@@ -1,5 +1,5 @@
 /* Buffer.java -- 
-   Copyright (C) 2002 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003 Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -35,19 +35,21 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package java.nio;
 
 public abstract class Buffer
 {
-  private int cap = 0;
-  private int limit = 0;
-  private int pos = 0;
-  private int mark = -1;
+  int cap = 0;
+  int limit = 0;
+  int pos = 0;
+  int mark = -1;
 
-  // Creates a new Buffer.
-  //
-  // Should be package private.
-  //
+  /**
+   * Creates a new Buffer.
+   *
+   * Should be package private.
+   */
   Buffer (int capacity, int limit, int position, int mark)
   {
     if (capacity < 0)
@@ -57,7 +59,7 @@ public abstract class Buffer
     limit (limit);
     position (position);
     
-    if (mark > 0)
+    if (mark >= 0)
     {
       if (mark > pos)
         throw new IllegalArgumentException ();
@@ -68,6 +70,8 @@ public abstract class Buffer
   
   /**
    * Retrieves the capacity of the buffer.
+   *
+   * @return the capacity of the buffer
    */
   public final int capacity ()
   {
@@ -76,6 +80,8 @@ public abstract class Buffer
 
   /**
    * Clears the buffer.
+   *
+   * @return this buffer
    */
   public final Buffer clear ()
   {
@@ -87,6 +93,8 @@ public abstract class Buffer
     
   /**
    * Flips the buffer.
+   *
+   * @return this buffer
    */
   public final Buffer flip ()
   {
@@ -98,19 +106,26 @@ public abstract class Buffer
     
   /**
    * Tells whether the buffer has remaining data to read or not.
+   *
+   * @return true if the buffer contains remaining data to read,
+   * false otherwise
    */
   public final boolean hasRemaining ()
   {
-    return limit > pos;
+    return remaining() > 0;
   }
 
   /**
    * Tells whether this buffer is read only or not.
+   *
+   * @return true if the buffer is read only, false otherwise
    */
   public abstract boolean isReadOnly ();
 
   /**
    * Retrieves the current limit of the buffer.
+   *
+   * @return the limit of the buffer
    */
   public final int limit ()
   {
@@ -122,6 +137,8 @@ public abstract class Buffer
    * 
    * @param newLimit The new limit value; must be non-negative and no larger
    * than this buffer's capacity.
+   *
+   * @return this buffer
    *
    * @exception IllegalArgumentException If the preconditions on newLimit
    * do not hold.
@@ -143,6 +160,8 @@ public abstract class Buffer
 
   /**
    * Sets this buffer's mark at its position.
+   *
+   * @return this buffer
    */
   public final Buffer mark ()
   {
@@ -152,6 +171,8 @@ public abstract class Buffer
 
   /**
    * Retrieves the current position of this buffer.
+   *
+   * @return the current position of this buffer
    */
   public final int position ()
   {
@@ -164,7 +185,9 @@ public abstract class Buffer
    * 
    * @param newPosition The new position value; must be non-negative and no
    * larger than the current limit.
-   * 
+   *
+   * @return this buffer
+   *
    * @exception IllegalArgumentException If the preconditions on newPosition
    * do not hold
    */
@@ -182,6 +205,8 @@ public abstract class Buffer
 
   /**
    * Returns the number of elements between the current position and the limit.
+   *
+   * @return the number of remaining elements
    */
   public final int remaining()
   {
@@ -190,7 +215,9 @@ public abstract class Buffer
 
   /**
    * Resets this buffer's position to the previously-marked position.
-   * 
+   *
+   * @return this buffer
+   *
    * @exception InvalidMarkException If the mark has not been set.
    */
   public final Buffer reset()
@@ -205,6 +232,8 @@ public abstract class Buffer
   /**
    * Rewinds this buffer. The position is set to zero and the mark
    * is discarded.
+   *
+   * @this buffer
    */
   public final Buffer rewind()
   {

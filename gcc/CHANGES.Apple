@@ -13,7 +13,6 @@ List owners by email name.  Possible statuses:
 
 Owner     Status     Name of change
 -----     ------     --------------
-dpatel    submitted  #import inode hack
 shebs     local      #import not deprecated
 mrs       unknown    %b/save-temps can clobber input file (radar 2871891)
 dalej     unknown    'reg + index' reg case.
@@ -38,14 +37,10 @@ stuart    local      -fobey-inline
 austern   unknown    -fterminated-vtables
 dpatel    local      -header-mapfile
 dpatel    local      -header-mapfile bandaid for buffer overflows
-dpatel    unknown    -inclusion-log-file
 shebs     local      -malign-mac68k
 stuart    unknown    -mlong-branch
 dalej     submit     -pg fix
-dpatel    local      -precomp-trustfile
-dpatel    local      -precomp-trustfile, -arch
-dpatel    unknown    . Use strtoq isntead of strtoll
-dpatel    unknown    . Use strtoq, strtouq instead of strtoll, strtoull
+dpatel    local      -arch
 austern   local      2.95-compatibility stuff
 austern   local      2.95-ptmf-compatibility
 dpatel    local      2920964
@@ -106,7 +101,6 @@ zlaski    local      constant cfstrings
 zlaski    submit     constant strings
 mrs       unknown    control opt level.
 austern   unknown    correct constructor inlining
-dpatel    submitted  cp_binding_level
 shebs     local      darwin host
 mrs       unknown    darwin mmap bug workaround
 shebs     unknown    darwin native
@@ -133,7 +127,6 @@ dalej     unknown    do not use float fieldmode
 shebs     local      documentation
 shebs     unknown    don't define SAVE_FP_PREFIX and friends
 austern   local      double destructor
-stuart    submit     dynamic-no-pic
 mrs       unknown    eh in data segment
 dpatel    unknown    error-colon
 shebs     local      fat builds
@@ -149,14 +142,13 @@ shebs     unknown    flag translation
 zlaski    unknown    flag_objc
 dalej     unknown    for TRUNC_DIV_EXPR
 dalej     unknown    for now
-dpatel    local      framework headers
+mrs       submited   framework headers
 dalej     local      fused multiply-add
 mrs       unknown    gdb only used symbols
 dpatel    unknown    handle -Wno-system-headers (2910306)
 shebs     submit     handle ~ in pathnames
 dalej     unknown    improve performance
 shebs     submit     include guard for darwin.h
-dpatel    local      indexing
 dalej     unknown    indirect calls in R12
 stuart    local      indirect sibcalls
 mrs       submit     insert assembly ".abort" directive on fatal error
@@ -187,7 +179,7 @@ dalej     unknown    multiply cost pulled into function
 dalej     unknown    multiply-add
 zlaski    submit     mystery binfo
 zlaski    submit     nested functions
-dpatel    unknown    new tree dump
+dpatel    submitted  new tree dump
 shebs     unknown    no soft-float multilibs
 stuart    local      obey inline
 zlaski    submit     objc bug fix
@@ -260,8 +252,6 @@ shebs     unknown    unnecessary test?
 dalej     unknown    use R12 as register for indirect calls.  This improves
 dalej     unknown    use new pseudo for temp; reusing reg confuses PRE
 dalej     unknown    use r12 for indirect calls
-dpatel    unknown    use strtoq instead of strtoll
-dpatel    unknown    use strtouq instead of strtoull
 dalej     unknown    volatile pic base reg in leaves
 austern   unknown    weak definition
 austern   unknown    weak import

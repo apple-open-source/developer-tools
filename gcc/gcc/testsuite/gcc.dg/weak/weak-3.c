@@ -1,4 +1,5 @@
 /* { dg-do compile } */
+/* { dg-require-weak "" } */
 /* { dg-options "-fno-common" } */
 
 /* { dg-final { scan-assembler "weak\[^ \t\]*\[ \t\]_?ffoo1a" } } */
@@ -53,7 +54,7 @@ extern void * ffoo1f (void);
 extern void * ffoox1f (void);
 void * foo1f (void)
 {
-  if (ffoo1f)
+  if (ffoo1f) /* { dg-warning "" } */
     ffoo1f ();
   return 0;
 }

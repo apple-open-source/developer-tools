@@ -6,8 +6,7 @@
 --                                                                          --
 --                                  S p e c                                 --
 --                                                                          --
---                                                                          --
---          Copyright (C) 1995-2000 Free Software Foundation, Inc.          --
+--          Copyright (C) 1995-2004 Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -32,6 +31,9 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
+--  This unit may be used directly from an application program by providing
+--  an appropriate WITH, and the interface can be expected to remain stable.
+
 with Ada.Exceptions;
 with Interfaces;
 with System.RPC;
@@ -39,6 +41,9 @@ with System.RPC;
 package System.Partition_Interface is
 
    pragma Elaborate_Body;
+
+   type DSA_Implementation_Name is (No_DSA, GLADE_DSA, PolyORB_DSA);
+   DSA_Implementation : constant DSA_Implementation_Name := No_DSA;
 
    type Subprogram_Id is new Natural;
    --  This type is used exclusively by stubs
@@ -95,23 +100,6 @@ package System.Partition_Interface is
    procedure Get_Unique_Remote_Pointer
      (Handler : in out RACW_Stub_Type_Access);
    --  Get a unique pointer on a remote object
-
-   procedure Launch
-     (Rsh_Command  : in String;
-      Name_Is_Host : in Boolean;
-      General_Name : in String;
-      Command_Line : in String);
-   --  General_Name represents the name of the machine or the name of the
-   --  partition (depending on the value of Name_Is_Host). Command_Line
-   --  holds the extra options that will be given on the command line.
-   --  Rsh_Command is typically "rsh", that will be used to launch the
-   --  other partition.
-
-   procedure Raise_Program_Error_For_E_4_18;
-   pragma No_Return (Raise_Program_Error_For_E_4_18);
-   --  Raise Program_Error with an error message explaining why it has been
-   --  raised. The rule in E.4 (18) is tricky and misleading for most users
-   --  of the distributed systems annex.
 
    procedure Raise_Program_Error_Unknown_Tag
      (E : in Ada.Exceptions.Exception_Occurrence);

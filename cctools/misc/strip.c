@@ -903,7 +903,9 @@ struct object *object)
 
 #ifndef NMEDIT
 	if(sfile != NULL || Rfile != NULL || dfile != NULL || Aflag || uflag ||
-	   Sflag || xflag || Xflag || nflag || rflag || default_dyld_executable)
+	   Sflag || xflag || Xflag || nflag || rflag || 
+	   default_dyld_executable || object->mh->filetype == MH_DYLIB ||
+	   object->mh->filetype == MH_DYLINKER)
 #endif /* !defined(NMEDIT) */
 	    {
 #ifdef NMEDIT
@@ -1462,7 +1464,12 @@ struct object *object)
 			section_type = s->flags & SECTION_TYPE;
 			if(section_type == S_LAZY_SYMBOL_POINTERS ||
 			   section_type == S_NON_LAZY_SYMBOL_POINTERS)
-			    stride = 4;
+#ifdef INTERIM_PPC64
+			  stride = (object->mh->cputype == CPU_TYPE_POWERPC64 ?
+				    8 : 4);
+#else
+			  stride = 4
+#endif /* INTERIM_PPC64 */
 			else if(section_type == S_SYMBOL_STUBS)
 			    stride = s->reserved2;
 			else{

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -228,7 +228,8 @@ static enum bool toc_symbol(
     struct section **sections);
 static enum bool check_sort_ranlibs(
     struct arch *arch,
-    char *output);
+    char *output,
+    enum bool library_warnings);
 static void warn_duplicate_member_names(
     void);
 static int member_name_qsort(
@@ -625,7 +626,8 @@ char **envp)
 		        strcmp(argv[i], "-weak_reference_mismatches") == 0 ||
 		        strcmp(argv[i], "-u") == 0 ||
 		        strcmp(argv[i], "-exported_symbols_list") == 0 ||
-		        strcmp(argv[i], "-unexported_symbols_list") == 0){
+		        strcmp(argv[i], "-unexported_symbols_list") == 0 ||
+		        strcmp(argv[i], "-executable_path") == 0){
 		    if(cmd_flags.ranlib == TRUE){
 			error("unknown option: %s", argv[i]);
 			usage();
@@ -663,7 +665,9 @@ char **envp)
 			strcmp(argv[i], "-M") == 0 ||
 			strcmp(argv[i], "-single_module") == 0 ||
 			strcmp(argv[i], "-multi_module") == 0 ||
-			strcmp(argv[i], "-m") == 0){
+			strcmp(argv[i], "-m") == 0 ||
+			strcmp(argv[i], "-dead_strip") == 0 ||
+			strcmp(argv[i], "-no_dead_strip_inits_and_terms") == 0){
 		    if(cmd_flags.ranlib == TRUE){
 			error("unknown option: %s", argv[i]);
 			usage();
@@ -1137,8 +1141,15 @@ void)
 			if(cmd_flags.rc_trace_archives == TRUE &&
 			   cmd_flags.dynamic == FALSE &&
 			   rc_trace_archive_printed == FALSE){
-			    printf("[Logging for Build & Integration] Used "
-				   "static archive: %s\n", ofiles[i].file_name);
+			    char resolvedname[MAXPATHLEN];
+                	    if(realpath(ofiles[i].file_name, resolvedname) !=
+			       NULL)
+				printf("[Logging for Build & Integration] Used "
+				       "static archive: %s\n", resolvedname);
+			    else
+				printf("[Logging for Build & Integration] Used "
+				       "static archive: %s\n",
+				       ofiles[i].file_name);
 			    rc_trace_archive_printed = TRUE;
 			}
 			/* loop through archive */
@@ -1194,8 +1205,13 @@ void)
 		if(cmd_flags.rc_trace_archives == TRUE &&
 		   cmd_flags.dynamic == FALSE &&
 		   rc_trace_archive_printed == FALSE){
-		    printf("[Logging for Build & Integration] Used static "
-			   "archive: %s\n", ofiles[i].file_name);
+		    char resolvedname[MAXPATHLEN];
+		    if(realpath(ofiles[i].file_name, resolvedname) != NULL)
+			printf("[Logging for Build & Integration] Used static "
+			       "archive: %s\n", resolvedname);
+		    else
+			printf("[Logging for Build & Integration] Used static "
+			       "archive: %s\n", ofiles[i].file_name);
 		    rc_trace_archive_printed = TRUE;
 		}
 		/* loop through archive */
@@ -2530,7 +2546,7 @@ char *output)
 	if(cmd_flags.s == TRUE){
 	    qsort(arch->toc_ranlibs, arch->toc_nranlibs, sizeof(struct ranlib),
 		  (int (*)(const void *, const void *))ranlib_name_qsort);
-	    sorted = check_sort_ranlibs(arch, output);
+	    sorted = check_sort_ranlibs(arch, output, FALSE);
 	    if(sorted == FALSE){
 		qsort(arch->toc_ranlibs, arch->toc_nranlibs,
 		      sizeof(struct ranlib),
@@ -2687,7 +2703,8 @@ static
 enum bool
 check_sort_ranlibs(
 struct arch *arch,
-char *output)
+char *output,
+enum bool library_warnings)
 {
     unsigned long i;
     enum bool multiple_defs;
@@ -2705,6 +2722,8 @@ char *output)
 	    if(strcmp(arch->toc_ranlibs[i].ran_un.ran_name,
 		      arch->toc_ranlibs[i+1].ran_un.ran_name) == 0){
 		if(multiple_defs == FALSE){
+		    if(library_warnings == FALSE)
+			return(FALSE);
 		    fprintf(stderr, "%s: same symbol defined in more than one "
 			    "member ", progname);
 		    if(narchs > 1)

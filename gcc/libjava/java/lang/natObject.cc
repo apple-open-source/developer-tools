@@ -98,7 +98,7 @@ java::lang::Object::clone (void)
 	throw new CloneNotSupportedException;
 
       size = klass->size();
-      r = JvAllocObject (klass, size);
+      r = _Jv_AllocObject (klass);
     }
 
   memcpy ((void *) r, (void *) this, size);
@@ -264,6 +264,13 @@ _Jv_MonitorExit (jobject obj)
     throw new java::lang::IllegalMonitorStateException;
 }
 
+bool
+_Jv_ObjectCheckMonitor (jobject obj)
+{
+  _Jv_SyncInfo *si = (_Jv_SyncInfo *) obj->sync_info;
+  return _Jv_MutexCheckMonitor (&si->mutex);
+}
+
 #else /* JV_HASH_SYNCHRONIZATION */
 
 // FIXME: We shouldn't be calling GC_register_finalizer directly.
@@ -303,7 +310,6 @@ _Jv_MonitorExit (jobject obj)
 // that can atomically update only N bits at a time.
 // Author: Hans-J. Boehm  (Hans_Boehm@hp.com, boehm@acm.org)
 
-#include <assert.h>
 #include <limits.h>
 #include <unistd.h>	// for usleep, sysconf.
 #include <gcj/javaprims.h>
@@ -352,7 +358,7 @@ struct heavy_lock {
   obj_addr_t address;		// Object to which this lock corresponds.
 				// Should not be traced by GC.
   				// Cleared as heavy_lock is destroyed.
-  				// Together with the rest of the hevy lock
+  				// Together with the rest of the heavy lock
   				// chain, this is protected by the lock
   				// bit in the hash table entry to which
   				// the chain is attached.
@@ -458,12 +464,12 @@ struct hash_entry {
 };
 
 #ifndef JV_SYNC_TABLE_SZ
-# define JV_SYNC_TABLE_SZ 2048
+# define JV_SYNC_TABLE_SZ 2048	// Must be power of 2.
 #endif
 
 hash_entry light_locks[JV_SYNC_TABLE_SZ];
 
-#define JV_SYNC_HASH(p) (((long)p ^ ((long)p >> 10)) % JV_SYNC_TABLE_SZ)
+#define JV_SYNC_HASH(p) (((long)p ^ ((long)p >> 10)) & (JV_SYNC_TABLE_SZ-1))
 
 // Note that the light_locks table is scanned conservatively by the
 // collector.  It is essential the the heavy_locks field is scanned.
@@ -605,7 +611,7 @@ heavy_lock_obj_finalization_proc (void *obj, void *cd)
       release_set(&(he -> address), he_address);
       return;
     }
-  assert(hl -> address == addr);
+  JvAssert(hl -> address == addr);
   GC_finalization_proc old_finalization_proc = hl -> old_finalization_proc;
   if (old_finalization_proc != 0)
     {
@@ -653,8 +659,8 @@ heavy_lock_obj_finalization_proc (void *obj, void *cd)
 static void
 remove_all_heavy (hash_entry *he, obj_addr_t new_address_val)
 {
-  assert(he -> heavy_count == 0);
-  assert(he -> address & LOCKED);
+  JvAssert(he -> heavy_count == 0);
+  JvAssert(he -> address & LOCKED);
   heavy_lock *hl = he -> heavy_locks;
   he -> heavy_locks = 0;
   // We would really like to release the lock bit here.  Unfortunately, that
@@ -664,8 +670,8 @@ remove_all_heavy (hash_entry *he, obj_addr_t new_address_val)
   for(; 0 != hl; hl = hl->next)
     {
       obj_addr_t obj = hl -> address;
-      assert(0 != obj);	// If this was previously finalized, it should no
-      			// longer appear on our list.
+      JvAssert(0 != obj);  // If this was previously finalized, it should no
+			   // longer appear on our list.
       hl -> address = 0; // Finalization proc might still see it after we
       			 // finish.
       GC_finalization_proc old_finalization_proc = hl -> old_finalization_proc;
@@ -782,13 +788,13 @@ _Jv_MonitorEnter (jobject obj)
   if (__builtin_expect(!addr, false))
     throw new java::lang::NullPointerException;
    
-  assert(!(addr & FLAGS));
+  JvAssert(!(addr & FLAGS));
 retry:
   if (__builtin_expect(compare_and_swap(&(he -> address),
 					0, addr),true))
     {
-      assert(he -> light_thr_id == INVALID_THREAD_ID);
-      assert(he -> light_count == 0);
+      JvAssert(he -> light_thr_id == INVALID_THREAD_ID);
+      JvAssert(he -> light_count == 0);
       he -> light_thr_id = self;
       // Count fields are set correctly.  Heavy_count was also zero,
       // but can change asynchronously.
@@ -836,7 +842,7 @@ retry:
 	  // only be held by other threads waiting for conversion, and
 	  // they, like us, drop it quickly without blocking.
 	  _Jv_MutexLock(&(hl->si.mutex));
-	  assert(he -> address == address | LOCKED );
+	  JvAssert(he -> address == address | LOCKED );
 	  release_set(&(he -> address), (address | REQUEST_CONVERSION | HEAVY));
 				// release lock on he
 	  while ((he -> address & ~FLAGS) == (address & ~FLAGS))
@@ -849,7 +855,7 @@ retry:
 		// Guarantee that hl doesn't get unlinked by finalizer.
 		// This is only an issue if the client fails to release
 		// the lock, which is unlikely.
-	  assert(he -> address & HEAVY);
+	  JvAssert(he -> address & HEAVY);
 	  // Lock has been converted, we hold the heavyweight lock,
 	  // heavy_count has been incremented.
 	  return;
@@ -866,7 +872,7 @@ retry:
     {
       // Either was_heavy is true, or something changed out from under us,
       // since the initial test for 0 failed.
-      assert(!(address & REQUEST_CONVERSION));
+      JvAssert(!(address & REQUEST_CONVERSION));
 	// Can't convert a nonexistent lightweight lock.
       heavy_lock *hl;
       hl = (was_heavy? find_heavy(addr, he) : 0);
@@ -879,15 +885,15 @@ retry:
 	  // one first and use that.
 	  he -> light_thr_id = self;  // OK, since nobody else can hold
 				      // light lock or do this at the same time.
-	  assert(he -> light_count == 0);
-	  assert(was_heavy == (he -> address & HEAVY));
+	  JvAssert(he -> light_count == 0);
+	  JvAssert(was_heavy == (he -> address & HEAVY));
 	  release_set(&(he -> address), (addr | was_heavy));
         }
       else
 	{
 	  // Must use heavy lock.
 	  ++ (he -> heavy_count);
-	  assert(0 == (address & ~HEAVY));
+	  JvAssert(0 == (address & ~HEAVY));
           release_set(&(he -> address), HEAVY);
           _Jv_MutexLock(&(hl->si.mutex));
 	  keep_live(addr);
@@ -898,7 +904,7 @@ retry:
   // We hold the lock on the hash entry, and he -> address can't
   // change from under us.  Neither can the chain of heavy locks.
     {
-      assert(0 == he -> heavy_count || (address & HEAVY));
+      JvAssert(0 == he -> heavy_count || (address & HEAVY));
       heavy_lock *hl = get_heavy(addr, he);
       ++ (he -> heavy_count);
       release_set(&(he -> address), address | HEAVY);
@@ -1006,17 +1012,17 @@ retry:
 	  he -> light_count = count - 1;
 	  return;
         }
-      assert(he -> light_thr_id == self);
-      assert(address & REQUEST_CONVERSION);
+      JvAssert(he -> light_thr_id == self);
+      JvAssert(address & REQUEST_CONVERSION);
       // Conversion requested
       // Convert now.
       if (!compare_and_swap(&(he -> address), address, address | LOCKED))
 	goto retry;
       heavy_lock *hl = find_heavy(addr, he);
-      assert (0 != hl);
+      JvAssert (0 != hl);
 		// Requestor created it.
       he -> light_count = 0;
-      assert(he -> heavy_count > 0);
+      JvAssert(he -> heavy_count > 0);
 	  	// was incremented by requestor.
       _Jv_MutexLock(&(hl->si.mutex));
 	// Release the he lock after acquiring the mutex.
@@ -1033,8 +1039,8 @@ retry:
       return;
     }
   // lightweight lock not for this object.
-  assert(!(address & LOCKED));
-  assert((address & ~FLAGS) != addr);
+  JvAssert(!(address & LOCKED));
+  JvAssert((address & ~FLAGS) != addr);
   if (!compare_and_swap(&(he -> address), address, address | LOCKED))
 	goto retry;
   heavy_lock *hl = find_heavy(addr, he);
@@ -1049,9 +1055,9 @@ retry:
       throw new java::lang::IllegalMonitorStateException(
 			JvNewStringLatin1("current thread not owner"));
     }
-  assert(address & HEAVY);
+  JvAssert(address & HEAVY);
   count = he -> heavy_count;
-  assert(count > 0);
+  JvAssert(count > 0);
   --count;
   he -> heavy_count = count;
   if (0 == count)
@@ -1087,6 +1093,46 @@ retry:
     }
   keep_live(addr);
 }     
+
+// Return false if obj's monitor is held by the current thread
+bool
+_Jv_ObjectCheckMonitor (jobject obj)
+{
+#ifdef JV_LINKER_CANNOT_8BYTE_ALIGN_STATICS
+  obj_addr_t addr = (obj_addr_t)obj & ~((obj_addr_t)FLAGS);
+#else
+  obj_addr_t addr = (obj_addr_t)obj;
+#endif
+  obj_addr_t address;
+  unsigned hash = JV_SYNC_HASH(addr);
+  hash_entry * he = light_locks + hash;
+  _Jv_ThreadId_t self = _Jv_ThreadSelf();
+
+  JvAssert(!(addr & FLAGS));
+retry:
+  // Acquire the hash table entry lock
+  address = ((he -> address) & ~LOCKED);
+  if (!compare_and_swap(&(he -> address), address, address | LOCKED))
+    {
+      wait_unlocked(he);
+      goto retry;
+    }
+
+  bool not_mine;
+
+  if (!(address & ~FLAGS))
+    not_mine = true;
+  else if ((address & ~FLAGS) == addr)
+    not_mine = (he -> light_thr_id != self);
+  else
+    {
+      heavy_lock* hl = find_heavy(addr, he);
+      not_mine = hl ? _Jv_MutexCheckMonitor(&hl->si.mutex) : true;
+    }
+
+  release_set(&(he -> address), address);	// unlock hash entry
+  return not_mine;
+}
 
 // The rest of these are moderately thin veneers on _Jv_Cond ops.
 // The current version of Notify might be able to make the pthread
@@ -1160,7 +1206,7 @@ retry:
 	  throw new IllegalMonitorStateException (JvNewStringLatin1 
                           ("current thread not owner"));
 	}
-      assert(address & HEAVY);
+      JvAssert(address & HEAVY);
     }
   switch (_Jv_CondWait (&(hl->si.condition), &(hl->si.mutex), timeout, nanos))
     {

@@ -136,7 +136,7 @@ unsigned long nfat_archs)
 	    /* if no intel cputypes found return NULL */
 	    if(lowest_family == CPU_SUBTYPE_INTEL_FAMILY_MAX + 1)
 		return(NULL);
-	    lowest_model = ULONG_MAX;
+	    lowest_model = LONG_MAX;
 	    lowest_index = -1;
 	    for(i = 0; i < nfat_archs; i++){
 		if(fat_archs[i].cputype != cputype)
@@ -269,6 +269,22 @@ unsigned long nfat_archs)
 		}
 	    }
 	    break;
+#ifdef INTERIM_PPC64
+	case CPU_TYPE_POWERPC64:
+	    /*
+	     * An exact match as not found.  Currently the interim ppc64 format
+	     * only has one subtype.  If other subtypes are added this code
+	     * will not know about them so just pick the
+	     * CPU_SUBTYPE_POWERPC64_ALL if it exists.
+	     */
+	    for(i = 0; i < nfat_archs; i++){
+		if(fat_archs[i].cputype != cputype)
+		    continue;
+		if(fat_archs[i].cpusubtype == CPU_SUBTYPE_POWERPC64_ALL)
+		    return(fat_archs + i);
+	    }
+	    break;
+#endif /* INTERIM_PPC64 */
 	case CPU_TYPE_VEO:
 	    /*
 	     * An exact match was not found.  So for the VEO subtypes if VEO1

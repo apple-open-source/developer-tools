@@ -38,9 +38,7 @@ exception statement from your version. */
 package java.util.zip;
 
 import java.io.BufferedInputStream;
-import java.io.ByteArrayInputStream;
 import java.io.DataInput;
-import java.io.DataInputStream;
 import java.io.File;
 import java.io.InputStream;
 import java.io.IOException;
@@ -107,7 +105,7 @@ public class ZipFile implements ZipConstants
   public ZipFile(File file) throws ZipException, IOException
   {
     this.raf = new RandomAccessFile(file, "r");
-    this.name = file.getName();
+    this.name = file.getPath();
   }
 
   /**
@@ -136,7 +134,7 @@ public class ZipFile implements ZipConstants
 	  ("OPEN_DELETE mode not supported yet in java.util.zip.ZipFile");
       }
     this.raf = new RandomAccessFile(file, "r");
-    this.name = file.getName();
+    this.name = file.getPath();
   }
 
   /**
@@ -310,7 +308,7 @@ public class ZipFile implements ZipConstants
    */
   protected void finalize() throws IOException
   {
-    if (!closed) close();
+    if (!closed && raf != null) close();
   }
 
   /**
@@ -440,7 +438,7 @@ public class ZipFile implements ZipConstants
   }
   
   /**
-   * Returns the name of this zip file.
+   * Returns the (path) name of this zip file.
    */
   public String getName()
   {

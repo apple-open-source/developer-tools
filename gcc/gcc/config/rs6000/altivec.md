@@ -1,23 +1,29 @@
 ;; AltiVec patterns.
-;; Copyright (C) 2002 Free Software Foundation, Inc.
+;; Copyright (C) 2002, 2003, 2004 Free Software Foundation, Inc.
 ;; Contributed by Aldy Hernandez (aldy@quesejoda.com)
 
-;; This file is part of GNU CC.
+;; This file is part of GCC.
 
-;; GNU CC is free software; you can redistribute it and/or modify
-;; it under the terms of the GNU General Public License as published by
-;; the Free Software Foundation; either version 2, or (at your option)
-;; any later version.
+;; GCC is free software; you can redistribute it and/or modify it
+;; under the terms of the GNU General Public License as published
+;; by the Free Software Foundation; either version 2, or (at your
+;; option) any later version.
 
-;; GNU CC is distributed in the hope that it will be useful,
-;; but WITHOUT ANY WARRANTY; without even the implied warranty of
-;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-;; GNU General Public License for more details.
+;; GCC is distributed in the hope that it will be useful, but WITHOUT
+;; ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+;; or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
+;; License for more details.
 
 ;; You should have received a copy of the GNU General Public License
-;; along with GNU CC; see the file COPYING.  If not, write to
-;; the Free Software Foundation, 59 Temple Place - Suite 330,
-;; Boston, MA 02111-1307, USA.
+;; along with GCC; see the file COPYING.  If not, write to the
+;; Free Software Foundation, 59 Temple Place - Suite 330, Boston,
+;; MA 02111-1307, USA.
+
+(define_constants
+  [(UNSPEC_VSPLTISW	141)
+   (UNSPEC_VSPLTISH	140)
+   (UNSPEC_VSPLTISB	139)
+   ])
 
 ;; Generic LVX load instruction.
 (define_insn "altivec_lvx_4si"
@@ -78,93 +84,188 @@
   [(set_attr "type" "vecstore")])
 
 ;; Vector move instructions.
-;; APPLE LOCAL disable generic AltiVec patterns
-(define_expand "av_movv4si"
+(define_expand "movv4si"
   [(set (match_operand:V4SI 0 "nonimmediate_operand" "")
 	(match_operand:V4SI 1 "any_operand" ""))]
   "TARGET_ALTIVEC"
   "{ rs6000_emit_move (operands[0], operands[1], V4SImode); DONE; }")
 
-;; APPLE LOCAL remove this so combine doesn't generate it
-;;(define_insn "*movv4si_internal"
-;;  [(set (match_operand:V4SI 0 "nonimmediate_operand" "=m,v,v,o,r,r")
-;;	(match_operand:V4SI 1 "input_operand" "v,m,v,r,o,r"))]
-;;  "TARGET_ALTIVEC"
-;;  "@
-;;   stvx %1,%y0
-;;   lvx %0,%y1
-;;   vor %0,%1,%1
-;;   stw%U0 %1,%0\;stw %L1,%L0\;stw %Y1,%Y0\;stw %Z1,%Z0
-;;   lwz%U1 %0,%1\;lwz %L0,%L1\;lwz %Y0,%Y1\;lwz %Z0,%Z1
-;;   mr %0,%1\;mr %L0,%L1\;mr %Y0,%Y1\;mr %Z0,%Z1"
-;;  [(set_attr "type" "vecstore,vecload,vecsimple,store,load,*")
-;;   (set_attr "length" "*,*,*,16,16,16")])
+(define_insn "*movv4si_internal"
+  [(set (match_operand:V4SI 0 "nonimmediate_operand" "=m,v,v,o,r,r,v")
+	(match_operand:V4SI 1 "input_operand" "v,m,v,r,o,r,W"))]
+  "TARGET_ALTIVEC 
+   && (register_operand (operands[0], V4SImode) 
+       || register_operand (operands[1], V4SImode))"
+  "*
+{
+  switch (which_alternative)
+    {
+    case 0: return \"stvx %1,%y0\";
+    case 1: return \"lvx %0,%y1\";
+    case 2: return \"vor %0,%1,%1\";
+    case 3: return \"#\";
+    case 4: return \"#\";
+    case 5: return \"#\";
+    case 6: return output_vec_const_move (operands);
+    default: abort();
+    }
+}"
+  [(set_attr "type" "vecstore,vecload,vecsimple,store,load,*,*")])
 
-;; APPLE LOCAL disable generic AltiVec patterns
-(define_expand "av_movv8hi"
+(define_split
+  [(set (match_operand:V4SI 0 "nonimmediate_operand" "")
+        (match_operand:V4SI 1 "input_operand" ""))]
+  "TARGET_ALTIVEC && reload_completed
+   && gpr_or_gpr_p (operands[0], operands[1])"
+  [(pc)]
+{ rs6000_split_multireg_move (operands[0], operands[1]); DONE; })
+
+(define_split
+  [(set (match_operand:V4SI 0 "altivec_register_operand" "")
+	(match_operand:V4SI 1 "easy_vector_constant_add_self" ""))]
+  "TARGET_ALTIVEC && reload_completed"
+  [(set (match_dup 0) (match_dup 3))
+   (set (match_dup 0)
+	(plus:V4SI (match_dup 0)
+		   (match_dup 0)))]
+  "
+{ 
+  operands[3] = gen_easy_vector_constant_add_self (operands[1]);
+}")    
+
+(define_expand "movv8hi"
   [(set (match_operand:V8HI 0 "nonimmediate_operand" "")
 	(match_operand:V8HI 1 "any_operand" ""))]
   "TARGET_ALTIVEC"
   "{ rs6000_emit_move (operands[0], operands[1], V8HImode); DONE; }")
 
-;; APPLE LOCAL remove this so combine doesn't generate it
-;;(define_insn "*movv8hi_internal1"
-;;  [(set (match_operand:V8HI 0 "nonimmediate_operand" "=m,v,v,o,r,r")
-;;	(match_operand:V8HI 1 "input_operand" "v,m,v,r,o,r"))]
-;;  "TARGET_ALTIVEC"
-;;  "@
-;;   stvx %1,%y0
-;;   lvx %0,%y1
-;;   vor %0,%1,%1
-;;   stw%U0 %1,%0\;stw %L1,%L0\;stw %Y1,%Y0\;stw %Z1,%Z0
-;;   lwz%U1 %0,%1\;lwz %L0,%L1\;lwz %Y0,%Y1\;lwz %Z0,%Z1
-;;   mr %0,%1\;mr %L0,%L1\;mr %Y0,%Y1\;mr %Z0,%Z1"
-;;  [(set_attr "type" "vecstore,vecload,vecsimple,store,load,*")
-;;   (set_attr "length" "*,*,*,16,16,16")])
+(define_insn "*movv8hi_internal1"
+  [(set (match_operand:V8HI 0 "nonimmediate_operand" "=m,v,v,o,r,r,v")
+	(match_operand:V8HI 1 "input_operand" "v,m,v,r,o,r,W"))]
+  "TARGET_ALTIVEC 
+   && (register_operand (operands[0], V8HImode) 
+       || register_operand (operands[1], V8HImode))"
+  "*
+{
+   switch (which_alternative)
+     {
+     case 0: return \"stvx %1,%y0\";
+     case 1: return \"lvx %0,%y1\";
+     case 2: return \"vor %0,%1,%1\";
+     case 3: return \"#\";
+     case 4: return \"#\";
+     case 5: return \"#\";
+     case 6: return output_vec_const_move (operands);
+     default: abort ();
+     }
+}"
+  [(set_attr "type" "vecstore,vecload,vecsimple,store,load,*,*")])
 
-;; APPLE LOCAL disable generic AltiVec patterns
-(define_expand "av_movv16qi"
+(define_split
+  [(set (match_operand:V8HI 0 "nonimmediate_operand" "")
+        (match_operand:V8HI 1 "input_operand" ""))]
+  "TARGET_ALTIVEC && reload_completed
+   && gpr_or_gpr_p (operands[0], operands[1])"
+  [(pc)]
+{ rs6000_split_multireg_move (operands[0], operands[1]); DONE; })
+
+(define_split
+  [(set (match_operand:V8HI 0 "altivec_register_operand" "")
+	(match_operand:V8HI 1 "easy_vector_constant_add_self" ""))]
+  "TARGET_ALTIVEC && reload_completed"
+  [(set (match_dup 0) (match_dup 3))
+   (set (match_dup 0)
+	(plus:V8HI (match_dup 0)
+		   (match_dup 0)))]
+  "
+{
+  operands[3] = gen_easy_vector_constant_add_self (operands[1]);
+}")
+
+(define_expand "movv16qi"
   [(set (match_operand:V16QI 0 "nonimmediate_operand" "")
 	(match_operand:V16QI 1 "any_operand" ""))]
   "TARGET_ALTIVEC"
   "{ rs6000_emit_move (operands[0], operands[1], V16QImode); DONE; }")
 
-;; APPLE LOCAL remove this so combine doesn't generate it
-;;(define_insn "*movv16qi_internal1"
-;;  [(set (match_operand:V16QI 0 "nonimmediate_operand" "=m,v,v,o,r,r")
-;;	(match_operand:V16QI 1 "input_operand" "v,m,v,r,o,r"))]
-;;  "TARGET_ALTIVEC"
-;;  "@
-;;   stvx %1,%y0
-;;   lvx %0,%y1
-;;   vor %0,%1,%1
-;;   stw%U0 %1,%0\;stw %L1,%L0\;stw %Y1,%Y0\;stw %Z1,%Z0
-;;   lwz%U1 %0,%1\;lwz %L0,%L1\;lwz %Y0,%Y1\;lwz %Z0,%Z1
-;;   mr %0,%1\;mr %L0,%L1\;mr %Y0,%Y1\;mr %Z0,%Z1"
-;;  [(set_attr "type" "vecstore,vecload,vecsimple,store,load,*")
-;;   (set_attr "length" "*,*,*,16,16,16")])
+(define_insn "*movv16qi_internal1"
+  [(set (match_operand:V16QI 0 "nonimmediate_operand" "=m,v,v,o,r,r,v")
+	(match_operand:V16QI 1 "input_operand" "v,m,v,r,o,r,W"))]
+  "TARGET_ALTIVEC
+   && (register_operand (operands[0], V16QImode)
+       || register_operand (operands[1], V16QImode))"
+  "*
+{
+  switch (which_alternative)
+    {
+    case 0: return \"stvx %1,%y0\";
+    case 1: return \"lvx %0,%y1\";
+    case 2: return \"vor %0,%1,%1\";
+    case 3: return \"#\";
+    case 4: return \"#\";
+    case 5: return \"#\";
+    case 6: return output_vec_const_move (operands);
+    default: abort ();
+    }
+}"
+  [(set_attr "type" "vecstore,vecload,vecsimple,store,load,*,*")])
 
-;; APPLE LOCAL disable generic AltiVec patterns
-(define_expand "av_movv4sf"
+(define_split
+  [(set (match_operand:V16QI 0 "nonimmediate_operand" "")
+        (match_operand:V16QI 1 "input_operand" ""))]
+  "TARGET_ALTIVEC && reload_completed
+   && gpr_or_gpr_p (operands[0], operands[1])"
+  [(pc)]
+{ rs6000_split_multireg_move (operands[0], operands[1]); DONE; })
+
+(define_split
+  [(set (match_operand:V16QI 0 "altivec_register_operand" "")
+	(match_operand:V16QI 1 "easy_vector_constant_add_self" ""))]
+  "TARGET_ALTIVEC && reload_completed"
+  [(set (match_dup 0) (match_dup 3))
+   (set (match_dup 0)
+	(plus:V16QI (match_dup 0)
+		   (match_dup 0)))]
+  "
+{
+  operands[3] = gen_easy_vector_constant_add_self (operands[1]);
+}")
+
+(define_expand "movv4sf"
   [(set (match_operand:V4SF 0 "nonimmediate_operand" "")
 	(match_operand:V4SF 1 "any_operand" ""))]
   "TARGET_ALTIVEC"
   "{ rs6000_emit_move (operands[0], operands[1], V4SFmode); DONE; }")
 
-;; APPLE LOCAL remove this so combine doesn't generate it
-;;(define_insn "*movv4sf_internal1"
-;;  [(set (match_operand:V4SF 0 "nonimmediate_operand" "=m,v,v,o,r,r")
-;;	(match_operand:V4SF 1 "input_operand" "v,m,v,r,o,r"))]
-;;  "TARGET_ALTIVEC"
-;;  "@
-;;   stvx %1,%y0
-;;   lvx %0,%y1
-;;   vor %0,%1,%1
-;;   stw%U0 %1,%0\;stw %L1,%L0\;stw %Y1,%Y0\;stw %Z1,%Z0
-;;   lwz%U1 %0,%1\;lwz %L0,%L1\;lwz %Y0,%Y1\;lwz %Z0,%Z1
-;;   mr %0,%1\;mr %L0,%L1\;mr %Y0,%Y1\;mr %Z0,%Z1"
-;;  [(set_attr "type" "vecstore,vecload,vecsimple,store,load,*")
-;;   (set_attr "length" "*,*,*,16,16,16")])
+(define_insn "*movv4sf_internal1"
+  [(set (match_operand:V4SF 0 "nonimmediate_operand" "=m,v,v,o,r,r,v")
+	(match_operand:V4SF 1 "input_operand" "v,m,v,r,o,r,W"))]
+  "TARGET_ALTIVEC
+   && (register_operand (operands[0], V4SFmode)
+       || register_operand (operands[1], V4SFmode))"
+  "*
+{
+  switch (which_alternative)
+    {
+    case 0: return \"stvx %1,%y0\";
+    case 1: return \"lvx %0,%y1\";
+    case 2: return \"vor %0,%1,%1\";
+    case 3: return \"#\";
+    case 4: return \"#\";
+    case 5: return \"#\";
+    case 6: return output_vec_const_move (operands);
+    default: abort ();
+    }
+}"
+  [(set_attr "type" "vecstore,vecload,vecsimple,store,load,*,*")])
+
+(define_split
+  [(set (match_operand:V4SF 0 "nonimmediate_operand" "")
+        (match_operand:V4SF 1 "input_operand" ""))]
+  "TARGET_ALTIVEC && reload_completed
+   && gpr_or_gpr_p (operands[0], operands[1])"
+  [(pc)]
+{ rs6000_split_multireg_move (operands[0], operands[1]); DONE; })
 
 (define_insn "get_vrsave_internal"
   [(set (match_operand:SI 0 "register_operand" "=r")
@@ -193,36 +294,6 @@
     return \"mtvrsave %1\";
 }"
   [(set_attr "type" "*")])
-
-;; Vector clears
-(define_insn "*movv4si_const0"
-  [(set (match_operand:V4SI 0 "altivec_register_operand" "=v")
-	(match_operand:V4SI 1 "zero_constant" ""))]
-  "TARGET_ALTIVEC"
-  "vxor %0,%0,%0"
-  [(set_attr "type" "vecsimple")])
-
-(define_insn "*movv4sf_const0"
-  [(set (match_operand:V4SF 0 "altivec_register_operand" "=v")
-	(match_operand:V4SF 1 "zero_constant" ""))]
-					 
-  "TARGET_ALTIVEC"
-  "vxor %0,%0,%0"
-  [(set_attr "type" "vecsimple")])
-
-(define_insn "*movv8hi_const0"
-  [(set (match_operand:V8HI 0 "altivec_register_operand" "=v")
-	(match_operand:V8HI 1 "zero_constant" ""))]
-  "TARGET_ALTIVEC"
-  "vxor %0,%0,%0"
-  [(set_attr "type" "vecsimple")])
-
-(define_insn "*movv16qi_const0"
-  [(set (match_operand:V16QI 0 "altivec_register_operand" "=v")
-	(match_operand:V16QI 1 "zero_constant" ""))]
-  "TARGET_ALTIVEC"
-  "vxor %0,%0,%0"
-  [(set_attr "type" "vecsimple")])
 
 ;; Simple binary operations.
 
@@ -318,6 +389,22 @@
    (set (reg:SI 110) (unspec:SI [(const_int 0)] 213))]
   "TARGET_ALTIVEC"
   "vaddsws %0,%1,%2"
+  [(set_attr "type" "vecsimple")])
+
+(define_insn "andv16qi3"
+  [(set (match_operand:V16QI 0 "register_operand" "=v")
+        (and:V16QI (match_operand:V16QI 1 "register_operand" "v")
+                  (match_operand:V16QI 2 "register_operand" "v")))]
+  "TARGET_ALTIVEC"
+  "vand %0,%1,%2"
+  [(set_attr "type" "vecsimple")])
+
+(define_insn "andv8hi3"
+  [(set (match_operand:V8HI 0 "register_operand" "=v")
+        (and:V8HI (match_operand:V8HI 1 "register_operand" "v")
+                  (match_operand:V8HI 2 "register_operand" "v")))]
+  "TARGET_ALTIVEC"
+  "vand %0,%1,%2"
   [(set_attr "type" "vecsimple")])
 
 (define_insn "andv4si3"
@@ -511,7 +598,7 @@
 
   /* Generate [-0.0, -0.0, -0.0, -0.0].  */
   neg0 = gen_reg_rtx (V4SFmode);
-  emit_insn (gen_altivec_vspltisw_v4sf (neg0, GEN_INT (-1)));
+  emit_insn (gen_altivec_vspltisw_v4sf (neg0, constm1_rtx));
   emit_insn (gen_altivec_vslw_v4sf (neg0, neg0, neg0));
 
   /* Use the multiply-add.  */
@@ -546,7 +633,7 @@
 		      (match_operand:V16QI 2 "register_operand" "v")
                       (match_operand:V4SI 3 "register_operand" "v")] 66))]
   "TARGET_ALTIVEC"
-  "vmsumubm %0,%1,%2,%3"
+  "vmsummbm %0,%1,%2,%3"
   [(set_attr "type" "veccomplex")])
 
 (define_insn "altivec_vmsumuhm"
@@ -906,6 +993,43 @@
                             (match_operand:V4SI 2 "register_operand" "v"))))]
   "TARGET_ALTIVEC"
   "vnor %0,%1,%2"
+  [(set_attr "type" "vecsimple")])
+  
+(define_insn "one_cmplv16qi2"
+  [(set (match_operand:V16QI 0 "register_operand" "=v")
+        (not:V16QI (match_operand:V16QI 1 "register_operand" "v")))]
+  "TARGET_ALTIVEC"
+  "vnor %0,%1,%1"
+  [(set_attr "type" "vecsimple")])
+
+(define_insn "one_cmplv8hi2"
+  [(set (match_operand:V8HI 0 "register_operand" "=v")
+        (not:V8HI (match_operand:V8HI 1 "register_operand" "v")))]
+  "TARGET_ALTIVEC"
+  "vnor %0,%1,%1"
+  [(set_attr "type" "vecsimple")])
+
+(define_insn "one_cmplv4si2"
+  [(set (match_operand:V4SI 0 "register_operand" "=v")
+        (not:V4SI (match_operand:V4SI 1 "register_operand" "v")))]
+  "TARGET_ALTIVEC"
+  "vnor %0,%1,%1"
+  [(set_attr "type" "vecsimple")])
+
+(define_insn "iorv16qi3"
+  [(set (match_operand:V16QI 0 "register_operand" "=v")
+        (ior:V16QI (match_operand:V16QI 1 "register_operand" "v")
+                  (match_operand:V16QI 2 "register_operand" "v")))]
+  "TARGET_ALTIVEC"
+  "vor %0,%1,%2"
+  [(set_attr "type" "vecsimple")])
+
+(define_insn "iorv8hi3"
+  [(set (match_operand:V8HI 0 "register_operand" "=v")
+        (ior:V8HI (match_operand:V8HI 1 "register_operand" "v")
+                  (match_operand:V8HI 2 "register_operand" "v")))]
+  "TARGET_ALTIVEC"
+  "vor %0,%1,%2"
   [(set_attr "type" "vecsimple")])
 
 (define_insn "iorv4si3"
@@ -1287,10 +1411,27 @@
   "vsumsws %0,%1,%2"
   [(set_attr "type" "veccomplex")])
 
+;; Vector xor's
 (define_insn "xorv4si3"
   [(set (match_operand:V4SI 0 "register_operand" "=v")
         (xor:V4SI (match_operand:V4SI 1 "register_operand" "v")
                   (match_operand:V4SI 2 "register_operand" "v")))]
+  "TARGET_ALTIVEC"
+  "vxor %0,%1,%2"
+  [(set_attr "type" "vecsimple")])
+
+(define_insn "xorv8hi3"
+  [(set (match_operand:V8HI 0 "register_operand" "=v")
+        (xor:V8HI (match_operand:V8HI 1 "register_operand" "v")
+                  (match_operand:V8HI 2 "register_operand" "v")))]
+  "TARGET_ALTIVEC"
+  "vxor %0,%1,%2"
+  [(set_attr "type" "vecsimple")])
+
+(define_insn "xorv16qi3"
+  [(set (match_operand:V16QI 0 "register_operand" "=v")
+        (xor:V16QI (match_operand:V16QI 1 "register_operand" "v")
+		   (match_operand:V16QI 2 "register_operand" "v")))]
   "TARGET_ALTIVEC"
   "vxor %0,%1,%2"
   [(set_attr "type" "vecsimple")])
@@ -1302,6 +1443,7 @@
   "TARGET_ALTIVEC"
   "vspltb %0,%1,%2"
   [(set_attr "type" "vecperm")])
+;; End of vector xor's
 
 (define_insn "altivec_vsplth"
   [(set (match_operand:V8HI 0 "register_operand" "=v")
@@ -1321,21 +1463,24 @@
 
 (define_insn "altivec_vspltisb"
   [(set (match_operand:V16QI 0 "register_operand" "=v")
-        (unspec:V16QI [(match_operand:QI 1 "immediate_operand" "i")] 139))]
+        (unspec:V16QI [(match_operand:QI 1 "immediate_operand" "i")]
+		      UNSPEC_VSPLTISB))]
   "TARGET_ALTIVEC"
   "vspltisb %0,%1"
   [(set_attr "type" "vecperm")])
 
 (define_insn "altivec_vspltish"
   [(set (match_operand:V8HI 0 "register_operand" "=v")
-        (unspec:V8HI [(match_operand:QI 1 "immediate_operand" "i")] 140))]
+        (unspec:V8HI [(match_operand:QI 1 "immediate_operand" "i")]
+		     UNSPEC_VSPLTISH))]
   "TARGET_ALTIVEC"
   "vspltish %0,%1"
   [(set_attr "type" "vecperm")])
 
 (define_insn "altivec_vspltisw"
   [(set (match_operand:V4SI 0 "register_operand" "=v")
-        (unspec:V4SI [(match_operand:QI 1 "immediate_operand" "i")] 141))]
+        (unspec:V4SI [(match_operand:QI 1 "immediate_operand" "i")]
+		     UNSPEC_VSPLTISW))]
   "TARGET_ALTIVEC"
   "vspltisw %0,%1"
   [(set_attr "type" "vecperm")])
@@ -1678,63 +1823,61 @@
   [(set_attr "type" "vecsimple")])
 
 (define_insn "altivec_dssall"
-  [(unspec [(const_int 0)] 188)]
+  [(unspec_volatile [(const_int 0)] 188)]
   "TARGET_ALTIVEC"
   "dssall"
   [(set_attr "type" "vecsimple")])
 
 (define_insn "altivec_dss"
-  [(unspec [(match_operand:QI 0 "immediate_operand" "i")] 189)]
+  [(unspec_volatile [(match_operand:QI 0 "immediate_operand" "i")] 189)]
   "TARGET_ALTIVEC"
   "dss %0"
   [(set_attr "type" "vecsimple")])
 
 (define_insn "altivec_dst"
-  [(unspec [(match_operand:SI 0 "register_operand" "b")
+  [(unspec [(match_operand:V4SI 0 "memory_operand" "Q")
 	    (match_operand:SI 1 "register_operand" "r")
 	    (match_operand:QI 2 "immediate_operand" "i")] 190)]
   "TARGET_ALTIVEC"
-  "dst %0,%1,%2"
+  "dst %P0,%1,%2"
   [(set_attr "type" "vecsimple")])
 
 (define_insn "altivec_dstt"
-  [(unspec [(match_operand:SI 0 "register_operand" "b")
+  [(unspec [(match_operand:V4SI 0 "memory_operand" "Q")
 	    (match_operand:SI 1 "register_operand" "r")
 	    (match_operand:QI 2 "immediate_operand" "i")] 191)]
   "TARGET_ALTIVEC"
-  "dstt %0,%1,%2"
+  "dstt %P0,%1,%2"
   [(set_attr "type" "vecsimple")])
 
 (define_insn "altivec_dstst"
-  [(unspec [(match_operand:SI 0 "register_operand" "b")
+  [(unspec [(match_operand:V4SI 0 "memory_operand" "Q")
 	    (match_operand:SI 1 "register_operand" "r")
 	    (match_operand:QI 2 "immediate_operand" "i")] 192)]
   "TARGET_ALTIVEC"
-  "dstst %0,%1,%2"
+  "dstst %P0,%1,%2"
   [(set_attr "type" "vecsimple")])
 
 (define_insn "altivec_dststt"
-  [(unspec [(match_operand:SI 0 "register_operand" "b")
+  [(unspec [(match_operand:V4SI 0 "memory_operand" "Q")
 	    (match_operand:SI 1 "register_operand" "r")
 	    (match_operand:QI 2 "immediate_operand" "i")] 193)]
   "TARGET_ALTIVEC"
-  "dststt %0,%1,%2"
+  "dststt %P0,%1,%2"
   [(set_attr "type" "vecsimple")])
 
 (define_insn "altivec_lvsl"
   [(set (match_operand:V16QI 0 "register_operand" "=v")
-	(unspec:V16QI [(match_operand:SI 1 "register_operand" "b")
-		       (match_operand:SI 2 "register_operand" "r")] 194))]
+	(unspec:V16QI [(match_operand 1 "memory_operand" "m")] 194))]
   "TARGET_ALTIVEC"
-  "lvsl %0,%1,%2"
+  "lvsl %0,%y1"
   [(set_attr "type" "vecload")])
 
 (define_insn "altivec_lvsr"
   [(set (match_operand:V16QI 0 "register_operand" "=v")
-	(unspec:V16QI [(match_operand:SI 1 "register_operand" "b")
-		       (match_operand:SI 2 "register_operand" "r")] 195))]
+	(unspec:V16QI [(match_operand 1 "memory_operand" "m")] 195))]
   "TARGET_ALTIVEC"
-  "lvsr %0,%1,%2"
+  "lvsr %0,%y1"
   [(set_attr "type" "vecload")])
 
 ;; Parallel some of the LVE* and STV*'s with unspecs because some have
@@ -1743,112 +1886,89 @@
 (define_insn "altivec_lvebx"
   [(parallel
     [(set (match_operand:V16QI 0 "register_operand" "=v")
-	  (mem:V16QI (plus:SI (match_operand:SI 1 "register_operand" "b")
-			      (match_operand:SI 2 "register_operand" "r"))))
+	  (match_operand:V16QI 1 "memory_operand" "m"))
      (unspec [(const_int 0)] 196)])]
   "TARGET_ALTIVEC"
-  "lvebx %0,%1,%2"
+  "lvebx %0,%y1"
   [(set_attr "type" "vecload")])
 
 (define_insn "altivec_lvehx"
   [(parallel
     [(set (match_operand:V8HI 0 "register_operand" "=v")
-	  (mem:V8HI
-	   (and:SI (plus:SI (match_operand:SI 1 "register_operand" "b")
-			    (match_operand:SI 2 "register_operand" "r"))
-		   (const_int -2))))
+	  (match_operand:V8HI 1 "memory_operand" "m"))
      (unspec [(const_int 0)] 197)])]
   "TARGET_ALTIVEC"
-  "lvehx %0,%1,%2"
+  "lvehx %0,%y1"
   [(set_attr "type" "vecload")])
 
 (define_insn "altivec_lvewx"
   [(parallel
     [(set (match_operand:V4SI 0 "register_operand" "=v")
-	  (mem:V4SI
-	   (and:SI (plus:SI (match_operand:SI 1 "register_operand" "b")
-			    (match_operand:SI 2 "register_operand" "r"))
-		   (const_int -4))))
+	  (match_operand:V4SI 1 "memory_operand" "m"))
      (unspec [(const_int 0)] 198)])]
   "TARGET_ALTIVEC"
-  "lvewx %0,%1,%2"
+  "lvewx %0,%y1"
   [(set_attr "type" "vecload")])
 
 (define_insn "altivec_lvxl"
   [(parallel
     [(set (match_operand:V4SI 0 "register_operand" "=v")
-	  (mem:V4SI (plus:SI (match_operand:SI 1 "register_operand" "b")
-			     (match_operand:SI 2 "register_operand" "r"))))
+	  (match_operand:V4SI 1 "memory_operand" "m"))
      (unspec [(const_int 0)] 213)])]
   "TARGET_ALTIVEC"
-  "lvxl %0,%1,%2"
+  "lvxl %0,%y1"
   [(set_attr "type" "vecload")])
 
 (define_insn "altivec_lvx"
   [(set (match_operand:V4SI 0 "register_operand" "=v")
-	(mem:V4SI (plus:SI (match_operand:SI 1 "register_operand" "b")
-			   (match_operand:SI 2 "register_operand" "r"))))]
+	(match_operand:V4SI 1 "memory_operand" "m"))]
   "TARGET_ALTIVEC"
-  "lvx %0,%1,%2"
+  "lvx %0,%y1"
   [(set_attr "type" "vecload")])
 
 (define_insn "altivec_stvx"
   [(parallel
-    [(set (mem:V4SI
-	   (and:SI (plus:SI (match_operand:SI 0 "register_operand" "b")
-			    (match_operand:SI 1 "register_operand" "r"))
-		   (const_int -16)))
-	  (match_operand:V4SI 2 "register_operand" "v"))
+    [(set (match_operand:V4SI 0 "memory_operand" "=m")
+	  (match_operand:V4SI 1 "register_operand" "v"))
      (unspec [(const_int 0)] 201)])]
   "TARGET_ALTIVEC"
-  "stvx %2,%0,%1"
+  "stvx %1,%y0"
   [(set_attr "type" "vecstore")])
 
 (define_insn "altivec_stvxl"
   [(parallel
-    [(set (mem:V4SI
-	   (and:SI (plus:SI (match_operand:SI 0 "register_operand" "b")
-			    (match_operand:SI 1 "register_operand" "r"))
-		   (const_int -16)))
-	  (match_operand:V4SI 2 "register_operand" "v"))
+    [(set (match_operand:V4SI 0 "memory_operand" "=m")
+	  (match_operand:V4SI 1 "register_operand" "v"))
      (unspec [(const_int 0)] 202)])]
   "TARGET_ALTIVEC"
-  "stvxl %2,%0,%1"
+  "stvxl %1,%y0"
   [(set_attr "type" "vecstore")])
 
 (define_insn "altivec_stvebx"
   [(parallel
-    [(set (mem:V16QI
-	   (plus:SI (match_operand:SI 0 "register_operand" "b")
-		    (match_operand:SI 1 "register_operand" "r")))
-	  (match_operand:V16QI 2 "register_operand" "v"))
+    [(set (match_operand:V16QI 0 "memory_operand" "=m")
+	  (match_operand:V16QI 1 "register_operand" "v"))
      (unspec [(const_int 0)] 203)])]
   "TARGET_ALTIVEC"
-  "stvebx %2,%0,%1"
+  "stvebx %1,%y0"
   [(set_attr "type" "vecstore")])
 
 (define_insn "altivec_stvehx"
   [(parallel
-    [(set (mem:V8HI
-	   (and:SI (plus:SI (match_operand:SI 0 "register_operand" "b")
-			    (match_operand:SI 1 "register_operand" "r"))
-		   (const_int -2)))
-	  (match_operand:V8HI 2 "register_operand" "v"))
+    [(set (match_operand:V8HI 0 "memory_operand" "=m")
+	  (match_operand:V8HI 1 "register_operand" "v"))
      (unspec [(const_int 0)] 204)])]
   "TARGET_ALTIVEC"
-  "stvehx %2,%0,%1"
+  "stvehx %1,%y0"
   [(set_attr "type" "vecstore")])
 
 (define_insn "altivec_stvewx"
   [(parallel
-    [(set (mem:V4SI
-	   (and:SI (plus:SI (match_operand:SI 0 "register_operand" "b")
-			    (match_operand:SI 1 "register_operand" "r"))
-		   (const_int -4)))
-	  (match_operand:V4SI 2 "register_operand" "v"))
+    [(set (match_operand:V4SI 0 "memory_operand" "=m")
+	  (match_operand:V4SI 1 "register_operand" "v"))
      (unspec [(const_int 0)] 205)])]
   "TARGET_ALTIVEC"
-  "stvewx %2,%0,%1"
+  "stvewx %1,%y0"
   [(set_attr "type" "vecstore")])
 
 (define_insn "absv16qi2"

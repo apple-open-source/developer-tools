@@ -3,15 +3,6 @@ LIB1ASMFUNCS = _ashiftrt _ashiftrt_n _ashiftlt _lshiftrt _movstr \
   _movstr_i4 _mulsi3 _sdivsi3 _sdivsi3_i4 _udivsi3 _udivsi3_i4 _set_fpscr \
   $(LIB1ASMFUNCS_CACHE)
 
-LIB2FUNCS_EXTRA=embed-bb.c
-
-embed-bb.c: $(srcdir)/libgcc2.c
-	echo '#ifdef inhibit_libc' > $@
-	echo '#define L_bb' >> $@
-	echo '#undef inhibit_libc' >> $@
-	cat $< >> $@
-	echo '#endif' >> $@
-
 # We want fine grained libraries, so use the new code to build the
 # floating point emulation libraries.
 FPBIT = fp-bit.c
@@ -31,9 +22,9 @@ fp-bit.c: $(srcdir)/config/fp-bit.c
 	cat $(srcdir)/config/fp-bit.c >> fp-bit.c
 
 MULTILIB_ENDIAN = ml
-MULTILIB_OPTIONS= $(MULTILIB_ENDIAN) m2/m3e/m4-single-only/m4-single/m4
+MULTILIB_OPTIONS= $(MULTILIB_ENDIAN) m2/m2e/m4-single-only/m4-single/m4
 MULTILIB_DIRNAMES= 
-MULTILIB_MATCHES = m2=m3 m2=m4-nofpu
+MULTILIB_MATCHES = m2=m3 m2e=m3e m2=m4-nofpu
 MULTILIB_EXCEPTIONS = ml
 
 LIBGCC = stmp-multilib

@@ -1,4 +1,4 @@
-@\input texinfo @c -*-texinfo-*-
+\input texinfo @c -*-texinfo-*-
 @setfilename gcj.info
 @settitle Guide to GNU gcj
 
@@ -115,7 +115,7 @@ files and object files, and it can read both Java source code and
 * Invoking jv-convert:: Converting from one encoding to another
 * Invoking rmic::        Generate stubs for Remote Method Invocation.
 * Invoking rmiregistry:: The remote object registry.
-* About CNI::           Description of the Cygnus Native Interface
+* About CNI::           Description of the Compiled Native Interface
 * System properties::   Modifying runtime behavior of the libgcj library
 * Resources::		Where to look for more information
 @end menu
@@ -182,7 +182,10 @@ Java bytecode files.
 @item @var{file}.zip
 @itemx @var{file}.jar
 An archive containing one or more @code{.class} files, all of
-which are compiled.  The archive may be compressed.
+which are compiled.  The archive may be compressed.  Files in
+an archive which don't end with @samp{.class} are treated as
+resource files; they are copmiled into the resulting object file
+as @samp{core:} URLs.
 @item @@@var{file}
 A file containing a whitespace-separated list of input file names.
 (Currently, these must all be @code{.java} source files, but that
@@ -338,6 +341,9 @@ This option will cause @command{gcj} not to warn when a source file is
 newer than its matching class file.  By default @command{gcj} will warn
 about this.
 
+@item -Wno-deprecated
+Warn if a deprecated class, method, or field is referred to.
+
 @item -Wunused
 This is the same as @command{gcc}'s @code{-Wunused}.
 
@@ -425,6 +431,27 @@ to initialize static classes upon their first use (this optimization
 isn't carried out if @code{-C} was specified.) When compiling to native
 code, @code{-fno-optimize-static-class-initialization} will turn this
 optimization off, regardless of the optimization level in use.
+
+@item --disable-assertions[=@var{class-or-package}]
+Don't include code for checking assertions in the compiled code.
+If @code{=@var{class-or-package}} is missing disables assertion code
+generation for all classes, unless overridden by a more
+specific @code{--enable-assertions} flag.
+If @var{class-or-package} is a class name, only disables generating
+assertion checks within the named class or its inner classes.
+If @var{class-or-package} is a package name, disables generating
+assertion checks within the named package or a subpackage.
+
+By default, assertions are enabled when generating class files
+or when not optimizing, and disabled when generating optimized binaries.
+
+@item --enable-assertions[=@var{class-or-package}]
+Generates code to check assertions.  The option is perhaps misnamed,
+as you still need to turn on assertion checking at run-time,
+and we don't support any easy way to do that.
+So this flag isn't very useful yet, except to partially override
+@code{--disable-assertions}.
+
 @end table
 
 
@@ -517,9 +544,9 @@ use these classes, you must link them explicitly with
 @node Extensions
 @section Extra features unique to gcj
 
-The main feature of @command{gcj} is that it can compile programs
-written in the Java programming language to native code.  Most
-extensions that have been added are to facilitate this functionality.
+The main feature of @command{gcj} is that it can compile programs written in
+the Java programming language to native code.  Most extensions that have been
+added are to facilitate this functionality.
 
 @itemize @bullet
 @item
@@ -537,8 +564,37 @@ all @samp{.}s will be transformed into @samp{-}s and that searching
 for inner classes starts with their outermost outer class.  If the class
 cannot be found this way the system classloader tries to use
 the @code{libgcj} bytecode interpreter to load the class from the standard
-classpath.
+classpath.  This process can be controlled to some degree via the
+@code{gnu.gcj.runtime.VMClassLoader.library_control} property;
+@xref{libgcj Runtime Properties}.
+
+@item
+@code{libgcj} includes a special @samp{gcjlib} URL type.  A URL of
+this form is like a @code{jar} URL, and looks like
+@samp{gcjlib:/path/to/shared/library.so!/path/to/resource}.  An access
+to one of these URLs causes the shared library to be @code{dlopen()}d,
+and then the resource is looked for in that library.  These URLs are
+most useful when used in conjunction with @code{java.net.URLClassLoader}.
+Note that, due to implementation limitations, currently any such URL
+can be accessed by only one class loader, and libraries are never
+unloaded.  This means some care must be exercised to make sure that
+a @code{gcjlib} URL is not accessed by more than one class loader at once.
+In a future release this limitation will be lifted, and such
+libraries will be mapped privately.
+
+@item
+A program compiled by @command{gcj} will examine the
+@env{GCJ_PROPERTIES} environment variable and change its behavior in
+some ways.  In particular @env{GCJ_PROPERTIES} holds a list of
+assignments to global properties, such as would be set with the
+@option{-D} option to @command{java}.  For instance,
+@samp{java.compiler=gcj} is a valid (but currently meaningless)
+setting.
+@cindex GCJ_PROPERTIES
+@vindex GCJ_PROPERTIES
+
 @end itemize
+
 
 @node Invoking gcjh
 @chapter Invoking gcjh
@@ -737,6 +793,10 @@ or file name.
 @item -c
 Disassemble method bodies.  By default method bodies are not printed.
 
+@item --print-constants
+Print the constant pool.  When printing a reference to a constant
+also print its index in the constant pool.
+
 @item --javap
 Generate output in @code{javap} format.  The implementation of this
 feature is very incomplete.
@@ -755,6 +815,7 @@ Print version number, then exit.
 
 @item -v, --verbose
 Print extra information while running.
+Implies @code{--print-constants}.
 @end table
 
 @c man end
@@ -772,7 +833,8 @@ gij [@option{-jar}] [@option{OPTION}] @dots{} @var{CLASS} [@var{ARGS}@dots{}]
   [@option{-cp} @var{path}] [@option{-classpath} @var{path}]
   [@option{-D}@var{name}[=@var{value}]@dots{}]
   [@option{-ms=}@var{number}] [@option{-mx=}@var{number}]
-  [@option{--showversion}] [@option{--version}] [@option{--help}]
+  [@option{-X@var{argument}]
+  [@option{--showversion}] [@option{--version}] [@option{--help}][@option{-?}]
 @c man end
 @c man begin SEEALSO gij
 gcc(1), gcj(1), gcjh(1), jv-scan(1), jcf-dump(1), gfdl(7),
@@ -832,11 +894,18 @@ This sets the initial heap size.
 @item -mx=@var{number}
 This sets the maximum heap size.
 
+@item -X
+@itemx -X@var{argument}
+Supplying @code{-X} by itself will cause @code{gij} to list all the
+supported @code{-X} options.  Currently there are none.  Unrecognized
+@code{-X} options are ignored, for compatibility with other runtimes.
+
 @item -jar
 This indicates that the name passed to @code{gij} should be interpreted
 as the name of a jar file, not a class.
 
 @item --help
+@itemx -?
 Print help, then exit.
 
 @item --showversion
@@ -1025,7 +1094,7 @@ Print version information, then exit.
 @node About CNI
 @chapter About CNI
 
-This documents CNI, the Cygnus Native Interface,
+This documents CNI, the Compiled Native Interface,
 which is is a convenient way to write Java native methods using C++.
 This is a more efficient, more convenient, but less portable
 alternative to the standard JNI (Java Native Interface).
@@ -2232,6 +2301,14 @@ trace.  Only done when the stack is sanitized.  Defaults to @code{true}.
 Whether an external process (@command{addr2line} or @command{addr2name.awk})
 should be used as fallback to convert the addresses to function names when
 the runtime is unable to do it through @code{dladdr}.
+
+@item gnu.gcj.runtime.VMClassLoader.library_control
+This controls how shared libraries are automatically loaded by the
+built-in class loader.  By default, or if this property is set to
+@samp{full}, a full search is done for each requested class.  If this
+property is set to @samp{cache}, then any failed lookups are cached
+and not tried again.  If this property is set to @samp{never}, then
+lookups are never done.  For more information, @xref{Extensions}.
 
 @end table
 

@@ -1,11 +1,11 @@
-/* APPLE LOCAL file msg send super */
 /* Check if casting 'self' or 'super' affects message lookup in the
    correct way.  */
 /* Contributed by Ziemowit Laski <zlaski@apple.com>.  */
 /* { dg-do compile } */
 
-#import <objc/objc.h>
-#import <objc/Object.h>
+#include <stddef.h>
+#include <objc/objc.h>
+#include <objc/Object.h>
 
 #ifdef __NEXT_RUNTIME__
 #define OBJC_GETCLASS objc_getClass
@@ -45,8 +45,11 @@
 @implementation Derived
 + (int) class_func1
 {
-   int i = [self class_func0];       /* { dg-warning ".Derived. may not respond to .\\+class_func0." } */
-   return i + [super class_func0];   /* { dg-warning ".Object. may not respond to .\\+class_func0." } */
+   int i = (size_t)[self class_func0];       /* { dg-warning ".Derived. may not respond to .\\+class_func0." } */
+       /* { dg-warning "Messages without a matching method signature" "" { target *-*-* } 48 } */
+       /* { dg-warning "will be assumed to return .id. and accept" "" { target *-*-* } 48 } */
+       /* { dg-warning ".\.\.\.. as arguments" "" { target *-*-* } 48 } */
+   return i + (size_t)[super class_func0];   /* { dg-warning ".Object. may not respond to .\\+class_func0." } */
 }
 + (int) class_func2
 {
@@ -63,12 +66,12 @@
 }   
 + (int) class_func5
 {
-   int i = [Derived class_func0];     /* { dg-warning ".Derived. may not respond to .\\+class_func0." } */
-   return i + [Object class_func0];   /* { dg-warning ".Object. may not respond to .\\+class_func0." } */
+   int i = (size_t)[Derived class_func0];    /* { dg-warning ".Derived. may not respond to .\\+class_func0." } */
+   return i + (size_t)[Object class_func0];  /* { dg-warning ".Object. may not respond to .\\+class_func0." } */
 }
 + (int) class_func6
 {
-   return [OBJC_GETCLASS("Object") class_func1];   /* { dg-warning ".Object. may not respond to .\\+class_func1." } */
+   return (size_t)[OBJC_GETCLASS("Object") class_func1];  /* { dg-warning ".Object. may not respond to .\\+class_func1." } */
 }
 + (int) class_func7
 {
@@ -76,8 +79,8 @@
 }
 - (int) instance_func1
 {
-   int i = [self instance_func0];       /* { dg-warning ".Derived. may not respond to .\\-instance_func0." } */
-   return i + [super instance_func0];   /* { dg-warning ".Object. may not respond to .\\-instance_func0." } */
+   int i = (size_t)[self instance_func0];     /* { dg-warning ".Derived. may not respond to .\\-instance_func0." } */
+   return i + (size_t)[super instance_func0]; /* { dg-warning ".Object. may not respond to .\\-instance_func0." } */
 }
 - (int) instance_func2
 {
@@ -93,12 +96,12 @@
 }   
 - (int) instance_func5
 {
-   int i = [Derived instance_func1];     /* { dg-warning ".Derived. may not respond to .\\+instance_func1." } */
-   return i + [Object instance_func1];   /* { dg-warning ".Object. may not respond to .\\+instance_func1." } */
+   int i = (size_t)[Derived instance_func1]; /* { dg-warning ".Derived. may not respond to .\\+instance_func1." } */
+   return i + (size_t)[Object instance_func1]; /* { dg-warning ".Object. may not respond to .\\+instance_func1." } */
 }
 - (int) instance_func6
 {
-   return [OBJC_GETCLASS("Object") class_func1];   /* { dg-warning ".Object. may not respond to .\\+class_func1." } */
+   return (size_t)[OBJC_GETCLASS("Object") class_func1]; /* { dg-warning ".Object. may not respond to .\\+class_func1." } */
 }
 - (int) instance_func7
 {
@@ -109,11 +112,11 @@
 @implementation Derived (Categ)
 + (int) categ_class_func1
 {
-   int i = [self class_func0];       /* { dg-warning ".Derived. may not respond to .\\+class_func0." } */
+   int i = (size_t)[self class_func0];       /* { dg-warning ".Derived. may not respond to .\\+class_func0." } */
    i += [self class_func1];
    i += [self categ_class_func2];
-   i += [self categ_instance_func1]; /* { dg-warning ".Derived. may not respond to .\\+categ_instance_func1." } */
-   return i + [super class_func0];   /* { dg-warning ".Object. may not respond to .\\+class_func0." } */
+   i += (size_t)[self categ_instance_func1]; /* { dg-warning ".Derived. may not respond to .\\+categ_instance_func1." } */
+   return i + (size_t)[super class_func0];   /* { dg-warning ".Object. may not respond to .\\+class_func0." } */
 }
 + (int) categ_class_func2
 {
@@ -122,13 +125,13 @@
 }
 - (int) categ_instance_func1
 {
-   int i = [self instance_func0];       /* { dg-warning ".Derived. may not respond to .\\-instance_func0." } */
+   int i = (size_t)[self instance_func0];    /* { dg-warning ".Derived. may not respond to .\\-instance_func0." } */
    i += [(Derived <Func> *)self categ_instance_func2];
-   i += [(Object <Func> *)self categ_instance_func2]; /* { dg-warning ".Object. may not respond to .\\-categ_instance_func2." } */
-   /* { dg-warning ".\\-categ_instance_func2. not implemented by protocol" "" { target *-*-* } 127 } */
-   i += [(id <Func>)self categ_instance_func2];  /* { dg-warning ".\\-categ_instance_func2. not implemented by protocol" } */
+   i += (size_t)[(Object <Func> *)self categ_instance_func2]; /* { dg-warning ".Object. may not respond to .\\-categ_instance_func2." } */
+   /* { dg-warning ".\\-categ_instance_func2. not implemented by protocol" "" { target *-*-* } 130 } */
+   i += (size_t)[(id <Func>)self categ_instance_func2];  /* { dg-warning ".\\-categ_instance_func2. not implemented by protocol" } */
    i += [(id)self categ_instance_func2];
-   return i + [super instance_func0];   /* { dg-warning ".Object. may not respond to .\\-instance_func0." } */
+   return i + (size_t)[super instance_func0];   /* { dg-warning ".Object. may not respond to .\\-instance_func0." } */
 }
 - (int) categ_instance_func2
 {

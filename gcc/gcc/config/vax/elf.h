@@ -2,22 +2,25 @@
    Copyright (C) 2002 Free Software Foundation, Inc.
    Contributed by Matt Thomas (matt@3am-software.com)
 
-This file is part of GNU CC.
+This file is part of GCC.
 
-GNU CC is free software; you can redistribute it and/or modify
+GCC is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2, or (at your option)
 any later version.
 
-GNU CC is distributed in the hope that it will be useful,
+GCC is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with GNU CC; see the file COPYING.  If not, write to
+along with GCC; see the file COPYING.  If not, write to
 the Free Software Foundation, 59 Temple Place - Suite 330,
 Boston, MA 02111-1307, USA.  */
+
+#undef TARGET_ELF
+#define TARGET_ELF 1
 
 #undef REGISTER_PREFIX
 #undef REGISTER_NAMES
@@ -69,12 +72,6 @@ Boston, MA 02111-1307, USA.  */
 /* The VAX wants no space between the case instruction and the jump table.  */
 #undef  ASM_OUTPUT_BEFORE_CASE_LABEL
 #define ASM_OUTPUT_BEFORE_CASE_LABEL(FILE, PREFIX, NUM, TABLE)
-
-/* Get the udiv/urem calls out of the user's namespace.  */
-#undef  UDIVSI3_LIBCALL
-#define UDIVSI3_LIBCALL "*__udiv"
-#undef  UMODSI3_LIBCALL
-#define UMODSI3_LIBCALL "*__urem"
 
 #undef OVERRIDE_OPTIONS
 #define OVERRIDE_OPTIONS			\

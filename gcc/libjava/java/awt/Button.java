@@ -41,7 +41,6 @@ package java.awt;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.peer.ButtonPeer;
-import java.awt.peer.ComponentPeer;
 import java.lang.reflect.Array;
 import java.util.EventListener;
 
@@ -149,6 +148,7 @@ public synchronized void
 setLabel(String label)
 {
   this.label = label;
+  actionCommand = label;
   if (peer != null)
     {
       ButtonPeer bp = (ButtonPeer) peer;

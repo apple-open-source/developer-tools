@@ -1,21 +1,23 @@
 /* Handle a .class file embedded in a .zip archive.
    This extracts a member from a .zip file, but does not handle
    uncompression (since that is not needed for classes.zip).
+   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2003
+   Free Software Foundation, Inc.
 
-   Copyright (C) 1996, 1997, 1998, 1999, 2000  Free Software Foundation, Inc.
+This file is part of GCC.
 
-This program is free software; you can redistribute it and/or modify
+GCC is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2, or (at your option)
 any later version.
 
-This program is distributed in the hope that it will be useful,
+GCC is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with GNU CC; see the file COPYING.  If not, write to
+along with GCC; see the file COPYING.  If not, write to
 the Free Software Foundation, 59 Temple Place - Suite 330,
 Boston, MA 02111-1307, USA.  
 
@@ -27,6 +29,8 @@ The Free Software Foundation is independent of Sun Microsystems, Inc.  */
 
 #include "config.h"
 #include "system.h"
+#include "coretypes.h"
+#include "tm.h"
 #include "zipfile.h"
 
 /* This stuff is partly based on the 28 August 1994 public release of the
@@ -210,16 +214,15 @@ typedef unsigned long     ulg;  /*  predefined on some systems) & match zip  */
 /* Prototypes          */
 /***********************/
 
-static ush makeword PARAMS ((const uch *));
-static ulg makelong PARAMS ((const uch *));
-static long find_zip_file_start PARAMS ((int fd, long offset));
+static ush makeword (const uch *);
+static ulg makelong (const uch *);
+static long find_zip_file_start (int fd, long offset);
 
 /***********************/
 /* Function makeword() */
 /***********************/
 
-static ush makeword(b)
-    const uch *b;
+static ush makeword(const uch *b)
 {
     /*
      * Convert Intel style 'short' integer to non-Intel non-16-bit
@@ -233,8 +236,7 @@ static ush makeword(b)
 /* Function makelong() */
 /***********************/
 
-static ulg makelong(sig)
-    const uch *sig;
+static ulg makelong(const uch *sig)
 {
     /*
      * Convert intel style 'long' variable to non-Intel non-16-bit
@@ -250,9 +252,7 @@ static ulg makelong(sig)
    start of the actual data.  Return -1 on error.  OFFSET is the
    offset from the beginning of the zip file of the file's header.  */
 static long
-find_zip_file_start (fd, offset)
-     int fd;
-     long offset;
+find_zip_file_start (int fd, long offset)
 {
   int filename_length, extra_field_length;
   unsigned char buffer[LREC_SIZE + 4];
@@ -273,8 +273,7 @@ find_zip_file_start (fd, offset)
 }
 
 int
-read_zip_archive (zipf)
-     register ZipFile *zipf;
+read_zip_archive (ZipFile *zipf)
 {
   int i;
   int dir_last_pad;
@@ -352,7 +351,7 @@ read_zip_archive (zipf)
 }
 
 #ifdef TEST
-main ()
+main (void)
 {
   ZipFile zipf[1];
   ZipDirectory *zipd;

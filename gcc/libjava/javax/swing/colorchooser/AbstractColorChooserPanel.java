@@ -35,34 +35,28 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package javax.swing.colorchooser;
 
-// Imports
-import java.awt.*;
-import java.io.*;
-import javax.swing.*;
-import javax.swing.event.*;
+import java.awt.Color;
+import java.awt.Graphics;
+import javax.swing.Icon;
+import javax.swing.JColorChooser;
+import javax.swing.JPanel;
 
 /**
  * AbstractColorChooserPanel
  * @author	Andrew Selkirk
  * @version	1.0
  */
-public abstract class AbstractColorChooserPanel extends JPanel {
-
-	//-------------------------------------------------------------
-	// Variables --------------------------------------------------
-	//-------------------------------------------------------------
+public abstract class AbstractColorChooserPanel extends JPanel
+{
+  private static final long serialVersionUID = -977469671210173863L;
 
 	/**
 	 * chooser
 	 */
 	private JColorChooser chooser;
-
-
-	//-------------------------------------------------------------
-	// Initialization ---------------------------------------------
-	//-------------------------------------------------------------
 
 	/**
 	 * Constructor AbstractColorChooserPanel
@@ -70,11 +64,6 @@ public abstract class AbstractColorChooserPanel extends JPanel {
 	public AbstractColorChooserPanel() {
 		// TODO
 	} // AbstractColorChooserPanel()
-
-
-	//-------------------------------------------------------------
-	// Methods ----------------------------------------------------
-	//-------------------------------------------------------------
 
 	/**
 	 * getDisplayName
@@ -143,6 +132,4 @@ public abstract class AbstractColorChooserPanel extends JPanel {
 	public void paint(Graphics graphics) {
 		// TODO
 	} // paint()
-
-
 } // AbstractColorChooserPanel

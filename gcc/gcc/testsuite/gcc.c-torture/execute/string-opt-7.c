@@ -12,6 +12,8 @@ extern int strcmp (const char *, const char *);
 extern int strncmp (const char *, const char *, size_t);
 extern void *memset (void *, int, size_t);
 
+int i;
+
 int main ()
 {
   const char *const src = "hello world";
@@ -62,6 +64,12 @@ int main ()
   if (__builtin_strncpy (dst, src, 4) != dst || strncmp (dst, src, 4))
     abort();
 
+  memset (dst, 0, sizeof (dst));
+  if (strncpy (dst, i++ ? "xfoo" + 1 : "bar", 4) != dst
+      || strcmp (dst, "bar")
+      || i != 1)
+    abort ();
+
   return 0;
 }
 
@@ -69,6 +77,7 @@ int main ()
 /* When optimizing, all the above cases should be transformed into
    something else.  So any remaining calls to the original function
    should abort.  */
+__attribute__ ((noinline))
 static char *
 strncpy(char *s1, const char *s2, size_t n)
 {

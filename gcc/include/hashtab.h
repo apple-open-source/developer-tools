@@ -1,5 +1,5 @@
 /* An expandable hash tables datatype.  
-   Copyright (C) 1999, 2000, 2002 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2002, 2003, 2004 Free Software Foundation, Inc.
    Contributed by Vladimir Makarov (vmakarov@cygnus.com).
 
 This program is free software; you can redistribute it and/or modify
@@ -76,10 +76,16 @@ typedef PTR (*htab_alloc) PARAMS ((size_t, size_t));
 /* We also need a free() routine.  */
 typedef void (*htab_free) PARAMS ((PTR));
 
+/* Memory allocation and deallocation; variants which take an extra
+   argument.  */
+typedef PTR (*htab_alloc_with_arg) PARAMS ((void *, size_t, size_t));
+typedef void (*htab_free_with_arg) PARAMS ((void *, void *));
+
 /* Hash tables are of the following type.  The structure
    (implementation) of this type is not needed for using the hash
    tables.  All work with hash table should be executed only through
-   functions mentioned below. */
+   functions mentioned below.  The size of this structure is subject to
+   change.  */
 
 struct htab GTY(())
 {
@@ -93,15 +99,15 @@ struct htab GTY(())
   htab_del del_f;
 
   /* Table itself.  */
-  PTR * GTY ((use_param (""), length ("%h.size"))) entries;
+  PTR * GTY ((use_param, length ("%h.size"))) entries;
 
-  /* Current size (in entries) of the hash table */
+  /* Current size (in entries) of the hash table.  */
   size_t size;
 
-  /* Current number of elements including also deleted elements */
+  /* Current number of elements including also deleted elements.  */
   size_t n_elements;
 
-  /* Current number of deleted elements in the table */
+  /* Current number of deleted elements in the table.  */
   size_t n_deleted;
 
   /* The following member is used for debugging. Its value is number
@@ -115,6 +121,15 @@ struct htab GTY(())
   /* Pointers to allocate/free functions.  */
   htab_alloc alloc_f;
   htab_free free_f;
+
+  /* Alternate allocate/free functions, which take an extra argument.  */
+  PTR GTY((skip)) alloc_arg;
+  htab_alloc_with_arg alloc_with_arg_f;
+  htab_free_with_arg free_with_arg_f;
+
+  /* Current size (in entries) of the hash table, as an index into the
+     table of primes.  */
+  unsigned int size_prime_index;
 };
 
 typedef struct htab *htab_t;
@@ -128,9 +143,19 @@ extern htab_t	htab_create_alloc	PARAMS ((size_t, htab_hash,
 						 htab_eq, htab_del,
 						 htab_alloc, htab_free));
 
+extern htab_t	htab_create_alloc_ex	PARAMS ((size_t, htab_hash,
+						    htab_eq, htab_del,
+						    PTR, htab_alloc_with_arg,
+						    htab_free_with_arg));
+
 /* Backward-compatibility functions.  */
 extern htab_t htab_create PARAMS ((size_t, htab_hash, htab_eq, htab_del));
 extern htab_t htab_try_create PARAMS ((size_t, htab_hash, htab_eq, htab_del));
+
+extern void	htab_set_functions_ex	PARAMS ((htab_t, htab_hash,
+						 htab_eq, htab_del,
+						 PTR, htab_alloc_with_arg,
+						 htab_free_with_arg));
 
 extern void	htab_delete	PARAMS ((htab_t));
 extern void	htab_empty	PARAMS ((htab_t));
@@ -145,8 +170,10 @@ extern PTR     *htab_find_slot_with_hash  PARAMS ((htab_t, const void *,
 						   enum insert_option));
 extern void	htab_clear_slot	PARAMS ((htab_t, void **));
 extern void	htab_remove_elt	PARAMS ((htab_t, void *));
+extern void	htab_remove_elt_with_hash PARAMS ((htab_t, void *, hashval_t));
 
 extern void	htab_traverse	PARAMS ((htab_t, htab_trav, void *));
+extern void	htab_traverse_noresize	PARAMS ((htab_t, htab_trav, void *));
 
 extern size_t	htab_size	PARAMS ((htab_t));
 extern size_t	htab_elements	PARAMS ((htab_t));
@@ -160,6 +187,11 @@ extern htab_eq htab_eq_pointer;
 
 /* A hash function for null-terminated strings.  */
 extern hashval_t htab_hash_string PARAMS ((const PTR));
+
+/* An iterative hash function for arbitrary data.  */
+extern hashval_t iterative_hash PARAMS ((const PTR, size_t, hashval_t));
+/* Shorthand for hashing something with an intrinsic size.  */
+#define iterative_hash_object(OB,INIT) iterative_hash (&OB, sizeof (OB), INIT)
 
 #ifdef __cplusplus
 }

@@ -5,7 +5,7 @@
 
      ---------------------------------------------------------------------
 
-     Copyright (C) 1999, 2000, 2001, 2002 Free Software Foundation, Inc.
+     Copyright (C) 1999, 2000, 2001, 2002, 2003 Free Software Foundation, Inc.
 
      This program is free software; you can redistribute it and/or modify it
      under the terms of the GNU General Public License as published by the
@@ -42,21 +42,12 @@
 
    */
 
-/* Undefine IN_GCC so malloc etc work. The alternative is to redefine
-   the out of stack routine in bison.  */
-#undef IN_GCC
-/* Front ends should not have to see these, but config.h needs everything.  */
-typedef void *tree;
-typedef void *rtx;
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-#include "ansidecl.h"
 #include "config.h"
 #include "system.h"
+#include "coretypes.h"
+#include "tm.h"
 #include "diagnostic.h"
+#include "timevar.h"
 
 #include "treelang.h"
 #include "treetree.h"
@@ -65,20 +56,38 @@ typedef void *rtx;
 #define YYPRINT(file, type, value) print_token (file, type, value) 
 #define YYERROR_VERBOSE YES
 
+/* My yylex routine used to intercept calls to flex generated code, to
+     record lex time.  */
+int yylex (void);
+static inline int my_yylex (void);
+/* Call lex, but ensure time is charged to TV_LEX.  */ 
+static inline int
+my_yylex (void)
+{
+  int res;
+  timevar_push (TV_LEX);
+  res = yylex ();
+  timevar_pop (TV_LEX);
+  return res;
+}
+#define yylex my_yylex
 
 extern int option_parser_trace;
 
 /* Local prototypes.  */
 
 static void yyerror (const char *error_message);
-int yylex (void);
 int yyparse (void);
 void print_token (FILE * file, unsigned int type ATTRIBUTE_UNUSED, YYSTYPE value);
 static struct prod_token_parm_item *reverse_prod_list (struct prod_token_parm_item *old_first);
 static void ensure_not_void (unsigned int type, struct prod_token_parm_item* name);
 static int check_type_match (int type_num, struct prod_token_parm_item *exp);
-static int get_common_type (struct prod_token_parm_item *type1, struct prod_token_parm_item *type2);
+static int get_common_type (struct prod_token_parm_item *type1,
+                            struct prod_token_parm_item *type2);
 static struct prod_token_parm_item *make_integer_constant (struct prod_token_parm_item* value);
+static struct prod_token_parm_item *make_plus_expression
+  (struct prod_token_parm_item* tok, struct prod_token_parm_item* op1,
+   struct prod_token_parm_item* op2, int type_code, int prod_code);
 static void set_storage (struct prod_token_parm_item *prod);
 
 /* File global variables.  */
@@ -102,8 +111,8 @@ static struct prod_token_parm_item *current_function=NULL;
 %token COMMA
 %right EQUALS
 %right ASSIGN
-%left  PLUS
-%left  MINUS
+%left  tl_PLUS
+%left  tl_MINUS
 
 /* Literals.  */
 %token INTEGER
@@ -111,7 +120,7 @@ static struct prod_token_parm_item *current_function=NULL;
 /* Keywords.  */
 %token IF
 %token ELSE
-%token RETURN
+%token tl_RETURN
 %token CHAR
 %token INT
 %token UNSIGNED
@@ -196,8 +205,9 @@ storage typename NAME init_opt SEMICOLON {
         abort ();
     if (STORAGE_CLASS (prod) == EXTERNAL_REFERENCE_STORAGE)
       {
-        fprintf (stderr, "%s:%i:%i: External reference variables may not have initial value\n", in_fname, 
-                tok->tp.tok.lineno, tok->tp.tok.charno);
+        fprintf (stderr, "%s:%i:%i: External reference variables may not have initial value\n",
+		 tok->tp.tok.location.file,
+		 tok->tp.tok.location.line, tok->tp.tok.charno);
         print_token (stderr, 0, tok);
         errorcount++;
         YYERROR;
@@ -209,8 +219,7 @@ storage typename NAME init_opt SEMICOLON {
      ((struct prod_token_parm_item*)SYMBOL_TABLE_NAME (prod))->tp.tok.length,
      NUMERIC_TYPE (prod),
      VAR_INIT (prod)? ((struct prod_token_parm_item*)VAR_INIT (prod))->tp.pro.code:NULL,
-     in_fname,
-     tok->tp.tok.lineno);
+     tok->tp.tok.location);
   if (!prod->tp.pro.code) 
     abort ();
 }
@@ -270,8 +279,9 @@ storage typename NAME LEFT_PARENTHESIS parameters RIGHT_PARENTHESIS SEMICOLON {
       break;
       
     case AUTOMATIC_STORAGE:
-      fprintf (stderr, "%s:%i:%i: A function cannot be automatic\n", in_fname, 
-              tok->tp.tok.lineno, tok->tp.tok.charno);
+      fprintf (stderr, "%s:%i:%i: A function cannot be automatic\n",
+	       tok->tp.tok.location.file,
+	       tok->tp.tok.location.line, tok->tp.tok.charno);
       print_token (stderr, 0, tok);
       errorcount++;
       YYERROR;
@@ -297,7 +307,9 @@ storage typename NAME LEFT_PARENTHESIS parameters RIGHT_PARENTHESIS SEMICOLON {
       if (!this_parm_var->tp.pro.main_token)
         abort ();
       this_parms->tp.par.variable_name = this_parm_var->tp.pro.main_token->tp.tok.chars;
-      this_parms->type = NUMERIC_TYPE (( (struct prod_token_parm_item*)EXPRESSION_TYPE (this_parm_var)));
+      this_parms->category = parameter_category;
+      this_parms->type = NUMERIC_TYPE 
+        (( (struct prod_token_parm_item*)EXPRESSION_TYPE (this_parm_var)));
       if (last_parms)
         {
           last_parms->tp.par.next = this_parms;
@@ -315,8 +327,7 @@ storage typename NAME LEFT_PARENTHESIS parameters RIGHT_PARENTHESIS SEMICOLON {
 
   prod->tp.pro.code = tree_code_create_function_prototype
     (tok->tp.tok.chars, STORAGE_CLASS (prod), NUMERIC_TYPE (type),
-     first_parms, in_fname, tok->tp.tok.lineno);
-
+     first_parms, tok->tp.tok.location);
 }
 ;
 
@@ -328,11 +339,13 @@ NAME LEFT_BRACE {
   struct prod_token_parm_item *this_parm;
   tok = $1;
   SYMBOL_TABLE_NAME ((&search_prod)) = tok;
+  search_prod.category = token_category;
   current_function = proto = lookup_tree_name (&search_prod);
   if (!proto)
     {
-      fprintf (stderr, "%s:%i:%i: Function prototype not found\n", in_fname, 
-              tok->tp.tok.lineno, tok->tp.tok.charno);
+      fprintf (stderr, "%s:%i:%i: Function prototype not found\n",
+	       tok->tp.tok.location.file,
+	       tok->tp.tok.location.line, tok->tp.tok.charno);
       print_token (stderr, 0, tok);
       errorcount++;
       YYERROR;
@@ -340,7 +353,7 @@ NAME LEFT_BRACE {
   if (!proto->tp.pro.code)
     abort ();
   tree_code_create_function_initial
-    (proto->tp.pro.code, in_fname, tok->tp.tok.lineno,
+    (proto->tp.pro.code, tok->tp.tok.location,
      FIRST_PARMS (current_function));
 
   /* Check all the parameters have code.  */
@@ -357,7 +370,7 @@ NAME LEFT_BRACE {
 variable_defs_opt statements_opt RIGHT_BRACE {
   struct prod_token_parm_item* tok;
   tok = $1;
-  tree_code_create_function_wrapup (in_fname, tok->tp.tok.lineno);
+  tree_code_create_function_wrapup (tok->tp.tok.location);
   current_function = NULL;
 }
 ;
@@ -463,7 +476,8 @@ statement:
 expression SEMICOLON {
   struct prod_token_parm_item *exp;
   exp = $1;
-  tree_code_output_expression_statement (exp->tp.pro.code, in_fname, exp->tp.pro.main_token->tp.tok.lineno);
+  tree_code_output_expression_statement (exp->tp.pro.code,
+					 exp->tp.pro.main_token->tp.tok.location);
 }
 |return SEMICOLON {
   /* Nothing to do.  */
@@ -480,7 +494,7 @@ IF LEFT_PARENTHESIS expression RIGHT_PARENTHESIS {
   tok = $1;
   exp = $3;
   ensure_not_void (NUMERIC_TYPE (exp), exp->tp.pro.main_token);
-  tree_code_if_start (exp->tp.pro.code, in_fname, tok->tp.tok.lineno);
+  tree_code_if_start (exp->tp.pro.code, tok->tp.tok.location);
 }
 LEFT_BRACE statements_opt RIGHT_BRACE {
   /* Just let the statements flow.  */
@@ -488,18 +502,18 @@ LEFT_BRACE statements_opt RIGHT_BRACE {
 ELSE {
   struct prod_token_parm_item* tok;
   tok = $1;
-  tree_code_if_else (in_fname, tok->tp.tok.lineno);
+  tree_code_if_else (tok->tp.tok.location);
 }
 LEFT_BRACE statements_opt RIGHT_BRACE {
   struct prod_token_parm_item* tok;
   tok = $12;
-  tree_code_if_end (in_fname, tok->tp.tok.lineno);
+  tree_code_if_end (tok->tp.tok.location);
 }
 ;
 
 
 return:
-RETURN expression_opt {
+tl_RETURN expression_opt {
   struct prod_token_parm_item *type_prod;
   struct prod_token_parm_item* ret_tok;
   ret_tok = $1;
@@ -509,8 +523,9 @@ RETURN expression_opt {
       tree_code_generate_return (type_prod->tp.pro.code, NULL);
     else
       {
-        fprintf (stderr, "%s:%i:%i: Redundant expression in return\n", in_fname, 
-                ret_tok->tp.tok.lineno, ret_tok->tp.tok.charno);
+        fprintf (stderr, "%s:%i:%i: Redundant expression in return\n",
+		 ret_tok->tp.tok.location.file,
+		 ret_tok->tp.tok.location.line, ret_tok->tp.tok.charno);
         print_token (stderr, 0, ret_tok);
         errorcount++;
         tree_code_generate_return (type_prod->tp.pro.code, NULL);
@@ -518,8 +533,9 @@ RETURN expression_opt {
   else
     if ($2 == NULL)
       {
-        fprintf (stderr, "%s:%i:%i: Expression missing in return\n", in_fname, 
-                ret_tok->tp.tok.lineno, ret_tok->tp.tok.charno); 
+        fprintf (stderr, "%s:%i:%i: Expression missing in return\n",
+		 ret_tok->tp.tok.location.file,
+		 ret_tok->tp.tok.location.line, ret_tok->tp.tok.charno); 
         print_token (stderr, 0, ret_tok);
         errorcount++;
       }
@@ -562,119 +578,42 @@ INTEGER {
 |variable_ref {
   $$ = $1;
 }
-|expression PLUS expression {
-  struct prod_token_parm_item* tok;
-  struct prod_token_parm_item *prod;
-  struct prod_token_parm_item *op1;
-  struct prod_token_parm_item *op2;
-  tree type;
-  
-  op1 = $1;
-  op2 = $3;
-  tok = $2;
-  ensure_not_void (NUMERIC_TYPE (op1), op1->tp.pro.main_token);
-  ensure_not_void (NUMERIC_TYPE (op2), op2->tp.pro.main_token);
-  prod = make_production (PROD_PLUS_EXPRESSION, tok);
-  NUMERIC_TYPE (prod) = get_common_type (op1, op2);
-  if (!NUMERIC_TYPE (prod))
+|expression tl_PLUS expression {
+  struct prod_token_parm_item *tok = $2;
+  struct prod_token_parm_item *op1 = $1;
+  struct prod_token_parm_item *op2 = $3;
+  int type_code = get_common_type (op1, op2);
+  if (!type_code)
     YYERROR;
-  else 
-    {
-      type = get_type_for_numeric_type (NUMERIC_TYPE (prod));
-      if (!type)
-        abort ();
-      OP1 (prod) = $1;
-      OP2 (prod) = $3;
-      
-      prod->tp.pro.code = tree_code_get_expression
-        (EXP_PLUS, type, op1->tp.pro.code, op2->tp.pro.code, NULL);
-    }
-  $$ = prod;
+  $$ = make_plus_expression
+     (tok, op1, op2, type_code, EXP_PLUS);
 }
-|expression MINUS expression %prec PLUS {
-  struct prod_token_parm_item* tok;
-  struct prod_token_parm_item *prod;
-  struct prod_token_parm_item *op1;
-  struct prod_token_parm_item *op2;
-  tree type;
-  
-  op1 = $1;
-  op2 = $3;
-  ensure_not_void (NUMERIC_TYPE (op1), op1->tp.pro.main_token);
-  ensure_not_void (NUMERIC_TYPE (op2), op2->tp.pro.main_token);
-  tok = $2;
-  prod = make_production (PROD_PLUS_EXPRESSION, tok);
-  NUMERIC_TYPE (prod) = get_common_type (op1, op2);
-  if (!NUMERIC_TYPE (prod))
+|expression tl_MINUS expression %prec tl_PLUS {
+  struct prod_token_parm_item *tok = $2;
+  struct prod_token_parm_item *op1 = $1;
+  struct prod_token_parm_item *op2 = $3;
+  int type_code = get_common_type (op1, op2);
+  if (!type_code)
     YYERROR;
-  else 
-    {
-      type = get_type_for_numeric_type (NUMERIC_TYPE (prod));
-      if (!type)
-        abort ();
-      OP1 (prod) = $1;
-      OP2 (prod) = $3;
-      
-      prod->tp.pro.code = tree_code_get_expression (EXP_MINUS, 
-                                          type, op1->tp.pro.code, op2->tp.pro.code, NULL);
-    }
-  $$ = prod;
+  $$ = make_plus_expression
+     (tok, op1, op2, type_code, EXP_MINUS);
 }
 |expression EQUALS expression {
-  struct prod_token_parm_item* tok;
-  struct prod_token_parm_item *prod;
-  struct prod_token_parm_item *op1;
-  struct prod_token_parm_item *op2;
-  tree type;
-  
-  op1 = $1;
-  op2 = $3;
-  ensure_not_void (NUMERIC_TYPE (op1), op1->tp.pro.main_token);
-  ensure_not_void (NUMERIC_TYPE (op2), op2->tp.pro.main_token);
-  tok = $2;
-  prod = make_production (PROD_PLUS_EXPRESSION, tok);
-  NUMERIC_TYPE (prod) = SIGNED_INT;
-  if (!NUMERIC_TYPE (prod))
-    YYERROR;
-  else 
-    {
-      type = get_type_for_numeric_type (NUMERIC_TYPE (prod));
-      if (!type)
-        abort ();
-      OP1 (prod) = $1;
-      OP2 (prod) = $3;
-      
-      prod->tp.pro.code = tree_code_get_expression (EXP_EQUALS, 
-                                          type, op1->tp.pro.code, op2->tp.pro.code, NULL);
-    }
-  $$ = prod;
+  struct prod_token_parm_item *tok = $2;
+  struct prod_token_parm_item *op1 = $1;
+  struct prod_token_parm_item *op2 = $3;
+  $$ = make_plus_expression
+     (tok, op1, op2, SIGNED_INT, EXP_EQUALS);
 }
 |variable_ref ASSIGN expression {
-  struct prod_token_parm_item* tok;
-  struct prod_token_parm_item *prod;
-  struct prod_token_parm_item *op1;
-  struct prod_token_parm_item *op2;
-  tree type;
-  
-  op1 = $1;
-  op2 = $3;
-  tok = $2;
-  ensure_not_void (NUMERIC_TYPE (op2), op2->tp.pro.main_token);
-  prod = make_production (PROD_ASSIGN_EXPRESSION, tok);
-  NUMERIC_TYPE (prod) = NUMERIC_TYPE (op1);
-  if (!NUMERIC_TYPE (prod))
+  struct prod_token_parm_item *tok = $2;
+  struct prod_token_parm_item *op1 = $1;
+  struct prod_token_parm_item *op2 = $3;
+  int type_code = NUMERIC_TYPE (op1);
+  if (!type_code)
     YYERROR;
-  else 
-    {
-      type = get_type_for_numeric_type (NUMERIC_TYPE (prod));
-      if (!type)
-        abort ();
-      OP1 (prod) = $1;
-      OP2 (prod) = $3;
-      prod->tp.pro.code = tree_code_get_expression (EXP_ASSIGN, 
-                                          type, op1->tp.pro.code, op2->tp.pro.code, NULL);
-    }
-  $$ = prod;
+  $$ = make_plus_expression
+     (tok, op1, op2, type_code, EXP_ASSIGN);
 }
 |function_invocation {
   $$ = $1;
@@ -700,11 +639,13 @@ NAME LEFT_PARENTHESIS expressions_with_commas RIGHT_PARENTHESIS {
   SYMBOL_TABLE_NAME (prod) = tok;
   PARAMETERS (prod) = reverse_prod_list ($3);
   SYMBOL_TABLE_NAME ((&search_prod)) = tok;
+  search_prod.category = token_category;
   proto = lookup_tree_name (&search_prod);
   if (!proto)
     {
-      fprintf (stderr, "%s:%i:%i: Function prototype not found\n", in_fname, 
-              tok->tp.tok.lineno, tok->tp.tok.charno);
+      fprintf (stderr, "%s:%i:%i: Function prototype not found\n",
+	       tok->tp.tok.location.file,
+	       tok->tp.tok.location.line, tok->tp.tok.charno);
       print_token (stderr, 0, tok);
       errorcount++;
       YYERROR;
@@ -721,8 +662,9 @@ NAME LEFT_PARENTHESIS expressions_with_commas RIGHT_PARENTHESIS {
 
   if (exp_count !=  exp_proto_count)
     {
-      fprintf (stderr, "%s:%i:%i: expression count mismatch with prototype\n", in_fname, 
-              tok->tp.tok.lineno, tok->tp.tok.charno);
+      fprintf (stderr, "%s:%i:%i: expression count mismatch with prototype\n",
+	       tok->tp.tok.location.file,
+	       tok->tp.tok.location.line, tok->tp.tok.charno);
       print_token (stderr, 0, tok);
       errorcount++;
       YYERROR;
@@ -778,11 +720,13 @@ NAME {
 
   tok = $1;
   SYMBOL_TABLE_NAME ((&search_prod)) = tok;
+  search_prod.category = token_category;
   symbol_table_entry = lookup_tree_name (&search_prod);
   if (!symbol_table_entry)
     {
-      fprintf (stderr, "%s:%i:%i: Variable referred to but not defined\n", in_fname, 
-              tok->tp.tok.lineno, tok->tp.tok.charno);
+      fprintf (stderr, "%s:%i:%i: Variable referred to but not defined\n",
+              tok->tp.tok.location.file,
+              tok->tp.tok.location.line, tok->tp.tok.charno);
       print_token (stderr, 0, tok);
       errorcount++;
       YYERROR;
@@ -832,14 +776,14 @@ print_token (FILE * file, unsigned int type ATTRIBUTE_UNUSED, YYSTYPE value)
   unsigned int  ix;
 
   tok  =  value;
-  fprintf (file, "%d \"", tok->tp.tok.lineno);
+  fprintf (file, "%d \"", tok->tp.tok.location.line);
   for (ix  =  0; ix < tok->tp.tok.length; ix++)
     fprintf (file, "%c", tok->tp.tok.chars[ix]);
   fprintf (file, "\"");
 }
 
 /* Output a message ERROR_MESSAGE from the parser.  */
-void
+static void
 yyerror (const char *error_message)
 {
   struct prod_token_parm_item *tok;
@@ -847,7 +791,8 @@ yyerror (const char *error_message)
   tok = yylval;
   if (tok)
     {
-      fprintf (stderr, "%s:%i:%i: %s\n", in_fname, tok->tp.tok.lineno, tok->tp.tok.charno, error_message);
+      fprintf (stderr, "%s:%i:%i: %s\n", tok->tp.tok.location.file,
+	       tok->tp.tok.location.line, tok->tp.tok.charno, error_message);
       print_token (stderr, 0, tok);
     }
   else
@@ -889,8 +834,9 @@ ensure_not_void (unsigned int type, struct prod_token_parm_item* name)
 {
   if (type == VOID)
     {
-      fprintf (stderr, "%s:%i:%i: Type must not be void in this context\n", in_fname, 
-              name->tp.tok.lineno, name->tp.tok.charno);
+      fprintf (stderr, "%s:%i:%i: Type must not be void in this context\n",
+	       name->tp.tok.location.file,
+	       name->tp.tok.location.line, name->tp.tok.charno);
       print_token (stderr, 0, name);
       errorcount++;
     }
@@ -965,6 +911,39 @@ make_integer_constant (struct prod_token_parm_item* value)
   return prod;
 }
 
+
+/* Build a PROD_PLUS_EXPRESSION.  This is uses for PLUS, MINUS, ASSIGN
+   and EQUALS expressions.  */
+
+static struct prod_token_parm_item *
+make_plus_expression (struct prod_token_parm_item* tok,
+		      struct prod_token_parm_item* op1,
+		      struct prod_token_parm_item* op2,
+		      int type_code, int prod_code)
+{
+  struct prod_token_parm_item *prod;
+  tree type;
+
+  ensure_not_void (NUMERIC_TYPE (op1), op1->tp.pro.main_token);
+  ensure_not_void (NUMERIC_TYPE (op2), op2->tp.pro.main_token);
+
+  prod = make_production (PROD_PLUS_EXPRESSION, tok);
+
+  NUMERIC_TYPE (prod) = type_code;
+  type = get_type_for_numeric_type (NUMERIC_TYPE (prod));
+  if (!type)
+    abort ();
+  OP1 (prod) = op1;
+  OP2 (prod) = op2;
+      
+  prod->tp.pro.code = tree_code_get_expression
+     (prod_code, type, op1->tp.pro.code,
+      op2->tp.pro.code, NULL);
+
+  return prod;
+}
+
+
 /* Set STORAGE_CLASS in PROD according to CLASS_TOKEN.  */
 
 static void
@@ -1003,3 +982,4 @@ treelang_debug (void)
   if (option_parser_trace)
     yydebug = 1;
 }
+

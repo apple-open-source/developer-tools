@@ -1,0 +1,40 @@
+2004-06-07  Jon Ziegler  <jonz@apple.com>
+
+	Radar 3678979
+	* build_gcc: Change directory for developer docs.
+
+2005-06-04  Fariborz Jahanian <fjahanian@apple.com>
+
+	Merge lno-branch as of 2004:05:29 00:00 GMT into
+	apple-ppc-branch. Pre-merge apple-ppc-branch
+	is tagged as: before-lno-20040530-merge-to-apple-ppc
+
+2004-05-11  Devang Patel  <dpatel@apple.com>
+
+	* build_gcc: Revert previous fix for g++ man page.
+	Fix name of installed g++ name page.
+
+2004-05-06  Mike Stump  <mrs@apple.com>
+
+	* build_gcc: Fix manual page name for g++.1.
+
+2004-04-29  Robert Bowdidge <bowdidge@apple.com>
+
+	Radar 3628023
+	* build_gcc: correctly lipo gcov
+
+2004-04-29  Devang Patel  <dpatel@apple.com>
+
+	Merge lno-branch as of 2004:04:18 00:00 into
+	apple-ppc-branch.
+
+2004-04-22  Devang Patel  <dpatel@apple.com>
+
+	Radar 3401402 and 3511029
+	* build_gcc: Add support to build darwin driver.
+
+2004-04-21  Robert Bowdidge <bowdidge@apple.com>
+
+	* build_gcc: Add --disable-libmudflap to the list of options to
+	configure.  Option needed to keep gcc building on recent internal
+	builds of the OS. [Radar 3630321]

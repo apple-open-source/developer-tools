@@ -6,8 +6,7 @@
  *                                                                          *
  *                              C Header File                               *
  *                                                                          *
- *                                                                          *
- *          Copyright (C) 1992-2001 Free Software Foundation, Inc.          *
+ *          Copyright (C) 1992-2004 Free Software Foundation, Inc.          *
  *                                                                          *
  * GNAT is free software;  you can  redistribute it  and/or modify it under *
  * terms of the  GNU General Public License as published  by the Free Soft- *
@@ -35,32 +34,32 @@ enum gnat_tree_code {
 #undef DEFTREECODE
 
 /* A tree to hold a loop ID.  */
-struct tree_loop_id GTY(()) 
+struct tree_loop_id GTY(())
 {
   struct tree_common common;
   struct nesting *loop_id;
 };
 
 /* The language-specific tree.  */
-union lang_tree_node 
+union lang_tree_node
   GTY((desc ("TREE_CODE (&%h.generic) == GNAT_LOOP_ID"),
        chain_next ("(union lang_tree_node *)TREE_CHAIN (&%h.generic)")))
 {
-  union tree_node GTY ((tag ("0"), 
-			desc ("tree_node_structure (&%h)"))) 
+  union tree_node GTY ((tag ("0"),
+			desc ("tree_node_structure (&%h)")))
     generic;
   struct tree_loop_id GTY ((tag ("1"))) loop_id;
 };
 
 /* Ada uses the lang_decl and lang_type fields to hold more trees.  */
-struct lang_decl GTY(()) 
+struct lang_decl GTY(())
 {
-  union lang_tree_node 
+  union lang_tree_node
     GTY((desc ("TREE_CODE (&%h.generic) == GNAT_LOOP_ID"))) t;
 };
 struct lang_type GTY(())
 {
-  union lang_tree_node 
+  union lang_tree_node
     GTY((desc ("TREE_CODE (&%h.generic) == GNAT_LOOP_ID"))) t;
 };
 
@@ -73,9 +72,13 @@ struct lang_type GTY(())
 #define TYPE_FAT_POINTER_P(NODE)  \
   (TREE_CODE (NODE) == RECORD_TYPE && TYPE_IS_FAT_POINTER_P (NODE))
 
-/* For integral types, nonzero if this is a packed array type.  Such
-   types should not be extended to a larger size.  */
+/* For integral types and array types, nonzero if this is a packed array type.
+   Such types should not be extended to a larger size.  */
 #define TYPE_PACKED_ARRAY_TYPE_P(NODE) TYPE_LANG_FLAG_0 (NODE)
+
+#define TYPE_IS_PACKED_ARRAY_TYPE_P(NODE) \
+  ((TREE_CODE (NODE) == INTEGER_TYPE || TREE_CODE (NODE) == ARRAY_TYPE) \
+   && TYPE_PACKED_ARRAY_TYPE_P (NODE))
 
 /* For INTEGER_TYPE, nonzero if this is a modular type with a modulus that
    is not equal to two to the power of its mode's size.  */
@@ -92,7 +95,8 @@ struct lang_type GTY(())
 
 /* For RECORD_TYPE, UNION_TYPE, and QUAL_UNION_TYPE, nonzero if this denotes
    a left-justified modular type (will only be true for RECORD_TYPE).  */
-#define TYPE_LEFT_JUSTIFIED_MODULAR_P(NODE) TYPE_LANG_FLAG_1 (NODE)
+#define TYPE_LEFT_JUSTIFIED_MODULAR_P(NODE) \
+  TYPE_LANG_FLAG_1 (REC_OR_UNION_CHECK (NODE))
 
 /* Nonzero in an arithmetic subtype if this is a subtype not known to the
    front-end.  */
@@ -104,7 +108,8 @@ struct lang_type GTY(())
 /* For RECORD_TYPE, UNION_TYPE, and QUAL_UNION_TYPE, nonzero if this is the
    type for an object whose type includes its template in addition to
    its value (only true for RECORD_TYPE).  */
-#define TYPE_CONTAINS_TEMPLATE_P(NODE) TYPE_LANG_FLAG_3 (NODE)
+#define TYPE_CONTAINS_TEMPLATE_P(NODE) \
+  TYPE_LANG_FLAG_3 (REC_OR_UNION_CHECK (NODE))
 
 /* For INTEGER_TYPE, nonzero if this really represents a VAX
    floating-point type.  */
@@ -175,17 +180,17 @@ struct lang_type GTY(())
 #define TYPE_INDEX_TYPE(NODE)	\
   (&TYPE_LANG_SPECIFIC (INTEGER_TYPE_CHECK (NODE))->t.generic)
 #define SET_TYPE_INDEX_TYPE(NODE, X)	\
-  (TYPE_LANG_SPECIFIC (INTEGER_TYPE_CHECK (NODE)) = (struct lang_type *)(X))
+  (TYPE_LANG_SPECIFIC (INTEGER_TYPE_CHECK (NODE)) = (struct lang_type *) (X))
 
 /* For an INTEGER_TYPE with TYPE_VAX_FLOATING_POINT_P, stores the
    Digits_Value.  */
-#define TYPE_DIGITS_VALUE(NODE)  \
-  ((long) TYPE_LANG_SPECIFIC (INTEGER_TYPE_CHECK (NODE)))
+#define TYPE_DIGITS_VALUE(NODE) \
+  (&TYPE_LANG_SPECIFIC (INTEGER_TYPE_CHECK (NODE))->t.generic)
 #define SET_TYPE_DIGITS_VALUE(NODE, X)  \
-  (TYPE_LANG_SPECIFIC (INTEGER_TYPE_CHECK (NODE)) = (struct lang_type *)(X))
+  (TYPE_LANG_SPECIFIC (INTEGER_TYPE_CHECK (NODE)) = (struct lang_type *) (X))
 
 /* For INTEGER_TYPE, stores the RM_Size of the type.  */
-#define TYPE_RM_SIZE_INT(NODE)	TYPE_VALUES (INTEGER_TYPE_CHECK (NODE))
+#define TYPE_RM_SIZE_INT(NODE)	(INTEGER_TYPE_CHECK (NODE)->type.values)
 
 /* Likewise for ENUMERAL_TYPE.  */
 #define TYPE_RM_SIZE_ENUM(NODE)	\
@@ -221,12 +226,20 @@ struct lang_type GTY(())
   (TYPE_LANG_SPECIFIC (NODE) = (struct lang_type *)(X))
 
 /* In an UNCONSTRAINED_ARRAY_TYPE, points to the record containing both
-   the template and object.  */
-#define TYPE_OBJECT_RECORD_TYPE(NODE) TYPE_MIN_VALUE (NODE)
+   the template and object.
+
+   ??? We also put this on an ENUMERAL_TYPE that's dummy.  Technically,
+   this is a conflict on the minval field, but there doesn't seem to be
+   simple fix, so we'll live with this kludge for now.  */
+#define TYPE_OBJECT_RECORD_TYPE(NODE) \
+  (TREE_CHECK2 ((NODE), UNCONSTRAINED_ARRAY_TYPE, ENUMERAL_TYPE)->type.minval)
 
 /* Nonzero in a FUNCTION_DECL that represents a stubbed function
    discriminant.  */
 #define DECL_STUBBED_P(NODE) DECL_LANG_FLAG_0 (FUNCTION_DECL_CHECK (NODE))
+
+/* Nonzero in a VAR_DECL if it needs to be initialized by an assignment.  */
+#define DECL_INIT_BY_ASSIGN_P(NODE) DECL_LANG_FLAG_0 (VAR_DECL_CHECK (NODE))
 
 /* Nonzero if this decl is always used by reference; i.e., an INDIRECT_REF
    is needed to access the object.  */
@@ -234,7 +247,7 @@ struct lang_type GTY(())
 
 /* Nonzero if this decl is a PARM_DECL for an Ada array being passed to a
    foreign convention subprogram.  */
-#define DECL_BY_COMPONENT_PTR_P(NODE) DECL_LANG_FLAG_2 (NODE)
+#define DECL_BY_COMPONENT_PTR_P(NODE) DECL_LANG_FLAG_2 (PARM_DECL_CHECK (NODE))
 
 /* Nonzero in a FIELD_DECL that is a dummy built for some internal reason.  */
 #define DECL_INTERNAL_P(NODE) DECL_LANG_FLAG_3 (FIELD_DECL_CHECK (NODE))
@@ -272,7 +285,30 @@ struct lang_type GTY(())
    discriminant number.  */
 #define DECL_DISCRIMINANT_NUMBER(NODE) DECL_INITIAL (FIELD_DECL_CHECK (NODE))
 
-/* This is a horrible kludge to store the loop_id of a loop into a tree
-   node.  We need to find some other place to store it!  */
+/* This is the loop id for a GNAT_LOOP_ID node.  */
 #define TREE_LOOP_ID(NODE) \
-  (((union lang_tree_node *)TREE_CHECK (NODE, GNAT_LOOP_ID))->loop_id.loop_id)
+  ((union lang_tree_node *) GNAT_LOOP_ID_CHECK (NODE))->loop_id.loop_id
+
+/* Define fields and macros for statements.
+
+   Start by defining which tree codes are used for statements.  */
+#define IS_STMT(NODE)		(TREE_CODE_CLASS (TREE_CODE (NODE)) == 's')
+
+/* We store the Sloc in statement nodes.  */
+#define TREE_SLOC(NODE)		TREE_COMPLEXITY (STMT_CHECK (NODE))
+
+#define EXPR_STMT_EXPR(NODE)	TREE_OPERAND_CHECK_CODE (NODE, EXPR_STMT, 0)
+#define DECL_STMT_VAR(NODE)	TREE_OPERAND_CHECK_CODE (NODE, DECL_STMT, 0)
+#define BLOCK_STMT_LIST(NODE)	TREE_OPERAND_CHECK_CODE (NODE, BLOCK_STMT, 0)
+#define IF_STMT_COND(NODE)	TREE_OPERAND_CHECK_CODE (NODE, IF_STMT, 0)
+#define IF_STMT_TRUE(NODE)	TREE_OPERAND_CHECK_CODE (NODE, IF_STMT, 1)
+#define IF_STMT_ELSEIF(NODE)	TREE_OPERAND_CHECK_CODE (NODE, IF_STMT, 2)
+#define IF_STMT_ELSE(NODE)	TREE_OPERAND_CHECK_CODE (NODE, IF_STMT, 3)
+#define GOTO_STMT_LABEL(NODE)	TREE_OPERAND_CHECK_CODE (NODE, GOTO_STMT, 0)
+#define LABEL_STMT_LABEL(NODE)	TREE_OPERAND_CHECK_CODE (NODE, LABEL_STMT, 0)
+#define RETURN_STMT_EXPR(NODE)	TREE_OPERAND_CHECK_CODE (NODE, RETURN_STMT, 0)
+#define ASM_STMT_TEMPLATE(NODE)	TREE_OPERAND_CHECK_CODE (NODE, ASM_STMT, 0)
+#define ASM_STMT_OUTPUT(NODE)	TREE_OPERAND_CHECK_CODE (NODE, ASM_STMT, 1)
+#define ASM_STMT_ORIG_OUT(NODE)	TREE_OPERAND_CHECK_CODE (NODE, ASM_STMT, 2)
+#define ASM_STMT_INPUT(NODE)	TREE_OPERAND_CHECK_CODE (NODE, ASM_STMT, 3)
+#define ASM_STMT_CLOBBER(NODE)	TREE_OPERAND_CHECK_CODE (NODE, ASM_STMT, 4)

@@ -1,3 +1,146 @@
+2004-05-04  Andreas Jaeger  <aj@suse.de>
+
+	* demangle.h: Do not use C++ reserved keyword typename as
+	parameter for cplus_demangle_fill_builtin_type.
+
+2004-04-22  Richard Henderson  <rth@redhat.com>
+
+	* hashtab.h (struct htab): Add size_prime_index.
+
+2004-04-13  Jeff Law  <law@redhat.com>
+ 
+	* hashtab.h (htab_remove_elt_with_hash): Prototype new function.
+ 
+2004-03-30  Zack Weinberg  <zack@codesourcery.com>
+
+	* hashtab.h, splay-tree.h: Use new shorter form of GTY markers.
+
+2004-02-24  Ian Lance Taylor  <ian@wasabisystems.com>
+
+	* dyn-string.h: Update copyright date.
+
+2004-02-23  Ian Lance Taylor  <ian@wasabisystems.com>
+
+	* dyn-string.h: Remove test of IN_LIBGCC2 and IN_GLIBCPP_V3 and
+	the associated #defines.
+
+2004-01-12  Ian Lance Taylor  <ian@wasabisystems.com>
+
+	* demangle.h: Instead of checking ANSI_PROTOTYPES, just include
+	"libiberty.h".
+
+	* demangle.h: If ANSI_PROTOTYPES is defined, include <stddef.h>.
+
+	* demangle.h (enum demangle_component_type): Define.
+	(struct demangle_operator_info): Declare.
+	(struct demangle_builtin_type_info): Declare.
+	(struct demangle_component): Define.
+	(cplus_demangle_fill_component): Declare.
+	(cplus_demangle_fill_name): Declare.
+	(cplus_demangle_fill_builtin_type): Declare.
+	(cplus_demangle_fill_operator): Declare.
+	(cplus_demangle_fill_extended_operator): Declare.
+	(cplus_demangle_fill_ctor, cplus_demangle_fill_dtor): Declare.
+	(cplus_demangle_v3_components): Declare.
+	(cplus_demangle_print): Declare.
+
+2003-12-19  Andreas Tobler  <a.tobler@schweiz.ch>
+
+	* include/fibheap.h (fibnode): Use __extension__ for
+	bit-fields mark and degree if __GNUC__.
+
+2003-12-18  Kazu Hirata  <kazu@cs.umass.edu>
+
+	* include/fibheap.h (fibnode): Use unsigned long int for
+	bit-fields if __GNUC__ is defined.
+
+2003-10-22  Joseph S. Myers  <jsm@polyomino.org.uk>
+
+	* obstack.h: Merge the following change from gnulib:
+	2003-10-21  Paul Eggert  <eggert@twinsun.com>
+	* obstack.h (obstack_1grow_fast): Properly parenthesize arg.
+	(obstack_ptr_grow_fast, obstack_int_grow_fast):
+	Don't use lvalue casts, as GCC plans to remove support for them
+	in GCC 3.5.  Reported by Joseph S. Myers.  This bug
+	was also present in the non-GCC version, indicating that this
+	code had always been buggy and had never been widely used.
+	(obstack_1grow, obstack_ptr_grow, obstack_int_grow, obstack_blank):
+	Use the fast variant of each macro, rather than copying the
+	definiens of the fast variant; that way, we'll be more likely to
+	catch future bugs in the fast variants.
+
+2003-09-22  Andrew Cagney  <cagney@redhat.com>
+
+	* floatformat.h (struct floatformat): Add field "is_valid".
+
+2003-09-15  Andrew Cagney  <cagney@redhat.com>
+
+	* floatformat.h (floatformat_to_double): Make input buffer constant.
+	(floatformat_from_double, floatformat_is_valid): Ditto.
+
+2003-09-15  Andrew Cagney  <cagney@redhat.com>
+
+	* floatformat.h (struct floatformat): Make "exp_bias" signed.
+
+2003-09-15  Daniel Jacobowitz  <drow@mvista.com>
+
+	* floatformat.h (floatformat_is_valid): Add prototype.
+
+2003-07-09  Bob Wilson  <bob.wilson@acm.org>
+
+	* xtensa-config.h: Undef all macros before defining them.
+
+2003-07-06  H.J. Lu <hongjiu.lu@intel.com>
+
+	* demangle.h: Support C++.
+
+2003-07-01  Zack Weinberg  <zack@codesourcery.com>
+
+	* filenames.h: New file imported from binutils.
+
+2003-06-30  Bob Wilson  <bob.wilson@acm.org>
+
+	* xtensa-config.h: New file imported from binutils.
+
+2003-06-22  Zack Weinberg  <zack@codesourcery.com>
+
+	* safe-ctype.h (HC_UNKNOWN, HC_ASCII, HC_EBCDIC): Rename to
+	HOST_CHARSET_UNKNOWN, HOST_CHARSET_ASCII, HOST_CHARSET_EBCDIC
+	respectively.
+
+2003-06-21  Zack Weinberg  <zack@codesourcery.com>
+
+	* safe-ctype.h (HC_UNKNOWN, HC_ASCII, HC_EBCDIC, HOST_CHARSET):
+	New #defines.
+
+2003-06-17  Kaveh R. Ghazi  <ghazi@caip.rutgers.edu>
+
+	* ansidecl.h: Delete HAVE_LONG_DOUBLE GCC bootstrap support.
+
+2003-05-15  Jim Blandy  <jimb@redhat.com>
+
+	* libiberty.h (hex_value): Make the value an unsigned int, to
+	avoid unexpected sign-extension when cast to unsigned types larger
+	than int --- like bfd_vma, on some platforms.
+	(_hex_value): Update declaration.
+
+2003-05-07  Jason Merrill  <jason@redhat.com>
+
+	* hashtab.h (iterative_hash): Prototype.
+	(iterative_hash_object): New macro.
+
+2003-03-17  Kaveh R. Ghazi  <ghazi@caip.rutgers.edu>
+
+	* ansidecl.h (ATTRIBUTE_NONNULL, ATTRIBUTE_NULL_PRINTF,
+	ATTRIBUTE_NULL_PRINTF_1, ATTRIBUTE_NULL_PRINTF_2,
+	ATTRIBUTE_NULL_PRINTF_3, ATTRIBUTE_NULL_PRINTF_4,
+	ATTRIBUTE_NULL_PRINTF_5): New.
+	(ATTRIBUTE_PRINTF): Add ATTRIBUTE_NONNULL.
+
+2003-03-17  Jan Hubicka  <jh@suse.cz>
+
+	* hashtab.h (htab_traverse_noresize): Declare.
+
 2003-02-27  Kaveh R. Ghazi  <ghazi@caip.rutgers.edu>
 
 	* libiberty.h: Document return value of physmem routines.
@@ -5,6 +148,25 @@
 2003-02-20  Kaveh R. Ghazi  <ghazi@caip.rutgers.edu>
 
 	* libiberty.h (physmem_total, physmem_available): Prototype.
+
+2003-02-20  Daniel Jacobowitz  <drow@mvista.com>
+
+	* libiberty.h (lrealpath): Add declaration.
+
+2003-01-26  Daniel Jacobowitz  <drow@mvista.com>
+
+	* hashtab.h (htab_alloc_with_arg, htab_free_with_arg): Add new types.
+	(struct htab): Add alloc_arg, alloc_with_arg_f, free_with_arg_f.
+	(htab_create_alloc_ex): New prototype.
+	(htab_set_functions_ex): New prototype.
+
+2002-07-17  Geoffrey Keating  <geoffk@redhat.com>
+
+	* splay-tree.h (GTY): Define if undefined.
+	(splay_tree_allocate_fn): Return PTR for compatibility, not void *.
+	(struct splay_tree_node_s): Support gengtype.
+	(struct splay_tree_s): Likewise.  Make allocate_data a PTR,
+	not a void *.
 
 2002-11-23  Simon Burge  <simonb@wasabisystems.com>
 
@@ -336,7 +498,7 @@
 
 2000-09-04  Alex Samuel  <samuel@codesourcery.com>
 
-	* dyn-string.h: Adjust formatting. 
+	* dyn-string.h: Adjust formatting.
 	(dyn_string_insert_char): New macro.  New declaration.
 
 2000-08-28  Jason Merrill  <jason@redhat.com>
@@ -361,7 +523,7 @@
 	dyn_string_insert_cstr, dyn_string_append, dyn_string_append_cstr,
 	dyn_string_append_char, dyn_string_substring): Change return type
 	to int.
-	
+
 2000-06-07  Kaveh R. Ghazi  <ghazi@caip.rutgers.edu>
 
 	* demangle.h (demangling_styles): Remove trailing comma in enum.
@@ -374,12 +536,12 @@
 	* dyn-string.h: Move here from gcc/dyn-string.h.  Add new functions.
 
 	* demangle.h (DMGL_GNU_NEW_ABI): New macro.
-	(DMGL_STYLE_MASK): Or in DMGL_GNU_NEW_ABI. 
+	(DMGL_STYLE_MASK): Or in DMGL_GNU_NEW_ABI.
 	(current_demangling_style): Add gnu_new_abi_demangling.
 	(GNU_NEW_ABI_DEMANGLING_STYLE_STRING): New macro.
 	(GNU_NEW_ABI_DEMANGLING): Likewise.
 	(cplus_demangle_new_abi): New declaration.
-	
+
 Tue May 30 16:53:34 2000  Andrew Cagney  <cagney@b1.cygnus.com>
 
 	* floatformat.h (struct floatformat): Add field name.
@@ -392,8 +554,8 @@ Tue May 30 16:53:34 2000  Andrew Cagney  <cagney@b1.cygnus.com>
 
 2000-05-06  Zack Weinberg  <zack@wolery.cumb.org>
 
- 	* ansidecl.h: #define __extension__ to nothing if
- 	GCC_VERSION < 2008.
+	* ansidecl.h: #define __extension__ to nothing if
+	GCC_VERSION < 2008.
 
 2000-05-04  Kaveh R. Ghazi  <ghazi@caip.rutgers.edu>
 
@@ -411,9 +573,9 @@ Thu May  4 17:15:26 2000  Philippe De Muyter  <phdm@macqel.be>
 2000-04-28  Kenneth Block  <block@zk3.dec.com>
 	    Jason Merrill  <jason@casey.cygnus.com>
 
-        * demangle.h (libiberty_demanglers): new table for different styles.
-        (cplus_demangle_set_style): New function for setting style.
-        (cplus_demangle_name_to_style): New function to translate name.
+	* demangle.h (libiberty_demanglers): new table for different styles.
+	(cplus_demangle_set_style): New function for setting style.
+	(cplus_demangle_name_to_style): New function to translate name.
 
 2000-04-24  Mark Mitchell  <mark@codesourcery.com>
 
@@ -638,8 +800,8 @@ Tue Feb 24 13:05:02 1998  Doug Evans  <devans@canuck.cygnus.com>
 Tue Feb 17 12:32:18 1998  Andrew Cagney  <cagney@b1.cygnus.com>
 
 	* remote-sim.h (sim_fetch_register, sim_store_register): Add
- 	register length parameter.  Functions return actual length of
- 	register.
+	register length parameter.  Functions return actual length of
+	register.
 
 Thu Feb 12 16:29:01 1998  Ian Lance Taylor  <ian@cygnus.com>
 
@@ -697,7 +859,7 @@ Tue Nov 25 01:35:52 1997  Doug Evans  <devans@seba.cygnus.com>
 Sat Nov 22 23:34:15 1997  Andrew Cagney  <cagney@b1.cygnus.com>
 
 	* remote-sim.h (sim_stop_reason): Clarify sim_signalled SIGRC
- 	argument.
+	argument.
 
 Mon Nov 17 14:00:51 1997  Doug Evans  <devans@seba.cygnus.com>
 
@@ -777,12 +939,12 @@ Fri May 23 13:43:41 1997  Fred Fish  <fnf@cygnus.com>
 Thu May 22 11:32:49 1997  Andrew Cagney  <cagney@b1.cygnus.com>
 
 	* remote-sim.h: Review documentation.  Clarify restrictions on
- 	when functions can be called.
+	when functions can be called.
 
 Wed May 21 16:47:53 1997  Andrew Cagney  <cagney@b1.cygnus.com>
 
 	* remote-sim.h (sim_set_profile_size): Add prototype, document as
- 	depreciated.
+	depreciated.
 
 Tue May 20 09:32:22 1997  Andrew Cagney  <cagney@b1.cygnus.com>
 
@@ -816,16 +978,16 @@ Tue Apr 22 10:24:34 1997  Fred Fish  <fnf@cygnus.com>
 Fri Apr 18 13:04:49 1997  Andrew Cagney  <cagney@b1.cygnus.com>
 
 	* remote-sim.h (sim_stop): New interface - asynchronous
- 	notification of a request to stop / suspend the running
- 	simulation.
+	notification of a request to stop / suspend the running
+	simulation.
 
 	* remote-sim.h (enum sim_stop): Add sim_running and sim_polling as
- 	states for use internal to simulators.
+	states for use internal to simulators.
 
 	* callback.h (struct host_callback_strut): Put a magic number at
- 	the end of the struct to allow basic checking.
+	the end of the struct to allow basic checking.
 	(struct host_callback_struct ): Add poll_quit - so
- 	that the console etc can be polled at regular intervals.
+	that the console etc can be polled at regular intervals.
 
 Thu Apr 17 02:17:12 1997  Doug Evans  <dje@canuck.cygnus.com>
 
@@ -836,7 +998,7 @@ Thu Apr 17 02:17:12 1997  Doug Evans  <dje@canuck.cygnus.com>
 Wed Apr  2 17:09:12 1997  Andrew Cagney  <cagney@kremvax.cygnus.com>
 
 	* remote-sim.h (sim_trace, sim_size): Make these global.  They
- 	will go away shortly.
+	will go away shortly.
 
 Wed Apr  2 15:23:49 1997  Doug Evans  <dje@canuck.cygnus.com>
 
@@ -866,7 +1028,7 @@ Mon Mar 17 19:22:12 1997  Ian Lance Taylor  <ian@cygnus.com>
 Mon Mar 17 14:57:55 1997  Andrew Cagney  <cagney@kremvax.cygnus.com>
 
 	* remote-sim.h: New file, copied in from gdb/remote-sim.h.  One
- 	day this will be placed in a directory of its own.
+	day this will be placed in a directory of its own.
 
 Sat Mar 15 19:00:14 1997  Ian Lance Taylor  <ian@cygnus.com>
 
@@ -875,8 +1037,8 @@ Sat Mar 15 19:00:14 1997  Ian Lance Taylor  <ian@cygnus.com>
 Thu Mar  6 15:46:59 1997  Andrew Cagney  <cagney@kremvax.cygnus.com>
 
 	* callback.h (struct host_callback_struct): Add callbacks -
- 	flush_stdout, write_stderr, flush_stderr, vprintf_filtered,
- 	evprintf_filtered.  Delete redundant callbacks - printf_filtered.
+	flush_stdout, write_stderr, flush_stderr, vprintf_filtered,
+	evprintf_filtered.  Delete redundant callbacks - printf_filtered.
 
 Thu Feb 27 23:18:27 1997  Ian Lance Taylor  <ian@cygnus.com>
 
@@ -988,7 +1150,7 @@ Tue Jul 23 17:37:58 1996  Fred Fish  <fnf@cygnus.com>
 	can define PRIVATE_XMALLOC and then define xmalloc and
 	xrealloc anyway they want.
 	(basename): Document in source that we can't declare the
- 	parameter type because it is declared inconsistently across
+	parameter type because it is declared inconsistently across
 	different systems.
 
 Mon Jul 22 13:16:13 1996  Richard Henderson  <rth@tamu.edu>
@@ -1783,7 +1945,7 @@ Sat Nov 30 20:46:43 1991  Steve Chamberlain  (sac at rtl.cygnus.com)
 Wed Nov 27 10:38:31 1991  Steve Chamberlain  (sac at rtl.cygnus.com)
 
 	* internalcoff.h: (internal_scnhdr) took out #def dependency, now
-	s_nreloc and s_nlnno are always long. 	(internal_reloc): allways
+	s_nreloc and s_nlnno are always long.	(internal_reloc): allways
 	has an offset field now.
 
 Fri Nov 22 08:12:58 1991  John Gilmore  (gnu at cygnus.com)

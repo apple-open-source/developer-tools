@@ -1,6 +1,6 @@
 // 2001-11-25  Phil Edwards  <pme@gcc.gnu.org>
 //
-// Copyright (C) 2001 Free Software Foundation, Inc.
+// Copyright (C) 2001, 2003 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -20,29 +20,25 @@
 
 // 20.4.1.1 allocator members
 
-#include <memory>
 #include <cstdlib>
+#include <memory>
+//#include <ext/pool_allocator.h>
+#include <ext/debug_allocator.h>
+#include <ext/malloc_allocator.h>
 #include <testsuite_hooks.h>
 
-typedef std::__malloc_alloc_template<3>             weird_alloc;
-template class std::__malloc_alloc_template<3>;
+using __gnu_cxx::malloc_allocator;
+using __gnu_cxx::debug_allocator;
 
-typedef std::__debug_alloc<weird_alloc>             debug_weird_alloc;
-template class std::__debug_alloc<weird_alloc>;
 
-typedef std::__default_alloc_template<true, 3>      unshared_normal_alloc;
-template class std::__default_alloc_template<true, 3>;
+template class malloc_allocator<int>;
+template class debug_allocator<malloc_allocator<int> >;
 
-typedef std::__default_alloc_template<false, 3>     unshared_singlethreaded;
-template class std::__default_alloc_template<false, 3>;
-
-//std::malloc_alloc test_malloc_alloc;
-
-struct big
-{
-    long f[15];
-};
-
+#if 0
+using __gnu_cxx::__pool_alloc;
+template class __pool_alloc<true, 3>;
+template class __pool_alloc<false, 3>;
+#endif
 
 bool         new_called;
 bool         delete_called;
@@ -63,40 +59,47 @@ operator delete(void *v) throw()
   return std::free(v);
 }
 
-
-template <typename arbitrary_SGIstyle_allocator,
-          bool uses_global_new_and_delete>
-void test()
+template<typename Alloc, bool uses_global_new_and_delete>
+void check_allocator()
 {
+  bool test __attribute__((unused)) = true;
   new_called = false;
   delete_called = false;
   requested = 0;
 
-  std::__allocator<big, arbitrary_SGIstyle_allocator>   a;
-  big *p = a.allocate(10);
-  if (uses_global_new_and_delete)  VERIFY (requested >= (10*15*sizeof(long)));
-  // Touch the far end of supposedly-allocated memory to check that we got
-  // all of it.  Why "3"?  Because it's my favorite integer between e and pi.
-  p[9].f[14] = 3;
-  VERIFY (new_called == uses_global_new_and_delete );
-  a.deallocate(p,10);
-  VERIFY (delete_called == uses_global_new_and_delete );
+  Alloc  a;
+  typename Alloc::pointer p = a.allocate(10);
+  if (uses_global_new_and_delete)  
+    VERIFY( requested >= (10 * 15 * sizeof(long)) );
+
+  VERIFY( new_called == uses_global_new_and_delete );
+  a.deallocate(p, 10);
+  VERIFY( delete_called == uses_global_new_and_delete );
 }
 
-
 // These just help tracking down error messages.
-void test01() { test<weird_alloc,false>(); }
-void test02() { test<debug_weird_alloc,false>(); }
-void test03() { test<unshared_normal_alloc,true>(); }
-void test04() { test<unshared_singlethreaded,true>(); }
+void test01() 
+{ check_allocator<malloc_allocator<int>, false>(); }
+
+void test02() 
+{ check_allocator<debug_allocator<malloc_allocator<int> >, false>(); }
+
+#if 0
+void test03() 
+{ check_allocator<__pool_alloc<true, 3>, true>(); }
+
+void test04() 
+{ check_allocator<__pool_alloc<false, 3>, true>(); }
+#endif
 
 int main()
 {
   test01();
   test02();
+#if 0
   test03();
   test04();
-
+#endif
   return 0;
 }
 

@@ -1,6 +1,6 @@
-# Makefile.in generated automatically by automake 1.4 from Makefile.am
+# Makefile.in generated automatically by automake 1.4-p6 from Makefile.am
 
-# Copyright (C) 1994, 1995-8, 1999 Free Software Foundation, Inc.
+# Copyright (C) 1994, 1995-8, 1999, 2001 Free Software Foundation, Inc.
 # This Makefile.in is free software; the Free Software Foundation
 # gives unlimited permission to copy and/or distribute it,
 # with or without modifications, as long as this notice is preserved.
@@ -66,6 +66,8 @@ target_triplet = @target@
 AR = @AR@
 AS = @AS@
 BACKTRACESPEC = @BACKTRACESPEC@
+CAIRO_CFLAGS = @CAIRO_CFLAGS@
+CAIRO_LIBS = @CAIRO_LIBS@
 CC = @CC@
 CHECKREFSPEC = @CHECKREFSPEC@
 COMPPATH = @COMPPATH@
@@ -76,6 +78,7 @@ DIVIDESPEC = @DIVIDESPEC@
 DLLTOOL = @DLLTOOL@
 EXCEPTIONSPEC = @EXCEPTIONSPEC@
 EXEEXT = @EXEEXT@
+EXTRA_CC_FILES = @EXTRA_CC_FILES@
 GCC_UNWIND_INCLUDE = @GCC_UNWIND_INCLUDE@
 GCDEPS = @GCDEPS@
 GCINCS = @GCINCS@
@@ -86,11 +89,23 @@ GCLIBS = @GCLIBS@
 GCOBJS = @GCOBJS@
 GCSPEC = @GCSPEC@
 GCTESTSPEC = @GCTESTSPEC@
+GLIB_CFLAGS = @GLIB_CFLAGS@
+GLIB_GENMARSHAL = @GLIB_GENMARSHAL@
+GLIB_LIBS = @GLIB_LIBS@
+GLIB_MKENUMS = @GLIB_MKENUMS@
+GOBJECT_QUERY = @GOBJECT_QUERY@
+GTK_CFLAGS = @GTK_CFLAGS@
+GTK_LIBS = @GTK_LIBS@
 HASH_SYNC_SPEC = @HASH_SYNC_SPEC@
+HAVE_LIB = @HAVE_LIB@
 IEEESPEC = @IEEESPEC@
 INCLTDL = @INCLTDL@
 INTERPRETER = @INTERPRETER@
 JC1GCSPEC = @JC1GCSPEC@
+LIB = @LIB@
+LIBART_CFLAGS = @LIBART_CFLAGS@
+LIBART_CONFIG = @LIBART_CONFIG@
+LIBART_LIBS = @LIBART_LIBS@
 LIBFFI = @LIBFFI@
 LIBFFIINCS = @LIBFFIINCS@
 LIBGCJDEBUG = @LIBGCJDEBUG@
@@ -102,24 +117,30 @@ LIBICONV = @LIBICONV@
 LIBLTDL = @LIBLTDL@
 LIBTOOL = @LIBTOOL@
 LN_S = @LN_S@
+LTLIB = @LTLIB@
 MAINT = @MAINT@
 MAKEINFO = @MAKEINFO@
 OBJDUMP = @OBJDUMP@
 OBJEXT = @OBJEXT@
 PACKAGE = @PACKAGE@
+PANGOFT2_CFLAGS = @PANGOFT2_CFLAGS@
+PANGOFT2_LIBS = @PANGOFT2_LIBS@
 PERL = @PERL@
+PKG_CONFIG = @PKG_CONFIG@
 PLATFORMOBJS = @PLATFORMOBJS@
 RANLIB = @RANLIB@
 STRIP = @STRIP@
 SYSDEP_SOURCES = @SYSDEP_SOURCES@
 SYSTEMSPEC = @SYSTEMSPEC@
 SYS_ZLIBS = @SYS_ZLIBS@
+THREADCXXFLAGS = @THREADCXXFLAGS@
 THREADDEPS = @THREADDEPS@
 THREADINCS = @THREADINCS@
 THREADLDFLAGS = @THREADLDFLAGS@
 THREADLIBS = @THREADLIBS@
 THREADOBJS = @THREADOBJS@
 THREADSPEC = @THREADSPEC@
+TOOLKIT = @TOOLKIT@
 VERSION = @VERSION@
 ZINCS = @ZINCS@
 ZLIBS = @ZLIBS@
@@ -220,7 +241,7 @@ TAGS:  $(HEADERS) $(SOURCES) config.h.in $(TAGS_DEPENDENCIES) $(LISP)
 	  awk '    { files[$$0] = 1; } \
 	       END { for (i in files) print i; }'`; \
 	test -z "$(ETAGS_ARGS)config.h.in$$unique$(LISP)$$tags" \
-	  || (cd $(srcdir) && etags $(ETAGS_ARGS) $$tags config.h.in $$unique $(LISP) -o $$here/TAGS)
+	  || (cd $(srcdir) && etags -o $$here/TAGS $(ETAGS_ARGS) $$tags config.h.in $$unique $(LISP))
 
 mostlyclean-tags:
 

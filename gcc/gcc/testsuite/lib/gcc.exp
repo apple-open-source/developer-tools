@@ -1,4 +1,4 @@
-# Copyright (C) 1992, 1993, 1994, 1996, 1997, 1999, 2000, 2001 Free Software Foundation, Inc.
+# Copyright (C) 1992, 1993, 1994, 1996, 1997, 1999, 2000, 2001, 2003 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -53,10 +53,10 @@ proc default_gcc_version { } {
 
     # verify that the compiler exists
     if { $compiler_name != 0 } then {
-	set tmp [remote_exec host "$compiler_name -v"]
+	set tmp [remote_exec host "$compiler -v"]
 	set status [lindex $tmp 0];
 	set output [lindex $tmp 1];
-	regexp "version.*$" $output version
+	regexp "version\[^\n\r\]*" $output version
 	if { $status == 0 && [info exists version] } then {
 	    clone_output "$compiler_name $version\n"
 	} else {
@@ -146,8 +146,10 @@ proc gcc_target_compile { source dest type options } {
     if { 1 } {
 	lappend options "additional_flags=-DNO_LABEL_VALUES"
     }
+    # TOOL_OPTIONS must come first, so that it doesn't override testcase
+    # specific options.
     if [info exists TOOL_OPTIONS] {
-	lappend options "additional_flags=$TOOL_OPTIONS"
+	set options [concat "additional_flags=$TOOL_OPTIONS" $options];
     }
     if [target_info exists gcc,timeout] {
 	lappend options "timeout=[target_info gcc,timeout]"
@@ -158,5 +160,6 @@ proc gcc_target_compile { source dest type options } {
     }
     # APPLE LOCAL end testsuite multiply defined
     lappend options "compiler=$GCC_UNDER_TEST"
+    set options [dg-additional-files-options $options $source]
     return [target_compile $source $dest $type $options]
 }

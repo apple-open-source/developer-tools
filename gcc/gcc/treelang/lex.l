@@ -1,11 +1,11 @@
-%{ /* -*- c -*- = mode for emacs editor
-/* 
+/* -*- c -*- = mode for emacs editor
 
    TREELANG lexical analysis
 
    ---------------------------------------------------------------------
 
-   Copyright (C) 1986, 87, 89, 92-96, 1997, 1999, 2000, 2001, 2002 Free Software Foundation, Inc.
+   Copyright (C) 1986, 87, 89, 92-96, 1997, 1999, 2000, 2001, 2002, 2003
+   Free Software Foundation, Inc.
    
    This program is free software; you can redistribute it and/or modify it 
    under the terms of the GNU General Public License as published by the
@@ -33,29 +33,24 @@
  
 */
 
-#include <stdio.h>
-#include <memory.h>
-#include "ansidecl.h"
+%{
 #include "config.h"
 #include "system.h"
-
-/* Avoid poisoned malloc problem.  */
-#undef IN_GCC
-
-#include "config.h"
+#include "coretypes.h"
+#include "tm.h"
 #include "diagnostic.h"
 #include "tree.h"
 
 /* Token defs.  */
 #include "treelang.h"
 #include "parse.h"
+#include "treetree.h"
 
 extern int option_lexer_trace;
 
 int yylex (void);
 void update_yylval (int a); 
 
-static int next_tree_lineno=1;
 static int next_tree_charno=1;
  
 static void update_lineno_charno (void);
@@ -79,11 +74,11 @@ static void dump_lex_value (int lexret);
  { 
    /* Should really allocate only what we need. lll;.  */
    yylval = my_malloc (sizeof (struct prod_token_parm_item));
-   ((struct prod_token_parm_item *)yylval)->tp.tok.lineno = next_tree_lineno;
+   ((struct prod_token_parm_item *)yylval)->tp.tok.location = input_location;
    ((struct prod_token_parm_item *)yylval)->tp.tok.charno = next_tree_charno;
  }
 
-[ \n]+ {
+[ \n\t]+ {
   update_lineno_charno ();
     NOT_RETURN (WHITESPACE);
 }
@@ -126,12 +121,12 @@ static void dump_lex_value (int lexret);
   
 "+" {
   update_lineno_charno ();
-  SAVE_RETURN (PLUS);
+  SAVE_RETURN (tl_PLUS);
 }
   
 "-" {
   update_lineno_charno ();
-  SAVE_RETURN (MINUS);
+  SAVE_RETURN (tl_MINUS);
 }
   
 "=" {
@@ -191,7 +186,7 @@ static void dump_lex_value (int lexret);
   
 "return" {
   update_lineno_charno ();
-  SAVE_RETURN (RETURN);
+  SAVE_RETURN (tl_RETURN);
 }
   
 "if" {
@@ -217,9 +212,10 @@ static void dump_lex_value (int lexret);
   
 [^\n]  {
   update_lineno_charno ();
-  fprintf (stderr, "%s:%i:%i: Unrecognized character %c\n", in_fname, 
-           ((struct prod_token_parm_item *)yylval)->tp.tok.lineno, 
-           ((struct prod_token_parm_item *)yylval)->tp.tok.charno, yytext[0]);
+  fprintf (stderr, "%s:%i:%i: Unrecognized character %c\n",
+	   ((struct prod_token_parm_item *)yylval)->tp.tok.location.file, 
+           ((struct prod_token_parm_item *)yylval)->tp.tok.location.line, 
+	   ((struct prod_token_parm_item *)yylval)->tp.tok.charno, yytext[0]);
   errorcount++;
 }
 
@@ -235,13 +231,13 @@ update_lineno_charno (void)
    /* Update the values we send to caller in case we sometimes don't
       tell them about all the 'tokens' eg comments etc.  */
    int yyl;
-   ((struct prod_token_parm_item *)yylval)->tp.tok.lineno = next_tree_lineno;
+   ((struct prod_token_parm_item *)yylval)->tp.tok.location = input_location;
    ((struct prod_token_parm_item *)yylval)->tp.tok.charno = next_tree_charno;
    for ( yyl = 0; yyl < yyleng; ++yyl ) 
       {
          if ( yytext[yyl] == '\n' ) 
             {
-               ++next_tree_lineno;
+	      ++input_line;
                next_tree_charno = 1;
             } 
          else 
@@ -262,8 +258,7 @@ update_yylval (int a)
   tok->tp.tok.length = yyleng;
   /* Have to copy yytext as it is just a ptr into the buffer at the
      moment.  */
-  tok->tp.tok.chars = my_malloc (yyleng + 1);
-  memcpy (tok->tp.tok.chars, yytext, yyleng);
+  tok->tp.tok.chars = (unsigned char*) get_string (yytext, yyleng);
 }
 
 /* Trace the value LEXRET and the position and token details being
@@ -274,7 +269,7 @@ dump_lex_value (int lexret)
 {
   int ix;
   fprintf (stderr, " %d l:%d c:%d ln:%d text=", lexret,
-         ((struct prod_token_parm_item *) yylval)->tp.tok.lineno,
+         ((struct prod_token_parm_item *) yylval)->tp.tok.location.line,
          ((struct prod_token_parm_item *) yylval)->tp.tok.charno,
          ((struct prod_token_parm_item *) yylval)->tp.tok.length);
   for (ix = 0; ix < yyleng; ix++) 

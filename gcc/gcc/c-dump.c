@@ -21,6 +21,8 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 
 #include "config.h"
 #include "system.h"
+#include "coretypes.h"
+#include "tm.h"
 #include "tree.h"
 #include "c-tree.h"
 #include "tree-dump.h"
@@ -28,29 +30,25 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 /* Dump information common to statements from STMT.  */
 
 void
-dump_stmt (di, t)
-     dump_info_p di;
-     tree t;
+dump_stmt (dump_info_p di, tree t)
 {
-  dump_int (di, "line", STMT_LINENO (t));
+  location_t *locus = EXPR_LOCUS (t);
+  if (locus)
+    dump_int (di, "line", locus->line);
 }
 
 /* Dump the next statement after STMT.  */
 
 void
-dump_next_stmt (di, t)
-     dump_info_p di;
-     tree t;
+dump_next_stmt (dump_info_p di, tree t)
 {
   dump_child ("next", TREE_CHAIN (t));
 }
 
 /* Dump any C-specific tree codes and attributes of common codes.  */
 
-int
-c_dump_tree (dump_info, t)
-     void *dump_info;
-     tree t;
+bool
+c_dump_tree (void *dump_info, tree t)
 {
   enum tree_code code;
   dump_info_p di = (dump_info_p) dump_info;
@@ -192,5 +190,5 @@ c_dump_tree (dump_info, t)
       break;
     }
 
-  return 0;
+  return false;
 }

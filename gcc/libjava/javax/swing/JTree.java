@@ -1,5 +1,5 @@
 /* JTree.java -- 
-   Copyright (C) 2002 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2004  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -35,11 +35,15 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package javax.swing;
 
-import java.awt.*;
-import javax.swing.plaf.*;
-import javax.accessibility.*;
+import java.awt.Dimension;
+import java.awt.Rectangle;
+
+import javax.accessibility.Accessible;
+import javax.accessibility.AccessibleContext;
+import javax.swing.plaf.TreeUI;
 
 public class JTree extends JComponent implements Scrollable, Accessible
 {
@@ -66,7 +70,7 @@ public class JTree extends JComponent implements Scrollable, Accessible
     
     public String getUIClassID()
     {
-	return "JTree";
+	return "TreeUI";
     }
 
 

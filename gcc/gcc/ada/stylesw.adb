@@ -6,8 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---                                                                          --
---          Copyright (C) 1992-2001, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2004, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -25,8 +24,7 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
-with Hostparm; use Hostparm;
-with Opt;      use Opt;
+with Opt; use Opt;
 
 package body Stylesw is
 
@@ -136,7 +134,6 @@ package body Stylesw is
    procedure Set_Style_Check_Options (Options : String) is
       OK : Boolean;
       EC : Natural;
-
    begin
       Set_Style_Check_Options (Options, OK, EC);
    end Set_Style_Check_Options;
@@ -196,6 +193,9 @@ package body Stylesw is
             when 'n' =>
                Style_Check_Standard         := True;
 
+            when 'N' =>
+               Reset_Style_Check_Options;
+
             when 'M' =>
                Style_Max_Line_Length := 0;
 
@@ -211,13 +211,17 @@ package body Stylesw is
                   Style_Max_Line_Length :=
                     Style_Max_Line_Length * 10 +
                       Character'Pos (Options (J)) - Character'Pos ('0');
+
+                  if Style_Max_Line_Length > Int (Column_Number'Last) then
+                     OK := False;
+                     Err_Col := J;
+                     return;
+                  end if;
+
                   J := J + 1;
                   exit when J > Options'Last
                     or else Options (J) not in '0' .. '9';
                end loop;
-
-               Style_Max_Line_Length :=
-                  Int'Min (Style_Max_Line_Length, Hostparm.Max_Line_Length);
 
                Style_Check_Max_Line_Length := Style_Max_Line_Length /= 0;
 

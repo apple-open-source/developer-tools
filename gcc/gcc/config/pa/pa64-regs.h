@@ -1,20 +1,20 @@
-/* Configuration for GNU C-compiler for PA-RISC.
-   Copyright (C) 1999, 2000 Free Software Foundation, Inc.
+/* Configuration for GCC-compiler for PA-RISC.
+   Copyright (C) 1999, 2000, 2003, 2004 Free Software Foundation, Inc.
 
-This file is part of GNU CC.
+This file is part of GCC.
 
-GNU CC is free software; you can redistribute it and/or modify
+GCC is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2, or (at your option)
 any later version.
 
-GNU CC is distributed in the hope that it will be useful,
+GCC is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with GNU CC; see the file COPYING.  If not, write to
+along with GCC; see the file COPYING.  If not, write to
 the Free Software Foundation, 59 Temple Place - Suite 330,
 Boston, MA 02111-1307, USA.  */
 
@@ -169,13 +169,11 @@ Boston, MA 02111-1307, USA.  */
 
    Registers 0  - 31 remain unchanged.
 
-   Registers 32 - 60 are mapped to 72, 74, 76 ...
+   Registers 32 - 59 are mapped to 72, 74, 76 ...
 
-   Register 88 is mapped to 32.  */
-
+   Register 60 is mapped to 32.  */
 #define DBX_REGISTER_NUMBER(REGNO) \
-  ((REGNO) <= 31 ? (REGNO) :						\
-   ((REGNO) > 31 && (REGNO) <= 60 ? (REGNO - 32) * 2 + 72 : 32))
+  ((REGNO) <= 31 ? (REGNO) : ((REGNO) < 60 ? (REGNO - 32) * 2 + 72 : 32))
 
 /* We must not use the DBX register numbers for the DWARF 2 CFA column
    numbers because that maps to numbers beyond FIRST_PSEUDO_REGISTER.
@@ -211,7 +209,7 @@ enum reg_class { NO_REGS, R1_REGS, GENERAL_REGS, FPUPPER_REGS, FP_REGS,
 
 #define N_REG_CLASSES (int) LIM_REG_CLASSES
 
-/* Give names of register classes as strings for dump file.   */
+/* Give names of register classes as strings for dump file.  */
 
 #define REG_CLASS_NAMES \
   {"NO_REGS", "R1_REGS", "GENERAL_REGS", "FPUPPER_REGS", "FP_REGS", \
@@ -257,7 +255,7 @@ enum reg_class { NO_REGS, R1_REGS, GENERAL_REGS, FPUPPER_REGS, FP_REGS,
 
 
 /* Get reg_class from a letter such as appears in the machine description.  */
-/* Keep 'x' for backward compatibility with user asm.   */
+/* Keep 'x' for backward compatibility with user asm.  */
 #define REG_CLASS_FROM_LETTER(C) \
   ((C) == 'f' ? FP_REGS :					\
    (C) == 'y' ? FP_REGS :					\
@@ -292,7 +290,7 @@ enum reg_class { NO_REGS, R1_REGS, GENERAL_REGS, FPUPPER_REGS, FP_REGS,
  "%fr28", "%fr29",  "%fr30", "%fr31", "SAR"}
 
 #define ADDITIONAL_REGISTER_NAMES \
- {{"%cr11",88}}
+ {{"%cr11",60}}
 
 #define FP_SAVED_REG_LAST 49
 #define FP_SAVED_REG_FIRST 40

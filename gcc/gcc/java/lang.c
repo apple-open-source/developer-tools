@@ -1,21 +1,21 @@
 /* Java(TM) language-specific utility routines.
-   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002
+   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004
    Free Software Foundation, Inc.
 
-This file is part of GNU CC.
+This file is part of GCC.
 
-GNU CC is free software; you can redistribute it and/or modify
+GCC is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2, or (at your option)
 any later version.
 
-GNU CC is distributed in the hope that it will be useful,
+GCC is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with GNU CC; see the file COPYING.  If not, write to
+along with GCC; see the file COPYING.  If not, write to
 the Free Software Foundation, 59 Temple Place - Suite 330,
 Boston, MA 02111-1307, USA. 
 
@@ -27,6 +27,8 @@ The Free Software Foundation is independent of Sun Microsystems, Inc.  */
 
 #include "config.h"
 #include "system.h"
+#include "coretypes.h"
+#include "tm.h"
 #include "tree.h"
 #include "input.h"
 #include "rtl.h"
@@ -43,40 +45,28 @@ The Free Software Foundation is independent of Sun Microsystems, Inc.  */
 #include "tree-inline.h"
 #include "splay-tree.h"
 #include "tree-dump.h"
+#include "opts.h"
+#include "options.h"
 
-struct string_option
-{
-  const char *const string;
-  int *const variable;
-  const int on_value;
-};
+static bool java_init (void);
+static void java_finish (void);
+static unsigned int java_init_options (unsigned int, const char **);
+static bool java_post_options (const char **);
 
-static const char *java_init PARAMS ((const char *));
-static void java_finish PARAMS ((void));
-static void java_init_options PARAMS ((void));
-static bool java_post_options PARAMS ((void));
-
-static int java_decode_option PARAMS ((int, char **));
-static void put_decl_string PARAMS ((const char *, int));
-static void put_decl_node PARAMS ((tree));
-static void java_print_error_function PARAMS ((diagnostic_context *,
-					       const char *));
-static int process_option_with_no PARAMS ((const char *,
-					   const struct string_option *,
-					   int));
-static tree java_tree_inlining_walk_subtrees PARAMS ((tree *,
-						      int *,
-						      walk_tree_fn,
-						      void *,
-						      void *));
-static int java_unsafe_for_reeval PARAMS ((tree));
-static int merge_init_test_initialization PARAMS ((void * *, 
-						   void *));
-static int inline_init_test_initialization PARAMS ((void * *, 
-						    void *));
-static bool java_can_use_bit_fields_p PARAMS ((void));
-static int java_dump_tree PARAMS ((void *, tree));
-static void dump_compound_expr PARAMS ((dump_info_p, tree));
+static int java_handle_option (size_t scode, const char *arg, int value);
+static void put_decl_string (const char *, int);
+static void put_decl_node (tree);
+static void java_print_error_function (diagnostic_context *, const char *);
+static tree java_tree_inlining_walk_subtrees (tree *, int *, walk_tree_fn,
+					      void *, void *);
+static int java_unsafe_for_reeval (tree);
+static int merge_init_test_initialization (void * *, void *);
+static int inline_init_test_initialization (void * *, void *);
+static bool java_can_use_bit_fields_p (void);
+static bool java_dump_tree (void *, tree);
+static void dump_compound_expr (dump_info_p, tree);
+static bool java_decl_ok_for_sibcall (tree);
+static tree java_get_callee_fndecl (tree);
 
 #ifndef TARGET_OBJECT_SUFFIX
 # define TARGET_OBJECT_SUFFIX ".o"
@@ -125,7 +115,7 @@ static bool inhibit_error_function_printing;
 
 int compiling_from_source;
 
-char * resource_name;
+const char *resource_name;
 
 int flag_emit_class_files = 0;
 
@@ -174,12 +164,16 @@ const char *current_encoding = NULL;
 /* When nonzero, report the now deprecated empty statements.  */
 int flag_extraneous_semicolon;
 
+/* When nonzero, report use of deprecated classes, methods, or fields.  */
+int flag_deprecated = 1;
+
 /* When nonzero, always check for a non gcj generated classes archive.  */
 int flag_force_classes_archive_check;
 
 /* When zero, don't optimize static class initialization. This flag shouldn't
    be tested alone, use STATIC_CLASS_INITIALIZATION_OPTIMIZATION_P instead.  */
-int flag_optimize_sci = 1;
+/* FIXME: Make this work with gimplify.  */
+int flag_optimize_sci = 0;
 
 /* When nonzero, use offset tables for virtual method calls
    in order to improve binary compatibility. */
@@ -189,43 +183,11 @@ int flag_indirect_dispatch = 0;
 int flag_store_check = 1;
 
 /* When nonzero, print extra version information.  */
-static int version_flag = 0;
+static int v_flag = 0;
 
 /* Set nonzero if the user specified -finline-functions on the command
    line.  */
 int flag_really_inline = 0;
-
-/* Table of language-dependent -f options.
-   STRING is the option name.  VARIABLE is the address of the variable.
-   ON_VALUE is the value to store in VARIABLE
-    if `-fSTRING' is seen as an option.
-   (If `-fno-STRING' is seen as an option, the opposite value is stored.)  */
-
-static const struct string_option
-lang_f_options[] =
-{
-  {"emit-class-file", &flag_emit_class_files, 1},
-  {"emit-class-files", &flag_emit_class_files, 1},
-  {"filelist-file", &flag_filelist_file, 1},
-  {"use-divide-subroutine", &flag_use_divide_subroutine, 1},
-  {"use-boehm-gc", &flag_use_boehm_gc, 1},
-  {"hash-synchronization", &flag_hash_synchronization, 1},
-  {"jni", &flag_jni, 1},
-  {"check-references", &flag_check_references, 1},
-  {"force-classes-archive-check", &flag_force_classes_archive_check, 1},
-  {"optimize-static-class-initialization", &flag_optimize_sci, 1 },
-  {"indirect-dispatch", &flag_indirect_dispatch, 1},
-  {"store-check", &flag_store_check, 1},
-  {"assert", &flag_assert, 1}
-};
-
-static const struct string_option
-lang_W_options[] =
-{
-  { "redundant-modifiers", &flag_redundant, 1 },
-  { "extraneous-semicolon", &flag_extraneous_semicolon, 1 },
-  { "out-of-date", &flag_newer, 1 }
-};
 
 JCF *current_jcf;
 
@@ -252,8 +214,8 @@ struct language_function GTY(())
 #define LANG_HOOKS_FINISH java_finish
 #undef LANG_HOOKS_INIT_OPTIONS
 #define LANG_HOOKS_INIT_OPTIONS java_init_options
-#undef LANG_HOOKS_DECODE_OPTION
-#define LANG_HOOKS_DECODE_OPTION java_decode_option
+#undef LANG_HOOKS_HANDLE_OPTION
+#define LANG_HOOKS_HANDLE_OPTION java_handle_option
 #undef LANG_HOOKS_POST_OPTIONS
 #define LANG_HOOKS_POST_OPTIONS java_post_options
 #undef LANG_HOOKS_PARSE_FILE
@@ -286,237 +248,225 @@ struct language_function GTY(())
 #undef LANG_HOOKS_SIGNED_OR_UNSIGNED_TYPE
 #define LANG_HOOKS_SIGNED_OR_UNSIGNED_TYPE java_signed_or_unsigned_type
 
-#undef LANG_HOOKS_TREE_INLINING_WALK_SUBTREES
-#define LANG_HOOKS_TREE_INLINING_WALK_SUBTREES java_tree_inlining_walk_subtrees
-
 #undef LANG_HOOKS_TREE_DUMP_DUMP_TREE_FN
 #define LANG_HOOKS_TREE_DUMP_DUMP_TREE_FN java_dump_tree
 
+#undef LANG_HOOKS_GIMPLIFY_EXPR
+#define LANG_HOOKS_GIMPLIFY_EXPR java_gimplify_expr
+
+#undef LANG_HOOKS_TREE_INLINING_WALK_SUBTREES
+#define LANG_HOOKS_TREE_INLINING_WALK_SUBTREES java_tree_inlining_walk_subtrees
+
+#undef LANG_HOOKS_DECL_OK_FOR_SIBCALL
+#define LANG_HOOKS_DECL_OK_FOR_SIBCALL java_decl_ok_for_sibcall
+
+#undef LANG_HOOKS_GET_CALLEE_FNDECL
+#define LANG_HOOKS_GET_CALLEE_FNDECL java_get_callee_fndecl
+
+#undef LANG_HOOKS_CALLGRAPH_EXPAND_FUNCTION
+#define LANG_HOOKS_CALLGRAPH_EXPAND_FUNCTION java_expand_body
+
 /* Each front end provides its own.  */
 const struct lang_hooks lang_hooks = LANG_HOOKS_INITIALIZER;
-
-/* Process an option that can accept a `no-' form.
-   Return 1 if option found, 0 otherwise.  */
-static int
-process_option_with_no (p, table, table_size)
-     const char *p;
-     const struct string_option *table;
-     int table_size;
-{
-  int j;
-
-  for (j = 0; j < table_size; j++)
-    {
-      if (!strcmp (p, table[j].string))
-	{
-	  *table[j].variable = table[j].on_value;
-	  return 1;
-	}
-      if (p[0] == 'n' && p[1] == 'o' && p[2] == '-'
-	  && ! strcmp (p+3, table[j].string))
-	{
-	  *table[j].variable = ! table[j].on_value;
-	  return 1;
-	}
-    }
-
-  return 0;
-}
 
 /*
  * process java-specific compiler command-line options
  * return 0, but do not complain if the option is not recognized.
  */
 static int
-java_decode_option (argc, argv)
-     int argc __attribute__ ((__unused__));
-     char **argv;
+java_handle_option (size_t scode, const char *arg, int value)
 {
-  char *p = argv[0];
+  enum opt_code code = (enum opt_code) scode;
 
-  jcf_path_init ();
+  switch (code)
+    {
+    default:
+      abort();
 
-  if (strcmp (p, "-version") == 0)
-    {
-      version_flag = 1;
-      /* We return 0 so that the caller can process this.  */
-      return 0;
-    }
+    case OPT_I:
+      jcf_path_include_arg (arg);
+      break;
 
-#define CLARG "-fcompile-resource="
-  if (strncmp (p, CLARG, sizeof (CLARG) - 1) == 0)
-    {
-      resource_name = p + sizeof (CLARG) - 1;
-      return 1;
-    }
-#undef CLARG
-#define CLARG "-fassume-compiled="
-  if (strncmp (p, CLARG, sizeof (CLARG) - 1) == 0)
-    {
-      add_assume_compiled (p + sizeof (CLARG) - 1, 0);
-      return 1;
-    }
-#undef CLARG
-#define CLARG "-fno-assume-compiled="
-  if (strncmp (p, CLARG, sizeof (CLARG) - 1) == 0)
-    {
-      add_assume_compiled (p + sizeof (CLARG) - 1, 1);
-      return 1;
-    }
-#undef CLARG
-#define CLARG "-fassume-compiled"
-  if (strncmp (p, CLARG, sizeof (CLARG) - 1) == 0)
-    {
-      add_assume_compiled ("", 0);
-      return 1;
-    }
-#undef CLARG
-#define CLARG "-fno-assume-compiled"
-  if (strncmp (p, CLARG, sizeof (CLARG) - 1) == 0)
-    {
-      add_assume_compiled ("", 1);
-      return 1;
-    }
-#undef CLARG
-#define CLARG "-fCLASSPATH="
-  if (strncmp (p, CLARG, sizeof (CLARG) - 1) == 0)
-    {
-      jcf_path_classpath_arg (p + sizeof (CLARG) - 1);
-      return 1;
-    }
-#undef CLARG
-#define CLARG "-fclasspath="
-  if (strncmp (p, CLARG, sizeof (CLARG) - 1) == 0)
-    {
-      jcf_path_classpath_arg (p + sizeof (CLARG) - 1);
-      return 1;
-    }
-#undef CLARG
-#define CLARG "-fbootclasspath="
-  if (strncmp (p, CLARG, sizeof (CLARG) - 1) == 0)
-    {
-      jcf_path_bootclasspath_arg (p + sizeof (CLARG) - 1);
-      return 1;
-    }
-#undef CLARG
-#define CLARG "-fextdirs="
-  if (strncmp (p, CLARG, sizeof (CLARG) - 1) == 0)
-    {
-      jcf_path_extdirs_arg (p + sizeof (CLARG) - 1);
-      return 1;
-    }
-#undef CLARG
-  else if (strncmp (p, "-I", 2) == 0)
-    {
-      jcf_path_include_arg (p + 2);
-      return 1;
-    }
+    case OPT_M:
+      jcf_dependency_init (1);
+      dependency_tracking |= DEPEND_ENABLE;
+      break;
 
-#define ARG "-foutput-class-dir="
-  if (strncmp (p, ARG, sizeof (ARG) - 1) == 0)
-    {
-      jcf_write_base_directory = p + sizeof (ARG) - 1;
-      return 1;
-    }
-#undef ARG
-#define ARG "-fencoding="
-  if (strncmp (p, ARG, sizeof (ARG) - 1) == 0)
-    {
-      current_encoding = p + sizeof (ARG) - 1;
-      return 1;
-    }
-#undef ARG
-#define ARG "-finline-functions"
-  if (strncmp (p, ARG, sizeof (ARG) - 1) == 0)
-    {
-      flag_inline_functions = 1;
-      flag_really_inline = 1;
-      return 1;
-    }
-#undef ARG
+    case OPT_MD_:
+      jcf_dependency_init (1);
+      dependency_tracking |= DEPEND_SET_FILE | DEPEND_ENABLE;
+      break;
 
-  if (p[0] == '-' && p[1] == 'f')
-    {
-      /* Some kind of -f option.
-	 P's value is the option sans `-f'.
-	 Search for it in the table of options.  */
-      p += 2;
-      if (process_option_with_no (p, lang_f_options,
-				  ARRAY_SIZE (lang_f_options)))
-	return 1;
-      return dump_switch_p (p);
-    }
+    case OPT_MF:
+      jcf_dependency_set_dep_file (arg);
+      dependency_tracking |= DEPEND_FILE_ALREADY_SET;
+      break;
 
-  if (strcmp (p, "-Wall") == 0)
-    {
-      flag_wall = 1;
-      flag_redundant = 1;
-      flag_extraneous_semicolon = 1;
+    case OPT_MM:
+      jcf_dependency_init (0);
+      dependency_tracking |= DEPEND_ENABLE;
+      break;
+
+    case OPT_MMD_:
+      jcf_dependency_init (0);
+      dependency_tracking |= DEPEND_SET_FILE | DEPEND_ENABLE;
+      break;
+
+    case OPT_MP:
+      jcf_dependency_print_dummies ();
+      break;
+
+    case OPT_MT:
+      jcf_dependency_set_target (arg);
+      dependency_tracking |= DEPEND_TARGET_SET;
+      break;
+
+    case OPT_Wall:
+      flag_wall = value;
+      flag_redundant = value;
+      flag_extraneous_semicolon = value;
       /* When -Wall given, enable -Wunused.  We do this because the C
 	 compiler does it, and people expect it.  */
-      set_Wunused (1);
-      return 1;
+      set_Wunused (value);
+      break;
+
+    case OPT_Wdeprecated:
+      flag_deprecated = value;
+      break;
+
+    case OPT_Wextraneous_semicolon:
+      flag_extraneous_semicolon = value;
+      break;
+
+    case OPT_Wout_of_date:
+      flag_newer = value;
+      break;
+
+    case OPT_Wredundant_modifiers:
+      flag_redundant = value;
+      break;
+
+    case OPT_fassert:
+      flag_assert = value;
+      break;
+
+    case OPT_fenable_assertions_:
+      add_enable_assert (arg, value);
+      break;
+
+    case OPT_fenable_assertions:
+      add_enable_assert ("", value);
+      break;
+
+    case OPT_fdisable_assertions_:
+      add_enable_assert (arg, !value);
+      break;
+
+    case OPT_fdisable_assertions:
+      add_enable_assert ("", !value);
+      break;
+
+    case OPT_fassume_compiled_:
+      add_assume_compiled (arg, !value);
+      break;
+
+    case OPT_fassume_compiled:
+      add_assume_compiled ("", !value);
+      break;
+
+    case OPT_fbootclasspath_:
+      jcf_path_bootclasspath_arg (arg);
+      break;
+
+    case OPT_fcheck_references:
+      flag_check_references = value;
+      break;
+
+    case OPT_fclasspath_:
+    case OPT_fCLASSPATH_:
+      jcf_path_classpath_arg (arg);
+      break;
+
+    case OPT_fcompile_resource_:
+      resource_name = arg;
+      break;
+
+    case OPT_fdump_:
+      if (!dump_switch_p (arg))
+	return 0;
+      break;
+
+    case OPT_femit_class_file:
+    case OPT_femit_class_files:
+      flag_emit_class_files = value;
+      break;
+
+    case OPT_fencoding_:
+      current_encoding = arg;
+      break;
+
+    case OPT_fextdirs_:
+      jcf_path_extdirs_arg (arg);
+      break;
+
+    case OPT_ffilelist_file:
+      flag_filelist_file = value;
+      break;
+
+    case OPT_fforce_classes_archive_check:
+      flag_force_classes_archive_check = value;
+      break;
+
+    case OPT_fhash_synchronization:
+      flag_hash_synchronization = value;
+      break;
+
+    case OPT_findirect_dispatch:
+      flag_indirect_dispatch = value;
+      break;
+
+    case OPT_finline_functions:
+      flag_inline_functions = value;
+      flag_really_inline = value;
+      break;
+
+    case OPT_fjni:
+      flag_jni = value;
+      break;
+
+    case OPT_foptimize_static_class_initialization:
+      flag_optimize_sci = value;
+      break;
+
+    case OPT_foutput_class_dir_:
+      jcf_write_base_directory = arg;
+      break;
+
+    case OPT_fstore_check:
+      flag_store_check = value;
+      break;
+
+    case OPT_fuse_boehm_gc:
+      flag_use_boehm_gc = value;
+      break;
+
+    case OPT_fuse_divide_subroutine:
+      flag_use_divide_subroutine = value;
+      break;
+
+    case OPT_version:
+      v_flag = 1;
+      break;
     }
 
-  if (p[0] == '-' && p[1] == 'W')
-    {
-      /* Skip `-W' and see if we accept the option or its `no-' form.  */
-      p += 2;
-      return process_option_with_no (p, lang_W_options,
-				     ARRAY_SIZE (lang_W_options));
-    }
-
-  if (strcmp (p, "-MD") == 0)
-    {
-      jcf_dependency_init (1);
-      dependency_tracking |= DEPEND_SET_FILE | DEPEND_ENABLE;
-      return 1;
-    }
-  else if (strcmp (p, "-MMD") == 0)
-    {
-      jcf_dependency_init (0);
-      dependency_tracking |= DEPEND_SET_FILE | DEPEND_ENABLE;
-      return 1;
-    }
-  else if (strcmp (p, "-M") == 0)
-    {
-      jcf_dependency_init (1);
-      dependency_tracking |= DEPEND_ENABLE;
-      return 1;
-    }
-  else if (strcmp (p, "-MM") == 0)
-    {
-      jcf_dependency_init (0);
-      dependency_tracking |= DEPEND_ENABLE;
-      return 1;
-    }
-  else if (strcmp (p, "-MP") == 0)
-    {
-      jcf_dependency_print_dummies ();
-      return 1;
-    }
-  else if (strcmp (p, "-MT") == 0)
-    {
-      jcf_dependency_set_target (argv[1]);
-      dependency_tracking |= DEPEND_TARGET_SET;
-      return 2;
-    }
-  else if (strcmp (p, "-MF") == 0)
-    {
-      jcf_dependency_set_dep_file (argv[1]);
-      dependency_tracking |= DEPEND_FILE_ALREADY_SET;
-      return 2;
-    }
-
-  return 0;
+  return 1;
 }
 
 /* Global open file.  */
 FILE *finput;
 
-static const char *
-java_init (filename)
-     const char *filename;
+static bool
+java_init (void)
 {
 #if 0
   extern int flag_minimal_debug;
@@ -526,6 +476,11 @@ java_init (filename)
   if (flag_inline_functions)
     flag_inline_trees = 1;
 
+  /* FIXME: Indirect dispatch isn't yet compatible with static class
+     init optimization.  */
+  if (flag_indirect_dispatch)
+    always_initialize_class_p = true;
+
   /* Force minimum function alignment if g++ uses the least significant
      bit of function pointers to store the virtual bit. This is required
      to keep vtables compatible.  */
@@ -533,79 +488,17 @@ java_init (filename)
       && force_align_functions_log < 1)
     force_align_functions_log = 1;
 
-  /* Open input file.  */
-
-  if (filename == 0 || !strcmp (filename, "-"))
-    {
-      finput = stdin;
-      filename = "stdin";
-
-      if (dependency_tracking)
-	error ("can't do dependency tracking with input from stdin");
-    }
-  else
-    {
-      if (dependency_tracking)
-	{
-	  char *dot;
-
-	  /* If the target is set and the output filename is set, then
-	     there's no processing to do here.  Otherwise we must
-	     compute one or the other.  */
-	  if (! ((dependency_tracking & DEPEND_TARGET_SET)
-		 && (dependency_tracking & DEPEND_FILE_ALREADY_SET)))
-	    {
-	      dot = strrchr (filename, '.');
-	      if (dot == NULL)
-		error ("couldn't determine target name for dependency tracking");
-	      else
-		{
-		  char *buf = xmalloc (dot - filename +
-				       3 + sizeof (TARGET_OBJECT_SUFFIX));
-		  strncpy (buf, filename, dot - filename);
-
-		  /* If emitting class files, we might have multiple
-		     targets.  The class generation code takes care of
-		     registering them.  Otherwise we compute the
-		     target name here.  */
-		  if ((dependency_tracking & DEPEND_TARGET_SET))
-		    ; /* Nothing.  */
-		  else if (flag_emit_class_files)
-		    jcf_dependency_set_target (NULL);
-		  else
-		    {
-		      strcpy (buf + (dot - filename), TARGET_OBJECT_SUFFIX);
-		      jcf_dependency_set_target (buf);
-		    }
-
-		  if ((dependency_tracking & DEPEND_FILE_ALREADY_SET))
-		    ; /* Nothing.  */
-		  else if ((dependency_tracking & DEPEND_SET_FILE))
-		    {
-		      strcpy (buf + (dot - filename), ".d");
-		      jcf_dependency_set_dep_file (buf);
-		    }
-		  else
-		    jcf_dependency_set_dep_file ("-");
-
-		  free (buf);
-		}
-	    }
-	}
-    }
-
-  jcf_path_init ();
-  jcf_path_seal (version_flag);
+  jcf_path_seal (v_flag);
 
   java_init_decl_processing ();
 
   using_eh_for_cleanups ();
 
-  return filename;
+  return true;
 }
 
 static void
-java_finish ()
+java_finish (void)
 {
   jcf_dependency_write ();
 }
@@ -623,9 +516,7 @@ static int decl_bufpos = 0;
    It length is given by LEN;  -1 means the string is nul-terminated. */
 
 static void
-put_decl_string (str, len)
-     const char *str;
-     int len;
+put_decl_string (const char *str, int len)
 {
   if (len < 0)
     len = strlen (str);
@@ -649,8 +540,7 @@ put_decl_string (str, len)
 /* Append to decl_buf a printable name for NODE. */
 
 static void
-put_decl_node (node)
-     tree node;
+put_decl_node (tree node)
 {
   int was_pointer = 0;
   if (TREE_CODE (node) == POINTER_TYPE)
@@ -725,9 +615,7 @@ put_decl_node (node)
    which is also called directly by java_print_error_function. */
 
 const char *
-lang_printable_name (decl, v)
-     tree decl;
-     int v  __attribute__ ((__unused__));
+lang_printable_name (tree decl, int v  __attribute__ ((__unused__)))
 {
   decl_bufpos = 0;
   put_decl_node (decl);
@@ -739,9 +627,7 @@ lang_printable_name (decl, v)
    space to the DECL name string -- With Leading Space.  */
 
 const char *
-lang_printable_name_wls (decl, v)
-     tree decl;
-     int v  __attribute__ ((__unused__));
+lang_printable_name_wls (tree decl, int v  __attribute__ ((__unused__)))
 {
   decl_bufpos = 1;
   put_decl_node (decl);
@@ -756,9 +642,8 @@ lang_printable_name_wls (decl, v)
 static GTY(()) tree last_error_function_context;
 static GTY(()) tree last_error_function;
 static void
-java_print_error_function (context, file)
-     diagnostic_context *context __attribute__((__unused__));
-     const char *file;
+java_print_error_function (diagnostic_context *context ATTRIBUTE_UNUSED,
+			   const char *file)
 {
   /* Don't print error messages with bogus function prototypes.  */
   if (inhibit_error_function_printing)
@@ -802,14 +687,14 @@ java_print_error_function (context, file)
    2, function prototypes are fully resolved and can be printed when
    reporting errors.  */
 
-void lang_init_source (level)
-     int level;
+void lang_init_source (int level)
 {
   inhibit_error_function_printing = (level == 1);
 }
 
-static void
-java_init_options ()
+static unsigned int
+java_init_options (unsigned int argc ATTRIBUTE_UNUSED,
+		   const char **argv ATTRIBUTE_UNUSED)
 {
   flag_bounds_check = 1;
   flag_exceptions = 1;
@@ -817,10 +702,20 @@ java_init_options ()
 
   /* In Java floating point operations never trap.  */
   flag_trapping_math = 0;
+
+  /* In Java arithmetic overflow always wraps around.  */
+  flag_wrapv = 1;
+
+  /* Java requires left-to-right evaluation of subexpressions.  */
+  flag_evaluation_order = 1;
+
+  jcf_path_init ();
+
+  return CL_Java;
 }
 
 static bool
-java_can_use_bit_fields_p ()
+java_can_use_bit_fields_p (void)
 {
   /* The bit-field optimizations cause problems when generating class
      files.  */
@@ -829,18 +724,77 @@ java_can_use_bit_fields_p ()
 
 /* Post-switch processing.  */
 static bool
-java_post_options ()
+java_post_options (const char **pfilename)
 {
- /* Use tree inlining if possible.  Function instrumentation is only
-     done in the RTL level, so we disable tree inlining.  */
-  if (! flag_instrument_function_entry_exit)
+  const char *filename = *pfilename;
+
+  /* Use tree inlining.  */
+  if (!flag_no_inline)
+    flag_no_inline = 1;
+  if (flag_inline_functions)
     {
-      if (!flag_no_inline)
-	flag_no_inline = 1;
-      if (flag_inline_functions)
+      flag_inline_trees = 2;
+      flag_inline_functions = 0;
+    }
+
+  /* Open input file.  */
+
+  if (filename == 0 || !strcmp (filename, "-"))
+    {
+      finput = stdin;
+      filename = "stdin";
+
+      if (dependency_tracking)
+	error ("can't do dependency tracking with input from stdin");
+    }
+  else
+    {
+      if (dependency_tracking)
 	{
-	  flag_inline_trees = 2;
-	  flag_inline_functions = 0;
+	  char *dot;
+
+	  /* If the target is set and the output filename is set, then
+	     there's no processing to do here.  Otherwise we must
+	     compute one or the other.  */
+	  if (! ((dependency_tracking & DEPEND_TARGET_SET)
+		 && (dependency_tracking & DEPEND_FILE_ALREADY_SET)))
+	    {
+	      dot = strrchr (filename, '.');
+	      if (dot == NULL)
+		error ("couldn't determine target name for dependency tracking");
+	      else
+		{
+		  char *buf = xmalloc (dot - filename +
+				       3 + sizeof (TARGET_OBJECT_SUFFIX));
+		  strncpy (buf, filename, dot - filename);
+
+		  /* If emitting class files, we might have multiple
+		     targets.  The class generation code takes care of
+		     registering them.  Otherwise we compute the
+		     target name here.  */
+		  if ((dependency_tracking & DEPEND_TARGET_SET))
+		    ; /* Nothing.  */
+		  else if (flag_emit_class_files)
+		    jcf_dependency_set_target (NULL);
+		  else
+		    {
+		      strcpy (buf + (dot - filename), TARGET_OBJECT_SUFFIX);
+		      jcf_dependency_set_target (buf);
+		    }
+
+		  if ((dependency_tracking & DEPEND_FILE_ALREADY_SET))
+		    ; /* Nothing.  */
+		  else if ((dependency_tracking & DEPEND_SET_FILE))
+		    {
+		      strcpy (buf + (dot - filename), ".d");
+		      jcf_dependency_set_dep_file (buf);
+		    }
+		  else
+		    jcf_dependency_set_dep_file ("-");
+
+		  free (buf);
+		}
+	    }
 	}
     }
 
@@ -851,8 +805,7 @@ java_post_options ()
 /* Return either DECL or its known constant value (if it has one).  */
 
 tree
-decl_constant_value (decl)
-     tree decl;
+decl_constant_value (tree decl)
 {
   if (/* Don't change a variable array bound or initial value to a constant
 	 in a place where a variable is invalid.  */
@@ -874,12 +827,11 @@ decl_constant_value (decl)
 /* Walk the language specific tree nodes during inlining.  */
 
 static tree
-java_tree_inlining_walk_subtrees (tp,subtrees,func,data,htab)
-     tree *tp ATTRIBUTE_UNUSED;
-     int *subtrees ATTRIBUTE_UNUSED;
-     walk_tree_fn func ATTRIBUTE_UNUSED;
-     void *data ATTRIBUTE_UNUSED;
-     void *htab ATTRIBUTE_UNUSED;
+java_tree_inlining_walk_subtrees (tree *tp ATTRIBUTE_UNUSED,
+				  int *subtrees ATTRIBUTE_UNUSED,
+				  walk_tree_fn func ATTRIBUTE_UNUSED,
+				  void *data ATTRIBUTE_UNUSED,
+				  void *htab ATTRIBUTE_UNUSED)
 {
   enum tree_code code;
   tree result;
@@ -901,27 +853,19 @@ java_tree_inlining_walk_subtrees (tp,subtrees,func,data,htab)
   switch (code)
     {
     case BLOCK:
-      if (BLOCK_EXPR_BODY (t))
-	{
-	  tree *prev = &BLOCK_EXPR_BODY (*tp);
-	  while (*prev)
-	    {
-	      WALK_SUBTREE (*prev);
-	      prev = &TREE_CHAIN (*prev);
-	    }	    
-	}
+      WALK_SUBTREE (BLOCK_EXPR_BODY (t));
       return NULL_TREE;
-      break;
 
     default:
       return NULL_TREE;
     }
+
+  #undef WALK_SUBTREE
 }
 
 /* Called from unsafe_for_reeval.  */
 static int
-java_unsafe_for_reeval (t)
-     tree t;
+java_unsafe_for_reeval (tree t)
 {
   switch (TREE_CODE (t))
     {
@@ -974,7 +918,7 @@ lang_build_type_variant (type, constp, volatilep)
    This variable is used to avoid multiple calls to the static
    constructor for each class.  
 
-   It looks somthing like this:
+   It looks something like this:
 
    foo ()
    {
@@ -991,16 +935,14 @@ lang_build_type_variant (type, constp, volatilep)
    Each of these boolean variables has an entry in the
    DECL_FUNCTION_INIT_TEST_TABLE of a method.  When inlining a method
    we must merge the DECL_FUNCTION_INIT_TEST_TABLE from the function
-   being linlined and create the boolean variables in the outermost
+   being inlined and create the boolean variables in the outermost
    scope of the method being inlined into.  */
 
 /* Create a mapping from a boolean variable in a method being inlined
    to one in the scope of the method being inlined into.  */
 
 static int
-merge_init_test_initialization (entry, x)
-     void * * entry;
-     void * x;
+merge_init_test_initialization (void **entry, void *x)
 {
   struct treetreehash_entry *ite = (struct treetreehash_entry *) *entry;
   splay_tree decl_map = (splay_tree)x;
@@ -1021,6 +963,24 @@ merge_init_test_initialization (entry, x)
   if (!*init_test_decl)
     *init_test_decl = (tree)n->value;
 
+  /* This fixes a weird case.  
+
+  The front end assumes that once we have called a method that
+  initializes some class, we can assume the class is initialized.  It
+  does this by setting the DECL_INITIAL of the init_test_decl for that
+  class, and no initializations are emitted for that class.
+  
+  However, what if the method that is suppoed to do the initialization
+  is itself inlined in the caller?  When expanding the called method
+  we'll assume that the class initialization has already been done,
+  because the DECL_INITIAL of the init_test_decl is set.
+  
+  To fix this we remove the DECL_INITIAL (in the caller scope) of all
+  the init_test_decls corresponding to classes initialized by the
+  inlined method.  This makes the caller no longer assume that the
+  method being inlined does any class initializations.  */
+  DECL_INITIAL (*init_test_decl) = NULL;
+
   return true;
 }
 
@@ -1028,9 +988,7 @@ merge_init_test_initialization (entry, x)
    inlining.  */
 
 void
-java_inlining_merge_static_initializers (fn, decl_map)
-     tree fn;
-     void *decl_map;
+java_inlining_merge_static_initializers (tree fn, void *decl_map)
 {
   htab_traverse 
     (DECL_FUNCTION_INIT_TEST_TABLE (fn),
@@ -1044,9 +1002,7 @@ java_inlining_merge_static_initializers (fn, decl_map)
    pre-existing one.  */
 
 static int
-inline_init_test_initialization (entry, x)
-     void * * entry;
-     void * x;
+inline_init_test_initialization (void **entry, void *x)
 {
   struct treetreehash_entry *ite = (struct treetreehash_entry *) *entry;
   splay_tree decl_map = (splay_tree)x;
@@ -1055,11 +1011,9 @@ inline_init_test_initialization (entry, x)
     (DECL_FUNCTION_INIT_TEST_TABLE (current_function_decl), ite->key);
   if (! h)
     return true;
-
   splay_tree_insert (decl_map,
 		     (splay_tree_key) ite->value,
 		     (splay_tree_value) h);
-
   return true;
 }
 
@@ -1069,9 +1023,7 @@ inline_init_test_initialization (entry, x)
    into, create a new mapping for it.  */
 
 void
-java_inlining_map_static_initializers (fn, decl_map)
-     tree fn;
-     void *decl_map;
+java_inlining_map_static_initializers (tree fn, void *decl_map)
 {
   htab_traverse 
     (DECL_FUNCTION_INIT_TEST_TABLE (fn),
@@ -1081,9 +1033,7 @@ java_inlining_map_static_initializers (fn, decl_map)
 /* Avoid voluminous output for deep recursion of compound exprs.  */
 
 static void
-dump_compound_expr (di, t)
-     dump_info_p di;
-     tree t;
+dump_compound_expr (dump_info_p di, tree t)
 {
   int i;
 
@@ -1108,10 +1058,8 @@ dump_compound_expr (di, t)
     }
 }
   
-static int
-java_dump_tree (dump_info, t)
-     void *dump_info;
-     tree t;
+static bool
+java_dump_tree (void *dump_info, tree t)
 {
   enum tree_code code;
   dump_info_p di = (dump_info_p) dump_info;
@@ -1133,29 +1081,29 @@ java_dump_tree (dump_info, t)
 	dump_child ("body", DECL_FUNCTION_BODY (t));
       if (DECL_LANG_SPECIFIC (t) && !dump_flag (di, TDF_SLIM, t))
 	dump_child ("inline body", DECL_SAVED_TREE (t));
-      return 1;
+      return true;
 
     case RETURN_EXPR:
       dump_child ("expr", TREE_OPERAND (t, 0));
-      return 1;
+      return true;
 
     case GOTO_EXPR:
       dump_child ("goto", TREE_OPERAND (t, 0));
-      return 1;
+      return true;
 
     case LABEL_EXPR:
       dump_child ("label", TREE_OPERAND (t, 0));
-      return 1;
+      return true;
 
     case LABELED_BLOCK_EXPR:
       dump_child ("label", TREE_OPERAND (t, 0));
       dump_child ("block", TREE_OPERAND (t, 1));
-      return 1;
+      return true;
 
     case EXIT_BLOCK_EXPR:
       dump_child ("block", TREE_OPERAND (t, 0));
       dump_child ("val", TREE_OPERAND (t, 1));
-      return 1;
+      return true;
 
     case BLOCK:
       if (BLOCK_EXPR_BODY (t))
@@ -1174,17 +1122,74 @@ java_dump_tree (dump_info, t)
 	    block = TREE_CHAIN (block);
 	  }
 	}
-      return 1;
+      return true;
       
     case COMPOUND_EXPR:
       if (!dump_flag (di, TDF_SLIM, t))
-	return 0;
+	return false;
       dump_compound_expr (di, t);
-      return 1;
+      return true;
 
     default:
       break;
     }
-  return 0;
+  return false;
 }
+
+/* Java calls can't, in general, be sibcalls because we need an
+   accurate stack trace in order to guarantee correct operation of
+   methods such as Class.forName(String) and
+   SecurityManager.getClassContext().  */
+
+static bool
+java_decl_ok_for_sibcall (tree decl)
+{
+  return decl != NULL && DECL_CONTEXT (decl) == output_class;
+}
+
+/* Given a call_expr, try to figure out what its target might be.  In
+   the case of an indirection via the atable, search for the decl.  If
+   the decl is external, we return NULL.  If we don't, the optimizer
+   will replace the indirection with a direct call, which undoes the
+   purpose of the atable indirection.  */
+static tree
+java_get_callee_fndecl (tree call_expr)
+{
+  tree method, table, element, atable_methods;
+
+  HOST_WIDE_INT index;
+
+  if (TREE_CODE (call_expr) != CALL_EXPR)
+    return NULL;
+  method = TREE_OPERAND (call_expr, 0);
+  STRIP_NOPS (method);
+  if (TREE_CODE (method) != ARRAY_REF)
+    return NULL;
+  table = TREE_OPERAND (method, 0);
+  if (! DECL_LANG_SPECIFIC(table)
+      || !DECL_OWNER (table) 
+      || TYPE_ATABLE_DECL (DECL_OWNER (table)) != table)
+    return NULL;
+
+  atable_methods = TYPE_ATABLE_METHODS (DECL_OWNER (table));
+  index = TREE_INT_CST_LOW (TREE_OPERAND (method, 1));
+  
+  /* FIXME: Replace this for loop with a hash table lookup.  */
+  for (element = atable_methods; element; element = TREE_CHAIN (element))
+    {
+      if (index == 1)
+	{
+	  tree purpose = TREE_PURPOSE (element);
+	  if (TREE_CODE (purpose) == FUNCTION_DECL
+	      && ! DECL_EXTERNAL (purpose))
+	    return purpose;
+	  else
+	    return NULL;
+	}
+      --index;
+    }
+
+  return NULL;
+}
+
 #include "gt-java-lang.h"

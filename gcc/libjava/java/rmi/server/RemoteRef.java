@@ -43,19 +43,36 @@ import java.rmi.Remote;
 import java.rmi.RemoteException;
 import java.io.ObjectOutput;
 
-public interface RemoteRef
-	extends Externalizable {
+public interface RemoteRef extends Externalizable
+{
+  long serialVersionUID = 0;
+  
+  String packagePrefix = "gnu.java.rmi.server";
 
-public static final long serialVersionUID = 0;
-public static final String packagePrefix = "gnu.java.rmi.server";
+  /**
+   * @deprecated
+   */
+  void invoke (RemoteCall call) throws Exception;
+  
+  Object invoke (Remote obj, Method method, Object[] params, long opnum)
+    throws Exception;
+  
+  /**
+   * @deprecated
+   */
+  RemoteCall newCall (RemoteObject obj, Operation[] op, int opnum, long hash)
+    throws RemoteException;
 
-public void invoke(RemoteCall call) throws Exception;
-public Object invoke(Remote obj, Method method, Object[] params, long opnum) throws Exception;
-public RemoteCall newCall(RemoteObject obj, Operation[] op, int opnum, long hash) throws RemoteException;
-public void done(RemoteCall call) throws RemoteException;
-public boolean remoteEquals(RemoteRef ref);
-public int remoteHashCode();
-public String getRefClass(ObjectOutput out);
-public String remoteToString();
-
+  /**
+   * @deprecated
+   */
+  void done (RemoteCall call) throws RemoteException;
+  
+  boolean remoteEquals (RemoteRef ref);
+  
+  int remoteHashCode();
+  
+  String getRefClass (ObjectOutput out);
+  
+  String remoteToString();
 }

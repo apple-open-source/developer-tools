@@ -1,5 +1,5 @@
 /* StyledEditorKit.java --
-   Copyright (C) 2002 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2004 Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -37,20 +37,25 @@ exception statement from your version. */
 
 package javax.swing.text;
 
-// Imports
-import java.awt.*;
-import java.awt.event.*;
-import java.beans.*;
-import java.io.*;
-import javax.swing.*;
-import javax.swing.event.*;
+import java.awt.Color;
+import java.awt.event.ActionEvent;
+import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
+import java.io.Serializable;
+
+import javax.swing.Action;
+import javax.swing.JEditorPane;
+import javax.swing.event.CaretEvent;
+import javax.swing.event.CaretListener;
 
 /**
  * StyledEditorKit
  * @author	Andrew Selkirk
  * @version	1.0
  */
-public class StyledEditorKit extends DefaultEditorKit {
+public class StyledEditorKit extends DefaultEditorKit
+{
+  static final long serialVersionUID = 7002391892985555948L;
 
 	//-------------------------------------------------------------
 	// Classes ----------------------------------------------------

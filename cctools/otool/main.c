@@ -1841,6 +1841,9 @@ enum bool verbose)
 				nsymbols, sorted_symbols, nsorted_symbols,
 				strings, strings_size, verbose);
 		else if(cputype == CPU_TYPE_POWERPC ||
+#ifdef INTERIM_PPC64
+                        cputype == CPU_TYPE_POWERPC64 ||
+#endif /* INTERIM_PPC64 */
 			cputype == CPU_TYPE_VEO)
 		    j = ppc_disassemble(sect, size - i, cur_addr, addr,
 				object_byte_sex, relocs, nrelocs, symbols,
@@ -2089,17 +2092,13 @@ hw_sqrt(double x)
  * More stubs to avoid linking in libm.  This works as along as we don't use
  * long doubles.
  */
-#ifdef __ppc__
 long
-__fpclassifyd(double x) /* ppc doesn't support long doubles */
+__fpclassifyd(double x)
 {
 	return(0);
 }
-#endif /* __ppc__ */
-#ifdef __i386__
 long
 __fpclassify(long double x)
 {
 	return(0);
 }
-#endif /* __i386__ */

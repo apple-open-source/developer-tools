@@ -1,3 +1,4 @@
+/* APPLE LOCAL entire file */
 /* Copyright (C) 2003 Free Software Foundation.
    Contributed by Devang Patel  <dpatel@apple.com>  */
 /* Test command line option -grepository */

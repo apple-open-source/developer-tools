@@ -1,4 +1,4 @@
-/* Copyright (C) 2000, 2001  Free Software Foundation.
+/* Copyright (C) 2000, 2001, 2003  Free Software Foundation.
 
    Ensure all expected transformations of builtin strncmp occur and
    perform correctly.
@@ -65,8 +65,9 @@ int main ()
   s2 = s1; s3 = s1+4;
   if (strncmp (++s2, ++s3+2, 1) >= 0 || s2 != s1+1 || s3 != s1+5)
     abort();
-#if defined(__i386__) || defined (__pj__) || defined (__i370__)
-  /* These tests work on platforms which support cmpstrsi.  */
+#if !defined(__OPTIMIZE__) || (defined(__i386__) && !defined(__OPTIMIZE_SIZE__))
+  /* These tests work on platforms which support cmpstrsi.  We test it
+     at -O0 on all platforms to ensure the strncmp logic is correct.  */
   s2 = s1;
   if (strncmp (++s2, "ello", 3) != 0 || s2 != s1+1)
     abort();
@@ -231,6 +232,7 @@ int main ()
 /* When optimizing, all the above cases should be transformed into
    something else.  So any remaining calls to the original function
    should abort.  */
+__attribute__ ((noinline))
 static int
 strncmp(const char *s1, const char *s2, size_t n)
 {

@@ -40,15 +40,27 @@ package java.rmi.server;
 import java.net.MalformedURLException;
 import java.net.URL;
 
+/**
+ * @deprecated
+ */
+public interface LoaderHandler
+{
+  String packagePrefix = "";
 
-public interface LoaderHandler {
+  /**
+   * @deprecated
+   */
+  Class loadClass(String name)
+    throws MalformedURLException, ClassNotFoundException;
 
-public static final String packagePrefix = "";
+  /**
+   * @deprecated
+   */
+  Class loadClass(URL codebase, String name)
+    throws MalformedURLException, ClassNotFoundException;
 
-public Class loadClass(String name) throws MalformedURLException, ClassNotFoundException;
-
-public Class loadClass(URL codebase, String name) throws MalformedURLException, ClassNotFoundException;
-
-public Object getSecurityContext(ClassLoader loader);
-
+  /**
+   * @deprecated
+   */
+  Object getSecurityContext(ClassLoader loader);
 }

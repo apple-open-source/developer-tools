@@ -1,57 +1,70 @@
 /* Language-dependent hooks for C++.
-   Copyright 2001, 2002 Free Software Foundation, Inc.
+   Copyright 2001, 2002, 2004 Free Software Foundation, Inc.
    Contributed by Alexandre Oliva  <aoliva@redhat.com>
 
-This file is part of GNU CC.
+This file is part of GCC.
 
-GNU CC is free software; you can redistribute it and/or modify
+GCC is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2, or (at your option)
 any later version.
 
-GNU CC is distributed in the hope that it will be useful,
+GCC is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with GNU CC; see the file COPYING.  If not, write to
+along with GCC; see the file COPYING.  If not, write to
 the Free Software Foundation, 59 Temple Place - Suite 330,
 Boston, MA 02111-1307, USA.  */
 
 #include "config.h"
 #include "system.h"
+#include "coretypes.h"
+#include "tm.h"
 #include "tree.h"
 #include "cp-tree.h"
 #include "c-common.h"
 #include "toplev.h"
 #include "langhooks.h"
 #include "langhooks-def.h"
+#include "diagnostic.h"
+#include "cxx-pretty-print.h"
 
-static HOST_WIDE_INT cxx_get_alias_set PARAMS ((tree));
-static bool ok_to_generate_alias_set_for_type PARAMS ((tree));
-static bool cxx_warn_unused_global_decl PARAMS ((tree));
-static tree cp_expr_size PARAMS ((tree));
-static bool cp_var_mod_type_p PARAMS ((tree));
-/* APPLE LOCAL finish file hook  */
-static void cxx_finish_file PARAMS ((void));
+enum c_language_kind c_language = clk_cxx;
+
+static HOST_WIDE_INT cxx_get_alias_set (tree);
+static bool cxx_warn_unused_global_decl (tree);
+static tree cp_expr_size (tree);
+static size_t cp_tree_size (enum tree_code);
+static bool cp_var_mod_type_p (tree);
+static int cxx_types_compatible_p (tree, tree);
+static int cp_expand_decl (tree);
+static void cxx_initialize_diagnostics (diagnostic_context *);
 
 #undef LANG_HOOKS_NAME
 #define LANG_HOOKS_NAME "GNU C++"
+#undef LANG_HOOKS_TREE_SIZE
+#define LANG_HOOKS_TREE_SIZE cp_tree_size
 #undef LANG_HOOKS_INIT
 #define LANG_HOOKS_INIT cxx_init
 #undef LANG_HOOKS_FINISH
 #define LANG_HOOKS_FINISH cxx_finish
 #undef LANG_HOOKS_CLEAR_BINDING_STACK
 #define LANG_HOOKS_CLEAR_BINDING_STACK pop_everything
-/* APPLE LOCAL begin finish file hook  */
 #undef LANG_HOOKS_FINISH_FILE
-#define LANG_HOOKS_FINISH_FILE cxx_finish_file
-/* APPLE LOCAL end finish file hook  */
+#define LANG_HOOKS_FINISH_FILE finish_file
 #undef LANG_HOOKS_INIT_OPTIONS
-#define LANG_HOOKS_INIT_OPTIONS cxx_init_options
-#undef LANG_HOOKS_DECODE_OPTION
-#define LANG_HOOKS_DECODE_OPTION c_common_decode_option
+#define LANG_HOOKS_INIT_OPTIONS c_common_init_options
+#undef LANG_HOOKS_INITIALIZE_DIAGNOSTICS
+#define LANG_HOOKS_INITIALIZE_DIAGNOSTICS cxx_initialize_diagnostics
+#undef LANG_HOOKS_HANDLE_OPTION
+#define LANG_HOOKS_HANDLE_OPTION c_common_handle_option
+#undef LANG_HOOKS_HANDLE_FILENAME
+#define LANG_HOOKS_HANDLE_FILENAME c_common_handle_filename
+#undef LANG_HOOKS_MISSING_ARGUMENT
+#define LANG_HOOKS_MISSING_ARGUMENT c_common_missing_argument
 #undef LANG_HOOKS_POST_OPTIONS
 #define LANG_HOOKS_POST_OPTIONS c_common_post_options
 #undef LANG_HOOKS_GET_ALIAS_SET
@@ -60,20 +73,18 @@ static void cxx_finish_file PARAMS ((void));
 #define LANG_HOOKS_EXPAND_CONSTANT cplus_expand_constant
 #undef LANG_HOOKS_EXPAND_EXPR
 #define LANG_HOOKS_EXPAND_EXPR cxx_expand_expr
+#undef LANG_HOOKS_EXPAND_DECL
+#define LANG_HOOKS_EXPAND_DECL cp_expand_decl
 #undef LANG_HOOKS_SAFE_FROM_P
 #define LANG_HOOKS_SAFE_FROM_P c_safe_from_p
 #undef LANG_HOOKS_PARSE_FILE
 #define LANG_HOOKS_PARSE_FILE c_common_parse_file
 #undef LANG_HOOKS_DUP_LANG_SPECIFIC_DECL
 #define LANG_HOOKS_DUP_LANG_SPECIFIC_DECL cxx_dup_lang_specific_decl
-#undef LANG_HOOKS_UNSAVE_EXPR_NOW
-#define LANG_HOOKS_UNSAVE_EXPR_NOW cxx_unsave_expr_now
 #undef LANG_HOOKS_MAYBE_BUILD_CLEANUP
 #define LANG_HOOKS_MAYBE_BUILD_CLEANUP cxx_maybe_build_cleanup
 #undef LANG_HOOKS_TRUTHVALUE_CONVERSION
 #define LANG_HOOKS_TRUTHVALUE_CONVERSION c_common_truthvalue_conversion
-#undef LANG_HOOKS_INSERT_DEFAULT_ATTRIBUTES
-#define LANG_HOOKS_INSERT_DEFAULT_ATTRIBUTES cxx_insert_default_attributes
 #undef LANG_HOOKS_UNSAFE_FOR_REEVAL
 #define LANG_HOOKS_UNSAFE_FOR_REEVAL c_common_unsafe_for_reeval
 #undef LANG_HOOKS_SET_DECL_ASSEMBLER_NAME
@@ -94,16 +105,24 @@ static void cxx_finish_file PARAMS ((void));
 #define LANG_HOOKS_DECL_PRINTABLE_NAME	cxx_printable_name
 #undef LANG_HOOKS_PRINT_ERROR_FUNCTION
 #define LANG_HOOKS_PRINT_ERROR_FUNCTION	cxx_print_error_function
+#undef LANG_HOOKS_PUSHLEVEL
+#define LANG_HOOKS_PUSHLEVEL lhd_do_nothing_i
+#undef LANG_HOOKS_POPLEVEL
+#define LANG_HOOKS_POPLEVEL lhd_do_nothing_iii_return_null_tree
 #undef LANG_HOOKS_WARN_UNUSED_GLOBAL_DECL
 #define LANG_HOOKS_WARN_UNUSED_GLOBAL_DECL cxx_warn_unused_global_decl
 #undef LANG_HOOKS_WRITE_GLOBALS
 #define LANG_HOOKS_WRITE_GLOBALS lhd_do_nothing
+#undef LANG_HOOKS_UPDATE_DECL_AFTER_SAVING
+#define LANG_HOOKS_UPDATE_DECL_AFTER_SAVING cp_update_decl_after_saving
 
 
 #undef LANG_HOOKS_FUNCTION_INIT
 #define LANG_HOOKS_FUNCTION_INIT cxx_push_function_context
 #undef LANG_HOOKS_FUNCTION_FINAL
 #define LANG_HOOKS_FUNCTION_FINAL cxx_pop_function_context
+#undef LANG_HOOKS_FUNCTION_MISSING_NORETURN_OK_P
+#define LANG_HOOKS_FUNCTION_MISSING_NORETURN_OK_P cp_missing_noreturn_ok_p
 
 /* Attribute hooks.  */
 #undef LANG_HOOKS_COMMON_ATTRIBUTE_TABLE
@@ -124,7 +143,7 @@ static void cxx_finish_file PARAMS ((void));
   cp_add_pending_fn_decls
 #undef LANG_HOOKS_TREE_INLINING_TREE_CHAIN_MATTERS_P
 #define LANG_HOOKS_TREE_INLINING_TREE_CHAIN_MATTERS_P \
-  cp_is_overload_p
+  cp_tree_chain_matters_p
 #undef LANG_HOOKS_TREE_INLINING_AUTO_VAR_IN_FN_P
 #define LANG_HOOKS_TREE_INLINING_AUTO_VAR_IN_FN_P \
   cp_auto_var_in_fn_p
@@ -135,16 +154,17 @@ static void cxx_finish_file PARAMS ((void));
 #define LANG_HOOKS_TREE_INLINING_ANON_AGGR_TYPE_P anon_aggr_type_p
 #undef LANG_HOOKS_TREE_INLINING_VAR_MOD_TYPE_P
 #define LANG_HOOKS_TREE_INLINING_VAR_MOD_TYPE_P cp_var_mod_type_p
-#undef LANG_HOOKS_TREE_INLINING_START_INLINING
-#define LANG_HOOKS_TREE_INLINING_START_INLINING cp_start_inlining
-#undef LANG_HOOKS_TREE_INLINING_END_INLINING
-#define LANG_HOOKS_TREE_INLINING_END_INLINING cp_end_inlining
 #undef LANG_HOOKS_TREE_DUMP_DUMP_TREE_FN
 #define LANG_HOOKS_TREE_DUMP_DUMP_TREE_FN cp_dump_tree
 #undef LANG_HOOKS_TREE_DUMP_TYPE_QUALS_FN
 #define LANG_HOOKS_TREE_DUMP_TYPE_QUALS_FN cp_type_quals
 #undef LANG_HOOKS_EXPR_SIZE
 #define LANG_HOOKS_EXPR_SIZE cp_expr_size
+
+#undef LANG_HOOKS_CALLGRAPH_ANALYZE_EXPR
+#define LANG_HOOKS_CALLGRAPH_ANALYZE_EXPR cxx_callgraph_analyze_expr
+#undef LANG_HOOKS_CALLGRAPH_EXPAND_FUNCTION
+#define LANG_HOOKS_CALLGRAPH_EXPAND_FUNCTION expand_body
 
 #undef LANG_HOOKS_MAKE_TYPE
 #define LANG_HOOKS_MAKE_TYPE cxx_make_type
@@ -162,6 +182,12 @@ static void cxx_finish_file PARAMS ((void));
 #define LANG_HOOKS_INCOMPLETE_TYPE_ERROR cxx_incomplete_type_error
 #undef LANG_HOOKS_TYPE_PROMOTES_TO
 #define LANG_HOOKS_TYPE_PROMOTES_TO cxx_type_promotes_to
+#undef LANG_HOOKS_TYPES_COMPATIBLE_P
+#define LANG_HOOKS_TYPES_COMPATIBLE_P cxx_types_compatible_p
+#undef LANG_HOOKS_REGISTER_BUILTIN_TYPE
+#define LANG_HOOKS_REGISTER_BUILTIN_TYPE c_register_builtin_type
+#undef LANG_HOOKS_GIMPLIFY_EXPR
+#define LANG_HOOKS_GIMPLIFY_EXPR cp_gimplify_expr
 
 /* APPLE LOCAL begin Objective-C++  */
 /* Redefine the hooks that need to be different for ObjC++.  */
@@ -241,69 +267,18 @@ const char *const tree_code_name[] = {
 };
 #undef DEFTREECODE
 
-/* Check if a C++ type is safe for aliasing.
-   Return TRUE if T safe for aliasing FALSE otherwise.  */
-
-static bool
-ok_to_generate_alias_set_for_type (t)
-     tree t;
-{
-  if (TYPE_PTRMEMFUNC_P (t))
-    return true;
-  if (AGGREGATE_TYPE_P (t))
-    {
-      if ((TREE_CODE (t) == RECORD_TYPE) || (TREE_CODE (t) == UNION_TYPE))
-	{
-	  tree fields;
-	  /* Backend-created structs are safe.  */
-	  if (! CLASS_TYPE_P (t))
-	    return true;
-	  /* PODs are safe.  */
-	  if (! CLASSTYPE_NON_POD_P(t))
-	    return true;
-	  /* Classes with virtual baseclasses are not.  */
-	  if (TYPE_USES_VIRTUAL_BASECLASSES (t))
-	    return false;
-	  /* Recursively check the base classes.  */
-	  if (TYPE_BINFO (t) != NULL && TYPE_BINFO_BASETYPES (t) != NULL)
-	    {
-	      int i;
-	      for (i = 0; i < TREE_VEC_LENGTH (TYPE_BINFO_BASETYPES (t)); i++)
-		{
-		  tree binfo = TREE_VEC_ELT (TYPE_BINFO_BASETYPES (t), i);
-		  if (!ok_to_generate_alias_set_for_type (BINFO_TYPE (binfo)))
-		    return false;
-		}
-	    }
-	  /* Check all the fields.  */
-	  for (fields = TYPE_FIELDS (t); fields; fields = TREE_CHAIN (fields))
-	    {
-	      if (TREE_CODE (fields) != FIELD_DECL)
-		continue;
-	      if (! ok_to_generate_alias_set_for_type (TREE_TYPE (fields)))
-		return false;
-	    }
-	  return true;
-	}
-      else if (TREE_CODE (t) == ARRAY_TYPE)
-	return ok_to_generate_alias_set_for_type (TREE_TYPE (t));
-      else
-	/* This should never happen, we dealt with all the aggregate
-	   types that can appear in C++ above.  */
-	abort ();
-    }
-  else
-    return true;
-}
-
 /* Special routine to get the alias set for C++.  */
 
 static HOST_WIDE_INT
-cxx_get_alias_set (t)
-     tree t;
+cxx_get_alias_set (tree t)
 {
-  /* It's not yet safe to use alias sets for classes in C++.  */
-  if (!ok_to_generate_alias_set_for_type(t))
+  if (IS_FAKE_BASE_TYPE (t))
+    /* The base variant of a type must be in the same alias set as the
+       complete type.  */
+    return get_alias_set (TYPE_CONTEXT (t));
+  
+  /* Punt on PMFs until we canonicalize functions properly.  */
+  if (TYPE_PTRMEMFUNC_P (t))
     return 0;
 
   return c_common_get_alias_set (t);
@@ -312,8 +287,7 @@ cxx_get_alias_set (t)
 /* Called from check_global_declarations.  */
 
 static bool
-cxx_warn_unused_global_decl (decl)
-     tree decl;
+cxx_warn_unused_global_decl (tree decl)
 {
   if (TREE_CODE (decl) == FUNCTION_DECL && DECL_DECLARED_INLINE_P (decl))
     return false;
@@ -330,30 +304,10 @@ cxx_warn_unused_global_decl (decl)
 /* APPLE LOCAL begin Objective-C++ */
 #ifdef OBJCPLUS
 static void 
-objcplus_init_options ()
+objcplus_init_options (void)
 {
   flag_objc = 1;
   cxx_init_options ();
-}
-#else
-void
-objc_check_decl (decl)
-     tree decl ATTRIBUTE_UNUSED;
-{
-}
-
-int
-objc_comptypes (lhs, rhs, reflexive)
-     tree lhs ATTRIBUTE_UNUSED;
-     tree rhs ATTRIBUTE_UNUSED;
-     int reflexive ATTRIBUTE_UNUSED;
-{
-  return -1;
-}
-
-void
-objc_clear_super_receiver ()
-{
 }
 #endif
 
@@ -362,8 +316,7 @@ objc_clear_super_receiver ()
    might have allocated something there.  */
 
 static tree
-cp_expr_size (exp)
-     tree exp;
+cp_expr_size (tree exp)
 {
   if (CLASS_TYPE_P (TREE_TYPE (exp)))
     {
@@ -377,11 +330,59 @@ cp_expr_size (exp)
 	abort ();
       /* This would be wrong for a type with virtual bases, but they are
 	 caught by the abort above.  */
-      return CLASSTYPE_SIZE_UNIT (TREE_TYPE (exp));
+      return (is_empty_class (TREE_TYPE (exp))
+	      ? size_zero_node 
+	      : CLASSTYPE_SIZE_UNIT (TREE_TYPE (exp)));
     }
   else
     /* Use the default code.  */
     return lhd_expr_size (exp);
+}
+
+/* Expand DECL if it declares an entity not handled by the
+   common code.  */
+
+static int
+cp_expand_decl (tree decl)
+{
+  if (TREE_CODE (decl) == VAR_DECL && !TREE_STATIC (decl))
+    {
+      /* Let the back-end know about this variable.  */
+      if (!anon_aggr_type_p (TREE_TYPE (decl)))
+	emit_local_var (decl);
+      else
+	expand_anon_union_decl (decl, NULL_TREE, 
+				DECL_ANON_UNION_ELEMS (decl));
+    }
+  else if (TREE_CODE (decl) == VAR_DECL && TREE_STATIC (decl))
+    make_rtl_for_local_static (decl);
+  else
+    return 0;
+
+  return 1;
+}
+
+int
+cp_tree_chain_matters_p (tree t)
+{
+  return cp_is_overload_p (t) || c_tree_chain_matters_p (t);
+}
+
+/* Langhook for tree_size: determine size of our 'x' and 'c' nodes.  */
+static size_t
+cp_tree_size (enum tree_code code)
+{
+  switch (code)
+    {
+    case PTRMEM_CST: 		return sizeof (struct ptrmem_cst);
+    case BASELINK:		return sizeof (struct tree_baselink);
+    case TEMPLATE_PARM_INDEX: 	return sizeof (template_parm_index);
+    case DEFAULT_ARG:		return sizeof (struct tree_default_arg);
+    case OVERLOAD:		return sizeof (struct tree_overload);
+    default:
+      abort ();
+    }
+  /* NOTREACHED */
 }
 
 /* Returns true if T is a variably modified type, in the sense of C99.
@@ -393,7 +394,7 @@ cp_var_mod_type_p (tree type)
 {
   /* If TYPE is a pointer-to-member, it is variably modified if either
      the class or the member are variably modified.  */
-  if (TYPE_PTRMEM_P (type) || TYPE_PTRMEMFUNC_P (type))
+  if (TYPE_PTR_TO_MEMBER_P (type))
     return (variably_modified_type_p (TYPE_PTRMEM_CLASS_TYPE (type))
 	    || variably_modified_type_p (TYPE_PTRMEM_POINTED_TO_TYPE (type)));
 
@@ -401,19 +402,25 @@ cp_var_mod_type_p (tree type)
   return false;
 }
 
-/* APPLE LOCAL begin Objective-C++ */
-/* This routine is called from the last rule in yyparse ().
-   It's a stub version of objc_finish_file that only does
-   the C++ finish_file work.  */
-
-static void
-cxx_finish_file ()
+static int cxx_types_compatible_p (tree x, tree y)
 {
-  if (! cxx_finish_file_start ())
-    return;
-  cxx_finish_file_rest ();
+  return same_type_ignoring_top_level_qualifiers_p (x, y);
 }
-/* APPLE LOCAL end Objective-C++ */
+
+/* Construct a C++-aware pretty-printer for CONTEXT.  It is assumed
+   that CONTEXT->printer is an already constructed basic pretty_printer.  */
+static void
+cxx_initialize_diagnostics (diagnostic_context *context)
+{
+  pretty_printer *base = context->printer;
+  cxx_pretty_printer *pp = xmalloc (sizeof (cxx_pretty_printer));
+  memcpy (pp_base (pp), base, sizeof (pretty_printer));
+  pp_cxx_pretty_printer_init (pp);
+  context->printer = (pretty_printer *) pp;
+
+  /* It is safe to free this object because it was previously malloc()'d.  */
+  free (base);
+}
 
 /* APPLE LOCAL Objective-C++ */
 /* Include the GC roots here instead of in cp/decl.c, so we can
@@ -422,8 +429,10 @@ cxx_finish_file ()
 #include "debug.h"
 #include "lex.h"
 #include "gt-cp-cp-tree-h.h"
+#if 0
+/* MERGE FAILURE! This file is not generated. Fix it */
 #include "gt-cp-decl-h.h"
-#include "gt-cp-lex-h.h"
+#endif
 #ifdef OBJCPLUS
 tree objcp_dummy = 0;
 #include "gtype-objcp.h"
@@ -432,3 +441,14 @@ tree cp_dummy = 0;
 #include "gtype-cp.h"
 #endif
 /* APPLE LOCAL end Objective-C++ */
+
+/* Stubs to keep c-opts.c happy.  */
+void
+push_file_scope (void)
+{
+}
+
+void
+pop_file_scope (void)
+{
+}

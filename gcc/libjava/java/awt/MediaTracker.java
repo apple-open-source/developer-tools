@@ -76,9 +76,9 @@ public class MediaTracker implements java.io.Serializable
 			       int width, int height)
     {
       if ((flags & ABORT) != 0)
-        status = ABORTED & COMPLETE;
+        status = ABORTED | COMPLETE;
       else if ((flags & ERROR) != 0)
-        status = ERRORED & COMPLETE;
+        status = ERRORED | COMPLETE;
       else if ((flags & ALLBITS) != 0)
         status = COMPLETE;
       else
@@ -88,8 +88,8 @@ public class MediaTracker implements java.io.Serializable
       {
 	MediaTracker.this.notifyAll();
       }
-      
-      return ((status & COMPLETE) != 0);
+      // If status is not COMPLETE then we need more updates.
+      return (status & COMPLETE) == 0;
     }
   }
 

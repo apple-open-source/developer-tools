@@ -1,21 +1,22 @@
 /* Handle verification of bytecoded methods for the GNU compiler for 
    the Java(TM) language.
-   Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002 Free Software Foundation, Inc.
+   Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003
+   Free Software Foundation, Inc.
 
-This file is part of GNU CC.
+This file is part of GCC.
 
-GNU CC is free software; you can redistribute it and/or modify
+GCC is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2, or (at your option)
 any later version.
 
-GNU CC is distributed in the hope that it will be useful,
+GCC is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with GNU CC; see the file COPYING.  If not, write to
+along with GCC; see the file COPYING.  If not, write to
 the Free Software Foundation, 59 Temple Place - Suite 330,
 Boston, MA 02111-1307, USA.
 
@@ -25,6 +26,8 @@ The Free Software Foundation is independent of Sun Microsystems, Inc.  */
 
 #include "config.h"
 #include "system.h"
+#include "coretypes.h"
+#include "tm.h"
 #include "tree.h"
 #include "java-tree.h"
 #include "javaop.h"
@@ -33,12 +36,12 @@ The Free Software Foundation is independent of Sun Microsystems, Inc.  */
 #include "java-except.h"
 #include "toplev.h"
 
-static void push_pending_label PARAMS ((tree));
-static tree merge_types PARAMS ((tree, tree));
-static const char *check_pending_block PARAMS ((tree));
-static void type_stack_dup PARAMS ((int, int));
-static int start_pc_cmp PARAMS ((const PTR, const PTR));
-static char *pop_argument_types PARAMS ((tree));
+static void push_pending_label (tree);
+static tree merge_types (tree, tree);
+static const char *check_pending_block (tree);
+static void type_stack_dup (int, int);
+static int start_pc_cmp (const void *, const void *);
+static char *pop_argument_types (tree);
 
 extern int stack_pointer;
 
@@ -53,8 +56,7 @@ tree pending_blocks;
 /* Append TARGET_LABEL to the pending_block stack unless already in it. */
 
 static void
-push_pending_label (target_label) 
-     tree target_label;
+push_pending_label (tree target_label) 
 {
   if (! LABEL_CHANGED (target_label))
     {
@@ -69,8 +71,7 @@ push_pending_label (target_label)
    Return NULL on success, or an error message on failure. */
 
 static const char *
-check_pending_block (target_label)
-     tree target_label;
+check_pending_block (tree target_label)
 {
   int changed = merge_type_state (target_label);
 
@@ -126,8 +127,7 @@ subroutine_nesting (tree label)
    Return TYPE_UNKNOWN if the types cannot be merged. */   
 
 static tree
-merge_types (type1, type2)
-     tree type1, type2;
+merge_types (tree type1, tree type2)
 {
   if (type1 == type2)
     return type1;
@@ -242,8 +242,7 @@ merge_types (type1, type2)
    0 if there was no change, and 1 if there was a change. */
 
 int
-merge_type_state (label)
-     tree label;
+merge_type_state (tree label)
 {
   int nlocals = DECL_MAX_LOCALS (current_function_decl);
   int cur_length = stack_pointer + nlocals;
@@ -305,8 +304,7 @@ merge_type_state (label)
 /* Handle dup-like operations. */
 
 static void
-type_stack_dup (size, offset)
-     int size, offset;
+type_stack_dup (int size, int offset)
 {
   tree type[4];
   int index;
@@ -347,9 +345,7 @@ struct pc_index
 
 /* A helper that is used when sorting exception ranges.  */
 static int
-start_pc_cmp (xp, yp)
-     const PTR xp;
-     const PTR yp;
+start_pc_cmp (const void *xp, const void *yp)
 {
   const struct pc_index *x = (const struct pc_index *) xp;
   const struct pc_index *y = (const struct pc_index *) yp;
@@ -367,13 +363,12 @@ start_pc_cmp (xp, yp)
 #define VERIFICATION_ERROR_WITH_INDEX(MESSAGE) \
   do { message = MESSAGE;  goto error_with_index; } while (0)
 
-/* Recursive helper function to pop argument types during verifiation.
+/* Recursive helper function to pop argument types during verification.
    ARG_TYPES is the list of formal parameter types.
    Return NULL on success and a freshly malloc'd error message on failure. */
 
 static char *
-pop_argument_types (arg_types)
-     tree arg_types;
+pop_argument_types (tree arg_types)
 {
   if (arg_types == end_params_node)
     return NULL;
@@ -416,10 +411,7 @@ pop_argument_types (arg_types)
 /* Verify the bytecodes of the current method.
    Return 1 on success, 0 on failure. */
 int
-verify_jvm_instructions (jcf, byte_ops, length)
-     JCF* jcf;
-     const unsigned char *byte_ops;
-     long length;
+verify_jvm_instructions (JCF* jcf, const unsigned char *byte_ops, long length)
 {
   tree label;
   int wide = 0;
@@ -431,7 +423,7 @@ verify_jvm_instructions (jcf, byte_ops, length)
   char *pmessage;
   int i;
   int index;
-  register unsigned char *p;
+  unsigned char *p;
   struct eh_range *prev_eh_ranges = NULL_EH_RANGE;
   struct eh_range *eh_ranges;
   tree return_type = TREE_TYPE (TREE_TYPE (current_function_decl));
@@ -480,9 +472,6 @@ verify_jvm_instructions (jcf, byte_ops, length)
 	  free (starts);
 	  return 0;
 	}
-
-      if  (handler_pc >= start_pc && handler_pc < end_pc)
-	warning ("exception handler inside code that is being protected");
 
       add_handler (start_pc, end_pc,
 		   lookup_label (handler_pc),
@@ -721,7 +710,7 @@ verify_jvm_instructions (jcf, byte_ops, length)
 	prev_eh_ranges = NULL_EH_RANGE;
 
 	/* Allocate decl and rtx for this variable now, so if we're not
-	   optmizing, we get a temporary that survives the whole method. */
+	   optimizing, we get a temporary that survives the whole method. */
 	find_local_variable (index, type, oldpc);
 
         if (TYPE_IS_WIDE (type))

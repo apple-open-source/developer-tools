@@ -1,20 +1,20 @@
 /* This file contains the implementation of class Protocol.
-   Copyright (C) 1993 Free Software Foundation, Inc.
+   Copyright (C) 1993, 2004 Free Software Foundation, Inc.
 
-This file is part of GNU CC. 
+This file is part of GCC. 
 
-GNU CC is free software; you can redistribute it and/or modify
+GCC is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2, or (at your option)
 any later version.
 
-GNU CC is distributed in the hope that it will be useful,
+GCC is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with GNU CC; see the file COPYING.  If not, write to
+along with GCC; see the file COPYING.  If not, write to
 the Free Software Foundation, 59 Temple Place - Suite 330,
 Boston, MA 02111-1307, USA.  */
  
@@ -56,6 +56,9 @@ struct objc_method_description_list {
   size_t i;
   struct objc_protocol_list* proto_list;
 
+  if (aProtocolObject == nil)
+    return NO;
+
   if (!strcmp(aProtocolObject->protocol_name, self->protocol_name))
     return YES;
 
@@ -80,11 +83,12 @@ struct objc_method_description_list {
   const char* name = sel_get_name (aSel);
   struct objc_method_description *result;
 
-  for (i = 0; i < instance_methods->count; i++)
-    {
-      if (!strcmp ((char*)instance_methods->list[i].name, name))
-	return &(instance_methods->list[i]);
-    }
+  if (instance_methods)
+    for (i = 0; i < instance_methods->count; i++)
+      {
+	if (!strcmp ((char*)instance_methods->list[i].name, name))
+	  return &(instance_methods->list[i]);
+      }
 
   for (proto_list = protocol_list; proto_list; proto_list = proto_list->next)
     {
@@ -107,11 +111,12 @@ struct objc_method_description_list {
   const char* name = sel_get_name (aSel);
   struct objc_method_description *result;
 
-  for (i = 0; i < class_methods->count; i++)
-    {
-      if (!strcmp ((char*)class_methods->list[i].name, name))
-	return &(class_methods->list[i]);
-    }
+  if (class_methods)
+    for (i = 0; i < class_methods->count; i++)
+      {
+	if (!strcmp ((char*)class_methods->list[i].name, name))
+	  return &(class_methods->list[i]);
+      }
 
   for (proto_list = protocol_list; proto_list; proto_list = proto_list->next)
     {
@@ -127,4 +132,29 @@ struct objc_method_description_list {
   return NULL;
 }
 
+- (unsigned) hash
+{
+  /* Compute a hash of the protocol_name; use the same hash algorithm
+   * that we use for class names; protocol names and class names are
+   * somewhat similar types of string spaces.
+   */
+  int hash = 0, index;
+  
+  for (index = 0; protocol_name[index] != '\0'; index++)
+    {
+      hash = (hash << 4) ^ (hash >> 28) ^ protocol_name[index];
+    }
+
+  hash = (hash ^ (hash >> 10) ^ (hash >> 20));
+
+  return hash;
+}
+
+- (BOOL) isEqual: (id)obj
+{
+  if (strcmp (protocol_name, [obj name]) == 0)
+    return YES;
+
+  return NO;
+}
 @end

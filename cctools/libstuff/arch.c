@@ -42,6 +42,9 @@ static const struct arch_flag arch_flags[] = {
     { "big",	CPU_TYPE_ANY,	  CPU_SUBTYPE_BIG_ENDIAN },
     /* architecture families */
     { "ppc",    CPU_TYPE_POWERPC, CPU_SUBTYPE_POWERPC_ALL },
+#ifdef INTERIM_PPC64
+    { "ppc64",  CPU_TYPE_POWERPC64, CPU_SUBTYPE_POWERPC64_ALL },
+#endif /* INTERIM_PPC64 */
     { "i386",   CPU_TYPE_I386,    CPU_SUBTYPE_I386_ALL },
     { "m68k",   CPU_TYPE_MC680x0, CPU_SUBTYPE_MC680x0_ALL },
     { "hppa",   CPU_TYPE_HPPA,    CPU_SUBTYPE_HPPA_ALL },
@@ -173,6 +176,9 @@ const struct arch_flag *flag)
    if(flag->cputype == CPU_TYPE_MC680x0 ||
       flag->cputype == CPU_TYPE_MC88000 ||
       flag->cputype == CPU_TYPE_POWERPC ||
+#ifdef INTERIM_PPC64
+      flag->cputype == CPU_TYPE_POWERPC64 ||
+#endif /* INTERIM_PPC64 */
       flag->cputype == CPU_TYPE_HPPA ||
       flag->cputype == CPU_TYPE_SPARC ||
       flag->cputype == CPU_TYPE_I860 ||

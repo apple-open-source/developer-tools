@@ -1,4 +1,3 @@
-/* APPLE LOCAL file objc test suite */
 /* This file "renames" various ObjC GNU runtime entry points
    (and fakes the existence of several others)
    if the NeXT runtime is being used.  */

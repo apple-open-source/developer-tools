@@ -1,4 +1,3 @@
-/* APPLE LOCAL file Panther ObjC enhancements */
 /* Test out '@catch(id foo) {...}', which should catch
    all uncaught exceptions.  */
 /* Developed by Ziemowit Laski <zlaski@apple.com>.  */
@@ -6,9 +5,9 @@
 /* { dg-options "-fobjc-exceptions -lobjc" } */
 /* { dg-do run { target *-*-darwin* } } */
 
-#import <objc/objc.h>
-#import <objc/objc-runtime.h>
-#import <objc/Object.h>
+#include <objc/objc.h>
+#include <objc/objc-runtime.h>
+#include <objc/Object.h>
 #include <stdio.h>
 
 /* The following is not required in actual user code; we include it

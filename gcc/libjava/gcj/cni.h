@@ -1,5 +1,5 @@
 // gcj/cni.h -*- c++ -*-
-// This file describes the Cygnus Native Interface, CNI.
+// This file describes the Compiled Native Interface, CNI.
 // It provides a nicer interface to many of the things in gcj/javaprims.h.
 
 /* Copyright (C) 1998, 1999, 2002  Free Software Foundation
@@ -19,18 +19,6 @@ details.  */
 #include <gcj/array.h>
 
 #include <string.h>
-
-extern inline jobject
-JvAllocObject (jclass cls)
-{
-  return _Jv_AllocObject (cls, cls->size());
-}
-
-extern inline jobject
-JvAllocObject (jclass cls, jsize sz)
-{
-  return _Jv_AllocObject (cls, sz);
-}
 
 extern "C" jstring _Jv_NewStringUTF (const char *bytes);
 extern "C" void _Jv_InitClass (jclass);

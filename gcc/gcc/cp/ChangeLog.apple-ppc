@@ -1,0 +1,19 @@
+2004-06-08  Fariborz Jahanian <fjahanian@apple.com>
+	* decl2.c (maybe_emit_vtables, get_guard):
+	Remove all APPLE LOCAL coalescing codes.
+	(import_export_decl): Remove all APPLE LOCAL coalescing codes,
+	except for one call to comdat_linkage.
+
+2004-06-08  Fariborz Jahanian <fjahanian@apple.com>
+        * decl2.c (maybe_emit_vtables, import_export_decl, get_guard):
+        Resore various APPLE LOCAL coalescing codes.
+
+2004-06-07  Fariborz Jahanian <fjahanian@apple.com>
+	* decl2.c (maybe_emit_vtables, import_export_decl, get_guard):
+	Remove various APPLE LOCAL coalescing codes. 
+
+2004-04-02  Ziemowit Laski  <zlaski@apple.com>
+        
+        Remove APPLE LOCAL AltiVec code whenever possible; merge in
+        AltiVec/VECTOR_TYPE-handling code from mainline.
+

@@ -37,20 +37,34 @@ exception statement from your version. */
 
 package java.rmi.server;
 
-public class Operation {
+/**
+ * @deprecated
+ */
+public class Operation
+{
+  private String operation;
 
-private String operation;
+  /**
+   * @deprecated
+   */
+  public Operation (String op)
+  {
+    operation = op;
+  }
 
-public Operation(String op) {
-	operation = op;
-}
+  /**
+   * @deprecated
+   */
+  public String getOperation ()
+  {
+    return operation;
+  }
 
-public String getOperation() {
-	return (operation);
-}
-
-public String toString() {
-	return (operation);
-}
-
+  /**
+   * @deprecated
+   */
+  public String toString ()
+  {
+    return operation;
+  }
 }

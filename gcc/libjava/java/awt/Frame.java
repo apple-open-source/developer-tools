@@ -1,5 +1,5 @@
 /* Frame.java -- AWT toplevel window
-   Copyright (C) 1999, 2000, 2002 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2002, 2004 Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -39,10 +39,6 @@ exception statement from your version. */
 package java.awt;
 
 import java.awt.peer.FramePeer;
-import java.awt.peer.WindowPeer;
-import java.awt.peer.ContainerPeer;
-import java.awt.peer.ComponentPeer;
-import java.io.Serializable;
 import java.util.Enumeration;
 import java.util.Vector;
 
@@ -52,7 +48,7 @@ import java.util.Vector;
   *
   * @author Aaron M. Renn (arenn@urbanophile.com)
   */
-public class Frame extends Window implements MenuContainer, Serializable
+public class Frame extends Window implements MenuContainer
 {
 
 /*
@@ -61,7 +57,7 @@ public class Frame extends Window implements MenuContainer, Serializable
 
 /**
   * Constant for the default cursor.
-  * Deprecated. replaced by <code>Cursor.DEFAULT_CURSOR</code> instead.
+  * @deprecated Replaced by <code>Cursor.DEFAULT_CURSOR</code> instead.
   */
 public static final int DEFAULT_CURSOR = Cursor.DEFAULT_CURSOR;
 
@@ -202,6 +198,16 @@ private int state;
   */
 private String title = "";
 
+  /**
+   * Maximized bounds for this frame.
+   */
+  private Rectangle maximizedBounds;
+
+  /**
+   * This field indicates whether the frame is undecorated or not.
+   */
+  private boolean undecorated = false;
+
 /*************************************************************************/
 
 /*
@@ -231,12 +237,15 @@ Frame(String title)
 {
   super();
   this.title = title;
+  // Top-level frames are initially invisible.
+  visible = false;
 }
 
 public
 Frame(GraphicsConfiguration gc)
 {
   super(gc);
+  visible = false;
 }
 
 public
@@ -244,6 +253,7 @@ Frame(String title, GraphicsConfiguration gc)
 {
   super(gc);
   setTitle(title);
+  visible = false;
 }
 
 /*************************************************************************/
@@ -331,9 +341,15 @@ getMenuBar()
 public synchronized void
 setMenuBar(MenuBar menuBar)
 {
-  this.menuBar = menuBar;
   if (peer != null)
+  {
+    if (this.menuBar != null)
+      this.menuBar.removeNotify();  
+    if (menuBar != null)
+      menuBar.addNotify();
     ((FramePeer) peer).setMenuBar(menuBar);
+  }
+  this.menuBar = menuBar;
 }
 
 /*************************************************************************/
@@ -391,7 +407,7 @@ getCursorType()
   *
   * @param type The cursor type.
   *
-  * @deprecated.  Use <code>Component.setCursor(Cursor)</code> instead.
+  * @deprecated Use <code>Component.setCursor(Cursor)</code> instead.
   */
 public void
 setCursor(int type)
@@ -420,28 +436,18 @@ remove(MenuComponent menu)
 public void
 addNotify()
 {
+  if (menuBar != null)
+    menuBar.addNotify();
   if (peer == null)
     peer = getToolkit ().createFrame (this);
   super.addNotify();
 }
 
-/*************************************************************************/
-
-/**
-  * Destroys any resources associated with this frame.  This includes
-  * all components in the frame and all owned toplevel windows.
-  */
-public void
-dispose()
+public void removeNotify()
 {
-  Enumeration e = ownedWindows.elements();
-  while(e.hasMoreElements())
-    {
-      Window w = (Window)e.nextElement();
-      w.dispose();
-    }
-
-  super.dispose();
+  if (menuBar != null)
+    menuBar.removeNotify();
+  super.removeNotify();
 }
 
 /*************************************************************************/
@@ -457,24 +463,95 @@ paramString()
   return(getClass().getName());
 }
 
-public int
-getState()
-{
-  /* FIXME: State might have changed in the peer... Must check. */
-    
-  return state;
-}
-
 public static Frame[]
 getFrames()
 {
   //Frame[] array = new Frames[frames.size()];
   //return frames.toArray(array);
-    
-    // see finalize() comment
   String msg = "FIXME: can't be implemented without weak references";
   throw new UnsupportedOperationException(msg);
 }
 
+  public void setState (int state)
+  {
+    int current_state = getExtendedState ();
+
+    if (state == NORMAL
+        && (current_state & ICONIFIED) != 0)
+      setExtendedState (current_state | ICONIFIED);
+    
+    if (state == ICONIFIED
+        && (current_state & ~ICONIFIED) == 0)
+      setExtendedState (current_state & ~ICONIFIED);
+  }
+
+  public int getState ()
+  {
+    /* FIXME: State might have changed in the peer... Must check. */
+  
+    return (state & ICONIFIED) != 0 ? ICONIFIED : NORMAL;
+  }
+
+  /**
+   * @since 1.4
+   */
+  public void setExtendedState (int state)
+  {
+    this.state = state;
+  }
+
+  /**
+   * @since 1.4
+   */
+  public int getExtendedState ()
+  {
+    return state;
+  }
+
+  /**
+   * @since 1.4
+   */
+  public void setMaximizedBounds (Rectangle maximizedBounds)
+  {
+    this.maximizedBounds = maximizedBounds;
+  }
+
+  /**
+   * Returns the maximized bounds of this frame.
+   *
+   * @return the maximized rectangle, may be null.
+   *
+   * @since 1.4
+   */
+  public Rectangle getMaximizedBounds ()
+  {
+    return maximizedBounds;
+  }
+
+  /**
+   * Returns whether this frame is undecorated or not.
+   * 
+   * @since 1.4
+   */
+  public boolean isUndecorated ()
+  {
+    return undecorated;
+  }
+
+  /**
+   * Disables or enables decorations for this frame. This method can only be
+   * called while the frame is not displayable.
+   * 
+   * @exception IllegalComponentStateException If this frame is displayable.
+   * 
+   * @since 1.4
+   */
+  public void setUndecorated (boolean undecorated)
+  {
+    if (!isDisplayable ())
+      throw new IllegalComponentStateException ();
+
+    this.undecorated = undecorated;
+  }
 } // class Frame 
 

@@ -6,8 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---                                                                          --
---           Copyright (C) 1992-2001 Free Software Foundation, Inc.         --
+--           Copyright (C) 1992-2003 Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -27,7 +26,7 @@
 
 --  Expand routines for chapter 3 constructs
 
-with Types; use Types;
+with Types;  use Types;
 with Elists; use Elists;
 
 package Exp_Ch3 is
@@ -53,21 +52,22 @@ package Exp_Ch3 is
    --  and the discriminant checking functions are inserted after this node.
 
    function Build_Initialization_Call
-     (Loc          : Source_Ptr;
-      Id_Ref       : Node_Id;
-      Typ          : Entity_Id;
-      In_Init_Proc : Boolean := False;
-      Enclos_Type  : Entity_Id := Empty;
-      Discr_Map    : Elist_Id := New_Elmt_List)
-      return         List_Id;
+     (Loc               : Source_Ptr;
+      Id_Ref            : Node_Id;
+      Typ               : Entity_Id;
+      In_Init_Proc      : Boolean := False;
+      Enclos_Type       : Entity_Id := Empty;
+      Discr_Map         : Elist_Id := New_Elmt_List;
+      With_Default_Init : Boolean := False)
+      return              List_Id;
    --  Builds a call to the initialization procedure of the Id entity. Id_Ref
    --  is either a new reference to Id (for record fields), or an indexed
    --  component (for array elements). Loc is the source location for the
    --  constructed tree, and Typ is the type of the entity (the initialization
    --  procedure of the base type is the procedure that actually gets called).
-   --  In_Init_Proc has to be set to True when the call is itself in an Init
-   --  procedure in order to enable the use of discriminals. Enclos_type is
-   --  the type of the init_proc and it is used for various expansion cases
+   --  In_Init_Proc has to be set to True when the call is itself in an init
+   --  proc in order to enable the use of discriminals. Enclos_type is the
+   --  type of the init proc and it is used for various expansion cases
    --  including the case where Typ is a task type which is a array component,
    --  the indices of the enclosing type are used to build the string that
    --  identifies each task at runtime.
@@ -77,6 +77,10 @@ package Exp_Ch3 is
    --  entry families bounded by discriminants, protected type discriminants
    --  can appear within expressions in array bounds (not as stand-alone
    --  identifiers) and a general replacement is necessary.
+   --
+   --  Ada0Y (AI-287): With_Default_Init is used to indicate that the initia-
+   --  lization call corresponds to a default initialized component of an
+   --  aggregate.
 
    procedure Freeze_Type (N : Node_Id);
    --  This procedure executes the freezing actions associated with the given

@@ -25,9 +25,6 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 /* Tree nodes relevant to both C and C++. These were originally in
 cp-tree.def in the cp subdir.  */
 
-/* A node to remember a source position.  */
-DEFTREECODE (SRCLOC, "srcloc", 'x', 2)
-
 DEFTREECODE (SIZEOF_EXPR, "sizeof_expr", '1', 1)
 DEFTREECODE (ARROW_EXPR, "arrow_expr", 'e', 1)
 DEFTREECODE (ALIGNOF_EXPR, "alignof_expr", '1', 1)
@@ -82,7 +79,7 @@ DEFTREECODE (GOTO_STMT, "goto_stmt", 'e', 1)
 DEFTREECODE (LABEL_STMT, "label_stmt", 'e', 1)
 
 /* Used to represent an inline assembly statement.  */
-DEFTREECODE (ASM_STMT, "asm_stmt", 'e', 5)
+DEFTREECODE (ASM_STMT, "asm_stmt", 'e', 4)
 
 /* A SCOPE_STMT marks the beginning or end of a scope.  If
    SCOPE_BEGIN_P holds, then this is the start of a scope.  If
@@ -91,10 +88,6 @@ DEFTREECODE (ASM_STMT, "asm_stmt", 'e', 5)
    this scope.  The SCOPE_STMT_BLOCK is the BLOCK containing the
    variables declared in this scope.  */
 DEFTREECODE (SCOPE_STMT, "scope_stmt", 'e', 1)
-
-/* A FILE_STMT marks the spot where a function changes files.  It has no
-   other semantics.  FILE_STMT_FILENAME gives the name.  */
-DEFTREECODE (FILE_STMT, "file_stmt", 'e', 1)
 
 /* Used to represent a CASE_LABEL. The operands are CASE_LOW and
    CASE_HIGH, respectively. If CASE_LOW is NULL_TREE, the label is a

@@ -186,6 +186,8 @@ void SymInfoFreeSymbol(SymInfoSymbol symbol)
 	free(symbol->name);
     if(symbol->ordinal)
 	free(symbol->ordinal);
+    if(symbol->arch)
+	free((char *)symbol->arch);
     if(symbol)
 	free(symbol);
 }
@@ -270,13 +272,13 @@ SymInfoDependencies SymInfoGetLibraryInfo(SymInfoList nmList)
 unsigned int SymInfoGetSubFrameworkCount(SymInfoDependencies deps)
 {
     if(!deps)
-	return(NULL);
+	return(0);
     return(deps->nSubFrameworks);
 }
 unsigned int SymInfoGetSubUmbrellaCount(SymInfoDependencies deps)
 {
     if(!deps)
-	return(NULL);
+	return(0);
     return(deps->nSubUmbrellas);
 }
 char **SymInfoGetSubUmbrellas(SymInfoDependencies deps)
@@ -312,13 +314,13 @@ char *SymInfoGetSymbolOrdinal(SymInfoSymbol symbol)
 unsigned int SymInfoGetExportCount(SymInfoList nmList)
 {
     if(!nmList)
-	return(NULL);
+	return(0);
     return(nmList->nExports);
 }
 unsigned int SymInfoGetImportCount(SymInfoList nmList)
 {
     if(!nmList)
-	return(NULL);
+	return(0);
     return(nmList->nImports);
 }
 char *SymInfoGetShortName(SymInfoList nmList)
@@ -637,7 +639,14 @@ void *cookie)
 
 	/* Save the name and arch */
 	self->imports[i]->name = savestr(symbols[symbolIndex].n_un.n_name);
-	self->imports[i]->arch = archInfo->name;
+	if(archInfo == NULL){
+	    char archString[10];
+	    sprintf(archString, "%d", ofile->mh->cputype);
+	    self->imports[i]->arch = savestr(archString);
+	}
+	else{
+	    self->imports[i]->arch = archInfo->name;
+	}
 
 	/* Now extract the ordinal info and save the short library name */
 	library_ordinal = GET_LIBRARY_ORDINAL(symbols[symbolIndex].n_desc);

@@ -1,5 +1,5 @@
 /* JRootPane.java --
-   Copyright (C) 2002 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2004  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -35,15 +35,14 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package javax.swing;
 
-import java.awt.*;
-import java.awt.event.*;
-
-import javax.accessibility.AccessibleContext;
-import javax.accessibility.AccessibleRole;
-import javax.accessibility.AccessibleState;
-import javax.accessibility.AccessibleStateSet;
+import java.awt.BorderLayout;
+import java.awt.Component;
+import java.awt.Container;
+import java.awt.Dimension;
+import java.awt.LayoutManager;
 
 /**
  * This class is where JComponents are added to.
@@ -72,7 +71,6 @@ public class JRootPane extends JComponent
       public Dimension preferredLayoutSize ( Container c )
 	{	    
 	  Dimension p = super.preferredLayoutSize(c);
-	  System.out.println("              PREF-SIZE from RootLayout = " + p);
 	  return p;
 	}        
     }
@@ -94,7 +92,7 @@ public class JRootPane extends JComponent
     /********************************************************/
 
     public String getUIClassID()
-    {	return "JPanel";    }
+    {	return "RootPaneUI";    }
 
     
     void setJMenuBar(JMenuBar m)
@@ -116,7 +114,7 @@ public class JRootPane extends JComponent
     public void setContentPane(Container p)
     {
 	contentPane = p;    
-	getLayeredPane().add(contentPane, 0);
+	getLayeredPane().add(contentPane, JLayeredPane.FRAME_CONTENT_LAYER);
     }
 
     protected void addImpl(Component comp,
@@ -166,7 +164,7 @@ public class JRootPane extends JComponent
     JRootPane()
     {
 	setLayout(createRootLayout());
-	
+	setBackground(UIManager.getColor("control"));
 	getGlassPane();
 	getLayeredPane();
 	getContentPane();

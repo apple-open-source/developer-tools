@@ -1,33 +1,43 @@
 /* Subroutines for the C front end on the POWER and PowerPC architectures.
-   Copyright (C) 2002
+   Copyright (C) 2002, 2003, 2004
    Free Software Foundation, Inc.
 
    Contributed by Zack Weinberg <zack@codesourcery.com>
 
-This file is part of GNU CC.
+   This file is part of GCC.
 
-GNU CC is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2, or (at your option)
-any later version.
+   GCC is free software; you can redistribute it and/or modify it
+   under the terms of the GNU General Public License as published
+   by the Free Software Foundation; either version 2, or (at your
+   option) any later version.
 
-GNU CC is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   GCC is distributed in the hope that it will be useful, but WITHOUT
+   ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+   or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
+   License for more details.
 
-You should have received a copy of the GNU General Public License
-along with GNU CC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with GCC; see the file COPYING.  If not, write to the
+   Free Software Foundation, 59 Temple Place - Suite 330, Boston,
+   MA 02111-1307, USA.  */
 
 #include "config.h"
 #include "system.h"
+#include "coretypes.h"
+#include "tm.h"
 #include "cpplib.h"
 #include "tree.h"
 #include "c-pragma.h"
 #include "errors.h"
 #include "tm_p.h"
+/* APPLE LOCAL begin AltiVec */
+#include "c-common.h"
+#include "cpplib.h"
+#include "../libcpp/internal.h"
+#include "target.h"
+
+static cpp_hashnode *altivec_categorize_keyword (const cpp_token *);
+/* APPLE LOCAL end AltiVec */
 
 /* Handle the machine specific pragma longcall.  Its syntax is
 
@@ -39,15 +49,14 @@ Boston, MA 02111-1307, USA.  */
    whether or not new function declarations receive a longcall
    attribute by default.  */
 
-#define SYNTAX_ERROR(msgid) do {					\
+#define SYNTAX_ERROR(msgid) do {			\
   warning (msgid);					\
   warning ("ignoring malformed #pragma longcall");	\
   return;						\
 } while (0)
 
 void
-rs6000_pragma_longcall (pfile)
-     cpp_reader *pfile ATTRIBUTE_UNUSED;
+rs6000_pragma_longcall (cpp_reader *pfile ATTRIBUTE_UNUSED)
 {
   tree x, n;
 
@@ -77,9 +86,94 @@ rs6000_pragma_longcall (pfile)
 #define builtin_define(TXT) cpp_define (pfile, TXT)
 #define builtin_assert(TXT) cpp_assert (pfile, TXT)
 
+/* APPLE LOCAL begin AltiVec */
+/* Keep the AltiVec keywords handy for fast comparisons.  */
+static GTY(()) cpp_hashnode *__vector_keyword;
+static GTY(()) cpp_hashnode *vector_keyword;
+static GTY(()) cpp_hashnode *__pixel_keyword;
+static GTY(()) cpp_hashnode *pixel_keyword;
+static GTY(()) cpp_hashnode *__bool_keyword;
+static GTY(()) cpp_hashnode *bool_keyword;
+static GTY(()) cpp_hashnode *_Bool_keyword;
+
+static GTY(()) cpp_hashnode *expand_bool_pixel;  /* Preserved across calls.  */
+
+static cpp_hashnode *
+altivec_categorize_keyword (const cpp_token *tok)
+{
+  if (tok->type == CPP_NAME)
+    {
+      cpp_hashnode *ident = tok->val.node;
+
+      if (ident == vector_keyword || ident == __vector_keyword)
+	return __vector_keyword;
+
+      if (ident == pixel_keyword || ident ==  __pixel_keyword)
+	return __pixel_keyword;
+	
+      if (ident == bool_keyword || ident == _Bool_keyword
+	  || ident == __bool_keyword)
+	return __bool_keyword;
+
+      return ident;
+    }
+
+  return 0;
+}
+
+/* Called to decide whether a conditional macro should be expanded.
+   Since we have exactly one such macro (i.e, 'vector'), we do not
+   need to examine the 'tok' parameter.  */
+
+cpp_hashnode *
+rs6000_macro_to_expand (cpp_reader *pfile, const cpp_token *tok)
+{
+  cpp_hashnode *expand_this = tok->val.node;
+  cpp_hashnode *ident = altivec_categorize_keyword (tok);
+
+  if (ident == __vector_keyword)
+    {
+      tok = _cpp_peek_token (pfile, 0);
+      ident = altivec_categorize_keyword (tok);
+
+      if (ident ==  __pixel_keyword || ident == __bool_keyword)
+	{
+	  expand_this = __vector_keyword;
+	  expand_bool_pixel = ident;
+	}
+      else if (ident)
+	{
+	  enum rid rid_code = (enum rid)(ident->rid_code);
+
+	  if (rid_code == RID_UNSIGNED || rid_code == RID_LONG
+	      || rid_code == RID_SHORT || rid_code == RID_SIGNED
+	      || rid_code == RID_INT || rid_code == RID_CHAR
+	      || rid_code == RID_FLOAT)
+	    {
+	      expand_this = __vector_keyword;
+	      /* If the next keyword is bool or pixel, it
+		 will need to be expanded as well.  */
+	      tok = _cpp_peek_token (pfile, 1);
+	      ident = altivec_categorize_keyword (tok);
+
+	      if (ident ==  __pixel_keyword || ident == __bool_keyword)
+		expand_bool_pixel = ident;
+	    }
+	}
+    }
+  else if (expand_bool_pixel
+	   && (ident ==  __pixel_keyword || ident == __bool_keyword))
+    {
+      expand_this = expand_bool_pixel;
+      expand_bool_pixel = 0;
+    }
+
+  return expand_this;
+}
+/* APPLE LOCAL end AltiVec */
+
 void
-rs6000_cpu_cpp_builtins (pfile)
-     cpp_reader *pfile;
+rs6000_cpu_cpp_builtins (cpp_reader *pfile)
 {
   if (TARGET_POWER2)
     builtin_define ("_ARCH_PWR2");
@@ -92,7 +186,50 @@ rs6000_cpu_cpp_builtins (pfile)
   if (! TARGET_POWER && ! TARGET_POWER2 && ! TARGET_POWERPC)
     builtin_define ("_ARCH_COM");
   if (TARGET_ALTIVEC)
-    builtin_define ("__ALTIVEC__");
+    {
+      /* APPLE LOCAL AltiVec */
+      struct cpp_callbacks *cb = cpp_get_callbacks (pfile);
+
+      builtin_define ("__ALTIVEC__");
+      builtin_define ("__VEC__=10206");
+
+      builtin_define ("__vector=__attribute__((altivec(vector__)))");
+      builtin_define ("__pixel=__attribute__((altivec(pixel__))) unsigned short");
+      builtin_define ("__bool=__attribute__((altivec(bool__))) unsigned");
+
+      /* APPLE LOCAL begin AltiVec */
+      /* Keywords without two leading underscores are context-sensitive, and hence
+	 implemented as conditional macros, controlled by the rs6000_macro_to_expand()
+	 function above.  */
+      builtin_define ("vector=vector");
+      __vector_keyword = cpp_lookup (pfile, DSC ("__vector"));
+      __vector_keyword->flags |= NODE_CONDITIONAL;
+      vector_keyword = cpp_lookup (pfile, DSC ("vector"));
+      vector_keyword->flags |= NODE_CONDITIONAL;
+      builtin_define ("pixel=pixel");
+      __pixel_keyword = cpp_lookup (pfile, DSC ("__pixel"));
+      __pixel_keyword->flags |= NODE_CONDITIONAL;
+      pixel_keyword = cpp_lookup (pfile, DSC ("pixel"));
+      pixel_keyword->flags |= NODE_CONDITIONAL;
+      builtin_define ("bool=bool");
+      builtin_define ("_Bool=_Bool");
+      __bool_keyword = cpp_lookup (pfile, DSC ("__bool"));
+      __bool_keyword->flags |= NODE_CONDITIONAL;
+      _Bool_keyword = cpp_lookup (pfile, DSC ("_Bool"));
+      _Bool_keyword->flags |= NODE_CONDITIONAL;
+      bool_keyword = cpp_lookup (pfile, DSC ("bool"));
+      bool_keyword->flags |= NODE_CONDITIONAL;
+
+      /* Enable context-sensitive macros.  */
+      cb->macro_to_expand = rs6000_macro_to_expand;
+      /* Enable '(vector signed int)(a, b, c, d)' vector literal notation.  */
+      targetm.cast_expr_as_vector_init = true;
+
+      /* Indicate that the compiler supports Apple AltiVec syntax, including context-
+	 sensitive keywords.  */
+      builtin_define ("__APPLE_ALTIVEC__");
+      /* APPLE LOCAL end AltiVec */
+    }
   if (TARGET_SPE)
     builtin_define ("__SPE__");
   if (TARGET_SOFT_FLOAT)
@@ -112,9 +249,6 @@ rs6000_cpu_cpp_builtins (pfile)
     case ABI_V4:
       builtin_define ("_CALL_SYSV");
       break;
-    case ABI_AIX_NODESC:
-      builtin_define ("_CALL_AIX");
-      break;
     case ABI_AIX:
       builtin_define ("_CALL_AIXDESC");
       builtin_define ("_CALL_AIX");
@@ -126,3 +260,4 @@ rs6000_cpu_cpp_builtins (pfile)
       break;
     }
 }
+

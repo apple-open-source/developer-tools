@@ -1,6 +1,6 @@
 // jvm.h - Header file for private implementation information. -*- c++ -*-
 
-/* Copyright (C) 1998, 1999, 2000, 2001, 2002  Free Software Foundation
+/* Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003  Free Software Foundation
 
    This file is part of libgcj.
 
@@ -29,6 +29,9 @@ details.  */
 // Include cni.h before field.h to enable all definitions.  FIXME.
 #include <gcj/cni.h>
 #include <gcj/field.h>
+
+/* Macro for possible unused arguments.  */
+#define MAYBE_UNUSED __attribute__((__unused__))
 
 /* Structure of the virtual table.  */
 struct _Jv_VTable
@@ -145,9 +148,82 @@ extern int _Jv_strLengthUtf8(char* str, int len);
 typedef struct _Jv_Utf8Const Utf8Const;
 _Jv_Utf8Const *_Jv_makeUtf8Const (char *s, int len);
 _Jv_Utf8Const *_Jv_makeUtf8Const (jstring string);
-extern jboolean _Jv_equalUtf8Consts (_Jv_Utf8Const *, _Jv_Utf8Const *);
+extern jboolean _Jv_equalUtf8Consts (const _Jv_Utf8Const *, const _Jv_Utf8Const *);
 extern jboolean _Jv_equal (_Jv_Utf8Const *, jstring, jint);
 extern jboolean _Jv_equaln (_Jv_Utf8Const *, jstring, jint);
+
+/* Helper class which converts a jstring to a temporary char*.
+   Uses the supplied buffer, if non-null. Otherwise, allocates
+   the buffer on the heap. Use the JV_TEMP_UTF_STRING macro,
+   which follows, to automatically allocate a stack buffer if
+   the string is small enough. */
+class _Jv_TempUTFString
+{
+public:
+  _Jv_TempUTFString(jstring jstr, char* buf=0);
+  ~_Jv_TempUTFString();
+
+// Accessors
+  operator const char*() const
+  {
+    return buf_;
+  }
+  const char* buf() const
+  {
+    return buf_;
+  }
+  char* buf()
+  {
+    return buf_;
+  }
+
+private:
+  char* buf_;
+  bool heapAllocated_;
+};
+
+inline _Jv_TempUTFString::_Jv_TempUTFString (jstring jstr, char* buf)
+  : buf_(0), heapAllocated_(false)
+{
+  if (!jstr) return;
+  jsize len = JvGetStringUTFLength (jstr);
+  if (buf)
+    buf_ = buf;
+  else
+    {
+      buf_ = (char*) _Jv_Malloc (len+1);
+      heapAllocated_ = true;
+    }
+
+  JvGetStringUTFRegion (jstr, 0, jstr->length(), buf_);
+  buf_[len] = '\0';
+}
+
+inline _Jv_TempUTFString::~_Jv_TempUTFString ()
+{
+  if (heapAllocated_)
+    _Jv_Free (buf_);
+}
+
+/* Macro which uses _Jv_TempUTFString. Allocates a stack-based
+   buffer if the string and its null terminator are <= 256
+   characters in length. Otherwise, a heap-based buffer is
+   used. The parameters to this macro are the variable name
+   which is an instance of _Jv_TempUTFString (above) and a
+   jstring.
+   
+   Sample Usage:
+   
+   jstring jstr = getAJString();
+   JV_TEMP_UTF_STRING(utfstr, jstr);
+   printf("The string is: %s\n", utfstr.buf());
+   
+ */
+#define JV_TEMP_UTF_STRING(utfstr, jstr) \
+  jstring utfstr##thejstr = (jstr); \
+  jsize utfstr##_len = utfstr##thejstr ? JvGetStringUTFLength (utfstr##thejstr) + 1 : 0; \
+  char utfstr##_buf[utfstr##_len <= 256 ? utfstr##_len : 0]; \
+  _Jv_TempUTFString utfstr(utfstr##thejstr, sizeof(utfstr##_buf)==0 ? 0 : utfstr##_buf)
 
 // FIXME: remove this define.
 #define StringClass java::lang::String::class$
@@ -162,7 +238,7 @@ namespace gcj
   
   /* Set to true by _Jv_CreateJavaVM. */
   extern bool runtimeInitialized;
-};
+}
 
 /* Type of pointer used as finalizer.  */
 typedef void _Jv_FinalizerFunc (jobject);
@@ -217,6 +293,12 @@ void _Jv_GCRegisterDisappearingLink (jobject *objp);
    implement soft references.  */
 jboolean _Jv_GCCanReclaimSoftReference (jobject obj);
 
+/* Register a finalizer for a String object.  This is only used by
+   the intern() implementation.  */
+void _Jv_RegisterStringFinalizer (jobject str);
+/* This is called to actually finalize a possibly-intern()d String.  */
+void _Jv_FinalizeString (jobject str);
+
 /* Return approximation of total size of heap.  */
 long _Jv_GCTotalMemory (void);
 /* Return approximation of total free memory.  */
@@ -254,6 +336,14 @@ _Jv_VTable::new_vtable (int count)
 {
   size_t size = sizeof(_Jv_VTable) + (count - 1) * vtable_elt_size ();
   return (_Jv_VTable *) _Jv_AllocBytes (size);
+}
+
+// Determine if METH gets an entry in a VTable.
+static inline jboolean _Jv_isVirtualMethod (_Jv_Method *meth)
+{
+  using namespace java::lang::reflect;
+  return (((meth->accflags & (Modifier::STATIC | Modifier::PRIVATE)) == 0)
+          && meth->name->data[0] != '<');
 }
 
 // This function is used to determine the hash code of an object.
@@ -326,19 +416,26 @@ extern void _Jv_GetTypesFromSignature (jmethodID method,
 				       JArray<jclass> **arg_types_out,
 				       jclass *return_type_out);
 
+extern jboolean _Jv_CheckAccess (jclass self_klass, jclass other_klass,
+				 jint flags);
+
 extern jobject _Jv_CallAnyMethodA (jobject obj, jclass return_type,
 				   jmethodID meth, jboolean is_constructor,
 				   JArray<jclass> *parameter_types,
-				   jobjectArray args);
+				   jobjectArray args,
+				   jclass iface = NULL);
 
 union jvalue;
-extern jthrowable _Jv_CallAnyMethodA (jobject obj,
-				      jclass return_type,
-				      jmethodID meth,
-				      jboolean is_constructor,
-				      JArray<jclass> *parameter_types,
-				      jvalue *args,
-				      jvalue *result);
+extern void _Jv_CallAnyMethodA (jobject obj,
+				jclass return_type,
+				jmethodID meth,
+				jboolean is_constructor,
+				jboolean is_virtual_call,
+				JArray<jclass> *parameter_types,
+				jvalue *args,
+				jvalue *result,
+				jboolean is_jni_call = true,
+				jclass iface = NULL);
 
 extern jobject _Jv_NewMultiArray (jclass, jint ndims, jint* dims)
   __attribute__((__malloc__));
@@ -352,9 +449,21 @@ extern "C"
   jlong _Jv_remJ (jlong, jlong);
 }
 
-/* get/set the name of the running executable. */
-extern char *_Jv_ThisExecutable (void);
-extern void _Jv_ThisExecutable (const char *);
+/* Get the number of arguments (cf. argc) or 0 if our argument
+   list was never initialized.  */
+extern int _Jv_GetNbArgs (void);
+
+/* Get the specified argument (cf. argv[index]) or "" if either
+   our argument list was never initialized or the specified index
+   is out of bounds.  */
+extern const char * _Jv_GetSafeArg (int index);
+
+/* Sets our argument list. Can be used by programs with non-standard
+   entry points.  */
+extern void _Jv_SetArgs (int argc, const char **argv);
+
+/* Get the name of the running executable.  */
+extern const char *_Jv_ThisExecutable (void);
 
 /* Return a pointer to a symbol in executable or loaded library.  */
 void *_Jv_FindSymbolInExecutable (const char *);
@@ -376,6 +485,22 @@ bool _Jv_VerifyClassName (unsigned char* ptr, _Jv_ushort length);
 bool _Jv_VerifyClassName (_Jv_Utf8Const *name);
 bool _Jv_VerifyIdentifier (_Jv_Utf8Const *);
 bool _Jv_ClassNameSamePackage (_Jv_Utf8Const *name1, _Jv_Utf8Const *name2);
+
+struct _Jv_core_chain
+{
+  int name_length;
+  const char *name;
+  int data_length;
+  const void *data;
+
+  struct _Jv_core_chain *next;
+};
+
+// This is called when new core data is loaded.
+extern void (*_Jv_RegisterCoreHook) (_Jv_core_chain *);
+
+_Jv_core_chain *_Jv_FindCore (_Jv_core_chain *node, jstring name);
+void _Jv_FreeCoreChain (_Jv_core_chain *chain);
 
 #ifdef ENABLE_JVMPI
 

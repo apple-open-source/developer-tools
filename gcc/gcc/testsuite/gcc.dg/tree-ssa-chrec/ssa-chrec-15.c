@@ -1,0 +1,23 @@
+/* { dg-do compile } */ 
+/* { dg-options "-O1 -fscalar-evolutions -fdump-tree-scev-details" } */
+
+
+int main (void)
+{
+  int a;
+  int b;
+  int c;
+  
+  /* Exercises the MINUS_EXPR.  loop_1 runs 50 times.  */
+  for (a = 100; a > 50; a--)
+    {
+      
+    }
+}
+
+/* The analyzer has to detect the following evolution function:
+   a  ->  {100, +, -1}_1
+*/
+
+/* { dg-final { scan-tree-dump-times "nb_iterations 50" 1 "scev"} } */
+

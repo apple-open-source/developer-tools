@@ -43,19 +43,22 @@ import java.rmi.AccessException;
 import java.rmi.AlreadyBoundException;
 import java.rmi.Remote;
 
-public interface Registry
-	extends Remote {
+public interface Registry extends Remote
+{
+  int REGISTRY_PORT = 1099;
 
-public static int REGISTRY_PORT = 1099;
+  Remote lookup(String name)
+    throws RemoteException, NotBoundException, AccessException;
 
-public Remote lookup(String name) throws RemoteException, NotBoundException, AccessException;
+  void bind(String name, Remote obj)
+    throws RemoteException, AlreadyBoundException, AccessException;
 
-public void bind(String name, Remote obj) throws RemoteException, AlreadyBoundException, AccessException;
+  void unbind(String name)
+    throws RemoteException, NotBoundException, AccessException;
 
-public void unbind(String name) throws RemoteException, NotBoundException, AccessException;
+  void rebind(String name, Remote obj)
+    throws RemoteException, AccessException;
 
-public void rebind(String name, Remote obj) throws RemoteException, AccessException;
-
-public String[] list() throws RemoteException, AccessException;
-
+  String[] list()
+    throws RemoteException, AccessException;
 }

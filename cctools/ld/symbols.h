@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -79,7 +79,10 @@ struct merged_symbol {
 	weak_reference_mismatch:1, /* seen both a weak and non-weak reference */
 	define_a_way:1,		   /* set if this symbol was defined as a */
 				   /*  result of -undefined define_a_way */
-	output_index:23;	/* the symbol table index this symbol will */
+	live:1,			   /* TRUE if the symbol is not to be dead */
+				   /*  stripped. */
+	unused:22;
+    unsigned long output_index;	/* the symbol table index this symbol will */
 				/*  have in the output file. */
     int undef_order;		/* if the symbol was undefined the order it */
 				/*  was seen. */
@@ -328,6 +331,12 @@ __private_extern__ void free_undefined_list(
 __private_extern__ void define_common_symbols(
     void);
 __private_extern__ void define_undefined_symbols_a_way(
+    void);
+__private_extern__ void mark_globals_live(
+    void);
+__private_extern__ void mark_N_NO_DEAD_STRIP_local_symbols_live(
+    void);
+__private_extern__ void count_live_symbols(
     void);
 __private_extern__ void define_link_editor_execute_symbols(
     unsigned long header_address);

@@ -1,5 +1,5 @@
 /* InflaterInputStream.java - Input stream filter for decompressing
-   Copyright (C) 1999, 2000, 2002, 2003 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2001, 2002, 2004 Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -42,17 +42,20 @@ import java.io.InputStream;
 import java.io.IOException;
 
 /**
+ * This filter stream is used to decompress data compressed in the "deflate"
+ * format. The "deflate" format is described in RFC 1951.
+ *
+ * This stream may form the basis for other decompression filters, such
+ * as the <code>GZIPInputStream</code>.
+ *
+ * @author John Leuner
  * @author Tom Tromey
- * @date May 17, 1999
+ * @since 1.1
  */
-
-/* Written using on-line Java Platform 1.2 API Specification
- * and JCL book.
- * Believed complete and correct.
- */
-
 public class InflaterInputStream extends FilterInputStream
 {
+
+
   protected void fill () throws IOException
   {
     len = in.read(buf, 0, buf.length);
@@ -70,11 +73,21 @@ public class InflaterInputStream extends FilterInputStream
     this (in, infl, 512);
   }
 
-  public InflaterInputStream (InputStream in, Inflater infl, int bufsize)
+  public InflaterInputStream (InputStream in, Inflater inf, int size)
   {
     super (in);
-    this.inf = infl;
-    this.buf = new byte[bufsize];
+
+    if (in == null)
+      throw new NullPointerException ("in may not be null");
+
+    if (inf == null)
+      throw new NullPointerException ("inf may not be null");
+    
+    if (size < 0)
+      throw new IllegalArgumentException ("size may not be negative");
+    
+    this.inf = inf;
+    this.buf = new byte [size];
   }
 
   public int read () throws IOException

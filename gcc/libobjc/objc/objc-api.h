@@ -1,20 +1,20 @@
 /* GNU Objective-C Runtime API.
-   Copyright (C) 1993, 1995, 1996, 1997, 2002 Free Software Foundation, Inc.
+   Copyright (C) 1993, 1995, 1996, 1997, 2002, 2004 Free Software Foundation, Inc.
 
-This file is part of GNU CC.
+This file is part of GCC.
 
-GNU CC is free software; you can redistribute it and/or modify it
+GCC is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
 Free Software Foundation; either version 2, or (at your option) any
 later version.
 
-GNU CC is distributed in the hope that it will be useful, but WITHOUT
+GCC is distributed in the hope that it will be useful, but WITHOUT
 ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
 FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
 License for more details.
 
 You should have received a copy of the GNU General Public License
-along with GNU CC; see the file COPYING.  If not, write to
+along with GCC; see the file COPYING.  If not, write to
 the Free Software Foundation, 59 Temple Place - Suite 330,
 Boston, MA 02111-1307, USA.  */
 
@@ -30,6 +30,7 @@ Boston, MA 02111-1307, USA.  */
 #include "objc/objc.h"
 #include "objc/hash.h"
 #include "objc/thr.h"
+#include "objc/objc-decls.h"
 #include <stdio.h>
 #include <stdarg.h>
 
@@ -100,7 +101,7 @@ struct objc_method_description
 extern void objc_error(id object, int code, const char* fmt, ...);
 extern void objc_verror(id object, int code, const char* fmt, va_list ap);
 typedef BOOL (*objc_error_handler)(id, int code, const char *fmt, va_list ap);
-objc_error_handler objc_set_error_handler(objc_error_handler func);
+extern objc_error_handler objc_set_error_handler(objc_error_handler func);
 
 /*
 ** Error codes
@@ -342,7 +343,11 @@ typedef struct objc_category {
 typedef struct objc_super {
   id      self;                           /* Id of the object sending
                                                 the message. */
+#ifdef __cplusplus
+  Class super_class;
+#else
   Class class;                              /* Object's super class. */
+#endif
 } Super, *Super_t;
 
 IMP objc_msg_lookup_super(Super_t super, SEL sel);
@@ -357,7 +362,7 @@ retval_t objc_msg_sendv(id, SEL, arglist_t);
 ** This may e.g. try to load in the class using dynamic loading.
 ** The function is guaranteed to be passed a non-NULL name string.
 */
-extern Class (*_objc_lookup_class)(const char *name);
+objc_EXPORT Class (*_objc_lookup_class)(const char *name);
 
 /*
 ** This is a hook which is called by __objc_exec_class every time a class
@@ -365,14 +370,14 @@ extern Class (*_objc_lookup_class)(const char *name);
 ** dynamic loader determine the classes that have been loaded when
 ** an object file is dynamically linked in.
 */
-extern void (*_objc_load_callback)(Class class, Category* category);
+objc_EXPORT void (*_objc_load_callback)(Class class, Category* category);
 
 /*
 ** Hook functions for allocating, copying and disposing of instances
 */
-extern id (*_objc_object_alloc)(Class class);
-extern id (*_objc_object_copy)(id object);
-extern id (*_objc_object_dispose)(id object);
+objc_EXPORT id (*_objc_object_alloc)(Class class);
+objc_EXPORT id (*_objc_object_copy)(id object);
+objc_EXPORT id (*_objc_object_dispose)(id object);
 
 /*
 ** Standard functions for memory allocation and disposal.
@@ -408,19 +413,19 @@ objc_free(void *mem);
 ** Users should call the normal objc routines above for
 ** memory allocation and disposal within their programs.
 */
-extern void *(*_objc_malloc)(size_t);
-extern void *(*_objc_atomic_malloc)(size_t);
-extern void *(*_objc_valloc)(size_t);
-extern void *(*_objc_realloc)(void *, size_t);
-extern void *(*_objc_calloc)(size_t, size_t);
-extern void (*_objc_free)(void *);
+objc_EXPORT void *(*_objc_malloc)(size_t);
+objc_EXPORT void *(*_objc_atomic_malloc)(size_t);
+objc_EXPORT void *(*_objc_valloc)(size_t);
+objc_EXPORT void *(*_objc_realloc)(void *, size_t);
+objc_EXPORT void *(*_objc_calloc)(size_t, size_t);
+objc_EXPORT void (*_objc_free)(void *);
 
 /*
 **  Hook for method forwarding. This makes it easy to substitute a
 **  library, such as ffcall, that implements closures, thereby avoiding
 **  gcc's __builtin_apply problems.
 */
-extern IMP (*__objc_msg_forward)(SEL);
+objc_EXPORT IMP (*__objc_msg_forward)(SEL);
 
 Method_t class_get_class_method(MetaClass class, SEL aSel);
 

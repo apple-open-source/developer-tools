@@ -1,21 +1,22 @@
 /* Language parser definitions for the GNU compiler for the Java(TM) language.
-   Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002 Free Software Foundation, Inc.
+   Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004
+   Free Software Foundation, Inc.
    Contributed by Alexandre Petit-Bianco (apbianco@cygnus.com)
 
-This file is part of GNU CC.
+This file is part of GCC.
 
-GNU CC is free software; you can redistribute it and/or modify
+GCC is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2, or (at your option)
 any later version.
 
-GNU CC is distributed in the hope that it will be useful,
+GCC is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with GNU CC; see the file COPYING.  If not, write to
+along with GCC; see the file COPYING.  If not, write to
 the Free Software Foundation, 59 Temple Place - Suite 330,
 Boston, MA 02111-1307, USA.
 
@@ -35,8 +36,8 @@ extern int quiet_flag;
 
 #ifndef JC1_LITE
 /* Function extern to java/ */
-extern int int_fits_type_p PARAMS ((tree, tree));
-extern tree stabilize_reference PARAMS ((tree));
+extern int int_fits_type_p (tree, tree);
+extern tree stabilize_reference (tree);
 #endif
 
 /* Macros for verbose debug info  */
@@ -69,7 +70,7 @@ extern tree stabilize_reference PARAMS ((tree));
 #define RECOVER     {yyerrok; RECOVERED;}
 
 #define YYERROR_NOW ctxp->java_error_flag = 1
-#define YYNOT_TWICE if (ctxp->prevent_ese != lineno)
+#define YYNOT_TWICE if (ctxp->prevent_ese != input_line)
 
 /* Accepted modifiers */
 #define CLASS_MODIFIERS ACC_PUBLIC|ACC_ABSTRACT|ACC_FINAL|ACC_STRICT
@@ -153,7 +154,7 @@ extern tree stabilize_reference PARAMS ((tree));
 /* Quickly build a temporary pointer on hypothetical type NAME. */
 #define BUILD_PTR_FROM_NAME(ptr, name)		\
   do {						\
-    ptr = build (POINTER_TYPE, NULL_TREE);	\
+    ptr = make_node (POINTER_TYPE);		\
     TYPE_NAME (ptr) = name;			\
   } while (0)
 
@@ -609,14 +610,6 @@ typedef struct jdeplist_s jdeplist;
 #define GET_CURRENT_BLOCK(F) ((F) ? DECL_FUNCTION_BODY ((F)) :	\
 			     current_static_block)
 
-/* Merge an other line to the source line number of a decl. Used to
-   remember function's end. */
-#define DECL_SOURCE_LINE_MERGE(DECL,NO) DECL_SOURCE_LINE(DECL) |= (NO << 16)
-
-/* Retrieve those two info separately. */
-#define DECL_SOURCE_LINE_FIRST(DECL)    (DECL_SOURCE_LINE(DECL) & 0x0000ffff)
-#define DECL_SOURCE_LINE_LAST(DECL)     (DECL_SOURCE_LINE(DECL) >> 16)
-
 /* Retrieve line/column from a WFL. */
 #define EXPR_WFL_GET_LINECOL(V,LINE,COL)	\
   {						\
@@ -699,6 +692,14 @@ typedef struct jdeplist_s jdeplist;
       java_check_regular_methods ((CLASS));	\
   }
 
+#define CLEAR_DEPRECATED  ctxp->deprecated = 0
+
+#define CHECK_DEPRECATED_NO_RESET(DECL)		\
+  {						\
+    if (ctxp->deprecated)			\
+      DECL_DEPRECATED (DECL) = 1;		\
+  }
+
 /* Using and reseting the @deprecated tag flag */
 #define CHECK_DEPRECATED(DECL)			\
   {						\
@@ -727,10 +728,10 @@ struct parser_ctxt GTY(()) {
   const char *filename;		    /* Current filename */
   struct parser_ctxt *next;
 
-  java_lexer * GTY((skip (""))) lexer; /* Current lexer state */
+  java_lexer * GTY((skip)) lexer; /* Current lexer state */
   char marker_begining;		     /* Marker. Should be a sub-struct */
-  struct java_line * GTY ((skip (""))) p_line; /* Previous line */
-  struct java_line * GTY ((skip (""))) c_line; /* Current line */
+  struct java_line * GTY ((skip)) p_line; /* Previous line */
+  struct java_line * GTY ((skip)) c_line; /* Current line */
   java_lc elc;			     /* Error's line column info */
   int ccb_indent;		     /* Keep track of {} indent, lexer */
   int first_ccb_indent1;	     /* First { at ident level 1 */
@@ -738,7 +739,7 @@ struct parser_ctxt GTY(()) {
   int parser_ccb_indent;	     /* Keep track of {} indent, parser */
   int osb_depth;		     /* Current depth of [ in an expression */
   int osb_limit;		     /* Limit of this depth */
-  int * GTY ((skip (""))) osb_number; /* Keep track of ['s */
+  int * GTY ((skip)) osb_number; /* Keep track of ['s */
   int lineno;			     /* Current lineno */
   char marker_end;		     /* End marker. Should be a sub-struct */
 
@@ -773,7 +774,7 @@ struct parser_ctxt GTY(()) {
 
   /* These two lists won't survive file traversal */
   tree  class_list;		    /* List of classes in a CU */
-  jdeplist * GTY((skip (""))) classd_list; /* Classe dependencies in a CU */
+  jdeplist * GTY((skip)) classd_list; /* Classe dependencies in a CU */
   
   tree  current_parsed_class;	    /* Class currently parsed */
   tree  current_parsed_class_un;    /* Curr. parsed class unqualified name */
@@ -806,7 +807,7 @@ struct parser_ctxt GTY(()) {
    an inner class is pushed. After, use FIXME. */
 #define CPC_INNER_P() GET_CPC_LIST ()
 
-/* Get the currently parsed class DECL_TYPE node.  */
+/* The TYPE_DECL node of the class currently being parsed.  */
 #define GET_CPC() TREE_VALUE (GET_CPC_LIST ())
 
 /* Get the currently parsed class unqualified IDENTIFIER_NODE.  */
@@ -914,32 +915,33 @@ struct parser_ctxt GTY(()) {
 #define JAVA_RADIX10_FLAG(NODE) TREE_LANG_FLAG_0(NODE)
 
 #ifndef JC1_LITE
-void java_complete_class PARAMS ((void));
-void java_check_circular_reference PARAMS ((void));
-void java_fix_constructors PARAMS ((void));
-void java_layout_classes PARAMS ((void));
-void java_reorder_fields PARAMS ((void));
-tree java_method_add_stmt PARAMS ((tree, tree));
-int java_report_errors PARAMS ((void));
-extern tree do_resolve_class PARAMS ((tree, tree, tree, tree));
+void java_complete_class (void);
+void java_check_circular_reference (void);
+void java_fix_constructors (void);
+void java_layout_classes (void);
+void java_reorder_fields (void);
+tree java_method_add_stmt (tree, tree);
+int java_report_errors (void);
+extern tree do_resolve_class (tree, tree, tree, tree);
 #endif
-char *java_get_line_col PARAMS ((const char *, int, int));
-extern void reset_report PARAMS ((void));
+char *java_get_line_col (const char *, int, int);
+extern void reset_report (void);
 
 /* Always in use, no matter what you compile */
-void java_push_parser_context PARAMS ((void));
-void java_pop_parser_context PARAMS ((int));
-void java_init_lex PARAMS ((FILE *, const char *));
-extern void java_parser_context_save_global PARAMS ((void));
-extern void java_parser_context_restore_global PARAMS ((void));
-int yyparse PARAMS ((void));
-extern int java_parse PARAMS ((void));
-extern void yyerror PARAMS ((const char *))
+void java_push_parser_context (void);
+void java_pop_parser_context (int);
+void java_init_lex (FILE *, const char *);
+extern void java_parser_context_save_global (void);
+extern void java_parser_context_restore_global (void);
+int yyparse (void);
+extern int java_parse (void);
+extern void yyerror (const char *)
 #ifdef JC1_LITE
 ATTRIBUTE_NORETURN
 #endif
 ;
-extern void java_expand_classes PARAMS ((void));
+extern void java_expand_classes (void);
+extern void java_finish_classes (void);
 
 extern GTY(()) struct parser_ctxt *ctxp;
 extern GTY(()) struct parser_ctxt *ctxp_for_generation;

@@ -6,8 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---                                                                          --
---          Copyright (C) 1992-2001 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2003 Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -30,6 +29,7 @@
 
 with Ada.Text_IO;
 
+with GNAT.Directory_Operations;
 with MDLL.Utl;
 with MDLL.Fil;
 
@@ -59,17 +59,21 @@ package body MDLL is
 
       Base_Filename : constant String := MDLL.Fil.Ext_To (Lib_Filename);
 
-      Def_File : aliased String := Def_Filename;
-      Jnk_File : aliased String := Base_Filename & ".jnk";
-      Bas_File : aliased String := Base_Filename & ".base";
-      Dll_File : aliased String := Base_Filename & ".dll";
-      Exp_File : aliased String := Base_Filename & ".exp";
-      Lib_File : aliased String := "lib" & Base_Filename & ".a";
+      Def_File : aliased constant String := Def_Filename;
+      Jnk_File : aliased          String := Base_Filename & ".jnk";
+      Bas_File : aliased constant String := Base_Filename & ".base";
+      Dll_File : aliased          String := Base_Filename & ".dll";
+      Exp_File : aliased          String := Base_Filename & ".exp";
+      Lib_File : aliased constant String := "lib" & Base_Filename & ".a";
 
       Bas_Opt  : aliased String := "-Wl,--base-file," & Bas_File;
       Lib_Opt  : aliased String := "-mdll";
       Out_Opt  : aliased String := "-o";
       Adr_Opt  : aliased String := "-Wl,--image-base=" & Lib_Address;
+
+      L_Afiles : Argument_List := Afiles;
+      --  Local afiles list. This list can be reordered to ensure that the
+      --  binder ali file is not the first entry in this list.
 
       All_Options : constant Argument_List := Options & Largs_Options;
 
@@ -180,15 +184,18 @@ package body MDLL is
 
          --  1) Build base file with objects files.
 
-         Utl.Gnatbind (Afiles, Options & Bargs_Options);
+         Utl.Gnatbind (L_Afiles, Options & Bargs_Options);
 
          declare
-            Params : OS_Lib.Argument_List :=
-              Out_Opt'Unchecked_Access & Jnk_File'Unchecked_Access &
-              Lib_Opt'Unchecked_Access &
-              Bas_Opt'Unchecked_Access & Ofiles & All_Options;
+            Params : constant OS_Lib.Argument_List :=
+                       Out_Opt'Unchecked_Access &
+                       Jnk_File'Unchecked_Access &
+                       Lib_Opt'Unchecked_Access &
+                       Bas_Opt'Unchecked_Access &
+                       Ofiles &
+                       All_Options;
          begin
-            Utl.Gnatlink (Afiles (Afiles'Last).all, Params);
+            Utl.Gnatlink (L_Afiles (L_Afiles'Last).all, Params);
          end;
 
          --  2) Build exp from base file.
@@ -200,18 +207,19 @@ package body MDLL is
 
          --  3) Build base file with exp file and objects files.
 
-         Utl.Gnatbind (Afiles, Options & Bargs_Options);
+         Utl.Gnatbind (L_Afiles, Options & Bargs_Options);
 
          declare
-            Params : OS_Lib.Argument_List :=
-              Out_Opt'Unchecked_Access & Jnk_File'Unchecked_Access &
-              Lib_Opt'Unchecked_Access &
-              Bas_Opt'Unchecked_Access &
-              Exp_File'Unchecked_Access &
-              Ofiles &
-              All_Options;
+            Params : constant OS_Lib.Argument_List :=
+                       Out_Opt'Unchecked_Access &
+                       Jnk_File'Unchecked_Access &
+                       Lib_Opt'Unchecked_Access &
+                       Bas_Opt'Unchecked_Access &
+                       Exp_File'Unchecked_Access &
+                       Ofiles &
+                       All_Options;
          begin
-            Utl.Gnatlink (Afiles (Afiles'Last).all, Params);
+            Utl.Gnatlink (L_Afiles (L_Afiles'Last).all, Params);
          end;
 
          --  4) Build new exp from base file and the lib file (.a)
@@ -223,18 +231,19 @@ package body MDLL is
 
          --  5) Build the dynamic library
 
-         Utl.Gnatbind (Afiles, Options & Bargs_Options);
+         Utl.Gnatbind (L_Afiles, Options & Bargs_Options);
 
          declare
-            Params : OS_Lib.Argument_List :=
-              Out_Opt'Unchecked_Access & Dll_File'Unchecked_Access &
-              Lib_Opt'Unchecked_Access &
-              Exp_File'Unchecked_Access &
-              Adr_Opt'Unchecked_Access &
-              Ofiles &
-              All_Options;
+            Params : constant OS_Lib.Argument_List :=
+                       Out_Opt'Unchecked_Access &
+                       Dll_File'Unchecked_Access &
+                       Lib_Opt'Unchecked_Access &
+                       Exp_File'Unchecked_Access &
+                       Adr_Opt'Unchecked_Access &
+                       Ofiles &
+                       All_Options;
          begin
-            Utl.Gnatlink (Afiles (Afiles'Last).all, Params);
+            Utl.Gnatlink (L_Afiles (L_Afiles'Last).all, Params);
          end;
 
          OS_Lib.Delete_File (Exp_File, Success);
@@ -318,18 +327,19 @@ package body MDLL is
 
          --  Build the DLL
 
-         Utl.Gnatbind (Afiles, Options & Bargs_Options);
+         Utl.Gnatbind (L_Afiles, Options & Bargs_Options);
 
          declare
-            Params : OS_Lib.Argument_List :=
-              Out_Opt'Unchecked_Access & Dll_File'Unchecked_Access &
-              Lib_Opt'Unchecked_Access &
-              Exp_File'Unchecked_Access &
-              Adr_Opt'Unchecked_Access &
-              Ofiles &
-              All_Options;
+            Params : constant OS_Lib.Argument_List :=
+                       Out_Opt'Unchecked_Access &
+                       Dll_File'Unchecked_Access &
+                       Lib_Opt'Unchecked_Access &
+                       Exp_File'Unchecked_Access &
+                       Adr_Opt'Unchecked_Access &
+                       Ofiles &
+                       All_Options;
          begin
-            Utl.Gnatlink (Afiles (Afiles'Last).all, Params);
+            Utl.Gnatlink (L_Afiles (L_Afiles'Last).all, Params);
          end;
 
          OS_Lib.Delete_File (Exp_File, Success);
@@ -341,17 +351,35 @@ package body MDLL is
       end Ada_Build_Non_Reloc_DLL;
 
    begin
+      --  On Windows the binder file must not be in the first position
+      --  in the list. This is due to the way DLL's are built on Windows.
+      --  We swap the first ali with the last one if it is the case.
+
+      if L_Afiles'Length > 1 then
+         declare
+            Filename : constant String :=
+                         Directory_Operations.Base_Name (L_Afiles (1).all);
+            First    : constant Positive := Filename'First;
+
+         begin
+            if Filename (First .. First + 1) = "b~" then
+               L_Afiles (L_Afiles'Last) := Afiles (1);
+               L_Afiles (1) := Afiles (Afiles'Last);
+            end if;
+         end;
+      end if;
+
       case Relocatable is
 
          when True =>
-            if Afiles'Length = 0 then
+            if L_Afiles'Length = 0 then
                Build_Reloc_DLL;
             else
                Ada_Build_Reloc_DLL;
             end if;
 
          when False =>
-            if Afiles'Length = 0 then
+            if L_Afiles'Length = 0 then
                Build_Non_Reloc_DLL;
             else
                Ada_Build_Non_Reloc_DLL;

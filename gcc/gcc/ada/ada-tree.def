@@ -6,8 +6,7 @@
  *                                                                          *
  *                              Specification                               *
  *                                                                          *
- *                                                                          *
- *          Copyright (C) 1992-2001 Free Software Foundation, Inc.          *
+ *          Copyright (C) 1992-2003 Free Software Foundation, Inc.          *
  *                                                                          *
  * GNAT is free software;  you can  redistribute it  and/or modify it under *
  * terms of the  GNU General Public License as published  by the Free Soft- *
@@ -38,7 +37,7 @@ DEFTREECODE (TRANSFORM_EXPR, "transform_expr", 'e', 0)
    by operand 0 at the alignment given by operand 1 and return the
    address of the resulting memory.  */
 
-DEFTREECODE (ALLOCATE_EXPR, "allocate_expr", 's', 2)
+DEFTREECODE (ALLOCATE_EXPR, "allocate_expr", '2', 2)
 
 /* A type that is an unconstrained array itself.  This node is never passed
    to GCC. TREE_TYPE is the type of the fat pointer and TYPE_OBJECT_RECORD_TYPE
@@ -77,4 +76,44 @@ DEFTREECODE (GNAT_NOP_EXPR, "gnat_nop_expr", '1', 1)
 
    ??? This should be redone at some point.  */
 
-DEFTREECODE (GNAT_LOOP_ID, "gnat_loop_id", 'x', 1)
+DEFTREECODE (GNAT_LOOP_ID, "gnat_loop_id", 'x', 0)
+
+/* Here are the tree codes for the statement types known to Ada.  These
+   must be at the end of this file to allow IS_STMT to work.
+
+   We start with an expression statement, whose only operand is an
+   expression, EXPR_STMT_EXPR, Execution of the statement means evaluation of
+   the expression (such as a MODIFY_EXPR) and discarding its result.  */
+DEFTREECODE (EXPR_STMT, "expr_stmt", 's', 1)
+
+/* This is a null statement.  The intent is for it not to survive very far.  */
+DEFTREECODE (NULL_STMT, "null_stmt", 's', 0)
+
+/* This defines the variable in DECL_STMT_VAR and performs any initialization
+   in DECL_INITIAL.  */
+DEFTREECODE (DECL_STMT, "decl_stmt", 's', 1)
+
+/* This represents a list of statements.  BLOCK_STMT_LIST is a list
+   statement tree, chained via TREE_CHAIN.  */
+DEFTREECODE (BLOCK_STMT, "block_stmt", 's', 1)
+
+/* This is an IF statement.  IF_STMT_COND is the condition being tested,
+   IF_STMT_TRUE is the statement to be executed if the condition is
+   true; IF_STMT_ELSEIF, if non-null, is a list of more IF_STMT nodes (where
+   we only look at IF_STMT_COND and IF_STMT_TRUE) that correspond to
+   any "else if" parts; and IF_STMT_ELSE is the statement to be executed if
+   all conditions are.  */
+DEFTREECODE (IF_STMT, "if_stmt", 's', 4)
+
+/* A goto just points to the label: GOTO_STMT_LABEL.  */
+DEFTREECODE (GOTO_STMT, "goto_stmt", 's', 1)
+
+/* A label: LABEL_STMT_LABEL is the label.  */
+DEFTREECODE (LABEL_STMT, "label_stmt", 's', 1)
+
+/* A "return".  RETURN_STMT_EXPR is the value to return if non-null.  */
+DEFTREECODE (RETURN_STMT, "return_stmt", 's', 1)
+
+/* An "asm" statement.  The operands are ASM_STMT_TEMPLATE, ASM_STMT_OUTPUT,
+   ASM_STMT_ORIG_OUT, ASM_STMT_INPUT, and ASM_STMT_CLOBBER.  */
+DEFTREECODE (ASM_STMT, "asm_stmt", 's', 5)

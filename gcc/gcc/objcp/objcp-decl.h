@@ -35,10 +35,13 @@ extern tree objcp_lookup_name		PARAMS ((tree));
 extern tree objcp_push_parm_decl	PARAMS ((tree));
 extern tree objcp_get_parm_info		PARAMS ((int));
 extern void objcp_store_parm_decls	PARAMS ((void));
+extern tree objcp_build_function_call	PARAMS ((tree, tree));
 extern tree objcp_xref_tag		PARAMS ((enum tree_code, tree));
 extern tree objcp_grokfield		PARAMS ((const char *, int, tree, tree, tree));
 extern tree objcp_build_component_ref	PARAMS ((tree, tree));
 extern int objcp_comptypes		PARAMS ((tree, tree));
+extern tree objcp_type_name		PARAMS ((tree));
+extern tree objcp_type_size		PARAMS ((tree));
 extern tree objcp_builtin_function 	PARAMS ((const char *, tree, int, 
 						 enum built_in_class, const char *, tree));
 
@@ -55,7 +58,7 @@ extern int objcp_lookup_identifier	PARAMS ((tree, tree *, int));
 	objcp_finish_struct (t, fieldlist, attributes)
 #define start_function(declspecs, declarator, attributes) \
 	objcp_start_function (declspecs, declarator, attributes)
-#define finish_function(nested, defer) \
+#define finish_function(nested) \
 	objcp_finish_function (nested)
 #define start_decl(declarator, declspecs, initialized, attributes) \
 	objcp_start_decl (declarator, declspecs, initialized, attributes)
@@ -69,6 +72,8 @@ extern int objcp_lookup_identifier	PARAMS ((tree, tree *, int));
 	objcp_get_parm_info (void_at_end)
 #define store_parm_decls() \
 	objcp_store_parm_decls ()
+#define build_function_call(function, args) \
+	objcp_build_function_call (function, args)
 #define xref_tag(code, name) \
 	objcp_xref_tag (code, name)
 #define grokfield(filename, line, declarator, declspecs, width) \
@@ -80,20 +85,16 @@ extern int objcp_lookup_identifier	PARAMS ((tree, tree *, int));
 #define builtin_function(name, type, code, class, libname, attr) \
 	objcp_builtin_function(name, type, code, class, libname, attr)
 	
-#undef OBJC_TYPE_NAME
-#define OBJC_TYPE_NAME(type) \
-  (TYPE_NAME (type) && TREE_CODE (TYPE_NAME (type)) == TYPE_DECL \
-   ? DECL_NAME (TYPE_NAME (type)) \
-   : TYPE_NAME (type))
+#undef TYPE_NAME
+#define TYPE_NAME(type) \
+	objcp_type_name (type)
 
+#undef TYPE_SIZE
+#define TYPE_SIZE(type) \
+	objcp_type_size (type)
+   	
 #define OBJCP_ORIGINAL_FUNCTION(name, args) 	(name)args
 
-/* APPLE LOCAL begin Panther ObjC enhancements */
-/* C++ marks ellipsis-free function parameters differently from C.  */
-#undef OBJC_VOID_AT_END
-#define OBJC_VOID_AT_END        void_list_node
-/* APPLE LOCAL end Panther ObjC enhancements */
-        
 #endif  /* OBJCP_REMAP_FUNCTIONS */
 
 #endif /* ! GCC_OBJCP_DECL_H */

@@ -26,16 +26,17 @@ foo3(void)
 extern void foo4(void);
 void
 foo4(void)
-{
+{ /* { dg-warning "candidate for attribute `noreturn'" "detect noreturn candidate" } */
   exit(0);
-} /* { dg-warning "candidate for attribute `noreturn'" "detect noreturn candidate" } */
+}
 
 extern void foo5(void) __attribute__ ((__noreturn__));
 void
 foo5(void)
 {
   return; /* { dg-warning "`noreturn' has a `return' statement" "detect invalid return" } */
-} /* { dg-warning "`noreturn' function does return" "detect return from noreturn" } */
+}
+/* { dg-warning "function does return" "detect return from noreturn" { target *-*-* } 37 } */
 
 extern void foo6(void);
 void

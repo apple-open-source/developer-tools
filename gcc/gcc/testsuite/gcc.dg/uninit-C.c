@@ -2,7 +2,13 @@
 /* { dg-do compile } */
 /* { dg-options "-O -Wuninitialized" } */
 
-typedef int TItype __attribute__ ((mode (TI)));
+/* Not all platforms support TImode integers.  */
+#if defined(__LP64__) || defined(__sparc__)
+typedef int TItype __attribute__ ((mode (TI)));  /* { dg-error "no data type for mode" "TI" { target sparc-sun-solaris2.[0-6]* } } */
+#else
+typedef long TItype;
+#endif
+
 
 TItype
 __subvdi3 (TItype a, TItype b)

@@ -1,3 +1,94 @@
+2004-04-12  Kelley Cook  <kcook@gcc.gnu.org>
+
+	PR bootstrap/14905
+	* configure.ac: Parse --enable-generated-files-in-srcdir.
+	* Makefile.am: Copy man and info files to srcdir if requested.
+	* configure: Regenerate.
+	* Makefile.in Regenerate.
+
+2004-03-10  Kelley Cook  <kcook@gcc.gnu.org>
+
+	* configure.ac: Bump AC_PREREQ to 2.59.
+	* configure: Regenerate.
+
+2004-03-09  Hans-Peter Nilsson  <hp@axis.com>
+
+	* configure: Regenerate for config/accross.m4 correction.
+
+2004-01-09  Kelley Cook  <kcook@gcc.gnu.org>
+
+	* configure.in: Rename file to ...
+	* configure.ac: ... this.  Add in AC_PREREQ(2.57)
+	* config.h.in: Regenerate.
+	* aclocal.m4: Regenerate.
+	* Makefile.in: Regenerate.
+
+2004-01-07  Andreas Tobler  <a.tobler@schweiz.ch>
+
+	* jartool.c (make_manifest): Fix off-by-one bug when creating
+	an empty MANIFEST.MF.
+
+2003-12-01  Kelley Cook  <kcook@gcc.gnu.org>
+
+	* Makefile.am: Define AM_MAKINFOFLAGS.  Remove Automake 1.4 hack.
+	* Makefile.in: Regenerate with automake 1.7.6 & autoconf 2.57 tools.
+	* aclocal.m4, config.h.in, configure: Likewise.
+	* install-sh, missing, mkinstalldirs, stamp-h.in: Remove.
+
+2003-11-21  Kelley Cook  <kcook@gcc.gnu.org>
+
+	* .cvsignore: Delete.
+
+2003-10-30  Kelley Cook  <kcook@gcc.gnu.org>
+
+	* Makefile.am (my_make_i_flags): Add $(srcdir) and update comment
+	to match.
+	(fastjar.info): Update target to write to build directory.
+	(%.1): New implicit rule from a .pod file.
+	(jar.1): Delete.
+	(grepjar.1): Delete.
+	(jar.pod): New intermediate rule.
+	(grepjar.pod): Likewise.
+	* Makefile.in: Regenerate.
+
+2003-08-13  Matthias Klose  <doko@debian.org>
+
+	* fastjar.texi: License manual under the GPL.
+	* Makefile.am: Remove reference to fdl.texi
+	* Makefile.in: Regenerate
+
+2003-07-29  Nathanael Nerode  <neroden@gcc.gnu.org>
+
+	* mkinstalldirs: Import autoconf 2.57 / automake 1.7 version.
+
+2003-07-11  Gerald Pfeifer  <pfeifer@dbai.tuwien.ac.at>
+
+	* README: Note that FastJar is not part of GCC.
+
+2003-07-02  Nathanael Nerode  <neroden@gcc.gnu.org>
+
+	PR java/9532
+	* jartool.c (add_to_jar): Return 1 on failure to open file.
+	Split out -C case to:
+	* jartool.c (add_to_jar_with_dir): New function.
+
+2003-06-15  Nathanael Nerode  <neroden@gcc.gnu.org>
+
+	PR java/9532
+	* jartool.c (main) Give proper error messages with -C, and
+	check for missing arguments properly.  Send error messages
+	to stderr.
+	* jartool.c (add_to_jar): Make getcwd() call portable,
+	and check for error return.
+
+2003-03-30  Joseph S. Myers  <jsm@polyomino.org.uk>
+
+	* fastjar.texi: Remove @ at start of file.
+
+2003-03-10  Mohan Embar  <gnustuff@thisiscool.com>
+
+	* dostime.c: add #include <stddef.h> for definition of NULL
+
 2003-02-04  Joseph S. Myers  <jsm@polyomino.org.uk>
 
 	* fastjar.texi: Update to GFDL 1.2.
@@ -18,6 +109,10 @@
 	with a '\0' to guard against the case where the formatted
 	time string is more than the size allowed by the buffer.
 
+2003-01-14  Tom Tromey  <tromey@redhat.com>
+
+	* config.h.in: Rebuilt.
+
 2002-12-30  DJ Delorie  <dj@redhat.com>
 
 	* Makefile.am (jar.1, grepjar.1): Protect against
@@ -31,6 +126,18 @@
 2002-12-04  Jakub Jelinek  <jakub@redhat.com>
 
 	* fastjar.texi (jar @direntry, grepjar @direntry): Add (fastjar).
+
+2002-11-23  H.J. Lu <hjl@gnu.org>
+
+	* acinclude.m4: Include ../config/accross.m4.
+	(gcc_AC_COMPILE_CHECK_SIZEOF): Removed.
+	(gcc_AC_EXAMINE_OBJECT): Removed.
+	(gcc_AC_C_COMPILE_ENDIAN): Removed.
+	* aclocal.m4; Rebuild.
+
+	* configure.in: Replace AC_C_BIGENDIAN with AC_C_BIGENDIAN_CROSS.
+	Replace AC_CHECK_SIZEOF with AC_COMPILE_CHECK_SIZEOF.
+	* configure: Likewise.
 
 2002-11-21  Ranjit Mathew <rmathew@hotmail.com>
 
@@ -60,6 +167,11 @@
 2002-10-20  Tom Tromey  <tromey@redhat.com>
 
 	* jartool.c: Use mode 0666 when opening new file.
+
+2002-09-16  Volker Reichelt  <reichelt@igpm.rwth-aachen.de>
+
+	* jargrep.c (chk_wrd): Remove unused variable(s).
+	* jartool.c (main, create_central_header, list_jar): Likewise.
 
 2002-10-15  Ranjit Mathew  <rmathew@hotmail.com>
 
@@ -183,7 +295,7 @@
 	* aclocal.m4: Regenerated.
 	* stamp-h.in: Regenerated.
 	* jargrep.c: Eliminate some signed/unsigned and default
-	uninitialized warnings. Use HAVE_STDLIB_H instead of 
+	uninitialized warnings. Use HAVE_STDLIB_H instead of
 	STDC_HEADERS macro.
 	* jartool.c: Likewise.
 	* compress.c: Likewise.
@@ -225,7 +337,7 @@
 
 2001-05-15  Per Bothner  <per@bothner.com>
 
-        * Makefile.am (bin_PROGRAMS):  Renamed from "fastjar" to "jar".
+	* Makefile.am (bin_PROGRAMS):  Renamed from "fastjar" to "jar".
 
 2001-05-03  John David Anglin  <dave@hiauly1.hia.nrc.ca>
 
@@ -243,7 +355,7 @@
 	* jartool.c (MAXPATHLEN): Provide if not defined.
 
 2000-12-15  Tom Tromey  <tromey@redhat.com>
-            Kelley Cook <kelleycook@home.com>
+	    Kelley Cook <kelleycook@home.com>
 
 	* jargrep.c: Include getopt.h if it exists.
 	(optind): Declare.

@@ -1,20 +1,20 @@
 /* Definitions for SOM assembler support.
-   Copyright (C) 1999, 2001, 2002 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2001, 2002, 2003 Free Software Foundation, Inc.
 
-This file is part of GNU CC.
+This file is part of GCC.
 
-GNU CC is free software; you can redistribute it and/or modify
+GCC is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2, or (at your option)
 any later version.
 
-GNU CC is distributed in the hope that it will be useful,
+GCC is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with GNU CC; see the file COPYING.  If not, write to
+along with GCC; see the file COPYING.  If not, write to
 the Free Software Foundation, 59 Temple Place - Suite 330,
 Boston, MA 02111-1307, USA.  */
 
@@ -30,18 +30,21 @@ Boston, MA 02111-1307, USA.  */
 /* We make the first line stab special to avoid adding several
    gross hacks to GAS.  */
 #undef  ASM_OUTPUT_SOURCE_LINE
-#define ASM_OUTPUT_SOURCE_LINE(file, line)		\
-  { static int sym_lineno = 1;				\
-    static tree last_function_decl = NULL;		\
-    if (current_function_decl == last_function_decl)	\
-      fprintf (file, "\t.stabn 68,0,%d,L$M%d-%s\nL$M%d:\n",	\
-	       line, sym_lineno,			\
-	       XSTR (XEXP (DECL_RTL (current_function_decl), 0), 0) + 1, \
-	       sym_lineno);				\
-    else						\
-      fprintf (file, "\t.stabn 68,0,%d,0\n", line);	\
-    last_function_decl = current_function_decl;		\
-    sym_lineno += 1; }
+#define ASM_OUTPUT_SOURCE_LINE(file, line, counter)		\
+  { static tree last_function_decl = NULL;			\
+    if (current_function_decl == last_function_decl)		\
+      {								\
+	rtx func = DECL_RTL (current_function_decl);		\
+	const char *name = XSTR (XEXP (func, 0), 0);		\
+	fprintf (file, "\t.stabn 68,0,%d,L$M%d-%s\nL$M%d:\n",	\
+		 line, counter,					\
+		 (* targetm.strip_name_encoding) (name),	\
+		 counter);					\
+      }								\
+    else							\
+      fprintf (file, "\t.stabn 68,0,%d,0\n", line);		\
+    last_function_decl = current_function_decl;			\
+  }
 
 /* gdb needs a null N_SO at the end of each file for scattered loading.  */
 
@@ -214,29 +217,7 @@ do {								\
 	     fputs ("\n", FILE);					\
 	   }} while (0)
 
-/* Output at beginning of assembler file.  */
-
-#define ASM_FILE_START(FILE) \
-do {  \
-     if (TARGET_PA_20) \
-       fputs("\t.LEVEL 2.0\n", FILE); \
-     else if (TARGET_PA_11) \
-       fputs("\t.LEVEL 1.1\n", FILE); \
-     else \
-       fputs("\t.LEVEL 1.0\n", FILE); \
-     fputs ("\t.SPACE $PRIVATE$\n\
-\t.SUBSPA $DATA$,QUAD=1,ALIGN=8,ACCESS=31\n\
-\t.SUBSPA $BSS$,QUAD=1,ALIGN=8,ACCESS=31,ZERO,SORT=82\n\
-\t.SPACE $TEXT$\n\
-\t.SUBSPA $LIT$,QUAD=0,ALIGN=8,ACCESS=44\n\
-\t.SUBSPA $CODE$,QUAD=0,ALIGN=8,ACCESS=44,CODE_ONLY\n\
-\t.IMPORT $global$,DATA\n\
-\t.IMPORT $$dyncall,MILLICODE\n", FILE);\
-     if (profile_flag)\
-       fprintf (FILE, "\t.IMPORT _mcount, CODE\n");\
-     if (write_symbols != NO_DEBUG) \
-       output_file_directive ((FILE), main_input_filename); \
-   } while (0)
+#define TARGET_ASM_FILE_START pa_som_file_start
 
 /* Output before code.  */
 
@@ -251,9 +232,9 @@ do {  \
 #define EXTRA_SECTIONS in_readonly_data
 
 #define EXTRA_SECTION_FUNCTIONS						\
-extern void readonly_data PARAMS ((void));				\
+extern void readonly_data (void);					\
 void									\
-readonly_data ()							\
+readonly_data (void)							\
 {									\
   if (in_section != in_readonly_data)					\
     {									\
@@ -351,8 +332,8 @@ readonly_data ()							\
 
 #define DO_GLOBAL_DTORS_BODY			\
 do {						\
-  extern void __gcc_plt_call ();		\
-  void (*reference)() = &__gcc_plt_call;	\
+  extern void __gcc_plt_call (void);		\
+  void (*reference)(void) = &__gcc_plt_call;	\
   func_ptr *p;					\
   __asm__ ("" : : "r" (reference));		\
   for (p = __DTOR_LIST__ + 1; *p; )		\

@@ -68,7 +68,7 @@ const int Size = 5;
 
 void test01()
 {
-  bool test = true;
+  bool test __attribute__((unused)) = true;
 
   for (int i = 0; i < 10; i++)
   {
@@ -94,6 +94,13 @@ void test01()
     VERIFY( a == b );
   }
 }
+
+#if !__GXX_WEAK__ && _MT_ALLOCATOR_H
+// Explicitly instantiate for systems with no COMDAT or weak support.
+template class __gnu_cxx::__mt_alloc<__gnu_cxx::_Hashtable_node<std::pair<const std::string, int> > >;
+template class __gnu_cxx::__mt_alloc<__gnu_cxx::_Hashtable_node<std::pair<const std::string, int> >* >;
+template class __gnu_cxx::__mt_alloc<std::pair<std::string, int> >;
+#endif
 
 int main()
 {

@@ -1,6 +1,6 @@
 /* Calculate branch probabilities, and basic block execution counts.
    Copyright (C) 1990, 1991, 1992, 1993, 1994, 1996, 1997, 1998, 1999,
-   2000, 2001  Free Software Foundation, Inc.
+   2000, 2001, 2002, 2003, 2004  Free Software Foundation, Inc.
    Contributed by James E. Wilson, UC Berkeley/Cygnus Support;
    based on some ideas from Dain Samples of UC Berkeley.
    Further mangling by Bob Manson, Cygnus Support.
@@ -39,61 +39,49 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
    edges must be on the spanning tree. We also attempt to place
    EDGE_CRITICAL edges on the spanning tree.
 
-   The two auxiliary files generated are <dumpbase>.bb and
-   <dumpbase>.bbg. The former contains the BB->linenumber
-   mappings, and the latter describes the BB graph.
-
-   The BB file contains line numbers for each block. For each basic
-   block, a zero count is output (to mark the start of a block), then
-   the line numbers of that block are listed. A zero ends the file
-   too.
-
-   The BBG file contains a count of the blocks, followed by edge
-   information, for every edge in the graph. The edge information
-   lists the source and target block numbers, and a bit mask
-   describing the type of edge.
-
-   The BB and BBG file formats are fully described in the gcov
-   documentation.  */
+   The auxiliary files generated are <dumpbase>.gcno (at compile time)
+   and <dumpbase>.gcda (at run time).  The format is
+   described in full in gcov-io.h.  */
 
 /* ??? Register allocation should use basic block execution counts to
    give preference to the most commonly executed blocks.  */
-
-/* ??? The .da files are not safe.  Changing the program after creating .da
-   files or using different options when compiling with -fbranch-probabilities
-   can result the arc data not matching the program.  Maybe add instrumented
-   arc count to .bbg file?  Maybe check whether PFG matches the .bbg file?  */
 
 /* ??? Should calculate branch probabilities before instrumenting code, since
    then we can use arc counts to help decide which arcs to instrument.  */
 
 #include "config.h"
 #include "system.h"
+#include "coretypes.h"
+#include "tm.h"
 #include "rtl.h"
-#include "tree.h"
 #include "flags.h"
-#include "insn-config.h"
 #include "output.h"
 #include "regs.h"
 #include "expr.h"
 #include "function.h"
 #include "toplev.h"
-#include "ggc.h"
-#include "hard-reg-set.h"
-#include "basic-block.h"
-#include "gcov-io.h"
-#include "target.h"
-#include "profile.h"
-#include "libfuncs.h"
-#include "langhooks.h"
+#include "coverage.h"
+#include "value-prof.h"
+#include "tree.h"
+#include "cfghooks.h"
+#include "tree-flow.h"
+
+/* Hooks for profiling.  */
+static struct profile_hooks* profile_hooks;
+
+/* File for profiling debug output.  */
+static inline FILE*
+profile_dump_file (void) {
+  return profile_hooks->profile_dump_file ();
+}
 
 /* Additional information about the edges we need.  */
 struct edge_info {
   unsigned int count_valid : 1;
-  
+
   /* Is on the spanning tree.  */
   unsigned int on_tree : 1;
-  
+
   /* Pretend this edge does not exist (it is abnormal and we've
      inserted a fake to compensate).  */
   unsigned int ignore : 1;
@@ -110,31 +98,9 @@ struct bb_info {
 #define EDGE_INFO(e)  ((struct edge_info *) (e)->aux)
 #define BB_INFO(b)  ((struct bb_info *) (b)->aux)
 
-/* Keep all basic block indexes nonnegative in the gcov output.  Index 0
-   is used for entry block, last block exit block.  */
-#define BB_TO_GCOV_INDEX(bb)  ((bb) == ENTRY_BLOCK_PTR ? 0		\
-			       : ((bb) == EXIT_BLOCK_PTR		\
-				  ? last_basic_block + 1 : (bb)->index + 1))
+/* Counter summary from the last set of coverage counts read.  */
 
-/* Instantiate the profile info structure.  */
-
-struct profile_info profile_info;
-
-/* Name and file pointer of the output file for the basic block graph.  */
-
-static FILE *bbg_file;
-
-/* Name and file pointer of the input file for the arc count data.  */
-
-static FILE *da_file;
-static char *da_file_name;
-
-/* Pointer of the output file for the basic block/line number map.  */
-static FILE *bb_file;
-
-/* Last source file name written to bb_file.  */
-
-static char *last_bb_file_name;
+const struct gcov_ctr_summary *profile_info;
 
 /* Collect statistics on the performance of this pass for the entire source
    file.  */
@@ -151,127 +117,126 @@ static int total_num_never_executed;
 static int total_num_branches;
 
 /* Forward declarations.  */
-static void find_spanning_tree PARAMS ((struct edge_list *));
-static void init_edge_profiler PARAMS ((void));
-static rtx gen_edge_profiler PARAMS ((int));
-static void instrument_edges PARAMS ((struct edge_list *));
-static void output_gcov_string PARAMS ((const char *, long));
-static void compute_branch_probabilities PARAMS ((void));
-static gcov_type * get_exec_counts PARAMS ((void));
-static long compute_checksum PARAMS ((void));
-static basic_block find_group PARAMS ((basic_block));
-static void union_groups PARAMS ((basic_block, basic_block));
+static void find_spanning_tree (struct edge_list *);
+static unsigned instrument_edges (struct edge_list *);
+static void instrument_values (unsigned, struct histogram_value *);
+static void compute_branch_probabilities (void);
+static void compute_value_histograms (unsigned, struct histogram_value *);
+static gcov_type * get_exec_counts (void);
+static basic_block find_group (basic_block);
+static void union_groups (basic_block, basic_block);
 
-/* If nonzero, we need to output a constructor to set up the
-   per-object-file data.  */
-static int need_func_profiler = 0;
 
 /* Add edge instrumentation code to the entire insn chain.
 
    F is the first insn of the chain.
    NUM_BLOCKS is the number of basic blocks found in F.  */
 
-static void
-instrument_edges (el)
-     struct edge_list *el;
+static unsigned
+instrument_edges (struct edge_list *el)
 {
-  int num_instr_edges = 0;
+  unsigned num_instr_edges = 0;
   int num_edges = NUM_EDGES (el);
   basic_block bb;
+
   remove_fake_edges ();
 
   FOR_BB_BETWEEN (bb, ENTRY_BLOCK_PTR, NULL, next_bb)
     {
-      edge e = bb->succ;
-      while (e)
+      edge e;
+
+      for (e = bb->succ; e; e = e->succ_next)
 	{
 	  struct edge_info *inf = EDGE_INFO (e);
+
 	  if (!inf->ignore && !inf->on_tree)
 	    {
 	      if (e->flags & EDGE_ABNORMAL)
 		abort ();
-	      if (rtl_dump_file)
-		fprintf (rtl_dump_file, "Edge %d to %d instrumented%s\n",
+	      if (dump_file)
+		fprintf (dump_file, "Edge %d to %d instrumented%s\n",
 			 e->src->index, e->dest->index,
 			 EDGE_CRITICAL_P (e) ? " (and split)" : "");
-	      need_func_profiler = 1;
-	      insert_insn_on_edge (
-			 gen_edge_profiler (total_num_edges_instrumented
-					    + num_instr_edges++), e);
+	      (profile_hooks->gen_edge_profiler) (num_instr_edges++, e);
 	    }
-	  e = e->succ_next;
 	}
     }
 
-  profile_info.count_edges_instrumented_now = num_instr_edges;
-  total_num_edges_instrumented += num_instr_edges;
-  profile_info.count_instrumented_edges = total_num_edges_instrumented;
-
   total_num_blocks_created += num_edges;
-  if (rtl_dump_file)
-    fprintf (rtl_dump_file, "%d edges instrumented\n", num_instr_edges);
-
-  commit_edge_insertions_watch_calls ();
+  if (dump_file)
+    fprintf (dump_file, "%d edges instrumented\n", num_instr_edges);
+  return num_instr_edges;
 }
 
-/* Output STRING to bb_file, surrounded by DELIMITER.  */
-
+/* Add code to measure histograms list of VALUES of length N_VALUES.  */
 static void
-output_gcov_string (string, delimiter)
-     const char *string;
-     long delimiter;
+instrument_values (unsigned n_values, struct histogram_value *values)
 {
-  size_t temp;
+  unsigned i, t;
 
-  /* Write a delimiter to indicate that a file name follows.  */
-  __write_long (delimiter, bb_file, 4);
+  /* Emit code to generate the histograms before the insns.  */
 
-  /* Write the string.  */
-  temp = strlen (string) + 1;
-  fwrite (string, temp, 1, bb_file);
-
-  /* Append a few zeros, to align the output to a 4 byte boundary.  */
-  temp = temp & 0x3;
-  if (temp)
+  for (i = 0; i < n_values; i++)
     {
-      char c[4];
+      switch (values[i].type)
+	{
+	case HIST_TYPE_INTERVAL:
+	  t = GCOV_COUNTER_V_INTERVAL;
+	  break;
 
-      c[0] = c[1] = c[2] = c[3] = 0;
-      fwrite (c, sizeof (char), 4 - temp, bb_file);
+	case HIST_TYPE_POW2:
+	  t = GCOV_COUNTER_V_POW2;
+	  break;
+
+	case HIST_TYPE_SINGLE_VALUE:
+	  t = GCOV_COUNTER_V_SINGLE;
+	  break;
+
+	case HIST_TYPE_CONST_DELTA:
+	  t = GCOV_COUNTER_V_DELTA;
+	  break;
+
+	default:
+	  abort ();
+	}
+      if (!coverage_counter_alloc (t, values[i].n_counters))
+	continue;
+
+      switch (values[i].type)
+	{
+	case HIST_TYPE_INTERVAL:
+	  (profile_hooks->gen_interval_profiler) (values + i, t, 0);
+	  break;
+
+	case HIST_TYPE_POW2:
+	  (profile_hooks->gen_pow2_profiler) (values + i, t, 0);
+	  break;
+
+	case HIST_TYPE_SINGLE_VALUE:
+	  (profile_hooks->gen_one_value_profiler) (values + i, t, 0);
+	  break;
+
+	case HIST_TYPE_CONST_DELTA:
+	  (profile_hooks->gen_const_delta_profiler) (values + i, t, 0);
+	  break;
+
+	default:
+	  abort ();
+	}
     }
-
-  /* Store another delimiter in the .bb file, just to make it easy to find
-     the end of the file name.  */
-  __write_long (delimiter, bb_file, 4);
 }
 
 
-/* Computes hybrid profile for all matching entries in da_file.
-   Sets max_counter_in_program as a side effect.  */
+/* Computes hybrid profile for all matching entries in da_file.  */
 
 static gcov_type *
-get_exec_counts ()
+get_exec_counts (void)
 {
-  int num_edges = 0;
+  unsigned num_edges = 0;
   basic_block bb;
-  int okay = 1, i;
-  int mismatch = 0;
-  gcov_type *profile;
-  char *function_name_buffer;
-  int function_name_buffer_len;
-  gcov_type max_counter_in_run;
-  const char *name = IDENTIFIER_POINTER
-		      (DECL_ASSEMBLER_NAME (current_function_decl));
-
-  profile_info.max_counter_in_program = 0;
-  profile_info.count_profiles_merged = 0;
-
-  /* No .da file, no execution counts.  */
-  if (!da_file)
-    return 0;
+  gcov_type *counts;
 
   /* Count the edges to be (possibly) instrumented.  */
-
   FOR_BB_BETWEEN (bb, ENTRY_BLOCK_PTR, NULL, next_bb)
     {
       edge e;
@@ -280,135 +245,15 @@ get_exec_counts ()
 	  num_edges++;
     }
 
-  /* now read and combine all matching profiles.  */
+  counts = get_coverage_counts (GCOV_COUNTER_ARCS, num_edges, &profile_info);
+  if (!counts)
+    return NULL;
 
-  profile = xmalloc (sizeof (gcov_type) * num_edges);
-  rewind (da_file);
-  function_name_buffer_len = strlen (name) + 1;
-  function_name_buffer = xmalloc (function_name_buffer_len + 1);
+  if (dump_file && profile_info)
+    fprintf(dump_file, "Merged %u profiles with maximal count %u.\n",
+	    profile_info->runs, (unsigned) profile_info->sum_max);
 
-  for (i = 0; i < num_edges; i++)
-    profile[i] = 0;
-
-  while (1)
-    {
-      long magic, extra_bytes;
-      long func_count;
-      int i;
-
-      if (__read_long (&magic, da_file, 4) != 0)
-	break;
-
-      if (magic != -123)
-	{
-	  okay = 0;
-	  break;
-	}
-
-      if (__read_long (&func_count, da_file, 4) != 0)
-	{
-	  okay = 0;
-	  break;
-	}
-
-      if (__read_long (&extra_bytes, da_file, 4) != 0)
-	{
-	  okay = 0;
-	  break;
-	}
-
-      fseek (da_file, 4 + 8, SEEK_CUR);
-
-      /* read the maximal counter.  */
-      __read_gcov_type (&max_counter_in_run, da_file, 8);
-
-      /* skip the rest of "statistics" emited by __bb_exit_func.  */
-      fseek (da_file, extra_bytes - (4 + 8 + 8), SEEK_CUR);
-
-      for (i = 0; i < func_count; i++)
-	{
-	  long arc_count;
-	  long chksum;
-	  int j;
-
-	  if (__read_gcov_string
-	      (function_name_buffer, function_name_buffer_len, da_file,
-	       -1) != 0)
-	    {
-	      okay = 0;
-	      break;
-	    }
-
-	  if (__read_long (&chksum, da_file, 4) != 0)
-	    {
-	      okay = 0;
-	      break;
-	    }
-
-	  if (__read_long (&arc_count, da_file, 4) != 0)
-	    {
-	      okay = 0;
-	      break;
-	    }
-
-	  if (strcmp (function_name_buffer, name) != 0)
-	    {
-	      /* skip */
-	      if (fseek (da_file, arc_count * 8, SEEK_CUR) < 0)
-		{
-		  okay = 0;
-		  break;
-		}
-	    }
-	  else if (arc_count != num_edges
-		   || chksum != profile_info.current_function_cfg_checksum)
-	    okay = 0, mismatch = 1;
-	  else
-	    {
-	      gcov_type tmp;
-
-	      profile_info.max_counter_in_program += max_counter_in_run;
-	      profile_info.count_profiles_merged++;
-
-	      for (j = 0; j < arc_count; j++)
-		if (__read_gcov_type (&tmp, da_file, 8) != 0)
-		  {
-		    okay = 0;
-		    break;
-		  }
-		else
-		  {
-		    profile[j] += tmp;
-		  }
-	    }
-	}
-
-      if (!okay)
-	break;
-
-    }
-
-  free (function_name_buffer);
-
-  if (!okay)
-    {
-      if (mismatch)
-	error
-	  ("Profile does not match flowgraph of function %s (out of date?)",
-	   current_function_name);
-      else
-	error (".da file corrupted");
-      free (profile);
-      return 0;
-    }
-  if (rtl_dump_file)
-    {
-      fprintf(rtl_dump_file, "Merged %i profiles with maximal count %i.\n",
-	      profile_info.count_profiles_merged,
-	      (int)profile_info.max_counter_in_program);
-    }
-
-  return profile;
+  return counts;
 }
 
 
@@ -416,7 +261,7 @@ get_exec_counts ()
    Annotate them accordingly.  */
 
 static void
-compute_branch_probabilities ()
+compute_branch_probabilities (void)
 {
   basic_block bb;
   int i;
@@ -428,6 +273,22 @@ compute_branch_probabilities ()
   int num_branches;
   gcov_type *exec_counts = get_exec_counts ();
   int exec_counts_pos = 0;
+
+  /* Very simple sanity checks so we catch bugs in our profiling code.  */
+  if (profile_info)
+    {
+      if (profile_info->run_max * profile_info->runs < profile_info->sum_max)
+	{
+	  error ("corrupted profile info: run_max * runs < sum_max");
+	  exec_counts = NULL;
+	}
+
+      if (profile_info->sum_all < profile_info->sum_max)
+	{
+	  error ("corrupted profile info: sum_all is smaller than sum_max");
+	  exec_counts = NULL;
+	}
+    }
 
   /* Attach extra info block to each bb.  */
 
@@ -464,6 +325,11 @@ compute_branch_probabilities ()
 	    if (exec_counts)
 	      {
 		e->count = exec_counts[exec_counts_pos++];
+		if (e->count > profile_info->sum_max)
+		  {
+		    error ("corrupted profile info: edge from %i to %i exceeds maximal count",
+			   bb->index, e->dest->index);
+		  }
 	      }
 	    else
 	      e->count = 0;
@@ -471,18 +337,18 @@ compute_branch_probabilities ()
 	    EDGE_INFO (e)->count_valid = 1;
 	    BB_INFO (bb)->succ_count--;
 	    BB_INFO (e->dest)->pred_count--;
-	    if (rtl_dump_file)
+	    if (dump_file)
 	      {
-		fprintf (rtl_dump_file, "\nRead edge from %i to %i, count:",
+		fprintf (dump_file, "\nRead edge from %i to %i, count:",
 			 bb->index, e->dest->index);
-		fprintf (rtl_dump_file, HOST_WIDEST_INT_PRINT_DEC,
+		fprintf (dump_file, HOST_WIDEST_INT_PRINT_DEC,
 			 (HOST_WIDEST_INT) e->count);
 	      }
 	  }
     }
 
-  if (rtl_dump_file)
-    fprintf (rtl_dump_file, "\n%d edge counts read\n", num_edges);
+  if (dump_file)
+    fprintf (dump_file, "\n%d edge counts read\n", num_edges);
 
   /* For every block in the file,
      - if every exit/entrance edge has a known count, then set the block count
@@ -574,9 +440,9 @@ compute_branch_probabilities ()
 		  for (e = bb->pred; e; e = e->pred_next)
 		    total += e->count;
 
-		  /* Seedgeh for the invalid edge, and set its count.  */
+		  /* Search for the invalid edge, and set its count.  */
 		  for (e = bb->pred; e; e = e->pred_next)
-		    if (! EDGE_INFO (e)->count_valid && ! EDGE_INFO (e)->ignore)
+		    if (!EDGE_INFO (e)->count_valid && !EDGE_INFO (e)->ignore)
 		      break;
 
 		  /* Calculate count for remaining edge by conservation.  */
@@ -594,12 +460,12 @@ compute_branch_probabilities ()
 	    }
 	}
     }
-  if (rtl_dump_file)
-    dump_flow_info (rtl_dump_file);
+  if (dump_file)
+    dump_flow_info (dump_file);
 
   total_num_passes += passes;
-  if (rtl_dump_file)
-    fprintf (rtl_dump_file, "Graph solving took %d passes.\n\n", passes);
+  if (dump_file)
+    fprintf (dump_file, "Graph solving took %d passes.\n\n", passes);
 
   /* If the graph has been correctly solved, every block will have a
      succ and pred count of zero.  */
@@ -620,24 +486,43 @@ compute_branch_probabilities ()
   FOR_BB_BETWEEN (bb, ENTRY_BLOCK_PTR, NULL, next_bb)
     {
       edge e;
-      gcov_type total;
       rtx note;
 
-      total = bb->count;
-      if (total)
+      if (bb->count < 0)
+	{
+	  error ("corrupted profile info: number of iterations for basic block %d thought to be %i",
+		 bb->index, (int)bb->count);
+	  bb->count = 0;
+	}
+      for (e = bb->succ; e; e = e->succ_next)
+	{
+	  /* Function may return twice in the cased the called function is
+	     setjmp or calls fork, but we can't represent this by extra
+	     edge from the entry, since extra edge from the exit is
+	     already present.  We get negative frequency from the entry
+	     point.  */
+	  if ((e->count < 0
+	       && e->dest == EXIT_BLOCK_PTR)
+	      || (e->count > bb->count
+		  && e->dest != EXIT_BLOCK_PTR))
+	    {
+	      if (block_ends_with_call_p (bb))
+		e->count = e->count < 0 ? 0 : bb->count;
+	    }
+	  if (e->count < 0 || e->count > bb->count)
+	    {
+	      error ("corrupted profile info: number of executions for edge %d-%d thought to be %i",
+		     e->src->index, e->dest->index,
+		     (int)e->count);
+	      e->count = bb->count / 2;
+	    }
+	}
+      if (bb->count)
 	{
 	  for (e = bb->succ; e; e = e->succ_next)
-	    {
-		e->probability = (e->count * REG_BR_PROB_BASE + total / 2) / total;
-		if (e->probability < 0 || e->probability > REG_BR_PROB_BASE)
-		  {
-		    error ("corrupted profile info: prob for %d-%d thought to be %d",
-			   e->src->index, e->dest->index, e->probability);
-		    e->probability = REG_BR_PROB_BASE / 2;
-		  }
-	    }
+	    e->probability = (e->count * REG_BR_PROB_BASE + bb->count / 2) / bb->count;
 	  if (bb->index >= 0
-	      && any_condjump_p (bb->end)
+	      && block_ends_with_condjump_p (bb)
 	      && bb->succ->succ_next)
 	    {
 	      int prob;
@@ -657,24 +542,31 @@ compute_branch_probabilities ()
 		index = 19;
 	      hist_br_prob[index]++;
 
-	      note = find_reg_note (bb->end, REG_BR_PROB, 0);
-	      /* There may be already note put by some other pass, such
-		 as builtin_expect expander.  */
-	      if (note)
-		XEXP (note, 0) = GEN_INT (prob);
-	      else
-		REG_NOTES (bb->end)
-		  = gen_rtx_EXPR_LIST (REG_BR_PROB, GEN_INT (prob),
-				       REG_NOTES (bb->end));
+	      /* Do this for RTL only.  */
+	      if (!ir_type ())
+		{
+		  note = find_reg_note (BB_END (bb), REG_BR_PROB, 0);
+		  /* There may be already note put by some other pass, such
+		     as builtin_expect expander.  */
+		  if (note)
+		    XEXP (note, 0) = GEN_INT (prob);
+		  else
+		    REG_NOTES (BB_END (bb))
+		      = gen_rtx_EXPR_LIST (REG_BR_PROB, GEN_INT (prob),
+					   REG_NOTES (BB_END (bb)));
+		}
 	      num_branches++;
 	    }
 	}
-      /* Otherwise distribute the probabilities evenly so we get sane sum.
-	 Use simple heuristics that if there are normal edges, give all abnormals
-	 frequency of 0, otherwise distribute the frequency over abnormals
-	 (this is the case of noreturn calls).  */
+      /* Otherwise distribute the probabilities evenly so we get sane
+	 sum.  Use simple heuristics that if there are normal edges,
+	 give all abnormals frequency of 0, otherwise distribute the
+	 frequency over abnormals (this is the case of noreturn
+	 calls).  */
       else
 	{
+	  int total = 0;
+
 	  for (e = bb->succ; e; e = e->succ_next)
 	    if (!(e->flags & (EDGE_COMPLEX | EDGE_FAKE)))
 	      total ++;
@@ -694,20 +586,20 @@ compute_branch_probabilities ()
 		e->probability = REG_BR_PROB_BASE / total;
 	    }
 	  if (bb->index >= 0
-	      && any_condjump_p (bb->end)
+	      && block_ends_with_condjump_p (bb)
 	      && bb->succ->succ_next)
 	    num_branches++, num_never_executed;
 	}
     }
 
-  if (rtl_dump_file)
+  if (dump_file)
     {
-      fprintf (rtl_dump_file, "%d branches\n", num_branches);
-      fprintf (rtl_dump_file, "%d branches never executed\n",
+      fprintf (dump_file, "%d branches\n", num_branches);
+      fprintf (dump_file, "%d branches never executed\n",
 	       num_never_executed);
       if (num_branches)
 	for (i = 0; i < 10; i++)
-	  fprintf (rtl_dump_file, "%d%% branches in range %d-%d%%\n",
+	  fprintf (dump_file, "%d%% branches in range %d-%d%%\n",
 		   (hist_br_prob[i] + hist_br_prob[19-i]) * 100 / num_branches,
 		   5 * i, 5 * i + 5);
 
@@ -716,39 +608,74 @@ compute_branch_probabilities ()
       for (i = 0; i < 20; i++)
 	total_hist_br_prob[i] += hist_br_prob[i];
 
-      fputc ('\n', rtl_dump_file);
-      fputc ('\n', rtl_dump_file);
+      fputc ('\n', dump_file);
+      fputc ('\n', dump_file);
     }
 
   free_aux_for_blocks ();
-  if (exec_counts)
-    free (exec_counts);
 }
 
-/* Compute checksum for the current function.  */
-
-#define CHSUM_HASH	500000003
-#define CHSUM_SHIFT	2
-
-static long
-compute_checksum ()
+/* Load value histograms for N_VALUES values whose description is stored
+   in VALUES array from .da file.  */
+static void
+compute_value_histograms (unsigned n_values, struct histogram_value *values)
 {
-  long chsum = 0;
-  basic_block bb;
+  unsigned i, j, t, any;
+  unsigned n_histogram_counters[GCOV_N_VALUE_COUNTERS];
+  gcov_type *histogram_counts[GCOV_N_VALUE_COUNTERS];
+  gcov_type *act_count[GCOV_N_VALUE_COUNTERS];
+  gcov_type *aact_count;
+ 
+  for (t = 0; t < GCOV_N_VALUE_COUNTERS; t++)
+    n_histogram_counters[t] = 0;
 
-  FOR_EACH_BB (bb)
+  for (i = 0; i < n_values; i++)
+    n_histogram_counters[(int) (values[i].type)] += values[i].n_counters;
+
+  any = 0;
+  for (t = 0; t < GCOV_N_VALUE_COUNTERS; t++)
     {
-      edge e;
-
-      for (e = bb->succ; e; e = e->succ_next)
+      if (!n_histogram_counters[t])
 	{
-	  chsum = ((chsum << CHSUM_SHIFT) + (BB_TO_GCOV_INDEX (e->dest) + 1)) % CHSUM_HASH;
+	  histogram_counts[t] = NULL;
+	  continue;
 	}
 
-      chsum = (chsum << CHSUM_SHIFT) % CHSUM_HASH;
+      histogram_counts[t] =
+	get_coverage_counts (COUNTER_FOR_HIST_TYPE (t),
+			     n_histogram_counters[t], NULL);
+      if (histogram_counts[t])
+	any = 1;
+      act_count[t] = histogram_counts[t];
+    }
+  if (!any)
+    return;
+
+  for (i = 0; i < n_values; i++)
+    {
+      rtx hist_list = NULL_RTX;
+      t = (int) (values[i].type);
+
+      /* FIXME: make this work for trees.  */
+      if (!ir_type ())
+	{
+	  aact_count = act_count[t];
+	  act_count[t] += values[i].n_counters;
+	  for (j = values[i].n_counters; j > 0; j--)
+	    hist_list = alloc_EXPR_LIST (0, GEN_INT (aact_count[j - 1]), 
+					hist_list);
+	      hist_list = alloc_EXPR_LIST (0, 
+			    copy_rtx ((rtx)values[i].value), hist_list);
+	  hist_list = alloc_EXPR_LIST (0, GEN_INT (values[i].type), hist_list);
+	      REG_NOTES ((rtx)values[i].insn) =
+		  alloc_EXPR_LIST (REG_VALUE_PROFILE, hist_list,
+				       REG_NOTES ((rtx)values[i].insn));
+	}
     }
 
-  return chsum;
+  for (t = 0; t < GCOV_N_VALUE_COUNTERS; t++)
+    if (histogram_counts[t])
+      free (histogram_counts[t]);
 }
 
 /* Instrument and/or analyze program behavior based on program flow graph.
@@ -768,24 +695,15 @@ compute_checksum ()
    Main entry point of this file.  */
 
 void
-branch_prob ()
+branch_prob (void)
 {
   basic_block bb;
-  int i;
-  int num_edges, ignored_edges;
+  unsigned i;
+  unsigned num_edges, ignored_edges;
+  unsigned num_instrumented;
   struct edge_list *el;
-  const char *name = IDENTIFIER_POINTER
-		       (DECL_ASSEMBLER_NAME (current_function_decl));
-
-  profile_info.current_function_cfg_checksum = compute_checksum ();
-
-  if (rtl_dump_file)
-    fprintf (rtl_dump_file, "CFG checksum is %ld\n",
-	profile_info.current_function_cfg_checksum);
-
-  /* Start of a function.  */
-  if (flag_test_coverage)
-    output_gcov_string (name, (long) -2);
+  unsigned n_values = 0;
+  struct histogram_value *values = NULL;
 
   total_num_times_called++;
 
@@ -805,36 +723,13 @@ branch_prob ()
     {
       int need_exit_edge = 0, need_entry_edge = 0;
       int have_exit_edge = 0, have_entry_edge = 0;
-      rtx insn;
       edge e;
 
-      /* Add fake edges from entry block to the call insns that may return
-	 twice.  The CFG is not quite correct then, as call insn plays more
-	 role of CODE_LABEL, but for our purposes, everything should be OK,
-	 as we never insert code to the beggining of basic block.  */
-      for (insn = bb->head; insn != NEXT_INSN (bb->end);
-	   insn = NEXT_INSN (insn))
-	{
-	  if (GET_CODE (insn) == CALL_INSN
-	      && find_reg_note (insn, REG_SETJMP, NULL))
-	    {
-	      if (GET_CODE (bb->head) == CODE_LABEL
-		  || insn != NEXT_INSN (bb->head))
-		{
-		  e = split_block (bb, PREV_INSN (insn));
-		  make_edge (ENTRY_BLOCK_PTR, e->dest, EDGE_FAKE);
-		  break;
-		}
-	      else
-		{
-		  /* We should not get abort here, as call to setjmp should not
-		     be the very first instruction of function.  */
-		  if (bb == ENTRY_BLOCK_PTR)
-		    abort ();
-		  make_edge (ENTRY_BLOCK_PTR, bb, EDGE_FAKE);
-		}
-	    }
-	}
+      /* Functions returning multiple times are not handled by extra edges.
+         Instead we simply allow negative counts on edges from exit to the
+         block past call and corresponding probabilities.  We can't go
+         with the extra edges because that would result in flowgraph that
+	 needs to have fake edges outside the spanning tree.  */
 
       for (e = bb->succ; e; e = e->succ_next)
 	{
@@ -855,15 +750,15 @@ branch_prob ()
 
       if (need_exit_edge && !have_exit_edge)
 	{
-	  if (rtl_dump_file)
-	    fprintf (rtl_dump_file, "Adding fake exit edge to bb %i\n",
+	  if (dump_file)
+	    fprintf (dump_file, "Adding fake exit edge to bb %i\n",
 		     bb->index);
 	  make_edge (bb, EXIT_BLOCK_PTR, EDGE_FAKE);
 	}
       if (need_entry_edge && !have_entry_edge)
 	{
-	  if (rtl_dump_file)
-	    fprintf (rtl_dump_file, "Adding fake entry edge to bb %i\n",
+	  if (dump_file)
+	    fprintf (dump_file, "Adding fake entry edge to bb %i\n",
 		     bb->index);
 	  make_edge (ENTRY_BLOCK_PTR, bb, EDGE_FAKE);
 	}
@@ -895,70 +790,6 @@ branch_prob ()
   verify_flow_info ();
 #endif
 
-  /* Output line number information about each basic block for
-     GCOV utility.  */
-  if (flag_test_coverage)
-    {
-      FOR_EACH_BB (bb)
-	{
-	  rtx insn = bb->head;
-	  static int ignore_next_note = 0;
-
-	  /* We are looking for line number notes.  Search backward before
-	     basic block to find correct ones.  */
-	  insn = prev_nonnote_insn (insn);
-	  if (!insn)
-	    insn = get_insns ();
-	  else
-	    insn = NEXT_INSN (insn);
-
-	  /* Output a zero to the .bb file to indicate that a new
-	     block list is starting.  */
-	  __write_long (0, bb_file, 4);
-
-	  while (insn != bb->end)
-	    {
-	      if (GET_CODE (insn) == NOTE)
-		{
-		  /* Must ignore the line number notes that immediately
-		     follow the end of an inline function to avoid counting
-		     it twice.  There is a note before the call, and one
-		     after the call.  */
-		  if (NOTE_LINE_NUMBER (insn) == NOTE_INSN_REPEATED_LINE_NUMBER)
-		    ignore_next_note = 1;
-		  else if (NOTE_LINE_NUMBER (insn) > 0)
-		    {
-		      if (ignore_next_note)
-			ignore_next_note = 0;
-		      else
-			{
-			  /* If this is a new source file, then output the
-			     file's name to the .bb file.  */
-			  if (! last_bb_file_name
-			      || strcmp (NOTE_SOURCE_FILE (insn),
-					 last_bb_file_name))
-			    {
-			      if (last_bb_file_name)
-				free (last_bb_file_name);
-			      last_bb_file_name
-				= xstrdup (NOTE_SOURCE_FILE (insn));
-			      output_gcov_string (NOTE_SOURCE_FILE (insn),
-						  (long)-1);
-			    }
-			  /* Output the line number to the .bb file.  Must be
-			     done after the output_bb_profile_data() call, and
-			     after the file name is written, to ensure that it
-			     is correctly handled by gcov.  */
-			  __write_long (NOTE_LINE_NUMBER (insn), bb_file, 4);
-			}
-		    }
-		}
-	      insn = NEXT_INSN (insn);
-	    }
-	}
-      __write_long (0, bb_file, 4);
-    }
-
   /* Create spanning tree from basic block graph, mark each edge that is
      on the spanning tree.  We insert as many abnormal and critical edges
      as possible to minimize number of edge splits necessary.  */
@@ -967,105 +798,210 @@ branch_prob ()
 
   /* Fake edges that are not on the tree will not be instrumented, so
      mark them ignored.  */
-  for (i = 0; i < num_edges; i++)
+  for (num_instrumented = i = 0; i < num_edges; i++)
     {
       edge e = INDEX_EDGE (el, i);
       struct edge_info *inf = EDGE_INFO (e);
-      if ((e->flags & EDGE_FAKE) && !inf->ignore && !inf->on_tree)
+
+      if (inf->ignore || inf->on_tree)
+	/*NOP*/;
+      else if (e->flags & EDGE_FAKE)
 	{
 	  inf->ignore = 1;
 	  ignored_edges++;
 	}
+      else
+	num_instrumented++;
     }
 
   total_num_blocks += n_basic_blocks + 2;
-  if (rtl_dump_file)
-    fprintf (rtl_dump_file, "%d basic blocks\n", n_basic_blocks);
+  if (dump_file)
+    fprintf (dump_file, "%d basic blocks\n", n_basic_blocks);
 
   total_num_edges += num_edges;
-  if (rtl_dump_file)
-    fprintf (rtl_dump_file, "%d edges\n", num_edges);
+  if (dump_file)
+    fprintf (dump_file, "%d edges\n", num_edges);
 
   total_num_edges_ignored += ignored_edges;
-  if (rtl_dump_file)
-    fprintf (rtl_dump_file, "%d ignored edges\n", ignored_edges);
+  if (dump_file)
+    fprintf (dump_file, "%d ignored edges\n", ignored_edges);
 
-  /* Create a .bbg file from which gcov can reconstruct the basic block
-     graph.  First output the number of basic blocks, and then for every
-     edge output the source and target basic block numbers.
-     NOTE: The format of this file must be compatible with gcov.  */
+  /* Write the data from which gcov can reconstruct the basic block
+     graph.  */
 
-  if (flag_test_coverage)
+  /* Basic block flags */
+  if (coverage_begin_output ())
     {
-      int flag_bits;
+      gcov_position_t offset;
 
-      __write_gcov_string (name, strlen (name), bbg_file, -1);
+      offset = gcov_write_tag (GCOV_TAG_BLOCKS);
+      for (i = 0; i != (unsigned) (n_basic_blocks + 2); i++)
+	gcov_write_unsigned (0);
+      gcov_write_length (offset);
+    }
 
-      /* write checksum.  */
-      __write_long (profile_info.current_function_cfg_checksum, bbg_file, 4);
+   /* Keep all basic block indexes nonnegative in the gcov output.
+      Index 0 is used for entry block, last index is for exit block.
+      */
+  ENTRY_BLOCK_PTR->index = -1;
+  EXIT_BLOCK_PTR->index = last_basic_block;
+#define BB_TO_GCOV_INDEX(bb)  ((bb)->index + 1)
 
-      /* The plus 2 stands for entry and exit block.  */
-      __write_long (n_basic_blocks + 2, bbg_file, 4);
-      __write_long (num_edges - ignored_edges + 1, bbg_file, 4);
+  /* Arcs */
+  if (coverage_begin_output ())
+    {
+      gcov_position_t offset;
 
       FOR_BB_BETWEEN (bb, ENTRY_BLOCK_PTR, EXIT_BLOCK_PTR, next_bb)
 	{
 	  edge e;
-	  long count = 0;
 
-	  for (e = bb->succ; e; e = e->succ_next)
-	    if (!EDGE_INFO (e)->ignore)
-	      count++;
-	  __write_long (count, bbg_file, 4);
+	  offset = gcov_write_tag (GCOV_TAG_ARCS);
+	  gcov_write_unsigned (BB_TO_GCOV_INDEX (bb));
 
 	  for (e = bb->succ; e; e = e->succ_next)
 	    {
 	      struct edge_info *i = EDGE_INFO (e);
 	      if (!i->ignore)
 		{
-		  flag_bits = 0;
-		  if (i->on_tree)
-		    flag_bits |= 0x1;
-		  if (e->flags & EDGE_FAKE)
-		    flag_bits |= 0x2;
-		  if (e->flags & EDGE_FALLTHRU)
-		    flag_bits |= 0x4;
+		  unsigned flag_bits = 0;
 
-		  __write_long (BB_TO_GCOV_INDEX (e->dest), bbg_file, 4);
-		  __write_long (flag_bits, bbg_file, 4);
+		  if (i->on_tree)
+		    flag_bits |= GCOV_ARC_ON_TREE;
+		  if (e->flags & EDGE_FAKE)
+		    flag_bits |= GCOV_ARC_FAKE;
+		  if (e->flags & EDGE_FALLTHRU)
+		    flag_bits |= GCOV_ARC_FALLTHROUGH;
+
+		  gcov_write_unsigned (BB_TO_GCOV_INDEX (e->dest));
+		  gcov_write_unsigned (flag_bits);
 	        }
 	    }
-	}
-      /* Emit fake loopback edge for EXIT block to maintain compatibility with
-         old gcov format.  */
-      __write_long (1, bbg_file, 4);
-      __write_long (0, bbg_file, 4);
-      __write_long (0x1, bbg_file, 4);
 
-      /* Emit a -1 to separate the list of all edges from the list of
-	 loop back edges that follows.  */
-      __write_long (-1, bbg_file, 4);
+	  gcov_write_length (offset);
+	}
     }
 
-  if (flag_branch_probabilities)
-    compute_branch_probabilities ();
-
-  /* For each edge not on the spanning tree, add counting code as rtl.  */
-
-  if (profile_arc_flag)
+  /* Line numbers.  */
+  /* FIXME:  make this work for trees.  (Line numbers are in location_t
+     objects, but aren't always attached to the obvious tree...) */
+  if (coverage_begin_output () && !ir_type ())
     {
-      instrument_edges (el);
-      allocate_reg_info (max_reg_num (), FALSE, FALSE);
+      char const *prev_file_name = NULL;
+      gcov_position_t offset;
+
+      FOR_EACH_BB (bb)
+	{
+	  rtx insn = BB_HEAD (bb);
+	  int ignore_next_note = 0;
+
+	  offset = 0;
+
+	  /* We are looking for line number notes.  Search backward
+	     before basic block to find correct ones.  */
+	  insn = prev_nonnote_insn (insn);
+	  if (!insn)
+	    insn = get_insns ();
+	  else
+	    insn = NEXT_INSN (insn);
+
+	  while (insn != BB_END (bb))
+	    {
+	      if (GET_CODE (insn) == NOTE)
+		{
+		  /* Must ignore the line number notes that
+		     immediately follow the end of an inline function
+		     to avoid counting it twice.  There is a note
+		     before the call, and one after the call.  */
+		  if (NOTE_LINE_NUMBER (insn)
+		      == NOTE_INSN_REPEATED_LINE_NUMBER)
+		    ignore_next_note = 1;
+		  else if (NOTE_LINE_NUMBER (insn) <= 0)
+		    /*NOP*/;
+		  else if (ignore_next_note)
+		    ignore_next_note = 0;
+		  else
+		    {
+		      if (!offset)
+			{
+			  offset = gcov_write_tag (GCOV_TAG_LINES);
+			  gcov_write_unsigned (BB_TO_GCOV_INDEX (bb));
+			}
+
+		      /* If this is a new source file, then output the
+			 file's name to the .bb file.  */
+		      if (!prev_file_name
+			  || strcmp (NOTE_SOURCE_FILE (insn),
+				     prev_file_name))
+			{
+			  prev_file_name = NOTE_SOURCE_FILE (insn);
+			  gcov_write_unsigned (0);
+			  gcov_write_string (prev_file_name);
+			}
+		      gcov_write_unsigned (NOTE_LINE_NUMBER (insn));
+		    }
+		}
+	      insn = NEXT_INSN (insn);
+	    }
+
+	  if (offset)
+	    {
+	      /* A file of NULL indicates the end of run.  */
+	      gcov_write_unsigned (0);
+	      gcov_write_string (NULL);
+	      gcov_write_length (offset);
+	    }
+	}
+    }
+
+  ENTRY_BLOCK_PTR->index = ENTRY_BLOCK;
+  EXIT_BLOCK_PTR->index = EXIT_BLOCK;
+#undef BB_TO_GCOV_INDEX
+
+  if (flag_profile_values)
+    find_values_to_profile (&n_values, &values);
+
+  if (flag_branch_probabilities)
+    {
+      compute_branch_probabilities ();
+      if (flag_profile_values)
+	compute_value_histograms (n_values, values);
+    }
+
+  /* For each edge not on the spanning tree, add counting code.  */
+  if (profile_arc_flag
+      && coverage_counter_alloc (GCOV_COUNTER_ARCS, num_instrumented))
+    {
+      unsigned n_instrumented = instrument_edges (el);
+
+      if (n_instrumented != num_instrumented)
+	abort ();
+
+      if (flag_profile_values)
+	instrument_values (n_values, values);
+
+      /* Commit changes done by instrumentation.  */
+      if (ir_type ())
+	bsi_commit_edge_inserts ((int *)NULL);
+      else
+	{
+          commit_edge_insertions_watch_calls ();
+	  allocate_reg_info (max_reg_num (), FALSE, FALSE);
+	}
     }
 
   remove_fake_edges ();
-  /* Re-merge split basic blocks and the mess introduced by
-     insert_insn_on_edge.  */
-  cleanup_cfg (profile_arc_flag ? CLEANUP_EXPENSIVE : 0);
-  if (rtl_dump_file)
-    dump_flow_info (rtl_dump_file);
-
   free_aux_for_edges ();
+
+  if (!ir_type ())
+    {
+      /* Re-merge split basic blocks and the mess introduced by
+	 insert_insn_on_edge.  */
+      cleanup_cfg (profile_arc_flag ? CLEANUP_EXPENSIVE : 0);
+      if (profile_dump_file())
+	dump_flow_info (profile_dump_file());
+    }
+
   free_edge_list (el);
 }
 
@@ -1073,8 +1009,7 @@ branch_prob ()
    aux fields.  */
 
 static basic_block
-find_group (bb)
-     basic_block bb;
+find_group (basic_block bb)
 {
   basic_block group = bb, bb1;
 
@@ -1092,8 +1027,7 @@ find_group (bb)
 }
 
 static void
-union_groups (bb1, bb2)
-     basic_block bb1, bb2;
+union_groups (basic_block bb1, basic_block bb2)
 {
   basic_block bb1g = find_group (bb1);
   basic_block bb2g = find_group (bb2);
@@ -1114,8 +1048,7 @@ union_groups (bb1, bb2)
    are more expensive to instrument.  */
 
 static void
-find_spanning_tree (el)
-     struct edge_list *el;
+find_spanning_tree (struct edge_list *el)
 {
   int i;
   int num_edges = NUM_EDGES (el);
@@ -1135,13 +1068,12 @@ find_spanning_tree (el)
     {
       edge e = INDEX_EDGE (el, i);
       if (((e->flags & (EDGE_ABNORMAL | EDGE_ABNORMAL_CALL | EDGE_FAKE))
-	   || e->dest == EXIT_BLOCK_PTR
-	   )
+	   || e->dest == EXIT_BLOCK_PTR)
 	  && !EDGE_INFO (e)->ignore
 	  && (find_group (e->src) != find_group (e->dest)))
 	{
-	  if (rtl_dump_file)
-	    fprintf (rtl_dump_file, "Abnormal edge %d to %d put to tree\n",
+	  if (dump_file)
+	    fprintf (dump_file, "Abnormal edge %d to %d put to tree\n",
 		     e->src->index, e->dest->index);
 	  EDGE_INFO (e)->on_tree = 1;
 	  union_groups (e->src, e->dest);
@@ -1152,12 +1084,11 @@ find_spanning_tree (el)
   for (i = 0; i < num_edges; i++)
     {
       edge e = INDEX_EDGE (el, i);
-      if ((EDGE_CRITICAL_P (e))
-	  && !EDGE_INFO (e)->ignore
-	  && (find_group (e->src) != find_group (e->dest)))
+      if (EDGE_CRITICAL_P (e) && !EDGE_INFO (e)->ignore
+	  && find_group (e->src) != find_group (e->dest))
 	{
-	  if (rtl_dump_file)
-	    fprintf (rtl_dump_file, "Critical edge %d to %d put to tree\n",
+	  if (dump_file)
+	    fprintf (dump_file, "Critical edge %d to %d put to tree\n",
 		     e->src->index, e->dest->index);
 	  EDGE_INFO (e)->on_tree = 1;
 	  union_groups (e->src, e->dest);
@@ -1168,11 +1099,11 @@ find_spanning_tree (el)
   for (i = 0; i < num_edges; i++)
     {
       edge e = INDEX_EDGE (el, i);
-      if (find_group (e->src) != find_group (e->dest)
-	  && !EDGE_INFO (e)->ignore)
+      if (!EDGE_INFO (e)->ignore
+	  && find_group (e->src) != find_group (e->dest))
 	{
-	  if (rtl_dump_file)
-	    fprintf (rtl_dump_file, "Normal edge %d to %d put to tree\n",
+	  if (dump_file)
+	    fprintf (dump_file, "Normal edge %d to %d put to tree\n",
 		     e->src->index, e->dest->index);
 	  EDGE_INFO (e)->on_tree = 1;
 	  union_groups (e->src, e->dest);
@@ -1186,49 +1117,9 @@ find_spanning_tree (el)
 /* Perform file-level initialization for branch-prob processing.  */
 
 void
-init_branch_prob (filename)
-  const char *filename;
+init_branch_prob (void)
 {
-  int len = strlen (filename);
   int i;
-
-  if (flag_test_coverage)
-    {
-      char *data_file, *bbg_file_name;
-
-      /* Open an output file for the basic block/line number map.  */
-      data_file = (char *) alloca (len + 4);
-      strcpy (data_file, filename);
-      strcat (data_file, ".bb");
-      if ((bb_file = fopen (data_file, "wb")) == 0)
-	fatal_io_error ("can't open %s", data_file);
-
-      /* Open an output file for the program flow graph.  */
-      bbg_file_name = (char *) alloca (len + 5);
-      strcpy (bbg_file_name, filename);
-      strcat (bbg_file_name, ".bbg");
-      if ((bbg_file = fopen (bbg_file_name, "wb")) == 0)
-	fatal_io_error ("can't open %s", bbg_file_name);
-
-      /* Initialize to zero, to ensure that the first file name will be
-	 written to the .bb file.  */
-      last_bb_file_name = 0;
-    }
-
-  da_file_name = (char *) xmalloc (len + 4);
-  strcpy (da_file_name, filename);
-  strcat (da_file_name, ".da");
-  
-  if (flag_branch_probabilities)
-    {
-      da_file = fopen (da_file_name, "rb");
-      if (!da_file)
-	warning ("file %s not found, execution counts assumed to be zero",
-		 da_file_name);
-    }
-
-  if (profile_arc_flag)
-    init_edge_profiler ();
 
   total_num_blocks = 0;
   total_num_edges = 0;
@@ -1247,180 +1138,58 @@ init_branch_prob (filename)
    is completed.  */
 
 void
-end_branch_prob ()
+end_branch_prob (void)
 {
-  if (flag_test_coverage)
+  if (dump_file)
     {
-      fclose (bb_file);
-      fclose (bbg_file);
-      unlink (da_file_name);
-    }
-
-  if (flag_branch_probabilities && da_file)
-    fclose (da_file);
-
-  if (rtl_dump_file)
-    {
-      fprintf (rtl_dump_file, "\n");
-      fprintf (rtl_dump_file, "Total number of blocks: %d\n",
+      fprintf (dump_file, "\n");
+      fprintf (dump_file, "Total number of blocks: %d\n",
 	       total_num_blocks);
-      fprintf (rtl_dump_file, "Total number of edges: %d\n", total_num_edges);
-      fprintf (rtl_dump_file, "Total number of ignored edges: %d\n",
+      fprintf (dump_file, "Total number of edges: %d\n", total_num_edges);
+      fprintf (dump_file, "Total number of ignored edges: %d\n",
 	       total_num_edges_ignored);
-      fprintf (rtl_dump_file, "Total number of instrumented edges: %d\n",
+      fprintf (dump_file, "Total number of instrumented edges: %d\n",
 	       total_num_edges_instrumented);
-      fprintf (rtl_dump_file, "Total number of blocks created: %d\n",
+      fprintf (dump_file, "Total number of blocks created: %d\n",
 	       total_num_blocks_created);
-      fprintf (rtl_dump_file, "Total number of graph solution passes: %d\n",
+      fprintf (dump_file, "Total number of graph solution passes: %d\n",
 	       total_num_passes);
       if (total_num_times_called != 0)
-	fprintf (rtl_dump_file, "Average number of graph solution passes: %d\n",
+	fprintf (dump_file, "Average number of graph solution passes: %d\n",
 		 (total_num_passes + (total_num_times_called  >> 1))
 		 / total_num_times_called);
-      fprintf (rtl_dump_file, "Total number of branches: %d\n",
+      fprintf (dump_file, "Total number of branches: %d\n",
 	       total_num_branches);
-      fprintf (rtl_dump_file, "Total number of branches never executed: %d\n",
+      fprintf (dump_file, "Total number of branches never executed: %d\n",
 	       total_num_never_executed);
       if (total_num_branches)
 	{
 	  int i;
 
 	  for (i = 0; i < 10; i++)
-	    fprintf (rtl_dump_file, "%d%% branches in range %d-%d%%\n",
+	    fprintf (dump_file, "%d%% branches in range %d-%d%%\n",
 		     (total_hist_br_prob[i] + total_hist_br_prob[19-i]) * 100
 		     / total_num_branches, 5*i, 5*i+5);
 	}
     }
 }
-
-/* The label used by the edge profiling code.  */
 
-static GTY(()) rtx profiler_label;
-
-/* Initialize the profiler_label.  */
-
-static void
-init_edge_profiler ()
-{
-  /* Generate and save a copy of this so it can be shared.  */
-  char buf[20];
-  ASM_GENERATE_INTERNAL_LABEL (buf, "LPBX", 2);
-  profiler_label = gen_rtx_SYMBOL_REF (Pmode, ggc_strdup (buf));
-}
-
-/* Output instructions as RTL to increment the edge execution count.  */
-
-static rtx
-gen_edge_profiler (edgeno)
-     int edgeno;
-{
-  enum machine_mode mode = mode_for_size (GCOV_TYPE_SIZE, MODE_INT, 0);
-  rtx mem_ref, tmp;
-  rtx sequence;
-
-  start_sequence ();
-
-  tmp = force_reg (Pmode, profiler_label);
-  tmp = plus_constant (tmp, GCOV_TYPE_SIZE / BITS_PER_UNIT * edgeno);
-  mem_ref = validize_mem (gen_rtx_MEM (mode, tmp));
-
-  set_mem_alias_set (mem_ref, new_alias_set ());
-
-  tmp = expand_simple_binop (mode, PLUS, mem_ref, const1_rtx,
-			     mem_ref, 0, OPTAB_WIDEN);
-
-  if (tmp != mem_ref)
-    emit_move_insn (copy_rtx (mem_ref), tmp);
-
-  sequence = get_insns ();
-  end_sequence ();
-  return sequence;
-}
-
-/* Output code for a constructor that will invoke __bb_init_func, if
-   this has not already been done.  */
+/* Set up hooks to enable tree-based profiling.  */
 
 void
-output_func_start_profiler ()
+tree_register_profile_hooks (void)
 {
-  tree fnname, fndecl;
-  char *name;
-  char buf[20];
-  const char *cfnname;
-  rtx table_address;
-  enum machine_mode mode = mode_for_size (GCOV_TYPE_SIZE, MODE_INT, 0);
-  int save_flag_inline_functions = flag_inline_functions;
-
-  /* It's either already been output, or we don't need it because we're
-     not doing profile-edges.  */
-  if (! need_func_profiler)
-    return;
-
-  need_func_profiler = 0;
-
-  /* Synthesize a constructor function to invoke __bb_init_func with a
-     pointer to this object file's profile block.  */
-
-  /* Try and make a unique name given the "file function name".
-
-     And no, I don't like this either.  */
-
-  fnname = get_file_function_name ('I');
-  cfnname = IDENTIFIER_POINTER (fnname);
-  name = concat (cfnname, "GCOV", NULL);
-  fnname = get_identifier (name);
-  free (name);
-
-  fndecl = build_decl (FUNCTION_DECL, fnname,
-		       build_function_type (void_type_node, NULL_TREE));
-  DECL_EXTERNAL (fndecl) = 0;
-
-  /* It can be a static function as long as collect2 does not have
-     to scan the object file to find its ctor/dtor routine.  */
-  TREE_PUBLIC (fndecl) = ! targetm.have_ctors_dtors;
-
-  TREE_USED (fndecl) = 1;
-
-  DECL_RESULT (fndecl) = build_decl (RESULT_DECL, NULL_TREE, void_type_node);
-
-  fndecl = (*lang_hooks.decls.pushdecl) (fndecl);
-  rest_of_decl_compilation (fndecl, 0, 1, 0);
-  announce_function (fndecl);
-  current_function_decl = fndecl;
-  DECL_INITIAL (fndecl) = error_mark_node;
-  make_decl_rtl (fndecl, NULL);
-  init_function_start (fndecl, input_filename, lineno);
-  (*lang_hooks.decls.pushlevel) (0);
-  expand_function_start (fndecl, 0);
-  cfun->arc_profile = 0;
-
-  /* Actually generate the code to call __bb_init_func.  */
-  ASM_GENERATE_INTERNAL_LABEL (buf, "LPBX", 0);
-  table_address = force_reg (Pmode,
-			     gen_rtx_SYMBOL_REF (Pmode, ggc_strdup (buf)));
-  emit_library_call (gen_rtx_SYMBOL_REF (Pmode, "__bb_init_func"), LCT_NORMAL,
-		     mode, 1, table_address, Pmode);
-
-  expand_function_end (input_filename, lineno, 0);
-  (*lang_hooks.decls.poplevel) (1, 0, 1);
-
-  /* Since fndecl isn't in the list of globals, it would never be emitted
-     when it's considered to be 'safe' for inlining, so turn off
-     flag_inline_functions.  */
-  flag_inline_functions = 0;
-
-  rest_of_compilation (fndecl);
-
-  /* Reset flag_inline_functions to its original value.  */
-  flag_inline_functions = save_flag_inline_functions;
-
-  if (! quiet_flag)
-    fflush (asm_out_file);
-  current_function_decl = NULL_TREE;
-
-  if (targetm.have_ctors_dtors)
-    (* targetm.asm_out.constructor) (XEXP (DECL_RTL (fndecl), 0),
-				     DEFAULT_INIT_PRIORITY);
+  profile_hooks = &tree_profile_hooks;
+  if (!ir_type ())
+    abort ();
 }
 
-#include "gt-profile.h"
+/* Set up hooks to enable RTL-based profiling.  */
+
+void
+rtl_register_profile_hooks (void)
+{
+  profile_hooks = &rtl_profile_hooks;
+  if (ir_type ())
+    abort ();
+}

@@ -1,5 +1,5 @@
 /* Definitions of target machine for GNU compiler, for MMIX.
-   Copyright (C) 2000, 2001, 2002 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
    Contributed by Hans-Peter Nilsson (hp@bitrange.com)
 
 This file is part of GCC.
@@ -21,6 +21,8 @@ Boston, MA 02111-1307, USA.  */
 
 #include "config.h"
 #include "system.h"
+#include "coretypes.h"
+#include "tm.h"
 #include "rtl.h"
 #include "regs.h"
 #include "hard-reg-set.h"
@@ -60,7 +62,7 @@ Boston, MA 02111-1307, USA.  */
    (perhaps any insn).  But regs_ever_live is up-to-date when
    leaf_function_p () isn't, so we "or" them together to get accurate
    information.  FIXME: Some tweak to leaf_function_p might be
-   preferrable.  */
+   preferable.  */
 #define MMIX_CFUN_NEEDS_SAVED_EH_RETURN_ADDRESS			\
  (flag_exceptions						\
   && ((reload_completed && regs_ever_live[MMIX_rJ_REGNUM])	\
@@ -115,23 +117,28 @@ const char *mmix_cc1_ignored_option;
 static int mmix_output_destination_register;
 
 static void mmix_output_shiftvalue_op_from_str
-  PARAMS ((FILE *, const char *, HOST_WIDEST_INT));
-static void mmix_output_shifted_value PARAMS ((FILE *, HOST_WIDEST_INT));
-static void mmix_output_condition PARAMS ((FILE *, rtx, int));
-static HOST_WIDEST_INT mmix_intval PARAMS ((rtx));
-static void mmix_output_octa PARAMS ((FILE *, HOST_WIDEST_INT, int));
-static bool mmix_assemble_integer PARAMS ((rtx, unsigned int, int));
-static struct machine_function * mmix_init_machine_status PARAMS ((void));
-static void mmix_encode_section_info PARAMS ((tree, int));
-static const char *mmix_strip_name_encoding PARAMS ((const char *));
-static void mmix_emit_sp_add PARAMS ((HOST_WIDE_INT offset));
-static void mmix_target_asm_function_prologue
-  PARAMS ((FILE *, HOST_WIDE_INT));
-static void mmix_target_asm_function_end_prologue PARAMS ((FILE *));
-static void mmix_target_asm_function_epilogue
-  PARAMS ((FILE *, HOST_WIDE_INT));
+  (FILE *, const char *, HOST_WIDEST_INT);
+static void mmix_output_shifted_value (FILE *, HOST_WIDEST_INT);
+static void mmix_output_condition (FILE *, rtx, int);
+static HOST_WIDEST_INT mmix_intval (rtx);
+static void mmix_output_octa (FILE *, HOST_WIDEST_INT, int);
+static bool mmix_assemble_integer (rtx, unsigned int, int);
+static struct machine_function *mmix_init_machine_status (void);
+static void mmix_encode_section_info (tree, rtx, int);
+static const char *mmix_strip_name_encoding (const char *);
+static void mmix_emit_sp_add (HOST_WIDE_INT offset);
+static void mmix_target_asm_function_prologue (FILE *, HOST_WIDE_INT);
+static void mmix_target_asm_function_end_prologue (FILE *);
+static void mmix_target_asm_function_epilogue (FILE *, HOST_WIDE_INT);
+static void mmix_reorg (void);
 static void mmix_asm_output_mi_thunk
-  PARAMS ((FILE *, tree, HOST_WIDE_INT, HOST_WIDE_INT, tree));
+  (FILE *, tree, HOST_WIDE_INT, HOST_WIDE_INT, tree);
+static void mmix_setup_incoming_varargs
+  (CUMULATIVE_ARGS *, enum machine_mode, tree, int *, int);
+static void mmix_file_start (void);
+static void mmix_file_end (void);
+static bool mmix_rtx_costs (rtx, int, int, int *);
+static rtx mmix_struct_value_rtx (tree, int);
 
 
 /* Target structure macros.  Listed by node.  See `Using and Porting GCC'
@@ -168,6 +175,35 @@ static void mmix_asm_output_mi_thunk
 #define TARGET_ASM_OUTPUT_MI_THUNK mmix_asm_output_mi_thunk
 #undef TARGET_ASM_CAN_OUTPUT_MI_THUNK
 #define TARGET_ASM_CAN_OUTPUT_MI_THUNK default_can_output_mi_thunk_no_vcall
+#undef TARGET_ASM_FILE_START
+#define TARGET_ASM_FILE_START mmix_file_start
+#undef TARGET_ASM_FILE_START_FILE_DIRECTIVE
+#define TARGET_ASM_FILE_START_FILE_DIRECTIVE true
+#undef TARGET_ASM_FILE_END
+#define TARGET_ASM_FILE_END mmix_file_end
+
+#undef TARGET_RTX_COSTS
+#define TARGET_RTX_COSTS mmix_rtx_costs
+#undef TARGET_ADDRESS_COST
+#define TARGET_ADDRESS_COST hook_int_rtx_0
+
+#undef TARGET_MACHINE_DEPENDENT_REORG
+#define TARGET_MACHINE_DEPENDENT_REORG mmix_reorg
+
+#undef TARGET_PROMOTE_FUNCTION_ARGS
+#define TARGET_PROMOTE_FUNCTION_ARGS hook_bool_tree_true
+#if 0
+/* Apparently not doing TRT if int < register-size.  FIXME: Perhaps
+   FUNCTION_VALUE and LIBCALL_VALUE needs tweaking as some ports say.  */
+#undef TARGET_PROMOTE_FUNCTION_RETURN
+#define TARGET_PROMOTE_FUNCTION_RETURN hook_bool_tree_true
+#endif
+
+#undef TARGET_STRUCT_VALUE_RTX
+#define TARGET_STRUCT_VALUE_RTX mmix_struct_value_rtx
+
+#undef TARGET_SETUP_INCOMING_VARARGS
+#define TARGET_SETUP_INCOMING_VARARGS mmix_setup_incoming_varargs
 
 struct gcc_target targetm = TARGET_INITIALIZER;
 
@@ -177,7 +213,7 @@ struct gcc_target targetm = TARGET_INITIALIZER;
 /* OVERRIDE_OPTIONS.  */
 
 void
-mmix_override_options ()
+mmix_override_options (void)
 {
   /* Should we err or should we warn?  Hmm.  At least we must neutralize
      it.  For example the wrong kind of case-tables will be generated with
@@ -194,7 +230,7 @@ mmix_override_options ()
 /* INIT_EXPANDERS.  */
 
 void
-mmix_init_expanders ()
+mmix_init_expanders (void)
 {
   init_machine_status = mmix_init_machine_status;
 }
@@ -202,7 +238,7 @@ mmix_init_expanders ()
 /* Set the per-function data.  */
 
 static struct machine_function *
-mmix_init_machine_status ()
+mmix_init_machine_status (void)
 {
   return ggc_alloc_cleared (sizeof (struct machine_function));
 }
@@ -210,12 +246,10 @@ mmix_init_machine_status ()
 /* DATA_ALIGNMENT.
    We have trouble getting the address of stuff that is located at other
    than 32-bit alignments (GETA requirements), so try to give everything
-   at least 32-bit alignment. */
+   at least 32-bit alignment.  */
 
 int
-mmix_data_alignment (type, basic_align)
-     tree type ATTRIBUTE_UNUSED;
-     int basic_align;
+mmix_data_alignment (tree type ATTRIBUTE_UNUSED, int basic_align)
 {
   if (basic_align < 32)
     return 32;
@@ -226,9 +260,7 @@ mmix_data_alignment (type, basic_align)
 /* CONSTANT_ALIGNMENT.  */
 
 int
-mmix_constant_alignment (constant, basic_align)
-     tree constant ATTRIBUTE_UNUSED;
-     int basic_align;
+mmix_constant_alignment (tree constant ATTRIBUTE_UNUSED, int basic_align)
 {
   if (basic_align < 32)
     return 32;
@@ -239,9 +271,7 @@ mmix_constant_alignment (constant, basic_align)
 /* LOCAL_ALIGNMENT.  */
 
 int
-mmix_local_alignment (type, basic_align)
-     tree type ATTRIBUTE_UNUSED;
-     int basic_align;
+mmix_local_alignment (tree type ATTRIBUTE_UNUSED, int basic_align)
 {
   if (basic_align < 32)
     return 32;
@@ -252,7 +282,7 @@ mmix_local_alignment (type, basic_align)
 /* CONDITIONAL_REGISTER_USAGE.  */
 
 void
-mmix_conditional_register_usage ()
+mmix_conditional_register_usage (void)
 {
   int i;
 
@@ -293,8 +323,7 @@ mmix_conditional_register_usage ()
    saved are local.  */
 
 int
-mmix_local_regno (regno)
-     int regno;
+mmix_local_regno (int regno)
 {
   return regno <= MMIX_LAST_STACK_REGISTER_REGNUM && !call_used_regs[regno];
 }
@@ -303,9 +332,7 @@ mmix_local_regno (regno)
    We need to extend the reload class of REMAINDER_REG and HIMULT_REG.  */
 
 enum reg_class
-mmix_preferred_reload_class (x, class)
-     rtx x ATTRIBUTE_UNUSED;
-     enum reg_class class;
+mmix_preferred_reload_class (rtx x ATTRIBUTE_UNUSED, enum reg_class class)
 {
   /* FIXME: Revisit.  */
   return GET_CODE (x) == MOD && GET_MODE (x) == DImode
@@ -316,9 +343,8 @@ mmix_preferred_reload_class (x, class)
    We need to extend the reload class of REMAINDER_REG and HIMULT_REG.  */
 
 enum reg_class
-mmix_preferred_output_reload_class (x, class)
-     rtx x ATTRIBUTE_UNUSED;
-     enum reg_class class;
+mmix_preferred_output_reload_class (rtx x ATTRIBUTE_UNUSED,
+				    enum reg_class class)
 {
   /* FIXME: Revisit.  */
   return GET_CODE (x) == MOD && GET_MODE (x) == DImode
@@ -329,11 +355,10 @@ mmix_preferred_output_reload_class (x, class)
    We need to reload regs of REMAINDER_REG and HIMULT_REG elsewhere.  */
 
 enum reg_class
-mmix_secondary_reload_class (class, mode, x, in_p)
-     enum reg_class class;
-     enum machine_mode mode ATTRIBUTE_UNUSED;
-     rtx x ATTRIBUTE_UNUSED;
-     int in_p ATTRIBUTE_UNUSED;
+mmix_secondary_reload_class (enum reg_class class,
+			     enum machine_mode mode ATTRIBUTE_UNUSED,
+			     rtx x ATTRIBUTE_UNUSED,
+			     int in_p ATTRIBUTE_UNUSED)
 {
   if (class == REMAINDER_REG
       || class == HIMULT_REG
@@ -346,9 +371,7 @@ mmix_secondary_reload_class (class, mode, x, in_p)
 /* CONST_OK_FOR_LETTER_P.  */
 
 int
-mmix_const_ok_for_letter_p (value, c)
-     HOST_WIDE_INT value;
-     int c;
+mmix_const_ok_for_letter_p (HOST_WIDE_INT value, int c)
 {
   return
     (c == 'I' ? value >= 0 && value <= 255
@@ -365,9 +388,7 @@ mmix_const_ok_for_letter_p (value, c)
 /* CONST_DOUBLE_OK_FOR_LETTER_P.  */
 
 int
-mmix_const_double_ok_for_letter_p (value, c)
-     rtx value;
-     int c;
+mmix_const_double_ok_for_letter_p (rtx value, int c)
 {
   return
     (c == 'G' ? value == CONST0_RTX (GET_MODE (value))
@@ -379,10 +400,7 @@ mmix_const_double_ok_for_letter_p (value, c)
    CONST_INT:s, but rather often as CONST_DOUBLE:s.  */
 
 int
-mmix_extra_constraint (x, c, strict)
-     rtx x;
-     int c;
-     int strict;
+mmix_extra_constraint (rtx x, int c, int strict)
 {
   HOST_WIDEST_INT value;
 
@@ -434,8 +452,7 @@ mmix_extra_constraint (x, c, strict)
 /* DYNAMIC_CHAIN_ADDRESS.  */
 
 rtx
-mmix_dynamic_chain_address (frame)
-     rtx frame;
+mmix_dynamic_chain_address (rtx frame)
 {
   /* FIXME: the frame-pointer is stored at offset -8 from the current
      frame-pointer.  Unfortunately, the caller assumes that a
@@ -447,7 +464,7 @@ mmix_dynamic_chain_address (frame)
 /* STARTING_FRAME_OFFSET.  */
 
 int
-mmix_starting_frame_offset ()
+mmix_starting_frame_offset (void)
 {
   /* The old frame pointer is in the slot below the new one, so
      FIRST_PARM_OFFSET does not need to depend on whether the
@@ -464,9 +481,7 @@ mmix_starting_frame_offset ()
 /* RETURN_ADDR_RTX.  */
 
 rtx
-mmix_return_addr_rtx (count, frame)
-     int count;
-     rtx frame ATTRIBUTE_UNUSED;
+mmix_return_addr_rtx (int count, rtx frame ATTRIBUTE_UNUSED)
 {
   return count == 0
     ? (MMIX_CFUN_NEEDS_SAVED_EH_RETURN_ADDRESS
@@ -482,7 +497,7 @@ mmix_return_addr_rtx (count, frame)
 /* SETUP_FRAME_ADDRESSES.  */
 
 void
-mmix_setup_frame_addresses ()
+mmix_setup_frame_addresses (void)
 {
   /* Nothing needed at the moment.  */
 }
@@ -491,9 +506,7 @@ mmix_setup_frame_addresses ()
    pointer.  Used to eliminate the frame pointer.  */
 
 int
-mmix_initial_elimination_offset (fromreg, toreg)
-     int fromreg;
-     int toreg;
+mmix_initial_elimination_offset (int fromreg, int toreg)
 {
   int regno;
   int fp_sp_offset
@@ -546,12 +559,11 @@ mmix_initial_elimination_offset (fromreg, toreg)
    one that must go on stack.  */
 
 rtx
-mmix_function_arg (argsp, mode, type, named, incoming)
-     const CUMULATIVE_ARGS * argsp;
-     enum machine_mode mode;
-     tree type;
-     int named ATTRIBUTE_UNUSED;
-     int incoming;
+mmix_function_arg (const CUMULATIVE_ARGS *argsp,
+		   enum machine_mode mode,
+		   tree type,
+		   int named ATTRIBUTE_UNUSED,
+		   int incoming)
 {
   /* Last-argument marker.  */
   if (type == void_type_node)
@@ -579,11 +591,10 @@ mmix_function_arg (argsp, mode, type, named, incoming)
    everything that goes by value.  */
 
 int
-mmix_function_arg_pass_by_reference (argsp, mode, type, named)
-     const CUMULATIVE_ARGS * argsp;
-     enum machine_mode mode;
-     tree type;
-     int named ATTRIBUTE_UNUSED;
+mmix_function_arg_pass_by_reference (const CUMULATIVE_ARGS *argsp,
+				     enum machine_mode mode,
+				     tree type,
+				     int named ATTRIBUTE_UNUSED)
 {
   /* FIXME: Check: I'm not sure the MUST_PASS_IN_STACK check is
      necessary.  */
@@ -598,9 +609,7 @@ mmix_function_arg_pass_by_reference (argsp, mode, type, named)
    passed, and 0 otherwise.  */
 
 int
-mmix_function_arg_regno_p (regno, incoming)
-     int regno;
-     int incoming;
+mmix_function_arg_regno_p (int regno, int incoming)
 {
   int first_arg_regnum
     = incoming ? MMIX_FIRST_INCOMING_ARG_REGNUM : MMIX_FIRST_ARG_REGNUM;
@@ -612,9 +621,7 @@ mmix_function_arg_regno_p (regno, incoming)
 /* FUNCTION_OUTGOING_VALUE.  */
 
 rtx
-mmix_function_outgoing_value (valtype, func)
-     tree valtype;
-     tree func ATTRIBUTE_UNUSED;
+mmix_function_outgoing_value (tree valtype, tree func ATTRIBUTE_UNUSED)
 {
   enum machine_mode mode = TYPE_MODE (valtype);
   enum machine_mode cmode;
@@ -655,7 +662,7 @@ mmix_function_outgoing_value (valtype, func)
   vec[nregs - 1]
     = gen_rtx_EXPR_LIST (VOIDmode,
 			 gen_rtx_REG (cmode, first_val_regnum + nregs - 1),
-			 GEN_INT (0));
+			 const0_rtx);
 
   return gen_rtx_PARALLEL (VOIDmode, gen_rtvec_v (nregs, vec));
 }
@@ -663,8 +670,7 @@ mmix_function_outgoing_value (valtype, func)
 /* FUNCTION_VALUE_REGNO_P.  */
 
 int
-mmix_function_value_regno_p (regno)
-     int regno;
+mmix_function_value_regno_p (int regno)
 {
   return regno == MMIX_RETURN_VALUE_REGNUM;
 }
@@ -672,8 +678,7 @@ mmix_function_value_regno_p (regno)
 /* EH_RETURN_DATA_REGNO. */
 
 int
-mmix_eh_return_data_regno (n)
-     int n ATTRIBUTE_UNUSED;
+mmix_eh_return_data_regno (int n)
 {
   if (n >= 0 && n < 4)
     return MMIX_EH_RETURN_DATA_REGNO_START + n;
@@ -684,7 +689,7 @@ mmix_eh_return_data_regno (n)
 /* EH_RETURN_STACKADJ_RTX. */
 
 rtx
-mmix_eh_return_stackadj_rtx ()
+mmix_eh_return_stackadj_rtx (void)
 {
   return gen_rtx_REG (Pmode, MMIX_EH_RETURN_STACKADJ_REGNUM);
 }
@@ -692,18 +697,16 @@ mmix_eh_return_stackadj_rtx ()
 /* EH_RETURN_HANDLER_RTX.  */
 
 rtx
-mmix_eh_return_handler_rtx ()
+mmix_eh_return_handler_rtx (void)
 {
-  return
-    gen_rtx_REG (Pmode, MMIX_INCOMING_RETURN_ADDRESS_REGNUM);
+  return gen_rtx_REG (Pmode, MMIX_INCOMING_RETURN_ADDRESS_REGNUM);
 }
 
 /* ASM_PREFERRED_EH_DATA_FORMAT. */
 
 int
-mmix_asm_preferred_eh_data_format (code, global)
-     int code ATTRIBUTE_UNUSED;
-     int global ATTRIBUTE_UNUSED;
+mmix_asm_preferred_eh_data_format (int code ATTRIBUTE_UNUSED,
+				   int global ATTRIBUTE_UNUSED)
 {
   /* This is the default (was at 2001-07-20).  Revisit when needed.  */
   return DW_EH_PE_absptr;
@@ -711,12 +714,11 @@ mmix_asm_preferred_eh_data_format (code, global)
 
 /* Make a note that we've seen the beginning of the prologue.  This
    matters to whether we'll translate register numbers as calculated by
-   mmix_machine_dependent_reorg.  */
+   mmix_reorg.  */
 
 static void
-mmix_target_asm_function_prologue (stream, framesize)
-     FILE *stream ATTRIBUTE_UNUSED;
-     HOST_WIDE_INT framesize ATTRIBUTE_UNUSED;
+mmix_target_asm_function_prologue (FILE *stream ATTRIBUTE_UNUSED,
+				   HOST_WIDE_INT framesize ATTRIBUTE_UNUSED)
 {
   cfun->machine->in_prologue = 1;
 }
@@ -724,20 +726,17 @@ mmix_target_asm_function_prologue (stream, framesize)
 /* Make a note that we've seen the end of the prologue.  */
 
 static void
-mmix_target_asm_function_end_prologue (stream)
-     FILE *stream ATTRIBUTE_UNUSED;
+mmix_target_asm_function_end_prologue (FILE *stream ATTRIBUTE_UNUSED)
 {
   cfun->machine->in_prologue = 0;
 }
 
-/* MACHINE_DEPENDENT_REORG.
-   No actual rearrangements done here; just virtually by calculating the
-   highest saved stack register number used to modify the register numbers
-   at output time.  */
+/* Implement TARGET_MACHINE_DEPENDENT_REORG.  No actual rearrangements
+   done here; just virtually by calculating the highest saved stack
+   register number used to modify the register numbers at output time.  */
 
-void
-mmix_machine_dependent_reorg (first)
-     rtx first ATTRIBUTE_UNUSED;
+static void
+mmix_reorg (void)
 {
   int regno;
 
@@ -777,10 +776,8 @@ mmix_machine_dependent_reorg (first)
 /* TARGET_ASM_FUNCTION_EPILOGUE.  */
 
 static void
-mmix_target_asm_function_epilogue (stream, locals_size)
-     FILE *stream;
-     HOST_WIDE_INT locals_size ATTRIBUTE_UNUSED;
-
+mmix_target_asm_function_epilogue (FILE *stream,
+				   HOST_WIDE_INT locals_size ATTRIBUTE_UNUSED)
 {
   /* Emit an \n for readability of the generated assembly.  */
   fputc ('\n', stream);
@@ -789,16 +786,15 @@ mmix_target_asm_function_epilogue (stream, locals_size)
 /* TARGET_ASM_OUTPUT_MI_THUNK.  */
 
 static void
-mmix_asm_output_mi_thunk (stream, fndecl, delta, vcall_offset, func)
-     FILE * stream;
-     tree fndecl ATTRIBUTE_UNUSED;
-     HOST_WIDE_INT delta;
-     HOST_WIDE_INT vcall_offset ATTRIBUTE_UNUSED;
-     tree func;
+mmix_asm_output_mi_thunk (FILE *stream,
+			  tree fndecl ATTRIBUTE_UNUSED,
+			  HOST_WIDE_INT delta,
+			  HOST_WIDE_INT vcall_offset ATTRIBUTE_UNUSED,
+			  tree func)
 {
-  /* If you define STRUCT_VALUE to 0, rather than use STRUCT_VALUE_REGNUM,
-     (i.e. pass location of structure to return as invisible first
-     argument) you need to tweak this code too.  */
+  /* If you define TARGET_STRUCT_VALUE_RTX that returns 0 (i.e. pass
+     location of structure to return as invisible first argument), you
+     need to tweak this code too.  */
   const char *regname = reg_names[MMIX_FIRST_INCOMING_ARG_REGNUM];
 
   if (delta >= 0 && delta < 65536)
@@ -819,23 +815,22 @@ mmix_asm_output_mi_thunk (stream, fndecl, delta, vcall_offset, func)
 /* FUNCTION_PROFILER.  */
 
 void
-mmix_function_profiler (stream, labelno)
-     FILE *stream ATTRIBUTE_UNUSED;
-     int labelno ATTRIBUTE_UNUSED;
+mmix_function_profiler (FILE *stream ATTRIBUTE_UNUSED,
+			int labelno ATTRIBUTE_UNUSED)
 {
   sorry ("function_profiler support for MMIX");
 }
 
-/* SETUP_INCOMING_VARARGS.  */
+/* Worker function for TARGET_SETUP_INCOMING_VARARGS.  For the moment,
+   let's stick to pushing argument registers on the stack.  Later, we
+   can parse all arguments in registers, to improve performance.  */
 
-void
-mmix_setup_incoming_varargs (args_so_farp, mode, vartype, pretend_sizep,
-			     second_time)
-     CUMULATIVE_ARGS * args_so_farp;
-     enum machine_mode mode;
-     tree vartype;
-     int * pretend_sizep;
-     int second_time ATTRIBUTE_UNUSED;
+static void
+mmix_setup_incoming_varargs (CUMULATIVE_ARGS *args_so_farp,
+			     enum machine_mode mode,
+			     tree vartype,
+			     int *pretend_sizep,
+			     int second_time ATTRIBUTE_UNUSED)
 {
   /* The last named variable has been handled, but
      args_so_farp has not been advanced for it.  */
@@ -843,7 +838,7 @@ mmix_setup_incoming_varargs (args_so_farp, mode, vartype, pretend_sizep,
     *pretend_sizep = (MMIX_MAX_ARGS_IN_REGS - (args_so_farp->regs + 1)) * 8;
 
   /* We assume that one argument takes up one register here.  That should
-     be true until we start messing with multi-reg parameters.   */
+     be true until we start messing with multi-reg parameters.  */
   if ((7 + (MMIX_FUNCTION_ARG_SIZE (mode, vartype))) / 8 != 1)
     internal_error ("MMIX Internal: Last named vararg would not fit in a register");
 }
@@ -856,9 +851,7 @@ mmix_setup_incoming_varargs (args_so_farp, mode, vartype, pretend_sizep,
    pass-by-reference, then perform an indirection.  */
 
 rtx
-mmix_expand_builtin_va_arg (valist, type)
-     tree valist;
-     tree type;
+mmix_expand_builtin_va_arg (tree valist, tree type)
 {
   tree ptr_size = size_int (BITS_PER_WORD / BITS_PER_UNIT);
   tree addr_tree, type_size = NULL;
@@ -963,8 +956,7 @@ int mmix_trampoline_size = 32;
 /* TRAMPOLINE_TEMPLATE.  */
 
 void
-mmix_trampoline_template (stream)
-     FILE * stream;
+mmix_trampoline_template (FILE *stream)
 {
   /* Read a value into the static-chain register and jump somewhere.  The
      static chain is stored at offset 16, and the function address is
@@ -986,10 +978,7 @@ mmix_trampoline_template (stream)
    some day it will).  */
 
 void
-mmix_initialize_trampoline (trampaddr, fnaddr, static_chain)
-     rtx trampaddr;
-     rtx fnaddr;
-     rtx static_chain;
+mmix_initialize_trampoline (rtx trampaddr, rtx fnaddr, rtx static_chain)
 {
   emit_move_insn (gen_rtx_MEM (DImode, plus_constant (trampaddr, 16)),
 		  static_chain);
@@ -1006,8 +995,7 @@ mmix_initialize_trampoline (trampaddr, fnaddr, static_chain)
    instruction, unless TARGET_BASE_ADDRESSES.  */
 
 int
-mmix_constant_address_p (x)
-     rtx x;
+mmix_constant_address_p (rtx x)
 {
   RTX_CODE code = GET_CODE (x);
   int addend = 0;
@@ -1020,7 +1008,6 @@ mmix_constant_address_p (x)
     case SYMBOL_REF:
       return 1;
 
-    case CONSTANT_P_RTX:
     case HIGH:
       /* FIXME: Don't know how to dissect these.  Avoid them for now,
 	 except we know they're constants.  */
@@ -1070,10 +1057,9 @@ mmix_constant_address_p (x)
    Used by GO_IF_LEGITIMATE_ADDRESS.  */
 
 int
-mmix_legitimate_address (mode, x, strict_checking)
-     enum machine_mode mode ATTRIBUTE_UNUSED;
-     rtx x;
-     int strict_checking;
+mmix_legitimate_address (enum machine_mode mode ATTRIBUTE_UNUSED,
+			 rtx x,
+			 int strict_checking)
 {
 #define MMIX_REG_OK(X)							\
   ((strict_checking							\
@@ -1132,8 +1118,7 @@ mmix_legitimate_address (mode, x, strict_checking)
 /* LEGITIMATE_CONSTANT_P.  */
 
 int
-mmix_legitimate_constant_p (x)
-     rtx x;
+mmix_legitimate_constant_p (rtx x)
 {
   RTX_CODE code = GET_CODE (x);
 
@@ -1149,10 +1134,7 @@ mmix_legitimate_constant_p (x)
 /* SELECT_CC_MODE.  */
 
 enum machine_mode
-mmix_select_cc_mode (op, x, y)
-     RTX_CODE op;
-     rtx x;
-     rtx y ATTRIBUTE_UNUSED;
+mmix_select_cc_mode (RTX_CODE op, rtx x, rtx y ATTRIBUTE_UNUSED)
 {
   /* We use CCmode, CC_UNSmode, CC_FPmode, CC_FPEQmode and CC_FUNmode to
      output different compare insns.  Note that we do not check the
@@ -1179,48 +1161,33 @@ mmix_select_cc_mode (op, x, y)
 /* REVERSIBLE_CC_MODE.  */
 
 int
-mmix_reversible_cc_mode (mode)
-     enum machine_mode mode;
+mmix_reversible_cc_mode (enum machine_mode mode)
 {
   /* That is, all integer and the EQ, NE, ORDERED and UNORDERED float
      compares.  */
   return mode != CC_FPmode;
 }
 
-/* DEFAULT_RTX_COSTS.  */
+/* TARGET_RTX_COSTS.  */
 
-int
-mmix_rtx_cost_recalculated (x, code, outer_code, costp)
-     rtx x ATTRIBUTE_UNUSED;
-     RTX_CODE code ATTRIBUTE_UNUSED;
-     RTX_CODE outer_code ATTRIBUTE_UNUSED;
-     int *costp ATTRIBUTE_UNUSED;
+static bool
+mmix_rtx_costs (rtx x ATTRIBUTE_UNUSED,
+		int code ATTRIBUTE_UNUSED,
+		int outer_code ATTRIBUTE_UNUSED,
+		int *total ATTRIBUTE_UNUSED)
 {
   /* For the time being, this is just a stub and we'll accept the
      generic calculations, until we can do measurements, at least.
      Say we did not modify any calculated costs.  */
-  return 0;
-}
-
-/* ADDRESS_COST.  */
-
-int
-mmix_address_cost (addr)
-     rtx addr ATTRIBUTE_UNUSED;
-{
-  /* There's no difference in the address costs and we have lots of
-     registers.  Some targets use constant 0, many others use 1 to say
-     this.  Let's start with 1.  */
-  return 1;
+  return false;
 }
 
 /* REGISTER_MOVE_COST.  */
 
 int
-mmix_register_move_cost (mode, from, to)
-     enum machine_mode mode ATTRIBUTE_UNUSED;
-     enum reg_class from;
-     enum reg_class to;
+mmix_register_move_cost (enum machine_mode mode ATTRIBUTE_UNUSED,
+			 enum reg_class from,
+			 enum reg_class to)
 {
   return (from == GENERAL_REGS && from == to) ? 2 : 3;
 }
@@ -1232,15 +1199,13 @@ mmix_register_move_cost (mode, from, to)
 /* DATA_SECTION_ASM_OP.  */
 
 const char *
-mmix_data_section_asm_op ()
+mmix_data_section_asm_op (void)
 {
   return "\t.data ! mmixal:= 8H LOC 9B";
 }
 
 static void
-mmix_encode_section_info (decl, first)
-     tree decl;
-     int first;
+mmix_encode_section_info (tree decl, rtx rtl, int first)
 {
   /* Test for an external declaration, and do nothing if it is one.  */
   if ((TREE_CODE (decl) == VAR_DECL
@@ -1259,7 +1224,7 @@ mmix_encode_section_info (decl, first)
 	 means that when -mtoplevel-symbols is in use, we can just handle
 	 well-behaved ISO-compliant code.  */
 
-      const char *str = XSTR (XEXP (DECL_RTL (decl), 0), 0);
+      const char *str = XSTR (XEXP (rtl, 0), 0);
       int len = strlen (str);
       char *newstr;
 
@@ -1268,7 +1233,7 @@ mmix_encode_section_info (decl, first)
 
       strcpy (newstr + 1, str);
       *newstr = '@';
-      XSTR (XEXP (DECL_RTL (decl), 0), 0) = newstr;
+      XSTR (XEXP (rtl, 0), 0) = newstr;
     }
 
   /* Set SYMBOL_REF_FLAG for things that we want to access with GETA.  We
@@ -1281,16 +1246,11 @@ mmix_encode_section_info (decl, first)
 	  && !TREE_SIDE_EFFECTS (decl)
 	  && (!DECL_INITIAL (decl)
 	      || TREE_CONSTANT (DECL_INITIAL (decl)))))
-    {
-      rtx rtl = (TREE_CODE_CLASS (TREE_CODE (decl)) != 'd'
-                 ? TREE_CST_RTL (decl) : DECL_RTL (decl));
-      SYMBOL_REF_FLAG (XEXP (rtl, 0)) = 1;
-    }
+    SYMBOL_REF_FLAG (XEXP (rtl, 0)) = 1;
 }
 
 static const char *
-mmix_strip_name_encoding (name)
-     const char *name;
+mmix_strip_name_encoding (const char *name)
 {
   for (; (*name == '@' || *name == '*'); name++)
     ;
@@ -1298,38 +1258,33 @@ mmix_strip_name_encoding (name)
   return name;
 }
 
-/* ASM_FILE_START.  */
+/* TARGET_ASM_FILE_START.
+   We just emit a little comment for the time being.  */
 
-void
-mmix_asm_file_start (stream)
-     FILE * stream;
+static void
+mmix_file_start (void)
 {
-  /* We just emit a little comment for the time being.  FIXME: Perhaps add
-     -mstandalone and some segment and prefix setup here.  */
-  ASM_OUTPUT_SOURCE_FILENAME (stream, main_input_filename);
+  default_file_start ();
 
-  fprintf (stream, "! mmixal:= 8H LOC Data_Section\n");
+  fputs ("! mmixal:= 8H LOC Data_Section\n", asm_out_file);
 
-  /* Make sure each file starts with the text section. */
+  /* Make sure each file starts with the text section.  */
   text_section ();
 }
 
-/* ASM_FILE_END.  */
+/* TARGET_ASM_FILE_END.  */
 
-void
-mmix_asm_file_end (stream)
-     FILE * stream ATTRIBUTE_UNUSED;
+static void
+mmix_file_end (void)
 {
-  /* Make sure each file ends with the data section. */
+  /* Make sure each file ends with the data section.  */
   data_section ();
 }
 
 /* ASM_OUTPUT_SOURCE_FILENAME.  */
 
 void
-mmix_asm_output_source_filename (stream, name)
-     FILE * stream;
-     const char * name;
+mmix_asm_output_source_filename (FILE *stream, const char *name)
 {
   fprintf (stream, "# 1 ");
   OUTPUT_QUOTED_STRING (stream, name);
@@ -1339,10 +1294,7 @@ mmix_asm_output_source_filename (stream, name)
 /* OUTPUT_QUOTED_STRING.  */
 
 void
-mmix_output_quoted_string (stream, string, length)
-     FILE * stream;
-     const char * string;
-     int length;
+mmix_output_quoted_string (FILE *stream, const char *string, int length)
 {
   const char * string_end = string + length;
   static const char *const unwanted_chars = "\"[]\\";
@@ -1386,9 +1338,7 @@ mmix_output_quoted_string (stream, string, length)
 /* ASM_OUTPUT_SOURCE_LINE.  */
 
 void
-mmix_asm_output_source_line  (stream, lineno)
-     FILE * stream;
-     int lineno;
+mmix_asm_output_source_line  (FILE *stream, int lineno)
 {
   fprintf (stream, "# %d ", lineno);
   OUTPUT_QUOTED_STRING (stream, main_input_filename);
@@ -1400,10 +1350,7 @@ mmix_asm_output_source_line  (stream, lineno)
    CONST_DOUBLEs.  */
 
 static bool
-mmix_assemble_integer (x, size, aligned_p)
-     rtx x;
-     unsigned int size;
-     int aligned_p;
+mmix_assemble_integer (rtx x, unsigned int size, int aligned_p)
 {
   if (aligned_p)
     switch (size)
@@ -1464,10 +1411,7 @@ mmix_assemble_integer (x, size, aligned_p)
 /* ASM_OUTPUT_ASCII.  */
 
 void
-mmix_asm_output_ascii (stream, string, length)
-     FILE *stream;
-     const char *string;
-     int length;
+mmix_asm_output_ascii (FILE *stream, const char *string, int length)
 {
   while (length > 0)
     {
@@ -1483,11 +1427,10 @@ mmix_asm_output_ascii (stream, string, length)
 /* ASM_OUTPUT_ALIGNED_COMMON.  */
 
 void
-mmix_asm_output_aligned_common (stream, name, size, align)
-     FILE *stream;
-     const char *name;
-     int size;
-     int align;
+mmix_asm_output_aligned_common (FILE *stream,
+				const char *name,
+				int size,
+				int align)
 {
   /* This is mostly the elfos.h one.  There doesn't seem to be a way to
      express this in a mmixal-compatible way.  */
@@ -1500,11 +1443,10 @@ mmix_asm_output_aligned_common (stream, name, size, align)
 /* ASM_OUTPUT_ALIGNED_LOCAL.  */
 
 void
-mmix_asm_output_aligned_local (stream, name, size, align)
-     FILE * stream;
-     const char * name;
-     int size;
-     int align;
+mmix_asm_output_aligned_local (FILE *stream,
+			       const char *name,
+			       int size,
+			       int align)
 {
   data_section ();
 
@@ -1516,9 +1458,7 @@ mmix_asm_output_aligned_local (stream, name, size, align)
 /* ASM_OUTPUT_LABEL.  */
 
 void
-mmix_asm_output_label (stream, name)
-     FILE *stream;
-     const char * name;
+mmix_asm_output_label (FILE *stream, const char *name)
 {
   assemble_name (stream, name);
   fprintf (stream, "\tIS @\n");
@@ -1527,11 +1467,10 @@ mmix_asm_output_label (stream, name)
 /* ASM_DECLARE_REGISTER_GLOBAL.  */
 
 void
-mmix_asm_declare_register_global (stream, decl, regno, name)
-     FILE *stream ATTRIBUTE_UNUSED;
-     tree decl ATTRIBUTE_UNUSED;
-     int regno ATTRIBUTE_UNUSED;
-     const char *name ATTRIBUTE_UNUSED;
+mmix_asm_declare_register_global (FILE *stream ATTRIBUTE_UNUSED,
+				  tree decl ATTRIBUTE_UNUSED,
+				  int regno ATTRIBUTE_UNUSED,
+				  const char *name ATTRIBUTE_UNUSED)
 {
   /* Nothing to do here, but there *will* be, therefore the framework is
      here.  */
@@ -1540,9 +1479,8 @@ mmix_asm_declare_register_global (stream, decl, regno, name)
 /* ASM_WEAKEN_LABEL.  */
 
 void
-mmix_asm_weaken_label (stream, name)
-     FILE * stream ATTRIBUTE_UNUSED;
-     const char * name ATTRIBUTE_UNUSED;
+mmix_asm_weaken_label (FILE *stream ATTRIBUTE_UNUSED,
+		       const char *name ATTRIBUTE_UNUSED)
 {
   fprintf (stream, "\t.weak ");
   assemble_name (stream, name);
@@ -1552,8 +1490,7 @@ mmix_asm_weaken_label (stream, name)
 /* MAKE_DECL_ONE_ONLY.  */
 
 void
-mmix_make_decl_one_only (decl)
-     tree decl;
+mmix_make_decl_one_only (tree decl)
 {
   DECL_WEAK (decl) = 1;
 }
@@ -1562,9 +1499,7 @@ mmix_make_decl_one_only (decl)
    Strip GCC's '*' and our own '@'.  No order is assumed.  */
 
 void
-mmix_asm_output_labelref (stream, name)
-     FILE *stream;
-     const char *name;
+mmix_asm_output_labelref (FILE *stream, const char *name)
 {
   int is_extern = 1;
 
@@ -1577,24 +1512,10 @@ mmix_asm_output_labelref (stream, name)
 	       name);
 }
 
-/* ASM_OUTPUT_INTERNAL_LABEL.  */
-
-void
-mmix_asm_output_internal_label (stream, name, num)
-     FILE * stream;
-     const char * name;
-     int num;
-{
-  fprintf (stream, "%s:%d\tIS @\n", name, num);
-}
-
 /* ASM_OUTPUT_DEF.  */
 
 void
-mmix_asm_output_def (stream, name, value)
-     FILE * stream;
-     const char * name;
-     const char * value;
+mmix_asm_output_def (FILE *stream, const char *name, const char *value)
 {
   assemble_name (stream, name);
   fprintf (stream, "\tIS ");
@@ -1605,10 +1526,7 @@ mmix_asm_output_def (stream, name, value)
 /* PRINT_OPERAND.  */
 
 void
-mmix_print_operand (stream, x, code)
-     FILE * stream;
-     rtx x;
-     int code;
+mmix_print_operand (FILE *stream, rtx x, int code)
 {
   /* When we add support for different codes later, we can, when needed,
      drop through to the main handler with a modified operand.  */
@@ -1835,8 +1753,7 @@ mmix_print_operand (stream, x, code)
 /* PRINT_OPERAND_PUNCT_VALID_P.  */
 
 int
-mmix_print_operand_punct_valid_p (code)
-     int code ATTRIBUTE_UNUSED;
+mmix_print_operand_punct_valid_p (int code ATTRIBUTE_UNUSED)
 {
   /* A '+' is used for branch prediction, similar to other ports.  */
   return code == '+'
@@ -1847,9 +1764,7 @@ mmix_print_operand_punct_valid_p (code)
 /* PRINT_OPERAND_ADDRESS.  */
 
 void
-mmix_print_operand_address (stream, x)
-     FILE *stream;
-     rtx x;
+mmix_print_operand_address (FILE *stream, rtx x)
 {
   if (REG_P (x))
     {
@@ -1894,9 +1809,7 @@ mmix_print_operand_address (stream, x)
 /* ASM_OUTPUT_REG_PUSH.  */
 
 void
-mmix_asm_output_reg_push (stream, regno)
-     FILE * stream;
-     int regno;
+mmix_asm_output_reg_push (FILE *stream, int regno)
 {
   fprintf (stream, "\tSUBU %s,%s,8\n\tSTOU %s,%s,0\n",
 	   reg_names[MMIX_STACK_POINTER_REGNUM],
@@ -1908,9 +1821,7 @@ mmix_asm_output_reg_push (stream, regno)
 /* ASM_OUTPUT_REG_POP.  */
 
 void
-mmix_asm_output_reg_pop (stream, regno)
-     FILE * stream;
-     int regno;
+mmix_asm_output_reg_pop (FILE *stream, int regno)
 {
   fprintf (stream, "\tLDOU %s,%s,0\n\tINCL %s,8\n",
 	   reg_names[MMIX_OUTPUT_REGNO (regno)],
@@ -1921,11 +1832,10 @@ mmix_asm_output_reg_pop (stream, regno)
 /* ASM_OUTPUT_ADDR_DIFF_ELT.  */
 
 void
-mmix_asm_output_addr_diff_elt (stream, body, value, rel)
-     FILE *stream;
-     rtx body ATTRIBUTE_UNUSED;
-     int value;
-     int rel;
+mmix_asm_output_addr_diff_elt (FILE *stream,
+			       rtx body ATTRIBUTE_UNUSED,
+			       int value,
+			       int rel)
 {
   fprintf (stream, "\tTETRA L%d-L%d\n", value, rel);
 }
@@ -1933,9 +1843,7 @@ mmix_asm_output_addr_diff_elt (stream, body, value, rel)
 /* ASM_OUTPUT_ADDR_VEC_ELT.  */
 
 void
-mmix_asm_output_addr_vec_elt (stream, value)
-     FILE *stream;
-     int value;
+mmix_asm_output_addr_vec_elt (FILE *stream, int value)
 {
   fprintf (stream, "\tOCTA L:%d\n", value);
 }
@@ -1943,9 +1851,7 @@ mmix_asm_output_addr_vec_elt (stream, value)
 /* ASM_OUTPUT_SKIP.  */
 
 void
-mmix_asm_output_skip (stream, nbytes)
-     FILE *stream;
-     int nbytes;
+mmix_asm_output_skip (FILE *stream, int nbytes)
 {
   fprintf (stream, "\tLOC @+%d\n", nbytes);
 }
@@ -1953,9 +1859,7 @@ mmix_asm_output_skip (stream, nbytes)
 /* ASM_OUTPUT_ALIGN.  */
 
 void
-mmix_asm_output_align (stream, power)
-     FILE *stream;
-     int power;
+mmix_asm_output_align (FILE *stream, int power)
 {
   /* We need to record the needed alignment of this section in the object,
      so we have to output an alignment directive.  Use a .p2align (not
@@ -1970,8 +1874,7 @@ mmix_asm_output_align (stream, power)
 /* DBX_REGISTER_NUMBER.  */
 
 int
-mmix_dbx_register_number (regno)
-     int regno;
+mmix_dbx_register_number (int regno)
 {
   /* Adjust the register number to the one it will be output as, dammit.
      It'd be nice if we could check the assumption that we're filling a
@@ -1989,15 +1892,13 @@ mmix_dbx_register_number (regno)
 
 /* End of target macro support functions.
 
-   Now MMIX's own functions.  First the exported ones.  */
+   Now the MMIX port's own functions.  First the exported ones.  */
 
 /* Wrapper for get_hard_reg_initial_val since integrate.h isn't included
    from insn-emit.c.  */
 
 rtx
-mmix_get_hard_reg_initial_val (mode, regno)
-     enum machine_mode mode;
-     int regno;
+mmix_get_hard_reg_initial_val (enum machine_mode mode, int regno)
 {
   return get_hard_reg_initial_val (mode, regno);
 }
@@ -2006,7 +1907,7 @@ mmix_get_hard_reg_initial_val (mode, regno)
    "POP %d,0" should be used even within the function.  */
 
 int
-mmix_use_simple_return ()
+mmix_use_simple_return (void)
 {
   int regno;
 
@@ -2043,7 +1944,7 @@ mmix_use_simple_return ()
 /* Expands the function prologue into RTX.  */
 
 void
-mmix_expand_prologue ()
+mmix_expand_prologue (void)
 {
   HOST_WIDE_INT locals_size = get_frame_size ();
   int regno;
@@ -2278,7 +2179,7 @@ mmix_expand_prologue ()
 /* Expands the function epilogue into RTX.  */
 
 void
-mmix_expand_epilogue ()
+mmix_expand_epilogue (void)
 {
   HOST_WIDE_INT locals_size = get_frame_size ();
   int regno;
@@ -2401,11 +2302,10 @@ mmix_expand_epilogue ()
    first insn and after the last insn is wanted.  */
 
 void
-mmix_output_register_setting (stream, regno, value, do_begin_end)
-     FILE *stream;
-     int regno;
-     HOST_WIDEST_INT value;
-     int do_begin_end;
+mmix_output_register_setting (FILE *stream,
+			      int regno,
+			      HOST_WIDEST_INT value,
+			      int do_begin_end)
 {
   if (do_begin_end)
     fprintf (stream, "\t");
@@ -2513,8 +2413,7 @@ mmix_output_register_setting (stream, regno, value, do_begin_end)
    else return 0.  */
 
 int
-mmix_shiftable_wyde_value (value)
-     unsigned HOST_WIDEST_INT value;
+mmix_shiftable_wyde_value (unsigned HOST_WIDEST_INT value)
 {
   /* Shift by 16 bits per group, stop when we've found two groups with
      nonzero bits.  */
@@ -2540,9 +2439,7 @@ mmix_shiftable_wyde_value (value)
 /* True if this is an address_operand or a symbolic operand.  */
 
 int
-mmix_symbolic_or_address_operand (op, mode)
-     rtx op;
-     enum machine_mode mode;
+mmix_symbolic_or_address_operand (rtx op, enum machine_mode mode)
 {
   switch (GET_CODE (op))
     {
@@ -2557,7 +2454,7 @@ mmix_symbolic_or_address_operand (op, mode)
 	      || (GET_CODE (XEXP (op, 1)) == CONST_DOUBLE
 		  && GET_MODE (XEXP (op, 1)) == VOIDmode)))
 	return 1;
-      /* FALLTHROUGH */
+      /* Fall through.  */
     default:
       return address_operand (op, mode);
     }
@@ -2568,9 +2465,7 @@ mmix_symbolic_or_address_operand (op, mode)
    doesn't seem to be worth it at the moment.  */
 
 int
-mmix_reg_or_constant_operand (op, mode)
-     rtx op;
-     enum machine_mode mode;
+mmix_reg_or_constant_operand (rtx op, enum machine_mode mode)
 {
   return register_operand (op, mode)
     || (GET_CODE (op) == CONST_DOUBLE && GET_MODE (op) == VOIDmode)
@@ -2580,9 +2475,7 @@ mmix_reg_or_constant_operand (op, mode)
 /* True if this is a register with a condition-code mode.  */
 
 int
-mmix_reg_cc_operand (op, mode)
-     rtx op;
-     enum machine_mode mode;
+mmix_reg_cc_operand (rtx op, enum machine_mode mode)
 {
   if (mode == VOIDmode)
     mode = GET_MODE (op);
@@ -2597,16 +2490,14 @@ mmix_reg_cc_operand (op, mode)
    replaced by (reg).  */
 
 int
-mmix_foldable_comparison_operator (op, mode)
-     rtx op;
-     enum machine_mode mode;
+mmix_foldable_comparison_operator (rtx op, enum machine_mode mode)
 {
   RTX_CODE code = GET_CODE (op);
 
   if (mode == VOIDmode)
     mode = GET_MODE (op);
 
-  if (mode == VOIDmode && GET_RTX_CLASS (GET_CODE (op)) == '<')
+  if (mode == VOIDmode && COMPARISON_P (op))
     mode = GET_MODE (XEXP (op, 0));
 
   return ((mode == CCmode || mode == DImode)
@@ -2624,9 +2515,7 @@ mmix_foldable_comparison_operator (op, mode)
    code with -ffast-math (gcc.dg/20001228-1.c).  */
 
 int
-mmix_comparison_operator (op, mode)
-     rtx op;
-     enum machine_mode mode;
+mmix_comparison_operator (rtx op, enum machine_mode mode)
 {
   RTX_CODE code = GET_CODE (op);
 
@@ -2636,13 +2525,13 @@ mmix_comparison_operator (op, mode)
     mode = GET_MODE (op);
 
   /* Get the mode from the first operand if we don't have one.  */
-  if (mode == VOIDmode && GET_RTX_CLASS (GET_CODE (op)) == '<')
+  if (mode == VOIDmode && COMPARISON_P (op))
     mode = GET_MODE (XEXP (op, 0));
 
   /* FIXME: This needs to be kept in sync with the tables in
      mmix_output_condition.  */
   return
-    (mode == VOIDmode && GET_RTX_CLASS (GET_CODE (op)) == '<')
+    (mode == VOIDmode && COMPARISON_P (op))
     || (mode == CC_FUNmode
 	&& (code == ORDERED || code == UNORDERED))
     || (mode == CC_FPmode
@@ -2662,9 +2551,7 @@ mmix_comparison_operator (op, mode)
 /* True if this is a register or 0 (int or float).  */
 
 int
-mmix_reg_or_0_operand (op, mode)
-     rtx op;
-     enum machine_mode mode;
+mmix_reg_or_0_operand (rtx op, enum machine_mode mode)
 {
   /* FIXME: Is mode calculation necessary and correct?  */
   return
@@ -2675,9 +2562,7 @@ mmix_reg_or_0_operand (op, mode)
 /* True if this is a register or an int 0..255.  */
 
 int
-mmix_reg_or_8bit_operand (op, mode)
-     rtx op;
-     enum machine_mode mode;
+mmix_reg_or_8bit_operand (rtx op, enum machine_mode mode)
 {
   return register_operand (op, mode)
     || (GET_CODE (op) == CONST_INT
@@ -2689,10 +2574,7 @@ mmix_reg_or_8bit_operand (op, mode)
    is the comparison of mode is CC-somethingmode.  */
 
 int
-mmix_valid_comparison (code, mode, op)
-     RTX_CODE code;
-     enum machine_mode mode;
-     rtx op;
+mmix_valid_comparison (RTX_CODE code, enum machine_mode mode, rtx op)
 {
   if (mode == VOIDmode && op != NULL_RTX)
     mode = GET_MODE (op);
@@ -2721,9 +2603,7 @@ mmix_valid_comparison (code, mode, op)
    NULL_RTX if this is not a valid comparison.  */
 
 rtx
-mmix_gen_compare_reg (code, x, y)
-     RTX_CODE code;
-     rtx x, y;
+mmix_gen_compare_reg (RTX_CODE code, rtx x, rtx y)
 {
   enum machine_mode ccmode = SELECT_CC_MODE (code, x, y);
   rtx cc_reg;
@@ -2758,8 +2638,7 @@ mmix_gen_compare_reg (code, x, y)
 /* Local (static) helper functions.  */
 
 static void
-mmix_emit_sp_add (offset)
-     HOST_WIDE_INT offset;
+mmix_emit_sp_add (HOST_WIDE_INT offset)
 {
   rtx insn;
 
@@ -2803,10 +2682,9 @@ mmix_emit_sp_add (offset)
    wyde.  The type of operator is passed as an asm output modifier.  */
 
 static void
-mmix_output_shiftvalue_op_from_str (stream, mainop, value)
-     FILE *stream;
-     const char *mainop;
-     HOST_WIDEST_INT value;
+mmix_output_shiftvalue_op_from_str (FILE *stream,
+				    const char *mainop,
+				    HOST_WIDEST_INT value)
 {
   static const char *const op_part[] = {"L", "ML", "MH", "H"};
   int i;
@@ -2837,10 +2715,7 @@ mmix_output_shiftvalue_op_from_str (stream, mainop, value)
 /* Print a 64-bit value, optionally prefixed by assembly pseudo.  */
 
 static void
-mmix_output_octa (stream, value, do_begin_end)
-     FILE *stream;
-     HOST_WIDEST_INT value;
-     int do_begin_end;
+mmix_output_octa (FILE *stream, HOST_WIDEST_INT value, int do_begin_end)
 {
   /* Snipped from final.c:output_addr_const.  We need to avoid the
      presumed universal "0x" prefix.  We can do it by replacing "0x" with
@@ -2874,9 +2749,7 @@ mmix_output_octa (stream, value, do_begin_end)
    be output with an operand).  */
 
 static void
-mmix_output_shifted_value (stream, value)
-     FILE * stream;
-     HOST_WIDEST_INT value;
+mmix_output_shifted_value (FILE *stream, HOST_WIDEST_INT value)
 {
   int i;
 
@@ -2888,13 +2761,13 @@ mmix_output_shifted_value (stream, value)
     }
 
   for (i = 0; i < 4; i++)
-  {
-    /* We know we're through when we find one-bits in the low 16 bits.  */
-    if (value & 0xffff)
     {
-      fprintf (stream, "#%x", (int) (value & 0xffff));
-      return;
-    }
+      /* We know we're through when we find one-bits in the low 16 bits.  */
+      if (value & 0xffff)
+	{
+	  fprintf (stream, "#%x", (int) (value & 0xffff));
+	  return;
+	}
 
     value >>= 16;
   }
@@ -2912,10 +2785,7 @@ mmix_output_shifted_value (stream, value)
    same as swapping the arguments).  */
 
 static void
-mmix_output_condition (stream, x, reversed)
-     FILE *stream;
-     rtx x;
-     int reversed;
+mmix_output_condition (FILE *stream, rtx x, int reversed)
 {
   struct cc_conv
   {
@@ -3020,8 +2890,7 @@ mmix_output_condition (stream, x, reversed)
 /* Return the bit-value for a const_int or const_double.  */
 
 static HOST_WIDEST_INT
-mmix_intval (x)
-     rtx x;
+mmix_intval (rtx x)
 {
   unsigned HOST_WIDEST_INT retval;
 
@@ -3086,6 +2955,15 @@ mmix_intval (x)
     }
 
   fatal_insn ("MMIX Internal: This is not a constant:", x);
+}
+
+/* Worker function for TARGET_STRUCT_VALUE_RTX.  */
+
+static rtx
+mmix_struct_value_rtx (tree fntype ATTRIBUTE_UNUSED,
+		       int incoming ATTRIBUTE_UNUSED)
+{
+  return gen_rtx_REG (Pmode, MMIX_STRUCT_VALUE_REGNUM);
 }
 
 /*

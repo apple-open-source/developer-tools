@@ -35,19 +35,21 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package javax.swing.table;
 
-// Imports
-import java.beans.*;
-import java.io.*;
-import javax.swing.event.*;
+import java.beans.PropertyChangeListener;
+import java.io.Serializable;
+import javax.swing.event.SwingPropertyChangeSupport;
 
 /**
  * TableColumn
  * @author	Andrew Selkirk
  * @version	1.0
  */
-public class TableColumn implements Serializable {
+public class TableColumn implements Serializable
+{
+  static final long serialVersionUID = -6113660025878112608L;
 
 	//-------------------------------------------------------------
 	// Variables --------------------------------------------------
@@ -216,9 +218,10 @@ public class TableColumn implements Serializable {
 	 * @param oldValue TODO
 	 * @param newValue TODO
 	 */
-	private void firePropertyChange(String property, boolean oldValue, boolean newValue) {
+	private void firePropertyChange(String property, boolean oldValue, boolean newValue)
+	{
 		firePropertyChange(property, new Boolean(oldValue), new Boolean(newValue));
-	} // firePropertyChange()
+	}
 
 	/**
 	 * setModelIndex

@@ -1,10 +1,8 @@
 #!/bin/sh
 #
-#  EDIT THIS FILE - it is no longer generated
-#
 # Install modified versions of certain ANSI-incompatible system header
 # files which are fixed to work correctly with ANSI C and placed in a
-# directory that GNU C will search.
+# directory that GCC will search.
 #
 # See README-fixinc for more information.
 #
@@ -29,6 +27,8 @@
 #            Boston,  MA  02111-1307, USA.
 #
 # # # # # # # # # # # # # # # # # # # # #
+
+# Usage: fixincl.sh output-dir input-dir
 #
 # Directory in which to store the results.
 # Fail if no arg to specify a directory for the output.

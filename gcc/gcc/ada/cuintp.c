@@ -6,8 +6,7 @@
  *                                                                          *
  *                          C Implementation File                           *
  *                                                                          *
- *                                                                          *
- *          Copyright (C) 1992-2001 Free Software Foundation, Inc.          *
+ *          Copyright (C) 1992-2003 Free Software Foundation, Inc.          *
  *                                                                          *
  * GNAT is free software;  you can  redistribute it  and/or modify it under *
  * terms of the  GNU General Public License as published  by the Free Soft- *
@@ -30,6 +29,8 @@
 
 #include "config.h"
 #include "system.h"
+#include "coretypes.h"
+#include "tm.h"
 #include "tree.h"
 #include "ada.h"
 #include "types.h"
@@ -56,14 +57,12 @@
    resulting node.  */
 
 tree
-UI_To_gnu (Input, type)
-     Uint Input;
-     tree type;
+UI_To_gnu (Uint Input, tree type)
 {
   tree gnu_ret;
 
   if (Input <= Uint_Direct_Last)
-    gnu_ret = convert (type, build_int_2 (Input - Uint_Direct_Bias, 
+    gnu_ret = convert (type, build_int_2 (Input - Uint_Direct_Bias,
 					  Input < Uint_Direct_Bias ? -1 : 0));
   else
     {

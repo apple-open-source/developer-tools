@@ -1,5 +1,5 @@
 /* JMenuItem.java --
-   Copyright (C) 2002 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2004  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -35,429 +35,281 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package javax.swing;
 
-// Imports
-import java.awt.*;
-import java.awt.event.*;
-import java.beans.*;
-import java.io.*;
-import javax.accessibility.*;
-import javax.swing.event.*;
-import javax.swing.plaf.*;
+import java.awt.Component;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseEvent;
+import java.beans.PropertyChangeListener;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 
-/**
- * JMenuItem
- * @author	Andrew Selkirk
- * @version	1.0
- */
-public class JMenuItem extends AbstractButton implements Accessible, MenuElement {
+import javax.accessibility.Accessible;
+import javax.accessibility.AccessibleContext;
+import javax.accessibility.AccessibleRole;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
+import javax.swing.event.MenuDragMouseEvent;
+import javax.swing.event.MenuDragMouseListener;
+import javax.swing.event.MenuKeyEvent;
+import javax.swing.event.MenuKeyListener;
+import javax.swing.plaf.MenuItemUI;
 
-	//-------------------------------------------------------------
-	// Classes ----------------------------------------------------
-	//-------------------------------------------------------------
+public class JMenuItem extends AbstractButton implements Accessible,
+                                                         MenuElement
+{
+  //-------------------------------------------------------------
+  // Variables --------------------------------------------------
+  //-------------------------------------------------------------
+  private static final String uiClassID = "MenuItemUI";
+  private KeyStroke accelerator;
 
-	/**
-	 * AccessibleJMenuItem
-	 */
-	protected class AccessibleJMenuItem extends AccessibleAbstractButton 
-			implements ChangeListener {
+  //-------------------------------------------------------------
+  // Initialization ---------------------------------------------
+  //-------------------------------------------------------------
+  public JMenuItem()
+  {
+    this(null, null);
+  } // JMenuItem()
 
-		//-------------------------------------------------------------
-		// Variables --------------------------------------------------
-		//-------------------------------------------------------------
+  public JMenuItem(Icon icon)
+  {
+    this(null, icon);
+  } // JMenuItem()
 
+  public JMenuItem(String text)
+  {
+    this(text, null);
+  } // JMenuItem()
 
-		//-------------------------------------------------------------
-		// Initialization ---------------------------------------------
-		//-------------------------------------------------------------
+  public JMenuItem(Action action)
+  {
+    // TODO		
+  } // JMenuItem()
 
-		/**
-		 * Constructor AccessibleJMenuItem
-		 * @param component TODO
-		 */
-		AccessibleJMenuItem(JMenuItem component) {
-			super(component);
-			// TODO
-		} // AccessibleJMenuItem()
+  public JMenuItem(String text, Icon icon)
+  {
+    super(text, icon);
+  } // JMenuItem()
 
+  public JMenuItem(String text, int mnemonic)
+  {
+    super(text, null);
+    setMnemonic(mnemonic);
+  } // JMenuItem()
 
-		//-------------------------------------------------------------
-		// Methods ----------------------------------------------------
-		//-------------------------------------------------------------
+  //-------------------------------------------------------------
+  // Methods ----------------------------------------------------
+  //-------------------------------------------------------------
+  private void readObject(ObjectInputStream stream)
+                   throws IOException, ClassNotFoundException
+  {
+    // TODO
+  } // readObject()
 
-		/**
-		 * stateChanged
-		 * @param event TODO
-		 */
-		public void stateChanged(ChangeEvent event) {
-			// TODO
-		} // stateChanged()
+  private void writeObject(ObjectOutputStream stream) throws IOException
+  {
+    // TODO
+  } // writeObject()
 
-		/**
-		 * getAccessibleRole
-		 * @returns AccessibleRole
-		 */
-		public AccessibleRole getAccessibleRole() {
-			return AccessibleRole.MENU_ITEM;
-		} // getAccessibleRole()
+  protected void init(String text, Icon icon)
+  {
+    // TODO
+  } // init()
 
+  public void setUI(MenuItemUI ui)
+  {
+    super.setUI(ui);
+  } // setUI()
 
-	} // AccessibleJMenuItem
+  public void updateUI()
+  {
+    MenuItemUI mi = ((MenuItemUI) UIManager.getUI(this));
+    setUI(mi);
+    invalidate();
+  } // updateUI()
 
+  public String getUIClassID()
+  {
+    return uiClassID;
+  } // getUIClassID()
 
-	//-------------------------------------------------------------
-	// Variables --------------------------------------------------
-	//-------------------------------------------------------------
+  public boolean isArmed()
+  {
+    return getModel().isArmed();
+  } // isArmed()
 
-	/**
-	 * uiClassID
-	 */
-	private static final String uiClassID = "MenuItemUI";
+  public void setArmed(boolean armed)
+  {
+    getModel().setArmed(armed);
+  } // setArmed()
 
-	/**
-	 * accelerator
-	 */
-	private KeyStroke accelerator;
+  public void setEnabled(boolean enabled)
+  {
+    setEnabled(enabled);
+  } // setEnabled()
 
+  public KeyStroke getAccelerator()
+  {
+    return accelerator;
+  } // getAccelerator()
 
-	//-------------------------------------------------------------
-	// Initialization ---------------------------------------------
-	//-------------------------------------------------------------
+  public void setAccelerator(KeyStroke keystroke)
+  {
+    this.accelerator = keystroke;
+  } // setAccelerator()
 
-	/**
-	 * Constructor JMenuItem
-	 */
-	public JMenuItem() {
-		// TODO
-	} // JMenuItem()
+  protected void configurePropertiesFromAction(Action action)
+  {
+    super.configurePropertiesFromAction(action);
 
-	/**
-	 * Constructor JMenuItem
-	 * @param icon TODO
-	 */
-	public JMenuItem(Icon icon) {
-		// TODO
-	} // JMenuItem()
+    if (action == null)
+      setAccelerator(null);
+    else
+      setAccelerator((KeyStroke) (action.getValue(Action.ACCELERATOR_KEY)));
+  
+  } // configurePropertiesFromAction()
 
-	/**
-	 * Constructor JMenuItem
-	 * @param text TODO
-	 */
-	public JMenuItem(String text) {
-		// TODO
-	} // JMenuItem()
+  protected PropertyChangeListener createActionPropertyChangeListener(Action action)
+  {
+    return null;
+  } // createActionPropertyChangeListener()
 
-	/**
-	 * Constructor JMenuItem
-	 * @param action TODO
-	 */
-	public JMenuItem(Action action) {
-		// TODO
-	} // JMenuItem()
+  public void processMouseEvent(MouseEvent event, MenuElement[] path,
+                                MenuSelectionManager manager)
+  {
+    // TODO
+  } // processMouseEvent()
 
-	/**
-	 * Constructor JMenuItem
-	 * @param text TODO
-	 * @param icon TODO
-	 */
-	public JMenuItem(String text, Icon icon) {
-		// TODO
-	} // JMenuItem()
+  public void processKeyEvent(KeyEvent event, MenuElement[] path,
+                              MenuSelectionManager manager)
+  {
+    // TODO
+  } // processKeyEvent()
 
-	/**
-	 * Constructor JMenuItem
-	 * @param text TODO
-	 * @param mnemonic TODO
-	 */
-	public JMenuItem(String text, int mnemonic) {
-		// TODO
-	} // JMenuItem()
+  public void processMenuDragMouseEvent(MenuDragMouseEvent event)
+  {
+  } // processMenuDragMouseEvent()
 
+  public void processMenuKeyEvent(MenuKeyEvent event)
+  {
+    // TODO
+  } // processMenuKeyEvent()
 
-	//-------------------------------------------------------------
-	// Methods ----------------------------------------------------
-	//-------------------------------------------------------------
+  protected void fireMenuDragMouseEntered(MenuDragMouseEvent event)
+  {
+    // TODO
+  } // fireMenuDragMouseEntered()
 
-	/**
-	 * readObject
-	 * @param stream TODO
-	 * @exception IOException TODO
-	 * @exception ClassNotFoundException TODO
-	 */
-	private void readObject(ObjectInputStream stream) 
-			throws IOException, ClassNotFoundException {
-		// TODO
-	} // readObject()
+  protected void fireMenuDragMouseExited(MenuDragMouseEvent event)
+  {
+    // TODO
+  } // fireMenuDragMouseExited()
 
-	/**
-	 * writeObject
-	 * @param stream TODO
-	 * @exception IOException TODO
-	 */
-	private void writeObject(ObjectOutputStream stream) throws IOException {
-		// TODO
-	} // writeObject()
+  protected void fireMenuDragMouseDragged(MenuDragMouseEvent event)
+  {
+    // TODO
+  } // fireMenuDragMouseDragged()
 
-	/**
-	 * init
-	 * @param text TODO
-	 * @param icon TODO
-	 */
-	protected void init(String text, Icon icon) {
-		// TODO
-	} // init()
+  protected void fireMenuDragMouseReleased(MenuDragMouseEvent event)
+  {
+    // TODO
+  } // fireMenuDragMouseReleased()
 
-	/**
-	 * setUI
-	 * @param ui TODO
-	 */
-	public void setUI(MenuItemUI ui) {
-		super.setUI(ui);
-		// TODO
-	} // setUI()
+  protected void fireMenuKeyPressed(MenuKeyEvent event)
+  {
+    // TODO
+  } // fireMenuKeyPressed()
 
-	/**
-	 * updateUI
-	 */
-	public void updateUI() {
-		setUI((MenuItemUI) UIManager.get(this));
-		invalidate();
-	} // updateUI()
+  protected void fireMenuKeyReleased(MenuKeyEvent event)
+  {
+    // TODO
+  } // fireMenuKeyReleased()
 
-	/**
-	 * getUIClassID
-	 * @returns String
-	 */
-	public String getUIClassID() {
-		return uiClassID;
-	} // getUIClassID()
+  protected void fireMenuKeyTyped(MenuKeyEvent event)
+  {
+    // TODO
+  } // fireMenuKeyTyped()
 
-	/**
-	 * isArmed
-	 * @returns boolean
-	 */
-	public boolean isArmed() {
-		return false; // TODO
-	} // isArmed()
+  public void menuSelectionChanged(boolean changed)
+  {
+    // TODO
+  } // menuSelectionChanged()
 
-	/**
-	 * setArmed
-	 * @param armed TODO
-	 */
-	public void setArmed(boolean armed) {
-		// TODO
-	} // setArmed()
+  public MenuElement[] getSubElements()
+  {
+    return null; // TODO
+  } // getSubElements()
 
-	/**
-	 * setEnabled
-	 * @param enabled TODO
-	 */
-	public void setEnabled(boolean enabled) {
-		// TODO
-	} // setEnabled()
+  public Component getComponent()
+  {
+    return null; // TODO
+  } // getComponent()
 
-	/**
-	 * getAccelerator
-	 * @returns KeyStroke
-	 */
-	public KeyStroke getAccelerator() {
-		return null; // TODO
-	} // getAccelerator()
+  public void addMenuDragMouseListener(MenuDragMouseListener listener)
+  {
+    // TODO
+  } // addMenuDragMouseListener()
 
-	/**
-	 * setAccelerator
-	 * @param keystroke TODO
-	 */
-	public void setAccelerator(KeyStroke keystroke) {
-		// TODO
-	} // setAccelerator()
+  public void removeMenuDragMouseListener(MenuDragMouseListener listener)
+  {
+  } // removeMenuDragMouseListener()
 
-	/**
-	 * configurePropertiesFromAction
-	 * @param action TODO
-	 */
-	protected void configurePropertiesFromAction(Action action) {
-		// TODO
-	} // configurePropertiesFromAction()
+  public void addMenuKeyListener(MenuKeyListener listener)
+  {
+  } // addMenuKeyListener()
 
-	/**
-	 * createActionPropertyChangeListener
-	 * @param action TODO
-	 * @returns PropertyChangeListener
-	 */
-	protected PropertyChangeListener createActionPropertyChangeListener(Action action) {
-		return null; // TODO
-	} // createActionPropertyChangeListener()
+  public void removeMenuKeyListener(MenuKeyListener listener)
+  {
+  } // removeMenuKeyListener()
 
-	/**
-	 * processMouseEvent
-	 * @param event TODO
-	 * @param path TODO
-	 * @param manager TODO
-	 */
-	public void processMouseEvent(MouseEvent event, MenuElement[] path,
-			MenuSelectionManager manager) {
-		// TODO
-	} // processMouseEvent()
+  protected String paramString()
+  {
+    return "JMenuItem";
+  } // paramString()
 
-	/**
-	 * processKeyEvent
-	 * @param event TODO
-	 * @param path TODO
-	 * @param manager TODO
-	 */
-	public void processKeyEvent(KeyEvent event, MenuElement[] path,
-			MenuSelectionManager manager) {
-		// TODO
-	} // processKeyEvent()
+  public AccessibleContext getAccessibleContext()
+  {
+    if (accessibleContext == null)
+      {
+        accessibleContext = new AccessibleJMenuItem(this);
+      }
 
-	/**
-	 * processMenuDragMouseEvent
-	 * @param event TODO
-	 */
-	public void processMenuDragMouseEvent(MenuDragMouseEvent event) {
-		// TODO
-	} // processMenuDragMouseEvent()
+    return accessibleContext;
+  } // getAccessibleContext()
 
-	/**
-	 * processMenuKeyEvent
-	 * @param event TODO
-	 */
-	public void processMenuKeyEvent(MenuKeyEvent event) {
-		// TODO
-	} // processMenuKeyEvent()
+  //-------------------------------------------------------------
+  // Classes ----------------------------------------------------
+  //-------------------------------------------------------------
+  protected class AccessibleJMenuItem extends AccessibleAbstractButton
+    implements ChangeListener
+  {
+    //-------------------------------------------------------------
+    // Variables --------------------------------------------------
+    //-------------------------------------------------------------
+    //-------------------------------------------------------------
+    // Initialization ---------------------------------------------
+    //-------------------------------------------------------------
+    AccessibleJMenuItem(JMenuItem component)
+    {
+      super(component);
 
-	/**
-	 * fireMenuDragMouseEntered
-	 * @param event TODO
-	 */
-	protected void fireMenuDragMouseEntered(MenuDragMouseEvent event) {
-		// TODO
-	} // fireMenuDragMouseEntered()
+      // TODO
+    } // AccessibleJMenuItem()
 
-	/**
-	 * fireMenuDragMouseExited
-	 * @param event TODO
-	 */
-	protected void fireMenuDragMouseExited(MenuDragMouseEvent event) {
-		// TODO
-	} // fireMenuDragMouseExited()
+    //-------------------------------------------------------------
+    // Methods ----------------------------------------------------
+    //-------------------------------------------------------------
+    public void stateChanged(ChangeEvent event)
+    {
+      // TODO
+    } // stateChanged()
 
-	/**
-	 * fireMenuDragMouseDragged
-	 * @param event TODO
-	 */
-	protected void fireMenuDragMouseDragged(MenuDragMouseEvent event) {
-		// TODO
-	} // fireMenuDragMouseDragged()
-
-	/**
-	 * fireMenuDragMouseReleased
-	 * @param event TODO
-	 */
-	protected void fireMenuDragMouseReleased(MenuDragMouseEvent event) {
-		// TODO
-	} // fireMenuDragMouseReleased()
-
-	/**
-	 * fireMenuKeyPressed
-	 * @param event TODO
-	 */
-	protected void fireMenuKeyPressed(MenuKeyEvent event) {
-		// TODO
-	} // fireMenuKeyPressed()
-
-	/**
-	 * fireMenuKeyReleased
-	 * @param event TODO
-	 */
-	protected void fireMenuKeyReleased(MenuKeyEvent event) {
-		// TODO
-	} // fireMenuKeyReleased()
-
-	/**
-	 * fireMenuKeyTyped
-	 * @param event TODO
-	 */
-	protected void fireMenuKeyTyped(MenuKeyEvent event) {
-		// TODO
-	} // fireMenuKeyTyped()
-
-	/**
-	 * menuSelectionChanged
-	 * @param changed TODO
-	 */
-	public void menuSelectionChanged(boolean changed) {
-		// TODO
-	} // menuSelectionChanged()
-
-	/**
-	 * getSubElements
-	 * @returns MenuElement[]
-	 */
-	public MenuElement[] getSubElements() {
-		return null; // TODO
-	} // getSubElements()
-
-	/**
-	 * getComponent
-	 * @returns Component
-	 */
-	public Component getComponent() {
-		return null; // TODO
-	} // getComponent()
-
-	/**
-	 * addMenuDragMouseListener
-	 * @param listener TODO
-	 */
-	public void addMenuDragMouseListener(MenuDragMouseListener listener) {
-		// TODO
-	} // addMenuDragMouseListener()
-
-	/**
-	 * removeMenuDragMouseListener
-	 * @param listener TODO
-	 */
-	public void removeMenuDragMouseListener(MenuDragMouseListener listener) {
-		// TODO
-	} // removeMenuDragMouseListener()
-
-	/**
-	 * addMenuKeyListener
-	 * @param listener TODO
-	 */
-	public void addMenuKeyListener(MenuKeyListener listener) {
-		// TODO
-	} // addMenuKeyListener()
-
-	/**
-	 * removeMenuKeyListener
-	 * @param listener TODO
-	 */
-	public void removeMenuKeyListener(MenuKeyListener listener) {
-		// TODO
-	} // removeMenuKeyListener()
-
-	/**
-	 * paramString
-	 * @returns String
-	 */
-	protected String paramString() {
-		return null; // TODO
-	} // paramString()
-
-	/**
-	 * getAccessibleContext
-	 * @returns AccessibleContext
-	 */
-	public AccessibleContext getAccessibleContext() {
-		if (accessibleContext == null) {
-			accessibleContext = new AccessibleJMenuItem(this);
-		} // if
-		return accessibleContext;
-	} // getAccessibleContext()
-
-
+    public AccessibleRole getAccessibleRole()
+    {
+      return AccessibleRole.MENU_ITEM;
+    } // getAccessibleRole()
+  } // AccessibleJMenuItem
 } // JMenuItem

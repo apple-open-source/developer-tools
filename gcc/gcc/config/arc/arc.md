@@ -1,20 +1,21 @@
 ;; Machine description of the Argonaut ARC cpu for GNU C compiler
-;; Copyright (C) 1994, 1997, 1998, 1999, 2000 Free Software Foundation, Inc.
+;; Copyright (C) 1994, 1997, 1998, 1999, 2000, 2004
+;; Free Software Foundation, Inc.
 
-;; This file is part of GNU CC.
+;; This file is part of GCC.
 
-;; GNU CC is free software; you can redistribute it and/or modify
+;; GCC is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
 ;; the Free Software Foundation; either version 2, or (at your option)
 ;; any later version.
 
-;; GNU CC is distributed in the hope that it will be useful,
+;; GCC is distributed in the hope that it will be useful,
 ;; but WITHOUT ANY WARRANTY; without even the implied warranty of
 ;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 ;; GNU General Public License for more details.
 
 ;; You should have received a copy of the GNU General Public License
-;; along with GNU CC; see the file COPYING.  If not, write to
+;; along with GCC; see the file COPYING.  If not, write to
 ;; the Free Software Foundation, 59 Temple Place - Suite 330,
 ;; Boston, MA 02111-1307, USA.
 
@@ -582,7 +583,7 @@
     = gen_rtx_REG (SELECT_CC_MODE (code, arc_compare_op0, arc_compare_op1),
 		   61);
 
-  operands[1] = gen_rtx (code, VOIDmode, ccreg, const0_rtx);
+  operands[1] = gen_rtx_fmt_ee (code, VOIDmode, ccreg, const0_rtx);
 }")
 
 ;(define_expand "movdicc"
@@ -598,7 +599,7 @@
 ;   = gen_rtx_REG (SELECT_CC_MODE (code, arc_compare_op0, arc_compare_op1),
 ;		   61);
 ;
-;  operands[1] = gen_rtx (code, VOIDmode, ccreg, const0_rtx);
+;  operands[1] = gen_rtx_fmt_ee (code, VOIDmode, ccreg, const0_rtx);
 ;}")
 
 (define_expand "movsfcc"
@@ -614,7 +615,7 @@
     = gen_rtx_REG (SELECT_CC_MODE (code, arc_compare_op0, arc_compare_op1),
 		   61);
 
-  operands[1] = gen_rtx (code, VOIDmode, ccreg, const0_rtx);
+  operands[1] = gen_rtx_fmt_ee (code, VOIDmode, ccreg, const0_rtx);
 }")
 
 ;(define_expand "movdfcc"
@@ -630,7 +631,7 @@
 ;   = gen_rtx_REG (SELECT_CC_MODE (code, arc_compare_op0, arc_compare_op1),
 ;		   61);
 ;
-;  operands[1] = gen_rtx (code, VOIDmode, ccreg, const0_rtx);
+;  operands[1] = gen_rtx_fmt_ee (code, VOIDmode, ccreg, const0_rtx);
 ;}")
 
 (define_insn "*movsicc_insn"

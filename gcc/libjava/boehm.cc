@@ -1,6 +1,6 @@
 // boehm.cc - interface between libjava and Boehm GC.
 
-/* Copyright (C) 1998, 1999, 2000, 2001, 2002  Free Software Foundation
+/* Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003  Free Software Foundation
 
    This file is part of libgcj.
 
@@ -11,6 +11,7 @@ details.  */
 #include <config.h>
 
 #include <stdio.h>
+#include <limits.h>
 
 #include <jvm.h>
 #include <gcj/cni.h>
@@ -205,11 +206,15 @@ _Jv_MarkObj (void *addr, void *msp, void *msl, void * /* env */)
       MAYBE_MARK (p, mark_stack_ptr, mark_stack_limit, c, cDlabel);
       p = (ptr_t) c->protectionDomain;
       MAYBE_MARK (p, mark_stack_ptr, mark_stack_limit, c, cPlabel);
+      p = (ptr_t) c->hack_signers;
+      MAYBE_MARK (p, mark_stack_ptr, mark_stack_limit, c, cSlabel);
+      p = (ptr_t) c->aux_info;
+      MAYBE_MARK (p, mark_stack_ptr, mark_stack_limit, c, cTlabel);
 
 #ifdef INTERPRETER
       if (_Jv_IsInterpretedClass (c))
 	{
-	  _Jv_InterpClass* ic = (_Jv_InterpClass*) c;
+	  _Jv_InterpClass* ic = (_Jv_InterpClass*) c->aux_info;
 
 	  p = (ptr_t) ic->interpreted_methods;
 	  MAYBE_MARK (p, mark_stack_ptr, mark_stack_limit, ic, cElabel);
@@ -325,11 +330,55 @@ _Jv_MarkArray (void *addr, void *msp, void *msl, void * /*env*/)
 // since another one could be registered first.  But the compiler also
 // knows this, so in that case everything else will break, too.
 #define GCJ_DEFAULT_DESCR GC_MAKE_PROC(GC_GCJ_RESERVED_MARK_PROC_INDEX,0)
+
 void *
-_Jv_BuildGCDescr(jclass)
+_Jv_BuildGCDescr(jclass self)
 {
-  /* FIXME: We should really look at the class and build the descriptor. */
-  return (void *)(GCJ_DEFAULT_DESCR);
+  jlong desc = 0;
+  jint bits_per_word = CHAR_BIT * sizeof (void *);
+
+  // Note: for now we only consider a bitmap mark descriptor.  We
+  // could also handle the case where the first N fields of a type are
+  // references.  However, this is not very likely to be used by many
+  // classes, and it is easier to compute things this way.
+
+  // The vtable pointer.
+  desc |= 1ULL << (bits_per_word - 1);
+#ifndef JV_HASH_SYNCHRONIZATION
+  // The sync_info field.
+  desc |= 1ULL << (bits_per_word - 2);
+#endif
+
+  for (jclass klass = self; klass != NULL; klass = klass->getSuperclass())
+    {
+      jfieldID field = JvGetFirstInstanceField(klass);
+      int count = JvNumInstanceFields(klass);
+
+      for (int i = 0; i < count; ++i)
+	{
+	  if (field->isRef())
+	    {
+	      unsigned int off = field->getOffset();
+	      // If we run into a weird situation, we bail.
+	      if (off % sizeof (void *) != 0)
+		return (void *) (GCJ_DEFAULT_DESCR);
+	      off /= sizeof (void *);
+	      // If we find a field outside the range of our bitmap,
+	      // fall back to procedure marker. The bottom 2 bits are
+	      // reserved.
+	      if (off >= bits_per_word - 2)
+		return (void *) (GCJ_DEFAULT_DESCR);
+	      desc |= 1ULL << (bits_per_word - off - 1);
+	    }
+
+	  field = field->getNextField();
+	}
+    }
+
+  // For bitmap mark type, bottom bits are 01.
+  desc |= 1;
+  // Bogus warning avoidance (on many platforms).
+  return (void *) (unsigned long) desc;
 }
 
 // Allocate some space that is known to be pointer-free.

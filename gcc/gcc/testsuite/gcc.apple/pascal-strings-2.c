@@ -1,4 +1,4 @@
-/* APPLE LOCAL file Pascal strings 2001-07-05 zll */
+/* APPLE LOCAL file pascal strings */
 /* Negative C test cases.  */
 /* Origin: Ziemowit Laski <zlaski@apple.com> */
 /* { dg-do compile } */
@@ -6,8 +6,8 @@
 
 typedef __WCHAR_TYPE__ wchar_t;
 
-const wchar_t *pascalStr1 = L"\pHi!"; /* { dg-error "not allowed in wide" } */
-const wchar_t *pascalStr2 = L"Bye\p!"; /* { dg-error "not allowed in wide" } */
+const wchar_t *pascalStr1 = L"\pHi!"; /* { dg-warning "unknown escape sequence" } */
+const wchar_t *pascalStr2 = L"Bye\p!"; /* { dg-warning "unknown escape sequence" } */
 
 const wchar_t *initErr0 = "\pHi";   /* { dg-warning "incompatible pointer type" } */
 const wchar_t initErr0a[] = "\pHi";  /* { dg-error "initialized from non-wide string" } */
@@ -21,10 +21,10 @@ const signed char initErr3a[] = L"Hi";  /* { dg-error "initialized from wide str
 const unsigned char *initErr4 = L"Hi";  /* { dg-warning "incompatible pointer type" } */
 const unsigned char initErr4a[] = L"Hi"; /* { dg-error "initialized from wide string" } */
 
-const char *pascalStr3 = "Hello\p, World!"; /* { dg-error "must be at beginning" } */
+const char *pascalStr3 = "Hello\p, World!"; /* { dg-warning "unknown escape sequence" } */
 
-const char *concat2 = "Hi" "\pthere"; /* { dg-error "not allowed in concatenation" } */
-const char *concat3 = "Hi" "there\p"; /* { dg-error "must be at beginning" } */
+const char *concat2 = "Hi" "\pthere"; /* { dg-warning "unknown escape sequence" } */
+const char *concat3 = "Hi" "there\p"; /* { dg-warning "unknown escape sequence" } */
 
 const char *s2 = "\pGoodbye!";   /* ok */
 unsigned char *s3 = "\pHi!";     /* { dg-warning "initialization discards qualifiers" } */

@@ -1,7 +1,7 @@
+// { dg-do run }
 // Test that template friends referring to class template members are
 // respected.
 
-// excess errors test - XFAIL *-*-*
 
 template <class T> struct A
 {
@@ -15,7 +15,7 @@ class B
 {
   template <class T> friend int A<T>::f (T);
   template <class T> friend struct A<T>::AI;
-  int a;
+  int a; // { dg-bogus "" "" { xfail *-*-* } }
 public:
   B(): a(0) { }
 };
@@ -29,7 +29,7 @@ template <class T> int A<T>::f (T)
 template <class T> int A<T>::AI::f (T)
 {
   B b;
-  return b.a;
+  return b.a; // { dg-bogus "" "" { xfail *-*-* } }
 }
 
 int main ()

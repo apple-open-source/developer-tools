@@ -2,7 +2,6 @@
 #include <objc/objc.h>
 #include <objc/objc-api.h>
 
-/* APPLE LOCAL objc test suite */
 #include "next_mapping.h"
 
 /* Test getting and calling the IMP of a method */

@@ -1,5 +1,5 @@
 /* JOptionPane.java -- 
-   Copyright (C) 2002 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2004  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -35,14 +35,16 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package javax.swing;
 
-import java.awt.*;
-import javax.swing.plaf.*;
+import java.awt.BorderLayout;
+import java.awt.Component;
+import java.awt.Dialog;
+import java.awt.Frame;
+
 import javax.accessibility.AccessibleContext;
-import javax.accessibility.AccessibleRole;
-import javax.accessibility.AccessibleState;
-import javax.accessibility.AccessibleStateSet;
+import javax.swing.plaf.OptionPaneUI;
 
 public class JOptionPane extends JComponent 
 {
@@ -159,7 +161,7 @@ public class JOptionPane extends JComponent
     {	return val;    }
 
     public String getUIClassID()
-    {	return "JOptionPane";    }
+    {	return "OptionPaneUI";    }
 
 
     public void setUI(OptionPaneUI ui) {

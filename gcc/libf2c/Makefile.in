@@ -20,7 +20,7 @@
 #02111-1307, USA.
 
 SHELL = @SHELL@
-PWD = $${PWDCMD-pwd}
+PWD_COMMAND = $${PWDCMD-pwd}
 MAKEOVERRIDES=
 .NOEXPORTS:
 
@@ -42,7 +42,7 @@ glibcpp_toolexeclibdir = @glibcpp_toolexeclibdir@
 top_builddir = .
 
 libdir = $(exec_prefix)/lib
-libsubdir = $(libdir)/gcc-lib/$(target_alias)/$(gcc_version)
+libsubdir = $(libdir)/gcc/$(target_alias)/$(gcc_version)
 #
 # Versions should start at 0:0:0 - See libtool manual.
 VERSION_MAJOR=0
@@ -259,8 +259,8 @@ rebuilt: configure
         installcheck installdirs all-unilib
 
 subdir_do:
-	@rootpre=`${PWD}`/; export rootpre; \
-	srcrootpre=`cd $(srcdir); ${PWD}`/; export srcrootpre; \
+	@rootpre=`${PWD_COMMAND}`/; export rootpre; \
+	srcrootpre=`cd $(srcdir); ${PWD_COMMAND}`/; export srcrootpre; \
 	for i in .. $(DODIRS); do \
 	  if [ x$$i != x.. ]; then \
 	    if [ -f ./$$i/Makefile ]; then \

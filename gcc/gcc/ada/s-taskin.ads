@@ -6,8 +6,7 @@
 --                                                                          --
 --                                  S p e c                                 --
 --                                                                          --
---                                                                          --
---          Copyright (C) 1992-2002, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2004, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -28,7 +27,7 @@
 -- covered by the  GNU Public License.                                      --
 --                                                                          --
 -- GNARL was developed by the GNARL team at Florida State University.       --
--- Extensive contributions were provided by Ada Core Technologies Inc.      --
+-- Extensive contributions were provided by Ada Core Technologies, Inc.     --
 --                                                                          --
 ------------------------------------------------------------------------------
 
@@ -44,7 +43,7 @@ with System.Parameters;
 --  used for Size_Type
 
 with System.Task_Info;
---  used for Task_Info_Type, Task_Image_Type
+--  used for Task_Info_Type
 
 with System.Soft_Links;
 --  used for TSD
@@ -110,24 +109,24 @@ package System.Tasking is
    --    the parent always has a lower serial number than the activator.
 
    ---------------------------------
-   -- Task_ID related definitions --
+   -- Task_Id related definitions --
    ---------------------------------
 
    type Ada_Task_Control_Block;
 
-   type Task_ID is access all Ada_Task_Control_Block;
+   type Task_Id is access all Ada_Task_Control_Block;
 
-   Null_Task : constant Task_ID;
+   Null_Task : constant Task_Id;
 
-   type Task_List is array (Positive range <>) of Task_ID;
+   type Task_List is array (Positive range <>) of Task_Id;
 
-   function Self return Task_ID;
+   function Self return Task_Id;
    pragma Inline (Self);
    --  This is the compiler interface version of this function. Do not call
    --  from the run-time system.
 
-   function To_Task_Id is new Unchecked_Conversion (System.Address, Task_ID);
-   function To_Address is new Unchecked_Conversion (Task_ID, System.Address);
+   function To_Task_Id is new Unchecked_Conversion (System.Address, Task_Id);
+   function To_Address is new Unchecked_Conversion (Task_Id, System.Address);
 
    -----------------------
    -- Enumeration types --
@@ -288,12 +287,12 @@ package System.Tasking is
    --  State >= Done, in which case it may or may not be still Onqueue.
 
    --  Please do not modify the order of the values, without checking
-   --  all uses of this type.  We rely on partial "monotonicity" of
+   --  all uses of this type. We rely on partial "monotonicity" of
    --  Entry_Call_Record.State to avoid locking when we access this
-   --  value for certain tests.  In particular:
+   --  value for certain tests. In particular:
 
    --  1)  Once State >= Done, we can rely that the call has been
-   --      completed.  If State >= Done, it will not
+   --      completed. If State >= Done, it will not
    --      change until the task does another entry call at this level.
 
    --  2)  Once State >= Was_Abortable, we can rely that the call has
@@ -302,7 +301,7 @@ package System.Tasking is
    --      async. select statement does not need to lock anything.
 
    type Restricted_Entry_Call_Record is record
-      Self : Task_ID;
+      Self : Task_Id;
       --  ID of the caller
 
       Mode : Call_Modes;
@@ -372,7 +371,7 @@ package System.Tasking is
    --  Note: The order of the fields is important to implement efficiently
    --  tasking support under gdb.
    --  Currently gdb relies on the order of the State, Parent, Base_Priority,
-   --  Task_Image, Call and LL fields.
+   --  Task_Image, Task_Image_Len, Call and LL fields.
 
    ----------------------------------------------------------------------
    --  Common ATCB section                                             --
@@ -389,7 +388,7 @@ package System.Tasking is
       --  and whether it is terminated.
       --  Protection: Self.L.
 
-      Parent : Task_ID;
+      Parent : Task_Id;
       --  The task on which this task depends.
       --  See also Master_Level and Master_Within.
 
@@ -423,9 +422,12 @@ package System.Tasking is
       --  accepts an entry or when Created activates, at which points Self is
       --  suspended.
 
-      Task_Image : System.Task_Info.Task_Image_Type;
-      --  holds an access to string that provides a readable id for task,
+      Task_Image : String (1 .. 32);
+      --  Hold a string that provides a readable id for task,
       --  built from the variable of which it is a value or component.
+
+      Task_Image_Len : Natural;
+      --  Actual length of Task_Image.
 
       Call : Entry_Call_Link;
       --  The entry call that has been accepted by this task.
@@ -441,8 +443,8 @@ package System.Tasking is
       --  takes care of all of its synchronization.
 
       Task_Arg : System.Address;
-      --  The argument to task procedure. Currently unused; this will
-      --  provide a handle for discriminant information.
+      --  The argument to task procedure. Provide a handle for discriminant
+      --  information.
       --  Protection: Part of the synchronization between Self and
       --  Activator. Activator writes it, once, before Self starts
       --  executing. Thereafter, Self only reads it.
@@ -459,15 +461,15 @@ package System.Tasking is
       --  per-task structures.
       --  Protection: Only accessed by Self.
 
-      All_Tasks_Link : Task_ID;
+      All_Tasks_Link : Task_Id;
       --  Used to link this task to the list of all tasks in the system.
       --  Protection: RTS_Lock.
 
-      Activation_Link : Task_ID;
+      Activation_Link : Task_Id;
       --  Used to link this task to a list of tasks to be activated.
       --  Protection: Only used by Activator.
 
-      Activator : Task_ID;
+      Activator : Task_Id;
       --  The task that created this task, either by declaring it as a task
       --  object or by executing a task allocator.
       --  The value is null iff Self has completed activation.
@@ -540,16 +542,16 @@ package System.Tasking is
    end record;
    pragma Suppress_Initialization (Restricted_Ada_Task_Control_Block);
 
-   Interrupt_Manager_ID : Task_ID;
+   Interrupt_Manager_ID : Task_Id;
    --  This task ID is declared here to break circular dependencies.
-   --  Also declare Interrupt_Manager_ID after Task_ID is known, to avoid
+   --  Also declare Interrupt_Manager_ID after Task_Id is known, to avoid
    --  generating unneeded finalization code.
 
    -----------------------
    -- List of all Tasks --
    -----------------------
 
-   All_Tasks_List : Task_ID;
+   All_Tasks_List : Task_Id;
    --  Global linked list of all tasks.
 
    ------------------------------------------
@@ -631,7 +633,7 @@ package System.Tasking is
    ----------------------------------
 
    type Entry_Call_Record is record
-      Self  : Task_ID;
+      Self  : Task_Id;
       --  ID of the caller
 
       Mode : Call_Modes;
@@ -677,7 +679,7 @@ package System.Tasking is
       --  They are gathered together to allow for compilers that lay records
       --  out contiguously, to allow for such packing.
 
-      Called_Task : Task_ID;
+      Called_Task : Task_Id;
       pragma Atomic (Called_Task);
       --  Use for task entry calls.
       --  The value is null if the call record is not in use.
@@ -726,6 +728,12 @@ package System.Tasking is
    ------------------------------------
 
    type Access_Address is access all System.Address;
+   --  Comment on what this is used for ???
+
+   pragma No_Strict_Aliasing (Access_Address);
+   --  This type is used in contexts where aliasing may be an issue (see
+   --  for example s-tataat.adb), so we avoid any incorrect aliasing
+   --  assumptions.
 
    ----------------------------------------------
    -- Ada_Task_Control_Block (ATCB) definition --
@@ -734,20 +742,20 @@ package System.Tasking is
    type Entry_Call_Array is array (ATC_Level_Index) of
      aliased Entry_Call_Record;
 
-   D_I_Count : constant := 2;
-   --  This constant may be adjusted, to allow more Address-sized
-   --  attributes to be stored directly in the task control block.
-
-   subtype Direct_Index is Integer range 0 .. D_I_Count - 1;
+   type Direct_Index is range 0 .. Parameters.Default_Attribute_Count;
+   subtype Direct_Index_Range is Direct_Index range 1 .. Direct_Index'Last;
    --  Attributes with indices in this range are stored directly in
-   --  the task control block.  Such attributes must be Address-sized.
+   --  the task control block. Such attributes must be Address-sized.
    --  Other attributes will be held in dynamically allocated records
    --  chained off of the task control block.
 
-   type Direct_Attribute_Array is
-     array (Direct_Index) of aliased System.Address;
+   type Direct_Attribute_Element is mod Memory_Size;
+   pragma Atomic (Direct_Attribute_Element);
 
-   type Direct_Index_Vector is mod 2 ** D_I_Count;
+   type Direct_Attribute_Array is
+     array (Direct_Index_Range) of aliased Direct_Attribute_Element;
+
+   type Direct_Index_Vector is mod 2 ** Parameters.Default_Attribute_Count;
    --  This is a bit-vector type, used to store information about
    --  the usage of the direct attribute fields.
 
@@ -832,7 +840,7 @@ package System.Tasking is
       --  signal (and resulting abortion exception) are not handled any more.
       --  In other words, the flag prevents a race between multiple aborters
       --  and the abortee.
-      --  Protection: Self.L.
+      --  Protection: protected by atomic access.
 
       ATC_Hack : Boolean := False;
       pragma Atomic (ATC_Hack);
@@ -857,7 +865,7 @@ package System.Tasking is
 
       Pending_Action : Boolean := False;
       --  Unified flag indicating some action needs to be take when abort
-      --  next becomes undeferred.  Currently set if:
+      --  next becomes undeferred. Currently set if:
       --  . Pending_Priority_Change is set
       --  . Pending_ATC_Level is changed
       --  . Requeue involving POs
@@ -920,10 +928,9 @@ package System.Tasking is
       Known_Tasks_Index : Integer := -1;
       --  Index in the System.Tasking.Debug.Known_Tasks array.
 
-      User_State : Integer := 0;
-      --  user-writeable location, for use in debugging tasks;
-      --  debugger can display this value to show where the task currently
-      --  is, in user terms
+      User_State : Long_Integer := 0;
+      --  User-writeable location, for use in debugging tasks;
+      --  also provides a simple task specific data.
 
       Direct_Attributes : Direct_Attribute_Array;
       --  For task attributes that have same size as Address
@@ -940,37 +947,36 @@ package System.Tasking is
       --  Protection: Self.L. Once a task has set Self.Stage to Completing, it
       --  has exclusive access to this field.
    end record;
-   pragma Volatile (Ada_Task_Control_Block);
 
    ---------------------
    -- Initialize_ATCB --
    ---------------------
 
    procedure Initialize_ATCB
-     (Self_ID          : Task_ID;
+     (Self_ID          : Task_Id;
       Task_Entry_Point : Task_Procedure_Access;
       Task_Arg         : System.Address;
-      Parent           : Task_ID;
+      Parent           : Task_Id;
       Elaborated       : Access_Boolean;
       Base_Priority    : System.Any_Priority;
       Task_Info        : System.Task_Info.Task_Info_Type;
       Stack_Size       : System.Parameters.Size_Type;
-      T                : in out Task_ID;
+      T                : in out Task_Id;
       Success          : out Boolean);
    --  Initialize fields of a TCB and link into global TCB structures
    --  Call this only with abort deferred and holding RTS_Lock.
 
 private
 
-   Null_Task : constant Task_ID := null;
+   Null_Task : constant Task_Id := null;
 
    type Activation_Chain is record
-      T_ID : Task_ID;
+      T_ID : Task_Id;
    end record;
    pragma Volatile (Activation_Chain);
 
    --  Activation_chain is an in-out parameter of initialization procedures
-   --  and it must be passed by reference because the init_proc may terminate
+   --  and it must be passed by reference because the init proc may terminate
    --  abnormally after creating task components, and these must be properly
    --  registered for removal (Expunge_Unactivated_Tasks).
 

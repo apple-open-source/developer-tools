@@ -1,24 +1,27 @@
 /* Target definitions for Darwin (Mac OS X) systems.
-   Copyright (C) 1989, 1990, 1991, 1992, 1993, 2000, 2001, 2002
+   Copyright (C) 1989, 1990, 1991, 1992, 1993, 2000, 2001, 2002, 2003, 2004
    Free Software Foundation, Inc.
    Contributed by Apple Computer Inc.
 
-This file is part of GNU CC.
+This file is part of GCC.
 
-GNU CC is free software; you can redistribute it and/or modify
+GCC is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2, or (at your option)
 any later version.
 
-GNU CC is distributed in the hope that it will be useful,
+GCC is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with GNU CC; see the file COPYING.  If not, write to
+along with GCC; see the file COPYING.  If not, write to
 the Free Software Foundation, 59 Temple Place - Suite 330,
 Boston, MA 02111-1307, USA.  */
+
+#ifndef CONFIG_DARWIN_H
+#define CONFIG_DARWIN_H
 
 /* The definitions in this file are common to all processor types
    running Darwin, which is the kernel for Mac OS X.  Darwin is
@@ -30,11 +33,6 @@ Boston, MA 02111-1307, USA.  */
 /* Although NeXT ran on many different architectures, as of Jan 2001
    the only supported Darwin targets are PowerPC and x86.  */
 
-/* Technically, STANDARD_EXEC_PREFIX should be /usr/libexec/, but in
-   practice this makes it hard to install new compilers elsewhere, so
-   leave it undefined and expect system builders to set configure args
-   correctly.  */
-
 /* One of Darwin's NeXT legacies is the Mach-O format, which is partly
    like a.out and partly like COFF, with additional features like
    multi-architecture binary support.  */
@@ -43,13 +41,11 @@ Boston, MA 02111-1307, USA.  */
 
 /* Suppress g++ attempt to link in the math library automatically.
    (Some Darwin versions have a libm, but they seem to cause problems
-   for C++ executables.)  */
-
-/* APPLE LOCAL include guard for darwin.h */
-#ifndef CONFIG_DARWIN_H
-#define CONFIG_DARWIN_H
-
+   for C++ executables.) This needs to be -lmx for Darwin 7.0 and
+   above.  */
+#ifndef MATH_LIBRARY
 #define MATH_LIBRARY ""
+#endif
 
 /* We have atexit.  */
 
@@ -113,7 +109,13 @@ Boston, MA 02111-1307, USA.  */
    Note that an option name with a prefix that matches another option
    name, that also takes an argument, needs to be modified so the
    prefix is different, otherwise a '*' after the shorter option will
-   match with the longer one.  */
+   match with the longer one.
+   
+   The SUBTARGET_OPTION_TRANSLATE_TABLE macro, which _must_ be defined
+   in gcc/config/{i386,rs6000}/darwin.h, should contain any additional
+   command-line option translations specific to the particular target
+   architecture.  */
+   
 #define TARGET_OPTION_TRANSLATE_TABLE \
   { "-all_load", "-Zall_load" },  \
   { "-allowable_client", "-Zallowable_client" },  \
@@ -129,6 +131,7 @@ Boston, MA 02111-1307, USA.  */
   { "-exported_symbols_list", "-Zexported_symbols_list" },  \
   { "-seg_addr_table_filename", "-Zseg_addr_table_filename" }, \
   { "-filelist", "-Xlinker -filelist -Xlinker" },  \
+  { "-framework", "-Xlinker -framework -Xlinker" },  \
   { "-flat_namespace", "-Zflat_namespace" },  \
   { "-force_cpusubtype_ALL", "-Zforce_cpusubtype_ALL" },  \
   { "-force_flat_namespace", "-Zforce_flat_namespace" },  \
@@ -140,7 +143,99 @@ Boston, MA 02111-1307, USA.  */
   { "-multi_module", "-Zmulti_module" },  \
   { "-static", "-static -Wa,-static" },  \
   { "-single_module", "-Zsingle_module" },  \
-  { "-unexported_symbols_list", "-Zunexported_symbols_list" }
+  { "-unexported_symbols_list", "-Zunexported_symbols_list" }, \
+  /* APPLE LOCAL begin constant cfstrings */	\
+  { "-fconstant-cfstrings", "-mconstant-cfstrings" }, \
+  { "-fno-constant-cfstrings", "-mno-constant-cfstrings" }, \
+  { "-Wnonportable-cfstrings", "-mwarn-nonportable-cfstrings" }, \
+  { "-Wno-nonportable-cfstrings", "-mno-warn-nonportable-cfstrings" }, \
+  { "-fpascal-strings", "-mpascal-strings" },	\
+  { "-fno-pascal-strings", "-mno-pascal-strings" },	\
+  /* APPLE LOCAL end constant cfstrings */	\
+  SUBTARGET_OPTION_TRANSLATE_TABLE
+
+/* APPLE LOCAL begin constant cfstrings */
+extern int darwin_constant_cfstrings;
+extern const char *darwin_constant_cfstrings_switch;
+extern int darwin_warn_nonportable_cfstrings;
+extern const char *darwin_warn_nonportable_cfstrings_switch;
+extern int darwin_pascal_strings;
+extern const char *darwin_pascal_strings_switch;
+extern int darwin_running_cxx;
+
+#undef  SUBTARGET_OPTIONS
+#define SUBTARGET_OPTIONS						\
+   {"constant-cfstrings", &darwin_constant_cfstrings_switch,		\
+    N_("Generate compile-time CFString objects"), 0},			\
+   {"no-constant-cfstrings", &darwin_constant_cfstrings_switch, "", 0},	\
+   {"pascal-strings", &darwin_pascal_strings_switch,			\
+    N_("Allow use of Pascal strings"), 0},				\
+   {"no-pascal-strings", &darwin_pascal_strings_switch, "", 0},		\
+   {"warn-nonportable-cfstrings", &darwin_warn_nonportable_cfstrings_switch,		\
+    N_("Warn if constant CFString objects contain non-portable characters"), 0},	\
+   {"no-warn-nonportable-cfstrings", &darwin_warn_nonportable_cfstrings_switch, "", 0}
+
+#define SUBTARGET_OS_CPP_BUILTINS()			\
+  do							\
+    {							\
+      builtin_define ("__MACH__");			\
+      builtin_define ("__APPLE__");			\
+      if (darwin_constant_cfstrings)			\
+	builtin_define ("__CONSTANT_CFSTRINGS__");	\
+      /* APPLE LOCAL begin pascal strings */		\
+      if (darwin_pascal_strings)			\
+	{						\
+	  builtin_define ("__PASCAL_STRINGS__");	\
+	  CPP_OPTION (pfile, pascal_strings) = 1;	\
+	}						\
+      /* APPLE LOCAL end pascal strings */		\
+    }							\
+  while (0)
+
+#define SUBSUBTARGET_OVERRIDE_OPTIONS					\
+do {									\
+  if (darwin_constant_cfstrings_switch)					\
+    {									\
+      const char *base = darwin_constant_cfstrings_switch;		\
+      while (base[-1] != 'm') base--;					\
+									\
+      if (*darwin_constant_cfstrings_switch != '\0')			\
+	error ("invalid option `%s'", base);				\
+      darwin_constant_cfstrings = (base[0] != 'n');			\
+    }									\
+  if (darwin_warn_nonportable_cfstrings_switch)				\
+    {									\
+      const char *base = darwin_warn_nonportable_cfstrings_switch;	\
+      while (base[-1] != 'm') base--;					\
+									\
+      if (*darwin_warn_nonportable_cfstrings_switch != '\0')		\
+	error ("invalid option `%s'", base);				\
+      darwin_warn_nonportable_cfstrings = (base[0] != 'n');		\
+    }									\
+  if (darwin_pascal_strings_switch)					\
+    {									\
+      const char *base = darwin_pascal_strings_switch;			\
+      while (base[-1] != 'm') base--;					\
+									\
+      if (*darwin_pascal_strings_switch != '\0')			\
+	error ("invalid option `%s'", base);				\
+      darwin_pascal_strings = (base[0] != 'n');				\
+    }									\
+  /* The c_dialect...() macros are not available to us here.  */	\
+  darwin_running_cxx = (strstr (lang_hooks.name, "C++") != 0);		\
+} while(0)
+
+#define SUBTARGET_INIT_BUILTINS		\
+do {					\
+  darwin_init_cfstring_builtins ();	\
+} while(0)
+
+#undef TARGET_EXPAND_TREE_BUILTIN
+#define TARGET_EXPAND_TREE_BUILTIN darwin_expand_tree_builtin
+#undef TARGET_CONSTRUCT_OBJC_STRING
+#define TARGET_CONSTRUCT_OBJC_STRING darwin_construct_objc_string
+
+/* APPLE LOCAL end constant cfstrings */
 
 /* These compiler options take n arguments.  */
 
@@ -184,12 +279,15 @@ Boston, MA 02111-1307, USA.  */
    !strcmp (STR, "dylinker_install_name") ? 1 : \
    0)
 
-/* Machine dependent cpp options.  */
+/* Machine dependent cpp options.  __APPLE_CC__ is defined as the
+   Apple include files expect it to be defined and won't work if it
+   isn't.  */
 
 #undef	CPP_SPEC
-/* APPLE LOCAL -cpp-precomp compatibility, -arch */
+/* APPLE LOCAL -precomp-trustfile, -arch */
+/* APPLE LOCAL __APPLE__ setting, don't set __APPLE__ here, as we do it someplace else */
 #define CPP_SPEC "%{static:%{!dynamic:-D__STATIC__}}%{!static:-D__DYNAMIC__} \
-		  %{arch} %{<precomp*} %{<cpp-precomp}"
+		  %{precomp-trustfile} %{arch}"
 
 /* APPLE LOCAL cc1plus spec  */
 #undef CC1PLUS_SPEC
@@ -204,18 +302,17 @@ Boston, MA 02111-1307, USA.  */
    instead of LINK_COMMAND_SPEC.  The command spec is better for
    specifying the handling of options understood by generic Unix
    linkers, and for positional arguments like libraries.  */
-/* APPLE LOCAL Symbol Separation */
-/* Add foutput-dbg construct for Symbol Separation */
+/* APPLE LOCAL  add fcreate-profile to LINK_COMMAND_SPEC */
 #define LINK_COMMAND_SPEC "\
 %{!foutput-dbg*:%{!fdump=*:%{!fsyntax-only:%{!precomp:%{!c:%{!M:%{!MM:%{!E:%{!S:\
     %{!Zdynamiclib:%(linker)}%{Zdynamiclib:/usr/bin/libtool} \
-    %{!Zdynamiclib:-arch %T %{@:-arch_multiple}} \
-    %{Zdynamiclib:-arch_only %T} \
+    %(darwin_arch_ld_spec) \
     %l %X %{d} %{s} %{t} %{Z} \
     %{!Zdynamiclib:%{A} %{e*} %{m} %{N} %{n} %{r} %{u*} %{x} %{z}} \
     %{@:-o %f%u.out}%{!@:%{o*}%{!o:-o a.out}} \
     %{!Zdynamiclib:%{!A:%{!nostdlib:%{!nostartfiles:%S}}}} \
-    %{L*} %(link_libgcc) %o %{!nostdlib:%{!nodefaultlibs:%G %L}} \
+    %{L*} %(link_libgcc) %o %{fprofile-arcs|fprofile-generate|fcreate-profile:-lgcov} \
+    %{!nostdlib:%{!nodefaultlibs:%G %L}} \
     %{!A:%{!nostdlib:%{!nostartfiles:%E}}} %{T*} %{F*} \
     %{!--help:%{!no-c++filt|c++filt:| c++filt3 }} }}}}}}}}}"
 
@@ -255,7 +352,6 @@ Boston, MA 02111-1307, USA.  */
      %{client_name*:%e-client_name not allowed with -dynamiclib} \
      %{compatibility_version*} \
      %{current_version*} \
-     %{Zforce_cpusubtype_ALL:%e-force_cpusubtype_ALL not allowed with -dynamiclib} \
      %{Zforce_flat_namespace:%e-force_flat_namespace not allowed with -dynamiclib} \
      %{Zinstall_name*:-install_name %*} \
      %{keep_private_externs:%e-keep_private_externs not allowed with -dynamiclib} \
@@ -276,7 +372,7 @@ Boston, MA 02111-1307, USA.  */
    %{Zmulti_module:-multi_module} %{Zsingle_module:-single_module} \
    %{Zmultiply_defined*:-multiply_defined %*} \
    %{Zmultiplydefinedunused*:-multiply_defined_unused %*} \
-   %{prebind} %{noprebind} %{prebind_all_twolevel_modules} \
+   %{prebind} %{noprebind} %{nofixprebinding} %{prebind_all_twolevel_modules} \
    %{read_only_relocs} \
    %{sectcreate*} %{sectorder*} %{seg1addr*} %{segprot*} %{seg_addr_table*} \
    %{Zseg_addr_table_filename*:-seg_addr_table_filename %*} \
@@ -292,7 +388,7 @@ Boston, MA 02111-1307, USA.  */
    %{pagezero_size*} %{segs_read_*} %{seglinkedit} %{noseglinkedit}  \
    %{sectalign*} %{sectobjectsymbols*} %{segcreate*} %{whyload} \
    %{whatsloaded} %{dylinker_install_name*} \
-   %{dylinker} %{Mach} "
+   %{dylinker} %{Mach} " 
 
 
 /* Machine dependent libraries.  */
@@ -300,43 +396,54 @@ Boston, MA 02111-1307, USA.  */
 #undef	LIB_SPEC
 #define LIB_SPEC "%{!static:-lSystem}"
 
-/* APPLE LOCAL begin gcc_static */
+/* APPLE LOCAL begin radar 3554191 and 3127145 */
 #undef LIBGCC_SPEC
-#define LIBGCC_SPEC "%{static:-lgcc_static} \
-                     %{!static:-lgcc}"
-/* APPLE LOCAL end gcc_static */
+#undef REAL_LIBGCC_SPEC
+#define REAL_LIBGCC_SPEC 					   \
+   "%{static:-lgcc_static}					   \
+    %{!static:%{static-libgcc:-lgcc -lgcc_eh}			   \
+	      %{!static-libgcc:%{shared-libgcc:-lgcc_s%M -lgcc}	   \
+			       %{!shared-libgcc:-lgcc -lgcc_eh}}}"
+/* APPLE LOCAL end radar 3554191 and 3127145 */
 
 /* We specify crt0.o as -lcrt0.o so that ld will search the library path.  */
 
+/* APPLE LOCAL IN FSF 2004-04-27 */
 #undef  STARTFILE_SPEC
 #define STARTFILE_SPEC  \
   "%{!Zdynamiclib:%{Zbundle:%{!static:-lbundle1.o}} \
      %{!Zbundle:%{pg:%{static:-lgcrt0.o} \
                      %{!static:%{object:-lgcrt0.o} \
                                %{!object:%{preload:-lgcrt0.o} \
-                                 %{!preload:-lgcrt1.o -lcrt2.o}}}} \
+                                 %{!preload:-lgcrt1.o crt2.o%s}}}} \
                 %{!pg:%{static:-lcrt0.o} \
                       %{!static:%{object:-lcrt0.o} \
                                 %{!object:%{preload:-lcrt0.o} \
-                                  %{!preload:-lcrt1.o -lcrt2.o}}}}}}"
+                                  %{!preload:-lcrt1.o crt2.o%s}}}}}}"
 
 /* The native Darwin linker doesn't necessarily place files in the order
    that they're specified on the link line.  Thus, it is pointless
    to put anything in ENDFILE_SPEC.  */
 /* #define ENDFILE_SPEC "" */
 
-#undef	DOLLARS_IN_IDENTIFIERS
-#define DOLLARS_IN_IDENTIFIERS 2
-
 /* We use Dbx symbol format.  */
 
 #define DBX_DEBUGGING_INFO 1
 
 /* Also enable Dwarf 2 as an option.  */
-/* APPLE LOCAL begin disable Dwarf 2 until assembler is fixed */
-/* #define DWARF2_DEBUGGING_INFO */
-/* #define PREFERRED_DEBUGGING_TYPE DBX_DEBUG */
-/* APPLE LOCAL end disable Dwarf 2 until assembler is fixed */
+#define DWARF2_DEBUGGING_INFO
+#define PREFERRED_DEBUGGING_TYPE DBX_DEBUG
+
+#define DEBUG_FRAME_SECTION   "__DWARFA,__debug_frame,coalesced,no_toc+strip_static_syms"
+#define DEBUG_INFO_SECTION    "__DWARFA,__debug_info"
+#define DEBUG_ABBREV_SECTION  "__DWARFA,__debug_abbrev"
+#define DEBUG_ARANGES_SECTION "__DWARFA,__debug_aranges"
+#define DEBUG_MACINFO_SECTION "__DWARFA,__debug_macinfo"
+#define DEBUG_LINE_SECTION    "__DWARFA,__debug_line"
+#define DEBUG_LOC_SECTION     "__DWARFA,__debug_loc"
+#define DEBUG_PUBNAMES_SECTION        "__DWARFA,__debug_pubnames"
+#define DEBUG_STR_SECTION     "__DWARFA,__debug_str"
+#define DEBUG_RANGES_SECTION  "__DWARFA,__debug_ranges"
 
 /* APPLE LOCAL begin gdb only used symbols */
 /* Support option to generate stabs for only used symbols. */
@@ -361,9 +468,50 @@ do { text_section ();							\
 	      "\t.stabs \"%s\",%d,0,0,Letext\nLetext:\n", "" , N_SO);	\
    } while (0)
 
+/* Making a symbols weak on Darwin requires more than just setting DECL_WEAK. */
+#define MAKE_DECL_ONE_ONLY(DECL) darwin_make_decl_one_only (DECL)
+
+/* Representation of linkonce symbols for the MACH-O assembler. Linkonce
+   symbols must be given a special section *and* must be preceded by a 
+   special assembler directive. */
+#define ASM_MAKE_LABEL_LINKONCE(FILE,  NAME)                            \
+ do { const char* _x = (NAME); if (!!strncmp (_x, "_OBJC_", 6)) {	\
+  fputs (".weak_definition ", FILE); assemble_name (FILE, _x);		\
+  fputs ("\n", FILE); }} while (0)
+
+/* We support hidden visibility */
+#undef TARGET_SUPPORTS_HIDDEN
+#define TARGET_SUPPORTS_HIDDEN 1
+
+/* The Darwin linker imposes two limitations on common symbols: they 
+   can't have hidden visibility, and they can't appear in dylibs.  As
+   a consequence, we should never use common symbols to represent 
+   vague linkage. */
+#undef USE_COMMON_FOR_ONE_ONLY
+#define USE_COMMON_FOR_ONE_ONLY 0
+
+/* The Darwin linker doesn't like explicit template instantiations to be
+   coalesced, because it doesn't want coalesced symbols to appear in
+   a static archive's table of contents. */
+#undef TARGET_EXPLICIT_INSTANTIATIONS_ONE_ONLY
+#define TARGET_EXPLICIT_INSTANTIATIONS_ONE_ONLY 0
+
+/* We make exception information linkonce. */
+#undef TARGET_USES_WEAK_UNWIND_INFO
+#define TARGET_USES_WEAK_UNWIND_INFO 1
+
+/* We need to use a nonlocal label for the start of an EH frame: the
+   Darwin linker requires that a coalesced section start with a label. */
+#undef FRAME_BEGIN_LABEL
+#define FRAME_BEGIN_LABEL "EH_frame"
+
+/* Emit a label for the FDE corresponding to DECL.  EMPTY means 
+   emit a label for an empty FDE. */
+#define TARGET_ASM_EMIT_UNWIND_LABEL darwin_emit_unwind_label
+
 /* Our profiling scheme doesn't LP labels and counter words.  */
 
-#define NO_PROFILE_COUNTERS
+#define NO_PROFILE_COUNTERS	1
 
 #undef	INIT_SECTION_ASM_OP
 #define INIT_SECTION_ASM_OP
@@ -382,24 +530,14 @@ do { text_section ();							\
 
 /* Don't output a .file directive.  That is only used by the assembler for
    error reporting.  */
+#undef	TARGET_ASM_FILE_START_FILE_DIRECTIVE
+#define TARGET_ASM_FILE_START_FILE_DIRECTIVE false
 
-#undef	ASM_FILE_START
-#define ASM_FILE_START(FILE)
-
-#undef	ASM_FILE_END
-#define ASM_FILE_END(FILE)						\
-    do {								\
-      machopic_finish (asm_out_file);                            	\
-      if (strcmp (lang_hooks.name, "GNU C++") == 0)			\
-	{								\
-	  constructor_section ();					\
-	  destructor_section ();					\
-	  ASM_OUTPUT_ALIGN (FILE, 1);					\
-	}								\
-    } while (0)
+#undef  TARGET_ASM_FILE_END
+#define TARGET_ASM_FILE_END darwin_file_end
 
 #define ASM_OUTPUT_SKIP(FILE,SIZE)  \
-  fprintf (FILE, "\t.space %d\n", SIZE)
+  fprintf (FILE, "\t.space "HOST_WIDE_INT_PRINT_UNSIGNED"\n", SIZE)
 
 /* Give ObjC methods pretty symbol names.  */
 
@@ -413,27 +551,32 @@ do { text_section ();							\
 		  (CLASS_NAME), (SEL_NAME));				\
      } while (0)
 
-/* The machopic_define_name calls are telling the machopic subsystem
+/* The RTTI data (e.g., __ti4name) is common and public (and static),
+   but it does need to be referenced via indirect PIC data pointers.
+   The machopic_define_name calls are telling the machopic subsystem
    that the name *is* defined in this module, so it doesn't need to
-   reference them indirectly.  */
+   make them indirect.  */
 
 #undef ASM_DECLARE_OBJECT_NAME
 #define ASM_DECLARE_OBJECT_NAME(FILE, NAME, DECL)			\
   do {									\
-    const char *xname = NAME;                                           \
-    if (GET_CODE (XEXP (DECL_RTL (DECL), 0)) != SYMBOL_REF)             \
-      xname = IDENTIFIER_POINTER (DECL_NAME (DECL));                    \
-    /* APPLE LOCAL  coalescing  */					\
-    if (! DECL_IS_COALESCED_OR_WEAK (DECL))                             \
-      if ((TREE_STATIC (DECL)                                           \
-	 && (!DECL_COMMON (DECL) || !TREE_PUBLIC (DECL)))               \
-        || DECL_INITIAL (DECL))                                         \
-      machopic_define_name (xname);                                     \
-    if ((TREE_STATIC (DECL)                                             \
-	 && (!DECL_COMMON (DECL) || !TREE_PUBLIC (DECL)))               \
-        || DECL_INITIAL (DECL))                                         \
-      (* targetm.encode_section_info) (DECL, false);			\
-    ASM_OUTPUT_LABEL (FILE, xname);                                     \
+    const char *xname = NAME;						\
+    if (GET_CODE (XEXP (DECL_RTL (DECL), 0)) != SYMBOL_REF)		\
+      xname = IDENTIFIER_POINTER (DECL_NAME (DECL));			\
+    if (! DECL_ONE_ONLY (DECL) && ! DECL_WEAK (DECL))                   \
+      if ((TREE_STATIC (DECL)						\
+	   && (!DECL_COMMON (DECL) || !TREE_PUBLIC (DECL)))		\
+          || DECL_INITIAL (DECL))					\
+        machopic_define_name (xname);					\
+    if ((TREE_STATIC (DECL)						\
+	 && (!DECL_COMMON (DECL) || !TREE_PUBLIC (DECL)))		\
+        || DECL_INITIAL (DECL))						\
+      (* targetm.encode_section_info) (DECL, DECL_RTL (DECL), false);	\
+    ASM_OUTPUT_LABEL (FILE, xname);					\
+    /* Darwin doesn't support zero-size objects, so give them a	\
+       byte.  */							\
+    if (tree_low_cst (DECL_SIZE_UNIT (DECL), 1) == 0)			\
+      assemble_zeros (1);						\
   } while (0)
 
 #define ASM_DECLARE_FUNCTION_NAME(FILE, NAME, DECL)                     \
@@ -441,17 +584,25 @@ do { text_section ();							\
     const char *xname = NAME;                                           \
     if (GET_CODE (XEXP (DECL_RTL (DECL), 0)) != SYMBOL_REF)             \
       xname = IDENTIFIER_POINTER (DECL_NAME (DECL));                    \
-    /* APPLE LOCAL  coalescing  */					\
-    if (! DECL_IS_COALESCED_OR_WEAK (DECL))				\
+    if (! DECL_ONE_ONLY (DECL) && ! DECL_WEAK (DECL))			\
       if ((TREE_STATIC (DECL)                                           \
-	 && (!DECL_COMMON (DECL) || !TREE_PUBLIC (DECL)))               \
-        || DECL_INITIAL (DECL))                                         \
-      machopic_define_name (xname);                                     \
+	   && (!DECL_COMMON (DECL) || !TREE_PUBLIC (DECL)))             \
+          || DECL_INITIAL (DECL))                                       \
+        machopic_define_name (xname);                                   \
     if ((TREE_STATIC (DECL)                                             \
 	 && (!DECL_COMMON (DECL) || !TREE_PUBLIC (DECL)))               \
         || DECL_INITIAL (DECL))                                         \
-      (* targetm.encode_section_info) (DECL, false);			\
+      (* targetm.encode_section_info) (DECL, DECL_RTL (DECL), false);	\
     ASM_OUTPUT_LABEL (FILE, xname);                                     \
+  } while (0)
+
+#define ASM_DECLARE_CONSTANT_NAME(FILE, NAME, EXP, SIZE)	\
+  do {								\
+    ASM_OUTPUT_LABEL (FILE, NAME);				\
+    /* Darwin doesn't support zero-size objects, so give them a	\
+       byte.  */						\
+    if ((SIZE) == 0)						\
+      assemble_zeros (1);					\
   } while (0)
 
 /* Wrap new method names in quotes so the assembler doesn't gag.
@@ -461,7 +612,9 @@ do { text_section ();							\
 #define ASM_OUTPUT_LABELREF(FILE,NAME)					     \
   do {									     \
        const char *xname = darwin_strip_name_encoding (NAME);		     \
-       if (xname[0] == '&' || xname[0] == '*')				     \
+       if (! strcmp (xname, "<pic base>"))				     \
+         machopic_output_function_base_name(FILE);                           \
+       else if (xname[0] == '&' || xname[0] == '*')			     \
          {								     \
            int len = strlen (xname);					     \
 	   if (len > 6 && !strcmp ("$stub", xname + len - 5))		     \
@@ -515,12 +668,12 @@ do { text_section ();							\
   do {									\
     fputs (".lcomm ", (FILE));						\
     assemble_name ((FILE), (NAME));					\
-    fprintf ((FILE), ",%u,%u\n", (SIZE),				\
+    fprintf ((FILE), ","HOST_WIDE_INT_PRINT_UNSIGNED",%u\n", (SIZE),	\
 	     floor_log2 ((ALIGN) / BITS_PER_UNIT));			\
     if ((DECL) && ((TREE_STATIC (DECL)					\
 	 && (!DECL_COMMON (DECL) || !TREE_PUBLIC (DECL)))		\
         || DECL_INITIAL (DECL)))					\
-      (* targetm.encode_section_info) (DECL, false);			\
+      (* targetm.encode_section_info) (DECL, DECL_RTL (DECL), false);	\
     if ((DECL) && ((TREE_STATIC (DECL)					\
 	 && (!DECL_COMMON (DECL) || !TREE_PUBLIC (DECL)))		\
         || DECL_INITIAL (DECL)))					\
@@ -537,9 +690,9 @@ do { text_section ();							\
 
 #undef	SECTION_FUNCTION
 #define SECTION_FUNCTION(FUNCTION, SECTION, DIRECTIVE, OBJC)		\
-extern void FUNCTION PARAMS ((void));					\
+extern void FUNCTION (void);						\
 void									\
-FUNCTION ()								\
+FUNCTION (void)								\
 {									\
   if (in_section != SECTION)						\
     {									\
@@ -569,10 +722,9 @@ FUNCTION ()								\
   in_objc_constant_string_object,			\
   /* APPLE LOCAL constant cfstrings */			\
   in_cfstring_constant_object,				\
-  /* APPLE LOCAL fix and continue */			\
   in_objc_image_info,					\
   in_objc_class_names, in_objc_meth_var_names,		\
-  in_objc_meth_var_types, in_objc_cls_refs, 		\
+  in_objc_meth_var_types, in_objc_cls_refs,		\
   in_machopic_nl_symbol_ptr,				\
   in_machopic_lazy_symbol_ptr,				\
   in_machopic_symbol_stub,				\
@@ -584,7 +736,7 @@ FUNCTION ()								\
 
 #undef	EXTRA_SECTION_FUNCTIONS
 #define EXTRA_SECTION_FUNCTIONS			\
-static void objc_section_init PARAMS ((void));	\
+static void objc_section_init (void);		\
 SECTION_FUNCTION (const_section,		\
                   in_const,			\
                   ".const", 0)			\
@@ -668,11 +820,10 @@ SECTION_FUNCTION (cfstring_constant_object_section,	\
 		  in_cfstring_constant_object,	\
 		  ".section __DATA, __cfstring", 0)	\
 /* APPLE LOCAL end constant cfstrings */	\
-/* APPLE LOCAL begin fix and continue */	\
+/* Fix-and-Continue image marker.  */		\
 SECTION_FUNCTION (objc_image_info_section,	\
-		  in_objc_image_info,		\
-		  ".section __OBJC, __image_info", 1)	\
-/* APPLE LOCAL end fix and continue */	\
+                  in_objc_image_info,		\
+                  ".section __OBJC, __image_info", 1)	\
 SECTION_FUNCTION (objc_class_names_section,	\
 		in_objc_class_names,		\
 		".objc_class_names", 1)	\
@@ -688,32 +839,31 @@ SECTION_FUNCTION (objc_cls_refs_section,	\
 						\
 SECTION_FUNCTION (machopic_lazy_symbol_ptr_section,	\
 		in_machopic_lazy_symbol_ptr,		\
-		".lazy_symbol_pointer", 0)      	\
+		".lazy_symbol_pointer", 0)	\
 SECTION_FUNCTION (machopic_nl_symbol_ptr_section,	\
 		in_machopic_nl_symbol_ptr,		\
-		".non_lazy_symbol_pointer", 0)      	\
+		".non_lazy_symbol_pointer", 0)	\
 SECTION_FUNCTION (machopic_symbol_stub_section,		\
 		in_machopic_symbol_stub,		\
-		".symbol_stub", 0)			\
-SECTION_FUNCTION (machopic_symbol_stub1_section,		\
+		".symbol_stub", 0)		\
+SECTION_FUNCTION (machopic_symbol_stub1_section,	\
 		in_machopic_symbol_stub1,		\
-		".section __TEXT,__symbol_stub1,symbol_stubs,pure_instructions,16", 0)      		\
+		".section __TEXT,__symbol_stub1,symbol_stubs,pure_instructions,16", 0)\
 SECTION_FUNCTION (machopic_picsymbol_stub_section,	\
 		in_machopic_picsymbol_stub,		\
-		".picsymbol_stub", 0)			\
+		".picsymbol_stub", 0)		\
 SECTION_FUNCTION (machopic_picsymbol_stub1_section,	\
 		in_machopic_picsymbol_stub1,		\
-		".section __TEXT,__picsymbolstub1,symbol_stubs,pure_instructions,32", 0)      		\
+		".section __TEXT,__picsymbolstub1,symbol_stubs,pure_instructions,32", 0)\
 SECTION_FUNCTION (darwin_exception_section,		\
 		in_darwin_exception,			\
 		".section __DATA,__gcc_except_tab", 0)	\
 SECTION_FUNCTION (darwin_eh_frame_section,		\
 		in_darwin_eh_frame,			\
-                /* APPLE LOCAL eh in data segment */    \
-		 ".section " EH_FRAME_SECTION_NAME ",__eh_frame" EH_FRAME_SECTION_ATTR, 0)  \
+		".section " EH_FRAME_SECTION_NAME ",__eh_frame" EH_FRAME_SECTION_ATTR, 0)  \
 							\
 static void					\
-objc_section_init ()				\
+objc_section_init (void)			\
 {						\
   static int been_here = 0;			\
 						\
@@ -730,7 +880,7 @@ objc_section_init ()				\
       objc_cls_refs_section ();			\
       objc_class_section ();			\
       objc_meta_class_section ();		\
-          /* shared, hot -> cold */    		\
+          /* shared, hot -> cold */		\
       objc_cls_meth_section ();			\
       objc_inst_meth_section ();		\
       objc_protocol_section ();			\
@@ -751,11 +901,14 @@ objc_section_init ()				\
 #define TARGET_ASM_SELECT_SECTION machopic_select_section
 #undef	TARGET_ASM_SELECT_RTX_SECTION
 #define TARGET_ASM_SELECT_RTX_SECTION machopic_select_rtx_section
+#undef  TARGET_ASM_UNIQUE_SECTION
+#define TARGET_ASM_UNIQUE_SECTION darwin_unique_section
+
+
 
 #define ASM_DECLARE_UNRESOLVED_REFERENCE(FILE,NAME)			\
-    do { 								\
+    do {								\
 	 if (FILE) {							\
-	   /* APPLE LOCAL dynamic-no-pic  */				\
 	   if (MACHOPIC_INDIRECT)					\
 	     fprintf (FILE, "\t.lazy_reference ");			\
 	   else								\
@@ -769,7 +922,7 @@ objc_section_init ()				\
     do {								\
 	 if (FILE) {							\
 	   fprintf (FILE, "\t");					\
-	   assemble_name (FILE, NAME); 					\
+	   assemble_name (FILE, NAME);					\
 	   fprintf (FILE, "=0\n");					\
 	   (*targetm.asm_out.globalize_label) (FILE, NAME);		\
 	 }								\
@@ -779,32 +932,23 @@ objc_section_init ()				\
 #define GLOBAL_ASM_OP ".globl "
 #define TARGET_ASM_GLOBALIZE_LABEL darwin_globalize_label
 
-/* APPLE LOCAL begin private extern */
-#define ASM_PRIVATE_EXTERNIZE_LABEL(FILE, NAME)				\
- do { const char* _x = (NAME); if (!!strncmp (_x, "_OBJC_", 6)) {	\
-  fputs (".private_extern ", FILE); assemble_name (FILE, _x);		\
-  fputs ("\n", FILE); }} while (0)
-/* APPLE LOCAL end private extern */
-
 /* APPLE LOCAL begin weak definition */
-#ifdef APPLE_WEAK_ASSEMBLER_DIRECTIVE
 #define ASM_WEAK_DEFINITIONIZE_LABEL(FILE,  NAME)                       \
  do { const char* _x = (NAME); if (!!strncmp (_x, "_OBJC_", 6)) {	\
   fputs (".weak_definition ", FILE); assemble_name (FILE, _x);		\
   fputs ("\n", FILE); }} while (0)
-#endif
 /* APPLE LOCAL end weak definition */
+
+/* Emit an assembler directive to set visibility for a symbol.  Used
+   to support visibility attribute and Darwin's private extern
+   feature.  */
+#undef TARGET_ASM_ASSEMBLE_VISIBILITY
+#define TARGET_ASM_ASSEMBLE_VISIBILITY darwin_assemble_visibility
+
 
 #undef ASM_GENERATE_INTERNAL_LABEL
 #define ASM_GENERATE_INTERNAL_LABEL(LABEL,PREFIX,NUM)	\
   sprintf (LABEL, "*%s%ld", PREFIX, (long)(NUM))
-
-/* This is how to output an internal numbered label where PREFIX is
-   the class of label and NUM is the number within the class.  */
-
-#undef ASM_OUTPUT_INTERNAL_LABEL
-#define ASM_OUTPUT_INTERNAL_LABEL(FILE,PREFIX,NUM)	\
-  fprintf (FILE, "%s%d:\n", PREFIX, NUM)
 
 /* Since we have a separate readonly data section, define this so that
    jump tables end up in text rather than data.  */
@@ -825,12 +969,10 @@ enum machopic_addr_class {
 
 /* Macros defining the various PIC cases.  */
 
-/* APPLE LOCAL begin dynamic-no-pic */
-#define MACHO_DYNAMIC_NO_PIC_P()	(TARGET_DYNAMIC_NO_PIC)
-#define MACHOPIC_INDIRECT	(flag_pic || MACHO_DYNAMIC_NO_PIC_P ())
-#define MACHOPIC_JUST_INDIRECT	(flag_pic == 1 || MACHO_DYNAMIC_NO_PIC_P ())
-#define MACHOPIC_PURE		(flag_pic == 2 && ! MACHO_DYNAMIC_NO_PIC_P ())
-/* APPLE LOCAL end dynamic-no-pic */
+#define MACHO_DYNAMIC_NO_PIC_P	(TARGET_DYNAMIC_NO_PIC)
+#define MACHOPIC_INDIRECT	(flag_pic || MACHO_DYNAMIC_NO_PIC_P)
+#define MACHOPIC_JUST_INDIRECT	(flag_pic == 1 || MACHO_DYNAMIC_NO_PIC_P)
+#define MACHOPIC_PURE		(flag_pic == 2 && ! MACHO_DYNAMIC_NO_PIC_P)
 
 #undef TARGET_ENCODE_SECTION_INFO
 #define TARGET_ENCODE_SECTION_INFO  darwin_encode_section_info
@@ -902,99 +1044,17 @@ enum machopic_addr_class {
 
 #define TARGET_ASM_EH_FRAME_SECTION darwin_eh_frame_section
 
-/* APPLE LOCAL begin coalescing  */
-/* The __eh_frame section attributes: a "normal" section by default.  */
-#define EH_FRAME_SECTION_ATTR	/*nothing*/
+#define EH_FRAME_SECTION_NAME   "__TEXT"
+#define EH_FRAME_SECTION_ATTR ",coalesced,no_toc+strip_static_syms"
 
-/* The only EH item we can't do PC-relative is the reference to
-   __gxx_personality_v0.  So we cheat, since moving the __eh_frame section
-   to the DATA segment is expensive.
-   We output a 4-byte encoding - including the last 2 chars of the 
-   personality function name: {0, 'g', 'v', '0', 0xff}
-   (The first zero byte coincides with the "absolute" encoding.)
-   This means we can now use DW_EH_PE_pcrel for everything.  And there
-   was much rejoicing.  */
-
-#define EH_FRAME_SECTION_NAME	"__TEXT"
-
-#define COALESCED_UNWIND_INFO
-
-#ifdef COALESCED_UNWIND_INFO
-#undef EH_FRAME_SECTION_ATTR
-
-#ifdef APPLE_WEAK_SECTION_ATTRIBUTE
-#define APPLE_EH_FRAME_WEAK_DEFINITIONS ",weak_definitions"
-#else /* APPLE_WEAK_SECTION_ATTRIBUTE */
-#define APPLE_EH_FRAME_WEAK_DEFINITIONS ""
-#endif /* APPLE_WEAK_SECTION_ATTRIBUTE */
-
-#ifdef APPLE_STRIP_STATIC_SYMS_SECTION_ATTRIBUTE
-#define APPLE_EH_FRAME_STRIP_STATIC "+strip_static_syms"
-#else /* APPLE_STRIP_STATIC_SYMS_SECTION_ATTRIBUTE */
-#define APPLE_EH_FRAME_STRIP_STATIC ""
-#endif /* APPLE_STRIP_STATIC_SYMS_SECTION_ATTRIBUTE */
-
-#define EH_FRAME_SECTION_ATTR \
-        ",coalesced" APPLE_EH_FRAME_WEAK_DEFINITIONS ",no_toc" APPLE_EH_FRAME_STRIP_STATIC
-
-
-/* Implicit or explicit template instantiations' EH info are GLOBAL
-   symbols.  ("Implicit" here implies "coalesced".)
-   Note that .weak_definition is commented out until 'as' supports it.  */
-
-
-#ifdef APPLE_WEAK_ASSEMBLER_DIRECTIVE
-#define APPLE_ASM_WEAK_DEF_FMT_STRING(LAB) \
-      (name_needs_quotes(LAB) ? ".weak_definition \"%s.eh\"\n" : ".weak_definition %s.eh\n")
-#else /* APPLE_WEAK_ASSEMBLER_DIRECTIVE */
-#define APPLE_ASM_WEAK_DEF_FMT_STRING(LAB) \
-      (name_needs_quotes(LAB) ? ";.weak_definition \"%s.eh\"\n" : ";.weak_definition %s.eh\n")
-#endif /* APPLE_WEAK_ASSEMBLER_DIRECTIVE */
-
-#define ASM_OUTPUT_COAL_UNWIND_LABEL(FILE, LAB, COAL, PUBLIC, PRIVATE_EXTERN) \
-  do {									\
-    if ((COAL) || (PUBLIC) || (PRIVATE_EXTERN))                         \
-      fprintf ((FILE),							\
-	       (name_needs_quotes(LAB) ? "%s \"%s.eh\"\n" : "%s %s.eh\n"), \
-	       ((PUBLIC) ? ".globl" : ".private_extern"),               \
-	       (LAB));							\
-    if (COAL)								\
-      fprintf ((FILE),							\
-	       APPLE_ASM_WEAK_DEF_FMT_STRING(LAB),			\
-	       (LAB));							\
-    fprintf ((FILE), 							\
-	     (name_needs_quotes(LAB) ? "\"%s.eh\":\n" : "%s.eh:\n"),    \
-	     (LAB));							\
-  } while (0)
-
-#define ASM_OUTPUT_EMPTY_COAL_UNWIND_LABEL(FILE, LAB, COAL, 		   \
-					   PUBLIC, PRIVATE_EXTERN)	   \
-  do {									   \
-    if ((COAL) || (PUBLIC) || (PRIVATE_EXTERN))				   \
-      fprintf ((FILE),							   \
-	       (name_needs_quotes(LAB) ? "%s \"%s.eh\"\n" : "%s %s.eh\n"), \
-	       ((PUBLIC) ? ".globl" : ".private_extern"),		   \
-	       (LAB));							   \
-    /* Actually, (COAL) must always be clear, due to Darwin linker	   \
-       restrictions.  */						   \
-    if (COAL)								   \
-      fprintf ((FILE),							   \
-	       APPLE_ASM_WEAK_DEF_FMT_STRING(LAB),			   \
-	       (LAB));							   \
-    fprintf ((FILE),							   \
-	     (name_needs_quotes(LAB) 					   \
-	      ? "\t\"%s.eh\" = 0\n" : "\t%s.eh = 0\n"),			   \
-	     (LAB));							   \
-  } while (0)
-
-
-#endif	/* COALESCED_UNWIND_INFO  */
-  
 #undef ASM_PREFERRED_EH_DATA_FORMAT
 #define ASM_PREFERRED_EH_DATA_FORMAT(CODE,GLOBAL)  \
   (((CODE) == 2 && (GLOBAL) == 1) \
    ? (DW_EH_PE_pcrel | DW_EH_PE_indirect) : \
      ((CODE) == 1 || (GLOBAL) == 0) ? DW_EH_PE_pcrel : DW_EH_PE_absptr)
+
+#define ASM_OUTPUT_DWARF_DELTA(FILE,SIZE,LABEL1,LABEL2)  \
+  darwin_asm_output_dwarf_delta (FILE, SIZE, LABEL1, LABEL2)
 
 #define ASM_MAYBE_OUTPUT_ENCODED_ADDR_RTX(ASM_OUT_FILE, ENCODING, SIZE, ADDR, DONE)	\
       if (ENCODING == ASM_PREFERRED_EH_DATA_FORMAT (2, 1)) {				\
@@ -1002,50 +1062,37 @@ enum machopic_addr_class {
 	goto DONE;									\
       }
 
-/* APPLE LOCAL end coalescing  */
-/* APPLE FIXME set up to add rs6000 pragmas... */
+
+#define TARGET_TERMINATE_DW2_EH_FRAME_INFO false
+
 /* APPLE LOCAL OS pragma hook */
-#undef REGISTER_OS_PRAGMAS
-#define REGISTER_OS_PRAGMAS(PFILE)                          \
-  do {                                                          \
-    cpp_register_pragma (PFILE, 0, "mark", darwin_pragma_ignore);  \
-    cpp_register_pragma (PFILE, 0, "options", darwin_pragma_options);  \
-    /* APPLE LOCAL begin Macintosh alignment 2002-1-22 ff */  \
+#define REGISTER_OS_PRAGMAS(PFILE)			\
+  do {								\
+    c_register_pragma (0, "mark", darwin_pragma_ignore);	\
+    c_register_pragma (0, "options", darwin_pragma_options);	\
+    c_register_pragma (0, "segment", darwin_pragma_ignore);	\
+    c_register_pragma (0, "unused", darwin_pragma_unused);	\
+    /* APPLE LOCAL begin Macintosh alignment 2002-1-22 --ff */  \
     cpp_register_pragma (PFILE, 0, "pack", darwin_pragma_pack);  \
-    /* APPLE LOCAL end Macintosh alignment 2002-1-22 ff */  \
-    cpp_register_pragma (PFILE, 0, "segment", darwin_pragma_ignore);  \
-    cpp_register_pragma (PFILE, 0, "unused", darwin_pragma_unused);  \
-    /* APPLE LOCAL begin CALL_ON_LOAD/CALL_ON_UNLOAD pragmas  20020202 turly  */ \
+    /* APPLE LOCAL end Macintosh alignment 2002-1-22 --ff */  \
+    /* APPLE LOCAL begin CALL_ON_LOAD/CALL_ON_UNLOAD pragmas  20020202 --turly  */ \
     cpp_register_pragma (PFILE, 0, "CALL_ON_LOAD", \
 					darwin_pragma_call_on_load); \
     cpp_register_pragma (PFILE, 0, "CALL_ON_UNLOAD", \
 					darwin_pragma_call_on_unload); \
-    /* APPLE LOCAL end CALL_ON_LOAD/CALL_ON_UNLOAD pragmas  20020202 turly  */ \
-    /* APPLE LOCAL begin CALL_ON_MODULE_BIND deprecated 2002-4-10 ff */  \
+    /* APPLE LOCAL end CALL_ON_LOAD/CALL_ON_UNLOAD pragmas  20020202 --turly  */ \
+    /* APPLE LOCAL begin CALL_ON_MODULE_BIND deprecated 2002-4-10 --ff */  \
     cpp_register_pragma (PFILE, 0, "CALL_ON_MODULE_BIND", darwin_pragma_call_on_module_bind);  \
-    /* APPLE LOCAL end CALL_ON_MODULE_BIND deprecated 2002-4-10 ff */  \
-    /* APPLE LOCAL begin temporary pragmas 2001-07-05 sts */  \
+    /* APPLE LOCAL end CALL_ON_MODULE_BIND deprecated 2002-4-10 --ff */  \
+    /* APPLE LOCAL begin temporary pragmas 2001-07-05 --sts */  \
     cpp_register_pragma (PFILE, 0, "CC_NO_MACH_TEXT_SECTIONS", darwin_pragma_cc_no_mach_text_sections);  \
     cpp_register_pragma (PFILE, 0, "CC_OPT_OFF", darwin_pragma_cc_opt_off);  \
     cpp_register_pragma (PFILE, 0, "CC_OPT_ON", darwin_pragma_cc_opt_on);  \
     cpp_register_pragma (PFILE, 0, "CC_OPT_RESTORE", darwin_pragma_cc_opt_restore);  \
     cpp_register_pragma (PFILE, 0, "CC_WRITABLE_STRINGS", darwin_pragma_cc_writable_strings);  \
     cpp_register_pragma (PFILE, 0, "CC_NON_WRITABLE_STRINGS", darwin_pragma_cc_non_writable_strings);  \
-    /* APPLE LOCAL end temporary pragmas 2001-07-05 sts */  \
+    /* APPLE LOCAL end temporary pragmas 2001-07-05 --sts */  \
   } while (0)
-
-/* APPLE LOCAL  coalescing  */
-extern void make_decl_coalesced (tree, int private_extern_p);
-
-/* Coalesced symbols are private extern by default.  This behavior can
-   be changed with the EXPERIMENTAL export-coalesced flag.  There is 
-   not (yet?) any means for coalesced symbols to be selectively exported.  */
-
-#define MAKE_DECL_COALESCED(DECL) \
-        make_decl_coalesced (DECL, !flag_export_coalesced)
-
-#define COALESCE_STATIC_THUNK(DECL, PUBLIC) \
-        make_decl_coalesced (DECL, !PUBLIC)
 
 extern int flag_coalescing_enabled,
 	   flag_coalesce_templates, flag_weak_coalesced_definitions;
@@ -1059,9 +1106,6 @@ extern int flag_export_coalesced;
 #define COALESCING_TEMPLATES_P(DECL)				\
         (COALESCING_ENABLED_P () && flag_coalesce_templates)
 
-#define ASM_OUTPUT_DWARF_DELTA(FILE,SIZE,LABEL1,LABEL2)  \
-  darwin_asm_output_dwarf_delta (FILE, SIZE, LABEL1, LABEL2)
-
 #define TARGET_TERMINATE_DW2_EH_FRAME_INFO false
 
 #define MARK_TEMPLATE_COALESCED(DECL)					\
@@ -1074,8 +1118,7 @@ extern int flag_export_coalesced;
 		&& DECL_INTERFACE_KNOWN (DECL)				\
 		&& DECL_NOT_REALLY_EXTERN (DECL))			\
 	    /* Or a non-common VAR_DECL.  */				\
-	    || (TREE_CODE (DECL) == VAR_DECL                            \
-		&& ! (DECL_COMMON (DECL) || DECL_COMDAT (DECL))));      \
+	    || (TREE_CODE (DECL) == VAR_DECL && ! DECL_COMMON (DECL)));	\
       if (!explicit							\
 	  || /*it IS explicit, but*/ !flag_weak_coalesced_definitions)	\
         MAKE_DECL_COALESCED (DECL);					\
@@ -1087,32 +1130,33 @@ extern int flag_export_coalesced;
 #undef TARGET_SECTION_TYPE_FLAGS
 #define TARGET_SECTION_TYPE_FLAGS darwin_section_type_flags
 
-#define DECL_IS_COALESCED_OR_WEAK(DECL)			\
-	(DECL_COALESCED (DECL) || DECL_WEAK (DECL))
-
-extern int machopic_var_referred_to_p PARAMS ((const char*)); 
-#define MACHOPIC_VAR_REFERRED_TO_P(NAME) machopic_var_referred_to_p (NAME)
-/* APPLE LOCAL  end coalescing  */
+#define DARWIN_REGISTER_TARGET_PRAGMAS()                        \
+  do {                                                          \
+    c_register_pragma (0, "mark", darwin_pragma_ignore);        \
+    c_register_pragma (0, "options", darwin_pragma_options);    \
+    c_register_pragma (0, "segment", darwin_pragma_ignore);     \
+    c_register_pragma (0, "unused", darwin_pragma_unused);      \
+  } while (0)
 
 /* APPLE LOCAL insert assembly ".abort" directive on fatal error   */
 #define EXIT_FROM_FATAL_DIAGNOSTIC(status) abort_assembly_and_exit (status)
 extern void abort_assembly_and_exit (int status) ATTRIBUTE_NORETURN;
 
-/* APPLE LOCAL begin Macintosh alignment 2002-2-13 ff */
+/* APPLE LOCAL begin Macintosh alignment 2002-2-13 --ff */
 #ifdef RS6000_VECTOR_ALIGNMENT
 /* When adjusting (lowering) the alignment of fields when in the
    mac68k alignment mode, the 128-bit alignment of vectors *MUST*
    be preserved.  */
 #define PEG_ALIGN_FOR_MAC68K(DESIRED)           \
-        ((flag_altivec && (DESIRED) == RS6000_VECTOR_ALIGNMENT) \
+        ((TARGET_ALTIVEC && (DESIRED) == RS6000_VECTOR_ALIGNMENT) \
          ? RS6000_VECTOR_ALIGNMENT              \
          : MIN ((DESIRED), 16))
 #else
 #define PEG_ALIGN_FOR_MAC68K(DESIRED)   MIN ((DESIRED), 16)
 #endif 
-/* APPLE LOCAL end Macintosh alignment 2002-2-13 ff */
+/* APPLE LOCAL end Macintosh alignment 2002-2-13 --ff */
 
-/* APPLE LOCAL begin double destructor turly 20020214  */
+/* APPLE LOCAL begin double destructor 20020214 --turly  */
 /* Handle __attribute__((apple_kext_compatibility)).  This shrinks the
    vtable for all classes with this attribute (and their descendants)
    back to 2.95 dimensions.  It causes only the deleting destructor to
@@ -1127,7 +1171,7 @@ extern void abort_assembly_and_exit (int status) ATTRIBUTE_NORETURN;
 /* NB: Can't use flag_apple_kext as it's in the C++ FE, and this macro
    is used in the back end for the above __attribute__ handler.  */
 #define POSSIBLY_COMPILING_APPLE_KEXT_P()		\
-	(! MACHOPIC_INDIRECT && c_language == clk_cplusplus)
+	(! MACHOPIC_INDIRECT && c_dialect_cxx())
 
 /* Need a mechanism to tell whether a C++ operator delete is empty so
    we overload TREE_SIDE_EFFECTS here (it is unused for FUNCTION_DECLS.)
@@ -1160,26 +1204,40 @@ extern void abort_assembly_and_exit (int status) ATTRIBUTE_NORETURN;
       if (POSSIBLY_COMPILING_APPLE_KEXT_P () && flag_apple_kext)	\
 	(IDX) = fold (build (PLUS_EXPR, TREE_TYPE (IDX), IDX, size_int (2))); \
     } while (0)
-/* APPLE LOCAL end double destructor turly 20020214  */
+/* APPLE LOCAL end double destructor 20020214 --turly  */
 
-/* APPLE LOCAL begin zerofill turly 20020218  */
+/* APPLE LOCAL begin zerofill 20020218 --turly  */
 /* This keeps uninitialized data from bloating the data when -fno-common.
    Radar 2863107.  */
-#define ASM_OUTPUT_ZEROFILL(FILE, NAME, SIZE, ALIGNMENT)        \
-do { fputs (".zerofill __DATA, __common, ", (FILE));            \
-        assemble_name ((FILE), (NAME));                         \
-        fprintf ((FILE), ", %u, %u\n", (SIZE), (ALIGNMENT));    \
-        in_section = no_section;                                \
-      } while (0)
-/* APPLE LOCAL end zerofill turly 20020218  */
-
-/* APPLE LOCAL begin CW asm blocks */
-#define CW_ASM_SPECIAL_LABEL(ID) darwin_cw_asm_special_label (ID)
+#define ASM_OUTPUT_ZEROFILL(FILE, NAME, SIZE, ALIGNMENT)		    \
+  do {									    \
+    fputs (".zerofill __DATA, __common, ", (FILE));			    \
+    assemble_name ((FILE), (NAME));					    \
+    fprintf ((FILE), ", " HOST_WIDE_INT_PRINT_DEC, (HOST_WIDE_INT) (SIZE)); \
+    fprintf ((FILE), ", " HOST_WIDE_INT_PRINT_DEC "\n",			    \
+	     (HOST_WIDE_INT) (ALIGNMENT));				    \
+    in_section = no_section;						    \
+  } while (0)
+/* APPLE LOCAL end zerofill 20020218 --turly  */
 
 #undef ASM_APP_ON
 #define ASM_APP_ON ""
 #undef ASM_APP_OFF
 #define ASM_APP_OFF ""
 
-/* APPLE LOCAL include guard for darwin.h */
-#endif /* CONFIG_DARWIN_H  */
+extern const char *machopic_non_lazy_ptr_name PARAMS ((const char *));
+
+void darwin_register_frameworks (int);
+#define TARGET_EXTRA_INCLUDES darwin_register_frameworks
+
+void add_framework_path (char *);
+#define TARGET_OPTF add_framework_path
+
+#define TARGET_HAS_F_SETLKW
+
+/* Darwin before 7.0 does not have C99 functions.   */
+#ifndef TARGET_C99_FUNCTIONS
+#define TARGET_C99_FUNCTIONS 0
+#endif
+
+#endif /* CONFIG_DARWIN_H */

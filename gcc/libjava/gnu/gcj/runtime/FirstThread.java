@@ -1,6 +1,6 @@
 // FirstThread.java - Implementation of very first thread.
 
-/* Copyright (C) 1998, 1999, 2000, 2001  Free Software Foundation
+/* Copyright (C) 1998, 1999, 2000, 2001, 2003  Free Software Foundation
 
    This file is part of libgcj.
 
@@ -57,22 +57,21 @@ final class FirstThread extends Thread
   private String getMain (String name)
   {
     String mainName = null;
-    try {
-
-      JarFile j = new JarFile (name);
-
-      Attributes a = j.getManifest().getMainAttributes();
-
-      mainName = a.getValue(Attributes.Name.MAIN_CLASS);
-
-    } catch (Exception e) {
-      // empty
-    }
+    try
+      {
+	JarFile j = new JarFile(name);
+	Attributes a = j.getManifest().getMainAttributes();
+	mainName = a.getValue(Attributes.Name.MAIN_CLASS);
+      }
+    catch (Exception e)
+      {
+	// Ignore.
+      }
 
     if (mainName == null)
       {
-	System.err.println ("Failed to load Main-Class manifest attribute from\n"
-			    + name);
+	System.err.println("Failed to load Main-Class manifest attribute from "
+			   + name);
 	System.exit(1);
       }
     return mainName;
@@ -90,8 +89,10 @@ final class FirstThread extends Thread
   // classes are linked in.  Otherwise bootstrapping fails.  These
   // classes are only referred to via Class.forName(), so we add an
   // explicit mention of them here.
-  static final Class Kcert = java.security.cert.Certificate.class;
-  static final Class Kfile = gnu.gcj.protocol.file.Handler.class;
-  static final Class Khttp = gnu.gcj.protocol.http.Handler.class;
-  static final Class Kjar  = gnu.gcj.protocol.jar.Handler.class;
+  static final Class Kcert     = java.security.cert.Certificate.class;
+  static final Class Kfile     = gnu.java.net.protocol.file.Handler.class;
+  static final Class Khttp     = gnu.java.net.protocol.http.Handler.class;
+  static final Class Kjar      = gnu.java.net.protocol.jar.Handler.class;
+  static final Class Klocale   = gnu.java.locale.LocaleInformation.class;
+  static final Class Kcalendar = gnu.java.locale.Calendar.class;
 }

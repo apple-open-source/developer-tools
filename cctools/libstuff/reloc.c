@@ -52,6 +52,9 @@ cpu_type_t cputype)
 	    return(I860_RELOC_PAIR);
 	    break;
 	case CPU_TYPE_POWERPC:
+#ifdef INTERIM_PPC64
+	case CPU_TYPE_POWERPC64:
+#endif /* INTERIM_PPC64 */
 	case CPU_TYPE_VEO:
 	    return(PPC_RELOC_PAIR);
 	    break;
@@ -97,6 +100,9 @@ unsigned long r_type)
 		return(TRUE);
 	    break;
 	case CPU_TYPE_POWERPC:
+#ifdef INTERIM_PPC64
+	case CPU_TYPE_POWERPC64:
+#endif /* INTERIM_PPC64 */
 	case CPU_TYPE_VEO:
 	    if(r_type == PPC_RELOC_HI16 ||
 	       r_type == PPC_RELOC_LO16 ||

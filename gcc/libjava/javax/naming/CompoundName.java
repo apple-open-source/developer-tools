@@ -1,5 +1,5 @@
 /* CompoundName.java --
-   Copyright (C) 2001 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2004 Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -40,8 +40,8 @@ package javax.naming;
 
 import java.io.Serializable;
 import java.util.Enumeration;
-import java.util.Properties;
 import java.util.NoSuchElementException;
+import java.util.Properties;
 import java.util.Vector;
 
 /**
@@ -58,6 +58,8 @@ import java.util.Vector;
  */
 public class CompoundName implements Name, Cloneable, Serializable
 {
+  private static final long serialVersionUID = 3513100557083972036L;
+
   private CompoundName (Properties syntax)
   {
     elts = new Vector ();
@@ -140,13 +142,17 @@ public class CompoundName implements Name, Cloneable, Serializable
 	    // Otherwise, fall through.
 	  }
 	// Quotes are only special at the start of a component.
-	else if (new_element.length () == 0 && special == beginQuote)
+	else if (new_element.length () == 0
+		 && special == beginQuote
+		 && beginQuote != null)
 	  {
 	    quote = endQuote;
 	    i += special.length ();
 	    continue;
 	  }
-	else if (new_element.length () == 0 && special == beginQuote2)
+	else if (new_element.length () == 0
+		 && special == beginQuote2
+		 && beginQuote2 != null)
 	  {
 	    quote = endQuote2;
 	    i += special.length ();
@@ -234,7 +240,7 @@ public class CompoundName implements Name, Cloneable, Serializable
 
   public int compareTo (Object obj)
   {
-    if (obj == null || ! (obj instanceof CompoundName))
+    if (! (obj instanceof CompoundName))
       throw new ClassCastException ("CompoundName.compareTo() expected CompoundName");
     CompoundName cn = (CompoundName) obj;
     int last = Math.min (cn.elts.size (), elts.size ());
@@ -258,7 +264,7 @@ public class CompoundName implements Name, Cloneable, Serializable
     int delta = elts.size () - cn.elts.size ();
     for (int i = 0; i < cn.elts.size (); ++i)
       {
-	String f = canonicalize ((String) elts.get (i));
+	String f = canonicalize ((String) elts.get (delta + i));
 	if (! f.equals (canonicalize ((String) cn.elts.get (i))))
 	  return false;
       }

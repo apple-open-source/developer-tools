@@ -1,22 +1,22 @@
 /* Definitions of target machine for GNU compiler.  Iris version 6 with
    GNU ld.
-   Copyright (C) 1999, 2000, 2002 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2002, 2004 Free Software Foundation, Inc.
    Written by Mark Mitchell <mark@codesourcery.com>.
 
-This file is part of GNU CC.
+This file is part of GCC.
 
-GNU CC is free software; you can redistribute it and/or modify
+GCC is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2, or (at your option)
 any later version.
 
-GNU CC is distributed in the hope that it will be useful,
+GCC is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with GNU CC; see the file COPYING.  If not, write to
+along with GCC; see the file COPYING.  If not, write to
 the Free Software Foundation, 59 Temple Place - Suite 330,
 Boston, MA 02111-1307, USA.  */
 
@@ -44,9 +44,17 @@ Boston, MA 02111-1307, USA.  */
 %{static: -non_shared} \
 %{!static: \
   %{!shared: %{!non_shared: %{!call_shared: -call_shared}}}} \
-%{rpath} -init __do_global_ctors -fini __do_global_dtors \
+%{rpath} -init __gcc_init -fini __gcc_fini \
 %{mabi=32: -melf32bsmip}%{mabi=n32: -melf32bmipn32}%{mabi=64: -melf64bmip}%{!mabi*: -melf32bmipn32}"
+
+#undef STARTFILE_SPEC
+#define STARTFILE_SPEC "%(irix_startfile_spec) irix-crti.o%s crtbegin.o%s"
+
+#undef ENDFILE_SPEC
+#define ENDFILE_SPEC "crtend.o%s irix-crtn.o%s %(irix_endfile_spec)"
 
 /* The GNU linker supports one-only sections.  */
 #define MAKE_DECL_ONE_ONLY(DECL) (DECL_WEAK (DECL) = 1)
-#define TARGET_ASM_UNIQUE_SECTION  mips_unique_section
+
+#define INIT_SECTION_ASM_OP "\t.section\t.init,0x1,0x6,4,4"
+#define FINI_SECTION_ASM_OP "\t.section\t.fini,0x1,0x6,4,4"

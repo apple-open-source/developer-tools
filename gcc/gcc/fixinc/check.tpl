@@ -17,7 +17,7 @@ TARGET_MACHINE='*'
 DESTDIR=`${PWDCMD-pwd}`/res
 SRCDIR=`${PWDCMD-pwd}`/inc
 FIND_BASE='.'
-VERBOSE=1
+VERBOSE=[=` echo ${VERBOSE-1} `=]
 INPUT=`${PWDCMD-pwd}`
 ORIGDIR=${INPUT}
 
@@ -135,7 +135,7 @@ do
     :
 
   else
-    diff -u $f ${TESTBASE}/$f >&2 || :
+    ${DIFF:-diff} -c $f ${TESTBASE}/$f >&2 || :
     exitok=false
   fi
 done

@@ -35,12 +35,10 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package javax.swing;
 
-import java.awt.*;
-import java.awt.event.*;
-import javax.swing.plaf.*;
-import javax.accessibility.*;
+import javax.accessibility.AccessibleContext;
 
 /**
  * An instance of JCheckbox can be added to a panel, frame etc
@@ -72,6 +70,8 @@ public class JCheckBox extends JToggleButton
     public JCheckBox(String text, Icon icon)
     {
 	super(text, icon);
+        paint_border = false;
+        content_area_filled = false;
     }
 
     
@@ -84,7 +84,7 @@ public class JCheckBox extends JToggleButton
     public String getUIClassID()
     {
 	//Returns a string that specifies the name of the L&F class that renders this component.  
-	return "JCheckBox";
+	return "CheckBoxUI";
     }
   
     protected  String paramString()

@@ -35,12 +35,10 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package javax.swing;
 
-import java.awt.*;
-import java.awt.event.*;
-import javax.swing.plaf.*;
-import javax.accessibility.*;
+import javax.accessibility.AccessibleContext;
 
 public class JRadioButton extends JToggleButton
 {
@@ -67,6 +65,8 @@ public class JRadioButton extends JToggleButton
     public JRadioButton(String text, Icon icon)
     {
 	super(text, icon);
+        paint_border = false;
+        content_area_filled = false;
     }
 
     
@@ -79,7 +79,7 @@ public class JRadioButton extends JToggleButton
     public String getUIClassID()
     {
 	//Returns a string that specifies the name of the L&F class that renders this component.  
-	return "JRadioButton";
+	return "RadioButtonUI";
     }
   
     protected  String paramString()

@@ -15,10 +15,11 @@
 			C1351C4C0460A0F900C91839,
 			C144BAF204699A3100C91839,
 			C1DE69FD048698B600C91839,
+			C185E70C04D5C6D200C91839,
 		);
 		codeSenseManager = C12B2B0A049FDBCB00C91839;
 		perUserDictionary = {
-			PBXPerProjectTemplateStateSaveDate = 78261612;
+			PBXPerProjectTemplateStateSaveDate = 81722981;
 			PBXWorkspaceContents = (
 				{
 				},
@@ -50,8 +51,8 @@
 			};
 			PBXWorkspaceGeometries = (
 				{
-					Frame = "{{0, 0}, {781, 548}}";
-					WindowFrame = "{{159, 376}, {781, 626}}";
+					Frame = "{{0, 0}, {959, 800}}";
+					WindowFrame = "{{322, 111}, {959, 878}}";
 				},
 			);
 			"PBXWorkspaceGeometries:PBXConfiguration.PBXModule.PBXBuildResultsModule" = {
@@ -75,14 +76,14 @@
 				WindowFrame = "{{339, 87}, {750, 558}}";
 			};
 			"PBXWorkspaceGeometries:PBXConfiguration.PBXModule.PBXProjectWorkspaceModule" = {
-				Frame = "{{0, 0}, {832, 592}}";
-				WindowFrame = "{{576, 63}, {832, 670}}";
+				Frame = "{{0, 0}, {959, 800}}";
+				WindowFrame = "{{444, -403}, {959, 878}}";
 			};
 			"PBXWorkspaceGeometries:PBXConfiguration.PBXModule.PBXRunSessionModule" = {
 				Frame = "{{0, 0}, {745, 442}}";
 				WindowFrame = "{{269, 436}, {745, 464}}";
 			};
-			PBXWorkspaceStateSaveDate = 78261612;
+			PBXWorkspaceStateSaveDate = 81722981;
 		};
 		projectwideBuildSettings = {
 		};
@@ -125,13 +126,13 @@
 	C1351C4C0460A0F900C91839 = {
 		fileReference = C14FA7A60421803700C91541;
 		isa = PBXFileBreakpoint;
-		lineNumber = 6014;
+		lineNumber = 6020;
 		state = 1;
 	};
 	C144BAF204699A3100C91839 = {
 		fileReference = C14FA7A60421803700C91541;
 		isa = PBXFileBreakpoint;
-		lineNumber = 3308;
+		lineNumber = 3306;
 		state = 1;
 	};
 	C14FA71B04201ADF00C91541 = {
@@ -166,6 +167,19 @@
 		isa = PBXFileReference;
 		name = "objcp-decl.c";
 		path = "/Volumes/DATA2/Dev/WC/darwin/HEAD/gcc3/gcc/objcp/objcp-decl.c";
+		refType = 0;
+		sourceTree = "<absolute>";
+	};
+	C185E70C04D5C6D200C91839 = {
+		fileReference = C185E70D04D5C6F000C91839;
+		isa = PBXFileBreakpoint;
+		lineNumber = 504;
+		state = 1;
+	};
+	C185E70D04D5C6F000C91839 = {
+		isa = PBXFileReference;
+		name = next_mapping.h;
+		path = "/Volumes/DATA2/Dev/WC/apple/pre-import-2003-02-13/gcc3/gcc/testsuite/objc/execute/next_mapping.h";
 		refType = 0;
 		sourceTree = "<absolute>";
 	};

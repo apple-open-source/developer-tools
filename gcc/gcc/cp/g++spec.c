@@ -1,25 +1,28 @@
 /* Specific flags and argument handling of the C++ front-end.
-   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002 Free Software Foundation, Inc.
+   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003
+   Free Software Foundation, Inc.
 
-This file is part of GNU CC.
+This file is part of GCC.
 
-GNU CC is free software; you can redistribute it and/or modify
+GCC is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2, or (at your option)
 any later version.
 
-GNU CC is distributed in the hope that it will be useful,
+GCC is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with GNU CC; see the file COPYING.  If not, write to
+along with GCC; see the file COPYING.  If not, write to
 the Free Software Foundation, 59 Temple Place - Suite 330,
 Boston, MA 02111-1307, USA.  */
 
 #include "config.h"
 #include "system.h"
+#include "coretypes.h"
+#include "tm.h"
 #include "gcc.h"
 
 /* This bit is set if we saw a `-xfoo' language specification.  */
@@ -43,11 +46,13 @@ Boston, MA 02111-1307, USA.  */
 #define LIBSTDCXX_PROFILE "-lstdc++"
 #endif
 
+/* APPLE LOCAL begin radar 3554191 */
+extern unsigned int macosx_version_min_required; /* defined in gcc.c */
+/* APPLE LOCAL end radar 3554191 */
+
 void
-lang_specific_driver (in_argc, in_argv, in_added_libraries)
-     int *in_argc;
-     const char *const **in_argv;
-     int *in_added_libraries;
+lang_specific_driver (int *in_argc, const char *const **in_argv,
+		      int *in_added_libraries)
 {
   int i, j;
 
@@ -112,7 +117,7 @@ lang_specific_driver (in_argc, in_argv, in_added_libraries)
   argv = *in_argv;
   added_libraries = *in_added_libraries;
 
-  args = (int *) xcalloc (argc, sizeof (int));
+  args = xcalloc (argc, sizeof (int));
 
   for (i = 1; i < argc; i++)
     {
@@ -138,9 +143,6 @@ lang_specific_driver (in_argc, in_argv, in_added_libraries)
 	  else if (strcmp (argv[i], "-lm") == 0
 		   || strcmp (argv[i], "-lmath") == 0
 		   || strcmp (argv[i], MATH_LIBRARY) == 0
-#ifdef ALT_LIBM
-		   || strcmp (argv[i], ALT_LIBM) == 0
-#endif
 		  )
 	    {
 	      args[i] |= MATHLIB;
@@ -170,12 +172,12 @@ lang_specific_driver (in_argc, in_argv, in_added_libraries)
 	      saw_speclang = 1;
 	    }
 	  else if (((argv[i][2] == '\0'
-		     && (char *)strchr ("bBVDUoeTuIYmLiA", argv[i][1]) != NULL)
+		     && strchr ("bBVDUoeTuIYmLiA", argv[i][1]) != NULL)
 		    || strcmp (argv[i], "-Xlinker") == 0
 		    || strcmp (argv[i], "-Tdata") == 0))
 	    quote = argv[i];
 	  else if ((argv[i][2] == '\0'
-		    && (char *) strchr ("cSEM", argv[i][1]) != NULL)
+		    && strchr ("cSEM", argv[i][1]) != NULL)
 		   || strcmp (argv[i], "-MM") == 0
 		   || strcmp (argv[i], "-fsyntax-only") == 0)
 	    {
@@ -186,10 +188,8 @@ lang_specific_driver (in_argc, in_argv, in_added_libraries)
 	  else if (strcmp (argv[i], "-static-libgcc") == 0 
 		   || strcmp (argv[i], "-static") == 0)
 	    shared_libgcc = 0;
-	  /* APPLE LOCAL begin FSF candidate 3190950 */
 	  else if (DEFAULT_WORD_SWITCH_TAKES_ARG (&argv[i][1]))
 	    i++;
-	  /* APPLE LOCAL end FSF candidate 3190950`*/
 	  else
 	    /* Pass other options through.  */
 	    continue;
@@ -245,9 +245,16 @@ lang_specific_driver (in_argc, in_argv, in_added_libraries)
   shared_libgcc = 0;
 #endif
 
+  /* APPLE LOCAL begin radar 3554191 */
+  {
+    if (macosx_version_min_required && macosx_version_min_required < 1040)
+      shared_libgcc = 0;
+  }
+  /* APPLE LOCAL end radar 3554191 */
+
   /* Make sure to have room for the trailing NULL argument.  */
   num_args = argc + added + need_math + shared_libgcc + (library > 0) + 1;
-  arglist = (const char **) xmalloc (num_args * sizeof (char *));
+  arglist = xmalloc (num_args * sizeof (char *));
 
   i = 0;
   j = 0;
@@ -306,13 +313,6 @@ lang_specific_driver (in_argc, in_argv, in_added_libraries)
     {
       arglist[j++] = saw_profile_flag ? LIBSTDCXX_PROFILE : LIBSTDCXX;
       added_libraries++;
-#ifdef USE_LIBUNWIND_EXCEPTIONS
-# ifndef LIBUNWIND
-#  define LIBUNWIND "-lunwind"
-# endif
-      arglist[j++] = LIBUNWIND;
-      added_libraries++;
-#endif
     }
   if (saw_math)
     arglist[j++] = saw_math;
@@ -334,7 +334,7 @@ lang_specific_driver (in_argc, in_argv, in_added_libraries)
 }
 
 /* Called before linking.  Returns 0 on success and -1 on failure.  */
-int lang_specific_pre_link ()  /* Not used for C++.  */
+int lang_specific_pre_link (void)  /* Not used for C++.  */
 {
   return 0;
 }

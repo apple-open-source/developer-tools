@@ -114,11 +114,7 @@ proc obj-c++_init { args } {
 	}
     }
 
-    # APPLE LOCAL flag -ObjC++
-    # Set the Objecive C++ compiler to something that can link as well
-    # as compile.  (Note: -x objective-c++ treats .o files as compile
-    # fodder! Don't use it!)
-    set OBJCXX_UNDER_TEST "$GXX_UNDER_TEST -ObjC++"
+    set OBJCXX_UNDER_TEST "$GXX_UNDER_TEST -x objective-c++"
 
     if ![info exists tmpdir] then {
 	set tmpdir /tmp

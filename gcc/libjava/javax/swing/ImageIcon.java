@@ -1,5 +1,5 @@
 /* ImageIcon.java -- 
-   Copyright (C) 2002 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2004  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -35,12 +35,13 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package javax.swing;
 
-import java.awt.*;
-import java.awt.image.*;
-
-
+import java.awt.Component;
+import java.awt.Graphics;
+import java.awt.Image;
+import java.awt.Toolkit;
 
 public class ImageIcon implements Icon
 {
@@ -50,7 +51,10 @@ public class ImageIcon implements Icon
 
   public ImageIcon(String s)
     {
-	this(s, "");
+    	// if description is not specified, then file name becomes
+	// desciption for this icon
+	
+	this(s, s);
     }
 
   public ImageIcon(String file,

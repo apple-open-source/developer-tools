@@ -1,6 +1,6 @@
 // prims.cc - Code for core of runtime environment.
 
-/* Copyright (C) 1998, 1999, 2000, 2001, 2002  Free Software Foundation
+/* Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004  Free Software Foundation
 
    This file is part of libgcj.
 
@@ -70,8 +70,10 @@ details.  */
 // around for use if we run out of memory.
 static java::lang::OutOfMemoryError *no_memory;
 
-// Largest representable size_t.
-#define SIZE_T_MAX ((size_t) (~ (size_t) 0))
+// Number of bytes in largest array object we create.  This could be
+// increased to the largest size_t value, so long as the appropriate
+// functions are changed to take a size_t argument instead of jint.
+#define MAX_OBJECT_SIZE ((1<<31) - 1)
 
 static const char *no_properties[] = { NULL };
 
@@ -86,12 +88,33 @@ const char *_Jv_Jar_Class_Path;
 property_pair *_Jv_Environment_Properties;
 #endif
 
-// The name of this executable.
-static char *_Jv_execName;
-
 // Stash the argv pointer to benefit native libraries that need it.
 const char **_Jv_argv;
 int _Jv_argc;
+
+// Argument support.
+int
+_Jv_GetNbArgs (void)
+{
+  // _Jv_argc is 0 if not explicitly initialized.
+  return _Jv_argc;
+}
+
+const char *
+_Jv_GetSafeArg (int index)
+{
+  if (index >=0 && index < _Jv_GetNbArgs ())
+    return _Jv_argv[index];
+  else
+    return "";
+}
+
+void
+_Jv_SetArgs (int argc, const char **argv)
+{
+  _Jv_argc = argc;
+  _Jv_argv = argv;
+}
 
 #ifdef ENABLE_JVMPI
 // Pointer to JVMPI notification functions.
@@ -101,49 +124,53 @@ void (*_Jv_JVMPI_Notify_THREAD_END) (JVMPI_Event *event);
 #endif
 
 
-extern "C" void _Jv_ThrowSignal (jthrowable) __attribute ((noreturn));
-
-// Just like _Jv_Throw, but fill in the stack trace first.  Although
-// this is declared extern in order that its name not be mangled, it
-// is not intended to be used outside this file.
-void 
-_Jv_ThrowSignal (jthrowable throwable)
+/* Unblock a signal.  Unless we do this, the signal may only be sent
+   once.  */
+static void 
+unblock_signal (int signum)
 {
-  throwable->fillInStackTrace ();
-  throw throwable;
-}
- 
-#ifdef HANDLE_SEGV
-static java::lang::NullPointerException *nullp;
+#ifdef _POSIX_VERSION
+  sigset_t sigs;
 
+  sigemptyset (&sigs);
+  sigaddset (&sigs, signum);
+  sigprocmask (SIG_UNBLOCK, &sigs, NULL);
+#endif
+}
+
+#ifdef HANDLE_SEGV
 SIGNAL_HANDLER (catch_segv)
 {
+  java::lang::NullPointerException *nullp 
+    = new java::lang::NullPointerException;
+  unblock_signal (SIGSEGV);
   MAKE_THROW_FRAME (nullp);
-  _Jv_ThrowSignal (nullp);
+  throw nullp;
 }
 #endif
-
-static java::lang::ArithmeticException *arithexception;
 
 #ifdef HANDLE_FPE
 SIGNAL_HANDLER (catch_fpe)
 {
+  java::lang::ArithmeticException *arithexception 
+    = new java::lang::ArithmeticException (JvNewStringLatin1 ("/ by zero"));
+  unblock_signal (SIGFPE);
 #ifdef HANDLE_DIVIDE_OVERFLOW
   HANDLE_DIVIDE_OVERFLOW;
 #else
   MAKE_THROW_FRAME (arithexception);
 #endif
-  _Jv_ThrowSignal (arithexception);
+  throw arithexception;
 }
 #endif
 
 
 
 jboolean
-_Jv_equalUtf8Consts (Utf8Const* a, Utf8Const *b)
+_Jv_equalUtf8Consts (const Utf8Const* a, const Utf8Const *b)
 {
   int len;
-  _Jv_ushort *aptr, *bptr;
+  const _Jv_ushort *aptr, *bptr;
   if (a == b)
     return true;
   if (a->hash != b->hash)
@@ -151,8 +178,8 @@ _Jv_equalUtf8Consts (Utf8Const* a, Utf8Const *b)
   len = a->length;
   if (b->length != len)
     return false;
-  aptr = (_Jv_ushort *)a->data;
-  bptr = (_Jv_ushort *)b->data;
+  aptr = (const _Jv_ushort *)a->data;
+  bptr = (const _Jv_ushort *)b->data;
   len = (len + 1) >> 1;
   while (--len >= 0)
     if (*aptr++ != *bptr++)
@@ -362,16 +389,15 @@ jvmpi_notify_alloc(jclass klass, jint size, jobject obj)
 # define jvmpi_notify_alloc(klass,size,obj) /* do nothing */
 #endif
 
-// Allocate a new object of class KLASS.  SIZE is the size of the object
-// to allocate.  You might think this is redundant, but it isn't; some
-// classes, such as String, aren't of fixed size.
+// Allocate a new object of class KLASS.
 // First a version that assumes that we have no finalizer, and that
 // the class is already initialized.
 // If we know that JVMPI is disabled, this can be replaced by a direct call
 // to the allocator for the appropriate GC.
 jobject
-_Jv_AllocObjectNoInitNoFinalizer (jclass klass, jint size)
+_Jv_AllocObjectNoInitNoFinalizer (jclass klass)
 {
+  jint size = klass->size ();
   jobject obj = (jobject) _Jv_AllocObj (size, klass);
   jvmpi_notify_alloc (klass, size, obj);
   return obj;
@@ -379,9 +405,10 @@ _Jv_AllocObjectNoInitNoFinalizer (jclass klass, jint size)
 
 // And now a version that initializes if necessary.
 jobject
-_Jv_AllocObjectNoFinalizer (jclass klass, jint size)
+_Jv_AllocObjectNoFinalizer (jclass klass)
 {
   _Jv_InitClass (klass);
+  jint size = klass->size ();
   jobject obj = (jobject) _Jv_AllocObj (size, klass);
   jvmpi_notify_alloc (klass, size, obj);
   return obj;
@@ -389,10 +416,10 @@ _Jv_AllocObjectNoFinalizer (jclass klass, jint size)
 
 // And now the general version that registers a finalizer if necessary.
 jobject
-_Jv_AllocObject (jclass klass, jint size)
+_Jv_AllocObject (jclass klass)
 {
-  jobject obj = _Jv_AllocObjectNoFinalizer (klass, size);
-
+  jobject obj = _Jv_AllocObjectNoFinalizer (klass);
+  
   // We assume that the compiler only generates calls to this routine
   // if there really is an interesting finalizer.
   // Unfortunately, we still have to the dynamic test, since there may
@@ -405,14 +432,62 @@ _Jv_AllocObject (jclass klass, jint size)
   return obj;
 }
 
+// Allocate a String, including variable length storage.
+jstring
+_Jv_AllocString(jsize len)
+{
+  using namespace java::lang;
+
+  jsize sz = sizeof(java::lang::String) + len * sizeof(jchar);
+
+  // We assert that for strings allocated this way, the data field
+  // will always point to the object itself.  Thus there is no reason
+  // for the garbage collector to scan any of it.
+  // Furthermore, we're about to overwrite the string data, so
+  // initialization of the object is not an issue.
+
+  // String needs no initialization, and there is no finalizer, so
+  // we can go directly to the collector's allocator interface.
+  jstring obj = (jstring) _Jv_AllocPtrFreeObj(sz, &String::class$);
+
+  obj->data = obj;
+  obj->boffset = sizeof(java::lang::String);
+  obj->count = len;
+  obj->cachedHashCode = 0;
+  
+#ifdef ENABLE_JVMPI
+  // Service JVMPI request.
+
+  if (__builtin_expect (_Jv_JVMPI_Notify_OBJECT_ALLOC != 0, false))
+    {
+      JVMPI_Event event;
+
+      event.event_type = JVMPI_EVENT_OBJECT_ALLOC;
+      event.env_id = NULL;
+      event.u.obj_alloc.arena_id = 0;
+      event.u.obj_alloc.class_id = (jobjectID) &String::class$;
+      event.u.obj_alloc.is_array = 0;
+      event.u.obj_alloc.size = sz;
+      event.u.obj_alloc.obj_id = (jobjectID) obj;
+
+      _Jv_DisableGC ();
+      (*_Jv_JVMPI_Notify_OBJECT_ALLOC) (&event);
+      _Jv_EnableGC ();
+    }
+#endif  
+  
+  return obj;
+}
+
 // A version of the above that assumes the object contains no pointers,
 // and requires no finalization.  This can't happen if we need pointers
 // to locks.
 #ifdef JV_HASH_SYNCHRONIZATION
 jobject
-_Jv_AllocPtrFreeObject (jclass klass, jint size)
+_Jv_AllocPtrFreeObject (jclass klass)
 {
   _Jv_InitClass (klass);
+  jint size = klass->size ();
 
   jobject obj = (jobject) _Jv_AllocPtrFreeObj (size, klass);
 
@@ -456,6 +531,11 @@ _Jv_NewObjectArray (jsize count, jclass elementClass, jobject init)
   // Ensure that elements pointer is properly aligned.
   jobjectArray obj = NULL;
   size_t size = (size_t) elements (obj);
+  // Check for overflow.
+  if (__builtin_expect ((size_t) count > 
+			(MAX_OBJECT_SIZE - 1 - size) / sizeof (jobject), false))
+    throw no_memory;
+
   size += count * sizeof (jobject);
 
   jclass klass = _Jv_GetArrayClass (elementClass,
@@ -491,7 +571,7 @@ _Jv_NewPrimArray (jclass eltype, jint count)
 
   // Check for overflow.
   if (__builtin_expect ((size_t) count > 
-			(SIZE_T_MAX - size) / elsize, false))
+			(MAX_OBJECT_SIZE - size) / elsize, false))
     throw no_memory;
 
   jclass klass = _Jv_GetArrayClass (eltype, 0);
@@ -592,23 +672,21 @@ _Jv_NewMultiArray (jclass array_type, jint dimensions, ...)
   _Jv_ArrayVTable _Jv_##NAME##VTable;		\
   java::lang::Class _Jv_##NAME##Class __attribute__ ((aligned (8)));
 
-DECLARE_PRIM_TYPE(byte);
-DECLARE_PRIM_TYPE(short);
-DECLARE_PRIM_TYPE(int);
-DECLARE_PRIM_TYPE(long);
-DECLARE_PRIM_TYPE(boolean);
-DECLARE_PRIM_TYPE(char);
-DECLARE_PRIM_TYPE(float);
-DECLARE_PRIM_TYPE(double);
-DECLARE_PRIM_TYPE(void);
+DECLARE_PRIM_TYPE(byte)
+DECLARE_PRIM_TYPE(short)
+DECLARE_PRIM_TYPE(int)
+DECLARE_PRIM_TYPE(long)
+DECLARE_PRIM_TYPE(boolean)
+DECLARE_PRIM_TYPE(char)
+DECLARE_PRIM_TYPE(float)
+DECLARE_PRIM_TYPE(double)
+DECLARE_PRIM_TYPE(void)
 
 void
 _Jv_InitPrimClass (jclass cl, char *cname, char sig, int len, 
                    _Jv_ArrayVTable *array_vtable)
 {    
   using namespace java::lang::reflect;
-
-  _Jv_InitNewClassFields (cl);
 
   // We must set the vtable for the class; the Java constructor
   // doesn't do this.
@@ -706,22 +784,6 @@ static JArray<jstring> *arg_vec;
 
 // The primary thread.
 static java::lang::Thread *main_thread;
-
-char *
-_Jv_ThisExecutable (void)
-{
-  return _Jv_execName;
-}
-
-void
-_Jv_ThisExecutable (const char *name)
-{
-  if (name)
-    {
-      _Jv_execName = (char *) _Jv_Malloc (strlen (name) + 1);
-      strcpy (_Jv_execName, name);
-    }
-}
 
 #ifndef DISABLE_GETENV_PROPERTIES
 
@@ -913,18 +975,24 @@ _Jv_CreateJavaVM (void* /*vm_args*/)
   _Jv_InitClass (&java::lang::VMThrowable::class$);
   java::lang::VMThrowable::trace_enabled = 0;
   
+  // We have to initialize this fairly early, to avoid circular class
+  // initialization.  In particular we want to start the
+  // initialization of ClassLoader before we start the initialization
+  // of VMClassLoader.
+  _Jv_InitClass (&java::lang::ClassLoader::class$);
+  // Once the bootstrap loader is in place, change it into a kind of
+  // system loader, by having it read the class path.
+  gnu::gcj::runtime::VMClassLoader::initialize();
+
   INIT_SEGV;
 #ifdef HANDLE_FPE
   INIT_FPE;
-#else
-  arithexception = new java::lang::ArithmeticException
-    (JvNewStringLatin1 ("/ by zero"));
 #endif
   
   no_memory = new java::lang::OutOfMemoryError;
-  
+
   java::lang::VMThrowable::trace_enabled = 1;
-  
+
 #ifdef USE_LTDL
   LTDL_SET_PRELOADED_SYMBOLS ();
 #endif
@@ -955,23 +1023,9 @@ void
 _Jv_RunMain (jclass klass, const char *name, int argc, const char **argv, 
 	     bool is_jar)
 {
-  _Jv_argv = argv;
-  _Jv_argc = argc;
+  _Jv_SetArgs (argc, argv);
 
   java::lang::Runtime *runtime = NULL;
-
-
-#ifdef DISABLE_MAIN_ARGS
-  _Jv_ThisExecutable ("[Embedded App]");
-#else
-#ifdef HAVE_PROC_SELF_EXE
-  char exec_name[20];
-  sprintf (exec_name, "/proc/%d/exe", getpid ());
-  _Jv_ThisExecutable (exec_name);
-#else
-  _Jv_ThisExecutable (argv[0]);
-#endif /* HAVE_PROC_SELF_EXE */
-#endif /* DISABLE_MAIN_ARGS */
 
   try
     {
@@ -1102,7 +1156,11 @@ jint
 _Jv_divI (jint dividend, jint divisor)
 {
   if (__builtin_expect (divisor == 0, false))
-    _Jv_ThrowSignal (arithexception);
+    {
+      java::lang::ArithmeticException *arithexception 
+	= new java::lang::ArithmeticException (JvNewStringLatin1 ("/ by zero"));      
+      throw arithexception;
+    }
   
   if (dividend == (jint) 0x80000000L && divisor == -1)
     return dividend;
@@ -1114,11 +1172,15 @@ jint
 _Jv_remI (jint dividend, jint divisor)
 {
   if (__builtin_expect (divisor == 0, false))
-    _Jv_ThrowSignal (arithexception);
+    {
+      java::lang::ArithmeticException *arithexception 
+	= new java::lang::ArithmeticException (JvNewStringLatin1 ("/ by zero"));      
+      throw arithexception;
+    }
   
   if (dividend == (jint) 0x80000000L && divisor == -1)
     return 0;
-
+  
   return dividend % divisor;
 }
 
@@ -1126,8 +1188,12 @@ jlong
 _Jv_divJ (jlong dividend, jlong divisor)
 {
   if (__builtin_expect (divisor == 0, false))
-    _Jv_ThrowSignal (arithexception);
-  
+    {
+      java::lang::ArithmeticException *arithexception 
+	= new java::lang::ArithmeticException (JvNewStringLatin1 ("/ by zero"));      
+      throw arithexception;
+    }
+
   if (dividend == (jlong) 0x8000000000000000LL && divisor == -1)
     return dividend;
 
@@ -1138,10 +1204,32 @@ jlong
 _Jv_remJ (jlong dividend, jlong divisor)
 {
   if (__builtin_expect (divisor == 0, false))
-    _Jv_ThrowSignal (arithexception);
-  
+    {
+      java::lang::ArithmeticException *arithexception 
+	= new java::lang::ArithmeticException (JvNewStringLatin1 ("/ by zero"));      
+      throw arithexception;
+    }
+
   if (dividend == (jlong) 0x8000000000000000LL && divisor == -1)
     return 0;
 
   return dividend % divisor;
+}
+
+
+
+// Return true if SELF_KLASS can access a field or method in
+// OTHER_KLASS.  The field or method's access flags are specified in
+// FLAGS.
+jboolean
+_Jv_CheckAccess (jclass self_klass, jclass other_klass, jint flags)
+{
+  using namespace java::lang::reflect;
+  return ((self_klass == other_klass)
+	  || ((flags & Modifier::PUBLIC) != 0)
+	  || (((flags & Modifier::PROTECTED) != 0)
+	      && other_klass->isAssignableFrom (self_klass))
+	  || (((flags & Modifier::PRIVATE) == 0)
+	      && _Jv_ClassNameSamePackage (self_klass->name,
+					   other_klass->name)));
 }

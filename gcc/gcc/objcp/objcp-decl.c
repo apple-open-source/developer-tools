@@ -70,12 +70,12 @@ objcp_start_struct (code, name)
      name = make_anon_name ();
   h = handle_class_head (record_type, 0, name, 0, 1, &new_scope);
 
-  /* APPLE LOCAL indexing dpatel */
+  /* APPLE LOCAL indexing --dpatel */
   flag_suppress_builtin_indexing = 1;
 
   s = begin_class_definition (TREE_TYPE (h));
 
-  /* APPLE LOCAL indexing dpatel */
+  /* APPLE LOCAL indexing --dpatel */
   flag_suppress_builtin_indexing = 0;
 
   return s;	
@@ -88,7 +88,7 @@ objcp_finish_struct (t, fieldlist, attributes)
 {
   tree s, field, next_field;
 
-  /* APPLE LOCAL indexing dpatel */
+  /* APPLE LOCAL indexing --dpatel */
   flag_suppress_builtin_indexing = 1;
 
   for (field = fieldlist; field; field = next_field) 
@@ -99,7 +99,7 @@ objcp_finish_struct (t, fieldlist, attributes)
   } 
   s = finish_class_definition (t, attributes, 1, 0);  
 
-  /* APPLE LOCAL indexing dpatel */
+  /* APPLE LOCAL indexing --dpatel */
   flag_suppress_builtin_indexing = 0;
 
   pop_lang_context ();
@@ -186,6 +186,14 @@ objcp_store_parm_decls ()
      do not need to do anything here.  */
 }
 
+tree
+objcp_build_function_call (function, args)
+     tree function, args;
+{
+  /* APPLE MERGE this is probably wrong */
+  return build_function_call (function, args);
+}
+      
 tree 
 objcp_xref_tag (code, name)
      enum tree_code code;
@@ -221,6 +229,31 @@ objcp_comptypes (type1, type2)
      tree type1, type2;
 {     
   return comptypes (type1, type2, 0);
+}
+
+tree 
+objcp_type_name (type)
+     tree type;
+{
+  if (TYPE_NAME (type) && TREE_CODE (TYPE_NAME (type)) == TYPE_DECL)
+    return DECL_NAME (TYPE_NAME (type));
+  else
+    return TYPE_NAME (type);
+}
+
+tree 
+objcp_type_size (type)
+     tree type;
+{
+  tree size = TYPE_SIZE (type);
+  if (size == NULL_TREE)
+    {
+      warning ("Requesting size of incomplete type `%s'",
+	       IDENTIFIER_POINTER (objcp_type_name (type)));
+      layout_type (type);
+      size = TYPE_SIZE (type);
+    }
+  return build_int_2 (TREE_INT_CST_LOW (size), 0);
 }
 
 /* C++'s version of 'builtin_function' winds up placing our precious
@@ -263,7 +296,7 @@ objcp_lookup_identifier (token, id, check_conflict)
 {
   tree objc_id = lookup_objc_ivar (token);
   
-  if (!check_conflict || (objc_id && IS_SUPER (objc_id)))
+  if (!check_conflict || objc_id && IS_SUPER (objc_id))
     *id = objc_id;
   else if (objc_id && *id && IDENTIFIER_BINDING (token)) 
     warning ("local declaration of `%s' hides instance variable",

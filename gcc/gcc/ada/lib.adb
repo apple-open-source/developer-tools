@@ -6,8 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---                                                                          --
---          Copyright (C) 1992-2001 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2004 Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -84,11 +83,6 @@ package body Lib is
       return Units.Table (U).Dependency_Num;
    end Dependency_Num;
 
-   function Dependent_Unit (U : Unit_Number_Type) return Boolean is
-   begin
-      return Units.Table (U).Dependent_Unit;
-   end Dependent_Unit;
-
    function Dynamic_Elab (U : Unit_Number_Type) return Boolean is
    begin
       return Units.Table (U).Dynamic_Elab;
@@ -133,6 +127,11 @@ package body Lib is
    begin
       return Units.Table (U).Main_Priority;
    end Main_Priority;
+
+   function Munit_Index (U : Unit_Number_Type) return Nat is
+   begin
+      return Units.Table (U).Munit_Index;
+   end Munit_Index;
 
    function Source_Index (U : Unit_Number_Type) return Source_File_Index is
    begin
@@ -393,7 +392,6 @@ package body Lib is
          <<Continue>>
             null;
       end loop;
-
    end Check_Same_Extended_Unit;
 
    -------------------------------
@@ -461,23 +459,52 @@ package body Lib is
       end if;
    end Generic_Separately_Compiled;
 
+   function Generic_Separately_Compiled
+     (Sfile : File_Name_Type) return Boolean
+   is
+   begin
+      --  Exactly the same as previous function, but works directly on a file
+      --  name.
+
+      if Is_Internal_File_Name
+          (Fname              => Sfile,
+           Renamings_Included => True)
+      then
+         return False;
+
+      --  All other generic units do generate object files
+
+      else
+         return True;
+      end if;
+   end Generic_Separately_Compiled;
+
    -------------------
    -- Get_Code_Unit --
    -------------------
 
    function Get_Code_Unit (S : Source_Ptr) return Unit_Number_Type is
-      Source_File : Source_File_Index :=
-                      Get_Source_File_Index (Top_Level_Location (S));
-
    begin
-      for U in Units.First .. Units.Last loop
-         if Source_Index (U) = Source_File then
-            return U;
-         end if;
-      end loop;
+      --  Search table unless we have No_Location, which can happen if the
+      --  relevant location has not been set yet. Happens for example when
+      --  we obtain Sloc (Cunit (Main_Unit)) before it is set.
 
-      --  If not in the table, must be the main source unit, and we just
-      --  have not got it put into the table yet.
+      if S /= No_Location then
+         declare
+            Source_File : constant Source_File_Index :=
+                            Get_Source_File_Index (Top_Level_Location (S));
+
+         begin
+            for U in Units.First .. Units.Last loop
+               if Source_Index (U) = Source_File then
+                  return U;
+               end if;
+            end loop;
+         end;
+      end if;
+
+      --  If S was No_Location, or was not in the table, we must be in the
+      --  main source unit (and the value has not been placed in the table yet)
 
       return Main_Unit;
    end Get_Code_Unit;
@@ -506,8 +533,7 @@ package body Lib is
    ----------------------------------
 
    function Get_Cunit_Entity_Unit_Number
-     (E    : Entity_Id)
-      return Unit_Number_Type
+     (E : Entity_Id) return Unit_Number_Type
    is
    begin
       for U in Units.First .. Units.Last loop
@@ -545,23 +571,32 @@ package body Lib is
    ---------------------
 
    function Get_Source_Unit (S : Source_Ptr) return Unit_Number_Type is
-      Source_File : Source_File_Index :=
-                      Get_Source_File_Index (Top_Level_Location (S));
-
    begin
-      Source_File := Get_Source_File_Index (S);
-      while Template (Source_File) /= No_Source_File loop
-         Source_File := Template (Source_File);
-      end loop;
+      --  Search table unless we have No_Location, which can happen if the
+      --  relevant location has not been set yet. Happens for example when
+      --  we obtain Sloc (Cunit (Main_Unit)) before it is set.
 
-      for U in Units.First .. Units.Last loop
-         if Source_Index (U) = Source_File then
-            return U;
-         end if;
-      end loop;
+      if S /= No_Location then
+         declare
+            Source_File : Source_File_Index :=
+                            Get_Source_File_Index (Top_Level_Location (S));
 
-      --  If not in the table, must be the main source unit, and we just
-      --  have not got it put into the table yet.
+         begin
+            Source_File := Get_Source_File_Index (S);
+            while Template (Source_File) /= No_Source_File loop
+               Source_File := Template (Source_File);
+            end loop;
+
+            for U in Units.First .. Units.Last loop
+               if Source_Index (U) = Source_File then
+                  return U;
+               end if;
+            end loop;
+         end;
+      end if;
+
+      --  If S was No_Location, or was not in the table, we must be in the
+      --  main source unit (and the value has not got put into the table yet)
 
       return Main_Unit;
    end Get_Source_Unit;
@@ -576,8 +611,7 @@ package body Lib is
    --------------------------------
 
    function In_Extended_Main_Code_Unit
-     (N    : Node_Or_Entity_Id)
-      return Boolean
+     (N : Node_Or_Entity_Id) return Boolean
    is
    begin
       if Sloc (N) = Standard_Location then
@@ -597,12 +631,37 @@ package body Lib is
       then
          return In_Extended_Main_Code_Unit (Associated_Node_For_Itype (N));
 
+      --  Otherwise see if we are in the main unit
+
       elsif Get_Code_Unit (Sloc (N)) = Get_Code_Unit (Cunit (Main_Unit)) then
          return True;
 
-      else         --  node may be in spec of main unit
+      --  Node may be in spec (or subunit etc) of main unit
+
+      else
          return
            In_Same_Extended_Unit (Sloc (N), Sloc (Cunit (Main_Unit)));
+      end if;
+   end In_Extended_Main_Code_Unit;
+
+   function In_Extended_Main_Code_Unit (Loc : Source_Ptr) return Boolean is
+   begin
+      if Loc = Standard_Location then
+         return True;
+
+      elsif Loc = No_Location then
+         return False;
+
+      --  Otherwise see if we are in the main unit
+
+      elsif Get_Code_Unit (Loc) = Get_Code_Unit (Cunit (Main_Unit)) then
+         return True;
+
+      --  Location may be in spec (or subunit etc) of main unit
+
+      else
+         return
+           In_Same_Extended_Unit (Loc, Sloc (Cunit (Main_Unit)));
       end if;
    end In_Extended_Main_Code_Unit;
 
@@ -611,14 +670,24 @@ package body Lib is
    ----------------------------------
 
    function In_Extended_Main_Source_Unit
-     (N    : Node_Or_Entity_Id)
-      return Boolean
+     (N : Node_Or_Entity_Id) return Boolean
    is
+      Nloc : constant Source_Ptr := Sloc (N);
+      Mloc : constant Source_Ptr := Sloc (Cunit (Main_Unit));
+
    begin
-      if Sloc (N) = Standard_Location then
+      --  If Mloc is not set, it means we are still parsing the main unit,
+      --  so everything so far is in the extended main source unit.
+
+      if Mloc = No_Location then
          return True;
 
-      elsif Sloc (N) = No_Location then
+      --  Special value cases
+
+      elsif Nloc = Standard_Location then
+         return True;
+
+      elsif Nloc = No_Location then
          return False;
 
       --  Special case Itypes to test the Sloc of the associated node. The
@@ -632,11 +701,41 @@ package body Lib is
       then
          return In_Extended_Main_Source_Unit (Associated_Node_For_Itype (N));
 
+      --  Otherwise compare original locations to see if in same unit
+
       else
          return
            In_Same_Extended_Unit
-             (Original_Location (Sloc (N)),
-              Original_Location (Sloc (Cunit (Main_Unit))));
+             (Original_Location (Nloc), Original_Location (Mloc));
+      end if;
+   end In_Extended_Main_Source_Unit;
+
+   function In_Extended_Main_Source_Unit
+     (Loc : Source_Ptr) return Boolean
+   is
+      Mloc : constant Source_Ptr := Sloc (Cunit (Main_Unit));
+
+   begin
+      --  If Mloc is not set, it means we are still parsing the main unit,
+      --  so everything so far is in the extended main source unit.
+
+      if Mloc = No_Location then
+         return True;
+
+      --  Special value cases
+
+      elsif Loc = Standard_Location then
+         return True;
+
+      elsif Loc = No_Location then
+         return False;
+
+      --  Otherwise compare original locations to see if in same unit
+
+      else
+         return
+           In_Same_Extended_Unit
+             (Original_Location (Loc), Original_Location (Mloc));
       end if;
    end In_Extended_Main_Source_Unit;
 
@@ -699,7 +798,6 @@ package body Lib is
 
    function Increment_Serial_Number return Nat is
       TSN : Int renames Units.Table (Current_Sem_Unit).Serial_Number;
-
    begin
       TSN := TSN + 1;
       return TSN;
@@ -771,6 +869,17 @@ package body Lib is
       return Int (Units.Last) - Int (Main_Unit) + 1;
    end Num_Units;
 
+   -----------------
+   -- Remove_Unit --
+   -----------------
+
+   procedure Remove_Unit (U : Unit_Number_Type) is
+   begin
+      if U = Units.Last then
+         Units.Decrement_Last;
+      end if;
+   end Remove_Unit;
+
    ----------------------------------
    -- Replace_Linker_Option_String --
    ----------------------------------
@@ -808,6 +917,16 @@ package body Lib is
       Compilation_Switches.Increment_Last;
       Compilation_Switches.Table (Compilation_Switches.Last) :=
         new String'(Switch);
+
+      --  Fix up --RTS flag which has been transformed by the gcc driver
+      --  into -fRTS
+
+      if Switch'Last >= Switch'First + 4
+        and then Switch (Switch'First .. Switch'First + 4) = "-fRTS"
+      then
+         Compilation_Switches.Table
+           (Compilation_Switches.Last) (Switch'First + 1) := '-';
+      end if;
    end Store_Compilation_Switch;
 
    --------------------------------
@@ -820,6 +939,16 @@ package body Lib is
       Linker_Option_Lines.Table (Linker_Option_Lines.Last) :=
         (Option => S, Unit => Current_Sem_Unit);
    end Store_Linker_Option_String;
+
+   -------------------------------
+   -- Synchronize_Serial_Number --
+   -------------------------------
+
+   procedure Synchronize_Serial_Number is
+      TSN : Int renames Units.Table (Current_Sem_Unit).Serial_Number;
+   begin
+      TSN := TSN + 1;
+   end Synchronize_Serial_Number;
 
    ---------------
    -- Tree_Read --

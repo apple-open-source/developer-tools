@@ -1,6 +1,6 @@
 // javaprims.h - Main external header file for libgcj.  -*- c++ -*-
 
-/* Copyright (C) 1998, 1999, 2000, 2001, 2002  Free Software Foundation
+/* Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003  Free Software Foundation
 
    This file is part of libgcj.
 
@@ -124,7 +124,7 @@ extern "Java"
       class ValidatorAndPriority;
       class WriteAbortedException;
       class Writer;
-    };
+    }
 
     namespace lang
     {
@@ -223,7 +223,7 @@ extern "Java"
         class ReferenceQueue;
         class SoftReference;
         class WeakReference;
-      };
+      }
 
       namespace reflect
       {
@@ -243,8 +243,8 @@ extern "Java"
         class Proxy$ProxyType;
         class ReflectPermission;
         class UndeclaredThrowableException;
-      };
-    };
+      }
+    }
 
     namespace util
     {
@@ -291,6 +291,7 @@ extern "Java"
       class Collections$UnmodifiableSortedSet;
       class Comparator;
       class ConcurrentModificationException;
+      class Currency;
       class Date;
       class Dictionary;
       class EmptyStackException;
@@ -371,14 +372,47 @@ extern "Java"
         class JarInputStream;
         class JarOutputStream;
         class Manifest;
-      };
+      }
+
+      namespace logging
+      {
+        class ConsoleHandler;
+        class ErrorManager;
+        class FileHandler;
+        class Filter;
+        class Formatter;
+        class Handler;
+        class Level;
+        class LogManager;
+        class LogRecord;
+        class Logger;
+        class LoggingPermission;
+        class MemoryHandler;
+        class SimpleFormatter;
+        class SocketHandler;
+        class StreamHandler;
+        class XMLFormatter;
+      }
+
+      namespace prefs
+      {
+        class AbstractPreferences;
+        class BackingStoreException;
+        class InvalidPreferencesFormatException;
+        class NodeChangeEvent;
+        class NodeChangeListener;
+        class PreferenceChangeEvent;
+        class PreferenceChangeListener;
+        class Preferences;
+        class PreferencesFactory;
+      }
 
       namespace regex
       {
         class Matcher;
         class Pattern;
         class PatternSyntaxException;
-      };
+      }
 
       namespace zip
       {
@@ -402,10 +436,10 @@ extern "Java"
         class ZipFile$ZipEntryEnumeration;
         class ZipInputStream;
         class ZipOutputStream;
-      };
-    };
-  };
-};
+      }
+    }
+  }
+}
   
 typedef struct java::lang::Object* jobject;
 typedef class java::lang::Class* jclass;
@@ -416,17 +450,17 @@ struct _Jv_JNIEnv;
 typedef struct _Jv_Field *jfieldID;
 typedef struct _Jv_Method *jmethodID;
 
-extern "C" jobject _Jv_AllocObject (jclass, jint) __attribute__((__malloc__));
-extern "C" jobject _Jv_AllocObjectNoFinalizer (jclass, jint) __attribute__((__malloc__));
-extern "C" jobject _Jv_AllocObjectNoInitNoFinalizer (jclass, jint) __attribute__((__malloc__));
+extern "C" jobject _Jv_AllocObject (jclass) __attribute__((__malloc__));
+extern "C" jobject _Jv_AllocObjectNoFinalizer (jclass) __attribute__((__malloc__));
+extern "C" jobject _Jv_AllocObjectNoInitNoFinalizer (jclass) __attribute__((__malloc__));
 #ifdef JV_HASH_SYNCHRONIZATION
-  extern "C" jobject _Jv_AllocPtrFreeObject (jclass, jint)
+  extern "C" jobject _Jv_AllocPtrFreeObject (jclass)
   			    __attribute__((__malloc__));
 #else
   // Collector still needs to scan sync_info
-  static inline jobject _Jv_AllocPtrFreeObject (jclass klass, jint sz)
+  static inline jobject _Jv_AllocPtrFreeObject (jclass klass)
   {
-    return _Jv_AllocObject(klass, sz);
+    return _Jv_AllocObject(klass);
   }
 #endif
 extern "C" jboolean _Jv_IsInstanceOf(jobject, jclass);
@@ -463,6 +497,7 @@ extern "C" void _Jv_RegisterClassHookDefault (jclass);
 
 typedef unsigned short _Jv_ushort __attribute__((__mode__(__HI__)));
 typedef unsigned int _Jv_uint __attribute__((__mode__(__SI__)));
+typedef unsigned int _Jv_ulong __attribute__((__mode__(__DI__)));
 
 struct _Jv_Utf8Const
 {

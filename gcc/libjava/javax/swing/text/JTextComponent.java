@@ -41,15 +41,23 @@ import java.awt.AWTEvent;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Image;
+import java.awt.Insets;
 import java.awt.Rectangle;
 import java.awt.Point;
-import javax.accessibility.*;
+import javax.accessibility.Accessible;
+import javax.accessibility.AccessibleContext;
+import javax.accessibility.AccessibleRole;
+import javax.accessibility.AccessibleStateSet;
+import javax.accessibility.AccessibleText;
 import javax.swing.Icon;
 import javax.swing.JComponent;
 import javax.swing.KeyStroke;
 import javax.swing.Scrollable;
 import javax.swing.UIManager;
-import javax.swing.event.*;
+import javax.swing.event.CaretEvent;
+import javax.swing.event.CaretListener;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.plaf.TextUI;
 
 public abstract class JTextComponent extends JComponent
@@ -377,6 +385,12 @@ public abstract class JTextComponent extends JComponent
 	return null;
     }
 
+    public Insets getMargin()
+    {
+        // FIXME: Not implemented.
+        return null;
+    }
+
     public void setText(String text)
     {
 	getDocument().remove(0,doc.getLength());
@@ -392,7 +406,7 @@ public abstract class JTextComponent extends JComponent
     public String getUIClassID()
     {
 	//          Returns a string that specifies the name of the l&f class that renders this component.  
-	return "JTextComponent";
+	return "TextComponentUI";
     }
     public int getVerticalAlignment()
     {
@@ -458,15 +472,15 @@ public abstract class JTextComponent extends JComponent
 	//          Sets the vertical position of the label's text, relative to its image.  
     }
 
-    public TextUI getUI()
-    {	return (TextUI) ui;
-    }
+  public TextUI getUI()
+  {
+    return (TextUI) UIManager.getUI(this);
+  }
 
-    public void updateUI()
-    {
-	TextUI b = (TextUI)UIManager.getUI(this);
-	setUI(b);
-    }
+  public void updateUI()
+  {
+    setUI(getUI());
+  }
 
   public Dimension getPreferredScrollableViewportSize()
   {

@@ -38,6 +38,7 @@ exception statement from your version. */
 
 package java.sql;
 
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
 
 /**
@@ -57,11 +58,7 @@ public class Timestamp extends java.util.Date
   /**
    * Used for parsing and formatting this date.
    */
-  // Millisecond will have to be close enough for now.
-  private static SimpleDateFormat parse_sdf = 
-    new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSSS");
-
-  private static SimpleDateFormat format_sdf =
+  private static SimpleDateFormat sdf =
     new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
   /**
@@ -78,14 +75,39 @@ public class Timestamp extends java.util.Date
    */
   public static Timestamp valueOf(String str)
   {
+    int nanos = 0;
+    int dot = str.indexOf('.');
+    if (dot != -1)
+      {
+	if (str.lastIndexOf('.') != dot)
+	  throw new IllegalArgumentException(str);
+
+	int len = str.length() - dot - 1;
+	if (len < 1 || len > 9)
+	  throw new IllegalArgumentException(str);
+
+	nanos = Integer.parseInt(str.substring(dot + 1));
+	for (int i = len; i < 9; i++)
+	  nanos *= 10;
+	
+	str = str.substring(0, dot);
+
+      }
+
     try
       {
-	Date d = (Date) parse_sdf.parseObject(str);
-	return new Timestamp(d.getTime());
+	java.util.Date d = (java.util.Date)sdf.parseObject(str);
+
+	if (d == null)
+	  throw new IllegalArgumentException(str);
+
+	Timestamp ts = new Timestamp(d.getTime() + nanos / 1000000);
+	ts.nanos = nanos;
+	return ts;
       }
-    catch (Exception e)
+    catch (ParseException e)
       {
-	return null;
+	throw new IllegalArgumentException(str);
       }
   }
 
@@ -128,7 +150,7 @@ public class Timestamp extends java.util.Date
    */
   public String toString()
   {
-    return format_sdf.format(this) + "." + getNanos();
+    return sdf.format(this) + "." + getNanos();
   }
 
   /**
@@ -202,9 +224,6 @@ public class Timestamp extends java.util.Date
    */
   public boolean equals(Object obj)
   {
-    if (obj == null)
-      return false;
-
     if (!(obj instanceof Timestamp))
       return false;
 

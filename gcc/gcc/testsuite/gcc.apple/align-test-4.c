@@ -190,7 +190,8 @@ int main(int argc, char *argv[])
     check(SIZEOF(LoaderExport, MODE), 10, "kernel struct");
     check(OFFSETOF(LoaderExport, MODE, offset), 4, "offset of offset");
     check(OFFSETOF(LoaderExport, MODE, sectionNumber), 8, "offset of sectionNumber");
-    check(SIZEOF(S1, MODE), 8, "bitfields & char");
+    /* GCC2 used to have this as '8', but it should really be 6.  */
+    check(SIZEOF(S1, MODE), 6, "bitfields & char");
     check(SIZEOF(S2, MODE), 6, "int & char");
     check(SIZEOF(S3, MODE), 6, "char, bitfields(32), char");
     check(OFFSETOF(S3, MODE, f3), 5, "offset of 2nd char");

@@ -1,5 +1,5 @@
 /* Timer.java -- 
-   Copyright (C) 2002 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2004  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -35,20 +35,25 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package javax.swing;
 
-import java.awt.event.*;
-import java.util.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.io.Serializable;
+import java.util.EventListener;
 
+import javax.swing.event.EventListenerList;
 
-public class Timer
+public class Timer implements Serializable
 {
+  protected EventListenerList listenerList = new EventListenerList();
+  
   int ticks;
   static boolean verbose;
   boolean running;
   boolean repeat_ticks = true;
   long interval, init_delay;
-  Vector actions = new Vector();
     
   class Waker extends Thread
   {
@@ -82,23 +87,44 @@ public class Timer
 
   public void addActionListener(ActionListener listener)
   {
-    actions.addElement(listener);
-  }
-  public void removeActionListener(ActionListener listener)
-  {
-    actions.removeElement(listener);
-  }
-
-  void fireActionPerformed()
-  {
-    for (int i=0;i<actions.size();i++)
-      {
-	ActionListener a = (ActionListener) actions.elementAt(i);
-	a.actionPerformed(new ActionEvent(this, ticks, "Timer"));
-      }
+    listenerList.add (ActionListener.class, listener);
   }
   
+  public void removeActionListener(ActionListener listener)
+  {
+    listenerList.remove (ActionListener.class, listener);
+  }
 
+  /**
+   * @since 1.3
+   */
+  public EventListener[] getListeners (Class listenerType)
+  {
+    return listenerList.getListeners (listenerType);
+  }
+  
+  /**
+   * @since 1.4
+   */
+  public ActionListener[] getActionListeners ()
+  {
+    return (ActionListener[]) listenerList.getListeners (ActionListener.class);
+  }
+
+  protected void fireActionPerformed (ActionEvent event)
+  {
+    ActionListener[] listeners = getActionListeners();
+    
+    for (int i = 0; i < listeners.length; i++)
+      {
+	listeners [i].actionPerformed (event);
+      }
+  }
+
+  void fireActionPerformed ()
+  {
+    fireActionPerformed (new ActionEvent (this, ticks, "Timer"));
+  }
 
   public static void setLogTimers(boolean flag)
   {
@@ -110,7 +136,6 @@ public class Timer
     return verbose;
   }
     
-
   public void setDelay(int delay)
   {
     interval = delay;
@@ -120,7 +145,6 @@ public class Timer
   {
     return (int)interval;
   }
-
 
   public void setInitialDelay(int initialDelay)
   {
@@ -132,12 +156,12 @@ public class Timer
     repeat_ticks = flag;
   }
 
-  boolean isRunning()
+  public boolean isRunning()
   {
     return running;
   }
 
-  void start()
+  public void start()
   {
     if (isRunning())
       {
@@ -147,7 +171,7 @@ public class Timer
     new Waker().start();
   }
 
-  void stop()
+  public void stop()
   {
     running = false;
   }

@@ -1,5 +1,5 @@
 /* Window.java --
-   Copyright (C) 1999, 2000, 2002 Free Software Foundation
+   Copyright (C) 1999, 2000, 2002, 2003 Free Software Foundation
 
 This file is part of GNU Classpath.
 
@@ -38,30 +38,50 @@ exception statement from your version. */
 
 package java.awt;
 
+import java.awt.event.ComponentEvent;
 import java.awt.event.WindowEvent;
+import java.awt.event.WindowFocusListener;
 import java.awt.event.WindowListener;
+import java.awt.event.WindowStateListener;
 import java.awt.peer.WindowPeer;
-import java.awt.peer.ComponentPeer;
+import java.lang.ref.Reference;
+import java.lang.ref.WeakReference;
+import java.util.Iterator;
 import java.util.EventListener;
 import java.util.Locale;
 import java.util.ResourceBundle;
+import java.util.Vector;
+import javax.accessibility.Accessible;
+import javax.accessibility.AccessibleContext;
 
 /**
  * This class represents a top-level window with no decorations.
  *
- * @author Aaron M. Renn (arenn@urbanophile.com)
+ * @author Aaron M. Renn <arenn@urbanophile.com>
  * @author Warren Levy  <warrenl@cygnus.com>
  */
-public class Window extends Container
+public class Window extends Container implements Accessible
 {
+  private static final long serialVersionUID = 4497834738069338734L;
+
   // Serialized fields, from Sun's serialization spec.
-  // private FocusManager focusMgr;  // FIXME: what is this?  
   private String warningString = null;
-  private int state = 0;
   private int windowSerializedDataVersion = 0; // FIXME
+  /** @since 1.2 */
+  // private FocusManager focusMgr;  // FIXME: what is this?  
+  /** @since 1.2 */
+  private int state = 0;
+  /** @since 1.4 */
+  private boolean focusableWindowState = true;
+
+  // A list of other top-level windows owned by this window.
+  private transient Vector ownedWindows = new Vector();
 
   private transient WindowListener windowListener;
+  private transient WindowFocusListener windowFocusListener;
+  private transient WindowStateListener windowStateListener;
   private transient GraphicsConfiguration graphicsConfiguration;
+  private transient AccessibleContext accessibleContext;
 
   /** 
    * This (package access) constructor is used by subclasses that want
@@ -71,8 +91,8 @@ public class Window extends Container
    */
   Window()
   {
-    setVisible(false);
-    setLayout((LayoutManager) new BorderLayout());
+    visible = false;
+    setLayout(new BorderLayout());
   }
 
   Window(GraphicsConfiguration gc)
@@ -80,7 +100,7 @@ public class Window extends Container
     this();
     graphicsConfiguration = gc;
   }
-    
+
   /**
    * Initializes a new instance of <code>Window</code> with the specified
    * parent.  The window will initially be invisible.
@@ -125,27 +145,30 @@ public class Window extends Container
   {
     this ();
 
-    if (owner == null)
-      throw new IllegalArgumentException ("owner must not be null");
+    synchronized (getTreeLock())
+      {
+	if (owner == null)
+	  throw new IllegalArgumentException ("owner must not be null");
 
-    this.parent = owner;
-    
-    // FIXME: add to owner's "owned window" list
-    //owner.owned.add(this); // this should be a weak reference
-    
-    /*  FIXME: Security check
-    SecurityManager.checkTopLevelWindow(...)
-    */
+	parent = owner;
+        owner.ownedWindows.add(new WeakReference(this));
+      }
+
+    // FIXME: make this text visible in the window.
+    SecurityManager s = System.getSecurityManager();
+    if (s != null && ! s.checkTopLevelWindow(this))
+      warningString = System.getProperty("awt.appletWarning");
 
     if (gc != null
         && gc.getDevice().getType() != GraphicsDevice.TYPE_RASTER_SCREEN)
       throw new IllegalArgumentException ("gc must be from a screen device");
 
-    if (gc == null)
-      graphicsConfiguration = GraphicsEnvironment.getLocalGraphicsEnvironment()
-        .getDefaultScreenDevice()
-        .getDefaultConfiguration();
-    else
+    // FIXME: until we implement this, it just causes AWT to crash.
+//     if (gc == null)
+//       graphicsConfiguration = GraphicsEnvironment.getLocalGraphicsEnvironment()
+//         .getDefaultScreenDevice()
+//         .getDefaultConfiguration();
+//     else
       graphicsConfiguration = gc;
   }
 
@@ -155,18 +178,6 @@ public class Window extends Container
 	return graphicsConfiguration;
 
     return super.getGraphicsConfigurationImpl();
-  }
-
-  /**
-   * Disposes of the input methods and context, and removes the WeakReference
-   * which formerly pointed to this Window from the parent's owned Window list.
-   *
-   * @exception Throwable The Exception raised by this method.
-   */
-  protected void finalize() throws Throwable
-  {
-    // FIXME: remove from owner's "owned window" list (Weak References)
-    super.finalize();
   }
 
   /**
@@ -198,7 +209,8 @@ public class Window extends Container
   }
 
   /**
-   * Makes this window visible and brings it to the front.
+   * Shows on-screen this window and any of its owned windows for whom
+   * isVisible returns true.
    */
   public void show()
   {
@@ -207,6 +219,26 @@ public class Window extends Container
     if (peer == null)
       addNotify();
 
+    // Show visible owned windows.
+    synchronized (getTreeLock())
+      {
+	Iterator e = ownedWindows.iterator();
+	while(e.hasNext())
+	  {
+	    Window w = (Window)(((Reference) e.next()).get());
+	    if (w != null)
+	      {
+		if (w.isVisible())
+		  w.getPeer().setVisible(true);
+	      }
+     	    else
+	      // Remove null weak reference from ownedWindows.
+	      // Unfortunately this can't be done in the Window's
+	      // finalize method because there is no way to guarantee
+	      // synchronous access to ownedWindows there.
+	      e.remove();
+	  }
+      }
     validate();
     super.show();
     toFront();
@@ -214,7 +246,22 @@ public class Window extends Container
 
   public void hide()
   {
-    // FIXME: call hide() on any "owned" children here.
+    // Hide visible owned windows.
+    synchronized (getTreeLock ())
+      {
+	Iterator e = ownedWindows.iterator();
+	while(e.hasNext())
+	  {
+	    Window w = (Window)(((Reference) e.next()).get());
+	    if (w != null)
+	      {
+		if (w.isVisible() && w.getPeer() != null)
+		  w.getPeer().setVisible(false);
+	      }
+     	    else
+	      e.remove();
+	  }
+      }
     super.hide();
   }
 
@@ -226,19 +273,34 @@ public class Window extends Container
   }
 
   /**
-   * Called to free any resource associated with this window.
+   * Destroys any resources associated with this window.  This includes
+   * all components in the window and all owned top-level windows.
    */
   public void dispose()
   {
     hide();
 
-    Window[] list = getOwnedWindows();
-    for (int i=0; i<list.length; i++)
-      list[i].dispose();
+    synchronized (getTreeLock ())
+      {
+	Iterator e = ownedWindows.iterator();
+	while(e.hasNext())
+	  {
+	    Window w = (Window)(((Reference) e.next()).get());
+	    if (w != null)
+	      w.dispose();
+	    else
+	      // Remove null weak reference from ownedWindows.
+	      e.remove();
+	  }
 
-    for (int i = 0; i < ncomponents; ++i)
-      component[i].removeNotify();
-    this.removeNotify();
+	for (int i = 0; i < ncomponents; ++i)
+	  component[i].removeNotify();
+	this.removeNotify();
+
+        // Post a WINDOW_CLOSED event.
+        WindowEvent we = new WindowEvent(this, WindowEvent.WINDOW_CLOSED);
+        getToolkit().getSystemEventQueue().postEvent(we);
+      }
   }
 
   /**
@@ -288,20 +350,7 @@ public class Window extends Container
    */
   public final String getWarningString()
   {
-    boolean secure = true;
-    /* boolean secure = SecurityManager.checkTopLevelWindow(...) */
-
-    if (!secure)
-      {
-        if (warningString != null)
-          return warningString;
-        else
-          {
-            String warning = System.getProperty("awt.appletWarning");
-            return warning;
-          }
-      }
-    return null;
+    return warningString;
   }
 
   /**
@@ -340,9 +389,33 @@ public class Window extends Container
   /** @since 1.2 */
   public Window[] getOwnedWindows()
   {
-    // FIXME: return array containing all the windows this window currently 
-    // owns.
-    return new Window[0];
+    Window [] trimmedList;
+    synchronized (getTreeLock ())
+      {
+	// Windows with non-null weak references in ownedWindows.
+	Window [] validList = new Window [ownedWindows.size()];
+
+	Iterator e = ownedWindows.iterator();
+	int numValid = 0;
+	while (e.hasNext())
+	  {
+	    Window w = (Window)(((Reference) e.next()).get());
+	    if (w != null)
+	      validList[numValid++] = w;
+	    else
+	      // Remove null weak reference from ownedWindows.
+	      e.remove();
+	  }
+
+	if (numValid != validList.length)
+	  {
+	    trimmedList = new Window [numValid];
+	    System.arraycopy (validList, 0, trimmedList, 0, numValid);
+	  }
+	else
+	  trimmedList = validList;
+      }
+    return trimmedList;
   }
 
   /**
@@ -380,6 +453,68 @@ public class Window extends Container
   }
 
   /**
+   * Returns an array of all the window focus listeners registered on this
+   * window.
+   *
+   * @since 1.4
+   */
+  public synchronized WindowFocusListener[] getWindowFocusListeners()
+  {
+    return (WindowFocusListener[])
+      AWTEventMulticaster.getListeners(windowFocusListener,
+                                       WindowFocusListener.class);
+  }
+  
+  /**
+   * Returns an array of all the window state listeners registered on this
+   * window.
+   *
+   * @since 1.4
+   */
+  public synchronized WindowStateListener[] getWindowStateListeners()
+  {
+    return (WindowStateListener[])
+      AWTEventMulticaster.getListeners(windowStateListener,
+                                       WindowStateListener.class);
+  }
+
+  /**
+   * Adds the specified listener to this window.
+   */
+  public void addWindowFocusListener (WindowFocusListener wfl)
+  {
+    windowFocusListener = AWTEventMulticaster.add (windowFocusListener, wfl);
+  }
+  
+  /**
+   * Adds the specified listener to this window.
+   *
+   * @since 1.4
+   */
+  public void addWindowStateListener (WindowStateListener wsl)
+  {
+    windowStateListener = AWTEventMulticaster.add (windowStateListener, wsl);  
+  }
+  
+  /**
+   * Removes the specified listener from this window.
+   */
+  public void removeWindowFocusListener (WindowFocusListener wfl)
+  {
+    windowFocusListener = AWTEventMulticaster.remove (windowFocusListener, wfl);
+  }
+  
+  /**
+   * Removes the specified listener from this window.
+   *
+   * @since 1.4
+   */
+  public void removeWindowStateListener (WindowStateListener wsl)
+  {
+    windowStateListener = AWTEventMulticaster.remove (windowStateListener, wsl);
+  }
+
+  /**
    * Returns an array of all the objects currently registered as FooListeners
    * upon this Window. FooListeners are registered using the addFooListener
    * method.
@@ -401,7 +536,9 @@ public class Window extends Container
     // Make use of event id's in order to avoid multiple instanceof tests.
     if (e.id <= WindowEvent.WINDOW_LAST 
         && e.id >= WindowEvent.WINDOW_FIRST
-        && (windowListener != null 
+        && (windowListener != null
+	    || windowFocusListener != null
+	    || windowStateListener != null
 	    || (eventMask & AWTEvent.WINDOW_EVENT_MASK) != 0))
       processEvent(e);
     else
@@ -434,31 +571,50 @@ public class Window extends Container
    */
   protected void processWindowEvent(WindowEvent evt)
   {
-    if (windowListener != null)
+    int id = evt.getID();
+
+    if (id == WindowEvent.WINDOW_GAINED_FOCUS
+	|| id == WindowEvent.WINDOW_LOST_FOCUS)
+      processWindowFocusEvent (evt);
+    else if (id == WindowEvent.WINDOW_STATE_CHANGED)
+      processWindowStateEvent (evt);
+    else
       {
-	switch (evt.getID())
+	if (windowListener != null)
 	  {
-	  case WindowEvent.WINDOW_ACTIVATED:
-	    windowListener.windowActivated(evt);
-	    break;
-	  case WindowEvent.WINDOW_CLOSED:
-	    windowListener.windowClosed(evt);
-	    break;
-	  case WindowEvent.WINDOW_CLOSING:
-	    windowListener.windowClosing(evt);
-	    break;
-	  case WindowEvent.WINDOW_DEACTIVATED:
-	    windowListener.windowDeactivated(evt);
-	    break;
-	  case WindowEvent.WINDOW_DEICONIFIED:
-	    windowListener.windowDeiconified(evt);
-	    break;
-	  case WindowEvent.WINDOW_ICONIFIED:
-	    windowListener.windowIconified(evt);
-	    break;
-	  case WindowEvent.WINDOW_OPENED:
-	    windowListener.windowOpened(evt);
-	    break;
+	    switch (evt.getID())
+	      {
+	      case WindowEvent.WINDOW_ACTIVATED:
+		windowListener.windowActivated(evt);
+		break;
+
+	      case WindowEvent.WINDOW_CLOSED:
+		windowListener.windowClosed(evt);
+		break;
+
+	      case WindowEvent.WINDOW_CLOSING:
+		windowListener.windowClosing(evt);
+		break;
+
+	      case WindowEvent.WINDOW_DEACTIVATED:
+		windowListener.windowDeactivated(evt);
+		break;
+
+	      case WindowEvent.WINDOW_DEICONIFIED:
+		windowListener.windowDeiconified(evt);
+		break;
+
+	      case WindowEvent.WINDOW_ICONIFIED:
+		windowListener.windowIconified(evt);
+		break;
+
+	      case WindowEvent.WINDOW_OPENED:
+		windowListener.windowOpened(evt);
+		break;
+
+	      default:
+		break;
+	      }
 	  }
       }
   }
@@ -481,6 +637,8 @@ public class Window extends Container
    * Post a Java 1.0 event to the event queue.
    *
    * @param event The event to post.
+   *
+   * @deprecated
    */
   public boolean postEvent(Event e)
   {
@@ -499,13 +657,21 @@ public class Window extends Container
     return super.isShowing();
   }
 
-  /** @since 1.2 */
+  /**
+   * @since 1.2
+   *
+   * @deprecated
+   */
   public void applyResourceBundle(ResourceBundle rb)
   {
-    // FIXME
+    throw new Error ("Not implemented");
   }
 
-  /** @since 1.2 */
+  /**
+   * @since 1.2
+   *
+   * @deprecated
+   */
   public void applyResourceBundle(String rbName)
   {
     ResourceBundle rb = ResourceBundle.getBundle(rbName);
@@ -513,12 +679,12 @@ public class Window extends Container
       applyResourceBundle(rb);    
   }
 
-  /*
   public AccessibleContext getAccessibleContext()
   {
     // FIXME
+    //return null;
+    throw new Error ("Not implemented");
   }
-  */
 
   /** 
    * Get graphics configuration.  The implementation for Window will
@@ -530,5 +696,112 @@ public class Window extends Container
     if (graphicsConfiguration != null) return graphicsConfiguration;
     if (peer != null) return peer.getGraphicsConfiguration();
     return null;
+  }
+
+  protected void processWindowFocusEvent(WindowEvent event)
+  {
+    if (windowFocusListener != null)
+      {
+        switch (event.getID ())
+          {
+          case WindowEvent.WINDOW_GAINED_FOCUS:
+            windowFocusListener.windowGainedFocus (event);
+            break;
+            
+          case WindowEvent.WINDOW_LOST_FOCUS:
+            windowFocusListener.windowLostFocus (event);
+            break;
+            
+          default:
+            break;
+          }
+      }
+  }
+  
+  /**
+   * @since 1.4
+   */
+  protected void processWindowStateEvent(WindowEvent event)
+  {
+    if (windowStateListener != null
+        && event.getID () == WindowEvent.WINDOW_STATE_CHANGED)
+      windowStateListener.windowStateChanged (event);
+  }
+
+  /**
+   * Returns whether this <code>Window</code> can get the focus or not.
+   *
+   * @since 1.4
+   */
+  public final boolean isFocusableWindow ()
+  {
+    if (getFocusableWindowState () == false)
+      return false;
+
+    if (this instanceof Dialog
+        || this instanceof Frame)
+      return true;
+
+    // FIXME: Implement more possible cases for returning true.
+
+    return false;
+  }
+  
+  /**
+   * Returns the value of the focusableWindowState property.
+   * 
+   * @since 1.4
+   */
+  public boolean getFocusableWindowState ()
+  {
+    return focusableWindowState;
+  }
+
+  /**
+   * Sets the value of the focusableWindowState property.
+   * 
+   * @since 1.4
+   */
+  public void setFocusableWindowState (boolean focusableWindowState)
+  {
+    this.focusableWindowState = focusableWindowState;
+  }
+
+  // setBoundsCallback is needed so that when a user moves a window,
+  // the Window's location can be updated without calling the peer's
+  // setBounds method.  When a user moves a window the peer window's
+  // location is updated automatically and the windowing system sends
+  // a message back to the application informing it of its updated
+  // dimensions.  We must update the AWT Window class with these new
+  // dimensions.  But we don't want to call the peer's setBounds
+  // method, because the peer's dimensions have already been updated.
+  // (Under X, having this method prevents Configure event loops when
+  // moving windows: Component.setBounds -> peer.setBounds ->
+  // postConfigureEvent -> Component.setBounds -> ...  In some cases
+  // Configure event loops cause windows to jitter back and forth
+  // continuously).
+  void setBoundsCallback (int x, int y, int w, int h)
+  {
+    if (this.x == x && this.y == y && width == w && height == h)
+      return;
+    invalidate();
+    boolean resized = width != w || height != h;
+    boolean moved = this.x != x || this.y != y;
+    this.x = x;
+    this.y = y;
+    width = w;
+    height = h;
+    if (resized)
+      {
+        ComponentEvent ce =
+          new ComponentEvent(this, ComponentEvent.COMPONENT_RESIZED);
+        getToolkit().getSystemEventQueue().postEvent(ce);
+      }
+    if (moved)
+      {
+        ComponentEvent ce =
+          new ComponentEvent(this, ComponentEvent.COMPONENT_MOVED);
+        getToolkit().getSystemEventQueue().postEvent(ce);
+      }
   }
 }

@@ -1,6 +1,6 @@
 // 20020717 gdr
 
-// Copyright (C) 2002 Free Software Foundation, Inc.
+// Copyright (C) 2002, 2003 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -25,14 +25,14 @@
 #include <testsuite_hooks.h>
 
 bool
-construction(int start, int size, int stride)
+construction(std::size_t start, std::size_t size, std::size_t stride)
 {
   std::slice s(start, size, stride);
   return s.start() == start && s.size() == size && s.stride() == stride;
 }
 
 bool
-copy(int start, int size, int stride)
+copy(std::size_t start, std::size_t size, std::size_t stride)
 {
   std::slice s(start, size, stride);
   std::slice t = s;
@@ -40,7 +40,7 @@ copy(int start, int size, int stride)
 }
 
 bool
-assignment(int start, int size, int stride)
+assignment(std::size_t start, std::size_t size, std::size_t stride)
 {
   std::slice s(start, size, stride);
   std::slice t;
@@ -51,7 +51,9 @@ assignment(int start, int size, int stride)
 
 int main()
 {
-  std::srand(20020717);         using std::rand;
+  bool test __attribute__((unused)) = true;
+  std::srand(20020717);         
+  using std::rand;
   VERIFY(construction(rand(), rand(), rand()));
 
   VERIFY(copy(rand(), rand(), rand()));

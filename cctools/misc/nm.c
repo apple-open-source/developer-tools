@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -932,6 +932,10 @@ char *arch_name)
 		else
 		    printf("non-external ");
 	    }
+	    
+	    if(ofile->mh->filetype == MH_OBJECT &&
+	       (symbols[i].n_desc & N_NO_DEAD_STRIP) == N_NO_DEAD_STRIP)
+		    printf("[no dead strip] ");
 
 	    if((symbols[i].n_type & N_TYPE) == N_INDR)
 		printf("%s (for %s)", symbols[i].n_un.n_name,

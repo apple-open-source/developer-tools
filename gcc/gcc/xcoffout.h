@@ -1,6 +1,7 @@
 /* XCOFF definitions.  These are needed in dbxout.c, final.c,
    and xcoffout.h.
-   Copyright (C) 1998, 2000, 2002 Free Software Foundation, Inc.
+   Copyright (C) 1998, 2000, 2002, 2003, 2004
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -28,15 +29,8 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 
 /* Use the XCOFF predefined type numbers.  */
 
-/* ??? According to metin, typedef stabx must go in text control section,
-   but he did not make this changes everywhere where such typedef stabx
-   can be emitted, so it is really needed or not?  */
-
-#define DBX_OUTPUT_STANDARD_TYPES(SYMS)		\
-{						\
-  text_section ();				\
-  xcoff_output_standard_types (SYMS);		\
-}
+#define DBX_ASSIGN_FUNDAMENTAL_TYPE_NUMBER(TYPE) \
+  xcoff_assign_fundamental_type_number (TYPE)
 
 /* Any type with a negative type index has already been output.  */
 
@@ -138,8 +132,8 @@ extern const char *xcoff_lastfile;
 
 /* Write out main source file name using ".file" rather than ".stabs".
    We don't actually do this here, because the assembler gets confused if there
-   is more than one .file directive.  ASM_FILE_START in config/rs6000/rs6000.h
-   is already emitting a .file directory, so we don't output one here also.
+   is more than one .file directive.  rs6000_xcoff_file_start is already
+   emitting a .file directory, so we don't output one here also.
    Initialize xcoff_lastfile.  */
 #define DBX_OUTPUT_MAIN_SOURCE_FILENAME(FILE,FILENAME) \
   xcoff_lastfile = (FILENAME)
@@ -181,27 +175,12 @@ extern const char *xcoff_lastfile;
 
 /* Prototype functions in xcoffout.c.  */
 
-extern int stab_to_sclass			PARAMS ((int));
-#ifdef BUFSIZ
-extern void xcoffout_begin_prologue		PARAMS ((unsigned int,
-							 const char *));
-extern void xcoffout_begin_block		PARAMS ((unsigned, unsigned));
-extern void xcoffout_end_epilogue		PARAMS ((unsigned int,
-							 const char *));
-extern void xcoffout_end_function		PARAMS ((unsigned int));
-extern void xcoffout_end_block			PARAMS ((unsigned, unsigned));
-#endif /* BUFSIZ */
-
-#ifdef TREE_CODE
-extern void xcoff_output_standard_types		PARAMS ((tree));
-#ifdef BUFSIZ
-extern void xcoffout_declare_function		PARAMS ((FILE *, tree, const char *));
-#endif /* BUFSIZ */
-#endif /* TREE_CODE */
-
-#ifdef RTX_CODE
-#ifdef BUFSIZ
-extern void xcoffout_source_line		PARAMS ((unsigned int,
-							 const char *));
-#endif /* BUFSIZ */
-#endif /* RTX_CODE */
+extern int stab_to_sclass (int);
+extern void xcoffout_begin_prologue (unsigned int, const char *);
+extern void xcoffout_begin_block (unsigned, unsigned);
+extern void xcoffout_end_epilogue (unsigned int, const char *);
+extern void xcoffout_end_function (unsigned int);
+extern void xcoffout_end_block (unsigned, unsigned);
+extern int xcoff_assign_fundamental_type_number (tree);
+extern void xcoffout_declare_function (FILE *, tree, const char *);
+extern void xcoffout_source_line (unsigned int, const char *);

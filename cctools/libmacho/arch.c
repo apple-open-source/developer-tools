@@ -66,6 +66,10 @@ static const NXArchInfo ArchInfoTable[] = {
 	 "Motorola 88K"},
     {"ppc",    CPU_TYPE_POWERPC, CPU_SUBTYPE_POWERPC_ALL,  NX_BigEndian,
 	 "PowerPC"},
+#ifdef INTERIM_PPC64
+    {"ppc64",  CPU_TYPE_POWERPC64, CPU_SUBTYPE_POWERPC64_ALL,  NX_BigEndian,
+	 "PowerPC 64-bit"},
+#endif /* INTERIM_PPC64 */
     {"sparc",  CPU_TYPE_SPARC,   CPU_SUBTYPE_SPARC_ALL,	   NX_BigEndian,
 	 "SPARC"},
     {"any",    CPU_TYPE_ANY,     CPU_SUBTYPE_MULTIPLE,     NX_UnknownByteOrder,
@@ -358,7 +362,7 @@ unsigned long nfat_archs)
 	    /* if no intel cputypes found return NULL */
 	    if(lowest_family == CPU_SUBTYPE_INTEL_FAMILY_MAX + 1)
 		return(NULL);
-	    lowest_model = ULONG_MAX;
+	    lowest_model = LONG_MAX;
 	    lowest_index = -1;
 	    for(i = 0; i < nfat_archs; i++){
 		if(fat_archs[i].cputype != cputype)
@@ -491,6 +495,22 @@ unsigned long nfat_archs)
 		}
 	    }
 	    break;
+#ifdef INTERIM_PPC64
+	case CPU_TYPE_POWERPC64:
+	    /*
+	     * An exact match as not found.  Currently the interim ppc64 format
+	     * only has one subtype.  If other subtypes are added this code
+	     * will not know about them so just pick the
+	     * CPU_SUBTYPE_POWERPC64_ALL if it exists.
+	     */
+	    for(i = 0; i < nfat_archs; i++){
+		if(fat_archs[i].cputype != cputype)
+		    continue;
+		if(fat_archs[i].cpusubtype == CPU_SUBTYPE_POWERPC64_ALL)
+		    return(fat_archs + i);
+	    }
+	    break;
+#endif /* INTERIM_PPC64 */
 	case CPU_TYPE_MC88000:
 	    for(i = 0; i < nfat_archs; i++){
 		if(fat_archs[i].cputype != cputype)

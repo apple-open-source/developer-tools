@@ -10,9 +10,6 @@ JLS1.2
 JDBC1.0
 JDBC2.0
 
-# Cannot be compiled
-!java.text.ACIAttribute
-
 # The following tests seem to hang or crash the testsuite.
 # This a problem when running Mauve "standalone".
 !java.lang.reflect.Array.newInstance

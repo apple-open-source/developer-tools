@@ -66,9 +66,13 @@ target_triplet = @target@
 AR = @AR@
 AS = @AS@
 CC = @CC@
+CCAS = @CCAS@
+CCASFLAGS = @CCASFLAGS@
+CFLAGS = @CFLAGS@
 CPP = @CPP@
 CXX = @CXX@
 CXXCPP = @CXXCPP@
+CXXFLAGS = @CXXFLAGS@
 CXXINCLUDES = @CXXINCLUDES@
 DLLTOOL = @DLLTOOL@
 EXEEXT = @EXEEXT@
@@ -89,10 +93,20 @@ RANLIB = @RANLIB@
 STRIP = @STRIP@
 THREADLIBS = @THREADLIBS@
 VERSION = @VERSION@
+addincludes = @addincludes@
+addlibs = @addlibs@
 addobjs = @addobjs@
+addtests = @addtests@
+build_subdir = @build_subdir@
 gc_basedir = @gc_basedir@
+host_subdir = @host_subdir@
 mkinstalldirs = @mkinstalldirs@
+ncn_cv_ = @ncn_cv_@
 target_all = @target_all@
+target_noncanonical = @target_noncanonical@
+target_subdir = @target_subdir@
+toolexecdir = @toolexecdir@
+toolexeclibdir = @toolexeclibdir@
 
 AUTOMAKE_OPTIONS = foreign
 
@@ -107,7 +121,7 @@ DIST_COMMON =  Makefile.am Makefile.in
 
 DISTFILES = $(DIST_COMMON) $(SOURCES) $(HEADERS) $(TEXINFOS) $(EXTRA_DIST)
 
-TAR = gtar
+TAR = tar
 GZIP_ENV = --best
 all: all-redirect
 .SUFFIXES:

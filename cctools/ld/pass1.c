@@ -62,6 +62,7 @@
 
 #include "ld.h"
 #include "pass1.h"
+#include "live_refs.h"
 #include "objects.h"
 #include "fvmlibs.h"
 #include "dylibs.h"
@@ -1650,9 +1651,6 @@ down:
 	     * and cause the possibility of more swapping and if fast linking is
 	     * wanted then the table of contents can be sorted.
 	     */
-	    warning("table of contents of library: %s not sorted slower link "
-		    "editing will result (use the ranlib(1) -s option)",
-		    file_name);
 	    member_loaded = TRUE;
 	    while(member_loaded == TRUE && errors == 0){
 		member_loaded = FALSE;

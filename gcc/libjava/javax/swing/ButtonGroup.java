@@ -35,15 +35,17 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package javax.swing;
 
-import java.io.*;
-import java.util.*;
-import javax.swing.event.*;
-
+import java.io.Serializable;
+import java.util.Enumeration;
+import java.util.Vector;
 
 public class ButtonGroup implements Serializable 
 {
+  static final long serialVersionUID = 4259076101881721375L;
+
     Vector v = new Vector();
     ButtonModel sel;
     
@@ -126,12 +128,4 @@ public class ButtonGroup implements Serializable
     }
 
 }
-
-
-
-
-
-
-
-
 

@@ -55,11 +55,11 @@ void islessgreater() { }
 
 void isunordered() { }
 
-#if _GLIBCPP_USE_C99
+#if _GLIBCXX_USE_C99
 template <typename _Tp>
   void test_c99_classify()
   {
-    bool test = true;
+    bool test __attribute__((unused)) = true;
 
     typedef _Tp fp_type;
     fp_type f1 = 1.0;
@@ -83,7 +83,7 @@ template <typename _Tp>
 
 int main()
 {
-#if _GLIBCPP_USE_C99
+#if _GLIBCXX_USE_C99
   test_c99_classify<float>();
   //test_c99_classify<double>();
 #endif

@@ -1,20 +1,20 @@
  /* GNU Objective C Runtime archiving
-   Copyright (C) 1993, 1995, 1996, 1997, 2002 Free Software Foundation, Inc.
+   Copyright (C) 1993, 1995, 1996, 1997, 2002, 2004 Free Software Foundation, Inc.
    Contributed by Kresten Krab Thorup
 
-This file is part of GNU CC.
+This file is part of GCC.
 
-GNU CC is free software; you can redistribute it and/or modify it under the
+GCC is free software; you can redistribute it and/or modify it under the
 terms of the GNU General Public License as published by the Free Software
 Foundation; either version 2, or (at your option) any later version.
 
-GNU CC is distributed in the hope that it will be useful, but WITHOUT ANY
+GCC is distributed in the hope that it will be useful, but WITHOUT ANY
 WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
 FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
 details.
 
 You should have received a copy of the GNU General Public License along with
-GNU CC; see the file COPYING.  If not, write to the Free Software
+GCC; see the file COPYING.  If not, write to the Free Software
 Foundation, 59 Temple Place - Suite 330,
 Boston, MA 02111-1307, USA.  */
 
@@ -62,7 +62,7 @@ const char *objc_skip_type (const char *type);
 static void __objc_finish_write_root_object (struct objc_typed_stream *);
 static void __objc_finish_read_root_object (struct objc_typed_stream *);
 
-static __inline__ int
+static inline int
 __objc_code_unsigned_char (unsigned char *buf, unsigned char val)
 {
   if ((val&_B_VALUE) == val)
@@ -87,7 +87,7 @@ objc_write_unsigned_char (struct objc_typed_stream *stream,
   return (*stream->write) (stream->physical, buf, len);
 }
 
-static __inline__ int
+static inline int
 __objc_code_char (unsigned char *buf, signed char val)
 {
   if (val >= 0)
@@ -108,7 +108,7 @@ objc_write_char (struct objc_typed_stream *stream, signed char value)
   return (*stream->write) (stream->physical, buf, len);
 }
 
-static __inline__ int
+static inline int
 __objc_code_unsigned_short (unsigned char *buf, unsigned short val)
 {
   if ((val&_B_VALUE) == val)
@@ -146,7 +146,7 @@ objc_write_unsigned_short (struct objc_typed_stream *stream,
   return (*stream->write) (stream->physical, buf, len);
 }
       
-static __inline__ int
+static inline int
 __objc_code_short (unsigned char *buf, short val)
 {
   int sign = (val < 0);
@@ -165,7 +165,7 @@ objc_write_short (struct objc_typed_stream *stream, short value)
 }
       
 
-static __inline__ int
+static inline int
 __objc_code_unsigned_int (unsigned char *buf, unsigned int val)
 {
   if ((val&_B_VALUE) == val)
@@ -202,7 +202,7 @@ objc_write_unsigned_int (struct objc_typed_stream *stream, unsigned int value)
   return (*stream->write) (stream->physical, buf, len);
 }
 
-static __inline__ int
+static inline int
 __objc_code_int (unsigned char *buf, int val)
 {
   int sign = (val < 0);
@@ -220,7 +220,7 @@ objc_write_int (struct objc_typed_stream *stream, int value)
   return (*stream->write) (stream->physical, buf, len);
 }
 
-static __inline__ int
+static inline int
 __objc_code_unsigned_long (unsigned char *buf, unsigned long val)
 {
   if ((val&_B_VALUE) == val)
@@ -258,7 +258,7 @@ objc_write_unsigned_long (struct objc_typed_stream *stream,
   return (*stream->write) (stream->physical, buf, len);
 }
 
-static __inline__ int
+static inline int
 __objc_code_long (unsigned char *buf, long val)
 {
   int sign = (val < 0);
@@ -350,7 +350,7 @@ objc_write_use_common (struct objc_typed_stream *stream, unsigned long key)
     }
 }
 
-static __inline__ int
+static inline int
 __objc_write_extension (struct objc_typed_stream *stream, unsigned char code)
 {
   if (code <= _B_VALUE)
@@ -366,7 +366,7 @@ __objc_write_extension (struct objc_typed_stream *stream, unsigned char code)
     }
 }
 
-__inline__ int
+inline int
 __objc_write_object (struct objc_typed_stream *stream, id object)
 {
   unsigned char buf = '\0';
@@ -431,7 +431,7 @@ objc_write_object (struct objc_typed_stream *stream, id object)
     }
 }
 
-__inline__ int
+inline int
 __objc_write_class (struct objc_typed_stream *stream, struct objc_class *class)
 {
   __objc_write_extension (stream, _BX_CLASS);
@@ -459,7 +459,7 @@ objc_write_class (struct objc_typed_stream *stream,
 }
 
 
-__inline__ int 
+inline int 
 __objc_write_selector (struct objc_typed_stream *stream, SEL selector)
 {
   const char *sel_name;
@@ -501,7 +501,7 @@ objc_write_selector (struct objc_typed_stream *stream, SEL selector)
 ** Read operations 
 */
 
-__inline__ int
+inline int
 objc_read_char (struct objc_typed_stream *stream, char *val)
 {
   unsigned char buf;
@@ -528,7 +528,7 @@ objc_read_char (struct objc_typed_stream *stream, char *val)
 }
 
 
-__inline__ int
+inline int
 objc_read_unsigned_char (struct objc_typed_stream *stream, unsigned char *val)
 {
   unsigned char buf;
@@ -549,7 +549,7 @@ objc_read_unsigned_char (struct objc_typed_stream *stream, unsigned char *val)
   return len;
 }
 
-__inline__ int
+inline int
 objc_read_short (struct objc_typed_stream *stream, short *value)
 {
   unsigned char buf[sizeof (short) + 1];
@@ -577,7 +577,7 @@ objc_read_short (struct objc_typed_stream *stream, short *value)
   return len;
 }
 
-__inline__ int
+inline int
 objc_read_unsigned_short (struct objc_typed_stream *stream,
 			  unsigned short *value)
 {
@@ -605,7 +605,7 @@ objc_read_unsigned_short (struct objc_typed_stream *stream,
 }
 
 
-__inline__ int
+inline int
 objc_read_int (struct objc_typed_stream *stream, int *value)
 {
   unsigned char buf[sizeof (int) + 1];
@@ -632,7 +632,7 @@ objc_read_int (struct objc_typed_stream *stream, int *value)
   return len;
 }
 
-__inline__ int
+inline int
 objc_read_long (struct objc_typed_stream *stream, long *value)
 {
   unsigned char buf[sizeof (long) + 1];
@@ -659,7 +659,7 @@ objc_read_long (struct objc_typed_stream *stream, long *value)
   return len;
 }
 
-__inline__ int
+inline int
 __objc_read_nbyte_uint (struct objc_typed_stream *stream,
 			unsigned int nbytes, unsigned int *val)
 {
@@ -678,7 +678,7 @@ __objc_read_nbyte_uint (struct objc_typed_stream *stream,
 }
   
 
-__inline__ int
+inline int
 objc_read_unsigned_int (struct objc_typed_stream *stream,
 			unsigned int *value)
 {
@@ -715,7 +715,7 @@ __objc_read_nbyte_ulong (struct objc_typed_stream *stream,
 }
   
 
-__inline__ int
+inline int
 objc_read_unsigned_long (struct objc_typed_stream *stream,
 			 unsigned long *value)
 {
@@ -733,7 +733,7 @@ objc_read_unsigned_long (struct objc_typed_stream *stream,
   return len;
 }
 
-__inline__ int
+inline int
 objc_read_string (struct objc_typed_stream *stream,
 		  char **string)
 {
@@ -887,7 +887,7 @@ objc_read_class (struct objc_typed_stream *stream, Class *class)
 
       if (buf[0] == (_B_EXT | _BX_CLASS))
 	{
-	  char *class_name;
+	  char *class_name = "";
 	  unsigned long version;
 
 	  /* get class */
@@ -938,7 +938,7 @@ objc_read_selector (struct objc_typed_stream *stream, SEL* selector)
 
       if (buf[0] == (_B_EXT|_BX_SEL)) /* selector! */
 	{
-	  char *selector_name;
+	  char *selector_name = "";
 
 	  /* get selector */
 	  len = objc_read_string (stream, &selector_name);

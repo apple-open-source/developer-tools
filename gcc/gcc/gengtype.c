@@ -1,5 +1,5 @@
 /* Process source files and output type information.
-   Copyright (C) 2002, 2003 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -18,8 +18,10 @@ along with GCC; see the file COPYING.  If not, write to the Free
 Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA.  */
 
-#include "hconfig.h"
+#include "bconfig.h"
 #include "system.h"
+#include "coretypes.h"
+#include "tm.h"
 #include "gengtype.h"
 #include "gtyp-gen.h"
 
@@ -30,34 +32,31 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 /* Nonzero iff an error has occurred.  */
 static int hit_error = 0;
 
-static void gen_rtx_next PARAMS ((void));
-static void write_rtx_next PARAMS ((void));
-static void open_base_files PARAMS ((void));
-static void close_output_files PARAMS ((void));
+static void gen_rtx_next (void);
+static void write_rtx_next (void);
+static void open_base_files (void);
+static void close_output_files (void);
 
 /* Report an error at POS, printing MSG.  */
 
 void
-error_at_line VPARAMS ((struct fileloc *pos, const char *msg, ...))
+error_at_line (struct fileloc *pos, const char *msg, ...)
 {
-  VA_OPEN (ap, msg);
-  VA_FIXEDARG (ap, struct fileloc *, pos);
-  VA_FIXEDARG (ap, const char *, msg);
+  va_list ap;
+
+  va_start (ap, msg);
 
   fprintf (stderr, "%s:%d: ", pos->file, pos->line);
   vfprintf (stderr, msg, ap);
   fputc ('\n', stderr);
   hit_error = 1;
 
-  VA_CLOSE (ap);
+  va_end (ap);
 }
 
 /* vasprintf, but produces fatal message on out-of-memory.  */
 int
-xvasprintf (result, format, args)
-     char ** result;
-     const char *format;
-     va_list args;
+xvasprintf (char **result, const char *format, va_list args)
 {
   int ret = vasprintf (result, format, args);
   if (*result == NULL || ret < 0)
@@ -70,22 +69,22 @@ xvasprintf (result, format, args)
 
 /* Wrapper for xvasprintf.  */
 char *
-xasprintf VPARAMS ((const char *format, ...))
+xasprintf (const char *format, ...)
 {
   char *result;
-  VA_OPEN (ap, format);
-  VA_FIXEDARG (ap, const char *, format);
+  va_list ap;
+
+  va_start (ap, format);
   xvasprintf (&result, format, ap);
-  VA_CLOSE (ap);
+  va_end (ap);
   return result;
 }
 
 /* The one and only TYPE_STRING.  */
 
 struct type string_type = {
-  TYPE_STRING, NULL, NULL, GC_USED
-  UNION_INIT_ZERO
-}; 
+  TYPE_STRING, NULL, NULL, GC_USED, {0}
+};
 
 /* Lists of various things.  */
 
@@ -94,19 +93,16 @@ static type_p structures;
 static type_p param_structs;
 static pair_p variables;
 
-static void do_scalar_typedef PARAMS ((const char *, struct fileloc *));
-static type_p find_param_structure 
-  PARAMS ((type_p t, type_p param[NUM_PARAM]));
-static type_p adjust_field_tree_exp PARAMS ((type_p t, options_p opt));
-static type_p adjust_field_rtx_def PARAMS ((type_p t, options_p opt));
+static void do_scalar_typedef (const char *, struct fileloc *);
+static type_p find_param_structure
+  (type_p t, type_p param[NUM_PARAM]);
+static type_p adjust_field_tree_exp (type_p t, options_p opt);
+static type_p adjust_field_rtx_def (type_p t, options_p opt);
 
 /* Define S as a typedef to T at POS.  */
 
 void
-do_typedef (s, t, pos)
-     const char *s;
-     type_p t;
-     struct fileloc *pos;
+do_typedef (const char *s, type_p t, struct fileloc *pos)
 {
   pair_p p;
 
@@ -132,9 +128,7 @@ do_typedef (s, t, pos)
 /* Define S as a typename of a scalar.  */
 
 static void
-do_scalar_typedef (s, pos)
-     const char *s;
-     struct fileloc *pos;
+do_scalar_typedef (const char *s, struct fileloc *pos)
 {
   do_typedef (s, create_scalar_type (s, strlen (s)), pos);
 }
@@ -142,9 +136,7 @@ do_scalar_typedef (s, pos)
 /* Return the type previously defined for S.  Use POS to report errors.  */
 
 type_p
-resolve_typedef (s, pos)
-     const char *s;
-     struct fileloc *pos;
+resolve_typedef (const char *s, struct fileloc *pos)
 {
   pair_p p;
   for (p = typedefs; p != NULL; p = p->next)
@@ -158,26 +150,22 @@ resolve_typedef (s, pos)
    at POS with fields FIELDS and options O.  */
 
 void
-new_structure (name, isunion, pos, fields, o)
-     const char *name;
-     int isunion;
-     struct fileloc *pos;
-     pair_p fields;
-     options_p o;
+new_structure (const char *name, int isunion, struct fileloc *pos,
+	       pair_p fields, options_p o)
 {
   type_p si;
   type_p s = NULL;
   lang_bitmap bitmap = get_base_file_bitmap (pos->file);
 
   for (si = structures; si != NULL; si = si->next)
-    if (strcmp (name, si->u.s.tag) == 0 
+    if (strcmp (name, si->u.s.tag) == 0
 	&& UNION_P (si) == isunion)
       {
 	type_p ls = NULL;
 	if (si->kind == TYPE_LANG_STRUCT)
 	  {
 	    ls = si;
-	    
+
 	    for (si = ls->u.s.lang_struct; si != NULL; si = si->next)
 	      if (si->u.s.bitmap == bitmap)
 		s = si;
@@ -206,7 +194,7 @@ new_structure (name, isunion, pos, fields, o)
 	  }
 	break;
       }
-  
+
   if (s == NULL)
     {
       s = xcalloc (1, sizeof (struct type));
@@ -236,14 +224,12 @@ new_structure (name, isunion, pos, fields, o)
    was defined previously.  */
 
 type_p
-find_structure (name, isunion)
-     const char *name;
-     int isunion;
+find_structure (const char *name, int isunion)
 {
   type_p s;
 
   for (s = structures; s != NULL; s = s->next)
-    if (strcmp (name, s->u.s.tag) == 0 
+    if (strcmp (name, s->u.s.tag) == 0
 	&& UNION_P (s) == isunion)
       return s;
 
@@ -261,15 +247,13 @@ find_structure (name, isunion)
    union if none was defined previously.  */
 
 static type_p
-find_param_structure (t, param)
-     type_p t;
-     type_p param[NUM_PARAM];
+find_param_structure (type_p t, type_p param[NUM_PARAM])
 {
   type_p res;
-  
+
   for (res = param_structs; res; res = res->next)
     if (res->u.param_struct.stru == t
-	&& memcmp (res->u.param_struct.param, param, 
+	&& memcmp (res->u.param_struct.param, param,
 		   sizeof (type_p) * NUM_PARAM) == 0)
       break;
   if (res == NULL)
@@ -287,9 +271,7 @@ find_param_structure (t, param)
 /* Return a scalar type with name NAME.  */
 
 type_p
-create_scalar_type (name, name_len)
-     const char *name;
-     size_t name_len;
+create_scalar_type (const char *name, size_t name_len)
 {
   type_p r = xcalloc (1, sizeof (struct type));
   r->kind = TYPE_SCALAR;
@@ -300,8 +282,7 @@ create_scalar_type (name, name_len)
 /* Return a pointer to T.  */
 
 type_p
-create_pointer (t)
-     type_p t;
+create_pointer (type_p t)
 {
   if (! t->pointer_to)
     {
@@ -316,12 +297,10 @@ create_pointer (t)
 /* Return an array of length LEN.  */
 
 type_p
-create_array (t, len)
-     type_p t;
-     const char *len;
+create_array (type_p t, const char *len)
 {
   type_p v;
-  
+
   v = xcalloc (1, sizeof (*v));
   v->kind = TYPE_ARRAY;
   v->u.a.p = t;
@@ -329,15 +308,21 @@ create_array (t, len)
   return v;
 }
 
+/* Return an options structure with name NAME and info INFO.  */
+options_p
+create_option (const char *name, void *info)
+{
+  options_p o = xmalloc (sizeof (*o));
+  o->name = name;
+  o->info = info;
+  return o;
+}
+
 /* Add a variable named S of type T with options O defined at POS,
    to `variables'.  */
 
 void
-note_variable (s, t, o, pos)
-     const char *s;
-     type_p t;
-     options_p o;
-     struct fileloc *pos;
+note_variable (const char *s, type_p t, options_p o, struct fileloc *pos)
 {
   pair_p n;
   n = xmalloc (sizeof (*n));
@@ -363,19 +348,19 @@ static int rtx_next_new[NUM_RTX_CODE];
    in gengtype at all, but it's needed for adjust_field_rtx_def.  */
 
 static void
-gen_rtx_next ()
+gen_rtx_next (void)
 {
   int i;
   for (i = 0; i < NUM_RTX_CODE; i++)
     {
       int k;
-      
+
       rtx_next_new[i] = -1;
       if (strncmp (rtx_format[i], "iuu", 3) == 0)
 	rtx_next_new[i] = 2;
       else if (i == COND_EXEC || i == SET || i == EXPR_LIST || i == INSN_LIST)
 	rtx_next_new[i] = 1;
-      else 
+      else
 	for (k = strlen (rtx_format[i]) - 1; k >= 0; k--)
 	  if (rtx_format[i][k] == 'e' || rtx_format[i][k] == 'u')
 	    rtx_next_new[i] = k;
@@ -384,19 +369,19 @@ gen_rtx_next ()
 
 /* Write out the contents of the rtx_next array.  */
 static void
-write_rtx_next ()
+write_rtx_next (void)
 {
   outf_p f = get_output_file_with_visibility (NULL);
   int i;
-  
+
   oprintf (f, "\n/* Used to implement the RTX_NEXT macro.  */\n");
   oprintf (f, "const unsigned char rtx_next[NUM_RTX_CODE] = {\n");
   for (i = 0; i < NUM_RTX_CODE; i++)
     if (rtx_next_new[i] == -1)
       oprintf (f, "  0,\n");
     else
-      oprintf (f, 
-	       "  offsetof (struct rtx_def, fld) + %d * sizeof (rtunion),\n",
+      oprintf (f,
+	       "  RTX_HDR_SIZE + %d * sizeof (rtunion),\n",
 	       rtx_next_new[i]);
   oprintf (f, "};\n");
 }
@@ -406,38 +391,33 @@ write_rtx_next ()
    are based in a complex way on the type of RTL.  */
 
 static type_p
-adjust_field_rtx_def (t, opt)
-     type_p t;
-     options_p opt ATTRIBUTE_UNUSED;
+adjust_field_rtx_def (type_p t, options_p opt ATTRIBUTE_UNUSED)
 {
   pair_p flds = NULL;
   options_p nodot;
   int i;
   type_p rtx_tp, rtvec_tp, tree_tp, mem_attrs_tp, note_union_tp, scalar_tp;
-  /* APPLE LOCAL begin - 3.4 scheduler update */
-  type_p bitmap_tp, basic_block_tp, reg_attrs_tp; 
-  /* APPLE LOCAL end - 3.4 scheduler update */
+  type_p bitmap_tp, basic_block_tp, reg_attrs_tp;
 
   static const char * const rtx_name[NUM_RTX_CODE] = {
 #define DEF_RTL_EXPR(ENUM, NAME, FORMAT, CLASS)   NAME ,
 #include "rtl.def"
 #undef DEF_RTL_EXPR
   };
-  
-  if (t->kind != TYPE_ARRAY)
+
+  if (t->kind != TYPE_UNION)
     {
-      error_at_line (&lexer_line, 
-		     "special `rtx_def' must be applied to an array");
+      error_at_line (&lexer_line,
+		     "special `rtx_def' must be applied to a union");
       return &string_type;
     }
-  
+
   nodot = xmalloc (sizeof (*nodot));
   nodot->next = NULL;
   nodot->name = "dot";
   nodot->info = "";
 
   rtx_tp = create_pointer (find_structure ("rtx_def", 0));
-  /* APPLE LOCAL begin - 3.4 scheduler update */
   rtvec_tp = create_pointer (find_structure ("rtvec_def", 0));
   tree_tp = create_pointer (find_structure ("tree_node", 1));
   mem_attrs_tp = create_pointer (find_structure ("mem_attrs", 0));
@@ -445,7 +425,6 @@ adjust_field_rtx_def (t, opt)
   bitmap_tp = create_pointer (find_structure ("bitmap_element_def", 0));
   basic_block_tp = create_pointer (find_structure ("basic_block_def", 0));
   scalar_tp = create_scalar_type ("rtunion scalar", 14);
-  /* APPLE LOCAL end - 3.4 scheduler update */
 
   {
     pair_p note_flds = NULL;
@@ -454,7 +433,7 @@ adjust_field_rtx_def (t, opt)
     for (c = NOTE_INSN_BIAS; c <= NOTE_INSN_MAX; c++)
       {
 	pair_p old_note_flds = note_flds;
-	
+
 	note_flds = xmalloc (sizeof (*note_flds));
 	note_flds->line.file = __FILE__;
 	note_flds->line.line = __LINE__;
@@ -479,8 +458,9 @@ adjust_field_rtx_def (t, opt)
 	    note_flds->name = "rttree";
 	    note_flds->type = tree_tp;
 	    break;
-	    
+
 	  case NOTE_INSN_EXPECTED_VALUE:
+	  case NOTE_INSN_VAR_LOCATION:
 	    note_flds->name = "rtx";
 	    note_flds->type = rtx_tp;
 	    break;
@@ -493,7 +473,7 @@ adjust_field_rtx_def (t, opt)
       }
     new_structure ("rtx_def_note_subunion", 1, &lexer_line, note_flds, NULL);
   }
-  
+
   note_union_tp = find_structure ("rtx_def_note_subunion", 1);
 
   for (i = 0; i < NUM_RTX_CODE; i++)
@@ -542,24 +522,26 @@ adjust_field_rtx_def (t, opt)
 		t = scalar_tp, subname = "rtint";
 	      else if (i == REG && aindex == 1)
 		t = scalar_tp, subname = "rtint";
-	      /* APPLE LOCAL begin - 3.4 scheduler update */
 	      else if (i == REG && aindex == 2)
 		t = reg_attrs_tp, subname = "rtreg";
-	      /* APPLE LOCAL end - 3.4 scheduler update */
 	      else if (i == SCRATCH && aindex == 0)
 		t = scalar_tp, subname = "rtint";
+	      else if (i == SYMBOL_REF && aindex == 1)
+		t = scalar_tp, subname = "rtint";
+	      else if (i == SYMBOL_REF && aindex == 2)
+		t = tree_tp, subname = "rttree";
 	      else if (i == BARRIER && aindex >= 3)
 		t = scalar_tp, subname = "rtint";
 	      else
 		{
-		  error_at_line (&lexer_line, 
+		  error_at_line (&lexer_line,
 			"rtx type `%s' has `0' in position %lu, can't handle",
 				 rtx_name[i], (unsigned long) aindex);
 		  t = &string_type;
 		  subname = "rtint";
 		}
 	      break;
-	      
+
 	    case 's':
 	    case 'S':
 	    case 'T':
@@ -595,7 +577,7 @@ adjust_field_rtx_def (t, opt)
 	      break;
 
 	    default:
-	      error_at_line (&lexer_line, 
+	      error_at_line (&lexer_line,
 		     "rtx type `%s' has `%c' in position %lu, can't handle",
 			     rtx_name[i], rtx_format[i][aindex],
 			     (unsigned long)aindex);
@@ -607,7 +589,7 @@ adjust_field_rtx_def (t, opt)
 	  subfields = xmalloc (sizeof (*subfields));
 	  subfields->next = old_subf;
 	  subfields->type = t;
-	  subfields->name = xasprintf ("[%lu].%s", (unsigned long)aindex,
+	  subfields->name = xasprintf (".fld[%lu].%s", (unsigned long)aindex,
 				       subname);
 	  subfields->line.file = __FILE__;
 	  subfields->line.line = __LINE__;
@@ -653,14 +635,12 @@ adjust_field_rtx_def (t, opt)
 
 /* Handle `special("tree_exp")'.  This is a special case for
    field `operands' of struct tree_exp, which although it claims to contain
-   pointers to trees, actually sometimes contains pointers to RTL too.  
+   pointers to trees, actually sometimes contains pointers to RTL too.
    Passed T, the old type of the field, and OPT its options.  Returns
    a new type for the field.  */
 
 static type_p
-adjust_field_tree_exp (t, opt)
-     type_p t;
-     options_p opt ATTRIBUTE_UNUSED;
+adjust_field_tree_exp (type_p t, options_p opt ATTRIBUTE_UNUSED)
 {
   pair_p flds;
   options_p nodot;
@@ -674,16 +654,15 @@ adjust_field_tree_exp (t, opt)
     { "GOTO_SUBROUTINE_EXPR", 0, 2 },
     { "RTL_EXPR", 0, 2 },
     { "WITH_CLEANUP_EXPR", 2, 1 },
-    { "METHOD_CALL_EXPR", 3, 1 }
   };
-  
+
   if (t->kind != TYPE_ARRAY)
     {
-      error_at_line (&lexer_line, 
+      error_at_line (&lexer_line,
 		     "special `tree_exp' must be applied to an array");
       return &string_type;
     }
-  
+
   nodot = xmalloc (sizeof (*nodot));
   nodot->next = NULL;
   nodot->name = "dot";
@@ -706,16 +685,16 @@ adjust_field_tree_exp (t, opt)
     flds->opt->name = "default";
     flds->opt->info = "";
   }
-  
+
   for (i = 0; i < ARRAY_SIZE (data); i++)
     {
       pair_p old_flds = flds;
       pair_p subfields = NULL;
       int r_index;
       const char *sname;
-      
-      for (r_index = 0; 
-	   r_index < data[i].first_rtl + data[i].num_rtl; 
+
+      for (r_index = 0;
+	   r_index < data[i].first_rtl + data[i].num_rtl;
 	   r_index++)
 	{
 	  pair_p old_subf = subfields;
@@ -757,12 +736,10 @@ adjust_field_tree_exp (t, opt)
    - Converts structures for which a parameter is provided to
      TYPE_PARAM_STRUCT;
    - Handles "special" options.
-*/   
+*/
 
 type_p
-adjust_field_type (t, opt)
-     type_p t;
-     options_p opt;
+adjust_field_type (type_p t, options_p opt)
 {
   int length_p = 0;
   const int pointer_p = t->kind == TYPE_POINTER;
@@ -772,7 +749,7 @@ adjust_field_type (t, opt)
 
   for (i = 0; i < NUM_PARAM; i++)
     params[i] = NULL;
-  
+
   for (; opt; opt = opt->next)
     if (strcmp (opt->name, "length") == 0)
       length_p = 1;
@@ -786,7 +763,7 @@ adjust_field_type (t, opt)
 	if (! UNION_OR_STRUCT_P (t)
 	    && (t->kind != TYPE_POINTER || ! UNION_OR_STRUCT_P (t->u.p)))
 	  {
-	    error_at_line (&lexer_line, 
+	    error_at_line (&lexer_line,
    "option `%s' may only be applied to structures or structure pointers",
 			   opt->name);
 	    return t;
@@ -814,7 +791,7 @@ adjust_field_type (t, opt)
   if (params_p)
     {
       type_p realt;
-      
+
       if (pointer_p)
 	t = t->u.p;
       realt = find_param_structure (t, params);
@@ -841,19 +818,16 @@ adjust_field_type (t, opt)
    in TYPEINFO.  POS is used for error messages.  */
 
 void
-note_yacc_type (o, fields, typeinfo, pos)
-     options_p o;
-     pair_p fields;
-     pair_p typeinfo;
-     struct fileloc *pos;
+note_yacc_type (options_p o, pair_p fields, pair_p typeinfo,
+		struct fileloc *pos)
 {
   pair_p p;
   pair_p *p_p;
-  
+
   for (p = typeinfo; p; p = p->next)
     {
       pair_p m;
-      
+
       if (p->name == NULL)
 	continue;
 
@@ -861,7 +835,7 @@ note_yacc_type (o, fields, typeinfo, pos)
 	{
 	  pair_p pp;
 	  int ok = 0;
-	  
+
 	  for (pp = typeinfo; pp; pp = pp->next)
 	    if (pp->type != (type_p) 1
 		&& strcmp (pp->opt->info, p->opt->info) == 0)
@@ -878,12 +852,12 @@ note_yacc_type (o, fields, typeinfo, pos)
 	  p->type = m->type;
       if (p->type == NULL)
 	{
-	  error_at_line (&p->line, 
+	  error_at_line (&p->line,
 			 "couldn't match fieldname `%s'", p->name);
 	  p->name = NULL;
 	}
     }
-  
+
   p_p = &typeinfo;
   while (*p_p)
     {
@@ -900,20 +874,16 @@ note_yacc_type (o, fields, typeinfo, pos)
   do_typedef ("YYSTYPE", find_structure ("yy_union", 1), pos);
 }
 
-static void process_gc_options PARAMS ((options_p, enum gc_used_enum, 
-					int *, int *, int *));
-static void set_gc_used_type PARAMS ((type_p, enum gc_used_enum, type_p *));
-static void set_gc_used PARAMS ((pair_p));
+static void process_gc_options (options_p, enum gc_used_enum,
+				int *, int *, int *);
+static void set_gc_used_type (type_p, enum gc_used_enum, type_p *);
+static void set_gc_used (pair_p);
 
 /* Handle OPT for set_gc_used_type.  */
 
 static void
-process_gc_options (opt, level, maybe_undef, pass_param, length)
-     options_p opt;
-     enum gc_used_enum level;
-     int *maybe_undef;
-     int *pass_param;
-     int *length;
+process_gc_options (options_p opt, enum gc_used_enum level, int *maybe_undef,
+		    int *pass_param, int *length)
 {
   options_p o;
   for (o = opt; o; o = o->next)
@@ -930,14 +900,11 @@ process_gc_options (opt, level, maybe_undef, pass_param, length)
 /* Set the gc_used field of T to LEVEL, and handle the types it references.  */
 
 static void
-set_gc_used_type (t, level, param)
-     type_p t;
-     enum gc_used_enum level;
-     type_p param[NUM_PARAM];
+set_gc_used_type (type_p t, enum gc_used_enum level, type_p param[NUM_PARAM])
 {
   if (t->gc_used >= level)
     return;
-  
+
   t->gc_used = level;
 
   switch (t->kind)
@@ -957,7 +924,7 @@ set_gc_used_type (t, level, param)
 	    int length = 0;
 	    process_gc_options (f->opt, level, &maybe_undef, &pass_param,
 				&length);
-	    
+
 	    if (length && f->type->kind == TYPE_POINTER)
 	      set_gc_used_type (f->type->u.p, GC_USED, NULL);
 	    else if (maybe_undef && f->type->kind == TYPE_POINTER)
@@ -978,7 +945,7 @@ set_gc_used_type (t, level, param)
     case TYPE_ARRAY:
       set_gc_used_type (t->u.a.p, GC_USED, param);
       break;
-      
+
     case TYPE_LANG_STRUCT:
       for (t = t->u.s.lang_struct; t; t = t->next)
 	set_gc_used_type (t, level, param);
@@ -996,7 +963,7 @@ set_gc_used_type (t, level, param)
       else
 	level = GC_USED;
       t->u.param_struct.stru->gc_used = GC_UNUSED;
-      set_gc_used_type (t->u.param_struct.stru, level, 
+      set_gc_used_type (t->u.param_struct.stru, level,
 			t->u.param_struct.param);
       break;
 
@@ -1008,8 +975,7 @@ set_gc_used_type (t, level, param)
 /* Set the gc_used fields of all the types pointed to by VARIABLES.  */
 
 static void
-set_gc_used (variables)
-     pair_p variables;
+set_gc_used (pair_p variables)
 {
   pair_p p;
   for (p = variables; p; p = p->next)
@@ -1025,7 +991,7 @@ static outf_p output_files;
 
 /* The output header file that is included into pretty much every
    source file.  */
-outf_p header_file;
+static outf_p header_file;
 
 /* Number of files specified in gtfiles.  */
 #define NUM_GT_FILES (ARRAY_SIZE (all_files) - 1)
@@ -1039,19 +1005,17 @@ static int srcdir_len = 0;
 #define NUM_BASE_FILES (ARRAY_SIZE (lang_dir_names) - 1)
 outf_p base_files[NUM_BASE_FILES];
 
-static outf_p create_file PARAMS ((const char *, const char *));
-static const char * get_file_basename PARAMS ((const char *));
+static outf_p create_file (const char *, const char *);
+static const char * get_file_basename (const char *);
 
 /* Create and return an outf_p for a new file for NAME, to be called
    ONAME.  */
 
 static outf_p
-create_file (name, oname)
-     const char *name;
-     const char *oname;
+create_file (const char *name, const char *oname)
 {
   static const char *const hdr[] = {
-    "   Copyright (C) 2002 Free Software Foundation, Inc.\n",
+    "   Copyright (C) 2003 Free Software Foundation, Inc.\n",
     "\n",
     "This file is part of GCC.\n",
     "\n",
@@ -1074,7 +1038,7 @@ create_file (name, oname)
   };
   outf_p f;
   size_t i;
-  
+
   f = xcalloc (sizeof (*f), 1);
   f->next = output_files;
   f->name = oname;
@@ -1087,15 +1051,14 @@ create_file (name, oname)
 }
 
 /* Print, like fprintf, to O.  */
-void 
-oprintf VPARAMS ((outf_p o, const char *format, ...))
+void
+oprintf (outf_p o, const char *format, ...)
 {
   char *s;
   size_t slength;
-  
-  VA_OPEN (ap, format);
-  VA_FIXEDARG (ap, outf_p, o);
-  VA_FIXEDARG (ap, const char *, format);
+  va_list ap;
+
+  va_start (ap, format);
   slength = xvasprintf (&s, format, ap);
 
   if (o->bufused + slength > o->buflength)
@@ -1112,46 +1075,38 @@ oprintf VPARAMS ((outf_p o, const char *format, ...))
   memcpy (o->buf + o->bufused, s, slength);
   o->bufused += slength;
   free (s);
-  VA_CLOSE (ap);
+  va_end (ap);
 }
 
 /* Open the global header file and the language-specific header files.  */
 
 static void
-open_base_files ()
+open_base_files (void)
 {
   size_t i;
-  
+
   header_file = create_file ("GCC", "gtype-desc.h");
 
   for (i = 0; i < NUM_BASE_FILES; i++)
-    base_files[i] = create_file (lang_dir_names[i], 
+    base_files[i] = create_file (lang_dir_names[i],
 				 xasprintf ("gtype-%s.h", lang_dir_names[i]));
 
   /* gtype-desc.c is a little special, so we create it here.  */
   {
-    /* APPLE LOCAL begin - 3.4 scheduler update */
     /* The order of files here matters very much.  */
     static const char *const ifiles [] = {
-      "config.h", "system.h", "varray.h",
+      "config.h", "system.h", "coretypes.h", "tm.h", "varray.h", 
       "hashtab.h", "splay-tree.h", "bitmap.h", "tree.h", "rtl.h",
       "function.h", "insn-config.h", "expr.h", "hard-reg-set.h",
-      "basic-block.h", "cselib.h", "insn-addr.h", "ssa.h", "optabs.h",
-      "libfuncs.h", "debug.h", "ggc.h",
+      "basic-block.h", "cselib.h", "insn-addr.h", "optabs.h",
+      "libfuncs.h", "debug.h", "ggc.h", "cgraph.h",
+      "tree-alias-type.h", "tree-flow.h", "reload.h",
+      "tree-data-ref.h", "tree-dg.h",
       NULL
     };
-    /*    static const char *const ifiles [] = {
-      "config.h", "system.h", "coretypes.h", "tm.h", "varray.h",
-      "hashtab.h", "splay-tree.h", "bitmap.h", "tree.h", "rtl.h",
-      "function.h", "insn-config.h", "expr.h", "hard-reg-set.h",
-      "basic-block.h", "cselib.h", "insn-addr.h", "ssa.h", "optabs.h",
-      "libfuncs.h", "debug.h", "ggc.h",
-      NULL
-      }; */
-    /* APPLE LOCAL end - 3.4 scheduler update */
     const char *const *ifp;
     outf_p gtype_desc_c;
-      
+
     gtype_desc_c = create_file ("GCC", "gtype-desc.c");
     for (ifp = ifiles; *ifp; ifp++)
       oprintf (gtype_desc_c, "#include \"%s\"\n", *ifp);
@@ -1161,19 +1116,18 @@ open_base_files ()
 /* Determine the pathname to F relative to $(srcdir).  */
 
 static const char *
-get_file_basename (f)
-     const char *f;
+get_file_basename (const char *f)
 {
   const char *basename;
   unsigned i;
-  
+
   basename = strrchr (f, '/');
-  
+
   if (!basename)
     return f;
-  
+
   basename++;
-  
+
   for (i = 1; i < NUM_BASE_FILES; i++)
     {
       const char * s1;
@@ -1197,12 +1151,12 @@ get_file_basename (f)
           break;
         }
     }
-  
+
   return basename;
 }
 
 /* Return a bitmap which has bit `1 << BASE_FILE_<lang>' set iff
-   INPUT_FILE is used by <lang>.  
+   INPUT_FILE is used by <lang>.
 
    This function should be written to assume that a file _is_ used
    if the situation is unclear.  If it wrongly assumes a file _is_ used,
@@ -1210,8 +1164,7 @@ get_file_basename (f)
    some GC roots may be missed, which is a much harder-to-debug problem.  */
 
 unsigned
-get_base_file_bitmap (input_file)
-     const char *input_file;
+get_base_file_bitmap (const char *input_file)
 {
   /* APPLE LOCAL Objective-C++ */
   /* Variables were here.  */
@@ -1240,7 +1193,7 @@ get_base_file_bitmap (input_file)
             }
         }
     }
-    
+
   /* Otherwise, set all languages.  */
   if (!bitmap)
     bitmap = (1 << NUM_BASE_FILES) - 1;
@@ -1253,8 +1206,7 @@ get_base_file_bitmap (input_file)
    INPUT_FILE.  */
 
 outf_p
-get_output_file_with_visibility (input_file)
-     const char *input_file;
+get_output_file_with_visibility (const char *input_file)
 {
   outf_p r;
   size_t len;
@@ -1277,7 +1229,7 @@ get_output_file_with_visibility (input_file)
       || (len > 3 && memcmp (basename+len-3, ".in", 3) == 0))
     {
       char *s;
-      
+
       output_name = s = xasprintf ("gt-%s", basename);
       for (; *s != '.'; s++)
 	if (! ISALNUM (*s) && *s != '-')
@@ -1300,10 +1252,10 @@ get_output_file_with_visibility (input_file)
   else if (strcmp (basename, "objc/objc-act.h") == 0)
     output_name = "gt-objc-objc-act-h.h", for_name = "objc/objc-act.h";
   /* APPLE LOCAL end Objective-C++ */
-  else 
+  else
     {
       size_t i;
-      
+
       for (i = 0; i < NUM_BASE_FILES; i++)
 	if (memcmp (basename, lang_dir_names[i], strlen (lang_dir_names[i])) == 0
 	    && basename[strlen(lang_dir_names[i])] == '/')
@@ -1329,8 +1281,7 @@ get_output_file_with_visibility (input_file)
    that uses INPUT_FILE.  */
 
 const char *
-get_output_file_name (input_file)
-     const char *input_file;
+get_output_file_name (const char *input_file)
 {
   return get_output_file_with_visibility (input_file)->name;
 }
@@ -1338,13 +1289,11 @@ get_output_file_name (input_file)
 /* Copy the output to its final destination,
    but don't unnecessarily change modification times.  */
 
-static void close_output_files PARAMS ((void));
-
 static void
-close_output_files ()
+close_output_files (void)
 {
   outf_p of;
-  
+
   for (of = output_files; of; of = of->next)
     {
       FILE * newfile;
@@ -1401,14 +1350,14 @@ struct walk_type_data;
    For structures, given a pointer to the item in 'val'.
    For misc. pointers, given the item in 'val'.
 */
-typedef void (*process_field_fn) 
-     PARAMS ((type_p f, const struct walk_type_data *p));
+typedef void (*process_field_fn)
+     (type_p f, const struct walk_type_data *p);
 typedef void (*func_name_fn)
-     PARAMS ((type_p s, const struct walk_type_data *p));
+     (type_p s, const struct walk_type_data *p);
 
 /* Parameters for write_types.  */
 
-struct write_types_data 
+struct write_types_data
 {
   const char *prefix;
   const char *param_prefix;
@@ -1418,35 +1367,35 @@ struct write_types_data
   const char *comment;
 };
 
-static void output_escaped_param PARAMS ((struct walk_type_data *d, 
-					  const char *, const char *));
-static void output_mangled_typename PARAMS ((outf_p, type_p));
-static void walk_type PARAMS ((type_p t, struct walk_type_data *d));
+static void output_escaped_param (struct walk_type_data *d,
+				  const char *, const char *);
+static void output_mangled_typename (outf_p, type_p);
+static void walk_type (type_p t, struct walk_type_data *d);
 static void write_func_for_structure
-     PARAMS ((type_p orig_s, type_p s, type_p * param,
-	      const struct write_types_data *wtd));
-static void write_types_process_field 
-     PARAMS ((type_p f, const struct walk_type_data *d));
-static void write_types PARAMS ((type_p structures, 
-				 type_p param_structs,
-				 const struct write_types_data *wtd));
+     (type_p orig_s, type_p s, type_p * param,
+      const struct write_types_data *wtd);
+static void write_types_process_field
+     (type_p f, const struct walk_type_data *d);
+static void write_types (type_p structures,
+			 type_p param_structs,
+			 const struct write_types_data *wtd);
 static void write_types_local_process_field
-     PARAMS ((type_p f, const struct walk_type_data *d));
+     (type_p f, const struct walk_type_data *d);
 static void write_local_func_for_structure
-     PARAMS ((type_p orig_s, type_p s, type_p * param));
-static void write_local PARAMS ((type_p structures, 
-				 type_p param_structs));
-static void write_enum_defn PARAMS ((type_p structures, type_p param_structs));
-static int contains_scalar_p PARAMS ((type_p t));
-static void put_mangled_filename PARAMS ((outf_p , const char *));
-static void finish_root_table PARAMS ((struct flist *flp, const char *pfx, 
-				       const char *tname, const char *lastname,
-				       const char *name));
-static void write_root PARAMS ((outf_p , pair_p, type_p, const char *, int,
-				   struct fileloc *, const char *));
-static void write_array PARAMS ((outf_p f, pair_p v,
-				 const struct write_types_data *wtd));
-static void write_roots PARAMS ((pair_p));
+     (type_p orig_s, type_p s, type_p * param);
+static void write_local (type_p structures,
+			 type_p param_structs);
+static void write_enum_defn (type_p structures, type_p param_structs);
+static int contains_scalar_p (type_p t);
+static void put_mangled_filename (outf_p , const char *);
+static void finish_root_table (struct flist *flp, const char *pfx,
+			       const char *tname, const char *lastname,
+			       const char *name);
+static void write_root (outf_p , pair_p, type_p, const char *, int,
+			struct fileloc *, const char *);
+static void write_array (outf_p f, pair_p v,
+			 const struct write_types_data *wtd);
+static void write_roots (pair_p);
 
 /* Parameters for walk_type.  */
 
@@ -1466,15 +1415,13 @@ struct walk_type_data
   int used_length;
   type_p orig_s;
   const char *reorder_fn;
-  int needs_cast_p;  /* APPLE LOCAL - 3.4 scheduler update */
+  int needs_cast_p;
 };
 
 /* Print a mangled name representing T to OF.  */
 
 static void
-output_mangled_typename (of, t)
-     outf_p of;
-     type_p t;
+output_mangled_typename (outf_p of, type_p t)
 {
   if (t == NULL)
     oprintf (of, "Z");
@@ -1501,7 +1448,7 @@ output_mangled_typename (of, t)
 	for (i = 0; i < NUM_PARAM; i++)
 	  if (t->u.param_struct.param[i] != NULL)
 	    output_mangled_typename (of, t->u.param_struct.param[i]);
-	output_mangled_typename (of, t->u.param_struct.stru);	
+	output_mangled_typename (of, t->u.param_struct.stru);
       }
       break;
     case TYPE_ARRAY:
@@ -1515,13 +1462,11 @@ output_mangled_typename (of, t)
    print error messages.  */
 
 static void
-output_escaped_param (d, param, oname)
-     struct walk_type_data *d;
-     const char *param;
-     const char *oname;
+output_escaped_param (struct walk_type_data *d, const char *param,
+		      const char *oname)
 {
   const char *p;
-  
+
   for (p = param; *p; p++)
     if (*p != '%')
       oprintf (d->of, "%c", *p);
@@ -1563,9 +1508,7 @@ output_escaped_param (d, param, oname)
    (from an enclosing param_is option).  */
 
 static void
-walk_type (t, d)
-     type_p t;
-     struct walk_type_data *d;
+walk_type (type_p t, struct walk_type_data *d)
 {
   const char *length = NULL;
   const char *desc = NULL;
@@ -1573,10 +1516,8 @@ walk_type (t, d)
   int use_param_num = -1;
   int use_params_p = 0;
   options_p oo;
-  
-  /* APPLE LOCAL begin - 3.4 scheduler update */
+
   d->needs_cast_p = 0;
-  /* APPLE LOCAL end - 3.4 scheduler update */
   for (oo = d->opt; oo; oo = oo->next)
     if (strcmp (oo->name, "length") == 0)
       length = (const char *)oo->info;
@@ -1603,12 +1544,10 @@ walk_type (t, d)
       ;
     else if (strcmp (oo->name, "param_is") == 0)
       ;
-  /* APPLE LOCAL begin - 3.4 scheduler update */
     else if (strncmp (oo->name, "param", 5) == 0
 	     && ISDIGIT (oo->name[5])
 	     && strcmp (oo->name + 6, "_is") == 0)
       ;
-  /* APPLE LOCAL end - 3.4 scheduler update */
     else if (strcmp (oo->name, "chain_next") == 0)
       ;
     else if (strcmp (oo->name, "chain_prev") == 0)
@@ -1624,55 +1563,53 @@ walk_type (t, d)
   if (use_params_p)
     {
       int pointer_p = t->kind == TYPE_POINTER;
-      
+
       if (pointer_p)
 	t = t->u.p;
       if (! UNION_OR_STRUCT_P (t))
 	error_at_line (d->line, "`use_params' option on unimplemented type");
-      else 
+      else
 	t = find_param_structure (t, d->param);
       if (pointer_p)
 	t = create_pointer (t);
     }
-      
+
   if (use_param_num != -1)
     {
       if (d->param != NULL && d->param[use_param_num] != NULL)
 	{
 	  type_p nt = d->param[use_param_num];
-	  
+
 	  if (t->kind == TYPE_ARRAY)
 	    nt = create_array (nt, t->u.a.len);
 	  else if (length != NULL && t->kind == TYPE_POINTER)
 	    nt = create_pointer (nt);
-	  /* APPLE LOCAL begin - 3.4 scheduler update */
 	  d->needs_cast_p = (t->kind != TYPE_POINTER
 			     && (nt->kind == TYPE_POINTER
 				 || nt->kind == TYPE_STRING));
-	  /* APPLE LOCAL end - 3.4 scheduler update */
 	  t = nt;
 	}
       else
 	error_at_line (d->line, "no parameter defined for `%s'",
 		       d->val);
     }
-  
-  if (maybe_undef_p 
+
+  if (maybe_undef_p
       && (t->kind != TYPE_POINTER || ! UNION_OR_STRUCT_P (t->u.p)))
     {
-      error_at_line (d->line, 
+      error_at_line (d->line,
 		     "field `%s' has invalid option `maybe_undef_p'\n",
 		     d->val);
       return;
     }
-  
+
   switch (t->kind)
     {
     case TYPE_SCALAR:
     case TYPE_STRING:
       d->process_field (t, d);
       break;
-      
+
     case TYPE_POINTER:
       {
 	if (maybe_undef_p
@@ -1687,15 +1624,15 @@ walk_type (t, d)
 	    if (! UNION_OR_STRUCT_P (t->u.p)
 		&& t->u.p->kind != TYPE_PARAM_STRUCT)
 	      {
-		error_at_line (d->line, 
+		error_at_line (d->line,
 			       "field `%s' is pointer to unimplemented type",
 			       d->val);
 		break;
 	      }
-	    
+
 	    d->process_field (t->u.p, d);
 	  }
-	else 
+	else
 	  {
 	    int loopcounter = d->counter++;
 	    const char *oldval = d->val;
@@ -1705,7 +1642,7 @@ walk_type (t, d)
 	    oprintf (d->of, "%*sif (%s != NULL) {\n", d->indent, "", d->val);
 	    d->indent += 2;
 	    oprintf (d->of, "%*ssize_t i%d;\n", d->indent, "", loopcounter);
-	    oprintf (d->of, "%*sfor (i%d = 0; i%d < (size_t)(", d->indent, "", 
+	    oprintf (d->of, "%*sfor (i%d = 0; i%d < (size_t)(", d->indent, "",
 		     loopcounter, loopcounter);
 	    output_escaped_param (d, length, "length");
 	    oprintf (d->of, "); i%d++) {\n", loopcounter);
@@ -1733,15 +1670,15 @@ walk_type (t, d)
 	const char *oldval = d->val;
 	char *newval;
 
-	/* If it's an array of scalars, we optimise by not generating
+	/* If it's an array of scalars, we optimize by not generating
 	   any code.  */
 	if (t->u.a.p->kind == TYPE_SCALAR)
 	  break;
-	
+
 	oprintf (d->of, "%*s{\n", d->indent, "");
 	d->indent += 2;
 	oprintf (d->of, "%*ssize_t i%d;\n", d->indent, "", loopcounter);
-	oprintf (d->of, "%*sfor (i%d = 0; i%d < (size_t)(", d->indent, "", 
+	oprintf (d->of, "%*sfor (i%d = 0; i%d < (size_t)(", d->indent, "",
 		 loopcounter, loopcounter);
 	if (length)
 	  output_escaped_param (d, length, "length");
@@ -1761,7 +1698,7 @@ walk_type (t, d)
 	oprintf (d->of, "%*s}\n", d->indent, "");
       }
       break;
-      
+
     case TYPE_STRUCT:
     case TYPE_UNION:
       {
@@ -1846,7 +1783,7 @@ walk_type (t, d)
 		seen_default_p = 1;
 	      }
 	    else if (! union_p && (default_p || tagid))
-	      error_at_line (d->line, 
+	      error_at_line (d->line,
 			     "can't use `%s' outside a union on field `%s'",
 			     default_p ? "default" : "tag", f->name);
 	    else if (union_p && ! (default_p || tagid)
@@ -1858,10 +1795,10 @@ walk_type (t, d)
 		continue;
 	      }
 	    else if (union_p && ! (default_p || tagid))
-	      error_at_line (d->line, 
+	      error_at_line (d->line,
 			     "field `%s' is missing `tag' or `default' option",
 			     f->name);
-	    
+
 	    d->line = &f->line;
 	    d->val = newval = xasprintf ("%s%s%s", oldval, dot, f->name);
 	    d->opt = f->opt;
@@ -1915,13 +1852,13 @@ walk_type (t, d)
     case TYPE_PARAM_STRUCT:
       {
 	type_p *oldparam = d->param;
-	
+
 	d->param = t->u.param_struct.param;
 	walk_type (t->u.param_struct.stru, d);
 	d->param = oldparam;
       }
       break;
-      
+
     default:
       abort ();
     }
@@ -1930,23 +1867,17 @@ walk_type (t, d)
 /* process_field routine for marking routines.  */
 
 static void
-write_types_process_field (f, d)
-     type_p f;
-     const struct walk_type_data *d;
+write_types_process_field (type_p f, const struct walk_type_data *d)
 {
   const struct write_types_data *wtd;
-  /* APPLE LOCAL begin - 3.4 scheduler update */
   const char *cast = d->needs_cast_p ? "(void *)" : "";
-  /* APPLE LOCAL end - 3.4 scheduler update */
   wtd = (const struct write_types_data *) d->cookie;
-  
+
   switch (f->kind)
     {
     case TYPE_POINTER:
-      /* APPLE LOCAL begin - 3.4 scheduler update */
-      oprintf (d->of, "%*s%s (%s%s", d->indent, "", 
+      oprintf (d->of, "%*s%s (%s%s", d->indent, "",
 	       wtd->subfield_marker_routine, cast, d->val);
-      /* APPLE LOCAL end - 3.4 scheduler update */
       if (wtd->param_prefix)
 	{
 	  oprintf (d->of, ", %s", d->prev_val[3]);
@@ -1960,7 +1891,7 @@ write_types_process_field (f, d)
 	}
       oprintf (d->of, ");\n");
       if (d->reorder_fn && wtd->reorder_note_routine)
-	oprintf (d->of, "%*s%s (%s%s, %s, %s);\n", d->indent, "", 
+	oprintf (d->of, "%*s%s (%s%s, %s, %s);\n", d->indent, "",
 		 wtd->reorder_note_routine, cast, d->val,
 		 d->prev_val[3], d->reorder_fn);
       break;
@@ -1975,18 +1906,16 @@ write_types_process_field (f, d)
     case TYPE_PARAM_STRUCT:
       oprintf (d->of, "%*sgt_%s_", d->indent, "", wtd->prefix);
       output_mangled_typename (d->of, f);
-      /* APPLE LOCAL begin - 3.4 scheduler update */
       oprintf (d->of, " (%s%s);\n", cast, d->val);
       if (d->reorder_fn && wtd->reorder_note_routine)
-	oprintf (d->of, "%*s%s (%s%s, %s%s, %s);\n", d->indent, "", 
+	oprintf (d->of, "%*s%s (%s%s, %s%s, %s);\n", d->indent, "",
 		 wtd->reorder_note_routine, cast, d->val, cast, d->val,
 		 d->reorder_fn);
-      /* APPLE LOCAL end - 3.4 scheduler update */
       break;
 
     case TYPE_SCALAR:
       break;
-      
+
     default:
       abort ();
     }
@@ -2001,11 +1930,8 @@ write_types_process_field (f, d)
 */
 
 static void
-write_func_for_structure (orig_s, s, param, wtd)
-     type_p orig_s;
-     type_p s;
-     type_p * param;
-     const struct write_types_data *wtd;
+write_func_for_structure (type_p orig_s, type_p s, type_p *param,
+			  const struct write_types_data *wtd)
 {
   const char *fn = s->u.s.line.file;
   int i;
@@ -2013,16 +1939,16 @@ write_func_for_structure (orig_s, s, param, wtd)
   const char *chain_prev = NULL;
   options_p opt;
   struct walk_type_data d;
-  
+
   /* This is a hack, and not the good kind either.  */
   for (i = NUM_PARAM - 1; i >= 0; i--)
-    if (param && param[i] && param[i]->kind == TYPE_POINTER 
+    if (param && param[i] && param[i]->kind == TYPE_POINTER
 	&& UNION_OR_STRUCT_P (param[i]->u.p))
       fn = param[i]->u.p->u.s.line.file;
-  
+
   memset (&d, 0, sizeof (d));
   d.of = get_output_file_with_visibility (fn);
-  
+
   for (opt = s->u.s.opt; opt; opt = opt->next)
     if (strcmp (opt->name, "chain_next") == 0)
       chain_next = (const char *) opt->info;
@@ -2040,7 +1966,7 @@ write_func_for_structure (orig_s, s, param, wtd)
   d.bitmap = s->u.s.bitmap;
   d.param = param;
   d.prev_val[0] = "*x";
-  d.prev_val[1] = "not valid postage";  /* guarantee an error */
+  d.prev_val[1] = "not valid postage";  /* Guarantee an error.  */
   d.prev_val[3] = "x";
   d.val = "(*x)";
 
@@ -2053,8 +1979,7 @@ write_func_for_structure (orig_s, s, param, wtd)
       oprintf (d.of, "gt_%s_", wtd->prefix);
       output_mangled_typename (d.of, orig_s);
     }
-  oprintf (d.of, " (x_p)\n");
-  oprintf (d.of, "      void *x_p;\n");
+  oprintf (d.of, " (void *x_p)\n");
   oprintf (d.of, "{\n");
   oprintf (d.of, "  %s %s * %sx = (%s %s *)x_p;\n",
 	   s->kind == TYPE_UNION ? "union" : "struct", s->u.s.tag,
@@ -2093,13 +2018,13 @@ write_func_for_structure (orig_s, s, param, wtd)
 	  oprintf (d.of, "      {\n");
 	  oprintf (d.of, "        %s %s * const xprev = (",
 		   s->kind == TYPE_UNION ? "union" : "struct", s->u.s.tag);
-	  
+
 	  d.prev_val[2] = "*x";
 	  output_escaped_param (&d, chain_prev, "chain_prev");
 	  oprintf (d.of, ");\n");
 	  oprintf (d.of, "        if (xprev == NULL) break;\n");
 	  oprintf (d.of, "        x = xprev;\n");
-	  oprintf (d.of, "        (void) %s (xprev", 
+	  oprintf (d.of, "        (void) %s (xprev",
 		   wtd->marker_routine);
 	  if (wtd->param_prefix)
 	    {
@@ -2112,11 +2037,11 @@ write_func_for_structure (orig_s, s, param, wtd)
       oprintf (d.of, "  while (x != xlimit)\n");
     }
   oprintf (d.of, "    {\n");
-  
+
   d.prev_val[2] = "*x";
   d.indent = 6;
   walk_type (s, &d);
-  
+
   if (chain_next != NULL)
     {
       oprintf (d.of, "      x = (");
@@ -2131,20 +2056,18 @@ write_func_for_structure (orig_s, s, param, wtd)
 /* Write out marker routines for STRUCTURES and PARAM_STRUCTS.  */
 
 static void
-write_types (structures, param_structs, wtd)
-     type_p structures;
-     type_p param_structs;
-     const struct write_types_data *wtd;
+write_types (type_p structures, type_p param_structs,
+	     const struct write_types_data *wtd)
 {
   type_p s;
-  
+
   oprintf (header_file, "\n/* %s*/\n", wtd->comment);
   for (s = structures; s; s = s->next)
     if (s->gc_used == GC_POINTED_TO
 	|| s->gc_used == GC_MAYBE_POINTED_TO)
       {
 	options_p opt;
-	
+
 	if (s->gc_used == GC_MAYBE_POINTED_TO
 	    && s->u.s.line.file == NULL)
 	  continue;
@@ -2153,23 +2076,23 @@ write_types (structures, param_structs, wtd)
 	output_mangled_typename (header_file, s);
 	oprintf (header_file, "(X) do { \\\n");
 	oprintf (header_file,
-		 "  if (X != NULL) gt_%sx_%s (X);\\\n", wtd->prefix, 
+		 "  if (X != NULL) gt_%sx_%s (X);\\\n", wtd->prefix,
 		 s->u.s.tag);
 	oprintf (header_file,
 		 "  } while (0)\n");
-	
+
 	for (opt = s->u.s.opt; opt; opt = opt->next)
 	  if (strcmp (opt->name, "ptr_alias") == 0)
 	    {
 	      type_p t = (type_p) opt->info;
-	      if (t->kind == TYPE_STRUCT 
+	      if (t->kind == TYPE_STRUCT
 		  || t->kind == TYPE_UNION
 		  || t->kind == TYPE_LANG_STRUCT)
 		oprintf (header_file,
 			 "#define gt_%sx_%s gt_%sx_%s\n",
 			 wtd->prefix, s->u.s.tag, wtd->prefix, t->u.s.tag);
 	      else
-		error_at_line (&s->u.s.line, 
+		error_at_line (&s->u.s.line,
 			       "structure alias is not a structure");
 	      break;
 	    }
@@ -2177,17 +2100,17 @@ write_types (structures, param_structs, wtd)
 	  continue;
 
 	/* Declare the marker procedure only once.  */
-	oprintf (header_file, 
-		 "extern void gt_%sx_%s PARAMS ((void *));\n",
+	oprintf (header_file,
+		 "extern void gt_%sx_%s (void *);\n",
 		 wtd->prefix, s->u.s.tag);
-  
+
 	if (s->u.s.line.file == NULL)
 	  {
-	    fprintf (stderr, "warning: structure `%s' used but not defined\n", 
+	    fprintf (stderr, "warning: structure `%s' used but not defined\n",
 		     s->u.s.tag);
 	    continue;
 	  }
-  
+
 	if (s->kind == TYPE_LANG_STRUCT)
 	  {
 	    type_p ss;
@@ -2207,15 +2130,15 @@ write_types (structures, param_structs, wtd)
 	/* Declare the marker procedure.  */
 	oprintf (header_file, "extern void gt_%s_", wtd->prefix);
 	output_mangled_typename (header_file, s);
-	oprintf (header_file, " PARAMS ((void *));\n");
-  
+	oprintf (header_file, " (void *);\n");
+
 	if (stru->u.s.line.file == NULL)
 	  {
-	    fprintf (stderr, "warning: structure `%s' used but not defined\n", 
+	    fprintf (stderr, "warning: structure `%s' used but not defined\n",
 		     s->u.s.tag);
 	    continue;
 	  }
-  
+
 	if (stru->kind == TYPE_LANG_STRUCT)
 	  {
 	    type_p ss;
@@ -2245,9 +2168,7 @@ static const struct write_types_data pch_wtd =
 /* process_field routine for local pointer-walking.  */
 
 static void
-write_types_local_process_field (f, d)
-     type_p f;
-     const struct walk_type_data *d;
+write_types_local_process_field (type_p f, const struct walk_type_data *d)
 {
   switch (f->kind)
     {
@@ -2264,7 +2185,7 @@ write_types_local_process_field (f, d)
 
     case TYPE_SCALAR:
       break;
-      
+
     default:
       abort ();
     }
@@ -2277,31 +2198,28 @@ write_types_local_process_field (f, d)
 */
 
 static void
-write_local_func_for_structure (orig_s, s, param)
-     type_p orig_s;
-     type_p s;
-     type_p * param;
+write_local_func_for_structure (type_p orig_s, type_p s, type_p *param)
 {
   const char *fn = s->u.s.line.file;
   int i;
   struct walk_type_data d;
-  
+
   /* This is a hack, and not the good kind either.  */
   for (i = NUM_PARAM - 1; i >= 0; i--)
-    if (param && param[i] && param[i]->kind == TYPE_POINTER 
+    if (param && param[i] && param[i]->kind == TYPE_POINTER
 	&& UNION_OR_STRUCT_P (param[i]->u.p))
       fn = param[i]->u.p->u.s.line.file;
-  
+
   memset (&d, 0, sizeof (d));
   d.of = get_output_file_with_visibility (fn);
-  
+
   d.process_field = write_types_local_process_field;
   d.opt = s->u.s.opt;
   d.line = &s->u.s.line;
   d.bitmap = s->u.s.bitmap;
   d.param = param;
   d.prev_val[0] = d.prev_val[2] = "*x";
-  d.prev_val[1] = "not valid postage";  /* guarantee an error */
+  d.prev_val[1] = "not valid postage";  /* Guarantee an error.  */
   d.prev_val[3] = "x";
   d.val = "(*x)";
 
@@ -2309,11 +2227,7 @@ write_local_func_for_structure (orig_s, s, param)
   oprintf (d.of, "void\n");
   oprintf (d.of, "gt_pch_p_");
   output_mangled_typename (d.of, orig_s);
-  oprintf (d.of, " (this_obj, x_p, op, cookie)\n");
-  oprintf (d.of, "      void *this_obj ATTRIBUTE_UNUSED;\n");
-  oprintf (d.of, "      void *x_p;\n");
-  oprintf (d.of, "      gt_pointer_operator op ATTRIBUTE_UNUSED;\n");
-  oprintf (d.of, "      void *cookie ATTRIBUTE_UNUSED;\n");
+  oprintf (d.of, " (void *this_obj ATTRIBUTE_UNUSED,\n\tvoid *x_p,\n\tgt_pointer_operator op ATTRIBUTE_UNUSED,\n\tvoid *cookie ATTRIBUTE_UNUSED)\n");
   oprintf (d.of, "{\n");
   oprintf (d.of, "  %s %s * const x ATTRIBUTE_UNUSED = (%s %s *)x_p;\n",
 	   s->kind == TYPE_UNION ? "union" : "struct", s->u.s.tag,
@@ -2326,19 +2240,17 @@ write_local_func_for_structure (orig_s, s, param)
 /* Write out local marker routines for STRUCTURES and PARAM_STRUCTS.  */
 
 static void
-write_local (structures, param_structs)
-     type_p structures;
-     type_p param_structs;
+write_local (type_p structures, type_p param_structs)
 {
   type_p s;
-  
+
   oprintf (header_file, "\n/* Local pointer-walking routines.  */\n");
   for (s = structures; s; s = s->next)
     if (s->gc_used == GC_POINTED_TO
 	|| s->gc_used == GC_MAYBE_POINTED_TO)
       {
 	options_p opt;
-	
+
 	if (s->u.s.line.file == NULL)
 	  continue;
 
@@ -2346,7 +2258,7 @@ write_local (structures, param_structs)
 	  if (strcmp (opt->name, "ptr_alias") == 0)
 	    {
 	      type_p t = (type_p) opt->info;
-	      if (t->kind == TYPE_STRUCT 
+	      if (t->kind == TYPE_STRUCT
 		  || t->kind == TYPE_UNION
 		  || t->kind == TYPE_LANG_STRUCT)
 		{
@@ -2357,7 +2269,7 @@ write_local (structures, param_structs)
 		  oprintf (header_file, "\n");
 		}
 	      else
-		error_at_line (&s->u.s.line, 
+		error_at_line (&s->u.s.line,
 			       "structure alias is not a structure");
 	      break;
 	    }
@@ -2367,9 +2279,9 @@ write_local (structures, param_structs)
 	/* Declare the marker procedure only once.  */
 	oprintf (header_file, "extern void gt_pch_p_");
 	output_mangled_typename (header_file, s);
-	oprintf (header_file, 
-	 "\n    PARAMS ((void *, void *, gt_pointer_operator, void *));\n");
-  
+	oprintf (header_file,
+	 "\n    (void *, void *, gt_pointer_operator, void *);\n");
+
 	if (s->kind == TYPE_LANG_STRUCT)
 	  {
 	    type_p ss;
@@ -2389,16 +2301,16 @@ write_local (structures, param_structs)
 	/* Declare the marker procedure.  */
 	oprintf (header_file, "extern void gt_pch_p_");
 	output_mangled_typename (header_file, s);
-	oprintf (header_file, 
-	 "\n    PARAMS ((void *, void *, gt_pointer_operator, void *));\n");
-  
+	oprintf (header_file,
+	 "\n    (void *, void *, gt_pointer_operator, void *);\n");
+
 	if (stru->u.s.line.file == NULL)
 	  {
-	    fprintf (stderr, "warning: structure `%s' used but not defined\n", 
+	    fprintf (stderr, "warning: structure `%s' used but not defined\n",
 		     s->u.s.tag);
 	    continue;
 	  }
-  
+
 	if (stru->kind == TYPE_LANG_STRUCT)
 	  {
 	    type_p ss;
@@ -2413,12 +2325,10 @@ write_local (structures, param_structs)
 /* Write out the 'enum' definition for gt_types_enum.  */
 
 static void
-write_enum_defn (structures, param_structs)
-     type_p structures;
-     type_p param_structs;
+write_enum_defn (type_p structures, type_p param_structs)
 {
   type_p s;
-  
+
   oprintf (header_file, "\n/* Enumeration of types known.  */\n");
   oprintf (header_file, "enum gt_types_enum {\n");
   for (s = structures; s; s = s->next)
@@ -2447,8 +2357,7 @@ write_enum_defn (structures, param_structs)
 /* Might T contain any non-pointer elements?  */
 
 static int
-contains_scalar_p (t)
-     type_p t;
+contains_scalar_p (type_p t)
 {
   switch (t->kind)
     {
@@ -2467,9 +2376,7 @@ contains_scalar_p (t)
 /* Mangle FN and print it to F.  */
 
 static void
-put_mangled_filename (f, fn)
-     outf_p f;
-     const char *fn;
+put_mangled_filename (outf_p f, const char *fn)
 {
   const char *name = get_output_file_name (fn);
   for (; *name != 0; name++)
@@ -2484,15 +2391,11 @@ put_mangled_filename (f, fn)
    the resulting code.  */
 
 static void
-finish_root_table (flp, pfx, lastname, tname, name)
-     struct flist *flp;
-     const char *pfx;
-     const char *tname;
-     const char *lastname;
-     const char *name;
+finish_root_table (struct flist *flp, const char *pfx, const char *lastname,
+		   const char *tname, const char *name)
 {
   struct flist *fli2;
-  
+
   for (fli2 = flp; fli2; fli2 = fli2->next)
     if (fli2->started_p)
       {
@@ -2516,7 +2419,7 @@ finish_root_table (flp, pfx, lastname, tname, name)
 	      oprintf (base_files[fnum], "[];\n");
 	    }
       }
-  
+
   {
     size_t fnum;
     for (fnum = 0; fnum < NUM_BASE_FILES; fnum++)
@@ -2524,7 +2427,7 @@ finish_root_table (flp, pfx, lastname, tname, name)
 	       "const struct %s * const %s[] = {\n",
 	       tname, name);
   }
-  
+
 
   for (fli2 = flp; fli2; fli2 = fli2->next)
     if (fli2->started_p)
@@ -2559,14 +2462,8 @@ finish_root_table (flp, pfx, lastname, tname, name)
    is nonzero iff we are building the root table for hash table caches.  */
 
 static void
-write_root (f, v, type, name, has_length, line, if_marked)
-     outf_p f;
-     pair_p v;
-     type_p type;
-     const char *name;
-     int has_length;
-     struct fileloc *line;
-     const char *if_marked;
+write_root (outf_p f, pair_p v, type_p type, const char *name, int has_length,
+	    struct fileloc *line, const char *if_marked)
 {
   switch (type->kind)
     {
@@ -2578,7 +2475,7 @@ write_root (f, v, type, name, has_length, line, if_marked)
 	    int skip_p = 0;
 	    const char *desc = NULL;
 	    options_p o;
-	    
+
 	    for (o = fld->opt; o; o = o->next)
 	      if (strcmp (o->name, "skip") == 0)
 		skip_p = 1;
@@ -2588,26 +2485,26 @@ write_root (f, v, type, name, has_length, line, if_marked)
 		error_at_line (line,
 		       "field `%s' of global `%s' has unknown option `%s'",
 			       fld->name, name, o->name);
-	    
+
 	    if (skip_p)
 	      continue;
 	    else if (desc && fld->type->kind == TYPE_UNION)
 	      {
 		pair_p validf = NULL;
 		pair_p ufld;
-		
+
 		for (ufld = fld->type->u.s.fields; ufld; ufld = ufld->next)
 		  {
 		    const char *tag = NULL;
 		    options_p oo;
-		    
+
 		    for (oo = ufld->opt; oo; oo = oo->next)
 		      if (strcmp (oo->name, "tag") == 0)
 			tag = (const char *)oo->info;
 		    if (tag == NULL || strcmp (tag, desc) != 0)
 		      continue;
 		    if (validf != NULL)
-		      error_at_line (line, 
+		      error_at_line (line,
 			   "both `%s.%s.%s' and `%s.%s.%s' have tag `%s'",
 				     name, fld->name, validf->name,
 				     name, fld->name, ufld->name,
@@ -2617,7 +2514,7 @@ write_root (f, v, type, name, has_length, line, if_marked)
 		if (validf != NULL)
 		  {
 		    char *newname;
-		    newname = xasprintf ("%s.%s.%s", 
+		    newname = xasprintf ("%s.%s.%s",
 					 name, fld->name, validf->name);
 		    write_root (f, v, validf->type, newname, 0, line,
 				if_marked);
@@ -2625,7 +2522,7 @@ write_root (f, v, type, name, has_length, line, if_marked)
 		  }
 	      }
 	    else if (desc)
-	      error_at_line (line, 
+	      error_at_line (line,
 		     "global `%s.%s' has `desc' option but is not union",
 			     name, fld->name);
 	    else
@@ -2647,15 +2544,15 @@ write_root (f, v, type, name, has_length, line, if_marked)
 	free (newname);
       }
       break;
-      
+
     case TYPE_POINTER:
       {
 	type_p ap, tp;
-	
+
 	oprintf (f, "  {\n");
 	oprintf (f, "    &%s,\n", name);
 	oprintf (f, "    1");
-	
+
 	for (ap = v->type; ap->kind == TYPE_ARRAY; ap = ap->u.a.p)
 	  if (ap->u.a.len[0])
 	    oprintf (f, " * (%s)", ap->u.a.len);
@@ -2666,9 +2563,9 @@ write_root (f, v, type, name, has_length, line, if_marked)
 	for (ap = v->type; ap->kind == TYPE_ARRAY; ap = ap->u.a.p)
 	  oprintf (f, "[0]");
 	oprintf (f, "),\n");
-	
+
 	tp = type->u.p;
-	
+
 	if (! has_length && UNION_OR_STRUCT_P (tp))
 	  {
 	    oprintf (f, "    &gt_ggc_mx_%s,\n", tp->u.s.tag);
@@ -2689,7 +2586,7 @@ write_root (f, v, type, name, has_length, line, if_marked)
 	  }
 	else
 	  {
-	    error_at_line (line, 
+	    error_at_line (line,
 			   "global `%s' is pointer to unimplemented type",
 			   name);
 	  }
@@ -2706,18 +2603,16 @@ write_root (f, v, type, name, has_length, line, if_marked)
 	oprintf (f, "    1, \n");
 	oprintf (f, "    sizeof (%s),\n", v->name);
 	oprintf (f, "    &gt_ggc_m_S,\n");
-	/* APPLE LOCAL begin - 3.4 scheduler update */
 	oprintf (f, "    (gt_pointer_walker) &gt_pch_n_S\n");
-	/* APPLE LOCAL end - 3.4 scheduler update */
 	oprintf (f, "  },\n");
       }
       break;
-	
+
     case TYPE_SCALAR:
       break;
-      
+
     default:
-      error_at_line (line, 
+      error_at_line (line,
 		     "global `%s' is unimplemented type",
 		     name);
     }
@@ -2726,14 +2621,11 @@ write_root (f, v, type, name, has_length, line, if_marked)
 /* This generates a routine to walk an array.  */
 
 static void
-write_array (f, v, wtd)
-     outf_p f;
-     pair_p v;
-     const struct write_types_data *wtd;
+write_array (outf_p f, pair_p v, const struct write_types_data *wtd)
 {
   struct walk_type_data d;
   char *prevval3;
-  
+
   memset (&d, 0, sizeof (d));
   d.of = f;
   d.cookie = wtd;
@@ -2748,14 +2640,13 @@ write_array (f, v, wtd)
   if (wtd->param_prefix)
     {
       oprintf (f, "static void gt_%sa_%s\n", wtd->param_prefix, v->name);
-      oprintf (f, 
-       "    PARAMS ((void *, void *, gt_pointer_operator, void *));\n");
-      oprintf (f, "static void gt_%sa_%s (this_obj, x_p, op, cookie)\n", 
+      oprintf (f,
+       "    (void *, void *, gt_pointer_operator, void *);\n");
+      oprintf (f, "static void gt_%sa_%s (void *this_obj ATTRIBUTE_UNUSED,\n",
 	       wtd->param_prefix, v->name);
-      oprintf (d.of, "      void *this_obj ATTRIBUTE_UNUSED;\n");
-      oprintf (d.of, "      void *x_p ATTRIBUTE_UNUSED;\n");
-      oprintf (d.of, "      gt_pointer_operator op ATTRIBUTE_UNUSED;\n");
-      oprintf (d.of, "      void *cookie ATTRIBUTE_UNUSED;\n");
+      oprintf (d.of, "      void *x_p ATTRIBUTE_UNUSED,\n");
+      oprintf (d.of, "      gt_pointer_operator op ATTRIBUTE_UNUSED,\n");
+      oprintf (d.of, "      void *cookie ATTRIBUTE_UNUSED)\n");
       oprintf (d.of, "{\n");
       d.prev_val[0] = d.prev_val[1] = d.prev_val[2] = d.val = v->name;
       d.process_field = write_types_local_process_field;
@@ -2764,11 +2655,10 @@ write_array (f, v, wtd)
     }
 
   d.opt = v->opt;
-  oprintf (f, "static void gt_%sa_%s PARAMS ((void *));\n",
+  oprintf (f, "static void gt_%sa_%s (void *);\n",
 	   wtd->prefix, v->name);
-  oprintf (f, "static void\ngt_%sa_%s (x_p)\n",
+  oprintf (f, "static void\ngt_%sa_%s (void *x_p ATTRIBUTE_UNUSED)\n",
 	   wtd->prefix, v->name);
-  oprintf (f, "      void *x_p ATTRIBUTE_UNUSED;\n");
   oprintf (f, "{\n");
   d.prev_val[0] = d.prev_val[1] = d.prev_val[2] = d.val = v->name;
   d.process_field = write_types_process_field;
@@ -2780,8 +2670,7 @@ write_array (f, v, wtd)
 /* Output a table describing the locations and types of VARIABLES.  */
 
 static void
-write_roots (variables)
-     pair_p variables;
+write_roots (pair_p variables)
 {
   pair_p v;
   struct flist *flp = NULL;
@@ -2801,14 +2690,14 @@ write_roots (variables)
 	  deletable_p = 1;
 	else if (strcmp (o->name, "param_is") == 0)
 	  ;
- 	else if (strncmp (o->name, "param", 5) == 0
+	else if (strncmp (o->name, "param", 5) == 0
 		 && ISDIGIT (o->name[5])
 		 && strcmp (o->name + 6, "_is") == 0)
 	  ;
 	else if (strcmp (o->name, "if_marked") == 0)
 	  ;
 	else
-	  error_at_line (&v->line, 
+	  error_at_line (&v->line,
 			 "global `%s' has unknown option `%s'",
 			 v->name, o->name);
 
@@ -2845,7 +2734,7 @@ write_roots (variables)
       int skip_p = 0;
       int length_p = 0;
       options_p o;
-      
+
       for (o = v->opt; o; o = o->next)
 	if (strcmp (o->name, "length") == 0)
 	  length_p = 1;
@@ -2871,7 +2760,7 @@ write_roots (variables)
       write_root (f, v, v->type, v->name, length_p, &v->line, NULL);
     }
 
-  finish_root_table (flp, "ggc_r", "LAST_GGC_ROOT_TAB", "ggc_root_tab", 
+  finish_root_table (flp, "ggc_r", "LAST_GGC_ROOT_TAB", "ggc_root_tab",
 		     "gt_ggc_rtab");
 
   for (v = variables; v; v = v->next)
@@ -2901,11 +2790,11 @@ write_roots (variables)
 	  put_mangled_filename (f, v->line.file);
 	  oprintf (f, "[] = {\n");
 	}
-      
+
       oprintf (f, "  { &%s, 1, sizeof (%s), NULL, NULL },\n",
 	       v->name, v->name);
     }
-  
+
   finish_root_table (flp, "ggc_rd", "LAST_GGC_ROOT_TAB", "ggc_root_tab",
 		     "gt_ggc_deletable_rtab");
 
@@ -2916,7 +2805,7 @@ write_roots (variables)
       const char *if_marked = NULL;
       int length_p = 0;
       options_p o;
-      
+
       for (o = v->opt; o; o = o->next)
 	if (strcmp (o->name, "length") == 0)
 	  length_p = 1;
@@ -2945,11 +2834,11 @@ write_roots (variables)
 	  put_mangled_filename (f, v->line.file);
 	  oprintf (f, "[] = {\n");
 	}
-      
+
       write_root (f, v, v->type->u.p->u.param_struct.param[0],
 		     v->name, length_p, &v->line, if_marked);
     }
-  
+
   finish_root_table (flp, "ggc_rc", "LAST_GGC_CACHE_TAB", "ggc_cache_tab",
 		     "gt_ggc_cache_rtab");
 
@@ -2960,7 +2849,7 @@ write_roots (variables)
       int length_p = 0;
       int if_marked_p = 0;
       options_p o;
-      
+
       for (o = v->opt; o; o = o->next)
 	if (strcmp (o->name, "length") == 0)
 	  length_p = 1;
@@ -2984,7 +2873,7 @@ write_roots (variables)
 
       write_root (f, v, v->type, v->name, length_p, &v->line, NULL);
     }
-  
+
   finish_root_table (flp, "pch_rc", "LAST_GGC_ROOT_TAB", "ggc_root_tab",
 		     "gt_pch_cache_rtab");
 
@@ -3017,26 +2906,24 @@ write_roots (variables)
 	  put_mangled_filename (f, v->line.file);
 	  oprintf (f, "[] = {\n");
 	}
-      
+
       oprintf (f, "  { &%s, 1, sizeof (%s), NULL, NULL },\n",
 	       v->name, v->name);
     }
-  
+
   finish_root_table (flp, "pch_rs", "LAST_GGC_ROOT_TAB", "ggc_root_tab",
 		     "gt_pch_scalar_rtab");
 }
 
 
-extern int main PARAMS ((int argc, char **argv));
-int 
-main(argc, argv)
-     int argc ATTRIBUTE_UNUSED;
-     char **argv ATTRIBUTE_UNUSED;
+extern int main (int argc, char **argv);
+int
+main(int argc ATTRIBUTE_UNUSED, char **argv ATTRIBUTE_UNUSED)
 {
   unsigned i;
   static struct fileloc pos = { __FILE__, __LINE__ };
   unsigned j;
-  
+
   gen_rtx_next ();
 
   srcdir_len = strlen (srcdir);
@@ -3046,10 +2933,10 @@ main(argc, argv)
   do_scalar_typedef ("uint8", &pos);
   do_scalar_typedef ("jword", &pos);
   do_scalar_typedef ("JCF_u2", &pos);
+  do_scalar_typedef ("void", &pos);
 
-  do_typedef ("PTR", create_pointer (create_scalar_type ("void",
-							 strlen ("void"))),
-	      &pos);
+  do_typedef ("PTR", create_pointer (resolve_typedef ("void", &pos)), &pos);
+
   do_typedef ("HARD_REG_SET", create_array (
 	      create_scalar_type ("unsigned long", strlen ("unsigned long")),
 	      "2"), &pos);

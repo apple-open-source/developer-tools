@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------------------
-   ffi.c - Copyright (c) 1996 Cygnus Solutions
+   ffi.c - Copyright (c) 1996 Red Hat, Inc.
    
    MIPS Foreign Function Interface 
 
@@ -23,13 +23,12 @@
    OTHER DEALINGS IN THE SOFTWARE.
    ----------------------------------------------------------------------- */
 
-#include <sgidefs.h>
 #include <ffi.h>
 #include <ffi_common.h>
 
 #include <stdlib.h>
 
-#if _MIPS_SIM == _MIPS_SIM_NABI32
+#if _MIPS_SIM == _ABIN32
 #define FIX_ARGP \
 FFI_ASSERT(argp <= &stack[bytes]); \
 if (argp == &stack[bytes]) \
@@ -55,12 +54,12 @@ static void ffi_prep_args(char *stack,
   register char *argp;
   register ffi_type **p_arg;
 
-#if _MIPS_SIM == _MIPS_SIM_NABI32
+#if _MIPS_SIM == _ABIN32
   /* If more than 8 double words are used, the remainder go
      on the stack. We reorder stuff on the stack here to 
      support this easily. */
-  if (bytes > 8 * SIZEOF_ARG)
-    argp = &stack[bytes - (8 * SIZEOF_ARG)];
+  if (bytes > 8 * FFI_SIZEOF_ARG)
+    argp = &stack[bytes - (8 * FFI_SIZEOF_ARG)];
   else
     argp = stack;
 #else
@@ -69,14 +68,14 @@ static void ffi_prep_args(char *stack,
 
   memset(stack, 0, bytes);
 
-#if _MIPS_SIM == _MIPS_SIM_NABI32
+#if _MIPS_SIM == _ABIN32
   if ( ecif->cif->rstruct_flag != 0 )
 #else
   if ( ecif->cif->rtype->type == FFI_TYPE_STRUCT )
 #endif  
     {
-      *(SLOT_TYPE_UNSIGNED *) argp = (SLOT_TYPE_UNSIGNED) ecif->rvalue;
-      argp += sizeof(SLOT_TYPE_UNSIGNED);
+      *(ffi_arg *) argp = (ffi_arg) ecif->rvalue;
+      argp += sizeof(ffi_arg);
       FIX_ARGP;
     }
 
@@ -92,16 +91,16 @@ static void ffi_prep_args(char *stack,
 	FIX_ARGP;
       }
 
-#if _MIPS_SIM == _MIPS_SIM_ABI32
+#if _MIPS_SIM == _ABIO32
 #define OFFSET 0
 #else
 #define OFFSET sizeof(int)
 #endif      
 
 	  z = (*p_arg)->size;
-	  if (z < sizeof(SLOT_TYPE_UNSIGNED))
+	  if (z < sizeof(ffi_arg))
 	    {
-	      z = sizeof(SLOT_TYPE_UNSIGNED);
+	      z = sizeof(ffi_arg);
 
 	      switch ((*p_arg)->type)
 		{
@@ -146,7 +145,7 @@ static void ffi_prep_args(char *stack,
 	    }
 	  else
 	    {
-#if _MIPS_SIM == _MIPS_SIM_ABI32	      
+#if _MIPS_SIM == _ABIO32	      
 	      memcpy(argp, *p_argv, z);
 #else
 	      {
@@ -178,7 +177,7 @@ static void ffi_prep_args(char *stack,
   return;
 }
 
-#if _MIPS_SIM == _MIPS_SIM_NABI32
+#if _MIPS_SIM == _ABIN32
 
 /* The n32 spec says that if "a chunk consists solely of a double 
    float field (but not a double, which is part of a union), it
@@ -267,7 +266,7 @@ ffi_status ffi_prep_cif_machdep(ffi_cif *cif)
 {
   cif->flags = 0;
 
-#if _MIPS_SIM == _MIPS_SIM_ABI32
+#if _MIPS_SIM == _ABIO32
   /* Set the flags necessary for O32 processing */
 
   if (cif->rtype->type != FFI_TYPE_STRUCT)
@@ -322,7 +321,7 @@ ffi_status ffi_prep_cif_machdep(ffi_cif *cif)
     }
 #endif
 
-#if _MIPS_SIM == _MIPS_SIM_NABI32
+#if _MIPS_SIM == _ABIN32
   /* Set the flags necessary for N32 processing */
   {
     unsigned shift = 0;
@@ -441,14 +440,14 @@ void ffi_call(ffi_cif *cif, void (*fn)(), void *rvalue, void **avalue)
     
   switch (cif->abi) 
     {
-#if _MIPS_SIM == _MIPS_SIM_ABI32
+#if _MIPS_SIM == _ABIO32
     case FFI_O32:
       ffi_call_O32(ffi_prep_args, &ecif, cif->bytes, 
 		   cif->flags, ecif.rvalue, fn);
       break;
 #endif
 
-#if _MIPS_SIM == _MIPS_SIM_NABI32
+#if _MIPS_SIM == _ABIN32
     case FFI_N32:
       ffi_call_N32(ffi_prep_args, &ecif, cif->bytes, 
 		   cif->flags, ecif.rvalue, fn);

@@ -42,6 +42,7 @@
 #include "stuff/bytesex.h"
 
 #include "ld.h"
+#include "live_refs.h"
 #include "objects.h"
 #include "sections.h"
 #include "pass1.h"

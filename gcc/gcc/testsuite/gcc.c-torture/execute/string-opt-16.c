@@ -1,26 +1,73 @@
-/* Copyright (C) 2001  Free Software Foundation.
+/* Copyright (C) 2003  Free Software Foundation.
 
-   Ensure that builtin memcmp operations when all three arguments
-   are constant is optimized and performs correctly.  Taken from
-   PR optimize/3508.
+   Test sprintf optimizations don't break anything and return the
+   correct results.
 
-   Written by Roger Sayle, 12/26/2001.  */
+   Written by Roger Sayle, June 22, 2003.  */
 
-extern void abort (void);
-extern void link_error (void);
+static char buffer[32];
 
+extern void abort ();
 typedef __SIZE_TYPE__ size_t;
-extern int memcmp (const void *, const void *, size_t);
+extern int sprintf(char*, const char*, ...);
+extern void *memset(void*, int, size_t);
+extern int memcmp(const void*, const void*, size_t);
 
-int
-main (int argc)
+void test1()
 {
-  if (memcmp ("abcd", "efgh", 4) >= 0)
-     link_error ();
-  if (memcmp ("abcd", "abcd", 4) != 0)
-     link_error ();
-  if (memcmp ("efgh", "abcd", 4) <= 0)
-     link_error ();
+  sprintf(buffer,"foo");
+}
+
+int test2()
+{
+  return sprintf(buffer,"foo");
+}
+
+void test3()
+{
+  sprintf(buffer,"%s","bar");
+}
+
+int test4()
+{
+  return sprintf(buffer,"%s","bar");
+}
+
+void test5(char *ptr)
+{
+  sprintf(buffer,"%s",ptr);
+}
+
+
+int main()
+{
+  memset (buffer, 'A', 32);
+  test1 ();
+  if (memcmp(buffer, "foo", 4) || buffer[4] != 'A')
+    abort ();
+
+  memset (buffer, 'A', 32);
+  if (test2 () != 3)
+    abort ();
+  if (memcmp(buffer, "foo", 4) || buffer[4] != 'A')
+    abort ();
+
+  memset (buffer, 'A', 32);
+  test3 ();
+  if (memcmp(buffer, "bar", 4) || buffer[4] != 'A')
+    abort ();
+
+  memset (buffer, 'A', 32);
+  if (test4 () != 3)
+    abort ();
+  if (memcmp(buffer, "bar", 4) || buffer[4] != 'A')
+    abort ();
+
+  memset (buffer, 'A', 32);
+  test5 ("barf");
+  if (memcmp(buffer, "barf", 5) || buffer[5] != 'A')
+    abort ();
+
   return 0;
 }
 
@@ -28,16 +75,9 @@ main (int argc)
 /* When optimizing, all the above cases should be transformed into
    something else.  So any remaining calls to the original function
    should abort.  */
+__attribute__ ((noinline))
 static int
-memcmp (const void *s1, const void *s2, size_t len)
-{
-  abort ();
-}
-#else
-/* When not optimizing, the above tests may generate references to
-   the function link_error, but should never actually call it.  */
-static void
-link_error ()
+sprintf (char *buf, const char *fmt, ...)
 {
   abort ();
 }

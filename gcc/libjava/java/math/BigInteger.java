@@ -223,6 +223,23 @@ public class BigInteger extends Number implements Comparable
       }
   }
 
+  /** 
+   *  Return a BigInteger that is bitLength bits long with a
+   *  probability < 2^-100 of being composite.
+   *
+   *  @param bitLength length in bits of resulting number
+   *  @param rnd random number generator to use
+   *  @throws ArithmeticException if bitLength < 2
+   *  @since 1.4
+   */
+  public static BigInteger probablePrime(int bitLength, Random rnd)
+  {
+    if (bitLength < 2)
+      throw new ArithmeticException();
+
+    return new BigInteger(bitLength, 100, rnd);
+  }
+
   /** Return a (possibly-shared) BigInteger with a given long value. */
   public static BigInteger valueOf(long val)
   {
@@ -524,7 +541,6 @@ public class BigInteger extends Number implements Comparable
     if (y.words == null)
       return BigInteger.add(x, y.ival);
     // Both are big
-    int len;
     if (y.ival > x.ival)
       { // Swap so x is longer then y.
 	BigInteger tmp = x;  x = y;  y = tmp;
@@ -1549,7 +1565,7 @@ public class BigInteger extends Number implements Comparable
   /* Assumes this and obj are both canonicalized. */
   public boolean equals(Object obj)
   {
-    if (obj == null || ! (obj instanceof BigInteger))
+    if (! (obj instanceof BigInteger))
       return false;
     return equals(this, (BigInteger) obj);
   }

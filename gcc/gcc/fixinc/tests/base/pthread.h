@@ -15,12 +15,48 @@
 #endif  /* AIX_PTHREAD_CHECK */
 
 
+#if defined( ALPHA_PTHREAD_CHECK )
+#  if defined (_PTHREAD_ENV_DECC) || defined (_PTHREAD_ENV_EPCC) || defined (__PRAGMA_EXTERN_PREFIX)
+#   define _PTHREAD_USE_PTDNAM_
+#  endif
+#  if defined (_PTHREAD_ENV_DECC) || defined (__PRAGMA_EXTERN_PREFIX)
+#   define _PTHREAD_USE_PTDNAM_
+#  endif
+#endif  /* ALPHA_PTHREAD_CHECK */
+
+
+#if defined( ALPHA_PTHREAD_GCC_CHECK )
+# define _PTHREAD_ENV_INTELC
+#elif defined (__GNUC__)
+# define _PTHREAD_ENV_GCC
+#else
+# error <pthread.h>: unrecognized compiler.
+#endif
+#endif  /* ALPHA_PTHREAD_GCC_CHECK */
+
+
 #if defined( PTHREAD_PAGE_SIZE_CHECK )
 extern int __page_size;
 #endif  /* PTHREAD_PAGE_SIZE_CHECK */
 
 
-#if defined( SOLARIS_MUTEX_INIT_CHECK )
+#if defined( SOLARIS_MUTEX_INIT_1_CHECK )
+#ident "@(#)pthread.h  1.16    97/05/05 SMI"
+#if __STDC__ - 0 == 0 && !defined(_NO_LONGLONG)
+#define PTHREAD_MUTEX_INITIALIZER	{{{0}, 0}, {{{0}}}, 0}
+#else
+#define PTHREAD_MUTEX_INITIALIZER	{{{0}, 0}, {{{0}}}, {0}}
+#endif
+#if __STDC__ - 0 == 0 && !defined(_NO_LONGLONG)
+#define PTHREAD_COND_INITIALIZER	{{{0},0}, 0} /* */
+#else
+#define PTHREAD_COND_INITIALIZER	{{{0},0}, {0}} /* */
+#endif
+
+#endif  /* SOLARIS_MUTEX_INIT_1_CHECK */
+
+
+#if defined( SOLARIS_MUTEX_INIT_2_CHECK )
 #ident "@(#)pthread.h  1.26  98/04/12 SMI"
 #if __STDC__ - 0 == 0 && !defined(_NO_LONGLONG)
 #define PTHREAD_MUTEX_INITIALIZER	{{{0},0}, {{{0}}}, 0}
@@ -33,7 +69,7 @@ extern int __page_size;
 #define PTHREAD_COND_INITIALIZER	{{{0}, 0}, {0}}	/* DEFAULTCV */
 #endif
 #define PTHREAD_RWLOCK_INITIALIZER	{0, 0, 0, {0, 0, 0}, {0, 0}, {0, 0}}
-#endif  /* SOLARIS_MUTEX_INIT_CHECK */
+#endif  /* SOLARIS_MUTEX_INIT_2_CHECK */
 
 
 #if defined( THREAD_KEYWORD_CHECK )

@@ -231,9 +231,9 @@ public final class Locale implements Serializable, Cloneable
     // default locale.
     if (defaultLocale != null)
       {
-        language = convertLanguage(language);
-        country = country.toUpperCase();
-        variant = variant.toUpperCase();
+        language = convertLanguage(language).intern();
+        country = country.toUpperCase().intern();
+        variant = variant.toUpperCase().intern();
       }
     this.language = language;
     this.country = country;
@@ -436,7 +436,8 @@ public final class Locale implements Serializable, Cloneable
    */
   public String getISO3Language()
   {
-    if ("".equals(language))
+    // We know all strings are interned so we can use '==' for better performance.
+    if (language == "")
       return "";
     int index
       = ("aa,ab,af,am,ar,as,ay,az,ba,be,bg,bh,bi,bn,bo,br,ca,co,cs,cy,da,"
@@ -472,7 +473,8 @@ public final class Locale implements Serializable, Cloneable
    */
   public String getISO3Country()
   {
-    if ("".equals(country))
+    // We know all strings are interned so we can use '==' for better performance.
+    if (country == "")
       return "";
     int index
       = ("AD,AE,AF,AG,AI,AL,AM,AN,AO,AQ,AR,AS,AT,AU,AW,AZ,BA,BB,BD,BE,BF,"
@@ -489,7 +491,7 @@ public final class Locale implements Serializable, Cloneable
          + "WS,YE,YT,YU,ZA,ZM,ZR,ZW")
       .indexOf(country);
 
-    if (index % 3 != 0 || language.length() != 2)
+    if (index % 3 != 0 || country.length() != 2)
       throw new MissingResourceException
         ("Can't find ISO3 country for " + country,
          "java.util.Locale", country);
@@ -520,7 +522,7 @@ public final class Locale implements Serializable, Cloneable
    * @return the language name of this locale localized to the default locale,
    *         with the ISO code as backup
    */
-  public String getDisplayLanguage()
+  public final String getDisplayLanguage()
   {
     return getDisplayLanguage(defaultLocale);
   }
@@ -558,7 +560,7 @@ public final class Locale implements Serializable, Cloneable
    * @return the country name of this locale localized to the given locale,
    *         with the ISO code as backup
    */
-  public String getDisplayCountry()
+  public final String getDisplayCountry()
   {
     return getDisplayCountry(defaultLocale);
   }
@@ -596,7 +598,7 @@ public final class Locale implements Serializable, Cloneable
    * @return the variant code of this locale localized to the given locale,
    *         with the ISO code as backup
    */
-  public String getDisplayVariant()
+  public final String getDisplayVariant()
   {
     return getDisplayVariant(defaultLocale);
   }
@@ -635,7 +637,7 @@ public final class Locale implements Serializable, Cloneable
    *
    * @return String version of this locale, suitable for display to the user
    */
-  public String getDisplayName()
+  public final String getDisplayName()
   {
     return getDisplayName(defaultLocale);
   }
@@ -723,12 +725,19 @@ public final class Locale implements Serializable, Cloneable
    */
   public boolean equals(Object obj)
   {
+    if (this == obj)
+      return true;
     if (! (obj instanceof Locale))
       return false;
     Locale l = (Locale) obj;
-    return (language.equals(l.language)
-            && country.equals(l.country)
-            && variant.equals(l.variant));
+
+    // ??? We might also want to add:
+    //        hashCode() == l.hashCode()
+    // But this is a synchronized method.  Is the overhead worth it?
+    // Measure this to make a decision.
+    return (language == l.language
+            && country == l.country
+            && variant == l.variant);
   }
 
   /**

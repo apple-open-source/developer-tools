@@ -5,7 +5,7 @@
    Copyright (C) 2002 Free Software Foundation Inc.
    Contributed by Hans-Peter Nilsson  <hp@bitrange.com>  */
 
-/* { dg-do run { xfail arc-*-* avr-*-* c4x-*-* cris-*-* h8300-*-* i370-*-* i960-*-* ip2k-*-* m32r-*-* m68hc1?-*-* m681?-*-* m680*-*-* m68k-*-* mcore-*-* mips*-*-* mn10?00-*-* ns32k-*-* s390*-*-* xstormy16-*-* v850*-*-* vax-*-* xtensa-*-* } } */
+/* { dg-do run { xfail arc-*-* avr-*-* c4x-*-* cris-*-* h8300-*-* ip2k-*-* m32r-*-* m68hc1?-*-* m681?-*-* m680*-*-* m68k-*-* mcore-*-* mips*-*-irix* mips*-*-linux-gnu mn10300-*-* ns32k-*-* xstormy16-*-* v850*-*-* vax-*-* xtensa-*-* } } */
 /* { dg-options "-O2 -foptimize-sibling-calls" } */
 
 /* The option -foptimize-sibling-calls is the default, but serves as
@@ -27,7 +27,7 @@ int main ()
    reasonably sure is to make them have the same contents (regarding the
    n tests).  */
 
-static void
+static void __attribute__((noinline))
 recurser_void1 (int n)
 {
   if (n == 0 || n == 7 || n == 8)
@@ -39,7 +39,7 @@ recurser_void1 (int n)
   recurser_void2 (n + 1);
 }
 
-static void
+static void __attribute__((noinline))
 recurser_void2 (int n)
 {
   if (n == 0 || n == 7 || n == 8)
