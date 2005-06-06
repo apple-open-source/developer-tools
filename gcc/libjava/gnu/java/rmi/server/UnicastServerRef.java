@@ -1,5 +1,6 @@
-/*
-  Copyright (c) 1996, 1997, 1998, 1999, 2002, 2003 Free Software Foundation, Inc.
+/* UnicastServerRef.java --
+   Copyright (c) 1996, 1997, 1998, 1999, 2002, 2003, 2004
+   Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -35,12 +36,13 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package gnu.java.rmi.server;
 
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
+import java.io.ObjectInputStream;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
+import java.lang.reflect.InvocationTargetException;
 import java.rmi.Remote;
 import java.rmi.RemoteException;
 import java.rmi.server.RemoteStub;
@@ -49,23 +51,8 @@ import java.rmi.server.ServerRef;
 import java.rmi.server.RemoteServer;
 import java.rmi.server.RemoteRef;
 import java.rmi.server.ServerNotActiveException;
-import java.rmi.server.RMIClientSocketFactory;
 import java.rmi.server.RMIServerSocketFactory;
-import java.rmi.server.UID;
 import java.rmi.server.Skeleton;
-import java.rmi.server.RemoteCall;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Method;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.Thread;
-import java.lang.Exception;
-import java.io.IOException;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.io.ObjectInput;
-import java.io.ObjectOutput;
 import java.util.Hashtable;
 
 public class UnicastServerRef
@@ -284,7 +271,16 @@ public Object incomingMessageCall(UnicastConnection conn, int method, long hash)
 		try{
 		    ret = meth.invoke(myself, args);
 		}catch(InvocationTargetException e){
-		    throw (Exception)(e.getTargetException());
+                    Throwable cause = e.getTargetException();
+                    if (cause instanceof Exception) {
+                        throw (Exception)cause;
+                    }
+                    else if (cause instanceof Error) {
+                        throw (Error)cause;
+                    }
+                    else {
+                        throw new Error("The remote method threw a java.lang.Throwable that is neither java.lang.Exception nor java.lang.Error.", e);
+                    }
 		}
 		return ret;
 	}

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2001-2004 Free Software Foundation, Inc.          --
+--          Copyright (C) 2001-2005 Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -44,14 +44,13 @@ with GNAT.OS_Lib;               use GNAT.OS_Lib;
 with GNAT.Regexp;               use GNAT.Regexp;
 
 with System.Case_Util;          use System.Case_Util;
+with System.CRTL;
 
 package body Prj.Makr is
 
    function Dup (Fd : File_Descriptor) return File_Descriptor;
-   pragma Import (C, Dup);
 
    procedure Dup2 (Old_Fd, New_Fd : File_Descriptor);
-   pragma Import (C, Dup2);
 
    Gcc : constant String := "gcc";
    Gcc_Path : String_Access := null;
@@ -64,11 +63,11 @@ package body Prj.Makr is
    Naming_File_Suffix      : constant String := "_naming";
    Source_List_File_Suffix : constant String := "_source_list.txt";
 
-   Output_FD   : File_Descriptor;
-   --  To save the project file and its naming project file.
+   Output_FD : File_Descriptor;
+   --  To save the project file and its naming project file
 
    procedure Write_Eol;
-   --  Output an empty line.
+   --  Output an empty line
 
    procedure Write_A_Char (C : Character);
    --  Write one character to Output_FD
@@ -83,6 +82,26 @@ package body Prj.Makr is
       Table_Initial        => 10,
       Table_Increment      => 10,
       Table_Name           => "Prj.Makr.Processed_Directories");
+
+   ---------
+   -- Dup --
+   ---------
+
+   function Dup  (Fd : File_Descriptor) return File_Descriptor is
+   begin
+      return File_Descriptor (System.CRTL.dup (Integer (Fd)));
+   end Dup;
+
+   ----------
+   -- Dup2 --
+   ----------
+
+   procedure Dup2 (Old_Fd, New_Fd : File_Descriptor) is
+      Fd : Integer;
+      pragma Warnings (Off, Fd);
+   begin
+      Fd := System.CRTL.dup2 (Integer (Old_Fd), Integer (New_Fd));
+   end Dup2;
 
    ----------
    -- Make --
@@ -160,19 +179,17 @@ package body Prj.Makr is
       -----------------------
 
       procedure Process_Directory (Dir_Name : String; Recursively : Boolean) is
-         Matched  : Matched_Type := False;
-         Str      : String (1 .. 2_000);
-         Last     : Natural;
-         Dir      : Dir_Type;
-         Process  : Boolean := True;
+         Matched : Matched_Type := False;
+         Str     : String (1 .. 2_000);
+         Canon   : String (1 .. 2_000);
+         Last    : Natural;
+         Dir     : Dir_Type;
+         Process : Boolean := True;
 
-         Temp_File_Name : String_Access := null;
-
+         Temp_File_Name         : String_Access := null;
          Save_Last_Pragma_Index : Natural := 0;
-
-         File_Name_Id : Name_Id := No_Name;
-
-         SFN_Prag : SFN_Pragma;
+         File_Name_Id           : Name_Id := No_Name;
+         SFN_Prag               : SFN_Pragma;
 
       begin
          --  Avoid processing the same directory more than once
@@ -195,12 +212,11 @@ package body Prj.Makr is
             Processed_Directories.Table (Processed_Directories.Last) :=
               new String'(Dir_Name);
 
-            --  Get the source file names from the directory.
-            --  Fails if the directory does not exist.
+            --  Get the source file names from the directory. Fails if the
+            --  directory does not exist.
 
             begin
                Open (Dir, Dir_Name);
-
             exception
                when Directory_Error =>
                   Prj.Com.Fail ("cannot open directory """, Dir_Name, """");
@@ -211,6 +227,13 @@ package body Prj.Makr is
             File_Loop : loop
                Read (Dir, Str, Last);
                exit File_Loop when Last = 0;
+
+               --  Copy the file name and put it in canonical case to match
+               --  against the patterns that have themselves already been put
+               --  in canonical case.
+
+               Canon (1 .. Last) := Str (1 .. Last);
+               Canonical_Case_File_Name (Canon (1 .. Last));
 
                if Is_Regular_File
                  (Dir_Name & Directory_Separator & Str (1 .. Last))
@@ -226,7 +249,7 @@ package body Prj.Makr is
 
                   for Index in Excluded_Expressions'Range loop
                      if
-                       Match (Str (1 .. Last), Excluded_Expressions (Index))
+                       Match (Canon (1 .. Last), Excluded_Expressions (Index))
                      then
                         Matched := Excluded;
                         exit;
@@ -242,7 +265,8 @@ package body Prj.Makr is
 
                      for Index in Regular_Expressions'Range loop
                         if
-                          Match (Str (1 .. Last), Regular_Expressions (Index))
+                          Match
+                            (Canon (1 .. Last), Regular_Expressions (Index))
                         then
                            Matched := True;
                            exit;
@@ -270,10 +294,18 @@ package body Prj.Makr is
 
                      begin
                         --  If we don't have the path of the compiler yet,
-                        --  get it now.
+                        --  get it now. The compiler name may have a prefix,
+                        --  so we get the potentially prefixed name.
 
                         if Gcc_Path = null then
-                           Gcc_Path := Locate_Exec_On_Path (Gcc);
+                           declare
+                              Prefix_Gcc : String_Access :=
+                                             Program_Name (Gcc);
+                           begin
+                              Gcc_Path :=
+                                Locate_Exec_On_Path (Prefix_Gcc.all);
+                              Free (Prefix_Gcc);
+                           end;
 
                            if Gcc_Path = null then
                               Prj.Com.Fail ("could not locate " & Gcc);
@@ -538,7 +570,7 @@ package body Prj.Makr is
 
                      if Matched /= Excluded then
                         for Index in Foreign_Expressions'Range loop
-                           if Match (Str (1 .. Last),
+                           if Match (Canon (1 .. Last),
                                      Foreign_Expressions (Index))
                            then
                               Matched := True;
@@ -663,6 +695,107 @@ package body Prj.Makr is
 
          Output_Name (1 .. Path_Last) := To_Lower (Path_Name (1 .. Path_Last));
          Output_Name_Last := Path_Last - Project_File_Extension'Length;
+
+         --  If there is already a project file with the specified name, parse
+         --  it to get the components that are not automatically generated.
+
+         if Is_Regular_File (Output_Name (1 .. Path_Last)) then
+            if Opt.Verbose_Mode then
+               Output.Write_Str ("Parsing already existing project file """);
+               Output.Write_Str (Output_Name (1 .. Output_Name_Last));
+               Output.Write_Line ("""");
+            end if;
+
+            Part.Parse
+              (Project                => Project_Node,
+               Project_File_Name      => Output_Name (1 .. Output_Name_Last),
+               Always_Errout_Finalize => False);
+
+            --  Fail if parsing was not successful
+
+            if Project_Node = Empty_Node then
+               Fail ("parsing of existing project file failed");
+
+            else
+               --  If parsing was successful, remove the components that are
+               --  automatically generated, if any, so that they will be
+               --  unconditionally added later.
+
+               --  Remove the with clause for the naming project file
+
+               declare
+                  With_Clause : Project_Node_Id :=
+                                  First_With_Clause_Of (Project_Node);
+                  Previous    : Project_Node_Id := Empty_Node;
+
+               begin
+                  while With_Clause /= Empty_Node loop
+                     if Tree.Name_Of (With_Clause) = Project_Naming_Id then
+                        if Previous = Empty_Node then
+                           Set_First_With_Clause_Of
+                             (Project_Node,
+                              To => Next_With_Clause_Of (With_Clause));
+                        else
+                           Set_Next_With_Clause_Of
+                             (Previous,
+                              To => Next_With_Clause_Of (With_Clause));
+                        end if;
+
+                        exit;
+                     end if;
+
+                     Previous := With_Clause;
+                     With_Clause := Next_With_Clause_Of (With_Clause);
+                  end loop;
+               end;
+
+               --  Remove attribute declarations of Source_Files,
+               --  Source_List_File, Source_Dirs, and the declaration of
+               --  package Naming, if they exist.
+
+               declare
+                  Declaration  : Project_Node_Id :=
+                                   First_Declarative_Item_Of
+                                     (Project_Declaration_Of
+                                       (Project_Node));
+                  Previous     : Project_Node_Id := Empty_Node;
+                  Current_Node : Project_Node_Id := Empty_Node;
+
+               begin
+                  while Declaration /= Empty_Node loop
+                     Current_Node := Current_Item_Node (Declaration);
+
+                     if (Kind_Of (Current_Node) = N_Attribute_Declaration
+                           and then
+                            (Tree.Name_Of (Current_Node) = Name_Source_Files
+                               or else Tree.Name_Of (Current_Node) =
+                                                 Name_Source_List_File
+                               or else Tree.Name_Of (Current_Node) =
+                                                 Name_Source_Dirs))
+                       or else
+                       (Kind_Of (Current_Node) = N_Package_Declaration
+                          and then Tree.Name_Of (Current_Node) = Name_Naming)
+                     then
+                        if Previous = Empty_Node then
+                           Set_First_Declarative_Item_Of
+                             (Project_Declaration_Of (Project_Node),
+                              To => Next_Declarative_Item (Declaration));
+
+                        else
+                           Set_Next_Declarative_Item
+                             (Previous,
+                              To => Next_Declarative_Item (Declaration));
+                        end if;
+
+                     else
+                        Previous := Declaration;
+                     end if;
+
+                     Declaration := Next_Declarative_Item (Declaration);
+                  end loop;
+               end;
+            end if;
+         end if;
 
          if Directory_Last /= 0 then
             Output_Name (1 .. Output_Name_Last - Directory_Last) :=
@@ -831,104 +964,6 @@ package body Prj.Makr is
             Output.Write_Str
               (Project_Naming_File_Name (1 .. Project_Naming_Last));
             Output.Write_Line ("""");
-         end if;
-
-         --  If there is already a project file with the specified name,
-         --  parse it to get the components that are not automatically
-         --  generated.
-
-         if Is_Regular_File (Output_Name (1 .. Output_Name_Last)) then
-            if Opt.Verbose_Mode then
-               Output.Write_Str ("Parsing already existing project file """);
-               Output.Write_Str (Output_Name (1 .. Output_Name_Last));
-               Output.Write_Line ("""");
-            end if;
-
-            Part.Parse
-              (Project                => Project_Node,
-               Project_File_Name      => Output_Name (1 .. Output_Name_Last),
-               Always_Errout_Finalize => False);
-
-            --  If parsing was successful, remove the components that are
-            --  automatically generated, if any, so that they will be
-            --  unconditionally added later.
-
-            if Project_Node /= Empty_Node then
-
-               --  Remove the with clause for the naming project file
-
-               declare
-                  With_Clause : Project_Node_Id :=
-                                  First_With_Clause_Of (Project_Node);
-                  Previous    : Project_Node_Id := Empty_Node;
-
-               begin
-                  while With_Clause /= Empty_Node loop
-                     if Tree.Name_Of (With_Clause) = Project_Naming_Id then
-                        if Previous = Empty_Node then
-                           Set_First_With_Clause_Of
-                             (Project_Node,
-                              To => Next_With_Clause_Of (With_Clause));
-                        else
-                           Set_Next_With_Clause_Of
-                             (Previous,
-                              To => Next_With_Clause_Of (With_Clause));
-                        end if;
-
-                        exit;
-                     end if;
-
-                     Previous := With_Clause;
-                     With_Clause := Next_With_Clause_Of (With_Clause);
-                  end loop;
-               end;
-
-               --  Remove attribute declarations of Source_Files,
-               --  Source_List_File, Source_Dirs, and the declaration of
-               --  package Naming, if they exist.
-
-               declare
-                  Declaration  : Project_Node_Id :=
-                                   First_Declarative_Item_Of
-                                     (Project_Declaration_Of
-                                       (Project_Node));
-                  Previous     : Project_Node_Id := Empty_Node;
-                  Current_Node : Project_Node_Id := Empty_Node;
-
-               begin
-                  while Declaration /= Empty_Node loop
-                     Current_Node := Current_Item_Node (Declaration);
-
-                     if (Kind_Of (Current_Node) = N_Attribute_Declaration
-                           and then
-                           (Tree.Name_Of (Current_Node) = Name_Source_Files
-                             or else Tree.Name_Of (Current_Node) =
-                                               Name_Source_List_File
-                              or else Tree.Name_Of (Current_Node) =
-                              Name_Source_Dirs))
-                       or else
-                       (Kind_Of (Current_Node) = N_Package_Declaration
-                          and then Tree.Name_Of (Current_Node) = Name_Naming)
-                     then
-                        if Previous = Empty_Node then
-                           Set_First_Declarative_Item_Of
-                             (Project_Declaration_Of (Project_Node),
-                              To => Next_Declarative_Item (Declaration));
-
-                        else
-                           Set_Next_Declarative_Item
-                             (Previous,
-                              To => Next_Declarative_Item (Declaration));
-                        end if;
-
-                     else
-                        Previous := Declaration;
-                     end if;
-
-                     Declaration := Next_Declarative_Item (Declaration);
-                  end loop;
-               end;
-            end if;
          end if;
 
          --  If there were no already existing project file, or if the parsing

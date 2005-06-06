@@ -1,5 +1,5 @@
 /* Hash tables.
-   Copyright (C) 2000, 2001, 2003 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2003, 2004 Free Software Foundation, Inc.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -46,8 +46,11 @@ struct ht
   struct obstack stack;
 
   hashnode *entries;
-  /* Call back.  */
+  /* Call back, allocate a node.  */
   hashnode (*alloc_node) (hash_table *);
+  /* Call back, allocate something that hangs off a node like a cpp_macro.  
+     NULL means use the usual allocator.  */
+  void * (*alloc_subobject) (size_t);
 
   unsigned int nslots;		/* Total slots in the entries array.  */
   unsigned int nelements;	/* Number of live elements.  */
@@ -58,6 +61,9 @@ struct ht
   /* Table usage statistics.  */
   unsigned int searches;
   unsigned int collisions;
+
+  /* Should 'entries' be freed when it is no longer needed?  */
+  bool entries_owned;
 };
 
 /* Initialize the hashtable with 2 ^ order entries.  */
@@ -68,12 +74,21 @@ extern void ht_destroy (hash_table *);
 
 extern hashnode ht_lookup (hash_table *, const unsigned char *,
 			   size_t, enum ht_lookup_option);
+extern hashnode ht_lookup_with_hash (hash_table *, const unsigned char *,
+                                     size_t, unsigned int,
+                                     enum ht_lookup_option);
+#define HT_HASHSTEP(r, c) ((r) * 67 + ((c) - 113));
+#define HT_HASHFINISH(r, len) ((r) + (len))
 
 /* For all nodes in TABLE, make a callback.  The callback takes
    TABLE->PFILE, the node, and a PTR, and the callback sequence stops
    if the callback returns zero.  */
 typedef int (*ht_cb) (struct cpp_reader *, hashnode, const void *);
 extern void ht_forall (hash_table *, ht_cb, const void *);
+
+/* Restore the hash table.  */
+extern void ht_load (hash_table *ht, hashnode *entries,
+		     unsigned int nslots, unsigned int nelements, bool own);
 
 /* Dump allocation statistics to stderr.  */
 extern void ht_dump_statistics (hash_table *);

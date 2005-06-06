@@ -102,9 +102,9 @@ public abstract class MessageDigest extends MessageDigestSpi
   /**
    * Creates a message digest with the specified algorithm name.
    *
-   * @param algorithm the standard name of the digest algorithm. 
-   * See Appendix A in the Java Cryptography Architecture API 
-   * Specification &amp; Reference for information about standard 
+   * @param algorithm the standard name of the digest algorithm.
+   * See Appendix A in the Java Cryptography Architecture API
+   * Specification &amp; Reference for information about standard
    * algorithm names.
    */
   protected MessageDigest(String algorithm)
@@ -134,11 +134,14 @@ public abstract class MessageDigest extends MessageDigestSpi
     Provider[] p = Security.getProviders();
     for (int i = 0; i < p.length; i++)
       {
-	try
+        try
+          {
+            return getInstance(algorithm, p[i]);
+          }
+        catch (NoSuchAlgorithmException ignored)
 	  {
-	    return getInstance(algorithm, p[i]);
+	    // Ignore.
 	  }
-	catch (NoSuchAlgorithmException ignored) {}
       }
 
     throw new NoSuchAlgorithmException(algorithm);
@@ -206,17 +209,17 @@ public abstract class MessageDigest extends MessageDigestSpi
       }
     catch (java.lang.reflect.InvocationTargetException ite)
       {
-	throw new NoSuchAlgorithmException(algorithm);
+        throw new NoSuchAlgorithmException(algorithm);
       }
-     
+
     if (o instanceof MessageDigestSpi)
       {
-	result = new DummyMessageDigest((MessageDigestSpi) o, algorithm);
+        result = new DummyMessageDigest((MessageDigestSpi) o, algorithm);
       }
     else if (o instanceof MessageDigest)
       {
-	result = (MessageDigest) o;
-	result.algorithm = algorithm;
+        result = (MessageDigest) o;
+        result.algorithm = algorithm;
       }
     else
       {
@@ -335,7 +338,7 @@ public abstract class MessageDigest extends MessageDigestSpi
 
     for (int i = digesta.length - 1; i >= 0; --i)
       if (digesta[i] != digestb[i])
-	return false;
+        return false;
 
     return true;
   }
@@ -383,10 +386,7 @@ public abstract class MessageDigest extends MessageDigestSpi
    */
   public Object clone() throws CloneNotSupportedException
   {
-    if (this instanceof Cloneable)
-      return super.clone();
-    else
-      throw new CloneNotSupportedException();
+    return super.clone();
   }
 
   private String digestToString()
@@ -400,12 +400,12 @@ public abstract class MessageDigest extends MessageDigestSpi
     int len = digest.length;
     for (int i = 0; i < len; ++i)
       {
-	byte b = digest[i];
-	byte high = (byte) ((b & 0xff) >>> 4);
-	byte low = (byte) (b & 0xf);
+        byte b = digest[i];
+        byte high = (byte) ((b & 0xff) >>> 4);
+        byte low = (byte) (b & 0xf);
 
-	buf.append(high > 9 ? ('a' - 10) + high : '0' + high);
-	buf.append(low > 9 ? ('a' - 10) + low : '0' + low);
+        buf.append(high > 9 ? ('a' - 10) + high : '0' + high);
+        buf.append(low > 9 ? ('a' - 10) + low : '0' + low);
       }
 
     return buf.toString();

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1998-2004, Free Software Foundation, Inc.         --
+--          Copyright (C) 1998-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -32,7 +32,10 @@ with Lib.Util; use Lib.Util;
 with Namet;    use Namet;
 with Nlists;   use Nlists;
 with Opt;      use Opt;
+with Restrict; use Restrict;
+with Rident;   use Rident;
 with Sem_Prag; use Sem_Prag;
+with Sem_Util; use Sem_Util;
 with Sinfo;    use Sinfo;
 with Sinput;   use Sinput;
 with Snames;   use Snames;
@@ -198,8 +201,77 @@ package body Lib.Xref is
       Def  : Source_Ptr;
       Ent  : Entity_Id;
 
+      function Is_On_LHS (Node : Node_Id) return Boolean;
+      --  Used to check if a node is on the left hand side of an
+      --  assignment. The following cases are handled:
+      --
+      --   Variable  Node is a direct descendant of an assignment
+      --             statement.
+      --
+      --   Prefix    Of an indexed or selected component that is
+      --             present in a subtree rooted by an assignment
+      --             statement. There is no restriction of nesting
+      --             of components, thus cases such as A.B(C).D are
+      --             handled properly.
+
+      ---------------
+      -- Is_On_LHS --
+      ---------------
+
+      --  Couldn't we use Is_Lvalue or whatever it is called ???
+
+      function Is_On_LHS (Node : Node_Id) return Boolean is
+         N : Node_Id := Node;
+
+      begin
+         --  Only identifiers are considered, is this necessary???
+
+         if Nkind (N) /= N_Identifier then
+            return False;
+         end if;
+
+         --  Reach the assignment statement subtree root. In the
+         --  case of a variable being a direct descendant of an
+         --  assignment statement, the loop is skiped.
+
+         while Nkind (Parent (N)) /= N_Assignment_Statement loop
+
+            --  Check whether the parent is a component and the
+            --  current node is its prefix.
+
+            if (Nkind (Parent (N)) = N_Selected_Component
+                  or else
+                Nkind (Parent (N)) = N_Indexed_Component)
+              and then Prefix (Parent (N)) = N
+            then
+               N := Parent (N);
+            else
+               return False;
+            end if;
+         end loop;
+
+         --  Parent (N) is an assignment statement, check whether
+         --  N is its name.
+
+         return Name (Parent (N)) = N;
+      end Is_On_LHS;
+
+   --  Start of processing for Generate_Reference
+
    begin
       pragma Assert (Nkind (E) in N_Entity);
+
+      --  Check for obsolescent reference to ASCII
+
+      if E = Standard_ASCII then
+         Check_Restriction (No_Obsolescent_Features, N);
+      end if;
+
+      --  Warn if reference to Ada 2005 entity not in Ada 2005 mode
+
+      if Is_Ada_2005 (E) and then Ada_Version < Ada_05 then
+         Error_Msg_NE ("& is only defined in Ada 2005?", N, E);
+      end if;
 
       --  Never collect references if not in main source unit. However,
       --  we omit this test if Typ is 'e' or 'k', since these entries are
@@ -243,11 +315,11 @@ package body Lib.Xref is
          --  For a variable that appears on the left side of an
          --  assignment statement, we set the Referenced_As_LHS
          --  flag since this is indeed a left hand side.
+         --  We also set the Referenced_As_LHS flag of a prefix
+         --  of selected or indexed component.
 
          if Ekind (E) = E_Variable
-           and then Nkind (Parent (N)) = N_Assignment_Statement
-           and then Name (Parent (N)) = N
-           and then No (Renamed_Object (E))
+           and then Is_On_LHS (N)
          then
             Set_Referenced_As_LHS (E);
 
@@ -269,6 +341,27 @@ package body Lib.Xref is
          then
             null;
 
+         --  Constant completion does not count as a reference
+
+         elsif Typ = 'c'
+           and then Ekind (E) = E_Constant
+         then
+            null;
+
+         --  Record representation clause does not count as a reference
+
+         elsif Nkind (N) = N_Identifier
+           and then Nkind (Parent (N)) = N_Record_Representation_Clause
+         then
+            null;
+
+         --  Discriminants do not need to produce a reference to record type
+
+         elsif Typ = 'd'
+           and then Nkind (Parent (N)) = N_Discriminant_Specification
+         then
+            null;
+
          --  Any other occurrence counts as referencing the entity
 
          else
@@ -279,7 +372,7 @@ package body Lib.Xref is
          --  this source unit (occasion for possible warning to be issued)
 
          if Has_Pragma_Unreferenced (E)
-           and then In_Same_Extended_Unit (Sloc (E), Sloc (N))
+           and then In_Same_Extended_Unit (E, N)
          then
             --  A reference as a named parameter in a call does not count
             --  as a violation of pragma Unreferenced for this purpose.
@@ -298,6 +391,30 @@ package body Lib.Xref is
               and then Name (Parent (N)) = N
             then
                null;
+
+            --  For entry formals, we want to place the warning on the
+            --  corresponding entity in the accept statement. The current
+            --  scope is the body of the accept, so we find the formal
+            --  whose name matches that of the entry formal (there is no
+            --  link between the two entities, and the one in the accept
+            --  statement is only used for conformance checking).
+
+            elsif Ekind (Scope (E)) = E_Entry then
+               declare
+                  BE : Entity_Id;
+
+               begin
+                  BE := First_Entity (Current_Scope);
+                  while Present (BE) loop
+                     if Chars (BE) = Chars (E) then
+                        Error_Msg_NE
+                          ("?pragma Unreferenced given for&", N, BE);
+                        exit;
+                     end if;
+
+                     Next_Entity (BE);
+                  end loop;
+               end;
 
             --  Here we issue the warning, since this is a real reference
 

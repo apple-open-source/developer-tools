@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2004, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -60,15 +60,21 @@ package Opt is
    --  GNATBIND, GNATLINK
    --  Set True if binder file to be generated in Ada rather than C
 
-   Ada_95 : Boolean := True;
-   --  GNAT
-   --  Set True if operating in Ada 95 mode
-   --  Set False if operating in Ada 83 mode
+   type Ada_Version_Type is (Ada_83, Ada_95, Ada_05);
+   --  Versions of Ada for Ada_Version below. Note that these are ordered,
+   --  so that tests like Ada_Version >= Ada_95 are legitimate and useful.
 
-   Ada_83 : Boolean := False;
+   Ada_Version_Default : Ada_Version_Type := Ada_95;
    --  GNAT
-   --  Set True if operating in Ada 83 mode
-   --  Set False if operating in Ada 95 mode
+   --  Default Ada version if no switch given
+
+   Ada_Version : Ada_Version_Type := Ada_Version_Default;
+   --  GNAT
+   --  Current Ada version for compiler
+
+   Ada_Version_Runtime : Ada_Version_Type := Ada_05;
+   --  GNAT
+   --  Ada version used to compile the runtime
 
    Ada_Final_Suffix : constant String := "final";
    Ada_Final_Name : String_Ptr := new String'("ada" & Ada_Final_Suffix);
@@ -247,23 +253,28 @@ package Opt is
 
    Create_Mapping_File : Boolean := False;
    --  GNATMAKE
-   --  Set to True (-C switch) to indicate that gnatmake
-   --  invokes the compiler with a mapping file (-gnatem compiler switch).
+   --  Set to True (-C switch) to indicate that gnatmake will invoke
+   --  the compiler with a mapping file (-gnatem compiler switch).
 
    subtype Debug_Level_Value is Nat range 0 .. 3;
    Debugger_Level : Debug_Level_Value := 0;
    --  GNATBIND
-   --  The value given to the -g parameter.
-   --  The default value for -g with no value is 2
-   --  This is usually ignored by GNATBIND, except in the VMS version
-   --  where it is passed as an argument to __gnat_initialize to trigger
-   --  the activation of the remote debugging interface (is this true???).
+   --  The value given to the -g parameter. The default value for -g with
+   --  no value is 2. This is usually ignored by GNATBIND, except in the
+   --  VMS version where it is passed as an argument to __gnat_initialize
+   --  to trigger the activation of the remote debugging interface.
+   --  Is this still true ???
 
    Debug_Generated_Code : Boolean := False;
    --  GNAT
    --  Set True (-gnatD switch) to debug generated expanded code instead
    --  of the original source code. Causes debugging information to be
    --  written with respect to the generated code file that is written.
+
+   Default_Exit_Status : Int := 0;
+   --  GNATBIND
+   --  Set the default exit status value. Set by the -Xnnn switch for the
+   --  binder.
 
    Default_Sec_Stack_Size : Int := -1;
    --  GNATBIND
@@ -272,11 +283,15 @@ package Opt is
    --  default was set by the binder, and that the default should be the
    --  initial value of System.Secondary_Stack.Default_Secondary_Stack_Size.
 
+   Detect_Blocking : Boolean := False;
+   --  GNAT
+   --  Set True to force the run time to raise Program_Error if calls to
+   --  potentially blocking operations are detected from protected actions.
+
    Display_Compilation_Progress : Boolean := False;
    --  GNATMAKE
    --  Set True (-d switch) to display information on progress while compiling
-   --  files. Internal flag to be used in conjunction with an IDE such as
-   --  Glide.
+   --  files. Internal flag to be used in conjunction with an IDE (e.g GPS).
 
    type Distribution_Stub_Mode_Type is
    --  GNAT
@@ -369,7 +384,7 @@ package Opt is
    Extensions_Allowed : Boolean := False;
    --  GNAT
    --  Set to True by switch -gnatX if GNAT specific language extensions
-   --  are allowed. For example, "with type" is a GNAT extension.
+   --  are allowed. For example, "limited with" is a GNAT extension.
 
    type External_Casing_Type is (
      As_Is,       -- External names cased as they appear in the Ada source
@@ -455,8 +470,6 @@ package Opt is
    GCC_Version : constant Nat := get_gcc_version;
    --  GNATMAKE
    --  Indicates which version of gcc is in use (2 = 2.8.1, 3 = 3.x).
-   --  Used in particular to decide if gcc switch -shared-libgcc should be
-   --  used (it cannot be used for 2.8.1).
 
    Global_Discard_Names : Boolean := False;
    --  GNAT, GNATBIND
@@ -488,7 +501,7 @@ package Opt is
    --    'p'  PC (US, IBM page 437)
    --    '8'  PC (European, IBM page 850)
    --    'f'  Full upper set (all distinct)
-   --    'n'  No upper characters (Ada/83 rules)
+   --    'n'  No upper characters (Ada 83 rules)
    --    'w'  Latin-1 plus wide characters allowed in identifiers
    --
    --  The setting affects the set of letters allowed in identifiers and the
@@ -555,6 +568,11 @@ package Opt is
    --  GNATMAKE
    --  When True signals gnatmake to ignore compilation errors and keep
    --  processing sources until there is no more work.
+
+   Keep_Temporary_Files : Boolean := False;
+   --  GNATCMD
+   --  When True the temporary files created by the GNAT driver are not
+   --  deleted. Set by switch -dn or qualifier /KEEP_TEMPORARY_FILES.
 
    Link_Only : Boolean := False;
    --  GNATMAKE
@@ -828,6 +846,11 @@ package Opt is
    --  Set True if generated code uses the System.Secondary_Stack package.
    --  For the binder, set if any unit uses the secondary stack package.
 
+   Setup_Projects : Boolean := False;
+   --  GNAT DRIVER
+   --  Set to True for GNAT SETUP: the Project Manager creates non existing
+   --  object, library and exec directories.
+
    Shared_Libgnat : Boolean;
    --  GNATBIND
    --  Set to True if a shared libgnat is requested by using the -shared
@@ -1090,15 +1113,15 @@ package Opt is
    --  command line switches, or by the use of appropriate configuration
    --  pragmas in the gnat.adc file.
 
-   Ada_83_Config : Boolean;
+   Ada_Version_Config : Ada_Version_Type;
    --  GNAT
-   --  This is the value of the configuration switch for Ada 83 mode, as set
-   --  by the command line switch -gnat83, and possibly modified by the use
-   --  of configuration pragmas Ada_95 and Ada_83 in the gnat.adc file. This
-   --  switch is used to set the initial value for Ada_83 mode at the start
+   --  This is the value of the configuration switch for the Ada 83 mode, as
+   --  set by the command line switches -gnat83/95/05, and possibly modified
+   --  by the use of configuration pragmas Ada_83/Ada95/Ada05. This switch
+   --  is used to set the initial value for Ada_Version mode at the start
    --  of analysis of a unit. Note however, that the setting of this flag
    --  is ignored for internal and predefined units (which are always compiled
-   --  in Ada 95 mode).
+   --  in the most up to date version of Ada).
 
    Dynamic_Elaboration_Checks_Config : Boolean := False;
    --  GNAT
@@ -1230,7 +1253,7 @@ package Opt is
 private
 
    type Config_Switches_Type is record
-      Ada_83                         : Boolean;
+      Ada_Version                    : Ada_Version_Type;
       Dynamic_Elaboration_Checks     : Boolean;
       Exception_Locations_Suppressed : Boolean;
       Extensions_Allowed             : Boolean;

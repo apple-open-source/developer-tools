@@ -27,6 +27,8 @@ AC_HEADER_STDC
 AC_STRUCT_TM
 AC_CHECK_HEADERS(fcntl.h unistd.h sys/param.h stdlib.h limits.h)
 
+AC_CHECK_FUNCS(ftruncate _chsize)
+
 dnl Checks for typedefs, structures, and compiler characteristics.
 AC_TYPE_OFF_T
 AC_STRUCT_TM
@@ -39,7 +41,7 @@ AC_COMPILE_CHECK_SIZEOF(char)
 AC_COMPILE_CHECK_SIZEOF(short)
 AC_COMPILE_CHECK_SIZEOF(int)
 AC_COMPILE_CHECK_SIZEOF(long)
-AC_COMPILE_CHECK_SIZEOF(long long)
+AC_CHECK_TYPES([long long],[AC_COMPILE_CHECK_SIZEOF(long long)])
 
 dnl Check byte order
 AC_C_BIGENDIAN_CROSS
@@ -87,16 +89,6 @@ AC_MSG_CHECKING([whether to place generated files in the source directory])
 AC_MSG_RESULT($generated_files_in_srcdir)
 AM_CONDITIONAL(GENINSRC, test x$generated_files_in_srcdir = xyes)
 
-# Get the version trigger filename from the toplevel
-if test "${with_gcc_version_trigger+set}" = set; then
-   gcc_version_trigger=$with_gcc_version_trigger
-else
-   gcc_version_trigger=${srcdir}/version.c
-fi
-changequote(,)dnl
-gcc_version_full=`grep version_string ${gcc_version_trigger} | sed -e 's/.*"\([^"]*\)".*/\1/'`
-gcc_version=`echo ${gcc_version_full} | sed -e 's/\([^ ]*\) .*/\1/'`
-changequote([,])dnl
-AC_SUBST(gcc_version)
+TL_AC_GCC_VERSION([$srcdir/..])
 
 AC_OUTPUT(Makefile install-defs.sh)

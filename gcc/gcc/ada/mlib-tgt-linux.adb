@@ -94,6 +94,15 @@ package body MLib.Tgt is
       return "ranlib";
    end Archive_Indexer;
 
+   -----------------------------
+   -- Archive_Indexer_Options --
+   -----------------------------
+
+   function Archive_Indexer_Options return String_List_Access is
+   begin
+      return new String_List (1 .. 0);
+   end Archive_Indexer_Options;
+
    ---------------------------
    -- Build_Dynamic_Library --
    ---------------------------
@@ -103,26 +112,23 @@ package body MLib.Tgt is
       Foreign      : Argument_List;
       Afiles       : Argument_List;
       Options      : Argument_List;
+      Options_2    : Argument_List;
       Interfaces   : Argument_List;
       Lib_Filename : String;
       Lib_Dir      : String;
       Symbol_Data  : Symbol_Record;
       Driver_Name  : Name_Id := No_Name;
-      Lib_Address  : String  := "";
       Lib_Version  : String  := "";
-      Relocatable  : Boolean := False;
       Auto_Init    : Boolean := False)
    is
       pragma Unreferenced (Foreign);
       pragma Unreferenced (Afiles);
       pragma Unreferenced (Interfaces);
       pragma Unreferenced (Symbol_Data);
-      pragma Unreferenced (Lib_Address);
-      pragma Unreferenced (Relocatable);
 
       Lib_File : constant String :=
-        Lib_Dir & Directory_Separator & "lib" &
-        Fil.Ext_To (Lib_Filename, DLL_Ext);
+                   Lib_Dir & Directory_Separator & "lib" &
+                   Fil.Ext_To (Lib_Filename, DLL_Ext);
 
       Version_Arg          : String_Access;
       Symbolic_Link_Needed : Boolean := False;
@@ -136,6 +142,7 @@ package body MLib.Tgt is
       end if;
 
       --  If specified, add automatic elaboration/finalization
+
       if Auto_Init then
          Init_Fini := Init_Fini_List;
          Init_Fini (2) := new String'("-Wl," & Lib_Filename & "init");
@@ -147,7 +154,8 @@ package body MLib.Tgt is
            (Output_File => Lib_File,
             Objects     => Ofiles,
             Options     => Options & Init_Fini.all,
-            Driver_Name => Driver_Name);
+            Driver_Name => Driver_Name,
+            Options_2   => Options_2);
 
       else
          Version_Arg := new String'("-Wl,-soname," & Lib_Version);
@@ -157,7 +165,8 @@ package body MLib.Tgt is
               (Output_File => Lib_Version,
                Objects     => Ofiles,
                Options     => Options & Version_Arg & Init_Fini.all,
-               Driver_Name => Driver_Name);
+               Driver_Name => Driver_Name,
+               Options_2   => Options_2);
             Symbolic_Link_Needed := Lib_Version /= Lib_File;
 
          else
@@ -165,7 +174,8 @@ package body MLib.Tgt is
               (Output_File => Lib_Dir & Directory_Separator & Lib_Version,
                Objects     => Ofiles,
                Options     => Options & Version_Arg & Init_Fini.all,
-               Driver_Name => Driver_Name);
+               Driver_Name => Driver_Name,
+               Options_2   => Options_2);
             Symbolic_Link_Needed :=
               Lib_Dir & Directory_Separator & Lib_Version /= Lib_File;
          end if;
@@ -197,15 +207,6 @@ package body MLib.Tgt is
          end if;
       end if;
    end Build_Dynamic_Library;
-
-   -------------------------
-   -- Default_DLL_Address --
-   -------------------------
-
-   function Default_DLL_Address return String is
-   begin
-      return "";
-   end Default_DLL_Address;
 
    -------------
    -- DLL_Ext --

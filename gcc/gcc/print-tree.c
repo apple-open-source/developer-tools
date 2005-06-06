@@ -28,6 +28,8 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "real.h"
 #include "ggc.h"
 #include "langhooks.h"
+/* APPLE LOCAL mainline */
+#include "tree-iterator.h"
 
 /* Define the hash table of nodes already seen.
    Such nodes are not repeated; brief cross-references are used.  */
@@ -61,7 +63,7 @@ debug_tree (tree node)
 void
 print_node_brief (FILE *file, const char *prefix, tree node, int indent)
 {
-  char class;
+  enum tree_code_class class;
 
   if (node == 0)
     return;
@@ -75,12 +77,18 @@ print_node_brief (FILE *file, const char *prefix, tree node, int indent)
   fprintf (file, "%s <%s " HOST_PTR_PRINTF,
 	   prefix, tree_code_name[(int) TREE_CODE (node)], (char *) node);
 
-  if (class == 'd')
+  if (class == tcc_declaration)
     {
       if (DECL_NAME (node))
 	fprintf (file, " %s", IDENTIFIER_POINTER (DECL_NAME (node)));
+      else if (TREE_CODE (node) == LABEL_DECL
+	       && LABEL_DECL_UID (node) != -1)
+	fprintf (file, " L." HOST_WIDE_INT_PRINT_DEC, LABEL_DECL_UID (node));
+      else
+	fprintf (file, " %c.%u", TREE_CODE (node) == CONST_DECL ? 'C' : 'D',
+		 DECL_UID (node));
     }
-  else if (class == 't')
+  else if (class == tcc_type)
     {
       if (TYPE_NAME (node))
 	{
@@ -156,10 +164,10 @@ print_node (FILE *file, const char *prefix, tree node, int indent)
   int hash;
   struct bucket *b;
   enum machine_mode mode;
-  char class;
+  enum tree_code_class class;
   int len;
-  int first_rtl;
   int i;
+  expanded_location xloc;
 
   if (node == 0)
     return;
@@ -176,7 +184,7 @@ print_node (FILE *file, const char *prefix, tree node, int indent)
       return;
     }
 
-  if (indent > 8 && (class == 't' || class == 'd'))
+  if (indent > 8 && (class == tcc_type || class == tcc_declaration))
     {
       print_node_brief (file, prefix, node, indent);
       return;
@@ -213,12 +221,18 @@ print_node (FILE *file, const char *prefix, tree node, int indent)
 	   prefix, tree_code_name[(int) TREE_CODE (node)], (void *) node);
 
   /* Print the name, if any.  */
-  if (class == 'd')
+  if (class == tcc_declaration)
     {
       if (DECL_NAME (node))
 	fprintf (file, " %s", IDENTIFIER_POINTER (DECL_NAME (node)));
+      else if (TREE_CODE (node) == LABEL_DECL
+	       && LABEL_DECL_UID (node) != -1)
+	fprintf (file, " L." HOST_WIDE_INT_PRINT_DEC, LABEL_DECL_UID (node));
+      else
+	fprintf (file, " %c.%u", TREE_CODE (node) == CONST_DECL ? 'C' : 'D',
+		 DECL_UID (node));
     }
-  else if (class == 't')
+  else if (class == tcc_type)
     {
       if (TYPE_NAME (node))
 	{
@@ -252,6 +266,9 @@ print_node (FILE *file, const char *prefix, tree node, int indent)
     fputs (" readonly", file);
   if (!TYPE_P (node) && TREE_CONSTANT (node))
     fputs (" constant", file);
+  else if (TYPE_P (node) && TYPE_SIZES_GIMPLIFIED (node))
+    fputs (" sizes-gimplified", file);
+
   if (TREE_INVARIANT (node))
     fputs (" invariant", file);
   if (TREE_ADDRESSABLE (node))
@@ -274,10 +291,10 @@ print_node (FILE *file, const char *prefix, tree node, int indent)
     fputs (" static", file);
   if (TREE_DEPRECATED (node))
     fputs (" deprecated", file);
-  /* APPLE LOCAL begin unavailable (Radar 2809697) --ilr */
+  /* APPLE LOCAL begin "unavailable" attribute (Radar 2809697) */
   if (TREE_UNAVAILABLE (node))
     fputs (" unavailable", file);
-  /* APPLE LOCAL end unavailable --ilr */
+  /* APPLE LOCAL end "unavailable" attribute (Radar 2809697) */
   if (TREE_VISITED (node))
     fputs (" visited", file);
   if (TREE_LANG_FLAG_0 (node))
@@ -299,7 +316,7 @@ print_node (FILE *file, const char *prefix, tree node, int indent)
 
   switch (TREE_CODE_CLASS (TREE_CODE (node)))
     {
-    case 'd':
+    case tcc_declaration:
       mode = DECL_MODE (node);
 
       if (DECL_UNSIGNED (node))
@@ -340,8 +357,6 @@ print_node (FILE *file, const char *prefix, tree node, int indent)
       if (TREE_CODE (node) == FIELD_DECL && DECL_NONADDRESSABLE_P (node))
 	fputs (" nonaddressable", file);
 
-      if (TREE_CODE (node) == LABEL_DECL && DECL_TOO_LATE (node))
-	fputs (" too-late", file);
       if (TREE_CODE (node) == LABEL_DECL && DECL_ERROR_ISSUED (node))
 	fputs (" error-issued", file);
 
@@ -357,6 +372,9 @@ print_node (FILE *file, const char *prefix, tree node, int indent)
 	fputs (" virtual", file);
       if (DECL_DEFER_OUTPUT (node))
 	fputs (" defer-output", file);
+
+      if (DECL_PRESERVE_P (node))
+	fputs (" preserve", file);
 
       if (DECL_LANG_FLAG_0 (node))
 	fputs (" decl_0", file);
@@ -376,8 +394,8 @@ print_node (FILE *file, const char *prefix, tree node, int indent)
 	fputs (" decl_7", file);
 
       fprintf (file, " %s", GET_MODE_NAME (mode));
-      fprintf (file, " file %s line %d",
-	       DECL_SOURCE_FILE (node), DECL_SOURCE_LINE (node));
+      xloc = expand_location (DECL_SOURCE_LOCATION (node));
+      fprintf (file, " file %s line %d", xloc.file, xloc.line);
 
       print_node (file, "size", DECL_SIZE (node), indent + 4);
       print_node (file, "unit size", DECL_SIZE_UNIT (node), indent + 4);
@@ -463,7 +481,7 @@ print_node (FILE *file, const char *prefix, tree node, int indent)
 	print_node_brief (file, "chain", TREE_CHAIN (node), indent + 4);
       break;
 
-    case 't':
+    case tcc_type:
       if (TYPE_UNSIGNED (node))
 	fputs (" unsigned", file);
 
@@ -540,8 +558,10 @@ print_node (FILE *file, const char *prefix, tree node, int indent)
 
       if (TREE_CODE (node) == ENUMERAL_TYPE)
 	print_node (file, "values", TYPE_VALUES (node), indent + 4);
-      else if (TREE_CODE (node) == ARRAY_TYPE || TREE_CODE (node) == SET_TYPE)
+      else if (TREE_CODE (node) == ARRAY_TYPE)
 	print_node (file, "domain", TYPE_DOMAIN (node), indent + 4);
+      else if (TREE_CODE (node) == VECTOR_TYPE)
+	fprintf (file, " nunits %d", (int) TYPE_VECTOR_SUBPARTS (node));
       else if (TREE_CODE (node) == RECORD_TYPE
 	       || TREE_CODE (node) == UNION_TYPE
 	       || TREE_CODE (node) == QUAL_UNION_TYPE)
@@ -573,16 +593,14 @@ print_node (FILE *file, const char *prefix, tree node, int indent)
       print_node_brief (file, "chain", TREE_CHAIN (node), indent + 4);
       break;
 
-    case 'e':
-    case '<':
-    case '1':
-    case '2':
-    case 'r':
-    case 's':
+    case tcc_expression:
+    case tcc_comparison:
+    case tcc_unary:
+    case tcc_binary:
+    case tcc_reference:
+    case tcc_statement:
       if (TREE_CODE (node) == BIT_FIELD_REF && BIT_FIELD_REF_UNSIGNED (node))
 	fputs (" unsigned", file);
-      else if (TREE_CODE (node) == SAVE_EXPR && SAVE_EXPR_NOPLACEHOLDER (node))
-	fputs (" noplaceholder", file);
       if (TREE_CODE (node) == BIND_EXPR)
 	{
 	  print_node (file, "vars", TREE_OPERAND (node, 0), indent + 4);
@@ -593,36 +611,19 @@ print_node (FILE *file, const char *prefix, tree node, int indent)
 
       len = TREE_CODE_LENGTH (TREE_CODE (node));
 
-      /* Some nodes contain rtx's, not trees,
-	 after a certain point.  Print the rtx's as rtx's.  */
-      first_rtl = first_rtl_op (TREE_CODE (node));
-
       for (i = 0; i < len; i++)
 	{
-	  if (i >= first_rtl)
-	    {
-	      indent_to (file, indent + 4);
-	      fprintf (file, "rtl %d ", i);
-	      if (TREE_OPERAND (node, i))
-		print_rtl (file, (rtx) TREE_OPERAND (node, i));
-	      else
-		fprintf (file, "(nil)");
-	      fprintf (file, "\n");
-	    }
-	  else
-	    {
-	      char temp[10];
+	  char temp[10];
 
-	      sprintf (temp, "arg %d", i);
-	      print_node (file, temp, TREE_OPERAND (node, i), indent + 4);
-	    }
+	  sprintf (temp, "arg %d", i);
+	  print_node (file, temp, TREE_OPERAND (node, i), indent + 4);
 	}
 
       print_node (file, "chain", TREE_CHAIN (node), indent + 4);
       break;
 
-    case 'c':
-    case 'x':
+    case tcc_constant:
+    case tcc_exceptional:
       switch (TREE_CODE (node))
 	{
 	case INTEGER_CST:
@@ -728,6 +729,30 @@ print_node (FILE *file, const char *prefix, tree node, int indent)
 	      }
 	  break;
 
+	/* APPLE LOCAL begin mainline */
+    	case STATEMENT_LIST:
+	  fprintf (file, " head " HOST_PTR_PRINTF " tail " HOST_PTR_PRINTF " stmts",
+		   (void *) node->stmt_list.head, (void *) node->stmt_list.tail);
+	  {
+	    tree_stmt_iterator i;
+	    for (i = tsi_start (node); !tsi_end_p (i); tsi_next (&i))
+	      {
+		/* Not printing the addresses of the (not-a-tree)
+		   'struct tree_stmt_list_node's.  */
+		fprintf (file, " " HOST_PTR_PRINTF, (void *)tsi_stmt (i));
+	      }
+	    fprintf (file, "\n");
+	    for (i = tsi_start (node); !tsi_end_p (i); tsi_next (&i))
+	      {
+		/* Not printing the addresses of the (not-a-tree)
+		   'struct tree_stmt_list_node's.  */
+		print_node (file, "stmt", tsi_stmt (i), indent + 4);
+	      }
+	  }
+	  print_node (file, "chain", TREE_CHAIN (node), indent + 4);
+	  break;
+	/* APPLE LOCAL end mainline */
+
 	case BLOCK:
 	  print_node (file, "vars", BLOCK_VARS (node), indent + 4);
 	  print_node (file, "supercontext", BLOCK_SUPERCONTEXT (node),
@@ -738,8 +763,36 @@ print_node (FILE *file, const char *prefix, tree node, int indent)
 		      BLOCK_ABSTRACT_ORIGIN (node), indent + 4);
 	  break;
 
+	case SSA_NAME:
+	  print_node_brief (file, "var", SSA_NAME_VAR (node), indent + 4);
+	  print_node_brief (file, "def_stmt",
+			    SSA_NAME_DEF_STMT (node), indent + 4);
+
+	  indent_to (file, indent + 4);
+	  fprintf (file, "version %u", SSA_NAME_VERSION (node));
+	  if (SSA_NAME_OCCURS_IN_ABNORMAL_PHI (node))
+	    fprintf (file, " in-abnormal-phi");
+	  if (SSA_NAME_IN_FREE_LIST (node))
+	    fprintf (file, " in-free-list");
+
+	  if (SSA_NAME_PTR_INFO (node)
+	      || SSA_NAME_VALUE (node)
+	      || SSA_NAME_AUX (node))
+	    {
+	      indent_to (file, indent + 3);
+	      if (SSA_NAME_PTR_INFO (node))
+		fprintf (file, " ptr-info %p",
+			 (void *) SSA_NAME_PTR_INFO (node));
+	      if (SSA_NAME_VALUE (node))
+		fprintf (file, " value %p",
+			 (void *) SSA_NAME_VALUE (node));
+	      if (SSA_NAME_AUX (node))
+		fprintf (file, " aux %p", SSA_NAME_AUX (node));
+	    }
+	  break;
+
 	default:
-	  if (TREE_CODE_CLASS (TREE_CODE (node)) == 'x')
+	  if (EXCEPTIONAL_CLASS_P (node))
 	    lang_hooks.print_xnode (file, node, indent);
 	  break;
 	}
@@ -749,10 +802,9 @@ print_node (FILE *file, const char *prefix, tree node, int indent)
 
   if (EXPR_HAS_LOCATION (node))
     {
+      expanded_location xloc = expand_location (EXPR_LOCATION (node));
       indent_to (file, indent+4);
-      fprintf (file, "%s:%d",
-	       EXPR_FILENAME (node),
-	       EXPR_LINENO (node));
+      fprintf (file, "%s:%d", xloc.file, xloc.line);
     }
 
   fprintf (file, ">");

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2004 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005 Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -43,7 +43,6 @@ with Namet;    use Namet;
 with Opt;      use Opt;
 with Osint.M;  use Osint.M;
 with Osint;    use Osint;
-with Gnatvsn;
 with Output;   use Output;
 with Prj;      use Prj;
 with Prj.Com;
@@ -120,7 +119,7 @@ package body Make is
    --  reinitialized, the elements between Q.First and Q.Last - 1 are unmarked.
 
    procedure Init_Q;
-   --  Must be called to (re)initialize the Q.
+   --  Must be called to (re)initialize the Q
 
    procedure Insert_Q
      (Source_File : File_Name_Type;
@@ -130,13 +129,13 @@ package body Make is
    --  for external use (gnatdist). Provide index for multi-unit sources.
 
    function Empty_Q return Boolean;
-   --  Returns True if Q is empty.
+   --  Returns True if Q is empty
 
    procedure Extract_From_Q
      (Source_File  : out File_Name_Type;
       Source_Unit  : out Unit_Name_Type;
       Source_Index : out Int);
-   --  Extracts the first element from the Q.
+   --  Extracts the first element from the Q
 
    procedure Insert_Project_Sources
      (The_Project  : Project_Id;
@@ -151,10 +150,10 @@ package body Make is
    --  from projects being extended.
 
    First_Q_Initialization : Boolean := True;
-   --  Will be set to false after Init_Q has been called once.
+   --  Will be set to false after Init_Q has been called once
 
    Q_Front : Natural;
-   --  Points to the first valid element in the Q.
+   --  Points to the first valid element in the Q
 
    Unique_Compile : Boolean := False;
    --  Set to True if -u or -U or a project file with no main is used
@@ -182,7 +181,7 @@ package body Make is
      Table_Initial        => 4000,
      Table_Increment      => 100,
      Table_Name           => "Make.Q");
-   --  This is the actual Q.
+   --  This is the actual Q
 
    --  The following instantiations and variables are necessary to save what
    --  is found on the command line, in case there is a project file specified.
@@ -284,7 +283,7 @@ package body Make is
    --  Avoid calling Change_Dir if the current working directory is already
    --  this directory
 
-   --  Packages of project files where unknown attributes are errors.
+   --  Packages of project files where unknown attributes are errors
 
    Naming_String   : aliased String := "naming";
    Builder_String  : aliased String := "builder";
@@ -338,7 +337,7 @@ package body Make is
      Table_Initial        => 20,
      Table_Increment      => 100,
      Table_Name           => "Make.Bad_Compilation");
-   --  Full name of all the source files for which compilation fails.
+   --  Full name of all the source files for which compilation fails
 
    Do_Compile_Step : Boolean := True;
    Do_Bind_Step    : Boolean := True;
@@ -356,9 +355,6 @@ package body Make is
    --  Switch to added in front of gnatbind switches. By default no switch is
    --  added. Switch "-shared" is added if there is a non-static Library
    --  Project File.
-
-   Bind_Shared_Known : Boolean := False;
-   --  Set to True after the first time Bind_Shared is computed
 
    Shared_Libgcc : aliased String := "-shared-libgcc";
 
@@ -414,7 +410,7 @@ package body Make is
       This       : Name_Id;
       Depends_On : Name_Id;
    end record;
-   --  Components of table Dependencies below.
+   --  Components of table Dependencies below
 
    package Dependencies is new Table.Table (
      Table_Component_Type => Dependency,
@@ -476,10 +472,10 @@ package body Make is
    --  between the call to Compile_Sources and List_Depend.)
 
    procedure Inform (N : Name_Id := No_Name; Msg : String);
-   --  Prints out the program name followed by a colon, N and S.
+   --  Prints out the program name followed by a colon, N and S
 
    procedure List_Bad_Compilations;
-   --  Prints out the list of all files for which the compilation failed.
+   --  Prints out the list of all files for which the compilation failed
 
    procedure Verbose_Msg
      (N1     : Name_Id;
@@ -488,9 +484,8 @@ package body Make is
       S2     : String  := "";
       Prefix : String  := "  -> ");
    --  If the verbose flag (Verbose_Mode) is set then print Prefix to standard
-   --  output followed by N1 and S1. If N2 /= No_Name then N2 is then printed
-   --  after S1. S2 is printed last. Both N1 and N2 are printed in quotation
-   --  marks.
+   --  output followed by N1 and S1. If N2 /= No_Name then N2 is printed after
+   --  S1. S2 is printed last. Both N1 and N2 are printed in quotation marks.
 
    Usage_Needed : Boolean := True;
    --  Flag used to make sure Makeusg is call at most once
@@ -500,14 +495,10 @@ package body Make is
    --  Set Usage_Needed to False.
 
    procedure Debug_Msg (S : String; N : Name_Id);
-   --  If Debug.Debug_Flag_W is set outputs string S followed by name N.
-
-   type Project_Array is array (Positive range <>) of Project_Id;
-   No_Projects : constant Project_Array := (1 .. 0 => No_Project);
+   --  If Debug.Debug_Flag_W is set outputs string S followed by name N
 
    procedure Recursive_Compute_Depth
      (Project : Project_Id;
-      Visited : Project_Array;
       Depth   : Natural);
    --  Compute depth of Project and of the projects it depends on
 
@@ -594,7 +585,7 @@ package body Make is
    Saved_Gcc       : String_Access := null;
    Saved_Gnatbind  : String_Access := null;
    Saved_Gnatlink  : String_Access := null;
-   --  Given by the command line. Will be used, if non null.
+   --  Given by the command line. Will be used, if non null
 
    Gcc_Path        : String_Access :=
                        GNAT.OS_Lib.Locate_Exec_On_Path (Gcc.all);
@@ -620,7 +611,7 @@ package body Make is
    --  Set to True when compiling with -gnats
 
    Display_Executed_Programs : Boolean := True;
-   --  Set to True if name of commands should be output on stderr.
+   --  Set to True if name of commands should be output on stderr
 
    Output_File_Name_Seen : Boolean := False;
    --  Set to True after having scanned the file_name for
@@ -631,14 +622,14 @@ package body Make is
    --  switch "-D obj_dir".
 
    Object_Directory_Path : String_Access := null;
-   --  The path name of the object directory, set with switch -D.
+   --  The path name of the object directory, set with switch -D
 
    type Make_Program_Type is (None, Compiler, Binder, Linker);
 
    Program_Args : Make_Program_Type := None;
    --  Used to indicate if we are scanning gnatmake, gcc, gnatbind, or gnatbind
-   --  options within the gnatmake command line.
-   --  Used in Scan_Make_Arg only, but must be a global variable.
+   --  options within the gnatmake command line. Used in Scan_Make_Arg only,
+   --  but must be global since value preserved from one call to another.
 
    Temporary_Config_File : Boolean := False;
    --  Set to True when there is a temporary config file used for a project
@@ -1216,13 +1207,13 @@ package body Make is
       --  Full name of current library file
 
       Full_Obj_File : File_Name_Type;
-      --  Full name of the object file corresponding to Lib_File.
+      --  Full name of the object file corresponding to Lib_File
 
       Lib_Stamp : Time_Stamp_Type;
-      --  Time stamp of the current ada library file.
+      --  Time stamp of the current ada library file
 
       Obj_Stamp : Time_Stamp_Type;
-      --  Time stamp of the current object file.
+      --  Time stamp of the current object file
 
       Modified_Source : File_Name_Type;
       --  The first source in Lib_File whose current time stamp differs
@@ -1647,13 +1638,13 @@ package body Make is
       O_File  := No_File;
       O_Stamp := (others => ' ');
 
-      --  Process linker options from the ALI files.
+      --  Process linker options from the ALI files
 
       for Opt in 1 .. Linker_Options.Last loop
          Check_File (Linker_Options.Table (Opt).Name);
       end loop;
 
-      --  Process options given on the command line.
+      --  Process options given on the command line
 
       for Opt in Linker_Switches.First .. Linker_Switches.Last loop
 
@@ -1732,8 +1723,9 @@ package body Make is
 
             if Arguments_Project = No_Project then
                if not External_Unit_Compilation_Allowed then
-                  Make_Failed ("external source, not part of any projects, " &
-                               "cannot be compiled (", Source_File_Name, ")");
+                  Make_Failed ("external source (", Source_File_Name,
+                               ") is not part of any project; cannot be " &
+                               "compiled without gnatmake switch -x");
                end if;
 
                --  If it is allowed, simply add the saved gcc switches
@@ -1913,7 +1905,7 @@ package body Make is
       end record;
 
       Running_Compile : array (1 .. Max_Process) of Compilation_Data;
-      --  Used to save information about outstanding compilations.
+      --  Used to save information about outstanding compilations
 
       Outstanding_Compiles : Natural := 0;
       --  Current number of outstanding compiles
@@ -1934,16 +1926,18 @@ package body Make is
       --  Full name of the current library file
 
       Obj_File : File_Name_Type;
-      --  Full name of the object file corresponding to Lib_File.
+      --  Full name of the object file corresponding to Lib_File
 
       Obj_Stamp : Time_Stamp_Type;
-      --  Time stamp of the current object file.
+      --  Time stamp of the current object file
 
       Sfile : File_Name_Type;
       --  Contains the source file of the units withed by Source_File
 
       ALI : ALI_Id;
       --  ALI Id of the current ALI file
+
+      --  Comment following declarations ???
 
       Read_Only : Boolean := False;
 
@@ -1956,9 +1950,12 @@ package body Make is
       Mfile : Natural := No_Mapping_File;
 
       Need_To_Check_Standard_Library : Boolean :=
-        Check_Readonly_Files and not Unique_Compile;
+                                         Check_Readonly_Files
+                                           and not Unique_Compile;
 
       Mapping_File_Arg : String_Access;
+
+      Process_Created : Boolean := False;
 
       procedure Add_Process
         (Pid    : Process_Id;
@@ -1988,7 +1985,10 @@ package body Make is
       --  to wait for.
 
       function Bad_Compilation_Count return Natural;
-      --  Returns the number of compilation failures.
+      --  Returns the number of compilation failures
+
+      procedure Check_Standard_Library;
+      --  Check if s-stalib.adb needs to be compiled
 
       procedure Collect_Arguments_And_Compile
         (Source_File : File_Name_Type; Source_Index : Int);
@@ -2011,17 +2011,17 @@ package body Make is
         Table_Initial        => 50,
         Table_Increment      => 100,
         Table_Name           => "Make.Good_ALI");
-      --  Contains the set of valid ALI files that have not yet been scanned.
+      --  Contains the set of valid ALI files that have not yet been scanned
 
       function Good_ALI_Present return Boolean;
-      --  Returns True if any ALI file was recorded in the previous set.
+      --  Returns True if any ALI file was recorded in the previous set
 
       procedure Get_Mapping_File (Project : Project_Id);
       --  Get a mapping file name. If there is one to be reused, reuse it.
       --  Otherwise, create a new mapping file.
 
       function Get_Next_Good_ALI return ALI_Id;
-      --  Returns the next good ALI_Id record;
+      --  Returns the next good ALI_Id record
 
       procedure Record_Failure
         (File  : File_Name_Type;
@@ -2032,7 +2032,7 @@ package body Make is
       --  could not find it. Records also Unit when possible.
 
       procedure Record_Good_ALI (A : ALI_Id);
-      --  Records in the previous set the Id of an ALI file.
+      --  Records in the previous set the Id of an ALI file
 
       -----------------
       -- Add_Process --
@@ -2150,6 +2150,48 @@ package body Make is
          return Bad_Compilation.Last - Bad_Compilation.First + 1;
       end Bad_Compilation_Count;
 
+      ----------------------------
+      -- Check_Standard_Library --
+      ----------------------------
+
+      procedure Check_Standard_Library is
+      begin
+         Need_To_Check_Standard_Library := False;
+
+         if not Targparm.Suppress_Standard_Library_On_Target then
+            declare
+               Sfile  : Name_Id;
+               Add_It : Boolean := True;
+
+            begin
+               Name_Len := Standard_Library_Package_Body_Name'Length;
+               Name_Buffer (1 .. Name_Len) :=
+                 Standard_Library_Package_Body_Name;
+               Sfile := Name_Enter;
+
+               --  If we have a special runtime, we add the standard
+               --  library only if we can find it.
+
+               if RTS_Switch then
+                  Add_It :=
+                    Find_File (Sfile, Osint.Source) /= No_File;
+               end if;
+
+               if Add_It then
+                  if Is_Marked (Sfile) then
+                     if Is_In_Obsoleted (Sfile) then
+                        Executable_Obsolete := True;
+                     end if;
+
+                  else
+                     Insert_Q (Sfile, Index => 0);
+                     Mark (Sfile, Index => 0);
+                  end if;
+               end if;
+            end;
+         end if;
+      end Check_Standard_Library;
+
       -----------------------------------
       -- Collect_Arguments_And_Compile --
       -----------------------------------
@@ -2158,9 +2200,12 @@ package body Make is
         (Source_File : File_Name_Type; Source_Index : Int)
       is
       begin
+         --  Process_Created will be set True if an attempt is made to compile
+         --  the source, that is if it is not in an externally built project.
 
-         --  If arguments have not yet been collected (in Check), collect them
-         --  now.
+         Process_Created := False;
+
+         --  If arguments not yet collected (in Check), collect them now
 
          if not Arguments_Collected then
             Collect_Arguments (Source_File, Source_Index, Args);
@@ -2176,48 +2221,55 @@ package body Make is
          --  check for an eventual library project, and use the full path.
 
          if Arguments_Project /= No_Project then
-            Prj.Env.Set_Ada_Paths (Arguments_Project, True);
+            if not Projects.Table (Arguments_Project).Externally_Built then
+               Prj.Env.Set_Ada_Paths (Arguments_Project, True);
 
-            if MLib.Tgt.Support_For_Libraries /= MLib.Tgt.None then
-               declare
-                  The_Data : Project_Data :=
-                    Projects.Table (Arguments_Project);
-                  Prj      : Project_Id   := Arguments_Project;
+               if not Unique_Compile
+                 and then MLib.Tgt.Support_For_Libraries /= MLib.Tgt.None
+               then
+                  declare
+                     The_Data : Project_Data :=
+                                  Projects.Table (Arguments_Project);
 
-               begin
-                  while The_Data.Extended_By /= No_Project loop
-                     Prj := The_Data.Extended_By;
-                     The_Data := Projects.Table (Prj);
-                  end loop;
+                     Prj : Project_Id := Arguments_Project;
 
-                  if The_Data.Library and then not The_Data.Flag1 then
-                     --  Add to the Q all sources of the project that
-                     --  have not been marked
+                  begin
+                     while The_Data.Extended_By /= No_Project loop
+                        Prj := The_Data.Extended_By;
+                        The_Data := Projects.Table (Prj);
+                     end loop;
 
-                     Insert_Project_Sources
-                       (The_Project  => Prj,
-                        All_Projects => False,
-                        Into_Q       => True);
+                     if The_Data.Library
+                       and then not The_Data.Need_To_Build_Lib
+                     then
+                        --  Add to the Q all sources of the project that
+                        --  have not been marked
 
-                     --  Now mark the project as processed
+                        Insert_Project_Sources
+                          (The_Project  => Prj,
+                           All_Projects => False,
+                           Into_Q       => True);
 
-                     Projects.Table (Prj).Flag1 := True;
-                  end if;
-               end;
+                        --  Now mark the project as processed
+
+                        Projects.Table (Prj).Need_To_Build_Lib := True;
+                     end if;
+                  end;
+               end if;
+
+               --  Change to the object directory of the project file,
+               --  if necessary.
+
+               Change_To_Object_Directory (Arguments_Project);
+
+               Pid := Compile (Arguments_Path_Name, Lib_File, Source_Index,
+                               Arguments (1 .. Last_Argument));
+               Process_Created := True;
             end if;
 
-            --  Change to the object directory of the project file,
-            --  if necessary.
-
-            Change_To_Object_Directory (Arguments_Project);
-
-            Pid := Compile (Arguments_Path_Name, Lib_File, Source_Index,
-                            Arguments (1 .. Last_Argument));
-
          else
-            --  If this is a source outside of any project file, make sure
-            --  it will be compiled in the object directory of the main project
-            --  file.
+            --  If this is a source outside of any project file, make sure it
+            --  will be compiled in object directory of the main project file.
 
             if Main_Project /= No_Project then
                Change_To_Object_Directory (Arguments_Project);
@@ -2225,6 +2277,7 @@ package body Make is
 
             Pid := Compile (Full_Source_File, Lib_File, Source_Index,
                             Arguments (1 .. Last_Argument));
+            Process_Created := True;
          end if;
       end Collect_Arguments_And_Compile;
 
@@ -2238,7 +2291,7 @@ package body Make is
          Source_Index : Int;
          Args         : Argument_List) return Process_Id
       is
-         Comp_Args : Argument_List (Args'First .. Args'Last + 8);
+         Comp_Args : Argument_List (Args'First .. Args'Last + 9);
          Comp_Next : Integer := Args'First;
          Comp_Last : Integer;
 
@@ -2362,8 +2415,7 @@ package body Make is
            L /= Strip_Directory (L) or else
            Object_Directory_Path /= null
          then
-
-            --  Build -o argument.
+            --  Build -o argument
 
             Get_Name_String (L);
 
@@ -2404,6 +2456,9 @@ package body Make is
          Comp_Args (Comp_Last) := new String'(Name_Buffer (1 .. Name_Len));
 
          GNAT.OS_Lib.Normalize_Arguments (Comp_Args (Args'First .. Comp_Last));
+
+         Comp_Last := Comp_Last + 1;
+         Comp_Args (Comp_Last) := new String'("-gnatez");
 
          Display (Gcc.all, Comp_Args (Args'First .. Comp_Last));
 
@@ -2498,7 +2553,7 @@ package body Make is
    begin
       pragma Assert (Args'First = 1);
 
-      --  Package and Queue initializations.
+      --  Package and Queue initializations
 
       Good_ALI.Init;
       Output.Set_Standard_Error;
@@ -2646,7 +2701,7 @@ package body Make is
 
                   if not Need_To_Compile then
 
-                     --  The ALI file is up-to-date. Record its Id.
+                     --  The ALI file is up-to-date. Record its Id
 
                      Record_Good_ALI (ALI);
 
@@ -2698,15 +2753,17 @@ package body Make is
 
                      --  Make sure we could successfully start the compilation
 
-                     if Pid = Invalid_Pid then
-                        Record_Failure (Full_Source_File, Source_Unit);
-                     else
-                        Add_Process
-                          (Pid,
-                           Full_Source_File,
-                           Lib_File,
-                           Source_Unit,
-                           Mfile);
+                     if Process_Created then
+                        if Pid = Invalid_Pid then
+                           Record_Failure (Full_Source_File, Source_Unit);
+                        else
+                           Add_Process
+                             (Pid,
+                              Full_Source_File,
+                              Lib_File,
+                              Source_Unit,
+                              Mfile);
+                        end if;
                      end if;
                   end if;
                end if;
@@ -2832,40 +2889,7 @@ package body Make is
                --  only when "-a" is used.
 
                if Need_To_Check_Standard_Library then
-                  Need_To_Check_Standard_Library := False;
-
-                  if not Targparm.Suppress_Standard_Library_On_Target then
-                     declare
-                        Sfile  : Name_Id;
-                        Add_It : Boolean := True;
-
-                     begin
-                        Name_Len := Standard_Library_Package_Body_Name'Length;
-                        Name_Buffer (1 .. Name_Len) :=
-                          Standard_Library_Package_Body_Name;
-                        Sfile := Name_Enter;
-
-                        --  If we have a special runtime, we add the standard
-                        --  library only if we can find it.
-
-                        if RTS_Switch then
-                           Add_It :=
-                             Find_File (Sfile, Osint.Source) /= No_File;
-                        end if;
-
-                        if Add_It then
-                           if Is_Marked (Sfile) then
-                              if Is_In_Obsoleted (Sfile) then
-                                 Executable_Obsolete := True;
-                              end if;
-
-                           else
-                              Insert_Q (Sfile, Index => 0);
-                              Mark (Sfile, Index => 0);
-                           end if;
-                        end if;
-                     end;
-                  end if;
+                  Check_Standard_Library;
                end if;
 
                --  Now insert in the Q the unmarked source files (i.e. those
@@ -2959,7 +2983,7 @@ package body Make is
       function Absolute_Path
         (Path    : Name_Id;
          Project : Project_Id) return String;
-      --  Returns an absolute path for a configuration pragmas file.
+      --  Returns an absolute path for a configuration pragmas file
 
       -------------------
       -- Absolute_Path --
@@ -3183,39 +3207,44 @@ package body Make is
 
          for J in Args'Range loop
 
-            --  Do not display the mapping file argument automatically
-            --  created when using a project file.
+            --  Never display -gnatez
 
-            if Main_Project = No_Project
-              or else Debug.Debug_Flag_N
-              or else Args (J)'Length < 8
-              or else
-                Args (J)(Args (J)'First .. Args (J)'First + 6) /= "-gnatem"
-            then
-               --  When -dn is not specified, do not display the config
-               --  pragmas switch (-gnatec) for the temporary file created
-               --  by the project manager (always the first -gnatec switch).
-               --  Reset Temporary_Config_File to False so that the eventual
-               --  other -gnatec switches will be displayed.
+            if Args (J).all /= "-gnatez" then
 
-               if (not Debug.Debug_Flag_N)
-                 and then Temporary_Config_File
-                 and then Args (J)'Length > 7
-                 and then Args (J)(Args (J)'First .. Args (J)'First + 6)
-                            = "-gnatec"
+               --  Do not display the mapping file argument automatically
+               --  created when using a project file.
+
+               if Main_Project = No_Project
+                 or else Debug.Debug_Flag_N
+                 or else Args (J)'Length < 8
+                 or else
+                   Args (J) (Args (J)'First .. Args (J)'First + 6) /= "-gnatem"
                then
-                  Temporary_Config_File := False;
+                  --  When -dn is not specified, do not display the config
+                  --  pragmas switch (-gnatec) for the temporary file created
+                  --  by the project manager (always the first -gnatec switch).
+                  --  Reset Temporary_Config_File to False so that the eventual
+                  --  other -gnatec switches will be displayed.
 
-               --  Do not display the -F=mapping_file switch for gnatbind,
-               --  if -dn is not specified.
+                  if (not Debug.Debug_Flag_N)
+                    and then Temporary_Config_File
+                    and then Args (J)'Length > 7
+                    and then Args (J) (Args (J)'First .. Args (J)'First + 6)
+                    = "-gnatec"
+                  then
+                     Temporary_Config_File := False;
 
-               elsif Debug.Debug_Flag_N
-                 or else Args (J)'Length < 4
-                 or else Args (J)(Args (J)'First .. Args (J)'First + 2) /=
-                           "-F="
-               then
-                  Write_Str (" ");
-                  Write_Str (Args (J).all);
+                     --  Do not display the -F=mapping_file switch for
+                     --  gnatbind, if -dn is not specified.
+
+                  elsif Debug.Debug_Flag_N
+                    or else Args (J)'Length < 4
+                    or else
+                      Args (J) (Args (J)'First .. Args (J)'First + 2) /= "-F="
+                  then
+                     Write_Str (" ");
+                     Write_Str (Args (J).all);
+                  end if;
                end if;
             end if;
          end loop;
@@ -3370,6 +3399,352 @@ package body Make is
       --  Set to True when there are Stand-Alone Libraries, so that gnatbind
       --  is invoked with the -F switch to force checking of elaboration flags.
 
+      Mapping_Path : Name_Id := No_Name;
+      --  The path name of the mapping file
+
+      Discard : Boolean;
+
+      procedure Check_Mains;
+      --  Check that the main subprograms do exist and that they all
+      --  belong to the same project file.
+
+      procedure Create_Binder_Mapping_File
+        (Args : in out Argument_List; Last_Arg : in out Natural);
+      --  Create a binder mapping file and add the necessary switch
+
+      -----------------
+      -- Check_Mains --
+      -----------------
+
+      procedure Check_Mains is
+         Real_Main_Project : Project_Id := No_Project;
+         --  The project of the first main
+
+         Proj              : Project_Id := No_Project;
+         --  The project of the current main
+
+         Data              : Project_Data;
+
+         Real_Path         : String_Access;
+
+      begin
+         Mains.Reset;
+
+         --  Check each main
+
+         loop
+            declare
+               Main      : constant String := Mains.Next_Main;
+               --  The name specified on the command line may include
+               --  directory information.
+
+               File_Name : constant String := Base_Name (Main);
+               --  The simple file name of the current main main
+
+            begin
+               exit when Main = "";
+
+               --  Get the project of the current main
+
+               Proj := Prj.Env.Project_Of (File_Name, Main_Project);
+
+               --  Fail if the current main is not a source of a
+               --  project.
+
+               if Proj = No_Project then
+                  Make_Failed
+                    ("""" & Main &
+                     """ is not a source of any project");
+
+               else
+                  --  If there is directory information, check that
+                  --  the source exists and, if it does, that the path
+                  --  is the actual path of a source of a project.
+
+                  if Main /= File_Name then
+                     Data := Projects.Table (Main_Project);
+
+                     Real_Path :=
+                       Locate_Regular_File
+                         (Main &
+                          Get_Name_String
+                            (Data.Naming.Ada_Body_Suffix),
+                          "");
+                     if Real_Path = null then
+                        Real_Path :=
+                          Locate_Regular_File
+                            (Main &
+                             Get_Name_String
+                               (Data.Naming.Ada_Spec_Suffix),
+                             "");
+                     end if;
+
+                     if Real_Path = null then
+                        Real_Path :=
+                          Locate_Regular_File (Main, "");
+                     end if;
+
+                     --  Fail if the file cannot be found
+
+                     if Real_Path = null then
+                        Make_Failed
+                          ("file """ & Main & """ does not exist");
+                     end if;
+
+                     declare
+                        Project_Path : constant String :=
+                                         Prj.Env.File_Name_Of_Library_Unit_Body
+                                           (Name              => File_Name,
+                                            Project           => Main_Project,
+                                            Main_Project_Only => False,
+                                            Full_Path         => True);
+                        Normed_Path  : constant String :=
+                                         Normalize_Pathname
+                                           (Real_Path.all,
+                                            Case_Sensitive => False);
+                        Proj_Path    : constant String :=
+                                         Normalize_Pathname
+                                           (Project_Path,
+                                            Case_Sensitive => False);
+
+                     begin
+                        Free (Real_Path);
+
+                        --  Fail if it is not the correct path
+
+                        if Normed_Path /= Proj_Path then
+                           if Verbose_Mode then
+                              Write_Str (Normed_Path);
+                              Write_Str (" /= ");
+                              Write_Line (Proj_Path);
+                           end if;
+
+                           Make_Failed
+                             ("""" & Main &
+                              """ is not a source of any project");
+                        end if;
+                     end;
+                  end if;
+
+                  if not Unique_Compile then
+
+                     --  Record the project, if it is the first main
+
+                     if Real_Main_Project = No_Project then
+                        Real_Main_Project := Proj;
+
+                     elsif Proj /= Real_Main_Project then
+
+                        --  Fail, as the current main is not a source
+                        --  of the same project as the first main.
+
+                        Make_Failed
+                          ("""" & Main &
+                           """ is not a source of project " &
+                           Get_Name_String
+                             (Projects.Table
+                                (Real_Main_Project).Name));
+                     end if;
+                  end if;
+               end if;
+
+               --  If -u and -U are not used, we may have mains that
+               --  are sources of a project that is not the one
+               --  specified with switch -P.
+
+               if not Unique_Compile then
+                  Main_Project := Real_Main_Project;
+               end if;
+            end;
+         end loop;
+      end Check_Mains;
+
+      --------------------------------
+      -- Create_Binder_Mapping_File --
+      --------------------------------
+
+      procedure Create_Binder_Mapping_File
+        (Args : in out Argument_List; Last_Arg : in out Natural)
+      is
+         Mapping_FD : File_Descriptor := Invalid_FD;
+         --  A File Descriptor for an eventual mapping file
+
+         ALI_Unit     : Name_Id := No_Name;
+         --  The unit name of an ALI file
+
+         ALI_Name     : Name_Id := No_Name;
+         --  The file name of the ALI file
+
+         ALI_Project  : Project_Id := No_Project;
+         --  The project of the ALI file
+
+         Bytes        : Integer;
+         OK           : Boolean := True;
+
+         Status       : Boolean;
+         --  For call to Close
+
+      begin
+         Tempdir.Create_Temp_File (Mapping_FD, Mapping_Path);
+
+         if Mapping_FD /= Invalid_FD then
+
+            --  Traverse all units
+
+            for J in Prj.Com.Units.First .. Prj.Com.Units.Last loop
+               declare
+                  Unit : constant Prj.Com.Unit_Data :=
+                           Prj.Com.Units.Table (J);
+                  use Prj.Com;
+
+               begin
+                  if Unit.Name /= No_Name then
+
+                     --  If there is a body, put it in the mapping
+
+                     if Unit.File_Names (Body_Part).Name /= No_Name
+                       and then Unit.File_Names (Body_Part).Project
+                       /= No_Project
+                     then
+                        Get_Name_String (Unit.Name);
+                        Name_Buffer
+                          (Name_Len + 1 .. Name_Len + 2) := "%b";
+                        Name_Len := Name_Len + 2;
+                        ALI_Unit := Name_Find;
+                        ALI_Name :=
+                          Lib_File_Name
+                            (Unit.File_Names (Body_Part).Name);
+                        ALI_Project :=
+                          Unit.File_Names (Body_Part).Project;
+
+                        --  Otherwise, if there is a spec, put it
+                        --  in the mapping.
+
+                     elsif Unit.File_Names (Specification).Name
+                       /= No_Name
+                       and then Unit.File_Names
+                         (Specification).Project
+                         /= No_Project
+                     then
+                        Get_Name_String (Unit.Name);
+                        Name_Buffer
+                          (Name_Len + 1 .. Name_Len + 2) := "%s";
+                        Name_Len := Name_Len + 2;
+                        ALI_Unit := Name_Find;
+                        ALI_Name := Lib_File_Name
+                          (Unit.File_Names (Specification).Name);
+                        ALI_Project :=
+                          Unit.File_Names (Specification).Project;
+
+                     else
+                        ALI_Name := No_Name;
+                     end if;
+
+                     --  If we have something to put in the mapping
+                     --  then we do it now. However, if the project
+                     --  is extended, we don't put anything in the
+                     --  mapping file, because we do not know where
+                     --  the ALI file is: it might be in the ext-
+                     --  ended project obj dir as well as in the
+                     --  extending project obj dir.
+
+                     if ALI_Name /= No_Name
+                       and then
+                         Projects.Table (ALI_Project).Extended_By = No_Project
+                       and then
+                         Projects.Table (ALI_Project).Extends = No_Project
+                     then
+                        --  First line is the unit name
+
+                        Get_Name_String (ALI_Unit);
+                        Name_Len := Name_Len + 1;
+                        Name_Buffer (Name_Len) := ASCII.LF;
+                        Bytes :=
+                          Write
+                            (Mapping_FD,
+                             Name_Buffer (1)'Address,
+                             Name_Len);
+                        OK := Bytes = Name_Len;
+
+                        exit when not OK;
+
+                        --  Second line it the ALI file name
+
+                        Get_Name_String (ALI_Name);
+                        Name_Len := Name_Len + 1;
+                        Name_Buffer (Name_Len) := ASCII.LF;
+                        Bytes :=
+                          Write
+                            (Mapping_FD,
+                             Name_Buffer (1)'Address,
+                             Name_Len);
+                        OK := Bytes = Name_Len;
+
+                        exit when not OK;
+
+                        --  Third line it the ALI path name,
+                        --  concatenation of the project
+                        --  directory with the ALI file name.
+
+                        declare
+                           ALI : constant String :=
+                                   Get_Name_String (ALI_Name);
+                        begin
+                           Get_Name_String
+                             (Projects.Table (ALI_Project).
+                                Object_Directory);
+
+                           if Name_Buffer (Name_Len) /=
+                             Directory_Separator
+                           then
+                              Name_Len := Name_Len + 1;
+                              Name_Buffer (Name_Len) :=
+                                Directory_Separator;
+                           end if;
+
+                           Name_Buffer
+                             (Name_Len + 1 ..
+                                Name_Len + ALI'Length) := ALI;
+                           Name_Len :=
+                             Name_Len + ALI'Length + 1;
+                           Name_Buffer (Name_Len) := ASCII.LF;
+                           Bytes :=
+                             Write
+                               (Mapping_FD,
+                                Name_Buffer (1)'Address,
+                                Name_Len);
+                           OK := Bytes = Name_Len;
+                        end;
+
+                        --  If OK is False, it means we were unable
+                        --  to write a line. No point in continuing
+                        --  with the other units.
+
+                        exit when not OK;
+                     end if;
+                  end if;
+               end;
+            end loop;
+
+            Close (Mapping_FD, Status);
+
+            OK := OK and Status;
+
+            --  If the creation of the mapping file was successful,
+            --  we add the switch to the arguments of gnatbind.
+
+            if OK then
+               Last_Arg := Last_Arg + 1;
+               Args (Last_Arg) :=
+                 new String'("-F=" & Get_Name_String (Mapping_Path));
+            end if;
+         end if;
+      end Create_Binder_Mapping_File;
+
+   --  Start of processing for Gnatmake
+
+   --  This body is very long, should be broken down ???
+
    begin
       Gnatmake_Called := True;
 
@@ -3385,7 +3760,6 @@ package body Make is
 
       Bind_Shared := No_Shared_Switch'Access;
       Link_With_Shared_Libgcc := No_Shared_Libgcc_Switch'Access;
-      Bind_Shared_Known := False;
 
       Failed_Links.Set_Last (0);
       Successful_Links.Set_Last (0);
@@ -3470,148 +3844,7 @@ package body Make is
                --  project file and, if there are several mains, each of them
                --  is a source of the same project file.
 
-               Mains.Reset;
-
-               declare
-                  Real_Main_Project : Project_Id := No_Project;
-                  --  The project of the first main
-
-                  Proj : Project_Id := No_Project;
-                  --  The project of the current main
-
-               begin
-                  --  Check each main
-
-                  loop
-                     declare
-                        Main : constant String := Mains.Next_Main;
-                        --  The name specified on the command line may include
-                        --  directory information.
-
-                        File_Name : constant String := Base_Name (Main);
-                        --  The simple file name of the current main main
-
-                     begin
-                        exit when Main = "";
-
-                        --  Get the project of the current main
-
-                        Proj := Prj.Env.Project_Of (File_Name, Main_Project);
-
-                        --  Fail if the current main is not a source of a
-                        --  project.
-
-                        if Proj = No_Project then
-                           Make_Failed
-                             ("""" & Main &
-                              """ is not a source of any project");
-
-                        else
-                           --  If there is directory information, check that
-                           --  the source exists and, if it does, that the path
-                           --  is the actual path of a source of a project.
-
-                           if Main /= File_Name then
-                              declare
-                                 Data : constant Project_Data :=
-                                          Projects.Table (Main_Project);
-
-                                 Project_Path : constant String :=
-                                   Prj.Env.File_Name_Of_Library_Unit_Body
-                                     (Name              => File_Name,
-                                      Project           => Main_Project,
-                                      Main_Project_Only => False,
-                                      Full_Path         => True);
-                                 Real_Path : String_Access :=
-                                   Locate_Regular_File
-                                     (Main &
-                                      Get_Name_String
-                                        (Data.Naming.Current_Body_Suffix),
-                                      "");
-                              begin
-                                 if Real_Path = null then
-                                    Real_Path :=
-                                      Locate_Regular_File
-                                        (Main &
-                                         Get_Name_String
-                                           (Data.Naming.Current_Spec_Suffix),
-                                         "");
-                                 end if;
-
-                                 if Real_Path = null then
-                                    Real_Path :=
-                                      Locate_Regular_File (Main, "");
-                                 end if;
-
-                                 --  Fail if the file cannot be found
-
-                                 if Real_Path = null then
-                                    Make_Failed
-                                      ("file """ & Main & """ does not exist");
-                                 end if;
-
-                                 declare
-                                    Normed_Path : constant String :=
-                                      Normalize_Pathname
-                                        (Real_Path.all,
-                                         Case_Sensitive => False);
-                                    Proj_Path : constant String :=
-                                      Normalize_Pathname
-                                        (Project_Path,
-                                         Case_Sensitive => False);
-
-                                 begin
-                                    Free (Real_Path);
-
-                                    --  Fail if it is not the correct path
-
-                                    if Normed_Path /= Proj_Path then
-                                       if Verbose_Mode then
-                                          Write_Str (Normed_Path);
-                                          Write_Str (" /= ");
-                                          Write_Line (Proj_Path);
-                                       end if;
-
-                                       Make_Failed
-                                         ("""" & Main &
-                                          """ is not a source of any project");
-                                    end if;
-                                 end;
-                              end;
-                           end if;
-
-                           if not Unique_Compile then
-
-                              --  Record the project, if it is the first main
-
-                              if Real_Main_Project = No_Project then
-                                 Real_Main_Project := Proj;
-
-                              elsif Proj /= Real_Main_Project then
-
-                                 --  Fail, as the current main is not a source
-                                 --  of the same project as the first main.
-
-                                 Make_Failed
-                                   ("""" & Main &
-                                    """ is not a source of project " &
-                                    Get_Name_String
-                                      (Projects.Table
-                                         (Real_Main_Project).Name));
-                              end if;
-                           end if;
-                        end if;
-
-                        --  If -u and -U are not used, we may have mains that
-                        --  are sources of a project that is not the one
-                        --  specified with switch -P.
-
-                        if not Unique_Compile then
-                           Main_Project := Real_Main_Project;
-                        end if;
-                     end;
-                  end loop;
-               end;
+               Check_Mains;
             end if;
 
          --  If no mains have been specified on the command line,
@@ -3745,8 +3978,16 @@ package body Make is
          Write_Eol;
          Write_Str ("GNATMAKE ");
          Write_Str (Gnatvsn.Gnat_Version_String);
-         Write_Str (" Copyright 1995-2004 Free Software Foundation, Inc.");
          Write_Eol;
+         Write_Str ("Copyright 1995-2004 Free Software Foundation, Inc.");
+         Write_Eol;
+      end if;
+
+      if Main_Project /= No_Project
+        and then Projects.Table (Main_Project).Externally_Built
+      then
+         Make_Failed
+           ("nothing to do for a main project that is externally built");
       end if;
 
       if Osint.Number_Of_Files = 0 then
@@ -3838,63 +4079,65 @@ package body Make is
 
       if Main_Project /= No_Project then
 
-         if Projects.Table (Main_Project).Object_Directory = No_Name then
-            Make_Failed ("no sources to compile");
+         if Projects.Table (Main_Project).Object_Directory /= No_Name then
+
+            --  Change the current directory to the object directory of
+            --  the main project.
+
+            begin
+               Project_Object_Directory := No_Project;
+               Change_To_Object_Directory (Main_Project);
+
+            exception
+               when Directory_Error =>
+
+                  --  This should never happen. But, if it does, display the
+                  --  content of the parent directory of the obj dir.
+
+                  declare
+                     Parent : constant Dir_Name_Str :=
+                                Dir_Name
+                                  (Get_Name_String
+                                     (Projects.Table
+                                        (Main_Project).Object_Directory));
+
+                     Dir  : Dir_Type;
+                     Str  : String (1 .. 200);
+                     Last : Natural;
+
+                  begin
+                     Write_Str ("Contents of directory """);
+                     Write_Str (Parent);
+                     Write_Line (""":");
+
+                     Open (Dir, Parent);
+
+                     loop
+                        Read (Dir, Str, Last);
+                        exit when Last = 0;
+                        Write_Str ("   ");
+                        Write_Line (Str (1 .. Last));
+                     end loop;
+
+                     Close (Dir);
+
+                  exception
+                     when X : others =>
+                        Write_Line ("(unexpected exception)");
+                        Write_Line (Exception_Information (X));
+
+                        if Is_Open (Dir) then
+                           Close (Dir);
+                        end if;
+                  end;
+
+                  Make_Failed
+                    ("unable to change working directory to """,
+                     Get_Name_String
+                       (Projects.Table (Main_Project).Object_Directory),
+                     """");
+            end;
          end if;
-
-         --  Change the current directory to the object directory of the main
-         --  project.
-
-         begin
-            Project_Object_Directory := No_Project;
-            Change_To_Object_Directory (Main_Project);
-
-         exception
-            when Directory_Error =>
-
-               --  This should never happen. But, if it does, display the
-               --  content of the parent directory of the obj dir.
-
-               declare
-                  Parent : constant Dir_Name_Str :=
-                    Dir_Name
-                      (Get_Name_String
-                           (Projects.Table (Main_Project).Object_Directory));
-                  Dir : Dir_Type;
-                  Str : String (1 .. 200);
-                  Last : Natural;
-
-               begin
-                  Write_Str ("Contents of directory """);
-                  Write_Str (Parent);
-                  Write_Line (""":");
-
-                  Open (Dir, Parent);
-
-                  loop
-                     Read (Dir, Str, Last);
-                     exit when Last = 0;
-                     Write_Str ("   ");
-                     Write_Line (Str (1 .. Last));
-                  end loop;
-
-                  Close (Dir);
-
-               exception
-                  when X : others =>
-                     Write_Line ("(unexpected exception)");
-                     Write_Line (Exception_Information (X));
-
-                     if Is_Open (Dir) then
-                        Close (Dir);
-                     end if;
-               end;
-
-               Make_Failed ("unable to change working directory to """,
-                            Get_Name_String
-                             (Projects.Table (Main_Project).Object_Directory),
-                            """");
-         end;
 
          --  Source file lookups should be cached for efficiency.
          --  Source files are not supposed to change.
@@ -4113,25 +4356,41 @@ package body Make is
          --  put all the project sources in the queue, and flag the project
          --  so that the library is generated.
 
-         if MLib.Tgt.Support_For_Libraries /= MLib.Tgt.None then
+         if not Unique_Compile
+           and then MLib.Tgt.Support_For_Libraries /= MLib.Tgt.None
+         then
             for Proj in Projects.First .. Projects.Last loop
                if Projects.Table (Proj).Library then
-                  Projects.Table (Proj).Flag1 :=
-                    not MLib.Tgt.Library_Exists_For (Proj);
+                  Projects.Table (Proj).Need_To_Build_Lib :=
+                    (not MLib.Tgt.Library_Exists_For (Proj))
+                    and then (not Projects.Table (Proj).Externally_Built);
 
-                  if Projects.Table (Proj).Flag1 then
-                     if Verbose_Mode then
-                        Write_Str
-                          ("Library file does not exist for project """);
-                        Write_Str
-                          (Get_Name_String (Projects.Table (Proj).Name));
-                        Write_Line ("""");
+                  if Projects.Table (Proj).Need_To_Build_Lib then
+
+                     --  If there is no object directory, then it will be
+                     --  impossible to build the library. So fail immediately.
+
+                     if Projects.Table (Proj).Object_Directory = No_Name then
+                        Make_Failed
+                          ("no object files to build library for project """,
+                           Get_Name_String (Projects.Table (Proj).Name),
+                           """");
+                        Projects.Table (Proj).Need_To_Build_Lib := False;
+
+                     else
+                        if Verbose_Mode then
+                           Write_Str
+                             ("Library file does not exist for project """);
+                           Write_Str
+                             (Get_Name_String (Projects.Table (Proj).Name));
+                           Write_Line ("""");
+                        end if;
+
+                        Insert_Project_Sources
+                          (The_Project  => Proj,
+                           All_Projects => False,
+                           Into_Q       => True);
                      end if;
-
-                     Insert_Project_Sources
-                       (The_Project  => Proj,
-                        All_Projects => False,
-                        Into_Q       => True);
                   end if;
                end if;
             end loop;
@@ -4406,13 +4665,13 @@ package body Make is
 
                   Name_Buffer (Name_Len + 1 ..
                                        Name_Len + Exec_File_Name'Length) :=
-                      Exec_File_Name;
+                    Exec_File_Name;
+
                   Name_Len := Name_Len + Exec_File_Name'Length;
                   Executable := Name_Find;
                   Non_Std_Executable := True;
                end if;
             end;
-
          end if;
 
          if Do_Compile_Step then
@@ -4424,7 +4683,7 @@ package body Make is
                Youngest_Obj_Stamp  : Time_Stamp_Type;
 
                Executable_Stamp : Time_Stamp_Type;
-               --  Executable is the final executable program.
+               --  Executable is the final executable program
 
                Library_Rebuilt : Boolean := False;
 
@@ -4467,7 +4726,6 @@ package body Make is
                if Total_Compilation_Failures /= 0 then
                   if Keep_Going then
                      goto Next_Main;
-
                   else
                      List_Bad_Compilations;
                      raise Compilation_Failed;
@@ -4501,12 +4759,13 @@ package body Make is
                         end if;
 
                         if Projects.Table (Proj1).Library
-                          and then not Projects.Table (Proj1).Flag1
+                          and then not Projects.Table (Proj1).Need_To_Build_Lib
+                          and then not Projects.Table (Proj1).Externally_Built
                         then
                            MLib.Prj.Check_Library (Proj1);
                         end if;
 
-                        if Projects.Table (Proj1).Flag1 then
+                        if Projects.Table (Proj1).Need_To_Build_Lib then
                            Library_Projs.Increment_Last;
                            Current := Library_Projs.Last;
                            Depth := Projects.Table (Proj1).Depth;
@@ -4523,7 +4782,7 @@ package body Make is
                            end loop;
 
                            Library_Projs.Table (Current) := Proj1;
-                           Projects.Table (Proj1).Flag1 := False;
+                           Projects.Table (Proj1).Need_To_Build_Lib := False;
                         end if;
                      end loop;
                   end;
@@ -4721,53 +4980,47 @@ package body Make is
                Last_Arg : Natural := Binder_Switches.Last;
                --  Index of the last argument in Args
 
-               Mapping_FD : File_Descriptor := Invalid_FD;
-               --  A File Descriptor for an eventual mapping file
-
-               Mapping_Path : Name_Id := No_Name;
-               --  The path name of the mapping file
-
-               ALI_Unit : Name_Id := No_Name;
-               --  The unit name of an ALI file
-
-               ALI_Name : Name_Id := No_Name;
-               --  The file name of the ALI file
-
-               ALI_Project  : Project_Id := No_Project;
-               --  The project of the ALI file
-
-               Bytes : Integer;
-               OK    : Boolean := True;
-
-               Status : Boolean;
-               --  For call to Close
+               Shared_Libs : Boolean := False;
+               --  Set to True when there are shared library project files or
+               --  when gnatbind is invoked with -shared.
 
             begin
-               --  If it is the first time the bind step is performed,
-               --  check if there are shared libraries, so that gnatbind is
-               --  called with -shared.
+               --  Check if there are shared libraries, so that gnatbind is
+               --  called with -shared. Check also if gnatbind is called with
+               --  -shared, so that gnatlink is called with -shared-libgcc
+               --  for GCC version 3 and above, ensuring that the shared
+               --  version of libgcc will be used.
 
-               if not Bind_Shared_Known then
-                  if Main_Project /= No_Project
-                     and then MLib.Tgt.Support_For_Libraries /= MLib.Tgt.None
-                  then
-                     for Proj in Projects.First .. Projects.Last loop
-                        if Projects.Table (Proj).Library and then
-                          Projects.Table (Proj).Library_Kind /= Static
-                        then
-                           Bind_Shared := Shared_Switch'Access;
+               if Main_Project /= No_Project
+                 and then MLib.Tgt.Support_For_Libraries /= MLib.Tgt.None
+               then
+                  for Proj in Projects.First .. Projects.Last loop
+                     if Projects.Table (Proj).Library and then
+                       Projects.Table (Proj).Library_Kind /= Static
+                     then
+                        Shared_Libs := True;
+                        Bind_Shared := Shared_Switch'Access;
+                        exit;
+                     end if;
+                  end loop;
+               end if;
 
-                           if GCC_Version >= 3 then
-                              Link_With_Shared_Libgcc :=
-                                Shared_Libgcc_Switch'Access;
-                           end if;
+               --  Check now for switch -shared
 
-                           exit;
-                        end if;
-                     end loop;
-                  end if;
+               if not Shared_Libs then
+                  for J in Binder_Switches.First .. Last_Arg loop
+                     if Binder_Switches.Table (J).all = "-shared" then
+                        Shared_Libs := True;
+                        exit;
+                     end if;
+                  end loop;
+               end if;
 
-                  Bind_Shared_Known := True;
+               --  If there are shared libraries, invoke gnatlink with
+               --  -shared-libgcc if GCC version is 3 or more.
+
+               if Shared_Libs and then GCC_Version >= 3 then
+                  Link_With_Shared_Libgcc := Shared_Libgcc_Switch'Access;
                end if;
 
                --  Get all the binder switches
@@ -4791,164 +5044,7 @@ package body Make is
                   --  If switch -C was specified, create a binder mapping file
 
                   if Create_Mapping_File then
-                     Tempdir.Create_Temp_File (Mapping_FD, Mapping_Path);
-
-                     if Mapping_FD /= Invalid_FD then
-
-                        --  Traverse all units
-
-                        for J in Prj.Com.Units.First .. Prj.Com.Units.Last loop
-                           declare
-                              Unit : constant Prj.Com.Unit_Data :=
-                                       Prj.Com.Units.Table (J);
-                              use Prj.Com;
-
-                           begin
-                              if Unit.Name /= No_Name then
-
-                                 --  If there is a body, put it in the mapping
-
-                                 if Unit.File_Names (Body_Part).Name /= No_Name
-                                   and then Unit.File_Names (Body_Part).Project
-                                                  /= No_Project
-                                 then
-                                    Get_Name_String (Unit.Name);
-                                    Name_Buffer
-                                      (Name_Len + 1 .. Name_Len + 2) := "%b";
-                                    Name_Len := Name_Len + 2;
-                                    ALI_Unit := Name_Find;
-                                    ALI_Name :=
-                                      Lib_File_Name
-                                        (Unit.File_Names (Body_Part).Name);
-                                    ALI_Project :=
-                                      Unit.File_Names (Body_Part).Project;
-
-                                 --  Otherwise, if there is a spec, put it
-                                 --  in the mapping.
-
-                                 elsif Unit.File_Names (Specification).Name
-                                                 /= No_Name
-                                   and then Unit.File_Names
-                                             (Specification).Project
-                                                /= No_Project
-                                 then
-                                    Get_Name_String (Unit.Name);
-                                    Name_Buffer
-                                      (Name_Len + 1 .. Name_Len + 2) := "%s";
-                                    Name_Len := Name_Len + 2;
-                                    ALI_Unit := Name_Find;
-                                    ALI_Name := Lib_File_Name
-                                        (Unit.File_Names (Specification).Name);
-                                    ALI_Project :=
-                                      Unit.File_Names (Specification).Project;
-
-                                 else
-                                    ALI_Name := No_Name;
-                                 end if;
-
-                                 --  If we have something to put in the mapping
-                                 --  then we do it now. However, if the project
-                                 --  is extended, we don't put anything in the
-                                 --  mapping file, because we do not know where
-                                 --  the ALI file is: it might be in the ext-
-                                 --  ended project obj dir as well as in the
-                                 --  extending project obj dir.
-
-                                 if ALI_Name /= No_Name
-                                    and then Projects.Table
-                                               (ALI_Project).Extended_By
-                                                        = No_Project
-                                    and then Projects.Table
-                                               (ALI_Project).Extends
-                                                        = No_Project
-                                 then
-                                    --  First line is the unit name
-
-                                    Get_Name_String (ALI_Unit);
-                                    Name_Len := Name_Len + 1;
-                                    Name_Buffer (Name_Len) := ASCII.LF;
-                                    Bytes :=
-                                      Write
-                                        (Mapping_FD,
-                                         Name_Buffer (1)'Address,
-                                         Name_Len);
-                                    OK := Bytes = Name_Len;
-
-                                    if OK then
-
-                                       --  Second line it the ALI file name
-
-                                       Get_Name_String (ALI_Name);
-                                       Name_Len := Name_Len + 1;
-                                       Name_Buffer (Name_Len) := ASCII.LF;
-                                       Bytes :=
-                                         Write
-                                           (Mapping_FD,
-                                            Name_Buffer (1)'Address,
-                                            Name_Len);
-                                       OK := Bytes = Name_Len;
-                                    end if;
-
-                                    if OK then
-
-                                       --  Third line it the ALI path name,
-                                       --  concatenation of the project
-                                       --  directory with the ALI file name.
-
-                                       declare
-                                          ALI : constant String :=
-                                                  Get_Name_String (ALI_Name);
-                                       begin
-                                          Get_Name_String
-                                            (Projects.Table (ALI_Project).
-                                               Object_Directory);
-
-                                          if Name_Buffer (Name_Len) /=
-                                            Directory_Separator
-                                          then
-                                             Name_Len := Name_Len + 1;
-                                             Name_Buffer (Name_Len) :=
-                                               Directory_Separator;
-                                          end if;
-
-                                          Name_Buffer
-                                            (Name_Len + 1 ..
-                                               Name_Len + ALI'Length) := ALI;
-                                          Name_Len :=
-                                            Name_Len + ALI'Length + 1;
-                                          Name_Buffer (Name_Len) := ASCII.LF;
-                                          Bytes :=
-                                            Write
-                                              (Mapping_FD,
-                                               Name_Buffer (1)'Address,
-                                               Name_Len);
-                                          OK := Bytes = Name_Len;
-                                       end;
-                                    end if;
-
-                                    --  If OK is False, it means we were unable
-                                    --  to write a line. No point in continuing
-                                    --  with the other units.
-
-                                    exit when not OK;
-                                 end if;
-                              end if;
-                           end;
-                        end loop;
-
-                        Close (Mapping_FD, Status);
-
-                        OK := OK and Status;
-
-                        --  If the creation of the mapping file was successful,
-                        --  we add the switch to the arguments of gnatbind.
-
-                        if OK then
-                           Last_Arg := Last_Arg + 1;
-                           Args (Last_Arg) := new String'
-                                      ("-F=" & Get_Name_String (Mapping_Path));
-                        end if;
-                     end if;
+                     Create_Binder_Mapping_File (Args, Last_Arg);
                   end if;
 
                end if;
@@ -4966,7 +5062,7 @@ package body Make is
                      if not Debug.Debug_Flag_N
                        and then Mapping_Path /= No_Name
                      then
-                        Delete_File (Get_Name_String (Mapping_Path), OK);
+                        Delete_File (Get_Name_String (Mapping_Path), Discard);
                      end if;
 
                      --  And reraise the exception
@@ -4978,7 +5074,7 @@ package body Make is
                --  if one was created.
 
                if not Debug.Debug_Flag_N and then Mapping_Path /= No_Name then
-                  Delete_File (Get_Name_String (Mapping_Path), OK);
+                  Delete_File (Get_Name_String (Mapping_Path), Discard);
                end if;
             end Bind_Step;
          end if;
@@ -5218,7 +5314,7 @@ package body Make is
             end Link_Step;
          end if;
 
-         --  We go to here when we skip the bind and link steps.
+         --  We go to here when we skip the bind and link steps
 
          <<Next_Main>>
 
@@ -5443,7 +5539,6 @@ package body Make is
       when X : others =>
          Write_Line (Exception_Information (X));
          Make_Failed ("INTERNAL ERROR. Please report.");
-
    end Gnatmake;
 
    ----------
@@ -5462,7 +5557,6 @@ package body Make is
    function In_Ada_Lib_Dir (File : File_Name_Type) return Boolean is
       D : constant Name_Id := Get_Directory (File);
       B : constant Byte    := Get_Name_Table_Byte (D);
-
    begin
       return (B and Ada_Lib_Dir) /= 0;
    end In_Ada_Lib_Dir;
@@ -5554,8 +5648,6 @@ package body Make is
    ----------------
 
    procedure Initialize is
-      Next_Arg : Positive;
-
    begin
       --  Override default initialization of Check_Object_Consistency
       --  since this is normally False for GNATBIND, but is True for
@@ -5564,7 +5656,7 @@ package body Make is
 
       Check_Object_Consistency := True;
 
-      --  Package initializations. The order of calls is important here.
+      --  Package initializations. The order of calls is important here
 
       Output.Set_Standard_Error;
 
@@ -5585,10 +5677,42 @@ package body Make is
 
       Mains.Delete;
 
-      Next_Arg := 1;
-      Scan_Args : while Next_Arg <= Argument_Count loop
+      --  Add the directory where gnatmake is invoked in front of the
+      --  path, if gnatmake is invoked with directory information.
+      --  Only do this if the platform is not VMS, where the notion of path
+      --  does not really exist.
+
+      if not OpenVMS then
+         declare
+            Command : constant String := Command_Name;
+
+         begin
+            for Index in reverse Command'Range loop
+               if Command (Index) = Directory_Separator then
+                  declare
+                     Absolute_Dir : constant String :=
+                                      Normalize_Pathname
+                                        (Command (Command'First .. Index));
+
+                     PATH : constant String :=
+                                      Absolute_Dir &
+                                      Path_Separator &
+                                      Getenv ("PATH").all;
+
+                  begin
+                     Setenv ("PATH", PATH);
+                  end;
+
+                  exit;
+               end if;
+            end loop;
+         end;
+      end if;
+
+      --  Scan the switches and arguments
+
+      Scan_Args : for Next_Arg in 1 .. Argument_Count loop
          Scan_Make_Arg (Argument (Next_Arg), And_Save => True);
-         Next_Arg := Next_Arg + 1;
       end loop Scan_Args;
 
       if Usage_Requested then
@@ -5688,8 +5812,13 @@ package body Make is
 
          --  Compute depth of each project
 
+         for Proj in 1 .. Projects.Last loop
+            Projects.Table (Proj).Seen := False;
+            Projects.Table (Proj).Depth := 0;
+         end loop;
+
          Recursive_Compute_Depth
-           (Main_Project, Visited => No_Projects, Depth => 0);
+           (Main_Project, Depth => 1);
 
       else
 
@@ -6166,7 +6295,7 @@ package body Make is
       B : Byte;
 
    begin
-      --  Dir last character is supposed to be a directory separator.
+      --  Dir last character is supposed to be a directory separator
 
       Name_Len := Dir'Length;
       Name_Buffer (1 .. Name_Len) := Dir;
@@ -6189,26 +6318,28 @@ package body Make is
 
    procedure Recursive_Compute_Depth
      (Project : Project_Id;
-      Visited : Project_Array;
       Depth   : Natural)
    is
       List : Project_List;
       Proj : Project_Id;
-      OK : Boolean;
-      New_Visited : constant Project_Array := Visited & Project;
 
    begin
-      --  Nothing to do if there is no project
+      --  Nothing to do if there is no project or if the project has already
+      --  been seen or if the depth is large enough.
 
-      if Project = No_Project then
+      if Project = No_Project
+        or else Projects.Table (Project).Seen
+        or else Projects.Table (Project).Depth >= Depth
+      then
          return;
       end if;
 
-      --  If current depth of project is lower than Depth, adjust it
+      Projects.Table (Project).Depth := Depth;
 
-      if Projects.Table (Project).Depth < Depth then
-         Projects.Table (Project).Depth := Depth;
-      end if;
+      --  Mark the project as Seen to avoid endless loop caused by limited
+      --  withs.
+
+      Projects.Table (Project).Seen := True;
 
       List := Projects.Table (Project).Imported_Projects;
 
@@ -6217,34 +6348,20 @@ package body Make is
       while List /= Empty_Project_List loop
          Proj := Project_Lists.Table (List).Project;
          List := Project_Lists.Table (List).Next;
-
-         OK := True;
-
-         --  To avoid endless loops due to cycles with limited widts,
-         --  do not revisit a project that is already in the chain of imports
-         --  that brought us here.
-
-         for J in Visited'Range loop
-            if Visited (J) = Proj then
-               OK := False;
-               exit;
-            end if;
-         end loop;
-
-         if OK then
-            Recursive_Compute_Depth
-              (Project => Proj,
-               Visited => New_Visited,
-               Depth => Depth + 1);
-         end if;
+         Recursive_Compute_Depth
+           (Project => Proj,
+            Depth => Depth + 1);
       end loop;
 
       --  Visit a project being extended, if any
 
       Recursive_Compute_Depth
         (Project => Projects.Table (Project).Extends,
-         Visited => New_Visited,
-         Depth => Depth + 1);
+         Depth   => Depth + 1);
+
+      --  Reset the Seen flag, as we leave this project
+
+      Projects.Table (Project).Seen := False;
    end Recursive_Compute_Depth;
 
    -----------------------
@@ -6879,9 +6996,9 @@ package body Make is
             Name        : String (1 .. Source_File_Name'Length + 3);
             Last        : Positive := Source_File_Name'Length;
             Spec_Suffix : constant String :=
-                            Get_Name_String (Naming.Current_Spec_Suffix);
+                            Get_Name_String (Naming.Ada_Spec_Suffix);
             Body_Suffix : constant String :=
-                            Get_Name_String (Naming.Current_Body_Suffix);
+                            Get_Name_String (Naming.Ada_Body_Suffix);
             Truncated   : Boolean := False;
 
          begin

@@ -31,7 +31,6 @@
 // ISO C++ 14882:
 //
 
-#include <bits/c++config.h>
 #include <memory>
 
 namespace std

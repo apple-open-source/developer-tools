@@ -269,15 +269,6 @@ extern int target_flags;
 #define FLOAT_WORDS_BIG_ENDIAN 1
 #define UNITS_PER_WORD 8
 
-/* FIXME: This macro is correlated to MAX_FIXED_MODE_SIZE in that
-   e.g. this macro must not be 8 (default, UNITS_PER_WORD) when
-   MAX_FIXED_MODE_SIZE is 64 (default, DImode), or really: this must be
-   set manually if MAX_FIXED_MODE_SIZE is not at least twice the register
-   size.  By setting it to 4, we don't have to worry about TImode things
-   yet.  Revisit, perhaps get TImode going or get some solution that does
-   not mandate TImode or lie in other ways.  */
-#define MIN_UNITS_PER_WORD 4
-
 /* FIXME: Promotion of modes currently generates slow code, extending
    before every operation.  */
 /* I'm a little bit undecided about this one.  It might be beneficial to
@@ -687,7 +678,7 @@ enum reg_class
 /* Node: Elimination */
 /* FIXME: Is this requirement built-in?  Anyway, we should try to get rid
    of it; we can deduce the value.  */
-#define FRAME_POINTER_REQUIRED (nonlocal_goto_stack_level != NULL_RTX)
+#define FRAME_POINTER_REQUIRED  current_function_has_nonlocal_label
 
 /* The frame-pointer is stored in a location that either counts to the
    offset of incoming parameters, or that counts to the offset of the
@@ -720,19 +711,6 @@ enum reg_class
 #define FUNCTION_INCOMING_ARG(CUM, MODE, TYPE, NAMED)	\
  mmix_function_arg (&(CUM), MODE, TYPE, NAMED, 1)
 
-#define FUNCTION_ARG_PASS_BY_REFERENCE(CUM, MODE, TYPE, NAMED)	\
- mmix_function_arg_pass_by_reference (&(CUM), MODE, TYPE, NAMED)
-
-/* This *sounds* good, but does not seem to be implemented correctly to
-   be a win; at least it wasn't in 2.7.2.  FIXME: Check and perhaps
-   replace with a big comment.
-   The definition needs to match or be a subset of
-   FUNCTION_ARG_PASS_BY_REFERENCE, since not all callers check that before
-   usage.  Watch lots of C++ testcases fail if set to 1, for example
-   g++.dg/init/byval1.C.  */
-#define FUNCTION_ARG_CALLEE_COPIES(CUM, MODE, TYPE, NAMED) \
- mmix_function_arg_pass_by_reference (&(CUM), MODE, TYPE, NAMED)
-
 typedef struct { int regs; int lib; } CUMULATIVE_ARGS;
 
 #define INIT_CUMULATIVE_ARGS(CUM, FNTYPE, LIBNAME, INDIRECT, N_NAMED_ARGS) \
@@ -740,7 +718,7 @@ typedef struct { int regs; int lib; } CUMULATIVE_ARGS;
 
 #define FUNCTION_ARG_ADVANCE(CUM, MODE, TYPE, NAMED)		\
  ((CUM).regs							\
-  = ((MUST_PASS_IN_STACK (MODE, TYPE))				\
+  = ((targetm.calls.must_pass_in_stack (MODE, TYPE))		\
      || (MMIX_FUNCTION_ARG_SIZE (MODE, TYPE) > 8		\
 	 && !TARGET_LIBFUNC && !(CUM).lib))			\
   ? (MMIX_MAX_ARGS_IN_REGS) + 1					\
@@ -789,13 +767,6 @@ typedef struct { int regs; int lib; } CUMULATIVE_ARGS;
 #define FUNCTION_PROFILER(FILE, LABELNO)	\
  mmix_function_profiler (FILE, LABELNO)
 
-/* Node: Varargs */
-
-/* FIXME: This and other EXPAND_BUILTIN_VA_... target macros are not
-   documented, although used by several targets.  */
-#define EXPAND_BUILTIN_VA_ARG(VALIST, TYPE) \
- mmix_expand_builtin_va_arg (VALIST, TYPE)
-
 /* Node: Trampolines */
 
 #define TRAMPOLINE_TEMPLATE(FILE) \
@@ -804,11 +775,6 @@ typedef struct { int regs; int lib; } CUMULATIVE_ARGS;
 #define TRAMPOLINE_SIZE mmix_trampoline_size
 #define INITIALIZE_TRAMPOLINE(ADDR, FNADDR, STATIC_CHAIN) \
  mmix_initialize_trampoline (ADDR, FNADDR, STATIC_CHAIN)
-
-
-/* Node: Library Calls */
-
-#define TARGET_MEM_FUNCTIONS
 
 
 /* Node: Addressing Modes */
@@ -913,11 +879,7 @@ typedef struct { int regs; int lib; } CUMULATIVE_ARGS;
 #define OUTPUT_QUOTED_STRING(STREAM, STRING) \
  mmix_output_quoted_string (STREAM, STRING, strlen (STRING))
 
-#define ASM_OUTPUT_SOURCE_LINE(STREAM, LINE, COUNTER) \
- mmix_asm_output_source_line  (STREAM, LINE)
-
 #define TARGET_ASM_NAMED_SECTION default_elf_asm_named_section
-
 
 /* Node: Data Output */
 
@@ -937,6 +899,9 @@ typedef struct { int regs; int lib; } CUMULATIVE_ARGS;
 
 #define ASM_OUTPUT_LABEL(STREAM, NAME) \
  mmix_asm_output_label (STREAM, NAME)
+
+#define ASM_OUTPUT_INTERNAL_LABEL(STREAM, NAME) \
+ mmix_asm_output_internal_label (STREAM, NAME)
 
 #define ASM_DECLARE_REGISTER_GLOBAL(STREAM, DECL, REGNO, NAME) \
  mmix_asm_declare_register_global (STREAM, DECL, REGNO, NAME)

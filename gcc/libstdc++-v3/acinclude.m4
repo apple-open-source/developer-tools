@@ -27,38 +27,6 @@ AC_DEFUN([GLIBCXX_CHECK_HOST], [
   AC_MSG_NOTICE([OS config directory is $os_include_dir])
 ])
 
-
-dnl
-dnl Initialize basic configure bits.
-dnl
-dnl Substs:
-dnl  multi_basedir
-dnl
-AC_DEFUN([GLIBCXX_TOPREL_CONFIGURE], [
-  # Sets up multi_basedir, which is srcdir/.. plus the usual
-  # "multi_source_toprel_bottom_adjust" lunacy as needed.
-  AM_ENABLE_MULTILIB(, ..)
-
-  # The generated code is exactly the same, except that automake's looks in
-  # ".. $srcdir/.." and autoconf's looks in multi_basedir.  Apparently other
-  # things are triggered on the presence of the two ...AUX_DIR[S], but I don't
-  # know what they are or what the other differences might be (and they keep
-  # changing anyhow).
-  #
-  # Looking in multi_basedir seems smarter, so actually execute that branch.
-  if false; then
-    # this is for automake
-    AC_CONFIG_AUX_DIR(..)
-  else
-    # this is for autoconf
-    AC_CONFIG_AUX_DIRS(${multi_basedir})
-  fi
-
-  dnl XXX Turn this on.
-  dnl AC_LANG_CPLUSPLUS
-])
-
-
 dnl
 dnl Initialize the rest of the library configury.  At this point we have
 dnl variables like $host.
@@ -605,12 +573,15 @@ AC_DEFUN([GLIBCXX_CHECK_LFS], [
     AC_TRY_LINK(
       [#include <unistd.h>
        #include <stdio.h>
+       #include <sys/stat.h>
       ],
       [FILE* fp;
        fopen64("t", "w");
        fseeko64(fp, 0, SEEK_CUR);
        ftello64(fp);
-       lseek64(1, 0, SEEK_CUR);],	
+       lseek64(1, 0, SEEK_CUR);
+       struct stat64 buf;
+       fstat64(1, &buf);],
       [glibcxx_cv_LFS=yes],
       [glibcxx_cv_LFS=no])
   ])
@@ -623,6 +594,25 @@ AC_DEFUN([GLIBCXX_CHECK_LFS], [
 
 
 dnl
+dnl Check for whether a fully dynamic basic_string implementation should
+dnl be turned on, that does not put empty objects in per-process static
+dnl memory (mostly useful together with shared memory allocators, see PR
+dnl libstdc++/16612 for details).
+dnl
+dnl --enable-fully-dynamic-string defines _GLIBCXX_FULLY_DYNAMIC_STRING
+dnl --disable-fully-dynamic-string leaves _GLIBCXX_FULLY_DYNAMIC_STRING undefined
+dnl  +  Usage:  GLIBCXX_ENABLE_FULLY_DYNAMIC_STRING[(DEFAULT)]
+dnl       Where DEFAULT is either `yes' or `no'.
+dnl
+AC_DEFUN([GLIBCXX_ENABLE_FULLY_DYNAMIC_STRING], [
+  GLIBCXX_ENABLE(fully-dynamic-string,$1,,[do not put empty strings in per-process static memory])
+  if test $enable_fully_dynamic_string = yes; then
+    AC_DEFINE(_GLIBCXX_FULLY_DYNAMIC_STRING)
+  fi
+])
+
+
+dnl
 dnl Does any necessary configuration of the testsuite directory.  Generates
 dnl the testsuite_hooks.h header.
 dnl
@@ -630,6 +620,8 @@ dnl GLIBCXX_ENABLE_SYMVERS and GLIBCXX_IS_NATIVE must be done before this.
 dnl
 dnl Sets:
 dnl  enable_abi_check / GLIBCXX_TEST_ABI
+dnl  GLIBCXX_TEST_WCHAR_T
+dnl  GLIBCXX_TEST_THREAD
 dnl Substs:
 dnl  baseline_dir
 dnl
@@ -662,6 +654,7 @@ AC_DEFUN([GLIBCXX_CONFIGURE_TESTSUITE], [
   AC_SUBST(baseline_dir)
 
   GLIBCXX_CONDITIONAL(GLIBCXX_TEST_WCHAR_T, test $enable_wchar_t = yes)
+  GLIBCXX_CONDITIONAL(GLIBCXX_TEST_THREAD, test $enable_thread = yes)
   GLIBCXX_CONDITIONAL(GLIBCXX_TEST_ABI, test $enable_abi_check = yes)
 ])
 
@@ -878,6 +871,121 @@ AC_DEFUN([GLIBCXX_ENABLE_C99], [
     AC_DEFINE(_GLIBCXX_USE_C99_MATH)
   fi
 
+  # Check for the existence of <complex.h> complex functions.
+  # This is necessary even though libstdc++ uses the builtin versions
+  # of these functions, because if the builtin cannot be used, a reference
+  # to the library function is emitted.
+  AC_CHECK_HEADERS(complex.h, ac_has_complex_h=yes, ac_has_complex_h=no)
+  ac_c99_complex=no;
+  if test x"$ac_has_complex_h" = x"yes"; then
+    ac_c99_complex=yes;
+    AC_MSG_CHECKING([for ISO C99 support in <complex.h>])
+    AC_TRY_COMPILE([#include <complex.h>],
+	           [typedef __complex__ float _ComplexT; _ComplexT tmp;
+	            cabsf(tmp);],, [ac_c99_complex=no])
+    AC_TRY_COMPILE([#include <complex.h>],
+		   [typedef __complex__ double _ComplexT; _ComplexT tmp;
+		    cabs(tmp);],, [ac_c99_complex=no])
+    AC_TRY_COMPILE([#include <complex.h>],
+	 	   [typedef __complex__ long double _ComplexT; _ComplexT tmp;
+		    cabsl(tmp);],, [ac_c99_complex=no])
+    AC_TRY_COMPILE([#include <complex.h>],
+	           [typedef __complex__ float _ComplexT; _ComplexT tmp;
+                    cargf(tmp);],, [ac_c99_complex=no])
+    AC_TRY_COMPILE([#include <complex.h>],
+		   [typedef __complex__ double _ComplexT; _ComplexT tmp;
+		    carg(tmp);],, [ac_c99_complex=no])
+    AC_TRY_COMPILE([#include <complex.h>],
+	   	   [typedef __complex__ long double _ComplexT; _ComplexT tmp;
+		    cargl(tmp);],, [ac_c99_complex=no])
+    AC_TRY_COMPILE([#include <complex.h>],
+	       	   [typedef __complex__ float _ComplexT; _ComplexT tmp;
+		    ccosf(tmp);],, [ac_c99_complex=no])
+    AC_TRY_COMPILE([#include <complex.h>],
+		   [typedef __complex__ double _ComplexT; _ComplexT tmp;
+		    ccos(tmp);],, [ac_c99_complex=no])
+    AC_TRY_COMPILE([#include <complex.h>],
+		   [typedef __complex__ long double _ComplexT; _ComplexT tmp;
+		    ccosl(tmp);],, [ac_c99_complex=no])
+    AC_TRY_COMPILE([#include <complex.h>],
+		   [typedef __complex__ float _ComplexT; _ComplexT tmp;
+		    ccoshf(tmp);],, [ac_c99_complex=no])
+    AC_TRY_COMPILE([#include <complex.h>],
+		   [typedef __complex__ double _ComplexT; _ComplexT tmp;
+		    ccosh(tmp);],, [ac_c99_complex=no])
+    AC_TRY_COMPILE([#include <complex.h>],
+		   [typedef __complex__ long double _ComplexT; _ComplexT tmp;
+		    ccoshl(tmp);],, [ac_c99_complex=no])
+    AC_TRY_COMPILE([#include <complex.h>],
+		   [typedef __complex__ float _ComplexT; _ComplexT tmp;
+		    cexpf(tmp);],, [ac_c99_complex=no])
+    AC_TRY_COMPILE([#include <complex.h>],
+		   [typedef __complex__ double _ComplexT; _ComplexT tmp;
+		    cexp(tmp);],, [ac_c99_complex=no])
+    AC_TRY_COMPILE([#include <complex.h>],
+		   [typedef __complex__ long double _ComplexT; _ComplexT tmp;
+		    cexpl(tmp);],, [ac_c99_complex=no])
+    AC_TRY_COMPILE([#include <complex.h>],
+		   [typedef __complex__ float _ComplexT; _ComplexT tmp;
+		    csinf(tmp);],, [ac_c99_complex=no])
+    AC_TRY_COMPILE([#include <complex.h>],
+		   [typedef __complex__ double _ComplexT; _ComplexT tmp;
+		    csin(tmp);],, [ac_c99_complex=no])
+    AC_TRY_COMPILE([#include <complex.h>],
+		   [typedef __complex__ long double _ComplexT; _ComplexT tmp;
+		    csinl(tmp);],, [ac_c99_complex=no])
+    AC_TRY_COMPILE([#include <complex.h>],
+		   [typedef __complex__ float _ComplexT; _ComplexT tmp;
+ 		    csinhf(tmp);],, [ac_c99_complex=no])
+    AC_TRY_COMPILE([#include <complex.h>],
+		   [typedef __complex__ double _ComplexT; _ComplexT tmp;
+		    csinh(tmp);],, [ac_c99_complex=no])
+    AC_TRY_COMPILE([#include <complex.h>],
+		   [typedef __complex__ long double _ComplexT; _ComplexT tmp;
+		    csinhl(tmp);],, [ac_c99_complex=no])
+    AC_TRY_COMPILE([#include <complex.h>],
+		   [typedef __complex__ float _ComplexT; _ComplexT tmp;
+		    csqrtf(tmp);],, [ac_c99_complex=no])
+    AC_TRY_COMPILE([#include <complex.h>],
+		   [typedef __complex__ double _ComplexT; _ComplexT tmp;
+		    csqrt(tmp);],, [ac_c99_complex=no])
+    AC_TRY_COMPILE([#include <complex.h>],
+		   [typedef __complex__ long double _ComplexT; _ComplexT tmp;
+		    csqrtl(tmp);],, [ac_c99_complex=no])
+    AC_TRY_COMPILE([#include <complex.h>],
+		   [typedef __complex__ float _ComplexT; _ComplexT tmp;
+		    ctanf(tmp);],, [ac_c99_complex=no])
+    AC_TRY_COMPILE([#include <complex.h>],
+		   [typedef __complex__ double _ComplexT; _ComplexT tmp;
+		    ctan(tmp);],, [ac_c99_complex=no])
+    AC_TRY_COMPILE([#include <complex.h>],
+		   [typedef __complex__ long double _ComplexT; _ComplexT tmp;
+		    ctanl(tmp);],, [ac_c99_complex=no])
+    AC_TRY_COMPILE([#include <complex.h>],
+		   [typedef __complex__ float _ComplexT; _ComplexT tmp;
+		    ctanhf(tmp);],, [ac_c99_complex=no])
+    AC_TRY_COMPILE([#include <complex.h>],
+		   [typedef __complex__ double _ComplexT; _ComplexT tmp;
+		    ctanh(tmp);],, [ac_c99_complex=no])
+    AC_TRY_COMPILE([#include <complex.h>],
+	  	   [typedef __complex__ long double _ComplexT; _ComplexT tmp;
+		    ctanhl(tmp);],, [ac_c99_complex=no])
+    AC_TRY_COMPILE([#include <complex.h>],
+		   [typedef __complex__ float _ComplexT; _ComplexT tmp;
+		    cpowf(tmp, tmp);],, [ac_c99_complex=no])
+    AC_TRY_COMPILE([#include <complex.h>],
+		   [typedef __complex__ double _ComplexT; _ComplexT tmp;
+		    cpow(tmp, tmp);],, [ac_c99_complex=no])
+    AC_TRY_COMPILE([#include <complex.h>],
+		   [typedef __complex__ long double _ComplexT; _ComplexT tmp;
+		    cpowl(tmp, tmp);],, [ac_c99_complex=no])
+  fi
+  AC_MSG_RESULT($ac_c99_complex)
+
+  if test x"$ac_c99_complex" = x"yes"; then
+    AC_DEFINE(_GLIBCXX_USE_C99_COMPLEX)
+  fi
+
   # Check for the existence in <stdio.h> of vscanf, et. al.
   ac_c99_stdio=yes;
   AC_MSG_CHECKING([for ISO C99 support in <stdio.h>])
@@ -947,16 +1055,13 @@ AC_DEFUN([GLIBCXX_ENABLE_C99], [
 
   AC_MSG_CHECKING([for enabled ISO C99 support])
   if test x"$ac_c99_math" = x"no" ||
+     test x"$ac_c99_complex" = x"no" ||
      test x"$ac_c99_stdio" = x"no" ||
      test x"$ac_c99_stdlib" = x"no" ||
      test x"$ac_c99_wchar" = x"no"; then
     enable_c99=no;
   fi;
   AC_MSG_RESULT($enable_c99)
-
-  if test x"$ac_99_math" = x"yes"; then
-    AC_DEFINE(_GLIBCXX_USE_C99_MATH)
-  fi
 
   # Option parsed, now set things appropriately
   if test x"$enable_c99" = x"yes"; then
@@ -1014,8 +1119,8 @@ AC_DEFUN([GLIBCXX_ENABLE_CLOCALE], [
   # Probe for locale support if no specific model is specified.
   # Default to "generic".
   if test $enable_clocale_flag = auto; then
-    case x${target_os} in
-      xlinux* | xgnu* | xkfreebsd*-gnu | xknetbsd*-gnu)
+    case ${target_os} in
+      linux* | gnu* | kfreebsd*-gnu | knetbsd*-gnu)
         AC_EGREP_CPP([_GLIBCXX_ok], [
         #include <features.h>
         #if __GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 2)
@@ -1024,7 +1129,7 @@ AC_DEFUN([GLIBCXX_ENABLE_CLOCALE], [
         ], enable_clocale_flag=gnu, enable_clocale_flag=generic)
 
         # Test for bugs early in glibc-2.2.x series
-          if test x$enable_clocale_flag = xgnu; then
+          if test $enable_clocale_flag = gnu; then
           AC_TRY_RUN([
           #define _GNU_SOURCE 1
           #include <locale.h>
@@ -1055,6 +1160,9 @@ AC_DEFUN([GLIBCXX_ENABLE_CLOCALE], [
 
         # ... at some point put __strxfrm_l tests in as well.
         ;;
+      darwin* | freebsd*)
+        enable_clocale_flag=darwin
+	;;
       *)
         enable_clocale_flag=generic
         ;;
@@ -1077,7 +1185,6 @@ AC_DEFUN([GLIBCXX_ENABLE_CLOCALE], [
 
       CLOCALE_H=config/locale/generic/c_locale.h
       CLOCALE_CC=config/locale/generic/c_locale.cc
-      CCODECVT_H=config/locale/generic/codecvt_specializations.h
       CCODECVT_CC=config/locale/generic/codecvt_members.cc
       CCOLLATE_CC=config/locale/generic/collate_members.cc
       CCTYPE_CC=config/locale/generic/ctype_members.cc
@@ -1089,6 +1196,23 @@ AC_DEFUN([GLIBCXX_ENABLE_CLOCALE], [
       CTIME_CC=config/locale/generic/time_members.cc
       CLOCALE_INTERNAL_H=config/locale/generic/c++locale_internal.h
       ;;
+    darwin)
+      AC_MSG_RESULT(darwin or freebsd)
+
+      CLOCALE_H=config/locale/generic/c_locale.h
+      CLOCALE_CC=config/locale/generic/c_locale.cc
+      CCODECVT_CC=config/locale/generic/codecvt_members.cc
+      CCOLLATE_CC=config/locale/generic/collate_members.cc
+      CCTYPE_CC=config/locale/darwin/ctype_members.cc
+      CMESSAGES_H=config/locale/generic/messages_members.h
+      CMESSAGES_CC=config/locale/generic/messages_members.cc
+      CMONEY_CC=config/locale/generic/monetary_members.cc
+      CNUMERIC_CC=config/locale/generic/numeric_members.cc
+      CTIME_H=config/locale/generic/time_members.h
+      CTIME_CC=config/locale/generic/time_members.cc
+      CLOCALE_INTERNAL_H=config/locale/generic/c++locale_internal.h
+      ;;
+	
     gnu)
       AC_MSG_RESULT(gnu)
 
@@ -1112,7 +1236,6 @@ AC_DEFUN([GLIBCXX_ENABLE_CLOCALE], [
 
       CLOCALE_H=config/locale/gnu/c_locale.h
       CLOCALE_CC=config/locale/gnu/c_locale.cc
-      CCODECVT_H=config/locale/ieee_1003.1-2001/codecvt_specializations.h
       CCODECVT_CC=config/locale/gnu/codecvt_members.cc
       CCOLLATE_CC=config/locale/gnu/collate_members.cc
       CCTYPE_CC=config/locale/gnu/ctype_members.cc
@@ -1129,7 +1252,6 @@ AC_DEFUN([GLIBCXX_ENABLE_CLOCALE], [
 
       CLOCALE_H=config/locale/ieee_1003.1-2001/c_locale.h
       CLOCALE_CC=config/locale/ieee_1003.1-2001/c_locale.cc
-      CCODECVT_H=config/locale/ieee_1003.1-2001/codecvt_specializations.h
       CCODECVT_CC=config/locale/generic/codecvt_members.cc
       CCOLLATE_CC=config/locale/generic/collate_members.cc
       CCTYPE_CC=config/locale/generic/ctype_members.cc
@@ -1159,7 +1281,6 @@ AC_DEFUN([GLIBCXX_ENABLE_CLOCALE], [
 
   AC_SUBST(USE_NLS)
   AC_SUBST(CLOCALE_H)
-  AC_SUBST(CCODECVT_H)
   AC_SUBST(CMESSAGES_H)
   AC_SUBST(CCODECVT_CC)
   AC_SUBST(CCOLLATE_CC)
@@ -1185,20 +1306,27 @@ AC_DEFUN([GLIBCXX_ENABLE_ALLOCATOR], [
   GLIBCXX_ENABLE(libstdcxx-allocator,auto,[=KIND],
     [use KIND for target std::allocator base],
     [permit new|malloc|mt|bitmap|pool|yes|no|auto])
+
   # If they didn't use this option switch, or if they specified --enable
   # with no specific model, we'll have to look for one.  If they
   # specified --disable (???), do likewise.
-  if test $enable_libstdcxx_allocator = no || test $enable_libstdcxx_allocator = yes; then
+  if test $enable_libstdcxx_allocator = no ||
+     test $enable_libstdcxx_allocator = yes;
+  then
      enable_libstdcxx_allocator=auto
   fi
 
-  # Either a known package, or "auto"
+  # Either a known package, or "auto". Auto implies the default choice
+  # for a particular platform.
   enable_libstdcxx_allocator_flag=$enable_libstdcxx_allocator
 
   # Probe for host-specific support if no specific model is specified.
   # Default to "new".
   if test $enable_libstdcxx_allocator_flag = auto; then
     case ${target_os} in
+      linux* | gnu* | kfreebsd*-gnu | knetbsd*-gnu)
+        enable_libstdcxx_allocator_flag=new
+        ;;
       *)
         enable_libstdcxx_allocator_flag=new
         ;;
@@ -1408,7 +1536,14 @@ AC_DEFUN([GLIBCXX_ENABLE_HOSTED], [
   AC_ARG_ENABLE([hosted-libstdcxx],
     AC_HELP_STRING([--disable-hosted-libstdcxx],
                    [only build freestanding C++ runtime support]),,
-    [enable_hosted_libstdcxx=yes])
+    [case "$host" in
+	arm*-*-symbianelf*) 
+	    enable_hosted_libstdcxx=no
+	    ;;
+        *) 
+	    enable_hosted_libstdcxx=yes
+	    ;;
+     esac])
   if test "$enable_hosted_libstdcxx" = no; then
     AC_MSG_NOTICE([Only freestanding libraries will be built])
     is_hosted=no
@@ -1434,28 +1569,12 @@ dnl --enable-long-long defines _GLIBCXX_USE_LONG_LONG
 dnl --disable-long-long leaves _GLIBCXX_USE_LONG_LONG undefined
 dnl  +  Usage:  GLIBCXX_ENABLE_LONG_LONG[(DEFAULT)]
 dnl       Where DEFAULT is either `yes' or `no'.
-dnl  +  If 'long long' stuff is not available, ignores DEFAULT and sets `no'.
 dnl
 AC_DEFUN([GLIBCXX_ENABLE_LONG_LONG], [
   GLIBCXX_ENABLE(long-long,$1,,[enables I/O support for 'long long'])
-
-  AC_LANG_SAVE
-  AC_LANG_CPLUSPLUS
-
-  AC_MSG_CHECKING([for enabled long long I/O support])
-  # iostreams require strtoll, strtoull to compile
-  AC_TRY_COMPILE([#include <stdlib.h>],
-                 [char* tmp; strtoll("gnu", &tmp, 10);],,[enable_long_long=no])
-  AC_TRY_COMPILE([#include <stdlib.h>],
-                 [char* tmp; strtoull("gnu", &tmp, 10);],,[enable_long_long=no])
-
-  # Option parsed, now set things appropriately
   if test $enable_long_long = yes; then
     AC_DEFINE(_GLIBCXX_USE_LONG_LONG)
   fi
-  AC_MSG_RESULT($enable_long_long)
-
-  AC_LANG_RESTORE
 ])
 
 
@@ -1618,6 +1737,23 @@ if test $enable_symvers != no; then
   CFLAGS=' -lgcc_s'
   AC_TRY_LINK(, [return 0;], glibcxx_shared_libgcc=yes, glibcxx_shared_libgcc=no)
   CFLAGS="$ac_save_CFLAGS"
+  if test $glibcxx_shared_libgcc = no; then
+    cat > conftest.c <<EOF
+int main (void) { return 0; }
+EOF
+changequote(,)dnl
+    glibcxx_libgcc_s_suffix=`${CC-cc} $CFLAGS $CPPFLAGS $LDFLAGS \
+			     -shared -shared-libgcc -o conftest.so \
+			     conftest.c -v 2>&1 >/dev/null \
+			     | sed -n 's/^.* -lgcc_s\([^ ]*\) .*$/\1/p'`
+changequote([,])dnl
+    rm -f conftest.c conftest.so
+    if test x${glibcxx_libgcc_s_suffix+set} = xset; then
+      CFLAGS=" -lgcc_s$glibcxx_libgcc_s_suffix"
+      AC_TRY_LINK(, [return 0;], glibcxx_shared_libgcc=yes)
+      CFLAGS="$ac_save_CFLAGS"
+    fi
+  fi
   AC_MSG_RESULT($glibcxx_shared_libgcc)
 fi
 
@@ -1708,6 +1844,15 @@ AC_DEFUN([GLIBCXX_ENABLE_THREADS], [
   fi
 
   glibcxx_thread_h=gthr-$target_thread_file.h
+
+  dnl Check for __GTHREADS define.
+  gthread_file=${toplevel_srcdir}/gcc/${glibcxx_thread_h}
+  if grep __GTHREADS $gthread_file >/dev/null 2>&1 ; then
+    enable_thread=yes
+  else
+   enable_thread=no
+  fi
+
   AC_SUBST(glibcxx_thread_h)
 ])
 

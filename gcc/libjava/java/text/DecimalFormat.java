@@ -1,5 +1,5 @@
 /* DecimalFormat.java -- Formats and parses numbers
-   Copyright (C) 1999, 2000, 2001, 2003 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2001, 2003, 2004  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -42,16 +42,15 @@ import gnu.java.text.FormatBuffer;
 import gnu.java.text.FormatCharacterIterator;
 import gnu.java.text.StringFormatBuffer;
 
+import java.io.IOException;
+import java.io.ObjectInputStream;
 import java.util.Currency;
 import java.util.HashMap;
 import java.util.Locale;
-import java.util.MissingResourceException;
-import java.util.ResourceBundle;
-import java.io.ObjectInputStream;
-import java.io.IOException;
 
 /**
- * @author Tom Tromey <tromey@cygnus.com>
+ * @author Tom Tromey (tromey@cygnus.com)
+ * @author Andrew John Hughes (gnu_andrew@member.fsf.org)
  * @date March 4, 1999
  */
 /* Written using "Java Class Libraries", 2nd edition, plus online
@@ -64,9 +63,9 @@ public class DecimalFormat extends NumberFormat
 {
   // This is a helper for applyPatternWithSymbols.  It reads a prefix
   // or a suffix.  It can cause some side-effects.
-  private final int scanFix (String pattern, int index, FormatBuffer buf,
-			     String patChars, DecimalFormatSymbols syms,
-			     boolean is_suffix)
+  private int scanFix (String pattern, int index, FormatBuffer buf,
+                       String patChars, DecimalFormatSymbols syms,
+                       boolean is_suffix)
   {
     int len = pattern.length();
     boolean quoteStarted = false;
@@ -142,9 +141,8 @@ public class DecimalFormat extends NumberFormat
   }
 
   // A helper which reads a number format.
-  private final int scanFormat (String pattern, int index,
-				String patChars, DecimalFormatSymbols syms,
-				boolean is_positive)
+  private int scanFormat (String pattern, int index, String patChars,
+                          DecimalFormatSymbols syms, boolean is_positive)
   {
     int max = pattern.length();
 
@@ -296,7 +294,7 @@ public class DecimalFormat extends NumberFormat
 
   // This helper function creates a string consisting of all the
   // characters which can appear in a pattern and must be quoted.
-  private final String patternChars (DecimalFormatSymbols syms)
+  private String patternChars (DecimalFormatSymbols syms)
   {
     StringBuffer buf = new StringBuffer ();
     buf.append(syms.getDecimalSeparator());
@@ -315,8 +313,7 @@ public class DecimalFormat extends NumberFormat
     return buf.toString();
   }
 
-  private final void applyPatternWithSymbols (String pattern,
-					      DecimalFormatSymbols syms)
+  private void applyPatternWithSymbols(String pattern, DecimalFormatSymbols syms)
   {
     // Initialize to the state the parser expects.
     negativePrefix = "";
@@ -427,7 +424,7 @@ public class DecimalFormat extends NumberFormat
     applyPattern (pattern);
   }
 
-  private final boolean equals (String s1, String s2)
+  private boolean equals(String s1, String s2)
   {
     if (s1 == null || s2 == null)
       return s1 == s2;
@@ -451,8 +448,8 @@ public class DecimalFormat extends NumberFormat
 	    && useExponentialNotation == dup.useExponentialNotation);
   }
 
-  protected void formatInternal (double number, FormatBuffer dest,
-				 FieldPosition fieldPos)
+  private void formatInternal (double number, FormatBuffer dest,
+			       FieldPosition fieldPos)
   {
     // A very special case.
     if (Double.isNaN(number))
@@ -849,7 +846,7 @@ public class DecimalFormat extends NumberFormat
     // FIXME: handle Inf and NaN.
 
     // FIXME: do we have to respect minimum digits?
-    // What about leading zeros?  What about multiplier?
+    // What about multiplier?
 
     StringBuffer buf = int_buf;
     StringBuffer frac_buf = null;
@@ -857,7 +854,13 @@ public class DecimalFormat extends NumberFormat
     int start_index = index;
     int max = str.length();
     int exp_index = -1;
-    int last = index + MAXIMUM_INTEGER_DIGITS;
+    int last = index + maximumIntegerDigits; 
+
+    if (maximumFractionDigits > 0)
+      last += maximumFractionDigits + 1;
+    
+    if (useExponentialNotation)
+      last += minExponentDigits + 1;
 
     if (last > 0 && max > last)
       max = last;
@@ -1145,7 +1148,7 @@ public class DecimalFormat extends NumberFormat
     positiveSuffix = newValue;
   }
 
-  private final void quoteFix (StringBuffer buf, String text, String patChars)
+  private void quoteFix(StringBuffer buf, String text, String patChars)
   {
     int len = text.length();
     for (int index = 0; index < len; ++index)
@@ -1162,7 +1165,7 @@ public class DecimalFormat extends NumberFormat
       }
   }
 
-  private final String computePattern (DecimalFormatSymbols syms)
+  private String computePattern(DecimalFormatSymbols syms)
   {
     StringBuffer mainPattern = new StringBuffer ();
     // We have to at least emit a zero for the minimum number of

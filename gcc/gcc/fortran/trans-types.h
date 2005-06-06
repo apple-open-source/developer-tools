@@ -24,28 +24,6 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #ifndef GFC_BACKEND_H
 #define GFC_BACKEND_H
 
-enum
-{
-  F95_INT1_TYPE,
-  F95_INT2_TYPE,
-  F95_INT4_TYPE,
-  F95_INT8_TYPE,
-  F95_INT16_TYPE,
-  F95_REAL4_TYPE,
-  F95_REAL8_TYPE,
-  F95_REAl16_TYPE,
-  F95_COMPLEX4_TYPE,
-  F95_COMPLEX8_TYPE,
-  F95_COMPLEX16_TYPE,
-  F95_LOGICAL1_TYPE,
-  F95_LOGICAL2_TYPE,
-  F95_LOGICAL4_TYPE,
-  F95_LOGICAL8_TYPE,
-  F95_LOGICAL16_TYPE,
-  F95_CHARACTER1_TYPE,
-  NUM_F95_TYPES
-};
-
 #define GFC_DTYPE_RANK_MASK 0x07
 #define GFC_DTYPE_TYPE_SHIFT 3
 #define GFC_DTYPE_TYPE_MASK 0x38
@@ -62,49 +40,22 @@ enum
   GFC_DTYPE_CHARACTER
 };
 
-extern GTY(()) tree gfc_type_nodes[NUM_F95_TYPES];
-
 extern GTY(()) tree gfc_array_index_type;
+extern GTY(()) tree gfc_character1_type_node;
 extern GTY(()) tree ppvoid_type_node;
 extern GTY(()) tree pvoid_type_node;
 extern GTY(()) tree pchar_type_node;
-
-#define gfc_int1_type_node  gfc_type_nodes[F95_INT1_TYPE]
-#define gfc_int2_type_node  gfc_type_nodes[F95_INT2_TYPE]
-#define gfc_int4_type_node  gfc_type_nodes[F95_INT4_TYPE]
-#define gfc_int8_type_node  gfc_type_nodes[F95_INT8_TYPE]
-#define gfc_int16_type_node gfc_type_nodes[F95_INT16_TYPE]
-
-#define gfc_real4_type_node  gfc_type_nodes[F95_REAL4_TYPE]
-#define gfc_real8_type_node  gfc_type_nodes[F95_REAL8_TYPE]
-#define gfc_real16_type_node gfc_type_nodes[F95_REAL16_TYPE]
-
-#define gfc_complex4_type_node  gfc_type_nodes[F95_COMPLEX4_TYPE]
-#define gfc_complex8_type_node  gfc_type_nodes[F95_COMPLEX8_TYPE]
-#define gfc_complex16_type_node gfc_type_nodes[F95_COMPLEX16_TYPE]
-
-#define gfc_logical1_type_node  gfc_type_nodes[F95_LOGICAL1_TYPE]
-#define gfc_logical2_type_node  gfc_type_nodes[F95_LOGICAL2_TYPE]
-#define gfc_logical4_type_node  gfc_type_nodes[F95_LOGICAL4_TYPE]
-#define gfc_logical8_type_node  gfc_type_nodes[F95_LOGICAL8_TYPE]
-#define gfc_logical16_type_node gfc_type_nodes[F95_LOGICAL16_TYPE]
-
-#define gfc_character1_type_node gfc_type_nodes[F95_CHARACTER1_TYPE]
-
-#define gfc_strlen_kind 4
-#define gfc_strlen_type_node gfc_int4_type_node
-
-/* These C-specific types are used while building builtin function decls.
-   For now it doesn't really matter what these are defined to as we don't
-   need any of the builtins that use them.  */
-#define intmax_type_node gfc_int8_type_node
-#define string_type_node pchar_type_node
-#define const_string_type_node pchar_type_node
+/* This is the type used to hold the lengths of character variables.
+   It must be the same as the corresponding definition in gfortran.h.  */
+/* TODO: This is still hardcoded as kind=4 in some bits of the compiler
+   and runtime library.  */
+extern GTY(()) tree gfc_charlen_type_node;
 
 /* be-function.c */
 void gfc_convert_function_code (gfc_namespace *);
 
 /* trans-types.c */
+void gfc_init_kinds (void);
 void gfc_init_types (void);
 
 tree gfc_get_int_type (int);
@@ -112,6 +63,7 @@ tree gfc_get_real_type (int);
 tree gfc_get_complex_type (int);
 tree gfc_get_logical_type (int);
 tree gfc_get_character_type (int, gfc_charlen *);
+tree gfc_get_character_type_len (int, tree);
 
 tree gfc_sym_type (gfc_symbol *);
 tree gfc_typenode_for_spec (gfc_typespec *);
@@ -139,5 +91,12 @@ int gfc_return_by_reference (gfc_symbol *);
 
 /* Returns true if the array sym does not require a descriptor.  */
 int gfc_is_nodesc_array (gfc_symbol *);
+
+/* Return the DTYPE for an array.  */
+tree gfc_get_dtype (tree);
+/* APPLE LOCAL begin AltiVec */
+tree build_stmt (enum tree_code code ATTRIBUTE_UNUSED, ...);
+void store_init_value (tree decl ATTRIBUTE_UNUSED, tree init ATTRIBUTE_UNUSED);
+/* APPLE LOCAL end AltiVec */
 
 #endif

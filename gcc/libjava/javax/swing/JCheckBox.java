@@ -1,5 +1,5 @@
 /* JCheckBox.java -- 
-   Copyright (C) 2002 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2004 Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -47,48 +47,97 @@ import javax.accessibility.AccessibleContext;
  */
 public class JCheckBox extends JToggleButton
 {
-    public JCheckBox()
-    {
-	this(null, null);
-    }
-    public JCheckBox(Action a)
-    {
-	this();
-	setAction(a);
-    }
+  private static final long serialVersionUID = -5246739313864538930L;
 
-    public JCheckBox(Icon icon)
-    { 
-	this(null, icon);
-    }    
+  public static final String BORDER_PAINTED_FLAT_CHANGED_PROPERTY =
+    "borderPaintedFlat";
   
-    public JCheckBox(String text)
-    {
-	this(text, null);
-    }
+  private boolean borderPaintedFlat;
+
+  private void init()
+  {
+    borderPainted = false;
+    contentAreaFilled = false;
+  }
+  
+  public JCheckBox()
+  {
+    super();
+    init();
+  }
+
+  public JCheckBox(Action action)
+  {
+    super(action);
+    init();
+  }
+
+  public JCheckBox(Icon icon)
+  { 
+    super(icon);
+    init();
+  }    
+  
+  public JCheckBox(Icon icon, boolean selected)
+  { 
+    super(icon, selected);
+    init();
+  }    
+  
+  public JCheckBox(String text)
+  {
+    super(text);
+    init();
+  }
       
-    public JCheckBox(String text, Icon icon)
-    {
-	super(text, icon);
-        paint_border = false;
-        content_area_filled = false;
-    }
+  public JCheckBox(String text, boolean selected)
+  {
+    super(text, selected);
+    init();
+  }
+      
+  public JCheckBox(String text, Icon icon)
+  {
+    super(text, icon);
+    init();
+  }
 
-    
-    public AccessibleContext getAccessibleContext()
-    {
-	//Gets the AccessibleContext associated with this JCheckBox. 
-	return null;
-    }
+  public JCheckBox(String text, Icon icon, boolean selected)
+  {
+    super(text, icon, selected);
+    init();
+  }
+
+  /**
+   * Gets the AccessibleContext associated with this JCheckBox.
+   */
+  public AccessibleContext getAccessibleContext()
+  {
+    return null;
+  }
   
-    public String getUIClassID()
-    {
-	//Returns a string that specifies the name of the L&F class that renders this component.  
-	return "CheckBoxUI";
-    }
+  /**
+   * Returns a string that specifies the name of the Look and Feel class
+   * that renders this component.
+   */
+  public String getUIClassID()
+  {
+    return "CheckBoxUI";
+  }
   
-    protected  String paramString()
-    {
-	return "JCheckBox";
-    }
+  protected  String paramString()
+  {
+    return "JCheckBox";
+  }
+
+  public boolean isBorderPaintedFlat()
+  {
+    return borderPaintedFlat;
+  }
+
+  public void setBorderPaintedFlat(boolean newValue)
+  {
+    firePropertyChange("borderPaintedFlat", borderPaintedFlat, newValue);
+    borderPaintedFlat = newValue;
+  }
 }

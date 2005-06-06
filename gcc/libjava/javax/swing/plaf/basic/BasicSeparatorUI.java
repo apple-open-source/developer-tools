@@ -1,4 +1,4 @@
-/* BasicSeparatorUI.java
+/* BasicSeparatorUI.java --
    Copyright (C) 2004 Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
@@ -35,23 +35,25 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package javax.swing.plaf.basic;
 
-import java.awt.Dimension;
 import java.awt.Color;
-import java.awt.Rectangle;
+import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Insets;
-import javax.swing.plaf.ComponentUI;
-import javax.swing.plaf.SeparatorUI;
-import javax.swing.UIDefaults;
-import javax.swing.UIManager;
+import java.awt.Rectangle;
+
 import javax.swing.JComponent;
 import javax.swing.JSeparator;
 import javax.swing.SwingUtilities;
+import javax.swing.UIDefaults;
+import javax.swing.UIManager;
+import javax.swing.plaf.ComponentUI;
+import javax.swing.plaf.SeparatorUI;
 
 /**
- * The Basic L&F UI delegate for JSeparator.
+ * The Basic Look and Feel UI delegate for JSeparator.
  */
 public class BasicSeparatorUI extends SeparatorUI
 {
@@ -113,7 +115,7 @@ public class BasicSeparatorUI extends SeparatorUI
 
   /**
    * This method installs the defaults that are given by
-   * the Basic L&F.
+   * the Basic Look and Feel.
    *
    * @param s The JSeparator that is being installed.
    */
@@ -123,11 +125,12 @@ public class BasicSeparatorUI extends SeparatorUI
 
     shadow = defaults.getColor("Separator.shadow");
     highlight = defaults.getColor("Separator.highlight");
+    s.setOpaque(true);
   }
 
   /**
    * This method removes the defaults that were given
-   * by the Basic L&F.
+   * by the Basic Look and Feel.
    *
    * @param s The JSeparator that is being uninstalled.
    */

@@ -33,8 +33,7 @@
 //
 
 /** @file sstream
- *  This is a Standard C++ Library header.  You should @c #include this header
- *  in your programs, rather than any of the "st[dl]_*.h" implementation files.
+ *  This is a Standard C++ Library header.
  */
 
 #ifndef _GLIBCXX_SSTREAM
@@ -73,16 +72,9 @@ namespace std
       typedef typename traits_type::pos_type 		pos_type;
       typedef typename traits_type::off_type 		off_type;
 
-      //@{
-      /**
-       *  @if maint
-       *  @doctodo
-       *  @endif
-      */
       typedef basic_streambuf<char_type, traits_type>  	__streambuf_type;
       typedef basic_string<char_type, _Traits, _Alloc> 	__string_type;
       typedef typename __string_type::size_type		__size_type;
-      //@}
 
     protected:
       /**
@@ -93,11 +85,6 @@ namespace std
       ios_base::openmode 	_M_mode;
 
       // Data Members:
-      /**
-       *  @if maint
-       *  @doctodo
-       *  @endif
-      */
       __string_type 		_M_string;
 
     public:
@@ -111,8 +98,8 @@ namespace std
       */
       explicit
       basic_stringbuf(ios_base::openmode __mode = ios_base::in | ios_base::out)
-      : __streambuf_type(), _M_mode(), _M_string()
-      { _M_stringbuf_init(__mode); }
+      : __streambuf_type(), _M_mode(__mode), _M_string()
+      { }
 
       /**
        *  @brief  Starts with an existing string buffer.
@@ -140,8 +127,7 @@ namespace std
       __string_type
       str() const
       {
-	const bool __testout = this->_M_mode & ios_base::out;
-	if (__testout)
+	if (this->pptr())
 	  {
 	    // The current egptr() may not be the actual string end.
 	    if (this->pptr() > this->egptr())
@@ -169,12 +155,7 @@ namespace std
       }
 
     protected:
-      // Common initialization code for both ctors goes here.
-      /**
-       *  @if maint
-       *  @doctodo
-       *  @endif
-      */
+      // Common initialization code goes here.
       void
       _M_stringbuf_init(ios_base::openmode __mode)
       {
@@ -186,15 +167,12 @@ namespace std
 	_M_sync(const_cast<char_type*>(_M_string.data()), 0, __len);
       }
 
-      // [documentation is inherited]
       virtual int_type
       underflow();
 
-      // [documentation is inherited]
       virtual int_type
       pbackfail(int_type __c = traits_type::eof());
 
-      // [documentation is inherited]
       virtual int_type
       overflow(int_type __c = traits_type::eof());
 
@@ -220,7 +198,7 @@ namespace std
 	    // things will quickly blow up.
 	    
 	    // Step 1: Destroy the current internal array.
-	    _M_string = __string_type(__s, __n);
+	    _M_string.assign(__s, __n);
 	    
 	    // Step 2: Use the external array.
 	    _M_sync(__s, 0, 0);
@@ -228,12 +206,10 @@ namespace std
 	return this;
       }
 
-      // [documentation is inherited]
       virtual pos_type
       seekoff(off_type __off, ios_base::seekdir __way,
 	      ios_base::openmode __mode = ios_base::in | ios_base::out);
 
-      // [documentation is inherited]
       virtual pos_type
       seekpos(pos_type __sp,
 	      ios_base::openmode __mode = ios_base::in | ios_base::out);
@@ -244,30 +220,30 @@ namespace std
       // Assumes: contents of _M_string and internal buffer match exactly.
       // __i == _M_in_cur - _M_in_beg
       // __o == _M_out_cur - _M_out_beg
-      /**
-       *  @if maint
-       *  @doctodo
-       *  @endif
-      */
       void
       _M_sync(char_type* __base, __size_type __i, __size_type __o)
       {
 	const bool __testin = this->_M_mode & ios_base::in;
 	const bool __testout = this->_M_mode & ios_base::out;
-	const __size_type __len = _M_string.size();
+	char_type* __end = __base + _M_string.size();
 
 	if (__testin)
-	  this->setg(__base, __base + __i, __base + __len);
+	  this->setg(__base, __base + __i, __end);
 	if (__testout)
 	  {
-	    this->setp(__base, __base + _M_string.capacity());
+	    // If __base comes from setbuf we cannot trust capacity()
+	    // to match the size of the buffer area: in general, after
+	    // Step 1 above, _M_string.capacity() >= __n.
+	    if (__base == _M_string.data())
+	      this->setp(__base, __base + _M_string.capacity());
+	    else
+	      this->setp(__base, __end);
 	    this->pbump(__o);
-	    // We need a pointer to the string end anyway, even when
-	    // !__testin: in that case, however, for the correct
-	    // functioning of the streambuf inlines all the get area
-	    // pointers must be identical.
+	    // egptr() always tracks the string end. When !__testin,
+	    // for the correct functioning of the streambuf inlines
+	    // the other get area pointers are identical.
 	    if (!__testin)
-	      this->setg(__base + __len, __base + __len, __base + __len);
+	      this->setg(__end, __end, __end);
 	  }
       }
 
@@ -277,9 +253,8 @@ namespace std
       _M_update_egptr()
       {
 	const bool __testin = this->_M_mode & ios_base::in;
-	const bool __testout = this->_M_mode & ios_base::out;
 
-	if (__testout && this->pptr() > this->egptr())
+	if (this->pptr() && this->pptr() > this->egptr())
 	  if (__testin)
 	    this->setg(this->eback(), this->gptr(), this->pptr());
 	  else
@@ -317,11 +292,6 @@ namespace std
       typedef basic_istream<char_type, traits_type>	__istream_type;
 
     private:
-      /**
-       *  @if maint
-       *  @doctodo
-       *  @endif
-      */
       __stringbuf_type	_M_stringbuf;
 
     public:
@@ -435,11 +405,6 @@ namespace std
       typedef basic_ostream<char_type, traits_type>	__ostream_type;
 
     private:
-      /**
-       *  @if maint
-       *  @doctodo
-       *  @endif
-      */
       __stringbuf_type	_M_stringbuf;
 
     public:
@@ -553,11 +518,6 @@ namespace std
       typedef basic_iostream<char_type, traits_type>	__iostream_type;
 
     private:
-      /**
-       *  @if maint
-       *  @doctodo
-       *  @endif
-      */
       __stringbuf_type	_M_stringbuf;
 
     public:

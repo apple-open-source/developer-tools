@@ -154,6 +154,7 @@ private
    Machine_Overflows         : constant Boolean := False;
    Machine_Rounds            : constant Boolean := True;
    OpenVMS                   : constant Boolean := False;
+   Preallocated_Stacks       : constant Boolean := False;
    Signed_Zeros              : constant Boolean := True;
    Stack_Check_Default       : constant Boolean := False;
    Stack_Check_Probes        : constant Boolean := False;
@@ -164,8 +165,8 @@ private
    Support_Long_Shifts       : constant Boolean := True;
    Suppress_Standard_Library : constant Boolean := False;
    Use_Ada_Main_Program_Name : constant Boolean := False;
-   ZCX_By_Default            : constant Boolean := False;
-   GCC_ZCX_Support           : constant Boolean := False;
+   ZCX_By_Default            : constant Boolean := True;
+   GCC_ZCX_Support           : constant Boolean := True;
    Front_End_ZCX_Support     : constant Boolean := False;
 
    --  Obsolete entries, to be removed eventually (bootstrap issues!)

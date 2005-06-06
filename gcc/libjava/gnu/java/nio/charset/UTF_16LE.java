@@ -1,5 +1,5 @@
 /* UTF_16LE.java -- 
-   Copyright (C) 2002 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2004, 2005  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -35,14 +35,12 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package gnu.java.nio.charset;
 
-import java.nio.ByteBuffer;
-import java.nio.CharBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CharsetEncoder;
-import java.nio.charset.CoderResult;
 
 /**
  * UTF-16LE charset.
@@ -53,7 +51,17 @@ final class UTF_16LE extends Charset
 {
   UTF_16LE ()
   {
-    super ("UTF-16LE", null);
+    super ("UTF-16LE", new String[] {
+        // witnessed by the internet
+        "UTF16LE", 
+        /* These names are provided by
+         * http://oss.software.ibm.com/cgi-bin/icu/convexp?s=ALL
+         */
+        "x-utf-16le", "ibm-1202", "ibm-13490", "ibm-17586",
+        "UTF16_LittleEndian",
+        // see http://java.sun.com/j2se/1.5.0/docs/guide/intl/encoding.doc.html
+        "UnicodeLittleUnmarked"
+    });
   }
 
   public boolean contains (Charset cs)

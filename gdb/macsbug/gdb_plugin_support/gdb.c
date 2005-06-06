@@ -36,7 +36,7 @@
 #include "inferior.h"	// stop_bpstat, read_sp
 #include "symtab.h"	// struct symtab_and_line, find_pc_line
 #include "frame.h"   	// selected_frame
-#include "gdbarch.h"	// gdbarch_register_raw_size
+#include "gdbarch.h"	// gdbarch_deprecated_register_raw_size
 #include "gdbcore.h"	// memory_error
 
 #define CLASS_BASE 100
@@ -1509,11 +1509,11 @@ char *gdb_set_register(char *theRegister, void *value, int size)
 	++start;
     end = start + strlen(start);
     
-    regnum = frame_map_name_to_regnum(start, end - start);
+    regnum = frame_map_name_to_regnum(get_selected_frame(), start, end - start);
     if (regnum < 0)
     	return ("bad register");
     
-    if (gdbarch_register_raw_size(current_gdbarch, regnum) != size)
+    if (gdbarch_deprecated_register_raw_size(current_gdbarch, regnum) != size)
     	return ("invalid register length");
     
     vp = expression_to_value_ptr(theRegister);
@@ -1581,7 +1581,7 @@ void *gdb_get_register(char *theRegister, void *value)
 	++theRegister;
     end = theRegister + strlen(theRegister);
     
-    regnum = frame_map_name_to_regnum(theRegister, end - theRegister);
+    regnum = frame_map_name_to_regnum(get_selected_frame(), theRegister, end - theRegister);
     if (regnum < 0) {
 	//strcpy((char *)value, "bad register");
 	*(long *)value = Gdb_GetReg_BadReg;
@@ -1595,7 +1595,7 @@ void *gdb_get_register(char *theRegister, void *value)
     }
     
     //if (size)
-    //	*size = gdbarch_register_raw_size(current_gdbarch, regnum);
+    //	*size = gdbarch_deprecated_register_raw_size(current_gdbarch, regnum);
     //gdb_printf("type = %d\n", TYPE_CODE(gdbarch_register_virtual_type(current_gdbarch, regnum)));
     
     return (value);

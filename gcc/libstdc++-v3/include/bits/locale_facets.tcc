@@ -28,7 +28,10 @@
 // invalidate any other reasons why the executable file might be covered by
 // the GNU General Public License.
 
-// Warning: this file is not meant for user inclusion. Use <locale>.
+/** @file locale_facets.tcc
+ *  This is an internal header file, included by other library headers.
+ *  You should not attempt to use it directly.
+ */
 
 #ifndef _LOCALE_FACETS_TCC
 #define _LOCALE_FACETS_TCC 1
@@ -279,28 +282,32 @@ namespace std
       const locale& __loc = __io._M_getloc();
       const __cache_type* __lc = __uc(__loc);
       const _CharT* __lit = __lc->_M_atoms_in;
+      char_type __c = char_type();
 
-      // True if a mantissa is found.
-      bool __found_mantissa = false;
+      // True if __beg becomes equal to __end.
+      bool __testeof = __beg == __end;
 
       // First check for sign.
-      if (__beg != __end)
+      if (!__testeof)
 	{
-	  const char_type __c = *__beg;
+	  __c = *__beg;
 	  const bool __plus = __c == __lit[__num_base::_S_iplus];
 	  if ((__plus || __c == __lit[__num_base::_S_iminus])
 	      && !(__lc->_M_use_grouping && __c == __lc->_M_thousands_sep)
 	      && !(__c == __lc->_M_decimal_point))
 	    {
 	      __xtrc += __plus ? '+' : '-';
-	      ++__beg;
+	      if (++__beg != __end)
+		__c = *__beg;
+	      else
+		__testeof = true;
 	    }
 	}
 
       // Next, look for leading zeros.
-      while (__beg != __end)
+      bool __found_mantissa = false;
+      while (!__testeof)
 	{
-	  const char_type __c = *__beg;
 	  if (__lc->_M_use_grouping && __c == __lc->_M_thousands_sep
 	      || __c == __lc->_M_decimal_point)
 	    break;
@@ -311,7 +318,10 @@ namespace std
 		  __xtrc += '0';
 		  __found_mantissa = true;
 		}
-	      ++__beg;
+	      if (++__beg != __end)
+		__c = *__beg;
+	      else
+		__testeof = true;
 	    }
 	  else
 	    break;
@@ -324,13 +334,12 @@ namespace std
       if (__lc->_M_use_grouping)
 	__found_grouping.reserve(32);
       int __sep_pos = 0;
-      const char_type* __lit_zero = __lit + __num_base::_S_izero;
       const char_type* __q;
-      while (__beg != __end)
+      const char_type* __lit_zero = __lit + __num_base::_S_izero;
+      while (!__testeof)
         {
 	  // According to 22.2.2.1.2, p8-9, first look for thousands_sep
 	  // and decimal_point.
-	  const char_type __c = *__beg;
           if (__lc->_M_use_grouping && __c == __lc->_M_thousands_sep)
 	    {
 	      if (!__found_dec && !__found_sci)
@@ -341,7 +350,6 @@ namespace std
 		    {
 		      __found_grouping += static_cast<char>(__sep_pos);
 		      __sep_pos = 0;
-		      ++__beg;
 		    }
 		  else
 		    {
@@ -363,17 +371,15 @@ namespace std
 		    __found_grouping += static_cast<char>(__sep_pos);
 		  __xtrc += '.';
 		  __found_dec = true;
-		  ++__beg;
 		}
 	      else
 		break;
 	    }
-          else if (__q = __traits_type::find(__lit_zero, 10, __c))
+          else if ((__q = __traits_type::find(__lit_zero, 10, __c)))
 	    {
 	      __xtrc += __num_base::_S_atoms_in[__q - __lit];
 	      __found_mantissa = true;
 	      ++__sep_pos;
-	      ++__beg;
 	    }
 	  else if ((__c == __lit[__num_base::_S_ie] 
 		    || __c == __lit[__num_base::_S_iE])
@@ -388,20 +394,30 @@ namespace std
 	      // Remove optional plus or minus sign, if they exist.
 	      if (++__beg != __end)
 		{
-		  const bool __plus = *__beg == __lit[__num_base::_S_iplus];
-		  if ((__plus || *__beg == __lit[__num_base::_S_iminus])
+		  __c = *__beg;
+		  const bool __plus = __c == __lit[__num_base::_S_iplus];
+		  if ((__plus || __c == __lit[__num_base::_S_iminus])
 		      && !(__lc->_M_use_grouping
-			   && *__beg == __lc->_M_thousands_sep)
-		      && !(*__beg == __lc->_M_decimal_point))
-		    {
-		      __xtrc += __plus ? '+' : '-';
-		      ++__beg;
-		    }
+			   && __c == __lc->_M_thousands_sep)
+		      && !(__c == __lc->_M_decimal_point))
+		    __xtrc += __plus ? '+' : '-';
+		  else
+		    continue;
+		}
+	      else
+		{
+		  __testeof = true;
+		  break;
 		}
 	    }
 	  else
 	    // Not a valid input item.
 	    break;
+
+	  if (++__beg != __end)
+	    __c = *__beg;
+	  else
+	    __testeof = true;
         }
 
       // Digit grouping is checked. If grouping and found_grouping don't
@@ -419,7 +435,7 @@ namespace std
         }
 
       // Finish up.
-      if (__beg == __end)
+      if (__testeof)
         __err |= ios_base::eofbit;
       return __beg;
     }
@@ -437,6 +453,7 @@ namespace std
 	const locale& __loc = __io._M_getloc();
 	const __cache_type* __lc = __uc(__loc);
 	const _CharT* __lit = __lc->_M_atoms_in;
+	char_type __c = char_type();
 
 	// NB: Iff __basefield == 0, __base can change based on contents.
 	const ios_base::fmtflags __basefield = __io.flags()
@@ -444,37 +461,39 @@ namespace std
 	const bool __oct = __basefield == ios_base::oct;
 	int __base = __oct ? 8 : (__basefield == ios_base::hex ? 16 : 10);
 
-	// True if numeric digits are found.
-	bool __found_num = false;
+	// True if __beg becomes equal to __end.
+	bool __testeof = __beg == __end;
 
 	// First check for sign.
 	bool __negative = false;
-	if (__beg != __end)
+	if (!__testeof)
 	  {
-	    const char_type __c = *__beg;
+	    __c = *__beg;
 	    if (numeric_limits<_ValueT>::is_signed)
 	      __negative = __c == __lit[__num_base::_S_iminus];
 	    if ((__negative || __c == __lit[__num_base::_S_iplus])
 		&& !(__lc->_M_use_grouping && __c == __lc->_M_thousands_sep)
 		&& !(__c == __lc->_M_decimal_point))
-	      ++__beg;
+	      {
+		if (++__beg != __end)
+		  __c = *__beg;
+		else
+		  __testeof = true;
+	      }
 	  }
 
 	// Next, look for leading zeros and check required digits
 	// for base formats.
-	while (__beg != __end)
+	bool __found_zero = false;
+	while (!__testeof)
 	  {
-	    const char_type __c = *__beg;
 	    if (__lc->_M_use_grouping && __c == __lc->_M_thousands_sep
 		|| __c == __lc->_M_decimal_point)
 	      break;
 	    else if (__c == __lit[__num_base::_S_izero] 
-		     && (!__found_num || __base == 10))
-	      {
-		__found_num = true;
-		++__beg;
-	      }
-	    else if (__found_num)
+		     && (!__found_zero || __base == 10))
+	      __found_zero = true;
+	    else if (__found_zero)
 	      {
 		if (__c == __lit[__num_base::_S_ix] 
 		    || __c == __lit[__num_base::_S_iX])
@@ -482,19 +501,30 @@ namespace std
 		    if (__basefield == 0)
 		      __base = 16;
 		    if (__base == 16)
-		      {
-			__found_num = false;
-			++__beg;
-		      }
+		      __found_zero = false;
+		    else
+		      break;
 		  }
-		else if (__basefield == 0)
-		  __base = 8;
-		break;
+		else
+		  {
+		    if (__basefield == 0)
+		      __base = 8;
+		    break;
+		  }
 	      }
 	    else
 	      break;
-	  }
 
+	    if (++__beg != __end)
+	      {
+		__c = *__beg;
+		if (!__found_zero)
+		  break;
+	      }
+	    else
+	      __testeof = true;
+	  }
+	
 	// At this point, base is determined. If not hex, only allow
 	// base digits as valid input.
 	const size_t __len = (__base == 16 ? __num_base::_S_iend
@@ -507,16 +537,15 @@ namespace std
 	int __sep_pos = 0;
 	bool __overflow = false;
 	_ValueT __result = 0;
-	const char_type* __lit_zero = __lit + __num_base::_S_izero;
 	const char_type* __q;
+	const char_type* __lit_zero = __lit + __num_base::_S_izero;
 	if (__negative)
 	  {
 	    const _ValueT __min = numeric_limits<_ValueT>::min() / __base;
-	    for (; __beg != __end; ++__beg)
+	    while (!__testeof)
 	      {
 		// According to 22.2.2.1.2, p8-9, first look for thousands_sep
 		// and decimal_point.
-		const char_type __c = *__beg;
 		if (__lc->_M_use_grouping && __c == __lc->_M_thousands_sep)
 		  {
 		    // NB: Thousands separator at the beginning of a string
@@ -534,7 +563,7 @@ namespace std
 		  }
 		else if (__c == __lc->_M_decimal_point)
 		  break;
-		else if (__q = __traits_type::find(__lit_zero, __len, __c))
+		else if ((__q = __traits_type::find(__lit_zero, __len, __c)))
 		  {
 		    int __digit = __q - __lit_zero;
 		    if (__digit > 15)
@@ -543,25 +572,28 @@ namespace std
 		      __overflow = true;
 		    else
 		      {
-			const _ValueT __new_result = __result * __base
-			                             - __digit;
+			const _ValueT __new_result = (__result * __base
+						      - __digit);
 			__overflow |= __new_result > __result;
 			__result = __new_result;
 			++__sep_pos;
-			__found_num = true;
 		      }
 		  }
 		else
 		  // Not a valid input item.
 		  break;
+
+		if (++__beg != __end)
+		  __c = *__beg;
+		else
+		  __testeof = true;
 	      }
 	  }
 	else
 	  {
 	    const _ValueT __max = numeric_limits<_ValueT>::max() / __base;
-	    for (; __beg != __end; ++__beg)
+	    while (!__testeof)
 	      {
-		const char_type __c = *__beg;
 		if (__lc->_M_use_grouping && __c == __lc->_M_thousands_sep)
 		  {
 		    if (__sep_pos)
@@ -577,7 +609,7 @@ namespace std
 		  }
 		else if (__c == __lc->_M_decimal_point)
 		  break;
-		else if (__q = __traits_type::find(__lit_zero, __len, __c))
+		else if ((__q = __traits_type::find(__lit_zero, __len, __c)))
 		  {
 		    int __digit = __q - __lit_zero;
 		    if (__digit > 15)
@@ -586,16 +618,20 @@ namespace std
 		      __overflow = true;
 		    else
 		      {
-			const _ValueT __new_result = __result * __base
-			                             + __digit;
+			const _ValueT __new_result = (__result * __base
+						      + __digit);
 			__overflow |= __new_result < __result;
 			__result = __new_result;
 			++__sep_pos;
-			__found_num = true;
 		      }
 		  }
 		else
 		  break;
+
+		if (++__beg != __end)
+		  __c = *__beg;
+		else
+		  __testeof = true;
 	      }
 	  }
 
@@ -613,12 +649,12 @@ namespace std
 	  }
 
 	if (!(__err & ios_base::failbit) && !__overflow
-	    && __found_num)
+	    && (__sep_pos || __found_zero || __found_grouping.size()))
 	  __v = __result;
 	else
 	  __err |= ios_base::failbit;
 
-	if (__beg == __end)
+	if (__testeof)
 	  __err |= ios_base::eofbit;
 	return __beg;
       }
@@ -646,7 +682,6 @@ namespace std
       else
         {
 	  // Parse bool values as alphanumeric.
-	  typedef char_traits<_CharT>                     __traits_type;
 	  typedef typename numpunct<_CharT>::__cache_type __cache_type;
 	  __use_cache<__cache_type> __uc;
 	  const locale& __loc = __io._M_getloc();
@@ -655,22 +690,28 @@ namespace std
 	  bool __testf = true;
 	  bool __testt = true;
 	  size_t __n;
-          for (__n = 0; __beg != __end; ++__n, ++__beg)
+	  bool __testeof = __beg == __end;
+          for (__n = 0; !__testeof; ++__n)
             {
+	      const char_type __c = *__beg;
+
 	      if (__testf)
 		if (__n < __lc->_M_falsename_size)
-		  __testf = *__beg == __lc->_M_falsename[__n];
+		  __testf = __c == __lc->_M_falsename[__n];
 		else
 		  break;
 
 	      if (__testt)
 		if (__n < __lc->_M_truename_size)
-		  __testt = *__beg == __lc->_M_truename[__n];
+		  __testt = __c == __lc->_M_truename[__n];
 		else
 		  break;
 
 	      if (!__testf && !__testt)
 		break;
+	      
+	      if (++__beg == __end)
+		__testeof = true;
             }
 	  if (__testf && __n == __lc->_M_falsename_size)
 	    __v = 0;
@@ -679,7 +720,7 @@ namespace std
 	  else
 	    __err |= ios_base::failbit;
 
-          if (__beg == __end)
+          if (__testeof)
             __err |= ios_base::eofbit;
         }
       return __beg;
@@ -787,8 +828,6 @@ namespace std
 
       if (!(__err & ios_base::failbit))
 	__v = reinterpret_cast<void*>(__ul);
-      else
-	__err |= ios_base::failbit;
       return __beg;
     }
 
@@ -943,10 +982,9 @@ namespace std
 	    __new[0] = __cs[0];
 	    __new[1] = __cs[1];
 	  }
-      _CharT* __p;
-      __p = std::__add_grouping(__new + __off, __sep, __grouping,
-				__grouping_size, __cs + __off,
-				__cs + __len);
+      _CharT* __p = std::__add_grouping(__new + __off, __sep, __grouping,
+					__grouping_size, __cs + __off,
+					__cs + __len);
       __len = __p - __new;
     }
 
@@ -1012,10 +1050,10 @@ namespace std
       // _GLIBCXX_RESOLVE_LIB_DEFECTS
       // 282. What types does numpunct grouping refer to?
       // Add grouping, if necessary.
-      _CharT* __p2;
       const int __declen = __p ? __p - __cs : __len;
-      __p2 = std::__add_grouping(__new, __sep, __grouping, __grouping_size,
-				 __cs, __cs + __declen);
+      _CharT* __p2 = std::__add_grouping(__new, __sep, __grouping,
+					 __grouping_size,
+					 __cs, __cs + __declen);
 
       // Tack on decimal part.
       int __newlen = __p2 - __new;
@@ -1049,21 +1087,12 @@ namespace std
 	const locale& __loc = __io._M_getloc();
 	const __cache_type* __lc = __uc(__loc);
 
-	// Note: digits10 is rounded down: add 1 to ensure the maximum
-	// available precision.  Then, in general, one more 1 needs to
-	// be added since, when the %{g,G} conversion specifiers are
-	// chosen inside _S_format_float, the precision field is "the
-	// maximum number of significant digits", *not* the "number of
-	// digits to appear after the decimal point", as happens for
-	// %{e,E,f,F} (C99, 7.19.6.1,4).
-	const int __max_digits = numeric_limits<_ValueT>::digits10 + 2;
-
 	// Use default precision if out of range.
 	streamsize __prec = __io.precision();
-	if (__prec > static_cast<streamsize>(__max_digits))
-	  __prec = static_cast<streamsize>(__max_digits);
-	else if (__prec < static_cast<streamsize>(0))
+	if (__prec < static_cast<streamsize>(0))
 	  __prec = static_cast<streamsize>(6);
+
+	const int __max_digits = numeric_limits<_ValueT>::digits10;
 
 	// [22.2.2.2.2] Stage 1, numeric conversion to character.
 	int __len;
@@ -1071,7 +1100,7 @@ namespace std
 	char __fbuf[16];
 
 #ifdef _GLIBCXX_USE_C99
-	// First try a buffer perhaps big enough (for sure sufficient
+	// First try a buffer perhaps big enough (most probably sufficient
 	// for non-ios_base::fixed outputs)
 	int __cs_size = __max_digits * 3;
 	char* __cs = static_cast<char*>(__builtin_alloca(__cs_size));
@@ -1094,13 +1123,13 @@ namespace std
 	const int __max_exp = numeric_limits<_ValueT>::max_exponent10;
 
 	// The size of the output string is computed as follows.
-	// ios_base::fixed outputs may need up to __max_exp+1 chars
-	// for the integer part + up to __max_digits chars for the
-	// fractional part + 3 chars for sign, decimal point, '\0'. On
-	// the other hand, for non-fixed outputs __max_digits*3 chars
-	// are largely sufficient.
-	const int __cs_size = __fixed ? __max_exp + __max_digits + 4
-	                              : __max_digits * 3;
+	// ios_base::fixed outputs may need up to __max_exp + 1 chars
+	// for the integer part + __prec chars for the fractional part
+	// + 3 chars for sign, decimal point, '\0'. On the other hand,
+	// for non-fixed outputs __max_digits * 2 + __prec chars are
+	// largely sufficient.
+	const int __cs_size = __fixed ? __max_exp + __prec + 4
+	                              : __max_digits * 2 + __prec;
 	char* __cs = static_cast<char*>(__builtin_alloca(__cs_size));
 
 	__num_base::_S_format_float(__io, __fbuf, __mod);
@@ -1119,12 +1148,16 @@ namespace std
       // Replace decimal point.
       const _CharT __cdec = __ctype.widen('.');
       const _CharT __dec = __lc->_M_decimal_point;
-      const _CharT* __p;
-      if (__p = char_traits<_CharT>::find(__ws, __len, __cdec))
+      const _CharT* __p = char_traits<_CharT>::find(__ws, __len, __cdec);
+      if (__p)
 	__ws[__p - __ws] = __dec;
 
       // Add grouping, if necessary.
-      if (__lc->_M_use_grouping)
+      // N.B. Make sure to not group things like 2e20, i.e., no decimal
+      // point, scientific notation.
+      if (__lc->_M_use_grouping
+	  && (__p || __len < 3 || (__cs[1] != 'e' && __cs[2] != 'e'
+				   && __cs[1] != 'E' && __cs[2] != 'E')))
 	{
 	  // Grouping can add (almost) as many separators as the
 	  // number of digits, but no more.
@@ -1159,8 +1192,8 @@ namespace std
       const ios_base::fmtflags __flags = __io.flags();
       if ((__flags & ios_base::boolalpha) == 0)
         {
-          unsigned long __uv = __v;
-          __s = _M_insert_int(__s, __io, __fill, __uv);
+          const long __l = __v;
+          __s = _M_insert_int(__s, __io, __fill, __l);
         }
       else
         {
@@ -1237,8 +1270,7 @@ namespace std
            const void* __v) const
     {
       const ios_base::fmtflags __flags = __io.flags();
-      const ios_base::fmtflags __fmt = ~(ios_base::showpos
-					 | ios_base::basefield
+      const ios_base::fmtflags __fmt = ~(ios_base::basefield
 					 | ios_base::uppercase
 					 | ios_base::internal);
       __io.flags(__flags & __fmt | (ios_base::hex | ios_base::showbase));
@@ -1294,8 +1326,7 @@ namespace std
 	__res.reserve(32);
 
 	const char_type* __lit_zero = __lit + money_base::_S_zero;
-	const char_type* __q;
-	const money_base::pattern __p = __lc->_M_neg_format;	
+	const money_base::pattern __p = __lc->_M_neg_format;
 	for (int __i = 0; __i < 4 && __testvalid; ++__i)
 	  {
 	    const part __which = static_cast<part>(__p.field[__i]);
@@ -1356,35 +1387,41 @@ namespace std
 		// Extract digits, remove and stash away the
 		// grouping of found thousands separators.
 		for (; __beg != __end; ++__beg)
-		  if (__q = __traits_type::find(__lit_zero, 10, *__beg))
-		    {
-		      __res += money_base::_S_atoms[__q - __lit];
-		      ++__n;
-		    }
-		  else if (*__beg == __lc->_M_decimal_point && !__testdecfound)
-		    {
-		      __last_pos = __n;
-		      __n = 0;
-		      __testdecfound = true;
-		    }
-		  else if (__lc->_M_use_grouping
-			   && *__beg == __lc->_M_thousands_sep
-			   && !__testdecfound)
-		    {
-		      if (__n)
-			{
-			  // Mark position for later analysis.
-			  __grouping_tmp += static_cast<char>(__n);
-			  __n = 0;
-			}
-		      else
-			{
-			  __testvalid = false;
-			  break;
-			}
-		    }
-		  else
-		    break;
+		  {
+		    const char_type __c = *__beg;
+		    const char_type* __q = __traits_type::find(__lit_zero, 
+							       10, __c);
+		    if (__q != 0)
+		      {
+			__res += money_base::_S_atoms[__q - __lit];
+			++__n;
+		      }
+		    else if (__c == __lc->_M_decimal_point 
+			     && !__testdecfound)
+		      {
+			__last_pos = __n;
+			__n = 0;
+			__testdecfound = true;
+		      }
+		    else if (__lc->_M_use_grouping
+			     && __c == __lc->_M_thousands_sep
+			     && !__testdecfound)
+		      {
+			if (__n)
+			  {
+			    // Mark position for later analysis.
+			    __grouping_tmp += static_cast<char>(__n);
+			    __n = 0;
+			  }
+			else
+			  {
+			    __testvalid = false;
+			    break;
+			  }
+		      }
+		    else
+		      break;
+		  }
 		if (__res.empty())
 		  __testvalid = false;
 		break;
@@ -1449,16 +1486,15 @@ namespace std
 	      __testvalid = false;
 	  }
 	
-	// Iff no more characters are available.
-	if (__beg == __end)
-	  __err |= ios_base::eofbit;
-	
 	// Iff valid sequence is not recognized.
 	if (!__testvalid)
 	  __err |= ios_base::failbit;
 	else
 	  __units.swap(__res);
 	
+	// Iff no more characters are available.
+	if (__beg == __end)
+	  __err |= ios_base::eofbit;
 	return __beg;
       }
 
@@ -1682,22 +1718,22 @@ namespace std
       char* __cs = static_cast<char*>(__builtin_alloca(__cs_size));
       // _GLIBCXX_RESOLVE_LIB_DEFECTS
       // 328. Bad sprintf format modifier in money_put<>::do_put()
-      int __len = std::__convert_from_v(__cs, __cs_size, "%.0Lf", __units,
-					_S_get_c_locale());
+      int __len = std::__convert_from_v(__cs, __cs_size, "%.*Lf", __units,
+					_S_get_c_locale(), 0);
       // If the buffer was not large enough, try again with the correct size.
       if (__len >= __cs_size)
 	{
 	  __cs_size = __len + 1;
 	  __cs = static_cast<char*>(__builtin_alloca(__cs_size));
-	  __len = std::__convert_from_v(__cs, __cs_size, "%.0Lf", __units,
-					_S_get_c_locale());
+	  __len = std::__convert_from_v(__cs, __cs_size, "%.*Lf", __units,
+					_S_get_c_locale(), 0);
 	}
 #else
       // max_exponent10 + 1 for the integer part, + 2 for sign and '\0'.
       const int __cs_size = numeric_limits<long double>::max_exponent10 + 3;
       char* __cs = static_cast<char*>(__builtin_alloca(__cs_size));
-      int __len = std::__convert_from_v(__cs, 0, "%.0Lf", __units,
-					_S_get_c_locale());
+      int __len = std::__convert_from_v(__cs, 0, "%.*Lf", __units,
+					_S_get_c_locale(), 0);
 #endif
       _CharT* __ws = static_cast<_CharT*>(__builtin_alloca(sizeof(_CharT)
 							   * __cs_size));
@@ -1724,10 +1760,8 @@ namespace std
     time_get<_CharT, _InIter>::do_date_order() const
     { return time_base::no_order; }
 
-  // Recursively expand a strftime format string and parse it.  Starts w/ %x
-  // and %X from do_get_time() and do_get_date(), which translate to a more
-  // specific string, which may contain yet more strings.  I.e. %x => %r =>
-  // %H:%M:%S => extracted characters.
+  // Expand a strftime format string and parse it.  E.g., do_get_date() may
+  // pass %m/%d/%Y => extracted characters.
   template<typename _CharT, typename _InIter>
     _InIter
     time_get<_CharT, _InIter>::
@@ -1847,8 +1881,13 @@ namespace std
 						__tm, __wcs);
 		  break;
 		case 'S':
-		  // Seconds.
-		  __beg = _M_extract_num(__beg, __end, __tm->tm_sec, 0, 59, 2,
+		  // Seconds. [tm_sec]
+		  // [00, 60] in C99 (one leap-second), [00, 61] in C89.
+#ifdef _GLIBCXX_USE_C99
+		  __beg = _M_extract_num(__beg, __end, __tm->tm_sec, 0, 60, 2,
+#else
+		  __beg = _M_extract_num(__beg, __end, __tm->tm_sec, 0, 61, 2,
+#endif
 					 __io, __err);
 		  break;
 		case 't':
@@ -2004,35 +2043,28 @@ namespace std
       while (__nmatches > 1)
 	{
 	  // Find smallest matching string.
-	  size_t __minlen = 10;
-	  for (size_t __i2 = 0; __i2 < __nmatches; ++__i2)
+	  size_t __minlen = __traits_type::length(__names[__matches[0]]);
+	  for (size_t __i2 = 1; __i2 < __nmatches; ++__i2)
 	    __minlen = std::min(__minlen,
 			      __traits_type::length(__names[__matches[__i2]]));
-	  ++__beg;
+	  ++__beg, ++__pos;
 	  if (__pos < __minlen && __beg != __end)
-	    {
-	      ++__pos;
-	      for (size_t __i3 = 0; __i3 < __nmatches; ++__i3)
-		{
-		  __name = __names[__matches[__i3]];
-		  if (__name[__pos] != *__beg)
-		    __matches[__i3] = __matches[--__nmatches];
-		}
-	    }
+	    for (size_t __i3 = 0; __i3 < __nmatches;)
+	      {
+		__name = __names[__matches[__i3]];
+		if (__name[__pos] != *__beg)
+		  __matches[__i3] = __matches[--__nmatches];
+		else
+		  ++__i3;
+	      }
 	  else
 	    break;
 	}
 
       if (__nmatches == 1)
 	{
-	  // If there was only one match, the first compare is redundant.
-	  if (__pos == 0)
-	    {
-	      ++__pos;
-	      ++__beg;
-	    }
-
 	  // Make sure found name is completely extracted.
+	  ++__beg, ++__pos;
 	  __name = __names[__matches[0]];
 	  const size_t __len = __traits_type::length(__name);
 	  while (__pos < __len && __beg != __end && __name[__pos] == *__beg)
@@ -2056,12 +2088,12 @@ namespace std
     do_get_time(iter_type __beg, iter_type __end, ios_base& __io,
 		ios_base::iostate& __err, tm* __tm) const
     {
-      _CharT __wcs[3];
-      const char* __cs = "%X";
       const locale& __loc = __io._M_getloc();
-      ctype<_CharT> const& __ctype = use_facet<ctype<_CharT> >(__loc);
-      __ctype.widen(__cs, __cs + 3, __wcs);
-      __beg = _M_extract_via_format(__beg, __end, __io, __err, __tm, __wcs);
+      const __timepunct<_CharT>& __tp = use_facet<__timepunct<_CharT> >(__loc);
+      const char_type*  __times[2];
+      __tp._M_time_formats(__times);
+      __beg = _M_extract_via_format(__beg, __end, __io, __err, 
+				    __tm, __times[0]);
       if (__beg == __end)
 	__err |= ios_base::eofbit;
       return __beg;
@@ -2073,12 +2105,12 @@ namespace std
     do_get_date(iter_type __beg, iter_type __end, ios_base& __io,
 		ios_base::iostate& __err, tm* __tm) const
     {
-      _CharT __wcs[3];
-      const char* __cs = "%x";
       const locale& __loc = __io._M_getloc();
-      ctype<_CharT> const& __ctype = use_facet<ctype<_CharT> >(__loc);
-      __ctype.widen(__cs, __cs + 3, __wcs);
-      __beg = _M_extract_via_format(__beg, __end, __io, __err, __tm, __wcs);
+      const __timepunct<_CharT>& __tp = use_facet<__timepunct<_CharT> >(__loc);
+      const char_type*  __dates[2];
+      __tp._M_date_formats(__dates);
+      __beg = _M_extract_via_format(__beg, __end, __io, __err, 
+				    __tm, __dates[0]);
       if (__beg == __end)
 	__err |= ios_base::eofbit;
       return __beg;
@@ -2105,7 +2137,7 @@ namespace std
       // __days array with the same index points to a day, and that
       // day's abbreviated form.
       // NB: Also assumes that an abbreviated name is a subset of the name.
-      if (!__err)
+      if (!__err && __beg != __end)
 	{
 	  size_t __pos = __traits_type::length(__days[__tmpwday]);
 	  __tp._M_days(__days);
@@ -2120,9 +2152,10 @@ namespace std
 	      if (__len != __pos)
 		__err |= ios_base::failbit;
 	    }
-	  if (!__err)
-	    __tm->tm_wday = __tmpwday;
 	}
+      if (!__err)
+	__tm->tm_wday = __tmpwday;
+      
       if (__beg == __end)
 	__err |= ios_base::eofbit;
       return __beg;
@@ -2150,7 +2183,7 @@ namespace std
       // __months array with the same index points to a month, and that
       // month's abbreviated form.
       // NB: Also assumes that an abbreviated name is a subset of the name.
-      if (!__err)
+      if (!__err && __beg != __end)
 	{
 	  size_t __pos = __traits_type::length(__months[__tmpmon]);
 	  __tp._M_months(__months);
@@ -2165,9 +2198,9 @@ namespace std
 	      if (__len != __pos)
 		__err |= ios_base::failbit;
 	    }
-	  if (!__err)
-	    __tm->tm_mon = __tmpmon;
 	}
+      if (!__err)
+	__tm->tm_mon = __tmpmon;
 
       if (__beg == __end)
 	__err |= ios_base::eofbit;
@@ -2249,7 +2282,7 @@ namespace std
 
       // NB: This size is arbitrary. Should this be a data member,
       // initialized at construction?
-      const size_t __maxlen = 64;
+      const size_t __maxlen = 128;
       char_type* __res = 
        static_cast<char_type*>(__builtin_alloca(sizeof(char_type) * __maxlen));
 
@@ -2277,7 +2310,6 @@ namespace std
       // Write resulting, fully-formatted string to output iterator.
       return std::__write(__s, __res, char_traits<char_type>::length(__res));
     }
-
 
   // Generic version does nothing.
   template<typename _CharT>
@@ -2361,7 +2393,7 @@ namespace std
 	      __len = __res + 1;
 	      __c = static_cast<_CharT*>(__builtin_alloca(sizeof(_CharT)
 							  * __len));
-	      __res = _M_transform(__c, __p, __res + 1);
+	      __res = _M_transform(__c, __p, __len);
 	    }
 
 	  __ret.append(__c, __res);
@@ -2455,7 +2487,7 @@ namespace std
 		    const string& __grouping_tmp)
   {
     const size_t __n = __grouping_tmp.size() - 1;
-    const size_t __min = std::min(__n, __grouping_size - 1);
+    const size_t __min = std::min(__n, size_t(__grouping_size - 1));
     size_t __i = __n;
     bool __test = true;
     

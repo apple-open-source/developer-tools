@@ -35,9 +35,11 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package java.net;
 
 import gnu.classpath.Configuration;
+
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -49,12 +51,12 @@ import java.io.Serializable;
  * constructor.  Instead, new instances of this objects are created
  * using the static methods getLocalHost(), getByName(), and
  * getAllByName().
- * <p>
- * This class fulfills the function of the C style functions gethostname(),
- * gethostbyname(), and gethostbyaddr().  It resolves Internet DNS names
- * into their corresponding numeric addresses and vice versa.
  *
- * @author Aaron M. Renn <arenn@urbanophile.com>
+ * <p>This class fulfills the function of the C style functions gethostname(),
+ * gethostbyname(), and gethostbyaddr().  It resolves Internet DNS names
+ * into their corresponding numeric addresses and vice versa.</p>
+ *
+ * @author Aaron M. Renn (arenn@urbanophile.com)
  * @author Per Bothner
  *
  * @specnote This class is not final since JK 1.4
@@ -68,7 +70,10 @@ public class InetAddress implements Serializable
    */
   static InetAddress ANY_IF;
     
-  private static final byte[] localhostAddress = { 127, 0, 0, 1 };
+  private static final byte[] loopbackAddress = { 127, 0, 0, 1 };
+
+  private static final InetAddress loopback 
+    = new Inet4Address(loopbackAddress, "localhost");
 
   private static InetAddress localhost = null;
 
@@ -76,12 +81,10 @@ public class InetAddress implements Serializable
   {
     // load the shared library needed for name resolution
     if (Configuration.INIT_LOAD_LIBRARY)
-      {
-        System.loadLibrary ("javanet");
-      }
+      System.loadLibrary("javanet");
     
     byte[] zeros = { 0, 0, 0, 0 };
-    ANY_IF = new InetAddress (zeros, "0.0.0.0");
+    ANY_IF = new Inet4Address(zeros, "0.0.0.0");
   }
 
   /**
@@ -116,27 +119,15 @@ public class InetAddress implements Serializable
    * only by static methods in this class.
    *
    * @param ipaddr The IP number of this address as an array of bytes
-   */
-  InetAddress(byte[] address)
-  {
-    this (address, null);
-  }
-
-  /**
-   * Initializes this object's addr instance variable from the passed in
-   * int array.  Note that this constructor is protected and is called
-   * only by static methods in this class.
-   *
-   * @param ipaddr The IP number of this address as an array of bytes
    * @param hostname The hostname of this IP address.
    */
-  InetAddress(byte[] address, String hostname)
+  InetAddress(byte[] ipaddr, String hostname)
   {
-    addr = address;
+    addr = (null == ipaddr) ? null : (byte[]) ipaddr.clone();
     hostName = hostname;
     
-    if (address != null)
-      family = getFamily (address);
+    if (ipaddr != null)
+      family = getFamily(ipaddr);
   }
 
   /**
@@ -301,9 +292,12 @@ public class InetAddress implements Serializable
    */
   public String getHostName()
   {
-    if (hostName == null)
-      lookup (null, this, false);
+    if (hostName != null)
+      return hostName;
 
+    // Lookup hostname and set field.
+    lookup (null, this, false);
+    
     return hostName;
   }
 
@@ -319,7 +313,7 @@ public class InetAddress implements Serializable
       {
         try
 	  {
-            sm.checkConnect (hostName, -1);
+            sm.checkConnect(hostName, -1);
 	  }
 	catch (SecurityException e)
 	  {
@@ -328,7 +322,14 @@ public class InetAddress implements Serializable
       }
 
     // Try to find the FDQN now
-    InetAddress address = new InetAddress (getAddress(), null);
+    InetAddress address;
+    byte[] ipaddr = getAddress();
+
+    if (ipaddr.length == 16)
+      address = new Inet6Address(getAddress(), null);
+    else
+      address = new Inet4Address(getAddress(), null);
+
     return address.getHostName();
   }
 
@@ -419,13 +420,13 @@ public class InetAddress implements Serializable
     
     for ( ; ; )
       {
-        sb.append (addr [i] & 0xff);
-	i++;
+        sb.append(addr[i] & 0xff);
+        i++;
 	
-	if (i == len)
-	  break;
+        if (i == len)
+          break;
 	
-	sb.append ('.');
+        sb.append('.');
       }
 
     return sb.toString();
@@ -493,15 +494,9 @@ public class InetAddress implements Serializable
    */
   public String toString()
   {
-    String host;
-    String address = getHostAddress();
-
-    if (hostName != null)
-      host = hostName;
-    else
-      host = address;
-
-    return host + "/" + address;
+    String addr = getHostAddress();
+    String host = (hostName != null) ? hostName : addr;
+    return host + "/" + addr;
   }
 
   /**
@@ -564,7 +559,8 @@ public class InetAddress implements Serializable
    * default.  This method is equivalent to returning the first element in
    * the InetAddress array returned from GetAllByName.
    *
-   * @param hostname The name of the desired host, or null for the local machine.
+   * @param hostname The name of the desired host, or null for the local 
+   * loopback address.
    *
    * @return The address of the host as an InetAddress object.
    *
@@ -576,13 +572,14 @@ public class InetAddress implements Serializable
   public static InetAddress getByName(String hostname)
     throws UnknownHostException
   {
+    // If null or the empty string is supplied, the loopback address
+    // is returned. Note that this is permitted without a security check.
+    if (hostname == null || hostname.length() == 0)
+      return loopback;
+
     SecurityManager s = System.getSecurityManager();
     if (s != null)
       s.checkConnect(hostname, -1);
-
-    // Default to current host if necessary
-    if (hostname == null || hostname.length() == 0)
-      return getLocalHost();
 
     // Assume that the host string is an IP address
     byte[] address = aton(hostname);
@@ -608,8 +605,9 @@ public class InetAddress implements Serializable
       }
 
     // Try to resolve the host by DNS
-    InetAddress[] addresses = getAllByName(hostname);
-    return addresses[0];
+    InetAddress result = new InetAddress(null, null);
+    lookup (hostname, result, false);
+    return result;
   }
 
   /**
@@ -620,7 +618,7 @@ public class InetAddress implements Serializable
    * hostname of the local machine is supplied by default.
    *
    * @param hostname The name of the desired host, or null for the
-   * local machine.
+   * local loopback address.
    *
    * @return All addresses of the host as an array of InetAddress objects.
    *
@@ -632,6 +630,11 @@ public class InetAddress implements Serializable
   public static InetAddress[] getAllByName(String hostname)
     throws UnknownHostException
   {
+    // If null or the empty string is supplied, the loopback address
+    // is returned. Note that this is permitted without a security check.
+    if (hostname == null || hostname.length() == 0)
+      return new InetAddress[] {loopback};
+
     SecurityManager s = System.getSecurityManager();
     if (s != null)
       s.checkConnect(hostname, -1);
@@ -676,7 +679,7 @@ public class InetAddress implements Serializable
     // However, if there is a security manager, and the cached result
     // is other than "localhost", we need to check again.
     if (localhost == null
-	|| (s != null && localhost.addr != localhostAddress))
+	|| (s != null && ! localhost.isLoopbackAddress()))
       getLocalHost (s);
     
     return localhost;
@@ -711,7 +714,7 @@ public class InetAddress implements Serializable
 	  }
       }
     
-    if (hostname != null)
+    if (hostname != null && hostname.length() != 0)
       {
 	try
 	  {
@@ -722,9 +725,11 @@ public class InetAddress implements Serializable
 	  {
 	  }
       }
+    else
+      throw new UnknownHostException();
     
     if (localhost == null)
-      localhost = new InetAddress (localhostAddress, "localhost");
+      localhost = new InetAddress (loopbackAddress, "localhost");
   }
 
   /**

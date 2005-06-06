@@ -1,5 +1,5 @@
 /* Runtime.java -- access to the VM process
-   Copyright (C) 1998, 2002, 2003 Free Software Foundation
+   Copyright (C) 1998, 2002, 2003, 2004 Free Software Foundation
 
 This file is part of GNU Classpath.
 
@@ -35,11 +35,12 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package java.lang;
 
 import java.io.File;
-import java.io.InputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -51,8 +52,8 @@ import java.util.StringTokenizer;
  * Runtime represents the Virtual Machine.
  *
  * @author John Keiser
- * @author Eric Blake <ebb9@email.byu.edu>
- * @status still missing 1.4 functionality
+ * @author Eric Blake (ebb9@email.byu.edu)
+ * @author Jeroen Frijters
  */
 // No idea why this class isn't final, since you can't build a subclass!
 public class Runtime
@@ -79,27 +80,27 @@ public class Runtime
    * treated as read-only.
    *
    * No matter what class you start initialization with, it defers to the
-   * superclass, therefore Object.<clinit> will be the first Java code
+   * superclass, therefore Object.&lt;clinit&gt; will be the first Java code
    * executed. From there, the bootstrap sequence, up to the point that
    * native libraries are loaded (as of March 24, when I traced this
    * manually) is as follows:
    *
-   * Object.<clinit> uses a String literal, possibly triggering initialization
-   *  String.<clinit> calls WeakHashMap.<init>, triggering initialization
+   * Object.&lt;clinit&gt; uses a String literal, possibly triggering initialization
+   *  String.&lt;clinit&gt; calls WeakHashMap.&lt;init&gt;, triggering initialization
    *   AbstractMap, WeakHashMap, WeakHashMap$1 have no dependencies
-   *  String.<clinit> calls CaseInsensitiveComparator.<init>, triggering
+   *  String.&lt;clinit&gt; calls CaseInsensitiveComparator.&lt;init&gt;, triggering
    *      initialization
    *   CaseInsensitiveComparator has no dependencies
-   * Object.<clinit> calls System.loadLibrary, triggering initialization
-   *  System.<clinit> calls System.loadLibrary
+   * Object.&lt;clinit&gt; calls System.loadLibrary, triggering initialization
+   *  System.&lt;clinit&gt; calls System.loadLibrary
    *  System.loadLibrary calls Runtime.getRuntime, triggering initialization
-   *   Runtime.<clinit> calls Properties.<init>, triggering initialization
+   *   Runtime.&lt;clinit&gt; calls Properties.&lt;init&gt;, triggering initialization
    *    Dictionary, Hashtable, and Properties have no dependencies
-   *   Runtime.<clinit> calls VMRuntime.insertSystemProperties, triggering
+   *   Runtime.&lt;clinit&gt; calls VMRuntime.insertSystemProperties, triggering
    *      initialization of VMRuntime; the VM must make sure that there are
    *      not any harmful dependencies
-   *   Runtime.<clinit> calls Runtime.<init>
-   *    Runtime.<init> calls StringTokenizer.<init>, triggering initialization
+   *   Runtime.&lt;clinit&gt; calls Runtime.&lt;init&gt;
+   *    Runtime.&lt;init&gt; calls StringTokenizer.&lt;init&gt;, triggering initialization
    *     StringTokenizer has no dependencies
    *  System.loadLibrary calls Runtime.loadLibrary
    *   Runtime.loadLibrary should be able to load the library, although it
@@ -107,8 +108,10 @@ public class Runtime
    *       ClassLoader first
    */
   static Properties defaultProperties = new Properties();
+
   static
   {
+    init();
     insertSystemProperties(defaultProperties);
   }
 
@@ -149,7 +152,6 @@ public class Runtime
     // work.
     libpath = new String[0];
 
-    init ();
   }
 
   /**
@@ -238,7 +240,7 @@ public class Runtime
                       }
                 try
                   {
-                    exitSequence.sleep(1); // Give other threads a chance.
+                    Thread.sleep(1); // Give other threads a chance.
                   }
                 catch (InterruptedException e)
                   {
@@ -707,10 +709,10 @@ public class Runtime
   native boolean loadLibraryInternal(String libname);
 
   /**
-   * A helper for the constructor which does some internal native
+   * A helper for Runtime static initializer which does some internal native
    * initialization.
    */
-  private native void init ();
+  private static native void init ();
 
   /**
    * Map a system-independent "short name" to the full file name, and append
@@ -734,8 +736,11 @@ public class Runtime
    * @param dir the directory to use, may be null
    * @return the newly created process
    * @throws NullPointerException if cmd or env have null elements
+   * @throws IOException if the exec fails
    */
-  native Process execInternal(String[] cmd, String[] env, File dir);
+  native Process execInternal(String[] cmd, String[] env, File dir)
+    throws IOException;
+    
 
   /**
    * Get the system properties. This is done here, instead of in System,

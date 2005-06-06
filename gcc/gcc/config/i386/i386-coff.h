@@ -1,7 +1,7 @@
 /* Definitions for "naked" Intel 386 using coff object format files
    and coff debugging info.
 
-   Copyright (C) 1994, 2000, 2002 Free Software Foundation, Inc.
+   Copyright (C) 1994, 2000, 2002, 2004 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -59,5 +59,12 @@ Boston, MA 02111-1307, USA.  */
 #undef  ASM_GENERATE_INTERNAL_LABEL
 #define ASM_GENERATE_INTERNAL_LABEL(BUF,PREFIX,NUMBER)	\
   sprintf ((BUF), ".%s%ld", (PREFIX), (long)(NUMBER))
+
+/* GNU as expects alignment to be the number of bytes instead of the log for
+   COFF targets.  */
+
+#undef ASM_OUTPUT_ALIGN
+#define ASM_OUTPUT_ALIGN(FILE,LOG) \
+  if ((LOG)!=0) fprintf ((FILE), "\t.align %d\n", 1<<(LOG))
 
 /* end of i386-coff.h */

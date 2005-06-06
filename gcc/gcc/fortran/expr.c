@@ -1,5 +1,5 @@
 /* Routines for manipulation of expression nodes.
-   Copyright (C) 2000, 2001, 2002, 2003, 2004 Free Software Foundation,
+   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005 Free Software Foundation,
    Inc.
    Contributed by Andy Vaught
 
@@ -21,10 +21,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA.  */
 
 #include "config.h"
-#include <stdarg.h>
-#include <stdio.h>
-#include <string.h>
-
+#include "system.h"
 #include "gfortran.h"
 #include "arith.h"
 #include "match.h"
@@ -39,12 +36,9 @@ gfc_get_expr (void)
   e = gfc_getmem (sizeof (gfc_expr));
 
   gfc_clear_ts (&e->ts);
-  e->op1 = NULL;
-  e->op2 = NULL;
   e->shape = NULL;
   e->ref = NULL;
   e->symtree = NULL;
-  e->uop = NULL;
 
   return e;
 }
@@ -154,7 +148,7 @@ free_expr0 (gfc_expr * e)
 	  break;
 
 	case BT_REAL:
-	  mpf_clear (e->value.real);
+	  mpfr_clear (e->value.real);
 	  break;
 
 	case BT_CHARACTER:
@@ -162,8 +156,8 @@ free_expr0 (gfc_expr * e)
 	  break;
 
 	case BT_COMPLEX:
-	  mpf_clear (e->value.complex.r);
-	  mpf_clear (e->value.complex.i);
+	  mpfr_clear (e->value.complex.r);
+	  mpfr_clear (e->value.complex.i);
 	  break;
 
 	default:
@@ -173,10 +167,10 @@ free_expr0 (gfc_expr * e)
       break;
 
     case EXPR_OP:
-      if (e->op1 != NULL)
-	gfc_free_expr (e->op1);
-      if (e->op2 != NULL)
-	gfc_free_expr (e->op2);
+      if (e->value.op.op1 != NULL)
+	gfc_free_expr (e->value.op.op1);
+      if (e->value.op.op2 != NULL)
+	gfc_free_expr (e->value.op.op2);
       break;
 
     case EXPR_FUNCTION:
@@ -330,6 +324,50 @@ gfc_copy_shape (mpz_t * shape, int rank)
 }
 
 
+/* Copy a shape array excluding dimension N, where N is an integer
+   constant expression.  Dimensions are numbered in fortran style --
+   starting with ONE.
+
+   So, if the original shape array contains R elements
+      { s1 ... sN-1  sN  sN+1 ... sR-1 sR}
+   the result contains R-1 elements:
+      { s1 ... sN-1  sN+1    ...  sR-1}
+
+   If anything goes wrong -- N is not a constant, its value is out
+   of range -- or anything else, just returns NULL.
+*/
+
+mpz_t *
+gfc_copy_shape_excluding (mpz_t * shape, int rank, gfc_expr * dim)
+{
+  mpz_t *new_shape, *s;
+  int i, n;
+
+  if (shape == NULL 
+      || rank <= 1
+      || dim == NULL
+      || dim->expr_type != EXPR_CONSTANT 
+      || dim->ts.type != BT_INTEGER)
+    return NULL;
+
+  n = mpz_get_si (dim->value.integer);
+  n--; /* Convert to zero based index */
+  if (n < 0 || n >= rank)
+    return NULL;
+
+  s = new_shape = gfc_get_shape (rank-1);
+
+  for (i = 0; i < rank; i++)
+    {
+      if (i == n)
+        continue;
+      mpz_init_set (*s, shape[i]);
+      s++;
+    }
+
+  return new_shape;
+}
+
 /* Given an expression pointer, return a copy of the expression.  This
    subroutine is recursive.  */
 
@@ -352,9 +390,6 @@ gfc_copy_expr (gfc_expr * p)
       q->value.character.string = s;
 
       memcpy (s, p->value.character.string, p->value.character.length + 1);
-
-      q->op1 = gfc_copy_expr (p->op1);
-      q->op2 = gfc_copy_expr (p->op2);
       break;
 
     case EXPR_CONSTANT:
@@ -365,12 +400,17 @@ gfc_copy_expr (gfc_expr * p)
 	  break;
 
 	case BT_REAL:
-	  mpf_init_set (q->value.real, p->value.real);
+          gfc_set_model_kind (q->ts.kind);
+          mpfr_init (q->value.real);
+	  mpfr_set (q->value.real, p->value.real, GFC_RND_MODE);
 	  break;
 
 	case BT_COMPLEX:
-	  mpf_init_set (q->value.complex.r, p->value.complex.r);
-	  mpf_init_set (q->value.complex.i, p->value.complex.i);
+          gfc_set_model_kind (q->ts.kind);
+          mpfr_init (q->value.complex.r);
+          mpfr_init (q->value.complex.i);
+	  mpfr_set (q->value.complex.r, p->value.complex.r, GFC_RND_MODE);
+	  mpfr_set (q->value.complex.i, p->value.complex.i, GFC_RND_MODE);
 	  break;
 
 	case BT_CHARACTER:
@@ -394,17 +434,17 @@ gfc_copy_expr (gfc_expr * p)
       break;
 
     case EXPR_OP:
-      switch (q->operator)
+      switch (q->value.op.operator)
 	{
 	case INTRINSIC_NOT:
 	case INTRINSIC_UPLUS:
 	case INTRINSIC_UMINUS:
-	  q->op1 = gfc_copy_expr (p->op1);
+	  q->value.op.op1 = gfc_copy_expr (p->value.op.op1);
 	  break;
 
 	default:		/* Binary operators */
-	  q->op1 = gfc_copy_expr (p->op1);
-	  q->op2 = gfc_copy_expr (p->op2);
+	  q->value.op.op1 = gfc_copy_expr (p->value.op.op1);
+	  q->value.op.op2 = gfc_copy_expr (p->value.op.op2);
 	  break;
 	}
 
@@ -475,9 +515,9 @@ gfc_int_expr (int i)
 
   p->expr_type = EXPR_CONSTANT;
   p->ts.type = BT_INTEGER;
-  p->ts.kind = gfc_default_integer_kind ();
+  p->ts.kind = gfc_default_integer_kind;
 
-  p->where = *gfc_current_locus ();
+  p->where = gfc_current_locus;
   mpz_init_set_si (p->value.integer, i);
 
   return p;
@@ -495,10 +535,10 @@ gfc_logical_expr (int i, locus * where)
 
   p->expr_type = EXPR_CONSTANT;
   p->ts.type = BT_LOGICAL;
-  p->ts.kind = gfc_default_logical_kind ();
+  p->ts.kind = gfc_default_logical_kind;
 
   if (where == NULL)
-    where = gfc_current_locus ();
+    where = &gfc_current_locus;
   p->where = *where;
   p->value.logical = i;
 
@@ -534,15 +574,15 @@ gfc_build_conversion (gfc_expr * e)
    The exception is that the operands of an exponential don't have to
    have the same type.  If possible, the base is promoted to the type
    of the exponent.  For example, 1**2.3 becomes 1.0**2.3, but
-   1.0**2 stays as it is. */
+   1.0**2 stays as it is.  */
 
 void
 gfc_type_convert_binary (gfc_expr * e)
 {
   gfc_expr *op1, *op2;
 
-  op1 = e->op1;
-  op2 = e->op2;
+  op1 = e->value.op.op1;
+  op2 = e->value.op.op2;
 
   if (op1->ts.type == BT_UNKNOWN || op2->ts.type == BT_UNKNOWN)
     {
@@ -575,18 +615,18 @@ gfc_type_convert_binary (gfc_expr * e)
     {
       e->ts = op1->ts;
 
-      /* Special cose for ** operator.  */
-      if (e->operator == INTRINSIC_POWER)
+      /* Special case for ** operator.  */
+      if (e->value.op.operator == INTRINSIC_POWER)
 	goto done;
 
-      gfc_convert_type (e->op2, &e->ts, 2);
+      gfc_convert_type (e->value.op.op2, &e->ts, 2);
       goto done;
     }
 
   if (op1->ts.type == BT_INTEGER)
     {
       e->ts = op2->ts;
-      gfc_convert_type (e->op1, &e->ts, 2);
+      gfc_convert_type (e->value.op.op1, &e->ts, 2);
       goto done;
     }
 
@@ -597,9 +637,9 @@ gfc_type_convert_binary (gfc_expr * e)
   else
     e->ts.kind = op2->ts.kind;
   if (op1->ts.type != BT_COMPLEX || op1->ts.kind != e->ts.kind)
-    gfc_convert_type (e->op1, &e->ts, 2);
+    gfc_convert_type (e->value.op.op1, &e->ts, 2);
   if (op2->ts.type != BT_COMPLEX || op2->ts.kind != e->ts.kind)
-    gfc_convert_type (e->op2, &e->ts, 2);
+    gfc_convert_type (e->value.op.op2, &e->ts, 2);
 
 done:
   return;
@@ -622,9 +662,9 @@ gfc_is_constant_expr (gfc_expr * e)
   switch (e->expr_type)
     {
     case EXPR_OP:
-      rv = (gfc_is_constant_expr (e->op1)
-	    && (e->op2 == NULL
-		|| gfc_is_constant_expr (e->op2)));
+      rv = (gfc_is_constant_expr (e->value.op.op1)
+	    && (e->value.op.op2 == NULL
+		|| gfc_is_constant_expr (e->value.op.op2)));
 
       break;
 
@@ -653,7 +693,8 @@ gfc_is_constant_expr (gfc_expr * e)
       break;
 
     case EXPR_SUBSTRING:
-      rv = gfc_is_constant_expr (e->op1) && gfc_is_constant_expr (e->op2);
+      rv = (gfc_is_constant_expr (e->ref->u.ss.start)
+	    && gfc_is_constant_expr (e->ref->u.ss.end));
       break;
 
     case EXPR_STRUCTURE:
@@ -685,11 +726,11 @@ simplify_intrinsic_op (gfc_expr * p, int type)
 {
   gfc_expr *op1, *op2, *result;
 
-  if (p->operator == INTRINSIC_USER)
+  if (p->value.op.operator == INTRINSIC_USER)
     return SUCCESS;
 
-  op1 = p->op1;
-  op2 = p->op2;
+  op1 = p->value.op.op1;
+  op2 = p->value.op.op2;
 
   if (gfc_simplify_expr (op1, type) == FAILURE)
     return FAILURE;
@@ -701,10 +742,10 @@ simplify_intrinsic_op (gfc_expr * p, int type)
     return SUCCESS;
 
   /* Rip p apart */
-  p->op1 = NULL;
-  p->op2 = NULL;
+  p->value.op.op1 = NULL;
+  p->value.op.op2 = NULL;
 
-  switch (p->operator)
+  switch (p->value.op.operator)
     {
     case INTRINSIC_UPLUS:
       result = gfc_uplus (op1);
@@ -1069,12 +1110,10 @@ gfc_simplify_expr (gfc_expr * p, int type)
       break;
 
     case EXPR_SUBSTRING:
-      if (gfc_simplify_expr (p->op1, type) == FAILURE
-	  || gfc_simplify_expr (p->op2, type) == FAILURE)
+      if (simplify_ref_chain (p->ref, type) == FAILURE)
 	return FAILURE;
 
       /* TODO: evaluate constant substrings.  */
-
       break;
 
     case EXPR_OP:
@@ -1149,15 +1188,17 @@ static try check_init_expr (gfc_expr *);
 static try
 check_intrinsic_op (gfc_expr * e, try (*check_function) (gfc_expr *))
 {
+  gfc_expr *op1 = e->value.op.op1;
+  gfc_expr *op2 = e->value.op.op2;
 
-  if ((*check_function) (e->op1) == FAILURE)
+  if ((*check_function) (op1) == FAILURE)
     return FAILURE;
 
-  switch (e->operator)
+  switch (e->value.op.operator)
     {
     case INTRINSIC_UPLUS:
     case INTRINSIC_UMINUS:
-      if (!numeric_type (et0 (e->op1)))
+      if (!numeric_type (et0 (op1)))
 	goto not_numeric;
       break;
 
@@ -1167,42 +1208,51 @@ check_intrinsic_op (gfc_expr * e, try (*check_function) (gfc_expr *))
     case INTRINSIC_GE:
     case INTRINSIC_LT:
     case INTRINSIC_LE:
+      if ((*check_function) (op2) == FAILURE)
+	return FAILURE;
+      
+      if (!(et0 (op1) == BT_CHARACTER && et0 (op2) == BT_CHARACTER)
+	  && !(numeric_type (et0 (op1)) && numeric_type (et0 (op2))))
+	{
+	  gfc_error ("Numeric or CHARACTER operands are required in "
+		     "expression at %L", &e->where);
+         return FAILURE;
+	}
+      break;
 
     case INTRINSIC_PLUS:
     case INTRINSIC_MINUS:
     case INTRINSIC_TIMES:
     case INTRINSIC_DIVIDE:
     case INTRINSIC_POWER:
-      if ((*check_function) (e->op2) == FAILURE)
+      if ((*check_function) (op2) == FAILURE)
 	return FAILURE;
 
-      if (!numeric_type (et0 (e->op1)) || !numeric_type (et0 (e->op2)))
+      if (!numeric_type (et0 (op1)) || !numeric_type (et0 (op2)))
 	goto not_numeric;
 
-      if (e->operator != INTRINSIC_POWER)
-	break;
-
-      if (check_function == check_init_expr && et0 (e->op2) != BT_INTEGER)
+      if (e->value.op.operator == INTRINSIC_POWER
+	  && check_function == check_init_expr && et0 (op2) != BT_INTEGER)
 	{
 	  gfc_error ("Exponent at %L must be INTEGER for an initialization "
-		     "expression", &e->op2->where);
+		     "expression", &op2->where);
 	  return FAILURE;
 	}
 
       break;
 
     case INTRINSIC_CONCAT:
-      if ((*check_function) (e->op2) == FAILURE)
+      if ((*check_function) (op2) == FAILURE)
 	return FAILURE;
 
-      if (et0 (e->op1) != BT_CHARACTER || et0 (e->op2) != BT_CHARACTER)
+      if (et0 (op1) != BT_CHARACTER || et0 (op2) != BT_CHARACTER)
 	{
 	  gfc_error ("Concatenation operator in expression at %L "
-		     "must have two CHARACTER operands", &e->op1->where);
+		     "must have two CHARACTER operands", &op1->where);
 	  return FAILURE;
 	}
 
-      if (e->op1->ts.kind != e->op2->ts.kind)
+      if (op1->ts.kind != op2->ts.kind)
 	{
 	  gfc_error ("Concat operator at %L must concatenate strings of the "
 		     "same kind", &e->where);
@@ -1212,10 +1262,10 @@ check_intrinsic_op (gfc_expr * e, try (*check_function) (gfc_expr *))
       break;
 
     case INTRINSIC_NOT:
-      if (et0 (e->op1) != BT_LOGICAL)
+      if (et0 (op1) != BT_LOGICAL)
 	{
 	  gfc_error (".NOT. operator in expression at %L must have a LOGICAL "
-		     "operand", &e->op1->where);
+		     "operand", &op1->where);
 	  return FAILURE;
 	}
 
@@ -1225,10 +1275,10 @@ check_intrinsic_op (gfc_expr * e, try (*check_function) (gfc_expr *))
     case INTRINSIC_OR:
     case INTRINSIC_EQV:
     case INTRINSIC_NEQV:
-      if ((*check_function) (e->op2) == FAILURE)
+      if ((*check_function) (op2) == FAILURE)
 	return FAILURE;
 
-      if (et0 (e->op1) != BT_LOGICAL || et0 (e->op2) != BT_LOGICAL)
+      if (et0 (op1) != BT_LOGICAL || et0 (op2) != BT_LOGICAL)
 	{
 	  gfc_error ("LOGICAL operands are required in expression at %L",
 		     &e->where);
@@ -1384,11 +1434,11 @@ check_init_expr (gfc_expr * e)
       break;
 
     case EXPR_SUBSTRING:
-      t = check_init_expr (e->op1);
+      t = check_init_expr (e->ref->u.ss.start);
       if (t == FAILURE)
 	break;
 
-      t = check_init_expr (e->op2);
+      t = check_init_expr (e->ref->u.ss.end);
       if (t == SUCCESS)
 	t = gfc_simplify_expr (e, 0);
 
@@ -1607,11 +1657,11 @@ check_restricted (gfc_expr * e)
       break;
 
     case EXPR_SUBSTRING:
-      t = gfc_specification_expr (e->op1);
+      t = gfc_specification_expr (e->ref->u.ss.start);
       if (t == FAILURE)
 	break;
 
-      t = gfc_specification_expr (e->op2);
+      t = gfc_specification_expr (e->ref->u.ss.end);
       if (t == SUCCESS)
 	t = gfc_simplify_expr (e, 0);
 
@@ -1727,7 +1777,8 @@ gfc_check_assign (gfc_expr * lvalue, gfc_expr * rvalue, int conform)
 
   if (rvalue->rank != 0 && lvalue->rank != rvalue->rank)
     {
-      gfc_error ("Incompatible ranks in assignment at %L", &lvalue->where);
+      gfc_error ("Incompatible ranks %d and %d in assignment at %L",
+		 lvalue->rank, rvalue->rank, &lvalue->where);
       return FAILURE;
     }
 
@@ -1737,6 +1788,20 @@ gfc_check_assign (gfc_expr * lvalue, gfc_expr * rvalue, int conform)
 		 &lvalue->where);
       return FAILURE;
     }
+
+   if (rvalue->expr_type == EXPR_NULL)
+     {
+       gfc_error ("NULL appears on right-hand side in assignment at %L",
+		  &rvalue->where);
+       return FAILURE;
+     }
+
+  /* This is possibly a typo: x = f() instead of x => f()  */
+  if (gfc_option.warn_surprising 
+      && rvalue->expr_type == EXPR_FUNCTION
+      && rvalue->symtree->n.sym->attr.pointer)
+    gfc_warning ("POINTER valued function appears on right-hand side of "
+		 "assignment at %L", &rvalue->where);
 
   /* Check size of array assignments.  */
   if (lvalue->rank != 0 && rvalue->rank != 0
@@ -1749,6 +1814,9 @@ gfc_check_assign (gfc_expr * lvalue, gfc_expr * rvalue, int conform)
   if (!conform)
     {
       if (gfc_numeric_ts (&lvalue->ts) && gfc_numeric_ts (&rvalue->ts))
+	return SUCCESS;
+
+      if (lvalue->ts.type == BT_LOGICAL && rvalue->ts.type == BT_LOGICAL)
 	return SUCCESS;
 
       gfc_error ("Incompatible types in assignment at %L, %s to %s",
@@ -1798,39 +1866,42 @@ gfc_check_pointer_assign (gfc_expr * lvalue, gfc_expr * rvalue)
   /* If rvalue is a NULL() or NULLIFY, we're done. Otherwise the type,
      kind, etc for lvalue and rvalue must match, and rvalue must be a
      pure variable if we're in a pure function.  */
-  if (rvalue->expr_type != EXPR_NULL)
+  if (rvalue->expr_type == EXPR_NULL)
+    return SUCCESS;
+
+  if (!gfc_compare_types (&lvalue->ts, &rvalue->ts))
     {
+      gfc_error ("Different types in pointer assignment at %L",
+		 &lvalue->where);
+      return FAILURE;
+    }
 
-      if (!gfc_compare_types (&lvalue->ts, &rvalue->ts))
-	{
-	  gfc_error ("Different types in pointer assignment at %L",
-		     &lvalue->where);
-	  return FAILURE;
-	}
+  if (lvalue->ts.kind != rvalue->ts.kind)
+    {
+      gfc_error	("Different kind type parameters in pointer "
+		 "assignment at %L", &lvalue->where);
+      return FAILURE;
+    }
 
-      if (lvalue->ts.kind != rvalue->ts.kind)
-	{
-	  gfc_error
-	    ("Different kind type parameters in pointer assignment at %L",
-	     &lvalue->where);
-	  return FAILURE;
-	}
+  attr = gfc_expr_attr (rvalue);
+  if (!attr.target && !attr.pointer)
+    {
+      gfc_error	("Pointer assignment target is neither TARGET "
+		 "nor POINTER at %L", &rvalue->where);
+      return FAILURE;
+    }
 
-      attr = gfc_expr_attr (rvalue);
-      if (!attr.target && !attr.pointer)
-	{
-	  gfc_error
-	    ("Pointer assignment target is neither TARGET nor POINTER at "
-	     "%L", &rvalue->where);
-	  return FAILURE;
-	}
+  if (is_pure && gfc_impure_variable (rvalue->symtree->n.sym))
+    {
+      gfc_error	("Bad target in pointer assignment in PURE "
+		 "procedure at %L", &rvalue->where);
+    }
 
-      if (is_pure && gfc_impure_variable (rvalue->symtree->n.sym))
-	{
-	  gfc_error
-	    ("Bad target in pointer assignment in PURE procedure at %L",
-	     &rvalue->where);
-	}
+  if (lvalue->rank != rvalue->rank)
+    {
+      gfc_error ("Unequal ranks %d and %d in pointer assignment at %L", 
+		 lvalue->rank, rvalue->rank, &rvalue->where);
+      return FAILURE;
     }
 
   return SUCCESS;
@@ -1838,7 +1909,7 @@ gfc_check_pointer_assign (gfc_expr * lvalue, gfc_expr * rvalue)
 
 
 /* Relative of gfc_check_assign() except that the lvalue is a single
-   symbol.  */
+   symbol.  Used for initialization assignments.  */
 
 try
 gfc_check_assign_symbol (gfc_symbol * sym, gfc_expr * rvalue)
@@ -1856,7 +1927,10 @@ gfc_check_assign_symbol (gfc_symbol * sym, gfc_expr * rvalue)
   lvalue.symtree->n.sym = sym;
   lvalue.where = sym->declared_at;
 
-  r = gfc_check_assign (&lvalue, rvalue, 1);
+  if (sym->attr.pointer)
+    r = gfc_check_pointer_assign (&lvalue, rvalue);
+  else
+    r = gfc_check_assign (&lvalue, rvalue, 1);
 
   gfc_free (lvalue.symtree);
 
@@ -1905,3 +1979,30 @@ gfc_default_initializer (gfc_typespec *ts)
     }
   return init;
 }
+
+
+/* Given a symbol, create an expression node with that symbol as a
+   variable. If the symbol is array valued, setup a reference of the
+   whole array.  */
+
+gfc_expr *
+gfc_get_variable_expr (gfc_symtree * var)
+{
+  gfc_expr *e;
+
+  e = gfc_get_expr ();
+  e->expr_type = EXPR_VARIABLE;
+  e->symtree = var;
+  e->ts = var->n.sym->ts;
+
+  if (var->n.sym->as != NULL)
+    {
+      e->rank = var->n.sym->as->rank;
+      e->ref = gfc_get_ref ();
+      e->ref->type = REF_ARRAY;
+      e->ref->u.ar.type = AR_FULL;
+    }
+
+  return e;
+}
+

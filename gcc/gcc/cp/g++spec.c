@@ -1,5 +1,5 @@
 /* Specific flags and argument handling of the C++ front-end.
-   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003
+   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -36,19 +36,15 @@ Boston, MA 02111-1307, USA.  */
 #define MATH_LIBRARY "-lm"
 #endif
 #ifndef MATH_LIBRARY_PROFILE
-#define MATH_LIBRARY_PROFILE "-lm"
+#define MATH_LIBRARY_PROFILE MATH_LIBRARY
 #endif
 
 #ifndef LIBSTDCXX
 #define LIBSTDCXX "-lstdc++"
 #endif
 #ifndef LIBSTDCXX_PROFILE
-#define LIBSTDCXX_PROFILE "-lstdc++"
+#define LIBSTDCXX_PROFILE LIBSTDCXX
 #endif
-
-/* APPLE LOCAL begin radar 3554191 */
-extern unsigned int macosx_version_min_required; /* defined in gcc.c */
-/* APPLE LOCAL end radar 3554191 */
 
 void
 lang_specific_driver (int *in_argc, const char *const **in_argv,
@@ -140,10 +136,7 @@ lang_specific_driver (int *in_argc, const char *const **in_argv,
 	    {
 	      library = -1;
 	    }
-	  else if (strcmp (argv[i], "-lm") == 0
-		   || strcmp (argv[i], "-lmath") == 0
-		   || strcmp (argv[i], MATH_LIBRARY) == 0
-		  )
+	  else if (strcmp (argv[i], MATH_LIBRARY) == 0)
 	    {
 	      args[i] |= MATHLIB;
 	      need_math = 0;
@@ -171,9 +164,21 @@ lang_specific_driver (int *in_argc, const char *const **in_argv,
 		}
 	      saw_speclang = 1;
 	    }
+	  /* Arguments that go directly to the linker might be .o files,
+	     or something, and so might cause libstdc++ to be needed.  */
+	  else if (strcmp (argv[i], "-Xlinker") == 0)
+	    {
+	      quote = argv[i];
+	      if (library == 0)
+		library = 1;
+	    }
+	  else if (strncmp (argv[i], "-Wl,", 4) == 0)
+	    library = (library == 0) ? 1 : library;
+	  /* Unrecognized libraries (e.g. -lfoo) may require libstdc++.  */
+	  else if (strncmp (argv[i], "-l", 2) == 0)
+	    library = (library == 0) ? 1 : library;
 	  else if (((argv[i][2] == '\0'
 		     && strchr ("bBVDUoeTuIYmLiA", argv[i][1]) != NULL)
-		    || strcmp (argv[i], "-Xlinker") == 0
 		    || strcmp (argv[i], "-Tdata") == 0))
 	    quote = argv[i];
 	  else if ((argv[i][2] == '\0'
@@ -230,7 +235,7 @@ lang_specific_driver (int *in_argc, const char *const **in_argv,
     }
 
   if (quote)
-    fatal ("argument to `%s' missing\n", quote);
+    fatal ("argument to '%s' missing\n", quote);
 
   /* If we know we don't have to do anything, bail now.  */
   if (! added && library <= 0)
@@ -244,13 +249,6 @@ lang_specific_driver (int *in_argc, const char *const **in_argv,
 #ifndef ENABLE_SHARED_LIBGCC
   shared_libgcc = 0;
 #endif
-
-  /* APPLE LOCAL begin radar 3554191 */
-  {
-    if (macosx_version_min_required && macosx_version_min_required < 1040)
-      shared_libgcc = 0;
-  }
-  /* APPLE LOCAL end radar 3554191 */
 
   /* Make sure to have room for the trailing NULL argument.  */
   num_args = argc + added + need_math + shared_libgcc + (library > 0) + 1;
@@ -298,7 +296,7 @@ lang_specific_driver (int *in_argc, const char *const **in_argv,
 	      arglist[j++] = "-xc++-header";
 	      break;
 	    default:
-	      abort ();
+	      gcc_unreachable ();
 	    }
 	  arglist[j++] = argv[i];
 	  arglist[j] = "-xnone";
@@ -311,15 +309,19 @@ lang_specific_driver (int *in_argc, const char *const **in_argv,
   /* Add `-lstdc++' if we haven't already done so.  */
   if (library > 0)
     {
-      arglist[j++] = saw_profile_flag ? LIBSTDCXX_PROFILE : LIBSTDCXX;
-      added_libraries++;
+      arglist[j] = saw_profile_flag ? LIBSTDCXX_PROFILE : LIBSTDCXX;
+      if (arglist[j][0] != '-' || arglist[j][1] == 'l')
+	added_libraries++;
+      j++;
     }
   if (saw_math)
     arglist[j++] = saw_math;
   else if (library > 0 && need_math)
     {
-      arglist[j++] = saw_profile_flag ? MATH_LIBRARY_PROFILE : MATH_LIBRARY;
-      added_libraries++;
+      arglist[j] = saw_profile_flag ? MATH_LIBRARY_PROFILE : MATH_LIBRARY;
+      if (arglist[j][0] != '-' || arglist[j][1] == 'l')
+	added_libraries++;
+      j++;
     }
   if (saw_libc)
     arglist[j++] = saw_libc;

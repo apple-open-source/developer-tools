@@ -1,4 +1,4 @@
-# Copyright 2002 Free Software Foundation, Inc.
+# Copyright 2003 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,14 +13,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
-
-# This file was written by Serena Hartoog (hartoog@apple.com)
-#
-# This test is based on the bug reported in radar 3347273, where 
-# conditional breakpoint expressions involving objc objects 
-# did not display correctly with info breakpoint
-#
-# This file is part of the gdb testsuite
 
 if $tracelevel then {
 	strace $tracelevel
@@ -47,13 +39,13 @@ gdb_load ${binfile}
 #
 # The following tests inspired by radar 3347273, 
 #
-gdb_test "break 75" \
-         "Breakpoint \[0-9\] at $hex.*line 75\\." \
-         "breakpoint on function randomFunc line 75"
+gdb_test "break [gdb_get_line_number "Whatever, just a place to break and examine SELF"]" \
+         "Breakpoint \[0-9\] at $hex.*line $decimal\\." \
+         "breakpoint on function randomFunc"
          
 send_gdb "run\n"
 gdb_expect {
-    -re ".*Starting program: ${binfile}.*Reading symbols for shared libraries.*Breakpoint 1, main.*object randomFunc.*$gdb_prompt $" {
+    -re ".*Starting program: ${binfile}.*Reading symbols for shared libraries.*Breakpoint 1, .*MyClass randomFunc.*$gdb_prompt $" {
         pass "run program" 
     }  
     -re "$gdb_prompt $" {
@@ -69,7 +61,7 @@ gdb_test "cond 1 ((int)\[object isKindOfClass:(id)\[NSString class\]\])" \
          "set break point conditon to isKindOfClass of NSString"
 
 gdb_test "info break" \
-         "Num Type.*stop only if.*object isKindOfClass.*breakpoint already hit 1 time" \
+         "Num Type.*condition not yet parsed:.*object isKindOfClass.*breakpoint already hit 1 time" \
          "info break"
          
 

@@ -1,5 +1,6 @@
+/* APPLE LOCAL file lno */
 /* { dg-do compile } */ 
-/* { dg-options "-O2 -ftree-loop-optimize -fscalar-evolutions -funroll-loops -fdump-tree-optimized" } */
+/* { dg-options "-O2 -ftree-loop-optimize -funroll-loops -fdump-tree-optimized" } */
 
 void foo(void)
 {

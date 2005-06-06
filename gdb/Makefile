@@ -1,5 +1,5 @@
-GDB_VERSION = 5.3-20030128
-GDB_RC_VERSION = 330.1
+GDB_VERSION = 6.1-20040303
+GDB_RC_VERSION = 413
 
 BINUTILS_VERSION = 2.13-20021117
 BINUTILS_RC_VERSION = 46
@@ -153,7 +153,7 @@ I386_TARGET=UNKNOWN
 
 CONFIG_VERBOSE=-v
 CONFIG_ENABLE_GDBTK=--enable-gdbtk=no
-CONFIG_ENABLE_GDBMI=--enable-gdbmi=yes
+CONFIG_ENABLE_GDBMI=
 CONFIG_ENABLE_BUILD_WARNINGS=--enable-build-warnings
 CONFIG_ENABLE_TUI=--disable-tui
 CONFIG_ALL_BFD_TARGETS=
@@ -169,7 +169,12 @@ CONFIG_OTHER_OPTIONS=--disable-serial-configure
 ifneq ($(findstring macosx,$(CANONICAL_ARCHS))$(findstring darwin,$(CANONICAL_ARCHS)),)
 CC = cc -arch $(HOST_ARCHITECTURE) -no-cpp-precomp
 CC_FOR_BUILD = NEXT_ROOT= cc -no-cpp-precomp
-CDEBUGFLAGS = -g -Os -mdynamic-no-pic
+ifeq ($(CONFIG_ENABLE_SHARED),--enable-shared)
+    CDEBUGFLAGS = -g -Os 
+else
+    CDEBUGFLAGS = -g -Os -mdynamic-no-pic
+endif
+
 CFLAGS = $(strip $(RC_CFLAGS_NOARCH) $(CDEBUGFLAGS) -Wall -Wimplicit -Wno-long-double)
 HOST_ARCHITECTURE = $(shell echo $* | sed -e 's/--.*//' -e 's/powerpc/ppc/' -e 's/-apple-macosx.*//' -e 's/-apple-macos.*//' -e 's/-apple-darwin.*//')
 endif
@@ -480,8 +485,10 @@ ifeq ($(CONFIG_ENABLE_SHARED),--enable-shared)
 	done
 endif
 
-	$(INSTALL) -c -d $(SYMROOT)/$(LIB_DIR)
-	$(INSTALL) -c -d $(DSTROOT)/$(LIB_DIR)
+# We no longer install things in /usr/lib -- jmolenda 2004-06-16
+#
+#	$(INSTALL) -c -d $(SYMROOT)/$(LIB_DIR)
+#	$(INSTALL) -c -d $(DSTROOT)/$(LIB_DIR)
 
 ifeq ($(CONFIG_ENABLE_SHARED),--enable-shared)
 	lipo -create -output $(SYMROOT)/$(LIB_DIR)/libintl.a \
@@ -511,8 +518,6 @@ install-gdb-common:
 		\
 		$(INSTALL) -c -d "$${docroot}"; \
 		\
-		$(INSTALL) -c -m 644 $(SRCROOT)/src/gdb/gdb.1 "$${docroot}/gdb.1"; \
-		\
 		$(INSTALL) -c -m 644 $(SRCROOT)/doc/refcard.pdf "$${docroot}/refcard.pdf"; \
 		\
 	done;
@@ -538,6 +543,7 @@ install-gdb-macosx-common: install-gdb-common
 		\
 		$(INSTALL) -c -d $${dstroot}/$(MAN_DIR)/man1; \
 		$(INSTALL) -c -m 644 $(SRCROOT)/src/gdb/gdb.1 $${dstroot}/$(MAN_DIR)/man1/gdb.1; \
+		perl -pi -e 's,GDB_DOCUMENTATION_DIRECTORY,$(SYSTEM_DEVELOPER_TOOLS_DOC_DIR)/gdb,' $${dstroot}/$(MAN_DIR)/man1/gdb.1; \
 		\
 		$(INSTALL) -c -d $${dstroot}/$(CONFIG_DIR); \
 		$(INSTALL) -c -m 644 $(SRCROOT)/gdb.conf $${dstroot}/$(CONFIG_DIR)/gdb.conf; \
@@ -585,11 +591,13 @@ install-gdb-fat: install-gdb-macosx-common
 
 install-binutils-macosx:
 
-	set -e; for dstroot in $(SYMROOT) $(DSTROOT); do \
-		\
-		$(INSTALL) -c -d $${dstroot}/$(LIBEXEC_BINUTILS_DIR); \
-	done
-
+# We no longer install anything in /usr/libexec/binutils -- jmolenda 2004-06-16
+#
+#	set -e; for dstroot in $(SYMROOT) $(DSTROOT); do \
+#		\
+#		$(INSTALL) -c -d $${dstroot}/$(LIBEXEC_BINUTILS_DIR); \
+#	done
+#
 	set -e; for i in $(BINUTILS_BINARIES); do \
 		instname=`echo $${i} | sed -e 's/\\-new//'`; \
 		lipo -create $(patsubst %,$(OBJROOT)/%/binutils/$${i},$(NATIVE_TARGETS)) \
@@ -600,7 +608,7 @@ install-binutils-macosx:
 install-chmod-macosx:
 	set -e;	if [ `whoami` = 'root' ]; then \
 		for dstroot in $(SYMROOT) $(DSTROOT); do \
-			chown -R root.wheel $${dstroot}; \
+			chown -R root:wheel $${dstroot}; \
 			chmod -R  u=rwX,g=rX,o=rX $${dstroot}; \
 			chmod a+x $${dstroot}/$(LIBEXEC_GDB_DIR)/*; \
 			chmod a+x $${dstroot}/$(DEVEXEC_DIR)/*; \
@@ -740,7 +748,9 @@ installhdrs:
 
 installsrc:
 	$(SUBMAKE) check
-	$(TAR) --dereference --exclude=CVS -cf - . | $(TAR) -C $(SRCROOT) -xf -
+	$(TAR) --dereference --exclude=CVS --exclude=src/contrib --exclude=src/dejagnu --exclude=src/etc --exclude=src/expect --exclude=src/sim --exclude=src/tcl --exclude=src/texinfo --exclude=src/utils -cf - . | $(TAR) -C $(SRCROOT) -xf -
+
+
 
 check:
 	[ -z `find . -name \*~ -o -name .\#\*` ] || \

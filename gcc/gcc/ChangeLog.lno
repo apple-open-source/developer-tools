@@ -1,3 +1,910 @@
+APPLE LOCAL file lno
+2004-07-18  Sebastian Pop  <pop@cri.ensmp.fr>
+
+	Merge from mainline (lno-merge-20040718).
+
+2004-07-17  Zdenek Dvorak  <rakdver@atrey.karlin.mff.cuni.cz>
+
+	* Makefile.in (tree-cfg.o): Add CFGLAYOUT_H dependency.
+	* loop-init.c (loop_optimizer_init, loop_optimizer_finalize): Do not
+	free the dominators.
+	* passes.c (rest_of_handle_loop2): Free the dominators.
+	* sched-rgn.c (compute_trg_info): Initialize fields of variable el.
+	* tree-cfg.c: Include cfglayout.h.
+	(tree_duplicate_bb): Copy also phi nodes.
+	(struct ssa_name_map_entry): New type.
+	(collect_defs, add_phi_args_after_copy, ssa_name_map_entry_hash,
+	ssa_name_map_entry_eq, allocate_ssa_names,
+	rewrite_to_new_ssa_names_def, rewrite_to_new_ssa_names_use,
+	rewrite_to_new_ssa_names, tree_duplicate_sese_region): New functions.
+	* tree-flow.h (tree_duplicate_sese_region): Declare.
+	* tree-ssa-loop-ch.c (mark_defs_for_rewrite, duplicate_blocks): Removed.
+	(copy_loop_headers): Use tree_duplicate_sese_region.
+	* tree-ssa-loop-manip.c (copy_phi_nodes): Only copy the phi node
+	arguments.
+	* tree-ssa-pre.c (gate_pre): Disable the optimization.
+
+2004-07-14  Dorit Naishlos <dorit@il.ibm.com>
+
+        * tree-vectorizer.c (vect_is_simple_use): Additional argument.
+        (vect_is_supportable_op): Call vect_is_simple_use with extra argument.
+        (vect_is_supportbale_store): Likewise.
+        (vect_is_supportbale_assignment): Likewise.
+        (vect_mark_stmts_to_be_vectorized): Cleanup - use vect_is_simple_use.
+        (vect_get_vec_def_for_operand): Cleanup.
+
+        (vect_analyze_data_refs): Support certain forms of COMPONENT_REF as
+        array_base. Use force_gimple in handling of data-refs.
+        (vect_force_dr_alignment_p): Support certain forms of COMPONENT_REF.
+        (vect_align_data_ref): Likewise.
+        (vect_analyze_data_ref_dependence): Likewise.
+
+        (vect_analyze_operations): Remove duplicate calls to vect_debug_details.
+        (vect_analyze_scalar_cycles): Likewise.
+        (vect_analyze_data_ref_dependence): Likewise.
+        (vect_analyze_data_refs_alignment): Likewise.
+        (vect_analyze_pointer_ref_access): Likewise.
+        (vect_analyze_pointer_ref_access): Likewise.
+        (vect_analyze_data_refs): Likewise.
+        (vect_analyze_loop_form): Likewise.
+
+2004-07-13  Sebastian Pop  <pop@cri.ensmp.fr>
+
+	* tree-data-ref.c: Fix some comments for inclusion in mainline.
+	(tree_fold_gcd): Moved...
+	* tree.c (tree_fold_gcd): ...here.
+	* tree.h (tree_fold_gcd): Declared here.
+
+2004-07-13  Zdenek Dvorak  <rakdver@atrey.karlin.mff.cuni.cz>
+
+	* tree-ssa-loop-niter.c (mark_maybe_infinite_loops): Handle abnormal
+	edges.
+
+2004-07-13  Zdenek Dvorak  <rakdver@atrey.karlin.mff.cuni.cz>
+
+	* Makefile.in (tree-ssa-loop.o, tree-ssa-dce.o): Add function.h
+	dependency.
+	* builtins.c (expand_builtin): Handle BUILT_IN_MAYBE_INFINITE_LOOP.
+	* builtins.def (BUILT_IN_MAYBE_INFINITE_LOOP): New builtin.
+	* function.h (struct function): Add marked_maybe_inf_loops field.
+	* timevar.def (TV_MARK_MILOOPS): New timevar.
+	* tree-flow.h (mark_maybe_infinite_loops): Declare.
+	* tree-optimize.c (init_tree_optimization_passes): Add
+	pass_mark_maybe_inf_loops.
+	* tree-pass.h (pass_mark_maybe_inf_loops): Declare.
+	* tree-ssa-dce.c: Include function.h.
+	(find_obviously_necessary_stmts): Mark back edges only if they were
+	not marked already.
+	(perform_tree_ssa_dce): Do not call mark_dfs_back_edges here.
+	* tree-ssa-loop-niter.c (unmark_surely_finite_loop,
+	mark_maybe_infinite_loops): New functions.
+	* tree-ssa-loop.c: Include function.h.
+	(tree_mark_maybe_inf_loops, gate_tree_mark_maybe_inf_loops,
+	pass_mark_maybe_inf_loops): New pass.
+	* tree-ssa-operands.c (function_ignores_memory_p): Add
+	BUILT_IN_MAYBE_INFINITE_LOOP.
+
+2004-07-12  Sebastian Pop  <pop@cri.ensmp.fr>
+
+	* Makefile.in (tree-scalar-evolution.o): Remove dependences on 
+	tree-vectorizer.h and tree-data-ref.h. 
+	(tree-data-ref.o): Add dependence on lambda.h.
+	* lambda-trans.c, lambda.h: Add missing copyright notice.
+	* tree-scalar-evolution.c: Don't include tree-data-ref.h and 
+	tree-vectorizer.h.  Fix some comments.
+	* tree-scalar-evolution.h (simple_iv): Modified to match the
+	declaration that is in mainline.
+
+2004-07-11  Dorit Naishlos <dorit@il.ibm.com>
+
+        * tree-vectorizer.c: Update documentation. Use '#ifdef
+        ENABLE_CHECKING' to guard checks that are expected to have been
+        verified during analysis. Use vect_debug_details/vect_debug_stats
+        for dumping information.
+
+        * tree-vectorizer.h (struct _stmt_vec_info): New field "memtag".
+        (STMT_VINFO_MEMTAG): Access macro for new field "memtag".
+        * tree-vectorizer.c (vect_create_data_ref): Get tag from new field.
+        (vect_analyze_data_refs): Record the tag in the new memtag field.
+
+        (vect_align_data_ref): Remove unused argument.
+        (vect_analyze_data_refs): Call vect_align_data_ref with one argument.
+        (vect_get_array_first_index): Additional argument to return the
+        index rather than as the return value of the function.
+        (create_index_for_array_ref): Call vect_get_array_first_index with
+        an extra argument.
+        (vect_create_data_ref): Remove unused argument.
+        (vect_debug_stats, vect_debug_details): Argument "string" removed.
+
+        (vect_analyze_pointer_ref_access): New function.
+        (vect_analyze_data_refs): Call vect_analyze_pointer_ref_access.
+
+        (vect_finish_stmt_generation): New function.
+        (vect_transform_assignment, vect_transform_op, vect_transform_store):
+        (vect_transform_load): Call vect_finish_stmt_generation.
+
+        (get_vectype_for_scalar_type): No need to iterate through the
+        different modes - build_vector_type already does that.
+
+        (vect_transform_loop_bound): Check which edge is actually the 'then'.
+
+        (vect_analyze_operations): Temporarily disable vectorization of loops
+        with unknown loop bound.
+ 
+2004-07-10  Zdenek Dvorak  <rakdver@atrey.karlin.mff.cuni.cz>
+
+	* tree-ssa-loop-ivopts.c (determine_biv_step): Use simple_iv.
+
+2004-07-09  Devang Patel  <dpatel@apple.com>
+
+	* Makefile.in (tree-ssa-loop-manip.o): Add tree-scalar-evolution.h
+	dependency.
+	* tree-scalar-evolution.c (scev_rest): Check scalar_evolution_info
+	and current_loops.
+	* tree-ssa-loop-manip.c (tree-scalar-evolution.h): Include.
+	(tree_duplicate_loop_to_header_edge): scev_reset () in the end.
+
+2004-07-09  Steven Bosscher  <stevenb@suse.de>,
+	    Zdenek Dvorak  <rakdver@atrey.karlin.mff.cuni.cz>
+
+	* tree-ssa-pre.c: Merge changes from mainline.
+
+2004-07-09  Steven Bosscher  <stevenb@suse.de>
+
+	* varray.h (varray_data_enum): Remove VARRAY_DATA_DG.
+
+2004-07-08  Sebastian Pop  <pop@cri.ensmp.fr>
+
+	* varray.c (element): Don't include dependence_node_def.
+
+2004-07-08  Sebastian Pop  <pop@cri.ensmp.fr>
+
+	* Makefile.in (OBJS-common): Remove tree-dg.o.
+	(tree-dg.o): Removed.
+	(GTFILES): Remove tree-dg.h.
+	* gengtype.c (open_base_files): Remove tree-dg.h.
+	* tree-data-ref.c (subscript_dependence_tester): Don't define.
+	(dump_data_dependence_relation): Print data references only
+	when they are not NULL.
+	(analyze_array_top): Removed.
+	(initialize_data_dependence_relation): Is extern now.
+	When the data references are NULL the relation is not known.
+	(compute_affine_dependence): Is extern now.
+	(find_data_references_in_loop): Returns chrec_dont_know when
+	failing to analyze a difficult case.  
+	(compute_data_dependences_for_loop): Terminate earlier when 
+	find_data_references_in_loop fails.
+	* tree-data-ref.h (data_dependence_relation): Update comments.
+	(initialize_data_dependence_relation, compute_affine_dependence): 
+	Declared extern.
+	* tree-dg.c, tree-dg.h: Removed.
+	* tree-flow-inline.h (dg_node_for_stmt): Removed.
+	* tree-flow.h: Don't include tree-dg.h.
+	(stmt_ann_d): Remove dependence_node field.
+	* tree-ssa-loop.c: Include tree-data-ref.h.
+	(tree_vectorize, tree_linear_transform): Don't construct the dg_graph.
+	* tree-vectorizer.c: Remove some declarations of static functions.
+	(vect_analyze_data_ref_dependence): Extra parameter for the vectorized 
+	loop.  Don't rely on the information provided by the data
+	reference structure.  Compute directly the relation between
+	the data references instead of querying this information in
+	the dg_graph.
+	(vect_analyze_data_ref_dependences): Pass to
+	vect_analyze_data_ref_dependence the information about the
+	vectorized loop.
+	* varray.h (varray_data_tag): Remove dependence_node_def.
+
+2004-07-07  Zdenek Dvorak  <rakdver@atrey.karlin.mff.cuni.cz>
+
+	* tree-ssa-loop-ivopts.c (cand_value_at): Handle types correctly.
+	(may_eliminate_iv): Verify there is no overflow.
+
+2004-07-07  Zdenek Dvorak  <rakdver@atrey.karlin.mff.cuni.cz>
+
+	* tree-ssa-loop-ivopts.c (find_bivs, find_givs_in_stmt_scev):
+	Ensure that step of the iv satisfies cst_and_fits_in_hwi.
+	(determine_use_iv_cost_outer): Preserve the fact that the cost
+	is infinity.
+	* tree-ssa-loop-prefetch.c (WRITE_CAN_USE_READ_PREFETCH,
+	READ_CAN_USE_WRITE_PREFETCH, HAVE_FORWARD_PREFETCH,
+	HAVE_BACKWARD_PREFETCH, ACCEPTABLE_MISS_RATE): New macros.
+	(struct mem_ref_group): Type of step changed to HOST_WIDE_INT.
+	(struct mem_ref): Type of delta changed to HOST_WIDE_INT.
+	(dump_mem_ref, find_or_create_group, record_ref,
+	struct ar_data, idx_analyze_ref, analyze_ref,
+	gather_memory_references_ref, issue_prefetch_ref): Updated to reflect
+	this.
+	(ddown): New function.
+	(prune_ref_by_self_reuse, prune_ref_by_group_reuse):
+	Implement.
+	(prune_ref_by_reuse): Use WRITE_CAN_USE_READ_PREFETCH and
+	READ_CAN_USE_WRITE_PREFETCH.
+	(prune_group_by_reuse): Add dumps.
+	(issue_prefetch_ref): Assert that PREFETCH_BLOCK is a power of 2.
+	* tree.c (cst_and_fits_in_hwi): Update comment and fix semantics.
+	(int_cst_value, build_int_cst): Check that we use them only for
+	types representable in HOST_WIDE_INT.
+
+2004-07-07  Zdenek Dvorak  <rakdver@atrey.karlin.mff.cuni.cz>
+
+	* tree-ssa-loop-ivcanon.c (canonicalize_loop_induction_variables):
+	Remove bogus check for chrec_contains_undetermined.
+
+2004-07-06  Sebastian Pop  <pop@cri.ensmp.fr>
+
+	* basic-block.h (edge_source, edge_destination): Removed.
+	* cfgloop.c (superloop_at_depth): Fix comment.
+	* cfgloop.h (loop_from_num, outer_loop, inner_loop, next_loop, 
+	loop_num, loop_depth, loop_header, loop_nb_iterations, 
+	loop_num_exits, loop_exit_edges, loop_exit_edge): Removed.
+	* lambda-code.c, tree-cfg.c, tree-data-ref.c, tree-dg.c, 
+	tree-elim-check.c, tree-scalar-evolution.c, tree-ssa-dom.c, 
+	tree-ssa-loop-ivcanon.c, tree-vectorizer.c: Inline removed functions.
+	* tree-data-ref.c: Rewrite some comments.
+	* tree-flow-inline.h (loop_of_stmt): Renamed loop_containing_stmt.
+
+2004-07-04  Dorit Naishlos <dorit@il.ibm.com>
+
+	* tree-vectorizer.c (vect_create_data_ref, vect_init_vector): 
+	Use insert_on_edge to add code in loop preheader.
+	(vect_transform_loop): Make sure there's a preheader BB.
+
+2004-06-30  Zdenek Dvorak  <rakdver@atrey.karlin.mff.cuni.cz>
+
+	* tree-ssa-loop-prefetch.c: New file.
+	* Makefile.in (tree-ssa-loop-prefetch.o): Add.
+	* timevar.def (TV_TREE_PREFETCH): New.
+	* tree-flow.h (tree_ssa_prefetch_arrays,
+	standard_iv_increment_position): Declare.
+	* tree-optimize.c (init_tree_optimization_passes): Add
+	pass_loop_prefetch.
+	* tree-pass.h (pass_loop_prefetch): Declare.
+	* tree-ssa-loop-ivcanon.c (estimate_loop_size): Force the size to be
+	nonzero.
+	* tree-ssa-loop-ivopts.c (cst_and_fits_in_hwi): Moved to tree.c.
+	(standard_iv_increment_position): New function.
+	(zero_p): Export.
+	* tree-ssa-loop-niter.c (zero_p): Remove duplicate function.
+	* tree-ssa-loop.c (tree_ssa_loop_prefetch,
+	gate_tree_ssa_loop_prefetch): New functions.
+	(pass_loop_prefetch): New pass structure.
+	* tree-ssa-operands.c (function_ignores_memory_p): New function.
+	(get_expr_operands): Use it.
+	* tree.c (cst_and_fits_in_hwi): Moved from tree-ssa-loop-ivopts.c.
+	* tree.h (zero_p, cst_and_fits_in_hwi): Declare.
+
+2004-06-28  Daniel Berlin  <dberlin@dberlin.org>
+
+	* lambda-code.c (print_linear_expression): Rename a few variables,
+	simplify some code.
+	(print_lambda_loop): Ditto.
+	(lambda_compute_auxillary_space): Update a comment.
+	(gcc_loop_to_lambda_loop): Update code for chrec_dont_know change.
+	(struct dir_dist_pair): New.
+	(reverse_dep): Ditto.
+	(lambda_dep_mult_constant): New function.	
+	(lambda_dep_add): Ditto.
+	(lambda_vec_distdirvec_mult): Ditto.
+	(lambda_vec_distdirmat_mult): Ditto.
+	(lambda_deps_positive): Ditto.
+	(lambda_transform_legal_p): Ditto.
+	* lambda-mat.c (lambda_matrix_mult): Cleanup
+	(lambda_matrix_delete_rows): Ditto.
+	(lambda_matrix_row_add): Ditto.
+	(lambda_matrix_col_exchange): Ditto.
+	(lambda_trans_matrix_is_nonsingular): Rename to standard gcc predicate
+	naming.
+	(lambda_trans_matrix_is_fullrank): Ditto.
+	(lambda_trans_matrix_base): Rename to reflect actual computation.
+	* lambda.h (lambda_transform_legal_p): Add prototype.
+	* tree-loop-linear.c (linear_transform_loops): Rewrite a bit, use legality
+	tester to test transforms.
+
+2004-06-28  Daniel Berlin  <dberlin@dberlin.org>
+
+	* tree-data-ref.c (build_classic_dist_vector): Add argument, stop 
+	making out-of-bounds array accesses when analyzing less than
+	all the loops.  Add checks to verify.
+	(build_classic_dir_vector): Ditto.
+	(compute_data_dependences_for_loop): Pass in starting loop number
+	to build_classic_*.
+
+2004-06-27  Sebastian Pop  <pop@cri.ensmp.fr>
+
+	* tree.def (INTERVAL_CHREC): Removed.
+	(SCEV_KNOWN, SCEV_NOT_KNOWN): New nodes.
+	* tree-pretty-print.c (dump_generic_node): Handle SCEV_KNOWN and 
+	SCEV_NOT_KNOWN nodes.
+	* tree-chrec.h (build_polynomial_chrec): When one of the
+	operands is chrec_dont_know, return directly chrec_dont_know.
+	* tree-scalar-evolution.c (instantiate_parameters_1): Same.
+	(initialize_scalar_evolutions_analyzer): Build chrec_dont_know using a  
+	SCEV_NOT_KNOWN node, and chrec_known with a SCEV_KNOWN node.
+	
+2004-06-24  Sebastian Pop  <pop@cri.ensmp.fr>
+
+	* tree-chrec.c (chrec_fold_automatically_generated_operands, 
+	chrec_merge): 
+	Use chrec_dont_know instead of a call to chrec_contains_undetermined.
+	(tree_fold_factorial, tree_fold_binomial, chrec_evaluate): Resurrect.
+	(chrec_apply): Reinsert the cases that were removed.
+	(chrec_convert): Remove the check for NULL_TREE inserted two days ago.
+	* tree-scalar-evolution.c (follow_ssa_edge_in_rhs): As a sequel of 
+	removing the tree_fold_* functions, the analyzed trees can contain 
+	NON_LVALUE_EXPR nodes.  Use STRIP_TYPE_NOPS for avoiding these nodes.
+	(number_of_iterations_in_loop): Add the missing open parenthesis in 
+	the debugging dumps.
+	(initialize_scalar_evolutions_analyzer): Use an INTERVAL_CHREC for 
+	constructing the chrec_dont_know node.  This fixes some strange 
+	problems that arise when chrec_dont_know is an INTEGER_CST. 
+	* tree.def (INTERVAL_CHREC): Resurrect.
+
+2004-06-23  Zdenek Dvorak  <rakdver@atrey.karlin.mff.cuni.cz>
+
+	* tree-chrec.c (chrec_merge): Handle case when one of the arguments
+	was not analyzed yet correctly.
+
+2004-06-23  Sebastian Pop  <pop@cri.ensmp.fr>
+	
+	* tree-chrec.c (chrec_fold_automatically_generated_operands): Now
+	static.  Clean comments.
+	(hide_evolution_in_loop, chrec_merge_types): Removed.  
+	* tree-chrec.h (hide_evolution_in_loop,
+	chrec_fold_automatically_generated_operands): Remove declarations.
+	* tree-scalar-evolution.c: Remove an old part of the comment at the 
+	beginning of the file.
+	(compute_overall_effect_of_inner_loop, 
+	compute_overall_effect_of_inner_loop, add_to_evolution_1,
+	analyze_scalar_evolution_1, analyze_scalar_evolution): Test for 
+	chrec_dont_know instead of calling chrec_contains_undetermined.
+	
+2004-06-22  Dorit Naishlos <dorit@il.ibm.com>
+
+	* tree-vectorizer.c (vect_create_data_ref): Fix setting of mem_tag.
+	(vect_analyze_data_refs): Make sure we have a mem_tag.
+
+2004-06-22  Sebastian Pop  <pop@cri.ensmp.fr>
+
+	* tree-fold-const.c, tree-fold-const.h: Removed.
+	* Makefile.in (SCEV_H, tree-chrec.o): Remove tree-fold-const.h.
+	(OBJS-common): Remove tree-fold-const.o.
+	(tree-fold-const.o): Removed.
+	* gengtype.c (open_base_files): Remove tree-fold-const.h.
+	* lambda-code.c, tree-chrec.c, tree-data-ref.c, tree-dg.c, 
+	tree-elim-check.c, tree-loop-linear.c, tree-pretty-print.c, 
+	tree-scalar-evolution.c, tree-ssa-loop-ivcanon.c, 
+	tree-ssa-loop-ivopts.c, tree-ssa-loop-niter.c, tree-vectorizer.c: 
+	Don't include tree-fold-const.h.
+	* tree-chrec.c, tree-data-ref.c: Replace uses of tree_fold_* with 
+	fold (build (*, ...))
+	* tree-data-ref.c (tree_fold_gcd, tree_fold_divides_p,
+	tree_fold_bezout): Saved from deletion here.
+	
+2004-06-22  Sebastian Pop  <pop@cri.ensmp.fr>
+
+	* tree-chrec.c, tree-chrec.h, tree-data-ref.c, tree-dg.c, 
+	tree-elim-check.c, tree-scalar-evolution.c, tree-ssa-loop-niter.c, 
+	tree-vectorizer.c: Replace chrec_top with chrec_dont_know, 
+	and chrec_bot with chrec_known.  Replace the checks of chrec_top 
+	with calls to chrec_contains_undetermined.
+	* tree.def (INTERVAL_CHREC): Removed.  
+	* cfgloop.h (loop): Update comments around nb_iterations field.  
+	* lambda-code.c (gcc_loop_to_lambda_loop): Always check for 
+	undetermined chrec after calling number_of_iterations_in_loop.
+	* tree-chrec.c (chrec_fold_multiply_ival_cst, 
+	chrec_fold_multiply_ival_ival, 
+	chrec_merge_types, chrec_contains_intervals, chrec_evaluate, 
+	chrec_merge_intervals): Removed.
+	(chrec_fold_plus_1, chrec_fold_plus, chrec_fold_minus, 
+	chrec_fold_multiply, chrec_merge, 
+	evolution_function_is_affine_multivariat, chrec_convert): 
+	Remove uses of INTERVAL_CHREC nodes.
+	(chrec_apply): Classify as unknown all the non-affine cases.
+	* tree-fold-const.h (tree_fold_binomial): Removed.
+	* tree-chrec.h (CHREC_LOW, CHREC_UP, 
+	chrec_contains_intervals, build_interval_chrec, 
+	build_chrec_top_type, evolution_function_is_multivariate, 
+	chrec_should_remain_symbolic): Removed.
+	(tree_is_chrec, chrec_zerop, evolution_function_is_affine_p): 
+	Remove uses of INTERVAL_CHREC nodes.
+	* tree-data-ref.c (analyze_ziv_subscript, 
+	analyze_overlapping_iterations): Same.
+	* tree-pretty-print.c (dump_generic_node): Same.
+	* tree-scalar-evolution.c (chrec_is_positive, 
+	instantiate_parameters_1, gather_chrec_stats, 
+	initialize_scalar_evolutions_analyzer): Same.
+	(analyze_scalar_evolution_in_loop): Make it static.
+	(resolve_mixers): Fix comments.
+	(chrec_stats, reset_chrecs_counters, dump_chrecs_stats):
+	Remove nb_interval_chrec counter.
+	(chrec_is_positive, simple_iv): Always check for undetermined after 
+	a call to number_of_iterations_in_loop or analyze_scalar_evolution.
+	* tree-ssa-loop-ivcanon.c (canonicalize_loop_induction_variables, 
+	canonicalize_loop_induction_variables): Same.
+	* tree-ssa-loop-ivopts.c (determine_biv_step): Same.
+	* tree-ssa-loop-niter.c (find_loop_niter_by_eval): Same.
+	(estimate_numbers_of_iterations_loop): Remove redundant call to 
+	number_of_iterations_in_loop.
+	* tree-scalar-evolution.h (analyze_scalar_evolution_in_loop): 
+	Remove declaration, the function is now static.
+	* tree-vectorizer.c (vect_analyze_loop_with_symbolic_num_of_iters):
+	Don't test for INTERVAL_CHREC nodes.
+
+2004-06-22  Devang Patel  <dpatel@apple.com>
+		
+        PR 16105	
+        * tree-vectorizer.c (vect_analyze_operations): Type of MODIFY_EXPR is
+        not reliable. Use LHS's type.
+
+2004-06-21  Zdenek Dvorak  <rakdver@atrey.karlin.mff.cuni.cz>
+
+	PR rtl-optimization/16001
+	* loop-iv.c (iv_number_of_iterations): Prevent copy propagation in
+	niter_expr.
+
+2004-06-21  Sebastian Pop  <pop@cri.ensmp.fr>
+
+	* tree.def (PEELED_CHREC): Removed.
+	* tree-chrec.c (is_not_constant_evolution, chrec_fold_plus_1, 
+	chrec_fold_multiply, chrec_replace_initial_condition, chrec_convert):
+	Don't handle PEELED_CHREC nodes.
+	(chrec_fold_plus_peel_cst, chrec_fold_plus_poly_peel, 
+	chrec_fold_plus_peel_poly, chrec_fold_plus_peel_peel, 
+	chrec_fold_multiply_peel_cst, chrec_fold_multiply_poly_peel, 
+	chrec_fold_multiply_peel_peel, simplify_peeled_chrec): Removed.
+	* tree-chrec.h (tree_is_chrec): Don't handle PEELED_CHREC nodes.
+	(build_peeled_chrec, evolution_function_is_peeled_affine_p): Removed.
+	* tree-pretty-print.c (dump_generic_node): Don't handle
+	PEELED_CHREC nodes.
+	* tree-scalar-evolution.c (analyze_evolution_in_loop,
+	instantiate_parameters_1): Same.
+	(chrec_stats, reset_chrecs_counters, dump_chrecs_stats, 
+	gather_chrec_stats): Don't count the number of PEELED_CHREC nodes.
+
+2004-06-18  Sebastian Pop  <pop@cri.ensmp.fr>
+
+	* Makefile.in (OBJS-common): Remove tree-elim-check.o.
+	* tree-scalar-evolution.c (first_iteration_non_satisfying_noev_noev, 
+	first_iteration_non_satisfying_noev_ev, 
+	first_iteration_non_satisfying_ev_noev, 
+	first_iteration_non_satisfying_ev_ev, 
+	first_iteration_non_satisfying_1, 
+	first_iteration_non_satisfying): Removed.
+	(number_of_iterations_in_loop): Clean up.
+	* tree-scalar-evolution.h (first_iteration_non_satisfying): Removed.
+	* tree-ssa-loop-ivopts.c (zero_p): Compare tree pointer
+	against NULL_TREE.
+	* tree-ssa-loop.c (tree_ssa_loop_test): Return when loops
+	structure is not available.
+	(tree_elim_checks): Disabled for the moment.  Don't call
+	eliminate_redundant_checks.
+
+2004-06-17  Andrew MacLeod  <amacleod@redhat.com>
+
+	* tree-cfg.c (tree_make_forwarder_block):  Use SET_PHI_RESULT.
+	* tree-flow-inline.h (get_use_op_ptr):  Return a use_operand_p.
+	(get_use_from_ptr, get_def_from_ptr):  New.  Return operand pointers.
+	(get_def_op_ptr):  Return a def_operand_p instead of a 'tree *'.
+	(get_v_may_def_result_ptr):  Return a def_operand_p.
+	(get_v_may_def_op_ptr, get_vuse_op_ptr):   Return a use_operand_p.
+	(get_v_must_def_op_ptr):  Return a def_operand_p.
+	(get_phi_result_ptr):  New.  Return a pointer to the result of a PHI.
+	(get_phi_arg_def_ptr):  New.  Return a pointer to an argument of a PHI.
+	(phi_element_for_edge):  Remove.
+	* tree-flow.h (propagate_value, replace_exp):  Change prototype.
+	(propagate_tree_value):  Add new prototype.
+	(phi_element_for_edge):  Remove prototype.
+	* tree-into-ssa.c (mark_def_sites):  Use new operand types.
+	(prepare_operand_for_rename):  Split into two functions.
+	(prepare_use_operand_for_rename):  Prepare use operands.
+	(prepare_def_operand_for_rename):  Prepare def operands.
+	(rewrite_stmt):  Use new operand types.
+	(rewrite_operand):  Use new operand types, change parameter type.
+	* tree-outof-ssa.c (replace_variable):  Split into two functions.
+	(replace_use_variable):  Rewrite uses.
+	(replace_def_variable):  Rewrite defs.
+	(rewrite_trees, rewrite_vars_out_of_ssa):  Use new operand types.
+	* tree-phinodes.c (make_phi_node, resize_phi_node):  Use new types.
+	(add_phi_arg, remove_phi_arg_num):  Use new operand types.
+	* tree-ssa-ccp.c (substitute_and_fold):  Use new operand types.
+	(ccp_fold, replace_uses_in):  Use new operand types.
+	* tree-ssa-copy.c (replace_ssa_names):  Rename to replace_ssa_names_ann
+	and no longer set the value, change parameter type.
+	(replace_exp_1):  Use new operand types.
+	(propagate_value):  Change parameter type, use new operand types.
+	(propagate_tree_value):  Propagate_value without SSA operands.
+	(replace_exp, cprop_operand, cprop_into_stmt):  Use new operand types.
+	(cprop_into_successor_phis):  Use new operand types.
+	* tree-ssa-dom.c (thread_across_edge):  Use new operand types.
+	(eliminate_redundant_computations):  Use new operand types.
+	* tree-ssa-dse.c (fix_phi_uses):  Use new operand_types.
+	(fix_stmt_v_may_defs):  Use new operand_types.
+	* tree-ssa-live.c (create_ssa_var_map):  Use new operand_types.
+	(build_tree_conflict_graph):  Use new operand_types.
+	* tree-ssa-loop.c (duplicate_blocks):  Use PHI_ARG_DEF_FROM_EDGE.
+	* tree-ssa-operands.c (struct freelist_d):  Remove.
+	(check_optype_freelist, add_optype_freelist):  Remove.
+	(allocate_def_optype, allocate_use_optype, allocate_v_may_def_optype,
+	allocate_vuse_optype, allocate_v_must_def_optype):  Call ggc_alloc.
+	(free_uses, free_defs, free_vuses, free_v_may_defs, free_v_must_defs):
+	Call ggc_free instead of add_optype_freelist.
+	(init_ssa_operands, fini_ssa_operands):  Remove free list code.
+	(finalize_ssa_defs, finalize_ssa_uses):  Set new use/def operands.
+	* tree-ssa-operands.h (struct def_optype_d):  Change underlying type.
+	(struct use_optype_d):  Change underlying type.
+	(def_operand_p, use_operand_p):  New types for pointers to operands.
+	(USE_OP, DEF_OP, V_MAY_DEF_RESULT, V_MAY_DEF_OP, VUSE_OP, 
+	V_MUST_DEF_OP):  Use new pointer type instead of dereferencing directly.
+	(USE_FROM_PTR, DEF_FROM_PTR):  New macros to "dereference" operand 
+	pointer types.
+	(SET_USE, SET_DEF):  New macros to set operands from their pointer.
+	(SET_USE_OP, SET_DEF_OP, SET_V_MAY_DEF_RESULT, SET_V_MAY_DEF_OP,
+	SET_VUSE_OP, SET_V_MUST_DEF_OP): New SET routines for operands.
+	(PHI_RESULT_PTR, PHI_RESULT, SET_PHI_RESULT):  Macros to manage the
+	PHI result as an operand.
+	(PHI_ARG_DEF_PTR, PHI_ARG_DEF, SET_PHI_ARG_DEF, PHI_ARG_DEF_FROM_EDGE,
+	PHI_ARG_DEF_PTR_FROM_EDGE):  Macros to manage the PHI arguments.
+	* tree-ssa-pre.c (eliminate):  Call propagate_tree_value.
+	* tree-tailcall.c (independent_of_stmt_p, propagate_through_phis):  Use
+	PHI_ARG_DEF_FROM_EDGE.
+	* tree.h (PHI_RESULT):  Renamed to PHI_RESULT_TREE.
+	(PHI_ARG_DEF):  Renamed to PHI_ARG_DEF_TREE.
+
+	* tree-ssa-loop-ivopts.c (find_bivs, mark_bivs,
+	find_interesting_uses_outer_or_nonlin, find_interesting_uses_stmt,
+	find_interesting_uses_outside, add_old_iv_candidates,
+	remove_statement, rewrite_use_nonlinear_expr, split_loop_exit_edge,
+	protect_loop_closed_ssa_form_use, compute_phi_arg_on_exit,
+	rewrite_use_outer): Use new operand types.
+
+2004-06-16  Dale Johannesen  <dalej@apple.com>
+
+	* Makefile.in (GTFILES): Add tree-chrec.h.
+	* tree-chrec.h (chrec_top, chrec_bot): Add GTY.
+	* tree-scalar-evolution.c (initialize_scalar_evolutions_analyzer):
+	Set chrec_top, chrec_bot once per compilation.
+	* gengtype.c (ifiles):  Add tree-fold-const.h, tree-chrec.h.
+
+2004-06-16  Dale Johannesen  <dalej@apple.com>
+	* tree-flow.h (tree_ann_common-d.aux): Document required behavior.
+	* tree-ssa-loop-manip.c (allocate_new_names): Don't propagate
+	new_names into copies.
+
+2004-06-16  Zdenek Dvorak  <rakdver@atrey.karlin.mff.cuni.cz>
+
+	PR tree-optimization/15993
+	* tree-ssa-dom.c (thread_across_edge): Do not thread edge if its
+	destination is unchanged.
+
+2004-06-14  Dorit Naishlos <dorit@il.ibm.com>
+
+	* tree-vectorizer.c (vect_analyze_data_refs): Minor fix.
+
+2004-06-14  Andrew Pinski  <apinski@apple.com>
+
+	* tree-ssa-return.c: Remove.
+	* Makefile.in (OBJS-common): Remove tree-ssa-return.o
+	(tree-ssa-return.o): Remove.
+	* timevar.def (TV_TREE_RETURN): Remove.
+	* tree-optimize.c (init_tree_optimization_passes):
+	Do not run pass_return.
+	* tree-pass.h (pass_return): Remove declaration.
+
+2004-06-14  Dorit Naishlos <dorit@il.ibm.com>
+
+        * tree-data-ref.c (init_data_ref): New function.
+        * tree-data-ref.h (init_data_ref): New function.
+        * tree-vectorizer.c (vect_get_array_first_index): Return index instead
+        of success status, and support pointers.
+        (vect_create_index_for_array_ref): Remove ARRAY_REF restriction, and
+        change call to vect_get_array_first_index.
+        (vect_create_data_ref): Handle INDIRECT_REFs.
+        (vect_is_supportable_store): Handle INDIRECT_REFs.
+        (vect_is_supportable_load): Handle INDIRECT_REFs.
+        (vect_analyze_data_ref_dependence): Handle INDIRECT_REFs.
+        (vect_analyze_data_ref_dependences): Remove usage of variable 'ok'.
+        (get_array_base): Removed (not used anymore).
+        (vect_force_dr_alignment_p): Use DR_BASE_NAME instead of
+        get_array_base.
+        (vect_align_data_ref): Likewise.
+        (vect_transform_store): Remove ARRAY_REF restriction.
+        (vect_transform_load): Remove ARRAY_REF restriction.
+        (vect_compute_data_ref_alignment): Support pointers.
+        (vect_analyze_data_refs): Support pointers.
+
+        (vect_debug_stats): New Function.
+        (vect_debug_details): New Function.
+        (vect_transform_loop): Use vect_debug_stats and vec_debug_details.
+        (vect_analyze_loop): Use vect_debug_details.
+        (vect_analyze_scalar_cycles): Use vect_debug_stats.
+        (vect_analyze_data_ref_dependence): Likewse.
+        (vect_analyze_data_refs_alignment): Likewise.
+        (vect_analyze_data_ref_accesses): Likewise.
+        (vect_analyze_data_refs): Likewise.
+        (vect_analyze_loop_form): Likewise.
+
+        (vect_gen_if_guard): Formatting fixes (avoid 80 column overflow).
+        (vect_update_initial_conditions_of_duplicatd_loop): Likewise.
+        (vect_transform_loop): Likewise.
+        (vect_analyze_loop_form): Likewise.
+
+2004-06-13  Zdenek Dvorak  <rakdver@atrey.karlin.mff.cuni.cz>
+
+	Merge from mainline (lno-merge-20040612).
+
+2004-06-13  Dorit Naishlos <dorit@il.ibm.com>
+
+	* tree-chrec.c (evolution_function_is_affine_multivariat): Add check
+	for POLYNOMIAL_CHREC.
+	* tree-dg.c (ddg_direction_between_stmts): Add check for chrec_top.
+
+	* tree-pass.h (TODO_write_loop_closed): New to-do flag.
+	* tree-optimize.c (execute_todo): Handle new to-do flag 
+	TODO_write_loop_closed.
+	* tree-ssa-loop.c (struct tree_opt_pass pass_vectorize): Set
+	TODO_write_loop_closed.
+
+	* tree-vectorizer.c (vect_transform_loop): Add calls to 
+	add_bb_to_loop.
+	(vect_analyze_data_ref_dependence): Fix last argument in call to 
+	ddg_direction_between_stmts.
+
+2004-06-11  Zdenek Dvorak  <rakdver@atrey.karlin.mff.cuni.cz>
+
+	PR target/15944
+	* loop-invariant.c (may_assign_reg_p): Use can_copy_p.
+
+2004-06-11  Olga Golovanevsky  <olga@il.ibm.com>
+            Dorit Naishlos <dorit@il.ibm.com>
+
+        * tree-vectorizer.c (vect_generate_tmps_on_preheader):
+        (vect_gen_if_guard): New functions.
+        (vect_update_initial_conditions_of_duplicated_loop):
+        Update also phis of bb at the exit of epilog loop.
+        (vect_transform_loop): Remove code that now belongs to
+        vect_generate_tmps_on_preheader () function. Use
+        vect_gen_if_guard function twice.
+
+2004-06-10  Zdenek Dvorak  <rakdver@atrey.karlin.mff.cuni.cz>
+
+	* tree-ssa-loop-ch.c: New file.
+	* Makefile.in (tree-ssa-loop-ch.o): Add.
+	(tree-ssa-loop.o): Add SCEV_H and tree-vectorizer.h dependency.
+	* cfgloop.h (current_loops): Declare.
+	* common.opt (fivcanon, fivopts, floop-test, ftree-lim): Add.
+	(ftree-loop-optimize, fscalar-evolutions, fall-data-deps,
+	ftree-ddg): Remove.
+	* flags.h (flag_scalar_evolutions, flag_all_data_deps,
+	flag_tree_loop, flag_ddg): Removed.
+	(flag_tree_lim, flag_ivcanon, flag_ivopts,
+	flag_tree_ssa_loop_test): New.
+	(f_options): Remove scalar-evolutions, all-data-deps,
+	tree-ddg, tree-loop-optimize.
+	* toplev.c (flag_scalar_evolutions, flag_all_data_deps,
+	flag_tree_loop, flag_ddg): Removed.
+	(flag_tree_lim, flag_ivcanon, flag_ivopts,
+	flag_tree_ssa_loop_test): New.
+	* opts.c (decode_options, common_handle_option): Initialize new
+	options.
+	* timevar.def (TV_SCALAR_EVOLUTIONS, TV_ALL_DATA_DEPS): Removed.
+	(TV_TREE_ELIM_CHECKS, TV_DEP_GRAPH, TV_LIM, TV_COMPLETE_UNROLL,
+	TV_UNSWITCH): Added.
+	* tree-flow.h (test_unrolling_and_peeling, test_loop_versioning):
+	Removed.
+	(tree_unroll_loops_completely): Declare.
+	* tree-optimize.c (init_tree_optimization_passes): Reorganize loop
+	optimizer passes.
+	* tree-pass.h (pass_scev, pass_scev_init, pass_scev_anal,
+	pass_scev_depend, pass_scev_linear_transform, pass_scev_iv_canon,
+	pass_scev_elim_checks, pass_scev_vectorize, pass_scev_done, pass_ddg,
+	pass_delete_ddg): Removed.
+	(pass_loop_init, pass_loop_test, pass_lim, pass_unswitch,
+	pass_iv_canon, pass_record_bounds, pass_elim_checks, pass_vectorize,
+	pass_complete_unroll, pass_linear_transform, pass_iv_optimize,
+	pass_loop_done): Declare.
+	* tree-scalar-evolution.c (current_loops): Moved to tree-ssa-loop.c.
+	(dd_info_available): Removed.
+	(scev_init, scev_depend, scev_elim_checks, scev_vectorize, scev_done,
+	gate_scev, gate_scev_analysis, gate_scev_depend, gate_scev_elim_checks,
+	gate_scev_vectorize): Removed.
+	(pass_scev, pass_scev_init, pass_scev_anal, pass_scev_depend,
+	pass_scev_vectorize, pass_scev_linear_transform,
+	pass_scev_iv_canon, pass_scev_elim_checks, pass_scev_done,
+	pass_ddg, pass_delete_ddg): Removed.
+	* tree-scalar-evolution.h (scev_analysis): Declare.
+	(scev_analysis): Export.
+	* tree-ssa-loop-ivcanon.c (canonicalize_loop_induction_variables):
+	Add parameter to control whether find_loop_niter_by_eval is run.
+	(canonicalize_induction_variables): Do not unroll loops.
+	(tree_unroll_loops_completely): Split from
+	canonicalize_induction_variables.
+	* tree-ssa-loop-ivopts.c (tree_ssa_iv_optimize_init,
+	tree_ssa_iv_optimize_finalize, tree_ssa_iv_optimize,
+	tree_ssa_iv_optimize): Global initialization/finalization removed.
+	* tree-ssa-loop-manip.c (test_unrolling_and_peeling,
+	test_loop_versioning): Removed.
+	* tree-ssa-loop.c: Include tree-scalar-evolution.h and
+	tree-vectorizer.h.
+	(current_loops): Moved from tree-scalar-evolution.c.
+	(tree_ssa_loop_opt): Removed.
+	(gate_loop): Removed.
+	(pass_loop): Modified.
+	(should_duplicate_loop_header_p, mark_defs_for_rewrite,
+	duplicate_blocks, do_while_loop_p, copy_loop_headers,
+	gate_ch, pass_ch): Moved to tree-ssa-loop-ch.c.
+	(tree_ssa_loop_init, pass_loop_init, tree_ssa_loop_im,
+	gate_tree_ssa_loop_im, pass_lim, tree_ssa_loop_unswitch,
+	gate_tree_ssa_loop_unswitch, pass_unswitch, tree_ssa_loop_ivcanon,
+	gate_tree_ssa_loop_ivcanon, pass_iv_canon, tree_ssa_loop_bounds,
+	pass_record_bounds, tree_ssa_loop_test, pass_loop_test,
+	tree_elim_checks, gate_tree_elim_checks, pass_elim_checks,
+	tree_vectorize, gate_tree_vectorize, pass_vectorize,
+	tree_complete_unroll, gate_tree_complete_unroll, pass_complete_unroll,
+	tree_linear_transform, gate_tree_linear_transform,
+	pass_linear_transform, tree_ssa_loop_ivopts, gate_tree_ssa_loop_ivopts,
+	pass_iv_optimize, tree_ssa_loop_done, pass_loop_done): New.
+	* testsuite/gcc.dg/tree-ssa-chrec/*: Updated.
+
+2004-06-10  Sebastian Pop  <pop@cri.ensmp.fr>
+
+	* tree.def: Remove EXPONENTIAL_CHREC node.
+	* tree-chrec.c (is_not_constant_evolution, chrec_fold_plus_1,
+	chrec_fold_multiply, chrec_evaluate, chrec_apply,
+	chrec_replace_initial_condition, initial_condition,
+	hide_evolution_in_loop, hide_evolution_in_other_loops_than_loop,
+	evolution_part_in_loop_num, reset_evolution_in_loop,
+	reset_evolution_in_loop, chrec_merge, is_multivariate_chrec_rec,
+	is_multivariate_chrec, evolution_function_is_affine_multivariate_p,
+	evolution_function_is_univariate_p, chrec_convert): Don't
+	handle EXPONENTIAL_CHREC nodes.
+	(chrec_fold_plus_expo_cst, chrec_fold_plus_cst_expo,
+	chrec_fold_plus_poly_expo, chrec_fold_plus_expo_poly,
+	chrec_fold_plus_expo_expo, chrec_fold_multiply_poly_expo,
+	chrec_fold_multiply_expo_expo, is_pure_sum_chrec): Removed.
+	* tree-chrec.h (tree_is_chrec, evolution_function_is_affine_p):
+	Don't handle EXPONENTIAL_CHREC nodes.
+	(build_exponential_chrec): Removed.
+	(no_evolution_in_loop_p): Use a call to tree_is_chrec for
+	determining when a node represents a scalar evolution.
+	* tree-data-ref.c (siv_subscript_p): Don't handle
+	EXPONENTIAL_CHREC nodes.
+	* tree-pretty-print.c (dump_generic_node): Same.
+	* tree-scalar-evolution.c: Remove FIXME comments about
+	EXPONENTIAL_CHREC nodes.  Add a pointer to the slides
+	presented at the GCC Summit 2004 about the scalar evolutions.
+	(compute_overall_effect_of_inner_loop): Clarify the leading comment.
+	(chrec_is_positive, add_to_evolution_1, add_to_evolution,
+	instantiate_parameters_1): Don't handle EXPONENTIAL_CHREC nodes.
+	(multiply_evolution_1, multiply_evolution): Removed.
+	(first_iteration_non_satisfying_ev_ev): Handle only affine
+	functions.
+	(follow_ssa_edge_in_rhs): Cases that were detected as
+	EXPONENTIAL_CHREC nodes are now mapped to the unknown element
+	(be it top or bottom) called chrec_top.
+	(chrec_stats, reset_chrecs_counters, dump_chrecs_stats,
+	gather_chrec_stats): Don't count the EXPONENTIAL_CHREC nodes.
+	* tree-vectorizer.c (vect_is_simple_iv_evolution,
+	vect_analyze_loop_with_symbolic_num_of_iters): Use
+	tree_is_chrec for determining whether the given node has an
+	evolution.
+
+2004-06-09  Zdenek Dvorak  <rakdver@atrey.karlin.mff.cuni.cz>
+
+	PR middle-end/15876
+	* tree-ssa-loop-ivopts.c (force_var_cost): Initialize DECL_RTL
+	correctly.
+
+2004-06-09  Zdenek Dvorak  <rakdver@atrey.karlin.mff.cuni.cz>
+
+	* passes.c (rest_of_handle_loop2): Run loop optimizations always.
+
+2004-06-09  Zdenek Dvorak  <rakdver@atrey.karlin.mff.cuni.cz>
+
+	* ra-build.c (livethrough_conflicts_bb): Check also contains_call.
+
+2004-06-09  Olga Golovanevsky  <olga@il.ibm.com>
+            Dorit Naishlos <dorit@il.ibm.com>
+
+	* tree-vctorizer.c
+	(vect_update_initial_conditions_of_duplicated_loop):
+	Handle general form of "init" and "step" of access function.
+	* tree-ssa-loop-manip.c (tree_duplicate_loop_to_exit_cfg):
+	The exit from loop is taken from bb previous to latch instead
+	of latch itself.
+
+2004-06-08  Andrew Pinski  <pinskia@physics.uc.edu>
+
+	PR tree-opt/15881
+	* tree-scalar-evolution.c (count_ev_in_wider_type): Use
+	fold_convert instead of convert.
+	(compute_overall_effect_of_inner_loop): Likewise.
+	(chrec_is_positive): Likewise.
+	(add_to_evolution_1): Likewise.
+	(add_to_evolution): Likewise.
+	(first_iteration_non_satisfying_1): Likewise.
+	(follow_ssa_edge_in_rhs): Likewise.
+	(interpret_rhs_modify_expr): Likewise.
+	(number_of_iterations_in_loop): Likewise.
+
+2004-06-08  Zdenek Dvorak  <rakdver@atrey.karlin.mff.cuni.cz>
+
+	PR tree-optimization/15779
+	* tree-scalar-evolution.c (scev_initialize): Clean the nb_iterations
+	field.
+	* tree-ssa-loop-ivcanon.c (canonicalize_loop_induction_variables): Do
+	not clean nb_iterations field.
+
+2004-06-07  Zdenek Dvorak  <rakdver@atrey.karlin.mff.cuni.cz>
+
+	* version.c (version_string): Update "merged" stamp.
+
+2004-05-30  Daniel Berlin  <dberlin@dberlin.org>
+
+	* tree-loop-linear.c (linear_transform_loops): We don't handle sibling
+	loops, or loops with multiple exits, yet.
+	* lambda-code.c (invariant_in_loop): Check outer loops too for
+	right now.
+	(lle_to_gcc_expression): Special case the coefficient == 1 cases.
+	(lambda_loopnest_to_gcc_loopnest): Use correct test.
+
+2004-05-30  Zdenek Dvorak  <rakdver@atrey.karlin.mff.cuni.cz>
+	    Jeff Law  <law@redhat.com>
+
+	* tree-into-ssa.c (prepare_operand_for_rename): New argument is_use.
+	If the operand is for a use, then strip away the SSA_NAME, do not
+	strip away the SSA_NAME for a set.  Never call release_ssa_name.
+	(mark_def_sites): Appropriately pass additional argument to
+	prepare_operand_for_rename.  If a VDEF_RESULT is not an SSA_NAME,
+	then set the VDEF_RESULT to the VDEF_OP.
+	(set_def_block): Strip away any SSA_NAME to get to the real
+	underlying variable.
+	(ssa_mark_def_sites): Prevent set_def_block from doing so.
+
+	* tree-ssa-loop.c (mark_defs_for_rewrite): Record defined ssa names.
+	(duplicate_blocks): Use rewrite_ssa_into_ssa.
+	(pass_ch): Remove TODO_rename_vars.
+
+2004-05-30  Zdenek Dvorak  <rakdver@atrey.karlin.mff.cuni.cz>
+
+	* opts.c (decode_options): Enable flag_scalar_evolutions by default.
+
+2004-05-30  Zdenek Dvorak  <rakdver@atrey.karlin.mff.cuni.cz>
+
+	* fold-const.c (fold_widened_comparison,
+	fold_sign_changed_comparison): New.
+	(fold): Use them.
+	* tree-flow.h (struct tree_niter_desc): New field additional_info.
+	* tree-ssa-loop-niter.c (simplify_using_outer_evolutions): Do not
+	rewrite expressions in-place.
+	(tree_simplify_using_condition, simplify_using_initial_conditions):
+	New functions.
+	(number_of_iterations_exit): Use simplify_using_initial_conditions.
+	(struct nb_iter_bound): New field additional.
+	(record_estimate, estimate_numbers_of_iterations_loop): Initialize
+	field additional.
+	(upper_bound_in_type, lower_bound_in_type): Export.  Handle
+	unsigned->signed conversion correctly.
+	(can_count_iv_in_wider_type): Pass the additional info to
+	can_count_iv_in_wider_type_bound.
+	(can_count_iv_in_wider_type_bound): Use the additional info.
+	* tree.h (lower_bound_in_type, upper_bound_in_type): Declare.
+	* config/i386/i386.c (legitimate_constant_p): Do not allow
+	integer - symbol.
+
+2004-05-29  Sebastian Pop  <pop@cri.ensmp.fr>
+
+	* lambda-code.c: Spell check.
+	* lambda-trans.c: Same.
+	* tree-chrec.c: Same.
+	* tree-dg.c: Same.
+	* tree-loop-linear.c: Same.
+	* tree-ssa-loop-im.c: Same.
+	* tree-ssa-loop-ivcanon.c: Same.
+	* tree-ssa-loop-ivopts.c: Same.
+	* tree-ssa-loop-manip.c: Same.
+	* tree-ssa-loop.c: Same.
+	* tree-vectorizer.c: Same.
+
 2004-05-28  Zdenek Dvorak  <rakdver@atrey.karlin.mff.cuni.cz>
 
 	* tree-ssa-loop-niter.c (number_of_iterations_cond): Record correct
@@ -128,15 +1035,15 @@
 
 2004-05-12  Sebastian Pop  <pop@cri.ensmp.fr>
 
-	* tree-chrec.c (chrec_evaluate): Use the type of the chrec 
+	* tree-chrec.c (chrec_evaluate): Use the type of the chrec
 	instead of integer_type_node when folding operations.
 	(chrec_apply): Factor chrec_type calls.
 	(chrec_eval_next_init_cond): Removed.
 	(chrec_convert): Don't propagate overflows introduced by convert.
 	* tree-chrec.h (chrec_eval_next_init_cond): Removed.
-	* tree-scalar-evolution.c (first_iteration_non_satisfying_noev_ev, 
+	* tree-scalar-evolution.c (first_iteration_non_satisfying_noev_ev,
 	first_iteration_non_satisfying_ev_noev,
-	first_iteration_non_satisfying_ev_ev): Use number_of_iterations_cond 
+	first_iteration_non_satisfying_ev_ev): Use number_of_iterations_cond
 	instead of computing the loop counts.
 
 2004-05-10  Zdenek Dvorak  <rakdver@atrey.karlin.mff.cuni.cz>
@@ -147,14 +1054,14 @@
 2004-05-10  Sebastian Pop  <pop@cri.ensmp.fr>
 
 	* tree-chrec.h (build_chrec_top_type): Disabled, return chrec_top.
-	* tree-scalar-evolution.c (first_iteration_non_satisfying_noev_ev, 
-	first_iteration_non_satisfying_ev_noev): Use the type of the chrec 
+	* tree-scalar-evolution.c (first_iteration_non_satisfying_noev_ev,
+	first_iteration_non_satisfying_ev_noev): Use the type of the chrec
 	instead of integer_type_node when folding operations.
 	(number_of_iterations_to_overflow): New.
 	(first_iteration_non_satisfying_ev_ev): Implement some cases.
 	(set_nb_iterations_in_loop): Return chrec_top on overflow.
 	(follow_ssa_edge_in_rhs): Handle type conversions "a = (type) rhs".
-	* tree-ssa-loop-ivcanon.c (canonicalize_loop_induction_variables): 
+	* tree-ssa-loop-ivcanon.c (canonicalize_loop_induction_variables):
 	Convert the result of find_loop_niter_by_eval to the same type as niter
 	before comparing.
 
@@ -169,26 +1076,26 @@
 
 2004-05-06  Sebastian Pop  <pop@cri.ensmp.fr>
 
-	* tree-chrec.h (build_chrec_top_type): Check that the type has 
+	* tree-chrec.h (build_chrec_top_type): Check that the type has
 	min and max values before taking their values.
 
 2004-05-06  Sebastian Pop  <pop@cri.ensmp.fr>
 
 	* tree-chrec.h (build_chrec_top_type): New.
-	* tree-chrec.c (chrec_fold_multiply_ival_cst, 
+	* tree-chrec.c (chrec_fold_multiply_ival_cst,
 	chrec_fold_multiply_ival_ival, chrec_fold_plus_1): Use
 	build_chrec_top_type instead of returning chrec_top.
 
 	* tree-data-ref.c (dump_data_dependence_relation): Don't dump
-	direction per subscript.  
+	direction per subscript.
 	(analyze_array): Use an extra boolean parameter for the access
 	mode: read or write.
 	(analyze_array_top, finalize_ddr_dependent): New.
 	(compute_direction_vector, set_all_subscripts_to): Removed.
 	(initialize_data_dependence_relation): The dependence relation
 	is unknown when one of the references base name is NULL_TREE.
-	(subscript_dependence_tester, build_classic_dist_vector, 
-	build_classic_dir_vector, compute_affine_dependence): 
+	(subscript_dependence_tester, build_classic_dist_vector,
+	build_classic_dir_vector, compute_affine_dependence):
 	Use finalize_ddr_dependent.
 	(build_classic_dir_vector): When one of the directions is
 	dir_star, the subscript coupling cannot deduce independence.
@@ -201,7 +1108,7 @@
 	(DR_IS_READ): New.
 	(DDR_SUBSCRIPTS_VECTOR_FINALIZE): Removed.
 	(analyze_array): Change declaration.
-	* tree-vectorizer.c (vect_analyze_data_refs): Adapt the use of 
+	* tree-vectorizer.c (vect_analyze_data_refs): Adapt the use of
 	analyze_array to the new prototype.  Pass in the read or write
 	mode.
 
@@ -263,22 +1170,22 @@
 	* tree.c (int_cst_value, build_int_cst): ...here.
 	* tree.h (int_cst_value, build_int_cst): Declare.
 
-	* tree-chrec.h (is_chrec, symbolic_parameter_expr_p): Removed. 
+	* tree-chrec.h (is_chrec, symbolic_parameter_expr_p): Removed.
 
-	* tree-chrec.c (evolution_function_is_affine_multivariat): Check that 
+	* tree-chrec.c (evolution_function_is_affine_multivariat): Check that
 	the left part is a polynomial before taking its variable.
 
-	* tree-elim-check.c (prove_truth_value): Update the use of 
+	* tree-elim-check.c (prove_truth_value): Update the use of
 	tree_is_* functions.
-	* tree-fold-const.h (tree_is_ge, tree_is_gt, tree_is_le, tree_is_lt, 
+	* tree-fold-const.h (tree_is_ge, tree_is_gt, tree_is_le, tree_is_lt,
 	tree_is_eq, tree_is_ne): Return true when decidable, and use a
 	parameter for returning the result.
 
 	* tree-scalar-evolution.c (types_forbid_solutions_p): Removed.
-	(first_iteration_non_satisfying_noev_noev, 
-	first_iteration_non_satisfying_noev_ev, 
-	first_iteration_non_satisfying_ev_noev): Update the use of 
-	tree_is_* functions.  Use no_evolution_in_loop_p instead of 
+	(first_iteration_non_satisfying_noev_noev,
+	first_iteration_non_satisfying_noev_ev,
+	first_iteration_non_satisfying_ev_noev): Update the use of
+	tree_is_* functions.  Use no_evolution_in_loop_p instead of
 	evolution_function_is_constant_p.  Extends the analyzer to
 	symbolic loop counts.
 	(first_iteration_non_satisfying): Factorize code.
@@ -337,8 +1244,8 @@
 
 2004-04-22  Sebastian Pop  <sebastian.pop@ensmp.fr>
 
-	* tree-elim-check.c (prove_truth_value_gt, prove_truth_value_lt, 
-	prove_truth_value_le, prove_truth_value_ge, prove_truth_value_eq, 
+	* tree-elim-check.c (prove_truth_value_gt, prove_truth_value_lt,
+	prove_truth_value_le, prove_truth_value_ge, prove_truth_value_eq,
 	prove_truth_value_ne): Resurrect.
 	(prove_truth_value_symbolic): New.  Disabled for the moment.
 	(prove_truth_value): Use it when this function fails on unknown.
@@ -367,8 +1274,8 @@
 
 2004-04-21  Sebastian Pop  <sebastian.pop@ensmp.fr>
 
-	* tree-chrec.c (chrec_apply): Fail on chrec_top when the chrec 
-	contains symbols defined in the inner loop.  Otherwise perform 
+	* tree-chrec.c (chrec_apply): Fail on chrec_top when the chrec
+	contains symbols defined in the inner loop.  Otherwise perform
 	the computation with symbols.
 	(no_evolution_in_loop_p): Same.  Moved from here...
 	* tree-chrec.h (no_evolution_in_loop_p): ...there.  Define it inline.
@@ -376,7 +1283,7 @@
 	* tree-scalar-evolution.c (nb_set_scev, nb_get_scev): New counters.
 	(set_scalar_evolution, get_scalar_evolution): Count the number of calls.
 	(chrec_contains_symbols_defined_in_loop): Defined.
-	(compute_scalar_evolution_after_loop, first_iteration_non_satisfying_1, 
+	(compute_scalar_evolution_after_loop, first_iteration_non_satisfying_1,
 	analyze_scalar_evolution_in_loop): Initialize boolean values.
 	(dump_chrecs_stats): Dump the get/set counters.
 
@@ -398,11 +1305,11 @@
 
 2004-04-20  Sebastian Pop  <sebastian.pop@ensmp.fr>
 
-	* tree-scalar-evolution.c (scev_info_str, new_scev_info_str, 
+	* tree-scalar-evolution.c (scev_info_str, new_scev_info_str,
 	find_var_scev_info, set_scalar_evolution, get_scalar_evolution):
 	Store a single scalar evolution per definition.
-	(compute_overall_effect_of_inner_loop): Renamed 
-	compute_scalar_evolution_after_loop. 
+	(compute_overall_effect_of_inner_loop): Renamed
+	compute_scalar_evolution_after_loop.
 	(compute_scalar_evolution_in_loop): New.
 	(analyze_scalar_evolution): Use the helper function.
 	(analyze_scalar_evolution_1): Helper recursive function.
@@ -416,8 +1323,8 @@
 
 2004-04-20  Sebastian Pop  <sebastian.pop@ensmp.fr>
 
-	* tree-chrec.c (chrec_fold_multiply_ival_cst, 
-	chrec_fold_multiply_ival_ival, chrec_fold_plus_1): When the fold 
+	* tree-chrec.c (chrec_fold_multiply_ival_cst,
+	chrec_fold_multiply_ival_ival, chrec_fold_plus_1): When the fold
 	resulted in an overflow, conservatively answer chrec_top.
 
 2004-04-20  Sebastian Pop  <sebastian.pop@ensmp.fr>
@@ -426,7 +1333,7 @@
 	and max on the multiplication result.
 	(chrec_fold_negate): Removed.
 	* tree-chrec.h (chrec_fold_negate): Removed.
-	* tree-scalar-evolution.c (interpret_rhs_modify_expr): 
+	* tree-scalar-evolution.c (interpret_rhs_modify_expr):
 	Use chrec_fold_minus instead of chrec_fold_negate.
 
 2004-04-20  Sebastian Pop  <sebastian.pop@ensmp.fr>
@@ -435,7 +1342,7 @@
 	* tree-data-ref.c (analyze_siv_subscript_affine_affine): Renamed
 	analyze_subscript_affine_affine.  Exchange the CHREC_VARIABLEs for
 	overlaps.
-	(analyze_miv_subscript): Use directly analyze_subscript_affine_affine, 
+	(analyze_miv_subscript): Use directly analyze_subscript_affine_affine,
 	and avoid the call to evolution_function_is_constant_p.
 
 2004-04-20  Sebastian Pop  <sebastian.pop@ensmp.fr>
@@ -444,15 +1351,15 @@
 	(no_evolution_in_loop_p): Return false when non decidable, use
 	a parameter for returning the result.
 	* tree-chrec.h (no_evolution_in_loop_p): Modify its declaration.
-	* tree-scalar-evolution.c (add_to_evolution, multiply_evolution): 
+	* tree-scalar-evolution.c (add_to_evolution, multiply_evolution):
 	Avoid the use of no_evolution_in_loop_p.
 	(add_to_evolution_1, multiply_evolution_1): New.
-	(multiply_by_expr_the_loop_evolution, add_expr_to_loop_evolution, 
-	build_exponential_evolution_in_loop, 
+	(multiply_by_expr_the_loop_evolution, add_expr_to_loop_evolution,
+	build_exponential_evolution_in_loop,
 	build_polynomial_evolution_in_loop): Removed.
-	(first_iteration_non_satisfying_1, analyze_scalar_evolution_in_loop): 
+	(first_iteration_non_satisfying_1, analyze_scalar_evolution_in_loop):
 	Modify the use of no_evolution_in_loop_p.
-	* tree-ssa-loop-ivopts.c (find_givs_in_stmt_scev, 
+	* tree-ssa-loop-ivopts.c (find_givs_in_stmt_scev,
 	find_givs_in_stmt_scev): Check that the result of scev analysis
 	does not contain symbols.
 
@@ -493,41 +1400,41 @@
 2004-04-15  Sebastian Pop  <sebastian.pop@ensmp.fr>
 
 	* tree-scalar-evolution.c (instantiate_parameters): Don't keep
-	symbols after instantiation.  Fully instantiate parameters, 
+	symbols after instantiation.  Fully instantiate parameters,
 	or fail on chrec_top.
 
 2004-04-15  Sebastian Pop  <sebastian.pop@ensmp.fr>
 
 	* tree-fold-const.h (chrec_merge_types): Move it...
-	* tree-chrec.c (multiply_int, divide_int, add_int, substract_int, 
-	integer_divides_p, lcm, gcd, update_initial_condition_to_origin, 
+	* tree-chrec.c (multiply_int, divide_int, add_int, substract_int,
+	integer_divides_p, lcm, gcd, update_initial_condition_to_origin,
 	remove_initial_condition, ): Removed.
 	(evolution_function_in_loop_num): Renamed into
 	hide_evolution_in_other_loops_than_loop.
 	(hide_evolution_in_loop, hide_evolution_in_other_loops_than_loop): New.
 	(chrec_merge_types): ... here.
-	(chrec_merge): Answer chrec_top on EXPONENTIAL_CHREC. 
-	(ziv_subscript_p, siv_subscript_p, analyze_ziv_subscript, 
-	analyze_siv_subscript, analyze_siv_subscript_cst_affine, 
-	analyze_siv_subscript_affine_cst, analyze_siv_subscript_affine_affine, 
-	chrec_steps_divide_constant_p, analyze_miv_subscript, 
+	(chrec_merge): Answer chrec_top on EXPONENTIAL_CHREC.
+	(ziv_subscript_p, siv_subscript_p, analyze_ziv_subscript,
+	analyze_siv_subscript, analyze_siv_subscript_cst_affine,
+	analyze_siv_subscript_affine_cst, analyze_siv_subscript_affine_affine,
+	chrec_steps_divide_constant_p, analyze_miv_subscript,
 	analyze_overlapping_iterations): Moved from here...
 	* tree-chrec.h (evolution_function_in_loop_num): Rename declaration.
 	(hide_evolution_in_other_loops_than_loop, hide_evolution_in_loop): New.
 	(analyze_overlapping_iterations): No longer extern.
 
-	* tree-data-ref.c (ziv_subscript_p, siv_subscript_p, 
-	analyze_ziv_subscript, 
-	analyze_siv_subscript, analyze_siv_subscript_cst_affine, 
-	analyze_siv_subscript_affine_cst, analyze_siv_subscript_affine_affine, 
-	chrec_steps_divide_constant_p, analyze_miv_subscript, 
+	* tree-data-ref.c (ziv_subscript_p, siv_subscript_p,
+	analyze_ziv_subscript,
+	analyze_siv_subscript, analyze_siv_subscript_cst_affine,
+	analyze_siv_subscript_affine_cst, analyze_siv_subscript_affine_affine,
+	chrec_steps_divide_constant_p, analyze_miv_subscript,
 	analyze_overlapping_iterations): ... there.
 	(initialize_data_dependence_relation,
 	access_functions_are_affine_or_constant_p): Moved down.
 	(compute_all_dependences): Moved down.  Now is static.
 	(build_classic_dir_vector): New.
-	(build_classic_dist_vector): 
-	(find_data_references): Renamed find_data_references_in_loop. 
+	(build_classic_dist_vector):
+	(find_data_references): Renamed find_data_references_in_loop.
 	Now is static.
 	(compute_data_dependences_for_loop): New.
 	(analyze_all_data_dependences): Use compute_data_dependences_for_loop.
@@ -537,17 +1444,17 @@
 	(select_outer_and_current_evolutions): Removed.
 	(stats_*): Move the static variables in the chrec_stats structure.
 	(chrec_stats): New structure.
-	(first_iteration_non_satisfying_1): In the multivariate case, 
+	(first_iteration_non_satisfying_1): In the multivariate case,
 	don't forget that the outer loops can change the number of iterations.
 	(cannot_analyze_loop_nb_iterations_yet): Removed.
 	(follow_ssa_edge_inner_loop_phi): Refine the case where the
-	evolution of the inner loop is symbolic.  
+	evolution of the inner loop is symbolic.
 	(number_of_iterations_in_loop): Factor the end of the cases.
 
 	* tree-dg.c (classic_dist, classic_dir): Declared static.
 	(dg_delete_graph): Delete the classic_dist and classic_dir.
 	(dg_create_graph): Adapt to use compute_data_dependences_for_loop.
-	(gate_ddg, gate_delete_ddg, pass_ddg, pass_delete_ddg): Moved in 
+	(gate_ddg, gate_delete_ddg, pass_ddg, pass_delete_ddg): Moved in
 	tree-scalar-evolution.c.
 	* tree-dg.h (dg_create_graph): Pass in struct loops.
 
@@ -569,7 +1476,7 @@
         functions that deal with alignment.
         (vect_analyze_data_refs): Likewise.
         (vect_analyze_loop): Call vect_analyze_data_refs_alignment.
-	
+
 2004-04-15  Zdenek Dvorak  <rakdver@atrey.karlin.mff.cuni.cz>
 
 	* loop-invariant.c (may_assign_reg_p): Prevent unused parameter
@@ -639,7 +1546,7 @@
 2004-04-10  Daniel Berlin  <dberlin@dberlin.org>
 
 	* lambda-code.c (lambda_loopnest_transform): Add comments.
-	
+
 2004-04-09  David Edelsohn  <edelsohn@gnu.org>
 
 	Backport from mainline:
@@ -739,7 +1646,7 @@
 	(struct scev_info_str): Moved to tree-scalar-evolution.c.
 	(MI_VAR, MI_INNER_LOOPS_CHREC, MI_OUTER_LOOPS_CHREC): Removed.
 	(new_scev_info_str): Moved to tree-scalar-evolution.c.
-	* tree-ssa-loop-manip.c (add_exit_phis_use): Just add exit phis for 
+	* tree-ssa-loop-manip.c (add_exit_phis_use): Just add exit phis for
 	superloops of the loop containing the definition.
 	* tree.h (PHI_MARKED): Removed.
 	(tree_phi_node): Field 'marked' removed.
@@ -750,25 +1657,25 @@
 	chrec_not_analyzed_yet is a NULL_TREE.
 	* tree-chrec.h (prove_truth_value_{lt, le, ge, ne, gt, eq}.c):
 	Removed.
-	(evolution_function_is_multivariate, 
+	(evolution_function_is_multivariate,
 	evolution_function_is_peeled_affine_p): New.
-	* tree-data-ref.c (analyze_all_data_dependences): Dump some 
+	* tree-data-ref.c (analyze_all_data_dependences): Dump some
 	statistics on the data dependences.
 	* tree-elim-check.c (not_code, prove_truth_value): New.
 	(try_eliminate_check): Use prove_truth_value.
 	* tree-fold-const.h (tree_is_ne): New.
-	* tree-scalar-evolution.c (types_forbid_solutions_p, 
-	first_iteration_non_satisfying_noev_noev, 
-	first_iteration_non_satisfying_noev_ev, 
-	first_iteration_non_satisfying_ev_noev, 
-	first_iteration_non_satisfying_ev_ev, 
-	first_iteration_non_satisfying_1, 
-	first_iteration_non_satisfying, 
+	* tree-scalar-evolution.c (types_forbid_solutions_p,
+	first_iteration_non_satisfying_noev_noev,
+	first_iteration_non_satisfying_noev_ev,
+	first_iteration_non_satisfying_ev_noev,
+	first_iteration_non_satisfying_ev_ev,
+	first_iteration_non_satisfying_1,
+	first_iteration_non_satisfying,
 	gather_stats_on_scev_database): New functions.
 	(nb_iterations_less, nb_iterations_eq, nb_iterations_ne): Removed.
 	(set_nb_iterations_in_loop): Be more careful on overflow.
 	(number_of_iterations_in_loop): Use first_iteration_non_satisfying.
-	* tree-scalar-evolution.h (first_iteration_non_satisfying, 
+	* tree-scalar-evolution.h (first_iteration_non_satisfying,
 	gather_stats_on_scev_database): Declared.
 
 2004-03-30  Zdenek Dvorak  <rakdver@atrey.karlin.mff.cuni.cz>
@@ -784,12 +1691,12 @@
 	to ensure that phi nodes remain in same order.
 	(lv_update_pending_stmts): Do not nreverse pending list.
 	(lv_adjust_loop_header_phi): Walk two phi nodes list in parallel.
-	(tree_ssa_loop_version): Now condition_bb is input parameter. 
+	(tree_ssa_loop_version): Now condition_bb is input parameter.
 	(update_lv_condition): New.
 	(test_loop_versioning): Use update_lv_condition.
 	* tree-ssa-loop-unswitch.c (tree_unswitch_loop): Update function
 	tree_ssa_loop_version () call by adding 4th parameter.
-	
+
 2004-03-29  Richard Guenther <rguenth@tat.physik.uni-tuebingen.de>
 
 	* tree-ssa-loop-ivcanon.c (canonicalize_loop_induction_variables):
@@ -866,9 +1773,9 @@
 	* tree-fold-const.c: Same.
 	* tree-scalar-evolution.c: Same.
 	* tree-scalar-evolution.h: Same.
-	* tree-data-ref.c (dump_data_dependence_relation): Remove the 
-	dump of the base_name because it produces too many conflicts in 
-	the diffs of the testsuite.  
+	* tree-data-ref.c (dump_data_dependence_relation): Remove the
+	dump of the base_name because it produces too many conflicts in
+	the diffs of the testsuite.
 	(compute_all_dependences): Use pointers to the dependence_relations varray.
 	(int_cst_value, build_classic_dist_vector): New.
 	(find_data_references): Use pointers to datarefs varray.
@@ -924,7 +1831,7 @@
 
         * tree-vectorizer.c: (vect_align_data_ref): Check for DECL_ALIGN
         instead of TYPE_ALIGN. Check for DECL_EXTERNAL.
-        (vect_analyze_data_refs): Check for DECL_EXTERNAL. 
+        (vect_analyze_data_refs): Check for DECL_EXTERNAL.
 
         Add documentation for functions.
 
@@ -1032,7 +1939,7 @@
 
 2003-03-18  Devang Patel  <dpatel@apple.com>
 
-	* tree-ssa-live.c (new_tree_live_info): Set num_blocks to 
+	* tree-ssa-live.c (new_tree_live_info): Set num_blocks to
 	last_basic_block instead of n_basic_blocks.
 	(calculate_live_on_entry): Use last_basic_block instead of
 	n_basic_blocks.
@@ -1287,8 +2194,8 @@
 2004-03-03  Sebastian Pop  <sebastian.pop@ensmp.fr>
 
 	* Makefile.in (OBJS-common): Add tree-elim-check.o.
-	(tree-chrec.o): Add dependence on tree-pass.h.     
-	(tree-elim-check.o): New rule.                
+	(tree-chrec.o): Add dependence on tree-pass.h.
+	(tree-elim-check.o): New rule.
 	* tree-elim-check.c: New file.
 	* basic-block.h (edge_source, edge_destination): New inlined
 	functions.
@@ -1298,27 +2205,27 @@
 	* flags.h (flag_tree_elim_checks): Declared here.
 	* opts.c (decode_options): Set flag_tree_elim_checks to zero.
 	(common_handle_option): Add case OPT_ftree_elim_checks.
-	* timevar.def (TV_TREE_ELIM_CHECKS): Defined.          
-	* toplev.c (flag_tree_elim_checks): Defined. 
+	* timevar.def (TV_TREE_ELIM_CHECKS): Defined.
+	* toplev.c (flag_tree_elim_checks): Defined.
 	* tree-cfg.c (print_pred_bbs, print_succ_bbs, print_loop):
-	Modify the dumping style.  Print nb_iterations.           
+	Modify the dumping style.  Print nb_iterations.
 	* tree-chrec.c, tree-chrec.h, tree-scalar-evolution.c,
-	tree-scalar-evolution.h, tree-data-ref.c: New version of the 
-	scalar evolution algorithm.  Don't use a schedule for 
+	tree-scalar-evolution.h, tree-data-ref.c: New version of the
+	scalar evolution algorithm.  Don't use a schedule for
 	analyzing the scalar variables.
 	* tree-fold-const.c (tree_fold_bezout): Define.
 	* tree-fold-const.h (tree_fold_int_round_div,
 	tree_fold_int_trunc_mod, tree_fold_int_ceil_mod,
 	tree_fold_int_floor_mod, tree_fold_int_round_mod): Removed, because
-	not used for the moment.                                           
+	not used for the moment.
 	(chrec_merge_types): New function.
 	* tree-optimize.c (pass_scev_elim_checks): Register the pass.
-	* tree-pass.h (pass_scev_elim_checks): Declare the pass.    
+	* tree-pass.h (pass_scev_elim_checks): Declare the pass.
 	* tree-pretty-print.c (dump_generic_node): Print
 	PEELED_CHREC.  Remove PERIODIC_CHREC.
 	* tree-vectorizer.c: Modify the use of
 	analyze_scalar_evolution.
-	* tree.def (POLYNOMIAL_CHREC, EXPONENTIAL_CHREC): Store the            
+	* tree.def (POLYNOMIAL_CHREC, EXPONENTIAL_CHREC): Store the
 	evolution loop in a third leaf instead of in TREE_TYPE.
 	TREE_TYPE is then used in storing the type of the chrec.
 	(PERIODIC_CHREC): Removed since it is not used for the moment.
@@ -1383,7 +2290,7 @@
 	(divide): Update comment.
 	(tree_ssa_iv_optimize_init): Initialize version_info instead of ivs
 	and outermost_usage.
-	(set_iv, get_iv, find_induction_variables, add_old_ivs_candidates): 
+	(set_iv, get_iv, find_induction_variables, add_old_ivs_candidates):
 	Use version_info instead of ivs.
 	(record_use): Do not initialize removed fields.
 	(find_interesting_uses_op): Call record_use.
@@ -1478,7 +2385,7 @@
 
 2004-02-20  Devang Patel  <dpatel@apple.com>
 
-	* tree-data-ref.h (data_dependence_direction): Add new member 
+	* tree-data-ref.h (data_dependence_direction): Add new member
 	dir_independent.
         * tree-dg.h (tree-data-ref.h): Include.
         (ddg_direction_between_stmts, ddg_distance_between_stmts): New decls.
@@ -1536,10 +2443,10 @@
         (OBJS-common): Add tree-dg.o
         (gtype-desc.o): Depend on tree-dg.h
         (tree-dg.o): New rule.
-        (GTFILES): Add tree-data-ref.h, tree-data-ref.h 
+        (GTFILES): Add tree-data-ref.h, tree-data-ref.h
         * common.opt (ftree-ddg): Add new option.
         * flags.h (flag_ddg): New extern.
-        * gengtype.c (open_base_files): Add tree-dg.h and tree-data-ref.h in 
+        * gengtype.c (open_base_files): Add tree-dg.h and tree-data-ref.h in
         the list.
         * opts.c (decode_option): Set flag_ddg to zero.
         (common_handle_option): Handle OPT_ftree_ddg.
@@ -1721,7 +2628,7 @@
 	* tree-ssa-loop-manip.c (lv_adjust_loop_entry_edge, lv_udate_pending_stmts,
 	lv_adjust_loop_header_phi, tree_ssa_loop_version): New functions.
 	* tree-ssa-loop.c (tree_ssa_loop_opt): Test loop versioning.
-	
+
 2004-01-29  Zdenek Dvorak  <rakdver@atrey.karlin.mff.cuni.cz>
 
 	* tree-scalar-evolution.c (scev_analyze_inner_loop_phi): Add ;.
@@ -1729,16 +2636,16 @@
 2004-01-29  Sebastian Pop  <sebastian.pop@ensmp.fr>
 
 	* Makefile.in (tree-ssa-dom.o): Depends on cfgloop.h.
-	* tree-flow-inline.h (loop_of_stmt): New function.                 
+	* tree-flow-inline.h (loop_of_stmt): New function.
 	* tree-ssa-dom.c: Include cfgloop.h.
 	(tree_ssa_dominator_optimize): Detect and finalize the natural
 	loops structure.
-	(simplify_rhs_and_lookup_avail_expr): Verify that the folded     
+	(simplify_rhs_and_lookup_avail_expr): Verify that the folded
 	operations belong to the same loop.
 
 	* cfgloop.h (loop): Rewrite comments for the nb_iterations field.
 	* tree-data-ref.c (analyze_all_data_dependences): Increase the size
-	of the dependence graph when computing all the dependences.              
+	of the dependence graph when computing all the dependences.
 	* tree-optimize.c (init_tree_optimization_passes): Move the
 	pass_scev after the pass_pre.
 	* tree-scalar-evolution.h: Update comments.
@@ -1843,7 +2750,7 @@
 
         (vectorize_loops): Remove debug printout.
 
-        * config/rs6000/altivec.md: (*movv4si_internal): More complex 
+        * config/rs6000/altivec.md: (*movv4si_internal): More complex
         condition.
         (*movv8hi_internal1): Likewise.
         (*movv16qi_internal1): Likewise.
@@ -1931,15 +2838,15 @@
 
         (vect_analyze_data_refs): Temporarily restrict vectorizable data refs
 	to ARRYA_RES which base is a VAR_DECL.
-        (vect_create_data_ref): Support only VAR_DECL array base. Mark all 
-        vops for renaming. 
+        (vect_create_data_ref): Support only VAR_DECL array base. Mark all
+        vops for renaming.
 
         (vect_get_array_first_index): New function.
         (vect_create_index_for_array_ref): Consider array_first_index.
         (vect_analyze_data_ref_access): Likewise.
 
         (vect_get_loop_niters): Use number_of_iterations_in_loop.
-        (vect_analyze_loop_form): Don't attempt to vectorize if 
+        (vect_analyze_loop_form): Don't attempt to vectorize if
         number_of_iterations == 0.
 
         (vect_analyze_operations): Fix vectype analysis.
@@ -2026,8 +2933,8 @@
 
 	* tree-chrec.c (remove_initial_condition,
 	add_expr_to_loop_evolution_1, add_expr_to_loop_evolution_2): New functions.
-	(add_expr_to_loop_evolution): Use these functions.                        
-	(build_polynomial_evolution_in_loop,              
+	(add_expr_to_loop_evolution): Use these functions.
+	(build_polynomial_evolution_in_loop,
 	build_exponential_evolution_in_loop): Move from here...
 	* tree-chrec.h (build_polynomial_evolution_in_loop,
 	build_exponential_evolution_in_loop): Remove declarations.
@@ -2035,8 +2942,8 @@
 	build_exponential_evolution_in_loop): ... to here.  Declare
 	these functions static.
 	(select_outer_and_current_evolutions): New function.
-	(matched_an_increment, scev_analyze_modify_expr,    
-	compute_overall_effect_of_inner_loop,           
+	(matched_an_increment, scev_analyze_modify_expr,
+	compute_overall_effect_of_inner_loop,
 	analyze_scalar_evolution): Use this function.
 	(add_to_evolution, multiply_evolution): Construct canonical
 	chains of recurrences.
@@ -2163,8 +3070,8 @@
 2004-01-09  Sebastian Pop  <s.pop@laposte.net>
 
 	* tree-scalar-evolution.c: New version of the analyzer.
-	* tree-scalar-evolution.h: Same.                       
-	* tree-chrec.c: Same.           
+	* tree-scalar-evolution.h: Same.
+	* tree-chrec.c: Same.
 	* tree-data-ref.c: Same.
 	* tree-chrec.h: Same.
 	* tree-data-ref.h: Same.
@@ -2346,7 +3253,7 @@
 
 2004-01-02  Sebastian Pop  <s.pop@laposte.net>
 
-	* tree-data-ref.c (vec_analyze_array, vec_array_base_name_differ_p, 
+	* tree-data-ref.c (vec_analyze_array, vec_array_base_name_differ_p,
 	array_base_name_differ_p): Removed for fixing the previous patch.
 
 2004-01-02  Richard Henderson  <rth@redhat.com>
@@ -2371,7 +3278,7 @@
 
 	* tree-data-ref.c (vec_analyze_array): Renamed to analyze_array.
 	(analyze_array): Removed.
-	(find_data_references): Adapted to use the new analyze_array  
+	(find_data_references): Adapted to use the new analyze_array
 	function.
 	(array_base_name_differ_p): Moved to tree-data-ref.h.
 	(vec_array_base_name_differ_p): Removed.
@@ -2385,13 +3292,13 @@
 
 2004-01-01  Dorit Naishlos <dorit@il.ibm.com>
 
-        * tree-vectorizer.c: New file. Implements loop vectorization 
+        * tree-vectorizer.c: New file. Implements loop vectorization
         pass.
         * tree-vectorizer.h: New file.
         * Makefile.in: (tree-vectorizer.c,tree-vectorizer.h): New files.
         * tree-dump.c: (dump_files): New dump file for the new
         vectorization pass.
-        * tree.h: (TDI_vect): New dump index for the new vectorization 
+        * tree.h: (TDI_vect): New dump index for the new vectorization
         pass.
         * timevar.def (TV_TREE_VECTORIZATION): Support new
         vectorization pass.
@@ -2417,7 +3324,7 @@
         * target.h (vectype_for_scalar_type): Same.
         * config/rs6000/rs6000.c: (rs6000_vectype_for_scalar_type):
         Implement the above new target hook.
- 	
+
 2003-12-31  Sebastian Pop  <s.pop@laposte.net>
 
 	* version.c (version_string): Change the identifier for the
@@ -2450,33 +3357,33 @@
 	* common.opt (fscalar-evolutions, fall-data-deps): Added.
 	* flags.h (flag_scalar_evolutions, flag_all_data_deps): Declared.
 	* opts.c (decode_options, common_handle_option): Initialize
-        flag_scalar_evolutions and flag_all_data_deps. 
+        flag_scalar_evolutions and flag_all_data_deps.
 	* timevar.def (TV_SCALAR_EVOLUTIONS, TV_ALL_DATA_DEPS): New.
 	* toplev.c (flag_scalar_evolutions, flag_all_data_deps): Defined.
-	(lang_independent_options): Add flag_scalar_evolutions and 
+	(lang_independent_options): Add flag_scalar_evolutions and
 	flag_all_data_deps.
 	* tree-dump.c (scev, alldd): New extensions.
 	* tree.h (tree_dump_index): Added TDI_scev and TDI_alldd.
-	* tree-optimize.c (tree-fold-const.h, tree-chrec.h, 
+	* tree-optimize.c (tree-fold-const.h, tree-chrec.h,
 	tree-scalar-evolution.h, tree-data-ref.h): Included.
-	(optimize_function_tree): Added the entry point for the analysis of 
+	(optimize_function_tree): Added the entry point for the analysis of
 	scalar evolutions and data dependences.
 	* tree-pretty-print.c (tree-fold-const.h, tree-chrec.h): Included.
-	(dump_generic_node): Added code for dumping POLYNOMIAL_CHREC, 
+	(dump_generic_node): Added code for dumping POLYNOMIAL_CHREC,
 	EXPONENTIAL_CHREC, PERIODIC_CHREC, and INTERVAL_CHREC.
-	* tree.def (INTERVAL_CHREC, POLYNOMIAL_CHREC, EXPONENTIAL_CHREC, 
+	* tree.def (INTERVAL_CHREC, POLYNOMIAL_CHREC, EXPONENTIAL_CHREC,
 	PERIODIC_CHREC): New tree nodes.
-	* varray.h (index_in_varray_tree, tree_is_in_varray_tree_p, 
+	* varray.h (index_in_varray_tree, tree_is_in_varray_tree_p,
 	index_in_varray_int, int_is_in_varray_int_p): New inlined functions.
-	* tree-chrec.c, tree-chrec.h, tree-data-ref.c, tree-data-ref.h, 
-	tree-fold-const.c, tree-fold-const.h, tree-scalar-evolution.c, 
+	* tree-chrec.c, tree-chrec.h, tree-data-ref.c, tree-data-ref.h,
+	tree-fold-const.c, tree-fold-const.h, tree-scalar-evolution.c,
 	tree-scalar-evolution.h: New files.
-	* doc/invoke.texi (-fdump-scalar-evolutions, -fdump-all-data-deps): 
+	* doc/invoke.texi (-fdump-scalar-evolutions, -fdump-all-data-deps):
 	Documented.
 	* testsuite/gcc.dg/tree-ssa-chrec/ssa-chrec-[01..50].c : New testcases.
-	* testsuite/gcc.dg/tree-ssa-chrec/ssa-chrec-[01..50].c.scev: Expected 
-	outputs for the scalar evolution analyzer.  
-	* testsuite/gcc.dg/tree-ssa-chrec/ssa-chrec-{10, 30, 31, 32, 33, 34, 
+	* testsuite/gcc.dg/tree-ssa-chrec/ssa-chrec-[01..50].c.scev: Expected
+	outputs for the scalar evolution analyzer.
+	* testsuite/gcc.dg/tree-ssa-chrec/ssa-chrec-{10, 30, 31, 32, 33, 34,
 	35, 36}.c.alldd: Expected outputs for the data dependence analyzer.
 	* testsuite/gcc.dg/tree-ssa-chrec/tree-ssa-scev.exp: New file.
 	* testsuite/lib/scantree.exp (diff-tree-dumps): New procedure.

@@ -1,5 +1,5 @@
 /* Main for jv-scan
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
    Free Software Foundation, Inc.
    Contributed by Alexandre Petit-Bianco (apbianco@cygnus.com)
 
@@ -59,6 +59,8 @@ FILE *finput, *out;
 /* Executable name.  */
 char *exec_name;
 
+struct line_maps line_table;
+
 /* Flags matching command line options.  */
 int flag_find_main = 0;
 int flag_dump_class = 0;
@@ -94,7 +96,7 @@ static const struct option options[] =
 static void
 usage (void)
 {
-  fprintf (stderr, _("Try `jv-scan --help' for more information.\n"));
+  fprintf (stderr, _("Try 'jv-scan --help' for more information.\n"));
   exit (1);
 }
 
@@ -106,7 +108,7 @@ help (void)
   printf (_("  --no-assert             Don't recognize the assert keyword\n"));
   printf (_("  --complexity            Print cyclomatic complexity of input file\n"));
   printf (_("  --encoding NAME         Specify encoding of input file\n"));
-  printf (_("  --print-main            Print name of class containing `main'\n"));
+  printf (_("  --print-main            Print name of class containing 'main'\n"));
   printf (_("  --list-class            List all classes defined in file\n"));
   printf (_("  --list-filename         Print input filename when listing class names\n"));
   printf (_("  -o FILE                 Set output file name\n"));
@@ -185,10 +187,10 @@ main (int argc, char **argv)
   /* Check on bad usage */
   if (flag_find_main + flag_dump_class + flag_complexity > 1)
     fatal_error
-      ("only one of `--print-main', `--list-class', and `--complexity' allowed");
+      ("only one of '--print-main', '--list-class', and '--complexity' allowed");
 
   if (output_file && !(out = fopen (output_file, "w")))
-    fatal_error ("can't open output file `%s'", output_file);
+    fatal_error ("can't open output file '%s'", output_file);
 
   ft = ftell (out);
 
@@ -198,8 +200,8 @@ main (int argc, char **argv)
   for ( i = optind; i < argc; i++ )
     if (argv [i])
       {
-	input_filename = argv [i];
-	if ( (finput = fopen (argv [i], "r")) )
+	char *filename = argv[i];
+	if ( (finput = fopen (filename, "r")) )
 	  {
 	    /* There's no point in trying to find the current encoding
 	       unless we are going to do something intelligent with it
@@ -212,7 +214,9 @@ main (int argc, char **argv)
 	    if (encoding == NULL || *encoding == '\0')
 	      encoding = DEFAULT_ENCODING;
 
+            main_input_filename = filename;
 	    java_init_lex (finput, encoding);
+	    ctxp->filename = filename;
 	    yyparse ();
 	    report ();
 	    if (ftell (out) != ft)
@@ -222,7 +226,7 @@ main (int argc, char **argv)
 	    reset_report ();
 	  }
 	else
-	  fatal_error ("file not found `%s'", argv [i]);
+	  fatal_error ("file not found '%s'", argv [i]);
       }
 
   /* Flush and close */
@@ -260,4 +264,10 @@ warning (const char *msgid, ...)
   vfprintf (stderr, _(msgid), ap);
   fputc ('\n', stderr);
   va_end (ap);
+}
+
+void
+fancy_abort (const char *file, int line, const char *func)
+{
+  fatal_error ("abort in %s, at %s:%d", func, file, line);
 }

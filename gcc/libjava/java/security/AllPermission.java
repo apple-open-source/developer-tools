@@ -1,5 +1,5 @@
 /* AllPermission.java -- Permission to do anything
-   Copyright (C) 1998, 2001, 2002 Free Software Foundation, Inc.
+   Copyright (C) 1998, 2001, 2002, 2004, 2005  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -35,19 +35,21 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package java.security;
 
-import java.util.Enumeration;
-import java.util.Collections;
 import gnu.java.util.EmptyEnumeration;
+
+import java.util.Collections;
+import java.util.Enumeration;
 
 /**
  * This class is a permission that implies all other permissions.  Granting
  * this permission effectively grants all others.  Extreme caution should
  * be exercised in granting this permission.
  *
- * @author Aaron M. Renn <arenn@urbanophile.com>
- * @author Eric Blake <ebb9@email.byu.edu>
+ * @author Aaron M. Renn (arenn@urbanophile.com)
+ * @author Eric Blake (ebb9@email.byu.edu)
  * @see AccessController
  * @see Permissions
  * @see SecurityManager
@@ -133,64 +135,64 @@ public final class AllPermission extends Permission
   {
     return new AllPermissionCollection();
   }
+
+  /**
+   * Implements AllPermission.newPermissionCollection, and obeys serialization
+   * of JDK.
+   *
+   * @author Eric Blake (ebb9@email.byu.edu)
+   */
+  private static final class AllPermissionCollection extends PermissionCollection
+  {
+    /**
+     * Compatible with JDK 1.1+.
+     */
+    private static final long serialVersionUID = -4023755556366636806L;
+
+    /**
+     * Whether an AllPermission has been added to the collection.
+     *
+     * @serial if all permission is in the collection yet
+     */
+    private boolean all_allowed;
+
+    /**
+     * Add an AllPermission.
+     *
+     * @param perm the permission to add
+     * @throws IllegalArgumentException if perm is not an AllPermission
+     * @throws SecurityException if the collection is read-only
+     */
+    public void add(Permission perm)
+    {
+      if (isReadOnly())
+        throw new SecurityException();
+      if (! (perm instanceof AllPermission))
+        throw new IllegalArgumentException();
+      all_allowed = true;
+    }
+
+    /**
+     * Returns true if this collection implies a permission.
+     *
+     * @param perm the permission to check
+     * @return true if this collection contains an AllPermission
+     */
+    public boolean implies(Permission perm)
+    {
+      return all_allowed;
+    }
+
+    /**
+     * Returns an enumeration of the elements in the collection.
+     *
+     * @return the elements in the collection
+     */
+    public Enumeration elements()
+    {
+      return all_allowed
+        ? Collections.enumeration(Collections.singleton(new AllPermission()))
+        : EmptyEnumeration.getInstance();
+    }
+  } // class AllPermissionCollection
 } // class AllPermission
-
-/**
- * Implements AllPermission.newPermissionCollection, and obeys serialization
- * of JDK.
- *
- * @author Eric Blake <ebb9@email.byu.edu>
- */
-final class AllPermissionCollection extends PermissionCollection
-{
-  /**
-   * Compatible with JDK 1.1+.
-   */
-  private static final long serialVersionUID = -4023755556366636806L;
-
-  /**
-   * Whether an AllPermission has been added to the collection.
-   *
-   * @serial if all permission is in the collection yet
-   */
-  private boolean all_allowed;
-
-  /**
-   * Add an AllPermission.
-   *
-   * @param perm the permission to add
-   * @throws IllegalArgumentException if perm is not an AllPermission
-   * @throws SecurityException if the collection is read-only
-   */
-  public void add(Permission perm)
-  {
-    if (isReadOnly())
-      throw new SecurityException();
-    if (! (perm instanceof AllPermission))
-      throw new IllegalArgumentException();
-    all_allowed = true;
-  }
-
-  /**
-   * Returns true if this collection implies a permission.
-   *
-   * @param perm the permission to check
-   * @return true if this collection contains an AllPermission
-   */
-  public boolean implies(Permission perm)
-  {
-    return all_allowed;
-  }
-
-  /**
-   * Returns an enumeration of the elements in the collection.
-   *
-   * @return the elements in the collection
-   */
-  public Enumeration elements()
-  {
-    return all_allowed
-      ? Collections.enumeration(Collections.singleton(new AllPermission()))
-      : EmptyEnumeration.getInstance();
-  }
-} // class AllPermissionCollection

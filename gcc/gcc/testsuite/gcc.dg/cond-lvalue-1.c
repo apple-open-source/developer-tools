@@ -1,7 +1,8 @@
 /* Test for deprecation of conditional expressions as lvalues.  */
 /* Origin: Joseph Myers <jsm@polyomino.org.uk> */
 /* { dg-do compile } */
-/* { dg-options "" } */
+/* APPLE LOCAL non lvalue assign */
+/* { dg-options "-fno-non-lvalue-assign" } */
 
 int x, y, z;
 
@@ -10,4 +11,5 @@ foo (void)
 {
   (x ? y : z) = 1; /* { dg-bogus "warning" "warning in place of error" } */
 }
-/* { dg-error "lvalue" "conditional expression as lvalue" { target *-*-* } 11 } */
+/* APPLE LOCAL non lvalue assign */
+/* { dg-error "lvalue" "conditional expression as lvalue" { target *-*-* } 12 } */

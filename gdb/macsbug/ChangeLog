@@ -1,3 +1,18 @@
+2005-01-21  Jim Ingham  <jingham@apple.com>
+
+	* MacsBug_display.c: gcc 4.0 doesn't allow static function
+	prototypes in a function body, so I moved the prototypes to
+	before the function that used to contain it.
+	* MacsBug_plugins.c: Ditto.
+	* gdb_plugin_support/gdb_io_redirection.c: Ditto.
+	* gdb_plugin_support/gdb_set.c: Ditto.
+	
+2005-01-06  Jim Ingham  <jingham@apple.com>
+
+	* MacsBug_display.c: Read all the registers into unsigned long
+	long's (since we now treat ALL the PPC registers as unsigned
+	long long, and then only print out the lower 32 bits for now.
+	
 2003-10-20  Ira Ruben  <iraruben@acm.org>
 
 	* Makefile: Add OPT to control -O level from command line.

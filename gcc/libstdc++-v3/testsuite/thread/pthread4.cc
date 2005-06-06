@@ -30,7 +30,6 @@
 // Do not include <pthread.h> explicitly; if threads are properly
 // configured for the port, then it is picked up free from STL headers.
 
-#if __GTHREADS
 using namespace std;
 
 static list<string> foo;
@@ -99,7 +98,7 @@ template class __gnu_cxx::__mt_alloc<std::_List_node<std::string> >;
 int
 main (void)
 {
-#if defined(__sun) && defined(__svr4__)
+#if defined(__sun) && defined(__svr4__) && _XOPEN_VERSION >= 500
   pthread_setconcurrency (2);
 #endif
 
@@ -113,6 +112,3 @@ main (void)
 
   return 0;
 }
-#else
-int main (void) {}
-#endif

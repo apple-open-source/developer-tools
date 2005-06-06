@@ -1,4 +1,5 @@
-// { dg-do run { target i?86-*-linux* i?86-*-freebsd* } }
+// APPLE LOCAL why is this local?
+// { dg-do run { target i?86-*-linux* i?86-*-freebsd* i?86-*-darwin* } }
 // { dg-options "-malign-double" }
 // Origin: Alex Samuel <samuel@codesourcery.com>
 

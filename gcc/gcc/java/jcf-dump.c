@@ -91,7 +91,7 @@ int this_class_index = 0;
 
 int class_access_flags = 0;
 
-/* Print in format similar to javap.  VERY IMCOMPLETE. */
+/* Print in format similar to javap.  VERY INCOMPLETE. */
 int flag_javap_compatible = 0;
 
 static void print_access_flags (FILE *, uint16, char);
@@ -882,7 +882,7 @@ static const struct option options[] =
 static void
 usage (void)
 {
-  fprintf (stderr, _("Try `jcf-dump --help' for more information.\n"));
+  fprintf (stderr, _("Try 'jcf-dump --help' for more information.\n"));
   exit (1);
 }
 
@@ -892,7 +892,7 @@ help (void)
   printf (_("Usage: jcf-dump [OPTION]... CLASS...\n\n"));
   printf (_("Display contents of a class file in readable form.\n\n"));
   printf (_("  -c                      Disassemble method bodies\n"));
-  printf (_("  --javap                 Generate output in `javap' format\n"));
+  printf (_("  --javap                 Generate output in 'javap' format\n"));
   printf ("\n");
   printf (_("  --classpath PATH        Set path to find .class files\n"));
   printf (_("  -IDIR                   Append directory to class path\n"));
@@ -1080,7 +1080,7 @@ main (int argc, char** argv)
 		  if (jcf->read_end - jcf->read_ptr < total_length)
 		    jcf_trim_old_input (jcf);
 		  JCF_FILL (jcf, total_length);
-		  filename = jcf->read_ptr;
+		  filename = (const char *) jcf->read_ptr;
 		  JCF_SKIP (jcf, filename_length);
 		  JCF_SKIP (jcf, extra_length);
 		  if (filename_length > 0
@@ -1181,7 +1181,7 @@ disassemble_method (JCF* jcf, const unsigned char *byte_ops, int len)
 #define VAR_INDEX_2 (saw_index = 1, IMMEDIATE_u2)
 
 #define CHECK_PC_IN_RANGE(PC) (PC < 0 || PC > len ? \
-  (fprintf(stderr, _("Bad byte codes.\n")), exit(-1)) : 1)
+  (fprintf(stderr, _("Bad byte codes.\n")), exit(-1), 0) : 1)
 
 /* Print out operand (if not implied by the opcode) for PUSCH opcodes.
    These all push a constant onto the opcode stack. */

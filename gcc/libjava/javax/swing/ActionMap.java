@@ -44,195 +44,167 @@ import java.io.Serializable;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 
+
 /**
- * ActionMap
- * @author	Andrew Selkirk
- * @version	1.0
+ * @author Andrew Selkirk
+ * @author Michael Koch
  */
-public class ActionMap implements Serializable
+public class ActionMap
+  implements Serializable
 {
-  static final long serialVersionUID = -6277518704513986346L;
+  private static final long serialVersionUID = -6277518704513986346L;
 
-	//-------------------------------------------------------------
-	// Variables --------------------------------------------------
-	//-------------------------------------------------------------
+  /**
+   * actionMap
+   */
+  private Map actionMap = new HashMap();
 
-	/**
-	 * actionMap
-	 */
-	private Map actionMap = new HashMap();
+  /**
+   * parent
+   */
+  private ActionMap parent;
 
-	/**
-	 * parent
-	 */
-	private ActionMap parent = null;
+  /**
+   * Creates a new <code>ActionMap</code> instance.
+   */
+  public ActionMap()
+  {
+  }
 
+  /**
+   * Returns an action associated with an object.
+   *
+   * @param key the key of the enty
+   *
+   * @return the action associated with key, may be null
+   */
+  public Action get(Object key)
+  {
+    Object result = actionMap.get(key);
 
-	//-------------------------------------------------------------
-	// Initialization ---------------------------------------------
-	//-------------------------------------------------------------
+    if (result == null && parent != null)
+      result = parent.get(key);
 
-	/**
-	 * Constructor ActionMap
-	 */
-	public ActionMap() {
-	} // ActionMap()
+    return (Action) result;
+  }
 
+  /**
+   * Puts a new <code>Action</code> into the <code>ActionMap</code>.
+   * If action is null an existing entry will be removed.
+   *
+   * @param key the key for the entry
+   * @param action the action.
+   */
+  public void put(Object key, Action action)
+  {
+    if (action == null)
+      actionMap.remove(key);
+    else
+      actionMap.put(key, action);
+  }
 
-	//-------------------------------------------------------------
-	// Methods ----------------------------------------------------
-	//-------------------------------------------------------------
+  /**
+   * Remove an entry from the <code>ActionMap</code>.
+   *
+   * @param key the key of the entry to remove
+   */
+  public void remove(Object key)
+  {
+    actionMap.remove(key);
+  }
 
-	/**
-	 * get
-	 * @param key TODO
-	 * @returns Action
-	 */
-	public Action get(Object key) {
+  /**
+   * Returns the parent of this <code>ActionMap</code>.
+   *
+   * @return the parent, may be null.
+   */
+  public ActionMap getParent()
+  {
+    return parent;
+  }
 
-		// Variables
-		Object	result;
+  /**
+   * Sets a parent for this <code>ActionMap</code>.
+   *
+   * @param parentMap the new parent
+   */
+  public void setParent(ActionMap parentMap)
+  {
+    parent = parentMap;
+  }
 
-		// Check Local store
-		result = actionMap.get(key);
+  /**
+   * Returns the number of entries in this <code>ActionMap</code>.
+   *
+   * @return the number of entries
+   */
+  public int size()
+  {
+    return actionMap.size();
+  }
 
-		// Check Parent
-		if (result == null) {
-			result = parent.get(key);
-		} // if
+  /**
+   * Clears the <code>ActionMap</code>.
+   */
+  public void clear()
+  {
+    actionMap.clear();
+  }
 
-		return (Action) result;
+  /**
+   * Returns all keys of entries in this <code>ActionMap</code>.
+   *
+   * @return an array of keys
+   */
+  public Object[] keys()
+  {
+    return actionMap.keySet().toArray();
+  }
 
-	} // get()
+  /**
+   * Returns all keys of entries in this <code>ActionMap</code>
+   * and all its parents.
+   *
+   * @return an array of keys
+   */
+  public Object[] allKeys()
+  {
+    Set set = new HashSet();
 
-	/**
-	 * put
-	 * @param key TODO
-	 * @param action TODO
-	 */
-	public void put(Object key, Action action) {
-		if (action == null) {
-			actionMap.remove(key);
-		} else {
-			actionMap.put(key, action);
-		} // if
-	} // put()
+    if (parent != null)
+      set.addAll(Arrays.asList(parent.allKeys()));
 
-	/**
-	 * remove
-	 * @param key TODO
-	 */
-	public void remove(Object key) {
-		actionMap.remove(key);
-	} // remove()
+    set.addAll(actionMap.keySet());
+    return set.toArray();
+  }
 
-	/**
-	 * getParent
-	 * @returns ActionMap
-	 */
-	public ActionMap getParent() {
-		return parent;
-	} // getParent()
+  /**
+   * writeObject
+   *
+   * @param stream the stream to write to
+   *
+   * @exception IOException If an error occurs
+   */
+  private void writeObject(ObjectOutputStream stream)
+    throws IOException
+  {
+    // TODO
+  }
 
-	/**
-	 * setParent
-	 * @param parentMap TODO
-	 */
-	public void setParent(ActionMap parentMap) {
-		parent = parentMap;
-	} // setParent()
-
-	/**
-	 * size
-	 * @returns int
-	 */
-	public int size() {
-		return actionMap.size();
-	} // size()
-
-	/**
-	 * clear
-	 */
-	public void clear() {
-		actionMap.clear();
-	} // clear()
-
-	/**
-	 * keys
-	 * @returns Object[]
-	 */
-	public Object[] keys() {
-		return convertSet(actionMap.keySet());
-	} // keys()
-
-	/**
-	 * allKeys
-	 * @returns Object[]
-	 */
-	public Object[] allKeys() {
-
-		// Variables
-		Set			set;
-
-		// Initialize
-		set = new HashSet();
-
-		// Get Key Sets
-		if (parent != null) {
-			set.addAll(Arrays.asList(parent.allKeys()));
-		} // if
-		set.addAll(actionMap.keySet());
-
-		return convertSet(set);
-
-	} // allKeys()
-
-	private Object[] convertSet(Set set) {
-
-		// Variables
-		int			index;
-		Iterator	iterator;
-		Object[]	keys;
-
-		// Create Final array
-		keys = new Object[set.size()];
-		iterator = set.iterator();
-		index = 0;
-		while (iterator.hasNext()) {
-			keys[index++] = iterator.next();
-		} // while
-
-		return keys;
-
-	} // convertSet()
-
-
-	//-------------------------------------------------------------
-	// Interface: Serializable ------------------------------------
-	//-------------------------------------------------------------
-
-	/**
-	 * writeObject
-	 * @param stream TODO
-	 * @exception IOException TODO
-	 */
-	private void writeObject(ObjectOutputStream value0) throws IOException {
-		// TODO
-	} // writeObject()
-
-	/**
-	 * readObject
-	 * @param stream TODO
-	 * @exception ClassNotFoundException TODO
-	 * @exception IOException TODO
-	 */
-	private void readObject(ObjectInputStream value0) throws ClassNotFoundException, IOException {
-		// TODO
-	} // readObject()
-
-
-} // ActionMap
+  /**
+   * readObject
+   *
+   * @param stream the stream to read from
+   *
+   * @exception ClassNotFoundException If the serialized class cannot be found
+   * @exception IOException If an error occurs
+   */
+  private void readObject(ObjectInputStream stream)
+    throws ClassNotFoundException, IOException
+  {
+    // TODO
+  }
+}

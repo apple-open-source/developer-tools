@@ -1,5 +1,5 @@
 /* JViewport.java -- 
-   Copyright (C) 2002, 2004  Free Software Foundation, Inc.
+   Copyright (C) 2002, 2004, 2005  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -45,10 +45,10 @@ import java.awt.Insets;
 import java.awt.Point;
 import java.awt.Rectangle;
 
+import javax.swing.border.Border;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 import javax.swing.plaf.ViewportUI;
-
 
 /**
  *  
@@ -91,19 +91,20 @@ import javax.swing.plaf.ViewportUI;
  * the underlying child at position <code>(-VX,-VY)</code></p>
  *
  */
-
 public class JViewport extends JComponent
 {
-  public static int BACKINGSTORE_SCROLL_MODE = 1;
-  public static int BLIT_SCROLL_MODE = 2;
-  public static int SIMPLE_SCROLL_MODE = 3;
+  private static final long serialVersionUID = -6925142919680527970L;
+  
+  public static final int SIMPLE_SCROLL_MODE = 0;
+  public static final int BLIT_SCROLL_MODE = 1;
+  public static final int BACKINGSTORE_SCROLL_MODE = 2;
 
   ChangeEvent changeEvent = new ChangeEvent(this);
 
   int scrollMode;
 
-  boolean scrollUnderway;
-  boolean isViewSizeSet;
+  protected boolean scrollUnderway;
+  protected boolean isViewSizeSet;
 
   /** 
    * The width and height of the Viewport's area in terms of view
@@ -114,29 +115,84 @@ public class JViewport extends JComponent
    *
    * @see #toViewCoordinates
    */
-  Dimension viewExtent;
+  Dimension extentSize;
+
+  /**
+   * The width and height of the view in its own coordinate space.
+   */
+
+  Dimension viewSize;
 
   Point lastPaintPosition;
 
   public JViewport()
   {
     setOpaque(true);
+    setScrollMode(BLIT_SCROLL_MODE);
     updateUI();
   }
 
+  public Dimension getExtentSize()
+  {
+    if (extentSize == null)
+      return toViewCoordinates(getSize());
+    else
+      return extentSize;
+  }
+
+  public Dimension toViewCoordinates(Dimension size)
+  {
+    return size;
+  }
+
+  public Point toViewCoordinates(Point p)
+  {
+    Point pos = getViewPosition();
+    return new Point(p.x + pos.x,
+                     p.y + pos.y);
+  }
+
+  public void setExtentSize(Dimension newSize)
+  {
+    extentSize = newSize;
+    fireStateChanged();
+  }
+
+  /**
+   * Returns the viewSize when set, or the preferred size of the set
+   * Component view.  If no viewSize and no Component view is set an
+   * empty Dimension is returned.
+   */
   public Dimension getViewSize()
   {
-    if (viewExtent == null)
-      return getPreferredSize();
+    if (isViewSizeSet)
+      return viewSize;
     else
-      return viewExtent;
+      {
+	Component view = getView();
+	if (view != null)
+	  return view.getPreferredSize();
+	else
+	  return new Dimension();
+      }
   }
+
 
   public void setViewSize(Dimension newSize)
   {
-    viewExtent = newSize;
+    viewSize = newSize;
+    Component view = getView();
+    if (view != null)
+      view.setSize(viewSize);
+    isViewSizeSet = true;
     fireStateChanged();
   }
+
+  /**
+   * Get the viewport's position in view space. Despite confusing name,
+   * this really does return the viewport's (0,0) position in view space,
+   * not the view's position.
+   */
 
   public Point getViewPosition()
   {
@@ -166,14 +222,20 @@ public class JViewport extends JComponent
   public Rectangle getViewRect()
   {
     return new Rectangle(getViewPosition(), 
-                         getViewSize());
+                         getExtentSize());
   }
 
+  /**
+   * @deprecated 1.4
+   */
   public boolean isBackingStoreEnabled()
   {
     return scrollMode == BACKINGSTORE_SCROLL_MODE;
   }
 
+  /**
+   * @deprecated 1.4
+   */
   public void setBackingStoreEnabled(boolean b)
   {
     if (b && scrollMode != BACKINGSTORE_SCROLL_MODE)
@@ -204,12 +266,34 @@ public class JViewport extends JComponent
 
   public void setView(Component v)
   {
-    add(v);
+    while (getComponentCount() > 0)
+      remove(0);
+    if (v != null)
+      {
+        add(v);
+        fireStateChanged();
+      }
+  }
+
+  public void revalidate()
+  {
     fireStateChanged();
+    super.revalidate();
+  }
+
+  public void reshape(int x, int y, int w, int h)
+  {
+    boolean changed = 
+      (x != getX()) 
+      || (y != getY()) 
+      || (w != getWidth())
+      || (h != getHeight());
+    super.reshape(x, y, w, h);
+    if (changed)
+      fireStateChanged();
   }
     
-    
-  public void addImpl(Component comp, Object constraints, int index)
+  protected void addImpl(Component comp, Object constraints, int index)
   {
     if (getComponentCount() > 0)
       remove(getComponents()[0]);
@@ -238,21 +322,9 @@ public class JViewport extends JComponent
     return false;
   }
 
-  public ChangeListener[] getChangeListeners() 
-  {
-    return (ChangeListener[]) getListeners(ChangeListener.class);
-  }
-
   public void paint(Graphics g)
   {
     paintComponent(g);
-  }
-
-  void fireStateChanged()
-  {
-    ChangeListener[] listeners = getChangeListeners();
-    for (int i = 0; i < listeners.length; ++i)
-      listeners[i].stateChanged(changeEvent);
   }
 
   public void addChangeListener(ChangeListener listener)
@@ -265,13 +337,59 @@ public class JViewport extends JComponent
     listenerList.remove(ChangeListener.class, listener);
   }
 
+  public ChangeListener[] getChangeListeners() 
+  {
+    return (ChangeListener[]) getListeners(ChangeListener.class);
+  }
+
+  protected void fireStateChanged()
+  {
+    ChangeListener[] listeners = getChangeListeners();
+    for (int i = 0; i < listeners.length; ++i)
+      listeners[i].stateChanged(changeEvent);
+  }
+
+  /**
+   * This method returns the String ID of the UI class of  Separator.
+   *
+   * @return The UI class' String ID.
+   */
   public String getUIClassID()
   {
     return "ViewportUI";
   }
 
+  /**
+   * This method resets the UI used to the Look and Feel defaults..
+   */
   public void updateUI()
   {
     setUI((ViewportUI) UIManager.getUI(this));
   }            
+
+  /**
+   * This method returns the viewport's UI delegate.
+   *
+   * @return The viewport's UI delegate.
+   */
+  public ViewportUI getUI()
+  {
+    return (ViewportUI) ui;
+  }
+
+  /**
+   * This method sets the viewport's UI delegate.
+   *
+   * @param ui The viewport's UI delegate.
+   */
+  public void setUI(ViewportUI ui)
+  {
+    super.setUI(ui);
+  }
+
+  public final void setBorder(Border border)
+  {
+    if (border != null)
+      throw new IllegalArgumentException();
+  }
 }

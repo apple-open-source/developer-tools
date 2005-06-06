@@ -1,4 +1,4 @@
-# Copyright 2003
+# Copyright 2003, 2004
 # Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
@@ -149,7 +149,7 @@ gdb_expect {
   -re "10\\^done.*shlib-info=\\\[num=\"$decimal\",name=\"$libsystem_shortname\",kind=\"-\",dyld-addr=\"-\",reason=\"init\",requested-state=\"Y\",state=\"Y\",path=\"$libsystem_full_pathname\",description=\"$libsystem_full_pathname\",slide=\"\",loaded_addr=\"$libsystem_load_addr\",prefix=\"\",commpage-objpath=\"$libsystem_commpage_full_pathname\",sympath=.*" {
       fail "verify pre-start libsystem via mi1 - info shlib shows sympath"
   }
-  -re "$gdb_prompt $" {
+  -re "$mi_gdb_prompt$" {
       fail "verify pre-start libsystem via mi1"
   }
   timeout {
@@ -173,6 +173,9 @@ gdb_expect {
 gdb_expect {
   -re ".*\\\*stopped,reason=\"shlib-event\".*$mi_gdb_prompt$" {
     pass "catch shlib-event during startup"
+  }
+  -re ".*\\\*stopped,reason=\"breakpoint-hit\".*$mi_gdb_prompt$" {
+    fail "catch shlib-event during startup (hit breakpoint, missed shlib-event)"
   }
   timeout {
     fail "(timeout) catch shlib-event during startup in mi1"
@@ -209,7 +212,7 @@ gdb_load ${binfile}
 # Verify that libSystem and mylib are both going to try loading at the same addr.
 send_gdb "info sharedlibrary\n"
 gdb_expect {
-  -re ".* $decimal ${testlibfile}.dylib *- *- *init Y Y \\\[memory at $libsystem_load_addr\\\].*objfile is. ${libbinfile}.* $decimal $libsystem_shortname *- *- *init Y Y $libsystem_full_pathname at $libsystem_load_addr.*$gdb_prompt $" {
+  -re ".* $decimal ${testlibfile}.dylib *- *- *init Y Y ${libbinfile} at $libsystem_load_addr.* $decimal $libsystem_shortname *- *- *init Y Y $libsystem_full_pathname at $libsystem_load_addr.*$gdb_prompt $" {
     pass "libmylib and libsystem will both try to load at same addr"
   }
   -re "$gdb_prompt $" {
@@ -295,14 +298,17 @@ set puts_breakpoint_offset_pre_start [expr $puts_breakpoint_address - $libsystem
 set printf_breakpoint_offset_pre_start [expr $printf_breakpoint_address - $libsystem_load_addr]
 
 
+# I don't explicitly test the breakpoint number here because on Tiger
+# and greater there is a posix & non-posix version of printf, so there
+# might have been two breakpoints set above...
 
-gdb_test "b main" "Breakpoint 4 at .*"
+gdb_test "b main" "Breakpoint \[0-9\] at .*"
 gdb_test "run" "Starting program:.*"
 
 # Verify that mydlib slid like it should have and libSystem stayed put.
 send_gdb "info sharedlibrary\n"
 gdb_expect {
-  -re ".* $decimal ${testlibfile}.dylib *- ($hex) *dyld Y Y $libbinfile at ($hex) \\(offset (0x\[^0\]\[0-9a-fA-F\]+)\\).* $decimal $libsystem_shortname *- $libsystem_load_addr *dyld Y Y $libsystem_full_pathname at $libsystem_load_addr \\(offset 0x0\\).*$gdb_prompt $" {
+  -re ".* $decimal $libsystem_shortname *- $libsystem_load_addr *dyld Y Y $libsystem_full_pathname at $libsystem_load_addr \\(offset 0x0\\).* $decimal ${testlibfile}.dylib *- ($hex) *dyld Y Y $libbinfile at ($hex) \\(offset (-?$hex)\\).*$gdb_prompt $" {
     set mylib_slid_addr $expect_out(1,string)
     set mylib_slid_addr_duplicate $expect_out(1,string)
     set mylib_slid_offset $expect_out(2,string)

@@ -43,15 +43,6 @@ import java.util.PropertyResourceBundle;
 import java.util.ResourceBundle;
 import java.util.Vector;
 
-class IntPair implements Serializable {
-  public int first, second;
-}
-
-class CharUnit implements Serializable {
-  public char ch;
-  public boolean bk;
-}
-
 /**
  * RE provides the user interface for compiling and matching regular
  * expressions.
@@ -119,6 +110,16 @@ class CharUnit implements Serializable {
  */
 
 public class RE extends REToken {
+
+  private static final class IntPair implements Serializable {
+    public int first, second;
+  }
+
+  private static final class CharUnit implements Serializable {
+    public char ch;
+    public boolean bk;
+  }
+
   // This String will be returned by getVersion()
   private static final String VERSION = "1.1.5-dev";
 
@@ -492,8 +493,25 @@ public class RE extends REToken {
       else if ((unit.ch == '(') && (syntax.get(RESyntax.RE_NO_BK_PARENS) ^ unit.bk)) {
 	boolean pure = false;
 	boolean comment = false;
+        boolean lookAhead = false;
+        boolean negativelh = false;
 	if ((index+1 < pLength) && (pattern[index] == '?')) {
 	  switch (pattern[index+1]) {
+          case '!':
+            if (syntax.get(RESyntax.RE_LOOKAHEAD)) {
+              pure = true;
+              negativelh = true;
+              lookAhead = true;
+              index += 2;
+            }
+            break;
+          case '=':
+            if (syntax.get(RESyntax.RE_LOOKAHEAD)) {
+              pure = true;
+              lookAhead = true;
+              index += 2;
+            }
+            break;
 	  case ':':
 	    if (syntax.get(RESyntax.RE_PURE_GROUPING)) {
 	      pure = true;
@@ -539,9 +557,13 @@ public class RE extends REToken {
 	    numSubs++;
 	  }
 
-	  int useIndex = (pure) ? 0 : nextSub + numSubs;
+	  int useIndex = (pure || lookAhead) ? 0 : nextSub + numSubs;
 	  currentToken = new RE(String.valueOf(pattern,index,endIndex-index).toCharArray(),cflags,syntax,useIndex,nextSub + numSubs);
 	  numSubs += ((RE) currentToken).getNumSubs();
+
+          if (lookAhead) {
+	      currentToken = new RETokenLookAhead(currentToken,negativelh);
+	  }
 
 	  index = nextIndex;
 	} // not a comment

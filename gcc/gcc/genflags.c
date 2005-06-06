@@ -102,10 +102,8 @@ gen_macro (const char *name, int real, int expect)
 {
   int i;
 
-  if (real > expect)
-    abort ();
-  if (real == 0)
-    abort ();
+  gcc_assert (real <= expect);
+  gcc_assert (real);
 
   /* #define GEN_CALL(A, B, C, D) gen_call((A), (B)) */
   fputs ("#define GEN_", stdout);
@@ -179,8 +177,8 @@ gen_proto (rtx insn)
 	{
 	  putchar ('(');
 	  for (i = 0; i < num-1; i++)
-	    printf ("rtx %c ATTRIBUTE_UNUSED, ", 'a' + i);
-	  printf ("rtx %c ATTRIBUTE_UNUSED)\n", 'a' + i);
+	    printf ("rtx ARG_UNUSED (%c), ", 'a' + i);
+	  printf ("rtx ARG_UNUSED (%c))\n", 'a' + i);
 	}
       else
 	puts ("(void)");
@@ -245,9 +243,6 @@ main (int argc, char **argv)
      direct calls to their generators in C code.  */
   insn_elision = 0;
 
-  if (argc <= 1)
-    fatal ("no input file name");
-
   if (init_md_reader_args (argc, argv) != SUCCESS_EXIT_CODE)
     return (FATAL_EXIT_CODE);
 
@@ -287,7 +282,7 @@ main (int argc, char **argv)
 
 /* Define this so we can link with print-rtl.o to get debug_rtx function.  */
 const char *
-get_insn_name (int code ATTRIBUTE_UNUSED)
+get_insn_name (int ARG_UNUSED (code))
 {
   return NULL;
 }

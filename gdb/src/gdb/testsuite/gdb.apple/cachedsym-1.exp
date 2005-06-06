@@ -50,6 +50,9 @@ set defcachedir "${objdir}/${cachedir}"
 set chbinfile "${defcachedir}/${testfile}.syms"
 set chlibbinfile "${defcachedir}/${libbinfn}.syms"
 
+gdb_suppress_entire_file "Cached symfiles disabled."
+return 0
+
 verbose "\[DEBUG\] testfile=$testfile" 1
 verbose "\[DEBUG\] libbinfile=$libbinfile" 1
 verbose "\[DEBUG\] binfile=$binfile" 1

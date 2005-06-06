@@ -81,7 +81,7 @@ with System.Soft_Links;
 --  Note that we do not use System.Tasking.Initialization directly since
 --  this is a higher level package that we shouldn't depend on. For example
 --  when using the restricted run time, it is replaced by
---  System.Tasking.Restricted.Initialization
+--  System.Tasking.Restricted.Stages.
 
 with System.OS_Primitives;
 --  used for Delay_Modes
@@ -311,9 +311,9 @@ package body System.Task_Primitives.Operations is
       end if;
    end Abort_Handler;
 
-   -------------------
-   --  Stack_Guard  --
-   -------------------
+   -----------------
+   -- Stack_Guard --
+   -----------------
 
    --  The underlying thread system sets a guard page at the
    --  bottom of a thread stack, so nothing is needed.
@@ -321,14 +321,13 @@ package body System.Task_Primitives.Operations is
    procedure Stack_Guard (T : ST.Task_Id; On : Boolean) is
       pragma Unreferenced (T);
       pragma Unreferenced (On);
-
    begin
       null;
    end Stack_Guard;
 
-   --------------------
-   -- Get_Thread_Id  --
-   --------------------
+   -------------------
+   -- Get_Thread_Id --
+   -------------------
 
    function Get_Thread_Id (T : ST.Task_Id) return OSI.Thread_Id is
    begin
@@ -412,8 +411,8 @@ package body System.Task_Primitives.Operations is
             null;
       end Configure_Processors;
 
-      function State (Int : System.Interrupt_Management.Interrupt_ID)
-                     return Character;
+      function State
+        (Int : System.Interrupt_Management.Interrupt_ID) return Character;
       pragma Import (C, State, "__gnat_get_interrupt_state");
       --  Get interrupt state.  Defined in a-init.c
       --  The input argument is the interrupt number,
@@ -507,7 +506,7 @@ package body System.Task_Primitives.Operations is
    end Initialize_Lock;
 
    procedure Initialize_Lock
-     (L : access RTS_Lock;
+     (L     : access RTS_Lock;
       Level : Lock_Level)
    is
       Result : Interfaces.C.int;
@@ -698,7 +697,6 @@ package body System.Task_Primitives.Operations is
    function Monotonic_Clock return Duration is
       TS     : aliased timespec;
       Result : Interfaces.C.int;
-
    begin
       Result := clock_gettime (CLOCK_REALTIME, TS'Unchecked_Access);
       pragma Assert (Result = 0);

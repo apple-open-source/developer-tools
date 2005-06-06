@@ -38,6 +38,30 @@ esac
 ]) []dnl # _GCC_TOPLEV_NONCANONICAL_TARGET
 
 dnl ####
+dnl # ACX_NONCANONICAL_BUILD
+dnl # Like underscored version, but AC_SUBST's.
+AC_DEFUN([ACX_NONCANONICAL_BUILD],
+[AC_REQUIRE([_GCC_TOPLEV_NONCANONICAL_BUILD]) []dnl
+AC_SUBST(build_noncanonical)
+]) []dnl # ACX_NONCANONICAL_BUILD
+
+dnl ####
+dnl # ACX_NONCANONICAL_HOST
+dnl # Like underscored version, but AC_SUBST's.
+AC_DEFUN([ACX_NONCANONICAL_HOST],
+[AC_REQUIRE([_GCC_TOPLEV_NONCANONICAL_HOST]) []dnl
+AC_SUBST(host_noncanonical)
+]) []dnl # ACX_NONCANONICAL_HOST
+
+dnl ####
+dnl # ACX_NONCANONICAL_TARGET
+dnl # Like underscored version, but AC_SUBST's.
+AC_DEFUN([ACX_NONCANONICAL_TARGET],
+[AC_REQUIRE([_GCC_TOPLEV_NONCANONICAL_TARGET]) []dnl
+AC_SUBST(target_noncanonical)
+]) []dnl # ACX_NONCANONICAL_TARGET
+
+dnl ####
 dnl # GCC_TOPLEV_SUBDIRS
 dnl # GCC & friends build 'build', 'host', and 'target' tools.  These must
 dnl # be separated into three well-known subdirectories of the build directory:
@@ -183,7 +207,6 @@ acx_cv_cc_gcc_supports_ada=no
 errors=`(${CC} -c conftest.adb) 2>&1 || echo failure`
 if test x"$errors" = x && test -f conftest.$ac_objext; then
   acx_cv_cc_gcc_supports_ada=yes
-  break
 fi
 rm -f conftest.*])
 
@@ -256,5 +279,29 @@ gcc_cv_c__bool=yes, gcc_cv_c__bool=no)
 if test $gcc_cv_c__bool = yes; then
   AC_DEFINE(HAVE__BOOL, 1, [Define if the \`_Bool' type is built-in.])
 fi
+])
+
+dnl See if hard links work and if not, try to substitute $1 or simple copy.
+AC_DEFUN([ACX_PROG_LN],
+[AC_MSG_CHECKING(whether ln works)
+AC_CACHE_VAL(acx_cv_prog_LN,
+[rm -f conftestdata_t
+echo >conftestdata_f
+if ln conftestdata_f conftestdata_t 2>/dev/null
+then
+  acx_cv_prog_LN=ln
+else
+  acx_cv_prog_LN=no
+fi
+rm -f conftestdata_f conftestdata_t
+])dnl
+if test $acx_cv_prog_LN = no; then
+  LN="ifelse([$1],,cp,[$1])"
+  AC_MSG_RESULT([no, using $LN])
+else
+  LN="$acx_cv_prog_LN"
+  AC_MSG_RESULT(yes)
+fi
+AC_SUBST(LN)dnl
 ])
 

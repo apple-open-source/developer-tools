@@ -66,7 +66,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #ifdef HAVE_doloop_end
 
 /* Return the loop termination condition for PATTERN or zero
- *    if it is not a decrement and branch jump insn.  */
+   if it is not a decrement and branch jump insn.  */
 
 static rtx
 doloop_condition_get (rtx pattern)
@@ -79,11 +79,11 @@ doloop_condition_get (rtx pattern)
   /* The canonical doloop pattern we expect is:
 
      (parallel [(set (pc) (if_then_else (condition)
-					(label_ref (label))
-					(pc)))
-		(set (reg) (plus (reg) (const_int -1)))
-		(additional clobbers and uses)])
-     
+                                        (label_ref (label))
+                                        (pc)))
+                (set (reg) (plus (reg) (const_int -1)))
+                (additional clobbers and uses)])
+
      Some machines (IA-64) make the decrement conditional on
      the condition as well, so we don't bother verifying the
      actual decrement.  In summary, the branch must be the
@@ -105,8 +105,8 @@ doloop_condition_get (rtx pattern)
   reg = SET_DEST (inc);
 
   /* Check for (set (pc) (if_then_else (condition)
-				       (label_ref (label))
-				       (pc))).  */
+                                       (label_ref (label))
+                                       (pc))).  */
   if (GET_CODE (cmp) != SET
       || SET_DEST (cmp) != pc_rtx
       || GET_CODE (SET_SRC (cmp)) != IF_THEN_ELSE
@@ -160,10 +160,12 @@ doloop_valid_p (struct loop *loop, struct niter_desc *desc)
 	 If the absolute increment is not 1, the loop can be infinite
 	 even with LTU/GTU, e.g. for (i = 3; i > 0; i -= 2)
 
+	 APPLE LOCAL begin lno
 	 Note that with LE and GE, the loop behavior is undefined
 	 (C++ standard section 5 clause 5) if an overflow occurs, say
 	 between INT_MAX and INT_MAX + 1.  We thus don't have to worry
 	 about these two cases.
+	 APPLE LOCAL end lno
 
 	 ??? We could compute these conditions at run-time and have a
 	 additional jump around the loop to ensure an infinite loop.
@@ -194,7 +196,7 @@ doloop_valid_p (struct loop *loop, struct niter_desc *desc)
 	{
 	  /* A called function may clobber any special registers required for
 	     low-overhead looping.  */
-	  if (GET_CODE (insn) == CALL_INSN)
+	  if (CALL_P (insn))
 	    {
 	      if (dump_file)
 		fprintf (dump_file, "Doloop: Function call in loop.\n");
@@ -204,7 +206,7 @@ doloop_valid_p (struct loop *loop, struct niter_desc *desc)
 
 	  /* Some targets (eg, PPC) use the count register for branch on table
 	     instructions.  ??? This should be a target specific check.  */
-	  if (GET_CODE (insn) == JUMP_INSN
+	  if (JUMP_P (insn)
 	      && (GET_CODE (PATTERN (insn)) == ADDR_DIFF_VEC
 		  || GET_CODE (PATTERN (insn)) == ADDR_VEC))
 	    {
@@ -249,7 +251,7 @@ add_test (rtx cond, basic_block bb, basic_block dest)
   /* The jump is supposed to handle an unlikely special case.  */
   REG_NOTES (jump)
 	  = gen_rtx_EXPR_LIST (REG_BR_PROB,
-			       GEN_INT (0), REG_NOTES (jump));
+			       const0_rtx, REG_NOTES (jump));
 
   LABEL_NUSES (label)++;
 
@@ -262,20 +264,21 @@ add_test (rtx cond, basic_block bb, basic_block dest)
    describes the loop, DESC describes the number of iterations of the
    loop, and DOLOOP_INSN is the low-overhead looping insn to emit at the
    end of the loop.  CONDITION is the condition separated from the
-   DOLOOP_SEQ.  */
+   DOLOOP_SEQ.  COUNT is the number of iterations of the LOOP.  */
 
 static void
 doloop_modify (struct loop *loop, struct niter_desc *desc,
-	       rtx doloop_seq, rtx condition)
+	       rtx doloop_seq, rtx condition, rtx count)
 {
   rtx counter_reg;
-  rtx count, tmp, noloop = NULL_RTX;
+  rtx tmp, noloop = NULL_RTX;
   rtx sequence;
   rtx jump_insn;
   rtx jump_label;
   int nonneg = 0, irr;
   bool increment_count;
   basic_block loop_end = desc->out_edge->src;
+  enum machine_mode mode;
 
   jump_insn = BB_END (loop_end);
 
@@ -296,8 +299,8 @@ doloop_modify (struct loop *loop, struct niter_desc *desc,
   counter_reg = XEXP (condition, 0);
   if (GET_CODE (counter_reg) == PLUS)
     counter_reg = XEXP (counter_reg, 0);
+  mode = GET_MODE (counter_reg);
 
-  count = desc->niter_expr;
   increment_count = false;
   switch (GET_CODE (condition))
     {
@@ -328,7 +331,7 @@ doloop_modify (struct loop *loop, struct niter_desc *desc,
 	 Note that the maximum value loaded is iterations_max - 1.  */
       if (desc->niter_max
 	  <= ((unsigned HOST_WIDEST_INT) 1
-	      << (GET_MODE_BITSIZE (GET_MODE (counter_reg)) - 1)))
+	      << (GET_MODE_BITSIZE (mode) - 1)))
 	nonneg = 1;
       break;
 
@@ -338,7 +341,7 @@ doloop_modify (struct loop *loop, struct niter_desc *desc,
     }
 
   if (increment_count)
-    count = simplify_gen_binary (PLUS, desc->mode, count, const1_rtx);
+    count = simplify_gen_binary (PLUS, mode, count, const1_rtx);
 
   /* Insert initialization of the count register into the loop header.  */
   start_sequence ();
@@ -350,7 +353,7 @@ doloop_modify (struct loop *loop, struct niter_desc *desc,
 
   if (desc->noloop_assumptions)
     {
-      rtx ass = desc->noloop_assumptions;
+      rtx ass = copy_rtx (desc->noloop_assumptions);
       basic_block preheader = loop_preheader_edge (loop)->src;
       basic_block set_zero
 	      = loop_split_edge_with (loop_preheader_edge (loop), NULL_RTX);
@@ -363,11 +366,11 @@ doloop_modify (struct loop *loop, struct niter_desc *desc,
       /* Expand the condition testing the assumptions and if it does not pass,
 	 reset the count register to 0.  */
       add_test (XEXP (ass, 0), preheader, set_zero);
-      preheader->succ->flags &= ~EDGE_FALLTHRU;
-      cnt = preheader->succ->count;
-      preheader->succ->probability = 0;
-      preheader->succ->count = 0;
-      irr = preheader->succ->flags & EDGE_IRREDUCIBLE_LOOP;
+      EDGE_SUCC (preheader, 0)->flags &= ~EDGE_FALLTHRU;
+      cnt = EDGE_SUCC (preheader, 0)->count;
+      EDGE_SUCC (preheader, 0)->probability = 0;
+      EDGE_SUCC (preheader, 0)->count = 0;
+      irr = EDGE_SUCC (preheader, 0)->flags & EDGE_IRREDUCIBLE_LOOP;
       te = make_edge (preheader, new_preheader, EDGE_FALLTHRU | irr);
       te->probability = REG_BR_PROB_BASE;
       te->count = cnt;
@@ -379,7 +382,7 @@ doloop_modify (struct loop *loop, struct niter_desc *desc,
       for (ass = XEXP (ass, 1); ass; ass = XEXP (ass, 1))
 	{
 	  bb = loop_split_edge_with (te, NULL_RTX);
-	  te = bb->succ;
+	  te = EDGE_SUCC (bb, 0);
 	  add_test (XEXP (ass, 0), bb, set_zero);
 	  make_edge (bb, set_zero, irr);
 	}
@@ -443,16 +446,19 @@ doloop_optimize (struct loop *loop)
 {
   enum machine_mode mode;
   rtx doloop_seq, doloop_pat, doloop_reg;
-  rtx iterations;
+  rtx iterations, count;
   rtx iterations_max;
   rtx start_label;
   rtx condition;
   unsigned level, est_niter;
   struct niter_desc *desc;
+  unsigned word_mode_size;
+  unsigned HOST_WIDE_INT word_mode_max;
 
   if (dump_file)
     fprintf (dump_file, "Doloop: Processing loop %d.\n", loop->num);
 
+  /* APPLE LOCAL begin lno */
   /* Ignore large loops.  */
   if (loop->ninsns > (unsigned) PARAM_VALUE (PARAM_MAX_DOLOOP_INSNS))
     {
@@ -461,6 +467,7 @@ doloop_optimize (struct loop *loop)
 		 "Doloop: The loop is too large.\n");
       return false;
     }
+  /* APPLE LOCAL end lno */
 
   iv_analysis_loop_init (loop);
 
@@ -482,7 +489,7 @@ doloop_optimize (struct loop *loop)
     est_niter = desc->niter;
   /* If the estimate on number of iterations is reliable (comes from profile
      feedback), use it.  Do not use it normally, since the expected number
-     of iterations of unrolled loop is 2.  */
+     of iterations of an unrolled loop is 2.  */
   if (loop->header->count)
     est_niter = expected_loop_iterations (loop);
 
@@ -495,6 +502,7 @@ doloop_optimize (struct loop *loop)
       return false;
     }
 
+  count = copy_rtx (desc->niter_expr);
   iterations = desc->const_iter ? desc->niter_expr : const0_rtx;
   iterations_max = GEN_INT (desc->niter_max);
   level = get_loop_level (loop) + 1;
@@ -506,8 +514,33 @@ doloop_optimize (struct loop *loop)
   doloop_reg = gen_reg_rtx (mode);
   doloop_seq = gen_doloop_end (doloop_reg, iterations, iterations_max,
 			       GEN_INT (level), start_label);
-  if (! doloop_seq && mode != word_mode)
+
+  word_mode_size = GET_MODE_BITSIZE (word_mode);
+  word_mode_max
+	  = ((unsigned HOST_WIDE_INT) 1 << (word_mode_size - 1) << 1) - 1;
+  if (! doloop_seq
+      && mode != word_mode
+      /* Before trying mode different from the one in that # of iterations is
+	 computed, we must be sure that the number of iterations fits into
+	 the new mode.  */
+      && (word_mode_size >= GET_MODE_BITSIZE (mode)
+	  || desc->niter_max <= word_mode_max))
     {
+      if (word_mode_size > GET_MODE_BITSIZE (mode))
+	{
+	  count = simplify_gen_unary (ZERO_EXTEND, word_mode,
+				      count, mode);
+	  iterations = simplify_gen_unary (ZERO_EXTEND, word_mode,
+					   iterations, mode);
+	  iterations_max = simplify_gen_unary (ZERO_EXTEND, word_mode,
+					       iterations_max, mode);
+	}
+      else
+	{
+	  count = lowpart_subreg (word_mode, count, mode);
+	  iterations = lowpart_subreg (word_mode, iterations, mode);
+	  iterations_max = lowpart_subreg (word_mode, iterations_max, mode);
+	}
       PUT_MODE (doloop_reg, word_mode);
       doloop_seq = gen_doloop_end (doloop_reg, iterations, iterations_max,
 				   GEN_INT (level), start_label);
@@ -528,7 +561,7 @@ doloop_optimize (struct loop *loop)
     {
       while (NEXT_INSN (doloop_pat) != NULL_RTX)
 	doloop_pat = NEXT_INSN (doloop_pat);
-      if (GET_CODE (doloop_pat) == JUMP_INSN)
+      if (JUMP_P (doloop_pat))
 	doloop_pat = PATTERN (doloop_pat);
       else
 	doloop_pat = NULL_RTX;
@@ -538,12 +571,11 @@ doloop_optimize (struct loop *loop)
       || ! (condition = doloop_condition_get (doloop_pat)))
     {
       if (dump_file)
-	fprintf (dump_file,
-		 "Doloop: Unrecognizable doloop pattern!\n");
+	fprintf (dump_file, "Doloop: Unrecognizable doloop pattern!\n");
       return false;
     }
 
-  doloop_modify (loop, desc, doloop_seq, condition);
+  doloop_modify (loop, desc, doloop_seq, condition, count);
   return true;
 }
 

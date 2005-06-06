@@ -1,7 +1,7 @@
 // -*- C++ -*-
 // Testing performance utilities for the C++ library testsuite.
 //
-// Copyright (C) 2003 Free Software Foundation, Inc.
+// Copyright (C) 2003, 2004, 2005 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -43,16 +43,33 @@
 #elif defined (__FreeBSD__)
 extern "C"
 {
-  struct mallinfo { int uordblks; };
-  struct mallinfo mallinfo(void)
-    { struct mallinfo m = { (((size_t) sbrk (0) + 1023) / 1024) }; return m; }
+  struct mallinfo
+  {
+    int uordblks;
+    int hblkhd;
+  };
+
+  struct mallinfo
+  mallinfo(void)
+  {
+    struct mallinfo m = { (((size_t) sbrk (0) + 1023) / 1024), 0 };
+    return m;
+  }
 }
-#else
+#elif !defined (__hpux__)
 extern "C"
 {
-  struct mallinfo { int uordblks; };
-  struct mallinfo empty = { 0 };
-  struct mallinfo mallinfo(void) { return empty; }
+  struct mallinfo
+  {
+    int uordblks;
+    int hblkhd;
+  };
+
+  struct mallinfo empty = { 0, 0 };
+
+  struct mallinfo
+  mallinfo(void)
+  { return empty; }
 }
 #endif
 
@@ -60,31 +77,44 @@ namespace __gnu_test
 {
   class time_counter
   {
+  private:
     clock_t	elapsed_begin;
     clock_t	elapsed_end;
     tms		tms_begin;
     tms		tms_end;
-    
+
   public:
-    time_counter() 
-    { this->clear(); }
+    explicit
+    time_counter() : elapsed_begin(), elapsed_end(), tms_begin(), tms_end()
+    { }
 
     void 
-    clear()
+    clear() throw()
     {
-      elapsed_begin = 0;
-      elapsed_end = 0;
-      memset(&tms_begin, 0, sizeof(tms));
-      memset(&tms_end, 0, sizeof(tms));
+      elapsed_begin = clock_t();
+      elapsed_end = clock_t();
+      tms_begin = tms();
+      tms_end = tms();
     }
 
     void
     start()
-    { elapsed_begin = times(&tms_begin); }
+    { 
+      this->clear();
+      elapsed_begin = times(&tms_begin); 
+      const clock_t err = clock_t(-1);
+      if (elapsed_begin == err)
+	std::__throw_runtime_error("time_counter::start");
+    }
     
     void
     stop()
-    { elapsed_end = times(&tms_end); }
+    { 
+      elapsed_end = times(&tms_end); 
+      const clock_t err = clock_t(-1);
+      if (elapsed_end == err)
+	std::__throw_runtime_error("time_counter::stop");
+    }
 
     size_t
     real_time() const
@@ -101,9 +131,9 @@ namespace __gnu_test
 
   class resource_counter
   {
-    int		who;
-    rusage	rusage_begin;
-    rusage	rusage_end;
+    int                 who;
+    rusage	        rusage_begin;
+    rusage	        rusage_end;
     struct mallinfo  	allocation_begin;
     struct mallinfo  	allocation_end;
 
@@ -112,7 +142,7 @@ namespace __gnu_test
     { this->clear(); }
     
     void 
-    clear()
+    clear() throw()
     { 
       memset(&rusage_begin, 0, sizeof(rusage_begin)); 
       memset(&rusage_end, 0, sizeof(rusage_end)); 
@@ -139,7 +169,8 @@ namespace __gnu_test
 
     int
     allocated_memory() const
-    { return allocation_end.uordblks - allocation_begin.uordblks; }
+    { return ((allocation_end.uordblks - allocation_begin.uordblks)
+	      + (allocation_end.hblkhd - allocation_begin.hblkhd)); }
     
     long 
     hard_page_fault() const
@@ -150,21 +181,21 @@ namespace __gnu_test
     { return rusage_end.ru_nswap - rusage_begin.ru_nswap; }
   };
 
-  void
+  inline void
   start_counters(time_counter& t, resource_counter& r)
   {
     t.start();
     r.start();
   }
 
-  void
+  inline void
   stop_counters(time_counter& t, resource_counter& r)
   {
     t.stop();
     r.stop();
   }
 
-  void
+  inline void
   clear_counters(time_counter& t, resource_counter& r)
   {
     t.clear();
@@ -184,8 +215,8 @@ namespace __gnu_test
     std::ofstream out(name, std::ios_base::app);
 
 #ifdef __GTHREADS
-    if (__gthread_active_p ())
-      testname.append ("-thread");
+    if (__gthread_active_p())
+      testname.append("-thread");
 #endif
 
     out.setf(std::ios_base::left);
@@ -216,7 +247,7 @@ namespace __gnu_test
 
 #ifdef __GTHREADS
     if (__gthread_active_p ())
-      testname.append ("-thread");
+      testname.append("-thread");
 #endif
 
     out.setf(std::ios_base::left);

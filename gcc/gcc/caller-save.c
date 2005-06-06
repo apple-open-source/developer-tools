@@ -24,9 +24,9 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "coretypes.h"
 #include "tm.h"
 #include "rtl.h"
+#include "regs.h"
 #include "insn-config.h"
 #include "flags.h"
-#include "regs.h"
 #include "hard-reg-set.h"
 #include "recog.h"
 #include "basic-block.h"
@@ -160,8 +160,7 @@ init_caller_save (void)
 	 [(int) MODE_BASE_REG_CLASS (regno_save_mode [i][1])], i))
       break;
 
-  if (i == FIRST_PSEUDO_REGISTER)
-    abort ();
+  gcc_assert (i < FIRST_PSEUDO_REGISTER);
 
   addr_reg = gen_rtx_REG (Pmode, i);
 
@@ -381,8 +380,7 @@ save_call_clobbered_regs (void)
 
       next = chain->next;
 
-      if (chain->is_caller_save_insn)
-	abort ();
+      gcc_assert (!chain->is_caller_save_insn);
 
       if (INSN_P (insn))
 	{
@@ -410,8 +408,9 @@ save_call_clobbered_regs (void)
 
 	  if (code == CALL_INSN && ! find_reg_note (insn, REG_NORETURN, NULL))
 	    {
-	      int regno;
+	      unsigned regno;
 	      HARD_REG_SET hard_regs_to_save;
+	      reg_set_iterator rsi;
 
 	      /* Use the register life information in CHAIN to compute which
 		 regs are live during the call.  */
@@ -427,27 +426,22 @@ save_call_clobbered_regs (void)
 	      /* Look through all live pseudos, mark their hard registers
 		 and choose proper mode for saving.  */
 	      EXECUTE_IF_SET_IN_REG_SET
-		(&chain->live_throughout, FIRST_PSEUDO_REGISTER, regno,
-		 {
-		   int r = reg_renumber[regno];
-		   int nregs;
+		(&chain->live_throughout, FIRST_PSEUDO_REGISTER, regno, rsi)
+		{
+		  int r = reg_renumber[regno];
+		  int nregs;
+		  enum machine_mode mode;
 
-		   if (r >= 0)
-		     {
-		       enum machine_mode mode;
-
-		       nregs = hard_regno_nregs[r][PSEUDO_REGNO_MODE (regno)];
-		       mode = HARD_REGNO_CALLER_SAVE_MODE
-			        (r, nregs, PSEUDO_REGNO_MODE (regno));
-		       if (GET_MODE_BITSIZE (mode)
-			   > GET_MODE_BITSIZE (save_mode[r]))
-			 save_mode[r] = mode;
-		       while (nregs-- > 0)
-			 SET_HARD_REG_BIT (hard_regs_to_save, r + nregs);
-		     }
-		   else
-		     abort ();
-		 });
+		  gcc_assert (r >= 0);
+		  nregs = hard_regno_nregs[r][PSEUDO_REGNO_MODE (regno)];
+		  mode = HARD_REGNO_CALLER_SAVE_MODE
+		    (r, nregs, PSEUDO_REGNO_MODE (regno));
+		  if (GET_MODE_BITSIZE (mode)
+		      > GET_MODE_BITSIZE (save_mode[r]))
+		    save_mode[r] = mode;
+		  while (nregs-- > 0)
+		    SET_HARD_REG_BIT (hard_regs_to_save, r + nregs);
+		}
 
 	      /* Record all registers set in this call insn.  These don't need
 		 to be saved.  N.B. the call insn might set a subreg of a
@@ -484,7 +478,7 @@ save_call_clobbered_regs (void)
 	  if (n_regs_saved)
 	    for (regno = 0; regno < FIRST_PSEUDO_REGISTER; regno++)
 	      if (TEST_HARD_REG_BIT (hard_regs_saved, regno))
-		regno += insert_restore (chain, GET_CODE (insn) == JUMP_INSN,
+		regno += insert_restore (chain, JUMP_P (insn),
 					 regno, MOVE_MAX_WORDS, save_mode);
 	}
     }
@@ -504,12 +498,11 @@ mark_set_regs (rtx reg, rtx setter ATTRIBUTE_UNUSED,
   if (GET_CODE (reg) == SUBREG)
     {
       rtx inner = SUBREG_REG (reg);
-      if (GET_CODE (inner) != REG || REGNO (inner) >= FIRST_PSEUDO_REGISTER)
+      if (!REG_P (inner) || REGNO (inner) >= FIRST_PSEUDO_REGISTER)
 	return;
-
-      regno = subreg_hard_regno (reg, 1);
+      regno = subreg_regno (reg);
     }
-  else if (GET_CODE (reg) == REG
+  else if (REG_P (reg)
 	   && REGNO (reg) < FIRST_PSEUDO_REGISTER)
     regno = REGNO (reg);
   else
@@ -535,7 +528,7 @@ add_stored_regs (rtx reg, rtx setter, void *data)
   if (GET_CODE (setter) == CLOBBER)
     return;
 
-  if (GET_CODE (reg) == SUBREG && GET_CODE (SUBREG_REG (reg)) == REG)
+  if (GET_CODE (reg) == SUBREG && REG_P (SUBREG_REG (reg)))
     {
       offset = subreg_regno_offset (REGNO (SUBREG_REG (reg)),
 				    GET_MODE (SUBREG_REG (reg)),
@@ -544,7 +537,7 @@ add_stored_regs (rtx reg, rtx setter, void *data)
       reg = SUBREG_REG (reg);
     }
 
-  if (GET_CODE (reg) != REG || REGNO (reg) >= FIRST_PSEUDO_REGISTER)
+  if (!REG_P (reg) || REGNO (reg) >= FIRST_PSEUDO_REGISTER)
     return;
 
   regno = REGNO (reg) + offset;
@@ -570,7 +563,7 @@ mark_referenced_regs (rtx x)
       code = GET_CODE (x);
       if ((code == REG && REGNO (x) < FIRST_PSEUDO_REGISTER)
 	  || code == PC || code == CC0
-	  || (code == SUBREG && GET_CODE (SUBREG_REG (x)) == REG
+	  || (code == SUBREG && REG_P (SUBREG_REG (x))
 	      && REGNO (SUBREG_REG (x)) < FIRST_PSEUDO_REGISTER
 	      /* If we're setting only part of a multi-word register,
 		 we shall mark it as referenced, because the words
@@ -650,9 +643,7 @@ insert_restore (struct insn_chain *chain, int before_p, int regno,
      or SET_SRC.  Instead of doing so and causing a crash later, check
      for this common case and abort here instead.  This will remove one
      step in debugging such problems.  */
-
-  if (regno_save_mem[regno][1] == 0)
-    abort ();
+  gcc_assert (regno_save_mem[regno][1]);
 
   /* Get the pattern to emit and update our status.
 
@@ -725,9 +716,7 @@ insert_save (struct insn_chain *chain, int before_p, int regno,
      or SET_SRC.  Instead of doing so and causing a crash later, check
      for this common case and abort here instead.  This will remove one
      step in debugging such problems.  */
-
-  if (regno_save_mem[regno][1] == 0)
-    abort ();
+  gcc_assert (regno_save_mem[regno][1]);
 
   /* Get the pattern to emit and update our status.
 
@@ -793,7 +782,7 @@ insert_one_insn (struct insn_chain *chain, int before_p, int code, rtx pat)
      isn't a problem.  We do, however, assume here that CALL_INSNs don't
      reference CC0.  Guard against non-INSN's like CODE_LABEL.  */
 
-  if ((GET_CODE (insn) == INSN || GET_CODE (insn) == JUMP_INSN)
+  if ((NONJUMP_INSN_P (insn) || JUMP_P (insn))
       && before_p
       && reg_referenced_p (cc0_rtx, PATTERN (insn)))
     chain = chain->prev, insn = chain->insn;
@@ -824,9 +813,7 @@ insert_one_insn (struct insn_chain *chain, int before_p, int code, rtx pat)
 	      rtx reg = XEXP (link, 0);
 	      int regno, i;
 
-	      if (GET_CODE (reg) != REG)
-		abort ();
-
+	      gcc_assert (REG_P (reg));
 	      regno = REGNO (reg);
 	      if (regno >= FIRST_PSEUDO_REGISTER)
 		regno = reg_renumber[regno];

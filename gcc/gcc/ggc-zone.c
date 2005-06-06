@@ -146,10 +146,13 @@ struct alloc_chunk {
   unsigned int magic;
 #endif
   unsigned int type:1;
-  unsigned int typecode:14;
-  unsigned int large:1;
-  unsigned int size:15;
   unsigned int mark:1;
+  unsigned char large;
+  unsigned short size;
+  /* Right now, on 32-bit hosts we don't have enough room to save the
+     typecode unless we make the one remaining flag into a bitfield.
+     There's a performance cost to that, so we don't do it until we're
+     ready to use the type information for something.  */
   union {
     struct alloc_chunk *next_free;
     char data[1];
@@ -162,7 +165,7 @@ struct alloc_chunk {
     double align_d;
 #endif
   } u;
-} __attribute__ ((packed));
+};
 
 #define CHUNK_OVERHEAD	(offsetof (struct alloc_chunk, u))
 
@@ -177,7 +180,7 @@ struct alloc_chunk {
    on a PowerPC G4 7450 - 667 mhz, and a Pentium 4 - 2.8ghz,
    these were determined to be the optimal values.  */
 #define NUM_FREE_BINS		64
-#define MAX_FREE_BIN_SIZE	256
+#define MAX_FREE_BIN_SIZE	(64 * sizeof (void *))
 #define FREE_BIN_DELTA		(MAX_FREE_BIN_SIZE / NUM_FREE_BINS)
 #define SIZE_BIN_UP(SIZE)	(((SIZE) + FREE_BIN_DELTA - 1) / FREE_BIN_DELTA)
 #define SIZE_BIN_DOWN(SIZE)	((SIZE) / FREE_BIN_DELTA)
@@ -305,11 +308,36 @@ struct alloc_zone
 
   /* True if this zone should be destroyed after the next collection.  */
   bool dead;
+
+#ifdef GATHER_STATISTICS
+  struct
+  {
+    /* Total memory allocated with ggc_alloc.  */
+    unsigned long long total_allocated;
+    /* Total overhead for memory to be allocated with ggc_alloc.  */
+    unsigned long long total_overhead;
+
+    /* Total allocations and overhead for sizes less than 32, 64 and 128.
+       These sizes are interesting because they are typical cache line
+       sizes.  */
+   
+    unsigned long long total_allocated_under32;
+    unsigned long long total_overhead_under32;
+  
+    unsigned long long total_allocated_under64;
+    unsigned long long total_overhead_under64;
+  
+    unsigned long long total_allocated_under128;
+    unsigned long long total_overhead_under128;
+  } stats;
+#endif
 } main_zone;
 
 struct alloc_zone *rtl_zone;
 struct alloc_zone *garbage_zone;
 struct alloc_zone *tree_zone;
+
+static int always_collect;
 
 /* Allocate pages in chunks of this size, to throttle calls to memory
    allocation routines.  The first page is used, the rest go onto the
@@ -340,8 +368,7 @@ ggc_allocated_p (const void *p)
   struct alloc_chunk *chunk;
   chunk = (struct alloc_chunk *) ((char *)p - CHUNK_OVERHEAD);
 #ifdef COOKIE_CHECKING
-  if (chunk->magic != CHUNK_MAGIC)
-    abort ();
+  gcc_assert (chunk->magic == CHUNK_MAGIC);
 #endif
   if (chunk->type == 1)
     return true;  
@@ -550,13 +577,11 @@ free_chunk (struct alloc_chunk *chunk, size_t size, struct alloc_zone *zone)
   size_t bin = 0;
 
   bin = SIZE_BIN_DOWN (size);
-  if (bin == 0)
-    abort ();
+  gcc_assert (bin);
   if (bin > NUM_FREE_BINS)
     bin = 0;
 #ifdef COOKIE_CHECKING
-  if (chunk->magic != CHUNK_MAGIC && chunk->magic != DEADCHUNK_MAGIC)
-    abort ();
+  gcc_assert (chunk->magic == CHUNK_MAGIC || chunk->magic == DEADCHUNK_MAGIC);
   chunk->magic = DEADCHUNK_MAGIC;
 #endif
   chunk->u.next_free = zone->free_chunks[bin];
@@ -569,7 +594,8 @@ free_chunk (struct alloc_chunk *chunk, size_t size, struct alloc_zone *zone)
 /* Allocate a chunk of memory of SIZE bytes.  */
 
 static void *
-ggc_alloc_zone_1 (size_t size, struct alloc_zone *zone, short type
+ggc_alloc_zone_1 (size_t orig_size, struct alloc_zone *zone,
+		  short type ATTRIBUTE_UNUSED
 		  MEM_STAT_DECL)
 {
   size_t bin = 0;
@@ -577,6 +603,7 @@ ggc_alloc_zone_1 (size_t size, struct alloc_zone *zone, short type
   struct page_entry *entry;
   struct alloc_chunk *chunk, *lchunk, **pp;
   void *result;
+  size_t size = orig_size;
 
   /* Align size, so that we're assured of aligned allocations.  */
   if (size < FREE_BIN_DELTA)
@@ -662,9 +689,6 @@ ggc_alloc_zone_1 (size_t size, struct alloc_zone *zone, short type
       free_chunk (lchunk, lsize, zone);
       lsize = 0;
     }
-#ifdef GATHER_STATISTICS
-  ggc_record_overhead (size, lsize PASS_MEM_STAT);
-#endif
 
   /* Calculate the object's address.  */
  found:
@@ -673,7 +697,8 @@ ggc_alloc_zone_1 (size_t size, struct alloc_zone *zone, short type
 #endif
   chunk->type = 1;
   chunk->mark = 0;
-  chunk->typecode = type;
+  /* We could save TYPE in the chunk, but we don't use that for
+     anything yet.  */
   result = chunk->u.data;
 
 #ifdef ENABLE_GC_CHECKING
@@ -694,7 +719,35 @@ ggc_alloc_zone_1 (size_t size, struct alloc_zone *zone, short type
 
   /* Keep track of how many bytes are being allocated.  This
      information is used in deciding when to collect.  */
-  zone->allocated += size + CHUNK_OVERHEAD;
+  zone->allocated += size;
+
+#ifdef GATHER_STATISTICS
+  ggc_record_overhead (orig_size, size + CHUNK_OVERHEAD - orig_size PASS_MEM_STAT);
+
+  {
+    size_t object_size = size + CHUNK_OVERHEAD;
+    size_t overhead = object_size - orig_size;
+
+    zone->stats.total_overhead += overhead;
+    zone->stats.total_allocated += object_size;
+
+    if (orig_size <= 32)
+      {
+	zone->stats.total_overhead_under32 += overhead;
+	zone->stats.total_allocated_under32 += object_size;
+      }
+    if (orig_size <= 64)
+      {
+	zone->stats.total_overhead_under64 += overhead;
+	zone->stats.total_allocated_under64 += object_size;
+      }
+    if (orig_size <= 128)
+      {
+	zone->stats.total_overhead_under128 += overhead;
+	zone->stats.total_allocated_under128 += object_size;
+      }
+  }
+#endif
 
   if (GGC_DEBUG_LEVEL >= 3)
     fprintf (G.debug_file, "Allocating object, chunk=%p size=%lu at %p\n",
@@ -761,10 +814,6 @@ ggc_free (void *p)
   
   /* Poison the chunk.  */
   poison_chunk (chunk, ggc_get_size (p));
-
-  /* XXX: We only deal with explicitly freeing large objects ATM.  */
-  if (chunk->large)
-    free (p);
 }
 
 /* If P is not marked, mark it and return false.  Otherwise return true.
@@ -778,8 +827,7 @@ ggc_set_mark (const void *p)
 
   chunk = (struct alloc_chunk *) ((char *)p - CHUNK_OVERHEAD);
 #ifdef COOKIE_CHECKING
-  if (chunk->magic != CHUNK_MAGIC)
-    abort ();
+  gcc_assert (chunk->magic == CHUNK_MAGIC);
 #endif
   if (chunk->mark)
     return 1;
@@ -802,8 +850,7 @@ ggc_marked_p (const void *p)
 
   chunk = (struct alloc_chunk *) ((char *)p - CHUNK_OVERHEAD);
 #ifdef COOKIE_CHECKING
-  if (chunk->magic != CHUNK_MAGIC)
-    abort ();
+  gcc_assert (chunk->magic == CHUNK_MAGIC);
 #endif
   return chunk->mark;
 }
@@ -817,8 +864,7 @@ ggc_get_size (const void *p)
 
   chunk = (struct alloc_chunk *) ((char *)p - CHUNK_OVERHEAD);
 #ifdef COOKIE_CHECKING
-  if (chunk->magic != CHUNK_MAGIC)
-    abort ();
+  gcc_assert (chunk->magic == CHUNK_MAGIC);
 #endif
   if (chunk->large)
     return chunk->size * 1024;
@@ -843,8 +889,7 @@ init_ggc (void)
   G.lg_pagesize = exact_log2 (G.pagesize);
 #ifdef HAVE_MMAP_DEV_ZERO
   G.dev_zero_fd = open ("/dev/zero", O_RDONLY);
-  if (G.dev_zero_fd == -1)
-    abort ();
+  gcc_assert (G.dev_zero_fd != -1);
 #endif
 
 #if 0
@@ -868,8 +913,7 @@ init_ggc (void)
 	   can't get something useful, give up.  */
 
 	p = alloc_anon (NULL, G.pagesize, &main_zone);
-	if ((size_t)p & (G.pagesize - 1))
-	  abort ();
+	gcc_assert (!((size_t)p & (G.pagesize - 1)));
       }
 
     /* We have a good page, might as well hold onto it...  */
@@ -901,13 +945,11 @@ destroy_ggc_zone (struct alloc_zone * dead_zone)
   struct alloc_zone *z;
 
   for (z = G.zones; z && z->next_zone != dead_zone; z = z->next_zone)
-    /* Just find that zone.  */ ;
+    /* Just find that zone.  */
+    continue;
 
-#ifdef ENABLE_CHECKING
   /* We should have found the zone in the list.  Anything else is fatal.  */
-  if (!z)
-    abort ();
-#endif
+  gcc_assert (z);
 
   /* z is dead, baby. z is dead.  */
   z->dead= true;
@@ -923,8 +965,7 @@ ggc_push_context (void)
   for (zone = G.zones; zone; zone = zone->next_zone)
     ++(zone->context_depth);
   /* Die on wrap.  */
-  if (main_zone.context_depth >= HOST_BITS_PER_LONG)
-    abort ();
+  gcc_assert (main_zone.context_depth < HOST_BITS_PER_LONG);
 }
 
 /* Decrement the `GC context'.  All objects allocated since the
@@ -990,13 +1031,15 @@ sweep_pages (struct alloc_zone *zone)
 	  if (((struct alloc_chunk *)p->page)->mark == 1)
 	    {
 	      ((struct alloc_chunk *)p->page)->mark = 0;
+	      allocated += p->bytes - CHUNK_OVERHEAD;
+	      pp = &p->next;
 	    }
 	  else
 	    {
 	      *pp = next;
 #ifdef ENABLE_GC_CHECKING
-	  /* Poison the page.  */
-	  memset (p->page, 0xb5, p->bytes);
+	      /* Poison the page.  */
+	      memset (p->page, 0xb5, p->bytes);
 #endif
 	      free_page (p);
 	    }
@@ -1033,7 +1076,7 @@ sweep_pages (struct alloc_zone *zone)
 		}
 	      if (chunk->mark)
 	        {
-	          allocated += chunk->size + CHUNK_OVERHEAD;
+	          allocated += chunk->size;
 		}
 	      chunk->mark = 0;
 	    }
@@ -1086,21 +1129,6 @@ sweep_pages (struct alloc_zone *zone)
 static bool
 ggc_collect_1 (struct alloc_zone *zone, bool need_marking)
 {
-  if (!zone->dead)
-    {
-      /* Avoid frequent unnecessary work by skipping collection if the
-	 total allocations haven't expanded much since the last
-	 collection.  */
-      float allocated_last_gc =
-	MAX (zone->allocated_last_gc,
-	     (size_t) PARAM_VALUE (GGC_MIN_HEAPSIZE) * 1024);
-
-      float min_expand = allocated_last_gc * PARAM_VALUE (GGC_MIN_EXPAND) / 100;
-
-      if (zone->allocated < allocated_last_gc + min_expand)
-	return false;
-    }
-
   if (!quiet_flag)
     fprintf (stderr, " {%s GC %luk -> ",
 	     zone->name, (unsigned long) zone->allocated / 1024);
@@ -1165,8 +1193,8 @@ check_cookies (void)
 	      struct alloc_chunk *end = (struct alloc_chunk *)(p->page + G.pagesize);
 	      do
 		{
-		  if (chunk->magic != CHUNK_MAGIC && chunk->magic != DEADCHUNK_MAGIC)
-		    abort ();
+		  gcc_assert (chunk->magic == CHUNK_MAGIC
+			      || chunk->magic == DEADCHUNK_MAGIC);
 		  chunk = (struct alloc_chunk *)(chunk->u.data + chunk->size);
 		}
 	      while (chunk < end);
@@ -1186,6 +1214,29 @@ ggc_collect (void)
 
   timevar_push (TV_GC);
   check_cookies ();
+
+  if (!always_collect)
+    {
+      float allocated_last_gc = 0, allocated = 0, min_expand;
+
+      for (zone = G.zones; zone; zone = zone->next_zone)
+	{
+	  allocated_last_gc += zone->allocated_last_gc;
+	  allocated += zone->allocated;
+	}
+
+      allocated_last_gc =
+	MAX (allocated_last_gc,
+	     (size_t) PARAM_VALUE (GGC_MIN_HEAPSIZE) * 1024);
+      min_expand = allocated_last_gc * PARAM_VALUE (GGC_MIN_EXPAND) / 100;
+
+      if (allocated < allocated_last_gc + min_expand)
+	{
+	  timevar_pop (TV_GC);
+	  return;
+	}
+    }
+
   /* Start by possibly collecting the main zone.  */
   main_zone.was_collected = false;
   marked |= ggc_collect_1 (&main_zone, true);
@@ -1198,6 +1249,8 @@ ggc_collect (void)
      marking.  So if we mark twice as often as we used to, we'll be
      twice as slow.  Hopefully we'll avoid this cost when we mark
      zone-at-a-time.  */
+  /* NOTE drow/2004-07-28: We now always collect the main zone, but
+     keep this code in case the heuristics are further refined.  */
 
   if (main_zone.was_collected)
     {
@@ -1270,8 +1323,7 @@ ggc_collect (void)
 	  printf ("Zone `%s' is dead and will be freed.\n", dead_zone->name);
 
 	  /* The zone must be empty.  */
-	  if (dead_zone->allocated != 0)
-	    abort ();
+	  gcc_assert (!dead_zone->allocated);
 
 	  /* Unchain the dead zone, release all its pages and free it.  */
 	  zone->next_zone = zone->next_zone->next_zone;
@@ -1284,10 +1336,153 @@ ggc_collect (void)
 }
 
 /* Print allocation statistics.  */
+#define SCALE(x) ((unsigned long) ((x) < 1024*10 \
+		  ? (x) \
+		  : ((x) < 1024*1024*10 \
+		     ? (x) / 1024 \
+		     : (x) / (1024*1024))))
+#define LABEL(x) ((x) < 1024*10 ? ' ' : ((x) < 1024*1024*10 ? 'k' : 'M'))
 
 void
 ggc_print_statistics (void)
 {
+  struct alloc_zone *zone;
+  struct ggc_statistics stats;
+  size_t total_overhead = 0, total_allocated = 0, total_bytes_mapped = 0;
+
+  /* Clear the statistics.  */
+  memset (&stats, 0, sizeof (stats));
+
+  /* Make sure collection will really occur, in all zones.  */
+  always_collect = 1;
+
+  /* Collect and print the statistics common across collectors.  */
+  ggc_print_common_statistics (stderr, &stats);
+
+  always_collect = 0;
+
+  /* Release free pages so that we will not count the bytes allocated
+     there as part of the total allocated memory.  */
+  for (zone = G.zones; zone; zone = zone->next_zone)
+    release_pages (zone);
+
+  /* Collect some information about the various sizes of
+     allocation.  */
+  fprintf (stderr,
+           "Memory still allocated at the end of the compilation process\n");
+
+  fprintf (stderr, "%20s %10s  %10s  %10s\n",
+	   "Zone", "Allocated", "Used", "Overhead");
+  for (zone = G.zones; zone; zone = zone->next_zone)
+    {
+      page_entry *p;
+      size_t allocated;
+      size_t in_use;
+      size_t overhead;
+
+      /* Skip empty entries.  */
+      if (!zone->pages)
+	continue;
+
+      overhead = allocated = in_use = 0;
+
+      /* Figure out the total number of bytes allocated for objects of
+	 this size, and how many of them are actually in use.  Also figure
+	 out how much memory the page table is using.  */
+      for (p = zone->pages; p; p = p->next)
+	{
+	  struct alloc_chunk *chunk;
+
+	  /* We've also allocated sizeof (page_entry), but it's not in the
+	     "managed" area... */
+	  allocated += p->bytes;
+	  overhead += sizeof (page_entry);
+
+	  if (p->large_p)
+	    {
+	      in_use += p->bytes - CHUNK_OVERHEAD;
+	      chunk = (struct alloc_chunk *) p->page;
+	      overhead += CHUNK_OVERHEAD;
+	      gcc_assert (chunk->type && !chunk->mark);
+	      continue;
+	    }
+
+	  for (chunk = (struct alloc_chunk *) p->page;
+	       (char *) chunk < (char *) p->page + p->bytes;
+	       chunk = (struct alloc_chunk *)(chunk->u.data + chunk->size))
+	    {
+	      overhead += CHUNK_OVERHEAD;
+	      if (chunk->type)
+		in_use += chunk->size;
+	      gcc_assert (!chunk->mark);
+	    }
+	}
+      fprintf (stderr, "%20s %10lu%c %10lu%c %10lu%c\n",
+	       zone->name,
+	       SCALE (allocated), LABEL (allocated),
+	       SCALE (in_use), LABEL (in_use),
+	       SCALE (overhead), LABEL (overhead));
+
+      gcc_assert (in_use == zone->allocated);
+
+      total_overhead += overhead;
+      total_allocated += zone->allocated;
+      total_bytes_mapped += zone->bytes_mapped;
+    }
+
+  fprintf (stderr, "%20s %10lu%c %10lu%c %10lu%c\n", "Total",
+	   SCALE (total_bytes_mapped), LABEL (total_bytes_mapped),
+	   SCALE (total_allocated), LABEL(total_allocated),
+	   SCALE (total_overhead), LABEL (total_overhead));
+
+#ifdef GATHER_STATISTICS  
+  {
+    unsigned long long all_overhead = 0, all_allocated = 0;
+    unsigned long long all_overhead_under32 = 0, all_allocated_under32 = 0;
+    unsigned long long all_overhead_under64 = 0, all_allocated_under64 = 0;
+    unsigned long long all_overhead_under128 = 0, all_allocated_under128 = 0;
+
+    fprintf (stderr, "\nTotal allocations and overheads during the compilation process\n");
+
+    for (zone = G.zones; zone; zone = zone->next_zone)
+      {
+	all_overhead += zone->stats.total_overhead;
+	all_allocated += zone->stats.total_allocated;
+
+	all_allocated_under32 += zone->stats.total_allocated_under32;
+	all_overhead_under32 += zone->stats.total_overhead_under32;
+
+	all_allocated_under64 += zone->stats.total_allocated_under64;
+	all_overhead_under64 += zone->stats.total_overhead_under64;
+	
+	all_allocated_under128 += zone->stats.total_allocated_under128;
+	all_overhead_under128 += zone->stats.total_overhead_under128;
+
+	fprintf (stderr, "%20s:                  %10lld\n",
+		 zone->name, zone->stats.total_allocated);
+      }
+
+    fprintf (stderr, "\n");
+
+    fprintf (stderr, "Total Overhead:                        %10lld\n",
+             all_overhead);
+    fprintf (stderr, "Total Allocated:                       %10lld\n",
+             all_allocated);
+
+    fprintf (stderr, "Total Overhead  under  32B:            %10lld\n",
+             all_overhead_under32);
+    fprintf (stderr, "Total Allocated under  32B:            %10lld\n",
+             all_allocated_under32);
+    fprintf (stderr, "Total Overhead  under  64B:            %10lld\n",
+             all_overhead_under64);
+    fprintf (stderr, "Total Allocated under  64B:            %10lld\n",
+             all_allocated_under64);
+    fprintf (stderr, "Total Overhead  under 128B:            %10lld\n",
+             all_overhead_under128);
+    fprintf (stderr, "Total Allocated under 128B:            %10lld\n",
+             all_allocated_under128);
+  }
+#endif
 }
 
 struct ggc_pch_data

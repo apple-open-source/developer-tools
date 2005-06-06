@@ -53,6 +53,8 @@ final class DoubleViewBufferImpl extends DoubleBuffer
     this.offset = bb.position();
     this.readOnly = bb.isReadOnly();
     this.endian = bb.order();
+    if (bb.isDirect())
+      this.address = VMDirectByteBuffer.adjustAddress(bb.address, offset);
   }
   
   public DoubleViewBufferImpl (ByteBuffer bb, int offset, int capacity,
@@ -64,8 +66,17 @@ final class DoubleViewBufferImpl extends DoubleBuffer
     this.offset = offset;
     this.readOnly = readOnly;
     this.endian = endian;
+    if (bb.isDirect())
+      this.address = VMDirectByteBuffer.adjustAddress(bb.address, offset);
   }
 
+  /**
+   * Reads the <code>double</code> at this buffer's current position,
+   * and then increments the position.
+   *
+   * @exception BufferUnderflowException If there are no remaining
+   * <code>double</code>s in this buffer.
+   */
   public double get ()
   {
     int p = position();
@@ -74,6 +85,13 @@ final class DoubleViewBufferImpl extends DoubleBuffer
     return result;
   }
 
+  /**
+   * Absolute get method. Reads the <code>double</code> at position
+   * <code>index</code>.
+   *
+   * @exception IndexOutOfBoundsException If index is negative or not smaller
+   * than the buffer's limit.
+   */
   public double get (int index)
   {
     return ByteBufferHelper.getDouble(bb, (index << 3) + offset, endian);
@@ -101,6 +119,11 @@ final class DoubleViewBufferImpl extends DoubleBuffer
 	bb.shiftDown(offset, offset + 8 * position(), 8 * count);
         position (count);
         limit (capacity ());
+      }
+    else
+      {
+	position(limit());
+	limit(capacity());
       }
     return this;
   }

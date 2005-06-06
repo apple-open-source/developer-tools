@@ -1,5 +1,6 @@
 /* System.java -- useful methods to interface with the system
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003 Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004
+   Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -38,6 +39,8 @@ exception statement from your version. */
 
 package java.lang;
 
+import gnu.classpath.Configuration;
+
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.FileDescriptor;
@@ -47,14 +50,13 @@ import java.io.InputStream;
 import java.io.PrintStream;
 import java.util.Properties;
 import java.util.PropertyPermission;
-import gnu.classpath.Configuration;
 
 /**
  * System represents system-wide resources; things that represent the
  * general environment.  As such, all methods are static.
  *
  * @author John Keiser
- * @author Eric Blake <ebb9@email.byu.edu>
+ * @author Eric Blake (ebb9@email.byu.edu)
  * @since 1.0
  * @status still missing 1.4 functionality
  */
@@ -97,6 +99,20 @@ public final class System
 	defaultProperties.put("gnu.classpath.vm.shortname", value);
       }
 
+    // Network properties
+    if (defaultProperties.get("http.agent") == null)
+      {
+	String userAgent
+	  = ("gnu-classpath/"
+	     + defaultProperties.getProperty("gnu.classpath.version")
+	     + " ("
+	     + defaultProperties.getProperty("gnu.classpath.vm.shortname")
+	     + "/"
+	     + defaultProperties.getProperty("java.vm.version")
+	     + ")");
+	defaultProperties.put("http.agent", userAgent);
+      }
+
     defaultProperties.put("gnu.cpu.endian",
 			  isWordsBigEndian() ? "big" : "little");
 
@@ -117,7 +133,7 @@ public final class System
    */
   // Note that we use clone here and not new.  Some programs assume
   // that the system properties do not have a parent.
-  private static Properties properties
+  static Properties properties
     = (Properties) Runtime.defaultProperties.clone();
 
   /**
@@ -147,7 +163,7 @@ public final class System
   /**
    * The standard output PrintStream.  This is assigned at startup and
    * starts its life perfectly valid. Although it is marked final, you can
-   * change it using {@link #setOut(PrintStream)} through some hefty VM magic.
+   * change it using {@link #setErr(PrintStream)} through some hefty VM magic.
    *
    * <p>This corresponds to the C stderr and C++ cerr variables, which
    * typically output error messages to the screen, but may be used to pipe
@@ -453,18 +469,22 @@ public final class System
   }
 
   /**
-   * This used to get an environment variable, but following Sun's lead,
-   * it now throws an Error. Use <code>getProperty</code> instead.
+   * Gets the value of an environment variable.
    *
    * @param name the name of the environment variable
-   * @return this does not return
-   * @throws Error this is not supported
-   * @deprecated use {@link #getProperty(String)}; getenv is not supported
+   * @return the string value of the variable
+   * @throws NullPointerException
+   * @throws SecurityException if permission is denied
+   * @since 1.5
    */
   public static String getenv(String name)
   {
-    throw new Error("getenv no longer supported, use properties instead: "
-                    + name);
+    if (name == null)
+      throw new NullPointerException();
+    SecurityManager sm = Runtime.securityManager; // Be thread-safe.
+    if (sm != null)
+      sm.checkPermission(new RuntimePermission("getenv."+name));
+    return getenv0(name);
   }
 
   /**
@@ -601,4 +621,11 @@ public final class System
    * @see #setErr(PrintStream)
    */
   private static native void setErr0(PrintStream err);
+
+  /**
+   * Gets the value of an environment variable.
+   *
+   * @see #getenv(String)
+   */
+  static native String getenv0(String name);
 } // class System

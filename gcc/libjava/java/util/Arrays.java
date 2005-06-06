@@ -1,5 +1,6 @@
 /* Arrays.java -- Utility class with methods to operate on arrays
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003 Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
+   Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -58,7 +59,7 @@ import java.lang.reflect.Array;
  *
  * @author Original author unknown
  * @author Bryce McKinlay
- * @author Eric Blake <ebb9@email.byu.edu>
+ * @author Eric Blake (ebb9@email.byu.edu)
  * @see Comparable
  * @see Comparator
  * @since 1.2
@@ -934,7 +935,7 @@ public class Arrays
 
 
 // sort
-  // Thanks to Paul Fisher <rao@gnu.org> for finding this quicksort algorithm
+  // Thanks to Paul Fisher (rao@gnu.org) for finding this quicksort algorithm
   // as specified by Sun and porting it to Java. The algorithm is an optimised
   // quicksort, as described in Jon L. Bentley and M. Douglas McIlroy's
   // "Engineering a Sort Function", Software-Practice and Experience, Vol.
@@ -968,6 +969,8 @@ public class Arrays
   {
     if (fromIndex > toIndex)
       throw new IllegalArgumentException();
+    if (fromIndex < 0)
+      throw new ArrayIndexOutOfBoundsException();
     qsort(a, fromIndex, toIndex - fromIndex);
   }
 
@@ -1018,7 +1021,7 @@ public class Arrays
   /**
    * Performs a recursive modified quicksort.
    *
-   * @param a the array to sort
+   * @param array the array to sort
    * @param from the start index (inclusive)
    * @param count the number of elements to sort
    */
@@ -1028,7 +1031,7 @@ public class Arrays
     if (count <= 7)
       {
         for (int i = from + 1; i < from + count; i++)
-          for (int j = i; j > 0 && array[j - 1] > array[j]; j--)
+          for (int j = i; j > from && array[j - 1] > array[j]; j--)
             swap(j, j - 1, array);
         return;
       }
@@ -1130,6 +1133,8 @@ public class Arrays
   {
     if (fromIndex > toIndex)
       throw new IllegalArgumentException();
+    if (fromIndex < 0)
+      throw new ArrayIndexOutOfBoundsException();
     qsort(a, fromIndex, toIndex - fromIndex);
   }
 
@@ -1180,7 +1185,7 @@ public class Arrays
   /**
    * Performs a recursive modified quicksort.
    *
-   * @param a the array to sort
+   * @param array the array to sort
    * @param from the start index (inclusive)
    * @param count the number of elements to sort
    */
@@ -1190,7 +1195,7 @@ public class Arrays
     if (count <= 7)
       {
         for (int i = from + 1; i < from + count; i++)
-          for (int j = i; j > 0 && array[j - 1] > array[j]; j--)
+          for (int j = i; j > from && array[j - 1] > array[j]; j--)
             swap(j, j - 1, array);
         return;
       }
@@ -1292,6 +1297,8 @@ public class Arrays
   {
     if (fromIndex > toIndex)
       throw new IllegalArgumentException();
+    if (fromIndex < 0)
+      throw new ArrayIndexOutOfBoundsException();
     qsort(a, fromIndex, toIndex - fromIndex);
   }
 
@@ -1342,7 +1349,7 @@ public class Arrays
   /**
    * Performs a recursive modified quicksort.
    *
-   * @param a the array to sort
+   * @param array the array to sort
    * @param from the start index (inclusive)
    * @param count the number of elements to sort
    */
@@ -1352,8 +1359,8 @@ public class Arrays
     if (count <= 7)
       {
         for (int i = from + 1; i < from + count; i++)
-          for (int j = i; j > 0 && array[j - 1] > array[j]; j--)
-            swap(j, j - 1, array);
+	  for (int j = i; j > from && array[j - 1] > array[j]; j--)
+	    swap(j, j - 1, array);
         return;
       }
 
@@ -1454,6 +1461,8 @@ public class Arrays
   {
     if (fromIndex > toIndex)
       throw new IllegalArgumentException();
+    if (fromIndex < 0)
+      throw new ArrayIndexOutOfBoundsException();
     qsort(a, fromIndex, toIndex - fromIndex);
   }
 
@@ -1516,7 +1525,7 @@ public class Arrays
   /**
    * Performs a recursive modified quicksort.
    *
-   * @param a the array to sort
+   * @param array the array to sort
    * @param from the start index (inclusive)
    * @param count the number of elements to sort
    */
@@ -1526,7 +1535,7 @@ public class Arrays
     if (count <= 7)
       {
         for (int i = from + 1; i < from + count; i++)
-          for (int j = i; j > 0 && array[j - 1] > array[j]; j--)
+          for (int j = i; j > from && array[j - 1] > array[j]; j--)
             swap(j, j - 1, array);
         return;
       }
@@ -1628,6 +1637,8 @@ public class Arrays
   {
     if (fromIndex > toIndex)
       throw new IllegalArgumentException();
+    if (fromIndex < 0)
+      throw new ArrayIndexOutOfBoundsException();
     qsort(a, fromIndex, toIndex - fromIndex);
   }
 
@@ -1690,7 +1701,7 @@ public class Arrays
   /**
    * Performs a recursive modified quicksort.
    *
-   * @param a the array to sort
+   * @param array the array to sort
    * @param from the start index (inclusive)
    * @param count the number of elements to sort
    */
@@ -1700,7 +1711,7 @@ public class Arrays
     if (count <= 7)
       {
         for (int i = from + 1; i < from + count; i++)
-          for (int j = i; j > 0 && array[j - 1] > array[j]; j--)
+          for (int j = i; j > from && array[j - 1] > array[j]; j--)
             swap(j, j - 1, array);
         return;
       }
@@ -1802,6 +1813,8 @@ public class Arrays
   {
     if (fromIndex > toIndex)
       throw new IllegalArgumentException();
+    if (fromIndex < 0)
+      throw new ArrayIndexOutOfBoundsException();
     qsort(a, fromIndex, toIndex - fromIndex);
   }
 
@@ -1854,7 +1867,7 @@ public class Arrays
   /**
    * Performs a recursive modified quicksort.
    *
-   * @param a the array to sort
+   * @param array the array to sort
    * @param from the start index (inclusive)
    * @param count the number of elements to sort
    */
@@ -1865,7 +1878,7 @@ public class Arrays
       {
         for (int i = from + 1; i < from + count; i++)
           for (int j = i;
-               j > 0 && Float.compare(array[j - 1], array[j]) > 0;
+               j > from && Float.compare(array[j - 1], array[j]) > 0;
                j--)
             {
               swap(j, j - 1, array);
@@ -1970,6 +1983,8 @@ public class Arrays
   {
     if (fromIndex > toIndex)
       throw new IllegalArgumentException();
+    if (fromIndex < 0)
+      throw new ArrayIndexOutOfBoundsException();
     qsort(a, fromIndex, toIndex - fromIndex);
   }
 
@@ -2022,7 +2037,7 @@ public class Arrays
   /**
    * Performs a recursive modified quicksort.
    *
-   * @param a the array to sort
+   * @param array the array to sort
    * @param from the start index (inclusive)
    * @param count the number of elements to sort
    */
@@ -2033,7 +2048,7 @@ public class Arrays
       {
         for (int i = from + 1; i < from + count; i++)
           for (int j = i;
-               j > 0 && Double.compare(array[j - 1], array[j]) > 0;
+               j > from && Double.compare(array[j - 1], array[j]) > 0;
                j--)
             {
               swap(j, j - 1, array);
@@ -2203,6 +2218,8 @@ public class Arrays
     if (fromIndex > toIndex)
       throw new IllegalArgumentException("fromIndex " + fromIndex
                                          + " > toIndex " + toIndex);
+    if (fromIndex < 0)
+      throw new ArrayIndexOutOfBoundsException();
 
     // In general, the code attempts to be simple rather than fast, the
     // idea being that a good optimising JIT will be able to optimise it
@@ -2341,7 +2358,7 @@ public class Arrays
    * Sun's choice for Serialization purposes. Element addition and removal
    * is prohibited, but values can be modified.
    *
-   * @author Eric Blake <ebb9@email.byu.edu>
+   * @author Eric Blake (ebb9@email.byu.edu)
    * @status updated to 1.4
    */
   private static final class ArrayList extends AbstractList
@@ -2374,16 +2391,36 @@ public class Arrays
       this.a = a;
     }
 
+    /**
+     * Returns the object at the specified index in
+     * the array.
+     *
+     * @param index The index to retrieve an object from.
+     * @return The object at the array index specified.
+     */ 
     public Object get(int index)
     {
       return a[index];
     }
 
+    /**
+     * Returns the size of the array.
+     *
+     * @return The size.
+     */
     public int size()
     {
       return a.length;
     }
 
+    /**
+     * Replaces the object at the specified index
+     * with the supplied element.
+     *
+     * @param index The index at which to place the new object.
+     * @param element The new object.
+     * @return The object replaced by this operation.
+     */
     public Object set(int index, Object element)
     {
       Object old = a[index];
@@ -2391,11 +2428,25 @@ public class Arrays
       return old;
     }
 
+    /**
+     * Returns true if the array contains the
+     * supplied object.
+     *
+     * @param o The object to look for.
+     * @return True if the object was found.
+     */
     public boolean contains(Object o)
     {
       return lastIndexOf(o) >= 0;
     }
 
+    /**
+     * Returns the first index at which the
+     * object, o, occurs in the array.
+     *
+     * @param o The object to search for.
+     * @return The first relevant index.
+     */
     public int indexOf(Object o)
     {
       int size = a.length;
@@ -2405,6 +2456,13 @@ public class Arrays
       return -1;
     }
 
+    /**
+     * Returns the last index at which the
+     * object, o, occurs in the array.
+     *
+     * @param o The object to search for.
+     * @return The last relevant index.
+     */
     public int lastIndexOf(Object o)
     {
       int i = a.length;
@@ -2414,11 +2472,28 @@ public class Arrays
       return -1;
     }
 
+    /**
+     * Transforms the list into an array of
+     * objects, by simplying cloning the array
+     * wrapped by this list.
+     *
+     * @return A clone of the internal array.
+     */
     public Object[] toArray()
     {
       return (Object[]) a.clone();
     }
 
+    /**
+     * Copies the objects from this list into
+     * the supplied array.  The supplied array
+     * is shrunk or enlarged to the size of the
+     * internal array, and filled with its objects.
+     *
+     * @param array The array to fill with the objects in this list.
+     * @return The array containing the objects in this list,
+     *         which may or may not be == to array.
+     */
     public Object[] toArray(Object[] array)
     {
       int size = a.length;

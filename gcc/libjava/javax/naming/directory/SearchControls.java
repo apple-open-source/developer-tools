@@ -1,5 +1,5 @@
 /* SearchControls.java --
-   Copyright (C) 2001, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2004, 2005  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -37,10 +37,11 @@ exception statement from your version. */
 
 
 package javax.naming.directory;
+
 import java.io.Serializable;
  
 /**
- * @author Warren Levy <warrenl@redhat.com>
+ * @author Warren Levy (warrenl@redhat.com)
  * @date June 5, 2001
  */
 

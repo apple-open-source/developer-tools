@@ -55,6 +55,7 @@ with System.Tasking.Initialization;
 --  used for Defer_Abort
 --           Undefer_Abort
 --           Poll_Base_Priority_Change
+--           Do_Pending_Action
 
 with System.Tasking.Queuing;
 --  used for Enqueue
@@ -101,6 +102,10 @@ package body System.Tasking.Rendezvous is
      Terminate_Selected,
      Accept_Alternative_Open,
      No_Alternative_Open);
+
+   ----------------
+   -- Local Data --
+   ----------------
 
    Default_Treatment : constant array (Select_Modes) of Select_Treatment :=
      (Simple_Mode         => No_Alternative_Open,
@@ -391,7 +396,19 @@ package body System.Tasking.Rendezvous is
       Uninterpreted_Data : System.Address)
    is
       Rendezvous_Successful : Boolean;
+
    begin
+      --  If pragma Detect_Blocking is active then Program_Error must be
+      --  raised if this potentially blocking operation is called from a
+      --  protected action.
+
+      if System.Tasking.Detect_Blocking
+        and then STPO.Self.Common.Protected_Action_Nesting > 0
+      then
+         Ada.Exceptions.Raise_Exception
+           (Program_Error'Identity, "potentially blocking operation");
+      end if;
+
       Call_Synchronous
         (Acceptor, E, Uninterpreted_Data, Simple_Call, Rendezvous_Successful);
    end Call_Simple;
@@ -956,8 +973,20 @@ package body System.Tasking.Rendezvous is
                pragma Assert (Self_Id.Pending_ATC_Level = 0);
                pragma Assert (Self_Id.Awake_Count = 0);
 
-               --  Trust that it is OK to fall through.
-               null;
+               STPO.Unlock (Self_Id);
+
+               if Single_Lock then
+                  Unlock_RTS;
+               end if;
+
+               Index := Self_Id.Chosen_Index;
+               Initialization.Undefer_Abort_Nestable (Self_Id);
+
+               if Self_Id.Pending_Action then
+                  Initialization.Do_Pending_Action (Self_Id);
+               end if;
+
+               return;
 
             else
                --  Self_Id.Common.Call and Self_Id.Chosen_Index
@@ -1309,6 +1338,17 @@ package body System.Tasking.Rendezvous is
       Entry_Call : Entry_Call_Link;
 
    begin
+      --  If pragma Detect_Blocking is active then Program_Error must be
+      --  raised if this potentially blocking operation is called from a
+      --  protected action.
+
+      if System.Tasking.Detect_Blocking
+        and then Self_Id.Common.Protected_Action_Nesting > 0
+      then
+         Ada.Exceptions.Raise_Exception
+           (Program_Error'Identity, "potentially blocking operation");
+      end if;
+
       if Parameters.Runtime_Traces then
          Send_Trace_Info (W_Call, Acceptor, Entry_Index (E));
       end if;
@@ -1668,6 +1708,17 @@ package body System.Tasking.Rendezvous is
       Yielded    : Boolean;
 
    begin
+      --  If pragma Detect_Blocking is active then Program_Error must be
+      --  raised if this potentially blocking operation is called from a
+      --  protected action.
+
+      if System.Tasking.Detect_Blocking
+        and then Self_Id.Common.Protected_Action_Nesting > 0
+      then
+         Ada.Exceptions.Raise_Exception
+           (Program_Error'Identity, "potentially blocking operation");
+      end if;
+
       Initialization.Defer_Abort (Self_Id);
       Self_Id.ATC_Nesting_Level := Self_Id.ATC_Nesting_Level + 1;
 

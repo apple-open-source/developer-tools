@@ -69,7 +69,6 @@ extern int xtensa_expand_block_move (rtx *);
 extern void xtensa_split_operand_pair (rtx *, enum machine_mode);
 extern int xtensa_emit_move_sequence (rtx *, enum machine_mode);
 extern rtx xtensa_copy_incoming_a7 (rtx);
-extern void xtensa_emit_block_move (rtx *, rtx *, int);
 extern void xtensa_expand_nonlocal_goto (rtx *);
 extern void xtensa_emit_loop_end (rtx, rtx *);
 extern char *xtensa_emit_call (int, rtx *);
@@ -77,7 +76,6 @@ extern char *xtensa_emit_call (int, rtx *);
 #ifdef TREE_CODE
 extern void init_cumulative_args (CUMULATIVE_ARGS *, int);
 extern void xtensa_va_start (tree, rtx);
-extern rtx xtensa_va_arg (tree, tree);
 #endif /* TREE_CODE */
 
 extern void print_operand (FILE *, rtx, int);

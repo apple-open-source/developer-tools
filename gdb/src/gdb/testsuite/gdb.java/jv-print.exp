@@ -124,8 +124,7 @@ gdb_exit
 gdb_start
 gdb_reinitialize_dir $srcdir/$subdir
 
-# APPLE LOCAL: Our gdb says "No stack" instead of "No registers".
-gdb_test "print \$pc" "No stack\\."
+gdb_test "print \$pc" "No registers\\."
 # FIXME: should also test "print $pc" when there is an execfile but no
 # remote debugging target, process or corefile.
 

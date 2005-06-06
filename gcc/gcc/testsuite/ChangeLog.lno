@@ -1,3 +1,73 @@
+2004-07-14  Dorit Naishlos <dorit@il.ibm.com>
+
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-31.c: New test.
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-32.c: New test.
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-33.c: New test.
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-34.c: New test.
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-35.c: New test.
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-36.c: New test.
+	
+2004-07-04  Andi Kleen <ak@muc.de>
+
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-*.c: Add support for i?86-*-* 
+	and x86_64-*-*. 
+	* gcc.dg/tree-ssa-vect/tree-vect.h: New file.
+
+2004-07-04  Dorit Naishlos <dorit@il.ibm.com> 
+
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-4*.c: Abort instead of print, and
+        remove redundant check loop in main.
+
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-40.c: Move call to bar from main1
+	to main.
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-42.c: Likewise.
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-46.c: Likewise.
+
+2004-06-22  Dorit Naishlos <dorit@il.ibm.com>
+
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-54.c: New test.
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-55.c: New test.
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-56.c: New test.
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-57.c: New test.
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-58.c: New test.
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-59.c: New test.
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-60.c: New test.
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-61.c: New test.
+
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-50.c: Abort instead of print, and
+	remove redundant check loop in main.
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-51.c: Likewise.
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-52.c: Likewise.
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-53.c: Likewise.
+
+2004-06-22  Devang Patel  <dpatel@apple.com>
+
+        * gcc.dg/tree-ssa-vect/pr16105.c: New test.
+
+2004-06-14  Dorit Naishlos <dorit@il.ibm.com>
+
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-46.c: New test.
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-47.c: New test.
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-48.c: New test.
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-49.c: New test.
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-50.c: New test.
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-51.c: New test.
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-52.c: New test.
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-53.c: New test.
+
+2004-06-14  Dorit Naishlos <dorit@il.ibm.com>
+
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-40.c: New test.
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-41.c: New test.
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-42.c: New test.
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-43.c: New test.
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-44.c: New test.
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-45.c: New test.
+
+2004-06-09  Dorit Naishlos <dorit@il.ibm.com>
+
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-30.c: New test.
+
 2004-05-20  Olga Golovanevsky  <olga@il.ibm.com>
 	    Dorit Naishlos <dorit@il.ibm.com>
 

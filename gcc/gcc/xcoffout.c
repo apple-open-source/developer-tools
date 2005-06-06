@@ -77,8 +77,8 @@ const char *xcoff_lastfile;
 #define ABS_OR_RELATIVE_LINENO(LINENO)		\
 ((xcoff_inlining) ? (LINENO) : (LINENO) - xcoff_begin_function_line)
 
-/* Output source line numbers via ".line" rather than ".stabd".  */
-#define ASM_OUTPUT_SOURCE_LINE(FILE,LINENUM,COUNTER)			   \
+/* Output source line numbers via ".line".  */
+#define ASM_OUTPUT_LINE(FILE,LINENUM)					   \
   do									   \
     {									   \
       if (xcoff_begin_function_line >= 0)				   \
@@ -156,7 +156,7 @@ xcoff_assign_fundamental_type_number (tree decl)
   size_t i;
 
   /* Do not waste time searching the list for non-intrinsic types.  */
-  if (DECL_NAME (decl) == 0 || DECL_SOURCE_LINE (decl) > 0)
+  if (DECL_NAME (decl) == 0 || ! DECL_IS_BUILTIN (decl))
     return 0;
 
   name = IDENTIFIER_POINTER (DECL_NAME (decl));
@@ -327,7 +327,7 @@ xcoffout_source_line (unsigned int line, const char *filename)
 
   xcoffout_source_file (asm_out_file, filename, inline_p);
 
-  ASM_OUTPUT_SOURCE_LINE (asm_out_file, line, 0);
+  ASM_OUTPUT_LINE (asm_out_file, line);
 }
 
 /* Output the symbols defined in block number DO_BLOCK.
@@ -405,22 +405,18 @@ xcoffout_end_block (unsigned int line, unsigned int n)
 void
 xcoffout_declare_function (FILE *file, tree decl, const char *name)
 {
-  int i;
+  size_t len;
 
   if (*name == '*')
     name++;
-  else
-    for (i = 0; name[i]; ++i)
-      {
-	if (name[i] == '[')
-	  {
-	    char *n = alloca (i + 1);
-	    strncpy (n, name, i);
-	    n[i] = '\0';
-	    name = n;
-	    break;
-	  }
-      }
+  len = strlen (name);
+  if (name[len - 1] == ']')
+    {
+      char *n = alloca (len - 3);
+      memcpy (n, name, len - 4);
+      n[len - 4] = '\0';
+      name = n;
+    }
 
   /* Any pending .bi or .ei must occur before the .function pseudo op.
      Otherwise debuggers will think that the function is in the previous
@@ -454,7 +450,7 @@ xcoffout_begin_prologue (unsigned int line,
   xcoffout_block (DECL_INITIAL (current_function_decl), 0,
 		  DECL_ARGUMENTS (current_function_decl));
 
-  ASM_OUTPUT_SOURCE_LINE (asm_out_file, line, 0);
+  ASM_OUTPUT_LINE (asm_out_file, line);
 }
 
 /* Called at end of function (before epilogue).

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2003, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2004, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -1268,10 +1268,10 @@ package body Ch5 is
       --  Otherwise check for redundant parens
 
       else
-         if Warn_On_Redundant_Constructs
+         if Style_Check
            and then Paren_Count (Cond) > 0
          then
-            Error_Msg_F ("redundant parentheses?", Cond);
+            Style.Check_Xtra_Parens (First_Sloc (Cond));
          end if;
 
          --  And return the result
@@ -1877,6 +1877,7 @@ package body Ch5 is
       Goto_Node := New_Node (N_Goto_Statement, Token_Ptr);
       Scan; -- past GOTO (or TO)
       Set_Name (Goto_Node, P_Qualified_Simple_Name_Resync);
+      Append_Elmt (Goto_Node, Goto_List);
       No_Constraint;
       TF_Semicolon;
       return Goto_Node;
@@ -1979,7 +1980,7 @@ package body Ch5 is
 
       --  Check for misplacement of later vs basic declarations in Ada 83
 
-      if Ada_83 then
+      if Ada_Version = Ada_83 then
          Decl := First (Decls);
 
          --  Loop through sequence of basic declarative items
@@ -2002,7 +2003,7 @@ package body Ch5 is
                   if Nkind (Decl) not in N_Later_Decl_Item
                     and then Nkind (Decl) /= N_Pragma
                   then
-                     if Ada_83 then
+                     if Ada_Version = Ada_83 then
                         Error_Msg_Sloc := Body_Sloc;
                         Error_Msg_N
                           ("(Ada 83) decl cannot appear after body#", Decl);

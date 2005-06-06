@@ -1,5 +1,6 @@
 /* Character scanner.
-   Copyright (C) 2000, 2001, 2002, 2003 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005
+   Free Software Foundation, Inc.
    Contributed by Andy Vaught
 
 This file is part of GCC.
@@ -42,11 +43,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
    new characters and do a lot of jumping backwards.  */
 
 #include "config.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <strings.h>
-
+#include "system.h"
 #include "gfortran.h"
 
 /* Structure for holding module and include file search path.  */
@@ -67,7 +64,7 @@ static int continue_flag, end_flag;
 gfc_source_form gfc_current_form;
 static gfc_linebuf *line_head, *line_tail;
        
-locus gfc_current_locus1;
+locus gfc_current_locus;
 char *gfc_source_file;
       
 
@@ -191,28 +188,6 @@ gfc_open_included_file (const char *name)
   return NULL;
 }
 
-
-/* Return a pointer to the current locus.  */
-
-locus *
-gfc_current_locus (void)
-{
-
-  return &gfc_current_locus1;
-}
-
-
-
-/* Let a caller move the current read pointer (backwards).  */
-
-void
-gfc_set_locus (locus * lp)
-{
-
-  gfc_current_locus1 = *lp;
-}
-
-
 /* Test to see if we're at the end of the main source file.  */
 
 int
@@ -235,7 +210,7 @@ gfc_at_eof (void)
   if (line_head == NULL)
     return 1;			/* Null file */
 
-  if (gfc_current_locus1.lb == NULL)
+  if (gfc_current_locus.lb == NULL)
     return 1;
 
   return 0;
@@ -250,7 +225,7 @@ gfc_at_bol (void)
   if (gfc_at_eof ())
     return 1;
 
-  return (gfc_current_locus1.nextc == gfc_current_locus1.lb->line);
+  return (gfc_current_locus.nextc == gfc_current_locus.lb->line);
 }
 
 
@@ -263,7 +238,7 @@ gfc_at_eol (void)
   if (gfc_at_eof ())
     return 1;
 
-  return (*gfc_current_locus1.nextc == '\0');
+  return (*gfc_current_locus.nextc == '\0');
 }
 
 
@@ -275,19 +250,19 @@ gfc_advance_line (void)
   if (gfc_at_end ())
     return;
 
-  if (gfc_current_locus1.lb == NULL) 
+  if (gfc_current_locus.lb == NULL) 
     {
       end_flag = 1;
       return;
     } 
 
-  gfc_current_locus1.lb = gfc_current_locus1.lb->next;
+  gfc_current_locus.lb = gfc_current_locus.lb->next;
 
-  if (gfc_current_locus1.lb != NULL)         
-    gfc_current_locus1.nextc = gfc_current_locus1.lb->line;
+  if (gfc_current_locus.lb != NULL)         
+    gfc_current_locus.nextc = gfc_current_locus.lb->line;
   else 
     {
-      gfc_current_locus1.nextc = NULL;
+      gfc_current_locus.nextc = NULL;
       end_flag = 1;
     }       
 }
@@ -307,13 +282,13 @@ next_char (void)
 {
   int c;
   
-  if (gfc_current_locus1.nextc == NULL)
+  if (gfc_current_locus.nextc == NULL)
     return '\n';
 
-  c = *gfc_current_locus1.nextc++;
+  c = *gfc_current_locus.nextc++;
   if (c == '\0')
     {
-      gfc_current_locus1.nextc--; /* Remain on this line.  */
+      gfc_current_locus.nextc--; /* Remain on this line.  */
       c = '\n';
     }
 
@@ -351,7 +326,7 @@ skip_free_comments (void)
 
   for (;;)
     {
-      start = gfc_current_locus1;
+      start = gfc_current_locus;
       if (gfc_at_eof ())
 	break;
 
@@ -376,13 +351,13 @@ skip_free_comments (void)
       break;
     }
 
-  gfc_set_locus (&start);
+  gfc_current_locus = start;
 }
 
 
 /* Skip comment lines in fixed source mode.  We have the same rules as
    in skip_free_comment(), except that we can have a 'c', 'C' or '*'
-   in column 1. and a '!' cannot be in* column 6.  */
+   in column 1, and a '!' cannot be in column 6.  */
 
 static void
 skip_fixed_comments (void)
@@ -393,7 +368,7 @@ skip_fixed_comments (void)
 
   for (;;)
     {
-      start = gfc_current_locus1;
+      start = gfc_current_locus;
       if (gfc_at_eof ())
 	break;
 
@@ -433,7 +408,7 @@ skip_fixed_comments (void)
       break;
     }
 
-  gfc_set_locus (&start);
+  gfc_current_locus = start;
 }
 
 
@@ -490,8 +465,8 @@ restart:
 	goto done;
 
       /* If the next nonblank character is a ! or \n, we've got a
-         continuation line. */
-      old_loc = gfc_current_locus1;
+         continuation line.  */
+      old_loc = gfc_current_locus;
 
       c = next_char ();
       while (gfc_is_whitespace (c))
@@ -502,14 +477,14 @@ restart:
 
       if (in_string && c != '\n')
 	{
-	  gfc_set_locus (&old_loc);
+	  gfc_current_locus = old_loc;
 	  c = '&';
 	  goto done;
 	}
 
       if (c != '!' && c != '\n')
 	{
-	  gfc_set_locus (&old_loc);
+	  gfc_current_locus = old_loc;
 	  c = '&';
 	  goto done;
 	}
@@ -529,14 +504,14 @@ restart:
          reading starts at the next character, otherwise we must back
          up to where the whitespace started and resume from there.  */
 
-      old_loc = *gfc_current_locus ();
+      old_loc = gfc_current_locus;
 
       c = next_char ();
       while (gfc_is_whitespace (c))
 	c = next_char ();
 
       if (c != '&')
-	gfc_set_locus (&old_loc);
+	gfc_current_locus = old_loc;
 
     }
   else
@@ -556,7 +531,7 @@ restart:
 	goto done;
 
       continue_flag = 1;
-      old_loc = *gfc_current_locus ();
+      old_loc = gfc_current_locus;
 
       gfc_advance_line ();
       gfc_skip_comments ();
@@ -580,7 +555,7 @@ restart:
 
 not_continuation:
   c = '\n';
-  gfc_set_locus (&old_loc);
+  gfc_current_locus = old_loc;
 
 done:
   continue_flag = 0;
@@ -614,9 +589,9 @@ gfc_peek_char (void)
   locus old_loc;
   int c;
 
-  old_loc = gfc_current_locus1;
+  old_loc = gfc_current_locus;
   c = gfc_next_char ();
-  gfc_set_locus (&old_loc);
+  gfc_current_locus = old_loc;
 
   return c;
 }
@@ -684,30 +659,60 @@ gfc_gobble_whitespace (void)
 
   do
     {
-      old_loc = gfc_current_locus1;
+      old_loc = gfc_current_locus;
       c = gfc_next_char_literal (0);
     }
   while (gfc_is_whitespace (c));
 
-  gfc_set_locus (&old_loc);
+  gfc_current_locus = old_loc;
 }
 
 
-/* Load a single line into the buffer.  We truncate lines that are too
-   long.  In fixed mode, we expand a tab that occurs within the
-   statement label region to expand to spaces that leave the next
-   character in the source region.  */
+/* Load a single line into pbuf.
+
+   If pbuf points to a NULL pointer, it is allocated.
+   We truncate lines that are too long, unless we're dealing with
+   preprocessor lines or if the option -ffixed-line-length-none is set,
+   in which case we reallocate the buffer to fit the entire line, if
+   need be.
+   In fixed mode, we expand a tab that occurs within the statement
+   label region to expand to spaces that leave the next character in
+   the source region.  */
 
 static void
-load_line (FILE * input, char *buffer, char *filename, int linenum)
+load_line (FILE * input, char **pbuf, char *filename, int linenum)
 {
-  int c, maxlen, i, trunc_flag;
+  int c, maxlen, i, trunc_flag, preprocessor_flag;
+  static int buflen = 0;
+  char *buffer;
 
-  maxlen = (gfc_current_form == FORM_FREE) 
-    ? 132 
-    : gfc_option.fixed_line_length;
+  /* Determine the maximum allowed line length.  */
+  if (gfc_current_form == FORM_FREE)
+    maxlen = GFC_MAX_LINE;
+  else
+    maxlen = gfc_option.fixed_line_length;
+
+  if (*pbuf == NULL)
+    {
+      /* Allocate the line buffer, storing its length into buflen.  */
+      if (maxlen > 0)
+	buflen = maxlen;
+      else
+	buflen = GFC_MAX_LINE;
+
+      *pbuf = gfc_getmem (buflen + 1);
+    }
 
   i = 0;
+  buffer = *pbuf;
+
+  preprocessor_flag = 0;
+  c = fgetc (input);
+  if (c == '#')
+    /* In order to not truncate preprocessor lines, we have to
+       remember that this is one.  */
+    preprocessor_flag = 1;
+  ungetc (c, input);
 
   for (;;)
     {
@@ -731,7 +736,7 @@ load_line (FILE * input, char *buffer, char *filename, int linenum)
 	}
 
       if (gfc_current_form == FORM_FIXED && c == '\t' && i <= 6)
-	{			/* Tab expandsion.  */
+	{			/* Tab expansion.  */
 	  while (i <= 6)
 	    {
 	      *buffer++ = ' ';
@@ -744,8 +749,17 @@ load_line (FILE * input, char *buffer, char *filename, int linenum)
       *buffer++ = c;
       i++;
 
-      if (i >= maxlen)
-	{			/* Truncate the rest of the line.  */
+      if (i >= buflen && (maxlen == 0 || preprocessor_flag))
+	{
+	  /* Reallocate line buffer to double size to hold the
+	     overlong line.  */
+	  buflen = buflen * 2;
+	  *pbuf = xrealloc (*pbuf, buflen);
+	  buffer = (*pbuf)+i;
+	}
+      else if (i >= buflen)
+	{			
+	  /* Truncate the rest of the line.  */
 	  trunc_flag = 1;
 
 	  for (;;)
@@ -758,8 +772,8 @@ load_line (FILE * input, char *buffer, char *filename, int linenum)
 		  && trunc_flag
 		  && !gfc_is_whitespace (c))
 		{
-		  gfc_warning_now ("Line %d of %s is being truncated",
-				   linenum, filename);
+		  gfc_warning_now ("%s:%d: Line is being truncated",
+				   filename, linenum);
 		  trunc_flag = 0;
 		}
 	    }
@@ -767,6 +781,14 @@ load_line (FILE * input, char *buffer, char *filename, int linenum)
 	  ungetc ('\n', input);
 	}
     }
+
+  /* Pad lines to the selected line length in fixed form.  */
+  if (gfc_current_form == FORM_FIXED
+      && gfc_option.fixed_line_length > 0
+      && !preprocessor_flag
+      && c != EOF)
+    while (i++ < buflen)
+      *buffer++ = ' ';
 
   *buffer = '\0';
 }
@@ -776,7 +798,7 @@ load_line (FILE * input, char *buffer, char *filename, int linenum)
    the file stack.  */
 
 static gfc_file *
-get_file (char *name)
+get_file (char *name, enum lc_reason reason ATTRIBUTE_UNUSED)
 {
   gfc_file *f;
 
@@ -792,6 +814,10 @@ get_file (char *name)
   if (current_file != NULL)
     f->inclusion_line = current_file->line;
 
+#ifdef USE_MAPPED_LOCATION
+  linemap_add (&line_table, reason, false, f->filename, 1);
+#endif
+
   return f;
 }
 
@@ -805,26 +831,56 @@ preprocessor_line (char *c)
   int i, line;
   char *filename;
   gfc_file *f;
+  int escaped;
 
   c++;
   while (*c == ' ' || *c == '\t')
     c++;
 
   if (*c < '0' || *c > '9')
-    {
-      gfc_warning_now ("%s:%d Unknown preprocessor directive", 
-		       current_file->filename, current_file->line);
-      current_file->line++;
-      return;
-    }
+    goto bad_cpp_line;
 
   line = atoi (c);
 
-  c = strchr (c, ' ') + 2; /* Skip space and quote.  */
+  /* Set new line number.  */
+  current_file->line = line;
+
+  c = strchr (c, ' '); 
+  if (c == NULL)
+    /* No file name given.  */
+    return;
+
+
+
+  /* Skip spaces.  */
+  while (*c == ' ' || *c == '\t')
+    c++;
+
+  /* Skip quote.  */
+  if (*c != '"')
+    goto bad_cpp_line;
+  ++c;
+
   filename = c;
 
-  c = strchr (c, '"'); /* Make filename end at quote.  */
+  /* Make filename end at quote.  */
+  escaped = false;
+  while (*c && ! (! escaped && *c == '"'))
+    {
+      if (escaped)
+        escaped = false;
+      else
+        escaped = *c == '\\';
+      ++c;
+    }
+
+  if (! *c)
+    /* Preprocessor line has no closing quote.  */
+    goto bad_cpp_line;
+
   *c++ = '\0';
+
+
 
   /* Get flags.  */
   
@@ -847,7 +903,7 @@ preprocessor_line (char *c)
   
   if (flag[1] || flag[3]) /* Starting new file.  */
     {
-      f = get_file (filename);
+      f = get_file (filename, LC_RENAME);
       f->up = current_file;
       current_file = f;
     }
@@ -856,8 +912,6 @@ preprocessor_line (char *c)
     {
       current_file = current_file->up;
     }
-  
-  current_file->line = line;
   
   /* The name of the file can be a temporary file produced by
      cpp. Replace the name if it is different.  */
@@ -868,6 +922,13 @@ preprocessor_line (char *c)
       current_file->filename = gfc_getmem (strlen (filename) + 1);
       strcpy (current_file->filename, filename);
     }
+
+  return;
+
+ bad_cpp_line:
+  gfc_warning_now ("%s:%d: Illegal preprocessor directive", 
+		   current_file->filename, current_file->line);
+  current_file->line++;
 }
 
 
@@ -917,7 +978,7 @@ include_line (char *line)
   if (*c != '\0' && *c != '!')
     return false;
 
-  /* We have an include line at this point. */
+  /* We have an include line at this point.  */
 
   *stop = '\0'; /* It's ok to trash the buffer, as this line won't be
 		   read by anything else.  */
@@ -931,7 +992,7 @@ include_line (char *line)
 static try
 load_file (char *filename, bool initial)
 {
-  char line[GFC_MAX_LINE+1];
+  char *line;
   gfc_linebuf *b;
   gfc_file *f;
   FILE *input;
@@ -965,14 +1026,15 @@ load_file (char *filename, bool initial)
 
   /* Load the file.  */
 
-  f = get_file (filename);
+  f = get_file (filename, initial ? LC_RENAME : LC_ENTER);
   f->up = current_file;
   current_file = f;
   current_file->line = 1;
+  line = NULL;
 
   for (;;) 
     {
-      load_line (input, line, filename, current_file->line);
+      load_line (input, &line, filename, current_file->line);
 
       len = strlen (line);
       if (feof (input) && len == 0)
@@ -995,9 +1057,14 @@ load_file (char *filename, bool initial)
 
       /* Add line.  */
 
-      b = gfc_getmem (sizeof (gfc_linebuf) + len + 1);
+      b = gfc_getmem (gfc_linebuf_header_size + len + 1);
 
+#ifdef USE_MAPPED_LOCATION
+      b->location
+	= linemap_line_start (&line_table, current_file->line++, 120);
+#else
       b->linenum = current_file->line++;
+#endif
       b->file = current_file;
       strcpy (b->line, line);
 
@@ -1009,15 +1076,21 @@ load_file (char *filename, bool initial)
       line_tail = b;
     }
 
+  /* Release the line buffer allocated in load_line.  */
+  gfc_free (line);
+
   fclose (input);
 
   current_file = current_file->up;
+#ifdef USE_MAPPED_LOCATION
+  linemap_add (&line_table, LC_LEAVE, 0, NULL, 0);
+#endif
   return SUCCESS;
 }
 
 
 /* Determine the source form from the filename extension.  We assume
-   case insensitivity. */
+   case insensitivity.  */
 
 static gfc_source_form
 form_from_filename (const char *filename)
@@ -1123,13 +1196,18 @@ gfc_new_file (const char *filename, gfc_source_form form)
 
   result = load_file (gfc_source_file, true);
 
-  gfc_current_locus1.lb = line_head;
-  gfc_current_locus1.nextc = (line_head == NULL) ? NULL : line_head->line;
+  gfc_current_locus.lb = line_head;
+  gfc_current_locus.nextc = (line_head == NULL) ? NULL : line_head->line;
 
 #if 0 /* Debugging aid.  */
   for (; line_head; line_head = line_head->next)
     gfc_status ("%s:%3d %s\n", line_head->file->filename, 
-		line_head->linenum, line_head->line);
+#ifdef USE_MAPPED_LOCATION
+		LOCATION_LINE (line_head->location),
+#else
+		line_head->linenum,
+#endif
+		line_head->line);
 
   exit (0);
 #endif

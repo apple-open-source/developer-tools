@@ -46,6 +46,7 @@ Boston, MA 02111-1307, USA.  */
 #include "target-def.h"
 #include "tm_p.h"
 #include "langhooks.h"
+#include "tree-gimple.h"
 
 static rtx emit_addhi3_postreload (rtx, rtx, rtx);
 static void xstormy16_asm_out_constructor (rtx, int);
@@ -548,6 +549,194 @@ xstormy16_preferred_reload_class (rtx x, enum reg_class class)
   return class;
 }
 
+/* Predicate for symbols and addresses that reflect special 8-bit
+   addressing.  */
+int
+xstormy16_below100_symbol (rtx x,
+			   enum machine_mode mode ATTRIBUTE_UNUSED)
+{
+  if (GET_CODE (x) == CONST)
+    x = XEXP (x, 0);
+  if (GET_CODE (x) == PLUS
+      && GET_CODE (XEXP (x, 1)) == CONST_INT)
+    x = XEXP (x, 0);
+  if (GET_CODE (x) == SYMBOL_REF)
+    {
+      const char *n = XSTR (x, 0);
+      if (n[0] == '@' && n[1] == 'b' && n[2] == '.')
+	return 1;
+    }
+  if (GET_CODE (x) == CONST_INT)
+    {
+      HOST_WIDE_INT i = INTVAL (x);
+      if ((i >= 0x0000 && i <= 0x00ff)
+	  || (i >= 0x7f00 && i <= 0x7fff))
+	return 1;
+    }
+  return 0;
+}
+
+/* Predicate for MEMs that can use special 8-bit addressing.  */
+int
+xstormy16_below100_operand (rtx x, enum machine_mode mode)
+{
+  if (GET_MODE (x) != mode)
+    return 0;
+  if (GET_CODE (x) == MEM)
+    x = XEXP (x, 0);
+  else if (GET_CODE (x) == SUBREG
+	   && GET_CODE (XEXP (x, 0)) == MEM
+	   && !MEM_VOLATILE_P (XEXP (x, 0)))
+    x = XEXP (XEXP (x, 0), 0);
+  else
+    return 0;
+  if (GET_CODE (x) == CONST_INT)
+    {
+      HOST_WIDE_INT i = INTVAL (x);
+      return (i >= 0x7f00 && i < 0x7fff);
+    }
+  return xstormy16_below100_symbol (x, HImode);
+}
+
+/* Likewise, but only for non-volatile MEMs, for patterns where the
+   MEM will get split into smaller sized accesses.  */
+int
+xstormy16_splittable_below100_operand (rtx x, enum machine_mode mode)
+{
+  if (GET_CODE (x) == MEM && MEM_VOLATILE_P (x))
+    return 0;
+  return xstormy16_below100_operand (x, mode);
+}
+
+int
+xstormy16_below100_or_register (rtx x, enum machine_mode mode)
+{
+  return (xstormy16_below100_operand (x, mode)
+	  || register_operand (x, mode));
+}
+
+int
+xstormy16_splittable_below100_or_register (rtx x, enum machine_mode mode)
+{
+  if (GET_CODE (x) == MEM && MEM_VOLATILE_P (x))
+    return 0;
+  return (xstormy16_below100_operand (x, mode)
+	  || register_operand (x, mode));
+}
+
+/* Predicate for constants with exactly one bit set.  */
+int
+xstormy16_onebit_set_operand (rtx x, enum machine_mode mode)
+{
+  HOST_WIDE_INT i;
+  if (GET_CODE (x) != CONST_INT)
+    return 0;
+  i = INTVAL (x);
+  if (mode == QImode)
+    i &= 0xff;
+  if (mode == HImode)
+    i &= 0xffff;
+  return exact_log2 (i) != -1;
+}
+
+/* Predicate for constants with exactly one bit not set.  */
+int
+xstormy16_onebit_clr_operand (rtx x, enum machine_mode mode)
+{
+  HOST_WIDE_INT i;
+  if (GET_CODE (x) != CONST_INT)
+    return 0;
+  i = ~ INTVAL (x);
+  if (mode == QImode)
+    i &= 0xff;
+  if (mode == HImode)
+    i &= 0xffff;
+  return exact_log2 (i) != -1;
+}
+
+/* Expand an 8-bit IOR.  This either detects the one case we can
+   actually do, or uses a 16-bit IOR.  */
+void
+xstormy16_expand_iorqi3 (rtx *operands)
+{
+  rtx in, out, outsub, val;
+
+  out = operands[0];
+  in = operands[1];
+  val = operands[2];
+
+  if (xstormy16_onebit_set_operand (val, QImode))
+    {
+      if (!xstormy16_below100_or_register (in, QImode))
+	in = copy_to_mode_reg (QImode, in);
+      if (!xstormy16_below100_or_register (out, QImode))
+	out = gen_reg_rtx (QImode);
+      emit_insn (gen_iorqi3_internal (out, in, val));
+      if (out != operands[0])
+	emit_move_insn (operands[0], out);
+      return;
+    }
+
+  if (GET_CODE (in) != REG)
+    in = copy_to_mode_reg (QImode, in);
+  if (GET_CODE (val) != REG
+      && GET_CODE (val) != CONST_INT)
+    val = copy_to_mode_reg (QImode, val);
+  if (GET_CODE (out) != REG)
+    out = gen_reg_rtx (QImode);
+
+  in = simplify_gen_subreg (HImode, in, QImode, 0);
+  outsub = simplify_gen_subreg (HImode, out, QImode, 0);
+  if (GET_CODE (val) != CONST_INT)
+    val = simplify_gen_subreg (HImode, val, QImode, 0);
+
+  emit_insn (gen_iorhi3 (outsub, in, val));
+
+  if (out != operands[0])
+    emit_move_insn (operands[0], out);
+}
+
+/* Likewise, for AND.  */
+void
+xstormy16_expand_andqi3 (rtx *operands)
+{
+  rtx in, out, outsub, val;
+
+  out = operands[0];
+  in = operands[1];
+  val = operands[2];
+
+  if (xstormy16_onebit_clr_operand (val, QImode))
+    {
+      if (!xstormy16_below100_or_register (in, QImode))
+	in = copy_to_mode_reg (QImode, in);
+      if (!xstormy16_below100_or_register (out, QImode))
+	out = gen_reg_rtx (QImode);
+      emit_insn (gen_andqi3_internal (out, in, val));
+      if (out != operands[0])
+	emit_move_insn (operands[0], out);
+      return;
+    }
+
+  if (GET_CODE (in) != REG)
+    in = copy_to_mode_reg (QImode, in);
+  if (GET_CODE (val) != REG
+      && GET_CODE (val) != CONST_INT)
+    val = copy_to_mode_reg (QImode, val);
+  if (GET_CODE (out) != REG)
+    out = gen_reg_rtx (QImode);
+
+  in = simplify_gen_subreg (HImode, in, QImode, 0);
+  outsub = simplify_gen_subreg (HImode, out, QImode, 0);
+  if (GET_CODE (val) != CONST_INT)
+    val = simplify_gen_subreg (HImode, val, QImode, 0);
+
+  emit_insn (gen_andhi3 (outsub, in, val));
+
+  if (out != operands[0])
+    emit_move_insn (operands[0], out);
+}
+
 #define LEGITIMATE_ADDRESS_INTEGER_P(X, OFFSET)				\
  (GET_CODE (X) == CONST_INT						\
   && (unsigned HOST_WIDE_INT) (INTVAL (X) + (OFFSET) + 2048) < 4096)
@@ -577,6 +766,9 @@ xstormy16_legitimate_address_p (enum machine_mode mode ATTRIBUTE_UNUSED,
   
   if (GET_CODE (x) == REG && REGNO_OK_FOR_BASE_P (REGNO (x))
       && (! strict || REGNO (x) < FIRST_PSEUDO_REGISTER))
+    return 1;
+
+  if (xstormy16_below100_symbol(x, mode))
     return 1;
   
   return 0;
@@ -666,6 +858,9 @@ xstormy16_extra_constraint_p (rtx x, int c)
     case 'Z':
       return (GET_CODE (x) == CONST_INT
 	      && (INTVAL (x) == 0));
+
+    case 'W':
+      return xstormy16_below100_operand(x, GET_MODE(x));
 
     default:
       return 0;
@@ -867,6 +1062,7 @@ xstormy16_expand_move (enum machine_mode mode, rtx dest, rtx src)
       && GET_CODE (dest) == MEM
       && (GET_CODE (XEXP (dest, 0)) != CONST_INT
 	  || ! xstormy16_legitimate_address_p (mode, XEXP (dest, 0), 0))
+      && ! xstormy16_below100_operand (dest, mode)
       && GET_CODE (src) != REG
       && GET_CODE (src) != SUBREG)
     src = copy_to_mode_reg (mode, src);
@@ -1228,7 +1424,7 @@ xstormy16_function_arg (CUMULATIVE_ARGS cum, enum machine_mode mode,
 {
   if (mode == VOIDmode)
     return const0_rtx;
-  if (MUST_PASS_IN_STACK (mode, type)
+  if (targetm.calls.must_pass_in_stack (mode, type)
       || cum + XSTORMY16_WORD_SIZE (type, mode) > NUM_ARGUMENT_REGISTERS)
     return 0;
   return gen_rtx_REG (mode, cum + 2);
@@ -1285,18 +1481,20 @@ xstormy16_expand_builtin_va_start (tree valist, rtx nextarg ATTRIBUTE_UNUSED)
   f_base = TYPE_FIELDS (va_list_type_node);
   f_count = TREE_CHAIN (f_base);
   
-  base = build (COMPONENT_REF, TREE_TYPE (f_base), valist, f_base);
-  count = build (COMPONENT_REF, TREE_TYPE (f_count), valist, f_count);
+  base = build (COMPONENT_REF, TREE_TYPE (f_base), valist, f_base, NULL_TREE);
+  count = build (COMPONENT_REF, TREE_TYPE (f_count), valist, f_count,
+		 NULL_TREE);
 
   t = make_tree (TREE_TYPE (base), virtual_incoming_args_rtx);
   t = build (PLUS_EXPR, TREE_TYPE (base), t, 
-	     build_int_2 (INCOMING_FRAME_SP_OFFSET, 0));
+	     build_int_cst (NULL_TREE, INCOMING_FRAME_SP_OFFSET));
   t = build (MODIFY_EXPR, TREE_TYPE (base), base, t);
   TREE_SIDE_EFFECTS (t) = 1;
   expand_expr (t, const0_rtx, VOIDmode, EXPAND_NORMAL);
 
   t = build (MODIFY_EXPR, TREE_TYPE (count), count, 
-	     build_int_2 (current_function_args_info * UNITS_PER_WORD, 0));
+	     build_int_cst (NULL_TREE,
+			    current_function_args_info * UNITS_PER_WORD));
   TREE_SIDE_EFFECTS (t) = 1;
   expand_expr (t, const0_rtx, VOIDmode, EXPAND_NORMAL);
 }
@@ -1305,49 +1503,58 @@ xstormy16_expand_builtin_va_start (tree valist, rtx nextarg ATTRIBUTE_UNUSED)
    of type va_list as a tree, TYPE is the type passed to va_arg.
    Note:  This algorithm is documented in stormy-abi.  */
    
-rtx
-xstormy16_expand_builtin_va_arg (tree valist, tree type)
+static tree
+xstormy16_expand_builtin_va_arg (tree valist, tree type, tree *pre_p,
+				 tree *post_p ATTRIBUTE_UNUSED)
 {
   tree f_base, f_count;
   tree base, count;
-  rtx count_rtx, addr_rtx, r;
-  rtx lab_gotaddr, lab_fromstack;
-  tree t;
+  tree count_tmp, addr, t;
+  tree lab_gotaddr, lab_fromstack;
   int size, size_of_reg_args, must_stack;
-  tree size_tree, count_plus_size;
-  rtx count_plus_size_rtx;
-  
+  tree size_tree;
+
   f_base = TYPE_FIELDS (va_list_type_node);
   f_count = TREE_CHAIN (f_base);
   
-  base = build (COMPONENT_REF, TREE_TYPE (f_base), valist, f_base);
-  count = build (COMPONENT_REF, TREE_TYPE (f_count), valist, f_count);
+  base = build (COMPONENT_REF, TREE_TYPE (f_base), valist, f_base, NULL_TREE);
+  count = build (COMPONENT_REF, TREE_TYPE (f_count), valist, f_count,
+		 NULL_TREE);
 
-  must_stack = MUST_PASS_IN_STACK (TYPE_MODE (type), type);
+  must_stack = targetm.calls.must_pass_in_stack (TYPE_MODE (type), type);
   size_tree = round_up (size_in_bytes (type), UNITS_PER_WORD);
+  gimplify_expr (&size_tree, pre_p, NULL, is_gimple_val, fb_rvalue);
   
   size_of_reg_args = NUM_ARGUMENT_REGISTERS * UNITS_PER_WORD;
 
-  count_rtx = expand_expr (count, NULL_RTX, HImode, EXPAND_NORMAL);
-  lab_gotaddr = gen_label_rtx ();
-  lab_fromstack = gen_label_rtx ();
-  addr_rtx = gen_reg_rtx (Pmode);
+  count_tmp = get_initialized_tmp_var (count, pre_p, NULL);
+  lab_gotaddr = create_artificial_label ();
+  lab_fromstack = create_artificial_label ();
+  addr = create_tmp_var (ptr_type_node, NULL);
 
   if (!must_stack)
     {
-      count_plus_size = build (PLUS_EXPR, TREE_TYPE (count), count, size_tree);
-      count_plus_size_rtx = expand_expr (count_plus_size, NULL_RTX, HImode, EXPAND_NORMAL);
-      emit_cmp_and_jump_insns (count_plus_size_rtx, GEN_INT (size_of_reg_args),
-			       GTU, const1_rtx, HImode, 1, lab_fromstack);
-  
-      t = build (PLUS_EXPR, ptr_type_node, base, count);
-      r = expand_expr (t, addr_rtx, Pmode, EXPAND_NORMAL);
-      if (r != addr_rtx)
-	emit_move_insn (addr_rtx, r);
+      tree r;
 
-      emit_jump_insn (gen_jump (lab_gotaddr));
-      emit_barrier ();
-      emit_label (lab_fromstack);
+      t = fold_convert (TREE_TYPE (count), size_tree);
+      t = build (PLUS_EXPR, TREE_TYPE (count), count_tmp, t);
+      r = fold_convert (TREE_TYPE (count), size_int (size_of_reg_args));
+      t = build (GT_EXPR, boolean_type_node, t, r);
+      t = build (COND_EXPR, void_type_node, t,
+		 build (GOTO_EXPR, void_type_node, lab_fromstack),
+		 NULL);
+      gimplify_and_add (t, pre_p);
+  
+      t = fold_convert (ptr_type_node, count_tmp);
+      t = build (PLUS_EXPR, ptr_type_node, base, t);
+      t = build (MODIFY_EXPR, void_type_node, addr, t);
+      gimplify_and_add (t, pre_p);
+
+      t = build (GOTO_EXPR, void_type_node, lab_gotaddr);
+      gimplify_and_add (t, pre_p);
+
+      t = build (LABEL_EXPR, void_type_node, lab_fromstack);
+      gimplify_and_add (t, pre_p);
     }
   
   /* Arguments larger than a word might need to skip over some
@@ -1356,37 +1563,38 @@ xstormy16_expand_builtin_va_arg (tree valist, tree type)
   size = PUSH_ROUNDING (int_size_in_bytes (type));
   if (size > 2 || size < 0 || must_stack)
     {
-      rtx lab_notransition = gen_label_rtx ();
-      emit_cmp_and_jump_insns (count_rtx, GEN_INT (NUM_ARGUMENT_REGISTERS 
-						   * UNITS_PER_WORD),
-			       GEU, const1_rtx, HImode, 1, lab_notransition);
-      
-      t = build (MODIFY_EXPR, TREE_TYPE (count), count, 
-		 build_int_2 (NUM_ARGUMENT_REGISTERS * UNITS_PER_WORD, 0));
-      TREE_SIDE_EFFECTS (t) = 1;
-      expand_expr (t, const0_rtx, VOIDmode, EXPAND_NORMAL);
-      
-      emit_label (lab_notransition);
+      tree r, u;
+
+      r = size_int (NUM_ARGUMENT_REGISTERS * UNITS_PER_WORD);
+      u = build (MODIFY_EXPR, void_type_node, count_tmp, r);
+
+      t = fold_convert (TREE_TYPE (count), r);
+      t = build (GE_EXPR, boolean_type_node, count_tmp, t);
+      t = build (COND_EXPR, void_type_node, t, NULL, u);
+      gimplify_and_add (t, pre_p);
     }
 
-  t = build (PLUS_EXPR, sizetype, size_tree,
-	     build_int_2 ((- NUM_ARGUMENT_REGISTERS * UNITS_PER_WORD
-			   + INCOMING_FRAME_SP_OFFSET),
-			  -1));
-  t = build (PLUS_EXPR, TREE_TYPE (count), count, fold (t));
+  t = size_int (NUM_ARGUMENT_REGISTERS * UNITS_PER_WORD
+		- INCOMING_FRAME_SP_OFFSET);
+  t = fold_convert (TREE_TYPE (count), t);
+  t = build (MINUS_EXPR, TREE_TYPE (count), count_tmp, t);
+  t = build (PLUS_EXPR, TREE_TYPE (count), t,
+	     fold_convert (TREE_TYPE (count), size_tree));
+  t = fold_convert (TREE_TYPE (base), fold (t));
   t = build (MINUS_EXPR, TREE_TYPE (base), base, t);
-  r = expand_expr (t, addr_rtx, Pmode, EXPAND_NORMAL);
-  if (r != addr_rtx)
-    emit_move_insn (addr_rtx, r);
-	     
-  emit_label (lab_gotaddr);
+  t = build (MODIFY_EXPR, void_type_node, addr, t);
+  gimplify_and_add (t, pre_p);
 
-  count_plus_size = build (PLUS_EXPR, TREE_TYPE (count), count, size_tree);
-  t = build (MODIFY_EXPR, TREE_TYPE (count), count, count_plus_size);
-  TREE_SIDE_EFFECTS (t) = 1;
-  expand_expr (t, const0_rtx, VOIDmode, EXPAND_NORMAL);
+  t = build (LABEL_EXPR, void_type_node, lab_gotaddr);
+  gimplify_and_add (t, pre_p);
 
-  return addr_rtx;
+  t = fold_convert (TREE_TYPE (count), size_tree);
+  t = build (PLUS_EXPR, TREE_TYPE (count), count_tmp, t);
+  t = build (MODIFY_EXPR, TREE_TYPE (count), count, t);
+  gimplify_and_add (t, pre_p);
+  
+  addr = fold_convert (build_pointer_type (type), addr);
+  return build_fold_indirect_ref (addr);
 }
 
 /* Initialize the variable parts of a trampoline.  ADDR is an RTX for
@@ -1474,6 +1682,119 @@ xstormy16_asm_output_mi_thunk (FILE *file,
   fputs ("\tjmpf ", file);
   assemble_name (file, XSTR (XEXP (DECL_RTL (function), 0), 0));
   putc ('\n', file);
+}
+
+/* The purpose of this function is to override the default behavior of
+   BSS objects.  Normally, they go into .bss or .sbss via ".common"
+   directives, but we need to override that and put them in
+   .bss_below100.  We can't just use a section override (like we do
+   for .data_below100), because that makes them initialized rather
+   than uninitialized.  */
+void
+xstormy16_asm_output_aligned_common (FILE *stream,
+				     tree decl ATTRIBUTE_UNUSED,
+				     const char *name,
+				     int size,
+				     int align,
+				     int global)
+{
+  if (name[0] == '@' && name[2] == '.')
+    {
+      const char *op = 0;
+      switch (name[1])
+	{
+	case 'b':
+	  bss100_section();
+	  op = "space";
+	  break;
+	}
+      if (op)
+	{
+	  const char *name2;
+	  int p2align = 0;
+
+	  while (align > 8)
+	    {
+	      align /= 2;
+	      p2align ++;
+	    }
+	  name2 = xstormy16_strip_name_encoding (name);
+	  if (global)
+	    fprintf (stream, "\t.globl\t%s\n", name2);
+	  if (p2align)
+	    fprintf (stream, "\t.p2align %d\n", p2align);
+	  fprintf (stream, "\t.type\t%s, @object\n", name2);
+	  fprintf (stream, "\t.size\t%s, %d\n", name2, size);
+	  fprintf (stream, "%s:\n\t.%s\t%d\n", name2, op, size);
+	  return;
+	}
+    }
+
+  if (!global)
+    {
+      fprintf (stream, "\t.local\t");
+      assemble_name (stream, name);
+      fprintf (stream, "\n");
+    }
+  fprintf (stream, "\t.comm\t");
+  assemble_name (stream, name);
+  fprintf (stream, ",%u,%u\n", size, align / BITS_PER_UNIT);
+}
+
+/* Mark symbols with the "below100" attribute so that we can use the
+   special addressing modes for them.  */
+
+static void
+xstormy16_encode_section_info (tree decl,
+			       rtx r,
+			       int first ATTRIBUTE_UNUSED)
+{
+  if (TREE_CODE (decl) == VAR_DECL
+      && (lookup_attribute ("below100", DECL_ATTRIBUTES (decl))
+	  || lookup_attribute ("BELOW100", DECL_ATTRIBUTES (decl))))
+    {
+      const char *newsection = 0;
+      char *newname;
+      tree idp;
+      rtx rtlname, rtl;
+      const char *oldname;
+
+      rtl = r;
+      rtlname = XEXP (rtl, 0);
+      if (GET_CODE (rtlname) == SYMBOL_REF)
+	oldname = XSTR (rtlname, 0);
+      else if (GET_CODE (rtlname) == MEM
+	       && GET_CODE (XEXP (rtlname, 0)) == SYMBOL_REF)
+	oldname = XSTR (XEXP (rtlname, 0), 0);
+      else
+	abort ();
+
+      if (DECL_INITIAL (decl))
+	{
+	  newsection = ".data_below100";
+	  DECL_SECTION_NAME (decl) = build_string (strlen (newsection), newsection);
+	}
+
+      newname = alloca (strlen (oldname) + 4);
+      sprintf (newname, "@b.%s", oldname);
+      idp = get_identifier (newname);
+      XEXP (rtl, 0) =
+	gen_rtx_SYMBOL_REF (Pmode, IDENTIFIER_POINTER (idp));
+    }
+}
+
+const char *
+xstormy16_strip_name_encoding (const char *name)
+{
+  while (1)
+    {
+      if (name[0] == '@' && name[2] == '.')
+	name += 3;
+      else if (name[0] == '*')
+	name ++;
+      else
+	return name;
+    }
 }
 
 /* Output constructors and destructors.  Just like 
@@ -1590,19 +1911,41 @@ xstormy16_print_operand (FILE *file, rtx x, int code)
 	/* There is either one bit set, or one bit clear, in X.
 	   Print it preceded by '#'.  */
       {
+	static int bits_set[8] = { 0, 1, 1, 2, 1, 2, 2, 3 };
 	HOST_WIDE_INT xx = 1;
 	HOST_WIDE_INT l;
 
 	if (GET_CODE (x) == CONST_INT)
 	  xx = INTVAL (x);
 	else
-	  output_operand_lossage ("`B' operand is not constant");
+	  output_operand_lossage ("'B' operand is not constant");
 	
-	l = exact_log2 (xx);
+	/* GCC sign-extends masks with the MSB set, so we have to
+	   detect all the cases that differ only in sign extension
+	   beyond the bits we care about.  Normally, the predicates
+	   and constraints ensure that we have the right values.  This
+	   works correctly for valid masks.  */
+	if (bits_set[xx & 7] <= 1)
+	  {
+	    /* Remove sign extension bits.  */
+	    if ((~xx & ~(HOST_WIDE_INT)0xff) == 0)
+	      xx &= 0xff;
+	    else if ((~xx & ~(HOST_WIDE_INT)0xffff) == 0)
+	      xx &= 0xffff;
+	    l = exact_log2 (xx);
+	  }
+	else
+	  {
+	    /* Add sign extension bits.  */
+	    if ((xx & ~(HOST_WIDE_INT)0xff) == 0)
+	      xx |= ~(HOST_WIDE_INT)0xff;
+	    else if ((xx & ~(HOST_WIDE_INT)0xffff) == 0)
+	      xx |= ~(HOST_WIDE_INT)0xffff;
+	    l = exact_log2 (~xx);
+	  }
+
 	if (l == -1)
-	  l = exact_log2 (~xx);
-	if (l == -1)
-	  output_operand_lossage ("`B' operand has multiple bits set");
+	  output_operand_lossage ("'B' operand has multiple bits set");
 	
 	fprintf (file, IMMEDIATE_PREFIX HOST_WIDE_INT_PRINT_DEC, l);
 	return;
@@ -1628,12 +1971,30 @@ xstormy16_print_operand (FILE *file, rtx x, int code)
 	if (GET_CODE (x) == CONST_INT)
 	  xx = INTVAL (x);
 	else
-	  output_operand_lossage ("`o' operand is not constant");
+	  output_operand_lossage ("'o' operand is not constant");
 	
 	if (code == 'O')
 	  xx = -xx;
 	
 	fprintf (file, IMMEDIATE_PREFIX HOST_WIDE_INT_PRINT_DEC, xx - 1);
+	return;
+      }
+
+    case 'b':
+      /* Print the shift mask for bp/bn.  */
+      {
+	HOST_WIDE_INT xx = 1;
+	HOST_WIDE_INT l;
+
+	if (GET_CODE (x) == CONST_INT)
+	  xx = INTVAL (x);
+	else
+	  output_operand_lossage ("'B' operand is not constant");
+	
+	l = 7 - xx;
+	
+	fputs (IMMEDIATE_PREFIX, file);
+	fprintf (file, HOST_WIDE_INT_PRINT_DEC, l);
 	return;
       }
 
@@ -2027,11 +2388,15 @@ xstormy16_interrupt_function_p (void)
 #define TARGET_ATTRIBUTE_TABLE xstormy16_attribute_table
 static tree xstormy16_handle_interrupt_attribute
   (tree *, tree, tree, int, bool *);
+static tree xstormy16_handle_below100_attribute
+  (tree *, tree, tree, int, bool *);
 
 static const struct attribute_spec xstormy16_attribute_table[] =
 {
   /* { name, min_len, max_len, decl_req, type_req, fn_type_req, handler } */
   { "interrupt", 0, 0, false, true,  true,  xstormy16_handle_interrupt_attribute },
+  { "BELOW100",  0, 0, false, false, false, xstormy16_handle_below100_attribute },
+  { "below100",  0, 0, false, false, false, xstormy16_handle_below100_attribute },
   { NULL,        0, 0, false, false, false, NULL }
 };
 
@@ -2045,11 +2410,39 @@ xstormy16_handle_interrupt_attribute (tree *node, tree name,
 {
   if (TREE_CODE (*node) != FUNCTION_TYPE)
     {
-      warning ("`%s' attribute only applies to functions",
+      warning ("%qs attribute only applies to functions",
 	       IDENTIFIER_POINTER (name));
       *no_add_attrs = true;
     }
 
+  return NULL_TREE;
+}
+
+/* Handle an "below" attribute;
+   arguments as in struct attribute_spec.handler.  */
+static tree
+xstormy16_handle_below100_attribute (tree *node,
+				     tree name ATTRIBUTE_UNUSED,
+				     tree args ATTRIBUTE_UNUSED,
+				     int flags ATTRIBUTE_UNUSED,
+				     bool *no_add_attrs)
+{
+  if (TREE_CODE (*node) != VAR_DECL
+      && TREE_CODE (*node) != POINTER_TYPE
+      && TREE_CODE (*node) != TYPE_DECL)
+    {
+      warning ("%<__BELOW100__%> attribute only applies to variables");
+      *no_add_attrs = true;
+    }
+  else if (args == NULL_TREE && TREE_CODE (*node) == VAR_DECL)
+    {
+      if (! (TREE_PUBLIC (*node) || TREE_STATIC (*node)))
+	{
+	  warning ("__BELOW100__ attribute not allowed with auto storage class.");
+	  *no_add_attrs = true;
+	}
+    }
+  
   return NULL_TREE;
 }
 
@@ -2097,9 +2490,9 @@ xstormy16_init_builtins (void)
 	  else
 	    args = tree_cons (NULL_TREE, arg, args);
 	}
-      builtin_function (s16builtins[i].name,
-			build_function_type (ret_type, args),
-			i, BUILT_IN_MD, NULL, NULL);
+      lang_hooks.builtin_function (s16builtins[i].name,
+				   build_function_type (ret_type, args),
+				   i, BUILT_IN_MD, NULL, NULL);
     }
 }
 
@@ -2170,6 +2563,236 @@ xstormy16_expand_builtin(tree exp, rtx target,
   return retval;
 }
 
+
+/* Look for combinations of insns that can be converted to BN or BP
+   opcodes.  This is, unfortunately, too complex to do with MD
+   patterns.  */
+static void
+combine_bnp (rtx insn)
+{
+  int insn_code, regno, need_extend;
+  unsigned int mask;
+  rtx cond, reg, and, load, qireg, mem;
+  enum machine_mode load_mode = QImode;
+  enum machine_mode and_mode = QImode;
+  rtx shift = NULL_RTX;
+
+  insn_code = recog_memoized (insn);
+  if (insn_code != CODE_FOR_cbranchhi
+      && insn_code != CODE_FOR_cbranchhi_neg)
+    return;
+
+  cond = XVECEXP (PATTERN (insn), 0, 0); /* set */
+  cond = XEXP (cond, 1); /* if */
+  cond = XEXP (cond, 0); /* cond */
+  switch (GET_CODE (cond))
+    {
+    case NE:
+    case EQ:
+      need_extend = 0;
+      break;
+    case LT:
+    case GE:
+      need_extend = 1;
+      break;
+    default:
+      return;
+    }
+
+  reg = XEXP (cond, 0);
+  if (GET_CODE (reg) != REG)
+    return;
+  regno = REGNO (reg);
+  if (XEXP (cond, 1) != const0_rtx)
+    return;
+  if (! find_regno_note (insn, REG_DEAD, regno))
+    return;
+  qireg = gen_rtx_REG (QImode, regno);
+
+  if (need_extend)
+    {
+      /* LT and GE conditionals should have an sign extend before
+	 them.  */
+      for (and = prev_real_insn (insn); and; and = prev_real_insn (and))
+	{
+	  int and_code = recog_memoized (and);
+
+	  if (and_code == CODE_FOR_extendqihi2
+	      && rtx_equal_p (SET_DEST (PATTERN (and)), reg)
+	      && rtx_equal_p (XEXP (SET_SRC (PATTERN (and)), 0), qireg))
+	    break;
+	
+	  if (and_code == CODE_FOR_movhi_internal
+	      && rtx_equal_p (SET_DEST (PATTERN (and)), reg))
+	    {
+	      /* This is for testing bit 15.  */
+	      and = insn;
+	      break;
+	    }
+
+	  if (reg_mentioned_p (reg, and))
+	    return;
+
+	  if (GET_CODE (and) != NOTE
+	      && GET_CODE (and) != INSN)
+	    return;
+	}
+    }
+  else
+    {
+      /* EQ and NE conditionals have an AND before them.  */
+      for (and = prev_real_insn (insn); and; and = prev_real_insn (and))
+	{
+	  if (recog_memoized (and) == CODE_FOR_andhi3
+	      && rtx_equal_p (SET_DEST (PATTERN (and)), reg)
+	      && rtx_equal_p (XEXP (SET_SRC (PATTERN (and)), 0), reg))
+	    break;
+	
+	  if (reg_mentioned_p (reg, and))
+	    return;
+
+	  if (GET_CODE (and) != NOTE
+	      && GET_CODE (and) != INSN)
+	    return;
+	}
+
+      if (and)
+	{
+	  /* Some mis-optimisations by GCC can generate a RIGHT-SHIFT
+	     followed by an AND like this:
+
+               (parallel [(set (reg:HI r7) (lshiftrt:HI (reg:HI r7) (const_int 3)))
+                          (clobber (reg:BI carry))]
+
+               (set (reg:HI r7) (and:HI (reg:HI r7) (const_int 1)))
+	      
+	     Attempt to detect this here.  */
+	  for (shift = prev_real_insn (and); shift; shift = prev_real_insn (shift))
+	    {
+	      if (recog_memoized (shift) == CODE_FOR_lshrhi3
+		  && rtx_equal_p (SET_DEST (XVECEXP (PATTERN (shift), 0, 0)), reg)
+		  && rtx_equal_p (XEXP (SET_SRC (XVECEXP (PATTERN (shift), 0, 0)), 0), reg))
+		break;
+		
+	      if (reg_mentioned_p (reg, shift)
+		  || (GET_CODE (shift) != NOTE
+		      && GET_CODE (shift) != INSN))
+		{
+		  shift = NULL_RTX;
+		  break;
+		}
+	    }
+	}
+    }
+  if (!and)
+    return;
+
+  for (load = shift ? prev_real_insn (shift) : prev_real_insn (and);
+       load;
+       load = prev_real_insn (load))
+    {
+      int load_code = recog_memoized (load);
+
+      if (load_code == CODE_FOR_movhi_internal
+	  && rtx_equal_p (SET_DEST (PATTERN (load)), reg)
+	  && xstormy16_below100_operand (SET_SRC (PATTERN (load)), HImode)
+	  && ! MEM_VOLATILE_P (SET_SRC (PATTERN (load))))
+	{
+	  load_mode = HImode;
+	  break;
+	}
+
+      if (load_code == CODE_FOR_movqi_internal
+	  && rtx_equal_p (SET_DEST (PATTERN (load)), qireg)
+	  && xstormy16_below100_operand (SET_SRC (PATTERN (load)), QImode))
+	{
+	  load_mode = QImode;
+	  break;
+	}
+
+      if (load_code == CODE_FOR_zero_extendqihi2
+	  && rtx_equal_p (SET_DEST (PATTERN (load)), reg)
+	  && xstormy16_below100_operand (XEXP (SET_SRC (PATTERN (load)), 0), QImode))
+	{
+	  load_mode = QImode;
+	  and_mode = HImode;
+	  break;
+	}
+
+      if (reg_mentioned_p (reg, load))
+	return;
+
+      if (GET_CODE (load) != NOTE
+	  && GET_CODE (load) != INSN)
+	return;
+    }
+  if (!load)
+    return;
+
+  mem = SET_SRC (PATTERN (load));
+
+  if (need_extend)
+    {
+      mask = (load_mode == HImode) ? 0x8000 : 0x80;
+
+      /* If the mem includes a zero-extend operation and we are
+	 going to generate a sign-extend operation then move the
+	 mem inside the zero-extend.  */
+      if (GET_CODE (mem) == ZERO_EXTEND)
+	mem = XEXP (mem, 0);
+    }
+  else
+    {
+      if (!xstormy16_onebit_set_operand (XEXP (SET_SRC (PATTERN (and)), 1), load_mode))
+	return;
+
+      mask = (int) INTVAL (XEXP (SET_SRC (PATTERN (and)), 1));
+
+      if (shift)
+	mask <<= INTVAL (XEXP (SET_SRC (XVECEXP (PATTERN (shift), 0, 0)), 1));
+    }
+
+  if (load_mode == HImode)
+    {
+      rtx addr = XEXP (mem, 0);
+
+      if (! (mask & 0xff))
+	{
+	  addr = plus_constant (addr, 1);
+	  mask >>= 8;
+	}
+      mem = gen_rtx_MEM (QImode, addr);
+    }
+
+  if (need_extend)
+    XEXP (cond, 0) = gen_rtx_SIGN_EXTEND (HImode, mem);
+  else
+    XEXP (cond, 0) = gen_rtx_AND (and_mode, mem, GEN_INT (mask));
+
+  INSN_CODE (insn) = -1;
+  delete_insn (load);
+
+  if (and != insn)
+    delete_insn (and);
+
+  if (shift != NULL_RTX)
+    delete_insn (shift);
+}
+
+static void
+xstormy16_reorg (void)
+{
+  rtx insn;
+
+  for (insn = get_insns (); insn; insn = NEXT_INSN (insn))
+    {
+      if (! JUMP_P (insn))
+	continue;
+      combine_bnp (insn);
+    }
+}
+
+
 /* Worker function for TARGET_RETURN_IN_MEMORY.  */
 
 static bool
@@ -2183,6 +2806,10 @@ xstormy16_return_in_memory (tree type, tree fntype ATTRIBUTE_UNUSED)
 #define TARGET_ASM_ALIGNED_HI_OP "\t.hword\t"
 #undef TARGET_ASM_ALIGNED_SI_OP
 #define TARGET_ASM_ALIGNED_SI_OP "\t.word\t"
+#undef TARGET_ENCODE_SECTION_INFO
+#define TARGET_ENCODE_SECTION_INFO xstormy16_encode_section_info
+#undef TARGET_STRIP_NAME_ENCODING
+#define TARGET_STRIP_NAME_ENCODING xstormy16_strip_name_encoding
 
 #undef TARGET_ASM_OUTPUT_MI_THUNK
 #define TARGET_ASM_OUTPUT_MI_THUNK xstormy16_asm_output_mi_thunk
@@ -2196,6 +2823,8 @@ xstormy16_return_in_memory (tree type, tree fntype ATTRIBUTE_UNUSED)
 
 #undef TARGET_BUILD_BUILTIN_VA_LIST
 #define TARGET_BUILD_BUILTIN_VA_LIST xstormy16_build_builtin_va_list
+#undef TARGET_GIMPLIFY_VA_ARG_EXPR
+#define TARGET_GIMPLIFY_VA_ARG_EXPR xstormy16_expand_builtin_va_arg
 
 #undef TARGET_PROMOTE_FUNCTION_ARGS
 #define TARGET_PROMOTE_FUNCTION_ARGS hook_bool_tree_true
@@ -2206,5 +2835,8 @@ xstormy16_return_in_memory (tree type, tree fntype ATTRIBUTE_UNUSED)
 
 #undef TARGET_RETURN_IN_MEMORY
 #define TARGET_RETURN_IN_MEMORY xstormy16_return_in_memory
+
+#undef TARGET_MACHINE_DEPENDENT_REORG
+#define TARGET_MACHINE_DEPENDENT_REORG xstormy16_reorg
 
 struct gcc_target targetm = TARGET_INITIALIZER;

@@ -1,5 +1,6 @@
 /* { dg-do compile } */ 
 /* { dg-options "-O2 -fdump-tree-pre-stats" } */
+extern int printf (const char *, ...);
 int main(int argc, char **argv)
 {
 	int a;
@@ -16,4 +17,4 @@ int main(int argc, char **argv)
 }
 /* We should eliminate one evaluation of b + c along the main path, 
    causing one reload. */
-/* { dg-final { scan-tree-dump-times "Reloads:1" 1 "pre"} } */
+/* { dg-final { scan-tree-dump-times "Eliminated:1" 1 "pre"} } */

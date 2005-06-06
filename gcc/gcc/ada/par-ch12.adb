@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2003 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005 Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -200,7 +200,15 @@ package body Ch12 is
          Set_Specification (Gen_Decl, P_Package (Pf_Spcn));
       else
          Gen_Decl := New_Node (N_Generic_Subprogram_Declaration, Gen_Sloc);
+
          Set_Specification (Gen_Decl, P_Subprogram_Specification);
+
+         if Nkind (Defining_Unit_Name (Specification (Gen_Decl))) =
+                                             N_Defining_Program_Unit_Name
+           and then Scope.Last > 0
+         then
+            Error_Msg_SP ("child unit allowed only at library level");
+         end if;
          TF_Semicolon;
       end if;
 
@@ -800,7 +808,14 @@ package body Ch12 is
    -----------------------------------------
 
    --  FORMAL_SUBPROGRAM_DECLARATION ::=
+   --    FORMAL_CONCRETE_SUBPROGRAM_DECLARATION
+   --  | FORMAL_ABSTRACT_SUBPROGRAM_DECLARATION
+
+   --  FORMAL_CONCRETE_SUBPROGRAM_DECLARATION ::=
    --    with SUBPROGRAM_SPECIFICATION [is SUBPROGRAM_DEFAULT];
+
+   --  FORMAL_ABSTRACT_SUBPROGRAM_DECLARATION ::=
+   --    with SUBPROGRAM_SPECIFICATION is abstract [SUBPROGRAM_DEFAULT];
 
    --  SUBPROGRAM_DEFAULT ::= DEFAULT_NAME | <>
 
@@ -809,32 +824,55 @@ package body Ch12 is
    --  The caller has checked that the initial tokens are WITH FUNCTION or
    --  WITH PROCEDURE, and the initial WITH has been scanned out.
 
-   --  Note: we separate this into two procedures because the name is allowed
-   --  to be an operator symbol for a function, but not for a procedure.
-
    --  Error recovery: cannot raise Error_Resync
 
    function P_Formal_Subprogram_Declaration return Node_Id is
-      Def_Node : Node_Id;
+      Prev_Sloc : constant Source_Ptr := Prev_Token_Ptr;
+      Spec_Node : constant Node_Id    := P_Subprogram_Specification;
+      Def_Node  : Node_Id;
 
    begin
-      Def_Node := New_Node (N_Formal_Subprogram_Declaration, Prev_Token_Ptr);
-      Set_Specification (Def_Node, P_Subprogram_Specification);
-
       if Token = Tok_Is then
          T_Is; -- past IS, skip extra IS or ";"
 
-         if Token = Tok_Box then
+         if Token = Tok_Abstract then
+            Def_Node :=
+              New_Node (N_Formal_Abstract_Subprogram_Declaration, Prev_Sloc);
+            Scan; -- past ABSTRACT
+
+            if Ada_Version < Ada_05 then
+               Error_Msg_SP
+                 ("formal abstract subprograms are an Ada 2005 extension");
+               Error_Msg_SP ("\unit must be compiled with -gnat05 switch");
+            end if;
+
+         else
+            Def_Node :=
+              New_Node (N_Formal_Concrete_Subprogram_Declaration, Prev_Sloc);
+         end if;
+
+         Set_Specification (Def_Node, Spec_Node);
+
+         if Token = Tok_Semicolon then
+            Scan; -- past ";"
+
+         elsif Token = Tok_Box then
             Set_Box_Present (Def_Node, True);
             Scan; -- past <>
+            T_Semicolon;
 
          else
             Set_Default_Name (Def_Node, P_Name);
+            T_Semicolon;
          end if;
 
+      else
+         Def_Node :=
+           New_Node (N_Formal_Concrete_Subprogram_Declaration, Prev_Sloc);
+         Set_Specification (Def_Node, Spec_Node);
+         T_Semicolon;
       end if;
 
-      T_Semicolon;
       return Def_Node;
    end P_Formal_Subprogram_Declaration;
 

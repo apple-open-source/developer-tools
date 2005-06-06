@@ -1,5 +1,5 @@
 /* Tree-dumping functionality for intermediate representation.
-   Copyright (C) 1999, 2000, 2001, 2002 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2001, 2002, 2004 Free Software Foundation, Inc.
    Written by Mark Mitchell <mark@codesourcery.com>
 
 This file is part of GCC.
@@ -264,15 +264,17 @@ cp_dump_tree (void* dump_info, tree t)
       if (CLASSTYPE_TEMPLATE_SPECIALIZATION(t))
         dump_string(di, "spec");
 
-      if (!dump_flag (di, TDF_SLIM, t))
+      if (!dump_flag (di, TDF_SLIM, t) && TYPE_BINFO (t))
 	{
 	  int i;
+	  tree binfo;
+	  tree base_binfo;
 	  
-	  for (i = 0; i < CLASSTYPE_N_BASECLASSES (t); ++i)
+	  for (binfo = TYPE_BINFO (t), i = 0;
+	       BINFO_BASE_ITERATE (binfo, i, base_binfo); ++i)
 	    {
-	      tree base_binfo = BINFO_BASETYPE (TYPE_BINFO (t), i);
 	      dump_child ("base", BINFO_TYPE (base_binfo));
-	      if (TREE_VIA_VIRTUAL (base_binfo)) 
+	      if (BINFO_VIRTUAL_P (base_binfo)) 
 		dump_string (di, "virtual");
 	      dump_access (di, base_binfo);
 	    }
@@ -366,14 +368,12 @@ cp_dump_tree (void* dump_info, tree t)
 	dump_string (di, "cleanup");
       dump_child ("body", TRY_STMTS (t));
       dump_child ("hdlr", TRY_HANDLERS (t));
-      dump_next_stmt (di, t);
       break;
 
     case EH_SPEC_BLOCK:
       dump_stmt (di, t);
       dump_child ("body", EH_SPEC_STMTS (t));
       dump_child ("raises", EH_SPEC_RAISES (t));
-      dump_next_stmt (di, t);
       break;
 
     case PTRMEM_CST:
@@ -397,21 +397,32 @@ cp_dump_tree (void* dump_info, tree t)
       dump_stmt (di, t);
       dump_child ("parm", HANDLER_PARMS (t));
       dump_child ("body", HANDLER_BODY (t));
-      dump_next_stmt (di, t);
       break;
 
     case MUST_NOT_THROW_EXPR:
       dump_stmt (di, t);
       dump_child ("body", TREE_OPERAND (t, 0));
-      dump_next_stmt (di, t);
       break;
 
     case USING_STMT:
       dump_stmt (di, t);
       dump_child ("nmsp", USING_STMT_NAMESPACE (t));
-      dump_next_stmt (di, t);
       break;
-      
+
+    case CLEANUP_STMT:
+      dump_stmt (di, t);
+      dump_child ("decl", CLEANUP_DECL (t));
+      dump_child ("expr", CLEANUP_EXPR (t));
+      dump_child ("body", CLEANUP_BODY (t));
+      break;
+
+    case IF_STMT:
+      dump_stmt (di, t);
+      dump_child ("cond", IF_COND (t));
+      dump_child ("then", THEN_CLAUSE (t));
+      dump_child ("else", ELSE_CLAUSE (t));
+      break;
+
     default:
       break;
     }

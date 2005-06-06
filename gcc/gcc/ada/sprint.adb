@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2004, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -693,12 +693,12 @@ package body Sprint is
 
          when N_Access_Definition =>
 
-            --  Ada 0Y (AI-254)
+            --  Ada 2005 (AI-254)
 
             if Present (Access_To_Subprogram_Definition (Node)) then
                Sprint_Node (Access_To_Subprogram_Definition (Node));
             else
-               --  Ada 0Y (AI-231)
+               --  Ada 2005 (AI-231)
 
                if Null_Exclusion_Present (Node) then
                   Write_Str ("not null ");
@@ -717,7 +717,7 @@ package body Sprint is
 
          when N_Access_Function_Definition =>
 
-            --  Ada 0Y (AI-231)
+            --  Ada 2005 (AI-231)
 
             if Null_Exclusion_Present (Node) then
                Write_Str ("not null ");
@@ -735,7 +735,8 @@ package body Sprint is
             Sprint_Node (Subtype_Mark (Node));
 
          when N_Access_Procedure_Definition =>
-            --  Ada 0Y (AI-231)
+
+            --  Ada 2005 (AI-231)
 
             if Null_Exclusion_Present (Node) then
                Write_Str ("not null ");
@@ -759,7 +760,7 @@ package body Sprint is
                Write_Str_With_Col_Check ("constant ");
             end if;
 
-            --  Ada 0Y (AI-231)
+            --  Ada 2005 (AI-231)
 
             if Null_Exclusion_Present (Node) then
                Write_Str ("not null ");
@@ -813,7 +814,8 @@ package body Sprint is
 
          when N_Allocator =>
             Write_Str_With_Col_Check_Sloc ("new ");
-            --  Ada 0Y (AI-231)
+
+            --  Ada 2005 (AI-231)
 
             if Null_Exclusion_Present (Node) then
                Write_Str ("not null ");
@@ -936,7 +938,7 @@ package body Sprint is
             end if;
 
             Write_Char_Sloc (''');
-            Write_Char_Code (Char_Literal_Value (Node));
+            Write_Char_Code (UI_To_CC (Char_Literal_Value (Node)));
             Write_Char (''');
 
          when N_Code_Statement =>
@@ -974,7 +976,7 @@ package body Sprint is
             Sprint_Bar_List (Choices (Node));
             Write_Str (" => ");
 
-            --  Ada 0Y (AI-287): Print the mbox if present
+            --  Ada 2005 (AI-287): Print the mbox if present
 
             if Box_Present (Node) then
                Write_Str_With_Col_Check ("<>");
@@ -997,7 +999,7 @@ package body Sprint is
          when N_Component_Definition =>
             Set_Debug_Sloc;
 
-            --  Ada 0Y (AI-230): Access definition components
+            --  Ada 2005 (AI-230): Access definition components
 
             if Present (Access_Definition (Node)) then
                Sprint_Node (Access_Definition (Node));
@@ -1007,7 +1009,7 @@ package body Sprint is
                   Write_Str_With_Col_Check ("aliased ");
                end if;
 
-               --  Ada 0Y (AI-231)
+               --  Ada 2005 (AI-231)
 
                if Null_Exclusion_Present (Node) then
                   Write_Str (" not null ");
@@ -1136,7 +1138,7 @@ package body Sprint is
 
             Write_Str_With_Col_Check_Sloc ("new ");
 
-            --  Ada 0Y (AI-231)
+            --  Ada 2005 (AI-231)
 
             if Null_Exclusion_Present (Node) then
                Write_Str_With_Col_Check ("not null ");
@@ -1361,6 +1363,34 @@ package body Sprint is
                Write_Str_With_Col_Check (" with private");
             end if;
 
+         when N_Formal_Abstract_Subprogram_Declaration =>
+            Write_Indent_Str_Sloc ("with ");
+            Sprint_Node (Specification (Node));
+
+            Write_Str_With_Col_Check (" is abstract");
+
+            if Box_Present (Node) then
+               Write_Str_With_Col_Check (" <>");
+            elsif Present (Default_Name (Node)) then
+               Write_Str_With_Col_Check (" ");
+               Sprint_Node (Default_Name (Node));
+            end if;
+
+            Write_Char (';');
+
+         when N_Formal_Concrete_Subprogram_Declaration =>
+            Write_Indent_Str_Sloc ("with ");
+            Sprint_Node (Specification (Node));
+
+            if Box_Present (Node) then
+               Write_Str_With_Col_Check (" is <>");
+            elsif Present (Default_Name (Node)) then
+               Write_Str_With_Col_Check (" is ");
+               Sprint_Node (Default_Name (Node));
+            end if;
+
+            Write_Char (';');
+
          when N_Formal_Discrete_Type_Definition =>
             Write_Str_With_Col_Check_Sloc ("<>");
 
@@ -1421,19 +1451,6 @@ package body Sprint is
 
          when N_Formal_Signed_Integer_Type_Definition =>
             Write_Str_With_Col_Check_Sloc ("range <>");
-
-         when N_Formal_Subprogram_Declaration =>
-            Write_Indent_Str_Sloc ("with ");
-            Sprint_Node (Specification (Node));
-
-            if Box_Present (Node) then
-               Write_Str_With_Col_Check (" is <>");
-            elsif Present (Default_Name (Node)) then
-               Write_Str_With_Col_Check (" is ");
-               Sprint_Node (Default_Name (Node));
-            end if;
-
-            Write_Char (';');
 
          when N_Formal_Type_Declaration =>
             Write_Indent_Str_Sloc ("type ");
@@ -1751,7 +1768,7 @@ package body Sprint is
                   Write_Str_With_Col_Check ("constant ");
                end if;
 
-               --  Ada 0Y (AI-231)
+               --  Ada 2005 (AI-231)
 
                if Null_Exclusion_Present (Node) then
                   Write_Str_With_Col_Check ("not null ");
@@ -1773,7 +1790,7 @@ package body Sprint is
             Sprint_Node (Defining_Identifier (Node));
             Write_Str (" : ");
 
-            --  Ada 0Y (AI-230): Access renamings
+            --  Ada 2005 (AI-230): Access renamings
 
             if Present (Access_Definition (Node)) then
                Sprint_Node (Access_Definition (Node));
@@ -2010,7 +2027,7 @@ package body Sprint is
                   Write_Str_With_Col_Check ("out ");
                end if;
 
-               --  Ada 0Y (AI-231)
+               --  Ada 2005 (AI-231)
 
                if Null_Exclusion_Present (Node) then
                   Write_Str ("not null ");
@@ -2401,7 +2418,7 @@ package body Sprint is
             Write_Id (Defining_Identifier (Node));
             Write_Str (" is ");
 
-            --  Ada 0Y (AI-231)
+            --  Ada 2005 (AI-231)
 
             if Null_Exclusion_Present (Node) then
                Write_Str ("not null ");
@@ -2598,7 +2615,7 @@ package body Sprint is
             else
                if First_Name (Node) or else not Dump_Original_Only then
 
-                  --  Ada 0Y (AI-50217): Print limited with_clauses
+                  --  Ada 2005 (AI-50217): Print limited with_clauses
 
                   if Private_Present (Node) and Limited_Present (Node) then
                      Write_Indent_Str ("limited private with ");
@@ -2815,13 +2832,13 @@ package body Sprint is
       Write_Str ("""]");
    end Write_Condition_And_Reason;
 
-   ------------------------
-   --  Write_Discr_Specs --
-   ------------------------
+   -----------------------
+   -- Write_Discr_Specs --
+   -----------------------
 
    procedure Write_Discr_Specs (N : Node_Id) is
-      Specs  : List_Id;
-      Spec   : Node_Id;
+      Specs : List_Id;
+      Spec  : Node_Id;
 
    begin
       Specs := Discriminant_Specifications (N);

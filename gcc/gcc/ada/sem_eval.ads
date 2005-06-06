@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2004 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005 Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -100,7 +100,7 @@ package Sem_Eval is
    --  When we are trying to perform compile time constant folding (for
    --  instance for expressions such as 'C + 1', Is_Static_Expression or
    --  Is_OK_Static_Expression are not the right functions to test to see
-   --  if folding is possible. Instead, we use Compile_Time_Know_Value.
+   --  if folding is possible. Instead, we use Compile_Time_Known_Value.
    --  All static expressions that do not raise constraint error (i.e.
    --  those for which Is_OK_Static_Expression is true) are known at
    --  compile time, but as shown by the above example, there are cases
@@ -411,7 +411,6 @@ private
    pragma Inline (Eval_Character_Literal);
    pragma Inline (Eval_Conditional_Expression);
    pragma Inline (Eval_Indexed_Component);
-   pragma Inline (Eval_Integer_Literal);
    pragma Inline (Eval_Named_Integer);
    pragma Inline (Eval_Named_Real);
    pragma Inline (Eval_Real_Literal);

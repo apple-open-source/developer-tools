@@ -274,7 +274,10 @@ FileChannelImpl::implTruncate (jlong size)
     }
   else
     {
-      if (::ftruncate (fd, (off_t) pos))
+      if (::ftruncate (fd, (off_t) size))
+	throw new IOException (JvNewStringLatin1 (strerror (errno)));
+      if (pos > size
+	  && ::lseek (fd, (off_t) size, SEEK_SET) == -1)
 	throw new IOException (JvNewStringLatin1 (strerror (errno)));
       pos = size;
     }
@@ -377,7 +380,7 @@ jint
 FileChannelImpl::available (void)
 {
 #if defined (FIONREAD) || defined (HAVE_SELECT) || defined (HAVE_FSTAT)
-  long num = 0;
+  int num = 0;
   int r = 0;
   bool num_set = false;
 
@@ -420,7 +423,7 @@ FileChannelImpl::available (void)
 	  && S_ISREG (sb.st_mode)
 	  && (where = lseek (fd, 0, SEEK_CUR)) != (off_t) -1)
 	{
-	  num = (long) (sb.st_size - where);
+	  num = (int) (sb.st_size - where);
 	  num_set = true;
 	}
     }
@@ -454,7 +457,7 @@ FileChannelImpl::lock
 {
   struct flock lockdata;
 
-  lockdata.l_type = shared ? F_WRLCK : F_RDLCK;
+  lockdata.l_type = shared ? F_RDLCK : F_WRLCK;
   lockdata.l_whence = SEEK_SET;
   lockdata.l_start = pos;
   lockdata.l_len = len;

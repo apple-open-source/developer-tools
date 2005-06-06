@@ -1,5 +1,6 @@
-/* { dg-do compile } */
+/* { dg-do compile { target powerpc*-*-darwin* } } */
 /* { dg-options "-mlongcall" } */
+#include <stdio.h>
 
 int
 dy_foo (char *str, int i)

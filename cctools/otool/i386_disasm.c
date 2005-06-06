@@ -48,9 +48,11 @@ WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 */
 #include <stdio.h>
 #include <string.h>
+#include "stuff/target_arch.h"
 #include <mach-o/loader.h>
 #include <mach-o/nlist.h>
 #include <mach-o/reloc.h>
+#include "stuff/symbol.h"
 #include "stuff/bytesex.h"
 #include "otool.h"
 #include "ofile_print.h"
@@ -106,11 +108,11 @@ static void get_operand(
     const unsigned long addr,
     const struct relocation_info *sorted_relocs,
     const unsigned long nsorted_relocs,
-    const struct nlist *symbols,
+    const nlist_t *symbols,
     const unsigned long nsymbols,
     const char *strings,
     const unsigned long strings_size,
-    const struct nlist *sorted_symbols,
+    const struct symbol *sorted_symbols,
     const unsigned long nsorted_symbols,
     const enum bool verbose);
 
@@ -126,11 +128,11 @@ static void immediate(
     const unsigned long addr,
     const struct relocation_info *sorted_relocs,
     const unsigned long nsorted_relocs,
-    const struct nlist *symbols,
+    const nlist_t *symbols,
     const unsigned long nsymbols,
     const char *strings,
     const unsigned long strings_size,
-    const struct nlist *sorted_symbols,
+    const struct symbol *sorted_symbols,
     const unsigned long nsorted_symbols,
     const enum bool verbose);
 
@@ -146,11 +148,11 @@ static void displacement(
     const unsigned long addr,
     const struct relocation_info *sorted_relocs,
     const unsigned long nsorted_relocs,
-    const struct nlist *symbols,
+    const nlist_t *symbols,
     const unsigned long nsymbols,
     const char *strings,
     const unsigned long strings_size,
-    const struct nlist *sorted_symbols,
+    const struct symbol *sorted_symbols,
     const unsigned long nsorted_symbols,
     const enum bool verbose);
 
@@ -162,11 +164,11 @@ static void get_symbol(
     const unsigned long value,
     const struct relocation_info *relocs,
     const unsigned long nrelocs,
-    const struct nlist *symbols,
+    const nlist_t *symbols,
     const unsigned long nsymbols,
     const char *strings,
     const unsigned long strings_size,
-    const struct nlist *sorted_symbols,
+    const struct symbol *sorted_symbols,
     const unsigned long nsorted_symbols,
     const enum bool verbose);
 
@@ -174,8 +176,8 @@ static void print_operand(
     const char *seg,
     const char *symadd,
     const char *symsub,
-    const unsigned int value,
-    const unsigned int value_size,
+    unsigned int value,
+    unsigned int value_size,
     const char *result,
     const char *tail);
 
@@ -292,6 +294,8 @@ static void modrm_byte(
 #define PFCH	67	/* prefetch instructions */
 #define SFEN	68	/* sfence & clflush */
 #define Mnol	69	/* no 'l' suffix, fildl & fistpl */
+#define AMD3DNOW       70  /* 3DNow! instruction (SSE2 format with a suffix) */
+#define PFCH3DNOW      71  /* 3DNow! prefetch instruction */
 
 /*
  * In 16-bit addressing mode:
@@ -467,6 +471,144 @@ static const struct instable op0F01[8] = {
 		{"lmsw",TERM,M,1},	{"invlpg",TERM,M,1},
 };
 
+static const struct instable op_monitor = {"monitor",TERM,GO_ON,0};
+static const struct instable op_mwait   = {"mwait",TERM,GO_ON,0};
+
+/*
+ * Decode table for 0x0F0F opcodes
+ * Unlike the other decode tables, this one maps suffixes.
+ */
+static const struct instable op0F0F[16][16] = {
+/*  [00]  */ {  INVALID,       INVALID,
+               INVALID,        INVALID,
+/*  [04]  */   INVALID,        INVALID,
+               INVALID,        INVALID,
+/*  [08]  */   INVALID,        INVALID,
+               INVALID,        INVALID,
+/*  [0C]  */   {"pi2fw",TERM,AMD3DNOW,0},      {"pi2fd",TERM,AMD3DNOW,0},
+               INVALID,        INVALID },
+/*  [10]  */ {  INVALID,       INVALID,
+               INVALID,        INVALID,
+/*  [14]  */   INVALID,        INVALID,
+               INVALID,        INVALID,
+/*  [18]  */   INVALID,        INVALID,
+               INVALID,        INVALID,
+/*  [1C]  */   {"pf2iw",TERM,AMD3DNOW,0},      {"pf2id",TERM,AMD3DNOW,0},
+               INVALID,        INVALID },
+/*  [20]  */ {  INVALID,       INVALID,
+               INVALID,        INVALID,
+/*  [24]  */   INVALID,        INVALID,
+               INVALID,        INVALID,
+/*  [28]  */   INVALID,        INVALID,
+               INVALID,        INVALID,
+/*  [2C]  */   INVALID,        INVALID,
+               INVALID,        INVALID, },
+/*  [30]  */ {  INVALID,       INVALID,
+               INVALID,        INVALID,
+/*  [34]  */   INVALID,        INVALID,
+               INVALID,        INVALID,
+/*  [38]  */   INVALID,        INVALID,
+               INVALID,        INVALID,
+/*  [3C]  */   INVALID,        INVALID,
+               INVALID,        INVALID },
+/*  [40]  */ {  INVALID,       INVALID,
+               INVALID,        INVALID,
+/*  [44]  */   INVALID,        INVALID,
+               INVALID,        INVALID,
+/*  [48]  */   INVALID,        INVALID,
+               INVALID,        INVALID,
+/*  [4C]  */   INVALID,        INVALID,
+               INVALID,        INVALID },
+/*  [50]  */ {  INVALID,       INVALID,
+               INVALID,        INVALID,
+/*  [54]  */   INVALID,        INVALID,
+               INVALID,        INVALID,
+/*  [58]  */   INVALID,        INVALID,
+               INVALID,        INVALID,
+/*  [5C]  */   INVALID,        INVALID,
+               INVALID,        INVALID, },
+/*  [60]  */ {  INVALID,       INVALID,
+               INVALID,        INVALID,
+/*  [64]  */   INVALID,        INVALID,
+               INVALID,        INVALID,
+/*  [68]  */   INVALID,        INVALID,
+               INVALID,        INVALID,
+/*  [6C]  */   INVALID,        INVALID,
+               INVALID,        INVALID },
+/*  [70]  */ {  INVALID,       INVALID,
+               INVALID,        INVALID,
+/*  [74]  */   INVALID,        INVALID,
+               INVALID,        INVALID,
+/*  [78]  */   INVALID,        INVALID,
+               INVALID,        INVALID,
+/*  [7C]  */   INVALID,        INVALID,
+               INVALID,        INVALID },
+/*  [80]  */ {  INVALID,       INVALID,
+               INVALID,        INVALID,
+/*  [84]  */   INVALID,        INVALID,
+               INVALID,        INVALID,
+/*  [88]  */   INVALID,        INVALID,
+               {"pfnacc",TERM,AMD3DNOW,0},     INVALID,
+/*  [8C]  */   INVALID,        INVALID,
+               {"pfpnacc",TERM,AMD3DNOW,0},    INVALID },
+/*  [90]  */ {  {"pfcmpge",TERM,AMD3DNOW,0},   INVALID,
+               INVALID,        INVALID,
+/*  [94]  */   {"pfmin",TERM,AMD3DNOW,0},      INVALID,
+               {"pfrcp",TERM,AMD3DNOW,0},      {"pfrsqrt",TERM,AMD3DNOW,0},
+/*  [98]  */   INVALID,        INVALID,
+               {"pfsub",TERM,AMD3DNOW,0},      INVALID,
+/*  [9C]  */   INVALID,        INVALID,
+               {"pfadd",TERM,AMD3DNOW,0},      INVALID },
+/*  [A0]  */ {  {"pfcmpgt",TERM,AMD3DNOW,0},   INVALID,
+               INVALID,        INVALID,
+/*  [A4]  */   {"pfmax",TERM,AMD3DNOW,0},      INVALID,
+               {"pfrcpit1",TERM,AMD3DNOW,0},   {"pfrsqit1",TERM,AMD3DNOW,0},
+/*  [A8]  */   INVALID,        INVALID,
+               {"pfsubr",TERM,AMD3DNOW,0},     INVALID,
+/*  [AC]  */   INVALID,        INVALID,
+               {"pfacc",TERM,AMD3DNOW,0},      INVALID },
+/*  [B0]  */ {  {"pfcmpeq",TERM,AMD3DNOW,0},   INVALID,
+               INVALID,        INVALID,
+/*  [B4]  */   {"pfmul",TERM,AMD3DNOW,0},      INVALID,
+               {"pfrcpit2",TERM,AMD3DNOW,0},   {"pmulhrw",TERM,AMD3DNOW,0},
+/*  [B8]  */   INVALID,        INVALID,
+               INVALID,        {"pswapd",TERM,AMD3DNOW,0},
+/*  [BC]  */   INVALID,        INVALID,
+               INVALID,        {"pavgusb",TERM,AMD3DNOW,0} },
+/*  [C0]  */ {  INVALID,       INVALID,
+               INVALID,        INVALID,
+/*  [C4]  */   INVALID,        INVALID,
+               INVALID,        INVALID,
+/*  [C8]  */   INVALID,        INVALID,
+               INVALID,        INVALID,
+/*  [CC]  */   INVALID,        INVALID,
+               INVALID,        INVALID },
+/*  [D0]  */ {  INVALID,       INVALID,
+               INVALID,        INVALID,
+/*  [D4]  */   INVALID,        INVALID,
+               INVALID,        INVALID,
+/*  [D8]  */   INVALID,        INVALID,
+               INVALID,        INVALID,
+/*  [DC]  */   INVALID,        INVALID,
+               INVALID,        INVALID },
+/*  [E0]  */ {  INVALID,       INVALID,
+               INVALID,        INVALID,
+/*  [E4]  */   INVALID,        INVALID,
+               INVALID,        INVALID,
+/*  [E8]  */   INVALID,        INVALID,
+               INVALID,        INVALID,
+/*  [EC]  */   INVALID,        INVALID,
+               INVALID,        INVALID },
+/*  [F0]  */ {  INVALID,       INVALID,
+               INVALID,        INVALID,
+/*  [F4]  */   INVALID,        INVALID,
+               INVALID,        INVALID,
+/*  [F8]  */   INVALID,        INVALID,
+               INVALID,        INVALID,
+/*  [FC]  */   INVALID,        INVALID,
+               INVALID,        INVALID },
+};
+
 /*
  * Decode table for 0x0FBA opcodes
  */
@@ -496,9 +638,9 @@ static const struct instable op0F[16][16] = {
 /*  [04]  */	INVALID,		INVALID,
 		{"clts",TERM,GO_ON,0},	INVALID,
 /*  [08]  */	{"invd",TERM,GO_ON,0},	{"wbinvd",TERM,GO_ON,0},
-		INVALID,		INVALID,
-/*  [0C]  */	INVALID,		INVALID,
-		INVALID,		INVALID },
+		INVALID,		{"ud2",TERM,GO_ON,0},
+/*  [0C]  */   INVALID,                {"prefetch",TERM,PFCH3DNOW,1},
+               {"femms",TERM,GO_ON,0}, {"",(const struct instable *)op0F0F,TERM,0} },
 /*  [10]  */ {  {"mov",TERM,SSE2,0},	{"mov",TERM,SSE2tm,0},
 		{"mov",TERM,SSE2,0},	{"movl",TERM,SSE2tm,0},
 /*  [14]  */	{"unpckl",TERM,SSE2,0},	{"unpckh",TERM,SSE2,0},
@@ -553,7 +695,7 @@ static const struct instable op0F[16][16] = {
 		{"pcmpeqd",TERM,SSE2,0},{"emms",TERM,GO_ON,0},
 /*  [78]  */	INVALID,		INVALID,
 		INVALID,		INVALID,
-/*  [7C]  */	INVALID,		INVALID,
+/*  [7C]  */	{"haddp",TERM,SSE2,0},  {"hsubp",TERM,SSE2,0},
 		{"mov",TERM,SSE2tfm,0},	{"mov",TERM,SSE2tm,0} },
 /*  [80]  */ {  {"jo",TERM,D,1},	{"jno",TERM,D,1},
 		{"jb",TERM,D,1},	{"jae",TERM,D,1},
@@ -595,7 +737,7 @@ static const struct instable op0F[16][16] = {
 		{"bswap",TERM,BSWAP,0},	{"bswap",TERM,BSWAP,0},
 /*  [CC]  */	{"bswap",TERM,BSWAP,0},	{"bswap",TERM,BSWAP,0},
 		{"bswap",TERM,BSWAP,0},	{"bswap",TERM,BSWAP,0} },
-/*  [D0]  */ {  INVALID,		{"psrlw",TERM,SSE2,0},
+/*  [D0]  */ {  {"addsubp",TERM,SSE2,0},{"psrlw",TERM,SSE2,0},
 		{"psrld",TERM,SSE2,0},	{"psrlq",TERM,SSE2,0},
 /*  [D4]  */	{"paddq",TERM,SSE2,0},	{"pmullw",TERM,SSE2,0},
 		{"mov",TERM,SSE2tm,0},	{"pmovmskb",TERM,SSE2,0},
@@ -611,14 +753,14 @@ static const struct instable op0F[16][16] = {
 		{"pminsw",TERM,SSE2,0},	{"por",TERM,SSE2,0},
 /*  [EC]  */	{"paddsb",TERM,SSE2,0},	{"paddsw",TERM,SSE2,0},
 		{"pmaxsw",TERM,SSE2,0},	{"pxor",TERM,SSE2,0} },
-/*  [F0]  */ {  INVALID,		{"psllw",TERM,SSE2,0},
+/*  [F0]  */ {  {"lddqu",TERM,SSE2,0},	{"psllw",TERM,SSE2,0},
 		{"pslld",TERM,SSE2,0},	{"psllq",TERM,SSE2,0},
 /*  [F4]  */	{"pmuludq",TERM,SSE2,0},{"pmaddwd",TERM,SSE2,0},
 		{"psadbw",TERM,SSE2,0},	{"maskmov",TERM,SSE2,0},
 /*  [F8]  */	{"psubb",TERM,SSE2,0},	{"psubw",TERM,SSE2,0},
 		{"psubd",TERM,SSE2,0},	{"psubq",TERM,SSE2,0},
 /*  [FC]  */	{"paddb",TERM,SSE2,0},	{"paddw",TERM,SSE2,0},
-		{"paddd",TERM,SSE2,0},	{"ud2",TERM,GO_ON,0} },
+		{"paddd",TERM,SSE2,0},	INVALID },
 };
 
 /*
@@ -777,7 +919,7 @@ static const struct instable opFP1n2[8][8] = {
 		{"ficoml",TERM,M,1},	{"ficompl",TERM,M,1},
 /*  [2,4]  */	{"fisubl",TERM,M,1},	{"fisubrl",TERM,M,1},
 		{"fidivl",TERM,M,1},	{"fidivrl",TERM,M,1} },
-/*  [3,0]  */ { {"fildl",TERM,Mnol,1},	INVALID,
+/*  [3,0]  */ { {"fildl",TERM,Mnol,1},	{"fisttpl",TERM,M,1},
 		{"fistl",TERM,M,1},	{"fistpl",TERM,Mnol,1},
 /*  [3,4]  */	INVALID,		{"fldt",TERM,M,1},
 		INVALID,		{"fstpt",TERM,M,1} },
@@ -785,7 +927,7 @@ static const struct instable opFP1n2[8][8] = {
 		{"fcoml",TERM,M,1},	{"fcompl",TERM,M,1},
 /*  [4,1]  */	{"fsubl",TERM,M,1},	{"fsubrl",TERM,M,1},
 		{"fdivl",TERM,M,1},	{"fdivrl",TERM,M,1} },
-/*  [5,0]  */ { {"fldl",TERM,M,1},	INVALID,
+/*  [5,0]  */ { {"fldl",TERM,M,1},	{"fisttpll",TERM,M,1},
 		{"fstl",TERM,M,1},	{"fstpl",TERM,M,1},
 /*  [5,4]  */	{"frstor",TERM,M,1},	INVALID,
 		{"fnsave",TERM,M,1},	{"fnstsw",TERM,M,1} },
@@ -793,7 +935,7 @@ static const struct instable opFP1n2[8][8] = {
 		{"ficoms",TERM,M,1},	{"ficomps",TERM,M,1},
 /*  [6,4]  */	{"fisubs",TERM,M,1},	{"fisubrs",TERM,M,1},
 		{"fidivs",TERM,M,1},	{"fidivrs",TERM,M,1} },
-/*  [7,0]  */ { {"filds",TERM,M,1},	INVALID,
+/*  [7,0]  */ { {"filds",TERM,M,1},	{"fisttps",TERM,M,1},
 		{"fists",TERM,M,1},	{"fistps",TERM,M,1},
 /*  [7,4]  */	{"fbld",TERM,M,1},	{"fildq",TERM,M,1},
 		{"fbstp",TERM,M,1},	{"fistpq",TERM,M,1} },
@@ -1023,15 +1165,15 @@ unsigned long sect_addr,
 enum byte_sex object_byte_sex,
 struct relocation_info *sorted_relocs,
 unsigned long nsorted_relocs,
-struct nlist *symbols,
+nlist_t *symbols,
 unsigned long nsymbols,
-struct nlist *sorted_symbols,
+struct symbol *sorted_symbols,
 unsigned long nsorted_symbols,
 char *strings,
 unsigned long strings_size,
 unsigned long *indirect_symbols,
 unsigned long nindirect_symbols,
-struct mach_header *mh,
+mach_header_t *mh,
 struct load_command *load_commands,
 enum bool verbose)
 {
@@ -1046,6 +1188,7 @@ enum bool verbose)
 
     unsigned long length;
     unsigned char byte;
+       unsigned char opcode_suffix;
     /* nibbles (4 bits) of the opcode */
     unsigned opcode1, opcode2, opcode3, opcode4, opcode5, prefix_byte;
     const struct instable *dp, *prefix_dp;
@@ -1121,6 +1264,8 @@ enum bool verbose)
 		break;
 	}
 
+       got_modrm_byte = FALSE;
+
 	/*
 	 * Some 386 instructions have 2 bytes of opcode before the mod_r/m
 	 * byte so we need to perform a table indirection.
@@ -1145,13 +1290,51 @@ enum bool verbose)
 	    }
 	    else{
 		/*
-		 * Since the opcode is not an SSE or SSE2 instruction that uses
-		 * the prefix byte as the "third opcode byte" print the
-		 * delayed last prefix if any.
+		 * 3DNow! instructions have 2 bytes of opcode followed by their
+		 * operands and then an instruction-specific suffix byte.
 		 */
-		if(prefix_dp != NULL)
-		    printf(prefix_dp->name);
-	    }
+		if(dp->indirect == (const struct instable *)op0F0F){
+		    data16 = FALSE;
+		    mmx = TRUE;
+		    if(got_modrm_byte == FALSE){
+			got_modrm_byte = TRUE;
+			byte = get_value(sizeof(char), sect, &length, &left);
+			modrm_byte(&mode, &reg, &r_m, byte);
+		    }
+		    GET_OPERAND(&symadd0, &symsub0, &value0, &value0_size,
+				result0);
+		    opcode_suffix = get_value(sizeof(char), sect, &length,
+					      &left);
+		    dp = &op0F0F[opcode_suffix >> 4][opcode_suffix & 0x0F];
+		}
+		else if(dp->indirect == (const struct instable *)op0F01){
+		    if(got_modrm_byte == FALSE){
+			got_modrm_byte = TRUE;
+			byte = get_value(sizeof(char), sect, &length, &left);
+			modrm_byte(&mode, &reg, &r_m, byte);
+			opcode3 = reg;
+		    }
+		    if(byte == 0xc8){
+			data16 = FALSE;
+			mmx = TRUE;
+			dp = &op_monitor;
+		    }
+		    else if(byte == 0xc9){
+			data16 = FALSE;
+			mmx = TRUE;
+			dp = &op_mwait;
+		    }
+		}
+		else{
+		    /*
+		     * Since the opcode is not an SSE or SSE2 instruction that
+		     * uses the prefix byte as the "third opcode byte" print the
+		     * delayed last prefix if any.
+		     */
+		    if(prefix_dp != NULL)
+			printf(prefix_dp->name);
+		}
+            }
 	}
 	else{
 	    /*
@@ -1171,15 +1354,16 @@ enum bool verbose)
 		printf(prefix_dp->name);
 	}
 
-	got_modrm_byte = FALSE;
 	if(dp->indirect != TERM){
 	    /*
 	     * This must have been an opcode for which several instructions
 	     * exist.  The opcode3 field further decodes the instruction.
 	     */
-	    got_modrm_byte = TRUE;
-	    byte = get_value(sizeof(char), sect, &length, &left);
-	    modrm_byte(&mode, (unsigned long *)&opcode3, &r_m, byte);
+	    if(got_modrm_byte == FALSE){
+		got_modrm_byte = TRUE;
+		byte = get_value(sizeof(char), sect, &length, &left);
+		modrm_byte(&mode, (unsigned long *)&opcode3, &r_m, byte);
+	    }
 	    /*
 	     * decode 287 instructions (D8-DF) from opcodeN
 	     */
@@ -1513,9 +1697,9 @@ enum bool verbose)
 		if(prefix_byte == 0x66)
 		    printf("%slpd\t", mnemonic);
 		else if(prefix_byte == 0xf2)
-		    printf("%slsd\t", mnemonic);
+		    printf("movddup\t");
 		else if(prefix_byte == 0xf3)
-		    printf("%slss\t", mnemonic);
+		    printf("%movsldup\t");
 		else{ /* no prefix_byte */
 		    if(mode == REG_ONLY)
 			printf("%shlps\t", mnemonic);
@@ -1530,7 +1714,7 @@ enum bool verbose)
 		else if(prefix_byte == 0xf2)
 		    printf("%shsd\t", mnemonic);
 		else if(prefix_byte == 0xf3)
-		    printf("%shss\t", mnemonic);
+		    printf("movshdup\t");
 		else{ /* no prefix_byte */
 		    if(mode == REG_ONLY)
 			printf("%slhps\t", mnemonic);
@@ -1773,6 +1957,23 @@ enum bool verbose)
 		    wbit = LONGOPERAND;
 		}
 		break;
+	    case 0xd0: /* addsubpd */
+	    case 0x7c: /* haddp */
+	    case 0x7d: /* hsubp */
+		if(prefix_byte == 0x66){
+		    printf("%sd\t", mnemonic);
+		    sse2 = TRUE;
+		}
+		else if(prefix_byte == 0xf2){
+		    printf("%ss\t", mnemonic);
+		    sse2 = TRUE;
+		}
+		else{ /* no prefix_byte */
+		    sprintf(result1, "%%mm%lu", reg);
+		    printf("%s\t", mnemonic);
+		    mmx = TRUE;
+		}
+		break;
 	    case 0xd7: /* pmovmskb */
 		if(prefix_byte == 0x66){
 		    reg_name = REG32[reg][1];
@@ -1801,6 +2002,10 @@ enum bool verbose)
 		    printf("%s\t", mnemonic);
 		    mmx = TRUE;
 		}
+		break;
+	    case 0xf0: /* lddqu */
+		printf("%s\t", mnemonic);
+		sse2 = TRUE;
 		break;
 	    case 0xf7: /* maskmovdqu & maskmovq */
 		sse2 = TRUE;
@@ -1968,6 +2173,15 @@ enum bool verbose)
 	    printf("%%xmm%lu\n", r_m);
 	    return(length);
 
+       /* 3DNow instructions */
+       case AMD3DNOW:
+               printf("%s\t", mnemonic);
+           sprintf(result1, "%%mm%lu", reg);
+           print_operand(seg, symadd0, symsub0, value0, value0_size,
+                         result0, ",");
+           printf("%s\n", result1);
+           return(length);
+
 	/* prefetch instructions */
 	case PFCH:
 	    if(got_modrm_byte == FALSE){
@@ -1993,6 +2207,26 @@ enum bool verbose)
 		printf("w\t");
 	    else
 		printf("l\t");
+           GET_OPERAND(&symadd0, &symsub0, &value0, &value0_size, result0);
+           print_operand(seg, symadd0, symsub0, value0, value0_size,
+                         result0, "\n");
+           return(length);
+
+       /* 3DNow! prefetch instructions */
+       case PFCH3DNOW:
+           if(got_modrm_byte == FALSE){
+               got_modrm_byte = TRUE;
+               byte = get_value(sizeof(char), sect, &length, &left);
+               modrm_byte(&mode, &reg, &r_m, byte);
+           }
+           switch(reg){
+           case 0:
+               printf("%s\t", dp->name);
+               break;
+           case 1:
+               printf("%sw\t", dp->name);
+               break;
+           }
 	    GET_OPERAND(&symadd0, &symsub0, &value0, &value0_size, result0);
 	    print_operand(seg, symadd0, symsub0, value0, value0_size,
 			  result0, "\n");
@@ -2588,12 +2822,12 @@ unsigned long *left,
 const unsigned long addr,
 const struct relocation_info *sorted_relocs,
 const unsigned long nsorted_relocs,
-const struct nlist *symbols,
+const nlist_t *symbols,
 const unsigned long nsymbols,
 const char *strings,
 const unsigned long strings_size,
 
-const struct nlist *sorted_symbols,
+const struct symbol *sorted_symbols,
 const unsigned long nsorted_symbols,
 const enum bool verbose)
 {
@@ -2690,12 +2924,12 @@ unsigned long *left,
 const unsigned long addr,
 const struct relocation_info *sorted_relocs,
 const unsigned long nsorted_relocs,
-const struct nlist *symbols,
+const nlist_t *symbols,
 const unsigned long nsymbols,
 const char *strings,
 const unsigned long strings_size,
 
-const struct nlist *sorted_symbols,
+const struct symbol *sorted_symbols,
 const unsigned long nsorted_symbols,
 const enum bool verbose)
 {
@@ -2734,12 +2968,12 @@ unsigned long *left,
 const unsigned long addr,
 const struct relocation_info *sorted_relocs,
 const unsigned long nsorted_relocs,
-const struct nlist *symbols,
+const nlist_t *symbols,
 const unsigned long nsymbols,
 const char *strings,
 const unsigned long strings_size,
 
-const struct nlist *sorted_symbols,
+const struct symbol *sorted_symbols,
 const unsigned long nsorted_symbols,
 const enum bool verbose)
 {
@@ -2784,11 +3018,11 @@ const unsigned long sect_offset,
 const unsigned long value,
 const struct relocation_info *relocs,
 const unsigned long nrelocs,
-const struct nlist *symbols,
+const nlist_t *symbols,
 const unsigned long nsymbols,
 const char *strings,
 const unsigned long strings_size,
-const struct nlist *sorted_symbols,
+const struct symbol *sorted_symbols,
 const unsigned long nsorted_symbols,
 const enum bool verbose)
 {
@@ -2830,7 +3064,8 @@ const enum bool verbose)
 		    }
 		    continue;
 		}
-		if(sreloc->r_type != GENERIC_RELOC_SECTDIFF){
+		if(sreloc->r_type != GENERIC_RELOC_SECTDIFF &&
+		   sreloc->r_type != GENERIC_RELOC_LOCAL_SECTDIFF){
 		    fprintf(stderr, "Unknown relocation r_type for entry "
 			    "%lu\n", i);
 		    continue;
@@ -2900,11 +3135,26 @@ print_operand(
 const char *seg,
 const char *symadd,
 const char *symsub,
-const unsigned int value,
-const unsigned int value_size,
+unsigned int value,
+unsigned int value_size,
 const char *result,
 const char *tail)
 {
+	/*
+	 * To allow the assembler to assemble the same thing as being
+	 * disassembled we need to deal with the fact that the assembler treats
+	 * all expressions as signed 32-bits.  So if the value_size is smaller
+	 * than 32-bits and signed we sign extend it and force the size to be
+	 * 32-bits.
+	 */
+	if(value_size == 1 && (value & 0x80) == 0x80){
+	    value = 0xffffff00 | (value & 0xff);
+	    value_size = 4;
+	}
+	else if(value_size == 2 && (value & 0x8000) == 0x8000){
+	    value = 0xffff0000 | (value & 0xffff);
+	    value_size = 4;
+	}
 	if(symadd != NULL){
 	    if(symsub != NULL){
 		if(value_size != 0){

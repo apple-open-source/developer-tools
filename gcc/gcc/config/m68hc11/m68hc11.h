@@ -92,7 +92,9 @@ Note:
   while (0)
 
 /* As an embedded target, we have no libc.  */
-#define inhibit_libc
+#ifndef inhibit_libc
+#  define inhibit_libc
+#endif
 
 /* Forward type declaration for prototypes definitions.
    rtx_ptr is equivalent to rtx. Can't use the same name.  */
@@ -1034,17 +1036,6 @@ typedef struct m68hc11_args
   int nregs;
 } CUMULATIVE_ARGS;
 
-/* A C expression that indicates when an argument must be passed by reference.
-   If nonzero for an argument, a copy of that argument is made in memory and a
-   pointer to the argument is passed instead of the argument itself.
-   The pointer is passed in whatever way is appropriate for passing a pointer
-   to that type.
- 
-   64-bit numbers are passed by reference.  */
-#define FUNCTION_ARG_PASS_BY_REFERENCE(CUM, MODE, TYPE, NAMED) \
-    m68hc11_function_arg_pass_by_reference (& (CUM), (MODE), (TYPE), (NAMED))
-
-
 /* If defined, a C expression which determines whether, and in which direction,
    to pad out an argument with extra space.  The value should be of type
    `enum direction': either `upward' to pad above the argument,
@@ -1057,18 +1048,6 @@ typedef struct m68hc11_args
 #undef PAD_VARARGS_DOWN
 #define PAD_VARARGS_DOWN \
   (m68hc11_function_arg_padding (TYPE_MODE (type), type) == downward)
-
-/* A C expression that indicates when it is the called function's
-   responsibility to make a copy of arguments passed by invisible
-   reference.  Normally, the caller makes a copy and passes the
-   address of the copy to the routine being called.  When
-   FUNCTION_ARG_CALLEE_COPIES is defined and is nonzero, the caller
-   does not make a copy.  Instead, it passes a pointer to the "live"
-   value.  The called function must not modify this value.  If it can
-   be determined that the value won't be modified, it need not make a
-   copy; otherwise a copy must be made.  */
-#define FUNCTION_ARG_CALLEE_COPIES(CUM, MODE, TYPE, NAMED)		\
-    ((NAMED) && FUNCTION_ARG_PASS_BY_REFERENCE (CUM, MODE, TYPE, NAMED))
 
 /* Initialize a variable CUM of type CUMULATIVE_ARGS for a call to a
    function whose data type is FNTYPE. For a library call, FNTYPE is 0.  */
@@ -1103,14 +1082,6 @@ typedef struct m68hc11_args
    it forbids all spill registers at that point.  Enabling
    caller saving results in spill failure.  */
 #define CALLER_SAVE_PROFITABLE(REFS,CALLS) 0
-
-/* For an arg passed partly in registers and partly in memory,
-   this is the number of registers used.
-   For args passed entirely in registers or entirely in memory, zero.
-
-   Passing an arg partly in register and memory does not work at all.
-   Don't do that.  */
-#define FUNCTION_ARG_PARTIAL_NREGS(CUM, MODE, TYPE, NAMED) (0)
 
 /* 1 if N is a possible register number for function argument passing.
    D is for 16-bit values, X is for 32-bit (X+D).  */
@@ -1633,6 +1604,7 @@ do {                                                                    \
 {"m68hc11_shift_operator",   {ASHIFT, ASHIFTRT, LSHIFTRT, ROTATE, ROTATERT}},\
 {"m68hc11_eq_compare_operator", {EQ, NE}},                              \
 {"non_push_operand",         {SUBREG, REG, MEM}},			\
+{"splitable_operand",        {SUBREG, REG, MEM}},			\
 {"reg_or_some_mem_operand",  {SUBREG, REG, MEM}},			\
 {"tst_operand",              {SUBREG, REG, MEM}},			\
 {"cmp_operand",              {SUBREG, REG, MEM, SYMBOL_REF, LABEL_REF,	\

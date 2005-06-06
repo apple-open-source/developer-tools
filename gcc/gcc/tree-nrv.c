@@ -1,5 +1,5 @@
 /* Language independent return value optimizations
-   Copyright (C) 2004 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -54,7 +54,7 @@ struct nrv_data
      this function's RETURN_EXPR statements.  */
   tree var;
 
-  /* This is the function's RESULT_DECL.  We will replace all occurences
+  /* This is the function's RESULT_DECL.  We will replace all occurrences
      of VAR with RESULT_DECL when we apply this optimization.  */
   tree result;
 };
@@ -80,11 +80,12 @@ finalize_nrv_r (tree *tp, int *walk_subtrees, void *data)
   /* No need to walk into types.  */
   if (TYPE_P (*tp))
     *walk_subtrees = 0;
-  /* If this is a RETURN_EXPR, then set the expression being returned
-     to RESULT.  */
+
+  /* If this is a RETURN_EXPR, set the expression being returned to RESULT.  */
   else if (TREE_CODE (*tp) == RETURN_EXPR)
     TREE_OPERAND (*tp, 0) = dp->result;
-  /* Replace all occurences of VAR with RESULT.  */
+
+  /* Otherwise replace all occurrences of VAR with RESULT.  */
   else if (*tp == dp->var)
     *tp = dp->result;
 
@@ -153,6 +154,7 @@ tree_nrv (void)
 	  /* The returned value must be a local automatic variable of the
 	     same type and alignment as the function's result.  */
 	  if (TREE_CODE (found) != VAR_DECL
+	      || TREE_THIS_VOLATILE (found)
 	      || DECL_CONTEXT (found) != current_function_decl
 	      || TREE_STATIC (found)
 	      || TREE_ADDRESSABLE (found)
@@ -213,5 +215,6 @@ struct tree_opt_pass pass_nrv =
   0,					/* properties_provided */
   0,					/* properties_destroyed */
   0,					/* todo_flags_start */
-  TODO_dump_func | TODO_ggc_collect	/* todo_flags_finish */
+  TODO_dump_func | TODO_ggc_collect,			/* todo_flags_finish */
+  0					/* letter */
 };

@@ -1,6 +1,6 @@
 /* Definitions of target machine for GNU compiler, for Sun SPARC.
    Copyright (C) 1987, 1988, 1989, 1992, 1994, 1995, 1996, 1997, 1998, 1999
-   2000, 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+   2000, 2001, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
    Contributed by Michael Tiemann (tiemann@cygnus.com).
    64-bit SPARC-V9 support by Michael Tiemann, Jim Wilson, and Doug Evans,
    at Cygnus Support.
@@ -24,6 +24,84 @@ Boston, MA 02111-1307, USA.  */
 
 /* Note that some other tm.h files include this one and then override
    whatever definitions are necessary.  */
+
+/* Define the specific costs for a given cpu */
+
+struct processor_costs {
+  /* Integer load */
+  const int int_load;
+
+  /* Integer signed load */
+  const int int_sload;
+
+  /* Integer zeroed load */
+  const int int_zload;
+
+  /* Float load */
+  const int float_load;
+
+  /* fmov, fneg, fabs */
+  const int float_move;
+
+  /* fadd, fsub */
+  const int float_plusminus;
+
+  /* fcmp */
+  const int float_cmp;
+
+  /* fmov, fmovr */
+  const int float_cmove;
+
+  /* fmul */
+  const int float_mul;
+
+  /* fdivs */
+  const int float_div_sf;
+
+  /* fdivd */
+  const int float_div_df;
+
+  /* fsqrts */
+  const int float_sqrt_sf;
+
+  /* fsqrtd */
+  const int float_sqrt_df;
+
+  /* umul/smul */
+  const int int_mul;
+
+  /* mulX */
+  const int int_mulX;
+
+  /* integer multiply cost for each bit set past the most
+     significant 3, so the formula for multiply cost becomes:
+
+	if (rs1 < 0)
+	  highest_bit = highest_clear_bit(rs1);
+	else
+	  highest_bit = highest_set_bit(rs1);
+	if (highest_bit < 3)
+	  highest_bit = 3;
+	cost = int_mul{,X} + ((highest_bit - 3) / int_mul_bit_factor);
+
+     A value of zero indicates that the multiply costs is fixed,
+     and not variable.  */
+  const int int_mul_bit_factor;
+
+  /* udiv/sdiv */
+  const int int_div;
+
+  /* divX */
+  const int int_divX;
+
+  /* movcc, movr */
+  const int int_cmove;
+
+  /* penalty for shifts, due to scheduling rules etc. */
+  const int shift_penalty;
+};
+
+extern const struct processor_costs *sparc_costs;
 
 /* Target CPU builtins.  FIXME: Defining sparc is for the benefit of
    Solaris only; otherwise just define __sparc__.  Sadly the headers
@@ -125,6 +203,19 @@ extern enum cmodel sparc_cmodel;
 #define TARGET_CM_EMBMEDANY (sparc_cmodel == CM_EMBMEDANY)
 
 #define SPARC_DEFAULT_CMODEL CM_32
+
+/* The SPARC-V9 architecture defines a relaxed memory ordering model (RMO)
+   which requires the following macro to be true if enabled.  Prior to V9,
+   there are no instructions to even talk about memory synchronization.
+   Note that the UltraSPARC III processors don't implement RMO, unlike the
+   UltraSPARC II processors.
+
+   Default to false; for example, Solaris never enables RMO, only ever uses
+   total memory ordering (TMO).  */
+#define SPARC_RELAXED_ORDERING false
+
+/* Do not use the .note.GNU-stack convention by default.  */
+#define NEED_INDICATE_EXEC_STACK 0
 
 /* This is call-clobbered in the normal ABI, but is reserved in the
    home grown (aka upward compatible) embedded ABI.  */
@@ -393,10 +484,6 @@ extern enum cmodel sparc_cmodel;
 #define CAN_DEBUG_WITHOUT_FP
 
 #define OVERRIDE_OPTIONS  sparc_override_options ()
-
-/* Generate DBX debugging information.  */
-
-#define DBX_DEBUGGING_INFO 1
 
 /* Run-time compilation parameters selecting different hardware subsets.  */
 
@@ -463,7 +550,7 @@ extern int target_flags;
 #define TARGET_HARD_QUAD (target_flags & MASK_HARD_QUAD)
 
 /* Nonzero on little-endian machines.  */
-/* ??? Little endian support currently only exists for sparclet-aout and
+/* ??? Little endian support currently only exists for sparc86x-elf and
    sparc64-elf configurations.  May eventually want to expand the support
    to all targets, but for now it's kept local to only those two.  */
 #define MASK_LITTLE_ENDIAN 0x1000
@@ -691,6 +778,8 @@ extern struct sparc_cpu_select sparc_select[];
 #define MIN_UNITS_PER_WORD	4
 #endif
 
+#define UNITS_PER_SIMD_WORD	(TARGET_VIS ? 8 : 0)
+
 /* Now define the sizes of the C data types.  */
 
 #define SHORT_TYPE_SIZE		16
@@ -806,7 +895,7 @@ if (TARGET_ARCH64				\
    SPARC has 32 integer registers and 32 floating point registers.
    64 bit SPARC has 32 additional fp regs, but the odd numbered ones are not
    accessible.  We still account for them to simplify register computations
-   (eg: in CLASS_MAX_NREGS).  There are also 4 fp condition code registers, so
+   (e.g.: in CLASS_MAX_NREGS).  There are also 4 fp condition code registers, so
    32+32+32+4 == 100.
    Register 100 is used as the integer condition code register.
    Register 101 is used as the soft frame pointer register.  */
@@ -1043,8 +1132,7 @@ extern int sparc_mode_class[];
 /* Value should be nonzero if functions must have frame pointers.
    Zero means the frame pointer need not be set up (and parms
    may be accessed via the stack pointer) in functions that seem suitable.
-   This is computed in `reload', in reload1.c.
-   Used in flow.c, global.c, and reload1.c.  */
+   Used in flow.c, global.c, ra.c and reload1.c.  */
 #define FRAME_POINTER_REQUIRED	\
   (! (leaf_function_p () && only_leaf_regs_used ()))
 
@@ -1511,16 +1599,16 @@ extern char leaf_reg_remap[];
 #define CAN_ELIMINATE(FROM, TO) \
   ((TO) == HARD_FRAME_POINTER_REGNUM || !FRAME_POINTER_REQUIRED)
 
-#define INITIAL_ELIMINATION_OFFSET(FROM, TO, OFFSET) \
-  do {								\
-    (OFFSET) = 0;						\
-    if ((TO) == STACK_POINTER_REGNUM)				\
-      /* Note, we always pretend that this is a leaf function	\
-	 because if it's not, there's no point in trying to	\
-	 eliminate the frame pointer.  If it is a leaf		\
-	 function, we guessed right!  */			\
-      (OFFSET) = compute_frame_size (get_frame_size (), 1);	\
-    (OFFSET) += SPARC_STACK_BIAS;				\
+/* We always pretend that this is a leaf function because if it's not,
+   there's no point in trying to eliminate the frame pointer.  If it
+   is a leaf function, we guessed right!  */
+#define INITIAL_ELIMINATION_OFFSET(FROM, TO, OFFSET) 			\
+  do {									\
+    if ((TO) == STACK_POINTER_REGNUM)					\
+      (OFFSET) = sparc_compute_frame_size (get_frame_size (), 1);	\
+    else								\
+      (OFFSET) = 0;							\
+    (OFFSET) += SPARC_STACK_BIAS;					\
   } while (0)
 
 /* Keep the stack pointer constant throughout the function.
@@ -1592,7 +1680,7 @@ extern char leaf_reg_remap[];
 /* Define the size of space to allocate for the return value of an
    untyped_call.  */
 
-#define APPLY_RESULT_SIZE 16
+#define APPLY_RESULT_SIZE (TARGET_ARCH64 ? 24 : 16)
 
 /* 1 if N is a possible register number for function argument passing.
    On SPARC, these are the "output" registers.  v9 also uses %f0-%f31.  */
@@ -1636,13 +1724,6 @@ init_cumulative_args (& (CUM), (FNTYPE), (LIBNAME), (FNDECL));
 #define FUNCTION_ARG_ADVANCE(CUM, MODE, TYPE, NAMED) \
 function_arg_advance (& (CUM), (MODE), (TYPE), (NAMED))
 
-/* Nonzero if we do not know how to pass TYPE solely in registers.  */
-
-#define MUST_PASS_IN_STACK(MODE,TYPE)			\
-  ((TYPE) != 0						\
-   && (TREE_CODE (TYPE_SIZE (TYPE)) != INTEGER_CST	\
-       || TREE_ADDRESSABLE (TYPE)))
-
 /* Determine where to put an argument to a function.
    Value is zero to push the argument on the stack,
    or a hard register in which to store the argument.
@@ -1664,22 +1745,6 @@ function_arg (& (CUM), (MODE), (TYPE), (NAMED), 0)
 
 #define FUNCTION_INCOMING_ARG(CUM, MODE, TYPE, NAMED) \
 function_arg (& (CUM), (MODE), (TYPE), (NAMED), 1)
-
-/* For an arg passed partly in registers and partly in memory,
-   this is the number of registers used.
-   For args passed entirely in registers or entirely in memory, zero.  */
-
-#define FUNCTION_ARG_PARTIAL_NREGS(CUM, MODE, TYPE, NAMED) \
-function_arg_partial_nregs (& (CUM), (MODE), (TYPE), (NAMED))
-
-/* A C expression that indicates when an argument must be passed by reference.
-   If nonzero for an argument, a copy of that argument is made in memory and a
-   pointer to the argument is passed instead of the argument itself.
-   The pointer is passed in whatever way is appropriate for passing a pointer
-   to that type.  */
-
-#define FUNCTION_ARG_PASS_BY_REFERENCE(CUM, MODE, TYPE, NAMED) \
-function_arg_pass_by_reference (& (CUM), (MODE), (TYPE), (NAMED))
 
 /* If defined, a C expression which determines whether, and in which direction,
    to pad out an argument with extra space.  The value should be of type
@@ -1733,7 +1798,7 @@ extern GTY(()) rtx sparc_compare_op1;
    case of a global register variable occupying more than one register
    we prefix the second and following registers with .gnu.part1. etc.  */
 
-extern char sparc_hard_reg_printed[8];
+extern GTY(()) char sparc_hard_reg_printed[8];
 
 #ifdef HAVE_AS_REGISTER_PSEUDO_OP
 #define ASM_DECLARE_REGISTER_GLOBAL(FILE, DECL, REGNO, NAME)		\
@@ -1775,13 +1840,9 @@ do {									\
  (get_frame_size () != 0	\
   || current_function_calls_alloca || current_function_outgoing_args_size)
 
-#define DELAY_SLOTS_FOR_EPILOGUE 1
-
-#define ELIGIBLE_FOR_EPILOGUE_DELAY(trial, slots_filled) \
-  eligible_for_epilogue_delay (trial, slots_filled)
-
 /* Define registers used by the epilogue and return instruction.  */
-#define EPILOGUE_USES(REGNO) (REGNO == 31)
+#define EPILOGUE_USES(REGNO) ((REGNO) == 31 \
+  || (current_function_calls_eh_return && (REGNO) == 1))
 
 /* Length in units of the trampoline for entering a nested function.  */
 
@@ -1802,10 +1863,6 @@ do {									\
 /* Implement `va_start' for varargs and stdarg.  */
 #define EXPAND_BUILTIN_VA_START(valist, nextarg) \
   sparc_va_start (valist, nextarg)
-
-/* Implement `va_arg'.  */
-#define EXPAND_BUILTIN_VA_ARG(valist, type) \
-  sparc_va_arg (valist, type)
 
 /* Generate RTL to flush the register windows so as to make arbitrary frames
    available.  */
@@ -1989,7 +2046,9 @@ do {									\
        integer register, needed for ldd/std instructions.
 
    'W' handles the memory operand when moving operands in/out
-       of 'e' constraint floating point registers.  */
+       of 'e' constraint floating point registers.
+
+   'Y' handles the zero vector constant.  */
 
 #ifndef REG_OK_STRICT
 
@@ -2181,6 +2240,11 @@ do {                                                                    \
    in one reasonably fast instruction.  */
 #define MOVE_MAX 8
 
+/* If a memory-to-memory move would take MOVE_RATIO or more simple
+   move-instruction pairs, we will do a movmem or libcall instead.  */
+
+#define MOVE_RATIO (optimize_size ? 3 : 8)
+
 /* Define if operations between registers always perform the operation
    on the full register even if a narrower mode is specified.  */
 #define WORD_REGISTER_OPERATIONS
@@ -2188,7 +2252,7 @@ do {                                                                    \
 /* Define if loading in MODE, an integral mode narrower than BITS_PER_WORD
    will either zero-extend or sign-extend.  The value of this macro should
    be the code that says which one of the two operations is implicitly
-   done, NIL if none.  */
+   done, UNKNOWN if none.  */
 #define LOAD_EXTEND_OP(MODE) ZERO_EXTEND
 
 /* Nonzero if access to memory by bytes is slow and undesirable.
@@ -2207,9 +2271,6 @@ do {                                                                    \
 
 /* Specify the machine mode used for addresses.  */
 #define Pmode (TARGET_ARCH64 ? DImode : SImode)
-
-/* Generate calls to memcpy, memcmp and memset.  */
-#define TARGET_MEM_FUNCTIONS
 
 /* Given a comparison code (EQ, NE, etc.) and the first operand of a COMPARE,
    return the mode to be used for the comparison.  For floating-point,
@@ -2462,6 +2523,19 @@ do {									\
 #define ASM_OUTPUT_IDENT(FILE, NAME) \
   fprintf (FILE, "%s\"%s\"\n", IDENT_ASM_OP, NAME);
 
+/* Prettify the assembly.  */
+
+extern int sparc_indent_opcode;
+
+#define ASM_OUTPUT_OPCODE(FILE, PTR)	\
+  do {					\
+    if (sparc_indent_opcode)		\
+      {					\
+	putc (' ', FILE);		\
+	sparc_indent_opcode = 0;	\
+      }					\
+  } while (0)
+
 /* Emit a dtp-relative reference to a TLS variable.  */
 
 #ifdef HAVE_AS_TLS
@@ -2470,8 +2544,8 @@ do {									\
 #endif
 
 #define PRINT_OPERAND_PUNCT_VALID_P(CHAR) \
-  ((CHAR) == '#' || (CHAR) == '*' || (CHAR) == '^'		\
-   || (CHAR) == '(' || (CHAR) == '_' || (CHAR) == '&')
+  ((CHAR) == '#' || (CHAR) == '*' || (CHAR) == '('		\
+   || (CHAR) == ')' || (CHAR) == '_' || (CHAR) == '&')
 
 /* Print operand X (an rtx) in assembler syntax to file FILE.
    CODE is a letter or dot (`z' in `%z0') or 0 if no letter was specified.
@@ -2577,10 +2651,9 @@ do {									\
 {"fcc_reg_operand", {REG}},						\
 {"fcc0_reg_operand", {REG}},						\
 {"icc_or_fcc_reg_operand", {REG}},					\
-{"restore_operand", {REG}},						\
 {"call_operand", {MEM}},						\
 {"call_operand_address", {SYMBOL_REF, LABEL_REF, CONST, CONST_DOUBLE,	\
-	ADDRESSOF, SUBREG, REG, PLUS, LO_SUM, CONST_INT}},		\
+	SUBREG, REG, PLUS, LO_SUM, CONST_INT}},				\
 {"symbolic_operand", {SYMBOL_REF, LABEL_REF, CONST}},			\
 {"symbolic_memory_operand", {SUBREG, MEM}},				\
 {"label_ref_operand", {LABEL_REF}},					\
@@ -2612,6 +2685,7 @@ do {									\
 {"uns_arith_operand", {SUBREG, REG, CONST_INT}},			\
 {"clobbered_register", {REG}},						\
 {"input_operand", {SUBREG, REG, CONST_INT, MEM, CONST}},		\
+{"compare_operand", {SUBREG, REG, ZERO_EXTRACT}},			\
 {"const64_operand", {CONST_INT, CONST_DOUBLE}},				\
 {"const64_high_operand", {CONST_INT, CONST_DOUBLE}},			\
 {"tgd_symbolic_operand", {SYMBOL_REF}},					\

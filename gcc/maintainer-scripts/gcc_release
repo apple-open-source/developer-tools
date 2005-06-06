@@ -248,15 +248,31 @@ EOF
 
   # Move message catalogs to source directory.
   mv ../objdir/gcc/po/*.gmo gcc/po/
+  [ -f libcpp/po/cpplib.pot ] && mv ../objdir/libcpp/po/*.gmo libcpp/po/
 
   # Create a "MD5SUMS" file to use for checking the validity of the release.
-  find . -type f |sed -e 's:^\./::' -e '/MD5SUMS/d' |sort |xargs md5sum >MD5SUMS
+  echo \
+"# This file contains the MD5 checksums of the files in the 
+# gcc-"${RELEASE}".tar.bz2 tarball.
+#
+# Besides verifying that all files in the tarball were correctly expanded,
+# it also can be used to determine if any files have changed since the
+# tarball was expanded or to verify that a patchfile was correctly applied.
+#
+# Suggested usage:
+# md5sum -c MD5SUMS | grep -v \"OK$\"
+" > MD5SUMS
+
+  find . -type f |
+  sed -e 's:^\./::' -e '/MD5SUMS/d' |
+  sort |
+  xargs md5sum >>MD5SUMS
 }
 
 # Buid a single tarfile.  The first argument is the name of the name
 # of the tarfile to build, without any suffixes.  They will be added
 # automatically.  The rest of the arguments are the files or
-# directories to include.
+# directories to include, and possibly other arguments to tar.
 
 build_tarfile() {
   # Get the name of the destination tar file.
@@ -267,6 +283,25 @@ build_tarfile() {
   (${TAR} cf - "$@" | ${BZIP2} > ${TARFILE}) || \
     error "Could not build tarfile"
   FILE_LIST="${FILE_LIST} ${TARFILE}"
+}
+
+# Build a single tarfile if any of the directories listed exist,
+# but not if none of them do (because that component doesn't exist
+# on this branch).
+maybe_build_tarfile() {
+  dest=$1
+  shift
+  dir_exists=0
+  for maybe_dir in "$@"; do
+    if [ -d "$maybe_dir" ]; then
+      dir_exists=1
+    fi
+  done
+  if [ $dir_exists = 1 ]; then
+    build_tarfile "$dest" "$@"
+  else
+    echo "Not building $dest tarfile"
+  fi
 }
 
 # Build the various tar files for the release.
@@ -286,13 +321,13 @@ build_tarfiles() {
   build_tarfile gcc-${RELEASE} `basename ${SOURCE_DIRECTORY}`
 
   # Now, build one for each of the languages.
-  build_tarfile gcc-ada-${RELEASE} ${ADA_DIRS}
-  build_tarfile gcc-g++-${RELEASE} ${CPLUSPLUS_DIRS}
-  build_tarfile gcc-g77-${RELEASE} ${FORTRAN_DIRS}
-  build_tarfile gcc-fortran-${RELEASE} ${FORTRAN95_DIRS}
-  build_tarfile gcc-java-${RELEASE} ${JAVA_DIRS}
-  build_tarfile gcc-objc-${RELEASE} ${OBJECTIVEC_DIRS}
-  build_tarfile gcc-testsuite-${RELEASE} ${TESTSUITE_DIRS}
+  maybe_build_tarfile gcc-ada-${RELEASE} ${ADA_DIRS}
+  maybe_build_tarfile gcc-g++-${RELEASE} ${CPLUSPLUS_DIRS}
+  maybe_build_tarfile gcc-g77-${RELEASE} ${FORTRAN_DIRS}
+  maybe_build_tarfile gcc-fortran-${RELEASE} ${FORTRAN95_DIRS}
+  maybe_build_tarfile gcc-java-${RELEASE} ${JAVA_DIRS}
+  maybe_build_tarfile gcc-objc-${RELEASE} ${OBJECTIVEC_DIRS}
+  maybe_build_tarfile gcc-testsuite-${RELEASE} ${TESTSUITE_DIRS}
    
   # The core is everything else.
   EXCLUDES=""
@@ -387,36 +422,102 @@ upload_files() {
   done
 }
 
+#Print description if snapshot exists
+snapshot_print() {
+  if [ -e ${RELEASE}/$1 ]; then
+     printf "%-38s%s\n\n" "$1" "$2" >> ${SNAPSHOT_README}
+     echo "  <tr><td><a href=\"$1\">$1</a></td>" >> ${SNAPSHOT_INDEX}
+     echo "      <td>$2</td></tr>" >> ${SNAPSHOT_INDEX}
+  fi
+}
+
 # Announce a snapshot, both on the web and via mail.
 announce_snapshot() {
   inform "Updating links and READMEs on the FTP server"
   
   TEXT_DATE=`date --date=$DATE +%B\ %d,\ %Y`
-  changedir "${SNAPSHOTS_DIR}"
-  sed -e "s%@DATE@%$DATE%g" \
-    -e "s%@TEXT_DATE@%$TEXT_DATE%g" \
-    -e "s%@LAST_DATE@%$LAST_DATE%g" \
-    -e "s%@BRANCH@%${BRANCH}%g" \
-    -e "s%@RELEASE@%${RELEASE}%g" \
-    -e "s%@EXPORT@%${EXPORTTAG} ${EXPORTDATE}%g" \
-    ~/scripts/snapshot-README > $$
-  mv $$ ${RELEASE}/README
-  sed -e "s%@DATE@%$DATE%g" \
-    -e "s%@TEXT_DATE@%$TEXT_DATE%g" \
-    -e "s%@LAST_DATE@%$LAST_DATE%g" \
-    -e "s%@BRANCH@%${BRANCH}%g" \
-    -e "s%@RELEASE@%${RELEASE}%g" \
-    -e "s%@EXPORT@%${EXPORTTAG} ${EXPORTDATE}%g" \
-    ~/scripts/snapshot-index.html > $$
-  mv $$ ${RELEASE}/index.html
+  SNAPSHOT_README=${RELEASE}/README
+  SNAPSHOT_INDEX=${RELEASE}/index.html
 
-  touch LATEST-IS-${BRANCH}-${DATE}
-  rm -f LATEST-IS-${BRANCH}-${LAST_DATE}
+  changedir "${SNAPSHOTS_DIR}"
+  echo \
+"Snapshot gcc-"${RELEASE}" is now available on
+  ftp://gcc.gnu.org/pub/gcc/snapshots/"${RELEASE}"/
+and on various mirrors, see http://gcc.gnu.org/mirrors.html for details.
+
+This snapshot has been generated from the GCC "${BRANCH}" CVS branch
+with the following options: "${EXPORTTAG} ${EXPORTDATE}"
+
+You'll find:
+" > ${SNAPSHOT_README}
+
+  echo \
+"<html>
+
+<head>
+<title>GCC "${RELEASE}" Snapshot</title>
+</head>
+
+<body>
+<h1>GCC "${RELEASE}" Snapshot</h1>
+
+<p>The <a href =\"http://gcc.gnu.org/\">GCC Project</a> makes
+periodic snapshots of the GCC source tree available to the public
+for testing purposes.</p>
+	
+<p>If you are planning to download and use one of our snapshots, then
+we highly recommend you join the GCC developers list.  Details for
+how to sign up can be found on the GCC project home page.</p>
+
+<p>This snapshot has been generated from the GCC "${BRANCH}" CVS branch
+with the following options: <code>"${EXPORTTAG} ${EXPORTDATE}"</code></p>
+
+<table>" > ${SNAPSHOT_INDEX}
+       
+  snapshot_print gcc-${RELEASE}.tar.bz2 "Complete GCC (includes all of below)"
+  snapshot_print gcc-core-${RELEASE}.tar.bz2 "C front end and core compiler"
+  snapshot_print gcc-ada-${RELEASE}.tar.bz2 "Ada front end and runtime"
+  snapshot_print gcc-fortran-${RELEASE}.tar.bz2 "Fortran front end and runtime"
+  snapshot_print gcc-g++-${RELEASE}.tar.bz2 "C++ front end and runtime"
+  snapshot_print gcc-g77-${RELEASE}.tar.bz2 "Fortran 77 front end and runtime"
+  snapshot_print gcc-java-${RELEASE}.tar.bz2 "Java front end and runtime"
+  snapshot_print gcc-objc-${RELEASE}.tar.bz2 "Objective-C front end and runtime"
+  snapshot_print gcc-testsuite-${RELEASE}.tar.bz2 "The GCC testsuite"
+
+  echo \
+"Diffs from "${BRANCH}"-"${LAST_DATE}" are available in the diffs/ subdirectory.
+
+When a particular snapshot is ready for public consumption the LATEST-"${BRANCH}"
+link is updated and a message is sent to the gcc list.  Please do not use
+a snapshot before it has been announced that way." >> ${SNAPSHOT_README}
+
+  echo \
+"</table>
+<p>Diffs from "${BRANCH}"-"${LAST_DATE}" are available in the
+<a href=\"diffs/\">diffs/ subdirectory</a>.</p>
+
+<p>When a particular snapshot is ready for public consumption the LATEST-"${BRANCH}"
+link is updated and a message is sent to the gcc list.  Please do not use
+a snapshot before it has been announced that way.</p>
+
+<hr />
+
+<address>
+<a href=\"mailto:gcc@gcc.gnu.org\">gcc@gcc.gnu.org</a>
+<br />
+Last modified "${TEXT_DATE}"
+</address>
+</body>
+
+</html>" >> ${SNAPSHOT_INDEX}
+
+  rm -f LATEST-${BRANCH}
+  ln -s ${RELEASE} LATEST-${BRANCH}
 
   inform "Sending mail"
 
   export QMAILHOST=gcc.gnu.org
-  mail -s "gcc-ss-${RELEASE} is now available" gcc@gcc.gnu.org < ${SNAPSHOTS_DIR}/${RELEASE}/README
+  mail -s "gcc-${RELEASE} is now available" gcc@gcc.gnu.org < ${SNAPSHOT_README}
 }
 
 ########################################################################

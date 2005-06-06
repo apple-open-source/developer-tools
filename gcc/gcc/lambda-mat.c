@@ -24,6 +24,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "tm.h"
 #include "ggc.h"
 #include "varray.h"
+#include "tree.h"
 #include "lambda.h"
 
 static void lambda_matrix_get_column (lambda_matrix, int, int, 
@@ -37,7 +38,7 @@ lambda_matrix_new (int m, int n)
   lambda_matrix mat;
   int i;
 
-  mat = ggc_alloc_cleared (m * sizeof (int));
+  mat = ggc_alloc (m * sizeof (lambda_vector));
   
   for (i = 0; i < m; i++)
     mat[i] = lambda_vector_new (n);
@@ -67,6 +68,29 @@ lambda_matrix_id (lambda_matrix mat, int size)
   for (i = 0; i < size; i++)
     for (j = 0; j < size; j++)
       mat[i][j] = (i == j) ? 1 : 0;
+}
+
+/* Return true if MAT is the identity matrix of SIZE */
+
+bool
+lambda_matrix_id_p (lambda_matrix mat, int size)
+{
+  int i, j;
+  for (i = 0; i < size; i++)
+    for (j = 0; j < size; j++)
+      {
+	if (i == j)
+	  {
+	    if (mat[i][j] != 1)
+	      return false;
+	  }
+	else
+	  {
+	    if (mat[i][j] != 0)
+	      return false;
+	  }
+      }
+  return true;
 }
 
 /* Negate the elements of the M x N matrix MAT1 and store it in MAT2.  */
@@ -129,17 +153,14 @@ lambda_matrix_mult (lambda_matrix mat1, lambda_matrix mat2,
 {
 
   int i, j, k;
-  lambda_vector row1, row3;
 
   for (i = 0; i < m; i++)
     {
-      row3 = mat3[i];
       for (j = 0; j < n; j++)
 	{
-	  row1 = mat1[i];
-	  row3[j] = 0;
+	  mat3[i][j] = 0;
 	  for (k = 0; k < r; k++)
-	    row3[j] += row1[k] * mat2[k][j];
+	    mat3[i][j] += mat1[i][k] * mat2[k][j];
 	}
     }
 }
@@ -157,18 +178,19 @@ lambda_matrix_get_column (lambda_matrix mat, int n, int col,
     vec[i] = mat[i][col];
 }
 
-/* Delete rows r1 to r2 (not including r2).  TODO */
+/* Delete rows r1 to r2 (not including r2).  */
 
 void
 lambda_matrix_delete_rows (lambda_matrix mat, int rows, int from, int to)
 {
-  int i, d;
-  d = to - from;
+  int i;
+  int dist;
+  dist = to - from;
 
   for (i = to; i < rows; i++)
-    mat[i - d] = mat[i];
+    mat[i - dist] = mat[i];
 
-  for (i = rows - d; i < rows; i++)
+  for (i = rows - dist; i < rows; i++)
     mat[i] = NULL;
 }
 
@@ -191,16 +213,12 @@ void
 lambda_matrix_row_add (lambda_matrix mat, int n, int r1, int r2, int const1)
 {
   int i;
-  lambda_vector row1, row2;
 
   if (const1 == 0)
     return;
 
-  row1 = mat[r1];
-  row2 = mat[r2];
-
   for (i = 0; i < n; i++)
-    row2[i] += const1 * row1[i];
+    mat[r2][i] += const1 * mat[r1][i];
 }
 
 /* Negate row R1 of matrix MAT which has N columns.  */
@@ -227,20 +245,18 @@ lambda_matrix_row_mc (lambda_matrix mat, int n, int r1, int const1)
 void
 lambda_matrix_col_exchange (lambda_matrix mat, int m, int col1, int col2)
 {
-  lambda_vector row;
   int i;
   int tmp;
   for (i = 0; i < m; i++)
     {
-      row = mat[i];
-      tmp = row[col1];
-      row[col1] = row[col2];
-      row[col2] = tmp;
+      tmp = mat[i][col1];
+      mat[i][col1] = mat[i][col2];
+      mat[i][col2] = tmp;
     }
 }
 
 /* Add a multiple of column C1 of matrix MAT with M rows to column C2:
-   C2 = C1 + CONST1 * C2.  */
+   C2 = C2 + CONST1 * C1.  */
 
 void
 lambda_matrix_col_add (lambda_matrix mat, int m, int c1, int c2, int const1)
@@ -420,8 +436,9 @@ lambda_matrix_inverse_hard (lambda_matrix mat, lambda_matrix inv, int n)
   return determinant;
 }
 
-/* Decompose mat to a product of a lower triangular H and a unimodular
-   U matrix.  */
+/* Decompose a N x N matrix MAT to a product of a lower triangular H
+   and a unimodular U matrix such that MAT = H.U.  N is the size of
+   the rows of MAT.  */
 
 void
 lambda_matrix_hermite (lambda_matrix mat, int n,
@@ -447,7 +464,7 @@ lambda_matrix_hermite (lambda_matrix mat, int n,
 	    }
 	}
 
-      /* Stop when only the diagonal element is non-zero.  */
+      /* Stop when only the diagonal element is nonzero.  */
       while (lambda_vector_first_nz (row, n, j + 1) < n)
 	{
 	  minimum_col = lambda_vector_min_nz (row, n, j);
@@ -464,14 +481,103 @@ lambda_matrix_hermite (lambda_matrix mat, int n,
     }
 }
 
-/* Find the first non-zero vector in mat, if found.
-   return rowsize if not found.  */
+/* Given an M x N integer matrix A, this function determines an M x
+   M unimodular matrix U, and an M x N echelon matrix S such that
+   "U.A = S".  This decomposition is also known as "right Hermite".
+   
+   Ref: Algorithm 2.1 page 33 in "Loop Transformations for
+   Restructuring Compilers" Utpal Banerjee.  */
+
+void
+lambda_matrix_right_hermite (lambda_matrix A, int m, int n,
+			     lambda_matrix S, lambda_matrix U)
+{
+  int i, j, i0 = 0;
+
+  lambda_matrix_copy (A, S, m, n);
+  lambda_matrix_id (U, m);
+
+  for (j = 0; j < n; j++)
+    {
+      if (lambda_vector_first_nz (S[j], m, i0) < m)
+	{
+	  ++i0;
+	  for (i = m - 1; i >= i0; i--)
+	    {
+	      while (S[i][j] != 0)
+		{
+		  int sigma, factor, a, b;
+
+		  a = S[i-1][j];
+		  b = S[i][j];
+		  sigma = (a * b < 0) ? -1: 1;
+		  a = abs (a);
+		  b = abs (b);
+		  factor = sigma * (a / b);
+
+		  lambda_matrix_row_add (S, n, i, i-1, -factor);
+		  lambda_matrix_row_exchange (S, i, i-1);
+
+		  lambda_matrix_row_add (U, m, i, i-1, -factor);
+		  lambda_matrix_row_exchange (U, i, i-1);
+		}
+	    }
+	}
+    }
+}
+
+/* Given an M x N integer matrix A, this function determines an M x M
+   unimodular matrix V, and an M x N echelon matrix S such that "A =
+   V.S".  This decomposition is also known as "left Hermite".
+   
+   Ref: Algorithm 2.2 page 36 in "Loop Transformations for
+   Restructuring Compilers" Utpal Banerjee.  */
+
+void
+lambda_matrix_left_hermite (lambda_matrix A, int m, int n,
+			     lambda_matrix S, lambda_matrix V)
+{
+  int i, j, i0 = 0;
+
+  lambda_matrix_copy (A, S, m, n);
+  lambda_matrix_id (V, m);
+
+  for (j = 0; j < n; j++)
+    {
+      if (lambda_vector_first_nz (S[j], m, i0) < m)
+	{
+	  ++i0;
+	  for (i = m - 1; i >= i0; i--)
+	    {
+	      while (S[i][j] != 0)
+		{
+		  int sigma, factor, a, b;
+
+		  a = S[i-1][j];
+		  b = S[i][j];
+		  sigma = (a * b < 0) ? -1: 1;
+		  a = abs (a);
+      b = abs (b);
+		  factor = sigma * (a / b);
+
+		  lambda_matrix_row_add (S, n, i, i-1, -factor);
+		  lambda_matrix_row_exchange (S, i, i-1);
+
+		  lambda_matrix_col_add (V, m, i-1, i, factor);
+		  lambda_matrix_col_exchange (V, m, i, i-1);
+		}
+	    }
+	}
+    }
+}
+
+/* When it exists, return the first nonzero row in MAT after row
+   STARTROW.  Otherwise return rowsize.  */
 
 int
 lambda_matrix_first_nz_vec (lambda_matrix mat, int rowsize, int colsize,
 			    int startrow)
 {
-
   int j;
   bool found = false;
 
@@ -496,9 +602,9 @@ lambda_matrix_project_to_null (lambda_matrix B, int rowsize,
   lambda_matrix M1, M2, M3, I;
   int determinant;
 
-  /* compute c(I-B^T inv(B B^T) B) e sub k   */
+  /* Compute c(I-B^T inv(B B^T) B) e sub k.  */
 
-  /* M1 is the transpose of B */
+  /* M1 is the transpose of B.  */
   M1 = lambda_matrix_new (colsize, colsize);
   lambda_matrix_transpose (B, M1, rowsize, colsize);
 
@@ -540,18 +646,6 @@ lambda_matrix_vector_mult (lambda_matrix matrix, int m, int n,
   for (i = 0; i < m; i++)
     for (j = 0; j < n; j++)
       dest[i] += matrix[i][j] * vec[j];
-}
-
-/* Print out a vector VEC of length N to OUTFILE.  */
-
-void
-print_lambda_vector (FILE * outfile, lambda_vector vector, int n)
-{
-  int i;
-
-  for (i = 0; i < n; i++)
-    fprintf (outfile, "%3d ", vector[i]);
-  fprintf (outfile, "\n");
 }
 
 /* Print out an M x N matrix MAT to OUTFILE.  */

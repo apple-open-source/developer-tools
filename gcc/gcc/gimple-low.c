@@ -1,6 +1,6 @@
 /* Tree lowering pass.  Lowers GIMPLE into unstructured form.
 
-   Copyright (C) 2003 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2005 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -46,11 +46,16 @@ struct lower_data
 {
   /* Block the current statement belongs to.  */
   tree block;
+
+  /* A TREE_LIST of label and return statements to be moved to the end
+     of the function.  */
+  tree return_statements;
 };
 
 static void lower_stmt (tree_stmt_iterator *, struct lower_data *);
 static void lower_bind_expr (tree_stmt_iterator *, struct lower_data *);
 static void lower_cond_expr (tree_stmt_iterator *, struct lower_data *);
+static void lower_return_expr (tree_stmt_iterator *, struct lower_data *);
 static bool expand_var_p (tree);
 
 /* Lowers the body of current_function_decl.  */
@@ -62,30 +67,60 @@ lower_function_body (void)
   tree *body_p = &DECL_SAVED_TREE (current_function_decl);
   tree bind = *body_p;
   tree_stmt_iterator i;
+  tree t, x;
 
-  if (TREE_CODE (bind) != BIND_EXPR)
-    abort ();
+  gcc_assert (TREE_CODE (bind) == BIND_EXPR);
 
   data.block = DECL_INITIAL (current_function_decl);
   BLOCK_SUBBLOCKS (data.block) = NULL_TREE;
   BLOCK_CHAIN (data.block) = NULL_TREE;
   TREE_ASM_WRITTEN (data.block) = 1;
 
+  data.return_statements = NULL_TREE;
+
   *body_p = alloc_stmt_list ();
   i = tsi_start (*body_p);
   tsi_link_after (&i, bind, TSI_NEW_STMT);
   lower_bind_expr (&i, &data);
 
-  if (data.block != DECL_INITIAL (current_function_decl))
-    abort ();
+  i = tsi_last (*body_p);
+
+  /* If the function falls off the end, we need a null return statement.
+     If we've already got one in the return_statements list, we don't
+     need to do anything special.  Otherwise build one by hand.  */
+  if (block_may_fallthru (*body_p)
+      && (data.return_statements == NULL
+          || TREE_OPERAND (TREE_VALUE (data.return_statements), 0) != NULL))
+    {
+      x = build (RETURN_EXPR, void_type_node, NULL);
+      SET_EXPR_LOCATION (x, cfun->function_end_locus);
+      tsi_link_after (&i, x, TSI_CONTINUE_LINKING);
+    }
+
+  /* If we lowered any return statements, emit the representative
+     at the end of the function.  */
+  for (t = data.return_statements ; t ; t = TREE_CHAIN (t))
+    {
+      x = build (LABEL_EXPR, void_type_node, TREE_PURPOSE (t));
+      tsi_link_after (&i, x, TSI_CONTINUE_LINKING);
+
+      /* Remove the line number from the representative return statement.
+	 It now fills in for many such returns.  Failure to remove this
+	 will result in incorrect results for coverage analysis.  */
+      x = TREE_VALUE (t);
+#ifdef USE_MAPPED_LOCATION
+      SET_EXPR_LOCATION (x, UNKNOWN_LOCATION);
+#else
+      SET_EXPR_LOCUS (x, NULL);
+#endif
+      tsi_link_after (&i, x, TSI_CONTINUE_LINKING);
+    }
+
+  gcc_assert (data.block == DECL_INITIAL (current_function_decl));
   BLOCK_SUBBLOCKS (data.block)
     = blocks_nreverse (BLOCK_SUBBLOCKS (data.block));
 
   clear_block_marks (data.block);
-
-  /* Avoid producing notes for blocks.  */
-  cfun->dont_emit_block_notes = 1;
-  reset_block_changes ();
 }
 
 struct tree_opt_pass pass_lower_cf = 
@@ -101,7 +136,8 @@ struct tree_opt_pass pass_lower_cf =
   PROP_gimple_lcf,			/* properties_provided */
   PROP_gimple_any,			/* properties_destroyed */
   0,					/* todo_flags_start */
-  TODO_dump_func			/* todo_flags_finish */
+  TODO_dump_func,			/* todo_flags_finish */
+  0					/* letter */
 };
 
 
@@ -136,6 +172,9 @@ lower_stmt (tree_stmt_iterator *tsi, struct lower_data *data)
     case COND_EXPR:
       lower_cond_expr (tsi, data);
       return;
+    case RETURN_EXPR:
+      lower_return_expr (tsi, data);
+      return;
 
     case TRY_FINALLY_EXPR:
     case TRY_CATCH_EXPR:
@@ -151,19 +190,20 @@ lower_stmt (tree_stmt_iterator *tsi, struct lower_data *data)
       
     case NOP_EXPR:
     case ASM_EXPR:
-    case RETURN_EXPR:
     case MODIFY_EXPR:
     case CALL_EXPR:
     case GOTO_EXPR:
     case LABEL_EXPR:
-    case VA_ARG_EXPR:
     case SWITCH_EXPR:
       break;
 
     default:
+#ifdef ENABLE_CHECKING
       print_node_brief (stderr, "", stmt, 0);
+      internal_error ("unexpected node");
+#endif
     case COMPOUND_EXPR:
-      abort ();
+      gcc_unreachable ();
     }
 
   tsi_next (tsi);
@@ -185,15 +225,13 @@ lower_bind_expr (tree_stmt_iterator *tsi, struct lower_data *data)
 	  /* The outermost block of the original function may not be the
 	     outermost statement chain of the gimplified function.  So we
 	     may see the outermost block just inside the function.  */
-	  if (new_block != DECL_INITIAL (current_function_decl))
-	    abort ();
+	  gcc_assert (new_block == DECL_INITIAL (current_function_decl));
 	  new_block = NULL;
 	}
       else
 	{
 	  /* We do not expect to handle duplicate blocks.  */
-	  if (TREE_ASM_WRITTEN (new_block))
-	    abort ();
+	  gcc_assert (!TREE_ASM_WRITTEN (new_block));
 	  TREE_ASM_WRITTEN (new_block) = 1;
 
 	  /* Block tree may get clobbered by inlining.  Normally this would
@@ -213,8 +251,7 @@ lower_bind_expr (tree_stmt_iterator *tsi, struct lower_data *data)
 
   if (new_block)
     {
-      if (data->block != new_block)
-	abort ();
+      gcc_assert (data->block == new_block);
 
       BLOCK_SUBBLOCKS (new_block)
 	= blocks_nreverse (BLOCK_SUBBLOCKS (new_block));
@@ -224,6 +261,54 @@ lower_bind_expr (tree_stmt_iterator *tsi, struct lower_data *data)
   /* The BIND_EXPR no longer carries any useful information -- kill it.  */
   tsi_link_before (tsi, BIND_EXPR_BODY (stmt), TSI_SAME_STMT);
   tsi_delink (tsi);
+}
+
+/* Try to determine whether a TRY_CATCH expression can fall through.
+   This is a subroutine of block_may_fallthru.  */
+
+static bool
+try_catch_may_fallthru (tree stmt)
+{
+  tree_stmt_iterator i;
+
+  /* If the TRY block can fall through, the whole TRY_CATCH can
+     fall through.  */
+  if (block_may_fallthru (TREE_OPERAND (stmt, 0)))
+    return true;
+
+  i = tsi_start (TREE_OPERAND (stmt, 1));
+  switch (TREE_CODE (tsi_stmt (i)))
+    {
+    case CATCH_EXPR:
+      /* We expect to see a sequence of CATCH_EXPR trees, each with a
+	 catch expression and a body.  The whole TRY_CATCH may fall
+	 through iff any of the catch bodies falls through.  */
+      for (; !tsi_end_p (i); tsi_next (&i))
+	{
+	  if (block_may_fallthru (CATCH_BODY (tsi_stmt (i))))
+	    return true;
+	}
+      return false;
+
+    case EH_FILTER_EXPR:
+      /* The exception filter expression only matters if there is an
+	 exception.  If the exception does not match EH_FILTER_TYPES,
+	 we will execute EH_FILTER_FAILURE, and we will fall through
+	 if that falls through.  If the exception does match
+	 EH_FILTER_TYPES, the stack unwinder will continue up the
+	 stack, so we will not fall through.  We don't know whether we
+	 will throw an exception which matches EH_FILTER_TYPES or not,
+	 so we just ignore EH_FILTER_TYPES and assume that we might
+	 throw an exception which doesn't match.  */
+      return block_may_fallthru (EH_FILTER_FAILURE (tsi_stmt (i)));
+
+    default:
+      /* This case represents statements to be executed when an
+	 exception occurs.  Those statements are implicitly followed
+	 by a RESX_EXPR to resume execution after the exception.  So
+	 in this case the TRY_CATCH never falls through.  */
+      return false;
+    }
 }
 
 /* Try to determine if we can fall out of the bottom of BLOCK.  This guess
@@ -241,10 +326,16 @@ block_may_fallthru (tree block)
     case GOTO_EXPR:
     case RETURN_EXPR:
     case RESX_EXPR:
-    case SWITCH_EXPR:
       /* Easy cases.  If the last statement of the block implies 
 	 control transfer, then we can't fall through.  */
       return false;
+
+    case SWITCH_EXPR:
+      /* If SWITCH_LABELS is set, this is lowered, and represents a
+	 branch to a selected label and hence can not fall through.
+	 Otherwise SWITCH_BODY is set, and the switch can fall
+	 through.  */
+      return SWITCH_LABELS (stmt) == NULL_TREE;
 
     case COND_EXPR:
       if (block_may_fallthru (COND_EXPR_THEN (stmt)))
@@ -254,8 +345,19 @@ block_may_fallthru (tree block)
     case BIND_EXPR:
       return block_may_fallthru (BIND_EXPR_BODY (stmt));
 
+    case TRY_CATCH_EXPR:
+      return try_catch_may_fallthru (stmt);
+
     case TRY_FINALLY_EXPR:
-      return block_may_fallthru (TREE_OPERAND (stmt, 1));
+      /* The finally clause is always executed after the try clause,
+	 so if it does not fall through, then the try-finally will not
+	 fall through.  Otherwise, if the try clause does not fall
+	 through, then when the finally clause falls through it will
+	 resume execution wherever the try clause was going.  So the
+	 whole try-finally will only fall through if both the try
+	 clause and the finally clause fall through.  */
+      return (block_may_fallthru (TREE_OPERAND (stmt, 0))
+	      && block_may_fallthru (TREE_OPERAND (stmt, 1)));
 
     case MODIFY_EXPR:
       if (TREE_CODE (TREE_OPERAND (stmt, 1)) == CALL_EXPR)
@@ -367,6 +469,43 @@ lower_cond_expr (tree_stmt_iterator *tsi, struct lower_data *data)
 
   tsi_next (tsi);
 }
+
+static void
+lower_return_expr (tree_stmt_iterator *tsi, struct lower_data *data)
+{
+  tree stmt = tsi_stmt (*tsi);
+  tree value, t, label;
+
+  /* Extract the value being returned.  */
+  value = TREE_OPERAND (stmt, 0);
+  if (value && TREE_CODE (value) == MODIFY_EXPR)
+    value = TREE_OPERAND (value, 1);
+
+  /* Match this up with an existing return statement that's been created.  */
+  for (t = data->return_statements; t ; t = TREE_CHAIN (t))
+    {
+      tree tvalue = TREE_OPERAND (TREE_VALUE (t), 0);
+      if (tvalue && TREE_CODE (tvalue) == MODIFY_EXPR)
+	tvalue = TREE_OPERAND (tvalue, 1);
+
+      if (value == tvalue)
+	{
+	  label = TREE_PURPOSE (t);
+	  goto found;
+	}
+    }
+
+  /* Not found.  Create a new label and record the return statement.  */
+  label = create_artificial_label ();
+  data->return_statements = tree_cons (label, stmt, data->return_statements);
+
+  /* Generate a goto statement and remove the return statement.  */
+ found:
+  t = build (GOTO_EXPR, void_type_node, label);
+  SET_EXPR_LOCUS (t, EXPR_LOCUS (stmt));
+  tsi_link_before (tsi, t, TSI_SAME_STMT);
+  tsi_delink (tsi);
+}
 
 
 /* Record the variables in VARS.  */
@@ -400,18 +539,13 @@ expand_var_p (tree var)
   if (TREE_CODE (var) != VAR_DECL)
     return true;
 
-  ann = var_ann (var);
+  /* Leave statics and externals alone.  */
+  if (TREE_STATIC (var) || DECL_EXTERNAL (var))
+    return true;
 
-  /* Remove all unused, unaliased temporaries.  Also remove unused, unaliased
-     local variables during highly optimizing compilations.  */
+  /* Remove all unused local variables.  */
   ann = var_ann (var);
-  if (ann
-      && ! ann->may_aliases
-      && ! ann->used
-      && ! ann->has_hidden_use
-      && ! TREE_ADDRESSABLE (var)
-      && ! TREE_THIS_VOLATILE (var)
-      && (DECL_ARTIFICIAL (var) || optimize >= 2))
+  if (!ann || !ann->used)
     return false;
 
   return true;
@@ -423,6 +557,13 @@ static void
 remove_useless_vars (void)
 {
   tree var, *cell;
+  FILE *df = NULL;
+
+  if (dump_file && (dump_flags & TDF_DETAILS))
+    {
+      df = dump_file;
+      fputs ("Discarding as unused:\n", df);
+    }
 
   for (cell = &cfun->unexpanded_var_list; *cell; )
     {
@@ -430,27 +571,22 @@ remove_useless_vars (void)
 
       if (!expand_var_p (var))
 	{
+	  if (df)
+	    {
+	      fputs ("  ", df);
+	      print_generic_expr (df, var, dump_flags);
+	      fputc ('\n', df);
+	    }
+
 	  *cell = TREE_CHAIN (*cell);
 	  continue;
 	}
 
       cell = &TREE_CHAIN (*cell);
     }
-}
 
-/* Expand variables in the unexpanded_var_list.  */
-
-void
-expand_used_vars (void)
-{
-  tree cell;
-
-  cfun->unexpanded_var_list = nreverse (cfun->unexpanded_var_list);
-
-  for (cell = cfun->unexpanded_var_list; cell; cell = TREE_CHAIN (cell))
-    expand_var (TREE_VALUE (cell));
-
-  cfun->unexpanded_var_list = NULL_TREE;
+  if (df)
+    fputc ('\n', df);
 }
 
 struct tree_opt_pass pass_remove_useless_vars = 
@@ -466,7 +602,60 @@ struct tree_opt_pass pass_remove_useless_vars =
   0,					/* properties_provided */
   0,					/* properties_destroyed */
   0,					/* todo_flags_start */
-  TODO_dump_func			/* todo_flags_finish */
+  TODO_dump_func,			/* todo_flags_finish */
+  0					/* letter */
 };
 
+/* Mark BLOCK used if it has a used variable in it, then recurse over its
+   subblocks.  */
 
+static void
+mark_blocks_with_used_vars (tree block)
+{
+  tree var;
+  tree subblock;
+
+  if (!TREE_USED (block))
+    {
+      for (var = BLOCK_VARS (block);
+	   var;
+	   var = TREE_CHAIN (var))
+	{
+	  if (TREE_USED (var))
+	    {
+	      TREE_USED (block) = true;
+	      break;
+	    }
+	}
+    }
+  for (subblock = BLOCK_SUBBLOCKS (block);
+       subblock;
+       subblock = BLOCK_CHAIN (subblock))
+    mark_blocks_with_used_vars (subblock);
+}
+
+/* Mark the used attribute on blocks correctly.  */
+  
+static void
+mark_used_blocks (void)
+{  
+  mark_blocks_with_used_vars (DECL_INITIAL (current_function_decl));
+}
+
+
+struct tree_opt_pass pass_mark_used_blocks = 
+{
+  "blocks",				/* name */
+  NULL,					/* gate */
+  mark_used_blocks,			/* execute */
+  NULL,					/* sub */
+  NULL,					/* next */
+  0,					/* static_pass_number */
+  0,					/* tv_id */
+  0,					/* properties_required */
+  0,					/* properties_provided */
+  0,					/* properties_destroyed */
+  0,					/* todo_flags_start */
+  TODO_dump_func,			/* todo_flags_finish */
+  0					/* letter */
+};

@@ -1,6 +1,7 @@
 ## Process this with automake to create Makefile.in
 
-AUTOMAKE_OPTIONS = foreign no-dependencies subdir-objects
+AUTOMAKE_OPTIONS = foreign subdir-objects
+ACLOCAL_AMFLAGS = -I .. -I ../config
 
 SUBDIRS = include testsuite
 
@@ -9,6 +10,7 @@ EXTRA_DIST = LICENSE ChangeLog.v1 \
 	src/arm/ffi.c src/arm/sysv.S src/arm/ffitarget.h \
 	src/mips/ffi.c src/mips/n32.S src/mips/o32.S \
 	src/mips/ffitarget.h \
+	src/m32r/ffi.c src/m32r/sysv.S src/m32r/ffitarget.h \
 	src/m68k/ffi.c src/m68k/sysv.S src/m68k/ffitarget.h \
 	src/powerpc/ffi.c src/powerpc/sysv.S \
 	src/powerpc/linux64.S src/powerpc/linux64_closure.S \
@@ -23,7 +25,7 @@ EXTRA_DIST = LICENSE ChangeLog.v1 \
 	src/sparc/ffi.c \
 	src/x86/ffi.c src/x86/sysv.S src/x86/win32.S \
 	src/x86/ffi64.c src/x86/unix64.S src/x86/ffitarget.h \
-	src/pa/ffi.c src/pa/linux.S
+	src/pa/ffi.c src/pa/linux.S src/frv/eabi.S src/frv/ffitarget.h
 
 ## ################################################################
 
@@ -64,21 +66,11 @@ AM_MAKEFLAGS = \
 	"CC=$(CC)" \
 	"CXX=$(CXX)" \
 	"LD=$(LD)" \
-	"LIBCFLAGS=$(LIBCFLAGS)" \
 	"NM=$(NM)" \
-	"PICFLAG=$(PICFLAG)" \
 	"RANLIB=$(RANLIB)" \
 	"DESTDIR=$(DESTDIR)"
 
 MAKEOVERRIDES=
-
-# Multilib support variables working around Automake bug.
-MULTISRCTOP =
-MULTIBUILDTOP =
-MULTIDIRS =
-MULTISUBDIR =
-MULTIDO = true
-MULTICLEAN = true
 
 toolexeclib_LTLIBRARIES = libffi.la
 noinst_LTLIBRARIES = libffi_convenience.la
@@ -109,6 +101,9 @@ endif
 if IA64
 nodist_libffi_la_SOURCES += src/ia64/ffi.c src/ia64/unix.S
 endif
+if M32R
+nodist_libffi_la_SOURCES += src/m32r/sysv.S src/m32r/ffi.c
+endif
 if M68K
 nodist_libffi_la_SOURCES += src/m68k/ffi.c src/m68k/sysv.S
 endif
@@ -123,6 +118,9 @@ nodist_libffi_la_SOURCES += src/powerpc/ffi_darwin.c src/powerpc/darwin.S src/po
 endif
 if ARM
 nodist_libffi_la_SOURCES += src/arm/sysv.S src/arm/ffi.c
+endif
+if FRV
+nodist_libffi_la_SOURCES += src/frv/eabi.S src/frv/ffi.c
 endif
 if S390
 nodist_libffi_la_SOURCES += src/s390/sysv.S src/s390/ffi.c
@@ -145,8 +143,7 @@ nodist_libffi_convenience_la_SOURCES = $(nodist_libffi_la_SOURCES)
 
 AM_CFLAGS = -Wall -g -fexceptions
 
-libffi_la_LDFLAGS = -release $(VERSION)
+libffi_la_LDFLAGS = -version-info `grep -v '^\#' $(srcdir)/libtool-version`
 
-INCLUDES = -I. -I$(top_srcdir)/include -Iinclude -I$(top_srcdir)/src
-
-AM_CCASFLAGS = $(INCLUDES)
+AM_CPPFLAGS = -I. -I$(top_srcdir)/include -Iinclude -I$(top_srcdir)/src
+AM_CCASFLAGS = $(AM_CPPFLAGS)

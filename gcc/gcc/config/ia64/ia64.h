@@ -1,5 +1,5 @@
 /* Definitions of target machine GNU compiler.  IA-64 version.
-   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004
+   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005
    Free Software Foundation, Inc.
    Contributed by James E. Wilson <wilson@cygnus.com> and
    		  David Mosberger <davidm@hpl.hp.com>.
@@ -44,8 +44,13 @@ do {						\
 	  builtin_define("__BIG_ENDIAN__");	\
 } while (0)
 
+#ifndef SUBTARGET_EXTRA_SPECS
+#define SUBTARGET_EXTRA_SPECS
+#endif
+
 #define EXTRA_SPECS \
-  { "asm_extra", ASM_EXTRA_SPEC },
+  { "asm_extra", ASM_EXTRA_SPEC }, \
+  SUBTARGET_EXTRA_SPECS
 
 #define CC1_SPEC "%(cc1_cpu) "
 
@@ -69,8 +74,6 @@ extern int target_flags;
 #define MASK_VOL_ASM_STOP 0x00000010	/* Emit stop bits for vol ext asm.  */
 
 #define MASK_ILP32      0x00000020      /* Generate ILP32 code.  */
-
-#define MASK_B_STEP	0x00000040	/* Emit code for Itanium B step.  */
 
 #define MASK_REG_NAMES	0x00000080	/* Use in/loc/out register names.  */
 
@@ -108,8 +111,6 @@ extern int target_flags;
 
 #define TARGET_ILP32            (target_flags & MASK_ILP32)
 
-#define TARGET_B_STEP		(target_flags & MASK_B_STEP)
-
 #define TARGET_REG_NAMES	(target_flags & MASK_REG_NAMES)
 
 #define TARGET_NO_SDATA		(target_flags & MASK_NO_SDATA)
@@ -140,6 +141,10 @@ extern int target_flags;
   (target_flags & (MASK_INLINE_SQRT_LAT | MASK_INLINE_SQRT_THR))
 
 #define TARGET_DWARF2_ASM	(target_flags & MASK_DWARF2_ASM)
+
+/* Variables which are this size or smaller are put in the sdata/sbss
+   sections.  */
+extern unsigned int ia64_section_threshold;
 
 /* If the assembler supports thread-local storage, assume that the
    system does as well.  If a particular target system has an
@@ -187,8 +192,6 @@ extern int ia64_tls_size;
       N_("Emit stop bits before and after volatile extended asms") },	\
   { "no-volatile-asm-stop", -MASK_VOL_ASM_STOP,				\
       N_("Don't emit stop bits before and after volatile extended asms") }, \
-  { "b-step",		MASK_B_STEP,					\
-      N_("Emit code for Itanium (TM) processor B step")},		\
   { "register-names",	MASK_REG_NAMES,					\
       N_("Use in/loc/out register names")},				\
   { "no-sdata",		MASK_NO_SDATA,					\
@@ -329,6 +332,8 @@ extern const char *ia64_tune_string;
 
 #define UNITS_PER_WORD 8
 
+#define UNITS_PER_SIMD_WORD UNITS_PER_WORD
+
 #define POINTER_SIZE (TARGET_ILP32 ? 32 : 64)
 
 /* A C expression whose value is zero if pointers that need to be extended
@@ -443,10 +448,10 @@ while (0)
 #define DOUBLE_TYPE_SIZE 64
 
 /* long double is XFmode normally, TFmode for HPUX.  */
-#define LONG_DOUBLE_TYPE_SIZE (TARGET_HPUX ? 128 : 96)
+#define LONG_DOUBLE_TYPE_SIZE (TARGET_HPUX ? 128 : 80)
 
 /* We always want the XFmode operations from libgcc2.c.  */
-#define LIBGCC2_LONG_DOUBLE_TYPE_SIZE 96
+#define LIBGCC2_LONG_DOUBLE_TYPE_SIZE 80
 
 #define DEFAULT_SIGNED_CHAR 1
 
@@ -805,6 +810,7 @@ while (0)
    : PR_REGNO_P (REGNO) && (MODE) == BImode ? 2				\
    : PR_REGNO_P (REGNO) && (MODE) == CCImode ? 1			\
    : FR_REGNO_P (REGNO) && (MODE) == XFmode ? 1				\
+   : FR_REGNO_P (REGNO) && (MODE) == XCmode ? 2				\
    : (GET_MODE_SIZE (MODE) + UNITS_PER_WORD - 1) / UNITS_PER_WORD)
 
 /* A C expression that is nonzero if it is permissible to store a value of mode
@@ -819,7 +825,8 @@ while (0)
      (MODE) != TFmode 						\
    : PR_REGNO_P (REGNO) ?					\
      (MODE) == BImode || GET_MODE_CLASS (MODE) == MODE_CC	\
-   : GR_REGNO_P (REGNO) ? (MODE) != CCImode && (MODE) != XFmode	\
+   : GR_REGNO_P (REGNO) ?					\
+     (MODE) != CCImode && (MODE) != XFmode && (MODE) != XCmode	\
    : AR_REGNO_P (REGNO) ? (MODE) == DImode			\
    : BR_REGNO_P (REGNO) ? (MODE) == DImode			\
    : 0)
@@ -836,7 +843,8 @@ while (0)
    we can't tie it with any other modes.  */
 #define MODES_TIEABLE_P(MODE1, MODE2)			\
   (GET_MODE_CLASS (MODE1) == GET_MODE_CLASS (MODE2)	\
-   && (((MODE1) == XFmode) == ((MODE2) == XFmode))	\
+   && ((((MODE1) == XFmode) || ((MODE1) == XCmode))	\
+       == (((MODE2) == XFmode) || ((MODE2) == XCmode)))	\
    && (((MODE1) == BImode) == ((MODE2) == BImode)))
 
 /* Specify the modes required to caller save a given hard regno.
@@ -1012,18 +1020,8 @@ enum reg_class
    The value is a register class; perhaps CLASS, or perhaps another, smaller
    class.  */
 
-/* Don't allow volatile mem reloads into floating point registers.  This
-   is defined to force reload to choose the r/m case instead of the f/f case
-   when reloading (set (reg fX) (mem/v)).
-
-   Do not reload expressions into AR regs.  */
-
 #define PREFERRED_RELOAD_CLASS(X, CLASS) \
-  (CLASS == FR_REGS && GET_CODE (X) == MEM && MEM_VOLATILE_P (X) ? NO_REGS   \
-   : CLASS == FR_REGS && GET_CODE (X) == CONST_DOUBLE ? NO_REGS		     \
-   : !OBJECT_P (X)							     \
-     && (CLASS == AR_M_REGS || CLASS == AR_I_REGS) ? NO_REGS		     \
-   : CLASS)
+  ia64_preferred_reload_class (X, CLASS)
 
 /* You should define this macro to indicate to the reload phase that it may
    need to allocate at least one register for a reload in addition to the
@@ -1048,8 +1046,9 @@ enum reg_class
    with unions should be solved with the addressof fiddling done by
    movxf and friends.  */
 #define SECONDARY_MEMORY_NEEDED(CLASS1, CLASS2, MODE)			\
-  ((MODE) == XFmode && (((CLASS1) == GR_REGS && (CLASS2) == FR_REGS)	\
-			|| ((CLASS1) == FR_REGS && (CLASS2) == GR_REGS)))
+  (((MODE) == XFmode || (MODE) == XCmode)				\
+   && (((CLASS1) == GR_REGS && (CLASS2) == FR_REGS)			\
+       || ((CLASS1) == FR_REGS && (CLASS2) == GR_REGS)))
 #endif
 
 /* A C expression for the maximum number of consecutive registers of
@@ -1059,6 +1058,7 @@ enum reg_class
 #define CLASS_MAX_NREGS(CLASS, MODE) \
   ((MODE) == BImode && (CLASS) == PR_REGS ? 2			\
    : ((CLASS) == FR_REGS && (MODE) == XFmode) ? 1		\
+   : ((CLASS) == FR_REGS && (MODE) == XCmode) ? 2		\
    : (GET_MODE_SIZE (MODE) + UNITS_PER_WORD - 1) / UNITS_PER_WORD)
 
 /* In FP regs, we can't change FP values to integer values and vice
@@ -1092,15 +1092,7 @@ enum reg_class
 #define CONST_OK_FOR_P(VALUE) ((VALUE) == 0 || (VALUE) == -1)
 
 #define CONST_OK_FOR_LETTER_P(VALUE, C) \
-((C) == 'I' ? CONST_OK_FOR_I (VALUE)		\
- : (C) == 'J' ? CONST_OK_FOR_J (VALUE)		\
- : (C) == 'K' ? CONST_OK_FOR_K (VALUE)		\
- : (C) == 'L' ? CONST_OK_FOR_L (VALUE)		\
- : (C) == 'M' ? CONST_OK_FOR_M (VALUE)		\
- : (C) == 'N' ? CONST_OK_FOR_N (VALUE)		\
- : (C) == 'O' ? CONST_OK_FOR_O (VALUE)		\
- : (C) == 'P' ? CONST_OK_FOR_P (VALUE)		\
- : 0)
+  ia64_const_ok_for_letter_p (VALUE, C)
 
 /* A C expression that defines the machine-dependent operand constraint letters
    (`G', `H') that specify particular ranges of `const_double' values.  */
@@ -1111,33 +1103,14 @@ enum reg_class
    || (VALUE) == CONST1_RTX (GET_MODE (VALUE)))
 
 #define CONST_DOUBLE_OK_FOR_LETTER_P(VALUE, C) \
-  ((C) == 'G' ? CONST_DOUBLE_OK_FOR_G (VALUE) : 0)
+  ia64_const_double_ok_for_letter_p (VALUE, C)
 
 /* A C expression that defines the optional machine-dependent constraint
    letters (`Q', `R', `S', `T', `U') that can be used to segregate specific
    types of operands, usually memory references, for the target machine.  */
 
-/* Non-volatile memory for FP_REG loads/stores.  */
-#define CONSTRAINT_OK_FOR_Q(VALUE) \
-  (memory_operand((VALUE), VOIDmode) && ! MEM_VOLATILE_P (VALUE))
-/* 1..4 for shladd arguments.  */
-#define CONSTRAINT_OK_FOR_R(VALUE) \
-  (GET_CODE (VALUE) == CONST_INT && INTVAL (VALUE) >= 1 && INTVAL (VALUE) <= 4)
-/* Non-post-inc memory for asms and other unsavory creatures.  */
-#define CONSTRAINT_OK_FOR_S(VALUE)					\
-  (GET_CODE (VALUE) == MEM						\
-   && GET_RTX_CLASS (GET_CODE (XEXP ((VALUE), 0))) != RTX_AUTOINC	\
-   && (reload_in_progress || memory_operand ((VALUE), VOIDmode)))
-/* Symbol ref to small-address-area: */
-#define CONSTRAINT_OK_FOR_T(VALUE)						\
-	(GET_CODE (VALUE) == SYMBOL_REF && SYMBOL_REF_SMALL_ADDR_P (VALUE))
-
 #define EXTRA_CONSTRAINT(VALUE, C) \
-  ((C) == 'Q' ? CONSTRAINT_OK_FOR_Q (VALUE)	\
-   : (C) == 'R' ? CONSTRAINT_OK_FOR_R (VALUE)	\
-   : (C) == 'S' ? CONSTRAINT_OK_FOR_S (VALUE)	\
-   : (C) == 'T' ? CONSTRAINT_OK_FOR_T (VALUE)	\
-   : 0)
+  ia64_extra_constraint (VALUE, C)
 
 /* Basic Stack Layout */
 
@@ -1312,29 +1285,6 @@ enum reg_class
 #define FUNCTION_INCOMING_ARG(CUM, MODE, TYPE, NAMED) \
   ia64_function_arg (&CUM, MODE, TYPE, NAMED, 1)
 
-/* A C expression for the number of words, at the beginning of an argument,
-   must be put in registers.  The value must be zero for arguments that are
-   passed entirely in registers or that are entirely pushed on the stack.  */
-
-#define FUNCTION_ARG_PARTIAL_NREGS(CUM, MODE, TYPE, NAMED) \
- ia64_function_arg_partial_nregs (&CUM, MODE, TYPE, NAMED)
-
-/* A C expression that indicates when an argument must be passed by reference.
-   If nonzero for an argument, a copy of that argument is made in memory and a
-   pointer to the argument is passed instead of the argument itself.  The
-   pointer is passed in whatever way is appropriate for passing a pointer to
-   that type.  */
-
-#define FUNCTION_ARG_PASS_BY_REFERENCE(CUM, MODE, TYPE, NAMED) \
-  ia64_function_arg_pass_by_reference (&CUM, MODE, TYPE, NAMED)
-
-/* Nonzero if we do not know how to pass TYPE solely in registers.  */
-
-#define MUST_PASS_IN_STACK(MODE, TYPE) \
-  ((TYPE) != 0							\
-   && (TREE_CODE (TYPE_SIZE (TYPE)) != INTEGER_CST		\
-       || TREE_ADDRESSABLE (TYPE)))
-
 /* A C type for declaring a variable that is used as the first argument of
    `FUNCTION_ARG' and other related values.  For some target machines, the type
    `int' suffices and can hold the number of bytes of argument so far.  */
@@ -1383,15 +1333,11 @@ do {									\
 /* If defined, a C expression that gives the alignment boundary, in bits, of an
    argument with the specified mode and type.  */
 
-/* Arguments with alignment larger than 8 bytes start at the next even
-   boundary.  See ia64_function_arg.  */
+/* Return the alignment boundary in bits for an argument with a specified
+   mode and type.  */
 
 #define FUNCTION_ARG_BOUNDARY(MODE, TYPE) \
-  (((TYPE) ? (TYPE_ALIGN (TYPE) > 8 * BITS_PER_UNIT)		\
-    : (((((MODE) == BLKmode					\
-	  ? int_size_in_bytes (TYPE) : GET_MODE_SIZE (MODE))	\
-	 + UNITS_PER_WORD - 1) / UNITS_PER_WORD) > 1))		\
-    ? 128 : PARM_BOUNDARY)
+  ia64_function_arg_boundary (MODE, TYPE)
 
 /* A C expression that is nonzero if REGNO is the number of a hard register in
    which function arguments are sometimes passed.  This does *not* include
@@ -1401,10 +1347,6 @@ do {									\
 #define FUNCTION_ARG_REGNO_P(REGNO) \
 (((REGNO) >= AR_ARG_FIRST && (REGNO) < (AR_ARG_FIRST + MAX_ARGUMENT_SLOTS)) \
  || ((REGNO) >= FR_ARG_FIRST && (REGNO) < (FR_ARG_FIRST + MAX_ARGUMENT_SLOTS)))
-
-/* Implement `va_arg'.  */
-#define EXPAND_BUILTIN_VA_ARG(valist, type) \
-  ia64_va_arg (valist, type)
 
 /* How Scalar Function Values are Returned */
 
@@ -1556,15 +1498,6 @@ do {									\
 
 #define INITIALIZE_TRAMPOLINE(ADDR, FNADDR, STATIC_CHAIN) \
   ia64_initialize_trampoline((ADDR), (FNADDR), (STATIC_CHAIN))
-
-/* Implicit Calls to Library Routines */
-
-/* Define this macro if GCC should generate calls to the System V (and ANSI
-   C) library functions `memcpy' and `memset' rather than the BSD functions
-   `bcopy' and `bzero'.  */
-
-#define TARGET_MEM_FUNCTIONS
-
 
 /* Addressing Modes */
 
@@ -2164,55 +2097,6 @@ do {									\
 #define SYMBOL_REF_SMALL_ADDR_P(X)	\
 	((SYMBOL_REF_FLAGS (X) & SYMBOL_FLAG_SMALL_ADDR) != 0)
 
-/* Define this if you have defined special-purpose predicates in the file
-   `MACHINE.c'.  For each predicate, list all rtl codes that can be in
-   expressions matched by the predicate.  */
-
-#define PREDICATE_CODES \
-{ "call_operand", {SUBREG, REG, SYMBOL_REF}},				\
-{ "got_symbolic_operand", {SYMBOL_REF, CONST, LABEL_REF}},		\
-{ "sdata_symbolic_operand", {SYMBOL_REF, CONST}},			\
-{ "small_addr_symbolic_operand", {SYMBOL_REF}},				\
-{ "symbolic_operand", {SYMBOL_REF, CONST, LABEL_REF}},			\
-{ "function_operand", {SYMBOL_REF}},					\
-{ "setjmp_operand", {SYMBOL_REF}},					\
-{ "destination_operand", {SUBREG, REG, MEM}},				\
-{ "not_postinc_memory_operand", {MEM}},					\
-{ "move_operand", {SUBREG, REG, MEM, CONST_INT, CONST_DOUBLE,		\
-		     SYMBOL_REF, CONST, LABEL_REF}},			\
-{ "gr_register_operand", {SUBREG, REG}},				\
-{ "fr_register_operand", {SUBREG, REG}},				\
-{ "grfr_register_operand", {SUBREG, REG}},				\
-{ "gr_nonimmediate_operand", {SUBREG, REG, MEM}},			\
-{ "fr_nonimmediate_operand", {SUBREG, REG, MEM}},			\
-{ "grfr_nonimmediate_operand", {SUBREG, REG, MEM}},			\
-{ "gr_reg_or_0_operand", {SUBREG, REG, CONST_INT}},			\
-{ "gr_reg_or_5bit_operand", {SUBREG, REG, CONST_INT}},			\
-{ "gr_reg_or_6bit_operand", {SUBREG, REG, CONST_INT}},			\
-{ "gr_reg_or_8bit_operand", {SUBREG, REG, CONST_INT}},			\
-{ "grfr_reg_or_8bit_operand", {SUBREG, REG, CONST_INT}}, 		\
-{ "gr_reg_or_8bit_adjusted_operand", {SUBREG, REG, CONST_INT}},		\
-{ "gr_reg_or_8bit_and_adjusted_operand", {SUBREG, REG, CONST_INT}},	\
-{ "gr_reg_or_14bit_operand", {SUBREG, REG, CONST_INT}}, 		\
-{ "gr_reg_or_22bit_operand", {SUBREG, REG, CONST_INT}}, 		\
-{ "shift_count_operand", {SUBREG, REG, CONST_INT}},			\
-{ "shift_32bit_count_operand", {SUBREG, REG, CONST_INT}},		\
-{ "shladd_operand", {CONST_INT}},					\
-{ "fetchadd_operand", {CONST_INT}},					\
-{ "fr_reg_or_fp01_operand", {SUBREG, REG, CONST_DOUBLE}},		\
-{ "normal_comparison_operator", {EQ, NE, GT, LE, GTU, LEU}},		\
-{ "adjusted_comparison_operator", {LT, GE, LTU, GEU}},			\
-{ "signed_inequality_operator", {GE, GT, LE, LT}},			\
-{ "predicate_operator", {NE, EQ}},					\
-{ "condop_operator", {PLUS, MINUS, IOR, XOR, AND}},			\
-{ "ar_lc_reg_operand", {REG}},						\
-{ "ar_ccv_reg_operand", {REG}},						\
-{ "ar_pfs_reg_operand", {REG}},						\
-{ "general_xfmode_operand", {SUBREG, REG, CONST_DOUBLE, MEM}},		\
-{ "destination_xfmode_operand", {SUBREG, REG, MEM}},			\
-{ "xfreg_or_fp01_operand", {REG, CONST_DOUBLE}},			\
-{ "basereg_operand", {SUBREG, REG}},
-
 /* An alias for a machine mode name.  This is the machine mode that elements of
    a jump-table should have.  */
 
@@ -2291,8 +2175,7 @@ do {									\
 
 extern int ia64_final_schedule;
 
-#define IA64_UNWIND_INFO	1
-#define IA64_UNWIND_EMIT(f,i)	process_for_unwind_directive (f,i)
+#define TARGET_UNWIND_INFO	1
 
 #define EH_RETURN_DATA_REGNO(N) ((N) < 4 ? (N) + 15 : INVALID_REGNUM)
 
@@ -2310,6 +2193,9 @@ struct machine_function GTY(())
 
   /* The number of varargs registers to save.  */
   int n_varargs;
+
+  /* The number of the next unwind state to copy.  */
+  int state_num;
 };
 
 

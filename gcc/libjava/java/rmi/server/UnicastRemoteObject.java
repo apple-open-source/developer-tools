@@ -1,5 +1,5 @@
-/*
-  Copyright (c) 1996, 1997, 1998, 1999, 2002, 2003 Free Software Foundation, Inc.
+/* UnicastRemoteObject.java --
+   Copyright (c) 1996, 1997, 1998, 1999, 2002, 2003 Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -38,16 +38,14 @@ exception statement from your version. */
 
 package java.rmi.server;
 
-import java.rmi.RemoteException;
-import java.rmi.Remote;
-import java.rmi.server.RemoteRef;
-import java.rmi.NoSuchObjectException;
 import gnu.java.rmi.server.UnicastServerRef;
-import gnu.java.rmi.server.UnicastServer;
 
-public class UnicastRemoteObject
-	extends RemoteServer {
+import java.rmi.NoSuchObjectException;
+import java.rmi.Remote;
+import java.rmi.RemoteException;
 
+public class UnicastRemoteObject extends RemoteServer
+{
 private static final long serialVersionUID = 4974527148936298033L;
 //The following serialized fields are from Java API Documentation "Serialized form"
 private int port = 0;
@@ -100,7 +98,9 @@ public static RemoteStub exportObject(Remote obj) throws RemoteException {
       {
 	sref = new UnicastServerRef(new ObjID (), port, ssf);
       }
-    return (sref.exportObject (obj)); 
+    Remote stub = sref.exportObject (obj); 
+    addStub(obj, stub);
+    return stub;
   }
 
   /**
@@ -118,12 +118,15 @@ public static RemoteStub exportObject(Remote obj) throws RemoteException {
   {
     if (obj instanceof RemoteObject)
       {
+	deleteStub(obj);
 	UnicastServerRef sref = (UnicastServerRef)((RemoteObject)obj).getRef();
 	return sref.unexportObject(obj, force);
       }
     else
-      //FIX ME
-      ;
+      {
+	//FIX ME
+	;
+      }
     return true;
   }
 

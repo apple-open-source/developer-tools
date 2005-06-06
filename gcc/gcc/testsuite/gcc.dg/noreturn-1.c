@@ -8,7 +8,7 @@ extern void foo1(void) __attribute__ ((__noreturn__));
 void
 foo1(void)
 {
-} /* { dg-warning "`noreturn' function does return" "detect falling off end of noreturn" } */
+} /* { dg-warning "'noreturn' function does return" "detect falling off end of noreturn" } */
 
 extern void foo2(void) __attribute__ ((__noreturn__));
 void
@@ -26,7 +26,7 @@ foo3(void)
 extern void foo4(void);
 void
 foo4(void)
-{ /* { dg-warning "candidate for attribute `noreturn'" "detect noreturn candidate" } */
+{ /* { dg-warning "candidate for attribute 'noreturn'" "detect noreturn candidate" } */
   exit(0);
 }
 
@@ -34,9 +34,8 @@ extern void foo5(void) __attribute__ ((__noreturn__));
 void
 foo5(void)
 {
-  return; /* { dg-warning "`noreturn' has a `return' statement" "detect invalid return" } */
-}
-/* { dg-warning "function does return" "detect return from noreturn" { target *-*-* } 37 } */
+  return; /* { dg-warning "'noreturn' has a 'return' statement" "detect invalid return" } */
+} /* { dg-warning "function does return" "detect return from noreturn" } */
 
 extern void foo6(void);
 void
@@ -57,4 +56,4 @@ void
 foo8(void)
 {
   foo7();
-} /* { dg-warning "`noreturn' function does return" "detect return from tail call" } */
+} /* { dg-warning "'noreturn' function does return" "detect return from tail call" } */

@@ -454,10 +454,19 @@ package Lib is
    --  code unit, the criterion being that Get_Code_Unit yields the same
    --  value for each argument.
 
+   function In_Same_Extended_Unit (N1, N2 : Node_Or_Entity_Id) return Boolean;
+   pragma Inline (In_Same_Extended_Unit);
+   --  Determines if two nodes or entities N1 and N2 are in the same
+   --  extended unit, where an extended unit is defined as a unit and all
+   --  its subunits (considered recursively, i.e. subunits of subunits are
+   --  included). Returns true if S1 and S2 are in the same extended unit
+   --  and False otherwise.
+
    function In_Same_Extended_Unit (S1, S2 : Source_Ptr) return Boolean;
+   pragma Inline (In_Same_Extended_Unit);
    --  Determines if the two source locations S1 and S2 are in the same
    --  extended unit, where an extended unit is defined as a unit and all
-   --  its subunits (considered recursively, i.e. subunits or subunits are
+   --  its subunits (considered recursively, i.e. subunits of subunits are
    --  included). Returns true if S1 and S2 are in the same extended unit
    --  and False otherwise.
 
@@ -528,13 +537,19 @@ package Lib is
    --  be kept consistent).
 
    procedure Replace_Linker_Option_String
-     (S : String_Id; Match_String : String);
+     (S            : String_Id;
+      Match_String : String);
    --  Replace an existing Linker_Option if the prefix Match_String
    --  matches, otherwise call Store_Linker_Option_String.
 
    procedure Store_Compilation_Switch (Switch : String);
    --  Called to register a compilation switch, either front-end or
    --  back-end, which may influence the generated output file(s).
+
+   procedure Disable_Switch_Storing;
+   --  Disable the registration of compilation switches with
+   --  Store_Compilation_Switch. This is used to not register switches added
+   --  automatically by the gcc driver.
 
    procedure Store_Linker_Option_String (S : String_Id);
    --  This procedure is called to register the string from a pragma
@@ -546,11 +561,13 @@ package Lib is
    procedure Lock;
    --  Lock internal tables before calling back end
 
-   procedure Tree_Write;
-   --  Writes out internal tables to current tree file using Tree_Write
-
    procedure Tree_Read;
-   --  Initializes internal tables from current tree file using Tree_Read
+   --  Initializes internal tables from current tree file using the relevant
+   --  Table.Tree_Read routines.
+
+   procedure Tree_Write;
+   --  Writes out internal tables to current tree file using the relevant
+   --  Table.Tree_Write routines.
 
    function Is_Loaded (Uname : Unit_Name_Type) return Boolean;
    --  Determines if unit with given name is already loaded, i.e. there is

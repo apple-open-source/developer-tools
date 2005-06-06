@@ -30,16 +30,27 @@ Boston, MA 02111-1307, USA.  */
 #include "c-incpath.h"
 #include "toplev.h"
 #include "tm_p.h"
+#include "cppdefault.h"
+#include "prefix.h"
+/* APPLE LOCAL include options.h */
+#include "options.h"
+/* APPLE LOCAL begin optimization pragmas 3124235/3420242 */
+#include "flags.h"
+#include "opts.h"
+#include "varray.h"
+/* APPLE LOCAL end optimization pragmas 3124235/3420242 */
 
 /* Pragmas.  */
 
 #define BAD(msgid) do { warning (msgid); return; } while (0)
+/* APPLE LOCAL Macintosh alignment 2002-1-22 --ff */
 #define BAD2(msgid, arg) do { warning (msgid, arg); return; } while (0)
 
 static bool using_frameworks = false;
 
-/* APPLE LOCAL CALL_ON_LOAD/CALL_ON_UNLOAD pragmas  20020202 --turly  */
+/* APPLE LOCAL begin CALL_ON_LOAD/CALL_ON_UNLOAD pragmas  20020202 --turly  */
 static void directive_with_named_function (const char *, void (*sec_f)(void));
+/* APPLE LOCAL end CALL_ON_LOAD/CALL_ON_UNLOAD pragmas  20020202 --turly  */
 
 /* Maintain a small stack of alignments.  This is similar to pragma
    pack's stack, but simpler.  */
@@ -137,6 +148,20 @@ darwin_pragma_ignore (cpp_reader *pfile ATTRIBUTE_UNUSED)
   /* Do nothing.  */
 }
 
+/* APPLE LOCAL begin pragma fenv */
+/* #pragma GCC fenv
+   This is kept in <fenv.h>.  The point is to allow trapping
+   math to default to off.  According to C99, any program
+   that requires trapping math must include <fenv.h>, so
+   we enable trapping math when that gets included.  */
+
+void
+darwin_pragma_fenv (cpp_reader *pfile ATTRIBUTE_UNUSED)
+{
+  flag_trapping_math = 1;
+}
+/* APPLE LOCAL end pragma fenv */
+
 /* #pragma options align={mac68k|power|reset} */
 
 void
@@ -161,7 +186,11 @@ darwin_pragma_options (cpp_reader *pfile ATTRIBUTE_UNUSED)
   arg = IDENTIFIER_POINTER (t);
 /* APPLE LOCAL begin Macintosh alignment 2002-1-22 --ff */
   if (!strcmp (arg, "mac68k"))
-    push_field_alignment (0, 1, 0);
+    {
+      if (POINTER_SIZE == 64)
+	warning ("mac68k alignment pragma is deprecated for 64-bit Darwin");
+      push_field_alignment (0, 1, 0);
+    }
   else if (!strcmp (arg, "native"))	/* equivalent to power on PowerPC */
     push_field_alignment (0, 0, 0);
   else if (!strcmp (arg, "natural"))
@@ -270,6 +299,132 @@ darwin_pragma_unused (cpp_reader *pfile ATTRIBUTE_UNUSED)
   if (c_lex (&x) != CPP_EOF)
     warning ("junk at end of '#pragma unused'");
 }
+
+/* APPLE LOCAL begin pragma reverse_bitfields */
+/* Handle the reverse_bitfields pragma.  */
+
+void
+darwin_pragma_reverse_bitfields (cpp_reader *pfile ATTRIBUTE_UNUSED)
+{
+  const char* arg;
+  tree t;
+
+  if (c_lex (&t) != CPP_NAME)
+    BAD ("malformed '#pragma reverse_bitfields', ignoring");
+  arg = IDENTIFIER_POINTER (t);
+
+  if (!strcmp (arg, "on"))
+    darwin_reverse_bitfields = true;
+  else if (!strcmp (arg, "off") || !strcmp (arg, "reset"))
+    darwin_reverse_bitfields = false;
+  else
+    warning ("malformed '#pragma reverse_bitfields {on|off|reset}', ignoring");
+  if (c_lex (&t) != CPP_EOF)
+    warning ("junk at end of '#pragma reverse_bitfields'");
+}
+/* APPLE LOCAL end pragma reverse_bitfields */
+
+/* APPLE LOCAL begin optimization pragmas 3124235/3420242 */
+varray_type va_opt;
+
+static void
+push_opt_level (int level, int size)
+{
+  if (!va_opt)
+    VARRAY_INT_INIT (va_opt, 5, "va_opt");
+  VARRAY_PUSH_INT (va_opt, size << 16 | level);
+}
+
+static void
+pop_opt_level (void)
+{
+  int level;
+  if (!va_opt)
+    VARRAY_INT_INIT (va_opt, 5, "va_opt");
+  if (!VARRAY_ACTIVE_SIZE (va_opt))
+    {
+      warning ("optimization pragma stack underflow");
+      return;
+    }
+  level = VARRAY_TOP_INT (va_opt);
+  VARRAY_POP (va_opt);
+
+  optimize_size = level >> 16;
+  optimize = level & 0xffff;
+}
+
+void
+darwin_pragma_opt_level  (cpp_reader *pfile ATTRIBUTE_UNUSED)
+{
+  tree t;
+  enum cpp_ttype argtype = c_lex (&t);
+
+  if (argtype == CPP_NAME)
+    {
+      const char* arg = IDENTIFIER_POINTER (t);
+      if (strcmp (arg, "reset") != 0)
+	BAD ("malformed '#pragma optimization_level [GCC] {0|1|2|3|reset}', ignoring");
+      pop_opt_level ();
+    }
+  else if (argtype == CPP_NUMBER)
+    {
+      if (TREE_CODE (t) != INTEGER_CST
+	  || INT_CST_LT (t, integer_zero_node)
+	  || TREE_INT_CST_HIGH (t) != 0)
+	BAD ("malformed '#pragma optimization_level [GCC] {0|1|2|3|reset}', ignoring");
+
+      push_opt_level (optimize, optimize_size);
+      optimize = TREE_INT_CST_LOW (t);
+      if (optimize > 3)
+	optimize = 3;
+      optimize_size = 0;
+    }
+  else
+    BAD ("malformed '#pragma optimization_level [GCC] {0|1|2|3|reset}', ignoring");
+
+  set_flags_from_O (false);
+
+  /* This is expected to be defined in each target. */
+  reset_optimization_options (optimize, optimize_size);
+
+  if (c_lex (&t) != CPP_EOF)
+    warning ("junk at end of '#pragma optimization_level'");
+}
+
+void
+darwin_pragma_opt_size  (cpp_reader *pfile ATTRIBUTE_UNUSED)
+{
+  const char* arg;
+  tree t;
+
+  if (c_lex (&t) != CPP_NAME)
+    BAD ("malformed '#pragma optimize_for_size { on | off | reset}', ignoring");
+  arg = IDENTIFIER_POINTER (t);
+
+  if (!strcmp (arg, "on"))
+    {
+      push_opt_level (optimize, optimize_size);
+      optimize_size = 1;
+      optimize = 2;
+    }
+  else if (!strcmp (arg, "off"))
+    /* Not clear what this should do exactly.  CW does not do a pop so
+       we don't either.  */
+    optimize_size = 0;
+  else if (!strcmp (arg, "reset"))
+    pop_opt_level ();
+  else
+    BAD ("malformed '#pragma optimize_for_size { on | off | reset }', ignoring");
+
+  set_flags_from_O (false);
+
+  /* This is expected to be defined in each target. */
+  reset_optimization_options (optimize, optimize_size);
+
+  if (c_lex (&t) != CPP_EOF)
+    warning ("junk at end of '#pragma optimize_for_size'");
+}
+/* APPLE LOCAL end optimization pragmas 3124235/3420242 */
 
 static struct {
   size_t len;
@@ -384,6 +539,28 @@ framework_construct_pathname (const char *fname, cpp_dir *dir)
   strncpy (&frname[frname_len], ".framework/", strlen (".framework/"));
   frname_len += strlen (".framework/");
 
+  /* APPLE LOCAL begin mainline */
+  if (fast_dir == 0)
+    {
+      frname[frname_len-1] = 0;
+      if (stat (frname, &st) == 0)
+	{
+	  /* As soon as we find the first instance of the framework,
+	     we stop and never use any later instance of that
+	     framework.  */
+	  add_framework (fname, fname_len, dir);
+	}
+      else
+	{
+	  /* If we can't find the parent directory, no point looking
+	     further.  */
+	  free (frname);
+	  return 0;
+	}
+      frname[frname_len-1] = '/';
+    }
+  /* APPLE LOCAL end mainline */
+
   /* Append framework_header_dirs and header file name */
   for (i = 0; framework_header_dirs[i].dirName; i++)
     {
@@ -394,11 +571,8 @@ framework_construct_pathname (const char *fname, cpp_dir *dir)
 	      &fname[fname_len]);
 
       if (stat (frname, &st) == 0)
-	{
-	  if (fast_dir == 0)
-	    add_framework (fname, fname_len, dir);
-	  return frname;
-	}
+	/* APPLE LOCAL mainline */
+	return frname;
     }
 
   free (frname);
@@ -435,7 +609,7 @@ find_subframework_file (const char *fname, const char *pname)
   bufptr = strstr (pname, dot_framework);
 
   /* If the parent header is not of any framework, then this header
-     can not be part of any subframework.  */
+     cannot be part of any subframework.  */
   if (!bufptr)
     return 0;
 
@@ -533,8 +707,48 @@ static const char *framework_defaults [] =
   {
     "/System/Library/Frameworks",
     "/Library/Frameworks",
-    "/Local/Library/Frameworks",
   };
+
+/* Register the GNU objective-C runtime include path if STDINC.  */
+
+void
+darwin_register_objc_includes (const char *sysroot, const char *iprefix,
+			       int stdinc)
+{
+  const char *fname;
+  size_t len;
+  /* We do not do anything if we do not want the standard includes. */
+  if (!stdinc)
+    return;
+  
+  fname = GCC_INCLUDE_DIR "-gnu-runtime";
+  
+  /* Register the GNU OBJC runtime include path if we are compiling  OBJC
+    with GNU-runtime.  */
+
+  if (c_dialect_objc () && !flag_next_runtime)
+    {
+      char *str;
+      /* See if our directory starts with the standard prefix.
+	 "Translate" them, i.e. replace /usr/local/lib/gcc... with
+	 IPREFIX and search them first.  */
+      if (iprefix && (len = cpp_GCC_INCLUDE_DIR_len) != 0 && !sysroot
+	  && !strncmp (fname, cpp_GCC_INCLUDE_DIR, len))
+	{
+	  str = concat (iprefix, fname + len, NULL);
+          /* FIXME: wrap the headers for C++awareness.  */
+	  add_path (str, SYSTEM, /*c++aware=*/false, false);
+	}
+      
+      /* Should this directory start with the sysroot?  */
+      if (sysroot)
+	str = concat (sysroot, fname, NULL);
+      else
+	str = update_path (fname, "");
+      
+      add_path (str, SYSTEM, /*c++aware=*/false, false);
+    }
+}
 
 
 /* Register all the system framework paths if STDINC is true and setup
@@ -542,7 +756,8 @@ static const char *framework_defaults [] =
    frameworks had been registered.  */
 
 void
-darwin_register_frameworks (int stdinc)
+darwin_register_frameworks (const char *sysroot,
+			    const char *iprefix ATTRIBUTE_UNUSED, int stdinc)
 {
   if (stdinc)
     {
@@ -551,8 +766,13 @@ darwin_register_frameworks (int stdinc)
       /* Setup default search path for frameworks.  */
       for (i=0; i<sizeof (framework_defaults)/sizeof(const char *); ++i)
 	{
+	  char *str;
+	  if (sysroot)
+	    str = concat (sysroot, xstrdup (framework_defaults [i]), NULL);
+	  else
+	    str = xstrdup (framework_defaults[i]);
 	  /* System Framework headers are cxx aware.  */
-	  add_system_framework_path (xstrdup (framework_defaults[i]));
+	  add_system_framework_path (str);
 	}
     }
 
@@ -566,7 +786,7 @@ darwin_register_frameworks (int stdinc)
    fails to find a header.  We search each file in the include stack,
    using FUNC, starting from the most deeply nested include and
    finishing with the main input file.  We stop searching when FUNC
-   returns non-zero.  */
+   returns nonzero.  */
 
 static const char*
 find_subframework_header (cpp_reader *pfile, const char *header, cpp_dir **dirp)
@@ -593,8 +813,6 @@ find_subframework_header (cpp_reader *pfile, const char *header, cpp_dir **dirp)
 
   return 0;
 }
-
-struct target_c_incpath_s target_c_incpath = C_INCPATH_INIT;
 
 /* APPLE LOCAL begin CALL_ON_LOAD/CALL_ON_UNLOAD pragmas  20020202 --turly  */
 extern void mod_init_section (void), mod_term_section (void);
@@ -626,60 +844,13 @@ static void directive_with_named_function (const char *pragma_name,
 void
 darwin_pragma_call_on_load (cpp_reader *pfile ATTRIBUTE_UNUSED)
 {
+  warning("Pragma CALL_ON_LOAD is deprecated; use constructor attribute instead");
   directive_with_named_function ("CALL_ON_LOAD", mod_init_section);
 }
 void
 darwin_pragma_call_on_unload (cpp_reader *pfile ATTRIBUTE_UNUSED)
 {
+  warning("Pragma CALL_ON_UNLOAD is deprecated; use destructor attribute instead");
   directive_with_named_function ("CALL_ON_UNLOAD", mod_term_section);
 }
 /* APPLE LOCAL end CALL_ON_LOAD/CALL_ON_UNLOAD pragmas  20020202 --turly  */
-
-/* APPLE LOCAL begin CALL_ON_MODULE_BIND deprecated 2002-4-10 --ff */
-void
-darwin_pragma_call_on_module_bind (cpp_reader *pfile ATTRIBUTE_UNUSED)
-{
-  warning ("#pragma CALL_ON_MODULE_BIND is no longer supported, ignoring.  "
-  	   "Use CALL_ON_LOAD instead.");
-}
-/* APPLE LOCAL end CALL_ON_MODULE_BIND deprecated 2002-4-10 --ff */
-
-/* APPLE LOCAL begin temporary pragmas 2001-07-05 --sts */
-/* These need to live only long enough to get their uses flushed out
-   of the system.  */
-void
-darwin_pragma_cc_no_mach_text_sections (cpp_reader *pfile ATTRIBUTE_UNUSED)
-{
-  warning ("#pragma CC_NO_MACH_TEXT_SECTIONS is no longer supported, ignoring");
-}
-
-void
-darwin_pragma_cc_opt_off (cpp_reader *pfile ATTRIBUTE_UNUSED)
-{
-  warning ("#pragma CC_OPT_OFF is no longer supported, ignoring");
-}
-
-void
-darwin_pragma_cc_opt_on (cpp_reader *pfile ATTRIBUTE_UNUSED)
-{
-  warning ("#pragma CC_OPT_ON is no longer supported, ignoring");
-}
-
-void
-darwin_pragma_cc_opt_restore (cpp_reader *pfile ATTRIBUTE_UNUSED)
-{
-  warning ("#pragma CC_OPT_RESTORE is no longer supported, ignoring");
-}
-
-void
-darwin_pragma_cc_writable_strings (cpp_reader *pfile ATTRIBUTE_UNUSED)
-{
-  warning ("#pragma CC_WRITABLE_STRINGS is no longer supported, ignoring");
-}
-
-void
-darwin_pragma_cc_non_writable_strings (cpp_reader *pfile ATTRIBUTE_UNUSED)
-{
-  warning ("#pragma CC_NON_WRITABLE_STRINGS is no longer supported, ignoring");
-}
-/* APPLE LOCAL end temporary pragmas 2001-07-05 --sts */

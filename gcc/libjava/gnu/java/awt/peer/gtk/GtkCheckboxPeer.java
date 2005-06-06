@@ -40,8 +40,6 @@ package gnu.java.awt.peer.gtk;
 
 import java.awt.Checkbox;
 import java.awt.CheckboxGroup;
-import java.awt.Component;
-import java.awt.Font;
 import java.awt.peer.CheckboxPeer;
 
 public class GtkCheckboxPeer extends GtkComponentPeer
@@ -52,44 +50,39 @@ public class GtkCheckboxPeer extends GtkComponentPeer
   // The current state of the GTK checkbox.
   private boolean currentState;  
 
-  public native void nativeCreate (GtkCheckboxGroupPeer group,
-                                   boolean state);
+  public native void create (GtkCheckboxGroupPeer group);
   public native void nativeSetCheckboxGroup (GtkCheckboxGroupPeer group);
   public native void connectSignals ();
-  public native void gtkSetFont (String name, int style, int size);
-  public native void gtkSetLabel (String label);
+  native void gtkWidgetModifyFont (String name, int style, int size);
+  native void gtkButtonSetLabel (String label);
+  native void gtkToggleButtonSetActive (boolean is_active);
 
   public GtkCheckboxPeer (Checkbox c)
   {
     super (c);
   }
 
-  // We can't fully use the ordinary getArgs code here, due to
-  // oddities of this particular widget.  In particular we must be
-  // able to switch between a checkbutton and a radiobutton
-  // dynamically.
+  // FIXME: we must be able to switch between a checkbutton and a
+  // radiobutton dynamically.
   public void create ()
   {
-    CheckboxGroup g = ((Checkbox) awtComponent).getCheckboxGroup ();
+    Checkbox checkbox = (Checkbox) awtComponent;
+    CheckboxGroup g = checkbox.getCheckboxGroup ();
     old_group = GtkCheckboxGroupPeer.getCheckboxGroupPeer (g);
-    currentState = ((Checkbox)awtComponent).getState();
-    nativeCreate (old_group, currentState);
+    create (old_group);
+    gtkToggleButtonSetActive (checkbox.getState ());
+    gtkButtonSetLabel (checkbox.getLabel ());
   }
 
   public void setState (boolean state)
   {
     if (currentState != state)
-      set ("active", state);
+      gtkToggleButtonSetActive (state);
   }
 
   public void setLabel (String label)
   {
-    gtkSetLabel (label);
-  }
-
-  public void setFont (Font f)
-  {
-    gtkSetFont(f.getName(), f.getStyle(), f.getSize());
+    gtkButtonSetLabel (label);
   }
 
   public void setCheckboxGroup (CheckboxGroup group)
@@ -103,13 +96,6 @@ public class GtkCheckboxPeer extends GtkComponentPeer
 	nativeSetCheckboxGroup (gp);
 	old_group = gp;
       }
-  }
-
-  public void getArgs (Component component, GtkArgList args)
-  {
-    super.getArgs (component, args);
-    args.add ("active", ((Checkbox) component).getState ());
-    args.add ("label", ((Checkbox) component).getLabel ());
   }
 
   // Override the superclass postItemEvent so that the peer doesn't

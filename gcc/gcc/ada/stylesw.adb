@@ -34,23 +34,25 @@ package body Stylesw is
 
    procedure Reset_Style_Check_Options is
    begin
-      Style_Check_Indentation      := 0;
-      Style_Check_Attribute_Casing := False;
-      Style_Check_Blanks_At_End    := False;
-      Style_Check_Comments         := False;
-      Style_Check_End_Labels       := False;
-      Style_Check_Form_Feeds       := False;
-      Style_Check_Horizontal_Tabs  := False;
-      Style_Check_If_Then_Layout   := False;
-      Style_Check_Keyword_Casing   := False;
-      Style_Check_Layout           := False;
-      Style_Check_Max_Line_Length  := False;
-      Style_Check_Pragma_Casing    := False;
-      Style_Check_References       := False;
-      Style_Check_Specs            := False;
-      Style_Check_Standard         := False;
-      Style_Check_Subprogram_Order := False;
-      Style_Check_Tokens           := False;
+      Style_Check_Indentation       := 0;
+      Style_Check_Attribute_Casing  := False;
+      Style_Check_Blanks_At_End     := False;
+      Style_Check_Comments          := False;
+      Style_Check_End_Labels        := False;
+      Style_Check_Form_Feeds        := False;
+      Style_Check_Horizontal_Tabs   := False;
+      Style_Check_If_Then_Layout    := False;
+      Style_Check_Keyword_Casing    := False;
+      Style_Check_Layout            := False;
+      Style_Check_Max_Line_Length   := False;
+      Style_Check_Max_Nesting_Level := False;
+      Style_Check_Order_Subprograms := False;
+      Style_Check_Pragma_Casing     := False;
+      Style_Check_References        := False;
+      Style_Check_Specs             := False;
+      Style_Check_Standard          := False;
+      Style_Check_Tokens            := False;
+      Style_Check_Xtra_Parens       := False;
    end Reset_Style_Check_Options;
 
    ------------------------------
@@ -59,10 +61,16 @@ package body Stylesw is
 
    procedure Save_Style_Check_Options (Options : out Style_Check_Options) is
       P : Natural := 0;
-      J : Natural;
 
       procedure Add (C : Character; S : Boolean);
       --  Add given character C to string if switch S is true
+
+      procedure Add_Nat (N : Nat);
+      --  Add given natural number to string
+
+      ---------
+      -- Add --
+      ---------
 
       procedure Add (C : Character; S : Boolean) is
       begin
@@ -71,6 +79,20 @@ package body Stylesw is
             Options (P) := C;
          end if;
       end Add;
+
+      -------------
+      -- Add_Nat --
+      -------------
+
+      procedure Add_Nat (N : Nat) is
+      begin
+         if N > 9 then
+            Add_Nat (N / 10);
+         end if;
+
+         P := P + 1;
+         Options (P) := Character'Val (Character'Pos ('0') + N mod 10);
+      end Add_Nat;
 
    --  Start of processing for Save_Style_Check_Options
 
@@ -91,28 +113,32 @@ package body Stylesw is
       Add ('i', Style_Check_If_Then_Layout);
       Add ('k', Style_Check_Keyword_Casing);
       Add ('l', Style_Check_Layout);
-      Add ('m', Style_Check_Max_Line_Length);
       Add ('n', Style_Check_Standard);
-      Add ('o', Style_Check_Subprogram_Order);
+      Add ('o', Style_Check_Order_Subprograms);
       Add ('p', Style_Check_Pragma_Casing);
       Add ('r', Style_Check_References);
       Add ('s', Style_Check_Specs);
       Add ('t', Style_Check_Tokens);
+      Add ('x', Style_Check_Xtra_Parens);
 
       if Style_Check_Max_Line_Length then
-         P := Options'Last;
-         J := Natural (Style_Max_Line_Length);
-
-         loop
-            Options (P) := Character'Val (J mod 10 + Character'Pos ('0'));
-            P := P - 1;
-            J := J / 10;
-            exit when J = 0;
-         end loop;
-
+         P := P + 1;
          Options (P) := 'M';
+         Add_Nat (Style_Max_Line_Length);
       end if;
 
+      if Style_Check_Max_Nesting_Level then
+         P := P + 1;
+         Options (P) := 'L';
+         Add_Nat (Style_Max_Nesting_Level);
+      end if;
+
+      pragma Assert (P <= Options'Last);
+
+      while P < Options'Last loop
+         P := P + 1;
+         Options (P) := ' ';
+      end loop;
    end Save_Style_Check_Options;
 
    -------------------------------------
@@ -160,38 +186,67 @@ package body Stylesw is
                   := Character'Pos (C) - Character'Pos ('0');
 
             when 'a' =>
-               Style_Check_Attribute_Casing := True;
+               Style_Check_Attribute_Casing  := True;
 
             when 'b' =>
-               Style_Check_Blanks_At_End    := True;
+               Style_Check_Blanks_At_End     := True;
 
             when 'c' =>
-               Style_Check_Comments         := True;
+               Style_Check_Comments          := True;
 
             when 'e' =>
-               Style_Check_End_Labels       := True;
+               Style_Check_End_Labels        := True;
 
             when 'f' =>
-               Style_Check_Form_Feeds       := True;
+               Style_Check_Form_Feeds        := True;
 
             when 'h' =>
-               Style_Check_Horizontal_Tabs  := True;
+               Style_Check_Horizontal_Tabs   := True;
 
             when 'i' =>
-               Style_Check_If_Then_Layout   := True;
+               Style_Check_If_Then_Layout    := True;
 
             when 'k' =>
-               Style_Check_Keyword_Casing   := True;
+               Style_Check_Keyword_Casing    := True;
 
             when 'l' =>
-               Style_Check_Layout           := True;
+               Style_Check_Layout            := True;
+
+            when 'L' =>
+               Style_Max_Nesting_Level := 0;
+
+               if J > Options'Last
+                 or else Options (J) not in '0' .. '9'
+               then
+                  OK := False;
+                  Err_Col := J;
+                  return;
+               end if;
+
+               loop
+                  Style_Max_Nesting_Level :=
+                    Style_Max_Nesting_Level * 10 +
+                      Character'Pos (Options (J)) - Character'Pos ('0');
+
+                  if Style_Max_Nesting_Level > 999 then
+                     OK := False;
+                     Err_Col := J;
+                     return;
+                  end if;
+
+                  J := J + 1;
+                  exit when J > Options'Last
+                    or else Options (J) not in '0' .. '9';
+               end loop;
+
+               Style_Check_Max_Nesting_Level := Style_Max_Nesting_Level /= 0;
 
             when 'm' =>
-               Style_Check_Max_Line_Length  := True;
-               Style_Max_Line_Length        := 79;
+               Style_Check_Max_Line_Length   := True;
+               Style_Max_Line_Length         := 79;
 
             when 'n' =>
-               Style_Check_Standard         := True;
+               Style_Check_Standard          := True;
 
             when 'N' =>
                Reset_Style_Check_Options;
@@ -223,22 +278,25 @@ package body Stylesw is
                     or else Options (J) not in '0' .. '9';
                end loop;
 
-               Style_Check_Max_Line_Length := Style_Max_Line_Length /= 0;
+               Style_Check_Max_Line_Length   := Style_Max_Line_Length /= 0;
 
             when 'o' =>
-               Style_Check_Subprogram_Order := True;
+               Style_Check_Order_Subprograms := True;
 
             when 'p' =>
-               Style_Check_Pragma_Casing    := True;
+               Style_Check_Pragma_Casing     := True;
 
             when 'r' =>
-               Style_Check_References       := True;
+               Style_Check_References        := True;
 
             when 's' =>
-               Style_Check_Specs            := True;
+               Style_Check_Specs             := True;
 
             when 't' =>
-               Style_Check_Tokens           := True;
+               Style_Check_Tokens            := True;
+
+            when 'x' =>
+               Style_Check_Xtra_Parens       := True;
 
             when ' ' =>
                null;

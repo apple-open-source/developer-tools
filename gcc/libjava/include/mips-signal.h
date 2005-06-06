@@ -1,7 +1,7 @@
 // mips-signal.h - Catch runtime signals and turn them into exceptions
 // on an mips based Linux system. 
 
-/* Copyright (C) 1998, 1999, 2001, 2002, 2003  Free Software Foundation
+/* Copyright (C) 1998, 1999, 2001, 2002, 2003, 2004 Free Software Foundation
 
    This file is part of libgcj.
 
@@ -22,7 +22,7 @@ details.  */
    sys/ucontext.h included by java-signal.h from prims.cc */
 
 #define HANDLE_SEGV 1
-#undef HANDLE_FPE
+#define HANDLE_FPE 1
 
 /* The third parameter to the signal handler points to something with
  * this structure defined in asm/ucontext.h, but the name clashes with
@@ -54,7 +54,9 @@ struct kernel_sigaction {
 
 
 #define SIGNAL_HANDLER(_name) \
-static void _name (int _dummy, siginfo_t *_info, sig_ucontext_t *_arg)
+static void _name (int _dummy __attribute__ ((__unused__)), \
+		   siginfo_t *_info __attribute__ ((__unused__)), \
+		   sig_ucontext_t *_arg __attribute__ ((__unused__)))
 
 /*
  *  MIPS leaves pc pointing at the faulting instruction, but the
@@ -83,7 +85,19 @@ do                                                   \
     syscall (SYS_sigaction, SIGSEGV, &kact, NULL);   \
   }                                                  \
 while (0)
-								
+
+#define INIT_FPE                                     \
+do                                                   \
+  {                                                  \
+    struct kernel_sigaction kact;                    \
+    kact.k_sa_handler = catch_fpe;                   \
+    kact.k_sa_flags = SA_SIGINFO | SA_NODEFER;       \
+    sigemptyset (&kact.k_sa_mask);                   \
+    syscall (SYS_sigaction, SIGFPE, &kact, NULL);    \
+  }                                                  \
+while (0)
+
+#undef HANDLE_DIVIDE_OVERFLOW
 
 #endif /* JAVA_SIGNAL_H */
   

@@ -1,5 +1,5 @@
-/* PlainDocument.java -- 
-   Copyright (C) 2002 Free Software Foundation, Inc.
+/* PlainDocument.java --
+   Copyright (C) 2002, 2004  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -35,24 +35,98 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package javax.swing.text;
 
+import java.util.ArrayList;
 
 public class PlainDocument extends AbstractDocument
 {
-    PlainDocument()
-    {
-	super(new GapContent());
-    }
+  private static final long serialVersionUID = 4758290289196893664L;
+    
+  public static final String lineLimitAttribute = "lineLimit";
+  public static final String tabSizeAttribute = "tabSize";
 
-    public Element getDefaultRootElement()
-    {
-	return null;
-    }
+  private Element rootElement;
+  private int tabSize;
+  
+  public PlainDocument()
+  {
+    this(new GapContent());
+  }
 
-    public Element getParagraphElement(int  pos)
-    {
-	return null;
-    }
+  public PlainDocument(AbstractDocument.Content content)
+  {
+    super(content);
+    tabSize = 8;
+    rootElement = createDefaultRoot();
+  }
+
+  private void reindex()
+  {
+    Element[] lines;
+    try 
+      {
+        String str = content.getString(0, content.length());
+
+        ArrayList elts = new ArrayList();
+        int j = 0;
+        for (int i = str.indexOf('\n', 0); i != -1; i = str.indexOf('\n', i + 1))
+          {
+            elts.add(createLeafElement(rootElement, SimpleAttributeSet.EMPTY, j, i + 1));
+            j = i + 1;
+          }
+        
+        if (j < content.length())
+          elts.add(createLeafElement(rootElement, SimpleAttributeSet.EMPTY, j, content.length()));
+        
+        lines = new Element[elts.size()];
+        for (int i = 0; i < elts.size(); ++i)
+          lines[i] = (Element) elts.get(i);
+      }
+    catch (BadLocationException e)
+      {
+        lines = new Element[1];
+        lines[0] = createLeafElement(rootElement, SimpleAttributeSet.EMPTY, 0, 1);
+      }
+
+    ((BranchElement) rootElement).replace(0, rootElement.getElementCount(), lines);
+  }
+
+  protected AbstractDocument.AbstractElement createDefaultRoot()
+  {
+    BranchElement root =
+      (BranchElement) createBranchElement(null, SimpleAttributeSet.EMPTY);
+
+    Element[] array = new Element[1];
+    array[0] = createLeafElement(root, SimpleAttributeSet.EMPTY, 0, 1);
+    root.replace(0, 0, array);
+    
+    return root;
+  }
+
+  protected void insertUpdate(DefaultDocumentEvent event, AttributeSet attributes)
+  {
+    reindex();
+
+    super.insertUpdate(event, attributes);
+  }
+
+  protected void removeUpdate(DefaultDocumentEvent event)
+  {
+    reindex();
+
+    super.removeUpdate(event);
+  }
+
+  public Element getDefaultRootElement()
+  {
+    return rootElement;
+  }
+
+  public Element getParagraphElement(int pos)
+  {
+    Element root = getDefaultRootElement();
+    return root.getElement(root.getElementIndex(pos));
+  }
 }
-

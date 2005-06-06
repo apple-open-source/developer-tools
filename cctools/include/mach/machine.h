@@ -155,9 +155,8 @@ extern vm_offset_t		interrupt_stack[];
 #define CPU_TYPE_RS6000		((cpu_type_t) 17)
 #define CPU_TYPE_MC98000	((cpu_type_t) 18)
 #define CPU_TYPE_POWERPC	((cpu_type_t) 18)
-#ifdef INTERIM_PPC64
-#define CPU_TYPE_POWERPC64	((cpu_type_t) 19)
-#endif /* INTERIM_PPC64 */
+#define CPU_ARCH_ABI64		 0x1000000
+#define CPU_TYPE_POWERPC64	((cpu_type_t)(CPU_TYPE_POWERPC | CPU_ARCH_ABI64))
 #define CPU_TYPE_VEO		((cpu_type_t) 255)
 		
 
@@ -234,6 +233,7 @@ extern vm_offset_t		interrupt_stack[];
 #define CPU_SUBTYPE_PENTPRO	CPU_SUBTYPE_INTEL(6, 1)
 #define CPU_SUBTYPE_PENTII_M3	CPU_SUBTYPE_INTEL(6, 3)
 #define CPU_SUBTYPE_PENTII_M5	CPU_SUBTYPE_INTEL(6, 5)
+#define CPU_SUBTYPE_PENTIUM_4	CPU_SUBTYPE_INTEL(10, 0)
 
 #define CPU_SUBTYPE_INTEL_FAMILY(x)	((x) & 15)
 #define CPU_SUBTYPE_INTEL_FAMILY_MAX	15
@@ -359,14 +359,6 @@ extern vm_offset_t		interrupt_stack[];
 #define CPU_SUBTYPE_POWERPC_7400	((cpu_subtype_t) 10)
 #define CPU_SUBTYPE_POWERPC_7450	((cpu_subtype_t) 11)
 #define CPU_SUBTYPE_POWERPC_970		((cpu_subtype_t) 100)
-
-#ifdef INTERIM_PPC64
-/*
- *      64-bit PowerPC subtypes
- */
-#define CPU_SUBTYPE_POWERPC64_ALL		((cpu_subtype_t) 0)
-#endif /* INTERIM_PPC64 */
-
 
 /*
  * VEO subtypes

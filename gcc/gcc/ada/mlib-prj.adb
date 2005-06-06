@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---              Copyright (C) 2001-2004, Ada Core Technologies, Inc.        --
+--              Copyright (C) 2001-2005, Ada Core Technologies, Inc.        --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -71,6 +71,9 @@ package body MLib.Prj is
    S_Dec_Ads : Name_Id := No_Name;
    --  Name_Id for "dec.ads"
 
+   G_Trasym_Ads : Name_Id := No_Name;
+   --  Name_Id for "g-trasym.ads"
+
    No_Argument_List : aliased String_List := (1 .. 0 => null);
    No_Argument      : constant String_List_Access := No_Argument_List'Access;
 
@@ -106,11 +109,11 @@ package body MLib.Prj is
       Table_Increment      => 100);
 
    package Objects_Htable is new GNAT.HTable.Simple_HTable
-     (Header_Num => Com.Header_Num,
+     (Header_Num => Header_Num,
       Element    => Boolean,
       No_Element => False,
       Key        => Name_Id,
-      Hash       => Com.Hash,
+      Hash       => Hash,
       Equal      => "=");
 
    --  List of non-Ada object files
@@ -152,42 +155,42 @@ package body MLib.Prj is
    --  All the ALI file in the library
 
    package Library_ALIs is new GNAT.HTable.Simple_HTable
-     (Header_Num => Com.Header_Num,
+     (Header_Num => Header_Num,
       Element    => Boolean,
       No_Element => False,
       Key        => Name_Id,
-      Hash       => Com.Hash,
+      Hash       => Hash,
       Equal      => "=");
 
    --  The ALI files in the interface sets
 
    package Interface_ALIs is new GNAT.HTable.Simple_HTable
-     (Header_Num => Com.Header_Num,
+     (Header_Num => Header_Num,
       Element    => Boolean,
       No_Element => False,
       Key        => Name_Id,
-      Hash       => Com.Hash,
+      Hash       => Hash,
       Equal      => "=");
 
    --  The ALI files that have been processed to check if the corresponding
    --  library unit is in the interface set.
 
    package Processed_ALIs is new GNAT.HTable.Simple_HTable
-     (Header_Num => Com.Header_Num,
+     (Header_Num => Header_Num,
       Element    => Boolean,
       No_Element => False,
       Key        => Name_Id,
-      Hash       => Com.Hash,
+      Hash       => Hash,
       Equal      => "=");
 
    --  The projects imported directly or indirectly.
 
    package Processed_Projects is new GNAT.HTable.Simple_HTable
-     (Header_Num => Com.Header_Num,
+     (Header_Num => Header_Num,
       Element    => Boolean,
       No_Element => False,
       Key        => Name_Id,
-      Hash       => Com.Hash,
+      Hash       => Hash,
       Equal      => "=");
 
    --  The library projects imported directly or indirectly.
@@ -308,6 +311,10 @@ package body MLib.Prj is
       Libdecgnat_Needed : Boolean := False;
       --  On OpenVMS, set to True if library needs to be linked with libdecgnat
 
+      Gtrasymobj_Needed : Boolean := False;
+      --  On OpenVMS, set to True if library needs to be linked with
+      --  g-trasym.obj.
+
       Data : Project_Data := Projects.Table (For_Project);
 
       Object_Directory_Path : constant String :=
@@ -316,9 +323,6 @@ package body MLib.Prj is
       Standalone   : constant Boolean := Data.Standalone_Library;
 
       Project_Name : constant String := Get_Name_String (Data.Name);
-
-      DLL_Address  : constant String_Access :=
-                       new String'(Default_DLL_Address);
 
       Current_Dir  : constant String := Get_Current_Dir;
 
@@ -372,7 +376,8 @@ package body MLib.Prj is
       --  to link with -lgnarl (this is the case when there is a dependency
       --  on s-osinte.ads). On OpenVMS, set Libdecgnat_Needed if the ALI file
       --  indicates that there is a need to link with -ldecgnat (this is the
-      --  case when there is a dependency on dec.ads).
+      --  case when there is a dependency on dec.ads), and set
+      --  Gtrasymobj_Needed if there is a dependency on g-trasym.ads.
 
       procedure Process (The_ALI : File_Name_Type);
       --  Check if the closure of a library unit which is or should be in the
@@ -506,7 +511,9 @@ package body MLib.Prj is
 
       begin
          if not Libgnarl_Needed or
-           (Hostparm.OpenVMS and then (not Libdecgnat_Needed))
+           (Hostparm.OpenVMS and then
+              ((not Libdecgnat_Needed) or
+               (not Gtrasymobj_Needed)))
          then
             --  Scan the ALI file
 
@@ -531,10 +538,13 @@ package body MLib.Prj is
                if ALI.Sdep.Table (Index).Sfile = S_Osinte_Ads then
                   Libgnarl_Needed := True;
 
-               elsif Hostparm.OpenVMS and then
-                     ALI.Sdep.Table (Index).Sfile = S_Dec_Ads
-               then
-                  Libdecgnat_Needed := True;
+               elsif Hostparm.OpenVMS then
+                  if ALI.Sdep.Table (Index).Sfile = S_Dec_Ads then
+                     Libdecgnat_Needed := True;
+
+                  elsif ALI.Sdep.Table (Index).Sfile = G_Trasym_Ads then
+                     Gtrasymobj_Needed := True;
+                  end if;
                end if;
             end loop;
          end if;
@@ -741,15 +751,21 @@ package body MLib.Prj is
       --  of "s-osinte.ads".
 
       if S_Osinte_Ads = No_Name then
-         Name_Len := 12;
-         Name_Buffer (1 .. Name_Len) := "s-osinte.ads";
+         Name_Len := 0;
+         Add_Str_To_Name_Buffer ("s-osinte.ads");
          S_Osinte_Ads := Name_Find;
       end if;
 
       if S_Dec_Ads = No_Name then
-         Name_Len := 7;
-         Name_Buffer (1 .. Name_Len) := "dec.ads";
+         Name_Len := 0;
+         Add_Str_To_Name_Buffer ("dec.ads");
          S_Dec_Ads := Name_Find;
+      end if;
+
+      if G_Trasym_Ads = No_Name then
+         Name_Len := 0;
+         Add_Str_To_Name_Buffer ("g-trasym.ads");
+         G_Trasym_Ads := Name_Find;
       end if;
 
       --  We work in the object directory
@@ -1193,8 +1209,8 @@ package body MLib.Prj is
                                       new String'(ALI_File);
 
                                     --  Find out if for this ALI file,
-                                    --  libgnarl or libdecgnat (on OpenVMS)
-                                    --  is necessary.
+                                    --  libgnarl or libdecgnat or g-trasym.obj
+                                    --  (on OpenVMS) is necessary.
 
                                     Check_Libs (ALI_File);
 
@@ -1253,6 +1269,12 @@ package body MLib.Prj is
             else
                Opts.Table (Opts.Last) := new String'(Shared_Lib ("gnarl"));
             end if;
+         end if;
+
+         if Gtrasymobj_Needed then
+            Opts.Increment_Last;
+            Opts.Table (Opts.Last) :=
+              new String'(Lib_Directory & "/g-trasym.obj");
          end if;
 
          if Libdecgnat_Needed then
@@ -1397,19 +1419,19 @@ package body MLib.Prj is
             Data := Projects.Table (For_Project);
 
             declare
-               Interface : String_List_Id := Data.Lib_Interface_ALIs;
-               ALI       : File_Name_Type;
+               Iface : String_List_Id := Data.Lib_Interface_ALIs;
+               ALI   : File_Name_Type;
 
             begin
-               while Interface /= Nil_String loop
-                  ALI := String_Elements.Table (Interface).Value;
+               while Iface /= Nil_String loop
+                  ALI := String_Elements.Table (Iface).Value;
                   Interface_ALIs.Set (ALI, True);
-                  Get_Name_String (String_Elements.Table (Interface).Value);
+                  Get_Name_String (String_Elements.Table (Iface).Value);
                   Add_Argument (Name_Buffer (1 .. Name_Len));
-                  Interface := String_Elements.Table (Interface).Next;
+                  Iface := String_Elements.Table (Iface).Next;
                end loop;
 
-               Interface := Data.Lib_Interface_ALIs;
+               Iface := Data.Lib_Interface_ALIs;
 
                if not Opt.Quiet_Output then
 
@@ -1417,10 +1439,10 @@ package body MLib.Prj is
                   --  library that is needed by an interface should also be an
                   --  interface. If it is not the case, output a warning.
 
-                  while Interface /= Nil_String loop
-                     ALI := String_Elements.Table (Interface).Value;
+                  while Iface /= Nil_String loop
+                     ALI := String_Elements.Table (Iface).Value;
                      Process (ALI);
-                     Interface := String_Elements.Table (Interface).Next;
+                     Iface := String_Elements.Table (Iface).Next;
                   end loop;
                end if;
             end;
@@ -1443,14 +1465,13 @@ package body MLib.Prj is
                   Foreign       => Foreign_Objects.all,
                   Afiles        => Ali_Files.all,
                   Options       => Options.all,
+                  Options_2     => No_Argument_List,
                   Interfaces    => Arguments (1 .. Argument_Number),
                   Lib_Filename  => Lib_Filename.all,
                   Lib_Dir       => Lib_Dirpath.all,
                   Symbol_Data   => Data.Symbol_Data,
                   Driver_Name   => Driver_Name,
-                  Lib_Address   => DLL_Address.all,
                   Lib_Version   => Lib_Version.all,
-                  Relocatable   => The_Build_Mode = Relocatable,
                   Auto_Init     => Data.Lib_Auto_Init);
 
             when Static =>
@@ -1536,7 +1557,13 @@ package body MLib.Prj is
       Data : constant Project_Data := Projects.Table (For_Project);
 
    begin
-      if Data.Library and not Data.Flag1 then
+      --  No need to build the library if there is no object directory,
+      --  hence no object files to build the library.
+
+      if Data.Library
+        and then not Data.Need_To_Build_Lib
+        and then Data.Object_Directory /= No_Name
+      then
          declare
             Current  : constant Dir_Name_Str := Get_Current_Dir;
             Lib_Name : constant Name_Id := Library_File_Name_For (For_Project);
@@ -1576,17 +1603,17 @@ package body MLib.Prj is
 
                   Obj_TS := File_Stamp (Name_Find);
 
-                  --  If library file time stamp is earlier, set Flag1 and
-                  --  return. String comparaison is used, otherwise time stamps
-                  --  may be too close and the comparaison would return True,
-                  --  which would trigger an unnecessary rebuild of the
-                  --  library.
+                  --  If library file time stamp is earlier, set
+                  --  Need_To_Build_Lib and return. String comparaison is used,
+                  --  otherwise time stamps may be too close and the
+                  --  comparaison would return True, which would trigger
+                  --  an unnecessary rebuild of the library.
 
                   if String (Lib_TS) < String (Obj_TS) then
 
                      --  Library must be rebuilt
 
-                     Projects.Table (For_Project).Flag1 := True;
+                     Projects.Table (For_Project).Need_To_Build_Lib := True;
                      exit;
                   end if;
                end if;
@@ -1610,9 +1637,6 @@ package body MLib.Prj is
       Last : Natural;
 
       Disregard : Boolean;
-
-      procedure Set_Writable (Name : System.Address);
-      pragma Import (C, Set_Writable, "__gnat_set_writable");
 
    begin
       Get_Name_String (Directory);
@@ -1640,8 +1664,7 @@ package body MLib.Prj is
          exit when Last = 0;
 
          if Is_Regular_File (Name (1 .. Last)) then
-            Name (Last + 1) := ASCII.NUL;
-            Set_Writable (Name (1)'Address);
+            Set_Writable (Name (1 .. Last));
             Delete_File (Name (1 .. Last), Disregard);
          end if;
       end loop;

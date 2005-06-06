@@ -1,5 +1,5 @@
 /* PowerPC E500 user include file.
-   Copyright (C) 2002, 2003 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004 Free Software Foundation, Inc.
    Contributed by Aldy Hernandez (aldyh@redhat.com).
 
    This file is part of GCC.
@@ -1087,5 +1087,24 @@ __ev_set_spefscr_frmc (int rnd)
   i |= rnd;
   __builtin_spe_mtspefscr (i);
 }
+
+/* The SPE PIM says these are declared in <spe.h>, although they are
+   not provided by GCC: they must be taken from a separate
+   library.  */
+extern short int atosfix16 (const char *);
+extern int atosfix32 (const char *);
+extern long long atosfix64 (const char *);
+
+extern unsigned short atoufix16 (const char *);
+extern unsigned int atoufix32 (const char *);
+extern unsigned long long atoufix64 (const char *);
+
+extern short int strtosfix16 (const char *, char **);
+extern int strtosfix32 (const char *, char **);
+extern long long strtosfix64 (const char *, char **);
+
+extern unsigned short int strtoufix16 (const char *, char **);
+extern unsigned int strtoufix32 (const char *, char **);
+extern unsigned long long strtoufix64 (const char *, char **);
 
 #endif /* _SPE_H */

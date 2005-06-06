@@ -48,6 +48,8 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "target.h"
 #include "target-def.h"
 #include "langhooks.h"
+#include "tree-gimple.h"
+
 
 /* Enumeration for all of the relational tests, so that we can build
    arrays indexed by the test type, and not worry about the order
@@ -82,9 +84,7 @@ char xtensa_hard_regno_mode_ok[(int) MAX_MACHINE_MODE][FIRST_PSEUDO_REGISTER];
 /* Current frame size calculated by compute_frame_size.  */
 unsigned xtensa_current_frame_size;
 
-/* Tables of ld/st opcode names for block moves */
-const char *xtensa_ld_opcodes[(int) MAX_MACHINE_MODE];
-const char *xtensa_st_opcodes[(int) MAX_MACHINE_MODE];
+/* Largest block move to handle in-line.  */
 #define LARGEST_MOVE_RATIO 15
 
 /* Define the structure for the machine field in struct function.  */
@@ -198,7 +198,6 @@ static rtx gen_int_relational (enum rtx_code, rtx, rtx, int *);
 static rtx gen_float_relational (enum rtx_code, rtx, rtx);
 static rtx gen_conditional_move (rtx);
 static rtx fixup_subreg_mem (rtx);
-static enum machine_mode xtensa_find_mode_for_size (unsigned);
 static struct machine_function * xtensa_init_machine_status (void);
 static bool xtensa_return_in_msb (tree);
 static void printx (FILE *, signed int);
@@ -211,6 +210,7 @@ static void xtensa_select_rtx_section (enum machine_mode, rtx,
 static bool xtensa_rtx_costs (rtx, int, int, int *);
 static tree xtensa_build_builtin_va_list (void);
 static bool xtensa_return_in_memory (tree, tree);
+static tree xtensa_gimplify_va_arg_expr (tree, tree, tree *, tree *);
 
 static const int reg_nonleaf_alloc_order[FIRST_PSEUDO_REGISTER] =
   REG_ALLOC_ORDER;
@@ -252,9 +252,13 @@ static const int reg_nonleaf_alloc_order[FIRST_PSEUDO_REGISTER] =
 #define TARGET_RETURN_IN_MEMORY xtensa_return_in_memory
 #undef TARGET_SPLIT_COMPLEX_ARG
 #define TARGET_SPLIT_COMPLEX_ARG hook_bool_tree_true
+#undef TARGET_MUST_PASS_IN_STACK
+#define TARGET_MUST_PASS_IN_STACK must_pass_in_stack_var_size
 
 #undef TARGET_EXPAND_BUILTIN_SAVEREGS
 #define TARGET_EXPAND_BUILTIN_SAVEREGS xtensa_builtin_saveregs
+#undef TARGET_GIMPLIFY_VA_ARG_EXPR
+#define TARGET_GIMPLIFY_VA_ARG_EXPR xtensa_gimplify_va_arg_expr
 
 #undef TARGET_RETURN_IN_MSB
 #define TARGET_RETURN_IN_MSB xtensa_return_in_msb
@@ -1419,10 +1423,10 @@ xtensa_copy_incoming_a7 (rtx opnd)
 }
 
 
-/* Try to expand a block move operation to an RTL block move instruction.
-   If not optimizing or if the block size is not a constant or if the
-   block is small, the expansion fails and GCC falls back to calling
-   memcpy().
+/* Try to expand a block move operation to a sequence of RTL move
+   instructions.  If not optimizing, or if the block size is not a
+   constant, or if the block is too large, the expansion fails and GCC
+   falls back to calling memcpy().
 
    operands[0] is the destination
    operands[1] is the source
@@ -1432,19 +1436,35 @@ xtensa_copy_incoming_a7 (rtx opnd)
 int
 xtensa_expand_block_move (rtx *operands)
 {
-  rtx dest = operands[0];
-  rtx src = operands[1];
-  int bytes = INTVAL (operands[2]);
-  int align = XINT (operands[3], 0);
+  static const enum machine_mode mode_from_align[] =
+  {
+    VOIDmode, QImode, HImode, VOIDmode, SImode,
+  };
+
+  rtx dst_mem = operands[0];
+  rtx src_mem = operands[1];
+  HOST_WIDE_INT bytes, align;
   int num_pieces, move_ratio;
+  rtx temp[2];
+  enum machine_mode mode[2];
+  int amount[2];
+  bool active[2];
+  int phase = 0;
+  int next;
+  int offset_ld = 0;
+  int offset_st = 0;
+  rtx x;
 
   /* If this is not a fixed size move, just call memcpy.  */
   if (!optimize || (GET_CODE (operands[2]) != CONST_INT))
     return 0;
 
+  bytes = INTVAL (operands[2]);
+  align = INTVAL (operands[3]);
+
   /* Anything to move?  */
   if (bytes <= 0)
-    return 1;
+    return 0;
 
   if (align > MOVE_MAX)
     align = MOVE_MAX;
@@ -1454,147 +1474,62 @@ xtensa_expand_block_move (rtx *operands)
   if (optimize > 2)
     move_ratio = LARGEST_MOVE_RATIO;
   num_pieces = (bytes / align) + (bytes % align); /* Close enough anyway.  */
-  if (num_pieces >= move_ratio)
+  if (num_pieces > move_ratio)
     return 0;
 
-  /* Make sure the memory addresses are valid.  */
-  operands[0] = validize_mem (dest);
-  operands[1] = validize_mem (src);
-
-  emit_insn (gen_movstrsi_internal (operands[0], operands[1],
-				    operands[2], operands[3]));
-  return 1;
-}
-
-
-/* Emit a sequence of instructions to implement a block move, trying
-   to hide load delay slots as much as possible.  Load N values into
-   temporary registers, store those N values, and repeat until the
-   complete block has been moved.  N=delay_slots+1.  */
-
-struct meminsnbuf
-{
-  char template[30];
-  rtx operands[2];
-};
-
-void
-xtensa_emit_block_move (rtx *operands, rtx *tmpregs, int delay_slots)
-{
-  rtx dest = operands[0];
-  rtx src = operands[1];
-  int bytes = INTVAL (operands[2]);
-  int align = XINT (operands[3], 0);
-  rtx from_addr = XEXP (src, 0);
-  rtx to_addr = XEXP (dest, 0);
-  int from_struct = MEM_IN_STRUCT_P (src);
-  int to_struct = MEM_IN_STRUCT_P (dest);
-  int offset = 0;
-  int chunk_size, item_size;
-  struct meminsnbuf *ldinsns, *stinsns;
-  const char *ldname, *stname;
-  enum machine_mode mode;
-
-  if (align > MOVE_MAX)
-    align = MOVE_MAX;
-  item_size = align;
-  chunk_size = delay_slots + 1;
-
-  ldinsns = (struct meminsnbuf *)
-    alloca (chunk_size * sizeof (struct meminsnbuf));
-  stinsns = (struct meminsnbuf *)
-    alloca (chunk_size * sizeof (struct meminsnbuf));
-
-  mode = xtensa_find_mode_for_size (item_size);
-  item_size = GET_MODE_SIZE (mode);
-  ldname = xtensa_ld_opcodes[(int) mode];
-  stname = xtensa_st_opcodes[(int) mode];
-
-  while (bytes > 0)
+  x = XEXP (dst_mem, 0);
+  if (!REG_P (x))
     {
-      int n;
+      x = force_reg (Pmode, x);
+      dst_mem = replace_equiv_address (dst_mem, x);
+    }
 
-      for (n = 0; n < chunk_size; n++)
+  x = XEXP (src_mem, 0);
+  if (!REG_P (x))
+    {
+      x = force_reg (Pmode, x);
+      src_mem = replace_equiv_address (src_mem, x);
+    }
+
+  active[0] = active[1] = false;
+
+  do
+    {
+      next = phase;
+      phase ^= 1;
+
+      if (bytes > 0)
 	{
-	  rtx addr, mem;
+	  int next_amount;
 
-	  if (bytes == 0)
-	    {
-	      chunk_size = n;
-	      break;
-	    }
+	  next_amount = (bytes >= 4 ? 4 : (bytes >= 2 ? 2 : 1));
+	  next_amount = MIN (next_amount, align);
 
-	  if (bytes < item_size)
-	    {
-	      /* Find a smaller item_size which we can load & store.  */
-	      item_size = bytes;
-	      mode = xtensa_find_mode_for_size (item_size);
-	      item_size = GET_MODE_SIZE (mode);
-	      ldname = xtensa_ld_opcodes[(int) mode];
-	      stname = xtensa_st_opcodes[(int) mode];
-	    }
+	  amount[next] = next_amount;
+	  mode[next] = mode_from_align[next_amount];
+	  temp[next] = gen_reg_rtx (mode[next]);
 
-	  /* Record the load instruction opcode and operands.  */
-	  addr = plus_constant (from_addr, offset);
-	  mem = gen_rtx_MEM (mode, addr);
-	  if (! memory_address_p (mode, addr))
-	    abort ();
-	  MEM_IN_STRUCT_P (mem) = from_struct;
-	  ldinsns[n].operands[0] = tmpregs[n];
-	  ldinsns[n].operands[1] = mem;
-	  sprintf (ldinsns[n].template, "%s\t%%0, %%1", ldname);
+	  x = adjust_address (src_mem, mode[next], offset_ld);
+	  emit_insn (gen_rtx_SET (VOIDmode, temp[next], x));
 
-	  /* Record the store instruction opcode and operands.  */
-	  addr = plus_constant (to_addr, offset);
-	  mem = gen_rtx_MEM (mode, addr);
-	  if (! memory_address_p (mode, addr))
-	    abort ();
-	  MEM_IN_STRUCT_P (mem) = to_struct;
-	  stinsns[n].operands[0] = tmpregs[n];
-	  stinsns[n].operands[1] = mem;
-	  sprintf (stinsns[n].template, "%s\t%%0, %%1", stname);
-
-	  offset += item_size;
-	  bytes -= item_size;
+	  offset_ld += next_amount;
+	  bytes -= next_amount;
+	  active[next] = true;
 	}
 
-      /* Now output the loads followed by the stores.  */
-      for (n = 0; n < chunk_size; n++)
-	output_asm_insn (ldinsns[n].template, ldinsns[n].operands);
-      for (n = 0; n < chunk_size; n++)
-	output_asm_insn (stinsns[n].template, stinsns[n].operands);
+      if (active[phase])
+	{
+	  active[phase] = false;
+	  
+	  x = adjust_address (dst_mem, mode[phase], offset_st);
+	  emit_insn (gen_rtx_SET (VOIDmode, x, temp[phase]));
+
+	  offset_st += amount[phase];
+	}
     }
-}
+  while (active[next]);
 
-
-static enum machine_mode
-xtensa_find_mode_for_size (unsigned item_size)
-{
-  enum machine_mode mode, tmode;
-
-  while (1)
-    {
-      mode = VOIDmode;
-
-      /* Find mode closest to but not bigger than item_size.  */
-      for (tmode = GET_CLASS_NARROWEST_MODE (MODE_INT);
-	   tmode != VOIDmode; tmode = GET_MODE_WIDER_MODE (tmode))
-	if (GET_MODE_SIZE (tmode) <= item_size)
-	  mode = tmode;
-      if (mode == VOIDmode)
-	abort ();
-
-      item_size = GET_MODE_SIZE (mode);
-
-      if (xtensa_ld_opcodes[(int) mode]
-	  && xtensa_st_opcodes[(int) mode])
-	break;
-
-      /* Cannot load & store this mode; try something smaller.  */
-      item_size -= 1;
-    }
-
-  return mode;
+  return 1;
 }
 
 
@@ -1773,7 +1708,9 @@ function_arg_advance (CUMULATIVE_ARGS *cum, enum machine_mode mode, tree type)
 	    ? (int) GET_MODE_SIZE (mode)
 	    : int_size_in_bytes (type)) + UNITS_PER_WORD - 1) / UNITS_PER_WORD;
 
-  if ((*arg_words + words > max) && (*arg_words < max))
+  if (*arg_words < max
+      && (targetm.calls.must_pass_in_stack (mode, type)
+	  || *arg_words + words > max))
     *arg_words = max;
 
   *arg_words += words;
@@ -1835,14 +1772,6 @@ override_options (void)
 
   if (!TARGET_BOOLEANS && TARGET_HARD_FLOAT)
     error ("boolean registers required for the floating-point option");
-
-  /* Set up the tables of ld/st opcode names for block moves.  */
-  xtensa_ld_opcodes[(int) SImode] = "l32i";
-  xtensa_ld_opcodes[(int) HImode] = "l16ui";
-  xtensa_ld_opcodes[(int) QImode] = "l8ui";
-  xtensa_st_opcodes[(int) SImode] = "s32i";
-  xtensa_st_opcodes[(int) HImode] = "s16i";
-  xtensa_st_opcodes[(int) QImode] = "s8i";
 
   xtensa_char_to_class['q'] = SP_REG;
   xtensa_char_to_class['a'] = GR_REGS;
@@ -2427,9 +2356,9 @@ xtensa_va_start (tree valist, rtx nextarg ATTRIBUTE_UNUSED)
   f_reg = TREE_CHAIN (f_stk);
   f_ndx = TREE_CHAIN (f_reg);
 
-  stk = build (COMPONENT_REF, TREE_TYPE (f_stk), valist, f_stk);
-  reg = build (COMPONENT_REF, TREE_TYPE (f_reg), valist, f_reg);
-  ndx = build (COMPONENT_REF, TREE_TYPE (f_ndx), valist, f_ndx);
+  stk = build (COMPONENT_REF, TREE_TYPE (f_stk), valist, f_stk, NULL_TREE);
+  reg = build (COMPONENT_REF, TREE_TYPE (f_reg), valist, f_reg, NULL_TREE);
+  ndx = build (COMPONENT_REF, TREE_TYPE (f_ndx), valist, f_ndx, NULL_TREE);
 
   /* Call __builtin_saveregs; save the result in __va_reg */
   u = make_tree (ptr_type_node, expand_builtin_saveregs ());
@@ -2439,7 +2368,8 @@ xtensa_va_start (tree valist, rtx nextarg ATTRIBUTE_UNUSED)
 
   /* Set the __va_stk member to ($arg_ptr - 32).  */
   u = make_tree (ptr_type_node, virtual_incoming_args_rtx);
-  u = fold (build (PLUS_EXPR, ptr_type_node, u, build_int_2 (-32, -1)));
+  u = fold (build (PLUS_EXPR, ptr_type_node, u,
+		   build_int_cst (NULL_TREE, -32)));
   t = build (MODIFY_EXPR, ptr_type_node, stk, u);
   TREE_SIDE_EFFECTS (t) = 1;
   expand_expr (t, const0_rtx, VOIDmode, EXPAND_NORMAL);
@@ -2449,7 +2379,7 @@ xtensa_va_start (tree valist, rtx nextarg ATTRIBUTE_UNUSED)
      alignment offset for __va_stk.  */
   if (arg_words >= MAX_ARGS_IN_REGISTERS)
     arg_words += 2;
-  u = build_int_2 (arg_words * UNITS_PER_WORD, 0);
+  u = build_int_cst (NULL_TREE, arg_words * UNITS_PER_WORD);
   t = build (MODIFY_EXPR, integer_type_node, ndx, u);
   TREE_SIDE_EFFECTS (t) = 1;
   expand_expr (t, const0_rtx, VOIDmode, EXPAND_NORMAL);
@@ -2458,122 +2388,113 @@ xtensa_va_start (tree valist, rtx nextarg ATTRIBUTE_UNUSED)
 
 /* Implement `va_arg'.  */
 
-rtx
-xtensa_va_arg (tree valist, tree type)
+static tree
+xtensa_gimplify_va_arg_expr (tree valist, tree type, tree *pre_p,
+			     tree *post_p ATTRIBUTE_UNUSED)
 {
   tree f_stk, stk;
   tree f_reg, reg;
   tree f_ndx, ndx;
-  tree tmp, addr_tree, type_size;
-  rtx array, orig_ndx, r, addr, size, va_size;
-  rtx lab_false, lab_over, lab_false2;
+  tree type_size, array, orig_ndx, addr, size, va_size, t;
+  tree lab_false, lab_over, lab_false2;
+  bool indirect;
+
+  indirect = pass_by_reference (NULL, TYPE_MODE (type), type, false);
+  if (indirect)
+    type = build_pointer_type (type);
 
   /* Handle complex values as separate real and imaginary parts.  */
   if (TREE_CODE (type) == COMPLEX_TYPE)
     {
-      rtx real_part, imag_part, concat_val, local_copy;
+      tree real_part, imag_part;
 
-      real_part = xtensa_va_arg (valist, TREE_TYPE (type));
-      imag_part = xtensa_va_arg (valist, TREE_TYPE (type));
+      real_part = xtensa_gimplify_va_arg_expr (valist, TREE_TYPE (type),
+					       pre_p, NULL);
+      real_part = get_initialized_tmp_var (real_part, pre_p, NULL);
 
-      /* Make a copy of the value in case the parts are not contiguous.  */
-      real_part = gen_rtx_MEM (TYPE_MODE (TREE_TYPE (type)), real_part);
-      imag_part = gen_rtx_MEM (TYPE_MODE (TREE_TYPE (type)), imag_part);
-      concat_val = gen_rtx_CONCAT (TYPE_MODE (type), real_part, imag_part);
+      imag_part = xtensa_gimplify_va_arg_expr (valist, TREE_TYPE (type),
+					       pre_p, NULL);
+      imag_part = get_initialized_tmp_var (imag_part, pre_p, NULL);
 
-      local_copy = assign_temp (type, 0, 1, 0);
-      emit_move_insn (local_copy, concat_val);
-
-      return XEXP (local_copy, 0);
+      return build (COMPLEX_EXPR, type, real_part, imag_part);
     }
 
   f_stk = TYPE_FIELDS (va_list_type_node);
   f_reg = TREE_CHAIN (f_stk);
   f_ndx = TREE_CHAIN (f_reg);
 
-  stk = build (COMPONENT_REF, TREE_TYPE (f_stk), valist, f_stk);
-  reg = build (COMPONENT_REF, TREE_TYPE (f_reg), valist, f_reg);
-  ndx = build (COMPONENT_REF, TREE_TYPE (f_ndx), valist, f_ndx);
+  stk = build (COMPONENT_REF, TREE_TYPE (f_stk), valist, f_stk, NULL_TREE);
+  reg = build (COMPONENT_REF, TREE_TYPE (f_reg), valist, f_reg, NULL_TREE);
+  ndx = build (COMPONENT_REF, TREE_TYPE (f_ndx), valist, f_ndx, NULL_TREE);
 
-  type_size = TYPE_SIZE_UNIT (TYPE_MAIN_VARIANT (type));
-
-  va_size = gen_reg_rtx (SImode);
-  tmp = fold (build (MULT_EXPR, sizetype,
-		     fold (build (TRUNC_DIV_EXPR, sizetype,
-				  fold (build (PLUS_EXPR, sizetype,
-					       type_size,
-					       size_int (UNITS_PER_WORD - 1))),
-				  size_int (UNITS_PER_WORD))),
-		     size_int (UNITS_PER_WORD)));
-  r = expand_expr (tmp, va_size, SImode, EXPAND_NORMAL);
-  if (r != va_size)
-    emit_move_insn (va_size, r);
+  type_size = size_in_bytes (type);
+  va_size = round_up (type_size, UNITS_PER_WORD);
+  gimplify_expr (&va_size, pre_p, NULL, is_gimple_val, fb_rvalue);
 
 
   /* First align __va_ndx if necessary for this arg:
 
+     orig_ndx = (AP).__va_ndx;
      if (__alignof__ (TYPE) > 4 )
-       (AP).__va_ndx = (((AP).__va_ndx + __alignof__ (TYPE) - 1)
+       orig_ndx = ((orig_ndx + __alignof__ (TYPE) - 1)
 			& -__alignof__ (TYPE)); */
+
+  orig_ndx = get_initialized_tmp_var (ndx, pre_p, NULL);
 
   if (TYPE_ALIGN (type) > BITS_PER_WORD)
     {
       int align = TYPE_ALIGN (type) / BITS_PER_UNIT;
-      tmp = build (PLUS_EXPR, integer_type_node, ndx,
-		   build_int_2 (align - 1, 0));
-      tmp = build (BIT_AND_EXPR, integer_type_node, tmp,
-		   build_int_2 (-align, -1));
-      tmp = build (MODIFY_EXPR, integer_type_node, ndx, tmp);
-      TREE_SIDE_EFFECTS (tmp) = 1;
-      expand_expr (tmp, const0_rtx, VOIDmode, EXPAND_NORMAL);
+
+      t = build (PLUS_EXPR, integer_type_node, orig_ndx,
+		 build_int_cst (NULL_TREE, align - 1));
+      t = build (BIT_AND_EXPR, integer_type_node, t,
+		 build_int_cst (NULL_TREE, -align));
+      t = build (MODIFY_EXPR, integer_type_node, orig_ndx, t);
+      gimplify_and_add (t, pre_p);
     }
 
 
   /* Increment __va_ndx to point past the argument:
 
-     orig_ndx = (AP).__va_ndx;
-     (AP).__va_ndx += __va_size (TYPE); */
+     (AP).__va_ndx = orig_ndx + __va_size (TYPE); */
 
-  orig_ndx = gen_reg_rtx (SImode);
-  r = expand_expr (ndx, orig_ndx, SImode, EXPAND_NORMAL);
-  if (r != orig_ndx)
-    emit_move_insn (orig_ndx, r);
-
-  tmp = build (PLUS_EXPR, integer_type_node, ndx,
-	       make_tree (intSI_type_node, va_size));
-  tmp = build (MODIFY_EXPR, integer_type_node, ndx, tmp);
-  TREE_SIDE_EFFECTS (tmp) = 1;
-  expand_expr (tmp, const0_rtx, VOIDmode, EXPAND_NORMAL);
+  t = fold_convert (integer_type_node, va_size);
+  t = build (PLUS_EXPR, integer_type_node, orig_ndx, t);
+  t = build (MODIFY_EXPR, integer_type_node, ndx, t);
+  gimplify_and_add (t, pre_p);
 
 
   /* Check if the argument is in registers:
 
      if ((AP).__va_ndx <= __MAX_ARGS_IN_REGISTERS * 4
-         && !MUST_PASS_IN_STACK (type))
+         && !must_pass_in_stack (type))
         __array = (AP).__va_reg; */
 
-  array = gen_reg_rtx (Pmode);
+  array = create_tmp_var (ptr_type_node, NULL);
 
-  lab_over = NULL_RTX;
-  if (!MUST_PASS_IN_STACK (VOIDmode, type))
+  lab_over = NULL;
+  if (!targetm.calls.must_pass_in_stack (TYPE_MODE (type), type))
     {
-      lab_false = gen_label_rtx ();
-      lab_over = gen_label_rtx ();
+      lab_false = create_artificial_label ();
+      lab_over = create_artificial_label ();
 
-      emit_cmp_and_jump_insns (expand_expr (ndx, NULL_RTX, SImode,
-					    EXPAND_NORMAL),
-			       GEN_INT (MAX_ARGS_IN_REGISTERS
-					* UNITS_PER_WORD),
-			       GT, const1_rtx, SImode, 0, lab_false);
+      t = build_int_cst (NULL_TREE, MAX_ARGS_IN_REGISTERS * UNITS_PER_WORD);
+      t = build (GT_EXPR, boolean_type_node, ndx, t);
+      t = build (COND_EXPR, void_type_node, t,
+		 build (GOTO_EXPR, void_type_node, lab_false),
+		 NULL);
+      gimplify_and_add (t, pre_p);
 
-      r = expand_expr (reg, array, Pmode, EXPAND_NORMAL);
-      if (r != array)
-	emit_move_insn (array, r);
+      t = build (MODIFY_EXPR, void_type_node, array, reg);
+      gimplify_and_add (t, pre_p);
 
-      emit_jump_insn (gen_jump (lab_over));
-      emit_barrier ();
-      emit_label (lab_false);
+      t = build (GOTO_EXPR, void_type_node, lab_over);
+      gimplify_and_add (t, pre_p);
+
+      t = build (LABEL_EXPR, void_type_node, lab_false);
+      gimplify_and_add (t, pre_p);
     }
+
 
   /* ...otherwise, the argument is on the stack (never split between
      registers and the stack -- change __va_ndx if necessary):
@@ -2585,25 +2506,31 @@ xtensa_va_arg (tree valist, tree type)
 	 __array = (AP).__va_stk;
        } */
 
-  lab_false2 = gen_label_rtx ();
-  emit_cmp_and_jump_insns (orig_ndx,
-			   GEN_INT (MAX_ARGS_IN_REGISTERS * UNITS_PER_WORD),
-			   GT, const1_rtx, SImode, 0, lab_false2);
+  lab_false2 = create_artificial_label ();
 
-  tmp = build (PLUS_EXPR, sizetype, make_tree (intSI_type_node, va_size),
-	       build_int_2 (32, 0));
-  tmp = build (MODIFY_EXPR, integer_type_node, ndx, tmp);
-  TREE_SIDE_EFFECTS (tmp) = 1;
-  expand_expr (tmp, const0_rtx, VOIDmode, EXPAND_NORMAL);
+  t = build_int_cst (NULL_TREE, MAX_ARGS_IN_REGISTERS * UNITS_PER_WORD);
+  t = build (GT_EXPR, boolean_type_node, orig_ndx, t);
+  t = build (COND_EXPR, void_type_node, t,
+	     build (GOTO_EXPR, void_type_node, lab_false2),
+	     NULL);
+  gimplify_and_add (t, pre_p);
 
-  emit_label (lab_false2);
+  t = size_binop (PLUS_EXPR, va_size, size_int (32));
+  t = fold_convert (integer_type_node, t);
+  t = build (MODIFY_EXPR, integer_type_node, ndx, t);
+  gimplify_and_add (t, pre_p);
 
-  r = expand_expr (stk, array, Pmode, EXPAND_NORMAL);
-  if (r != array)
-    emit_move_insn (array, r);
+  t = build (LABEL_EXPR, void_type_node, lab_false2);
+  gimplify_and_add (t, pre_p);
 
-  if (lab_over != NULL_RTX)
-    emit_label (lab_over);
+  t = build (MODIFY_EXPR, void_type_node, array, stk);
+  gimplify_and_add (t, pre_p);
+
+  if (lab_over)
+    {
+      t = build (LABEL_EXPR, void_type_node, lab_over);
+      gimplify_and_add (t, pre_p);
+    }
 
 
   /* Given the base array pointer (__array) and index to the subsequent
@@ -2616,33 +2543,26 @@ xtensa_va_arg (tree valist, tree type)
      The results are endian-dependent because values smaller than one word
      are aligned differently.  */
 
-  size = gen_reg_rtx (SImode);
-  emit_move_insn (size, va_size);
 
-  if (BYTES_BIG_ENDIAN)
+  if (BYTES_BIG_ENDIAN && TREE_CODE (type_size) == INTEGER_CST)
     {
-      rtx lab_use_va_size = gen_label_rtx ();
-
-      emit_cmp_and_jump_insns (expand_expr (type_size, NULL_RTX, SImode,
-					    EXPAND_NORMAL),
-			       GEN_INT (PARM_BOUNDARY / BITS_PER_UNIT),
-			       GE, const1_rtx, SImode, 0, lab_use_va_size);
-
-      r = expand_expr (type_size, size, SImode, EXPAND_NORMAL);
-      if (r != size)
-	emit_move_insn (size, r);
-
-      emit_label (lab_use_va_size);
+      t = size_int (PARM_BOUNDARY / BITS_PER_UNIT);
+      t = fold (build (GE_EXPR, boolean_type_node, type_size, t));
+      t = fold (build (COND_EXPR, sizetype, t, va_size, type_size));
+      size = t;
     }
+  else
+    size = va_size;
 
-  addr_tree = build (PLUS_EXPR, ptr_type_node,
-		     make_tree (ptr_type_node, array),
-		     ndx);
-  addr_tree = build (MINUS_EXPR, ptr_type_node, addr_tree,
-		     make_tree (intSI_type_node, size));
-  addr = expand_expr (addr_tree, NULL_RTX, Pmode, EXPAND_NORMAL);
-  addr = copy_to_reg (addr);
-  return addr;
+  t = fold_convert (ptr_type_node, ndx);
+  addr = build (PLUS_EXPR, ptr_type_node, array, t);
+  t = fold_convert (ptr_type_node, size);
+  addr = build (MINUS_EXPR, ptr_type_node, addr, t);
+
+  addr = fold_convert (build_pointer_type (type), addr);
+  if (indirect)
+    addr = build_fold_indirect_ref (addr);
+  return build_fold_indirect_ref (addr);
 }
 
 

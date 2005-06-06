@@ -138,6 +138,7 @@ case "${host}" in
   s390*-*)
 	sysdeps_dir=s390
 	libgcj_interpreter=yes
+	DIVIDESPEC=-fno-use-divide-subroutine
 	enable_hash_synchronization_default=yes
 	;;
   sparc*-*)
@@ -169,8 +170,10 @@ case "${host}" in
   sparc*-linux* | \
   ia64-* | \
   x86_64*-linux* | \
+  hppa*-linux* | \
   sh-linux* | sh[34]*-linux*)
   	can_unwind_signal=yes
+	libgcj_ld_symbolic='-Wl,-Bsymbolic'
 	if test x$slow_pthread_self = xyes \
 	   && test x$cross_compiling != xyes; then
 	  cat > conftest.c <<EOF
@@ -224,7 +227,7 @@ EOF
   mips*-*-linux* )
   	sysdeps_dir=mips
   	can_unwind_signal=yes
-	libgcj_flags="${libgcj_flags} -mxgot"
+	DIVIDESPEC=-fno-use-divide-subroutine
 	case "${host}" in
 	    mipsel*-linux* | mipsisa32el*-linux*)
 		enable_hash_synchronization_default=yes
@@ -232,10 +235,10 @@ EOF
 	    ;;
 	esac
 	;;
-  *-*-darwin*)
-	enable_hash_synchronization_default=no
+  powerpc*-*-darwin*)
+	enable_hash_synchronization_default=yes
 	slow_pthread_self=
-	can_unwind_signal=no
+	can_unwind_signal=yes
 	;;
   *-*-freebsd*)
 	slow_pthread_self=

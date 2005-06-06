@@ -74,8 +74,7 @@ gcov_open (const char *name, int mode)
   s_flock.l_pid = getpid ();
 #endif
   
-  if (gcov_var.file)
-    abort ();
+  GCOV_CHECK (!gcov_var.file);
   gcov_var.start = 0;
   gcov_var.offset = gcov_var.length = 0;
   gcov_var.overread = -1u;
@@ -268,9 +267,6 @@ gcov_write_counter (gcov_type value)
     buffer[1] = (gcov_unsigned_t) (value >> 32);
   else
     buffer[1] = 0;
-  
-  if (value < 0)
-    gcov_var.error = -1;
 }
 #endif /* IN_LIBGCOV */
 
@@ -453,9 +449,7 @@ gcov_read_counter (void)
     value |= ((gcov_type) from_file (buffer[1])) << 32;
   else if (buffer[1])
     gcov_var.error = -1;
-  
-  if (value < 0)
-    gcov_var.error = -1;
+
   return value;
 }
 
@@ -514,8 +508,7 @@ gcov_sync (gcov_position_t base, gcov_unsigned_t length)
 #endif
 
 #if IN_LIBGCOV
-/* Move to the a set position in a gcov file.  BASE is zero to move to
-   the end, and nonzero to move to that position.  */
+/* Move to the a set position in a gcov file.  */
 
 GCOV_LINKAGE void
 gcov_seek (gcov_position_t base)
@@ -523,7 +516,7 @@ gcov_seek (gcov_position_t base)
   GCOV_CHECK_WRITING ();
   if (gcov_var.offset)
     gcov_write_block (gcov_var.offset);
-  fseek (gcov_var.file, base << 2, base ? SEEK_SET : SEEK_END);
+  fseek (gcov_var.file, base << 2, SEEK_SET);
   gcov_var.start = ftell (gcov_var.file) >> 2;
 }
 #endif

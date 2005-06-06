@@ -1,5 +1,5 @@
 /* Definitions for PA_RISC with ELF-32 format
-   Copyright (C) 2000, 2002 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2002, 2004 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -35,3 +35,5 @@ Boston, MA 02111-1307, USA.  */
     __attribute__ ((__unused__, section(".ctors"),			\
 		    aligned(sizeof(func_ptr))))				\
     = { (func_ptr) (-1) }
+
+#define MD_UNWIND_SUPPORT "config/pa/linux-unwind.h"

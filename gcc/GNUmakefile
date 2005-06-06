@@ -86,3 +86,5 @@ clean:
 
 $(OBJROOT) $(SYMROOT) $(DSTROOT):
 	mkdir -p $@
+
+.PHONY: install installsrc clean

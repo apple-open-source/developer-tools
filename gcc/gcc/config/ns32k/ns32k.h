@@ -708,17 +708,6 @@ enum reg_class
 #define FUNCTION_ARG(CUM, MODE, TYPE, NAMED) \
 ((TARGET_REGPARM && (CUM) < 8) ? gen_rtx_REG ((MODE), (CUM) / 4) : 0)
 
-/* For an arg passed partly in registers and partly in memory,
-   this is the number of registers used.
-   For args passed entirely in registers or entirely in memory, zero.  */
-
-#define FUNCTION_ARG_PARTIAL_NREGS(CUM, MODE, TYPE, NAMED)	\
-((TARGET_REGPARM && (CUM) < 8					\
-  && 8 < ((CUM) + ((MODE) == BLKmode				\
-		      ? int_size_in_bytes (TYPE)		\
-		      : GET_MODE_SIZE (MODE))))  		\
- ? 2 - (CUM) / 4 : 0)
-
 /* Output assembler code to FILE to increment profiler label # LABELNO
    for profiling a function entry.
 
@@ -760,20 +749,25 @@ enum reg_class
    of a trampoline, leaving space for the variable parts.  */
 
 /* On the 32k, the trampoline looks like this:
-     addr  0(pc),r2
-     jump  @__trampoline
-     .int STATIC
-     .int FUNCTION
-Doing trampolines with a library assist function is easier than figuring
-out how to do stores to memory in reverse byte order (the way immediate
-operands on the 32k are stored).  */
+
+	addr    0(pc),r2
+        movd    16(r2),tos
+        movd    12(r2),r1
+        ret     0
+	.align 4
+	.int STATIC
+	.int FUNCTION
+  
+   Putting the data in following data is easier than figuring out how to
+   do stores to memory in reverse byte order (the way immediate operands
+   on the 32k are stored).  */
 
 #define TRAMPOLINE_TEMPLATE(FILE)					\
 {									\
-  fprintf (FILE, "\taddr 0(pc),r2\n" );					\
-  fprintf (FILE, "\tjump " );						\
-  PUT_ABSOLUTE_PREFIX (FILE);						\
-  fprintf (FILE, "__trampoline\n" );					\
+  fprintf (FILE, "\taddr 0(pc),r2\n");					\
+  fprintf (FILE, "\tmovd 16(r2),tos\n");				\
+  fprintf (FILE, "\tmovd 12(r2),r1\n");					\
+  fprintf (FILE, "\tret 0\n");						\
   assemble_aligned_integer (UNITS_PER_WORD, const0_rtx);		\
   assemble_aligned_integer (UNITS_PER_WORD, const0_rtx);		\
 }
@@ -790,24 +784,6 @@ operands on the 32k are stored).  */
 {									     \
   emit_move_insn (gen_rtx_MEM (SImode, plus_constant (TRAMP, 12)), CXT);    \
   emit_move_insn (gen_rtx_MEM (SImode, plus_constant (TRAMP, 16)), FNADDR); \
-}
-
-/* This is the library routine that is used
-   to transfer control from the trampoline
-   to the actual nested function.  */
-
-/* The function name __transfer_from_trampoline is not actually used.
-   The function definition just permits use of "asm with operands"
-   (though the operand list is empty).  */
-#define TRANSFER_FROM_TRAMPOLINE	\
-void					\
-__transfer_from_trampoline ()		\
-{					\
-  asm (".globl __trampoline");		\
-  asm ("__trampoline:");		\
-  asm ("movd 16(r2),tos");		\
-  asm ("movd 12(r2),r1");		\
-  asm ("ret 0");			\
 }
 
 /* Addressing modes, and classification of registers for them.  */
@@ -1104,13 +1080,13 @@ __transfer_from_trampoline ()		\
 /* The number of scalar move insns which should be generated instead
    of a string move insn or a library call.
    
-   We have a smart movstrsi insn */
+   We have a smart movmemsi insn */
 #define MOVE_RATIO 0
 
 #define STORE_RATIO (optimize_size ? 3 : 15)
 #define STORE_BY_PIECES_P(SIZE, ALIGN) \
-  (move_by_pieces_ninsns (SIZE, ALIGN) < (unsigned int) STORE_RATIO)
-
+  (move_by_pieces_ninsns (SIZE, ALIGN, STORE_MAX_PIECES + 1) \
+   < (unsigned int) STORE_RATIO)
 
 /* Nonzero if access to memory by bytes is slow and undesirable.  */
 #define SLOW_BYTE_ACCESS 0

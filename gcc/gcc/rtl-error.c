@@ -1,5 +1,5 @@
 /* RTL specific diagnostic subroutines for GCC
-   Copyright (C) 2001, 2002, 2003 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
    Contributed by Gabriel Dos Reis <gdr@codesourcery.com>
 
 This file is part of GCC.
@@ -59,10 +59,14 @@ location_for_asm (rtx insn)
     asmop = NULL;
 
   if (asmop)
+#ifdef USE_MAPPED_LOCATION
+    loc = ASM_OPERANDS_SOURCE_LOCATION (asmop);
+#else
     {
       loc.file = ASM_OPERANDS_SOURCE_FILE (asmop);
       loc.line = ASM_OPERANDS_SOURCE_LINE (asmop);
     }
+#endif
   else
     loc = input_location;
   return loc;

@@ -1,6 +1,6 @@
 /* libgloss.h -- operating system specific defines to be used when
    targeting GCC for Libgloss supported targets.
-   Copyright (C) 1996 Free Software Foundation, Inc.
+   Copyright (C) 1996, 2004 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -29,7 +29,7 @@ Boston, MA 02111-1307, USA.  */
 
 /* This file used to force LINK_SPEC to be the null string, but that is not
    correct.  LINK_SPEC is used to pass machine specific arguments to the
-   linker and hence can not be redefined here.  LINK_SPEC is never used to
+   linker and hence cannot be redefined here.  LINK_SPEC is never used to
    specify startup files or libraries, so it should never conflict with
    libgloss.  */
 

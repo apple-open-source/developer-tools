@@ -1,6 +1,7 @@
 /* Low level interface to ptrace, for GDB when running under Unix.
    Copyright 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
-   1996, 1998, 1999, 2000, 2001 Free Software Foundation, Inc.
+   1996, 1998, 1999, 2000, 2001, 2002, 2003, 2004
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -36,22 +37,7 @@
 #include <sys/select.h>
 #endif
 
-#ifdef HAVE_TERMIOS
-#define PROCESS_GROUP_TYPE pid_t
-#endif
-
-#ifdef HAVE_TERMIO
-#define PROCESS_GROUP_TYPE int
-#endif
-
-#ifdef HAVE_SGTTY
-#ifdef SHORT_PGRP
-/* This is only used for the ultra.  Does it have pid_t?  */
-#define PROCESS_GROUP_TYPE short
-#else
-#define PROCESS_GROUP_TYPE int
-#endif
-#endif /* sgtty */
+#include "inflow.h"
 
 #ifdef HAVE_SYS_IOCTL_H
 #include <sys/ioctl.h>
@@ -242,6 +228,7 @@ void
 terminal_inferior (void)
 {
   if (gdb_has_a_terminal () && terminal_is_ours
+      && inferior_ttystate != NULL
       && inferior_thisrun_terminal == 0)
     {
       int result;
@@ -447,7 +434,6 @@ terminal_ours_1 (int output_only)
     }
 }
 
-/* ARGSUSED */
 void
 term_info (char *arg, int from_tty)
 {
@@ -505,7 +491,6 @@ print_terminal_flags (int flags)
   printf_filtered ("\n");
 }
 
-/* ARGSUSED */
 void
 child_terminal_info (char *args, int from_tty)
 {
@@ -559,7 +544,7 @@ new_tty_prefork (char *ttyname)
 void
 new_tty (void)
 {
-  register int tty;
+  int tty;
 
   if (inferior_thisrun_terminal == 0)
     return;
@@ -616,7 +601,6 @@ new_tty (void)
 
 /* Kill the inferior process.  Make us have no inferior.  */
 
-/* ARGSUSED */
 static void
 kill_command (char *arg, int from_tty)
 {
@@ -652,7 +636,6 @@ kill_command (char *arg, int from_tty)
 /* Call set_sigint_trap when you need to pass a signal on to an attached
    process when handling SIGINT */
 
-/* ARGSUSED */
 static void
 pass_signal (int signo)
 {

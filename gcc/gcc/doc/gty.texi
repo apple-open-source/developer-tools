@@ -61,7 +61,7 @@ static GTY(()) int @var{counter};        /* @r{save counter in a PCH} */
 @end smallexample
 
 The parser understands simple typedefs such as
-@code{typedef struct @var{tag} *@var{name};} and 
+@code{typedef struct @var{tag} *@var{name};} and
 @code{typedef int @var{name};}.
 These don't need to be marked.
 
@@ -291,6 +291,19 @@ this field is always @code{NULL}.  This is used to avoid requiring
 backends to define certain optional structures.  It doesn't work with
 language frontends.
 
+@findex nested_ptr
+@item nested_ptr (@var{type}, "@var{to expression}", "@var{from expression}")
+
+The type machinery expects all pointers to point to the start of an
+object.  Sometimes for abstraction purposes it's convenient to have
+a pointer which points inside an object.  So long as it's possible to
+convert the original object to and from the pointer, such pointers
+can still be used.  @var{type} is the type of the original object,
+the @var{to expression} returns the pointer given the original object,
+and the @var{from expression} returns the original object given
+the pointer.  The pointer will be available using the @code{%h}
+escape.
+
 @findex chain_next
 @findex chain_prev
 @item chain_next ("@var{expression}")
@@ -411,7 +424,7 @@ header file that should be included in the source file you just changed.
 The file will be called @file{gt-@var{path}.h} where @var{path} is the
 pathname relative to the @file{gcc} directory with slashes replaced by
 @verb{|-|}, so for example the header file to be included in
-@file{objc/objc-parse.c} is called @file{gt-objc-objc-parse.c}.  The
+@file{cp/parser.c} is called @file{gt-cp-parser.c}.  The
 generated header file should be included after everything else in the
 source file.  Don't forget to mention this file as a dependency in the
 @file{Makefile}!

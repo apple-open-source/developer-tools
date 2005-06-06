@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1996-2004 Free Software Foundation, Inc.          --
+--          Copyright (C) 1996-2005 Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -29,6 +29,7 @@
 with ALI;      use ALI;
 with Gnatvsn;  use Gnatvsn;
 with Hostparm;
+with Indepsw;  use Indepsw;
 with Namet;    use Namet;
 with Opt;
 with Osint;    use Osint;
@@ -157,6 +158,10 @@ procedure Gnatlink is
    Compile_Bind_File : Boolean := True;
    --  Set to False if bind file is not to be compiled
 
+   Create_Map_File : Boolean := False;
+   --  Set to True by switch -M. The map file name is derived from
+   --  the ALI file name (mainprog.ali => mainprog.map).
+
    Object_List_File_Supported : Boolean;
    pragma Import
      (C, Object_List_File_Supported, "__gnat_objlist_file_supported");
@@ -167,28 +172,28 @@ procedure Gnatlink is
    --  Set to True to force generation of a response file
 
    function Base_Name (File_Name : in String) return String;
-   --  Return just the file name part without the extension (if present).
+   --  Return just the file name part without the extension (if present)
 
    procedure Delete (Name : in String);
-   --  Wrapper to unlink as status is ignored by this application.
+   --  Wrapper to unlink as status is ignored by this application
 
    procedure Error_Msg (Message : in String);
    --  Output the error or warning Message
 
    procedure Exit_With_Error (Error : in String);
-   --  Output Error and exit program with a fatal condition.
+   --  Output Error and exit program with a fatal condition
 
    procedure Process_Args;
-   --  Go through all the arguments and build option tables.
+   --  Go through all the arguments and build option tables
 
    procedure Process_Binder_File (Name : in String);
-   --  Reads the binder file and extracts linker arguments.
+   --  Reads the binder file and extracts linker arguments
 
    procedure Write_Header;
-   --  Show user the program name, version and copyright.
+   --  Show user the program name, version and copyright
 
    procedure Write_Usage;
-   --  Show user the program options.
+   --  Show user the program options
 
    ---------------
    -- Base_Name --
@@ -327,6 +332,21 @@ procedure Gnatlink is
                   Binder_Options.Table (Binder_Options.Last) :=
                     Linker_Options.Table (Linker_Options.Last);
 
+               elsif Arg'Length >= 3 and then Arg (2) = 'M' then
+                  declare
+                     Switches : String_List_Access;
+                  begin
+                     Convert (Map_File, Arg (3 .. Arg'Last), Switches);
+
+                     if Switches /= null then
+                        for J in Switches'Range loop
+                           Linker_Options.Increment_Last;
+                           Linker_Options.Table (Linker_Options.Last) :=
+                             Switches (J);
+                        end loop;
+                     end if;
+                  end;
+
                elsif Arg'Length = 2 then
                   case Arg (2) is
                      when 'A' =>
@@ -376,6 +396,9 @@ procedure Gnatlink is
                            Exit_With_Error
                              ("Object list file not supported on this target");
                         end if;
+
+                     when 'M' =>
+                        Create_Map_File := True;
 
                      when 'n' =>
                         Compile_Bind_File := False;
@@ -491,7 +514,7 @@ procedure Gnatlink is
                                 new String'(Arg);
                            end if;
 
-                           --  Pass to gcc for linking program.
+                           --  Pass to gcc for linking program
 
                            Gcc_Linker_Options.Increment_Last;
                            Gcc_Linker_Options.Table
@@ -616,10 +639,10 @@ procedure Gnatlink is
       --  For call to Close
 
       GNAT_Static : Boolean := False;
-      --  Save state of -static option.
+      --  Save state of -static option
 
       GNAT_Shared : Boolean := False;
-      --  Save state of -shared option.
+      --  Save state of -shared option
 
       Xlinker_Was_Previous : Boolean := False;
       --  Indicate that "-Xlinker" was the option preceding the current
@@ -681,7 +704,7 @@ procedure Gnatlink is
       --  terminator.
 
       function Index (S, Pattern : String) return Natural;
-      --  Return the last occurrence of Pattern in S, or 0 if none.
+      --  Return the last occurrence of Pattern in S, or 0 if none
 
       function Is_Option_Present (Opt : in String) return Boolean;
       --  Return true if the option Opt is already present in
@@ -1255,7 +1278,8 @@ procedure Gnatlink is
          Write_Eol;
          Write_Str ("GNATLINK ");
          Write_Str (Gnat_Version_String);
-         Write_Str (" Copyright 1995-2004 Free Software Foundation, Inc");
+         Write_Eol;
+         Write_Str ("Copyright 1995-2005 Free Software Foundation, Inc");
          Write_Eol;
       end if;
    end Write_Header;
@@ -1287,6 +1311,12 @@ procedure Gnatlink is
       Write_Line ("  -o nam     Use 'nam' as the name of the executable");
       Write_Line ("  -b target  Compile the binder source to run on target");
       Write_Line ("  -Bdir      Load compiler executables from dir");
+
+      if Is_Supported (Map_File) then
+         Write_Line ("  -Mmap      Create map file map");
+         Write_Line ("  -M         Create map file mainprog.map");
+      end if;
+
       Write_Line ("  --GCC=comp Use comp as the compiler");
       Write_Line ("  --LINK=nam Use 'nam' for the linking rather than 'gcc'");
       Write_Eol;
@@ -1297,6 +1327,38 @@ procedure Gnatlink is
 --  Start of processing for Gnatlink
 
 begin
+   --  Add the directory where gnatlink is invoked in front of the
+   --  path, if gnatlink is invoked with directory information.
+   --  Only do this if the platform is not VMS, where the notion of path
+   --  does not really exist.
+
+   if not Hostparm.OpenVMS then
+      declare
+         Command : constant String := Command_Name;
+
+      begin
+         for Index in reverse Command'Range loop
+            if Command (Index) = Directory_Separator then
+               declare
+                  Absolute_Dir : constant String :=
+                                   Normalize_Pathname
+                                     (Command (Command'First .. Index));
+
+                  PATH         : constant String :=
+                                   Absolute_Dir &
+                  Path_Separator &
+                  Getenv ("PATH").all;
+
+               begin
+                  Setenv ("PATH", PATH);
+               end;
+
+               exit;
+            end if;
+         end loop;
+      end;
+   end if;
+
    Process_Args;
 
    if Argument_Count = 0
@@ -1406,12 +1468,16 @@ begin
                        Units.Table (ALIs.Table (A).First_Unit).Last_Arg
             loop
                --  Do not compile with the front end switches except for --RTS
+               --  if the binder generated file is in Ada.
 
                declare
                   Arg : String_Ptr renames Args.Table (Index);
                begin
                   if not Is_Front_End_Switch (Arg.all)
-                    or else Arg (Arg'First + 2 .. Arg'First + 5) = "RTS="
+                    or else
+                      (Ada_Bind_File
+                        and then Arg'Length > 5
+                        and then Arg (Arg'First + 2 .. Arg'First + 5) = "RTS=")
                   then
                      Binder_Options_From_ALI.Increment_Last;
                      Binder_Options_From_ALI.Table
@@ -1454,6 +1520,25 @@ begin
    then
       Error_Msg ("warning: executable name """ & Output_File_Name.all
                    & """ may conflict with shell command");
+   end if;
+
+   --  If -M switch was specified, add the switches to create the map file
+
+   if Create_Map_File then
+      declare
+         Map_Name : constant String := Base_Name (Ali_File_Name.all) & ".map";
+         Switches : String_List_Access;
+
+      begin
+         Convert (Map_File, Map_Name, Switches);
+
+         if Switches /= null then
+            for J in Switches'Range loop
+               Linker_Options.Increment_Last;
+               Linker_Options.Table (Linker_Options.Last) := Switches (J);
+            end loop;
+         end if;
+      end;
    end if;
 
    --  Perform consistency checks
@@ -1578,7 +1663,7 @@ begin
       end Bind_Step;
    end if;
 
-   --  Now, actually link the program.
+   --  Now, actually link the program
 
    --  Skip this step for now on the JVM since the Java interpreter will do
    --  the actual link at run time. We might consider packing all class files

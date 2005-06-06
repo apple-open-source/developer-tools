@@ -1,6 +1,13 @@
 # Run the Jacks test suite.
 # See http://www-124.ibm.com/developerworks/oss/cvs/jikes/~checkout~/jacks/jacks.html
 
+proc load_gcc_lib { filename } {
+    global srcdir
+    load_file $srcdir/../../gcc/testsuite/lib/$filename
+}
+
+load_gcc_lib target-libpath.exp
+
 proc gcj_jacks_setup_xfail {ary} {
   upvar $ary array
   global srcdir
@@ -16,7 +23,7 @@ proc gcj_jacks_write {filename} {
   global GCJ_UNDER_TEST
   global libgcj_jar
   global libjava_libgcc_s_path
-  global original_ld_library_path
+  global ld_library_path
 
   set gcjl [split $GCJ_UNDER_TEST]
   set gcj_cmd [lindex $gcjl 0]
@@ -35,6 +42,7 @@ proc gcj_jacks_write {filename} {
   puts $fd "set JAVA_FLAGS \"-mx=64m\""
 
   puts $fd "set JAVAC_ENCODING_FLAG --encoding="
+  puts $fd "set JAVAC_DEPRECATION_FLAG -Wdeprecated"
   puts $fd "set tcltest::testConstraints(encoding) 1"
   puts $fd "set tcltest::testConstraints(gcj) 1"
   puts $fd "set tcltest::testConstraints(assert) 1"
@@ -42,7 +50,8 @@ proc gcj_jacks_write {filename} {
   # puts $fd "set tcltest::testConstraints(jvm) 1"
   close $fd
 
-  setenv LD_LIBRARY_PATH $libjava_libgcc_s_path:$original_ld_library_path
+  set ld_library_path $libjava_libgcc_s_path
+  set_ld_library_path_env_vars
 }
 
 proc gcj_jacks_parse {file} {
@@ -97,9 +106,20 @@ proc gcj_jacks_run {} {
   verbose "Running Jacks..."
   # Just ignore error exits from the jacks program.
   # It will always error exit for us, since don't completely pass.
-  catch {exec ./jacks gcj} msg
-
-  gcj_jacks_parse logging/gcj.log
+  # At the moment jacks has a hardcoded call to tclsh8.3. To override this,
+  # we check here on the version and launch the script directly with the
+  # tclsh$tcl_ver.
+  set tcl_ver [info tclversion]
+  if {[package vcompare  $tcl_ver 8.3] >= 0 } {
+    if {[catch {exec tclsh$tcl_ver jacks gcj} msg]} {
+	send_log "Couldn't run jacks: $msg\n"
+	return
+    }
+    gcj_jacks_parse logging/gcj.log
+  } else {
+      send_log "No suitable tclsh found, you need at least version 8.3 or up.\n"
+      return
+  }
 
   cd $here
 }

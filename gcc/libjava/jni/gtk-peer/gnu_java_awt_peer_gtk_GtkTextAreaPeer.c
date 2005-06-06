@@ -54,6 +54,8 @@ Java_gnu_java_awt_peer_gtk_GtkTextAreaPeer_create
 
   text = gtk_text_view_new ();
   gtk_widget_set_size_request (text, textview_width, textview_height);
+  gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW (text), TRUE);
+
   gtk_widget_show (text);
 
   sw = gtk_scrolled_window_new (NULL, NULL);
@@ -139,7 +141,7 @@ Java_gnu_java_awt_peer_gtk_GtkTextAreaPeer_replaceRange
 }
 
 JNIEXPORT void JNICALL
-Java_gnu_java_awt_peer_gtk_GtkTextAreaPeer_gtkSetFont
+Java_gnu_java_awt_peer_gtk_GtkTextAreaPeer_gtkWidgetModifyFont
   (JNIEnv *env, jobject obj, jstring name, jint style, jint size)
 {
   const char *font_name;
@@ -156,7 +158,7 @@ Java_gnu_java_awt_peer_gtk_GtkTextAreaPeer_gtkSetFont
   gdk_threads_enter();
 
   font_desc = pango_font_description_from_string (font_name);
-  pango_font_description_set_size (font_desc, size * PANGO_SCALE);
+  pango_font_description_set_size (font_desc, size * dpi_conversion_factor);
 
   if (style & AWT_STYLE_BOLD)
     pango_font_description_set_weight (font_desc, PANGO_WEIGHT_BOLD);
@@ -164,13 +166,31 @@ Java_gnu_java_awt_peer_gtk_GtkTextAreaPeer_gtkSetFont
   if (style & AWT_STYLE_ITALIC)
     pango_font_description_set_style (font_desc, PANGO_STYLE_OBLIQUE);
 
-  gtk_widget_modify_font (GTK_WIDGET(text), font_desc);
+  gtk_widget_modify_font (GTK_WIDGET (text), font_desc);
 
   pango_font_description_free (font_desc);
 
   gdk_threads_leave();
 
   (*env)->ReleaseStringUTFChars (env, name, font_name);
+}
+
+JNIEXPORT void JNICALL 
+Java_gnu_java_awt_peer_gtk_GtkTextAreaPeer_gtkWidgetRequestFocus
+  (JNIEnv *env, jobject obj)
+{
+  void *ptr;
+  GtkWidget *text;
+
+  ptr = NSA_GET_PTR (env, obj);
+  
+  gdk_threads_enter ();
+
+  text = GTK_WIDGET (TEXT_FROM_SW (ptr));
+
+  gtk_widget_grab_focus (text);
+
+  gdk_threads_leave ();
 }
 
 JNIEXPORT jint JNICALL

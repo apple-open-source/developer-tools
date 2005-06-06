@@ -1,31 +1,29 @@
 /* Support for the generic parts of PE/PEI, for BFD.
-   Copyright 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002
+   Copyright 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003
    Free Software Foundation, Inc.
    Written by Cygnus Solutions.
 
-This file is part of BFD, the Binary File Descriptor library.
+   This file is part of BFD, the Binary File Descriptor library.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 2 of the License, or
+   (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
-/*
-Most of this hacked by  Steve Chamberlain,
+/* Most of this hacked by  Steve Chamberlain,
 			sac@cygnus.com
 
-PE/PEI rearrangement (and code added): Donn Terry
-                                       Softway Systems, Inc.
-*/
+   PE/PEI rearrangement (and code added): Donn Terry
+                                       Softway Systems, Inc.  */
 
 /* Hey look, some documentation [and in a place you expect to find it]!
 
@@ -53,8 +51,7 @@ PE/PEI rearrangement (and code added): Donn Terry
 
    FIXME: Please add more docs here so the next poor fool that has to hack
    on this code has a chance of getting something accomplished without
-   wasting too much time.
-*/
+   wasting too much time.  */
 
 #include "libpei.h"
 
@@ -138,7 +135,7 @@ static asection_ptr       pe_ILF_make_a_section   PARAMS ((pe_ILF_vars *, const 
 static void               pe_ILF_make_a_reloc     PARAMS ((pe_ILF_vars *, bfd_vma, bfd_reloc_code_real_type, asection_ptr));
 static void               pe_ILF_make_a_symbol    PARAMS ((pe_ILF_vars *, const char *, const char *, asection_ptr, flagword));
 static void               pe_ILF_save_relocs      PARAMS ((pe_ILF_vars *, asection_ptr));
-static void		  pe_ILF_make_a_symbol_reloc  PARAMS ((pe_ILF_vars *, bfd_vma, bfd_reloc_code_real_type, struct symbol_cache_entry **, unsigned int));
+static void		  pe_ILF_make_a_symbol_reloc  PARAMS ((pe_ILF_vars *, bfd_vma, bfd_reloc_code_real_type, struct bfd_symbol **, unsigned int));
 static bfd_boolean        pe_ILF_build_a_bfd      PARAMS ((bfd *, unsigned int, bfd_byte *, bfd_byte *, unsigned int, unsigned int));
 static const bfd_target * pe_ILF_object_p         PARAMS ((bfd *));
 static const bfd_target * pe_bfd_object_p 	  PARAMS ((bfd *));
@@ -259,12 +256,17 @@ coff_swap_scnhdr_in (abfd, ext, in)
     }
 
 #ifndef COFF_NO_HACK_SCNHDR_SIZE
-  /* If this section holds uninitialized data, use the virtual size
-     (stored in s_paddr) instead of the physical size.  */
-  if ((scnhdr_int->s_flags & IMAGE_SCN_CNT_UNINITIALIZED_DATA) != 0
-      && (scnhdr_int->s_paddr > 0))
+  /* If this section holds uninitialized data and is from an object file
+     or from an executable image that has not initialized the field,
+     or if the image is an executable file and the physical size is padded,
+     use the virtual size (stored in s_paddr) instead.  */
+  if (scnhdr_int->s_paddr > 0
+      && (((scnhdr_int->s_flags & IMAGE_SCN_CNT_UNINITIALIZED_DATA) != 0
+	   && (! bfd_pe_executable_p (abfd) || scnhdr_int->s_size == 0))
+          || (bfd_pe_executable_p (abfd) && scnhdr_int->s_size > scnhdr_int->s_paddr)))
     {
       scnhdr_int->s_size = scnhdr_int->s_paddr;
+
       /* This code used to set scnhdr_int->s_paddr to 0.  However,
          coff_set_alignment_hook stores s_paddr in virt_size, which
          only works if it correctly holds the virtual size of the
@@ -468,7 +470,7 @@ static void
 pe_ILF_make_a_symbol_reloc (pe_ILF_vars *                 vars,
 			    bfd_vma                       address,
 			    bfd_reloc_code_real_type      reloc,
-			    struct symbol_cache_entry **  sym,
+			    struct bfd_symbol **  sym,
 			    unsigned int                  sym_index)
 {
   arelent * entry;
@@ -900,10 +902,40 @@ pe_ILF_build_a_bfd (bfd *           abfd,
       symbol = symbol_name;
 
       if (import_name_type != IMPORT_NAME)
-	/* Skip any prefix in symbol_name.  */
-	while (*symbol == '@' || * symbol == '?' || * symbol == '_')
-	  ++ symbol;
+	{
+	  bfd_boolean skipped_leading_underscore = FALSE;
+	  bfd_boolean skipped_leading_at = FALSE;
+	  bfd_boolean skipped_leading_question_mark = FALSE;
+	  bfd_boolean check_again;
+	  
+	  /* Skip any prefix in symbol_name.  */
+	  -- symbol;
+	  do
+	    {
+	      check_again = FALSE;
+	      ++ symbol;
 
+	      switch (*symbol)
+		{
+		case '@':
+		  if (! skipped_leading_at)
+		    check_again = skipped_leading_at = TRUE;
+		  break;
+		case '?':
+		  if (! skipped_leading_question_mark)
+		    check_again = skipped_leading_question_mark = TRUE;
+		  break;
+		case '_':
+		  if (! skipped_leading_underscore)
+		    check_again = skipped_leading_underscore = TRUE;
+		  break;
+		default:
+		  break;
+		}
+	    }
+	  while (check_again);
+	}
+      
       if (import_name_type == IMPORT_NAME_UNDECORATE)
 	{
 	  /* Truncate at the first '@'  */
@@ -965,11 +997,11 @@ pe_ILF_build_a_bfd (bfd *           abfd,
       if (magic == MIPS_ARCH_MAGIC_WINCE)
 	{
 	  pe_ILF_make_a_symbol_reloc (&vars, (bfd_vma) 0, BFD_RELOC_HI16_S,
-				      (struct symbol_cache_entry **) imp_sym,
+				      (struct bfd_symbol **) imp_sym,
 				      imp_index);
 	  pe_ILF_make_a_reloc (&vars, (bfd_vma) 0, BFD_RELOC_LO16, text);
 	  pe_ILF_make_a_symbol_reloc (&vars, (bfd_vma) 4, BFD_RELOC_LO16,
-				      (struct symbol_cache_entry **) imp_sym,
+				      (struct bfd_symbol **) imp_sym,
 				      imp_index);
 	}
       else

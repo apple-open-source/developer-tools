@@ -1,6 +1,7 @@
+// The PA HP-UX dynamic loader doesn't support unsatisfied weak symbols.
 // { dg-do run }
-// { dg-do compile { target *-*-coff i?86-pc-cygwin } }
-// { dg-warning "weak declaration" "COFF format does not support weak" { target *-*-coff i?86-pc-cygwin powerpc-ibm-aix4* rs6000-ibm-aix4* } 5 }
+// { dg-require-weak "" }
+// { dg-skip-if "No unsat" { hppa*-*-hpux* } { "*" } { "" } }
 
 extern void foo (void) __attribute__ ((weak));
 

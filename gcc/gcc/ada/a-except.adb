@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2004 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005 Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -120,11 +120,22 @@ package body Ada.Exceptions is
    --  Raise_From_Signal_Handler. The origin of the call is indicated by the
    --  From_Signal_Handler argument.
 
+   procedure To_Stderr (S : String);
+   pragma Export (Ada, To_Stderr, "__gnat_to_stderr");
+   --  Little routine to output string to stderr that is also used
+   --  in the tasking run time.
+
+   procedure To_Stderr (C : Character);
+   pragma Inline (To_Stderr);
+   pragma Export (Ada, To_Stderr, "__gnat_to_stderr_char");
+   --  Little routine to output a character to stderr, used by some of
+   --  the separate units below.
+
    package Exception_Data is
 
-      ----------------------------------
-      --  Exception messages routines --
-      ----------------------------------
+      ---------------------------------
+      -- Exception messages routines --
+      ---------------------------------
 
       procedure Set_Exception_C_Msg
         (Id   : Exception_Id;
@@ -154,34 +165,40 @@ package body Ada.Exceptions is
       function Exception_Information (X : Exception_Occurrence) return String;
       --  The format of the exception information is as follows:
       --
-      --    exception name (as in Exception_Name)
-      --    message (or a null line if no message)
-      --    PID=nnnn
-      --    0xyyyyyyyy 0xyyyyyyyy ...
+      --    Exception_Name: <exception name> (as in Exception_Name)
+      --    Message: <message> (only if Exception_Message is empty)
+      --    PID=nnnn (only if != 0)
+      --    Call stack traceback locations:  (only if at least one location)
+      --    <0xyyyyyyyy 0xyyyyyyyy ...>      (is recorded)
       --
-      --  The lines are separated by a ASCII.LF character
+      --  The lines are separated by a ASCII.LF character.
       --  The nnnn is the partition Id given as decimal digits.
-      --  The 0x... line represents traceback program counter locations,
-      --  in order with the first one being the exception location.
+      --  The 0x... line represents traceback program counter locations, in
+      --  execution order with the first one being the exception location. It
+      --  is present only
+      --
+      --  The Exception_Name and Message lines are omitted in the abort
+      --  signal case, since this is not really an exception.
+
+      --  !! If the format of the generated string is changed, please note
+      --  !! that an equivalent modification to the routine String_To_EO must
+      --  !! be made to preserve proper functioning of the stream attributes.
 
       ---------------------------------------
       -- Exception backtracing subprograms --
       ---------------------------------------
 
-      --  What is automatically output when exception tracing is on basically
-      --  corresponds to the usual exception information, but with the call
-      --  chain backtrace possibly tailored by a backtrace decorator. Modifying
-      --  Exception_Information itself is not a good idea because the decorated
-      --  output is completely out of control and would break all our code
-      --  related to the streaming of exceptions.
-      --
-      --  We then provide an alternative function to Exception_Information to
-      --  compute the possibly tailored output, which is equivalent if no
-      --  decorator is currently set.
+      --  What is automatically output when exception tracing is on is the
+      --  usual exception information with the call chain backtrace possibly
+      --  tailored by a backtrace decorator. Modifying Exception_Information
+      --  itself is not a good idea because the decorated output is completely
+      --  out of control and would break all our code related to the streaming
+      --  of exceptions.  We then provide an alternative function to compute
+      --  the possibly tailored output, which is equivalent if no decorator is
+      --  currently set:
 
       function Tailored_Exception_Information
-        (X    : Exception_Occurrence)
-        return String;
+        (X : Exception_Occurrence) return String;
       --  Exception information to be output in the case of automatic tracing
       --  requested through GNAT.Exception_Traces.
       --
@@ -193,28 +210,7 @@ package body Ada.Exceptions is
       pragma Export
         (Ada, Tailored_Exception_Information,
            "__gnat_tailored_exception_information");
-      --  This function is used within this package but also from within
-      --  System.Tasking.Stages.
-      --
-      --  The output of Exception_Information and
-      --  Tailored_Exception_Information share a common part which was
-      --  formerly built using local procedures within
-      --  Exception_Information. These procedures have been extracted
-      --  from their original place to be available to
-      --  Tailored_Exception_Information also.
-      --
-      --  Each of these procedures appends some input to an
-      --  information string currently being built. The Ptr argument
-      --  represents the last position in this string at which a
-      --  character has been written.
-
-      procedure Tailored_Exception_Information
-        (X    : Exception_Occurrence;
-         Buff : in out String;
-         Last : in out Integer);
-      --  Procedural version of the above function. Instead of returning the
-      --  result, this one is put in Buff (Buff'first .. Buff'first + Last)
-      --  And what happens on overflow ???
+      --  This is currently used by System.Tasking.Stages.
 
    end Exception_Data;
 
@@ -234,14 +230,14 @@ package body Ada.Exceptions is
       --  routine when the GCC 3 mechanism is used.
 
       procedure Notify_Handled_Exception;
-      pragma Export (C, Notify_Handled_Exception,
-                       "__gnat_notify_handled_exception");
+      pragma Export
+        (C, Notify_Handled_Exception, "__gnat_notify_handled_exception");
       --  This routine is called for a handled occurrence is about to be
       --  propagated.
 
       procedure Notify_Unhandled_Exception;
-      pragma Export (C, Notify_Unhandled_Exception,
-                       "__gnat_notify_unhandled_exception");
+      pragma Export
+        (C, Notify_Unhandled_Exception, "__gnat_notify_unhandled_exception");
       --  This routine is called when an unhandled occurrence is about to be
       --  propagated.
 
@@ -330,20 +326,6 @@ package body Ada.Exceptions is
    --  is associated with the raise, and has already been stored in the
    --  exception occurrence referenced by the Current_Excep in the TSD.
    --  Abort is deferred before the raise call.
-
-   procedure Raise_With_Msg (E : Exception_Id; Setup : Boolean);
-   pragma No_Return (Raise_With_Msg);
-   --  Similar to above, with an extra parameter to indicate wether
-   --  Setup_Exception has been called already.
-
-   procedure Raise_After_Setup (E : Exception_Id);
-   pragma No_Return (Raise_After_Setup);
-   pragma Export (C, Raise_After_Setup, "__gnat_raise_after_setup");
-   --  Wrapper to Raise_With_Msg and Setup set to True.
-   --
-   --  This is called by System.Tasking.Entry_Calls.Check_Exception when an
-   --  exception has occured during an entry call. The exception to propagate
-   --  has been setup and initialized via Transfer_Occurrence in this case.
 
    procedure Raise_With_Location_And_Msg
      (E : Exception_Id;
@@ -502,6 +484,7 @@ package body Ada.Exceptions is
    procedure Rcheck_27 (File : Big_String_Ptr; Line : Integer);
    procedure Rcheck_28 (File : Big_String_Ptr; Line : Integer);
    procedure Rcheck_29 (File : Big_String_Ptr; Line : Integer);
+   procedure Rcheck_30 (File : Big_String_Ptr; Line : Integer);
 
    pragma Export (C, Rcheck_00, "__gnat_rcheck_00");
    pragma Export (C, Rcheck_01, "__gnat_rcheck_01");
@@ -533,6 +516,43 @@ package body Ada.Exceptions is
    pragma Export (C, Rcheck_27, "__gnat_rcheck_27");
    pragma Export (C, Rcheck_28, "__gnat_rcheck_28");
    pragma Export (C, Rcheck_29, "__gnat_rcheck_29");
+   pragma Export (C, Rcheck_30, "__gnat_rcheck_30");
+
+   --  None of these procedures ever returns (they raise an exception!). By
+   --  using pragma No_Return, we ensure that any junk code after the call,
+   --  such as normal return epilog stuff, can be eliminated).
+
+   pragma No_Return (Rcheck_00);
+   pragma No_Return (Rcheck_01);
+   pragma No_Return (Rcheck_02);
+   pragma No_Return (Rcheck_03);
+   pragma No_Return (Rcheck_04);
+   pragma No_Return (Rcheck_05);
+   pragma No_Return (Rcheck_06);
+   pragma No_Return (Rcheck_07);
+   pragma No_Return (Rcheck_08);
+   pragma No_Return (Rcheck_09);
+   pragma No_Return (Rcheck_10);
+   pragma No_Return (Rcheck_11);
+   pragma No_Return (Rcheck_12);
+   pragma No_Return (Rcheck_13);
+   pragma No_Return (Rcheck_14);
+   pragma No_Return (Rcheck_15);
+   pragma No_Return (Rcheck_16);
+   pragma No_Return (Rcheck_17);
+   pragma No_Return (Rcheck_18);
+   pragma No_Return (Rcheck_19);
+   pragma No_Return (Rcheck_20);
+   pragma No_Return (Rcheck_21);
+   pragma No_Return (Rcheck_22);
+   pragma No_Return (Rcheck_23);
+   pragma No_Return (Rcheck_24);
+   pragma No_Return (Rcheck_25);
+   pragma No_Return (Rcheck_26);
+   pragma No_Return (Rcheck_27);
+   pragma No_Return (Rcheck_28);
+   pragma No_Return (Rcheck_29);
+   pragma No_Return (Rcheck_30);
 
    ---------------------------------------------
    -- Reason Strings for Run-Time Check Calls --
@@ -551,29 +571,30 @@ package body Ada.Exceptions is
    Rmsg_05 : constant String := "index check failed"               & NUL;
    Rmsg_06 : constant String := "invalid data"                     & NUL;
    Rmsg_07 : constant String := "length check failed"              & NUL;
-   Rmsg_08 : constant String := "overflow check failed"            & NUL;
-   Rmsg_09 : constant String := "partition check failed"           & NUL;
-   Rmsg_10 : constant String := "range check failed"               & NUL;
-   Rmsg_11 : constant String := "tag check failed"                 & NUL;
-   Rmsg_12 : constant String := "access before elaboration"        & NUL;
-   Rmsg_13 : constant String := "accessibility check failed"       & NUL;
-   Rmsg_14 : constant String := "all guards closed"                & NUL;
-   Rmsg_15 : constant String := "duplicated entry address"         & NUL;
-   Rmsg_16 : constant String := "explicit raise"                   & NUL;
-   Rmsg_17 : constant String := "finalize/adjust raised exception" & NUL;
-   Rmsg_18 : constant String := "misaligned address value"         & NUL;
-   Rmsg_19 : constant String := "missing return"                   & NUL;
-   Rmsg_20 : constant String := "overlaid controlled object"       & NUL;
-   Rmsg_21 : constant String := "potentially blocking operation"   & NUL;
-   Rmsg_22 : constant String := "stubbed subprogram called"        & NUL;
-   Rmsg_23 : constant String := "unchecked union restriction"      & NUL;
-   Rmsg_24 : constant String := "illegal use of"
+   Rmsg_08 : constant String := "null-exclusion check failed"      & NUL;
+   Rmsg_09 : constant String := "overflow check failed"            & NUL;
+   Rmsg_10 : constant String := "partition check failed"           & NUL;
+   Rmsg_11 : constant String := "range check failed"               & NUL;
+   Rmsg_12 : constant String := "tag check failed"                 & NUL;
+   Rmsg_13 : constant String := "access before elaboration"        & NUL;
+   Rmsg_14 : constant String := "accessibility check failed"       & NUL;
+   Rmsg_15 : constant String := "all guards closed"                & NUL;
+   Rmsg_16 : constant String := "duplicated entry address"         & NUL;
+   Rmsg_17 : constant String := "explicit raise"                   & NUL;
+   Rmsg_18 : constant String := "finalize/adjust raised exception" & NUL;
+   Rmsg_19 : constant String := "misaligned address value"         & NUL;
+   Rmsg_20 : constant String := "missing return"                   & NUL;
+   Rmsg_21 : constant String := "overlaid controlled object"       & NUL;
+   Rmsg_22 : constant String := "potentially blocking operation"   & NUL;
+   Rmsg_23 : constant String := "stubbed subprogram called"        & NUL;
+   Rmsg_24 : constant String := "unchecked union restriction"      & NUL;
+   Rmsg_25 : constant String := "illegal use of"
              & " remote access-to-class-wide type, see RM E.4(18)" & NUL;
-   Rmsg_25 : constant String := "empty storage pool"               & NUL;
-   Rmsg_26 : constant String := "explicit raise"                   & NUL;
-   Rmsg_27 : constant String := "infinite recursion"               & NUL;
-   Rmsg_28 : constant String := "object too large"                 & NUL;
-   Rmsg_29 : constant String := "restriction violation"            & NUL;
+   Rmsg_26 : constant String := "empty storage pool"               & NUL;
+   Rmsg_27 : constant String := "explicit raise"                   & NUL;
+   Rmsg_28 : constant String := "infinite recursion"               & NUL;
+   Rmsg_29 : constant String := "object too large"                 & NUL;
+   Rmsg_30 : constant String := "restriction violation"            & NUL;
 
    -----------------------
    -- Polling Interface --
@@ -658,8 +679,14 @@ package body Ada.Exceptions is
    -- Exception_Information --
    ---------------------------
 
-   function Exception_Information (X : Exception_Occurrence) return String
-     renames Exception_Data.Exception_Information;
+   function Exception_Information (X : Exception_Occurrence) return String is
+   begin
+      if X.Id = Null_Id then
+         raise Constraint_Error;
+      end if;
+
+      return Exception_Data.Exception_Information (X);
+   end Exception_Information;
 
    -----------------------
    -- Exception_Message --
@@ -993,13 +1020,11 @@ package body Ada.Exceptions is
    -- Raise_With_Msg --
    --------------------
 
-   procedure Raise_With_Msg (E : Exception_Id; Setup : Boolean) is
+   procedure Raise_With_Msg (E : Exception_Id) is
       Excep : constant EOA := Get_Current_Excep.all;
 
    begin
-      if not Setup then
-         Exception_Propagation.Setup_Exception (Excep, Excep);
-      end if;
+      Exception_Propagation.Setup_Exception (Excep, Excep);
 
       Excep.Exception_Raised := False;
       Excep.Id               := E;
@@ -1009,20 +1034,6 @@ package body Ada.Exceptions is
       Abort_Defer.all;
       Raise_Current_Excep (E);
    end Raise_With_Msg;
-
-   procedure Raise_With_Msg (E : Exception_Id) is
-   begin
-      Raise_With_Msg (E, Setup => False);
-   end Raise_With_Msg;
-
-   -----------------------
-   -- Raise_After_Setup --
-   -----------------------
-
-   procedure Raise_After_Setup (E : Exception_Id) is
-   begin
-      Raise_With_Msg (E, Setup => True);
-   end Raise_After_Setup;
 
    --------------------------------------
    -- Calls to Run-Time Check Routines --
@@ -1090,7 +1101,7 @@ package body Ada.Exceptions is
 
    procedure Rcheck_12 (File : Big_String_Ptr; Line : Integer) is
    begin
-      Raise_Program_Error_Msg (File, Line, To_Ptr (Rmsg_12'Address));
+      Raise_Constraint_Error_Msg (File, Line, To_Ptr (Rmsg_12'Address));
    end Rcheck_12;
 
    procedure Rcheck_13 (File : Big_String_Ptr; Line : Integer) is
@@ -1155,7 +1166,7 @@ package body Ada.Exceptions is
 
    procedure Rcheck_25 (File : Big_String_Ptr; Line : Integer) is
    begin
-      Raise_Storage_Error_Msg (File, Line, To_Ptr (Rmsg_25'Address));
+      Raise_Program_Error_Msg (File, Line, To_Ptr (Rmsg_25'Address));
    end Rcheck_25;
 
    procedure Rcheck_26 (File : Big_String_Ptr; Line : Integer) is
@@ -1177,6 +1188,11 @@ package body Ada.Exceptions is
    begin
       Raise_Storage_Error_Msg (File, Line, To_Ptr (Rmsg_29'Address));
    end Rcheck_29;
+
+   procedure Rcheck_30 (File : Big_String_Ptr; Line : Integer) is
+   begin
+      Raise_Storage_Error_Msg (File, Line, To_Ptr (Rmsg_30'Address));
+   end Rcheck_30;
 
    -------------
    -- Reraise --
@@ -1338,6 +1354,30 @@ package body Ada.Exceptions is
 
       Raise_Current_Excep (E);
    end Raise_Exception_No_Defer;
+
+   ---------------
+   -- To_Stderr --
+   ---------------
+
+   procedure To_Stderr (C : Character) is
+
+      type int is new Integer;
+
+      procedure put_char_stderr (C : int);
+      pragma Import (C, put_char_stderr, "put_char_stderr");
+
+   begin
+      put_char_stderr (Character'Pos (C));
+   end To_Stderr;
+
+   procedure To_Stderr (S : String) is
+   begin
+      for J in S'Range loop
+         if S (J) /= ASCII.CR then
+            To_Stderr (S (J));
+         end if;
+      end loop;
+   end To_Stderr;
 
    ---------
    -- ZZZ --

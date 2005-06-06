@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2004 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005 Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -38,6 +38,7 @@ with System.Storage_Elements;
 with System.Soft_Links;
 
 with Unchecked_Conversion;
+with System.Restrictions;
 
 package body System.Finalization_Implementation is
 
@@ -91,9 +92,9 @@ package body System.Finalization_Implementation is
    --  Given the address (obj) of a tagged object, return a
    --  pointer to the record controller of this object.
 
-   -------------
-   --  Adjust --
-   -------------
+   ------------
+   -- Adjust --
+   ------------
 
    procedure Adjust (Object : in out Record_Controller) is
 
@@ -102,7 +103,7 @@ package body System.Finalization_Implementation is
                     Object.My_Address - Object'Address;
 
       procedure Ptr_Adjust (Ptr : in out Finalizable_Ptr);
-      --  Substract the offset to the pointer
+      --  Subtract the offset to the pointer
 
       procedure Reverse_Adjust (P : Finalizable_Ptr);
       --  Ajust the components in the reverse order in which they are stored
@@ -137,10 +138,10 @@ package body System.Finalization_Implementation is
    --  Start of processing for Adjust
 
    begin
-      --  Adjust the components and their finalization pointers next.
-      --  We must protect against an exception in some call to Adjust, so
-      --  we keep pointing to the list of successfully adjusted components,
-      --  which can be finalized if an exception is raised.
+      --  Adjust the components and their finalization pointers next. We must
+      --  protect against an exception in some call to Adjust, so we keep
+      --  pointing to the list of successfully adjusted components, which can
+      --  be finalized if an exception is raised.
 
       First_Comp := Object.F;
       Object.F := null;               --  nothing adjusted yet.
@@ -155,8 +156,8 @@ package body System.Finalization_Implementation is
       when others =>
          --  Finalize those components that were successfully adjusted, and
          --  propagate exception. The object itself is not yet attached to
-         --  global finalization list, so we cannot rely on the outer call
-         --  to Clean to take care of these components.
+         --  global finalization list, so we cannot rely on the outer call to
+         --  Clean to take care of these components.
 
          Finalize (Object);
          raise;
@@ -178,10 +179,10 @@ package body System.Finalization_Implementation is
          Obj.Next := L;
          L        := Obj'Unchecked_Access;
 
-      --  Dynamically allocated objects: they are attached to a doubly
-      --  linked list, so that an element can be finalized at any moment
-      --  by means of an unchecked deallocation. Attachement is
-      --  protected against multi-threaded access.
+      --  Dynamically allocated objects: they are attached to a doubly linked
+      --  list, so that an element can be finalized at any moment by means of
+      --  an unchecked deallocation. Attachement is protected against
+      --  multi-threaded access.
 
       elsif Nb_Link = 2 then
 
@@ -348,10 +349,10 @@ package body System.Finalization_Implementation is
    procedure Detach_From_Final_List (Obj : in out Finalizable) is
    begin
 
-      --  When objects are not properly attached to a doubly linked
-      --  list do not try to detach them. The only case where it can
-      --  happen is when dealing with Finalize_Storage_Only objects
-      --  which are not always attached.
+      --  When objects are not properly attached to a doubly linked list do
+      --  not try to detach them. The only case where it can happen is when
+      --  dealing with Finalize_Storage_Only objects which are not always
+      --  attached to the finalization list.
 
       if Obj.Next /= null and then Obj.Prev /= null then
          SSL.Lock_Task.all;
@@ -414,17 +415,22 @@ package body System.Finalization_Implementation is
       end record;
       type Ptr is access all Fake_Exception_Occurence;
 
-      --  Let's get the current exception before starting to finalize in
-      --  order to check if we are in the abort case if an exception is
-      --  raised.
-
       function To_Ptr is new
-         Unchecked_Conversion (Exception_Occurrence_Access, Ptr);
+        Unchecked_Conversion (Exception_Occurrence_Access, Ptr);
 
-      X : constant Exception_Id :=
-            To_Ptr (System.Soft_Links.Get_Current_Excep.all).Id;
+      X :  Exception_Id := Null_Id;
 
    begin
+      --  If abort is allowed, we get the current exception before starting
+      --  to finalize in order to check if we are in the abort case if an
+      --  exception is raised. When abort is not allowed, avoid accessing the
+      --  current exception since this can be a pretty costly operation in
+      --  programs using controlled types heavily.
+
+      if System.Restrictions.Abort_Allowed then
+         X := To_Ptr (System.Soft_Links.Get_Current_Excep.all).Id;
+      end if;
+
       while P /= null loop
          Q := P.Next;
          Finalize (P.all);
@@ -447,7 +453,6 @@ package body System.Finalization_Implementation is
    begin
       Detach_From_Final_List (Obj);
       Finalize (Obj);
-
    exception
       when E_Occ : others => Raise_From_Finalize (null, False, E_Occ);
    end Finalize_One;
@@ -461,7 +466,6 @@ package body System.Finalization_Implementation is
       Offset  : SSE.Storage_Offset := RC_Offset (The_Tag);
 
    begin
-
       --  Fetch the controller from the Parent or above if necessary
       --  when there are no controller at this level
 
@@ -484,7 +488,8 @@ package body System.Finalization_Implementation is
       --  ancestor corresponding to the tag "The_Tag" and that its parent
       --  is variable sized. We assume that the _controller is the first
       --  compoment right after the parent.
-      --  ??? note that it may not be true if there are new discriminants.
+
+      --  ??? note that it may not be true if there are new discriminants
 
       else --  Offset = -1
 
@@ -527,7 +532,6 @@ package body System.Finalization_Implementation is
 
    procedure Initialize (Object : in out Limited_Record_Controller) is
       pragma Warnings (Off, Object);
-
    begin
       null;
    end Initialize;

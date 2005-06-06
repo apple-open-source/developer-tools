@@ -124,15 +124,6 @@ Boston, MA 02111-1307, USA.  */
 
 #define STACK_PARMS_IN_REG_PARM_AREA
 
-/* This evaluates to nonzero if we do not know how to pass TYPE solely in
-   registers. This is the case for all arguments that do not fit in two
-   registers.  */
-
-#define MUST_PASS_IN_STACK(MODE,TYPE)					\
-  ((TYPE) != 0                                          		\
-   && (TREE_CODE (TYPE_SIZE (TYPE)) != INTEGER_CST      		\
-       || (TREE_ADDRESSABLE (TYPE) || ALPHA_ARG_SIZE (MODE, TYPE, 0) > 2)))
-
 /* Define a data type for recording info about an argument list
    during the scan of that argument list.  This data type should
    hold all necessary information about the function itself
@@ -198,8 +189,9 @@ do {								\
 								\
   size = ALPHA_ARG_SIZE (MODE, TYPE, NAMED);			\
                                                                 \
-  if (size > 2 || MUST_PASS_IN_STACK (MODE, TYPE)		\
-      || (CUM).num_reg_words + size > 6)			\
+  if (size > 2							\
+      || (CUM).num_reg_words + size > 6				\
+      || targetm.calls.must_pass_in_stack (MODE, TYPE))		\
     (CUM).force_stack = 1;					\
                                                                 \
   if (! (CUM).force_stack)					\
@@ -217,11 +209,6 @@ do {								\
   (CUM).num_arg_words += size;					\
   ++(CUM).num_args;						\
 } while(0)
-
-/* An argument is passed either entirely in registers or entirely on stack.  */
- 
-#undef FUNCTION_ARG_PARTIAL_NREGS
-/* #define FUNCTION_ARG_PARTIAL_NREGS(CUM,MODE,TYPE,NAMED) 0 */
 
 /* This ensures that $15 increments/decrements in leaf functions won't get
    eliminated.  */
@@ -478,7 +465,7 @@ ssib_section (void)		\
 #undef DWARF2_DEBUGGING_INFO
 #undef DWARF2_UNWIND_INFO
 #undef INCOMING_RETURN_ADDR_RTX
-#undef ASM_OUTPUT_SOURCE_LINE
+#undef PREFERRED_DEBUGGING_TYPE
 
 /* We don't need a start file.  */
 
@@ -491,6 +478,5 @@ ssib_section (void)		\
 #define LIB_SPEC "-L/opt/ctl/craylibs/craylibs -lu -lm -lc -lsma"
 
 #undef EXPAND_BUILTIN_VA_START
-#undef EXPAND_BUILTIN_VA_ARG
 
 #define EH_FRAME_IN_DATA_SECTION 1

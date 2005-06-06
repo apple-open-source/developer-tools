@@ -2,4 +2,7 @@
 
 AUTOMAKE_OPTIONS = foreign
 
-include_HEADERS = jni.h jvmpi.h
+# autoconf2.13's target_alias
+target_noncanonical = @target_noncanonical@
+
+tool_include__HEADERS = jni.h jawt.h jawt_md.h jvmpi.h

@@ -1,5 +1,5 @@
 /* Functions related to the Boehm garbage collector.
-   Copyright (C) 2000, 2003 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2003, 2004 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -46,7 +46,7 @@ static void
 set_bit (unsigned HOST_WIDE_INT *low, unsigned HOST_WIDE_INT *high,
 	 unsigned int n)
 {
-  HOST_WIDE_INT *which;
+  unsigned HOST_WIDE_INT *which;
 
   if (n >= HOST_BITS_PER_WIDE_INT)
     {
@@ -56,7 +56,7 @@ set_bit (unsigned HOST_WIDE_INT *low, unsigned HOST_WIDE_INT *high,
   else
     which = low;
 
-  *which |= (HOST_WIDE_INT) 1 << n;
+  *which |= (unsigned HOST_WIDE_INT) 1 << n;
 }
 
 /* Recursively mark reference fields.  */
@@ -146,12 +146,13 @@ get_boehm_type_descriptor (tree type)
   HOST_WIDE_INT last_view_index = -1;
   int pointer_after_end = 0;
   unsigned HOST_WIDE_INT low = 0, high = 0;
-  tree field, value;
+  tree field, value, value_type;
 
   /* If the GC wasn't requested, just use a null pointer.  */
   if (! flag_use_boehm_gc)
     return null_pointer_node;
 
+  value_type = java_type_for_mode (ptr_mode, 1);
   /* If we have a type of unknown size, use a proc.  */
   if (int_size_in_bytes (type) == -1)
     goto procedure_object_descriptor;
@@ -205,13 +206,13 @@ get_boehm_type_descriptor (tree type)
 	  last_set_index >>= 1;
 	  ++count;
 	}
-      value = build_int_2 (low, high);
+      value = build_int_cst_wide (value_type, low, high);
     }
   else if (! pointer_after_end)
     {
       /* Bottom two bits for bitmap mark type are 01.  */
       set_bit (&low, &high, 0);
-      value = build_int_2 (low, high);
+      value = build_int_cst_wide (value_type, low, high);
     }
   else
     {
@@ -222,9 +223,8 @@ get_boehm_type_descriptor (tree type)
 	    | DS_PROC)
 	 Here DS_PROC == 2.  */
     procedure_object_descriptor:
-      value = build_int_2 (2, 0);
+      value = build_int_cst (value_type, 2);
     }
 
-  TREE_TYPE (value) = java_type_for_mode (ptr_mode, 1);
   return value;
 }

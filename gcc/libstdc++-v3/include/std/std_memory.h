@@ -41,9 +41,8 @@
  *
  */
 
-/** @file memory
- *  This is a Standard C++ Library header.  You should @c #include this header
- *  in your programs, rather than any of the "st[dl]_*.h" implementation files.
+/** @file
+ *  This is a Standard C++ Library header.
  */
 
 #ifndef _GLIBCXX_MEMORY
@@ -58,6 +57,7 @@
 #include <bits/stl_uninitialized.h>
 #include <bits/stl_raw_storage_iter.h>
 #include <debug/debug.h>
+#include <limits>
 
 namespace std
 {
@@ -73,8 +73,9 @@ namespace std
     pair<_Tp*, ptrdiff_t>
     __get_temporary_buffer(ptrdiff_t __len, _Tp*)
     {
-      if (__len > ptrdiff_t(INT_MAX / sizeof(_Tp)))
-	__len = INT_MAX / sizeof(_Tp);
+      const ptrdiff_t __max = numeric_limits<ptrdiff_t>::max() / sizeof(_Tp);
+      if (__len > __max)
+	__len = __max;
       
       while (__len > 0) 
 	{
@@ -105,7 +106,7 @@ namespace std
    * Provides the nothrow exception guarantee.
    */
   template<typename _Tp>
-    inline pair<_Tp*,ptrdiff_t>
+    inline pair<_Tp*, ptrdiff_t>
     get_temporary_buffer(ptrdiff_t __len)
     { return std::__get_temporary_buffer(__len, static_cast<_Tp*>(0)); }
 
@@ -253,7 +254,7 @@ namespace std
        *  specification here, but omitting it is standard conforming.  Its
        *  presence can be detected only if _Tp::~_Tp() throws, but this is
        *  prohibited.  [17.4.3.6]/2
-       *  @end maint
+       *  @endif
        */
       ~auto_ptr() { delete _M_ptr; }
       
@@ -334,7 +335,7 @@ namespace std
 	  }
       }
       
-      /** @{
+      /** 
        *  @brief  Automatic conversions
        *
        *  These operations convert an %auto_ptr into and from an auto_ptr_ref
@@ -366,7 +367,6 @@ namespace std
       template<typename _Tp1>
         operator auto_ptr<_Tp1>() throw()
         { return auto_ptr<_Tp1>(this->release()); }
-      /** @}  */
   };
 } // namespace std
 

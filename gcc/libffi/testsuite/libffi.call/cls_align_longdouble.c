@@ -4,8 +4,7 @@
    PR:		none.
    Originator:	<hos@tamanegi.org> 20031203	 */
 
-/* { dg-do run { xfail mips*-*-* arm*-*-* strongarm*-*-* xscale*-*-* } } */
-/* { dg-options -mlong-double-128 { target powerpc64*-*-* } } */
+/* { dg-do run { xfail mips64*-*-* arm*-*-* strongarm*-*-* xscale*-*-* } } */
 
 #include "ffitest.h"
 

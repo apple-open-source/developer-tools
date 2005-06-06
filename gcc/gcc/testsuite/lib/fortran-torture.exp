@@ -139,6 +139,7 @@ proc fortran-torture-execute { src } {
     global TORTURE_OPTIONS
 
     # Check for alternate driver.
+    set additional_flags "";
     if [file exists [file rootname $src].x] {
 	verbose "Using alternate driver [file rootname [file tail $src]].x" 2
 	set done_p 0
@@ -184,6 +185,9 @@ proc fortran-torture-execute { src } {
 
 	set options ""
 	lappend options "additional_flags=-w $option"
+	if { $additional_flags != "" } {
+	    lappend options "additional_flags=$additional_flags";
+	}
 	set comp_output [gfortran_target_compile "$src" "$executable" executable $options];
 
 	# See if we got something bad.
@@ -239,9 +243,9 @@ proc fortran-torture-execute { src } {
 	# integers, but that is obviously much harder than just regexping this.
 	# So maybe we should just avoid those in testcases.
 	if [target_info exists no_long_long] then {
-	    if [expr [search_for $src "integer\*8"] \
-	             +[search_for $src "integer *( *8 *)"] \
-	             +[search_for $src "integer *( *kind *= *8 *)"]] \
+	    if [expr [search_for_re $src "integer\*8"] \
+	             +[search_for_re $src "integer *( *8 *)"] \
+	             +[search_for_re $src "integer *( *kind *= *8 *)"]] \
 	      then {
 		untested "$testcase execution, $option"
 		continue
@@ -269,9 +273,9 @@ proc fortran-torture-execute { src } {
 
 
 #
-# search_for -- looks for a string match in a file
+# search_for_re -- looks for a string match in a file
 #
-proc search_for { file pattern } {
+proc search_for_re { file pattern } {
     set fd [open $file r]
     while { [gets $fd cur_line]>=0 } {
 	set lower [string tolower $cur_line]
@@ -300,7 +304,6 @@ proc search_for { file pattern } {
 proc fortran-torture { args } {
     global srcdir subdir
     global compiler_conditional_xfail_data
-    global TORTURE_OPTIONS
 
     set src [lindex $args 0];
     if { [llength $args] > 1 } {
@@ -325,7 +328,7 @@ proc fortran-torture { args } {
     }
    
     # loop through all the options
-    set option_list $TORTURE_OPTIONS
+    set option_list [list { "-O" } ]
     foreach option $option_list {
 
 	# torture_compile_xfail is set by the .x script (if present)
@@ -342,3 +345,19 @@ proc fortran-torture { args } {
     }
 }
 
+#
+# add-ieee-options -- add options necessary for 100% ieee conformance.
+#
+proc add-ieee-options { } {
+    # Ensure that excess precision does not cause problems.
+    if { [istarget "i?86-*-*"]
+	 || [istarget "m68k-*-*"] } then {
+      uplevel 1 lappend additional_flags "-ffloat-store"
+    }
+
+    # Enable full IEEE compliance mode.
+    if { [istarget "alpha*-*-*"]
+         || [istarget "sh*-*-*"] } then {
+      uplevel 1 lappend additional_flags "-mieee"
+    }
+}

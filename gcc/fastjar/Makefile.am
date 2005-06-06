@@ -1,7 +1,6 @@
 # Process this with automake to create Makefile.in
 
-## We definitely don't want dependency tracking when using automake 1.4.
-AUTOMAKE_OPTIONS = no-dependencies
+ACLOCAL_AMFLAGS = -I ../config
 
 # Work around what appears to be a GNU make bug handling MAKEFLAGS
 # values defined in terms of make variables, as is the case for CC and
@@ -41,15 +40,16 @@ AM_MAKEFLAGS = \
 	"RANLIB=$(RANLIB)" \
 	"DESTDIR=$(DESTDIR)"
 
-INCLUDES = -I. -I$(top_srcdir) $(ZINCS) -I$(top_srcdir)/../include
+AM_CPPFLAGS = -I. -I$(top_srcdir) $(ZINCS) -I$(top_srcdir)/../include
 
 LIBIBERTY = ../libiberty/libiberty.a
 
-bin_PROGRAMS = jar grepjar
-jar_SOURCES = jartool.c dostime.c compress.c pushback.c jartool.h \
-zipfile.h dostime.h compress.h pushback.h
-jar_LDADD = $(ZLIBS) $(LIBIBERTY)
-jar_DEPENDENCIES = $(ZDEPS) $(LIBIBERTY)
+bin_PROGRAMS = fastjar grepjar
+fastjar_SOURCES = jartool.c dostime.c compress.c pushback.c shift.c jartool.h \
+zipfile.h dostime.h compress.h pushback.h shift.h
+fastjar_LDADD = $(ZLIBS) $(LIBIBERTY)
+fastjar_DEPENDENCIES = $(ZDEPS) $(LIBIBERTY)
+fastjar_CPPFLAGS = $(AM_CPPFLAGS) -DWITH_SHIFT_DOWN
 
 grepjar_SOURCES = jargrep.c dostime.c compress.c pushback.c jartool.h \
 zipfile.h dostime.h compress.h pushback.h
@@ -64,21 +64,21 @@ info_TEXINFOS = fastjar.texi
 fastjar_TEXINFOS = \
 	../gcc/doc/include/gcc-common.texi \
 	../gcc/doc/include/gpl.texi
-man_MANS = jar.1 grepjar.1
+man_MANS = fastjar.1 grepjar.1
 EXTRA_DIST = $(man_MANS)
 
 TEXI2POD = perl $(srcdir)/../contrib/texi2pod.pl
 POD2MAN = pod2man --center="GNU" --release="gcc-@gcc_version@"
 
-%.1: %.pod
+.pod.1:
 	-($(POD2MAN) --section=1 $< > $(@).T$$$$ && \
 		mv -f $(@).T$$$$ $@) || \
 		(rm -f $(@).T$$$$ && exit 1)
 
-.INTERMEDIATE: jar.pod grepjar.pod
+.INTERMEDIATE: fastjar.pod grepjar.pod
 
-jar.pod: $(srcdir)/fastjar.texi
-	-$(TEXI2POD) -D jar $< > $@
+fastjar.pod: $(srcdir)/fastjar.texi
+	-$(TEXI2POD) -D fastjar $< > $@
 
 grepjar.pod: $(srcdir)/fastjar.texi
 	-$(TEXI2POD) -D grepjar $< > $@
@@ -96,13 +96,13 @@ endif
 
 all-local: $(STAMP_GENINSRC) 
 
-stamp-geninsrc: jar.1 grepjar.1 fastjar.info
-	-cp -p $(top_builddir)/jar.1 $(srcdir)/jar.1
+stamp-geninsrc: fastjar.1 grepjar.1 fastjar.info
+	-cp -p $(top_builddir)/fastjar.1 $(srcdir)/fastjar.1
 	-cp -p $(top_builddir)/grepjar.1 $(srcdir)/grepjar.1
 	-cp -p $(top_builddir)/fastjar.info $(srcdir)/fastjar.info
 	touch $@
 
-CLEANFILES = stamp-geninsrc
-MAINTAINERCLEANFILES = $(srcdir)/jar.1 \
+CLEANFILES = stamp-geninsrc fastjar.info
+MAINTAINERCLEANFILES = $(srcdir)/fastjar.1 \
                        $(srcdir)/grepjar.1 \
                        $(srcdir)/fastjar.info

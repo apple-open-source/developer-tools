@@ -1,18 +1,12 @@
-sinclude(../libtool.m4)
-dnl The lines below arrange for aclocal not to bring libtool.m4
-dnl AC_PROG_LIBTOOL into aclocal.m4, while still arranging for automake
-dnl to add a definition of LIBTOOL to Makefile.in.
-ifelse(yes,no,[
-AC_DEFUN([AC_PROG_LIBTOOL],)
-AC_DEFUN([AM_PROG_LIBTOOL],)
-AC_SUBST(LIBTOOL)
-])
-
 # mmap(2) blacklisting.  Some platforms provide the mmap library routine
 # but don't support all of the features we need from it.
 AC_DEFUN([AC_FUNC_MMAP_BLACKLIST],
-[if test $ac_cv_header_sys_mman_h != yes \
- || test $ac_cv_func_mmap != yes; then
+[
+AC_CHECK_HEADER([sys/mman.h],
+		[libffi_header_sys_mman_h=yes], [libffi_header_sys_mman_h=no])
+AC_CHECK_FUNC([mmap], [libffi_func_mmap=yes], [libffi_func_mmap=no])
+if test "$libffi_header_sys_mman_h" != yes \
+ || test "$libffi_func_mmap" != yes; then
    ac_cv_func_mmap_file=no
    ac_cv_func_mmap_dev_zero=no
    ac_cv_func_mmap_anon=no
@@ -96,5 +90,3 @@ if test $ac_cv_func_mmap_anon = yes; then
 	    [Define if mmap with MAP_ANON(YMOUS) works.])
 fi
 ])
-
-sinclude(../config/accross.m4)

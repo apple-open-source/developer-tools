@@ -1,5 +1,5 @@
 /* High-level loop manipulation functions.
-   Copyright (C) 2004 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005 Free Software Foundation, Inc.
    
 This file is part of GCC.
    
@@ -35,270 +35,530 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "cfgloop.h"
 #include "tree-pass.h"
 #include "cfglayout.h"
+#include "tree-scalar-evolution.h"
 
-static basic_block lv_adjust_loop_entry_edge (basic_block, basic_block, edge, 
-					      tree); 
-static void lv_update_pending_stmts (edge e);
-static void lv_adjust_loop_header_phi (basic_block, basic_block, basic_block, 
-				       edge);
+/* Creates an induction variable with value BASE + STEP * iteration in LOOP.
+   It is expected that neither BASE nor STEP are shared with other expressions
+   (unless the sharing rules allow this).  Use VAR as a base var_decl for it
+   (if NULL, a new temporary will be created).  The increment will occur at
+   INCR_POS (after it if AFTER is true, before it otherwise).  INCR_POS and 
+   AFTER can be computed using standard_iv_increment_position.  The ssa versions
+   of the variable before and after increment will be stored in VAR_BEFORE and
+   VAR_AFTER (unless they are NULL).  */
 
-/* Copies phi nodes in newly created copies of the LOOP.  The new blocks start
-   since FIRST_NEW_BLOCK index.  PEELING is true if we were peeling
-   the loop.  */
+void
+create_iv (tree base, tree step, tree var, struct loop *loop,
+	   block_stmt_iterator *incr_pos, bool after,
+	   tree *var_before, tree *var_after)
+{
+  tree stmt, initial, step1, stmts;
+  tree vb, va;
+  enum tree_code incr_op = PLUS_EXPR;
+
+  if (!var)
+    {
+      var = create_tmp_var (TREE_TYPE (base), "ivtmp");
+      add_referenced_tmp_var (var);
+    }
+
+  vb = make_ssa_name (var, NULL_TREE);
+  if (var_before)
+    *var_before = vb;
+  va = make_ssa_name (var, NULL_TREE);
+  if (var_after)
+    *var_after = va;
+
+  /* For easier readability of the created code, produce MINUS_EXPRs
+     when suitable.  */
+  if (TREE_CODE (step) == INTEGER_CST)
+    {
+      if (TYPE_UNSIGNED (TREE_TYPE (step)))
+	{
+	  step1 = fold (build1 (NEGATE_EXPR, TREE_TYPE (step), step));
+	  if (tree_int_cst_lt (step1, step))
+	    {
+	      incr_op = MINUS_EXPR;
+	      step = step1;
+	    }
+	}
+      else
+	{
+	  if (!tree_expr_nonnegative_p (step)
+	      && may_negate_without_overflow_p (step))
+	    {
+	      incr_op = MINUS_EXPR;
+	      step = fold (build1 (NEGATE_EXPR, TREE_TYPE (step), step));
+	    }
+	}
+    }
+
+  stmt = build2 (MODIFY_EXPR, void_type_node, va,
+		 build2 (incr_op, TREE_TYPE (base),
+			 vb, step));
+  SSA_NAME_DEF_STMT (va) = stmt;
+  if (after)
+    bsi_insert_after (incr_pos, stmt, BSI_NEW_STMT);
+  else
+    bsi_insert_before (incr_pos, stmt, BSI_NEW_STMT);
+
+  initial = force_gimple_operand (base, &stmts, true, var);
+  if (stmts)
+    {
+      edge pe = loop_preheader_edge (loop);
+
+      bsi_insert_on_edge_immediate_loop (pe, stmts);
+    }
+
+  stmt = create_phi_node (vb, loop->header);
+  SSA_NAME_DEF_STMT (vb) = stmt;
+  add_phi_arg (stmt, initial, loop_preheader_edge (loop));
+  add_phi_arg (stmt, va, loop_latch_edge (loop));
+}
+
+/* Add exit phis for the USE on EXIT.  */
 
 static void
-copy_phi_nodes (struct loop *loop, unsigned first_new_block, bool peeling)
+add_exit_phis_edge (basic_block exit, tree use)
+{
+  tree phi, def_stmt = SSA_NAME_DEF_STMT (use);
+  basic_block def_bb = bb_for_stmt (def_stmt);
+  struct loop *def_loop;
+  edge e;
+  edge_iterator ei;
+
+  /* Check that some of the edges entering the EXIT block exits a loop in
+     that USE is defined.  */
+  FOR_EACH_EDGE (e, ei, exit->preds)
+    {
+      def_loop = find_common_loop (def_bb->loop_father, e->src->loop_father);
+      if (!flow_bb_inside_loop_p (def_loop, e->dest))
+	break;
+    }
+
+  if (!e)
+    return;
+
+  phi = create_phi_node (use, exit);
+
+  FOR_EACH_EDGE (e, ei, exit->preds)
+    add_phi_arg (phi, use, e);
+
+  SSA_NAME_DEF_STMT (use) = def_stmt;
+}
+
+/* Add exit phis for VAR that is used in LIVEIN.
+   Exits of the loops are stored in EXITS.  */
+
+static void
+add_exit_phis_var (tree var, bitmap livein, bitmap exits)
+{
+  bitmap def;
+  unsigned index;
+  basic_block def_bb = bb_for_stmt (SSA_NAME_DEF_STMT (var));
+  bitmap_iterator bi;
+
+  bitmap_clear_bit (livein, def_bb->index);
+
+  def = BITMAP_ALLOC (NULL);
+  bitmap_set_bit (def, def_bb->index);
+  compute_global_livein (livein, def);
+  BITMAP_FREE (def);
+
+  EXECUTE_IF_AND_IN_BITMAP (exits, livein, 0, index, bi)
+    {
+      add_exit_phis_edge (BASIC_BLOCK (index), var);
+    }
+}
+
+/* Add exit phis for the names marked in NAMES_TO_RENAME.
+   Exits of the loops are stored in EXITS.  Sets of blocks where the ssa
+   names are used are stored in USE_BLOCKS.  */
+
+static void
+add_exit_phis (bitmap names_to_rename, bitmap *use_blocks, bitmap loop_exits)
 {
   unsigned i;
-  basic_block bb, orig;
-  tree phi, new_phi, def;
-  edge e, new_e;
-  edge latch = loop_latch_edge (loop), entry = loop_preheader_edge (loop);
+  bitmap_iterator bi;
 
-  for (i = first_new_block; i < (unsigned) last_basic_block; i++)
+  EXECUTE_IF_SET_IN_BITMAP (names_to_rename, 0, i, bi)
     {
-      tree nlist;
-      bb = BASIC_BLOCK (i);
-      orig = bb->rbi->original;
-
-      for (phi = phi_nodes (orig); phi; phi = TREE_CHAIN (phi))
-	{
-	  new_phi = create_phi_node (PHI_RESULT (phi), bb);
-
-	  if (orig == loop->header)
-	    {
-	      if (!bb->pred || bb->pred->pred_next)
-		abort ();
-
-	      new_e = bb->pred;
-	      e = (peeling && bb->rbi->copy_number == 1 ? entry : latch);
-	      def = phi_element_for_edge (phi, e)->def;
-	      add_phi_arg (&new_phi, def, new_e);
-	      continue;
-	    }
-
-	  for (new_e = bb->pred; new_e; new_e = new_e->pred_next)
-	    {
-	      e = find_edge (new_e->src->rbi->original, orig);
-	      if (!e)
-		abort ();
-
-	      def = phi_element_for_edge (phi, e)->def;
-	      add_phi_arg (&new_phi, def, new_e);
-	    }
-	}
-
-      /* neverse phi nodes to keep them in original order.  */
-      nlist = nreverse (phi_nodes (bb));
-      set_phi_nodes (bb, nlist);
-    }
-
-  if (peeling)
-    {
-      /* Update the phi nodes in the header so that the latch value comes from
-	 both edges.  */
-      for (phi = phi_nodes (loop->header); phi; phi = TREE_CHAIN (phi))
-	{
-	  def = phi_element_for_edge (phi, latch)->def;
-	  phi_element_for_edge (phi, entry)->def = def;
-	}
+      add_exit_phis_var (ssa_name (i), use_blocks[i], loop_exits);
     }
 }
 
-/* Constructs list of all ssa names defined inside LOOP.  */
+/* Returns a bitmap of all loop exit edge targets.  */
 
-static tree
-collect_defs (struct loop *loop)
+static bitmap
+get_loops_exits (void)
 {
-  basic_block *body = get_loop_body (loop);
-  unsigned i, j;
-  tree phi, stmt;
-  block_stmt_iterator bsi;
-  def_optype defs;
-  vdef_optype vdefs;
-  tree ret = NULL_TREE;
+  bitmap exits = BITMAP_ALLOC (NULL);
+  basic_block bb;
+  edge e;
+  edge_iterator ei;
 
-  for (i = 0; i < loop->num_nodes; i++)
+  FOR_EACH_BB (bb)
     {
-      for (bsi = bsi_start (body[i]); !bsi_end_p (bsi); bsi_next (&bsi))
-	{
-	  stmt = bsi_stmt (bsi);
-
-	  get_stmt_operands (stmt);
-
-	  defs = STMT_DEF_OPS (stmt);
-	  for (j = 0; j < NUM_DEFS (defs); j++)
-	    ret = tree_cons (NULL, DEF_OP (defs, j), ret);
-
-	  vdefs = STMT_VDEF_OPS (stmt);
-	  for (j = 0; j < NUM_VDEFS (vdefs); j++)
-	    ret = tree_cons (NULL, VDEF_RESULT (vdefs, j), ret);
-	}
-
-      for (phi = phi_nodes (body[i]); phi; phi = TREE_CHAIN (phi))
-	ret = tree_cons (NULL, PHI_RESULT (phi), ret);
+      FOR_EACH_EDGE (e, ei, bb->preds)
+	if (e->src != ENTRY_BLOCK_PTR
+	    && !flow_bb_inside_loop_p (e->src->loop_father, bb))
+	  {
+	    bitmap_set_bit (exits, bb->index);
+	    break;
+	  }
     }
 
-  return ret;
+  return exits;
 }
 
-/* For each definition in DEFINITIONS allocates:
-
-   NDUPL + 1 copies if ORIGIN is true
-   NDUPL copies if ORIGIN is false
-
-   (one for each duplicate of the loop body).  
-   If ORIGIN is true, additional set of DEFINITIONS 
-   is allocated for initial loop copy. */
+/* For USE in BB, if it is used outside of the loop it is defined in,
+   mark it for rewrite.  Record basic block BB where it is used
+   to USE_BLOCKS.  */
 
 static void
-allocate_new_names (tree definitions, unsigned ndupl, bool origin)
+find_uses_to_rename_use (basic_block bb, tree use, bitmap *use_blocks)
+{
+  unsigned ver;
+  basic_block def_bb;
+  struct loop *def_loop;
+
+  if (TREE_CODE (use) != SSA_NAME)
+    return;
+
+  ver = SSA_NAME_VERSION (use);
+  def_bb = bb_for_stmt (SSA_NAME_DEF_STMT (use));
+  if (!def_bb)
+    return;
+  def_loop = def_bb->loop_father;
+
+  /* If the definition is not inside loop, it is not interesting.  */
+  if (!def_loop->outer)
+    return;
+
+  if (!use_blocks[ver])
+    use_blocks[ver] = BITMAP_ALLOC (NULL);
+  bitmap_set_bit (use_blocks[ver], bb->index);
+
+  if (!flow_bb_inside_loop_p (def_loop, bb))
+    mark_for_rewrite (use);
+}
+
+/* For uses in STMT, mark names that are used outside of the loop they are
+   defined to rewrite.  Record the set of blocks in that the ssa
+   names are defined to USE_BLOCKS.  */
+
+static void
+find_uses_to_rename_stmt (tree stmt, bitmap *use_blocks)
+{
+  ssa_op_iter iter;
+  tree var;
+  basic_block bb = bb_for_stmt (stmt);
+
+  get_stmt_operands (stmt);
+
+  FOR_EACH_SSA_TREE_OPERAND (var, stmt, iter, SSA_OP_ALL_USES | SSA_OP_ALL_KILLS)
+    find_uses_to_rename_use (bb, var, use_blocks);
+}
+
+/* Marks names that are used outside of the loop they are defined in
+   for rewrite.  Records the set of blocks in that the ssa
+   names are defined to USE_BLOCKS.  */
+
+static void
+find_uses_to_rename (bitmap *use_blocks)
+{
+  basic_block bb;
+  block_stmt_iterator bsi;
+  tree phi;
+  unsigned i;
+
+  FOR_EACH_BB (bb)
+    {
+      for (phi = phi_nodes (bb); phi; phi = PHI_CHAIN (phi))
+	for (i = 0; i < (unsigned) PHI_NUM_ARGS (phi); i++)
+	  find_uses_to_rename_use (EDGE_PRED (bb, i)->src,
+				   PHI_ARG_DEF (phi, i), use_blocks);
+
+      for (bsi = bsi_start (bb); !bsi_end_p (bsi); bsi_next (&bsi))
+	find_uses_to_rename_stmt (bsi_stmt (bsi), use_blocks);
+    }
+}
+
+/* Rewrites the program into a loop closed ssa form -- i.e. inserts extra
+   phi nodes to ensure that no variable is used outside the loop it is
+   defined in.
+
+   This strengthening of the basic ssa form has several advantages:
+
+   1) Updating it during unrolling/peeling/versioning is trivial, since
+      we do not need to care about the uses outside of the loop.
+   2) The behavior of all uses of an induction variable is the same.
+      Without this, you need to distinguish the case when the variable
+      is used outside of the loop it is defined in, for example
+
+      for (i = 0; i < 100; i++)
+	{
+	  for (j = 0; j < 100; j++)
+	    {
+	      k = i + j;
+	      use1 (k);
+	    }
+	  use2 (k);
+	}
+
+      Looking from the outer loop with the normal SSA form, the first use of k
+      is not well-behaved, while the second one is an induction variable with
+      base 99 and step 1.  */
+
+void
+rewrite_into_loop_closed_ssa (void)
+{
+  bitmap loop_exits = get_loops_exits ();
+  bitmap *use_blocks;
+  unsigned i;
+  bitmap names_to_rename;
+
+  gcc_assert (!any_marked_for_rewrite_p ());
+
+  use_blocks = xcalloc (num_ssa_names, sizeof (bitmap));
+
+  /* Find the uses outside loops.  */
+  find_uses_to_rename (use_blocks);
+
+  /* Add the phi nodes on exits of the loops for the names we need to
+     rewrite.  */
+  names_to_rename = marked_ssa_names ();
+  add_exit_phis (names_to_rename, use_blocks, loop_exits);
+
+  for (i = 0; i < num_ssa_names; i++)
+    BITMAP_FREE (use_blocks[i]);
+  free (use_blocks);
+  BITMAP_FREE (loop_exits);
+  BITMAP_FREE (names_to_rename);
+
+  /* Do the rewriting.  */
+  rewrite_ssa_into_ssa ();
+}
+
+/* Check invariants of the loop closed ssa form for the USE in BB.  */
+
+static void
+check_loop_closed_ssa_use (basic_block bb, tree use)
 {
   tree def;
-  unsigned i;
-  ssa_name_ann_t ann;
-  tree *new_names;
-  bool abnormal;
+  basic_block def_bb;
+  
+  if (TREE_CODE (use) != SSA_NAME)
+    return;
 
-  for (; definitions; definitions = TREE_CHAIN (definitions))
-    {
-      def = TREE_VALUE (definitions);
-      ann = get_ssa_name_ann (def);
-      new_names = xmalloc (sizeof (tree) * (ndupl + (origin ? 1 : 0)));
-
-      abnormal = SSA_NAME_OCCURS_IN_ABNORMAL_PHI (def);
-      for (i = (origin ? 0 : 1); i <= ndupl; i++)
-	{
-	  new_names[i] = duplicate_ssa_name (def, SSA_NAME_DEF_STMT (def));
-	  SSA_NAME_OCCURS_IN_ABNORMAL_PHI (new_names[i]) = abnormal;
-	}
-       /* Delay this until now so it doesn't get propagated to the copies.
-	  That would cause problems in the next outer loop.  */
-      ann->common.aux = new_names;
-    }
+  def = SSA_NAME_DEF_STMT (use);
+  def_bb = bb_for_stmt (def);
+  gcc_assert (!def_bb
+	      || flow_bb_inside_loop_p (def_bb->loop_father, bb));
 }
 
-/* Renames the variable *OP_P in statement STMT.  If DEF is true,
-   *OP_P is defined by the statement.  N_COPY is the number of the
-   copy of the loop body we are renaming.  */
+/* Checks invariants of loop closed ssa form in statement STMT in BB.  */
 
 static void
-rename_op (tree *op_p, bool def, tree stmt, unsigned n_copy)
+check_loop_closed_ssa_stmt (basic_block bb, tree stmt)
 {
-  ssa_name_ann_t ann;
-  tree *new_names;
+  ssa_op_iter iter;
+  tree var;
 
-  if(!op_p)
-    return;
+  get_stmt_operands (stmt);
 
-  if (TREE_CODE (*op_p) != SSA_NAME)
-    return;
-
-  ann = ssa_name_ann (*op_p);
-  new_names = ann ? ann->common.aux : NULL;
-
-  /* Something defined outside of the loop.  */
-  if (!new_names)
-    return;
-
-  /* An ordinary ssa name defined in the loop.  */
-
-  *op_p = new_names[n_copy];
-  if (def)
-    SSA_NAME_DEF_STMT (*op_p) = stmt;
+  FOR_EACH_SSA_TREE_OPERAND (var, stmt, iter, SSA_OP_ALL_USES)
+    check_loop_closed_ssa_use (bb, var);
 }
 
-/* Renames the variables in basic block BB.  */
+/* Checks that invariants of the loop closed ssa form are preserved.  */
 
-static void
-rename_variables_in_bb (basic_block bb)
+void
+verify_loop_closed_ssa (void)
 {
-  tree phi;
+  basic_block bb;
   block_stmt_iterator bsi;
-  tree stmt;
-  stmt_ann_t ann;
-  use_optype uses;
-  vuse_optype vuses;
-  def_optype defs;
-  vdef_optype vdefs;
-  unsigned i, nbb = bb->rbi->copy_number;
-  edge e;
+  tree phi;
+  unsigned i;
 
-  for (phi = phi_nodes (bb); phi; phi = TREE_CHAIN (phi))
-    rename_op (&PHI_RESULT (phi), true, phi, nbb);
+  verify_ssa ();
 
-  for (bsi = bsi_start (bb); !bsi_end_p (bsi); bsi_next (&bsi))
+  FOR_EACH_BB (bb)
     {
-      stmt = bsi_stmt (bsi);
-      get_stmt_operands (stmt);
-      ann = stmt_ann (stmt);
+      for (phi = phi_nodes (bb); phi; phi = PHI_CHAIN (phi))
+	for (i = 0; i < (unsigned) PHI_NUM_ARGS (phi); i++)
+	  check_loop_closed_ssa_use (PHI_ARG_EDGE (phi, i)->src,
+				     PHI_ARG_DEF (phi, i));
 
-      uses = USE_OPS (ann);
-      for (i = 0; i < NUM_USES (uses); i++)
-	rename_op (USE_OP_PTR (uses, i), false, stmt, nbb);
-
-      defs = DEF_OPS (ann);
-      for (i = 0; i < NUM_DEFS (defs); i++)
-	rename_op (DEF_OP_PTR (defs, i), true, stmt, nbb);
-
-      vuses = VUSE_OPS (ann);
-      for (i = 0; i < NUM_VUSES (vuses); i++)
-	rename_op (VUSE_OP_PTR (vuses, i), false, stmt, nbb);
-
-      vdefs = VDEF_OPS (ann);
-      for (i = 0; i < NUM_VDEFS (vdefs); i++)
-	{
-	  rename_op (VDEF_OP_PTR (vdefs, i), false, stmt, nbb);
-	  rename_op (VDEF_RESULT_PTR (vdefs, i), true, stmt, nbb);
-	}
+      for (bsi = bsi_start (bb); !bsi_end_p (bsi); bsi_next (&bsi))
+	check_loop_closed_ssa_stmt (bb, bsi_stmt (bsi));
     }
+}
 
-  for (e = bb->succ; e; e = e->succ_next)
-    for (phi = phi_nodes (e->dest); phi; phi = TREE_CHAIN (phi))
-      rename_op (&phi_element_for_edge (phi, e)->def, false, phi, nbb);
+/* Split loop exit edge EXIT.  The things are a bit complicated by a need to
+   preserve the loop closed ssa form.  */
+
+void
+split_loop_exit_edge (edge exit)
+{
+  basic_block dest = exit->dest;
+  basic_block bb = loop_split_edge_with (exit, NULL);
+  tree phi, new_phi, new_name, name;
+  use_operand_p op_p;
+
+  for (phi = phi_nodes (dest); phi; phi = PHI_CHAIN (phi))
+    {
+      op_p = PHI_ARG_DEF_PTR_FROM_EDGE (phi, EDGE_SUCC (bb, 0));
+
+      name = USE_FROM_PTR (op_p);
+
+      /* If the argument of the phi node is a constant, we do not need
+	 to keep it inside loop.  */
+      if (TREE_CODE (name) != SSA_NAME)
+	continue;
+
+      /* Otherwise create an auxiliary phi node that will copy the value
+	 of the ssa name out of the loop.  */
+      new_name = duplicate_ssa_name (name, NULL);
+      new_phi = create_phi_node (new_name, bb);
+      SSA_NAME_DEF_STMT (new_name) = new_phi;
+      add_phi_arg (new_phi, name, exit);
+      SET_USE (op_p, new_name);
+    }
+}
+
+/* Insert statement STMT to the edge E and update the loop structures.
+   Returns the newly created block (if any).  */
+
+basic_block
+bsi_insert_on_edge_immediate_loop (edge e, tree stmt)
+{
+  basic_block src, dest, new_bb;
+  struct loop *loop_c;
+
+  src = e->src;
+  dest = e->dest;
+
+  loop_c = find_common_loop (src->loop_father, dest->loop_father);
+
+  new_bb = bsi_insert_on_edge_immediate (e, stmt);
+
+  if (!new_bb)
+    return NULL;
+
+  add_bb_to_loop (new_bb, loop_c);
+  if (dest->loop_father->latch == src)
+    dest->loop_father->latch = new_bb;
+
+  return new_bb;
+}
+
+/* Returns the basic block in that statements should be emitted for induction
+   variables incremented at the end of the LOOP.  */
+
+basic_block
+ip_end_pos (struct loop *loop)
+{
+  return loop->latch;
+}
+
+/* Returns the basic block in that statements should be emitted for induction
+   variables incremented just before exit condition of a LOOP.  */
+
+basic_block
+ip_normal_pos (struct loop *loop)
+{
+  tree last;
+  basic_block bb;
+  edge exit;
+
+  if (EDGE_COUNT (loop->latch->preds) > 1)
+    return NULL;
+
+  bb = EDGE_PRED (loop->latch, 0)->src;
+  last = last_stmt (bb);
+  if (TREE_CODE (last) != COND_EXPR)
+    return NULL;
+
+  exit = EDGE_SUCC (bb, 0);
+  if (exit->dest == loop->latch)
+    exit = EDGE_SUCC (bb, 1);
+
+  if (flow_bb_inside_loop_p (loop, exit->dest))
+    return NULL;
+
+  return bb;
+}
+
+/* Stores the standard position for induction variable increment in LOOP
+   (just before the exit condition if it is available and latch block is empty,
+   end of the latch block otherwise) to BSI.  INSERT_AFTER is set to true if
+   the increment should be inserted after *BSI.  */
+
+void
+standard_iv_increment_position (struct loop *loop, block_stmt_iterator *bsi,
+				bool *insert_after)
+{
+  basic_block bb = ip_normal_pos (loop), latch = ip_end_pos (loop);
+  tree last = last_stmt (latch);
+
+  if (!bb
+      || (last && TREE_CODE (last) != LABEL_EXPR))
+    {
+      *bsi = bsi_last (latch);
+      *insert_after = true;
+    }
+  else
+    {
+      *bsi = bsi_last (bb);
+      *insert_after = false;
+    }
+}
+
+/* Copies phi node arguments for duplicated blocks.  The index of the first
+   duplicated block is FIRST_NEW_BLOCK.  */
+
+static void
+copy_phi_node_args (unsigned first_new_block)
+{
+  unsigned i;
+
+  for (i = first_new_block; i < (unsigned) last_basic_block; i++)
+    BASIC_BLOCK (i)->rbi->duplicated = 1;
+
+  for (i = first_new_block; i < (unsigned) last_basic_block; i++)
+    add_phi_args_after_copy_bb (BASIC_BLOCK (i));
+
+  for (i = first_new_block; i < (unsigned) last_basic_block; i++)
+    BASIC_BLOCK (i)->rbi->duplicated = 0;
 }
 
 /* Renames variables in the area copied by tree_duplicate_loop_to_header_edge.
-   FIRST_NEW_BLOCK is the first block in the copied area.   */
+   FIRST_NEW_BLOCK is the first block in the copied area.   DEFINITIONS is
+   a bitmap of all ssa names defined inside the loop.  */
 
 static void
-rename_variables (unsigned first_new_block)
+rename_variables (unsigned first_new_block, bitmap definitions)
 {
-  unsigned i;
+  unsigned i, copy_number = 0;
   basic_block bb;
+  htab_t ssa_name_map = NULL;
 
   for (i = first_new_block; i < (unsigned) last_basic_block; i++)
     {
       bb = BASIC_BLOCK (i);
 
-      rename_variables_in_bb (bb);
+      /* We assume that first come all blocks from the first copy, then all
+	 blocks from the second copy, etc.  */
+      if (copy_number != (unsigned) bb->rbi->copy_number)
+	{
+	  allocate_ssa_names (definitions, &ssa_name_map);
+	  copy_number = bb->rbi->copy_number;
+	}
 
-      if (bb->rbi->copy_number == 1)
-	rename_variables_in_bb (bb->rbi->original);
+      rewrite_to_new_ssa_names_bb (bb, ssa_name_map);
     }
-}
 
-/* Releases the structures holding the new ssa names. 
-   The original ssa names are released if ORIGIN is true.
-   Otherwise they are saved for initial loop copy.  */
-
-static void
-free_new_names (tree definitions, bool origin)
-{
-  tree def;
-  ssa_name_ann_t ann;
-
-  for (; definitions; definitions = TREE_CHAIN (definitions))
-    {
-      def = TREE_VALUE (definitions);
-      ann = ssa_name_ann (def);
-
-      free (ann->common.aux);
-      ann->common.aux = NULL;
-
-      if (origin)
-	 release_ssa_name (def);
-    }
+  htab_delete (ssa_name_map);
 }
 
 /* Sets SSA_NAME_DEF_STMT for results of all phi nodes in BB.  */
@@ -308,37 +568,11 @@ set_phi_def_stmts (basic_block bb)
 {
   tree phi;
 
-  for (phi = phi_nodes (bb); phi; phi = TREE_CHAIN (phi))
+  for (phi = phi_nodes (bb); phi; phi = PHI_CHAIN (phi))
     SSA_NAME_DEF_STMT (PHI_RESULT (phi)) = phi;
 }
 
-/* Extends phi nodes on EXIT to the newly created edges.  */
-
-static void
-extend_exit_phi_nodes (unsigned first_new_block, edge exit)
-{
-  basic_block exit_block = exit->dest;
-  edge ae;
-  tree phi, def;
-
-  for (phi = phi_nodes (exit_block); phi; phi = TREE_CHAIN (phi))
-    {
-      def = phi_element_for_edge (phi, exit)->def;
-
-      for (ae = exit_block->pred; ae; ae = ae->pred_next)
-	{
-	  if (ae->src->index < (int) first_new_block)
-	    continue;
-
-	  if (ae->src->rbi->original != exit->src)
-	    continue;
-
-	  add_phi_arg (&phi, def, ae);
-	}
-    }
-}
-
-/* The same ad cfgloopmanip.c:duplicate_loop_to_header_edge, but also updates
+/* The same as cfgloopmanip.c:duplicate_loop_to_header_edge, but also updates
    ssa.  In order to achieve this, only loops whose exits all lead to the same
    location are handled.
    
@@ -356,12 +590,7 @@ tree_duplicate_loop_to_header_edge (struct loop *loop, edge e,
   unsigned first_new_block;
   basic_block bb;
   unsigned i;
-  bool peeling = (e != loop_latch_edge (loop));
-  edge latch, latch_copy;
-  tree phi, arg, map, def;
-  tree definitions;
-  edge *exits;
-  unsigned n_exits;
+  bitmap definitions;
 
   if (!(loops->state & LOOPS_HAVE_SIMPLE_LATCHES))
     return false;
@@ -372,43 +601,24 @@ tree_duplicate_loop_to_header_edge (struct loop *loop, edge e,
   verify_loop_closed_ssa ();
 #endif
 
-  exits = get_loop_exit_edges (loop, &n_exits);
-  definitions = collect_defs (loop);
+  gcc_assert (!any_marked_for_rewrite_p ());
 
   first_new_block = last_basic_block;
   if (!duplicate_loop_to_header_edge (loop, e, loops, ndupl, wont_exit,
 				      orig, to_remove, n_to_remove, flags))
     return false;
 
-  allocate_new_names (definitions, ndupl, true);
-
   /* Readd the removed phi args for e.  */
-  latch = loop_latch_edge (loop);
-  latch_copy = peeling ? loop_preheader_edge (loop) : latch;
-  map = PENDING_STMT (e);
-  PENDING_STMT (e) = NULL;
+  flush_pending_stmts (e);
 
-  for (phi = phi_nodes (loop->header), arg = map;
-       phi;
-       phi = TREE_CHAIN (phi), arg = TREE_CHAIN (arg))
-    {
-      def = TREE_VALUE (arg);
-      add_phi_arg (&phi, def, latch_copy);
-    }
-  if (arg)
-    abort ();
-
-  /* Extend exit phi nodes.  */
-  for (i = 0; i < n_exits; i++)
-    extend_exit_phi_nodes (first_new_block, exits[i]);
-  free (exits);
-
-  /* Copy the phi nodes.  */
-  copy_phi_nodes (loop, first_new_block, peeling);
+  /* Copy the phi node arguments.  */
+  copy_phi_node_args (first_new_block);
 
   /* Rename the variables.  */
-  rename_variables (first_new_block);
-  free_new_names (definitions, true);
+  definitions = marked_ssa_names ();
+  rename_variables (first_new_block, definitions);
+  unmark_all_for_rewrite ();
+  BITMAP_FREE (definitions);
 
   /* For some time we have the identical ssa names as results in multiple phi
      nodes.  When phi node is resized, it sets SSA_NAME_DEF_STMT of its result
@@ -424,6 +634,7 @@ tree_duplicate_loop_to_header_edge (struct loop *loop, edge e,
   	set_phi_def_stmts (bb->rbi->original);
     }
 
+  scev_reset ();
 #ifdef ENABLE_CHECKING
   verify_loop_closed_ssa ();
 #endif
@@ -431,41 +642,45 @@ tree_duplicate_loop_to_header_edge (struct loop *loop, edge e,
   return true;
 }
 
-/* Unrolls and peels each loop twice for testing.  */
-
-void
-test_unrolling_and_peeling (struct loops *loops)
-{
-  struct loop *loop;
-  unsigned i;
-
-  for (i = 1; i < loops->num; i++)
-    {
-      loop = loops->parray[i];
-
-      if (!loop
-	  || loop->inner)
-	continue;
-
-      tree_duplicate_loop_to_header_edge (loop, loop_preheader_edge (loop),
-					  loops, 2, NULL, NULL, NULL, NULL, 0);
-      verify_loop_structure (loops);
-      verify_ssa ();
-
-      tree_duplicate_loop_to_header_edge (loop, loop_latch_edge (loop),
-					  loops, 2, NULL, NULL, NULL, NULL, 0);
-      verify_loop_structure (loops);
-      verify_ssa ();
-    }
-}
-
 /*---------------------------------------------------------------------------
   Loop versioning
   ---------------------------------------------------------------------------*/
  
+/* Adjust phi nodes for 'first' basic block.  'second' basic block is a copy
+   of 'first'. Both of them are dominated by 'new_head' basic block. When
+   'new_head' was created by 'second's incoming edge it received phi arguments
+   on the edge by split_edge(). Later, additional edge 'e' was created to
+   connect 'new_head' and 'first'. Now this routine adds phi args on this 
+   additional edge 'e' that new_head to second edge received as part of edge 
+   splitting.
+*/
+
+static void
+lv_adjust_loop_header_phi (basic_block first, basic_block second,
+			   basic_block new_head, edge e)
+{
+  tree phi1, phi2;
+
+  /* Browse all 'second' basic block phi nodes and add phi args to
+     edge 'e' for 'first' head. PHI args are always in correct order.  */
+
+  for (phi2 = phi_nodes (second), phi1 = phi_nodes (first); 
+       phi2 && phi1; 
+       phi2 = PHI_CHAIN (phi2),  phi1 = PHI_CHAIN (phi1))
+    {
+      edge e2 = find_edge (new_head, second);
+
+      if (e2)
+	{
+	  tree def = PHI_ARG_DEF (phi2, e2->dest_idx);
+	  add_phi_arg (phi1, def, e);
+	}
+    }
+}
+
 /* Adjust entry edge for lv.
    
-  e is a incoming edge. 
+  e is an incoming edge. 
 
   --- edge e ---- > [second_head]
 
@@ -484,22 +699,22 @@ lv_adjust_loop_entry_edge (basic_block first_head,
 			   tree cond_expr)
 { 
   block_stmt_iterator bsi;
-  basic_block orig_head = e->src;
   basic_block new_head = NULL;
   tree goto1 = NULL_TREE;
   tree goto2 = NULL_TREE;
   tree new_cond_expr = NULL_TREE;
   edge e0, e1;
 
+  gcc_assert (e->dest == second_head);
+
   /* Split edge 'e'. This will create a new basic block, where we can
-     insert conditioanl expr.  */
+     insert conditional expr.  */
   new_head = split_edge (e);
-  set_immediate_dominator (CDI_DOMINATORS, new_head, orig_head);
 
   /* Build new conditional expr */
   goto1 = build1 (GOTO_EXPR, void_type_node, tree_block_label (first_head));
   goto2 = build1 (GOTO_EXPR, void_type_node, tree_block_label (second_head));
-  new_cond_expr = build (COND_EXPR, void_type_node, cond_expr, goto1, goto2);
+  new_cond_expr = build3 (COND_EXPR, void_type_node, cond_expr, goto1, goto2);
 
   /* Add new cond. in new head.  */ 
   bsi = bsi_start (new_head); 
@@ -507,83 +722,18 @@ lv_adjust_loop_entry_edge (basic_block first_head,
 
   /* Adjust edges appropriately to connect new head with first head
      as well as second head.  */
+  e0 = EDGE_SUCC (new_head, 0);
+  e0->flags &= ~EDGE_FALLTHRU;
+  e0->flags |= EDGE_FALSE_VALUE;
   e1 = make_edge (new_head, first_head, EDGE_TRUE_VALUE);
   set_immediate_dominator (CDI_DOMINATORS, first_head, new_head);
-  make_edge (new_head, second_head, EDGE_FALSE_VALUE);
   set_immediate_dominator (CDI_DOMINATORS, second_head, new_head);
 
   /* Adjust loop header phi nodes.  */
   lv_adjust_loop_header_phi (first_head, second_head, new_head, e1);
 
-  /* When edge 'e' was split, it created a fall through edge
-      from new head to second head. Above created FALSE edge
-      from new head to second head and now we do not need the
-      fall through edge.  */
-  for (e0 = new_head->succ; e0; e0 = e0->succ_next)
-    if (e0->dest == second_head)
-      e0->flags &= ~EDGE_FALLTHRU;
-
   return new_head;
 }
-
-/* Add phi args using PENDINT_STMT list.  */
-
-static void
-lv_update_pending_stmts (edge e)
-{
-  basic_block dest;
-  tree phi, arg, def;
-
-  if (!PENDING_STMT (e))
-    return;
-
-  dest = e->dest;
-
-  for (phi = phi_nodes (dest), arg = PENDING_STMT (e);
-       phi;
-       phi = TREE_CHAIN (phi), arg = TREE_CHAIN (arg))
-    {
-      def = TREE_VALUE (arg);
-      add_phi_arg (&phi, def, e);
-    }
-
-  PENDING_STMT (e) = NULL;
-}
-
-/* Adjust phi nodes for 'first' basic block.  'second' basic block is a copy
-   of 'first'. Both of them are dominated by 'new_head' basic block. When
-   'new_head' was created by 'second's incoming edge it received phi arguments
-   on the edge by split_edge(). Later, additional edge 'e' was created to
-   connect 'new_head' and 'first'. Now this routnine adds phi args on this 
-   additional edge 'e' that new_head to second edge received as part of edge 
-   splitting.
-*/
-
-static void
-lv_adjust_loop_header_phi (basic_block first, basic_block second,
-			   basic_block new_head, edge e)
-{
-  tree phi1, phi2;
-
-  /* Browse all 'second' basic block phi nodes and add phi args to
-     edge 'e' for 'first' head. PHI args are always in correct order.  */
-
-  for (phi2 = phi_nodes (second), phi1 = phi_nodes (first); 
-       phi2 && phi1; 
-       phi2 = TREE_CHAIN (phi2),  phi1 = TREE_CHAIN (phi1))
-    {
-      int i;
-      for (i = 0; i < PHI_NUM_ARGS (phi2); i++)
-	{
-	  if (PHI_ARG_EDGE (phi2, i)->src == new_head)
-	    {
-	      tree def = PHI_ARG_DEF (phi2, i);
-	      add_phi_arg (&phi1, def, e);
-	    }
-	}
-    }
-}
-
 
 /* Main entry point for Loop Versioning transformation.
    
@@ -598,7 +748,7 @@ struct loop *
 tree_ssa_loop_version (struct loops *loops, struct loop * loop, 
 		       tree cond_expr, basic_block *condition_bb)
 {
-  edge entry, latch_edge;
+  edge entry, latch_edge, exit, true_edge, false_edge;
   basic_block first_head, second_head;
   int irred_flag;
   struct loop *nloop;
@@ -631,18 +781,25 @@ tree_ssa_loop_version (struct loops *loops, struct loop * loop,
   *condition_bb = lv_adjust_loop_entry_edge (first_head, second_head, entry, 
 					    cond_expr); 
 
-  latch_edge = loop->latch->rbi->copy->succ;
+  latch_edge = EDGE_SUCC (loop->latch->rbi->copy, 0);
+  
+  extract_true_false_edges_from_block (*condition_bb, &true_edge, &false_edge);
   nloop = loopify (loops, 
 		   latch_edge,
-		   loop->header->rbi->copy->pred,
-		   *condition_bb,
+		   EDGE_PRED (loop->header->rbi->copy, 0),
+		   *condition_bb, true_edge, false_edge,
 		   false /* Do not redirect all edges.  */);
 
+  exit = loop->single_exit;
+  if (exit)
+    nloop->single_exit = find_edge (exit->src->rbi->copy, exit->dest);
+
   /* loopify redirected latch_edge. Update its PENDING_STMTS.  */ 
-  lv_update_pending_stmts (latch_edge);
+  flush_pending_stmts (latch_edge);
 
   /* loopify redirected condition_bb's succ edge. Update its PENDING_STMTS.  */ 
-  lv_update_pending_stmts (FALLTHRU_EDGE (*condition_bb));
+  extract_true_false_edges_from_block (*condition_bb, &true_edge, &false_edge);
+  flush_pending_stmts (false_edge);
 
   /* Adjust irreducible flag.  */
   if (irred_flag)
@@ -650,608 +807,14 @@ tree_ssa_loop_version (struct loops *loops, struct loop * loop,
       (*condition_bb)->flags |= BB_IRREDUCIBLE_LOOP;
       loop_preheader_edge (loop)->flags |= EDGE_IRREDUCIBLE_LOOP;
       loop_preheader_edge (nloop)->flags |= EDGE_IRREDUCIBLE_LOOP;
-      (*condition_bb)->pred->flags |= EDGE_IRREDUCIBLE_LOOP;
+      EDGE_PRED ((*condition_bb), 0)->flags |= EDGE_IRREDUCIBLE_LOOP;
     }
 
   /* At this point condition_bb is loop predheader with two successors, 
      first_head and second_head.   Make sure that loop predheader has only 
-     one successor. */
+     one successor.  */
   loop_split_edge_with (loop_preheader_edge (loop), NULL);
   loop_split_edge_with (loop_preheader_edge (nloop), NULL);
 
-  /* Ensure that the latch has just a single successor.  */
-  loop_split_edge_with (loop_latch_edge (loop), NULL);
-  loop_split_edge_with (loop_latch_edge (nloop), NULL);
-
   return nloop;
 }
-
-/* Update loop versioning condition.
-   This is used by other optimizations/transformations to disable
-   one loop version.  */
-void
-update_lv_condition (basic_block *bb, tree new_cond)
-{
-  tree stmt;
-  block_stmt_iterator bsi = bsi_last (*bb);
-
-  stmt = bsi_stmt (bsi);
-
-  if (TREE_CODE (stmt) == COND_EXPR)
-    {
-      TREE_OPERAND (stmt, 0) = new_cond;
-      modify_stmt (stmt);
-    }
-  else
-    abort ();
-}
-
-void
-test_loop_versioning (struct loops *loops)
-{
-  struct loop *loop;
-  unsigned i;
-  tree cond_expr;
-  
-  for (i = 1; i < loops->num; i = i+ 2)
-    {
-      struct loop *nloop;
-      basic_block condition_bb;
-      loop = loops->parray[i];
-      
-      if (!loop)
-	continue;
-      
-      cond_expr = build (EQ_EXPR, boolean_type_node,
-			 integer_one_node,
-			 integer_zero_node);
-      
-      nloop = tree_ssa_loop_version (loops, loop, cond_expr, &condition_bb);
-      
-      if (nloop)
-	{
-	  verify_loop_structure (loops);
-	  verify_dominators (CDI_DOMINATORS);
-	  verify_ssa ();
-	  
-	  update_lv_condition (&condition_bb, boolean_true_node);
-	}
-    }
-
-}
-
-/* Add exit phis for the USE on EXIT.  */
-
-static void
-add_exit_phis_edge (basic_block exit, tree use)
-{
-  tree phi, def_stmt = SSA_NAME_DEF_STMT (use);
-  basic_block def_bb = bb_for_stmt (def_stmt);
-  struct loop *def_loop;
-  edge e;
-
-  /* Check that some of the edges entering the EXIT block exits a loop in
-     that USE is defined.  */
-  for (e = exit->pred; e; e = e->pred_next)
-    {
-      def_loop = find_common_loop (def_bb->loop_father, e->src->loop_father);
-      if (!flow_bb_inside_loop_p (def_loop, e->dest))
-	break;
-    }
-
-  if (!e)
-    return;
-
-  phi = create_phi_node (use, exit);
-
-  for (e = exit->pred; e; e = e->pred_next)
-    add_phi_arg (&phi, use, e);
-
-  SSA_NAME_DEF_STMT (use) = def_stmt;
-}
-
-/* Add exit phis for VAR that is used in LIVEIN.
-   Exits of the loops are stored in EXITS.  */
-
-static void
-add_exit_phis_var (tree var, bitmap livein, bitmap exits)
-{
-  bitmap def;
-  int index;
-  basic_block def_bb = bb_for_stmt (SSA_NAME_DEF_STMT (var));
-
-  bitmap_clear_bit (livein, def_bb->index);
-
-  def = BITMAP_XMALLOC ();
-  bitmap_set_bit (def, def_bb->index);
-  compute_global_livein (livein, def);
-  BITMAP_XFREE (def);
-
-  EXECUTE_IF_AND_IN_BITMAP (exits, livein, 0, index,
-			    add_exit_phis_edge (BASIC_BLOCK (index), var));
-}
-
-/* Add exit phis for the names marked in NAMES_TO_RENAME.
-   Exits of the loops are stored in EXITS.  Sets of blocks where the ssa
-   names are used are stored in USE_BLOCKS.  SSA_NAMES is the array of ssa
-   names indexed by their versions.  */
-
-static void
-add_exit_phis (bitmap names_to_rename, bitmap *use_blocks, bitmap loop_exits,
-	       tree *ssa_names)
-{
-  unsigned i;
-
-  EXECUTE_IF_SET_IN_BITMAP (names_to_rename, 0, i,
-    {
-      add_exit_phis_var (ssa_names[i], use_blocks[i], loop_exits);
-    });
-}
-
-/* Returns a bitmap of all loop exit edge targets.  */
-
-static bitmap
-get_loops_exits (void)
-{
-  bitmap exits = BITMAP_XMALLOC ();
-  basic_block bb;
-  edge e;
-
-  FOR_EACH_BB (bb)
-    {
-      for (e = bb->pred; e; e = e->pred_next)
-	if (e->src != ENTRY_BLOCK_PTR
-	    && !flow_bb_inside_loop_p (e->src->loop_father, bb))
-	  {
-	    bitmap_set_bit (exits, bb->index);
-	    break;
-	  }
-    }
-
-  return exits;
-}
-
-/* For USE in BB, if it is used outside of the loop it is defined in,
-   mark it in NAMES_TO_RENAME.  Record basic block BB where it is used
-   to USE_BLOCKS, and the ssa name itself to NAMES.  */
-
-static void
-find_uses_to_rename_use (basic_block bb, tree use, bitmap names_to_rename,
-			 bitmap *use_blocks, tree *names)
-{
-  unsigned ver;
-  basic_block def_bb;
-  struct loop *def_loop;
-
-  if (TREE_CODE (use) != SSA_NAME)
-    return;
-
-  ver = SSA_NAME_VERSION (use);
-  def_bb = bb_for_stmt (SSA_NAME_DEF_STMT (use));
-  if (!def_bb)
-    return;
-  def_loop = def_bb->loop_father;
-
-  /* If the definition is not inside loop, it is not interesting.  */
-  if (!def_loop->outer)
-    return;
-
-  names[ver] = use;
-  if (!use_blocks[ver])
-    use_blocks[ver] = BITMAP_XMALLOC ();
-  bitmap_set_bit (use_blocks[ver], bb->index);
-
-  if (!flow_bb_inside_loop_p (def_loop, bb))
-    bitmap_set_bit (names_to_rename, ver);
-}
-
-/* For uses in STMT, mark names that are used outside of the loop they are
-   defined in in NAMES_TO_RENAME.  Record the set of blocks in that the ssa
-   names are defined to USE_BLOCKS, and the names themselves to NAMES.  */
-
-static void
-find_uses_to_rename_stmt (tree stmt, bitmap names_to_rename,
-			  bitmap *use_blocks, tree *names)
-{
-  use_optype uses;
-  vuse_optype vuses;
-  vdef_optype vdefs;
-  stmt_ann_t ann;
-  unsigned i;
-  basic_block bb = bb_for_stmt (stmt);
-
-  get_stmt_operands (stmt);
-  ann = stmt_ann (stmt);
-
-  uses = USE_OPS (ann);
-  for (i = 0; i < NUM_USES (uses); i++)
-    find_uses_to_rename_use (bb, USE_OP (uses, i),
-			     names_to_rename, use_blocks, names);
-
-  vuses = VUSE_OPS (ann);
-  for (i = 0; i < NUM_VUSES (vuses); i++)
-    find_uses_to_rename_use (bb, VUSE_OP (vuses, i),
-			     names_to_rename, use_blocks, names);
-
-  vdefs = VDEF_OPS (ann);
-  for (i = 0; i < NUM_VDEFS (vdefs); i++)
-    find_uses_to_rename_use (bb, VDEF_OP (vdefs, i),
-			     names_to_rename, use_blocks, names);
-}
-
-/* Marks names that are used outside of the loop they are defined in
-   in NAMES_TO_RENAME.  Records the set of blocks in that the ssa
-   names are defined to USE_BLOCKS, and the names themselves to NAMES.  */
-
-static void
-find_uses_to_rename (bitmap names_to_rename, bitmap *use_blocks, tree *names)
-{
-  basic_block bb;
-  block_stmt_iterator bsi;
-  tree phi;
-  unsigned i;
-
-  FOR_EACH_BB (bb)
-    {
-      for (phi = phi_nodes (bb); phi; phi = TREE_CHAIN (phi))
-	for (i = 0; i < (unsigned) PHI_NUM_ARGS (phi); i++)
-	  find_uses_to_rename_use (PHI_ARG_EDGE (phi, i)->src,
-				   PHI_ARG_DEF (phi, i),
-				   names_to_rename, use_blocks, names);
-
-      for (bsi = bsi_start (bb); !bsi_end_p (bsi); bsi_next (&bsi))
-	find_uses_to_rename_stmt (bsi_stmt (bsi),
-				  names_to_rename, use_blocks, names);
-    }
-}
-
-/* Rewrites the program into a loop closed ssa form -- i.e. inserts extra
-   phi nodes to ensure that no variable is used outside the loop it is
-   defined in.
-
-   This strenghtening of the basic ssa form has several advantages:
-
-   1) Updating it during unrolling/peeling/versioning is trivial, since
-      we do not need to care about the uses outside of the loop.
-   2) The behavior of all uses of an induction variable is the same.
-      Without this, you need to distinguish the case when the variable
-      is used outside of the loop it is defined in, for example
-
-      for (i = 0; i < 100; i++)
-	{
-	  for (j = 0; j < 100; j++)
-	    {
-	      k = i + j;
-	      use1 (k);
-	    }
-	  use2 (k);
-	}
-
-      Looking from the outer loop with the normal SSA form, the first use of k
-      is not well-behaved, while the second one is an induction variable with
-      base 99 and step 1.  */
-
-void
-rewrite_into_loop_closed_ssa (void)
-{
-  bitmap names_to_rename = BITMAP_XMALLOC ();
-  bitmap loop_exits = get_loops_exits ();
-  bitmap *use_blocks;
-  tree *ssa_names;
-  unsigned i;
-
-  tree_ssa_dce_no_cfg_changes ();
-
-  use_blocks = xcalloc (highest_ssa_version, sizeof (bitmap));
-  ssa_names = xcalloc (highest_ssa_version, sizeof (tree));
-
-  /* Find the uses outside loops.  */
-  find_uses_to_rename (names_to_rename, use_blocks, ssa_names);
-
-  /* Add the phi nodes on exits of the loops for the names we need to
-     rewrite.  */
-  add_exit_phis (names_to_rename, use_blocks, loop_exits, ssa_names);
-
-  for (i = 0; i < highest_ssa_version; i++)
-    BITMAP_XFREE (use_blocks[i]);
-  free (use_blocks);
-  free (ssa_names);
-  BITMAP_XFREE (loop_exits);
-
-  /* Do the rewriting.  */
-  rewrite_ssa_into_ssa (names_to_rename);
-  BITMAP_XFREE (names_to_rename);
-  BITMAP_XFREE (loop_exits);
-}
-
-/* Check invariants of the loop closed ssa form for the USE in BB.  */
-
-static void
-check_loop_closed_ssa_use (basic_block bb, tree use)
-{
-  tree def;
-  basic_block def_bb;
-  
-  if (TREE_CODE (use) != SSA_NAME)
-    return;
-
-  def = SSA_NAME_DEF_STMT (use);
-  def_bb = bb_for_stmt (def);
-  if (def_bb
-      && !flow_bb_inside_loop_p (def_bb->loop_father, bb))
-    abort ();
-}
-
-/* Checks invariants of loop closed ssa form in statement STMT in BB.  */
-
-static void
-check_loop_closed_ssa_stmt (basic_block bb, tree stmt)
-{
-  use_optype uses;
-  vuse_optype vuses;
-  vdef_optype vdefs;
-  stmt_ann_t ann;
-  unsigned i;
-
-  get_stmt_operands (stmt);
-  ann = stmt_ann (stmt);
-
-  uses = USE_OPS (ann);
-  for (i = 0; i < NUM_USES (uses); i++)
-    check_loop_closed_ssa_use (bb, USE_OP (uses, i));
-
-  vuses = VUSE_OPS (ann);
-  for (i = 0; i < NUM_VUSES (vuses); i++)
-    check_loop_closed_ssa_use (bb, VUSE_OP (vuses, i));
-
-  vdefs = VDEF_OPS (ann);
-  for (i = 0; i < NUM_VDEFS (vdefs); i++)
-    check_loop_closed_ssa_use (bb, VDEF_OP (vdefs, i));
-}
-
-/* Checks that invariants of the loop closed ssa form are preserved.  */
-
-void
-verify_loop_closed_ssa (void)
-{
-  basic_block bb;
-  block_stmt_iterator bsi;
-  tree phi;
-  unsigned i;
-
-  verify_ssa ();
-
-  FOR_EACH_BB (bb)
-    {
-      for (phi = phi_nodes (bb); phi; phi = TREE_CHAIN (phi))
-	for (i = 0; i < (unsigned) PHI_NUM_ARGS (phi); i++)
-	  check_loop_closed_ssa_use (PHI_ARG_EDGE (phi, i)->src,
-				     PHI_ARG_DEF (phi, i));
-
-      for (bsi = bsi_start (bb); !bsi_end_p (bsi); bsi_next (&bsi))
-	check_loop_closed_ssa_stmt (bb, bsi_stmt (bsi));
-    }
-}
-
-/* Renames variables in new generated LOOP.  */
-
-static void
-tdlte_rename_variables_in_loop (struct loop *loop)
-{
-  unsigned i;
-  basic_block *bbs;
-
-  bbs = get_loop_body (loop);
-
-  for (i = 0; i < loop->num_nodes; i++)
-    {
-      rename_variables_in_bb (bbs[i]);
-    }
-
-  free (bbs);
-}
-
-/* This function copies phis from loop to new_loop 
-   as they were not generated by duplication of bbs.  */
-
-static void
-tdlte_copy_phi_nodes (struct loop *loop, struct loop *new_loop)
-{
-  tree phi, new_phi, def;
-  edge new_e;
-  edge latch = loop_latch_edge (loop);
-  tree nlist;
-
-     
-  for (phi = phi_nodes (loop->header); phi; phi = TREE_CHAIN (phi))
-    {
-      new_phi = create_phi_node (PHI_RESULT (phi), new_loop->header);
-      new_e = new_loop->header->pred;
-      def = phi_element_for_edge (phi, latch)->def;
-      add_phi_arg (&new_phi, def, new_e);
-    }
-
-  /* neverse phi nodes to keep them in original order.  */
-  nlist = nreverse (phi_nodes (new_loop->header));
-  set_phi_nodes (new_loop->header, nlist);
-
-}
-
-/* This function: 
-   - copies basic blocks of the loop LOOP;
-   - locate them at the only exit of LOOP; 
-   - redirect edges so that two loops are produced: 
-             initial LOOP and newly generated;
-   - update dominators;
-   - returns pointer to new loop in NEW_LOOP_P.
-
-   FORNOW: only innermost loops with 
-           1 exit are handled. 
-*/
-
-static bool
-tree_duplicate_loop_to_exit_cfg (struct loop *loop, struct loops *loops,
-				 struct loop **new_loop_p)
-{
-  struct loop *target;
-  /* APPLE LOCAL AV while -haifa.  */
-  /* Remove local variable latch.  */
-  basic_block *new_bbs, *bbs;
-  edge latch_edge;
-
-  unsigned i; 
-  unsigned  n = loop->num_nodes;
-  struct loop *new_loop;
-  basic_block exit_dest; 
-
-  bbs = get_loop_body (loop);
-
-  /* Check whether duplication is possible.  */
-  if (!can_copy_bbs_p (bbs, loop->num_nodes))
-    {
-      free (bbs);
-      return false;
-    }
-  new_bbs = xmalloc (sizeof (basic_block) * loop->num_nodes);
-
-  /* Find edge from latch.  */
-  latch_edge = loop_latch_edge (loop);
-
-  /* We duplicate only innermost loops */
-  if(loop->inner)
-    {
-      if (dump_file && (dump_flags & TDF_DETAILS))
-	  fprintf (dump_file,
-		   "Loop duplication failed. Loop is not innermost.\n");
-      free (bbs);
-      return false;
-    }
-
-  /* FORNOW: only loops with 1 exit. */
-  if(loop->num_exits != 1)
-    {
-      if (dump_file && (dump_flags & TDF_DETAILS))
-	  fprintf (dump_file,
-		   "More than one exit from loop.\n");
-      return false;
-    }    
-
-  /* Loop the new bbs will belong to.  */
-  target = loop->outer;
-  if(!target)
-    {
-      if (dump_file && (dump_flags & TDF_DETAILS))
-	  fprintf (dump_file,
-		   "Loop is outer-most loop.\n");
-      return false;
-    }    
-    
-  /* Generate new loop structure. */
-  new_loop = duplicate_loop (loops, loop, target); 
-  if(!new_loop)
-    {
-      if (dump_file && (dump_flags & TDF_DETAILS))
-	  fprintf (dump_file,
-		   "duplicate_loop returns NULL.\n");
-      return false;
-
-    }
-  /* FIXME: Should we copy contents of the loop structure
-     to the new loop?  */
-
-  copy_bbs (bbs, n, new_bbs, NULL, 0, NULL, NULL);
-  for (i = 0; i < n; i++)
-    new_bbs[i]->rbi->copy_number = 1;
-
-  /* Redirect the special edges.  */
-  exit_dest = loop->exit_edges[0]->dest;
-  if(!exit_dest)
-    {
-      if (dump_file && (dump_flags & TDF_DETAILS))
-	  fprintf (dump_file,
-		   "First exit basic block of loop is NULL.\n");
-      return false;
-    }
-    
-  
-  redirect_edge_and_branch_force (loop->exit_edges[0],
-				  new_bbs[0]);
-  /* APPLE LOCAL begin AV while -haifa  */
-  set_immediate_dominator (CDI_DOMINATORS, new_bbs[0], loop->exit_edges[0]->src);
-  set_immediate_dominator (CDI_DOMINATORS, exit_dest, new_loop->header);
-  /* APPLE LOCAL end AV while -haifa  */
-  free (new_bbs);
-  free (bbs);
-
-
-  *new_loop_p = new_loop;
-  return true;
-}
-
-/* This funtion generate pure copy of LOOP 
-   and locate it immediately after given LOOP.
-   It fixes phis of copy loop so that they inherite 
-   one of thier values from exit edge of initil LOOP.  */
-
-bool
-tree_duplicate_loop_to_exit (struct loop *loop, struct loops *loops)
-{
-  struct loop *new_loop = NULL;
-  tree definitions;
-  edge pred;
-  tree *new_names, new_var;
-  tree phi, def;
-  unsigned first_new_block;
-  ssa_name_ann_t ann;
-
-  definitions = collect_defs (loop);
-
-  first_new_block = last_basic_block;
-  if(!tree_duplicate_loop_to_exit_cfg (loop, loops, &new_loop))
-    {
-      if (dump_file && (dump_flags & TDF_DETAILS))
-	fprintf (dump_file,
-		 "tree_duplicate_loop_to_exit failed.\n");
-      return false;
-    }
-
-  if(!new_loop)
-    abort();
-
-
-  allocate_new_names (definitions, 1, false);
-
-  /* Copy phis from loop->header to new_loop->header.  */
-  tdlte_copy_phi_nodes (loop, new_loop);
-
-  /* Rename the variables.  */
-  tdlte_rename_variables_in_loop (new_loop);
-
-  /* Fix phis to inherit values from loop exit edge.  */
-  for (phi = phi_nodes (new_loop->header); phi; phi = TREE_CHAIN (phi))
-    {
-      pred = new_loop->header->pred;
-      def = phi_element_for_edge (phi, pred)->def;
-
-      if (TREE_CODE (def) != SSA_NAME)
-	continue;
-
-      ann = ssa_name_ann (def);
-      new_names = ann ? ann->common.aux : NULL;
-
-      /* Something defined outside of the loop.  */
-      if (!new_names)
-	continue;
-
-      /* An ordinary ssa name defined in the loop.  */
-      new_var = new_names[new_loop->header->rbi->copy_number];
-      
-      add_phi_arg (&phi, new_var, loop_latch_edge(new_loop));
-    }
-
-
-  free_new_names (definitions, false);
-
-  return true;
-}
-

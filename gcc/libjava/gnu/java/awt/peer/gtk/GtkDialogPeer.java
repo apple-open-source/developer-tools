@@ -38,9 +38,10 @@ exception statement from your version. */
 
 package gnu.java.awt.peer.gtk;
 
-import java.awt.AWTEvent;
-import java.awt.Component;
 import java.awt.Dialog;
+import java.awt.Graphics;
+import java.awt.Rectangle;
+import java.awt.event.PaintEvent;
 import java.awt.peer.DialogPeer;
 
 public class GtkDialogPeer extends GtkWindowPeer
@@ -50,22 +51,44 @@ public class GtkDialogPeer extends GtkWindowPeer
   {
     super (dialog);
   }
+  
+  public Graphics getGraphics ()
+  {
+    Graphics g;
+    if (GtkToolkit.useGraphics2D ())
+      g = new GdkGraphics2D (this);
+    else
+      g = new GdkGraphics (this);
+    g.translate (-insets.left, -insets.top);
+    return g;
+  }  
+  
+  protected void postMouseEvent(int id, long when, int mods, int x, int y, 
+				int clickCount, boolean popupTrigger)
+  {
+    super.postMouseEvent (id, when, mods, 
+			  x + insets.left, y + insets.top, 
+			  clickCount, popupTrigger);
+  }
+
+  protected void postExposeEvent (int x, int y, int width, int height)
+  {
+    if (!isInRepaint)
+      q().postEvent (new PaintEvent (awtComponent, PaintEvent.PAINT,
+                                   new Rectangle (x + insets.left, 
+                                                  y + insets.top, 
+                                                  width, height)));
+  }
 
   void create ()
   {
     // Create a decorated dialog window.
     create (GDK_WINDOW_TYPE_HINT_DIALOG, true);
-  }
 
-  public void getArgs (Component component, GtkArgList args)
-  {
-    super.getArgs (component, args);
+    Dialog dialog = (Dialog) awtComponent;
 
-    Dialog dialog = (Dialog) component;
-
-    args.add ("title", dialog.getTitle ());
-    args.add ("modal", dialog.isModal ());
-    args.add ("allow_shrink", dialog.isResizable ());
-    args.add ("allow_grow", dialog.isResizable ());
+    gtkWindowSetModal (dialog.isModal ());
+    setTitle (dialog.getTitle ());
+    setResizable (dialog.isResizable ());
   }
 }

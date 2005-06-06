@@ -27,21 +27,25 @@
 // invalidate any other reasons why the executable file might be covered by
 // the GNU General Public License.
 
+/** @file ext/malloc_allocator.h
+ *  This file is a GNU extension to the Standard C++ Library.
+ */
+
 #ifndef _MALLOC_ALLOCATOR_H
 #define _MALLOC_ALLOCATOR_H 1
 
+#include <cstdlib>
 #include <new>
+#include <bits/functexcept.h>
 
 namespace __gnu_cxx
 {
   /**
-   *  @brief  An allocator that uses malloc
+   *  @brief  An allocator that uses malloc.
    *
    *  This is precisely the allocator defined in the C++ Standard. 
    *    - all allocation calls malloc
    *    - all deallocation calls free
-   *
-   *  (See @link Allocators allocators info @endlink for more.)
    */
   template<typename _Tp>
     class malloc_allocator
@@ -79,9 +83,12 @@ namespace __gnu_cxx
       pointer
       allocate(size_type __n, const void* = 0)
       {
+	if (__builtin_expect(__n > this->max_size(), false))
+	  std::__throw_bad_alloc();
+
 	pointer __ret = static_cast<_Tp*>(malloc(__n * sizeof(_Tp)));
 	if (!__ret)
-	  throw std::bad_alloc();
+	  std::__throw_bad_alloc();
 	return __ret;
       }
 

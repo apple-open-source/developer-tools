@@ -117,15 +117,12 @@ struct gcc_debug_hooks
      The parameter is 0 if after the start, 1 if before the end.  */
   void (* handle_pch) (unsigned int);
 
-  /* APPLE LOCAL begin Symbol Separation */
-  void (* restore_write_symbols) (void);
-  void (* clear_write_symbols) (const char *, unsigned long);
-  void (* start_symbol_repository) (unsigned int, const char *, unsigned long);
-  void (* end_symbol_repository) (unsigned int);
-  /* APPLE LOCAL end Symbol Separation */
-
   /* Called from final_scan_insn for any NOTE_INSN_VAR_LOCATION note.  */
   void (* var_location) (rtx);
+
+  /* This is 1 if the debug writer wants to see start and end commands for the
+     main source files, and 0 otherwise.  */
+  int start_end_main_source_file;
 };
 
 extern const struct gcc_debug_hooks *debug_hooks;

@@ -1,5 +1,5 @@
 /* Charset.java -- 
-   Copyright (C) 2002 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2004  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -35,7 +35,10 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package java.nio.charset;
+
+import gnu.java.nio.charset.Provider;
 
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
@@ -47,7 +50,6 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
-import gnu.java.nio.charset.Provider;
 
 /**
  * @author Jesse Rosenstock
@@ -115,12 +117,29 @@ public abstract class Charset implements Comparable
   {
     return charsetForName (charsetName) != null;
   }
- 
+
+  /**
+   * Returns the Charset instance for the charset of the given name.
+   * 
+   * @param charsetName
+   * @return
+   * @throws UnsupportedCharsetException if this VM does not support
+   * the charset of the given name.
+   * @throws IllegalCharsetNameException if the given charset name is
+   * legal.
+   * @throws IllegalArgumentException if <code>charsetName</code> is null.
+   */
   public static Charset forName (String charsetName)
   {
+    // Throws IllegalArgumentException as the JDK does.
+    if(charsetName == null)
+        throw new IllegalArgumentException("Charset name must not be null.");
+    
     Charset cs = charsetForName (charsetName);
     if (cs == null)
       throw new UnsupportedCharsetException (charsetName);
+    cachedDecoder = null;
+    cachedEncoder = null;
     return cs;
   }
 
@@ -128,19 +147,19 @@ public abstract class Charset implements Comparable
    * Retrieves a charset for the given charset name.
    *
    * @return A charset object for the charset with the specified name, or
-   *   <code>null</code> if no such charset exists.
+   * <code>null</code> if no such charset exists.
    *
    * @throws IllegalCharsetNameException  if the name is illegal
    */
-  private static Charset charsetForName (String charsetName)
+  private static Charset charsetForName(String charsetName)
   {
     checkName (charsetName);
     return provider ().charsetForName (charsetName);
   }
 
-  public static SortedMap availableCharsets ()
+  public static SortedMap availableCharsets()
   {
-    TreeMap charsets = new TreeMap (String.CASE_INSENSITIVE_ORDER);
+    TreeMap charsets = new TreeMap(String.CASE_INSENSITIVE_ORDER);
 
     for (Iterator i = provider ().charsets (); i.hasNext (); )
       {
@@ -148,15 +167,15 @@ public abstract class Charset implements Comparable
         charsets.put (cs.name (), cs);
       }
 
-    return Collections.unmodifiableSortedMap (charsets);
+    return Collections.unmodifiableSortedMap(charsets);
   }
 
   // XXX: we need to support multiple providers, reading them from
   // java.nio.charset.spi.CharsetProvider in the resource directory
   // META-INF/services
-  private static final CharsetProvider provider ()
+  private static CharsetProvider provider()
   {
-    return Provider.provider ();
+    return Provider.provider();
   }
 
   public final String name ()

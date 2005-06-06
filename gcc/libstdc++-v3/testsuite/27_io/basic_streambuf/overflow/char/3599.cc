@@ -55,10 +55,10 @@ test07()
   std::ostream out(&ob); 
 
   out << "gasp";
-  VERIFY(out.good());
+  VERIFY( out.good() );
 
   out << std::endl;
-  VERIFY(out.good());
+  VERIFY( out.good() );
 }
 
 int main() 

@@ -1,5 +1,5 @@
-/* Inet6Address.java
-   Copyright (C) 2002, 2003 Free Software Foundation, Inc.
+/* Inet6Address.java --
+   Copyright (C) 2002, 2003, 2004  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -35,20 +35,17 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package java.net;
 
 import java.util.Arrays;
 
-
-/**
- * @author Michael Koch
- * @date August 3, 2002.
- */
-
 /*
  * Written using on-line Java Platform 1.4 API Specification and
  * RFC 1884 (http://www.ietf.org/rfc/rfc1884.txt)
- * Status: Believed complete and correct.
+ * 
+ * @author Michael Koch
+ * @status Believed complete and correct.
  */
 public final class Inet6Address extends InetAddress
 {
@@ -68,7 +65,8 @@ public final class Inet6Address extends InetAddress
   Inet6Address(byte[] addr, String host)
   {
     super(addr, host);
-    this.ipaddress = addr;
+    // Super constructor clones the addr.  Get a reference to the clone.
+    this.ipaddress = this.addr;
   }
 
   /**
@@ -197,7 +195,7 @@ public final class Inet6Address extends InetAddress
    */
   public byte[] getAddress()
   {
-    return ipaddress;
+    return (byte[]) ipaddress.clone();
   }
 
   /**
@@ -210,18 +208,11 @@ public final class Inet6Address extends InetAddress
     for (int i = 0; i < 16; i += 2)
       {
 	int x = ((ipaddress[i] & 0xFF) << 8) | (ipaddress[i + 1] & 0xFF);
-	boolean empty = sbuf.length() == 0;
 
-	if (empty)
-	  {
-	    if (i > 0)
-	      sbuf.append("::");
-	  }
-	else
+	if (i > 0)
 	  sbuf.append(':');
 
-	if (x != 0 || i >= 14)
-	  sbuf.append(Integer.toHexString(x));
+	sbuf.append(Integer.toHexString(x));
       }
 
     return sbuf.toString();
@@ -243,9 +234,10 @@ public final class Inet6Address extends InetAddress
     if (! (obj instanceof Inet6Address))
       return false;
 
-    Inet6Address tmp = (Inet6Address) obj;
-
-    return super.equals(tmp) && this.ipaddress == tmp.ipaddress;
+    // this.ipaddress is never set in this class except to
+    // the value of the super class' addr.  The super classes
+    // equals(Object) will do the compare.
+    return super.equals(obj);
   }
 
   /**

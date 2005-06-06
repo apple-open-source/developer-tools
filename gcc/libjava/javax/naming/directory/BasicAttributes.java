@@ -1,5 +1,5 @@
 /* BasicAttributes.java --
-   Copyright (C) 2000, 2001 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2004, 2005  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -40,11 +40,12 @@ package javax.naming.directory;
 
 import java.util.NoSuchElementException;
 import java.util.Vector;
+
 import javax.naming.NamingEnumeration;
 import javax.naming.NamingException;
 
 /**
- * @author Tom Tromey <tromey@redhat.com>
+ * @author Tom Tromey (tromey@redhat.com)
  * @date June 22, 2001
  */
 public class BasicAttributes implements Attributes
@@ -82,19 +83,27 @@ public class BasicAttributes implements Attributes
     return ba;
   }
 
+  /**
+   * Returns true if and only if the given Object is an instance of
+   * Attributes, the given attributes both do or don't ignore case for
+   * IDs and the collection of attributes is the same.
+   */
   public boolean equals (Object obj)
   {
-    if (! (obj instanceof BasicAttributes))
-      return false;
-    BasicAttributes b = (BasicAttributes) obj;
-    if (ignoreCase != b.ignoreCase
-	|| attributes.size () != b.attributes.size ())
+    if (! (obj instanceof Attributes))
       return false;
 
-    // Does order matter?
-    for (int i = 0; i < attributes.size (); ++i)
+    Attributes bs = (Attributes) obj;
+    if (ignoreCase != bs.isCaseIgnored()
+	|| attributes.size () != bs.size ())
+      return false;
+
+    NamingEnumeration bas = bs.getAll();
+    while (bas.hasMoreElements())
       {
-	if (! attributes.get (i).equals (b.attributes.get (i)))
+	Attribute a = (Attribute) bas.nextElement();
+	Attribute b = get(a.getID ());
+	if (! a.equals(b))
 	  return false;
       }
 
@@ -184,12 +193,13 @@ public class BasicAttributes implements Attributes
 
   // This is set by the serialization spec.
   private boolean ignoreCase;
-  private transient Vector attributes;
+  // Package-private to avoid a trampoline.
+  transient Vector attributes;
 
   // Used when enumerating.
   private class BasicAttributesEnumeration implements NamingEnumeration
   {
-    int where = -1;
+    int where = 0;
     boolean id;
 
     public BasicAttributesEnumeration (boolean id)
@@ -218,10 +228,10 @@ public class BasicAttributes implements Attributes
 
     public Object nextElement () throws NoSuchElementException
     {
-      if (where + 1 >= attributes.size ())
+      if (where >= attributes.size ())
 	throw new NoSuchElementException ("no more elements");
-      ++where;
       Attribute at = (Attribute) attributes.get (where);
+      ++where;
       return id ? (Object) at.getID () : (Object) at;
     }
   }

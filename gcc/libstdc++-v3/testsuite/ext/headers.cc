@@ -1,3 +1,4 @@
+// { dg-do compile }
 // 1999-06-23 bkoz 
 
 // Copyright (C) 1999, 2001, 2003 Free Software Foundation, Inc.
@@ -35,9 +36,10 @@
 #include <ext/slist>
 #include <ext/debug_allocator.h>
 #include <ext/malloc_allocator.h>
+#include <ext/new_allocator.h>
+#include <ext/array_allocator.h>
 #include <ext/mt_allocator.h>
 #include <ext/pool_allocator.h>
 #include <ext/stdio_filebuf.h>
 #include <ext/stdio_sync_filebuf.h>
 
-int main() { }

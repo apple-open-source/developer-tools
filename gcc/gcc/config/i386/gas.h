@@ -1,5 +1,6 @@
 /* Definitions for Intel 386 using GAS.
-   Copyright (C) 1988, 1993, 1994, 1996, 2002 Free Software Foundation, Inc.
+   Copyright (C) 1988, 1993, 1994, 1996, 2002, 2004
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -48,10 +49,6 @@ Boston, MA 02111-1307, USA.  */
 /* Output #ident as a .ident.  */
 
 #define ASM_OUTPUT_IDENT(FILE, NAME) fprintf (FILE, "\t.ident \"%s\"\n", NAME);
-
-/* Implicit library calls should use memcpy, not bcopy, etc.  */
-
-#define TARGET_MEM_FUNCTIONS
 
 /* In the past there was confusion as to what the argument to .align was
    in GAS.  For the last several years the rule has been this: for a.out
@@ -120,5 +117,9 @@ Boston, MA 02111-1307, USA.  */
 
 /* Print opcodes the way that GAS expects them.  */
 #define GAS_MNEMONICS 1
+
+/* The comment-starter string as GAS expects it. */
+#undef ASM_COMMENT_START
+#define ASM_COMMENT_START "#"
 
 #define TARGET_ASM_FILE_START_FILE_DIRECTIVE true

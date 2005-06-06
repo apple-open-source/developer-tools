@@ -7,7 +7,7 @@
 --                                  B o d y                                 --
 --                                                                          --
 --             Copyright (C) 1991-1994, Florida State University            --
---             Copyright (C) 1995-2003, Ada Core Technologies               --
+--             Copyright (C) 1995-2004, Ada Core Technologies               --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -39,12 +39,16 @@ pragma Polling (Off);
 with System.Task_Primitives.Operations;
 --  used for Write_Lock
 --           Unlock
+--           Self
 
 with System.Parameters;
 --  used for Runtime_Traces
 
 with System.Traces;
 --  used for Send_Trace_Info
+
+with System.Soft_Links.Tasking;
+--  Used for Init_Tasking_Soft_Links
 
 package body System.Tasking.Protected_Objects is
 
@@ -84,6 +88,7 @@ package body System.Tasking.Protected_Objects is
 
    procedure Lock (Object : Protection_Access) is
       Ceiling_Violation : Boolean;
+
    begin
       --  The lock is made without defering abortion.
 
@@ -104,6 +109,19 @@ package body System.Tasking.Protected_Objects is
       if Ceiling_Violation then
          raise Program_Error;
       end if;
+
+      --  We are entering in a protected action, so that we increase the
+      --  protected object nesting level (if pragma Detect_Blocking is
+      --  active).
+
+      if Detect_Blocking then
+         declare
+            Self_Id : constant Task_Id := Self;
+         begin
+            Self_Id.Common.Protected_Action_Nesting :=
+              Self_Id.Common.Protected_Action_Nesting + 1;
+         end;
+      end if;
    end Lock;
 
    --------------------
@@ -112,6 +130,7 @@ package body System.Tasking.Protected_Objects is
 
    procedure Lock_Read_Only (Object : Protection_Access) is
       Ceiling_Violation : Boolean;
+
    begin
       Read_Lock (Object.L'Access, Ceiling_Violation);
 
@@ -122,6 +141,19 @@ package body System.Tasking.Protected_Objects is
       if Ceiling_Violation then
          raise Program_Error;
       end if;
+
+      --  We are entering in a protected action, so that we increase the
+      --  protected object nesting level (if pragma Detect_Blocking is
+      --  active).
+
+      if Detect_Blocking then
+         declare
+            Self_Id : constant Task_Id := Self;
+         begin
+            Self_Id.Common.Protected_Action_Nesting :=
+              Self_Id.Common.Protected_Action_Nesting + 1;
+         end;
+      end if;
    end Lock_Read_Only;
 
    ------------
@@ -130,6 +162,25 @@ package body System.Tasking.Protected_Objects is
 
    procedure Unlock (Object : Protection_Access) is
    begin
+      --  We are exiting from a protected action, so that we decrease the
+      --  protected object nesting level (if pragma Detect_Blocking is
+      --  active).
+
+      if Detect_Blocking then
+         declare
+            Self_Id : constant Task_Id := Self;
+
+         begin
+            --  Cannot call this procedure without being within a protected
+            --  action.
+
+            pragma Assert (Self_Id.Common.Protected_Action_Nesting > 0);
+
+            Self_Id.Common.Protected_Action_Nesting :=
+              Self_Id.Common.Protected_Action_Nesting - 1;
+         end;
+      end if;
+
       Unlock (Object.L'Access);
 
       if Parameters.Runtime_Traces then
@@ -137,4 +188,8 @@ package body System.Tasking.Protected_Objects is
       end if;
    end Unlock;
 
+begin
+   --  Ensure that tasking soft links are set when using protected objects
+
+   System.Soft_Links.Tasking.Init_Tasking_Soft_Links;
 end System.Tasking.Protected_Objects;

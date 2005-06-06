@@ -6,10 +6,12 @@
 @c @cropmarks
 @c @finalout
 
+@include gcc-common.texi
+
 @copying
 @c man begin COPYRIGHT
 Copyright @copyright{} 1987, 1989, 1991, 1992, 1993, 1994, 1995, 1996,
-1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004
+1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
 Free Software Foundation, Inc.
 
 Permission is granted to copy, distribute and/or modify this document
@@ -40,10 +42,6 @@ This manual contains no Invariant Sections.  The Front-Cover Texts are
 @c man end
 @end copying
 
-@macro gcctabopt{body}
-@code{\body\}
-@end macro
-
 @c Create a separate index for command line options.
 @defcodeindex op
 @syncodeindex vr op
@@ -60,8 +58,7 @@ This manual contains no Invariant Sections.  The Front-Cover Texts are
 
 @titlepage
 @title The C Preprocessor
-@subtitle Last revised April 2001
-@subtitle for GCC version 3
+@subtitle for GCC version @value{version-GCC}
 @author Richard M. Stallman
 @author Zachary Weinberg
 @page
@@ -230,7 +227,7 @@ differences that do exist are detailed in the section @ref{Traditional
 Mode}.
 
 For clarity, unless noted otherwise, references to @samp{CPP} in this
-manual refer to GNU CPP.
+manual refer to GNU CPP@.
 @c man end
 
 @menu
@@ -510,7 +507,7 @@ However, a few of the keywords of C++ are significant even in the
 preprocessor.  @xref{C++ Named Operators}.
 
 In the 1999 C standard, identifiers may contain letters which are not
-part of the ``basic source character set,'' at the implementation's
+part of the ``basic source character set'', at the implementation's
 discretion (such as accented Latin letters, Greek letters, or Chinese
 ideograms).  This may be done with an extended character set, or the
 @samp{\u} and @samp{\U} escape sequences.  GCC does not presently
@@ -596,7 +593,7 @@ Punctuator:      @{   @}   [   ]   #    ##
 @end smallexample
 
 @cindex other tokens
-Any other single character is considered ``other.'' It is passed on to
+Any other single character is considered ``other''.  It is passed on to
 the preprocessor's output unmolested.  The C compiler will almost
 certainly reject source code containing ``other'' tokens.  In ASCII, the
 only other characters are @samp{@@}, @samp{$}, @samp{`}, and control
@@ -901,7 +898,7 @@ This has two effects.  First, directories appearing before the
 quote marks.  Directories after @option{-I-} are searched for all
 headers.  Second, the directory containing the current file is not
 searched for anything, unless it happens to be one of the directories
-named by an @option{-I} switch.  @option{-I-} is deprecated, -iquote
+named by an @option{-I} switch.  @option{-I-} is deprecated, @option{-iquote}
 should be used instead.
 
 @option{-I. -I-} is not the same as no @option{-I} options at all, and does
@@ -1076,7 +1073,7 @@ would have to edit the new headers to match.
 
 There is no way to solve this problem within the C standard, but you can
 use the GNU extension @samp{#include_next}.  It means, ``Include the
-@emph{next} file with this name.''  This directive works like
+@emph{next} file with this name''.  This directive works like
 @samp{#include} except in searching for the specified file: it starts
 searching the list of header file directories @emph{after} the directory
 in which the current file was found.
@@ -1321,7 +1318,7 @@ name, and you wish to use the function sometimes.
 
 @smallexample
 extern void foo(void);
-#define foo() /* optimized inline version */
+#define foo() /* @r{optimized inline version} */
 @dots{}
   foo();
   funcptr = foo;
@@ -1898,7 +1895,8 @@ or a C++ compiler.  This macro is similar to @code{__STDC_VERSION__}, in
 that it expands to a version number.  A fully conforming implementation
 of the 1998 C++ standard will define this macro to @code{199711L}.  The
 GNU C++ compiler is not yet fully conforming, so it uses @code{1}
-instead.  We hope to complete our implementation in the near future.
+instead.  It is hoped to complete the implementation of standard C++
+in the near future.
 
 @item __OBJC__
 This macro is defined, with value 1, when the Objective-C compiler is in
@@ -1929,16 +1927,16 @@ These macros are defined by all GNU compilers that use the C
 preprocessor: C, C++, and Objective-C@.  Their values are the major
 version, minor version, and patch level of the compiler, as integer
 constants.  For example, GCC 3.2.1 will define @code{__GNUC__} to 3,
-@code{__GNUC_MINOR__} to 2, and @code{__GNUC_PATCHLEVEL__} to 1.  They
-are defined only when the entire compiler is in use; if you invoke the
-preprocessor directly, they are not defined.
+@code{__GNUC_MINOR__} to 2, and @code{__GNUC_PATCHLEVEL__} to 1.  These
+macros are also defined if you invoke the preprocessor directly.
 
 @code{__GNUC_PATCHLEVEL__} is new to GCC 3.0; it is also present in the
 widely-used development snapshots leading up to 3.0 (which identify
 themselves as GCC 2.96 or 2.97, depending on which snapshot you have).
 
 If all you need to know is whether or not your program is being compiled
-by GCC, you can simply test @code{__GNUC__}.  If you need to write code
+by GCC, or a non-GCC compiler that claims to accept the GNU C dialects,
+you can simply test @code{__GNUC__}.  If you need to write code
 which depends on a specific version, you must be more careful.  Each
 time the minor version is increased, the patch level is reset to zero;
 each time the major version is increased (which happens rarely), the
@@ -2052,8 +2050,11 @@ OSF/rose @option{-mno-underscores} option).
 @itemx __PTRDIFF_TYPE__
 @itemx __WCHAR_TYPE__
 @itemx __WINT_TYPE__
+@itemx __INTMAX_TYPE__
+@itemx __UINTMAX_TYPE__
 These macros are defined to the correct underlying types for the
-@code{size_t}, @code{ptrdiff_t}, @code{wchar_t}, and @code{wint_t}
+@code{size_t}, @code{ptrdiff_t}, @code{wchar_t}, @code{wint_t},
+@code{intmax_t}, and @code{uintmax_t}
 typedefs, respectively.  They exist to make the standard header files
 @file{stddef.h} and @file{wchar.h} work correctly.  You should not use
 these macros directly; instead, include the appropriate headers and use
@@ -2071,9 +2072,11 @@ this macro directly; instead, include the appropriate headers.
 @itemx __INT_MAX__
 @itemx __LONG_MAX__
 @itemx __LONG_LONG_MAX__
+@itemx __INTMAX_MAX__
 Defined to the maximum value of the @code{signed char}, @code{wchar_t},
 @code{signed short},
-@code{signed int}, @code{signed long}, and @code{signed long long} types
+@code{signed int}, @code{signed long}, @code{signed long long}, and
+@code{intmax_t} types
 respectively.  They exist to make the standard header given numerical limits
 work correctly.  You should not use these macros directly; instead, include
 the appropriate headers.
@@ -2085,7 +2088,7 @@ handling.
 
 @item __NEXT_RUNTIME__
 This macro is defined, with value 1, if (and only if) the NeXT runtime
-(as in @option{-fnext-runtime}) is in use for Objective-C.  If the GNU
+(as in @option{-fnext-runtime}) is in use for Objective-C@.  If the GNU
 runtime is used, this macro is not defined, so that you can use this
 macro to determine which runtime (NeXT or GNU) is being used.
 
@@ -2208,7 +2211,7 @@ These definitions are effectively the same:
 @smallexample
 #define FOUR (2 + 2)
 #define FOUR         (2    +    2)
-#define FOUR (2 /* two */ + 2)
+#define FOUR (2 /* @r{two} */ + 2)
 @end smallexample
 @noindent
 but these are not:
@@ -2542,7 +2545,7 @@ definition.  Recall that all macro definitions are rescanned for more
 macros to replace.  If the self-reference were considered a use of the
 macro, it would produce an infinitely large expansion.  To prevent this,
 the self-reference is not considered a macro call.  It is passed into
-the preprocessor output unchanged.  Let's consider an example:
+the preprocessor output unchanged.  Consider an example:
 
 @smallexample
 #define foo (4 + foo)
@@ -2963,9 +2966,6 @@ rule as the compiler uses to calculate the value of a constant
 expression, and may give different results in some cases.  If the value
 comes out to be nonzero, the @samp{#if} succeeds and the @var{controlled
 text} is included; otherwise it is skipped.
-
-If @var{expression} is not correctly formed, GCC issues an error and
-treats the conditional as having failed.
 
 @node Defined
 @subsection Defined
@@ -3538,8 +3538,8 @@ require matching quotes.  For example:
 @smallexample
 #define m This macro's fine and has an unmatched quote
 "/* This is not a comment.  */
-/* This is a comment.  The following #include directive
-   is ill-formed.  */
+/* @r{This is a comment.  The following #include directive
+   is ill-formed.}  */
 #include <stdio.h
 @end smallexample
 
@@ -3556,7 +3556,7 @@ replacement text before storing it, but preserves the form of internal
 whitespace.
 
 One consequence is that it is legitimate for the replacement text to
-contain an unmatched quote (@pxref{Traditional lexical analysis}). An
+contain an unmatched quote (@pxref{Traditional lexical analysis}).  An
 unclosed string or character constant continues into the text
 following the macro call.  Similarly, the text at the end of a macro's
 expansion can run together with the text after the macro invocation to
@@ -3626,7 +3626,7 @@ example
 
 @smallexample
 #define str(x) "x"
-str(/* A comment */some text )
+str(/* @r{A comment} */some text )
      @expansion{} "some text "
 @end smallexample
 
@@ -3757,15 +3757,17 @@ execution character set.
 
 Currently, CPP requires its input to be ASCII or UTF-8.  The execution
 character set may be controlled by the user, with the
-@code{-ftarget-charset} and @code{-ftarget-wide-charset} options.
+@option{-ftarget-charset} and @option{-ftarget-wide-charset} options.
 
 @item Identifier characters.
 @anchor{Identifier characters}
 
 The C and C++ standards allow identifiers to be composed of @samp{_}
 and the alphanumeric characters.  C++ and C99 also allow universal
-character names (not implemented in GCC), and C99 further permits
-implementation-defined characters.
+@c APPLE LOCAL begin mainline
+character names, and C99 further permits implementation-defined
+characters.
+@c APPLE LOCAL end mainline
 
 GCC allows the @samp{$} character in identifiers as an extension for
 most targets.  This is true regardless of the @option{std=} switch,
@@ -3799,15 +3801,15 @@ target character, and then or-ing in the bit-pattern of the new
 character truncated to the width of a target character.  The final
 bit-pattern is given type @code{int}, and is therefore signed,
 regardless of whether single characters are signed or not (a slight
-change from versions 3.1 and earlier of GCC).  If there are more
+change from versions 3.1 and earlier of GCC)@.  If there are more
 characters in the constant than would fit in the target @code{int} the
 compiler issues a warning, and the excess leading characters are
 ignored.
 
-For example, 'ab' for a target with an 8-bit @code{char} would be
-interpreted as @w{(int) ((unsigned char) 'a' * 256 + (unsigned char)
-'b')}, and '\234a' as @w{(int) ((unsigned char) '\234' * 256 + (unsigned
-char) 'a')}.
+For example, @code{'ab'} for a target with an 8-bit @code{char} would be
+interpreted as @w{@samp{(int) ((unsigned char) 'a' * 256 + (unsigned char)
+'b')}}, and @code{'\234a'} as @w{@samp{(int) ((unsigned char) '\234' *
+256 + (unsigned char) 'a')}}.
 
 @item Source file inclusion.
 
@@ -3836,10 +3838,10 @@ pragmas.
 
 CPP has a small number of internal limits.  This section lists the
 limits which the C standard requires to be no lower than some minimum,
-and all the others we are aware of.  We intend there to be as few limits
+and all the others known.  It is intended that there should be as few limits
 as possible.  If you encounter an undocumented or inconvenient limit,
-please report that to us as a bug.  (See the section on reporting bugs in
-the GCC manual.)
+please report that as a bug.  @xref{Bugs, , Reporting Bugs, gcc, Using
+the GNU Compiler Collection (GCC)}.
 
 Where we say something is limited @dfn{only by available memory}, that
 means that internal data structures impose no intrinsic limit, and space
@@ -4045,7 +4047,7 @@ they generally represent bugs in the snapshots.
 
 @item -I- deprecated
 
-This option has been deprecated in 3.5.  @option{-iquote} is meant to
+This option has been deprecated in 4.0.  @option{-iquote} is meant to
 replace the need for this option.
 
 @item Order of evaluation of @samp{#} and @samp{##} operators
@@ -4101,7 +4103,7 @@ comma, then @samp{##} behaves as a normal token paste.
 @item @samp{#line} and @samp{#include}
 
 The @samp{#line} directive used to change GCC's notion of the
-``directory containing the current file,'' used by @samp{#include} with
+``directory containing the current file'', used by @samp{#include} with
 a double-quoted header file name.  In 3.0 and later, it does not.
 @xref{Line Control}, for further explanation.
 
@@ -4130,7 +4132,7 @@ here are also acceptable to the C compiler and have the same meaning,
 except that the C compiler has different rules for specifying the output
 file.
 
-@strong{Note:} Whether you use the preprocessor by way of @command{gcc}
+@emph{Note:} Whether you use the preprocessor by way of @command{gcc}
 or @command{cpp}, the @dfn{compiler driver} is run first.  This
 program's purpose is to translate your command into invocations of the
 programs that do the actual work.  Their command line interfaces are

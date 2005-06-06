@@ -1,5 +1,5 @@
 /* Statement translation -- generate GCC trees from gfc_code.
-   Copyright (C) 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
    Contributed by Paul Brook <paul@nowt.org>
    and Steven Bosscher <s.bosscher@student.tudelft.nl>
 
@@ -26,12 +26,9 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "coretypes.h"
 #include "tree.h"
 #include "tree-gimple.h"
-#include <stdio.h>
 #include "ggc.h"
 #include "toplev.h"
 #include "real.h"
-#include <assert.h>
-#include <gmp.h>
 #include "gfortran.h"
 #include "trans.h"
 #include "trans-stmt.h"
@@ -83,7 +80,23 @@ gfc_trans_label_here (gfc_code * code)
   return build1_v (LABEL_EXPR, gfc_get_label_decl (code->here));
 }
 
+
+/* Given a variable expression which has been ASSIGNed to, find the decl
+   containing the auxiliary variables.  For variables in common blocks this
+   is a field_decl.  */
+
+void
+gfc_conv_label_variable (gfc_se * se, gfc_expr * expr)
+{
+  gcc_assert (expr->symtree->n.sym->attr.assign == 1);
+  gfc_conv_expr (se, expr);
+  /* Deals with variable in common block. Get the field declaration.  */
+  if (TREE_CODE (se->expr) == COMPONENT_REF)
+    se->expr = TREE_OPERAND (se->expr, 1);
+}
+
 /* Translate a label assignment statement.  */
+
 tree
 gfc_trans_label_assign (gfc_code * code)
 {
@@ -98,7 +111,8 @@ gfc_trans_label_assign (gfc_code * code)
   /* Start a new block.  */
   gfc_init_se (&se, NULL);
   gfc_start_block (&se.pre);
-  gfc_conv_expr (&se, code->expr);
+  gfc_conv_label_variable (&se, code->expr);
+
   len = GFC_DECL_STRING_LEN (se.expr);
   addr = GFC_DECL_ASSIGN_ADDR (se.expr);
 
@@ -106,6 +120,8 @@ gfc_trans_label_assign (gfc_code * code)
 
   if (code->label->defined == ST_LABEL_TARGET)
     {
+      /* Shouldn't need to set this flag. Reserve for optimization bug.  */
+      DECL_ARTIFICIAL (label_tree) = 0;
       label_tree = gfc_build_addr_expr (pvoid_type_node, label_tree);
       len_tree = integer_minus_one_node;
     }
@@ -113,7 +129,7 @@ gfc_trans_label_assign (gfc_code * code)
     {
       label_str = code->label->format->value.character.string;
       label_len = code->label->format->value.character.length;
-      len_tree = build_int_2 (label_len, 0);
+      len_tree = build_int_cst (NULL_TREE, label_len);
       label_tree = gfc_build_string_const (label_len + 1, label_str);
       label_tree = gfc_build_addr_expr (pchar_type_node, label_tree);
     }
@@ -143,11 +159,11 @@ gfc_trans_goto (gfc_code * code)
   /* ASSIGNED GOTO.  */
   gfc_init_se (&se, NULL);
   gfc_start_block (&se.pre);
-  gfc_conv_expr (&se, code->expr);
+  gfc_conv_label_variable (&se, code->expr);
   assign_error =
-    gfc_build_string_const (37, "Assigned label is not a target label");
+    gfc_build_cstring_const ("Assigned label is not a target label");
   tmp = GFC_DECL_STRING_LEN (se.expr);
-  tmp = build (NE_EXPR, boolean_type_node, tmp, integer_minus_one_node);
+  tmp = build2 (NE_EXPR, boolean_type_node, tmp, integer_minus_one_node);
   gfc_trans_runtime_check (tmp, assign_error, &se.pre);
 
   assigned_goto = GFC_DECL_ASSIGN_ADDR (se.expr);
@@ -161,21 +177,28 @@ gfc_trans_goto (gfc_code * code)
     }
 
   /* Check the label list.  */
-  range_error =
-    gfc_build_string_const (34, "Assigned label is not in the list");
+  range_error = gfc_build_cstring_const ("Assigned label is not in the list");
 
   do
     {
       tmp = gfc_get_label_decl (code->label);
       tmp = gfc_build_addr_expr (pvoid_type_node, tmp);
-      tmp = build (EQ_EXPR, boolean_type_node, tmp, assigned_goto);
-      tmp = build_v (COND_EXPR, tmp, target, build_empty_stmt ());
+      tmp = build2 (EQ_EXPR, boolean_type_node, tmp, assigned_goto);
+      tmp = build3_v (COND_EXPR, tmp, target, build_empty_stmt ());
       gfc_add_expr_to_block (&se.pre, tmp);
       code = code->block;
     }
   while (code != NULL);
   gfc_trans_runtime_check (boolean_true_node, range_error, &se.pre);
   return gfc_finish_block (&se.pre); 
+}
+
+
+/* Translate an ENTRY statement.  Just adds a label for this entry point.  */
+tree
+gfc_trans_entry (gfc_code * code)
+{
+  return build1_v (LABEL_EXPR, code->ext.entry->label);
 }
 
 
@@ -191,7 +214,7 @@ gfc_trans_call (gfc_code * code)
   gfc_init_se (&se, NULL);
   gfc_start_block (&se.pre);
 
-  assert (code->resolved_sym);
+  gcc_assert (code->resolved_sym);
   has_alternate_specifier = 0;
 
   /* Translate the call.  */
@@ -206,7 +229,7 @@ gfc_trans_call (gfc_code * code)
       gfc_code *select_code;
       gfc_symbol *sym;
       select_code = code->next;
-      assert(select_code->op == EXEC_SELECT);
+      gcc_assert(select_code->op == EXEC_SELECT);
       sym = select_code->expr->symtree->n.sym;
       se.expr = convert (gfc_typenode_for_spec (&sym->ts), se.expr);
       gfc_add_modify_expr (&se.pre, sym->backend_decl, se.expr);
@@ -248,7 +271,7 @@ gfc_trans_return (gfc_code * code ATTRIBUTE_UNUSED)
 
       gfc_conv_expr (&se, code->expr);
 
-      tmp = build (MODIFY_EXPR, TREE_TYPE (result), result, se.expr);
+      tmp = build2 (MODIFY_EXPR, TREE_TYPE (result), result, se.expr);
       gfc_add_expr_to_block (&se.pre, tmp);
 
       tmp = build1_v (GOTO_EXPR, gfc_get_return_label ());
@@ -267,6 +290,7 @@ gfc_trans_return (gfc_code * code ATTRIBUTE_UNUSED)
 tree
 gfc_trans_pause (gfc_code * code)
 {
+  tree gfc_int4_type_node = gfc_get_int_type (4);
   gfc_se se;
   tree args;
   tree tmp;
@@ -279,8 +303,7 @@ gfc_trans_pause (gfc_code * code)
 
   if (code->expr == NULL)
     {
-      tmp = build_int_2 (code->ext.stop_code, 0);
-      TREE_TYPE (tmp) = gfc_int4_type_node;
+      tmp = build_int_cst (gfc_int4_type_node, code->ext.stop_code);
       args = gfc_chainon_list (NULL_TREE, tmp);
       fndecl = gfor_fndecl_pause_numeric;
     }
@@ -307,6 +330,7 @@ gfc_trans_pause (gfc_code * code)
 tree
 gfc_trans_stop (gfc_code * code)
 {
+  tree gfc_int4_type_node = gfc_get_int_type (4);
   gfc_se se;
   tree args;
   tree tmp;
@@ -319,8 +343,7 @@ gfc_trans_stop (gfc_code * code)
 
   if (code->expr == NULL)
     {
-      tmp = build_int_2 (code->ext.stop_code, 0);
-      TREE_TYPE (tmp) = gfc_int4_type_node;
+      tmp = build_int_cst (gfc_int4_type_node, code->ext.stop_code);
       args = gfc_chainon_list (NULL_TREE, tmp);
       fndecl = gfor_fndecl_stop_numeric;
     }
@@ -408,7 +431,7 @@ gfc_trans_if_1 (gfc_code * code)
     elsestmt = build_empty_stmt ();
 
   /* Build the condition expression and add it to the condition block.  */
-  stmt = build_v (COND_EXPR, if_se.expr, stmt, elsestmt);
+  stmt = build3_v (COND_EXPR, if_se.expr, stmt, elsestmt);
   
   gfc_add_expr_to_block (&if_se.pre, stmt);
 
@@ -465,13 +488,13 @@ gfc_trans_arithmetic_if (gfc_code * code)
   branch1 = build1_v (GOTO_EXPR, gfc_get_label_decl (code->label));
   branch2 = build1_v (GOTO_EXPR, gfc_get_label_decl (code->label2));
 
-  tmp = build (LT_EXPR, boolean_type_node, se.expr, zero);
-  branch1 = build_v (COND_EXPR, tmp, branch1, branch2);
+  tmp = build2 (LT_EXPR, boolean_type_node, se.expr, zero);
+  branch1 = build3_v (COND_EXPR, tmp, branch1, branch2);
 
   /* if (cond <= 0) take branch1 else take branch2.  */
   branch2 = build1_v (GOTO_EXPR, gfc_get_label_decl (code->label3));
-  tmp = build (LE_EXPR, boolean_type_node, se.expr, zero);
-  branch1 = build_v (COND_EXPR, tmp, branch1, branch2);
+  tmp = build2 (LE_EXPR, boolean_type_node, se.expr, zero);
+  branch1 = build3_v (COND_EXPR, tmp, branch1, branch2);
 
   /* Append the COND_EXPR to the evaluation of COND, and return.  */
   gfc_add_expr_to_block (&se.pre, branch1);
@@ -479,13 +502,113 @@ gfc_trans_arithmetic_if (gfc_code * code)
 }
 
 
+/* Translate the simple DO construct.  This is where the loop variable has
+   integer type and step +-1.  We can't use this in the general case
+   because integer overflow and floating point errors could give incorrect
+   results.
+   We translate a do loop from:
+
+   DO dovar = from, to, step
+      body
+   END DO
+
+   to:
+
+   [Evaluate loop bounds and step]
+   dovar = from;
+   if ((step > 0) ? (dovar <= to) : (dovar => to))
+    {
+      for (;;)
+        {
+	  body;
+   cycle_label:
+	  cond = (dovar == to);
+	  dovar += step;
+	  if (cond) goto end_label;
+	}
+      }
+   end_label:
+
+   This helps the optimizers by avoiding the extra induction variable
+   used in the general case.  */
+
+static tree
+gfc_trans_simple_do (gfc_code * code, stmtblock_t *pblock, tree dovar,
+		     tree from, tree to, tree step)
+{
+  stmtblock_t body;
+  tree type;
+  tree cond;
+  tree tmp;
+  tree cycle_label;
+  tree exit_label;
+  
+  type = TREE_TYPE (dovar);
+
+  /* Initialize the DO variable: dovar = from.  */
+  gfc_add_modify_expr (pblock, dovar, from);
+
+  /* Cycle and exit statements are implemented with gotos.  */
+  cycle_label = gfc_build_label_decl (NULL_TREE);
+  exit_label = gfc_build_label_decl (NULL_TREE);
+
+  /* Put the labels where they can be found later. See gfc_trans_do().  */
+  code->block->backend_decl = tree_cons (cycle_label, exit_label, NULL);
+
+  /* Loop body.  */
+  gfc_start_block (&body);
+
+  /* Main loop body.  */
+  tmp = gfc_trans_code (code->block->next);
+  gfc_add_expr_to_block (&body, tmp);
+
+  /* Label for cycle statements (if needed).  */
+  if (TREE_USED (cycle_label))
+    {
+      tmp = build1_v (LABEL_EXPR, cycle_label);
+      gfc_add_expr_to_block (&body, tmp);
+    }
+
+  /* Evaluate the loop condition.  */
+  cond = build2 (EQ_EXPR, boolean_type_node, dovar, to);
+  cond = gfc_evaluate_now (cond, &body);
+
+  /* Increment the loop variable.  */
+  tmp = build2 (PLUS_EXPR, type, dovar, step);
+  gfc_add_modify_expr (&body, dovar, tmp);
+
+  /* The loop exit.  */
+  tmp = build1_v (GOTO_EXPR, exit_label);
+  TREE_USED (exit_label) = 1;
+  tmp = build3_v (COND_EXPR, cond, tmp, build_empty_stmt ());
+  gfc_add_expr_to_block (&body, tmp);
+
+  /* Finish the loop body.  */
+  tmp = gfc_finish_block (&body);
+  tmp = build1_v (LOOP_EXPR, tmp);
+
+  /* Only execute the loop if the number of iterations is positive.  */
+  if (tree_int_cst_sgn (step) > 0)
+    cond = fold (build2 (LE_EXPR, boolean_type_node, dovar, to));
+  else
+    cond = fold (build2 (GE_EXPR, boolean_type_node, dovar, to));
+  tmp = build3_v (COND_EXPR, cond, tmp, build_empty_stmt ());
+  gfc_add_expr_to_block (pblock, tmp);
+
+  /* Add the exit label.  */
+  tmp = build1_v (LABEL_EXPR, exit_label);
+  gfc_add_expr_to_block (pblock, tmp);
+
+  return gfc_finish_block (pblock);
+}
+
 /* Translate the DO construct.  This obviously is one of the most
    important ones to get right with any compiler, but especially
    so for Fortran.
 
-   Currently we calculate the loop count before entering the loop, but
-   it may be possible to optimize if step is a constant. The main
-   advantage is that the loop test is a single GENERIC node
+   We special case some loop forms as described in gfc_trans_simple_do.
+   For other cases we implement them with a separate loop count,
+   as described in the standard.
 
    We translate a do loop from:
 
@@ -495,29 +618,22 @@ gfc_trans_arithmetic_if (gfc_code * code)
 
    to:
 
-   pre_dovar;
-   pre_from;
-   pre_to;
-   pre_step;
-   temp1=to_expr-from_expr;
-   step_temp=step_expr;
-   range_temp=step_tmp/range_temp;
-   for ( ; range_temp > 0 ; range_temp = range_temp - 1)
+   [evaluate loop bounds and step]
+   count = to + step - from;
+   dovar = from;
+   for (;;)
      {
        body;
 cycle_label:
-       dovar_temp = dovar
-       dovar=dovar_temp + step_temp;
+       dovar += step
+       count--;
+       if (count <=0) goto exit_label;
      }
 exit_label:
 
-   Some optimization is done for empty do loops. We can't just let
-   dovar=to because it's possible for from+range*loopcount!=to.  Anyone
-   who writes empty DO deserves sub-optimal (but correct) code anyway.
-
    TODO: Large loop counts
-   Does not work loop counts which do not fit into a signed integer kind,
-   ie. Does not work for loop counts > 2^31 for integer(kind=4) variables
+   The code above assumes the loop count fits into a signed integer kind,
+   i.e. Does not work for loop counts > 2^31 for integer(kind=4) variables
    We must support the full range.  */
 
 tree
@@ -529,6 +645,7 @@ gfc_trans_do (gfc_code * code)
   tree to;
   tree step;
   tree count;
+  tree count_one;
   tree type;
   tree cond;
   tree cycle_label;
@@ -539,8 +656,7 @@ gfc_trans_do (gfc_code * code)
 
   gfc_start_block (&block);
 
-  /* Create GIMPLE versions of all expressions in the iterator.  */
-
+  /* Evaluate all the expressions in the iterator.  */
   gfc_init_se (&se, NULL);
   gfc_conv_expr_lhs (&se, code->ext.iterator->var);
   gfc_add_block_to_block (&block, &se.pre);
@@ -548,34 +664,50 @@ gfc_trans_do (gfc_code * code)
   type = TREE_TYPE (dovar);
 
   gfc_init_se (&se, NULL);
-  gfc_conv_expr_type (&se, code->ext.iterator->start, type);
+  gfc_conv_expr_val (&se, code->ext.iterator->start);
   gfc_add_block_to_block (&block, &se.pre);
-  from = se.expr;
+  from = gfc_evaluate_now (se.expr, &block);
 
   gfc_init_se (&se, NULL);
-  gfc_conv_expr_type (&se, code->ext.iterator->end, type);
+  gfc_conv_expr_val (&se, code->ext.iterator->end);
   gfc_add_block_to_block (&block, &se.pre);
-  to = se.expr;
+  to = gfc_evaluate_now (se.expr, &block);
 
   gfc_init_se (&se, NULL);
-  gfc_conv_expr_type (&se, code->ext.iterator->step, type);
-
-  /* We don't want this changing part way through.  */
-  gfc_make_safe_expr (&se);
+  gfc_conv_expr_val (&se, code->ext.iterator->step);
   gfc_add_block_to_block (&block, &se.pre);
-  step = se.expr;
+  step = gfc_evaluate_now (se.expr, &block);
 
-  /* Initialise loop count. This code is executed before we enter the
+  /* Special case simple loops.  */
+  if (TREE_CODE (type) == INTEGER_TYPE
+      && (integer_onep (step)
+	|| tree_int_cst_equal (step, integer_minus_one_node)))
+    return gfc_trans_simple_do (code, &block, dovar, from, to, step);
+      
+  /* Initialize loop count. This code is executed before we enter the
      loop body. We generate: count = (to + step - from) / step.  */
 
-  tmp = fold (build (MINUS_EXPR, type, step, from));
-  tmp = fold (build (PLUS_EXPR, type, to, tmp));
-  tmp = fold (build (TRUNC_DIV_EXPR, type, tmp, step));
-
-  count = gfc_create_var (type, "count");
+  tmp = fold (build2 (MINUS_EXPR, type, step, from));
+  tmp = fold (build2 (PLUS_EXPR, type, to, tmp));
+  if (TREE_CODE (type) == INTEGER_TYPE)
+    {
+      tmp = fold (build2 (TRUNC_DIV_EXPR, type, tmp, step));
+      count = gfc_create_var (type, "count");
+    }
+  else
+    {
+      /* TODO: We could use the same width as the real type.
+	 This would probably cause more problems that it solves
+	 when we implement "long double" types.  */
+      tmp = fold (build2 (RDIV_EXPR, type, tmp, step));
+      tmp = fold (build1 (FIX_TRUNC_EXPR, gfc_array_index_type, tmp));
+      count = gfc_create_var (gfc_array_index_type, "count");
+    }
   gfc_add_modify_expr (&block, count, tmp);
 
-  /* Initialise the DO variable: dovar = from.  */
+  count_one = convert (TREE_TYPE (count), integer_one_node);
+
+  /* Initialize the DO variable: dovar = from.  */
   gfc_add_modify_expr (&block, dovar, from);
 
   /* Loop body.  */
@@ -586,10 +718,11 @@ gfc_trans_do (gfc_code * code)
   exit_label = gfc_build_label_decl (NULL_TREE);
 
   /* Start with the loop condition.  Loop until count <= 0.  */
-  cond = build (LE_EXPR, boolean_type_node, count, integer_zero_node);
+  cond = build2 (LE_EXPR, boolean_type_node, count,
+		convert (TREE_TYPE (count), integer_zero_node));
   tmp = build1_v (GOTO_EXPR, exit_label);
   TREE_USED (exit_label) = 1;
-  tmp = build_v (COND_EXPR, cond, tmp, build_empty_stmt ());
+  tmp = build3_v (COND_EXPR, cond, tmp, build_empty_stmt ());
   gfc_add_expr_to_block (&body, tmp);
 
   /* Put these labels where they can be found later. We put the
@@ -611,18 +744,18 @@ gfc_trans_do (gfc_code * code)
     }
 
   /* Increment the loop variable.  */
-  tmp = build (PLUS_EXPR, type, dovar, step);
+  tmp = build2 (PLUS_EXPR, type, dovar, step);
   gfc_add_modify_expr (&body, dovar, tmp);
 
   /* Decrement the loop count.  */
-  tmp = build (MINUS_EXPR, type, count, integer_one_node);
+  tmp = build2 (MINUS_EXPR, TREE_TYPE (count), count, count_one);
   gfc_add_modify_expr (&body, count, tmp);
 
   /* End of loop body.  */
   tmp = gfc_finish_block (&body);
 
   /* The for loop itself.  */
-  tmp = build_v (LOOP_EXPR, tmp);
+  tmp = build1_v (LOOP_EXPR, tmp);
   gfc_add_expr_to_block (&block, tmp);
 
   /* Add the exit label.  */
@@ -684,7 +817,7 @@ gfc_trans_do_while (gfc_code * code)
   /* Build "IF (! cond) GOTO exit_label".  */
   tmp = build1_v (GOTO_EXPR, exit_label);
   TREE_USED (exit_label) = 1;
-  tmp = build_v (COND_EXPR, cond.expr, tmp, build_empty_stmt ());
+  tmp = build3_v (COND_EXPR, cond.expr, tmp, build_empty_stmt ());
   gfc_add_expr_to_block (&block, tmp);
 
   /* The main body of the loop.  */
@@ -703,7 +836,7 @@ gfc_trans_do_while (gfc_code * code)
 
   gfc_init_block (&block);
   /* Build the loop.  */
-  tmp = build_v (LOOP_EXPR, tmp);
+  tmp = build1_v (LOOP_EXPR, tmp);
   gfc_add_expr_to_block (&block, tmp);
 
   /* Add the exit label.  */
@@ -831,12 +964,11 @@ gfc_trans_integer_select (gfc_code * code)
 	    }
 
           /* Build a label.  */
-          label = build_decl (LABEL_DECL, NULL_TREE, NULL_TREE);
-          DECL_CONTEXT (label) = current_function_decl;
+          label = gfc_build_label_decl (NULL_TREE);
 
 	  /* Add this case label.
              Add parameter 'label', make it match GCC backend.  */
-	  tmp = build (CASE_LABEL_EXPR, void_type_node, low, high, label);
+	  tmp = build3 (CASE_LABEL_EXPR, void_type_node, low, high, label);
 	  gfc_add_expr_to_block (&body, tmp);
 	}
 
@@ -850,7 +982,7 @@ gfc_trans_integer_select (gfc_code * code)
     }
 
   tmp = gfc_finish_block (&body);
-  tmp = build_v (SWITCH_EXPR, se.expr, tmp, NULL_TREE);
+  tmp = build3_v (SWITCH_EXPR, se.expr, tmp, NULL_TREE);
   gfc_add_expr_to_block (&block, tmp);
 
   tmp = build1_v (LABEL_EXPR, end_label);
@@ -951,8 +1083,8 @@ gfc_trans_logical_select (gfc_code * code)
       if (f != NULL)
 	false_tree = gfc_trans_code (f->next);
 
-      gfc_add_expr_to_block (&block, build_v (COND_EXPR, se.expr,
-					      true_tree, false_tree));
+      gfc_add_expr_to_block (&block, build3_v (COND_EXPR, se.expr,
+					       true_tree, false_tree));
     }
 
   return gfc_finish_block (&block);
@@ -985,6 +1117,8 @@ gfc_trans_character_select (gfc_code *code)
 
   if (select_struct == NULL)
     {
+      tree gfc_int4_type_node = gfc_get_int_type (4);
+
       select_struct = make_node (RECORD_TYPE);
       TYPE_NAME (select_struct) = get_identifier ("_jump_struct");
 
@@ -1038,14 +1172,14 @@ gfc_trans_character_select (gfc_code *code)
     {
       for (d = c->ext.case_list; d; d = d->next)
         {
-          tmp = build_v (LABEL_EXPR, labels[d->n]);
+          tmp = build1_v (LABEL_EXPR, labels[d->n]);
           gfc_add_expr_to_block (&body, tmp);
         }
 
       tmp = gfc_trans_code (c->next);
       gfc_add_expr_to_block (&body, tmp);
 
-      tmp = build_v (GOTO_EXPR, end_label);
+      tmp = build1_v (GOTO_EXPR, end_label);
       gfc_add_expr_to_block (&body, tmp);
     }
 
@@ -1093,8 +1227,8 @@ gfc_trans_character_select (gfc_code *code)
       init = tree_cons (NULL_TREE, tmp, init);
     }
 
-  type = build_array_type (select_struct,
-                           build_index_type (build_int_2(n - 1, 0)));
+  type = build_array_type (select_struct, build_index_type
+			   (build_int_cst (NULL_TREE, n - 1)));
 
   init = build1 (CONSTRUCTOR, type, nreverse(init));
   TREE_CONSTANT (init) = 1;
@@ -1112,7 +1246,7 @@ gfc_trans_character_select (gfc_code *code)
   init = gfc_build_addr_expr (pvoid_type_node, init);
   args = gfc_chainon_list (NULL_TREE, init);
 
-  tmp = build_int_2 (n, 0);
+  tmp = build_int_cst (NULL_TREE, n);
   args = gfc_chainon_list (args, tmp);
 
   tmp = gfc_build_addr_expr (pvoid_type_node, end_label);
@@ -1132,7 +1266,7 @@ gfc_trans_character_select (gfc_code *code)
 
   tmp = gfc_finish_block (&body);
   gfc_add_expr_to_block (&block, tmp);
-  tmp = build_v (LABEL_EXPR, end_label);
+  tmp = build1_v (LABEL_EXPR, end_label);
   gfc_add_expr_to_block (&block, tmp);
 
   if (n != 0)
@@ -1159,7 +1293,7 @@ gfc_trans_character_select (gfc_code *code)
 tree
 gfc_trans_select (gfc_code * code)
 {
-  assert (code && code->expr);
+  gcc_assert (code && code->expr);
 
   /* Empty SELECT constructs are legal.  */
   if (code->block == NULL)
@@ -1221,16 +1355,16 @@ gfc_trans_forall_loop (forall_info *forall_tmp, int nvar, tree body, int mask_fl
       gfc_init_block (&block);
 
       /* The exit condition.  */
-      cond = build (LE_EXPR, boolean_type_node, count, integer_zero_node);
+      cond = build2 (LE_EXPR, boolean_type_node, count, integer_zero_node);
       tmp = build1_v (GOTO_EXPR, exit_label);
-      tmp = build_v (COND_EXPR, cond, tmp, build_empty_stmt ());
+      tmp = build3_v (COND_EXPR, cond, tmp, build_empty_stmt ());
       gfc_add_expr_to_block (&block, tmp);
 
       /* The main loop body.  */
       gfc_add_expr_to_block (&block, body);
 
       /* Increment the loop variable.  */
-      tmp = build (PLUS_EXPR, TREE_TYPE (var), var, step);
+      tmp = build2 (PLUS_EXPR, TREE_TYPE (var), var, step);
       gfc_add_modify_expr (&block, var, tmp);
 
       /* Advance to the next mask element.  */
@@ -1240,13 +1374,13 @@ gfc_trans_forall_loop (forall_info *forall_tmp, int nvar, tree body, int mask_fl
           maskindex = forall_tmp->maskindex;
           if (mask)
             {
-              tmp = build (PLUS_EXPR, gfc_array_index_type, maskindex,
-                           integer_one_node);
+              tmp = build2 (PLUS_EXPR, gfc_array_index_type,
+			    maskindex, gfc_index_one_node);
               gfc_add_modify_expr (&block, maskindex, tmp);
             }
         }
       /* Decrement the loop counter.  */
-      tmp = build (MINUS_EXPR, TREE_TYPE (var), count, integer_one_node);
+      tmp = build2 (MINUS_EXPR, TREE_TYPE (var), count, gfc_index_one_node);
       gfc_add_modify_expr (&block, count, tmp);
 
       body = gfc_finish_block (&block);
@@ -1256,13 +1390,13 @@ gfc_trans_forall_loop (forall_info *forall_tmp, int nvar, tree body, int mask_fl
       gfc_add_modify_expr (&block, var, start);
 
       /* Initialize the loop counter.  */
-      tmp = fold (build (MINUS_EXPR, TREE_TYPE (var), step, start));
-      tmp = fold (build (PLUS_EXPR, TREE_TYPE (var), end, tmp));
-      tmp = fold (build (TRUNC_DIV_EXPR, TREE_TYPE (var), tmp, step));
+      tmp = fold (build2 (MINUS_EXPR, TREE_TYPE (var), step, start));
+      tmp = fold (build2 (PLUS_EXPR, TREE_TYPE (var), end, tmp));
+      tmp = fold (build2 (TRUNC_DIV_EXPR, TREE_TYPE (var), tmp, step));
       gfc_add_modify_expr (&block, count, tmp);
 
       /* The loop expression.  */
-      tmp = build_v (LOOP_EXPR, body);
+      tmp = build1_v (LOOP_EXPR, body);
       gfc_add_expr_to_block (&block, tmp);
 
       /* The exit label.  */
@@ -1277,9 +1411,9 @@ gfc_trans_forall_loop (forall_info *forall_tmp, int nvar, tree body, int mask_fl
 
 
 /* Generate the body and loops according to MASK_FLAG and NEST_FLAG.
-   if MASK_FLAG is non-zero, the body is controlled by maskes in forall
+   if MASK_FLAG is nonzero, the body is controlled by maskes in forall
    nest, otherwise, the body is not controlled by maskes.
-   if NEST_FLAG is non-zero, generate loops for nested forall, otherwise,
+   if NEST_FLAG is nonzero, generate loops for nested forall, otherwise,
    only generate loops for the current forall level.  */
 
 static tree
@@ -1308,14 +1442,14 @@ gfc_trans_nested_forall_loop (forall_info * nested_forall_info, tree body,
 
               if (mask)
                 {
-                  /* If a mask was specified make the assignment contitional.  */
+                  /* If a mask was specified make the assignment conditional.  */
                   if (pmask)
 		    tmp = gfc_build_indirect_ref (mask);
                   else
                     tmp = mask;
                   tmp = gfc_build_array_ref (tmp, maskindex);
 
-                  body = build_v (COND_EXPR, tmp, body, build_empty_stmt ());
+                  body = build3_v (COND_EXPR, tmp, body, build_empty_stmt ());
                 }
             }
           nvar = forall_tmp->nvar;
@@ -1347,17 +1481,17 @@ gfc_do_allocate (tree bytesize, tree size, tree * pdata, stmtblock_t * pblock,
 
   if (INTEGER_CST_P (size))
     {
-      tmp = fold (build (MINUS_EXPR, gfc_array_index_type, size,
-			 integer_one_node));
+      tmp = fold (build2 (MINUS_EXPR, gfc_array_index_type, size,
+			  gfc_index_one_node));
     }
   else
     tmp = NULL_TREE;
 
-  type = build_range_type (gfc_array_index_type, integer_zero_node, tmp);
+  type = build_range_type (gfc_array_index_type, gfc_index_zero_node, tmp);
   type = build_array_type (elem_type, type);
   if (gfc_can_put_var_on_stack (bytesize))
     {
-      assert (INTEGER_CST_P (size));
+      gcc_assert (INTEGER_CST_P (size));
       tmpvar = gfc_create_var (type, "temp");
       *pdata = NULL_TREE;
     }
@@ -1372,7 +1506,7 @@ gfc_do_allocate (tree bytesize, tree size, tree * pdata, stmtblock_t * pblock,
       else if (gfc_index_integer_kind == 8)
 	tmp = gfor_fndecl_internal_malloc64;
       else
-	abort ();
+	gcc_unreachable ();
       tmp = gfc_build_function_call (tmp, args);
       tmp = convert (TREE_TYPE (tmpvar), tmp);
       gfc_add_modify_expr (pblock, tmpvar, tmp);
@@ -1416,7 +1550,7 @@ generate_loop_for_temp_to_lhs (gfc_expr *expr, tree tmp1, tree size,
       gfc_add_block_to_block (&block, &lse.post);
 
       /* Increment the count1.  */
-      tmp = fold (build (PLUS_EXPR, TREE_TYPE (count1), count1, size));
+      tmp = fold (build2 (PLUS_EXPR, TREE_TYPE (count1), count1, size));
       gfc_add_modify_expr (&block, count1, tmp);
       tmp = gfc_finish_block (&block);
     }
@@ -1438,7 +1572,7 @@ generate_loop_for_temp_to_lhs (gfc_expr *expr, tree tmp1, tree size,
 
       gfc_mark_ss_chain_used (lss, 1);
       /* Initialize count2.  */
-      gfc_add_modify_expr (&block, count2, integer_zero_node);
+      gfc_add_modify_expr (&block, count2, gfc_index_zero_node);
 
       /* Start the scalarized loop body.  */
       gfc_start_scalarized_body (&loop1, &body);
@@ -1450,8 +1584,8 @@ generate_loop_for_temp_to_lhs (gfc_expr *expr, tree tmp1, tree size,
       /* Form the expression of the temporary.  */
       if (lss != gfc_ss_terminator)
         {
-          index = fold (build (PLUS_EXPR, gfc_array_index_type,
-			       count1, count2));
+          index = fold (build2 (PLUS_EXPR, gfc_array_index_type,
+				count1, count2));
           rse.expr = gfc_build_array_ref (tmp1, index);
         }
       /* Translate expr.  */
@@ -1463,32 +1597,30 @@ generate_loop_for_temp_to_lhs (gfc_expr *expr, tree tmp1, tree size,
      /* Form the mask expression according to the mask tree list.  */
      if (wheremask)
        {
-         tmp2 = wheremask;
-         if (tmp2 != NULL)
-            wheremaskexpr = gfc_build_array_ref (tmp2, count3);
-         tmp2 = TREE_CHAIN (tmp2);
+	 wheremaskexpr = gfc_build_array_ref (wheremask, count3);
+         tmp2 = TREE_CHAIN (wheremask);
          while (tmp2)
            {
              tmp1 = gfc_build_array_ref (tmp2, count3);
-             wheremaskexpr = build (TRUTH_AND_EXPR, TREE_TYPE (tmp1),
-                                    wheremaskexpr, tmp1);
+             wheremaskexpr = build2 (TRUTH_AND_EXPR, TREE_TYPE (tmp1),
+				     wheremaskexpr, tmp1);
              tmp2 = TREE_CHAIN (tmp2);
            }
-         tmp = build_v (COND_EXPR, wheremaskexpr, tmp, build_empty_stmt ());
+         tmp = build3_v (COND_EXPR, wheremaskexpr, tmp, build_empty_stmt ());
        }
 
       gfc_add_expr_to_block (&body, tmp);
 
       /* Increment count2.  */
-      tmp = fold (build (PLUS_EXPR, TREE_TYPE (count2), count2,
-                         integer_one_node));
+      tmp = fold (build2 (PLUS_EXPR, gfc_array_index_type,
+			  count2, gfc_index_one_node));
       gfc_add_modify_expr (&body, count2, tmp);
 
       /* Increment count3.  */
       if (count3)
         {
-          tmp = fold (build (PLUS_EXPR, TREE_TYPE (count3), count3,
-                             integer_one_node));
+          tmp = fold (build2 (PLUS_EXPR, gfc_array_index_type,
+			      count3, gfc_index_one_node));
           gfc_add_modify_expr (&body, count3, tmp);
         }
 
@@ -1499,7 +1631,7 @@ generate_loop_for_temp_to_lhs (gfc_expr *expr, tree tmp1, tree size,
       gfc_cleanup_loop (&loop1);
 
       /* Increment count1.  */
-      tmp = fold (build (PLUS_EXPR, TREE_TYPE (count1), count1, size));
+      tmp = fold (build2 (PLUS_EXPR, TREE_TYPE (count1), count1, size));
       gfc_add_modify_expr (&block, count1, tmp);
       tmp = gfc_finish_block (&block);
     }
@@ -1536,10 +1668,10 @@ generate_loop_for_rhs_to_temp (gfc_expr *expr2, tree tmp1, tree size,
     }
   else
     {
-      /* Initilize count2.  */
-      gfc_add_modify_expr (&block, count2, integer_zero_node);
+      /* Initialize count2.  */
+      gfc_add_modify_expr (&block, count2, gfc_index_zero_node);
 
-      /* Initiliaze the loop.  */
+      /* Initialize the loop.  */
       gfc_init_loopinfo (&loop);
 
       /* We may need LSS to determine the shape of the expression.  */
@@ -1559,7 +1691,7 @@ generate_loop_for_rhs_to_temp (gfc_expr *expr2, tree tmp1, tree size,
       gfc_conv_expr (&rse, expr2);
 
       /* Form the expression of the temporary.  */
-      index = fold (build (PLUS_EXPR, gfc_array_index_type, count1, count2));
+      index = fold (build2 (PLUS_EXPR, gfc_array_index_type, count1, count2));
       lse.expr = gfc_build_array_ref (tmp1, index);
     }
 
@@ -1569,18 +1701,16 @@ generate_loop_for_rhs_to_temp (gfc_expr *expr2, tree tmp1, tree size,
   /* Form the mask expression according to the mask tree list.  */
   if (wheremask)
     {
-      tmp2 = wheremask;
-      if (tmp2 != NULL)
-        wheremaskexpr = gfc_build_array_ref (tmp2, count3);
-      tmp2 = TREE_CHAIN (tmp2);
+      wheremaskexpr = gfc_build_array_ref (wheremask, count3);
+      tmp2 = TREE_CHAIN (wheremask);
       while (tmp2)
         {
           tmp1 = gfc_build_array_ref (tmp2, count3);
-          wheremaskexpr = build (TRUTH_AND_EXPR, TREE_TYPE (tmp1),
-                                 wheremaskexpr, tmp1);
+          wheremaskexpr = build2 (TRUTH_AND_EXPR, TREE_TYPE (tmp1),
+				  wheremaskexpr, tmp1);
           tmp2 = TREE_CHAIN (tmp2);
         }
-      tmp = build_v (COND_EXPR, wheremaskexpr, tmp, build_empty_stmt ());
+      tmp = build3_v (COND_EXPR, wheremaskexpr, tmp, build_empty_stmt ());
     }
 
   gfc_add_expr_to_block (&body1, tmp);
@@ -1592,15 +1722,15 @@ generate_loop_for_rhs_to_temp (gfc_expr *expr2, tree tmp1, tree size,
   else
     {
       /* Increment count2.  */
-      tmp = fold (build (PLUS_EXPR, gfc_array_index_type, count2,
-			 integer_one_node));
+      tmp = fold (build2 (PLUS_EXPR, gfc_array_index_type,
+			  count2, gfc_index_one_node));
       gfc_add_modify_expr (&body1, count2, tmp);
 
       /* Increment count3.  */
       if (count3)
         {
-          tmp = fold (build (PLUS_EXPR, gfc_array_index_type, count3,
-                             integer_one_node));
+          tmp = fold (build2 (PLUS_EXPR, gfc_array_index_type,
+			      count3, gfc_index_one_node));
           gfc_add_modify_expr (&body1, count3, tmp);
         }
 
@@ -1615,7 +1745,7 @@ generate_loop_for_rhs_to_temp (gfc_expr *expr2, tree tmp1, tree size,
          as tree nodes in SS may not be valid in different scope.  */
     }
   /* Increment count1.  */
-  tmp = fold (build (PLUS_EXPR, TREE_TYPE (count1), count1, size));
+  tmp = fold (build2 (PLUS_EXPR, TREE_TYPE (count1), count1, size));
   gfc_add_modify_expr (&block, count1, tmp);
 
   tmp = gfc_finish_block (&block);
@@ -1639,7 +1769,7 @@ compute_inner_temp_size (gfc_expr *expr1, gfc_expr *expr2,
   *lss = gfc_walk_expr (expr1);
   *rss = NULL;
 
-  size = integer_one_node;
+  size = gfc_index_one_node;
   if (*lss != gfc_ss_terminator)
     {
       gfc_init_loopinfo (&loop);
@@ -1672,10 +1802,11 @@ compute_inner_temp_size (gfc_expr *expr1, gfc_expr *expr2,
       /* Figure out how many elements we need.  */
       for (i = 0; i < loop.dimen; i++)
         {
-	  tmp = fold (build (MINUS_EXPR, TREE_TYPE (loop.from[i]),
-			     integer_one_node, loop.from[i]));
-          tmp = fold (build (PLUS_EXPR, TREE_TYPE (tmp), tmp, loop.to[i]));
-          size = fold (build (MULT_EXPR, TREE_TYPE (size), size, tmp));
+	  tmp = fold (build2 (MINUS_EXPR, gfc_array_index_type,
+			      gfc_index_one_node, loop.from[i]));
+          tmp = fold (build2 (PLUS_EXPR, gfc_array_index_type,
+			      tmp, loop.to[i]));
+          size = fold (build2 (MULT_EXPR, gfc_array_index_type, size, tmp));
         }
       gfc_add_block_to_block (pblock, &loop.pre);
       size = gfc_evaluate_now (size, pblock);
@@ -1700,12 +1831,12 @@ compute_overall_iter_number (forall_info *nested_forall_info, tree inner_size,
 
   /* TODO: optimizing the computing process.  */
   number = gfc_create_var (gfc_array_index_type, "num");
-  gfc_add_modify_expr (block, number, integer_zero_node);
+  gfc_add_modify_expr (block, number, gfc_index_zero_node);
 
   gfc_start_block (&body);
   if (nested_forall_info)
-    tmp = build (PLUS_EXPR, gfc_array_index_type, number,
-                 inner_size);
+    tmp = build2 (PLUS_EXPR, gfc_array_index_type, number,
+		  inner_size);
   else
     tmp = inner_size;
   gfc_add_modify_expr (&body, number, tmp);
@@ -1739,7 +1870,7 @@ allocate_temp_for_forall_nest (forall_info * nested_forall_info, tree type,
   size = compute_overall_iter_number (nested_forall_info, inner_size, block);
 
   unit = TYPE_SIZE_UNIT (type);
-  bytesize = fold (build (MULT_EXPR, gfc_array_index_type, size, unit));
+  bytesize = fold (build2 (MULT_EXPR, gfc_array_index_type, size, unit));
 
   *ptemp1 = NULL;
   temp1 = gfc_do_allocate (bytesize, size, ptemp1, block, type);
@@ -1778,13 +1909,13 @@ gfc_trans_assign_need_temp (gfc_expr * expr1, gfc_expr * expr2, tree wheremask,
   if (wheremask)
     {
       count = gfc_create_var (gfc_array_index_type, "count");
-      gfc_add_modify_expr (block, count, integer_zero_node);
+      gfc_add_modify_expr (block, count, gfc_index_zero_node);
     }
   else
     count = NULL;
 
   /* Initialize count1.  */
-  gfc_add_modify_expr (block, count1, integer_zero_node);
+  gfc_add_modify_expr (block, count1, gfc_index_zero_node);
 
   /* Calculate the size of temporary needed in the assignment. Return loop, lss
      and rss which are used in function generate_loop_for_rhs_to_temp().  */
@@ -1794,7 +1925,7 @@ gfc_trans_assign_need_temp (gfc_expr * expr1, gfc_expr * expr2, tree wheremask,
   type = gfc_typenode_for_spec (&expr1->ts);
 
   /* Allocate temporary for nested forall construct according to the
-     information in nested_forall_info and inner_size. */
+     information in nested_forall_info and inner_size.  */
   tmp1 = allocate_temp_for_forall_nest (nested_forall_info, type,
                                 inner_size, block, &ptemp1);
 
@@ -1805,7 +1936,7 @@ gfc_trans_assign_need_temp (gfc_expr * expr1, gfc_expr * expr2, tree wheremask,
       mask = forall_tmp->mask;
       maskindex = forall_tmp->maskindex;
       if (mask)
-        gfc_add_modify_expr (block, maskindex, integer_zero_node);
+        gfc_add_modify_expr (block, maskindex, gfc_index_zero_node);
       forall_tmp = forall_tmp->next_nest;
     }
 
@@ -1813,13 +1944,13 @@ gfc_trans_assign_need_temp (gfc_expr * expr1, gfc_expr * expr2, tree wheremask,
   tmp = generate_loop_for_rhs_to_temp (expr2, tmp1, inner_size, count,
                                        count1, count2, lss, rss, wheremask);
 
-  /* Generate body and loops according to the inforamtion in
+  /* Generate body and loops according to the information in
      nested_forall_info.  */
   tmp = gfc_trans_nested_forall_loop (nested_forall_info, tmp, 1, 1);
   gfc_add_expr_to_block (block, tmp);
 
   /* Reset count1.  */
-  gfc_add_modify_expr (block, count1, integer_zero_node);
+  gfc_add_modify_expr (block, count1, gfc_index_zero_node);
 
   /* Reset maskindexed.  */
   forall_tmp = nested_forall_info;
@@ -1828,19 +1959,19 @@ gfc_trans_assign_need_temp (gfc_expr * expr1, gfc_expr * expr2, tree wheremask,
       mask = forall_tmp->mask;
       maskindex = forall_tmp->maskindex;
       if (mask)
-        gfc_add_modify_expr (block, maskindex, integer_zero_node);
+        gfc_add_modify_expr (block, maskindex, gfc_index_zero_node);
       forall_tmp = forall_tmp->next_nest;
     }
 
   /* Reset count.  */
   if (wheremask)
-    gfc_add_modify_expr (block, count, integer_zero_node);
+    gfc_add_modify_expr (block, count, gfc_index_zero_node);
 
   /* Generate codes to copy the temporary to lhs.  */
   tmp = generate_loop_for_temp_to_lhs (expr1, tmp1, inner_size, count,
                                        count1, count2, wheremask);
 
-  /* Generate body and loops according to the inforamtion in
+  /* Generate body and loops according to the information in
      nested_forall_info.  */
   tmp = gfc_trans_nested_forall_loop (nested_forall_info, tmp, 1, 1);
   gfc_add_expr_to_block (block, tmp);
@@ -1879,7 +2010,7 @@ gfc_trans_pointer_assign_need_temp (gfc_expr * expr1, gfc_expr * expr2,
   forall_info *forall_tmp;
 
   count = gfc_create_var (gfc_array_index_type, "count");
-  gfc_add_modify_expr (block, count, integer_zero_node);
+  gfc_add_modify_expr (block, count, gfc_index_zero_node);
 
   inner_size = integer_one_node;
   lss = gfc_walk_expr (expr1);
@@ -1904,8 +2035,8 @@ gfc_trans_pointer_assign_need_temp (gfc_expr * expr1, gfc_expr * expr2,
       gfc_add_block_to_block (&body, &rse.post);
 
       /* Increment count.  */
-      tmp = fold (build (PLUS_EXPR, TREE_TYPE (count), count,
-                         integer_one_node));
+      tmp = fold (build2 (PLUS_EXPR, gfc_array_index_type,
+			  count, gfc_index_one_node));
       gfc_add_modify_expr (&body, count, tmp);
 
       tmp = gfc_finish_block (&body);
@@ -1917,17 +2048,17 @@ gfc_trans_pointer_assign_need_temp (gfc_expr * expr1, gfc_expr * expr2,
           mask = forall_tmp->mask;
           maskindex = forall_tmp->maskindex;
           if (mask)
-            gfc_add_modify_expr (block, maskindex, integer_zero_node);
+            gfc_add_modify_expr (block, maskindex, gfc_index_zero_node);
           forall_tmp = forall_tmp->next_nest;
         }
 
-      /* Generate body and loops according to the inforamtion in
+      /* Generate body and loops according to the information in
          nested_forall_info.  */
       tmp = gfc_trans_nested_forall_loop (nested_forall_info, tmp, 1, 1);
       gfc_add_expr_to_block (block, tmp);
 
       /* Reset count.  */
-      gfc_add_modify_expr (block, count, integer_zero_node);
+      gfc_add_modify_expr (block, count, gfc_index_zero_node);
 
       /* Reset maskindexes.  */
       forall_tmp = nested_forall_info;
@@ -1936,7 +2067,7 @@ gfc_trans_pointer_assign_need_temp (gfc_expr * expr1, gfc_expr * expr2,
           mask = forall_tmp->mask;
           maskindex = forall_tmp->maskindex;
           if (mask)
-            gfc_add_modify_expr (block, maskindex, integer_zero_node);
+            gfc_add_modify_expr (block, maskindex, gfc_index_zero_node);
           forall_tmp = forall_tmp->next_nest;
         }
       gfc_start_block (&body);
@@ -1949,12 +2080,12 @@ gfc_trans_pointer_assign_need_temp (gfc_expr * expr1, gfc_expr * expr2,
       gfc_add_modify_expr (&body, lse.expr, rse.expr);
       gfc_add_block_to_block (&body, &lse.post);
       /* Increment count.  */
-      tmp = fold (build (PLUS_EXPR, TREE_TYPE (count), count,
-                         integer_one_node));
+      tmp = fold (build2 (PLUS_EXPR, gfc_array_index_type,
+			  count, gfc_index_one_node));
       gfc_add_modify_expr (&body, count, tmp);
       tmp = gfc_finish_block (&body);
 
-      /* Generate body and loops according to the inforamtion in
+      /* Generate body and loops according to the information in
          nested_forall_info.  */
       tmp = gfc_trans_nested_forall_loop (nested_forall_info, tmp, 1, 1);
       gfc_add_expr_to_block (block, tmp);
@@ -1993,8 +2124,8 @@ gfc_trans_pointer_assign_need_temp (gfc_expr * expr1, gfc_expr * expr2,
       gfc_add_block_to_block (&body, &lse.post);
 
       /* Increment count.  */
-      tmp = fold (build (PLUS_EXPR, TREE_TYPE (count), count,
-                         integer_one_node));
+      tmp = fold (build2 (PLUS_EXPR, gfc_array_index_type,
+			  count, gfc_index_one_node));
       gfc_add_modify_expr (&body, count, tmp);
 
       tmp = gfc_finish_block (&body);
@@ -2006,17 +2137,17 @@ gfc_trans_pointer_assign_need_temp (gfc_expr * expr1, gfc_expr * expr2,
           mask = forall_tmp->mask;
           maskindex = forall_tmp->maskindex;
           if (mask)
-            gfc_add_modify_expr (block, maskindex, integer_zero_node);
+            gfc_add_modify_expr (block, maskindex, gfc_index_zero_node);
           forall_tmp = forall_tmp->next_nest;
         }
 
-      /* Generate body and loops according to the inforamtion in
+      /* Generate body and loops according to the information in
          nested_forall_info.  */
       tmp = gfc_trans_nested_forall_loop (nested_forall_info, tmp, 1, 1);
       gfc_add_expr_to_block (block, tmp);
 
       /* Reset count.  */
-      gfc_add_modify_expr (block, count, integer_zero_node);
+      gfc_add_modify_expr (block, count, gfc_index_zero_node);
 
       /* Reset maskindexes.  */
       forall_tmp = nested_forall_info;
@@ -2025,7 +2156,7 @@ gfc_trans_pointer_assign_need_temp (gfc_expr * expr1, gfc_expr * expr2,
           mask = forall_tmp->mask;
           maskindex = forall_tmp->maskindex;
           if (mask)
-            gfc_add_modify_expr (block, maskindex, integer_zero_node);
+            gfc_add_modify_expr (block, maskindex, gfc_index_zero_node);
           forall_tmp = forall_tmp->next_nest;
         }
       parm = gfc_build_array_ref (tmp1, count);
@@ -2038,8 +2169,8 @@ gfc_trans_pointer_assign_need_temp (gfc_expr * expr1, gfc_expr * expr2,
       gfc_add_block_to_block (&body, &lse.post);
 
       /* Increment count.  */
-      tmp = fold (build (PLUS_EXPR, TREE_TYPE (count), count,
-                         integer_one_node));
+      tmp = fold (build2 (PLUS_EXPR, gfc_array_index_type,
+			  count, gfc_index_one_node));
       gfc_add_modify_expr (&body, count, tmp);
 
       tmp = gfc_finish_block (&body);
@@ -2070,7 +2201,7 @@ gfc_trans_pointer_assign_need_temp (gfc_expr * expr1, gfc_expr * expr2,
       e<i> = f<i>
       g<i> = h<i>
     end forall
-   (where e,f,g,h<i> are arbitary expressions possibly involving i)
+   (where e,f,g,h<i> are arbitrary expressions possibly involving i)
    Translates to:
     count = ((end + 1 - start) / staride)
     masktmp(:) = maskexpr(:)
@@ -2091,7 +2222,7 @@ gfc_trans_pointer_assign_need_temp (gfc_expr * expr1, gfc_expr * expr2,
     Note that this code only works when there are no dependencies.
     Forall loop with array assignments and data dependencies are a real pain,
     because the size of the temporary cannot always be determined before the
-    loop is executed.  This problem is compouded by the presence of nested
+    loop is executed.  This problem is compounded by the presence of nested
     FORALL constructs.
  */
 
@@ -2121,8 +2252,7 @@ gfc_trans_forall_1 (gfc_code * code, forall_info * nested_forall_info)
   gfc_forall_iterator *fa;
   gfc_se se;
   gfc_code *c;
-  tree *saved_var_decl;
-  symbol_attribute *saved_var_attr;
+  gfc_saved_var *saved_vars;
   iter_info *this_forall, *iter_tmp;
   forall_info *info, *forall_tmp;
   temporary_list *temp;
@@ -2141,9 +2271,7 @@ gfc_trans_forall_1 (gfc_code * code, forall_info * nested_forall_info)
   end = (tree *) gfc_getmem (nvar * sizeof (tree));
   step = (tree *) gfc_getmem (nvar * sizeof (tree));
   varexpr = (gfc_expr **) gfc_getmem (nvar * sizeof (gfc_expr *));
-  saved_var_decl = (tree *) gfc_getmem (nvar * sizeof (tree));
-  saved_var_attr = (symbol_attribute *)
-    gfc_getmem (nvar * sizeof (symbol_attribute));
+  saved_vars = (gfc_saved_var *) gfc_getmem (nvar * sizeof (gfc_saved_var));
 
   /* Allocate the space for info.  */
   info = (forall_info *) gfc_getmem (sizeof (forall_info));
@@ -2155,20 +2283,11 @@ gfc_trans_forall_1 (gfc_code * code, forall_info * nested_forall_info)
       /* allocate space for this_forall.  */
       this_forall = (iter_info *) gfc_getmem (sizeof (iter_info));
 
-      /* Save the FORALL index's backend_decl.  */
-      saved_var_decl[n] = sym->backend_decl;
-
-      /* Save the attribute.  */
-      saved_var_attr[n] = sym->attr;
-
-      /* Set the proper attributes. */
-      gfc_clear_attr (&sym->attr);
-      sym->attr.referenced = 1;
-      sym->attr.flavor = FL_VARIABLE;
-
       /* Create a temporary variable for the FORALL index.  */
       tmp = gfc_typenode_for_spec (&sym->ts);
       var[n] = gfc_create_var (tmp, sym->name);
+      gfc_shadow_sym (sym, var[n], &saved_vars[n]);
+
       /* Record it in this_forall.  */
       this_forall->var = var[n];
 
@@ -2219,7 +2338,7 @@ gfc_trans_forall_1 (gfc_code * code, forall_info * nested_forall_info)
   /* Work out the number of elements in the mask array.  */
   tmpvar = NULL_TREE;
   lenvar = NULL_TREE;
-  size = integer_one_node;
+  size = gfc_index_one_node;
   sizevar = NULL_TREE;
 
   for (n = 0; n < nvar; n++)
@@ -2228,13 +2347,14 @@ gfc_trans_forall_1 (gfc_code * code, forall_info * nested_forall_info)
 	lenvar = NULL_TREE;
 
       /* size = (end + step - start) / step.  */
-      tmp = fold (build (MINUS_EXPR, TREE_TYPE (start[n]), step[n], start[n]));
-      tmp = fold (build (PLUS_EXPR, TREE_TYPE (end[n]), end[n], tmp));
+      tmp = fold (build2 (MINUS_EXPR, TREE_TYPE (start[n]), 
+			  step[n], start[n]));
+      tmp = fold (build2 (PLUS_EXPR, TREE_TYPE (end[n]), end[n], tmp));
 
-      tmp = fold (build (FLOOR_DIV_EXPR, TREE_TYPE (tmp), tmp, step[n]));
+      tmp = fold (build2 (FLOOR_DIV_EXPR, TREE_TYPE (tmp), tmp, step[n]));
       tmp = convert (gfc_array_index_type, tmp);
 
-      size = fold (build (MULT_EXPR, gfc_array_index_type, size, tmp));
+      size = fold (build2 (MULT_EXPR, gfc_array_index_type, size, tmp));
     }
 
   /* Record the nvar and size of current forall level.  */
@@ -2254,12 +2374,12 @@ gfc_trans_forall_1 (gfc_code * code, forall_info * nested_forall_info)
     }
 
   /* Copy the mask into a temporary variable if required.
-     For now we assume a mask temporary is needed. */
+     For now we assume a mask temporary is needed.  */
   if (code->expr)
     {
       /* Allocate the mask temporary.  */
-      bytesize = fold (build (MULT_EXPR, gfc_array_index_type, size,
-			      TYPE_SIZE_UNIT (boolean_type_node)));
+      bytesize = fold (build2 (MULT_EXPR, gfc_array_index_type, size,
+			       TYPE_SIZE_UNIT (boolean_type_node)));
 
       mask = gfc_do_allocate (bytesize, size, &pmask, &block, boolean_type_node);
 
@@ -2269,7 +2389,7 @@ gfc_trans_forall_1 (gfc_code * code, forall_info * nested_forall_info)
       info->mask = mask;
       info->maskindex = maskindex;
 
-      gfc_add_modify_expr (&block, maskindex, integer_zero_node);
+      gfc_add_modify_expr (&block, maskindex, gfc_index_zero_node);
 
       /* Start of mask assignment loop body.  */
       gfc_start_block (&body);
@@ -2290,8 +2410,8 @@ gfc_trans_forall_1 (gfc_code * code, forall_info * nested_forall_info)
       gfc_add_modify_expr (&body, tmp, se.expr);
 
       /* Advance to the next mask element.  */
-      tmp = build (PLUS_EXPR, gfc_array_index_type, maskindex,
-		   integer_one_node);
+      tmp = build2 (PLUS_EXPR, gfc_array_index_type,
+		   maskindex, gfc_index_one_node);
       gfc_add_modify_expr (&body, maskindex, tmp);
 
       /* Generate the loops.  */
@@ -2315,7 +2435,7 @@ gfc_trans_forall_1 (gfc_code * code, forall_info * nested_forall_info)
       switch (c->op)
 	{
 	case EXEC_ASSIGN:
-          /* A scalar or array assingment.  */
+          /* A scalar or array assignment.  */
 	  need_temp = gfc_check_dependency (c->expr, c->expr2, varexpr, nvar);
           /* Teporaries due to array assignment data dependencies introduce
              no end of problems.  */
@@ -2329,7 +2449,7 @@ gfc_trans_forall_1 (gfc_code * code, forall_info * nested_forall_info)
 
               /* Reset the mask index.  */
               if (mask)
-                gfc_add_modify_expr (&block, maskindex, integer_zero_node);
+                gfc_add_modify_expr (&block, maskindex, gfc_index_zero_node);
 
               /* Generate body and loops.  */
               tmp = gfc_trans_nested_forall_loop (nested_forall_info, assign, 1, 1);
@@ -2374,7 +2494,7 @@ gfc_trans_forall_1 (gfc_code * code, forall_info * nested_forall_info)
 
               /* Reset the mask index.  */
               if (mask)
-                gfc_add_modify_expr (&block, maskindex, integer_zero_node);
+                gfc_add_modify_expr (&block, maskindex, gfc_index_zero_node);
 
               /* Generate body and loops.  */
               tmp = gfc_trans_nested_forall_loop (nested_forall_info, assign,
@@ -2389,20 +2509,15 @@ gfc_trans_forall_1 (gfc_code * code, forall_info * nested_forall_info)
           break;
 
 	default:
-	  abort ();
-	  break;
+	  gcc_unreachable ();
 	}
 
       c = c->next;
     }
 
-  /* Restore the index original backend_decl and the attribute.  */
-  for (fa = code->ext.forall_iterator, n=0; fa; fa = fa->next, n++)
-    {
-      gfc_symbol *sym = fa->var->symtree->n.sym;
-      sym->backend_decl = saved_var_decl[n];
-      sym->attr = saved_var_attr[n];
-    }
+  /* Restore the original index variables.  */
+  for (fa = code->ext.forall_iterator, n = 0; fa; fa = fa->next, n++)
+    gfc_restore_sym (fa->var->symtree->n.sym, &saved_vars[n]);
 
   /* Free the space for var, start, end, step, varexpr.  */
   gfc_free (var);
@@ -2410,8 +2525,7 @@ gfc_trans_forall_1 (gfc_code * code, forall_info * nested_forall_info)
   gfc_free (end);
   gfc_free (step);
   gfc_free (varexpr);
-  gfc_free (saved_var_decl);
-  gfc_free (saved_var_attr);
+  gfc_free (saved_vars);
 
   if (pmask)
     {
@@ -2494,8 +2608,8 @@ gfc_evaluate_where_mask (gfc_expr * me, forall_info * nested_forall_info,
 
   /* Variable to index the temporary.  */
   count = gfc_create_var (gfc_array_index_type, "count");
-  /* Initilize count.  */
-  gfc_add_modify_expr (block, count, integer_zero_node);
+  /* Initialize count.  */
+  gfc_add_modify_expr (block, count, gfc_index_zero_node);
 
   gfc_start_block (&body);
 
@@ -2508,7 +2622,7 @@ gfc_evaluate_where_mask (gfc_expr * me, forall_info * nested_forall_info,
     }
   else
     {
-      /* Initiliaze the loop.  */
+      /* Initialize the loop.  */
       gfc_init_loopinfo (&loop);
 
       /* We may need LSS to determine the shape of the expression.  */
@@ -2546,8 +2660,8 @@ gfc_evaluate_where_mask (gfc_expr * me, forall_info * nested_forall_info,
   else
     {
       /* Increment count.  */
-      tmp1 = fold (build (PLUS_EXPR, gfc_array_index_type, count,
-                          integer_one_node));
+      tmp1 = fold (build2 (PLUS_EXPR, gfc_array_index_type, count,
+                          gfc_index_one_node));
       gfc_add_modify_expr (&body1, count, tmp1);
 
       /* Generate the copying loops.  */
@@ -2619,7 +2733,7 @@ gfc_trans_where_assign (gfc_expr *expr1, gfc_expr *expr2, tree mask,
 
   /* In each where-assign-stmt, the mask-expr and the variable being
      defined shall be arrays of the same shape.  */
-  assert (lss != gfc_ss_terminator);
+  gcc_assert (lss != gfc_ss_terminator);
 
   /* The assignment needs scalarization.  */
   lss_section = lss;
@@ -2629,7 +2743,7 @@ gfc_trans_where_assign (gfc_expr *expr1, gfc_expr *expr2, tree mask,
          && lss_section->type != GFC_SS_SECTION)
     lss_section = lss_section->next;
 
-  assert (lss_section != gfc_ss_terminator);
+  gcc_assert (lss_section != gfc_ss_terminator);
 
   /* Initialize the scalarizer.  */
   gfc_init_loopinfo (&loop);
@@ -2701,20 +2815,20 @@ gfc_trans_where_assign (gfc_expr *expr1, gfc_expr *expr2, tree mask,
   while (tmp)
     {
       tmp1 = gfc_build_array_ref (tmp, index);
-      maskexpr = build (TRUTH_AND_EXPR, TREE_TYPE (tmp1), maskexpr, tmp1);
+      maskexpr = build2 (TRUTH_AND_EXPR, TREE_TYPE (tmp1), maskexpr, tmp1);
       tmp = TREE_CHAIN (tmp);
     }
   /* Use the scalar assignment as is.  */
   tmp = gfc_trans_scalar_assign (&lse, &rse, expr1->ts.type);
-  tmp = build_v (COND_EXPR, maskexpr, tmp, build_empty_stmt ());
+  tmp = build3_v (COND_EXPR, maskexpr, tmp, build_empty_stmt ());
 
   gfc_add_expr_to_block (&body, tmp);
 
   if (lss == gfc_ss_terminator)
     {
       /* Increment count1.  */
-      tmp = fold (build (PLUS_EXPR, TREE_TYPE (count1), count1,
-                         integer_one_node));
+      tmp = fold (build2 (PLUS_EXPR, gfc_array_index_type,
+			  count1, gfc_index_one_node));
       gfc_add_modify_expr (&body, count1, tmp);
 
       /* Use the scalar assignment as is.  */
@@ -2722,17 +2836,15 @@ gfc_trans_where_assign (gfc_expr *expr1, gfc_expr *expr2, tree mask,
     }
   else
     {
-      if (lse.ss != gfc_ss_terminator)
-        abort ();
-      if (rse.ss != gfc_ss_terminator)
-        abort ();
+      gcc_assert (lse.ss == gfc_ss_terminator
+		  && rse.ss == gfc_ss_terminator);
 
       if (loop.temp_ss != NULL)
         {
           /* Increment count1 before finish the main body of a scalarized
              expression.  */
-          tmp = fold (build (PLUS_EXPR, TREE_TYPE (count1), count1,
-                             integer_one_node));
+          tmp = fold (build2 (PLUS_EXPR, gfc_array_index_type,
+			      count1, gfc_index_one_node));
           gfc_add_modify_expr (&body, count1, tmp);
           gfc_trans_scalarized_loop_boundary (&loop, &body);
 
@@ -2749,11 +2861,8 @@ gfc_trans_where_assign (gfc_expr *expr1, gfc_expr *expr2, tree mask,
           gfc_advance_se_ss_chain (&rse);
           gfc_conv_expr (&lse, expr1);
 
-          if (lse.ss != gfc_ss_terminator)
-            abort ();
-
-          if (rse.ss != gfc_ss_terminator)
-            abort ();
+          gcc_assert (lse.ss == gfc_ss_terminator
+		      && rse.ss == gfc_ss_terminator);
 
           /* Form the mask expression according to the mask tree list.  */
           index = count2;
@@ -2767,24 +2876,25 @@ gfc_trans_where_assign (gfc_expr *expr1, gfc_expr *expr2, tree mask,
           while (tmp)
             {
               tmp1 = gfc_build_array_ref (tmp, index);
-              maskexpr = build (TRUTH_AND_EXPR, TREE_TYPE (tmp1), maskexpr,
-                                tmp1);
+              maskexpr = build2 (TRUTH_AND_EXPR, TREE_TYPE (tmp1),
+				 maskexpr, tmp1);
               tmp = TREE_CHAIN (tmp);
             }
           /* Use the scalar assignment as is.  */
           tmp = gfc_trans_scalar_assign (&lse, &rse, expr1->ts.type);
-          tmp = build_v (COND_EXPR, maskexpr, tmp, build_empty_stmt ());
+          tmp = build3_v (COND_EXPR, maskexpr, tmp, build_empty_stmt ());
           gfc_add_expr_to_block (&body, tmp);
+
           /* Increment count2.  */
-          tmp = fold (build (PLUS_EXPR, TREE_TYPE (count2), count2,
-                             integer_one_node));
+          tmp = fold (build2 (PLUS_EXPR, gfc_array_index_type,
+			      count2, gfc_index_one_node));
           gfc_add_modify_expr (&body, count2, tmp);
         }
       else
         {
           /* Increment count1.  */
-          tmp = fold (build (PLUS_EXPR, TREE_TYPE (count1), count1,
-                             integer_one_node));
+          tmp = fold (build2 (PLUS_EXPR, gfc_array_index_type,
+			      count1, gfc_index_one_node));
           gfc_add_modify_expr (&body, count1, tmp);
         }
 
@@ -2802,7 +2912,7 @@ gfc_trans_where_assign (gfc_expr *expr1, gfc_expr *expr2, tree mask,
 
 
 /* Translate the WHERE construct or statement.
-   This fuction can be called iteratelly to translate the nested WHERE
+   This fuction can be called iteratively to translate the nested WHERE
    construct or statement.
    MASK is the control mask, and PMASK is the pending control mask.
    TEMP records the temporary address which must be freed later.  */
@@ -2893,8 +3003,8 @@ gfc_trans_where_2 (gfc_code * code, tree mask, tree pmask,
                       /* Variables to control maskexpr.  */
                       count1 = gfc_create_var (gfc_array_index_type, "count1");
                       count2 = gfc_create_var (gfc_array_index_type, "count2");
-                      gfc_add_modify_expr (block, count1, integer_zero_node);
-                      gfc_add_modify_expr (block, count2, integer_zero_node);
+                      gfc_add_modify_expr (block, count1, gfc_index_zero_node);
+                      gfc_add_modify_expr (block, count2, gfc_index_zero_node);
 
                       tmp = gfc_trans_where_assign (expr1, expr2, mask, count1,
                                                     count2);
@@ -2908,8 +3018,8 @@ gfc_trans_where_2 (gfc_code * code, tree mask, tree pmask,
                   /* Variables to control maskexpr.  */
                   count1 = gfc_create_var (gfc_array_index_type, "count1");
                   count2 = gfc_create_var (gfc_array_index_type, "count2");
-                  gfc_add_modify_expr (block, count1, integer_zero_node);
-                  gfc_add_modify_expr (block, count2, integer_zero_node);
+                  gfc_add_modify_expr (block, count1, gfc_index_zero_node);
+                  gfc_add_modify_expr (block, count2, gfc_index_zero_node);
 
                   tmp = gfc_trans_where_assign (expr1, expr2, mask, count1,
                                                 count2);
@@ -2927,7 +3037,7 @@ gfc_trans_where_2 (gfc_code * code, tree mask, tree pmask,
               break;
 
             default:
-              abort ();
+              gcc_unreachable ();
             }
 
          /* The next statement within the same where-body-construct.  */
@@ -2941,7 +3051,7 @@ gfc_trans_where_2 (gfc_code * code, tree mask, tree pmask,
 
 /* As the WHERE or WHERE construct statement can be nested, we call
    gfc_trans_where_2 to do the translation, and pass the initial
-   NULL values for both the control mask and the pending control mask. */
+   NULL values for both the control mask and the pending control mask.  */
 
 tree
 gfc_trans_where (gfc_code * code)
@@ -2986,7 +3096,7 @@ gfc_trans_cycle (gfc_code * code)
 }
 
 
-/* EXIT a DO loop. Similair to CYCLE, but now the label is in
+/* EXIT a DO loop. Similar to CYCLE, but now the label is in
    TREE_VALUE (backend_decl) of the gfc_code node at the head of the
    loop.  */
 
@@ -3024,6 +3134,8 @@ gfc_trans_allocate (gfc_code * code)
 
   if (code->expr)
     {
+      tree gfc_int4_type_node = gfc_get_int_type (4);
+
       stat = gfc_create_var (gfc_int4_type_node, "stat");
       pstat = gfc_build_addr_expr (NULL, stat);
 
@@ -3053,7 +3165,7 @@ gfc_trans_allocate (gfc_code * code)
       /* Find the last reference in the chain.  */
       while (ref && ref->next != NULL)
 	{
-	  assert (ref->type != REF_ARRAY || ref->u.ar.type == AR_ELEMENT);
+	  gcc_assert (ref->type != REF_ARRAY || ref->u.ar.type == AR_ELEMENT);
 	  ref = ref->next;
 	}
 
@@ -3082,8 +3194,8 @@ gfc_trans_allocate (gfc_code * code)
 	    {
 	      tmp = build1_v (GOTO_EXPR, error_label);
 	      parm =
-		build (NE_EXPR, boolean_type_node, stat, integer_zero_node);
-	      tmp = build_v (COND_EXPR, parm, tmp, build_empty_stmt ());
+		build2 (NE_EXPR, boolean_type_node, stat, integer_zero_node);
+	      tmp = build3_v (COND_EXPR, parm, tmp, build_empty_stmt ());
 	      gfc_add_expr_to_block (&se.pre, tmp);
 	    }
 	}
@@ -3124,7 +3236,7 @@ gfc_trans_deallocate (gfc_code * code)
   for (al = code->ext.alloc_list; al != NULL; al = al->next)
     {
       expr = al->expr;
-      assert (expr->expr_type == EXPR_VARIABLE);
+      gcc_assert (expr->expr_type == EXPR_VARIABLE);
 
       gfc_init_se (&se, NULL);
       gfc_start_block (&se.pre);

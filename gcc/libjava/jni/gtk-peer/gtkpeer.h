@@ -1,5 +1,5 @@
 /* gtkpeer.h -- Some global variables and #defines
-   Copyright (C) 1998, 1999 Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2004 Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -91,13 +91,33 @@ extern struct state_table *native_global_ref_table;
     (*env)->DeleteGlobalRef (env, *globRefPtr); \
     free (globRefPtr);} while (0)
 
+extern struct state_table *native_pixbufdecoder_state_table;
+
+#define NSA_PB_INIT(env, clazz) \
+  native_pixbufdecoder_state_table = init_state_table (env, clazz)
+
+#define NSA_GET_PB_PTR(env, obj) \
+  get_state (env, obj, native_pixbufdecoder_state_table)
+
+#define NSA_SET_PB_PTR(env, obj, ptr) \
+  set_state (env, obj, native_pixbufdecoder_state_table, (void *)ptr)
+
+#define NSA_DEL_PB_PTR(env, obj) \
+  remove_state_slot (env, obj, native_pixbufdecoder_state_table)
+
 #endif /* JVM_SUN */
+
+#define SWAPU32(w)							\
+  (((w) << 24) | (((w) & 0xff00) << 8) | (((w) >> 8) & 0xff00) | ((w) >> 24))
 
 struct graphics
 {
   GdkDrawable *drawable;
   GdkGC *gc;
   GdkColormap *cm;
+  PangoFontDescription *pango_font;
+  PangoContext *pango_context;
+  PangoLayout *pango_layout;
   jint x_offset, y_offset;
 };
 
@@ -118,14 +138,18 @@ struct graphics
 
 #define SYNTHETIC_EVENT_MASK (1 << 10)
 
-#define AWT_SHIFT_MASK   (1 << 0)
-#define AWT_CTRL_MASK    (1 << 1)
-#define AWT_META_MASK    (1 << 2)
-#define AWT_ALT_MASK     (1 << 3)
+#define AWT_SHIFT_DOWN_MASK   (1 << 6)
+#define AWT_CTRL_DOWN_MASK    (1 << 7)
+#define AWT_META_DOWN_MASK    (1 << 8)
+#define AWT_ALT_DOWN_MASK     (1 << 9)
+
+#define AWT_BUTTON1_DOWN_MASK (1 << 10)
+#define AWT_BUTTON2_DOWN_MASK (1 << 11)
+#define AWT_BUTTON3_DOWN_MASK (1 << 12)
 
 #define AWT_BUTTON1_MASK (1 << 4)
-#define AWT_BUTTON2_MASK AWT_ALT_MASK
-#define AWT_BUTTON3_MASK AWT_META_MASK
+#define AWT_BUTTON2_MASK (1 << 3)
+#define AWT_BUTTON3_MASK (1 << 2)
 
 #define MULTI_CLICK_TIME   250
 /* as opposed to a MULTI_PASS_TIME :) */
@@ -361,8 +385,8 @@ struct graphics
 #define VK_ALT_GRAPH 65406
 #define VK_UNDEFINED 0
 
-#define AWT_FOCUS_LOST 1004
-#define AWT_FOCUS_GAINED 1005
+#define AWT_FOCUS_GAINED 1004
+#define AWT_FOCUS_LOST 1005
 
 #define AWT_WINDOW_OPENED 200
 #define AWT_WINDOW_CLOSING 201
@@ -385,6 +409,35 @@ struct graphics
 #define AWT_STYLE_BOLD   1
 #define AWT_STYLE_ITALIC 2
 
+/* From java.awt.SystemColor */
+#define AWT_DESKTOP                  0
+#define AWT_ACTIVE_CAPTION           1
+#define AWT_ACTIVE_CAPTION_TEXT      2
+#define AWT_ACTIVE_CAPTION_BORDER    3
+#define AWT_INACTIVE_CAPTION         4
+#define AWT_INACTIVE_CAPTION_TEXT    5
+#define AWT_INACTIVE_CAPTION_BORDER  6
+#define AWT_WINDOW                   7
+#define AWT_WINDOW_BORDER            8
+#define AWT_WINDOW_TEXT              9
+#define AWT_MENU                    10
+#define AWT_MENU_TEXT               11
+#define AWT_TEXT                    12
+#define AWT_TEXT_TEXT               13
+#define AWT_TEXT_HIGHLIGHT          14
+#define AWT_TEXT_HIGHLIGHT_TEXT     15
+#define AWT_TEXT_INACTIVE_TEXT      16
+#define AWT_CONTROL                 17
+#define AWT_CONTROL_TEXT            18
+#define AWT_CONTROL_HIGHLIGHT       19
+#define AWT_CONTROL_LT_HIGHLIGHT    20
+#define AWT_CONTROL_SHADOW          21
+#define AWT_CONTROL_DK_SHADOW       22
+#define AWT_SCROLLBAR               23
+#define AWT_INFO                    24
+#define AWT_INFO_TEXT               25
+#define AWT_NUM_COLORS              26
+
 extern jmethodID setBoundsCallbackID;
 
 extern jmethodID postActionEventID;
@@ -401,10 +454,24 @@ extern jmethodID postListItemEventID;
 extern jmethodID postTextEventID;
 extern jmethodID postWindowEventID;
 
+extern jmethodID beginNativeRepaintID;
+extern jmethodID endNativeRepaintID;
+
+extern jmethodID initComponentGraphicsID;
+extern jmethodID initComponentGraphics2DID;
+extern jmethodID setCursorID;
+
 extern jmethodID syncAttrsID;
 extern jclass gdkColor;
 extern jmethodID gdkColorID;
-extern JNIEnv *gdk_env;
+
+extern jmethodID postInsetsChangedEventID;
+extern jmethodID windowGetWidthID;
+extern jmethodID windowGetHeightID;
+
+JNIEnv *gdk_env(void);
+
+extern double dpi_conversion_factor;
 
 extern GtkWindowGroup *global_gtk_window_group;
 
@@ -415,17 +482,41 @@ gboolean pre_event_handler (GtkWidget *widget,
 			       jobject peer);
 
 void connect_awt_hook (JNIEnv *env, jobject peer_obj, int nwindows, ...);
+void connect_awt_hook_cb (GtkWidget *widget, jobject peer);
 
 void set_visible (GtkWidget *widget, jboolean visible);
 void set_parent (GtkWidget *widget, GtkContainer *parent);
-GtkLayout *find_gtk_layout (GtkWidget *parent);
 
 jint keyevent_state_to_awt_mods (GdkEvent *event);
+
+guint awt_keycode_to_keysym (jint keyCode, jint keyLocation);
 
 struct item_event_hook_info
 {
   jobject peer_obj;
   const char *label;
 };
+
+/* Union used for type punning. */
+union widget_union
+{
+  void **void_widget;
+  GtkWidget **widget;
+};
+
+#define DEBUG_LOCKING 0
+
+#if DEBUG_LOCKING
+#define gdk_threads_enter()                       \
+{                                                 \
+  g_print ("lock: %s, %d\n", __FILE__, __LINE__); \
+  gdk_threads_enter ();                           \
+}
+#define gdk_threads_leave()                         \
+{                                                   \
+  g_print ("unlock: %s, %d\n", __FILE__, __LINE__); \
+  gdk_threads_leave ();                             \
+}
+#endif
 
 #endif /* __GTKPEER_H */

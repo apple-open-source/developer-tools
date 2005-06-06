@@ -34,7 +34,6 @@ enum lc_reason {LC_ENTER = 0, LC_LEAVE, LC_RENAME};
 /* Long-term, we want to use this to replace struct location_s (in input.h),
    and effectively typedef source_location location_t.  */
 typedef unsigned int source_location;
-typedef source_location fileline; /* deprecated name */
 
 /* Physical source file TO_FILE at line TO_LINE at column 0 is represented
    by the logical START_LOCATION.  TO_LINE+L at column C is represented by
@@ -109,7 +108,7 @@ extern void linemap_check_files_exited (struct line_maps *);
    the highest_location).  */
 
 extern source_location linemap_line_start
-(struct line_maps *, unsigned int,  unsigned int);
+(struct line_maps *set, unsigned int to_line,  unsigned int max_column_hint);
 
 /* Add a mapping of logical source line to physical source file and
    line number.
@@ -120,8 +119,7 @@ extern source_location linemap_line_start
    TO_FILE is NULL, then TO_FILE, TO_LINE and SYSP are given their
    natural values considering the file we are returning to.
 
-   START_LOCATION should be monotonic increasing across calls to this
-   function.  A call to this function can relocate the previous set of
+   A call to this function can relocate the previous set of
    maps, so any stored line_map pointers should not be used.  */
 extern const struct line_map *linemap_add
   (struct line_maps *, enum lc_reason, unsigned int sysp,

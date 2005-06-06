@@ -55,6 +55,7 @@
  */
 struct merged_symbol {
     struct nlist nlist;		/* the nlist structure of this merged symbol */
+    unsigned long name_len;	/* the size of the symbol name */
     struct object_file		/* pointer to the object file this symbol is */
 	*definition_object;	/*  defined in */
     struct dynamic_library	/* pointer to the dynamic library this symbol */
@@ -77,11 +78,14 @@ struct merged_symbol {
 				   /*  only in the undefined list as a two- */
 				   /*  level namespace reference from a dylib.*/
 	weak_reference_mismatch:1, /* seen both a weak and non-weak reference */
+	seen_undef:1,		   /* seen an undefined reference from an */
+				   /*  object file. So the N_WEAK_REF bit */
+				   /*  does reflect the value for the output. */
 	define_a_way:1,		   /* set if this symbol was defined as a */
 				   /*  result of -undefined define_a_way */
 	live:1,			   /* TRUE if the symbol is not to be dead */
 				   /*  stripped. */
-	unused:22;
+	unused:21;
     unsigned long output_index;	/* the symbol table index this symbol will */
 				/*  have in the output file. */
     int undef_order;		/* if the symbol was undefined the order it */
@@ -295,6 +299,12 @@ struct indr_symbol_pair {
 };
 __private_extern__ struct indr_symbol_pair *indr_symbol_pairs;
 __private_extern__ unsigned long nindr_symbol_pairs;
+
+/*
+ * merged_symbols_relocated is set when the merged symbols are relocated to
+ * have addresses and section numbers as they would in the output file.
+ */
+__private_extern__ enum bool merged_symbols_relocated;
 
 /*
  * The strings in the string table can't start at offset 0 because a symbol with

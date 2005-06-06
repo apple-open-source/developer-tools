@@ -38,9 +38,6 @@ pragma Polling (Off);
 with System.Task_Primitives.Operations;
 --  used for Self
 
-with Unchecked_Deallocation;
---  To recover from failure of ATCB initialization.
-
 with System.Storage_Elements;
 --  Needed for initializing Stack_Info.Size
 
@@ -50,9 +47,6 @@ with System.Parameters;
 package body System.Tasking is
 
    package STPO renames System.Task_Primitives.Operations;
-
-   procedure Free is new
-     Unchecked_Deallocation (Ada_Task_Control_Block, Task_Id);
 
    ----------
    -- Self --
@@ -73,7 +67,7 @@ package body System.Tasking is
       Base_Priority    : System.Any_Priority;
       Task_Info        : System.Task_Info.Task_Info_Type;
       Stack_Size       : System.Parameters.Size_Type;
-      T                : in out Task_Id;
+      T                : Task_Id;
       Success          : out Boolean) is
    begin
       T.Common.State := Unactivated;
@@ -83,13 +77,13 @@ package body System.Tasking is
       STPO.Initialize_TCB (T, Success);
 
       if not Success then
-         Free (T);
          return;
       end if;
 
       T.Common.Parent := Parent;
       T.Common.Base_Priority := Base_Priority;
       T.Common.Current_Priority := 0;
+      T.Common.Protected_Action_Nesting := 0;
       T.Common.Call := null;
       T.Common.Task_Arg := Task_Arg;
       T.Common.Task_Entry_Point := Task_Entry_Point;

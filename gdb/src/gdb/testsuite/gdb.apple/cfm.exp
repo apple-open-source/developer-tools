@@ -92,7 +92,6 @@ gdb_expect {
 }
 
 set timeout $orig_timeout
-remote_exec build "rm -rf /tmp/cfm"
 
 gdb_exit
 return 0

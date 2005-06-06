@@ -1,7 +1,7 @@
 // -*- c++ -*-
 // boehm-gc.h - Defines for Boehm collector.
 
-/* Copyright (C) 1998, 1999, 2002  Free Software Foundation
+/* Copyright (C) 1998, 1999, 2002, 2004  Free Software Foundation
 
    This file is part of libgcj.
 
@@ -12,13 +12,13 @@ details.  */
 #ifndef __JV_BOEHM_GC__
 #define __JV_BOEHM_GC__
 
-#define JV_MARKOBJ_DECL void *_Jv_MarkObj (void *, void *, void *, void *)
-#define JV_MARKARRAY_DECL void *_Jv_MarkArray (void *, void *, void *, void *)
+#define JV_MARKOBJ_DECL void *::_Jv_MarkObj (void *, void *, void *, void *)
+#define JV_MARKARRAY_DECL void *::_Jv_MarkArray (void *, void *, void *, void *)
 
 extern "C"
 {
-  JV_MARKOBJ_DECL;
-  JV_MARKARRAY_DECL;
+  void *_Jv_MarkObj (void *, void *, void *, void *);
+  void *_Jv_MarkArray (void *, void *, void *, void *);
 }
 
 // Enough stuff to inline _Jv_AllocObj.  Ugly.
@@ -26,12 +26,16 @@ extern "C"
 #include <java/lang/Class.h>
 #include <string.h>
 
+#include <gc_ext_config.h> // for THREAD_LOCAL_ALLOC
+
 extern "C" void * GC_gcj_malloc(size_t, void *);
 extern "C" void * GC_malloc_atomic(size_t);
 #ifdef THREAD_LOCAL_ALLOC
 extern "C" void * GC_local_gcj_malloc(size_t, void *);
 extern "C" void * GC_local_malloc_atomic(size_t);
 #endif
+
+#ifndef LIBGCJ_GC_DEBUG
 
 inline void *
 _Jv_AllocObj (jsize size, jclass klass)
@@ -64,6 +68,16 @@ _Jv_AllocPtrFreeObj (jsize size, jclass klass)
 #endif
   return obj;
 }
+
+#else /* LIBGCJ_GC_DEBUG */
+
+void *
+_Jv_AllocObj (jsize size, jclass klass);
+
+void *
+_Jv_AllocPtrFreeObj (jsize size, jclass klass);
+
+#endif /* LIBGCJ_GC_DEBUG */
 
 // _Jv_AllocBytes (jsize size) should go here, too.  But clients don't
 // usually include this header.

@@ -35,7 +35,6 @@ extern void             iq2000_expand_prologue (void);
 extern void             iq2000_expand_epilogue (void);
 extern void             iq2000_expand_eh_return (rtx);
 extern int              iq2000_can_use_return_insn (void);
-extern int              function_arg_pass_by_reference (CUMULATIVE_ARGS *, enum machine_mode, tree, int);
 extern int              iq2000_adjust_insn_length (rtx, int);
 extern char *           iq2000_output_conditional_branch (rtx, rtx *, int, int, int, int);
 extern void             print_operand_address (FILE *, rtx);
@@ -50,9 +49,7 @@ extern void             gen_conditional_branch (rtx *, enum rtx_code);
 extern void             init_cumulative_args (CUMULATIVE_ARGS *, tree, rtx);
 extern void             function_arg_advance (CUMULATIVE_ARGS *, enum machine_mode, tree, int);
 extern struct rtx_def * function_arg (CUMULATIVE_ARGS *, enum machine_mode, tree, int);
-extern int              function_arg_partial_nregs (CUMULATIVE_ARGS *, enum machine_mode, tree, int);
 extern void             iq2000_va_start (tree, rtx);
-extern rtx              iq2000_va_arg (tree, tree);
 extern rtx              iq2000_function_value (tree, tree);
 #endif
 

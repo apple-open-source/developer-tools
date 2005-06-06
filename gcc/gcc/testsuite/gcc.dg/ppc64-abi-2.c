@@ -1,8 +1,10 @@
 /* { dg-do run { target powerpc64-*-linux* } } */
+/* { dg-require-effective-target lp64 } */
 /* { dg-options "-O2 -fprofile -mprofile-kernel -maltivec -mabi=altivec" } */
 #include <stdarg.h>
 #include <signal.h>
 #include <altivec.h>
+#include <stdlib.h>
 
 /* Testcase to check for ABI compliance of parameter passing
    for the PowerPC64 ABI.  */

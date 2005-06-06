@@ -1,7 +1,14 @@
-sinclude(../config/acx.m4)
-sinclude(../config/accross.m4)
-sinclude(../config/gettext.m4)
-sinclude(../config/progtest.m4)
+m4_include([../config/accross.m4])
+m4_include([../config/acx.m4])
+m4_include([../config/gettext-sister.m4])
+m4_include([../config/gcc-lib-path.m4])
+m4_include([../config/gcc-version.m4])
+m4_include([../config/iconv.m4])
+m4_include([../config/lcmessage.m4])
+m4_include([../config/lib-ld.m4])
+m4_include([../config/lib-link.m4])
+m4_include([../config/lib-prefix.m4])
+m4_include([../config/progtest.m4])
 
 dnl See whether we need a declaration for a function.
 dnl The result is highly dependent on the INCLUDES passed in, so make sure
@@ -28,11 +35,13 @@ dnl Arrange to define HAVE_DECL_<FUNCTION> to 0 or 1 as appropriate.
 dnl gcc_AC_CHECK_DECLS(SYMBOLS,
 dnl 	[ACTION-IF-NEEDED [, ACTION-IF-NOT-NEEDED [, INCLUDES]]])
 AC_DEFUN([gcc_AC_CHECK_DECLS],
-[for ac_func in $1
+[AC_FOREACH([gcc_AC_Func], [$1],
+  [AH_TEMPLATE(AS_TR_CPP(HAVE_DECL_[]gcc_AC_Func),
+  [Define to 1 if we found a declaration for ']gcc_AC_Func[', otherwise
+   define to 0.])])dnl
+for ac_func in $1
 do
-changequote(, )dnl
-  ac_tr_decl=HAVE_DECL_`echo $ac_func | tr 'abcdefghijklmnopqrstuvwxyz' 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'`
-changequote([, ])dnl
+  ac_tr_decl=AS_TR_CPP([HAVE_DECL_$ac_func])
 gcc_AC_CHECK_DECL($ac_func,
   [AC_DEFINE_UNQUOTED($ac_tr_decl, 1) $2],
   [AC_DEFINE_UNQUOTED($ac_tr_decl, 0) $3],
@@ -48,12 +57,6 @@ dnl during this test.
   $4
 )
 done
-dnl Automatically generate config.h entries via autoheader.
-if test x = y ; then
-  patsubst(translit([$1], [a-z], [A-Z]), [\w+],
-    [AC_DEFINE([HAVE_DECL_\&], 1,
-      [Define to 1 if we found this declaration otherwise define to 0.])])dnl
-fi
 ])
 
 dnl 'make compare' can be significantly faster, if cmp itself can
@@ -124,7 +127,12 @@ else
   then
     gcc_cv_prog_LN_S=ln
   else
-    gcc_cv_prog_LN_S=cp
+    if cp -p conftestdata_f conftestdata_t 2>/dev/null
+    then
+      gcc_cv_prog_LN_S="cp -p"
+    else
+      gcc_cv_prog_LN_S=cp
+    fi
   fi
 fi
 rm -f conftestdata_f conftestdata_t
@@ -136,42 +144,10 @@ else
   if test "$gcc_cv_prog_LN_S" = "ln"; then
     AC_MSG_RESULT([no, using ln])
   else
-    AC_MSG_RESULT([no, and neither does ln, so using cp])
+    AC_MSG_RESULT([no, and neither does ln, so using $gcc_cv_prog_LN_S])
   fi
 fi
 AC_SUBST(LN_S)dnl
-])
-
-dnl See if hard links work and if not, try to substitute either symbolic links or simple copy.
-AC_DEFUN([gcc_AC_PROG_LN],
-[AC_MSG_CHECKING(whether ln works)
-AC_CACHE_VAL(gcc_cv_prog_LN,
-[rm -f conftestdata_t
-echo >conftestdata_f
-if ln conftestdata_f conftestdata_t 2>/dev/null
-then
-  gcc_cv_prog_LN="ln"
-else
-  if ln -s conftestdata_f conftestdata_t 2>/dev/null
-  then
-    gcc_cv_prog_LN="ln -s"
-  else
-    gcc_cv_prog_LN=cp
-  fi
-fi
-rm -f conftestdata_f conftestdata_t
-])dnl
-LN="$gcc_cv_prog_LN"
-if test "$gcc_cv_prog_LN" = "ln"; then
-  AC_MSG_RESULT(yes)
-else
-  if test "$gcc_cv_prog_LN" = "ln -s"; then
-    AC_MSG_RESULT([no, using ln -s])
-  else
-    AC_MSG_RESULT([no, and neither does ln -s, so using cp])
-  fi
-fi
-AC_SUBST(LN)dnl
 ])
 
 dnl Define MKDIR_TAKES_ONE_ARG if mkdir accepts only one argument instead
@@ -259,54 +235,15 @@ test -z "$INSTALL_DATA" && INSTALL_DATA='${INSTALL} -m 644'
 AC_SUBST(INSTALL_DATA)dnl
 ])
 
-dnl GCC_PATH_PROG(VARIABLE, PROG-TO-CHECK-FOR [, VALUE-IF-NOT-FOUND [, PATH]])
-dnl like AC_PATH_PROG but use other cache variables
-AC_DEFUN([GCC_PATH_PROG],
-[# Extract the first word of "$2", so it can be a program name with args.
-set dummy $2; ac_word=[$]2
-AC_MSG_CHECKING([for $ac_word])
-AC_CACHE_VAL(gcc_cv_path_$1,
-[case "[$]$1" in
-  /*)
-  gcc_cv_path_$1="[$]$1" # Let the user override the test with a path.
-  ;;
-  ?:/*)			 
-  gcc_cv_path_$1="[$]$1" # Let the user override the test with a dos path.
-  ;;
-  *)
-  IFS="${IFS= 	}"; ac_save_ifs="$IFS"; IFS=":"
-dnl $ac_dummy forces splitting on constant user-supplied paths.
-dnl POSIX.2 word splitting is done only on the output of word expansions,
-dnl not every word.  This closes a longstanding sh security hole.
-  ac_dummy="ifelse([$4], , $PATH, [$4])"
-  for ac_dir in $ac_dummy; do 
-    test -z "$ac_dir" && ac_dir=.
-    if test -f $ac_dir/$ac_word; then
-      gcc_cv_path_$1="$ac_dir/$ac_word"
-      break
-    fi
-  done
-  IFS="$ac_save_ifs"
-dnl If no 3rd arg is given, leave the cache variable unset,
-dnl so GCC_PATH_PROGS will keep looking.
-ifelse([$3], , , [  test -z "[$]gcc_cv_path_$1" && gcc_cv_path_$1="$3"
-])dnl
-  ;;
-esac])dnl
-$1="$gcc_cv_path_$1"
-if test -n "[$]$1"; then
-  AC_MSG_RESULT([$]$1)
-else
-  AC_MSG_RESULT(no)
-fi
-AC_SUBST($1)dnl
-])
-
 # mmap(2) blacklisting.  Some platforms provide the mmap library routine
 # but don't support all of the features we need from it.
 AC_DEFUN([gcc_AC_FUNC_MMAP_BLACKLIST],
-[if test $ac_cv_header_sys_mman_h != yes \
- || test $ac_cv_func_mmap != yes; then
+[
+AC_CHECK_HEADER([sys/mman.h],
+		[gcc_header_sys_mman_h=yes], [gcc_header_sys_mman_h=no])
+AC_CHECK_FUNC([mmap], [gcc_func_mmap=yes], [gcc_func_mmap=no])
+if test "$gcc_header_sys_mman_h" != yes \
+ || test "$gcc_func_mmap" != yes; then
    gcc_cv_func_mmap_file=no
    gcc_cv_func_mmap_dev_zero=no
    gcc_cv_func_mmap_anon=no
@@ -497,77 +434,20 @@ AC_CACHE_CHECK(for __int64, ac_cv_c___int64,
   fi
 ])
 
-#serial AM2
-
 dnl From Bruno Haible.
 
-AC_DEFUN([AM_ICONV],
+AC_DEFUN([AM_LANGINFO_CODESET],
 [
-  dnl Some systems have iconv in libc, some have it in libiconv (OSF/1 and
-  dnl those with the standalone portable GNU libiconv installed).
-
-  am_cv_lib_iconv_ldpath=
-  AC_ARG_WITH([libiconv-prefix],
-[  --with-libiconv-prefix=DIR  search for libiconv in DIR/include and DIR/lib], [
-    for dir in `echo "$withval" | tr : ' '`; do
-      if test -d $dir/include; then CPPFLAGS="$CPPFLAGS -I$dir/include"; fi
-      if test -d $dir/lib; then am_cv_lib_iconv_ldpath="-L$dir/lib"; fi
-    done
-   ])
-
-  AC_CHECK_HEADERS([iconv.h])
-
-  AC_CACHE_CHECK(for iconv, am_cv_func_iconv, [
-    am_cv_func_iconv="no, consider installing GNU libiconv"
-    am_cv_lib_iconv=no
-    AC_TRY_LINK([#include <stdlib.h>
-#include <iconv.h>],
-      [iconv_t cd = iconv_open("","");
-       iconv(cd,NULL,NULL,NULL,NULL);
-       iconv_close(cd);],
-      am_cv_func_iconv=yes)
-    if test "$am_cv_func_iconv" != yes; then
-      am_save_LIBS="$LIBS"
-      LIBS="$LIBS $am_cv_libiconv_ldpath -liconv"
-      AC_TRY_LINK([#include <stdlib.h>
-#include <iconv.h>],
-        [iconv_t cd = iconv_open("","");
-         iconv(cd,NULL,NULL,NULL,NULL);
-         iconv_close(cd);],
-        am_cv_lib_iconv=yes
-        am_cv_func_iconv=yes)
-      LIBS="$am_save_LIBS"
-    fi
-  ])
-  if test "$am_cv_func_iconv" = yes; then
-    AC_DEFINE(HAVE_ICONV, 1, [Define if you have the iconv() function.])
-    AC_MSG_CHECKING([for iconv declaration])
-    AC_CACHE_VAL(am_cv_proto_iconv, [
-      AC_TRY_COMPILE([
-#include <stdlib.h>
-#include <iconv.h>
-extern
-#ifdef __cplusplus
-"C"
-#endif
-#if defined(__STDC__) || defined(__cplusplus)
-size_t iconv (iconv_t cd, char * *inbuf, size_t *inbytesleft, char * *outbuf, size_t *outbytesleft);
-#else
-size_t iconv();
-#endif
-], [], am_cv_proto_iconv_arg1="", am_cv_proto_iconv_arg1="const")
-      am_cv_proto_iconv="extern size_t iconv (iconv_t cd, $am_cv_proto_iconv_arg1 char * *inbuf, size_t *inbytesleft, char * *outbuf, size_t *outbytesleft);"])
-    am_cv_proto_iconv=`echo "[$]am_cv_proto_iconv" | tr -s ' ' | sed -e 's/( /(/'`
-    AC_MSG_RESULT([$]{ac_t:-
-         }[$]am_cv_proto_iconv)
-    AC_DEFINE_UNQUOTED(ICONV_CONST, $am_cv_proto_iconv_arg1,
-      [Define as const if the declaration of iconv() needs const.])
+  AC_CACHE_CHECK([for nl_langinfo and CODESET], am_cv_langinfo_codeset,
+    [AC_TRY_LINK([#include <langinfo.h>],
+      [char* cs = nl_langinfo(CODESET);],
+      am_cv_langinfo_codeset=yes,
+      am_cv_langinfo_codeset=no)
+    ])
+  if test $am_cv_langinfo_codeset = yes; then
+    AC_DEFINE(HAVE_LANGINFO_CODESET, 1,
+      [Define if you have <langinfo.h> and nl_langinfo(CODESET).])
   fi
-  LIBICONV=
-  if test "$am_cv_lib_iconv" = yes; then
-    LIBICONV="$am_cv_lib_iconv_ldpath -liconv"
-  fi
-  AC_SUBST(LIBICONV)
 ])
 
 AC_DEFUN([gcc_AC_INITFINI_ARRAY],
@@ -602,7 +482,7 @@ for f in $gcc_cv_as_bfd_srcdir/configure \
          $gcc_cv_as_gas_srcdir/configure \
          $gcc_cv_as_gas_srcdir/configure.in \
          $gcc_cv_as_gas_srcdir/Makefile.in ; do
-  gcc_cv_gas_version=`grep '^VERSION=[[0-9]]*\.[[0-9]]*' $f`
+  gcc_cv_gas_version=`sed -n -e 's/^[[ 	]]*\(VERSION=[[0-9]]*\.[[0-9]]*.*\)/\1/p' < $f`
   if test x$gcc_cv_gas_version != x; then
     break
   fi
@@ -676,35 +556,104 @@ if test $[$2] = yes; then
   $7
 fi])])
 
-# lcmessage.m4 serial 3 (gettext-0.11.3)
-dnl Copyright (C) 1995-2002 Free Software Foundation, Inc.
-dnl This file is free software, distributed under the terms of the GNU
-dnl General Public License.  As a special exception to the GNU General
-dnl Public License, this file may be distributed as part of a program
-dnl that contains a configuration script generated by Autoconf, under
-dnl the same distribution terms as the rest of that program.
-dnl
-dnl This file can can be used in projects which are not available under
-dnl the GNU General Public License or the GNU Library General Public
-dnl License but which still want to provide support for the GNU gettext
-dnl functionality.
-dnl Please note that the actual code of the GNU gettext library is covered
-dnl by the GNU Library General Public License, and the rest of the GNU
-dnl gettext package package is covered by the GNU General Public License.
-dnl They are *not* in the public domain.
+# AM_PROG_CC_C_O
+# --------------
+# Like AC_PROG_CC_C_O, but changed for automake.
 
-dnl Authors:
-dnl   Ulrich Drepper <drepper@cygnus.com>, 1995.
+# Copyright (C) 1999, 2000, 2001, 2003 Free Software Foundation, Inc.
 
-# Check whether LC_MESSAGES is available in <locale.h>.
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2, or (at your option)
+# any later version.
 
-AC_DEFUN([AM_LC_MESSAGES],
-[
-  AC_CACHE_CHECK([for LC_MESSAGES], am_cv_val_LC_MESSAGES,
-    [AC_TRY_LINK([#include <locale.h>], [return LC_MESSAGES],
-       am_cv_val_LC_MESSAGES=yes, am_cv_val_LC_MESSAGES=no)])
-  if test $am_cv_val_LC_MESSAGES = yes; then
-    AC_DEFINE(HAVE_LC_MESSAGES, 1,
-      [Define if your <locale.h> file defines LC_MESSAGES.])
-  fi
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+# 02111-1307, USA.
+
+AC_DEFUN([AM_PROG_CC_C_O],
+[AC_REQUIRE([AC_PROG_CC_C_O])dnl
+AC_REQUIRE([AM_AUX_DIR_EXPAND])dnl
+# FIXME: we rely on the cache variable name because
+# there is no other way.
+set dummy $CC
+ac_cc=`echo $[2] | sed ['s/[^a-zA-Z0-9_]/_/g;s/^[0-9]/_/']`
+if eval "test \"`echo '$ac_cv_prog_cc_'${ac_cc}_c_o`\" != yes"; then
+   # Losing compiler, so override with the script.
+   # FIXME: It is wrong to rewrite CC.
+   # But if we don't then we get into trouble of one sort or another.
+   # A longer-term fix would be to have automake use am__CC in this case,
+   # and then we could set am__CC="\$(top_srcdir)/compile \$(CC)"
+   CC="$am_aux_dir/compile $CC"
+fi
+])
+
+# AM_AUX_DIR_EXPAND
+
+# Copyright (C) 2001, 2003 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2, or (at your option)
+# any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+# 02111-1307, USA.
+
+# For projects using AC_CONFIG_AUX_DIR([foo]), Autoconf sets
+# $ac_aux_dir to `$srcdir/foo'.  In other projects, it is set to
+# `$srcdir', `$srcdir/..', or `$srcdir/../..'.
+#
+# Of course, Automake must honor this variable whenever it calls a
+# tool from the auxiliary directory.  The problem is that $srcdir (and
+# therefore $ac_aux_dir as well) can be either absolute or relative,
+# depending on how configure is run.  This is pretty annoying, since
+# it makes $ac_aux_dir quite unusable in subdirectories: in the top
+# source directory, any form will work fine, but in subdirectories a
+# relative path needs to be adjusted first.
+#
+# $ac_aux_dir/missing
+#    fails when called from a subdirectory if $ac_aux_dir is relative
+# $top_srcdir/$ac_aux_dir/missing
+#    fails if $ac_aux_dir is absolute,
+#    fails when called from a subdirectory in a VPATH build with
+#          a relative $ac_aux_dir
+#
+# The reason of the latter failure is that $top_srcdir and $ac_aux_dir
+# are both prefixed by $srcdir.  In an in-source build this is usually
+# harmless because $srcdir is `.', but things will broke when you
+# start a VPATH build or use an absolute $srcdir.
+#
+# So we could use something similar to $top_srcdir/$ac_aux_dir/missing,
+# iff we strip the leading $srcdir from $ac_aux_dir.  That would be:
+#   am_aux_dir='\$(top_srcdir)/'`expr "$ac_aux_dir" : "$srcdir//*\(.*\)"`
+# and then we would define $MISSING as
+#   MISSING="\${SHELL} $am_aux_dir/missing"
+# This will work as long as MISSING is not called from configure, because
+# unfortunately $(top_srcdir) has no meaning in configure.
+# However there are other variables, like CC, which are often used in
+# configure, and could therefore not use this "fixed" $ac_aux_dir.
+#
+# Another solution, used here, is to always expand $ac_aux_dir to an
+# absolute PATH.  The drawback is that using absolute paths prevent a
+# configured tree to be moved without reconfiguration.
+
+AC_DEFUN([AM_AUX_DIR_EXPAND],
+[dnl Rely on autoconf to set up CDPATH properly.
+AC_PREREQ([2.50])dnl
+# expand $ac_aux_dir to an absolute path
+am_aux_dir=`cd $ac_aux_dir && pwd`
 ])

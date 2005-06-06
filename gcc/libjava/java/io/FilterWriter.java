@@ -1,5 +1,5 @@
 /* FilterWriter.java -- Parent class for output streams that filter
-   Copyright (C) 1998, 1999, 2001, 2003 Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2001, 2003, 2005  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -52,7 +52,7 @@ package java.io;
   * underlying stream.  Subclasses provide actual filtering.
   *
   * @author Aaron M. Renn (arenn@urbanophile.com)
-  * @author Tom Tromey <tromey@cygnus.com> 
+  * @author Tom Tromey (tromey@cygnus.com) 
   */
 public abstract class FilterWriter extends Writer
 {
@@ -72,7 +72,7 @@ public abstract class FilterWriter extends Writer
     */
   protected FilterWriter(Writer out)
   {
-    super(out);
+    super(out.lock);
     this.out = out;
   }
 

@@ -118,8 +118,9 @@ find_best_successor (basic_block bb)
 {
   edge e;
   edge best = NULL;
+  edge_iterator ei;
 
-  for (e = bb->succ; e; e = e->succ_next)
+  FOR_EACH_EDGE (e, ei, bb->succs)
     if (!best || better_p (e, best))
       best = e;
   if (!best || ignore_bb_p (best->dest))
@@ -136,8 +137,9 @@ find_best_predecessor (basic_block bb)
 {
   edge e;
   edge best = NULL;
+  edge_iterator ei;
 
-  for (e = bb->pred; e; e = e->pred_next)
+  FOR_EACH_EDGE (e, ei, bb->preds)
     if (!best || better_p (e, best))
       best = e;
   if (!best || ignore_bb_p (best->src))
@@ -247,8 +249,7 @@ tail_duplicate (void)
 
       if (ignore_bb_p (bb))
 	continue;
-      if (seen (bb))
-	abort ();
+      gcc_assert (!seen (bb));
 
       n = find_trace (bb, trace);
 
@@ -270,14 +271,14 @@ tail_duplicate (void)
 	      blocks[bb2->index] = NULL;
 	    }
 	  traced_insns += bb2->frequency * counts [bb2->index];
-	  if (bb2->pred && bb2->pred->pred_next
+	  if (EDGE_COUNT (bb2->preds) > 1
 	      && can_duplicate_block_p (bb2))
 	    {
-	      edge e = bb2->pred;
+	      edge e;
 	      basic_block old = bb2;
 
-	      while (e->src != bb)
-		e = e->pred_next;
+	      e = find_edge (bb, bb2);
+
 	      nduplicated += counts [bb2->index];
 	      bb2 = duplicate_block (bb2, e);
 
@@ -320,18 +321,19 @@ tail_duplicate (void)
 static void
 layout_superblocks (void)
 {
-  basic_block end = ENTRY_BLOCK_PTR->succ->dest;
-  basic_block bb = ENTRY_BLOCK_PTR->succ->dest->next_bb;
+  basic_block end = EDGE_SUCC (ENTRY_BLOCK_PTR, 0)->dest;
+  basic_block bb = EDGE_SUCC (ENTRY_BLOCK_PTR, 0)->dest->next_bb;
 
   while (bb != EXIT_BLOCK_PTR)
     {
+      edge_iterator ei;
       edge e, best = NULL;
       while (end->rbi->next)
 	end = end->rbi->next;
 
-      for (e = end->succ; e; e = e->succ_next)
+      FOR_EACH_EDGE (e, ei, end->succs)
 	if (e->dest != EXIT_BLOCK_PTR
-	    && e->dest != ENTRY_BLOCK_PTR->succ->dest
+	    && e->dest != EDGE_SUCC (ENTRY_BLOCK_PTR, 0)->dest
 	    && !e->dest->rbi->visited
 	    && (!best || EDGE_FREQUENCY (e) > EDGE_FREQUENCY (best)))
 	  best = e;
@@ -354,17 +356,18 @@ layout_superblocks (void)
     }
 }
 
-/* Main entry point to this file.  */
+/* Main entry point to this file.  FLAGS is the set of flags to pass
+   to cfg_layout_initialize().  */
 
 void
-tracer (void)
+tracer (unsigned int flags)
 {
   if (n_basic_blocks <= 1)
     return;
 
   timevar_push (TV_TRACER);
 
-  cfg_layout_initialize ();
+  cfg_layout_initialize (flags);
   mark_dfs_back_edges ();
   if (dump_file)
     dump_flow_info (dump_file);

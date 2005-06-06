@@ -1,10 +1,10 @@
-/* APPLE LOCAL entire file */
+/* APPLE LOCAL file */
 /* Test whether -fverbose-asm emits option values.  */
 /* Contibuted by Devang Patel <dpatel@apple.com>.  */
 
 /* { dg-do compile } */
 /* { dg-options "-fverbose-asm" } */
-/* { dg-final { scan-assembler "fpeephole=0" } } */
+/* { dg-final { scan-assembler "fpeephole" } } */
 
 int
 main (int argc, char *argv [])

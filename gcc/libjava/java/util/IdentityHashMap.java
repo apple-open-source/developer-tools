@@ -1,6 +1,6 @@
 /* IdentityHashMap.java -- a class providing a hashtable data structure,
    mapping Object --> Object, which uses object identity for hashing.
-   Copyright (C) 2001, 2002 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2002, 2004, 2005  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -78,8 +78,8 @@ import java.io.Serializable;
  * iterator, and in the case of the entrySet, the Map.Entry, to
  * fail with a {@link ConcurrentModificationException}.
  *
- * @author Tom Tromey <tromey@redhat.com>
- * @author Eric Blake <ebb9@email.byu.edu>
+ * @author Tom Tromey (tromey@redhat.com)
+ * @author Eric Blake (ebb9@email.byu.edu)
  * @see System#identityHashCode(Object)
  * @see Collection
  * @see Map
@@ -492,7 +492,7 @@ public class IdentityHashMap extends AbstractMap
         Object[] old = table;
         // This isn't necessarily prime, but it is an odd number of key/value
         // slots, which has a higher probability of fewer collisions.
-        table = new Object[old.length << 1 + 2];
+        table = new Object[(old.length * 2) + 2];
         Arrays.fill(table, emptyslot);
         size = 0;
         threshold = (table.length >>> 3) * 3;
@@ -676,10 +676,10 @@ public class IdentityHashMap extends AbstractMap
    * creates the appropriate Map.Entry object with the correct fail-fast
    * semantics and identity comparisons.
    *
-   * @author Tom Tromey <tromey@redhat.com>
-   * @author Eric Blake <ebb9@email.byu.edu>
+   * @author Tom Tromey (tromey@redhat.com)
+   * @author Eric Blake (ebb9@email.byu.edu)
    */
-  private final class IdentityIterator implements Iterator
+  private class IdentityIterator implements Iterator
   {
     /**
      * The type of this Iterator: {@link #KEYS}, {@link #VALUES},
@@ -769,7 +769,7 @@ public class IdentityHashMap extends AbstractMap
    * the general contract of Map.Entry, and is probably unsuitable for
    * comparison to normal maps; but it works among other IdentityHashMaps.
    *
-   * @author Eric Blake <ebb9@email.byu.edu>
+   * @author Eric Blake (ebb9@email.byu.edu)
    */
   private final class IdentityEntry implements Map.Entry
   {
@@ -878,7 +878,7 @@ public class IdentityHashMap extends AbstractMap
      * @throws ConcurrentModificationException if the entry was invalidated
      *         by modifying the Map or calling Iterator.remove()
      */
-    public final String toString()
+    public String toString()
     {
       if (knownMod != modCount || table[loc] == tombstone)
         throw new ConcurrentModificationException();

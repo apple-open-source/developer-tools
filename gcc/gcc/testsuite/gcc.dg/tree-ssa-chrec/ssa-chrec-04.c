@@ -1,5 +1,6 @@
+/* APPLE LOCAL file lno */
 /* { dg-do compile } */ 
-/* { dg-options "-O1 -fscalar-evolutions -ftree-elim-checks -fdump-tree-scev-details -fdump-tree-elck-details -fdump-tree-optimized" } */
+/* { dg-options "-O1 -floop-test -fdump-tree-lptest-details -fdump-tree-optimized" } */
 
 void remove_me (void);
 
@@ -17,5 +18,5 @@ int main(void)
     }
 }
 
-/* { dg-final { scan-tree-dump-times "nb_iterations 28" 1 "scev"} } */
+/* { dg-final { scan-tree-dump-times "set_nb_iterations_in_loop = 28" 1 "lptest"} } */
 /* { dg-final { scan-tree-dump-times "remove_me" 0 "optimized"} } */

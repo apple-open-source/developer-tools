@@ -91,6 +91,15 @@ package body MLib.Tgt is
       return "ranlib";
    end Archive_Indexer;
 
+   -----------------------------
+   -- Archive_Indexer_Options --
+   -----------------------------
+
+   function Archive_Indexer_Options return String_List_Access is
+   begin
+      return new String_List (1 .. 0);
+   end Archive_Indexer_Options;
+
    ---------------------------
    -- Build_Dynamic_Library --
    ---------------------------
@@ -100,31 +109,38 @@ package body MLib.Tgt is
       Foreign      : Argument_List;
       Afiles       : Argument_List;
       Options      : Argument_List;
+      Options_2    : Argument_List;
       Interfaces   : Argument_List;
       Lib_Filename : String;
       Lib_Dir      : String;
       Symbol_Data  : Symbol_Record;
       Driver_Name  : Name_Id := No_Name;
-      Lib_Address  : String  := "";
       Lib_Version  : String  := "";
-      Relocatable  : Boolean := False;
       Auto_Init    : Boolean := False)
    is
       pragma Unreferenced (Foreign);
       pragma Unreferenced (Afiles);
       pragma Unreferenced (Interfaces);
       pragma Unreferenced (Symbol_Data);
-      pragma Unreferenced (Lib_Address);
-      pragma Unreferenced (Relocatable);
 
       Lib_File : constant String :=
-        Lib_Dir & Directory_Separator & "lib" &
-        MLib.Fil.Ext_To (Lib_Filename, DLL_Ext);
+                   Lib_Dir & Directory_Separator & "lib" &
+                   MLib.Fil.Ext_To (Lib_Filename, DLL_Ext);
 
       Version_Arg          : String_Access;
       Symbolic_Link_Needed : Boolean := False;
 
       Init_Fini : Argument_List_Access := Empty_Argument_List;
+
+      N_Options    : Argument_List := Options;
+      Options_Last : Natural := N_Options'Last;
+      --  After moving -lxxx to Options_2, N_Options up to index Options_Last
+      --  will contain the Options to pass to MLib.Utl.Gcc.
+
+      Real_Options_2 : Argument_List (1 .. Options'Length + Options_2'Length);
+      Real_Options_2_Last : Natural := 0;
+      --  Real_Options_2 up to index Real_Options_2_Last will contain the
+      --  Options_2 to pass to MLib.Utl.Gcc.
 
    begin
       if Opt.Verbose_Mode then
@@ -133,18 +149,53 @@ package body MLib.Tgt is
       end if;
 
       --  If specified, add automatic elaboration/finalization
+
       if Auto_Init then
          Init_Fini := Init_Fini_List;
          Init_Fini (2) := new String'("-Wl," & Lib_Filename & "init");
          Init_Fini (4) := new String'("-Wl," & Lib_Filename & "final");
       end if;
 
+      --  Move all -lxxx to Options_2
+
+      declare
+         Index : Natural := N_Options'First;
+         Arg   : String_Access;
+
+      begin
+         while Index <= Options_Last loop
+            Arg := N_Options (Index);
+
+            if Arg'Length > 2
+              and then Arg (Arg'First .. Arg'First + 1) = "-l"
+            then
+               Real_Options_2_Last := Real_Options_2_Last + 1;
+               Real_Options_2 (Real_Options_2_Last) := Arg;
+               N_Options (Index .. Options_Last - 1) :=
+                 N_Options (Index + 1 .. Options_Last);
+               Options_Last := Options_Last - 1;
+
+            else
+               Index := Index + 1;
+            end if;
+         end loop;
+      end;
+
+      --  Add to Real_Options_2 the argument Options_2
+
+      Real_Options_2
+        (Real_Options_2_Last + 1 .. Real_Options_2_Last + Options_2'Length) :=
+        Options_2;
+      Real_Options_2_Last := Real_Options_2_Last + Options_2'Length;
+
       if Lib_Version = "" then
          MLib.Utl.Gcc
            (Output_File => Lib_File,
             Objects     => Ofiles,
-            Options     => Options & Init_Fini.all,
-            Driver_Name => Driver_Name);
+            Options     => N_Options (N_Options'First .. Options_Last) &
+                           Init_Fini.all,
+            Driver_Name => Driver_Name,
+            Options_2   => Real_Options_2 (1 .. Real_Options_2_Last));
 
       else
          Version_Arg := new String'("-Wl,-soname," & Lib_Version);
@@ -153,16 +204,20 @@ package body MLib.Tgt is
             MLib.Utl.Gcc
               (Output_File => Lib_Version,
                Objects     => Ofiles,
-               Options     => Options & Version_Arg & Init_Fini.all,
-               Driver_Name => Driver_Name);
+               Options     => N_Options (N_Options'First .. Options_Last) &
+                              Version_Arg & Init_Fini.all,
+               Driver_Name => Driver_Name,
+               Options_2   => Real_Options_2 (1 .. Real_Options_2_Last));
             Symbolic_Link_Needed := Lib_Version /= Lib_File;
 
          else
             MLib.Utl.Gcc
               (Output_File => Lib_Dir & Directory_Separator & Lib_Version,
                Objects     => Ofiles,
-               Options     => Options & Version_Arg & Init_Fini.all,
-               Driver_Name => Driver_Name);
+               Options     => N_Options (N_Options'First .. Options_Last) &
+                              Version_Arg & Init_Fini.all,
+               Driver_Name => Driver_Name,
+               Options_2   => Real_Options_2 (1 .. Real_Options_2_Last));
             Symbolic_Link_Needed :=
               Lib_Dir & Directory_Separator & Lib_Version /= Lib_File;
          end if;
@@ -195,15 +250,6 @@ package body MLib.Tgt is
          end if;
       end if;
    end Build_Dynamic_Library;
-
-   -------------------------
-   -- Default_DLL_Address --
-   -------------------------
-
-   function Default_DLL_Address return String is
-   begin
-      return "";
-   end Default_DLL_Address;
 
    -------------
    -- DLL_Ext --

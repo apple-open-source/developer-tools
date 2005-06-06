@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2004, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -92,7 +92,7 @@ package body Sem_Ch7 is
    --  is an inner package.
 
    function Is_Private_Base_Type (E : Entity_Id) return Boolean;
-   --  True for a private type that is not a subtype.
+   --  True for a private type that is not a subtype
 
    function Is_Visible_Dependent (Dep : Entity_Id) return Boolean;
    --  If the private dependent is a private type whose full view is
@@ -219,7 +219,7 @@ package body Sem_Ch7 is
                or else Is_Child_Unit (Spec_Id))
            and then not Unit_Requires_Body (Spec_Id)
          then
-            if Ada_83 then
+            if Ada_Version = Ada_83 then
                Error_Msg_N
                  ("optional package body (not allowed in Ada 95)?", N);
             else
@@ -288,7 +288,7 @@ package body Sem_Ch7 is
          Append_Entity (Body_Id, Scope (Spec_Id));
       end if;
 
-      --  Indicate that we are currently compiling the body of the package.
+      --  Indicate that we are currently compiling the body of the package
 
       Set_In_Package_Body (Spec_Id);
       Set_Has_Completion (Spec_Id);
@@ -377,7 +377,7 @@ package body Sem_Ch7 is
 
       End_Package_Scope (Spec_Id);
 
-      --  All entities declared in body are not visible.
+      --  All entities declared in body are not visible
 
       declare
          E : Entity_Id;
@@ -691,6 +691,17 @@ package body Sem_Ch7 is
       --  Child and Unit are entities of compilation units. True if Child
       --  is a public child of Parent as defined in 10.1.1
 
+      procedure Inspect_Deferred_Constant_Completion;
+      --  Examines the deferred constants in the private part of the package
+      --  specification. Emits the error message "constant declaration requires
+      --  initialization expression " if not completed by an Import pragma.
+
+      procedure Inspect_Unchecked_Union_Completion (Decls : List_Id);
+      --  Detects all incomplete or private type declarations having a known
+      --  discriminant part that are completed by an Unchecked_Union. Emits
+      --  the error message "Unchecked_Union may not complete discriminated
+      --  partial view".
+
       ---------------------
       -- Clear_Constants --
       ---------------------
@@ -793,6 +804,72 @@ package body Sem_Ch7 is
          end if;
       end Is_Public_Child;
 
+      ------------------------------------------
+      -- Inspect_Deferred_Constant_Completion --
+      ------------------------------------------
+
+      procedure Inspect_Deferred_Constant_Completion is
+         Decl   : Node_Id;
+
+      begin
+         Decl := First (Priv_Decls);
+         while Present (Decl) loop
+
+            --  Deferred constant signature
+
+            if Nkind (Decl) = N_Object_Declaration
+              and then Constant_Present (Decl)
+              and then No (Expression (Decl))
+
+               --  No need to check internally generated constants
+
+              and then Comes_From_Source (Decl)
+
+               --  The constant is not completed. A full object declaration
+               --  or a pragma Import complete a deferred constant.
+
+              and then not Has_Completion (Defining_Identifier (Decl))
+            then
+               Error_Msg_N
+                 ("constant declaration requires initialization expression",
+                 Defining_Identifier (Decl));
+            end if;
+
+            Decl := Next (Decl);
+         end loop;
+      end Inspect_Deferred_Constant_Completion;
+
+      ----------------------------------------
+      -- Inspect_Unchecked_Union_Completion --
+      ----------------------------------------
+
+      procedure Inspect_Unchecked_Union_Completion (Decls : List_Id) is
+         Decl : Node_Id := First (Decls);
+
+      begin
+         while Present (Decl) loop
+
+            --  We are looking at an incomplete or private type declaration
+            --  with a known_discriminant_part whose full view is an
+            --  Unchecked_Union.
+
+            if (Nkind (Decl) = N_Incomplete_Type_Declaration
+                  or else
+                Nkind (Decl) = N_Private_Type_Declaration)
+              and then Has_Discriminants (Defining_Identifier (Decl))
+              and then Present (Full_View (Defining_Identifier (Decl)))
+              and then Is_Unchecked_Union
+                (Full_View (Defining_Identifier (Decl)))
+            then
+               Error_Msg_N ("completion of discriminated partial view" &
+                 " cannot be an Unchecked_Union",
+                 Full_View (Defining_Identifier (Decl)));
+            end if;
+
+            Next (Decl);
+         end loop;
+      end Inspect_Unchecked_Union_Completion;
+
    --  Start of processing for Analyze_Package_Specification
 
    begin
@@ -800,7 +877,7 @@ package body Sem_Ch7 is
          Analyze_Declarations (Vis_Decls);
       end if;
 
-      --  Verify that incomplete types have received full declarations.
+      --  Verify that incomplete types have received full declarations
 
       E := First_Entity (Id);
       while Present (E) loop
@@ -844,14 +921,31 @@ package body Sem_Ch7 is
 
       Public_Child := False;
 
-      if Present (Parent_Spec (Parent (N))) then
-         Generate_Parent_References;
+      declare
+         Par       : Entity_Id;
+         Pack_Decl : Node_Id;
+         Par_Spec  : Node_Id;
 
-         declare
-            Par       : Entity_Id := Id;
-            Pack_Decl : Node_Id;
+      begin
+         Par := Id;
+         Par_Spec := Parent_Spec (Parent (N));
 
-         begin
+         --  If the package is formal package of an enclosing generic, is is
+         --  transformed into a local generic declaration, and compiled to make
+         --  its spec available. We need to retrieve the original generic to
+         --  determine whether it is a child unit, and install its parents.
+
+         if No (Par_Spec)
+           and then
+             Nkind (Original_Node (Parent (N))) = N_Formal_Package_Declaration
+         then
+            Par := Entity (Name (Original_Node (Parent (N))));
+            Par_Spec := Parent_Spec (Unit_Declaration_Node (Par));
+         end if;
+
+         if Present (Par_Spec) then
+            Generate_Parent_References;
+
             while Scope (Par) /= Standard_Standard
               and then Is_Public_Child (Id, Par)
             loop
@@ -862,8 +956,8 @@ package body Sem_Ch7 is
                Pack_Decl := Unit_Declaration_Node (Par);
                Set_Use (Private_Declarations (Specification (Pack_Decl)));
             end loop;
-         end;
-      end if;
+         end if;
+      end;
 
       if Is_Compilation_Unit (Id) then
          Install_Private_With_Clauses (Id);
@@ -886,6 +980,10 @@ package body Sem_Ch7 is
          end if;
 
          Analyze_Declarations (Priv_Decls);
+
+         --  Check the private declarations for incomplete deferred constants
+
+         Inspect_Deferred_Constant_Completion;
 
          --  The first private entity is the immediate follower of the last
          --  visible entity, if there was one.
@@ -919,6 +1017,18 @@ package body Sem_Ch7 is
 
          Next_Entity (E);
       end loop;
+
+      --  Ada 2005 (AI-216): The completion of an incomplete or private type
+      --  declaration having a known_discriminant_part shall not be an
+      --  Unchecked_Union type.
+
+      if Present (Vis_Decls) then
+         Inspect_Unchecked_Union_Completion (Vis_Decls);
+      end if;
+
+      if Present (Priv_Decls) then
+         Inspect_Unchecked_Union_Completion (Priv_Decls);
+      end if;
 
       if Ekind (Id) = E_Generic_Package
         and then Nkind (Orig_Decl) = N_Generic_Package_Declaration
@@ -1375,12 +1485,13 @@ package body Sem_Ch7 is
          Next_Entity (Id);
       end loop;
 
-      --  Next make other declarations in the private part visible as well.
+      --  Next make other declarations in the private part visible as well
 
       Id := First_Private_Entity (P);
 
       while Present (Id) loop
          Install_Package_Entity (Id);
+         Set_Is_Hidden (Id, False);
          Next_Entity (Id);
       end loop;
 
@@ -1558,7 +1669,7 @@ package body Sem_Ch7 is
       --  that need to be available for the partial view also.
 
       function Type_In_Use (T : Entity_Id) return Boolean;
-      --  Check whether type or base type appear in an active use_type clause.
+      --  Check whether type or base type appear in an active use_type clause
 
       ------------------------------
       -- Preserve_Full_Attributes --
@@ -1656,7 +1767,7 @@ package body Sem_Ch7 is
               In_Use (P) and not Is_Hidden (Id));
          end if;
 
-         --  Local entities are not immediately visible outside of the package.
+         --  Local entities are not immediately visible outside of the package
 
          Set_Is_Immediately_Visible (Id, False);
 
@@ -1794,7 +1905,6 @@ package body Sem_Ch7 is
             end if;
 
             Priv_Elmt := First_Elmt (Private_Dependents (Id));
-            Exchange_Declarations (Id);
 
             --  Swap out the subtypes and derived types of Id that were
             --  compiled in this scope, or installed previously by
@@ -1825,6 +1935,10 @@ package body Sem_Ch7 is
 
                Next_Elmt (Priv_Elmt);
             end loop;
+
+            --  Now restore the type itself to its private view.
+
+            Exchange_Declarations (Id);
 
          elsif Ekind (Id) = E_Incomplete_Type
            and then No (Full_View (Id))
@@ -1890,7 +2004,7 @@ package body Sem_Ch7 is
          end;
       end if;
 
-      --  Otherwise search entity chain for entity requiring completion.
+      --  Otherwise search entity chain for entity requiring completion
 
       E := First_Entity (P);
       while Present (E) loop
@@ -1900,6 +2014,14 @@ package body Sem_Ch7 is
          --  parent, and so do not affect whether the parent needs a body.
 
          if Is_Child_Unit (E) then
+            null;
+
+         --  Ignore formal packages and their renamings
+
+         elsif Ekind (E) = E_Package
+           and then Nkind (Original_Node (Unit_Declaration_Node (E))) =
+                                                N_Formal_Package_Declaration
+         then
             null;
 
          --  Otherwise test to see if entity requires a completion

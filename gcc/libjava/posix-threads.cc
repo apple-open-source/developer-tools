@@ -1,6 +1,6 @@
 // posix-threads.cc - interface between libjava and POSIX threads.
 
-/* Copyright (C) 1998, 1999, 2000, 2001  Free Software Foundation
+/* Copyright (C) 1998, 1999, 2000, 2001, 2004  Free Software Foundation
 
    This file is part of libgcj.
 
@@ -34,6 +34,7 @@ details.  */
 #include <java/lang/System.h>
 #include <java/lang/Long.h>
 #include <java/lang/OutOfMemoryError.h>
+#include <java/lang/InternalError.h>
 
 // This is used to implement thread startup.
 struct starter
@@ -280,6 +281,17 @@ handle_intr (int)
   // Do nothing.
 }
 
+static void
+block_sigchld()
+{
+  sigset_t mask;
+  sigemptyset (&mask);
+  sigaddset (&mask, SIGCHLD);
+  int c = pthread_sigmask (SIG_BLOCK, &mask, NULL);
+  if (c != 0)
+    JvFail (strerror (c));
+}
+
 void
 _Jv_InitThreads (void)
 {
@@ -295,6 +307,10 @@ _Jv_InitThreads (void)
   sigemptyset (&act.sa_mask);
   act.sa_flags = 0;
   sigaction (INTR, &act, NULL);
+
+  // Block SIGCHLD here to ensure that any non-Java threads inherit the new 
+  // signal mask.
+  block_sigchld();
 }
 
 _Jv_Thread_t *
@@ -358,6 +374,8 @@ _Jv_ThreadRegister (_Jv_Thread_t *data)
 	_Jv_self_cache[current_index].high_sp_bits = BAD_HIGH_SP_VALUE;
       }
 # endif
+  // Block SIGCHLD which is used in natPosixProcess.cc.
+  block_sigchld();
 }
 
 void
@@ -402,6 +420,10 @@ _Jv_ThreadStart (java::lang::Thread *thread, _Jv_Thread_t *data,
   if (data->flags & FLAG_START)
     return;
   data->flags |= FLAG_START;
+
+  // Block SIGCHLD which is used in natPosixProcess.cc.
+  // The current mask is inherited by the child thread.
+  block_sigchld();
 
   param.sched_priority = thread->getPriority();
 

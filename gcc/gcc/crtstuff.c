@@ -55,6 +55,8 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
    compiled for the target, and hence definitions concerning only the host
    do not apply.  */
 
+#define IN_LIBGCC2
+
 /* We include auto-host.h here to get HAVE_GAS_HIDDEN.  This is
    supposedly valid even though this is a "target" file.  */
 #include "auto-host.h"
@@ -92,7 +94,7 @@ call_ ## FUNC (void)					\
 #if defined(EH_FRAME_SECTION_NAME) && !defined(USE_PT_GNU_EH_FRAME)
 # define USE_EH_FRAME_REGISTRY
 #endif
-#if defined(EH_FRAME_SECTION_NAME) && defined(HAVE_LD_RO_RW_SECTION_MIXING)
+#if defined(EH_FRAME_SECTION_NAME) && EH_TABLES_CAN_BE_READ_ONLY
 # define EH_FRAME_SECTION_CONST const
 #else
 # define EH_FRAME_SECTION_CONST
@@ -109,7 +111,7 @@ call_ ## FUNC (void)					\
    but not its definition.
 
    Making TARGET_WEAK_ATTRIBUTE conditional seems like a good solution until
-   one thinks about scaling to larger problems -- ie, the condition under
+   one thinks about scaling to larger problems -- i.e., the condition under
    which TARGET_WEAK_ATTRIBUTE is active will eventually get far too
    complicated.
 
@@ -455,9 +457,18 @@ STATIC func_ptr __DTOR_END__[1]
 #ifdef EH_FRAME_SECTION_NAME
 /* Terminate the frame unwind info section with a 4byte 0 as a sentinel;
    this would be the 'length' field in a real FDE.  */
-STATIC EH_FRAME_SECTION_CONST int __FRAME_END__[]
-     __attribute__ ((unused, mode(SI), section(EH_FRAME_SECTION_NAME),
-		     aligned(4)))
+# if __INT_MAX__ == 2147483647
+typedef int int32;
+# elif __LONG_MAX__ == 2147483647
+typedef long int32;
+# elif __SHRT_MAX__ == 2147483647
+typedef short int32;
+# else
+#  error "Missing a 4 byte integer"
+# endif
+STATIC EH_FRAME_SECTION_CONST int32 __FRAME_END__[]
+     __attribute__ ((unused, section(EH_FRAME_SECTION_NAME),
+		     aligned(sizeof(int32))))
      = { 0 };
 #endif /* EH_FRAME_SECTION_NAME */
 

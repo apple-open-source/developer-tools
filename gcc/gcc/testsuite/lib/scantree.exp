@@ -19,6 +19,7 @@
 #
 # This is largely borrowed from scanasm.exp.
 
+# APPLE LOCAL begin lno
 # Utility for diffing compiler result against an expected output file.
 # Invoked via dg-final.  Call pass if there are no differences between
 # the output of the compiler and the expected output file, otherwise
@@ -51,7 +52,8 @@ proc diff-tree-dumps { args } {
     upvar 2 prog testcase
     
     # This must match the rule in gcc-dg.exp.
-    set new_file "[glob [file tail $testcase].t??.[lindex $args 0]]"
+    # APPLE LOCAL <rdar://problem/3837835> Selective inlining of functions that use Altivec
+    set new_file "[glob [file tail $testcase].\[ti\]??.[lindex $args 0]]"
     set reference_file "[glob $testcase.[lindex $args 0]]"
     
     set test_result [diff $reference_file $new_file]
@@ -63,6 +65,7 @@ proc diff-tree-dumps { args } {
 	local_exec (diff $reference_file $new_file 0);
     }
 }
+# APPLE LOCAL end lno
 
 # Utility for scanning compiler result, invoked via dg-final.
 # Call pass if pattern is present, otherwise fail.
@@ -94,7 +97,8 @@ proc scan-tree-dump { args } {
     upvar 2 name testcase
 
     # This must match the rule in gcc-dg.exp.
-    set output_file "[glob [file tail $testcase].t??.[lindex $args 1]]"
+    # APPLE LOCAL <rdar://problem/3837835> Selective inlining of functions that use Altivec
+    set output_file "[glob [file tail $testcase].\[ti\]??.[lindex $args 1]]"
 
     set fd [open $output_file r]
     set text [read $fd]
@@ -136,7 +140,8 @@ proc scan-tree-dump-times { args } {
     upvar 2 name testcase
 
     # This must match the rule in gcc-dg.exp.
-    set output_file "[glob [file tail $testcase].t??.[lindex $args 2]]"
+    # APPLE LOCAL <rdar://problem/3837835> Selective inlining of functions that use Altivec
+    set output_file "[glob [file tail $testcase].\[ti\]??.[lindex $args 2]]"
 
     set fd [open $output_file r]
     set text [read $fd]
@@ -173,7 +178,8 @@ proc scan-tree-dump-not { args } {
     }
 
     upvar 2 name testcase
-    set output_file "[glob [file tail $testcase].t??.[lindex $args 1]]"
+    # APPLE LOCAL <rdar://problem/3837835> Selective inlining of functions that use Altivec
+    set output_file "[glob [file tail $testcase].\[ti\]??.[lindex $args 1]]"
 
     set fd [open $output_file r]
     set text [read $fd]
@@ -224,7 +230,8 @@ proc scan-tree-dump-dem { args } {
     }
 
     upvar 2 name testcase
-    set output_file "[glob [file tail $testcase].t??.[lindex $args 1]]"
+    # APPLE LOCAL <rdar://problem/3837835> Selective inlining of functions that use Altivec
+    set output_file "[glob [file tail $testcase].\[ti\]??.[lindex $args 1]]"
 
     set fd [open "| $cxxfilt < $output_file" r]
     set text [read $fd]
@@ -274,7 +281,8 @@ proc scan-tree-dump-dem-not { args } {
     }
 
     upvar 2 name testcase
-    set output_file "[glob [file tail $testcase].t??.[lindex $args 1]]"
+    # APPLE LOCAL <rdar://problem/3837835> Selective inlining of functions that use Altivec
+    set output_file "[glob [file tail $testcase].\[ti\]??.[lindex $args 1]]"
 
     set fd [open "| $cxxfilt < $output_file" r]
     set text [read $fd]

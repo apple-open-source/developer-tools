@@ -1,5 +1,5 @@
 /* CropImageFilter.java -- Java class for cropping image filter
-   Copyright (C) 1999 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2004  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -38,10 +38,10 @@ exception statement from your version. */
 
 package java.awt.image;
 
+import java.awt.Rectangle;
 import java.util.Hashtable;
 
 /**
- * <br>
  * Currently this filter does almost nothing and needs to be implemented.
  *
  * @author C. Brian Jones (cbj@gnu.org) 
@@ -92,7 +92,7 @@ public class CropImageFilter extends ImageFilter
      */
     public void setProperties(Hashtable props)
     {
-//  	props.put("filters", "ReplicateScaleFilter");
+  	props.put("filters", "CropImageFilter");
 	consumer.setProperties(props);
     }
 
@@ -113,7 +113,27 @@ public class CropImageFilter extends ImageFilter
     public void setPixels(int x, int y, int w, int h, 
 	   ColorModel model, byte[] pixels, int offset, int scansize)
     {
-	consumer.setPixels(x, y, w, h, model, pixels, offset, scansize);
+	Rectangle filterBounds = new Rectangle(this.x, this.y,
+	                                       this.width, this.height);
+	Rectangle pixelBounds = new Rectangle(x, y, w, h);
+
+	if (filterBounds.intersects(pixelBounds))
+	{
+	    Rectangle bounds = filterBounds.intersection(pixelBounds);
+
+	    byte[] cropped = new byte[bounds.width * bounds.height];
+	    for (int i = 0; i < bounds.height; i++)
+	    {
+		int start = (bounds.y - pixelBounds.y + i) * scansize + offset;
+
+		for (int j = 0; j < bounds.width; j++)
+		    cropped[i * bounds.width + j] = pixels[start + bounds.x + j];
+	    }
+	    
+	    consumer.setPixels(bounds.x, bounds.y,
+	                       bounds.width, bounds.height,
+	                       model, cropped, 0, bounds.width);
+	}
     }
 
     /**
@@ -133,7 +153,27 @@ public class CropImageFilter extends ImageFilter
     public void setPixels(int x, int y, int w, int h, 
            ColorModel model, int[] pixels, int offset, int scansize)
     {
-	consumer.setPixels(x, y, w, h, model, pixels, offset, scansize);
+	Rectangle filterBounds = new Rectangle(this.x, this.y,
+	                                       this.width, this.height);
+	Rectangle pixelBounds = new Rectangle(x, y, w, h);
+
+	if (filterBounds.intersects(pixelBounds))
+	{
+	    Rectangle bounds = filterBounds.intersection(pixelBounds);
+
+	    int[] cropped = new int[bounds.width * bounds.height];
+	    for (int i = 0; i < bounds.height; i++)
+	    {
+		int start = (bounds.y - pixelBounds.y + i) * scansize + offset;
+
+		for (int j = 0; j < bounds.width; j++)
+		    cropped[i * bounds.width + j] = pixels[start + bounds.x + j];
+	    }
+	    
+	    consumer.setPixels(bounds.x, bounds.y,
+	                       bounds.width, bounds.height,
+	                       model, cropped, 0, bounds.width);
+	}
     }
 
 }

@@ -53,6 +53,8 @@ final class FloatViewBufferImpl extends FloatBuffer
     this.offset = bb.position();
     this.readOnly = bb.isReadOnly();
     this.endian = bb.order();
+    if (bb.isDirect())
+      this.address = VMDirectByteBuffer.adjustAddress(bb.address, offset);
   }
   
   public FloatViewBufferImpl (ByteBuffer bb, int offset, int capacity,
@@ -64,8 +66,17 @@ final class FloatViewBufferImpl extends FloatBuffer
     this.offset = offset;
     this.readOnly = readOnly;
     this.endian = endian;
+    if (bb.isDirect())
+      this.address = VMDirectByteBuffer.adjustAddress(bb.address, offset);
   }
 
+  /**
+   * Reads the <code>float</code> at this buffer's current position,
+   * and then increments the position.
+   *
+   * @exception BufferUnderflowException If there are no remaining
+   * <code>floats</code> in this buffer.
+   */
   public float get ()
   {
     int p = position();
@@ -74,6 +85,13 @@ final class FloatViewBufferImpl extends FloatBuffer
     return result;
   }
 
+  /**
+   * Absolute get method. Reads the <code>float</code> at position
+   * <code>index</code>.
+   *
+   * @exception IndexOutOfBoundsException If index is negative or not smaller
+   * than the buffer's limit.
+   */
   public float get (int index)
   {
     return ByteBufferHelper.getFloat(bb, (index << 2) + offset, endian);
@@ -101,6 +119,11 @@ final class FloatViewBufferImpl extends FloatBuffer
 	bb.shiftDown(offset, offset + 4 * position(), 4 * count);
         position (count);
         limit (capacity ());
+      }
+    else
+      {
+	position(limit());
+	limit(capacity());
       }
     return this;
   }

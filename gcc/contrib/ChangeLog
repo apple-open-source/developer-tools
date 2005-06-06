@@ -1,3 +1,120 @@
+2005-04-20  Release Manager
+
+	* GCC 4.0.0 released.
+
+2005-04-17  Joseph S. Myers  <joseph@codesourcery.com>
+
+	* gennews (files): Update for GCC 4.0.
+
+2005-03-21  Zack Weinberg  <zack@codesourcery.com>
+
+	Merge from mainline:
+
+    2005-03-18  Alexandre Oliva  <aoliva@redhat.com>
+
+	* gcc_update (silent): Unset instead of initializing to null.
+
+    2005-03-18  Andreas Schwab  <schwab@suse.de>
+
+	* gcc_update (apply_patch): Properly quote $1.
+
+    2005-03-18  Zack Weinberg  <zack@codesourcery.com>
+
+	* gcc_update: Add --silent option.
+
+2005-03-08  Kaveh R. Ghazi  <ghazi@caip.rutgers.edu>
+
+	* warn_summary (keywordFilter): Update sed pattern for new quoting
+	style in warnings.
+
+2005-03-07  Kaveh R. Ghazi  <ghazi@caip.rutgers.edu>
+
+	* warn_summary: Add -fortran subdir flag.
+	(subdirectoryFilter): Fix missing ada subdir.
+
+2004-11-20  Hans-Peter Nilsson  <hp@bitrange.com>
+
+	* gcc_update (touch_files): Don't rely on "make" being GNU make;
+	grep for "Touching" to determine that the rule executes.
+
+2004-11-14  Hans-Peter Nilsson  <hp@bitrange.com>
+
+	* gcc_update (touch_files): Explicitly pass --no-print-directory.
+
+2004-11-04  Andrew Pinski  <pinskia@physics.uc.edu>
+
+	* gcc_update (boehm-gc/aclocal.m4): Remove boehm-gc/acinclude.m4.
+
+2004-08-04  Paolo Bonzini  <bonzini@gnu.org>
+
+	* gcc_update: Add fixincludes.
+
+2004-08-26  Matthias Klose  <doko@debian.org>
+
+	* texi2pod.pl: keep references of the form @ref{...}, print them bold.
+
+2004-08-26  Matthias Klose  <doko@debian.org>
+
+	* test_summary: Include baseline used for libstdc++-v3 abi check
+	in test summary.
+
+2004-08-25  Ben Elliston  <bje@au.ibm.com>
+
+	* gcc_update (libcpp/Makefile.in): Remove libcpp/Makefile.am.
+
+2004-08-20  Andreas Tobler  <a.tobler@schweiz.ch>
+
+	* gcc_update (self): libjava/configure.in -> configure.ac. Automake
+	update done.
+
+2004-08-04  Paolo Bonzini  <bonzini@gnu.org>
+
+	* gcc_update: libjava/configure.ac -> configure.in.  Automake
+	1.4 does not handle configure.ac properly.
+
+2004-08-04  Andreas Schwab  <schwab@suse.de>
+
+	* gcc_update: libjava/configure.in -> configure.ac.
+
+2004-08-03  Richard Earnshaw <rearnsha@arm.com>
+
+	* gcc_update: gcc/config/arm/arm-tune.md -> arm-cores.def gentune.sh.
+
+2004-07-16  Jeff Law  <law@redhat.com>
+
+	* analyze_brprob: Fix comments.  More consistent output format.
+
+2004-06-17  Diego Novillo  <dnovillo@redhat.com>
+
+	* tree-ssa.doxy: Update for doxygen 1.3.5.
+
+2004-06-14  Andreas Jaeger  <aj@suse.de>
+
+	* gcc_update: boehm-gc/configure.in -> configure.ac.
+
+2004-06-16  Paolo Bonzini  <bonzini@gnu.org>
+
+	* gcc_update (boehm-gc/configure): Depend on
+	boehm-gc/configure.ac instead of boehm-gc/configure.in
+
+2004-06-14  Paolo Bonzini  <bonzini@gnu.org>
+
+	* gcc_update (libmudflap/configure): Depend on
+	libmudflap/configure.ac instead of libmudflap/configure.in
+
+2004-06-14  Andreas Jaeger  <aj@suse.de>
+
+	* gcc_update: Add libcpp.
+
+2004-06-10  Andreas Jaeger  <aj@suse.de>
+
+	* gcc_update: Add libgfortran.
+
+2004-05-29  Andrew Pinski  <pinskia@physics.uc.edu>
+
+	* gcc_update (libbanshee/configure): Depend on
+	libbanshee/configure.ac instead of libbanshee/configure.in
+
 2004-05-17  Zack Weinberg  <zack@codesourcery.com>
 
 	* gcc_update: Remove gcc/f/intdoc.texi and all libf2c files

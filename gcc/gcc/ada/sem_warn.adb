@@ -171,9 +171,9 @@ package body Sem_Warn is
       --  from another unit. This is true for entities in packages that are
       --  at the library level.
 
-      -----------------------
-      --  Missing_Subunits --
-      -----------------------
+      ----------------------
+      -- Missing_Subunits --
+      ----------------------
 
       function Missing_Subunits return Boolean is
          D : Node_Id;
@@ -563,6 +563,7 @@ package body Sem_Warn is
                                 (Ekind (E) = E_Function
                                   or else Ekind (E) = E_Package_Body
                                   or else Ekind (E) = E_Procedure
+                                  or else Ekind (E) = E_Subprogram_Body
                                   or else Ekind (E) = E_Block)))
 
                --  Exclude instantiations, since there is no reason why
@@ -670,7 +671,7 @@ package body Sem_Warn is
                Unreferenced_Entities.Increment_Last;
                Unreferenced_Entities.Table (Unreferenced_Entities.Last) := E1;
 
-               --  Force warning on entity.
+               --  Force warning on entity
 
                Set_Referenced (E1, False);
             end if;
@@ -994,7 +995,7 @@ package body Sem_Warn is
             Un : constant Node_Id := Sinfo.Unit (Cnode);
 
             function Check_Use_Clause (N : Node_Id) return Traverse_Result;
-            --  If N is a use_clause for Pack, emit warning.
+            --  If N is a use_clause for Pack, emit warning
 
             procedure Check_Use_Clauses is new
               Traverse_Proc (Check_Use_Clause);
@@ -1483,6 +1484,14 @@ package body Sem_Warn is
                   then
                      if Warn_On_Modified_Unread
                        and then not Is_Imported (E)
+
+                        --  Suppress the message for aliased or renamed
+                        --  variables, since there may be other entities
+                        --  read the same memory location.
+
+                       and then not Is_Aliased (E)
+                       and then No (Renamed_Object (E))
+
                      then
                         Error_Msg_N
                           ("variable & is assigned but never read?", E);

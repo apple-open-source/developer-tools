@@ -22,13 +22,11 @@
 // their own code with -fno-implicit-templates and not suffer from a zillion
 // link errors.
 
-#include <fstream>
 #include <istream>
 #include <ostream>
 #include <sstream>
 #include <iomanip>
 #include <testsuite_hooks.h>
-
 
 // PR libstdc++/3829
 void
@@ -37,7 +35,7 @@ test01()
   using namespace std;
   bool test __attribute__((unused)) = true;
   string x ("   this is text");
-  istringstream  sin (x);
+  istringstream  sin(x);
   ostringstream  sout;
 
   // same order as in bits/std_iomanip.h
@@ -59,7 +57,6 @@ test01()
        << ends << flush << endl;
   VERIFY(sout.good());
 }
-
 
 int
 main()

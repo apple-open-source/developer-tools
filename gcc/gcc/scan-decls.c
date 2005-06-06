@@ -39,6 +39,13 @@ int extern_C_braces_length = 0;
 char extern_C_braces[MAX_EXTERN_C_BRACES];
 #define in_extern_C_brace (extern_C_braces_length>0)
 
+/* APPLE LOCAL begin CW asm blocks */
+/* Dummies needed because we use them in cpplib, yuck.  */
+int flag_cw_asm_blocks;
+int cw_asm_state;
+int cw_asm_in_operands;
+/* APPLE LOCAL end CW asm blocks */
+
 /* True if the function declaration currently being scanned is
    prefixed by extern "C".  */
 int current_extern_C = 0;

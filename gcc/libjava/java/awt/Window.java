@@ -1,5 +1,5 @@
 /* Window.java --
-   Copyright (C) 1999, 2000, 2002, 2003 Free Software Foundation
+   Copyright (C) 1999, 2000, 2002, 2003, 2004  Free Software Foundation
 
 This file is part of GNU Classpath.
 
@@ -39,6 +39,8 @@ exception statement from your version. */
 package java.awt;
 
 import java.awt.event.ComponentEvent;
+import java.awt.event.FocusEvent;
+import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.event.WindowFocusListener;
 import java.awt.event.WindowListener;
@@ -46,19 +48,23 @@ import java.awt.event.WindowStateListener;
 import java.awt.peer.WindowPeer;
 import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
-import java.util.Iterator;
 import java.util.EventListener;
+import java.util.Iterator;
 import java.util.Locale;
 import java.util.ResourceBundle;
 import java.util.Vector;
+
 import javax.accessibility.Accessible;
 import javax.accessibility.AccessibleContext;
+import javax.accessibility.AccessibleRole;
+import javax.accessibility.AccessibleState;
+import javax.accessibility.AccessibleStateSet;
 
 /**
  * This class represents a top-level window with no decorations.
  *
- * @author Aaron M. Renn <arenn@urbanophile.com>
- * @author Warren Levy  <warrenl@cygnus.com>
+ * @author Aaron M. Renn (arenn@urbanophile.com)
+ * @author Warren Levy  (warrenl@cygnus.com)
  */
 public class Window extends Container implements Accessible
 {
@@ -81,7 +87,31 @@ public class Window extends Container implements Accessible
   private transient WindowFocusListener windowFocusListener;
   private transient WindowStateListener windowStateListener;
   private transient GraphicsConfiguration graphicsConfiguration;
-  private transient AccessibleContext accessibleContext;
+
+  private transient boolean shown;
+
+  private transient Component windowFocusOwner;
+  
+  /*
+   * The number used to generate the name returned by getName.
+   */
+  private static transient long next_window_number;
+
+  protected class AccessibleAWTWindow extends AccessibleAWTContainer
+  {
+    public AccessibleRole getAccessibleRole()
+    {
+      return AccessibleRole.WINDOW;
+    }
+    
+    public AccessibleStateSet getAccessibleStateSet()
+    {
+      AccessibleStateSet states = super.getAccessibleStateSet();
+      if (isActive())
+        states.add(AccessibleState.ACTIVE);
+      return states;
+    }
+  }
 
   /** 
    * This (package access) constructor is used by subclasses that want
@@ -92,7 +122,37 @@ public class Window extends Container implements Accessible
   Window()
   {
     visible = false;
+    // Windows are the only Containers that default to being focus
+    // cycle roots.
+    focusCycleRoot = true;
     setLayout(new BorderLayout());
+
+    addWindowFocusListener (new WindowAdapter ()
+      {
+        public void windowGainedFocus (WindowEvent event)
+        {
+          if (windowFocusOwner != null)
+            {
+              // FIXME: move this section and the other similar
+              // sections in Component into a separate method.
+              EventQueue eq = Toolkit.getDefaultToolkit ().getSystemEventQueue ();
+              synchronized (eq)
+                {
+                  KeyboardFocusManager manager = KeyboardFocusManager.getCurrentKeyboardFocusManager ();
+                  Component currentFocusOwner = manager.getGlobalPermanentFocusOwner ();
+                  if (currentFocusOwner != null)
+                    {
+                      eq.postEvent (new FocusEvent (currentFocusOwner, FocusEvent.FOCUS_LOST,
+                                                    false, windowFocusOwner));
+                      eq.postEvent (new FocusEvent (windowFocusOwner, FocusEvent.FOCUS_GAINED,
+                                                    false, currentFocusOwner));
+                    }
+                  else
+                    eq.postEvent (new FocusEvent (windowFocusOwner, FocusEvent.FOCUS_GAINED, false));
+                }
+            }
+        }
+      });
   }
 
   Window(GraphicsConfiguration gc)
@@ -105,7 +165,7 @@ public class Window extends Container implements Accessible
    * Initializes a new instance of <code>Window</code> with the specified
    * parent.  The window will initially be invisible.
    *
-   * @param parent The owning <code>Frame</code> of this window.
+   * @param owner The owning <code>Frame</code> of this window.
    *
    * @exception IllegalArgumentException If the owner's GraphicsConfiguration
    * is not from a screen device, or if owner is null; this exception is always
@@ -163,12 +223,11 @@ public class Window extends Container implements Accessible
         && gc.getDevice().getType() != GraphicsDevice.TYPE_RASTER_SCREEN)
       throw new IllegalArgumentException ("gc must be from a screen device");
 
-    // FIXME: until we implement this, it just causes AWT to crash.
-//     if (gc == null)
-//       graphicsConfiguration = GraphicsEnvironment.getLocalGraphicsEnvironment()
-//         .getDefaultScreenDevice()
-//         .getDefaultConfiguration();
-//     else
+    if (gc == null)
+      graphicsConfiguration = GraphicsEnvironment.getLocalGraphicsEnvironment()
+                                                 .getDefaultScreenDevice()
+                                                 .getDefaultConfiguration();
+    else
       graphicsConfiguration = gc;
   }
 
@@ -242,6 +301,23 @@ public class Window extends Container implements Accessible
     validate();
     super.show();
     toFront();
+
+    KeyboardFocusManager manager = KeyboardFocusManager.getCurrentKeyboardFocusManager ();
+    manager.setGlobalFocusedWindow (this);
+
+    if (!shown)
+      {
+        FocusTraversalPolicy policy = getFocusTraversalPolicy ();
+        Component initialFocusOwner = null;
+
+        if (policy != null)
+          initialFocusOwner = policy.getInitialComponent (this);
+
+        if (initialFocusOwner != null)
+          initialFocusOwner.requestFocusInWindow ();
+
+        shown = true;
+      }
   }
 
   public void hide()
@@ -551,7 +627,7 @@ public class Window extends Container implements Accessible
    * <code>processWindowEvent()</code> is called to process the event,
    * otherwise the superclass version of this method is invoked.
    *
-   * @param event The event to process.
+   * @param evt The event to process.
    */
   protected void processEvent(AWTEvent evt)
   {
@@ -567,7 +643,7 @@ public class Window extends Container implements Accessible
    * invoked if it is enabled via <code>enableEvents()</code> or if
    * a listener has been added.
    *
-   * @param event The event to process.
+   * @param evt The event to process.
    */
   protected void processWindowEvent(WindowEvent evt)
   {
@@ -618,7 +694,33 @@ public class Window extends Container implements Accessible
 	  }
       }
   }
+  
+  /**
+   * Identifies if this window is active.  The active window is a Frame or
+   * Dialog that has focus or owns the active window.
+   *  
+   * @return true if active, else false.
+   * @since 1.4
+   */
+  public boolean isActive()
+  {
+    KeyboardFocusManager manager = KeyboardFocusManager.getCurrentKeyboardFocusManager ();
+    return manager.getActiveWindow() == this;
+  }
 
+  /**
+   * Identifies if this window is focused.  A window is focused if it is the
+   * focus owner or it contains the focus owner.
+   * 
+   * @return true if focused, else false.
+   * @since 1.4
+   */
+  public boolean isFocused()
+  {
+    KeyboardFocusManager manager = KeyboardFocusManager.getCurrentKeyboardFocusManager ();
+    return manager.getFocusedWindow() == this;
+  }
+  
   /**
    * Returns the child window that has focus if this window is active.
    * This method returns <code>null</code> if this window is not active
@@ -627,23 +729,43 @@ public class Window extends Container implements Accessible
    * @return The component that has focus, or <code>null</code> if no
    * component has focus.
    */
-  public Component getFocusOwner()
+  public Component getFocusOwner ()
   {
-    // FIXME
-    return null;
+    KeyboardFocusManager manager = KeyboardFocusManager.getCurrentKeyboardFocusManager ();
+
+    Window activeWindow = manager.getActiveWindow ();
+
+    // The currently-focused Component belongs to the active Window.
+    if (activeWindow == this)
+      return manager.getFocusOwner ();
+    else
+      return windowFocusOwner;
+  }
+
+  /**
+   * Set the focus owner for this window.  This method is used to
+   * remember which component was focused when this window lost
+   * top-level focus, so that when it regains top-level focus the same
+   * child component can be refocused.
+   *
+   * @param windowFocusOwner the component in this window that owns
+   * the focus.
+   */
+  void setFocusOwner (Component windowFocusOwner)
+  {
+    this.windowFocusOwner = windowFocusOwner;
   }
 
   /**
    * Post a Java 1.0 event to the event queue.
    *
-   * @param event The event to post.
+   * @param e The event to post.
    *
    * @deprecated
    */
   public boolean postEvent(Event e)
   {
-    // FIXME
-    return false;
+    return handleEvent (e);
   }
 
   /**
@@ -655,6 +777,22 @@ public class Window extends Container implements Accessible
   public boolean isShowing()
   {
     return super.isShowing();
+  }
+
+  public void setLocationRelativeTo (Component c)
+  {
+    if (c == null || !c.isShowing ())
+      {
+        int x = 0;
+        int y = 0;
+
+        GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment ();
+        Point center = ge.getCenterPoint ();
+        x = center.x - (width / 2);
+        y = center.y - (height / 2);
+        setLocation (x, y);
+      }
+    // FIXME: handle case where component is non-null.
   }
 
   /**
@@ -674,16 +812,24 @@ public class Window extends Container implements Accessible
    */
   public void applyResourceBundle(String rbName)
   {
-    ResourceBundle rb = ResourceBundle.getBundle(rbName);
+    ResourceBundle rb = ResourceBundle.getBundle(rbName, Locale.getDefault(),
+      ClassLoader.getSystemClassLoader());
     if (rb != null)
       applyResourceBundle(rb);    
   }
 
+  /**
+   * Gets the AccessibleContext associated with this <code>Window</code>.
+   * The context is created, if necessary.
+   *
+   * @return the associated context
+   */
   public AccessibleContext getAccessibleContext()
   {
-    // FIXME
-    //return null;
-    throw new Error ("Not implemented");
+    /* Create the context if this is the first request */
+    if (accessibleContext == null)
+      accessibleContext = new AccessibleAWTWindow();
+    return accessibleContext;
   }
 
   /** 
@@ -791,17 +937,32 @@ public class Window extends Container implements Accessible
     this.y = y;
     width = w;
     height = h;
-    if (resized)
+    if (resized && isShowing ())
       {
         ComponentEvent ce =
           new ComponentEvent(this, ComponentEvent.COMPONENT_RESIZED);
         getToolkit().getSystemEventQueue().postEvent(ce);
       }
-    if (moved)
+    if (moved && isShowing ())
       {
         ComponentEvent ce =
           new ComponentEvent(this, ComponentEvent.COMPONENT_MOVED);
         getToolkit().getSystemEventQueue().postEvent(ce);
       }
+  }
+
+  /**
+   * Generate a unique name for this window.
+   *
+   * @return A unique name for this window.
+   */
+  String generateName()
+  {
+    return "win" + getUniqueLong();
+  }
+
+  private static synchronized long getUniqueLong()
+  {
+    return next_window_number++;
   }
 }

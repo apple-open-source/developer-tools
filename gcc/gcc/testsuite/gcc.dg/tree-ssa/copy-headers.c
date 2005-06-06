@@ -1,18 +1,15 @@
 /* { dg-do compile } */ 
-/* { dg-options "-O2 -fdump-tree-dom1 -ftree-loop-optimize" } */
+/* { dg-options "-O2 -fdump-tree-ch-details" } */
 
-extern void link_error (void);
+extern int foo (int);
 
 void bla (void)
 {
-  int i, j = 1;
+  int i, n = foo (0);
 
-  for (i = 0; i < 100; i++)
-    j = 0;
-
-  if (j)
-    link_error ();
+  for (i = 0; i < n; i++)
+    foo (i);
 }
 
-/* There should be no link_error call in the dom1 dump.  */
-/* { dg-final { scan-tree-dump-times "link_error" 0 "dom1"} } */
+/* There should be a header duplicated.  */
+/* { dg-final { scan-tree-dump-times "Duplicating header" 1 "ch"} } */

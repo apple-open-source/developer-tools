@@ -1,5 +1,5 @@
 /* Thread and mutex controls for Objective C.
-   Copyright (C) 1996, 1997, 2002 Free Software Foundation, Inc.
+   Copyright (C) 1996, 1997, 2002, 2004 Free Software Foundation, Inc.
    Contributed by Galen C. Hunt (gchunt@cs.rochester.edu)
 
 This file is part of GCC.
@@ -38,7 +38,11 @@ Boston, MA 02111-1307, USA.  */
 #ifndef __thread_INCLUDE_GNU
 #define __thread_INCLUDE_GNU
 
-#include "objc/objc.h"
+#include <objc/objc.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif /* __cplusplus */
 
 /*************************************************************************
  *  Universal static variables:
@@ -141,5 +145,9 @@ int __objc_thread_exit (void);
 objc_thread_t __objc_thread_id (void);
 int __objc_thread_set_data (void *value);
 void * __objc_thread_get_data (void);
+
+#ifdef __cplusplus
+}
+#endif /* __cplusplus */
 
 #endif /* not __thread_INCLUDE_GNU */

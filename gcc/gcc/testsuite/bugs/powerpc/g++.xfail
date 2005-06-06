@@ -1,3 +1,4 @@
+# APPLE LOCAL file testsuite
 ###
 ### List of failing tests with Radar bug numbers
 ### <radarNum>: <test name>
@@ -9,50 +10,99 @@
 ### file and make sure the Radar is closed.
 ###
 ###------------------------------------------------------------------
-3220997: g++.dg/align-test-1.C execution test
-3665086: g++.dg/apple-altivec-1.C (test for excess errors)
-3665086: g++.dg/altivec-3.C (test for excess errors)
-3665127: g++.dg/altivec-5.C (test for excess errors)
-3665098: g++.dg/eh/simd-2.C (test for excess errors)
-3665086: g++.dg/ext/altivec-2.C (test for excess errors)
-3665086: g++.dg/ext/altivec-4.C (test for excess errors)
-3665086: g++.dg/ext/altivec-5.C (test for excess errors)
-3665086: g++.dg/ext/altivec-6.C (test for excess errors)
-3665086: g++.dg/ext/altivec-8.C (test for excess errors)
-#3665096: g++.dg/template/instantiate6.C (test for excess errors)
-#3665130: g++.dg/template/static3.C (test for excess errors)
 3222046: g++.dg/warn/weak1.C (test for excess errors)
-3665098: 258: expected branch percentages not found: 25
-3665098: g++.dg/gcov/gcov-1.C gcov: 0 failures in line counts, 1 in branch percentages, 0 in return percentages
-3665098: 23:is 2:should be 1
-3665098: g++.dg/gcov/gcov-2.C gcov: 1 failures in line counts, 0 in branch percentages, 0 in return percentages
 3223598: g++.dg/special/conpr-3.C execution test
-3665098: g++.old-deja/g++.abi/cxa_vec.C execution test
-3665098: g++.old-deja/g++.brendan/crash13.C  (test for errors, line 34)
-3665098: g++.old-deja/g++.brendan/new3.C execution test
 3222135: g++.old-deja/g++.bugs/900404_02.C  (test for warnings, line 25)
 3222698: g++.old-deja/g++.ext/pretty4.C execution test
-3665098: g++.old-deja/g++.law/friend5.C  (test for errors, line 19)
-3665098: g++.old-deja/g++.law/friend5.C  (test for errors, line 24)
-#3665144: g++.old-deja/g++.mike/p4750.C (test for excess errors)
-#3665148: g++.old-deja/g++.other/inline7.C (test for excess errors)
-#3665098: g++.old-deja/g++.other/inline8.C (test for excess errors)
-#3665144: g++.old-deja/g++.other/local-alloc1.C (test for excess errors)
-3224899: g++.old-deja/g++.other/string2.C execution test
-#3665162: g++.old-deja/g++.pt/static3.C (test for excess errors)
-#3665162: g++.old-deja/g++.pt/static6.C (test for excess errors)
-#3665148: g++.old-deja/g++.pt/ttp19.C (test for excess errors)
-#3665148: g++.old-deja/g++.pt/ttp40.C (test for excess errors)
-#3665148: g++.old-deja/g++.robertl/eb21.C (test for excess errors)
-#3665148: g++.old-deja/g++.robertl/eb59.C (test for excess errors)
-#3665098: g++.old-deja/g++.robertl/eb73.C (test for excess errors)
-3681923: g++.old-deja/g++.other/warn7.C  (test for warnings, line 38)
-3689471: g++.old-deja/g++.mike/p646.C  (test for warnings, line 104)
-3689471: g++.old-deja/g++.mike/p646.C  (test for warnings, line 112)
-3689471: g++.old-deja/g++.mike/p646.C  (test for warnings, line 120)
-3689471: g++.old-deja/g++.mike/p646.C  (test for warnings, line 127)
-3689471: g++.old-deja/g++.mike/p646.C  (test for warnings, line 133)
-3689471: g++.old-deja/g++.bugs/900205_03.C  (test for errors, line 21)
-3689471: g++.old-deja/g++.bugs/900205_03.C  (test for errors, line 24)
-3689471: g++.old-deja/g++.bugs/900205_03.C  (test for errors, line 44)
-3689471: g++.old-deja/g++.bugs/900205_03.C  (test for errors, line 47)
+3843119: g++.dg/abi/local1.C execution test
+3843157: g++.dg/pascal-strings-2.C  (test for warnings, line 7)
+3843157: g++.dg/pascal-strings-2.C  (test for warnings, line 8)
+3843157: g++.dg/pascal-strings-2.C  (test for warnings, line 22)
+3843157: g++.dg/pascal-strings-2.C  (test for warnings, line 24)
+3843157: g++.dg/pascal-strings-2.C  (test for warnings, line 25)
+3843157: g++.dg/pascal-strings-2.C (test for excess errors)
+4096269: g++.dg/eh/uncaught1.C execution test
+#
+# The following tests fail only when the c++ suite is run through Obj-C++.
+3904139: g++.dg/ext/fnname3.C execution test
+3904139: g++.dg/ext/pretty1.C scan-assembler int bar\\(T\\).*with T = int
+3904139: g++.dg/ext/pretty1.C scan-assembler int main\\(\\)
+3904178: g++.dg/opt/devirt1.C scan-assembler xyzzy
+3904139: g++.old-deja/g++.ext/pretty2.C execution test
+3904139: g++.old-deja/g++.ext/pretty3.C execution test
+3904139: g++.old-deja/g++.pt/memtemp77.C execution test
+3904173: g++.old-deja/g++.jason/cleanup2.C (test for excess errors)
+3904173: g++.old-deja/g++.jason/hmc1.C (test for excess errors)
+3904173: g++.old-deja/g++.law/ctors10.C  (test for errors, line 21)
+3904173: g++.old-deja/g++.law/ctors10.C (test for excess errors)
+3904173: g++.old-deja/g++.law/shadow1.C (test for excess errors)
+3904184: g++.old-deja/g++.mike/p11144.C (test for excess errors)
+3904186: g++.dg/pch/system-1.C -g assembly comparison
+3904186: g++.dg/pch/system-1.C -O2 -g assembly comparison
+3904186: g++.dg/pch/system-1.C -O2 assembly comparison
+3904186: g++.dg/pch/system-2.C -g assembly comparison
+3904186: g++.dg/pch/system-2.C -O2 -g assembly comparison
+3904186: g++.dg/pch/system-2.C -O2 assembly comparison
+3904186: g++.dg/pch/uninst.C -g assembly comparison
+3904186: g++.dg/pch/uninst.C -O2 -g assembly comparison
+3904186: g++.dg/pch/uninst.C -O2 assembly comparison
+4079018: g++.dg/template/spec19.C (test for excess errors)
+4084977: g++.old-deja/g++.oliva/expr2.C execution test
+4084991: g++.dg/expr/lval2.C (test for excess errors)
+#
+# The following tests fail only when the c++ suite is run with -mcpu=G5
+3719311: g++.dg/template/warn1.C  (test for warnings, line 12)
+#
+# The following tests fail only when the c++ suite is run with -m64
+3964999: g++.old-deja/g++.pt/const2.C (test for excess errors)
+3965017: g++.dg/template/repo1.C (test for excess errors)
+3965017: g++.dg/template/repo3.C (test for excess errors)
+3965017: g++.old-deja/g++.pt/instantiate4.C (test for excess errors)
+3965017: g++.old-deja/g++.pt/instantiate6.C (test for excess errors)
+3965017: g++.old-deja/g++.pt/repo1.C (test for excess errors)
+3965017: g++.old-deja/g++.pt/repo2.C (test for excess errors)
+3965017: g++.old-deja/g++.pt/repo3.C (test for excess errors)
+3965017: g++.old-deja/g++.pt/repo4.C (test for excess errors)
+3941491: g++.dg/debug/const1.C -gdwarf-21 (test for excess errors)
+3941491: g++.dg/debug/const1.C -gdwarf-21 -O2 (test for excess errors)
+3941491: g++.dg/debug/const1.C -gdwarf-21 -O3 (test for excess errors)
+3941491: g++.dg/debug/const1.C -gdwarf-21 -fastcp (test for excess errors)
+3941491: g++.dg/debug/const1.C -gdwarf-2 (test for excess errors)
+3941491: g++.dg/debug/const1.C -gdwarf-2 -O2 (test for excess errors)
+3941491: g++.dg/debug/const1.C -gdwarf-2 -O3 (test for excess errors)
+3941491: g++.dg/debug/const1.C -gdwarf-2 -fastcp (test for excess errors)
+3941491: g++.dg/debug/const1.C -gdwarf-23 (test for excess errors)
+3941491: g++.dg/debug/const1.C -gdwarf-23 -O2 (test for excess errors)
+3941491: g++.dg/debug/const1.C -gdwarf-23 -O3 (test for excess errors)
+3941491: g++.dg/debug/const1.C -gdwarf-23 -fastcp (test for excess errors)
+3941491: g++.dg/debug/debug4.C -gdwarf-21 (test for excess errors)
+3941491: g++.dg/debug/debug4.C -gdwarf-21 -O2 (test for excess errors)
+3941491: g++.dg/debug/debug4.C -gdwarf-21 -O3 (test for excess errors)
+3941491: g++.dg/debug/debug4.C -gdwarf-21 -fastcp (test for excess errors)
+3941491: g++.dg/debug/debug4.C -gdwarf-2 (test for excess errors)
+3941491: g++.dg/debug/debug4.C -gdwarf-2 -O2 (test for excess errors)
+3941491: g++.dg/debug/debug4.C -gdwarf-2 -O3 (test for excess errors)
+3941491: g++.dg/debug/debug4.C -gdwarf-2 -fastcp (test for excess errors)
+3941491: g++.dg/debug/debug4.C -gdwarf-23 (test for excess errors)
+3941491: g++.dg/debug/debug4.C -gdwarf-23 -O2 (test for excess errors)
+3941491: g++.dg/debug/debug4.C -gdwarf-23 -O3 (test for excess errors)
+3941491: g++.dg/debug/debug4.C -gdwarf-23 -fastcp (test for excess errors)
+3941491: g++.dg/debug/trivial.C -gdwarf-21 (test for excess errors)
+3941491: g++.dg/debug/trivial.C -gdwarf-21 -O2 (test for excess errors)
+3941491: g++.dg/debug/trivial.C -gdwarf-21 -O3 (test for excess errors)
+3941491: g++.dg/debug/trivial.C -gdwarf-21 -fastcp (test for excess errors)
+3941491: g++.dg/debug/trivial.C -gdwarf-2 (test for excess errors)
+3941491: g++.dg/debug/trivial.C -gdwarf-2 -O2 (test for excess errors)
+3941491: g++.dg/debug/trivial.C -gdwarf-2 -O3 (test for excess errors)
+3941491: g++.dg/debug/trivial.C -gdwarf-2 -fastcp (test for excess errors)
+3941491: g++.dg/debug/trivial.C -gdwarf-23 (test for excess errors)
+3941491: g++.dg/debug/trivial.C -gdwarf-23 -O2 (test for excess errors)
+3941491: g++.dg/debug/trivial.C -gdwarf-23 -O3 (test for excess errors)
+3941491: g++.dg/debug/trivial.C -gdwarf-23 -fastcp (test for excess errors)
+3967626: g++.dg/eh/forced1.C execution test
+3967626: g++.old-deja/g++.eh/terminate2.C execution test
+4097506: g++.dg/ext/opt-pragma-2.C scan-assembler-times bl "L_printf 4
+4097506: g++.dg/ext/opt-pragma-3.C scan-assembler-times b "L_printf 4
+4097506: g++.dg/ext/opt-pragma-4.C scan-assembler-times b "L_printf 2
+4097506: g++.dg/ext/opt-pragma-4.C scan-assembler-times bl "L_printf 2
+4099260: g++.old-deja/g++.brendan/new3.C execution test

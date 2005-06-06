@@ -28,6 +28,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 
 #ifdef VMS_DEBUGGING_INFO
 #include "tree.h"
+#include "version.h"
 #include "flags.h"
 #include "rtl.h"
 #include "output.h"
@@ -208,7 +209,8 @@ const struct gcc_debug_hooks vmsdbg_debug_hooks
    vmsdbgout_abstract_function,
    debug_nothing_rtx,		  /* label */
    debug_nothing_int,		  /* handle_pch */
-   debug_nothing_rtx		  /* var_location */
+   debug_nothing_rtx,		  /* var_location */
+   0                              /* start_end_main_source_file */
 };
 
 /* Definitions of defaults for assembler-dependent names of various

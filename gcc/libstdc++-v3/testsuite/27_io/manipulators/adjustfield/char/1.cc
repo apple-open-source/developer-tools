@@ -39,13 +39,15 @@ struct MyNP : std::numpunct<char>
   std::string do_falsename() const;
 };
 
-std::string MyNP::do_truename()  const 
+std::string
+MyNP::do_truename() const 
 { 
   std::string s("yea"); 
   return s; 
 }
 
-std::string MyNP::do_falsename() const 
+std::string
+MyNP::do_falsename() const 
 { 
   std::string s("nay"); 
   return s; 
@@ -55,8 +57,19 @@ void
 test01()
 {
   bool test __attribute__((unused)) = true;
-  const char lit[] = "1 0\ntrue false\n:  true:\n:true  :\n: false:\n:  1:"
-    		     "\n:1  :\n:  0:\nyea nay\n:   yea:\n:yea   :\n:   nay:\n";
+  const char lit[] = "1 0\n"
+                     "true false\n"
+                     ":  true:\n"
+                     ":true  :\n"
+                     ": false:\n"
+                     ":  1:\n"
+                     ":1  :\n"
+                     ":  0:\n"
+                     "yea nay\n"
+                     ":   yea:\n"
+                     ":yea   :\n"
+                     ":   nay:\n";
+
   std::ostringstream oss;
   oss << true << " " << false << std::endl;
   oss << std::boolalpha;
@@ -70,7 +83,7 @@ test01()
   oss << ":" << std::setw(3) << std::left << true << ":" << std::endl;
   oss << ":" << std::setw(3) << std::right << false << ":" << std::endl;
 
-  std::locale loc = std::locale (std::locale::classic(), new MyNP);
+  std::locale loc = std::locale(std::locale::classic(), new MyNP);
   oss.imbue(loc);
 
   oss << std::boolalpha;
@@ -90,19 +103,3 @@ main()
   test01();
   return 0;
 }
-
-// Projected output:
-/*
-1 0
-true false
-:  true:
-:true  :
-: false:
-:  1:
-:1  :
-:  0:
-yea nay
-:   yea:
-:yea   :
-:   nay:
-*/

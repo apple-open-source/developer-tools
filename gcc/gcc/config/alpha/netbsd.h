@@ -1,6 +1,6 @@
 /* Definitions of target machine for GNU compiler,
    for Alpha NetBSD systems.
-   Copyright (C) 1998, 2002, 2003 Free Software Foundation, Inc.
+   Copyright (C) 1998, 2002, 2003, 2004 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -76,7 +76,7 @@ Boston, MA 02111-1307, USA.  */
 
 /* Attempt to enable execute permissions on the stack.  */
 
-#define TRANSFER_FROM_TRAMPOLINE NETBSD_ENABLE_EXECUTE_STACK
+#define ENABLE_EXECUTE_STACK NETBSD_ENABLE_EXECUTE_STACK
 
 
 #undef TARGET_VERSION

@@ -22,7 +22,8 @@ else
      -I$(SRCROOT) -I$(SRCROOT)/../include -I$(OFILE_DIR) -I$(SRCROOT)/../dyld
 endif
 
-USE_DEPENDENCY_FILE := $(shell if [ "$(notdir $(CC))" != "mwccppc" ]; then \
+USE_DEPENDENCY_FILE := $(shell if [ "$(notdir $(CC))" != "mwccppc" ] && \
+				  [ "$(RC_XBS)" != "YES" ]; then \
 	     echo YES ; else echo NO ; \
 	     fi; )
 
@@ -321,26 +322,29 @@ teflon_install nextstep_install: all
 lib_ofiles_install: $(RC_OS)_lib_ofiles_install
 
 macos_lib_ofiles_install: all
-	$(MKDIRS) $(DSTROOT)$(SYSTEMDIR)
-	@if [ $(SRCROOT) = . ];						\
+	@if [ $(OLD_DYLD_STUFF) ];					\
 	then								\
-	    install -c -m 444 dtmp_obj/libdyld.a			\
-		     $(DSTROOT)$(SYSTEMDIR)/libdyld.a;			\
-	    ranlib $(DSTROOT)$(SYSTEMDIR)/libdyld.a;			\
-	    (cd $(DSTROOT)$(SYSTEMDIR); 				\
-	    rm -f libdyld_debug.a; ln -s libdyld.a libdyld_debug.a);	\
-	    install -c -m 444 ptmp_obj/libdyld_pg.a 			\
-		     $(DSTROOT)$(SYSTEMDIR)/libdyld_profile.a;		\
-	    ranlib $(DSTROOT)$(SYSTEMDIR)/libdyld_profile.a;		\
-	else								\
-	    install -c -m 444 $(SYMROOT)/libdyld.a			\
-		     $(DSTROOT)$(SYSTEMDIR)/libdyld.a;			\
-	    ranlib $(DSTROOT)$(SYSTEMDIR)/libdyld.a;			\
-	    (cd $(DSTROOT)$(SYSTEMDIR); 				\
-	    rm -f libdyld_debug.a; ln -s libdyld.a libdyld_debug.a);	\
-	    install -c -m 444 $(SYMROOT)/libdyld_pg.a 			\
-		     $(DSTROOT)$(SYSTEMDIR)/libdyld_profile.a;		\
-	    ranlib $(DSTROOT)$(SYSTEMDIR)/libdyld_profile.a;		\
+	    $(MKDIRS) $(DSTROOT)$(SYSTEMDIR); 				\
+	    if [ $(SRCROOT) = . ];					\
+	    then							\
+		install -c -m 444 dtmp_obj/libdyld.a			\
+			 $(DSTROOT)$(SYSTEMDIR)/libdyld.a;		\
+		ranlib $(DSTROOT)$(SYSTEMDIR)/libdyld.a;		\
+		(cd $(DSTROOT)$(SYSTEMDIR); 				\
+		rm -f libdyld_debug.a; ln -s libdyld.a libdyld_debug.a); \
+		install -c -m 444 ptmp_obj/libdyld_pg.a 		\
+			 $(DSTROOT)$(SYSTEMDIR)/libdyld_profile.a;	\
+		ranlib $(DSTROOT)$(SYSTEMDIR)/libdyld_profile.a;	\
+	    else							\
+		install -c -m 444 $(SYMROOT)/libdyld.a			\
+			 $(DSTROOT)$(SYSTEMDIR)/libdyld.a;		\
+		ranlib $(DSTROOT)$(SYSTEMDIR)/libdyld.a;		\
+		(cd $(DSTROOT)$(SYSTEMDIR); 				\
+		rm -f libdyld_debug.a; ln -s libdyld.a libdyld_debug.a); \
+		install -c -m 444 $(SYMROOT)/libdyld_pg.a 		\
+			 $(DSTROOT)$(SYSTEMDIR)/libdyld_profile.a;	\
+		ranlib $(DSTROOT)$(SYSTEMDIR)/libdyld_profile.a;	\
+	    fi; 							\
 	fi
 
 teflon_lib_ofiles_install nextstep_lib_ofiles_install:

@@ -27,10 +27,15 @@
 // invalidate any other reasons why the executable file might be covered by
 // the GNU General Public License.
 
+/** @file ext/new_allocator.h
+ *  This file is a GNU extension to the Standard C++ Library.
+ */
+
 #ifndef _NEW_ALLOCATOR_H
 #define _NEW_ALLOCATOR_H 1
 
 #include <new>
+#include <bits/functexcept.h>
 
 namespace __gnu_cxx
 {
@@ -40,8 +45,6 @@ namespace __gnu_cxx
    *  This is precisely the allocator defined in the C++ Standard. 
    *    - all allocation calls operator new
    *    - all deallocation calls operator delete
-   *
-   *  (See @link Allocators allocators info @endlink for more.)
    */
   template<typename _Tp>
     class new_allocator
@@ -78,7 +81,12 @@ namespace __gnu_cxx
       // about what the return value is when __n == 0.
       pointer
       allocate(size_type __n, const void* = 0)
-      { return static_cast<_Tp*>(::operator new(__n * sizeof(_Tp))); }
+      { 
+	if (__builtin_expect(__n > this->max_size(), false))
+	  std::__throw_bad_alloc();
+
+	return static_cast<_Tp*>(::operator new(__n * sizeof(_Tp)));
+      }
 
       // __p is not permitted to be a null pointer.
       void

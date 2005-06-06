@@ -1,5 +1,5 @@
 /* MessageFormat.java - Localized message formatting.
-   Copyright (C) 1999, 2001, 2002 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2001, 2002, 2004, 2005 Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -46,107 +46,107 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Vector;
 
-/**
- * @author Tom Tromey <tromey@cygnus.com>
- * @author Jorge Aliss <jaliss@hotmail.com>
- * @date March 3, 1999
- */
-/* Written using "Java Class Libraries", 2nd edition, plus online
- * API docs for JDK 1.2 from http://www.javasoft.com.
- * Status:  Believed complete and correct to 1.2, except serialization.
- *          and parsing.
- */
-final class MessageFormatElement
-{
-  // Argument number.
-  int argNumber;
-  // Formatter to be used.  This is the format set by setFormat.
-  Format setFormat;
-  // Formatter to be used based on the type.
-  Format format;
-
-  // Argument will be checked to make sure it is an instance of this
-  // class.
-  Class formatClass;
-
-  // Formatter type.
-  String type;
-  // Formatter style.
-  String style;
-
-  // Text to follow this element.
-  String trailer;
-
-  // Recompute the locale-based formatter.
-  void setLocale (Locale loc)
-  {
-    if (type == null)
-      ;
-    else if (type.equals("number"))
-      {
-	formatClass = java.lang.Number.class;
-
-	if (style == null)
-	  format = NumberFormat.getInstance(loc);
-	else if (style.equals("currency"))
-	  format = NumberFormat.getCurrencyInstance(loc);
-	else if (style.equals("percent"))
-	  format = NumberFormat.getPercentInstance(loc);
-	else if (style.equals("integer"))
-	  {
-	    NumberFormat nf = NumberFormat.getNumberInstance(loc);
-	    nf.setMaximumFractionDigits(0);
-	    nf.setGroupingUsed(false);
-	    format = nf;
-	  }
-	else
-	  {
-	    format = NumberFormat.getNumberInstance(loc);
-	    DecimalFormat df = (DecimalFormat) format;
-	    df.applyPattern(style);
-	  }
-      }
-    else if (type.equals("time") || type.equals("date"))
-      {
-	formatClass = java.util.Date.class;
-
-	int val = DateFormat.DEFAULT;
-	if (style == null)
-	  ;
-	else if (style.equals("short"))
-	  val = DateFormat.SHORT;
-	else if (style.equals("medium"))
-	  val = DateFormat.MEDIUM;
-	else if (style.equals("long"))
-	  val = DateFormat.LONG;
-	else if (style.equals("full"))
-	  val = DateFormat.FULL;
-
-	if (type.equals("time"))
-	  format = DateFormat.getTimeInstance(val, loc);
-	else
-	  format = DateFormat.getDateInstance(val, loc);
-
-	if (style != null && val == DateFormat.DEFAULT)
-	  {
-	    SimpleDateFormat sdf = (SimpleDateFormat) format;
-	    sdf.applyPattern(style);
-	  }
-      }
-    else if (type.equals("choice"))
-      {
-	formatClass = java.lang.Number.class;
-
-	if (style == null)
-	  throw new
-	    IllegalArgumentException ("style required for choice format");
-	format = new ChoiceFormat (style);
-      }
-  }
-}
-
 public class MessageFormat extends Format
 {
+  /**
+   * @author Tom Tromey (tromey@cygnus.com)
+   * @author Jorge Aliss (jaliss@hotmail.com)
+   * @date March 3, 1999
+   */
+  /* Written using "Java Class Libraries", 2nd edition, plus online
+   * API docs for JDK 1.2 from http://www.javasoft.com.
+   * Status:  Believed complete and correct to 1.2, except serialization.
+   *          and parsing.
+   */
+  private static final class MessageFormatElement
+  {
+    // Argument number.
+    int argNumber;
+    // Formatter to be used.  This is the format set by setFormat.
+    Format setFormat;
+    // Formatter to be used based on the type.
+    Format format;
+
+    // Argument will be checked to make sure it is an instance of this
+    // class.
+    Class formatClass;
+
+    // Formatter type.
+    String type;
+    // Formatter style.
+    String style;
+
+    // Text to follow this element.
+    String trailer;
+
+    // Recompute the locale-based formatter.
+    void setLocale (Locale loc)
+    {
+      if (type == null)
+        ;
+      else if (type.equals("number"))
+        {
+	  formatClass = java.lang.Number.class;
+
+	  if (style == null)
+	    format = NumberFormat.getInstance(loc);
+	  else if (style.equals("currency"))
+	    format = NumberFormat.getCurrencyInstance(loc);
+	  else if (style.equals("percent"))
+	    format = NumberFormat.getPercentInstance(loc);
+	  else if (style.equals("integer"))
+	    {
+	      NumberFormat nf = NumberFormat.getNumberInstance(loc);
+	      nf.setMaximumFractionDigits(0);
+	      nf.setGroupingUsed(false);
+	      format = nf;
+	    }
+	  else
+	    {
+	      format = NumberFormat.getNumberInstance(loc);
+	      DecimalFormat df = (DecimalFormat) format;
+	      df.applyPattern(style);
+	    }
+        }
+      else if (type.equals("time") || type.equals("date"))
+        {
+	  formatClass = java.util.Date.class;
+
+	  int val = DateFormat.DEFAULT;
+	  if (style == null)
+	    ;
+	  else if (style.equals("short"))
+	    val = DateFormat.SHORT;
+	  else if (style.equals("medium"))
+	    val = DateFormat.MEDIUM;
+	  else if (style.equals("long"))
+	    val = DateFormat.LONG;
+	  else if (style.equals("full"))
+	    val = DateFormat.FULL;
+
+	  if (type.equals("time"))
+	    format = DateFormat.getTimeInstance(val, loc);
+	  else
+	    format = DateFormat.getDateInstance(val, loc);
+
+	  if (style != null && val == DateFormat.DEFAULT)
+	    {
+	      SimpleDateFormat sdf = (SimpleDateFormat) format;
+	      sdf.applyPattern(style);
+	    }
+        }
+      else if (type.equals("choice"))
+        {
+	  formatClass = java.lang.Number.class;
+
+	  if (style == null)
+	    throw new
+	      IllegalArgumentException ("style required for choice format");
+	  format = new ChoiceFormat (style);
+        }
+    }
+  }
+
   private static final long serialVersionUID = 6479157306784022952L;
 
   public static class Field extends Format.Field
@@ -157,7 +157,7 @@ public class MessageFormat extends Format
      * This is the attribute set for all characters produced
      * by MessageFormat during a formatting.
      */
-    public static final MessageFormat.Field ARGUMENT = new Field("argument");
+    public static final MessageFormat.Field ARGUMENT = new MessageFormat.Field("argument");
 
     // For deserialization
     private Field()
@@ -165,7 +165,7 @@ public class MessageFormat extends Format
       super("");
     }
     
-    private Field(String s)
+    protected Field(String s)
     {
       super(s);
     }
@@ -189,86 +189,95 @@ public class MessageFormat extends Format
   // Helper that returns the text up to the next format opener.  The
   // text is put into BUFFER.  Returns index of character after end of
   // string.  Throws IllegalArgumentException on error.
-  private static final int scanString (String pat, int index,
-				       StringBuffer buffer)
+  private static int scanString(String pat, int index, StringBuffer buffer)
   {
     int max = pat.length();
     buffer.setLength(0);
+    boolean quoted = false;
     for (; index < max; ++index)
       {
 	char c = pat.charAt(index);
-	if (c == '\'' && index + 2 < max && pat.charAt(index + 2) == '\'')
+	if (quoted)
 	  {
-	    buffer.append(pat.charAt(index + 1));
-	    index += 2;
+	    // In a quoted context, a single quote ends the quoting.
+	    if (c == '\'')
+	      quoted = false;
+	    else
+	      buffer.append(c);
 	  }
-	else if (c == '\'' && index + 1 < max
-		 && pat.charAt(index + 1) == '\'')
+	// Check for '', which is a single quote.
+	else if (c == '\'' && index + 1 < max && pat.charAt(index + 1) == '\'')
 	  {
 	    buffer.append(c);
 	    ++index;
 	  }
+	else if (c == '\'')
+	  {
+	    // Start quoting.
+	    quoted = true;
+	  }
 	else if (c == '{')
 	  break;
-	else if (c == '}')
-	  throw new IllegalArgumentException("Found '}' without '{'");
 	else
 	  buffer.append(c);
       }
+    // Note that we explicitly allow an unterminated quote.  This is
+    // done for compatibility.
     return index;
   }
 
   // This helper retrieves a single part of a format element.  Returns
   // the index of the terminating character.
-  private static final int scanFormatElement (String pat, int index,
-					      StringBuffer buffer,
-					      char term)
+  private static int scanFormatElement(String pat, int index,
+                                       StringBuffer buffer, char term)
   {
     int max = pat.length();
     buffer.setLength(0);
     int brace_depth = 1;
+    boolean quoted = false;
 
     for (; index < max; ++index)
       {
 	char c = pat.charAt(index);
-	if (c == '\'' && index + 2 < max && pat.charAt(index + 2) == '\'')
+	// First see if we should turn off quoting.
+	if (quoted)
 	  {
-	    buffer.append(c);
-	    buffer.append(pat.charAt(index + 1));
-	    buffer.append(c);
-	    index += 2;
+	    if (c == '\'')
+	      quoted = false;
+	    // In both cases we fall through to inserting the
+	    // character here.
 	  }
+	// See if we have just a plain quote to insert.
 	else if (c == '\'' && index + 1 < max
 		 && pat.charAt(index + 1) == '\'')
 	  {
 	    buffer.append(c);
 	    ++index;
 	  }
+	// See if quoting should turn on.
+	else if (c == '\'')
+	  quoted = true;
 	else if (c == '{')
-	  {
-	    buffer.append(c);
-	    ++brace_depth;
-	  }
+	  ++brace_depth;
 	else if (c == '}')
 	  {
 	    if (--brace_depth == 0)
 	      break;
-	    buffer.append(c);
 	  }
 	// Check for TERM after braces, because TERM might be `}'.
 	else if (c == term)
 	  break;
-	else
-	  buffer.append(c);
+	// All characters, including opening and closing quotes, are
+	// inserted here.
+	buffer.append(c);
       }
     return index;
   }
 
   // This is used to parse a format element and whatever non-format
   // text might trail it.
-  private static final int scanFormat (String pat, int index,
-				       StringBuffer buffer, Vector elts,
-				       Locale locale)
+  private static int scanFormat(String pat, int index, StringBuffer buffer,
+                                Vector elts, Locale locale)
   {
     MessageFormatElement mfe = new MessageFormatElement ();
     elts.addElement(mfe);
@@ -286,7 +295,9 @@ public class MessageFormat extends Format
       }
     catch (NumberFormatException nfx)
       {
-	throw new IllegalArgumentException("Failed to parse integer string");
+	IllegalArgumentException iae = new IllegalArgumentException(pat);
+	iae.initCause(nfx);
+	throw iae;
       }
 
     // Extract the element format.
@@ -404,9 +415,10 @@ public class MessageFormat extends Format
     return formatInternal(arguments, appendBuf, fp, null);
   }
 
-  protected final StringBuffer formatInternal (Object arguments[], StringBuffer appendBuf,
-					       FieldPosition fp,
-					       FormatCharacterIterator output_iterator)
+  private StringBuffer formatInternal (Object arguments[],
+                                       StringBuffer appendBuf,
+				       FieldPosition fp,
+				       FormatCharacterIterator output_iterator)
   {
     appendBuf.append(leader);
     if (output_iterator != null)
@@ -414,10 +426,13 @@ public class MessageFormat extends Format
 
     for (int i = 0; i < elements.length; ++i)
       {
-	if (elements[i].argNumber >= arguments.length)
-	  throw new IllegalArgumentException("Not enough arguments given");
+	Object thisArg = null;
+	boolean unavailable = false;
+	if (arguments == null || elements[i].argNumber >= arguments.length)
+	  unavailable = true;
+	else
+	  thisArg = arguments[elements[i].argNumber];
 
-	Object thisArg = arguments[elements[i].argNumber];
 	AttributedCharacterIterator iterator = null;
 
 	Format formatter = null;
@@ -425,22 +440,27 @@ public class MessageFormat extends Format
 	if (fp != null && i == fp.getField() && fp.getFieldAttribute() == Field.ARGUMENT)
 	  fp.setBeginIndex(appendBuf.length());
 
-	if (elements[i].setFormat != null)
-	  formatter = elements[i].setFormat;
-	else if (elements[i].format != null)
-	  {
-	    if (elements[i].formatClass != null
-		&& ! elements[i].formatClass.isInstance(thisArg))
-	      throw new IllegalArgumentException("Wrong format class");
-	    
-	    formatter = elements[i].format;
-	  }
-	else if (thisArg instanceof Number)
-	  formatter = NumberFormat.getInstance(locale);
-	else if (thisArg instanceof Date)
-	  formatter = DateFormat.getTimeInstance(DateFormat.DEFAULT, locale);
+	if (unavailable)
+	  appendBuf.append("{" + elements[i].argNumber + "}");
 	else
-	  appendBuf.append(thisArg);
+	  {
+	    if (elements[i].setFormat != null)
+	      formatter = elements[i].setFormat;
+	    else if (elements[i].format != null)
+	      {
+	        if (elements[i].formatClass != null
+		    && ! elements[i].formatClass.isInstance(thisArg))
+	          throw new IllegalArgumentException("Wrong format class");
+	    
+	        formatter = elements[i].format;
+	      }
+	    else if (thisArg instanceof Number)
+	      formatter = NumberFormat.getInstance(locale);
+	    else if (thisArg instanceof Date)
+	      formatter = DateFormat.getTimeInstance(DateFormat.DEFAULT, locale);
+	    else
+	      appendBuf.append(thisArg);
+	  }
 
 	if (fp != null && fp.getField() == i && fp.getFieldAttribute() == Field.ARGUMENT)
 	  fp.setEndIndex(appendBuf.length());
@@ -496,29 +516,18 @@ public class MessageFormat extends Format
   }
 
   /**
-   * Returns the pattern with the formatted objects.
+   * Returns the pattern with the formatted objects.  The first argument
+   * must be a array of Objects.
+   * This is equivalent to format((Object[]) objectArray, appendBuf, fpos)
    *
-   * @param source The object to be formatted.
-   * @param result The StringBuffer where the text is appened.
+   * @param objectArray The object array to be formatted.
+   * @param appendBuf The StringBuffer where the text is appened.
    * @param fpos A FieldPosition object (it is ignored).
    */
-  public final StringBuffer format (Object singleArg, StringBuffer appendBuf,
+  public final StringBuffer format (Object objectArray, StringBuffer appendBuf,
 				    FieldPosition fpos)
   {
-    Object[] args;
-
-    if (singleArg instanceof Object[])
-      {
-	// This isn't specified in any manual, but it follows the
-	// JDK implementation.
-	args = (Object[]) singleArg;
-      }
-    else
-      {
-	args = new Object[1];
-	args[0] = singleArg;
-      }
-    return format (args, appendBuf, fpos);
+    return format ((Object[])objectArray, appendBuf, fpos);
   }
 
   /**

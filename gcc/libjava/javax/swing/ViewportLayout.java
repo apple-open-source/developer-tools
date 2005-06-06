@@ -41,37 +41,129 @@ import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.LayoutManager;
+import java.awt.Point;
+import java.awt.Rectangle;
 import java.io.Serializable;
 
 /**
  * ViewportLayout
  * @author	Andrew Selkirk
- * @version	1.0
+ * @author	Graydon Hoare
  */
 public class ViewportLayout implements LayoutManager, Serializable
 {
-  static final long serialVersionUID = -788225906076097229L;
+  private static final long serialVersionUID = -788225906076097229L;
 
-	public ViewportLayout() {
-	}
-	public void addLayoutComponent(String name, Component c) {
-          // ignore
-	}
-	public void removeLayoutComponent(Component c) {
-          // ignore
-	}
-	public Dimension preferredLayoutSize(Container parent) {
-          return null;
-	}
-	public Dimension minimumLayoutSize(Container parent) {
-          return null;
-	}
-	public void layoutContainer(Container parent) {
-          if (parent.countComponents() == 1)
-            {
-              // This should usually be true, but if it's not it is
-              // probably nicer if we do not panic.
-              Component c = parent.getComponent(0);
-            }
-	}
+  public ViewportLayout() 
+  {
+  }
+  public void addLayoutComponent(String name, Component c) 
+  {
+  }
+  public void removeLayoutComponent(Component c) 
+  {
+  }
+
+  public Dimension preferredLayoutSize(Container parent) 
+  {
+    JViewport vp = (JViewport)parent;
+    Component view = vp.getView();
+    if (view != null)
+      return view.getPreferredSize();
+    else
+      return new Dimension();
+  }
+
+  public Dimension minimumLayoutSize(Container parent) 
+  {
+    JViewport vp = (JViewport)parent;
+    Component view = vp.getView();
+    if (view != null)
+      return view.getMinimumSize();
+    else
+      return new Dimension();
+  }
+
+  /**
+   * Layout the view and viewport to respect the following rules. These are
+   * not precisely the rules described in sun's javadocs, but they are the
+   * rules which sun's swing implementation follows, if you watch its
+   * behavior:
+   *
+   * <ol> 
+   * 
+   * <li>If the port is larger than the view's minimum size, put the port
+   * at view position <code>(0,0)</code> and make the view's size equal to
+   * the port's.</li>
+   *
+   * <li>If the port is smaller than the view, leave the view at its
+   * minimum size. also, do not move the port, <em>unless</em> the port
+   * extends into space <em>past</em> the edge of the view. If so, move the
+   * port up or to the left, in view space, by the amount of empty space
+   * (keep the lower and right edges lined up)</li>
+   *
+   * </ol>
+   *
+   * @see JViewport#getViewSize
+   * @see JViewport#setViewSize
+   * @see JViewport#getViewPosition
+   * @see JViewport#setViewPosition
+   */
+
+  public void layoutContainer(Container parent) 
+  {
+    // The way to interpret this function is basically to ignore the names
+    // of methods it calls, and focus on the variable names here. getViewRect
+    // doesn't, for example, return the view; it returns the port bounds in
+    // view space. Likwise setViewPosition doesn't reposition the view; it 
+    // positions the port, in view coordinates.
+
+    JViewport port = (JViewport) parent;    
+    Component view = port.getView();
+
+    if (view == null)
+      return;
+
+    // These dimensions and positions are in *view space*.  Do not mix
+    // variables in here from port space (eg. parent.getBounds()). This
+    // function should be entirely in view space, because the methods on
+    // the viewport require inputs in view space.
+
+    Rectangle portBounds = port.getViewRect();
+    Dimension viewPref = view.getPreferredSize();
+    Dimension viewMinimum = view.getMinimumSize();
+    Point portLowerRight = new Point(portBounds.x + portBounds.width,
+                                     portBounds.y + portBounds.height);
+        
+    // vertical implementation of the above rules
+    if (portBounds.height >= viewMinimum.height)
+      {
+        portBounds.y = 0;
+        viewPref.height = portBounds.height;
+      }
+    else
+      {
+        viewPref.height = viewMinimum.height;
+        int overextension = portLowerRight.y - viewPref.height;
+        if (overextension > 0)
+            portBounds.y -= overextension;
+      }
+
+    // horizontal implementation of the above rules
+    if (portBounds.width >= viewMinimum.width)
+      {
+        portBounds.x = 0;
+        viewPref.width = portBounds.width;
+      }
+    else
+      {
+        viewPref.width = viewMinimum.width;
+        int overextension = portLowerRight.x - viewPref.width;
+        if (overextension > 0)
+            portBounds.x -= overextension;
+      }
+
+    port.setViewPosition(portBounds.getLocation());
+    port.setViewSize(viewPref);
+  }
 }

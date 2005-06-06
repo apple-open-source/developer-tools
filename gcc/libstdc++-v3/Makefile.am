@@ -25,29 +25,31 @@
 include $(top_srcdir)/fragment.am
 
 if GLIBCXX_HOSTED
-  # Possibly libmath as well...
-  hosted_source = src po
+  hosted_source = libmath src po testsuite
 endif
 ## Keep this list sync'd with acinclude.m4:GLIBCXX_CONFIGURE.
-SUBDIRS = include libmath libsupc++ $(hosted_source) testsuite
+SUBDIRS = include libsupc++ $(hosted_source)
 
 # These rules are messy, but are hella worth it.
 doxygen:
 	-(srcdir=`cd ${top_srcdir}; ${PWD_COMMAND}`; \
 	  builddir=`${PWD_COMMAND}`; \
 	  ${SHELL} ${srcdir}/docs/doxygen/run_doxygen \
+	            --host_alias=${host_alias} \
 	            --mode=user $${srcdir} $${builddir})
 
 doxygen-maint:
 	-(srcdir=`cd ${top_srcdir}; ${PWD_COMMAND}`; \
 	  builddir=`${PWD_COMMAND}`; \
 	  ${SHELL} ${srcdir}/docs/doxygen/run_doxygen \
+	            --host_alias=${host_alias} \
 	            --mode=maint $${srcdir} $${builddir})
 
 doxygen-man:
 	-(srcdir=`cd ${top_srcdir}; ${PWD_COMMAND}`; \
 	  builddir=`${PWD_COMMAND}`; \
 	  ${SHELL} ${srcdir}/docs/doxygen/run_doxygen \
+	            --host_alias=${host_alias} \
 	            --mode=man $${srcdir} $${builddir})
 
 .PHONY: doxygen doxygen-maint doxygen-man
@@ -58,38 +60,6 @@ check-%:
 
 # Multilib support.
 MAKEOVERRIDES=
-
-# Multilib support variables.
-MULTISRCTOP =
-MULTIBUILDTOP =
-MULTIDIRS =
-MULTISUBDIR =
-MULTIDO = true
-MULTICLEAN = true
-
-# Multilib support.
-.PHONY: all-multi mostlyclean-multi clean-multi distclean-multi \
-	maintainer-clean-multi
-
-all-recursive: all-multi
-install-recursive: install-multi
-mostlyclean-recursive: mostlyclean-multi
-clean-recursive: clean-multi
-distclean-recursive: distclean-multi
-maintainer-clean-recursive: maintainer-clean-multi
-
-all-multi:
-	: $(MAKE) ; exec $(MULTIDO) $(AM_MAKEFLAGS) DO=all multi-do
-install-multi:
-	$(MULTIDO) $(AM_MAKEFLAGS) DO=install multi-do
-mostlyclean-multi:
-	$(MULTICLEAN) $(AM_MAKEFLAGS) DO=mostlyclean multi-clean
-clean-multi:
-	$(MULTICLEAN) $(AM_MAKEFLAGS) DO=clean multi-clean
-distclean-multi:
-	$(MULTICLEAN) $(AM_MAKEFLAGS) DO=distclean multi-clean
-maintainer-clean-multi:
-	$(MULTICLEAN) $(AM_MAKEFLAGS) DO=maintainer-clean multi-clean
 
 # All the machinations with string instantiations messes up the
 # automake-generated TAGS rule. Make a simple one here.
@@ -129,8 +99,6 @@ AM_MAKEFLAGS = \
 	"AR=$(AR)" \
 	"AS=$(AS)" \
 	"LD=$(LD)" \
-	"LIBCFLAGS=$(LIBCFLAGS)" \
-	"PICFLAG=$(PICFLAG)" \
 	"RANLIB=$(RANLIB)" \
 	"NM=$(NM)" \
 	"NM_FOR_BUILD=$(NM_FOR_BUILD)" \

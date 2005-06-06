@@ -1,5 +1,5 @@
 /* UnresolvedPermission.java -- Placeholder for unresolved permissions
-   Copyright (C) 1998, 2001, 2002 Free Software Foundation, Inc.
+   Copyright (C) 1998, 2001, 2002, 2004, 2005  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -35,16 +35,17 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package java.security;
 
 // All uses of Certificate in this file refer to the one in the listed
 // package, not this one.
 import java.security.cert.Certificate;
 import java.util.Arrays;
-import java.util.Hashtable;
-import java.util.Vector;
 import java.util.Enumeration;
+import java.util.Hashtable;
 import java.util.NoSuchElementException;
+import java.util.Vector;
 
 /**
  * This class is used to hold instances of all permissions that cannot
@@ -206,7 +207,7 @@ public final class UnresolvedPermission extends Permission
  * Implements the permission collection for unresolved permissions, and
  * obeys serialization of JDK.
  *
- * @author Eric Blake <ebb9@email.byu.edu>
+ * @author Eric Blake (ebb9@email.byu.edu)
  */
 class UnresolvedPermissionCollection extends PermissionCollection
 {
@@ -215,13 +216,14 @@ class UnresolvedPermissionCollection extends PermissionCollection
    */
   private static final long serialVersionUID = -7176153071733132400L;
 
+  // Package-private to avoid a trampoline.
   /**
    * Hashtable where we store permissions.
    *
    * @serial map of typename to a Vector of permissions (you'd think Sun
    *         would document this better!)
    */
-  private final Hashtable permissions = new Hashtable();
+  final Hashtable permissions = new Hashtable();
 
   /**
    * Add a permission.

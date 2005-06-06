@@ -57,9 +57,9 @@ import java.io.Serializable;
  * ArrayIndexOutOfBoundsException, or invalid results. Also, this class is
  * not threadsafe.
  *
- * @author Warren Levy  <warrenl@cygnus.com>
- * @author Aaron M. Renn <arenn@urbanophile.com>
- * @author Eric Blake <ebb9@email.byu.edu>
+ * @author Warren Levy  (warrenl@cygnus.com)
+ * @author Aaron M. Renn (arenn@urbanophile.com)
+ * @author Eric Blake (ebb9@email.byu.edu)
  * @since 1.0
  * @status updated to 1.4
  */
@@ -338,7 +338,7 @@ public class Rectangle extends Rectangle2D implements Shape, Serializable
    * its upper left corner.
    *
    * @return the point where this rectangle is located
-   * @see setLocation(Point)
+   * @see #setLocation(Point)
    * @since 1.1
    */
   public Point getLocation()
@@ -542,7 +542,7 @@ public class Rectangle extends Rectangle2D implements Shape, Serializable
    */
   public boolean intersects(Rectangle r)
   {
-    return width > 0 && height > 0 && r.width > 0 && r.height > 0
+    return r.width > 0 && r.height > 0 && width > 0 && height > 0
       && r.x < x + width && r.x + r.width > x
       && r.y < y + height && r.y + r.height > y;
   }

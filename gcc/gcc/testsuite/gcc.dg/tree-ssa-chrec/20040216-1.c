@@ -1,7 +1,8 @@
+/* APPLE LOCAL file lno */
 /* Test dependence graph.  */
 
 /* { dg-do compile } */
-/* { dg-options "-O2 -fscalar-evolutions -ftree-ddg -c -fdump-tree-all" } */
+/* { dg-options "-O2 -floop-test -c -fdump-tree-all" } */
 
 #define N 16
 void bar(int *);
@@ -23,4 +24,4 @@ void foo()
 }
 
 /* Find 4 Dependence nodes */
-/* { dg-final { scan-tree-dump-times "Dependence Node" 4 "ddg"} } */
+/* { dg-final { scan-tree-dump-times "Dependence Node" 4 "lptest"} } */

@@ -1,6 +1,6 @@
 /* Operating system specific defines to be used when targeting GCC for
    generic System V Release 3 system.
-   Copyright (C) 1991, 1996, 2000, 2002 Free Software Foundation, Inc.
+   Copyright (C) 1991, 1996, 2000, 2002, 2004 Free Software Foundation, Inc.
    Contributed by Ron Guilmette (rfg@monkeys.com).
 
 This file is part of GCC.
@@ -69,10 +69,6 @@ Boston, MA 02111-1307, USA. */
 /* Use periods rather than dollar signs in special g++ assembler names.  */
 
 #define NO_DOLLAR_IN_LABEL
-
-/* Implicit library calls should use memcpy, not bcopy, etc.  */
-
-#define TARGET_MEM_FUNCTIONS
 
 /* System V Release 3 uses COFF debugging info.  */
 

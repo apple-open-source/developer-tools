@@ -1,5 +1,5 @@
 /* JFormattedTextField.java --
-   Copyright (C) 2003 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004 Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -42,6 +42,7 @@ import java.awt.event.FocusEvent;
 import java.io.Serializable;
 import java.text.Format;
 import java.text.ParseException;
+
 import javax.swing.text.Document;
 import javax.swing.text.DocumentFilter;
 import javax.swing.text.NavigationFilter;
@@ -52,11 +53,13 @@ import javax.swing.text.NavigationFilter;
  */
 public class JFormattedTextField extends JTextField
 {
-  private static final long serialVersionUID = 2889768923115424035L;
+  private static final long serialVersionUID = 5464657870110180632L;
 
   public abstract static class AbstractFormatter implements Serializable
   {
     private static final long serialVersionUID = -5193212041738979680L;
+    
+    private JFormattedTextField textField;
     
     public AbstractFormatter ()
     {
@@ -71,7 +74,7 @@ public class JFormattedTextField extends JTextField
 
     protected Action[] getActions ()
     {
-      throw new InternalError ("not implemented");
+      return textField.getActions();
     }
 
     protected DocumentFilter getDocumentFilter ()
@@ -81,32 +84,35 @@ public class JFormattedTextField extends JTextField
 
     protected JFormattedTextField getFormattedTextField ()
     {
-      throw new InternalError ("not implemented");
+      return textField;
     }
 
     protected NavigationFilter getNavigationFilter ()
     {
-      throw new InternalError ("not implemented");
+      return textField.getNavigationFilter();
     }
 
-    public void install (JFormattedTextField ftf)
+    public void install(JFormattedTextField textField)
     {
-      throw new InternalError ("not implemented");
+      if (this.textField != null)
+	uninstall();
+      
+      this.textField = textField;
     }
 
     public void uninstall ()
     {
-      throw new InternalError ("not implemented");
+      this.textField = null;
     }
 
     protected void invalidEdit ()
     {
-      throw new InternalError ("not implemented");
+      textField.invalidEdit();
     }
 
     protected void setEditValid (boolean valid)
     {
-      throw new InternalError ("not implemented");
+      textField.editValid = valid;
     }
 
     public abstract Object stringToValue (String text)
@@ -126,14 +132,34 @@ public class JFormattedTextField extends JTextField
     public abstract AbstractFormatter getFormatter (JFormattedTextField tf);
   }
 
+  static class FormatterFactoryWrapper extends AbstractFormatterFactory
+  {
+    AbstractFormatter formatter;
+
+    public FormatterFactoryWrapper(AbstractFormatter formatter)
+    {
+      this.formatter = formatter;
+    }
+
+    public AbstractFormatter getFormatter(JFormattedTextField tf)
+    {
+      return formatter;
+    }
+  }
+
   public static final int COMMIT = 0;
   public static final int COMMIT_OR_REVERT = 1;
   public static final int REVERT = 2;
   public static final int PERSIST = 3;
 
+  private Object value;
+  private int focusLostBehavior = COMMIT_OR_REVERT;
+  private AbstractFormatterFactory formatterFactory;
+  private boolean editValid = true;
+  
   public JFormattedTextField ()
   {
-    throw new InternalError ("not implemented");
+    this((AbstractFormatterFactory) null, null);
   }
 
   public JFormattedTextField (Format format)
@@ -143,22 +169,23 @@ public class JFormattedTextField extends JTextField
 
   public JFormattedTextField (AbstractFormatter formatter)
   {
-    throw new InternalError ("not implemented");
+    this(new FormatterFactoryWrapper(formatter), null);
   }
 
   public JFormattedTextField (AbstractFormatterFactory factory)
   {
-    throw new InternalError ("not implemented");
+    this(factory, null);
   }
 
   public JFormattedTextField (AbstractFormatterFactory factory, Object value)
   {
-    throw new InternalError ("not implemented");
+    this.formatterFactory = factory;
+    this.value = value;
   }
 
   public JFormattedTextField (Object value)
   {
-    throw new InternalError ("not implemented");
+    this.value = value;
   }
 
   public void commitEdit ()
@@ -172,39 +199,42 @@ public class JFormattedTextField extends JTextField
     throw new InternalError ("not implemented");
   }
 
-  public int getFocusLostBehaviour ()
+  public int getFocusLostBehavior()
   {
-    throw new InternalError ("not implemented");
+    return focusLostBehavior;
   }
 
   public AbstractFormatter getFormatter ()
   {
-    throw new InternalError ("not implemented");
+    if (formatterFactory == null)
+      return null;
+    
+    return formatterFactory.getFormatter(this);
   }
 
   public AbstractFormatterFactory getFormatterFactory ()
   {
-    throw new InternalError ("not implemented");
+    return formatterFactory;
   }
 
   public String getUIClassID ()
   {
-    throw new InternalError ("not implemented");
+    return "FormattedTextFieldUI";
   }
 
   public Object getValue ()
   {
-    throw new InternalError ("not implemented");
+    return value;
   }
 
   protected void invalidEdit ()
   {
-    throw new InternalError ("not implemented");
+    UIManager.getLookAndFeel().provideErrorFeedback(this);
   }
 
   public boolean isEditValid ()
   {
-    throw new InternalError ("not implemented");
+    return editValid;
   }
 
   protected void processFocusEvent (FocusEvent evt)
@@ -212,28 +242,58 @@ public class JFormattedTextField extends JTextField
     throw new InternalError ("not implemented");
   }
 
-  public void setDocument (Document document)
+  public void setDocument(Document newDocument)
   {
-    throw new InternalError ("not implemented");
+    Document oldDocument = getDocument();
+
+    if (oldDocument == newDocument)
+      return;
+    
+    super.setDocument(newDocument);
   }
 
-  public void setLostFocusBehavior (int behavior)
+  public void setFocusLostBehavior(int behavior)
   {
-    throw new InternalError ("not implemented");
+    if (behavior != COMMIT
+	&& behavior != COMMIT_OR_REVERT
+	&& behavior != PERSIST
+	&& behavior != REVERT)
+      throw new IllegalArgumentException("invalid behavior");
+
+    this.focusLostBehavior = behavior;
   }
 
   protected void setFormatter (AbstractFormatter formatter)
   {
-    throw new InternalError ("not implemented");
+    AbstractFormatter oldFormatter = null;
+    
+    if (formatterFactory != null)
+      oldFormatter = formatterFactory.getFormatter(this);
+
+    if (oldFormatter == formatter)
+      return;
+
+    setFormatterFactory(new FormatterFactoryWrapper(formatter));
+    firePropertyChange("formatter", oldFormatter, formatter);
   }
 
   public void setFormatterFactory (AbstractFormatterFactory factory)
   {
-    throw new InternalError ("not implemented");
+    if (formatterFactory == factory)
+      return;
+    
+    AbstractFormatterFactory oldFactory = formatterFactory;
+    formatterFactory = factory;
+    firePropertyChange("formatterFactory", oldFactory, factory);
   }
 
-  public void setValue (Object value)
+  public void setValue (Object newValue)
   {
-    throw new InternalError ("not implemented");
+    if (value == newValue)
+      return;
+    
+    Object oldValue = value;
+    value = newValue;
+    firePropertyChange("value", oldValue, newValue);
   }
 }

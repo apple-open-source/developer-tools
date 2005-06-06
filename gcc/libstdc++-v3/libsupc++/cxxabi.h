@@ -39,14 +39,23 @@
    is includable from both C and C++. Though the C++ specific parts are not
    available in C, naturally enough.  */
 
+/** @file cxxabi.h
+ *  The header provides an interface to the C++ ABI.
+ */
+
 #ifndef _CXXABI_H
 #define _CXXABI_H 1
 
+#pragma GCC visibility push(default)
+
 #include <stddef.h>
+#include <bits/cxxabi_tweaks.h>
  
 #ifdef __cplusplus
 namespace __cxxabiv1
 {  
+  typedef __cxa_cdtor_return_type (*__cxa_cdtor_type)(void *);
+
   extern "C" 
   {
 #endif
@@ -54,58 +63,56 @@ namespace __cxxabiv1
   // Allocate array.
   void* 
   __cxa_vec_new(size_t __element_count, size_t __element_size, 
-		size_t __padding_size, void (*__constructor) (void*),
-		void (*__destructor) (void*));
+		size_t __padding_size, __cxa_cdtor_type constructor,
+		__cxa_cdtor_type destructor);
 
   void*
   __cxa_vec_new2(size_t __element_count, size_t __element_size,
-		 size_t __padding_size, void (*__constructor) (void*),
-		 void (*__destructor) (void*), void *(*__alloc) (size_t), 
+		 size_t __padding_size, __cxa_cdtor_type constructor,
+		 __cxa_cdtor_type destructor, void *(*__alloc) (size_t), 
 		 void (*__dealloc) (void*));
 
   void*
   __cxa_vec_new3(size_t __element_count, size_t __element_size,
-		 size_t __padding_size, void (*__constructor) (void*),
-		 void (*__destructor) (void*), void *(*__alloc) (size_t), 
+		 size_t __padding_size, __cxa_cdtor_type constructor,
+		 __cxa_cdtor_type destructor, void *(*__alloc) (size_t), 
 		 void (*__dealloc) (void*, size_t));
 
   // Construct array.
-  void 
+  __cxa_vec_ctor_return_type
   __cxa_vec_ctor(void* __array_address, size_t __element_count,
-		 size_t __element_size, void (*__constructor) (void*),
-		 void (*__destructor) (void*));
+		 size_t __element_size, __cxa_cdtor_type constructor,
+		 __cxa_cdtor_type destructor);
 
-  void 
+  __cxa_vec_ctor_return_type
   __cxa_vec_cctor(void* dest_array, void* src_array, size_t element_count, 
-		  size_t element_size, void (*constructor) (void*, void*), 
-		  void (*destructor) (void*));
+		  size_t element_size, 
+		  __cxa_cdtor_return_type (*constructor) (void*, void*), 
+		  __cxa_cdtor_type destructor);
  
   // Destruct array.
   void 
   __cxa_vec_dtor(void* __array_address, size_t __element_count,
-		 size_t __element_size, void (*__destructor) (void*));
+		 size_t __element_size, __cxa_cdtor_type destructor);
   
   void 
   __cxa_vec_cleanup(void* __array_address, size_t __element_count,
-		    size_t __element_size, void (*__destructor) (void*));
+		    size_t __element_size, __cxa_cdtor_type destructor);
   
   // Destruct and release array.
   void 
   __cxa_vec_delete(void* __array_address, size_t __element_size,
-		   size_t __padding_size, void (*__destructor) (void*));
+		   size_t __padding_size, __cxa_cdtor_type destructor);
 
   void 
   __cxa_vec_delete2(void* __array_address, size_t __element_size,
-		    size_t __padding_size, void (*__destructor) (void*),
+		    size_t __padding_size, __cxa_cdtor_type destructor,
 		    void (*__dealloc) (void*));
                   
   void 
   __cxa_vec_delete3(void* __array_address, size_t __element_size,
-		    size_t __padding_size, void (*__destructor) (void*),
+		    size_t __padding_size, __cxa_cdtor_type destructor,
 		    void (*__dealloc) (void*, size_t));
-
-  // The ABI requires a 64-bit type.
-  __extension__ typedef int __guard __attribute__((mode (__DI__)));
 
   int 
   __cxa_guard_acquire(__guard*);
@@ -524,5 +531,7 @@ namespace __cxxabiv1
 namespace abi = __cxxabiv1;
 
 #endif // __cplusplus
+
+#pragma GCC visibility pop
 
 #endif // __CXXABI_H 

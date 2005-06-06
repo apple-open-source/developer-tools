@@ -1,5 +1,5 @@
 /* GtkButtonPeer.java -- Implements ButtonPeer with GTK
-   Copyright (C) 1998, 1999 Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2004  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -41,26 +41,34 @@ package gnu.java.awt.peer.gtk;
 import java.awt.AWTEvent;
 import java.awt.Button;
 import java.awt.Component;
-import java.awt.Font;
 import java.awt.Point;
-import java.awt.event.MouseEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.MouseEvent;
 import java.awt.peer.ButtonPeer;
 
 public class GtkButtonPeer extends GtkComponentPeer
     implements ButtonPeer
 {
-  native void create ();
-  public native void connectJObject ();
+  native void create (String label);
+
   public native void connectSignals ();
 
-  native void gtkSetFont(String name, int style, int size);
-  native void gtkSetLabel(String label);
+  native void gtkWidgetModifyFont (String name, int style, int size);
+  native void gtkSetLabel (String label);
   native void gtkWidgetSetForeground (int red, int green, int blue);
+  native void gtkWidgetSetBackground (int red, int green, int blue);
+  native void gtkActivate ();
+  native void gtkWidgetRequestFocus ();
+  native void setNativeBounds (int x, int y, int width, int height);
 
   public GtkButtonPeer (Button b)
   {
     super (b);
+  }
+
+  void create ()
+  {
+    create (((Button) awtComponent).getLabel ());
   }
 
   public void setLabel (String label) 
@@ -77,32 +85,23 @@ public class GtkButtonPeer extends GtkComponentPeer
 	p.translate(((Component) me.getSource()).getX(),
 	            ((Component) me.getSource()).getY());
 	if (!me.isConsumed ()
-	    && (me.getModifiers () & MouseEvent.BUTTON1_MASK) != 0
+	    && (me.getModifiersEx () & MouseEvent.BUTTON1_DOWN_MASK) != 0
 	    && awtComponent.getBounds().contains(p))
-	  postActionEvent (((Button)awtComponent).getActionCommand (), 
-			   me.getModifiers ());
+          postActionEvent (((Button) awtComponent).getActionCommand (), 
+                           me.getModifiersEx ());
       }
 
     if (e.getID () == KeyEvent.KEY_PRESSED)
       {
 	KeyEvent ke = (KeyEvent) e;
 	if (!ke.isConsumed () && ke.getKeyCode () == KeyEvent.VK_SPACE)
-	  postActionEvent (((Button)awtComponent).getActionCommand (),
-			   ke.getModifiers ());
+          {
+            postActionEvent (((Button) awtComponent).getActionCommand (),
+                             ke.getModifiersEx ());
+            gtkActivate ();
+          }
       }
 
     super.handleEvent (e);
-  }
-
-  public void getArgs (Component component, GtkArgList args)
-  {
-    super.getArgs (component, args);
-
-    args.add ("label", ((Button)component).getLabel ());
-  }
-
-  public void setFont (Font f)
-  {
-    gtkSetFont(f.getName(), f.getStyle(), f.getSize());
   }
 }

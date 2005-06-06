@@ -516,8 +516,9 @@ void
 list_interpreter_cmd (char *args, int from_tty)
 {
   struct gdb_interpreter *interp_ptr;
+  struct cleanup *list_cleanup;
 
-  ui_out_list_begin (uiout, "interpreters");
+  list_cleanup = make_cleanup_ui_out_list_begin_end (uiout, "interpreters");
   for (interp_ptr = interp_list; interp_ptr != NULL; 
        interp_ptr = interp_ptr->next)
     {
@@ -525,7 +526,7 @@ list_interpreter_cmd (char *args, int from_tty)
       ui_out_field_string (uiout, "interpreter", interp_ptr->name);
       ui_out_text (uiout, "\n");
     }
-  ui_out_list_end (uiout);
+  do_cleanups (list_cleanup);
 }
 
 void

@@ -53,6 +53,8 @@ class CharViewBufferImpl extends CharBuffer
     this.offset = bb.position();
     this.readOnly = bb.isReadOnly();
     this.endian = bb.order();
+    if (bb.isDirect())
+      this.address = VMDirectByteBuffer.adjustAddress(bb.address, offset);
   }
   
   public CharViewBufferImpl (ByteBuffer bb, int offset, int capacity,
@@ -64,8 +66,17 @@ class CharViewBufferImpl extends CharBuffer
     this.offset = offset;
     this.readOnly = readOnly;
     this.endian = endian;
+    if (bb.isDirect())
+      this.address = VMDirectByteBuffer.adjustAddress(bb.address, offset);
   }
 
+  /**
+   * Reads the <code>char</code> at this buffer's current position,
+   * and then increments the position.
+   *
+   * @exception BufferUnderflowException If there are no remaining
+   * <code>char</code>s in this buffer.
+   */
   public char get ()
   {
     int p = position();
@@ -74,6 +85,15 @@ class CharViewBufferImpl extends CharBuffer
     return result;
   }
 
+  /**
+   * Absolute get method. Reads the <code>char</code> at position
+   * <code>index</code>.
+   *
+   * @param index Position to read the <code>char</code> from.
+   *
+   * @exception IndexOutOfBoundsException If index is negative or not smaller
+   * than the buffer's limit.
+   */
   public char get (int index)
   {
     return ByteBufferHelper.getChar(bb, (index << 1) + offset, endian);
@@ -101,6 +121,11 @@ class CharViewBufferImpl extends CharBuffer
 	bb.shiftDown(offset, offset + 2 * position(), 2 * count);
         position (count);
         limit (capacity ());
+      }
+    else
+      {
+	position(limit());
+	limit(capacity());
       }
     return this;
   }

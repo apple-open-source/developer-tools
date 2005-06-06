@@ -27,6 +27,9 @@ Boston, MA 02111-1307, USA.  */
 #else
 #include <varargs.h>
 #endif
+#if !defined (va_copy) && defined (__va_copy)
+# define va_copy(d,s)  __va_copy((d),(s))
+#endif
 #include <stdio.h>
 #ifdef HAVE_STRING_H
 #include <string.h>
@@ -156,8 +159,7 @@ int
 vasprintf (result, format, args)
      char **result;
      const char *format;
-     /* APPLE LOCAL  Agree with <stdio.h> prototype  */
-#if defined (_BSD_VA_LIST_) && (defined (__FreeBSD__) || defined (__APPLE__))
+#if defined (_BSD_VA_LIST_) && defined (__FreeBSD__)
      _BSD_VA_LIST_ args;
 #else
      va_list args;

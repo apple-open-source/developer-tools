@@ -1,6 +1,6 @@
 /* Definitions of target machine for GNU compiler.  
    Vitesse IQ2000 processors
-   Copyright (C) 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -307,16 +307,16 @@ enum reg_class
    `I'	is used for the range of constants an arithmetic insn can
 	actually contain (16 bits signed integers).
 
-   `J'	is used for the range which is just zero (ie, $r0).
+   `J'	is used for the range which is just zero (i.e., $r0).
 
    `K'	is used for the range of constants a logical insn can actually
 	contain (16 bit zero-extended integers).
 
    `L'	is used for the range of constants that be loaded with lui
-	(ie, the bottom 16 bits are zero).
+	(i.e., the bottom 16 bits are zero).
 
    `M'	is used for the range of constants that take two words to load
-	(ie, not matched by `I', `K', and `L').
+	(i.e., not matched by `I', `K', and `L').
 
    `N'	is used for constants 0xffffnnnn or 0xnnnnffff
 
@@ -438,15 +438,6 @@ enum reg_class
 #define FUNCTION_ARG(CUM, MODE, TYPE, NAMED) \
   function_arg (& CUM, MODE, TYPE, NAMED)
 
-#define FUNCTION_ARG_PARTIAL_NREGS(CUM, MODE, TYPE, NAMED) \
-  function_arg_partial_nregs (& CUM, MODE, TYPE, NAMED)
-
-#define FUNCTION_ARG_PASS_BY_REFERENCE(CUM, MODE, TYPE, NAMED)		\
-  function_arg_pass_by_reference (& CUM, MODE, TYPE, NAMED)
-
-#define FUNCTION_ARG_CALLEE_COPIES(CUM, MODE, TYPE, NAMED)		\
-  ((NAMED) && FUNCTION_ARG_PASS_BY_REFERENCE (CUM, MODE, TYPE, NAMED))
-
 #define MAX_ARGS_IN_REGISTERS 8
 
 typedef struct iq2000_args
@@ -543,10 +534,6 @@ typedef struct iq2000_args
 
 #define EXPAND_BUILTIN_VA_START(valist, nextarg) \
   iq2000_va_start (valist, nextarg)
-
-/* Implement `va_arg'.  */
-#define EXPAND_BUILTIN_VA_ARG(valist, type) \
-  iq2000_va_arg (valist, type)
 
 
 /* Trampolines for Nested Functions.  */
@@ -939,17 +926,13 @@ extern void		sbss_section  (void);
 
 
 #undef ASM_SPEC
-#define ASM_SPEC "%{march=iq2000: -m2000} %{march=iq10: -m10} %{!march=*: -m2000}"
 
 
-/* The mapping from gcc register number to DWARF 2 CFA column number.
-   This mapping does not allow for tracking register 0, since
-   register 0 is fixed.  */
-#define DWARF_FRAME_REGNUM(REG)				\
-  (REG == GP_REG_FIRST + 31 ? DWARF_FRAME_RETURN_COLUMN : REG)
+/* The mapping from gcc register number to DWARF 2 CFA column number.  */
+#define DWARF_FRAME_REGNUM(REG)        (REG)
 
 /* The DWARF 2 CFA column which tracks the return address.  */
-#define DWARF_FRAME_RETURN_COLUMN ( GP_REG_FIRST + 26)
+#define DWARF_FRAME_RETURN_COLUMN (GP_REG_FIRST + 31)
 
 /* Describe how we implement __builtin_eh_return.  */
 #define EH_RETURN_DATA_REGNO(N) ((N) < 4 ? (N) + GP_ARG_FIRST : INVALID_REGNUM)

@@ -34,6 +34,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "varray.h"
 #include "params.h"
 #include "hashtab.h"
+#include "target.h"
 #include "debug.h"
 #include "tree-inline.h"
 #include "flags.h"
@@ -100,7 +101,8 @@ maybe_thunk_body (tree fn)
   tree call, clone, expr_stmt, fn_parm, fn_parm_typelist, last_arg, start;
   int parmno, vtt_parmno;
 
-  if (flag_apple_kext || flag_clone_structors)
+  /* APPLE LOCAL disable de-cloner */
+  if (TRUE || flag_apple_kext || flag_clone_structors)
     return 0;
 
   /* If we've already seen this structor, avoid re-processing it.  */
@@ -133,7 +135,7 @@ maybe_thunk_body (tree fn)
   /* If we got this far, we've decided to turn the clones into thunks.  */
 
   /* We're going to generate code for fn, so it is no longer "abstract."  */
-  /* APPLE LOCAL begin 3271957 and 3262497 */
+  /* APPLE LOCAL begin fix -gused debug info (radar 3271957 3262497) */
   /* Leave 'abstract' bit set for unified constructs and destructors when 
      -gused is used.  */
   if (!(flag_debug_only_used_symbols
@@ -144,7 +146,7 @@ maybe_thunk_body (tree fn)
 	   && DECL_MAYBE_IN_CHARGE_CONSTRUCTOR_P (fn))
       )
     DECL_ABSTRACT (fn) = 0;
-  /* APPLE LOCAL end 3271957 and 3262497 */
+  /* APPLE LOCAL end */
 
   /* Find the vtt_parm, if present.  */
   for (vtt_parmno = -1, parmno = 0, fn_parm = DECL_ARGUMENTS (fn);
@@ -177,7 +179,7 @@ maybe_thunk_body (tree fn)
 
       /* Start processing the function.  */
       push_to_top_level ();
-      start_function (NULL_TREE, clone, NULL_TREE, SF_PRE_PARSED);
+      start_preparsed_function (clone, NULL_TREE, SF_PRE_PARSED);
 
       /* Walk parameter lists together, creating parameter list for call to original function.  */
       for (parmno = 0,
@@ -192,7 +194,7 @@ maybe_thunk_body (tree fn)
 	  if (parmno == vtt_parmno && ! DECL_HAS_VTT_PARM_P (clone))
 	    {
 	      tree typed_null_pointer_node = copy_node (null_pointer_node);
-	      my_friendly_assert (fn_parm_typelist, 0);
+	      gcc_assert (fn_parm_typelist);
 	      /* Clobber actual parameter with formal parameter type.  */
 	      TREE_TYPE (typed_null_pointer_node) = TREE_VALUE (fn_parm_typelist);
 	      parmlist = tree_cons (NULL, typed_null_pointer_node, parmlist);
@@ -206,7 +208,7 @@ maybe_thunk_body (tree fn)
 	     function.  */
 	  else
 	    {
-	      my_friendly_assert (clone_parm, 0);
+	      gcc_assert (clone_parm);
 	      DECL_ABSTRACT_ORIGIN (clone_parm) = NULL;
 	      parmlist = tree_cons (NULL, clone_parm, parmlist);
 	      clone_parm = TREE_CHAIN (clone_parm);
@@ -251,13 +253,13 @@ maybe_clone_body (tree fn)
 
   /* We know that any clones immediately follow FN in the TYPE_METHODS
      list.  */
-  for (clone = TREE_CHAIN (fn);
-       clone && DECL_CLONED_FUNCTION_P (clone);
-       clone = TREE_CHAIN (clone))
+  push_to_top_level ();
+  FOR_EACH_CLONE (clone, fn)
     {
       tree parm;
       tree clone_parm;
       /* APPLE LOCAL structor thunks */
+      /* Delete some local variables.  */
 
       /* Update CLONE's source position information to match FN's.  */
       DECL_SOURCE_LOCATION (clone) = DECL_SOURCE_LOCATION (fn);
@@ -273,6 +275,7 @@ maybe_clone_body (tree fn)
       DECL_NOT_REALLY_EXTERN (clone) = DECL_NOT_REALLY_EXTERN (fn);
       TREE_PUBLIC (clone) = TREE_PUBLIC (fn);
       DECL_VISIBILITY (clone) = DECL_VISIBILITY (fn);
+      DECL_VISIBILITY_SPECIFIED (clone) = DECL_VISIBILITY_SPECIFIED (fn);
 
       /* Adjust the parameter names and locations.  */
       parm = DECL_ARGUMENTS (fn);
@@ -315,8 +318,7 @@ maybe_clone_body (tree fn)
    /* APPLE LOCAL end structor thunks */
 
       /* Start processing the function.  */
-      push_to_top_level ();
-      start_function (NULL_TREE, clone, NULL_TREE, SF_PRE_PARSED);
+      start_preparsed_function (clone, NULL_TREE, SF_PRE_PARSED);
 
       /* Remap the parameters.  */
       decl_map = splay_tree_new (splay_tree_compare_pointers, NULL, NULL);
@@ -369,6 +371,13 @@ maybe_clone_body (tree fn)
 	    }
 	}
 
+      if (targetm.cxx.cdtor_returns_this ())
+	{
+	  parm = DECL_RESULT (fn);
+	  clone_parm = DECL_RESULT (clone);
+	  splay_tree_insert (decl_map, (splay_tree_key) parm,
+			     (splay_tree_value) clone_parm);
+	}
       /* Clone the body.  */
       clone_body (clone, fn, decl_map);
 
@@ -382,8 +391,8 @@ maybe_clone_body (tree fn)
       finish_function (0);
       BLOCK_ABSTRACT_ORIGIN (DECL_INITIAL (clone)) = DECL_INITIAL (fn);
       expand_or_defer_fn (clone);
-      pop_from_top_level ();
     }
+  pop_from_top_level ();
 
   /* We don't need to process the original function any further.  */
   return 1;

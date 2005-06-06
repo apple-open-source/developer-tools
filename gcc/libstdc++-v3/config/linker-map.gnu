@@ -61,7 +61,6 @@ GLIBCXX_3.4 {
       std::_List_node_base::reverse*;
       std::_List_node_base::transfer*;
       std::__throw_*;
-      std::__basic_file*;
       std::__timepunct*;
       std::__numeric_limits_base*;
       std::__num_base::_S_format_float*;
@@ -103,6 +102,10 @@ GLIBCXX_3.4 {
     # operator delete[](void*, std::nothrow_t const&)
     _ZdaPvRKSt9nothrow_t;
 
+    # std::basic_iostream constructors, destructors
+    _ZNSdC*;
+    _ZNSdD*;
+
     # std::locale destructors
     _ZNSt6localeD*;
 	
@@ -131,8 +134,20 @@ GLIBCXX_3.4 {
     _ZSt28_Rb_tree_rebalance_for_erasePSt18_Rb_tree_node_baseRS_;
     _ZSt29_Rb_tree_insert_and_rebalancebPSt18_Rb_tree_node_baseS0_RS_;
 
-    # std::__codecvt_abstract_base*
-    _ZNStSt23__codecvt_abstract_base*;
+    # std::__basic_file
+    _ZNKSt12__basic_fileIcE7is_openEv;
+    _ZNSt12__basic_fileIcE2fdEv;
+    _ZNSt12__basic_fileIcE4openEPKcSt13_Ios_Openmodei;
+    _ZNSt12__basic_fileIcE4syncEv;
+    _ZNSt12__basic_fileIcE5closeEv;
+    _ZNSt12__basic_fileIcE6xsgetn*;
+    _ZNSt12__basic_fileIcE6xsputn*;
+    _ZNSt12__basic_fileIcE7seekoff*;
+    _ZNSt12__basic_fileIcE8sys_openE*St13_Ios_Openmode;
+    _ZNSt12__basic_fileIcE8xsputn_2*;
+    _ZNSt12__basic_fileIcE9showmanycEv;
+    _ZNSt12__basic_fileIcEC*;
+    _ZNSt12__basic_fileIcED*;
 
     # virtual table
     _ZTVNSt8ios_base7failureE;
@@ -234,6 +249,60 @@ GLIBCXX_3.4 {
     *;
 };
 
+GLIBCXX_3.4.1 {
+ 
+    _ZNSt12__basic_fileIcE4fileEv;
+ 
+} GLIBCXX_3.4;
+ 
+GLIBCXX_3.4.2 {
+
+    _ZN9__gnu_cxx18stdio_sync_filebufI[cw]St11char_traitsI[cw]EE4fileEv;
+
+    _ZN9__gnu_cxx17__pool_alloc_base9_M_refillE[jm];
+    _ZN9__gnu_cxx17__pool_alloc_base16_M_get_free_listE[jm];
+    _ZN9__gnu_cxx17__pool_alloc_base12_M_get_mutexEv;
+
+} GLIBCXX_3.4.1;
+
+GLIBCXX_3.4.3 {
+ 
+    # stub functions from libmath
+    acosf;
+    acosl;
+    asinf;
+    asinl;
+    atanf;
+    atanl;
+    ceilf;
+    ceill;
+    floorf;
+    floorl;
+    fmodf;
+    fmodl;
+    frexpf;
+    frexpl;
+    ldexpf;
+    ldexpl;
+    modff;
+    modfl;
+
+} GLIBCXX_3.4.2;
+
+GLIBCXX_3.4.4 {
+
+    _ZN9__gnu_cxx6__poolILb0EE13_M_initializeEv;
+    _ZN9__gnu_cxx6__poolILb1EE13_M_initializeEPFvPvE;
+    _ZN9__gnu_cxx6__poolILb1EE21_M_destroy_thread_keyEPv;
+    _ZN9__gnu_cxx6__poolILb1EE16_M_get_thread_idEv;
+    _ZN9__gnu_cxx6__poolILb[01]EE16_M_reserve_blockE[jm][jm];
+    _ZN9__gnu_cxx6__poolILb[01]EE16_M_reclaim_blockEPc[jm];
+    _ZN9__gnu_cxx6__poolILb[01]EE10_M_destroyEv;
+
+    _ZN9__gnu_cxx9free_list6_M_getE*;
+    _ZN9__gnu_cxx9free_list8_M_clearEv;
+
+} GLIBCXX_3.4.3;
 
 # Symbols in the support library (libsupc++) have their own tag.
 CXXABI_1.3 {
@@ -339,3 +408,9 @@ CXXABI_1.3 {
   local:
     *;
 };
+
+CXXABI_1.3.1 {
+
+    __cxa_get_exception_ptr;
+
+} CXXABI_1.3;

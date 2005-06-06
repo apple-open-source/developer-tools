@@ -25,7 +25,7 @@
 # Each language makefile fragment must provide the following targets:
 #
 # foo.all.build, foo.all.cross, foo.start.encap, foo.rest.encap,
-# foo.info, foo.dvi,
+# foo.info
 # foo.install-normal, foo.install-common, foo.install-info, foo.install-man,
 # foo.uninstall, foo.distdir,
 # foo.mostlyclean, foo.clean, foo.distclean, foo.extraclean,
@@ -41,10 +41,10 @@
 # $(srcdir) must be set to the gcc/ source directory (*not* gcc/fortran/).
 
 # Actual name to use when installing a native compiler.
-GFORTRAN_INSTALL_NAME = `echo gfortran|sed '$(program_transform_name)'`
+GFORTRAN_INSTALL_NAME := $(shell echo gfortran|sed '$(program_transform_name)')
 
 # Actual name to use when installing a cross-compiler.
-GFORTRAN_CROSS_NAME = `echo gfortran|sed '$(program_transform_cross_name)'`
+GFORTRAN_CROSS_NAME := $(shell echo gfortran|sed '$(program_transform_cross_name)')
 
 #^L
 
@@ -59,31 +59,22 @@ GFORTRAN_CROSS_NAME = `echo gfortran|sed '$(program_transform_cross_name)'`
 
 # These are the groups of object files we have.  The F95_PARSER_OBJS are
 # all the front end files, the F95_OBJS are the files for the translation
-# from the parse tree to GENERIC, and F95_ADDITIONAL_OBJS are the files
-# from the middle end we depend on.
+# from the parse tree to GENERIC
 
-F95_PARSER_OBJS = fortran/arith.o fortran/array.o fortran/bbt.o fortran/check.o\
-    fortran/decl.o fortran/error.o fortran/expr.o fortran/interface.o \
-    fortran/intrinsic.o fortran/io.o fortran/iresolve.o fortran/match.o \
-    fortran/matchexp.o fortran/misc.o fortran/module.o fortran/parse.o \
-    fortran/primary.o fortran/options.o fortran/resolve.o \
-    fortran/scanner.o fortran/simplify.o fortran/st.o fortran/symbol.o \
-    fortran/dump-parse-tree.o
+F95_PARSER_OBJS = fortran/arith.o fortran/array.o fortran/bbt.o \
+    fortran/check.o fortran/data.o fortran/decl.o fortran/dump-parse-tree.o \
+    fortran/error.o fortran/expr.o fortran/interface.o \
+    fortran/intrinsic.o fortran/io.o fortran/iresolve.o \
+    fortran/match.o fortran/matchexp.o fortran/misc.o fortran/module.o \
+    fortran/options.o fortran/parse.o fortran/primary.o fortran/resolve.o \
+    fortran/scanner.o fortran/simplify.o fortran/st.o fortran/symbol.o
 
 F95_OBJS = $(F95_PARSER_OBJS) \
-    fortran/f95-lang.o fortran/convert.o fortran/trans.o fortran/trans-decl.o \
-    fortran/trans-types.o fortran/trans-const.o fortran/trans-expr.o \
-    fortran/trans-stmt.o fortran/trans-io.o fortran/trans-array.o \
-    fortran/trans-intrinsic.o fortran/dependency.o fortran/trans-common.o \
-    fortran/data.o
-
-# FIXME:
-# We rely on c-semantics to expand from GIMPLE to RTL.
-# This should go away once a real GIMPLE expander is available. 
-F95_ADDITIONAL_OBJS = \
-	tree-cfg.o tree-dfa.o tree-optimize.o tree-gimple.o \
-	tree-ssa.o tree-ssa-ccp.o tree-ssa-dce.o \
-	tree-alias-common.o tree-alias-type.o gimplify.o stor-layout.o
+    fortran/convert.o fortran/dependency.o fortran/f95-lang.o \
+    fortran/trans.o fortran/trans-array.o fortran/trans-common.o \
+    fortran/trans-const.o fortran/trans-decl.o fortran/trans-expr.o \
+    fortran/trans-intrinsic.o fortran/trans-io.o fortran/trans-stmt.o \
+    fortran/trans-types.o
 
 # GFORTRAN uses GMP for its internal arithmetics.
 F95_LIBS = $(GMPLIBS) $(LIBS)
@@ -113,10 +104,10 @@ gfortran-cross$(exeext): gfortran$(exeext)
 	cp gfortran$(exeext) gfortran-cross$(exeext)
 
 # The compiler itself is called f951.
-f951$(exeext): $(F95_OBJS) $(F95_ADDITIONAL_OBJS) \
+f951$(exeext): $(F95_OBJS) \
 		$(BACKEND) $(LIBDEPS)
 	$(CC) $(ALL_CFLAGS) $(LDFLAGS) -o $@ \
-		$(F95_OBJS) $(F95_ADDITIONAL_OBJS) $(BACKEND) $(F95_LIBS)
+		$(F95_OBJS) $(BACKEND) $(F95_LIBS)
 
 gt-fortran-f95-lang.h gtype-fortran.h	      : s-gtype; @true
 gt-fortran-trans-decl.h gt-fortran-trans.h    : s-gtype; @true
@@ -141,9 +132,15 @@ f95.tags: force
 
 f95.info: doc/gfortran.info
 dvi:: doc/gfortran.dvi
+html:: $(htmldir)/gfortran/index.html
 
-f95.man:
-f95.srcman:
+F95_MANFILES = doc/gfortran.1
+
+f95.man: $(F95_MANFILES)
+
+f95.srcman: $(F95_MANFILES)
+	-cp -p $^ $(srcdir)/doc
+
 f95.srcextra:
 
 check-f95 : check-gfortran
@@ -161,12 +158,22 @@ GFORTRAN_TEXI = \
 doc/gfortran.info: $(GFORTRAN_TEXI)
 	if [ x$(BUILD_INFO) = xinfo ]; then \
 	  rm -f doc/gfortran.info-*; \
-	  $(MAKEINFO) -I$(srcdir)/doc/include -I$(srcdir)/fortran \
-	    -o doc/gfortran.info $(srcdir)/fortran/gfortran.texi; \
+	  $(MAKEINFO) -I $(srcdir)/doc/include -I $(srcdir)/fortran \
+	    -o $@ $<; \
 	else true; fi
 
 doc/gfortran.dvi: $(GFORTRAN_TEXI)
 	$(TEXI2DVI) -I $(srcdir)/fortran -I $(abs_docdir)/include -o $@ $<
+
+$(htmldir)/gfortran/index.html: $(GFORTRAN_TEXI)
+	$(mkinstalldirs) $(@D)
+	rm -f $(@D)/*
+	$(TEXI2HTML) -I $(docdir)/include -I $(srcdir)/fortran -o $(@D) $<
+
+.INTERMEDIATE: gfortran.pod
+
+gfortran.pod: $(GFORTRAN_TEXI)
+	-$(TEXI2POD) < $(srcdir)/fortran/invoke.texi > $@
 
 #
 # Install hooks:
@@ -198,8 +205,13 @@ f95.install-common: installdirs
 
 install-info:: $(DESTDIR)$(infodir)/gfortran.info
 
-f95.install-man: installdirs
-#TODO: write the gfortran man pages
+f95.install-man: installdirs \
+	$(DESTDIR)$(man1dir)/$(GFORTRAN_INSTALL_NAME)$(man1ext)
+
+$(DESTDIR)$(man1dir)/$(GFORTRAN_INSTALL_NAME)$(man1ext): doc/gfortran.1
+	-rm -f $@
+	-$(INSTALL_DATA) $< $@
+	-chmod a-x $@
 
 f95.uninstall:
 	if $(SHELL) -c 'install-info --version | sed 1q | fgrep -s -v -i debian' >/dev/null 2>&1; then \
@@ -207,6 +219,7 @@ f95.uninstall:
 	  install-info --delete --info-dir=$(DESTDIR)$(infodir) $(DESTDIR)$(infodir)/gfortran.info || : ; \
 	else : ; fi; \
 	rm -rf $(DESTDIR)$(bindir)/$(GFORTRAN_INSTALL_NAME)$(exeext); \
+	rm -rf $(DESTDIR)$(man1dir)/$(GFORTRAN_INSTALL_NAME)$(man1ext); \
 	rm -rf $(DESTDIR)$(bindir)/$(GFORTRAN_CROSS_NAME)$(exeext); \
 	rm -rf $(DESTDIR)$(infodir)/gfortran.info*
 
@@ -226,6 +239,7 @@ f95.distclean:
 f95.extraclean:
 f95.maintainer-clean:
 	-rm -f doc/gfortran.info* fortran/gfortran.*aux
+	-rm -f $(docobjdir)/gfortran.1
 
 #
 # Stage hooks:
@@ -261,14 +275,17 @@ $(F95_PARSER_OBJS): fortran/gfortran.h fortran/intrinsic.h fortran/match.h \
 GFORTRAN_TRANS_DEPS = fortran/gfortran.h fortran/intrinsic.h fortran/trans-array.h \
     fortran/trans-const.h fortran/trans-const.h fortran/trans.h \
     fortran/trans-stmt.h fortran/trans-types.h \
-    $(CONFIG_H) $(SYSTEM_H) $(TREE_H) $(TM_H) coretypes.h
+    $(CONFIG_H) $(SYSTEM_H) $(TREE_H) $(TM_H) coretypes.h $(GGC_H)
 
 fortran/f95-lang.o: $(GFORTRAN_TRANS_DEPS) fortran/mathbuiltins.def \
-  gt-fortran-f95-lang.h gtype-fortran.h cgraph.h
+  gt-fortran-f95-lang.h gtype-fortran.h cgraph.h $(TARGET_H)
 fortran/convert.o: $(GFORTRAN_TRANS_DEPS)
 fortran/trans.o: $(GFORTRAN_TRANS_DEPS)
-fortran/trans-decl.o: $(GFORTRAN_TRANS_DEPS) gt-fortran-trans-decl.h cgraph.h
-fortran/trans-types.o: $(GFORTRAN_TRANS_DEPS) gt-fortran-trans-types.h
+fortran/trans-decl.o: $(GFORTRAN_TRANS_DEPS) gt-fortran-trans-decl.h \
+  cgraph.h $(TARGET_H) function.h errors.h $(FLAGS_H) tree-gimple.h \
+  tree-dump.h
+fortran/trans-types.o: $(GFORTRAN_TRANS_DEPS) gt-fortran-trans-types.h \
+  real.h toplev.h $(TARGET_H)
 fortran/trans-const.o: $(GFORTRAN_TRANS_DEPS)
 fortran/trans-expr.o: $(GFORTRAN_TRANS_DEPS)
 fortran/trans-stmt.o: $(GFORTRAN_TRANS_DEPS)
@@ -278,5 +295,4 @@ fortran/trans-intrinsic.o: $(GFORTRAN_TRANS_DEPS) fortran/mathbuiltins.def \
   gt-fortran-trans-intrinsic.h
 fortran/dependency.o: fortran/gfortran.h fortran/dependency.h
 fortran/trans-common.o: $(GFORTRAN_TRANS_DEPS)
-fortran/data.o: $(GFORTRAN_TRANS_DEPS)
 

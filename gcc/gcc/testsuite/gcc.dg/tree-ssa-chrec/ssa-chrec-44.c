@@ -1,5 +1,6 @@
+/* APPLE LOCAL file lno */
 /* { dg-do compile } */ 
-/* { dg-options "-O1 -fscalar-evolutions -fdump-tree-scev-details" } */
+/* { dg-options "-O1 -floop-test -fdump-tree-lptest-details" } */
 
 /* That's a reduced testcase of one of my favourite simulation programs.
    This is also known under the name: "Newton's falling apple".

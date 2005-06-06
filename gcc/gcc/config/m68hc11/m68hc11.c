@@ -1,5 +1,5 @@
 /* Subroutines for code generation on Motorola 68HC11 and 68HC12.
-   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004
+   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005
    Free Software Foundation, Inc.
    Contributed by Stephane Carrez (stcarrez@nerim.fr)
 
@@ -272,6 +272,8 @@ static int nb_soft_regs;
 #define TARGET_STRUCT_VALUE_RTX m68hc11_struct_value_rtx
 #undef TARGET_RETURN_IN_MEMORY
 #define TARGET_RETURN_IN_MEMORY m68hc11_return_in_memory
+#undef TARGET_CALLEE_COPIES
+#define TARGET_CALLEE_COPIES hook_callee_copies_named
 
 #undef TARGET_STRIP_NAME_ENCODING
 #define TARGET_STRIP_NAME_ENCODING m68hc11_strip_name_encoding
@@ -292,6 +294,11 @@ m68hc11_override_options (void)
 	       (flag_pic > 1) ? "PIC" : "pic");
       flag_pic = 0;
     }
+
+  /* Do not enable -fweb because it breaks the 32-bit shift patterns
+     by breaking the match_dup of those patterns.  The shift patterns
+     will no longer be recognized after that.  */
+  flag_web = 0;
 
   /* Configure for a 68hc11 processor.  */
   if (TARGET_M6811)
@@ -379,8 +386,6 @@ m68hc11_conditional_register_usage (void)
 
 
 /* Reload and register operations.  */
-
-static const char *const reg_class_names[] = REG_CLASS_NAMES;
 
 
 void
@@ -843,7 +848,7 @@ m68hc11_reload_operands (rtx operands[])
       /* If the offset is out of range, we have to compute the address
          with a separate add instruction.  We try to do with with an 8-bit
          add on the A register.  This is possible only if the lowest part
-         of the offset (ie, big_offset % 256) is a valid constant offset
+         of the offset (i.e., big_offset % 256) is a valid constant offset
          with respect to the mode.  If it's not, we have to generate a
          16-bit add on the D register.  From:
        
@@ -1005,6 +1010,24 @@ non_push_operand (rtx operand, enum machine_mode mode)
     return 0;
 
   if (push_operand (operand, mode) == 1)
+    return 0;
+  return 1;
+}
+
+int
+splitable_operand (rtx operand, enum machine_mode mode)
+{
+  if (general_operand (operand, mode) == 0)
+    return 0;
+
+  if (push_operand (operand, mode) == 1)
+    return 0;
+
+  /* Reject a (MEM (MEM X)) because the patterns that use non_push_operand
+     need to split such addresses to access the low and high part but it
+     is not possible to express a valid address for the low part.  */
+  if (mode != QImode && GET_CODE (operand) == MEM
+      && GET_CODE (XEXP (operand, 0)) == MEM)
     return 0;
   return 1;
 }
@@ -1286,7 +1309,7 @@ m68hc11_handle_page0_attribute (tree *node, tree name,
     }
   else
     {
-      warning ("`%s' attribute ignored", IDENTIFIER_POINTER (name));
+      warning ("%qs attribute ignored", IDENTIFIER_POINTER (name));
       *no_add_attrs = true;
     }
 
@@ -1322,7 +1345,7 @@ m68hc11_handle_fntype_attribute (tree *node, tree name,
       && TREE_CODE (*node) != FIELD_DECL
       && TREE_CODE (*node) != TYPE_DECL)
     {
-      warning ("`%s' attribute only applies to functions",
+      warning ("%qs attribute only applies to functions",
 	       IDENTIFIER_POINTER (name));
       *no_add_attrs = true;
     }
@@ -1407,13 +1430,13 @@ m68hc11_encode_section_info (tree decl, rtx rtl, int first ATTRIBUTE_UNUSED)
   trap_handler = lookup_attribute ("trap", func_attr) != NULL_TREE;
   if (trap_handler && is_far)
     {
-      warning ("`trap' and `far' attributes are not compatible, ignoring `far'");
+      warning ("%<trap%> and %<far%> attributes are not compatible, ignoring %<far%>");
       trap_handler = 0;
     }
   if (trap_handler)
     {
       if (trap_handler_symbol != 0)
-        warning ("`trap' attribute is already used");
+        warning ("%<trap%> attribute is already used");
       else
         trap_handler_symbol = XEXP (rtl, 0);
     }
@@ -1453,24 +1476,6 @@ m68hc11_is_trap_symbol (rtx sym)
 
 
 /* Argument support functions.  */
-
-/* Handle the FUNCTION_ARG_PASS_BY_REFERENCE macro.
-   Arrays are passed by references and other types by value.
-
-   SCz: I tried to pass DImode by reference but it seems that this
-   does not work very well.  */
-int
-m68hc11_function_arg_pass_by_reference (const CUMULATIVE_ARGS *cum ATTRIBUTE_UNUSED,
-                                        enum machine_mode mode ATTRIBUTE_UNUSED,
-                                        tree type,
-                                        int named ATTRIBUTE_UNUSED)
-{
-  return ((type && TREE_CODE (type) == ARRAY_TYPE)
-	  /* Consider complex values as aggregates, so care for TCmode.  */
-	  /*|| GET_MODE_SIZE (mode) > 4 SCz, temporary */
-	  /*|| (type && AGGREGATE_TYPE_P (type))) */ );
-}
-
 
 /* Define the offset between two registers, one to be eliminated, and the
    other its replacement, at the start of a routine.  */
@@ -2782,11 +2787,11 @@ m68hc11_expand_compare_and_branch (enum rtx_code code, rtx op0, rtx op1,
 	    break;
 
 	  case EQ:
-	    code1 = NIL;
+	    code1 = UNKNOWN;
 	    code2 = NE;
 	    break;
 	  case NE:
-	    code2 = NIL;
+	    code2 = UNKNOWN;
 	    break;
 
 	  default:
@@ -2800,14 +2805,14 @@ m68hc11_expand_compare_and_branch (enum rtx_code code, rtx op0, rtx op1,
 	 *    if (lo(a) < lo(b)) goto true;
 	 *  false:
 	 */
-	if (code1 != NIL)
+	if (code1 != UNKNOWN)
 	  m68hc11_expand_compare_and_branch (code1, hi[0], hi[1], label);
-	if (code2 != NIL)
+	if (code2 != UNKNOWN)
 	  m68hc11_expand_compare_and_branch (code2, hi[0], hi[1], label2);
 
 	m68hc11_expand_compare_and_branch (code3, lo[0], lo[1], label);
 
-	if (code2 != NIL)
+	if (code2 != UNKNOWN)
 	  emit_label (label2);
 	return 0;
       }

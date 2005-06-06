@@ -17,5 +17,6 @@ int main(void) {
 
   CHECK_IF(sizeof(x1) == 1);
   CHECK_IF(sizeof(x2) == 1);
+  return 0;
 }
 

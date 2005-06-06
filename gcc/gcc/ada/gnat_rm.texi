@@ -16,7 +16,11 @@
 @c oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 
 @setfilename gnat_rm.info
+
+@set FSFEDITION
+
 @settitle GNAT Reference Manual
+
 @setchapternewpage odd
 @syncodeindex fn cp
 
@@ -82,6 +86,7 @@ Ada Core Technologies, Inc.
 * Specialized Needs Annexes::
 * Implementation of Specific Ada Features::
 * Project File Reference::
+* Obsolescent Features::
 * GNU Free Documentation License::
 * Index::
 
@@ -112,6 +117,7 @@ Implementation Defined Pragmas
 * Pragma CPP_Virtual::
 * Pragma CPP_Vtable::
 * Pragma Debug::
+* Pragma Detect_Blocking::
 * Pragma Elaboration_Checks::
 * Pragma Eliminate::
 * Pragma Export_Exception::
@@ -151,11 +157,11 @@ Implementation Defined Pragmas
 * Pragma Obsolescent::
 * Pragma Passive::
 * Pragma Polling::
+* Pragma Profile (Ravenscar)::
+* Pragma Profile (Restricted)::
 * Pragma Propagate_Exceptions::
 * Pragma Psect_Object::
 * Pragma Pure_Function::
-* Pragma Ravenscar::
-* Pragma Restricted_Run_Time::
 * Pragma Restriction_Warnings::
 * Pragma Source_File_Name::
 * Pragma Source_File_Name_Project::
@@ -202,6 +208,7 @@ Implementation Defined Attributes
 * Enum_Rep::
 * Epsilon::
 * Fixed_Value::
+* Has_Access_Values::
 * Has_Discriminants::
 * Img::
 * Integer_Value::
@@ -241,6 +248,7 @@ The Implementation of Standard I/O
 * Sequential_IO::
 * Text_IO::
 * Wide_Text_IO::
+* Wide_Wide_Text_IO::
 * Stream_IO::
 * Shared Files::
 * Open Modes::
@@ -252,6 +260,8 @@ The GNAT Library
 * Ada.Characters.Latin_9 (a-chlat9.ads)::
 * Ada.Characters.Wide_Latin_1 (a-cwila1.ads)::
 * Ada.Characters.Wide_Latin_9 (a-cwila9.ads)::
+* Ada.Characters.Wide_Wide_Latin_1 (a-czila1.ads)::
+* Ada.Characters.Wide_Wide_Latin_9 (a-czila9.ads)::
 * Ada.Command_Line.Remove (a-colire.ads)::
 * Ada.Command_Line.Environment (a-colien.ads)::
 * Ada.Direct_IO.C_Streams (a-diocst.ads)::
@@ -261,8 +271,10 @@ The GNAT Library
 * Ada.Streams.Stream_IO.C_Streams (a-ssicst.ads)::
 * Ada.Strings.Unbounded.Text_IO (a-suteio.ads)::
 * Ada.Strings.Wide_Unbounded.Wide_Text_IO (a-swuwti.ads)::
+* Ada.Strings.Wide_Wide_Unbounded.Wide_Wide_Text_IO (a-szuzti.ads)::
 * Ada.Text_IO.C_Streams (a-tiocst.ads)::
 * Ada.Wide_Text_IO.C_Streams (a-wtcstr.ads)::
+* Ada.Wide_Wide_Text_IO.C_Streams (a-ztcstr.ads)::
 * GNAT.Array_Split (g-arrspl.ads)::
 * GNAT.AWK (g-awk.ads)::
 * GNAT.Bounded_Buffers (g-boubuf.ads)::
@@ -302,7 +314,7 @@ The GNAT Library
 * GNAT.Memory_Dump (g-memdum.ads)::
 * GNAT.Most_Recent_Exception (g-moreex.ads)::
 * GNAT.OS_Lib (g-os_lib.ads)::
-* GNAT.Perfect_Hash.Generators (g-pehage.ads)::
+* GNAT.Perfect_Hash_Generators (g-pehage.ads)::
 * GNAT.Regexp (g-regexp.ads)::
 * GNAT.Registry (g-regist.ads)::
 * GNAT.Regpat (g-regpat.ads)::
@@ -325,6 +337,7 @@ The GNAT Library
 * GNAT.Traceback (g-traceb.ads)::
 * GNAT.Traceback.Symbolic (g-trasym.ads)::
 * GNAT.Wide_String_Split (g-wistsp.ads)::
+* GNAT.Wide_Wide_String_Split (g-zistsp.ads)::
 * Interfaces.C.Extensions (i-cexten.ads)::
 * Interfaces.C.Streams (i-cstrea.ads)::
 * Interfaces.CPP (i-cpp.ads)::
@@ -359,6 +372,11 @@ Wide_Text_IO
 * Wide_Text_IO Stream Pointer Positioning::
 * Wide_Text_IO Reading and Writing Non-Regular Files::
 
+Wide_Wide_Text_IO
+
+* Wide_Wide_Text_IO Stream Pointer Positioning::
+* Wide_Wide_Text_IO Reading and Writing Non-Regular Files::
+
 Interfacing to Other Languages
 
 * Interfacing to C::
@@ -374,8 +392,11 @@ Implementation of Specific Ada Features
 * GNAT Implementation of Tasking::
 * GNAT Implementation of Shared Passive Packages::
 * Code Generation for Array Aggregates::
+* The Size of Discriminated Records with Default Discriminants::
 
 Project File Reference
+
+Obsolescent Features
 
 GNU Free Documentation License
 
@@ -387,11 +408,21 @@ Index
 @node About This Guide
 @unnumbered About This Guide
 
+@ifclear PROEDITION
 @noindent
 This manual contains useful information in writing programs using the
 GNAT compiler.  It includes information on implementation dependent
 characteristics of GNAT, including all the information required by Annex
 M of the standard.
+@end ifclear
+
+@ifset PROEDITION
+@noindent
+This manual contains useful information in writing programs using the
+GNAT Pro compiler.  It includes information on implementation dependent
+characteristics of GNAT Pro, including all the information required by Annex
+M of the standard.
+@end ifset
 
 Ada 95 is designed to be highly portable.
 In general, a program will have the same effect even when compiled by
@@ -406,6 +437,11 @@ Note: Any program that makes use of implementation-dependent features
 may be non-portable.  You should follow good programming practice and
 isolate and clearly document any sections of your program that make use
 of these features in a non-portable manner.
+
+@ifset PROEDITION
+For ease of exposition, ``GNAT Pro'' will be referred to simply as
+``GNAT'' in the remainder of this document.
+@end ifset
 
 @menu
 * What This Reference Manual Contains::
@@ -479,6 +515,12 @@ other features.
 @item
 @ref{Project File Reference}, presents the syntax and semantics
 of project files.
+
+@item
+@ref{Obsolescent Features} documents implementation dependent features,
+including pragmas and attributes, which are considered obsolescent, since
+there are other preferred ways of achieving the same results. These
+obsolescent forms are retained for backwards compatibilty.
 
 @end itemize
 
@@ -602,6 +644,7 @@ consideration, the use of these pragmas should be minimized.
 * Pragma CPP_Virtual::
 * Pragma CPP_Vtable::
 * Pragma Debug::
+* Pragma Detect_Blocking::
 * Pragma Elaboration_Checks::
 * Pragma Eliminate::
 * Pragma Export_Exception::
@@ -641,11 +684,11 @@ consideration, the use of these pragmas should be minimized.
 * Pragma Obsolescent::
 * Pragma Passive::
 * Pragma Polling::
+* Pragma Profile (Ravenscar)::
+* Pragma Profile (Restricted)::
 * Pragma Propagate_Exceptions::
 * Pragma Psect_Object::
 * Pragma Pure_Function::
-* Pragma Ravenscar::
-* Pragma Restricted_Run_Time::
 * Pragma Restriction_Warnings::
 * Pragma Source_File_Name::
 * Pragma Source_File_Name_Project::
@@ -1299,6 +1342,21 @@ equivalent to the procedure call statement corresponding to the argument
 with a terminating semicolon.  Pragmas are permitted in sequences of
 declarations, so you can use pragma @code{Debug} to intersperse calls to
 debug procedures in the middle of declarations.
+
+@node Pragma Detect_Blocking
+@unnumberedsec Pragma Detect_Blocking
+@findex Detect_Blocking
+@noindent
+Syntax:
+
+@smallexample @c ada
+pragma Detect_Blocking;
+@end smallexample
+
+@noindent
+This is a configuration pragma that forces the detection of potentially
+blocking operations within a protected operation, and to raise Program_Error
+if that happens.
 
 @node Pragma Elaboration_Checks
 @unnumberedsec Pragma Elaboration_Checks
@@ -2203,9 +2261,13 @@ as will any declaration of a scalar variable.  For composite variables,
 whether the variable is initialized may also depend on whether the package
 in which the type of the variable is declared is compiled with the pragma.
 
-The other important difference is that there is control over the value used
-for initializing scalar objects.  At bind time, you can select whether to
-initialize with invalid values (like Normalize_Scalars), or with high or
+The other important difference is that you can control the value used
+for initializing scalar objects.  At bind time, you can select several
+options for initialization. You can
+initialize with invalid values (similar to Normalize_Scalars, though for
+Initialize_Scalars it is not always possible to determine the invalid
+values in complex cases like signed component fields with non-standard
+sizes). You can also initialize with high or
 low values, or with a specified bit pattern.  See the users guide for binder
 options for specifying these cases.
 
@@ -2216,6 +2278,10 @@ behavior depends on the choice.  Of course the behavior should not change,
 and if it does, then most likely you have an erroneous reference to an
 uninitialized value.
 
+It is even possible to change the value at execution time eliminating even
+the need to rebind with a different switch using an environment variable.
+See the GNAT users guide for details.
+
 Note that pragma @code{Initialize_Scalars} is particularly useful in
 conjunction with the enhanced validity checking that is now provided
 in GNAT, which checks for invalid values under more conditions.
@@ -2223,6 +2289,13 @@ Using this feature (see description of the @code{-gnatV} flag in the
 users guide) in conjunction with pragma @code{Initialize_Scalars}
 provides a powerful new tool to assist in the detection of problems
 caused by uninitialized variables.
+
+Note: the use of @code{Initialize_Scalars} has a fairly extensive
+effect on the generated code. This may cause your code to be
+substantially larger. It may also cause an increase in the amount
+of stack required, so it is probably a good idea to turn on stack
+checking (see description of stack checking in the GNAT users guide)
+when using this pragma.
 
 @node Pragma Inline_Always
 @unnumberedsec Pragma Inline_Always
@@ -2676,45 +2749,60 @@ are as follows:
 @item Standard.Character
 @noindent
 Objects whose root type is Standard.Character are initialized to
-Character'Last.  This will be out of range of the subtype only if
-the subtype range excludes this value.
+Character'Last unless the subtype range excludes NUL (in which case
+NUL is used). This choice will always generate an invalid value if
+one exists.
 
 @item Standard.Wide_Character
 @noindent
 Objects whose root type is Standard.Wide_Character are initialized to
-Wide_Character'Last.  This will be out of range of the subtype only if
-the subtype range excludes this value.
+Wide_Character'Last unless the subtype range excludes NUL (in which case
+NUL is used). This choice will always generate an invalid value if
+one exists.
+
+@item Standard.Wide_Wide_Character
+@noindent
+Objects whose root type is Standard.Wide_Wide_Character are initialized to
+the invalid value 16#FFFF_FFFF# unless the subtype range excludes NUL (in
+which case NUL is used). This choice will always generate an invalid value if
+one exists.
 
 @item Integer types
 @noindent
-Objects of an integer type are initialized to base_type'First, where
-base_type is the base type of the object type.  This will be out of range
-of the subtype only if the subtype range excludes this value.  For example,
-if you declare the subtype:
+Objects of an integer type are treated differently depending on whether
+negative values are present in the subtype. If no negative values are
+present, then all one bits is used as the initial value except in the
+special case where zero is excluded from the subtype, in which case
+all zero bits are used. This choice will always generate an invalid
+value if one exists.
 
-@smallexample @c ada
-subtype Ityp is integer range 1 .. 10;
-@end smallexample
+For subtypes with negative values present, the largest negative number
+is used, except in the unusual case where this largest negative number
+is in the subtype, and the largest positive number is not, in which case
+the largest positive value is used. This choice will always generate
+an invalid value if one exists.
 
-@noindent
-then objects of type x will be initialized to Integer'First, a negative
-number that is certainly outside the range of subtype @code{Ityp}.
+@item Floating-Point Types
+Objects of all floating-point types are initialized to all 1-bits. For
+standard IEEE format, this corresponds to a NaN (not a number) which is
+indeed an invalid value.
 
-@item Real types
-Objects of all real types (fixed and floating) are initialized to
-base_type'First, where base_Type is the base type of the object type.
-This will be out of range of the subtype only if the subtype range
-excludes this value.
+@item Fixed-Point Types
+Objects of all fixed-point types are treated as described above for integers,
+with the rules applying to the underlying integer value used to represent
+the fixed-point value.
 
 @item Modular types
-Objects of a modular type are initialized to typ'Last.  This will be out
-of range of the subtype only if the subtype excludes this value.
+Objects of a modular type are initialized to all one bits, except in
+the special case where zero is excluded from the subtype, in which
+case all zero bits are used. This choice will always generate an
+invalid value if one exists.
 
 @item Enumeration types
 Objects of an enumeration type are initialized to all one-bits, i.e.@: to
-the value @code{2 ** typ'Size - 1}.  This will be out of range of the
-enumeration subtype in all cases except where the subtype contains
-exactly 2**8, 2**16, or 2**32 elements.
+the value @code{2 ** typ'Size - 1} unless the subtype excludes the literal
+whose Pos value is zero, in which case a code of zero is used. This choice
+will always generate an invalid value if one exists.
 
 @end table
 
@@ -2803,6 +2891,184 @@ to test for an abort condition.
 
 Note that polling can also be enabled by use of the @code{-gnatP} switch.  See
 the @cite{GNAT User's Guide} for details.
+
+@node Pragma Profile (Ravenscar)
+@unnumberedsec Pragma Profile (Ravenscar)
+@findex Ravenscar
+@noindent
+Syntax:
+
+@smallexample @c ada
+pragma Profile (Ravenscar);
+@end smallexample
+
+@noindent
+A configuration pragma that establishes the following set of configuration
+pragmas:
+
+@table @code
+@item Task_Dispatching_Policy (FIFO_Within_Priorities)
+[RM D.2.2] Tasks are dispatched following a preemptive
+priority-ordered scheduling policy.
+
+@item Locking_Policy (Ceiling_Locking)
+[RM D.3] While tasks and interrupts execute a protected action, they inherit
+the ceiling priority of the corresponding protected object.
+@c
+@c @item Detect_Blocking
+@c This pragma forces the detection of potentially blocking operations within a
+@c protected operation, and to raise Program_Error if that happens.
+@end table
+@noindent
+
+plus the following set of restrictions:
+
+@table @code
+@item Max_Entry_Queue_Length = 1
+Defines the maximum number of calls that are queued on a (protected) entry.
+Note that this restrictions is checked at run time. Violation of this
+restriction results in the raising of Program_Error exception at the point of
+the call. For the Profile (Ravenscar) the value of Max_Entry_Queue_Length is
+always 1 and hence no task can be queued on a protected entry.
+
+@item Max_Protected_Entries = 1
+[RM D.7] Specifies the maximum number of entries per protected type. The
+bounds of every entry family of a protected unit shall be static, or shall be
+defined by a discriminant of a subtype whose corresponding bound is static.
+For the Profile (Ravenscar) the value of Max_Protected_Entries is always 1.
+
+@item Max_Task_Entries = 0
+[RM D.7] Specifies the maximum number of entries
+per task.  The bounds of every entry family
+of a task unit shall be static, or shall be
+defined by a discriminant of a subtype whose
+corresponding bound is static.  A value of zero
+indicates that no rendezvous are possible.  For
+the Profile (Ravenscar), the value of Max_Task_Entries is always
+0 (zero).
+
+@item No_Abort_Statements
+[RM D.7] There are no abort_statements, and there are
+no calls to Task_Identification.Abort_Task.
+
+@item No_Asynchronous_Control
+[RM D.7] There are no semantic dependences on the package
+Asynchronous_Task_Control.
+
+@item No_Calendar
+There are no semantic dependencies on the package Ada.Calendar.
+
+@item No_Dynamic_Attachment
+There is no call to any of the operations defined in package Ada.Interrupts
+(Is_Reserved, Is_Attached, Current_Handler, Attach_Handler, Exchange_Handler,
+Detach_Handler, and Reference).
+
+@item No_Dynamic_Priorities
+[RM D.7] There are no semantic dependencies on the package Dynamic_Priorities.
+
+@item No_Implicit_Heap_Allocations
+[RM D.7] No constructs are allowed to cause implicit heap allocation.
+
+@item No_Local_Protected_Objects
+Protected objects and access types that designate
+such objects shall be declared only at library level.
+
+@item No_Protected_Type_Allocators
+There are no allocators for protected types or
+types containing protected subcomponents.
+
+@item No_Relative_Delay
+There are no delay_relative statements.
+
+@item No_Requeue_Statements
+Requeue statements are not allowed.
+
+@item No_Select_Statements
+There are no select_statements.
+
+@item No_Task_Allocators
+[RM D.7] There are no allocators for task types
+or types containing task subcomponents.
+
+@item No_Task_Attributes_Package
+There are no semantic dependencies on the Ada.Task_Attributes package.
+
+@item No_Task_Hierarchy
+[RM D.7] All (non-environment) tasks depend
+directly on the environment task of the partition.
+
+@item No_Task_Termination
+Tasks which terminate are erroneous.
+
+@item Simple_Barriers
+Entry barrier condition expressions shall be either static
+boolean expressions or boolean objects which are declared in
+the protected type which contains the entry.
+@end table
+
+@noindent
+This set of configuration pragmas and restrictions correspond to the
+definition of the ``Ravenscar Profile'' for limited tasking, devised and
+published by the @cite{International Real-Time Ada Workshop}, 1997,
+and whose most recent description is available at
+@url{ftp://ftp.openravenscar.org/openravenscar/ravenscar00.pdf}.
+
+The original definition of the profile was revised at subsequent IRTAW
+meetings. It has been included in the ISO
+@cite{Guide for the Use of the Ada Programming Language in High
+Integrity Systems}, and has been approved by ISO/IEC/SC22/WG9 for inclusion in
+the next revision of the standard. The formal definition given by
+the Ada Rapporteur Group (ARG) can be found in two Ada Issues (AI-249 and
+AI-305) available at
+@url{http://www.ada-auth.org/cgi-bin/cvsweb.cgi/AIs/AI-00249.TXT} and
+@url{http://www.ada-auth.org/cgi-bin/cvsweb.cgi/AIs/AI-00305.TXT}
+respectively.
+
+The above set is a superset of the restrictions provided by pragma
+@code{Profile (Restricted)}, it includes six additional restrictions
+(@code{Simple_Barriers}, @code{No_Select_Statements},
+@code{No_Calendar}, @code{No_Implicit_Heap_Allocations},
+@code{No_Relative_Delay} and @code{No_Task_Termination}).  This means
+that pragma @code{Profile (Ravenscar)}, like the pragma
+@code{Profile (Restricted)},
+automatically causes the use of a simplified,
+more efficient version of the tasking run-time system.
+
+@node Pragma Profile (Restricted)
+@unnumberedsec Pragma Profile (Restricted)
+@findex Restricted Run Time
+@noindent
+Syntax:
+
+@smallexample @c ada
+pragma Profile (Restricted);
+@end smallexample
+
+@noindent
+A configuration pragma that establishes the following set of restrictions:
+
+@itemize @bullet
+@item No_Abort_Statements
+@item No_Entry_Queue
+@item No_Task_Hierarchy
+@item No_Task_Allocators
+@item No_Dynamic_Priorities
+@item No_Terminate_Alternatives
+@item No_Dynamic_Attachment
+@item No_Protected_Type_Allocators
+@item No_Local_Protected_Objects
+@item No_Requeue_Statements
+@item No_Task_Attributes_Package
+@item Max_Asynchronous_Select_Nesting =  0
+@item Max_Task_Entries =  0
+@item Max_Protected_Entries = 1
+@item Max_Select_Alternatives = 0
+@end itemize
+
+@noindent
+This set of restrictions causes the automatic selection of a simplified
+version of the run time that provides improved performance for the
+limited set of tasking functionality permitted by this set of restrictions.
 
 @node Pragma Propagate_Exceptions
 @unnumberedsec Pragma Propagate_Exceptions
@@ -2913,159 +3179,6 @@ Note: If pragma @code{Pure_Function} is applied to a renamed function, it
 applies to the underlying renamed function.  This can be used to
 disambiguate cases of overloading where some but not all functions
 in a set of overloaded functions are to be designated as pure.
-
-@node Pragma Ravenscar
-@unnumberedsec Pragma Ravenscar
-@findex Ravenscar
-@noindent
-Syntax:
-
-@smallexample @c ada
-pragma Ravenscar;
-@end smallexample
-
-@noindent
-A configuration pragma that establishes the following set of restrictions:
-
-@table @code
-@item No_Abort_Statements
-[RM D.7] There are no abort_statements, and there are
-no calls to Task_Identification.Abort_Task.
-
-@item No_Select_Statements
-There are no select_statements.
-
-@item No_Task_Hierarchy
-[RM D.7] All (non-environment) tasks depend
-directly on the environment task of the partition.
-
-@item No_Task_Allocators
-[RM D.7] There are no allocators for task types
-or types containing task subcomponents.
-
-@item No_Dynamic_Priorities
-[RM D.7] There are no semantic dependencies on the package Dynamic_Priorities.
-
-@item No_Terminate_Alternatives
-[RM D.7] There are no selective_accepts with terminate_alternatives
-
-@item No_Dynamic_Interrupts
-There are no semantic dependencies on Ada.Interrupts.
-
-@item No_Implicit_Heap_Allocations
-[RM D.7] No constructs are allowed to cause implicit heap allocation
-
-@item No_Protected_Type_Allocators
-There are no allocators for protected types or
-types containing protected subcomponents.
-
-@item No_Local_Protected_Objects
-Protected objects and access types that designate
-such objects shall be declared only at library level.
-
-@item No_Requeue_Statements
-Requeue statements are not allowed.
-
-@item No_Calendar
-There are no semantic dependencies on the package Ada.Calendar.
-
-@item No_Relative_Delay
-There are no delay_relative_statements.
-
-@item No_Task_Attributes_Package
-There are no semantic dependencies on the Ada.Task_Attributes package.
-
-@item Simple_Barriers
-Entry barrier condition expressions shall be either static
-boolean expressions or boolean objects which are declared in
-the protected type which contains the entry.
-
-@item Max_Asynchronous_Select_Nesting = 0
-[RM D.7] Specifies the maximum dynamic nesting level of asynchronous_selects.
-A value of zero prevents the use of any asynchronous_select.
-
-@item Max_Task_Entries = 0
-[RM D.7] Specifies the maximum number of entries
-per task.  The bounds of every entry family
-of a task unit shall be static, or shall be
-defined by a discriminant of a subtype whose
-corresponding bound is static.  A value of zero
-indicates that no rendezvous are possible.  For
-the Ravenscar pragma, the value of Max_Task_Entries is always
-0 (zero).
-
-@item Max_Protected_Entries = 1
-[RM D.7] Specifies the maximum number of entries per
-protected type.  The bounds of every entry family of
-a protected unit shall be static, or shall be defined
-by a discriminant of a subtype whose corresponding
-bound is static.  For the Ravenscar pragma the value of
-Max_Protected_Entries is always 1.
-
-@item Max_Select_Alternatives = 0
-[RM D.7] Specifies the maximum number of alternatives in a selective_accept.
-For the Ravenscar pragma the value is always 0.
-
-@item No_Task_Termination
-Tasks which terminate are erroneous.
-
-@item No_Entry_Queue
-No task can be queued on a protected entry.  Note that this restrictions is
-checked at run time.  The violation of this restriction generates a
-Program_Error exception.
-@end table
-
-@noindent
-This set of restrictions corresponds to the definition of the ``Ravenscar
-Profile'' for limited tasking, devised and published by the
-@cite{International Real-Time Ada Workshop}, 1997,
-and whose most recent description is available at
-@url{ftp://ftp.openravenscar.org/openravenscar/ravenscar00.pdf}.
-
-The above set is a superset of the restrictions provided by pragma
-@code{Restricted_Run_Time}, it includes five additional restrictions
-(@code{Simple_Barriers}, @code{No_Select_Statements},
-@code{No_Calendar},
-@code{No_Relative_Delay} and @code{No_Task_Termination}).  This means
-that pragma @code{Ravenscar}, like the pragma @code{Restricted_Run_Time},
-automatically causes the use of a simplified, more efficient version
-of the tasking run-time system.
-
-@node Pragma Restricted_Run_Time
-@unnumberedsec Pragma Restricted_Run_Time
-@findex Restricted_Run_Time
-@noindent
-Syntax:
-
-@smallexample @c ada
-pragma Restricted_Run_Time;
-@end smallexample
-
-@noindent
-A configuration pragma that establishes the following set of restrictions:
-
-@itemize @bullet
-@item No_Abort_Statements
-@item No_Entry_Queue
-@item No_Task_Hierarchy
-@item No_Task_Allocators
-@item No_Dynamic_Priorities
-@item No_Terminate_Alternatives
-@item No_Dynamic_Interrupts
-@item No_Protected_Type_Allocators
-@item No_Local_Protected_Objects
-@item No_Requeue_Statements
-@item No_Task_Attributes_Package
-@item Max_Asynchronous_Select_Nesting =  0
-@item Max_Task_Entries =  0
-@item Max_Protected_Entries = 1
-@item Max_Select_Alternatives = 0
-@end itemize
-
-@noindent
-This set of restrictions causes the automatic selection of a simplified
-version of the run time that provides improved performance for the
-limited set of tasking functionality permitted by this set of restrictions.
 
 @node Pragma Restriction_Warnings
 @unnumberedsec Pragma Restriction_Warnings
@@ -3969,6 +4082,7 @@ consideration, you should minimize the use of these attributes.
 * Enum_Rep::
 * Epsilon::
 * Fixed_Value::
+* Has_Access_Values::
 * Has_Discriminants::
 * Img::
 * Integer_Value::
@@ -4273,6 +4387,19 @@ conversion to the fixed-point type.  The difference is
 that there are full range checks, to ensure that the result is in range.
 This attribute is primarily intended for use in implementation of the
 input-output functions for fixed-point values.
+
+@node Has_Access_Values
+@unnumberedsec Has_Access_Values
+@cindex Access values, testing for
+@findex Has_Access_Values
+@noindent
+The prefix of the @code{Has_Access_Values} attribute is a type.  The result
+is a Boolean value which is True if the is an access type, or is a composite
+type with a component (at any nesting depth) that is an access type, and is
+False otherwise.
+The intended use of this attribute is in conjunction with generic
+definitions.  If the attribute is applied to a generic private type, it
+indicates whether or not the corresponding actual type has access values.
 
 @node Has_Discriminants
 @unnumberedsec Has_Discriminants
@@ -5984,8 +6111,8 @@ restrictions to produce a more efficient implementation.
 @end cartouche
 GNAT currently takes advantage of these restrictions by providing an optimized
 run time when the Ravenscar profile and the GNAT restricted run time set
-of restrictions are specified.  See pragma @code{Ravenscar} and pragma
-@code{Restricted_Run_Time} for more details.
+of restrictions are specified.  See pragma @code{Profile (Ravenscar)} and
+pragma @code{Profile (Restricted)} for more details.
 
 @cindex Time, monotonic
 @unnumberedsec D.8(47-49): Monotonic Time
@@ -6855,10 +6982,10 @@ for protected types are restricted to either static boolean expressions or
 references to simple boolean variables defined in the private part of the
 protected type.  No other form of entry barriers is permitted.  This is one
 of the restrictions of the Ravenscar profile for limited tasking (see also
-pragma @code{Ravenscar}).
+pragma @code{Profile (Ravenscar)}).
 
-@item Max_Entry_Queue_Depth => Expr
-@findex Max_Entry_Queue_Depth
+@item Max_Entry_Queue_Length => Expr
+@findex Max_Entry_Queue_Length
 This restriction is a declaration that any protected entry compiled in
 the scope of the restriction has at most the specified number of
 tasks waiting on the entry
@@ -6879,10 +7006,10 @@ from Boolean). This is intended for use in safety critical programs
 where the certification protocol requires the use of short-circuit
 (and then, or else) forms for all composite boolean operations.
 
-@item No_Dynamic_Interrupts
-@findex No_Dynamic_Interrupts
-This restriction ensures at compile time that there is no attempt to
-dynamically associate interrupts.  Only static association is allowed.
+@item No_Dynamic_Attachment
+@findex No_Dynamic_Attachment
+This restriction ensures that there is no call to any of the operations
+defined in package Ada.Interrupts.
 
 @item No_Enumeration_Maps
 @findex No_Enumeration_Maps
@@ -6929,7 +7056,10 @@ of exceptions when they are declared.
 This restriction ensures that the generated code does not contain any
 implicit conditionals, either by modifying the generated code where possible,
 or by rejecting any construct that would otherwise generate an implicit
-conditional.
+conditional. Note that this check does not include run time constraint
+checks, which on some targets may generate implicit conditionals as
+well. To control the latter, constraint checks can be suppressed in the
+normal manner.
 
 @item No_Implicit_Dynamic_Code
 @findex No_Implicit_Dynamic_Code
@@ -6978,7 +7108,7 @@ on some targets.
 This restriction ensures at compile time no select statements of any kind
 are permitted, that is the keyword @code{select} may not appear.
 This is one of the restrictions of the Ravenscar
-profile for limited tasking (see also pragma @code{Ravenscar}).
+profile for limited tasking (see also pragma @code{Profile (Ravenscar)}).
 
 @item No_Standard_Storage_Pools
 @findex No_Standard_Storage_Pools
@@ -6989,8 +7119,12 @@ user-defined storage pool.
 
 @item No_Streams
 @findex No_Streams
-This restriction ensures at compile time that there are no implicit or
-explicit dependencies on the package @code{Ada.Streams}.
+This restriction ensures at compile/bind time that there are no
+stream objects created (and therefore no actual stream operations).
+This restriction does not forbid dependences on the package
+@code{Ada.Streams}. So it is permissible to with
+@code{Ada.Streams} (or another package that does so itself)
+as long as no actual stream objects are created.
 
 @item No_Task_Attributes_Package
 @findex No_Task_Attributes_Package
@@ -7012,8 +7146,9 @@ to be output either by the compiler or binder.
 @item No_Wide_Characters
 @findex No_Wide_Characters
 This restriction ensures at compile time that no uses of the types
-@code{Wide_Character} or @code{Wide_String}
-appear, and that no wide character literals
+@code{Wide_Character} or @code{Wide_String} or corresponding wide
+wide types
+appear, and that no wide or wide wide string or character literals
 appear in the program (that is literals representing characters not in
 type @code{Character}.
 
@@ -8359,7 +8494,7 @@ Similarly, the size of type @code{Rec} is 40 bits
 (@code{Rec'Size} = @code{Rec'Value_Size} = 40), but
 the alignment is 4, so objects of this type will have
 their size increased to 64 bits so that it is a multiple
-of the alignment (in bits).  The reason for this decision, which is
+of the alignment (in bits).  This decision is
 in accordance with the specific Implementation Advice in RM 13.3(43):
 
 @quotation
@@ -9418,15 +9553,19 @@ thus the same lack of restriction applies.  For example, if you declare:
 then a component clause for a component of type R may start on any
 specified bit boundary, and may specify a value of 49 bits or greater.
 
+Packed bit arrays that are longer than 64 bits must always be placed
+on a storage unit (byte) boundary. Any component clause that does not
+meet this requirement will be rejected.
+
 The rules for other types are different for GNAT 3 and GNAT 5 versions
 (based on GCC 2 and GCC 3 respectively). In GNAT 5, larger components
+(other than packed arrays)
 may also be placed on arbitrary boundaries, so for example, the following
 is permitted:
 
 @smallexample @c ada
-   type R is array (1 .. 79) of Boolean;
-   pragma Pack (R);
-   for R'Size use 79;
+   type R is array (1 .. 10) of Boolean;
+   for R'Size use 80;
 
    type Q is record
       G, H : Boolean;
@@ -9436,8 +9575,8 @@ is permitted:
    for Q use record
       G at 0 range  0 ..   0;
       H at 0 range  1 ..   1;
-      L at 0 range  2 ..  80;
-      R at 0 range 81 .. 159;
+      L at 0 range  2 ..  81;
+      R at 0 range 82 .. 161;
    end record;
 @end smallexample
 
@@ -10182,6 +10321,16 @@ packages without @samp{Wide_} in the name, but operate with the types
 @code{Wide_String} and @code{Wide_Character} instead of @code{String}
 and @code{Character}.
 
+@item Ada.Strings.Wide_Wide_Bounded (A.4.7)
+@itemx Ada.Strings.Wide_Wide_Fixed (A.4.7)
+@itemx Ada.Strings.Wide_Wide_Maps (A.4.7)
+@itemx Ada.Strings.Wide_Wide_Maps.Constants (A.4.7)
+@itemx Ada.Strings.Wide_Wide_Unbounded (A.4.7)
+These packages provide analogous capabilities to the corresponding
+packages without @samp{Wide_} in the name, but operate with the types
+@code{Wide_Wide_String} and @code{Wide_Wide_Character} instead
+of @code{String} and @code{Character}.
+
 @item Ada.Synchronous_Task_Control (D.10)
 This package provides some standard facilities for controlling task
 communication in a synchronous manner.
@@ -10370,7 +10519,71 @@ types are @code{Wide_Character} and @code{Wide_String} instead of
 This package is similar to @code{Ada.Text_IO.Streams}, except that the
 types are @code{Wide_Character} and @code{Wide_String} instead of
 @code{Character} and @code{String}.
+
+@item Ada.Wide_Wide_Text_IO (A.11)
+This package is similar to @code{Ada.Text_IO}, except that the external
+file supports wide character representations, and the internal types are
+@code{Wide_Character} and @code{Wide_String} instead of @code{Character}
+and @code{String}.  It contains generic subpackages listed next.
+
+@item Ada.Wide_Wide_Text_IO.Decimal_IO
+Provides input-output facilities for decimal fixed-point types
+
+@item Ada.Wide_Wide_Text_IO.Enumeration_IO
+Provides input-output facilities for enumeration types.
+
+@item Ada.Wide_Wide_Text_IO.Fixed_IO
+Provides input-output facilities for ordinary fixed-point types.
+
+@item Ada.Wide_Wide_Text_IO.Float_IO
+Provides input-output facilities for float types.  The following
+predefined instantiations of this generic package are available:
+
+@table @code
+@item Short_Float
+@code{Short_Float_Wide_Wide_Text_IO}
+@item Float
+@code{Float_Wide_Wide_Text_IO}
+@item Long_Float
+@code{Long_Float_Wide_Wide_Text_IO}
 @end table
+
+@item Ada.Wide_Wide_Text_IO.Integer_IO
+Provides input-output facilities for integer types.  The following
+predefined instantiations of this generic package are available:
+
+@table @code
+@item Short_Short_Integer
+@code{Ada.Short_Short_Integer_Wide_Wide_Text_IO}
+@item Short_Integer
+@code{Ada.Short_Integer_Wide_Wide_Text_IO}
+@item Integer
+@code{Ada.Integer_Wide_Wide_Text_IO}
+@item Long_Integer
+@code{Ada.Long_Integer_Wide_Wide_Text_IO}
+@item Long_Long_Integer
+@code{Ada.Long_Long_Integer_Wide_Wide_Text_IO}
+@end table
+
+@item Ada.Wide_Wide_Text_IO.Modular_IO
+Provides input-output facilities for modular (unsigned) types
+
+@item Ada.Wide_Wide_Text_IO.Complex_IO (G.1.3)
+This package is similar to @code{Ada.Text_IO.Complex_IO}, except that the
+external file supports wide character representations.
+
+@item Ada.Wide_Wide_Text_IO.Editing (F.3.4)
+This package is similar to @code{Ada.Text_IO.Editing}, except that the
+types are @code{Wide_Character} and @code{Wide_String} instead of
+@code{Character} and @code{String}.
+
+@item Ada.Wide_Wide_Text_IO.Streams (A.12.3)
+This package is similar to @code{Ada.Text_IO.Streams}, except that the
+types are @code{Wide_Character} and @code{Wide_String} instead of
+@code{Character} and @code{String}.
+@end table
+
+
 
 @node The Implementation of Standard I/O
 @chapter The Implementation of Standard I/O
@@ -10411,6 +10624,7 @@ these additional facilities are also described in this chapter.
 * Sequential_IO::
 * Text_IO::
 * Wide_Text_IO::
+* Wide_Wide_Text_IO::
 * Stream_IO::
 * Shared Files::
 * Open Modes::
@@ -10430,13 +10644,19 @@ Ada.Text_IO
 @item
 Ada.Text_IO.Complex_IO
 @item
-Ada.Text_IO.Text_Streams,
+Ada.Text_IO.Text_Streams
 @item
 Ada.Wide_Text_IO
 @item
-Ada.Wide_Text_IO.Complex_IO,
+Ada.Wide_Text_IO.Complex_IO
 @item
 Ada.Wide_Text_IO.Text_Streams
+@item
+Ada.Wide_Wide_Text_IO
+@item
+Ada.Wide_Wide_Text_IO.Complex_IO
+@item
+Ada.Wide_Wide_Text_IO.Text_Streams
 @item
 Ada.Stream_IO
 @item
@@ -10804,6 +11024,10 @@ The package @code{Ada.Strings.Wide_Unbounded.Wide_Text_IO} in library
 files @file{a-swuwti.ads} and @file{a-swuwti.adb} provides similar extended
 @code{Wide_Text_IO} functionality for unbounded wide strings.
 
+The package @code{Ada.Strings.Wide_Wide_Unbounded.Wide_Wide_Text_IO} in library
+files @file{a-szuzti.ads} and @file{a-szuzti.adb} provides similar extended
+@code{Wide_Wide_Text_IO} functionality for unbounded wide wide strings.
+
 @node Wide_Text_IO
 @section Wide_Text_IO
 
@@ -10966,6 +11190,148 @@ to a normal program using @code{Wide_Text_IO}.  However, this discrepancy
 can be observed if the wide text file shares a stream with another file.
 
 @node Wide_Text_IO Reading and Writing Non-Regular Files
+@subsection Reading and Writing Non-Regular Files
+
+@noindent
+As in the case of Text_IO, when a non-regular file is read, it is
+assumed that the file contains no page marks (any form characters are
+treated as data characters), and @code{End_Of_Page} always returns
+@code{False}.  Similarly, the end of file indication is not sticky, so
+it is possible to read beyond an end of file.
+
+@node Wide_Wide_Text_IO
+@section Wide_Wide_Text_IO
+
+@noindent
+@code{Wide_Wide_Text_IO} is similar in most respects to Text_IO, except that
+both input and output files may contain special sequences that represent
+wide wide character values.  The encoding scheme for a given file may be
+specified using a FORM parameter:
+
+@smallexample
+WCEM=@var{x}
+@end smallexample
+
+@noindent
+as part of the FORM string (WCEM = wide character encoding method),
+where @var{x} is one of the following characters
+
+@table @samp
+@item h
+Hex ESC encoding
+@item u
+Upper half encoding
+@item s
+Shift-JIS encoding
+@item e
+EUC Encoding
+@item 8
+UTF-8 encoding
+@item b
+Brackets encoding
+@end table
+
+@noindent
+The encoding methods match those that
+can be used in a source
+program, but there is no requirement that the encoding method used for
+the source program be the same as the encoding method used for files,
+and different files may use different encoding methods.
+
+The default encoding method for the standard files, and for opened files
+for which no WCEM parameter is given in the FORM string matches the
+wide character encoding specified for the main program (the default
+being brackets encoding if no coding method was specified with -gnatW).
+
+@table @asis
+
+@item UTF-8 Coding
+A wide character is represented using
+UCS Transformation Format 8 (UTF-8) as defined in Annex R of ISO
+10646-1/Am.2.  Depending on the character value, the representation
+is a one, two, three, or four byte sequence:
+
+@smallexample
+16#000000#-16#00007f#: 2#0xxxxxxx#
+16#000080#-16#0007ff#: 2#110xxxxx# 2#10xxxxxx#
+16#000800#-16#00ffff#: 2#1110xxxx# 2#10xxxxxx# 2#10xxxxxx#
+16#010000#-16#10ffff#: 2#11110xxx# 2#10xxxxxx# 2#10xxxxxx# 2#10xxxxxx#
+@end smallexample
+
+@noindent
+where the xxx bits correspond to the left-padded bits of the
+21-bit character value.  Note that all lower half ASCII characters
+are represented as ASCII bytes and all upper half characters and
+other wide characters are represented as sequences of upper-half
+characters.
+
+@item Brackets Coding
+In this encoding, a wide wide character is represented by the following eight
+character sequence if is in wide character range
+
+@smallexample
+[ " a b c d " ]
+@end smallexample
+
+and by the following ten character sequence if not
+
+@smallexample
+[ " a b c d e f " ]
+@end smallexample
+
+@noindent
+where @code{a}, @code{b}, @code{c}, @code{d}, @code{e}, and @code{f}
+are the four or six hexadecimal
+characters (using uppercase letters) of the wide wide character code.  For
+example, @code{["01A345"]} is used to represent the wide wide character
+with code @code{16#01A345#}.
+
+This scheme is compatible with use of the full Wide_Wide_Character set.
+On input, brackets coding can also be used for upper half characters,
+e.g.@: @code{["C1"]} for lower case a.  However, on output, brackets notation
+is only used for wide characters with a code greater than @code{16#FF#}.
+
+@end table
+
+@noindent
+If is also possible to use the other Wide_Character encoding methods,
+such as Shift-JIS, but the other schemes cannot support the full range
+of wide wide characters.
+An attempt to output a character that cannot
+be represented using the encoding scheme for the file causes
+Constraint_Error to be raised.  An invalid wide character sequence on
+input also causes Constraint_Error to be raised.
+
+@menu
+* Wide_Wide_Text_IO Stream Pointer Positioning::
+* Wide_Wide_Text_IO Reading and Writing Non-Regular Files::
+@end menu
+
+@node Wide_Wide_Text_IO Stream Pointer Positioning
+@subsection Stream Pointer Positioning
+
+@noindent
+@code{Ada.Wide_Wide_Text_IO} is similar to @code{Ada.Text_IO} in its handling
+of stream pointer positioning (@pxref{Text_IO}).  There is one additional
+case:
+
+If @code{Ada.Wide_Wide_Text_IO.Look_Ahead} reads a character outside the
+normal lower ASCII set (i.e.@: a character in the range:
+
+@smallexample @c ada
+Wide_Wide_Character'Val (16#0080#) .. Wide_Wide_Character'Val (16#10FFFF#)
+@end smallexample
+
+@noindent
+then although the logical position of the file pointer is unchanged by
+the @code{Look_Ahead} call, the stream is physically positioned past the
+wide character sequence.  Again this is to avoid the need for buffering
+or backup, and all @code{Wide_Wide_Text_IO} routines check the internal
+indication that this situation has occurred so that this is not visible
+to a normal program using @code{Wide_Wide_Text_IO}.  However, this discrepancy
+can be observed if the wide text file shares a stream with another file.
+
+@node Wide_Wide_Text_IO Reading and Writing Non-Regular Files
 @subsection Reading and Writing Non-Regular Files
 
 @noindent
@@ -11295,6 +11661,17 @@ operations.
         Form : in String := "");
  end Ada.Wide_Text_IO.C_Streams;
 
+  with Interfaces.C_Streams;
+  package Ada.Wide_Wide_Text_IO.C_Streams is
+     function C_Stream (F : File_Type)
+        return Interfaces.C_Streams.FILEs;
+     procedure Open
+       (File : in out File_Type;
+        Mode : in File_Mode;
+        C_Stream : in Interfaces.C_Streams.FILEs;
+        Form : in String := "");
+ end Ada.Wide_Wide_Text_IO.C_Streams;
+
  with Interfaces.C_Streams;
  package Ada.Stream_IO.C_Streams is
     function C_Stream (F : File_Type)
@@ -11308,7 +11685,7 @@ operations.
 @end smallexample
 
 @noindent
-In each of these five packages, the @code{C_Stream} function obtains the
+In each of these six packages, the @code{C_Stream} function obtains the
 @code{FILE} pointer from a currently opened Ada file.  It is then
 possible to use the @code{Interfaces.C_Streams} package to operate on
 this stream, or the stream can be passed to a C program which can
@@ -11362,6 +11739,8 @@ of GNAT, and will generate a warning message.
 * Ada.Characters.Latin_9 (a-chlat9.ads)::
 * Ada.Characters.Wide_Latin_1 (a-cwila1.ads)::
 * Ada.Characters.Wide_Latin_9 (a-cwila9.ads)::
+* Ada.Characters.Wide_Wide_Latin_1 (a-czila1.ads)::
+* Ada.Characters.Wide_Wide_Latin_9 (a-czila9.ads)::
 * Ada.Command_Line.Remove (a-colire.ads)::
 * Ada.Command_Line.Environment (a-colien.ads)::
 * Ada.Direct_IO.C_Streams (a-diocst.ads)::
@@ -11371,8 +11750,10 @@ of GNAT, and will generate a warning message.
 * Ada.Streams.Stream_IO.C_Streams (a-ssicst.ads)::
 * Ada.Strings.Unbounded.Text_IO (a-suteio.ads)::
 * Ada.Strings.Wide_Unbounded.Wide_Text_IO (a-swuwti.ads)::
+* Ada.Strings.Wide_Wide_Unbounded.Wide_Wide_Text_IO (a-szuzti.ads)::
 * Ada.Text_IO.C_Streams (a-tiocst.ads)::
 * Ada.Wide_Text_IO.C_Streams (a-wtcstr.ads)::
+* Ada.Wide_Wide_Text_IO.C_Streams (a-ztcstr.ads)::
 * GNAT.Array_Split (g-arrspl.ads)::
 * GNAT.AWK (g-awk.ads)::
 * GNAT.Bounded_Buffers (g-boubuf.ads)::
@@ -11412,7 +11793,7 @@ of GNAT, and will generate a warning message.
 * GNAT.Memory_Dump (g-memdum.ads)::
 * GNAT.Most_Recent_Exception (g-moreex.ads)::
 * GNAT.OS_Lib (g-os_lib.ads)::
-* GNAT.Perfect_Hash.Generators (g-pehage.ads)::
+* GNAT.Perfect_Hash_Generators (g-pehage.ads)::
 * GNAT.Regexp (g-regexp.ads)::
 * GNAT.Registry (g-regist.ads)::
 * GNAT.Regpat (g-regpat.ads)::
@@ -11435,6 +11816,7 @@ of GNAT, and will generate a warning message.
 * GNAT.Traceback (g-traceb.ads)::
 * GNAT.Traceback.Symbolic (g-trasym.ads)::
 * GNAT.Wide_String_Split (g-wistsp.ads)::
+* GNAT.Wide_Wide_String_Split (g-zistsp.ads)::
 * Interfaces.C.Extensions (i-cexten.ads)::
 * Interfaces.C.Streams (i-cstrea.ads)::
 * Interfaces.CPP (i-cpp.ads)::
@@ -11494,6 +11876,34 @@ This child of @code{Ada.Characters}
 provides a set of definitions corresponding to those in the
 GNAT defined package @code{Ada.Characters.Latin_9} but with the
 types of the constants being @code{Wide_Character}
+instead of @code{Character}.  The provision of such a package
+is specifically authorized by the Ada Reference Manual
+(RM A.3(27)).
+
+@node Ada.Characters.Wide_Wide_Latin_1 (a-czila1.ads)
+@section @code{Ada.Characters.Wide_Wide_Latin_1} (@file{a-czila1.ads})
+@cindex @code{Ada.Characters.Wide_Wide_Latin_1} (@file{a-czila1.ads})
+@cindex Latin_1 constants for Wide_Wide_Character
+
+@noindent
+This child of @code{Ada.Characters}
+provides a set of definitions corresponding to those in the
+RM-defined package @code{Ada.Characters.Latin_1} but with the
+types of the constants being @code{Wide_Wide_Character}
+instead of @code{Character}.  The provision of such a package
+is specifically authorized by the Ada Reference Manual
+(RM A.3(27)).
+
+@node Ada.Characters.Wide_Wide_Latin_9 (a-czila9.ads)
+@section @code{Ada.Characters.Wide_Wide_Latin_9} (@file{a-czila9.ads})
+@cindex @code{Ada.Characters.Wide_Wide_Latin_9} (@file{a-czila9.ads})
+@cindex Latin_9 constants for Wide_Wide_Character
+
+@noindent
+This child of @code{Ada.Characters}
+provides a set of definitions corresponding to those in the
+GNAT defined package @code{Ada.Characters.Latin_9} but with the
+types of the constants being @code{Wide_Wide_Character}
 instead of @code{Character}.  The provision of such a package
 is specifically authorized by the Ada Reference Manual
 (RM A.3(27)).
@@ -11596,6 +12006,17 @@ This package provides subprograms for Text_IO for unbounded
 wide strings, avoiding the necessity for an intermediate operation
 with ordinary wide strings.
 
+@node Ada.Strings.Wide_Wide_Unbounded.Wide_Wide_Text_IO (a-szuzti.ads)
+@section @code{Ada.Strings.Wide_Wide_Unbounded.Wide_Wide_Text_IO} (@file{a-szuzti.ads})
+@cindex @code{Ada.Strings.Wide_Wide_Unbounded.Wide_Wide_Text_IO} (@file{a-szuzti.ads})
+@cindex @code{Unbounded_Wide_Wide_String}, IO support
+@cindex @code{Text_IO}, extensions for unbounded wide wide strings
+
+@noindent
+This package provides subprograms for Text_IO for unbounded
+wide wide strings, avoiding the necessity for an intermediate operation
+with ordinary wide wide strings.
+
 @node Ada.Text_IO.C_Streams (a-tiocst.ads)
 @section @code{Ada.Text_IO.C_Streams} (@file{a-tiocst.ads})
 @cindex @code{Ada.Text_IO.C_Streams} (@file{a-tiocst.ads})
@@ -11617,6 +12038,18 @@ This package provides subprograms that allow interfacing between
 C streams and @code{Wide_Text_IO}.  The stream identifier can be
 extracted from a file opened on the Ada side, and an Ada file
 can be constructed from a stream opened on the C side.
+
+@node Ada.Wide_Wide_Text_IO.C_Streams (a-ztcstr.ads)
+@section @code{Ada.Wide_Wide_Text_IO.C_Streams} (@file{a-ztcstr.ads})
+@cindex @code{Ada.Wide_Wide_Text_IO.C_Streams} (@file{a-ztcstr.ads})
+@cindex C Streams, Interfacing with @code{Wide_Wide_Text_IO}
+
+@noindent
+This package provides subprograms that allow interfacing between
+C streams and @code{Wide_Wide_Text_IO}.  The stream identifier can be
+extracted from a file opened on the Ada side, and an Ada file
+can be constructed from a stream opened on the C side.
+
 
 @node GNAT.Array_Split (g-arrspl.ads)
 @section @code{GNAT.Array_Split} (@file{g-arrspl.ads})
@@ -12054,9 +12487,9 @@ including time/date management, file operations, subprocess management,
 including a portable spawn procedure, and access to environment variables
 and error return codes.
 
-@node GNAT.Perfect_Hash.Generators (g-pehage.ads)
-@section @code{GNAT.Perfect_Hash.Generators} (@file{g-pehage.ads})
-@cindex @code{GNAT.Perfect_Hash.Generators} (@file{g-pehage.ads})
+@node GNAT.Perfect_Hash_Generators (g-pehage.ads)
+@section @code{GNAT.Perfect_Hash_Generators} (@file{g-pehage.ads})
+@cindex @code{GNAT.Perfect_Hash_Generators} (@file{g-pehage.ads})
 @cindex Hash functions
 
 @noindent
@@ -12232,7 +12665,7 @@ defines a string access and an array of string access types.
 @cindex String splitter
 
 @noindent
-Useful string-manipulation routines: given a set of separators, split
+Useful string manipulation routines: given a set of separators, split
 a string wherever the separators appear, and provide direct access
 to the resulting slices. This package is instantiated from
 @code{GNAT.Array_Split}.
@@ -12302,8 +12735,19 @@ name and line number information.
 @cindex Wide_String splitter
 
 @noindent
-Useful wide_string-manipulation routines: given a set of separators, split
-a wide_string wherever the separators appear, and provide direct access
+Useful wide string manipulation routines: given a set of separators, split
+a wide string wherever the separators appear, and provide direct access
+to the resulting slices. This package is instantiated from
+@code{GNAT.Array_Split}.
+
+@node GNAT.Wide_Wide_String_Split (g-zistsp.ads)
+@section @code{GNAT.Wide_Wide_String_Split} (@file{g-zistsp.ads})
+@cindex @code{GNAT.Wide_Wide_String_Split} (@file{g-zistsp.ads})
+@cindex Wide_Wide_String splitter
+
+@noindent
+Useful wide wide string manipulation routines: given a set of separators, split
+a wide wide string wherever the separators appear, and provide direct access
 to the resulting slices. This package is instantiated from
 @code{GNAT.Array_Split}.
 
@@ -12506,7 +12950,7 @@ to support the @code{Task_Info} pragma
 
 @noindent
 This package provides routines for converting between
-wide characters and a representation as a value of type
+wide and wide wide characters and a representation as a value of type
 @code{Standard.String}, using a specified wide character
 encoding method.  It uses definitions in
 package @code{System.Wch_Con}.
@@ -12716,6 +13160,7 @@ facilities.
 * GNAT Implementation of Tasking::
 * GNAT Implementation of Shared Passive Packages::
 * Code Generation for Array Aggregates::
+* The Size of Discriminated Records with Default Discriminants::
 @end menu
 
 @node Machine Code Insertions
@@ -13260,6 +13705,98 @@ If any of these conditions are violated, the aggregate will be built in
 a temporary (created either by the front-end or the code generator) and then
 that temporary will be copied onto the target.
 
+
+@node The Size of Discriminated Records with Default Discriminants
+@section The Size of Discriminated Records with Default Discriminants
+
+@noindent
+If a discriminated type @code{T} has discriminants with default values, it is
+possible to declare an object of this type without providing an explicit
+constraint:
+
+@smallexample @c ada
+@group
+type Size is range 1..100;
+
+type Rec (D : Size := 15) is record
+   Name : String (1..D);
+end T;
+
+Word : Rec;
+@end group
+@end smallexample
+
+@noindent
+Such an object is said to be @emph{unconstrained}.
+The discriminant of the object
+can be modified by a full assignment to the object, as long as it preserves the
+relation between the value of the discriminant, and the value of the components
+that depend on it:
+
+@smallexample @c ada
+@group
+Word := (3, "yes");
+
+Word := (5, "maybe");
+
+Word := (5, "no"); -- raises Constraint_Error
+@end group
+@end smallexample
+
+@noindent
+In order to support this behavior efficiently, an unconstrained object is
+given the maximum size that any value of the type requires. In the case
+above, @code{Word} has storage for the discriminant and for
+a @code{String} of length 100.
+It is important to note that unconstrained objects do not require dynamic
+allocation. It would be an improper implementation to place on the heap those
+components whose size depends on discriminants. (This improper implementation
+was used by some Ada83 compilers, where the @code{Name} component above
+would have
+been stored as a pointer to a dynamic string). Following the principle that
+dynamic storage management should never be introduced implicitly,
+an Ada95 compiler should reserve the full size for an unconstrained declared
+object, and place it on the stack.
+
+This maximum size approach
+has been a source of surprise to some users, who expect the default
+values of the discriminants to determine the size reserved for an
+unconstrained object: ``If the default is 15, why should the object occupy
+a larger size?''
+The answer, of course, is that the discriminant may be later modified,
+and its full range of values must be taken into account. This is why the
+declaration:
+
+@smallexample
+@group
+type Rec (D : Positive := 15) is record
+   Name : String (1..D);
+end record;
+
+Too_Large : Rec;
+@end group
+@end smallexample
+
+@noindent
+is flagged by the compiler with a warning:
+an attempt to create @code{Too_Large} will raise @code{Storage_Error},
+because the required size includes @code{Positive'Last}
+bytes. As the first example indicates, the proper approach is to declare an
+index type of ``reasonable'' range so that unconstrained objects are not too
+large.
+
+One final wrinkle: if the object is declared to be @code{aliased}, or if it is
+created in the heap by means of an allocator, then it is @emph{not}
+unconstrained:
+it is constrained by the default values of the discriminants, and those values
+cannot be modified by full assignment. This is because in the presence of
+aliasing all views of the object (which may be manipulated by different tasks,
+say) must be consistent, so it is imperative that the object, once created,
+remain invariant.
+
+
+
+
 @node Project File Reference
 @chapter Project File Reference
 
@@ -13274,6 +13811,7 @@ See the chapter on project files in the GNAT Users guide for examples of use.
 * Reserved Words::
 * Lexical Elements::
 * Declarations::
+* Empty declarations::
 * Typed string declarations::
 * Variables::
 * Expressions::
@@ -13344,8 +13882,20 @@ simple_declarative_item ::=
   variable_declaration |
   typed_variable_declaration |
   attribute_declaration |
-  case_construction
+  case_construction |
+  empty_declaration
 @end smallexample
+
+@node Empty declarations
+@section Empty declarations
+
+@smallexample
+empty_declaration ::=
+  @b{null} ;
+@end smallexample
+
+An empty declaration is allowed anywhere a declaration is allowed.
+It has no effect.
 
 @node Typed string declarations
 @section Typed string declarations
@@ -13648,7 +14198,7 @@ case_construction ::=
 
 case_item ::=
   @b{when} discrete_choice_list =>
-    @{case_construction | attribute_declaration@}
+    @{case_construction | attribute_declaration | empty_declaration@}
 
 discrete_choice_list ::=
   string_literal @{| string_literal@} |
@@ -14132,6 +14682,47 @@ uses the project option. Elaboration of the process file consists in the
 sequential elaboration of all its declarations. The computed values of
 attributes and variables in the project are then used to establish the
 environment in which the gnat tool will execute.
+
+@node Obsolescent Features
+@chapter Obsolescent Features
+
+@noindent
+This chapter describes features that are provided by GNAT, but are
+considered obsolescent since there are preferred ways of achieving
+the same effect. These features are provided solely for historical
+compatibility purposes.
+
+@menu
+* pragma No_Run_Time::
+* pragma Ravenscar::
+* pragma Restricted_Run_Time::
+@end menu
+
+@node pragma No_Run_Time
+@section pragma No_Run_Time
+
+The pragma @code{No_Run_Time} is used to achieve an affect similar
+to the use of the "Zero Foot Print" configurable run time, but without
+requiring a specially configured run time. The result of using this
+pragma, which must be used for all units in a partition, is to restrict
+the use of any language features requiring run-time support code. The
+preferred usage is to use an appropriately configured run-time that
+includes just those features that are to be made accessible.
+
+@node pragma Ravenscar
+@section pragma Ravenscar
+
+The pragma @code{Ravenscar} has exactly the same effect as pragma
+@code{Profile (Ravenscar)}. The latter usage is preferred since it
+is part of the new Ada 2005 standard.
+
+@node pragma Restricted_Run_Time
+@section pragma Restricted_Run_Time
+
+The pragma @code{Restricted_Run_Time} has exactly the same effect as
+pragma @code{Profile (Restricted)}. The latter usage is
+preferred since the Ada 2005 pragma @code{Profile} is intended for
+this kind of implementation dependent addition.
 
 @include fdl.texi
 @c GNU Free Documentation License

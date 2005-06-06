@@ -1,5 +1,5 @@
 /* BFD backend for MIPS BSD (a.out) binaries.
-   Copyright 1993, 1994, 1995, 1997, 1998, 1999, 2000, 2001, 2002
+   Copyright 1993, 1994, 1995, 1997, 1998, 1999, 2000, 2001, 2002, 2003
    Free Software Foundation, Inc.
    Written by Ralph Campbell.
 
@@ -19,7 +19,6 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
-#define BYTES_IN_WORD 4
 /* #define ENTRY_CAN_BE_ZERO */
 #define N_HEADER_IN_TEXT(x) 1
 #define N_SHARED_LIB(x) 0
@@ -71,7 +70,7 @@ static bfd_boolean MY(write_object_contents) PARAMS ((bfd *abfd));
 #include "aout-target.h"
 
 static bfd_reloc_status_type mips_fix_jmp_addr
-  PARAMS ((bfd *, arelent *, struct symbol_cache_entry *, PTR, asection *,
+  PARAMS ((bfd *, arelent *, struct bfd_symbol *, PTR, asection *,
 	   bfd *, char **));
 static reloc_howto_type *MY(reloc_howto_type_lookup)
   PARAMS ((bfd *, bfd_reloc_code_real_type));
@@ -204,7 +203,7 @@ mips_fix_jmp_addr (abfd, reloc_entry, symbol, data, input_section, output_bfd,
 		   error_message)
      bfd *abfd ATTRIBUTE_UNUSED;
      arelent *reloc_entry;
-     struct symbol_cache_entry *symbol;
+     struct bfd_symbol *symbol;
      PTR data ATTRIBUTE_UNUSED;
      asection *input_section;
      bfd *output_bfd;
@@ -221,7 +220,7 @@ mips_fix_jmp_addr (abfd, reloc_entry, symbol, data, input_section, output_bfd,
       && (symbol->flags & BSF_WEAK) == 0)
     return bfd_reloc_undefined;
 
-  /* Work out which section the relocation is targetted at and the
+  /* Work out which section the relocation is targeted at and the
      initial relocation command value.  */
   if (bfd_is_com_section (symbol->section))
     relocation = 0;
@@ -272,7 +271,7 @@ mips_fix_hi16_s (abfd, reloc_entry, symbol, data, input_section,
       && (symbol->flags & BSF_WEAK) == 0)
     return bfd_reloc_undefined;
 
-  /* Work out which section the relocation is targetted at and the
+  /* Work out which section the relocation is targeted at and the
      initial relocation command value.  */
   if (bfd_is_com_section (symbol->section))
     relocation = 0;

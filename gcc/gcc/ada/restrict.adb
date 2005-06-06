@@ -31,11 +31,23 @@ with Fname;    use Fname;
 with Fname.UF; use Fname.UF;
 with Lib;      use Lib;
 with Namet;    use Namet;
+with Opt;      use Opt;
+with Sinfo;    use Sinfo;
 with Sinput;   use Sinput;
 with Snames;   use Snames;
 with Uname;    use Uname;
 
 package body Restrict is
+
+   Restricted_Profile_Result : Boolean := False;
+   --  This switch memoizes the result of Restricted_Profile function
+   --  calls for improved efficiency. Its setting is valid only if
+   --  Restricted_Profile_Cached is True. Note that if this switch
+   --  is ever set True, it need never be turned off again.
+
+   Restricted_Profile_Cached : Boolean := False;
+   --  This flag is set to True if the Restricted_Profile_Result
+   --  contains the correct cached result of Restricted_Profile calls.
 
    -----------------------
    -- Local Subprograms --
@@ -48,6 +60,10 @@ package body Restrict is
    --  the normal insertion mechanism, since this requires an entry
    --  in the Names table, and this table will be locked if we are
    --  generating a message from gigi.
+
+   function Same_Unit (U1, U2 : Node_Id) return Boolean;
+   --  Returns True iff U1 and U2 represent the same library unit. Used for
+   --  handling of No_Dependence => Unit restriction case.
 
    function Suppress_Restriction_Message (N : Node_Id) return Boolean;
    --  N is the node for a possible restriction violation message, but
@@ -290,6 +306,36 @@ package body Restrict is
       end if;
    end Check_Restriction;
 
+   -------------------------------------
+   -- Check_Restriction_No_Dependence --
+   -------------------------------------
+
+   procedure Check_Restriction_No_Dependence (U : Node_Id; Err : Node_Id) is
+      DU : Node_Id;
+
+   begin
+      for J in No_Dependence.First .. No_Dependence.Last loop
+         DU := No_Dependence.Table (J).Unit;
+
+         if Same_Unit (U, DU) then
+            Error_Msg_Sloc := Sloc (DU);
+            Error_Msg_Node_1 := DU;
+
+            if No_Dependence.Table (J).Warn then
+               Error_Msg
+                 ("?violation of restriction `No_Dependence '='> &`#",
+                  Sloc (Err));
+            else
+               Error_Msg
+                 ("|violation of restriction `No_Dependence '='> &`#",
+                  Sloc (Err));
+            end if;
+
+            return;
+         end if;
+      end loop;
+   end Check_Restriction_No_Dependence;
+
    ----------------------------------------
    -- Cunit_Boolean_Restrictions_Restore --
    ----------------------------------------
@@ -361,57 +407,75 @@ package body Restrict is
    --  Note: body of this function must be coordinated with list of
    --  renaming declarations in System.Rident.
 
-   function Process_Restriction_Synonyms (Id : Name_Id) return Name_Id is
+   function Process_Restriction_Synonyms (N : Node_Id) return Name_Id
+   is
+      Old_Name : constant Name_Id := Chars (N);
+      New_Name : Name_Id;
+
    begin
-      case Id is
+      case Old_Name is
          when Name_Boolean_Entry_Barriers =>
-            return Name_Simple_Barriers;
+            New_Name := Name_Simple_Barriers;
 
          when Name_Max_Entry_Queue_Depth =>
-            return Name_Max_Entry_Queue_Length;
+            New_Name := Name_Max_Entry_Queue_Length;
 
          when Name_No_Dynamic_Interrupts =>
-            return Name_No_Dynamic_Attachment;
+            New_Name := Name_No_Dynamic_Attachment;
 
          when Name_No_Requeue =>
-            return Name_No_Requeue_Statements;
+            New_Name := Name_No_Requeue_Statements;
 
          when Name_No_Task_Attributes =>
-            return Name_No_Task_Attributes_Package;
+            New_Name := Name_No_Task_Attributes_Package;
 
          when others =>
-            return Id;
+            return Old_Name;
       end case;
+
+      if Warn_On_Obsolescent_Feature then
+         Error_Msg_Name_1 := Old_Name;
+         Error_Msg_N ("restriction identifier % is obsolescent?", N);
+         Error_Msg_Name_1 := New_Name;
+         Error_Msg_N ("|use restriction identifier % instead", N);
+      end if;
+
+      return New_Name;
    end Process_Restriction_Synonyms;
 
    ------------------------
    -- Restricted_Profile --
    ------------------------
 
-   --  This implementation must be coordinated with Set_Restricted_Profile
-
    function Restricted_Profile return Boolean is
    begin
-      return     Restrictions.Set (No_Abort_Statements)
-        and then Restrictions.Set (No_Asynchronous_Control)
-        and then Restrictions.Set (No_Entry_Queue)
-        and then Restrictions.Set (No_Task_Hierarchy)
-        and then Restrictions.Set (No_Task_Allocators)
-        and then Restrictions.Set (No_Dynamic_Priorities)
-        and then Restrictions.Set (No_Terminate_Alternatives)
-        and then Restrictions.Set (No_Dynamic_Attachment)
-        and then Restrictions.Set (No_Protected_Type_Allocators)
-        and then Restrictions.Set (No_Local_Protected_Objects)
-        and then Restrictions.Set (No_Requeue_Statements)
-        and then Restrictions.Set (No_Task_Attributes_Package)
-        and then Restrictions.Set (Max_Asynchronous_Select_Nesting)
-        and then Restrictions.Set (Max_Task_Entries)
-        and then Restrictions.Set (Max_Protected_Entries)
-        and then Restrictions.Set (Max_Select_Alternatives)
-        and then Restrictions.Value (Max_Asynchronous_Select_Nesting) =  0
-        and then Restrictions.Value (Max_Task_Entries)                =  0
-        and then Restrictions.Value (Max_Protected_Entries)           <= 1
-        and then Restrictions.Value (Max_Select_Alternatives)         =  0;
+      if Restricted_Profile_Cached then
+         return Restricted_Profile_Result;
+
+      else
+         Restricted_Profile_Result := True;
+         Restricted_Profile_Cached := True;
+
+         declare
+            R : Restriction_Flags  renames Profile_Info (Restricted).Set;
+            V : Restriction_Values renames Profile_Info (Restricted).Value;
+         begin
+            for J in R'Range loop
+               if R (J)
+                 and then (Restrictions.Set (J) = False
+                             or else Restriction_Warnings (J)
+                             or else
+                               (J in All_Parameter_Restrictions
+                                  and then Restrictions.Value (J) > V (J)))
+               then
+                  Restricted_Profile_Result := False;
+                  exit;
+               end if;
+            end loop;
+
+            return Restricted_Profile_Result;
+         end;
+      end if;
    end Restricted_Profile;
 
    ------------------------
@@ -466,52 +530,56 @@ package body Restrict is
       Error_Msg_N (B (1 .. P), N);
    end Restriction_Msg;
 
-   -------------------
-   -- Set_Ravenscar --
-   -------------------
+   ---------------
+   -- Same_Unit --
+   ---------------
 
-   procedure Set_Ravenscar (N : Node_Id) is
+   function Same_Unit (U1, U2 : Node_Id) return Boolean is
    begin
-      Set_Restricted_Profile (N);
-      Set_Restriction (Simple_Barriers,              N);
-      Set_Restriction (No_Select_Statements,         N);
-      Set_Restriction (No_Calendar,                  N);
-      Set_Restriction (No_Entry_Queue,               N);
-      Set_Restriction (No_Relative_Delay,            N);
-      Set_Restriction (No_Task_Termination,          N);
-      Set_Restriction (No_Implicit_Heap_Allocations, N);
-   end Set_Ravenscar;
+      if Nkind (U1) = N_Identifier then
+         return Nkind (U2) = N_Identifier and then Chars (U1) = Chars (U2);
 
-   ----------------------------
-   -- Set_Restricted_Profile --
-   ----------------------------
+      elsif Nkind (U2) = N_Identifier then
+         return False;
 
-   --  This must be coordinated with Restricted_Profile
+      elsif (Nkind (U1) = N_Selected_Component
+             or else Nkind (U1) = N_Expanded_Name)
+        and then
+          (Nkind (U2) = N_Selected_Component
+           or else Nkind (U2) = N_Expanded_Name)
+      then
+         return Same_Unit (Prefix (U1), Prefix (U2))
+           and then Same_Unit (Selector_Name (U1), Selector_Name (U2));
+      else
+         return False;
+      end if;
+   end Same_Unit;
 
-   procedure Set_Restricted_Profile (N : Node_Id) is
+   ------------------------------
+   -- Set_Profile_Restrictions --
+   ------------------------------
+
+   procedure Set_Profile_Restrictions
+     (P    : Profile_Name;
+      N    : Node_Id;
+      Warn : Boolean)
+   is
+      R : Restriction_Flags  renames Profile_Info (P).Set;
+      V : Restriction_Values renames Profile_Info (P).Value;
+
    begin
-      --  Set Boolean restrictions for Restricted Profile
+      for J in R'Range loop
+         if R (J) then
+            if J in All_Boolean_Restrictions then
+               Set_Restriction (J, N);
+            else
+               Set_Restriction (J, N, V (J));
+            end if;
 
-      Set_Restriction (No_Abort_Statements,          N);
-      Set_Restriction (No_Asynchronous_Control,      N);
-      Set_Restriction (No_Entry_Queue,               N);
-      Set_Restriction (No_Task_Hierarchy,            N);
-      Set_Restriction (No_Task_Allocators,           N);
-      Set_Restriction (No_Dynamic_Priorities,        N);
-      Set_Restriction (No_Terminate_Alternatives,    N);
-      Set_Restriction (No_Dynamic_Attachment,        N);
-      Set_Restriction (No_Protected_Type_Allocators, N);
-      Set_Restriction (No_Local_Protected_Objects,   N);
-      Set_Restriction (No_Requeue_Statements,        N);
-      Set_Restriction (No_Task_Attributes_Package,   N);
-
-      --  Set parameter restrictions
-
-      Set_Restriction (Max_Asynchronous_Select_Nesting, N, 0);
-      Set_Restriction (Max_Task_Entries,                N, 0);
-      Set_Restriction (Max_Select_Alternatives,         N, 0);
-      Set_Restriction (Max_Protected_Entries,           N, 1);
-   end Set_Restricted_Profile;
+            Restriction_Warnings (J) := Warn;
+         end if;
+      end loop;
+   end Set_Profile_Restrictions;
 
    ---------------------
    -- Set_Restriction --
@@ -525,6 +593,12 @@ package body Restrict is
    is
    begin
       Restrictions.Set (R) := True;
+
+      if Restricted_Profile_Cached and Restricted_Profile_Result then
+         null;
+      else
+         Restricted_Profile_Cached := False;
+      end if;
 
       --  Set location, but preserve location of system
       --  restriction for nice error msg with run time name
@@ -557,6 +631,12 @@ package body Restrict is
       V : Integer)
    is
    begin
+      if Restricted_Profile_Cached and Restricted_Profile_Result then
+         null;
+      else
+         Restricted_Profile_Cached := False;
+      end if;
+
       if Restrictions.Set (R) then
          if V < Restrictions.Value (R) then
             Restrictions.Value (R) := V;
@@ -590,6 +670,38 @@ package body Restrict is
          end if;
       end if;
    end Set_Restriction;
+
+   -----------------------------------
+   -- Set_Restriction_No_Dependence --
+   -----------------------------------
+
+   procedure Set_Restriction_No_Dependence
+     (Unit : Node_Id;
+      Warn : Boolean)
+   is
+   begin
+      --  Loop to check for duplicate entry
+
+      for J in No_Dependence.First .. No_Dependence.Last loop
+
+         --  Case of entry already in table
+
+         if Same_Unit (Unit, No_Dependence.Table (J).Unit) then
+
+            --  Error has precedence over warning
+
+            if not Warn then
+               No_Dependence.Table (J).Warn := False;
+            end if;
+
+            return;
+         end if;
+      end loop;
+
+      --  Entry is in table
+
+      No_Dependence.Append ((Unit, Warn));
+   end Set_Restriction_No_Dependence;
 
    ----------------------------------
    -- Suppress_Restriction_Message --

@@ -5,13 +5,16 @@
    Copyright (C) 2002 Free Software Foundation Inc.
    Contributed by Hans-Peter Nilsson  <hp@bitrange.com>  */
 
-/* { dg-do run { xfail arc-*-* avr-*-* c4x-*-* cris-*-* h8300-*-* ip2k-*-* m32r-*-* m68hc1?-*-* m681?-*-* m680*-*-* m68k-*-* mcore-*-* mips*-*-irix* mips*-*-linux-gnu mn10300-*-* ns32k-*-* xstormy16-*-* v850*-*-* vax-*-* xtensa-*-* } } */
+/* { dg-do run { xfail arc-*-* avr-*-* c4x-*-* cris-*-* h8300-*-* hppa*64*-*-* ip2k-*-* m32r-*-* m68hc1?-*-* m681?-*-* m680*-*-* m68k-*-* mcore-*-* mn10300-*-* ns32k-*-* xstormy16-*-* v850*-*-* vax-*-* xtensa-*-* } } */
 /* { dg-options "-O2 -foptimize-sibling-calls" } */
 
 /* The option -foptimize-sibling-calls is the default, but serves as
    marker.  This test is xfailed on targets without sibcall patterns
    (except targets where the test does not work due to the return address
    not saved on the regular stack).  */
+
+extern void abort (void);
+extern void exit (int);
 
 static void recurser_void1 (void);
 static void recurser_void2 (void);

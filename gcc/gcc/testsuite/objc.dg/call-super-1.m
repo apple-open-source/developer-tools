@@ -1,8 +1,7 @@
-/* APPLE LOCAL file msg send super */
 /* Check if objc_super stack variables are created correctly (and
    not clobbered by other values).  */
 /* Contributed by Ziemowit Laski <zlaski@apple.com>.  */
-/* { dg-options "-std=c99" } */
+/* { dg-options "-std=c99 -lobjc" } */
 /* { dg-do run } */
 
 #include <objc/objc.h>

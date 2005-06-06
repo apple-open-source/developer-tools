@@ -45,6 +45,7 @@ new_handler __new_handler;
 new_handler
 std::set_new_handler (new_handler handler) throw()
 {
+/* APPLE LOCAL begin keymgr */
 #if defined(APPLE_KEYMGR) && ! defined(APPLE_KERNEL_EXTENSION) && ! defined(LIBCC_KEXT)
   new_handler prev_handler =
     (new_handler) _keymgr_get_per_thread_data (KEYMGR_NEW_HANLDER_KEY);
@@ -54,10 +55,13 @@ std::set_new_handler (new_handler handler) throw()
 #else	/* ! APPLE_KEYMGR */
   new_handler prev_handler = __new_handler;
 #endif	/* APPLE_KEYMGR */
+/* APPLE LOCAL end keymgr */
   __new_handler = handler;
   return prev_handler;
 }
 
+/* APPLE LOCAL begin libcc_kext */
 #if !defined(LIBCC_KEXT)
 std::bad_alloc::~bad_alloc() throw() { }
 #endif
+/* APPLE LOCAL end libcc_kext */

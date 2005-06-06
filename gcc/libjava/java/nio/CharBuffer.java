@@ -65,61 +65,81 @@ public abstract class CharBuffer extends Buffer
    * Wraps a <code>char</code> array into a <code>CharBuffer</code>
    * object.
    *
+   * @param array the array to wrap
+   * @param offset the offset of the region in the array to wrap
+   * @param length the length of the region in the array to wrap
+   *
+   * @return a new <code>CharBuffer</code> object
+   * 
    * @exception IndexOutOfBoundsException If the preconditions on the offset
    * and length parameters do not hold
    */
-  final public static CharBuffer wrap (char[] array, int offset, int length)
+  public static final CharBuffer wrap(char[] array, int offset, int length)
   {
-    return new CharBufferImpl (array, 0, array.length, offset + length, offset, -1, false);
+    return new CharBufferImpl(array, 0, array.length, offset + length, offset, -1, false);
   }
   
   /**
    * Wraps a character sequence into a <code>CharBuffer</code> object.
+   *
+   * @param seq the sequence to wrap
+   *
+   * @return a new <code>CharBuffer</code> object
    */
-  final public static CharBuffer wrap (CharSequence a)
+  public static final CharBuffer wrap(CharSequence seq)
   {
-    return wrap (a, 0, a.length ());
+    return wrap(seq, 0, seq.length());
   }
   
   /**
    * Wraps a character sequence into a <code>CharBuffer</code> object.
    * 
+   * @param seq the sequence to wrap
+   * @param start the index of the first character to wrap
+   * @param end the index of the first character not to wrap
+   *
+   * @return a new <code>CharBuffer</code> object
+   * 
    * @exception IndexOutOfBoundsException If the preconditions on the offset
    * and length parameters do not hold
    */
-  final public static CharBuffer wrap (CharSequence a, int offset, int length)
+  public static final CharBuffer wrap(CharSequence seq, int start, int end)
   {
     // FIXME: implement better handling of java.lang.String.
     // Probably share data with String via reflection.
 	  
-    if ((offset < 0)
-        || (offset > a.length ())
-        || (length < 0)
-        || (length > (a.length () - offset)))
-      throw new IndexOutOfBoundsException ();
+    if ((start < 0)
+        || (start > seq.length())
+        || (end < start)
+        || (end > (seq.length() - start)))
+      throw new IndexOutOfBoundsException();
     
-    char [] buffer = new char [a.length ()];
+    int len = end - start;
+    char[] buffer = new char[len];
     
-    for (int i = offset; i < length; i++)
-      {
-        buffer [i] = a.charAt (i);
-      }
+    for (int i = 0; i < len; i++)
+      buffer[i] = seq.charAt(i + start);
     
-    return wrap (buffer, offset, length).asReadOnlyBuffer ();
+    return wrap(buffer, 0, len).asReadOnlyBuffer();
   }
 
   /**
    * Wraps a <code>char</code> array into a <code>CharBuffer</code>
    * object.
+   *
+   * @param array the array to wrap
+   *
+   * @return a new <code>CharBuffer</code> object
    */
-  final public static CharBuffer wrap (char[] array)
+  public static final CharBuffer wrap(char[] array)
   {
-    return wrap (array, 0, array.length);
+    return wrap(array, 0, array.length);
   }
   
   /**
-   * This method transfers <code>chars<code> from this buffer into the given
-   * destination array.
+   * This method transfers <code>char</code>s from this buffer into the given
+   * destination array. Before the transfer, it checks if there are fewer than
+   * length <code>char</code>s remaining in this buffer. 
    *
    * @param dst The destination array
    * @param offset The offset within the array of the first <code>char</code>
@@ -128,12 +148,15 @@ public abstract class CharBuffer extends Buffer
    * must be non-negative and no larger than dst.length - offset.
    *
    * @exception BufferUnderflowException If there are fewer than length
-   * <code>chars</code> remaining in this buffer.
+   * <code>char</code>s remaining in this buffer.
    * @exception IndexOutOfBoundsException If the preconditions on the offset
    * and length parameters do not hold.
    */
   public CharBuffer get (char[] dst, int offset, int length)
   {
+    checkArraySize(dst.length, offset, length);
+    checkForUnderflow(length);
+
     for (int i = offset; i < offset + length; i++)
       {
         dst [i] = get ();
@@ -143,13 +166,13 @@ public abstract class CharBuffer extends Buffer
   }
 
   /**
-   * This method transfers <code>chars<code> from this buffer into the given
+   * This method transfers <code>char</code>s from this buffer into the given
    * destination array.
    *
    * @param dst The byte array to write into.
    *
    * @exception BufferUnderflowException If there are fewer than dst.length
-   * <code>chars</code> remaining in this buffer.
+   * <code>char</code>s remaining in this buffer.
    */
   public CharBuffer get (char[] dst)
   {
@@ -158,12 +181,13 @@ public abstract class CharBuffer extends Buffer
 
   /**
    * Writes the content of the the <code>CharBUFFER</code> src
-   * into the buffer.
+   * into the buffer. Before the transfer, it checks if there is fewer than
+   * <code>src.remaining()</code> space remaining in this buffer.
    *
    * @param src The source data.
    *
    * @exception BufferOverflowException If there is insufficient space in this
-   * buffer for the remaining <code>chars<code> in the source buffer.
+   * buffer for the remaining <code>char</code>s in the source buffer.
    * @exception IllegalArgumentException If the source buffer is this buffer.
    * @exception ReadOnlyBufferException If this buffer is read-only.
    */
@@ -172,14 +196,13 @@ public abstract class CharBuffer extends Buffer
     if (src == this)
       throw new IllegalArgumentException ();
 
-    if (src.remaining () > remaining ())
-      throw new BufferOverflowException ();
+    checkForOverflow(src.remaining());
 
     if (src.remaining () > 0)
       {
         char[] toPut = new char [src.remaining ()];
         src.get (toPut);
-        src.put (toPut);
+	put (toPut);
       }
 
     return this;
@@ -187,7 +210,8 @@ public abstract class CharBuffer extends Buffer
 
   /**
    * Writes the content of the the <code>char array</code> src
-   * into the buffer.
+   * into the buffer. Before the transfer, it checks if there is fewer than
+   * length space remaining in this buffer.
    *
    * @param src The array to copy into the buffer.
    * @param offset The offset within the array of the first byte to be read;
@@ -196,22 +220,15 @@ public abstract class CharBuffer extends Buffer
    * must be non-negative and no larger than src.length - offset.
    * 
    * @exception BufferOverflowException If there is insufficient space in this
-   * buffer for the remaining <code>chars<code> in the source array.
+   * buffer for the remaining <code>char</code>s in the source array.
    * @exception IndexOutOfBoundsException If the preconditions on the offset
    * and length parameters do not hold
    * @exception ReadOnlyBufferException If this buffer is read-only.
    */
   public CharBuffer put (char[] src, int offset, int length)
   {
-    if (offset < 0
-        || offset >= src.length
-        || length < 0
-        || length > (src.length - offset))
-      throw new IndexOutOfBoundsException ();
-     
-    // Put nothing into this buffer when not enough space left.
-    if (length > remaining ())
-      throw new BufferOverflowException ();
+    checkArraySize(src.length, offset, length);
+    checkForOverflow(length);
 		    
     for (int i = offset; i < offset + length; i++)
       put (src [i]);
@@ -226,7 +243,7 @@ public abstract class CharBuffer extends Buffer
    * @param src The array to copy into the buffer.
    * 
    * @exception BufferOverflowException If there is insufficient space in this
-   * buffer for the remaining <code>chars<code> in the source array.
+   * buffer for the remaining <code>char</code>s in the source array.
    * @exception ReadOnlyBufferException If this buffer is read-only.
    */
   public final CharBuffer put (char[] src)
@@ -256,9 +273,8 @@ public abstract class CharBuffer extends Buffer
     if (backing_buffer == null)
       throw new UnsupportedOperationException ();
 
-    if (isReadOnly ())
-      throw new ReadOnlyBufferException ();
-    
+    checkIfReadOnly();
+
     return backing_buffer;
   }
 
@@ -274,19 +290,32 @@ public abstract class CharBuffer extends Buffer
     if (backing_buffer == null)
       throw new UnsupportedOperationException ();
 
-    if (isReadOnly ())
-      throw new ReadOnlyBufferException ();
+    checkIfReadOnly();
     
     return array_offset;
   }
 
   /**
    * Calculates a hash code for this buffer.
+   *
+   * This is done with int arithmetic,
+   * where ** represents exponentiation, by this formula:<br>
+   * <code>s[position()] + 31 + (s[position()+1] + 30)*31**1 + ... +
+   * (s[limit()-1]+30)*31**(limit()-1)</code>.
+   * Where s is the buffer data. Note that the hashcode is dependent
+   * on buffer content, and therefore is not useful if the buffer
+   * content may change.
    */
   public int hashCode ()
   {
-    // FIXME: Check what SUN calculates here.
-    return super.hashCode ();
+    int hashCode = get(position()) + 31;
+    int multiplier = 1;
+    for (int i = position() + 1; i < limit(); ++i)
+      {
+	  multiplier *= 31;
+	  hashCode += (get(i) + 30)*multiplier;
+      }
+    return hashCode;
   }
 
   /**
@@ -343,7 +372,7 @@ public abstract class CharBuffer extends Buffer
    * and then increments the position.
    *
    * @exception BufferUnderflowException If there are no remaining
-   * <code>chars</code> in this buffer.
+   * <code>char</code>s in this buffer.
    */
   public abstract char get ();
 
@@ -352,7 +381,7 @@ public abstract class CharBuffer extends Buffer
    * and then increments the position.
    *
    * @exception BufferOverflowException If there no remaining 
-   * <code>chars</code> in this buffer.
+   * <code>char</code>s in this buffer.
    * @exception ReadOnlyBufferException If this buffer is read-only.
    */
   public abstract CharBuffer put (char b);

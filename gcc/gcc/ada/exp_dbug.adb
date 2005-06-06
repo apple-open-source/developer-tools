@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1996-2004 Free Software Foundation, Inc.          --
+--          Copyright (C) 1996-2005 Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -631,8 +631,7 @@ package body Exp_Dbug is
    -- Get_External_Name --
    -----------------------
 
-   procedure Get_External_Name (Entity : Entity_Id; Has_Suffix : Boolean)
-   is
+   procedure Get_External_Name (Entity : Entity_Id; Has_Suffix : Boolean) is
       E    : Entity_Id := Entity;
       Kind : Entity_Kind;
 
@@ -794,8 +793,7 @@ package body Exp_Dbug is
          elsif Nkind (Choice) = N_Character_Literal
            and then No (Entity (Choice))
          then
-            Add_Uint_To_Buffer
-              (UI_From_Int (Int (Char_Literal_Value (Choice))));
+            Add_Uint_To_Buffer (Char_Literal_Value (Choice));
 
          else
             declare

@@ -1,6 +1,6 @@
 /* Map.java: interface Map -- An object that maps keys to values
              interface Map.Entry -- an Entry in a Map
-   Copyright (C) 1998, 2001, 2004 Free Software Foundation, Inc.
+   Copyright (C) 1998, 2001, 2004, 2005  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -68,7 +68,7 @@ package java.util;
  * normally fail with a non-empty argument.
  *
  * @author Original author unknown
- * @author Eric Blake <ebb9@email.byu.edu>
+ * @author Eric Blake (ebb9@email.byu.edu)
  * @see HashMap
  * @see TreeMap
  * @see Hashtable
@@ -106,6 +106,10 @@ public interface Map
    *
    * @param value the value to search for
    * @return true if the map contains the value
+   * @throws ClassCastException if the type of the value is not a valid type
+   *         for this map.
+   * @throws NullPointerException if the value is null and the map doesn't
+   *         support null values.
    */
   boolean containsValue(Object value);
 
@@ -164,7 +168,8 @@ public interface Map
    * @throws ClassCastException if the key or value is of the wrong type
    * @throws IllegalArgumentException if something about this key or value
    *         prevents it from existing in this map
-   * @throws NullPointerException if the map forbids null keys or values
+   * @throws NullPointerException if either the key or the value is null,
+   *         and the map forbids null keys or values
    * @see #containsKey(Object)
    */
   Object put(Object key, Object value);
@@ -222,10 +227,14 @@ public interface Map
    * null values may also return null if the key was removed.
    *
    * @param key the key to remove
-   * @return the value the key mapped to, or null if not present
+   * @return the value the key mapped to, or null if not present.
    * @throws UnsupportedOperationException if deletion is unsupported
+   * @throws NullPointerException if the key is null and this map doesn't
+   *         support null keys.
+   * @throws ClassCastException if the type of the key is not a valid type
+   *         for this map.
    */
-  Object remove(Object o);
+  Object remove(Object key);
 
   /**
    * Returns the number of key-value mappings in the map. If there are more
@@ -258,7 +267,7 @@ public interface Map
    * for undefined behavior.
    *
    * @author Original author unknown
-   * @author Eric Blake <ebb9@email.byu.edu>
+   * @author Eric Blake (ebb9@email.byu.edu)
    * @see Map
    * @see Map#entrySet()
    * @since 1.2

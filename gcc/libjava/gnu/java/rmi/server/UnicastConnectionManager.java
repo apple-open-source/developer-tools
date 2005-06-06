@@ -1,5 +1,6 @@
-/*
-  Copyright (c) 1996, 1997, 1998, 1999, 2002 Free Software Foundation, Inc.
+/* UnicastConnectionManager.java --
+   Copyright (c) 1996, 1997, 1998, 1999, 2002, 2004
+   Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -35,31 +36,27 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package gnu.java.rmi.server;
 
-import java.rmi.server.RMISocketFactory;
-import java.rmi.server.RMIServerSocketFactory;
-import java.rmi.server.RMIClientSocketFactory;
-import java.rmi.RemoteException;
+import gnu.java.rmi.server.RMIIncomingThread;
+import gnu.java.rmi.server.UnicastConnection;
+
 import java.io.IOException;
 import java.io.ObjectOutput;
 import java.io.ObjectInput;
-import java.io.DataInputStream;
-import java.lang.Thread;
-import java.lang.Runnable;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.net.ServerSocket;
 import java.net.UnknownHostException;
-
+import java.rmi.RemoteException;
+import java.rmi.server.RMISocketFactory;
+import java.rmi.server.RMIServerSocketFactory;
+import java.rmi.server.RMIClientSocketFactory;
 import java.util.ArrayList;
 import java.util.ConcurrentModificationException;
-import java.util.Enumeration;
 import java.util.Hashtable;
 import java.util.Iterator;
-
-import gnu.java.rmi.server.UnicastConnection;
-import gnu.java.rmi.server.RMIIncomingThread;
 
 public class UnicastConnectionManager
 	implements Runnable, ProtocolConstants {
@@ -67,8 +64,9 @@ public class UnicastConnectionManager
 private static String localhost;
 // use different maps for server/client type UnicastConnectionManager
 private static Hashtable servers = new Hashtable();
-private static Hashtable clients = new Hashtable();
-private ArrayList connections; //client connection pool
+// Package-private to avoid trampolines.
+static Hashtable clients = new Hashtable();
+ArrayList connections; //client connection pool
 
 // make serverThread volatile for poll
 private volatile Thread serverThread;
@@ -76,7 +74,8 @@ private ServerSocket ssock;
 String serverName;
 int serverPort;
 
-static private Thread scavenger;
+// Package-private to avoid a trampoline.
+static Thread scavenger;
 
 // If client and server are in the same VM, serverobj represents server
 Object serverobj;

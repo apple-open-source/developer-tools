@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------------------
-   darwin_closure.S - Copyright (c) 2002 2003 Free Software Foundation,
+   darwin_closure.S - Copyright (c) 2002, 2003, 2004, Free Software Foundation,
    Inc. based on ppc_closure.S
 
    PowerPC Assembly glue.
@@ -36,14 +36,14 @@
 	.align 2
 _ffi_closure_ASM:
 LFB1:
-	mflr	r0			/* extract return address  */
-	stw	r0, 8(r1)		/* save the return address  */
+	mflr	r0		/* extract return address  */
+	stw	r0,8(r1)	/* save the return address  */
 LCFI0:
 	/* 24 Bytes (Linkage Area)
 	   32 Bytes (outgoing parameter area, always reserved)
 	   104 Bytes (13*8 from FPR)
-	   8 Bytes (result)
-	   168 Bytes  */
+	   16 Bytes (result)
+	   176 Bytes  */
 
 	stwu	r1,-176(r1)	/* skip over caller save area
 				keep stack aligned to 16.  */
@@ -53,29 +53,29 @@ LCFI1:
 
 	/* We store gpr 3 to gpr 10 (aligned to 4)
 	   in the parents outgoing area.  */
-	stw   r3, 200(r1)
-	stw   r4, 204(r1)
-	stw   r5, 208(r1)
-	stw   r6, 212(r1)
-	stw   r7, 216(r1)
-	stw   r8, 220(r1)
-	stw   r9, 224(r1)
-	stw   r10, 228(r1)
+	stw   r3,200(r1)
+	stw   r4,204(r1)
+	stw   r5,208(r1)
+	stw   r6,212(r1)
+	stw   r7,216(r1)
+	stw   r8,220(r1)
+	stw   r9,224(r1)
+	stw   r10,228(r1)
 
 	/* We save fpr 1 to fpr 13. (aligned to 8)  */
-	stfd  f1, 56(r1)
-	stfd  f2, 64(r1)
-	stfd  f3, 72(r1)
-	stfd  f4, 80(r1)
-	stfd  f5, 88(r1)
-	stfd  f6, 96(r1)
-	stfd  f7, 104(r1)
-	stfd  f8, 112(r1)
-	stfd  f9, 120(r1)
-	stfd  f10, 128(r1)
-	stfd  f11, 136(r1)
-	stfd  f12, 144(r1)
-	stfd  f13, 152(r1)
+	stfd  f1,56(r1)
+	stfd  f2,64(r1)
+	stfd  f3,72(r1)
+	stfd  f4,80(r1)
+	stfd  f5,88(r1)
+	stfd  f6,96(r1)
+	stfd  f7,104(r1)
+	stfd  f8,112(r1)
+	stfd  f9,120(r1)
+	stfd  f10,128(r1)
+	stfd  f11,136(r1)
+	stfd  f12,144(r1)
+	stfd  f13,152(r1)
 
 	/* Set up registers for the routine that actually does the work
 	   get the context pointer from the trampoline.  */
@@ -150,8 +150,8 @@ Lret_type3:
 /* case FFI_TYPE_LONGDOUBLE  */
 Lret_type4:
 	lfd	f1,0(r5)
+	lfd	f2,8(r5)
 	b	Lfinish
-	nop
 	nop
 
 /* case FFI_TYPE_UINT8  */
@@ -226,9 +226,9 @@ Lret_type14:
 
 /* case done  */
 Lfinish:
-	addi	r1,r1,176		/* Restore stack pointer.  */
-	lwz	r0,8(r1)		/* Get return address.  */
-	mtlr	r0			/* Reset link register.  */
+	addi	r1,r1,176	/* Restore stack pointer.  */
+	lwz	r0,8(r1)	/* Get return address.  */
+	mtlr	r0		/* Reset link register.  */
 	blr
 
 /* END(ffi_closure_ASM)  */
@@ -301,4 +301,4 @@ L_ffi_closure_helper_DARWIN$lazy_ptr:
 .data
 	.align 2
 LLFB1$non_lazy_ptr:
-        .long LFB1
+	.long LFB1

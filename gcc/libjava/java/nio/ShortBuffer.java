@@ -68,7 +68,7 @@ public abstract class ShortBuffer extends Buffer
    * @exception IndexOutOfBoundsException If the preconditions on the offset
    * and length parameters do not hold
    */
-  final public static ShortBuffer wrap (short[] array, int offset, int length)
+  public static final ShortBuffer wrap (short[] array, int offset, int length)
   {
     return new ShortBufferImpl (array, 0, array.length, offset + length, offset, -1, false);
   }
@@ -77,14 +77,15 @@ public abstract class ShortBuffer extends Buffer
    * Wraps a <code>short</code> array into a <code>ShortBuffer</code>
    * object.
    */
-  final public static ShortBuffer wrap (short[] array)
+  public static final ShortBuffer wrap (short[] array)
   {
     return wrap (array, 0, array.length);
   }
   
   /**
-   * This method transfers <code>shorts<code> from this buffer into the given
-   * destination array.
+   * This method transfers <code>short</code>s from this buffer into the given
+   * destination array. Before the transfer, it checks if there are fewer than
+   * length <code>short</code>s remaining in this buffer. 
    *
    * @param dst The destination array
    * @param offset The offset within the array of the first <code>short</code>
@@ -93,12 +94,15 @@ public abstract class ShortBuffer extends Buffer
    * must be non-negative and no larger than dst.length - offset.
    *
    * @exception BufferUnderflowException If there are fewer than length
-   * <code>shorts</code> remaining in this buffer.
+   * <code>short</code>s remaining in this buffer.
    * @exception IndexOutOfBoundsException If the preconditions on the offset
    * and length parameters do not hold.
    */
   public ShortBuffer get (short[] dst, int offset, int length)
   {
+    checkArraySize(dst.length, offset, length);
+    checkForUnderflow(length);
+
     for (int i = offset; i < offset + length; i++)
       {
         dst [i] = get ();
@@ -108,13 +112,13 @@ public abstract class ShortBuffer extends Buffer
   }
 
   /**
-   * This method transfers <code>shorts<code> from this buffer into the given
+   * This method transfers <code>short</code>s from this buffer into the given
    * destination array.
    *
    * @param dst The byte array to write into.
    *
    * @exception BufferUnderflowException If there are fewer than dst.length
-   * <code>shorts</code> remaining in this buffer.
+   * <code>short</code>s remaining in this buffer.
    */
   public ShortBuffer get (short[] dst)
   {
@@ -123,12 +127,13 @@ public abstract class ShortBuffer extends Buffer
 
   /**
    * Writes the content of the the <code>ShortBUFFER</code> src
-   * into the buffer.
+   * into the buffer. Before the transfer, it checks if there is fewer than
+   * <code>src.remaining()</code> space remaining in this buffer.
    *
    * @param src The source data.
    *
    * @exception BufferOverflowException If there is insufficient space in this
-   * buffer for the remaining <code>shorts<code> in the source buffer.
+   * buffer for the remaining <code>short</code>s in the source buffer.
    * @exception IllegalArgumentException If the source buffer is this buffer.
    * @exception ReadOnlyBufferException If this buffer is read-only.
    */
@@ -137,14 +142,13 @@ public abstract class ShortBuffer extends Buffer
     if (src == this)
       throw new IllegalArgumentException ();
 
-    if (src.remaining () > remaining ())
-      throw new BufferOverflowException ();
+    checkForOverflow(src.remaining ());
 
     if (src.remaining () > 0)
       {
         short[] toPut = new short [src.remaining ()];
         src.get (toPut);
-        src.put (toPut);
+        put (toPut);
       }
 
     return this;
@@ -152,7 +156,8 @@ public abstract class ShortBuffer extends Buffer
 
   /**
    * Writes the content of the the <code>short array</code> src
-   * into the buffer.
+   * into the buffer. Before the transfer, it checks if there is fewer than
+   * length space remaining in this buffer.
    *
    * @param src The array to copy into the buffer.
    * @param offset The offset within the array of the first byte to be read;
@@ -161,13 +166,16 @@ public abstract class ShortBuffer extends Buffer
    * must be non-negative and no larger than src.length - offset.
    * 
    * @exception BufferOverflowException If there is insufficient space in this
-   * buffer for the remaining <code>shorts<code> in the source array.
+   * buffer for the remaining <code>short</code>s in the source array.
    * @exception IndexOutOfBoundsException If the preconditions on the offset
    * and length parameters do not hold
    * @exception ReadOnlyBufferException If this buffer is read-only.
    */
   public ShortBuffer put (short[] src, int offset, int length)
   {
+    checkArraySize(src.length, offset, length);
+    checkForOverflow(length);
+
     for (int i = offset; i < offset + length; i++)
       put (src [i]);
 
@@ -181,7 +189,7 @@ public abstract class ShortBuffer extends Buffer
    * @param src The array to copy into the buffer.
    * 
    * @exception BufferOverflowException If there is insufficient space in this
-   * buffer for the remaining <code>shorts<code> in the source array.
+   * buffer for the remaining <code>short</code>s in the source array.
    * @exception ReadOnlyBufferException If this buffer is read-only.
    */
   public final ShortBuffer put (short[] src)
@@ -211,8 +219,7 @@ public abstract class ShortBuffer extends Buffer
     if (backing_buffer == null)
       throw new UnsupportedOperationException ();
 
-    if (isReadOnly ())
-      throw new ReadOnlyBufferException ();
+    checkIfReadOnly();
     
     return backing_buffer;
   }
@@ -229,19 +236,34 @@ public abstract class ShortBuffer extends Buffer
     if (backing_buffer == null)
       throw new UnsupportedOperationException ();
 
-    if (isReadOnly ())
-      throw new ReadOnlyBufferException ();
+    checkIfReadOnly();
     
     return array_offset;
   }
 
   /**
    * Calculates a hash code for this buffer.
+   *
+   * This is done with <code>int</code> arithmetic,
+   * where ** represents exponentiation, by this formula:<br>
+   * <code>s[position()] + 31 + (s[position()+1] + 30)*31**1 + ... +
+   * (s[limit()-1]+30)*31**(limit()-1)</code>.
+   * Where s is the buffer data. Note that the hashcode is dependent
+   * on buffer content, and therefore is not useful if the buffer
+   * content may change.
+   *
+   * @return the hash code
    */
   public int hashCode ()
   {
-    // FIXME: Check what SUN calculates here.
-    return super.hashCode ();
+    int hashCode = get(position()) + 31;
+    int multiplier = 1;
+    for (int i = position() + 1; i < limit(); ++i)
+      {
+	  multiplier *= 31;
+	  hashCode += (get(i) + 30)*multiplier;
+      }
+    return hashCode;
   }
 
   /**
@@ -298,7 +320,7 @@ public abstract class ShortBuffer extends Buffer
    * and then increments the position.
    *
    * @exception BufferUnderflowException If there are no remaining
-   * <code>shorts</code> in this buffer.
+   * <code>short</code>s in this buffer.
    */
   public abstract short get ();
 
@@ -307,7 +329,7 @@ public abstract class ShortBuffer extends Buffer
    * and then increments the position.
    *
    * @exception BufferOverflowException If there no remaining 
-   * <code>shorts</code> in this buffer.
+   * <code>short</code>s in this buffer.
    * @exception ReadOnlyBufferException If this buffer is read-only.
    */
   public abstract ShortBuffer put (short b);

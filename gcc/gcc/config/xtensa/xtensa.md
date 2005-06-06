@@ -52,20 +52,41 @@
   [(set_attr "type" "multi")])
 
 
-;; Functional units.
+;; Pipeline model.
 
-(define_function_unit "memory" 1 0 (eq_attr "type" "load,fload") 2 0)
+;; The Xtensa basically has simple 5-stage RISC pipeline.
+;; Most instructions complete in 1 cycle, and it is OK to assume that
+;; everything is fully pipelined.  The exceptions have special insn
+;; reservations in the pipeline description below.  The Xtensa can
+;; issue one instruction per cycle, so defining CPU units is unnecessary.
 
-(define_function_unit "sreg" 1 1 (eq_attr "type" "rsr") 2 0)
+(define_insn_reservation "xtensa_any_insn" 1
+			 (eq_attr "type" "!load,fload,rsr,mul16,mul32,fmadd,fconv")
+			 "nothing")
 
-(define_function_unit "mul16" 1 0 (eq_attr "type" "mul16") 2 0)
+(define_insn_reservation "xtensa_memory" 2
+			 (eq_attr "type" "load,fload")
+			 "nothing")
 
-(define_function_unit "mul32" 1 0 (eq_attr "type" "mul32") 2 0)
+(define_insn_reservation "xtensa_sreg" 2
+			 (eq_attr "type" "rsr")
+			 "nothing")
 
-(define_function_unit "fpmadd" 1 0 (eq_attr "type" "fmadd") 4 0)
+(define_insn_reservation "xtensa_mul16" 2
+			 (eq_attr "type" "mul16")
+			 "nothing")
 
-(define_function_unit "fpconv" 1 0 (eq_attr "type" "fconv") 2 0)
+(define_insn_reservation "xtensa_mul32" 2
+			 (eq_attr "type" "mul32")
+			 "nothing")
 
+(define_insn_reservation "xtensa_fmadd" 4
+			 (eq_attr "type" "fmadd")
+			 "nothing")
+
+(define_insn_reservation "xtensa_fconv" 2
+			 (eq_attr "type" "fconv")
+			 "nothing")
 
 ;; Addition.
 
@@ -1036,7 +1057,7 @@
 
 ;; Block moves
 
-(define_expand "movstrsi"
+(define_expand "movmemsi"
   [(parallel [(set (match_operand:BLK 0 "" "")
 		   (match_operand:BLK 1 "" ""))
 	      (use (match_operand:SI 2 "arith_operand" ""))
@@ -1047,25 +1068,6 @@
     FAIL;
   DONE;
 })
-
-(define_insn "movstrsi_internal"
-  [(set (match_operand:BLK 0 "memory_operand" "=U")
-	(match_operand:BLK 1 "memory_operand" "U"))
-   (use (match_operand:SI 2 "arith_operand" ""))
-   (use (match_operand:SI 3 "const_int_operand" ""))
-   (clobber (match_scratch:SI 4 "=&r"))
-   (clobber (match_scratch:SI 5 "=&r"))]
-  ""
-{
-  rtx tmpregs[2];
-  tmpregs[0] = operands[4];
-  tmpregs[1] = operands[5];
-  xtensa_emit_block_move (operands, tmpregs, 1);
-  return "";
-}
-  [(set_attr "type"	"multi")
-   (set_attr "mode"	"none")
-   (set_attr "length"	"300")])
 
 
 ;; Shift instructions.

@@ -1,3 +1,29 @@
+2004-11-24  Kelley Cook  <kcook@gcc.gnu.org>
+
+	* configure: Regenerate for libtool change.
+
+2004-11-24  Kelley Cook  <kcook@gcc.gnu.org>
+
+	* Makefile.in, aclocal.m4: Regenerate with automake 1.9.3.
+
+2004-11-22  Eric Botcazou  <ebotcazou@libertysurf.fr>
+
+	* zconf.h: Define NO_vsnprintf on Solaris 2.5.1.
+
+2004-10-11  Tom Tromey  <tromey@redhat.com>
+
+	PR libgcj/14856:
+	* Imported zlib 1.2.1; merged local changes.
+
+2005-06-15  Paolo Bonzini  <bonzini@gnu.org>
+
+	* Makefile.am: Remove useless multilib rules.
+	* configure.ac: Rewrite multilib support to use
+	features of recent automakes.
+	* aclocal.m4: Regenerate with Automake 1.8.5.
+	* Makefile.in: Regenerate with Automake 1.8.5.
+	* configure: Regenerate.
+
 2004-04-12  Kelley Cook  <kcook@gcc.gnu.org>
 
 	* Makefile.am: Add in libz_a_CFLAGS as recommended by automake doc.

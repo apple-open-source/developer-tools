@@ -59,7 +59,7 @@ import java.util.ResourceBundle;
  * static factory methods in this class such as 
  * <code>getCurrencyInstance</code>.
  * 
- * @author Tom Tromey <tromey@cygnus.com>
+ * @author Tom Tromey (tromey@cygnus.com)
  * @author Aaron M. Renn (arenn@urbanophile.com)
  * @date March 4, 1999
  */
@@ -302,15 +302,14 @@ public abstract class NumberFormat extends Format implements Cloneable
     return list;
   }
 
-  private static final NumberFormat computeInstance (Locale loc,
-						     String resource,
-						     String def)
+  private static NumberFormat computeInstance(Locale loc, String resource,
+                                              String def)
   {
     ResourceBundle res;
     try
       {
 	res = ResourceBundle.getBundle("gnu.java.locale.LocaleInformation",
-				       loc);
+		loc, ClassLoader.getSystemClassLoader());
       }
     catch (MissingResourceException x)
       {

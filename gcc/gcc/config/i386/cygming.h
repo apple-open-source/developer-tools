@@ -72,14 +72,6 @@ Boston, MA 02111-1307, USA.  */
 
 #define MAYBE_UWIN_CPP_BUILTINS() /* Nothing.  */
 
-/* Support the __declspec keyword by turning them into attributes.
-   We currently only support: dllimport and dllexport.
-   Note that the current way we do this may result in a collision with
-   predefined attributes later on.  This can be solved by using one attribute,
-   say __declspec__, and passing args to it.  The problem with that approach
-   is that args are not accumulated: each new appearance would clobber any
-   existing args.  */
-
 #define TARGET_OS_CPP_BUILTINS()					\
   do									\
     {									\
@@ -88,13 +80,15 @@ Boston, MA 02111-1307, USA.  */
 	builtin_define ("__stdcall=__attribute__((__stdcall__))");	\
 	builtin_define ("__fastcall=__attribute__((__fastcall__))");	\
 	builtin_define ("__cdecl=__attribute__((__cdecl__))");		\
-	builtin_define ("__declspec(x)=__attribute__((x))");		\
 	if (!flag_iso)							\
 	  {								\
 	    builtin_define ("_stdcall=__attribute__((__stdcall__))");	\
 	    builtin_define ("_fastcall=__attribute__((__fastcall__))");	\
 	    builtin_define ("_cdecl=__attribute__((__cdecl__))");	\
 	  }								\
+	/* Even though linkonce works with static libs, this is needed 	\
+	    to compare typeinfo symbols across dll boundaries.  */	\
+	builtin_define ("__GXX_MERGED_TYPEINFO_NAMES=0");		\
 	MAYBE_UWIN_CPP_BUILTINS ();					\
 	EXTRA_OS_CPP_BUILTINS ();					\
   }									\
@@ -102,7 +96,7 @@ Boston, MA 02111-1307, USA.  */
 
 /* Get tree.c to declare a target-specific specialization of
    merge_decl_attributes.  */
-#define TARGET_DLLIMPORT_DECL_ATTRIBUTES
+#define TARGET_DLLIMPORT_DECL_ATTRIBUTES 1
 
 /* This macro defines names of additional specifications to put in the specs
    that can be used in various specifications like CC1_SPEC.  Its definition
@@ -171,6 +165,7 @@ switch_to_section (enum in_section section, tree decl)		\
   switch (section)						\
     {								\
       case in_text: text_section (); break;			\
+      case in_unlikely_executed_text: unlikely_text_section (); break; \
       case in_data: data_section (); break;			\
       case in_readonly_data: readonly_data_section (); break;	\
       case in_named: named_section (decl, NULL, 0); break;	\
@@ -266,14 +261,12 @@ do {							\
 #define ASM_OUTPUT_ALIGN(FILE,LOG)	\
     if ((LOG)!=0) fprintf ((FILE), "\t.align %d\n", 1<<(LOG))
 
-/* Define this macro if in some cases global symbols from one translation
-   unit may not be bound to undefined symbols in another translation unit
-   without user intervention.  For instance, under Microsoft Windows
-   symbols must be explicitly imported from shared libraries (DLLs).  */
-#define MULTIPLE_SYMBOL_SPACES
+/* Windows uses explicit import from shared libraries.  */
+#define MULTIPLE_SYMBOL_SPACES 1
 
 extern void i386_pe_unique_section (TREE, int);
 #define TARGET_ASM_UNIQUE_SECTION i386_pe_unique_section
+#define TARGET_ASM_FUNCTION_RODATA_SECTION default_no_function_rodata_section
 
 #define SUPPORTS_ONE_ONLY 1
 
@@ -402,6 +395,23 @@ extern int i386_pe_dllimport_name_p (const char *);
 				       TREE_PUBLIC (DECL));		\
       ASM_OUTPUT_DEF (STREAM, alias, IDENTIFIER_POINTER (TARGET));	\
     } while (0)
+
+/* GNU as supports weak symbols on PECOFF. */
+#ifdef HAVE_GAS_WEAK
+#define ASM_WEAKEN_LABEL(FILE, NAME)  \
+  do                                  \
+    {                                 \
+      fputs ("\t.weak\t", (FILE));    \
+      assemble_name ((FILE), (NAME)); \
+      fputc ('\n', (FILE));           \
+    }                                 \
+  while (0)
+#endif /* HAVE_GAS_WEAK */
+
+/* FIXME: SUPPORTS_WEAK && TARGET_HAVE_NAMED_SECTIONS is true,
+   but for .jcr section to work we also need crtbegin and crtend
+   objects.  */
+#define TARGET_USE_JCR_SECTION 0
 
 /* Decide whether it is safe to use a local alias for a virtual function
    when constructing thunks.  */

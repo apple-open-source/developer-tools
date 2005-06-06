@@ -1,6 +1,6 @@
 // interpret.cc - Code for the interpreter
 
-/* Copyright (C) 1999, 2000, 2001, 2002, 2003 Free Software Foundation
+/* Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004 Free Software Foundation
 
    This file is part of libgcj.
 
@@ -11,6 +11,7 @@ details.  */
 /* Author: Kresten Krab Thorup <krab@gnu.org>  */
 
 #include <config.h>
+#include <platform.h>
 
 // Define this to get the direct-threaded interpreter.  If undefined,
 // we revert to a basic bytecode interpreter.  The former is faster
@@ -38,8 +39,14 @@ details.  */
 #include <java/lang/Thread.h>
 #include <java-insns.h>
 #include <java-signal.h>
+#include <java/lang/ClassFormatError.h>
+#include <execution.h>
+#include <java/lang/reflect/Modifier.h>
 
 #ifdef INTERPRETER
+
+// Execution engine for interpreted code.
+_Jv_InterpreterEngine _Jv_soleInterpreterEngine;
 
 #include <stdlib.h>
 
@@ -52,6 +59,26 @@ static void throw_incompatible_class_change_error (jstring msg)
 #ifndef HANDLE_SEGV
 static void throw_null_pointer_exception ()
   __attribute__ ((__noreturn__));
+#endif
+
+static void throw_class_format_error (jstring msg)
+	__attribute__ ((__noreturn__));
+static void throw_class_format_error (char *msg)
+	__attribute__ ((__noreturn__));
+
+#ifdef DIRECT_THREADED
+// Lock to ensure that methods are not compiled concurrently.
+// We could use a finer-grained lock here, however it is not safe to use
+// the Class monitor as user code in another thread could hold it.
+static _Jv_Mutex_t compile_mutex;
+
+void
+_Jv_InitInterpreter()
+{
+  _Jv_MutexInit (&compile_mutex);
+}
+#else
+void _Jv_InitInterpreter() {}
 #endif
 
 extern "C" double __ieee754_fmod (double,double);
@@ -750,8 +777,9 @@ _Jv_InterpMethod::compile (const void * const *insn_targets)
       exc[i].start_pc.p = &insns[pc_mapping[exc[i].start_pc.i]];
       exc[i].end_pc.p = &insns[pc_mapping[exc[i].end_pc.i]];
       exc[i].handler_pc.p = &insns[pc_mapping[exc[i].handler_pc.i]];
-      jclass handler = (_Jv_ResolvePoolEntry (defining_class,
-					      exc[i].handler_type.i)).clazz;
+      jclass handler
+	= (_Jv_Linker::resolve_pool_entry (defining_class,
+					     exc[i].handler_type.i)).clazz;
       exc[i].handler_type.p = handler;
     }
 
@@ -759,17 +787,24 @@ _Jv_InterpMethod::compile (const void * const *insn_targets)
 }
 #endif /* DIRECT_THREADED */
 
-// This function exists so that the stack-tracing code can find the
-// boundaries of the interpreter.
-void
-_Jv_StartOfInterpreter (void)
-{
-}
+// These exist so that the stack-tracing code can find the boundaries
+// of the interpreter.
+void *_Jv_StartOfInterpreter;
+void *_Jv_EndOfInterpreter;
+extern "C" void *_Unwind_FindEnclosingFunction (void *pc);
 
 void
 _Jv_InterpMethod::run (void *retp, ffi_raw *args)
 {
   using namespace java::lang::reflect;
+
+  // Record the address of the start of this member function in
+  // _Jv_StartOfInterpreter.  Such a write to a global variable
+  // without acquiring a lock is correct iff reads and writes of words
+  // in memory are atomic, but Java requires that anyway.
+ foo:
+  if (_Jv_StartOfInterpreter == NULL)
+    _Jv_StartOfInterpreter = _Unwind_FindEnclosingFunction (&&foo);
 
   // FRAME_DESC registers this particular invocation as the top-most
   // interpreter frame.  This lets the stack tracing code (for
@@ -1032,9 +1067,14 @@ _Jv_InterpMethod::run (void *retp, ffi_raw *args)
 #define PCVAL(unionval) unionval.p
 #define AMPAMP(label) &&label
 
-  // Compile if we must.
+  // Compile if we must. NOTE: Double-check locking.
   if (prepared == NULL)
-    compile (insn_target);
+    {
+      _Jv_MutexLock (&compile_mutex);
+      if (prepared == NULL)
+	compile (insn_target);
+      _Jv_MutexUnlock (&compile_mutex);
+    }
   pc = (insn_slot *) prepared;
 
 #else
@@ -1086,13 +1126,14 @@ _Jv_InterpMethod::run (void *retp, ffi_raw *args)
       {
 	int index = GET2U ();
 
-	/* _Jv_ResolvePoolEntry returns immediately if the value already
-	 * is resolved.  If we want to clutter up the code here to gain
-	 * a little performance, then we can check the corresponding bit
-	 * JV_CONSTANT_ResolvedFlag in the tag directly.  For now, I
-	 * don't think it is worth it.  */
+	/* _Jv_Linker::resolve_pool_entry returns immediately if the
+	 * value already is resolved.  If we want to clutter up the
+	 * code here to gain a little performance, then we can check
+	 * the corresponding bit JV_CONSTANT_ResolvedFlag in the tag
+	 * directly.  For now, I don't think it is worth it.  */
 
-	rmeth = (_Jv_ResolvePoolEntry (defining_class, index)).rmethod;
+	rmeth = (_Jv_Linker::resolve_pool_entry (defining_class,
+						   index)).rmethod;
 
 	sp -= rmeth->stack_item_count;
 	// We don't use NULLCHECK here because we can't rely on that
@@ -1156,7 +1197,7 @@ _Jv_InterpMethod::run (void *retp, ffi_raw *args)
 	ffi_cif *cif = &rmeth->cif;
 	ffi_raw *raw = (ffi_raw*) sp;
 
-	jdouble rvalue;
+	_Jv_value rvalue;
 
 #if FFI_NATIVE_RAW_API
 	/* We assume that this is only implemented if it's correct	*/
@@ -1172,11 +1213,11 @@ _Jv_InterpMethod::run (void *retp, ffi_raw *args)
 	 * so those are checked before the switch */
 	if (rtype == FFI_TYPE_POINTER)
 	  {
-	    PUSHA (*(jobject*)&rvalue);
+	    PUSHA (rvalue.object_value);
 	  }
 	else if (rtype == FFI_TYPE_SINT32)
 	  {
-	    PUSHI (*(jint*)&rvalue);
+	    PUSHI (rvalue.int_value);
 	  }
 	else if (rtype == FFI_TYPE_VOID)
 	  {
@@ -1187,36 +1228,27 @@ _Jv_InterpMethod::run (void *retp, ffi_raw *args)
 	    switch (rtype)
 	      {
 	      case FFI_TYPE_SINT8:
-		{
-		  jbyte value = (*(jint*)&rvalue) & 0xff;
-		  PUSHI (value);
-		}
+		PUSHI ((jbyte)(rvalue.int_value & 0xff));
 		break;
 
 	      case FFI_TYPE_SINT16:
-		{
-		  jshort value = (*(jint*)&rvalue) & 0xffff;
-		  PUSHI (value);
-		}
+		PUSHI ((jshort)(rvalue.int_value & 0xffff));
 		break;
 
 	      case FFI_TYPE_UINT16:
-		{
-		  jint value = (*(jint*)&rvalue) & 0xffff;
-		  PUSHI (value);
-		}
+		PUSHI (rvalue.int_value & 0xffff);
 		break;
 
 	      case FFI_TYPE_FLOAT:
-		PUSHF (*(jfloat*)&rvalue);
+	        PUSHF (rvalue.float_value);
 		break;
 
 	      case FFI_TYPE_DOUBLE:
-		PUSHD (rvalue);
+	        PUSHD (rvalue.double_value);
 		break;
 
 	      case FFI_TYPE_SINT64:
-		PUSHL (*(jlong*)&rvalue);
+	        PUSHL (rvalue.long_value);
 		break;
 
 	      default:
@@ -2055,11 +2087,11 @@ _Jv_InterpMethod::run (void *retp, ffi_raw *args)
       NEXT_INSN;
 
     insn_dcmpl:
-      tmpval = 1;
+      tmpval = -1;
       goto dcmp;
 
     insn_dcmpg:
-      tmpval = -1;
+      tmpval = 1;
 
     dcmp:
       {
@@ -2391,7 +2423,7 @@ _Jv_InterpMethod::run (void *retp, ffi_raw *args)
     insn_getstatic:
       {
 	jint fieldref_index = GET2U ();
-	_Jv_ResolvePoolEntry (defining_class, fieldref_index);
+	_Jv_Linker::resolve_pool_entry (defining_class, fieldref_index);
 	_Jv_Field *field = pool_data[fieldref_index].field;
 
 	if ((field->flags & Modifier::STATIC) == 0)
@@ -2408,37 +2440,37 @@ _Jv_InterpMethod::run (void *retp, ffi_raw *args)
 	    switch (type->size_in_bytes)
 	      {
 	      case 1:
-		PUSHI (*(jbyte*) (field->u.addr));
+		PUSHI (*field->u.byte_addr);
 		newinsn = AMPAMP (getstatic_resolved_1);
 		break;
 
 	      case 2:
 		if (type == JvPrimClass (char))
 		  {
-		    PUSHI(*(jchar*) (field->u.addr));
+		    PUSHI (*field->u.char_addr);
 		    newinsn = AMPAMP (getstatic_resolved_char);
 		  }
 		else
 		  {
-		    PUSHI(*(jshort*) (field->u.addr));
+		    PUSHI (*field->u.short_addr);
 		    newinsn = AMPAMP (getstatic_resolved_short);
 		  }
 		break;
 
 	      case 4:
-		PUSHI(*(jint*) (field->u.addr));
+	        PUSHI(*field->u.int_addr);
 		newinsn = AMPAMP (getstatic_resolved_4);
 		break;
 
 	      case 8:
-		PUSHL(*(jlong*) (field->u.addr));
+	        PUSHL(*field->u.long_addr);
 		newinsn = AMPAMP (getstatic_resolved_8);
 		break;
 	      }
 	  }
 	else
 	  {
-	    PUSHA(*(jobject*) (field->u.addr));
+	    PUSHA(*field->u.object_addr);
 	    newinsn = AMPAMP (getstatic_resolved_obj);
 	  }
 
@@ -2478,7 +2510,7 @@ _Jv_InterpMethod::run (void *retp, ffi_raw *args)
     insn_getfield:
       {
 	jint fieldref_index = GET2U ();
-	_Jv_ResolvePoolEntry (defining_class, fieldref_index);
+	_Jv_Linker::resolve_pool_entry (defining_class, fieldref_index);
 	_Jv_Field *field = pool_data[fieldref_index].field;
 
 	if ((field->flags & Modifier::STATIC) != 0)
@@ -2494,42 +2526,43 @@ _Jv_InterpMethod::run (void *retp, ffi_raw *args)
 	NULLCHECK(obj);
 
 	void *newinsn = NULL;
+	_Jv_value *val = (_Jv_value *) ((char *)obj + field_offset);
 	if (type->isPrimitive ())
 	  {
 	    switch (type->size_in_bytes)
 	      {
 	      case 1:
-		PUSHI (*(jbyte*) ((char*)obj + field_offset));
+	        PUSHI (val->byte_value);
 		newinsn = AMPAMP (getfield_resolved_1);
 		break;
 
 	      case 2:
 		if (type == JvPrimClass (char))
 		  {
-		    PUSHI (*(jchar*) ((char*)obj + field_offset));
+		    PUSHI (val->char_value);
 		    newinsn = AMPAMP (getfield_resolved_char);
 		  }
 		else
 		  {
-		    PUSHI (*(jshort*) ((char*)obj + field_offset));
+		    PUSHI (val->short_value);
 		    newinsn = AMPAMP (getfield_resolved_short);
 		  }
 		break;
 
 	      case 4:
-		PUSHI (*(jint*) ((char*)obj + field_offset));
+		PUSHI (val->int_value);
 		newinsn = AMPAMP (getfield_resolved_4);
 		break;
 
 	      case 8:
-		PUSHL(*(jlong*) ((char*)obj + field_offset));
+	        PUSHL (val->long_value);
 		newinsn = AMPAMP (getfield_resolved_8);
 		break;
 	      }
 	  }
 	else
 	  {
-	    PUSHA(*(jobject*) ((char*)obj + field_offset));
+	    PUSHA (val->object_value);
 	    newinsn = AMPAMP (getfield_resolved_obj);
 	  }
 
@@ -2593,7 +2626,7 @@ _Jv_InterpMethod::run (void *retp, ffi_raw *args)
     insn_putstatic:
       {
 	jint fieldref_index = GET2U ();
-	_Jv_ResolvePoolEntry (defining_class, fieldref_index);
+	_Jv_Linker::resolve_pool_entry (defining_class, fieldref_index);
 	_Jv_Field *field = pool_data[fieldref_index].field;
 
 	jclass type = field->type;
@@ -2611,7 +2644,7 @@ _Jv_InterpMethod::run (void *retp, ffi_raw *args)
 	      case 1:
 		{
 		  jint value = POPI();
-		  *(jbyte*) (field->u.addr) = value;
+		  *field->u.byte_addr = value;
 		  newinsn = AMPAMP (putstatic_resolved_1);
 		  break;
 		}
@@ -2619,7 +2652,7 @@ _Jv_InterpMethod::run (void *retp, ffi_raw *args)
 	      case 2:
 		{
 		  jint value = POPI();
-		  *(jchar*) (field->u.addr) = value;
+		  *field->u.char_addr = value;
 		  newinsn = AMPAMP (putstatic_resolved_2);
 		  break;
 		}
@@ -2627,7 +2660,7 @@ _Jv_InterpMethod::run (void *retp, ffi_raw *args)
 	      case 4:
 		{
 		  jint value = POPI();
-		  *(jint*) (field->u.addr) = value;
+		  *field->u.int_addr = value;
 		  newinsn = AMPAMP (putstatic_resolved_4);
 		  break;
 		}
@@ -2635,7 +2668,7 @@ _Jv_InterpMethod::run (void *retp, ffi_raw *args)
 	      case 8:
 		{
 		  jlong value = POPL();
-		  *(jlong*) (field->u.addr) = value;
+		  *field->u.long_addr = value;
 		  newinsn = AMPAMP (putstatic_resolved_8);
 		  break;
 		}
@@ -2644,7 +2677,7 @@ _Jv_InterpMethod::run (void *retp, ffi_raw *args)
 	else
 	  {
 	    jobject value = POPA();
-	    *(jobject*) (field->u.addr) = value;
+	    *field->u.object_addr = value;
 	    newinsn = AMPAMP (putstatic_resolved_obj);
 	  }
 
@@ -2680,7 +2713,7 @@ _Jv_InterpMethod::run (void *retp, ffi_raw *args)
     insn_putfield:
       {
 	jint fieldref_index = GET2U ();
-	_Jv_ResolvePoolEntry (defining_class, fieldref_index);
+	_Jv_Linker::resolve_pool_entry (defining_class, fieldref_index);
 	_Jv_Field *field = pool_data[fieldref_index].field;
 
 	jclass type = field->type;
@@ -2806,7 +2839,8 @@ _Jv_InterpMethod::run (void *retp, ffi_raw *args)
       {
 	int index = GET2U ();
 
-	rmeth = (_Jv_ResolvePoolEntry (defining_class, index)).rmethod;
+	rmeth = (_Jv_Linker::resolve_pool_entry (defining_class,
+						   index)).rmethod;
 
 	sp -= rmeth->stack_item_count;
 
@@ -2844,7 +2878,8 @@ _Jv_InterpMethod::run (void *retp, ffi_raw *args)
       {
 	int index = GET2U ();
 
-	rmeth = (_Jv_ResolvePoolEntry (defining_class, index)).rmethod;
+	rmeth = (_Jv_Linker::resolve_pool_entry (defining_class,
+						   index)).rmethod;
 
 	sp -= rmeth->stack_item_count;
 
@@ -2873,7 +2908,8 @@ _Jv_InterpMethod::run (void *retp, ffi_raw *args)
       {
 	int index = GET2U ();
 
-	rmeth = (_Jv_ResolvePoolEntry (defining_class, index)).rmethod;
+	rmeth = (_Jv_Linker::resolve_pool_entry (defining_class,
+						   index)).rmethod;
 
 	sp -= rmeth->stack_item_count;
 
@@ -2916,7 +2952,8 @@ _Jv_InterpMethod::run (void *retp, ffi_raw *args)
     insn_new:
       {
 	int index = GET2U ();
-	jclass klass = (_Jv_ResolvePoolEntry (defining_class, index)).clazz;
+	jclass klass = (_Jv_Linker::resolve_pool_entry (defining_class,
+							  index)).clazz;
 	jobject res = _Jv_AllocObject (klass);
 	PUSHA (res);
 
@@ -2949,7 +2986,8 @@ _Jv_InterpMethod::run (void *retp, ffi_raw *args)
     insn_anewarray:
       {
 	int index = GET2U ();
-	jclass klass = (_Jv_ResolvePoolEntry (defining_class, index)).clazz;
+	jclass klass = (_Jv_Linker::resolve_pool_entry (defining_class,
+							  index)).clazz;
 	int size  = POPI();
 	jobject result = _Jv_NewObjectArray (size, klass, 0);
 	PUSHA (result);
@@ -2991,7 +3029,8 @@ _Jv_InterpMethod::run (void *retp, ffi_raw *args)
       {
 	jobject value = POPA();
 	jint index = GET2U ();
-	jclass to = (_Jv_ResolvePoolEntry (defining_class, index)).clazz;
+	jclass to = (_Jv_Linker::resolve_pool_entry (defining_class,
+						       index)).clazz;
 
 	if (value != NULL && ! to->isInstance (value))
 	  throw new java::lang::ClassCastException (to->getName());
@@ -3021,7 +3060,8 @@ _Jv_InterpMethod::run (void *retp, ffi_raw *args)
       {
 	jobject value = POPA();
 	jint index = GET2U ();
-	jclass to = (_Jv_ResolvePoolEntry (defining_class, index)).clazz;
+	jclass to = (_Jv_Linker::resolve_pool_entry (defining_class,
+						       index)).clazz;
 	PUSHI (to->isInstance (value));
 
 #ifdef DIRECT_THREADED
@@ -3083,7 +3123,8 @@ _Jv_InterpMethod::run (void *retp, ffi_raw *args)
 	int dim        = GET1U ();
 
 	jclass type    
-	  = (_Jv_ResolvePoolEntry (defining_class, kind_index)).clazz;
+	  = (_Jv_Linker::resolve_pool_entry (defining_class,
+					       kind_index)).clazz;
 	jint *sizes    = (jint*) __builtin_alloca (sizeof (jint)*dim);
 
 	for (int i = dim - 1; i >= 0; i--)
@@ -3127,6 +3168,10 @@ _Jv_InterpMethod::run (void *retp, ffi_raw *args)
 
 	  case op_iload:
 	    LOADI (wide);
+	    NEXT_INSN;
+
+	  case op_fload:
+	    LOADF (wide);
 	    NEXT_INSN;
 
 	  case op_aload:
@@ -3180,8 +3225,8 @@ _Jv_InterpMethod::run (void *retp, ffi_raw *args)
 #else
 	      jclass handler = NULL;
 	      if (exc[i].handler_type.i != 0)
-		handler = (_Jv_ResolvePoolEntry (defining_class,
-						 exc[i].handler_type.i)).clazz;
+		handler = (_Jv_Linker::resolve_pool_entry (defining_class,
+							     exc[i].handler_type.i)).clazz;
 #endif /* DIRECT_THREADED */
 
 	      if (handler == NULL || handler->isAssignableFrom (exc_class))
@@ -3201,13 +3246,6 @@ _Jv_InterpMethod::run (void *retp, ffi_raw *args)
       // No handler, so re-throw.
       throw ex;
     }
-}
-
-// This function exists so that the stack-tracing code can find the
-// boundaries of the interpreter.
-void
-_Jv_EndOfInterpreter (void)
-{
 }
 
 static void
@@ -3233,5 +3271,548 @@ throw_null_pointer_exception ()
   throw null_pointer_exc;
 }
 #endif
+
+/** Do static initialization for fields with a constant initializer */
+void
+_Jv_InitField (jobject obj, jclass klass, int index)
+{
+  using namespace java::lang::reflect;
+
+  if (obj != 0 && klass == 0)
+    klass = obj->getClass ();
+
+  if (!_Jv_IsInterpretedClass (klass))
+    return;
+
+  _Jv_InterpClass *iclass = (_Jv_InterpClass*)klass->aux_info;
+
+  _Jv_Field * field = (&klass->fields[0]) + index;
+
+  if (index > klass->field_count)
+    throw_internal_error ("field out of range");
+
+  int init = iclass->field_initializers[index];
+  if (init == 0)
+    return;
+
+  _Jv_Constants *pool = &klass->constants;
+  int tag = pool->tags[init];
+
+  if (! field->isResolved ())
+    throw_internal_error ("initializing unresolved field");
+
+  if (obj==0 && ((field->flags & Modifier::STATIC) == 0))
+    throw_internal_error ("initializing non-static field with no object");
+
+  void *addr = 0;
+
+  if ((field->flags & Modifier::STATIC) != 0)
+    addr = (void*) field->u.addr;
+  else
+    addr = (void*) (((char*)obj) + field->u.boffset);
+
+  switch (tag)
+    {
+    case JV_CONSTANT_String:
+      {
+	jstring str;
+	str = _Jv_NewStringUtf8Const (pool->data[init].utf8);
+	pool->data[init].string = str;
+	pool->tags[init] = JV_CONSTANT_ResolvedString;
+      }
+      /* fall through */
+
+    case JV_CONSTANT_ResolvedString:
+      if (! (field->type == &java::lang::String::class$
+ 	     || field->type == &java::lang::Class::class$))
+	throw_class_format_error ("string initialiser to non-string field");
+
+      *(jstring*)addr = pool->data[init].string;
+      break;
+
+    case JV_CONSTANT_Integer:
+      {
+	int value = pool->data[init].i;
+
+	if (field->type == JvPrimClass (boolean))
+	  *(jboolean*)addr = (jboolean)value;
+	
+	else if (field->type == JvPrimClass (byte))
+	  *(jbyte*)addr = (jbyte)value;
+	
+	else if (field->type == JvPrimClass (char))
+	  *(jchar*)addr = (jchar)value;
+
+	else if (field->type == JvPrimClass (short))
+	  *(jshort*)addr = (jshort)value;
+	
+	else if (field->type == JvPrimClass (int))
+	  *(jint*)addr = (jint)value;
+
+	else
+	  throw_class_format_error ("erroneous field initializer");
+      }  
+      break;
+
+    case JV_CONSTANT_Long:
+      if (field->type != JvPrimClass (long))
+	throw_class_format_error ("erroneous field initializer");
+
+      *(jlong*)addr = _Jv_loadLong (&pool->data[init]);
+      break;
+
+    case JV_CONSTANT_Float:
+      if (field->type != JvPrimClass (float))
+	throw_class_format_error ("erroneous field initializer");
+
+      *(jfloat*)addr = pool->data[init].f;
+      break;
+
+    case JV_CONSTANT_Double:
+      if (field->type != JvPrimClass (double))
+	throw_class_format_error ("erroneous field initializer");
+
+      *(jdouble*)addr = _Jv_loadDouble (&pool->data[init]);
+      break;
+
+    default:
+      throw_class_format_error ("erroneous field initializer");
+    }
+}
+
+inline static unsigned char*
+skip_one_type (unsigned char* ptr)
+{
+  int ch = *ptr++;
+
+  while (ch == '[')
+    { 
+      ch = *ptr++;
+    }
+  
+  if (ch == 'L')
+    {
+      do { ch = *ptr++; } while (ch != ';');
+    }
+
+  return ptr;
+}
+
+static ffi_type*
+get_ffi_type_from_signature (unsigned char* ptr)
+{
+  switch (*ptr) 
+    {
+    case 'L':
+    case '[':
+      return &ffi_type_pointer;
+      break;
+
+    case 'Z':
+      // On some platforms a bool is a byte, on others an int.
+      if (sizeof (jboolean) == sizeof (jbyte))
+	return &ffi_type_sint8;
+      else
+	{
+	  JvAssert (sizeof (jbyte) == sizeof (jint));
+	  return &ffi_type_sint32;
+	}
+      break;
+
+    case 'B':
+      return &ffi_type_sint8;
+      break;
+      
+    case 'C':
+      return &ffi_type_uint16;
+      break;
+	  
+    case 'S': 
+      return &ffi_type_sint16;
+      break;
+	  
+    case 'I':
+      return &ffi_type_sint32;
+      break;
+	  
+    case 'J':
+      return &ffi_type_sint64;
+      break;
+	  
+    case 'F':
+      return &ffi_type_float;
+      break;
+	  
+    case 'D':
+      return &ffi_type_double;
+      break;
+
+    case 'V':
+      return &ffi_type_void;
+      break;
+    }
+
+  throw_internal_error ("unknown type in signature");
+}
+
+/* this function yields the number of actual arguments, that is, if the
+ * function is non-static, then one is added to the number of elements
+ * found in the signature */
+
+int 
+_Jv_count_arguments (_Jv_Utf8Const *signature,
+		     jboolean staticp)
+{
+  unsigned char *ptr = (unsigned char*) signature->chars();
+  int arg_count = staticp ? 0 : 1;
+
+  /* first, count number of arguments */
+
+  // skip '('
+  ptr++;
+
+  // count args
+  while (*ptr != ')')
+    {
+      ptr = skip_one_type (ptr);
+      arg_count += 1;
+    }
+
+  return arg_count;
+}
+
+/* This beast will build a cif, given the signature.  Memory for
+ * the cif itself and for the argument types must be allocated by the
+ * caller.
+ */
+
+static int 
+init_cif (_Jv_Utf8Const* signature,
+	  int arg_count,
+	  jboolean staticp,
+	  ffi_cif *cif,
+	  ffi_type **arg_types,
+	  ffi_type **rtype_p)
+{
+  unsigned char *ptr = (unsigned char*) signature->chars();
+
+  int arg_index = 0;		// arg number
+  int item_count = 0;		// stack-item count
+
+  // setup receiver
+  if (!staticp)
+    {
+      arg_types[arg_index++] = &ffi_type_pointer;
+      item_count += 1;
+    }
+
+  // skip '('
+  ptr++;
+
+  // assign arg types
+  while (*ptr != ')')
+    {
+      arg_types[arg_index++] = get_ffi_type_from_signature (ptr);
+
+      if (*ptr == 'J' || *ptr == 'D')
+	item_count += 2;
+      else
+	item_count += 1;
+
+      ptr = skip_one_type (ptr);
+    }
+
+  // skip ')'
+  ptr++;
+  ffi_type *rtype = get_ffi_type_from_signature (ptr);
+
+  ptr = skip_one_type (ptr);
+  if (ptr != (unsigned char*)signature->chars() + signature->len())
+    throw_internal_error ("did not find end of signature");
+
+  if (ffi_prep_cif (cif, FFI_DEFAULT_ABI,
+		    arg_count, rtype, arg_types) != FFI_OK)
+    throw_internal_error ("ffi_prep_cif failed");
+
+  if (rtype_p != NULL)
+    *rtype_p = rtype;
+
+  return item_count;
+}
+
+#if FFI_NATIVE_RAW_API
+#   define FFI_PREP_RAW_CLOSURE ffi_prep_raw_closure
+#   define FFI_RAW_SIZE ffi_raw_size
+#else
+#   define FFI_PREP_RAW_CLOSURE ffi_prep_java_raw_closure
+#   define FFI_RAW_SIZE ffi_java_raw_size
+#endif
+
+/* we put this one here, and not in interpret.cc because it
+ * calls the utility routines _Jv_count_arguments 
+ * which are static to this module.  The following struct defines the
+ * layout we use for the stubs, it's only used in the ncode method. */
+
+typedef struct {
+  ffi_raw_closure  closure;
+  ffi_cif   cif;
+  ffi_type *arg_types[0];
+} ncode_closure;
+
+typedef void (*ffi_closure_fun) (ffi_cif*,void*,ffi_raw*,void*);
+
+void *
+_Jv_InterpMethod::ncode ()
+{
+  using namespace java::lang::reflect;
+
+  if (self->ncode != 0)
+    return self->ncode;
+
+  jboolean staticp = (self->accflags & Modifier::STATIC) != 0;
+  int arg_count = _Jv_count_arguments (self->signature, staticp);
+
+  ncode_closure *closure =
+    (ncode_closure*)_Jv_AllocBytes (sizeof (ncode_closure)
+					+ arg_count * sizeof (ffi_type*));
+
+  init_cif (self->signature,
+	    arg_count,
+	    staticp,
+	    &closure->cif,
+	    &closure->arg_types[0],
+	    NULL);
+
+  ffi_closure_fun fun;
+
+  args_raw_size = FFI_RAW_SIZE (&closure->cif);
+
+  JvAssert ((self->accflags & Modifier::NATIVE) == 0);
+
+  if ((self->accflags & Modifier::SYNCHRONIZED) != 0)
+    {
+      if (staticp)
+	fun = (ffi_closure_fun)&_Jv_InterpMethod::run_synch_class;
+      else
+	fun = (ffi_closure_fun)&_Jv_InterpMethod::run_synch_object; 
+    }
+  else
+    {
+      if (staticp)
+	fun = (ffi_closure_fun)&_Jv_InterpMethod::run_class;
+      else
+	fun = (ffi_closure_fun)&_Jv_InterpMethod::run_normal;
+    }
+
+  FFI_PREP_RAW_CLOSURE (&closure->closure,
+		        &closure->cif, 
+		        fun,
+		        (void*)this);
+
+  self->ncode = (void*)closure;
+  return self->ncode;
+}
+
+void *
+_Jv_JNIMethod::ncode ()
+{
+  using namespace java::lang::reflect;
+
+  if (self->ncode != 0)
+    return self->ncode;
+
+  jboolean staticp = (self->accflags & Modifier::STATIC) != 0;
+  int arg_count = _Jv_count_arguments (self->signature, staticp);
+
+  ncode_closure *closure =
+    (ncode_closure*)_Jv_AllocBytes (sizeof (ncode_closure)
+				    + arg_count * sizeof (ffi_type*));
+
+  ffi_type *rtype;
+  init_cif (self->signature,
+	    arg_count,
+	    staticp,
+	    &closure->cif,
+	    &closure->arg_types[0],
+	    &rtype);
+
+  ffi_closure_fun fun;
+
+  args_raw_size = FFI_RAW_SIZE (&closure->cif);
+
+  // Initialize the argument types and CIF that represent the actual
+  // underlying JNI function.
+  int extra_args = 1;
+  if ((self->accflags & Modifier::STATIC))
+    ++extra_args;
+  jni_arg_types = (ffi_type **) _Jv_AllocBytes ((extra_args + arg_count)
+						* sizeof (ffi_type *));
+  int offset = 0;
+  jni_arg_types[offset++] = &ffi_type_pointer;
+  if ((self->accflags & Modifier::STATIC))
+    jni_arg_types[offset++] = &ffi_type_pointer;
+  memcpy (&jni_arg_types[offset], &closure->arg_types[0],
+	  arg_count * sizeof (ffi_type *));
+
+  if (ffi_prep_cif (&jni_cif, _Jv_platform_ffi_abi,
+		    extra_args + arg_count, rtype,
+		    jni_arg_types) != FFI_OK)
+    throw_internal_error ("ffi_prep_cif failed for JNI function");
+
+  JvAssert ((self->accflags & Modifier::NATIVE) != 0);
+
+  // FIXME: for now we assume that all native methods for
+  // interpreted code use JNI.
+  fun = (ffi_closure_fun) &_Jv_JNIMethod::call;
+
+  FFI_PREP_RAW_CLOSURE (&closure->closure,
+			&closure->cif, 
+			fun,
+			(void*) this);
+
+  self->ncode = (void *) closure;
+  return self->ncode;
+}
+
+static void
+throw_class_format_error (jstring msg)
+{
+  throw (msg
+	 ? new java::lang::ClassFormatError (msg)
+	 : new java::lang::ClassFormatError);
+}
+
+static void
+throw_class_format_error (char *msg)
+{
+  throw_class_format_error (JvNewStringLatin1 (msg));
+}
+
+
+
+void
+_Jv_InterpreterEngine::do_verify (jclass klass)
+{
+  _Jv_InterpClass *iclass = (_Jv_InterpClass *) klass->aux_info;
+  for (int i = 0; i < klass->method_count; i++)
+    {
+      using namespace java::lang::reflect;
+      _Jv_MethodBase *imeth = iclass->interpreted_methods[i];
+      _Jv_ushort accflags = klass->methods[i].accflags;
+      if ((accflags & (Modifier::NATIVE | Modifier::ABSTRACT)) == 0)
+	{
+	  _Jv_InterpMethod *im = reinterpret_cast<_Jv_InterpMethod *> (imeth);
+	  _Jv_VerifyMethod (im);
+	}
+    }
+}
+
+void
+_Jv_InterpreterEngine::do_create_ncode (jclass klass)
+{
+  _Jv_InterpClass *iclass = (_Jv_InterpClass *) klass->aux_info;
+  for (int i = 0; i < klass->method_count; i++)
+    {
+      // Just skip abstract methods.  This is particularly important
+      // because we don't resize the interpreted_methods array when
+      // miranda methods are added to it.
+      if ((klass->methods[i].accflags
+	   & java::lang::reflect::Modifier::ABSTRACT)
+	  != 0)
+	continue;
+
+      _Jv_MethodBase *imeth = iclass->interpreted_methods[i];
+
+      if ((klass->methods[i].accflags & java::lang::reflect::Modifier::NATIVE)
+	  != 0)
+	{
+	  // You might think we could use a virtual `ncode' method in
+	  // the _Jv_MethodBase and unify the native and non-native
+	  // cases.  Well, we can't, because we don't allocate these
+	  // objects using `new', and thus they don't get a vtable.
+	  _Jv_JNIMethod *jnim = reinterpret_cast<_Jv_JNIMethod *> (imeth);
+	  klass->methods[i].ncode = jnim->ncode ();
+	}
+      else if (imeth != 0)		// it could be abstract
+	{
+	  _Jv_InterpMethod *im = reinterpret_cast<_Jv_InterpMethod *> (imeth);
+	  klass->methods[i].ncode = im->ncode ();
+	}
+    }
+}
+
+void
+_Jv_InterpreterEngine::do_allocate_static_fields (jclass klass,
+						  int static_size)
+{
+  _Jv_InterpClass *iclass = (_Jv_InterpClass *) klass->aux_info;
+
+  char *static_data = (char *) _Jv_AllocBytes (static_size);
+  memset (static_data, 0, static_size);
+
+  for (int i = 0; i < klass->field_count; i++)
+    {
+      _Jv_Field *field = &klass->fields[i];
+
+      if ((field->flags & java::lang::reflect::Modifier::STATIC) != 0)
+	{
+	  field->u.addr  = static_data + field->u.boffset;
+	      
+	  if (iclass->field_initializers[i] != 0)
+	    {
+	      _Jv_Linker::resolve_field (field, klass->loader);
+	      _Jv_InitField (0, klass, i);
+	    }
+	}
+    }
+
+  // Now we don't need the field_initializers anymore, so let the
+  // collector get rid of it.
+  iclass->field_initializers = 0;
+}
+
+_Jv_ResolvedMethod *
+_Jv_InterpreterEngine::do_resolve_method (_Jv_Method *method, jclass klass,
+					  jboolean staticp, jint vtable_index)
+{
+  int arg_count = _Jv_count_arguments (method->signature, staticp);
+
+  _Jv_ResolvedMethod* result = (_Jv_ResolvedMethod*)
+    _Jv_AllocBytes (sizeof (_Jv_ResolvedMethod)
+		    + arg_count*sizeof (ffi_type*));
+
+  result->stack_item_count
+    = init_cif (method->signature,
+		arg_count,
+		staticp,
+		&result->cif,
+		&result->arg_types[0],
+		NULL);
+
+  result->vtable_index        = vtable_index;
+  result->method              = method;
+  result->klass               = klass;
+
+  return result;
+}
+
+void
+_Jv_InterpreterEngine::do_post_miranda_hook (jclass klass)
+{
+  _Jv_InterpClass *iclass = (_Jv_InterpClass *) klass->aux_info;
+  for (int i = 0; i < klass->method_count; i++)
+    {
+      // Just skip abstract methods.  This is particularly important
+      // because we don't resize the interpreted_methods array when
+      // miranda methods are added to it.
+      if ((klass->methods[i].accflags
+	   & java::lang::reflect::Modifier::ABSTRACT)
+	  != 0)
+	continue;
+      // Miranda method additions mean that the `methods' array moves.
+      // We cache a pointer into this array, so we have to update.
+      iclass->interpreted_methods[i]->self = &klass->methods[i];
+    }
+}
 
 #endif // INTERPRETER

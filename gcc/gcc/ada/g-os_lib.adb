@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---           Copyright (C) 1995-2004 Ada Core Technologies, Inc.            --
+--           Copyright (C) 1995-2005 Ada Core Technologies, Inc.            --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -38,6 +38,16 @@ with Unchecked_Conversion;
 with System; use System;
 
 package body GNAT.OS_Lib is
+
+   OpenVMS : Boolean;
+   --  Note: OpenVMS should be a constant, but it cannot be, because it
+   --        prevents bootstrapping on some platforms.
+
+   On_Windows : constant Boolean := Directory_Separator = '\';
+
+   pragma Import (Ada, OpenVMS, "system__openvms");
+   --  Needed to avoid doing useless checks when non on a VMS platform (see
+   --  Normalize_Pathname).
 
    package SSL renames System.Soft_Links;
 
@@ -1065,7 +1075,7 @@ package body GNAT.OS_Lib is
       S  : Integer;
 
    begin
-      --  Use the global lock because To_GM_Time is not thread safe.
+      --  Use the global lock because To_GM_Time is not thread safe
 
       Locked_Processing : begin
          SSL.Lock_Task.all;
@@ -1531,6 +1541,14 @@ package body GNAT.OS_Lib is
                   Buffer (Path_Len) := Directory_Separator;
                end if;
 
+               --  By default, the drive letter on Windows is in upper case
+
+               if On_Windows and then Path_Len >= 2 and then
+                 Buffer (2) = ':'
+               then
+                  System.Case_Util.To_Upper (Buffer (1 .. 1));
+               end if;
+
                return Buffer (1 .. Path_Len);
             end;
          end if;
@@ -1576,8 +1594,9 @@ package body GNAT.OS_Lib is
 
                --  Remove trailing directory separator, if any
 
-               if Result (Last) = '/' or else
-                  Result (Last) = Directory_Separator
+               if Last > 1 and then
+                 (Result (Last) = '/' or else
+                  Result (Last) = Directory_Separator)
                then
                   Last := Last - 1;
                end if;
@@ -1594,13 +1613,26 @@ package body GNAT.OS_Lib is
 
             Last := S1'Last;
 
-            if S1 (Last) = '/' or else S1 (Last) = Directory_Separator then
-               Last := Last - 1;
+            if Last > 1
+              and then (S1 (Last) = '/'
+                          or else
+                        S1 (Last) = Directory_Separator)
+            then
+               --  Special case for Windows: C:\
+
+               if Last = 3
+                 and then S1 (1) /= Directory_Separator
+                 and then S1 (2) = ':'
+               then
+                  null;
+
+               else
+                  Last := Last - 1;
+               end if;
             end if;
 
             return S1 (1 .. Last);
          end if;
-
       end Final_Value;
 
    --  Start of processing for Normalize_Pathname
@@ -1658,15 +1690,23 @@ package body GNAT.OS_Lib is
          end loop;
       end if;
 
-      --  Resolving logical names from VMS.
-      --  If we have a Unix path on VMS such as /temp/..., and TEMP is a
-      --  logical name, we need to resolve this logical name.
-      --  As we have no means to know if we are on VMS, we need to do that
-      --  for absolute paths starting with '/'.
-      --  We find the directory, change to it, get the current directory,
-      --  and change the directory to this value.
+      --  Resolve directory names for VMS and Windows
 
-      if Path_Buffer (1) = '/' then
+      --  On VMS, if we have a Unix path such as /temp/..., and TEMP is a
+      --  logical name, we need to resolve this logical name.
+
+      --  On Windows, if we have an absolute path starting with a directory
+      --  separator, we need to have the drive letter appended in front.
+
+      --  For both platforms, Get_Current_Dir will return a suitable
+      --  directory name (logical names resolved on VMS, path starting with
+      --  a drive letter on Windows). So we find the directory, change to it,
+      --  call Get_Current_Dir and change the directory to the returned value.
+      --  Then, of course, we return to the previous directory.
+
+      if (OpenVMS or On_Windows)
+        and then Path_Buffer (1) = Directory_Separator
+      then
          declare
             Cur_Dir : String := Get_Directory ("");
             --  Save the current directory, so that we can change dir back to
@@ -1679,21 +1719,21 @@ package body GNAT.OS_Lib is
             --  set to ASCII.NUL to call chdir.
 
             Pos : Positive := End_Path;
-            --  Position of the last directory separator ('/')
+            --  Position of the last directory separator
 
             Status : Integer;
             --  Value returned by chdir
 
          begin
-            --  Look for the last '/'
+            --  Look for the last directory separator
 
-            while Path (Pos) /= '/' loop
+            while Path (Pos) /= Directory_Separator loop
                Pos := Pos - 1;
             end loop;
 
-            --  Get the previous character that is not a '/'
+            --  Get the previous character that is not a directory separator
 
-            while Pos > 1 and then Path (Pos) = '/' loop
+            while Pos > 1 and then Path (Pos) = Directory_Separator loop
                Pos := Pos - 1;
             end loop;
 
@@ -1880,7 +1920,7 @@ package body GNAT.OS_Lib is
             if Status <= 0 then
                Last := Finish + 1;
 
-            --  Replace symbolic link with its value.
+            --  Replace symbolic link with its value
 
             else
                if Is_Absolute_Path (Link_Buffer (1 .. Status)) then
@@ -1928,7 +1968,6 @@ package body GNAT.OS_Lib is
         (Name  : C_File_Name;
          Fmode : Mode) return File_Descriptor;
       pragma Import (C, C_Open_Read, "__gnat_open_read");
-
    begin
       return C_Open_Read (Name, Fmode);
    end Open_Read;
@@ -1938,7 +1977,6 @@ package body GNAT.OS_Lib is
       Fmode : Mode) return File_Descriptor
    is
       C_Name : String (1 .. Name'Length + 1);
-
    begin
       C_Name (1 .. Name'Length) := Name;
       C_Name (C_Name'Last)      := ASCII.NUL;
@@ -1957,7 +1995,6 @@ package body GNAT.OS_Lib is
         (Name  : C_File_Name;
          Fmode : Mode) return File_Descriptor;
       pragma Import (C, C_Open_Read_Write, "__gnat_open_rw");
-
    begin
       return C_Open_Read_Write (Name, Fmode);
    end Open_Read_Write;
@@ -1967,7 +2004,6 @@ package body GNAT.OS_Lib is
       Fmode : Mode) return File_Descriptor
    is
       C_Name : String (1 .. Name'Length + 1);
-
    begin
       C_Name (1 .. Name'Length) := Name;
       C_Name (C_Name'Last)      := ASCII.NUL;
@@ -1999,9 +2035,7 @@ package body GNAT.OS_Lib is
    is
       function rename (From, To : Address) return Integer;
       pragma Import (C, rename, "rename");
-
       R : Integer;
-
    begin
       R := rename (Old_Name, New_Name);
       Success := (R = 0);
@@ -2014,16 +2048,72 @@ package body GNAT.OS_Lib is
    is
       C_Old_Name : String (1 .. Old_Name'Length + 1);
       C_New_Name : String (1 .. New_Name'Length + 1);
-
    begin
       C_Old_Name (1 .. Old_Name'Length) := Old_Name;
       C_Old_Name (C_Old_Name'Last)      := ASCII.NUL;
-
       C_New_Name (1 .. New_Name'Length) := New_Name;
       C_New_Name (C_New_Name'Last)      := ASCII.NUL;
-
       Rename_File (C_Old_Name'Address, C_New_Name'Address, Success);
    end Rename_File;
+
+   -----------------------
+   -- Set_Close_On_Exec --
+   -----------------------
+
+   procedure Set_Close_On_Exec
+     (FD            : File_Descriptor;
+      Close_On_Exec : Boolean;
+      Status        : out Boolean)
+   is
+      function C_Set_Close_On_Exec
+        (FD : File_Descriptor; Close_On_Exec : System.CRTL.int)
+         return System.CRTL.int;
+      pragma Import (C, C_Set_Close_On_Exec, "__gnat_set_close_on_exec");
+   begin
+      Status := C_Set_Close_On_Exec (FD, Boolean'Pos (Close_On_Exec)) = 0;
+   end Set_Close_On_Exec;
+
+   --------------------
+   -- Set_Executable --
+   --------------------
+
+   procedure Set_Executable (Name : String) is
+      procedure C_Set_Executable (Name : C_File_Name);
+      pragma Import (C, C_Set_Executable, "__gnat_set_executable");
+      C_Name : aliased String (Name'First .. Name'Last + 1);
+   begin
+      C_Name (Name'Range)  := Name;
+      C_Name (C_Name'Last) := ASCII.NUL;
+      C_Set_Executable (C_Name (C_Name'First)'Address);
+   end Set_Executable;
+
+   --------------------
+   -- Set_Read_Only --
+   --------------------
+
+   procedure Set_Read_Only (Name : String) is
+      procedure C_Set_Read_Only (Name : C_File_Name);
+      pragma Import (C, C_Set_Read_Only, "__gnat_set_readonly");
+      C_Name : aliased String (Name'First .. Name'Last + 1);
+   begin
+      C_Name (Name'Range)  := Name;
+      C_Name (C_Name'Last) := ASCII.NUL;
+      C_Set_Read_Only (C_Name (C_Name'First)'Address);
+   end Set_Read_Only;
+
+   --------------------
+   -- Set_Writable --
+   --------------------
+
+   procedure Set_Writable (Name : String) is
+      procedure C_Set_Writable (Name : C_File_Name);
+      pragma Import (C, C_Set_Writable, "__gnat_set_writable");
+      C_Name : aliased String (Name'First .. Name'Last + 1);
+   begin
+      C_Name (Name'Range)  := Name;
+      C_Name (C_Name'Last) := ASCII.NUL;
+      C_Set_Writable (C_Name (C_Name'First)'Address);
+   end Set_Writable;
 
    ------------
    -- Setenv --
@@ -2056,7 +2146,6 @@ package body GNAT.OS_Lib is
    is
       Junk   : Process_Id;
       Result : Integer;
-
    begin
       Spawn_Internal (Program_Name, Args, Result, Junk, Blocking => True);
       return Result;
@@ -2069,6 +2158,84 @@ package body GNAT.OS_Lib is
    is
    begin
       Success := (Spawn (Program_Name, Args) = 0);
+   end Spawn;
+
+   procedure Spawn
+     (Program_Name           : String;
+      Args                   : Argument_List;
+      Output_File_Descriptor : File_Descriptor;
+      Return_Code            : out Integer;
+      Err_To_Out             : Boolean := True)
+   is
+      function Dup (Fd : File_Descriptor) return File_Descriptor;
+      pragma Import (C, Dup, "__gnat_dup");
+
+      procedure Dup2 (Old_Fd, New_Fd : File_Descriptor);
+      pragma Import (C, Dup2, "__gnat_dup2");
+
+      Saved_Output : File_Descriptor;
+      Saved_Error  : File_Descriptor := Invalid_FD;
+      --  We need to initialize Saved_Error to Invalid_FD to avoid
+      --  a compiler warning that this variable may be used before
+      --  it is initialized (which can not happen, but the compiler
+      --  is not smart enough to figure this out).
+
+   begin
+      --  Set standard output and error to the temporary file
+
+      Saved_Output := Dup (Standout);
+      Dup2 (Output_File_Descriptor, Standout);
+
+      if Err_To_Out then
+         Saved_Error  := Dup (Standerr);
+         Dup2 (Output_File_Descriptor, Standerr);
+      end if;
+
+      --  Spawn the program
+
+      Return_Code := Spawn (Program_Name, Args);
+
+      --  Restore the standard output and error
+
+      Dup2 (Saved_Output, Standout);
+
+      if Err_To_Out then
+         Dup2 (Saved_Error, Standerr);
+      end if;
+
+      --  And close the saved standard output and error file descriptors
+
+      Close (Saved_Output);
+
+      if Err_To_Out then
+         Close (Saved_Error);
+      end if;
+   end Spawn;
+
+   procedure Spawn
+     (Program_Name  : String;
+      Args          : Argument_List;
+      Output_File   : String;
+      Success       : out Boolean;
+      Return_Code   : out Integer;
+      Err_To_Out    : Boolean := True)
+   is
+      FD : File_Descriptor;
+
+   begin
+      Success := True;
+      Return_Code := 0;
+
+      FD := Create_Output_Text_File (Output_File);
+
+      if FD = Invalid_FD then
+         Success := False;
+         return;
+      end if;
+
+      Spawn (Program_Name, Args, FD, Return_Code, Err_To_Out);
+
+      Close (FD, Success);
    end Spawn;
 
    --------------------
@@ -2084,7 +2251,7 @@ package body GNAT.OS_Lib is
    is
 
       procedure Spawn (Args : Argument_List);
-      --  Call Spawn.
+      --  Call Spawn with given argument list
 
       N_Args : Argument_List (Args'Range);
       --  Normalized arguments

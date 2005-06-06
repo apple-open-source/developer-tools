@@ -35,10 +35,6 @@ extern void   m32r_load_pic_register (void);
 
 #ifdef TREE_CODE
 extern enum m32r_function_type m32r_compute_function_type (tree);
-
-#ifdef HAVE_MACHINE_MODES
-extern int    function_arg_partial_nregs (CUMULATIVE_ARGS *, Mmode, tree, int);
-#endif
 #endif /* TREE_CODE */
 
 #ifdef RTX_CODE
@@ -58,6 +54,8 @@ extern int    m32r_not_same_reg (rtx, rtx);
 extern int    m32r_hard_regno_rename_ok (unsigned int, unsigned int);
 extern int    m32r_legitimate_pic_operand_p (rtx);
 extern rtx    m32r_legitimize_pic_address (rtx, rtx);
+extern rtx    m32r_return_addr (int);
+extern rtx    m32r_function_symbol (const char *);
 
 #ifdef HAVE_MACHINE_MODES
 extern int    call_address_operand (rtx, Mmode);
@@ -92,10 +90,6 @@ extern int    reg_or_zero_operand (rtx, Mmode);
 
 #endif /* HAVE_MACHINE_MODES */
 
-#ifdef TREE_CODE
-extern struct rtx_def * m32r_va_arg (tree, tree);
-extern int m32r_pass_by_reference (tree);
-#endif /* TREE_CODE */
 #endif /* RTX_CODE */
 
 #undef  Mmode

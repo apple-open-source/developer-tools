@@ -1,5 +1,6 @@
 /* Definitions of target machine for gcc for Renesas / SuperH SH using ELF.
-   Copyright (C) 1996, 1997, 2000, 2001, 2002 Free Software Foundation, Inc.
+   Copyright (C) 1996, 1997, 2000, 2001, 2002, 2004
+   Free Software Foundation, Inc.
    Contributed by Ian Lance Taylor <ian@cygnus.com>.
 
 This file is part of GCC.
@@ -58,9 +59,12 @@ Boston, MA 02111-1307, USA.  */
 #define ASM_SPEC SH_ASM_SPEC
 #undef SUBTARGET_ASM_ISA_SPEC
 #define SUBTARGET_ASM_ISA_SPEC "\
-%{m5-compact:--isa=SHcompact} %{m5-compact-nofpu:--isa=SHcompact} \
-%{m5-32media:--isa=SHmedia --abi=32} %{m5-32media-nofpu:--isa=SHmedia --abi=32} \
-%{m5-64media:--isa=SHmedia --abi=64} %{m5-64media-nofpu:--isa=SHmedia --abi=64}"
+%{m2a:--isa=sh2a} \
+%{m2a-single:--isa=sh2a} \
+%{m2a-single-only:--isa=sh2a} \
+%{m2a-nofpu:--isa=sh2a-nofpu} \
+%{m5-compact*:--isa=SHcompact} %{m5-32media*:--isa=SHmedia --abi=32} \
+%{m5-64media*:--isa=SHmedia --abi=64}" ASM_ISA_DEFAULT_SPEC
 
 #undef LINK_SPEC
 #define LINK_SPEC SH_LINK_SPEC
@@ -79,24 +83,8 @@ Boston, MA 02111-1307, USA.  */
 #define ASM_GENERATE_INTERNAL_LABEL(STRING, PREFIX, NUM) \
   sprintf ((STRING), "*%s%s%ld", LOCAL_LABEL_PREFIX, (PREFIX), (long)(NUM))
 
-#undef  ASM_OUTPUT_SOURCE_LINE
-#define ASM_OUTPUT_SOURCE_LINE(file, line, counter)			\
-do									\
-  {									\
-    asm_fprintf ((file), ".stabn 68,0,%d,%LLM%d-",			\
-	     (line), (counter));					\
-    assemble_name ((file),						\
-		   XSTR (XEXP (DECL_RTL (current_function_decl), 0), 0));\
-    asm_fprintf ((file), "\n%LLM%d:\n", (counter));			\
-  }									\
-while (0)
-
-#undef DBX_OUTPUT_MAIN_SOURCE_FILE_END
-#define DBX_OUTPUT_MAIN_SOURCE_FILE_END(FILE, FILENAME)			\
-do {									\
-  text_section ();							\
-  asm_fprintf ((FILE), "\t.stabs \"\",%d,0,0,%LLetext\n%LLetext:\n", N_SO); \
-} while (0)
+#define DBX_LINES_FUNCTION_RELATIVE 1
+#define DBX_OUTPUT_NULL_N_SO_AT_MAIN_SOURCE_FILE_END
 
 #undef STARTFILE_SPEC
 #define STARTFILE_SPEC \

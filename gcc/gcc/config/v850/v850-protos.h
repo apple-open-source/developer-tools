@@ -1,5 +1,5 @@
 /* Prototypes for v850.c functions used in the md file & elsewhere.
-   Copyright (C) 1999, 2000, 2002 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2002, 2004 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -70,7 +70,6 @@ extern int    pattern_is_ok_for_epilogue    (rtx, Mmode);
 extern int    register_is_ok_for_epilogue   (rtx, Mmode);
 #ifdef TREE_CODE
 extern rtx    function_arg                  (CUMULATIVE_ARGS *, Mmode, tree, int);
-extern rtx    v850_va_arg                   (tree, tree);
 #endif
 #endif
 #endif /* TREE_CODE */
@@ -81,9 +80,6 @@ extern void   v850_output_aligned_bss       (FILE *, tree, const char *, int, in
 extern void   v850_output_common            (FILE *, tree, const char *, int, int);
 extern void   v850_output_local             (FILE *, tree, const char *, int, int);
 extern v850_data_area v850_get_data_area    (tree);
-#ifdef HAVE_MACHINE_MODES
-extern int    function_arg_partial_nregs    (CUMULATIVE_ARGS *, Mmode, tree, int);
-#endif
 #endif
 
 extern void ghs_pragma_section		    (struct cpp_reader *);

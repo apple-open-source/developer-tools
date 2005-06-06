@@ -1,3 +1,210 @@
+2005-04-20  Release Manager
+
+	* GCC 4.0.0 released.
+
+2005-03-03  David Ayers  <d.ayers@inode.at>
+
+	* objc/hash.h (OBJC_IGNORE_DEPRECATED_API): Update deprecated
+	version reference.  Correct typo.
+
+2005-03-02  David Ayers  <d.ayers@inode.at>
+
+	PR libobjc/19024
+	* Makefile.in (OBJS): Add hash_compat.lo.
+	(OBJS_GC): Add hash_compat_gc.lo.
+	(hash_compat_gc.lo): New target and rule.
+	* objc/hash.h (hash_new, hash_delete, hash_add, hash_remove)
+	(hash_next, hash_value_for_key, hash_is_key_in_hash)
+	(hash_ptr, hash_string, compare_ptrs, compare_strings): Prefix
+	with objc_.  Add deprecated non prefixed inlined versions.
+	(OBJC_IGNORE_DEPRECATED_API): New macro to hide deprecated
+	declarations.
+	* hash.c (hash_new, hash_delete, hash_add, hash_remove, hash_next)
+	(hash_value_for_key, hash_is_key_in_hash): Prefix with objc_ and
+	update callers.
+	* hash_compat.c: New file.
+	* archive.c: Update callers.
+	* init.c: Likewise.
+	* selector.c: Likewise.
+	* libobjc.def: Add objc_ versions of hash functions.
+
+2004-12-20  Andrew Pinski  <pinskia@physics.uc.edu>
+
+	PR libobjc/12035
+	* gc.c: Remove definition of LOGWL, modWORDSZ, and divWORDSZ since
+	they are not used.
+	Include limits.h and stdlib.h.
+	Define BITS_PER_WORD.
+
+2004-12-12  Alexander Malmberg  <alexander@malmberg.org>
+
+	* selector.c (__objc_init_selector_tables): Add missing void to
+	definition.
+
+2004-12-02  Richard Sandiford  <rsandifo@redhat.com>
+
+	* configure.ac: Use TL_AC_GCC_VERSION to set gcc_version.
+	* configure, aclocal.m4: Regenerate.
+
+2004-11-29  Kelley Cook  <kcook@gcc.gnu.org>
+
+	* configure: Regenerate for libtool change.
+
+2004-11-25  Kelley Cook  <kcook@gcc.gnu.org>
+
+	* configure: Regenerate for libtool reversion.
+
+2004-11-24  Kelley Cook  <kcook@gcc.gnu.org>
+
+	* configure: Regenerate for libtool change.
+
+2004-11-24  Kelley Cook  <kcook@gcc.gnu.org>
+
+	* aclocal.m4, config.h.in: Regenerate.
+
+2004-10-08  Mike Stump  <mrs@apple.com>
+            Andrew Pinski  <pinskia@physics.uc.edu>
+
+	* aclocal.m4: Rename to ...
+	* acinclude.m4: here and also use m4_include instead of sinclude.
+	* aclocal.m4: Regenerate.
+	* configure: Regenerate.
+	* configure.ac: Add AM_MAINTAINER_MODE and AM_PROG_CC_C_O.
+	* Makefile.in (configure): Add @MAINT@ infront of configure.ac
+
+2004-10-08  Andrew Pinski  <pinskia@physics.uc.edu>
+
+	* archive.c: Fix all the warnings about passing unsigned char*
+	to char* and the other way too.
+
+2004-09-16  Andrew Pinski  <pinskia@physics.uc.edu>
+
+	PR libobjc/16448
+	* exception.c: Include config.h
+	(objc_exception_throw): Change _GLIBCXX_SJLJ_EXCEPTIONS to
+	SJLJ_EXCEPTIONS.
+	* configure.ac: Find out what exception handling code we use.
+	* configure: Regenerate.
+	* config.h.in: New file, regenerate.
+
+2004-09-16  Andrew Pinski  <apinski@apple.com>
+
+	* encoding.c (ALTIVEC_VECTOR_MODE): Define a bogus macro.
+
+2004-08-28  Nathanael Nerode  <neroden@gcc.gnu.org>
+
+	* configure.ac: Switch from _GCC_TOPLEV_NONCANONICAL_TARGET to
+	ACX_NONCANONICAL_TARGET.
+	* configure: Regenerate.
+
+2004-08-13  Ziemowit Laski  <zlaski@apple.com>
+
+	* objc/sarray.h: Hoist include of assert.h near the top of file,
+	and mark the remainder of the file 'extern "C"'.
+
+2004-08-13  Andrew Pinski  <pinskia@physics.uc.edu>
+
+	* objc/Object.h: Move includes out of extern "C" blocks.
+	* objc/encoding.h: Likewise.
+	* objc/hash.h: Likewise.
+	* objc/objc-api.h: Likewise.
+	* objc/runtime.h: Likewise.
+	* objc/sarray.h: Likewise.
+	* objc/typedstream.h: Likewise.
+
+2004-08-12  Ziemowit Laski  <zlaski@apple.com>
+
+	* objc/NXConstStr.h: Update copyright date; bracket with
+	'extern "C"' for C++ use; make include syntax consistent
+	by using <...> instead of "..."; hoist <objc/...> includes
+	above the 'extern "C"' block.
+	* objc/Object.h: Likewise.
+	* objc/Protocol.h: Likewise.
+	* objc/encoding.h: Likewise.
+	* objc/hash.h: Likewise.
+	* objc/runtime.h: Likewise.
+	* objc/sarray.h: Likewise.
+	* objc/thr.h: Likewise.
+	* objc/typedstream.h: Likewise.
+	* objc/objc-api.h: Add 'extern "C"' block for C++ use.
+	(objc_static_instances): For C++ case, do away with
+	zero-sized array.
+	(objc_method): Hoist definition to file scope.
+	(_objc_load_callback, _objc_object_alloc, class_get_class_method,
+	class_get_instance_method, class_create_instance, 
+	class_get_class_name, class_get_instance_size,
+	class_get_meta_class, class_get_super_class, class_get_version,
+	class_is_class, class_is_meta_class, class_set_version,
+	class_get_gc_object_type, class_ivar_set_gcinvisible,
+	get_imp): Rename 'class' parameter to '_class'.
+	* objc/objc-list.h: Add 'extern "C"' block for C++ use.
+	* objc/objc.h: Update copyright date.
+	(arglist_t): Provide a union tag.
+
+2004-07-22  Andrew Pinski  <pinskia@physics.uc.edu>
+
+	* thr.c (__objc_thread_detach_function): Do not mark as volatile
+	but instead use the attribute noreturn.
+
+2004-06-28  Zack Weinberg  <zack@codesourcery.com>
+
+	* encoding.c: Rename target_flags with a #define to avoid
+	conflict with a prior declaration.
+
+2004-06-24  Andrew Pinski  <apinski@apple.com>
+
+	* objc/encoding.h: Wrap the functions with extern "C" for C++
+	mode.
+	* objc/hash.h: Likewise.
+	* objc/objc-api.h: Likewise.
+	* objc/objc-list.h: Likewise.
+	* objc/runtime.h: Likewise.
+	* objc/sarray.h: Likewise.
+	* objc/thr.h: Likewise.
+	* objc/typedstream.h: Likewise.
+
+
+2004-06-21  Nick Clifton  <nickc@redhat.com>
+
+	* encoding.c (BITS_PER_UNIT): Define if a definition is not
+	provided.
+
+2004-06-20  Alexander Malmberg  <alexander@malmberg.org>
+
+	* Makefile.in (exception.lo): Remove $(OBJC_GCFLAGS).
+	(exception_gc.lo): New.
+	(OBJS_GC): Add exception_gc.lo.
+
+2004-06-17  Richard Henderson  <rth@redhat.com>
+
+	* exception.c: New file.
+	* Makefile.in (exception.lo): New.
+	(OBJS): Add it.
+
+2004-06-14  Andrew Pinski  <pinskia@physics.uc.edu>
+
+	* linking.m (_objcInit): New empty function
+	for Darwin only.
+
+2004-06-11  Andrew Pinski  <pinskia@physics.uc.edu>
+
+	* configure.ac: Support --enable-shared=libobjc.
+	* configure: Regenerate.
+
+	PR libobjc/15901
+	* configure.ac: Do not disable shared by default.
+	* configure: Regenerate.
+
+2004-06-03  Nicola Pero  <n.pero@mi.flashnet.it>
+
+	* Protocol.m ([-isEqual:]): Small optimizations returning
+	immediately if the argument is equal to self, and accessing
+	the argument's name directly if it's a protocol.
+
+2004-06-03  David Ayers  <d.ayers@inode.at>
+
+	* Protocol.m ([-isEqual:]): Test the class of the argument.
+
 2004-05-25  Andrew Pinski  <pinskia@physics.uc.edu>
 
 	* configure.ac (includedir): Rename to ...
@@ -20,30 +227,30 @@
 
 	Merge from the libobjc-branch
 	2004-02-09  Andrew Pinski  <pinskia@physics.uc.edu>
-	
+
 		* Makefile.in (OBJC_H): Change objc-deps.h to objc-decls.h.
-	
+
 	2004-02-03  Andrew Pinski  <pinskia@physics.uc.edu>
-	
+
 		* Makefile.in (OBJC_H): Add objc-deps.h.
-	
+
 	2004-01-27  Nicola Pero  <n.pero@mi.flashnet.it>
-	
+
 		* Protocol.m ([-conformsTo:]): If the argument is nil, return NO.
 		([-hash], [-isEqual:]): New methods.
-	
+
 	2004-01-27  Richard Frith-Macdonald <rfm@gnu.org>
-	
+
 		* sarray.c (sarray_free): Add a better comment.
-	
+
 	2004-01-27  Adam Fedor  <fedor@gnu.org>
-	
+
 		* hash.c (hash_add): Cast cachep to int.
 		* selector.c (__sel_register_typed_name): Cast
 		soffset_decode to int.
-	
+
 	2004-01-27  Alexander Malmberg  <alexander@malmberg.org>
-	
+
 		* selector.c: Rename register_selectors_from_list to
 		__objc_register_selectors_from_list. Update caller.
 		(__objc_register_selectors_from_list): Lock __objc_runtime_mutex
@@ -55,30 +262,30 @@
 		* sendmsg.c (class_add_method_list): Use
 		__objc_register_selectors_from_list.
 		* objc/runtime.h: Add __objc_register_selectors_from_list.
-	
+
 	2004-01-25  Adam Fedor  <fedor@gnu.org>
-	            Nicola Pero  <n.pero@mi.flashnet.it>
-	            Andrew Pinski  <pinskia@physics.uc.edu>
-	
+		    Nicola Pero  <n.pero@mi.flashnet.it>
+		    Andrew Pinski  <pinskia@physics.uc.edu>
+
 		* objc/objc-decls.h: New file.
 		* objc/objc-api.h (_objc_lookup_class): Mark as export.
 		(_objc_load_callback): Likewise.
 		(_objc_object_alloc): Likewise.
 		(_objc_object_copy): Likewise.
 		(_objc_object_dispose): Likewise.
-	
+
 	2004-01-25  Andrew Pinski  <pinskia@physics.uc.edu>
-	
+
 		* archive.c: s/__inline__/inline
-		* sendmsg.c: Likewise. 
-	
+		* sendmsg.c: Likewise.
+
 		* encoding.c: Remove FIXME about the warning
 		about unused variable.
 		* sendmsg.c: Add a FIXME comment saying that
 		this should be using libffi.
-	
+
 		* Makefile.in (LIBTOOL): Use @LIBTOOL@ now as it works.
-	
+
 
 2004-05-13  Andrew Pinski  <pinskia@physics.uc.edu>
 

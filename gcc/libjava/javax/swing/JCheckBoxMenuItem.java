@@ -35,6 +35,7 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package javax.swing;
 
 import java.io.IOException;
@@ -44,130 +45,206 @@ import javax.accessibility.Accessible;
 import javax.accessibility.AccessibleContext;
 import javax.accessibility.AccessibleRole;
 
-
+/**
+ * This class represents JCheckBoxMenuItem. Its behaviour is very similar
+ * to JCheckBoxButton. Just like the JCheckBoxButton, user can check and
+ * uncheck this menu item by clicking on it. Also setSelected()/setState()
+ * can be use used for the same purpose. JCheckBoxMenuItem uses
+ * ToggleButtonModel to keep track of its selection.
+ */
 public class JCheckBoxMenuItem extends JMenuItem implements SwingConstants,
                                                             Accessible
 {
-  //-------------------------------------------------------------
-  // Variables --------------------------------------------------
-  //-------------------------------------------------------------
-  private static final String uiClassID = "CheckBoxMenuItemUI";
-  private boolean state;
-  private Object[] selectedObjects;
+  private static final long serialVersionUID = -6676402307973384715L;
 
-  //-------------------------------------------------------------
-  // Initialization ---------------------------------------------
-  //-------------------------------------------------------------
+  /** name for the UI delegate for this menuItem. */
+  private static final String uiClassID = "CheckBoxMenuItemUI";
+
+  /** Indicates whether this menu item is checked. */
+  private boolean state;
+
+  /**
+   * This array contains text of this menu item if this menu item is in
+   * checked state and null it is not.
+   */
+  private Object[] selectedObjects = new Object[1];
+
+  /**
+   * Creates a new JCheckBoxMenuItem object.
+   */
   public JCheckBoxMenuItem()
   {
     this(null, null);
-  } // JCheckBoxMenuItem()
+  }
 
+  /**
+   * Creates a new JCheckBoxMenuItem with given icon
+   *
+   * @param icon Icon for this menu item
+   */
   public JCheckBoxMenuItem(Icon icon)
   {
     this(null, icon);
-  } // JCheckBoxMenuItem()
+  }
 
+  /**
+   * Creates a new JCheckBoxMenuItem with given label
+   *
+   * @param text Label for this menu item
+   */
   public JCheckBoxMenuItem(String text)
   {
     this(text, null);
-  } // JCheckBoxMenuItem()
+  }
 
+  /**
+   * Creates a new JCheckBoxMenuItem using given action
+   *
+   * @param action Action for this menu item.
+   */
   public JCheckBoxMenuItem(Action action)
   {
     this();
     setAction(action);
-  } // JCheckBoxMenuItem()
+  }
 
+  /**
+   * Creates a new JCheckBoxMenuItem object with given label and icon
+   *
+   * @param text Label for this menu item
+   * @param icon Icon for this menu item
+   */
   public JCheckBoxMenuItem(String text, Icon icon)
   {
     this(text, icon, false);
-  } // JCheckBoxMenuItem()
+  }
 
+  /**
+   * Creates a new JCheckBoxMenuItem object using specified label and
+   * marked as checked if given 'state' is true
+   *
+   * @param text Label for this menu item
+   * @param state True if this item should be in checked state and false otherwise
+   */
   public JCheckBoxMenuItem(String text, boolean state)
   {
     this(text, null, state);
-  } // JCheckBoxMenuItem()
+  }
 
+  /**
+   * Creates a new JCheckBoxMenuItem object with given label, icon,
+   * and marked as checked if given 'state' is true
+   *
+   * @param text Label for this menu item
+   * @param icon icon for this menu item
+   * @param state  True if this item should be in checked state and false otherwise
+   */
   public JCheckBoxMenuItem(String text, Icon icon, boolean state)
   {
     super(text, icon);
     setModel(new JToggleButton.ToggleButtonModel());
     this.state = state;
-  } // JCheckBoxMenuItem()
+  }
 
-  //-------------------------------------------------------------
-  // Methods ----------------------------------------------------
-  //-------------------------------------------------------------
   private void writeObject(ObjectOutputStream stream) throws IOException
   {
-    // TODO
-  } // writeObject()
+  }
 
+  /**
+   * This method returns a name to identify which look and feel class will be
+   * the UI delegate for the menuItem.
+   *
+   * @return The Look and Feel classID. "JCheckBoxMenuItemUI"
+   */
   public String getUIClassID()
   {
     return uiClassID;
-  } // getUIClassID()
+  }
 
+  /**
+   * Returns checked state for this check box menu item.
+   *
+   * @return Returns true if this menu item is in checked state
+   * and false otherwise.
+   */
   public boolean getState()
   {
     return state;
-  } // getState()
+  }
 
+  /**
+   * Sets state for this check box menu item. If
+   * given 'state' is true, then mark menu item as checked,
+   * and uncheck this menu item otherwise.
+   *
+   * @param state new state for this menu item
+   *
+   */
   public synchronized void setState(boolean state)
   {
     this.state = state;
-  } // setState()
+  }
 
+  /**
+   * This method returns array containing label of this
+   * menu item if it is selected and null otherwise.
+   *
+   * @return Array containing label of this
+   * menu item if this menu item is selected or null otherwise.
+   */
   public Object[] getSelectedObjects()
   {
-    return selectedObjects;
-  } // getSelectedObjects()
+    if (state == true)
+      selectedObjects[0] = this.getText();
+    else
+      selectedObjects[0] = null;
 
+    return selectedObjects;
+  }
+
+  /**
+    * This method overrides JComponent.requestFocus with an empty
+    * implementation, since JCheckBoxMenuItems should not
+    * receve focus in general.
+    */
   public void requestFocus()
   {
-    // TODO
-  } // requestFocus()
+    //  Should do nothing here
+  }
 
+  /**
+   * A string that describes this JCheckBoxMenuItem. Normally only used
+   * for debugging.
+   *
+   * @return A string describing this JCheckBoxMenuItem
+   */
   protected String paramString()
   {
     return "JCheckBoxMenuItem";
-  } // paramString()
+  }
 
   public AccessibleContext getAccessibleContext()
   {
     if (accessibleContext == null)
-      {
-        accessibleContext = new AccessibleJCheckBoxMenuItem(this);
-      }
+      accessibleContext = new AccessibleJCheckBoxMenuItem();
 
     return accessibleContext;
-  } // getAccessibleContext()
+  }
 
-  //-------------------------------------------------------------
-  // Classes ----------------------------------------------------
-  //-------------------------------------------------------------
   protected class AccessibleJCheckBoxMenuItem extends AccessibleJMenuItem
   {
-    //-------------------------------------------------------------
-    // Variables --------------------------------------------------
-    //-------------------------------------------------------------
-    //-------------------------------------------------------------
-    // Initialization ---------------------------------------------
-    //-------------------------------------------------------------
-    protected AccessibleJCheckBoxMenuItem(JCheckBoxMenuItem component)
+    private static final long serialVersionUID = 1079958073579370777L;
+
+    /**
+     * Creates a new AccessibleJCheckBoxMenuItem object.
+     */
+    protected AccessibleJCheckBoxMenuItem()
     {
-      super(component);
+    }
 
-      // TODO
-    } // AccessibleJCheckBoxMenuItem()
-
-    //-------------------------------------------------------------
-    // Methods ----------------------------------------------------
-    //-------------------------------------------------------------
     public AccessibleRole getAccessibleRole()
     {
       return AccessibleRole.CHECK_BOX;
-    } // getAccessibleRole()
-  } // AccessibleJCheckBoxMenuItem
-} // JCheckBoxMenuItem
+    }
+  }
+}

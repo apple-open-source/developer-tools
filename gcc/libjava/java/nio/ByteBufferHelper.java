@@ -1,5 +1,5 @@
 /* ByteBufferImpl.java -- 
-   Copyright (C) 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -38,36 +38,10 @@ exception statement from your version. */
 package java.nio;
 
 /**
- * @author Michael Koch <konqueror@gmx.de>
+ * @author Michael Koch (konqueror@gmx.de)
  */
 final class ByteBufferHelper
 {
-  private static void checkRemainingForRead (ByteBuffer buffer, int bytes)
-  {
-    if (buffer.remaining() < bytes)
-      throw new BufferUnderflowException();
-  }
-  
-  private static void checkRemainingForWrite (ByteBuffer buffer, int bytes)
-  {
-    if (buffer.remaining() < bytes)
-      throw new BufferOverflowException();
-  }
-
-  private static void checkAvailableForRead (ByteBuffer buffer,
-					     int index, int bytes)
-  {
-    if (buffer.limit() < (index + bytes))
-      throw new BufferUnderflowException();
-  }
-  
-  private static void checkAvailableForWrite (ByteBuffer buffer,
-					      int index, int bytes)
-  {
-    if (buffer.limit() < (index + bytes))
-      throw new BufferOverflowException();
-  }
-  
   public static char getChar (ByteBuffer buffer, ByteOrder order)
   {
     return (char) getShort (buffer, order);
@@ -91,7 +65,7 @@ final class ByteBufferHelper
 
   public static short getShort (ByteBuffer buffer, ByteOrder order)
   {
-    checkRemainingForRead (buffer, 2);
+    buffer.checkForUnderflow(2);
 
     if (order == ByteOrder.LITTLE_ENDIAN)
       {
@@ -105,7 +79,7 @@ final class ByteBufferHelper
   
   public static void putShort (ByteBuffer buffer, short value, ByteOrder order)
   {
-    checkRemainingForWrite (buffer, 2);
+    buffer.checkForOverflow(2);
 
     if (order == ByteOrder.LITTLE_ENDIAN)
       {
@@ -122,8 +96,6 @@ final class ByteBufferHelper
   public static short getShort (ByteBuffer buffer,
 				      int index, ByteOrder order)
   {
-    checkAvailableForRead (buffer, index, 2);
-
     if (order == ByteOrder.LITTLE_ENDIAN)
       {
         return (short) ((buffer.get (index) & 0xff)
@@ -137,8 +109,6 @@ final class ByteBufferHelper
   public static void putShort (ByteBuffer buffer, int index,
 			       short value, ByteOrder order)
   {
-    checkAvailableForWrite (buffer, index, 2);
-
     if (order == ByteOrder.LITTLE_ENDIAN)
       {
         buffer.put (index, (byte) value);
@@ -153,7 +123,7 @@ final class ByteBufferHelper
 
   public static int getInt (ByteBuffer buffer, ByteOrder order)
   {
-    checkRemainingForRead (buffer, 4);
+    buffer.checkForUnderflow(4);
 
     if (order == ByteOrder.LITTLE_ENDIAN)
       {
@@ -171,7 +141,7 @@ final class ByteBufferHelper
   
   public static void putInt (ByteBuffer buffer, int value, ByteOrder order)
   {
-    checkRemainingForWrite (buffer, 4);
+    buffer.checkForOverflow(4);
 
     if (order == ByteOrder.LITTLE_ENDIAN)
       {
@@ -191,8 +161,6 @@ final class ByteBufferHelper
   
   public static int getInt (ByteBuffer buffer, int index, ByteOrder order)
   {
-    checkAvailableForRead (buffer, index, 4);
-
     if (order == ByteOrder.LITTLE_ENDIAN)
       {
         return ((buffer.get (index) & 0xff)
@@ -210,8 +178,6 @@ final class ByteBufferHelper
   public static void putInt (ByteBuffer buffer, int index,
 				   int value, ByteOrder order)
   {
-    checkAvailableForWrite (buffer, index, 4);
-
     if (order == ByteOrder.LITTLE_ENDIAN)
       {
         buffer.put (index, (byte) value);
@@ -230,7 +196,7 @@ final class ByteBufferHelper
 
   public static long getLong (ByteBuffer buffer, ByteOrder order)
   {
-    checkRemainingForRead (buffer, 8);
+    buffer.checkForUnderflow(8);
 
     if (order == ByteOrder.LITTLE_ENDIAN)
       {
@@ -256,7 +222,7 @@ final class ByteBufferHelper
   
   public static void putLong (ByteBuffer buffer, long value, ByteOrder order)
   {
-    checkRemainingForWrite (buffer, 8);
+    buffer.checkForOverflow(8);
 
     if (order == ByteOrder.LITTLE_ENDIAN)
       {
@@ -284,8 +250,6 @@ final class ByteBufferHelper
   
   public static long getLong (ByteBuffer buffer, int index, ByteOrder order)
   {
-    checkAvailableForRead (buffer, index, 8);
-
     if (order == ByteOrder.LITTLE_ENDIAN)
       {
         return ((buffer.get (index) & 0xff)
@@ -311,8 +275,6 @@ final class ByteBufferHelper
   public static void putLong (ByteBuffer buffer, int index,
 				    long value, ByteOrder order)
   {
-    checkAvailableForWrite (buffer, index, 8);
-
     if (order == ByteOrder.LITTLE_ENDIAN)
       {
         buffer.put (index, (byte) value);
@@ -365,7 +327,7 @@ final class ByteBufferHelper
 
   public static void putDouble (ByteBuffer buffer, double value, ByteOrder order)
   {
-    putLong (buffer, Double.doubleToLongBits (value), order);
+    putLong (buffer, Double.doubleToRawLongBits (value), order);
   }
   
   public static double getDouble (ByteBuffer buffer, int index, ByteOrder order)
@@ -376,6 +338,7 @@ final class ByteBufferHelper
   public static void putDouble (ByteBuffer buffer, int index,
 				double value, ByteOrder order)
   {
-    putLong (buffer, index, Double.doubleToLongBits (value), order);
+    putLong (buffer, index, Double.doubleToRawLongBits (value), order);
   }
 } // ByteBufferHelper
+

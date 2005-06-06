@@ -1,4 +1,4 @@
-/* BasicListUI.java
+/* BasicListUI.java --
    Copyright (C) 2002, 2004 Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
@@ -35,6 +35,7 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package javax.swing.plaf.basic;
 
 import java.awt.Color;
@@ -48,6 +49,7 @@ import java.awt.event.FocusListener;
 import java.awt.event.MouseEvent;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
+
 import javax.swing.JComponent;
 import javax.swing.JList;
 import javax.swing.ListCellRenderer;
@@ -62,7 +64,6 @@ import javax.swing.event.ListSelectionListener;
 import javax.swing.event.MouseInputListener;
 import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.ListUI;
-
 
 /**
  * The Basic Look and Feel UI delegate for the 
@@ -121,7 +122,6 @@ public class BasicListUI extends ListUI
      */
     public void contentsChanged(ListDataEvent e)
     {
-      // System.err.println(this + ".contentsChanged(" + e + ")");
       BasicListUI.this.damageLayout();
     }
 
@@ -132,7 +132,6 @@ public class BasicListUI extends ListUI
      */
     public void intervalAdded(ListDataEvent e)
     {
-      // System.err.println(this + ".intervalAdded(" + e + ")");
       BasicListUI.this.damageLayout();
     }
 
@@ -143,7 +142,6 @@ public class BasicListUI extends ListUI
      */
     public void intervalRemoved(ListDataEvent e)
     {
-      // System.err.println(this + ".intervalRemoved(" + e + ")");
       BasicListUI.this.damageLayout();
     }
   }
@@ -161,7 +159,6 @@ public class BasicListUI extends ListUI
      */
     public void valueChanged(ListSelectionEvent e)
     {
-      //       System.err.println(this + ".valueChanged(" + e + ")");
     }
   }
 
@@ -189,12 +186,10 @@ public class BasicListUI extends ListUI
      */
     public void mousePressed(MouseEvent event)
     {
-      // System.err.println("got mouse click event " + event);
       int row = BasicListUI.this.convertYToRow(event.getY());
       if (row == -1)
         return;
 
-      // System.err.println("clicked on row " + row);
       BasicListUI.this.list.setSelectedIndex(row);
     }
 
@@ -262,7 +257,6 @@ public class BasicListUI extends ListUI
      */
     public void propertyChange(PropertyChangeEvent e)
     {
-      // System.err.println(this + ".propertyChange(" + e + ")");
       if (e.getSource() == BasicListUI.this.list)
         {
           if (e.getOldValue() != null && e.getOldValue() instanceof ListModel)
@@ -357,6 +351,8 @@ public class BasicListUI extends ListUI
    */
   public Rectangle getCellBounds(JList l, int index1, int index2)
   {
+    maybeUpdateLayoutState();
+
     if (l != list || cellWidth == -1)
       return null;
 
@@ -366,6 +362,7 @@ public class BasicListUI extends ListUI
                                        getRowHeight(lo));
     Rectangle hibounds = new Rectangle(0, convertRowToY(hi), cellWidth,
                                        getRowHeight(hi));
+
     return lobounds.union(hibounds);
   }
 
@@ -408,7 +405,6 @@ public class BasicListUI extends ListUI
       {
         int h = getRowHeight(row);
 
-        // System.err.println("convertYToRow(" + y0 + ") vs. " + h);
         if (y0 < h)
           return row;
         y0 -= h;
@@ -468,7 +464,6 @@ public class BasicListUI extends ListUI
    */
   void maybeUpdateLayoutState()
   {
-    // System.err.println(this + ".maybeUpdateLayoutState()");
     if (updateLayoutStateNeeded != 0)
       {
         updateLayoutState();
@@ -502,6 +497,7 @@ public class BasicListUI extends ListUI
     list.setBackground(defaults.getColor("List.background"));
     list.setSelectionForeground(defaults.getColor("List.selectionForeground"));
     list.setSelectionBackground(defaults.getColor("List.selectionBackground"));
+    list.setOpaque(true);
   }
 
   /**
@@ -575,7 +571,6 @@ public class BasicListUI extends ListUI
     installDefaults();
     installListeners();
     installKeyboardActions();
-    // System.err.println(this + ".installUI()");
     maybeUpdateLayoutState();
   }
 
@@ -617,7 +612,6 @@ public class BasicListUI extends ListUI
    */
   public Dimension getPreferredSize(JComponent c)
   {
-    maybeUpdateLayoutState();
     if (list.getModel().getSize() == 0)
       return new Dimension(0, 0);
     Rectangle bounds = getCellBounds(list, 0, list.getModel().getSize() - 1);
@@ -676,7 +670,7 @@ public class BasicListUI extends ListUI
    */
   public void paint(Graphics g, JComponent c)
   {
-    int nrows = Math.min(list.getVisibleRowCount(), list.getModel().getSize());
+    int nrows = list.getModel().getSize();
     if (nrows == 0)
       return;
 
@@ -685,22 +679,24 @@ public class BasicListUI extends ListUI
     ListModel model = list.getModel();
     ListSelectionModel sel = list.getSelectionModel();
     int lead = sel.getLeadSelectionIndex();
+    Rectangle clip = g.getClipBounds();
     paintBackground(g, list);
 
     for (int row = 0; row < nrows; ++row)
       {
         Rectangle bounds = getCellBounds(list, row, row);
-        paintCell(g, row, bounds, render, model, sel, lead);
+        if (bounds.intersects(clip))
+          paintCell(g, row, bounds, render, model, sel, lead);
       }
   }
 
   public int locationToIndex(JList list, Point location)
   {
-    throw new Error("Not implemented");
+    return convertYToRow(location.y);
   }
 
   public Point indexToLocation(JList list, int index)
   {
-    throw new Error("Not implemented");
+    return new Point(0, convertRowToY(index));
   }
 }

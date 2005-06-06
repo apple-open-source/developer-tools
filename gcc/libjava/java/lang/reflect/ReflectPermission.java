@@ -1,5 +1,5 @@
 /* ReflectPermission.java - named permission for reflaction
-   Copyright (C) 2000, 2001 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2005  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -35,14 +35,14 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+package java.lang.reflect;
+
+import java.security.BasicPermission;
+
 /* Written using "Java Class Libraries", 2nd edition, ISBN 0-201-31002-3
  * "The Java Language Specification", ISBN 0-201-63451-1
  * plus online API docs for JDK 1.2 beta from http://www.javasoft.com.
  */
-
-package java.lang.reflect;
-
-import java.security.BasicPermission;
 
 /**
  * This class implements permissions for reflection.  This is a named
@@ -66,8 +66,8 @@ import java.security.BasicPermission;
  *  </tr>
  * </table>
  *
- * @author Tom Tromey <tromey@redhat.com>
- * @author Eric Blake <ebb9@email.byu.edu>
+ * @author Tom Tromey (tromey@redhat.com)
+ * @author Eric Blake (ebb9@email.byu.edu)
  * @since 1.2
  * @status updated to 1.4
  */

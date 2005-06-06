@@ -24,6 +24,7 @@
 #include "language.h"
 #include "gdbcmd.h"
 #include "gdb_string.h"
+#include "block.h"
 #include <math.h>
 
 #include "varobj.h"
@@ -37,8 +38,9 @@ int varobjdebug = 0;
 static int varobj_use_dynamic_type = 1;
 
 /* String representations of gdb's format codes */
+/* APPLE LOCAL: add "unsigned" and "OSType" */
 char *varobj_format_string[] =
-  { "natural", "binary", "decimal", "hexadecimal", "octal" };
+  { "natural", "binary", "decimal", "hexadecimal", "octal", "unsigned", "OSType" };
 
 /* String representations of gdb's known languages */
 char *varobj_language_string[] = { "unknown", "C", "C++", "Java" };
@@ -435,7 +437,8 @@ static int cplus_real_type_index_for_fake_child_index (
 /* Private data */
 
 /* Mappings of varobj_display_formats enums to gdb's format codes */
-static int format_code[] = { 0, 't', 'd', 'x', 'o', 'u' };
+/* APPLE LOCAL: "u" (unsigned) and "T" (OSType) */
+static int format_code[] = { 0, 't', 'd', 'x', 'o', 'u', 'T' };
 
 /* Header of the list of root variable objects */
 static struct varobj_root *rootlist;
@@ -641,7 +644,7 @@ find_frame_addr_in_frame_chain (CORE_ADDR frame_addr)
       frame = get_prev_frame (frame);
       if (frame == NULL)
 	return NULL;
-      if (get_frame_base (frame) == frame_addr)
+      if (get_frame_base_address (frame) == frame_addr)
 	return frame;
     }
 }
@@ -993,7 +996,10 @@ varobj_set_display_format (struct varobj *var,
     case FORMAT_DECIMAL:
     case FORMAT_HEXADECIMAL:
     case FORMAT_OCTAL:
+    /* APPLE LOCAL: formatting as unsigned */
     case FORMAT_UNSIGNED:
+    /* APPLE LOCAL: formatting as OSType */
+    case FORMAT_OSTYPE:
       var->format = format;
       break;
 
@@ -1197,7 +1203,6 @@ varobj_set_value (struct varobj *var, char *expression)
   struct expression *exp;
   struct value *value;
   int saved_input_radix = input_radix;
-  enum scheduler_locking_mode old_mode;
   int ret_val = 1;
   struct cleanup *schedlock_chain;
 
@@ -1858,8 +1863,8 @@ get_type (struct varobj *var)
   else
     type = var->type;
 
-  while (type != NULL && TYPE_CODE (type) == TYPE_CODE_TYPEDEF)
-    type = TYPE_TARGET_TYPE (type);
+  if (type != NULL)
+    type = check_typedef (type);
 
   return type;
 }
@@ -1899,8 +1904,8 @@ get_target_type (struct type *type)
   if (type != NULL)
     {
       type = TYPE_TARGET_TYPE (type);
-      while (type != NULL && TYPE_CODE (type) == TYPE_CODE_TYPEDEF)
-	type = TYPE_TARGET_TYPE (type);
+      if (type != NULL)
+	type = check_typedef (type);
     }
 
   return type;
@@ -2339,7 +2344,7 @@ varobj_pc_in_valid_block_p (struct varobj *var)
   
   /* reinit_frame_cache (); */
   
-  fi = find_frame_addr_in_frame_chain (var->root->frame.base);
+  fi = frame_find_by_id (var->root->frame);
   if (fi != NULL)
     {
       cur_pc = get_frame_pc (fi);
@@ -2949,7 +2954,7 @@ c_value_of_variable (struct varobj *var)
 	    val_print (VALUE_TYPE (var->value),
 		       VALUE_CONTENTS_RAW (var->value), 0,
 		       VALUE_ADDRESS (var->value), stb,
-		       format_code[(int) var->format], 1, 0, 0);
+		       format_code[(int) var->format], 0, 0, 0);
 	    thevalue = ui_file_xstrdup (stb, &dummy);
 	    do_cleanups (old_chain);
 	return thevalue;

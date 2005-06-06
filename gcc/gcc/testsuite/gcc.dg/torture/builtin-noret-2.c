@@ -3,6 +3,7 @@
    <zack@codesourcery.com>.  */
 /* { dg-options "-multiply_defined suppress" { target powerpc-*-darwin* } } */
 /* { dg-do link } */
+/* { dg-require-weak "" } */
 
 extern void tabort (void);
 extern void texit (void);
@@ -15,6 +16,7 @@ int
 main (void)
 {
   volatile int i = 0;
+  extern void exit (int);
   if (i)
     tabort ();
   if (i)
@@ -60,6 +62,7 @@ t_exit (void)
 void
 _exit (int i)
 {
+  extern void abort (void);
   abort ();
 }
 
@@ -81,5 +84,6 @@ t_Exit (void)
 void
 _Exit (int i)
 {
+  extern void abort (void);
   abort ();
 }

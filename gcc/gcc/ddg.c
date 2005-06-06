@@ -29,7 +29,6 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "rtl.h"
 #include "tm_p.h"
 #include "hard-reg-set.h"
-#include "basic-block.h"
 #include "regs.h"
 #include "function.h"
 #include "flags.h"
@@ -68,7 +67,7 @@ static bool mem_ref_p;
 static int
 mark_mem_use (rtx *x, void *data ATTRIBUTE_UNUSED)
 {
-  if (GET_CODE (*x) == MEM)
+  if (MEM_P (*x))
     mem_ref_p = true;
   return 0;
 }
@@ -80,7 +79,7 @@ mark_mem_use_1 (rtx *x, void *data)
   for_each_rtx (x, mark_mem_use, data);
 }
 
-/* Returns non-zero if INSN reads from memory.  */
+/* Returns nonzero if INSN reads from memory.  */
 static bool
 mem_read_insn_p (rtx insn)
 {
@@ -92,11 +91,11 @@ mem_read_insn_p (rtx insn)
 static void
 mark_mem_store (rtx loc, rtx setter ATTRIBUTE_UNUSED, void *data ATTRIBUTE_UNUSED)
 {
-  if (GET_CODE (loc) == MEM)
+  if (MEM_P (loc))
     mem_ref_p = true;
 }
 
-/* Returns non-zero if INSN writes to memory.  */
+/* Returns nonzero if INSN writes to memory.  */
 static bool
 mem_write_insn_p (rtx insn)
 {
@@ -105,7 +104,7 @@ mem_write_insn_p (rtx insn)
   return mem_ref_p;
 }
 
-/* Returns non-zero if X has access to memory.  */
+/* Returns nonzero if X has access to memory.  */
 static bool
 rtx_mem_access_p (rtx x)
 {
@@ -116,7 +115,7 @@ rtx_mem_access_p (rtx x)
   if (x == 0)
     return false;
 
-  if (GET_CODE (x) == MEM)
+  if (MEM_P (x))
     return true;
 
   code = GET_CODE (x);
@@ -138,7 +137,7 @@ rtx_mem_access_p (rtx x)
   return false;
 }
 
-/* Returns non-zero if INSN reads to or writes from memory.  */
+/* Returns nonzero if INSN reads to or writes from memory.  */
 static bool
 mem_access_insn_p (rtx insn)
 {
@@ -164,8 +163,7 @@ create_ddg_dependence (ddg_ptr g, ddg_node_ptr src_node,
   if (interloop)
      distance = 1;
 
-  if (!link)
-    abort ();
+  gcc_assert (link);
 
   /* Note: REG_DEP_ANTI applies to MEM ANTI_DEP as well!!  */
   if (REG_NOTE_KIND (link) == REG_DEP_ANTI)
@@ -189,6 +187,8 @@ create_ddg_dependence (ddg_ptr g, ddg_node_ptr src_node,
       else
 	free (e);
     }
+  else if (t == ANTI_DEP && dt == REG_DEP)
+    free (e);  /* We can fix broken anti register deps using reg-moves.  */
   else
     add_edge_to_ddg (g, e);
 }
@@ -240,8 +240,7 @@ add_deps_for_def (ddg_ptr g, struct df *df, struct ref *rd)
 	  rtx use_insn = DF_REF_INSN (r_use->ref);
 	  ddg_node_ptr dest_node = get_node_of_insn (g, use_insn);
 
-	  if (!src_node || !dest_node)
-	    abort ();
+	  gcc_assert (src_node && dest_node);
 
 	  /* Any such upwards exposed use appears before the rd def.  */
 	  use_before_def = true;
@@ -296,8 +295,7 @@ add_deps_for_use (ddg_ptr g, struct df *df, struct ref *use)
   use_node = get_node_of_insn (g, use->insn);
   def_node = get_node_of_insn (g, first_def->insn);
 
-  if (!use_node || !def_node)
-    abort ();
+  gcc_assert (use_node && def_node);
 
   /* Make sure there are no defs after USE.  */
   for (i = use_node->cuid + 1; i < g->num_nodes; i++)
@@ -305,7 +303,7 @@ add_deps_for_use (ddg_ptr g, struct df *df, struct ref *use)
        return;
   /* We must not add ANTI dep when there is an intra-loop TRUE dep in
      the opozite direction. If the first_def reaches the USE then there is
-     such a dep. */
+     such a dep.  */
   if (! bitmap_bit_p (bb_info->rd_gen, first_def->id))
     create_ddg_dep_no_link (g, use_node, def_node, ANTI_DEP, REG_DEP, 1);
 }
@@ -314,30 +312,31 @@ add_deps_for_use (ddg_ptr g, struct df *df, struct ref *use)
 static void
 build_inter_loop_deps (ddg_ptr g, struct df *df)
 {
-  int rd_num, u_num;
+  unsigned rd_num, u_num;
   struct bb_info *bb_info;
+  bitmap_iterator bi;
 
   bb_info = DF_BB_INFO (df, g->bb);
 
   /* Find inter-loop output and true deps by connecting downward exposed defs
      to the first def of the BB and to upwards exposed uses.  */
-  EXECUTE_IF_SET_IN_BITMAP (bb_info->rd_gen, 0, rd_num,
+  EXECUTE_IF_SET_IN_BITMAP (bb_info->rd_gen, 0, rd_num, bi)
     {
       struct ref *rd = df->defs[rd_num];
 
       add_deps_for_def (g, df, rd);
-    });
+    }
 
   /* Find inter-loop anti deps.  We are interested in uses of the block that
      appear below all defs; this implies that these uses are killed.  */
-  EXECUTE_IF_SET_IN_BITMAP (bb_info->ru_kill, 0, u_num,
+  EXECUTE_IF_SET_IN_BITMAP (bb_info->ru_kill, 0, u_num, bi)
     {
       struct ref *use = df->uses[u_num];
 
       /* We are interested in uses of this BB.  */
       if (BLOCK_FOR_INSN (use->insn) == g->bb)
       	add_deps_for_use (g, df,use);
-    });
+    }
 }
 
 /* Given two nodes, analyze their RTL insns and add inter-loop mem deps
@@ -366,7 +365,7 @@ add_inter_loop_mem_dep (ddg_ptr g, ddg_node_ptr from, ddg_node_ptr to)
 }
 
 /* Perform intra-block Data Dependency analysis and connect the nodes in
-   the DDG.  We assume the loop has a single basic block. */
+   the DDG.  We assume the loop has a single basic block.  */
 static void
 build_intra_loop_deps (ddg_ptr g)
 {
@@ -383,7 +382,7 @@ build_intra_loop_deps (ddg_ptr g)
   get_block_head_tail (g->bb->index, &head, &tail);
   sched_analyze (&tmp_deps, head, tail);
 
-  /* Build intra-loop data dependecies using the schedular dependecy
+  /* Build intra-loop data dependencies using the scheduler dependency
      analysis.  */
   for (i = 0; i < g->num_nodes; i++)
     {
@@ -477,17 +476,15 @@ create_ddg (basic_block bb, struct df *df, int closing_branch_deps)
     {
       if (! INSN_P (insn))
 	{
-	  if (! first_note && GET_CODE (insn) == NOTE
+	  if (! first_note && NOTE_P (insn)
 	      && NOTE_LINE_NUMBER (insn) !=  NOTE_INSN_BASIC_BLOCK)
 	    first_note = insn;
 	  continue;
 	}
-      if (GET_CODE (insn) == JUMP_INSN)
+      if (JUMP_P (insn))
 	{
-	  if (g->closing_branch)
-	    abort (); /* Found two branches in DDG.  */
-	  else
-	    g->closing_branch = &g->nodes[i];
+	  gcc_assert (!g->closing_branch);
+	  g->closing_branch = &g->nodes[i];
 	}
       else if (GET_CODE (PATTERN (insn)) == USE)
 	{
@@ -505,11 +502,12 @@ create_ddg (basic_block bb, struct df *df, int closing_branch_deps)
       g->nodes[i++].insn = insn;
       first_note = NULL_RTX;
     }
+  
+  /* We must have found a branch in DDG.  */
+  gcc_assert (g->closing_branch);
+  
 
-  if (!g->closing_branch)
-    abort ();  /* Found no branch in DDG.  */
-
-  /* Build the data dependecy graph.  */
+  /* Build the data dependency graph.  */
   build_intra_loop_deps (g);
   build_inter_loop_deps (g, df);
   return g;
@@ -646,8 +644,8 @@ add_edge_to_ddg (ddg_ptr g ATTRIBUTE_UNUSED, ddg_edge_ptr e)
   ddg_node_ptr src = e->src;
   ddg_node_ptr dest = e->dest;
 
-  if (!src->successors || !dest->predecessors)
-    abort (); /* Should have allocated the sbitmaps.  */
+  /* Should have allocated the sbitmaps.  */
+  gcc_assert (src->successors && dest->predecessors);
 
   SET_BIT (src->successors, dest->cuid);
   SET_BIT (dest->predecessors, src->cuid);
@@ -898,7 +896,7 @@ free_ddg_all_sccs (ddg_all_sccs_ptr all_sccs)
 
 /* Given FROM - a bitmap of source nodes - and TO - a bitmap of destination
    nodes - find all nodes that lie on paths from FROM to TO (not excluding
-   nodes from FROM and TO).  Return non zero if nodes exist.  */
+   nodes from FROM and TO).  Return nonzero if nodes exist.  */
 int
 find_nodes_on_paths (sbitmap result, ddg_ptr g, sbitmap from, sbitmap to)
 {
@@ -980,7 +978,7 @@ find_nodes_on_paths (sbitmap result, ddg_ptr g, sbitmap from, sbitmap to)
 /* Updates the counts of U_NODE's successors (that belong to NODES) to be
    at-least as large as the count of U_NODE plus the latency between them.
    Sets a bit in TMP for each successor whose count was changed (increased).
-   Returns non-zero if any count was changed.  */
+   Returns nonzero if any count was changed.  */
 static int
 update_dist_to_successors (ddg_node_ptr u_node, sbitmap nodes, sbitmap tmp)
 {

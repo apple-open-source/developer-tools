@@ -1,11 +1,17 @@
 /* This file "renames" various ObjC GNU runtime entry points
    (and fakes the existence of several others)
    if the NeXT runtime is being used.  */
-/* Author: Ziemowit Laski <zlaski@apple.com>  */
+/* Authors: Ziemowit Laski <zlaski@apple.com>  */
+/*	    David Ayers <d.ayers@inode.at>  */
 
 #ifdef __NEXT_RUNTIME__
 #include <objc/objc-class.h>
+#include <objc/Object.h>
 #include <ctype.h>
+/* APPLE LOCAL begin Objective-C++ */
+#include <stdlib.h>
+#include <string.h>
+/* APPLE LOCAL end Objective-C++ */
 
 #define objc_get_class(C)			objc_getClass(C)
 #define objc_get_meta_class(C)			objc_getMetaClass(C)
@@ -42,23 +48,33 @@
 
 /* The following is necessary to "cover" the bf*.m test cases on NeXT.  */
 
+/* APPLE LOCAL begin Objective-C++ */
 #undef  MAX
+#undef  MIN
+#undef  ROUND
+
+#ifdef __cplusplus
+#define MAX(X, Y) ((X > Y) ? X : Y)
+#define MIN(X, Y) ((X < Y) ? X : Y)
+#define ROUND(V, A) (A * ((V + A - 1) / A))
+#else
 #define MAX(X, Y)                    \
   ({ typeof (X) __x = (X), __y = (Y); \
      (__x > __y ? __x : __y); })
-
-#undef  MIN
 #define MIN(X, Y)                    \
   ({ typeof (X) __x = (X), __y = (Y); \
      (__x < __y ? __x : __y); })
-  
-#undef  ROUND
 #define ROUND(V, A) \
   ({ typeof (V) __v = (V); typeof (A) __a = (A); \
      __a * ((__v+__a - 1)/__a); })
+#endif
+/* APPLE LOCAL end Objective-C++ */
 
 #define BITS_PER_UNIT __CHAR_BIT__
-#define STRUCTURE_SIZE_BOUNDARY (BITS_PER_UNIT * sizeof (struct{char a;}))
+/* APPLE LOCAL begin Objective-C++ */
+typedef struct{ char a; } __small_struct;
+#define STRUCTURE_SIZE_BOUNDARY (BITS_PER_UNIT * sizeof (__small_struct))
+/* APPLE LOCAL end Objective-C++ */
 
 /* Not sure why the following are missing from NeXT objc headers... */
 
@@ -102,7 +118,8 @@ struct objc_struct_layout
   unsigned int record_align;
 };
 
-typedef union {
+/* APPLE LOCAL Objective-C++ */
+typedef union arglist {
   char *arg_ptr;
   char arg_regs[sizeof (char*)];
 } *arglist_t;                   /* argument frame */
@@ -115,6 +132,8 @@ void objc_layout_structure (const char *type,
 BOOL objc_layout_structure_next_member (struct objc_struct_layout *layout);
 void objc_layout_finish_structure (struct objc_struct_layout *layout,
     unsigned int *size, unsigned int *align);
+/* APPLE LOCAL Objective-C++ */
+int objc_aligned_size (const char *type);
 
 /*
   return the size of an object specified by type
@@ -191,9 +210,8 @@ objc_sizeof_type (const char *type)
     return sizeof (double);
     break;
 
-  case _C_VOID:
-    return sizeof (void);
-    break;
+  /* APPLE LOCAL Objective-C++ */
+  /* Do not compute 'sizeof (void)'.  */
 
   case _C_PTR:
   case _C_ATOM:
@@ -846,6 +864,54 @@ void objc_layout_structure_get_info (struct objc_struct_layout *layout,
     *align = layout->record_align / BITS_PER_UNIT;
   if (type)
     *type = layout->prev_type;
+}
+
+/* A small, portable NSConstantString implementation for use with the NeXT
+   runtime.
+   
+   On full-fledged Mac OS X systems, NSConstantString is provided
+   as part of the Foundation framework.  However, on bare Darwin systems,
+   Foundation is not included, and hence there is no NSConstantString 
+   implementation to link against.
+
+   This code is derived from the GNU runtime's NXConstantString implementation.
+*/
+
+struct objc_class _NSConstantStringClassReference;
+
+@interface NSConstantString : Object
+{
+  char *c_string;
+  unsigned int len;
+}
+
+-(const char *) cString;
+-(unsigned int) length;
+
+@end
+
+@implementation NSConstantString
+
+-(const char *) cString
+{
+  return (c_string);
+}
+
+-(unsigned int) length
+{
+  return (len);
+}
+
+@end
+
+/* The NSConstantString metaclass will need to be initialized before we can
+   send messages to strings.  */
+
+void objc_constant_string_init (void) __attribute__((constructor));
+void objc_constant_string_init (void) {
+  memcpy (&_NSConstantStringClassReference,
+	  objc_getClass ("NSConstantString"),
+	  sizeof (_NSConstantStringClassReference));
 }
 
 #endif  /* #ifdef __NEXT_RUNTIME__ */

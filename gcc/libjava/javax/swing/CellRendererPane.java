@@ -35,6 +35,7 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package javax.swing;
 
 import java.awt.Component;
@@ -43,6 +44,7 @@ import java.awt.Graphics;
 import java.awt.Rectangle;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
+
 import javax.accessibility.Accessible;
 import javax.accessibility.AccessibleContext;
 import javax.accessibility.AccessibleRole;
@@ -56,50 +58,30 @@ public class CellRendererPane extends Container implements Accessible
 {
   private static final long serialVersionUID = -7642183829532984273L;
 
-	//-------------------------------------------------------------
-	// Classes ----------------------------------------------------
-	//-------------------------------------------------------------
+  /**
+   * AccessibleCellRendererPane
+   */
+  protected class AccessibleCellRendererPane extends AccessibleAWTContainer
+  {
+    private static final long serialVersionUID = -8981090083147391074L;
 
-	/**
-	 * AccessibleCellRendererPane
-	 */
-	protected class AccessibleCellRendererPane extends AccessibleAWTContainer {
+    /**
+     * Constructor AccessibleCellRendererPane
+     * @param component TODO
+     */
+    protected AccessibleCellRendererPane()
+    {
+    }
 
-          private static final long serialVersionUID = 7300340301783504481L;
-
-		//-------------------------------------------------------------
-		// Initialization ---------------------------------------------
-		//-------------------------------------------------------------
-
-		/**
-		 * Constructor AccessibleCellRendererPane
-		 * @param component TODO
-		 */
-		protected AccessibleCellRendererPane(CellRendererPane component) {
-			super();
-			// TODO
-		} // AccessibleCellRendererPane()
-
-
-		//-------------------------------------------------------------
-		// Methods ----------------------------------------------------
-		//-------------------------------------------------------------
-
-		/**
-		 * getAccessibleRole
-		 * @returns AccessibleRole
-		 */
-		public AccessibleRole getAccessibleRole() {
-			return AccessibleRole.PANEL;
-		} // getAccessibleRole()
-
-
-	} // AccessibleCellRendererPane
-
-
-	//-------------------------------------------------------------
-	// Variables --------------------------------------------------
-	//-------------------------------------------------------------
+    /**
+     * getAccessibleRole
+     * @returns AccessibleRole
+     */
+    public AccessibleRole getAccessibleRole()
+    {
+      return AccessibleRole.PANEL;
+    }
+  }
 
 	/**
 	 * accessibleContext
@@ -209,16 +191,15 @@ public class CellRendererPane extends Container implements Accessible
 		// TODO
 	} // paintComponent()
 
-	/**
-	 * getAccessibleContext
-	 * @returns AccessibleContext
-	 */
-	public AccessibleContext getAccessibleContext() {
-		if (accessibleContext == null) {
-			accessibleContext = new AccessibleCellRendererPane(this);
-		} // if
-		return accessibleContext;
-	} // getAccessibleContext()
+  /**
+   * getAccessibleContext
+   * @return AccessibleContext
+   */
+  public AccessibleContext getAccessibleContext()
+  {
+    if (accessibleContext == null)
+      accessibleContext = new AccessibleCellRendererPane();
 
-
-} // CellRendererPane
+    return accessibleContext;
+  }
+}

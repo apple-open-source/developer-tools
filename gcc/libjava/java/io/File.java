@@ -1,5 +1,5 @@
 /* File.java -- Class representing a file on disk
-   Copyright (C) 1998, 1999, 2000, 2001, 2003, 2004
+   Copyright (C) 1998, 1999, 2000, 2001, 2003, 2004, 2005
    Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
@@ -40,6 +40,8 @@ exception statement from your version. */
 package java.io;
 
 import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import gnu.classpath.Configuration;
 import gnu.gcj.runtime.FileDeleter;
@@ -55,8 +57,8 @@ import gnu.gcj.runtime.FileDeleter;
  * types of path separators ("/" versus "\", for example).  It also
  * contains method useful for creating and deleting files and directories.
  *
- * @author Aaron M. Renn <arenn@urbanophile.com>
- * @author Tom Tromey <tromey@cygnus.com>
+ * @author Aaron M. Renn (arenn@urbanophile.com)
+ * @author Tom Tromey (tromey@cygnus.com)
  */
 public class File implements Serializable, Comparable
 {
@@ -89,6 +91,7 @@ public class File implements Serializable, Comparable
    * An example separator string would be "/" on the GNU system.
    */
   public static final String separator = System.getProperty("file.separator");
+  private static final String dupSeparator = separator + separator;
 
   /**
    * This is the first character of the file separator string.  On many
@@ -116,7 +119,6 @@ public class File implements Serializable, Comparable
   static final String tmpdir = System.getProperty("java.io.tmpdir");
   static int maxPathLen;
   static boolean caseSensitive;
-  static String dupSeparator = separator + separator;
   
   static
   {
@@ -289,7 +291,15 @@ public class File implements Serializable, Comparable
     // On Windows, convert any '/' to '\'.  This appears to be the same logic
     // that Sun's Win32 Java performs.
     if (separatorChar == '\\')
-      p = p.replace ('/', '\\');
+      {
+        p = p.replace ('/', '\\');
+	// We have to special case the "\c:" prefix.
+	if (p.length() > 2 && p.charAt(0) == '\\' &&
+	    ((p.charAt(1) >= 'a' && p.charAt(1) <= 'z') ||
+	    (p.charAt(1) >= 'A' && p.charAt(1) <= 'Z')) &&
+	    p.charAt(2) == ':')
+	  p = p.substring(1);
+      }
 
     int dupIndex = p.indexOf(dupSeparator);
     int plen = p.length();
@@ -359,14 +369,37 @@ public class File implements Serializable, Comparable
   {
     if (name == null)
       throw new NullPointerException();
-    if (dirPath != null && dirPath.length() > 0)
+    if (dirPath != null)
       {
-	// Try to be smart about the number of separator characters.
-	if (dirPath.charAt(dirPath.length() - 1) == separatorChar
-	    || name.length() == 0)
-	  path = normalizePath(dirPath + name);
+	if (dirPath.length() > 0)
+	  {
+	    // Try to be smart about the number of separator characters.
+	    if (dirPath.charAt(dirPath.length() - 1) == separatorChar
+		|| name.length() == 0)
+	      path = normalizePath(dirPath + name);
+	    else
+	      path = normalizePath(dirPath + separatorChar + name);
+	  }
 	else
-	  path = normalizePath(dirPath + separatorChar + name);
+	  {
+	    // If dirPath is empty, use a system dependant
+	    // default prefix.
+	    // Note that the leading separators in name have
+	    // to be chopped off, to prevent them forming
+	    // a UNC prefix on Windows.
+	    if (separatorChar == '\\' /* TODO use ON_WINDOWS */)
+	      {
+		int skip = 0;
+		while(name.length() > skip
+		    && (name.charAt(skip) == separatorChar
+		    || name.charAt(skip) == '/'))
+		  {
+		    skip++;
+		  }
+		name = name.substring(skip);
+	      }
+	    path = normalizePath(separatorChar + name);
+	  }
       }
     else
       path = normalizePath(name);
@@ -385,6 +418,23 @@ public class File implements Serializable, Comparable
   public File(File directory, String name)
   {
     this (directory == null ? null : directory.path, name);
+  }
+
+  /**
+   * This method initializes a new <code>File</code> object to represent
+   * a file corresponding to the specified <code>file:</code> protocol URI.
+   *
+   * @param uri The uri.
+   */
+  public File(URI uri)
+  {
+    if (uri == null)
+	throw new NullPointerException("uri is null");
+
+    if (!uri.getScheme().equals("file"))
+	throw new IllegalArgumentException("invalid uri protocol");
+
+    path = normalizePath(uri.getPath());
   }
 
   /**
@@ -583,7 +633,7 @@ public class File implements Serializable, Comparable
    * This method returns a <code>File</code> object representing the parent
    * file of this one.
    *
-   * @param A <code>File</code> for the parent of this object.  
+   * @return a <code>File</code> for the parent of this object.  
    * <code>null</code>
    * will be returned if this object does not have a parent.
    *
@@ -875,6 +925,27 @@ public class File implements Serializable, Comparable
   }
 
   /**
+   * @return A <code>URI</code> for this object.
+   */
+  public URI toURI()
+  {
+    String abspath = getAbsolutePath();
+
+    if (isDirectory())
+      abspath = abspath + separator;
+        
+    try
+      {
+	return new URI("file", abspath.replace(separatorChar, '/'), null);
+      }
+    catch (URISyntaxException use)
+      {
+        // Can't happen.
+	throw new RuntimeException(use);
+      }
+  }
+
+  /**
    * This method returns a <code>URL</code> with the <code>file:</code>
    * protocol that represents this file.  The exact form of this URL is
    * system dependent.
@@ -992,16 +1063,16 @@ public class File implements Serializable, Comparable
       {
         String dirname = tmpdir;
         if (dirname == null)
-          throw new IOException ("Cannot determine system temporary directory"); 
+          throw new IOException("Cannot determine system temporary directory"); 
 	
-        directory = new File (dirname);
+        directory = new File(dirname);
         if (!directory.exists())
-          throw new IOException ("System temporary directory "
-                                 + directory.getName() + " does not exist.");
+          throw new IOException("System temporary directory "
+                                + directory.getName() + " does not exist.");
         if (!directory.isDirectory())
-          throw new IOException ("System temporary directory "
-                                 + directory.getName()
-                                 + " is not really a directory.");
+          throw new IOException("System temporary directory "
+                                + directory.getName()
+                                + " is not really a directory.");
       }
 
     // Check if prefix is at least 3 characters long
@@ -1067,6 +1138,7 @@ public class File implements Serializable, Comparable
    */
   public boolean setReadOnly()
   {
+    // Do a security check before trying to do anything else.
     checkWrite();
     return performSetReadOnly();
   }
@@ -1282,8 +1354,10 @@ public class File implements Serializable, Comparable
   }
 
   /** 
-   * Add this File to the set of files to be deleted upon normal
-   * termination.
+   * Calling this method requests that the file represented by this object
+   * be deleted when the virtual machine exits.  Note that this request cannot
+   * be cancelled.  Also, it will only be carried out if the virtual machine
+   * exits normally.
    *
    * @exception SecurityException If deleting of the file is not allowed
    *

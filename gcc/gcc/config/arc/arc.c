@@ -102,6 +102,8 @@ static bool arc_rtx_costs (rtx, int, int, int *);
 static int arc_address_cost (rtx);
 static void arc_external_libcall (rtx);
 static bool arc_return_in_memory (tree, tree);
+static bool arc_pass_by_reference (CUMULATIVE_ARGS *, enum machine_mode,
+				   tree, bool);
 
 /* Initialize the GCC target structure.  */
 #undef TARGET_ASM_ALIGNED_HI_OP
@@ -138,6 +140,10 @@ static bool arc_return_in_memory (tree, tree);
 
 #undef TARGET_RETURN_IN_MEMORY
 #define TARGET_RETURN_IN_MEMORY arc_return_in_memory
+#undef TARGET_PASS_BY_REFERENCE
+#define TARGET_PASS_BY_REFERENCE arc_pass_by_reference
+#undef TARGET_CALLEE_COPIES
+#define TARGET_CALLEE_COPIES hook_bool_CUMULATIVE_ARGS_mode_tree_bool_true
 
 #undef TARGET_SETUP_INCOMING_VARARGS
 #define TARGET_SETUP_INCOMING_VARARGS arc_setup_incoming_varargs
@@ -385,14 +391,14 @@ arc_handle_interrupt_attribute (tree *node ATTRIBUTE_UNUSED,
 
   if (TREE_CODE (value) != STRING_CST)
     {
-      warning ("argument of `%s' attribute is not a string constant",
+      warning ("argument of %qs attribute is not a string constant",
 	       IDENTIFIER_POINTER (name));
       *no_add_attrs = true;
     }
   else if (strcmp (TREE_STRING_POINTER (value), "ilink1")
 	   && strcmp (TREE_STRING_POINTER (value), "ilink2"))
     {
-      warning ("argument of `%s' attribute is not \"ilink1\" or \"ilink2\"",
+      warning ("argument of %qs attribute is not \"ilink1\" or \"ilink2\"",
 	       IDENTIFIER_POINTER (name));
       *no_add_attrs = true;
     }
@@ -1965,7 +1971,7 @@ arc_final_prescan_insn (rtx insn,
   /* BODY will hold the body of INSN.  */
   register rtx body = PATTERN (insn);
 
-  /* This will be 1 if trying to repeat the trick (ie: do the `else' part of
+  /* This will be 1 if trying to repeat the trick (i.e.: do the `else' part of
      an if/then/else), and things need to be reversed.  */
   int reverse = 0;
 
@@ -2289,78 +2295,6 @@ arc_va_start (tree valist, rtx nextarg)
   std_expand_builtin_va_start (valist, nextarg);
 }
 
-rtx
-arc_va_arg (tree valist, tree type)
-{
-  rtx addr_rtx;
-  tree addr, incr;
-  tree type_ptr = build_pointer_type (type);
-
-  /* All aggregates are passed by reference.  All scalar types larger
-     than 8 bytes are passed by reference.  */
-
-  if (AGGREGATE_TYPE_P (type) || int_size_in_bytes (type) > 8)
-    {
-      tree type_ptr_ptr = build_pointer_type (type_ptr);
-
-      addr = build (INDIRECT_REF, type_ptr,
-		    build (NOP_EXPR, type_ptr_ptr, valist));
-
-      incr = build (PLUS_EXPR, TREE_TYPE (valist),
-		    valist, build_int_2 (UNITS_PER_WORD, 0));
-    }
-  else
-    {
-      HOST_WIDE_INT align, rounded_size;
-
-      /* Compute the rounded size of the type.  */
-      align = PARM_BOUNDARY / BITS_PER_UNIT;
-      rounded_size = (((TREE_INT_CST_LOW (TYPE_SIZE (type)) / BITS_PER_UNIT
-			+ align - 1) / align) * align);
-
-      /* Align 8 byte operands.  */
-      addr = valist;
-      if (TYPE_ALIGN (type) > BITS_PER_WORD)
-	{
-	  /* AP = (TYPE *)(((int)AP + 7) & -8)  */
-
-	  addr = build (NOP_EXPR, integer_type_node, valist);
-	  addr = fold (build (PLUS_EXPR, integer_type_node, addr,
-			      build_int_2 (7, 0)));
-	  addr = fold (build (BIT_AND_EXPR, integer_type_node, addr,
-			      build_int_2 (-8, 0)));
-	  addr = fold (build (NOP_EXPR, TREE_TYPE (valist), addr));
-	}
-
-      /* The increment is always rounded_size past the aligned pointer.  */
-      incr = fold (build (PLUS_EXPR, TREE_TYPE (addr), addr,
-			  build_int_2 (rounded_size, 0)));
-
-      /* Adjust the pointer in big-endian mode.  */
-      if (BYTES_BIG_ENDIAN)
-	{
-	  HOST_WIDE_INT adj;
-	  adj = TREE_INT_CST_LOW (TYPE_SIZE (type)) / BITS_PER_UNIT;
-	  if (rounded_size > align)
-	    adj = rounded_size;
-
-	  addr = fold (build (PLUS_EXPR, TREE_TYPE (addr), addr,
-			      build_int_2 (rounded_size - adj, 0)));
-	}
-    }
-
-  /* Evaluate the data address.  */
-  addr_rtx = expand_expr (addr, NULL_RTX, Pmode, EXPAND_NORMAL);
-  addr_rtx = copy_to_reg (addr_rtx);
-  
-  /* Compute new value for AP.  */
-  incr = build (MODIFY_EXPR, TREE_TYPE (valist), valist, incr);
-  TREE_SIDE_EFFECTS (incr) = 1;
-  expand_expr (incr, const0_rtx, VOIDmode, EXPAND_NORMAL);
-
-  return addr_rtx;
-}
-
 /* This is how to output a definition of an internal numbered label where
    PREFIX is the class of label and NUM is the number within the class.  */
 
@@ -2401,4 +2335,26 @@ arc_return_in_memory (tree type, tree fntype ATTRIBUTE_UNUSED)
       HOST_WIDE_INT size = int_size_in_bytes (type);
       return (size == -1 || size > 8);
     }
+}
+
+/* For ARC, All aggregates and arguments greater than 8 bytes are
+   passed by reference.  */
+
+static bool
+arc_pass_by_reference (CUMULATIVE_ARGS *ca ATTRIBUTE_UNUSED,
+		       enum machine_mode mode, tree type,
+		       bool named ATTRIBUTE_UNUSED)
+{
+  unsigned HOST_WIDE_INT size;
+
+  if (type)
+    {
+      if (AGGREGATE_TYPE_P (type))
+	return true;
+      size = int_size_in_bytes (type);
+    }
+  else
+    size = GET_MODE_SIZE (mode);
+
+  return size > 8;
 }

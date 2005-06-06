@@ -1,6 +1,6 @@
-/* RMIClassLoader.java
-  Copyright (c) 1996, 1997, 1998, 1999, 2002, 2003
-  Free Software Foundation, Inc.
+/* RMIClassLoader.java --
+   Copyright (c) 1996, 1997, 1998, 1999, 2002, 2003, 2004
+   Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -55,9 +55,15 @@ import java.util.StringTokenizer;
  */
 public class RMIClassLoader
 {
-  static private class MyClassLoader extends URLClassLoader
+  /**
+   * This class isn't intended to be instantiated.
+   */
+  private RMIClassLoader() {}
+
+  private static class MyClassLoader extends URLClassLoader
   {
-    private MyClassLoader (URL[] urls, ClassLoader parent, String annotation)
+    // Package-private to avoid a trampoline constructor.
+    MyClassLoader (URL[] urls, ClassLoader parent, String annotation)
     {
       super (urls, parent);
       this.annotation = annotation;

@@ -41,7 +41,7 @@
    turning off all optimization via the <code>-g -O0</code> flag will
    disable inlining, so that stepping through all functions, including
    inlined constructors and destructors, is possible. In addition,
-   <code>-fno-eliminate-unused-debug-types<code> can be used when
+   <code>-fno-eliminate-unused-debug-types</code> can be used when
    additional debug information, such as nested class info, is desired.
 </p>
 
@@ -63,6 +63,7 @@
 <p>If you would like debug symbols in libstdc++, there are two ways to
   build libstdc++ with debug flags. The first is to run make from the
   toplevel in a freshly-configured tree with
+</p>
 <pre>
      --enable-libstdcxx-debug
 </pre>
@@ -99,7 +100,8 @@
   debug mode that provides additional checking of library facilities,
   and will report errors in the use of libstdc++ as soon as they can
   be detected by emitting a description of the problem to standard
-  error and aborting the program. </p>
+  error and aborting the program.  This debug mode is available with
+  GCC 3.4.0 and later versions. </p>
 
 <p>The libstdc++ debug mode performs checking for many areas of the C++
   standard, but the focus is on checking interactions among standard
@@ -149,6 +151,7 @@
   mode or with debug mode. The
   following table provides the names and headers of the debugging
   containers:
+</p>
 
 <table title="Debugging containers" border="1">
   <tr>

@@ -1,6 +1,6 @@
 // field.h - Header file for fieldID instances.  -*- c++ -*-
 
-/* Copyright (C) 1998, 1999, 2000  Free Software Foundation
+/* Copyright (C) 1998, 1999, 2000, 2004  Free Software Foundation
 
    This file is part of libgcj.
 
@@ -21,9 +21,7 @@ details.  */
 
 struct _Jv_Field
 {
-#ifndef COMPACT_FIELDS
   struct _Jv_Utf8Const*	name;
-#endif
 
   /* The type of the field, if isResolved().
      If !isResolved():  The fields's signature as a (Utf8Const*). */
@@ -31,15 +29,20 @@ struct _Jv_Field
 
   _Jv_ushort		flags;
 
-#ifdef COMPACT_FIELDS
-  jshort		nameIndex;  /* offset in class's name table */
-#else
   _Jv_ushort		bsize;  /* not really needed ... */
-#endif
 
   union {
     jint		boffset;  /* offset in bytes for instance field */
-    void*		addr;  /* address of static field */
+    char*		addr;  /* address of static field */
+    
+    jobject* object_addr;  /* address of static object field... etc */
+    jbyte* byte_addr;
+    jshort* short_addr;
+    jchar* char_addr;
+    jint* int_addr;
+    jlong* long_addr;
+    jfloat* float_addr;
+    jdouble* double_addr;
   } u;
 
 #ifdef __cplusplus
@@ -59,7 +62,7 @@ struct _Jv_Field
     { 
       if (!isResolved ()) 
 	{
-	  char first = ((_Jv_Utf8Const*)type)->data[0]; 
+	  char first = ((_Jv_Utf8Const*)type)->first(); 
 	  return first == '[' || first == 'L';
 	}
       else
@@ -82,12 +85,7 @@ struct _Jv_Field
     return flags & java::lang::reflect::Modifier::ALL_FLAGS;
   }
 
-#ifdef COMPACT_FIELDS
-  _Jv_Utf8Const * getNameUtf8Const (jclass cls)
-  { return clas->fieldNames + nameIndex; }
-#else
   _Jv_Utf8Const * getNameUtf8Const (jclass) { return name; }
-#endif
 #endif
 };
 

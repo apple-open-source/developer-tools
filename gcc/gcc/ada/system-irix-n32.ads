@@ -90,14 +90,26 @@ pragma Pure (System);
 
    --  Priority-related Declarations (RM D.1)
 
-   Max_Priority           : constant Positive := 30;
-   Max_Interrupt_Priority : constant Positive := 31;
+   --  IRIX priorities as defined by realtime(5):
+   --
+   --  255        is for system-level interrupts
+   --  240 - 254  are suggested for hard real-time threads
+   --  200 - 239  are used by system device driver interrupt threads
+   --  110 - 199  are suggested for interactive real-time applications
+   --   90 - 109  are used by system daemon threads
+   --    0 -  89  are suggested for soft real-time applications
+   --
+   --  We don't express the full range of IRIX priorities.  For now, we
+   --  handle only the subset for soft real-time applications.
 
-   subtype Any_Priority       is Integer      range  0 .. 31;
-   subtype Priority           is Any_Priority range  0 .. 30;
-   subtype Interrupt_Priority is Any_Priority range 31 .. 31;
+   Max_Priority           : constant Positive := 88;
+   Max_Interrupt_Priority : constant Positive := 89;
 
-   Default_Priority : constant Priority := 15;
+   subtype Any_Priority       is Integer      range  0 .. 89;
+   subtype Priority           is Any_Priority range  0 .. 88;
+   subtype Interrupt_Priority is Any_Priority range 89 .. 89;
+
+   Default_Priority : constant Priority := 44;
 
 private
 
@@ -128,6 +140,7 @@ private
    Machine_Overflows         : constant Boolean := False;
    Machine_Rounds            : constant Boolean := True;
    OpenVMS                   : constant Boolean := False;
+   Preallocated_Stacks       : constant Boolean := False;
    Signed_Zeros              : constant Boolean := True;
    Stack_Check_Default       : constant Boolean := False;
    Stack_Check_Probes        : constant Boolean := True;

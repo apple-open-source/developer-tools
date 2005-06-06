@@ -54,8 +54,8 @@ package java.io;
  * class which also auto-flushes when it encounters a newline character
  * in the chars written).
  *
- * @author Per Bothner <bothner@cygnus.com>
- * @author Aaron M. Renn <arenn@urbanophile.com>
+ * @author Per Bothner (bothner@cygnus.com)
+ * @author Aaron M. Renn (arenn@urbanophile.com)
  * @date April 17, 1998.  
  */
 public class PrintWriter extends Writer
@@ -86,7 +86,7 @@ public class PrintWriter extends Writer
    */
   public PrintWriter(Writer wr)
   {
-    super(wr);
+    super(wr.lock);
     this.out = wr;
   }
 
@@ -102,7 +102,7 @@ public class PrintWriter extends Writer
    */
   public PrintWriter(Writer wr, boolean autoflush)
   {
-    super(wr);
+    super(wr.lock);
     this.out = wr;
     this.autoflush = autoflush;
   }

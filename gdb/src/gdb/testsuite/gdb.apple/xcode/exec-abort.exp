@@ -32,6 +32,7 @@ if [mi_gdb_start] {
 set testfile "callfuncs"
 set srcfile ${testfile}.c
 set binfile ${objdir}/${subdir}/${testfile}
+remote_exec build "mkdir -p ${objdir}/${subdir}"
 if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug}] != "" } {
     gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
 }

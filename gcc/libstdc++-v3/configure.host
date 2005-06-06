@@ -17,8 +17,8 @@
 # It sets the following shell variables:
 #
 #   cpu_include_dir        CPU-specific directory, defaults to cpu/generic
-#                          if cpu/host_cpu doesn't exist.  This is
-#                          used to set atomicity_include_dir.
+#                          if cpu/host_cpu doesn't exist.  This is not used
+#                          directly, but sets the default for others.
 #
 #   os_include_dir         OS-specific directory, defaults to os/generic.
 #
@@ -29,6 +29,9 @@
 #
 #   abi_baseline_pair      directory name for ABI compat testing,
 #                          defaults to host_cpu-host_os (as per config.guess)
+#
+#   abi_tweaks_dir         location of cxxabi_tweaks.h,
+#                          defaults to cpu_include_dir
 #
 #   atomicity_dir          location of atomicity.h,
 #                          defaults to cpu_include_dir
@@ -72,6 +75,9 @@ case "${host_cpu}" in
   alpha*)
     try_cpu=alpha
     ;;
+  arm* | xscale | ep9312)
+    try_cpu=arm
+    ;;
   i[567]86 | x86_64)
     try_cpu=i486
     ;;
@@ -98,7 +104,7 @@ case "${host_cpu}" in
     try_cpu=sparc
     ;;
   *)
-    if test -f ${glibcxx_srcdir}/config/cpu/${host_cpu}/atomicity.h; then
+    if test -d ${glibcxx_srcdir}/config/cpu/${host_cpu}; then
       try_cpu=${host_cpu}
     else
       try_cpu=generic
@@ -120,10 +126,21 @@ esac
 # Now look for the file(s) usually tied to a CPU model, and make
 # default choices for those if they haven't been explicitly set
 # already.  
-cpu_include_dir="cpu/${try_cpu}"
-atomicity_dir=$cpu_include_dir
+cpu_include_dir=cpu/${try_cpu}
 abi_baseline_pair=${try_cpu}-${host_os}
+unset try_cpu
 
+if test -f ${glibcxx_srcdir}/config/${cpu_include_dir}/atomicity.h ; then
+  atomicity_dir=$cpu_include_dir
+else
+  atomicity_dir="cpu/generic"
+fi
+
+if test -f ${glibcxx_srcdir}/config/${cpu_include_dir}/cxxabi_tweaks.h ; then
+  abi_tweaks_dir=$cpu_include_dir
+else
+  abi_tweaks_dir="cpu/generic"
+fi
 
 # Set any OS-dependent bits.
 # Set the os_include_dir.
@@ -138,11 +155,13 @@ case "${host_os}" in
     # explicitly duplicate the directory for 4.[<3].
     os_include_dir="os/aix"
     atomicity_dir="os/aix"
+    atomic_word_dir="os/aix"
     OPT_LDFLAGS="-Wl,-G"
     ;;
   aix4.*)
     os_include_dir="os/generic"
     atomicity_dir="os/aix"
+    atomic_word_dir="os/aix"
     ;;
   aix*)
     os_include_dir="os/generic"
@@ -154,6 +173,23 @@ case "${host_os}" in
     ;;
   cygwin*)
     os_include_dir="os/newlib"
+    ;;
+  darwin | darwin[1-7] | darwin[1-7].*)
+    # On Darwin, performance is improved if libstdc++ is single-module.
+    # Up to at least 10.3.7, -flat_namespace is required for proper
+    # treatment of coalesced symbols.
+    OPT_LDFLAGS="${OPT_LDFLAGS} -Wl,-single_module -Wl,-flat_namespace"
+    os_include_dir="os/bsd/darwin"
+  # APPLE LOCAL darwin native radar 3729768
+    enable_cxx_flags="-DAPPLE_KEYMGR $enable_cxx_flags"
+    ;;
+  darwin[89] | darwin[89].* | darwin[1-9][0-9]* )
+    # On Darwin, performance is improved if libstdc++ is single-module,
+    # and on 8+ compatibility is better if not -flat_namespace.
+    OPT_LDFLAGS="${OPT_LDFLAGS} -Wl,-single_module"
+    os_include_dir="os/bsd/darwin"
+  # APPLE LOCAL darwin native radar 3729768
+    enable_cxx_flags="-DAPPLE_KEYMGR $enable_cxx_flags"
     ;;
   *djgpp*)      # leading * picks up "msdosdjgpp"
     os_include_dir="os/djgpp"
@@ -192,7 +228,7 @@ case "${host_os}" in
     # This too-vague configuration does not provide enough information
     # to select a ctype include, and thus os_include_dir is a crap shoot.
     echo "Please specify the full version of Solaris, ie. solaris2.9 " 1>&2
-    exit 1;
+    exit 1
     ;;
   solaris2.5 | solaris2.5.[0-9])
     os_include_dir="os/solaris/solaris2.5"
@@ -221,14 +257,11 @@ esac
 # Set any OS-dependent and CPU-dependent bits.
 # THIS TABLE IS SORTED.  KEEP IT THAT WAY.
 case "${host}" in
-  mips*-*-linux*)
-    atomicity_dir="cpu/mips"
-    ;;
-  x86_64-*-linux*)
-    abi_baseline_pair="x86_64-linux-gnu"
-    ;;
   alpha*-*-freebsd5*)
     abi_baseline_pair="alpha-freebsd5"
+    ;;
+  arm*-*-linux*)
+    abi_baseline_pair="arm-linux-gnu"
     ;;
   i*86-*-freebsd4*)
     abi_baseline_pair="i386-freebsd4"
@@ -236,7 +269,21 @@ case "${host}" in
   i*86-*-freebsd5*)
     abi_baseline_pair="i386-freebsd5"
     ;;
+  mips*-*-linux*)
+    atomicity_dir="cpu/mips"
+    abi_baseline_pair="mips-linux-gnu"
+    cpu_include_dir="cpu/mips"
+    ;;
+  s390-*-linux*)
+    abi_baseline_pair="s390-linux-gnu"
+    ;;
+  s390x-*-linux*)
+    abi_baseline_pair="s390x-linux-gnu"
+    ;;
   sparc*-*-freebsd5*)
     abi_baseline_pair="sparc-freebsd5"
+    ;;
+  x86_64-*-linux*)
+    abi_baseline_pair="x86_64-linux-gnu"
     ;;
 esac

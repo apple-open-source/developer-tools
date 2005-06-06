@@ -28,8 +28,6 @@
 // Do not include <pthread.h> explicitly; if threads are properly
 // configured for the port, then it is picked up free from STL headers.
 
-#if __GTHREADS
-
 const int max_thread_count = 2;
 const int max_loop_count = 1000000;
 
@@ -47,7 +45,7 @@ main()
 {
   pthread_t tid[max_thread_count];
 
-#if defined(__sun) && defined(__svr4__)
+#if defined(__sun) && defined(__svr4__) && _XOPEN_VERSION >= 500
   pthread_setconcurrency (max_thread_count);
 #endif
 
@@ -59,6 +57,3 @@ main()
 
   return 0;
 }
-#else
-int main (void) {}
-#endif

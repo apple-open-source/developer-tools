@@ -1,5 +1,5 @@
 /* InputMap.java --
-   Copyright (C) 2002 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2004 Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -35,7 +35,6 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
-
 package javax.swing;
 
 import java.io.IOException;
@@ -43,198 +42,172 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.util.Arrays;
-import java.util.Iterator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+
 /**
- * InputMap
- * @author	Andrew Selkirk
- * @version	1.0
+ * @author Andrew Selkirk
+ * @author Michael Koch
+ *
+ * @since 1.3
  */
-public class InputMap implements Serializable
+public class InputMap
+  implements Serializable
 {
-  static final long serialVersionUID = -5429059542008604257L;
+  private static final long serialVersionUID = -5429059542008604257L;
 
-	//-------------------------------------------------------------
-	// Variables --------------------------------------------------
-	//-------------------------------------------------------------
+  /**
+   * inputMap
+   */
+  private Map inputMap = new HashMap();
 
-	/**
-	 * inputMap
-	 */
-	private Map inputMap = new HashMap();
+  /**
+   * parent
+   */
+  private InputMap parent;
 
-	/**
-	 * parent
-	 */
-	private InputMap parent = null;
+  /**
+   * Creates a new <code>InputMap</code> instance.
+   */
+  public InputMap()
+  {
+    // TODO
+  }
 
+  /**
+   * Returns the binding for keystroke.
+   *
+   * @param key the key of the enty
+   *
+   * @return the binding associated with keystroke may be null
+   */
+  public Object get(KeyStroke keystroke)
+  {
+    Object result = inputMap.get(keystroke);
 
-	//-------------------------------------------------------------
-	// Initialization ---------------------------------------------
-	//-------------------------------------------------------------
+    if (result == null && parent != null)
+      result = parent.get(keystroke);
+    return result;
+  }
 
-	/**
-	 * Constructor InputMap
-	 */
-	public InputMap() {
-		// TODO
-	} // InputMap()
+  /**
+   * Puts a new entry into the <code>InputMap</code>.
+   * If actionMapKey is null an existing entry will be removed.
+   *
+   * @param keystroke the keystroke for the entry
+   * @param actionMapKey the action.
+   */
+  public void put(KeyStroke keystroke, Object actionMapKey)
+  {
+    if (actionMapKey == null)
+      inputMap.remove(keystroke);
+    else
+      inputMap.put(keystroke, actionMapKey);
+  }
 
+  /**
+   * Remove an entry from the <code>InputMap</code>.
+   *
+   * @param key the key of the entry to remove
+   */
+  public void remove(KeyStroke keystroke)
+  {
+    inputMap.remove(keystroke);
+  }
 
-	//-------------------------------------------------------------
-	// Methods ----------------------------------------------------
-	//-------------------------------------------------------------
+  /**
+   * Returns the parent of this <code>InputMap</code>.
+   *
+   * @return the parent, may be null.
+   */
+  public InputMap getParent()
+  {
+    return parent;
+  }
 
-	/**
-	 * get
-	 * @param value0 TODO
-	 * @returns Object
-	 */
-	public Object get(KeyStroke keystroke) {
+  /**
+   * Sets a parent for this <code>InputMap</code>.
+   *
+   * @param parentMap the new parent
+   */
+  public void setParent(InputMap parentMap)
+  {
+    parent = parentMap;
+  }
 
-		// Variables
-		Object	result;
+  /**
+   * Returns the number of entries in this <code>InputMap</code>.
+   *
+   * @return the number of entries
+   */
+  public int size()
+  {
+    return inputMap.size();
+  }
 
-		// Check Local store
-		result = inputMap.get(keystroke);
+  /**
+   * Clears the <code>InputMap</code>.
+   */
+  public void clear()
+  {
+    inputMap.clear();
+  }
 
-		// Check Parent
-		if (result == null) {
-			result = parent.get(keystroke);
-		} // if
+  /**
+   * Returns all keys of entries in this <code>InputMap</code>.
+   *
+   * @return an array of keys
+   */
+  public KeyStroke[] keys()
+  {
+    KeyStroke[] array = new KeyStroke[size()];
+    return (KeyStroke[]) inputMap.keySet().toArray(array);
+  }
 
-		return result;
+  /**
+   * Returns all keys of entries in this <code>InputMap</code>
+   * and all its parents.
+   *
+   * @return an array of keys
+   */
+  public KeyStroke[] allKeys()
+  {
+    Set set = new HashSet();
 
-	} // get()
+    if (parent != null)
+      set.addAll(Arrays.asList(parent.allKeys()));
 
-	/**
-	 * put
-	 * @param keystroke TODO
-	 * @param actionMapKey TODO
-	 */
-	public void put(KeyStroke keystroke, Object actionMapKey) {
-		if (actionMapKey == null) {
-			inputMap.remove(keystroke);
-		} else {
-			inputMap.put(keystroke, actionMapKey);
-		} // if
-	} // put()
+    set.addAll(inputMap.keySet());
+    KeyStroke[] array = new KeyStroke[size()];
+    return (KeyStroke[]) set.toArray(array);
+  }
 
-	/**
-	 * remove
-	 * @param keystroke TODO
-	 */
-	public void remove(KeyStroke keystroke) {
-		inputMap.remove(keystroke);
-	} // remove()
+  /**
+   * writeObject
+   *
+   * @param stream the stream to write to
+   *
+   * @exception IOException If an error occurs
+   */
+  private void writeObject(ObjectOutputStream stream) throws IOException
+  {
+    // TODO
+  }
 
-	/**
-	 * getParent
-	 * @returns InputMap
-	 */
-	public InputMap getParent() {
-		return parent;
-	} // getParent()
-
-	/**
-	 * setParent
-	 * @param parentMap TODO
-	 */
-	public void setParent(InputMap parentMap) {
-		parent = parentMap;
-	} // setParent()
-
-	/**
-	 * size
-	 * @returns int
-	 */
-	public int size() {
-		return inputMap.size();
-	} // size()
-
-	/**
-	 * clear
-	 */
-	public void clear() {
-		inputMap.clear();
-	} // clear()
-
-	/**
-	 * keys
-	 * @returns KeyStroke[]
-	 */
-	public KeyStroke[] keys() {
-		return convertSet(inputMap.keySet());
-	} // keys()
-
-	/**
-	 * allKeys
-	 * @returns KeyStroke[]
-	 */
-	public KeyStroke[] allKeys() {
-
-		// Variables
-		Set			set;
-
-		// Initialize
-		set = new HashSet();
-
-		// Get Key Sets
-		if (parent != null) {
-			set.addAll(Arrays.asList(parent.allKeys()));
-		} // if
-		set.addAll(inputMap.keySet());
-
-		return convertSet(set);
-
-	} // allKeys()
-
-	private KeyStroke[] convertSet(Set set) {
-
-		// Variables
-		int			index;
-		Iterator	iterator;
-		KeyStroke[]	keys;
-
-		// Create Final array
-		keys = new KeyStroke[set.size()];
-		iterator = set.iterator();
-		index = 0;
-		while (iterator.hasNext()) {
-			keys[index++] = (KeyStroke) iterator.next();
-		} // while
-
-		return keys;
-
-	} // convertSet()
-
-
-	//-------------------------------------------------------------
-	// Interface: Serializable ------------------------------------
-	//-------------------------------------------------------------
-
-	/**
-	 * writeObject
-	 * @param stream TODO
-	 * @exception IOException TODO
-	 */
-	private void writeObject(ObjectOutputStream stream) throws IOException {
-		// TODO
-	} // writeObject()
-
-	/**
-	 * readObject
-	 * @param stream TODO
-	 * @exception ClassNotFoundException TODO
-	 * @exception IOException TODO
-	 */
-	private void readObject(ObjectInputStream stream) throws ClassNotFoundException, IOException {
-		// TODO
-	} // readObject()
-
-
-} // InputMap
+  /**
+   * readObject
+   *
+   * @param stream the stream to read from
+   *
+   * @exception ClassNotFoundException If the serialized class cannot be found
+   * @exception IOException If an error occurs
+   */
+  private void readObject(ObjectInputStream stream)
+    throws ClassNotFoundException, IOException
+  {
+    // TODO
+  }
+}

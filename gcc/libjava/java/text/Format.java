@@ -1,5 +1,5 @@
 /* Format.java -- Abstract superclass for formatting/parsing strings.
-   Copyright (C) 1998, 1999, 2000, 2001, 2003  Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2000, 2001, 2003, 2005  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -39,6 +39,7 @@ exception statement from your version. */
 package java.text;
 
 import gnu.java.text.FormatCharacterIterator;
+
 import java.io.Serializable;
 
 /**
@@ -56,17 +57,20 @@ import java.io.Serializable;
  * available locales in the current runtime environment.
  *
  * @author Aaron M. Renn (arenn@urbanophile.com)
- * @author Per Bothner <bothner@cygnus.com>
+ * @author Per Bothner (bothner@cygnus.com)
  */
 public abstract class Format implements Serializable, Cloneable
 {
+  /**
+   * For compatability with Sun's JDK 1.4.2 rev. 5
+   */
   static final long serialVersionUID = -299282585814624189L;
 
   public static class Field extends AttributedCharacterIterator.Attribute
   {
     static final long serialVersionUID = 276966692217360283L;
    
-    public Field(String name)
+    protected Field(String name)
     {
       super(name);
     }

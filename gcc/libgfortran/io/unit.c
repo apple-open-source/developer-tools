@@ -1,4 +1,4 @@
-/* Copyright (C) 2002-2003 Free Software Foundation, Inc.
+/* Copyright (C) 2002, 2003 Free Software Foundation, Inc.
    Contributed by Andy Vaught
 
 This file is part of the GNU Fortran 95 runtime library (libgfortran).
@@ -7,6 +7,15 @@ Libgfortran is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2, or (at your option)
 any later version.
+
+In addition to the permissions in the GNU General Public License, the
+Free Software Foundation gives you unlimited permission to link the
+compiled version of this file into combinations with other programs,
+and to distribute those combinations without any restriction coming
+from the use of this file.  (The General Public License restrictions
+do apply in other respects; for example, they cover modification of
+the file, and distribution when not linked into a combine
+executable.)
 
 Libgfortran is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -83,7 +92,6 @@ rotate_right (gfc_unit * t)
 static int
 compare (int a, int b)
 {
-
   if (a < b)
     return -1;
   if (a > b)
@@ -132,7 +140,6 @@ insert (gfc_unit * new, gfc_unit * t)
 void
 insert_unit (gfc_unit * new)
 {
-
   new->priority = pseudo_random ();
   g.unit_root = insert (new, g.unit_root);
 }
@@ -194,7 +201,6 @@ delete_treap (gfc_unit * old, gfc_unit * t)
 static void
 delete_unit (gfc_unit * old)
 {
-
   g.unit_root = delete_treap (old, g.unit_root);
 }
 
@@ -244,8 +250,6 @@ find_unit (int n)
 gfc_unit *
 get_unit (int read_flag)
 {
-  gfc_unit *u;
-
   if (ioparm.internal_unit != NULL)
     {
       internal_unit.s =
@@ -263,11 +267,7 @@ get_unit (int read_flag)
 
   /* Has to be an external unit */
 
-  u = find_unit (ioparm.unit);
-  if (u != NULL)
-    return u;
-
-  return NULL;
+  return find_unit (ioparm.unit);
 }
 
 
@@ -277,7 +277,6 @@ get_unit (int read_flag)
 int
 is_internal_unit ()
 {
-
   return current_unit == &internal_unit;
 }
 
@@ -335,6 +334,27 @@ init_units (void)
       insert_unit (u);
     }
 
+  if (options.stderr_unit >= 0)
+    {				/* STDERR */
+      u = get_mem (sizeof (gfc_unit));
+
+      u->unit_number = options.stderr_unit;
+      u->s = error_stream ();
+
+      u->flags.action = ACTION_WRITE;
+
+      u->flags.access = ACCESS_SEQUENTIAL;
+      u->flags.form = FORM_FORMATTED;
+      u->flags.status = STATUS_OLD;
+      u->flags.blank = BLANK_ZERO;
+      u->flags.position = POSITION_ASIS;
+
+      u->recl = options.default_recl;
+      u->endfile = AT_ENDFILE;
+
+      insert_unit (u);
+    }
+
   /* Calculate the maximum file offset in a portable manner.
    * max will be the largest signed number for the type gfc_offset.
    *
@@ -374,7 +394,6 @@ close_unit (gfc_unit * u)
 void
 close_units (void)
 {
-
   while (g.unit_root != NULL)
     close_unit (g.unit_root);
 }

@@ -52,6 +52,10 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
  */
 
+#ifndef __FASTJAR_JARTOOL_H__
+#define __FASTJAR_JARTOOL_H__
+
+#include <sys/types.h>
 #include "config.h"
 
 #define ACTION_NONE 0
@@ -90,7 +94,7 @@ typedef u_int16_t ub2;
 typedef unsigned int ub4;
 #elif SIZEOF_LONG == 4
 typedef unsigned long ub4;
-#elif SIZEOF_LONG_LONG == 4
+#elif defined(HAVE_LONG_LONG) && SIZEOF_LONG_LONG == 4
 typedef unsigned long long ub4;
 #else
 typedef u_int32_t ub4;
@@ -104,9 +108,12 @@ struct zipentry {
   ub4 usize;
   ub4 offset;
   ub1 compressed;
+  ub2 flags;
   char *filename;
   
   struct zipentry *next_entry;
 };
 
 typedef struct zipentry zipentry;
+
+#endif /* __FASTJAR_JARTOOL_H__ */

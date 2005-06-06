@@ -20,6 +20,16 @@ along with GCC; see the file COPYING.  If not, write to the Free
 Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA.  */
 
+#ifndef GCC_SCHED_INT_H
+#define GCC_SCHED_INT_H
+
+/* For state_t.  */
+#include "insn-attr.h"
+/* For regset_head.  */
+#include "basic-block.h"
+/* For reg_note.  */
+#include "rtl.h"
+
 /* Pointer to data describing the current DFA state.  */
 extern state_t curr_state;
 
@@ -84,7 +94,7 @@ struct deps
 
   /* Used to keep post-call pseudo/hard reg movements together with
      the call.  */
-  bool in_post_call_group_p;
+  enum { not_post_call, post_call, post_call_initial } in_post_call_group_p;
 
   /* Set to the tail insn of the outermost libcall block.
 
@@ -343,19 +353,10 @@ enum INSN_TRAP_CLASS
 #endif
 
 /* Functions in sched-vis.c.  */
-extern void init_target_units (void);
-extern void insn_print_units (rtx);
-extern void init_block_visualization (void);
-extern void print_block_visualization (const char *);
-extern void visualize_scheduled_insns (int);
-extern void visualize_no_unit (rtx);
-extern void visualize_stall_cycles (int);
-extern void visualize_alloc (void);
-extern void visualize_free (void);
+extern void print_insn (char *, rtx, int);
 
 /* Functions in sched-deps.c.  */
 extern int add_dependence (rtx, rtx, enum reg_note);
-extern void add_insn_mem_dependence (struct deps *, rtx *, rtx *, rtx, rtx);
 extern void sched_analyze (struct deps *, rtx, rtx);
 extern void init_deps (struct deps *);
 extern void free_deps (struct deps *);
@@ -378,7 +379,7 @@ extern void restore_line_notes (rtx, rtx);
 extern void rm_redundant_line_notes (void);
 extern void rm_other_notes (rtx, rtx);
 
-extern int insn_issue_delay (rtx);
+extern int insn_cost (rtx, rtx, rtx);
 extern int set_priorities (rtx, rtx);
 
 extern void schedule_block (int, int);
@@ -387,10 +388,4 @@ extern void sched_finish (void);
 
 extern void ready_add (struct ready_list *, rtx);
 
-/* The following are exported for the benefit of debugging functions.  It
-   would be nicer to keep them private to haifa-sched.c.  */
-extern int insn_unit (rtx);
-extern int insn_cost (rtx, rtx, rtx);
-extern rtx get_unit_last_insn (int);
-extern int actual_hazard_this_instance (int, int, rtx, int, int);
-extern void print_insn (char *, rtx, int);
+#endif /* GCC_SCHED_INT_H */

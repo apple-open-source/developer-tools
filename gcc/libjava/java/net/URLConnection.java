@@ -35,6 +35,7 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package java.net;
 
 import java.io.IOException;
@@ -87,8 +88,8 @@ import gnu.gcj.io.MimeTypes;
  * by the actual content handlers as described in the description of that
  * method.
  *
- * @author Aaron M. Renn <arenn@urbanophile.com>
- * @author Warren Levy <warrenl@cygnus.com>
+ * @author Aaron M. Renn (arenn@urbanophile.com)
+ * @author Warren Levy (warrenl@cygnus.com)
  */
 public abstract class URLConnection
 {
@@ -115,6 +116,9 @@ public abstract class URLConnection
    * store the data returned from a server
    */
   private static boolean defaultUseCaches = true;
+
+  private static ContentHandlerFactory defaultFactory
+    = new gnu.java.net.DefaultContentHandlerFactory();
 
   /**
    * This variable determines whether or not interaction is allowed with
@@ -165,10 +169,11 @@ public abstract class URLConnection
   protected URL url;
 
   private static Hashtable handlers = new Hashtable();
-  private static SimpleDateFormat dateFormat1;
-  private static SimpleDateFormat dateFormat2;
-  private static SimpleDateFormat dateFormat3;
+  private static SimpleDateFormat[] dateFormats;
   private static boolean dateformats_initialized;
+
+  /* Cached ParsePosition, used when parsing dates. */
+  private ParsePosition position;
 
   /**
    * Creates a URL connection to a given URL. A real connection is not made.
@@ -367,18 +372,23 @@ public abstract class URLConnection
     if (! dateformats_initialized)
       initializeDateFormats();
 
+    if (position == null)
+      position = new ParsePosition(0);
+
     long result = defaultValue;
     String str = getHeaderField(name);
 
     if (str != null)
       {
-	Date date;
-	if ((date = dateFormat1.parse(str, new ParsePosition(0))) != null)
-	  result = date.getTime();
-	else if ((date = dateFormat2.parse(str, new ParsePosition(0))) != null)
-	  result = date.getTime();
-	else if ((date = dateFormat3.parse(str, new ParsePosition(0))) != null)
-	  result = date.getTime();
+	for (int i = 0; i < dateFormats.length; i++)
+	  {
+	    SimpleDateFormat df = dateFormats[i];
+	    position.setIndex(0);
+	    position.setErrorIndex(0);
+	    Date date = df.parse(str, position);
+	    if (date != null)
+	      return date.getTime();
+	  }
       }
 
     return result;
@@ -402,23 +412,29 @@ public abstract class URLConnection
   }
 
   /**
-   * This method returns the content of the document pointed to by the URL
-   * as an Object.  The type of object depends on the MIME type of the
-   * object and particular content hander loaded.  Most text type content
-   * handlers will return a subclass of InputStream.  Images usually return
-   * a class that implements ImageProducer.  There is not guarantee what
-   * type of object will be returned, however.
-   * <p>
-   * This class first determines the MIME type of the content, then creates
-   * a ContentHandler object to process the input.  If the ContentHandlerFactory
-   * is set, then that object is called to load a content handler, otherwise
-   * a class called gnu.java.net.content.&lt;content_type&gt; is tried.
-   * The default class will also be used if the content handler factory returns
-   * a null content handler.
+   * This method returns the content of the document pointed to by the
+   * URL as an Object.  The type of object depends on the MIME type of
+   * the object and particular content hander loaded.  Most text type
+   * content handlers will return a subclass of
+   * <code>InputStream</code>.  Images usually return a class that
+   * implements <code>ImageProducer</code>.  There is not guarantee
+   * what type of object will be returned, however.
    *
-   * @exception IOException If an error occurs
+   * <p>This class first determines the MIME type of the content, then
+   * creates a ContentHandler object to process the input.  If the
+   * <code>ContentHandlerFactory</code> is set, then that object is
+   * called to load a content handler, otherwise a class called
+   * gnu.java.net.content.&lt;content_type&gt; is tried.  If this
+   * handler does not exist, the method will simple return the
+   * <code>InputStream</code> returned by
+   * <code>getInputStream()</code>.  Note that the default
+   * implementation of <code>getInputStream()</code> throws a
+   * <code>UnknownServiceException</code> so subclasses are encouraged
+   * to override this method.</p>
+   *
+   * @exception IOException If an error with the connection occurs.
    * @exception UnknownServiceException If the protocol does not support the
-   * content type
+   * content type at all.
    */
   public Object getContent() throws IOException
   {
@@ -430,12 +446,12 @@ public abstract class URLConnection
     // guessContentTypeFromName() and guessContentTypeFromStream methods
     // as well as FileNameMap class & fileNameMap field & get/set methods.
     String type = getContentType();
-    ContentHandler ch = setContentHandler(type);
+    ContentHandler ch = getContentHandler(type);
 
-    if (ch == null)
-      return getInputStream();
+    if (ch != null)
+      return ch.getContent(this);
 
-    return ch.getContent(this);
+    return getInputStream();
   }
 
   /**
@@ -879,20 +895,20 @@ public abstract class URLConnection
    */
   public static String guessContentTypeFromName(String filename)
   {
-    int dot = filename.lastIndexOf (".");
+    int dot = filename.lastIndexOf(".");
     
     if (dot != -1)
       {
 	if (dot == filename.length())
-	  return ("application/octet-stream");
+	  return "application/octet-stream";
 	else
-	  filename = filename.substring (dot + 1);
+	  filename = filename.substring(dot + 1);
       }
     
-    String type = MimeTypes.getMimeTypeFromExtension (filename);
+    String type = MimeTypes.getMimeTypeFromExtension(filename);
     
     if (type == null)
-      return("application/octet-stream");
+      return"application/octet-stream";
 
     return type;
   }
@@ -948,7 +964,7 @@ public abstract class URLConnection
    */
   public static void setFileNameMap(FileNameMap map)
   {
-    // Throw an exception if an extant security mgr precludes
+    // Throw an exception if an extant security manager precludes
     // setting the factory.
     SecurityManager s = System.getSecurityManager();
     if (s != null)
@@ -957,13 +973,13 @@ public abstract class URLConnection
     fileNameMap = map;
   }
 
-  private ContentHandler setContentHandler(String contentType)
+  private ContentHandler getContentHandler(String contentType)
   {
-    ContentHandler handler;
-
     // No content type so just handle it as the default.
     if (contentType == null || contentType.equals(""))
       return null;
+
+    ContentHandler handler;
 
     // See if a handler has been cached for this content type.
     // For efficiency, if a content type has been searched for but not
@@ -975,12 +991,17 @@ public abstract class URLConnection
       else
 	return null;
 
-    // If a non-default factory has been set, use it to find the content type.
+    // If a non-default factory has been set, use it.
     if (factory != null)
       handler = factory.createContentHandler(contentType);
 
-    // Non-default factory may have returned null or a factory wasn't set.
-    // Use the default search algorithm to find a handler for this content type.
+    // Now try default factory. Using this factory to instantiate built-in
+    // content handlers is preferable  
+    if (handler == null)
+      handler = defaultFactory.createContentHandler(contentType);
+
+    // User-set factory has not returned a handler. Use the default search 
+    // algorithm.
     if (handler == null)
       {
 	// Get the list of packages to check and append our default handler
@@ -989,7 +1010,7 @@ public abstract class URLConnection
 	// ever be needed (or available).
 	String propVal = System.getProperty("java.content.handler.pkgs");
 	propVal = (propVal == null) ? "" : (propVal + "|");
-	propVal = propVal + "gnu.gcj.content|sun.net.www.content";
+	propVal = propVal + "gnu.java.net.content|sun.net.www.content";
 
 	// Replace the '/' character in the content type with '.' and
 	// all other non-alphabetic, non-numeric characters with '_'.
@@ -1025,7 +1046,7 @@ public abstract class URLConnection
       }
 
     // Update the hashtable with the new content handler.
-    if (handler != null && handler instanceof ContentHandler)
+    if (handler instanceof ContentHandler)
       {
 	handlers.put(contentType, handler);
 	return handler;
@@ -1040,17 +1061,18 @@ public abstract class URLConnection
   // We don't put these in a static initializer, because it creates problems
   // with initializer co-dependency: SimpleDateFormat's constructors eventually 
   // depend on URLConnection (via the java.text.*Symbols classes).
-  private synchronized void initializeDateFormats()
+  private static synchronized void initializeDateFormats()
   {
     if (dateformats_initialized)
       return;
 
     Locale locale = new Locale("En", "Us", "Unix");
-    dateFormat1 =
+    dateFormats = new SimpleDateFormat[3];
+    dateFormats[0] =
       new SimpleDateFormat("EEE, dd MMM yyyy hh:mm:ss 'GMT'", locale);
-    dateFormat2 =
+    dateFormats[1] =
       new SimpleDateFormat("EEEE, dd-MMM-yy hh:mm:ss 'GMT'", locale);
-    dateFormat3 = new SimpleDateFormat("EEE MMM d hh:mm:ss yyyy", locale);
+    dateFormats[2] = new SimpleDateFormat("EEE MMM d hh:mm:ss yyyy", locale);
     dateformats_initialized = true;
   }
 }

@@ -32,15 +32,19 @@ Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #include <ctype.h>
 
 #include <stddef.h>		/* so noone else will get system versions */
-#include "assert.h"
+#include <assert.h>
 
-#include "objc/objc.h"		/* core data types */
-#include "objc/objc-api.h"	/* runtime api functions */
+#include <objc/objc.h>		/* core data types */
+#include <objc/objc-api.h>	/* runtime api functions */
 
-#include "objc/thr.h"		/* thread and mutex support */
+#include <objc/thr.h>		/* thread and mutex support */
 
-#include "objc/hash.h"		/* hash structures */
-#include "objc/objc-list.h"	/* linear lists */
+#include <objc/hash.h>		/* hash structures */
+#include <objc/objc-list.h>	/* linear lists */
+
+#ifdef __cplusplus
+extern "C" {
+#endif /* __cplusplus */
 
 extern void __objc_add_class_to_hash(Class);   /* (objc-class.c) */
 extern void __objc_init_selector_tables(void); /* (objc-sel.c) */
@@ -85,6 +89,8 @@ SEL  __sel_register_typed_name (const char*, const char*,
 				struct objc_selector*, BOOL is_const);
 extern void __objc_generate_gc_type_description (Class);
 
+#ifdef __cplusplus
+}
+#endif /* __cplusplus */
+
 #endif /* not __objc_runtime_INCLUDE_GNU */
-
-

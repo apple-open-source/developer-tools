@@ -55,27 +55,54 @@ macosx_resize_window (int *lines_per_page, int *chars_per_line)
   int new_chars_per_line = UINT_MAX;
   int ret;
 
-  if (isatty (fileno (stdout))) {
-    struct winsize window_size;
-    ret = ioctl (fileno(stdout), TIOCGWINSZ, &window_size);
-    if (ret == 0) {
-      new_lines_per_page = window_size.ws_row;
-      new_chars_per_line = window_size.ws_col;
+  if (isatty (fileno (stdout)))
+    {
+      struct winsize window_size;
+      ret = ioctl (fileno (stdout), TIOCGWINSZ, &window_size);
+      if (ret == 0)
+        {
+          new_lines_per_page = window_size.ws_row;
+          new_chars_per_line = window_size.ws_col;
+        }
     }
-  }
 
-  if ((*lines_per_page != UINT_MAX) && (*lines_per_page != 0)) {
-    *lines_per_page = new_lines_per_page;
-  }
+  if ((*lines_per_page != UINT_MAX) && (*lines_per_page != 0))
+    {
+      *lines_per_page = new_lines_per_page;
+    }
 
-  if ((*chars_per_line != UINT_MAX) && (*chars_per_line != 0)) {
-    *chars_per_line = new_chars_per_line;
-  }
+  if ((*chars_per_line != UINT_MAX) && (*chars_per_line != 0))
+    {
+      *chars_per_line = new_chars_per_line;
+    }
 
-  update_width ();
+  set_screen_size ();
+  set_width ();
+}
+
+void
+update_command (char *args, int from_tty)
+{
+  registers_changed ();
+  reinit_frame_cache ();
+}
+
+void
+stack_flush_command (char *args, int from_tty)
+{
+  reinit_frame_cache ();
+  if (from_tty)
+    printf_filtered ("Stack cache flushed.\n");
 }
 
 void
 _initialize_macosx_xdep ()
 {
+  add_com ("flushstack", class_maintenance, stack_flush_command,
+           "Force gdb to flush its stack-frame cache (maintainer command)");
+
+  add_com_alias ("flush", "flushregs", class_maintenance, 1);
+
+  add_com ("update", class_obscure, update_command,
+           "Re-read current state information from inferior.");
 }

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                B o d y                                   --
 --                                                                          --
---          Copyright (C) 1992-2004, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -375,8 +375,8 @@ begin
    Write_Line ("        n*   normal warning mode (cancels -gnatws/-gnatwe)");
    Write_Line ("        o*   turn on warnings for address clause overlay");
    Write_Line ("        O    turn off warnings for address clause overlay");
-   Write_Line ("        p    turn on warnings for ineffective pragma inline");
-   Write_Line ("        P*   turn off warnings for ineffective pragma inline");
+   Write_Line ("        p    turn on warnings for ineffective pragma Inline");
+   Write_Line ("        P*   turn off warnings for ineffective pragma Inline");
    Write_Line ("        r    turn on warnings for redundant construct");
    Write_Line ("        R*   turn off warnings for redundant construct");
    Write_Line ("        s    suppress all warnings");
@@ -422,8 +422,7 @@ begin
    --  Lines for -gnaty switch
 
    Write_Switch_Char ("y");
-   Write_Line ("Enable all style checks except 'o', indent=3");
-
+   Write_Line ("Enable default style checks (same as -gnaty3abcefhiklmnprst)");
    Write_Switch_Char ("yxx");
    Write_Line ("Enable selected style checks xx = list of parameters:");
    Write_Line ("        1-9  check indentation");
@@ -436,6 +435,7 @@ begin
    Write_Line ("        i    check if-then layout");
    Write_Line ("        k    check casing rules for keywords");
    Write_Line ("        l    check reference manual layout");
+   Write_Line ("        Lnnn check max nest level < nnn");
    Write_Line ("        m    check line length <= 79 characters");
    Write_Line ("        n    check casing of package Standard identifiers");
    Write_Line ("        Mnnn check line length <= nnn characters");
@@ -444,6 +444,7 @@ begin
    Write_Line ("        r    check casing for identifier references");
    Write_Line ("        s    check separate subprogram specs present");
    Write_Line ("        t    check token separation rules");
+   Write_Line ("        x    check extra parens around conditionals");
 
    --  Lines for -gnatyN switch
 
@@ -464,5 +465,10 @@ begin
 
    Write_Switch_Char ("83");
    Write_Line ("Enforce Ada 83 restrictions");
+
+   --  Line for -gnat05 switch
+
+   Write_Switch_Char ("05");
+   Write_Line ("Allow Ada 2005 extensions");
 
 end Usage;

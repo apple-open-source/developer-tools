@@ -10,6 +10,7 @@
 
 #import <Foundation/NSString.h>
 #import <CoreFoundation/CFString.h>
+#include <stdlib.h>
 
 void printOut(NSString *str) {
   NSLog(@"The value of str is: %@", str);

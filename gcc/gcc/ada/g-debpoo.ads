@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2003 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2004 Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -32,31 +32,31 @@
 ------------------------------------------------------------------------------
 
 --  This packages provides a special implementation of the Ada95 storage pools.
---
+
 --  The goal of this debug pool is to detect incorrect uses of memory
 --  (multiple deallocations, access to invalid memory,...). Errors are reported
 --  in one of two ways: either by immediately raising an exception, or by
 --  printing a message on standard output.
---
+
 --  You need to instrument your code to use this package: for each access type
 --  you want to monitor, you need to add a clause similar to:
---
+
 --      type Integer_Access is access Integer;
 --      for Integer_Access'Storage_Pool use Pool;
 
 --  where Pool is a tagged object declared with
 --
 --      Pool : GNAT.Debug_Pools.Debug_Pool;
---
+
 --  This package was designed to be as efficient as possible, but still has an
 --  impact on the performance of your code, which depends on the number of
 --  allocations, deallocations and, somewhat less, dereferences that your
 --  application performs.
---
+
 --  For each faulty memory use, this debug pool will print several lines
 --  of information, including things like the location where the memory
 --  was initially allocated, the location where it was freed etc.
---
+
 --  Physical allocations and deallocations are done through the usual system
 --  calls. However, in order to provide proper checks, the debug pool will not
 --  release the memory immediately. It keeps released memory around (the amount
@@ -64,27 +64,27 @@
 --  has not been allocated and memory that has been allocated but freed. This
 --  also means that this memory cannot be reallocated, preventing what would
 --  otherwise be a false indication that freed memory is now allocated.
---
+
 --  In addition, this package presents several subprograms that help analyze
 --  the behavior of your program, by reporting memory leaks, the total amount
 --  of memory that was allocated. The pool is also designed to work correctly
 --  in conjunction with gnatmem.
---
+
 --  Finally, a subprogram Print_Pool is provided for use from the debugger.
---
+
 --  Limitations
 --  ===========
---
+
 --  Current limitation of this debug pool: if you use this debug pool for a
 --  general access type ("access all"), the pool might report invalid
 --  dereferences if the access object is pointing to another object on the
 --  stack which was not allocated through a call to "new".
---
+
 --  This debug pool will respect all alignments specified in your code, but
 --  it does that by aligning all objects using Standard'Maximum_Alignment.
 --  This allows faster checks, and limits the performance impact of using
 --  this pool.
---
+
 
 with System;                  use System;
 with System.Storage_Elements; use System.Storage_Elements;
@@ -249,20 +249,35 @@ private
       Storage_Address          : out Address;
       Size_In_Storage_Elements : Storage_Count;
       Alignment                : Storage_Count);
+   --  Allocate a new chunk of memory, and set it up so that the debug pool
+   --  can check accesses to its data, and report incorrect access later on.
+   --  The parameters have the same semantics as defined in the ARM95.
 
    procedure Deallocate
      (Pool                     : in out Debug_Pool;
       Storage_Address          : Address;
       Size_In_Storage_Elements : Storage_Count;
       Alignment                : Storage_Count);
+   --  Mark a block of memory as invalid. It might not be physically removed
+   --  immediately, depending on the setup of the debug pool, so that checks
+   --  are still possible. The parameters have the same semantics as defined
+   --  in the RM.
 
    function Storage_Size (Pool : Debug_Pool) return SSC;
+   --  Return the maximal size of data that can be allocated through Pool.
+   --  Since Pool uses the malloc() system call, all the memory is accessible
+   --  through the pool
 
    procedure Dereference
      (Pool                     : in out Debug_Pool;
       Storage_Address          : System.Address;
       Size_In_Storage_Elements : Storage_Count;
       Alignment                : Storage_Count);
+   --  Check whether a derefence statement is valid, ie whether the pointer
+   --  was allocated through Pool. As documented above, errors will be
+   --  reported either by a special error message or an exception, depending
+   --  on the setup of the storage pool.
+   --  The parameters have the same semantics as defined in the ARM95.
 
    type Byte_Count is mod System.Max_Binary_Modulus;
    --  Type used for maintaining byte counts, needs to be large enough

@@ -1,5 +1,5 @@
 /* GtkChoicePeer.java -- Implements ChoicePeer with GTK
-   Copyright (C) 1998, 1999 Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2005  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -38,7 +38,6 @@ exception statement from your version. */
 
 package gnu.java.awt.peer.gtk;
 
-import java.awt.AWTEvent;
 import java.awt.Choice;
 import java.awt.event.ItemEvent;
 import java.awt.peer.ChoicePeer;
@@ -58,25 +57,26 @@ public class GtkChoicePeer extends GtkComponentPeer
 	  items[i] = c.getItem (i);
 	  
 	append (items);
-
-        // Must set our state before notifying listeners
-	((Choice) awtComponent).select (c.getItem (0));
-	postItemEvent (c.getItem (0), ItemEvent.SELECTED);
       }
+
+    int selected = c.getSelectedIndex();
+    if (selected >= 0)
+      select(selected);
   }
 
   native void create ();
 
   native void append (String items[]);
-  native int getHistory ();
+  native int nativeGetSelected ();
   native void nativeAdd (String item, int index);
   native void nativeRemove (int index);
+  native void nativeRemoveAll ();
 
-  native public void select (int position);
+  public native void select (int position);
  
   public void add (String item, int index)
   {
-    int before = getHistory();
+    int before = nativeGetSelected();
     
     nativeAdd (item, index);
     
@@ -92,11 +92,11 @@ public class GtkChoicePeer extends GtkComponentPeer
 
   public void remove (int index)
   {
-    int before = getHistory();
+    int before = nativeGetSelected();
     int after;
     
     nativeRemove (index);
-    after = getHistory();
+    after = nativeGetSelected();
     
     /* Generate an ItemEvent if we are removing the currently selected item
        and there are at least one item left. */
@@ -110,7 +110,7 @@ public class GtkChoicePeer extends GtkComponentPeer
 
   public void removeAll ()
   {
-    nativeRemove (-1);
+    nativeRemoveAll();
   }
   
   public void addItem (String item, int position)

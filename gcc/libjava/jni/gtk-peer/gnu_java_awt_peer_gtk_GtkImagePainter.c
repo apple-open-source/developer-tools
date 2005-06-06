@@ -1,5 +1,5 @@
 /* gtkimagepainter.c
-   Copyright (C) 1999 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2004 Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -40,14 +40,13 @@ exception statement from your version. */
 #include <libart_lgpl/art_misc.h>
 #include <libart_lgpl/art_rgb_affine.h>
 
-#define SWAPU32(w) \
-  (((w) << 24) | (((w) & 0xff00) << 8) | (((w) >> 8) & 0xff00) | ((w) >> 24))
 
-JNIEXPORT void JNICALL Java_gnu_java_awt_peer_gtk_GtkImagePainter_drawPixels
-(JNIEnv *env, jobject obj __attribute__((unused)), jobject gc_obj,
- jint bg_red, jint bg_green, jint bg_blue, jint x, jint y, jint width,
- jint height, jintArray jpixels, jint offset, jint scansize,
- jdoubleArray jaffine)
+JNIEXPORT void JNICALL
+Java_gnu_java_awt_peer_gtk_GtkImagePainter_drawPixels
+  (JNIEnv *env, jobject obj __attribute__((unused)), jobject gc_obj,
+   jint bg_red, jint bg_green, jint bg_blue, jint x, jint y, jint width,
+   jint height, jintArray jpixels, jint offset, jint scansize,
+   jdoubleArray jaffine)
 {
   struct graphics *g;
   jint *pixels, *elems;
@@ -57,6 +56,9 @@ JNIEXPORT void JNICALL Java_gnu_java_awt_peer_gtk_GtkImagePainter_drawPixels
   guchar *j_rgba, *c_rgb;
 
   g = (struct graphics *) NSA_GET_PTR (env, gc_obj);
+
+  if (!jpixels)
+    return;
 
   elems = (*env)->GetIntArrayElements (env, jpixels, NULL);
   num_pixels = (*env)->GetArrayLength (env, jpixels);
@@ -145,6 +147,12 @@ JNIEXPORT void JNICALL Java_gnu_java_awt_peer_gtk_GtkImagePainter_drawPixels
     }
 
   gdk_threads_enter ();
+
+  if (!g || !GDK_IS_DRAWABLE (g->drawable))
+    {
+      gdk_threads_leave ();
+      return;
+    }
 
   gdk_draw_rgb_image (g->drawable,
 		      g->gc,

@@ -1,7 +1,7 @@
 @ libgcc routines for ARM cpu.
 @ Division routines, written by Richard Earnshaw, (rearnsha@armltd.co.uk)
 
-/* Copyright 1995, 1996, 1998, 1999, 2000, 2003, 2004
+/* Copyright 1995, 1996, 1998, 1999, 2000, 2003, 2004, 2005
    Free Software Foundation, Inc.
 
 This file is free software; you can redistribute it and/or modify it
@@ -80,7 +80,9 @@ Boston, MA 02111-1307, USA.  */
 # define __ARM_ARCH__ 5
 #endif
 
-#if defined(__ARM_ARCH_6__) || defined(__ARM_ARCH_6J__)
+#if defined(__ARM_ARCH_6__) || defined(__ARM_ARCH_6J__) \
+	|| defined(__ARM_ARCH_6K__) || defined(__ARM_ARCH_6Z__) \
+	|| defined(__ARM_ARCH_6ZK__)
 # undef __ARM_ARCH__
 # define __ARM_ARCH__ 6
 #endif
@@ -196,9 +198,16 @@ SYM (__\name):
 	bx	pc
 	nop
 	.arm
-_L__\name:		/* A hook to tell gdb that we've switched to ARM */
+/* A hook to tell gdb that we've switched to ARM mode.  Also used to call
+   directly from other local arm routines.  */
+_L__\name:		
 .endm
 #define EQUIV .thumb_set
+/* Branch directly to a function declared with ARM_FUNC_START.
+   Must be called in arm mode.  */
+.macro  ARM_CALL name
+	bl	_L__\name
+.endm
 #else
 .macro	ARM_FUNC_START name
 	.text
@@ -209,11 +218,22 @@ _L__\name:		/* A hook to tell gdb that we've switched to ARM */
 SYM (__\name):
 .endm
 #define EQUIV .set
+.macro  ARM_CALL name
+	bl	__\name
+.endm
 #endif
+
+.macro	FUNC_ALIAS new old
+	.globl	SYM (__\new)
+	EQUIV	SYM (__\new), SYM (__\old)
+.endm
 
 .macro	ARM_FUNC_ALIAS new old
 	.globl	SYM (__\new)
 	EQUIV	SYM (__\new), SYM (__\old)
+#ifdef __thumb__
+	.set	SYM (_L__\new), SYM (_L__\old)
+#endif
 .endm
 
 #ifdef __thumb__
@@ -649,6 +669,24 @@ LSYM(Lgot_result):
 
 	DIV_FUNC_END udivsi3
 
+FUNC_START aeabi_uidivmod
+#ifdef __thumb__
+	push	{r0, r1, lr}
+	bl	SYM(__udivsi3)
+	POP	{r1, r2, r3}
+	mul	r2, r0
+	sub	r1, r1, r2
+	bx	r3
+#else
+	stmfd	sp!, { r0, r1, lr }
+	bl	SYM(__udivsi3)
+	ldmfd	sp!, { r1, r2, lr }
+	mul	r3, r2, r0
+	sub	r1, r1, r3
+	RET
+#endif
+	FUNC_END aeabi_uidivmod
+	
 #endif /* L_udivsi3 */
 /* ------------------------------------------------------------------------ */
 #ifdef L_umodsi3
@@ -769,6 +807,24 @@ LSYM(Lover12):
 	
 	DIV_FUNC_END divsi3
 
+FUNC_START aeabi_idivmod
+#ifdef __thumb__
+	push	{r0, r1, lr}
+	bl	SYM(__divsi3)
+	POP	{r1, r2, r3}
+	mul	r2, r0
+	sub	r1, r1, r2
+	bx	r3
+#else
+	stmfd	sp!, { r0, r1, lr }
+	bl	SYM(__divsi3)
+	ldmfd	sp!, { r1, r2, lr }
+	mul	r3, r2, r0
+	sub	r1, r1, r3
+	RET
+#endif
+	FUNC_END aeabi_idivmod
+	
 #endif /* L_divsi3 */
 /* ------------------------------------------------------------------------ */
 #ifdef L_modsi3
@@ -834,9 +890,13 @@ LSYM(Lover12):
 #ifdef L_dvmd_tls
 
 	FUNC_START div0
+	FUNC_ALIAS aeabi_idiv0 div0
+	FUNC_ALIAS aeabi_ldiv0 div0
 
 	RET
 
+	FUNC_END aeabi_ldiv0
+	FUNC_END aeabi_idiv0
 	FUNC_END div0
 	
 #endif /* L_divmodsi_tools */
@@ -884,7 +944,8 @@ LSYM(Lover12):
 #ifdef L_lshrdi3
 
 	FUNC_START lshrdi3
-
+	FUNC_ALIAS aeabi_llsr lshrdi3
+	
 #ifdef __thumb__
 	lsr	al, r2
 	mov	r3, ah
@@ -907,6 +968,7 @@ LSYM(Lover12):
 	mov	ah, ah, lsr r2
 	RET
 #endif
+	FUNC_END aeabi_llsr
 	FUNC_END lshrdi3
 
 #endif
@@ -914,6 +976,8 @@ LSYM(Lover12):
 #ifdef L_ashrdi3
 	
 	FUNC_START ashrdi3
+	FUNC_ALIAS aeabi_lasr ashrdi3
+	
 #ifdef __thumb__
 	lsr	al, r2
 	mov	r3, ah
@@ -941,6 +1005,7 @@ LSYM(Lover12):
 	RET
 #endif
 
+	FUNC_END aeabi_lasr
 	FUNC_END ashrdi3
 
 #endif
@@ -948,6 +1013,8 @@ LSYM(Lover12):
 #ifdef L_ashldi3
 
 	FUNC_START ashldi3
+	FUNC_ALIAS aeabi_llsl ashldi3
+	
 #ifdef __thumb__
 	lsl	ah, r2
 	mov	r3, al
@@ -970,6 +1037,7 @@ LSYM(Lover12):
 	mov	al, al, lsl r2
 	RET
 #endif
+	FUNC_END aeabi_llsl
 	FUNC_END ashldi3
 
 #endif
@@ -1035,7 +1103,20 @@ LSYM(Lover12):
    the target code cannot be relied upon to return via a BX instruction, so
    instead we have to store the resturn address on the stack and allow the
    called function to return here instead.  Upon return we recover the real
-   return address and use a BX to get back to Thumb mode.  */
+   return address and use a BX to get back to Thumb mode.
+
+   There are three variations of this code.  The first,
+   _interwork_call_via_rN(), will push the return address onto the
+   stack and pop it in _arm_return().  It should only be used if all
+   arguments are passed in registers.
+
+   The second, _interwork_r7_call_via_rN(), instead stores the return
+   address at [r7, #-4].  It is the caller's responsibility to ensure
+   that this address is valid and contains no useful data.
+
+   The third, _interwork_r11_call_via_rN(), works in the same way but
+   uses r11 instead of r7.  It is useful if the caller does not really
+   need a frame pointer.  */
 	
 	.text
 	.align 0
@@ -1044,7 +1125,33 @@ LSYM(Lover12):
 	.globl _arm_return
 _arm_return:
 	RETLDM
-	.code   16
+
+	.globl _arm_return_r7
+_arm_return_r7:
+	ldr	lr, [r7, #-4]
+	bx	lr
+
+	.globl _arm_return_r11
+_arm_return_r11:
+	ldr	lr, [r11, #-4]
+	bx	lr
+
+.macro interwork_with_frame frame, register, name, return
+	.code	16
+
+	THUMB_FUNC_START \name
+
+	bx	pc
+	nop
+
+	.code	32
+	tst	\register, #1
+	streq	lr, [\frame, #-4]
+	adreq	lr, _arm_return_\frame
+	bx	\register
+
+	SIZE	(\name)
+.endm
 
 .macro interwork register
 	.code	16
@@ -1063,6 +1170,9 @@ LSYM(Lchange_\register):
 	bx	\register
 
 	SIZE	(_interwork_call_via_\register)
+
+	interwork_with_frame r7,\register,_interwork_r7_call_via_\register
+	interwork_with_frame r11,\register,_interwork_r11_call_via_\register
 .endm
 	
 	interwork r0
@@ -1102,6 +1212,8 @@ LSYM(Lchange_\register):
 #endif /* L_interwork_call_via_rX */
 #endif /* Arch supports thumb.  */
 
+#ifndef __symbian__
 #include "ieee754-df.S"
 #include "ieee754-sf.S"
-
+#include "bpabi.S"
+#endif /* __symbian__ */

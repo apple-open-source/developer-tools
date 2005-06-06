@@ -138,9 +138,14 @@ typedef enum ffi_abi {
   FFI_O32,
   FFI_N32,
   FFI_N64,
+  FFI_O32_SOFT_FLOAT,
 
 #ifdef FFI_MIPS_O32
+#ifdef __mips_soft_float
+  FFI_DEFAULT_ABI = FFI_O32_SOFT_FLOAT,
+#else
   FFI_DEFAULT_ABI = FFI_O32,
+#endif
 #else
   FFI_DEFAULT_ABI = FFI_N32,
 #endif
@@ -153,7 +158,13 @@ typedef enum ffi_abi {
 
 /* ---- Definitions for closures ----------------------------------------- */
 
+#if defined(FFI_MIPS_O32)
+#define FFI_CLOSURES 1
+#define FFI_TRAMPOLINE_SIZE 20
+#else
+/* N32/N64 not implemented yet. */
 #define FFI_CLOSURES 0
+#endif /* FFI_MIPS_O32 */
 #define FFI_NATIVE_RAW_API 0
 
 #endif

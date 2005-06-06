@@ -8,9 +8,9 @@
     void foo(vector unsigned short) { }
     void foo(vector signed short) { }
     void foo(vector bool short) { }
-    void foo(vector unsigned long) { }
-    void foo(vector signed long) { }
-    void foo(vector bool long) { }
+    void foo(vector unsigned int) { }
+    void foo(vector signed int) { }
+    void foo(vector bool int) { }
     void foo(vector float) { }
     void foo(vector pixel) { }
     void foo(int) { }

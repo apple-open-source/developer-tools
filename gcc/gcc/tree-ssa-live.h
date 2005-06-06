@@ -1,5 +1,5 @@
 /* Routines for liveness in SSA trees.
-   Copyright (C) 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005 Free Software Foundation, Inc.
    Contributed by Andrew MacLeod  <amacleod@redhat.com>
 
 This file is part of GCC.
@@ -22,6 +22,8 @@ Boston, MA 02111-1307, USA.  */
 
 #ifndef _TREE_SSA_LIVE_H
 #define _TREE_SSA_LIVE_H 1
+
+#include "partition.h"
 
 /* Used to create the variable mapping when we go out of SSA form.  */
 typedef struct _var_map
@@ -56,25 +58,17 @@ typedef struct _var_map
 #define VARMAP_NORMAL		0
 #define VARMAP_NO_SINGLE_DEFS	1
 
-/* Flags to pass to remove_ssa_form.  */
-
-#define SSANORM_PERFORM_TER		0x1
-#define SSANORM_COMBINE_TEMPS		0x2
-#define SSANORM_REMOVE_ALL_PHIS		0x4
-#define SSANORM_COALESCE_PARTITIONS	0x8
-#define SSANORM_USE_COALESCE_LIST	0x10
-
 extern var_map init_var_map (int);
 extern void delete_var_map (var_map);
 extern void dump_var_map (FILE *, var_map);
 extern int var_union (var_map, tree, tree);
 extern void change_partition_var (var_map, tree, int);
 extern void compact_var_map (var_map, int);
-extern void remove_ssa_form (FILE *, var_map, int);
-extern void register_ssa_partitions_for_vars (bitmap vars, var_map map);
-extern tree make_ssa_temp (tree);
+#ifdef ENABLE_CHECKING
+extern void register_ssa_partition_check (tree ssa_var);
+#endif
 
-static inline int num_var_partitions (var_map);
+static inline unsigned num_var_partitions (var_map);
 static inline tree var_to_partition_to_var (var_map, tree);
 static inline tree partition_to_var (var_map, int);
 static inline int var_to_partition (var_map, tree);
@@ -85,10 +79,9 @@ static inline void register_ssa_partition (var_map, tree, bool);
 #define SSA_VAR_MAP_REF_COUNT	 0x01
 extern var_map create_ssa_var_map (int);
 
-
 /* Number of partitions in MAP.  */
 
-static inline int 
+static inline unsigned
 num_var_partitions (var_map map)
 {
   return map->num_partitions;
@@ -101,10 +94,7 @@ static inline int
 version_ref_count (var_map map, tree ssa_var)
 {
   int version = SSA_NAME_VERSION (ssa_var);
-#ifdef ENABLE_CHECKING
-  if (!map->ref_count)
-    abort ();
-#endif
+  gcc_assert (map->ref_count);
   return map->ref_count[version];
 }
  
@@ -139,7 +129,7 @@ static inline tree version_to_var (var_map map, int version)
  
 
 /* Given VAR, return the partition number in MAP which contains it.  
-   NO_PARTITION is returned if its not in any partition.  */
+   NO_PARTITION is returned if it's not in any partition.  */
 
 static inline int
 var_to_partition (var_map map, tree var)
@@ -190,16 +180,7 @@ register_ssa_partition (var_map map, tree ssa_var, bool is_use)
   int version;
 
 #if defined ENABLE_CHECKING
-  if (TREE_CODE (ssa_var) != SSA_NAME)
-    abort ();
-
-  if (!is_gimple_reg (SSA_NAME_VAR (ssa_var)))
-    {
-      fprintf (stderr, "Illegally registering a virtual SSA name :");
-      print_generic_expr (stderr, ssa_var, TDF_SLIM);
-      fprintf (stderr, " in the SSA->Normal phase.\n");
-      abort();
-    }
+  register_ssa_partition_check (ssa_var);
 #endif
 
   version = SSA_NAME_VERSION (ssa_var);
@@ -282,9 +263,7 @@ static inline void make_live_on_entry (tree_live_info_p, basic_block, int);
 static inline int
 partition_is_global (tree_live_info_p live, int p)
 {
-  if (!live->global)
-    abort ();
-
+  gcc_assert (live->global);
   return bitmap_bit_p (live->global, p);
 }
 
@@ -295,9 +274,7 @@ partition_is_global (tree_live_info_p live, int p)
 static inline bitmap
 live_entry_blocks (tree_live_info_p live, int p)
 {
-  if (!live->livein)
-    abort ();
-
+  gcc_assert (live->livein);
   return live->livein[p];
 }
 
@@ -308,12 +285,10 @@ live_entry_blocks (tree_live_info_p live, int p)
 static inline bitmap
 live_on_exit (tree_live_info_p live, basic_block bb)
 {
-  if (!live->liveout)
-    abort();
+  gcc_assert (live->liveout);
+  gcc_assert (bb != ENTRY_BLOCK_PTR);
+  gcc_assert (bb != EXIT_BLOCK_PTR);
 
-  if (bb == ENTRY_BLOCK_PTR || bb == EXIT_BLOCK_PTR)
-    abort ();
-  
   return live->liveout[bb->index];
 }
 
@@ -328,12 +303,12 @@ live_var_map (tree_live_info_p live)
 
 
 /* Merge the live on entry information in LIVE for partitions P1 and P2. Place
-   the result into P1.  Clear P2. */
+   the result into P1.  Clear P2.  */
 
 static inline void 
 live_merge_and_clear (tree_live_info_p live, int p1, int p2)
 {
-  bitmap_a_or_b (live->livein[p1], live->livein[p1], live->livein[p2]);
+  bitmap_ior_into (live->livein[p1], live->livein[p2]);
   bitmap_zero (live->livein[p2]);
 }
 
@@ -380,7 +355,6 @@ static inline int tpa_next_partition (tpa_p, int);
 static inline int tpa_num_trees (tpa_p);
 static inline int tpa_find_tree (tpa_p, int);
 static inline void tpa_decompact (tpa_p);
-extern tpa_p tpa_init (var_map);
 extern void tpa_delete (tpa_p);
 extern void tpa_dump (FILE *, tpa_p);
 extern void tpa_remove_partition (tpa_p, int, int);
@@ -436,10 +410,7 @@ tpa_find_tree (tpa_p tpa, int i)
      a compressed element, so return TPA_NONE.  */
   if (index != TPA_NONE && index >= tpa_num_trees (tpa))
     {
-#ifdef ENABLE_CHECKING
-      if (tpa->uncompressed_num == -1)
-        abort ();
-#endif
+      gcc_assert (tpa->uncompressed_num != -1);
       index = TPA_NONE;
     }
 
@@ -452,15 +423,12 @@ tpa_find_tree (tpa_p tpa, int i)
 static inline void 
 tpa_decompact(tpa_p tpa)
 {
-#ifdef ENABLE_CHECKING
-  if (tpa->uncompressed_num == -1)
-    abort ();
-#endif
+  gcc_assert (tpa->uncompressed_num != -1);
   tpa->num_trees = tpa->uncompressed_num;
 }
 
 
-/* Once a var_map has been created and compressed, a complimentary root_var
+/* Once a var_map has been created and compressed, a complementary root_var
    object can be built.  This creates a list of all the root variables from
    which ssa version names are derived.  Each root variable has a list of 
    which partitions are versions of that root.  
@@ -737,7 +705,6 @@ extern void dump_coalesce_list (FILE *, coalesce_list_p);
 extern void delete_coalesce_list (coalesce_list_p);
 
 #define NO_BEST_COALESCE	-1
-extern int pop_best_coalesce (coalesce_list_p, int *, int *);
 
 extern conflict_graph build_tree_conflict_graph (tree_live_info_p, tpa_p,
 						 coalesce_list_p);

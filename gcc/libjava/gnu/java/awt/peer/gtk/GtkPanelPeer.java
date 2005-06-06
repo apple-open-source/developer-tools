@@ -38,17 +38,31 @@ exception statement from your version. */
 
 package gnu.java.awt.peer.gtk;
 
+import java.awt.AWTEvent;
 import java.awt.Panel;
+import java.awt.event.MouseEvent;
 import java.awt.peer.PanelPeer;
 
 public class GtkPanelPeer extends GtkContainerPeer
   implements PanelPeer
 {
   native void create ();
-  native void connectJObject ();
 
   public GtkPanelPeer (Panel p)
   {
     super (p);
+  }
+
+  public void handleEvent (AWTEvent event)
+  {
+    int id = event.getID();
+
+    switch (id)
+      {
+      case MouseEvent.MOUSE_PRESSED:
+        awtComponent.requestFocusInWindow ();
+        break;
+      }
+    super.handleEvent (event);
   }
 }

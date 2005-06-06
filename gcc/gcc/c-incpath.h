@@ -1,5 +1,5 @@
 /* Set up combined include path for the preprocessor.
-   Copyright (C) 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005 Free Software Foundation, Inc.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -23,11 +23,10 @@ extern void add_cpp_dir_path (struct cpp_dir *, int);
 
 struct target_c_incpath_s {
   /* Do extra includes processing.  STDINC is false iff -nostdinc was given.  */
-  void (*extra_includes) (int);
+  void (*extra_pre_includes) (const char *, const char *, int);
+  void (*extra_includes) (const char *, const char *, int);
 };
 
 extern struct target_c_incpath_s target_c_incpath;
-
-#define C_INCPATH_INIT { TARGET_EXTRA_INCLUDES }
 
 enum { QUOTE = 0, BRACKET, SYSTEM, AFTER };

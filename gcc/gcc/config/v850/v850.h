@@ -746,9 +746,6 @@ struct cum_arg { int nbytes; int anonymous_args; };
 #define FUNCTION_ARG(CUM, MODE, TYPE, NAMED) \
   function_arg (&CUM, MODE, TYPE, NAMED)
 
-#define FUNCTION_ARG_PARTIAL_NREGS(CUM, MODE, TYPE, NAMED) \
-  function_arg_partial_nregs (&CUM, MODE, TYPE, NAMED)
-
 /* Initialize a variable CUM of type CUMULATIVE_ARGS
    for a call to a function whose data type is FNTYPE.
    For a library call, FNTYPE is 0.  */
@@ -772,16 +769,6 @@ struct cum_arg { int nbytes; int anonymous_args; };
 /* Define this if the above stack space is to be considered part of the
    space allocated by the caller.  */
 #define OUTGOING_REG_PARM_STACK_SPACE
-
-/* Implement `va_arg'.  */
-#define EXPAND_BUILTIN_VA_ARG(valist, type) \
-  v850_va_arg (valist, type)
-
-#define FUNCTION_ARG_PASS_BY_REFERENCE(CUM, MODE, TYPE, NAMED)		\
-  ((TYPE) && int_size_in_bytes (TYPE) > 8)
- 
-#define FUNCTION_ARG_CALLEE_COPIES(CUM, MODE, TYPE, NAMED) \
-  ((TYPE) && int_size_in_bytes (TYPE) > 8)
 
 /* 1 if N is a possible register number for function argument passing.  */
 
@@ -1249,11 +1236,6 @@ zbss_section ()								\
 /* Specify the machine mode that this machine uses
    for the index in the tablejump instruction.  */
 #define CASE_VECTOR_MODE (TARGET_BIG_SWITCH ? SImode : HImode)
-
-/* Define this if the case instruction drops through after the table
-   when the index is out of range.  Don't define it if the case insn
-   jumps to the default label instead.  */
-/* #define CASE_DROPS_THROUGH */
 
 /* Define as C expression which evaluates to nonzero if the tablejump
    instruction expects the table to contain offsets from the address of the

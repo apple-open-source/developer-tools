@@ -1,5 +1,5 @@
 /* Panel.java -- Simple container object
-   Copyright (C) 1999, 2002 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2002, 2004, 2005  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -46,8 +46,8 @@ import javax.accessibility.AccessibleRole;
  * A panel is a simple container class. It's default layout is the
  * <code>FlowLayout</code> manager.
  *
- * @author Aaron M. Renn <arenn@urbanophile.com>
- * @author Eric Blake <ebb9@email.byu.edu>
+ * @author Aaron M. Renn (arenn@urbanophile.com)
+ * @author Eric Blake (ebb9@email.byu.edu)
  * @see FlowLayout
  * @since 1.0
  * @status updated to 1.4
@@ -61,6 +61,19 @@ public class Panel extends Container implements Accessible
 
   /** The cached accessible context. */
   private transient AccessibleContext context;
+
+  /** Flag set when the first system-requested paint event is
+      dispatched. */
+  private transient boolean initialSystemUpdateDone;
+
+  /** Flag set when the first application-requested paint event is
+      consumed. */
+  private transient boolean initialUpdateConsumed;
+
+  /*
+   * The number used to generate the name returned by getName.
+   */
+  private static transient long next_panel_number;
 
   /**
    * Initializes a new instance of <code>Panel</code> that has a default
@@ -114,7 +127,7 @@ public class Panel extends Container implements Accessible
    * This class provides accessibility support for Panels, and is the
    * runtime type returned by {@link #getAccessibleContext()}.
    *
-   * @author Eric Blake <ebb9@email.byu.edu>
+   * @author Eric Blake (ebb9@email.byu.edu)
    * @since 1.3
    */
   protected class AccessibleAWTPanel extends AccessibleAWTContainer
@@ -141,5 +154,20 @@ public class Panel extends Container implements Accessible
     {
       return AccessibleRole.PANEL;
     }
-  } // class AccessibleAWTPanel
-} // class Panel 
+  }
+
+  /**
+   * Generate a unique name for this panel.
+   *
+   * @return A unique name for this panel.
+   */
+  String generateName ()
+  {
+    return "panel" + getUniqueLong ();
+  }
+
+  private static synchronized long getUniqueLong ()
+  {
+    return next_panel_number++;
+  }
+}

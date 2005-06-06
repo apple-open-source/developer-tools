@@ -1,5 +1,5 @@
 /* Generic partial redundancy elimination with lazy code motion support.
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -102,6 +102,7 @@ compute_antinout_edge (sbitmap *antloc, sbitmap *transp, sbitmap *antin,
   edge e;
   basic_block *worklist, *qin, *qout, *qend;
   unsigned int qlen;
+  edge_iterator ei;
 
   /* Allocate a worklist array/queue.  Entries are only added to the
      list if they were not already on the list.  So the size is
@@ -126,7 +127,7 @@ compute_antinout_edge (sbitmap *antloc, sbitmap *transp, sbitmap *antin,
 
   /* Mark blocks which are predecessors of the exit block so that we
      can easily identify them below.  */
-  for (e = EXIT_BLOCK_PTR->pred; e; e = e->pred_next)
+  FOR_EACH_EDGE (e, ei, EXIT_BLOCK_PTR->preds)
     e->src->aux = EXIT_BLOCK_PTR;
 
   /* Iterate until the worklist is empty.  */
@@ -157,7 +158,7 @@ compute_antinout_edge (sbitmap *antloc, sbitmap *transp, sbitmap *antin,
 	/* If the in state of this block changed, then we need
 	   to add the predecessors of this block to the worklist
 	   if they are not already on the worklist.  */
-	for (e = bb->pred; e; e = e->pred_next)
+	FOR_EACH_EDGE (e, ei, bb->preds)
 	  if (!e->src->aux && e->src != ENTRY_BLOCK_PTR)
 	    {
 	      *qin++ = e->src;
@@ -251,6 +252,7 @@ compute_laterin (struct edge_list *edge_list, sbitmap *earliest,
   edge e;
   basic_block *worklist, *qin, *qout, *qend, bb;
   unsigned int qlen;
+  edge_iterator ei;
 
   num_edges = NUM_EDGES (edge_list);
 
@@ -280,7 +282,7 @@ compute_laterin (struct edge_list *edge_list, sbitmap *earliest,
      do not want to be overly optimistic.  Consider an outgoing edge from
      the entry block.  That edge should always have a LATER value the
      same as EARLIEST for that edge.  */
-  for (e = ENTRY_BLOCK_PTR->succ; e; e = e->succ_next)
+  FOR_EACH_EDGE (e, ei, ENTRY_BLOCK_PTR->succs)
     sbitmap_copy (later[(size_t) e->aux], earliest[(size_t) e->aux]);
 
   /* Add all the blocks to the worklist.  This prevents an early exit from
@@ -290,10 +292,11 @@ compute_laterin (struct edge_list *edge_list, sbitmap *earliest,
       *qin++ = bb;
       bb->aux = bb;
     }
-  qin = worklist;
+
   /* Note that we do not use the last allocated element for our queue,
      as EXIT_BLOCK is never inserted into it. In fact the above allocation
      of n_basic_blocks + 1 elements is not necessary.  */
+  qin = worklist;
   qend = &worklist[n_basic_blocks];
   qlen = n_basic_blocks;
 
@@ -309,11 +312,12 @@ compute_laterin (struct edge_list *edge_list, sbitmap *earliest,
 
       /* Compute the intersection of LATERIN for each incoming edge to B.  */
       sbitmap_ones (laterin[bb->index]);
-      for (e = bb->pred; e != NULL; e = e->pred_next)
-	sbitmap_a_and_b (laterin[bb->index], laterin[bb->index], later[(size_t)e->aux]);
+      FOR_EACH_EDGE (e, ei, bb->preds)
+	sbitmap_a_and_b (laterin[bb->index], laterin[bb->index],
+			 later[(size_t)e->aux]);
 
       /* Calculate LATER for all outgoing edges.  */
-      for (e = bb->succ; e != NULL; e = e->succ_next)
+      FOR_EACH_EDGE (e, ei, bb->succs)
 	if (sbitmap_union_of_diff_cg (later[(size_t) e->aux],
 				      earliest[(size_t) e->aux],
 				      laterin[e->src->index],
@@ -334,7 +338,7 @@ compute_laterin (struct edge_list *edge_list, sbitmap *earliest,
      for the EXIT block.  We allocated an extra entry in the LATERIN array
      for just this purpose.  */
   sbitmap_ones (laterin[last_basic_block]);
-  for (e = EXIT_BLOCK_PTR->pred; e != NULL; e = e->pred_next)
+  FOR_EACH_EDGE (e, ei, EXIT_BLOCK_PTR->preds)
     sbitmap_a_and_b (laterin[last_basic_block],
 		     laterin[last_basic_block],
 		     later[(size_t) e->aux]);
@@ -354,7 +358,8 @@ compute_insert_delete (struct edge_list *edge_list, sbitmap *antloc,
   basic_block bb;
 
   FOR_EACH_BB (bb)
-    sbitmap_difference (delete[bb->index], antloc[bb->index], laterin[bb->index]);
+    sbitmap_difference (delete[bb->index], antloc[bb->index],
+			laterin[bb->index]);
 
   for (x = 0; x < NUM_EDGES (edge_list); x++)
     {
@@ -475,6 +480,7 @@ compute_available (sbitmap *avloc, sbitmap *kill, sbitmap *avout,
   edge e;
   basic_block *worklist, *qin, *qout, *qend, bb;
   unsigned int qlen;
+  edge_iterator ei;
 
   /* Allocate a worklist array/queue.  Entries are only added to the
      list if they were not already on the list.  So the size is
@@ -498,7 +504,7 @@ compute_available (sbitmap *avloc, sbitmap *kill, sbitmap *avout,
 
   /* Mark blocks which are successors of the entry block so that we
      can easily identify them below.  */
-  for (e = ENTRY_BLOCK_PTR->succ; e; e = e->succ_next)
+  FOR_EACH_EDGE (e, ei, ENTRY_BLOCK_PTR->succs)
     e->dest->aux = ENTRY_BLOCK_PTR;
 
   /* Iterate until the worklist is empty.  */
@@ -526,11 +532,12 @@ compute_available (sbitmap *avloc, sbitmap *kill, sbitmap *avout,
 	  sbitmap_intersection_of_preds (avin[bb->index], avout, bb->index);
 	}
 
-      if (sbitmap_union_of_diff_cg (avout[bb->index], avloc[bb->index], avin[bb->index], kill[bb->index]))
+      if (sbitmap_union_of_diff_cg (avout[bb->index], avloc[bb->index],
+				    avin[bb->index], kill[bb->index]))
 	/* If the out state of this block changed, then we need
 	   to add the successors of this block to the worklist
 	   if they are not already on the worklist.  */
-	for (e = bb->succ; e; e = e->succ_next)
+	FOR_EACH_EDGE (e, ei, bb->succs)
 	  if (!e->dest->aux && e->dest != EXIT_BLOCK_PTR)
 	    {
 	      *qin++ = e->dest;
@@ -600,6 +607,7 @@ compute_nearerout (struct edge_list *edge_list, sbitmap *farthest,
   int num_edges, i;
   edge e;
   basic_block *worklist, *tos, bb;
+  edge_iterator ei;
 
   num_edges = NUM_EDGES (edge_list);
 
@@ -620,7 +628,7 @@ compute_nearerout (struct edge_list *edge_list, sbitmap *farthest,
      do not want to be overly optimistic.  Consider an incoming edge to
      the exit block.  That edge should always have a NEARER value the
      same as FARTHEST for that edge.  */
-  for (e = EXIT_BLOCK_PTR->pred; e; e = e->pred_next)
+  FOR_EACH_EDGE (e, ei, EXIT_BLOCK_PTR->preds)
     sbitmap_copy (nearer[(size_t)e->aux], farthest[(size_t)e->aux]);
 
   /* Add all the blocks to the worklist.  This prevents an early exit
@@ -640,12 +648,12 @@ compute_nearerout (struct edge_list *edge_list, sbitmap *farthest,
 
       /* Compute the intersection of NEARER for each outgoing edge from B.  */
       sbitmap_ones (nearerout[bb->index]);
-      for (e = bb->succ; e != NULL; e = e->succ_next)
+      FOR_EACH_EDGE (e, ei, bb->succs)
 	sbitmap_a_and_b (nearerout[bb->index], nearerout[bb->index],
 			 nearer[(size_t) e->aux]);
 
       /* Calculate NEARER for all incoming edges.  */
-      for (e = bb->pred; e != NULL; e = e->pred_next)
+      FOR_EACH_EDGE (e, ei, bb->preds)
 	if (sbitmap_union_of_diff_cg (nearer[(size_t) e->aux],
 				      farthest[(size_t) e->aux],
 				      nearerout[e->dest->index],
@@ -663,7 +671,7 @@ compute_nearerout (struct edge_list *edge_list, sbitmap *farthest,
      for the ENTRY block.  We allocated an extra entry in the NEAREROUT array
      for just this purpose.  */
   sbitmap_ones (nearerout[last_basic_block]);
-  for (e = ENTRY_BLOCK_PTR->succ; e != NULL; e = e->succ_next)
+  FOR_EACH_EDGE (e, ei, ENTRY_BLOCK_PTR->succs)
     sbitmap_a_and_b (nearerout[last_basic_block],
 		     nearerout[last_basic_block],
 		     nearer[(size_t) e->aux]);
@@ -683,7 +691,8 @@ compute_rev_insert_delete (struct edge_list *edge_list, sbitmap *st_avloc,
   basic_block bb;
 
   FOR_EACH_BB (bb)
-    sbitmap_difference (delete[bb->index], st_avloc[bb->index], nearerout[bb->index]);
+    sbitmap_difference (delete[bb->index], st_avloc[bb->index],
+			nearerout[bb->index]);
 
   for (x = 0; x < NUM_EDGES (edge_list); x++)
     {
@@ -849,8 +858,6 @@ struct bb_info
 static sbitmap *antic;
 static sbitmap *transp;
 static sbitmap *comp;
-static sbitmap *delete;
-static sbitmap *insert;
 
 static struct seginfo * new_seginfo (int, rtx, int, HARD_REG_SET);
 static void add_seginfo (struct bb_info *, struct seginfo *);
@@ -907,8 +914,9 @@ static void
 make_preds_opaque (basic_block b, int j)
 {
   edge e;
+  edge_iterator ei;
 
-  for (e = b->pred; e; e = e->pred_next)
+  FOR_EACH_EDGE (e, ei, b->preds)
     {
       basic_block pb = e->src;
 
@@ -927,7 +935,7 @@ reg_dies (rtx reg, HARD_REG_SET live)
 {
   int regno, nregs;
 
-  if (GET_CODE (reg) != REG)
+  if (!REG_P (reg))
     return;
 
   regno = REGNO (reg);
@@ -948,7 +956,7 @@ reg_becomes_live (rtx reg, rtx setter ATTRIBUTE_UNUSED, void *live)
   if (GET_CODE (reg) == SUBREG)
     reg = SUBREG_REG (reg);
 
-  if (GET_CODE (reg) != REG)
+  if (!REG_P (reg))
     return;
 
   regno = REGNO (reg);
@@ -962,6 +970,180 @@ reg_becomes_live (rtx reg, rtx setter ATTRIBUTE_UNUSED, void *live)
    and vice versa.  */
 #if defined (MODE_ENTRY) != defined (MODE_EXIT)
  #error "Both MODE_ENTRY and MODE_EXIT must be defined"
+#endif
+
+#if defined (MODE_ENTRY) && defined (MODE_EXIT)
+/* Split the fallthrough edge to the exit block, so that we can note
+   that there NORMAL_MODE is required.  Return the new block if it's
+   inserted before the exit block.  Otherwise return null.  */
+
+static basic_block
+create_pre_exit (int n_entities, int *entity_map, const int *num_modes)
+{
+  edge eg;
+  edge_iterator ei;
+  basic_block pre_exit;
+
+  /* The only non-call predecessor at this stage is a block with a
+     fallthrough edge; there can be at most one, but there could be
+     none at all, e.g. when exit is called.  */
+  pre_exit = 0;
+  FOR_EACH_EDGE (eg, ei, EXIT_BLOCK_PTR->preds)
+    if (eg->flags & EDGE_FALLTHRU)
+      {
+	basic_block src_bb = eg->src;
+	regset live_at_end = src_bb->global_live_at_end;
+	rtx last_insn, ret_reg;
+
+	gcc_assert (!pre_exit);
+	/* If this function returns a value at the end, we have to
+	   insert the final mode switch before the return value copy
+	   to its hard register.  */
+	if (EDGE_COUNT (EXIT_BLOCK_PTR->preds) == 1
+	    && GET_CODE ((last_insn = BB_END (src_bb))) == INSN
+	    && GET_CODE (PATTERN (last_insn)) == USE
+	    && GET_CODE ((ret_reg = XEXP (PATTERN (last_insn), 0))) == REG)
+	  {
+	    int ret_start = REGNO (ret_reg);
+	    int nregs = hard_regno_nregs[ret_start][GET_MODE (ret_reg)];
+	    int ret_end = ret_start + nregs;
+	    int short_block = 0;
+	    int maybe_builtin_apply = 0;
+	    int forced_late_switch = 0;
+	    rtx before_return_copy;
+
+	    do
+	      {
+		rtx return_copy = PREV_INSN (last_insn);
+		rtx return_copy_pat, copy_reg;
+		int copy_start, copy_num;
+		int j;
+
+		if (INSN_P (return_copy))
+		  {
+		    if (GET_CODE (PATTERN (return_copy)) == USE
+			&& GET_CODE (XEXP (PATTERN (return_copy), 0)) == REG
+			&& (FUNCTION_VALUE_REGNO_P
+			    (REGNO (XEXP (PATTERN (return_copy), 0)))))
+		      {
+			maybe_builtin_apply = 1;
+			last_insn = return_copy;
+			continue;
+		      }
+		    /* If the return register is not (in its entirety)
+		       likely spilled, the return copy might be
+		       partially or completely optimized away.  */
+		    return_copy_pat = single_set (return_copy);
+		    if (!return_copy_pat)
+		      {
+			return_copy_pat = PATTERN (return_copy);
+			if (GET_CODE (return_copy_pat) != CLOBBER)
+			  break;
+		      }
+		    copy_reg = SET_DEST (return_copy_pat);
+		    if (GET_CODE (copy_reg) == REG)
+		      copy_start = REGNO (copy_reg);
+		    else if (GET_CODE (copy_reg) == SUBREG
+			     && GET_CODE (SUBREG_REG (copy_reg)) == REG)
+		      copy_start = REGNO (SUBREG_REG (copy_reg));
+		    else
+		      break;
+		    if (copy_start >= FIRST_PSEUDO_REGISTER)
+		      break;
+		    copy_num
+		      = hard_regno_nregs[copy_start][GET_MODE (copy_reg)];
+
+		    /* If the return register is not likely spilled, - as is
+		       the case for floating point on SH4 - then it might
+		       be set by an arithmetic operation that needs a
+		       different mode than the exit block.  */
+		    for (j = n_entities - 1; j >= 0; j--)
+		      {
+			int e = entity_map[j];
+			int mode = MODE_NEEDED (e, return_copy);
+
+			if (mode != num_modes[e] && mode != MODE_EXIT (e))
+			  break;
+		      }
+		    if (j >= 0)
+		      {
+			/* For the SH4, floating point loads depend on fpscr,
+			   thus we might need to put the final mode switch
+			   after the return value copy.  That is still OK,
+			   because a floating point return value does not
+			   conflict with address reloads.  */
+			if (copy_start >= ret_start
+			    && copy_start + copy_num <= ret_end
+			    && OBJECT_P (SET_SRC (return_copy_pat)))
+			  forced_late_switch = 1;
+			break;
+		      }
+
+		    if (copy_start >= ret_start
+			&& copy_start + copy_num <= ret_end)
+		      nregs -= copy_num;
+		    else if (!maybe_builtin_apply
+			     || !FUNCTION_VALUE_REGNO_P (copy_start))
+		      break;
+		    last_insn = return_copy;
+		  }
+		/* ??? Exception handling can lead to the return value
+		   copy being already separated from the return value use,
+		   as in  unwind-dw2.c .
+		   Similarly, conditionally returning without a value,
+		   and conditionally using builtin_return can lead to an
+		   isolated use.  */
+		if (return_copy == BB_HEAD (src_bb))
+		  {
+		    short_block = 1;
+		    break;
+		  }
+		last_insn = return_copy;
+	      }
+	    while (nregs);
+	    /* If we didn't see a full return value copy, verify that there
+	       is a plausible reason for this.  If some, but not all of the
+	       return register is likely spilled, we can expect that there
+	       is a copy for the likely spilled part.  */
+	    if (nregs
+		&& ! forced_late_switch
+		&& ! short_block
+		&& CLASS_LIKELY_SPILLED_P (REGNO_REG_CLASS (ret_start))
+		&& nregs == hard_regno_nregs[ret_start][GET_MODE (ret_reg)]
+		/* For multi-hard-register floating point values,
+		   sometimes the likely-spilled part is ordinarily copied
+		   first, then the other part is set with an arithmetic
+		   operation.  This doesn't actually cause reload failures,
+		   so let it pass.  */
+		&& (GET_MODE_CLASS (GET_MODE (ret_reg)) == MODE_INT
+		    || nregs == 1))
+	      abort ();
+	    if (INSN_P (last_insn))
+	      {
+		before_return_copy
+		  = emit_note_before (NOTE_INSN_DELETED, last_insn);
+		/* Instructions preceding LAST_INSN in the same block might
+		   require a different mode than MODE_EXIT, so if we might
+		   have such instructions, keep them in a separate block
+		   from pre_exit.  */
+		if (last_insn != BB_HEAD (src_bb))
+		  src_bb = split_block (src_bb,
+					PREV_INSN (before_return_copy))->dest;
+	      }
+	    else
+	      before_return_copy = last_insn;
+	    pre_exit = split_block (src_bb, before_return_copy)->src;
+	  }
+	else
+	  {
+	    pre_exit = split_edge (eg);
+	    COPY_REG_SET (pre_exit->global_live_at_start, live_at_end);
+	    COPY_REG_SET (pre_exit->global_live_at_end, live_at_end);
+	  }
+      }
+
+  return pre_exit;
+}
 #endif
 
 /* Find all insns that need a particular mode setting, and insert the
@@ -997,7 +1179,7 @@ optimize_mode_switching (FILE *file)
 	   If NORMAL_MODE is defined, allow for two extra
 	   blocks split from the entry and exit block.  */
 #if defined (MODE_ENTRY) && defined (MODE_EXIT)
-	entry_exit_extra = 2;
+	entry_exit_extra = 3;
 #endif
 	bb_info[n_entities]
 	  = xcalloc (last_basic_block + entry_exit_extra, sizeof **bb_info);
@@ -1010,27 +1192,10 @@ optimize_mode_switching (FILE *file)
     return 0;
 
 #if defined (MODE_ENTRY) && defined (MODE_EXIT)
-  {
-    /* Split the edge from the entry block and the fallthrough edge to the
-       exit block, so that we can note that there NORMAL_MODE is supplied /
-       required.  */
-    edge eg;
-    post_entry = split_edge (ENTRY_BLOCK_PTR->succ);
-    /* The only non-call predecessor at this stage is a block with a
-       fallthrough edge; there can be at most one, but there could be
-       none at all, e.g. when exit is called.  */
-    for (pre_exit = 0, eg = EXIT_BLOCK_PTR->pred; eg; eg = eg->pred_next)
-      if (eg->flags & EDGE_FALLTHRU)
-	{
-	  regset live_at_end = eg->src->global_live_at_end;
-
-	  if (pre_exit)
-	    abort ();
-	  pre_exit = split_edge (eg);
-	  COPY_REG_SET (pre_exit->global_live_at_start, live_at_end);
-	  COPY_REG_SET (pre_exit->global_live_at_end, live_at_end);
-	}
-  }
+  /* Split the edge from the entry block, so that we can note that
+     there NORMAL_MODE is supplied.  */
+  post_entry = split_edge (EDGE_SUCC (ENTRY_BLOCK_PTR, 0));
+  pre_exit = create_pre_exit (n_entities, entity_map, num_modes);
 #endif
 
   /* Create the bitmap vectors.  */
@@ -1127,6 +1292,8 @@ optimize_mode_switching (FILE *file)
   for (i = 0; i < max_num_modes; i++)
     {
       int current_mode[N_ENTITIES];
+      sbitmap *delete;
+      sbitmap *insert;
 
       /* Set the anticipatable and computing arrays.  */
       sbitmap_vector_zero (antic, last_basic_block);
@@ -1201,7 +1368,7 @@ optimize_mode_switching (FILE *file)
 	      if (eg->flags & EDGE_ABNORMAL)
 		{
 		  emited = true;
-		  if (GET_CODE (BB_END (src_bb)) == JUMP_INSN)
+		  if (JUMP_P (BB_END (src_bb)))
 		    emit_insn_before (mode_set, BB_END (src_bb));
 		  /* It doesn't make sense to switch to normal mode
 		     after a CALL_INSN, so we're going to abort if we
@@ -1214,7 +1381,7 @@ optimize_mode_switching (FILE *file)
 		     the call (it wouldn't make sense, anyway).  In
 		     the case of EH edges, EH entry points also start
 		     in normal mode, so a similar reasoning applies.  */
-		  else if (GET_CODE (BB_END (src_bb)) == INSN)
+		  else if (NONJUMP_INSN_P (BB_END (src_bb)))
 		    emit_insn_after (mode_set, BB_END (src_bb));
 		  else
 		    abort ();
@@ -1237,6 +1404,8 @@ optimize_mode_switching (FILE *file)
 	      }
 	}
 
+      sbitmap_vector_free (delete);
+      sbitmap_vector_free (insert);
       clear_aux_for_edges ();
       free_edge_list (edge_list);
     }
@@ -1261,17 +1430,17 @@ optimize_mode_switching (FILE *file)
 		  mode_set = get_insns ();
 		  end_sequence ();
 
-		  /* Do not bother to insert empty sequence.  */
-		  if (mode_set == NULL_RTX)
-		    continue;
-
-		  emited = true;
-		  if (GET_CODE (ptr->insn_ptr) == NOTE
-		      && (NOTE_LINE_NUMBER (ptr->insn_ptr)
-			  == NOTE_INSN_BASIC_BLOCK))
-		    emit_insn_after (mode_set, ptr->insn_ptr);
-		  else
-		    emit_insn_before (mode_set, ptr->insn_ptr);
+		  /* Insert MODE_SET only if it is nonempty.  */
+		  if (mode_set != NULL_RTX)
+		    {
+		      emited = true;
+		      if (NOTE_P (ptr->insn_ptr)
+			  && (NOTE_LINE_NUMBER (ptr->insn_ptr)
+			      == NOTE_INSN_BASIC_BLOCK))
+			emit_insn_after (mode_set, ptr->insn_ptr);
+		      else
+			emit_insn_before (mode_set, ptr->insn_ptr);
+		    }
 		}
 
 	      free (ptr);
@@ -1287,8 +1456,6 @@ optimize_mode_switching (FILE *file)
   sbitmap_vector_free (antic);
   sbitmap_vector_free (transp);
   sbitmap_vector_free (comp);
-  sbitmap_vector_free (delete);
-  sbitmap_vector_free (insert);
 
   if (need_commit)
     commit_edge_insertions ();

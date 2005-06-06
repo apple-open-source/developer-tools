@@ -215,7 +215,8 @@ extern GTY(()) int mn10300_unspec_int_label_counter;
 	fixed_regs[i] = call_used_regs[i] = 1;	\
     }						\
   if (flag_pic)					\
-    fixed_regs[PIC_OFFSET_TABLE_REGNUM] = 1;	\
+    fixed_regs[PIC_OFFSET_TABLE_REGNUM] =       \
+    call_used_regs[PIC_OFFSET_TABLE_REGNUM] = 1;\
 }
 
 /* Return number of consecutive hard regs needed starting at reg REGNO
@@ -366,41 +367,59 @@ enum reg_class {
    has been allocated, which happens in local-alloc.c.  */
 
 #ifndef REG_OK_STRICT
-# define REGNO_IN_RANGE_P(regno,min,max) \
-  (IN_RANGE ((regno), (min), (max)) || (regno) >= FIRST_PSEUDO_REGISTER)
+# define REG_STRICT 0
 #else
-# define REGNO_IN_RANGE_P(regno,min,max) \
-  (IN_RANGE ((regno), (min), (max)) \
-   || (reg_renumber \
-       && reg_renumber[(regno)] >= (min) && reg_renumber[(regno)] <= (max)))
+# define REG_STRICT 1
 #endif
 
-#define REGNO_DATA_P(regno) \
-  REGNO_IN_RANGE_P ((regno), FIRST_DATA_REGNUM, LAST_DATA_REGNUM)
-#define REGNO_ADDRESS_P(regno) \
-  REGNO_IN_RANGE_P ((regno), FIRST_ADDRESS_REGNUM, LAST_ADDRESS_REGNUM)
-#define REGNO_SP_P(regno) \
-  REGNO_IN_RANGE_P ((regno), STACK_POINTER_REGNUM, STACK_POINTER_REGNUM)
-#define REGNO_EXTENDED_P(regno) \
-  REGNO_IN_RANGE_P ((regno), FIRST_EXTENDED_REGNUM, LAST_EXTENDED_REGNUM)
-#define REGNO_AM33_P(regno) \
-  (REGNO_DATA_P ((regno)) || REGNO_ADDRESS_P ((regno)) \
-   || REGNO_EXTENDED_P ((regno)))
-#define REGNO_FP_P(regno) \
-  REGNO_IN_RANGE_P ((regno), FIRST_FP_REGNUM, LAST_FP_REGNUM)
+# define REGNO_IN_RANGE_P(regno,min,max,strict) \
+  (IN_RANGE ((regno), (min), (max)) 		\
+   || ((strict)					\
+       ? (reg_renumber				\
+	  && reg_renumber[(regno)] >= (min)	\
+	  && reg_renumber[(regno)] <= (max))	\
+       : (regno) >= FIRST_PSEUDO_REGISTER))
 
+#define REGNO_DATA_P(regno, strict) \
+  (REGNO_IN_RANGE_P ((regno), FIRST_DATA_REGNUM, LAST_DATA_REGNUM, \
+		     (strict)))
+#define REGNO_ADDRESS_P(regno, strict) \
+  (REGNO_IN_RANGE_P ((regno), FIRST_ADDRESS_REGNUM, LAST_ADDRESS_REGNUM, \
+		     (strict)))
+#define REGNO_SP_P(regno, strict) \
+  (REGNO_IN_RANGE_P ((regno), STACK_POINTER_REGNUM, STACK_POINTER_REGNUM, \
+		     (strict)))
+#define REGNO_EXTENDED_P(regno, strict) \
+  (REGNO_IN_RANGE_P ((regno), FIRST_EXTENDED_REGNUM, LAST_EXTENDED_REGNUM, \
+		     (strict)))
+#define REGNO_AM33_P(regno, strict) \
+  (REGNO_DATA_P ((regno), (strict)) || REGNO_ADDRESS_P ((regno), (strict)) \
+   || REGNO_EXTENDED_P ((regno), (strict)))
+#define REGNO_FP_P(regno, strict) \
+  (REGNO_IN_RANGE_P ((regno), FIRST_FP_REGNUM, LAST_FP_REGNUM, (strict)))
+
+#define REGNO_STRICT_OK_FOR_BASE_P(regno, strict) \
+  (REGNO_SP_P ((regno), (strict)) \
+   || REGNO_ADDRESS_P ((regno), (strict)) \
+   || REGNO_EXTENDED_P ((regno), (strict)))
 #define REGNO_OK_FOR_BASE_P(regno) \
-  (REGNO_SP_P ((regno)) \
-   || REGNO_ADDRESS_P ((regno)) || REGNO_EXTENDED_P ((regno)))
-#define REG_OK_FOR_BASE_P(X) REGNO_OK_FOR_BASE_P (REGNO (X))
+  (REGNO_STRICT_OK_FOR_BASE_P ((regno), REG_STRICT))
+#define REG_OK_FOR_BASE_P(X) \
+  (REGNO_OK_FOR_BASE_P (REGNO (X)))
 
+#define REGNO_STRICT_OK_FOR_BIT_BASE_P(regno, strict) \
+  (REGNO_SP_P ((regno), (strict)) || REGNO_ADDRESS_P ((regno), (strict)))
 #define REGNO_OK_FOR_BIT_BASE_P(regno) \
-  (REGNO_SP_P ((regno)) || REGNO_ADDRESS_P ((regno)))
-#define REG_OK_FOR_BIT_BASE_P(X) REGNO_OK_FOR_BIT_BASE_P (REGNO (X))
+  (REGNO_STRICT_OK_FOR_BIT_BASE_P ((regno), REG_STRICT))
+#define REG_OK_FOR_BIT_BASE_P(X) \
+  (REGNO_OK_FOR_BIT_BASE_P (REGNO (X)))
 
+#define REGNO_STRICT_OK_FOR_INDEX_P(regno, strict) \
+  (REGNO_DATA_P ((regno), (strict)) || REGNO_EXTENDED_P ((regno), (strict)))
 #define REGNO_OK_FOR_INDEX_P(regno) \
-  (REGNO_DATA_P ((regno)) || REGNO_EXTENDED_P ((regno)))
-#define REG_OK_FOR_INDEX_P(X) REGNO_OK_FOR_INDEX_P (REGNO (X))
+  (REGNO_STRICT_OK_FOR_INDEX_P ((regno), REG_STRICT))
+#define REG_OK_FOR_INDEX_P(X) \
+  (REGNO_OK_FOR_INDEX_P (REGNO (X)))
 
 /* Given an rtx X being reloaded into a reg required to be
    in class CLASS, return the class of reg to actually use.
@@ -590,15 +609,6 @@ struct cum_arg {int nbytes; };
 #define FUNCTION_ARG(CUM, MODE, TYPE, NAMED) \
   function_arg (&CUM, MODE, TYPE, NAMED)
 
-#define FUNCTION_ARG_PARTIAL_NREGS(CUM, MODE, TYPE, NAMED) \
-  function_arg_partial_nregs (&CUM, MODE, TYPE, NAMED)
-
-#define FUNCTION_ARG_PASS_BY_REFERENCE(CUM, MODE, TYPE, NAMED)		\
-  ((TYPE) && int_size_in_bytes (TYPE) > 8)
- 
-#define FUNCTION_ARG_CALLEE_COPIES(CUM, MODE, TYPE, NAMED) \
-  ((TYPE) && int_size_in_bytes (TYPE) > 8)
-
 /* Define how to find the value returned by a function.
    VALTYPE is the data type of the value (as a tree).
    If the precise function being called is known, FUNC is its FUNCTION_DECL;
@@ -679,13 +689,6 @@ struct cum_arg {int nbytes; };
 /* Implement `va_start' for varargs and stdarg.  */
 #define EXPAND_BUILTIN_VA_START(valist, nextarg) \
   mn10300_va_start (valist, nextarg)
-
-/* Implement `va_arg'.  */
-#define EXPAND_BUILTIN_VA_ARG(valist, type) \
-  mn10300_va_arg (valist, type)
-
-/* Addressing modes, and classification of registers for them.  */
-
 
 /* 1 if X is an rtx for a constant that is a valid address.  */
 
@@ -756,41 +759,20 @@ struct cum_arg {int nbytes; };
 
 /* Accept either REG or SUBREG where a register is valid.  */
   
-#define RTX_OK_FOR_BASE_P(X)					\
-  ((REG_P (X) && REG_OK_FOR_BASE_P (X))				\
+#define RTX_OK_FOR_BASE_P(X, strict)				\
+  ((REG_P (X) && REGNO_STRICT_OK_FOR_BASE_P (REGNO (X),		\
+ 					     (strict))) 	\
    || (GET_CODE (X) == SUBREG && REG_P (SUBREG_REG (X))		\
-       && REG_OK_FOR_BASE_P (SUBREG_REG (X))))
+       && REGNO_STRICT_OK_FOR_BASE_P (REGNO (SUBREG_REG (X)),	\
+ 				      (strict))))
 
 #define GO_IF_LEGITIMATE_ADDRESS(MODE, X, ADDR)    	\
-{							\
-  if (CONSTANT_ADDRESS_P (X)				\
-      && (! flag_pic || legitimate_pic_operand_p (X)))	\
-    goto ADDR;						\
-  if (RTX_OK_FOR_BASE_P (X))				\
-    goto ADDR;						\
-  if (TARGET_AM33					\
-      && GET_CODE (X) == POST_INC			\
-      && RTX_OK_FOR_BASE_P (XEXP (X, 0))		\
-      && (MODE == SImode || MODE == SFmode || MODE == HImode))\
-    goto ADDR;						\
-  if (GET_CODE (X) == PLUS)				\
-    {							\
-      rtx base = 0, index = 0;				\
-      if (REG_P (XEXP (X, 0))				\
-	  && REG_OK_FOR_BASE_P (XEXP (X, 0)))		\
-	base = XEXP (X, 0), index = XEXP (X, 1);	\
-      if (REG_P (XEXP (X, 1))				\
-	  && REG_OK_FOR_BASE_P (XEXP (X, 1)))		\
-	base = XEXP (X, 1), index = XEXP (X, 0);	\
-      if (base != 0 && index != 0)			\
-	{						\
-	  if (GET_CODE (index) == CONST_INT)		\
-	    goto ADDR;					\
-	  if (GET_CODE (index) == CONST)		\
-	    goto ADDR;					\
-	}						\
-    }							\
-}
+do							\
+  {							\
+    if (legitimate_address_p ((MODE), (X), REG_STRICT))	\
+      goto ADDR;					\
+  }							\
+while (0) 
 
 
 /* Try machine-dependent ways of modifying an illegitimate address

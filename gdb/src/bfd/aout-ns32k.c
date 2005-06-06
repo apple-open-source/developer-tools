@@ -1,5 +1,5 @@
 /* BFD back-end for ns32k a.out-ish binaries.
-   Copyright 1990, 1991, 1992, 1994, 1995, 1996, 1998, 2000, 2001, 2002
+   Copyright 1990, 1991, 1992, 1994, 1995, 1996, 1998, 2000, 2001, 2002, 2003
    Free Software Foundation, Inc.
    Contributed by Ian Dall (idall@eleceng.adelaide.edu.au).
 
@@ -18,8 +18,6 @@
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
    Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
-
-#define BYTES_IN_WORD 4
 
 #include "bfd.h"
 #include "aout/aout64.h"
@@ -67,12 +65,12 @@ MY(put_reloc) PARAMS ((bfd *, int, int, bfd_vma, reloc_howto_type *,
 		       struct reloc_std_external *));
 
 /* The ns32k series is ah, unusual, when it comes to relocation.
-   There are three storage methods for relocateable objects.  There
+   There are three storage methods for relocatable objects.  There
    are displacements, immediate operands and ordinary twos complement
    data. Of these, only the last fits into the standard relocation
    scheme.  Immediate operands are stored huffman encoded and
    immediate operands are stored big endian (where as the natural byte
-   order is little endian for this achitecture).
+   order is little endian for this architecture).
 
    Note that the ns32k displacement storage method is orthogonal to
    whether the relocation is pc relative or not. The "displacement"

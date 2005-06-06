@@ -1,5 +1,5 @@
 /* FloatBufferImpl.java -- 
-   Copyright (C) 2002, 2003 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -80,6 +80,8 @@ final class FloatBufferImpl extends FloatBuffer
   
   public FloatBuffer compact ()
   {
+    checkIfReadOnly();
+    mark = -1;
     int copied = 0;
     
     while (remaining () > 0)
@@ -89,6 +91,7 @@ final class FloatBufferImpl extends FloatBuffer
       }
 
     position (copied);
+    limit(capacity());
     return this;
   }
   
@@ -98,10 +101,16 @@ final class FloatBufferImpl extends FloatBuffer
   }
 
   /**
-   * Relative get method. Reads the next <code>float</code> from the buffer.
+   * Reads the <code>float</code> at this buffer's current position,
+   * and then increments the position.
+   *
+   * @exception BufferUnderflowException If there are no remaining
+   * <code>floats</code> in this buffer.
    */
   public float get ()
   {
+    checkForUnderflow();
+
     float result = backing_buffer [position ()];
     position (position () + 1);
     return result;
@@ -111,13 +120,15 @@ final class FloatBufferImpl extends FloatBuffer
    * Relative put method. Writes <code>value</code> to the next position
    * in the buffer.
    * 
+   * @exception BufferOverflowException If there no remaining 
+   * space in this buffer.
    * @exception ReadOnlyBufferException If this buffer is read-only.
    */
   public FloatBuffer put (float value)
   {
-    if (readOnly)
-      throw new ReadOnlyBufferException ();
-	  	    
+    checkIfReadOnly();
+    checkForOverflow();
+
     backing_buffer [position ()] = value;
     position (position () + 1);
     return this;
@@ -132,11 +143,13 @@ final class FloatBufferImpl extends FloatBuffer
    */
   public float get (int index)
   {
+    checkIndex(index);
+
     return backing_buffer [index];
   }
   
   /**
-   * Absolute put method. Writes <code>value</value> to position
+   * Absolute put method. Writes <code>value</code> to position
    * <code>index</code> in the buffer.
    *
    * @exception IndexOutOfBoundsException If index is negative or not smaller
@@ -145,9 +158,9 @@ final class FloatBufferImpl extends FloatBuffer
    */
   public FloatBuffer put (int index, float value)
   {
-    if (readOnly)
-      throw new ReadOnlyBufferException ();
-    	    
+    checkIfReadOnly();
+    checkIndex(index);
+
     backing_buffer [index] = value;
     return this;
   }

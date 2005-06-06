@@ -1,5 +1,5 @@
 /* Simple bitmaps.
-   Copyright (C) 1999, 2000, 2002, 2003 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2002, 2003, 2004 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -25,8 +25,8 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
    It should be straightforward to convert so for now we keep things simple
    while more important issues are dealt with.  */
 
-#define SBITMAP_ELT_BITS ((unsigned) HOST_BITS_PER_WIDE_INT)
-#define SBITMAP_ELT_TYPE unsigned HOST_WIDE_INT
+#define SBITMAP_ELT_BITS ((unsigned) HOST_BITS_PER_WIDEST_FAST_INT)
+#define SBITMAP_ELT_TYPE unsigned HOST_WIDEST_FAST_INT
 
 typedef struct simple_bitmap_def
 {
@@ -58,30 +58,31 @@ typedef SBITMAP_ELT_TYPE *sbitmap_ptr;
 /* Loop over all elements of SBITSET, starting with MIN.  */
 #define EXECUTE_IF_SET_IN_SBITMAP(SBITMAP, MIN, N, CODE)		\
 do {									\
-  unsigned int word_num_;						\
+  unsigned int word_num_ = (MIN) / (unsigned int) SBITMAP_ELT_BITS;	\
   unsigned int bit_num_ = (MIN) % (unsigned int) SBITMAP_ELT_BITS;	\
   unsigned int size_ = (SBITMAP)->size;					\
   SBITMAP_ELT_TYPE *ptr_ = (SBITMAP)->elms;				\
+  SBITMAP_ELT_TYPE word_;						\
 									\
-  for (word_num_ = (MIN) / (unsigned int) SBITMAP_ELT_BITS;		\
-       word_num_ < size_; word_num_++, bit_num_ = 0)			\
+  if (word_num_ < size_)						\
     {									\
-      SBITMAP_ELT_TYPE word_ = ptr_[word_num_];				\
+      word_ = ptr_[word_num_] >> bit_num_;				\
 									\
-      if (word_ != 0)							\
-	for (; bit_num_ < SBITMAP_ELT_BITS; bit_num_++)			\
-	  {								\
-	    SBITMAP_ELT_TYPE _mask = (SBITMAP_ELT_TYPE) 1 << bit_num_;	\
-									\
-	    if ((word_ & _mask) != 0)					\
-	      {								\
-		word_ &= ~ _mask;					\
-		(N) = word_num_ * SBITMAP_ELT_BITS + bit_num_;		\
-		CODE;							\
-		if (word_ == 0)						\
-		  break;						\
-	      }								\
-	  }								\
+      while (1)								\
+	{								\
+	  for (; word_ != 0; word_ >>= 1, bit_num_++)			\
+	    {								\
+	      if ((word_ & 1) != 0)					\
+		{							\
+		  (N) = word_num_ * SBITMAP_ELT_BITS + bit_num_;	\
+		  CODE;							\
+		}							\
+	    }								\
+	  word_num_++;							\
+	  if (word_num_ >= size_)					\
+	    break;							\
+	  bit_num_ = 0, word_ = ptr_[word_num_];			\
+	}								\
     }									\
 } while (0)
 
@@ -140,6 +141,7 @@ extern void sbitmap_a_or_b_and_c (sbitmap, sbitmap, sbitmap, sbitmap);
 extern bool sbitmap_a_or_b_and_c_cg (sbitmap, sbitmap, sbitmap, sbitmap);
 extern void sbitmap_a_and_b_or_c (sbitmap, sbitmap, sbitmap, sbitmap);
 extern bool sbitmap_a_and_b_or_c_cg (sbitmap, sbitmap, sbitmap, sbitmap);
+extern bool sbitmap_any_common_bits (sbitmap, sbitmap);
 extern void sbitmap_a_and_b (sbitmap, sbitmap, sbitmap);
 extern bool sbitmap_a_and_b_cg (sbitmap, sbitmap, sbitmap);
 extern void sbitmap_a_or_b (sbitmap, sbitmap, sbitmap);

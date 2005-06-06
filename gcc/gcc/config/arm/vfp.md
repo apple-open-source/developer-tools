@@ -1,5 +1,5 @@
 ;; ARM VFP coprocessor Machine Description
-;; Copyright (C) 2003 Free Software Foundation, Inc.
+;; Copyright (C) 2003, 2005 Free Software Foundation, Inc.
 ;; Written by CodeSourcery, LLC.
 ;;
 ;; This file is part of GCC.
@@ -56,7 +56,7 @@
 (define_cpu_unit "vfp_ls" "vfp11")
 
 ;; The VFP "type" attributes differ from those used in the FPA model.
-;; ffarith	Fast floating point insns, eg. abs, neg, cpy, cmp.
+;; ffarith	Fast floating point insns, e.g. abs, neg, cpy, cmp.
 ;; farith	Most arithmetic insns.
 ;; fmul		Double precision multiply.
 ;; fdivs	Single precision sqrt or division.
@@ -111,8 +111,8 @@
 ;; ??? For now do not allow loading constants into vfp regs.  This causes
 ;; problems because small constants get converted into adds.
 (define_insn "*arm_movsi_vfp"
-  [(set (match_operand:SI 0 "nonimmediate_operand" "=r,r,r ,m,!w,r,!w,!w,  Uv")
-      (match_operand:SI 1 "general_operand"	   "rI,K,mi,r,r,!w,!w,Uvi,!w"))]
+  [(set (match_operand:SI 0 "nonimmediate_operand" "=r,r,r ,m,*w,r,*w,*w, *Uv")
+      (match_operand:SI 1 "general_operand"	   "rI,K,mi,r,r,*w,*w,*Uvi,*w"))]
   "TARGET_ARM && TARGET_VFP && TARGET_HARD_FLOAT
    && (   s_register_operand (operands[0], SImode)
        || s_register_operand (operands[1], SImode))"

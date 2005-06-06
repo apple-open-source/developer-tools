@@ -108,6 +108,7 @@ extern unsigned xtensa_current_frame_size;
     builtin_assert ("machine=xtensa");					\
     builtin_define ("__xtensa__");					\
     builtin_define ("__XTENSA__");					\
+    builtin_define ("__XTENSA_WINDOWED_ABI__");				\
     builtin_define (TARGET_BIG_ENDIAN ? "__XTENSA_EB__" : "__XTENSA_EL__"); \
     if (!TARGET_HARD_FLOAT)						\
       builtin_define ("__XTENSA_SOFT_FLOAT__");				\
@@ -207,6 +208,15 @@ extern unsigned xtensa_current_frame_size;
 /* Imitate the way many other C compilers handle alignment of
    bitfields and the structures that contain them.  */
 #define PCC_BITFIELD_TYPE_MATTERS 1
+
+/* Disable the use of word-sized or smaller complex modes for structures,
+   and for function arguments in particular, where they cause problems with
+   register a7.  The xtensa_copy_incoming_a7 function assumes that there is
+   a single reference to an argument in a7, but with small complex modes the
+   real and imaginary components may be extracted separately, leading to two
+   uses of the register, only one of which would be replaced.  */
+#define MEMBER_TYPE_FORCES_BLK(FIELD, MODE) \
+  ((MODE) == CQImode || (MODE) == CHImode)
 
 /* Align string constants and constructors to at least a word boundary.
    The typical use of this macro is to increase alignment for string
@@ -761,9 +771,6 @@ typedef struct xtensa_args
 #define FUNCTION_INCOMING_ARG(CUM, MODE, TYPE, NAMED) \
   function_arg (&CUM, MODE, TYPE, TRUE)
 
-/* Arguments are never passed partly in memory and partly in registers.  */
-#define FUNCTION_ARG_PARTIAL_NREGS(CUM, MODE, TYPE, NAMED) (0)
-
 /* Specify function argument alignment.  */
 #define FUNCTION_ARG_BOUNDARY(MODE, TYPE)				\
   ((TYPE) != 0								\
@@ -773,22 +780,6 @@ typedef struct xtensa_args
    : (GET_MODE_ALIGNMENT (MODE) <= PARM_BOUNDARY			\
       ? PARM_BOUNDARY							\
       : GET_MODE_ALIGNMENT (MODE)))
-
-/* Nonzero if we do not know how to pass TYPE solely in registers.
-   We cannot do so in the following cases:
-
-   - if the type has variable size
-   - if the type is marked as addressable (it is required to be constructed
-     into the stack)
-
-   This differs from the default in that it does not check if the padding
-   and mode of the type are such that a copy into a register would put it
-   into the wrong part of the register.  */
-
-#define MUST_PASS_IN_STACK(MODE, TYPE)					\
-  ((TYPE) != 0								\
-   && (TREE_CODE (TYPE_SIZE (TYPE)) != INTEGER_CST			\
-       || TREE_ADDRESSABLE (TYPE)))
 
 /* Profiling Xtensa code is typically done with the built-in profiling
    feature of Tensilica's instruction set simulator, which does not
@@ -900,10 +891,6 @@ typedef struct xtensa_args
 /* Implement `va_start' for varargs and stdarg.  */
 #define EXPAND_BUILTIN_VA_START(valist, nextarg) \
   xtensa_va_start (valist, nextarg)
-
-/* Implement `va_arg'.  */
-#define EXPAND_BUILTIN_VA_ARG(valist, type) \
-  xtensa_va_arg (valist, type)
 
 /* If defined, a C expression that produces the machine-specific code
    to setup the stack so that arbitrary frames can be accessed.

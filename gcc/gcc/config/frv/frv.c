@@ -1,4 +1,4 @@
-/* Copyright (C) 1997, 1998, 1999, 2000, 2001, 2003, 2004
+/* Copyright (C) 1997, 1998, 1999, 2000, 2001, 2003, 2004, 2005
    Free Software Foundation, Inc.
    Contributed by Red Hat, Inc.
 
@@ -48,11 +48,80 @@ Boston, MA 02111-1307, USA.  */
 #include <ctype.h>
 #include "target.h"
 #include "target-def.h"
+#include "targhooks.h"
 #include "integrate.h"
+#include "langhooks.h"
 
 #ifndef FRV_INLINE
 #define FRV_INLINE inline
 #endif
+
+/* The maximum number of distinct NOP patterns.  There are three:
+   nop, fnop and mnop.  */
+#define NUM_NOP_PATTERNS 3
+
+/* Classification of instructions and units: integer, floating-point/media,
+   branch and control.  */
+enum frv_insn_group { GROUP_I, GROUP_FM, GROUP_B, GROUP_C, NUM_GROUPS };
+
+/* The DFA names of the units, in packet order.  */
+static const char *const frv_unit_names[] =
+{
+  "c",
+  "i0", "f0",
+  "i1", "f1",
+  "i2", "f2",
+  "i3", "f3",
+  "b0", "b1"
+};
+
+/* The classification of each unit in frv_unit_names[].  */
+static const enum frv_insn_group frv_unit_groups[ARRAY_SIZE (frv_unit_names)] =
+{
+  GROUP_C,
+  GROUP_I, GROUP_FM,
+  GROUP_I, GROUP_FM,
+  GROUP_I, GROUP_FM,
+  GROUP_I, GROUP_FM,
+  GROUP_B, GROUP_B
+};
+
+/* Return the DFA unit code associated with the Nth unit of integer
+   or floating-point group GROUP,  */
+#define NTH_UNIT(GROUP, N) frv_unit_codes[(GROUP) + (N) * 2 + 1]
+
+/* Return the number of integer or floating-point unit UNIT
+   (1 for I1, 2 for F2, etc.).  */
+#define UNIT_NUMBER(UNIT) (((UNIT) - 1) / 2)
+
+/* The DFA unit number for each unit in frv_unit_names[].  */
+static int frv_unit_codes[ARRAY_SIZE (frv_unit_names)];
+
+/* FRV_TYPE_TO_UNIT[T] is the last unit in frv_unit_names[] that can issue
+   an instruction of type T.  The value is ARRAY_SIZE (frv_unit_names) if
+   no instruction of type T has been seen.  */
+static unsigned int frv_type_to_unit[TYPE_UNKNOWN + 1];
+
+/* An array of dummy nop INSNs, one for each type of nop that the
+   target supports.  */
+static GTY(()) rtx frv_nops[NUM_NOP_PATTERNS];
+
+/* The number of nop instructions in frv_nops[].  */
+static unsigned int frv_num_nops;
+
+/* Return true if instruction INSN should be packed with the following
+   instruction.  */
+#define PACKING_FLAG_P(INSN) (GET_MODE (INSN) == TImode)
+
+/* Set the value of PACKING_FLAG_P(INSN).  */
+#define SET_PACKING_FLAG(INSN) PUT_MODE (INSN, TImode)
+#define CLEAR_PACKING_FLAG(INSN) PUT_MODE (INSN, VOIDmode)
+
+/* Loop with REG set to each hard register in rtx X.  */
+#define FOR_EACH_REGNO(REG, X)						\
+  for (REG = REGNO (X);							\
+       REG < REGNO (X) + HARD_REGNO_NREGS (REGNO (X), GET_MODE (X));	\
+       REG++)
 
 /* Information about a relocation unspec.  SYMBOL is the relocation symbol
    (a SYMBOL_REF or LABEL_REF), RELOC is the type of relocation and OFFSET
@@ -71,23 +140,15 @@ typedef struct frv_tmp_reg_struct
   }
 frv_tmp_reg_t;
 
-/* Register state information for VLIW re-packing phase.  These values must fit
-   within an unsigned char.  */
-#define REGSTATE_DEAD		0x00	/* register is currently dead */
+/* Register state information for VLIW re-packing phase.  */
 #define REGSTATE_CC_MASK	0x07	/* Mask to isolate CCn for cond exec */
-#define REGSTATE_LIVE		0x08	/* register is live */
-#define REGSTATE_MODIFIED	0x10	/* reg modified in current VLIW insn */
-#define REGSTATE_IF_TRUE	0x20	/* reg modified in cond exec true */
-#define REGSTATE_IF_FALSE	0x40	/* reg modified in cond exec false */
-#define REGSTATE_UNUSED		0x80	/* bit for hire */
-#define REGSTATE_MASK		0xff	/* mask for the bits to set */
+#define REGSTATE_MODIFIED	0x08	/* reg modified in current VLIW insn */
+#define REGSTATE_IF_TRUE	0x10	/* reg modified in cond exec true */
+#define REGSTATE_IF_FALSE	0x20	/* reg modified in cond exec false */
 
-					/* conditional expression used */
 #define REGSTATE_IF_EITHER	(REGSTATE_IF_TRUE | REGSTATE_IF_FALSE)
 
-/* The following is not sure in the reg_state bytes, so can have a larger value
-   than 0xff.  */
-#define REGSTATE_CONDJUMP	0x100	/* conditional jump done in VLIW insn */
+typedef unsigned char regstate_t;
 
 /* Used in frv_frame_accessor_t to indicate the direction of a register-to-
    memory move.  */
@@ -215,6 +276,7 @@ static void frv_print_operand_memory_reference_reg
 						(FILE *, rtx);
 static void frv_print_operand_memory_reference	(FILE *, rtx, int);
 static int frv_print_operand_jump_hint		(rtx);
+static const char *comparison_string		(enum rtx_code, rtx);
 static FRV_INLINE int frv_regno_ok_for_base_p	(int, int);
 static rtx single_set_pattern			(rtx);
 static int frv_function_contains_far_jump	(void);
@@ -237,32 +299,59 @@ static int frv_legitimate_memory_operand	(rtx, enum machine_mode, int);
 static rtx frv_int_to_acc			(enum insn_code, int, rtx);
 static enum machine_mode frv_matching_accg_mode	(enum machine_mode);
 static rtx frv_read_argument			(tree *);
+static rtx frv_read_iacc_argument		(enum machine_mode, tree *);
 static int frv_check_constant_argument		(enum insn_code, int, rtx);
 static rtx frv_legitimize_target		(enum insn_code, rtx);
 static rtx frv_legitimize_argument		(enum insn_code, int, rtx);
+static rtx frv_legitimize_tls_address		(rtx, enum tls_model);
 static rtx frv_expand_set_builtin		(enum insn_code, tree, rtx);
 static rtx frv_expand_unop_builtin		(enum insn_code, tree, rtx);
 static rtx frv_expand_binop_builtin		(enum insn_code, tree, rtx);
 static rtx frv_expand_cut_builtin		(enum insn_code, tree, rtx);
 static rtx frv_expand_binopimm_builtin		(enum insn_code, tree, rtx);
 static rtx frv_expand_voidbinop_builtin		(enum insn_code, tree);
+static rtx frv_expand_int_void2arg		(enum insn_code, tree);
+static rtx frv_expand_prefetches		(enum insn_code, tree);
 static rtx frv_expand_voidtriop_builtin		(enum insn_code, tree);
 static rtx frv_expand_voidaccop_builtin		(enum insn_code, tree);
 static rtx frv_expand_mclracc_builtin		(tree);
 static rtx frv_expand_mrdacc_builtin		(enum insn_code, tree);
 static rtx frv_expand_mwtacc_builtin		(enum insn_code, tree);
 static rtx frv_expand_noargs_builtin		(enum insn_code);
+static void frv_split_iacc_move			(rtx, rtx);
 static rtx frv_emit_comparison			(enum rtx_code, rtx, rtx);
 static int frv_clear_registers_used		(rtx *, void *);
 static void frv_ifcvt_add_insn			(rtx, rtx, int);
 static rtx frv_ifcvt_rewrite_mem		(rtx, enum machine_mode, rtx);
 static rtx frv_ifcvt_load_value			(rtx, rtx);
-static void frv_registers_update		(rtx, unsigned char [],
-						 int [], int *, int);
-static int frv_registers_used_p			(rtx, unsigned char [], int);
-static int frv_registers_set_p			(rtx, unsigned char [], int);
-static int frv_issue_rate			(void);
-static int frv_use_dfa_pipeline_interface	(void);
+static int frv_acc_group_1			(rtx *, void *);
+static unsigned int frv_insn_unit		(rtx);
+static bool frv_issues_to_branch_unit_p		(rtx);
+static int frv_cond_flags 			(rtx);
+static bool frv_regstate_conflict_p 		(regstate_t, regstate_t);
+static int frv_registers_conflict_p_1 		(rtx *, void *);
+static bool frv_registers_conflict_p 		(rtx);
+static void frv_registers_update_1 		(rtx, rtx, void *);
+static void frv_registers_update 		(rtx);
+static void frv_start_packet 			(void);
+static void frv_start_packet_block 		(void);
+static void frv_finish_packet 			(void (*) (void));
+static bool frv_pack_insn_p 			(rtx);
+static void frv_add_insn_to_packet		(rtx);
+static void frv_insert_nop_in_packet		(rtx);
+static bool frv_for_each_packet 		(void (*) (void));
+static bool frv_sort_insn_group_1		(enum frv_insn_group,
+						 unsigned int, unsigned int,
+						 unsigned int, unsigned int,
+						 state_t);
+static int frv_compare_insns			(const void *, const void *);
+static void frv_sort_insn_group			(enum frv_insn_group);
+static void frv_reorder_packet 			(void);
+static void frv_fill_unused_units		(enum frv_insn_group);
+static void frv_align_label 			(void);
+static void frv_reorg_packet 			(void);
+static void frv_register_nop			(rtx);
+static void frv_reorg 				(void);
 static void frv_pack_insns			(void);
 static void frv_function_prologue		(FILE *, HOST_WIDE_INT);
 static void frv_function_epilogue		(FILE *, HOST_WIDE_INT);
@@ -287,6 +376,9 @@ static void frv_output_const_unspec		(FILE *,
 						 const struct frv_unspec *);
 static bool frv_function_ok_for_sibcall		(tree, tree);
 static rtx frv_struct_value_rtx			(tree, int);
+static bool frv_must_pass_in_stack (enum machine_mode mode, tree type);
+static int frv_arg_partial_bytes (CUMULATIVE_ARGS *, enum machine_mode,
+				  tree, bool);
 
 /* Initialize the GCC target structure.  */
 #undef  TARGET_ASM_FUNCTION_PROLOGUE
@@ -317,23 +409,36 @@ static rtx frv_struct_value_rtx			(tree, int);
 
 #undef  TARGET_SCHED_ISSUE_RATE
 #define TARGET_SCHED_ISSUE_RATE frv_issue_rate
-#undef  TARGET_SCHED_USE_DFA_PIPELINE_INTERFACE
-#define TARGET_SCHED_USE_DFA_PIPELINE_INTERFACE frv_use_dfa_pipeline_interface
 
 #undef TARGET_FUNCTION_OK_FOR_SIBCALL
 #define TARGET_FUNCTION_OK_FOR_SIBCALL frv_function_ok_for_sibcall
 #undef TARGET_CANNOT_FORCE_CONST_MEM
 #define TARGET_CANNOT_FORCE_CONST_MEM frv_cannot_force_const_mem
 
+#undef TARGET_HAVE_TLS
+#define TARGET_HAVE_TLS HAVE_AS_TLS
+
 #undef TARGET_STRUCT_VALUE_RTX
 #define TARGET_STRUCT_VALUE_RTX frv_struct_value_rtx
+#undef TARGET_MUST_PASS_IN_STACK
+#define TARGET_MUST_PASS_IN_STACK frv_must_pass_in_stack
+#undef TARGET_PASS_BY_REFERENCE
+#define TARGET_PASS_BY_REFERENCE hook_pass_by_reference_must_pass_in_stack
+#undef TARGET_ARG_PARTIAL_BYTES
+#define TARGET_ARG_PARTIAL_BYTES frv_arg_partial_bytes
 
 #undef TARGET_EXPAND_BUILTIN_SAVEREGS
 #define TARGET_EXPAND_BUILTIN_SAVEREGS frv_expand_builtin_saveregs
 #undef TARGET_SETUP_INCOMING_VARARGS
 #define TARGET_SETUP_INCOMING_VARARGS frv_setup_incoming_varargs
+#undef TARGET_MACHINE_DEPENDENT_REORG
+#define TARGET_MACHINE_DEPENDENT_REORG frv_reorg
 
 struct gcc_target targetm = TARGET_INITIALIZER;
+
+#define FRV_SYMBOL_REF_TLS_P(RTX) \
+  (GET_CODE (RTX) == SYMBOL_REF && SYMBOL_REF_TLS_MODEL (RTX) != 0)
+
 
 /* Any function call that satisfies the machine-independent
    requirements is eligible on FR-V.  */
@@ -422,10 +527,17 @@ frv_default_flags_for_cpu (void)
     case FRV_CPU_GENERIC:
       return MASK_DEFAULT_FRV;
 
+    case FRV_CPU_FR550:
+      return MASK_DEFAULT_FR550;
+
     case FRV_CPU_FR500:
     case FRV_CPU_TOMCAT:
       return MASK_DEFAULT_FR500;
 
+    case FRV_CPU_FR450:
+      return MASK_DEFAULT_FR450;
+
+    case FRV_CPU_FR405:
     case FRV_CPU_FR400:
       return MASK_DEFAULT_FR400;
 
@@ -448,7 +560,8 @@ frv_default_flags_for_cpu (void)
 void
 frv_override_options (void)
 {
-  int regno, i;
+  int regno;
+  unsigned int i;
 
   /* Set the cpu type.  */
   if (frv_cpu_string)
@@ -465,8 +578,17 @@ frv_override_options (void)
       else
 	{
 	  const char *p = frv_cpu_string + sizeof ("fr") - 1;
-	  if (strcmp (p, "500") == 0)
+	  if (strcmp (p, "550") == 0)
+	    frv_cpu_type = FRV_CPU_FR550;
+
+	  else if (strcmp (p, "500") == 0)
 	    frv_cpu_type = FRV_CPU_FR500;
+
+	  else if (strcmp (p, "450") == 0)
+	    frv_cpu_type = FRV_CPU_FR450;
+
+	  else if (strcmp (p, "405") == 0)
+	    frv_cpu_type = FRV_CPU_FR405;
 
 	  else if (strcmp (p, "400") == 0)
 	    frv_cpu_type = FRV_CPU_FR400;
@@ -498,11 +620,6 @@ frv_override_options (void)
 	}
     }
 
-  /* Both -fpic and -gdwarf want to use .previous and the assembler only keeps
-     one level.  */
-  if (write_symbols == DWARF_DEBUG && flag_pic)
-    error ("-fpic and -gdwarf are incompatible (-fpic and -g/-gdwarf-2 are fine)");
-
   /* Change the branch cost value.  */
   if (frv_branch_cost_string)
     frv_branch_cost_int = atoi (frv_branch_cost_string);
@@ -531,7 +648,20 @@ frv_override_options (void)
       if (GPR_P (regno))
 	{
 	  int gpr_reg = regno - GPR_FIRST;
-	  if ((gpr_reg & 3) == 0)
+
+	  if (gpr_reg == GR8_REG)
+	    class = GR8_REGS;
+
+	  else if (gpr_reg == GR9_REG)
+	    class = GR9_REGS;
+
+	  else if (gpr_reg == GR14_REG)
+	    class = FDPIC_FPTR_REGS;
+
+	  else if (gpr_reg == FDPIC_REGNO)
+	    class = FDPIC_REGS;
+
+	  else if ((gpr_reg & 3) == 0)
 	    class = QUAD_REGS;
 
 	  else if ((gpr_reg & 1) == 0)
@@ -647,6 +777,12 @@ frv_override_options (void)
   if ((target_flags_explicit & MASK_LINKED_FP) == 0)
     target_flags |= MASK_LINKED_FP;
 
+  for (i = 0; i < ARRAY_SIZE (frv_unit_names); i++)
+    frv_unit_codes[i] = get_cpu_unit_code (frv_unit_names[i]);
+
+  for (i = 0; i < ARRAY_SIZE (frv_type_to_unit); i++)
+    frv_type_to_unit[i] = ARRAY_SIZE (frv_unit_codes);
+
   init_machine_status = frv_init_machine_status;
 }
 
@@ -728,12 +864,6 @@ frv_conditional_register_usage (void)
     fixed_regs[i] = call_used_regs[i] = 1;
 
   for (i = FPR_FIRST + NUM_FPRS; i <= FPR_LAST; i++)
-    fixed_regs[i] = call_used_regs[i] = 1;
-
-  for (i = ACC_FIRST + NUM_ACCS; i <= ACC_LAST; i++)
-    fixed_regs[i] = call_used_regs[i] = 1;
-
-  for (i = ACCG_FIRST + NUM_ACCS; i <= ACCG_LAST; i++)
     fixed_regs[i] = call_used_regs[i] = 1;
 
   /* Reserve the registers used for conditional execution.  At present, we need
@@ -1322,9 +1452,9 @@ frv_debug_stack (frv_stack_t *info)
 
 
 
-/* The following variable value is TRUE if the next output insn should
-   finish cpu cycle.  In order words the insn will have packing bit
-   (which means absence of asm code suffix `.p' on assembler.  */
+/* Used during final to control the packing of insns.  The value is
+   1 if the current instruction should be packed with the next one,
+   0 if it shouldn't or -1 if packing is disabled altogether.  */
 
 static int frv_insn_packing_flag;
 
@@ -1388,7 +1518,9 @@ frv_function_prologue (FILE *file, HOST_WIDE_INT size ATTRIBUTE_UNUSED)
     }
 
   frv_pack_insns ();
-  frv_insn_packing_flag = TRUE;
+
+  /* Allow the garbage collector to free the nops created by frv_reorg.  */
+  memset (frv_nops, 0, sizeof (frv_nops));
 }
 
 
@@ -1744,7 +1876,7 @@ frv_function_epilogue (FILE *file ATTRIBUTE_UNUSED,
   memset (&frv_ifcvt.tmp_reg, 0, sizeof (frv_ifcvt.tmp_reg));
 
   /* Release the bitmap of created insns.  */
-  BITMAP_XFREE (frv_ifcvt.scratch_insns_bitmap);
+  BITMAP_FREE (frv_ifcvt.scratch_insns_bitmap);
 }
 
 
@@ -1754,12 +1886,7 @@ frv_function_epilogue (FILE *file ATTRIBUTE_UNUSED,
    it allows the scheduler to intermix instructions with the saves of
    the caller saved registers.  In some cases, it might be necessary
    to emit a barrier instruction as the last insn to prevent such
-   scheduling.
-
-   If SIBCALL_P is true, the final branch back to the calling function is
-   omitted, and is used for sibling call (aka tail call) sites.  For sibcalls,
-   we must not clobber any arguments used for parameter passing or any stack
-   slots for arguments passed to the current function.  */
+   scheduling.  */
 
 void
 frv_expand_epilogue (bool emit_return)
@@ -1854,7 +1981,7 @@ frv_asm_output_mi_thunk (FILE *file,
   const char *name_func = XSTR (XEXP (DECL_RTL (function), 0), 0);
   const char *name_arg0 = reg_names[FIRST_ARG_REGNUM];
   const char *name_jmp = reg_names[JUMP_REGNO];
-  const char *parallel = ((PACKING_FLAG_USED_P ()) ? ".p" : "");
+  const char *parallel = (frv_issue_rate () > 1 ? ".p" : "");
 
   /* Do the add using an addi if possible.  */
   if (IN_RANGE_P (delta, -2048, 2047))
@@ -2080,35 +2207,6 @@ frv_expand_builtin_va_start (tree valist, rtx nextarg)
 }
 
 
-/* Expand __builtin_va_arg to do the va_arg macro.  */
-
-rtx
-frv_expand_builtin_va_arg (tree valist, tree type)
-{
-  rtx addr;
-  rtx mem;
-  rtx reg;
-
-  if (TARGET_DEBUG_ARG)
-    {
-      fprintf (stderr, "va_arg:\n");
-      debug_tree (type);
-    }
-
-  if (! AGGREGATE_TYPE_P (type))
-    return std_expand_builtin_va_arg (valist, type);
-
-  addr = std_expand_builtin_va_arg (valist, ptr_type_node);
-  mem  = gen_rtx_MEM (Pmode, addr);
-  reg  = gen_reg_rtx (Pmode);
-
-  set_mem_alias_set (mem, get_varargs_alias_set ());
-  emit_move_insn (reg, mem);
-
-  return reg;
-}
-
-
 /* Expand a block move operation, and return 1 if successful.  Return 0
    if we should let the compiler generate normal code.
 
@@ -2304,7 +2402,7 @@ frv_asm_output_opcode (FILE *f, const char *ptr)
 {
   int c;
 
-  if (! PACKING_FLAG_USED_P())
+  if (frv_insn_packing_flag <= 0)
     return ptr;
 
   for (; *ptr && *ptr != ' ' && *ptr != '\t';)
@@ -2324,53 +2422,31 @@ frv_asm_output_opcode (FILE *f, const char *ptr)
 	fputc (c, f);
     }
 
-  if (!frv_insn_packing_flag)
-    fprintf (f, ".p");
+  fprintf (f, ".p");
 
   return ptr;
 }
 
-/* The following function sets up the packing bit for the current
-   output insn.  Remember that the function is not called for asm
-   insns.  */
+/* Set up the packing bit for the current output insn.  Note that this
+   function is not called for asm insns.  */
 
 void
-frv_final_prescan_insn (rtx insn, rtx *opvec, int noperands ATTRIBUTE_UNUSED)
+frv_final_prescan_insn (rtx insn, rtx *opvec,
+			int noperands ATTRIBUTE_UNUSED)
 {
-  if (! PACKING_FLAG_USED_P())
-    return;
-
-  if (!INSN_P (insn))
-    return;
-
-  frv_insn_operands = opvec;
-
-  /* Look for the next printable instruction.  frv_pack_insns () has set
-     things up so that any printable instruction will have TImode if it
-     starts a new packet and VOIDmode if it should be packed with the
-     previous instruction.
-
-     Printable instructions will be asm_operands or match one of the .md
-     patterns.  Since asm instructions cannot be packed -- and will
-     therefore have TImode -- this loop terminates on any recognizable
-     instruction, and on any unrecognizable instruction with TImode.  */
-  for (insn = NEXT_INSN (insn); insn; insn = NEXT_INSN (insn))
+  if (INSN_P (insn))
     {
-      if (NOTE_P (insn))
-	continue;
-      else if (!INSN_P (insn))
-	break;
-      else if (GET_MODE (insn) == TImode || INSN_CODE (insn) != -1)
-	break;
+      if (frv_insn_packing_flag >= 0)
+	{
+	  frv_insn_operands = opvec;
+	  frv_insn_packing_flag = PACKING_FLAG_P (insn);
+	}
+      else if (recog_memoized (insn) >= 0
+	       && get_attr_acc_group (insn) == ACC_GROUP_ODD)
+	/* Packing optimizations have been disabled, but INSN can only
+	   be issued in M1.  Insert an mnop in M0.  */
+	fprintf (asm_out_file, "\tmnop.p\n");
     }
-
-  /* Set frv_insn_packing_flag to FALSE if the next instruction should
-     be packed with this one.  Set it to TRUE otherwise.  If the next
-     instruction is an asm instruction, this statement will set the
-     flag to TRUE, and that value will still hold when the asm operands
-     themselves are printed.  */
-  frv_insn_packing_flag = ! (insn && INSN_P (insn)
-			     && GET_MODE (insn) != TImode);
 }
 
 
@@ -2633,6 +2709,29 @@ frv_print_operand_jump_hint (rtx insn)
 }
 
 
+/* Return the comparison operator to use for CODE given that the ICC
+   register is OP0.  */
+
+static const char *
+comparison_string (enum rtx_code code, rtx op0)
+{
+  bool is_nz_p = GET_MODE (op0) == CC_NZmode;
+  switch (code)
+    {
+    default:  output_operand_lossage ("bad condition code");
+    case EQ:  return "eq";
+    case NE:  return "ne";
+    case LT:  return is_nz_p ? "n" : "lt";
+    case LE:  return "le";
+    case GT:  return "gt";
+    case GE:  return is_nz_p ? "p" : "ge";
+    case LTU: return is_nz_p ? "no" : "c";
+    case LEU: return is_nz_p ? "eq" : "ls";
+    case GTU: return is_nz_p ? "ne" : "hi";
+    case GEU: return is_nz_p ? "ra" : "nc";
+    }
+}
+
 /* Print an operand to an assembler instruction.
 
    `%' followed by a letter and a digit says to output an operand in an
@@ -2736,45 +2835,13 @@ frv_print_operand (FILE * file, rtx x, int code)
 
     case 'C':
       /* Print appropriate test for integer branch false operation.  */
-      switch (GET_CODE (x))
-	{
-	default:
-	  fatal_insn ("Bad insn to frv_print_operand, 'C' modifier:", x);
-
-	case EQ:  fputs ("ne", file); break;
-	case NE:  fputs ("eq", file); break;
-	case LT:  fputs ("ge", file); break;
-	case LE:  fputs ("gt", file); break;
-	case GT:  fputs ("le", file); break;
-	case GE:  fputs ("lt", file); break;
-	case LTU: fputs ("nc", file); break;
-	case LEU: fputs ("hi", file); break;
-	case GTU: fputs ("ls", file); break;
-	case GEU: fputs ("c",  file); break;
-	}
+      fputs (comparison_string (reverse_condition (GET_CODE (x)),
+				XEXP (x, 0)), file);
       break;
-
-    /* case 'c': print a constant without the constant prefix.  If
-       CONSTANT_ADDRESS_P(x) is not true, PRINT_OPERAND is called.  */
 
     case 'c':
       /* Print appropriate test for integer branch true operation.  */
-      switch (GET_CODE (x))
-	{
-	default:
-	  fatal_insn ("Bad insn to frv_print_operand, 'c' modifier:", x);
-
-	case EQ:  fputs ("eq", file); break;
-	case NE:  fputs ("ne", file); break;
-	case LT:  fputs ("lt", file); break;
-	case LE:  fputs ("le", file); break;
-	case GT:  fputs ("gt", file); break;
-	case GE:  fputs ("ge", file); break;
-	case LTU: fputs ("c",  file); break;
-	case LEU: fputs ("ls", file); break;
-	case GTU: fputs ("hi", file); break;
-	case GEU: fputs ("nc", file); break;
-	}
+      fputs (comparison_string (GET_CODE (x), XEXP (x, 0)), file);
       break;
 
     case 'e':
@@ -3041,6 +3108,19 @@ frv_init_cumulative_args (CUMULATIVE_ARGS *cum,
 }
 
 
+/* Return true if we should pass an argument on the stack rather than
+   in registers.  */
+
+static bool
+frv_must_pass_in_stack (enum machine_mode mode, tree type)
+{
+  if (mode == BLKmode)
+    return true;
+  if (type == NULL)
+    return false;
+  return AGGREGATE_TYPE_P (type);
+}
+
 /* If defined, a C expression that gives the alignment boundary, in bits, of an
    argument with the specified mode and type.  If it is not defined,
    `PARM_BOUNDARY' is used for all arguments.  */
@@ -3051,37 +3131,6 @@ frv_function_arg_boundary (enum machine_mode mode ATTRIBUTE_UNUSED,
 {
   return BITS_PER_WORD;
 }
-
-
-/* A C expression that controls whether a function argument is passed in a
-   register, and which register.
-
-   The arguments are CUM, of type CUMULATIVE_ARGS, which summarizes (in a way
-   defined by INIT_CUMULATIVE_ARGS and FUNCTION_ARG_ADVANCE) all of the previous
-   arguments so far passed in registers; MODE, the machine mode of the argument;
-   TYPE, the data type of the argument as a tree node or 0 if that is not known
-   (which happens for C support library functions); and NAMED, which is 1 for an
-   ordinary argument and 0 for nameless arguments that correspond to `...' in the
-   called function's prototype.
-
-   The value of the expression should either be a `reg' RTX for the hard
-   register in which to pass the argument, or zero to pass the argument on the
-   stack.
-
-   For machines like the VAX and 68000, where normally all arguments are
-   pushed, zero suffices as a definition.
-
-   The usual way to make the ANSI library `stdarg.h' work on a machine where
-   some arguments are usually passed in registers, is to cause nameless
-   arguments to be passed on the stack instead.  This is done by making
-   `FUNCTION_ARG' return 0 whenever NAMED is 0.
-
-   You may use the macro `MUST_PASS_IN_STACK (MODE, TYPE)' in the definition of
-   this macro to determine if this argument is of a type that must be passed in
-   the stack.  If `REG_PARM_STACK_SPACE' is not defined and `FUNCTION_ARG'
-   returns nonzero for such an argument, the compiler will abort.  If
-   `REG_PARM_STACK_SPACE' is defined, the argument will be computed in the
-   stack and then loaded into a register.  */
 
 rtx
 frv_function_arg (CUMULATIVE_ARGS *cum,
@@ -3168,11 +3217,9 @@ frv_function_arg_advance (CUMULATIVE_ARGS *cum,
    used by the caller for this argument; likewise `FUNCTION_INCOMING_ARG', for
    the called function.  */
 
-int
-frv_function_arg_partial_nregs (CUMULATIVE_ARGS *cum,
-                                enum machine_mode mode,
-                                tree type ATTRIBUTE_UNUSED,
-                                int named ATTRIBUTE_UNUSED)
+static int
+frv_arg_partial_bytes (CUMULATIVE_ARGS *cum, enum machine_mode mode,
+		       tree type ATTRIBUTE_UNUSED, bool named ATTRIBUTE_UNUSED)
 {
   enum machine_mode xmode = (mode == BLKmode) ? SImode : mode;
   int bytes = GET_MODE_SIZE (xmode);
@@ -3183,52 +3230,12 @@ frv_function_arg_partial_nregs (CUMULATIVE_ARGS *cum,
   ret = ((arg_num <= LAST_ARG_REGNUM && arg_num + words > LAST_ARG_REGNUM+1)
 	 ? LAST_ARG_REGNUM - arg_num + 1
 	 : 0);
+  ret *= UNITS_PER_WORD;
 
   if (TARGET_DEBUG_ARG && ret)
-    fprintf (stderr, "function_arg_partial_nregs: %d\n", ret);
+    fprintf (stderr, "frv_arg_partial_bytes: %d\n", ret);
 
   return ret;
-
-}
-
-
-
-/* A C expression that indicates when an argument must be passed by reference.
-   If nonzero for an argument, a copy of that argument is made in memory and a
-   pointer to the argument is passed instead of the argument itself.  The
-   pointer is passed in whatever way is appropriate for passing a pointer to
-   that type.
-
-   On machines where `REG_PARM_STACK_SPACE' is not defined, a suitable
-   definition of this macro might be
-        #define FUNCTION_ARG_PASS_BY_REFERENCE(CUM, MODE, TYPE, NAMED)  \
-          MUST_PASS_IN_STACK (MODE, TYPE)  */
-
-int
-frv_function_arg_pass_by_reference (CUMULATIVE_ARGS *cum ATTRIBUTE_UNUSED,
-                                    enum machine_mode mode,
-                                    tree type,
-                                    int named ATTRIBUTE_UNUSED)
-{
-  return MUST_PASS_IN_STACK (mode, type);
-}
-
-/* If defined, a C expression that indicates when it is the called function's
-   responsibility to make a copy of arguments passed by invisible reference.
-   Normally, the caller makes a copy and passes the address of the copy to the
-   routine being called.  When FUNCTION_ARG_CALLEE_COPIES is defined and is
-   nonzero, the caller does not make a copy.  Instead, it passes a pointer to
-   the "live" value.  The called function must not modify this value.  If it
-   can be determined that the value won't be modified, it need not make a copy;
-   otherwise a copy must be made.  */
-
-int
-frv_function_arg_callee_copies (CUMULATIVE_ARGS *cum ATTRIBUTE_UNUSED,
-                                enum machine_mode mode ATTRIBUTE_UNUSED,
-                                tree type ATTRIBUTE_UNUSED,
-                                int named ATTRIBUTE_UNUSED)
-{
-  return 0;
 }
 
 
@@ -3317,6 +3324,9 @@ frv_legitimate_address_p (enum machine_mode mode,
   int ret = 0;
   HOST_WIDE_INT value;
   unsigned regno0;
+
+  if (FRV_SYMBOL_REF_TLS_P (x))
+    return 0;
 
   switch (GET_CODE (x))
     {
@@ -3435,6 +3445,179 @@ frv_legitimate_address_p (enum machine_mode mode,
   return ret;
 }
 
+/* Given an ADDR, generate code to inline the PLT.  */
+static rtx
+gen_inlined_tls_plt (rtx addr)
+{
+  rtx mem, retval, dest;
+  rtx picreg = get_hard_reg_initial_val (Pmode, FDPIC_REG);
+
+
+  dest = gen_reg_rtx (DImode);
+
+  if (flag_pic == 1)
+    {
+      /*
+	-fpic version:
+
+	lddi.p  @(gr15, #gottlsdesc12(ADDR)), gr8
+	calll    #gettlsoff(ADDR)@(gr8, gr0)
+      */
+      emit_insn (gen_tls_lddi (dest, addr, picreg));
+    }
+  else
+    {
+      /*
+	-fPIC version:
+
+	sethi.p #gottlsdeschi(ADDR), gr8
+	setlo   #gottlsdesclo(ADDR), gr8
+	ldd     #tlsdesc(ADDR)@(gr15, gr8), gr8
+	calll   #gettlsoff(ADDR)@(gr8, gr0)
+      */
+      rtx reguse = gen_reg_rtx (Pmode);
+      emit_insn (gen_tlsoff_hilo (reguse, addr, GEN_INT (R_FRV_GOTTLSDESCHI)));
+      emit_insn (gen_tls_tlsdesc_ldd (dest, picreg, reguse, addr));
+    }
+
+  retval = gen_reg_rtx (Pmode);
+  emit_insn (gen_tls_indirect_call (retval, addr, dest, picreg));
+  return retval;
+}
+
+/* Emit a TLSMOFF or TLSMOFF12 offset, depending on -mTLS.  Returns
+   the destination address.  */
+static rtx
+gen_tlsmoff (rtx addr, rtx reg)
+{
+  rtx dest = gen_reg_rtx (Pmode);
+
+  if (TARGET_BIG_TLS)
+    {
+      /* sethi.p #tlsmoffhi(x), grA
+	 setlo   #tlsmofflo(x), grA
+      */
+      dest = gen_reg_rtx (Pmode);
+      emit_insn (gen_tlsoff_hilo (dest, addr,
+				  GEN_INT (R_FRV_TLSMOFFHI)));
+      dest = gen_rtx_PLUS (Pmode, dest, reg);
+    }
+  else
+    {
+      /* addi grB, #tlsmoff12(x), grC
+	   -or-
+	 ld/st @(grB, #tlsmoff12(x)), grC
+      */
+      dest = gen_reg_rtx (Pmode);
+      emit_insn (gen_symGOTOFF2reg_i (dest, addr, reg,
+				      GEN_INT (R_FRV_TLSMOFF12)));
+    }
+  return dest;
+}
+
+/* Generate code for a TLS address.  */
+static rtx
+frv_legitimize_tls_address (rtx addr, enum tls_model model)
+{
+  rtx dest, tp = gen_rtx_REG (Pmode, 29);
+  rtx picreg = get_hard_reg_initial_val (Pmode, 15);
+
+  switch (model)
+    {
+    case TLS_MODEL_INITIAL_EXEC:
+      if (flag_pic == 1)
+	{
+	  /* -fpic version.
+	     ldi @(gr15, #gottlsoff12(x)), gr5
+	   */
+	  dest = gen_reg_rtx (Pmode);
+	  emit_insn (gen_tls_load_gottlsoff12 (dest, addr, picreg));
+	  dest = gen_rtx_PLUS (Pmode, tp, dest);
+	}
+      else
+	{
+	  /* -fPIC or anything else.
+
+	    sethi.p #gottlsoffhi(x), gr14
+	    setlo   #gottlsofflo(x), gr14
+	    ld      #tlsoff(x)@(gr15, gr14), gr9
+	  */
+	  rtx tmp = gen_reg_rtx (Pmode);
+	  dest = gen_reg_rtx (Pmode);
+	  emit_insn (gen_tlsoff_hilo (tmp, addr,
+				      GEN_INT (R_FRV_GOTTLSOFF_HI)));
+
+	  emit_insn (gen_tls_tlsoff_ld (dest, picreg, tmp, addr));
+	  dest = gen_rtx_PLUS (Pmode, tp, dest);
+	}
+      break;
+    case TLS_MODEL_LOCAL_DYNAMIC:
+      {
+	rtx reg, retval;
+
+	if (TARGET_INLINE_PLT)
+	  retval = gen_inlined_tls_plt (GEN_INT (0));
+	else
+	  {
+	    /* call #gettlsoff(0) */
+	    retval = gen_reg_rtx (Pmode);
+	    emit_insn (gen_call_gettlsoff (retval, GEN_INT (0), picreg));
+	  }
+
+	reg = gen_reg_rtx (Pmode);
+	emit_insn (gen_rtx_SET (VOIDmode, reg,
+				gen_rtx_PLUS (Pmode,
+					      retval, tp)));
+
+	dest = gen_tlsmoff (addr, reg);
+
+	/*
+	dest = gen_reg_rtx (Pmode);
+	emit_insn (gen_tlsoff_hilo (dest, addr,
+				    GEN_INT (R_FRV_TLSMOFFHI)));
+	dest = gen_rtx_PLUS (Pmode, dest, reg);
+	*/
+	break;
+      }
+    case TLS_MODEL_LOCAL_EXEC:
+      dest = gen_tlsmoff (addr, gen_rtx_REG (Pmode, 29));
+      break;
+    case TLS_MODEL_GLOBAL_DYNAMIC:
+      {
+	rtx retval;
+
+	if (TARGET_INLINE_PLT)
+	  retval = gen_inlined_tls_plt (addr);
+	else
+	  {
+	    /* call #gettlsoff(x) */
+	    retval = gen_reg_rtx (Pmode);
+	    emit_insn (gen_call_gettlsoff (retval, addr, picreg));
+	  }
+	dest = gen_rtx_PLUS (Pmode, retval, tp);
+	break;
+      }
+    default:
+      abort ();
+    }
+
+  return dest;
+}
+
+rtx
+frv_legitimize_address (rtx x,
+			rtx oldx ATTRIBUTE_UNUSED,
+			enum machine_mode mode ATTRIBUTE_UNUSED)
+{
+  if (GET_CODE (x) == SYMBOL_REF)
+    {
+      enum tls_model model = SYMBOL_REF_TLS_MODEL (x);
+      if (model != 0)
+        return frv_legitimize_tls_address (x, model);
+    }
+
+  return NULL_RTX;
+}
 
 /* Test whether a local function descriptor is canonical, i.e.,
    whether we can use FUNCDESC_GOTOFF to compute the address of the
@@ -3508,6 +3691,15 @@ unspec_got_name (int i)
     case R_FRV_GPREL12: return "gprel12";
     case R_FRV_GPRELHI: return "gprelhi";
     case R_FRV_GPRELLO: return "gprello";
+    case R_FRV_GOTTLSOFF_HI: return "gottlsoffhi";
+    case R_FRV_GOTTLSOFF_LO: return "gottlsofflo";
+    case R_FRV_TLSMOFFHI: return "tlsmoffhi";
+    case R_FRV_TLSMOFFLO: return "tlsmofflo";
+    case R_FRV_TLSMOFF12: return "tlsmoff12";
+    case R_FRV_TLSDESCHI: return "tlsdeschi";
+    case R_FRV_TLSDESCLO: return "tlsdesclo";
+    case R_FRV_GOTTLSDESCHI: return "gottlsdeschi";
+    case R_FRV_GOTTLSDESCLO: return "gottlsdesclo";
     default: abort ();
     }
 }
@@ -4370,13 +4562,23 @@ move_destination_operand (rtx op, enum machine_mode mode)
       return TRUE;
 
     case MEM:
-      if (GET_CODE (XEXP (op, 0)) == ADDRESSOF)
-        return TRUE;
-
       return frv_legitimate_memory_operand (op, mode, FALSE);
     }
 
   return FALSE;
+}
+
+/* Return true if we the operand is a valid destination for a movcc_fp
+   instruction.  This means rejecting fcc_operands, since we need
+   scratch registers to write to them.  */
+
+int
+movcc_fp_destination_operand (rtx op, enum machine_mode mode)
+{
+  if (fcc_operand (op, mode))
+    return FALSE;
+
+  return move_destination_operand (op, mode);
 }
 
 /* Look for a SYMBOL_REF of a function in an rtx.  We always want to
@@ -4463,9 +4665,6 @@ move_source_operand (rtx op, enum machine_mode mode)
       return TRUE;
 
     case MEM:
-      if (GET_CODE (XEXP (op, 0)) == ADDRESSOF)
-        return TRUE;
-
       return frv_legitimate_memory_operand (op, mode, FALSE);
     }
 
@@ -4505,9 +4704,6 @@ condexec_dest_operand (rtx op, enum machine_mode mode)
       return TRUE;
 
     case MEM:
-      if (GET_CODE (XEXP (op, 0)) == ADDRESSOF)
-        return TRUE;
-
       return frv_legitimate_memory_operand (op, mode, TRUE);
     }
 
@@ -4551,9 +4747,6 @@ condexec_source_operand (rtx op, enum machine_mode mode)
       return TRUE;
 
     case MEM:
-      if (GET_CODE (XEXP (op, 0)) == ADDRESSOF)
-        return TRUE;
-
       return frv_legitimate_memory_operand (op, mode, TRUE);
     }
 
@@ -4636,6 +4829,7 @@ got12_operand (rtx op, enum machine_mode mode ATTRIBUTE_UNUSED)
       case R_FRV_FUNCDESC_GOT12:
       case R_FRV_FUNCDESC_GOTOFF12:
       case R_FRV_GPREL12:
+      case R_FRV_TLSMOFF12:
 	return true;
       }
   return false;
@@ -4650,13 +4844,46 @@ const_unspec_operand (rtx op, enum machine_mode mode ATTRIBUTE_UNUSED)
 
   return frv_const_unspec_p (op, &unspec);
 }
-/* Return true if operand is a gpr register or a valid memory operation.  */
+
+/* Return true if operand is a gpr register or a valid memory operand.  */
 
 int
 gpr_or_memory_operand (rtx op, enum machine_mode mode)
 {
   return (integer_register_operand (op, mode)
 	  || frv_legitimate_memory_operand (op, mode, FALSE));
+}
+
+/* Return true if operand is a gpr register, a valid memory operand,
+   or a memory operand that can be made valid using an additional gpr
+   register.  */
+
+int
+gpr_or_memory_operand_with_scratch (rtx op, enum machine_mode mode)
+{
+  rtx addr;
+
+  if (gpr_or_memory_operand (op, mode))
+    return TRUE;
+
+  if (GET_CODE (op) != MEM)
+    return FALSE;
+
+  if (GET_MODE (op) != mode)
+    return FALSE;
+
+  addr = XEXP (op, 0);
+
+  if (GET_CODE (addr) != PLUS)
+    return FALSE;
+      
+  if (!integer_register_operand (XEXP (addr, 0), Pmode))
+    return FALSE;
+
+  if (GET_CODE (XEXP (addr, 1)) != CONST_INT)
+    return FALSE;
+
+  return TRUE;
 }
 
 /* Return true if operand is a fpr register or a valid memory operation.  */
@@ -4785,7 +5012,7 @@ call_operand (rtx op, enum machine_mode mode)
     return FALSE;
 
   if (GET_CODE (op) == SYMBOL_REF)
-    return TRUE;
+    return !TARGET_LONG_CALLS || SYMBOL_REF_LOCAL_P (op);
 
   /* Note this doesn't allow reg+reg or reg+imm12 addressing (which should
      never occur anyway), but prevents reload from not handling the case
@@ -4809,18 +5036,43 @@ sibcall_operand (rtx op, enum machine_mode mode)
   return gpr_or_int12_operand (op, mode);
 }
 
+/* Returns 1 if OP is either a SYMBOL_REF or a constant.  */
+int
+symbolic_operand (register rtx op, enum machine_mode mode ATTRIBUTE_UNUSED)
+{
+  enum rtx_code c = GET_CODE (op);
+
+  if (c == CONST)
+    {
+      /* Allow (const:SI (plus:SI (symbol_ref) (const_int))).  */
+      return GET_MODE (op) == SImode
+	&& GET_CODE (XEXP (op, 0)) == PLUS
+	&& GET_CODE (XEXP (XEXP (op, 0), 0)) == SYMBOL_REF
+	&& GET_CODE (XEXP (XEXP (op, 0), 1)) == CONST_INT;
+    }
+
+  return c == SYMBOL_REF || c == CONST_INT;
+}
+
 /* Return true if operator is a kind of relational operator.  */
 
 int
 relational_operator (rtx op, enum machine_mode mode)
 {
-  rtx op0;
-  rtx op1;
-  int regno;
+  return (integer_relational_operator (op, mode)
+	  || float_relational_operator (op, mode));
+}
 
+/* Return true if OP is a relational operator suitable for CCmode,
+   CC_UNSmode or CC_NZmode.  */
+
+int
+integer_relational_operator (rtx op, enum machine_mode mode)
+{
   if (mode != VOIDmode && mode != GET_MODE (op))
     return FALSE;
 
+  /* The allowable relations depend on the mode of the ICC register.  */
   switch (GET_CODE (op))
     {
     default:
@@ -4828,129 +5080,22 @@ relational_operator (rtx op, enum machine_mode mode)
 
     case EQ:
     case NE:
-    case LE:
     case LT:
     case GE:
-    case GT:
-    case LEU:
-    case LTU:
-    case GEU:
-    case GTU:
-      break;
-    }
+      return (GET_MODE (XEXP (op, 0)) == CC_NZmode
+	      || GET_MODE (XEXP (op, 0)) == CCmode);
 
-  op1 = XEXP (op, 1);
-  if (op1 != const0_rtx)
-    return FALSE;
-
-  op0 = XEXP (op, 0);
-  if (GET_CODE (op0) != REG)
-    return FALSE;
-
-  regno = REGNO (op0);
-  switch (GET_MODE (op0))
-    {
-    default:
-      break;
-
-    case CCmode:
-    case CC_UNSmode:
-      return ICC_OR_PSEUDO_P (regno);
-
-    case CC_FPmode:
-      return FCC_OR_PSEUDO_P (regno);
-
-    case CC_CCRmode:
-      return CR_OR_PSEUDO_P (regno);
-    }
-
-  return FALSE;
-}
-
-/* Return true if operator is a signed integer relational operator.  */
-
-int
-signed_relational_operator (rtx op, enum machine_mode mode)
-{
-  rtx op0;
-  rtx op1;
-  int regno;
-
-  if (mode != VOIDmode && mode != GET_MODE (op))
-    return FALSE;
-
-  switch (GET_CODE (op))
-    {
-    default:
-      return FALSE;
-
-    case EQ:
-    case NE:
     case LE:
-    case LT:
-    case GE:
     case GT:
-      break;
-    }
+      return GET_MODE (XEXP (op, 0)) == CCmode;
 
-  op1 = XEXP (op, 1);
-  if (op1 != const0_rtx)
-    return FALSE;
-
-  op0 = XEXP (op, 0);
-  if (GET_CODE (op0) != REG)
-    return FALSE;
-
-  regno = REGNO (op0);
-  if (GET_MODE (op0) == CCmode && ICC_OR_PSEUDO_P (regno))
-    return TRUE;
-
-  if (GET_MODE (op0) == CC_CCRmode && CR_OR_PSEUDO_P (regno))
-    return TRUE;
-
-  return FALSE;
-}
-
-/* Return true if operator is a signed integer relational operator.  */
-
-int
-unsigned_relational_operator (rtx op, enum machine_mode mode)
-{
-  rtx op0;
-  rtx op1;
-  int regno;
-
-  if (mode != VOIDmode && mode != GET_MODE (op))
-    return FALSE;
-
-  switch (GET_CODE (op))
-    {
-    default:
-      return FALSE;
-
-    case LEU:
-    case LTU:
-    case GEU:
     case GTU:
-      break;
+    case GEU:
+    case LTU:
+    case LEU:
+      return (GET_MODE (XEXP (op, 0)) == CC_NZmode
+	      || GET_MODE (XEXP (op, 0)) == CC_UNSmode);
     }
-
-  op1 = XEXP (op, 1);
-  if (op1 != const0_rtx)
-    return FALSE;
-
-  op0 = XEXP (op, 0);
-  if (GET_CODE (op0) != REG)
-    return FALSE;
-
-  regno = REGNO (op0);
-  if (GET_MODE (op0) == CC_UNSmode && ICC_OR_PSEUDO_P (regno))
-    return TRUE;
-
-  if (GET_MODE (op0) == CC_CCRmode && CR_OR_PSEUDO_P (regno))
-    return TRUE;
-
-  return FALSE;
 }
 
 /* Return true if operator is a floating point relational operator.  */
@@ -4958,10 +5103,6 @@ unsigned_relational_operator (rtx op, enum machine_mode mode)
 int
 float_relational_operator (rtx op, enum machine_mode mode)
 {
-  rtx op0;
-  rtx op1;
-  int regno;
-
   if (mode != VOIDmode && mode != GET_MODE (op))
     return FALSE;
 
@@ -4980,25 +5121,8 @@ float_relational_operator (rtx op, enum machine_mode mode)
     case ORDERED:
     case UNORDERED:
 #endif
-      break;
+      return GET_MODE (XEXP (op, 0)) == CC_FPmode;
     }
-
-  op1 = XEXP (op, 1);
-  if (op1 != const0_rtx)
-    return FALSE;
-
-  op0 = XEXP (op, 0);
-  if (GET_CODE (op0) != REG)
-    return FALSE;
-
-  regno = REGNO (op0);
-  if (GET_MODE (op0) == CC_FPmode && FCC_OR_PSEUDO_P (regno))
-    return TRUE;
-
-  if (GET_MODE (op0) == CC_CCRmode && CR_OR_PSEUDO_P (regno))
-    return TRUE;
-
-  return FALSE;
 }
 
 /* Return true if operator is EQ/NE of a conditional execution register.  */
@@ -5237,24 +5361,16 @@ condexec_memory_operand (rtx op, enum machine_mode mode)
     return FALSE;
 
   addr = XEXP (op, 0);
-  if (GET_CODE (addr) == ADDRESSOF)
-    return TRUE;
-
   return frv_legitimate_address_p (mode, addr, reload_completed, TRUE, FALSE);
 }
 
-/* Return true if operator is an integer binary operator that can be combined
-   with a setcc operation.  Do not allow the arithmetic operations that could
-   potentially overflow since the FR-V sets the condition code based on the
-   "true" value of the result, not the result after truncating to a 32-bit
-   register.  */
+/* Return true if OP is an integer binary operator that can be combined
+   with a (set ... (compare:CC_NZ ...)) pattern.  */
 
 int
 intop_compare_operator (rtx op, enum machine_mode mode)
 {
-  enum machine_mode op_mode = GET_MODE (op);
-
-  if (mode != VOIDmode && op_mode != mode)
+  if (mode != VOIDmode && GET_MODE (op) != mode)
     return FALSE;
 
   switch (GET_CODE (op))
@@ -5262,54 +5378,15 @@ intop_compare_operator (rtx op, enum machine_mode mode)
     default:
       return FALSE;
 
+    case PLUS:
+    case MINUS:
     case AND:
     case IOR:
     case XOR:
     case ASHIFTRT:
     case LSHIFTRT:
-      break;
+      return GET_MODE (op) == SImode;
     }
-
-  if (! integer_register_operand (XEXP (op, 0), SImode))
-    return FALSE;
-
-  if (! gpr_or_int10_operand (XEXP (op, 1), SImode))
-    return FALSE;
-
-  return TRUE;
-}
-
-/* Return true if operator is an integer binary operator that can be combined
-   with a setcc operation inside of a conditional execution.  */
-
-int
-condexec_intop_cmp_operator (rtx op, enum machine_mode mode)
-{
-  enum machine_mode op_mode = GET_MODE (op);
-
-  if (mode != VOIDmode && op_mode != mode)
-    return FALSE;
-
-  switch (GET_CODE (op))
-    {
-    default:
-      return FALSE;
-
-    case AND:
-    case IOR:
-    case XOR:
-    case ASHIFTRT:
-    case LSHIFTRT:
-      break;
-    }
-
-  if (! integer_register_operand (XEXP (op, 0), SImode))
-    return FALSE;
-
-  if (! integer_register_operand (XEXP (op, 1), SImode))
-    return FALSE;
-
-  return TRUE;
 }
 
 /* Return 1 if operand is a valid ACC register number.  */
@@ -5317,24 +5394,9 @@ condexec_intop_cmp_operator (rtx op, enum machine_mode mode)
 int
 acc_operand (rtx op, enum machine_mode mode)
 {
-  int regno;
-
-  if (GET_MODE (op) != mode && mode != VOIDmode)
-    return FALSE;
-
-  if (GET_CODE (op) == SUBREG)
-    {
-      if (GET_CODE (SUBREG_REG (op)) != REG)
-	return register_operand (op, mode);
-
-      op = SUBREG_REG (op);
-    }
-
-  if (GET_CODE (op) != REG)
-    return FALSE;
-
-  regno = REGNO (op);
-  return ACC_OR_PSEUDO_P (regno);
+  return ((mode == VOIDmode || mode == GET_MODE (op))
+	  && REG_P (op) && ACC_P (REGNO (op))
+	  && ((REGNO (op) - ACC_FIRST) & ~ACC_MASK) == 0);
 }
 
 /* Return 1 if operand is a valid even ACC register number.  */
@@ -5342,24 +5404,7 @@ acc_operand (rtx op, enum machine_mode mode)
 int
 even_acc_operand (rtx op, enum machine_mode mode)
 {
-  int regno;
-
-  if (GET_MODE (op) != mode && mode != VOIDmode)
-    return FALSE;
-
-  if (GET_CODE (op) == SUBREG)
-    {
-      if (GET_CODE (SUBREG_REG (op)) != REG)
-	return register_operand (op, mode);
-
-      op = SUBREG_REG (op);
-    }
-
-  if (GET_CODE (op) != REG)
-    return FALSE;
-
-  regno = REGNO (op);
-  return (ACC_OR_PSEUDO_P (regno) && ((regno - ACC_FIRST) & 1) == 0);
+  return acc_operand (op, mode) && ((REGNO (op) - ACC_FIRST) & 1) == 0;
 }
 
 /* Return 1 if operand is zero or four.  */
@@ -5367,24 +5412,7 @@ even_acc_operand (rtx op, enum machine_mode mode)
 int
 quad_acc_operand (rtx op, enum machine_mode mode)
 {
-  int regno;
-
-  if (GET_MODE (op) != mode && mode != VOIDmode)
-    return FALSE;
-
-  if (GET_CODE (op) == SUBREG)
-    {
-      if (GET_CODE (SUBREG_REG (op)) != REG)
-	return register_operand (op, mode);
-
-      op = SUBREG_REG (op);
-    }
-
-  if (GET_CODE (op) != REG)
-    return FALSE;
-
-  regno = REGNO (op);
-  return (ACC_OR_PSEUDO_P (regno) && ((regno - ACC_FIRST) & 3) == 0);
+  return acc_operand (op, mode) && ((REGNO (op) - ACC_FIRST) & 3) == 0;
 }
 
 /* Return 1 if operand is a valid ACCG register number.  */
@@ -5392,21 +5420,9 @@ quad_acc_operand (rtx op, enum machine_mode mode)
 int
 accg_operand (rtx op, enum machine_mode mode)
 {
-  if (GET_MODE (op) != mode && mode != VOIDmode)
-    return FALSE;
-
-  if (GET_CODE (op) == SUBREG)
-    {
-      if (GET_CODE (SUBREG_REG (op)) != REG)
-	return register_operand (op, mode);
-
-      op = SUBREG_REG (op);
-    }
-
-  if (GET_CODE (op) != REG)
-    return FALSE;
-
-  return ACCG_OR_PSEUDO_P (REGNO (op));
+  return ((mode == VOIDmode || mode == GET_MODE (op))
+	  && REG_P (op) && ACCG_P (REGNO (op))
+	  && ((REGNO (op) - ACCG_FIRST) & ~ACC_MASK) == 0);
 }
 
 
@@ -5426,6 +5442,42 @@ direct_return_p (void)
 }
 
 
+void
+frv_emit_move (enum machine_mode mode, rtx dest, rtx src)
+{
+  if (GET_CODE (src) == SYMBOL_REF)
+    {
+      enum tls_model model = SYMBOL_REF_TLS_MODEL (src);
+      if (model != 0)
+	src = frv_legitimize_tls_address (src, model);
+    }
+
+  switch (mode)
+    {
+    case SImode:
+      if (frv_emit_movsi (dest, src))
+	return;
+      break;
+
+    case QImode:
+    case HImode:
+    case DImode:
+    case SFmode:
+    case DFmode:
+      if (!reload_in_progress
+	  && !reload_completed
+	  && !register_operand (dest, mode)
+	  && !reg_or_0_operand (src, mode))
+	src = copy_to_mode_reg (mode, src);
+      break;
+
+    default:
+      abort ();
+    }
+
+  emit_insn (gen_rtx_SET (VOIDmode, dest, src));
+}
+
 /* Emit code to handle a MOVSI, adding in the small data register or pic
    register if needed to load up addresses.  Return TRUE if the appropriate
    instructions are emitted.  */
@@ -5533,6 +5585,15 @@ frv_emit_movsi (rtx dest, rtx src)
     handle_sym:
       if (TARGET_FDPIC)
 	{
+	  enum tls_model model = SYMBOL_REF_TLS_MODEL (sym);
+
+	  if (model != 0)
+	    {
+	      src = frv_legitimize_tls_address (src, model);
+	      emit_move_insn (dest, src);
+	      return TRUE;
+	    }
+
 	  if (SYMBOL_REF_FUNCTION_P (sym))
 	    {
 	      if (frv_local_funcdesc_p (sym))
@@ -5809,6 +5870,8 @@ output_move_single (rtx operands[], rtx insn)
 	      if (GPR_P (src_regno))
 		return "movgs %1, %0";
 	    }
+	  else if (ZERO_P (src))
+	    return "movgs %., %0";
 	}
     }
 
@@ -6725,6 +6788,7 @@ frv_ifcvt_modify_tests (ce_if_block_t *ce_info, rtx *p_true, rtx *p_false)
   enum reg_class cr_class;
   int cc_first;
   int cc_last;
+  reg_set_iterator rsi;
 
   /* Make sure we are only dealing with hard registers.  Also honor the
      -mno-cond-exec switch, and -mno-nested-cond-exec switches if
@@ -6781,11 +6845,11 @@ frv_ifcvt_modify_tests (ce_if_block_t *ce_info, rtx *p_true, rtx *p_false)
 
       /* Remove anything live at the beginning of the join block from being
          available for allocation.  */
-      EXECUTE_IF_SET_IN_REG_SET (join_bb->global_live_at_start, 0, regno,
-				 {
-				   if (regno < FIRST_PSEUDO_REGISTER)
-				     CLEAR_HARD_REG_BIT (tmp_reg->regs, regno);
-				 });
+      EXECUTE_IF_SET_IN_REG_SET (join_bb->global_live_at_start, 0, regno, rsi)
+	{
+	  if (regno < FIRST_PSEUDO_REGISTER)
+	    CLEAR_HARD_REG_BIT (tmp_reg->regs, regno);
+	}
     }
 
   /* Add in all of the blocks in multiple &&/|| blocks to be scanned.  */
@@ -6797,7 +6861,7 @@ frv_ifcvt_modify_tests (ce_if_block_t *ce_info, rtx *p_true, rtx *p_false)
       while (multiple_test_bb != test_bb)
 	{
 	  bb[num_bb++] = multiple_test_bb;
-	  multiple_test_bb = multiple_test_bb->pred->src;
+	  multiple_test_bb = EDGE_PRED (multiple_test_bb, 0)->src;
 	}
     }
 
@@ -6825,11 +6889,11 @@ frv_ifcvt_modify_tests (ce_if_block_t *ce_info, rtx *p_true, rtx *p_false)
 
       /* Anything live at the beginning of the block is obviously unavailable
          for allocation.  */
-      EXECUTE_IF_SET_IN_REG_SET (bb[j]->global_live_at_start, 0, regno,
-				 {
-				   if (regno < FIRST_PSEUDO_REGISTER)
-				     CLEAR_HARD_REG_BIT (tmp_reg->regs, regno);
-				 });
+      EXECUTE_IF_SET_IN_REG_SET (bb[j]->global_live_at_start, 0, regno, rsi)
+	{
+	  if (regno < FIRST_PSEUDO_REGISTER)
+	    CLEAR_HARD_REG_BIT (tmp_reg->regs, regno);
+	}
 
       /* Loop through the insns in the block.  */
       for (;;)
@@ -6940,7 +7004,7 @@ frv_ifcvt_modify_tests (ce_if_block_t *ce_info, rtx *p_true, rtx *p_false)
   /* Allocate the appropriate temporary condition code register.  Try to
      allocate the ICR/FCR register that corresponds to the ICC/FCC register so
      that conditional cmp's can be done.  */
-  if (mode == CCmode || mode == CC_UNSmode)
+  if (mode == CCmode || mode == CC_UNSmode || mode == CC_NZmode)
     {
       cr_class = ICR_REGS;
       cc_class = ICC_REGS;
@@ -7095,7 +7159,7 @@ frv_ifcvt_modify_multiple_tests (ce_if_block_t *ce_info,
   if (GET_CODE (cr) != REG)
     goto fail;
 
-  if (mode == CCmode || mode == CC_UNSmode)
+  if (mode == CCmode || mode == CC_UNSmode || mode == CC_NZmode)
     {
       cr_class = ICR_REGS;
       p_new_cr = &frv_ifcvt.extra_int_cr;
@@ -7463,10 +7527,28 @@ frv_ifcvt_modify_insn (ce_if_block_t *ce_info,
       else if (frv_ifcvt.scratch_insns_bitmap
 	       && bitmap_bit_p (frv_ifcvt.scratch_insns_bitmap,
 				INSN_UID (insn))
-	       /* We must not unconditionally set a reg set used as
-		  scratch in the THEN branch if the same reg is live
-		  in the ELSE branch.  */
 	       && REG_P (SET_DEST (set))
+	       /* We must not unconditionally set a scratch reg chosen
+		  for a nested if-converted block if its incoming
+		  value from the TEST block (or the result of the THEN
+		  branch) could/should propagate to the JOIN block.
+		  It suffices to test whether the register is live at
+		  the JOIN point: if it's live there, we can infer
+		  that we set it in the former JOIN block of the
+		  nested if-converted block (otherwise it wouldn't
+		  have been available as a scratch register), and it
+		  is either propagated through or set in the other
+		  conditional block.  It's probably not worth trying
+		  to catch the latter case, and it could actually
+		  limit scheduling of the combined block quite
+		  severely.  */
+	       && ce_info->join_bb
+	       && ! (REGNO_REG_SET_P
+		     (ce_info->join_bb->global_live_at_start,
+		      REGNO (SET_DEST (set))))
+	       /* Similarly, we must not unconditionally set a reg
+		  used as scratch in the THEN branch if the same reg
+		  is live in the ELSE branch.  */
 	       && (! ce_info->else_bb
 		   || BLOCK_FOR_INSN (insn) == ce_info->else_bb
 		   || ! (REGNO_REG_SET_P
@@ -7640,7 +7722,7 @@ frv_ifcvt_modify_final (ce_if_block_t *ce_info ATTRIBUTE_UNUSED)
     {
       rtx insn = emit_insn_before (frv_ifcvt.scratch_regs[i], existing_insn);
       if (! frv_ifcvt.scratch_insns_bitmap)
-	frv_ifcvt.scratch_insns_bitmap = BITMAP_XMALLOC ();
+	frv_ifcvt.scratch_insns_bitmap = BITMAP_ALLOC (NULL);
       bitmap_set_bit (frv_ifcvt.scratch_insns_bitmap, INSN_UID (insn));
       frv_ifcvt.scratch_regs[i] = NULL_RTX;
     }
@@ -7866,6 +7948,11 @@ frv_class_likely_spilled_p (enum reg_class class)
     default:
       break;
 
+    case GR8_REGS:
+    case GR9_REGS:
+    case GR89_REGS:
+    case FDPIC_FPTR_REGS:
+    case FDPIC_REGS:
     case ICC_REGS:
     case FCC_REGS:
     case CC_REGS:
@@ -8037,6 +8124,7 @@ frv_hard_regno_mode_ok (int regno, enum machine_mode mode)
     {
     case CCmode:
     case CC_UNSmode:
+    case CC_NZmode:
       return ICC_P (regno) || GPR_P (regno);
 
     case CC_CCRmode:
@@ -8190,6 +8278,36 @@ frv_legitimate_constant_p (rtx x)
 
   /* Otherwise store the constant away and do a load.  */
   return FALSE;
+}
+
+/* Implement SELECT_CC_MODE.  Choose CC_FP for floating-point comparisons,
+   CC_NZ for comparisons against zero in which a single Z or N flag test
+   is enough, CC_UNS for other unsigned comparisons, and CC for other
+   signed comparisons.  */
+
+enum machine_mode
+frv_select_cc_mode (enum rtx_code code, rtx x, rtx y)
+{
+  if (GET_MODE_CLASS (GET_MODE (x)) == MODE_FLOAT)
+    return CC_FPmode;
+
+  switch (code)
+    {
+    case EQ:
+    case NE:
+    case LT:
+    case GE:
+      return y == const0_rtx ? CC_NZmode : CCmode;
+
+    case GTU:
+    case GEU:
+    case LTU:
+    case LEU:
+      return y == const0_rtx ? CC_NZmode : CC_UNSmode;
+
+    default:
+      return CCmode;
+    }
 }
 
 /* A C expression for the cost of moving data from a register in class FROM to
@@ -8359,7 +8477,7 @@ frv_init_machine_status (void)
 
 /* Implement TARGET_SCHED_ISSUE_RATE.  */
 
-static int
+int
 frv_issue_rate (void)
 {
   if (!TARGET_PACK)
@@ -8373,609 +8491,861 @@ frv_issue_rate (void)
       return 1;
 
     case FRV_CPU_FR400:
+    case FRV_CPU_FR405:
+    case FRV_CPU_FR450:
       return 2;
 
     case FRV_CPU_GENERIC:
     case FRV_CPU_FR500:
     case FRV_CPU_TOMCAT:
       return 4;
+
+    case FRV_CPU_FR550:
+      return 8;
     }
-}
-
-
-/* Implement TARGET_SCHED_USE_DFA_PIPELINE_INTERFACE.  */
-
-static int
-frv_use_dfa_pipeline_interface (void)
-{
-  return true;
 }
 
-/* Update the register state information, to know about which registers are set
-   or clobbered.  */
-
-static void
-frv_registers_update (rtx x,
-                      unsigned char reg_state[],
-                      int modified[],
-                      int *p_num_mod,
-                      int flag)
-{
-  int regno, reg_max;
-  rtx reg;
-  rtx cond;
-  const char *format;
-  int length;
-  int j;
-
-  switch (GET_CODE (x))
-    {
-    default:
-      break;
-
-      /* Clobber just modifies a register, it doesn't make it live.  */
-    case CLOBBER:
-      frv_registers_update (XEXP (x, 0), reg_state, modified, p_num_mod,
-			    flag | REGSTATE_MODIFIED);
-      return;
-
-      /* Pre modify updates the first argument, just references the second.  */
-    case PRE_MODIFY:
-    case SET:
-      frv_registers_update (XEXP (x, 0), reg_state, modified, p_num_mod,
-			    flag | REGSTATE_MODIFIED | REGSTATE_LIVE);
-      frv_registers_update (XEXP (x, 1), reg_state, modified, p_num_mod, flag);
-      return;
-
-      /* For COND_EXEC, pass the appropriate flag to evaluate the conditional
-         statement, but just to be sure, make sure it is the type of cond_exec
-         we expect.  */
-    case COND_EXEC:
-      cond = XEXP (x, 0);
-      if ((GET_CODE (cond) == EQ || GET_CODE (cond) == NE)
-	  && GET_CODE (XEXP (cond, 0)) == REG
-	  && CR_P (REGNO (XEXP (cond, 0)))
-	  && GET_CODE (XEXP (cond, 1)) == CONST_INT
-	  && INTVAL (XEXP (cond, 1)) == 0
-	  && (flag & (REGSTATE_MODIFIED | REGSTATE_IF_EITHER)) == 0)
-	{
-	  frv_registers_update (cond, reg_state, modified, p_num_mod, flag);
-	  flag |= ((REGNO (XEXP (cond, 0)) - CR_FIRST)
-		   | ((GET_CODE (cond) == NE)
-		      ? REGSTATE_IF_TRUE
-		      : REGSTATE_IF_FALSE));
-
-	  frv_registers_update (XEXP (x, 1), reg_state, modified, p_num_mod,
-				flag);
-	  return;
-	}
-      else
-	fatal_insn ("frv_registers_update", x);
-
-      /* MEM resets the modification bits.  */
-    case MEM:
-      flag &= ~REGSTATE_MODIFIED;
-      break;
-
-      /* See if we need to set the modified flag.  */
-    case SUBREG:
-      reg = SUBREG_REG (x);
-      if (GET_CODE (reg) == REG)
-	{
-	  regno = subreg_regno (x);
-	  reg_max = REGNO (reg) + HARD_REGNO_NREGS (regno, GET_MODE (reg));
-	  goto reg_common;
-	}
-      break;
-
-    case REG:
-      regno = REGNO (x);
-      reg_max = regno + HARD_REGNO_NREGS (regno, GET_MODE (x));
-      /* Fall through.  */
-
-    reg_common:
-      if (flag & REGSTATE_MODIFIED)
-	{
-	  flag &= REGSTATE_MASK;
-	  while (regno < reg_max)
-	    {
-	      int rs = reg_state[regno];
-
-	      if (flag != rs)
-		{
-		  if ((rs & REGSTATE_MODIFIED) == 0)
-		    {
-		      modified[ *p_num_mod ] = regno;
-		      (*p_num_mod)++;
-		    }
-
-		  /* If the previous register state had the register as
-                     modified, possibly in some conditional execution context,
-                     and the current insn modifies in some other context, or
-                     outside of conditional execution, just mark the variable
-                     as modified.  */
-		  else
-		    flag &= ~(REGSTATE_IF_EITHER | REGSTATE_CC_MASK);
-
-		  reg_state[regno] = (rs | flag);
-		}
-	      regno++;
-	    }
-	}
-      return;
-    }
-
-
-  length = GET_RTX_LENGTH (GET_CODE (x));
-  format = GET_RTX_FORMAT (GET_CODE (x));
-
-  for (j = 0; j < length; ++j)
-    {
-      switch (format[j])
-	{
-	case 'e':
-	  frv_registers_update (XEXP (x, j), reg_state, modified, p_num_mod,
-				flag);
-	  break;
-
-	case 'V':
-	case 'E':
-	  if (XVEC (x, j) != 0)
-	    {
-	      int k;
-	      for (k = 0; k < XVECLEN (x, j); ++k)
-		frv_registers_update (XVECEXP (x, j, k), reg_state, modified,
-				      p_num_mod, flag);
-	    }
-	  break;
-
-	default:
-	  /* Nothing to do.  */
-	  break;
-	}
-    }
-
-  return;
-}
-
-
-/* Return if any registers in a hard register set were used an insn.  */
+/* A for_each_rtx callback.  If X refers to an accumulator, return
+   ACC_GROUP_ODD if the bit 2 of the register number is set and
+   ACC_GROUP_EVEN if it is clear.  Return 0 (ACC_GROUP_NONE)
+   otherwise.  */
 
 static int
-frv_registers_used_p (rtx x, unsigned char reg_state[], int flag)
+frv_acc_group_1 (rtx *x, void *data ATTRIBUTE_UNUSED)
 {
-  int regno, reg_max;
-  rtx reg;
-  rtx cond;
-  rtx dest;
-  const char *format;
-  int result;
-  int length;
-  int j;
-
-  switch (GET_CODE (x))
+  if (REG_P (*x))
     {
-    default:
-      break;
-
-      /* Skip clobber, that doesn't use the previous value.  */
-    case CLOBBER:
-      return FALSE;
-
-      /* For SET, if a conditional jump has occurred in the same insn, only
-	 allow a set of a CR register if that register is not currently live.
-	 This is because on the FR-V, B0/B1 instructions are always last.
-	 Otherwise, don't look at the result, except within a MEM, but do look
-	 at the source.  */
-    case SET:
-      dest = SET_DEST (x);
-      if (flag & REGSTATE_CONDJUMP
-	  && GET_CODE (dest) == REG && CR_P (REGNO (dest))
-	  && (reg_state[ REGNO (dest) ] & REGSTATE_LIVE) != 0)
-	return TRUE;
-
-      if (GET_CODE (dest) == MEM)
-	{
-	  result = frv_registers_used_p (XEXP (dest, 0), reg_state, flag);
-	  if (result)
-	    return result;
-	}
-
-      return frv_registers_used_p (SET_SRC (x), reg_state, flag);
-
-      /* For COND_EXEC, pass the appropriate flag to evaluate the conditional
-         statement, but just to be sure, make sure it is the type of cond_exec
-         we expect.  */
-    case COND_EXEC:
-      cond = XEXP (x, 0);
-      if ((GET_CODE (cond) == EQ || GET_CODE (cond) == NE)
-	  && GET_CODE (XEXP (cond, 0)) == REG
-	  && CR_P (REGNO (XEXP (cond, 0)))
-	  && GET_CODE (XEXP (cond, 1)) == CONST_INT
-	  && INTVAL (XEXP (cond, 1)) == 0
-	  && (flag & (REGSTATE_MODIFIED | REGSTATE_IF_EITHER)) == 0)
-	{
-	  result = frv_registers_used_p (cond, reg_state, flag);
-	  if (result)
-	    return result;
-
-	  flag |= ((REGNO (XEXP (cond, 0)) - CR_FIRST)
-		   | ((GET_CODE (cond) == NE)
-		      ? REGSTATE_IF_TRUE
-		      : REGSTATE_IF_FALSE));
-
-	  return frv_registers_used_p (XEXP (x, 1), reg_state, flag);
-	}
-      else
-	fatal_insn ("frv_registers_used_p", x);
-
-      /* See if a register or subreg was modified in the same VLIW insn.  */
-    case SUBREG:
-      reg = SUBREG_REG (x);
-      if (GET_CODE (reg) == REG)
-	{
-	  regno = subreg_regno (x);
-	  reg_max = REGNO (reg) + HARD_REGNO_NREGS (regno, GET_MODE (reg));
-	  goto reg_common;
-	}
-      break;
-
-    case REG:
-      regno = REGNO (x);
-      reg_max = regno + HARD_REGNO_NREGS (regno, GET_MODE (x));
-      /* Fall through.  */
-
-    reg_common:
-      while (regno < reg_max)
-	{
-	  int rs = reg_state[regno];
-
-	  if (rs & REGSTATE_MODIFIED)
-	    {
-	      int rs_if = rs & REGSTATE_IF_EITHER;
-	      int flag_if = flag & REGSTATE_IF_EITHER;
-
-	      /* Simple modification, no conditional execution */
-	      if ((rs & REGSTATE_IF_EITHER) == 0)
-		return TRUE;
-
-	      /* See if the variable is only modified in a conditional
-		 execution expression opposite to the conditional execution
-		 expression that governs this expression (ie, true vs. false
-		 for the same CC register).  If this isn't two halves of the
-		 same conditional expression, consider the register
-		 modified.  */
-	      if (((rs_if == REGSTATE_IF_TRUE && flag_if == REGSTATE_IF_FALSE)
-		   || (rs_if == REGSTATE_IF_FALSE && flag_if == REGSTATE_IF_TRUE))
-		  && ((rs & REGSTATE_CC_MASK) == (flag & REGSTATE_CC_MASK)))
-		;
-	      else
-		return TRUE;
-	    }
-
-	  regno++;
-	}
-      return FALSE;
+      if (ACC_P (REGNO (*x)))
+	return (REGNO (*x) - ACC_FIRST) & 4 ? ACC_GROUP_ODD : ACC_GROUP_EVEN;
+      if (ACCG_P (REGNO (*x)))
+	return (REGNO (*x) - ACCG_FIRST) & 4 ? ACC_GROUP_ODD : ACC_GROUP_EVEN;
     }
-
-
-  length = GET_RTX_LENGTH (GET_CODE (x));
-  format = GET_RTX_FORMAT (GET_CODE (x));
-
-  for (j = 0; j < length; ++j)
-    {
-      switch (format[j])
-	{
-	case 'e':
-	  result = frv_registers_used_p (XEXP (x, j), reg_state, flag);
-	  if (result != 0)
-	    return result;
-	  break;
-
-	case 'V':
-	case 'E':
-	  if (XVEC (x, j) != 0)
-	    {
-	      int k;
-	      for (k = 0; k < XVECLEN (x, j); ++k)
-		{
-		  result = frv_registers_used_p (XVECEXP (x, j, k), reg_state,
-						 flag);
-		  if (result != 0)
-		    return result;
-		}
-	    }
-	  break;
-
-	default:
-	  /* Nothing to do.  */
-	  break;
-	}
-    }
-
   return 0;
 }
 
-/* Return if any registers in a hard register set were set in an insn.  */
+/* Return the value of INSN's acc_group attribute.  */
 
-static int
-frv_registers_set_p (rtx x, unsigned char reg_state[], int modify_p)
+int
+frv_acc_group (rtx insn)
 {
-  int regno, reg_max;
-  rtx reg;
-  rtx cond;
-  const char *format;
-  int length;
-  int j;
-
-  switch (GET_CODE (x))
-    {
-    default:
-      break;
-
-    case CLOBBER:
-      return frv_registers_set_p (XEXP (x, 0), reg_state, TRUE);
-
-    case PRE_MODIFY:
-    case SET:
-      return (frv_registers_set_p (XEXP (x, 0), reg_state, TRUE)
-	      || frv_registers_set_p (XEXP (x, 1), reg_state, FALSE));
-
-    case COND_EXEC:
-      cond = XEXP (x, 0);
-      /* Just to be sure, make sure it is the type of cond_exec we
-         expect.  */
-      if ((GET_CODE (cond) == EQ || GET_CODE (cond) == NE)
-	  && GET_CODE (XEXP (cond, 0)) == REG
-	  && CR_P (REGNO (XEXP (cond, 0)))
-	  && GET_CODE (XEXP (cond, 1)) == CONST_INT
-	  && INTVAL (XEXP (cond, 1)) == 0
-	  && !modify_p)
-	return frv_registers_set_p (XEXP (x, 1), reg_state, modify_p);
-      else
-	fatal_insn ("frv_registers_set_p", x);
-
-      /* MEM resets the modification bits.  */
-    case MEM:
-      modify_p = FALSE;
-      break;
-
-      /* See if we need to set the modified modify_p.  */
-    case SUBREG:
-      reg = SUBREG_REG (x);
-      if (GET_CODE (reg) == REG)
-	{
-	  regno = subreg_regno (x);
-	  reg_max = REGNO (reg) + HARD_REGNO_NREGS (regno, GET_MODE (reg));
-	  goto reg_common;
-	}
-      break;
-
-    case REG:
-      regno = REGNO (x);
-      reg_max = regno + HARD_REGNO_NREGS (regno, GET_MODE (x));
-      /* Fall through.  */
-
-    reg_common:
-      if (modify_p)
-	while (regno < reg_max)
-	  {
-	    int rs = reg_state[regno];
-
-	    if (rs & REGSTATE_MODIFIED)
-	      return TRUE;
-	    regno++;
-	  }
-      return FALSE;
-    }
-
-
-  length = GET_RTX_LENGTH (GET_CODE (x));
-  format = GET_RTX_FORMAT (GET_CODE (x));
-
-  for (j = 0; j < length; ++j)
-    {
-      switch (format[j])
-	{
-	case 'e':
-	  if (frv_registers_set_p (XEXP (x, j), reg_state, modify_p))
-	    return TRUE;
-	  break;
-
-	case 'V':
-	case 'E':
-	  if (XVEC (x, j) != 0)
-	    {
-	      int k;
-	      for (k = 0; k < XVECLEN (x, j); ++k)
-		if (frv_registers_set_p (XVECEXP (x, j, k), reg_state,
-					 modify_p))
-		  return TRUE;
-	    }
-	  break;
-
-	default:
-	  /* Nothing to do.  */
-	  break;
-	}
-    }
-
-  return FALSE;
+  /* This distinction only applies to the FR550 packing constraints.  */
+  if (frv_cpu_type != FRV_CPU_FR550)
+    return ACC_GROUP_NONE;
+  return for_each_rtx (&PATTERN (insn), frv_acc_group_1, 0);
 }
 
+/* Return the index of the DFA unit in FRV_UNIT_NAMES[] that instruction
+   INSN will try to claim first.  Since this value depends only on the
+   type attribute, we can cache the results in FRV_TYPE_TO_UNIT[].  */
+
+static unsigned int
+frv_insn_unit (rtx insn)
+{
+  enum attr_type type;
+
+  type = get_attr_type (insn);
+  if (frv_type_to_unit[type] == ARRAY_SIZE (frv_unit_codes))
+    {
+      /* We haven't seen this type of instruction before.  */
+      state_t state;
+      unsigned int unit;
+
+      /* Issue the instruction on its own to see which unit it prefers.  */
+      state = alloca (state_size ());
+      state_reset (state);
+      state_transition (state, insn);
+
+      /* Find out which unit was taken.  */
+      for (unit = 0; unit < ARRAY_SIZE (frv_unit_codes); unit++)
+	if (cpu_unit_reservation_p (state, frv_unit_codes[unit]))
+	  break;
+
+      if (unit == ARRAY_SIZE (frv_unit_codes))
+	abort ();
+
+      frv_type_to_unit[type] = unit;
+    }
+  return frv_type_to_unit[type];
+}
+
+/* Return true if INSN issues to a branch unit.  */
+
+static bool
+frv_issues_to_branch_unit_p (rtx insn)
+{
+  return frv_unit_groups[frv_insn_unit (insn)] == GROUP_B;
+}
 
-/* On the FR-V, this pass is used to rescan the insn chain, and pack
-   conditional branches/calls/jumps, etc. with previous insns where it can.  It
-   does not reorder the instructions.  We assume the scheduler left the flow
-   information in a reasonable state.  */
+/* The current state of the packing pass, implemented by frv_pack_insns.  */
+static struct {
+  /* The state of the pipeline DFA.  */
+  state_t dfa_state;
+
+  /* Which hardware registers are set within the current packet,
+     and the conditions under which they are set.  */
+  regstate_t regstate[FIRST_PSEUDO_REGISTER];
+
+  /* The memory locations that have been modified so far in this
+     packet.  MEM is the memref and COND is the regstate_t condition
+     under which it is set.  */
+  struct {
+    rtx mem;
+    regstate_t cond;
+  } mems[2];
+
+  /* The number of valid entries in MEMS.  The value is larger than
+     ARRAY_SIZE (mems) if there were too many mems to record.  */
+  unsigned int num_mems;
+
+  /* The maximum number of instructions that can be packed together.  */
+  unsigned int issue_rate;
+
+  /* The instructions in the packet, partitioned into groups.  */
+  struct frv_packet_group {
+    /* How many instructions in the packet belong to this group.  */
+    unsigned int num_insns;
+
+    /* A list of the instructions that belong to this group, in the order
+       they appear in the rtl stream.  */
+    rtx insns[ARRAY_SIZE (frv_unit_codes)];
+
+    /* The contents of INSNS after they have been sorted into the correct
+       assembly-language order.  Element X issues to unit X.  The list may
+       contain extra nops.  */
+    rtx sorted[ARRAY_SIZE (frv_unit_codes)];
+
+    /* The member of frv_nops[] to use in sorted[].  */
+    rtx nop;
+  } groups[NUM_GROUPS];
+
+  /* The instructions that make up the current packet.  */
+  rtx insns[ARRAY_SIZE (frv_unit_codes)];
+  unsigned int num_insns;
+} frv_packet;
+
+/* Return the regstate_t flags for the given COND_EXEC condition.
+   Abort if the condition isn't in the right form.  */
+
+static int
+frv_cond_flags (rtx cond)
+{
+  if ((GET_CODE (cond) == EQ || GET_CODE (cond) == NE)
+      && GET_CODE (XEXP (cond, 0)) == REG
+      && CR_P (REGNO (XEXP (cond, 0)))
+      && XEXP (cond, 1) == const0_rtx)
+    return ((REGNO (XEXP (cond, 0)) - CR_FIRST)
+	    | (GET_CODE (cond) == NE
+	       ? REGSTATE_IF_TRUE
+	       : REGSTATE_IF_FALSE));
+  abort ();
+}
+
+
+/* Return true if something accessed under condition COND2 can
+   conflict with something written under condition COND1.  */
+
+static bool
+frv_regstate_conflict_p (regstate_t cond1, regstate_t cond2)
+{
+  /* If either reference was unconditional, we have a conflict.  */
+  if ((cond1 & REGSTATE_IF_EITHER) == 0
+      || (cond2 & REGSTATE_IF_EITHER) == 0)
+    return true;
+
+  /* The references might conflict if they were controlled by
+     different CRs.  */
+  if ((cond1 & REGSTATE_CC_MASK) != (cond2 & REGSTATE_CC_MASK))
+    return true;
+
+  /* They definitely conflict if they are controlled by the
+     same condition.  */
+  if ((cond1 & cond2 & REGSTATE_IF_EITHER) != 0)
+    return true;
+
+  return false;
+}
+
+
+/* A for_each_rtx callback.  Return 1 if *X depends on an instruction in
+   the current packet.  DATA points to a regstate_t that describes the
+   condition under which *X might be set or used.  */
+
+static int
+frv_registers_conflict_p_1 (rtx *x, void *data)
+{
+  unsigned int regno, i;
+  regstate_t cond;
+
+  cond = *(regstate_t *) data;
+
+  if (GET_CODE (*x) == REG)
+    FOR_EACH_REGNO (regno, *x)
+      if ((frv_packet.regstate[regno] & REGSTATE_MODIFIED) != 0)
+	if (frv_regstate_conflict_p (frv_packet.regstate[regno], cond))
+	  return 1;
+
+  if (GET_CODE (*x) == MEM)
+    {
+      /* If we ran out of memory slots, assume a conflict.  */
+      if (frv_packet.num_mems > ARRAY_SIZE (frv_packet.mems))
+	return 1;
+
+      /* Check for output or true dependencies with earlier MEMs.  */
+      for (i = 0; i < frv_packet.num_mems; i++)
+	if (frv_regstate_conflict_p (frv_packet.mems[i].cond, cond))
+	  {
+	    if (true_dependence (frv_packet.mems[i].mem, VOIDmode,
+				 *x, rtx_varies_p))
+	      return 1;
+
+	    if (output_dependence (frv_packet.mems[i].mem, *x))
+	      return 1;
+	  }
+    }
+
+  /* The return values of calls aren't significant: they describe
+     the effect of the call as a whole, not of the insn itself.  */
+  if (GET_CODE (*x) == SET && GET_CODE (SET_SRC (*x)) == CALL)
+    {
+      if (for_each_rtx (&SET_SRC (*x), frv_registers_conflict_p_1, data))
+	return 1;
+      return -1;
+    }
+
+  /* Check subexpressions.  */
+  return 0;
+}
+
+
+/* Return true if something in X might depend on an instruction
+   in the current packet.  */
+
+static bool
+frv_registers_conflict_p (rtx x)
+{
+  regstate_t flags;
+
+  flags = 0;
+  if (GET_CODE (x) == COND_EXEC)
+    {
+      if (for_each_rtx (&XEXP (x, 0), frv_registers_conflict_p_1, &flags))
+	return true;
+
+      flags |= frv_cond_flags (XEXP (x, 0));
+      x = XEXP (x, 1);
+    }
+  return for_each_rtx (&x, frv_registers_conflict_p_1, &flags);
+}
+
+
+/* A note_stores callback.  DATA points to the regstate_t condition
+   under which X is modified.  Update FRV_PACKET accordingly.  */
+
+static void
+frv_registers_update_1 (rtx x, rtx pat ATTRIBUTE_UNUSED, void *data)
+{
+  unsigned int regno;
+
+  if (GET_CODE (x) == REG)
+    FOR_EACH_REGNO (regno, x)
+      frv_packet.regstate[regno] |= *(regstate_t *) data;
+
+  if (GET_CODE (x) == MEM)
+    {
+      if (frv_packet.num_mems < ARRAY_SIZE (frv_packet.mems))
+	{
+	  frv_packet.mems[frv_packet.num_mems].mem = x;
+	  frv_packet.mems[frv_packet.num_mems].cond = *(regstate_t *) data;
+	}
+      frv_packet.num_mems++;
+    }
+}
+
+
+/* Update the register state information for an instruction whose
+   body is X.  */
+
+static void
+frv_registers_update (rtx x)
+{
+  regstate_t flags;
+
+  flags = REGSTATE_MODIFIED;
+  if (GET_CODE (x) == COND_EXEC)
+    {
+      flags |= frv_cond_flags (XEXP (x, 0));
+      x = XEXP (x, 1);
+    }
+  note_stores (x, frv_registers_update_1, &flags);
+}
+
+
+/* Initialize frv_packet for the start of a new packet.  */
+
+static void
+frv_start_packet (void)
+{
+  enum frv_insn_group group;
+
+  memset (frv_packet.regstate, 0, sizeof (frv_packet.regstate));
+  frv_packet.num_mems = 0;
+  frv_packet.num_insns = 0;
+  for (group = 0; group < NUM_GROUPS; group++)
+    frv_packet.groups[group].num_insns = 0;
+}
+
+
+/* Likewise for the start of a new basic block.  */
+
+static void
+frv_start_packet_block (void)
+{
+  state_reset (frv_packet.dfa_state);
+  frv_start_packet ();
+}
+
+
+/* Finish the current packet, if any, and start a new one.  Call
+   HANDLE_PACKET with FRV_PACKET describing the completed packet.  */
+
+static void
+frv_finish_packet (void (*handle_packet) (void))
+{
+  if (frv_packet.num_insns > 0)
+    {
+      handle_packet ();
+      state_transition (frv_packet.dfa_state, 0);
+      frv_start_packet ();
+    }
+}
+
+
+/* Return true if INSN can be added to the current packet.  Update
+   the DFA state on success.  */
+
+static bool
+frv_pack_insn_p (rtx insn)
+{
+  /* See if the packet is already as long as it can be.  */
+  if (frv_packet.num_insns == frv_packet.issue_rate)
+    return false;
+
+  /* If the scheduler thought that an instruction should start a packet,
+     it's usually a good idea to believe it.  It knows much more about
+     the latencies than we do.
+
+     There are some exceptions though:
+
+       - Conditional instructions are scheduled on the assumption that
+	 they will be executed.  This is usually a good thing, since it
+	 tends to avoid unnecessary stalls in the conditional code.
+	 But we want to pack conditional instructions as tightly as
+	 possible, in order to optimize the case where they aren't
+	 executed.
+
+       - The scheduler will always put branches on their own, even
+	 if there's no real dependency.
+
+       - There's no point putting a call in its own packet unless
+	 we have to.  */
+  if (frv_packet.num_insns > 0
+      && GET_CODE (insn) == INSN
+      && GET_MODE (insn) == TImode
+      && GET_CODE (PATTERN (insn)) != COND_EXEC)
+    return false;
+
+  /* Check for register conflicts.  Don't do this for setlo since any
+     conflict will be with the partnering sethi, with which it can
+     be packed.  */
+  if (get_attr_type (insn) != TYPE_SETLO)
+    if (frv_registers_conflict_p (PATTERN (insn)))
+      return false;
+
+  return state_transition (frv_packet.dfa_state, insn) < 0;
+}
+
+
+/* Add instruction INSN to the current packet.  */
+
+static void
+frv_add_insn_to_packet (rtx insn)
+{
+  struct frv_packet_group *packet_group;
+
+  packet_group = &frv_packet.groups[frv_unit_groups[frv_insn_unit (insn)]];
+  packet_group->insns[packet_group->num_insns++] = insn;
+  frv_packet.insns[frv_packet.num_insns++] = insn;
+
+  frv_registers_update (PATTERN (insn));
+}
+
+
+/* Insert INSN (a member of frv_nops[]) into the current packet.  If the
+   packet ends in a branch or call, insert the nop before it, otherwise
+   add to the end.  */
+
+static void
+frv_insert_nop_in_packet (rtx insn)
+{
+  struct frv_packet_group *packet_group;
+  rtx last;
+
+  packet_group = &frv_packet.groups[frv_unit_groups[frv_insn_unit (insn)]];
+  last = frv_packet.insns[frv_packet.num_insns - 1];
+  if (GET_CODE (last) != INSN)
+    {
+      insn = emit_insn_before (PATTERN (insn), last);
+      frv_packet.insns[frv_packet.num_insns - 1] = insn;
+      frv_packet.insns[frv_packet.num_insns++] = last;
+    }
+  else
+    {
+      insn = emit_insn_after (PATTERN (insn), last);
+      frv_packet.insns[frv_packet.num_insns++] = insn;
+    }
+  packet_group->insns[packet_group->num_insns++] = insn;
+}
+
+
+/* If packing is enabled, divide the instructions into packets and
+   return true.  Call HANDLE_PACKET for each complete packet.  */
+
+static bool
+frv_for_each_packet (void (*handle_packet) (void))
+{
+  rtx insn, next_insn;
+
+  frv_packet.issue_rate = frv_issue_rate ();
+
+  /* Early exit if we don't want to pack insns.  */
+  if (!optimize
+      || !flag_schedule_insns_after_reload
+      || TARGET_NO_VLIW_BRANCH
+      || frv_packet.issue_rate == 1)
+    return false;
+
+  /* Set up the initial packing state.  */
+  dfa_start ();
+  frv_packet.dfa_state = alloca (state_size ());
+
+  frv_start_packet_block ();
+  for (insn = get_insns (); insn != 0; insn = next_insn)
+    {
+      enum rtx_code code;
+      bool eh_insn_p;
+
+      code = GET_CODE (insn);
+      next_insn = NEXT_INSN (insn);
+
+      if (code == CODE_LABEL)
+	{
+	  frv_finish_packet (handle_packet);
+	  frv_start_packet_block ();
+	}
+
+      if (INSN_P (insn))
+	switch (GET_CODE (PATTERN (insn)))
+	  {
+	  case USE:
+	  case CLOBBER:
+	  case ADDR_VEC:
+	  case ADDR_DIFF_VEC:
+	    break;
+
+	  default:
+	    /* Calls mustn't be packed on a TOMCAT.  */
+	    if (GET_CODE (insn) == CALL_INSN && frv_cpu_type == FRV_CPU_TOMCAT)
+	      frv_finish_packet (handle_packet);
+
+	    /* Since the last instruction in a packet determines the EH
+	       region, any exception-throwing instruction must come at
+	       the end of reordered packet.  Insns that issue to a
+	       branch unit are bound to come last; for others it's
+	       too hard to predict.  */
+	    eh_insn_p = (find_reg_note (insn, REG_EH_REGION, NULL) != NULL);
+	    if (eh_insn_p && !frv_issues_to_branch_unit_p (insn))
+	      frv_finish_packet (handle_packet);
+
+	    /* Finish the current packet if we can't add INSN to it.
+	       Simulate cycles until INSN is ready to issue.  */
+	    if (!frv_pack_insn_p (insn))
+	      {
+		frv_finish_packet (handle_packet);
+		while (!frv_pack_insn_p (insn))
+		  state_transition (frv_packet.dfa_state, 0);
+	      }
+
+	    /* Add the instruction to the packet.  */
+	    frv_add_insn_to_packet (insn);
+
+	    /* Calls and jumps end a packet, as do insns that throw
+	       an exception.  */
+	    if (code == CALL_INSN || code == JUMP_INSN || eh_insn_p)
+	      frv_finish_packet (handle_packet);
+	    break;
+	  }
+    }
+  frv_finish_packet (handle_packet);
+  dfa_finish ();
+  return true;
+}
+
+/* Subroutine of frv_sort_insn_group.  We are trying to sort
+   frv_packet.groups[GROUP].sorted[0...NUM_INSNS-1] into assembly
+   language order.  We have already picked a new position for
+   frv_packet.groups[GROUP].sorted[X] if bit X of ISSUED is set.
+   These instructions will occupy elements [0, LOWER_SLOT) and
+   [UPPER_SLOT, NUM_INSNS) of the final (sorted) array.  STATE is
+   the DFA state after issuing these instructions.
+
+   Try filling elements [LOWER_SLOT, UPPER_SLOT) with every permutation
+   of the unused instructions.  Return true if one such permutation gives
+   a valid ordering, leaving the successful permutation in sorted[].
+   Do not modify sorted[] until a valid permutation is found.  */
+
+static bool
+frv_sort_insn_group_1 (enum frv_insn_group group,
+		       unsigned int lower_slot, unsigned int upper_slot,
+		       unsigned int issued, unsigned int num_insns,
+		       state_t state)
+{
+  struct frv_packet_group *packet_group;
+  unsigned int i;
+  state_t test_state;
+  size_t dfa_size;
+  rtx insn;
+
+  /* Early success if we've filled all the slots.  */
+  if (lower_slot == upper_slot)
+    return true;
+
+  packet_group = &frv_packet.groups[group];
+  dfa_size = state_size ();
+  test_state = alloca (dfa_size);
+
+  /* Try issuing each unused instruction.  */
+  for (i = num_insns - 1; i + 1 != 0; i--)
+    if (~issued & (1 << i))
+      {
+	insn = packet_group->sorted[i];
+	memcpy (test_state, state, dfa_size);
+	if (state_transition (test_state, insn) < 0
+	    && cpu_unit_reservation_p (test_state,
+				       NTH_UNIT (group, upper_slot - 1))
+	    && frv_sort_insn_group_1 (group, lower_slot, upper_slot - 1,
+				      issued | (1 << i), num_insns,
+				      test_state))
+	  {
+	    packet_group->sorted[upper_slot - 1] = insn;
+	    return true;
+	  }
+      }
+
+  return false;
+}
+
+/* Compare two instructions by their frv_insn_unit.  */
+
+static int
+frv_compare_insns (const void *first, const void *second)
+{
+  const rtx *insn1 = first, *insn2 = second;
+  return frv_insn_unit (*insn1) - frv_insn_unit (*insn2);
+}
+
+/* Copy frv_packet.groups[GROUP].insns[] to frv_packet.groups[GROUP].sorted[]
+   and sort it into assembly language order.  See frv.md for a description of
+   the algorithm.  */
+
+static void
+frv_sort_insn_group (enum frv_insn_group group)
+{
+  struct frv_packet_group *packet_group;
+  unsigned int first, i, nop, max_unit, num_slots;
+  state_t state, test_state;
+  size_t dfa_size;
+
+  packet_group = &frv_packet.groups[group];
+
+  /* Assume no nop is needed.  */
+  packet_group->nop = 0;
+
+  if (packet_group->num_insns == 0)
+    return;
+
+  /* Copy insns[] to sorted[].  */
+  memcpy (packet_group->sorted, packet_group->insns,
+	  sizeof (rtx) * packet_group->num_insns);
+
+  /* Sort sorted[] by the unit that each insn tries to take first.  */
+  if (packet_group->num_insns > 1)
+    qsort (packet_group->sorted, packet_group->num_insns,
+	   sizeof (rtx), frv_compare_insns);
+
+  /* That's always enough for branch and control insns.  */
+  if (group == GROUP_B || group == GROUP_C)
+    return;
+
+  dfa_size = state_size ();
+  state = alloca (dfa_size);
+  test_state = alloca (dfa_size);
+
+  /* Find the highest FIRST such that sorted[0...FIRST-1] can issue
+     consecutively and such that the DFA takes unit X when sorted[X]
+     is added.  Set STATE to the new DFA state.  */
+  state_reset (test_state);
+  for (first = 0; first < packet_group->num_insns; first++)
+    {
+      memcpy (state, test_state, dfa_size);
+      if (state_transition (test_state, packet_group->sorted[first]) >= 0
+	  || !cpu_unit_reservation_p (test_state, NTH_UNIT (group, first)))
+	break;
+    }
+
+  /* If all the instructions issued in ascending order, we're done.  */
+  if (first == packet_group->num_insns)
+    return;
+
+  /* Add nops to the end of sorted[] and try each permutation until
+     we find one that works.  */
+  for (nop = 0; nop < frv_num_nops; nop++)
+    {
+      max_unit = frv_insn_unit (frv_nops[nop]);
+      if (frv_unit_groups[max_unit] == group)
+	{
+	  packet_group->nop = frv_nops[nop];
+	  num_slots = UNIT_NUMBER (max_unit) + 1;
+	  for (i = packet_group->num_insns; i < num_slots; i++)
+	    packet_group->sorted[i] = frv_nops[nop];
+	  if (frv_sort_insn_group_1 (group, first, num_slots,
+				     (1 << first) - 1, num_slots, state))
+	    return;
+	}
+    }
+  abort ();
+}
+
+/* Sort the current packet into assembly-language order.  Set packing
+   flags as appropriate.  */
+
+static void
+frv_reorder_packet (void)
+{
+  unsigned int cursor[NUM_GROUPS];
+  rtx insns[ARRAY_SIZE (frv_unit_groups)];
+  unsigned int unit, to, from;
+  enum frv_insn_group group;
+  struct frv_packet_group *packet_group;
+
+  /* First sort each group individually.  */
+  for (group = 0; group < NUM_GROUPS; group++)
+    {
+      cursor[group] = 0;
+      frv_sort_insn_group (group);
+    }
+
+  /* Go through the unit template and try add an instruction from
+     that unit's group.  */
+  to = 0;
+  for (unit = 0; unit < ARRAY_SIZE (frv_unit_groups); unit++)
+    {
+      group = frv_unit_groups[unit];
+      packet_group = &frv_packet.groups[group];
+      if (cursor[group] < packet_group->num_insns)
+	{
+	  /* frv_reorg should have added nops for us.  */
+	  if (packet_group->sorted[cursor[group]] == packet_group->nop)
+	    abort ();
+	  insns[to++] = packet_group->sorted[cursor[group]++];
+	}
+    }
+
+  if (to != frv_packet.num_insns)
+    abort ();
+
+  /* Clear the last instruction's packing flag, thus marking the end of
+     a packet.  Reorder the other instructions relative to it.  */
+  CLEAR_PACKING_FLAG (insns[to - 1]);
+  for (from = 0; from < to - 1; from++)
+    {
+      remove_insn (insns[from]);
+      add_insn_before (insns[from], insns[to - 1]);
+      SET_PACKING_FLAG (insns[from]);
+    }
+}
+
+
+/* Divide instructions into packets.  Reorder the contents of each
+   packet so that they are in the correct assembly-language order.
+
+   Since this pass can change the raw meaning of the rtl stream, it must
+   only be called at the last minute, just before the instructions are
+   written out.  */
 
 static void
 frv_pack_insns (void)
 {
-  state_t frv_state;			/* frv state machine */
-  int cur_start_vliw_p;			/* current insn starts a VLIW insn */
-  int next_start_vliw_p;		/* next insn starts a VLIW insn */
-  int cur_condjump_p;			/* flag if current insn is a cond jump*/
-  int next_condjump_p;			/* flag if next insn is a cond jump */
-  rtx insn;
-  rtx link;
-  int j;
-  int num_mod = 0;			/* # of modified registers */
-  int modified[FIRST_PSEUDO_REGISTER];	/* registers modified in current VLIW */
-					/* register state information */
-  unsigned char reg_state[FIRST_PSEUDO_REGISTER];
+  if (frv_for_each_packet (frv_reorder_packet))
+    frv_insn_packing_flag = 0;
+  else
+    frv_insn_packing_flag = -1;
+}
+
+/* See whether we need to add nops to group GROUP in order to
+   make a valid packet.  */
 
-  /* If we weren't going to pack the insns, don't bother with this pass.  */
-  if (!optimize
-      || !flag_schedule_insns_after_reload
-      || TARGET_NO_VLIW_BRANCH
-      || frv_issue_rate () == 1)
-    return;
+static void
+frv_fill_unused_units (enum frv_insn_group group)
+{
+  unsigned int non_nops, nops, i;
+  struct frv_packet_group *packet_group;
 
-  /* Set up the instruction and register states.  */
-  dfa_start ();
-  frv_state = (state_t) xmalloc (state_size ());
-  memset (reg_state, REGSTATE_DEAD, sizeof (reg_state));
+  packet_group = &frv_packet.groups[group];
 
-  /* Go through the insns, and repack the insns.  */
-  state_reset (frv_state);
-  cur_start_vliw_p = FALSE;
-  next_start_vliw_p = TRUE;
-  cur_condjump_p = 0;
-  next_condjump_p = 0;
+  /* Sort the instructions into assembly-language order.
+     Use nops to fill slots that are otherwise unused.  */
+  frv_sort_insn_group (group);
 
-  for (insn = get_insns (); insn != NULL_RTX; insn = NEXT_INSN (insn))
+  /* See how many nops are needed before the final useful instruction.  */
+  i = nops = 0;
+  for (non_nops = 0; non_nops < packet_group->num_insns; non_nops++)
+    while (packet_group->sorted[i++] == packet_group->nop)
+      nops++;
+
+  /* Insert that many nops into the instruction stream.  */
+  while (nops-- > 0)
+    frv_insert_nop_in_packet (packet_group->nop);
+}
+
+/* Used by frv_reorg to keep track of the current packet's address.  */
+static unsigned int frv_packet_address;
+
+/* If the current packet falls through to a label, try to pad the packet
+   with nops in order to fit the label's alignment requirements.  */
+
+static void
+frv_align_label (void)
+{
+  unsigned int alignment, target, nop;
+  rtx x, last, barrier, label;
+
+  /* Walk forward to the start of the next packet.  Set ALIGNMENT to the
+     maximum alignment of that packet, LABEL to the last label between
+     the packets, and BARRIER to the last barrier.  */
+  last = frv_packet.insns[frv_packet.num_insns - 1];
+  label = barrier = 0;
+  alignment = 4;
+  for (x = NEXT_INSN (last); x != 0 && !INSN_P (x); x = NEXT_INSN (x))
     {
-      enum rtx_code code = GET_CODE (insn);
-      enum rtx_code pattern_code;
-
-      /* For basic block begin notes redo the live information, and skip other
-         notes.  */
-      if (code == NOTE)
+      if (LABEL_P (x))
 	{
-	  if (NOTE_LINE_NUMBER (insn) == (int)NOTE_INSN_BASIC_BLOCK)
-	    {
-	      regset live;
-
-	      for (j = 0; j < FIRST_PSEUDO_REGISTER; j++)
-		reg_state[j] &= ~ REGSTATE_LIVE;
-
-	      live = NOTE_BASIC_BLOCK (insn)->global_live_at_start;
-	      EXECUTE_IF_SET_IN_REG_SET(live, 0, j,
-					{
-					  reg_state[j] |= REGSTATE_LIVE;
-					});
-	    }
-
-	  continue;
+	  unsigned int subalign = 1 << label_to_alignment (x);
+	  alignment = MAX (alignment, subalign);
+	  label = x;
 	}
+      if (BARRIER_P (x))
+	barrier = x;
+    }
 
-      /* Things like labels reset everything.  */
-      if (!INSN_P (insn))
+  /* If -malign-labels, and the packet falls through to an unaligned
+     label, try introducing a nop to align that label to 8 bytes.  */
+  if (TARGET_ALIGN_LABELS
+      && label != 0
+      && barrier == 0
+      && frv_packet.num_insns < frv_packet.issue_rate)
+    alignment = MAX (alignment, 8);
+
+  /* Advance the address to the end of the current packet.  */
+  frv_packet_address += frv_packet.num_insns * 4;
+
+  /* Work out the target address, after alignment.  */
+  target = (frv_packet_address + alignment - 1) & -alignment;
+
+  /* If the packet falls through to the label, try to find an efficient
+     padding sequence.  */
+  if (barrier == 0)
+    {
+      /* First try adding nops to the current packet.  */
+      for (nop = 0; nop < frv_num_nops; nop++)
+	while (frv_packet_address < target && frv_pack_insn_p (frv_nops[nop]))
+	  {
+	    frv_insert_nop_in_packet (frv_nops[nop]);
+	    frv_packet_address += 4;
+	  }
+
+      /* If we still haven't reached the target, add some new packets that
+	 contain only nops.  If there are two types of nop, insert an
+	 alternating sequence of frv_nops[0] and frv_nops[1], which will
+	 lead to packets like:
+
+		nop.p
+		mnop.p/fnop.p
+		nop.p
+		mnop/fnop
+
+	 etc.  Just emit frv_nops[0] if that's the only nop we have.  */
+      last = frv_packet.insns[frv_packet.num_insns - 1];
+      nop = 0;
+      while (frv_packet_address < target)
 	{
-	  next_start_vliw_p = TRUE;
-	  continue;
-	}
-
-      /* Clear the VLIW start flag on random USE and CLOBBER insns, which is
-         set on the USE insn that precedes the return, and potentially on
-         CLOBBERs for setting multiword variables.  Also skip the ADDR_VEC
-         holding the case table labels.  */
-      pattern_code = GET_CODE (PATTERN (insn));
-      if (pattern_code == USE || pattern_code == CLOBBER
-	  || pattern_code == ADDR_VEC || pattern_code == ADDR_DIFF_VEC)
-	{
-	  CLEAR_VLIW_START (insn);
-	  continue;
-	}
-
-      cur_start_vliw_p = next_start_vliw_p;
-      next_start_vliw_p = FALSE;
-
-      cur_condjump_p |= next_condjump_p;
-      next_condjump_p = 0;
-
-      /* Unconditional branches and calls end the current VLIW insn.  */
-      if (code == CALL_INSN)
-	{
-	  next_start_vliw_p = TRUE;
-
-	  /* On a TOMCAT, calls must be alone in the VLIW insns.  */
-	  if (frv_cpu_type == FRV_CPU_TOMCAT)
-	    cur_start_vliw_p = TRUE;
-	}
-      else if (code == JUMP_INSN)
-	{
-	  if (any_condjump_p (insn))
-	    next_condjump_p = REGSTATE_CONDJUMP;
-	  else
-	    next_start_vliw_p = TRUE;
-	}
-
-      /* Only allow setting a CCR register after a conditional branch.  */
-      else if (((cur_condjump_p & REGSTATE_CONDJUMP) != 0)
-	       && get_attr_type (insn) != TYPE_CCR)
-	cur_start_vliw_p = TRUE;
-
-      /* Determine if we need to start a new VLIW instruction.  */
-      if (cur_start_vliw_p
-	  /* Do not check for register conflicts in a setlo instruction
-	     because any output or true dependencies will be with the
-	     partnering sethi instruction, with which it can be packed.
-
-	     Although output dependencies are rare they are still
-	     possible.  So check output dependencies in VLIW insn.  */
-	  || (get_attr_type (insn) != TYPE_SETLO
-	      && (frv_registers_used_p (PATTERN (insn),
-					reg_state,
-					cur_condjump_p)
-		  || frv_registers_set_p (PATTERN (insn), reg_state, FALSE)))
-	  || state_transition (frv_state, insn) >= 0)
-	{
-	  SET_VLIW_START (insn);
-	  state_reset (frv_state);
-	  state_transition (frv_state, insn);
-	  cur_condjump_p = 0;
-
-	  /* Update the modified registers.  */
-	  for (j = 0; j < num_mod; j++)
-	    reg_state[ modified[j] ] &= ~(REGSTATE_CC_MASK
-					  | REGSTATE_IF_EITHER
-					  | REGSTATE_MODIFIED);
-
-	  num_mod = 0;
-	}
-      else
-	CLEAR_VLIW_START (insn);
-
-      /* Record which registers are modified.  */
-      frv_registers_update (PATTERN (insn), reg_state, modified, &num_mod, 0);
-
-      /* Process the death notices.  */
-      for (link = REG_NOTES (insn);
-	   link != NULL_RTX;
-	   link = XEXP (link, 1))
-	{
-	  rtx reg = XEXP (link, 0);
-
-	  if (REG_NOTE_KIND (link) == REG_DEAD && GET_CODE (reg) == REG)
-	    {
-	      int regno = REGNO (reg);
-	      int n = regno + HARD_REGNO_NREGS (regno, GET_MODE (reg));
-	      for (; regno < n; regno++)
-		reg_state[regno] &= ~REGSTATE_LIVE;
-	    }
+	  last = emit_insn_after (PATTERN (frv_nops[nop]), last);
+	  frv_packet_address += 4;
+	  if (frv_num_nops > 1)
+	    nop ^= 1;
 	}
     }
 
-  free (frv_state);
-  dfa_finish ();
-  return;
+  frv_packet_address = target;
 }
 
+/* Subroutine of frv_reorg, called after each packet has been constructed
+   in frv_packet.  */
+
+static void
+frv_reorg_packet (void)
+{
+  frv_fill_unused_units (GROUP_I);
+  frv_fill_unused_units (GROUP_FM);
+  frv_align_label ();
+}
+
+/* Add an instruction with pattern NOP to frv_nops[].  */
+
+static void
+frv_register_nop (rtx nop)
+{
+  nop = make_insn_raw (nop);
+  NEXT_INSN (nop) = 0;
+  PREV_INSN (nop) = 0;
+  frv_nops[frv_num_nops++] = nop;
+}
+
+/* Implement TARGET_MACHINE_DEPENDENT_REORG.  Divide the instructions
+   into packets and check whether we need to insert nops in order to
+   fulfill the processor's issue requirements.  Also, if the user has
+   requested a certain alignment for a label, try to meet that alignment
+   by inserting nops in the previous packet.  */
+
+static void
+frv_reorg (void)
+{
+  frv_num_nops = 0;
+  frv_register_nop (gen_nop ());
+  if (TARGET_MEDIA)
+    frv_register_nop (gen_mnop ());
+  if (TARGET_HARD_FLOAT)
+    frv_register_nop (gen_fnop ());
+
+  /* Estimate the length of each branch.  Although this may change after
+     we've inserted nops, it will only do so in big functions.  */
+  shorten_branches (get_insns ());
+
+  frv_packet_address = 0;
+  frv_for_each_packet (frv_reorg_packet);
+}
 
 #define def_builtin(name, type, code) \
-  builtin_function ((name), (type), (code), BUILT_IN_MD, NULL, NULL)
+  lang_hooks.builtin_function ((name), (type), (code), BUILT_IN_MD, NULL, NULL)
 
 struct builtin_description
 {
@@ -9001,7 +9371,8 @@ static struct builtin_description bdesc_1arg[] =
   { CODE_FOR_munpackh, "__MUNPACKH", FRV_BUILTIN_MUNPACKH, 0, 0 },
   { CODE_FOR_mbtoh, "__MBTOH", FRV_BUILTIN_MBTOH, 0, 0 },
   { CODE_FOR_mhtob, "__MHTOB", FRV_BUILTIN_MHTOB, 0, 0 },
-  { CODE_FOR_mabshs, "__MABSHS", FRV_BUILTIN_MABSHS, 0, 0 }
+  { CODE_FOR_mabshs, "__MABSHS", FRV_BUILTIN_MABSHS, 0, 0 },
+  { CODE_FOR_scutss, "__SCUTSS", FRV_BUILTIN_SCUTSS, 0, 0 }
 };
 
 /* Media intrinsics that take two arguments.  */
@@ -9023,11 +9394,33 @@ static struct builtin_description bdesc_2arg[] =
   { CODE_FOR_mqsubhss, "__MQSUBHSS", FRV_BUILTIN_MQSUBHSS, 0, 0 },
   { CODE_FOR_mqsubhus, "__MQSUBHUS", FRV_BUILTIN_MQSUBHUS, 0, 0 },
   { CODE_FOR_mpackh, "__MPACKH", FRV_BUILTIN_MPACKH, 0, 0 },
-  { CODE_FOR_mdpackh, "__MDPACKH", FRV_BUILTIN_MDPACKH, 0, 0 },
   { CODE_FOR_mcop1, "__Mcop1", FRV_BUILTIN_MCOP1, 0, 0 },
   { CODE_FOR_mcop2, "__Mcop2", FRV_BUILTIN_MCOP2, 0, 0 },
   { CODE_FOR_mwcut, "__MWCUT", FRV_BUILTIN_MWCUT, 0, 0 },
-  { CODE_FOR_mqsaths, "__MQSATHS", FRV_BUILTIN_MQSATHS, 0, 0 }
+  { CODE_FOR_mqsaths, "__MQSATHS", FRV_BUILTIN_MQSATHS, 0, 0 },
+  { CODE_FOR_mqlclrhs, "__MQLCLRHS", FRV_BUILTIN_MQLCLRHS, 0, 0 },
+  { CODE_FOR_mqlmths, "__MQLMTHS", FRV_BUILTIN_MQLMTHS, 0, 0 },
+  { CODE_FOR_smul, "__SMUL", FRV_BUILTIN_SMUL, 0, 0 },
+  { CODE_FOR_umul, "__UMUL", FRV_BUILTIN_UMUL, 0, 0 },
+  { CODE_FOR_addss, "__ADDSS", FRV_BUILTIN_ADDSS, 0, 0 },
+  { CODE_FOR_subss, "__SUBSS", FRV_BUILTIN_SUBSS, 0, 0 },
+  { CODE_FOR_slass, "__SLASS", FRV_BUILTIN_SLASS, 0, 0 },
+  { CODE_FOR_scan, "__SCAN", FRV_BUILTIN_SCAN, 0, 0 }
+};
+
+/* Integer intrinsics that take two arguments and have no return value.  */
+
+static struct builtin_description bdesc_int_void2arg[] =
+{
+  { CODE_FOR_smass, "__SMASS", FRV_BUILTIN_SMASS, 0, 0 },
+  { CODE_FOR_smsss, "__SMSSS", FRV_BUILTIN_SMSSS, 0, 0 },
+  { CODE_FOR_smu, "__SMU", FRV_BUILTIN_SMU, 0, 0 }
+};
+
+static struct builtin_description bdesc_prefetches[] =
+{
+  { CODE_FOR_frv_prefetch0, "__data_prefetch0", FRV_BUILTIN_PREFETCH0, 0, 0 },
+  { CODE_FOR_frv_prefetch, "__data_prefetch", FRV_BUILTIN_PREFETCH, 0, 0 }
 };
 
 /* Media intrinsics that take two arguments, the first being an ACC number.  */
@@ -9057,7 +9450,9 @@ static struct builtin_description bdesc_2argimm[] =
   { CODE_FOR_mhsetloh, "__MHSETLOH", FRV_BUILTIN_MHSETLOH, 0, 0 },
   { CODE_FOR_mhsethis, "__MHSETHIS", FRV_BUILTIN_MHSETHIS, 0, 0 },
   { CODE_FOR_mhsethih, "__MHSETHIH", FRV_BUILTIN_MHSETHIH, 0, 0 },
-  { CODE_FOR_mhdseth, "__MHDSETH", FRV_BUILTIN_MHDSETH, 0, 0 }
+  { CODE_FOR_mhdseth, "__MHDSETH", FRV_BUILTIN_MHDSETH, 0, 0 },
+  { CODE_FOR_mqsllhi, "__MQSLLHI", FRV_BUILTIN_MQSLLHI, 0, 0 },
+  { CODE_FOR_mqsrahi, "__MQSRAHI", FRV_BUILTIN_MQSRAHI, 0, 0 }
 };
 
 /* Media intrinsics that take two arguments and return void, the first argument
@@ -9129,6 +9524,7 @@ frv_init_builtins (void)
   tree sword2 = long_long_integer_type_node;
   tree uword2 = long_long_unsigned_type_node;
   tree uword4 = build_pointer_type (uword1);
+  tree iacc   = integer_type_node;
 
 #define UNARY(RET, T1) \
   build_function_type (RET, tree_cons (NULL_TREE, T1, endlink))
@@ -9141,6 +9537,12 @@ frv_init_builtins (void)
   build_function_type (RET, tree_cons (NULL_TREE, T1, \
 			    tree_cons (NULL_TREE, T2, \
 			    tree_cons (NULL_TREE, T3, endlink))))
+
+#define QUAD(RET, T1, T2, T3, T4) \
+  build_function_type (RET, tree_cons (NULL_TREE, T1, \
+			    tree_cons (NULL_TREE, T2, \
+			    tree_cons (NULL_TREE, T3, \
+			    tree_cons (NULL_TREE, T4, endlink)))))
 
   tree void_ftype_void = build_function_type (voidt, endlink);
 
@@ -9175,8 +9577,19 @@ frv_init_builtins (void)
   tree uw2_ftype_uw2_uw2 = BINARY (uword2, uword2, uword2);
   tree uw2_ftype_uw2_int = BINARY (uword2, uword2, integer);
   tree uw2_ftype_acc_int = BINARY (uword2, accumulator, integer);
+  tree uw2_ftype_uh_uh_uh_uh = QUAD (uword2, uhalf, uhalf, uhalf, uhalf);
 
   tree sw2_ftype_sw2_sw2 = BINARY (sword2, sword2, sword2);
+  tree sw2_ftype_sw2_int   = BINARY (sword2, sword2, integer);
+  tree uw2_ftype_uw1_uw1   = BINARY (uword2, uword1, uword1);
+  tree sw2_ftype_sw1_sw1   = BINARY (sword2, sword1, sword1);
+  tree void_ftype_sw1_sw1  = BINARY (voidt, sword1, sword1);
+  tree void_ftype_iacc_sw2 = BINARY (voidt, iacc, sword2);
+  tree void_ftype_iacc_sw1 = BINARY (voidt, iacc, sword1);
+  tree sw1_ftype_sw1       = UNARY (sword1, sword1);
+  tree sw2_ftype_iacc      = UNARY (sword2, iacc);
+  tree sw1_ftype_iacc      = UNARY (sword1, iacc);
+  tree void_ftype_ptr      = UNARY (voidt, const_ptr_type_node);
 
   def_builtin ("__MAND", uw1_ftype_uw1_uw1, FRV_BUILTIN_MAND);
   def_builtin ("__MOR", uw1_ftype_uw1_uw1, FRV_BUILTIN_MOR);
@@ -9227,7 +9640,7 @@ frv_init_builtins (void)
   def_builtin ("__MEXPDHD", uw2_ftype_uw1_int, FRV_BUILTIN_MEXPDHD);
   def_builtin ("__MPACKH", uw1_ftype_uh_uh, FRV_BUILTIN_MPACKH);
   def_builtin ("__MUNPACKH", uw2_ftype_uw1, FRV_BUILTIN_MUNPACKH);
-  def_builtin ("__MDPACKH", uw2_ftype_uw2_uw2, FRV_BUILTIN_MDPACKH);
+  def_builtin ("__MDPACKH", uw2_ftype_uh_uh_uh_uh, FRV_BUILTIN_MDPACKH);
   def_builtin ("__MDUNPACKH", void_ftype_uw4_uw2, FRV_BUILTIN_MDUNPACKH);
   def_builtin ("__MBTOH", uw2_ftype_uw1, FRV_BUILTIN_MBTOH);
   def_builtin ("__MHTOB", uw1_ftype_uw2, FRV_BUILTIN_MHTOB);
@@ -9262,10 +9675,31 @@ frv_init_builtins (void)
   def_builtin ("__MHSETLOH", uw1_ftype_uw1_int, FRV_BUILTIN_MHSETLOH);
   def_builtin ("__MHSETHIH", uw1_ftype_uw1_int, FRV_BUILTIN_MHSETHIH);
   def_builtin ("__MHDSETH", uw1_ftype_uw1_int, FRV_BUILTIN_MHDSETH);
+  def_builtin ("__MQLCLRHS", sw2_ftype_sw2_sw2, FRV_BUILTIN_MQLCLRHS);
+  def_builtin ("__MQLMTHS", sw2_ftype_sw2_sw2, FRV_BUILTIN_MQLMTHS);
+  def_builtin ("__MQSLLHI", uw2_ftype_uw2_int, FRV_BUILTIN_MQSLLHI);
+  def_builtin ("__MQSRAHI", sw2_ftype_sw2_int, FRV_BUILTIN_MQSRAHI);
+  def_builtin ("__SMUL", sw2_ftype_sw1_sw1, FRV_BUILTIN_SMUL);
+  def_builtin ("__UMUL", uw2_ftype_uw1_uw1, FRV_BUILTIN_UMUL);
+  def_builtin ("__SMASS", void_ftype_sw1_sw1, FRV_BUILTIN_SMASS);
+  def_builtin ("__SMSSS", void_ftype_sw1_sw1, FRV_BUILTIN_SMSSS);
+  def_builtin ("__SMU", void_ftype_sw1_sw1, FRV_BUILTIN_SMU);
+  def_builtin ("__ADDSS", sw1_ftype_sw1_sw1, FRV_BUILTIN_ADDSS);
+  def_builtin ("__SUBSS", sw1_ftype_sw1_sw1, FRV_BUILTIN_SUBSS);
+  def_builtin ("__SLASS", sw1_ftype_sw1_sw1, FRV_BUILTIN_SLASS);
+  def_builtin ("__SCAN", sw1_ftype_sw1_sw1, FRV_BUILTIN_SCAN);
+  def_builtin ("__SCUTSS", sw1_ftype_sw1, FRV_BUILTIN_SCUTSS);
+  def_builtin ("__IACCreadll", sw2_ftype_iacc, FRV_BUILTIN_IACCreadll);
+  def_builtin ("__IACCreadl", sw1_ftype_iacc, FRV_BUILTIN_IACCreadl);
+  def_builtin ("__IACCsetll", void_ftype_iacc_sw2, FRV_BUILTIN_IACCsetll);
+  def_builtin ("__IACCsetl", void_ftype_iacc_sw1, FRV_BUILTIN_IACCsetl);
+  def_builtin ("__data_prefetch0", void_ftype_ptr, FRV_BUILTIN_PREFETCH0);
+  def_builtin ("__data_prefetch", void_ftype_ptr, FRV_BUILTIN_PREFETCH);
 
 #undef UNARY
 #undef BINARY
 #undef TRINARY
+#undef QUAD
 }
 
 /* Set the names for various arithmetic operations according to the
@@ -9326,13 +9760,21 @@ static rtx
 frv_int_to_acc (enum insn_code icode, int opnum, rtx opval)
 {
   rtx reg;
+  int i;
+
+  /* ACCs and ACCGs are implicity global registers if media intrinsics
+     are being used.  We set up this lazily to avoid creating lots of
+     unnecessary call_insn rtl in non-media code.  */
+  for (i = 0; i <= ACC_MASK; i++)
+    if ((i & ACC_MASK) == i)
+      global_regs[i + ACC_FIRST] = global_regs[i + ACCG_FIRST] = 1;
 
   if (GET_CODE (opval) != CONST_INT)
     {
       error ("accumulator is not a constant integer");
       return NULL_RTX;
     }
-  if (! IN_RANGE_P (INTVAL (opval), 0, NUM_ACCS - 1))
+  if ((INTVAL (opval) & ~ACC_MASK) != 0)
     {
       error ("accumulator number is out of bounds");
       return NULL_RTX;
@@ -9345,7 +9787,7 @@ frv_int_to_acc (enum insn_code icode, int opnum, rtx opval)
 
   if (! (*insn_data[icode].operand[opnum].predicate) (reg, VOIDmode))
     {
-      error ("inappropriate accumulator for `%s'", insn_data[icode].name);
+      error ("inappropriate accumulator for %qs", insn_data[icode].name);
       return NULL_RTX;
     }
   return reg;
@@ -9396,6 +9838,35 @@ frv_read_argument (tree *arglistptr)
   return expand_expr (next, NULL_RTX, VOIDmode, 0);
 }
 
+/* Like frv_read_argument, but interpret the argument as the number
+   of an IACC register and return a (reg:MODE ...) rtx for it.  */
+
+static rtx
+frv_read_iacc_argument (enum machine_mode mode, tree *arglistptr)
+{
+  int i, regno;
+  rtx op;
+
+  op = frv_read_argument (arglistptr);
+  if (GET_CODE (op) != CONST_INT
+      || INTVAL (op) < 0
+      || INTVAL (op) > IACC_LAST - IACC_FIRST
+      || ((INTVAL (op) * 4) & (GET_MODE_SIZE (mode) - 1)) != 0)
+    {
+      error ("invalid IACC argument");
+      op = const0_rtx;
+    }
+
+  /* IACCs are implicity global registers.  We set up this lazily to
+     avoid creating lots of unnecessary call_insn rtl when IACCs aren't
+     being used.  */
+  regno = INTVAL (op) + IACC_FIRST;
+  for (i = 0; i < HARD_REGNO_NREGS (regno, mode); i++)
+    global_regs[regno + i] = 1;
+
+  return gen_rtx_REG (mode, regno);
+}
+
 /* Return true if OPVAL can be used for operand OPNUM of instruction ICODE.
    The instruction should require a constant operand of some sort.  The
    function prints an error if OPVAL is not valid.  */
@@ -9405,12 +9876,12 @@ frv_check_constant_argument (enum insn_code icode, int opnum, rtx opval)
 {
   if (GET_CODE (opval) != CONST_INT)
     {
-      error ("`%s' expects a constant argument", insn_data[icode].name);
+      error ("%qs expects a constant argument", insn_data[icode].name);
       return FALSE;
     }
   if (! (*insn_data[icode].operand[opnum].predicate) (opval, VOIDmode))
     {
-      error ("constant argument out of range for `%s'", insn_data[icode].name);
+      error ("constant argument out of range for %qs", insn_data[icode].name);
       return FALSE;
     }
   return TRUE;
@@ -9602,6 +10073,41 @@ frv_expand_voidbinop_builtin (enum insn_code icode, tree arglist)
   return 0;
 }
 
+/* Expand builtins that take two long operands and return void.  */
+
+static rtx
+frv_expand_int_void2arg (enum insn_code icode, tree arglist)
+{
+  rtx pat;
+  rtx op0 = frv_read_argument (&arglist);
+  rtx op1 = frv_read_argument (&arglist);
+
+  op0 = frv_legitimize_argument (icode, 1, op0);
+  op1 = frv_legitimize_argument (icode, 1, op1);
+  pat = GEN_FCN (icode) (op0, op1);
+  if (! pat)
+    return NULL_RTX;
+
+  emit_insn (pat);
+  return NULL_RTX;
+}
+
+/* Expand prefetch builtins.  These take a single address as argument.  */
+
+static rtx
+frv_expand_prefetches (enum insn_code icode, tree arglist)
+{
+  rtx pat;
+  rtx op0 = frv_read_argument (&arglist);
+
+  pat = GEN_FCN (icode) (force_reg (Pmode, op0));
+  if (! pat)
+    return 0;
+
+  emit_insn (pat);
+  return 0;
+}
+
 /* Expand builtins that take three operands and return void.  The first
    argument must be a constant that describes a pair or quad accumulators.  A
    fourth argument is created that is the accumulator guard register that
@@ -9660,6 +10166,44 @@ frv_expand_voidaccop_builtin (enum insn_code icode, tree arglist)
 
   emit_insn (pat);
   return NULL_RTX;
+}
+
+/* Expand the MDPACKH builtin.  It takes four unsigned short arguments and
+   each argument forms one word of the two double-word input registers.
+   ARGLIST is a TREE_LIST of the arguments and TARGET, if nonnull,
+   suggests a good place to put the return value.  */
+
+static rtx
+frv_expand_mdpackh_builtin (tree arglist, rtx target)
+{
+  enum insn_code icode = CODE_FOR_mdpackh;
+  rtx pat, op0, op1;
+  rtx arg1 = frv_read_argument (&arglist);
+  rtx arg2 = frv_read_argument (&arglist);
+  rtx arg3 = frv_read_argument (&arglist);
+  rtx arg4 = frv_read_argument (&arglist);
+
+  target = frv_legitimize_target (icode, target);
+  op0 = gen_reg_rtx (DImode);
+  op1 = gen_reg_rtx (DImode);
+
+  /* The high half of each word is not explicitly initialised, so indicate
+     that the input operands are not live before this point.  */
+  emit_insn (gen_rtx_CLOBBER (DImode, op0));
+  emit_insn (gen_rtx_CLOBBER (DImode, op1));
+
+  /* Move each argument into the low half of its associated input word.  */
+  emit_move_insn (simplify_gen_subreg (HImode, op0, DImode, 2), arg1);
+  emit_move_insn (simplify_gen_subreg (HImode, op0, DImode, 6), arg2);
+  emit_move_insn (simplify_gen_subreg (HImode, op1, DImode, 2), arg3);
+  emit_move_insn (simplify_gen_subreg (HImode, op1, DImode, 6), arg4);
+
+  pat = GEN_FCN (icode) (target, op0, op1);
+  if (! pat)
+    return NULL_RTX;
+
+  emit_insn (pat);
+  return target;
 }
 
 /* Expand the MCLRACC builtin.  This builtin takes a single accumulator
@@ -9740,6 +10284,21 @@ frv_expand_mwtacc_builtin (enum insn_code icode, tree arglist)
   return NULL_RTX;
 }
 
+/* Emit a move from SRC to DEST in SImode chunks.  This can be used
+   to move DImode values into and out of IACC0.  */
+
+static void
+frv_split_iacc_move (rtx dest, rtx src)
+{
+  enum machine_mode inner;
+  int i;
+
+  inner = GET_MODE (dest);
+  for (i = 0; i < GET_MODE_SIZE (inner); i += GET_MODE_SIZE (SImode))
+    emit_move_insn (simplify_gen_subreg (SImode, dest, inner, i),
+		    simplify_gen_subreg (SImode, src, inner, i));
+}
+
 /* Expand builtins.  */
 
 static rtx
@@ -9755,7 +10314,7 @@ frv_expand_builtin (tree exp,
   unsigned i;
   struct builtin_description *d;
 
-  if (! TARGET_MEDIA)
+  if (fcode < FRV_BUILTIN_FIRST_NONMEDIA && !TARGET_MEDIA)
     {
       error ("media functions are not available unless -mmedia is used");
       return NULL_RTX;
@@ -9797,7 +10356,47 @@ frv_expand_builtin (tree exp,
     case FRV_BUILTIN_MHDSETH:
       if (! TARGET_MEDIA_REV2)
 	{
-	  error ("this media function is only available on the fr400");
+	  error ("this media function is only available on the fr400"
+		 " and fr550");
+	  return NULL_RTX;
+	}
+      break;
+
+    case FRV_BUILTIN_SMASS:
+    case FRV_BUILTIN_SMSSS:
+    case FRV_BUILTIN_SMU:
+    case FRV_BUILTIN_ADDSS:
+    case FRV_BUILTIN_SUBSS:
+    case FRV_BUILTIN_SLASS:
+    case FRV_BUILTIN_SCUTSS:
+    case FRV_BUILTIN_IACCreadll:
+    case FRV_BUILTIN_IACCreadl:
+    case FRV_BUILTIN_IACCsetll:
+    case FRV_BUILTIN_IACCsetl:
+      if (!TARGET_FR405_BUILTINS)
+	{
+	  error ("this builtin function is only available"
+		 " on the fr405 and fr450");
+	  return NULL_RTX;
+	}
+      break;
+
+    case FRV_BUILTIN_PREFETCH:
+      if (!TARGET_FR500_FR550_BUILTINS)
+	{
+	  error ("this builtin function is only available on the fr500"
+		 " and fr550");
+	  return NULL_RTX;
+	}
+      break;
+
+    case FRV_BUILTIN_MQLCLRHS:
+    case FRV_BUILTIN_MQLMTHS:
+    case FRV_BUILTIN_MQSLLHI:
+    case FRV_BUILTIN_MQSRAHI:
+      if (!TARGET_MEDIA_FR450)
+	{
+	  error ("this builtin function is only available on the fr450");
 	  return NULL_RTX;
 	}
       break;
@@ -9833,6 +10432,37 @@ frv_expand_builtin (tree exp,
 
     case FRV_BUILTIN_MWTACCG:
       return frv_expand_mwtacc_builtin (CODE_FOR_mwtaccg, arglist);
+
+    case FRV_BUILTIN_MDPACKH:
+      return frv_expand_mdpackh_builtin (arglist, target);
+
+    case FRV_BUILTIN_IACCreadll:
+      {
+	rtx src = frv_read_iacc_argument (DImode, &arglist);
+	if (target == 0 || !REG_P (target))
+	  target = gen_reg_rtx (DImode);
+	frv_split_iacc_move (target, src);
+	return target;
+      }
+
+    case FRV_BUILTIN_IACCreadl:
+      return frv_read_iacc_argument (SImode, &arglist);
+
+    case FRV_BUILTIN_IACCsetll:
+      {
+	rtx dest = frv_read_iacc_argument (DImode, &arglist);
+	rtx src = frv_read_argument (&arglist);
+	frv_split_iacc_move (dest, force_reg (DImode, src));
+	return 0;
+      }
+
+    case FRV_BUILTIN_IACCsetl:
+      {
+	rtx dest = frv_read_iacc_argument (SImode, &arglist);
+	rtx src = frv_read_argument (&arglist);
+	emit_move_insn (dest, force_reg (SImode, src));
+	return 0;
+      }
 
     default:
       break;
@@ -9871,6 +10501,16 @@ frv_expand_builtin (tree exp,
   for (i = 0, d = bdesc_voidacc; i < ARRAY_SIZE (bdesc_voidacc); i++, d++)
     if (d->code == fcode)
       return frv_expand_voidaccop_builtin (d->icode, arglist);
+
+  for (i = 0, d = bdesc_int_void2arg;
+       i < ARRAY_SIZE (bdesc_int_void2arg); i++, d++)
+    if (d->code == fcode)
+      return frv_expand_int_void2arg (d->icode, arglist);
+
+  for (i = 0, d = bdesc_prefetches;
+       i < ARRAY_SIZE (bdesc_prefetches); i++, d++)
+    if (d->code == fcode)
+      return frv_expand_prefetches (d->icode, arglist);
 
   return 0;
 }
@@ -10019,3 +10659,22 @@ frv_struct_value_rtx (tree fntype ATTRIBUTE_UNUSED,
 {
   return gen_rtx_REG (Pmode, FRV_STRUCT_VALUE_REGNUM);
 }
+
+#define TLS_BIAS (2048 - 16)
+
+/* This is called from dwarf2out.c via ASM_OUTPUT_DWARF_DTPREL.
+   We need to emit DTP-relative relocations.  */
+
+void
+frv_output_dwarf_dtprel (FILE *file, int size, rtx x)
+{
+  if (size != 4)
+    abort ();
+  fputs ("\t.picptr\ttlsmoff(", file);
+  /* We want the unbiased TLS offset, so add the bias to the
+     expression, such that the implicit biasing cancels out.  */
+  output_addr_const (file, plus_constant (x, TLS_BIAS));
+  fputs (")", file);
+}
+
+#include "gt-frv.h"

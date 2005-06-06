@@ -1,5 +1,5 @@
 /* Built-in and inline functions for gcj
-   Copyright (C) 2001, 2003
+   Copyright (C) 2001, 2003, 2004, 2005
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -96,17 +96,17 @@ static GTY(()) struct builtin_record java_builtins[] =
 static tree
 max_builtin (tree method_return_type, tree method_arguments)
 {
-  return fold (build (MAX_EXPR, method_return_type,
-		      TREE_VALUE (method_arguments),
-		      TREE_VALUE (TREE_CHAIN (method_arguments))));
+  return fold (build2 (MAX_EXPR, method_return_type,
+		       TREE_VALUE (method_arguments),
+		       TREE_VALUE (TREE_CHAIN (method_arguments))));
 }
 
 static tree
 min_builtin (tree method_return_type, tree method_arguments)
 {
-  return fold (build (MIN_EXPR, method_return_type,
-		      TREE_VALUE (method_arguments),
-		      TREE_VALUE (TREE_CHAIN (method_arguments))));
+  return fold (build2 (MIN_EXPR, method_return_type,
+		       TREE_VALUE (method_arguments),
+		       TREE_VALUE (TREE_CHAIN (method_arguments))));
 }
 
 static tree
@@ -123,8 +123,8 @@ java_build_function_call_expr (tree fn, tree arglist)
   tree call_expr;
 
   call_expr = build1 (ADDR_EXPR, build_pointer_type (TREE_TYPE (fn)), fn);
-  call_expr = build (CALL_EXPR, TREE_TYPE (TREE_TYPE (fn)),
-		     call_expr, arglist, NULL_TREE);
+  call_expr = build3 (CALL_EXPR, TREE_TYPE (TREE_TYPE (fn)),
+		      call_expr, arglist, NULL_TREE);
   TREE_SIDE_EFFECTS (call_expr) = 1;
   return fold (call_expr);
 }
@@ -144,7 +144,7 @@ define_builtin (enum built_in_function val,
   DECL_EXTERNAL (decl) = 1;
   TREE_PUBLIC (decl) = 1;
   SET_DECL_ASSEMBLER_NAME (decl, get_identifier (libname));
-  make_decl_rtl (decl, NULL);
+  make_decl_rtl (decl);
   pushdecl (decl);
   DECL_BUILT_IN_CLASS (decl) = BUILT_IN_NORMAL;
   DECL_FUNCTION_CODE (decl) = val;
@@ -161,6 +161,8 @@ initialize_builtins (void)
 {
   tree double_ftype_double, double_ftype_double_double;
   tree float_ftype_float, float_ftype_float_float;
+  /* APPLE LOCAL lno */
+  tree void_ftype;
   tree t;
   int i;
 
@@ -184,6 +186,10 @@ initialize_builtins (void)
   double_ftype_double = build_function_type (double_type_node, t);
   t = tree_cons (NULL_TREE, double_type_node, t);
   double_ftype_double_double = build_function_type (double_type_node, t);
+
+  /* APPLE LOCAL begin lno */
+  void_ftype = build_function_type (void_type_node, NULL_TREE);
+  /* APPLE LOCAL end lno */
 
   define_builtin (BUILT_IN_FMOD, "__builtin_fmod",
 		  double_ftype_double_double, "fmod");
@@ -216,6 +222,12 @@ initialize_builtins (void)
 		  double_ftype_double, "_ZN4java4lang4Math4sqrtEd");
   define_builtin (BUILT_IN_TAN, "__builtin_tan",
 		  double_ftype_double, "_ZN4java4lang4Math3tanEd");
+  /* APPLE LOCAL begin lno */
+  define_builtin (BUILT_IN_MAYBE_INFINITE_LOOP, "__builtin_maybe_infinite_loop",
+		  void_ftype, "__builtin_maybe_infinite_loop");
+  /* APPLE LOCAL end lno */
+
+  build_common_builtin_nodes ();
 }
 
 /* If the call matches a builtin, return the

@@ -16,6 +16,7 @@ details.  */
 #include <jvm.h>
 #include <java-threads.h>
 
+#include <gnu/gcj/RawDataManaged.h>
 #include <java/lang/Thread.h>
 #include <java/lang/ThreadGroup.h>
 #include <java/lang/IllegalArgumentException.h>
@@ -59,11 +60,7 @@ java::lang::Thread::initialize_native (void)
 {
   natThread *nt = (natThread *) _Jv_AllocBytes (sizeof (natThread));
   
-  // The native thread data is kept in a Object field, not a RawData, so that
-  // the GC allocator can be used and a finalizer run after the thread becomes
-  // unreachable. Note that this relies on the GC's ability to finalize 
-  // non-Java objects. FIXME?
-  data = reinterpret_cast<jobject> (nt);
+  data = (gnu::gcj::RawDataManaged *) nt;
   
   // Register a finalizer to clean up the native thread resources.
   _Jv_RegisterFinalizer (data, finalize_native);
@@ -81,6 +78,13 @@ finalize_native (jobject ptr)
 {
   natThread *nt = (natThread *) ptr;
   _Jv_ThreadDestroyData (nt->thread);
+#ifdef _Jv_HaveCondDestroy
+  _Jv_CondDestroy (&nt->join_cond);
+#endif
+#ifdef _Jv_HaveMutexDestroy
+  _Jv_MutexDestroy (&nt->join_mutex);
+#endif
+  _Jv_FreeJNIEnv(nt->jni_env);
 }
 
 jint
@@ -109,6 +113,7 @@ java::lang::Thread::holdsLock (jobject obj)
 void
 java::lang::Thread::interrupt (void)
 {
+  checkAccess ();
   natThread *nt = (natThread *) data;
   _Jv_ThreadInterrupt (nt->thread);
 }
@@ -318,6 +323,7 @@ java::lang::Thread::start (void)
 void
 java::lang::Thread::stop (java::lang::Throwable *)
 {
+  checkAccess ();
   throw new UnsupportedOperationException
     (JvNewStringLatin1 ("Thread.stop unimplemented"));
 }

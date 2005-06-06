@@ -1,20 +1,29 @@
 /* Copyright (C) 2002-2003 Free Software Foundation, Inc.
    Contributed by Andy Vaught
 
-This file is part of the GNU Fortran 95 runtime library (libgfor).
+This file is part of the GNU Fortran 95 runtime library (libgfortran).
 
-Libgfor is free software; you can redistribute it and/or modify
+Libgfortran is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2, or (at your option)
 any later version.
 
-Libgfor is distributed in the hope that it will be useful,
+In addition to the permissions in the GNU General Public License, the
+Free Software Foundation gives you unlimited permission to link the
+compiled version of this file into combinations with other programs,
+and to distribute those combinations without any restriction coming
+from the use of this file.  (The General Public License restrictions
+do apply in other respects; for example, they cover modification of
+the file, and distribution when not linked into a combine
+executable.)
+
+Libgfortran is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with libgfor; see the file COPYING.  If not, write to
+along with libgfortran; see the file COPYING.  If not, write to
 the Free Software Foundation, 59 Temple Place - Suite 330,
 Boston, MA 02111-1307, USA.  */
 
@@ -48,75 +57,23 @@ Boston, MA 02111-1307, USA.  */
  * that files that report loci and those that do not can be linked
  * together without reporting an erroneous position. */
 
-char *filename;
-unsigned line;
+char *filename = 0;
+iexport_data(filename);
+
+unsigned line = 0;
+iexport_data(line);
 
 static char buffer[32];		/* buffer for integer/ascii conversions */
-
-/* rtoa()-- Real to ascii conversion for base 10 and below.
- * Returns a pointer to a static buffer.  */
-
-char *
-rtoa (double f, int length, int oprec)
-{
-  double n = f;
-  double fval, minval;
-  int negative, prec;
-  unsigned k;
-  char formats[16];
-
-  prec = 0;
-  negative = 0;
-  if (n < 0.0)
-    {
-      negative = 1;
-      n = -n;
-    }
-
-  if (length >= 8)
-    minval = FLT_MIN;
-  else
-    minval = DBL_MIN;
-
-
-  if (n <= minval)
-    {
-      buffer[0] = '0';
-      buffer[1] = '.';
-      for (k = 2; k < 28 ; k++)
-        buffer[k] = '0';
-      buffer[k+1] = '\0';
-      return buffer;
-    }
-  fval = n;
-  while (fval > 1.0)
-    {
-      fval = fval / 10.0;
-      prec ++;
-    }
-
-  prec = sizeof (buffer) - 2 - prec;
-  if (prec > 20)
-     prec = 20;
-  prec = prec > oprec ? oprec : prec ;
-
-  if (negative)
-     sprintf (formats, "-%%.%df", prec);
-  else
-     sprintf (formats, "%%.%df", prec);
-
-  sprintf (buffer, formats, n);
-  return buffer;
-}
 
 
 /* Returns a pointer to a static buffer. */
 
 char *
-itoa (int64_t n)
+gfc_itoa (int64_t n)
 {
   int negative;
   char *p;
+  uint64_t t;
 
   if (n == 0)
     {
@@ -126,19 +83,20 @@ itoa (int64_t n)
     }
 
   negative = 0;
+  t = n;
   if (n < 0)
     {
       negative = 1;
-      n = -n;
+      t = -n; /*must use unsigned to protect from overflow*/
     }
 
   p = buffer + sizeof (buffer) - 1;
   *p-- = '\0';
 
-  while (n != 0)
+  while (t != 0)
     {
-      *p-- = '0' + (n % 10);
-      n /= 10;
+      *p-- = '0' + (t % 10);
+      t /= 10;
     }
 
   if (negative)
@@ -228,7 +186,7 @@ st_printf (const char *format, ...)
 	  break;
 
 	case 'd':
-	  q = itoa (va_arg (arg, int));
+	  q = gfc_itoa (va_arg (arg, int));
 	  count = strlen (q);
 
 	  p = salloc_w (s, &count);
@@ -305,7 +263,7 @@ st_sprintf (char *buffer, const char *format, ...)
 	  break;
 
 	case 'd':
-	  p = itoa (va_arg (arg, int));
+	  p = gfc_itoa (va_arg (arg, int));
 	  count = strlen (p);
 
 	  memcpy (buffer, p, count);
@@ -335,7 +293,6 @@ st_sprintf (char *buffer, const char *format, ...)
 void
 show_locus (void)
 {
-
   if (!options.locus || filename == NULL)
     return;
 
@@ -354,8 +311,9 @@ recursion_check (void)
 {
   static int magic = 0;
 
+  /* Don't even try to print something at this point */
   if (magic == MAGIC)
-    sys_exit (4);		/* Don't even try to print something at this point */
+    sys_exit (4);
 
   magic = MAGIC;
 }
@@ -368,12 +326,9 @@ recursion_check (void)
 void
 os_error (const char *message)
 {
-
   recursion_check ();
-
   show_locus ();
   st_printf ("Operating system error: %s\n%s\n", get_oserror (), message);
-
   sys_exit (1);
 }
 
@@ -384,14 +339,12 @@ os_error (const char *message)
 void
 runtime_error (const char *message)
 {
-
   recursion_check ();
-
   show_locus ();
   st_printf ("Fortran runtime error: %s\n", message);
-
   sys_exit (2);
 }
+iexport(runtime_error);
 
 
 /* void internal_error()-- These are this-can't-happen errors
@@ -400,9 +353,7 @@ runtime_error (const char *message)
 void
 internal_error (const char *message)
 {
-
   recursion_check ();
-
   show_locus ();
   st_printf ("Internal Error: %s\n", message);
   sys_exit (3);
@@ -499,13 +450,11 @@ translate_error (int code)
 void
 generate_error (int family, const char *message)
 {
-
+  /* Set the error status.  */
   if (ioparm.iostat != NULL)
-    {
-      *ioparm.iostat = family;
-      return;
-    }
+    *ioparm.iostat = family;
 
+  /* Report status back to the compiler.  */
   switch (family)
     {
     case ERROR_EOR:
@@ -522,10 +471,13 @@ generate_error (int family, const char *message)
 
     default:
       ioparm.library_return = LIBRARY_ERROR;
+      if (ioparm.err != 0)
+	return;
       break;
     }
 
-  if (ioparm.err != 0)
+  /* Return if the user supplied an iostat variable.  */
+  if (ioparm.iostat != NULL)
     return;
 
   /* Terminate the program */

@@ -1,6 +1,6 @@
 /* { dg-do run { target *-*-darwin* } } */
 /* { dg-options "-O2 -fss-const-prop" } */
-/* APPLE LOCAL */
+/* APPLE LOCAL file bitfield zero initialization */
 /* <rdar://problem/3366203>:Setup Assistant crashes in SetModificationDateToPasteboard */
 /* <rdar://problem/3379022>:GCC compiler error in bitfield handling */
 

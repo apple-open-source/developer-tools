@@ -35,235 +35,236 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package javax.swing;
 
 import java.io.IOException;
 import java.io.ObjectOutputStream;
+
 import javax.accessibility.AccessibleContext;
 import javax.accessibility.AccessibleRole;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.Document;
 
 /**
- * JPasswordField
- * @author	Andrew Selkirk
- * @version	1.0
+ * class JPasswordField
+ * 
+ * @author Andrew Selkirk
+ * @version 1.0
  */
-public class JPasswordField extends JTextField {
+public class JPasswordField extends JTextField
+{
+  /**
+   * AccessibleJPasswordField
+   */
+  protected class AccessibleJPasswordField extends AccessibleJTextField
+  {
+    private static final long serialVersionUID = -8477039424200681086L;
 
-	//-------------------------------------------------------------
-	// Classes ----------------------------------------------------
-	//-------------------------------------------------------------
+    /**
+     * Constructor AccessibleJPasswordField
+     */
+    protected AccessibleJPasswordField()
+    {
+    }
 
-	/**
-	 * AccessibleJPasswordField
-	 */
-	protected class AccessibleJPasswordField extends AccessibleJTextField {
+    /**
+     * getAccessibleRole
+     * 
+     * @return AccessibleRole
+     */
+    public AccessibleRole getAccessibleRole()
+    {
+      return AccessibleRole.PASSWORD_TEXT;
+    }
+  }
 
-		//-------------------------------------------------------------
-		// Variables --------------------------------------------------
-		//-------------------------------------------------------------
+  /**
+   * echoChar.  Default is 0.
+   */
+  private char echoChar = 0;
 
+  /**
+   * Creates a <code>JPasswordField</code> object.
+   */
+  public JPasswordField()
+  {
+    this(null, null, 0);
+  }
 
-		//-------------------------------------------------------------
-		// Initialization ---------------------------------------------
-		//-------------------------------------------------------------
+  /**
+   * Creates a <code>JPasswordField</code> object.
+   * 
+   * @param text the initial text
+   */
+  public JPasswordField(String text)
+  {
+    this(null, text, 0);
+  }
 
-		/**
-		 * Constructor AccessibleJPasswordField
-		 * @param component TODO
-		 */
-		protected AccessibleJPasswordField(JPasswordField component) {
-			super(component);
-			// TODO
-		} // AccessibleJPasswordField()
+  /**
+   * Creates a <code>JPasswordField</code> object.
+   * 
+   * @param columns the number of columns
+   */
+  public JPasswordField(int columns)
+  {
+    this(null, null, columns);
+  }
 
+  /**
+   * Creates a <code>JPasswordField</code> object.
+   * 
+   * @param text the initial text
+   * @param columns the number of columns
+   */
+  public JPasswordField(String text, int columns)
+  {
+    this(null, text, columns);
+  }
 
-		//-------------------------------------------------------------
-		// Methods ----------------------------------------------------
-		//-------------------------------------------------------------
+  /**
+   * Creates a <code>JPasswordField</code> object.
+   * 
+   * @param document the document to use
+   * @param text the initial text
+   * @param columns the number of columns
+   */
+  public JPasswordField(Document document, String text, int columns)
+  {
+    super(document, text, columns);
+  }
 
-		/**
-		 * getAccessibleRole
-		 * @returns AccessibleRole
-		 */
-		public AccessibleRole getAccessibleRole() {
-			return AccessibleRole.PASSWORD_TEXT;
-		} // getAccessibleRole()
+  /**
+   * writeObject
+   * 
+   * @param stream the stream to write to
+   * 
+   * @exception IOException if an error occurs
+   */
+  private void writeObject(ObjectOutputStream stream) throws IOException
+  {
+    // TODO: Implement me.
+  }
 
+  /**
+   * Returns the <code>UIClassID</code>
+   * 
+   * @return the string "PasswordFieldUI"
+   */
+  public String getUIClassID()
+  {
+    return "PasswordFieldUI";
+  }
 
-	} // AccessibleJPasswordField
+  /**
+   * getEchoChar
+   * 
+   * @return the echo char
+   */
+  public char getEchoChar()
+  {
+    return echoChar;
+  }
 
+  /**
+   * setEchoChar
+   * 
+   * @param echo the echo char
+   */
+  public void setEchoChar(char echo)
+  {
+    this.echoChar = echo;
+  }
 
-	//-------------------------------------------------------------
-	// Variables --------------------------------------------------
-	//-------------------------------------------------------------
+  /**
+   * echoCharIsSet
+   * 
+   * @return <code>true</code> if the echo char is set,
+   * <code>false</code> otherwise.
+   */
+  public boolean echoCharIsSet()
+  {
+    return echoChar == 0;
+  }
 
-	/**
-	 * uiClassID
-	 */
-	private static final String uiClassID = "PasswordFieldUI";
+  /**
+   * Copies the selected text into the clipboard. This operation is not
+   * allowed in a password input field.
+   */
+  public void copy()
+  {
+    UIManager.getLookAndFeel().provideErrorFeedback(this);
+  }
 
-	/**
-	 * echoChar.  Default is 0
-	 */
-	private char echoChar = 0;
+  /**
+   * Cuts the selected text and puts it into the clipboard. This operation
+   * is not allowed in a password input field.
+   */
+  public void cut()
+  {
+    UIManager.getLookAndFeel().provideErrorFeedback(this);
+  }
 
+  /**
+   * getText
+   * 
+   * @return String
+   * 
+   * @deprecated
+   */
+  public String getText()
+  {
+    return null; // TODO
+  }
 
-	//-------------------------------------------------------------
-	// Initialization ---------------------------------------------
-	//-------------------------------------------------------------
+  /**
+   * getText
+   * 
+   * @param offset TODO
+   * @param length TODO
+   * 
+   * @return String
+   * 
+   * @exception BadLocationException TODO
+   *
+   * @deprecated
+   */
+  public String getText(int offset, int length) throws BadLocationException
+  {
+    return null; // TODO
+  }
 
-	/**
-	 * Constructor JPasswordField
-	 */
-	public JPasswordField() {
-		// TODO
-	} // JPasswordField()
+  /**
+   * getPassword
+   * 
+   * @return char[]
+   */
+  public char[] getPassword()
+  {
+    return new char[0]; // TODO
+  }
 
-	/**
-	 * Constructor JPasswordField
-	 * @param text TODO
-	 */
-	public JPasswordField(String text) {
-		// TODO
-	} // JPasswordField()
+  /**
+   * paramString
+   * 
+   * @return String
+   */
+  protected String paramString()
+  {
+    return null; // TODO
+  }
 
-	/**
-	 * Constructor JPasswordField
-	 * @param columns TODO
-	 */
-	public JPasswordField(int columns) {
-		// TODO
-	} // JPasswordField()
+  /**
+   * getAccessibleContext
+   * 
+   * @return the <code>AccessibleContext</code> object
+   */
+  public AccessibleContext getAccessibleContext()
+  {
+    if (accessibleContext == null)
+      accessibleContext = new AccessibleJPasswordField();
 
-	/**
-	 * Constructor JPasswordField
-	 * @param text TODO
-	 * @param columns TODO
-	 */
-	public JPasswordField(String text, int columns) {
-		// TODO
-	} // JPasswordField()
-
-	/**
-	 * Constructor JPasswordField
-	 * @param document TODO
-	 * @param text TODO
-	 * @param columns TODO
-	 */
-	public JPasswordField(Document document, String text, int columns) {
-		// TODO
-	} // JPasswordField()
-
-
-	//-------------------------------------------------------------
-	// Methods ----------------------------------------------------
-	//-------------------------------------------------------------
-
-	/**
-	 * writeObject
-	 * @param stream TODO
-	 * @exception IOException TODO
-	 */
-	private void writeObject(ObjectOutputStream stream) throws IOException {
-		// TODO
-	} // writeObject()
-
-	/**
-	 * copy
-	 */
-	public void copy() {
-		// TODO
-	} // copy()
-
-	/**
-	 * getUIClassID
-	 * @returns String
-	 */
-	public String getUIClassID() {
-		return uiClassID;
-	} // getUIClassID()
-
-	/**
-	 * getEchoChar
-	 * @returns char
-	 */
-	public char getEchoChar() {
-		return echoChar;
-	} // getEchoChar()
-
-	/**
-	 * setEchoChar
-	 * @param echo TODO
-	 */
-	public void setEchoChar(char echo) {
-		this.echoChar = echo;
-		// TODO
-	} // setEchoChar()
-
-	/**
-	 * echoCharIsSet
-	 * @returns boolean
-	 */
-	public boolean echoCharIsSet() {
-		return (echoChar == 0);
-	} // echoCharIsSet()
-
-	/**
-	 * cut
-	 */
-	public void cut() {
-		// TODO
-	} // cut()
-
-	/**
-	 * getText
-	 * @returns String
-         * @deprecated
-	 */
-	public String getText() {
-		return null; // TODO
-	} // getText()
-
-	/**
-	 * getText
-	 * @param offset TODO
-	 * @param length TODO
-	 * @exception BadLocationException TODO
-	 * @returns String
-         * @deprecated
-	 */
-	public String getText(int offset, int length) throws BadLocationException {
-		return null; // TODO
-	} // getText()
-
-	/**
-	 * getPassword
-	 * @returns char[]
-	 */
-	public char[] getPassword() {
-		return null; // TODO
-	} // getPassword()
-
-	/**
-	 * paramString
-	 * @returns String
-	 */
-	protected String paramString() {
-		return null; // TODO
-	} // paramString()
-
-	/**
-	 * getAccessibleContext
-	 * @returns AccessibleContext
-	 */
-	public AccessibleContext getAccessibleContext() {
-		if (accessibleContext == null) {
-			accessibleContext = new AccessibleJPasswordField(this);
-		} // if
-		return accessibleContext;
-	} // getAccessibleContext()
-
-
-} // JPasswordField
+    return accessibleContext;
+  }
+}

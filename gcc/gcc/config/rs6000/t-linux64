@@ -42,4 +42,3 @@ bispecs: specs
 	else \
 	  sed -e '/cc1_options/{ n; s/$$/ %{!m32:-mlong-double-128}/; }' < specs > $@; \
 	fi
-

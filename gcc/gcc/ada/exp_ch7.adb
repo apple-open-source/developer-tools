@@ -130,8 +130,7 @@ package body Exp_Ch7 is
       Is_Master                  : Boolean;
       Is_Protected_Subprogram    : Boolean;
       Is_Task_Allocation_Block   : Boolean;
-      Is_Asynchronous_Call_Block : Boolean)
-      return      Node_Id;
+      Is_Asynchronous_Call_Block : Boolean) return Node_Id;
    --  Expand a the clean-up procedure for controlled and/or transient
    --  block, and/or task master or task body, or blocks used to
    --  implement task allocation or asynchronous entry calls, or
@@ -153,8 +152,7 @@ package body Exp_Ch7 is
 
    function Make_Transient_Block
      (Loc    : Source_Ptr;
-      Action : Node_Id)
-      return   Node_Id;
+      Action : Node_Id) return Node_Id;
    --  Create a transient block whose name is Scope, which is also a
    --  controlled block if Flist is not empty and whose only code is
    --  Action (either a single statement or single declaration).
@@ -184,8 +182,7 @@ package body Exp_Ch7 is
    function Make_Deep_Proc
      (Prim  : Final_Primitives;
       Typ   : Entity_Id;
-      Stmts : List_Id)
-      return  Node_Id;
+      Stmts : List_Id) return Node_Id;
    --  This function generates the tree for Deep_Initialize, Deep_Adjust
    --  or Deep_Finalize procedures according to the first parameter,
    --  these procedures operate on the type Typ. The Stmts parameter
@@ -193,8 +190,7 @@ package body Exp_Ch7 is
 
    function Make_Deep_Array_Body
      (Prim : Final_Primitives;
-      Typ  : Entity_Id)
-      return List_Id;
+      Typ  : Entity_Id) return List_Id;
    --  This function generates the list of statements for implementing
    --  Deep_Initialize, Deep_Adjust or Deep_Finalize procedures
    --  according to the first parameter, these procedures operate on the
@@ -202,8 +198,7 @@ package body Exp_Ch7 is
 
    function Make_Deep_Record_Body
      (Prim : Final_Primitives;
-      Typ  : Entity_Id)
-      return List_Id;
+      Typ  : Entity_Id) return List_Id;
    --  This function generates the list of statements for implementing
    --  Deep_Initialize, Deep_Adjust or Deep_Finalize procedures
    --  according to the first parameter, these procedures operate on the
@@ -230,8 +225,7 @@ package body Exp_Ch7 is
    function Convert_View
      (Proc : Entity_Id;
       Arg  : Node_Id;
-      Ind  : Pos := 1)
-      return Node_Id;
+      Ind  : Pos := 1) return Node_Id;
    --  Proc is one of the Initialize/Adjust/Finalize operations, and
    --  Arg is the argument being passed to it. Ind indicates which
    --  formal of procedure Proc we are trying to match. This function
@@ -503,8 +497,7 @@ package body Exp_Ch7 is
    function Cleanup_Array
      (N    : Node_Id;
       Obj  : Node_Id;
-      Typ  : Entity_Id)
-      return List_Id
+      Typ  : Entity_Id) return List_Id
    is
       Loc        : constant Source_Ptr := Sloc (N);
       Index_List : constant List_Id := New_List;
@@ -514,7 +507,7 @@ package body Exp_Ch7 is
       --  of a single component of the array.
 
       function Free_One_Dimension (Dim : Int) return List_Id;
-      --  Generate a loop over one dimension of the array.
+      --  Generate a loop over one dimension of the array
 
       --------------------
       -- Free_Component --
@@ -601,8 +594,7 @@ package body Exp_Ch7 is
    function Cleanup_Record
      (N    : Node_Id;
       Obj  : Node_Id;
-      Typ  : Entity_Id)
-      return List_Id
+      Typ  : Entity_Id) return List_Id
    is
       Loc   : constant Source_Ptr := Sloc (N);
       Tsk   : Node_Id;
@@ -671,14 +663,13 @@ package body Exp_Ch7 is
       return Stmts;
    end Cleanup_Record;
 
-   -------------------------------
-   --  Cleanup_Protected_Object --
-   -------------------------------
+   ------------------------------
+   -- Cleanup_Protected_Object --
+   ------------------------------
 
    function Cleanup_Protected_Object
-     (N    : Node_Id;
-      Ref  : Node_Id)
-      return Node_Id
+     (N   : Node_Id;
+      Ref : Node_Id) return Node_Id
    is
       Loc : constant Source_Ptr := Sloc (N);
 
@@ -730,7 +721,7 @@ package body Exp_Ch7 is
          Next_Entity (E);
       end loop;
 
-      --   Analyze inserted cleanup statements.
+      --   Analyze inserted cleanup statements
 
       if Present (Stmt) then
          Stmt := Next (Stmt);
@@ -747,9 +738,8 @@ package body Exp_Ch7 is
    ------------------
 
    function Cleanup_Task
-     (N    : Node_Id;
-      Ref  : Node_Id)
-      return Node_Id
+     (N   : Node_Id;
+      Ref : Node_Id) return Node_Id
    is
       Loc  : constant Source_Ptr := Sloc (N);
    begin
@@ -852,12 +842,12 @@ package body Exp_Ch7 is
       --  If type is not frozen yet, check explicitly among its components,
       --  because flag is not necessarily set.
 
-      ------------------------------------
-      --  Has_Some_Controlled_Component --
-      ------------------------------------
+      -----------------------------------
+      -- Has_Some_Controlled_Component --
+      -----------------------------------
 
-      function Has_Some_Controlled_Component (Rec : Entity_Id)
-        return Boolean
+      function Has_Some_Controlled_Component
+        (Rec : Entity_Id) return Boolean
       is
          Comp : Entity_Id;
 
@@ -966,8 +956,7 @@ package body Exp_Ch7 is
    function Convert_View
      (Proc : Entity_Id;
       Arg  : Node_Id;
-      Ind  : Pos := 1)
-      return Node_Id
+      Ind  : Pos := 1) return Node_Id
    is
       Fent : Entity_Id := First_Entity (Proc);
       Ftyp : Entity_Id;
@@ -1061,77 +1050,13 @@ package body Exp_Ch7 is
       if No (Wrap_Node) then
          null;
 
+      --  If the node to wrap is an iteration_scheme, the expression is
+      --  one of the bounds, and the expansion will make an explicit
+      --  declaration for it (see Analyze_Iteration_Scheme, sem_ch5.adb),
+      --  so do not apply any transformations here.
+
       elsif Nkind (Wrap_Node) = N_Iteration_Scheme then
-
-         --  Create a declaration followed by an assignment, so that
-         --  the assignment can have its own transient scope.
-         --  We generate the equivalent of:
-
-         --  type Ptr is access all expr_type;
-         --  Var : Ptr;
-         --  begin
-         --     Var := Expr'reference;
-         --  end;
-
-         --  This closely resembles what is done in Remove_Side_Effect,
-         --  but it has to be done here, before the analysis of the call
-         --  is completed.
-
-         declare
-            Ptr_Typ : constant Entity_Id :=
-                        Make_Defining_Identifier (Loc,
-                          Chars => New_Internal_Name ('A'));
-            Ptr     : constant Entity_Id :=
-                        Make_Defining_Identifier (Loc,
-                          Chars => New_Internal_Name ('T'));
-
-            Expr_Type    : constant Entity_Id := Etype (N);
-            New_Expr     : constant Node_Id := Relocate_Node (N);
-            Decl         : Node_Id;
-            Ptr_Typ_Decl : Node_Id;
-            Stmt         : Node_Id;
-
-         begin
-            Ptr_Typ_Decl :=
-              Make_Full_Type_Declaration (Loc,
-                Defining_Identifier => Ptr_Typ,
-                Type_Definition =>
-                  Make_Access_To_Object_Definition (Loc,
-                    All_Present => True,
-                    Subtype_Indication =>
-                      New_Reference_To (Expr_Type, Loc)));
-
-            Decl :=
-              Make_Object_Declaration (Loc,
-                 Defining_Identifier => Ptr,
-                 Object_Definition => New_Occurrence_Of (Ptr_Typ, Loc));
-
-            Set_Etype (Ptr, Ptr_Typ);
-            Stmt :=
-               Make_Assignment_Statement (Loc,
-                  Name => New_Occurrence_Of (Ptr, Loc),
-                  Expression => Make_Reference (Loc, New_Expr));
-
-            Set_Analyzed (New_Expr, False);
-
-            Insert_List_Before_And_Analyze
-              (Parent (Wrap_Node),
-                 New_List (
-                   Ptr_Typ_Decl,
-                   Decl,
-                   Make_Block_Statement (Loc,
-                     Handled_Statement_Sequence =>
-                       Make_Handled_Sequence_Of_Statements (Loc,
-                         New_List (Stmt)))));
-
-            Rewrite (N,
-              Make_Explicit_Dereference (Loc,
-                Prefix => New_Reference_To (Ptr, Loc)));
-            Analyze_And_Resolve (N, Expr_Type);
-
-         end;
-
-      --  Transient scope is required
+         null;
 
       else
          New_Scope (New_Internal_Entity (E_Block, Current_Scope, Loc, 'B'));
@@ -1181,6 +1106,7 @@ package body Exp_Ch7 is
       Mark      : Entity_Id := Empty;
       New_Decls : constant List_Id := New_List;
       Blok      : Node_Id;
+      End_Lab   : Node_Id;
       Wrapped   : Boolean;
       Chain     : Entity_Id := Empty;
       Decl      : Node_Id;
@@ -1308,11 +1234,16 @@ package body Exp_Ch7 is
       --  exception handlers and an AT END call in the same scope.
 
       if Present (Exception_Handlers (Handled_Statement_Sequence (N))) then
+
+         --  Preserve end label to provide proper cross-reference information
+
+         End_Lab := End_Label (Handled_Statement_Sequence (N));
          Blok :=
            Make_Block_Statement (Loc,
              Handled_Statement_Sequence => Handled_Statement_Sequence (N));
          Set_Handled_Statement_Sequence (N,
            Make_Handled_Sequence_Of_Statements (Loc, New_List (Blok)));
+         Set_End_Label (Handled_Statement_Sequence (N), End_Lab);
          Wrapped := True;
 
       --  Otherwise we do not wrap
@@ -1381,7 +1312,7 @@ package body Exp_Ch7 is
       Set_Declarations (N, New_Decls);
       Analyze_Declarations (New_Decls);
 
-      --  The At_End call is attached to the sequence of statements.
+      --  The At_End call is attached to the sequence of statements
 
       declare
          HSS : Node_Id;
@@ -1424,9 +1355,8 @@ package body Exp_Ch7 is
       Len_Ref      : Node_Id := Empty;
 
       function Last_Array_Component
-        (Ref :  Node_Id;
-         Typ :  Entity_Id)
-         return Node_Id;
+        (Ref : Node_Id;
+         Typ : Entity_Id) return Node_Id;
       --  Creates a reference to the last component of the array object
       --  designated by Ref whose type is Typ.
 
@@ -1435,9 +1365,8 @@ package body Exp_Ch7 is
       --------------------------
 
       function Last_Array_Component
-        (Ref :  Node_Id;
-         Typ :  Entity_Id)
-         return Node_Id
+        (Ref : Node_Id;
+         Typ : Entity_Id) return Node_Id
       is
          Index_List : constant List_Id := New_List;
 
@@ -1685,9 +1614,8 @@ package body Exp_Ch7 is
    ---------------------
 
    function Find_Final_List
-     (E    : Entity_Id;
-      Ref  : Node_Id := Empty)
-      return Node_Id
+     (E   : Entity_Id;
+      Ref : Node_Id := Empty) return Node_Id
    is
       Loc : constant Source_Ptr := Sloc (Ref);
       S   : Entity_Id;
@@ -1998,16 +1926,28 @@ package body Exp_Ch7 is
    ------------------------------------
 
    procedure Insert_Actions_In_Scope_Around (N : Node_Id) is
-      SE : Scope_Stack_Entry renames Scope_Stack.Table (Scope_Stack.Last);
+      SE     : Scope_Stack_Entry renames Scope_Stack.Table (Scope_Stack.Last);
+      Target : Node_Id;
 
    begin
+      --  If the node to be wrapped is the triggering alternative of an
+      --  asynchronous select, it is not part of a statement list. The
+      --  actions must be inserted before the Select itself, which is
+      --  part of some list of statements.
+
+      if Nkind (Parent (Node_To_Be_Wrapped)) = N_Triggering_Alternative then
+         Target := Parent (Parent (Node_To_Be_Wrapped));
+      else
+         Target := N;
+      end if;
+
       if Present (SE.Actions_To_Be_Wrapped_Before) then
-         Insert_List_Before (N, SE.Actions_To_Be_Wrapped_Before);
+         Insert_List_Before (Target, SE.Actions_To_Be_Wrapped_Before);
          SE.Actions_To_Be_Wrapped_Before := No_List;
       end if;
 
       if Present (SE.Actions_To_Be_Wrapped_After) then
-         Insert_List_After (N, SE.Actions_To_Be_Wrapped_After);
+         Insert_List_After (Target, SE.Actions_To_Be_Wrapped_After);
          SE.Actions_To_Be_Wrapped_After := No_List;
       end if;
    end Insert_Actions_In_Scope_Around;
@@ -2020,8 +1960,7 @@ package body Exp_Ch7 is
      (Ref          : Node_Id;
       Typ          : Entity_Id;
       Flist_Ref    : Node_Id;
-      With_Attach  : Node_Id)
-      return         List_Id
+      With_Attach  : Node_Id) return List_Id
    is
       Loc    : constant Source_Ptr := Sloc (Ref);
       Res    : constant List_Id    := New_List;
@@ -2131,10 +2070,9 @@ package body Exp_Ch7 is
    --    System.FI.Attach_To_Final_List (Flist, Ref, Nb_Link)
 
    function Make_Attach_Call
-     (Obj_Ref      : Node_Id;
-      Flist_Ref    : Node_Id;
-      With_Attach  : Node_Id)
-      return Node_Id
+     (Obj_Ref     : Node_Id;
+      Flist_Ref   : Node_Id;
+      With_Attach : Node_Id) return Node_Id
    is
       Loc : constant Source_Ptr := Sloc (Obj_Ref);
 
@@ -2170,8 +2108,7 @@ package body Exp_Ch7 is
       Is_Master                  : Boolean;
       Is_Protected_Subprogram    : Boolean;
       Is_Task_Allocation_Block   : Boolean;
-      Is_Asynchronous_Call_Block : Boolean)
-      return      Node_Id
+      Is_Asynchronous_Call_Block : Boolean) return Node_Id
    is
       Loc  : constant Source_Ptr := Sloc (Clean);
       Stmt : constant List_Id    := New_List;
@@ -2209,7 +2146,7 @@ package body Exp_Ch7 is
          --  NOTE: This cleanup handler references _object, a parameter
          --        to the procedure.
 
-         --  Find the _object parameter representing the protected object.
+         --  Find the _object parameter representing the protected object
 
          Spec := Parent (Corresponding_Spec (N));
 
@@ -2477,8 +2414,7 @@ package body Exp_Ch7 is
 
    function Make_Deep_Array_Body
      (Prim : Final_Primitives;
-      Typ  : Entity_Id)
-      return List_Id
+      Typ  : Entity_Id) return List_Id
    is
       Loc : constant Source_Ptr := Sloc (Typ);
 
@@ -2588,8 +2524,7 @@ package body Exp_Ch7 is
    function Make_Deep_Proc
      (Prim  : Final_Primitives;
       Typ   : Entity_Id;
-      Stmts : List_Id)
-      return Entity_Id
+      Stmts : List_Id) return Entity_Id
    is
       Loc       : constant Source_Ptr := Sloc (Typ);
       Formals   : List_Id;
@@ -2664,8 +2599,7 @@ package body Exp_Ch7 is
 
    function Make_Deep_Record_Body
      (Prim : Final_Primitives;
-      Typ  : Entity_Id)
-      return List_Id
+      Typ  : Entity_Id) return List_Id
    is
       Loc            : constant Source_Ptr := Sloc (Typ);
       Controller_Typ : Entity_Id;
@@ -2767,8 +2701,7 @@ package body Exp_Ch7 is
    function Make_Final_Call
      (Ref         : Node_Id;
       Typ         : Entity_Id;
-      With_Detach : Node_Id)
-      return        List_Id
+      With_Detach : Node_Id) return List_Id
    is
       Loc   : constant Source_Ptr := Sloc (Ref);
       Res   : constant List_Id    := New_List;
@@ -2893,8 +2826,7 @@ package body Exp_Ch7 is
      (Ref          : Node_Id;
       Typ          : Entity_Id;
       Flist_Ref    : Node_Id;
-      With_Attach  : Node_Id)
-      return         List_Id
+      With_Attach  : Node_Id) return List_Id
    is
       Loc     : constant Source_Ptr := Sloc (Ref);
       Is_Conc : Boolean;
@@ -3012,8 +2944,7 @@ package body Exp_Ch7 is
 
    function Make_Transient_Block
      (Loc    : Source_Ptr;
-      Action : Node_Id)
-      return   Node_Id
+      Action : Node_Id) return Node_Id
    is
       Flist  : constant Entity_Id := Finalization_Chain_Entity (Current_Scope);
       Decls  : constant List_Id   := New_List;

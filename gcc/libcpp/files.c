@@ -1,6 +1,6 @@
 /* Part of CPP library.  File handling.
    Copyright (C) 1986, 1987, 1989, 1992, 1993, 1994, 1995, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+   1999, 2000, 2001, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
    Written by Per Bothner, 1994.
    Based on CCCP program by Paul Rubin, June 1986
    Adapted to ANSI C, Richard Stallman, Jan 1987
@@ -163,6 +163,7 @@ static void open_file_failed (cpp_reader *pfile, _cpp_file *file);
 static struct file_hash_entry *search_cache (struct file_hash_entry *head,
 					     const cpp_dir *start_dir);
 static _cpp_file *make_cpp_file (cpp_reader *, cpp_dir *, const char *fname);
+static void destroy_cpp_file (_cpp_file *);
 static cpp_dir *make_cpp_dir (cpp_reader *, const char *dir_name, int sysp);
 static void allocate_file_hash_entries (cpp_reader *pfile);
 static struct file_hash_entry *new_file_hash_entry (cpp_reader *pfile);
@@ -174,10 +175,14 @@ static void read_name_map (cpp_dir *dir);
 static char *remap_filename (cpp_reader *pfile, _cpp_file *file);
 static char *append_file_to_dir (const char *fname, cpp_dir *dir);
 static bool validate_pch (cpp_reader *, _cpp_file *file, const char *pchname);
-static int pchf_adder (void **slot, void *data);
 static int pchf_save_compare (const void *e1, const void *e2);
 static int pchf_compare (const void *d_p, const void *e_p);
 static bool check_file_against_entries (cpp_reader *, _cpp_file *, bool);
+
+/* APPLE LOCAL begin distcc pch indirection --mrs */
+#include <sys/param.h>
+char *indirect_file (char *, const int);
+/* APPLE LOCAL end distcc pch indirection --mrs */
 
 /* Given a filename in FILE->PATH, with the empty string interpreted
    as <stdin>, open it.
@@ -262,6 +267,11 @@ pch_open_file (cpp_reader *pfile, _cpp_file *file, bool *invalid_pch)
   memcpy (pchname, path, flen);
   memcpy (pchname + flen, extension, sizeof (extension));
 
+  /* APPLE LOCAL begin distcc pch indirection --mrs */
+  if (! file->main_file)
+    pchname = indirect_file (pchname, 0);
+  /* APPLE LOCAL end distcc pch indirection --mrs */
+
   if (stat (pchname, &st) == 0)
     {
       DIR *pchdir;
@@ -337,10 +347,9 @@ find_file_in_dir (cpp_reader *pfile, _cpp_file *file, bool *invalid_pch)
         file->path = "";
       res_open_file = open_file (file);
       file->path = path;
-      /* APPLE LOCAL end predictive compilation */
-
 
       if (res_open_file)
+      /* APPLE LOCAL end predictive compilation */
 	return true;
 
       if (file->err_no != ENOENT)
@@ -430,6 +439,21 @@ _cpp_find_file (cpp_reader *pfile, const char *fname, cpp_dir *start_dir, bool f
   /* Try each path in the include chain.  */
   for (; !fake ;)
     {
+      if (file->dir == pfile->quote_include
+	  || file->dir == pfile->bracket_include)
+	{
+	  entry = search_cache (*hash_slot, file->dir);
+	  if (entry)
+	    {
+	      /* Found the same file again.  Record it as reachable
+		 from this position, too.  */
+	      free ((char *) file->name);
+	      free (file);
+	      file = entry->u.file;
+	      goto found;
+	    }
+	}
+
       if (find_file_in_dir (pfile, file, &invalid_pch))
 	break;
 
@@ -437,7 +461,15 @@ _cpp_find_file (cpp_reader *pfile, const char *fname, cpp_dir *start_dir, bool f
       if (file->dir == NULL)
 	{
 	  if (search_path_exhausted (pfile, fname, file))
-	    return file;
+	    {
+	      /* Although this file must not go in the cache, because
+		 the file found might depend on things (like the current file)
+		 that aren't represented in the cache, it still has to go in
+		 the list of all files so that #import works.  */
+	      file->next_file = pfile->all_files;
+	      pfile->all_files = file;
+	      return file;
+	    }
 
 	  open_file_failed (pfile, file);
 	  if (invalid_pch)
@@ -450,33 +482,40 @@ _cpp_find_file (cpp_reader *pfile, const char *fname, cpp_dir *start_dir, bool f
 	    }
 	  break;
 	}
-
-      /* Only check the cache for the starting location (done above)
-	 and the quote and bracket chain heads because there are no
-	 other possible starting points for searches.  */
-      if (file->dir != pfile->bracket_include
-	  && file->dir != pfile->quote_include)
-	continue;
-
-      entry = search_cache (*hash_slot, file->dir);
-      if (entry)
-	break;
     }
 
-  if (entry)
+  /* This is a new file; put it in the list.  */
+  file->next_file = pfile->all_files;
+  pfile->all_files = file;
+
+  /* If this file was found in the directory-of-the-current-file,
+     check whether that directory is reachable via one of the normal
+     search paths.  If so, we must record this entry as being
+     reachable that way, otherwise we will mistakenly reprocess this
+     file if it is included later from the normal search path.  */
+  if (file->dir && start_dir->next == pfile->quote_include)
     {
-      /* Cache for START_DIR too, sharing the _cpp_file structure.  */
-      free ((char *) file->name);
-      free (file);
-      file = entry->u.file;
-    }
-  else
-    {
-      /* This is a new file; put it in the list.  */
-      file->next_file = pfile->all_files;
-      pfile->all_files = file;
+      cpp_dir *d;
+      cpp_dir *proper_start_dir = pfile->quote_include;
+
+      for (d = proper_start_dir;; d = d->next)
+	{
+	  if (d == pfile->bracket_include)
+	    proper_start_dir = d;
+	  if (d == 0)
+	    {
+	      proper_start_dir = 0;
+	      break;
+	    }
+	  /* file->dir->name will have a trailing slash.  */
+	  if (!strncmp (d->name, file->dir->name, file->dir->len - 1))
+	    break;
+	}
+      if (proper_start_dir)
+	start_dir = proper_start_dir;
     }
 
+ found:
   /* Store this new result in the hash table.  */
   entry = new_file_hash_entry (pfile);
   entry->next = *hash_slot;
@@ -639,7 +678,7 @@ should_stack_file (cpp_reader *pfile, _cpp_file *file, bool import)
   /* Handle PCH files immediately; don't stack them.  */
   if (file->pch)
     {
-      pfile->cb.read_pch (pfile, file->path, file->fd, file->pchname);
+      pfile->cb.read_pch (pfile, file->pchname, file->fd, file->path);
       close (file->fd);
       file->fd = -1;
       return false;
@@ -676,12 +715,38 @@ should_stack_file (cpp_reader *pfile, _cpp_file *file, bool import)
       if ((import || f->once_only)
 	  && f->err_no == 0
 	  && f->st.st_mtime == file->st.st_mtime
-	  && f->st.st_size == file->st.st_size
-	  && read_file (pfile, f)
-	  /* Size might have changed in read_file().  */
-	  && f->st.st_size == file->st.st_size
-	  && !memcmp (f->buffer, file->buffer, f->st.st_size))
-	break;
+	  && f->st.st_size == file->st.st_size)
+	{
+	  _cpp_file *ref_file;
+	  bool same_file_p = false;
+
+	  if (f->buffer && !f->buffer_valid)
+	    {
+	      /* We already have a buffer but it is not valid, because
+		 the file is still stacked.  Make a new one.  */
+	      ref_file = make_cpp_file (pfile, f->dir, f->name);
+	      ref_file->path = f->path;
+	    }
+	  else
+	    /* The file is not stacked anymore.  We can reuse it.  */
+	    ref_file = f;
+
+	  same_file_p = read_file (pfile, ref_file)
+			/* Size might have changed in read_file().  */
+			&& ref_file->st.st_size == file->st.st_size
+			&& !memcmp (ref_file->buffer,
+				    file->buffer,
+				    file->st.st_size);
+
+	  if (f->buffer && !f->buffer_valid)
+	    {
+	      ref_file->path = 0;
+	      destroy_cpp_file (ref_file);
+	    }
+
+	  if (same_file_p)
+	    break;
+	}
     }
 
   return f == NULL;
@@ -854,10 +919,14 @@ open_file_failed (cpp_reader *pfile, _cpp_file *file)
 static struct file_hash_entry *
 search_cache (struct file_hash_entry *head, const cpp_dir *start_dir)
 {
-  while (head && head->start_dir != start_dir)
-    head = head->next;
+  struct file_hash_entry *p;
 
-  return head;
+  /* Look for a file that was found from a search starting at the
+     given location.  */
+  for (p = head; p; p = p->next)
+    if (p->start_dir == start_dir)
+      return p;
+  return 0;
 }
 
 /* Allocate a new _cpp_file structure.  */
@@ -875,6 +944,16 @@ make_cpp_file (cpp_reader *pfile, cpp_dir *dir, const char *fname)
   return file;
 }
 
+/* Release a _cpp_file structure.  */
+static void
+destroy_cpp_file (_cpp_file *file)
+{
+  if (file->buffer)
+    free ((void *) file->buffer);
+  free ((void *) file->name);
+  free (file);
+}
+
 /* A hash of directory names.  The directory names are the path names
    of files which contain a #include "", the included file name is
    appended to this directories.
@@ -889,7 +968,7 @@ make_cpp_dir (cpp_reader *pfile, const char *dir_name, int sysp)
   cpp_dir *dir;
 
   hash_slot = (struct file_hash_entry **)
-    htab_find_slot_with_hash (pfile->file_hash, dir_name,
+    htab_find_slot_with_hash (pfile->dir_hash, dir_name,
 			      htab_hash_string (dir_name),
 			      INSERT);
 
@@ -938,7 +1017,12 @@ new_file_hash_entry (cpp_reader *pfile)
 /* APPLE LOCAL begin predictive compilation */
 bool read_from_stdin (cpp_reader *pfile)
 {
-  _cpp_file *file = pfile->main_file;
+  _cpp_file *file;
+
+  if (pfile->buffer->file->fd != 0)
+    return false;
+
+  file = pfile->main_file;
   file->dont_read = !read_file_guts (pfile, file);
   pfile->buffer->next_line = file->buffer;
   pfile->buffer->rlimit = file->buffer + file->st.st_size;
@@ -1000,6 +1084,8 @@ _cpp_init_files (cpp_reader *pfile)
 {
   pfile->file_hash = htab_create_alloc (127, file_hash_hash, file_hash_eq,
 					NULL, xcalloc, free);
+  pfile->dir_hash = htab_create_alloc (127, file_hash_hash, file_hash_eq,
+					NULL, xcalloc, free);
   allocate_file_hash_entries (pfile);
 }
 
@@ -1008,6 +1094,7 @@ void
 _cpp_cleanup_files (cpp_reader *pfile)
 {
   htab_delete (pfile->file_hash);
+  htab_delete (pfile->dir_hash);
 }
 
 /* Enter a file name in the hash for the sake of cpp_included.  */
@@ -1416,58 +1503,6 @@ struct pchf_data {
 
 static struct pchf_data *pchf;
 
-/* Data for pchf_addr.  */
-struct pchf_adder_info
-{
-  cpp_reader *pfile;
-  struct pchf_data *d;
-};
-
-/* A hash traversal function to add entries into DATA->D.  */
-
-static int
-pchf_adder (void **slot, void *data)
-{
-  struct file_hash_entry *h = (struct file_hash_entry *) *slot;
-  struct pchf_adder_info *i = (struct pchf_adder_info *) data;
-
-  if (h->start_dir != NULL && h->u.file->stack_count != 0)
-    {
-      struct pchf_data *d = i->d;
-      _cpp_file *f = h->u.file;
-      size_t count = d->count++;
-
-      /* This should probably never happen, since if a read error occurred
-	 the PCH file shouldn't be written...  */
-      if (f->dont_read || f->err_no)
-	return 1;
-
-      d->entries[count].once_only = f->once_only;
-      /* |= is avoided in the next line because of an HP C compiler bug */
-      d->have_once_only = d->have_once_only | f->once_only; 
-      if (f->buffer_valid)
-	  md5_buffer ((const char *)f->buffer,
-		      f->st.st_size, d->entries[count].sum);
-      else
-	{
-	  FILE *ff;
-	  int oldfd = f->fd;
-
-	  if (!open_file (f))
-	    {
-	      open_file_failed (i->pfile, f);
-	      return 0;
-	    }
-	  ff = fdopen (f->fd, "rb");
-	  md5_stream (ff, d->entries[count].sum);
-	  fclose (ff);
-	  f->fd = oldfd;
-	}
-      d->entries[count].size = f->st.st_size;
-    }
-  return 1;
-}
-
 /* A qsort ordering function for pchf_entry structures.  */
 
 static int
@@ -1479,14 +1514,16 @@ pchf_save_compare (const void *e1, const void *e2)
 /* Create and write to F a pchf_data structure.  */
 
 bool
-_cpp_save_file_entries (cpp_reader *pfile, FILE *f)
+_cpp_save_file_entries (cpp_reader *pfile, FILE *fp)
 {
   size_t count = 0;
   struct pchf_data *result;
   size_t result_size;
-  struct pchf_adder_info pai;
+  _cpp_file *f;
 
-  count = htab_elements (pfile->file_hash);
+  for (f = pfile->all_files; f; f = f->next_file)
+    ++count;
+
   result_size = (sizeof (struct pchf_data)
 		 + sizeof (struct pchf_entry) * (count - 1));
   result = xcalloc (result_size, 1);
@@ -1494,9 +1531,43 @@ _cpp_save_file_entries (cpp_reader *pfile, FILE *f)
   result->count = 0;
   result->have_once_only = false;
 
-  pai.pfile = pfile;
-  pai.d = result;
-  htab_traverse (pfile->file_hash, pchf_adder, &pai);
+  for (f = pfile->all_files; f; f = f->next_file)
+    {
+      size_t count;
+
+      /* This should probably never happen, since if a read error occurred
+	 the PCH file shouldn't be written...  */
+      if (f->dont_read || f->err_no)
+	continue;
+
+      if (f->stack_count == 0)
+	continue;
+
+      count = result->count++;
+
+      result->entries[count].once_only = f->once_only;
+      /* |= is avoided in the next line because of an HP C compiler bug */
+      result->have_once_only = result->have_once_only | f->once_only;
+      if (f->buffer_valid)
+	md5_buffer ((const char *)f->buffer,
+		    f->st.st_size, result->entries[count].sum);
+      else
+	{
+	  FILE *ff;
+	  int oldfd = f->fd;
+
+	  if (!open_file (f))
+	    {
+	      open_file_failed (pfile, f);
+	      return false;
+	    }
+	  ff = fdopen (f->fd, "rb");
+	  md5_stream (ff, result->entries[count].sum);
+	  fclose (ff);
+	  f->fd = oldfd;
+	}
+      result->entries[count].size = f->st.st_size;
+    }
 
   result_size = (sizeof (struct pchf_data)
                  + sizeof (struct pchf_entry) * (result->count - 1));
@@ -1504,7 +1575,7 @@ _cpp_save_file_entries (cpp_reader *pfile, FILE *f)
   qsort (result->entries, result->count, sizeof (struct pchf_entry),
 	 pchf_save_compare);
 
-  return fwrite (result, result_size, 1, f) == 1;
+  return fwrite (result, result_size, 1, fp) == 1;
 }
 
 /* Read the pchf_data structure from F.  */
@@ -1600,3 +1671,145 @@ check_file_against_entries (cpp_reader *pfile ATTRIBUTE_UNUSED,
   return bsearch (&d, pchf->entries, pchf->count, sizeof (struct pchf_entry),
 		  pchf_compare) != NULL;
 }
+
+/* APPLE LOCAL begin distcc pch indirection --mrs */
+static const char message_terminator = '\n';
+
+/* Communications routine to communicate with filename translation
+   server for distributed builds.  This routine reads data from the
+   server.  */
+
+static int
+read_from_parent (int fd, char *buffer, int size)
+{
+  int index = 0;
+  int result;
+
+  if (size <= 0)
+    return 0;
+
+  do {
+    result = read (fd, &buffer[index], size - index);
+
+    if (result <= 0 || index >= size )
+      return 0;
+    else
+      index += result;
+  } while (buffer[index - 1] != message_terminator);
+
+  /* Straighten out the string termination. */
+  buffer[index - 1] = '\0';
+
+  return 1;
+}
+
+/* Communications routine to communicate with filename translation server
+   for distributed builds.  This routine writes data to the server.  */
+
+static int
+write_to_parent (int fd, const char *message)
+{
+  int result;
+
+  if (message) {
+    const int length = strlen (message);
+    int index = 0;
+
+    while (index < length) {
+      result = write (fd, &message[index], length - index);
+
+      if (result < 0)
+        return 0;
+      else
+        index += result;
+    }
+  }
+
+  result = write (fd, &message_terminator, 1);
+
+  if (result < 0)
+    return 0;
+
+  return 1;
+}
+
+
+/* Initialize the filename translation service.  */
+
+static int
+init_indirect_pipes (int *read_fd, int *write_fd)
+{
+  const char *file_indirect_pipes = getenv ("GCC_INDIRECT_FILES");
+  const char *protocol_operation = "VERS";
+  const char *protocol_version = "1";
+  char response[MAXPATHLEN];
+
+  if (!file_indirect_pipes)
+    return -1;
+
+  /* The environment variable indicates that the process that invoked
+     gcc would like to provide a different path for certain files.
+     This is mainly intended to be used with PCH headers and symbol
+     separation files (.cinfo) files under certain circumstances. */
+
+  if (sscanf (file_indirect_pipes, "%d, %d", read_fd, write_fd) != 2)
+    return -1;
+
+  /* Verify the protocol version. */
+  if (write_to_parent (*write_fd, protocol_operation))
+    if (write_to_parent (*write_fd, protocol_version))
+      if (read_from_parent (*read_fd, response, MAXPATHLEN))
+	if (strcmp ("OK", response) == 0)
+	  return 1;
+
+  return -1;
+}
+
+/* Redirect file I/O at the direction of a translation server.  fname
+   is the filename to transform.  OPERATION is:
+
+   0 for reading
+   1 for writing
+   2 for reading and writing  */
+
+char *
+indirect_file (char *fname, int operation)
+{
+  static int indirection_initialized;
+  static int read_fd;
+  static int write_fd;
+  const char *operation_identifier = NULL;
+
+  if (!indirection_initialized)
+    indirection_initialized = init_indirect_pipes (&read_fd, &write_fd);
+
+  if (indirection_initialized != 1)
+    return fname;
+
+  switch (operation)
+    {
+    case 0:
+      operation_identifier = "PULL";
+      break;
+    case 1:
+      operation_identifier = "PUSH";
+      break;
+    case 2:
+      operation_identifier = "BOTH";
+      break;
+    default:
+      return fname;
+    }
+
+  if (write_to_parent (write_fd, operation_identifier))
+    if (write_to_parent (write_fd, fname))
+      {
+	char response[MAXPATHLEN];
+
+	if (read_from_parent (read_fd, response, MAXPATHLEN))
+	  fname = xstrdup (response);
+      }
+
+  return fname;
+}
+/* APPLE LOCAL end distcc pch indirection --mrs */

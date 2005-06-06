@@ -6,7 +6,7 @@ ifeq "macos" "$(RC_OS)"
 			 [ "$(RC_RELEASE)" != "Bunsen" ] &&    \
 			 [ "$(RC_RELEASE)" != "Gonzo"  ] &&    \
 			 [ "$(RC_RELEASE)" != "Kodiak" ]; then \
-	     echo -Wno-long-double -no-cpp-precomp -DINTERIM_PPC64 ; \
+	     echo -Wno-long-double -no-cpp-precomp ; \
 	     fi; )
 endif
 
@@ -18,7 +18,8 @@ else
 	 -I$(SRCROOT) -I$(SRCROOT)/../include -I$(OFILE_DIR)
 endif
 
-USE_DEPENDENCY_FILE := $(shell if [ "$(notdir $(CC))" != "mwccppc" ]; then \
+USE_DEPENDENCY_FILE := $(shell if [ "$(notdir $(CC))" != "mwccppc" ] && \
+				  [ "$(RC_XBS)" != "YES" ]; then \
 	     echo YES ; else echo NO ; \
 	     fi; )
 
@@ -72,6 +73,8 @@ lib_ofiles: $(OFILE_DIR) $(SYMROOT) libredo_prebinding.a
 
 vers.c:
 	vers_string -c $(VERS_STRING_FLAGS) cctools_misc > $(OFILE_DIR)/$@
+	echo "const char apple_version[]= " \"`vers_string $(VERS_STRING_FLAGS) -f cctools`\" ";" >> \
+	$(OFILE_DIR)/$@
 
 ifeq "NO" "$(USE_DEPENDENCY_FILE)"
 .c.o:

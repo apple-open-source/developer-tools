@@ -36,17 +36,18 @@ with GNAT;     use GNAT;
 
 package body MLib.Utl is
 
-   Initialized   : Boolean := False;
+   Initialized : Boolean := False;
 
-   Gcc_Name      : constant String := "gcc";
-   Gcc_Exec      : OS_Lib.String_Access;
+   Gcc_Name : constant String := "gcc";
+   Gcc_Exec : OS_Lib.String_Access;
 
-   Ar_Name       : OS_Lib.String_Access;
-   Ar_Exec       : OS_Lib.String_Access;
-   Ar_Options    : OS_Lib.String_List_Access;
+   Ar_Name    : OS_Lib.String_Access;
+   Ar_Exec    : OS_Lib.String_Access;
+   Ar_Options : OS_Lib.String_List_Access;
 
-   Ranlib_Name   : OS_Lib.String_Access;
-   Ranlib_Exec   : OS_Lib.String_Access := null;
+   Ranlib_Name    : OS_Lib.String_Access;
+   Ranlib_Exec    : OS_Lib.String_Access := null;
+   Ranlib_Options : OS_Lib.String_List_Access := null;
 
    procedure Initialize;
    --  Look for the tools in the path and record the full path for each one
@@ -66,7 +67,7 @@ package body MLib.Utl is
       Line_Length : Natural := 0;
 
    begin
-      Initialize;
+      Utl.Initialize;
 
       Arguments :=
         new String_List (1 .. 1 + Ar_Options'Length + Objects'Length);
@@ -116,7 +117,7 @@ package body MLib.Utl is
 
          OS_Lib.Spawn
            (Ranlib_Exec.all,
-            (1 => Arguments (Ar_Options'Length + 1)),
+            Ranlib_Options.all & (Arguments (Ar_Options'Length + 1)),
             Success);
 
          if not Success then
@@ -156,8 +157,8 @@ package body MLib.Utl is
      (Output_File : String;
       Objects     : Argument_List;
       Options     : Argument_List;
-      Driver_Name : Name_Id       := No_Name;
-      Options_2   : Argument_List := No_Argument_List)
+      Options_2   : Argument_List;
+      Driver_Name : Name_Id := No_Name)
    is
       Arguments :
         OS_Lib.Argument_List
@@ -177,7 +178,7 @@ package body MLib.Utl is
 
       Driver  : String_Access;
    begin
-      Initialize;
+      Utl.Initialize;
 
       if Driver_Name = No_Name then
          Driver := Gcc_Exec;
@@ -284,6 +285,8 @@ package body MLib.Utl is
                Write_Line (Ranlib_Exec.all);
             end if;
          end if;
+
+         Ranlib_Options := Archive_Indexer_Options;
       end if;
    end Initialize;
 

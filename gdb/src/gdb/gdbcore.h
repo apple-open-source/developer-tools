@@ -24,6 +24,8 @@
 #if !defined (GDBCORE_H)
 #define GDBCORE_H 1
 
+struct type;
+
 #include "bfd.h"
 
 /* Return the name of the executable file as a string.
@@ -55,7 +57,9 @@ extern void read_memory (CORE_ADDR memaddr, char *myaddr, int len);
    bytes.  */
 
 extern LONGEST read_memory_integer (CORE_ADDR memaddr, int len);
+
 extern int safe_read_memory_integer (CORE_ADDR memaddr, int len, LONGEST *return_value);
+extern int safe_read_memory_unsigned_integer (CORE_ADDR memaddr, int len, ULONGEST *return_value);
 
 /* Read an unsigned integer from debugged memory, given address and
    number of bytes.  */

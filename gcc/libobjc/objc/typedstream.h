@@ -1,5 +1,5 @@
 /* GNU Objective-C Typed Streams interface.
-   Copyright (C) 1993, 1995 Free Software Foundation, Inc.
+   Copyright (C) 1993, 1995, 2004 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -27,9 +27,14 @@ Boston, MA 02111-1307, USA.  */
 #ifndef __typedstream_INCLUDE_GNU
 #define __typedstream_INCLUDE_GNU
 
-#include "objc/objc.h"
-#include "objc/hash.h"
+#include <objc/objc.h>
+#include <objc/hash.h>
+
 #include <stdio.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif /* __cplusplus */
 
 typedef int (*objc_typed_read_func)(void*, char*, int);
 typedef int (*objc_typed_write_func)(void*, const char*, int);
@@ -128,5 +133,9 @@ void objc_close_typed_stream (TypedStream* stream);
 
 BOOL objc_end_of_typed_stream (TypedStream* stream);
 void objc_flush_typed_stream (TypedStream* stream);
+
+#ifdef __cplusplus
+}
+#endif /* __cplusplus */
 
 #endif /* not __typedstream_INCLUDE_GNU */

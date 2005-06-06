@@ -625,7 +625,7 @@ old_postuninstall_cmds=
 
 if test -n "$RANLIB"; then
   old_archive_cmds="$old_archive_cmds~\$RANLIB \$oldlib"
-  # APPLE LOCAL begin handle ~ in pathnames 2002-01-14 --sts
+  # APPLE LOCAL handle ~ in pathnames 2002-01-14 --sts
   old_postinstall_cmds="\$RANLIB \$oldlib@$old_postinstall_cmds"
 fi
 
@@ -1373,6 +1373,18 @@ sysv4 | sysv4.2uw2* | sysv4.3* | sysv5*)
       sys_lib_search_path_spec='/lib /usr/lib /usr/ccs/lib'
       ;;
   esac
+  ;;
+
+tpf*)
+  version_type=linux
+  need_lib_prefix=no
+  need_version=no
+  library_names_spec='${libname}${release}.so$versuffix ${libname}${release}.so $major $libname.so'
+  soname_spec='${libname}${release}.so$major'
+  shlibpath_var=LD_LIBRARY_PATH
+  shlibpath_overrides_runpath=no
+  hardcode_into_libs=yes
+  dynamic_linker='GNU/Linux ld.so'
   ;;
 
 uts4*)

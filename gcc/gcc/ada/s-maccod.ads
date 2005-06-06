@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2003 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2004 Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -31,7 +31,7 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
---  This package provides machine code support, both for instrinsic machine
+--  This package provides machine code support, both for intrinsic machine
 --  operations, and also for machine code statements. See GNAT documentation
 --  for full details.
 
@@ -97,24 +97,21 @@ pragma Pure (Machine_Code);
      Outputs  : Asm_Output_Operand := No_Output_Operands;
      Inputs   : Asm_Input_Operand_List;
      Clobber  : String  := "";
-     Volatile : Boolean := False)
-     return     Asm_Insn;
+     Volatile : Boolean := False) return Asm_Insn;
 
    function Asm (
      Template : String;
      Outputs  : Asm_Output_Operand_List;
      Inputs   : Asm_Input_Operand := No_Input_Operands;
      Clobber  : String  := "";
-     Volatile : Boolean := False)
-     return     Asm_Insn;
+     Volatile : Boolean := False) return Asm_Insn;
 
    function Asm (
      Template : String;
      Outputs  : Asm_Output_Operand := No_Output_Operands;
      Inputs   : Asm_Input_Operand  := No_Input_Operands;
      Clobber  : String  := "";
-     Volatile : Boolean := False)
-     return     Asm_Insn;
+     Volatile : Boolean := False) return Asm_Insn;
 
    pragma Import (Intrinsic, Asm);
 

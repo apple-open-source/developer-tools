@@ -1,3 +1,4 @@
+/* APPLE LOCAL file lno */
 /* { dg-do compile } */
 /* { dg-options "-O1 -fdump-tree-phiopt1-details" } */
 

@@ -81,6 +81,15 @@ package body MLib.Tgt is
       return "ranlib" & Get_Target_Suffix;
    end Archive_Indexer;
 
+   -----------------------------
+   -- Archive_Indexer_Options --
+   -----------------------------
+
+   function Archive_Indexer_Options return String_List_Access is
+   begin
+      return new String_List (1 .. 0);
+   end Archive_Indexer_Options;
+
    ---------------------------
    -- Build_Dynamic_Library --
    ---------------------------
@@ -90,42 +99,31 @@ package body MLib.Tgt is
       Foreign      : Argument_List;
       Afiles       : Argument_List;
       Options      : Argument_List;
+      Options_2    : Argument_List;
       Interfaces   : Argument_List;
       Lib_Filename : String;
       Lib_Dir      : String;
       Symbol_Data  : Symbol_Record;
       Driver_Name  : Name_Id := No_Name;
-      Lib_Address  : String  := "";
       Lib_Version  : String  := "";
-      Relocatable  : Boolean := False;
       Auto_Init    : Boolean := False)
    is
       pragma Unreferenced (Ofiles);
       pragma Unreferenced (Foreign);
       pragma Unreferenced (Afiles);
       pragma Unreferenced (Options);
+      pragma Unreferenced (Options_2);
       pragma Unreferenced (Interfaces);
       pragma Unreferenced (Lib_Filename);
       pragma Unreferenced (Lib_Dir);
       pragma Unreferenced (Symbol_Data);
       pragma Unreferenced (Driver_Name);
-      pragma Unreferenced (Lib_Address);
       pragma Unreferenced (Lib_Version);
-      pragma Unreferenced (Relocatable);
       pragma Unreferenced (Auto_Init);
 
    begin
       null;
    end Build_Dynamic_Library;
-
-   -------------------------
-   -- Default_DLL_Address --
-   -------------------------
-
-   function Default_DLL_Address return String is
-   begin
-      return "";
-   end Default_DLL_Address;
 
    -------------
    -- DLL_Ext --
@@ -222,7 +220,7 @@ package body MLib.Tgt is
       if not Projects.Table (Project).Library then
          Prj.Com.Fail ("INTERNAL ERROR: Library_Exists_For called " &
                        "for non library project");
-         return False; --  To avoid warning;
+         return False;
 
       else
          declare

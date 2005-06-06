@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---           Copyright (C) 1992-2003 Free Software Foundation, Inc.         --
+--           Copyright (C) 1992-2005 Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -28,6 +28,7 @@
 
 with Types;  use Types;
 with Elists; use Elists;
+with Uintp;  use Uintp;
 
 package Exp_Ch3 is
 
@@ -43,7 +44,7 @@ package Exp_Ch3 is
    --  the master for that access type, now that it is known to denote an
    --  object with tasks.
 
-   procedure Expand_Derived_Record (T : Entity_Id; Def : Node_Id);
+   procedure Expand_Record_Extension (T : Entity_Id; Def : Node_Id);
    --  Add a field _parent in the extension part of the record.
 
    procedure Build_Discr_Checking_Funcs (N : Node_Id);
@@ -58,8 +59,7 @@ package Exp_Ch3 is
       In_Init_Proc      : Boolean := False;
       Enclos_Type       : Entity_Id := Empty;
       Discr_Map         : Elist_Id := New_Elmt_List;
-      With_Default_Init : Boolean := False)
-      return              List_Id;
+      With_Default_Init : Boolean := False) return List_Id;
    --  Builds a call to the initialization procedure of the Id entity. Id_Ref
    --  is either a new reference to Id (for record fields), or an indexed
    --  component (for array elements). Loc is the source location for the
@@ -78,13 +78,17 @@ package Exp_Ch3 is
    --  can appear within expressions in array bounds (not as stand-alone
    --  identifiers) and a general replacement is necessary.
    --
-   --  Ada0Y (AI-287): With_Default_Init is used to indicate that the initia-
-   --  lization call corresponds to a default initialized component of an
-   --  aggregate.
+   --  Ada 2005 (AI-287): With_Default_Init is used to indicate that the
+   --  initialization call corresponds to a default initialized component
+   --  of an aggregate.
 
-   procedure Freeze_Type (N : Node_Id);
-   --  This procedure executes the freezing actions associated with the given
-   --  freeze type node N.
+   function Freeze_Type (N : Node_Id) return Boolean;
+   --  This function executes the freezing actions associated with the given
+   --  freeze type node N and returns True if the node is to be deleted.
+   --  We delete the node if it is present just for front end purpose and
+   --  we don't want Gigi to see the node.  This function can't delete the
+   --  node itself since it would confuse any remaining processing of the
+   --  freeze node.
 
    function Needs_Simple_Initialization (T : Entity_Id) return Boolean;
    --  Certain types need initialization even though there is no specific
@@ -97,11 +101,16 @@ package Exp_Ch3 is
 
    function Get_Simple_Init_Val
      (T    : Entity_Id;
-      Loc  : Source_Ptr)
-      return Node_Id;
+      Loc  : Source_Ptr;
+      Size : Uint := No_Uint) return Node_Id;
    --  For a type which Needs_Simple_Initialization (see above), prepares
    --  the tree for an expression representing the required initial value.
    --  Loc is the source location used in constructing this tree which is
-   --  returned as the result of the call.
+   --  returned as the result of the call. The Size parameter indicates the
+   --  target size of the object if it is known (indicated by a value that
+   --  is not No_Uint and is greater than zero). If Size is not given (Size
+   --  set to No_Uint, or non-positive), then the Esize of T is used as an
+   --  estimate of the Size. The object size is needed to prepare a known
+   --  invalid value for use by Normalize_Scalars.
 
 end Exp_Ch3;

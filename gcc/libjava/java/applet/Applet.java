@@ -1,5 +1,5 @@
 /* Applet.java -- Java base applet class
-   Copyright (C) 1999, 2002 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2002, 2004, 2005  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -48,6 +48,7 @@ import java.io.ObjectInputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Locale;
+
 import javax.accessibility.AccessibleContext;
 import javax.accessibility.AccessibleRole;
 import javax.accessibility.AccessibleState;
@@ -62,8 +63,8 @@ import javax.accessibility.AccessibleStateSet;
  * are init, stop, and destroy for control purposes, and getAppletInfo and
  * getParameterInfo for descriptive purposes.
  *
- * @author Aaron M. Renn <arenn@urbanophile.com>
- * @author Eric Blake <ebb9@email.byu.edu>
+ * @author Aaron M. Renn (arenn@urbanophile.com)
+ * @author Eric Blake (ebb9@email.byu.edu)
  * @since 1.0
  * @status updated to 1.4
  */
@@ -77,10 +78,11 @@ public class Applet extends Panel
   /** The applet stub for this applet. */
   private transient AppletStub stub;
 
-  /**
-   * The dimensions passed to this applet through its HTML tag.
-   */
-  private transient Dimension dimensions;
+  /** Some applets call setSize in their constructors.  In that case,
+      these fields are used to store width and height values until a
+      stub is set. */
+  private transient int width;
+  private transient int height;
 
   /**
    * The accessibility context for this applet.
@@ -111,6 +113,9 @@ public class Applet extends Panel
   public final void setStub(AppletStub stub)
   {
     this.stub = stub;
+
+    if (width != 0 && height != 0)
+      stub.appletResize (width, height);
   }
 
   /**
@@ -178,7 +183,13 @@ public class Applet extends Panel
    */
   public void resize(int width, int height)
   {
-    stub.appletResize(width, height);
+    if (stub == null)
+      {
+        this.width = width;
+        this.height = height;
+      }
+    else
+      stub.appletResize(width, height);
   }
 
   /**
@@ -233,11 +244,11 @@ public class Applet extends Panel
   {
     try
       {
-        return getImage(new URL(url, name));
+	return getImage(new URL(url, name));
       }
     catch (MalformedURLException e)
       {
-        return null;
+	return null;
       }
   }
 
@@ -289,11 +300,11 @@ public class Applet extends Panel
   {
     try
       {
-        return getAudioClip(new URL(url, name));
+	return getAudioClip(new URL(url, name));
       }
     catch (MalformedURLException e)
       {
-        return null;
+	return null;
       }
   }
 
@@ -348,7 +359,7 @@ public class Applet extends Panel
     AudioClip ac = getAudioClip(url);
     try
       {
-        ac.play();
+	ac.play();
       }
     catch (Exception ignored)
       {
@@ -369,7 +380,7 @@ public class Applet extends Panel
   {
     try
       {
-        getAudioClip(url, name).play();
+	getAudioClip(url, name).play();
       }
     catch (Exception ignored)
       {
@@ -462,46 +473,11 @@ public class Applet extends Panel
     s.defaultReadObject();
   }
 
-  private Dimension getDimensions ()
-  {
-    if (dimensions == null)
-      {
-	int width = Integer.parseInt(stub.getParameter("width"));
-	int height = Integer.parseInt(stub.getParameter("height"));
-
-	dimensions = new Dimension(width, height);
-      }
-
-    return dimensions;
-  }
-
-  /**
-   * Returns an instance of {@link Dimension} representing the
-   * applet's width and height parameters.
-   *
-   * @return the applet's preferred size
-   */
-  public Dimension preferredSize()
-  {
-    return getDimensions ();
-  }
-
-  /**
-   * Returns an instance of {@link Dimension} representing the
-   * applet's width and height parameters.
-   *
-   * @return the applet's minimum size
-   */
-  public Dimension minimumSize()
-  {
-    return getDimensions ();
-  }
-
   /**
    * This class provides accessibility support for Applets, and is the
    * runtime type returned by {@link #getAccessibleContext()}.
    *
-   * @author Eric Blake <ebb9@email.byu.edu>
+   * @author Eric Blake (ebb9@email.byu.edu)
    * @since 1.3
    */
   protected class AccessibleApplet extends AccessibleAWTPanel
@@ -540,7 +516,7 @@ public class Applet extends Panel
     {
       AccessibleStateSet s = super.getAccessibleStateSet();
       if (isActive())
-        s.add(AccessibleState.ACTIVE);
+	s.add(AccessibleState.ACTIVE);
       return s;
     }
   } // class AccessibleApplet

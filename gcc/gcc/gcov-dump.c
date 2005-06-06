@@ -1,5 +1,5 @@
 /* Dump a gcov file, for debugging use.
-   Copyright (C) 2002, 2003 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004 Free Software Foundation, Inc.
    Contributed by Nathan Sidwell <nathan@codesourcery.com>
 
 Gcov is free software; you can redistribute it and/or modify
@@ -254,8 +254,6 @@ dump_file (const char *filename)
 	  break;
 	}
     }
-  if (!gcov_is_eof ())
-    printf ("%s:early end of file\n", filename);
   gcov_close ();
 }
 

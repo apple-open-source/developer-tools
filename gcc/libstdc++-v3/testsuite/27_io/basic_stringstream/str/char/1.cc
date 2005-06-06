@@ -33,8 +33,7 @@ void test01()
   const int i01 = 123;
   int a,b;
 
-  std::ios_base::iostate state1, state2, statefail, stateeof;
-  statefail = std::ios_base::failbit;
+  std::ios_base::iostate state1, state2, stateeof;
   stateeof = std::ios_base::eofbit;
 
   // string str() const

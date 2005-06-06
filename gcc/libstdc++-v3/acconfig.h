@@ -13,11 +13,14 @@
 // Include I/O support for 'long long' and 'unsigned long long'.
 #undef _GLIBCXX_USE_LONG_LONG
 
+// Define if C99 features such as lldiv_t, llabs, lldiv should be exposed.
+#undef _GLIBCXX_USE_C99
+
 // Define if C99 math functions (like fpclassify) should be exposed.
 #undef _GLIBCXX_USE_C99_MATH
 
-// Define if C99 features such as lldiv_t, llabs, lldiv should be exposed.
-#undef _GLIBCXX_USE_C99
+// Define if C99 complex math functions should be used in std::complex.
+#undef _GLIBCXX_USE_C99_COMPLEX
 
 // Define if code specialized for wchar_t should be used.
 #undef _GLIBCXX_USE_WCHAR_T
@@ -44,6 +47,9 @@
 
 // Define if LFS support is available.
 #undef _GLIBCXX_USE_LFS
+
+// Define if a fully dynamic basic_string is wanted.
+#undef _GLIBCXX_FULLY_DYNAMIC_STRING
 
 // Define if NLS translations are to be used.
 #undef _GLIBCXX_USE_NLS

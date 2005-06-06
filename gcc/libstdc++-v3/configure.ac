@@ -13,11 +13,11 @@ AC_CONFIG_HEADER(config.h)
 ### am handles this now?  ORIGINAL_LD_FOR_MULTILIBS=$LD
 
 # For libtool versioning info, format is CURRENT:REVISION:AGE
-libtool_VERSION=6:0:0
+libtool_VERSION=6:4:0
 AC_SUBST(libtool_VERSION)
 
 # Find the rest of the source tree framework.
-GLIBCXX_TOPREL_CONFIGURE
+AM_ENABLE_MULTILIB(, ..)
 
 # Gets build, host, target, *_vendor, *_cpu, *_os, etc.
 #
@@ -44,7 +44,16 @@ if test "$build" != "$host"; then
   GLIBCXX_IS_NATIVE=false
   GCC_NO_EXECUTABLES
 else
-  GLIBCXX_IS_NATIVE=true
+  # APPLE LOCAL begin 64-bit
+  case "$target" in
+    powerpc-apple-darwin8*)
+      GLIBCXX_IS_NATIVE=false
+      cross_compiling=yes
+      ;;
+    *)
+      GLIBCXX_IS_NATIVE=true ;;
+  esac
+  # APPLE LOCAL end 64-bit
 fi
 
 # Sets up automake.  Must come after AC_CANONICAL_SYSTEM.  Each of the
@@ -58,7 +67,7 @@ fi
 #  no-dependencies:  turns off auto dependency generation (just for now)
 #  -Wall:  turns on all automake warnings...
 #  -Wno-portability:  ...except this one, since GNU make is now required.
-AM_INIT_AUTOMAKE([1.7.6 no-define foreign no-dependencies -Wall -Wno-portability -Wno-override])
+AM_INIT_AUTOMAKE([1.9.1 no-define foreign no-dependencies -Wall -Wno-portability -Wno-override])
 
 # Runs configure.host, finds CC, CXX, and assorted other critical bits.  Sets
 # up critical shell variables.
@@ -94,6 +103,7 @@ GLIBCXX_ENABLE_CONCEPT_CHECKS([no])
 GLIBCXX_ENABLE_DEBUG_FLAGS(["-g3 -O0"])
 GLIBCXX_ENABLE_DEBUG([no])
 GLIBCXX_ENABLE_CXX_FLAGS
+GLIBCXX_ENABLE_FULLY_DYNAMIC_STRING([no])
 
 # No surprises, no surprises...
 if test $atomicity_dir = cpu/generic ; then
@@ -116,7 +126,7 @@ if $GLIBCXX_IS_NATIVE; then
   # Check for available headers.
   AC_CHECK_HEADERS([nan.h ieeefp.h endian.h sys/isa_defs.h machine/endian.h \
   machine/param.h sys/machine.h fp.h locale.h float.h inttypes.h gconv.h \
-  sys/types.h])
+  sys/types.h sys/ipc.h sys/sem.h])
 
   GLIBCXX_CHECK_COMPILER_FEATURES
   GLIBCXX_CHECK_LINKER_FEATURES
@@ -193,7 +203,6 @@ else
 
     # GLIBCXX_CHECK_STDLIB_SUPPORT
     AC_DEFINE(HAVE_STRTOF)        
-    AC_DEFINE(HAVE_STRTOLD)        
     # AC_FUNC_MMAP
     AC_DEFINE(HAVE_MMAP)
 
@@ -267,13 +276,13 @@ GLIBCXX_ENABLE_SYMVERS([yes])
 GLIBCXX_CONFIGURE_TESTSUITE
 
 # Propagate the target-specific source directories through the build chain.
-# (Nothing currently uses cpu_include_dir directly; only atomicity_include_dir 
-# uses it, and it only gets used in this file.)
 ATOMICITY_SRCDIR=config/${atomicity_dir}
 ATOMIC_WORD_SRCDIR=config/${atomic_word_dir}
 OS_INC_SRCDIR=config/${os_include_dir}
+ABI_TWEAKS_SRCDIR=config/${abi_tweaks_dir}
 AC_SUBST(ATOMICITY_SRCDIR)
 AC_SUBST(ATOMIC_WORD_SRCDIR)
+AC_SUBST(ABI_TWEAKS_SRCDIR)
 AC_SUBST(OS_INC_SRCDIR)
 
 # Determine cross-compile flags and AM_CONDITIONALs.

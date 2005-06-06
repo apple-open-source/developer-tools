@@ -108,7 +108,7 @@ static const char *singlemove_string (rtx *);
 static void m68k_output_function_prologue (FILE *, HOST_WIDE_INT);
 static void m68k_output_function_epilogue (FILE *, HOST_WIDE_INT);
 #ifdef M68K_TARGET_COFF
-static void m68k_coff_asm_named_section (const char *, unsigned int);
+static void m68k_coff_asm_named_section (const char *, unsigned int, tree);
 #endif /* M68K_TARGET_COFF */
 static void m68k_output_mi_thunk (FILE *, tree, HOST_WIDE_INT,
 					  HOST_WIDE_INT, tree);
@@ -123,22 +123,8 @@ static int const_int_cost (rtx);
 static bool m68k_rtx_costs (rtx, int, int, int *);
 
 
-/* Alignment to use for loops and jumps */
-/* Specify power of two alignment used for loops.  */
-const char *m68k_align_loops_string;
-/* Specify power of two alignment used for non-loop jumps.  */
-const char *m68k_align_jumps_string;
-/* Specify power of two alignment used for functions.  */
-const char *m68k_align_funcs_string;
 /* Specify the identification number of the library being built */
 const char *m68k_library_id_string;
-
-/* Specify power of two alignment used for loops.  */
-int m68k_align_loops;
-/* Specify power of two alignment used for non-loop jumps.  */
-int m68k_align_jumps;
-/* Specify power of two alignment used for functions.  */
-int m68k_align_funcs;
 
 /* Nonzero if the last compare/test insn had FP operands.  The
    sCC expanders peek at this to determine what to do for the
@@ -221,22 +207,6 @@ struct gcc_target targetm = TARGET_INITIALIZER;
 void
 override_options (void)
 {
-  int def_align;
-  int i;
-
-  def_align = 1;
-
-  /* Validate -malign-loops= value, or provide default */
-  m68k_align_loops = def_align;
-  if (m68k_align_loops_string)
-    {
-      i = atoi (m68k_align_loops_string);
-      if (i < 1 || i > MAX_CODE_ALIGN)
-	error ("-malign-loops=%d is not between 1 and %d", i, MAX_CODE_ALIGN);
-      else
-	m68k_align_loops = i;
-    }
-
   /* Library identification */
   if (m68k_library_id_string)
     {
@@ -268,29 +238,6 @@ override_options (void)
    */
   if (TARGET_SEP_DATA || TARGET_ID_SHARED_LIBRARY)
     flag_pic = 2;
-
-  /* Validate -malign-jumps= value, or provide default */
-  m68k_align_jumps = def_align;
-  if (m68k_align_jumps_string)
-    {
-      i = atoi (m68k_align_jumps_string);
-      if (i < 1 || i > MAX_CODE_ALIGN)
-	error ("-malign-jumps=%d is not between 1 and %d", i, MAX_CODE_ALIGN);
-      else
-	m68k_align_jumps = i;
-    }
-
-  /* Validate -malign-functions= value, or provide default */
-  m68k_align_funcs = def_align;
-  if (m68k_align_funcs_string)
-    {
-      i = atoi (m68k_align_funcs_string);
-      if (i < 1 || i > MAX_CODE_ALIGN)
-	error ("-malign-functions=%d is not between 1 and %d",
-	       i, MAX_CODE_ALIGN);
-      else
-	m68k_align_funcs = i;
-    }
 
   /* -fPIC uses 32-bit pc-relative displacements, which don't exist
      until the 68020.  */
@@ -338,7 +285,7 @@ m68k_handle_fndecl_attribute (tree *node, tree name,
 {
   if (TREE_CODE (*node) != FUNCTION_DECL)
     {
-      warning ("`%s' attribute only applies to functions",
+      warning ("%qs attribute only applies to functions",
 	       IDENTIFIER_POINTER (name));
       *no_add_attrs = true;
     }
@@ -424,9 +371,13 @@ m68k_initial_elimination_offset (int from, int to)
 static bool
 m68k_save_reg (unsigned int regno, bool interrupt_handler)
 {
-  if (flag_pic && current_function_uses_pic_offset_table
-      && regno == PIC_OFFSET_TABLE_REGNUM)
-    return true;
+  if (flag_pic && regno == PIC_OFFSET_TABLE_REGNUM)
+    {
+      if (current_function_uses_pic_offset_table)
+	return true;
+      if (!current_function_is_leaf && TARGET_ID_SHARED_LIBRARY)
+	return true;
+    }
 
   if (current_function_calls_eh_return)
     {
@@ -1171,7 +1122,7 @@ output_scc_di(rtx op, rtx operand1, rtx operand2, rtx dest)
       else
 	loperands[3] = adjust_address (operand2, SImode, 4);
     }
-  loperands[4] = gen_label_rtx();
+  loperands[4] = gen_label_rtx ();
   if (operand2 != const0_rtx)
     {
       output_asm_insn (MOTOROLA ?
@@ -1213,7 +1164,7 @@ output_scc_di(rtx op, rtx operand1, rtx operand2, rtx dest)
         break;
 
       case GT:
-        loperands[6] = gen_label_rtx();
+        loperands[6] = gen_label_rtx ();
         output_asm_insn (MOTOROLA ?
 			   "shi %5\n\tjbra %l6" :
 			   "shi %5\n\tjra %l6",
@@ -1232,7 +1183,7 @@ output_scc_di(rtx op, rtx operand1, rtx operand2, rtx dest)
         break;
 
       case LT:
-        loperands[6] = gen_label_rtx();
+        loperands[6] = gen_label_rtx ();
         output_asm_insn (MOTOROLA ?
 			   "scs %5\n\tjbra %l6" :
 			   "scs %5\n\tjra %l6",
@@ -1251,7 +1202,7 @@ output_scc_di(rtx op, rtx operand1, rtx operand2, rtx dest)
         break;
 
       case GE:
-        loperands[6] = gen_label_rtx();
+        loperands[6] = gen_label_rtx ();
         output_asm_insn (MOTOROLA ?
 			   "scc %5\n\tjbra %l6" :
 			   "scc %5\n\tjra %l6",
@@ -1270,7 +1221,7 @@ output_scc_di(rtx op, rtx operand1, rtx operand2, rtx dest)
         break;
 
       case LE:
-        loperands[6] = gen_label_rtx();
+        loperands[6] = gen_label_rtx ();
         output_asm_insn (MOTOROLA ?
 			   "sls %5\n\tjbra %l6" :
 			   "sls %5\n\tjra %l6",
@@ -1336,7 +1287,7 @@ output_btst (rtx *operands, rtx countop, rtx dataop, rtx insn, int signpos)
 /* Returns true if OP is either a symbol reference or a sum of a symbol
    reference and a constant.  */
 
-bool
+int
 symbolic_operand (rtx op, enum machine_mode mode ATTRIBUTE_UNUSED)
 {
   switch (GET_CODE (op))
@@ -1436,7 +1387,7 @@ legitimize_pic_address (rtx orig, enum machine_mode mode ATTRIBUTE_UNUSED,
 			     gen_rtx_PLUS (Pmode,
 					   pic_offset_table_rtx, orig));
       current_function_uses_pic_offset_table = 1;
-      RTX_UNCHANGING_P (pic_ref) = 1;
+      MEM_READONLY_P (pic_ref) = 1;
       emit_move_insn (reg, pic_ref);
       return reg;
     }
@@ -1470,7 +1421,7 @@ legitimize_pic_address (rtx orig, enum machine_mode mode ATTRIBUTE_UNUSED,
 }
 
 
-typedef enum { MOVL, SWAP, NEGW, NOTW, NOTB, MOVQ } CONST_METHOD;
+typedef enum { MOVL, SWAP, NEGW, NOTW, NOTB, MOVQ, MVS, MVZ } CONST_METHOD;
 
 static CONST_METHOD const_method (rtx);
 
@@ -1500,11 +1451,22 @@ const_method (rtx constant)
       /* This is the only value where neg.w is useful */
       if (i == -65408)
 	return NEGW;
-      /* Try also with swap */
-      u = i;
-      if (USE_MOVQ ((u >> 16) | (u << 16)))
-	return SWAP;
     }
+
+  /* Try also with swap.  */
+  u = i;
+  if (USE_MOVQ ((u >> 16) | (u << 16)))
+    return SWAP;
+
+  if (TARGET_CFV4)
+    {
+      /* Try using MVZ/MVS with an immediate value to load constants.  */
+      if (i >= 0 && i <= 65535)
+	return MVZ;
+      if (i >= -32768 && i <= 32767)
+	return MVS;
+    }
+
   /* Otherwise, use move.l */
   return MOVL;
 }
@@ -1517,6 +1479,8 @@ const_int_cost (rtx constant)
       case MOVQ :
       /* Constants between -128 and 127 are cheap due to moveq */
 	return 0;
+      case MVZ:
+      case MVS:
       case NOTB :
       case NOTW :
       case NEGW :
@@ -1565,9 +1529,9 @@ m68k_rtx_costs (rtx x, int code, int outer_code, int *total)
        for add and the time for shift, taking away a little more because
        sometimes move insns are needed.  */
     /* div?.w is relatively cheaper on 68000 counted in COSTS_N_INSNS terms.  */
-#define MULL_COST (TARGET_68060 ? 2 : TARGET_68040 ? 5 : TARGET_CFV3 ? 3 : TARGET_COLDFIRE ? 10 : 13)
+#define MULL_COST (TARGET_68060 ? 2 : TARGET_68040 ? 5 : (TARGET_COLDFIRE && !TARGET_5200) ? 3 : TARGET_COLDFIRE ? 10 : 13)
 #define MULW_COST (TARGET_68060 ? 2 : TARGET_68040 ? 3 : TARGET_68020 ? 8 : \
-			TARGET_CFV3 ? 2 : 5)
+			(TARGET_COLDFIRE && !TARGET_5200) ? 2 : 5)
 #define DIVW_COST (TARGET_68020 ? 27 : TARGET_CF_HWDIV ? 11 : 12)
 
     case PLUS:
@@ -1661,6 +1625,10 @@ output_move_const_into_data_reg (rtx *operands)
   i = INTVAL (operands[1]);
   switch (const_method (operands[1]))
     {
+    case MVZ:
+      return "mvsw %1,%0";
+    case MVS:
+      return "mvzw %1,%0";
     case MOVQ :
       return "moveq %1,%0";
     case NOTB :
@@ -1688,6 +1656,23 @@ output_move_const_into_data_reg (rtx *operands)
     }
 }
 
+/* Return 1 if 'constant' can be represented by
+   mov3q on a ColdFire V4 core.  */
+int
+valid_mov3q_const (rtx constant)
+{
+  int i;
+
+  if (TARGET_CFV4 && GET_CODE (constant) == CONST_INT)
+    {
+      i = INTVAL (constant);
+      if ((i == -1) || (i >= 1 && i <= 7))
+	return 1;
+    }
+  return 0;
+}
+
+
 const char *
 output_move_simode_const (rtx *operands)
 {
@@ -1700,6 +1685,9 @@ output_move_simode_const (rtx *operands)
 	  || !(GET_CODE (operands[0]) == MEM
 	       && MEM_VOLATILE_P (operands[0]))))
     return "clr%.l %0";
+  else if ((GET_MODE (operands[0]) == SImode)
+           && valid_mov3q_const (operands[1]))
+      return "mov3q%.l %1,%0";
   else if (operands[1] == const0_rtx
 	   && ADDRESS_REG_P (operands[0]))
     return "sub%.l %0,%0";
@@ -1708,13 +1696,21 @@ output_move_simode_const (rtx *operands)
   else if (ADDRESS_REG_P (operands[0])
 	   && INTVAL (operands[1]) < 0x8000
 	   && INTVAL (operands[1]) >= -0x8000)
-    return "move%.w %1,%0";
+    {
+      if (valid_mov3q_const (operands[1]))
+        return "mov3q%.l %1,%0";
+      return "move%.w %1,%0";
+    }
   else if (GET_CODE (operands[0]) == MEM
       && GET_CODE (XEXP (operands[0], 0)) == PRE_DEC
       && REGNO (XEXP (XEXP (operands[0], 0), 0)) == STACK_POINTER_REGNUM
 	   && INTVAL (operands[1]) < 0x8000
 	   && INTVAL (operands[1]) >= -0x8000)
-    return "pea %a1";
+    {
+      if (valid_mov3q_const (operands[1]))
+        return "mov3q%.l %1,%-";
+      return "pea %a1";
+    }
   return "move%.l %1,%0";
 }
 
@@ -1788,10 +1784,6 @@ output_move_himode (rtx *operands)
 const char *
 output_move_qimode (rtx *operands)
 {
-  rtx xoperands[4];
-
-  /* This is probably useless, since it loses for pushing a struct
-     of several bytes a byte at a time.	 */
   /* 68k family always modifies the stack pointer by at least 2, even for
      byte pushes.  The 5200 (ColdFire) does not do this.  */
   if (GET_CODE (operands[0]) == MEM
@@ -1799,22 +1791,8 @@ output_move_qimode (rtx *operands)
       && XEXP (XEXP (operands[0], 0), 0) == stack_pointer_rtx
       && ! ADDRESS_REG_P (operands[1])
       && ! TARGET_COLDFIRE)
-    {
-      xoperands[1] = operands[1];
-      xoperands[2]
-	= gen_rtx_MEM (QImode,
-		       gen_rtx_PLUS (VOIDmode, stack_pointer_rtx, const1_rtx));
-      /* Just pushing a byte puts it in the high byte of the halfword.	*/
-      /* We must put it in the low-order, high-numbered byte.  */
-      if (!reg_mentioned_p (stack_pointer_rtx, operands[1]))
-	{
-	  xoperands[3] = stack_pointer_rtx;
-	  output_asm_insn ("subq%.l #2,%3\n\tmove%.b %1,%2", xoperands);
-	}
-      else
-	output_asm_insn ("move%.b %1,%-\n\tmove%.b %@,%2", xoperands);
-      return "";
-    }
+    /* generated by pushqi1 pattern now */
+    abort ();
 
   /* clr and st insns on 68000 read before writing.
      This isn't so on the 68010, but we have no TARGET_68010.  */
@@ -2739,8 +2717,8 @@ print_operand (FILE *file, rtx op, int letter)
 
    This routine is responsible for distinguishing between -fpic and -fPIC 
    style relocations in an address.  When generating -fpic code the
-   offset is output in word mode (eg movel a5@(_foo:w), a0).  When generating
-   -fPIC code the offset is output in long mode (eg movel a5@(_foo:l), a0) */
+   offset is output in word mode (e.g. movel a5@(_foo:w), a0).  When generating
+   -fPIC code the offset is output in long mode (e.g. movel a5@(_foo:l), a0) */
 
 #if MOTOROLA
 #  define ASM_OUTPUT_CASE_FETCH(file, labelno, regname)\
@@ -3211,6 +3189,18 @@ memory_src_operand (rtx op, enum machine_mode mode)
   return memory_operand (op, mode);
 }
 
+int
+post_inc_operand (rtx op, enum machine_mode mode ATTRIBUTE_UNUSED)
+{
+  return MEM_P (op) && GET_CODE (XEXP (op, 0)) == POST_INC;
+}
+
+int
+pre_dec_operand (rtx op, enum machine_mode mode ATTRIBUTE_UNUSED)
+{
+  return MEM_P (op) && GET_CODE (XEXP (op, 0)) == PRE_DEC;
+}
+
 /* Predicate that accepts only a pc-relative address.  This is needed
    because pc-relative addresses don't satisfy the predicate
    "general_src_operand".  */
@@ -3227,7 +3217,7 @@ output_andsi3 (rtx *operands)
 {
   int logval;
   if (GET_CODE (operands[2]) == CONST_INT
-      && (INTVAL (operands[2]) | 0xffff) == (HOST_WIDE_INT)0xffffffff
+      && (INTVAL (operands[2]) | 0xffff) == -1
       && (DATA_REG_P (operands[0])
 	  || offsettable_memref_p (operands[0]))
       && !TARGET_COLDFIRE)
@@ -3338,7 +3328,8 @@ output_xorsi3 (rtx *operands)
 /* Output assembly to switch to section NAME with attribute FLAGS.  */
 
 static void
-m68k_coff_asm_named_section (const char *name, unsigned int flags)
+m68k_coff_asm_named_section (const char *name, unsigned int flags, 
+			     tree decl ATTRIBUTE_UNUSED)
 {
   char flagchar;
 
@@ -3371,6 +3362,23 @@ m68k_output_mi_thunk (FILE *file, tree thunk ATTRIBUTE_UNUSED,
 			 "\tsubq.l %I%d,4(%Rsp)\n" :
 			 "\tsubql %I%d,%Rsp@(4)\n",
 		 (int) -delta);
+  else if (TARGET_COLDFIRE)
+    {
+      /* ColdFire can't add/sub a constant to memory unless it is in
+	 the range of addq/subq.  So load the value into %d0 and
+	 then add it to 4(%sp). */
+      if (delta >= -128 && delta <= 127)
+	asm_fprintf (file, MOTOROLA ?
+		     "\tmoveq.l %I%wd,%Rd0\n" :
+		     "\tmoveql %I%wd,%Rd0\n", delta);
+      else
+	asm_fprintf (file, MOTOROLA ?
+		     "\tmove.l %I%wd,%Rd0\n" :
+		     "\tmovel %I%wd,%Rd0\n", delta);
+      asm_fprintf (file, MOTOROLA ?
+		   "\tadd.l %Rd0,4(%Rsp)\n" :
+		   "\taddl %Rd0,%Rsp@(4)\n");
+    }
   else
     asm_fprintf (file, MOTOROLA ?
 			 "\tadd.l %I%wd,4(%Rsp)\n" :
@@ -3423,4 +3431,21 @@ m68k_struct_value_rtx (tree fntype ATTRIBUTE_UNUSED,
 		       int incoming ATTRIBUTE_UNUSED)
 {
   return gen_rtx_REG (Pmode, M68K_STRUCT_VALUE_REGNUM);
+}
+
+/* Return nonzero if register old_reg can be renamed to register new_reg.  */
+int
+m68k_hard_regno_rename_ok (unsigned int old_reg ATTRIBUTE_UNUSED,
+			   unsigned int new_reg)
+{
+
+  /* Interrupt functions can only use registers that have already been
+     saved by the prologue, even if they would normally be
+     call-clobbered.  */
+
+  if (m68k_interrupt_function_p (current_function_decl)
+      && !regs_ever_live[new_reg])
+    return 0;
+
+  return 1;
 }

@@ -152,7 +152,7 @@
    %{compat-bsd: \
      %{!YP,*:%{p|pg:-Y P,/usr/ucblib/sparcv9:/usr/lib/libp/sparcv9:/usr/lib/sparcv9} \
        %{!p:%{!pg:-Y P,/usr/ucblib/sparcv9:/usr/lib/sparcv9}}} \
-     -R /usr/ucblib} \
+     -R /usr/ucblib/sparcv9} \
    %{!compat-bsd: \
      %{!YP,*:%{p|pg:-Y P,/usr/lib/libp/sparcv9:/usr/lib/sparcv9} \
        %{!p:%{!pg:-Y P,/usr/lib/sparcv9}}}}"
@@ -208,6 +208,27 @@
 %{mv8plus:-m32 -mptr32 -mno-stack-bias \
   %{!mcpu*:%{!mcypress:%{!msparclite:%{!mf930:%{!mf934:%{!mv8:%{!msupersparc:-mcpu=v9}}}}}}}} \
 "
+#endif
+
+/* Support for a compile-time default CPU, et cetera.  The rules are:
+   --with-cpu is ignored if -mcpu is specified.
+   --with-tune is ignored if -mtune is specified.
+   --with-float is ignored if -mhard-float, -msoft-float, -mfpu, or -mno-fpu
+     are specified.
+   In the SPARC_BI_ARCH compiler we cannot pass %{!mcpu=*:-mcpu=%(VALUE)}
+   here, otherwise say -mcpu=v7 would be passed even when -m64.
+   CC1_SPEC above takes care of this instead.  */
+#undef OPTION_DEFAULT_SPECS
+#if DEFAULT_ARCH32_P
+#define OPTION_DEFAULT_SPECS \
+  {"cpu", "%{!m64:%{!mcpu=*:-mcpu=%(VALUE)}}" }, \
+  {"tune", "%{!mtune=*:-mtune=%(VALUE)}" }, \
+  {"float", "%{!msoft-float:%{!mhard-float:%{!fpu:%{!no-fpu:-m%(VALUE)-float}}}}" }
+#else
+#define OPTION_DEFAULT_SPECS \
+  {"cpu", "%{!m32:%{!mcpu=*:-mcpu=%(VALUE)}}" }, \
+  {"tune", "%{!mtune=*:-mtune=%(VALUE)}" }, \
+  {"float", "%{!msoft-float:%{!mhard-float:%{!fpu:%{!no-fpu:-m%(VALUE)-float}}}}" }
 #endif
 
 #if DEFAULT_ARCH32_P

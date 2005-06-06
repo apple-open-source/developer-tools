@@ -179,7 +179,7 @@ typedef struct {int num_args; enum avms_arg_type atypes[6];} avms_arg_info;
 
 #undef FUNCTION_ARG_ADVANCE
 #define FUNCTION_ARG_ADVANCE(CUM, MODE, TYPE, NAMED)			\
-  if (MUST_PASS_IN_STACK (MODE, TYPE))					\
+  if (targetm.calls.must_pass_in_stack (MODE, TYPE))			\
     (CUM).num_args += 6;						\
   else									\
     {									\
@@ -188,16 +188,6 @@ typedef struct {int num_args; enum avms_arg_type atypes[6];} avms_arg_info;
 									\
      (CUM).num_args += ALPHA_ARG_SIZE (MODE, TYPE, NAMED);		\
     }
-
-/* For an arg passed partly in registers and partly in memory,
-   this is the number of registers used.
-   For args passed entirely in registers or entirely in memory, zero.  */
-
-#undef FUNCTION_ARG_PARTIAL_NREGS
-#define FUNCTION_ARG_PARTIAL_NREGS(CUM, MODE, TYPE, NAMED)		\
-((CUM).num_args < 6 && 6 < (CUM).num_args				\
-   + ALPHA_ARG_SIZE (MODE, TYPE, NAMED)					\
- ? 6 - (CUM).num_args : 0)
 
 /* ABI has stack checking, but it's broken.  */
 #undef STACK_CHECK_BUILTIN
@@ -318,55 +308,7 @@ do {									\
 
 #define LINK_EH_SPEC "vms-dwarf2eh.o%s "
 
-#ifdef IN_LIBGCC2
-#include <pdscdef.h>
-
-#define MD_FALLBACK_FRAME_STATE_FOR(CONTEXT, FS, SUCCESS)		\
- do {									\
-  PDSCDEF *pv = *((PDSCDEF **) (CONTEXT)->reg [29]);                    \
-									\
-  if (pv && ((long) pv & 0x7) == 0) /* low bits 0 means address */      \
-    pv = *(PDSCDEF **) pv;                                              \
-									\
-  if (pv && ((pv->pdsc$w_flags & 0xf) == PDSC$K_KIND_FP_STACK))		\
-    {									\
-      int i, j;								\
-									\
-      (FS)->cfa_offset = pv->pdsc$l_size;				\
-      (FS)->cfa_reg = pv->pdsc$w_flags & PDSC$M_BASE_REG_IS_FP ? 29 : 30; \
-      (FS)->retaddr_column = 26;					\
-      (FS)->cfa_how = CFA_REG_OFFSET;					\
-      (FS)->regs.reg[27].loc.offset = -pv->pdsc$l_size;			\
-      (FS)->regs.reg[27].how = REG_SAVED_OFFSET;			\
-      (FS)->regs.reg[26].loc.offset					\
-	 = -(pv->pdsc$l_size - pv->pdsc$w_rsa_offset);			\
-      (FS)->regs.reg[26].how = REG_SAVED_OFFSET;			\
-									\
-      for (i = 0, j = 0; i < 32; i++)					\
-	if (1<<i & pv->pdsc$l_ireg_mask)				\
-	  {								\
-	    (FS)->regs.reg[i].loc.offset				\
-	      = -(pv->pdsc$l_size - pv->pdsc$w_rsa_offset - 8 * ++j);	\
-	    (FS)->regs.reg[i].how = REG_SAVED_OFFSET;			\
-	  }								\
-									\
-      goto SUCCESS;							\
-    }									\
-  else if (pv && ((pv->pdsc$w_flags & 0xf) == PDSC$K_KIND_FP_REGISTER))	\
-    {									\
-      (FS)->cfa_offset = pv->pdsc$l_size;				\
-      (FS)->cfa_reg = pv->pdsc$w_flags & PDSC$M_BASE_REG_IS_FP ? 29 : 30; \
-      (FS)->retaddr_column = 26;					\
-      (FS)->cfa_how = CFA_REG_OFFSET;					\
-      (FS)->regs.reg[26].loc.reg = pv->pdsc$b_save_ra;			\
-      (FS)->regs.reg[26].how = REG_SAVED_REG;			        \
-      (FS)->regs.reg[29].loc.reg = pv->pdsc$b_save_fp;			\
-      (FS)->regs.reg[29].how = REG_SAVED_REG;			        \
-									\
-      goto SUCCESS;							\
-    }									\
-} while (0)
-#endif
+#define MD_UNWIND_SUPPORT "config/alpha/vms-unwind.h"
 
 /* This is how to output an assembler line
    that says to advance the location counter

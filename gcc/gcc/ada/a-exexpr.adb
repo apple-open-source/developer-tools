@@ -36,6 +36,8 @@ with Interfaces;
 with Ada.Unchecked_Conversion;
 with Ada.Unchecked_Deallocation;
 
+with System.Storage_Elements;  use System.Storage_Elements;
+
 pragma Warnings (Off);
 --  Since several constructs give warnings in 3.14a1, including unreferenced
 --  variables and pragma Unreferenced itself.
@@ -104,7 +106,7 @@ package body Exception_Propagation is
 
    type Unwind_Word is mod 2 ** System.Word_Size;
    for Unwind_Word'Size use System.Word_Size;
-   --  Map the corresponding C type used in Unwind_Exception below.
+   --  Map the corresponding C type used in Unwind_Exception below
 
    type Unwind_Exception is record
       Class    : Exception_Class := GNAT_Exception_Class;
@@ -112,52 +114,59 @@ package body Exception_Propagation is
       Private1 : Unwind_Word;
       Private2 : Unwind_Word;
    end record;
-   --  Map the GCC struct used for exception handling.
+   --  Map the GCC struct used for exception handling
 
    for Unwind_Exception'Alignment use Standard'Maximum_Alignment;
    --  The C++ ABI mandates the common exception header to be at least
    --  doubleword aligned, and the libGCC implementation actually makes it
-   --  maximally aligned (see unwind.h). We need to match this because:
+   --  maximally aligned (see unwind.h). See additional comments on the
+   --  alignment below.
 
-   --  1/ We pass pointers to such headers down to the underlying
-   --     libGCC unwinder,
-
-   --    and
-
-   --  2/ The GNAT_GCC_Exception record below starts with this common
-   --     common header and has a C counterpart which needs to be laid
-   --     out identically in raise.c. If the alignment of the C and Ada
-   --     common headers mismatch, their size may also differ, and the
-   --     layouts may not match anymore.
-
-   ---------------------------------------------------------------
-   --  GNAT specific entities to deal with the GCC eh circuitry --
-   ---------------------------------------------------------------
+   --------------------------------------------------------------
+   -- GNAT Specific Entities To Deal With The GCC EH Circuitry --
+   --------------------------------------------------------------
 
    --  A GNAT exception object to be dealt with by the personality routine
-   --  called by the GCC unwinding runtime. This structure shall match the
-   --  one in raise.c and is currently experimental as it might be merged
-   --  with the GNAT runtime definition some day.
+   --  called by the GCC unwinding runtime.
 
    type GNAT_GCC_Exception is record
       Header : Unwind_Exception;
-      --  ABI Exception header first.
+      --  ABI Exception header first
 
       Id : Exception_Id;
-      --  GNAT Exception identifier. This is used by the personality
-      --  routine to determine if the context it examines contains a
-      --  handler for the exception beeing propagated.
+      --  GNAT Exception identifier.  This is filled by Propagate_Exception
+      --  and then used by the personality routine to determine if the context
+      --  it examines contains a handler for the exception beeing propagated.
 
       N_Cleanups_To_Trigger : Integer;
-      --  Number of cleanup only frames encountered in SEARCH phase.
-      --  This is used to control the forced unwinding triggered when
-      --  no handler has been found.
+      --  Number of cleanup only frames encountered in SEARCH phase.  This is
+      --  initialized to 0 by Propagate_Exception and maintained by the
+      --  personality routine to control a forced unwinding phase triggering
+      --  all the cleanups before calling Unhandled_Exception_Terminate when
+      --  an exception is not handled.
 
       Next_Exception : EOA;
-      --  Used to create a linked list of exception occurrences.
+      --  Used to create a linked list of exception occurrences
    end record;
 
    pragma Convention (C, GNAT_GCC_Exception);
+
+   --  There is a subtle issue with the common header alignment, since the C
+   --  version is aligned on BIGGEST_ALIGNMENT, the Ada version is aligned on
+   --  Standard'Maximum_Alignment, and those two values don't quite represent
+   --  the same concepts and so may be decoupled someday. One typical reason
+   --  is that BIGGEST_ALIGNMENT may be larger than what the underlying system
+   --  allocator guarantees, and there are extra costs involved in allocating
+   --  objects aligned to such factors.
+
+   --  To deal with the potential alignment differences between the C and Ada
+   --  representations, the Ada part of the whole structure is only accessed
+   --  by the personality routine through the accessors declared below.  Ada
+   --  specific fields are thus always accessed through consistent layout, and
+   --  we expect the actual alignment to always be large enough to avoid traps
+   --  from the C accesses to the common header. Besides, accessors aleviate
+   --  the need for a C struct whole conterpart, both painful and errorprone
+   --  to maintain anyway.
 
    type GNAT_GCC_Exception_Access is access all GNAT_GCC_Exception;
 
@@ -169,22 +178,6 @@ package body Exception_Propagation is
 
    procedure Free is new Unchecked_Deallocation
      (Exception_Occurrence, EOA);
-
-   function Remove
-     (Top   : EOA;
-      Excep : GNAT_GCC_Exception_Access) return Boolean;
-   --  Remove Excep from the stack starting at Top.
-   --  Return True if Excep was found and removed, false otherwise.
-
-   --  Hooks called when entering/leaving an exception handler for a given
-   --  occurrence, aimed at handling the stack of active occurrences. The
-   --  calls are generated by gigi in tree_transform/N_Exception_Handler.
-
-   procedure Begin_Handler (GCC_Exception : GNAT_GCC_Exception_Access);
-   pragma Export (C, Begin_Handler, "__gnat_begin_handler");
-
-   procedure End_Handler (GCC_Exception : GNAT_GCC_Exception_Access);
-   pragma Export (C, End_Handler, "__gnat_end_handler");
 
    function CleanupUnwind_Handler
      (UW_Version   : Integer;
@@ -211,12 +204,48 @@ package body Exception_Propagation is
       UW_Argument  : System.Address);
    pragma Import (C, Unwind_ForcedUnwind, "__gnat_Unwind_ForcedUnwind");
 
+   ------------------------------------------------------------------
+   -- Occurrence Stack Management Facilities for the GCC-EH Scheme --
+   ------------------------------------------------------------------
+
+   function Remove
+     (Top   : EOA;
+      Excep : GNAT_GCC_Exception_Access) return Boolean;
+   --  Remove Excep from the stack starting at Top.
+   --  Return True if Excep was found and removed, false otherwise.
+
+   --  Hooks called when entering/leaving an exception handler for a given
+   --  occurrence, aimed at handling the stack of active occurrences. The
+   --  calls are generated by gigi in tree_transform/N_Exception_Handler.
+
+   procedure Begin_Handler (GCC_Exception : GNAT_GCC_Exception_Access);
+   pragma Export (C, Begin_Handler, "__gnat_begin_handler");
+
+   procedure End_Handler (GCC_Exception : GNAT_GCC_Exception_Access);
+   pragma Export (C, End_Handler, "__gnat_end_handler");
+
+   Setup_Key : constant := 16#DEAD#;
+   --  To handle the case of a task "transferring" an exception occurrence to
+   --  another task, for instance via Exceptional_Complete_Rendezvous, we need
+   --  to be able to identify occurrences which have been Setup and not yet
+   --  Propagated. We hijack one of the common header fields for that purpose,
+   --  setting it to a special key value during the setup process, clearing it
+   --  at the very beginning of the propagation phase, and expecting it never
+   --  to be reset to the special value later on. A 16-bit value is used rather
+   --  than a 32-bit value for static compatibility with 16-bit targets such as
+   --  AAMP (where type Unwind_Word will be 16 bits).
+
+   function Is_Setup_And_Not_Propagated (E : EOA) return Boolean;
+
+   procedure Set_Setup_And_Not_Propagated (E : EOA);
+   procedure Clear_Setup_And_Not_Propagated (E : EOA);
+
    ------------------------------------------------------------
    -- Accessors to basic components of a GNAT exception data --
    ------------------------------------------------------------
 
    --  As of today, these are only used by the C implementation of the
-   --  propagation personality routine to avoid having to rely on a C
+   --  GCC propagation personality routine to avoid having to rely on a C
    --  counterpart of the whole exception_data structure, which is both
    --  painful and error prone. These subprograms could be moved to a
    --  more widely visible location if need be.
@@ -229,6 +258,31 @@ package body Exception_Propagation is
 
    function Import_Code_For (E : Exception_Data_Ptr) return Exception_Code;
    pragma Export (C, Import_Code_For, "__gnat_import_code_for");
+
+   function EID_For (GNAT_Exception : GNAT_GCC_Exception_Access)
+     return Exception_Id;
+   pragma Export (C, EID_For, "__gnat_eid_for");
+
+   procedure Adjust_N_Cleanups_For
+     (GNAT_Exception : GNAT_GCC_Exception_Access;
+      Adjustment     : Integer);
+   pragma Export (C, Adjust_N_Cleanups_For, "__gnat_adjust_n_cleanups_for");
+
+   ---------------------------------------------------------------------------
+   -- Objects to materialize "others" and "all others" in the GCC EH tables --
+   ---------------------------------------------------------------------------
+
+   --  Currently, these only have their address taken and compared so there is
+   --  no real point having whole exception data blocks allocated. In any case
+   --  the types should match what gigi and the personality routine expect.
+   --  The initial value is an arbitrary value that will not exceed the range
+   --  of Integer on 16-bit targets (such as AAMP).
+
+   Others_Value : constant Integer := 16#7FFF#;
+   pragma Export (C, Others_Value, "__gnat_others_value");
+
+   All_Others_Value : constant Integer := 16#7FFF#;
+   pragma Export (C, All_Others_Value, "__gnat_all_others_value");
 
    ------------
    -- Remove --
@@ -316,11 +370,55 @@ package body Exception_Propagation is
       return URC_NO_REASON;
    end CleanupUnwind_Handler;
 
+   ---------------------------------
+   -- Is_Setup_And_Not_Propagated --
+   ---------------------------------
+
+   function Is_Setup_And_Not_Propagated (E : EOA) return Boolean is
+      GCC_E : GNAT_GCC_Exception_Access :=
+                To_GNAT_GCC_Exception (E.Private_Data);
+   begin
+      return GCC_E /= null and then GCC_E.Header.Private1 = Setup_Key;
+   end Is_Setup_And_Not_Propagated;
+
+   ------------------------------------
+   -- Clear_Setup_And_Not_Propagated --
+   ------------------------------------
+
+   procedure Clear_Setup_And_Not_Propagated (E : EOA) is
+      GCC_E : GNAT_GCC_Exception_Access :=
+                To_GNAT_GCC_Exception (E.Private_Data);
+   begin
+      pragma Assert (GCC_E /= null);
+      GCC_E.Header.Private1 := 0;
+   end Clear_Setup_And_Not_Propagated;
+
+   ----------------------------------
+   -- Set_Setup_And_Not_Propagated --
+   ----------------------------------
+
+   procedure Set_Setup_And_Not_Propagated (E : EOA) is
+      GCC_E : GNAT_GCC_Exception_Access :=
+                To_GNAT_GCC_Exception (E.Private_Data);
+   begin
+      pragma Assert (GCC_E /= null);
+      GCC_E.Header.Private1 := Setup_Key;
+   end Set_Setup_And_Not_Propagated;
+
    ---------------------
    -- Setup_Exception --
    ---------------------
 
-   --  Push the current exception occurrence on the stack before overriding it.
+   --  In the GCC-EH implementation of the propagation scheme, this
+   --  subprogram should be understood as : Setup the exception occurrence
+   --  stack headed at Current for a forthcoming raise of Excep.
+
+   --  In the GNAT-SJLJ case this "stack" only exists implicitely, by way of
+   --  local occurrence declarations together with save/restore operations
+   --  generated by the front-end, and this routine has nothing to do.
+
+   --  The differenciation is done here and not in the callers to avoid having
+   --  to spread out the test in numerous places.
 
    procedure Setup_Exception
      (Excep    : EOA;
@@ -331,38 +429,71 @@ package body Exception_Propagation is
       Next          : EOA;
       GCC_Exception : GNAT_GCC_Exception_Access;
 
-      --  Note that we make no use of the Reraised indication at this point.
-
-      --  The information is still passed around just in case of future needs,
-      --  since we've already switched between using/not-using it a number of
-      --  times.
-
    begin
-      --  If the current exception is not live, the stack is empty and there
-      --  is nothing to do. Note that the stack always appears empty for
-      --  mechanisms that do not require one. For the mechanism we implement
-      --  in this unit, the initial Private_Data allocation for an occurrence
-      --  is issued by Propagate_Exception.
+      --  Just return if we're not in the GCC-EH case. What is otherwise
+      --  performed is useless and even harmful since it potentially involves
+      --  dynamic allocations that would never be released, and participates
+      --  in the Setup_And_Not_Propagated predicate management, only properly
+      --  handled by the rest of the GCC-EH scheme.
 
-      if Top.Private_Data = System.Null_Address then
+      if Zero_Cost_Exceptions = 0 then
          return;
       end if;
 
-      --  Shift the contents of the Top of the stack in a freshly allocated
-      --  entry, which leaves the room in the fixed Top entry available for the
-      --  occurrence about to be propagated.
+      --  Otherwise, the exception Excep is soon to be propagated, and the
+      --  storage used for that will be the occurrence statically allocated
+      --  for the current thread. This storage might currently be used for a
+      --  still active occurrence, so we need to push it on the thread's
+      --  occurrence stack (headed at that static occurrence) before it gets
+      --  clobbered.
 
-      Next := new Exception_Occurrence;
-      Save_Occurrence_And_Private (Next.all, Top.all);
+      --  What we do here is to trigger this push when need be, and allocate a
+      --  Private_Data block for the forthcoming Propagation.
 
-      --  Allocate Private_Data for the occurrence about to be propagated
-      --  and link everything together.
+      --  Some tasking rendez-vous attempts lead to an occurrence transfer
+      --  from the server to the client (see Exceptional_Complete_Rendezvous).
+      --  In those cases Setup is called twice for the very same occurrence
+      --  before it gets propagated: once from the server, because this is
+      --  where the occurrence contents is elaborated and known, and then
+      --  once from the client when it detects the case and actually raises
+      --  the exception in its own context.
+
+      --  The Is_Setup_And_Not_Propagated predicate tells us when we are in
+      --  the second call to Setup for a Transferred occurrence, and there is
+      --  nothing to be done here in this situation. This predicate cannot be
+      --  True if we are dealing with a Reraise, and we may even be called
+      --  with a raw uninitialized Excep occurrence in this case so we should
+      --  not check anyway. Observe the front-end expansion for a "raise;" to
+      --  see that happening. We get a local occurrence and a direct call to
+      --  Save_Occurrence without the intermediate init-proc call.
+
+      if not Reraised and then Is_Setup_And_Not_Propagated (Excep) then
+         return;
+      end if;
+
+      --  Allocate what will be the Private_Data block for the exception
+      --  to be propagated.
 
       GCC_Exception := new GNAT_GCC_Exception;
-      GCC_Exception.Next_Exception := Next;
+
+      --  If the Top of the occurrence stack is not currently used for an
+      --  active exception (the stack is empty) we just need to setup the
+      --  Private_Data pointer.
+
+      --  Otherwise, we also need to shift the contents of the Top of the
+      --  stack in a freshly allocated entry and link everything together.
+
+      if Top.Private_Data /= System.Null_Address then
+         Next := new Exception_Occurrence;
+         Save_Occurrence_And_Private (Next.all, Top.all);
+
+         GCC_Exception.Next_Exception := Next;
+         Top.Private_Data := GCC_Exception.all'Address;
+      end if;
 
       Top.Private_Data := GCC_Exception.all'Address;
 
+      Set_Setup_And_Not_Propagated (Top);
    end Setup_Exception;
 
    -------------------
@@ -375,6 +506,7 @@ package body Exception_Propagation is
       --  already been performed by Propagate_Exception. This hook remains for
       --  potential future necessity in optimizing the overall scheme, as well
       --  a useful debugging tool.
+
       null;
    end Begin_Handler;
 
@@ -384,7 +516,6 @@ package body Exception_Propagation is
 
    procedure End_Handler (GCC_Exception : GNAT_GCC_Exception_Access) is
       Removed : Boolean;
-
    begin
       Removed := Remove (Get_Current_Excep.all, GCC_Exception);
       pragma Assert (Removed);
@@ -403,15 +534,15 @@ package body Exception_Propagation is
       GCC_Exception : GNAT_GCC_Exception_Access;
 
    begin
-      if Excep.Private_Data = System.Null_Address then
-         GCC_Exception := new GNAT_GCC_Exception;
-         Excep.Private_Data := GCC_Exception.all'Address;
-      else
-         GCC_Exception := To_GNAT_GCC_Exception (Excep.Private_Data);
-      end if;
+      pragma Assert (Excep.Private_Data /= System.Null_Address);
 
-      --  Fill in the useful flags for the personality routine called for each
+      --  Retrieve the Private_Data for this occurrence and set the useful
+      --  flags for the personality routine, which will be called for each
       --  frame via Unwind_RaiseException below.
+
+      GCC_Exception := To_GNAT_GCC_Exception (Excep.Private_Data);
+
+      Clear_Setup_And_Not_Propagated (Excep);
 
       GCC_Exception.Id := Excep.Id;
       GCC_Exception.N_Cleanups_To_Trigger := 0;
@@ -470,6 +601,30 @@ package body Exception_Propagation is
 
       Unhandled_Exception_Terminate;
    end Propagate_Exception;
+
+   ---------------------------
+   -- Adjust_N_Cleanups_For --
+   ---------------------------
+
+   procedure Adjust_N_Cleanups_For
+     (GNAT_Exception : GNAT_GCC_Exception_Access;
+      Adjustment     : Integer)
+   is
+   begin
+      GNAT_Exception.N_Cleanups_To_Trigger :=
+        GNAT_Exception.N_Cleanups_To_Trigger + Adjustment;
+   end Adjust_N_Cleanups_For;
+
+   -------------
+   -- EID_For --
+   -------------
+
+   function EID_For
+     (GNAT_Exception : GNAT_GCC_Exception_Access) return Exception_Id
+   is
+   begin
+      return GNAT_Exception.Id;
+   end EID_For;
 
    ---------------------
    -- Import_Code_For --
@@ -530,29 +685,29 @@ package body Exception_Propagation is
    --  An attempt was made to use the Private_Data pointer for this purpose.
    --  It did not work because:
 
-   --  1/ The Private_Data has to be saved by Save_Occurrence to be usable
+   --  1) The Private_Data has to be saved by Save_Occurrence to be usable
    --     as a key in case of a later reraise,
 
-   --  2/ There is no easy way to synchronize End_Handler for an occurrence
+   --  2) There is no easy way to synchronize End_Handler for an occurrence
    --     and the data attached to potential copies, so these copies may end
    --     up pointing to stale data. Moreover ...
 
-   --  3/ The same address may be reused for different occurrences, which
+   --  3) The same address may be reused for different occurrences, which
    --     defeats the idea of using it as a key.
 
    --  The example below illustrates:
 
    --  Saved_CE : Exception_Occurrence;
-   --
+
    --  begin
    --    raise Constraint_Error;
    --  exception
    --    when CE: others =>
    --      Save_Occurrence (Saved_CE, CE);      <= Saved_CE.PDA = CE.PDA
    --  end;
-   --
+
    --                                           <= Saved_CE.PDA is stale (!)
-   --
+
    --  begin
    --    raise Program_Error;                   <= Saved_CE.PDA = PE.PDA (!!)
    --  exception

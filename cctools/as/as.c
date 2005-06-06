@@ -46,6 +46,7 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
 #include "xmalloc.h"
 #include "layout.h"
 #include "write_object.h"
+#include "stuff/arch.h"
 
 /* ['x'] TRUE if "-x" seen. */
 char flagseen[128] = { 0 };
@@ -371,7 +372,7 @@ char **envp)
 				as_fatal("I expected 'm88k' after "
 				       "-arch for this assembler.");
 #endif
-#if defined(PPC) && !defined(INTERIM_PPC64)
+#if defined(PPC) && !defined(ARCH64)
 			    if(strcmp(*work_argv, "ppc601") == 0){
 				if(archflag_cpusubtype != -1 &&
 				   archflag_cpusubtype !=
@@ -485,8 +486,22 @@ char **envp)
 			    	    strcmp(*work_argv, "m98k") != 0)
 				as_fatal("I expected 'ppc' after "
 				       "-arch for this assembler.");
-#endif /* defined(PPC) && !defined(INTERIM_PPC64) */
-#ifdef INTERIM_PPC64
+#endif /* defined(PPC) && !defined(ARCH64) */
+#if defined(PPC) && defined(ARCH64)
+			    if(strcmp(*work_argv,
+					   "ppc970-64") == 0){
+				if(archflag_cpusubtype != -1 &&
+				   archflag_cpusubtype !=
+					CPU_SUBTYPE_POWERPC_970)
+				    as_fatal("can't specify more "
+				       "than one -arch flag ");
+				specific_archflag = *work_argv;
+				archflag_cpusubtype =
+				    CPU_SUBTYPE_POWERPC_970;
+			    }
+			    else
+#endif
+#if defined(PPC) && defined(ARCH64)
 			    if(strcmp(*work_argv, "ppc64") != 0)
 			      as_fatal("I expected 'ppc64' after "
 				       "-arch for this assembler.");
@@ -578,6 +593,16 @@ char **envp)
 				archflag_cpusubtype =
 				    CPU_SUBTYPE_PENTII_M5;
 			    }
+			    else if(strcmp(*work_argv, "pentium4") ==0){
+				if(archflag_cpusubtype != -1 &&
+				   archflag_cpusubtype !=
+					CPU_SUBTYPE_PENTIUM_4)
+				    as_fatal("can't specify more "
+				       "than one -arch flag ");
+				specific_archflag = *work_argv;
+				archflag_cpusubtype =
+				    CPU_SUBTYPE_PENTIUM_4;
+			    }
 			    else if(strcmp(*work_argv, "i386") != 0)
 				as_fatal("I expected 'i386', 'i486', 'i486SX', "
 				   "'i586', 'pentium', 'i686', 'pentpro', "
@@ -629,6 +654,8 @@ unknown_flag:
 	 * specific architecture then let the machine instructions in the
 	 * assembly determine the cpusubtype of the output file.
 	 */
+	if(force_cpusubtype_ALL_for_cputype(md_cputype) == TRUE)
+	    force_cpusubtype_ALL = TRUE;
 	if(force_cpusubtype_ALL && specific_archflag)
 	    archflag_cpusubtype = -1;
 

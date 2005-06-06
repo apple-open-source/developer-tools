@@ -96,20 +96,19 @@ template<typename Container>
 
     time_counter time;
     resource_counter resource;
-    clear_counters(time, resource);
-    start_counters(time, resource);
-
-    do_loop<Container>();
-    do_loop<Container>();
-
-    stop_counters(time, resource);
- 
-    std::ostringstream comment;
-    comment << "repeated iterations: " << iterations*2 << '\t';
-    comment << "type: " << abi::__cxa_demangle(typeid(obj).name(),
-					       0, 0, &status);
-    report_header(__FILE__, comment.str());
-    report_performance(__FILE__, string(), time, resource);
+    {
+      start_counters(time, resource);
+      do_loop<Container>();
+      do_loop<Container>();
+      stop_counters(time, resource);
+      
+      std::ostringstream comment;
+      comment << "repeated iterations: " << iterations*2 << '\t';
+      comment << "type: " << abi::__cxa_demangle(typeid(obj).name(),
+						 0, 0, &status);
+      report_header(__FILE__, comment.str());
+      report_performance(__FILE__, string(), time, resource);
+    }
   }
 
 // http://gcc.gnu.org/ml/libstdc++/2001-05/msg00105.html
@@ -171,20 +170,32 @@ int main(void)
 #endif
 
   typedef less<test_type> compare_type;
+  typedef pair<const test_type, test_type> pair_type;
+  typedef __gnu_cxx::malloc_allocator<pair_type> m_pair_alloc_type;
+  typedef __gnu_cxx::new_allocator<pair_type> n_pair_alloc_type;
+  typedef __gnu_cxx::__mt_alloc<pair_type> so_pair_alloc_type;
+  typedef __gnu_cxx::bitmap_allocator<pair_type> bit_pair_alloc_type;
+  typedef __gnu_cxx::__pool_alloc<pair_type> po_pair_alloc_type;
+
 #ifdef TEST_S15
-  test_container(map<test_type, test_type, compare_type, m_alloc_type>());
+  test_container(map<test_type, test_type, compare_type,
+		 m_pair_alloc_type>());
 #endif
 #ifdef TEST_S16
-  test_container(map<test_type, test_type, compare_type, n_alloc_type>());
+  test_container(map<test_type, test_type, compare_type,
+		 n_pair_alloc_type>());
 #endif
 #ifdef TEST_S17
-  test_container(map<test_type, test_type, compare_type, so_alloc_type>());
+  test_container(map<test_type, test_type, compare_type,
+		 so_pair_alloc_type>());
 #endif
 #ifdef TEST_S18
-  test_container(map<test_type, test_type, compare_type, bit_alloc_type>());
+  test_container(map<test_type, test_type, compare_type,
+		 bit_pair_alloc_type>());
 #endif
 #ifdef TEST_S19
-  test_container(map<test_type, test_type, compare_type, po_alloc_type>());
+  test_container(map<test_type, test_type, compare_type,
+		 po_pair_alloc_type>());
 #endif
 
 #ifdef TEST_S20

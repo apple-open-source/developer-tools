@@ -89,6 +89,18 @@ public class GtkImage extends Image implements ImageConsumer
     this.observer = observer;
   }
 
+  public synchronized int[]
+  getPixelCache ()
+  {
+    return pixelCache;
+  }
+
+  public synchronized ColorModel
+  getColorModel ()
+  {
+    return model;
+  }
+
   public synchronized int 
   getWidth (ImageObserver observer)
   {
@@ -202,7 +214,7 @@ public class GtkImage extends Image implements ImageConsumer
   public synchronized void 
   setColorModel (ColorModel model)
   {
-    if (this.model == null || this.model == model)
+    if (this.model == null || this.model.equals(model))
       this.model = model;
     else
       isCacheable = false;
@@ -218,7 +230,7 @@ public class GtkImage extends Image implements ImageConsumer
 	     int offset, int scansize)
   {
     setPixels (x, y, width, height, cm, convertPixels (pixels), offset,
-	       scansize);
+               scansize);
 
     if (observer != null)
       observer.imageUpdate (this,
@@ -235,15 +247,16 @@ public class GtkImage extends Image implements ImageConsumer
     if (!isCacheable)
       return;
 
-    if (cm != model || pixelCache == null)
+    if (!cm.equals(model) || pixelCache == null)
       {
 	isCacheable = false;
 	return;
       }
 
-    if (scansize == width)
+    if (scansize == width && height == 1)
       {
-	System.arraycopy (pixels, offset, 
+        // Copy contents of pixels array into pixel cache.
+	System.arraycopy (pixels, offset,
 			  pixelCache, y * this.width + x,
 			  pixels.length - offset);
       }
@@ -262,7 +275,7 @@ public class GtkImage extends Image implements ImageConsumer
     if (status == ImageConsumer.STATICIMAGEDONE && isCacheable)
       isLoaded = true;
 
-    if (status == ImageConsumer.SINGLEFRAMEDONE)
+    if (status == ImageConsumer.SINGLEFRAME)
       isCacheable = false;
 
     if (observer != null)
@@ -277,7 +290,7 @@ public class GtkImage extends Image implements ImageConsumer
 				-1, -1, -1, -1);
       }
 
-    if (source != null)
+    if (source != null && status != ImageConsumer.SINGLEFRAME)
       source.removeConsumer (this);
   }
 

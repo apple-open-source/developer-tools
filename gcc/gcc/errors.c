@@ -1,5 +1,5 @@
 /* Basic error reporting routines.
-   Copyright (C) 1999, 2000, 2001, 2003
+   Copyright (C) 1999, 2000, 2001, 2003, 2004
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -20,10 +20,14 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA.  */
 
 /* warning, error, and fatal.  These definitions are suitable for use
-   in the generator programs; eventually we would like to use them in
-   cc1 too, but that's a longer term project.  */
+   in the generator programs; the compiler has a more elaborate suite
+   of diagnostic printers, found in diagnostic.c.  */
 
+#ifdef GENERATOR_FILE
+#include "bconfig.h"
+#else
 #include "config.h"
+#endif
 #include "system.h"
 #include "errors.h"
 
@@ -126,5 +130,5 @@ trim_filename (const char *name)
 void
 fancy_abort (const char *file, int line, const char *func)
 {
-  internal_error ("abort in %s, at %s:%d", func, file, line);
+  internal_error ("abort in %s, at %s:%d", func, trim_filename (file), line);
 }

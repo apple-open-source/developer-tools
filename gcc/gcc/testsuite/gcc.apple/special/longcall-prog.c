@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include <stdio.h>
 
 /* declare all externally visible functions in libweak.c */

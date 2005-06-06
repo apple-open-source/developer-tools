@@ -68,7 +68,25 @@ gdb_test "info pid" "The program being debugged is not being run." "info pid err
 send_gdb "set interpreter mi1\n"
 mi_gdb_test "37-pid-info" "37\\^error,msg=\"The program being debugged is not being run.\"" "-pid-info errors when not running"
 
-mi_gdb_test "38-gdb-set interpreter console-quoted" ".*Switching to interpreter .\"console-quoted.\".*38\\^done" "switch to console-quoted 1"
+# FIXME: There's a race condition in info-pid.exp, on the "switch to
+# console quoted" test.  Since it uses mi_gdb_test, and the switch to
+# console stuff ends up printing two GDB prompts, if only half of the
+# response comes through in a given read(), it will match one of the
+# mi_gdb_test failure cases instead of waiting for the rest of the
+# data to come through.  At some point, we should clean up the
+# prompt-printing part of the interpreter switching code.  In the
+# meantime, we can use a specific test instead of mi_gdb_test.
+
+# mi_gdb_test "38-gdb-set interpreter console-quoted" ".*Switching to interpreter .\"console-quoted.\".*38\\^done" "switch to console-quoted 1"
+
+send_gdb "38-gdb-set interpreter console-quoted\n"
+gdb_expect {
+  -re ".*Switching to interpreter .\"console-quoted.\".*38\\^done.*$gdb_prompt\[\r\n	]*"
+     { pass "switch to console-quoted 1" }
+  timeout 
+     { fail "switch to console-quoted 1 (timeout)" }
+}
+
 gdb_test "info pid" "\\&\"The program being debugged is not being run..n\"" "info pid in console-quoted errors when not running"
 
 gdb_test "set interpreter console" "Switching to interpreter \"console\"\..*" "switch back to console 1"

@@ -1,5 +1,5 @@
 /* BorderUIResource.java
-   Copyright (C) 2002, 2003 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -38,14 +38,22 @@ exception statement from your version. */
 
 package javax.swing.plaf;
 
-import javax.swing.border.*;
-import javax.swing.Icon;
-import java.io.Serializable;
+import java.awt.Color;
 import java.awt.Component;
+import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Insets;
-import java.awt.Font;
-import java.awt.Color;
+import java.io.Serializable;
+
+import javax.swing.Icon;
+import javax.swing.border.BevelBorder;
+import javax.swing.border.Border;
+import javax.swing.border.CompoundBorder;
+import javax.swing.border.EmptyBorder;
+import javax.swing.border.EtchedBorder;
+import javax.swing.border.LineBorder;
+import javax.swing.border.MatteBorder;
+import javax.swing.border.TitledBorder;
 
 /**
  * A wrapper for {@link javax.swing.border.Border} that also
@@ -270,6 +278,8 @@ public class BorderUIResource
     extends BevelBorder
     implements UIResource, Serializable
   {
+    private static final long serialVersionUID = -1275542891108351642L;
+    
     /**
      * Constructs a BevelBorderUIResource whose colors will be derived
      * from the background of the enclosed component. The background
@@ -399,6 +409,8 @@ public class BorderUIResource
     extends CompoundBorder
     implements UIResource, Serializable
   {
+    private static final long serialVersionUID = 7550017084975167341L;
+    
     /**
      * Constructs a CompoundBorderUIResource with the specified inside
      * and outside borders.
@@ -441,6 +453,8 @@ public class BorderUIResource
     extends EmptyBorder
     implements UIResource, Serializable
   {
+    private static final long serialVersionUID = -4914187529340071708L;
+    
     /**
      * Constructs an empty border given the number of pixels required
      * on each side.
@@ -496,6 +510,8 @@ public class BorderUIResource
     extends EtchedBorder
     implements UIResource, Serializable
   {
+    private static final long serialVersionUID = -8186391754165296656L;
+    
     /**
      * Constructs an EtchedBorderUIResource that appears lowered into
      * the surface. The colors will be derived from the background
@@ -597,6 +613,8 @@ public class BorderUIResource
     extends LineBorder
     implements UIResource, Serializable
   {
+    private static final long serialVersionUID = -6171232338180172310L;
+    
     /**
      * Constructs a LineBorderUIResource given its color.  The border
      * will be one pixel thick and have plain corners.
@@ -652,6 +670,8 @@ public class BorderUIResource
     extends MatteBorder
     implements UIResource, Serializable
   {
+    private static final long serialVersionUID = -8107923147541851122L;
+    
     /**
      * Constructs a MatteBorderUIResource given the width on each side
      * and a fill color.
@@ -731,6 +751,8 @@ public class BorderUIResource
     extends TitledBorder
     implements UIResource, Serializable
   {
+    private static final long serialVersionUID = 7667113547406407427L;
+    
     /**
      * Constructs a TitledBorderUIResource given the text of its title.
      *

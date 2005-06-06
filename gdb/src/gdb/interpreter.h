@@ -22,6 +22,8 @@
 #ifndef GDB_INTERPRETER_H
 #define GDB_INTERPRETER_H
 
+#error removed
+
 typedef int (*interp_init_ftype) (void *data);
 typedef int (*interp_resume_ftype) (void *data);
 typedef int (*interp_do_one_event_ftype) (void *data);

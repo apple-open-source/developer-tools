@@ -23,6 +23,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #define GCC_REGS_H
 
 #include "varray.h"
+#include "obstack.h"
 #include "hard-reg-set.h"
 #include "basic-block.h"
 
@@ -50,7 +51,6 @@ typedef struct reg_info_def
 {				/* fields set by reg_scan */
   int first_uid;		/* UID of first insn to use (REG n) */
   int last_uid;			/* UID of last insn to use (REG n) */
-  int last_note_uid;		/* UID of last note to use (REG n) */
 
 				/* fields set by reg_scan & flow_analysis */
   int sets;			/* # of times (REG n) is set */
@@ -62,13 +62,9 @@ typedef struct reg_info_def
   int live_length;		/* # of instructions (REG n) is live */
   int calls_crossed;		/* # of calls (REG n) is live across */
   int basic_block;		/* # of basic blocks (REG n) is used in */
-  char changes_mode;		/* whether (SUBREG (REG n)) exists and
-				   is illegal.  */
 } reg_info;
 
 extern varray_type reg_n_info;
-
-extern bitmap_head subregs_of_mode;
 
 /* Indexed by n, gives number of times (REG n) is used or set.  */
 
@@ -163,6 +159,10 @@ extern char regs_ever_live[FIRST_PSEUDO_REGISTER];
 
 extern char regs_asm_clobbered[FIRST_PSEUDO_REGISTER];
 
+/* Vector indexed by machine mode saying whether there are regs of that mode.  */
+
+extern bool have_regs_of_mode [MAX_MACHINE_MODE];
+
 /* For each hard register, the widest mode object that it can contain.
    This will be a MODE_INT mode if the register can hold integers.  Otherwise
    it will be a MODE_FLOAT or a MODE_CC mode, whichever is valid for the
@@ -184,10 +184,6 @@ extern enum machine_mode reg_raw_mode[FIRST_PSEUDO_REGISTER];
    This is harmless since cse won't scan through a loop end.  */
 
 #define REGNO_LAST_UID(N) (VARRAY_REG (reg_n_info, N)->last_uid)
-
-/* Similar, but includes insns that mention the reg in their notes.  */
-
-#define REGNO_LAST_NOTE_UID(N) (VARRAY_REG (reg_n_info, N)->last_note_uid)
 
 /* List made of EXPR_LIST rtx's which gives pairs of pseudo registers
    that have to go in the same hard reg.  */

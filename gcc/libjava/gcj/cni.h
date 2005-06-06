@@ -17,16 +17,23 @@ details.  */
 #include <java/lang/Class.h>
 
 #include <gcj/array.h>
+#include <gcj/javaprims.h>
 
 #include <string.h>
 
-extern "C" jstring _Jv_NewStringUTF (const char *bytes);
 extern "C" void _Jv_InitClass (jclass);
+extern "C" void *_Jv_AllocBytes (jsize size) __attribute__((__malloc__));
 
 extern inline void
 JvInitClass (jclass cls)
 {
   return _Jv_InitClass (cls);
+}
+
+extern inline void *
+JvAllocBytes (jsize sz)
+{
+  return _Jv_AllocBytes (sz);
 }
 
 extern inline jstring
@@ -101,14 +108,23 @@ JvMalloc (jsize size)
   return _Jv_Malloc (size);
 }
 
+extern inline void *
+JvRealloc (void *ptr, jsize size)
+{
+  return _Jv_Realloc (ptr, size);
+}
+
 extern inline void
 JvFree (void *ptr)
 {
   return _Jv_Free (ptr);
 }
 
+typedef struct _Jv_VMOption JvVMOption;
+typedef struct _Jv_VMInitArgs JvVMInitArgs;
+
 extern inline jint
-JvCreateJavaVM (void* vm_args)
+JvCreateJavaVM (JvVMInitArgs* vm_args)
 {
   return _Jv_CreateJavaVM (vm_args);
 }

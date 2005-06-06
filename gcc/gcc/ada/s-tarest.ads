@@ -75,9 +75,12 @@ package System.Tasking.Restricted.Stages is
    --   task type t (discr : integer);
    --   tE : aliased boolean := false;
    --   tZ : size_type := unspecified_size;
+
    --   type tV (discr : integer) is limited record
    --      _task_id : task_id;
+   --      _atcb : aliased system__tasking__ada_task_control_block (0);
    --   end record;
+
    --   procedure tB (_task : access tV);
    --   freeze tV [
    --      procedure tVIP (_init : in out tV; _master : master_id;
@@ -86,26 +89,28 @@ package System.Tasking.Restricted.Stages is
    --      begin
    --         _init.discr := discr;
    --         _init._task_id := null;
+   --         system__tasking__ada_task_control_blockIP (_init._atcb, 0);
+   --         _init._task_id := _init._atcb'unchecked_access;
    --         create_restricted_task (unspecified_priority, tZ,
    --           unspecified_task_info, task_procedure_access!(tB'address),
    --           _init'address, tE'unchecked_access, _chain, _task_name, _init.
    --           _task_id);
    --         return;
    --      end tVIP;
-   --   ]
 
    --   _chain : aliased activation_chain;
    --   activation_chainIP (_chain);
 
    --   procedure tB (_task : access tV) is
    --      discr : integer renames _task.discr;
-   --
+
    --      procedure _clean is
    --      begin
    --         complete_restricted_task;
    --         finalize_list (F14b);
    --         return;
    --      end _clean;
+
    --   begin
    --      ...declarations...
    --      complete_restricted_activation;
@@ -124,6 +129,7 @@ package System.Tasking.Restricted.Stages is
 
    procedure Create_Restricted_Task
      (Priority      : Integer;
+      Stack_Address : System.Address;
       Size          : System.Parameters.Size_Type;
       Task_Info     : System.Task_Info.Task_Info_Type;
       State         : Task_Procedure_Access;
@@ -131,31 +137,44 @@ package System.Tasking.Restricted.Stages is
       Elaborated    : Access_Boolean;
       Chain         : in out Activation_Chain;
       Task_Image    : String;
-      Created_Task  : out Task_Id);
+      Created_Task  : Task_Id);
    --  Compiler interface only. Do not call from within the RTS.
    --  This must be called to create a new task.
    --
    --  Priority is the task's priority (assumed to be in the
-   --   System.Any_Priority'Range)
+   --  System.Any_Priority'Range)
+   --
+   --  Stack_Address is the start address of the stack associated to the
+   --  task, in case it has been preallocated by the compiler; it is equal
+   --  to Null_Address when the stack needs to be allocated by the
+   --  underlying operating system.
+   --
    --  Size is the stack size of the task to create
+   --
    --  Task_Info is the task info associated with the created task, or
-   --   Unspecified_Task_Info if none.
+   --  Unspecified_Task_Info if none.
+   --
    --  State is the compiler generated task's procedure body
+   --
    --  Discriminants is a pointer to a limited record whose discriminants
-   --   are those of the task to create. This parameter should be passed as
-   --   the single argument to State.
+   --  are those of the task to create. This parameter should be passed as
+   --  the single argument to State.
+   --
    --  Elaborated is a pointer to a Boolean that must be set to true on exit
-   --   if the task could be sucessfully elaborated.
+   --  if the task could be sucessfully elaborated.
+   --
    --  Chain is a linked list of task that needs to be created. On exit,
-   --   Created_Task.Activation_Link will be Chain.T_ID, and Chain.T_ID
-   --   will be Created_Task (e.g the created task will be linked at the front
-   --   of Chain).
+   --  Created_Task.Activation_Link will be Chain.T_ID, and Chain.T_ID
+   --  will be Created_Task (e.g the created task will be linked at the front
+   --  of Chain).
+   --
    --  Task_Image is a string created by the compiler that the
-   --   run time can store to ease the debugging and the
-   --   Ada.Task_Identification facility.
+   --  run time can store to ease the debugging and the
+   --  Ada.Task_Identification facility.
+   --
    --  Created_Task is the resulting task.
    --
-   --  This procedure can raise Storage_Error if the task creation failed.
+   --  This procedure can raise Storage_Error if the task creation fails
 
    procedure Activate_Restricted_Tasks
      (Chain_Access : Activation_Chain_Access);

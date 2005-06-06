@@ -35,6 +35,7 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package java.util;
 
 import java.io.IOException;
@@ -74,7 +75,7 @@ import java.io.Serializable;
  * @see java.text.Collator
  * @author Jochen Hoenicke
  * @author Paul Fisher
- * @author Eric Blake <ebb9@email.byu.edu>
+ * @author Eric Blake (ebb9@email.byu.edu)
  * @since 1.1
  * @status updated to 1.4
  */
@@ -186,7 +187,7 @@ public final class Locale implements Serializable, Cloneable
    *
    * @serial should be -1 in serial streams
    */
-  private int hashcode;
+  private transient int hashcode;
 
   /**
    * The default locale. Except for during bootstrapping, this should never be
@@ -233,7 +234,7 @@ public final class Locale implements Serializable, Cloneable
       {
         language = convertLanguage(language).intern();
         country = country.toUpperCase().intern();
-        variant = variant.toUpperCase().intern();
+        variant = variant.intern();
       }
     this.language = language;
     this.country = country;
@@ -321,7 +322,7 @@ public final class Locale implements Serializable, Cloneable
    * Returns a list of all 2-letter uppercase country codes as defined
    * in ISO 3166.
    *
-   * @return a list of acceptible country codes
+   * @return a list of acceptable country codes
    */
   public static String[] getISOCountries()
   {
@@ -416,7 +417,7 @@ public final class Locale implements Serializable, Cloneable
    * @return the string representation of this Locale
    * @see #getDisplayName()
    */
-  public final String toString()
+  public String toString()
   {
     if (language.length() == 0 && country.length() == 0)
       return "";
@@ -522,7 +523,7 @@ public final class Locale implements Serializable, Cloneable
    * @return the language name of this locale localized to the default locale,
    *         with the ISO code as backup
    */
-  public final String getDisplayLanguage()
+  public String getDisplayLanguage()
   {
     return getDisplayLanguage(defaultLocale);
   }
@@ -560,7 +561,7 @@ public final class Locale implements Serializable, Cloneable
    * @return the country name of this locale localized to the given locale,
    *         with the ISO code as backup
    */
-  public final String getDisplayCountry()
+  public String getDisplayCountry()
   {
     return getDisplayCountry(defaultLocale);
   }
@@ -598,7 +599,7 @@ public final class Locale implements Serializable, Cloneable
    * @return the variant code of this locale localized to the given locale,
    *         with the ISO code as backup
    */
-  public final String getDisplayVariant()
+  public String getDisplayVariant()
   {
     return getDisplayVariant(defaultLocale);
   }
@@ -637,7 +638,7 @@ public final class Locale implements Serializable, Cloneable
    *
    * @return String version of this locale, suitable for display to the user
    */
-  public final String getDisplayName()
+  public String getDisplayName()
   {
     return getDisplayName(defaultLocale);
   }
@@ -709,10 +710,8 @@ public final class Locale implements Serializable, Cloneable
    *
    * @return the hashcode
    */
-  public synchronized int hashCode()
+  public int hashCode()
   {
-    // This method is synchronized because writeObject() might reset
-    // the hashcode.
     return hashcode;
   }
 
@@ -731,10 +730,6 @@ public final class Locale implements Serializable, Cloneable
       return false;
     Locale l = (Locale) obj;
 
-    // ??? We might also want to add:
-    //        hashCode() == l.hashCode()
-    // But this is a synchronized method.  Is the overhead worth it?
-    // Measure this to make a decision.
     return (language == l.language
             && country == l.country
             && variant == l.variant);
@@ -745,17 +740,19 @@ public final class Locale implements Serializable, Cloneable
    *
    * @param output the stream to write to
    * @throws IOException if the write fails
-   * @serialData the hashcode should always be written as -1, and recomputed
-   *      when reading it back
+   * @serialData The first three fields are Strings representing language,
+   *             country, and variant. The fourth field is a placeholder for 
+   *             the cached hashcode, but this is always written as -1, and 
+   *             recomputed when reading it back.
    */
-  private synchronized void writeObject(ObjectOutputStream output)
+  private void writeObject(ObjectOutputStream s)
     throws IOException
   {
-    // Synchronized so that hashCode() doesn't get wrong value.
-    int tmpHashcode = hashcode;
-    hashcode = -1;
-    output.defaultWriteObject();
-    hashcode = tmpHashcode;
+    s.writeObject(language);
+    s.writeObject(country);
+    s.writeObject(variant);
+    // Hashcode field is always written as -1.
+    s.writeInt(-1);
   }
 
   /**
@@ -766,10 +763,13 @@ public final class Locale implements Serializable, Cloneable
    * @throws ClassNotFoundException if reading fails
    * @serialData the hashCode is always invalid and must be recomputed
    */
-  private void readObject(ObjectInputStream input)
+  private void readObject(ObjectInputStream s)
     throws IOException, ClassNotFoundException
   {
-    input.defaultReadObject();
+    language = ((String) s.readObject()).intern();
+    country = ((String) s.readObject()).intern();
+    variant = ((String) s.readObject()).intern();
+    // Recompute hashcode.
     hashcode = language.hashCode() ^ country.hashCode() ^ variant.hashCode();
   }
 } // class Locale

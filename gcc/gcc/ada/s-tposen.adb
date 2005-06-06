@@ -67,7 +67,8 @@ with System.Task_Primitives.Operations;
 --           Unlock
 
 with Ada.Exceptions;
---  used for Exception_Id;
+--  used for Exception_Id
+--           Raise_Exception
 
 with System.Parameters;
 --  used for Single_Lock
@@ -347,7 +348,23 @@ package body System.Tasking.Protected_Objects.Single_Entry is
 
    procedure Lock_Entry (Object : Protection_Entry_Access) is
       Ceiling_Violation : Boolean;
+
    begin
+      --  If pragma Detect_Blocking is active then the protected object
+      --  nesting level must be increased.
+
+      if Detect_Blocking then
+         declare
+            Self_Id : constant Task_Id := STPO.Self;
+         begin
+            --  We are entering in a protected action, so that we
+            --  increase the protected object nesting level.
+
+            Self_Id.Common.Protected_Action_Nesting :=
+              Self_Id.Common.Protected_Action_Nesting + 1;
+         end;
+      end if;
+
       STPO.Write_Lock (Object.L'Access, Ceiling_Violation);
 
       if Ceiling_Violation then
@@ -364,7 +381,23 @@ package body System.Tasking.Protected_Objects.Single_Entry is
 
    procedure Lock_Read_Only_Entry (Object : Protection_Entry_Access) is
       Ceiling_Violation : Boolean;
+
    begin
+      --  If pragma Detect_Blocking is active then the protected object
+      --  nesting level must be increased.
+
+      if Detect_Blocking then
+         declare
+            Self_Id : constant Task_Id := STPO.Self;
+         begin
+            --  We are entering in a protected action, so that we
+            --  increase the protected object nesting level.
+
+            Self_Id.Common.Protected_Action_Nesting :=
+              Self_Id.Common.Protected_Action_Nesting + 1;
+         end;
+      end if;
+
       STPO.Read_Lock (Object.L'Access, Ceiling_Violation);
 
       if Ceiling_Violation then
@@ -465,6 +498,17 @@ package body System.Tasking.Protected_Objects.Single_Entry is
       Ceiling_Violation : Boolean;
 
    begin
+      --  If pragma Detect_Blocking is active then Program_Error must be
+      --  raised if this potentially blocking operation is called from a
+      --  protected action.
+
+      if Detect_Blocking
+        and then Self_Id.Common.Protected_Action_Nesting > 0
+      then
+         Ada.Exceptions.Raise_Exception
+           (Program_Error'Identity, "potentially blocking operation");
+      end if;
+
       STPO.Write_Lock (Object.L'Access, Ceiling_Violation);
 
       if Ceiling_Violation then
@@ -516,43 +560,48 @@ package body System.Tasking.Protected_Objects.Single_Entry is
    -------------------
 
    procedure Service_Entry (Object : Protection_Entry_Access) is
-      Self_Id       : constant Task_Id := STPO.Self;
-      Entry_Call    : constant Entry_Call_Link := Object.Entry_Queue;
-      Caller        : Task_Id;
+      Self_Id    : constant Task_Id := STPO.Self;
+      Entry_Call : constant Entry_Call_Link := Object.Entry_Queue;
+      Caller     : Task_Id;
 
    begin
-      if Entry_Call /= null then
-         if Object.Entry_Body.Barrier (Object.Compiler_Info, 1) then
-            Object.Entry_Queue := null;
+      if Entry_Call /= null
+        and then Object.Entry_Body.Barrier (Object.Compiler_Info, 1)
+      then
+         Object.Entry_Queue := null;
 
-            if Object.Call_In_Progress /= null then
-               --  This violates the No_Entry_Queue restriction, send
-               --  Program_Error to the caller.
+         if Object.Call_In_Progress /= null then
 
-               Send_Program_Error (Self_Id, Entry_Call);
-               Unlock_Entry (Object);
-               return;
-            end if;
+            --  Violation of No_Entry_Queue restriction, raise exception
 
-            Object.Call_In_Progress := Entry_Call;
-            Object.Entry_Body.Action
-              (Object.Compiler_Info, Entry_Call.Uninterpreted_Data, 1);
-            Object.Call_In_Progress := null;
-            Caller := Entry_Call.Self;
+            Send_Program_Error (Self_Id, Entry_Call);
             Unlock_Entry (Object);
-
-            if Single_Lock then
-               STPO.Lock_RTS;
-            end if;
-
-            STPO.Write_Lock (Caller);
-            Wakeup_Entry_Caller (Self_Id, Entry_Call, Done);
-            STPO.Unlock (Caller);
-
-            if Single_Lock then
-               STPO.Unlock_RTS;
-            end if;
+            return;
          end if;
+
+         Object.Call_In_Progress := Entry_Call;
+         Object.Entry_Body.Action
+           (Object.Compiler_Info, Entry_Call.Uninterpreted_Data, 1);
+         Object.Call_In_Progress := null;
+         Caller := Entry_Call.Self;
+         Unlock_Entry (Object);
+
+         if Single_Lock then
+            STPO.Lock_RTS;
+         end if;
+
+         STPO.Write_Lock (Caller);
+         Wakeup_Entry_Caller (Self_Id, Entry_Call, Done);
+         STPO.Unlock (Caller);
+
+         if Single_Lock then
+            STPO.Unlock_RTS;
+         end if;
+
+      else
+         --  Just unlock the entry
+
+         Unlock_Entry (Object);
       end if;
 
    exception
@@ -579,6 +628,17 @@ package body System.Tasking.Protected_Objects.Single_Entry is
       Ceiling_Violation : Boolean;
 
    begin
+      --  If pragma Detect_Blocking is active then Program_Error must be
+      --  raised if this potentially blocking operation is called from a
+      --  protected action.
+
+      if Detect_Blocking
+        and then Self_Id.Common.Protected_Action_Nesting > 0
+      then
+         Ada.Exceptions.Raise_Exception
+           (Program_Error'Identity, "potentially blocking operation");
+      end if;
+
       STPO.Write_Lock (Object.L'Access, Ceiling_Violation);
 
       if Ceiling_Violation then
@@ -631,6 +691,23 @@ package body System.Tasking.Protected_Objects.Single_Entry is
 
    procedure Unlock_Entry (Object : Protection_Entry_Access) is
    begin
+      --  We are exiting from a protected action, so that we decrease the
+      --  protected object nesting level (if pragma Detect_Blocking is active).
+
+      if Detect_Blocking then
+         declare
+            Self_Id : constant Task_Id := Self;
+
+         begin
+            --  Cannot call Unlock_Entry without being within protected action
+
+            pragma Assert (Self_Id.Common.Protected_Action_Nesting > 0);
+
+            Self_Id.Common.Protected_Action_Nesting :=
+              Self_Id.Common.Protected_Action_Nesting - 1;
+         end;
+      end if;
+
       STPO.Unlock (Object.L'Access);
    end Unlock_Entry;
 

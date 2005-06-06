@@ -1,5 +1,6 @@
+/* APPLE LOCAL file lno */
 /* { dg-do compile } */ 
-/* { dg-options "-O1 -fscalar-evolutions -fdump-tree-scev-stats" } */
+/* { dg-options "-O1 -floop-test -fdump-tree-lptest-details" } */
 
 
 int main(void)
@@ -24,6 +25,6 @@ int main(void)
    b  ->  {8, +, 6}_2
    a  ->  {{11, +, 8}_1, +, 1}_2
 */
-/* { dg-final { scan-tree-dump-times "nb_iterations 5" 1 "scev"} } */
-/* { dg-final { scan-tree-dump-times "nb_iterations 7" 1 "scev"} } */
+/* { dg-final { scan-tree-dump-times "set_nb_iterations_in_loop = 5" 1 "lptest"} } */
+/* { dg-final { scan-tree-dump-times "set_nb_iterations_in_loop = 7" 1 "lptest"} } */
 

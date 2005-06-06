@@ -49,7 +49,7 @@ import java.security.spec.AlgorithmParameterSpec;
  * cryptographic service provider who wishes to supply the implementation of a
  * particular signature algorithm.
  *
- * @author Mark Benvenuto <ivymccough@worldnet.att.net>
+ * @author Mark Benvenuto (ivymccough@worldnet.att.net)
  * @since 1.2
  * @see Signature
  */
@@ -165,7 +165,7 @@ public abstract class SignatureSpi
   protected int engineSign(byte[] outbuf, int offset, int len)
     throws SignatureException
   {
-    byte tmp[] = engineSign();
+    byte[] tmp = engineSign();
     if (tmp.length > len)
       throw new SignatureException("Invalid Length");
 
@@ -263,7 +263,7 @@ public abstract class SignatureSpi
    */
   protected AlgorithmParameters engineGetParameters()
   {
-    throw new UnsupportedOperationException();    
+    throw new UnsupportedOperationException();
   }
 
   /**
@@ -297,6 +297,6 @@ public abstract class SignatureSpi
    */
   public Object clone() throws CloneNotSupportedException
   {
-    throw new CloneNotSupportedException();
+    return super.clone();
   }
 }

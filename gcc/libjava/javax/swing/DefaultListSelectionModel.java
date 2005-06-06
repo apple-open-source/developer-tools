@@ -35,15 +35,16 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package javax.swing;
 
 import java.io.Serializable;
-import java.util.EventListener;
 import java.util.BitSet;
+import java.util.EventListener;
+
 import javax.swing.event.EventListenerList;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
-
 
 /**
  * <p>This class provides a default implementation of {@link
@@ -62,6 +63,7 @@ public class DefaultListSelectionModel implements Cloneable,
                                                   ListSelectionModel,
                                                   Serializable
 {
+  private static final long serialVersionUID = -5718799865110415860L;
 
   /** The list of ListSelectionListeners subscribed to this selection model. */
   protected EventListenerList listenerList = new EventListenerList();
@@ -116,7 +118,7 @@ public class DefaultListSelectionModel implements Cloneable,
    * @see #isLeadAnchorNotificationEnabled
    * @see #setLeadAnchorNotificationEnabled
    */
-  boolean leadAnchorNotificationEnabled = true;
+  protected boolean leadAnchorNotificationEnabled = true;
 
 
   /**
@@ -263,7 +265,7 @@ public class DefaultListSelectionModel implements Cloneable,
       { 
         end = i;
       }
-    fireSelectionValueChanged(beg, end, valueIsAdjusting);    
+    fireValueChanged(beg, end, valueIsAdjusting);    
   }
 
   /**
@@ -408,7 +410,7 @@ public class DefaultListSelectionModel implements Cloneable,
     int hi = Math.max(index0, index1);
 
     sel.set(lo, hi+1);
-    fireSelectionValueChanged(lo, hi, valueIsAdjusting);
+    fireValueChanged(lo, hi, valueIsAdjusting);
   }
 
 
@@ -428,7 +430,7 @@ public class DefaultListSelectionModel implements Cloneable,
     int lo = Math.min(index0, index1);
     int hi = Math.max(index0, index1);
     sel.clear(lo, hi+1); 
-    fireSelectionValueChanged(lo, hi, valueIsAdjusting);
+    fireValueChanged(lo, hi, valueIsAdjusting);
   }
 
   /**
@@ -438,7 +440,7 @@ public class DefaultListSelectionModel implements Cloneable,
   {
     int sz = sel.size();
     sel.clear();
-    fireSelectionValueChanged(0, sz, valueIsAdjusting);
+    fireValueChanged(0, sz, valueIsAdjusting);
   }
   
   /**
@@ -459,7 +461,7 @@ public class DefaultListSelectionModel implements Cloneable,
     int lo = Math.min(index0, index1);
     int hi = Math.max(index0, index1);
     sel.set(lo, hi+1);
-    fireSelectionValueChanged(lo, hi, valueIsAdjusting);
+    fireValueChanged(lo, hi, valueIsAdjusting);
   }
 
   /**
@@ -518,11 +520,23 @@ public class DefaultListSelectionModel implements Cloneable,
    *
    * @param firstIndex The low index of the changed range
    * @param lastIndex The high index of the changed range
+   */
+  protected void fireValueChanged(int firstIndex, int lastIndex)
+  {
+    fireValueChanged(firstIndex, lastIndex, getValueIsAdjusting());
+  }
+  
+  /**
+   * Fires a {@link ListSelectionEvent} to all the listeners of type {@link
+   * ListSelectionListener} registered with this selection model.
+   *
+   * @param firstIndex The low index of the changed range
+   * @param lastIndex The high index of the changed range
    * @param isAdjusting Whether this change is part of a seqence of adjustments
    * made to the selection, such as during interactive scrolling
    */
-  public void fireSelectionValueChanged(int firstIndex, int lastIndex,
-                                        boolean isAdjusting)
+  protected void fireValueChanged(int firstIndex, int lastIndex,
+				  boolean isAdjusting)
   {
     ListSelectionEvent evt = new ListSelectionEvent(this, firstIndex,
                                                     lastIndex, isAdjusting);
@@ -585,5 +599,22 @@ public class DefaultListSelectionModel implements Cloneable,
   public ListSelectionListener[] getListSelectionListeners()
   {
     return (ListSelectionListener[]) getListeners(ListSelectionListener.class);
+  }
+
+  /**
+   * Returns a clone of this object.
+   * <code>listenerList</code> don't gets duplicated.
+   *
+   * @return the cloned object
+   *
+   * @throws CloneNotSupportedException if an error occurs
+   */
+  public Object clone()
+    throws CloneNotSupportedException
+  {
+    DefaultListSelectionModel model =
+      (DefaultListSelectionModel) super.clone();
+    model.sel = (BitSet) sel.clone();
+    return model;
   }
 }

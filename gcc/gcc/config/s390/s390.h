@@ -1,5 +1,5 @@
 /* Definitions of target machine for GNU compiler, for IBM S/390
-   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004
+   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005
    Free Software Foundation, Inc.
    Contributed by Hartmut Penner (hpenner@de.ibm.com) and
                   Ulrich Weigand (uweigand@de.ibm.com).
@@ -60,6 +60,11 @@ extern enum processor_type s390_arch;
 extern enum processor_flags s390_arch_flags;
 extern const char *s390_arch_string;
 
+extern const char *s390_warn_framesize_string;
+extern const char *s390_warn_dynamicstack_string;
+extern const char *s390_stack_size_string;
+extern const char *s390_stack_guard_string;
+
 #define TARGET_CPU_IEEE_FLOAT \
 	(s390_arch_flags & PF_IEEE_FLOAT)
 #define TARGET_CPU_ZARCH \
@@ -72,6 +77,9 @@ extern const char *s390_arch_string;
 
 
 /* Run-time target specification.  */
+
+/* This will be overridden by OS headers.  */
+#define TARGET_TPF 0
 
 /* Target CPU builtins.  */
 #define TARGET_CPU_CPP_BUILTINS()			\
@@ -89,63 +97,79 @@ extern const char *s390_arch_string;
 extern int target_flags;
 
 #define MASK_HARD_FLOAT            0x01
-#define MASK_BACKCHAIN             0x02
 #define MASK_SMALL_EXEC            0x04
 #define MASK_DEBUG_ARG             0x08
 #define MASK_64BIT                 0x10
 #define MASK_ZARCH                 0x20
 #define MASK_MVCLE                 0x40
-#define MASK_TPF                   0x80
+#define MASK_TPF_PROFILING         0x80
 #define MASK_NO_FUSED_MADD         0x100
+#define MASK_BACKCHAIN             0x200
+#define MASK_PACKED_STACK          0x400
 
 #define TARGET_HARD_FLOAT          (target_flags & MASK_HARD_FLOAT)
 #define TARGET_SOFT_FLOAT          (!(target_flags & MASK_HARD_FLOAT))
-#define TARGET_BACKCHAIN           (target_flags & MASK_BACKCHAIN)
 #define TARGET_SMALL_EXEC          (target_flags & MASK_SMALL_EXEC)
 #define TARGET_DEBUG_ARG           (target_flags & MASK_DEBUG_ARG)
 #define TARGET_64BIT               (target_flags & MASK_64BIT)
 #define TARGET_ZARCH               (target_flags & MASK_ZARCH)
 #define TARGET_MVCLE               (target_flags & MASK_MVCLE)
-#define TARGET_TPF                 (target_flags & MASK_TPF)
+#define TARGET_TPF_PROFILING       (target_flags & MASK_TPF_PROFILING)
 #define TARGET_NO_FUSED_MADD       (target_flags & MASK_NO_FUSED_MADD)
 #define TARGET_FUSED_MADD	   (! TARGET_NO_FUSED_MADD)
+#define TARGET_BACKCHAIN           (target_flags & MASK_BACKCHAIN)
+#define TARGET_PACKED_STACK        (target_flags & MASK_PACKED_STACK)
 
 /* ??? Once this actually works, it could be made a runtime option.  */
 #define TARGET_IBM_FLOAT           0
 #define TARGET_IEEE_FLOAT          1
 
 #ifdef DEFAULT_TARGET_64BIT
-#define TARGET_DEFAULT             0x31
+#define TARGET_DEFAULT             (MASK_64BIT | MASK_ZARCH | MASK_HARD_FLOAT)
 #else
-#define TARGET_DEFAULT             0x1
+#define TARGET_DEFAULT             MASK_HARD_FLOAT
 #endif
 
-#define TARGET_SWITCHES                                                  \
-{ { "hard-float",      1, N_("Use hardware fp")},                        \
-  { "soft-float",     -1, N_("Don't use hardware fp")},                  \
-  { "backchain",       2, N_("Set backchain")},                          \
-  { "no-backchain",   -2, N_("Don't set backchain (faster, but debug harder")},\
-  { "small-exec",      4, N_("Use bras for executable < 64k")},          \
-  { "no-small-exec",  -4, N_("Don't use bras")},                         \
-  { "debug",           8, N_("Additional debug prints")},                \
-  { "no-debug",       -8, N_("Don't print additional debug prints")},    \
-  { "64",             16, N_("64 bit ABI")},                             \
-  { "31",            -16, N_("31 bit ABI")},                             \
-  { "zarch",          32, N_("z/Architecture")},                         \
-  { "esa",           -32, N_("ESA/390 architecture")},                   \
-  { "mvcle",          64, N_("mvcle use")},                              \
-  { "no-mvcle",      -64, N_("mvc&ex")},                                 \
-  { "tpf",           128, N_("enable tpf OS code")},                     \
-  { "no-tpf",       -128, N_("disable tpf OS code")},                    \
-  { "no-fused-madd", 256, N_("disable fused multiply/add instructions")},\
-  { "fused-madd",   -256, N_("enable fused multiply/add instructions")}, \
+#define TARGET_SWITCHES                                                      \
+{ { "hard-float",          1, N_("Use hardware fp")},                        \
+  { "soft-float",         -1, N_("Don't use hardware fp")},                  \
+  { "small-exec",          4, N_("Use bras for executable < 64k")},          \
+  { "no-small-exec",      -4, N_("Don't use bras")},                         \
+  { "debug",               8, N_("Additional debug prints")},                \
+  { "no-debug",           -8, N_("Don't print additional debug prints")},    \
+  { "64",                 16, N_("64 bit ABI")},                             \
+  { "31",                -16, N_("31 bit ABI")},                             \
+  { "zarch",              32, N_("z/Architecture")},                         \
+  { "esa",               -32, N_("ESA/390 architecture")},                   \
+  { "mvcle",              64, N_("mvcle use")},                              \
+  { "no-mvcle",          -64, N_("mvc&ex")},                                 \
+  { "tpf-trace",         128, N_("Enable tpf OS tracing code")},             \
+  { "no-tpf-trace",     -128, N_("Disable tpf OS tracing code")},            \
+  { "no-fused-madd",     256, N_("Disable fused multiply/add instructions")},\
+  { "fused-madd",       -256, N_("Enable fused multiply/add instructions")}, \
+  { "backchain",         512, N_("Maintain backchain pointer")},             \
+  { "no-backchain",     -512, N_("Don't maintain backchain pointer")},       \
+  { "packed-stack",     1024, N_("Use packed stack layout")},                \
+  { "no-packed-stack", -1024, N_("Don't use packed stack layout")},          \
   { "", TARGET_DEFAULT, 0 } }
 
-#define TARGET_OPTIONS                                          \
-{ { "tune=",            &s390_tune_string,                      \
-    N_("Schedule code for given CPU"), 0},                      \
-  { "arch=",            &s390_arch_string,                      \
-    N_("Generate code for given CPU"), 0},                      \
+#define TARGET_OPTIONS                                                         \
+{ { "tune=",            &s390_tune_string,                                     \
+    N_("Schedule code for given CPU"), 0},                                     \
+  { "arch=",            &s390_arch_string,                                     \
+    N_("Generate code for given CPU"), 0},                                     \
+  { "warn-framesize=",   &s390_warn_framesize_string,                          \
+    N_("Warn if a single function's framesize exceeds the given framesize"),   \
+       0},                                                                     \
+  { "warn-dynamicstack", &s390_warn_dynamicstack_string,                       \
+    N_("Warn if a function uses alloca or creates an array with dynamic size"),\
+       0},                                                                     \
+  { "stack-size=",       &s390_stack_size_string,                              \
+    N_("Emit extra code in the function prologue in order to trap if the stack"\
+       "size exceeds the given limit"), 0},                                    \
+  { "stack-guard=",      &s390_stack_guard_string,                             \
+    N_("Set the max. number of bytes which has to be left to stack size "      \
+       "before a trap instruction is triggered"), 0},                          \
 }
 
 /* Support for configure-time defaults.  */
@@ -278,31 +302,38 @@ if (INTEGRAL_MODE_P (MODE) &&	        	    	\
    GPR 14: Return address register
    GPR 15: Stack pointer
 
-   Registers 32-34 are 'fake' hard registers that do not
+   Registers 32-35 are 'fake' hard registers that do not
    correspond to actual hardware:
    Reg 32: Argument pointer
    Reg 33: Condition code
-   Reg 34: Frame pointer  */
+   Reg 34: Frame pointer  
+   Reg 35: Return address pointer
 
-#define FIRST_PSEUDO_REGISTER 35
+   Registers 36 and 37 are mapped to access registers 
+   0 and 1, used to implement thread-local storage.  */
+
+#define FIRST_PSEUDO_REGISTER 38
 
 /* Standard register usage.  */
 #define GENERAL_REGNO_P(N)	((int)(N) >= 0 && (N) < 16)
 #define ADDR_REGNO_P(N)		((N) >= 1 && (N) < 16)
 #define FP_REGNO_P(N)		((N) >= 16 && (N) < (TARGET_IEEE_FLOAT? 32 : 20))
 #define CC_REGNO_P(N)		((N) == 33)
-#define FRAME_REGNO_P(N)	((N) == 32 || (N) == 34)
+#define FRAME_REGNO_P(N)	((N) == 32 || (N) == 34 || (N) == 35)
+#define ACCESS_REGNO_P(N)	((N) == 36 || (N) == 37)
 
 #define GENERAL_REG_P(X)	(REG_P (X) && GENERAL_REGNO_P (REGNO (X)))
 #define ADDR_REG_P(X)		(REG_P (X) && ADDR_REGNO_P (REGNO (X)))
 #define FP_REG_P(X)		(REG_P (X) && FP_REGNO_P (REGNO (X)))
 #define CC_REG_P(X)		(REG_P (X) && CC_REGNO_P (REGNO (X)))
 #define FRAME_REG_P(X)		(REG_P (X) && FRAME_REGNO_P (REGNO (X)))
+#define ACCESS_REG_P(X)		(REG_P (X) && ACCESS_REGNO_P (REGNO (X)))
 
 #define SIBCALL_REGNUM 1
-#define BASE_REGISTER 13
+#define BASE_REGNUM 13
 #define RETURN_REGNUM 14
 #define CC_REGNUM 33
+#define TP_REGNUM 36
 
 /* Set up fixed registers and calling convention:
 
@@ -313,6 +344,7 @@ if (INTEGRAL_MODE_P (MODE) &&	        	    	\
    GPR 14 is always fixed on S/390 machines (as return address).
    GPR 15 is always fixed (as stack pointer).
    The 'fake' hard registers are call-clobbered and fixed.
+   The access registers are call-saved and fixed.
 
    On 31-bit, FPRs 18-19 are call-clobbered;
    on 64-bit, FPRs 24-31 are call-clobbered.
@@ -327,7 +359,8 @@ if (INTEGRAL_MODE_P (MODE) &&	        	    	\
   0, 0, 0, 0, 					\
   0, 0, 0, 0, 					\
   0, 0, 0, 0, 					\
-  1, 1, 1 }
+  1, 1, 1, 1,					\
+  1, 1 }
 
 #define CALL_USED_REGISTERS			\
 { 1, 1, 1, 1, 					\
@@ -338,7 +371,8 @@ if (INTEGRAL_MODE_P (MODE) &&	        	    	\
   1, 1, 1, 1, 					\
   1, 1, 1, 1, 					\
   1, 1, 1, 1, 					\
-  1, 1, 1 }
+  1, 1, 1, 1,					\
+  1, 1 }
 
 #define CALL_REALLY_USED_REGISTERS		\
 { 1, 1, 1, 1, 					\
@@ -349,7 +383,8 @@ if (INTEGRAL_MODE_P (MODE) &&	        	    	\
   1, 1, 1, 1, 					\
   1, 1, 1, 1, 					\
   1, 1, 1, 1, 					\
-  1, 1, 1 }
+  1, 1, 1, 1,					\
+  0, 0 }
 
 #define CONDITIONAL_REGISTER_USAGE s390_conditional_register_usage ()
 
@@ -358,7 +393,7 @@ if (INTEGRAL_MODE_P (MODE) &&	        	    	\
 {  1, 2, 3, 4, 5, 0, 13, 12, 11, 10, 9, 8, 7, 6, 14,            \
    16, 17, 18, 19, 20, 21, 22, 23,                              \
    24, 25, 26, 27, 28, 29, 30, 31,                              \
-   15, 32, 33, 34 }
+   15, 32, 33, 34, 35, 36, 37 }
 
 
 /* Fitting values into registers.  */
@@ -382,6 +417,8 @@ if (INTEGRAL_MODE_P (MODE) &&	        	    	\
     (GET_MODE_CLASS(MODE) == MODE_COMPLEX_FLOAT ? 2 : 1) :      \
    GENERAL_REGNO_P(REGNO)?                                      \
     ((GET_MODE_SIZE(MODE)+UNITS_PER_WORD-1) / UNITS_PER_WORD) : \
+   ACCESS_REGNO_P(REGNO)?					\
+    ((GET_MODE_SIZE(MODE)+4-1) / 4) : 				\
    1)
 
 #define HARD_REGNO_MODE_OK(REGNO, MODE)                             \
@@ -395,6 +432,9 @@ if (INTEGRAL_MODE_P (MODE) &&	        	    	\
      GET_MODE_CLASS (MODE) == MODE_CC :                             \
    FRAME_REGNO_P(REGNO)?                                            \
      (enum machine_mode) (MODE) == Pmode :                          \
+   ACCESS_REGNO_P(REGNO)?					    \
+     (((MODE) == SImode || ((enum machine_mode) (MODE) == Pmode))   \
+      && (HARD_REGNO_NREGS(REGNO, MODE) == 1 || !((REGNO) & 1))) :  \
    0)
 
 #define MODES_TIEABLE_P(MODE1, MODE2)		\
@@ -406,14 +446,19 @@ if (INTEGRAL_MODE_P (MODE) &&	        	    	\
 #define CLASS_MAX_NREGS(CLASS, MODE)   					\
      ((CLASS) == FP_REGS ? 						\
       (GET_MODE_CLASS (MODE) == MODE_COMPLEX_FLOAT ? 2 : 1) :  		\
+      (CLASS) == ACCESS_REGS ?						\
+      (GET_MODE_SIZE (MODE) + 4 - 1) / 4 :				\
       (GET_MODE_SIZE (MODE) + UNITS_PER_WORD - 1) / UNITS_PER_WORD)
 
 /* If a 4-byte value is loaded into a FPR, it is placed into the
    *upper* half of the register, not the lower.  Therefore, we
-   cannot use SUBREGs to switch between modes in FP registers.  */
+   cannot use SUBREGs to switch between modes in FP registers.
+   Likewise for access registers, since they have only half the
+   word size on 64-bit.  */
 #define CANNOT_CHANGE_MODE_CLASS(FROM, TO, CLASS)		\
   (GET_MODE_SIZE (FROM) != GET_MODE_SIZE (TO)			\
-   ? reg_classes_intersect_p (FP_REGS, CLASS) : 0)
+   ? reg_classes_intersect_p (FP_REGS, CLASS)			\
+     || reg_classes_intersect_p (ACCESS_REGS, CLASS) : 0)
 
 /* Register classes.  */
 
@@ -422,39 +467,48 @@ if (INTEGRAL_MODE_P (MODE) &&	        	    	\
    ADDR_REGS        All general purpose registers except %r0
                     (These registers can be used in address generation)
    FP_REGS          All floating point registers
+   CC_REGS          The condition code register
+   ACCESS_REGS      The access registers
 
    GENERAL_FP_REGS  Union of GENERAL_REGS and FP_REGS
    ADDR_FP_REGS     Union of ADDR_REGS and FP_REGS
+   GENERAL_CC_REGS  Union of GENERAL_REGS and CC_REGS
+   ADDR_CC_REGS     Union of ADDR_REGS and CC_REGS
 
    NO_REGS          No registers
    ALL_REGS         All registers
 
    Note that the 'fake' frame pointer and argument pointer registers
-   are included amongst the address registers here.  The condition
-   code register is only included in ALL_REGS.  */
+   are included amongst the address registers here.  */
 
 enum reg_class
 {
-  NO_REGS, ADDR_REGS, GENERAL_REGS,
+  NO_REGS, CC_REGS, ADDR_REGS, GENERAL_REGS, ACCESS_REGS,
+  ADDR_CC_REGS, GENERAL_CC_REGS, 
   FP_REGS, ADDR_FP_REGS, GENERAL_FP_REGS,
   ALL_REGS, LIM_REG_CLASSES
 };
 #define N_REG_CLASSES (int) LIM_REG_CLASSES
 
-#define REG_CLASS_NAMES                                                 \
-{ "NO_REGS", "ADDR_REGS", "GENERAL_REGS", 				\
+#define REG_CLASS_NAMES							\
+{ "NO_REGS", "CC_REGS", "ADDR_REGS", "GENERAL_REGS", "ACCESS_REGS",	\
+  "ADDR_CC_REGS", "GENERAL_CC_REGS",					\
   "FP_REGS", "ADDR_FP_REGS", "GENERAL_FP_REGS", "ALL_REGS" }
 
 /* Class -> register mapping.  */
 #define REG_CLASS_CONTENTS \
 {				       			\
   { 0x00000000, 0x00000000 },	/* NO_REGS */		\
-  { 0x0000fffe, 0x00000005 },	/* ADDR_REGS */		\
-  { 0x0000ffff, 0x00000005 },	/* GENERAL_REGS */	\
+  { 0x00000000, 0x00000002 },	/* CC_REGS */		\
+  { 0x0000fffe, 0x0000000d },	/* ADDR_REGS */		\
+  { 0x0000ffff, 0x0000000d },	/* GENERAL_REGS */	\
+  { 0x00000000, 0x00000030 },	/* ACCESS_REGS */	\
+  { 0x0000fffe, 0x0000000f },	/* ADDR_CC_REGS */	\
+  { 0x0000ffff, 0x0000000f },	/* GENERAL_CC_REGS */	\
   { 0xffff0000, 0x00000000 },	/* FP_REGS */		\
-  { 0xfffffffe, 0x00000005 },	/* ADDR_FP_REGS */	\
-  { 0xffffffff, 0x00000005 },	/* GENERAL_FP_REGS */	\
-  { 0xffffffff, 0x00000007 },	/* ALL_REGS */		\
+  { 0xfffffffe, 0x0000000d },	/* ADDR_FP_REGS */	\
+  { 0xffffffff, 0x0000000d },	/* GENERAL_FP_REGS */	\
+  { 0xffffffff, 0x0000003f },	/* ALL_REGS */		\
 }
 
 /* Register -> class mapping.  */
@@ -506,7 +560,9 @@ extern const enum reg_class regclass_map[FIRST_PSEUDO_REGISTER];
 #define REG_CLASS_FROM_LETTER(C)                                        \
   ((C) == 'a' ? ADDR_REGS :                                             \
    (C) == 'd' ? GENERAL_REGS :                                          \
-   (C) == 'f' ? FP_REGS : NO_REGS)
+   (C) == 'f' ? FP_REGS :                                               \
+   (C) == 'c' ? CC_REGS : 						\
+   (C) == 't' ? ACCESS_REGS : NO_REGS)
 
 #define CONST_OK_FOR_CONSTRAINT_P(VALUE, C, STR)                          \
   s390_const_ok_for_constraint_p ((VALUE), (C), (STR))
@@ -515,13 +571,15 @@ extern const enum reg_class regclass_map[FIRST_PSEUDO_REGISTER];
 
 #define EXTRA_CONSTRAINT_STR(OP, C, STR)                               	\
   s390_extra_constraint_str ((OP), (C), (STR))
-#define EXTRA_MEMORY_CONSTRAINT(C, STR)				\
-  ((C) == 'Q' || (C) == 'R' || (C) == 'S' || (C) == 'T')
-#define EXTRA_ADDRESS_CONSTRAINT(C, STR)			\
+#define EXTRA_MEMORY_CONSTRAINT(C, STR)					\
+  ((C) == 'Q' || (C) == 'R' || (C) == 'S' || (C) == 'T' || (C) == 'A')
+#define EXTRA_ADDRESS_CONSTRAINT(C, STR)				\
   ((C) == 'U' || (C) == 'W' || (C) == 'Y')
 
-#define CONSTRAINT_LEN(C, STR)                                   \
-  ((C) == 'N' ? 5 : DEFAULT_CONSTRAINT_LEN ((C), (STR)))
+#define CONSTRAINT_LEN(C, STR)                                  	\
+  ((C) == 'N' ? 5 : 							\
+   (C) == 'A' ? 2 :							\
+   (C) == 'B' ? 2 : DEFAULT_CONSTRAINT_LEN ((C), (STR)))
 
 /* Stack layout and calling conventions.  */
 
@@ -554,16 +612,22 @@ extern int current_function_outgoing_args_size;
    the argument area.  */
 #define FIRST_PARM_OFFSET(FNDECL) 0
 
+/* Defining this macro makes __builtin_frame_address(0) and 
+   __builtin_return_address(0) work with -fomit-frame-pointer.  */
+#define INITIAL_FRAME_ADDRESS_RTX                                             \
+  (TARGET_PACKED_STACK ?                                                      \
+   plus_constant (arg_pointer_rtx, -UNITS_PER_WORD) :                         \
+   plus_constant (arg_pointer_rtx, -STACK_POINTER_OFFSET))
+
 /* The return address of the current frame is retrieved
    from the initial value of register RETURN_REGNUM.
    For frames farther back, we use the stack slot where
    the corresponding RETURN_REGNUM register was saved.  */
+#define DYNAMIC_CHAIN_ADDRESS(FRAME)                                          \
+  (TARGET_PACKED_STACK ?                                                      \
+   plus_constant ((FRAME), STACK_POINTER_OFFSET - UNITS_PER_WORD) : (FRAME))
 
-#define DYNAMIC_CHAIN_ADDRESS(FRAME)						\
-  ((FRAME) != hard_frame_pointer_rtx ? (FRAME) :				\
-   plus_constant (arg_pointer_rtx, -STACK_POINTER_OFFSET))
-
-#define RETURN_ADDR_RTX(COUNT, FRAME)						\
+#define RETURN_ADDR_RTX(COUNT, FRAME)					      \
   s390_return_addr_rtx ((COUNT), DYNAMIC_CHAIN_ADDRESS ((FRAME)))
 
 /* In 31-bit mode, we need to mask off the high bit of return addresses.  */
@@ -579,10 +643,8 @@ extern int current_function_outgoing_args_size;
 
 /* Describe how we implement __builtin_eh_return.  */
 #define EH_RETURN_DATA_REGNO(N) ((N) < 4 ? (N) + 6 : INVALID_REGNUM)
-#define EH_RETURN_HANDLER_RTX \
-  gen_rtx_MEM (Pmode, plus_constant (arg_pointer_rtx, \
-               -STACK_POINTER_OFFSET + UNITS_PER_WORD*RETURN_REGNUM))
-
+#define EH_RETURN_HANDLER_RTX gen_rtx_MEM (Pmode, return_address_pointer_rtx)
+       
 /* Select a format to encode pointers in exception handling data.  */
 #define ASM_PREFERRED_EH_DATA_FORMAT(CODE, GLOBAL)			    \
   (flag_pic								    \
@@ -596,6 +658,7 @@ extern int current_function_outgoing_args_size;
 #define FRAME_POINTER_REGNUM 34
 #define HARD_FRAME_POINTER_REGNUM 11
 #define ARG_POINTER_REGNUM 32
+#define RETURN_ADDRESS_POINTER_REGNUM 35
 
 /* The static chain must be call-clobbered, but not used for
    function argument passing.  As register 1 is clobbered by
@@ -614,28 +677,19 @@ extern int current_function_outgoing_args_size;
 
 #define INITIAL_FRAME_POINTER_OFFSET(DEPTH) (DEPTH) = 0
 
-#define ELIMINABLE_REGS				        \
-{{ FRAME_POINTER_REGNUM, STACK_POINTER_REGNUM},	        \
- { FRAME_POINTER_REGNUM, HARD_FRAME_POINTER_REGNUM},    \
- { ARG_POINTER_REGNUM, STACK_POINTER_REGNUM},	        \
- { ARG_POINTER_REGNUM, HARD_FRAME_POINTER_REGNUM}}
+#define ELIMINABLE_REGS				             \
+{{ FRAME_POINTER_REGNUM, STACK_POINTER_REGNUM},	             \
+ { FRAME_POINTER_REGNUM, HARD_FRAME_POINTER_REGNUM},         \
+ { ARG_POINTER_REGNUM, STACK_POINTER_REGNUM},	             \
+ { ARG_POINTER_REGNUM, HARD_FRAME_POINTER_REGNUM},           \
+ { RETURN_ADDRESS_POINTER_REGNUM, STACK_POINTER_REGNUM},     \
+ { RETURN_ADDRESS_POINTER_REGNUM, HARD_FRAME_POINTER_REGNUM}}
 
-#define CAN_ELIMINATE(FROM, TO) (1)
+#define CAN_ELIMINATE(FROM, TO) \
+  s390_can_eliminate ((FROM), (TO))
 
-#define INITIAL_ELIMINATION_OFFSET(FROM, TO, OFFSET) 			  \
-{ if ((FROM) == FRAME_POINTER_REGNUM && (TO) == STACK_POINTER_REGNUM) 	  \
-  { (OFFSET) = 0; }     						  \
-  else  if ((FROM) == FRAME_POINTER_REGNUM                                \
-	    && (TO) == HARD_FRAME_POINTER_REGNUM)                	  \
-  { (OFFSET) = 0; }     						  \
-  else if ((FROM) == ARG_POINTER_REGNUM                                   \
-            && (TO) == HARD_FRAME_POINTER_REGNUM)                         \
-  { (OFFSET) = s390_arg_frame_offset (); }     				  \
-  else if ((FROM) == ARG_POINTER_REGNUM && (TO) == STACK_POINTER_REGNUM)  \
-  { (OFFSET) = s390_arg_frame_offset (); }     				  \
-  else									  \
-    abort();								  \
-}
+#define INITIAL_ELIMINATION_OFFSET(FROM, TO, OFFSET) \
+  (OFFSET) = s390_initial_elimination_offset ((FROM), (TO))
 
 
 /* Stack arguments.  */
@@ -664,11 +718,6 @@ CUMULATIVE_ARGS;
 
 #define FUNCTION_ARG(CUM, MODE, TYPE, NAMED)   \
   s390_function_arg (&CUM, MODE, TYPE, NAMED)
-
-#define FUNCTION_ARG_PASS_BY_REFERENCE(CUM, MODE, TYPE, NAMED) \
-  s390_function_arg_pass_by_reference (MODE, TYPE)
-
-#define FUNCTION_ARG_PARTIAL_NREGS(CUM, MODE, TYPE, NAMED) 0
 
 /* Arguments can be placed in general registers 2 to 6,
    or in floating point registers 0 and 2.  */
@@ -707,25 +756,15 @@ CUMULATIVE_ARGS;
 #define EXPAND_BUILTIN_VA_START(valist, nextarg) \
   s390_va_start (valist, nextarg)
 
-#define EXPAND_BUILTIN_VA_ARG(valist, type) \
-  s390_va_arg (valist, type)
-
-
 /* Trampolines for nested functions.  */
 
-#define TRAMPOLINE_SIZE (TARGET_64BIT ? 36 : 20)
+#define TRAMPOLINE_SIZE (TARGET_64BIT ? 32 : 16)
 
 #define INITIALIZE_TRAMPOLINE(ADDR, FNADDR, CXT)                       \
    s390_initialize_trampoline ((ADDR), (FNADDR), (CXT))
 
 #define TRAMPOLINE_TEMPLATE(FILE)                                       \
    s390_trampoline_template (FILE)
-
-
-/* Library calls.  */
-
-/* We should use memcpy, not bcopy.  */
-#define TARGET_MEM_FUNCTIONS
 
 
 /* Addressing modes, and classification of registers for them.  */
@@ -799,6 +838,19 @@ CUMULATIVE_ARGS;
     goto WIN;                                                           \
 }
 
+/* Try a machine-dependent way of reloading an illegitimate address
+   operand.  If we find one, push the reload and jump to WIN.  This
+   macro is used in only one place: `find_reloads_address' in reload.c.  */
+#define LEGITIMIZE_RELOAD_ADDRESS(AD, MODE, OPNUM, TYPE, IND, WIN)	\
+do {									\
+  rtx new = legitimize_reload_address (AD, MODE, OPNUM, (int)(TYPE));	\
+  if (new)								\
+    {									\
+      (AD) = new;							\
+      goto WIN;								\
+    }									\
+} while (0)
+
 /* Nonzero if the constant value X is a legitimate general operand.
    It is given that X satisfies CONSTANT_P or is a CONST_DOUBLE.  */
 #define LEGITIMATE_CONSTANT_P(X) \
@@ -820,6 +872,10 @@ CUMULATIVE_ARGS;
 /* Given a comparison code (EQ, NE, etc.) and the first operand of a COMPARE,
    return the mode to be used for the comparison.  */
 #define SELECT_CC_MODE(OP, X, Y) s390_select_ccmode ((OP), (X), (Y))
+
+/* Canonicalize a comparison from one we don't have to one we do have.  */
+#define CANONICALIZE_COMPARISON(CODE, OP0, OP1) \
+  s390_canonicalize_comparison (&(CODE), &(OP0), &(OP1))
 
 /* Define the information needed to generate branch and scc insns.  This is
    stored from the compare operation.  Note that we can't use "rtx" here
@@ -848,9 +904,14 @@ extern struct rtx_def *s390_compare_op0, *s390_compare_op1;
 /* Nonzero if access to memory by bytes is slow and undesirable.  */
 #define SLOW_BYTE_ACCESS 1
 
+/* An integer expression for the size in bits of the largest integer machine
+   mode that should actually be used.  We allow pairs of registers.  */ 
+#define MAX_FIXED_MODE_SIZE GET_MODE_BITSIZE (TARGET_64BIT ? TImode : DImode)
+
 /* The maximum number of bytes that a single instruction can move quickly
    between memory and registers or between two memory locations.  */
 #define MOVE_MAX (TARGET_64BIT ? 16 : 8)
+#define MOVE_MAX_PIECES (TARGET_64BIT ? 8 : 4)
 #define MAX_MOVE_MAX 16
 
 /* Determine whether to use move_by_pieces or block move insn.  */
@@ -862,6 +923,11 @@ extern struct rtx_def *s390_compare_op0, *s390_compare_op1;
 #define CLEAR_BY_PIECES_P(SIZE, ALIGN)		\
   ( (SIZE) == 1 || (SIZE) == 2 || (SIZE) == 4	\
     || (TARGET_64BIT && (SIZE) == 8) )
+
+/* This macro is used to determine whether store_by_pieces should be
+   called to "memset" storage with byte values other than zero, or
+   to "memcpy" storage when the source is a constant string.  */
+#define STORE_BY_PIECES_P(SIZE, ALIGN) MOVE_BY_PIECES_P (SIZE, ALIGN)
 
 /* Don't perform CSE on function addresses.  */
 #define NO_FUNCTION_CSE
@@ -927,10 +993,10 @@ extern int flag_pic;
    indexed by compiler's hard-register-number (see above).  */
 #define REGISTER_NAMES							\
 { "%r0",  "%r1",  "%r2",  "%r3",  "%r4",  "%r5",  "%r6",  "%r7",	\
-  "%r8",  "%r9", "%r10", "%r11", "%r12", "%r13", "%r14", "%r15",	\
+  "%r8",  "%r9",  "%r10", "%r11", "%r12", "%r13", "%r14", "%r15",	\
   "%f0",  "%f2",  "%f4",  "%f6",  "%f1",  "%f3",  "%f5",  "%f7",	\
-  "%f8",  "%f10", "%f12", "%f14", "%f9", "%f11", "%f13", "%f15",	\
-  "%ap",  "%cc",  "%fp"							\
+  "%f8",  "%f10", "%f12", "%f14", "%f9",  "%f11", "%f13", "%f15",	\
+  "%ap",  "%cc",  "%fp",  "%rp",  "%a0",  "%a1"				\
 }
 
 /* Emit a dtp-relative reference to a TLS variable.  */
@@ -980,7 +1046,6 @@ do {									\
 /* Define the codes that are matched by predicates in aux-output.c.  */
 #define PREDICATE_CODES							\
   {"s_operand",       { SUBREG, MEM }},					\
-  {"s_imm_operand",   { CONST_INT, CONST_DOUBLE, SUBREG, MEM }},	\
   {"shift_count_operand", { REG, SUBREG, PLUS, CONST_INT }},		\
   {"bras_sym_operand",{ SYMBOL_REF, CONST }},				\
   {"larl_operand",    { SYMBOL_REF, CONST, CONST_INT, CONST_DOUBLE }},	\
@@ -990,8 +1055,13 @@ do {									\
   {"consttable_operand", { SYMBOL_REF, LABEL_REF, CONST, 		\
 			   CONST_INT, CONST_DOUBLE }},			\
   {"s390_plus_operand", { PLUS }},					\
-  {"s390_alc_comparison", { LTU, GTU, LEU, GEU }},			\
-  {"s390_slb_comparison", { LTU, GTU, LEU, GEU }},
+  {"s390_comparison",     { EQ, NE, LT, GT, LE, GE, LTU, GTU, LEU, GEU,	\
+			    UNEQ, UNLT, UNGT, UNLE, UNGE, LTGT,		\
+			    UNORDERED, ORDERED }},			\
+  {"s390_alc_comparison", { ZERO_EXTEND, SIGN_EXTEND, 			\
+			    LTU, GTU, LEU, GEU }},			\
+  {"s390_slb_comparison", { ZERO_EXTEND, SIGN_EXTEND,			\
+			    LTU, GTU, LEU, GEU }},
 
 /* Specify the machine mode that this machine uses for the index in the
    tablejump instruction.  */
@@ -1012,8 +1082,5 @@ do {									\
 /* A function address in a call instruction is a byte address (for
    indexing purposes) so give the MEM rtx a byte's mode.  */
 #define FUNCTION_MODE QImode
-
-/* This macro definition sets up a default value for `main' to return.  */
-#define DEFAULT_MAIN_RETURN  c_expand_return (integer_zero_node)
 
 #endif

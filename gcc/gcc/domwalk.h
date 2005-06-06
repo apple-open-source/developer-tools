@@ -25,7 +25,7 @@ Boston, MA 02111-1307, USA.  */
 
 struct dom_walk_data
 {
-  /* This is the direction of the dominator tree we want to walk.  ie,
+  /* This is the direction of the dominator tree we want to walk.  i.e.,
      if it is set to CDI_DOMINATORS, then we walk the dominator tree,
      if it is set to CDI_POST_DOMINATORS, then we walk the post
      dominator tree.  */
@@ -38,7 +38,7 @@ struct dom_walk_data
      to use the second statement walker for anything, so it's hard to
      predict if we really need the ability to select their direction
      independently.  */
-  bool walk_stmts_backward : 1;
+  BOOL_BITFIELD walk_stmts_backward : 1;
 
   /* Function to initialize block local data.
 
@@ -55,7 +55,7 @@ struct dom_walk_data
   /* Function to call before the statement walk occurring before the
      recursive walk of the dominator children. 
 
-     This typically initializes an block local data and pushes that
+     This typically initializes a block local data and pushes that
      data onto BLOCK_DATA_STACK.  */
   void (*before_dom_children_before_stmts) (struct dom_walk_data *,
 					    basic_block);
@@ -103,7 +103,7 @@ struct dom_walk_data
   /* From here below are private data.  Please do not use this
      information/data outside domwalk.c.  */
 
-  /* Stack of available block local structures.   */
+  /* Stack of available block local structures.  */
   varray_type free_block_data;
 };
 

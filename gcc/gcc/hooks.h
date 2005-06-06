@@ -22,8 +22,12 @@ Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 #ifndef GCC_HOOKS_H
 #define GCC_HOOKS_H
 
+#include "machmode.h"
+
 extern bool hook_bool_void_false (void);
+extern bool hook_bool_void_true (void);
 extern bool hook_bool_bool_false (bool);
+extern bool hook_bool_mode_false (enum machine_mode);
 extern bool hook_bool_tree_false (tree);
 extern bool hook_bool_tree_true (tree);
 extern bool hook_bool_tree_hwi_hwi_tree_false (tree, HOST_WIDE_INT, HOST_WIDE_INT,
@@ -36,12 +40,12 @@ extern bool hook_bool_rtx_int_int_intp_false (rtx, int, int, int *);
 extern bool hook_bool_constcharptr_size_t_false (const char *, size_t);
 
 extern void hook_void_void (void);
-extern void hook_void_int (int);
-extern void hook_void_charptr (char *);
+extern void hook_void_constcharptr (const char *);
 extern void hook_void_FILEptr_constcharptr (FILE *, const char *);
 extern void hook_void_tree (tree);
 extern void hook_void_tree_treeptr (tree, tree *);
 
+extern int hook_int_tree_0 (tree);
 extern int hook_int_tree_tree_1 (tree, tree);
 extern int hook_int_rtx_0 (rtx);
 extern int hook_int_size_t_constcharptr_int_0 (size_t, const char *, int);
@@ -63,5 +67,5 @@ extern const char *hook_constcharptr_tree_null (tree);
 extern tree hook_tree_tree_null (tree);
 extern tree hook_tree_tree_tree_tree_null (tree, tree, tree);
 /* APPLE LOCAL end constant cfstrings */
-
+extern tree hook_tree_tree_bool_null (tree, bool);
 #endif

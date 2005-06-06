@@ -1,5 +1,5 @@
 /* TrustAnchor.java -- an ultimately-trusted certificate.
-   Copyright (C) 2003 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -7,7 +7,7 @@ GNU Classpath is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2, or (at your option)
 any later version.
- 
+
 GNU Classpath is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
@@ -38,12 +38,9 @@ exception statement from your version. */
 
 package java.security.cert;
 
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
+import gnu.java.security.x509.X500DistinguishedName;
 
 import java.security.PublicKey;
-
-import gnu.java.security.x509.X500DistinguishedName;
 
 /**
  * An ultimately-trusted certificate to serve as the root of a
@@ -143,7 +140,7 @@ public class TrustAnchor
   public final String getCAName()
   {
     if (caName != null)
-      return caName.toRFC2253();
+      return caName.toString();
     return null;
   }
 
@@ -182,7 +179,7 @@ public class TrustAnchor
   {
     if (trustedCert == null)
       return "[ Trusted CA Public Key=" + caKey + ", Trusted CA Issuer Name="
-        + caName.toRFC2253() + " ]";
+        + caName.toString() + " ]";
     return "[ Trusted CA Certificate=" + trustedCert + " ]";
   }
 }

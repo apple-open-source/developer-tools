@@ -20,6 +20,7 @@
 // USA.
 
 #include <streambuf>
+#include <locale>
 #include <testsuite_hooks.h>
 
 class testbuf : public std::streambuf

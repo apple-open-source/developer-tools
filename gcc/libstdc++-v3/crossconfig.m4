@@ -4,6 +4,10 @@ dnl
 
 # Base decisions on target environment.
 case "${host}" in
+  arm*-*-symbianelf*)
+    # This is a freestanding configuration; there is nothing to do here.
+    ;;
+
   *-darwin*)
     # Darwin versions vary, but the linker should work in a cross environment,
     # so we just check for all the features here.
@@ -40,6 +44,22 @@ case "${host}" in
     [AC_DEFINE(HAVE_SIGSETJMP, 1, [Define if sigsetjmp is available.])])
 
     AC_DEFINE(HAVE_MMAP)
+    ;;
+
+  *djgpp)
+    AC_CHECK_HEADERS([float.h ieeefp.h inttypes.h locale.h \
+      memory.h stdint.h stdlib.h strings.h string.h unistd.h \
+      wchar.h wctype.h machine/endian.h sys/ioctl.h sys/param.h \
+      sys/resource.h sys/stat.h sys/time.h sys/types.h sys/uio.h])
+    GLIBCXX_CHECK_COMPILER_FEATURES
+    GLIBCXX_CHECK_LINKER_FEATURES
+    GLIBCXX_CHECK_MATH_SUPPORT
+    GLIBCXX_CHECK_BUILTIN_MATH_SUPPORT
+    GLIBCXX_CHECK_COMPLEX_MATH_SUPPORT
+    GLIBCXX_CHECK_WCHAR_T_SUPPORT
+    GLIBCXX_CHECK_STDLIB_SUPPORT
+    GLIBCXX_CHECK_S_ISREG_OR_S_IFREG
+    AC_DEFINE(HAVE_WRITEV)
     ;;
 
   *-freebsd*)
@@ -176,8 +196,6 @@ case "${host}" in
     AC_DEFINE(HAVE_LOGF)
     AC_DEFINE(HAVE_LOG10F)
     AC_DEFINE(HAVE_MODFF)
-    AC_DEFINE(HAVE_SIGNBIT)
-    AC_DEFINE(HAVE_SIGNBITF)
     AC_DEFINE(HAVE_SINF)
     AC_DEFINE(HAVE_SINHF)
     AC_DEFINE(HAVE_SINCOS)
@@ -207,7 +225,6 @@ case "${host}" in
       AC_DEFINE(HAVE_LOG10L)
       AC_DEFINE(HAVE_MODFL)
       AC_DEFINE(HAVE_POWL)
-      AC_DEFINE(HAVE_SIGNBITL)
       AC_DEFINE(HAVE_SINL)
       AC_DEFINE(HAVE_SINHL)
       AC_DEFINE(HAVE_SINCOSL)
@@ -246,6 +263,24 @@ case "${host}" in
       AC_DEFINE(HAVE_ISINFL)
       AC_DEFINE(HAVE_ISNANL)
     fi
+    ;;
+  *-netware)
+    AC_CHECK_HEADERS([nan.h ieeefp.h sys/isa_defs.h sys/machine.h \
+      sys/types.h locale.h float.h inttypes.h])
+    SECTION_FLAGS='-ffunction-sections -fdata-sections'
+    AC_SUBST(SECTION_FLAGS)
+    GLIBCXX_CHECK_LINKER_FEATURES
+    GLIBCXX_CHECK_COMPLEX_MATH_SUPPORT
+    GLIBCXX_CHECK_WCHAR_T_SUPPORT
+
+    # For showmanyc_helper().
+    AC_CHECK_HEADERS(sys/ioctl.h sys/filio.h)
+    GLIBCXX_CHECK_POLL
+    GLIBCXX_CHECK_S_ISREG_OR_S_IFREG
+
+    # For xsputn_2().
+    AC_CHECK_HEADERS(sys/uio.h)
+    GLIBCXX_CHECK_WRITEV
     ;;
   *-qnx6.1* | *-qnx6.2*)
     SECTION_FLAGS='-ffunction-sections -fdata-sections'
@@ -379,8 +414,13 @@ case "${host}" in
         AC_DEFINE(HAVE___BUILTIN_SINF)
        ;;
     esac
-    AC_DEFINE(HAVE_STRTOF)
-    AC_DEFINE(HAVE_STRTOLD)
+    case "$target" in
+      *-*-solaris2.10)
+      # These two C99 functions are present only in Solaris >= 10
+      AC_DEFINE(HAVE_STRTOF)
+      AC_DEFINE(HAVE_STRTOLD)
+     ;;
+    esac
     AC_DEFINE(HAVE_MMAP) 
     AC_DEFINE(HAVE_COPYSIGN)
     AC_DEFINE(HAVE_ISNAN)

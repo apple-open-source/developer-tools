@@ -1,5 +1,5 @@
 /* MI Command Set - stack commands.
-   Copyright 2000, 2002 Free Software Foundation, Inc.
+   Copyright 2000, 2002, 2003, 2004 Free Software Foundation, Inc.
    Contributed by Cygnus Solutions (a Red Hat company).
 
    This file is part of GDB.
@@ -25,19 +25,18 @@
 #include "frame.h"
 #include "value.h"
 #include "mi-cmds.h"
+#include "mi-main.h"
 #include "ui-out.h"
 #include "varobj.h"
 #include "wrapper.h"
-#include "interpreter.h"
+#include "interps.h"
 #include "symtab.h"
-#include "symtab.h"
+#include "block.h"
+#include "stack.h"
+#include "dictionary.h"
+#include "gdb_string.h"
 #include "objfiles.h"
 #include "gdb_regex.h"
-
-/* FIXME: these should go in some .h file but stack.c doesn't have a
-   corresponding .h file. These wrappers will be obsolete anyway, once
-   we pull the plug on the sanitization. */
-extern void select_frame_command_wrapper (char *, int);
 
 /* FIXME: There is no general mi header to put this kind of utility function.*/
 extern void mi_report_var_creation (struct ui_out *uiout, struct varobj *var);
@@ -45,9 +44,6 @@ extern void mi_report_var_creation (struct ui_out *uiout, struct varobj *var);
 void mi_interp_stack_changed_hook (void);
 void mi_interp_frame_changed_hook (int new_frame_number);
 void mi_interp_context_hook (int thread_id);
-
-/* This is the interpreter for the mi... */
-extern struct gdb_interpreter *mi_interp;
 
 /* This regexp pattern buffer is used for the file_list_statics
    and file_list_globals for the filter.  It doesn't look like the
@@ -58,6 +54,11 @@ extern struct gdb_interpreter *mi_interp;
 
 struct re_pattern_buffer mi_symbol_filter;
 
+static char *print_values_bad_input_string = 
+           "Unknown value for PRINT_VALUES: must be: 0 or \"--no-values\", "
+	   "1 or \"--all-values\", 2 or \"--simple-values\", "
+           "3 or \"--make-varobj\"";
+
 /* Use this to print any extra info in the stack listing output that is
    not in the standard gdb printing */
 
@@ -65,18 +66,24 @@ void mi_print_frame_more_info (struct ui_out *uiout,
 				struct symtab_and_line *sal,
 				struct frame_info *fi);
 
-static void list_args_or_locals (int locals, int values, 
+static void list_args_or_locals (int locals, enum print_values values, 
 				 struct frame_info *fi,
-				 int all_blocks,
-				 int create_varobj);
+				 int all_blocks);
 
 static void print_syms_for_block (struct block *block, 
 				  struct frame_info *fi, 
 				  struct ui_stream *stb,
 				  int locals, 
-				  int values,
-				  int create_varobj,
+				  int consts,
+				  enum print_values values,
 				  struct re_pattern_buffer *filter);
+
+static void
+print_globals_for_symtab (struct symtab *file_symtab, 
+			  struct ui_stream *stb,
+			  enum print_values values,
+			  int consts,
+			  struct re_pattern_buffer *filter);
 
 /* Print a list of the stack frames. Args can be none, in which case
    we want to print the whole backtrace, or a pair of numbers
@@ -155,16 +162,16 @@ mi_print_frame_info_lite (struct ui_out *uiout,
 			  CORE_ADDR fp)
 {
   char num_buf[8];
-
+  struct cleanup *list_cleanup;
   sprintf (num_buf, "%d", frame_num);
   ui_out_text (uiout, "Frame ");
   ui_out_text(uiout, num_buf);
   ui_out_text(uiout, ": ");
-  ui_out_list_begin (uiout, num_buf);
+  list_cleanup = make_cleanup_ui_out_tuple_begin_end (uiout, num_buf);
   ui_out_field_core_addr (uiout, "pc", pc);
   ui_out_field_core_addr (uiout, "fp", fp);
   ui_out_text (uiout, "\n");
-  ui_out_list_end (uiout);
+  do_cleanups (list_cleanup);
 
 }
 
@@ -207,29 +214,33 @@ mi_cmd_stack_list_frames_lite (char *command, char **argv, int argc)
     valid = FAST_COUNT_STACK_DEPTH (1, 0, -1, limit, &count, mi_print_frame_info_lite);
 #else
     /* Start at the inner most frame */
-    for (fi = get_current_frame (); fi ; fi = get_next_frame(fi))
+    {
+      struct cleanup *list_cleanup;
+      for (fi = get_current_frame (); fi ; fi = get_next_frame(fi))
         ;
 
-    fi = get_current_frame ();
-    
-    if (fi == NULL)
+      fi = get_current_frame ();
+      
+      if (fi == NULL)
         error ("mi_cmd_stack_list_frames_lite: No frames in stack.");
-
-    ui_out_list_begin (uiout, "frames");
-
-    for (i = 0; fi != NULL; (fi = get_prev_frame (fi)), i++) 
-      {
-        QUIT;
-
-        if ((limit == 0) || (i < limit))
-          {
-	    mi_print_frame_info_lite (uiout, i, fi->pc, get_frame_base(fi));
-          }
-      }
-
-    count = i;
-    valid = 1;
-    ui_out_list_end (uiout);
+      
+      list_cleanup = make_cleanup_ui_out_list_begin_end (uiout, "frames");
+      
+      for (i = 0; fi != NULL; (fi = get_prev_frame (fi)), i++) 
+	{
+	  QUIT;
+	  
+	  if ((limit == 0) || (i < limit))
+	    {
+	      mi_print_frame_info_lite (uiout, i, get_frame_pc (fi), 
+                                        get_frame_base(fi));
+	    }
+	}
+      
+      count = i;
+      valid = 1;
+      do_cleanups (list_cleanup);
+    }
 #endif
     
     ui_out_text (uiout, "Valid: ");
@@ -289,29 +300,65 @@ mi_cmd_stack_info_depth (char *command, char **argv, int argc)
   return MI_CMD_DONE;
 }
 
+/*
+  mi_decode_print_values, ARG is the mi standard "print-values"
+  argument.  We decode this into an enum print_values.
+*/
+
+enum print_values
+mi_decode_print_values (char *arg)
+{
+  enum print_values print_values = 0;
+
+  /* APPLE LOCAL: We muck with this a bit.  We set
+     2 to mean PRINT_MAKE_VAROBJ as well as 3
+     and --make-varobjs.  To get the "2" behavior
+     you have to explicitly use --simple-values.  */
+
+  if (strcmp (arg, "0") == 0
+      || strcmp (arg, "--no-values") == 0)
+    print_values = PRINT_NO_VALUES;
+  else if (strcmp (arg, "1") == 0
+	   || strcmp (arg, "--all-values") == 0)
+    print_values = PRINT_ALL_VALUES;
+  else if (strcmp (arg, "2") == 0)
+    print_values = PRINT_MAKE_VAROBJ;
+  else if (strcmp (arg, "--simple-values") == 0)
+    print_values = PRINT_SIMPLE_VALUES;
+  else if (strcmp (arg, "3") == 0
+	   || strcmp (arg, "--make-varobjs") == 0)
+    print_values = PRINT_MAKE_VAROBJ;
+  else
+    print_values = PRINT_BAD_INPUT;
+
+  return print_values;
+}
+
 /* Print a list of the locals for the current frame. With argument of
    0, print only the names, with argument of 1 print also the
    values. */
 enum mi_cmd_result
 mi_cmd_stack_list_locals (char *command, char **argv, int argc)
 {
-  int values;
+  struct frame_info *frame;
+  enum print_values values;
   int all_blocks;
-  int create_varobj;
 
   if (argc < 1 || argc > 2)
     error ("mi_cmd_stack_list_locals: Usage: PRINT_VALUES [ALL_BLOCKS]");
 
-  values = atoi (argv[0]);
-  create_varobj = (values == 2);
+  frame = get_selected_frame ();
+
+  values = mi_decode_print_values (argv[0]);
+  if (values == PRINT_BAD_INPUT)
+    error ("%s", print_values_bad_input_string);
 
   if (argc >= 2)
     all_blocks = atoi (argv[1]);
   else
     all_blocks = 0;
 
-  list_args_or_locals (1, values, deprecated_selected_frame,
-		       all_blocks, create_varobj);
+  list_args_or_locals (1, values, frame, all_blocks);
   return MI_CMD_DONE;
 }
 
@@ -325,8 +372,7 @@ mi_cmd_stack_list_args (char *command, char **argv, int argc)
   int frame_low;
   int frame_high;
   int i;
-  int values;
-  int create_varobj;
+  enum print_values values;
   struct frame_info *fi;
   struct cleanup *cleanup_stack_args;
 
@@ -346,8 +392,9 @@ mi_cmd_stack_list_args (char *command, char **argv, int argc)
       frame_high = -1;
     }
 
-  values = atoi (argv[0]);
-  create_varobj = (values == 2);
+  values = mi_decode_print_values (argv[0]);
+  if (values == PRINT_BAD_INPUT)
+    error ("%s", print_values_bad_input_string);
 
   /* Let's position fi on the frame at which to start the
      display. Could be the innermost frame if the whole stack needs
@@ -371,7 +418,7 @@ mi_cmd_stack_list_args (char *command, char **argv, int argc)
       QUIT;
       cleanup_frame = make_cleanup_ui_out_tuple_begin_end (uiout, "frame");
       ui_out_field_int (uiout, "level", i); 
-      list_args_or_locals (0, values, fi, 0, create_varobj);
+      list_args_or_locals (0, values, fi, 0);
       do_cleanups (cleanup_frame);
     }
 
@@ -389,8 +436,8 @@ mi_cmd_stack_list_args (char *command, char **argv, int argc)
    blocks in the function that is in frame FI.*/
 
 static void
-list_args_or_locals (int locals, int values, struct frame_info *fi, 
-		     int all_blocks, int create_varobj)
+list_args_or_locals (int locals, enum print_values values, struct frame_info *fi, 
+		     int all_blocks)
 {
   struct block *block = NULL;
   struct cleanup *cleanup_list;
@@ -418,7 +465,7 @@ list_args_or_locals (int locals, int values, struct frame_info *fi,
       if (fstart == 0)
 	{
 	  /* Can't find the containing function for this PC.  Sigh... */
-	  fstart = fi->pc;
+	  fstart = get_frame_pc (fi);
 	}
 
       bv = blockvector_for_pc (fstart, &index);
@@ -434,8 +481,8 @@ list_args_or_locals (int locals, int values, struct frame_info *fi,
 
       while (BLOCK_END (block) <= endaddr)
 	{
-	  print_syms_for_block (block, fi, stb, locals, 
-				values, create_varobj, NULL);
+	  print_syms_for_block (block, fi, stb, locals, 1, 
+				values, NULL);
 	  index++;
 	  if (index == nblocks)
 	    break;
@@ -448,7 +495,7 @@ list_args_or_locals (int locals, int values, struct frame_info *fi,
 
       while (block != 0)
 	{
-	  print_syms_for_block (block, fi, stb, locals, values, create_varobj, NULL);
+	  print_syms_for_block (block, fi, stb, locals, 1, values, NULL);
 	  
 	  if (BLOCK_FUNCTION (block))
 	    break;
@@ -471,21 +518,108 @@ list_args_or_locals (int locals, int values, struct frame_info *fi,
    If the file name is the special cookie *CURRENT FRAME* then it prints
    the statics for the currently selected frame.
 
-   If PRINT_VALUES is 0, only the variable names are printed.
-   If PRINT_VALUES is 1, the values are also printed.
-   If PRINT_VALUES is 2, then varobj's are made for all the variables as
-   well.
+   See mi_decode_print_values for how PRINT_VALUES works
    If the filter string is provided, only symbols that DON'T match
    the filter will be printed.
    */
 
 #define CURRENT_FRAME_COOKIE "*CURRENT FRAME*"
 
+static int
+parse_statics_globals_args (char **argv, int argc, char **filename_ptr, char ** shlibname_ptr, 
+			    enum print_values *values_ptr, struct re_pattern_buffer **filterp_ptr,
+			    int *consts_ptr)
+{
+  char *filter_arg;
+  int bad_args;
+
+  filter_arg = NULL;
+  *filename_ptr = NULL;
+  *shlibname_ptr = NULL;
+  bad_args = 0;
+  
+  if (argc > 2 && argc < 5)
+    {
+      *filename_ptr = argv[0];
+      *shlibname_ptr = argv[1];
+      *values_ptr = mi_decode_print_values (argv[2]);
+      if (*values_ptr == PRINT_BAD_INPUT) 
+	bad_args = 1;
+      if (argc == 4) 
+	filter_arg = argv[3];
+      *consts_ptr = 0;
+    }
+  else if (argc == 5 || argc == 7 || argc == 9)
+    {
+      int got_values = 0;
+
+      while (argc > 0) 
+	{
+	  int step = 2;
+	  if (strcmp (argv[0], "-file") == 0)
+	    *filename_ptr = argv[1];
+	  else if (strcmp (argv[0], "-shlib") == 0)
+	    *shlibname_ptr = argv[1];
+	  else if (strcmp (argv[0], "-filter") == 0)
+	    filter_arg = argv[1];
+	  else if (strcmp (argv[0], "-constants") == 0)
+	    {
+	      if (strcmp (argv[1], "1") == 0)
+		*consts_ptr = 1;
+	      else if (strcmp (argv[1], "0") == 0)
+		*consts_ptr = 0;
+	      else
+		{
+		  bad_args = 1;
+		  break;
+		}
+	    }
+	  else
+	    {
+	      *values_ptr = mi_decode_print_values (argv[0]);
+	      if (*values_ptr != PRINT_BAD_INPUT) 
+		{
+		  got_values = 1;
+		  step = 1;
+		}
+	      else
+		{
+		  bad_args = 1;
+		  break;
+		}
+	    }
+
+	  argc -= step;
+	  argv += step;
+	}
+      if (*filename_ptr == NULL || *shlibname_ptr == NULL || got_values == 0)
+	bad_args = 1;
+    }
+  else
+    bad_args = 1;
+
+  if (bad_args)
+    return 0;
+
+  if (filter_arg != NULL)
+    {
+      const char *msg;
+
+      msg = re_compile_pattern (filter_arg, strlen (filter_arg), &mi_symbol_filter);
+      if (msg)
+	error ("Error compiling regexp: \"%s\"", msg);
+      *filterp_ptr = &mi_symbol_filter;
+    }
+  else
+    *filterp_ptr = NULL;
+
+  return 1;
+}
+
 enum mi_cmd_result
 mi_cmd_file_list_statics (char *command, char **argv, int argc)
 {
-  int values;
-  int create_varobj;
+  enum print_values values;
   char *shlibname, *filename;
   struct block *block;
   struct partial_symtab *file_ps;
@@ -493,37 +627,16 @@ mi_cmd_file_list_statics (char *command, char **argv, int argc)
   struct cleanup *cleanup_list;
   struct ui_stream *stb;
   struct re_pattern_buffer *filterp = NULL;
+  int consts = 1;
 
-  if (argc < 3 || argc > 4)
-    {
-      error ("mi_cmd_file_list_statics: Usage: FILE SHLIB PRINT_VALUES"
-	     " [FILTER]");
-    }
+
+  if (!parse_statics_globals_args (argv, argc, &filename, &shlibname, &values, 
+				   &filterp, &consts))
+    error ("mi_cmd_file_list_statics: Usage: -file FILE -shlib SHLIB"
+	   " VALUES"
+	   " [-filter FILTER] [-constants 0/1]");
   
-  
-  values = atoi (argv[2]);
-  create_varobj = (values == 2);
-  
-  filename = argv[0];
-  shlibname = argv[1];
-
-  if (argc == 4)
-    {
-      const char *msg;
-
-      msg = re_compile_pattern (argv[3], strlen (argv[3]), &mi_symbol_filter);
-      if (msg)
-	error ("Error compiling regexp: \"%s\"", msg);
-      filterp = &mi_symbol_filter;
-    }
-  else
-    filterp = NULL;
-
-  /* Probably better to not restrict the objfile search, while doing the 
-     PSYMTAB to SYMTAB conversion to miss some types that are defined outside the
-     current shlib.  So get the psymtab first, and then convert after cleaning up.  */
-
-  if (strcmp (filename, CURRENT_FRAME_COOKIE) == 0) 
+  if (strcmp (filename, CURRENT_FRAME_COOKIE) == 0)
     {
       CORE_ADDR pc;
       struct obj_section *objsec;
@@ -531,9 +644,9 @@ mi_cmd_file_list_statics (char *command, char **argv, int argc)
       pc = get_frame_pc (get_selected_frame ());
       objsec = find_pc_section (pc);
       if (objsec != NULL && objsec->objfile != NULL)
-	cleanup_list = make_cleanup_restrict_to_objfile (objsec->objfile);
+        cleanup_list = make_cleanup_restrict_to_objfile (objsec->objfile);
       else
-	cleanup_list = make_cleanup (null_cleanup, NULL);
+        cleanup_list = make_cleanup (null_cleanup, NULL);
 
       file_ps = find_pc_psymtab (pc);
       do_cleanups (cleanup_list);
@@ -552,24 +665,38 @@ mi_cmd_file_list_statics (char *command, char **argv, int argc)
       else
 	cleanup_list = make_cleanup (null_cleanup, NULL);
       
-      file_ps = lookup_partial_symtab (filename);
-      
-      /* FIXME: dbxread.c only uses the SECOND N_SO stab when making psymtabs.  It discards
-         the first one.  But that means that if filename is an absolute path, it is likely
-         lookup_partial_symtab will fail.  If it did, try again with the base name.  */
+      /* Probably better to not restrict the objfile search, while
+	 doing the PSYMTAB to SYMTAB conversion to miss some types
+	 that are defined outside the current shlib.  So get the
+	 psymtab first, and then convert after cleaning up.  */
 
-      if (file_ps == NULL)
-        if (lbasename(filename) != filename)
-          file_ps = lookup_partial_symtab (lbasename (filename));
+      if (*filename != '\0')
+	{
+	  file_ps = lookup_partial_symtab (filename);
+	  
+	  
+	  /* FIXME: dbxread.c only uses the SECOND N_SO stab when making
+	     psymtabs.  It discards the first one.  But that means that if
+	     filename is an absolute path, it is likely
+	     lookup_partial_symtab will fail.  If it did, try again with
+	     the base name.  */
+	  
+	  if (file_ps == NULL)
+	    if (lbasename(filename) != filename)
+	      file_ps = lookup_partial_symtab (lbasename (filename));
+	}
+      else
+	file_ps = NULL;
       
       do_cleanups (cleanup_list);
 
     }
 
-  /* If the user passed us a real filename and we couldn't find it, that is an error.  But
-     "" or current frame, could point to a file or objfile with no debug info.  In which
-     case we should just return an empty list.  */
-  
+  /* If the user passed us a real filename and we couldn't find it,
+     that is an error.  But "" or current frame, could point to a file
+     or objfile with no debug info.  In which case we should just
+     return an empty list.  */
+
   if (file_ps == NULL)
     {
       if (filename[0] == '\0' || strcmp (filename, CURRENT_FRAME_COOKIE) == 0)
@@ -579,22 +706,23 @@ mi_cmd_file_list_statics (char *command, char **argv, int argc)
 	  return MI_CMD_DONE;
 	}
       else
-	error ("mi_cmd_file_list_statics: Could not get symtab for file \"%s\".", filename);
+	error ("mi_cmd_file_list_statics: "
+	       "Could not get symtab for file \"%s\".", filename);
     }
   
   file_symtab = PSYMTAB_TO_SYMTAB (file_ps);
-
+  
   if (file_symtab == NULL)
     error ("Could not convert psymtab to symtab for file \"%s\"", filename);
 
   block = BLOCKVECTOR_BLOCK (file_symtab->blockvector, STATIC_BLOCK);
-
+      
   stb = ui_out_stream_new (uiout);
   
   cleanup_list = make_cleanup_ui_out_list_begin_end (uiout, "statics");
-
-  print_syms_for_block (block, NULL, stb, -1, values, create_varobj, filterp);
-
+  
+  print_syms_for_block (block, NULL, stb, -1, consts, values, filterp);
+  
   do_cleanups (cleanup_list);
   ui_out_stream_delete (stb);
 
@@ -602,10 +730,11 @@ mi_cmd_file_list_statics (char *command, char **argv, int argc)
 }
 
 
-void
+static void
 print_globals_for_symtab (struct symtab *file_symtab, 
 			  struct ui_stream *stb,
-			  int values, int create_varobj, 
+			  enum print_values values,
+			  int consts,
 			  struct re_pattern_buffer *filter)
 {
   struct block *block;
@@ -615,7 +744,7 @@ print_globals_for_symtab (struct symtab *file_symtab,
 
   cleanup_list = make_cleanup_ui_out_list_begin_end (uiout, "globals");
 
-  print_syms_for_block (block, NULL, stb, -1, values, create_varobj, filter);
+  print_syms_for_block (block, NULL, stb, -1, consts, values, filter);
 
   do_cleanups (cleanup_list);
 }
@@ -628,49 +757,27 @@ print_globals_for_symtab (struct symtab *file_symtab,
    shared libraries for the file.  If the filename is empty, then it
    looks in all files in the given shared library.  If both are empty
    then it prints ALL globals.  
-   If PRINT_VALUES is 0, only the variable names are printed.  
-   If PRINT_VALUES is 1, the values are also printed.  
-   If PRINT_VALUES is 2, then varobj's are made for all the variables 
-   as well.  
+   The third argument is the standard print-values argument.
    Finally, if there are four arguments, the last is a regular expression,
    to filter OUT all varobj's matching the regexp.  */
 
 enum mi_cmd_result
 mi_cmd_file_list_globals (char *command, char **argv, int argc)
 {
-  int values;
-  int create_varobj;
+  enum print_values values;
   char *shlibname, *filename;
   struct partial_symtab *file_ps;
   struct symtab *file_symtab;
   struct ui_stream *stb;
   struct re_pattern_buffer *filterp;
+  int consts = 1;
 
-  if (argc < 3 || argc > 4)
-    {
-      error ("mi_cmd_file_list_globals: Usage: FILE SHLIB PRINT_VALUES"
-	     " [FILTER]");
-    }
+  if (!parse_statics_globals_args (argv, argc, &filename, &shlibname, &values, 
+				   &filterp, &consts))
+    error ("mi_cmd_file_list_globals: Usage: -file FILE -shlib SHLIB"
+	   " VALUES"
+	   " [-filter FILTER] [-constants 0/1]");
   
-  
-  values = atoi (argv[2]);
-  create_varobj = (values == 2);
-  
-  filename = argv[0];
-  shlibname = argv[1];
-
-  if (argc == 4)
-    {
-      const char *msg;
-
-      msg = re_compile_pattern (argv[3], strlen (argv[3]), &mi_symbol_filter);
-      if (msg)
-	error ("Error compiling regexp: \"%s\"", msg);
-      filterp = &mi_symbol_filter;
-    }
-  else
-    filterp = NULL;
-
   stb = ui_out_stream_new (uiout);
 
   if (*filename != '\0')
@@ -682,7 +789,7 @@ mi_cmd_file_list_globals (char *command, char **argv, int argc)
 	  cleanup_list = make_cleanup_restrict_to_shlib (shlibname);
 	  if (cleanup_list == (void *) -1)
 	    {
-	      error ("mi_cmd_file_list_statics: "
+	      error ("mi_cmd_file_list_globals: "
 		     "Could not find shlib \"%s\".", 
 		     shlibname);
 	    }
@@ -708,7 +815,7 @@ mi_cmd_file_list_globals (char *command, char **argv, int argc)
       
       file_symtab = PSYMTAB_TO_SYMTAB (file_ps);
       print_globals_for_symtab (file_symtab, stb, values, 
-				create_varobj, filterp);
+				consts, filterp);
     }
   else
     {
@@ -719,7 +826,7 @@ mi_cmd_file_list_globals (char *command, char **argv, int argc)
 
 	  ALL_OBJFILES (ofile)
 	    {
-	      if (objfile_matches_name (ofile, shlibname))
+	      if (objfile_matches_name (ofile, shlibname) != objfile_no_match)
 		{
 		  requested_ofile = ofile;
 		  break;
@@ -747,7 +854,7 @@ mi_cmd_file_list_globals (char *command, char **argv, int argc)
 		  ui_out_field_string (uiout, "filename", 
 				       file_symtab->filename);
 		  print_globals_for_symtab (file_symtab, stb, values, 
-					    create_varobj, filterp);
+					    consts, filterp);
 		  do_cleanups (file_cleanup);
 		}
 	    }
@@ -785,8 +892,8 @@ mi_cmd_file_list_globals (char *command, char **argv, int argc)
 		      ui_out_field_string (uiout, "filename", 
 					   file_symtab->filename);
 		      print_globals_for_symtab (file_symtab, stb, 
-						values, create_varobj, 
-						filterp);
+						values, 
+						consts, filterp);
 		      do_cleanups (file_cleanup);
 		    }
 		}
@@ -801,14 +908,15 @@ mi_cmd_file_list_globals (char *command, char **argv, int argc)
 
 }
 
-/* Print the variable symbols for block BLOCK.  If VALUES is 1 print
-   the values as well as the names.  If CREATE_VAROBJ is 1, also make
-   varobj's for each variable.
+/* Print the variable symbols for block BLOCK.  VALUES is the
+   print_values enum.
 
    LOCALS determines what scope of variables to print:
      1 - print locals AND statics.  
      0 - print args.  
      -1  - print statics. 
+   CONSTS - whether to print const symbols.  Const pointers are
+   always printed anyway.
    STB is the ui-stream to which the results are printed.  
    And FI, if non-null, is the frame to bind the varobj to.  
    If FILTER is non-null, then we only print expressions matching
@@ -819,28 +927,29 @@ print_syms_for_block (struct block *block,
 		      struct frame_info *fi, 
 		      struct ui_stream *stb,
 		      int locals, 
-		      int values,
-		      int create_varobj,
+		      int consts,
+		      enum print_values values,
 		      struct re_pattern_buffer *filter)
 {
-  int nsyms;
   int print_me;
   struct symbol *sym;
-  int i;
+  struct dict_iterator iter;
   struct ui_stream *error_stb;
   struct cleanup *old_chain;
   
-  nsyms = BLOCK_NSYMS (block);
-
-  if (nsyms == 0) 
+  if (dict_empty (BLOCK_DICT (block)))
     return;
 
   error_stb = ui_out_stream_new (uiout);
   old_chain = make_cleanup_ui_out_stream_delete (error_stb);
 
-  ALL_BLOCK_SYMBOLS (block, i, sym)
+  ALL_BLOCK_SYMBOLS (block, iter, sym)
     {
       print_me = 0;
+
+      /* If this is a const, and we aren't printing consts, then skop this one. 
+	 However, we always print const pointers, 'cause they are interesting even
+	 if plain int/char/etc consts aren't.  */
 
       switch (SYMBOL_CLASS (sym))
 	{
@@ -855,17 +964,18 @@ print_syms_for_block (struct block *block,
 	case LOC_OPTIMIZED_OUT:	/* optimized out         */
 	  print_me = 0;
 	  break;
-
+	  
 	case LOC_ARG:	/* argument              */
 	case LOC_REF_ARG:	/* reference arg         */
 	case LOC_REGPARM:	/* register arg          */
 	case LOC_REGPARM_ADDR:	/* indirect register arg */
 	case LOC_LOCAL_ARG:	/* stack arg             */
 	case LOC_BASEREG_ARG:	/* basereg arg           */
+	case LOC_COMPUTED_ARG:
 	  if (locals == 0)
 	    print_me = 1;
 	  break;
-
+	  
 	case LOC_STATIC:	/* static                */
 	  if (locals == -1 || locals == 1)
 	    print_me = 1;
@@ -873,54 +983,90 @@ print_syms_for_block (struct block *block,
 	case LOC_LOCAL:	/* stack local           */
 	case LOC_BASEREG:	/* basereg local         */
 	case LOC_REGISTER:	/* register              */
+	case LOC_COMPUTED:
 	  if (locals == 1)
 	    print_me = 1;
 	  break;
 	}
 
+      /* If we were asked not to print consts, make sure we don't.  */
+
+      if (print_me 
+	  && !consts && (SYMBOL_TYPE (sym) != NULL) 
+	  && TYPE_CONST (check_typedef (SYMBOL_TYPE (sym)))
+	  && (!(TYPE_CODE (check_typedef (SYMBOL_TYPE (sym))) == TYPE_CODE_PTR)))
+	print_me = 0;
+      
       if (print_me)
 	{
-	  struct symbol *sym2;
-	  int len = strlen (SYMBOL_NAME (sym));
+          struct symbol *sym2;
+	  int len = strlen (SYMBOL_NATURAL_NAME (sym));
 
 	  /* If we are about to print, compare against the regexp.  */
-	  if (filter && re_search (filter, SYMBOL_NAME (sym), 
+	  if (filter && re_search (filter, SYMBOL_NATURAL_NAME (sym), 
 				   len, 0, len, 
 				   (struct re_registers *) 0) >= 0)
 	    continue;
 
-	  if (!create_varobj && !values)
+	  if (values == PRINT_NO_VALUES)
 	    {
-	      ui_out_tuple_begin (uiout, NULL);
-	      ui_out_field_string (uiout, "name", SYMBOL_NAME (sym));
-	      ui_out_tuple_end (uiout);
+	      struct cleanup *tuple_cleanup;
+	      tuple_cleanup = make_cleanup_ui_out_tuple_begin_end (uiout, NULL);
+	      ui_out_field_string (uiout, "name", SYMBOL_NATURAL_NAME (sym));
+	      do_cleanups (tuple_cleanup);
 	      continue;
 	    }
 
 	  if (!locals)
-	    sym2 = lookup_symbol (SYMBOL_NAME (sym),
-				  block, VAR_NAMESPACE,
+	    sym2 = lookup_symbol (SYMBOL_NATURAL_NAME (sym),
+				  block, VAR_DOMAIN,
 				  (int *) NULL,
 				  (struct symtab **) NULL);
 	  else
 	    sym2 = sym;
 	  
-	  if (create_varobj)
+	  if (values == PRINT_MAKE_VAROBJ)
 	    {
+	      /* APPLE LOCAL: If you pass an expression with a "::" in
+		 it down to parse_expression, it will choke on it.  So
+		 we need to add a ' before and after the
+		 expression.  Only do it if there is a "::" however, just
+	         to keep the uglification to a minimum.  */
 	      struct varobj *new_var;
+	      struct cleanup *tuple_cleanup, *expr_cleanup;
+	      char *expr = SYMBOL_NATURAL_NAME (sym2);
+	      if (strstr (expr, "::") != NULL) 
+		{
+		  char *tmp;
+		  int len = strlen (expr);
+		  tmp = xmalloc (len + 3);
+		  tmp[0] = '\'';
+		  memcpy (tmp + 1, expr, len);
+		  tmp[len + 1] = '\'';
+		  tmp[len + 2] = '\0';
+		  expr = tmp;
+		  expr_cleanup = make_cleanup (xfree, expr);
+		}
+	      else
+		{
+		  expr_cleanup = make_cleanup (null_cleanup, NULL);
+		}
+
+	      /* END APPLE LOCAL */
 	      if (fi)
 		new_var = varobj_create (varobj_gen_name (), 
-					 SYMBOL_NAME (sym2),
-					 fi->frame,
-					 block,
-					 USE_BLOCK_IN_FRAME);
-
+				       expr,
+				       get_frame_base (fi),
+				       block,
+				       USE_BLOCK_IN_FRAME);
 	      else
 		new_var = varobj_create (varobj_gen_name (), 
-					 SYMBOL_NAME (sym2),
-					 0,
-					 block,
-					 NO_FRAME_NEEDED);
+				       expr,
+				       0,
+				       block,
+				       NO_FRAME_NEEDED);
+
+	      do_cleanups (expr_cleanup);
 
 	      /* FIXME: There should be a better way to report an error in 
 		 creating a variable here, but I am not sure how to do it,
@@ -929,46 +1075,72 @@ print_syms_for_block (struct block *block,
 	      if (new_var == NULL)
 		continue;
 
-	      ui_out_tuple_begin (uiout, "varobj");
-	      ui_out_field_string (uiout, "exp", SYMBOL_NAME (sym));
-	      if (values)
+	      tuple_cleanup = make_cleanup_ui_out_tuple_begin_end (uiout, "varobj");
+	      ui_out_field_string (uiout, "exp", SYMBOL_NATURAL_NAME (sym));
+	      if (new_var != NULL)
 		{
-		  if (new_var != NULL)
+		  char *value_str;
+		  struct ui_file *save_stderr;
+		  
+		  /* If we are using the varobj's, then print
+		     the value as the varobj would. */
+		  
+		  save_stderr = gdb_stderr;
+		  gdb_stderr = error_stb->stream;
+		  
+		  if (gdb_varobj_get_value (new_var, &value_str))
 		    {
-		      char *value_str;
-		      struct ui_file *save_stderr;
-       
-		      /* If we are using the varobj's, then print
-			 the value as the varobj would. */
-		      
-		      save_stderr = gdb_stderr;
-		      gdb_stderr = error_stb->stream;
-
-		      if (gdb_varobj_get_value (new_var, &value_str))
-			{
-			  ui_out_field_string (uiout, "value", value_str);
-			}
-		      else
-			{
-			  /* FIXME: can I get the error string & put it here? */
-			  ui_out_field_stream (uiout, "value", 
-					       error_stb);
-			}
-		      gdb_stderr = save_stderr;
+		      ui_out_field_string (uiout, "value", value_str);
 		    }
 		  else
-		    ui_out_field_skip (uiout, "value");
+		    {
+		      /* FIXME: can I get the error string & put it here? */
+		      ui_out_field_stream (uiout, "value", 
+					   error_stb);
+		    }
+		  gdb_stderr = save_stderr;
 		}
+	      else
+		ui_out_field_skip (uiout, "value");
+	    
 	      mi_report_var_creation (uiout, new_var);
-	    }	  
+	      do_cleanups (tuple_cleanup);
+	    }
 	  else
 	    {
-	      ui_out_tuple_begin (uiout, NULL);
-	      ui_out_field_string (uiout, "name", SYMBOL_NAME (sym));
-	      print_variable_value (sym2, fi, stb->stream);
-	      ui_out_field_stream (uiout, "value", stb);
+	      struct cleanup *cleanup_tuple = NULL;
+	      struct type *type;
+
+	      cleanup_tuple =
+		make_cleanup_ui_out_tuple_begin_end (uiout, NULL);
+	      
+	      ui_out_field_string (uiout, "name", SYMBOL_PRINT_NAME (sym));
+	      
+	      switch (values)
+		{
+		case PRINT_SIMPLE_VALUES:
+		  type = check_typedef (sym2->type);
+		  type_print (sym2->type, "", stb->stream, -1);
+		  ui_out_field_stream (uiout, "type", stb);
+		  if (TYPE_CODE (type) != TYPE_CODE_ARRAY
+		      && TYPE_CODE (type) != TYPE_CODE_STRUCT
+		      && TYPE_CODE (type) != TYPE_CODE_UNION)
+		    {
+		      print_variable_value (sym2, fi, stb->stream);
+		      ui_out_field_stream (uiout, "value", stb);
+		    }
+		  do_cleanups (cleanup_tuple);
+		  break;
+		case PRINT_ALL_VALUES:
+		  print_variable_value (sym2, fi, stb->stream);
+		  ui_out_field_stream (uiout, "value", stb);
+		  do_cleanups (cleanup_tuple);
+		  break;
+		default:
+		  internal_error (__FILE__, __LINE__,
+				  "Wrong print_values value for this branch.\n");
+		}
 	    }
-	  ui_out_tuple_end (uiout);
 	}
     }
 
@@ -986,9 +1158,9 @@ mi_cmd_stack_select_frame (char *command, char **argv, int argc)
 
   /* with no args, don't change frame */
   if (argc == 0)
-    select_frame_command_wrapper (0, 1 /* not used */ );
+    select_frame_command (0, 1 /* not used */ );
   else
-    select_frame_command_wrapper (argv[0], 1 /* not used */ );
+    select_frame_command (argv[0], 1 /* not used */ );
   return MI_CMD_DONE;
 }
 
@@ -996,12 +1168,12 @@ void
 mi_interp_stack_changed_hook (void)
 {
   struct ui_out *saved_ui_out = uiout;
+  struct cleanup *list_cleanup;
+  uiout = interp_ui_out (mi_interp);
 
-  uiout = gdb_interpreter_ui_out (mi_interp);
-
-  ui_out_list_begin (uiout, "MI_HOOK_RESULT");
+  list_cleanup = make_cleanup_ui_out_list_begin_end (uiout, "MI_HOOK_RESULT");
   ui_out_field_string (uiout, "HOOK_TYPE", "stack_changed");
-  ui_out_list_end (uiout);
+  do_cleanups (list_cleanup);
   uiout = saved_ui_out;
 }
 
@@ -1009,13 +1181,21 @@ void
 mi_interp_frame_changed_hook (int new_frame_number)
 {
   struct ui_out *saved_ui_out = uiout;
+  struct cleanup *list_cleanup;
 
-  uiout = gdb_interpreter_ui_out (mi_interp);
+  /* APPLE LOCAL: Don't report new_frame_number == -1, that is just the
+     invalidate frame message, and there is not much the UI can do with 
+     that.  */
 
-  ui_out_list_begin (uiout, "MI_HOOK_RESULT");
+  if (new_frame_number == -1)
+    return;
+
+  uiout = interp_ui_out (mi_interp);
+
+  list_cleanup = make_cleanup_ui_out_list_begin_end (uiout, "MI_HOOK_RESULT");
   ui_out_field_string (uiout, "HOOK_TYPE", "frame_changed");
   ui_out_field_int (uiout, "frame", new_frame_number);
-  ui_out_list_end (uiout);
+  do_cleanups (list_cleanup);
   uiout = saved_ui_out;
 
 }
@@ -1024,13 +1204,13 @@ void
 mi_interp_context_hook (int thread_id)
 {
   struct ui_out *saved_ui_out = uiout;
+  struct cleanup *list_cleanup;
+  uiout = interp_ui_out (mi_interp);
 
-  uiout = gdb_interpreter_ui_out (mi_interp);
-
-  ui_out_list_begin (uiout, "MI_HOOK_RESULT");
+  list_cleanup = make_cleanup_ui_out_list_begin_end (uiout, "MI_HOOK_RESULT");
   ui_out_field_string (uiout, "HOOK_TYPE", "thread_changed");
   ui_out_field_int (uiout, "thread", thread_id);
-  ui_out_list_end (uiout);
+  do_cleanups (list_cleanup);
   uiout = saved_ui_out;
 }
 

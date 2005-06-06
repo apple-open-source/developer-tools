@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2003 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005 Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -37,8 +37,32 @@
 
 --  General Note: throughout the compiler, we use the term line or source
 --  line to refer to a physical line in the source, terminated by the end of
---  physical line sequence. See Skip_Line_Terminators procedure for a full
---  description of the difference between logical and physical lines.
+--  physical line sequence.
+
+--  There are two distinct concepts of line terminator in GNAT
+
+--    A logical line terminator is what corresponds to the "end of a line" as
+--    described in RM 2.2 (13). Any of the characters FF, LF, CR or VT or any
+--    wide character that is a Line or Paragraph Separator acts as an end of
+--    logical line in this sense, and it is essentially irrelevant whether one
+--    or more appears in sequence (since if sequence of such characters is
+--    regarded as separate ends of line, then the intervening logical lines
+--    are null in any case).
+
+--    A physical line terminator is a sequence of format effectors that is
+--    treated as ending a physical line. Physical lines have no Ada semantic
+--    significance, but they are significant for error reporting purposes,
+--    since errors are identified by line and column location.
+
+--  In GNAT, a physical line is ended by any of the sequences LF, CR/LF, CR or
+--  LF/CR. LF is used in typical Unix systems, CR/LF in DOS systems, and CR
+--  alone in System 7. We don't know of any system using LF/CR, but it seems
+--  reasonable to include this case for consistency. In addition, we recognize
+--  any of these sequences in any of the operating systems, for better
+--  behavior in treating foreign files (e.g. a Unix file with LF terminators
+--  transferred to a DOS system). Finally, wide character codes in cagtegories
+--  Separator, Line and Separator, Paragraph are considered to be physical
+--  line terminators.
 
 with Alloc;
 with Casing; use Casing;
@@ -293,7 +317,7 @@ package Sinput is
    procedure Lock;
    --  Lock internal tables
 
-   Main_Source_File : Source_File_Index;
+   Main_Source_File : Source_File_Index := No_Source_File;
    --  This is set to the source file index of the main unit
 
    -----------------------------
@@ -445,8 +469,7 @@ package Sinput is
    --  represent the standard 1,9,17.. spacing pattern.
 
    function Get_Logical_Line_Number
-     (P    : Source_Ptr)
-      return Logical_Line_Number;
+     (P : Source_Ptr) return Logical_Line_Number;
    --  The line number of the specified source position is obtained by
    --  doing a binary search on the source positions in the lines table
    --  for the unit containing the given source position. The returned
@@ -457,8 +480,7 @@ package Sinput is
    --  the same as the physical line number.
 
    function Get_Physical_Line_Number
-     (P    : Source_Ptr)
-      return Physical_Line_Number;
+     (P : Source_Ptr) return Physical_Line_Number;
    --  The line number of the specified source position is obtained by
    --  doing a binary search on the source positions in the lines table
    --  for the unit containing the given source position. The returned
@@ -478,9 +500,8 @@ package Sinput is
    --  given source location.
 
    function Line_Start
-     (L    : Physical_Line_Number;
-      S    : Source_File_Index)
-      return Source_Ptr;
+     (L : Physical_Line_Number;
+      S : Source_File_Index) return Source_Ptr;
    --  Finds the source position of the start of the given line in the
    --  given source file, using a physical line number to identify the line.
 
@@ -525,8 +546,7 @@ package Sinput is
 
    function Physical_To_Logical
      (Line : Physical_Line_Number;
-      S    : Source_File_Index)
-      return Logical_Line_Number;
+      S    : Source_File_Index) return Logical_Line_Number;
    --  Given a physical line number in source file whose source index is S,
    --  return the corresponding logical line number. If the physical line
    --  number is one containing a Source_Reference pragma, the result will
@@ -535,16 +555,29 @@ package Sinput is
    procedure Skip_Line_Terminators
      (P        : in out Source_Ptr;
       Physical : out Boolean);
-   --  On entry, Source (P) points to the line terminator character that
-   --  terminates a line. The result set in P is the location of the first
-   --  character of the following line (after skipping the sequence of line
-   --  terminator characters terminating the current line). In addition, if
-   --  the terminator sequence ends a physical line (the definition of what
-   --  constitutes a physical line is embodied in the implementation of this
-   --  function), and it is the first time this sequence is encountered, then
-   --  an entry is made in the lines table to record the location for further
-   --  use by functions such as Get_Line_Number. Physical is set to True if
-   --  the line terminator was the end of a physical line.
+   --  On entry, P points to a line terminator that has been encountered,
+   --  which is one of FF,LF,VT,CR or a wide character sequence whose value is
+   --  in category Separator,Line or Separator,Paragraph. The purpose of this
+   --  P points just past the character that was scanned. The purpose of this
+   --  routine is to distinguish physical and logical line endings. A physical
+   --  line ending is one of:
+   --
+   --     CR on its own (MAC System 7)
+   --     LF on its own (Unix and unix-like systems)
+   --     CR/LF (DOS, Windows)
+   --     LF/CR (not used, but recognized in any case)
+   --     Wide character in Separator,Line or Separator,Paragraph category
+   --
+   --  A logical line ending (that is not a physical line ending) is one of:
+   --
+   --     VT on its own
+   --     FF on its own
+   --
+   --  On return, P is bumped past the line ending sequence (one of the above
+   --  seven possibilities). Physical is set to True to indicate that a
+   --  physical end of line was encountered, in which case this routine also
+   --  makes sure that the lines table for the current source file has an
+   --  appropriate entry for the start of the new physical line.
 
    function Source_Offset (S : Source_Ptr) return Nat;
    --  Returns the zero-origin offset of the given source location from the
@@ -568,11 +601,13 @@ package Sinput is
    procedure Write_Time_Stamp (S : Source_File_Index);
    --  Writes time stamp of specified file in YY-MM-DD HH:MM.SS format
 
-   procedure Tree_Write;
-   --  Writes out internal tables to current tree file using Tree_Write
-
    procedure Tree_Read;
-   --  Initializes internal tables from current tree file using Tree_Read
+   --  Initializes internal tables from current tree file using the relevant
+   --  Table.Tree_Read routines.
+
+   procedure Tree_Write;
+   --  Writes out internal tables to current tree file using the relevant
+   --  Table.Tree_Write routines.
 
 private
    pragma Inline (File_Name);

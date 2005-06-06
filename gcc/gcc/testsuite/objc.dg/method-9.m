@@ -1,5 +1,5 @@
-/* Check if finding multiple signatures for a method is handled gracefully
-   when method lookup succeeds (see also method-7.m).  */
+/* APPLE LOCAL file */
+/* Check if finding multiple signatures for a method is handled gracefully when method lookup succeeds (see also method-7.m).  */
 /* Contributed by Ziemowit Laski <zlaski@apple.com>  */
 /* { dg-do compile } */
 
@@ -37,7 +37,11 @@
      /* { dg-warning "also found .\\-\\(id\\)initWithData:\\(int\\)data." "" { target *-*-* } 13 } */
 
      /* The following warning is a consequence of picking the "wrong" method signature.  */
-     /* { dg-warning "passing arg 1 of .initWithData:. from incompatible pointer type" "" { target *-*-* } 33 } */
+     /* { dg-warning "passing argument 1 of .initWithData:. from incompatible pointer type" "" { target *-*-* } 33 } */
     return result;
 }
 @end
+
+/* APPLE LOCAL Objective-C */
+/* { dg-options "-Wstrict-selector-match" } */
+

@@ -675,9 +675,10 @@ static void dw(char *arg, int from_tty)
  | FB addr n expr|"string" - search from addr to addr+n-1 for the byte |
  *---------------------------------------------------------------------*/
 
+static void find(char *arg, int from_tty);
+
 static void fb(char *arg, int from_tty)
 {
-    static void find(char *arg, int from_tty);
     
     find_size = 1;
     findName  = "FB";
@@ -1167,9 +1168,10 @@ static void mr(char *arg, int from_tty)
  | PC - display the value of PC |
  *------------------------------*/
 
+static void _rn(int r, int from_tty);
+
 static void pc(char *arg, int from_tty)
 {
-    static void _rn(int r, int from_tty);
     
     _rn(-1, from_tty);				/* -1 means use $pc in rn()		*/
 }

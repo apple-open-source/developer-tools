@@ -1,5 +1,5 @@
 /* Definitions for 64-bit SPARC running Linux-based GNU systems with ELF.
-   Copyright 1996, 1997, 1998, 2000, 2002, 2003, 2004
+   Copyright 1996, 1997, 1998, 2000, 2002, 2003, 2004, 2005
    Free Software Foundation, Inc.
    Contributed by David S. Miller (davem@caip.rutgers.edu)
 
@@ -30,6 +30,11 @@ Boston, MA 02111-1307, USA.  */
 	builtin_assert ("system=linux");	\
 	builtin_assert ("system=unix");		\
 	builtin_assert ("system=posix");	\
+	if (flag_pic)				\
+	  {					\
+		builtin_define ("__PIC__");	\
+		builtin_define ("__pic__");	\
+	  }					\
     }						\
   while (0)
 
@@ -127,7 +132,6 @@ Boston, MA 02111-1307, USA.  */
 
 #undef CPP_SUBTARGET_SPEC
 #define CPP_SUBTARGET_SPEC "\
-%{fPIC|fpic|fPIE|fpie:-D__PIC__ -D__pic__} \
 %{posix:-D_POSIX_SOURCE} \
 %{pthread:-D_REENTRANT} \
 "
@@ -285,9 +289,6 @@ Boston, MA 02111-1307, USA.  */
 #undef DBX_REGISTER_NUMBER
 #define DBX_REGISTER_NUMBER(REGNO) (REGNO)
 
-#define DWARF2_DEBUGGING_INFO 1
-#define DBX_DEBUGGING_INFO 1
-
 #undef ASM_OUTPUT_ALIGNED_LOCAL
 #define ASM_OUTPUT_ALIGNED_LOCAL(FILE, NAME, SIZE, ALIGN)		\
 do {									\
@@ -302,13 +303,6 @@ do {									\
 
 #undef  LOCAL_LABEL_PREFIX
 #define LOCAL_LABEL_PREFIX  "."
-
-/* This is how to output a reference to an internal numbered label where
-   PREFIX is the class of label and NUM is the number within the class.  */
-
-#undef  ASM_OUTPUT_INTERNAL_LABELREF
-#define ASM_OUTPUT_INTERNAL_LABELREF(FILE,PREFIX,NUM)	\
-  fprintf (FILE, ".L%s%d", PREFIX, NUM)
 
 /* This is how to store into the string LABEL
    the symbol_ref name of an internal numbered label where
@@ -349,7 +343,9 @@ do {									\
 #undef CTORS_SECTION_ASM_OP
 #undef DTORS_SECTION_ASM_OP
 
-#define TARGET_ASM_FILE_END file_end_indicate_exec_stack
+/* Determine whether the the entire c99 runtime is present in the
+   runtime library.  */
+#define TARGET_C99_FUNCTIONS 1
 
 #define TARGET_HAS_F_SETLKW
 
@@ -362,121 +358,13 @@ do {									\
 #define USE_LD_AS_NEEDED 1
 #endif
 
-/* Do code reading to identify a signal frame, and set the frame
-   state data appropriately.  See unwind-dw2.c for the structs.  */
+#define MD_UNWIND_SUPPORT "config/sparc/linux-unwind.h"
 
-/* Handle multilib correctly.  */
-#if defined(__arch64__)
-/* 64-bit SPARC version */
-#define MD_FALLBACK_FRAME_STATE_FOR(CONTEXT, FS, SUCCESS)		\
-  do {									\
-    unsigned int *pc_ = (CONTEXT)->ra;					\
-    long new_cfa_, i_;							\
-    long regs_off_, fpu_save_off_;					\
-    long this_cfa_, fpu_save_;						\
-									\
-    if (pc_[0] != 0x82102065		/* mov NR_rt_sigreturn, %g1 */	\
-        || pc_[1] != 0x91d0206d)		/* ta 0x6d */		\
-      break;								\
-    regs_off_ = 192 + 128;						\
-    fpu_save_off_ = regs_off_ + (16 * 8) + (3 * 8) + (2 * 4);		\
-    this_cfa_ = (long) (CONTEXT)->cfa;					\
-    new_cfa_ = *(long *)(((CONTEXT)->cfa) + (regs_off_ + (14 * 8)));	\
-    new_cfa_ += 2047; /* Stack bias */					\
-    fpu_save_ = *(long *)((this_cfa_) + (fpu_save_off_));		\
-    (FS)->cfa_how = CFA_REG_OFFSET;					\
-    (FS)->cfa_reg = 14;							\
-    (FS)->cfa_offset = new_cfa_ - (long) (CONTEXT)->cfa;		\
-    for (i_ = 1; i_ < 16; ++i_)						\
-      {									\
-	(FS)->regs.reg[i_].how = REG_SAVED_OFFSET;			\
-	(FS)->regs.reg[i_].loc.offset =					\
-	  this_cfa_ + (regs_off_ + (i_ * 8)) - new_cfa_;		\
-      }									\
-    for (i_ = 0; i_ < 16; ++i_)						\
-      {									\
-	(FS)->regs.reg[i_ + 16].how = REG_SAVED_OFFSET;			\
-	(FS)->regs.reg[i_ + 16].loc.offset =				\
-	  this_cfa_ + (i_ * 8) - new_cfa_;				\
-      }									\
-    if (fpu_save_)							\
-      {									\
-	for (i_ = 0; i_ < 64; ++i_)					\
-	  {								\
-            if (i_ > 32 && (i_ & 0x1))					\
-              continue;							\
-	    (FS)->regs.reg[i_ + 32].how = REG_SAVED_OFFSET;		\
-	    (FS)->regs.reg[i_ + 32].loc.offset =			\
-	      (fpu_save_ + (i_ * 4)) - new_cfa_;			\
-	  }								\
-      }									\
-    /* Stick return address into %g0, same trick Alpha uses.  */	\
-    (FS)->regs.reg[0].how = REG_SAVED_OFFSET;				\
-    (FS)->regs.reg[0].loc.offset =					\
-      this_cfa_ + (regs_off_ + (16 * 8) + 8) - new_cfa_;		\
-    (FS)->retaddr_column = 0;						\
-    goto SUCCESS;							\
-  } while (0)
-#else
-/* 32-bit SPARC version */
-#define MD_FALLBACK_FRAME_STATE_FOR(CONTEXT, FS, SUCCESS)		\
-  do {									\
-    unsigned int *pc_ = (CONTEXT)->ra;					\
-    int new_cfa_, i_, oldstyle_;					\
-    int regs_off_, fpu_save_off_;					\
-    int fpu_save_, this_cfa_;						\
-									\
-    if (pc_[1] != 0x91d02010)		/* ta 0x10 */			\
-      break;								\
-    if (pc_[0] == 0x821020d8)		/* mov NR_sigreturn, %g1 */	\
-      oldstyle_ = 1;							\
-    else if (pc_[0] == 0x82102065)	/* mov NR_rt_sigreturn, %g1 */	\
-      oldstyle_ = 0;							\
-    else								\
-      break;								\
-    if (oldstyle_)							\
-      {									\
-        regs_off_ = 96;							\
-        fpu_save_off_ = regs_off_ + (4 * 4) + (16 * 4);			\
-      }									\
-    else								\
-      {									\
-        regs_off_ = 96 + 128;						\
-        fpu_save_off_ = regs_off_ + (4 * 4) + (16 * 4) + (2 * 4);	\
-      }									\
-    this_cfa_ = (int) (CONTEXT)->cfa;					\
-    new_cfa_ = *(int *)(((CONTEXT)->cfa) + (regs_off_+(4*4)+(14 * 4)));	\
-    fpu_save_ = *(int *)((this_cfa_) + (fpu_save_off_));		\
-    (FS)->cfa_how = CFA_REG_OFFSET;					\
-    (FS)->cfa_reg = 14;							\
-    (FS)->cfa_offset = new_cfa_ - (int) (CONTEXT)->cfa;			\
-    for (i_ = 1; i_ < 16; ++i_)						\
-      {									\
-        if (i_ == 14)							\
-          continue;							\
-	(FS)->regs.reg[i_].how = REG_SAVED_OFFSET;			\
-	(FS)->regs.reg[i_].loc.offset =					\
-	   this_cfa_ + (regs_off_+(4 * 4)+(i_ * 4)) - new_cfa_;		\
-      }									\
-    for (i_ = 0; i_ < 16; ++i_)						\
-      {									\
-	(FS)->regs.reg[i_ + 16].how = REG_SAVED_OFFSET;			\
-	(FS)->regs.reg[i_ + 16].loc.offset =				\
-	  this_cfa_ + (i_ * 4) - new_cfa_;				\
-      }									\
-    if (fpu_save_)							\
-      {									\
-	for (i_ = 0; i_ < 32; ++i_)					\
-	  {								\
-	    (FS)->regs.reg[i_ + 32].how = REG_SAVED_OFFSET;		\
-	    (FS)->regs.reg[i_ + 32].loc.offset =			\
-	      (fpu_save_ + (i_ * 4)) - new_cfa_;			\
-	  }								\
-      }									\
-    /* Stick return address into %g0, same trick Alpha uses.  */	\
-    (FS)->regs.reg[0].how = REG_SAVED_OFFSET;				\
-    (FS)->regs.reg[0].loc.offset = this_cfa_+(regs_off_+4)-new_cfa_;	\
-    (FS)->retaddr_column = 0;						\
-    goto SUCCESS;							\
-  } while (0)
-#endif
+/* Linux currently uses RMO in uniprocessor mode, which is equivalent to
+   TMO, and TMO in multiprocessor mode.  But they reserve the right to
+   change their minds.  */
+#undef SPARC_RELAXED_ORDERING
+#define SPARC_RELAXED_ORDERING true
+
+#undef NEED_INDICATE_EXEC_STACK
+#define NEED_INDICATE_EXEC_STACK 1

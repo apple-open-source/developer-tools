@@ -119,14 +119,14 @@ static short pc_bottom_divider;			/* row of pc area bottom divider	*/
 
 static GDB_HOOK *hook_stop = NULL;		/* hook-stop hander			*/
 
-static unsigned long prev_pc;				/* reg values since last time displayed	*/
-static unsigned long prev_lr;
-static unsigned long prev_ctr;
-static unsigned long prev_msr;
-static unsigned long prev_cr;
-static unsigned long prev_xer;
-static unsigned long prev_mq;
-static unsigned long prev_gpr[32];
+static unsigned long long prev_pc;				/* reg values since last time displayed	*/
+static unsigned long long prev_lr;
+static unsigned long long prev_ctr;
+static unsigned long long prev_msr;
+static unsigned long long prev_cr;
+static unsigned long long prev_xer;
+static unsigned long long prev_mq;
+static unsigned long long prev_gpr[32];
 
 static unsigned long *prev_stack       = NULL;	/* stk values since last time displayed	*/
 static char	     *prev_stack_color = NULL;	/* color state for prev_stack value	*/
@@ -250,10 +250,11 @@ void get_screen_size(int *max_rows, int *max_cols)
  the screen to scroll up.  This is needed in enough places to warrant its own routine.
 */
 
+static void flush_buffer(void);
+
 void position_cursor_for_shell_input(void)
 {
     struct winsize size;
-    static void flush_buffer(void);
     
     if (macsbug_screen) {
     	flush_buffer();
@@ -388,13 +389,13 @@ static int write_line(char *fmt, ...)
  | su [n] - scroll the history up n (default 1) line |
  *---------------------------------------------------*/
 
+static void sd(char *arg, int from_tty);
+    
 static void su(char *arg, int from_tty)
 {
     int     i, n;
     History *h1;
     char    negated_arg[25];
-    
-    static void sd(char *arg, int from_tty);
     
     if (!macsbug_screen)
     	return;
@@ -1070,7 +1071,7 @@ void display_pc_area(void)
     DisasmData	   disasm_info;
     Disasm_pc_data pc_data;
     GDB_FILE	   *redirect_stdout;
-    unsigned long  current_pc;
+    unsigned long long      current_pc;
     char 	   line[1024];
     
     get_screen_size(&max_rows, &max_cols);
@@ -1374,6 +1375,7 @@ void __display_side_bar(char *arg, int from_tty)
 {
     int           i, row, col, reg, saved_regs, lastcmd, left_col, bottom,
     		  cur_app_name, force_all_updates, changed, stack_rows;
+    unsigned long long long_pc, long_lr, long_ctr, long_msr, long_cr, long_xer, long_mq, long_gpr[32];
     unsigned long pc, lr, ctr, msr, cr, xer, mq, gpr[32], *stack;
     char          *bar_left, *bar_right, r[6], centered_name[13], v[50];
     
@@ -1452,17 +1454,29 @@ void __display_side_bar(char *arg, int from_tty)
     if (force_all_updates)
     	first_sidebar = force_all_updates;
     
-    gdb_get_register("$pc",  &pc); 	/* get current register values...		*/
-    gdb_get_register("$lr",  &lr);
-    gdb_get_register("$ctr", &ctr);
-    gdb_get_register("$ps",  &msr);
-    gdb_get_register("$cr",  &cr);
-    gdb_get_register("$xer", &xer);
-    gdb_get_register("$mq",  &mq);
+    /* This is a bit of a hack, but for PPC starting with Tiger, all the registers
+       are treated as 64 bit values.  But I don't want to muck around with resizing
+       the register area for this.  So for now, I will just truncate all the values
+       to longs.  JCI */
+    gdb_get_register("$pc",  &long_pc); 	/* get current register values...		*/
+    pc = (unsigned long) long_pc;
+    gdb_get_register("$lr",  &long_lr);
+    lr = (unsigned long) long_lr;
+    gdb_get_register("$ctr", &long_ctr);
+    ctr = (unsigned long) long_ctr;
+    gdb_get_register("$ps",  &long_msr);
+    msr = (unsigned long) long_msr;
+    gdb_get_register("$cr",  &long_cr);
+    cr = (unsigned long) long_cr;
+    gdb_get_register("$xer", &long_xer);
+    xer = (unsigned long) long_xer;
+    gdb_get_register("$mq",  &long_mq);
+    mq = (unsigned long) long_mq;
     
     for (i = 0; i < 32; ++i) {
 	sprintf(r, "$r%d", i);
-	gdb_get_register(r, &gpr[i]);
+	gdb_get_register(r, &long_gpr[i]);
+	gpr[i] = (unsigned long) long_gpr[i];
     }
      
     row = 1;
@@ -1492,7 +1506,7 @@ void __display_side_bar(char *arg, int from_tty)
 	screen_fprintf(stdout, SIDE_BAR, GOTO "%s" "     SP     " "%s", row, left_col, bar_left, bar_right);
     ++row;
     
-    changed = (prev_gpr[1] != gpr[1]);
+    changed = (prev_gpr[1] != long_gpr[1]);
     if (first_sidebar || changed || changed != prev_sp_color)
     	screen_fprintf(stdout, SIDE_BAR, GOTO "%s" "  " "%s" "%.8lX" "  " "%s", row, left_col,
 			       bar_left, COLOR_CHANGE(prev_sp_color = changed), 
@@ -1548,18 +1562,18 @@ void __display_side_bar(char *arg, int from_tty)
     
     /* Print the special registers, in red if they different from previous...		*/
     
-    changed = (prev_lr != lr);
+    changed = (prev_lr != long_lr);
     if (first_sidebar || changed || changed != prev_lr_color)
     	screen_fprintf(stdout, SIDE_BAR, GOTO "%s" "LR  " "%s" "%.8X" "%s", row, left_col,
     			 bar_left, COLOR_CHANGE(prev_lr_color = changed), lr, bar_right);
     ++row;
     
-    changed = (prev_cr != cr);
+    changed = (prev_cr != long_cr);
     if (first_sidebar || changed || changed != prev_cr_color) {
     	prev_cr_color = changed;
     	screen_fprintf(stdout, SIDE_BAR, GOTO "%s" "CR  ", row, left_col, bar_left);
     	for (i = 28; i >= 0; i -= 4)
-    	    screen_fprintf(stdout, SIDE_BAR, "%s" "%.1X", COLOR_CHANGE((prev_cr>>i&15) != (cr>>i&15)), (cr>>i&15));
+    	    screen_fprintf(stdout, SIDE_BAR, "%s" "%.1X", COLOR_CHANGE((prev_cr>>i&15) != (long_cr>>i&15)), (cr>>i&15));
     	if (*bar_right)
     	    screen_fprintf(stdout, SIDE_BAR, "%s", bar_right);
     }
@@ -1569,20 +1583,20 @@ void __display_side_bar(char *arg, int from_tty)
     	screen_fprintf(stdout, SIDE_BAR, GOTO "%s" "            " "%s", row, left_col, bar_left, bar_right);
     ++row;
     
-    changed = (prev_ctr != ctr);
+    changed = (prev_ctr != long_ctr);
     if (first_sidebar || changed || changed != prev_ctr_color)
     	screen_fprintf(stdout, SIDE_BAR, GOTO "%s" "CTR " "%s" "%.8X" "%s", row, left_col, bar_left,
 			COLOR_CHANGE(prev_ctr_color = changed), ctr, bar_right);
     ++row;
     
     #if 0
-    changed = (prev_msr != msr);
+    changed = (prev_msr != long_msr);
     if (first_sidebar || changed || changed != prev_msr_color)
     	screen_fprintf(stdout, SIDE_BAR, GOTO "%s" "MSR " "%s" "%.8X" "%s", row, left_col, bar_left,
     			COLOR_CHANGE(prev_msr_color = changed), msr, bar_right);
     ++row;
     
-    changed = (prev_mq != mq);
+    changed = (prev_mq != long_mq);
     if (first_sidebar || changed || changed != prev_mq_color)
     	screen_fprintf(stdout, SIDE_BAR, GOTO "%s" "MQ  " "%s" "%.8X" "%s", row, left_col, bar_left,
     			COLOR_CHANGE(prev_mq_color = changed), mq , bar_right);
@@ -1593,10 +1607,10 @@ void __display_side_bar(char *arg, int from_tty)
     if (first_sidebar || changed || changed != prev_xer_color) {
     	prev_xer_color = changed;
     	screen_fprintf(stdout, SIDE_BAR, GOTO "%s" "XER ", row, left_col, bar_left);
-    	screen_fprintf(stdout, SIDE_BAR, "%s" "%.1X" COLOR_OFF, COLOR_CHANGE((prev_xer>>28&0xF) != (xer>>28&0xF)), xer>>28&0xF);
+    	screen_fprintf(stdout, SIDE_BAR, "%s" "%.1X" COLOR_OFF, COLOR_CHANGE((prev_xer>>28&0xF) != (long_xer>>28&0xF)), xer>>28&0xF);
     	screen_fprintf(stdout, SIDE_BAR, "%.3X", (xer>>16&0xFFF));
-    	screen_fprintf(stdout, SIDE_BAR, "%s" "%.2X", COLOR_CHANGE((prev_xer>>8&0xFF) != (xer>>8&0xFF)), xer>>8&0xFF);
-    	screen_fprintf(stdout, SIDE_BAR, "%s" "%.2X", COLOR_CHANGE((prev_xer&0xFF) != (xer&0xFF)), xer&0xFF);
+    	screen_fprintf(stdout, SIDE_BAR, "%s" "%.2X", COLOR_CHANGE((prev_xer>>8&0xFF) != (long_xer>>8&0xFF)), xer>>8&0xFF);
+    	screen_fprintf(stdout, SIDE_BAR, "%s" "%.2X", COLOR_CHANGE((prev_xer&0xFF) != (long_xer&0xFF)), xer&0xFF);
    	if (*bar_right)
 	    screen_fputs(bar_right, stdout, SIDE_BAR);
     }
@@ -1609,7 +1623,7 @@ void __display_side_bar(char *arg, int from_tty)
     /* Print the general regs at the bottom...						*/
     
     for (reg = 0; reg < 32; ++reg) {
-    	changed = (prev_gpr[reg] != gpr[reg]);
+    	changed = (prev_gpr[reg] != long_gpr[reg]);
     	if (first_sidebar || changed || changed != prev_gpr_color[reg]) {
        	    screen_fprintf(stdout, SIDE_BAR, GOTO "%s", row, left_col, bar_left);
        	    if (reg == 1)

@@ -1,5 +1,4 @@
-
-/* Copyright (C) 2002-2003 Free Software Foundation, Inc.
+/* Copyright (C) 2002, 2003, 2004 Free Software Foundation, Inc.
    Contributed by Andy Vaught
 
 This file is part of the GNU Fortran 95 runtime library (libgfortran).
@@ -8,6 +7,15 @@ Libgfortran is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2, or (at your option)
 any later version.
+
+In addition to the permissions in the GNU General Public License, the
+Free Software Foundation gives you unlimited permission to link the
+compiled version of this file into combinations with other programs,
+and to distribute those combinations without any restriction coming
+from the use of this file.  (The General Public License restrictions
+do apply in other respects; for example, they cover modification of
+the file, and distribution when not linked into a combine
+executable.)
 
 Libgfortran is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -31,131 +39,84 @@ static st_option access_opt[] = {
   {"sequential", ACCESS_SEQUENTIAL},
   {"direct", ACCESS_DIRECT},
   {NULL}
-}, action_opt[] =
-{
-  {
-  "read", ACTION_READ}
-  ,
-  {
-  "write", ACTION_WRITE}
-  ,
-  {
-  "readwrite", ACTION_READWRITE}
-  ,
-  {
-  NULL}
-}
+};
 
-, blank_opt[] =
+static st_option action_opt[] =
 {
-  {
-  "null", BLANK_NULL}
-  ,
-  {
-  "zero", BLANK_ZERO}
-  ,
-  {
-  NULL}
-}
+  { "read", ACTION_READ},
+  { "write", ACTION_WRITE},
+  { "readwrite", ACTION_READWRITE},
+  { NULL}
+};
 
-, delim_opt[] =
+static st_option blank_opt[] =
 {
-  {
-  "none", DELIM_NONE}
-  ,
-  {
-  "apostrophe", DELIM_APOSTROPHE}
-  ,
-  {
-  "quote", DELIM_QUOTE}
-  ,
-  {
-  NULL}
-}
+  { "null", BLANK_NULL},
+  { "zero", BLANK_ZERO},
+  { NULL}
+};
 
-, form_opt[] =
+static st_option delim_opt[] =
 {
-  {
-  "formatted", FORM_FORMATTED}
-  ,
-  {
-  "unformatted", FORM_UNFORMATTED}
-  ,
-  {
-  NULL}
-}
+  { "none", DELIM_NONE},
+  { "apostrophe", DELIM_APOSTROPHE},
+  { "quote", DELIM_QUOTE},
+  { NULL}
+};
 
-, position_opt[] =
+static st_option form_opt[] =
 {
-  {
-  "asis", POSITION_ASIS}
-  ,
-  {
-  "rewind", POSITION_REWIND}
-  ,
-  {
-  "append", POSITION_APPEND}
-  ,
-  {
-  NULL}
-}
+  { "formatted", FORM_FORMATTED},
+  { "unformatted", FORM_UNFORMATTED},
+  { NULL}
+};
 
-, status_opt[] =
+static st_option position_opt[] =
 {
-  {
-  "unknown", STATUS_UNKNOWN}
-  ,
-  {
-  "old", STATUS_OLD}
-  ,
-  {
-  "new", STATUS_NEW}
-  ,
-  {
-  "replace", STATUS_REPLACE}
-  ,
-  {
-  "scratch", STATUS_SCRATCH}
-  ,
-  {
-  NULL}
-}
+  { "asis", POSITION_ASIS},
+  { "rewind", POSITION_REWIND},
+  { "append", POSITION_APPEND},
+  { NULL}
+};
 
-, pad_opt[] =
+static st_option status_opt[] =
 {
-  {
-  "yes", PAD_YES}
-  ,
-  {
-  "no", PAD_NO}
-  ,
-  {
-  NULL}
+  { "unknown", STATUS_UNKNOWN},
+  { "old", STATUS_OLD},
+  { "new", STATUS_NEW},
+  { "replace", STATUS_REPLACE},
+  { "scratch", STATUS_SCRATCH},
+  { NULL}
+};
+
+static st_option pad_opt[] =
+{
+  { "yes", PAD_YES},
+  { "no", PAD_NO},
+  { NULL}
 };
 
 
-/* test_endfile()-- Given a unit, test to see if the file is
- * positioned at the terminal point, and if so, change state from
- * NO_ENDFILE flag to AT_ENDFILE.  This prevents us from changing the
- * state from AFTER_ENDFILE to AT_ENDFILE. */
+/* Given a unit, test to see if the file is positioned at the terminal
+   point, and if so, change state from NO_ENDFILE flag to AT_ENDFILE.
+   This prevents us from changing the state from AFTER_ENDFILE to
+   AT_ENDFILE.  */
 
 void
 test_endfile (gfc_unit * u)
 {
-
   if (u->endfile == NO_ENDFILE && file_length (u->s) == file_position (u->s))
     u->endfile = AT_ENDFILE;
 }
 
 
-/* edit_modes()-- Change the modes of a file, those that are allowed
- * to be changed. */
+/* Change the modes of a file, those that are allowed * to be
+   changed.  */
 
 static void
 edit_modes (gfc_unit * u, unit_flags * flags)
 {
-
-  /* Complain about attempts to change the unchangeable */
+  /* Complain about attempts to change the unchangeable.  */
 
   if (flags->status != STATUS_UNSPECIFIED &&
       u->flags.status != flags->position)
@@ -178,7 +139,7 @@ edit_modes (gfc_unit * u, unit_flags * flags)
     generate_error (ERROR_BAD_OPTION,
 		    "Cannot change ACTION parameter in OPEN statement");
 
-  /* Status must be OLD if present */
+  /* Status must be OLD if present.  */
 
   if (flags->status != STATUS_UNSPECIFIED && flags->status != STATUS_OLD)
     generate_error (ERROR_BAD_OPTION,
@@ -203,7 +164,8 @@ edit_modes (gfc_unit * u, unit_flags * flags)
     }
 
   if (ioparm.library_return == LIBRARY_OK)
-    {				/* Change the changeable */
+    {
+      /* Change the changeable:  */
       if (flags->blank != BLANK_UNSPECIFIED)
 	u->flags.blank = flags->blank;
       if (flags->delim != DELIM_UNSPECIFIED)
@@ -212,7 +174,7 @@ edit_modes (gfc_unit * u, unit_flags * flags)
 	u->flags.pad = flags->pad;
     }
 
-  /* Reposition the file if necessary. */
+  /* Reposition the file if necessary.  */
 
   switch (flags->position)
     {
@@ -227,7 +189,7 @@ edit_modes (gfc_unit * u, unit_flags * flags)
       u->current_record = 0;
       u->last_record = 0;
 
-      test_endfile (u);		/* We might be at the end */
+      test_endfile (u);		/* We might be at the end.  */
       break;
 
     case POSITION_APPEND:
@@ -235,7 +197,7 @@ edit_modes (gfc_unit * u, unit_flags * flags)
 	goto seek_error;
 
       u->current_record = 0;
-      u->endfile = AT_ENDFILE;	/* We are at the end */
+      u->endfile = AT_ENDFILE;	/* We are at the end.  */
       break;
 
     seek_error:
@@ -245,7 +207,7 @@ edit_modes (gfc_unit * u, unit_flags * flags)
 }
 
 
-/* new_unit()-- Open an unused unit */
+/* Open an unused unit.  */
 
 void
 new_unit (unit_flags * flags)
@@ -254,13 +216,12 @@ new_unit (unit_flags * flags)
   stream *s;
   char tmpname[5 /* fort. */ + 10 /* digits of unit number */ + 1 /* 0 */];
 
-  /* Change unspecifieds to defaults */
+  /* Change unspecifieds to defaults.  Leave (flags->action ==
+     ACTION_UNSPECIFIED) alone so open_external() can set it based on
+     what type of open actually works.  */
 
   if (flags->access == ACCESS_UNSPECIFIED)
     flags->access = ACCESS_SEQUENTIAL;
-
-  if (flags->action == ACTION_UNSPECIFIED)
-    flags->action = ACTION_READWRITE;	/* Processor dependent */
 
   if (flags->form == FORM_UNSPECIFIED)
     flags->form = (flags->access == ACCESS_SEQUENTIAL)
@@ -321,7 +282,7 @@ new_unit (unit_flags * flags)
   if (flags->status == STATUS_UNSPECIFIED)
     flags->status = STATUS_UNKNOWN;
 
-  /* Checks */
+  /* Checks.  */
 
   if (flags->access == ACCESS_DIRECT && ioparm.recl_in == 0)
     {
@@ -362,17 +323,22 @@ new_unit (unit_flags * flags)
       internal_error ("new_unit(): Bad status");
     }
 
-  /* Make sure the file isn't already open someplace else */
+  /* Make sure the file isn't already open someplace else.
+     Do not error if opening file preconnected to stdin, stdout, stderr.  */
 
-  if (find_file () != NULL)
+  u = find_file ();
+  if (u != NULL
+      && (options.stdin_unit < 0 || u->unit_number != options.stdin_unit)
+      && (options.stdout_unit < 0 || u->unit_number != options.stdout_unit)
+      && (options.stderr_unit < 0 || u->unit_number != options.stderr_unit))
     {
       generate_error (ERROR_ALREADY_OPEN, NULL);
       goto cleanup;
     }
 
-  /* Open file */
+  /* Open file.  */
 
-  s = open_external (flags->action, flags->status);
+  s = open_external (flags);
   if (s == NULL)
     {
       generate_error (ERROR_OS, NULL);
@@ -382,7 +348,7 @@ new_unit (unit_flags * flags)
   if (flags->status == STATUS_NEW || flags->status == STATUS_REPLACE)
     flags->status = STATUS_OLD;
 
-  /* Create the unit structure */
+  /* Create the unit structure.  */
 
   u = get_mem (sizeof (gfc_unit) + ioparm.file_len);
 
@@ -390,15 +356,15 @@ new_unit (unit_flags * flags)
   u->s = s;
   u->flags = *flags;
 
-  /* Unspecified recl ends up with a processor dependent value */
+  /* Unspecified recl ends up with a processor dependent value.  */
 
-  u->recl = (ioparm.recl_in != 0) ? ioparm.recl_in : DEFAULT_RECL;
+  u->recl = (ioparm.recl_in != 0) ? ioparm.recl_in : g.max_offset;
   u->last_record = 0;
   u->current_record = 0;
 
   /* If the file is direct access, calculate the maximum record number
-   * via a division now instead of letting the multiplication overflow
-   * later. */
+     via a division now instead of letting the multiplication overflow
+     later.  */
 
   if (flags->access == ACCESS_DIRECT)
     u->maxrec = g.max_offset / u->recl;
@@ -409,30 +375,28 @@ new_unit (unit_flags * flags)
   insert_unit (u);
 
   /* The file is now connected.  Errors after this point leave the
-   * file connected.  Curiously, the standard requires that the
-   * position specifier be ignored for new files so a newly connected
-   * file starts out that the initial point.  We still need to figure
-   * out if the file is at the end or not. */
+     file connected.  Curiously, the standard requires that the
+     position specifier be ignored for new files so a newly connected
+     file starts out that the initial point.  We still need to figure
+     out if the file is at the end or not.  */
 
   test_endfile (u);
 
-cleanup:
+ cleanup:
 
-  /* Free memory associated with a temporary filename */
+  /* Free memory associated with a temporary filename.  */
 
   if (flags->status == STATUS_SCRATCH)
     free_mem (ioparm.file);
 }
 
 
-/* already_open()-- Open a unit which is already open.  This involves
- * changing the modes or closing what is there now and opening the new
- * file. */
+/* Open a unit which is already open.  This involves changing the
+   modes or closing what is there now and opening the new file.  */
 
 static void
 already_open (gfc_unit * u, unit_flags * flags)
 {
-
   if (ioparm.file == NULL)
     {
       edit_modes (u, flags);
@@ -440,7 +404,7 @@ already_open (gfc_unit * u, unit_flags * flags)
     }
 
   /* If the file is connected to something else, close it and open a
-   * new unit */
+     new unit.  */
 
   if (!compare_file_filename (u->s, ioparm.file, ioparm.file_len))
     {
@@ -458,8 +422,10 @@ already_open (gfc_unit * u, unit_flags * flags)
 }
 
 
-/*************/
-/* open file */
+/* Open file.  */
+
+extern void st_open (void);
+export_proto(st_open);
 
 void
 st_open (void)
@@ -469,7 +435,7 @@ st_open (void)
  
   library_start ();
 
-  /* Decode options */
+  /* Decode options.  */
 
   flags.access = (ioparm.access == NULL) ? ACCESS_UNSPECIFIED :
     find_option (ioparm.access, ioparm.access_len, access_opt,
@@ -506,8 +472,8 @@ st_open (void)
   if (ioparm.unit < 0)
     generate_error (ERROR_BAD_OPTION, "Bad unit number in OPEN statement");
 
-  if (flags.position != POSITION_UNSPECIFIED &&
-      u->flags.access == ACCESS_DIRECT)
+  if (flags.position != POSITION_UNSPECIFIED
+      && flags.access == ACCESS_DIRECT)
     generate_error (ERROR_BAD_OPTION,
 		    "Cannot use POSITION with direct access files");
 
@@ -515,7 +481,10 @@ st_open (void)
     flags.position = POSITION_ASIS;
 
   if (ioparm.library_return != LIBRARY_OK)
+  {
+    library_end ();
     return;
+  }
 
   u = find_unit (ioparm.unit);
 

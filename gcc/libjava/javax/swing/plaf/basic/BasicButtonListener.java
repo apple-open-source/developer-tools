@@ -1,4 +1,4 @@
-/* BasicButtonListener.java
+/* BasicButtonListener.java --
    Copyright (C) 2004 Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
@@ -35,8 +35,10 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package javax.swing.plaf.basic;
 
+import java.awt.event.ActionEvent;
 import java.awt.event.FocusEvent;
 import java.awt.event.FocusListener;
 import java.awt.event.InputEvent;
@@ -46,6 +48,7 @@ import java.awt.event.MouseMotionListener;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 
+import javax.swing.AbstractAction;
 import javax.swing.AbstractButton;
 import javax.swing.ButtonModel;
 import javax.swing.JComponent;
@@ -56,16 +59,29 @@ public class BasicButtonListener
   implements MouseListener, MouseMotionListener, FocusListener, 
              ChangeListener, PropertyChangeListener
 {
+  public BasicButtonListener(AbstractButton b)
+  {
+    // Do nothing here.
+  }
+  
   public void propertyChange(PropertyChangeEvent e)
   {
   }
+  
   protected void checkOpacity(AbstractButton b) 
   {    
   }
+  
   public void focusGained(FocusEvent e) 
   {    
+    if (e.getSource() instanceof AbstractButton)
+      {
+        AbstractButton button = (AbstractButton) e.getSource();
+        if (button.isFocusPainted())
+          button.repaint();   
+      }
   }
-
+  
   public void focusLost(FocusEvent e)
   {
     if (e.getSource() instanceof AbstractButton)
@@ -73,23 +89,59 @@ public class BasicButtonListener
         AbstractButton button = (AbstractButton) e.getSource();
         ButtonModel model = button.getModel();
         model.setArmed(false);
+
+        if (button.isFocusPainted())
+          button.repaint();   
       }
   }
+  
   public void installKeyboardActions(JComponent c)
   {
+    c.getActionMap().put("pressed", 
+                         new AbstractAction() 
+                         {
+                           public void actionPerformed(ActionEvent e)          
+                           {
+                             AbstractButton button = (AbstractButton) e.getSource();
+                             ButtonModel model = button.getModel();
+                             // It is important that these transitions happen in this order.
+                             model.setArmed(true);
+                             model.setPressed(true);
+                           }
+                         });
+    
+    c.getActionMap().put("released", 
+                         new AbstractAction() 
+                         {
+                           public void actionPerformed(ActionEvent e)          
+                           {
+                             AbstractButton button = (AbstractButton) e.getSource();
+                             ButtonModel model = button.getModel();
+                             // It is important that these transitions happen in this order.
+                             model.setPressed(false);
+                             model.setArmed(false);
+                           }
+                       });    
   }
+  
   public void uninstallKeyboardActions(JComponent c)
   {
+    c.getActionMap().put("pressed", null);
+    c.getActionMap().put("released", null);
   }
+  
   public void stateChanged(ChangeEvent e)
   {
   }
+  
   public void mouseMoved(MouseEvent e)
   {
   }
+  
   public void mouseDragged(MouseEvent e)
   {
   }
+  
   public void mouseClicked(MouseEvent e)
   {
   }
@@ -105,7 +157,7 @@ public class BasicButtonListener
       {
         AbstractButton button = (AbstractButton) e.getSource();
         ButtonModel model = button.getModel();
-        if ((e.getModifiers() & InputEvent.BUTTON1_MASK) != 0)
+        if ((e.getModifiersEx() & InputEvent.BUTTON1_DOWN_MASK) != 0)
           {
             // It is important that these transitions happen in this order.
             model.setArmed(true);
@@ -113,7 +165,6 @@ public class BasicButtonListener
           }
       }
   }
-
 
   /**
    * Accept a mouse release event and set the button's 
@@ -128,7 +179,7 @@ public class BasicButtonListener
       {
         AbstractButton button = (AbstractButton) e.getSource();
         ButtonModel model = button.getModel();
-        if ((e.getModifiers() & InputEvent.BUTTON1_MASK) != 0)
+        if ((e.getModifiersEx() & InputEvent.BUTTON1_DOWN_MASK) != 0)
           {
             // It is important that these transitions happen in this order.
             model.setPressed(false);
@@ -136,7 +187,6 @@ public class BasicButtonListener
           }
       }
   }
-
 
   /**
    * Accept a mouse enter event and set the button's "rollover" property to
@@ -156,7 +206,7 @@ public class BasicButtonListener
           model.setRollover(true);
         
         if (model.isPressed() 
-            && (e.getModifiers() & InputEvent.BUTTON1_MASK) != 0)
+            && (e.getModifiersEx() & InputEvent.BUTTON1_DOWN_MASK) != 0)
           model.setArmed(true);
         else
           model.setArmed(false);

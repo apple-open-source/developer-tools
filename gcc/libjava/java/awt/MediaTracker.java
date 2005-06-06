@@ -1,5 +1,5 @@
 /* MediaTracker.java -- Class used for keeping track of images
-   Copyright (C) 1999, 2002 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2002i, 2004  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -38,8 +38,8 @@ exception statement from your version. */
 
 package java.awt;
 
-import java.util.ArrayList;
 import java.awt.image.ImageObserver;
+import java.util.ArrayList;
 
 /**
   * This class is used for keeping track of the status of various media
@@ -81,12 +81,17 @@ public class MediaTracker implements java.io.Serializable
         status = ERRORED | COMPLETE;
       else if ((flags & ALLBITS) != 0)
         status = COMPLETE;
-      else
+      else if ((flags & SOMEBITS) != 0)
         status = LOADING;
-      
-      synchronized (MediaTracker.this)
+      else
+        status = 0;
+
+      if ((status & COMPLETE) == COMPLETE)
       {
-	MediaTracker.this.notifyAll();
+        synchronized (MediaTracker.this)
+        {
+          MediaTracker.this.notifyAll();
+        }
       }
       // If status is not COMPLETE then we need more updates.
       return (status & COMPLETE) == 0;
@@ -106,7 +111,8 @@ public class MediaTracker implements java.io.Serializable
     e.next = head;
     head = e;
     // Start tracking image status.
-    target.checkImage(image, e);
+    int flags = target.checkImage(image, e);
+    e.imageUpdate(image, flags, -1, -1, -1, -1);
   }
 
   public void addImage(Image image, int id, int width, int height)
@@ -119,7 +125,8 @@ public class MediaTracker implements java.io.Serializable
     e.height = height;
     head = e;
     // Start tracking image status.
-    target.checkImage(image, width, height, e);
+    int flags = target.checkImage(image, width, height, e);
+    e.imageUpdate(image, flags, -1, -1, width, height);
   }
 
   public boolean checkAll()

@@ -22,7 +22,7 @@
    Boston, MA 02111-1307, USA.  */
 
 #include "defs.h"
-#include "bfd.h"		/* Binary File Description */
+#include "bfd.h"                /* Binary File Description */
 #include "symtab.h"
 #include "symfile.h"
 #include "objfiles.h"
@@ -43,6 +43,9 @@
 #include "cached-symfile.h"
 #include "macosx-nat-dyld.h"
 
+/* From objfiles.c */
+extern void objfile_alloc_data (struct objfile *objfile);
+
 #ifdef USE_MMALLOC
 #include "mmprivate.h"
 #endif
@@ -52,8 +55,7 @@
 #define MMALLOC_SHARED (1 << 1)
 
 #if MAPPED_SYMFILES
-static void
-move_objfile (struct relocation_context *r, struct objfile *o);
+static void move_objfile (struct relocation_context *r, struct objfile *o);
 
 static inline int
 relocate (struct relocation_context *r, void *ptr, void **new);
@@ -66,7 +68,7 @@ static int check_timestamp = 1;
 
 #ifndef FSF_OBJFILES
 
-static unsigned long cached_symfile_version = 6;
+static unsigned long cached_symfile_version = 7;
 
 extern int mapped_symbol_files;
 extern int use_mapped_symbol_files;
@@ -77,7 +79,7 @@ extern struct cmd_list_element *infoshliblist;
 extern struct cmd_list_element *shliblist;
 
 #ifndef TARGET_KEEP_SECTION
-#define TARGET_KEEP_SECTION(ASECT)	0
+#define TARGET_KEEP_SECTION(ASECT)      0
 #endif
 
 int
@@ -103,10 +105,10 @@ build_objfile_section_table (struct objfile *objfile)
       aflag = bfd_get_section_flags (abfd, asect);
 
       if (!(aflag & SEC_ALLOC) && !(TARGET_KEEP_SECTION (asect)))
-	continue;
+        continue;
 
       if (0 == bfd_section_size (abfd, asect))
-	continue;
+        continue;
 
       section.offset = 0;
       section.objfile = objfile;
@@ -120,11 +122,12 @@ build_objfile_section_table (struct objfile *objfile)
     }
 
   objfile_add_to_ordered_sections (objfile);
-  
+
   return 0;
 }
 
-void init_objfile (struct objfile *objfile)
+void
+init_objfile (struct objfile *objfile)
 {
   /* Initialize the section indexes for this objfile, so that we can
      later detect if they are used w/o being properly assigned to. */
@@ -136,7 +139,8 @@ void init_objfile (struct objfile *objfile)
 }
 
 struct objfile *
-allocate_objfile (bfd *abfd, int flags, int symflags, CORE_ADDR mapaddr, const char *prefix)
+allocate_objfile (bfd *abfd, int flags, int symflags, CORE_ADDR mapaddr,
+                  const char *prefix)
 {
   struct objfile *objfile = NULL;
 
@@ -146,7 +150,9 @@ allocate_objfile (bfd *abfd, int flags, int symflags, CORE_ADDR mapaddr, const c
 #if MAPPED_SYMFILES
 
   if (use_mapped_symbol_files)
-    objfile = open_mapped_objfile (bfd_get_filename (abfd), abfd, bfd_get_mtime (abfd), mapaddr, prefix);
+    objfile =
+      open_mapped_objfile (bfd_get_filename (abfd), abfd,
+                           bfd_get_mtime (abfd), mapaddr, prefix);
 
   if ((objfile == NULL) && (flags & OBJF_MAPPED))
     {
@@ -164,20 +170,33 @@ allocate_objfile (bfd *abfd, int flags, int symflags, CORE_ADDR mapaddr, const c
       objfile->flags |= flags;
 
       /* Update the per-objfile information that comes from the bfd, ensuring
-	 that any data that is reference is saved in the per-objfile data
-	 region. */
+         that any data that is reference is saved in the per-objfile data
+         region. */
 
       objfile->obfd = abfd;
       if (objfile->name)
-	objfile->name = xstrdup (objfile->name);
+        objfile->name = xstrdup (objfile->name);
       else
-	objfile->name = xstrdup (bfd_get_filename (abfd));
+        objfile->name = xstrdup (bfd_get_filename (abfd));
       objfile->mtime = bfd_get_mtime (abfd);
 
       if (build_objfile_section_table (objfile))
-	error ("Can't find the file sections in `%s': %s",
-	       objfile->name, bfd_errmsg (bfd_get_error ()));
-      
+        error ("Can't find the file sections in `%s': %s",
+               objfile->name, bfd_errmsg (bfd_get_error ()));
+
+      /* FIXME: At some point this should be a host specific callout.
+         Even though this is a Mac OS X specific copy of allocate_objfile,
+         we should still fix this when we fix that...  */
+
+      if (objfile->name != NULL &&
+          strstr (objfile->name, "libSystem") != NULL)
+        objfile->check_for_equivalence = 1;
+      else
+        objfile->check_for_equivalence = 0;
+      objfile->equivalence_table = NULL;
+
+      objfile->syms_only_objfile = 0;
+
       link_objfile (objfile);
     }
 
@@ -186,7 +205,8 @@ allocate_objfile (bfd *abfd, int flags, int symflags, CORE_ADDR mapaddr, const c
 
 #if MAPPED_SYMFILES
 
-void mmalloc_protect (PTR md, int flags)
+void
+mmalloc_protect (PTR md, int flags)
 {
   size_t start, end;
   int ret;
@@ -217,7 +237,8 @@ mmalloc_xrealloc_hook (PTR md, PTR ptr, size_t size)
 }
 
 struct objfile *
-open_objfile_from_mmalloc_pool (PTR md, bfd *abfd, int fd, time_t mtime, char *filename, const char *prefix)
+open_objfile_from_mmalloc_pool (PTR md, bfd *abfd, int fd, time_t mtime,
+                                char *filename, const char *prefix)
 {
   struct objfile *orig_objfile;
   struct symtab *orig_s;
@@ -236,7 +257,9 @@ open_objfile_from_mmalloc_pool (PTR md, bfd *abfd, int fd, time_t mtime, char *f
 
   mapto = (void *) mmalloc_getkey (md, 0);
 
-  orig_objfile = (struct objfile *) ((CORE_ADDR) mmalloc_getkey (md, 1) + (CORE_ADDR) mmalloc_getkey (md, 0));
+  orig_objfile =
+    (struct objfile *) ((CORE_ADDR) mmalloc_getkey (md, 1) +
+                        (CORE_ADDR) mmalloc_getkey (md, 0));
   if (orig_objfile == NULL)
     {
       warning ("Unable to read objfile from \"%s\"; ignoring", filename);
@@ -248,42 +271,45 @@ open_objfile_from_mmalloc_pool (PTR md, bfd *abfd, int fd, time_t mtime, char *f
   if (mtime != timestamp)
     {
       if (info_verbose)
-	{
-	  char *str1 = xstrdup (ctime (&mtime));
-	  char *str2 = xstrdup (ctime (&timestamp));
-	  str1[strlen(str1) - 1] = '\0';
-	  str2[strlen(str2) - 1] = '\0';
-	  if (check_timestamp)
-	    warning ("Timestamp for cached symbol file \"%s\" (%s) does not match timestamp for library (%s); ignoring",
-		     filename, str1, str2);
-	  else
-	    warning ("Timestamp for cached symbol file \"%s\" (%s) does not match timestamp for library (%s); using anyway",
-		     filename, str1, str2);
-	  xfree (str1);
-	  xfree (str2);
-	}
+        {
+          char *str1 = xstrdup (ctime (&mtime));
+          char *str2 = xstrdup (ctime (&timestamp));
+          str1[strlen (str1) - 1] = '\0';
+          str2[strlen (str2) - 1] = '\0';
+          if (check_timestamp)
+            warning
+              ("Timestamp for cached symbol file \"%s\" (%s) does not match timestamp for library (%s); ignoring",
+               filename, str1, str2);
+          else
+            warning
+              ("Timestamp for cached symbol file \"%s\" (%s) does not match timestamp for library (%s); using anyway",
+               filename, str1, str2);
+          xfree (str1);
+          xfree (str2);
+        }
       if (check_timestamp)
-	return NULL;
+        return NULL;
     }
 
   version = (unsigned long) mmalloc_getkey (md, 3);
   if (version != cached_symfile_version)
     {
-      warning ("Version for symbol file \"%s\" (%ld) does not match version for GDB (%ld); ignoring", filename,
-	       version, cached_symfile_version);
+      warning
+        ("Version for symbol file \"%s\" (%ld) does not match version for GDB (%ld); ignoring",
+         filename, version, cached_symfile_version);
       return NULL;
     }
 
   objfile = (struct objfile *) xmalloc (sizeof (struct objfile));
-  
+
   mmalloc_endpoints (md, &start, &end);
-  
+
   if (md != mapto)
     {
       struct relocation_context r;
 
       r.len = end - start;
-      
+
       r.from_start = (size_t) mapto;
       r.to_start = start;
       r.mapped_start = start;
@@ -296,12 +322,12 @@ open_objfile_from_mmalloc_pool (PTR md, bfd *abfd, int fd, time_t mtime, char *f
   *objfile = *orig_objfile;
 
   if (strcmp ((orig_objfile->prefix == NULL) ? "" : orig_objfile->prefix,
-             (prefix == NULL) ? "" : prefix) != 0)
+              (prefix == NULL) ? "" : prefix) != 0)
     {
-      warning ("Mapped symbol file \"%s\" uses a different prefix (\"%s\") than the one requested (\"%s\"); ignoring",
-              filename,
-              (orig_objfile->prefix == NULL) ? "" : orig_objfile->prefix,
-              (prefix == NULL) ? "" : prefix);
+      warning
+        ("Mapped symbol file \"%s\" uses a different prefix (\"%s\") than the one requested (\"%s\"); ignoring",
+         filename, (orig_objfile->prefix == NULL) ? "" : orig_objfile->prefix,
+         (prefix == NULL) ? "" : prefix);
       return NULL;
     }
 
@@ -324,74 +350,77 @@ open_objfile_from_mmalloc_pool (PTR md, bfd *abfd, int fd, time_t mtime, char *f
   objfile->name = filename;
   objfile->flags |= OBJF_MAPPED;
 
-  if (objfile->symtabs != NULL) 
+  if (objfile->symtabs != NULL)
     {
       struct symtab *cur, *prev, *temp;
-    
+
       temp = (struct symtab *) xmalloc (sizeof (struct symtab));
       *temp = *objfile->symtabs;
-    
+
       objfile->symtabs = temp;
       prev = objfile->symtabs;
       cur = prev->next;
 
       while (cur != NULL)
-	{
-	  temp = (struct symtab *) xmalloc (sizeof (struct symtab));
+        {
+          temp = (struct symtab *) xmalloc (sizeof (struct symtab));
 
-	  *temp = *cur;
-	  prev->next = temp;
+          *temp = *cur;
+          prev->next = temp;
 
-	  prev = prev->next;
-	  cur = cur->next;
-	}
+          prev = prev->next;
+          cur = cur->next;
+        }
     }
 
-  if (objfile->psymtabs != NULL) 
+  if (objfile->psymtabs != NULL)
     {
       struct partial_symtab *cur, *prev, *temp;
-    
-      temp = (struct partial_symtab *) xmalloc (sizeof (struct partial_symtab));
+
+      temp =
+        (struct partial_symtab *) xmalloc (sizeof (struct partial_symtab));
       *temp = *objfile->psymtabs;
-    
+
       objfile->psymtabs = temp;
       prev = objfile->psymtabs;
       cur = prev->next;
 
       while (cur != NULL)
-	{
-	  temp = (struct partial_symtab *) xmalloc (sizeof (struct partial_symtab));
+        {
+          temp =
+            (struct partial_symtab *)
+            xmalloc (sizeof (struct partial_symtab));
 
-	  *temp = *cur;
-	  prev->next = temp;
+          *temp = *cur;
+          prev->next = temp;
 
-	  prev = prev->next;
-	  cur = cur->next;
-	}
+          prev = prev->next;
+          cur = cur->next;
+        }
     }
 
   for (p = objfile->psymtabs; p != NULL; p = p->next)
     {
       if (p->symtab == NULL)
-	continue;
+        continue;
 
       orig_s = orig_objfile->symtabs;
       s = objfile->symtabs;
 
       for (;;)
-	{
-	  if ((orig_s == NULL) || (s == NULL))
-	    error ("unable to find matching symtab when updating pointers");
+        {
+          if ((orig_s == NULL) || (s == NULL))
+            error ("unable to find matching symtab when updating pointers");
 
-	  if (p->symtab == orig_s)
-	    {
-	      p->symtab = s;
-	      break;
-	    }
-	  
-	  orig_s = orig_s->next;
-	  s = s->next;
-	}
+          if (p->symtab == orig_s)
+            {
+              p->symtab = s;
+              break;
+            }
+
+          orig_s = orig_s->next;
+          s = s->next;
+        }
     }
 
   objfile->psymbol_cache = bcache_xmalloc (objfile->md);
@@ -402,23 +431,20 @@ open_objfile_from_mmalloc_pool (PTR md, bfd *abfd, int fd, time_t mtime, char *f
   bcache_specify_allocation_with_arg
     (objfile->macro_cache, xmmalloc, xmfree, objfile->md);
   obstack_specify_allocation_with_arg
-    (&objfile->psymbol_obstack, 0, 0, xmmalloc, xmfree, objfile->md);
-  obstack_specify_allocation_with_arg
-    (&objfile->symbol_obstack, 0, 0, xmmalloc, xmfree, objfile->md);
-  obstack_specify_allocation_with_arg
-    (&objfile->type_obstack, 0, 0, xmmalloc, xmfree, objfile->md);
+    (&objfile->objfile_obstack, 0, 0, xmmalloc, xmfree, objfile->md);
 
   link_objfile (objfile);
 
   if (build_objfile_section_table (objfile))
     error ("Can't find the file sections in `%s': %s",
-	   objfile->name, bfd_errmsg (bfd_get_error ()));
+           objfile->name, bfd_errmsg (bfd_get_error ()));
 
   return objfile;
 }
 
 struct objfile *
-open_mapped_objfile (const char *filename, bfd *abfd, time_t mtime, CORE_ADDR mapaddr, const char *prefix)
+open_mapped_objfile (const char *filename, bfd *abfd, time_t mtime,
+                     CORE_ADDR mapaddr, const char *prefix)
 {
   const char *symsfilename = NULL;
   const char *resolved = NULL;
@@ -431,7 +457,8 @@ open_mapped_objfile (const char *filename, bfd *abfd, time_t mtime, CORE_ADDR ma
   /* First try to open an existing file in the current directory, and
      then try the directory where the symbol file is located. */
 
-  if ((strlen (filename) >= 5) && (strcmp (filename + (strlen (filename) - 5), ".syms") == 0)) 
+  if ((strlen (filename) >= 5)
+      && (strcmp (filename + (strlen (filename) - 5), ".syms") == 0))
     symsfilename = filename;
   else
     symsfilename = concat (basename (filename), ".syms", (char *) NULL);
@@ -442,25 +469,27 @@ open_mapped_objfile (const char *filename, bfd *abfd, time_t mtime, CORE_ADDR ma
     return NULL;
 
   if (sbuf.st_mtime < mtime)
-      {
-	if (info_verbose)
-	  {
-	    char *str1 = xstrdup (ctime (&sbuf.st_mtime));
-	    char *str2 = xstrdup (ctime (&mtime));
-	    str1[strlen(str1) - 1] = '\0';
-	    str2[strlen(str2) - 1] = '\0';
-	    if (check_timestamp)
-	      warning ("Cached symbol file \"%s\" is older (%s) than library (%s); ignoring\n",
-		       symsfilename, str1, str2);
-	    else
-	      warning ("Cached symbol file \"%s\" is older (%s) than library (%s); ignoring\n",
-		       symsfilename, str1, str2);
-	    xfree (str1);
-	    xfree (str2);
-	  }
-	if (check_timestamp)
-	  return NULL;
-      }
+    {
+      if (info_verbose)
+        {
+          char *str1 = xstrdup (ctime (&sbuf.st_mtime));
+          char *str2 = xstrdup (ctime (&mtime));
+          str1[strlen (str1) - 1] = '\0';
+          str2[strlen (str2) - 1] = '\0';
+          if (check_timestamp)
+            warning
+              ("Cached symbol file \"%s\" is older (%s) than library (%s); ignoring\n",
+               symsfilename, str1, str2);
+          else
+            warning
+              ("Cached symbol file \"%s\" is older (%s) than library (%s); ignoring\n",
+               symsfilename, str1, str2);
+          xfree (str1);
+          xfree (str2);
+        }
+      if (check_timestamp)
+        return NULL;
+    }
 
   md = mmalloc_attach (fd, 0, MMALLOC_SHARED);
   if (md == NULL)
@@ -469,16 +498,18 @@ open_mapped_objfile (const char *filename, bfd *abfd, time_t mtime, CORE_ADDR ma
       return NULL;
     }
 
-  objfile = open_objfile_from_mmalloc_pool (md, abfd, fd, mtime, resolved, prefix);
+  objfile =
+    open_objfile_from_mmalloc_pool (md, abfd, fd, mtime, resolved, prefix);
 
   if (objfile == NULL)
-      mmalloc_detach (md);
+    mmalloc_detach (md);
 
   return objfile;
 }
 
 struct objfile *
-create_objfile_from_mmalloc_pool (bfd *abfd, PTR md, int fd, CORE_ADDR mapaddr)
+create_objfile_from_mmalloc_pool (bfd *abfd, PTR md, int fd,
+                                  CORE_ADDR mapaddr)
 {
   struct objfile *objfile;
 
@@ -504,11 +535,7 @@ create_objfile_from_mmalloc_pool (bfd *abfd, PTR md, int fd, CORE_ADDR mapaddr)
   bcache_specify_allocation_with_arg
     (objfile->macro_cache, xmmalloc, xmfree, objfile->md);
   obstack_specify_allocation_with_arg
-    (&objfile->psymbol_obstack, 0, 0, xmmalloc, xmfree, objfile->md);
-  obstack_specify_allocation_with_arg
-    (&objfile->symbol_obstack, 0, 0, xmmalloc, xmfree, objfile->md);
-  obstack_specify_allocation_with_arg
-    (&objfile->type_obstack, 0, 0, xmmalloc, xmfree, objfile->md);
+    (&objfile->objfile_obstack, 0, 0, xmmalloc, xmfree, objfile->md);
 
   return objfile;
 }
@@ -520,11 +547,12 @@ create_objfile_from_mmalloc_pool (bfd *abfd, PTR md, int fd, CORE_ADDR mapaddr)
    available address.  The resulting objfile is linked onto the GDB
    objfile chain, just as any other objfile would be. */
 
-struct objfile *cache_bfd (bfd *abfd, const char *prefix, int symflags,
-			   size_t addr, size_t mapaddr, const char *dest)
+struct objfile *
+cache_bfd (bfd *abfd, const char *prefix, int symflags,
+           size_t addr, size_t mapaddr, const char *dest)
 {
   unsigned int i;
-  struct section_addr_info addrs;
+  struct section_addr_info *addrs;
   struct objfile *objfile = NULL;
   struct symtab *s = NULL;
   struct partial_symtab *p = NULL;
@@ -537,16 +565,20 @@ struct objfile *cache_bfd (bfd *abfd, const char *prefix, int symflags,
   struct objfile *repositioned = NULL;
   time_t mtime;
   struct relocation_context r;
-  
-  if ((dest[0] != '\0') && (dest[strlen(dest) - 1] == '/'))
-    filename = concat (dest, basename (bfd_get_filename (abfd)), ".syms", (char *) NULL);
+
+  if ((dest[0] != '\0') && (dest[strlen (dest) - 1] == '/'))
+    filename =
+      concat (dest, basename (bfd_get_filename (abfd)), ".syms",
+              (char *) NULL);
   else if ((stat (dest, &st) == 0) && S_ISDIR (st.st_mode))
-    filename = concat (dest, "/", basename (bfd_get_filename (abfd)), ".syms", (char *) NULL);
+    filename =
+      concat (dest, "/", basename (bfd_get_filename (abfd)), ".syms",
+              (char *) NULL);
   else
     filename = dest;
-      
+
   temp_filename = concat (filename, ".new", (char *) NULL);
-  
+
   fd = open (temp_filename, O_RDWR | O_CREAT | O_TRUNC, 0666);
   if (fd < 0)
     {
@@ -566,7 +598,7 @@ struct objfile *cache_bfd (bfd *abfd, const char *prefix, int symflags,
   md = mmalloc_attach (fd, ((unsigned char *) 0) + mapaddr, 0);
   if (md == NULL)
     {
-      warning ("Unable to map symbol file at 0x%lx", (unsigned long) mapaddr);
+      warning ("Unable to map symbol file at 0x%zx", mapaddr);
       return NULL;
     }
 
@@ -577,26 +609,25 @@ struct objfile *cache_bfd (bfd *abfd, const char *prefix, int symflags,
       return NULL;
     }
 
+#if 0
   swapout_gdbarch_swap (current_gdbarch);
   clear_gdbarch_swap (current_gdbarch);
+#endif
 
-  builtin_type_void =
-    init_type (TYPE_CODE_VOID, 1,
-	       0,
-	       "void", objfile);
+  builtin_type_void = init_type (TYPE_CODE_VOID, 1, 0, "void", objfile);
 
   builtin_type_int =
     init_type (TYPE_CODE_INT, TARGET_INT_BIT / TARGET_CHAR_BIT,
-	       0, "int", objfile);
+               0, "int", objfile);
 
   builtin_type_error =
     init_type (TYPE_CODE_ERROR, 0, 0, "<unknown type>", objfile);
 
   builtin_type_char =
     init_type (TYPE_CODE_INT, TARGET_CHAR_BIT / TARGET_CHAR_BIT,
-	       (TYPE_FLAG_NOSIGN
+               (TYPE_FLAG_NOSIGN
                 | (TARGET_CHAR_SIGNED ? 0 : TYPE_FLAG_UNSIGNED)),
-	       "char", objfile);
+               "char", objfile);
 
   objfile->symflags = symflags;
   objfile->obfd = abfd;
@@ -606,19 +637,21 @@ struct objfile *cache_bfd (bfd *abfd, const char *prefix, int symflags,
     objfile->prefix = NULL;
   else
     objfile->prefix = mstrsave (objfile->md, prefix);
-	
-  for (i = 0; i < MAX_SECTIONS; i++) 
+
+  addrs = NULL;
+  abort ();
+
+  for (i = 0; i < addrs->num_sections; i++)
     {
-      addrs.other[i].name = NULL;
-      addrs.other[i].addr = addr;
-      addrs.other[i].sectindex = 0;
-      addrs.addrs_are_offsets = 0;
+      addrs->other[i].name = NULL;
+      addrs->other[i].addr = addr;
+      addrs->other[i].sectindex = 0;
+      addrs->addrs_are_offsets = 0;
     }
 
   syms_from_objfile (objfile, &addrs, 0, 0, 0, 0);
 
-  ALL_OBJFILE_PSYMTABS (objfile, p)
-    s = PSYMTAB_TO_SYMTAB (p);
+  ALL_OBJFILE_PSYMTABS (objfile, p) s = PSYMTAB_TO_SYMTAB (p);
 
   objfile_demangle_msymbols (objfile);
 
@@ -639,22 +672,26 @@ struct objfile *cache_bfd (bfd *abfd, const char *prefix, int symflags,
   objfile->obfd = NULL;
   free_objfile (objfile);
 
-  if (rename (temp_filename, filename) != 0) {
-    warning ("unable to rename created temporary file");
-    unlink (temp_filename);
-    return NULL;
-  }
+  if (rename (temp_filename, filename) != 0)
+    {
+      warning ("unable to rename created temporary file");
+      unlink (temp_filename);
+      return NULL;
+    }
 
   objfile = open_mapped_objfile (filename, abfd, mtime, 0, prefix);
-  if (objfile == NULL) {
-    warning ("unable to read mapped objfile");
-    return NULL;
-  }
+  if (objfile == NULL)
+    {
+      warning ("unable to read mapped objfile");
+      return NULL;
+    }
 
   if (info_verbose)
     printf (" done\n");
 
+#if 0
   swapin_gdbarch_swap (current_gdbarch);
+#endif
 
   return objfile;
 }
@@ -673,9 +710,11 @@ create_objfile (bfd *abfd)
   objfile->macro_cache = bcache_xmalloc (NULL);
   bcache_specify_allocation (objfile->psymbol_cache, xmalloc, xfree);
   bcache_specify_allocation (objfile->macro_cache, xmalloc, xfree);
-  obstack_specify_allocation (&objfile->psymbol_obstack, 0, 0, xmalloc, xfree);
-  obstack_specify_allocation (&objfile->symbol_obstack, 0, 0, xmalloc, xfree);
-  obstack_specify_allocation (&objfile->type_obstack, 0, 0, xmalloc, xfree);
+  obstack_specify_allocation (&objfile->objfile_obstack, 0, 0, xmalloc,
+                              xfree);
+
+  /* FIXME: This needs to be converted to use objfile-specific data. */
+  objfile_alloc_data (objfile);
 
   init_objfile (objfile);
 
@@ -684,12 +723,16 @@ create_objfile (bfd *abfd)
 
 #endif /* FSF_OBJFILES */
 
-static void validate_context (struct relocation_context *r)
+static void
+validate_context (struct relocation_context *r)
 {
-  if (((r->to_start >= r->from_start) && (r->to_start <= (r->from_start + r->len)))
-      || ((r->from_start >= r->to_start) && (r->from_start <= (r->to_start + r->len))))
+  if (((r->to_start >= r->from_start)
+       && (r->to_start <= (r->from_start + r->len)))
+      || ((r->from_start >= r->to_start)
+          && (r->from_start <= (r->to_start + r->len))))
     {
-      internal_error (__FILE__, __LINE__, "relocation contained overlapping regions");
+      internal_error (__FILE__, __LINE__,
+                      "relocation contained overlapping regions");
     }
 }
 
@@ -728,18 +771,17 @@ lookup (struct relocation_context *r, void *ptr)
 
   if ((addr >= r->from_start) && (addr <= (r->from_start + r->len)))
     return (addr - r->from_start + r->mapped_start);
-  
+
   if ((addr >= r->to_start) && (addr <= (r->to_start + r->len)))
     return (addr - r->to_start + r->mapped_start);
-  
+
   internal_error (__FILE__, __LINE__, "relocation was not in valid range");
 }
 
 #define RELOCATE(x) (relocate (r, x, (void **) &x))
 #define LOOKUP(x) ((typeof (x)) lookup (r, x))
 
-static void
-move_type (struct relocation_context *r, struct type *t);
+static void move_type (struct relocation_context *r, struct type *t);
 
 static void
 move_field (struct relocation_context *r, struct field *f)
@@ -749,7 +791,7 @@ move_field (struct relocation_context *r, struct field *f)
 
   if (RELOCATE (f->type))
     move_type (r, LOOKUP (f->type));
-  
+
   RELOCATE (f->name);
 }
 
@@ -770,26 +812,26 @@ move_cplus_struct (struct relocation_context *r, struct cplus_struct_type *cp)
     {
       struct fn_fieldlist *fn = LOOKUP (cp->fn_fieldlists);
       for (i = 0; i < cp->nfn_fields; i++)
-	{
-	  RELOCATE (fn[i].name);
-	  if (RELOCATE (fn[i].fn_fields))
-	    {
-	      struct fn_field *fld = LOOKUP (fn[i].fn_fields);
-	      for (j = 0; j < fn[i].length; j++)
-		{
-		  RELOCATE (fld[j].physname);
-		  RELOCATE (fld[j].type);
-		  RELOCATE (fld[j].fcontext);
-		}
-	    }
-	}
+        {
+          RELOCATE (fn[i].name);
+          if (RELOCATE (fn[i].fn_fields))
+            {
+              struct fn_field *fld = LOOKUP (fn[i].fn_fields);
+              for (j = 0; j < fn[i].length; j++)
+                {
+                  RELOCATE (fld[j].physname);
+                  RELOCATE (fld[j].type);
+                  RELOCATE (fld[j].fcontext);
+                }
+            }
+        }
     }
 
   if (RELOCATE (cp->template_args))
     for (i = 0; i < cp->ntemplate_args; i++)
       {
-	RELOCATE (LOOKUP (cp->template_args)[i].name);
-	RELOCATE (LOOKUP (cp->template_args)[i].type);
+        RELOCATE (LOOKUP (cp->template_args)[i].name);
+        RELOCATE (LOOKUP (cp->template_args)[i].type);
       }
 
   if (RELOCATE (cp->instantiations))
@@ -810,7 +852,7 @@ static void
 move_main_type (struct relocation_context *r, struct main_type *m)
 {
   unsigned int i;
-  
+
   if (m == NULL)
     return;
 
@@ -822,18 +864,17 @@ move_main_type (struct relocation_context *r, struct main_type *m)
 
   if (RELOCATE (m->target_type))
     move_type (r, LOOKUP (m->target_type));
-  
+
   if (RELOCATE (m->fields))
     {
       for (i = 0; i < m->nfields; i++)
-	move_field (r, LOOKUP (m->fields) + i);
+        move_field (r, LOOKUP (m->fields) + i);
     }
 
   if (RELOCATE (m->vptr_basetype))
     move_type (r, LOOKUP (m->vptr_basetype));
 
-  if ((m->code == TYPE_CODE_STRUCT)
-      || (m->code == TYPE_CODE_UNION))
+  if ((m->code == TYPE_CODE_STRUCT) || (m->code == TYPE_CODE_UNION))
     if (RELOCATE (m->type_specific.cplus_stuff))
       move_cplus_struct (r, LOOKUP (m->type_specific.cplus_stuff));
 }
@@ -859,7 +900,7 @@ move_type (struct relocation_context *r, struct type *t)
 
 static void
 move_symbol_general (struct relocation_context *r,
-		     struct general_symbol_info *g)
+                     struct general_symbol_info *g)
 {
   if (g == NULL)
     return;
@@ -918,6 +959,7 @@ move_symbol (struct relocation_context *r, struct symbol *s)
 static void
 move_block (struct relocation_context *r, struct block *b)
 {
+#if 0
   unsigned int i;
 
   if (b == NULL)
@@ -929,13 +971,15 @@ move_block (struct relocation_context *r, struct block *b)
   for (i = 0; i < BLOCK_NSYMS (b); i++)
     {
       if (RELOCATE (b->sym[i]))
-	move_symbol (r, LOOKUP (b->sym[i]));
+        move_symbol (r, LOOKUP (b->sym[i]));
     }
+#endif
 }
 
 void
 move_blockvector (struct relocation_context *r, struct blockvector *b)
 {
+#if 0
   unsigned int i;
 
   if (b == NULL)
@@ -944,8 +988,9 @@ move_blockvector (struct relocation_context *r, struct blockvector *b)
   for (i = 0; i < b->nblocks; i++)
     {
       if (RELOCATE (b->block[i]))
-	move_block (r, LOOKUP (b->block[i]));
+        move_block (r, LOOKUP (b->block[i]));
     }
+#endif
 }
 
 void
@@ -971,7 +1016,7 @@ move_psymtab (struct relocation_context *r, struct partial_symtab *p)
   for (i = 0; i < p->number_of_dependencies; i++)
     RELOCATE (LOOKUP (p->dependencies)[i]);
 }
-  
+
 void
 move_obstack_chunk (struct relocation_context *r, struct _obstack_chunk *s)
 {
@@ -1001,6 +1046,7 @@ move_obstack (struct relocation_context *r, struct obstack *s)
 void
 move_symtab (struct relocation_context *r, struct symtab *s)
 {
+#if 0
   if (s == NULL)
     return;
 
@@ -1017,14 +1063,15 @@ move_symtab (struct relocation_context *r, struct symtab *s)
   RELOCATE (s->objfile);
   if (r->objfile != NULL)
     s->objfile = r->objfile;
+#endif
 }
 
 static void
 move_psymbol_allocation_list (struct relocation_context *r,
-			      struct psymbol_allocation_list *l)
+                              struct psymbol_allocation_list *l)
 {
   unsigned int i;
-  
+
   if (l == NULL)
     return;
 
@@ -1034,11 +1081,11 @@ move_psymbol_allocation_list (struct relocation_context *r,
   for (i = 0; i < l->size; i++)
     {
       if (LOOKUP (l->list)[i] == NULL)
-	break;
+        break;
 
-      if (! RELOCATE (LOOKUP (l->list)[i]))
-	continue;
-      
+      if (!RELOCATE (LOOKUP (l->list)[i]))
+        continue;
+
       move_psymbol (r, LOOKUP (LOOKUP (l->list)[i]));
     }
 }
@@ -1060,24 +1107,26 @@ move_objfile (struct relocation_context *r, struct objfile *o)
 
   RELOCATE (o->msymbols);
 
-  for (ms = LOOKUP (o->msymbols); (ms != NULL) && (ms->ginfo.name != NULL); ms++) {
-    move_msymbol (r, ms);
-  }
-  for (i = 0; i < MINIMAL_SYMBOL_HASH_SIZE; i++) {
-    RELOCATE (o->msymbol_hash[i]);
-  }
-  for (i = 0; i < MINIMAL_SYMBOL_HASH_SIZE; i++) {
-    RELOCATE (o->msymbol_demangled_hash[i]);
-  }
+  for (ms = LOOKUP (o->msymbols); (ms != NULL) && (ms->ginfo.name != NULL);
+       ms++)
+    {
+      move_msymbol (r, ms);
+    }
+  for (i = 0; i < MINIMAL_SYMBOL_HASH_SIZE; i++)
+    {
+      RELOCATE (o->msymbol_hash[i]);
+    }
+  for (i = 0; i < MINIMAL_SYMBOL_HASH_SIZE; i++)
+    {
+      RELOCATE (o->msymbol_demangled_hash[i]);
+    }
 
   RELOCATE (o->section_offsets);
 
   gdb_assert (o->sections == NULL);
   gdb_assert (o->sections_end == NULL);
 
-  move_obstack (r, &o->psymbol_obstack);
-  move_obstack (r, &o->symbol_obstack);
-  move_obstack (r, &o->type_obstack);
+  move_obstack (r, &o->objfile_obstack);
 
   RELOCATE (o->psymbol_cache);
   RELOCATE (o->macro_cache);
@@ -1090,24 +1139,28 @@ move_objfile (struct relocation_context *r, struct objfile *o)
 
   RELOCATE (o->psymtabs);
   ps = LOOKUP (o->psymtabs);
-  while (ps != NULL) {
-    move_psymtab (r, ps);
-    RELOCATE (ps->next);
-    ps = LOOKUP (ps->next);
-  }
+  while (ps != NULL)
+    {
+      move_psymtab (r, ps);
+      RELOCATE (ps->next);
+      ps = LOOKUP (ps->next);
+    }
 
   RELOCATE (o->symtabs);
   ss = LOOKUP (o->symtabs);
-  while (ss != NULL) {
-    move_symtab (r, ss);
-    RELOCATE (ss->next);
-    ss = LOOKUP (ss->next);
-  }
+  while (ss != NULL)
+    {
+      move_symtab (r, ss);
+      RELOCATE (ss->next);
+      ss = LOOKUP (ss->next);
+    }
 }
 
 #if MAPPED_SYMFILES
 
-static void verify (struct objfile *o, void (* f) (struct relocation_context *, void *), void *p)
+static void
+verify (struct objfile *o, void (*f) (struct relocation_context *, void *),
+        void *p)
 {
   size_t start = 0;
   size_t end = 0;
@@ -1125,32 +1178,36 @@ static void verify (struct objfile *o, void (* f) (struct relocation_context *, 
   r.objfile = NULL;
 
   relocate (&r, p, (void **) &p);
-  (* f) (&r, (void *) lookup (&r, p));
-  
+  (*f) (&r, (void *) lookup (&r, p));
+
   r.mapped_start = start;
   r.from_start = 0xf0000000;
   r.to_start = start;
 
   relocate (&r, p, (void **) &p);
-  (* f) (&r, (void **) lookup (&r, p));
+  (*f) (&r, (void **) lookup (&r, p));
 }
 
-void objfile_verify (struct objfile *o)
+void
+objfile_verify (struct objfile *o)
 {
   verify (o, move_objfile, (void *) o);
 }
 
-void symbol_verify (struct objfile *o, struct symbol *s)
+void
+symbol_verify (struct objfile *o, struct symbol *s)
 {
   verify (o, move_symbol, (void *) s);
 }
 
-void type_verify (struct objfile *o, struct type *t)
+void
+type_verify (struct objfile *o, struct type *t)
 {
   verify (o, move_type, (void *) t);
 }
 
-struct objfile *objfile_reposition (struct objfile *o, struct relocation_context *r)
+struct objfile *
+objfile_reposition (struct objfile *o, struct relocation_context *r)
 {
   if (o->md == NULL)
     error ("Objfile may not be moved in memory.");
@@ -1170,27 +1227,27 @@ _initialize_cached_symfile ()
 {
   struct cmd_list_element *c;
 
-  c = add_set_cmd ("cached-symfiles-check-timestamp", class_obscure, var_boolean,
-		   (char *) &check_timestamp,
-		   "Set if GDB should ignore cached symbol files with incorrect timestamps.",
-		   &setlist);
+  c =
+    add_set_cmd ("cached-symfiles-check-timestamp", class_obscure,
+                 var_boolean, (char *) &check_timestamp,
+                 "Set if GDB should ignore cached symbol files with incorrect timestamps.",
+                 &setlist);
   add_show_from_set (c, &showlist);
 
   add_show_from_set
     (add_set_cmd ("cached-symfile-path", class_support, var_string,
-		  (char *) &cached_symfile_path,
-		  "Set list of directories to search for cached symbol files.",
-		  &setlist),
-     &showlist);
+                  (char *) &cached_symfile_path,
+                  "Set list of directories to search for cached symbol files.",
+                  &setlist), &showlist);
 
-  cached_symfile_path = xstrdup ("./gdb-symfile-cache:./syms:/usr/libexec/gdb/symfiles");
+  cached_symfile_path =
+    xstrdup ("./gdb-symfile-cache:./syms:/usr/libexec/gdb/symfiles");
 
   add_show_from_set
     (add_set_cmd ("cached-symfile-dir", class_support, var_string,
-		  (char *) &cached_symfile_dir,
-		  "Set directory in which to generate cached symbol files.",
-		  &setlist),
-     &showlist);
+                  (char *) &cached_symfile_dir,
+                  "Set directory in which to generate cached symbol files.",
+                  &setlist), &showlist);
 
   cached_symfile_dir = xstrdup ("./gdb-symfile-cache");
 }

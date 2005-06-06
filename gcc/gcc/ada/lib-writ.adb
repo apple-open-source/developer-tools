@@ -53,6 +53,14 @@ with System.WCh_Con; use System.WCh_Con;
 
 package body Lib.Writ is
 
+   -----------------------
+   -- Local Subprograms --
+   -----------------------
+
+   procedure Write_Unit_Name (N : Node_Id);
+   --  Used to write out the unit name for R (pragma Restriction) lines
+   --  for uses of Restriction (No_Dependence => unit-name).
+
    ----------------------------------
    -- Add_Preprocessing_Dependency --
    ----------------------------------
@@ -220,7 +228,7 @@ package body Lib.Writ is
          Item := First (Context_Items (Cunit));
          while Present (Item) loop
 
-            --  Ada0Y (AI-50217): limited with_clauses do not create
+            --  Ada 2005 (AI-50217): limited with_clauses do not create
             --  dependencies
 
             if Nkind (Item) = N_With_Clause
@@ -673,7 +681,7 @@ package body Lib.Writ is
                --  a body or if a body is present in Ada 83 mode.
 
                if Body_Required (Cunit)
-                 or else (Ada_83
+                 or else (Ada_Version = Ada_83
                            and then Full_Source_Name (Body_Fname) /= No_File)
                then
                   Write_Info_Name (Body_Fname);
@@ -856,6 +864,10 @@ package body Lib.Writ is
          Write_Info_Str (" CE");
       end if;
 
+      if Opt.Detect_Blocking then
+         Write_Info_Str (" DB");
+      end if;
+
       if Opt.Float_Format /= ' ' then
          Write_Info_Str (" F");
 
@@ -936,7 +948,7 @@ package body Lib.Writ is
          end if;
       end loop;
 
-      --  Output restrictions line
+      --  Output first restrictions line
 
       Write_Info_Initiate ('R');
       Write_Info_Char (' ');
@@ -958,7 +970,9 @@ package body Lib.Writ is
       --  And now the information for the parameter restrictions
 
       for RP in All_Parameter_Restrictions loop
-         if Main_Restrictions.Set (RP) then
+         if Main_Restrictions.Set (RP)
+           and then not Restriction_Warnings (RP)
+         then
             Write_Info_Char ('r');
             Write_Info_Nat (Nat (Main_Restrictions.Value (RP)));
          else
@@ -980,6 +994,19 @@ package body Lib.Writ is
       end loop;
 
       Write_Info_EOL;
+
+      --  Output R lines for No_Dependence entries
+
+      for J in No_Dependence.First .. No_Dependence.Last loop
+         if In_Extended_Main_Source_Unit (No_Dependence.Table (J).Unit)
+           and then not No_Dependence.Table (J).Warn
+         then
+            Write_Info_Initiate ('R');
+            Write_Info_Char (' ');
+            Write_Unit_Name (No_Dependence.Table (J).Unit);
+            Write_Info_EOL;
+         end if;
+      end loop;
 
       --  Output interrupt state lines
 
@@ -1093,7 +1120,23 @@ package body Lib.Writ is
       Output_References;
       Write_Info_Terminate;
       Close_Output_Library_Info;
-
    end Write_ALI;
+
+   ---------------------
+   -- Write_Unit_Name --
+   ---------------------
+
+   procedure Write_Unit_Name (N : Node_Id) is
+   begin
+      if Nkind (N) = N_Identifier then
+         Write_Info_Name (Chars (N));
+
+      else
+         pragma Assert (Nkind (N) = N_Selected_Component);
+         Write_Unit_Name (Prefix (N));
+         Write_Info_Char ('.');
+         Write_Unit_Name (Selector_Name (N));
+      end if;
+   end Write_Unit_Name;
 
 end Lib.Writ;

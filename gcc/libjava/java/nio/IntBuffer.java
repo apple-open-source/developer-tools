@@ -68,7 +68,7 @@ public abstract class IntBuffer extends Buffer
    * @exception IndexOutOfBoundsException If the preconditions on the offset
    * and length parameters do not hold
    */
-  final public static IntBuffer wrap (int[] array, int offset, int length)
+  public static final IntBuffer wrap (int[] array, int offset, int length)
   {
     return new IntBufferImpl (array, 0, array.length, offset + length, offset, -1, false);
   }
@@ -77,14 +77,15 @@ public abstract class IntBuffer extends Buffer
    * Wraps a <code>int</code> array into a <code>IntBuffer</code>
    * object.
    */
-  final public static IntBuffer wrap (int[] array)
+  public static final IntBuffer wrap (int[] array)
   {
     return wrap (array, 0, array.length);
   }
   
   /**
-   * This method transfers <code>ints<code> from this buffer into the given
-   * destination array.
+   * This method transfers <code>int</code>s from this buffer into the given
+   * destination array. Before the transfer, it checks if there are fewer than
+   * length <code>int</code>s remaining in this buffer. 
    *
    * @param dst The destination array
    * @param offset The offset within the array of the first <code>int</code>
@@ -93,12 +94,15 @@ public abstract class IntBuffer extends Buffer
    * must be non-negative and no larger than dst.length - offset.
    *
    * @exception BufferUnderflowException If there are fewer than length
-   * <code>ints</code> remaining in this buffer.
+   * <code>int</code>s remaining in this buffer.
    * @exception IndexOutOfBoundsException If the preconditions on the offset
    * and length parameters do not hold.
    */
   public IntBuffer get (int[] dst, int offset, int length)
   {
+    checkArraySize(dst.length, offset, length);
+    checkForUnderflow(length);
+
     for (int i = offset; i < offset + length; i++)
       {
         dst [i] = get ();
@@ -108,13 +112,13 @@ public abstract class IntBuffer extends Buffer
   }
 
   /**
-   * This method transfers <code>ints<code> from this buffer into the given
+   * This method transfers <code>int</code>s from this buffer into the given
    * destination array.
    *
    * @param dst The byte array to write into.
    *
    * @exception BufferUnderflowException If there are fewer than dst.length
-   * <code>ints</code> remaining in this buffer.
+   * <code>int</code>s remaining in this buffer.
    */
   public IntBuffer get (int[] dst)
   {
@@ -123,12 +127,13 @@ public abstract class IntBuffer extends Buffer
 
   /**
    * Writes the content of the the <code>IntBUFFER</code> src
-   * into the buffer.
+   * into the buffer. Before the transfer, it checks if there is fewer than
+   * <code>src.remaining()</code> space remaining in this buffer.
    *
    * @param src The source data.
    *
    * @exception BufferOverflowException If there is insufficient space in this
-   * buffer for the remaining <code>ints<code> in the source buffer.
+   * buffer for the remaining <code>int</code>s in the source buffer.
    * @exception IllegalArgumentException If the source buffer is this buffer.
    * @exception ReadOnlyBufferException If this buffer is read-only.
    */
@@ -137,14 +142,13 @@ public abstract class IntBuffer extends Buffer
     if (src == this)
       throw new IllegalArgumentException ();
 
-    if (src.remaining () > remaining ())
-      throw new BufferOverflowException ();
+    checkForOverflow(src.remaining ());
 
     if (src.remaining () > 0)
       {
         int[] toPut = new int [src.remaining ()];
         src.get (toPut);
-        src.put (toPut);
+        put (toPut);
       }
 
     return this;
@@ -152,7 +156,8 @@ public abstract class IntBuffer extends Buffer
 
   /**
    * Writes the content of the the <code>int array</code> src
-   * into the buffer.
+   * into the buffer. Before the transfer, it checks if there is fewer than
+   * length space remaining in this buffer.
    *
    * @param src The array to copy into the buffer.
    * @param offset The offset within the array of the first byte to be read;
@@ -161,13 +166,16 @@ public abstract class IntBuffer extends Buffer
    * must be non-negative and no larger than src.length - offset.
    * 
    * @exception BufferOverflowException If there is insufficient space in this
-   * buffer for the remaining <code>ints<code> in the source array.
+   * buffer for the remaining <code>int</code>s in the source array.
    * @exception IndexOutOfBoundsException If the preconditions on the offset
    * and length parameters do not hold
    * @exception ReadOnlyBufferException If this buffer is read-only.
    */
   public IntBuffer put (int[] src, int offset, int length)
   {
+    checkArraySize(src.length, offset, length);
+    checkForOverflow(length);
+
     for (int i = offset; i < offset + length; i++)
       put (src [i]);
 
@@ -181,7 +189,7 @@ public abstract class IntBuffer extends Buffer
    * @param src The array to copy into the buffer.
    * 
    * @exception BufferOverflowException If there is insufficient space in this
-   * buffer for the remaining <code>ints<code> in the source array.
+   * buffer for the remaining <code>int</code>s in the source array.
    * @exception ReadOnlyBufferException If this buffer is read-only.
    */
   public final IntBuffer put (int[] src)
@@ -211,8 +219,7 @@ public abstract class IntBuffer extends Buffer
     if (backing_buffer == null)
       throw new UnsupportedOperationException ();
 
-    if (isReadOnly ())
-      throw new ReadOnlyBufferException ();
+    checkIfReadOnly();
     
     return backing_buffer;
   }
@@ -229,19 +236,34 @@ public abstract class IntBuffer extends Buffer
     if (backing_buffer == null)
       throw new UnsupportedOperationException ();
 
-    if (isReadOnly ())
-      throw new ReadOnlyBufferException ();
+    checkIfReadOnly();
     
     return array_offset;
   }
 
   /**
    * Calculates a hash code for this buffer.
+   *
+   * This is done with <code>int</code> arithmetic,
+   * where ** represents exponentiation, by this formula:<br>
+   * <code>s[position()] + 31 + (s[position()+1] + 30)*31**1 + ... +
+   * (s[limit()-1]+30)*31**(limit()-1)</code>.
+   * Where s is the buffer data. Note that the hashcode is dependent
+   * on buffer content, and therefore is not useful if the buffer
+   * content may change.
+   *
+   * @return the hash code
    */
   public int hashCode ()
   {
-    // FIXME: Check what SUN calculates here.
-    return super.hashCode ();
+    int hashCode = get(position()) + 31;
+    int multiplier = 1;
+    for (int i = position() + 1; i < limit(); ++i)
+      {
+	  multiplier *= 31;
+	  hashCode += (get(i) + 30)*multiplier;
+      }
+    return hashCode;
   }
 
   /**
@@ -298,7 +320,7 @@ public abstract class IntBuffer extends Buffer
    * and then increments the position.
    *
    * @exception BufferUnderflowException If there are no remaining
-   * <code>ints</code> in this buffer.
+   * <code>int</code>s in this buffer.
    */
   public abstract int get ();
 
@@ -307,7 +329,7 @@ public abstract class IntBuffer extends Buffer
    * and then increments the position.
    *
    * @exception BufferOverflowException If there no remaining 
-   * <code>ints</code> in this buffer.
+   * <code>int</code>s in this buffer.
    * @exception ReadOnlyBufferException If this buffer is read-only.
    */
   public abstract IntBuffer put (int b);

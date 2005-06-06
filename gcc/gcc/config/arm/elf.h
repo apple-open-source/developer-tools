@@ -108,7 +108,7 @@
 #endif
 
 #ifndef TARGET_DEFAULT
-#define TARGET_DEFAULT (ARM_FLAG_SOFT_FLOAT | ARM_FLAG_APCS_FRAME)
+#define TARGET_DEFAULT (ARM_FLAG_APCS_FRAME)
 #endif
 
 #ifndef MULTILIB_DEFAULTS
@@ -118,9 +118,6 @@
 
 #define TARGET_ASM_FILE_START_APP_OFF true
 #define TARGET_ASM_FILE_START_FILE_DIRECTIVE true
-
-#undef  TARGET_ASM_NAMED_SECTION
-#define TARGET_ASM_NAMED_SECTION  arm_elf_asm_named_section
 
 
 /* For PIC code we need to explicitly specify (PLT) and (GOT) relocs.  */

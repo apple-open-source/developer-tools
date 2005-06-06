@@ -24,12 +24,16 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "tm.h"
 #include "rtl.h"
 #include "hard-reg-set.h"
+#include "obstack.h"
 #include "basic-block.h"
 #include "cfgloop.h"
 #include "cfglayout.h"
 #include "params.h"
 #include "output.h"
 #include "expr.h"
+#include "hashtab.h"
+#include "recog.h"    
+#include "varray.h"                        
 
 /* This pass performs loop unrolling and peeling.  We only perform these
    optimizations on innermost loops (with single exception) because
@@ -66,6 +70,51 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
    showed that this choice may affect performance in order of several %.
    */
 
+/* Information about induction variables to split.  */
+
+struct iv_to_split
+{
+  rtx insn;		/* The insn in that the induction variable occurs.  */
+  rtx base_var;		/* The variable on that the values in the further
+			   iterations are based.  */
+  rtx step;		/* Step of the induction variable.  */
+  unsigned n_loc;
+  unsigned loc[3];	/* Location where the definition of the induction
+			   variable occurs in the insn.  For example if
+			   N_LOC is 2, the expression is located at
+			   XEXP (XEXP (single_set, loc[0]), loc[1]).  */ 
+};
+
+/* Information about accumulators to expand.  */
+
+struct var_to_expand
+{
+  rtx insn;		           /* The insn in that the variable expansion occurs.  */
+  rtx reg;                         /* The accumulator which is expanded.  */
+  varray_type var_expansions;      /* The copies of the accumulator which is expanded.  */ 
+  enum rtx_code op;                /* The type of the accumulation - addition, subtraction 
+                                      or multiplication.  */
+  int expansion_count;             /* Count the number of expansions generated so far.  */
+  int reuse_expansion;             /* The expansion we intend to reuse to expand
+                                      the accumulator.  If REUSE_EXPANSION is 0 reuse 
+                                      the original accumulator.  Else use 
+                                      var_expansions[REUSE_EXPANSION - 1].  */
+};
+
+/* Information about optimization applied in
+   the unrolled loop.  */
+
+struct opt_info
+{
+  htab_t insns_to_split;           /* A hashtable of insns to split.  */
+  htab_t insns_with_var_to_expand; /* A hashtable of insns with accumulators
+                                      to expand.  */
+  unsigned first_new_block;        /* The first basic block that was
+                                      duplicated.  */
+  basic_block loop_exit;           /* The loop exit basic block.  */
+  basic_block loop_preheader;      /* The loop preheader basic block.  */
+};
+
 static void decide_unrolling_and_peeling (struct loops *, int);
 static void peel_loops_completely (struct loops *, int);
 static void decide_peel_simple (struct loop *, int);
@@ -79,6 +128,18 @@ static void peel_loop_completely (struct loops *, struct loop *);
 static void unroll_loop_stupid (struct loops *, struct loop *);
 static void unroll_loop_constant_iterations (struct loops *, struct loop *);
 static void unroll_loop_runtime_iterations (struct loops *, struct loop *);
+static struct opt_info *analyze_insns_in_loop (struct loop *);
+static void opt_info_start_duplication (struct opt_info *);
+static void apply_opt_in_copies (struct opt_info *, unsigned, bool, bool);
+static void free_opt_info (struct opt_info *);
+static struct var_to_expand *analyze_insn_to_expand_var (struct loop*, rtx);
+static bool referenced_in_one_insn_in_loop_p (struct loop *, rtx);
+static struct iv_to_split *analyze_iv_to_split_insn (rtx);
+static void expand_var_during_unrolling (struct var_to_expand *, rtx);
+static int insert_var_expansion_initialization (void **, void *);
+static int combine_var_copies_in_loop_exit (void **, void *);
+static int release_var_copies (void **, void *);
+static rtx get_expansion (struct var_to_expand *);
 
 /* Unroll and/or peel (depending on FLAGS) LOOPS.  */
 void
@@ -116,7 +177,7 @@ unroll_and_peel_loops (struct loops *loops, int flags)
 	{
 	case LPT_PEEL_COMPLETELY:
 	  /* Already done.  */
-	  abort ();
+	  gcc_unreachable ();
 	case LPT_PEEL_SIMPLE:
 	  peel_loop_simple (loops, loop);
 	  break;
@@ -133,7 +194,7 @@ unroll_and_peel_loops (struct loops *loops, int flags)
 	  check = false;
 	  break;
 	default:
-	  abort ();
+	  gcc_unreachable ();
 	}
       if (check)
 	{
@@ -426,9 +487,10 @@ peel_loop_completely (struct loops *loops, struct loop *loop)
   sbitmap wont_exit;
   unsigned HOST_WIDE_INT npeel;
   unsigned n_remove_edges, i;
-  edge *remove_edges, ei;
+  edge *remove_edges, ein;
   struct niter_desc *desc = get_simple_loop_desc (loop);
-
+  struct opt_info *opt_info = NULL;
+  
   npeel = desc->niter;
 
   if (npeel)
@@ -442,6 +504,10 @@ peel_loop_completely (struct loops *loops, struct loop *loop)
       remove_edges = xcalloc (npeel, sizeof (edge));
       n_remove_edges = 0;
 
+      if (flag_split_ivs_in_unroller)
+        opt_info = analyze_insns_in_loop (loop);
+      
+      opt_info_start_duplication (opt_info);
       if (!duplicate_loop_to_header_edge (loop, loop_preheader_edge (loop),
 		loops, npeel,
 		wont_exit, desc->out_edge, remove_edges, &n_remove_edges,
@@ -449,6 +515,12 @@ peel_loop_completely (struct loops *loops, struct loop *loop)
 	abort ();
 
       free (wont_exit);
+      
+      if (opt_info)
+ 	{
+ 	  apply_opt_in_copies (opt_info, npeel, false, true);
+ 	  free_opt_info (opt_info);
+ 	}
 
       /* Remove the exit edges.  */
       for (i = 0; i < n_remove_edges; i++)
@@ -456,12 +528,12 @@ peel_loop_completely (struct loops *loops, struct loop *loop)
       free (remove_edges);
     }
 
-  ei = desc->in_edge;
+  ein = desc->in_edge;
   free_simple_loop_desc (loop);
 
   /* Now remove the unreachable part of the last iteration and cancel
      the loop.  */
-  remove_path (loops, ei);
+  remove_path (loops, ein);
 
   if (dump_file)
     fprintf (dump_file, ";; Peeled loop completely, %d times\n", (int) npeel);
@@ -597,11 +669,12 @@ unroll_loop_constant_iterations (struct loops *loops, struct loop *loop)
   unsigned max_unroll = loop->lpt_decision.times;
   struct niter_desc *desc = get_simple_loop_desc (loop);
   bool exit_at_end = loop_exit_at_end_p (loop);
-
+  struct opt_info *opt_info = NULL;
+  
   niter = desc->niter;
 
-  if (niter <= max_unroll + 1)
-    abort ();  /* Should not get here (such loop should be peeled instead).  */
+  /* Should not get here (such loop should be peeled instead).  */
+  gcc_assert (niter > max_unroll + 1);
 
   exit_mod = niter % (max_unroll + 1);
 
@@ -610,7 +683,10 @@ unroll_loop_constant_iterations (struct loops *loops, struct loop *loop)
 
   remove_edges = xcalloc (max_unroll + exit_mod + 1, sizeof (edge));
   n_remove_edges = 0;
-
+  if (flag_split_ivs_in_unroller 
+      || flag_variable_expansion_in_unroller)
+    opt_info = analyze_insns_in_loop (loop);
+  
   if (!exit_at_end)
     {
       /* The exit is not at the end of the loop; leave exit test
@@ -627,13 +703,17 @@ unroll_loop_constant_iterations (struct loops *loops, struct loop *loop)
 
       if (exit_mod)
 	{
-	  if (!duplicate_loop_to_header_edge (loop, loop_preheader_edge (loop),
+	  opt_info_start_duplication (opt_info);
+          if (!duplicate_loop_to_header_edge (loop, loop_preheader_edge (loop),
 					      loops, exit_mod,
 					      wont_exit, desc->out_edge,
 					      remove_edges, &n_remove_edges,
 					      DLTHE_FLAG_UPDATE_FREQ))
 	    abort ();
 
+          if (opt_info && exit_mod > 1)
+ 	    apply_opt_in_copies (opt_info, exit_mod, false, false); 
+          
 	  desc->noloop_assumptions = NULL_RTX;
 	  desc->niter -= exit_mod;
 	  desc->niter_max -= exit_mod;
@@ -658,12 +738,16 @@ unroll_loop_constant_iterations (struct loops *loops, struct loop *loop)
 	  RESET_BIT (wont_exit, 0);
 	  if (desc->noloop_assumptions)
 	    RESET_BIT (wont_exit, 1);
-
+         
+          opt_info_start_duplication (opt_info);
 	  if (!duplicate_loop_to_header_edge (loop, loop_preheader_edge (loop),
 		loops, exit_mod + 1,
 		wont_exit, desc->out_edge, remove_edges, &n_remove_edges,
 		DLTHE_FLAG_UPDATE_FREQ))
 	    abort ();
+ 
+          if (opt_info && exit_mod > 0)
+  	    apply_opt_in_copies (opt_info, exit_mod + 1, false, false);
 
 	  desc->niter -= exit_mod + 1;
 	  desc->niter_max -= exit_mod + 1;
@@ -677,11 +761,19 @@ unroll_loop_constant_iterations (struct loops *loops, struct loop *loop)
     }
 
   /* Now unroll the loop.  */
+  
+  opt_info_start_duplication (opt_info);
   if (!duplicate_loop_to_header_edge (loop, loop_latch_edge (loop),
 		loops, max_unroll,
 		wont_exit, desc->out_edge, remove_edges, &n_remove_edges,
 		DLTHE_FLAG_UPDATE_FREQ))
     abort ();
+
+  if (opt_info)
+    {
+      apply_opt_in_copies (opt_info, max_unroll, true, true);
+      free_opt_info (opt_info);
+    }
 
   free (wont_exit);
 
@@ -690,15 +782,15 @@ unroll_loop_constant_iterations (struct loops *loops, struct loop *loop)
       basic_block exit_block = desc->in_edge->src->rbi->copy;
       /* Find a new in and out edge; they are in the last copy we have made.  */
       
-      if (exit_block->succ->dest == desc->out_edge->dest)
+      if (EDGE_SUCC (exit_block, 0)->dest == desc->out_edge->dest)
 	{
-	  desc->out_edge = exit_block->succ;
-	  desc->in_edge = exit_block->succ->succ_next;
+	  desc->out_edge = EDGE_SUCC (exit_block, 0);
+	  desc->in_edge = EDGE_SUCC (exit_block, 1);
 	}
       else
 	{
-	  desc->out_edge = exit_block->succ->succ_next;
-	  desc->in_edge = exit_block->succ;
+	  desc->out_edge = EDGE_SUCC (exit_block, 1);
+	  desc->in_edge = EDGE_SUCC (exit_block, 0);
 	}
     }
 
@@ -737,7 +829,7 @@ decide_unroll_runtime_iterations (struct loop *loop, int flags)
 	     "computable number of iterations\n");
 
   /* nunroll = total number of copies of the original loop body in
-     unrolled loop (i.e. if it is 2, we have to duplicate loop body once).  */
+     unrolled loop (i.e. if it is 2, we have to duplicate loop body once.  */
   nunroll = PARAM_VALUE (PARAM_MAX_UNROLLED_INSNS) / loop->ninsns;
   nunroll_by_av = PARAM_VALUE (PARAM_MAX_AVERAGE_UNROLLED_INSNS) / loop->av_ninsns;
   if (nunroll > nunroll_by_av)
@@ -842,7 +934,12 @@ unroll_loop_runtime_iterations (struct loops *loops, struct loop *loop)
   unsigned max_unroll = loop->lpt_decision.times;
   struct niter_desc *desc = get_simple_loop_desc (loop);
   bool exit_at_end = loop_exit_at_end_p (loop);
-
+  struct opt_info *opt_info = NULL;
+  
+  if (flag_split_ivs_in_unroller
+      || flag_variable_expansion_in_unroller)
+    opt_info = analyze_insns_in_loop (loop);
+  
   /* Remember blocks whose dominators will have to be updated.  */
   dom_bbs = xcalloc (n_basic_blocks, sizeof (basic_block));
   n_dom_bbs = 0;
@@ -946,11 +1043,11 @@ unroll_loop_runtime_iterations (struct loops *loops, struct loop *loop)
       branch_code = compare_and_jump_seq (copy_rtx (niter), GEN_INT (j), EQ,
 					  block_label (preheader), p, NULL_RTX);
 
-      swtch = loop_split_edge_with (swtch->pred, branch_code);
+      swtch = loop_split_edge_with (EDGE_PRED (swtch, 0), branch_code);
       set_immediate_dominator (CDI_DOMINATORS, preheader, swtch);
-      swtch->succ->probability = REG_BR_PROB_BASE - p;
+      EDGE_SUCC (swtch, 0)->probability = REG_BR_PROB_BASE - p;
       e = make_edge (swtch, preheader,
-		     swtch->succ->flags & EDGE_IRREDUCIBLE_LOOP);
+		     EDGE_SUCC (swtch, 0)->flags & EDGE_IRREDUCIBLE_LOOP);
       e->probability = p;
     }
 
@@ -963,11 +1060,11 @@ unroll_loop_runtime_iterations (struct loops *loops, struct loop *loop)
       branch_code = compare_and_jump_seq (copy_rtx (niter), const0_rtx, EQ,
 					  block_label (preheader), p, NULL_RTX);
 
-      swtch = loop_split_edge_with (swtch->succ, branch_code);
+      swtch = loop_split_edge_with (EDGE_SUCC (swtch, 0), branch_code);
       set_immediate_dominator (CDI_DOMINATORS, preheader, swtch);
-      swtch->succ->probability = REG_BR_PROB_BASE - p;
+      EDGE_SUCC (swtch, 0)->probability = REG_BR_PROB_BASE - p;
       e = make_edge (swtch, preheader,
-		     swtch->succ->flags & EDGE_IRREDUCIBLE_LOOP);
+		     EDGE_SUCC (swtch, 0)->flags & EDGE_IRREDUCIBLE_LOOP);
       e->probability = p;
     }
 
@@ -978,12 +1075,19 @@ unroll_loop_runtime_iterations (struct loops *loops, struct loop *loop)
 
   sbitmap_ones (wont_exit);
   RESET_BIT (wont_exit, may_exit_copy);
-
+  opt_info_start_duplication (opt_info);
+  
   if (!duplicate_loop_to_header_edge (loop, loop_latch_edge (loop),
 		loops, max_unroll,
 		wont_exit, desc->out_edge, remove_edges, &n_remove_edges,
 		DLTHE_FLAG_UPDATE_FREQ))
     abort ();
+  
+  if (opt_info)
+    {
+      apply_opt_in_copies (opt_info, max_unroll, true, true);
+      free_opt_info (opt_info);
+    }
 
   free (wont_exit);
 
@@ -992,15 +1096,15 @@ unroll_loop_runtime_iterations (struct loops *loops, struct loop *loop)
       basic_block exit_block = desc->in_edge->src->rbi->copy;
       /* Find a new in and out edge; they are in the last copy we have made.  */
       
-      if (exit_block->succ->dest == desc->out_edge->dest)
+      if (EDGE_SUCC (exit_block, 0)->dest == desc->out_edge->dest)
 	{
-	  desc->out_edge = exit_block->succ;
-	  desc->in_edge = exit_block->succ->succ_next;
+	  desc->out_edge = EDGE_SUCC (exit_block, 0);
+	  desc->in_edge = EDGE_SUCC (exit_block, 1);
 	}
       else
 	{
-	  desc->out_edge = exit_block->succ->succ_next;
-	  desc->in_edge = exit_block->succ;
+	  desc->out_edge = EDGE_SUCC (exit_block, 1);
+	  desc->in_edge = EDGE_SUCC (exit_block, 0);
 	}
     }
 
@@ -1013,8 +1117,7 @@ unroll_loop_runtime_iterations (struct loops *loops, struct loop *loop)
      preconditioning and the fact that the value must be valid at entry
      of the loop.  After passing through the above code, we see that
      the correct new number of iterations is this:  */
-  if (desc->const_iter)
-    abort ();
+  gcc_assert (!desc->const_iter);
   desc->niter_expr =
     simplify_gen_binary (UDIV, desc->mode, old_niter, GEN_INT (max_unroll + 1));
   desc->niter_max /= max_unroll + 1;
@@ -1138,16 +1241,28 @@ peel_loop_simple (struct loops *loops, struct loop *loop)
   sbitmap wont_exit;
   unsigned npeel = loop->lpt_decision.times;
   struct niter_desc *desc = get_simple_loop_desc (loop);
-
+  struct opt_info *opt_info = NULL;
+  
+  if (flag_split_ivs_in_unroller && npeel > 1)
+    opt_info = analyze_insns_in_loop (loop);
+  
   wont_exit = sbitmap_alloc (npeel + 1);
   sbitmap_zero (wont_exit);
-
+  
+  opt_info_start_duplication (opt_info);
+  
   if (!duplicate_loop_to_header_edge (loop, loop_preheader_edge (loop),
 		loops, npeel, wont_exit, NULL, NULL, NULL,
 		DLTHE_FLAG_UPDATE_FREQ))
     abort ();
 
   free (wont_exit);
+  
+  if (opt_info)
+    {
+      apply_opt_in_copies (opt_info, npeel, false, false);
+      free_opt_info (opt_info);
+    }
 
   if (desc->simple_p)
     {
@@ -1241,7 +1356,7 @@ decide_unroll_stupid (struct loop *loop, int flags)
 
   loop->lpt_decision.decision = LPT_UNROLL_STUPID;
   loop->lpt_decision.times = i - 1;
-
+      
   if (dump_file)
     fprintf (dump_file,
 	     ";; Decided to unroll the loop stupidly, %d times.\n",
@@ -1271,14 +1386,27 @@ unroll_loop_stupid (struct loops *loops, struct loop *loop)
   sbitmap wont_exit;
   unsigned nunroll = loop->lpt_decision.times;
   struct niter_desc *desc = get_simple_loop_desc (loop);
-
+  struct opt_info *opt_info = NULL;
+  
+  if (flag_split_ivs_in_unroller
+      || flag_variable_expansion_in_unroller)
+    opt_info = analyze_insns_in_loop (loop);
+  
+  
   wont_exit = sbitmap_alloc (nunroll + 1);
   sbitmap_zero (wont_exit);
-
+  opt_info_start_duplication (opt_info);
+  
   if (!duplicate_loop_to_header_edge (loop, loop_latch_edge (loop),
 		loops, nunroll, wont_exit, NULL, NULL, NULL,
 		DLTHE_FLAG_UPDATE_FREQ))
     abort ();
+  
+  if (opt_info)
+    {
+      apply_opt_in_copies (opt_info, nunroll, true, true);
+      free_opt_info (opt_info);
+    }
 
   free (wont_exit);
 
@@ -1296,4 +1424,750 @@ unroll_loop_stupid (struct loops *loops, struct loop *loop)
   if (dump_file)
     fprintf (dump_file, ";; Unrolled loop %d times, %i insns\n",
 	     nunroll, num_loop_insns (loop));
+}
+
+/* A hash function for information about insns to split.  */
+
+static hashval_t
+si_info_hash (const void *ivts)
+{
+  return htab_hash_pointer (((struct iv_to_split *) ivts)->insn);
+}
+
+/* An equality functions for information about insns to split.  */
+
+static int
+si_info_eq (const void *ivts1, const void *ivts2)
+{
+  const struct iv_to_split *i1 = ivts1;
+  const struct iv_to_split *i2 = ivts2;
+
+  return i1->insn == i2->insn;
+}
+
+/* Return a hash for VES, which is really a "var_to_expand *".  */
+
+static hashval_t
+ve_info_hash (const void *ves)
+{
+  return htab_hash_pointer (((struct var_to_expand *) ves)->insn);
+}
+
+/* Return true if IVTS1 and IVTS2 (which are really both of type 
+   "var_to_expand *") refer to the same instruction.  */
+
+static int
+ve_info_eq (const void *ivts1, const void *ivts2)
+{
+  const struct var_to_expand *i1 = ivts1;
+  const struct var_to_expand *i2 = ivts2;
+  
+  return i1->insn == i2->insn;
+}
+
+/* Returns true if REG is referenced in one insn in LOOP.  */
+
+bool
+referenced_in_one_insn_in_loop_p (struct loop *loop, rtx reg)
+{
+  basic_block *body, bb;
+  unsigned i;
+  int count_ref = 0;
+  rtx insn;
+  
+  body = get_loop_body (loop); 
+  for (i = 0; i < loop->num_nodes; i++)
+    {
+      bb = body[i];
+      
+      FOR_BB_INSNS (bb, insn)
+      {
+        if (rtx_referenced_p (reg, insn))
+          count_ref++;
+      }
+    }
+  return (count_ref  == 1);
+}
+
+/* Determine whether INSN contains an accumulator
+   which can be expanded into separate copies, 
+   one for each copy of the LOOP body.
+   
+   for (i = 0 ; i < n; i++)
+     sum += a[i];
+   
+   ==>
+     
+   sum += a[i]
+   ....
+   i = i+1;
+   sum1 += a[i]
+   ....
+   i = i+1
+   sum2 += a[i];
+   ....
+
+   Return NULL if INSN contains no opportunity for expansion of accumulator.  
+   Otherwise, allocate a VAR_TO_EXPAND structure, fill it with the relevant 
+   information and return a pointer to it.
+*/
+
+static struct var_to_expand *
+analyze_insn_to_expand_var (struct loop *loop, rtx insn)
+{
+  rtx set, dest, src, op1;
+  struct var_to_expand *ves;
+  enum machine_mode mode1, mode2;
+  
+  set = single_set (insn);
+  if (!set)
+    return NULL;
+  
+  dest = SET_DEST (set);
+  src = SET_SRC (set);
+  
+  if (GET_CODE (src) != PLUS
+      && GET_CODE (src) != MINUS
+      && GET_CODE (src) != MULT)
+    return NULL;
+  
+  if (!XEXP (src, 0))
+    return NULL;
+  
+  op1 = XEXP (src, 0);
+  
+  if (!REG_P (dest)
+      && !(GET_CODE (dest) == SUBREG
+           && REG_P (SUBREG_REG (dest))))
+    return NULL;
+  
+  if (!rtx_equal_p (dest, op1))
+    return NULL;      
+  
+  if (!referenced_in_one_insn_in_loop_p (loop, dest))
+    return NULL;
+  
+  if (rtx_referenced_p (dest, XEXP (src, 1)))
+    return NULL;
+  
+  mode1 = GET_MODE (dest); 
+  mode2 = GET_MODE (XEXP (src, 1));
+  if ((FLOAT_MODE_P (mode1) 
+       || FLOAT_MODE_P (mode2)) 
+      && !flag_unsafe_math_optimizations) 
+    return NULL;
+  
+  /* Record the accumulator to expand.  */
+  ves = xmalloc (sizeof (struct var_to_expand));
+  ves->insn = insn;
+  VARRAY_RTX_INIT (ves->var_expansions, 1, "var_expansions");
+  ves->reg = copy_rtx (dest);
+  ves->op = GET_CODE (src);
+  ves->expansion_count = 0;
+  ves->reuse_expansion = 0;
+  return ves; 
+}
+
+/* Determine whether there is an induction variable in INSN that
+   we would like to split during unrolling.  
+
+   I.e. replace
+
+   i = i + 1;
+   ...
+   i = i + 1;
+   ...
+   i = i + 1;
+   ...
+
+   type chains by
+
+   i0 = i + 1
+   ...
+   i = i0 + 1
+   ...
+   i = i0 + 2
+   ...
+
+   Return NULL if INSN contains no interesting IVs.  Otherwise, allocate 
+   an IV_TO_SPLIT structure, fill it with the relevant information and return a
+   pointer to it.  */
+
+static struct iv_to_split *
+analyze_iv_to_split_insn (rtx insn)
+{
+  rtx set, dest;
+  struct rtx_iv iv;
+  struct iv_to_split *ivts;
+
+  /* For now we just split the basic induction variables.  Later this may be
+     extended for example by selecting also addresses of memory references.  */
+  set = single_set (insn);
+  if (!set)
+    return NULL;
+
+  dest = SET_DEST (set);
+  if (!REG_P (dest))
+    return NULL;
+
+  if (!biv_p (insn, dest))
+    return NULL;
+
+  if (!iv_analyze (insn, dest, &iv))
+    abort ();
+
+  if (iv.step == const0_rtx
+      || iv.mode != iv.extend_mode)
+    return NULL;
+
+  /* Record the insn to split.  */
+  ivts = xmalloc (sizeof (struct iv_to_split));
+  ivts->insn = insn;
+  ivts->base_var = NULL_RTX;
+  ivts->step = iv.step;
+  ivts->n_loc = 1;
+  ivts->loc[0] = 1;
+  
+  return ivts;
+}
+
+/* Determines which of insns in LOOP can be optimized.
+   Return a OPT_INFO struct with the relevant hash tables filled
+   with all insns to be optimized.  The FIRST_NEW_BLOCK field
+   is undefined for the return value.  */
+
+static struct opt_info *
+analyze_insns_in_loop (struct loop *loop)
+{
+  basic_block *body, bb;
+  unsigned i, n_edges = 0;
+  struct opt_info *opt_info = xcalloc (1, sizeof (struct opt_info));
+  rtx insn;
+  struct iv_to_split *ivts = NULL;
+  struct var_to_expand *ves = NULL;
+  PTR *slot1;
+  PTR *slot2;
+  edge *edges = get_loop_exit_edges (loop, &n_edges);
+  basic_block preheader;
+  bool can_apply = false;
+  
+  iv_analysis_loop_init (loop);
+
+  body = get_loop_body (loop);
+
+  if (flag_split_ivs_in_unroller)
+    opt_info->insns_to_split = htab_create (5 * loop->num_nodes,
+                                            si_info_hash, si_info_eq, free);
+  
+  /* Record the loop exit bb and loop preheader before the unrolling.  */
+  if (!loop_preheader_edge (loop)->src)
+    {
+      preheader = loop_split_edge_with (loop_preheader_edge (loop), NULL_RTX);
+      opt_info->loop_preheader = loop_split_edge_with (loop_preheader_edge (loop), NULL_RTX);
+    }
+  else
+    opt_info->loop_preheader = loop_preheader_edge (loop)->src;
+  
+  if (n_edges == 1
+      && !(edges[0]->flags & EDGE_COMPLEX)
+      && (edges[0]->flags & EDGE_LOOP_EXIT))
+    {
+      opt_info->loop_exit = loop_split_edge_with (edges[0], NULL_RTX);
+      can_apply = true;
+    }
+  
+  if (flag_variable_expansion_in_unroller
+      && can_apply)
+    opt_info->insns_with_var_to_expand = htab_create (5 * loop->num_nodes,
+						      ve_info_hash, ve_info_eq, free);
+  
+  for (i = 0; i < loop->num_nodes; i++)
+    {
+      bb = body[i];
+      if (!dominated_by_p (CDI_DOMINATORS, loop->latch, bb))
+	continue;
+
+      FOR_BB_INSNS (bb, insn)
+      {
+        if (!INSN_P (insn))
+          continue;
+        
+        if (opt_info->insns_to_split)
+          ivts = analyze_iv_to_split_insn (insn);
+        
+        if (ivts)
+          {
+            slot1 = htab_find_slot (opt_info->insns_to_split, ivts, INSERT);
+            *slot1 = ivts;
+            continue;
+          }
+        
+        if (opt_info->insns_with_var_to_expand)
+          ves = analyze_insn_to_expand_var (loop, insn);
+        
+        if (ves)
+          {
+            slot2 = htab_find_slot (opt_info->insns_with_var_to_expand, ves, INSERT);
+            *slot2 = ves;
+          }
+      }
+    }
+  
+  free (edges);
+  free (body);
+  return opt_info;
+}
+
+/* Called just before loop duplication.  Records start of duplicated area
+   to OPT_INFO.  */
+
+static void 
+opt_info_start_duplication (struct opt_info *opt_info)
+{
+  if (opt_info)
+    opt_info->first_new_block = last_basic_block;
+}
+
+/* Determine the number of iterations between initialization of the base
+   variable and the current copy (N_COPY).  N_COPIES is the total number
+   of newly created copies.  UNROLLING is true if we are unrolling
+   (not peeling) the loop.  */
+
+static unsigned
+determine_split_iv_delta (unsigned n_copy, unsigned n_copies, bool unrolling)
+{
+  if (unrolling)
+    {
+      /* If we are unrolling, initialization is done in the original loop
+	 body (number 0).  */
+      return n_copy;
+    }
+  else
+    {
+      /* If we are peeling, the copy in that the initialization occurs has
+	 number 1.  The original loop (number 0) is the last.  */
+      if (n_copy)
+	return n_copy - 1;
+      else
+	return n_copies;
+    }
+}
+
+/* Locate in EXPR the expression corresponding to the location recorded
+   in IVTS, and return a pointer to the RTX for this location.  */
+
+static rtx *
+get_ivts_expr (rtx expr, struct iv_to_split *ivts)
+{
+  unsigned i;
+  rtx *ret = &expr;
+
+  for (i = 0; i < ivts->n_loc; i++)
+    ret = &XEXP (*ret, ivts->loc[i]);
+
+  return ret;
+}
+
+/* Allocate basic variable for the induction variable chain.  Callback for
+   htab_traverse.  */
+
+static int
+allocate_basic_variable (void **slot, void *data ATTRIBUTE_UNUSED)
+{
+  struct iv_to_split *ivts = *slot;
+  rtx expr = *get_ivts_expr (single_set (ivts->insn), ivts);
+
+  ivts->base_var = gen_reg_rtx (GET_MODE (expr));
+
+  return 1;
+}
+
+/* Insert initialization of basic variable of IVTS before INSN, taking
+   the initial value from INSN.  */
+
+static void
+insert_base_initialization (struct iv_to_split *ivts, rtx insn)
+{
+  rtx expr = copy_rtx (*get_ivts_expr (single_set (insn), ivts));
+  rtx seq;
+
+  start_sequence ();
+  expr = force_operand (expr, ivts->base_var);
+  if (expr != ivts->base_var)
+    emit_move_insn (ivts->base_var, expr);
+  seq = get_insns ();
+  end_sequence ();
+
+  emit_insn_before (seq, insn);
+}
+
+/* Replace the use of induction variable described in IVTS in INSN
+   by base variable + DELTA * step.  */
+
+static void
+split_iv (struct iv_to_split *ivts, rtx insn, unsigned delta)
+{
+  rtx expr, *loc, seq, incr, var;
+  enum machine_mode mode = GET_MODE (ivts->base_var);
+  rtx src, dest, set;
+
+  /* Construct base + DELTA * step.  */
+  if (!delta)
+    expr = ivts->base_var;
+  else
+    {
+      incr = simplify_gen_binary (MULT, mode,
+				  ivts->step, gen_int_mode (delta, mode));
+      expr = simplify_gen_binary (PLUS, GET_MODE (ivts->base_var),
+				  ivts->base_var, incr);
+    }
+
+  /* Figure out where to do the replacement.  */
+  loc = get_ivts_expr (single_set (insn), ivts);
+
+  /* If we can make the replacement right away, we're done.  */
+  if (validate_change (insn, loc, expr, 0))
+    return;
+
+  /* Otherwise, force EXPR into a register and try again.  */
+  start_sequence ();
+  var = gen_reg_rtx (mode);
+  expr = force_operand (expr, var);
+  if (expr != var)
+    emit_move_insn (var, expr);
+  seq = get_insns ();
+  end_sequence ();
+  emit_insn_before (seq, insn);
+      
+  if (validate_change (insn, loc, var, 0))
+    return;
+
+  /* The last chance.  Try recreating the assignment in insn
+     completely from scratch.  */
+  set = single_set (insn);
+  gcc_assert (set);
+
+  start_sequence ();
+  *loc = var;
+  src = copy_rtx (SET_SRC (set));
+  dest = copy_rtx (SET_DEST (set));
+  src = force_operand (src, dest);
+  if (src != dest)
+    emit_move_insn (dest, src);
+  seq = get_insns ();
+  end_sequence ();
+     
+  emit_insn_before (seq, insn);
+  delete_insn (insn);
+}
+
+
+/* Return one expansion of the accumulator recorded in struct VE.  */
+
+static rtx
+get_expansion (struct var_to_expand *ve)
+{
+  rtx reg;
+  
+  if (ve->reuse_expansion == 0)
+    reg = ve->reg;
+  else
+    reg = VARRAY_RTX (ve->var_expansions,  ve->reuse_expansion - 1);
+  
+  if (VARRAY_ACTIVE_SIZE (ve->var_expansions) == (unsigned) ve->reuse_expansion)
+    ve->reuse_expansion = 0;
+  else 
+    ve->reuse_expansion++;
+  
+  return reg;
+}
+
+
+/* Given INSN replace the uses of the accumulator recorded in VE 
+   with a new register.  */
+
+static void
+expand_var_during_unrolling (struct var_to_expand *ve, rtx insn)
+{
+  rtx new_reg, set;
+  bool really_new_expansion = false;
+  
+  set = single_set (insn);
+  if (!set)
+    abort ();
+  
+  /* Generate a new register only if the expansion limit has not been
+     reached.  Else reuse an already existing expansion.  */
+  if (PARAM_VALUE (PARAM_MAX_VARIABLE_EXPANSIONS) > ve->expansion_count)
+    {
+      really_new_expansion = true;
+      new_reg = gen_reg_rtx (GET_MODE (ve->reg));
+    }
+  else
+    new_reg = get_expansion (ve);
+
+  validate_change (insn, &SET_DEST (set), new_reg, 1);
+  validate_change (insn, &XEXP (SET_SRC (set), 0), new_reg, 1);
+  
+  if (apply_change_group ())
+    if (really_new_expansion)
+      {
+        VARRAY_PUSH_RTX (ve->var_expansions, new_reg);
+        ve->expansion_count++;
+      }
+}
+
+/* Initialize the variable expansions in loop preheader.  
+   Callbacks for htab_traverse.  PLACE_P is the loop-preheader 
+   basic block where the initialization of the expansions 
+   should take place.  */
+
+static int
+insert_var_expansion_initialization (void **slot, void *place_p)
+{
+  struct var_to_expand *ve = *slot;
+  basic_block place = (basic_block)place_p;
+  rtx seq, var, zero_init, insn;
+  unsigned i;
+  
+  if (VARRAY_ACTIVE_SIZE (ve->var_expansions) == 0)
+    return 1;
+  
+  start_sequence ();
+  if (ve->op == PLUS || ve->op == MINUS) 
+    for (i = 0; i < VARRAY_ACTIVE_SIZE (ve->var_expansions); i++)
+      {
+        var = VARRAY_RTX (ve->var_expansions, i);
+        zero_init =  CONST0_RTX (GET_MODE (var));
+        emit_move_insn (var, zero_init);
+      }
+  else if (ve->op == MULT)
+    for (i = 0; i < VARRAY_ACTIVE_SIZE (ve->var_expansions); i++)
+      {
+        var = VARRAY_RTX (ve->var_expansions, i);
+        zero_init =  CONST1_RTX (GET_MODE (var));
+        emit_move_insn (var, zero_init);
+      }
+  
+  seq = get_insns ();
+  end_sequence ();
+  
+  insn = BB_HEAD (place);
+  while (!NOTE_INSN_BASIC_BLOCK_P (insn))
+    insn = NEXT_INSN (insn);
+  
+  emit_insn_after (seq, insn); 
+  /* Continue traversing the hash table.  */
+  return 1;   
+}
+
+/*  Combine the variable expansions at the loop exit.  
+    Callbacks for htab_traverse.  PLACE_P is the loop exit
+    basic block where the summation of the expansions should 
+    take place.  */
+
+static int
+combine_var_copies_in_loop_exit (void **slot, void *place_p)
+{
+  struct var_to_expand *ve = *slot;
+  basic_block place = (basic_block)place_p;
+  rtx sum = ve->reg;
+  rtx expr, seq, var, insn;
+  unsigned i;
+
+  if (VARRAY_ACTIVE_SIZE (ve->var_expansions) == 0)
+    return 1;
+  
+  start_sequence ();
+  if (ve->op == PLUS || ve->op == MINUS)
+    for (i = 0; i < VARRAY_ACTIVE_SIZE (ve->var_expansions); i++)
+      {
+        var = VARRAY_RTX (ve->var_expansions, i);
+        sum = simplify_gen_binary (PLUS, GET_MODE (ve->reg),
+                                   var, sum);
+      }
+  else if (ve->op == MULT)
+    for (i = 0; i < VARRAY_ACTIVE_SIZE (ve->var_expansions); i++)
+      {
+        var = VARRAY_RTX (ve->var_expansions, i);
+        sum = simplify_gen_binary (MULT, GET_MODE (ve->reg),
+                                   var, sum);
+      }
+  
+  expr = force_operand (sum, ve->reg);
+  if (expr != ve->reg)
+    emit_move_insn (ve->reg, expr);
+  seq = get_insns ();
+  end_sequence ();
+  
+  insn = BB_HEAD (place);
+  while (!NOTE_INSN_BASIC_BLOCK_P (insn))
+    insn = NEXT_INSN (insn);
+
+  emit_insn_after (seq, insn);
+  
+  /* Continue traversing the hash table.  */
+  return 1;
+}
+
+/* Apply loop optimizations in loop copies using the 
+   data which gathered during the unrolling.  Structure 
+   OPT_INFO record that data.
+   
+   UNROLLING is true if we unrolled (not peeled) the loop.
+   REWRITE_ORIGINAL_BODY is true if we should also rewrite the original body of
+   the loop (as it should happen in complete unrolling, but not in ordinary
+   peeling of the loop).  */
+
+static void
+apply_opt_in_copies (struct opt_info *opt_info, 
+                     unsigned n_copies, bool unrolling, 
+                     bool rewrite_original_loop)
+{
+  unsigned i, delta;
+  basic_block bb, orig_bb;
+  rtx insn, orig_insn, next;
+  struct iv_to_split ivts_templ, *ivts;
+  struct var_to_expand ve_templ, *ves;
+  
+  /* Sanity check -- we need to put initialization in the original loop
+     body.  */
+  gcc_assert (!unrolling || rewrite_original_loop);
+  
+  /* Allocate the basic variables (i0).  */
+  if (opt_info->insns_to_split)
+    htab_traverse (opt_info->insns_to_split, allocate_basic_variable, NULL);
+  
+  for (i = opt_info->first_new_block; i < (unsigned) last_basic_block; i++)
+    {
+      bb = BASIC_BLOCK (i);
+      orig_bb = bb->rbi->original;
+      
+      delta = determine_split_iv_delta (bb->rbi->copy_number, n_copies,
+					unrolling);
+      orig_insn = BB_HEAD (orig_bb);
+      for (insn = BB_HEAD (bb); insn != NEXT_INSN (BB_END (bb)); insn = next)
+        {
+          next = NEXT_INSN (insn);
+          if (!INSN_P (insn))
+            continue;
+          
+          while (!INSN_P (orig_insn))
+            orig_insn = NEXT_INSN (orig_insn);
+          
+          ivts_templ.insn = orig_insn;
+          ve_templ.insn = orig_insn;
+          
+          /* Apply splitting iv optimization.  */
+          if (opt_info->insns_to_split)
+            {
+              ivts = htab_find (opt_info->insns_to_split, &ivts_templ);
+              
+              if (ivts)
+                {
+#ifdef ENABLE_CHECKING
+		  gcc_assert (rtx_equal_p (PATTERN (insn), PATTERN (orig_insn)));
+#endif
+                  
+                  if (!delta)
+                    insert_base_initialization (ivts, insn);
+                  split_iv (ivts, insn, delta);
+                }
+            }
+          /* Apply variable expansion optimization.  */
+          if (unrolling && opt_info->insns_with_var_to_expand)
+            {
+              ves = htab_find (opt_info->insns_with_var_to_expand, &ve_templ);
+              if (ves)
+                { 
+#ifdef ENABLE_CHECKING
+                  gcc_assert (rtx_equal_p (PATTERN (insn), PATTERN (orig_insn)));
+#endif
+                  expand_var_during_unrolling (ves, insn);
+                }
+            }
+          orig_insn = NEXT_INSN (orig_insn);
+        }
+    }
+
+  if (!rewrite_original_loop)
+    return;
+  
+  /* Initialize the variable expansions in the loop preheader
+     and take care of combining them at the loop exit.  */ 
+  if (opt_info->insns_with_var_to_expand)
+    {
+      htab_traverse (opt_info->insns_with_var_to_expand, 
+                     insert_var_expansion_initialization, 
+                     opt_info->loop_preheader);
+      htab_traverse (opt_info->insns_with_var_to_expand, 
+                     combine_var_copies_in_loop_exit, 
+                     opt_info->loop_exit);
+    }
+  
+  /* Rewrite also the original loop body.  Find them as originals of the blocks
+     in the last copied iteration, i.e. those that have
+     bb->rbi->original->copy == bb.  */
+  for (i = opt_info->first_new_block; i < (unsigned) last_basic_block; i++)
+    {
+      bb = BASIC_BLOCK (i);
+      orig_bb = bb->rbi->original;
+      if (orig_bb->rbi->copy != bb)
+	continue;
+      
+      delta = determine_split_iv_delta (0, n_copies, unrolling);
+      for (orig_insn = BB_HEAD (orig_bb);
+           orig_insn != NEXT_INSN (BB_END (bb));
+           orig_insn = next)
+        {
+          next = NEXT_INSN (orig_insn);
+          
+          if (!INSN_P (orig_insn))
+ 	    continue;
+          
+          ivts_templ.insn = orig_insn;
+          if (opt_info->insns_to_split)
+            {
+              ivts = htab_find (opt_info->insns_to_split, &ivts_templ);
+              if (ivts)
+                {
+                  if (!delta)
+                    insert_base_initialization (ivts, orig_insn);
+                  split_iv (ivts, orig_insn, delta);
+                  continue;
+                }
+            }
+          
+        }
+    }
+}
+
+/*  Release the data structures used for the variable expansion
+    optimization.  Callbacks for htab_traverse.  */
+
+static int
+release_var_copies (void **slot, void *data ATTRIBUTE_UNUSED)
+{
+  struct var_to_expand *ve = *slot;
+  
+  VARRAY_CLEAR (ve->var_expansions);
+  
+  /* Continue traversing the hash table.  */
+  return 1;
+}
+
+/* Release OPT_INFO.  */
+
+static void
+free_opt_info (struct opt_info *opt_info)
+{
+  if (opt_info->insns_to_split)
+    htab_delete (opt_info->insns_to_split);
+  if (opt_info->insns_with_var_to_expand)
+    {
+      htab_traverse (opt_info->insns_with_var_to_expand, 
+                     release_var_copies, NULL);
+      htab_delete (opt_info->insns_with_var_to_expand);
+    }
+  free (opt_info);
 }

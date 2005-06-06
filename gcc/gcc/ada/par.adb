@@ -395,6 +395,11 @@ function Par (Configuration_Pragmas : Boolean) return List_Id is
    SS_Whtm           : constant SS_Rec := SS_Rec'(F, F, F, F, F, F, T, F);
    SS_Unco           : constant SS_Rec := SS_Rec'(F, F, F, F, F, F, F, T);
 
+   Goto_List : Elist_Id;
+   --  List of goto nodes appearing in the current compilation. Used to
+   --  recognize natural loops and convert them into bona fide loops for
+   --  optimization purposes.
+
    Label_List : Elist_Id;
    --  List of label nodes for labels appearing in the current compilation.
    --  Used by Par.Labl to construct the corresponding implicit declarations.
@@ -576,12 +581,12 @@ function Par (Configuration_Pragmas : Boolean) return List_Id is
 
       function P_Access_Definition
         (Null_Exclusion_Present : Boolean) return Node_Id;
-      --  Ada 0Y (AI-231/AI-254): The caller parses the null-exclusion part
+      --  Ada 2005 (AI-231/AI-254): The caller parses the null-exclusion part
       --  and indicates if it was present
 
       function P_Access_Type_Definition
         (Header_Already_Parsed : Boolean := False) return Node_Id;
-      --  Ada 0Y (AI-254): The formal is used to indicate if the caller has
+      --  Ada 2005 (AI-254): The formal is used to indicate if the caller has
       --  parsed the null_exclusion part. In this case the caller has also
       --  removed the ACCESS token
 
@@ -597,12 +602,12 @@ function Par (Configuration_Pragmas : Boolean) return List_Id is
       --  declaration of this type for details.
 
       function P_Null_Exclusion return Boolean;
-      --  Ada 0Y (AI-231): Parse the null-excluding part. True indicates
+      --  Ada 2005 (AI-231): Parse the null-excluding part. True indicates
       --  that the null-excluding part was present.
 
       function P_Subtype_Indication
         (Not_Null_Present : Boolean := False) return Node_Id;
-      --  Ada 0Y (AI-231): The flag Not_Null_Present indicates that the
+      --  Ada 2005 (AI-231): The flag Not_Null_Present indicates that the
       --  null-excluding part has been scanned out and it was present.
 
       function Init_Expr_Opt (P : Boolean := False) return Node_Id;
@@ -624,7 +629,7 @@ function Par (Configuration_Pragmas : Boolean) return List_Id is
          Not_Null_Present : Boolean := False) return Node_Id;
       --  This version of P_Subtype_Indication is called when the caller has
       --  already scanned out the subtype mark which is passed as a parameter.
-      --  Ada 0Y (AI-231): The flag Not_Null_Present indicates that the
+      --  Ada 2005 (AI-231): The flag Not_Null_Present indicates that the
       --  null-excluding part has been scanned out and it was present.
 
       function P_Subtype_Mark_Attribute (Type_Node : Node_Id) return Node_Id;
@@ -1203,7 +1208,6 @@ begin
 
    if Configuration_Pragmas then
       declare
-         Ecount  : constant Int     := Serious_Errors_Detected;
          Pragmas : constant List_Id := Empty_List;
          P_Node  : Node_Id;
 
@@ -1219,20 +1223,29 @@ begin
             else
                P_Node := P_Pragma;
 
-               if Serious_Errors_Detected > Ecount then
-                  return Error_List;
-               end if;
+               if Nkind (P_Node) = N_Pragma then
 
-               if Chars (P_Node) > Last_Configuration_Pragma_Name
-                 and then Chars (P_Node) /= Name_Source_Reference
-               then
-                  Error_Msg_SC
-                    ("only configuration pragmas allowed " &
-                     "in configuration file");
-                  return Error_List;
-               end if;
+                  --  Give error if bad pragma
 
-               Append (P_Node, Pragmas);
+                  if Chars (P_Node) > Last_Configuration_Pragma_Name
+                    and then Chars (P_Node) /= Name_Source_Reference
+                  then
+                     if Is_Pragma_Name (Chars (P_Node)) then
+                        Error_Msg_N
+                          ("only configuration pragmas allowed " &
+                           "in configuration file", P_Node);
+                     else
+                        Error_Msg_N
+                          ("unrecognized pragma in configuration file",
+                           P_Node);
+                     end if;
+
+                  --  Pragma is OK config pragma, so collect it
+
+                  else
+                     Append (P_Node, Pragmas);
+                  end if;
+               end if;
             end if;
          end loop;
       end;
@@ -1260,6 +1273,7 @@ begin
          SIS_Entry_Active := False;
          Last_Resync_Point := No_Location;
 
+         Goto_List  := New_Elmt_List;
          Label_List := New_Elmt_List;
 
          --  If in multiple unit per file mode, skip past ignored unit

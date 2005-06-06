@@ -122,7 +122,6 @@ static int        calc_live_regs                (int *);
 static int        const_ok_for_mcore            (int);
 static int        try_constant_tricks           (long, int *, int *);
 static const char *     output_inline_const     (enum machine_mode, rtx *);
-static void       block_move_sequence           (rtx, rtx, rtx, rtx, int, int, int);
 static void       layout_mcore_frame            (struct mcore_frame *);
 static void       mcore_setup_incoming_varargs	(CUMULATIVE_ARGS *, enum machine_mode, tree, int *, int);
 static cond_type  is_cond_candidate             (rtx);
@@ -139,7 +138,7 @@ const struct attribute_spec mcore_attribute_table[];
 static tree       mcore_handle_naked_attribute  (tree *, tree, tree, int, bool *);
 #ifdef OBJECT_FORMAT_ELF
 static void	  mcore_asm_named_section       (const char *,
-							unsigned int);
+						 unsigned int, tree);
 #endif
 static void       mcore_unique_section	        (tree, int);
 static void mcore_encode_section_info		(tree, rtx, int);
@@ -150,13 +149,16 @@ static int        mcore_ior_cost               	(rtx);
 static bool       mcore_rtx_costs		(rtx, int, int, int *);
 static void       mcore_external_libcall	(rtx);
 static bool       mcore_return_in_memory	(tree, tree);
+static int        mcore_arg_partial_bytes       (CUMULATIVE_ARGS *,
+						 enum machine_mode,
+						 tree, bool);
 
 
 /* Initialize the GCC target structure.  */
 #undef  TARGET_ASM_EXTERNAL_LIBCALL
 #define TARGET_ASM_EXTERNAL_LIBCALL	mcore_external_libcall
 
-#ifdef TARGET_DLLIMPORT_DECL_ATTRIBUTES
+#if TARGET_DLLIMPORT_DECL_ATTRIBUTES
 #undef  TARGET_MERGE_DECL_ATTRIBUTES
 #define TARGET_MERGE_DECL_ATTRIBUTES	merge_dllimport_decl_attributes
 #endif
@@ -172,6 +174,8 @@ static bool       mcore_return_in_memory	(tree, tree);
 #define TARGET_ATTRIBUTE_TABLE 		mcore_attribute_table
 #undef  TARGET_ASM_UNIQUE_SECTION
 #define TARGET_ASM_UNIQUE_SECTION 	mcore_unique_section
+#undef  TARGET_ASM_FUNCTION_RODATA_SECTION
+#define TARGET_ASM_FUNCTION_RODATA_SECTION default_no_function_rodata_section
 #undef  TARGET_ENCODE_SECTION_INFO
 #define TARGET_ENCODE_SECTION_INFO 	mcore_encode_section_info
 #undef  TARGET_STRIP_NAME_ENCODING
@@ -192,6 +196,12 @@ static bool       mcore_return_in_memory	(tree, tree);
 
 #undef  TARGET_RETURN_IN_MEMORY
 #define TARGET_RETURN_IN_MEMORY		mcore_return_in_memory
+#undef  TARGET_MUST_PASS_IN_STACK
+#define TARGET_MUST_PASS_IN_STACK	must_pass_in_stack_var_size
+#undef  TARGET_PASS_BY_REFERENCE
+#define TARGET_PASS_BY_REFERENCE  hook_pass_by_reference_must_pass_in_stack
+#undef  TARGET_ARG_PARTIAL_BYTES
+#define TARGET_ARG_PARTIAL_BYTES	mcore_arg_partial_bytes
 
 #undef  TARGET_SETUP_INCOMING_VARARGS
 #define TARGET_SETUP_INCOMING_VARARGS	mcore_setup_incoming_varargs
@@ -316,7 +326,7 @@ mcore_print_operand_address (FILE * stream, rtx x)
 /* Print operand x (an rtx) in assembler syntax to file stream
    according to modifier code.
 
-   'R'  print the next register or memory location along, ie the lsw in
+   'R'  print the next register or memory location along, i.e. the lsw in
         a double word value
    'O'  print a constant without the #
    'M'  print a constant as its negative
@@ -909,7 +919,7 @@ mcore_is_dead (rtx first, rtx reg)
 	}
     }
 
-  /* No conclusive evidence either way, we can not take the chance
+  /* No conclusive evidence either way, we cannot take the chance
      that control flow hid the use from us -- "I'm not dead yet".  */
   return 0;
 }
@@ -1818,127 +1828,117 @@ mcore_store_multiple_operation (rtx op, enum machine_mode mode ATTRIBUTE_UNUSED)
 static const enum machine_mode mode_from_align[] =
 {
   VOIDmode, QImode, HImode, VOIDmode, SImode,
-  VOIDmode, VOIDmode, VOIDmode, DImode
 };
 
 static void
-block_move_sequence (rtx dest, rtx dst_mem, rtx src, rtx src_mem,
-		     int size, int align, int offset)
+block_move_sequence (rtx dst_mem, rtx src_mem, int size, int align)
 {
   rtx temp[2];
   enum machine_mode mode[2];
   int amount[2];
-  int active[2];
+  bool active[2];
   int phase = 0;
   int next;
-  int offset_ld = offset;
-  int offset_st = offset;
+  int offset_ld = 0;
+  int offset_st = 0;
+  rtx x;
 
-  active[0] = active[1] = FALSE;
-
-  /* Establish parameters for the first load and for the second load if
-     it is known to be the same mode as the first.  */
-  amount[0] = amount[1] = align;
-
-  mode[0] = mode_from_align[align];
-
-  temp[0] = gen_reg_rtx (mode[0]);
-  
-  if (size >= 2 * align)
+  x = XEXP (dst_mem, 0);
+  if (!REG_P (x))
     {
-      mode[1] = mode[0];
-      temp[1] = gen_reg_rtx (mode[1]);
+      x = force_reg (Pmode, x);
+      dst_mem = replace_equiv_address (dst_mem, x);
     }
+
+  x = XEXP (src_mem, 0);
+  if (!REG_P (x))
+    {
+      x = force_reg (Pmode, x);
+      src_mem = replace_equiv_address (src_mem, x);
+    }
+
+  active[0] = active[1] = false;
 
   do
     {
-      rtx srcp, dstp;
-      
       next = phase;
-      phase = !phase;
+      phase ^= 1;
 
       if (size > 0)
 	{
-	  /* Change modes as the sequence tails off.  */
-	  if (size < amount[next])
-	    {
-	      amount[next] = (size >= 4 ? 4 : (size >= 2 ? 2 : 1));
-	      mode[next] = mode_from_align[amount[next]];
-	      temp[next] = gen_reg_rtx (mode[next]);
-	    }
-	  
-	  size -= amount[next];
-	  srcp = gen_rtx_MEM (
-#if 0
-			  MEM_IN_STRUCT_P (src_mem) ? mode[next] : BLKmode,
-#else
-			  mode[next],
-#endif
-			  gen_rtx_PLUS (Pmode, src, GEN_INT (offset_ld)));
-	  
-	  RTX_UNCHANGING_P (srcp) = RTX_UNCHANGING_P (src_mem);
-	  MEM_VOLATILE_P (srcp) = MEM_VOLATILE_P (src_mem);
-	  MEM_IN_STRUCT_P (srcp) = 1;
-	  emit_insn (gen_rtx_SET (VOIDmode, temp[next], srcp));
-	  offset_ld += amount[next];
-	  active[next] = TRUE;
+	  int next_amount;
+
+	  next_amount = (size >= 4 ? 4 : (size >= 2 ? 2 : 1));
+	  next_amount = MIN (next_amount, align);
+
+	  amount[next] = next_amount;
+	  mode[next] = mode_from_align[next_amount];
+	  temp[next] = gen_reg_rtx (mode[next]);
+
+	  x = adjust_address (src_mem, mode[next], offset_ld);
+	  emit_insn (gen_rtx_SET (VOIDmode, temp[next], x));
+
+	  offset_ld += next_amount;
+	  size -= next_amount;
+	  active[next] = true;
 	}
 
       if (active[phase])
 	{
-	  active[phase] = FALSE;
+	  active[phase] = false;
 	  
-	  dstp = gen_rtx_MEM (
-#if 0
-			  MEM_IN_STRUCT_P (dst_mem) ? mode[phase] : BLKmode,
-#else
-			  mode[phase],
-#endif
-			  gen_rtx_PLUS (Pmode, dest, GEN_INT (offset_st)));
-	  
-	  RTX_UNCHANGING_P (dstp) = RTX_UNCHANGING_P (dst_mem);
-	  MEM_VOLATILE_P (dstp) = MEM_VOLATILE_P (dst_mem);
-	  MEM_IN_STRUCT_P (dstp) = 1;
-	  emit_insn (gen_rtx_SET (VOIDmode, dstp, temp[phase]));
+	  x = adjust_address (dst_mem, mode[phase], offset_st);
+	  emit_insn (gen_rtx_SET (VOIDmode, x, temp[phase]));
+
 	  offset_st += amount[phase];
 	}
     }
   while (active[next]);
 }
 
-void
-mcore_expand_block_move (rtx dst_mem, rtx src_mem, rtx * operands)
+bool
+mcore_expand_block_move (rtx *operands)
 {
-  int align = INTVAL (operands[3]);
-  int bytes;
+  HOST_WIDE_INT align, bytes, max;
 
-  if (GET_CODE (operands[2]) == CONST_INT)
+  if (GET_CODE (operands[2]) != CONST_INT)
+    return false;
+
+  bytes = INTVAL (operands[2]);
+  align = INTVAL (operands[3]);
+
+  if (bytes <= 0)
+    return false;
+  if (align > 4)
+    align = 4;
+
+  switch (align)
     {
-      bytes = INTVAL (operands[2]);
-      
-      if (bytes <= 0)
-	return;
-      if (align > 4)
-	align = 4;
-      
-      /* RBE: bumped 1 and 2 byte align from 1 and 2 to 4 and 8 bytes before
-         we give up and go to memcpy.  */
-      if ((align == 4 && (bytes <= 4*4
-			  || ((bytes & 01) == 0 && bytes <= 8*4)
-			  || ((bytes & 03) == 0 && bytes <= 16*4)))
-	  || (align == 2 && bytes <= 4*2)
-	  || (align == 1 && bytes <= 4*1))
-	{
-	  block_move_sequence (operands[0], dst_mem, operands[1], src_mem,
-			       bytes, align, 0);
-	  return;
-	}
+    case 4:
+      if (bytes & 1)
+	max = 4*4;
+      else if (bytes & 3)
+	max = 8*4;
+      else
+	max = 16*4;
+      break;
+    case 2:
+      max = 4*2;
+      break;
+    case 1:
+      max = 4*1;
+      break;
+    default:
+      abort ();
     }
 
-  /* If we get here, just use the library routine.  */
-  emit_library_call (gen_rtx_SYMBOL_REF (Pmode, "memcpy"), 0, VOIDmode, 3,
-		     operands[0], Pmode, operands[1], Pmode, operands[2],
-		     SImode);
+  if (bytes <= max)
+    {
+      block_move_sequence (operands[0], operands[1], bytes, align);
+      return true;
+    }
+
+  return false;
 }
 
 
@@ -2787,7 +2787,7 @@ conditionalize_block (rtx first)
       if (code != BARRIER && code != NOTE && !is_cond_candidate (insn))
 	return NEXT_INSN (insn);
      
-      /* Remember the last real insn before the label (ie end of block 2).  */
+      /* Remember the last real insn before the label (i.e. end of block 2).  */
       if (code == JUMP_INSN || code == INSN)
 	{
 	  blk_size ++;
@@ -2989,7 +2989,7 @@ mcore_override_options (void)
 	  || (mcore_stack_increment == 0
 	      && (mcore_stack_increment_string[0] != '0'
 		  || mcore_stack_increment_string[1] != 0)))
-	error ("invalid option `-mstack-increment=%s'",
+	error ("invalid option %<-mstack-increment=%s%>",
 	       mcore_stack_increment_string);	
     }
   
@@ -2998,20 +2998,6 @@ mcore_override_options (void)
     target_flags |= M340_BIT;
 }
 
-int
-mcore_must_pass_on_stack (enum machine_mode mode ATTRIBUTE_UNUSED, tree type)
-{
-  if (type == NULL)
-    return 0;
-
-  /* If the argument can have its address taken, it must
-     be placed on the stack.  */
-  if (TREE_ADDRESSABLE (type))
-    return 1;
-
-  return 0;
-}
-
 /* Compute the number of word sized registers needed to 
    hold a function argument of mode MODE and type TYPE.  */
 
@@ -3020,7 +3006,7 @@ mcore_num_arg_regs (enum machine_mode mode, tree type)
 {
   int size;
 
-  if (MUST_PASS_IN_STACK (mode, type))
+  if (targetm.calls.must_pass_in_stack (mode, type))
     return 0;
 
   if (type && mode == BLKmode)
@@ -3112,10 +3098,10 @@ mcore_function_arg (CUMULATIVE_ARGS cum, enum machine_mode mode,
 {
   int arg_reg;
   
-  if (! named)
+  if (! named || mode == VOIDmode)
     return 0;
 
-  if (MUST_PASS_IN_STACK (mode, type))
+  if (targetm.calls.must_pass_in_stack (mode, type))
     return 0;
 
   arg_reg = ROUND_REG (cum, mode);
@@ -3126,24 +3112,23 @@ mcore_function_arg (CUMULATIVE_ARGS cum, enum machine_mode mode,
   return 0;
 }
 
-/* Implements the FUNCTION_ARG_PARTIAL_NREGS macro.
-   Returns the number of argument registers required to hold *part* of
-   a parameter of machine mode MODE and type TYPE (which may be NULL if
+/* Returns the number of bytes of argument registers required to hold *part*
+   of a parameter of machine mode MODE and type TYPE (which may be NULL if
    the type is not known).  If the argument fits entirely in the argument
    registers, or entirely on the stack, then 0 is returned.  CUM is the
    number of argument registers already used by earlier parameters to
    the function.  */
 
-int
-mcore_function_arg_partial_nregs (CUMULATIVE_ARGS cum, enum machine_mode mode,
-				  tree type, int named)
+static int
+mcore_arg_partial_bytes (CUMULATIVE_ARGS *cum, enum machine_mode mode,
+			 tree type, bool named)
 {
-  int reg = ROUND_REG (cum, mode);
+  int reg = ROUND_REG (*cum, mode);
 
   if (named == 0)
     return 0;
 
-  if (MUST_PASS_IN_STACK (mode, type))
+  if (targetm.calls.must_pass_in_stack (mode, type))
     return 0;
       
   /* REG is not the *hardware* register number of the register that holds
@@ -3167,7 +3152,7 @@ mcore_function_arg_partial_nregs (CUMULATIVE_ARGS cum, enum machine_mode mode,
   reg = NPARM_REGS - reg;
 
   /* Return partially in registers and partially on the stack.  */
-  return reg;
+  return reg * UNITS_PER_WORD;
 }
 
 /* Return nonzero if SYMBOL is marked as being dllexport'd.  */
@@ -3391,7 +3376,7 @@ mcore_handle_naked_attribute (tree * node, tree name, tree args ATTRIBUTE_UNUSED
     }
   else
     {
-      warning ("`%s' attribute only applies to functions",
+      warning ("%qs attribute only applies to functions",
 	       IDENTIFIER_POINTER (name));
       *no_add_attrs = true;
     }
@@ -3443,7 +3428,9 @@ mcore_naked_function_p (void)
 
 #ifdef OBJECT_FORMAT_ELF
 static void
-mcore_asm_named_section (const char *name, unsigned int flags ATTRIBUTE_UNUSED)
+mcore_asm_named_section (const char *name, 
+			 unsigned int flags ATTRIBUTE_UNUSED,
+			 tree decl ATTRIBUTE_UNUSED)
 {
   fprintf (asm_out_file, "\t.section %s\n", name);
 }

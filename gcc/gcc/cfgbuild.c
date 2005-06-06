@@ -1,6 +1,6 @@
 /* Control flow graph building code for GNU compiler.
    Copyright (C) 1987, 1988, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+   1999, 2000, 2001, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -50,8 +50,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 
 static int count_basic_blocks (rtx);
 static void find_basic_blocks_1 (rtx);
-static rtx find_label_refs (rtx, rtx);
-static void make_edges (rtx, basic_block, basic_block, int);
+static void make_edges (basic_block, basic_block, int);
 static void make_label_edge (sbitmap *, basic_block, rtx, int);
 static void find_bb_boundaries (basic_block);
 static void compute_outgoing_frequencies (basic_block);
@@ -67,7 +66,7 @@ inside_basic_block_p (rtx insn)
     case CODE_LABEL:
       /* Avoid creating of basic block for jumptables.  */
       return (NEXT_INSN (insn) == 0
-	      || GET_CODE (NEXT_INSN (insn)) != JUMP_INSN
+	      || !JUMP_P (NEXT_INSN (insn))
 	      || (GET_CODE (PATTERN (NEXT_INSN (insn))) != ADDR_VEC
 		  && GET_CODE (PATTERN (NEXT_INSN (insn))) != ADDR_DIFF_VEC));
 
@@ -84,7 +83,7 @@ inside_basic_block_p (rtx insn)
       return false;
 
     default:
-      abort ();
+      gcc_unreachable ();
     }
 }
 
@@ -108,6 +107,12 @@ control_flow_insn_p (rtx insn)
 	      && GET_CODE (PATTERN (insn)) != ADDR_DIFF_VEC);
 
     case CALL_INSN:
+      /* Noreturn and sibling call instructions terminate the basic blocks
+	 (but only if they happen unconditionally).  */
+      if ((SIBLING_CALL_P (insn)
+	   || find_reg_note (insn, REG_NORETURN, 0))
+	  && GET_CODE (PATTERN (insn)) != COND_EXEC)
+	return true;
       /* Call insn may return to the nonlocal goto handler.  */
       return ((nonlocal_goto_handler_labels
 	       && (0 == (note = find_reg_note (insn, REG_EH_REGION,
@@ -126,7 +131,7 @@ control_flow_insn_p (rtx insn)
       return false;
 
     default:
-      abort ();
+      gcc_unreachable ();
     }
 }
 
@@ -143,7 +148,7 @@ count_basic_blocks (rtx f)
     {
       /* Code labels and barriers causes current basic block to be
          terminated at previous real insn.  */
-      if ((GET_CODE (insn) == CODE_LABEL || GET_CODE (insn) == BARRIER)
+      if ((LABEL_P (insn) || BARRIER_P (insn))
 	  && saw_insn)
 	count++, saw_insn = false;
 
@@ -169,51 +174,6 @@ count_basic_blocks (rtx f)
 
   return count;
 }
-
-/* Scan a list of insns for labels referred to other than by jumps.
-   This is used to scan the alternatives of a call placeholder.  */
-
-static rtx
-find_label_refs (rtx f, rtx lvl)
-{
-  rtx insn;
-
-  for (insn = f; insn; insn = NEXT_INSN (insn))
-    if (INSN_P (insn) && GET_CODE (insn) != JUMP_INSN)
-      {
-	rtx note;
-
-	/* Make a list of all labels referred to other than by jumps
-	   (which just don't have the REG_LABEL notes).
-
-	   Make a special exception for labels followed by an ADDR*VEC,
-	   as this would be a part of the tablejump setup code.
-
-	   Make a special exception to registers loaded with label
-	   values just before jump insns that use them.  */
-
-	for (note = REG_NOTES (insn); note; note = XEXP (note, 1))
-	  if (REG_NOTE_KIND (note) == REG_LABEL)
-	    {
-	      rtx lab = XEXP (note, 0), next;
-
-	      if ((next = next_nonnote_insn (lab)) != NULL
-		  && GET_CODE (next) == JUMP_INSN
-		  && (GET_CODE (PATTERN (next)) == ADDR_VEC
-		      || GET_CODE (PATTERN (next)) == ADDR_DIFF_VEC))
-		;
-	      else if (GET_CODE (lab) == NOTE)
-		;
-	      else if (GET_CODE (NEXT_INSN (insn)) == JUMP_INSN
-		       && find_reg_note (NEXT_INSN (insn), REG_LABEL, lab))
-		;
-	      else
-		lvl = alloc_EXPR_LIST (0, XEXP (note, 0), lvl);
-	    }
-      }
-
-  return lvl;
-}
 
 /* Create an edge between two basic blocks.  FLAGS are auxiliary information
    about the edge that is accumulated between calls.  */
@@ -223,8 +183,7 @@ find_label_refs (rtx f, rtx lvl)
 static void
 make_label_edge (sbitmap *edge_cache, basic_block src, rtx label, int flags)
 {
-  if (GET_CODE (label) != CODE_LABEL)
-    abort ();
+  gcc_assert (LABEL_P (label));
 
   /* If the label was never emitted, this insn is junk, but avoid a
      crash trying to refer to BLOCK_FOR_INSN (label).  This can happen
@@ -242,7 +201,7 @@ make_label_edge (sbitmap *edge_cache, basic_block src, rtx label, int flags)
 void
 rtl_make_eh_edge (sbitmap *edge_cache, basic_block src, rtx insn)
 {
-  int is_call = GET_CODE (insn) == CALL_INSN ? EDGE_ABNORMAL_CALL : 0;
+  int is_call = CALL_P (insn) ? EDGE_ABNORMAL_CALL : 0;
   rtx handlers, i;
 
   handlers = reachable_handlers (insn);
@@ -263,24 +222,15 @@ rtl_make_eh_edge (sbitmap *edge_cache, basic_block src, rtx insn)
    the list of exception regions active at the end of the basic block.  */
 
 static void
-make_edges (rtx label_value_list, basic_block min, basic_block max, int update_p)
+make_edges (basic_block min, basic_block max, int update_p)
 {
   basic_block bb;
   sbitmap *edge_cache = NULL;
 
-  /* Assume no computed jump; revise as we create edges.  */
-  current_function_has_computed_jump = 0;
-
-  /* If we are partitioning hot and cold basic blocks into separate
-     sections, we cannot assume there is no computed jump.  */
-
-  if (flag_reorder_blocks_and_partition)
-    current_function_has_computed_jump = 1;
-
   /* Heavy use of computed goto in machine-generated code can lead to
      nearly fully-connected CFGs.  In that case we spend a significant
      amount of time searching the edge lists for duplicates.  */
-  if (forced_labels || label_value_list || cfun->max_jumptable_ents > 100)
+  if (forced_labels || cfun->max_jumptable_ents > 100)
     {
       edge_cache = sbitmap_vector_alloc (last_basic_block, last_basic_block);
       sbitmap_vector_zero (edge_cache, last_basic_block);
@@ -289,8 +239,9 @@ make_edges (rtx label_value_list, basic_block min, basic_block max, int update_p
         FOR_BB_BETWEEN (bb, min, max->next_bb, next_bb)
 	  {
 	    edge e;
+	    edge_iterator ei;
 
-	    for (e = bb->succ; e ; e = e->succ_next)
+	    FOR_EACH_EDGE (e, ei, bb->succs)
 	      if (e->dest != EXIT_BLOCK_PTR)
 		SET_BIT (edge_cache[bb->index], e->dest->index);
 	  }
@@ -306,9 +257,9 @@ make_edges (rtx label_value_list, basic_block min, basic_block max, int update_p
     {
       rtx insn, x;
       enum rtx_code code;
-      int force_fallthru = 0;
+      edge e;
 
-      if (GET_CODE (BB_HEAD (bb)) == CODE_LABEL
+      if (LABEL_P (BB_HEAD (bb))
 	  && LABEL_ALT_ENTRY_P (BB_HEAD (bb)))
 	cached_make_edge (NULL, ENTRY_BLOCK_PTR, bb, 0);
 
@@ -356,23 +307,12 @@ make_edges (rtx label_value_list, basic_block min, basic_block max, int update_p
 		  && GET_CODE (XEXP (SET_SRC (tmp), 2)) == LABEL_REF)
 		make_label_edge (edge_cache, bb,
 				 XEXP (XEXP (SET_SRC (tmp), 2), 0), 0);
-
-#ifdef CASE_DROPS_THROUGH
-	      /* Silly VAXen.  The ADDR_VEC is going to be in the way of
-		 us naturally detecting fallthru into the next block.  */
-	      force_fallthru = 1;
-#endif
 	    }
 
 	  /* If this is a computed jump, then mark it as reaching
-	     everything on the label_value_list and forced_labels list.  */
+	     everything on the forced_labels list.  */
 	  else if (computed_jump_p (insn))
 	    {
-	      current_function_has_computed_jump = 1;
-
-	      for (x = label_value_list; x; x = XEXP (x, 1))
-		make_label_edge (edge_cache, bb, XEXP (x, 0), EDGE_ABNORMAL);
-
 	      for (x = forced_labels; x; x = XEXP (x, 1))
 		make_label_edge (edge_cache, bb, XEXP (x, 0), EDGE_ABNORMAL);
 	    }
@@ -384,8 +324,7 @@ make_edges (rtx label_value_list, basic_block min, basic_block max, int update_p
 	  /* Otherwise, we have a plain conditional or unconditional jump.  */
 	  else
 	    {
-	      if (! JUMP_LABEL (insn))
-		abort ();
+	      gcc_assert (JUMP_LABEL (insn));
 	      make_label_edge (edge_cache, bb, JUMP_LABEL (insn), 0);
 	    }
 	}
@@ -429,16 +368,20 @@ make_edges (rtx label_value_list, basic_block min, basic_block max, int update_p
 
       /* Find out if we can drop through to the next block.  */
       insn = NEXT_INSN (insn);
+      e = find_edge (bb, EXIT_BLOCK_PTR);
+      if (e && e->flags & EDGE_FALLTHRU)
+	insn = NULL;
+
       while (insn
-	     && GET_CODE (insn) == NOTE
+	     && NOTE_P (insn)
 	     && NOTE_LINE_NUMBER (insn) != NOTE_INSN_BASIC_BLOCK)
 	insn = NEXT_INSN (insn);
 
-      if (!insn || (bb->next_bb == EXIT_BLOCK_PTR && force_fallthru))
+      if (!insn)
 	cached_make_edge (edge_cache, bb, EXIT_BLOCK_PTR, EDGE_FALLTHRU);
       else if (bb->next_bb != EXIT_BLOCK_PTR)
 	{
-	  if (force_fallthru || insn == BB_HEAD (bb->next_bb))
+	  if (insn == BB_HEAD (bb->next_bb))
 	    cached_make_edge (edge_cache, bb, bb->next_bb, EDGE_FALLTHRU);
 	}
     }
@@ -457,8 +400,6 @@ find_basic_blocks_1 (rtx f)
 {
   rtx insn, next;
   rtx bb_note = NULL_RTX;
-  rtx lvl = NULL_RTX;
-  rtx trll = NULL_RTX;
   rtx head = NULL_RTX;
   rtx end = NULL_RTX;
   basic_block prev = ENTRY_BLOCK_PTR;
@@ -475,7 +416,7 @@ find_basic_blocks_1 (rtx f)
 
       next = NEXT_INSN (insn);
 
-      if ((GET_CODE (insn) == CODE_LABEL || GET_CODE (insn) == BARRIER)
+      if ((LABEL_P (insn) || BARRIER_P (insn))
 	  && head)
 	{
 	  prev = create_basic_block_structure (head, end, bb_note, prev);
@@ -519,57 +460,13 @@ find_basic_blocks_1 (rtx f)
 
 	case CODE_LABEL:
 	case JUMP_INSN:
+	case CALL_INSN:
 	case INSN:
 	case BARRIER:
 	  break;
 
-	case CALL_INSN:
-	  if (GET_CODE (PATTERN (insn)) == CALL_PLACEHOLDER)
-	    {
-	      /* Scan each of the alternatives for label refs.  */
-	      lvl = find_label_refs (XEXP (PATTERN (insn), 0), lvl);
-	      lvl = find_label_refs (XEXP (PATTERN (insn), 1), lvl);
-	      lvl = find_label_refs (XEXP (PATTERN (insn), 2), lvl);
-	      /* Record its tail recursion label, if any.  */
-	      if (XEXP (PATTERN (insn), 3) != NULL_RTX)
-		trll = alloc_EXPR_LIST (0, XEXP (PATTERN (insn), 3), trll);
-	    }
-	  break;
-
 	default:
-	  abort ();
-	}
-
-      if (GET_CODE (insn) == INSN || GET_CODE (insn) == CALL_INSN)
-	{
-	  rtx note;
-
-	  /* Make a list of all labels referred to other than by jumps.
-
-	     Make a special exception for labels followed by an ADDR*VEC,
-	     as this would be a part of the tablejump setup code.
-
-	     Make a special exception to registers loaded with label
-	     values just before jump insns that use them.  */
-
-	  for (note = REG_NOTES (insn); note; note = XEXP (note, 1))
-	    if (REG_NOTE_KIND (note) == REG_LABEL)
-	      {
-		rtx lab = XEXP (note, 0), next;
-
-		if ((next = next_nonnote_insn (lab)) != NULL
-			 && GET_CODE (next) == JUMP_INSN
-			 && (GET_CODE (PATTERN (next)) == ADDR_VEC
-			     || GET_CODE (PATTERN (next)) == ADDR_DIFF_VEC))
-		  ;
-		else if (GET_CODE (lab) == NOTE)
-		  ;
-		else if (GET_CODE (NEXT_INSN (insn)) == JUMP_INSN
-			 && find_reg_note (NEXT_INSN (insn), REG_LABEL, lab))
-		  ;
-		else
-		  lvl = alloc_EXPR_LIST (0, XEXP (note, 0), lvl);
-	      }
+	  gcc_unreachable ();
 	}
     }
 
@@ -578,22 +475,17 @@ find_basic_blocks_1 (rtx f)
   else if (bb_note)
     delete_insn (bb_note);
 
-  if (last_basic_block != n_basic_blocks)
-    abort ();
+  gcc_assert (last_basic_block == n_basic_blocks);
 
-  label_value_list = lvl;
-  tail_recursion_label_list = trll;
   clear_aux_for_blocks ();
 }
 
 
 /* Find basic blocks of the current function.
-   F is the first insn of the function and NREGS the number of register
-   numbers in use.  */
+   F is the first insn of the function.  */
 
 void
-find_basic_blocks (rtx f, int nregs ATTRIBUTE_UNUSED,
-		   FILE *file ATTRIBUTE_UNUSED)
+find_basic_blocks (rtx f)
 {
   basic_block bb;
 
@@ -630,8 +522,10 @@ find_basic_blocks (rtx f, int nregs ATTRIBUTE_UNUSED,
 
   find_basic_blocks_1 (f);
 
+  profile_status = PROFILE_ABSENT;
+
   /* Discover the edges of our cfg.  */
-  make_edges (label_value_list, ENTRY_BLOCK_PTR->next_bb, EXIT_BLOCK_PTR->prev_bb, 0);
+  make_edges (ENTRY_BLOCK_PTR->next_bb, EXIT_BLOCK_PTR->prev_bb, 0);
 
   /* Do very simple cleanup now, for the benefit of code that runs between
      here and cleanup_cfg, e.g. thread_prologue_and_epilogue_insns.  */
@@ -649,21 +543,80 @@ enum state {BLOCK_NEW = 0, BLOCK_ORIGINAL, BLOCK_TO_SPLIT};
 #define STATE(BB) (enum state) ((size_t) (BB)->aux)
 #define SET_STATE(BB, STATE) ((BB)->aux = (void *) (size_t) (STATE))
 
+/* Used internally by purge_dead_tablejump_edges, ORed into state.  */
+#define BLOCK_USED_BY_TABLEJUMP		32
+#define FULL_STATE(BB) ((size_t) (BB)->aux)
+
+static void
+mark_tablejump_edge (rtx label)
+{
+  basic_block bb;
+
+  gcc_assert (LABEL_P (label));
+  /* See comment in make_label_edge.  */
+  if (INSN_UID (label) == 0)
+    return;
+  bb = BLOCK_FOR_INSN (label);
+  SET_STATE (bb, FULL_STATE (bb) | BLOCK_USED_BY_TABLEJUMP);
+}
+
+static void
+purge_dead_tablejump_edges (basic_block bb, rtx table)
+{
+  rtx insn = BB_END (bb), tmp;
+  rtvec vec;
+  int j;
+  edge_iterator ei;
+  edge e;
+
+  if (GET_CODE (PATTERN (table)) == ADDR_VEC)
+    vec = XVEC (PATTERN (table), 0);
+  else
+    vec = XVEC (PATTERN (table), 1);
+
+  for (j = GET_NUM_ELEM (vec) - 1; j >= 0; --j)
+    mark_tablejump_edge (XEXP (RTVEC_ELT (vec, j), 0));
+
+  /* Some targets (eg, ARM) emit a conditional jump that also
+     contains the out-of-range target.  Scan for these and
+     add an edge if necessary.  */
+  if ((tmp = single_set (insn)) != NULL
+       && SET_DEST (tmp) == pc_rtx
+       && GET_CODE (SET_SRC (tmp)) == IF_THEN_ELSE
+       && GET_CODE (XEXP (SET_SRC (tmp), 2)) == LABEL_REF)
+    mark_tablejump_edge (XEXP (XEXP (SET_SRC (tmp), 2), 0));
+
+  for (ei = ei_start (bb->succs); (e = ei_safe_edge (ei)); )
+    {
+      if (FULL_STATE (e->dest) & BLOCK_USED_BY_TABLEJUMP)
+        SET_STATE (e->dest, FULL_STATE (e->dest)
+                            & ~(size_t) BLOCK_USED_BY_TABLEJUMP);
+      else if (!(e->flags & (EDGE_ABNORMAL | EDGE_EH)))
+        {
+          remove_edge (e);
+          continue;
+        }
+      ei_next (&ei);
+    }
+}
+
 /* Scan basic block BB for possible BB boundaries inside the block
    and create new basic blocks in the progress.  */
 
 static void
 find_bb_boundaries (basic_block bb)
 {
+  basic_block orig_bb = bb;
   rtx insn = BB_HEAD (bb);
   rtx end = BB_END (bb);
+  rtx table;
   rtx flow_transfer_insn = NULL_RTX;
   edge fallthru = NULL;
 
   if (insn == BB_END (bb))
     return;
 
-  if (GET_CODE (insn) == CODE_LABEL)
+  if (LABEL_P (insn))
     insn = NEXT_INSN (insn);
 
   /* Scan insn chain and try to find new basic block boundaries.  */
@@ -713,6 +666,11 @@ find_bb_boundaries (basic_block bb)
      followed by cleanup at fallthru edge, so the outgoing edges may
      be dead.  */
   purge_dead_edges (bb);
+
+  /* purge_dead_edges doesn't handle tablejump's, but if we have split the
+     basic block, we might need to kill some edges.  */
+  if (bb != orig_bb && tablejump_p (BB_END (bb), NULL, &table))
+    purge_dead_tablejump_edges (bb, table);
 }
 
 /*  Assume that frequency of basic block B is known.  Compute frequencies
@@ -722,31 +680,39 @@ static void
 compute_outgoing_frequencies (basic_block b)
 {
   edge e, f;
+  edge_iterator ei;
 
-  if (b->succ && b->succ->succ_next && !b->succ->succ_next->succ_next)
+  if (EDGE_COUNT (b->succs) == 2)
     {
       rtx note = find_reg_note (BB_END (b), REG_BR_PROB, NULL);
       int probability;
 
-      if (!note)
-	return;
-
-      probability = INTVAL (XEXP (note, 0));
-      e = BRANCH_EDGE (b);
-      e->probability = probability;
-      e->count = ((b->count * probability + REG_BR_PROB_BASE / 2)
-		  / REG_BR_PROB_BASE);
-      f = FALLTHRU_EDGE (b);
-      f->probability = REG_BR_PROB_BASE - probability;
-      f->count = b->count - e->count;
+      if (note)
+	{
+	  probability = INTVAL (XEXP (note, 0));
+	  e = BRANCH_EDGE (b);
+	  e->probability = probability;
+	  e->count = ((b->count * probability + REG_BR_PROB_BASE / 2)
+		      / REG_BR_PROB_BASE);
+	  f = FALLTHRU_EDGE (b);
+	  f->probability = REG_BR_PROB_BASE - probability;
+	  f->count = b->count - e->count;
+	  return;
+	}
     }
 
-  if (b->succ && !b->succ->succ_next)
+  if (EDGE_COUNT (b->succs) == 1)
     {
-      e = b->succ;
+      e = EDGE_SUCC (b, 0);
       e->probability = REG_BR_PROB_BASE;
       e->count = b->count;
+      return;
     }
+  guess_outgoing_edge_probabilities (b);
+  if (b->count)
+    FOR_EACH_EDGE (e, ei, b->succs)
+      e->count = ((b->count * e->probability + REG_BR_PROB_BASE / 2)
+		  / REG_BR_PROB_BASE);
 }
 
 /* Assume that someone emitted code with control flow instructions to the
@@ -776,29 +742,31 @@ find_many_sub_basic_blocks (sbitmap blocks)
 
   /* Now re-scan and wire in all edges.  This expect simple (conditional)
      jumps at the end of each new basic blocks.  */
-  make_edges (NULL, min, max, 1);
+  make_edges (min, max, 1);
 
   /* Update branch probabilities.  Expect only (un)conditional jumps
      to be created with only the forward edges.  */
-  FOR_BB_BETWEEN (bb, min, max->next_bb, next_bb)
-    {
-      edge e;
+  if (profile_status != PROFILE_ABSENT)
+    FOR_BB_BETWEEN (bb, min, max->next_bb, next_bb)
+      {
+	edge e;
+	edge_iterator ei;
 
-      if (STATE (bb) == BLOCK_ORIGINAL)
-	continue;
-      if (STATE (bb) == BLOCK_NEW)
-	{
-	  bb->count = 0;
-	  bb->frequency = 0;
-	  for (e = bb->pred; e; e = e->pred_next)
-	    {
-	      bb->count += e->count;
-	      bb->frequency += EDGE_FREQUENCY (e);
-	    }
-	}
+	if (STATE (bb) == BLOCK_ORIGINAL)
+	  continue;
+	if (STATE (bb) == BLOCK_NEW)
+	  {
+	    bb->count = 0;
+	    bb->frequency = 0;
+	    FOR_EACH_EDGE (e, ei, bb->preds)
+	      {
+		bb->count += e->count;
+		bb->frequency += EDGE_FREQUENCY (e);
+	      }
+	  }
 
-      compute_outgoing_frequencies (bb);
-    }
+	compute_outgoing_frequencies (bb);
+      }
 
   FOR_EACH_BB (bb)
     SET_STATE (bb, 0);
@@ -818,19 +786,20 @@ find_sub_basic_blocks (basic_block bb)
 
   /* Now re-scan and wire in all edges.  This expect simple (conditional)
      jumps at the end of each new basic blocks.  */
-  make_edges (NULL, min, max, 1);
+  make_edges (min, max, 1);
 
   /* Update branch probabilities.  Expect only (un)conditional jumps
      to be created with only the forward edges.  */
   FOR_BB_BETWEEN (b, min, max->next_bb, next_bb)
     {
       edge e;
+      edge_iterator ei;
 
       if (b != min)
 	{
 	  b->count = 0;
 	  b->frequency = 0;
-	  for (e = b->pred; e; e = e->pred_next)
+	  FOR_EACH_EDGE (e, ei, b->preds)
 	    {
 	      b->count += e->count;
 	      b->frequency += EDGE_FREQUENCY (e);

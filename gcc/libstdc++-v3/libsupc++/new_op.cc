@@ -1,5 +1,7 @@
 // Support routines for the -*- C++ -*- dynamic memory management.
-// Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002 Free Software Foundation
+
+// Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2004
+// Free Software Foundation
 //
 // This file is part of GCC.
 //
@@ -41,18 +43,22 @@ extern int panic ();
 #endif
 /* APPLE LOCAL end libcc_kext */
 #include <exception_defines.h>
+#include <bits/c++config.h>
 
 using std::new_handler;
 using std::bad_alloc;
 /* APPLE LOCAL libcc_kext */
-#ifndef LIBCC_KEXT
+#if _GLIBCXX_HOSTED && !defined(LIBCC_KEXT)
 using std::malloc;
-/* APPLE LOCAL libcc_kext */
+#else
+// A freestanding C runtime may not provide "malloc" -- but there is no
+// other reasonable way to implement "operator new".
+extern "C" void *malloc (std::size_t);
 #endif
 
 extern new_handler __new_handler;
 
-void *
+_GLIBCXX_WEAK_DEFINITION void *
 operator new (std::size_t sz) throw (std::bad_alloc)
 {
   void *p;

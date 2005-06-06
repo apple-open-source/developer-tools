@@ -69,6 +69,14 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "value-prof.h"
 
 
+
+/* Do initialization work for the edge profiler.  */
+
+static void
+tree_init_edge_profiler (void)
+{
+}
+
 /* Output instructions as GIMPLE trees to increment the edge 
    execution count, and insert them on E.  We rely on 
    bsi_insert_on_edge to preserve the order.  */
@@ -94,12 +102,15 @@ tree_gen_edge_profiler (int edgeno, edge e)
    tag of the section for counters, BASE is offset of the counter position.  */
 
 static void
-tree_gen_interval_profiler (struct histogram_value *value ATTRIBUTE_UNUSED, 
+tree_gen_interval_profiler (histogram_value value ATTRIBUTE_UNUSED, 
 			    unsigned tag ATTRIBUTE_UNUSED, 
 			    unsigned base ATTRIBUTE_UNUSED)
 {
   /* FIXME implement this.  */
-  abort ();
+#ifdef ENABLE_CHECKING
+  internal_error ("unimplemented functionality");
+#endif
+  gcc_unreachable ();
 }
 
 /* Output instructions as GIMPLE trees to increment the power of two histogram 
@@ -107,12 +118,15 @@ tree_gen_interval_profiler (struct histogram_value *value ATTRIBUTE_UNUSED,
    of the section for counters, BASE is offset of the counter position.  */
 
 static void
-tree_gen_pow2_profiler (struct histogram_value *value ATTRIBUTE_UNUSED, 
+tree_gen_pow2_profiler (histogram_value value ATTRIBUTE_UNUSED, 
 			unsigned tag ATTRIBUTE_UNUSED,
 			unsigned base ATTRIBUTE_UNUSED)
 {
   /* FIXME implement this.  */
-  abort ();
+#ifdef ENABLE_CHECKING
+  internal_error ("unimplemented functionality");
+#endif
+  gcc_unreachable ();
 }
 
 /* Output instructions as GIMPLE trees for code to find the most common value.
@@ -120,12 +134,15 @@ tree_gen_pow2_profiler (struct histogram_value *value ATTRIBUTE_UNUSED,
    section for counters, BASE is offset of the counter position.  */
 
 static void
-tree_gen_one_value_profiler (struct histogram_value *value ATTRIBUTE_UNUSED, 
+tree_gen_one_value_profiler (histogram_value value ATTRIBUTE_UNUSED, 
 			    unsigned tag ATTRIBUTE_UNUSED,
 			    unsigned base ATTRIBUTE_UNUSED)
 {
   /* FIXME implement this.  */
-  abort ();
+#ifdef ENABLE_CHECKING
+  internal_error ("unimplemented functionality");
+#endif
+  gcc_unreachable ();
 }
 
 /* Output instructions as GIMPLE trees for code to find the most common value 
@@ -134,25 +151,31 @@ tree_gen_one_value_profiler (struct histogram_value *value ATTRIBUTE_UNUSED,
    section for counters, BASE is offset of the counter position.  */
 
 static void
-tree_gen_const_delta_profiler (struct histogram_value *value ATTRIBUTE_UNUSED, 
+tree_gen_const_delta_profiler (histogram_value value ATTRIBUTE_UNUSED, 
 				unsigned tag ATTRIBUTE_UNUSED,
 				unsigned base ATTRIBUTE_UNUSED)
 {
   /* FIXME implement this.  */
-  abort ();
+#ifdef ENABLE_CHECKING
+  internal_error ("unimplemented functionality");
+#endif
+  gcc_unreachable ();
 }
 
 /* Return 1 if tree-based profiling is in effect, else 0.
    If it is, set up hooks for tree-based profiling.
    Gate for pass_tree_profile.  */
 
-static bool do_tree_profiling (void) {
-  if (flag_tree_based_profiling)
+static bool do_tree_profiling (void)
+{
+  if (flag_tree_based_profiling
+      && (profile_arc_flag || flag_test_coverage || flag_branch_probabilities))
     {
       tree_register_profile_hooks ();
       tree_register_value_prof_hooks ();
+      return true;
     }
-  return flag_tree_based_profiling;
+  return false;
 }
 
 /* Return the file on which profile dump output goes, if any.  */
@@ -174,11 +197,13 @@ struct tree_opt_pass pass_tree_profile =
   PROP_gimple_leh | PROP_cfg,		/* properties_provided */
   0,					/* properties_destroyed */
   0,					/* todo_flags_start */
-  TODO_verify_stmts			/* todo_flags_finish */
+  TODO_verify_stmts,			/* todo_flags_finish */
+  0					/* letter */
 };
 
 struct profile_hooks tree_profile_hooks =
 {
+  tree_init_edge_profiler,      /* init_edge_profiler */
   tree_gen_edge_profiler,	/* gen_edge_profiler */
   tree_gen_interval_profiler,   /* gen_interval_profiler */
   tree_gen_pow2_profiler,       /* gen_pow2_profiler */

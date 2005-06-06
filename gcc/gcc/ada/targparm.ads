@@ -101,8 +101,14 @@ package Targparm is
    --  If a pragma Polling (On) appears, then the flag Opt.Polling_Required
    --  is set to True.
 
+   --  If a pragma Detect_Blocking appears, then the flag Opt.Detect_Blocking
+   --  is set to True.
+
    --  if a pragma Suppress_Exception_Locations appears, then the flag
    --  Opt.Exception_Locations_Suppressed is set to True.
+
+   --  If a pragma Profile with a valid profile argument appears, then
+   --  the appropriate restrictions and policy flags are set.
 
    --  The only other pragma allowed is a pragma Restrictions that specifies
    --  a restriction that will be imposed on all units in the partition. Note
@@ -112,6 +118,8 @@ package Targparm is
    Restrictions_On_Target : Restrictions_Info;
    --  Records restrictions specified by system.ads. Only the Set and Value
    --  members are modified. The Violated and Count fields are never modified.
+   --  Note that entries can be set either by a pragma Restrictions or by
+   --  a pragma Profile.
 
    -------------------
    -- Run Time Name --
@@ -336,6 +344,13 @@ package Targparm is
    --    All finalization and initialization (controlled types) is omitted
    --
    --    The routine __gnat_handler_installed is not imported
+
+   Preallocated_Stacks_On_Target : Boolean;
+   --  If this flag is True, then the expander preallocates all task stacks
+   --  at compile time. If the flag is False, then task stacks are not pre-
+   --  allocated, and task stack allocation is the responsibility of the
+   --  run-time (which typically delegates the task to the underlying
+   --  operating system environment).
 
    ---------------------
    -- Duration Format --

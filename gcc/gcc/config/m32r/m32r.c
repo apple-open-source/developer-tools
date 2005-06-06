@@ -38,6 +38,7 @@
 #include "recog.h"
 #include "toplev.h"
 #include "ggc.h"
+#include "integrate.h"
 #include "tm_p.h"
 #include "target.h"
 #include "target-def.h"
@@ -56,9 +57,6 @@ enum m32r_model m32r_model;
 /* Selected SDA support.  */
 const char * m32r_sdata_string = M32R_SDATA_DEFAULT;
 enum m32r_sdata m32r_sdata;
-
-/* Scheduler support */
-static int m32r_sched_odd_word_p;
 
 /* Machine-specific symbol_ref flags.  */
 #define SYMBOL_FLAG_MODEL_SHIFT		SYMBOL_FLAG_MACH_DEP_SHIFT
@@ -92,11 +90,7 @@ static void  m32r_output_function_epilogue (FILE *, HOST_WIDE_INT);
 
 static void  m32r_file_start (void);
 
-static int    m32r_adjust_cost (rtx, rtx, rtx, int);
 static int    m32r_adjust_priority (rtx, int);
-static void   m32r_sched_init (FILE *, int, int);
-static int    m32r_sched_reorder (FILE *, int, rtx *, int *, int);
-static int    m32r_variable_issue (FILE *, int, rtx, int);
 static int    m32r_issue_rate (void);
 
 static void m32r_encode_section_info (tree, rtx, int);
@@ -106,6 +100,10 @@ static void m32r_setup_incoming_varargs (CUMULATIVE_ARGS *, enum machine_mode,
 					 tree, int *, int);
 static void init_idents (void);
 static bool m32r_rtx_costs (rtx, int, int, int *);
+static bool m32r_pass_by_reference (CUMULATIVE_ARGS *, enum machine_mode,
+				    tree, bool);
+static int m32r_arg_partial_bytes (CUMULATIVE_ARGS *, enum machine_mode,
+				   tree, bool);
 
 /* Initialize the GCC target structure.  */
 #undef  TARGET_ATTRIBUTE_TABLE
@@ -124,18 +122,10 @@ static bool m32r_rtx_costs (rtx, int, int, int *);
 #undef  TARGET_ASM_FILE_START
 #define TARGET_ASM_FILE_START m32r_file_start
 
-#undef  TARGET_SCHED_ADJUST_COST
-#define TARGET_SCHED_ADJUST_COST m32r_adjust_cost
 #undef  TARGET_SCHED_ADJUST_PRIORITY
 #define TARGET_SCHED_ADJUST_PRIORITY m32r_adjust_priority
 #undef  TARGET_SCHED_ISSUE_RATE
 #define TARGET_SCHED_ISSUE_RATE m32r_issue_rate
-#undef  TARGET_SCHED_VARIABLE_ISSUE
-#define TARGET_SCHED_VARIABLE_ISSUE m32r_variable_issue
-#undef  TARGET_SCHED_INIT
-#define TARGET_SCHED_INIT m32r_sched_init
-#undef  TARGET_SCHED_REORDER
-#define TARGET_SCHED_REORDER m32r_sched_reorder
 
 #undef  TARGET_ENCODE_SECTION_INFO
 #define TARGET_ENCODE_SECTION_INFO m32r_encode_section_info
@@ -149,12 +139,16 @@ static bool m32r_rtx_costs (rtx, int, int, int *);
 
 #undef  TARGET_PROMOTE_PROTOTYPES
 #define TARGET_PROMOTE_PROTOTYPES hook_bool_tree_true
-
 #undef  TARGET_RETURN_IN_MEMORY
 #define TARGET_RETURN_IN_MEMORY m32r_return_in_memory
-
 #undef  TARGET_SETUP_INCOMING_VARARGS
 #define TARGET_SETUP_INCOMING_VARARGS m32r_setup_incoming_varargs
+#undef  TARGET_MUST_PASS_IN_STACK
+#define TARGET_MUST_PASS_IN_STACK must_pass_in_stack_var_size
+#undef  TARGET_PASS_BY_REFERENCE
+#define TARGET_PASS_BY_REFERENCE m32r_pass_by_reference
+#undef  TARGET_ARG_PARTIAL_BYTES
+#define TARGET_ARG_PARTIAL_BYTES m32r_arg_partial_bytes
 
 struct gcc_target targetm = TARGET_INITIALIZER;
 
@@ -363,7 +357,7 @@ m32r_handle_model_attribute (tree *node ATTRIBUTE_UNUSED, tree name,
       && arg != large_ident1
       && arg != large_ident2)
     {
-      warning ("invalid argument of `%s' attribute",
+      warning ("invalid argument of %qs attribute",
 	       IDENTIFIER_POINTER (name));
       *no_add_attrs = true;
     }
@@ -982,19 +976,21 @@ large_insn_p (rtx op, enum machine_mode mode ATTRIBUTE_UNUSED)
   return get_attr_length (op) != 2;
 }
 
-/* Return nonzero if TYPE must be passed or returned in memory.
-   The m32r treats both directions the same so we handle both directions
-   in this function.  */
+/* Return nonzero if TYPE must be passed by indirect reference.  */
 
-int
-m32r_pass_by_reference (tree type)
+static bool
+m32r_pass_by_reference (CUMULATIVE_ARGS *ca ATTRIBUTE_UNUSED,
+			enum machine_mode mode, tree type,
+			bool named ATTRIBUTE_UNUSED)
 {
-  int size = int_size_in_bytes (type);
+  int size;
 
-  if (size < 0 || size > 8)
-    return 1;
+  if (type)
+    size = int_size_in_bytes (type);
+  else
+    size = GET_MODE_SIZE (mode);
 
-  return 0;
+  return (size < 0 || size > 8);
 }
 
 /* Comparisons.  */
@@ -1182,11 +1178,8 @@ gen_compare (enum rtx_code code, rtx x, rtx y, int need_compare)
 	y = force_reg (GET_MODE (x), y);
       else
 	{
-	  int ok_const =
-	    (code == LTU || code == LEU || code == GTU || code == GEU)
-	    ? uint16_operand (y, GET_MODE (y))
-	    : reg_or_cmp_int16_operand (y, GET_MODE (y));
-	  
+	  int ok_const = reg_or_int16_operand (y, GET_MODE (y));
+
 	  if (! ok_const)
 	    y = force_reg (GET_MODE (x), y);
 	}
@@ -1332,13 +1325,11 @@ gen_split_move_double (rtx operands[])
 }
 
 
-/* Implements the FUNCTION_ARG_PARTIAL_NREGS macro.  */
-
-int
-function_arg_partial_nregs (CUMULATIVE_ARGS *cum, enum machine_mode mode,
-			    tree type, int named ATTRIBUTE_UNUSED)
+static int
+m32r_arg_partial_bytes (CUMULATIVE_ARGS *cum, enum machine_mode mode,
+			tree type, bool named ATTRIBUTE_UNUSED)
 {
-  int ret;
+  int words;
   unsigned int size =
     (((mode == BLKmode && type)
       ? (unsigned int) int_size_in_bytes (type)
@@ -1346,13 +1337,13 @@ function_arg_partial_nregs (CUMULATIVE_ARGS *cum, enum machine_mode mode,
     / UNITS_PER_WORD;
 
   if (*cum >= M32R_MAX_PARM_REGS)
-    ret = 0;
+    words = 0;
   else if (*cum + size > M32R_MAX_PARM_REGS)
-    ret = (*cum + size) - M32R_MAX_PARM_REGS;
+    words = (*cum + size) - M32R_MAX_PARM_REGS;
   else
-    ret = 0;
+    words = 0;
 
-  return ret;
+  return words * UNITS_PER_WORD;
 }
 
 /* Worker function for TARGET_RETURN_IN_MEMORY.  */
@@ -1360,7 +1351,7 @@ function_arg_partial_nregs (CUMULATIVE_ARGS *cum, enum machine_mode mode,
 static bool
 m32r_return_in_memory (tree type, tree fntype ATTRIBUTE_UNUSED)
 {
-  return m32r_pass_by_reference (type);
+  return m32r_pass_by_reference (NULL, TYPE_MODE (type), type, false);
 }
 
 /* Do any needed setup for a variadic function.  For the M32R, we must
@@ -1405,73 +1396,6 @@ m32r_setup_incoming_varargs (CUMULATIVE_ARGS *cum, enum machine_mode mode,
 }
 
 
-/* Implement `va_arg'.  */
-
-rtx
-m32r_va_arg (tree valist, tree type)
-{
-  HOST_WIDE_INT size, rsize;
-  tree t;
-  rtx addr_rtx;
-
-  size = int_size_in_bytes (type);
-  rsize = (size + UNITS_PER_WORD - 1) & -UNITS_PER_WORD;
-
-  if (m32r_pass_by_reference (type))
-    {
-      tree type_ptr, type_ptr_ptr;
-
-      /* Pass by reference.  */
-      type_ptr = build_pointer_type (type);
-      type_ptr_ptr = build_pointer_type (type_ptr);
-
-      t = build (POSTINCREMENT_EXPR, va_list_type_node, valist, 
-		 build_int_2 (UNITS_PER_WORD, 0));
-      TREE_SIDE_EFFECTS (t) = 1;
-      t = build1 (NOP_EXPR, type_ptr_ptr, t);
-      TREE_SIDE_EFFECTS (t) = 1;
-      t = build1 (INDIRECT_REF, type_ptr, t);
-
-      addr_rtx = expand_expr (t, NULL_RTX, Pmode, EXPAND_NORMAL);
-    }
-  else
-    {
-      /* Pass by value.  */
-      if (size < UNITS_PER_WORD)
-	{
-	  /* Care for bigendian correction on the aligned address.  */
-	  t = build (PLUS_EXPR, ptr_type_node, valist,
-		     build_int_2 (rsize - size, 0));
-	  addr_rtx = expand_expr (t, NULL_RTX, Pmode, EXPAND_NORMAL);
-	  addr_rtx = copy_to_reg (addr_rtx);
-
-	  /* Increment AP.  */
-	  t = build (PLUS_EXPR, va_list_type_node, valist,
-		     build_int_2 (rsize, 0));
-	  t = build (MODIFY_EXPR, va_list_type_node, valist, t);
-	  TREE_SIDE_EFFECTS (t) = 1;
-	  expand_expr (t, const0_rtx, VOIDmode, EXPAND_NORMAL);
-	}
-      else
-	{
-	  t = build (POSTINCREMENT_EXPR, va_list_type_node, valist, 
-		     build_int_2 (rsize, 0));
-	  TREE_SIDE_EFFECTS (t) = 1;
-	  addr_rtx = expand_expr (t, NULL_RTX, Pmode, EXPAND_NORMAL);
-	}
-    }
-
-  return addr_rtx;
-}
-
-static int
-m32r_adjust_cost (rtx insn ATTRIBUTE_UNUSED, rtx link ATTRIBUTE_UNUSED,
-		  rtx dep_insn ATTRIBUTE_UNUSED, int cost)
-{
-  return cost;
-}
-
-
 /* Return true if INSN is real instruction bearing insn.  */
 
 static int
@@ -1497,124 +1421,6 @@ m32r_adjust_priority (rtx insn, int priority)
 }
 
 
-/* Initialize for scheduling a group of instructions.  */
-
-static void
-m32r_sched_init (FILE * stream ATTRIBUTE_UNUSED,
-		 int verbose ATTRIBUTE_UNUSED,
-		 int max_ready ATTRIBUTE_UNUSED)
-{
-  m32r_sched_odd_word_p = FALSE;
-}
-
-
-/* Reorder the schedulers priority list if needed */
-
-static int
-m32r_sched_reorder (FILE * stream, int verbose, rtx * ready,
-		    int *n_readyp, int clock ATTRIBUTE_UNUSED)
-{
-  int n_ready = *n_readyp;
-
-  if (TARGET_DEBUG)
-    return m32r_issue_rate ();
-
-  if (verbose <= 7)
-    stream = (FILE *)0;
-
-  if (stream)
-    fprintf (stream,
-	     ";;\t\t::: Looking at %d insn(s) on ready list, boundary is %s word\n",
-	     n_ready,
-	     (m32r_sched_odd_word_p) ? "odd" : "even");
-
-  if (n_ready > 1)
-    {
-      rtx * long_head = alloca (sizeof (rtx) * n_ready);
-      rtx * long_tail = long_head;
-      rtx * short_head = alloca (sizeof (rtx) * n_ready);
-      rtx * short_tail = short_head;
-      rtx * new_head = alloca (sizeof (rtx) * n_ready);
-      rtx * new_tail = new_head + (n_ready - 1);
-      int   i;
-
-      /* Loop through the instructions, classifying them as short/long.  Try
-	 to keep 2 short together and/or 1 long.  Note, the ready list is
-	 actually ordered backwards, so keep it in that manner.  */
-      for (i = n_ready-1; i >= 0; i--)
-	{
-	  rtx insn = ready[i];
-
-	  if (! m32r_is_insn (insn))
-	    {
-	      /* Dump all current short/long insns just in case.  */
-	      while (long_head != long_tail)
-		*new_tail-- = *long_head++;
-
-	      while (short_head != short_tail)
-		*new_tail-- = *short_head++;
-
-	      *new_tail-- = insn;
-	      if (stream)
-		fprintf (stream,
-			 ";;\t\t::: Skipping non instruction %d\n",
-			 INSN_UID (insn));
-
-	    }
-
-	  else
-	    {
-	      if (get_attr_insn_size (insn) != INSN_SIZE_SHORT)
-		*long_tail++ = insn;
-
-	      else
-		*short_tail++ = insn;
-	    }
-	}
-
-      /* If we are on an odd word, emit a single short instruction if
-	 we can.  */
-      if (m32r_sched_odd_word_p && short_head != short_tail)
-	*new_tail-- = *short_head++;
-
-      /* Now dump out all of the long instructions.  */
-      while (long_head != long_tail)
-	*new_tail-- = *long_head++;
-
-      /* Now dump out all of the short instructions.  */
-      while (short_head != short_tail)
-	*new_tail-- = *short_head++;
-
-      if (new_tail + 1 != new_head)
-	abort ();
-
-      memcpy (ready, new_head, sizeof (rtx) * n_ready);
-      if (stream)
-	{
-	  int i;
-	  fprintf (stream, ";;\t\t::: New ready list:               ");
-	  for (i = 0; i < n_ready; i++)
-	    {
-	      rtx insn = ready[i];
-
-	      fprintf (stream, " %d", INSN_UID (ready[i]));
-
-	      if (! m32r_is_insn (insn))
-		fputs ("(?)", stream);
-
-	      else if (get_attr_insn_size (insn) != INSN_SIZE_SHORT)
-		fputs ("(l)", stream);
-
-	      else
-		fputs ("(s)", stream);
-	    }
-
-	  fprintf (stream, "\n");
-	}
-    }
-  return m32r_issue_rate ();
-}
-
 /* Indicate how many instructions can be issued at the same time.
    This is sort of a lie.  The m32r can issue only 1 long insn at
    once, but it can issue 2 short insns.  The default therefore is
@@ -1625,45 +1431,6 @@ static int
 m32r_issue_rate (void)
 {
   return ((TARGET_LOW_ISSUE_RATE) ? 1 : 2);
-}
-
-/* If we have a machine that can issue a variable # of instructions
-   per cycle, indicate how many more instructions can be issued
-   after the current one.  */
-
-static int
-m32r_variable_issue (FILE * stream, int verbose, rtx insn, int how_many)
-{
-  int orig_odd_word_p = m32r_sched_odd_word_p;
-  int short_p = FALSE;
-
-  how_many--;
-  if (how_many > 0 && !TARGET_DEBUG)
-    {
-      if (! m32r_is_insn (insn))
-	how_many++;
-
-      else if (get_attr_insn_size (insn) != INSN_SIZE_SHORT)
-	{
-	  how_many = 0;
-	  m32r_sched_odd_word_p = 0;
-	}
-      else
-	{
-	  m32r_sched_odd_word_p = !m32r_sched_odd_word_p;
-	  short_p = TRUE;
-	}
-    }
-
-  if (verbose > 7 && stream)
-    fprintf (stream,
-	     ";;\t\t::: %s insn %d starts on an %s word, can emit %d more instruction(s)\n",
-	     short_p ? "short" : "long",
-	     INSN_UID (insn),
-	     orig_odd_word_p ? "odd" : "even",
-	     how_many);
-
-  return how_many;
 }
 
 /* Cost functions.  */
@@ -1826,8 +1593,8 @@ static struct m32r_frame_info zero_frame_info;
    The return address and frame pointer are treated separately.
    Don't consider them here.  */
 #define MUST_SAVE_REGISTER(regno, interrupt_p) \
-((regno) != RETURN_ADDR_REGNUM && (regno) != FRAME_POINTER_REGNUM \
- && (regs_ever_live[regno] && (!call_used_regs[regno] || interrupt_p)))
+  ((regno) != RETURN_ADDR_REGNUM && (regno) != FRAME_POINTER_REGNUM \
+  && (regs_ever_live[regno] && (!call_really_used_regs[regno] || interrupt_p)))
 
 #define MUST_SAVE_FRAME_POINTER (regs_ever_live[FRAME_POINTER_REGNUM])
 #define MUST_SAVE_RETURN_ADDR   (regs_ever_live[RETURN_ADDR_REGNUM] || current_function_profile)
@@ -1905,6 +1672,29 @@ m32r_compute_frame_size (int size)	/* # of var. bytes allocated.  */
 /* The table we use to reference PIC data.  */
 static rtx global_offset_table;
                                                                                 
+static void
+m32r_reload_lr (rtx sp, int size)
+{
+  rtx lr = gen_rtx_REG (Pmode, RETURN_ADDR_REGNUM);
+
+  if (size == 0)
+    emit_insn (gen_movsi (lr, gen_rtx_MEM (Pmode, sp)));
+  else if (size <= 32768)
+    emit_insn (gen_movsi (lr, gen_rtx_MEM (Pmode,
+					   gen_rtx_PLUS (Pmode, sp,
+							 GEN_INT (size)))));
+  else
+    {   
+      rtx tmp = gen_rtx_REG (Pmode, PROLOGUE_TMP_REGNUM);
+
+      emit_insn (gen_movsi (tmp, GEN_INT (size)));
+      emit_insn (gen_addsi3 (tmp, tmp, sp));
+      emit_insn (gen_movsi (lr, gen_rtx_MEM (Pmode, tmp)));
+    }
+
+  emit_insn (gen_rtx_USE (VOIDmode, lr));
+}
+
 void
 m32r_load_pic_register (void)
 {
@@ -1993,7 +1783,11 @@ m32r_expand_prologue (void)
                                gen_rtx_REG (Pmode, RETURN_ADDR_REGNUM)));
                                                                                 
   if (pic_reg_used)
-    m32r_load_pic_register ();
+    {
+      m32r_load_pic_register ();
+      m32r_reload_lr (stack_pointer_rtx,
+                      (current_function_profile ? 0 : frame_size));
+    }
 
   if (current_function_profile && !pic_reg_used)
     emit_insn (gen_blockage ());
@@ -2195,14 +1989,21 @@ m32r_legitimize_pic_address (rtx orig, rtx reg)
       else
         address = reg;
 
+      current_function_uses_pic_offset_table = 1;
+
+      if (GET_CODE (orig) == LABEL_REF
+          || (GET_CODE (orig) == SYMBOL_REF && SYMBOL_REF_LOCAL_P (orig)))
+        {
+          emit_insn (gen_gotoff_load_addr (reg, orig));
+          emit_insn (gen_addsi3 (reg, reg, pic_offset_table_rtx));
+          return reg;
+        }
+
       emit_insn (gen_pic_load_addr (address, orig));
 
       emit_insn (gen_addsi3 (address, address, pic_offset_table_rtx));
-      pic_ref = gen_rtx_MEM (Pmode, address);
-
-      RTX_UNCHANGING_P (pic_ref) = 1;
+      pic_ref = gen_const_mem (Pmode, address);
       insn = emit_move_insn (reg, pic_ref);
-      current_function_uses_pic_offset_table = 1;
 #if 0
       /* Put a REG_EQUAL note on this insn, so that it can be optimized
          by loop.  */
@@ -2741,6 +2542,29 @@ m32r_not_same_reg (rtx a, rtx b)
 }
 
 
+rtx
+m32r_function_symbol (const char *name)
+{
+  int extra_flags = 0;
+  enum m32r_model model;
+  rtx sym = gen_rtx_SYMBOL_REF (Pmode, name);
+
+  if (TARGET_MODEL_SMALL)
+    model = M32R_MODEL_SMALL;
+  else if (TARGET_MODEL_MEDIUM)
+    model = M32R_MODEL_MEDIUM;
+  else if (TARGET_MODEL_LARGE)
+    model = M32R_MODEL_LARGE;
+  else
+    abort (); /* Shouldn't happen.  */
+  extra_flags |= model << SYMBOL_FLAG_MODEL_SHIFT;
+                                                                                
+  if (extra_flags)
+    SYMBOL_REF_FLAGS (sym) |= extra_flags;
+
+  return sym;
+}
+
 /* Use a library function to move some bytes.  */
 
 static void
@@ -2752,19 +2576,11 @@ block_move_call (rtx dest_reg, rtx src_reg, rtx bytes_rtx)
       && GET_MODE (bytes_rtx) != Pmode)
     bytes_rtx = convert_to_mode (Pmode, bytes_rtx, 1);
 
-#ifdef TARGET_MEM_FUNCTIONS
-  emit_library_call (gen_rtx_SYMBOL_REF (Pmode, "memcpy"), 0,
+  emit_library_call (m32r_function_symbol ("memcpy"), 0,
 		     VOIDmode, 3, dest_reg, Pmode, src_reg, Pmode,
 		     convert_to_mode (TYPE_MODE (sizetype), bytes_rtx,
 				      TYPE_UNSIGNED (sizetype)),
 		     TYPE_MODE (sizetype));
-#else
-  emit_library_call (gen_rtx_SYMBOL_REF (Pmode, "bcopy"), 0,
-		     VOIDmode, 3, src_reg, Pmode, dest_reg, Pmode,
-		     convert_to_mode (TYPE_MODE (integer_type_node), bytes_rtx,
-				      TYPE_UNSIGNED (integer_type_node)),
-		     TYPE_MODE (integer_type_node));
-#endif
 }
 
 /* The maximum number of bytes to copy using pairs of load/store instructions.
@@ -2851,7 +2667,7 @@ m32r_expand_block_move (rtx operands[])
 	 to the word after the end of the source block, and dst_reg to point
 	 to the last word of the destination block, provided that the block
 	 is MAX_MOVE_BYTES long.  */
-      emit_insn (gen_movstrsi_internal (dst_reg, src_reg, at_a_time,
+      emit_insn (gen_movmemsi_internal (dst_reg, src_reg, at_a_time,
 					new_dst_reg, new_src_reg));
       emit_move_insn (dst_reg, new_dst_reg);
       emit_move_insn (src_reg, new_src_reg);
@@ -2865,7 +2681,7 @@ m32r_expand_block_move (rtx operands[])
     }
 
   if (leftover)
-    emit_insn (gen_movstrsi_internal (dst_reg, src_reg, GEN_INT (leftover),
+    emit_insn (gen_movmemsi_internal (dst_reg, src_reg, GEN_INT (leftover),
 				      gen_reg_rtx (SImode),
 				      gen_reg_rtx (SImode)));
 }
@@ -3051,4 +2867,13 @@ m32r_hard_regno_rename_ok (unsigned int old_reg ATTRIBUTE_UNUSED,
     return 0;
 
   return 1;
+}
+
+rtx
+m32r_return_addr (int count)
+{
+  if (count != 0)
+    return const0_rtx;
+  
+  return get_hard_reg_initial_val (Pmode, RETURN_ADDR_REGNUM);
 }

@@ -1,5 +1,5 @@
 /* Definitions for MIPS running Linux-based GNU systems with ELF format.
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -51,14 +51,16 @@ Boston, MA 02111-1307, USA.  */
 
 /* If we don't set MASK_ABICALLS, we can't default to PIC.  */
 #undef TARGET_DEFAULT
-#define TARGET_DEFAULT (MASK_ABICALLS|MASK_GAS)
+#define TARGET_DEFAULT MASK_ABICALLS
 
 #define TARGET_OS_CPP_BUILTINS()				\
     do {							\
 	LINUX_TARGET_OS_CPP_BUILTINS();				\
-	builtin_define ("__PIC__");				\
-	builtin_define ("__pic__");				\
-        builtin_assert ("machine=mips");			\
+	if (TARGET_ABICALLS)					\
+	  {							\
+	    builtin_define ("__PIC__");				\
+	    builtin_define ("__pic__");				\
+	  }							\
 	/* The GNU C++ standard library requires this.  */	\
 	if (c_dialect_cxx ())					\
 	  builtin_define ("_GNU_SOURCE");			\
@@ -96,10 +98,7 @@ Boston, MA 02111-1307, USA.  */
 } while (0)
 
 #undef  SUBTARGET_CPP_SPEC
-#define SUBTARGET_CPP_SPEC "\
-%{fno-PIC:-U__PIC__ -U__pic__} %{fno-pic:-U__PIC__ -U__pic__} \
-%{fPIC|fPIE|fpic|fpie:-D__PIC__ -D__pic__} \
-%{pthread:-D_REENTRANT}"
+#define SUBTARGET_CPP_SPEC "%{pthread:-D_REENTRANT}"
 
 /* From iris5.h */
 /* -G is incompatible with -KPIC which is the default, so only allow objects
@@ -120,10 +119,7 @@ Boston, MA 02111-1307, USA.  */
         %{static:-static}}}"
 
 #undef SUBTARGET_ASM_SPEC
-#define SUBTARGET_ASM_SPEC "\
-%{mabi=64: -64} \
-%{!fno-PIC:%{!fno-pic:-KPIC}} \
-%{fno-PIC:-non_shared} %{fno-pic:-non_shared}"
+#define SUBTARGET_ASM_SPEC "%{mabi=64: -64} %{!mno-abicalls:-KPIC}"
 
 /* The MIPS assembler has different syntax for .set. We set it to
    .dummy to trap any errors.  */
@@ -170,11 +166,6 @@ Boston, MA 02111-1307, USA.  */
 #undef FUNCTION_NAME_ALREADY_DECLARED
 #define FUNCTION_NAME_ALREADY_DECLARED 1
 
-#define ASM_PREFERRED_EH_DATA_FORMAT(CODE, GLOBAL)       		\
-  (flag_pic								\
-    ? ((GLOBAL) ? DW_EH_PE_indirect : 0) | DW_EH_PE_pcrel | DW_EH_PE_sdata4\
-   : DW_EH_PE_absptr)
-
 /* The glibc _mcount stub will save $v0 for us.  Don't mess with saving
    it, since ASM_OUTPUT_REG_PUSH/ASM_OUTPUT_REG_POP do not work in the
    presence of $gp-relative calls.  */
@@ -184,78 +175,7 @@ Boston, MA 02111-1307, USA.  */
 #undef LIB_SPEC
 #define LIB_SPEC "\
 %{shared: -lc} \
-%{!static:-rpath-link %R/lib:%R/usr/lib} \
 %{!shared: %{pthread:-lpthread} \
   %{profile:-lc_p} %{!profile: -lc}}"
 
-#ifndef inhibit_libc
-/* Do code reading to identify a signal frame, and set the frame
-   state data appropriately.  See unwind-dw2.c for the structs.  */
-#ifdef IN_LIBGCC2
-#include <signal.h>
-
-/* The third parameter to the signal handler points to something with
- * this structure defined in asm/ucontext.h, but the name clashes with
- * struct ucontext from sys/ucontext.h so this private copy is used.  */
-typedef struct _sig_ucontext {
-    unsigned long         uc_flags;
-    struct _sig_ucontext  *uc_link;
-    stack_t               uc_stack;
-    struct sigcontext uc_mcontext;
-    sigset_t      uc_sigmask;
-} _sig_ucontext_t;
-
-#endif /* IN_LIBGCC2  */
-
-#define MD_FALLBACK_FRAME_STATE_FOR(CONTEXT, FS, SUCCESS)            \
-  do {                                                               \
-    u_int32_t *pc_ = (u_int32_t *) (CONTEXT)->ra;                \
-    struct sigcontext *sc_;                                          \
-    _Unwind_Ptr new_cfa_;                                            \
-    int i_;                                                          \
-                                                                     \
-    /* 24021061 li v0, 0x1061 (rt_sigreturn)*/                       \
-    /* 0000000c syscall    */                                        \
-    /*    or */                                                      \
-    /* 24021017 li v0, 0x1017 (sigreturn) */                         \
-    /* 0000000c syscall  */                                          \
-    if (*(pc_ + 1) != 0x0000000c)                                    \
-      break;                                                         \
-    if (*(pc_ + 0) == 0x24021017)                                    \
-      {                                                              \
-        struct sigframe {                                            \
-          u_int32_t  trampoline[2];                                \
-          struct sigcontext sigctx;                                  \
-        } *rt_ = (CONTEXT)->ra;                                      \
-        sc_ = &rt_->sigctx;                                          \
-      }                                                              \
-    else if (*(pc_ + 0) == 0x24021061)                               \
-      {                                                              \
-        struct rt_sigframe {                                         \
-          u_int32_t  trampoline[2];                                \
-          struct siginfo info;                                       \
-          _sig_ucontext_t uc;                                        \
-        } *rt_ = (CONTEXT)->ra;                                      \
-        sc_ = &rt_->uc.uc_mcontext;                                  \
-      }                                                              \
-    else                                                             \
-      break;                                                         \
-                                                                     \
-    new_cfa_ = (_Unwind_Ptr)sc_;                                     \
-    (FS)->cfa_how = CFA_REG_OFFSET;                                  \
-    (FS)->cfa_reg = STACK_POINTER_REGNUM;                            \
-    (FS)->cfa_offset = new_cfa_ - (_Unwind_Ptr) (CONTEXT)->cfa;      \
-                                                                     \
-    for (i_ = 0; i_ < 32; i_++) {                                    \
-      (FS)->regs.reg[i_].how = REG_SAVED_OFFSET;                     \
-      (FS)->regs.reg[i_].loc.offset                                  \
-        = (_Unwind_Ptr)&(sc_->sc_regs[i_]) - new_cfa_;               \
-    }                                                                \
-    (FS)->regs.reg[SIGNAL_UNWIND_RETURN_COLUMN].how = REG_SAVED_OFFSET; \
-    (FS)->regs.reg[SIGNAL_UNWIND_RETURN_COLUMN].loc.offset           \
-        = (_Unwind_Ptr)&(sc_->sc_pc) - new_cfa_;                     \
-    (FS)->retaddr_column = SIGNAL_UNWIND_RETURN_COLUMN;              \
-                                                                     \
-    goto SUCCESS;                                                    \
-  } while (0)
-#endif
+#define MD_UNWIND_SUPPORT "config/mips/linux-unwind.h"

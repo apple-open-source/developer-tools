@@ -106,7 +106,7 @@ package System.Tasking.Initialization is
    --  For the sake of efficiency, the version with Self_ID as parameter
    --  should used wherever possible. These are all nestable.
 
-   --  Non-nestable inline versions  --
+   --  Non-nestable inline versions
 
    procedure Defer_Abort (Self_ID : Task_Id);
    pragma Inline (Defer_Abort);
@@ -114,7 +114,7 @@ package System.Tasking.Initialization is
    procedure Undefer_Abort (Self_ID : Task_Id);
    pragma Inline (Undefer_Abort);
 
-   --  Nestable inline versions  --
+   --  Nestable inline versions
 
    procedure Defer_Abort_Nestable (Self_ID : Task_Id);
    pragma Inline (Defer_Abort_Nestable);
@@ -131,13 +131,21 @@ package System.Tasking.Initialization is
    --  ?????
    --  Try to phase out all uses of the above versions.
 
+   procedure Do_Pending_Action (Self_ID : Task_Id);
+   --  Only call with no locks, and when Self_ID.Pending_Action = True
+   --  Perform necessary pending actions (e.g. abortion, priority change).
+   --  This procedure is usually called when needed as a result of
+   --  calling Undefer_Abort, although in the case of e.g. No_Abort
+   --  restriction, it can be necessary to force execution of pending
+   --  actions.
+
    function Check_Abort_Status return Integer;
    --  Returns Boolean'Pos (True) iff abort signal should raise
    --  Standard.Abort_Signal. Only used by IRIX currently.
 
-   ---------------------------
-   --  Change Base Priority --
-   ---------------------------
+   --------------------------
+   -- Change Base Priority --
+   --------------------------
 
    procedure Change_Base_Priority (T : Task_Id);
    --  Change the base priority of T.

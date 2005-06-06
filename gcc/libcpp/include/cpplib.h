@@ -1,5 +1,6 @@
 /* Definitions for CPP library.
-   Copyright (C) 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004
+   Copyright (C) 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003,
+   2004, 2005
    Free Software Foundation, Inc.
    Written by Per Bothner, 1994-95.
 
@@ -52,113 +53,118 @@ struct _cpp_file;
    '='.  The lexer needs operators ending in '=', like ">>=", to be in
    the same order as their counterparts without the '=', like ">>".  */
 
-/* Positions in the table.  */
-#define CPP_LAST_EQ CPP_MAX
-#define CPP_FIRST_DIGRAPH CPP_HASH
-#define CPP_LAST_PUNCTUATOR CPP_DOT_STAR
-#define CPP_LAST_CPP_OP CPP_LESS_EQ
-
-#define TTYPE_TABLE				\
-  OP(CPP_EQ = 0,	"=")			\
-  OP(CPP_NOT,		"!")			\
-  OP(CPP_GREATER,	">")	/* compare */	\
-  OP(CPP_LESS,		"<")			\
-  OP(CPP_PLUS,		"+")	/* math */	\
-  OP(CPP_MINUS,		"-")			\
-  OP(CPP_MULT,		"*")			\
-  OP(CPP_DIV,		"/")			\
-  OP(CPP_MOD,		"%")			\
-  OP(CPP_AND,		"&")	/* bit ops */	\
-  OP(CPP_OR,		"|")			\
-  OP(CPP_XOR,		"^")			\
-  OP(CPP_RSHIFT,	">>")			\
-  OP(CPP_LSHIFT,	"<<")			\
-  OP(CPP_MIN,		"<?")	/* extension */	\
-  OP(CPP_MAX,		">?")			\
-\
-  OP(CPP_COMPL,		"~")			\
-  OP(CPP_AND_AND,	"&&")	/* logical */	\
-  OP(CPP_OR_OR,		"||")			\
-  OP(CPP_QUERY,		"?")			\
-  OP(CPP_COLON,		":")			\
-  OP(CPP_COMMA,		",")	/* grouping */	\
-  OP(CPP_OPEN_PAREN,	"(")			\
-  OP(CPP_CLOSE_PAREN,	")")			\
-  TK(CPP_EOF,		SPELL_NONE)		\
-  OP(CPP_EQ_EQ,		"==")	/* compare */	\
-  OP(CPP_NOT_EQ,	"!=")			\
-  OP(CPP_GREATER_EQ,	">=")			\
-  OP(CPP_LESS_EQ,	"<=")			\
-\
-  /* These two are unary + / - in preprocessor expressions.  */ \
-  OP(CPP_PLUS_EQ,	"+=")	/* math */	\
-  OP(CPP_MINUS_EQ,	"-=")			\
-\
-  OP(CPP_MULT_EQ,	"*=")			\
-  OP(CPP_DIV_EQ,	"/=")			\
-  OP(CPP_MOD_EQ,	"%=")			\
-  OP(CPP_AND_EQ,	"&=")	/* bit ops */	\
-  OP(CPP_OR_EQ,		"|=")			\
-  OP(CPP_XOR_EQ,	"^=")			\
-  OP(CPP_RSHIFT_EQ,	">>=")			\
-  OP(CPP_LSHIFT_EQ,	"<<=")			\
-  OP(CPP_MIN_EQ,	"<?=")	/* extension */	\
-  OP(CPP_MAX_EQ,	">?=")			\
-  /* Digraphs together, beginning with CPP_FIRST_DIGRAPH.  */	\
-  OP(CPP_HASH,		"#")	/* digraphs */	\
-  OP(CPP_PASTE,		"##")			\
-  OP(CPP_OPEN_SQUARE,	"[")			\
-  OP(CPP_CLOSE_SQUARE,	"]")			\
-  OP(CPP_OPEN_BRACE,	"{")			\
-  OP(CPP_CLOSE_BRACE,	"}")			\
-  /* The remainder of the punctuation.  Order is not significant.  */	\
-  OP(CPP_SEMICOLON,	";")	/* structure */	\
-  OP(CPP_ELLIPSIS,	"...")			\
-  OP(CPP_PLUS_PLUS,	"++")	/* increment */	\
-  OP(CPP_MINUS_MINUS,	"--")			\
-  OP(CPP_DEREF,		"->")	/* accessors */	\
-  OP(CPP_DOT,		".")			\
-  OP(CPP_SCOPE,		"::")			\
-  OP(CPP_DEREF_STAR,	"->*")			\
-  OP(CPP_DOT_STAR,	".*")			\
-  OP(CPP_ATSIGN,	"@")  /* used in Objective-C */ \
-\
-  TK(CPP_NAME,		SPELL_IDENT)	/* word */			\
-  TK(CPP_AT_NAME,       SPELL_IDENT)    /* @word - Objective-C */       \
-  TK(CPP_NUMBER,	SPELL_LITERAL)	/* 34_be+ta  */			\
-\
-  TK(CPP_CHAR,		SPELL_LITERAL)	/* 'char' */			\
-  TK(CPP_WCHAR,		SPELL_LITERAL)	/* L'char' */			\
-  TK(CPP_OTHER,		SPELL_LITERAL)	/* stray punctuation */		\
-\
-  TK(CPP_STRING,	SPELL_LITERAL)	/* "string" */			\
-  TK(CPP_WSTRING,	SPELL_LITERAL)	/* L"string" */			\
-  TK(CPP_OBJC_STRING,   SPELL_LITERAL)  /* @"string" - Objective-C */	\
+#define TTYPE_TABLE							\
+  OP(EQ,		"=")						\
+  OP(NOT,		"!")						\
+  OP(GREATER,		">")	/* compare */				\
+  OP(LESS,		"<")						\
+  OP(PLUS,		"+")	/* math */				\
+  OP(MINUS,		"-")						\
+  OP(MULT,		"*")						\
+  OP(DIV,		"/")						\
+  OP(MOD,		"%")						\
+  OP(AND,		"&")	/* bit ops */				\
+  OP(OR,		"|")						\
+  OP(XOR,		"^")						\
+  OP(RSHIFT,		">>")						\
+  OP(LSHIFT,		"<<")						\
+  OP(MIN,		"<?")	/* extension */				\
+  OP(MAX,		">?")						\
+									\
+  OP(COMPL,		"~")						\
+  OP(AND_AND,		"&&")	/* logical */				\
+  OP(OR_OR,		"||")						\
+  OP(QUERY,		"?")						\
+  OP(COLON,		":")						\
+  OP(COMMA,		",")	/* grouping */				\
+  OP(OPEN_PAREN,	"(")						\
+  OP(CLOSE_PAREN,	")")						\
+  TK(EOF,		NONE)						\
+  OP(EQ_EQ,		"==")	/* compare */				\
+  OP(NOT_EQ,		"!=")						\
+  OP(GREATER_EQ,	">=")						\
+  OP(LESS_EQ,		"<=")						\
+									\
+  /* These two are unary + / - in preprocessor expressions.  */		\
+  OP(PLUS_EQ,		"+=")	/* math */				\
+  OP(MINUS_EQ,		"-=")						\
+									\
+  OP(MULT_EQ,		"*=")						\
+  OP(DIV_EQ,		"/=")						\
+  OP(MOD_EQ,		"%=")						\
+  OP(AND_EQ,		"&=")	/* bit ops */				\
+  OP(OR_EQ,		"|=")						\
+  OP(XOR_EQ,		"^=")						\
+  OP(RSHIFT_EQ,		">>=")						\
+  OP(LSHIFT_EQ,		"<<=")						\
+  OP(MIN_EQ,		"<?=")	/* extension */				\
+  OP(MAX_EQ,		">?=")						\
+  /* Digraphs together, beginning with CPP_FIRST_DIGRAPH.  */		\
+  OP(HASH,		"#")	/* digraphs */				\
+  OP(PASTE,		"##")						\
+  OP(OPEN_SQUARE,	"[")						\
+  OP(CLOSE_SQUARE,	"]")						\
+  OP(OPEN_BRACE,	"{")						\
+  OP(CLOSE_BRACE,	"}")						\
+  /* The remainder of the punctuation.	Order is not significant.  */	\
+  OP(SEMICOLON,		";")	/* structure */				\
+  OP(ELLIPSIS,		"...")						\
+  OP(PLUS_PLUS,		"++")	/* increment */				\
+  OP(MINUS_MINUS,	"--")						\
+  OP(DEREF,		"->")	/* accessors */				\
+  OP(DOT,		".")						\
+  OP(SCOPE,		"::")						\
+  OP(DEREF_STAR,	"->*")						\
+  OP(DOT_STAR,		".*")						\
+  OP(ATSIGN,		"@")  /* used in Objective-C */			\
+									\
+  TK(NAME,		IDENT)	 /* word */				\
+  TK(AT_NAME,		IDENT)	 /* @word - Objective-C */		\
+  TK(NUMBER,		LITERAL) /* 34_be+ta  */			\
+									\
+  TK(CHAR,		LITERAL) /* 'char' */				\
+  TK(WCHAR,		LITERAL) /* L'char' */				\
+  TK(OTHER,		LITERAL) /* stray punctuation */		\
+									\
+  TK(STRING,		LITERAL) /* "string" */				\
+  TK(WSTRING,		LITERAL) /* L"string" */			\
+  TK(OBJC_STRING,	LITERAL) /* @"string" - Objective-C */		\
   /* APPLE LOCAL pascal strings */					\
-  TK(CPP_PASCAL_STRING,	SPELL_LITERAL)	/* Pascal ("\p...") string */	\
-  TK(CPP_HEADER_NAME,	SPELL_LITERAL)	/* <stdio.h> in #include */	\
-\
-  TK(CPP_COMMENT,	SPELL_LITERAL)	/* Only if output comments.  */ \
-                                        /* SPELL_LITERAL happens to DTRT.  */ \
-  TK(CPP_MACRO_ARG,	SPELL_NONE)	/* Macro argument.  */		\
-  TK(CPP_PADDING,	SPELL_NONE)	/* Whitespace for cpp0.  */
+  TK(PASCAL_STRING,	LITERAL) /* Pascal ("\p...") string */		\
+  TK(HEADER_NAME,	LITERAL) /* <stdio.h> in #include */		\
+									\
+  /* APPLE LOCAL begin CW asm blocks */					\
+  TK(BOL,		LITERAL) /* asm bol */				\
+  TK(EOL,		LITERAL) /* asm eol */				\
+  /* APPLE LOCAL end CW asm blocks */					\
+  TK(COMMENT,		LITERAL) /* Only if output comments.  */	\
+				 /* SPELL_LITERAL happens to DTRT.  */	\
+  TK(MACRO_ARG,		NONE)	 /* Macro argument.  */			\
+  TK(PRAGMA,		NONE)	 /* Only if deferring pragmas */	\
+  TK(PADDING,		NONE)	 /* Whitespace for -E.	*/
 
-#define OP(e, s) e,
-#define TK(e, s) e,
+#define OP(e, s) CPP_ ## e,
+#define TK(e, s) CPP_ ## e,
 enum cpp_ttype
 {
   TTYPE_TABLE
-  N_TTYPES
+  N_TTYPES,
+
+  /* Positions in the table.  */
+  CPP_LAST_EQ        = CPP_MAX,
+  CPP_FIRST_DIGRAPH  = CPP_HASH,
+  CPP_LAST_PUNCTUATOR= CPP_DOT_STAR,
+  CPP_LAST_CPP_OP    = CPP_LESS_EQ
 };
 #undef OP
 #undef TK
 
-/* C language kind, used when calling cpp_reader_init.  */
+/* C language kind, used when calling cpp_create_reader.  */
 enum c_lang {CLK_GNUC89 = 0, CLK_GNUC99, CLK_STDC89, CLK_STDC94, CLK_STDC99,
 	     CLK_GNUCXX, CLK_CXX98, CLK_ASM};
 
 /* Payload of a NUMBER, STRING, CHAR or COMMENT token.  */
-struct cpp_string
+struct cpp_string GTY(())
 {
   unsigned int len;
   const unsigned char *text;
@@ -173,22 +179,47 @@ struct cpp_string
 #define NO_EXPAND	(1 << 5) /* Do not macro-expand this token.  */
 #define BOL		(1 << 6) /* Token at beginning of line.  */
 
+/* Specify which field, if any, of the cpp_token union is used.  */
+
+enum cpp_token_fld_kind {
+  CPP_TOKEN_FLD_NODE,
+  CPP_TOKEN_FLD_SOURCE,
+  CPP_TOKEN_FLD_STR,
+  CPP_TOKEN_FLD_ARG_NO,
+  CPP_TOKEN_FLD_NONE
+};
+
 /* A preprocessing token.  This has been carefully packed and should
    occupy 16 bytes on 32-bit hosts and 24 bytes on 64-bit hosts.  */
-struct cpp_token
+struct cpp_token GTY(())
 {
   source_location src_loc;	/* Location of first char of token.  */
   ENUM_BITFIELD(cpp_ttype) type : CHAR_BIT;  /* token type */
   unsigned char flags;		/* flags - see above */
 
-  union
+  union cpp_token_u
   {
-    cpp_hashnode *node;		/* An identifier.  */
-    const cpp_token *source;	/* Inherit padding from this token.  */
-    struct cpp_string str;	/* A string, or number.  */
-    unsigned int arg_no;	/* Argument no. for a CPP_MACRO_ARG.  */
-  } val;
+    /* An identifier.  */
+    cpp_hashnode *
+      GTY ((nested_ptr (union tree_node,
+		"%h ? CPP_HASHNODE (GCC_IDENT_TO_HT_IDENT (%h)) : NULL",
+			"%h ? HT_IDENT_TO_GCC_IDENT (HT_NODE (%h)) : NULL"),
+	    tag ("CPP_TOKEN_FLD_NODE")))
+	 node;
+	 
+    /* Inherit padding from this token.  */
+    cpp_token * GTY ((tag ("CPP_TOKEN_FLD_SOURCE"))) source;
+
+    /* A string, or number.  */
+    struct cpp_string GTY ((tag ("CPP_TOKEN_FLD_STR"))) str;
+
+    /* Argument no. for a CPP_MACRO_ARG.  */
+    unsigned int GTY ((tag ("CPP_TOKEN_FLD_ARG_NO"))) arg_no;
+  } GTY ((desc ("cpp_token_val_index (&%1)"))) val;
 };
+
+/* Say which field is in use.  */
+extern enum cpp_token_fld_kind cpp_token_val_index (cpp_token *tok);
 
 /* A type wide enough to hold any multibyte source character.
    cpplib's character constant interpreter requires an unsigned type.
@@ -208,19 +239,30 @@ struct cpp_token
 typedef unsigned CPPCHAR_SIGNED_T cppchar_t;
 typedef CPPCHAR_SIGNED_T cppchar_signed_t;
 
+/* Style of header dependencies to generate.  */
+enum cpp_deps_style { DEPS_NONE = 0, DEPS_USER, DEPS_SYSTEM };
+
+/* APPLE LOCAL begin mainline UCNs 2005-04-17 3892809 */
+/* The possible normalization levels, from most restrictive to least.  */
+enum cpp_normalize_level {
+  /* In NFKC.  */
+  normalized_KC = 0,
+  /* In NFC.  */
+  normalized_C,
+  /* In NFC, except for subsequences where being in NFC would make
+     the identifier invalid.  */
+  normalized_identifier_C,
+  /* Not normalized at all.  */
+  normalized_none
+};
+/* APPLE LOCAL end mainline UCNs 2005-04-17 3892809 */
+
 /* This structure is nested inside struct cpp_reader, and
    carries all the options visible to the command line.  */
 struct cpp_options
 {
   /* Characters between tab stops.  */
   unsigned int tabstop;
-
-  /* APPLE LOCAL begin -header-mapfile */
-  /* The central header translation mapfile, set by the '-header-mapfile'
-     option, or NULL if none. */
-  struct hmap_header_map *header_map;
-  struct search_path *hmap_path;
-  /* APPLE LOCAL end -header-mapfile */
 
   /* APPLE LOCAL begin predictive compilation */
   bool predictive_compilation;
@@ -366,9 +408,10 @@ struct cpp_options
   /* Nonzero means handle C++ alternate operator names.  */
   unsigned char operator_names;
 
-  /* APPLE LOCAL -Wno-#warnings */
+  /* APPLE LOCAL begin -Wno-#warnings */
   /* Nonzero means suppress all #warning messages. (Radar 2796309) */
   int no_pound_warnings;
+  /* APPLE LOCAL end -Wno-#warnings */
 
   /* True for traditional preprocessing.  */
   unsigned char traditional;
@@ -381,6 +424,12 @@ struct cpp_options
 
   /* Holds the name of the input character set.  */
   const char *input_charset;
+
+/* APPLE LOCAL begin mainline UCNs 2005-04-17 3892809 */
+  /* The minimum permitted level of normalization before a warning
+     is generated.  */
+  enum cpp_normalize_level warn_normalize;
+/* APPLE LOCAL end mainline UCNs 2005-04-17 3892809 */
 
   /* True to warn about precompiled header files we couldn't use.  */
   bool warn_invalid_pch;
@@ -396,17 +445,17 @@ struct cpp_options
   bool use_ss;
   /* APPLE LOCAL end Symbol Separation */
 
-  /* APPLE LOCAL BEGIN pch distcc --mrs */
+  /* APPLE LOCAL begin pch distcc --mrs */
   /* True if PCH should omit from the -E output all lines from PCH files
      found in PCH files.  */
   unsigned char pch_preprocess;
-  /* APPLE LOCAL END pch distcc --mrs */
+  /* APPLE LOCAL end pch distcc --mrs */
 
   /* Dependency generation.  */
   struct
   {
     /* Style of header dependencies to generate.  */
-    enum {DEPS_NONE = 0, DEPS_USER, DEPS_SYSTEM } style;
+    enum cpp_deps_style style;
 
     /* Assume missing files are generated files.  */
     bool missing_files;
@@ -434,6 +483,10 @@ struct cpp_options
 
   /* Nonzero means __STDC__ should have the value 0 in system headers.  */
   unsigned char stdc_0_in_system_headers;
+
+  /* True means return pragmas as tokens rather than processing
+     them directly. */
+  bool defer_pragmas;
 };
 
 /* Callback for header lookup for HEADER, which is the name of a
@@ -465,7 +518,6 @@ struct cpp_callbacks
   void (*def_pragma) (cpp_reader *, unsigned int);
   int (*valid_pch) (cpp_reader *, const char *, int);
   void (*read_pch) (cpp_reader *, const char *, int, const char *);
-
   missing_header_cb missing_header;
 
   /* APPLE LOCAL begin Symbol Separation */
@@ -501,6 +553,13 @@ struct cpp_dir
   /* Mapping of file names for this directory for MS-DOS and related
      platforms.  A NULL-terminated array of (from, to) pairs.  */
   const char **name_map;
+
+  /* APPLE LOCAL begin headermaps 3871393 */
+  /* Arbitrary mapping of include strings to paths of redirected
+     files.  Contents are a special data format -- see struct
+     hmap_header_map below.  */
+  void *header_map;
+  /* APPLE LOCAL end headermaps 3871393 */
 
   /* Routine to construct pathname, given the search path name and the
      HEADER we are trying to find, return a constructed pathname to
@@ -569,6 +628,23 @@ enum builtin_type
 #define NODE_LEN(NODE)		HT_LEN (&(NODE)->ident)
 #define NODE_NAME(NODE)		HT_STR (&(NODE)->ident)
 
+/* Specify which field, if any, of the union is used.  */
+
+enum {
+  NTV_MACRO,
+  NTV_ANSWER,
+  NTV_BUILTIN,
+  NTV_ARGUMENT,
+  NTV_NONE
+};
+
+#define CPP_HASHNODE_VALUE_IDX(HNODE)				\
+  ((HNODE.flags & NODE_MACRO_ARG) ? NTV_ARGUMENT		\
+   : HNODE.type == NT_MACRO ? ((HNODE.flags & NODE_BUILTIN) 	\
+			       ? NTV_BUILTIN : NTV_MACRO)	\
+   : HNODE.type == NT_ASSERTION ? NTV_ANSWER			\
+   : NTV_NONE)
+
 /* The common part of an identifier node shared amongst all 3 C front
    ends.  Also used to store CPP identifiers, which are a superset of
    identifiers in the grammatical sense.  */
@@ -586,14 +662,14 @@ struct cpp_hashnode GTY(())
   union _cpp_hashnode_value
   {
     /* If a macro.  */
-    cpp_macro * GTY((skip)) macro;
+    cpp_macro * GTY((tag ("NTV_MACRO"))) macro;
     /* Answers to an assertion.  */
-    struct answer * GTY ((skip)) answers;
+    struct answer * GTY ((tag ("NTV_ANSWER"))) answers;
     /* Code for a builtin macro.  */
-    enum builtin_type GTY ((tag ("1"))) builtin;
+    enum builtin_type GTY ((tag ("NTV_BUILTIN"))) builtin;
     /* Macro argument index.  */
-    unsigned short GTY ((tag ("0"))) arg_index;
-  } GTY ((desc ("0"))) value;
+    unsigned short GTY ((tag ("NTV_ARGUMENT"))) arg_index;
+  } GTY ((desc ("CPP_HASHNODE_VALUE_IDX (%1)"))) value;
 };
 
 /* APPLE LOCAL begin Symbol Separation */
@@ -623,23 +699,18 @@ extern cpp_reader *cpp_create_reader (enum c_lang, struct ht *,
    command line options).  */
 extern void cpp_set_lang (cpp_reader *, enum c_lang);
 
-/* Add a dependency TARGET.  Quote it for "make" if QUOTE.  Can be
-   called any number of times before cpp_read_main_file().  If no
-   targets have been added before cpp_read_main_file(), then the
-   default target is used.  */
-extern void cpp_add_dependency_target (cpp_reader *, const char *, int);
-
 /* Set the include paths.  */
 extern void cpp_set_include_chains (cpp_reader *, cpp_dir *, cpp_dir *, int);
 
-/* Call these to get pointers to the options and callback structures
-   for a given reader.  These pointers are good until you call
-   cpp_finish on that reader.  You can either edit the callbacks
+/* Call these to get pointers to the options, callback, and deps
+   structures for a given reader.  These pointers are good until you
+   call cpp_finish on that reader.  You can either edit the callbacks
    through the pointer returned from cpp_get_callbacks, or set them
    with cpp_set_callbacks.  */
 extern cpp_options *cpp_get_options (cpp_reader *);
 extern cpp_callbacks *cpp_get_callbacks (cpp_reader *);
 extern void cpp_set_callbacks (cpp_reader *, cpp_callbacks *);
+extern struct deps *cpp_get_deps (cpp_reader *);
 
 /* This function reads the file, but does not start preprocessing.  It
    returns the name of the original file; this is the same as the
@@ -676,9 +747,11 @@ extern unsigned int cpp_errors (cpp_reader *);
 extern unsigned int cpp_token_len (const cpp_token *);
 extern unsigned char *cpp_token_as_text (cpp_reader *, const cpp_token *);
 extern unsigned char *cpp_spell_token (cpp_reader *, const cpp_token *,
-				       unsigned char *);
+  /* APPLE LOCAL mainline UCNs 2005-04-17 3892809 */
+				       unsigned char *, bool);
 extern void cpp_register_pragma (cpp_reader *, const char *, const char *,
-				 void (*) (cpp_reader *));
+				 void (*) (cpp_reader *), bool);
+extern void cpp_handle_deferred_pragma (cpp_reader *, const cpp_string *);
 extern int cpp_avoid_paste (cpp_reader *, const cpp_token *,
 			    const cpp_token *);
 extern const cpp_token *cpp_get_token (cpp_reader *);
@@ -702,6 +775,9 @@ extern bool cpp_interpret_string_notranslate (cpp_reader *,
 					      const cpp_string *, size_t,
 					      /* APPLE LOCAL pascal strings */
 					      cpp_string *, bool, bool);
+
+/* Convert a host character constant to the execution character set.  */
+extern cppchar_t cpp_host_to_exec_charset (cpp_reader *, cppchar_t);
 
 /* Used to register macros and assertions, perhaps from the command line.
    The text is the same as the command line argument.  */
@@ -787,12 +863,6 @@ cpp_num cpp_num_sign_extend (cpp_num, size_t);
 #define CPP_DL_WARNING_P(l)	(CPP_DL_EXTRACT (l) >= CPP_DL_WARNING \
 				 && CPP_DL_EXTRACT (l) <= CPP_DL_PEDWARN)
 
-/* N.B. The error-message-printer prototypes have not been nicely
-   formatted because exgettext needs to see 'msgid' on the same line
-   as the name of the function in order to work properly.  Only the
-   string argument gets a name in an effort to keep the lines from
-   getting ridiculously oversized.  */
-
 /* Output a diagnostic of some kind.  */
 extern void cpp_error (cpp_reader *, int, const char *msgid, ...)
   ATTRIBUTE_PRINTF_3;
@@ -807,7 +877,7 @@ extern void cpp_errno (cpp_reader *, int, const char *msgid);
 extern void cpp_error_with_line (cpp_reader *, int, source_location, unsigned,
 				 const char *msgid, ...) ATTRIBUTE_PRINTF_5;
 
-/* APPLE LOCAL begin -header-mapfile */
+/* APPLE LOCAL begin headermaps 3871393 */
 #define HMAP_SAME_ENDIANNESS_MAGIC      (((((('h' << 8) | 'm') << 8) | 'a') << 8) | 'p')
 #define HMAP_OPPOSITE_ENDIANNESS_MAGIC  (((((('p' << 8) | 'a') << 8) | 'm') << 8) | 'h')
 
@@ -839,10 +909,7 @@ struct hmap_header_map
   struct hmap_bucket buckets[1]; /* Inline array of 'capacity' maptable buckets */
   /* Strings follow the buckets, at strings_offset.  */
 };
-
-extern struct search_path *hmap_lookup_path	PARAMS ((cpp_reader *,
-							 const char **));
-/* APPLE LOCAL end -header-mapfile */
+/* APPLE LOCAL end headermaps 3871393 */
 
 /* In cpplex.c */
 extern int cpp_ideq (const cpp_token *, const char *);

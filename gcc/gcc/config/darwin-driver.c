@@ -1,6 +1,7 @@
+/* APPLE LOCAL file driver driver */
 /* Darwin driver program that handles -arch commands and invokes
    appropriate compiler driver. 
-   Copyright (C) 2004 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -29,9 +30,10 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <regex.h>
 #include "libiberty.h"
 #include "filenames.h"
-
+#include "stdbool.h"
 /* Hack!.
    Pay the price for including darwin.h.  */
 typedef int tree;  
@@ -65,9 +67,12 @@ const char *final_output = "a.out";
    line options.  */
 int compile_only_request = 0;
 int asm_output_request = 0;
+int dash_capital_m_seen = 0;
 int preprocessed_output_request = 0;
 int ima_is_used = 0;
 int dash_dynamiclib_seen = 0;
+int verbose_flag = 0;
+int save_temps_seen = 0;
 
 /* Support at the max 10 arch. at a time. This is historical limit.  */
 #define MAX_ARCHES 10
@@ -110,6 +115,7 @@ struct arch_config_guess_map arch_config_map [] =
 {
   {"i386", "i686"},
   {"ppc", "powerpc"},
+  {"ppc64", "powerpc"},
   {NULL, NULL}
 };
 
@@ -177,7 +183,7 @@ get_arch_name (const char *name)
     a_info = NXGetArchInfoFromName (name);
 
   if (!a_info)
-    abort ();
+    fatal ("Invalid arch name : %s", name);
 
   cputype = a_info->cputype;
 
@@ -185,7 +191,7 @@ get_arch_name (const char *name)
   all_info = NXGetAllArchInfos ();
 
   if (!all_info)
-    abort ();
+    fatal ("Unable to collect arch info for %s", name);
 
   /* Find first arch. that matches cputype.  */
   while (all_info->name)
@@ -224,7 +230,7 @@ get_driver_name (const char *arch_name)
     }
 
   if (!config_name)
-    abort ();
+    fatal ("Unable to guess config name for arch %s", arch_name);
 
   len = strlen (config_name) + strlen (PDN) + prefix_len + 1;
   driver_name = (char *) malloc (sizeof (char) * len);
@@ -367,9 +373,10 @@ initialize (void)
 
      Sometimes linker wants to see "-final_output" "outputname". 
 
-     In the end, We need FOUR extra argument.  */
+     In the end, we may need five extra arguments, plus one extra
+     space for the NULL terminator.  */
 
-  new_argv = (const char **) malloc ((total_argc + 4) * sizeof (const char *));
+  new_argv = (const char **) malloc ((total_argc + 6) * sizeof (const char *));
   if (!new_argv)
     abort ();
 
@@ -378,7 +385,7 @@ initialize (void)
 
   /* For each -arch, three arguments are needed.
      For example, "-arch" "ppc" "file".  Additional slots are for
-     "lipo" "-create" "-o" and "outputfilename". */
+     "lipo" "-create" "-o" "outputfilename" and the NULL. */
   lipo_argv = (const char **) malloc ((total_argc * 3 + 5) * sizeof (const char *));
   if (!lipo_argv)
     abort ();
@@ -471,16 +478,21 @@ do_lipo (int start_outfile_index, const char *out_file)
   /* Already 4 lipo arguments are set.  Now add all lipo inputs.  */
   j = 4;
   for (i = 0; i < num_arches; i++)
-    {
-      lipo_argv[j++] = "-arch";
-      lipo_argv[j++] = arches[i];
-      lipo_argv[j++] = out_files[start_outfile_index + i];
-    }
+    lipo_argv[j++] = out_files[start_outfile_index + i];
+
+  /* Add the NULL at the end.  */
+  lipo_argv[j++] = NULL;
 
 #ifdef DEBUG
   debug_command_line (lipo_argv, j);
 #endif
-  
+ 
+  if (verbose_flag)
+    {
+      for (i = 0; lipo_argv[i]; i++)
+	fprintf (stderr, "%s ", lipo_argv[i]);
+      fprintf (stderr, "\n");
+    }
   pid = pexecute (lipo_argv[0], (char *const *)lipo_argv, progname, NULL, &errmsg_fmt,
 		  &errmsg_arg, PEXECUTE_SEARCH | PEXECUTE_LAST); 
   
@@ -518,12 +530,15 @@ do_compile (const char **current_argv, int current_argc)
       /* Add arch option as the last option. Do not add any other option
 	 before removing this option.  */
       additional_arch_options = add_arch_options (index, current_argv, argc_count);
-
+      argc_count += additional_arch_options;
+      
       commands[index].prog = current_argv[0];
       commands[index].argv = current_argv;
 
+      current_argv[argc_count] = NULL;
+
 #ifdef DEBUG
-      debug_command_line (current_argv, of_index);
+      debug_command_line (current_argv, argc_count);
 #endif
       commands[index].pid = pexecute (current_argv[0], 
 				      (char *const *)current_argv, 
@@ -537,7 +552,7 @@ do_compile (const char **current_argv, int current_argc)
       
       /* Remove the last arch option added in the current_argv list.  */
       if (additional_arch_options)
-	remove_arch_options (current_argv, argc_count);
+	argc_count -= remove_arch_options (current_argv, argc_count);
       index++;
     }
 
@@ -636,7 +651,7 @@ add_arch_options (int index, const char **current_argv, int arch_index)
   count = 1;
 
 #ifdef DEBUG
-  fprintf (stderr, "%s: add_arch_options\n", progname);
+  fprintf (stderr, "%s: add_arch_options: %s\n", progname, arches[index]);
 #endif
 
   if (!strcmp (arches[index], "ppc601"))
@@ -655,8 +670,8 @@ add_arch_options (int index, const char **current_argv, int arch_index)
     current_argv[arch_index] = "-mcpu=7450";
   else if (!strcmp (arches[index], "ppc970"))
     current_argv[arch_index] = "-mcpu=970";
-  else if (!strcmp (arches[index], "i386"))
-    current_argv[arch_index] = "-march=i386";
+  else if (!strcmp (arches[index], "ppc64"))
+    current_argv[arch_index] = "-m64";
   else if (!strcmp (arches[index], "i486"))
     current_argv[arch_index] = "-march=i486";
   else if (!strcmp (arches[index], "i586"))
@@ -665,10 +680,12 @@ add_arch_options (int index, const char **current_argv, int arch_index)
     current_argv[arch_index] = "-march=i686";
   else if (!strcmp (arches[index], "pentium"))
     current_argv[arch_index] = "-march=pentium";
+  else if (!strcmp (arches[index], "pentium2"))
+    current_argv[arch_index] = "-march=pentium2";
   else if (!strcmp (arches[index], "pentpro"))
     current_argv[arch_index] = "-march=pentiumpro";
   else if (!strcmp (arches[index], "pentIIm3"))
-    current_argv[arch_index] = "-march=pentium3";
+    current_argv[arch_index] = "-march=pentium2";
   else
     count = 0;
 
@@ -711,6 +728,367 @@ add_arch (const char *new_arch)
   num_arches++;
 }
 
+/* Rewrite the command line as requested in the QA_OVERRIDE_GCC3_OPTIONS
+   environment variable -- used for testing the compiler, working around bugs
+   in the Apple build environment, etc. 
+
+   The override string is made up of a set of space-separated clauses.  The
+   first letter of each clause describes what's to be done:
+   +string       Add string as a new argument (at the end of the command line).
+                 Multi-word command lines can be added with +x +y
+   s/x/y/        substitute x for y in the command line. X must be an entire 
+                 argument, and can be a regular expression as accepted by the
+                 POSIX regexp code.  Y will be substituted as a single argument,
+                 and will not have regexp replacements added in.
+   xoption       Removes argument matching option
+   Xoption       Removes argument matching option and following word
+   Ox            Removes any optimization flags in command line and replaces
+                 with -Ox.
+
+
+   Here's some examples:
+     O2
+     s/precomp-trustfile=foo//
+     +-fexplore-antartica
+     +-fast
+     s/-fsetvalue=* //
+     x-fwritable-strings
+     s/-O[0-2]/-Osize/
+     x-v
+     X-o +-o +foo.o
+
+   Option substitutions are processed from left to right; matches and changes
+   are cumulative.  An error in processing one element (such as trying to
+   remove an element and successor when the match is at the end) cause the
+   particular change to stop, but additional changes in the environment
+   variable to be applied.
+
+   Key details: 
+   * we always want to be able to adjust optimization levels for testing
+   * adding options is a common task
+   * substitution and deletion are less common.
+
+   If the first character of the environment variable is #, changes are
+   silent.  If not, diagnostics are written to stderr explaining what
+   changes are being performed.
+
+*/
+
+char **arg_array;
+int arg_array_size=0;
+int arg_count = 0;
+int confirm_changes = 1;
+const int ARG_ARRAY_INCREMENT_SIZE = 8;
+#define FALSE 0
+
+/* Routines for the argument array.  The argument array routines are
+   responsible for allocation and deallocation of all objects in the
+   array */
+
+void read_args (int argc, char **argv) 
+{
+  int i;
+
+  arg_array_size = argc+10;
+  arg_count = argc;
+  arg_array = (char**) malloc(sizeof(char*)*arg_array_size);
+  
+  for (i=0;i<argc;i++) {
+    arg_array[i] = malloc (strlen (argv[i])+1);
+    strcpy (arg_array[i], argv[i]);
+  }
+}
+
+/* Insert the argument before pos. */
+void insert_arg(int pos, char *arg_to_insert) 
+{
+  int i;
+  char *newArg = malloc (strlen (arg_to_insert)+1);
+  strcpy(newArg, arg_to_insert);
+  
+  if (arg_count == arg_array_size) {
+    /* expand array */
+    arg_array_size = arg_count + ARG_ARRAY_INCREMENT_SIZE;
+    arg_array = (char**) realloc (arg_array, arg_array_size);
+  }
+
+  for (i = arg_count; i > pos; i--) {
+    arg_array[i+1] = arg_array[i];
+  }
+
+  arg_array[pos] = newArg;
+  arg_count++;
+  
+  if (confirm_changes)
+    fprintf(stderr,"### Adding argument %s at position %d\n",arg_to_insert, pos);
+}
+
+
+void replace_arg (char *str, int pos) {
+  char *newArg = malloc(strlen(str)+1);
+  strcpy(newArg,str);
+
+  if (confirm_changes)
+    fprintf (stderr,"### Replacing %s with %s\n",arg_array[pos], str);
+
+  free (arg_array[pos]);
+  arg_array[pos] = newArg;
+}
+
+void append_arg (char *str)
+{
+  char *new_arg = malloc (strlen (str)+1);
+  strcpy (new_arg, str);
+  if (confirm_changes)
+    fprintf(stderr,"### Adding argument %s at end\n", str);
+
+  if (arg_count == arg_array_size) {
+    /* expand array */
+    arg_array_size = arg_count + ARG_ARRAY_INCREMENT_SIZE;
+    arg_array = (char**) realloc (arg_array, arg_array_size);
+  }
+  
+  arg_array[arg_count++] = new_arg;
+}
+
+void delete_arg(int pos) {
+  int i;
+
+  if (confirm_changes)
+    fprintf(stderr,"### Deleting argument %s\n",arg_array[pos]);
+
+  free (arg_array[pos]);
+
+  for (i=pos; i < arg_count; i++) 
+    arg_array[i] = arg_array[i+1];
+
+  arg_count--;
+}
+
+/* Changing optimization levels is a common testing pattern --
+   we've got a special option that searches for and replaces anything
+   beginning with -O */
+void replace_optimization_level (char *new_level) {
+  int i;
+  int optionFound = 0;
+  char *new_opt = malloc(strlen(new_opt)+3);
+  sprintf(new_opt, "-O%s",new_level);
+  
+
+  for (i=0;i<arg_count;i++) {
+    if (strncmp(arg_array[i],"-O",2) == 0) {
+      replace_arg (new_opt, i);
+      optionFound = 1;
+      break;
+    }
+  }
+  
+  if (optionFound == 0)
+    /* No optimization level?  Add it! */
+    append_arg (new_opt);
+
+  free (new_opt);
+}
+
+/* Returns a NULL terminated string holding whatever was in the original
+   string at that point.  This must be freed by the caller. */
+
+char *arg_string(char *str, int begin, int len) {
+  char *new_str = malloc(len+1);
+  strncpy(new_str,&str[begin],len);
+  new_str[len] = '\0';
+  return new_str;
+}
+
+/* Given a search-and-replace string of the form
+   s/x/y/
+
+   do search and replace on the arg list.  Make sure to check that the
+   string is sane -- that it has all the proper slashes that are necessary.
+   The search string can be a regular expression, but the replace string
+   must be a literal; the search must also be for a full argument, not for
+   a chain of arguments.  The result will be treated as a single argument.
+   
+   Return true if success, false if bad failure.
+*/
+
+bool search_and_replace (char *str) {
+  regex_t regexp_search_struct;
+  int searchLen;
+  int replaceLen;
+  int i;
+  int err;
+
+  char *searchStr;
+  char *replaceStr;
+  char *replacedStr; 
+  const int  ERRSIZ = 512;
+  char errbuf[ERRSIZ];
+  
+
+  if (str[0] != '/') {
+    return false;
+  }
+
+  searchLen = strcspn (str + 1, "/\0");
+
+  if (str[1 + searchLen] != '/')
+    return false;
+    
+  replaceLen = strcspn(str+1+searchLen+1, "/\0");
+
+  if (str[1 + searchLen + 1 +replaceLen] != '/')
+    return false;
+
+  searchStr = arg_string(str, 1, searchLen);
+  replaceStr = arg_string (str, 1 + searchLen + 1, replaceLen);
+
+  if ((err = regcomp(&regexp_search_struct, searchStr, REG_EXTENDED)) != 0) {
+    regerror(err, &regexp_search_struct, errbuf, ERRSIZ);
+    fprintf(stderr,"%s",errbuf);
+    return false;
+  }
+
+  for (i=0;i<arg_count;i++) {
+    regmatch_t matches[5];
+    if (regexec (&regexp_search_struct, arg_array[i],
+		 5, matches, 0) == 0) {
+      if ((matches[0].rm_eo - matches[0].rm_so) == strlen (arg_array[i])) {
+	/* Success! Change the string. */
+	replace_arg(replaceStr,i);
+	break;
+      }
+    }
+  }
+
+  regfree (&regexp_search_struct);
+  free (searchStr);
+  free (replaceStr);
+
+  return true;
+}
+
+
+/* Given a string, return the argument number where the first match occurs. */
+int find_arg (char *str) {
+  int i;
+  int matchIndex = -1;
+
+  for (i=0;i<arg_count;i++) {
+    if (strcmp(arg_array[i],str) == 0) {
+      matchIndex = i;
+      break;
+    }
+  }
+
+  return matchIndex;
+}
+  
+void rewrite_command_line (char *override_options_line, int *argc, char ***argv){
+  int line_pos = 0;
+  
+  read_args (*argc, *argv);
+
+  if (override_options_line[0] == '#') 
+    {
+      confirm_changes = 0;
+      line_pos++;
+    }
+
+
+  if (confirm_changes)
+    fprintf (stderr, "### QA_OVERRIDE_GCC3_OPTIONS: %s\n",
+	     override_options_line);
+
+  /* Loop through all commands in the file */
+
+  while (override_options_line[line_pos] != '\0') 
+    {
+      char first_char;
+      char *searchStr;
+      char *arg;
+      int search_index;
+      int arg_len;
+
+      /* Any spaces in between options don't count. */
+      if (override_options_line[line_pos] == ' ')
+	{
+	  line_pos++;
+	  continue;
+	}
+      
+      /* The first non-space character is the command. */
+      first_char = override_options_line[line_pos];
+      line_pos++;
+      arg_len = strcspn(override_options_line+line_pos, " ");
+
+      switch (first_char) {
+      case '+':
+	/* Add an argument to the end of the arg list */
+	arg = arg_string (override_options_line,
+			  line_pos,
+			  arg_len);
+	append_arg (arg);
+	free (arg);
+	break;
+
+      case 'x':
+	/* Delete a matching argument */
+	searchStr = arg_string(override_options_line, line_pos, arg_len);
+	if ((search_index = find_arg(searchStr)) != -1) {
+	  delete_arg(search_index);
+	}
+	free (searchStr);
+	break;
+
+      case 'X':
+	/* Delete a matching argument and the argument following. */
+	searchStr = arg_string(override_options_line, line_pos, arg_len);
+	if ((search_index = find_arg(searchStr)) != -1) {
+	  if (search_index >= arg_count -1) {
+	    if (confirm_changes) 
+	      fprintf(stderr,"Not enough arguments to do X\n");
+	  } else {
+	    delete_arg(search_index); /* Delete the matching argument */
+	    delete_arg(search_index); /* Delete the following argument */
+	  }
+	}
+	free (searchStr);
+	break;
+
+      case 'O':
+	/* Change the optimization level to the specified value, and
+	   remove any optimization arguments.   This is a separate command
+	   because we often want is to substitute our favorite
+	   optimization level for whatever the project normally wants.
+	   As we probably care about this a lot (for things like
+	   testing file sizes at different optimization levels) we
+	   make a special rewrite clause. */
+	arg = arg_string (override_options_line, line_pos, arg_len);
+	replace_optimization_level(arg);
+	free (arg);
+	break;
+      case 's':
+	/* Search for the regexp passed in, and replace a matching argument
+	   with the provided replacement string */
+	searchStr = arg_string (override_options_line, line_pos, arg_len);
+	search_and_replace (searchStr);
+	free (searchStr);
+	break;
+
+      default:
+	fprintf(stderr,"### QA_OVERRIDE_GCC3_OPTIONS: invalid string (pos %d)\n",
+		line_pos);
+	break;
+      }
+      line_pos += arg_len;
+    }
+  *argc = arg_count;
+  *argv = arg_array;
+}
+
+
+
 /* Main entry point. This is gcc driver driver!
    Interpret -arch flag from the list of input arguments. Invoke appropriate
    compiler driver. 'lipo' the results if more than one -arch is supplied.  */
@@ -720,7 +1098,7 @@ main (int argc, const char **argv)
   size_t i;
   int l, pid, ret, argv_0_len, prog_len;
   char *errmsg_fmt, *errmsg_arg; 
-
+  char *override_option_str = NULL;
   total_argc = argc;
   argv_0_len = strlen (argv[0]);
   prog_len = 0;
@@ -745,6 +1123,12 @@ main (int argc, const char **argv)
   fprintf (stderr,"%s: progname = %s\n", progname, progname);
   fprintf (stderr,"%s: driver_exec_prefix = %s\n", progname, driver_exec_prefix);
 #endif
+
+  /* Before we get too far, rewrite the command line with any requested overrides */
+  if ((override_option_str = getenv ("QA_OVERRIDE_GCC3_OPTIONS")) != NULL) 
+    rewrite_command_line(override_option_str, &argc, (char***)&argv);
+
+
 
   initialize ();
 
@@ -775,12 +1159,21 @@ main (int argc, const char **argv)
 	  new_argv[new_argc++] = argv[i];
 	  preprocessed_output_request = 1;
 	}
+      else if (!strcmp (argv[i], "-MD") || !strcmp (argv[i], "-MMD"))
+	{
+	  new_argv[new_argc++] = argv[i];
+	  dash_capital_m_seen = 1;
+	}
       else if (!strcmp (argv[i], "-dynamiclib"))
 	{
 	  new_argv[new_argc++] = argv[i];
 	  dash_dynamiclib_seen = 1;
 	}
-
+      else if (!strcmp (argv[i], "-v"))
+	{
+	  new_argv[new_argc++] = argv[i];
+	  verbose_flag = 1;
+	}
       else if (!strcmp (argv[i], "-o"))
 	{
 	  if (i + 1 >= argc)
@@ -813,13 +1206,17 @@ main (int argc, const char **argv)
 	       || (! strcmp (argv[i], "-###"))
 	       || (! strcmp (argv[i], "-fconstant-cfstrings"))
 	       || (! strcmp (argv[i], "-fno-constant-cfstrings"))
-	       || (! strcmp (argv[i], "-save-temps"))
 	       || (! strcmp (argv[i], "-static-libgcc"))
 	       || (! strcmp (argv[i], "-shared-libgcc"))
 	       || (! strcmp (argv[i], "-pipe"))
 	       )
 	{
 	  new_argv[new_argc++] = argv[i];
+	}
+      else if (! strcmp (argv[i], "-save-temps"))
+	{
+	  new_argv[new_argc++] = argv[i];
+	  save_temps_seen = 1;
 	}
       else if ((! strcmp (argv[i], "-Xlinker"))
 	       || (! strcmp (argv[i], "-Xassembler"))
@@ -843,19 +1240,10 @@ main (int argc, const char **argv)
 	  /* First copy this flag itself.  */
 	  new_argv[new_argc++] = argv[i];
 
+	  if (argv[i][1] == 'M')
+	    dash_capital_m_seen = 1;
+
 	  /* Now copy this flag's arguments, if any, appropriately.  */
-	  if (c == 'x')
-	    {
-	      if (p[1] == 0 && i + 1 == argc)
-		fatal ("argument to `-x` is missing");
-
-	      if (p[1] == 0)
-		{
-		  i++;
-		  new_argv[new_argc++] = argv[i];
-		}
-	    }
-
 	  if ((SWITCH_TAKES_ARG (c) > (p[1] != 0)) 
 	      || WORD_SWITCH_TAKES_ARG (p))
 	    {
@@ -886,6 +1274,7 @@ main (int argc, const char **argv)
 	  ifn = (struct input_filename *) malloc (sizeof (struct input_filename));
 	  ifn->name = argv[i];
 	  ifn->index = i;
+	  ifn->next = NULL;
 	  num_infiles++;
 
 	  if (last_infile)
@@ -902,9 +1291,14 @@ main (int argc, const char **argv)
     fatal ("no input files");
 #endif
 
-  if (preprocessed_output_request && asm_output_request && num_infiles > 1)
-    fatal ("-E and -S are not allowed with multiple -arch flags");
-
+  if (num_arches > 1)
+    {
+      if (preprocessed_output_request 
+	  || save_temps_seen
+	  || asm_output_request 
+	  || dash_capital_m_seen)
+	fatal ("-E, -S, -save-temps and -M options are not allowed with multiple -arch flags");
+    }
   /* If -arch is not present OR Only one -arch <blah> is specified.  
      Invoke appropriate compiler driver.  FAT build is not required in this
      case.  */ 
@@ -935,10 +1329,13 @@ main (int argc, const char **argv)
 	  new_argv[new_argc++] = output_filename;
 	}
 
+      /* Add the NULL.  */
+      new_argv[new_argc] = NULL;
+  
 #ifdef DEBUG
       debug_command_line (new_argv, new_argc);
 #endif
-  
+
       pid = pexecute (new_argv[0], (char *const *)new_argv, progname, NULL, 
 		      &errmsg_fmt, &errmsg_arg, PEXECUTE_SEARCH | PEXECUTE_LAST); 
       

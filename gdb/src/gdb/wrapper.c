@@ -490,36 +490,6 @@ wrap_varobj_get_value (char *a)
   return 1;
 }
 
-static int
-wrap_execute_command (char *a)
-{
-  struct gdb_wrapper_arguments *args = (struct gdb_wrapper_arguments *) a;
-
-  char *command = (char *) args->args[0].pointer;
-  int from_tty = args->args[1].integer;
-
-  execute_command (command, from_tty);
-  return 1;
-
-}
-
-int
-safe_execute_command (char *command, int from_tty)
-{
-  struct gdb_wrapper_arguments args;
-  args.args[0].pointer = command;
-  args.args[1].integer = from_tty;
-
-  if (!catch_errors ((catch_errors_ftype *) wrap_execute_command, &args,
-		     "", RETURN_MASK_ALL))
-    {
-      /* An error occurred */
-      return 0;
-    }
-
-    return 1;
-}
-
 static int 
 wrap_value_objc_target_type (char *a)
 {

@@ -1,5 +1,5 @@
 /* Basic error reporting routines.
-   Copyright (C) 1999, 2000, 2001, 2003
+   Copyright (C) 1999, 2000, 2001, 2003, 2004
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -35,8 +35,6 @@ extern void error (const char *, ...);
 extern void fatal (const char *, ...) ATTRIBUTE_NORETURN;
 extern void internal_error (const char *, ...) ATTRIBUTE_NORETURN;
 extern const char *trim_filename (const char *);
-extern void fancy_abort (const char *, int, const char *)
-    ATTRIBUTE_NORETURN;
 
 extern int have_error;
 extern const char *progname;

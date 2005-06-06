@@ -52,7 +52,7 @@ Boston, MA 02111-1307, USA.  */
 
 
   [ Note this walker can also walk the post-dominator tree, which is
-    defined in a similar manner.  ie, block B1 is said to post-dominate
+    defined in a similar manner.  i.e., block B1 is said to post-dominate
     block B2 if all paths from B2 to the exit block must pass through
     B1.  ]
 
@@ -201,7 +201,7 @@ walk_dominator_tree (struct dom_walk_data *walk_data, basic_block bb)
     {
       /* The destination block may have become unreachable, in
 	 which case there's no point in optimizing it.  */
-      if (dest->pred)
+      if (EDGE_COUNT (dest->preds) > 0)
 	walk_dominator_tree (walk_data, dest);
     }
 

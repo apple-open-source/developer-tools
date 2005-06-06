@@ -1,6 +1,6 @@
 // 2001-05-24 Benjamin Kosnik  <bkoz@redhat.com>
 
-// Copyright (C) 2001, 2002, 2003 Free Software Foundation, Inc.
+// Copyright (C) 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -40,22 +40,16 @@ test03()
   std::ostringstream ostrst02(blank); 
   
   // No buffer, so should be created.
-  ostrst01 << "i: " << i << " i's address:  " << pi << "\n"
+  ostrst01 << "i: " << i << " i's address:  " << pi << '\n'
 	     << "d: " << d << " d's address: " << pd << std::endl;
   // Buffer, so existing buffer should be overwritten.
-  ostrst02 << "i: " << i << " i's address:  " << pi << "\n"
+  ostrst02 << "i: " << i << " i's address:  " << pi << '\n'
 	     << "d: " << d << " d's address: " << pd << std::endl;
 
   std::string msg01 = ostrst01.str();
   std::string msg02 = ostrst02.str();
   VERIFY( msg01 == msg02 );
   VERIFY( msg02 != blank );
-
-  // stringstream
-  std::string str1("");
-  std::string str3("this is a somewhat  string");
-  std::stringstream ss1(str1, std::ios_base::in|std::ios_base::out);
-  std::stringstream ss2(str3, std::ios_base::in|std::ios_base::out);
 }
 
 int main()

@@ -40,6 +40,8 @@
 #include <cstddef>
 #include "unwind.h"
 
+#pragma GCC visibility push(default)
+
 namespace __cxxabiv1
 {
 
@@ -105,6 +107,7 @@ extern "C" void __cxa_throw (void *thrown_exception,
      __attribute__((noreturn));
 
 // Used to implement exception handlers.
+extern "C" void *__cxa_get_exception_ptr (void *) throw();
 extern "C" void *__cxa_begin_catch (void *) throw();
 extern "C" void __cxa_end_catch ();
 extern "C" void __cxa_rethrow () __attribute__((noreturn));
@@ -167,5 +170,7 @@ __get_exception_header_from_ue (_Unwind_Exception *exc)
 }
 
 } /* namespace __cxxabiv1 */
+
+#pragma GCC visibility pop
 
 #endif // _UNWIND_CXX_H

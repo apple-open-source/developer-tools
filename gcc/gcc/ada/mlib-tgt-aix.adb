@@ -69,7 +69,7 @@ package body MLib.Tgt is
    --  The switches to use when linking a library against libgnarl when using
    --  FSU threads.
 
-   Thread_Options : Argument_List_Access := null;
+   Thread_Options : Argument_List_Access := Empty_Argument_List;
    --  Designate the thread switches to used when linking a library against
    --  libgnarl. Depends on the thread library (Native or FSU). Resolved for
    --  the first library linked against libgnarl.
@@ -110,6 +110,15 @@ package body MLib.Tgt is
       return "ranlib";
    end Archive_Indexer;
 
+   -----------------------------
+   -- Archive_Indexer_Options --
+   -----------------------------
+
+   function Archive_Indexer_Options return String_List_Access is
+   begin
+      return new String_List (1 .. 0);
+   end Archive_Indexer_Options;
+
    ---------------------------
    -- Build_Dynamic_Library --
    ---------------------------
@@ -119,35 +128,32 @@ package body MLib.Tgt is
       Foreign      : Argument_List;
       Afiles       : Argument_List;
       Options      : Argument_List;
+      Options_2    : Argument_List;
       Interfaces   : Argument_List;
       Lib_Filename : String;
       Lib_Dir      : String;
       Symbol_Data  : Symbol_Record;
       Driver_Name  : Name_Id := No_Name;
-      Lib_Address  : String  := "";
       Lib_Version  : String  := "";
-      Relocatable  : Boolean := False;
       Auto_Init    : Boolean := False)
    is
       pragma Unreferenced (Foreign);
       pragma Unreferenced (Afiles);
       pragma Unreferenced (Interfaces);
       pragma Unreferenced (Symbol_Data);
-      pragma Unreferenced (Lib_Address);
       pragma Unreferenced (Lib_Version);
-      pragma Unreferenced (Relocatable);
 
       Lib_File : constant String :=
-        Lib_Dir & Directory_Separator & "lib" &
-        MLib.Fil.Ext_To (Lib_Filename, DLL_Ext);
+                   Lib_Dir & Directory_Separator & "lib" &
+                   MLib.Fil.Ext_To (Lib_Filename, DLL_Ext);
       --  The file name of the library
 
       Init_Fini : Argument_List_Access := Empty_Argument_List;
       --  The switch for automatic initialization of Stand-Alone Libraries.
       --  Changed to a real switch when Auto_Init is True.
 
-      Options_2 : Argument_List_Access := Empty_Argument_List;
-      --  Changed to the thread options, if -lgnarl is specified
+      Thread_Opts : Argument_List_Access := Empty_Argument_List;
+      --  Set to Thread_Options if -lgnarl is found in the Options
 
    begin
       if Opt.Verbose_Mode then
@@ -207,7 +213,7 @@ package body MLib.Tgt is
                end;
             end if;
 
-            Options_2 := Thread_Options;
+            Thread_Opts := Thread_Options;
             exit;
          end if;
       end loop;
@@ -215,21 +221,12 @@ package body MLib.Tgt is
       --  Finally, call GCC (or the driver specified) to build the library
 
       MLib.Utl.Gcc
-           (Output_File => Lib_File,
-            Objects     => Ofiles,
-            Options     => Options & Bexpall_Option & Init_Fini.all,
-            Driver_Name => Driver_Name,
-            Options_2   => Options_2.all);
+        (Output_File => Lib_File,
+         Objects     => Ofiles,
+         Options     => Options & Bexpall_Option & Init_Fini.all,
+         Driver_Name => Driver_Name,
+         Options_2   => Options_2 & Thread_Opts.all);
    end Build_Dynamic_Library;
-
-   -------------------------
-   -- Default_DLL_Address --
-   -------------------------
-
-   function Default_DLL_Address return String is
-   begin
-      return "";
-   end Default_DLL_Address;
 
    -------------
    -- DLL_Ext --

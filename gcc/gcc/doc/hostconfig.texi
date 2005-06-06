@@ -71,6 +71,13 @@ indicate an out-of-date PCH file (built by some other GCC executable),
 and such a PCH file won't work.
 @end deftypefn
 
+@deftypefn {Host Hook} size_t HOST_HOOKS_GT_PCH_ALLOC_GRANULARITY (void);
+This host hook returns the alignment required for allocating virtual
+memory.  Usually this is the same as getpagesize, but on some hosts the
+alignment for reserving memory differs from the pagesize for committing
+memory.
+@end deftypefn
+
 @node Filesystem
 @section Host Filesystem
 @cindex configuration file
@@ -143,7 +150,7 @@ constructing the index part of debugging dump file names.  The resultant
 string must fit in fifteen bytes.  The full filename will be the
 concatenation of: the prefix of the assembler file name, the string
 resulting from applying this format to an index number, and a string
-unique to each dump file kind, e.g. @samp{rtl}.
+unique to each dump file kind, e.g.@: @samp{rtl}.
 
 If you do not define this macro, GCC will use @samp{.%02d.}.  You should
 define this macro if using the default will create an invalid file name.
@@ -152,10 +159,14 @@ define this macro if using the default will create an invalid file name.
 Define this macro to be a C statement (sans semicolon) that performs
 host-dependent removal of ordinary temp files in the compilation driver.
 
-If you do not define this macro, GCC will use the default version. You
+If you do not define this macro, GCC will use the default version.  You
 should define this macro if the default version does not reliably remove
 the temp file as, for example, on VMS which allows multiple versions
 of a file.
+
+@item HOST_LACKS_INODE_NUMBERS
+Define this macro if the host filesystem does not report meaningful inode
+numbers in struct stat.
 @end ftable
 
 @node Host Misc
@@ -201,6 +212,11 @@ initialization when a compilation driver is being initialized.
 Define this macro if the host system has a small limit on the total
 size of an argument vector.  This causes the driver to take more care
 not to pass unnecessary arguments to subprocesses.
+
+@item HOST_LONG_LONG_FORMAT
+If defined, the string used to indicate an argument of type @code{long
+long} to functions like @code{printf}.  The default value is
+@code{"ll"}. 
 @end ftable
 
 In addition, if @command{configure} generates an incorrect definition of

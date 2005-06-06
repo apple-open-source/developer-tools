@@ -26,6 +26,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "coretypes.h"
 #include "intl.h"
 #include "pretty-print.h"
+#include "tree.h"
 
 #define obstack_chunk_alloc xmalloc
 #define obstack_chunk_free  free
@@ -165,6 +166,40 @@ pp_base_indent (pretty_printer *pp)
     pp_space (pp);
 }
 
+/* Prepare PP to format a message pointed to by TEXT, with tentative
+   location LOCUS.  It is expected that a call to pp_format_text with
+   exactly the same PP and TEXT arguments will follow.  This routine
+   may modify the data in memory at TEXT and LOCP, and if it does,
+   caller is expected to notice.
+
+   Currently, all this does is notice a %H or %J escape at the beginning
+   of the string, and update LOCUS to match.  */
+void
+pp_base_prepare_to_format (pretty_printer *pp ATTRIBUTE_UNUSED,
+			   text_info *text,
+			   location_t *locus)
+{
+  const char *p = text->format_spec;
+  tree t;
+
+  /* Extract the location information if any.  */
+  if (p[0] == '%')
+    switch (p[1])
+      {
+      case 'H':
+	*locus = *va_arg (*text->args_ptr, location_t *);
+	text->format_spec = p + 2;
+	break;
+
+      case 'J':
+	t = va_arg (*text->args_ptr, tree);
+	*locus = DECL_SOURCE_LOCATION (t);
+	text->format_spec = p + 2;
+	break;
+      }
+}
+
+
 /* Format a message pointed to by TEXT.  The following format specifiers are
    recognized as being client independent:
    %d, %i: (signed) integer in base ten.
@@ -179,8 +214,10 @@ pp_base_indent (pretty_printer *pp)
    %p: pointer.
    %m: strerror(text->err_no) - does not consume a value from args_ptr.
    %%: '%'.
-   %`: opening quote.
-   %': closing quote.
+   %<: opening quote.
+   %>: closing quote.
+   %': apostrophe (should only be used in untranslated messages;
+       translations should use appropriate punctuation directly).
    %.*s: a substring the length of which is specified by an integer.
    %H: location_t.
    Flag 'q': quote formatted text (must come immediately after '%').  */
@@ -229,8 +266,7 @@ pp_base_format_text (pretty_printer *pp, text_info *text)
           break;
         }
       /* We don't support precision beyond that of "long long".  */
-      if (precision > 2)
-        abort();
+      gcc_assert (precision <= 2);
 
       if (quoted)
 	pp_string (pp, open_quote);
@@ -292,21 +328,23 @@ pp_base_format_text (pretty_printer *pp, text_info *text)
 	  pp_character (pp, '%');
 	  break;
 
-	case '`':
+	case '<':
 	  pp_string (pp, open_quote);
 	  break;
 
+	case '>':
 	case '\'':
 	  pp_string (pp, close_quote);
 	  break;
 
         case 'H':
           {
-            const location_t *locus = va_arg (*text->args_ptr, location_t *);
+            location_t *locus = va_arg (*text->args_ptr, location_t *);
+	    expanded_location s = expand_location (*locus);
             pp_string (pp, "file '");
-            pp_string (pp, locus->file);
+            pp_string (pp, s.file);
             pp_string (pp, "', line ");
-            pp_decimal_int (pp, locus->line);
+            pp_decimal_int (pp, s.line);
           }
           break;
 
@@ -315,10 +353,11 @@ pp_base_format_text (pretty_printer *pp, text_info *text)
 	    int n;
 	    const char *s;
 	    /* We handle no precision specifier but '%.*s'.  */
-	    if (*++text->format_spec != '*')
-	      abort ();
-	    else if (*++text->format_spec != 's')
-	      abort ();
+	    ++text->format_spec;
+	    gcc_assert (*text->format_spec == '*');
+	    ++text->format_spec;
+	    gcc_assert (*text->format_spec == 's');
+
 	    n = va_arg (*text->args_ptr, int);
 	    s = va_arg (*text->args_ptr, const char *);
 	    pp_append_text (pp, s, s + n);
@@ -568,7 +607,7 @@ pp_base_string (pretty_printer *pp, const char *str)
   pp_maybe_wrap_text (pp, str, str + (str ? strlen (str) : 0));
 }
 
-/* Maybe print out a whitespace if needed.   */
+/* Maybe print out a whitespace if needed.  */
 
 void
 pp_base_maybe_space (pretty_printer *pp)

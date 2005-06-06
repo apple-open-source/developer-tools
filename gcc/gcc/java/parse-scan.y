@@ -1,5 +1,6 @@
 /* Parser grammar for quick source code scan of Java(TM) language programs.
-   Copyright (C) 1998, 1999, 2000, 2002, 2003 Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2000, 2002, 2003, 2004, 2005
+   Free Software Foundation, Inc.
    Contributed by Alexandre Petit-Bianco (apbianco@cygnus.com)
 
 This file is part of GCC.
@@ -41,15 +42,12 @@ definitions and other extensions.  */
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
-#include "input.h"
 #include "obstack.h"
 #include "toplev.h"
 
 extern FILE *finput, *out;
  
-/* Current position in real source file.  */
-
-location_t input_location;
+ const char *main_input_filename;
 
 /* Obstack for the lexer.  */
 struct obstack temporary_obstack;
@@ -514,10 +512,10 @@ formal_parameter:
 		  if (bracket_count)
 		    {
 		      int i;
-		      char *n = xmalloc (bracket_count + 1 + strlen ($$));
+		      char *n = xmalloc (bracket_count + 1 + strlen ($2));
 		      for (i = 0; i < bracket_count; ++i)
 			n[i] = '[';
-		      strcpy (n + bracket_count, $$);
+		      strcpy (n + bracket_count, $2);
 		      $$ = n;
 		    }
 		  else
@@ -553,8 +551,8 @@ static:				/* Test lval.sub_token here */
 
 /* 19.8.5 Productions from 8.6: Constructor Declarations  */
 /* NOTE FOR FURTHER WORK ON CONSTRUCTORS:
-   - If a forbidded modifier is found, the the error is either the use of
-     a forbidded modifier for a constructor OR bogus attempt to declare a
+   - If a forbidden modifier is found, the error is either the use of
+     a forbidden modifier for a constructor OR bogus attempt to declare a
      method without having specified the return type. FIXME */
 constructor_declaration:
 	constructor_declarator throws constructor_body
@@ -926,7 +924,7 @@ primary_no_new_array:
 |	array_access
 |	type_literals
         /* Added, JDK1.1 inner classes. Documentation is wrong
-           refering to a 'ClassName' (class_name) rule that doesn't
+           referring to a 'ClassName' (class_name) rule that doesn't
            exist. Used name instead.  */
 |	name DOT_TK THIS_TK
 		{ USE_ABSORBER; }
@@ -1294,7 +1292,7 @@ report_class_declaration (const char * name)
       if (!previous_output)
 	{
 	  if (flag_list_filename)
-	    fprintf (out, "%s: ", input_filename);
+	    fprintf (out, "%s: ", main_input_filename);
 	  previous_output = 1;
 	}
 
@@ -1339,12 +1337,13 @@ report (void)
 {
   extern int flag_complexity;
   if (flag_complexity)
-    fprintf (out, "%s %d\n", input_filename, complexity);
+    fprintf (out, "%s %d\n", main_input_filename, complexity);
 }
 
 /* Reset global status used by the report functions.  */
 
-void reset_report (void)
+void
+reset_report (void)
 {
   previous_output = 0;
   package_name = NULL;
@@ -1355,6 +1354,23 @@ void reset_report (void)
 void
 yyerror (const char *msg ATTRIBUTE_UNUSED)
 {
-  fprintf (stderr, "%s: %d: %s\n", input_filename, input_line, msg);
+  fprintf (stderr, "%s: %s\n", main_input_filename, msg);
   exit (1);
 }
+
+#ifdef __XGETTEXT__
+/* Depending on the version of Bison used to compile this grammar,
+   it may issue generic diagnostics spelled "syntax error" or
+   "parse error".  To prevent this from changing the translation
+   template randomly, we list all the variants of this particular
+   diagnostic here.  Translators: there is no fine distinction
+   between diagnostics with "syntax error" in them, and diagnostics
+   with "parse error" in them.  It's okay to give them both the same
+   translation.  */
+const char d1[] = N_("syntax error");
+const char d2[] = N_("parse error");
+const char d3[] = N_("syntax error; also virtual memory exhausted");
+const char d4[] = N_("parse error; also virtual memory exhausted");
+const char d5[] = N_("syntax error: cannot back up");
+const char d6[] = N_("parse error: cannot back up");
+#endif

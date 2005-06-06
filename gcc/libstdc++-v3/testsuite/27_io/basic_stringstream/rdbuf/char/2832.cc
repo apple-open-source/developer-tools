@@ -35,10 +35,6 @@ active_buffer(std::ios& stream)
 void test02()
 {
   bool test __attribute__((unused)) = true;
-  const char* strlit01 = "fuck war";
-  const std::string str00;
-  const std::string str01(strlit01);
-  std::string str02;
   std::stringbuf sbuf;
   std::streambuf* pbasebuf0 = &sbuf;
 
@@ -64,6 +60,3 @@ int main()
   test02();
   return 0;
 }
-
-
-

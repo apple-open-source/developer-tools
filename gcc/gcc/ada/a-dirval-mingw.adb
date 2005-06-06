@@ -39,11 +39,20 @@ with Ada.Characters.Latin_1; use Ada.Characters.Latin_1;
 package body Ada.Directories.Validity is
 
    Invalid_Character : constant array (Character) of Boolean :=
-                         (NUL .. US             => True,
+                         (NUL .. US | '\'       => True,
                           '/' | ':' | '*' | '?' => True,
                           '"' | '<' | '>' | '|' => True,
                           DEL .. NBSP           => True,
                           others                => False);
+
+   ---------------------------------
+   -- Is_Path_Name_Case_Sensitive --
+   ---------------------------------
+
+   function Is_Path_Name_Case_Sensitive return Boolean is
+   begin
+      return False;
+   end Is_Path_Name_Case_Sensitive;
 
    ------------------------
    -- Is_Valid_Path_Name --
@@ -76,7 +85,9 @@ package body Ada.Directories.Validity is
          loop
             --  Look for the start of the next directory or file name
 
-            while Start <= Name'Last and then Name (Start) = '\' loop
+            while Start <= Name'Last and then
+              (Name (Start) = '\' or Name (Start) = '/')
+            loop
                Start := Start + 1;
             end loop;
 
@@ -89,7 +100,7 @@ package body Ada.Directories.Validity is
             --  Look for the end of the directory/file name
 
             while Last < Name'Last loop
-               exit when Name (Last + 1) = '\';
+               exit when Name (Last + 1) = '\' or Name (Last + 1) = '/';
                Last := Last + 1;
             end loop;
 
@@ -119,7 +130,7 @@ package body Ada.Directories.Validity is
 
    begin
       --  A file name cannot be empty, cannot contain more than 256 characters,
-      --  and cannot contain invalid characters, including '\'
+      --  and cannot contain invalid characters.
 
       if Name'Length = 0 or else Name'Length > 256 then
          return False;
@@ -129,7 +140,7 @@ package body Ada.Directories.Validity is
       else
          Only_Spaces := True;
          for J in Name'Range loop
-            if Invalid_Character (Name (J)) or else Name (J) = '\' then
+            if Invalid_Character (Name (J)) then
                return False;
             elsif Name (J) /= ' ' then
                Only_Spaces := False;
@@ -143,4 +154,3 @@ package body Ada.Directories.Validity is
    end Is_Valid_Simple_Name;
 
 end Ada.Directories.Validity;
-

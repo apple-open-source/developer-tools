@@ -40,24 +40,20 @@ alloc_stmt_list (void)
   if (list)
     {
       stmt_list_cache = TREE_CHAIN (list);
-      TREE_CHAIN (list) = NULL;
-      TREE_SIDE_EFFECTS (list) = 0;
+      memset (list, 0, sizeof(struct tree_common));
+      TREE_SET_CODE (list, STATEMENT_LIST);
     }
   else
-    {
-      list = make_node (STATEMENT_LIST);
-      TREE_TYPE (list) = void_type_node;
-    }
+    list = make_node (STATEMENT_LIST);
+  TREE_TYPE (list) = void_type_node;
   return list;
 }
 
 void
 free_stmt_list (tree t)
 {
-#ifdef ENABLE_CHECKING
-  if (STATEMENT_LIST_HEAD (t) || STATEMENT_LIST_TAIL (t))
-    abort ();
-#endif
+  gcc_assert (!STATEMENT_LIST_HEAD (t));
+  gcc_assert (!STATEMENT_LIST_TAIL (t));
   TREE_CHAIN (t) = stmt_list_cache;
   stmt_list_cache = t;
 }
@@ -70,10 +66,7 @@ tsi_link_before (tree_stmt_iterator *i, tree t, enum tsi_iterator_update mode)
   struct tree_statement_list_node *head, *tail, *cur;
 
   /* Die on looping.  */
-  if (t == i->container)
-    abort ();
-
-  TREE_SIDE_EFFECTS (i->container) = 1;
+  gcc_assert (t != i->container);
 
   if (TREE_CODE (t) == STATEMENT_LIST)
     {
@@ -87,8 +80,7 @@ tsi_link_before (tree_stmt_iterator *i, tree t, enum tsi_iterator_update mode)
       /* Empty statement lists need no work.  */
       if (!head || !tail)
 	{
-	  if (head != tail)
-	    abort ();
+	  gcc_assert (head == tail);
 	  return;
 	}
     }
@@ -100,6 +92,8 @@ tsi_link_before (tree_stmt_iterator *i, tree t, enum tsi_iterator_update mode)
       head->stmt = t;
       tail = head;
     }
+
+  TREE_SIDE_EFFECTS (i->container) = 1;
 
   cur = i->ptr;
 
@@ -116,8 +110,7 @@ tsi_link_before (tree_stmt_iterator *i, tree t, enum tsi_iterator_update mode)
     }
   else
     {
-      if (STATEMENT_LIST_TAIL (i->container))
-	abort ();
+      gcc_assert (!STATEMENT_LIST_TAIL (i->container));
       STATEMENT_LIST_HEAD (i->container) = head;
       STATEMENT_LIST_TAIL (i->container) = tail;
     }
@@ -134,8 +127,7 @@ tsi_link_before (tree_stmt_iterator *i, tree t, enum tsi_iterator_update mode)
       i->ptr = tail;
       break;
     case TSI_SAME_STMT:
-      if (!cur)
-	abort ();
+      gcc_assert (cur);
       break;
     }
 }
@@ -148,10 +140,7 @@ tsi_link_after (tree_stmt_iterator *i, tree t, enum tsi_iterator_update mode)
   struct tree_statement_list_node *head, *tail, *cur;
 
   /* Die on looping.  */
-  if (t == i->container)
-    abort ();
-
-  TREE_SIDE_EFFECTS (i->container) = 1;
+  gcc_assert (t != i->container);
 
   if (TREE_CODE (t) == STATEMENT_LIST)
     {
@@ -165,8 +154,7 @@ tsi_link_after (tree_stmt_iterator *i, tree t, enum tsi_iterator_update mode)
       /* Empty statement lists need no work.  */
       if (!head || !tail)
 	{
-	  if (head != tail)
-	    abort ();
+	  gcc_assert (head == tail);
 	  return;
 	}
     }
@@ -178,6 +166,8 @@ tsi_link_after (tree_stmt_iterator *i, tree t, enum tsi_iterator_update mode)
       head->stmt = t;
       tail = head;
     }
+
+  TREE_SIDE_EFFECTS (i->container) = 1;
 
   cur = i->ptr;
 
@@ -194,8 +184,7 @@ tsi_link_after (tree_stmt_iterator *i, tree t, enum tsi_iterator_update mode)
     }
   else
     {
-      if (STATEMENT_LIST_TAIL (i->container))
-	abort ();
+      gcc_assert (!STATEMENT_LIST_TAIL (i->container));
       STATEMENT_LIST_HEAD (i->container) = head;
       STATEMENT_LIST_TAIL (i->container) = tail;
     }
@@ -212,8 +201,7 @@ tsi_link_after (tree_stmt_iterator *i, tree t, enum tsi_iterator_update mode)
       i->ptr = tail;
       break;
     case TSI_SAME_STMT:
-      if (!cur)
-        abort ();
+      gcc_assert (cur);
       break;
     }
 }
@@ -256,8 +244,7 @@ tsi_split_statement_list_after (const tree_stmt_iterator *i)
 
   cur = i->ptr;
   /* How can we possibly split after the end, or before the beginning?  */
-  if (cur == NULL)
-    abort ();
+  gcc_assert (cur);
   next = cur->next;
 
   old_sl = i->container;
@@ -284,8 +271,7 @@ tsi_split_statement_list_before (tree_stmt_iterator *i)
 
   cur = i->ptr;
   /* How can we possibly split after the end, or before the beginning?  */
-  if (cur == NULL)
-    abort ();
+  gcc_assert (cur);
   prev = cur->prev;
 
   old_sl = i->container;

@@ -27,7 +27,7 @@
 // invalidate any other reasons why the executable file might be covered by
 // the GNU General Public License.
 
-/** @file ext/stdiostream.h
+/** @file ext/stdio_sync_filebuf.h
  *  This file is a GNU extension to the Standard C++ Library.
  */
 
@@ -46,6 +46,7 @@
 
 namespace __gnu_cxx
 {
+  /// @brief  class stdio_sync_filebuf.
   template<typename _CharT, typename _Traits = std::char_traits<_CharT> >
     class stdio_sync_filebuf : public std::basic_streambuf<_CharT, _Traits>
     {
@@ -70,6 +71,16 @@ namespace __gnu_cxx
       stdio_sync_filebuf(std::__c_file* __f)
       : _M_file(__f), _M_unget_buf(traits_type::eof())
       { }
+
+      /**
+       *  @return  The underlying FILE*.
+       *
+       *  This function can be used to access the underlying "C" file pointer.
+       *  Note that there is no way for the library to track what you do
+       *  with the file, so be careful.
+       */
+      std::__c_file* const
+      file() { return this->_M_file; }
 
     protected:
       int_type

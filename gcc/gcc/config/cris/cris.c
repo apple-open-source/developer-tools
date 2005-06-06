@@ -1,5 +1,5 @@
 /* Definitions for GCC.  Part of the machine description for CRIS.
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
    Free Software Foundation, Inc.
    Contributed by Axis Communications.  Written by Hans-Peter Nilsson.
 
@@ -83,12 +83,18 @@ static char cris_output_insn_is_bound = 0;
    just the "sym:GOTOFF" part.  */
 static int cris_pic_sympart_only = 0;
 
+/* In code for output macros, this is how we know whether e.g. constant
+   goes in code or in a static initializer.  */
+static int in_code = 0;
+
 /* Fix for reg_overlap_mentioned_p.  */
 static int cris_reg_overlap_mentioned_p (rtx, rtx);
 
 static void cris_print_base (rtx, FILE *);
 
 static void cris_print_index (rtx, FILE *);
+
+static void cris_output_addr_const (FILE *, rtx);
 
 static struct machine_function * cris_init_machine_status (void);
 
@@ -115,6 +121,10 @@ static void cris_init_libfuncs (void);
 
 static bool cris_rtx_costs (rtx, int, int, int *);
 static int cris_address_cost (rtx);
+static bool cris_pass_by_reference (CUMULATIVE_ARGS *, enum machine_mode,
+				    tree, bool);
+static int cris_arg_partial_bytes (CUMULATIVE_ARGS *, enum machine_mode,
+				   tree, bool);
 
 /* The function cris_target_asm_function_epilogue puts the last insn to
    output here.  It always fits; there won't be a symbol operand.  Used in
@@ -183,12 +193,14 @@ int cris_cpu_version = CRIS_DEFAULT_CPU_VERSION;
 
 #undef TARGET_PROMOTE_FUNCTION_ARGS
 #define TARGET_PROMOTE_FUNCTION_ARGS hook_bool_tree_true
-
 #undef TARGET_STRUCT_VALUE_RTX
 #define TARGET_STRUCT_VALUE_RTX cris_struct_value_rtx
-
 #undef TARGET_SETUP_INCOMING_VARARGS
 #define TARGET_SETUP_INCOMING_VARARGS cris_setup_incoming_varargs
+#undef TARGET_PASS_BY_REFERENCE
+#define TARGET_PASS_BY_REFERENCE cris_pass_by_reference
+#undef TARGET_ARG_PARTIAL_BYTES
+#define TARGET_ARG_PARTIAL_BYTES cris_arg_partial_bytes
 
 struct gcc_target targetm = TARGET_INITIALIZER;
 
@@ -644,6 +656,10 @@ cris_fatal (char *arg)
   return 0;
 }
 
+/* This variable belongs to cris_target_asm_function_prologue but must
+   be located outside it for GTY reasons.  */
+static GTY(()) unsigned long cfa_label_num = 0;
+
 /* Textual function prologue.  */
 
 static void
@@ -658,7 +674,7 @@ cris_target_asm_function_prologue (FILE *file, HOST_WIDE_INT size)
   int framesize;
   int faked_args_size = 0;
   int cfa_write_offset = 0;
-  char *cfa_label = NULL;
+  static char cfa_label[30];
   int return_address_on_stack
     = regs_ever_live[CRIS_SRP_REGNUM]
     || cfun->machine->needs_return_address_on_stack != 0;
@@ -711,7 +727,8 @@ cris_target_asm_function_prologue (FILE *file, HOST_WIDE_INT size)
 	  cfa_offset += cris_initial_frame_pointer_offset ();
 	}
 
-      cfa_label = dwarf2out_cfi_label ();
+      ASM_GENERATE_INTERNAL_LABEL (cfa_label, "LCFIT",
+				   cfa_label_num++);
       dwarf2out_def_cfa (cfa_label, cfa_reg, cfa_offset);
 
       cfa_write_offset = - faked_args_size - 4;
@@ -908,6 +925,9 @@ cris_target_asm_function_prologue (FILE *file, HOST_WIDE_INT size)
     fprintf (file, "\tmove.d $pc,$%s\n\tsub.d .:GOTOFF,$%s\n",
 	     reg_names[PIC_OFFSET_TABLE_REGNUM],
 	     reg_names[PIC_OFFSET_TABLE_REGNUM]);
+
+  if (doing_dwarf)
+    ASM_OUTPUT_LABEL (file, cfa_label);
 
   if (TARGET_PDEBUG)
     fprintf (file,
@@ -1698,6 +1718,15 @@ cris_return_addr_rtx (int count, rtx frameaddr ATTRIBUTE_UNUSED)
     : NULL_RTX;
 }
 
+/* Accessor used in cris.md:return because cfun->machine isn't available
+   there.  */
+
+int
+cris_return_address_on_stack ()
+{
+  return cfun->machine->needs_return_address_on_stack;
+}
+
 /* This used to be the INITIAL_FRAME_POINTER_OFFSET worker; now only
    handles FP -> SP elimination offset.  */
 
@@ -1813,13 +1842,11 @@ cris_notice_update_cc (rtx exp, rtx insn)
       if (GET_CODE (exp) == SET)
 	{
 	  if (cc_status.value1
-	      && cris_reg_overlap_mentioned_p (SET_DEST (exp),
-					     cc_status.value1))
+	      && modified_in_p (cc_status.value1, insn))
 	    cc_status.value1 = 0;
 
 	  if (cc_status.value2
-	      && cris_reg_overlap_mentioned_p (SET_DEST (exp),
-					     cc_status.value2))
+	      && modified_in_p (cc_status.value2, insn))
 	    cc_status.value2 = 0;
 	}
       return;
@@ -1949,14 +1976,12 @@ cris_notice_update_cc (rtx exp, rtx insn)
 		{
 		  /* There's no CC0 change when clearing a register or
 		     memory.  Just check for overlap.  */
-		  if ((cc_status.value1
-		       && cris_reg_overlap_mentioned_p (SET_DEST (exp),
-							cc_status.value1)))
+		  if (cc_status.value1
+		      && modified_in_p (cc_status.value1, insn))
 		    cc_status.value1 = 0;
 
-		  if ((cc_status.value2
-		       && cris_reg_overlap_mentioned_p (SET_DEST (exp),
-							cc_status.value2)))
+		  if (cc_status.value2
+		      && modified_in_p (cc_status.value2, insn))
 		    cc_status.value2 = 0;
 
 		  return;
@@ -1988,14 +2013,12 @@ cris_notice_update_cc (rtx exp, rtx insn)
 	    {
 	      /* When SET to MEM, then CC is not changed (except for
 		 overlap).  */
-	      if ((cc_status.value1
-		   && cris_reg_overlap_mentioned_p (SET_DEST (exp),
-						    cc_status.value1)))
+	      if (cc_status.value1
+		  && modified_in_p (cc_status.value1, insn))
 		cc_status.value1 = 0;
 
-	      if ((cc_status.value2
-		   && cris_reg_overlap_mentioned_p (SET_DEST (exp),
-						    cc_status.value2)))
+	      if (cc_status.value2
+		  && modified_in_p (cc_status.value2, insn))
 		cc_status.value2 = 0;
 
 	      return;
@@ -2032,31 +2055,11 @@ cris_notice_update_cc (rtx exp, rtx insn)
 		  /* For "move.S rz,[rx=ry+o]" and "clear.S [rx=ry+o]",
 		     say flags are not changed, except for overlap.  */
 		  if (cc_status.value1
-		      && cris_reg_overlap_mentioned_p (XEXP
-						       (XVECEXP
-							(exp, 0, 0), 0),
-						       cc_status.value1))
-		    cc_status.value1 = 0;
-
-		  if (cc_status.value1
-		      && cris_reg_overlap_mentioned_p (XEXP
-						       (XVECEXP
-							(exp, 0, 1), 0),
-						       cc_status.value1))
+		      && modified_in_p (cc_status.value1, insn))
 		    cc_status.value1 = 0;
 
 		  if (cc_status.value2
-		      && cris_reg_overlap_mentioned_p (XEXP
-						       (XVECEXP
-							(exp, 0, 0), 0),
-						       cc_status.value2))
-		    cc_status.value2 = 0;
-
-		  if (cc_status.value2
-		      && cris_reg_overlap_mentioned_p (XEXP
-						       (XVECEXP
-							(exp, 0, 1), 0),
-						       cc_status.value2))
+		      && modified_in_p (cc_status.value2, insn))
 		    cc_status.value2 = 0;
 
 		  return;
@@ -2439,12 +2442,13 @@ cris_reg_overlap_mentioned_p (rtx x, rtx in)
    We just dispatch to the functions for ELF and a.out.  */
 
 void
-cris_target_asm_named_section (const char *name, unsigned int flags)
+cris_target_asm_named_section (const char *name, unsigned int flags,
+			       tree decl)
 {
   if (! TARGET_ELF)
-    default_no_named_section (name, flags);
+    default_no_named_section (name, flags, decl);
   else
-    default_elf_asm_named_section (name, flags);
+    default_elf_asm_named_section (name, flags, decl);
 }
 
 /* The LEGITIMATE_PIC_OPERAND_P worker.  */
@@ -2710,8 +2714,7 @@ cris_override_options (void)
       flag_no_function_cse = 1;
     }
 
-  if ((write_symbols == DWARF_DEBUG
-       || write_symbols == DWARF2_DEBUG) && ! TARGET_ELF)
+  if (write_symbols == DWARF2_DEBUG && ! TARGET_ELF)
     {
       warning ("that particular -g option is invalid with -maout and -melinux");
       write_symbols = DBX_DEBUG;
@@ -2783,86 +2786,6 @@ cris_init_libfuncs (void)
   set_optab_libfunc (udiv_optab, SImode, "__Udiv");
   set_optab_libfunc (smod_optab, SImode, "__Mod");
   set_optab_libfunc (umod_optab, SImode, "__Umod");
-}
-
-/* The EXPAND_BUILTIN_VA_ARG worker.  This is modified from the
-   "standard" implementation of va_arg: read the value from the current
-   address and increment by the size of one or two registers.  The
-   important difference for CRIS is that if the type is
-   pass-by-reference, then perform an indirection.  */
-
-rtx
-cris_expand_builtin_va_arg (tree valist, tree type)
-{
-  tree addr_tree, t;
-  rtx addr;
-  tree passed_size = size_zero_node;
-  tree type_size = NULL;
-  tree size3 = size_int (3);
-  tree size4 = size_int (4);
-  tree size8 = size_int (8);
-  tree rounded_size;
-
-  /* Get AP.  */
-  addr_tree = valist;
-
-  if (type == error_mark_node
-      || (type_size = TYPE_SIZE_UNIT (TYPE_MAIN_VARIANT (type))) == NULL
-      || TREE_OVERFLOW (type_size))
-    /* Presumably an error; the size isn't computable.  A message has
-       supposedly been emitted elsewhere.  */
-    rounded_size = size_zero_node;
-  else
-    rounded_size
-      = fold (build (MULT_EXPR, sizetype,
-		     fold (build (TRUNC_DIV_EXPR, sizetype,
-				  fold (build (PLUS_EXPR, sizetype,
-					       type_size, size3)),
-				  size4)),
-		     size4));
-
-  if (!integer_zerop (rounded_size))
-    {
-      /* Check if the type is passed by value or by reference.  Values up
-	 to 8 bytes are passed by-value, padded to register-size (4
-	 bytes).  Larger values and varying-size types are passed
-	 by reference.  */
-      passed_size
-	= (!really_constant_p (type_size)
-	   ? size4
-	   : fold (build (COND_EXPR, sizetype,
-			  fold (build (GT_EXPR, sizetype,
-				       rounded_size,
-				       size8)),
-			  size4,
-			  rounded_size)));
-
-      addr_tree
-	= (!really_constant_p (type_size)
-	   ? build1 (INDIRECT_REF, build_pointer_type (type), addr_tree)
-	   : fold (build (COND_EXPR, TREE_TYPE (addr_tree),
-			  fold (build (GT_EXPR, sizetype,
-				       rounded_size,
-				       size8)),
-			  build1 (INDIRECT_REF, build_pointer_type (type),
-				  addr_tree),
-			  addr_tree)));
-    }
-
-  addr = expand_expr (addr_tree, NULL_RTX, Pmode, EXPAND_NORMAL);
-  addr = copy_to_reg (addr);
-
-  if (!integer_zerop (rounded_size))
-    {
-      /* Compute new value for AP.  */
-      t = build (MODIFY_EXPR, TREE_TYPE (valist), valist,
-		 build (PLUS_EXPR, TREE_TYPE (valist), valist,
-			passed_size));
-      TREE_SIDE_EFFECTS (t) = 1;
-      expand_expr (t, const0_rtx, VOIDmode, EXPAND_NORMAL);
-    }
-
-  return addr;
 }
 
 /* The INIT_EXPANDERS worker sets the per-function-data initializer and
@@ -3037,178 +2960,120 @@ cris_split_movdx (rtx *operands)
   return val;
 }
 
-/* This is in essence a copy of output_addr_const altered to output
-   symbolic operands as PIC.
+/* Use from within code, from e.g. PRINT_OPERAND and
+   PRINT_OPERAND_ADDRESS.  Macros used in output_addr_const need to emit
+   different things depending on whether code operand or constant is
+   emitted.  */
 
-   FIXME: Add hooks similar to ASM_OUTPUT_SYMBOL_REF to get this effect in
-   the "real" output_addr_const.  All we need is one for LABEL_REF (and
-   one for CODE_LABEL?).  */
-
-void
+static void
 cris_output_addr_const (FILE *file, rtx x)
 {
-  int is_plt = 0;
+  in_code++;
+  output_addr_const (file, x);
+  in_code--;
+}
 
-restart:
+/* Worker function for ASM_OUTPUT_SYMBOL_REF.  */
+
+void
+cris_asm_output_symbol_ref (FILE *file, rtx x)
+{
+  if (flag_pic && in_code > 0)
+    {
+      const char *origstr = XSTR (x, 0);
+      const char *str;
+
+      str = (* targetm.strip_name_encoding) (origstr);
+
+      if (cris_gotless_symbol (x))
+	{
+	  if (! cris_pic_sympart_only)
+	    fprintf (file, "$%s+", reg_names [PIC_OFFSET_TABLE_REGNUM]);
+	  assemble_name (file, str);
+	  fprintf (file, ":GOTOFF");
+	}
+      else if (cris_got_symbol (x))
+	{
+	  if (cris_pic_sympart_only)
+	    abort ();
+	  fprintf (file, "[$%s+", reg_names [PIC_OFFSET_TABLE_REGNUM]);
+	  assemble_name (file, XSTR (x, 0));
+
+	  if (flag_pic == 1)
+	    fprintf (file, ":GOT16]");
+	  else
+	    fprintf (file, ":GOT]");
+	}
+      else
+	LOSE_AND_RETURN ("unexpected PIC symbol", x);
+
+      /* Sanity check.  */
+      if (! current_function_uses_pic_offset_table)
+	output_operand_lossage ("PIC register isn't set up");
+    }
+  else
+    assemble_name (file, XSTR (x, 0));
+}
+
+/* Worker function for ASM_OUTPUT_LABEL_REF.  */
+
+void
+cris_asm_output_label_ref (FILE *file, char *buf)
+{
+  if (flag_pic && in_code > 0)
+    {
+      if (! cris_pic_sympart_only)
+	fprintf (file, "$%s+", reg_names [PIC_OFFSET_TABLE_REGNUM]);
+      assemble_name (file, buf);
+
+      fprintf (file, ":GOTOFF");
+
+      /* Sanity check.  */
+      if (! current_function_uses_pic_offset_table)
+	internal_error ("emitting PIC operand, but PIC register isn't set up");
+    }
+  else
+    assemble_name (file, buf);
+}
+
+/* Worker function for OUTPUT_ADDR_CONST_EXTRA.  */
+
+bool
+cris_output_addr_const_extra (FILE *file, rtx x)
+{
   switch (GET_CODE (x))
     {
+      const char *origstr;
+      const char *str;
+
     case UNSPEC:
       ASSERT_PLT_UNSPEC (x);
       x = XVECEXP (x, 0, 0);
-      is_plt = 1;
-
-      /* Fall through.  */
-    case SYMBOL_REF:
-      if (flag_pic)
+      origstr = XSTR (x, 0);
+      str = (* targetm.strip_name_encoding) (origstr);
+      if (cris_pic_sympart_only)
 	{
-	  const char *origstr = XSTR (x, 0);
-	  const char *str;
+	  assemble_name (file, str);
+	  fprintf (file, ":PLTG");
+	}
+      else
+	{
+	  if (TARGET_AVOID_GOTPLT)
+	    /* We shouldn't get here.  */
+	    abort ();
 
-	  str = (* targetm.strip_name_encoding) (origstr);
+	  fprintf (file, "[$%s+", reg_names [PIC_OFFSET_TABLE_REGNUM]);
+	  assemble_name (file, XSTR (x, 0));
 
-	  if (is_plt)
-	    {
-	      if (cris_pic_sympart_only)
-		{
-		  assemble_name (file, str);
-		  fprintf (file, ":PLTG");
-		}
-	      else
-		{
-		  if (TARGET_AVOID_GOTPLT)
-		    /* We shouldn't get here.  */
-		    abort ();
-
-		  fprintf (file, "[$%s+", reg_names [PIC_OFFSET_TABLE_REGNUM]);
-		  assemble_name (file, XSTR (x, 0));
-
-		  if (flag_pic == 1)
-		    fprintf (file, ":GOTPLT16]");
-		  else
-		    fprintf (file, ":GOTPLT]");
-		}
-	    }
-	  else if (cris_gotless_symbol (x))
-	    {
-	      if (! cris_pic_sympart_only)
-		fprintf (file, "$%s+", reg_names [PIC_OFFSET_TABLE_REGNUM]);
-	      assemble_name (file, str);
-	      fprintf (file, ":GOTOFF");
-	    }
-	  else if (cris_got_symbol (x))
-	    {
-	      if (cris_pic_sympart_only)
-		abort ();
-	      fprintf (file, "[$%s+", reg_names [PIC_OFFSET_TABLE_REGNUM]);
-	      assemble_name (file, XSTR (x, 0));
-
-	      if (flag_pic == 1)
-		fprintf (file, ":GOT16]");
-	      else
-		fprintf (file, ":GOT]");
-	    }
+	  if (flag_pic == 1)
+	    fprintf (file, ":GOTPLT16]");
 	  else
-	    LOSE_AND_RETURN ("unexpected PIC symbol", x);
-
-	  /* Sanity check.  */
-	  if (! current_function_uses_pic_offset_table)
-	    output_operand_lossage ("PIC register isn't set up");
+	    fprintf (file, ":GOTPLT]");
 	}
-      else
-	assemble_name (file, XSTR (x, 0));
-      break;
-
-    case LABEL_REF:
-      /* If we get one of those here, it should be dressed as PIC.  Branch
-	 labels are normally output with the 'l' specifier, which means it
-	 will go directly to output_asm_label and not end up here.  */
-      if (GET_CODE (XEXP (x, 0)) != CODE_LABEL
-	  && (GET_CODE (XEXP (x, 0)) != NOTE
-	      || NOTE_LINE_NUMBER (XEXP (x, 0)) != NOTE_INSN_DELETED_LABEL))
-	fatal_insn ("unexpected address expression", x);
-
-      if (flag_pic)
-	{
-	  if (cris_gotless_symbol (x))
-	    {
-	      if (! cris_pic_sympart_only)
-		fprintf (file, "$%s+", reg_names [PIC_OFFSET_TABLE_REGNUM]);
-	      cris_output_addr_const (file, XEXP (x, 0));
-
-	      fprintf (file, ":GOTOFF");
-	    }
-	  else
-	    /* Labels are never marked as global symbols.  */
-	    fatal_insn ("unexpected PIC symbol", x);
-
-	  /* Sanity check.  */
-	  if (! current_function_uses_pic_offset_table)
-	    internal_error ("emitting PIC operand, but PIC register isn't set up");
-	  break;
-	}
-
-      output_addr_const (file, x);
-      break;
-
-    case NOTE:
-      if (NOTE_LINE_NUMBER (x) != NOTE_INSN_DELETED_LABEL)
-	fatal_insn ("unexpected NOTE as addr_const:", x);
-    case CODE_LABEL:
-    case CONST_INT:
-    case CONST_DOUBLE:
-    case ZERO_EXTEND:
-    case SIGN_EXTEND:
-      output_addr_const (file, x);
-      break;
-
-    case CONST:
-      /* This used to output parentheses around the expression,
-	 but that does not work on the 386 (either ATT or BSD assembler).  */
-      cris_output_addr_const (file, XEXP (x, 0));
-      break;
-
-    case PLUS:
-      /* Some assemblers need integer constants to appear last (eg masm).  */
-      if (GET_CODE (XEXP (x, 0)) == CONST_INT)
-	{
-	  cris_output_addr_const (file, XEXP (x, 1));
-	  if (INTVAL (XEXP (x, 0)) >= 0)
-	    fprintf (file, "+");
-	  output_addr_const (file, XEXP (x, 0));
-	}
-      else
-	{
-	  cris_output_addr_const (file, XEXP (x, 0));
-	  if (GET_CODE (XEXP (x, 1)) != CONST_INT
-	      || INTVAL (XEXP (x, 1)) >= 0)
-	    fprintf (file, "+");
-	  cris_output_addr_const (file, XEXP (x, 1));
-	}
-      break;
-
-    case MINUS:
-      /* Avoid outputting things like x-x or x+5-x,
-	 since some assemblers can't handle that.  */
-      x = simplify_subtraction (x);
-      if (GET_CODE (x) != MINUS)
-	goto restart;
-
-      cris_output_addr_const (file, XEXP (x, 0));
-      fprintf (file, "-");
-      if ((GET_CODE (XEXP (x, 1)) == CONST_INT
-	   && INTVAL (XEXP (x, 1)) < 0)
-	  || GET_CODE (XEXP (x, 1)) != CONST_INT)
-	{
-	  fprintf (file, "%s", targetm.asm_out.open_paren);
-	  cris_output_addr_const (file, XEXP (x, 1));
-	  fprintf (file, "%s", targetm.asm_out.close_paren);
-	}
-      else
-	output_addr_const (file, XEXP (x, 1));
-      break;
+      return true;
 
     default:
-      LOSE_AND_RETURN ("unexpected address expression", x);
+      return false;
     }
 }
 
@@ -3239,6 +3104,33 @@ cris_setup_incoming_varargs (CUMULATIVE_ARGS *ca,
 	       ca->regs, *pretend_arg_size, second_time);
     }
 }
+
+/* Return true if TYPE must be passed by invisible reference.
+   For cris, we pass <= 8 bytes by value, others by reference.  */
+
+static bool
+cris_pass_by_reference (CUMULATIVE_ARGS *ca ATTRIBUTE_UNUSED,
+			enum machine_mode mode, tree type,
+			bool named ATTRIBUTE_UNUSED)
+{
+  return (targetm.calls.must_pass_in_stack (mode, type)
+	  || CRIS_FUNCTION_ARG_SIZE (mode, type) > 8);
+}
+
+
+static int
+cris_arg_partial_bytes (CUMULATIVE_ARGS *ca, enum machine_mode mode,
+			tree type, bool named ATTRIBUTE_UNUSED)
+{
+  if (ca->regs == CRIS_MAX_ARGS_IN_REGS - 1
+      && !targetm.calls.must_pass_in_stack (mode, type)
+      && CRIS_FUNCTION_ARG_SIZE (mode, type) > 4
+      && CRIS_FUNCTION_ARG_SIZE (mode, type) <= 8)
+    return UNITS_PER_WORD;
+  else
+    return 0;
+}
+
 
 #if 0
 /* Various small functions to replace macros.  Only called from a

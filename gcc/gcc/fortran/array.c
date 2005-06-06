@@ -1,5 +1,5 @@
 /* Array things
-   Copyright (C) 2000, 2001, 2002 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2002, 2004, 2005 Free Software Foundation, Inc.
    Contributed by Andy Vaught
 
 This file is part of GCC.
@@ -20,11 +20,9 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA.  */
 
 #include "config.h"
+#include "system.h"
 #include "gfortran.h"
 #include "match.h"
-
-#include <string.h>
-#include <assert.h>
 
 /* This parameter is the size of the largest array constructor that we
    will expand to an array constructor without iterators.
@@ -77,7 +75,7 @@ match_subscript (gfc_array_ref * ar, int init)
 
   i = ar->dimen;
 
-  ar->c_where[i] = *gfc_current_locus ();
+  ar->c_where[i] = gfc_current_locus;
   ar->start[i] = ar->end[i] = ar->stride[i] = NULL;
 
   /* We can't be sure of the difference between DIMEN_ELEMENT and
@@ -143,7 +141,7 @@ gfc_match_array_ref (gfc_array_ref * ar, gfc_array_spec * as, int init)
 
   memset (ar, '\0', sizeof (ar));
 
-  ar->where = *gfc_current_locus ();
+  ar->where = gfc_current_locus;
   ar->as = as;
 
   if (gfc_match_char ('(') != MATCH_YES)
@@ -459,7 +457,7 @@ gfc_set_array_spec (gfc_symbol * sym, gfc_array_spec * as, locus * error_loc)
   if (as == NULL)
     return SUCCESS;
 
-  if (gfc_add_dimension (&sym->attr, error_loc) == FAILURE)
+  if (gfc_add_dimension (&sym->attr, sym->name, error_loc) == FAILURE)
     return FAILURE;
 
   sym->as = as;
@@ -605,6 +603,7 @@ gfc_insert_constructor (gfc_expr * base, gfc_constructor * c1)
 {
   gfc_constructor *c, *pre;
   expr_t type;
+  int t;
 
   type = base->expr_type;
 
@@ -617,12 +616,13 @@ gfc_insert_constructor (gfc_expr * base, gfc_constructor * c1)
         {
           if (type == EXPR_ARRAY)
             {
-              if (mpz_cmp (c->n.offset, c1->n.offset) < 0)
+	      t = mpz_cmp (c->n.offset, c1->n.offset);
+              if (t < 0)
                 {
                   pre = c;
                   c = c->next;
                 }
-              else if (mpz_cmp (c->n.offset, c1->n.offset) == 0)
+              else if (t == 0)
                 {
                   gfc_error ("duplicated initializer");
                   break;
@@ -743,7 +743,7 @@ match_array_list (gfc_constructor ** result)
   match m;
   int n;
 
-  old_loc = *gfc_current_locus ();
+  old_loc = gfc_current_locus;
 
   if (gfc_match_char ('(') == MATCH_NO)
     return MATCH_NO;
@@ -809,7 +809,7 @@ match_array_list (gfc_constructor ** result)
   e->value.constructor = head;
 
   p = gfc_get_constructor ();
-  p->where = *gfc_current_locus ();
+  p->where = gfc_current_locus;
   p->iterator = gfc_get_iterator ();
   *p->iterator = iter;
 
@@ -825,7 +825,7 @@ syntax:
 cleanup:
   gfc_free_constructor (head);
   gfc_free_iterator (&iter, 0);
-  gfc_set_locus (&old_loc);
+  gfc_current_locus = old_loc;
   return m;
 }
 
@@ -849,7 +849,7 @@ match_array_cons_element (gfc_constructor ** result)
     return m;
 
   p = gfc_get_constructor ();
-  p->where = *gfc_current_locus ();
+  p->where = gfc_current_locus;
   p->expr = expr;
 
   *result = p;
@@ -870,7 +870,7 @@ gfc_match_array_constructor (gfc_expr ** result)
   if (gfc_match (" (/") == MATCH_NO)
     return MATCH_NO;
 
-  where = *gfc_current_locus ();
+  where = gfc_current_locus;
   head = tail = NULL;
 
   if (gfc_match (" /)") == MATCH_YES)
@@ -940,7 +940,7 @@ check_element_type (gfc_expr * expr)
 {
 
   if (cons_state == CONS_BAD)
-    return 0;			/* Supress further errors */
+    return 0;			/* Suppress further errors */
 
   if (cons_state == CONS_START)
     {
@@ -967,7 +967,7 @@ check_element_type (gfc_expr * expr)
 }
 
 
-/* Recursive work function for gfc_check_constructor_type(). */
+/* Recursive work function for gfc_check_constructor_type().  */
 
 static try
 check_constructor_type (gfc_constructor * c)
@@ -1489,7 +1489,7 @@ resolve_array_list (gfc_constructor * p)
   for (; p; p = p->next)
     {
       if (p->iterator != NULL
-	  && gfc_resolve_iterator (p->iterator) == FAILURE)
+	  && gfc_resolve_iterator (p->iterator, false) == FAILURE)
 	t = FAILURE;
 
       if (gfc_resolve_expr (p->expr) == FAILURE)
@@ -1499,9 +1499,45 @@ resolve_array_list (gfc_constructor * p)
   return t;
 }
 
+/* Resolve character array constructor. If it is a constant character array and
+   not specified character length, update character length to the maximum of
+   its element constructors' length.  */
 
-/* Resolve all of the expressions in an array list.
-   TODO: String lengths.  */
+static void
+resolve_character_array_constructor (gfc_expr * expr)
+{
+  gfc_constructor * p;
+  int max_length;
+
+  gcc_assert (expr->expr_type == EXPR_ARRAY);
+  gcc_assert (expr->ts.type == BT_CHARACTER);
+
+  max_length = -1;
+
+  if (expr->ts.cl == NULL || expr->ts.cl->length == NULL)
+    {
+      /* Find the maximum length of the elements. Do nothing for variable array
+	 constructor.  */
+      for (p = expr->value.constructor; p; p = p->next)
+	if (p->expr->expr_type == EXPR_CONSTANT)
+	  max_length = MAX (p->expr->value.character.length, max_length);
+	else
+	  return;
+
+      if (max_length != -1)
+	{
+	  /* Update the character length of the array constructor.  */
+	  if (expr->ts.cl == NULL)
+	    expr->ts.cl = gfc_get_charlen ();
+	  expr->ts.cl->length = gfc_int_expr (max_length);
+	  /* Update the element constructors.  */
+	  for (p = expr->value.constructor; p; p = p->next)
+	    gfc_set_constant_character_len (max_length, p->expr);
+	}
+    }
+}
+
+/* Resolve all of the expressions in an array list.  */
 
 try
 gfc_resolve_array_constructor (gfc_expr * expr)
@@ -1511,6 +1547,8 @@ gfc_resolve_array_constructor (gfc_expr * expr)
   t = resolve_array_list (expr->value.constructor);
   if (t == SUCCESS)
     t = gfc_check_constructor_type (expr);
+  if (t == SUCCESS && expr->ts.type == BT_CHARACTER)
+    resolve_character_array_constructor (expr);
 
   return t;
 }
@@ -1606,9 +1644,9 @@ gfc_get_array_element (gfc_expr * array, int element)
 
 /********* Subroutines for determining the size of an array *********/
 
-/* These are needed just to accomodate RESHAPE().  There are no
+/* These are needed just to accommodate RESHAPE().  There are no
    diagnostics here, we just return a negative number if something
-   goes wrong. */
+   goes wrong.  */
 
 
 /* Get the size of single dimension of an array specification.  The
@@ -1970,4 +2008,23 @@ gfc_find_array_ref (gfc_expr * e)
     gfc_internal_error ("gfc_find_array_ref(): No ref found");
 
   return &ref->u.ar;
+}
+
+
+/* Find out if an array shape is known at compile time.  */
+
+int
+gfc_is_compile_time_shape (gfc_array_spec *as)
+{
+  int i;
+
+  if (as->type != AS_EXPLICIT)
+    return 0;
+
+  for (i = 0; i < as->rank; i++)
+    if (!gfc_is_constant_expr (as->lower[i])
+	|| !gfc_is_constant_expr (as->upper[i]))
+      return 0;
+
+  return 1;
 }

@@ -50,14 +50,26 @@
 #undef	TARGET_AIX
 #define	TARGET_AIX TARGET_64BIT
 
-#undef PROCESSOR_DEFAULT64
-#define PROCESSOR_DEFAULT64 PROCESSOR_PPC630
+#ifdef HAVE_LD_NO_DOT_SYMS
+/* New ABI uses a local sym for the function entry point.  */
+extern int dot_symbols;
+#undef DOT_SYMBOLS
+#define DOT_SYMBOLS dot_symbols
+#endif
 
-#undef	TARGET_RELOCATABLE
-#define	TARGET_RELOCATABLE (!TARGET_64BIT && (target_flags & MASK_RELOCATABLE))
+#undef  PROCESSOR_DEFAULT
+#define PROCESSOR_DEFAULT PROCESSOR_POWER4
+#undef  PROCESSOR_DEFAULT64
+#define PROCESSOR_DEFAULT64 PROCESSOR_POWER4
+
+/* We don't need to generate entries in .fixup, except when
+   -mrelocatable or -mrelocatable-lib is given.  */
+#undef RELOCATABLE_NEEDS_FIXUP
+#define RELOCATABLE_NEEDS_FIXUP \
+  (target_flags & target_flags_explicit & MASK_RELOCATABLE)
 
 #undef	RS6000_ABI_NAME
-#define	RS6000_ABI_NAME (TARGET_64BIT ? "aixdesc" : "sysv")
+#define	RS6000_ABI_NAME "linux"
 
 #define INVALID_64BIT "-m%s not supported in this configuration"
 #define INVALID_32BIT INVALID_64BIT
@@ -75,6 +87,7 @@
 	      rs6000_current_abi = ABI_AIX;			\
 	      error (INVALID_64BIT, "call");			\
 	    }							\
+	  dot_symbols = !strcmp (rs6000_abi_name, "aixdesc");	\
 	  if (target_flags & MASK_RELOCATABLE)			\
 	    {							\
 	      target_flags &= ~MASK_RELOCATABLE;		\
@@ -90,7 +103,7 @@
 	      target_flags &= ~MASK_PROTOTYPE;			\
 	      error (INVALID_64BIT, "prototype");		\
 	    }							\
-          if ((target_flags & MASK_POWERPC64) == 0)		\
+	  if ((target_flags & MASK_POWERPC64) == 0)		\
 	    {							\
 	      target_flags |= MASK_POWERPC64;			\
 	      error ("-m64 requires a PowerPC64 cpu");		\
@@ -124,16 +137,16 @@
 
 #ifndef	RS6000_BI_ARCH
 #define	ASM_DEFAULT_SPEC "-mppc64"
-#define	ASM_SPEC         "%(asm_spec64) %(asm_spec_common)"
+#define	ASM_SPEC	 "%(asm_spec64) %(asm_spec_common)"
 #define	LINK_OS_LINUX_SPEC "%(link_os_linux_spec64)"
 #else
 #if DEFAULT_ARCH64_P
 #define	ASM_DEFAULT_SPEC "-mppc%{!m32:64}"
-#define	ASM_SPEC         "%{m32:%(asm_spec32)}%{!m32:%(asm_spec64)} %(asm_spec_common)"
+#define	ASM_SPEC	 "%{m32:%(asm_spec32)}%{!m32:%(asm_spec64)} %(asm_spec_common)"
 #define	LINK_OS_LINUX_SPEC "%{m32:%(link_os_linux_spec32)}%{!m32:%(link_os_linux_spec64)}"
 #else
 #define	ASM_DEFAULT_SPEC "-mppc%{m64:64}"
-#define	ASM_SPEC         "%{!m64:%(asm_spec32)}%{m64:%(asm_spec64)} %(asm_spec_common)"
+#define	ASM_SPEC	 "%{!m64:%(asm_spec32)}%{m64:%(asm_spec64)} %(asm_spec_common)"
 #define	LINK_OS_LINUX_SPEC "%{!m64:%(link_os_linux_spec32)}%{m64:%(link_os_linux_spec64)}"
 #endif
 #endif
@@ -188,6 +201,8 @@
 #define	TARGET_EABI		0
 #undef	TARGET_PROTOTYPE
 #define	TARGET_PROTOTYPE	0
+#undef RELOCATABLE_NEEDS_FIXUP
+#define RELOCATABLE_NEEDS_FIXUP 0
 
 #endif
 
@@ -211,9 +226,6 @@
 #define NO_PROFILE_COUNTERS TARGET_64BIT
 #define PROFILE_HOOK(LABEL) \
   do { if (TARGET_64BIT) output_profile_hook (LABEL); } while (0)
-
-/* We don't need to generate entries in .fixup.  */
-#undef RELOCATABLE_NEEDS_FIXUP
 
 /* PowerPC64 Linux word-aligns FP doubles when -malign-power is given.  */
 #undef  ADJUST_FIELD_ALIGN
@@ -250,7 +262,7 @@
    than a doubleword should be padded upward or downward.  You could
    reasonably assume that they follow the normal rules for structure
    layout treating the parameter area as any other block of memory,
-   then map the reg param area to registers.  ie. pad updard.
+   then map the reg param area to registers.  i.e. pad upward.
    Setting both of the following defines results in this behavior.
    Setting just the first one will result in aggregates that fit in a
    doubleword being padded downward, and others being padded upward.
@@ -258,16 +270,6 @@
    the same way as an int.  */
 #define AGGREGATE_PADDING_FIXED TARGET_64BIT
 #define AGGREGATES_PAD_UPWARD_ALWAYS 0
-
-/* We don't want anything in the reg parm area being passed on the
-   stack.  */
-#define MUST_PASS_IN_STACK(MODE, TYPE)				\
-  ((TARGET_64BIT						\
-    && (TYPE) != 0						\
-    && (TREE_CODE (TYPE_SIZE (TYPE)) != INTEGER_CST		\
-	|| TREE_ADDRESSABLE (TYPE)))				\
-   || (!TARGET_64BIT						\
-       && default_must_pass_in_stack ((MODE), (TYPE))))
 
 /* Specify padding for the last element of a block move between
    registers and memory.  FIRST is nonzero if this is the only
@@ -287,8 +289,16 @@
 #undef MD_EXEC_PREFIX
 #undef MD_STARTFILE_PREFIX
 
+/* Linux doesn't support saving and restoring 64-bit regs in a 32-bit
+   process.  */
+#define OS_MISSING_POWERPC64 !TARGET_64BIT
+
+/* glibc has float and long double forms of math functions.  */
+#undef  TARGET_C99_FUNCTIONS
+#define TARGET_C99_FUNCTIONS 1
+
 #undef  TARGET_OS_CPP_BUILTINS
-#define TARGET_OS_CPP_BUILTINS()            		\
+#define TARGET_OS_CPP_BUILTINS()			\
   do							\
     {							\
       if (TARGET_64BIT)					\
@@ -396,11 +406,19 @@
    object files, each potentially with a different TOC pointer.  For
    that reason, place a nop after the call so that the linker can
    restore the TOC pointer if a TOC adjusting call stub is needed.  */
+#if DOT_SYMBOLS
 #define CRT_CALL_STATIC_FUNCTION(SECTION_OP, FUNC)	\
   asm (SECTION_OP "\n"					\
 "	bl ." #FUNC "\n"				\
 "	nop\n"						\
 "	.previous");
+#else
+#define CRT_CALL_STATIC_FUNCTION(SECTION_OP, FUNC)	\
+  asm (SECTION_OP "\n"					\
+"	bl " #FUNC "\n"					\
+"	nop\n"						\
+"	.previous");
+#endif
 #endif
 
 /* FP save and restore routines.  */
@@ -425,13 +443,11 @@
       if (!flag_inhibit_size_directive)					\
 	{								\
 	  fputs ("\t.size\t", (FILE));					\
-	  if (TARGET_64BIT)						\
+	  if (TARGET_64BIT && DOT_SYMBOLS)				\
 	    putc ('.', (FILE));						\
 	  assemble_name ((FILE), (FNAME));				\
 	  fputs (",.-", (FILE));					\
-	  if (TARGET_64BIT)						\
-	    putc ('.', (FILE));						\
-	  assemble_name ((FILE), (FNAME));				\
+	  rs6000_output_function_entry (FILE, FNAME);			\
 	  putc ('\n', (FILE));						\
 	}								\
     }									\
@@ -468,43 +484,38 @@
 		   && GET_MODE_CLASS (GET_MODE (X)) == MODE_FLOAT	\
 		   && BITS_PER_WORD == HOST_BITS_PER_INT)))))
 
-/* This is the same as the dbxelf.h version, except that we need to
-   use the function code label, not the function descriptor.  */
-#undef	ASM_OUTPUT_SOURCE_LINE
-#define	ASM_OUTPUT_SOURCE_LINE(FILE, LINE, COUNTER)			\
+/* This ABI cannot use DBX_LINES_FUNCTION_RELATIVE, nor can it use
+   dbxout_stab_value_internal_label_diff, because we must
+   use the function code label, not the function descriptor label.  */
+#define	DBX_OUTPUT_SOURCE_LINE(FILE, LINE, COUNTER)			\
 do									\
   {									\
     char temp[256];							\
+    const char *s;							\
     ASM_GENERATE_INTERNAL_LABEL (temp, "LM", COUNTER);			\
-    fprintf (FILE, "\t.stabn 68,0,%d,", LINE);				\
+    dbxout_begin_stabn_sline (LINE);					\
     assemble_name (FILE, temp);						\
     putc ('-', FILE);							\
-    if (TARGET_64BIT)							\
-      putc ('.', FILE);							\
-    assemble_name (FILE,						\
-		   XSTR (XEXP (DECL_RTL (current_function_decl), 0), 0));\
+    s = XSTR (XEXP (DECL_RTL (current_function_decl), 0), 0);		\
+    rs6000_output_function_entry (FILE, s);				\
     putc ('\n', FILE);							\
-    (*targetm.asm_out.internal_label) (FILE, "LM", COUNTER);		\
+    targetm.asm_out.internal_label (FILE, "LM", COUNTER);		\
+    COUNTER += 1;							\
   }									\
 while (0)
 
-/* Similarly, we want the function code label here.  */
-#define DBX_OUTPUT_BRAC(FILE, NAME, BRAC) \
+/* Similarly, we want the function code label here.  Cannot use
+   dbxout_stab_value_label_diff, as we have to use
+   rs6000_output_function_entry.  FIXME.  */
+#define DBX_OUTPUT_BRAC(FILE, NAME, BRAC)				\
   do									\
     {									\
-      const char *flab;							\
-      fprintf (FILE, "%s%d,0,0,", ASM_STABN_OP, BRAC);			\
+      const char *s;							\
+      dbxout_begin_stabn (BRAC);					\
       assemble_name (FILE, NAME);					\
       putc ('-', FILE);							\
-      if (current_function_func_begin_label != NULL_TREE)		\
-	flab = IDENTIFIER_POINTER (current_function_func_begin_label);	\
-      else								\
-	{								\
-	  if (TARGET_64BIT)						\
-	    putc ('.', FILE);						\
-	  flab = XSTR (XEXP (DECL_RTL (current_function_decl), 0), 0);	\
-	}								\
-      assemble_name (FILE, flab);					\
+      s = XSTR (XEXP (DECL_RTL (current_function_decl), 0), 0);		\
+      rs6000_output_function_entry (FILE, s);				\
       putc ('\n', FILE);						\
     }									\
   while (0)
@@ -516,12 +527,12 @@ while (0)
 #define	DBX_OUTPUT_NFUN(FILE, LSCOPE, DECL)				\
   do									\
     {									\
-      fprintf (FILE, "%s\"\",%d,0,0,", ASM_STABS_OP, N_FUN);		\
+      const char *s;							\
+      dbxout_begin_empty_stabs (N_FUN);					\
       assemble_name (FILE, LSCOPE);					\
       putc ('-', FILE);							\
-      if (TARGET_64BIT)							\
-        putc ('.', FILE);						\
-      assemble_name (FILE, XSTR (XEXP (DECL_RTL (DECL), 0), 0));	\
+      s = XSTR (XEXP (DECL_RTL (current_function_decl), 0), 0);		\
+      rs6000_output_function_entry (FILE, s);				\
       putc ('\n', FILE);						\
     }									\
   while (0)
@@ -553,175 +564,4 @@ while (0)
 #define USE_LD_AS_NEEDED 1
 #endif
 
-/* Do code reading to identify a signal frame, and set the frame
-   state data appropriately.  See unwind-dw2.c for the structs.  */
-
-#ifdef IN_LIBGCC2
-#include <signal.h>
-#ifdef __powerpc64__
-#include <sys/ucontext.h>
-
-enum { SIGNAL_FRAMESIZE = 128 };
-
-#else
-
-/* During the 2.5 kernel series the kernel ucontext was changed, but
-   the new layout is compatible with the old one, so we just define
-   and use the old one here for simplicity and compatibility.  */
-
-struct kernel_old_ucontext {
-  unsigned long     uc_flags;
-  struct ucontext  *uc_link;
-  stack_t           uc_stack;
-  struct sigcontext_struct uc_mcontext;
-  sigset_t          uc_sigmask;
-};
-enum { SIGNAL_FRAMESIZE = 64 };
-#endif
-
-#endif
-
-#ifdef __powerpc64__
-
-/* If the current unwind info (FS) does not contain explicit info
-   saving R2, then we have to do a minor amount of code reading to
-   figure out if it was saved.  The big problem here is that the
-   code that does the save/restore is generated by the linker, so
-   we have no good way to determine at compile time what to do.  */
-
-#define MD_FROB_UPDATE_CONTEXT(CTX, FS)					\
-  do {									\
-    if ((FS)->regs.reg[2].how == REG_UNSAVED)				\
-      {									\
-	unsigned int *insn						\
-	  = (unsigned int *)						\
-	    _Unwind_GetGR ((CTX), LINK_REGISTER_REGNUM);		\
-	if (*insn == 0xE8410028)					\
-	  _Unwind_SetGRPtr ((CTX), 2, (CTX)->cfa + 40);			\
-      }									\
-  } while (0)
-
-#define MD_FALLBACK_FRAME_STATE_FOR(CONTEXT, FS, SUCCESS)		\
-  do {									\
-    unsigned char *pc_ = (CONTEXT)->ra;					\
-    struct sigcontext *sc_;						\
-    long new_cfa_;							\
-    int i_;								\
-									\
-    /* addi r1, r1, 128; li r0, 0x0077; sc  (sigreturn) */		\
-    /* addi r1, r1, 128; li r0, 0x00AC; sc  (rt_sigreturn) */		\
-    if (*(unsigned int *) (pc_+0) != 0x38210000 + SIGNAL_FRAMESIZE	\
-	|| *(unsigned int *) (pc_+8) != 0x44000002)			\
-      break;								\
-    if (*(unsigned int *) (pc_+4) == 0x38000077)			\
-      {									\
-	struct sigframe {						\
-	  char gap[SIGNAL_FRAMESIZE];					\
-	  struct sigcontext sigctx;					\
-	} *rt_ = (CONTEXT)->cfa;					\
-	sc_ = &rt_->sigctx;						\
-      }									\
-    else if (*(unsigned int *) (pc_+4) == 0x380000AC)			\
-      {									\
-	struct rt_sigframe {						\
-	  int tramp[6];							\
-	  struct siginfo *pinfo;					\
-	  struct ucontext *puc;						\
-	} *rt_ = (struct rt_sigframe *) pc_;				\
-	sc_ = &rt_->puc->uc_mcontext;					\
-      }									\
-    else								\
-      break;								\
-    									\
-    new_cfa_ = sc_->regs->gpr[STACK_POINTER_REGNUM];			\
-    (FS)->cfa_how = CFA_REG_OFFSET;					\
-    (FS)->cfa_reg = STACK_POINTER_REGNUM;				\
-    (FS)->cfa_offset = new_cfa_ - (long) (CONTEXT)->cfa;		\
-    									\
-    for (i_ = 0; i_ < 32; i_++)						\
-      if (i_ != STACK_POINTER_REGNUM)					\
-	{	    							\
-	  (FS)->regs.reg[i_].how = REG_SAVED_OFFSET;			\
-	  (FS)->regs.reg[i_].loc.offset 				\
-	    = (long)&(sc_->regs->gpr[i_]) - new_cfa_;			\
-	}								\
-									\
-    (FS)->regs.reg[LINK_REGISTER_REGNUM].how = REG_SAVED_OFFSET;	\
-    (FS)->regs.reg[LINK_REGISTER_REGNUM].loc.offset 			\
-      = (long)&(sc_->regs->link) - new_cfa_;				\
-									\
-    (FS)->regs.reg[ARG_POINTER_REGNUM].how = REG_SAVED_OFFSET;		\
-    (FS)->regs.reg[ARG_POINTER_REGNUM].loc.offset 			\
-      = (long)&(sc_->regs->nip) - new_cfa_;				\
-    (FS)->retaddr_column = ARG_POINTER_REGNUM;				\
-    goto SUCCESS;							\
-  } while (0)
-
-#else
-
-#define MD_FALLBACK_FRAME_STATE_FOR(CONTEXT, FS, SUCCESS)		\
-  do {									\
-    unsigned char *pc_ = (CONTEXT)->ra;					\
-    struct sigcontext *sc_;						\
-    long new_cfa_;							\
-    int i_;								\
-									\
-    /* li r0, 0x7777; sc  (sigreturn old)  */				\
-    /* li r0, 0x0077; sc  (sigreturn new)  */				\
-    /* li r0, 0x6666; sc  (rt_sigreturn old)  */			\
-    /* li r0, 0x00AC; sc  (rt_sigreturn new)  */			\
-    if (*(unsigned int *) (pc_+4) != 0x44000002)			\
-      break;								\
-    if (*(unsigned int *) (pc_+0) == 0x38007777				\
-	|| *(unsigned int *) (pc_+0) == 0x38000077)			\
-      {									\
-	struct sigframe {						\
-	  char gap[SIGNAL_FRAMESIZE];					\
-	  struct sigcontext sigctx;					\
-	} *rt_ = (CONTEXT)->cfa;					\
-	sc_ = &rt_->sigctx;						\
-      }									\
-    else if (*(unsigned int *) (pc_+0) == 0x38006666			\
-	     || *(unsigned int *) (pc_+0) == 0x380000AC)		\
-      {									\
-	struct rt_sigframe {						\
-	  char gap[SIGNAL_FRAMESIZE];					\
-	  unsigned long _unused[2];					\
-	  struct siginfo *pinfo;					\
-	  void *puc;							\
-	  struct siginfo info;						\
-	  struct kernel_old_ucontext uc;				\
-	} *rt_ = (CONTEXT)->cfa;					\
-	sc_ = &rt_->uc.uc_mcontext;					\
-      }									\
-    else								\
-      break;								\
-    									\
-    new_cfa_ = sc_->regs->gpr[STACK_POINTER_REGNUM];			\
-    (FS)->cfa_how = CFA_REG_OFFSET;					\
-    (FS)->cfa_reg = STACK_POINTER_REGNUM;				\
-    (FS)->cfa_offset = new_cfa_ - (long) (CONTEXT)->cfa;		\
-    									\
-    for (i_ = 0; i_ < 32; i_++)						\
-      if (i_ != STACK_POINTER_REGNUM)					\
-	{	    							\
-	  (FS)->regs.reg[i_].how = REG_SAVED_OFFSET;			\
-	  (FS)->regs.reg[i_].loc.offset 				\
-	    = (long)&(sc_->regs->gpr[i_]) - new_cfa_;			\
-	}								\
-									\
-    (FS)->regs.reg[LINK_REGISTER_REGNUM].how = REG_SAVED_OFFSET;	\
-    (FS)->regs.reg[LINK_REGISTER_REGNUM].loc.offset 			\
-      = (long)&(sc_->regs->link) - new_cfa_;				\
-									\
-    (FS)->regs.reg[CR0_REGNO].how = REG_SAVED_OFFSET;			\
-    (FS)->regs.reg[CR0_REGNO].loc.offset 				\
-      = (long)&(sc_->regs->nip) - new_cfa_;				\
-    (FS)->retaddr_column = CR0_REGNO;					\
-    goto SUCCESS;							\
-  } while (0)
-
-#endif
-
-
-#define OS_MISSING_POWERPC64 !TARGET_64BIT
+#define MD_UNWIND_SUPPORT "config/rs6000/linux-unwind.h"

@@ -1,5 +1,5 @@
 /* CollationKey.java -- Precomputed collation value
-   Copyright (C) 1998, 1999, 2000, 2003  Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2000, 2003, 2005  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -59,8 +59,8 @@ package java.text;
  * <code>CollationKey</code> is created by calling the
  * <code>getCollationKey</code> method on an instance of <code>Collator</code>.
  *
- * @author Aaron M. Renn <arenn@urbanophile.com>
- * @author Tom Tromey <tromey@cygnus.com>
+ * @author Aaron M. Renn (arenn@urbanophile.com)
+ * @author Tom Tromey (tromey@cygnus.com)
  * @date March 25, 1999
  */
 public final class CollationKey implements Comparable
@@ -78,24 +78,13 @@ public final class CollationKey implements Comparable
   /**
    * This is the bit value for this key.
    */
-  private int[] key;
+  private byte[] key;
 
-  CollationKey(Collator collator, CollationElementIterator iter,
-	       String originalText, int strength)
+  CollationKey (Collator collator, String originalText, byte[] key)
   {
     this.collator = collator;
     this.originalText = originalText;
-
-    // Compute size of required array.
-    int size = 0;
-    while (RuleBasedCollator.next(iter, strength)
-	   != CollationElementIterator.NULLORDER)
-      ++size;
-
-    iter.reset();
-    key = new int[size];
-    for (int i = 0; i < size; i++)
-      key[i] = RuleBasedCollator.next(iter, strength);
+    this.key = key;
   }
 
   /**
@@ -205,15 +194,6 @@ public final class CollationKey implements Comparable
    */
   public byte[] toByteArray()
   {
-    byte[] r = new byte[4 * key.length];
-    int off = 0;
-    for (int i = 0; i < key.length; ++i)
-      {
-	r[off++] = (byte) ((key[i] >>> 24) & 255);
-	r[off++] = (byte) ((key[i] >>> 16) & 255);
-	r[off++] = (byte) ((key[i] >>>  8) & 255);
-	r[off++] = (byte) ((key[i]       ) & 255);
-      }
-    return r;
+    return key;
   }
 }

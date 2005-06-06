@@ -1,22 +1,41 @@
 RC_OS = macos
 OFLAG = -O
+LEGACY = -D_MACH_I386_THREAD_STATUS_FPSTATE_LEGACY_FIELD_NAMES_ \
+	 -D_ARCHITECTURE_I386_FPU_FPSTATE_LEGACY_FIELD_NAMES_
+KERN = -fno-builtin -finline -fno-keep-inline-functions -fsigned-bitfields \
+       -force_cpusubtype_ALL -msoft-float -nostdinc \
+-I$(NEXT_ROOT)/System/Library/Frameworks/Kernel.framework/PrivateHeaders/libsa \
+-I$(NEXT_ROOT)/System/Library/Frameworks/Kernel.framework/PrivateHeaders \
+       -I$(NEXT_ROOT)/System/Library/Frameworks/Kernel.framework/Headers/libsa \
+       -I$(NEXT_ROOT)/System/Library/Frameworks/Kernel.framework/Headers/bsd \
+       -I$(NEXT_ROOT)/System/Library/Frameworks/Kernel.framework/Headers \
+       -DKERNEL -DKERNEL_PRIVATE -DAPPLE -DNeXT -DLIBSA_PRIVATE
 ifeq "macos" "$(RC_OS)"
   X_CFLAGS := $(shell if [ "$(RC_RELEASE)" != "Beaker" ] &&    \
 			 [ "$(RC_RELEASE)" != "Bunsen" ] &&    \
 			 [ "$(RC_RELEASE)" != "Gonzo"  ] &&    \
 			 [ "$(RC_RELEASE)" != "Kodiak" ]; then \
-	     echo -Wno-long-double -no-cpp-precomp -DINTERIM_PPC64 ; \
+	     echo -Wno-long-double -no-cpp-precomp ; \
+	     fi; )
+  CC := $(shell if [ "$(RC_RELEASE)" == "Tiger" ] || \
+		   [ "$(RC_RELEASE)" == "Gordian" ] || \
+		   [ "$(RC_RELEASE)" == "Saffron" ] || \
+		   [ "$(RC_USE_GCC35_FOR_PPC64)" == "YES" ]; then \
+		     echo gcc-3.5 ; \
+		else \
+		     echo "$(CC)" ; \
 	     fi; )
 endif
 ifeq "mwccppc" "$(notdir $(CC))"
-  CFLAGS = $(OFLAG) -g \
+  CFLAGS = $(OFLAG) -g $(LEGACY) \
      -I$(SRCROOT) -I$(SRCROOT)/../include -I$(OFILE_DIR)
 else
-  CFLAGS = $(OFLAG) -g -Wall $(X_CFLAGS) \
+  CFLAGS = $(OFLAG) -g -Wall $(X_CFLAGS) $(LEGACY) \
      -I$(SRCROOT) -I$(SRCROOT)/../include -I$(OFILE_DIR)
 endif
 
-USE_DEPENDENCY_FILE := $(shell if [ "$(notdir $(CC))" != "mwccppc" ]; then \
+USE_DEPENDENCY_FILE := $(shell if [ "$(notdir $(CC))" != "mwccppc" ] && \
+				  [ "$(RC_XBS)" != "YES" ]; then \
 	     echo YES ; else echo NO ; \
 	     fi; )
 
@@ -31,7 +50,8 @@ SYMROOT = .
 OBJROOT = .
 OFILE_DIRS = $(OBJROOT)/shlib_obj $(OBJROOT)/profile_obj \
 	     $(OBJROOT)/optimized_obj $(OBJROOT)/dynamic_obj \
-	     $(OBJROOT)/ptmp_obj $(OBJROOT)/otmp_obj $(OBJROOT)/dtmp_obj
+	     $(OBJROOT)/ptmp_obj $(OBJROOT)/otmp_obj $(OBJROOT)/dtmp_obj \
+	     $(OBJROOT)/kld_obj $(OBJROOT)/ktmp_obj
 OFILE_DIR = $(OBJROOT)
 VPATH = $(OFILE_DIR)
 
@@ -57,11 +77,11 @@ OBJS = arch.o getsecbyname.o getsegbyname.o get_end.o swap.o \
 
 all: lib_ofiles
 
-macos: optimized_ofiles
+macos: optimized_ofiles kld_ofiles
 
-teflon: optimized_ofiles
+teflon: optimized_ofiles kld_ofiles
 
-nextstep: optimized_ofiles shlib_ofiles
+nextstep: optimized_ofiles kld_ofiles shlib_ofiles
 
 lib_ofiles: $(OFILE_DIRS) $(SYMROOT) $(RC_OS) dynamic_ofiles profile_ofiles
 
@@ -154,7 +174,7 @@ optimized_ofiles: $(OBJROOT)/optimized_obj $(OBJROOT)/otmp_obj
 	    rm -f static_obj;						\
 	    ln -s ./optimized_obj static_obj;				\
 	    rm -f optimized_obj/libmacho.ofileList;			\
-	    cp dylib.ofileList optimized_obj/libmacho.ofileList;		\
+	    cp dylib.ofileList optimized_obj/libmacho.ofileList;	\
 	else								\
 	    (cd $(OBJROOT)/otmp_obj;					\
 		$(MAKE) -f $(SRCROOT)/Makefile libmacho_static.a	\
@@ -174,6 +194,38 @@ optimized_ofiles: $(OBJROOT)/optimized_obj $(OBJROOT)/otmp_obj
 	    ln -s ./optimized_obj $(OBJROOT)/static_obj;		\
 	    rm -f $(OBJROOT)/optimized_obj/libmacho.ofileList;		\
 	    cp dylib.ofileList $(OBJROOT)/optimized_obj/libmacho.ofileList; \
+	fi
+
+kld_ofiles: $(OBJROOT)/kld_obj $(OBJROOT)/ktmp_obj
+	@if [ $(SRCROOT) = . ];						\
+	then								\
+	    (cd ktmp_obj;						\
+		$(MAKE) -f ../Makefile libmacho_kld.a			\
+		VPATH=.. 						\
+		OFILE_DIR=.						\
+		SRCROOT=..						\
+		COPTS="-static -DRLD -DSA_RLD $(KERN)"			\
+		LIBSTUFF="-L../../libstuff -lstuff_kld"			\
+		OFLAG="$(OFLAG)"					\
+		RC_CFLAGS="$(RC_CFLAGS)"				\
+		RC_ARCHS="$(RC_ARCHS)");				\
+	    (cd kld_obj; rm -f $(OBJS));				\
+	    (cd ktmp_obj; cp $(OBJS) ../kld_obj); 			\
+	else								\
+	    (cd $(OBJROOT)/ktmp_obj;					\
+		$(MAKE) -f $(SRCROOT)/Makefile libmacho_kld.a		\
+		VPATH=$(SRCROOT)					\
+		OFILE_DIR=$(OBJROOT)/ktmp_obj				\
+		SRCROOT=$(SRCROOT)					\
+		SYMROOT=$(SYMROOT)					\
+		COPTS="-static -DRLD -DSA_RLD $(KERN)"			\
+		LIBSTUFF="-L$(SYMROOT)/../libstuff -lstuff_kld"		\
+		OFLAG="$(OFLAG)"					\
+		RC_CFLAGS="$(RC_CFLAGS)"				\
+		RC_ARCHS="$(RC_ARCHS)");				\
+	    (cd $(OBJROOT)/kld_obj; rm -f $(OBJS));		\
+	    (cd $(OBJROOT)/ktmp_obj; 					\
+		cp $(OBJS) $(OBJROOT)/kld_obj); 			\
 	fi
 
 dynamic_ofiles: $(OBJROOT)/dynamic_obj $(OBJROOT)/dtmp_obj
@@ -229,7 +281,7 @@ clean:
 shlib_clean:
 	-rm -r -f $(OBJROOT)/ptmp_obj $(OBJROOT)/otmp_obj $(OBJROOT)/dtmp_obj
 
-libmacho.a libmacho_pg.a libmacho_static.a: $(OBJS)
+libmacho.a libmacho_pg.a libmacho_static.a libmacho_kld.a: $(OBJS)
 	libtool -static -o $(SYMROOT)/$@ $(OBJS)
 
 

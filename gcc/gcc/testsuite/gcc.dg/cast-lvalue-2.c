@@ -1,7 +1,8 @@
 /* Test for error on casts as lvalues.  Casts to same type.  */
 /* Origin: Joseph Myers <jsm@polyomino.org.uk> */
 /* { dg-do compile } */
-/* { dg-options "" } */
+/* APPLE LOCAL non lvalue assign */
+/* { dg-options "-fno-non-lvalue-assign" } */
 
 int x;
 
@@ -10,4 +11,5 @@ foo (void)
 {
   (int) x = 1; /* { dg-bogus "warning" "warning in place of error" } */
 }
-/* { dg-error "lvalue" "cast as lvalue" { target *-*-*} 11 } */
+/* APPLE LOCAL non lvalue assign */
+/* { dg-error "lvalue" "cast as lvalue" { target *-*-*} 12 } */

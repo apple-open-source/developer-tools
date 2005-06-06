@@ -1,6 +1,6 @@
 // nonstandard construct and destroy functions -*- C++ -*-
 
-// Copyright (C) 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+// Copyright (C) 2001, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -61,7 +61,7 @@
 #ifndef _STL_CONSTRUCT_H
 #define _STL_CONSTRUCT_H 1
 
-#include <bits/type_traits.h>
+#include <bits/cpp_type_traits.h>
 #include <new>
 
 namespace std
@@ -117,7 +117,10 @@ namespace std
     inline void
     __destroy_aux(_ForwardIterator __first, _ForwardIterator __last,
 		  __false_type)
-    { for ( ; __first != __last; ++__first) std::_Destroy(&*__first); }
+    {
+      for (; __first != __last; ++__first)
+	std::_Destroy(&*__first);
+    }
 
   /**
    * @if maint
@@ -146,11 +149,40 @@ namespace std
     {
       typedef typename iterator_traits<_ForwardIterator>::value_type
                        _Value_type;
-      typedef typename __type_traits<_Value_type>::has_trivial_destructor
-                       _Has_trivial_destructor;
+      typedef typename std::__is_scalar<_Value_type>::__type
+	               _Has_trivial_destructor;
 
       std::__destroy_aux(__first, __last, _Has_trivial_destructor());
     }
+
+  /**
+   * @if maint
+   * Destroy a range of objects using the supplied allocator.  For
+   * nondefault allocators we do not optimize away invocation of 
+   * destroy() even if _Tp has a trivial destructor.
+   * @endif
+   */
+
+  template <typename _Tp> class allocator;
+
+  template<typename _ForwardIterator, typename _Allocator>
+    void
+    _Destroy(_ForwardIterator __first, _ForwardIterator __last,
+	     _Allocator __alloc)
+    {
+      for (; __first != __last; ++__first)
+	__alloc.destroy(&*__first);
+    }
+
+  template<typename _ForwardIterator, typename _Allocator, typename _Tp>
+    inline void
+    _Destroy(_ForwardIterator __first, _ForwardIterator __last,
+	     allocator<_Tp>)
+    {
+      _Destroy(__first, __last);
+    }
+   
+
 } // namespace std
 
 #endif /* _STL_CONSTRUCT_H */

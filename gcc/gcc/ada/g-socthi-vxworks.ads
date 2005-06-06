@@ -275,12 +275,6 @@ package GNAT.Sockets.Thin is
 
    function C_Listen (S, Backlog : C.int) return C.int;
 
-   function C_Read
-     (Fd    : C.int;
-      Buf   : System.Address;
-      Count : C.int)
-      return  C.int;
-
    function C_Readv
      (Fd     : C.int;
       Iov    : System.Address;
@@ -354,12 +348,6 @@ package GNAT.Sockets.Thin is
      (Command : System.Address)
       return    C.int;
 
-   function C_Write
-     (Fd    : C.int;
-      Buf   : System.Address;
-      Count : C.int)
-      return  C.int;
-
    function C_Writev
      (Fd     : C.int;
       Iov    : System.Address;
@@ -387,9 +375,9 @@ package GNAT.Sockets.Thin is
 
    function  Is_Socket_In_Set
      (Set    : Fd_Set_Access;
-      Socket : C.int)
-     return Boolean;
-   --  Check whether Socket is in the socket set
+      Socket : C.int) return C.int;
+   --  Check whether Socket is in the socket set, return a non-zero
+   --  value if it is, zero if it is not.
 
    procedure Last_Socket_In_Set
      (Set    : Fd_Set_Access;
@@ -425,14 +413,12 @@ private
    pragma Import (C, C_Getsockopt, "getsockopt");
    pragma Import (C, C_Inet_Addr, "inet_addr");
    pragma Import (C, C_Listen, "listen");
-   pragma Import (C, C_Read, "read");
    pragma Import (C, C_Readv, "readv");
    pragma Import (C, C_Select, "select");
    pragma Import (C, C_Setsockopt, "setsockopt");
    pragma Import (C, C_Shutdown, "shutdown");
    pragma Import (C, C_Strerror, "strerror");
    pragma Import (C, C_System, "system");
-   pragma Import (C, C_Write, "write");
    pragma Import (C, C_Writev, "writev");
 
    pragma Import (C, Free_Socket_Set, "__gnat_free_socket_set");

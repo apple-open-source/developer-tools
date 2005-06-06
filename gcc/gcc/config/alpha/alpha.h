@@ -1,6 +1,6 @@
 /* Definitions of target machine for GNU compiler, for DEC Alpha.
    Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2004 Free Software Foundation, Inc.
+   2000, 2001, 2002, 2004, 2005 Free Software Foundation, Inc.
    Contributed by Richard Kenner (kenner@vlsi1.ultra.nyu.edu)
 
 This file is part of GCC.
@@ -156,99 +156,99 @@ extern int alpha_tls_size;
 /* This means that floating-point support exists in the target implementation
    of the Alpha architecture.  This is usually the default.  */
 #define MASK_FP		(1 << 0)
-#define TARGET_FP	(target_flags & MASK_FP)
+#define TARGET_FP	((target_flags & MASK_FP) != 0)
 
 /* This means that floating-point registers are allowed to be used.  Note
    that Alpha implementations without FP operations are required to
    provide the FP registers.  */
 
 #define MASK_FPREGS	(1 << 1)
-#define TARGET_FPREGS	(target_flags & MASK_FPREGS)
+#define TARGET_FPREGS	((target_flags & MASK_FPREGS) != 0)
 
 /* This means that gas is used to process the assembler file.  */
 
 #define MASK_GAS	(1 << 2)
-#define TARGET_GAS	(target_flags & MASK_GAS)
+#define TARGET_GAS	((target_flags & MASK_GAS) != 0)
 
 /* This means that we should mark procedures as IEEE conformant.  */
 
 #define MASK_IEEE_CONFORMANT (1 << 3)
-#define TARGET_IEEE_CONFORMANT	(target_flags & MASK_IEEE_CONFORMANT)
+#define TARGET_IEEE_CONFORMANT	((target_flags & MASK_IEEE_CONFORMANT) != 0)
 
 /* This means we should be IEEE-compliant except for inexact.  */
 
 #define MASK_IEEE	(1 << 4)
-#define TARGET_IEEE	(target_flags & MASK_IEEE)
+#define TARGET_IEEE	((target_flags & MASK_IEEE) != 0)
 
 /* This means we should be fully IEEE-compliant.  */
 
 #define MASK_IEEE_WITH_INEXACT (1 << 5)
-#define TARGET_IEEE_WITH_INEXACT (target_flags & MASK_IEEE_WITH_INEXACT)
+#define TARGET_IEEE_WITH_INEXACT ((target_flags & MASK_IEEE_WITH_INEXACT) != 0)
 
 /* This means we must construct all constants rather than emitting
    them as literal data.  */
 
 #define MASK_BUILD_CONSTANTS (1 << 6)
-#define TARGET_BUILD_CONSTANTS (target_flags & MASK_BUILD_CONSTANTS)
+#define TARGET_BUILD_CONSTANTS ((target_flags & MASK_BUILD_CONSTANTS) != 0)
 
 /* This means we handle floating points in VAX F- (float)
    or G- (double) Format.  */
 
 #define MASK_FLOAT_VAX	(1 << 7)
-#define TARGET_FLOAT_VAX (target_flags & MASK_FLOAT_VAX)
+#define TARGET_FLOAT_VAX ((target_flags & MASK_FLOAT_VAX) != 0)
 
 /* This means that the processor has byte and half word loads and stores
    (the BWX extension).  */
 
 #define MASK_BWX	(1 << 8)
-#define TARGET_BWX	(target_flags & MASK_BWX)
+#define TARGET_BWX	((target_flags & MASK_BWX) != 0)
 
 /* This means that the processor has the MAX extension.  */
 #define MASK_MAX	(1 << 9)
-#define TARGET_MAX	(target_flags & MASK_MAX)
+#define TARGET_MAX	((target_flags & MASK_MAX) != 0)
 
 /* This means that the processor has the FIX extension.  */
 #define MASK_FIX	(1 << 10)
-#define TARGET_FIX	(target_flags & MASK_FIX)
+#define TARGET_FIX	((target_flags & MASK_FIX) != 0)
 
 /* This means that the processor has the CIX extension.  */
 #define MASK_CIX	(1 << 11)
-#define TARGET_CIX	(target_flags & MASK_CIX)
+#define TARGET_CIX	((target_flags & MASK_CIX) != 0)
 
 /* This means use !literal style explicit relocations.  */
 #define MASK_EXPLICIT_RELOCS (1 << 12)
-#define TARGET_EXPLICIT_RELOCS (target_flags & MASK_EXPLICIT_RELOCS)
+#define TARGET_EXPLICIT_RELOCS ((target_flags & MASK_EXPLICIT_RELOCS) != 0)
 
 /* This means use 16-bit relocations to .sdata/.sbss.  */
 #define MASK_SMALL_DATA (1 << 13)
-#define TARGET_SMALL_DATA (target_flags & MASK_SMALL_DATA)
+#define TARGET_SMALL_DATA ((target_flags & MASK_SMALL_DATA) != 0)
 
 /* This means emit thread pointer loads for kernel not user.  */
 #define MASK_TLS_KERNEL	(1 << 14)
-#define TARGET_TLS_KERNEL (target_flags & MASK_TLS_KERNEL)
+#define TARGET_TLS_KERNEL ((target_flags & MASK_TLS_KERNEL) != 0)
 
 /* This means use direct branches to local functions.  */
 #define MASK_SMALL_TEXT (1 << 15)
-#define TARGET_SMALL_TEXT (target_flags & MASK_SMALL_TEXT)
+#define TARGET_SMALL_TEXT ((target_flags & MASK_SMALL_TEXT) != 0)
 
-/* This means use IEEE quad-format for long double.  Assumes the 
+/* This means use IEEE quad-format for long double.  Assumes the
    presence of the GEM support library routines.  */
 #define MASK_LONG_DOUBLE_128 (1 << 16)
-#define TARGET_LONG_DOUBLE_128 (target_flags & MASK_LONG_DOUBLE_128)
+#define TARGET_LONG_DOUBLE_128 ((target_flags & MASK_LONG_DOUBLE_128) != 0)
 
 /* This means that the processor is an EV5, EV56, or PCA56.
    Unlike alpha_cpu this is not affected by -mtune= setting.  */
 #define MASK_CPU_EV5	(1 << 28)
-#define TARGET_CPU_EV5	(target_flags & MASK_CPU_EV5)
+#define TARGET_CPU_EV5	((target_flags & MASK_CPU_EV5) != 0)
 
 /* Likewise for EV6.  */
 #define MASK_CPU_EV6	(1 << 29)
-#define TARGET_CPU_EV6	(target_flags & MASK_CPU_EV6)
+#define TARGET_CPU_EV6	((target_flags & MASK_CPU_EV6) != 0)
 
 /* This means we support the .arch directive in the assembler.  Only
    defined in TARGET_CPU_DEFAULT.  */
 #define MASK_SUPPORT_ARCH (1 << 30)
-#define TARGET_SUPPORT_ARCH	(target_flags & MASK_SUPPORT_ARCH)
+#define TARGET_SUPPORT_ARCH	((target_flags & MASK_SUPPORT_ARCH) != 0)
 
 /* These are for target os support and cannot be changed at runtime.  */
 #define TARGET_ABI_WINDOWS_NT 0
@@ -466,21 +466,27 @@ extern const char *alpha_tls_size_string; /* For -mtls-size= */
 #define	WCHAR_TYPE_SIZE 32
 
 /* Define this macro if it is advisable to hold scalars in registers
-   in a wider mode than that declared by the program.  In such cases, 
+   in a wider mode than that declared by the program.  In such cases,
    the value is constrained to be within the bounds of the declared
    type, but kept valid in the wider mode.  The signedness of the
    extension may differ from that of the type.
 
-   For Alpha, we always store objects in a full register.  32-bit objects
-   are always sign-extended, but smaller objects retain their signedness.  */
+   For Alpha, we always store objects in a full register.  32-bit integers
+   are always sign-extended, but smaller objects retain their signedness.
 
-#define PROMOTE_MODE(MODE,UNSIGNEDP,TYPE)  \
-  if (GET_MODE_CLASS (MODE) == MODE_INT		\
-      && GET_MODE_SIZE (MODE) < UNITS_PER_WORD)	\
-    {						\
-      if ((MODE) == SImode)			\
-	(UNSIGNEDP) = 0;			\
-      (MODE) = DImode;				\
+   Note that small vector types can get mapped onto integer modes at the
+   whim of not appearing in alpha-modes.def.  We never promoted these
+   values before; don't do so now that we've trimmed the set of modes to
+   those actually implemented in the backend.  */
+
+#define PROMOTE_MODE(MODE,UNSIGNEDP,TYPE)			\
+  if (GET_MODE_CLASS (MODE) == MODE_INT				\
+      && (TYPE == NULL || TREE_CODE (TYPE) != VECTOR_TYPE)	\
+      && GET_MODE_SIZE (MODE) < UNITS_PER_WORD)			\
+    {								\
+      if ((MODE) == SImode)					\
+	(UNSIGNEDP) = 0;					\
+      (MODE) = DImode;						\
     }
 
 /* Define this if most significant bit is lowest numbered
@@ -554,6 +560,9 @@ extern const char *alpha_tls_size_string; /* For -mtls-size= */
    On the Alpha, they trap.  */
 
 #define SLOW_UNALIGNED_ACCESS(MODE, ALIGN) 1
+
+/* Our SIMD is all done on single integer registers.  */
+#define UNITS_PER_SIMD_WORD UNITS_PER_WORD
 
 /* Standard register usage.  */
 
@@ -566,7 +575,7 @@ extern const char *alpha_tls_size_string; /* For -mtls-size= */
    We define all 32 integer registers, even though $31 is always zero,
    and all 32 floating-point registers, even though $f31 is also
    always zero.  We do not bother defining the FP status register and
-   there are no other registers. 
+   there are no other registers.
 
    Since $31 is always zero, we will use register number 31 as the
    argument pointer.  It will never appear in the generated code
@@ -641,13 +650,8 @@ extern const char *alpha_tls_size_string; /* For -mtls-size= */
 #define HARD_REGNO_MODE_OK(REGNO, MODE) 				\
   ((REGNO) >= 32 && (REGNO) <= 62 					\
    ? (MODE) == SFmode || (MODE) == DFmode || (MODE) == DImode		\
+     || (MODE) == SCmode || (MODE) == DCmode				\
    : 1)
-
-/* Value is 1 if MODE is a supported vector mode.  */
-
-#define VECTOR_MODE_SUPPORTED_P(MODE) \
-  (TARGET_MAX \
-   && ((MODE) == V8QImode || (MODE) == V4HImode || (MODE) == V2SImode))
 
 /* A C expression that is nonzero if a value of mode
    MODE1 is accessible in mode MODE2 without copying.
@@ -684,7 +688,7 @@ extern const char *alpha_tls_size_string; /* For -mtls-size= */
 /* Base register for access to local variables of function.  */
 #define FRAME_POINTER_REGNUM 63
 
-/* Register in which static-chain is passed to a function. 
+/* Register in which static-chain is passed to a function.
 
    For the Alpha, this is based on an example; the calling sequence
    doesn't seem to specify this.  */
@@ -721,7 +725,7 @@ extern const char *alpha_tls_size_string; /* For -mtls-size= */
 
    For any two classes, it is very desirable that there be another
    class that represents their union.  */
-   
+
 enum reg_class {
   NO_REGS, R0_REG, R24_REG, R25_REG, R27_REG,
   GENERAL_REGS, FLOAT_REGS, ALL_REGS,
@@ -814,7 +818,7 @@ enum reg_class {
    `R' is a SYMBOL_REF that has SYMBOL_REF_FLAG set or is the current
    function.
 
-   'S' is a 6-bit constant (valid for a shift insn).  
+   'S' is a 6-bit constant (valid for a shift insn).
 
    'T' is a HIGH.
 
@@ -874,16 +878,16 @@ enum reg_class {
    ? reg_classes_intersect_p (FLOAT_REGS, CLASS) : 0)
 
 /* Define the cost of moving between registers of various classes.  Moving
-   between FLOAT_REGS and anything else except float regs is expensive. 
+   between FLOAT_REGS and anything else except float regs is expensive.
    In fact, we make it quite expensive because we really don't want to
    do these moves unless it is clearly worth it.  Optimizations may
    reduce the impact of not being able to allocate a pseudo to a
    hard register.  */
 
-#define REGISTER_MOVE_COST(MODE, CLASS1, CLASS2)	\
-  (((CLASS1) == FLOAT_REGS) == ((CLASS2) == FLOAT_REGS)	\
-   ? 2							\
-   : TARGET_FIX ? 3 : 4+2*alpha_memory_latency)
+#define REGISTER_MOVE_COST(MODE, CLASS1, CLASS2)		\
+  (((CLASS1) == FLOAT_REGS) == ((CLASS2) == FLOAT_REGS)	? 2	\
+   : TARGET_FIX ? ((CLASS1) == FLOAT_REGS ? 6 : 8)		\
+   : 4+2*alpha_memory_latency)
 
 /* A C expressions returning the cost of moving data of MODE from a register to
    or from memory.
@@ -1040,10 +1044,9 @@ extern int alpha_memory_latency;
    (TYPE is null for libcalls where that information may not be available.)  */
 
 #define FUNCTION_ARG_ADVANCE(CUM, MODE, TYPE, NAMED)			\
-  if (MUST_PASS_IN_STACK (MODE, TYPE))					\
-    (CUM) = 6;								\
-  else									\
-    (CUM) += ALPHA_ARG_SIZE (MODE, TYPE, NAMED)
+  ((CUM) += 								\
+   (targetm.calls.must_pass_in_stack (MODE, TYPE))			\
+    ? 6 : ALPHA_ARG_SIZE (MODE, TYPE, NAMED))
 
 /* Determine where to put an argument to a function.
    Value is zero to push the argument on the stack,
@@ -1063,23 +1066,6 @@ extern int alpha_memory_latency;
 
 #define FUNCTION_ARG(CUM, MODE, TYPE, NAMED)	\
   function_arg((CUM), (MODE), (TYPE), (NAMED))
-
-/* A C expression that indicates when an argument must be passed by
-   reference.  If nonzero for an argument, a copy of that argument is
-   made in memory and a pointer to the argument is passed instead of
-   the argument itself.  The pointer is passed in whatever way is
-   appropriate for passing a pointer to that type.  */
-
-#define FUNCTION_ARG_PASS_BY_REFERENCE(CUM, MODE, TYPE, NAMED) \
-  ((MODE) == TFmode || (MODE) == TCmode)
-
-/* For an arg passed partly in registers and partly in memory,
-   this is the number of registers used.
-   For args passed entirely in registers or entirely in memory, zero.  */
-
-#define FUNCTION_ARG_PARTIAL_NREGS(CUM, MODE, TYPE, NAMED)	\
-((CUM) < 6 && 6 < (CUM) + ALPHA_ARG_SIZE (MODE, TYPE, NAMED)	\
- ? 6 - (CUM) : 0)
 
 /* Try to output insns to set TARGET equal to the constant C if it can be
    done in less than N insns.  Do all computations in MODE.  Returns the place
@@ -1115,7 +1101,7 @@ extern struct alpha_compare alpha_compare;
 
 #define ASM_DECLARE_FUNCTION_SIZE(FILE,NAME,DECL) \
   alpha_end_function(FILE,NAME,DECL)
-   
+
 /* Output any profiling code before the prologue.  */
 
 #define PROFILE_BEFORE_PROLOGUE 1
@@ -1145,7 +1131,7 @@ extern struct alpha_compare alpha_compare;
    of a trampoline, leaving space for the variable parts.
 
    The trampoline should set the static chain pointer to value placed
-   into the trampoline and should branch to the specified routine.  
+   into the trampoline and should branch to the specified routine.
    Note that $27 has been set to the address of the trampoline, so we can
    use it for addressability of the two data items.  */
 
@@ -1189,6 +1175,7 @@ do {						\
 #define INCOMING_RETURN_ADDR_RTX  gen_rtx_REG (Pmode, 26)
 #define DWARF_FRAME_RETURN_COLUMN DWARF_FRAME_REGNUM (26)
 #define DWARF_ALT_FRAME_RETURN_COLUMN DWARF_FRAME_REGNUM (64)
+#define DWARF_ZERO_REG 31
 
 /* Describe how we implement __builtin_eh_return.  */
 #define EH_RETURN_DATA_REGNO(N)	((N) < 4 ? (N) + 16 : INVALID_REGNUM)
@@ -1226,9 +1213,7 @@ do {						\
 /* Include all constant integers and constant doubles, but not
    floating-point, except for floating-point zero.  */
 
-#define LEGITIMATE_CONSTANT_P(X)  		\
-  (GET_MODE_CLASS (GET_MODE (X)) != MODE_FLOAT	\
-   || (X) == CONST0_RTX (GET_MODE (X)))
+#define LEGITIMATE_CONSTANT_P  alpha_legitimate_constant_p
 
 /* The macros REG_OK_FOR..._P assume that the arg is a REG rtx
    and check its validity for a certain class.
@@ -1305,7 +1290,7 @@ do {								\
 /* Try a machine-dependent way of reloading an illegitimate address
    operand.  If we find one, push the reload and jump to WIN.  This
    macro is used in only one place: `find_reloads_address' in reload.c.  */
-   
+
 #define LEGITIMIZE_RELOAD_ADDRESS(X,MODE,OPNUM,TYPE,IND_L,WIN)		     \
 do {									     \
   rtx new_x = alpha_legitimize_reload_address (X, MODE, OPNUM, TYPE, IND_L); \
@@ -1347,7 +1332,7 @@ do {									     \
 #define MOVE_MAX 8
 
 /* If a memory-to-memory move would take MOVE_RATIO or more simple
-   move-instruction pairs, we will do a movstr or libcall instead.
+   move-instruction pairs, we will do a movmem or libcall instead.
 
    Without byte/word accesses, we want no more than four instructions;
    with, several single byte accesses are better.  */
@@ -1360,7 +1345,7 @@ do {									     \
 
 /* Nonzero if access to memory by bytes is no faster than for words.
    Also nonzero if doing byte operations (specifically shifts) in registers
-   is undesirable. 
+   is undesirable.
 
    On the Alpha, we want to not use the byte operation and instead use
    masking operations to access fields; these will save instructions.  */
@@ -1374,7 +1359,7 @@ do {									     \
 /* Define if loading in MODE, an integral mode narrower than BITS_PER_WORD
    will either zero-extend or sign-extend.  The value of this macro should
    be the code that says which one of the two operations is implicitly
-   done, NIL if none.  */
+   done, UNKNOWN if none.  */
 #define LOAD_EXTEND_OP(MODE) ((MODE) == SImode ? SIGN_EXTEND : ZERO_EXTEND)
 
 /* Define if loading short immediate values into registers sign extends.  */
@@ -1619,76 +1604,15 @@ do {						\
 #define PRINT_OPERAND_PUNCT_VALID_P(CODE) \
   ((CODE) == '/' || (CODE) == ',' || (CODE) == '-' || (CODE) == '~' \
    || (CODE) == '#' || (CODE) == '*' || (CODE) == '&' || (CODE) == '+')
-
+
 /* Print a memory address as an operand to reference that memory location.  */
 
 #define PRINT_OPERAND_ADDRESS(FILE, ADDR) \
   print_operand_address((FILE), (ADDR))
-
-/* Define the codes that are matched by predicates in alpha.c.  */
-
-#define PREDICATE_CODES 						\
-  {"reg_or_0_operand", {SUBREG, REG, CONST_INT, CONST_DOUBLE,		\
-			CONST_VECTOR}},					\
-  {"reg_or_6bit_operand", {SUBREG, REG, CONST_INT}},			\
-  {"reg_or_8bit_operand", {SUBREG, REG, CONST_INT}},			\
-  {"reg_or_const_int_operand", {SUBREG, REG, CONST_INT}},		\
-  {"cint8_operand", {CONST_INT}},					\
-  {"reg_or_cint_operand", {SUBREG, REG, CONST_INT}},			\
-  {"add_operand", {SUBREG, REG, CONST_INT}},				\
-  {"sext_add_operand", {SUBREG, REG, CONST_INT}},			\
-  {"const48_operand", {CONST_INT}},					\
-  {"and_operand", {SUBREG, REG, CONST_INT}},				\
-  {"or_operand", {SUBREG, REG, CONST_INT}},				\
-  {"mode_mask_operand", {CONST_INT}},					\
-  {"mul8_operand", {CONST_INT}},					\
-  {"mode_width_operand", {CONST_INT}},					\
-  {"alpha_comparison_operator", {EQ, LE, LT, LEU, LTU}},		\
-  {"alpha_zero_comparison_operator", {EQ, NE, LE, LT, LEU, LTU}},	\
-  {"alpha_swapped_comparison_operator", {EQ, GE, GT, GEU, GTU}},	\
-  {"signed_comparison_operator", {EQ, NE, LE, LT, GE, GT}},		\
-  {"alpha_fp_comparison_operator", {EQ, LE, LT, UNORDERED}},		\
-  {"divmod_operator", {DIV, MOD, UDIV, UMOD}},				\
-  {"fix_operator", {FIX, UNSIGNED_FIX}},				\
-  {"const0_operand", {CONST_INT, CONST_DOUBLE, CONST_VECTOR}},		\
-  {"samegp_function_operand", {SYMBOL_REF}},				\
-  {"direct_call_operand", {SYMBOL_REF}},				\
-  {"local_symbolic_operand", {SYMBOL_REF, CONST, LABEL_REF}},		\
-  {"small_symbolic_operand", {SYMBOL_REF, CONST}},			\
-  {"global_symbolic_operand", {SYMBOL_REF, CONST}},			\
-  {"dtp16_symbolic_operand", {CONST}},					\
-  {"dtp32_symbolic_operand", {CONST}},					\
-  {"gotdtp_symbolic_operand", {CONST}},					\
-  {"tp16_symbolic_operand", {CONST}},					\
-  {"tp32_symbolic_operand", {CONST}},					\
-  {"gottp_symbolic_operand", {CONST}},					\
-  {"call_operand", {REG, SYMBOL_REF}},					\
-  {"input_operand", {SUBREG, REG, MEM, CONST_INT, CONST_DOUBLE,		\
-		     CONST_VECTOR, SYMBOL_REF, CONST, LABEL_REF, HIGH}},\
-  {"some_operand", {SUBREG, REG, MEM, CONST_INT, CONST_DOUBLE,		\
-		    CONST_VECTOR, SYMBOL_REF, CONST, LABEL_REF, HIGH}},	\
-  {"some_ni_operand", {SUBREG, REG, MEM}},				\
-  {"aligned_memory_operand", {MEM}},					\
-  {"unaligned_memory_operand", {MEM}},					\
-  {"reg_or_unaligned_mem_operand", {SUBREG, REG, MEM}},			\
-  {"any_memory_operand", {MEM}},					\
-  {"normal_memory_operand", {MEM}},					\
-  {"hard_fp_register_operand", {SUBREG, REG}},				\
-  {"hard_int_register_operand", {SUBREG, REG}},				\
-  {"reg_not_elim_operand", {SUBREG, REG}},				\
-  {"reg_no_subreg_operand", {REG}},					\
-  {"addition_operation", {PLUS}},					\
-  {"symbolic_operand", {SYMBOL_REF, LABEL_REF, CONST}},			\
-  {"some_small_symbolic_operand", {SET, PARALLEL, PREFETCH, UNSPEC,	\
-				   UNSPEC_VOLATILE}},
 
 /* Implement `va_start' for varargs and stdarg.  */
 #define EXPAND_BUILTIN_VA_START(valist, nextarg) \
   alpha_va_start (valist, nextarg)
-
-/* Implement `va_arg'.  */
-#define EXPAND_BUILTIN_VA_ARG(valist, type) \
-  alpha_va_arg (valist, type)
 
 /* Tell collect that the object format is ECOFF.  */
 #define OBJECT_FORMAT_COFF
@@ -1727,9 +1651,16 @@ extern long alpha_auto_offset;
   ((GET_CODE (X) == PLUS ? INTVAL (XEXP (X, 1)) : 0) + alpha_auto_offset)
 #define DEBUGGER_ARG_OFFSET(OFFSET, X) (OFFSET + alpha_arg_offset)
 
+/* mips-tfile doesn't understand .stabd directives.  */
+#define DBX_OUTPUT_SOURCE_LINE(STREAM, LINE, COUNTER) do {	\
+  dbxout_begin_stabn_sline (LINE);				\
+  dbxout_stab_value_internal_label ("LM", &COUNTER);		\
+} while (0)
 
-#define ASM_OUTPUT_SOURCE_LINE(STREAM, LINE, COUNTER)			\
-  alpha_output_lineno (STREAM, LINE)
+/* We want to use MIPS-style .loc directives for SDB line numbers.  */
+extern int num_source_filenames;
+#define SDB_OUTPUT_SOURCE_LINE(STREAM, LINE)	\
+  fprintf (STREAM, "\t.loc\t%d %d\n", num_source_filenames, LINE)
 
 #define ASM_OUTPUT_SOURCE_FILENAME(STREAM, NAME)			\
   alpha_output_filename (STREAM, NAME)
@@ -1836,6 +1767,3 @@ do {							\
 
 /* The system headers under Alpha systems are generally C++-aware.  */
 #define NO_IMPLICIT_EXTERN_C
-
-/* Generate calls to memcpy, etc., not bcopy, etc.  */
-#define TARGET_MEM_FUNCTIONS 1

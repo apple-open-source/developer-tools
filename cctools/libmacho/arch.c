@@ -37,7 +37,8 @@
  * Originally written at NeXT, Inc.
  *
  */
-
+#ifndef RLD
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -66,10 +67,8 @@ static const NXArchInfo ArchInfoTable[] = {
 	 "Motorola 88K"},
     {"ppc",    CPU_TYPE_POWERPC, CPU_SUBTYPE_POWERPC_ALL,  NX_BigEndian,
 	 "PowerPC"},
-#ifdef INTERIM_PPC64
-    {"ppc64",  CPU_TYPE_POWERPC64, CPU_SUBTYPE_POWERPC64_ALL,  NX_BigEndian,
+    {"ppc64",  CPU_TYPE_POWERPC64, CPU_SUBTYPE_POWERPC_ALL,  NX_BigEndian,
 	 "PowerPC 64-bit"},
-#endif /* INTERIM_PPC64 */
     {"sparc",  CPU_TYPE_SPARC,   CPU_SUBTYPE_SPARC_ALL,	   NX_BigEndian,
 	 "SPARC"},
     {"any",    CPU_TYPE_ANY,     CPU_SUBTYPE_MULTIPLE,     NX_UnknownByteOrder,
@@ -99,6 +98,8 @@ static const NXArchInfo ArchInfoTable[] = {
 	 "Intel Pentium II Model 3" },
     {"pentIIm5", CPU_TYPE_I386, CPU_SUBTYPE_PENTII_M5, NX_LittleEndian,
 	 "Intel Pentium II Model 5" },
+    {"pentium4", CPU_TYPE_I386, CPU_SUBTYPE_PENTIUM_4, NX_LittleEndian,
+	 "Intel Pentium 4" },
     {"ppc601", CPU_TYPE_POWERPC, CPU_SUBTYPE_POWERPC_601,  NX_BigEndian,
 	 "PowerPC 601" },
     {"ppc603", CPU_TYPE_POWERPC, CPU_SUBTYPE_POWERPC_603,  NX_BigEndian,
@@ -119,6 +120,8 @@ static const NXArchInfo ArchInfoTable[] = {
 	 "PowerPC 7450" },
     {"ppc970", CPU_TYPE_POWERPC, CPU_SUBTYPE_POWERPC_970,  NX_BigEndian,
 	 "PowerPC 970" },
+    {"ppc970-64",  CPU_TYPE_POWERPC64, CPU_SUBTYPE_POWERPC_970,  NX_BigEndian,
+	 "PowerPC 970 64-bit"},
     {"little", CPU_TYPE_ANY,     CPU_SUBTYPE_LITTLE_ENDIAN, NX_LittleEndian,
          "Little Endian"},
     {"big",    CPU_TYPE_ANY,     CPU_SUBTYPE_BIG_ENDIAN,   NX_BigEndian,
@@ -267,10 +270,10 @@ NXFindBestFatArch(
 cpu_type_t cputype,
 cpu_subtype_t cpusubtype,
 struct fat_arch *fat_archs,
-unsigned long nfat_archs)
+uint32_t nfat_archs)
 {
     unsigned long i;
-    int lowest_family, lowest_model, lowest_index;
+    long lowest_family, lowest_model, lowest_index;
 
 	/*
 	 * Look for the first exact match.
@@ -495,22 +498,39 @@ unsigned long nfat_archs)
 		}
 	    }
 	    break;
-#ifdef INTERIM_PPC64
 	case CPU_TYPE_POWERPC64:
 	    /*
-	     * An exact match as not found.  Currently the interim ppc64 format
-	     * only has one subtype.  If other subtypes are added this code
-	     * will not know about them so just pick the
-	     * CPU_SUBTYPE_POWERPC64_ALL if it exists.
+	     * An exact match as not found.  So for all the PowerPC64 subtypes
+	     * pick the subtype from the following order starting from a subtype
+	     * that will work (contains 64-bit instructions or altivec if
+	     * needed):
+	     *	970 (currently only the one 64-bit subtype)
+	     * For an unknown subtype pick only the ALL type if it exists.
 	     */
-	    for(i = 0; i < nfat_archs; i++){
-		if(fat_archs[i].cputype != cputype)
-		    continue;
-		if(fat_archs[i].cpusubtype == CPU_SUBTYPE_POWERPC64_ALL)
-		    return(fat_archs + i);
+	    switch(cpusubtype){
+	    case CPU_SUBTYPE_POWERPC_ALL:
+		/*
+		 * The CPU_SUBTYPE_POWERPC_ALL is only used by the development
+		 * environment tools when building a generic ALL type binary.
+		 * In the case of a non-exact match we pick the most current
+		 * processor.
+		 */
+	    case CPU_SUBTYPE_POWERPC_970:
+		for(i = 0; i < nfat_archs; i++){
+		    if(fat_archs[i].cputype != cputype)
+			continue;
+		    if(fat_archs[i].cpusubtype == CPU_SUBTYPE_POWERPC_970)
+			return(fat_archs + i);
+		}
+	    default:
+		for(i = 0; i < nfat_archs; i++){
+		    if(fat_archs[i].cputype != cputype)
+			continue;
+		    if(fat_archs[i].cpusubtype == CPU_SUBTYPE_POWERPC_ALL)
+			return(fat_archs + i);
+		}
 	    }
 	    break;
-#endif /* INTERIM_PPC64 */
 	case CPU_TYPE_MC88000:
 	    for(i = 0; i < nfat_archs; i++){
 		if(fat_archs[i].cputype != cputype)
@@ -564,61 +584,16 @@ cpu_type_t cputype,
 cpu_subtype_t cpusubtype1,
 cpu_subtype_t cpusubtype2)
 {
+	/*
+	 * We now combine any i386 subtype to the ALL subtype.
+	 */
+	if(cputype == CPU_TYPE_I386)
+	    return(CPU_SUBTYPE_I386_ALL);
+
 	if(cpusubtype1 == cpusubtype2)
 	    return(cpusubtype1);
 
 	switch(cputype){
-	case CPU_TYPE_I386:
-	    /*
-	     * For compatiblity with pre-Rhapsody CR1 systems the subtypes that
-	     * previously existed are handled the same as before.  So going in
-	     * we know we don't have an exact match because of the test done
-	     * at the beginning of the routine.
-	     */
-	    if((cpusubtype1 == CPU_SUBTYPE_I386_ALL ||
-	        /* cpusubtype1 == CPU_SUBTYPE_386 || same as above */
-	        cpusubtype1 == CPU_SUBTYPE_486 ||
-	        cpusubtype1 == CPU_SUBTYPE_486SX ||
-	        cpusubtype1 == CPU_SUBTYPE_586) &&
-	       (cpusubtype2 == CPU_SUBTYPE_I386_ALL ||
-	        /* cpusubtype2 == CPU_SUBTYPE_386 || same as above */
-	        cpusubtype2 == CPU_SUBTYPE_486 ||
-	        cpusubtype2 == CPU_SUBTYPE_486SX ||
-	        cpusubtype2 == CPU_SUBTYPE_586)){
-		/* return the highest subtype of the two */
-		if(cpusubtype1 == CPU_SUBTYPE_586 ||
-		   cpusubtype2 == CPU_SUBTYPE_586)
-		    return(CPU_SUBTYPE_586);
-		if(cpusubtype1 == CPU_SUBTYPE_486SX ||
-		   cpusubtype2 == CPU_SUBTYPE_486SX)
-		    return(CPU_SUBTYPE_486SX);
-		if(cpusubtype1 == CPU_SUBTYPE_486 ||
-		   cpusubtype2 == CPU_SUBTYPE_486)
-		    return(CPU_SUBTYPE_486);
-		break; /* logically can't get here */
-	    }
-	    /*
-	     * If either is a MODEL_ALL type select the one with the highest
-	     * family type.  Note that only the old group of subtypes (ALL, 386,
-	     * 486, 486SX, 586) can ever have MODEL_ALL (a model number of
-	     * zero).  Since the cases both subtypes being in the old group are
-	     * handled above this makes the the highest family type the one that
-	     * is not MODEL_ALL.
-	     */
-	    if(CPU_SUBTYPE_INTEL_MODEL(cpusubtype1) ==
-	       CPU_SUBTYPE_INTEL_MODEL_ALL)
-		return(cpusubtype2);
-	    if(CPU_SUBTYPE_INTEL_MODEL(cpusubtype2) ==
-	       CPU_SUBTYPE_INTEL_MODEL_ALL)
-		return(cpusubtype1);
-	    /*
-	     * For all other families and models they must match exactly to
-	     * combine and since that test was done at the start of this routine
-	     * we know these do not match and do not combine.
-	     */
-	    return((cpu_subtype_t)-1);
-	    break; /* logically can't get here */
-
 	case CPU_TYPE_MC680x0:
 	    if(cpusubtype1 != CPU_SUBTYPE_MC680x0_ALL &&
 	       cpusubtype1 != CPU_SUBTYPE_MC68030_ONLY &&
@@ -716,3 +691,4 @@ cpu_subtype_t cpusubtype2)
 	}
 	return((cpu_subtype_t)-1); /* logically can't get here */
 }
+#endif /* !defined(RLD) */

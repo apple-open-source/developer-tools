@@ -1,5 +1,5 @@
 /* AbstractSequentialList.java -- List implementation for sequential access
-   Copyright (C) 1998, 1999, 2000, 2001 Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2000, 2001, 2005  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -61,7 +61,7 @@ package java.util;
  *
  * @author Original author unknown
  * @author Bryce McKinlay
- * @author Eric Blake <ebb9@email.byu.edu>
+ * @author Eric Blake (ebb9@email.byu.edu)
  * @see Collection
  * @see List
  * @see AbstractList
@@ -105,7 +105,9 @@ public abstract class AbstractSequentialList extends AbstractList
    * @throws ClassCastException if o cannot be added to this list due to its
    *         type
    * @throws IllegalArgumentException if o cannot be added to this list for
-   *         some other reason
+   *         some other reason.
+   * @throws NullPointerException if o is null and the list does not permit
+   *         the addition of null values.
    */
   public void add(int index, Object o)
   {
@@ -137,6 +139,8 @@ public abstract class AbstractSequentialList extends AbstractList
    * @throws IllegalArgumentException if some element of c cannot be added
    *         to this list for some other reason
    * @throws NullPointerException if the specified collection is null
+   * @throws NullPointerException if an object, o, in c is null and the list
+   *         does not permit the addition of null values.
    * @see #add(int, Object)
    */
   public boolean addAll(int index, Collection c)
@@ -214,6 +218,8 @@ public abstract class AbstractSequentialList extends AbstractList
    *         type
    * @throws IllegalArgumentException if o cannot be added to this list for
    *         some other reason
+   * @throws NullPointerException if o is null and the list does not allow
+   *         a value to be set to null.
    */
   public Object set(int index, Object o)
   {

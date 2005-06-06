@@ -67,7 +67,6 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "rtl.h"
 #include "tm_p.h"
 #include "flags.h"
-#include "basic-block.h"
 #include "regs.h"
 #include "function.h"
 #include "insn-config.h"
@@ -448,9 +447,9 @@ static void
 validate_equiv_mem_from_store (rtx dest, rtx set ATTRIBUTE_UNUSED,
 			       void *data ATTRIBUTE_UNUSED)
 {
-  if ((GET_CODE (dest) == REG
+  if ((REG_P (dest)
        && reg_overlap_mentioned_p (dest, equiv_mem))
-      || (GET_CODE (dest) == MEM
+      || (MEM_P (dest)
 	  && true_dependence (dest, VOIDmode, equiv_mem, rtx_varies_p)))
     equiv_mem_modified = 1;
 }
@@ -484,7 +483,7 @@ validate_equiv_mem (rtx start, rtx reg, rtx memref)
       if (find_reg_note (insn, REG_DEAD, reg))
 	return 1;
 
-      if (GET_CODE (insn) == CALL_INSN && ! RTX_UNCHANGING_P (memref)
+      if (CALL_P (insn) && ! MEM_READONLY_P (memref)
 	  && ! CONST_OR_PURE_CALL_P (insn))
 	return 0;
 
@@ -498,7 +497,7 @@ validate_equiv_mem (rtx start, rtx reg, rtx memref)
       for (note = REG_NOTES (insn); note; note = XEXP (note, 1))
 	if ((REG_NOTE_KIND (note) == REG_INC
 	     || REG_NOTE_KIND (note) == REG_DEAD)
-	    && GET_CODE (XEXP (note, 0)) == REG
+	    && REG_P (XEXP (note, 0))
 	    && reg_overlap_mentioned_p (XEXP (note, 0), memref))
 	  return 0;
     }
@@ -518,10 +517,7 @@ equiv_init_varies_p (rtx x)
   switch (code)
     {
     case MEM:
-      return ! RTX_UNCHANGING_P (x) || equiv_init_varies_p (XEXP (x, 0));
-
-    case QUEUED:
-      return 1;
+      return !MEM_READONLY_P (x) || equiv_init_varies_p (XEXP (x, 0));
 
     case CONST:
     case CONST_INT:
@@ -711,7 +707,7 @@ memref_referenced_p (rtx memref, rtx x)
     case SET:
       /* If we are setting a MEM, it doesn't count (its address does), but any
 	 other SET_DEST that has a MEM in it is referencing the MEM.  */
-      if (GET_CODE (SET_DEST (x)) == MEM)
+      if (MEM_P (SET_DEST (x)))
 	{
 	  if (memref_referenced_p (memref, XEXP (SET_DEST (x), 0)))
 	    return 1;
@@ -849,7 +845,7 @@ update_equiv_regs (void)
 	     Equivalences to MEMs should be made in another pass, after the
 	     reg_equiv[].replace information has been gathered.  */
 
-	  if (GET_CODE (dest) == MEM && GET_CODE (src) == REG
+	  if (MEM_P (dest) && REG_P (src)
 	      && (regno = REGNO (src)) >= FIRST_PSEUDO_REGISTER
 	      && REG_BASIC_BLOCK (regno) >= 0
 	      && REG_N_SETS (regno) == 1
@@ -878,11 +874,11 @@ update_equiv_regs (void)
 	     preferred class of a pseudo depends on all instructions that set
 	     or use it.  */
 
-	  if (GET_CODE (dest) != REG
+	  if (!REG_P (dest)
 	      || (regno = REGNO (dest)) < FIRST_PSEUDO_REGISTER
 	      || reg_equiv[regno].init_insns == const0_rtx
 	      || (CLASS_LIKELY_SPILLED_P (reg_preferred_class (regno))
-		  && GET_CODE (src) == MEM))
+		  && MEM_P (src)))
 	    {
 	      /* This might be setting a SUBREG of a pseudo, a pseudo that is
 		 also set somewhere else to a constant.  */
@@ -940,7 +936,7 @@ update_equiv_regs (void)
 	  note = find_reg_note (insn, REG_EQUIV, NULL_RTX);
 
 	  if (note == 0 && REG_BASIC_BLOCK (regno) >= 0
-	      && GET_CODE (SET_SRC (set)) == MEM
+	      && MEM_P (SET_SRC (set))
 	      && validate_equiv_mem (insn, dest, SET_SRC (set)))
 	    REG_NOTES (insn) = note = gen_rtx_EXPR_LIST (REG_EQUIV, SET_SRC (set),
 							 REG_NOTES (insn));
@@ -985,7 +981,7 @@ update_equiv_regs (void)
 		    if (REG_N_REFS (regno) == 2
 			&& (rtx_equal_p (XEXP (note, 0), src)
 			    || ! equiv_init_varies_p (src))
-			&& GET_CODE (insn) == INSN
+			&& NONJUMP_INSN_P (insn)
 			&& equiv_init_movable_p (PATTERN (insn), regno))
 		      reg_equiv[regno].replace = 1;
 		}
@@ -1011,6 +1007,11 @@ update_equiv_regs (void)
 	  rtx link;
 
 	  if (! INSN_P (insn))
+	    continue;
+
+	  /* Don't substitute into a non-local goto, this confuses CFG.  */
+	  if (JUMP_P (insn)
+	      && find_reg_note (insn, REG_NON_LOCAL_GOTO, NULL_RTX))
 	    continue;
 
 	  for (link = REG_NOTES (insn); link; link = XEXP (link, 1))
@@ -1116,7 +1117,8 @@ update_equiv_regs (void)
   /* Clear all dead REGNOs from all basic block's live info.  */
   if (clear_regnos)
     {
-      int j;
+      unsigned j;
+      
       if (clear_regnos > 8)
 	{
 	  FOR_EACH_BB (bb)
@@ -1126,14 +1128,17 @@ update_equiv_regs (void)
 	    }
 	}
       else
-	EXECUTE_IF_SET_IN_REG_SET (&cleared_regs, 0, j,
-	  {
-	    FOR_EACH_BB (bb)
-	      {
-	        CLEAR_REGNO_REG_SET (bb->global_live_at_start, j);
-	        CLEAR_REGNO_REG_SET (bb->global_live_at_end, j);
-	      }
-	  });
+	{
+	  reg_set_iterator rsi;
+	  EXECUTE_IF_SET_IN_REG_SET (&cleared_regs, 0, j, rsi)
+	    {
+	      FOR_EACH_BB (bb)
+		{
+		  CLEAR_REGNO_REG_SET (bb->global_live_at_start, j);
+		  CLEAR_REGNO_REG_SET (bb->global_live_at_end, j);
+		}
+	    }
+	}
     }
 
   /* Clean up.  */
@@ -1155,7 +1160,7 @@ no_equiv (rtx reg, rtx store ATTRIBUTE_UNUSED, void *data ATTRIBUTE_UNUSED)
   int regno;
   rtx list;
 
-  if (GET_CODE (reg) != REG)
+  if (!REG_P (reg))
     return;
   regno = REGNO (reg);
   list = reg_equiv[regno].init_insns;
@@ -1190,7 +1195,7 @@ block_alloc (int b)
   insn = BB_END (BASIC_BLOCK (b));
   while (1)
     {
-      if (GET_CODE (insn) != NOTE)
+      if (!NOTE_P (insn))
 	if (++insn_count > max_uid)
 	  abort ();
       if (insn == BB_HEAD (BASIC_BLOCK (b)))
@@ -1213,7 +1218,7 @@ block_alloc (int b)
   insn = BB_HEAD (BASIC_BLOCK (b));
   while (1)
     {
-      if (GET_CODE (insn) != NOTE)
+      if (!NOTE_P (insn))
 	insn_number++;
 
       if (INSN_P (insn))
@@ -1308,14 +1313,13 @@ block_alloc (int b)
 		  hard_reg = get_hard_reg_initial_reg (cfun, r1);
 		  if (hard_reg != NULL_RTX)
 		    {
-		      if (GET_CODE (hard_reg) == REG
-			  && IN_RANGE (REGNO (hard_reg),
-				       0, FIRST_PSEUDO_REGISTER - 1)
-			  && ! call_used_regs[REGNO (hard_reg)])
+		      if (REG_P (hard_reg)
+			  && REGNO (hard_reg) < FIRST_PSEUDO_REGISTER
+			  && !call_used_regs[REGNO (hard_reg)])
 			continue;
 		    }
 
-		  if (GET_CODE (r0) == REG || GET_CODE (r0) == SUBREG)
+		  if (REG_P (r0) || GET_CODE (r0) == SUBREG)
 		    {
 		      /* We have two priorities for hard register preferences.
 			 If we have a move insn or an insn whose first input
@@ -1324,7 +1328,7 @@ block_alloc (int b)
 		      int may_save_copy
 			= (r1 == recog_data.operand[i] && must_match_0 >= 0);
 
-		      if (GET_CODE (r1) == REG || GET_CODE (r1) == SUBREG)
+		      if (REG_P (r1) || GET_CODE (r1) == SUBREG)
 			win = combine_regs (r1, r0, may_save_copy,
 					    insn_number, insn, 0);
 		    }
@@ -1350,22 +1354,22 @@ block_alloc (int b)
 	  if (optimize
 	      && GET_CODE (PATTERN (insn)) == CLOBBER
 	      && (r0 = XEXP (PATTERN (insn), 0),
-		  GET_CODE (r0) == REG)
+		  REG_P (r0))
 	      && (link = find_reg_note (insn, REG_LIBCALL, NULL_RTX)) != 0
 	      && XEXP (link, 0) != 0
-	      && GET_CODE (XEXP (link, 0)) == INSN
+	      && NONJUMP_INSN_P (XEXP (link, 0))
 	      && (set = single_set (XEXP (link, 0))) != 0
 	      && SET_DEST (set) == r0 && SET_SRC (set) == r0
 	      && (note = find_reg_note (XEXP (link, 0), REG_EQUAL,
 					NULL_RTX)) != 0)
 	    {
-	      if (r1 = XEXP (note, 0), GET_CODE (r1) == REG
+	      if (r1 = XEXP (note, 0), REG_P (r1)
 		  /* Check that we have such a sequence.  */
 		  && no_conflict_p (insn, r0, r1))
 		win = combine_regs (r1, r0, 1, insn_number, insn, 1);
 	      else if (GET_RTX_FORMAT (GET_CODE (XEXP (note, 0)))[0] == 'e'
 		       && (r1 = XEXP (XEXP (note, 0), 0),
-			   GET_CODE (r1) == REG || GET_CODE (r1) == SUBREG)
+			   REG_P (r1) || GET_CODE (r1) == SUBREG)
 		       && no_conflict_p (insn, r0, r1))
 		win = combine_regs (r1, r0, 0, insn_number, insn, 1);
 
@@ -1373,7 +1377,7 @@ block_alloc (int b)
 		 commutative.  */
 	      else if (COMMUTATIVE_P (XEXP (note, 0))
 		       && (r1 = XEXP (XEXP (note, 0), 1),
-			   (GET_CODE (r1) == REG || GET_CODE (r1) == SUBREG))
+			   (REG_P (r1) || GET_CODE (r1) == SUBREG))
 		       && no_conflict_p (insn, r0, r1))
 		win = combine_regs (r1, r0, 0, insn_number, insn, 1);
 
@@ -1400,7 +1404,7 @@ block_alloc (int b)
 
 	  for (link = REG_NOTES (insn); link; link = XEXP (link, 1))
 	    if (REG_NOTE_KIND (link) == REG_DEAD
-		&& GET_CODE (XEXP (link, 0)) == REG
+		&& REG_P (XEXP (link, 0))
 		&& combined_regno != (int) REGNO (XEXP (link, 0))
 		&& (no_conflict_combined_regno != (int) REGNO (XEXP (link, 0))
 		    || ! find_reg_note (insn, REG_NO_CONFLICT,
@@ -1421,14 +1425,14 @@ block_alloc (int b)
 
 	  for (link = REG_NOTES (insn); link; link = XEXP (link, 1))
 	    if (REG_NOTE_KIND (link) == REG_UNUSED
-		&& GET_CODE (XEXP (link, 0)) == REG)
+		&& REG_P (XEXP (link, 0)))
 	      wipe_dead_reg (XEXP (link, 0), 1);
 
 	  /* If this is an insn that has a REG_RETVAL note pointing at a
 	     CLOBBER insn, we have reached the end of a REG_NO_CONFLICT
 	     block, so clear any register number that combined within it.  */
 	  if ((note = find_reg_note (insn, REG_RETVAL, NULL_RTX)) != 0
-	      && GET_CODE (XEXP (note, 0)) == INSN
+	      && NONJUMP_INSN_P (XEXP (note, 0))
 	      && GET_CODE (PATTERN (XEXP (note, 0))) == CLOBBER)
 	    no_conflict_combined_regno = -1;
 	}
@@ -1724,7 +1728,7 @@ qty_sugg_compare_1 (const void *q1p, const void *q2p)
    We don't actually combine a hard reg with a pseudo; instead
    we just record the hard reg as the suggestion for the pseudo's quantity.
    If we really combined them, we could lose if the pseudo lives
-   across an insn that clobbers the hard reg (eg, movstr).
+   across an insn that clobbers the hard reg (eg, movmem).
 
    ALREADY_DEAD is nonzero if USEDREG is known to be dead even though
    there is no REG_DEAD note on INSN.  This occurs during the processing
@@ -1753,7 +1757,7 @@ combine_regs (rtx usedreg, rtx setreg, int may_save_copy, int insn_number,
     {
       rtx subreg = SUBREG_REG (usedreg);
 
-      if (GET_CODE (subreg) == REG)
+      if (REG_P (subreg))
 	{
 	  if (GET_MODE_SIZE (GET_MODE (subreg)) > UNITS_PER_WORD)
 	    may_save_copy = 0;
@@ -1771,7 +1775,7 @@ combine_regs (rtx usedreg, rtx setreg, int may_save_copy, int insn_number,
       usedreg = subreg;
     }
 
-  if (GET_CODE (usedreg) != REG)
+  if (!REG_P (usedreg))
     return 0;
 
   ureg = REGNO (usedreg);
@@ -1786,7 +1790,7 @@ combine_regs (rtx usedreg, rtx setreg, int may_save_copy, int insn_number,
     {
       rtx subreg = SUBREG_REG (setreg);
 
-      if (GET_CODE (subreg) == REG)
+      if (REG_P (subreg))
 	{
 	  if (GET_MODE_SIZE (GET_MODE (subreg)) > UNITS_PER_WORD)
 	    may_save_copy = 0;
@@ -1804,7 +1808,7 @@ combine_regs (rtx usedreg, rtx setreg, int may_save_copy, int insn_number,
       setreg = subreg;
     }
 
-  if (GET_CODE (setreg) != REG)
+  if (!REG_P (setreg))
     return 0;
 
   sreg = REGNO (setreg);
@@ -1984,7 +1988,7 @@ reg_is_set (rtx reg, rtx setter, void *data ATTRIBUTE_UNUSED)
      a hard register.  These may actually not exist any more.  */
 
   if (GET_CODE (reg) != SUBREG
-      && GET_CODE (reg) != REG)
+      && !REG_P (reg))
     return;
 
   /* Mark this register as being born.  If it is used in a CLOBBER, mark
@@ -2006,7 +2010,7 @@ reg_is_born (rtx reg, int birth)
     {
       regno = REGNO (SUBREG_REG (reg));
       if (regno < FIRST_PSEUDO_REGISTER)
-	regno = subreg_hard_regno (reg, 1);
+	regno = subreg_regno (reg);
     }
   else
     regno = REGNO (reg);
@@ -2060,7 +2064,7 @@ wipe_dead_reg (rtx reg, int output_p)
 	{
 	  rtx set = XVECEXP (PATTERN (this_insn), 0, i);
 	  if (GET_CODE (set) == SET
-	      && GET_CODE (SET_DEST (set)) != REG
+	      && !REG_P (SET_DEST (set))
 	      && !rtx_equal_p (reg, SET_DEST (set))
 	      && reg_overlap_mentioned_p (reg, SET_DEST (set)))
 	    output_p = 1;
@@ -2310,8 +2314,8 @@ no_conflict_p (rtx insn, rtx r0 ATTRIBUTE_UNUSED, rtx r1)
      when we scan the insns that actually use it.  */
 
   if (note == 0
-      || (GET_CODE (r1) == REG && REGNO (r1) < FIRST_PSEUDO_REGISTER)
-      || (GET_CODE (r1) == SUBREG && GET_CODE (SUBREG_REG (r1)) == REG
+      || (REG_P (r1) && REGNO (r1) < FIRST_PSEUDO_REGISTER)
+      || (GET_CODE (r1) == SUBREG && REG_P (SUBREG_REG (r1))
 	  && REGNO (SUBREG_REG (r1)) < FIRST_PSEUDO_REGISTER))
     return 0;
 

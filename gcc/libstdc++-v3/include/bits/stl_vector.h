@@ -1,6 +1,6 @@
 // Vector implementation -*- C++ -*-
 
-// Copyright (C) 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+// Copyright (C) 2001, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -81,7 +81,7 @@ namespace _GLIBCXX_STD
 	_Tp*           _M_start;
 	_Tp*           _M_finish;
 	_Tp*           _M_end_of_storage;
-	_Vector_impl (_Alloc const& __a)
+	_Vector_impl(_Alloc const& __a)
 	: _Alloc(__a), _M_start(0), _M_finish(0), _M_end_of_storage(0)
 	{ }
       };
@@ -118,7 +118,8 @@ namespace _GLIBCXX_STD
 
       void
       _M_deallocate(_Tp* __p, size_t __n)
-      { if (__p)
+      {
+	if (__p)
 	  _M_impl.deallocate(__p, __n);
       }
     };
@@ -153,19 +154,19 @@ namespace _GLIBCXX_STD
       typedef vector<_Tp, _Alloc>			vector_type;
 
     public:
-      typedef _Tp					value_type;
-      typedef value_type*				pointer;
-      typedef const value_type*				const_pointer;
+      typedef _Tp					 value_type;
+      typedef typename _Alloc::pointer                   pointer;
+      typedef typename _Alloc::const_pointer             const_pointer;
+      typedef typename _Alloc::reference                 reference;
+      typedef typename _Alloc::const_reference           const_reference;
       typedef __gnu_cxx::__normal_iterator<pointer, vector_type> iterator;
       typedef __gnu_cxx::__normal_iterator<const_pointer, vector_type>
       const_iterator;
-      typedef std::reverse_iterator<const_iterator> const_reverse_iterator;
-      typedef std::reverse_iterator<iterator>		reverse_iterator;
-      typedef value_type&				reference;
-      typedef const value_type&				const_reference;
-      typedef size_t					size_type;
-      typedef ptrdiff_t					difference_type;
-      typedef typename _Base::allocator_type		allocator_type;
+      typedef std::reverse_iterator<const_iterator>  const_reverse_iterator;
+      typedef std::reverse_iterator<iterator>		 reverse_iterator;
+      typedef size_t					 size_type;
+      typedef ptrdiff_t					 difference_type;
+      typedef typename _Base::allocator_type		 allocator_type;
 
     protected:
       /** @if maint
@@ -198,9 +199,11 @@ namespace _GLIBCXX_STD
       vector(size_type __n, const value_type& __value,
 	     const allocator_type& __a = allocator_type())
       : _Base(__n, __a)
-      { this->_M_impl._M_finish = std::uninitialized_fill_n(this->
-							    _M_impl._M_start,
-							    __n, __value); }
+      {
+	std::__uninitialized_fill_n_a(this->_M_impl._M_start, __n, __value,
+				      this->get_allocator());
+	this->_M_impl._M_finish = this->_M_impl._M_start + __n;
+      }
 
       /**
        *  @brief  Create a %vector with default elements.
@@ -212,10 +215,11 @@ namespace _GLIBCXX_STD
       explicit
       vector(size_type __n)
       : _Base(__n, allocator_type())
-      { this->_M_impl._M_finish = std::uninitialized_fill_n(this->
-							    _M_impl._M_start,
-							    __n,
-							    value_type()); }
+      {
+	std::__uninitialized_fill_n_a(this->_M_impl._M_start, __n, value_type(),
+				      this->get_allocator());
+	this->_M_impl._M_finish = this->_M_impl._M_start + __n;	
+      }
 
       /**
        *  @brief  %Vector copy constructor.
@@ -228,10 +232,10 @@ namespace _GLIBCXX_STD
        */
       vector(const vector& __x)
       : _Base(__x.size(), __x.get_allocator())
-      { this->_M_impl._M_finish = std::uninitialized_copy(__x.begin(),
-							  __x.end(),
-							  this->
-							  _M_impl._M_start);
+      { this->_M_impl._M_finish =
+	  std::__uninitialized_copy_a(__x.begin(), __x.end(),
+				      this->_M_impl._M_start,
+				      this->get_allocator());
       }
 
       /**
@@ -255,7 +259,7 @@ namespace _GLIBCXX_STD
 	: _Base(__a)
         {
 	  // Check whether it's an integral type.  If so, it's not an iterator.
-	  typedef typename _Is_integer<_InputIterator>::_Integral _Integral;
+	  typedef typename std::__is_integer<_InputIterator>::__type _Integral;
 	  _M_initialize_dispatch(__first, __last, _Integral());
 	}
 
@@ -266,7 +270,9 @@ namespace _GLIBCXX_STD
        *  responsibilty.
        */
       ~vector()
-      { std::_Destroy(this->_M_impl._M_start, this->_M_impl._M_finish); }
+      { std::_Destroy(this->_M_impl._M_start, this->_M_impl._M_finish,
+		      this->get_allocator());
+      }
 
       /**
        *  @brief  %Vector assignment operator.
@@ -310,7 +316,7 @@ namespace _GLIBCXX_STD
         assign(_InputIterator __first, _InputIterator __last)
         {
 	  // Check whether it's an integral type.  If so, it's not an iterator.
-	  typedef typename _Is_integer<_InputIterator>::_Integral _Integral;
+	  typedef typename std::__is_integer<_InputIterator>::__type _Integral;
 	  _M_assign_dispatch(__first, __last, _Integral());
 	}
 
@@ -597,7 +603,7 @@ namespace _GLIBCXX_STD
       {
 	if (this->_M_impl._M_finish != this->_M_impl._M_end_of_storage)
 	  {
-	    std::_Construct(this->_M_impl._M_finish, __x);
+	    this->_M_impl.construct(this->_M_impl._M_finish, __x);
 	    ++this->_M_impl._M_finish;
 	  }
 	else
@@ -617,7 +623,7 @@ namespace _GLIBCXX_STD
       pop_back()
       {
 	--this->_M_impl._M_finish;
-	std::_Destroy(this->_M_impl._M_finish);
+	this->_M_impl.destroy(this->_M_impl._M_finish);
       }
 
       /**
@@ -671,7 +677,7 @@ namespace _GLIBCXX_STD
 	       _InputIterator __last)
         {
 	  // Check whether it's an integral type.  If so, it's not an iterator.
-	  typedef typename _Is_integer<_InputIterator>::_Integral _Integral;
+	  typedef typename std::__is_integer<_InputIterator>::__type _Integral;
 	  _M_insert_dispatch(__position, __first, __last, _Integral());
 	}
 
@@ -757,7 +763,8 @@ namespace _GLIBCXX_STD
 	  pointer __result = this->_M_allocate(__n);
 	  try
 	    {
-	      std::uninitialized_copy(__first, __last, __result);
+	      std::__uninitialized_copy_a(__first, __last, __result,
+					  this->get_allocator());
 	      return __result;
 	    }
 	  catch(...)
@@ -777,9 +784,9 @@ namespace _GLIBCXX_STD
         {
 	  this->_M_impl._M_start = _M_allocate(__n);
 	  this->_M_impl._M_end_of_storage = this->_M_impl._M_start + __n;
-	  this->_M_impl._M_finish = std::uninitialized_fill_n(this->
-							      _M_impl._M_start,
-							      __n, __value);
+	  std::__uninitialized_fill_n_a(this->_M_impl._M_start, __n, __value,
+					this->get_allocator());
+	  this->_M_impl._M_finish = this->_M_impl._M_end_of_storage;
 	}
 
       // Called by the range constructor to implement [23.1.1]/9
@@ -799,7 +806,7 @@ namespace _GLIBCXX_STD
         _M_range_initialize(_InputIterator __first,
 			    _InputIterator __last, input_iterator_tag)
         {
-	  for ( ; __first != __last; ++__first)
+	  for (; __first != __last; ++__first)
 	    push_back(*__first);
 	}
 
@@ -809,12 +816,13 @@ namespace _GLIBCXX_STD
         _M_range_initialize(_ForwardIterator __first,
 			    _ForwardIterator __last, forward_iterator_tag)
         {
-	  size_type __n = std::distance(__first, __last);
+	  const size_type __n = std::distance(__first, __last);
 	  this->_M_impl._M_start = this->_M_allocate(__n);
 	  this->_M_impl._M_end_of_storage = this->_M_impl._M_start + __n;
-	  this->_M_impl._M_finish = std::uninitialized_copy(__first, __last,
-							    this->
-							    _M_impl._M_start);
+	  this->_M_impl._M_finish =
+	    std::__uninitialized_copy_a(__first, __last,
+					this->_M_impl._M_start,
+					this->get_allocator());
 	}
 
 

@@ -1,5 +1,5 @@
 /* UTF_16BE.java -- 
-   Copyright (C) 2002 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2004, 2005  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -35,14 +35,12 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package gnu.java.nio.charset;
 
-import java.nio.ByteBuffer;
-import java.nio.CharBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CharsetEncoder;
-import java.nio.charset.CoderResult;
 
 /**
  * UTF-16BE charset.
@@ -53,7 +51,18 @@ final class UTF_16BE extends Charset
 {
   UTF_16BE ()
   {
-    super ("UTF-16BE", null);
+    super ("UTF-16BE",  new String[] {
+        // witnessed by the internet
+        "UTF16BE",
+        /* These names are provided by
+         * http://oss.software.ibm.com/cgi-bin/icu/convexp?s=ALL
+         */
+        "x-utf-16be", "ibm-1200", "ibm-1201", "ibm-5297",
+        "ibm-13488", "ibm-17584", "windows-1201", "cp1200", "cp1201",
+        "UTF16_BigEndian",
+        // see http://java.sun.com/j2se/1.5.0/docs/guide/intl/encoding.doc.html
+        "UnicodeBigUnmarked"
+    });
   }
 
   public boolean contains (Charset cs)

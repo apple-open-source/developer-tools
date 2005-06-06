@@ -38,6 +38,7 @@ extern void mmix_output_quoted_string (FILE *, const char *, int);
 extern void mmix_asm_output_source_line  (FILE *, int);
 extern void mmix_asm_output_ascii (FILE *, const char *, int);
 extern void mmix_asm_output_label (FILE *, const char *);
+extern void mmix_asm_output_internal_label (FILE *, const char *);
 extern void mmix_asm_weaken_label (FILE *, const char *);
 extern void mmix_asm_output_labelref (FILE *, const char *);
 extern void mmix_asm_output_def (FILE *, const char *, const char *);
@@ -53,8 +54,6 @@ extern int mmix_local_regno (int);
 extern int mmix_dbx_register_number (int);
 extern int mmix_use_simple_return (void);
 extern void mmix_make_decl_one_only (tree);
-extern int mmix_function_arg_pass_by_reference
-  (const CUMULATIVE_ARGS *, enum machine_mode, tree, int);
 extern rtx mmix_function_outgoing_value (tree, tree);
 extern int mmix_function_value_regno_p (int);
 extern int mmix_data_alignment (tree, int);
@@ -67,7 +66,6 @@ extern void mmix_asm_declare_register_global
   (FILE *, tree, int, const char *);
 extern rtx mmix_function_arg
   (const CUMULATIVE_ARGS *, enum machine_mode, tree, int, int);
-extern rtx mmix_expand_builtin_va_arg (tree, tree);
 extern void mmix_asm_output_addr_diff_elt (FILE *, rtx, int, int);
 extern void mmix_asm_output_addr_vec_elt (FILE *, int);
 extern enum reg_class mmix_preferred_reload_class (rtx, enum reg_class);

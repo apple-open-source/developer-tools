@@ -37,12 +37,14 @@
 #include "tm.h"
 #include "unwind.h"
 #include "unwind-ia64.h"
+#include "unwind-compat.h"
 #include "ia64intrin.h"
 
 /* This isn't thread safe, but nice for occasional tests.  */
 #undef ENABLE_MALLOC_CHECKING
 
 #ifndef __USING_SJLJ_EXCEPTIONS__
+
 #define UNW_VER(x)		((x) >> 48)
 #define UNW_FLAG_MASK		0x0000ffff00000000
 #define UNW_FLAG_OSMASK		0x0000f00000000000
@@ -1753,6 +1755,9 @@ _Unwind_GetBSP (struct _Unwind_Context *context)
   return (_Unwind_Ptr) context->bsp;
 }
 
+#ifdef MD_UNWIND_SUPPORT
+#include MD_UNWIND_SUPPORT
+#endif
 
 static _Unwind_Reason_Code
 uw_frame_state_for (struct _Unwind_Context *context, _Unwind_FrameState *fs)
@@ -1776,28 +1781,26 @@ uw_frame_state_for (struct _Unwind_Context *context, _Unwind_FrameState *fs)
 	 os-specific fallback mechanism.  This will necessarily
 	 not provide a personality routine or LSDA.  */
 #ifdef MD_FALLBACK_FRAME_STATE_FOR
-      MD_FALLBACK_FRAME_STATE_FOR (context, fs, success);
+      if (MD_FALLBACK_FRAME_STATE_FOR (context, fs) == _URC_NO_REASON)
+	return _URC_NO_REASON;
 
       /* [SCRA 11.4.1] A leaf function with no memory stack, no exception
 	 handlers, and which keeps the return value in B0 does not need
 	 an unwind table entry.
 
 	 This can only happen in the frame after unwinding through a signal
-	 handler.  Avoid infinite looping by requiring that B0 != RP.  */
-      if (context->br_loc[0] && *context->br_loc[0] != context->rp)
+	 handler.  Avoid infinite looping by requiring that B0 != RP.
+	 RP == 0 terminates the chain.  */
+      if (context->br_loc[0] && *context->br_loc[0] != context->rp
+	  && context->rp != 0)
 	{
 	  fs->curr.reg[UNW_REG_RP].where = UNW_WHERE_BR;
 	  fs->curr.reg[UNW_REG_RP].when = -1;
 	  fs->curr.reg[UNW_REG_RP].val = 0;
-	  goto success;
+	  return _URC_NO_REASON;
 	}
-
-      return _URC_END_OF_STACK;
-    success:
-      return _URC_NO_REASON;
-#else
-      return _URC_END_OF_STACK;
 #endif
+      return _URC_END_OF_STACK;
     }
 
   context->region_start = ent->start_offset + segment_base;
@@ -2108,7 +2111,7 @@ uw_init_context_1 (struct _Unwind_Context *context, void *bsp)
   uw_update_context (context, &fs);
 }
 
-/* Install (ie longjmp to) the contents of TARGET.  */
+/* Install (i.e. longjmp to) the contents of TARGET.  */
 
 static void __attribute__((noreturn))
 uw_install_context (struct _Unwind_Context *current __attribute__((unused)),
@@ -2272,6 +2275,8 @@ uw_install_context (struct _Unwind_Context *current __attribute__((unused)),
 	"(p6) ldf.fill f22 = [r28]		\n\t"
 	"cmp.ne p7, p0 = r0, r29		\n\t"
 	";;					\n\t"
+	"ld8 r27 = [r20], 8			\n\t"
+	";;					\n\t"
 	"ld8 r28 = [r20], 8			\n\t"
 	"(p7) ldf.fill f23 = [r29]		\n\t"
 	"cmp.ne p6, p0 = r0, r22		\n\t"
@@ -2379,4 +2384,23 @@ uw_identify_context (struct _Unwind_Context *context)
 }
 
 #include "unwind.inc"
+
+#if defined (USE_GAS_SYMVER) && defined (SHARED) && defined (USE_LIBUNWIND_EXCEPTIONS)
+alias (_Unwind_Backtrace);
+alias (_Unwind_DeleteException);
+alias (_Unwind_FindEnclosingFunction);
+alias (_Unwind_ForcedUnwind);
+alias (_Unwind_GetBSP);
+alias (_Unwind_GetCFA);
+alias (_Unwind_GetGR);
+alias (_Unwind_GetIP);
+alias (_Unwind_GetLanguageSpecificData);
+alias (_Unwind_GetRegionStart);
+alias (_Unwind_RaiseException);
+alias (_Unwind_Resume);
+alias (_Unwind_Resume_or_Rethrow);
+alias (_Unwind_SetGR);
+alias (_Unwind_SetIP);
+#endif
+
 #endif

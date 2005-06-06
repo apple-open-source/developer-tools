@@ -21,6 +21,9 @@
    __cxa_atexit in libc. */
 #undef DEFAULT_USE_CXA_ATEXIT
 
+/* Define if you want assertions enabled. This is a cheap check. */
+#undef ENABLE_ASSERT_CHECKING
+
 /* Define if you want more run-time sanity checks. This one gets a grab bag of
    miscellaneous but relatively cheap checks. */
 #undef ENABLE_CHECKING
@@ -53,7 +56,8 @@
 
 /* Define if you want all operations on trees (the basic data structure of the
    front ends) to be checked for dynamic type safety at runtime. This is
-   moderately expensive. */
+   moderately expensive. The tree browser debugging routines will also be
+   enabled by this option. */
 #undef ENABLE_TREE_CHECKING
 
 /* Define if you want to run subprograms and generated programs through
@@ -141,88 +145,116 @@
 /* Define if <time.h> defines clock_t. */
 #undef HAVE_CLOCK_T
 
-/* Define to 1 if we found this declaration otherwise define to 0. */
+/* Define to 1 if we found a declaration for 'abort', otherwise define to 0.
+   */
 #undef HAVE_DECL_ABORT
 
-/* Define to 1 if we found this declaration otherwise define to 0. */
+/* Define to 1 if we found a declaration for 'atof', otherwise define to 0. */
 #undef HAVE_DECL_ATOF
 
-/* Define to 1 if we found this declaration otherwise define to 0. */
+/* Define to 1 if we found a declaration for 'atol', otherwise define to 0. */
 #undef HAVE_DECL_ATOL
 
-/* Define to 1 if we found this declaration otherwise define to 0. */
+/* Define to 1 if we found a declaration for 'basename', otherwise define to
+   0. */
 #undef HAVE_DECL_BASENAME
 
-/* Define to 1 if we found this declaration otherwise define to 0. */
+/* Define to 1 if we found a declaration for 'calloc', otherwise define to 0.
+   */
 #undef HAVE_DECL_CALLOC
 
-/* Define to 1 if we found this declaration otherwise define to 0. */
+/* Define to 1 if we found a declaration for 'clock', otherwise define to 0.
+   */
 #undef HAVE_DECL_CLOCK
 
-/* Define to 1 if we found this declaration otherwise define to 0. */
+/* Define to 1 if we found a declaration for 'errno', otherwise define to 0.
+   */
 #undef HAVE_DECL_ERRNO
 
-/* Define to 1 if we found this declaration otherwise define to 0. */
+/* Define to 1 if we found a declaration for 'fprintf_unlocked', otherwise
+   define to 0. */
 #undef HAVE_DECL_FPRINTF_UNLOCKED
 
-/* Define to 1 if we found this declaration otherwise define to 0. */
+/* Define to 1 if we found a declaration for 'fputs_unlocked', otherwise
+   define to 0. */
 #undef HAVE_DECL_FPUTS_UNLOCKED
 
-/* Define to 1 if we found this declaration otherwise define to 0. */
+/* Define to 1 if we found a declaration for 'free', otherwise define to 0. */
 #undef HAVE_DECL_FREE
 
-/* Define to 1 if we found this declaration otherwise define to 0. */
+/* Define to 1 if we found a declaration for 'fwrite_unlocked', otherwise
+   define to 0. */
 #undef HAVE_DECL_FWRITE_UNLOCKED
 
-/* Define to 1 if we found this declaration otherwise define to 0. */
+/* Define to 1 if we found a declaration for 'getcwd', otherwise define to 0.
+   */
 #undef HAVE_DECL_GETCWD
 
-/* Define to 1 if we found this declaration otherwise define to 0. */
+/* Define to 1 if we found a declaration for 'getenv', otherwise define to 0.
+   */
 #undef HAVE_DECL_GETENV
 
-/* Define to 1 if we found this declaration otherwise define to 0. */
+/* Define to 1 if we found a declaration for 'getopt', otherwise define to 0.
+   */
 #undef HAVE_DECL_GETOPT
 
-/* Define to 1 if we found this declaration otherwise define to 0. */
+/* Define to 1 if we found a declaration for 'getpagesize', otherwise define
+   to 0. */
+#undef HAVE_DECL_GETPAGESIZE
+
+/* Define to 1 if we found a declaration for 'getrlimit', otherwise define to
+   0. */
 #undef HAVE_DECL_GETRLIMIT
 
-/* Define to 1 if we found this declaration otherwise define to 0. */
+/* Define to 1 if we found a declaration for 'getrusage', otherwise define to
+   0. */
 #undef HAVE_DECL_GETRUSAGE
 
-/* Define to 1 if we found this declaration otherwise define to 0. */
+/* Define to 1 if we found a declaration for 'getwd', otherwise define to 0.
+   */
 #undef HAVE_DECL_GETWD
 
-/* Define to 1 if we found this declaration otherwise define to 0. */
+/* Define to 1 if we found a declaration for 'ldgetname', otherwise define to
+   0. */
 #undef HAVE_DECL_LDGETNAME
 
-/* Define to 1 if we found this declaration otherwise define to 0. */
+/* Define to 1 if we found a declaration for 'malloc', otherwise define to 0.
+   */
 #undef HAVE_DECL_MALLOC
 
-/* Define to 1 if we found this declaration otherwise define to 0. */
+/* Define to 1 if we found a declaration for 'putc_unlocked', otherwise define
+   to 0. */
 #undef HAVE_DECL_PUTC_UNLOCKED
 
-/* Define to 1 if we found this declaration otherwise define to 0. */
+/* Define to 1 if we found a declaration for 'realloc', otherwise define to 0.
+   */
 #undef HAVE_DECL_REALLOC
 
-/* Define to 1 if we found this declaration otherwise define to 0. */
+/* Define to 1 if we found a declaration for 'sbrk', otherwise define to 0. */
 #undef HAVE_DECL_SBRK
 
-/* Define to 1 if we found this declaration otherwise define to 0. */
+/* Define to 1 if we found a declaration for 'setrlimit', otherwise define to
+   0. */
 #undef HAVE_DECL_SETRLIMIT
 
-/* Define to 1 if we found this declaration otherwise define to 0. */
+/* Define to 1 if we found a declaration for 'snprintf', otherwise define to
+   0. */
 #undef HAVE_DECL_SNPRINTF
 
-/* Define to 1 if we found this declaration otherwise define to 0. */
+/* Define to 1 if we found a declaration for 'strsignal', otherwise define to
+   0. */
 #undef HAVE_DECL_STRSIGNAL
 
-/* Define to 1 if we found this declaration otherwise define to 0. */
+/* Define to 1 if we found a declaration for 'strstr', otherwise define to 0.
+   */
 #undef HAVE_DECL_STRSTR
 
-/* Define to 1 if we found this declaration otherwise define to 0. */
+/* Define to 1 if we found a declaration for 'times', otherwise define to 0.
+   */
 #undef HAVE_DECL_TIMES
 
-/* Define to 1 if we found this declaration otherwise define to 0. */
+/* Define to 1 if we found a declaration for 'vasprintf', otherwise define to
+   0. */
 #undef HAVE_DECL_VASPRINTF
 
 /* Define to 1 if you have the <direct.h> header file. */
@@ -252,6 +284,9 @@
 /* Define if your assembler supports .balign and .p2align. */
 #undef HAVE_GAS_BALIGN_AND_P2ALIGN
 
+/* Define 0/1 if your assembler supports COMDAT group. */
+#undef HAVE_GAS_COMDAT_GROUP
+
 /* Define if your assembler uses the new HImode fild and fist notation. */
 #undef HAVE_GAS_FILDS_FISTS
 
@@ -261,6 +296,9 @@
 /* Define if your assembler supports specifying the maximum number of bytes to
    skip when using the GAS .p2align command. */
 #undef HAVE_GAS_MAX_SKIP_P2ALIGN
+
+/* Define if your assembler supports .nsubspa comdat option. */
+#undef HAVE_GAS_NSUBSPA_COMDAT
 
 /* Define if your assembler and linker support 32-bit section relative relocs
    via '.secrel32 label'. */
@@ -301,6 +339,9 @@
 /* Define to 1 if you have the `kill' function. */
 #undef HAVE_KILL
 
+/* Define if you have <langinfo.h> and nl_langinfo(CODESET). */
+#undef HAVE_LANGINFO_CODESET
+
 /* Define to 1 if you have the <langinfo.h> header file. */
 #undef HAVE_LANGINFO_H
 
@@ -313,8 +354,14 @@
 /* Define if your linker supports --as-needed and --no-as-needed options. */
 #undef HAVE_LD_AS_NEEDED
 
+/* Define if your linker supports --demangle option. */
+#undef HAVE_LD_DEMANGLE
+
 /* Define if your linker supports --eh-frame-hdr option. */
 #undef HAVE_LD_EH_FRAME_HDR
+
+/* Define if your PowerPC64 linker only needs function descriptor syms. */
+#undef HAVE_LD_NO_DOT_SYMS
 
 /* Define if your linker supports -pie option. */
 #undef HAVE_LD_PIE
@@ -322,6 +369,9 @@
 /* Define if your linker links a mix of read-only and read-write sections into
    a read-write section. */
 #undef HAVE_LD_RO_RW_SECTION_MIXING
+
+/* Define if your linker supports -Bstatic/-Bdynamic option. */
+#undef HAVE_LD_STATIC_DYNAMIC
 
 /* Define to 1 if you have the <limits.h> header file. */
 #undef HAVE_LIMITS_H
@@ -376,9 +426,6 @@
 
 /* Define to 1 if you have the `setrlimit' function. */
 #undef HAVE_SETRLIMIT
-
-/* Define if you have a working <stdbool.h> header file. */
-#undef HAVE_STDBOOL_H
 
 /* Define to 1 if you have the <stddef.h> header file. */
 #undef HAVE_STDDEF_H
@@ -437,9 +484,6 @@
 /* Define to 1 if you have the <time.h> header file. */
 #undef HAVE_TIME_H
 
-/* Define if <sys/types.h> defines \`uchar'. */
-#undef HAVE_UCHAR
-
 /* Define to 1 if you have the <unistd.h> header file. */
 #undef HAVE_UNISTD_H
 
@@ -468,9 +512,6 @@
 /* Define to 1 if `vfork' works. */
 #undef HAVE_WORKING_VFORK
 
-/* Define if the \`_Bool' type is built-in. */
-#undef HAVE__BOOL
-
 /* Define if your compiler supports the \`__int64' type. */
 #undef HAVE___INT64
 
@@ -490,6 +531,9 @@
 /* Define to 1 if your C compiler doesn't accept -c and -o together. */
 #undef NO_MINUS_C_MINUS_O
 
+/* The name of this program for internationalization purposes. */
+#undef PACKAGE
+
 /* Define to the address where bug reports for this package should be sent. */
 #undef PACKAGE_BUGREPORT
 
@@ -508,22 +552,22 @@
 /* Define to PREFIX/include if cpp should also search that directory. */
 #undef PREFIX_INCLUDE_DIR
 
-/* The number of bytes in type int */
+/* The size of a `int', as computed by sizeof. */
 #undef SIZEOF_INT
 
-/* The number of bytes in type long */
+/* The size of a `long', as computed by sizeof. */
 #undef SIZEOF_LONG
 
-/* The number of bytes in type long long */
+/* The size of a `long long', as computed by sizeof. */
 #undef SIZEOF_LONG_LONG
 
-/* The number of bytes in type short */
+/* The size of a `short', as computed by sizeof. */
 #undef SIZEOF_SHORT
 
-/* The number of bytes in type void * */
+/* The size of a `void *', as computed by sizeof. */
 #undef SIZEOF_VOID_P
 
-/* The number of bytes in type __int64 */
+/* The size of a `__int64', as computed by sizeof. */
 #undef SIZEOF___INT64
 
 /* Define to 1 if you have the ANSI C header files. */
@@ -538,8 +582,12 @@
 /* Define if your assembler mis-optimizes .eh_frame data. */
 #undef USE_AS_TRADITIONAL_FORMAT
 
-/* Define if gcc should use -lunwind. */
-#undef USE_LIBUNWIND_EXCEPTIONS
+/* Define to 1 if the 'long long' (or '__int64') is wider than 'long' but
+   still efficiently supported by the host hardware. */
+#undef USE_LONG_LONG_FOR_WIDEST_FAST_INT
+
+/* Define if location_t is fileline integer cookie. */
+#undef USE_MAPPED_LOCATION
 
 /* Define to be the last portion of registry key on windows hosts. */
 #undef WIN32_REGISTRY_KEY
@@ -567,15 +615,6 @@
 
 /* Define to `int' if <sys/types.h> does not define. */
 #undef ssize_t
-
-/* Define if your linker supports -pie option. */
-#undef HAVE_LD_PIE
-
-/* Define if BANSHEE is available */
-#undef HAVE_BANSHEE
-
-/* Define to PREFIX/include if cpp should also search that directory. */
-#undef PREFIX_INCLUDE_DIR
 
 /* Define to `int' if <sys/types.h> doesn't define. */
 #undef uid_t

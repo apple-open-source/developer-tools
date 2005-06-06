@@ -1,4 +1,4 @@
-# Copyright (C) 1992, 1993, 1994, 1996, 1997, 2000, 2001, 2002
+# Copyright (C) 1992, 1993, 1994, 1996, 1997, 2000, 2001, 2002, 2004
 # Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
@@ -28,6 +28,7 @@
 load_lib libgloss.exp
 load_lib prune.exp
 load_lib gcc-defs.exp
+load_lib target-libpath.exp
 
 #
 # OBJC_UNDER_TEST is the compiler under test.
@@ -56,7 +57,7 @@ proc default_objc_version { } {
 	set tmp [remote_exec host "$compiler -v"]
 	set status [lindex $tmp 0];
 	set output [lindex $tmp 1];
-	regexp "version\[^\n\r\]*" $output version
+	regexp " version \[^\n\r\]*" $output version
 	if { $status == 0 && [info exists version] } then {
 	    clone_output "$compiler_name $version\n"
 	} else {
@@ -94,6 +95,10 @@ proc objc_init { args } {
     global TOOL_EXECUTABLE
     global objc_libgcc_s_path
 
+    # We set LC_ALL and LANG to C so that we get the same error messages as expected.
+    setenv LC_ALL C
+    setenv LANG C
+
     if { $objc_initialized == 1 } { return; }
 
     if ![info exists OBJC_UNDER_TEST] then {
@@ -107,16 +112,8 @@ proc objc_init { args } {
     if ![info exists tmpdir] then {
 	set tmpdir /tmp
     }
-    if { [target_info needs_status_wrapper]!="" && ![info exists gluefile] } {
-	set gluefile ${tmpdir}/objc-testglue.o;
-	set result [build_wrapper $gluefile];
-	if { $result != "" } {
-	    set gluefile [lindex $result 0];
-	    set wrap_flags [lindex $result 1];
-	} else {
-	    unset gluefile
-	}
-    }
+
+    objc_maybe_build_wrapper "${tmpdir}/objc-testglue.o"
 
     set objc_libgcc_s_path "${rootme}"
     set compiler [lindex $OBJC_UNDER_TEST 0]
@@ -128,7 +125,7 @@ proc objc_init { args } {
 	    if { "$mldir" == "." } {
 		continue
 	    }
-	    if { [llength [glob -nocomplain ${rootme}/${mldir}/libgcc_s*.so.*]] == 1 } {
+	    if { [llength [glob -nocomplain ${rootme}/${mldir}/libgcc_s*.so.*]] >= 1 } {
 		append objc_libgcc_s_path ":${rootme}/${mldir}"
 	    }
 	}
@@ -173,7 +170,14 @@ proc objc_target_compile { source dest type options } {
     # at it (and associated headers).
 
     set objcpath "[get_multilibs]"
+
     set libobjc_dir [lookfor_file ${objcpath} libobjc/.libs/libobjc.a]
+    if { $libobjc_dir == ""} {
+      verbose "see if we have -fgnu-runtime in [target_info name]"
+      if [regexp ".*-fgnu-runtime.*" [target_info name]] {
+        set libobjc_dir [lookfor_file ${objcpath} libobjc/.libs/libobjc-gnu.a]
+      }
+    }
     if { $libobjc_dir != "" } {
 	set objc_include_dir "${srcdir}/../../libobjc"
 	lappend options "additional_flags=-I${objc_include_dir}"
@@ -184,21 +188,7 @@ proc objc_target_compile { source dest type options } {
     }
     lappend options "compiler=$OBJC_UNDER_TEST"
 
-    # On IRIX 6, we have to set variables akin to LD_LIBRARY_PATH, but
-    # called LD_LIBRARYN32_PATH (for the N32 ABI) and LD_LIBRARY64_PATH
-    # (for the 64-bit ABI).  The right way to do this would be to modify
-    # unix.exp -- but that's not an option since it's part of DejaGNU
-    # proper, so we do it here.
-    # The same applies to Darwin (DYLD_LIBRARY_PATH), Solaris 32 bit
-    # (LD_LIBRARY_PATH_32), Solaris 64 bit (LD_LIBRARY_PATH_64), and HP-UX
-    # (SHLIB_PATH).
-    setenv  LD_LIBRARY_PATH     $ld_library_path
-    setenv  SHLIB_PATH          $ld_library_path
-    setenv  LD_LIBRARYN32_PATH  $ld_library_path
-    setenv  LD_LIBRARY64_PATH   $ld_library_path
-    setenv  LD_LIBRARY_PATH_32  $ld_library_path
-    setenv  LD_LIBRARY_PATH_64  $ld_library_path
-    setenv  DYLD_LIBRARY_PATH   $ld_library_path
+    set_ld_library_path_env_vars
 
     return [target_compile $source $dest $type $options]
 }

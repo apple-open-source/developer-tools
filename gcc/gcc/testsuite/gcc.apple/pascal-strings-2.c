@@ -26,11 +26,11 @@ const char *pascalStr3 = "Hello\p, World!"; /* { dg-warning "unknown escape sequ
 const char *concat2 = "Hi" "\pthere"; /* { dg-warning "unknown escape sequence" } */
 const char *concat3 = "Hi" "there\p"; /* { dg-warning "unknown escape sequence" } */
 
-const char *s2 = "\pGoodbye!";   /* ok */
+const unsigned char *s2 = "\pGoodbye!";   /* ok */
 unsigned char *s3 = "\pHi!";     /* { dg-warning "initialization discards qualifiers" } */
 char *s4 = "\pHi";               /* { dg-warning "initialization discards qualifiers" } */
 signed char *s5 = "\pHi";        /* { dg-warning "initialization discards qualifiers" } */
-const signed char *s6 = "\pHi";  /* ok */
+const signed char *s6 = "\pHi";  /* { dg-warning "differ in signedness" } */
 
 /* the maximum length of a Pascal literal is 255. */
 const unsigned char *almostTooLong =

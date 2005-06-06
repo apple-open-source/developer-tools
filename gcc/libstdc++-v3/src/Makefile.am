@@ -96,7 +96,9 @@ basic_file.cc: ${glibcxx_srcdir}/$(BASIC_FILE_CC)
 
 # Sources present in the src directory.
 sources = \
-	allocator.cc \
+	bitmap_allocator.cc \
+	pool_allocator.cc \
+	mt_allocator.cc \
 	codecvt.cc \
 	complex_io.cc \
 	ctype.cc \
@@ -124,12 +126,14 @@ sources = \
 	ext-inst.cc \
 	io-inst.cc \
 	istream-inst.cc \
+	istream.cc \
 	locale-inst.cc \
 	locale-misc-inst.cc \
 	misc-inst.cc \
 	ostream-inst.cc \
 	sstream-inst.cc \
 	streambuf-inst.cc \
+	streambuf.cc \
 	string-inst.cc \
 	valarray-inst.cc \
 	wlocale-inst.cc \

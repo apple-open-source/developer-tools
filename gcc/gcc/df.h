@@ -1,6 +1,7 @@
 /* Form lists of pseudo register references for autoinc optimization
    for GNU compiler.  This is part of flow optimization.
-   Copyright (C) 1999, 2000, 2001, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2001, 2003, 2004, 2005
+   Free Software Foundation, Inc.
    Contributed by Michael P. Hayes (m.hayes@elec.canterbury.ac.nz)
 
 This file is part of GCC.
@@ -20,6 +21,12 @@ along with GCC; see the file COPYING.  If not, write to the Free
 Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA.  */
 
+#ifndef GCC_DF_H
+#define GCC_DF_H
+
+#include "bitmap.h"
+#include "basic-block.h"
+
 #define DF_RD		1	/* Reaching definitions.  */
 #define DF_RU		2	/* Reaching uses.  */
 #define DF_LR		4	/* Live registers.  */
@@ -31,7 +38,6 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #define DF_ALL		255
 #define DF_HARD_REGS	1024	/* Mark hard registers.  */
 #define DF_EQUIV_NOTES	2048	/* Mark uses present in EQUIV/EQUAL notes.  */
-#define DF_FOR_REGALLOC	4096    /* If called for the register allocator.  */
 
 enum df_ref_type {DF_REF_REG_DEF, DF_REF_REG_USE, DF_REF_REG_MEM_LOAD,
 		  DF_REF_REG_MEM_STORE};
@@ -52,23 +58,10 @@ enum df_ref_flags
        independent.  */
     DF_REF_READ_WRITE = 1,
 
-    /* This flag is set on register references inside a subreg on
-       machines which have CANNOT_CHANGE_MODE_CLASS.
-       Note, that this flag can also be set on df_refs representing
-       the REG itself (i.e., one might not see the subreg anymore).
-       Also note, that this flag is set also for hardreg refs, i.e.,
-       you must check yourself if it's a pseudo.  */
-    DF_REF_MODE_CHANGE = 2,
-
     /* This flag is set, if we stripped the subreg from the reference.
        In this case we must make conservative guesses, at what the
        outer mode was.  */
-    DF_REF_STRIPPED = 4,
-
-    /* This flag is set during register allocation if it's okay for
-    the reference's INSN to have one of its operands replaced with a
-    memory reference.  */
-    DF_REF_MEM_OK = 8
+    DF_REF_STRIPPED = 2
   };
 
 
@@ -158,9 +151,6 @@ struct df
   bitmap insns_modified;	/* Insns that (may) have changed.  */
   bitmap bbs_modified;		/* Blocks that (may) have changed.  */
   bitmap all_blocks;		/* All blocks in CFG.  */
-  /* The sbitmap vector of dominators or NULL if not computed.
-     Ideally, this should be a pointer to a CFG object.  */
-  sbitmap *dom;
   int *dfs_order;		/* DFS order -> block number.  */
   int *rc_order;		/* Reverse completion order -> block number.  */
   int *rts_order;		/* Reverse top sort order -> block number.  */
@@ -231,7 +221,7 @@ struct df_map
 #define DF_INSN_USES(DF, INSN) ((DF)->insns[INSN_UID (INSN)].uses)
 
 
-/* Functions to build and analyse dataflow information.  */
+/* Functions to build and analyze dataflow information.  */
 
 extern struct df *df_init (void);
 
@@ -263,8 +253,6 @@ extern int df_reg_replace (struct df *, bitmap, rtx, rtx);
 extern int df_ref_reg_replace (struct df *, struct ref *, rtx, rtx);
 
 extern int df_ref_remove (struct df *, struct ref *);
-
-extern int df_insn_reg_replace (struct df *, basic_block, rtx, rtx, rtx);
 
 extern int df_insn_mem_replace (struct df *, basic_block, rtx, rtx, rtx);
 
@@ -303,8 +291,6 @@ extern struct ref *df_bb_regno_last_def_find (struct df *, basic_block, unsigned
 extern struct ref *df_find_def (struct df *, rtx, rtx);
 
 extern int df_reg_used (struct df *, rtx, rtx);
-
-extern struct ref *df_find_def (struct df *, rtx, rtx);
 
 /* Functions for debugging from GDB.  */
 
@@ -377,3 +363,5 @@ struct dataflow
 
 extern void iterative_dataflow (struct dataflow *);
 extern bool read_modify_subreg_p (rtx);
+
+#endif /* GCC_DF_H */

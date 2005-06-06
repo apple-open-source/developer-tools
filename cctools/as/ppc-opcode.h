@@ -715,10 +715,12 @@ static const struct ppc_opcode ppc_opcodes[] = {
  { 0x7c0002a6, "mfspr",   {{21,5,GREG}, {11,10,SPREG}} },
  { 0x7c0003a6, "mtspr",   {{11,10,SPREG},{21,5,GREG}} },
  { 0x7c000120, "mtcrf",   {{12,8,FXM},  {21,5,GREG}} },
+ { 0x7c000120, "mtocrf",  {{12,8,FXM},  {21,5,GREG}} },
  { 0x7c000400, "mcrxr",   {{21,5,CRFONLY}}  },
  { 0x7c000400, "mcrxr",   {{23,3,NUM}}  },
  { 0x7c000026, "mfcr",    {{21,5,GREG}} },
  { 0x7c100026, "mfcr",    {{21,5,GREG}, {12,8,FXM}} },
+ { 0x7c100026, "mfocrf",  {{21,5,GREG}, {12,8,FXM}} },
 
 /* Move to/from spr mnemonics (assember extended mnemonics) */
  { 0x7c0102a6, "mfxer",   {{21,5,GREG}} },
@@ -875,8 +877,7 @@ static const struct ppc_opcode ppc_opcodes[] = {
 
  { 0x7c0005aa, "stswi",   {{21,5,GREG}, {16,5,G0REG},{11,5,NUM0}}  },
 
- { 0x7c0007ae, "stfiwx",  {{21,5,FREG}, {16,5,G0REG},{11,5,GREG}},
-	OPTIONAL|CPU970 },
+ { 0x7c0007ae, "stfiwx",  {{21,5,FREG}, {16,5,G0REG},{11,5,GREG}}, },
 
  { 0xd0000000, "stfs",    {{21,5,FREG}, {0,16,D},    {16,5,G0REG}} },
  { 0xd4000000, "stfsu",   {{21,5,FREG}, {0,16,D},    {16,5,GREG}} },

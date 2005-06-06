@@ -1,5 +1,5 @@
 /* Hash tables.
-   Copyright (C) 2000, 2001, 2003 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2003, 2004 Free Software Foundation, Inc.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -41,13 +41,11 @@ calc_hash (const unsigned char *str, size_t len)
 {
   size_t n = len;
   unsigned int r = 0;
-#define HASHSTEP(r, c) ((r) * 67 + ((c) - 113));
 
   while (n--)
-    r = HASHSTEP (r, *str++);
+    r = HT_HASHSTEP (r, *str++);
 
-  return r + len;
-#undef HASHSTEP
+  return HT_HASHFINISH (r, len);
 }
 
 /* Initialize an identifier hashtable.  */
@@ -68,6 +66,7 @@ ht_create (unsigned int order)
   obstack_alignment_mask (&table->stack) = 0;
 
   table->entries = xcalloc (nslots, sizeof (hashnode));
+  table->entries_owned = true;
   table->nslots = nslots;
   return table;
 }
@@ -78,7 +77,8 @@ void
 ht_destroy (hash_table *table)
 {
   obstack_free (&table->stack, NULL);
-  free (table->entries);
+  if (table->entries_owned)
+    free (table->entries);
   free (table);
 }
 
@@ -94,7 +94,15 @@ hashnode
 ht_lookup (hash_table *table, const unsigned char *str, size_t len,
 	   enum ht_lookup_option insert)
 {
-  unsigned int hash = calc_hash (str, len);
+  return ht_lookup_with_hash (table, str, len, calc_hash (str, len),
+			      insert);
+}
+
+hashnode
+ht_lookup_with_hash (hash_table *table, const unsigned char *str,
+		     size_t len, unsigned int hash,
+		     enum ht_lookup_option insert)
+{
   unsigned int hash2;
   unsigned int index;
   size_t sizemask;
@@ -199,7 +207,9 @@ ht_expand (hash_table *table)
       }
   while (++p < limit);
 
-  free (table->entries);
+  if (table->entries_owned)
+    free (table->entries);
+  table->entries_owned = true;
   table->entries = nentries;
   table->nslots = size;
 }
@@ -222,14 +232,28 @@ ht_forall (hash_table *table, ht_cb cb, const void *v)
   while (++p < limit);
 }
 
+/* Restore the hash table.  */
+void
+ht_load (hash_table *ht, hashnode *entries,
+	 unsigned int nslots, unsigned int nelements,
+	 bool own)
+{
+  if (ht->entries_owned)
+    free (ht->entries);
+  ht->entries = entries;
+  ht->nslots = nslots;
+  ht->nelements = nelements;
+  ht->entries_owned = own;
+}
+
 /* Dump allocation statistics to stderr.  */
 
 void
 ht_dump_statistics (hash_table *table)
 {
   size_t nelts, nids, overhead, headers;
-  size_t total_bytes, longest, sum_of_squares;
-  double exp_len, exp_len2, exp2_len;
+  size_t total_bytes, longest;
+  double sum_of_squares, exp_len, exp_len2, exp2_len;
   hashnode *p, *limit;
 
 #define SCALE(x) ((unsigned long) ((x) < 1024*10 \
@@ -248,7 +272,7 @@ ht_dump_statistics (hash_table *table)
 	size_t n = HT_LEN (*p);
 
 	total_bytes += n;
-	sum_of_squares += n * n;
+	sum_of_squares += (double) n * n;
 	if (n > longest)
 	  longest = n;
 	nids++;

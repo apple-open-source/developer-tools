@@ -25,21 +25,17 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "tree.h"
 #include "rtl.h"
 #include "hard-reg-set.h"
+#include "obstack.h"
 #include "basic-block.h"
 #include "insn-config.h"
 #include "output.h"
 #include "function.h"
-#include "obstack.h"
 #include "cfglayout.h"
 #include "cfgloop.h"
 #include "target.h"
 #include "ggc.h"
 #include "alloc-pool.h"
 #include "flags.h"
-
-/* The contents of the current function definition are allocated
-   in this obstack, and all are freed at the end of the function.  */
-extern struct obstack flow_obstack;
 
 /* Holds the interesting trailing notes for the function.  */
 rtx cfg_layout_function_footer, cfg_layout_function_header;
@@ -119,7 +115,7 @@ skip_insns_after_block (basic_block bb)
 
 	case CODE_LABEL:
 	  if (NEXT_INSN (insn)
-	      && GET_CODE (NEXT_INSN (insn)) == JUMP_INSN
+	      && JUMP_P (NEXT_INSN (insn))
 	      && (GET_CODE (PATTERN (NEXT_INSN (insn))) == ADDR_VEC
 	          || GET_CODE (PATTERN (NEXT_INSN (insn))) == ADDR_DIFF_VEC))
 	    {
@@ -149,7 +145,7 @@ skip_insns_after_block (basic_block bb)
   for (insn = last_insn; insn != BB_END (bb); insn = prev)
     {
       prev = PREV_INSN (insn);
-      if (GET_CODE (insn) == NOTE)
+      if (NOTE_P (insn))
 	switch (NOTE_LINE_NUMBER (insn))
 	  {
 	  case NOTE_INSN_LOOP_END:
@@ -172,7 +168,7 @@ label_for_bb (basic_block bb)
 {
   rtx label = BB_HEAD (bb);
 
-  if (GET_CODE (label) != CODE_LABEL)
+  if (!LABEL_P (label))
     {
       if (dump_file)
 	fprintf (dump_file, "Emitting label for block %d\n", bb->index);
@@ -195,12 +191,13 @@ record_effective_endpoints (void)
 
   for (insn = get_insns ();
        insn
-       && GET_CODE (insn) == NOTE
+       && NOTE_P (insn)
        && NOTE_LINE_NUMBER (insn) != NOTE_INSN_BASIC_BLOCK;
        insn = NEXT_INSN (insn))
     continue;
-  if (!insn)
-    abort ();  /* No basic blocks at all?  */
+  /* No basic blocks at all?  */
+  gcc_assert (insn);
+  
   if (PREV_INSN (insn))
     cfg_layout_function_header =
 	    unlink_insn_chain (get_insns (), PREV_INSN (insn));
@@ -254,7 +251,7 @@ insn_locators_initialize (void)
   rtx insn, next;
   int loc = 0;
   int line_number = 0, last_line_number = 0;
-  char *file_name = NULL, *last_file_name = NULL;
+  const char *file_name = NULL, *last_file_name = NULL;
 
   prologue_locator = epilogue_locator = 0;
 
@@ -267,12 +264,31 @@ insn_locators_initialize (void)
 
   for (insn = get_insns (); insn; insn = next)
     {
+      int active = 0;
+      
       next = NEXT_INSN (insn);
 
-      if ((active_insn_p (insn)
-	   && GET_CODE (PATTERN (insn)) != ADDR_VEC
-	   && GET_CODE (PATTERN (insn)) != ADDR_DIFF_VEC)
-	  || !NEXT_INSN (insn)
+      if (NOTE_P (insn))
+	{
+	  gcc_assert (NOTE_LINE_NUMBER (insn) != NOTE_INSN_BLOCK_BEG
+		      && NOTE_LINE_NUMBER (insn) != NOTE_INSN_BLOCK_END);
+	  if (NOTE_LINE_NUMBER (insn) > 0)
+	    {
+	      expanded_location xloc;
+	      NOTE_EXPANDED_LOCATION (xloc, insn);
+	      line_number = xloc.line;
+	      file_name = xloc.file;
+	    }
+	}
+      else
+	active = (active_insn_p (insn)
+		  && GET_CODE (PATTERN (insn)) != ADDR_VEC
+		  && GET_CODE (PATTERN (insn)) != ADDR_DIFF_VEC);
+      
+      check_block_change (insn, &block);
+
+      if (active
+	  || !next
 	  || (!prologue_locator && file_name))
 	{
 	  if (last_block != block)
@@ -293,54 +309,23 @@ insn_locators_initialize (void)
 	    {
 	      loc++;
 	      VARRAY_PUSH_INT (file_locators_locs, loc);
-	      VARRAY_PUSH_CHAR_PTR (file_locators_files, file_name);
+	      VARRAY_PUSH_CHAR_PTR (file_locators_files, (char *) file_name);
 	      last_file_name = file_name;
 	    }
+	  if (!prologue_locator && file_name)
+	    prologue_locator = loc;
+	  if (!next)
+	    epilogue_locator = loc;
+	  if (active)
+	    INSN_LOCATOR (insn) = loc;
 	}
-      if (!prologue_locator && file_name)
-	prologue_locator = loc;
-      if (!NEXT_INSN (insn))
-	epilogue_locator = loc;
-      if (active_insn_p (insn))
-        INSN_LOCATOR (insn) = loc;
-      else if (GET_CODE (insn) == NOTE)
-	{
-	  switch (NOTE_LINE_NUMBER (insn))
-	    {
-	    case NOTE_INSN_BLOCK_BEG:
-	      if (cfun->dont_emit_block_notes)
-		abort ();
-	      block = NOTE_BLOCK (insn);
-	      delete_insn (insn);
-	      break;
-	    case NOTE_INSN_BLOCK_END:
-	      if (cfun->dont_emit_block_notes)
-		abort ();
-	      block = BLOCK_SUPERCONTEXT (block);
-	      if (block && TREE_CODE (block) == FUNCTION_DECL)
-		block = 0;
-	      delete_insn (insn);
-	      break;
-	    default:
-	      if (NOTE_LINE_NUMBER (insn) > 0)
-		{
-		  line_number = NOTE_LINE_NUMBER (insn);
-		  file_name = (char *)NOTE_SOURCE_FILE (insn);
-		}
-	      break;
-	    }
-	}
-
-      if (cfun->dont_emit_block_notes)
-	check_block_change (insn, &block);
     }
 
   /* Tag the blocks with a depth number so that change_scope can find
      the common parent easily.  */
   set_block_levels (DECL_INITIAL (cfun->decl), 0);
 
-  if (cfun->dont_emit_block_notes)
-    free_block_changes ();
+  free_block_changes ();
 }
 
 /* For each lexical block, set BLOCK_NUMBER to the depth at which it is
@@ -358,7 +343,7 @@ set_block_levels (tree block, int level)
 }
 
 /* Return sope resulting from combination of S1 and S2.  */
-tree
+static tree
 choose_inner_scope (tree s1, tree s2)
 {
    if (!s1)
@@ -382,8 +367,7 @@ change_scope (rtx orig_insn, tree s1, tree s2)
 
   while (ts1 != ts2)
     {
-      if (ts1 == NULL || ts2 == NULL)
-	abort ();
+      gcc_assert (ts1 && ts2);
       if (BLOCK_NUMBER (ts1) > BLOCK_NUMBER (ts2))
 	ts1 = BLOCK_SUPERCONTEXT (ts1);
       else if (BLOCK_NUMBER (ts1) < BLOCK_NUMBER (ts2))
@@ -539,6 +523,12 @@ reemit_insn_block_notes (void)
     {
       tree this_block;
 
+      /* Avoid putting scope notes between jump table and its label.  */
+      if (JUMP_P (insn)
+	  && (GET_CODE (PATTERN (insn)) == ADDR_VEC
+	      || GET_CODE (PATTERN (insn)) == ADDR_DIFF_VEC))
+	continue;
+
       this_block = insn_scope (insn);
       /* For sequences compute scope resulting from merging all scopes
          of instructions nested inside.  */
@@ -620,8 +610,7 @@ fixup_reorder_chain (void)
 	}
     }
 
-  if (index != n_basic_blocks)
-    abort ();
+  gcc_assert (index == n_basic_blocks);
 
   NEXT_INSN (insn) = cfg_layout_function_footer;
   if (cfg_layout_function_footer)
@@ -645,28 +634,29 @@ fixup_reorder_chain (void)
       rtx bb_end_insn;
       basic_block nb;
       basic_block old_bb;
+      edge_iterator ei;
 
-      if (bb->succ == NULL)
+      if (EDGE_COUNT (bb->succs) == 0)
 	continue;
 
       /* Find the old fallthru edge, and another non-EH edge for
 	 a taken jump.  */
       e_taken = e_fall = NULL;
-      for (e = bb->succ; e ; e = e->succ_next)
+
+      FOR_EACH_EDGE (e, ei, bb->succs)
 	if (e->flags & EDGE_FALLTHRU)
 	  e_fall = e;
 	else if (! (e->flags & EDGE_EH))
 	  e_taken = e;
 
       bb_end_insn = BB_END (bb);
-      if (GET_CODE (bb_end_insn) == JUMP_INSN)
+      if (JUMP_P (bb_end_insn))
 	{
 	  if (any_condjump_p (bb_end_insn))
 	    {
 	      /* If the old fallthru is still next, nothing to do.  */
 	      if (bb->rbi->next == e_fall->dest
-	          || (!bb->rbi->next
-		      && e_fall->dest == EXIT_BLOCK_PTR))
+	          || e_fall->dest == EXIT_BLOCK_PTR)
 		continue;
 
 	      /* The degenerated case of conditional jump jumping to the next
@@ -681,11 +671,14 @@ fixup_reorder_chain (void)
 		{
 		  rtx note;
 		  edge e_fake;
+		  bool redirected;
 
 		  e_fake = unchecked_make_edge (bb, e_fall->dest, 0);
 
-		  if (!redirect_jump (BB_END (bb), block_label (bb), 0))
-		    abort ();
+		  redirected = redirect_jump (BB_END (bb),
+					      block_label (bb), 0);
+		  gcc_assert (redirected);
+		  
 		  note = find_reg_note (BB_END (bb), REG_BR_PROB, NULL_RTX);
 		  if (note)
 		    {
@@ -712,9 +705,15 @@ fixup_reorder_chain (void)
 		  if (note
 		      && INTVAL (XEXP (note, 0)) < REG_BR_PROB_BASE / 2
 		      && invert_jump (bb_end_insn,
-				      label_for_bb (e_fall->dest), 0))
+				      (e_fall->dest == EXIT_BLOCK_PTR
+				       ? NULL_RTX
+				       : label_for_bb (e_fall->dest)), 0))
 		    {
 		      e_fall->flags &= ~EDGE_FALLTHRU;
+#ifdef ENABLE_CHECKING
+		      gcc_assert (could_fall_through
+				  (e_taken->src, e_taken->dest));
+#endif
 		      e_taken->flags |= EDGE_FALLTHRU;
 		      update_br_prob_note (bb);
 		      e = e_fall, e_fall = e_taken, e_taken = e;
@@ -723,38 +722,34 @@ fixup_reorder_chain (void)
 
 	      /* If the "jumping" edge is a crossing edge, and the fall
 		 through edge is non-crossing, leave things as they are.  */
-	      else if (e_taken->crossing_edge && !e_fall->crossing_edge)
+	      else if ((e_taken->flags & EDGE_CROSSING)
+		       && !(e_fall->flags & EDGE_CROSSING))
 		continue;
 
 	      /* Otherwise we can try to invert the jump.  This will
 		 basically never fail, however, keep up the pretense.  */
 	      else if (invert_jump (bb_end_insn,
-				    label_for_bb (e_fall->dest), 0))
+				    (e_fall->dest == EXIT_BLOCK_PTR
+				     ? NULL_RTX
+				     : label_for_bb (e_fall->dest)), 0))
 		{
 		  e_fall->flags &= ~EDGE_FALLTHRU;
+#ifdef ENABLE_CHECKING
+		  gcc_assert (could_fall_through
+			      (e_taken->src, e_taken->dest));
+#endif
 		  e_taken->flags |= EDGE_FALLTHRU;
 		  update_br_prob_note (bb);
 		  continue;
 		}
 	    }
-	  else if (returnjump_p (bb_end_insn))
-	    continue;
 	  else
 	    {
-	      /* Otherwise we have some switch or computed jump.  In the
-		 99% case, there should not have been a fallthru edge.  */
-	      if (! e_fall)
-		continue;
-
-#ifdef CASE_DROPS_THROUGH
-	      /* Except for VAX.  Since we didn't have predication for the
-		 tablejump, the fallthru block should not have moved.  */
-	      if (bb->rbi->next == e_fall->dest)
-		continue;
-	      bb_end_insn = skip_insns_after_block (bb);
-#else
-	      abort ();
-#endif
+	      /* Otherwise we have some return, switch or computed
+		 jump.  In the 99% case, there should not have been a
+		 fallthru edge.  */
+	      gcc_assert (returnjump_p (bb_end_insn) || !e_fall);
+	      continue;
 	    }
 	}
       else
@@ -770,7 +765,7 @@ fixup_reorder_chain (void)
 	    continue;
 
 	  /* A fallthru to exit block.  */
-	  if (!bb->rbi->next && e_fall->dest == EXIT_BLOCK_PTR)
+	  if (e_fall->dest == EXIT_BLOCK_PTR)
 	    continue;
 	}
 
@@ -784,33 +779,32 @@ fixup_reorder_chain (void)
 	  bb->rbi->next = nb;
 	  /* Don't process this new block.  */
 	  old_bb = bb;
-  	  bb = nb;
-
+	  bb = nb;
+	  
 	  /* Make sure new bb is tagged for correct section (same as
-	     fall-thru source).  */
-	  e_fall->src->partition = bb->pred->src->partition;
+	     fall-thru source, since you cannot fall-throu across
+	     section boundaries).  */
+	  BB_COPY_PARTITION (e_fall->src, EDGE_PRED (bb, 0)->src);
 	  if (flag_reorder_blocks_and_partition
-	  /* APPLE LOCAL begin hot/cold partitioning  */
 	      && targetm.have_named_sections)
-	  /* APPLE LOCAL end hot/cold partitioning  */
 	    {
-	      if (bb->pred->src->partition == COLD_PARTITION)
+	      if (BB_PARTITION (EDGE_PRED (bb, 0)->src) == BB_COLD_PARTITION)
 		{
 		  rtx new_note;
 		  rtx note = BB_HEAD (e_fall->src);
-
+		  
 		  while (!INSN_P (note)
 			 && note != BB_END (e_fall->src))
 		    note = NEXT_INSN (note);
-
+		  
 		  new_note = emit_note_before 
                                           (NOTE_INSN_UNLIKELY_EXECUTED_CODE, 
 					   note);
 		  NOTE_BASIC_BLOCK (new_note) = bb;
 		}
-	      if (GET_CODE (BB_END (bb)) == JUMP_INSN
+	      if (JUMP_P (BB_END (bb))
 		  && !any_condjump_p (BB_END (bb))
-		  && bb->succ->crossing_edge )
+  		  && (EDGE_SUCC (bb, 0)->flags & EDGE_CROSSING))
 		REG_NOTES (BB_END (bb)) = gen_rtx_EXPR_LIST 
 		  (REG_CROSSING_JUMP, NULL_RTX, REG_NOTES (BB_END (bb)));
 	    }
@@ -831,7 +825,7 @@ fixup_reorder_chain (void)
 	    fprintf (dump_file, "duplicate of %i ",
 		     bb->rbi->original->index);
 	  else if (forwarder_block_p (bb)
-		   && GET_CODE (BB_HEAD (bb)) != CODE_LABEL)
+		   && !LABEL_P (BB_HEAD (bb)))
 	    fprintf (dump_file, "compensation ");
 	  else
 	    fprintf (dump_file, "bb %i ", bb->index);
@@ -860,13 +854,16 @@ fixup_reorder_chain (void)
   FOR_EACH_BB (bb)
     {
       edge e;
-      for (e = bb->succ; e && !(e->flags & EDGE_FALLTHRU); e = e->succ_next)
-	continue;
+      edge_iterator ei;
+
+      FOR_EACH_EDGE (e, ei, bb->succs)
+	if (e->flags & EDGE_FALLTHRU)
+	  break;
+
       if (e && !can_fallthru (e->src, e->dest))
 	force_nonfallthru (e);
     }
 }
-/* APPLE LOCAL begin hot/cold partitioning  */
 
 /* Update the basic block number information in any 
    NOTE_INSN_UNLIKELY_EXECUTED_CODE notes within the basic block.  */
@@ -878,11 +875,10 @@ update_unlikely_executed_notes (basic_block bb)
 
   for (cur_insn = BB_HEAD (bb); cur_insn != BB_END (bb); 
        cur_insn = NEXT_INSN (cur_insn)) 
-    if (GET_CODE (cur_insn) == NOTE
+    if (NOTE_P (cur_insn)
 	&& NOTE_LINE_NUMBER (cur_insn) == NOTE_INSN_UNLIKELY_EXECUTED_CODE)
       NOTE_BASIC_BLOCK (cur_insn) = bb;
 }
-/* APPLE LOCAL end hot/cold partitioning  */
 
 /* Perform sanity checks on the insn chain.
    1. Check that next/prev pointers are consistent in both the forward and
@@ -899,37 +895,52 @@ verify_insn_chain (void)
   for (prevx = NULL, insn_cnt1 = 1, x = get_insns ();
        x != 0;
        prevx = x, insn_cnt1++, x = NEXT_INSN (x))
-    if (PREV_INSN (x) != prevx)
-      abort ();
+    gcc_assert (PREV_INSN (x) == prevx);
 
-  if (prevx != get_last_insn ())
-    abort ();
+  gcc_assert (prevx == get_last_insn ());
 
   for (nextx = NULL, insn_cnt2 = 1, x = get_last_insn ();
        x != 0;
        nextx = x, insn_cnt2++, x = PREV_INSN (x))
-    if (NEXT_INSN (x) != nextx)
-      abort ();
+    gcc_assert (NEXT_INSN (x) == nextx);
 
-  if (insn_cnt1 != insn_cnt2)
-    abort ();
+  gcc_assert (insn_cnt1 == insn_cnt2);
 }
 
-/* The block falling through to exit must be the last one in the
-   reordered chain.  Ensure that this condition is met.  */
+/* If we have assembler epilogues, the block falling through to exit must
+   be the last one in the reordered chain when we reach final.  Ensure
+   that this condition is met.  */
 static void
 fixup_fallthru_exit_predecessor (void)
 {
   edge e;
+  edge_iterator ei;
   basic_block bb = NULL;
 
-  for (e = EXIT_BLOCK_PTR->pred; e; e = e->pred_next)
+  /* This transformation is not valid before reload, because we might
+     separate a call from the instruction that copies the return
+     value.  */
+  gcc_assert (reload_completed);
+
+  FOR_EACH_EDGE (e, ei, EXIT_BLOCK_PTR->preds)
     if (e->flags & EDGE_FALLTHRU)
       bb = e->src;
 
   if (bb && bb->rbi->next)
     {
       basic_block c = ENTRY_BLOCK_PTR->next_bb;
+
+      /* If the very first block is the one with the fall-through exit
+	 edge, we have to split that block.  */
+      if (c == bb)
+	{
+	  bb = split_block (bb, NULL)->dest;
+	  initialize_bb_rbi (bb);
+	  bb->rbi->next = c->rbi->next;
+	  c->rbi->next = bb;
+	  bb->rbi->footer = c->rbi->footer;
+	  c->rbi->footer = NULL;
+	}
 
       while (c->rbi->next != bb)
 	c = c->rbi->next;
@@ -1018,8 +1029,6 @@ duplicate_insn_chain (rtx from, rtx to)
 	         in first BB, we may want to copy the block.  */
 	    case NOTE_INSN_PROLOGUE_END:
 
-	    case NOTE_INSN_LOOP_VTOP:
-	    case NOTE_INSN_LOOP_CONT:
 	    case NOTE_INSN_LOOP_BEG:
 	    case NOTE_INSN_LOOP_END:
 	      /* Strip down the loop notes - we don't really want to keep
@@ -1038,31 +1047,23 @@ duplicate_insn_chain (rtx from, rtx to)
 	    case NOTE_INSN_BASIC_BLOCK:
 	      break;
 
-	      /* There is no purpose to duplicate prologue.  */
-	    case NOTE_INSN_BLOCK_BEG:
-	    case NOTE_INSN_BLOCK_END:
-	      /* The BLOCK_BEG/BLOCK_END notes should be eliminated when BB
-	         reordering is in the progress.  */
-	    case NOTE_INSN_EH_REGION_BEG:
-	    case NOTE_INSN_EH_REGION_END:
-	      /* Should never exist at BB duplication time.  */
-	      abort ();
-	      break;
 	    case NOTE_INSN_REPEATED_LINE_NUMBER:
 	    case NOTE_INSN_UNLIKELY_EXECUTED_CODE:
 	      emit_note_copy (insn);
 	      break;
 
 	    default:
-	      if (NOTE_LINE_NUMBER (insn) < 0)
-		abort ();
+	      /* All other notes should have already been eliminated.
+	       */
+	      gcc_assert (NOTE_LINE_NUMBER (insn) >= 0);
+	      
 	      /* It is possible that no_line_number is set and the note
 	         won't be emitted.  */
 	      emit_note_copy (insn);
 	    }
 	  break;
 	default:
-	  abort ();
+	  gcc_unreachable ();
 	}
     }
   insn = NEXT_INSN (last);
@@ -1077,6 +1078,7 @@ duplicate_insn_chain (rtx from, rtx to)
    code.  */
 extern basic_block cfg_layout_duplicate_bb (basic_block);
 
+/* APPLE LOCAL lno */
 extern basic_block cfg_layout_duplicate_bb (basic_block);
 basic_block
 cfg_layout_duplicate_bb (basic_block bb)
@@ -1089,6 +1091,7 @@ cfg_layout_duplicate_bb (basic_block bb)
 			       insn ? get_last_insn () : NULL,
 			       EXIT_BLOCK_PTR->prev_bb);
 
+  BB_COPY_PARTITION (new_bb, bb);
   if (bb->rbi->header)
     {
       insn = bb->rbi->header;
@@ -1111,8 +1114,8 @@ cfg_layout_duplicate_bb (basic_block bb)
 
   if (bb->global_live_at_start)
     {
-      new_bb->global_live_at_start = OBSTACK_ALLOC_REG_SET (&flow_obstack);
-      new_bb->global_live_at_end = OBSTACK_ALLOC_REG_SET (&flow_obstack);
+      new_bb->global_live_at_start = ALLOC_REG_SET (&reg_obstack);
+      new_bb->global_live_at_end = ALLOC_REG_SET (&reg_obstack);
       COPY_REG_SET (new_bb->global_live_at_start, bb->global_live_at_start);
       COPY_REG_SET (new_bb->global_live_at_end, bb->global_live_at_end);
     }
@@ -1120,11 +1123,15 @@ cfg_layout_duplicate_bb (basic_block bb)
   return new_bb;
 }
 
-/* Main entry point to this module - initialize the data structures for
-   CFG layout changes.  It keeps LOOPS up-to-date if not null.  */
+/* Main entry point to this module - initialize the datastructures for
+   CFG layout changes.  It keeps LOOPS up-to-date if not null.
+
+   FLAGS is a set of additional flags to pass to cleanup_cfg().  It should
+   include CLEANUP_UPDATE_LIFE if liveness information must be kept up
+   to date.  */
 
 void
-cfg_layout_initialize (void)
+cfg_layout_initialize (unsigned int flags)
 {
   basic_block bb;
 
@@ -1139,7 +1146,7 @@ cfg_layout_initialize (void)
 
   record_effective_endpoints ();
 
-  cleanup_cfg (CLEANUP_CFGLAYOUT);
+  cleanup_cfg (CLEANUP_CFGLAYOUT | flags);
 }
 
 /* Splits superblocks.  */
@@ -1182,13 +1189,18 @@ cfg_layout_finalize (void)
   verify_flow_info ();
 #endif
   rtl_register_cfg_hooks ();
-  fixup_fallthru_exit_predecessor ();
+  if (reload_completed
+#ifdef HAVE_epilogue
+      && !HAVE_epilogue
+#endif
+      )
+    fixup_fallthru_exit_predecessor ();
   fixup_reorder_chain ();
 
 #ifdef ENABLE_CHECKING
   verify_insn_chain ();
 #endif
-
+  
   free_rbi_pool ();
   FOR_BB_BETWEEN (bb, ENTRY_BLOCK_PTR, NULL, next_bb)
     bb->rbi = NULL;
@@ -1214,7 +1226,8 @@ can_copy_bbs_p (basic_block *bbs, unsigned n)
   for (i = 0; i < n; i++)
     {
       /* In case we should redirect abnormal edge during duplication, fail.  */
-      for (e = bbs[i]->succ; e; e = e->succ_next)
+      edge_iterator ei;
+      FOR_EACH_EDGE (e, ei, bbs[i]->succs)
 	if ((e->flags & EDGE_ABNORMAL)
 	    && e->dest->rbi->duplicated)
 	  {
@@ -1296,10 +1309,11 @@ copy_bbs (basic_block *bbs, unsigned n, basic_block *new_bbs,
     new_edges[j] = NULL;
   for (i = 0; i < n; i++)
     {
+      edge_iterator ei;
       new_bb = new_bbs[i];
       bb = bbs[i];
 
-      for (e = new_bb->succ; e; e = e->succ_next)
+      FOR_EACH_EDGE (e, ei, new_bb->succs)
 	{
 	  for (j = 0; j < n_edges; j++)
 	    if (edges[j] && edges[j]->src == bb && edges[j]->dest == e->dest)

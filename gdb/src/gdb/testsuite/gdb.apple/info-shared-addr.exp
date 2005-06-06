@@ -48,7 +48,7 @@ proc do_libsystem_checks { run_name } {
 
   send_gdb "info sharedlibrary\n"
   gdb_expect {
-    -re ".* ($decimal) libSystem.* at ($hex).*$gdb_prompt $" {
+    -re ".* ($decimal) libSystem.*libSystem.B.dylib at ($hex).*$gdb_prompt $" {
       pass "get libSystem's shlib number and load addr $run_name"
       set libsystem_shlib_num $expect_out(1,string)
       set libsystem_load_addr $expect_out(2,string)
@@ -59,11 +59,23 @@ proc do_libsystem_checks { run_name } {
     timeout   { fail "get libSystem's shlib number and load addr $run_name (timeout)" } 
   }
 
-  gdb_test "info sharedlibrary $libsystem_load_addr" \
+  send_gdb "p printf\n"
+  gdb_expect {
+    -re ".*no debug info.. ($hex) .printf.*$gdb_prompt $" {
+      pass "get printf address $run_name"
+      set printf_addr $expect_out(1,string)
+    }
+    -re ".*$gdb_prompt $" {
+      fail "get printf address $run_name"
+    }
+    timeout   { fail "get printf address $run_name (timeout)" } 
+  }
+
+  gdb_test "info sharedlibrary $printf_addr" \
            ".* $libsystem_shlib_num .*libSystem.*at $libsystem_load_addr.*" \
            "info sh addr at libSystem's load address $run_name"
 
-  gdb_test "metrowerks-address-to-name $libsystem_load_addr" \
+  gdb_test "metrowerks-address-to-name $printf_addr" \
            "libSystem.*" \
            "metrowerks-address-to-name given libSystem's load address $run_name"
 

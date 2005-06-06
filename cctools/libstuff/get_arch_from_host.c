@@ -20,6 +20,7 @@
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
+#ifndef RLD
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
@@ -309,6 +310,14 @@ struct arch_flag *specific_arch_flag)
 		if(specific_arch_flag != NULL)
 		    specific_arch_flag->name = "pentIIm5";
 		return(1);
+	    case CPU_SUBTYPE_PENTIUM_4:
+		if(family_arch_flag != NULL){
+		    family_arch_flag->name = "i386";
+		    family_arch_flag->cpusubtype = CPU_SUBTYPE_I386_ALL;
+		}
+		if(specific_arch_flag != NULL)
+		    specific_arch_flag->name = "pentium4";
+		return(1);
 	    default:
 		if(family_arch_flag != NULL){
 		    family_arch_flag->name = "i386";
@@ -375,3 +384,4 @@ struct arch_flag *specific_arch_flag)
 	}
 	return(0);
 }
+#endif /* !defined(RLD) */

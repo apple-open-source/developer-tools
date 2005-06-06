@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2004, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -163,6 +163,11 @@ package body Freeze is
    --  of the object is needed, and for a type, the subsidiary types are
    --  needed -- see body for details). Never has any effect on T if the
    --  Debug_Info_Off flag is set.
+
+   procedure Undelay_Type (T : Entity_Id);
+   --  T is a type of a component that we know to be an Itype.
+   --  We don't want this to have a Freeze_Node, so ensure it doesn't.
+   --  Do the same for any Full_View or Corresponding_Record_Type.
 
    procedure Warn_Overlay
      (Expr : Node_Id;
@@ -506,9 +511,9 @@ package body Freeze is
 
    procedure Check_Compile_Time_Size (T : Entity_Id) is
 
-      procedure Set_Small_Size (S : Uint);
+      procedure Set_Small_Size (T : Entity_Id; S : Uint);
       --  Sets the compile time known size (32 bits or less) in the Esize
-      --  field, checking for a size clause that was given which attempts
+      --  field, of T checking for a size clause that was given which attempts
       --  to give a smaller size.
 
       function Size_Known (T : Entity_Id) return Boolean;
@@ -525,7 +530,7 @@ package body Freeze is
       -- Set_Small_Size --
       --------------------
 
-      procedure Set_Small_Size (S : Uint) is
+      procedure Set_Small_Size (T : Entity_Id; S : Uint) is
       begin
          if S > 32 then
             return;
@@ -576,7 +581,8 @@ package body Freeze is
 
          elsif Is_Array_Type (T) then
             if Ekind (T) = E_String_Literal_Subtype then
-               Set_Small_Size (Component_Size (T) * String_Literal_Length (T));
+               Set_Small_Size (T, Component_Size (T)
+                               * String_Literal_Length (T));
                return True;
 
             elsif not Is_Constrained (T) then
@@ -601,7 +607,6 @@ package body Freeze is
 
             begin
                Index := First_Index (T);
-
                while Present (Index) loop
                   if Nkind (Index) = N_Range then
                      Get_Index_Bounds (Index, Low, High);
@@ -633,7 +638,7 @@ package body Freeze is
                   Next_Index (Index);
                end loop;
 
-               Set_Small_Size (Esiz);
+               Set_Small_Size (T, Esiz);
                return True;
             end;
 
@@ -865,7 +870,7 @@ package body Freeze is
                end loop;
 
                if Packed_Size_Known then
-                  Set_Small_Size (Packed_Size);
+                  Set_Small_Size (T, Packed_Size);
                end if;
 
                return True;
@@ -881,8 +886,7 @@ package body Freeze is
       -------------------------------------
 
       function Static_Discriminated_Components
-        (T    : Entity_Id)
-         return Boolean
+        (T : Entity_Id) return Boolean
       is
          Constraint : Elmt_Id;
 
@@ -1340,7 +1344,6 @@ package body Freeze is
       Result : in out List_Id)
    is
       L : constant List_Id := Freeze_Entity (Ent, Loc);
-
    begin
       if Is_Non_Empty_List (L) then
          if Result = No_List then
@@ -1357,7 +1360,6 @@ package body Freeze is
 
    procedure Freeze_Before (N : Node_Id; T : Entity_Id) is
       Freeze_Nodes : constant List_Id := Freeze_Entity (T, Sloc (N));
-
    begin
       if Is_Non_Empty_List (Freeze_Nodes) then
          Insert_Actions (N, Freeze_Nodes);
@@ -1369,6 +1371,7 @@ package body Freeze is
    -------------------
 
    function Freeze_Entity (E : Entity_Id; Loc : Source_Ptr) return List_Id is
+      Test_E : Entity_Id := E;
       Comp   : Entity_Id;
       F_Node : Node_Id;
       Result : List_Id;
@@ -1464,6 +1467,7 @@ package body Freeze is
          IR   : Node_Id;
          Junk : Boolean;
          ADC  : Node_Id;
+         Prev : Entity_Id;
 
          Unplaced_Component : Boolean := False;
          --  Set True if we find at least one component with no component
@@ -1541,13 +1545,258 @@ package body Freeze is
             end if;
          end if;
 
-         --  Freeze components and embedded subtypes
+         --  Freeze components and embedded subtypes.
 
          Comp := First_Entity (Rec);
+         Prev := Empty;
+
          while Present (Comp) loop
-            if not Is_Type (Comp) then
-               Freeze_And_Append (Etype (Comp), Loc, Result);
+
+            --  First handle the (real) component case.
+
+            if Ekind (Comp) = E_Component
+              or else Ekind (Comp) = E_Discriminant
+            then
+               declare
+                  CC : constant Node_Id := Component_Clause (Comp);
+
+               begin
+                  --  Freezing a record type freezes the type of each of its
+                  --  components.  However, if the type of the component is
+                  --  part of this record, we do not want or need a separate
+                  --  Freeze_Node.  Note that Is_Itype is wrong because that's
+                  --  also set in private type cases.  We also can't check
+                  --  for the Scope being exactly Rec because of private types
+                  --  and record extensions.
+                  if Is_Itype (Etype (Comp))
+                    and then Is_Record_Type (Underlying_Type
+                                             (Scope (Etype (Comp))))
+                  then
+                     Undelay_Type (Etype (Comp));
+                  end if;
+
+                  Freeze_And_Append (Etype (Comp), Loc, Result);
+
+                  --  Check for error of component clause given for variable
+                  --  sized type. We have to delay this test till this point,
+                  --  since the component type has to be frozen for us to know
+                  --  if it is variable length. We omit this test in a generic
+                  --  context, it will be applied at instantiation time.
+
+                  if Present (CC) then
+                     Placed_Component := True;
+
+                     if Inside_A_Generic then
+                        null;
+
+                     elsif not Size_Known_At_Compile_Time
+                              (Underlying_Type (Etype (Comp)))
+                     then
+                        Error_Msg_N
+                          ("component clause not allowed for variable " &
+                           "length component", CC);
+                     end if;
+
+                  else
+                     Unplaced_Component := True;
+                  end if;
+
+                  --  Case of component requires byte alignment
+
+                  if Must_Be_On_Byte_Boundary (Etype (Comp)) then
+
+                     --  Set the enclosing record to also require byte align
+
+                     Set_Must_Be_On_Byte_Boundary (Rec);
+
+                     --  Check for component clause that is inconsistent
+                     --  with the required byte boundary alignment.
+
+                     if Present (CC)
+                       and then Normalized_First_Bit (Comp) mod
+                                  System_Storage_Unit /= 0
+                     then
+                        Error_Msg_N
+                          ("component & must be byte aligned",
+                           Component_Name (Component_Clause (Comp)));
+                     end if;
+                  end if;
+
+                  --  If component clause is present, then deal with the
+                  --  non-default bit order case. We cannot do this before
+                  --  the freeze point, because there is no required order
+                  --  for the component clause and the bit_order clause.
+
+                  --  We only do this processing for the base type, and in
+                  --  fact that's important, since otherwise if there are
+                  --  record subtypes, we could reverse the bits once for
+                  --  each subtype, which would be incorrect.
+
+                  if Present (CC)
+                    and then Reverse_Bit_Order (Rec)
+                    and then Ekind (E) = E_Record_Type
+                  then
+                     declare
+                        CFB : constant Uint    := Component_Bit_Offset (Comp);
+                        CSZ : constant Uint    := Esize (Comp);
+                        CLC : constant Node_Id := Component_Clause (Comp);
+                        Pos : constant Node_Id := Position (CLC);
+                        FB  : constant Node_Id := First_Bit (CLC);
+
+                        Storage_Unit_Offset : constant Uint :=
+                                                CFB / System_Storage_Unit;
+
+                        Start_Bit : constant Uint :=
+                                      CFB mod System_Storage_Unit;
+
+                     begin
+                        --  Cases where field goes over storage unit boundary
+
+                        if Start_Bit + CSZ > System_Storage_Unit then
+
+                           --  Allow multi-byte field but generate warning
+
+                           if Start_Bit mod System_Storage_Unit = 0
+                             and then CSZ mod System_Storage_Unit = 0
+                           then
+                              Error_Msg_N
+                                ("multi-byte field specified with non-standard"
+                                 & " Bit_Order?", CLC);
+
+                              if Bytes_Big_Endian then
+                                 Error_Msg_N
+                                   ("bytes are not reversed "
+                                    & "(component is big-endian)?", CLC);
+                              else
+                                 Error_Msg_N
+                                   ("bytes are not reversed "
+                                    & "(component is little-endian)?", CLC);
+                              end if;
+
+                              --  Do not allow non-contiguous field
+
+                           else
+                              Error_Msg_N
+                                ("attempt to specify non-contiguous field"
+                                 & " not permitted", CLC);
+                              Error_Msg_N
+                                ("\(caused by non-standard Bit_Order "
+                                 & "specified)", CLC);
+                           end if;
+
+                           --  Case where field fits in one storage unit
+
+                        else
+                           --  Give warning if suspicious component clause
+
+                           if Intval (FB) >= System_Storage_Unit then
+                              Error_Msg_N
+                                ("?Bit_Order clause does not affect " &
+                                 "byte ordering", Pos);
+                              Error_Msg_Uint_1 :=
+                                Intval (Pos) + Intval (FB) /
+                                  System_Storage_Unit;
+                              Error_Msg_N
+                                ("?position normalized to ^ before bit " &
+                                 "order interpreted", Pos);
+                           end if;
+
+                           --  Here is where we fix up the Component_Bit_Offset
+                           --  value to account for the reverse bit order.
+                           --  Some examples of what needs to be done are:
+
+                           --    First_Bit .. Last_Bit     Component_Bit_Offset
+                           --      old          new          old       new
+
+                           --     0 .. 0       7 .. 7         0         7
+                           --     0 .. 1       6 .. 7         0         6
+                           --     0 .. 2       5 .. 7         0         5
+                           --     0 .. 7       0 .. 7         0         4
+
+                           --     1 .. 1       6 .. 6         1         6
+                           --     1 .. 4       3 .. 6         1         3
+                           --     4 .. 7       0 .. 3         4         0
+
+                           --  The general rule is that the first bit is
+                           --  is obtained by subtracting the old ending bit
+                           --  from storage_unit - 1.
+
+                           Set_Component_Bit_Offset
+                             (Comp,
+                              (Storage_Unit_Offset * System_Storage_Unit) +
+                                (System_Storage_Unit - 1) -
+                                  (Start_Bit + CSZ - 1));
+
+                           Set_Normalized_First_Bit
+                             (Comp,
+                                Component_Bit_Offset (Comp) mod
+                                  System_Storage_Unit);
+                        end if;
+                     end;
+                  end if;
+               end;
             end if;
+
+            --  If the component is an Itype with Delayed_Freeze and is
+            --  either a record or array subtype and its base type has not
+            --  yet been frozen, we must remove this from the entity list
+            --  of this record and put it on the entity list of the scope of
+            --  its base type.  Note that we know that this is not the type
+            --  of a component since we cleared Has_Delayed_Freeze for it
+            --  in the previous loop.  Thus this must be the Designated_Type
+            --  of an access type, which is the type of a component.
+            if Is_Itype (Comp)
+              and then Is_Type (Scope (Comp))
+              and then Is_Composite_Type (Comp)
+              and then Base_Type (Comp) /= Comp
+              and then Has_Delayed_Freeze (Comp)
+              and then not Is_Frozen (Base_Type (Comp))
+            then
+               declare
+                  Will_Be_Frozen : Boolean := False;
+                  S : Entity_Id := Scope (Rec);
+
+               begin
+                  --  We have a pretty bad kludge here.  Suppose Rec is a
+                  --  subtype being defined in a subprogram that's created
+                  --  as part of the freezing of Rec'Base.  In that case,
+                  --  we know that Comp'Base must have already been frozen by
+                  --  the time we get to elaborate this because Gigi doesn't
+                  --  elaborate any bodies until it has elaborated all of the
+                  --  declarative part.  But Is_Frozen will not be  set at this
+                  --  point because we are processing code in lexical order.
+
+                  --  We detect this case by going up the Scope chain of
+                  --  Rec and seeing if we have a subprogram scope before
+                  --  reaching the top of the scope chain or that of Comp'Base.
+                  --  If we do, then mark that Comp'Base will actually be
+                  --  frozen.  If so, we merely undelay it.
+                  while Present (S) loop
+                     if Is_Subprogram (S) then
+                        Will_Be_Frozen := True;
+                        exit;
+                     elsif S = Scope (Base_Type (Comp)) then
+                        exit;
+                     end if;
+
+                     S := Scope (S);
+                  end loop;
+
+                  if Will_Be_Frozen then
+                     Undelay_Type (Comp);
+                  else
+                     if Present (Prev) then
+                        Set_Next_Entity (Prev, Next_Entity (Comp));
+                     else
+                        Set_First_Entity (Rec, Next_Entity (Comp));
+                     end if;
+
+                     --  Insert in entity list of scope of base type (which
+                     --  must be an enclosing scope, because still unfrozen).
+
+                     Append_Entity (Comp, Scope (Base_Type (Comp)));
+                  end if;
+               end;
 
             --  If the component is an access type with an allocator
             --  as default value, the designated type will be frozen
@@ -1560,7 +1809,7 @@ package body Freeze is
             --  private, it cannot contain allocators, and it is premature
             --  to freeze the type, so we check for this as well.
 
-            if Is_Access_Type (Etype (Comp))
+            elsif Is_Access_Type (Etype (Comp))
               and then Present (Parent (Comp))
               and then Present (Expression (Parent (Comp)))
               and then Nkind (Expression (Parent (Comp))) = N_Allocator
@@ -1614,150 +1863,7 @@ package body Freeze is
                    (Component_Type (Etype (Comp))), Loc, Result);
             end if;
 
-            --  Processing for real components (exclude anonymous subtypes)
-
-            if Ekind (Comp) = E_Component
-              or else Ekind (Comp) = E_Discriminant
-            then
-               --  Check for error of component clause given for variable
-               --  sized type. We have to delay this test till this point,
-               --  since the component type has to be frozen for us to know
-               --  if it is variable length. We omit this test in a generic
-               --  context, it will be applied at instantiation time.
-
-               declare
-                  CC : constant Node_Id := Component_Clause (Comp);
-
-               begin
-                  if Present (CC) then
-                     Placed_Component := True;
-
-                     if Inside_A_Generic then
-                        null;
-
-                     elsif not Size_Known_At_Compile_Time
-                              (Underlying_Type (Etype (Comp)))
-                     then
-                        Error_Msg_N
-                          ("component clause not allowed for variable " &
-                           "length component", CC);
-                     end if;
-
-                  else
-                     Unplaced_Component := True;
-                  end if;
-               end;
-
-               --  If component clause is present, then deal with the
-               --  non-default bit order case. We cannot do this before
-               --  the freeze point, because there is no required order
-               --  for the component clause and the bit_order clause.
-
-               --  We only do this processing for the base type, and in
-               --  fact that's important, since otherwise if there are
-               --  record subtypes, we could reverse the bits once for
-               --  each subtype, which would be incorrect.
-
-               if Present (Component_Clause (Comp))
-                 and then Reverse_Bit_Order (Rec)
-                 and then Ekind (E) = E_Record_Type
-               then
-                  declare
-                     CFB : constant Uint    := Component_Bit_Offset (Comp);
-                     CSZ : constant Uint    := Esize (Comp);
-                     CLC : constant Node_Id := Component_Clause (Comp);
-                     Pos : constant Node_Id := Position (CLC);
-                     FB  : constant Node_Id := First_Bit (CLC);
-
-                     Storage_Unit_Offset : constant Uint :=
-                                             CFB / System_Storage_Unit;
-
-                     Start_Bit : constant Uint :=
-                                   CFB mod System_Storage_Unit;
-
-                  begin
-                     --  Cases where field goes over storage unit boundary
-
-                     if Start_Bit + CSZ > System_Storage_Unit then
-
-                        --  Allow multi-byte field but generate warning
-
-                        if Start_Bit mod System_Storage_Unit = 0
-                          and then CSZ mod System_Storage_Unit = 0
-                        then
-                           Error_Msg_N
-                             ("multi-byte field specified with non-standard"
-                                & " Bit_Order?", CLC);
-
-                           if Bytes_Big_Endian then
-                              Error_Msg_N
-                                ("bytes are not reversed "
-                                   & "(component is big-endian)?", CLC);
-                           else
-                              Error_Msg_N
-                                ("bytes are not reversed "
-                                   & "(component is little-endian)?", CLC);
-                           end if;
-
-                        --  Do not allow non-contiguous field
-
-                        else
-                           Error_Msg_N
-                             ("attempt to specify non-contiguous field"
-                                & " not permitted", CLC);
-                           Error_Msg_N
-                             ("\(caused by non-standard Bit_Order "
-                                & "specified)", CLC);
-                        end if;
-
-                     --  Case where field fits in one storage unit
-
-                     else
-                        --  Give warning if suspicious component clause
-
-                        if Intval (FB) >= System_Storage_Unit then
-                           Error_Msg_N
-                             ("?Bit_Order clause does not affect " &
-                              "byte ordering", Pos);
-                           Error_Msg_Uint_1 :=
-                             Intval (Pos) + Intval (FB) / System_Storage_Unit;
-                           Error_Msg_N
-                             ("?position normalized to ^ before bit " &
-                              "order interpreted", Pos);
-                        end if;
-
-                        --  Here is where we fix up the Component_Bit_Offset
-                        --  value to account for the reverse bit order.
-                        --  Some examples of what needs to be done are:
-
-                        --    First_Bit .. Last_Bit     Component_Bit_Offset
-                        --      old          new          old       new
-
-                        --     0 .. 0       7 .. 7         0         7
-                        --     0 .. 1       6 .. 7         0         6
-                        --     0 .. 2       5 .. 7         0         5
-                        --     0 .. 7       0 .. 7         0         4
-
-                        --     1 .. 1       6 .. 6         1         6
-                        --     1 .. 4       3 .. 6         1         3
-                        --     4 .. 7       0 .. 3         4         0
-
-                        --  The general rule is that the first bit is
-                        --  is obtained by subtracting the old ending bit
-                        --  from storage_unit - 1.
-
-                        Set_Component_Bit_Offset (Comp,
-                          (Storage_Unit_Offset * System_Storage_Unit)
-                          + (System_Storage_Unit - 1)
-                          - (Start_Bit + CSZ - 1));
-
-                        Set_Normalized_First_Bit (Comp,
-                          Component_Bit_Offset (Comp) mod System_Storage_Unit);
-                     end if;
-                  end;
-               end if;
-            end if;
-
+            Prev := Comp;
             Next_Entity (Comp);
          end loop;
 
@@ -1861,6 +1967,17 @@ package body Freeze is
    --  Start of processing for Freeze_Entity
 
    begin
+      --  We are going to test for various reasons why this entity need
+      --  not be frozen here, but in the case of an Itype that's defined
+      --  within a record, that test actually applies to the record.
+      if Is_Itype (E) and then Is_Record_Type (Scope (E)) then
+         Test_E := Scope (E);
+      elsif Is_Itype (E) and then Present (Underlying_Type (Scope (E)))
+        and then Is_Record_Type (Underlying_Type (Scope (E)))
+      then
+         Test_E := Underlying_Type (Scope (E));
+      end if;
+
       --  Do not freeze if already frozen since we only need one freeze node
 
       if Is_Frozen (E) then
@@ -1871,7 +1988,7 @@ package body Freeze is
       --  The entity will be frozen in the proper scope after the current
       --  generic is analyzed.
 
-      elsif Inside_A_Generic and then External_Ref_In_Generic (E) then
+      elsif Inside_A_Generic and then External_Ref_In_Generic (Test_E) then
          return No_List;
 
       --  Do not freeze a global entity within an inner scope created during
@@ -1885,9 +2002,9 @@ package body Freeze is
       --  comes from source, or is a generic instance, then the freeze point
       --  is the one mandated by the language. and we freze the entity.
 
-      elsif In_Open_Scopes (Scope (E))
-        and then Scope (E) /= Current_Scope
-        and then Ekind (E) /= E_Constant
+      elsif In_Open_Scopes (Scope (Test_E))
+        and then Scope (Test_E) /= Current_Scope
+        and then Ekind (Test_E) /= E_Constant
       then
          declare
             S : Entity_Id := Current_Scope;
@@ -1919,10 +2036,10 @@ package body Freeze is
 
       elsif Front_End_Inlining
         and then  In_Instance_Body
-        and then Present (Scope (E))
+        and then Present (Scope (Test_E))
       then
          declare
-            S : Entity_Id := Scope (E);
+            S : Entity_Id := Scope (Test_E);
          begin
             while Present (S) loop
                if Is_Generic_Instance (S) then
@@ -2170,14 +2287,35 @@ package body Freeze is
                Freeze_And_Append (Etype (E), Loc, Result);
             end if;
 
-            --  For object created by object declaration, perform required
-            --  categorization (preelaborate and pure) checks. Defer these
-            --  checks to freeze time since pragma Import inhibits default
-            --  initialization and thus pragma Import affects these checks.
+            --  Special processing for objects created by object declaration
 
             if Nkind (Declaration_Node (E)) = N_Object_Declaration then
+
+               --  For object created by object declaration, perform required
+               --  categorization (preelaborate and pure) checks. Defer these
+               --  checks to freeze time since pragma Import inhibits default
+               --  initialization and thus pragma Import affects these checks.
+
                Validate_Object_Declaration (Declaration_Node (E));
+
+               --  If there is an address clause, check it is valid
+
                Check_Address_Clause (E);
+
+               --  For imported objects, set Is_Public unless there is also
+               --  an address clause, which means that there is no external
+               --  symbol needed for the Import (Is_Public may still be set
+               --  for other unrelated reasons). Note that we delayed this
+               --  processing till freeze time so that we can be sure not
+               --  to set the flag if there is an address clause. If there
+               --  is such a clause, then the only purpose of the import
+               --  pragma is to suppress implicit initialization.
+
+               if Is_Imported (E)
+                 and then not Present (Address_Clause (E))
+               then
+                  Set_Is_Public (E);
+               end if;
             end if;
 
             --  Check that a constant which has a pragma Volatile[_Components]
@@ -2193,17 +2331,17 @@ package body Freeze is
                --  inherited the indication from elsewhere (e.g. an address
                --  clause, which is not good enough in RM terms!)
 
-               if Present (Get_Rep_Pragma (E, Name_Atomic))
+               if Has_Rep_Pragma (E, Name_Atomic)
                     or else
-                  Present (Get_Rep_Pragma (E, Name_Atomic_Components))
+                  Has_Rep_Pragma (E, Name_Atomic_Components)
                then
                   Error_Msg_N
                     ("stand alone atomic constant must be " &
                      "imported ('R'M 'C.6(13))", E);
 
-               elsif Present (Get_Rep_Pragma (E, Name_Volatile))
+               elsif Has_Rep_Pragma (E, Name_Volatile)
                        or else
-                     Present (Get_Rep_Pragma (E, Name_Volatile_Components))
+                     Has_Rep_Pragma (E, Name_Volatile_Components)
                then
                   Error_Msg_N
                     ("stand alone volatile constant must be " &
@@ -2543,27 +2681,43 @@ package body Freeze is
                   Set_Has_Non_Standard_Rep (Base_Type (E));
                   Set_Is_Packed            (Base_Type (E));
                end if;
+
+               Set_Component_Alignment_If_Not_Set (E);
+
+               --  If the array is packed, we must create the packed array
+               --  type to be used to actually implement the type. This is
+               --  only needed for real array types (not for string literal
+               --  types, since they are present only for the front end).
+
+               if Is_Packed (E)
+                 and then Ekind (E) /= E_String_Literal_Subtype
+               then
+                  Create_Packed_Array_Type (E);
+                  Freeze_And_Append (Packed_Array_Type (E), Loc, Result);
+
+                  --  Size information of packed array type is copied to the
+                  --  array type, since this is really the representation.
+
+                  Set_Size_Info (E, Packed_Array_Type (E));
+                  Set_RM_Size   (E, RM_Size (Packed_Array_Type (E)));
+               end if;
+
+               --  For non-packed arrays set the alignment of the array
+               --  to the alignment of the component type if it is unknown.
+               --  Skip this in the atomic case, since atomic arrays may
+               --  need larger alignments.
+
+               if not Is_Packed (E)
+                 and then Unknown_Alignment (E)
+                 and then Known_Alignment (Ctyp)
+                 and then Known_Static_Component_Size (E)
+                 and then Known_Static_Esize (Ctyp)
+                 and then Esize (Ctyp) = Component_Size (E)
+                 and then not Is_Atomic (E)
+               then
+                  Set_Alignment (E, Alignment (Component_Type (E)));
+               end if;
             end;
-
-            Set_Component_Alignment_If_Not_Set (E);
-
-            --  If the array is packed, we must create the packed array
-            --  type to be used to actually implement the type. This is
-            --  only needed for real array types (not for string literal
-            --  types, since they are present only for the front end).
-
-            if Is_Packed (E)
-              and then Ekind (E) /= E_String_Literal_Subtype
-            then
-               Create_Packed_Array_Type (E);
-               Freeze_And_Append (Packed_Array_Type (E), Loc, Result);
-
-               --  Size information of packed array type is copied to the
-               --  array type, since this is really the representation.
-
-               Set_Size_Info (E, Packed_Array_Type (E));
-               Set_RM_Size   (E, RM_Size (Packed_Array_Type (E)));
-            end if;
 
          --  For a class-wide type, the corresponding specific type is
          --  frozen as well (RM 13.14(15))
@@ -2636,6 +2790,12 @@ package body Freeze is
                   Freeze_And_Append (Comp, Loc, Result);
 
                elsif (Ekind (Comp)) /= E_Function then
+                  if Is_Itype (Etype (Comp))
+                    and then Underlying_Type (Scope (Etype (Comp))) = E
+                  then
+                     Undelay_Type (Etype (Comp));
+                  end if;
+
                   Freeze_And_Append (Etype (Comp), Loc, Result);
                end if;
 
@@ -2846,65 +3006,7 @@ package body Freeze is
             Check_Restriction (No_Standard_Storage_Pools, E);
          end if;
 
-         --  If the current entity is an array or record subtype and has
-         --  discriminants used to constrain it, it must not freeze, because
-         --  Freeze_Entity nodes force Gigi to process the frozen type.
-
          if Is_Composite_Type (E) then
-
-            if Is_Array_Type (E) then
-               declare
-                  Index : Node_Id := First_Index (E);
-                  Expr1 : Node_Id;
-                  Expr2 : Node_Id;
-
-               begin
-                  while Present (Index) loop
-                     if Etype (Index) /= Any_Type then
-                        Get_Index_Bounds (Index, Expr1, Expr2);
-
-                        for J in 1 .. 2 loop
-                           if Nkind (Expr1) = N_Identifier
-                             and then Ekind (Entity (Expr1)) = E_Discriminant
-                           then
-                              Set_Has_Delayed_Freeze (E, False);
-                              Set_Freeze_Node (E, Empty);
-                              Check_Debug_Info_Needed (E);
-                              return Result;
-                           end if;
-
-                           Expr1 := Expr2;
-                        end loop;
-                     end if;
-
-                     Next_Index (Index);
-                  end loop;
-               end;
-
-            elsif Has_Discriminants (E)
-              and Is_Constrained (E)
-            then
-               declare
-                  Constraint : Elmt_Id;
-                  Expr       : Node_Id;
-
-               begin
-                  Constraint := First_Elmt (Discriminant_Constraint (E));
-                  while Present (Constraint) loop
-                     Expr := Node (Constraint);
-                     if Nkind (Expr) = N_Identifier
-                       and then Ekind (Entity (Expr)) = E_Discriminant
-                     then
-                        Set_Has_Delayed_Freeze (E, False);
-                        Set_Freeze_Node (E, Empty);
-                        Check_Debug_Info_Needed (E);
-                        return Result;
-                     end if;
-
-                     Next_Elmt (Constraint);
-                  end loop;
-               end;
-            end if;
 
             --  AI-117 requires that all new primitives of a tagged type
             --  must inherit the convention of the full view of the type.
@@ -3007,7 +3109,7 @@ package body Freeze is
          --  in particular the size and alignment values. This processing is
          --  not required for generic types, since generic types do not play
          --  any part in code generation, and so the size and alignment values
-         --  for suhc types are irrelevant.
+         --  for such types are irrelevant.
 
          if Is_Generic_Type (E) then
             return Result;
@@ -3050,6 +3152,44 @@ package body Freeze is
             Result := New_List (F_Node);
          else
             Append (F_Node, Result);
+         end if;
+
+         --  A final pass over record types with discriminants. If the type
+         --  has an incomplete declaration, there may be constrained access
+         --  subtypes declared elsewhere, which do not depend on the discrimi-
+         --  nants of the type, and which are used as component types (i.e.
+         --  the full view is a recursive type). The designated types of these
+         --  subtypes can only be elaborated after the type itself, and they
+         --  need an itype reference.
+
+         if Ekind (E) = E_Record_Type
+           and then Has_Discriminants (E)
+         then
+            declare
+               Comp : Entity_Id;
+               IR   : Node_Id;
+               Typ  : Entity_Id;
+
+            begin
+               Comp := First_Component (E);
+
+               while Present (Comp) loop
+                  Typ  := Etype (Comp);
+
+                  if Ekind (Comp) = E_Component
+                    and then Is_Access_Type (Typ)
+                    and then Scope (Typ) /= E
+                    and then Base_Type (Designated_Type (Typ)) = E
+                    and then Is_Itype (Designated_Type (Typ))
+                  then
+                     IR := Make_Itype_Reference (Sloc (Comp));
+                     Set_Itype (IR, Designated_Type (Typ));
+                     Append (IR, Result);
+                  end if;
+
+                  Next_Component (Comp);
+               end loop;
+            end;
          end if;
       end if;
 
@@ -3628,6 +3768,10 @@ package body Freeze is
       --  Returns size of type with given bounds. Also leaves these
       --  bounds set as the current bounds of the Typ.
 
+      -----------
+      -- Fsize --
+      -----------
+
       function Fsize (Lov, Hiv : Ureal) return Nat is
       begin
          Set_Realval (Lo, Lov);
@@ -3635,7 +3779,7 @@ package body Freeze is
          return Minimum_Size (Typ);
       end Fsize;
 
-   --  Start of processing for Freeze_Fixed_Point_Type;
+   --  Start of processing for Freeze_Fixed_Point_Type
 
    begin
       --  If Esize of a subtype has not previously been set, set it now
@@ -4196,7 +4340,7 @@ package body Freeze is
       Ensure_Type_Is_SA (Etype (E));
 
       --  Reset True_Constant flag, since something strange is going on
-      --  with the scoping here, and our simple value traceing may not
+      --  with the scoping here, and our simple value tracing may not
       --  be sufficient for this indication to be reliable. We kill the
       --  Constant_Value indication for the same reason.
 
@@ -4357,9 +4501,9 @@ package body Freeze is
       end if;
    end Freeze_Subprogram;
 
-   -----------------------
-   --  Is_Fully_Defined --
-   -----------------------
+   ----------------------
+   -- Is_Fully_Defined --
+   ----------------------
 
    function Is_Fully_Defined (T : Entity_Id) return Boolean is
    begin
@@ -4626,6 +4770,44 @@ package body Freeze is
          end if;
       end if;
    end Set_Debug_Info_Needed;
+
+   ------------------
+   -- Undelay_Type --
+   ------------------
+
+   procedure Undelay_Type (T : Entity_Id) is
+   begin
+      Set_Has_Delayed_Freeze (T, False);
+      Set_Freeze_Node (T, Empty);
+
+      --  Since we don't want T to have a Freeze_Node, we don't want its
+      --  Full_View or Corresponding_Record_Type to have one either.
+
+      --  ??? Fundamentally, this whole handling is a kludge. What we really
+      --  want is to be sure that for an Itype that's part of record R and
+      --  is a subtype of type T, that it's frozen after the later of the
+      --  freeze points of R and T.  We have no way of doing that directly,
+      --  so what we do is force most such Itypes to be frozen as part of
+      --  freezing R via this procedure and only delay the ones that need
+      --  to be delayed (mostly the designated types of access types that are
+      --  defined as part of the record).
+
+      if Is_Private_Type (T)
+        and then Present (Full_View (T))
+        and then Is_Itype (Full_View (T))
+        and then Is_Record_Type (Scope (Full_View (T)))
+      then
+         Undelay_Type (Full_View (T));
+      end if;
+
+      if Is_Concurrent_Type (T)
+        and then Present (Corresponding_Record_Type (T))
+        and then Is_Itype (Corresponding_Record_Type (T))
+        and then Is_Record_Type (Scope (Corresponding_Record_Type (T)))
+      then
+         Undelay_Type (Corresponding_Record_Type (T));
+      end if;
+   end Undelay_Type;
 
    ------------------
    -- Warn_Overlay --

@@ -403,7 +403,7 @@ package body GNAT.Sockets.Thin is
       R : Boolean;
    begin
       Task_Lock.Lock;
-      R := Is_Socket_In_Set (Non_Blocking_Sockets, S);
+      R := (Is_Socket_In_Set (Non_Blocking_Sockets, S) /= 0);
       Task_Lock.Unlock;
       return R;
    end Non_Blocking_Socket;
@@ -502,10 +502,11 @@ package body GNAT.Sockets.Thin is
 
    begin
       for J in Iovec'Range loop
-         Res := C_Read
+         Res := C_Recv
            (Fd,
             Iovec (J).Base.all'Address,
-            Interfaces.C.int (Iovec (J).Length));
+            Interfaces.C.int (Iovec (J).Length),
+            0);
 
          if Res < 0 then
             return Res;
@@ -534,10 +535,11 @@ package body GNAT.Sockets.Thin is
 
    begin
       for J in Iovec'Range loop
-         Res := C_Write
+         Res := C_Send
            (Fd,
             Iovec (J).Base.all'Address,
-            Interfaces.C.int (Iovec (J).Length));
+            Interfaces.C.int (Iovec (J).Length),
+            Constants.MSG_Forced_Flags);
 
          if Res < 0 then
             return Res;

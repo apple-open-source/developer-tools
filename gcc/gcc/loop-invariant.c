@@ -1,5 +1,5 @@
 /* Rtl-level loop invariant motion.
-   Copyright (C) 2004 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005 Free Software Foundation, Inc.
    
 This file is part of GCC.
    
@@ -41,6 +41,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "tm.h"
 #include "rtl.h"
 #include "hard-reg-set.h"
+#include "obstack.h"
 #include "basic-block.h"
 #include "cfgloop.h"
 #include "expr.h"
@@ -154,7 +155,7 @@ check_maybe_invariant (rtx x)
 
       /* Just handle the most trivial case where we load from an unchanging
 	 location (most importantly, pic tables).  */
-      if (RTX_UNCHANGING_P (x))
+      if (MEM_READONLY_P (x))
 	break;
 
       return false;
@@ -219,6 +220,7 @@ find_exits (struct loop *loop, basic_block *body,
 	    bitmap may_exit, bitmap has_exit)
 {
   unsigned i;
+  edge_iterator ei;
   edge e;
   struct loop *outermost_exit = loop, *aexit;
   bool has_call = false;
@@ -230,7 +232,7 @@ find_exits (struct loop *loop, basic_block *body,
 	{
 	  FOR_BB_INSNS (body[i], insn)
 	    {
-	      if (GET_CODE (insn) == CALL_INSN
+	      if (CALL_P (insn)
 		  && !CONST_OR_PURE_CALL_P (insn))
 		{
 		  has_call = true;
@@ -239,7 +241,7 @@ find_exits (struct loop *loop, basic_block *body,
 		}
 	    }
 
-	  for (e = body[i]->succ; e; e = e->succ_next)
+	  FOR_EACH_EDGE (e, ei, body[i]->succs)
 	    {
 	      if (flow_bb_inside_loop_p (loop, e->dest))
 		continue;
@@ -282,14 +284,9 @@ find_exits (struct loop *loop, basic_block *body,
 /* Check whether we may assign a value to X from a register.  */
 
 static bool
-may_assign_reg_p (rtx x ATTRIBUTE_UNUSED)
+may_assign_reg_p (rtx x)
 {
-#ifdef AVOID_CCMODE_COPIES
-  if (GET_MODE_CLASS (GET_MODE (x)) == MODE_CC)
-    return false;
-#endif
-
-  return true;
+  return can_copy_p (GET_MODE (x));
 }
 
 /* Finds definitions that may correspond to invariants in LOOP with body BODY.
@@ -299,13 +296,13 @@ static void
 find_defs (struct loop *loop, basic_block *body, struct df *df)
 {
   unsigned i;
-  bitmap blocks = BITMAP_XMALLOC ();
+  bitmap blocks = BITMAP_ALLOC (NULL);
 
   for (i = 0; i < loop->num_nodes; i++)
     bitmap_set_bit (blocks, body[i]->index);
 
   df_analyze_subcfg (df, blocks, DF_UD_CHAIN | DF_HARD_REGS | DF_EQUIV_NOTES);
-  BITMAP_XFREE (blocks);
+  BITMAP_FREE (blocks);
 }
 
 /* Creates a new invariant for definition DEF in INSN, depending on invariants
@@ -450,10 +447,10 @@ find_invariant_insn (rtx insn, bool always_reached, bool always_executed,
 	return;
     }
 
-  depends_on = BITMAP_XMALLOC ();
+  depends_on = BITMAP_ALLOC (NULL);
   if (!check_dependencies (insn, df, depends_on))
     {
-      BITMAP_XFREE (depends_on);
+      BITMAP_FREE (depends_on);
       return;
     }
 
@@ -530,7 +527,7 @@ find_invariants_bb (basic_block bb, bool always_reached, bool always_executed,
       find_invariants_insn (insn, always_reached, always_executed, df);
 
       if (always_reached
-	  && GET_CODE (insn) == CALL_INSN
+	  && CALL_P (insn)
 	  && !CONST_OR_PURE_CALL_P (insn))
 	always_reached = false;
     }
@@ -560,10 +557,10 @@ find_invariants_body (struct loop *loop, basic_block *body,
 static void
 find_invariants (struct loop *loop, struct df *df)
 {
-  bitmap may_exit = BITMAP_XMALLOC ();
-  bitmap always_reached = BITMAP_XMALLOC ();
-  bitmap has_exit = BITMAP_XMALLOC ();
-  bitmap always_executed = BITMAP_XMALLOC ();
+  bitmap may_exit = BITMAP_ALLOC (NULL);
+  bitmap always_reached = BITMAP_ALLOC (NULL);
+  bitmap has_exit = BITMAP_ALLOC (NULL);
+  bitmap always_executed = BITMAP_ALLOC (NULL);
   basic_block *body = get_loop_body_in_dom_order (loop);
 
   find_exits (loop, body, may_exit, has_exit);
@@ -573,10 +570,10 @@ find_invariants (struct loop *loop, struct df *df)
   find_defs (loop, body, df);
   find_invariants_body (loop, body, always_reached, always_executed, df);
 
-  BITMAP_XFREE (always_reached);
-  BITMAP_XFREE (always_executed);
-  BITMAP_XFREE (may_exit);
-  BITMAP_XFREE (has_exit);
+  BITMAP_FREE (always_reached);
+  BITMAP_FREE (always_executed);
+  BITMAP_FREE (may_exit);
+  BITMAP_FREE (has_exit);
   free (body);
 }
 
@@ -604,6 +601,7 @@ get_inv_cost (struct invariant *inv, int *comp_cost, unsigned *regs_needed)
   unsigned aregs_needed;
   unsigned depno;
   struct invariant *dep;
+  bitmap_iterator bi;
 
   *comp_cost = 0;
   *regs_needed = 0;
@@ -615,7 +613,7 @@ get_inv_cost (struct invariant *inv, int *comp_cost, unsigned *regs_needed)
   (*regs_needed)++;
   (*comp_cost) += inv->cost;
 
-  EXECUTE_IF_SET_IN_BITMAP (inv->depends_on, 0, depno,
+  EXECUTE_IF_SET_IN_BITMAP (inv->depends_on, 0, depno, bi)
     {
       dep = VARRAY_GENERIC_PTR_NOGC (invariants, depno);
 
@@ -636,7 +634,7 @@ get_inv_cost (struct invariant *inv, int *comp_cost, unsigned *regs_needed)
 
       (*regs_needed) += aregs_needed;
       (*comp_cost) += acomp_cost;
-    });
+    }
 }
 
 /* Calculates gain for eliminating invariant INV.  REGS_USED is the number
@@ -701,6 +699,7 @@ static void
 set_move_mark (unsigned invno)
 {
   struct invariant *inv = VARRAY_GENERIC_PTR_NOGC (invariants, invno);
+  bitmap_iterator bi;
 
   if (inv->move)
     return;
@@ -709,7 +708,10 @@ set_move_mark (unsigned invno)
   if (dump_file)
     fprintf (dump_file, "Decided to move invariant %d\n", invno);
 
-  EXECUTE_IF_SET_IN_BITMAP (inv->depends_on, 0, invno, set_move_mark (invno));
+  EXECUTE_IF_SET_IN_BITMAP (inv->depends_on, 0, invno, bi)
+    {
+      set_move_mark (invno);
+    }
 }
 
 /* Determines which invariants to move.  DF is the dataflow object.  */
@@ -719,17 +721,6 @@ find_invariants_to_move (struct df *df)
 {
   unsigned i, regs_used, n_inv_uses, regs_needed = 0, new_regs;
   struct invariant *inv = NULL;
-
-  if (flag_move_all_movables)
-    {
-      /* This is easy & stupid.  */
-      for (i = 0; i < VARRAY_ACTIVE_SIZE (invariants); i++)
-	{
-	  inv = VARRAY_GENERIC_PTR_NOGC (invariants, i);
-	  inv->move = true;
-	}
-      return;
-    }
 
   if (!VARRAY_ACTIVE_SIZE (invariants))
     return;
@@ -777,6 +768,7 @@ move_invariant_reg (struct loop *loop, unsigned invno, struct df *df)
   basic_block preheader = loop_preheader_edge (loop)->src;
   rtx reg, set;
   struct use *use;
+  bitmap_iterator bi;
 
   if (inv->processed)
     return;
@@ -784,10 +776,10 @@ move_invariant_reg (struct loop *loop, unsigned invno, struct df *df)
 
   if (inv->depends_on)
     {
-      EXECUTE_IF_SET_IN_BITMAP (inv->depends_on, 0, i,
+      EXECUTE_IF_SET_IN_BITMAP (inv->depends_on, 0, i, bi)
 	{
 	  move_invariant_reg (loop, i, df);
-	});
+	}
     }
 
   /* Move the set out of the loop.  If the set is always executed (we could
@@ -871,7 +863,7 @@ free_inv_motion_data (struct df *df)
   for (i = 0; i < VARRAY_ACTIVE_SIZE (invariants); i++)
     {
       inv = VARRAY_GENERIC_PTR_NOGC (invariants, i);
-      BITMAP_XFREE (inv->depends_on);
+      BITMAP_FREE (inv->depends_on);
       free (inv);
     }
   VARRAY_POP_ALL (invariants);

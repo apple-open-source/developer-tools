@@ -1,5 +1,6 @@
 /* US Software GOFAST floating point library support.
-   Copyright (C) 1994, 1998, 1999, 2002, 2003 Free Software Foundation, Inc.
+   Copyright (C) 1994, 1998, 1999, 2002, 2003, 2004
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -75,6 +76,6 @@ gofast_maybe_init_libfuncs (void)
   set_conv_libfunc (ufix_optab,   SImode, DFmode, "dptoul");
 
   set_conv_libfunc (sfloat_optab, SFmode, SImode, "sitofp");
-  set_conv_libfunc (sfloat_optab, DFmode, DImode, "litodp");
+  set_conv_libfunc (sfloat_optab, DFmode, SImode, "litodp");
 #endif
 }

@@ -1,6 +1,6 @@
 /* CPP Library.
    Copyright (C) 1986, 1987, 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+   1999, 2000, 2001, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
    Contributed by Per Bothner, 1994-95.
    Based on CCCP program by Paul Rubin, June 1986
    Adapted to ANSI C, Richard Stallman, Jan 1987
@@ -24,6 +24,7 @@ Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #include "cpplib.h"
 #include "internal.h"
 #include "mkdeps.h"
+#include "localedir.h"
 
 static void init_library (void);
 static void mark_named_operators (cpp_reader *);
@@ -121,7 +122,7 @@ init_library (void)
       init_trigraph_map ();
 
 #ifdef ENABLE_NLS
-       (void) bindtextdomain ("gcc", LOCALEDIR);
+       (void) bindtextdomain (PACKAGE, LOCALEDIR);
 #endif
     }
 }
@@ -169,6 +170,8 @@ cpp_create_reader (enum c_lang lang, hash_table *table,
   CPP_OPTION (pfile, dollars_in_ident) = 1;
   CPP_OPTION (pfile, warn_dollars) = 1;
   CPP_OPTION (pfile, warn_variadic_macros) = 1;
+  /* APPLE LOCAL mainline UCNs 2005-04-17 3892809 */
+  CPP_OPTION (pfile, warn_normalize) = normalized_C;
 
   /* Default CPP arithmetic to something sensible for the host for the
      benefit of dumb users like fix-header.  */
@@ -291,7 +294,7 @@ cpp_destroy (cpp_reader *pfile)
 
    There are two tables of these.  builtin_array holds all the
    "builtin" macros: these are handled by builtin_macro() in
-   cppmacro.c.  Builtin is somewhat of a misnomer -- the property of
+   macro.c.  Builtin is somewhat of a misnomer -- the property of
    interest is that these macros require special code to compute their
    expansions.  The value is a "builtin_type" enumerator.
 
@@ -446,18 +449,6 @@ static void sanity_checks (cpp_reader *pfile)
 # define sanity_checks(PFILE)
 #endif
 
-/* Add a dependency target.  Can be called any number of times before
-   cpp_read_main_file().  If no targets have been added before
-   cpp_read_main_file(), then the default target is used.  */
-void
-cpp_add_dependency_target (cpp_reader *pfile, const char *target, int quote)
-{
-  if (!pfile->deps)
-    pfile->deps = deps_init ();
-
-  deps_add_target (pfile->deps, target, quote);
-}
-
 /* This is called after options have been parsed, and partially
    processed.  */
 void
@@ -497,13 +488,6 @@ cpp_read_main_file (cpp_reader *pfile, const char *fname)
   /* APPLE LOCAL end predictive compilation */
   if (_cpp_find_failed (pfile->main_file))
     return NULL;
-
-  /* APPLE LOCAL begin Symbol Separation */
-  /* If creating PCH file then main input file is a header and it is a candidate
-     for separate symbol repository. Find one if available.  */
-  if (CPP_OPTION (pfile, making_pch) && CPP_OPTION (pfile, use_ss))
-    find_include_cinfo (pfile, fname);
-  /* APPLE LOCAL end Symbol Separation */
 
   _cpp_stack_file (pfile, pfile->main_file, false);
 
@@ -608,7 +592,7 @@ cpp_finish (cpp_reader *pfile, FILE *deps_stream)
   if (CPP_OPTION (pfile, warn_unused_macros))
     cpp_forall_identifiers (pfile, _cpp_warn_if_unused_macro, NULL);
 
-  /* cpplex.c leaves the final buffer on the stack.  This it so that
+  /* lex.c leaves the final buffer on the stack.  This it so that
      it returns an unending stream of CPP_EOFs to the client.  If we
      popped the buffer, we'd dereference a NULL buffer pointer and
      segfault.  It's nice to allow the client to do worry-free excess
@@ -653,6 +637,8 @@ post_options (cpp_reader *pfile)
 
   if (CPP_OPTION (pfile, traditional))
     {
+      CPP_OPTION (pfile, cplusplus_comments) = 0;
+
       /* Traditional CPP does not accurately track column information.  */
       CPP_OPTION (pfile, show_column) = 0;
       CPP_OPTION (pfile, trigraphs) = 0;

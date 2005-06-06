@@ -1,5 +1,5 @@
 ;; Scheduling description for UltraSPARC-I/II.
-;;   Copyright (C) 2002 Free Software Foundation, Inc.
+;;   Copyright (C) 2002, 2004 Free Software Foundation, Inc.
 ;;
 ;; This file is part of GCC.
 ;;
@@ -80,7 +80,7 @@
 
 (define_insn_reservation "us1_single" 1
   (and (eq_attr "cpu" "ultrasparc")
-    (eq_attr "type" "multi,flushw,iflush,trap"))
+    (eq_attr "type" "multi,savew,flushw,iflush,trap"))
   "us1_single_issue")
 
 (define_insn_reservation "us1_simple_ieuN" 1

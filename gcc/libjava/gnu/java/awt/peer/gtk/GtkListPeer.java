@@ -41,20 +41,28 @@ package gnu.java.awt.peer.gtk;
 import java.awt.AWTEvent;
 import java.awt.Dimension;
 import java.awt.List;
-import java.awt.event.MouseEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.MouseEvent;
 import java.awt.peer.ListPeer;
 
 public class GtkListPeer extends GtkComponentPeer
   implements ListPeer
 {
-//    native void create (ComponentPeer parent, String [] items, boolean mode);
+  void create ()
+  {
+    List list = (List) awtComponent;
 
-  native void create ();
-  native void connectJObject ();
+    create (list.getRows ());
+
+    setMultipleMode (list.isMultipleMode ());
+  }
+
+  native void create (int rows);
   native void connectSignals ();
+  native void gtkWidgetModifyFont (String name, int style, int size);
+  native void gtkWidgetRequestFocus ();
 
-  native void getSize (int rows, int dims[]);
+  native void getSize (int rows, int visibleRows, int dims[]);
 
   public GtkListPeer (List list)
   {
@@ -100,7 +108,8 @@ public class GtkListPeer extends GtkComponentPeer
   {
     int dims[] = new int[2];
 
-    getSize (rows, dims);
+    int visibleRows = ((List) awtComponent).getRows();
+    getSize (rows, visibleRows, dims);
     return new Dimension (dims[0], dims[1]);
   }
 
@@ -108,7 +117,8 @@ public class GtkListPeer extends GtkComponentPeer
   {
     int dims[] = new int[2];
 
-    getSize (rows, dims);
+    int visibleRows = ((List) awtComponent).getRows();
+    getSize (rows, visibleRows, dims);
     return new Dimension (dims[0], dims[1]);
   }
 
@@ -129,20 +139,20 @@ public class GtkListPeer extends GtkComponentPeer
   {
     if (e.getID () == MouseEvent.MOUSE_CLICKED && isEnabled ())
       {
-        /* Only generate the ActionEvent on the second click of
-	   a multiple click */
+        // Only generate the ActionEvent on the second click of a
+        // multiple click.
 	MouseEvent me = (MouseEvent) e;
 	if (!me.isConsumed ()
-	    && (me.getModifiers () & MouseEvent.BUTTON1_MASK) != 0
+	    && (me.getModifiersEx () & MouseEvent.BUTTON1_DOWN_MASK) != 0
 	    && me.getClickCount() == 2)
 	  {
-            String selectedItem = ((List)awtComponent).getSelectedItem ();
+            String selectedItem = ((List) awtComponent).getSelectedItem ();
 
-            /* Double-click only generates an Action event
-	       if something is selected */
+            // Double-click only generates an Action event if
+            // something is selected.
             if (selectedItem != null)
-	      postActionEvent (((List)awtComponent).getSelectedItem (), 
-			       me.getModifiers ());
+	      postActionEvent (((List) awtComponent).getSelectedItem (), 
+			       me.getModifiersEx ());
 	  }
       }
 
@@ -151,11 +161,12 @@ public class GtkListPeer extends GtkComponentPeer
 	KeyEvent ke = (KeyEvent) e;
 	if (!ke.isConsumed () && ke.getKeyCode () == KeyEvent.VK_ENTER)
 	  {
-            String selectedItem = ((List)awtComponent).getSelectedItem ();
+            String selectedItem = ((List) awtComponent).getSelectedItem ();
 
-            /* Enter only generates an Action event if something is selected */
+            // Enter only generates an Action event if something is
+            // selected.
             if (selectedItem != null)
-	      postActionEvent (selectedItem, ke.getModifiers ());
+	      postActionEvent (selectedItem, ke.getModifiersEx ());
 	  }
       }
 

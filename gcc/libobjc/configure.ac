@@ -21,7 +21,7 @@
 #02111-1307, USA.
 
 AC_PREREQ(2.59)
-AC_INIT
+AC_INIT(package-unused, version-unused,, libobjc)
 AC_CONFIG_SRCDIR([objc/objc.h])
 
 # We need the following definitions because AC_PROG_LIBTOOL relies on them
@@ -105,8 +105,7 @@ toplevel_srcdir=\${srcdir}/$toprel
 AC_SUBST(toplevel_srcdir)
 
 AC_CANONICAL_SYSTEM
-_GCC_TOPLEV_NONCANONICAL_TARGET
-AC_SUBST(target_noncanonical)
+ACX_NONCANONICAL_TARGET
 
 # Export source directory.
 # These need to be absolute paths, yet at the same time need to
@@ -118,11 +117,7 @@ case $srcdir in
 esac
 AC_SUBST(glibcpp_srcdir)
 
-# Process the option "--enable-version-specific-runtime-libs"
-gcc_version_trigger=${srcdir}/../gcc/version.c
-gcc_version_full=`grep version_string ${gcc_version_trigger} | sed -e 's/.*\"\([[^ \"]]*\)[[ \"]].*/\1/'`
-gcc_version=`echo ${gcc_version_full} | sed -e 's/\([^ ]*\) .*/\1/'`
-AC_SUBST(gcc_version)
+TL_AC_GCC_VERSION([$srcdir/..])
 
 # Calculate toolexeclibdir
 # Also toolexecdir, though it's only used in toolexeclibdir
@@ -168,6 +163,8 @@ esac
 AC_SUBST(includedirname)
 AC_SUBST(libext)
 
+AC_CONFIG_HEADERS(config.h)
+
 # --------
 # Programs
 # --------
@@ -189,12 +186,14 @@ AC_CHECK_TOOL(AR, ar)
 AC_CHECK_TOOL(RANLIB, ranlib, :)
 AC_PROG_INSTALL
 
-# Disable shared libs by default
-AC_DISABLE_SHARED
+AM_MAINTAINER_MODE
+
 # Enable Win32 DLL on MS Windows - FIXME
 AC_LIBTOOL_WIN32_DLL
 
 AC_PROG_LIBTOOL
+
+AM_PROG_CC_C_O
 
 AC_PROG_MAKE_SET
 
@@ -230,6 +229,60 @@ else
 fi])
 GTHREAD_FLAGS=$objc_cv_gthread_flags
 AC_SUBST(GTHREAD_FLAGS)
+
+AC_MSG_CHECKING([for exception model to use])
+AC_LANG_PUSH(C)
+AC_ARG_ENABLE(sjlj-exceptions,
+  AS_HELP_STRING([--enable-sjlj-exceptions],
+                 [force use of builtin_setjmp for exceptions]),
+[:],
+[dnl Botheration.  Now we've got to detect the exception model.
+dnl Link tests against libgcc.a are problematic since -- at least
+dnl as of this writing -- we've not been given proper -L bits for
+dnl single-tree newlib and libgloss.
+dnl
+dnl This is what AC_TRY_COMPILE would do if it didn't delete the
+dnl conftest files before we got a change to grep them first.
+cat > conftest.$ac_ext << EOF
+[#]line __oline__ "configure"
+@interface Frob
+@end
+@implementation Frob
+@end
+int proc();
+int foo()
+{
+  @try {
+   return proc();
+  }
+  @catch (Frob* ex) {
+    return 0;
+  }
+}
+EOF
+old_CFLAGS="$CFLAGS" 
+dnl work around that we don't have Objective-C support in autoconf
+CFLAGS="-x objective-c -fgnu-runtime -fobjc-exceptions -S"
+if AC_TRY_EVAL(ac_compile); then
+  if grep _Unwind_SjLj_Resume conftest.s >/dev/null 2>&1 ; then
+    enable_sjlj_exceptions=yes
+  elif grep _Unwind_Resume conftest.s >/dev/null 2>&1 ; then
+    enable_sjlj_exceptions=no
+  fi
+fi
+CFLAGS="$old_CFLAGS"
+rm -f conftest*])
+if test x$enable_sjlj_exceptions = xyes; then
+  AC_DEFINE(SJLJ_EXCEPTIONS, 1,
+	[Define if the compiler is configured for setjmp/longjmp exceptions.])
+  ac_exception_model_name=sjlj
+elif test x$enable_sjlj_exceptions = xno; then
+  ac_exception_model_name="call frame"
+else
+  AC_MSG_ERROR([unable to detect exception model])
+fi
+AC_LANG_POP(C)
+AC_MSG_RESULT($ac_exception_model_name)
 
 # ------
 # Output

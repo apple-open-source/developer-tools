@@ -39,9 +39,10 @@ exception statement from your version. */
 
 package java.io;
 
+import gnu.java.nio.channels.FileChannelImpl;
+
 import java.nio.channels.ByteChannel;
 import java.nio.channels.FileChannel;
-import gnu.java.nio.channels.FileChannelImpl;
 
 /**
  * This class represents an opaque file handle as a Java class.  It should
@@ -119,7 +120,7 @@ public final class FileDescriptor
 	    if (ex instanceof SyncFailedException)
 	      throw (SyncFailedException) ex;
 	    else
-	      throw new SyncFailedException(ex.getMessage());
+	      throw new SyncFailedException(ex.toString());
 	  }
       }
   }

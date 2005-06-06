@@ -23,7 +23,13 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #ifndef GCC_DDG_H
 #define GCC_DDG_H
 
-
+/* For sbitmap.  */
+#include "sbitmap.h"
+/* For basic_block.  */
+#include "basic-block.h"
+/* For struct df.  */
+#include "df.h"
+ 
 typedef struct ddg_node *ddg_node_ptr;
 typedef struct ddg_edge *ddg_edge_ptr;
 typedef struct ddg *ddg_ptr;
@@ -51,10 +57,10 @@ struct ddg_node
   /* The insn represented by the node.  */
   rtx insn;
 
-  /* A note preceeding INSN (or INSN itself), such that all insns linked
+  /* A note preceding INSN (or INSN itself), such that all insns linked
      from FIRST_NOTE until INSN (inclusive of both) are moved together
      when reordering the insns.  This takes care of notes that should
-     continue to preceed INSN.  */
+     continue to precede INSN.  */
   rtx first_note;
 
   /* Incoming and outgoing dependency edges.  */
@@ -86,7 +92,7 @@ struct ddg_edge
   /* REG or MEM dependency.  */
   dep_data_type data_type;
 
-  /* Latency of the depedency.  */
+  /* Latency of the dependency.  */
   int latency;
 
   /* The distance: number of loop iterations the dependency crosses.  */

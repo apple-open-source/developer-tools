@@ -1,3 +1,21 @@
+Changes for the 5.18 release (the cctools-586 release):
+- Fixed a bug in the Makefile that had -static which should not have been there.
+  Radar bug #4105797.
+
+Changes for the 5.18 release (the cctools-583 release):
+- Changed the Makefile so that when RC_XBS is set to YES then the compiler
+  options -MD and -dependency-file as well as the md(1) program are not used.
+  Radar bug #4029936.
+
+Changes for the 5.17 release (the cctools-550 release):
+- Ported and cleaned up the code to work with 32-bit and 64-bit Mach-O files.
+  Radar bug #3854972.
+
+Changes for the 5.17 release (the cctools-549 release):
+- Made a change to prevent the code from crashing if handed a 64-bit Mach-O
+  file.  The change is in nm() in libsyminfo.c to check to see that the 32-bit
+  mach_header is NULL and if so just return.  Radar bug #3854972.
+
 Changes for the 5.16 release (the cctools-520 release):
 - Fixed a bug that would cause a crash if libsyminfo was presented with an
   binary of an unknown cputype.  The fix was in nm() in libsyminfo.c to check

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2003, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2004, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -761,7 +761,7 @@ package body Sem_Cat is
          return;
       end if;
 
-      --  Ada0Y (AI-50217): Process explicit with_clauses that are not limited
+      --  Ada 2005 (AI-50217): Process explicit non-limited with_clauses
 
       declare
          Item             : Node_Id;
@@ -798,42 +798,18 @@ package body Sem_Cat is
           K =  N_Subprogram_Renaming_Declaration)
         and then Present (Parent_Spec (N))
       then
-         declare
-            Parent_Lib_U  : constant Node_Id   := Parent_Spec (N);
-            Parent_Kind   : constant Node_Kind :=
-                              Nkind (Unit (Parent_Lib_U));
-            Parent_Entity : Entity_Id;
+         Check_Categorization_Dependencies (E, Scope (E), N, False);
 
-         begin
-            if        Parent_Kind =  N_Package_Instantiation
-              or else Parent_Kind =  N_Procedure_Instantiation
-              or else Parent_Kind =  N_Function_Instantiation
-              or else Parent_Kind =  N_Package_Renaming_Declaration
-              or else Parent_Kind in N_Generic_Renaming_Declaration
-            then
-               Parent_Entity := Defining_Entity (Unit (Parent_Lib_U));
+         --  Verify that public child of an RCI library unit
+         --  must also be an RCI library unit (RM E.2.3(15)).
 
-            else
-               Parent_Entity :=
-                 Defining_Entity (Specification (Unit (Parent_Lib_U)));
-            end if;
-
-            Check_Categorization_Dependencies (E, Parent_Entity, N, False);
-
-            --  Verify that public child of an RCI library unit
-            --  must also be an RCI library unit (RM E.2.3(15)).
-
-            if Is_Remote_Call_Interface (Parent_Entity)
-              and then not Private_Present (P)
-              and then not Is_Remote_Call_Interface (E)
-            then
-               Error_Msg_N
-                 ("public child of rci unit must also be rci unit", N);
-               return;
-            end if;
-         end;
+         if Is_Remote_Call_Interface (Scope (E))
+           and then not Private_Present (P)
+           and then not Is_Remote_Call_Interface (E)
+         then
+            Error_Msg_N ("public child of rci unit must also be rci unit", N);
+         end if;
       end if;
-
    end Validate_Categorization_Dependency;
 
    --------------------------------
@@ -1088,9 +1064,9 @@ package body Sem_Cat is
 
    end Validate_Object_Declaration;
 
-   --------------------------------
-   --  Validate_RCI_Declarations --
-   --------------------------------
+   -------------------------------
+   -- Validate_RCI_Declarations --
+   -------------------------------
 
    procedure Validate_RCI_Declarations (P : Entity_Id) is
       E : Entity_Id;

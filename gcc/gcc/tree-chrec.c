@@ -1,5 +1,5 @@
 /* Chains of recurrences.
-   Copyright (C) 2003 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005 Free Software Foundation, Inc.
    Contributed by Sebastian Pop <s.pop@laposte.net>
 
 This file is part of GCC.
@@ -33,9 +33,11 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "tree.h"
 #include "diagnostic.h"
 #include "varray.h"
-#include "tree-fold-const.h"
 #include "tree-chrec.h"
 #include "tree-pass.h"
+/* APPLE LOCAL mainline 4080945/ PR 20742 */
+#include "params.h"
+
 
 /* Extended folder for chrecs.  */
 
@@ -44,9 +46,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 static inline bool
 is_not_constant_evolution (tree cst)
 {
-  return (TREE_CODE (cst) == POLYNOMIAL_CHREC
-	  || TREE_CODE (cst) == EXPONENTIAL_CHREC
-	  || TREE_CODE (cst) == PEELED_CHREC);
+  return (TREE_CODE (cst) == POLYNOMIAL_CHREC);
 }
 
 /* Fold CODE for a polynomial function and a constant.  */
@@ -57,13 +57,10 @@ chrec_fold_poly_cst (enum tree_code code,
 		     tree poly, 
 		     tree cst)
 {
-#if defined ENABLE_CHECKING
-  if (poly == NULL_TREE
-      || cst == NULL_TREE
-      || TREE_CODE (poly) != POLYNOMIAL_CHREC
-      || is_not_constant_evolution (cst))
-    abort ();
-#endif
+  gcc_assert (poly);
+  gcc_assert (cst);
+  gcc_assert (TREE_CODE (poly) == POLYNOMIAL_CHREC);
+  gcc_assert (!is_not_constant_evolution (cst));
   
   switch (code)
     {
@@ -86,69 +83,8 @@ chrec_fold_poly_cst (enum tree_code code,
 	 chrec_fold_multiply (type, CHREC_RIGHT (poly), cst));
       
     default:
-      return chrec_top;
+      return chrec_dont_know;
     }
-}
-
-/* Fold the addition of a peeled chrec and a constant.  */
-
-static inline tree 
-chrec_fold_plus_peel_cst (tree type, 
-			  tree peel, 
-			  tree cst)
-{
-#if defined ENABLE_CHECKING
-  if (peel == NULL_TREE
-      || cst == NULL_TREE
-      || TREE_CODE (peel) != PEELED_CHREC
-      || is_not_constant_evolution (cst))
-    abort ();
-#endif
-  
-  return build_peeled_chrec 
-    (CHREC_VARIABLE (peel),
-     chrec_fold_plus (type, CHREC_LEFT (peel), cst),
-     chrec_fold_plus (type, CHREC_RIGHT (peel), cst));
-}
-
-/* Fold the addition of an exponential function and a constant.  */
-
-static inline tree 
-chrec_fold_plus_expo_cst (enum tree_code code, 
-			  tree type, 
-			  tree expo, 
-			  tree cst)
-{
-#if defined ENABLE_CHECKING
-  if (expo == NULL_TREE
-      || cst == NULL_TREE
-      || TREE_CODE (expo) != EXPONENTIAL_CHREC
-      || is_not_constant_evolution (cst))
-    abort ();
-#endif
-  
-  /* For the moment, we don't know how to fold this further.  */
-  return build (code, type, expo, cst);
-}
-
-/* Fold the addition of an exponential function and a constant.  */
-
-static inline tree 
-chrec_fold_plus_cst_expo (enum tree_code code, 
-			  tree type, 
-			  tree cst, 
-			  tree expo)
-{
-#if defined ENABLE_CHECKING
-  if (expo == NULL_TREE
-      || cst == NULL_TREE
-      || TREE_CODE (expo) != EXPONENTIAL_CHREC
-      || is_not_constant_evolution (cst))
-    abort ();
-#endif
-  
-  /* For the moment, we don't know how to fold this further.  */
-  return build (code, type, cst, expo);
 }
 
 /* Fold the addition of two polynomial functions.  */
@@ -160,14 +96,11 @@ chrec_fold_plus_poly_poly (enum tree_code code,
 			   tree poly1)
 {
   tree left, right;
-  
-#if defined ENABLE_CHECKING
-  if (poly0 == NULL_TREE
-      || poly1 == NULL_TREE
-      || TREE_CODE (poly0) != POLYNOMIAL_CHREC
-      || TREE_CODE (poly1) != POLYNOMIAL_CHREC)
-    abort ();
-#endif
+
+  gcc_assert (poly0);
+  gcc_assert (poly1);
+  gcc_assert (TREE_CODE (poly0) == POLYNOMIAL_CHREC);
+  gcc_assert (TREE_CODE (poly1) == POLYNOMIAL_CHREC);
   
   /*
     {a, +, b}_1 + {c, +, d}_2  ->  {{a, +, b}_1 + c, +, d}_2,
@@ -185,7 +118,7 @@ chrec_fold_plus_poly_poly (enum tree_code code,
 	  (CHREC_VARIABLE (poly1), 
 	   chrec_fold_minus (type, poly0, CHREC_LEFT (poly1)),
 	   chrec_fold_multiply (type, CHREC_RIGHT (poly1), 
-				convert (type, integer_minus_one_node)));
+				build_int_cst_type (type, -1)));
     }
   
   if (CHREC_VARIABLE (poly0) > CHREC_VARIABLE (poly1))
@@ -224,263 +157,7 @@ chrec_fold_plus_poly_poly (enum tree_code code,
       (CHREC_VARIABLE (poly0), left, right); 
 }
 
-/* Fold the addition of a polynomial and a peeled chrec.  */
-
-static inline tree 
-chrec_fold_plus_poly_peel (enum tree_code code, 
-			   tree type, 
-			   tree poly, 
-			   tree peel)
-{
-#if defined ENABLE_CHECKING
-  if (peel == NULL_TREE
-      || poly == NULL_TREE
-      || TREE_CODE (peel) != PEELED_CHREC
-      || TREE_CODE (poly) != POLYNOMIAL_CHREC)
-    abort ();
-#endif
-  
-  /*
-    {a, +, b}_1 + (c, d)_2  ->  ({a, +, b}_1 + c, {a, +, b}_1 + d)_2,
-    {a, +, b}_2 + (c, d)_1  ->  {a + (c, d)_1, +, b}_2,
-    {a, +, b}_x + (c, d)_x  ->  ({a, +, b}_x + c, {a, +, b}_x + d)_x.  */
-  if (CHREC_VARIABLE (poly) < CHREC_VARIABLE (peel))
-    return build_peeled_chrec 
-      (CHREC_VARIABLE (peel), 
-       (code == PLUS_EXPR ? 
-	chrec_fold_plus (type, poly, CHREC_LEFT (peel)) : 
-	chrec_fold_minus (type, poly, CHREC_LEFT (peel))),
-       (code == PLUS_EXPR ? 
-	chrec_fold_plus (type, poly, CHREC_RIGHT (peel)) :
-	chrec_fold_minus (type, poly, CHREC_RIGHT (peel))));
-  
-  if (CHREC_VARIABLE (poly) > CHREC_VARIABLE (peel))
-    return build_polynomial_chrec 
-      (CHREC_VARIABLE (poly), 
-       (code == PLUS_EXPR ? 
-	chrec_fold_plus (type, CHREC_LEFT (poly), peel) :
-	chrec_fold_minus (type, CHREC_LEFT (poly), peel)),
-       (code == PLUS_EXPR ? 
-	chrec_fold_plus (type, CHREC_RIGHT (poly), peel) :
-	chrec_fold_minus (type, CHREC_RIGHT (poly), peel)));
-  
-  return build_peeled_chrec 
-    (CHREC_VARIABLE (peel), 
-     (code == PLUS_EXPR ? 
-      chrec_fold_plus (type, poly, CHREC_LEFT (peel)) :
-      chrec_fold_minus (type, poly, CHREC_LEFT (peel))),
-     (code == PLUS_EXPR ? 
-      chrec_fold_plus (type, poly, CHREC_RIGHT (peel)) :
-      chrec_fold_minus (type, poly, CHREC_RIGHT (peel))));
-}
-
-/* Fold the addition of a polynomial and a peeled chrec.  */
-
-static inline tree 
-chrec_fold_plus_peel_poly (enum tree_code code, 
-			   tree type, 
-			   tree peel, 
-			   tree poly)
-{
-#if defined ENABLE_CHECKING
-  if (peel == NULL_TREE
-      || poly == NULL_TREE
-      || TREE_CODE (peel) != PEELED_CHREC
-      || TREE_CODE (poly) != POLYNOMIAL_CHREC)
-    abort ();
-#endif
-  
-  /*
-    {a, +, b}_1 + (c, d)_2  ->  ({a, +, b}_1 + c, {a, +, b}_1 + d)_2,
-    {a, +, b}_2 + (c, d)_1  ->  {a + (c, d)_1, +, b}_2,
-    {a, +, b}_x + (c, d)_x  ->  ({a, +, b}_x + c, {a, +, b}_x + d)_x.  */
-  if (CHREC_VARIABLE (poly) < CHREC_VARIABLE (peel))
-    return build_peeled_chrec 
-      (CHREC_VARIABLE (peel), 
-       (code == PLUS_EXPR ? 
-	chrec_fold_plus (type, CHREC_LEFT (peel), poly) : 
-	chrec_fold_minus (type, CHREC_LEFT (peel), poly)),
-       (code == PLUS_EXPR ? 
-	chrec_fold_plus (type, CHREC_RIGHT (peel), poly) :
-	chrec_fold_minus (type, CHREC_RIGHT (peel), poly)));
-  
-  if (CHREC_VARIABLE (poly) > CHREC_VARIABLE (peel))
-    return build_polynomial_chrec 
-      (CHREC_VARIABLE (poly), 
-       (code == PLUS_EXPR ? 
-	chrec_fold_plus (type, peel, CHREC_LEFT (poly)) :
-	chrec_fold_minus (type, peel, CHREC_LEFT (poly))),
-       (code == PLUS_EXPR ? 
-	chrec_fold_plus (type, peel, CHREC_RIGHT (poly)) :
-	chrec_fold_minus (type, peel, CHREC_RIGHT (poly))));
-  
-  return build_peeled_chrec 
-    (CHREC_VARIABLE (peel), 
-     (code == PLUS_EXPR ? 
-      chrec_fold_plus (type, CHREC_LEFT (peel), poly) :
-      chrec_fold_minus (type, CHREC_LEFT (peel), poly)),
-     (code == PLUS_EXPR ? 
-      chrec_fold_plus (type, CHREC_RIGHT (peel), poly) :
-      chrec_fold_minus (type, CHREC_RIGHT (peel), poly)));
-}
-
-/* Fold the addition of a polynomial and an exponential functions.  */
-
-static inline tree 
-chrec_fold_plus_poly_expo (enum tree_code code, 
-			   tree type, 
-			   tree poly, 
-			   tree expo)
-{
-#if defined ENABLE_CHECKING
-  if (expo == NULL_TREE
-      || poly == NULL_TREE
-      || TREE_CODE (expo) != EXPONENTIAL_CHREC
-      || TREE_CODE (poly) != POLYNOMIAL_CHREC)
-    abort ();
-#endif
-  
-  /* For the moment, we don't know how to fold this further.  */
-  return build (code, type, poly, expo);
-}
-
-/* Fold the addition of a polynomial and an exponential functions.  */
-
-static inline tree 
-chrec_fold_plus_expo_poly (enum tree_code code, 
-			   tree type, 
-			   tree expo, 
-			   tree poly)
-{
-#if defined ENABLE_CHECKING
-  if (expo == NULL_TREE
-      || poly == NULL_TREE
-      || TREE_CODE (expo) != EXPONENTIAL_CHREC
-      || TREE_CODE (poly) != POLYNOMIAL_CHREC)
-    abort ();
-#endif
-  
-  /* For the moment, we don't know how to fold this further.  */
-  return build (code, type, expo, poly);
-}
-
-/* Fold the addition of two peeled chrecs.  */
-
-static inline tree 
-chrec_fold_plus_peel_peel (tree type, 
-			   tree peel0, 
-			   tree peel1)
-{
-#if defined ENABLE_CHECKING
-  if (peel0 == NULL_TREE
-      || peel1 == NULL_TREE
-      || TREE_CODE (peel0) != PEELED_CHREC
-      || TREE_CODE (peel1) != PEELED_CHREC)
-    abort ();
-#endif
-  
-  /*
-    (a, b)_1 + (c, d)_2  ->  ((a, b)_1 + c, (a, b)_1 + d)_2,
-    (a, b)_2 + (c, d)_1  ->  (a + (c, d)_1, b + (c, d)_1)_2,
-    (a, b)_x + (c, d)_x  ->  (a + c, b + d)_x.  */
-  if (CHREC_VARIABLE (peel0) < CHREC_VARIABLE (peel1))
-    return build_peeled_chrec 
-      (CHREC_VARIABLE (peel1), 
-       chrec_fold_plus (type, peel0, CHREC_LEFT (peel1)),
-       chrec_fold_plus (type, peel0, CHREC_RIGHT (peel1)));
-  
-  if (CHREC_VARIABLE (peel0) > CHREC_VARIABLE (peel1))
-    return build_peeled_chrec 
-      (CHREC_VARIABLE (peel0), 
-       chrec_fold_plus (type, CHREC_LEFT (peel0), peel1),
-       chrec_fold_plus (type, CHREC_RIGHT (peel0), peel1));
-  
-  return build_peeled_chrec 
-    (CHREC_VARIABLE (peel0), 
-     chrec_fold_plus (type, CHREC_LEFT (peel0), CHREC_LEFT (peel1)),
-     chrec_fold_plus (type, CHREC_RIGHT (peel0), CHREC_RIGHT (peel1)));
-}
-
-/* Fold the addition of two exponential functions.  */
-
-static inline tree 
-chrec_fold_plus_expo_expo (enum tree_code code, 
-			   tree type, 
-			   tree expo0, 
-			   tree expo1)
-{
-#if defined ENABLE_CHECKING
-  if (expo0 == NULL_TREE
-      || expo1 == NULL_TREE
-      || TREE_CODE (expo0) != EXPONENTIAL_CHREC
-      || TREE_CODE (expo1) != EXPONENTIAL_CHREC)
-    abort ();
-#endif
-  
-  /* For the moment, we don't know how to fold this further.  */
-  return build (code, type, expo0, expo1);
-}
-
 
-
-/* Fold the multiplication of a peeled chrec and a constant.  */
-
-static inline tree 
-chrec_fold_multiply_peel_cst (tree type, 
-			      tree peel, 
-			      tree cst)
-{
-#if defined ENABLE_CHECKING
-  if (peel == NULL_TREE
-      || cst == NULL_TREE
-      || TREE_CODE (peel) != PEELED_CHREC
-      || is_not_constant_evolution (cst))
-    abort ();
-#endif
-  
-  return build_peeled_chrec 
-    (CHREC_VARIABLE (peel),
-     chrec_fold_multiply (type, CHREC_LEFT (peel), cst),
-     chrec_fold_multiply (type, CHREC_RIGHT (peel), cst));
-}
-
-/* Fold the multiplication of an interval and a constant.  */
-
-static inline tree 
-chrec_fold_multiply_ival_cst (tree type, 
-			      tree ival, 
-			      tree cst)
-{
-  tree lowm, upm;
-
-#if defined ENABLE_CHECKING
-  if (ival == NULL_TREE
-      || cst == NULL_TREE
-      || TREE_CODE (ival) != INTERVAL_CHREC
-      || is_not_constant_evolution (cst))
-    abort ();
-#endif
- 
-  /* Don't modify abstract values.  */
-  if (ival == chrec_top)
-    return chrec_top;
-  if (ival == chrec_bot)
-    return chrec_bot;
-
-  lowm = chrec_fold_multiply (type, CHREC_LOW (ival), cst);
-  upm = chrec_fold_multiply (type, CHREC_UP (ival), cst);
-
-  /* When the fold resulted in an overflow, conservatively answer
-     chrec_top.  */
-  if (!evolution_function_is_constant_p (lowm)
-      || !evolution_function_is_constant_p (upm)
-      || TREE_OVERFLOW (lowm)
-      || TREE_OVERFLOW (upm))
-    return build_chrec_top_type (type);
-
-  return build_interval_chrec (tree_fold_min (type, lowm, upm),
-			       tree_fold_max (type, lowm, upm));
-}
 
 /* Fold the multiplication of two polynomial functions.  */
 
@@ -489,13 +166,10 @@ chrec_fold_multiply_poly_poly (tree type,
 			       tree poly0, 
 			       tree poly1)
 {
-#if defined ENABLE_CHECKING
-  if (poly0 == NULL_TREE
-      || poly1 == NULL_TREE
-      || TREE_CODE (poly0) != POLYNOMIAL_CHREC
-      || TREE_CODE (poly1) != POLYNOMIAL_CHREC)
-    abort ();
-#endif
+  gcc_assert (poly0);
+  gcc_assert (poly1);
+  gcc_assert (TREE_CODE (poly0) == POLYNOMIAL_CHREC);
+  gcc_assert (TREE_CODE (poly1) == POLYNOMIAL_CHREC);
   
   /* {a, +, b}_1 * {c, +, d}_2  ->  {c*{a, +, b}_1, +, d}_2,
      {a, +, b}_2 * {c, +, d}_1  ->  {a*{c, +, d}_1, +, b}_2,
@@ -536,216 +210,31 @@ chrec_fold_multiply_poly_poly (tree type,
      
      /* "2*b*d".  */
      chrec_fold_multiply
-     (type, build_int_2 (2, 0),
+     (type, build_int_cst (NULL_TREE, 2),
       chrec_fold_multiply (type, CHREC_RIGHT (poly0), CHREC_RIGHT (poly1))));
-}
-
-/* Fold the addition of a polynomial and a peeled chrec.  */
-
-static inline tree 
-chrec_fold_multiply_poly_peel (tree type, 
-			       tree poly, 
-			       tree peel)
-{
-#if defined ENABLE_CHECKING
-  if (peel == NULL_TREE
-      || poly == NULL_TREE
-      || TREE_CODE (peel) != PEELED_CHREC
-      || TREE_CODE (poly) != POLYNOMIAL_CHREC)
-    abort ();
-#endif
-  
-  /*
-    {a, +, b}_1 * (c, d)_2  ->  ({a, +, b}_1 * c, {a, +, b}_1 * d)_2,
-    {a, +, b}_2 * (c, d)_1  ->  {a * (c, d)_1, +, b}_2,
-    {a, +, b}_x * (c, d)_x  ->  ({a, +, b}_x * c, {a, +, b}_x * d)_x.  */
-  if (CHREC_VARIABLE (poly) < CHREC_VARIABLE (peel))
-    return build_peeled_chrec 
-      (CHREC_VARIABLE (peel), 
-       chrec_fold_multiply (type, poly, CHREC_LEFT (peel)),
-       chrec_fold_multiply (type, poly, CHREC_RIGHT (peel)));
-  
-  if (CHREC_VARIABLE (poly) > CHREC_VARIABLE (peel))
-    return build_polynomial_chrec 
-      (CHREC_VARIABLE (poly), 
-       chrec_fold_multiply (type, CHREC_LEFT (poly), peel),
-       chrec_fold_multiply (type, CHREC_RIGHT (poly), peel));
-  
-  return build_peeled_chrec 
-    (CHREC_VARIABLE (peel), 
-     chrec_fold_multiply (type, poly, CHREC_LEFT (peel)),
-     chrec_fold_multiply (type, poly, CHREC_RIGHT (peel)));
-}
-
-/* Fold the multiplication of a polynomial and an exponential
-   functions.  */
-
-static inline tree 
-chrec_fold_multiply_poly_expo (tree type, 
-			       tree poly, 
-			       tree expo)
-{
-#if defined ENABLE_CHECKING
-  if (expo == NULL_TREE
-      || poly == NULL_TREE
-      || TREE_CODE (expo) != EXPONENTIAL_CHREC
-      || TREE_CODE (poly) != POLYNOMIAL_CHREC)
-    abort ();
-#endif
-  
-  /* For the moment, we don't know how to fold this further.  */
-  return build (MULT_EXPR, type, expo, poly);
-}
-
-/* Fold the addition of two peeled chrecs.  */
-
-static inline tree 
-chrec_fold_multiply_peel_peel (tree type, 
-			       tree peel0, 
-			       tree peel1)
-{
-#if defined ENABLE_CHECKING
-  if (peel0 == NULL_TREE
-      || peel1 == NULL_TREE
-      || TREE_CODE (peel0) != PEELED_CHREC
-      || TREE_CODE (peel1) != PEELED_CHREC)
-    abort ();
-#endif
-  
-  /*
-    (a, b)_1 * (c, d)_2  ->  ((a, b)_1 * c, (a, b)_1 * d)_2,
-    (a, b)_2 * (c, d)_1  ->  (a * (c, d)_1, b * (c, d)_1)_2,
-    (a, b)_x * (c, d)_x  ->  (a * c, b * d)_x.  */
-  if (CHREC_VARIABLE (peel0) < CHREC_VARIABLE (peel1))
-    return build_peeled_chrec 
-      (CHREC_VARIABLE (peel1), 
-       chrec_fold_multiply (type, peel0, CHREC_LEFT (peel1)),
-       chrec_fold_multiply (type, peel0, CHREC_RIGHT (peel1)));
-  
-  if (CHREC_VARIABLE (peel0) > CHREC_VARIABLE (peel1))
-    return build_peeled_chrec 
-      (CHREC_VARIABLE (peel0), 
-       chrec_fold_multiply (type, CHREC_LEFT (peel0), peel1),
-       chrec_fold_multiply (type, CHREC_RIGHT (peel0), peel1));
-  
-  return build_peeled_chrec 
-    (CHREC_VARIABLE (peel0), 
-     chrec_fold_multiply (type, CHREC_LEFT (peel0), CHREC_LEFT (peel1)),
-     chrec_fold_multiply (type, CHREC_RIGHT (peel0), CHREC_RIGHT (peel1)));
-}
-
-/* Fold the multiplication of two exponential functions.  */
-
-static inline tree 
-chrec_fold_multiply_expo_expo (tree type, 
-			       tree expo0, 
-			       tree expo1)
-{
-#if defined ENABLE_CHECKING
-  if (expo0 == NULL_TREE
-      || expo1 == NULL_TREE
-      || TREE_CODE (expo0) != EXPONENTIAL_CHREC
-      || TREE_CODE (expo1) != EXPONENTIAL_CHREC)
-    abort ();
-#endif
-  
-  if (CHREC_VARIABLE (expo0) < CHREC_VARIABLE (expo1))
-    /* expo0 is a constant wrt. expo1.  */
-    return build_exponential_chrec 
-      (CHREC_VARIABLE (expo1), 
-       chrec_fold_multiply (type, CHREC_LEFT (expo1), expo0),
-       CHREC_RIGHT (expo1));
-  
-  if (CHREC_VARIABLE (expo1) < CHREC_VARIABLE (expo0))
-    /* expo1 is a constant wrt. expo0.  */
-    return build_exponential_chrec
-      (CHREC_VARIABLE (expo0), 
-       chrec_fold_multiply (type, CHREC_LEFT (expo0), expo1),
-       CHREC_RIGHT (expo0));
-  
-  return build_exponential_chrec 
-    (CHREC_VARIABLE (expo0), 
-     chrec_fold_multiply (type, CHREC_LEFT (expo0), CHREC_LEFT (expo1)),
-     chrec_fold_multiply (type, CHREC_RIGHT (expo0), CHREC_RIGHT (expo1)));
-}
-
-/* Fold the multiplication of two intervals.  */
-
-static inline tree
-chrec_fold_multiply_ival_ival (tree type, 
-			       tree ival0,
-			       tree ival1)
-{
-  tree ac, ad, bc, bd;
-  
-#if defined ENABLE_CHECKING
-  if (ival0 == NULL_TREE
-      || ival1 == NULL_TREE
-      || TREE_CODE (ival0) != INTERVAL_CHREC
-      || TREE_CODE (ival1) != INTERVAL_CHREC)
-    abort ();
-#endif
-  
-  /* Don't modify abstract values.  */
-  if (automatically_generated_chrec_p (ival0)
-      || automatically_generated_chrec_p (ival1))
-    chrec_fold_automatically_generated_operands (ival0, ival1);
-  
-  ac = tree_fold_multiply (type, CHREC_LOW (ival0), CHREC_LOW (ival1));
-  ad = tree_fold_multiply (type, CHREC_LOW (ival0), CHREC_UP (ival1));
-  bc = tree_fold_multiply (type, CHREC_UP (ival0), CHREC_LOW (ival1));
-  bd = tree_fold_multiply (type, CHREC_UP (ival0), CHREC_UP (ival1));
-
-  /* When the fold resulted in an overflow, conservatively answer
-     chrec_top.  */
-  if (!evolution_function_is_constant_p (ac)
-      || !evolution_function_is_constant_p (ad)
-      || !evolution_function_is_constant_p (bc)
-      || !evolution_function_is_constant_p (bd)
-      || TREE_OVERFLOW (ac)
-      || TREE_OVERFLOW (ad)
-      || TREE_OVERFLOW (bc)
-      || TREE_OVERFLOW (bd))
-    return build_chrec_top_type (type);
-
-  /* [a, b] * [c, d]  ->  [min (ac, ad, bc, bd), max (ac, ad, bc, bd)],
-     for reference, see Moore's "Interval Arithmetic".  */
-  return build_interval_chrec 
-    (tree_fold_min 
-     (type, tree_fold_min
-      (type, tree_fold_min (type, ac, ad), bc), bd),
-     tree_fold_max
-     (type, tree_fold_max
-      (type, tree_fold_max (type, ac, ad), bc), bd));
 }
 
 /* When the operands are automatically_generated_chrec_p, the fold has
    to respect the semantics of the operands.  */
 
-tree 
+static inline tree 
 chrec_fold_automatically_generated_operands (tree op0, 
 					     tree op1)
 {
-  /* TOP op x = TOP,
-     x op TOP = TOP.  */
-  if (op0 == chrec_top
-      || op1 == chrec_top)
-    return chrec_top;
+  if (op0 == chrec_dont_know
+      || op1 == chrec_dont_know)
+    return chrec_dont_know;
   
-  /* BOT op TOP = TOP, 
-     TOP op BOT = TOP, 
-     BOT op x = BOT,
-     x op BOT = BOT.  */
-  if (op0 == chrec_bot
-      || op1 == chrec_bot)
-    return chrec_bot;
+  if (op0 == chrec_known
+      || op1 == chrec_known)
+    return chrec_known;
   
   if (op0 == chrec_not_analyzed_yet
       || op1 == chrec_not_analyzed_yet)
     return chrec_not_analyzed_yet;
   
-  /* The default case produces a safe result. */
-  return chrec_top;
+  /* The default case produces a safe result.  */
+  return chrec_dont_know;
 }
 
 /* Fold the addition of two chrecs.  */
@@ -756,8 +245,6 @@ chrec_fold_plus_1 (enum tree_code code,
 		   tree op0,
 		   tree op1)
 {
-  tree t1, t2;
-  
   if (automatically_generated_chrec_p (op0)
       || automatically_generated_chrec_p (op1))
     return chrec_fold_automatically_generated_operands (op0, op1);
@@ -769,13 +256,7 @@ chrec_fold_plus_1 (enum tree_code code,
 	{
 	case POLYNOMIAL_CHREC:
 	  return chrec_fold_plus_poly_poly (code, type, op0, op1);
-	  
-	case EXPONENTIAL_CHREC:
-	  return chrec_fold_plus_poly_expo (code, type, op0, op1);
-	  
-	case PEELED_CHREC:
-	  return chrec_fold_plus_poly_peel (code, type, op0, op1);
-	  
+
 	default:
 	  if (code == PLUS_EXPR)
 	    return build_polynomial_chrec 
@@ -788,101 +269,7 @@ chrec_fold_plus_1 (enum tree_code code,
 	       chrec_fold_minus (type, CHREC_LEFT (op0), op1),
 	       CHREC_RIGHT (op0));
 	}
-      
-    case EXPONENTIAL_CHREC:
-      switch (TREE_CODE (op1))
-	{
-	case POLYNOMIAL_CHREC:
-	  return chrec_fold_plus_expo_poly (code, type, op0, op1);
-	  
-	case EXPONENTIAL_CHREC:
-	  return chrec_fold_plus_expo_expo (code, type, op0, op1);
-	  
-	case PEELED_CHREC:
-	  return build (code, type, op0, op1);
 
-	default:
-	  return chrec_fold_plus_expo_cst (code, type, op0, op1);
-	}
-      
-    case PEELED_CHREC:
-      switch (TREE_CODE (op1))
-	{
-	case POLYNOMIAL_CHREC:
-	  return chrec_fold_plus_peel_poly (code, type, op0, op1);
-	  
-	case PEELED_CHREC:
-	  return chrec_fold_plus_peel_peel (type, op0, op1);
-	  
-	case EXPONENTIAL_CHREC:
-	  return build (code, type, op0, op1);
-	  
-	default:
-	  return build_peeled_chrec 
-	    (CHREC_VARIABLE (op0),
-	     (code == PLUS_EXPR ? 
-	      chrec_fold_plus (type, CHREC_LEFT (op0), op1) :
-	      chrec_fold_minus (type, CHREC_LEFT (op0), op1)),
-	     (code == PLUS_EXPR ? 
-	      chrec_fold_plus (type, CHREC_RIGHT (op0), op1) :
-	      chrec_fold_minus (type, CHREC_RIGHT (op0), op1)));
-	}
-      
-    case INTERVAL_CHREC:
-      switch (TREE_CODE (op1))
-	{
-	case POLYNOMIAL_CHREC:
-	  return build_polynomial_chrec 
-	    (CHREC_VARIABLE (op1), 
-	     (code == PLUS_EXPR ? 
-	      chrec_fold_plus (type, op0, CHREC_LEFT (op1)) :
-	      chrec_fold_minus (type, op0, CHREC_LEFT (op1))),
-	     CHREC_RIGHT (op1));
-	  
-	case EXPONENTIAL_CHREC:
-	  return chrec_top;
-	  
-	case INTERVAL_CHREC:
-	  t1 = (code == PLUS_EXPR ? 
-		chrec_fold_plus (type, CHREC_LOW (op0), CHREC_LOW (op1)) :
-		chrec_fold_minus (type, CHREC_LOW (op0), CHREC_LOW (op1)));
-	  t2 = (code == PLUS_EXPR ? 
-		chrec_fold_plus (type, CHREC_UP (op0), CHREC_UP (op1)) :
-		chrec_fold_minus (type, CHREC_UP (op0), CHREC_UP (op1)));
-
-	  /* When the fold resulted in an overflow, conservatively answer
-	     chrec_top.  */
-	  if (!evolution_function_is_constant_p (t1)
-	      || !evolution_function_is_constant_p (t2)
-	      || TREE_OVERFLOW (t1)
-	      || TREE_OVERFLOW (t2))
-	    return build_chrec_top_type (type);
-
-	  return build_interval_chrec 
-	    (tree_fold_min (type, t1, t2),
-	     tree_fold_max (type, t1, t2));
-	  
-	default:
-	  t1 = (code == PLUS_EXPR ? 
-		chrec_fold_plus (type, CHREC_LOW (op0), op1) : 
-		chrec_fold_minus (type, CHREC_LOW (op0), op1));
-	  t2 = (code == PLUS_EXPR ? 
-		chrec_fold_plus (type, CHREC_UP (op0), op1) : 
-		chrec_fold_minus (type, CHREC_UP (op0), op1));
-	  
-	  /* When the fold resulted in an overflow, conservatively answer
-	     chrec_top.  */
-	  if (!evolution_function_is_constant_p (t1)
-	      || !evolution_function_is_constant_p (t2)
-	      || TREE_OVERFLOW (t1)
-	      || TREE_OVERFLOW (t2))
-	    return build_chrec_top_type (type);
-
-	  return build_interval_chrec 
-	    (tree_fold_min (type, t1, t2),
-	     tree_fold_max (type, t1, t2));
-	}
-      
     default:
       switch (TREE_CODE (op1))
 	{
@@ -896,51 +283,23 @@ chrec_fold_plus_1 (enum tree_code code,
 	    return build_polynomial_chrec 
 	      (CHREC_VARIABLE (op1), 
 	       chrec_fold_minus (type, op0, CHREC_LEFT (op1)),
-	       chrec_fold_multiply (type, CHREC_RIGHT (op1), 
-				    convert (type,
-					     integer_minus_one_node)));
-	     
-	case EXPONENTIAL_CHREC:
-	  return chrec_fold_plus_cst_expo (code, type, op0, op1);
-	  
-	case PEELED_CHREC:
-	  if (code == PLUS_EXPR)
-	    return build_peeled_chrec 
-	      (CHREC_VARIABLE (op1),
-	       chrec_fold_plus (type, op0, CHREC_LEFT (op1)),
-	       chrec_fold_plus (type, op0, CHREC_RIGHT (op1)));
-	  else
-	    return build_peeled_chrec 
-	      (CHREC_VARIABLE (op1),
-	       chrec_fold_minus (type, op0, CHREC_LEFT (op1)),
-	       chrec_fold_minus (type, op0, CHREC_RIGHT (op1)));
-	  
-	case INTERVAL_CHREC:
-	  t1 = (code == PLUS_EXPR ? 
-		chrec_fold_plus (type, op0, CHREC_LOW (op1)) : 
-		chrec_fold_minus (type, op0, CHREC_LOW (op1)));
-	  t2 = (code == PLUS_EXPR ? 
-		chrec_fold_plus (type, op0, CHREC_UP (op1)) :
-		chrec_fold_minus (type, op0, CHREC_UP (op1)));
+	       chrec_fold_multiply (type, CHREC_RIGHT (op1),
+				    build_int_cst_type (type, -1)));
 
-	  /* When the fold resulted in an overflow, conservatively answer
-	     chrec_top.  */
-	  if (!evolution_function_is_constant_p (t1)
-	      || !evolution_function_is_constant_p (t2)
-	      || TREE_OVERFLOW (t1)
-	      || TREE_OVERFLOW (t2))
-	    return build_chrec_top_type (type);
-
-	  return build_interval_chrec 
-	      (tree_fold_min (type, t1, t2),
-	       tree_fold_max (type, t1, t2));
-	  
 	default:
-	  if (tree_contains_chrecs (op0)
-	      || tree_contains_chrecs (op1))
-	    return build (code, type, op0, op1);
-	  else
-	    return fold (build (code, type, op0, op1));
+/* APPLE LOCAL begin mainline 4080945/ PR 20742 */
+          {
+            int size = 0;
+            if ((tree_contains_chrecs (op0, &size)
+                 || tree_contains_chrecs (op1, &size))
+                && size < PARAM_VALUE (PARAM_SCEV_MAX_EXPR_SIZE))
+              return build2 (code, type, op0, op1);
+            else if (size < PARAM_VALUE (PARAM_SCEV_MAX_EXPR_SIZE))
+              return fold (build2 (code, type, op0, op1));
+            else
+              return chrec_dont_know;
+          }
+/* APPLE LOCAL end mainline 4080945/ PR 20742 */
 	}
     }
 }
@@ -952,31 +311,22 @@ chrec_fold_plus (tree type,
 		 tree op0,
 		 tree op1)
 {
-  if (integer_zerop (op0)
-      || (TREE_CODE (op0) == INTERVAL_CHREC
-	  && integer_zerop (CHREC_LOW (op0))
-	  && integer_zerop (CHREC_UP (op0))))
+  if (integer_zerop (op0))
     return op1;
-  if (integer_zerop (op1)
-      || (TREE_CODE (op1) == INTERVAL_CHREC
-	  && integer_zerop (CHREC_LOW (op1))
-	  && integer_zerop (CHREC_UP (op1))))
+  if (integer_zerop (op1))
     return op0;
   
   return chrec_fold_plus_1 (PLUS_EXPR, type, op0, op1);
 }
 
-/* Fold the substraction of two chrecs.  */
+/* Fold the subtraction of two chrecs.  */
 
 tree 
 chrec_fold_minus (tree type, 
 		  tree op0, 
 		  tree op1)
 {
-  if (integer_zerop (op1)
-      || (TREE_CODE (op1) == INTERVAL_CHREC
-	  && integer_zerop (CHREC_LOW (op1))
-	  && integer_zerop (CHREC_UP (op1))))
+  if (integer_zerop (op1))
     return op0;
   
   return chrec_fold_plus_1 (MINUS_EXPR, type, op0, op1);
@@ -1001,17 +351,11 @@ chrec_fold_multiply (tree type,
 	case POLYNOMIAL_CHREC:
 	  return chrec_fold_multiply_poly_poly (type, op0, op1);
 	  
-	case PEELED_CHREC:
-	  return chrec_fold_multiply_poly_peel (type, op0, op1);
-	  
-	case EXPONENTIAL_CHREC:
-	  return chrec_fold_multiply_poly_expo (type, op0, op1);
-	  
 	default:
 	  if (integer_onep (op1))
 	    return op0;
 	  if (integer_zerop (op1))
-	    return convert (type, integer_zero_node);
+	    return build_int_cst_type (type, 0);
 	  
 	  return build_polynomial_chrec 
 	    (CHREC_VARIABLE (op0), 
@@ -1019,86 +363,12 @@ chrec_fold_multiply (tree type,
 	     chrec_fold_multiply (type, CHREC_RIGHT (op0), op1));
 	}
       
-    case PEELED_CHREC:
-      switch (TREE_CODE (op1))
-	{
-	case POLYNOMIAL_CHREC:
-	  return chrec_fold_multiply_poly_peel (type, op1, op0);
-	  
-	case PEELED_CHREC:
-	  return chrec_fold_multiply_peel_peel (type, op0, op1);
-	  
-	default:
-	  if (integer_onep (op1))
-	    return op0;
-	  if (integer_zerop (op1))
-	    return convert (type, integer_zero_node);
-	  
-	  return build_peeled_chrec 
-	    (CHREC_VARIABLE (op0),
-	     chrec_fold_multiply (type, CHREC_LEFT (op0), op1),
-	     chrec_fold_multiply (type, CHREC_RIGHT (op0), op1));
-	}
-      
-    case EXPONENTIAL_CHREC:
-      switch (TREE_CODE (op1))
-	{
-	case POLYNOMIAL_CHREC:
-	  return chrec_fold_multiply_poly_expo (type, op1, op0);
-	  
-	case EXPONENTIAL_CHREC:
-	  return chrec_fold_multiply_expo_expo (type, op0, op1);
-	  
-	default:
-	  if (integer_onep (op1))
-	    return op0;
-	  if (integer_zerop (op1))
-	    return convert (type, integer_zero_node);
-	  
-	  return build_exponential_chrec 
-	    (CHREC_VARIABLE (op0),
-	     chrec_fold_multiply (type, CHREC_LEFT (op0), op1),
-	     CHREC_RIGHT (op0));
-	}
-      
-    case INTERVAL_CHREC:
-      switch (TREE_CODE (op1))
-	{
-	case POLYNOMIAL_CHREC:
-	  return build_polynomial_chrec 
-	    (CHREC_VARIABLE (op1), 
-	     chrec_fold_multiply (type, CHREC_LEFT (op1), op0),
-	     chrec_fold_multiply (type, CHREC_RIGHT (op1), op0));
-	  
-	case PEELED_CHREC:
-	  return build_peeled_chrec 
-	    (CHREC_VARIABLE (op1),
-	     chrec_fold_multiply (type, CHREC_LEFT (op1), op0),
-	     chrec_fold_multiply (type, CHREC_RIGHT (op1), op0));
-	  
-	case EXPONENTIAL_CHREC:
-	  return build_exponential_chrec 
-	    (CHREC_VARIABLE (op1),
-	     chrec_fold_multiply (type, CHREC_LEFT (op1), op0),
-	     CHREC_RIGHT (op1));
-	  
-	case INTERVAL_CHREC:
-	  return chrec_fold_multiply_ival_ival (type, op0, op1);
-	  
-	default:
-	  if (integer_onep (op1))
-	    return op0;
-	  if (integer_zerop (op1))
-	    return convert (type, integer_zero_node);
-	  return chrec_fold_multiply_ival_cst (type, op0, op1);
-	}
-      
     default:
       if (integer_onep (op0))
 	return op1;
       
       if (integer_zerop (op0))
-	return convert (type, integer_zero_node);
+    	return build_int_cst_type (type, 0);
       
       switch (TREE_CODE (op1))
 	{
@@ -1108,27 +378,12 @@ chrec_fold_multiply (tree type,
 	     chrec_fold_multiply (type, CHREC_LEFT (op1), op0),
 	     chrec_fold_multiply (type, CHREC_RIGHT (op1), op0));
 	  
-	case PEELED_CHREC:
-	  return build_peeled_chrec 
-	    (CHREC_VARIABLE (op1),
-	     chrec_fold_multiply (type, CHREC_LEFT (op1), op0),
-	     chrec_fold_multiply (type, CHREC_RIGHT (op1), op0));
-	  
-	case EXPONENTIAL_CHREC:
-	  return build_exponential_chrec 
-	    (CHREC_VARIABLE (op1),
-	     chrec_fold_multiply (type, CHREC_LEFT (op1), op0),
-	     CHREC_RIGHT (op1));
-	  
-	case INTERVAL_CHREC:
-	  return chrec_fold_multiply_ival_cst (type, op1, op0);
-	  
 	default:
 	  if (integer_onep (op1))
 	    return op0;
 	  if (integer_zerop (op1))
-	    return convert (type, integer_zero_node);
-	  return tree_fold_multiply (type, op0, op1);
+	    return build_int_cst_type (type, 0);
+	  return fold (build (MULT_EXPR, type, op0, op1));
 	}
     }
 }
@@ -1137,61 +392,122 @@ chrec_fold_multiply (tree type,
 
 /* Operations.  */
 
-/* Try to recognize the nature of the peeled chrec and to transform it
-   into a more specific chrec: polynomial, periodic, ...  For example,
-   this function transforms (6, {9, +, 3}_1)_1 into {6, +, 3}_1.  */
+/* Evaluate the binomial coefficient.  Return NULL_TREE if the intermediate
+   calculation overflows, otherwise return C(n,k) with type TYPE.  */
 
-tree
-simplify_peeled_chrec (tree peel)
+static tree 
+tree_fold_binomial (tree type, tree n, unsigned int k)
 {
-  tree res = peel;
-  
-  return res;
+  unsigned HOST_WIDE_INT lidx, lnum, ldenom, lres, ldum;
+  HOST_WIDE_INT hidx, hnum, hdenom, hres, hdum;
+  unsigned int i;
+  tree res;
+
+  /* Handle the most frequent cases.  */
+  if (k == 0)
+    return build_int_cst (type, 1);
+  if (k == 1)
+    return fold_convert (type, n);
+
+  /* Check that k <= n.  */
+  if (TREE_INT_CST_HIGH (n) == 0
+      && TREE_INT_CST_LOW (n) < k)
+    return NULL_TREE;
+
+  /* Numerator = n.  */
+  lnum = TREE_INT_CST_LOW (n);
+  hnum = TREE_INT_CST_HIGH (n);
+
+  /* Denominator = 2.  */
+  ldenom = 2;
+  hdenom = 0;
+
+  /* Index = Numerator-1.  */
+  if (lnum == 0)
+    {
+      hidx = hnum - 1;
+      lidx = ~ (unsigned HOST_WIDE_INT) 0;
+    }
+  else
+    {
+      hidx = hnum;
+      lidx = lnum - 1;
+    }
+
+  /* Numerator = Numerator*Index = n*(n-1).  */
+  if (mul_double (lnum, hnum, lidx, hidx, &lnum, &hnum))
+    return NULL_TREE;
+
+  for (i = 3; i <= k; i++)
+    {
+      /* Index--.  */
+      if (lidx == 0)
+	{
+	  hidx--;
+	  lidx = ~ (unsigned HOST_WIDE_INT) 0;
+	}
+      else
+        lidx--;
+
+      /* Numerator *= Index.  */
+      if (mul_double (lnum, hnum, lidx, hidx, &lnum, &hnum))
+	return NULL_TREE;
+
+      /* Denominator *= i.  */
+      mul_double (ldenom, hdenom, i, 0, &ldenom, &hdenom);
+    }
+
+  /* Result = Numerator / Denominator.  */
+  div_and_round_double (EXACT_DIV_EXPR, 1, lnum, hnum, ldenom, hdenom,
+			&lres, &hres, &ldum, &hdum);
+
+  res = build_int_cst_wide (type, lres, hres);
+  return int_fits_type_p (res, type) ? res : NULL_TREE;
 }
 
 /* Helper function.  Use the Newton's interpolating formula for
    evaluating the value of the evolution function.  */
 
 static tree 
-chrec_evaluate (unsigned var,
-		tree chrec,
-		tree n,
-		tree k)
+chrec_evaluate (unsigned var, tree chrec, tree n, unsigned int k)
 {
-  tree type = chrec_type (chrec);
-  tree binomial_n_k = tree_fold_binomial (n, k);
-  
-  if (TREE_CODE (chrec) == EXPONENTIAL_CHREC
+  tree arg0, arg1, binomial_n_k;
+  tree type = TREE_TYPE (chrec);
+
+  while (TREE_CODE (chrec) == POLYNOMIAL_CHREC
+	 && CHREC_VARIABLE (chrec) > var)
+    chrec = CHREC_LEFT (chrec);
+
+  if (TREE_CODE (chrec) == POLYNOMIAL_CHREC
       && CHREC_VARIABLE (chrec) == var)
-    return chrec_top;
-  
-  if (TREE_CODE (chrec) == POLYNOMIAL_CHREC)
     {
-      if (CHREC_VARIABLE (chrec) > var)
-	return chrec_evaluate (var, CHREC_LEFT (chrec), n, k);
-      
-      if (CHREC_VARIABLE (chrec) == var)
-	return chrec_fold_plus 
-	  (type, 
-	   chrec_fold_multiply (type, binomial_n_k, CHREC_LEFT (chrec)),
-	   chrec_evaluate (var, CHREC_RIGHT (chrec), n, 
-			   tree_fold_plus (type, k, integer_one_node)));
-      
-      return chrec_fold_multiply (type, binomial_n_k, chrec);
+      arg0 = chrec_evaluate (var, CHREC_RIGHT (chrec), n, k + 1);
+      if (arg0 == chrec_dont_know)
+	return chrec_dont_know;
+      binomial_n_k = tree_fold_binomial (type, n, k);
+      if (!binomial_n_k)
+	return chrec_dont_know;
+      arg1 = fold (build2 (MULT_EXPR, type,
+			   CHREC_LEFT (chrec), binomial_n_k));
+      return chrec_fold_plus (type, arg0, arg1);
     }
-  else
-    return chrec_fold_multiply (type, binomial_n_k, chrec);
+
+  binomial_n_k = tree_fold_binomial (type, n, k);
+  if (!binomial_n_k)
+    return chrec_dont_know;
+  
+  return fold (build2 (MULT_EXPR, type, chrec, binomial_n_k));
 }
 
 /* Evaluates "CHREC (X)" when the varying variable is VAR.  
    Example:  Given the following parameters, 
    
    var = 1
-   chrec = {5, +, {3, +, 4}_1}_1
+   chrec = {3, +, 4}_1
    x = 10
    
    The result is given by the Newton's interpolating formula: 
-   5 * \binom{10}{0} + 3 * \binom{10}{1} + 4 * \binom{10}{2}.
+   3 * \binom{10}{0} + 4 * \binom{10}{1}.
 */
 
 tree 
@@ -1200,7 +516,7 @@ chrec_apply (unsigned var,
 	     tree x)
 {
   tree type = chrec_type (chrec);
-  tree res = chrec_top;
+  tree res = chrec_dont_know;
 
   if (automatically_generated_chrec_p (chrec)
       || automatically_generated_chrec_p (x)
@@ -1210,11 +526,11 @@ chrec_apply (unsigned var,
 	 constants with respect to the varying loop.  */
       || chrec_contains_symbols_defined_in_loop (chrec, var)
       || chrec_contains_symbols (x))
-    return chrec_top;
+    return chrec_dont_know;
   
   if (dump_file && (dump_flags & TDF_DETAILS))
     fprintf (dump_file, "(chrec_apply \n");
-  
+
   if (evolution_function_is_affine_p (chrec))
     {
       /* "{a, +, b} (x)"  ->  "a + b*x".  */
@@ -1228,17 +544,16 @@ chrec_apply (unsigned var,
 						    CHREC_RIGHT (chrec), x));
     }
   
-  else if (TREE_CODE (chrec) != POLYNOMIAL_CHREC
-	   && TREE_CODE (chrec) != EXPONENTIAL_CHREC)
+  else if (TREE_CODE (chrec) != POLYNOMIAL_CHREC)
     res = chrec;
   
   else if (TREE_CODE (x) == INTEGER_CST
 	   && tree_int_cst_sgn (x) == 1)
     /* testsuite/.../ssa-chrec-38.c.  */
-    res = chrec_evaluate (var, chrec, x, integer_zero_node);
-  
+    res = chrec_evaluate (var, chrec, x, 0);
+
   else
-    res = chrec_top;
+    res = chrec_dont_know;
   
   if (dump_file && (dump_flags & TDF_DETAILS))
     {
@@ -1272,15 +587,6 @@ chrec_replace_initial_condition (tree chrec,
 	 chrec_replace_initial_condition (CHREC_LEFT (chrec), init_cond),
 	 CHREC_RIGHT (chrec));
       
-    case EXPONENTIAL_CHREC:
-      return build_exponential_chrec
-	(CHREC_VARIABLE (chrec),
-	 chrec_replace_initial_condition (CHREC_LEFT (chrec), init_cond),
-	 CHREC_RIGHT (chrec));
-      
-    case PEELED_CHREC:
-      return chrec_top;
-      
     default:
       return init_cond;
     }
@@ -1294,47 +600,10 @@ initial_condition (tree chrec)
   if (automatically_generated_chrec_p (chrec))
     return chrec;
   
-  if (TREE_CODE (chrec) == POLYNOMIAL_CHREC
-      || TREE_CODE (chrec) == EXPONENTIAL_CHREC)
+  if (TREE_CODE (chrec) == POLYNOMIAL_CHREC)
     return initial_condition (CHREC_LEFT (chrec));
   else
     return chrec;
-}
-
-/* Returns a multivariate function that has no evolution in LOOP_NUM.
-   Mask the evolution LOOP_NUM.  */
-
-tree 
-hide_evolution_in_loop (tree chrec, unsigned loop_num)
-{
-  if (automatically_generated_chrec_p (chrec))
-    return chrec;
-  
-  switch (TREE_CODE (chrec))
-    {
-    case POLYNOMIAL_CHREC:
-      if (CHREC_VARIABLE (chrec) >= loop_num)
-	return hide_evolution_in_loop (CHREC_LEFT (chrec), loop_num);
-
-      else
-	return build_polynomial_chrec 
-	  (CHREC_VARIABLE (chrec), 
-	   hide_evolution_in_loop (CHREC_LEFT (chrec), loop_num), 
-	   CHREC_RIGHT (chrec));
-
-    case EXPONENTIAL_CHREC:
-      if (CHREC_VARIABLE (chrec) >= loop_num)
-	return hide_evolution_in_loop (CHREC_LEFT (chrec), loop_num);
-
-      else
-	return build_exponential_chrec 
-	  (CHREC_VARIABLE (chrec),
-	   hide_evolution_in_loop (CHREC_LEFT (chrec), loop_num),
-	   CHREC_RIGHT (chrec));
-
-    default:
-      return chrec;
-    }
 }
 
 /* Returns a univariate function that represents the evolution in
@@ -1365,35 +634,21 @@ hide_evolution_in_other_loops_than_loop (tree chrec,
 	return hide_evolution_in_other_loops_than_loop (CHREC_LEFT (chrec), 
 							loop_num);
       
-    case EXPONENTIAL_CHREC:
-      if (CHREC_VARIABLE (chrec) == loop_num)
-	return build_exponential_chrec 
-	  (loop_num,
-	   hide_evolution_in_other_loops_than_loop (CHREC_LEFT (chrec), 
-						    loop_num),
-	   CHREC_RIGHT (chrec));
-      
-      else if (CHREC_VARIABLE (chrec) < loop_num)
-	/* There is no evolution in this loop.  */
-	return initial_condition (chrec);
-      
-      else
-	return hide_evolution_in_other_loops_than_loop (CHREC_LEFT (chrec), 
-							loop_num);
-      
     default:
       return chrec;
     }
 }
 
-/* Returns the evolution part in LOOP_NUM.  Example: the call
-   get_evolution_in_loop (1, {{0, +, 1}_1, +, 2}_1) returns 
-   {1, +, 2}_1  */
+/* Returns the evolution part of CHREC in LOOP_NUM when RIGHT is
+   true, otherwise returns the initial condition in LOOP_NUM.  */
 
-tree 
-evolution_part_in_loop_num (tree chrec, 
-			    unsigned loop_num)
+static tree 
+chrec_component_in_loop_num (tree chrec, 
+			     unsigned loop_num,
+			     bool right)
 {
+  tree component;
+
   if (automatically_generated_chrec_p (chrec))
     return chrec;
   
@@ -1402,15 +657,22 @@ evolution_part_in_loop_num (tree chrec,
     case POLYNOMIAL_CHREC:
       if (CHREC_VARIABLE (chrec) == loop_num)
 	{
+	  if (right)
+	    component = CHREC_RIGHT (chrec);
+	  else
+	    component = CHREC_LEFT (chrec);
+
 	  if (TREE_CODE (CHREC_LEFT (chrec)) != POLYNOMIAL_CHREC
 	      || CHREC_VARIABLE (CHREC_LEFT (chrec)) != CHREC_VARIABLE (chrec))
-	    return CHREC_RIGHT (chrec);
+	    return component;
 	  
 	  else
 	    return build_polynomial_chrec
 	      (loop_num, 
-	       evolution_part_in_loop_num (CHREC_LEFT (chrec), loop_num), 
-	       CHREC_RIGHT (chrec));
+	       chrec_component_in_loop_num (CHREC_LEFT (chrec), 
+					    loop_num, 
+					    right), 
+	       component);
 	}
       
       else if (CHREC_VARIABLE (chrec) < loop_num)
@@ -1418,37 +680,43 @@ evolution_part_in_loop_num (tree chrec,
 	return NULL_TREE;
       
       else
-	return evolution_part_in_loop_num (CHREC_LEFT (chrec), loop_num);
+	return chrec_component_in_loop_num (CHREC_LEFT (chrec), 
+					    loop_num, 
+					    right);
       
-    case EXPONENTIAL_CHREC:
-      if (CHREC_VARIABLE (chrec) == loop_num)
-	{
-	  if (TREE_CODE (CHREC_LEFT (chrec)) != EXPONENTIAL_CHREC
-	      || CHREC_VARIABLE (CHREC_LEFT (chrec)) != CHREC_VARIABLE (chrec))
-	    return CHREC_RIGHT (chrec);
-	  
-	  else
-	    return build_exponential_chrec 
-	      (loop_num,
-	       evolution_part_in_loop_num (CHREC_LEFT (chrec), loop_num),
-	       CHREC_RIGHT (chrec));
-	}
-      
-      else if (CHREC_VARIABLE (chrec) < loop_num)
-	/* There is no evolution part in this loop.  */
+     default:
+      if (right)
 	return NULL_TREE;
-      
       else
-	return evolution_part_in_loop_num (CHREC_LEFT (chrec), loop_num);
-      
-    default:
-      return NULL_TREE;
+	return chrec;
     }
+}
+
+/* Returns the evolution part in LOOP_NUM.  Example: the call
+   evolution_part_in_loop_num ({{0, +, 1}_1, +, 2}_1, 1) returns 
+   {1, +, 2}_1  */
+
+tree 
+evolution_part_in_loop_num (tree chrec, 
+			    unsigned loop_num)
+{
+  return chrec_component_in_loop_num (chrec, loop_num, true);
+}
+
+/* Returns the initial condition in LOOP_NUM.  Example: the call
+   initial_condition_in_loop_num ({{0, +, 1}_1, +, 2}_2, 2) returns 
+   {0, +, 1}_1  */
+
+tree 
+initial_condition_in_loop_num (tree chrec, 
+			       unsigned loop_num)
+{
+  return chrec_component_in_loop_num (chrec, loop_num, false);
 }
 
 /* Set or reset the evolution of CHREC to NEW_EVOL in loop LOOP_NUM.
    This function is essentially used for setting the evolution to
-   chrec_top, for example after having determined that it is
+   chrec_dont_know, for example after having determined that it is
    impossible to say how many times a loop will execute.  */
 
 tree 
@@ -1456,74 +724,20 @@ reset_evolution_in_loop (unsigned loop_num,
 			 tree chrec, 
 			 tree new_evol)
 {
-  if ((TREE_CODE (chrec) == POLYNOMIAL_CHREC
-       || TREE_CODE (chrec) == EXPONENTIAL_CHREC)
+  if (TREE_CODE (chrec) == POLYNOMIAL_CHREC
       && CHREC_VARIABLE (chrec) > loop_num)
-    return build 
+/* APPLE LOCAL mainline 4080945/ PR 20742 */
+    return build2
       (TREE_CODE (chrec), 
-       build_int_2 (CHREC_VARIABLE (chrec), 0), 
+       build_int_cst (NULL_TREE, CHREC_VARIABLE (chrec)), 
        reset_evolution_in_loop (loop_num, CHREC_LEFT (chrec), new_evol), 
        reset_evolution_in_loop (loop_num, CHREC_RIGHT (chrec), new_evol));
   
-  while ((TREE_CODE (chrec) == POLYNOMIAL_CHREC
-	  || TREE_CODE (chrec) == EXPONENTIAL_CHREC)
+  while (TREE_CODE (chrec) == POLYNOMIAL_CHREC
 	 && CHREC_VARIABLE (chrec) == loop_num)
     chrec = CHREC_LEFT (chrec);
   
   return build_polynomial_chrec (loop_num, chrec, new_evol);
-}
-
-/* Determine the type of the result after the merge of types TYPE0 and
-   TYPE1.  */
-
-static inline tree 
-chrec_merge_types (tree type0, 
-		   tree type1)
-{
-  if (type0 == type1)
-    return type0;
-
-  else 
-    /* FIXME.  */
-    return NULL_TREE;
-}
-
-/* Merge the information contained in intervals or scalar constants. 
-   merge ([a, b], [c, d])  ->  [min (a, c), max (b, d)],
-   merge ([a, b], c)       ->  [min (a, c), max (b, c)],
-   merge (a, [b, c])       ->  [min (a, b), max (a, c)],
-   merge (a, b)            ->  [min (a, b), max (a, b)].  */
-
-static inline tree 
-chrec_merge_intervals (tree chrec1, 
-		       tree chrec2)
-{
-  tree type1 = chrec_type (chrec1);
-  tree type2 = chrec_type (chrec2);
-  tree type = chrec_merge_types (type1, type2);
-  
-  if (type == NULL_TREE)
-    return chrec_top;
-  
-  if (TREE_CODE (chrec1) == INTERVAL_CHREC)
-    {
-      if (TREE_CODE (chrec2) == INTERVAL_CHREC)
-	return build_interval_chrec 
-	  (tree_fold_min (type, CHREC_LOW (chrec1), CHREC_LOW (chrec2)),
-	   tree_fold_max (type, CHREC_UP (chrec1), CHREC_UP (chrec2)));
-      else
-	return build_interval_chrec 
-	  (tree_fold_min (type, CHREC_LOW (chrec1), chrec2),
-	   tree_fold_max (type, CHREC_UP (chrec1), chrec2));
-    }
-  else if (TREE_CODE (chrec2) == INTERVAL_CHREC)
-    return build_interval_chrec 
-      (tree_fold_min (type, CHREC_LOW (chrec2), chrec1),
-       tree_fold_max (type, CHREC_UP (chrec2), chrec1));
-  else
-    return build_interval_chrec 
-      (tree_fold_min (type, chrec1, chrec2),
-       tree_fold_max (type, chrec1, chrec2));
 }
 
 /* Merges two evolution functions that were found by following two
@@ -1533,15 +747,13 @@ tree
 chrec_merge (tree chrec1, 
 	     tree chrec2)
 {
-  tree type = chrec_type (chrec1);
+  if (chrec1 == chrec_dont_know
+      || chrec2 == chrec_dont_know)
+    return chrec_dont_know;
 
-  if (chrec1 == chrec_top
-      || chrec2 == chrec_top)
-    return chrec_top;
-
-  if (chrec1 == chrec_bot 
-      || chrec2 == chrec_bot)
-    return chrec_bot;
+  if (chrec1 == chrec_known 
+      || chrec2 == chrec_known)
+    return chrec_known;
 
   if (chrec1 == chrec_not_analyzed_yet)
     return chrec2;
@@ -1551,77 +763,7 @@ chrec_merge (tree chrec1,
   if (operand_equal_p (chrec1, chrec2, 0))
     return chrec1;
 
-  switch (TREE_CODE (chrec1))
-    {
-    case INTEGER_CST:
-    case INTERVAL_CHREC:
-      switch (TREE_CODE (chrec2))
-	{
-	case INTEGER_CST:
-	case INTERVAL_CHREC:
-	  return chrec_merge_intervals (chrec1, chrec2);
-	  
-	case POLYNOMIAL_CHREC:
-	  return build_polynomial_chrec 
-	    (CHREC_VARIABLE (chrec2),
-	     chrec_merge (chrec1, CHREC_LEFT (chrec2)),
-	     chrec_merge (convert (type, integer_zero_node),
-			  CHREC_RIGHT (chrec2)));
-	  
-	case EXPONENTIAL_CHREC:
-	  return build_exponential_chrec 
-	    (CHREC_VARIABLE (chrec2),
-	     chrec_merge (chrec1, CHREC_LEFT (chrec2)),
-	     chrec_merge (convert (type, integer_one_node),
-			  CHREC_RIGHT (chrec2)));
-
-	default:
-	  return chrec_top;
-	}
-      
-    case POLYNOMIAL_CHREC:
-      switch (TREE_CODE (chrec2))
-	{
-	case INTEGER_CST:
-	case INTERVAL_CHREC:
-	  return build_polynomial_chrec 
-	    (CHREC_VARIABLE (chrec1),
-	     chrec_merge (CHREC_LEFT (chrec1), chrec2),
-	     chrec_merge (CHREC_RIGHT (chrec1),
-			  convert (type, integer_zero_node)));
-	  
-	case POLYNOMIAL_CHREC:
-	  if (CHREC_VARIABLE (chrec1) == CHREC_VARIABLE (chrec2))
-	    return build_polynomial_chrec 
-	      (CHREC_VARIABLE (chrec2),
-	       chrec_merge (CHREC_LEFT (chrec1), CHREC_LEFT (chrec2)),
-	       chrec_merge (CHREC_RIGHT (chrec1), CHREC_RIGHT (chrec2)));
-	  else if (CHREC_VARIABLE (chrec1) < CHREC_VARIABLE (chrec2))
-	    return build_polynomial_chrec 
-	      (CHREC_VARIABLE (chrec2),
-	       chrec_merge (chrec1, CHREC_LEFT (chrec2)),
-	       chrec_merge (convert (type, integer_zero_node),
-			    CHREC_RIGHT (chrec2)));
-	  else
-	    return build_polynomial_chrec 
-	      (CHREC_VARIABLE (chrec1),
-	       chrec_merge (CHREC_LEFT (chrec1), chrec2),
-	       chrec_merge (CHREC_RIGHT (chrec1),
-			    convert (type, integer_zero_node)));
-	  
-	case EXPONENTIAL_CHREC:
-	  return chrec_top;
-	  
-	default:
-	  return chrec_top;
-	}
-      
-    case EXPONENTIAL_CHREC:
-      return chrec_top;
-
-    default:
-      return chrec_top;
-    }
+  return chrec_dont_know;
 }
 
 
@@ -1636,8 +778,7 @@ is_multivariate_chrec_rec (tree chrec, unsigned int rec_var)
   if (chrec == NULL_TREE)
     return false;
   
-  if (TREE_CODE (chrec) == POLYNOMIAL_CHREC
-      || TREE_CODE (chrec) == EXPONENTIAL_CHREC)
+  if (TREE_CODE (chrec) == POLYNOMIAL_CHREC)
     {
       if (CHREC_VARIABLE (chrec) != rec_var)
 	return true;
@@ -1657,32 +798,13 @@ is_multivariate_chrec (tree chrec)
   if (chrec == NULL_TREE)
     return false;
   
-  if (TREE_CODE (chrec) == POLYNOMIAL_CHREC
-      || TREE_CODE (chrec) == EXPONENTIAL_CHREC)
+  if (TREE_CODE (chrec) == POLYNOMIAL_CHREC)
     return (is_multivariate_chrec_rec (CHREC_LEFT (chrec), 
 				       CHREC_VARIABLE (chrec))
 	    || is_multivariate_chrec_rec (CHREC_RIGHT (chrec), 
 					  CHREC_VARIABLE (chrec)));
   else
     return false;
-}
-
-/* Determine whether the given chrec is a polynomial or not.  */
-
-bool
-is_pure_sum_chrec (tree chrec)
-{
-  if (chrec == NULL_TREE)
-    return true;
-  
-  if (TREE_CODE (chrec) == EXPONENTIAL_CHREC)
-    return false;
-  
-  if (TREE_CODE (chrec) == POLYNOMIAL_CHREC)
-    return (is_pure_sum_chrec (CHREC_LEFT (chrec))
-	    && is_pure_sum_chrec (CHREC_RIGHT (chrec)));
-  
-  return true;
 }
 
 /* Determines whether the chrec contains symbolic names or not.  */
@@ -1726,7 +848,7 @@ chrec_contains_symbols (tree chrec)
 bool 
 chrec_contains_undetermined (tree chrec)
 {
-  if (chrec == chrec_top
+  if (chrec == chrec_dont_know
       || chrec == chrec_not_analyzed_yet
       || chrec == NULL_TREE)
     return true;
@@ -1750,60 +872,36 @@ chrec_contains_undetermined (tree chrec)
     }
 }
 
-/* Determines whether the chrec contains interval coefficients.  */
-
-bool 
-chrec_contains_intervals (tree chrec)
-{
-  if (chrec == NULL_TREE
-      || automatically_generated_chrec_p (chrec))
-    return false;
-  
-  if (TREE_CODE (chrec) == INTERVAL_CHREC)
-    return true;
-  
-  switch (TREE_CODE_LENGTH (TREE_CODE (chrec)))
-    {
-    case 3:
-      if (chrec_contains_intervals (TREE_OPERAND (chrec, 2)))
-	return true;
-      
-    case 2:
-      if (chrec_contains_intervals (TREE_OPERAND (chrec, 1)))
-	return true;
-      
-    case 1:
-      if (chrec_contains_intervals (TREE_OPERAND (chrec, 0)))
-	return true;
-      
-    default:
-      return false;
-    }
-}
-
-/* Determines whether the tree EXPR contains chrecs.  */
+/* APPLE LOCAL begin mainline 4080945/ PR 20742 */
+/* Determines whether the tree EXPR contains chrecs, and increment
+   SIZE if it is not a NULL pointer by an estimation of the depth of
+   the tree.  */
 
 bool
-tree_contains_chrecs (tree expr)
+tree_contains_chrecs (tree expr, int *size)
 {
   if (expr == NULL_TREE)
     return false;
   
+  if (size)
+    (*size)++;
+
   if (tree_is_chrec (expr))
     return true;
   
   switch (TREE_CODE_LENGTH (TREE_CODE (expr)))
     {
     case 3:
-      if (tree_contains_chrecs (TREE_OPERAND (expr, 2)))
+      if (tree_contains_chrecs (TREE_OPERAND (expr, 2), size))
 	return true;
       
     case 2:
-      if (tree_contains_chrecs (TREE_OPERAND (expr, 1)))
+      if (tree_contains_chrecs (TREE_OPERAND (expr, 1), size))
 	return true;
       
     case 1:
-      if (tree_contains_chrecs (TREE_OPERAND (expr, 0)))
+      if (tree_contains_chrecs (TREE_OPERAND (expr, 0), size))
+/* APPLE LOCAL end mainline 4080945/ PR 20742 */
 	return true;
       
     default:
@@ -1829,8 +927,9 @@ evolution_function_is_affine_multivariate_p (tree chrec)
 	    return true;
 	  else
 	    {
-	      if (CHREC_VARIABLE (CHREC_RIGHT (chrec)) 
-		  != CHREC_VARIABLE (chrec)
+	      if (TREE_CODE (CHREC_RIGHT (chrec)) == POLYNOMIAL_CHREC
+		  && CHREC_VARIABLE (CHREC_RIGHT (chrec)) 
+		     != CHREC_VARIABLE (chrec)
 		  && evolution_function_is_affine_multivariate_p 
 		  (CHREC_RIGHT (chrec)))
 		return true;
@@ -1850,9 +949,6 @@ evolution_function_is_affine_multivariate_p (tree chrec)
 	    return false;
 	}
       
-      
-    case EXPONENTIAL_CHREC:
-    case INTERVAL_CHREC:
     default:
       return false;
     }
@@ -1870,11 +966,9 @@ evolution_function_is_univariate_p (tree chrec)
   switch (TREE_CODE (chrec))
     {
     case POLYNOMIAL_CHREC:
-    case EXPONENTIAL_CHREC:
       switch (TREE_CODE (CHREC_LEFT (chrec)))
 	{
 	case POLYNOMIAL_CHREC:
-	case EXPONENTIAL_CHREC:
 	  if (CHREC_VARIABLE (chrec) != CHREC_VARIABLE (CHREC_LEFT (chrec)))
 	    return false;
 	  if (!evolution_function_is_univariate_p (CHREC_LEFT (chrec)))
@@ -1888,7 +982,6 @@ evolution_function_is_univariate_p (tree chrec)
       switch (TREE_CODE (CHREC_RIGHT (chrec)))
 	{
 	case POLYNOMIAL_CHREC:
-	case EXPONENTIAL_CHREC:
 	  if (CHREC_VARIABLE (chrec) != CHREC_VARIABLE (CHREC_RIGHT (chrec)))
 	    return false;
 	  if (!evolution_function_is_univariate_p (CHREC_RIGHT (chrec)))
@@ -1904,9 +997,45 @@ evolution_function_is_univariate_p (tree chrec)
     }
 }
 
+/* Returns the number of variables of CHREC.  Example: the call
+   nb_vars_in_chrec ({{0, +, 1}_5, +, 2}_6) returns 2.  */
+
+unsigned 
+nb_vars_in_chrec (tree chrec)
+{
+  if (chrec == NULL_TREE)
+    return 0;
+
+  switch (TREE_CODE (chrec))
+    {
+    case POLYNOMIAL_CHREC:
+      return 1 + nb_vars_in_chrec 
+	(initial_condition_in_loop_num (chrec, CHREC_VARIABLE (chrec)));
+
+    default:
+      return 0;
+    }
+}
+
 
 
-/* Convert the initial condition of chrec to type.  */
+/* Convert CHREC to TYPE.  The following is rule is always true:
+   TREE_TYPE (chrec) == TREE_TYPE (CHREC_LEFT (chrec)) == TREE_TYPE
+   (CHREC_RIGHT (chrec)).  An example of what could happen when adding
+   two chrecs and the type of the CHREC_RIGHT is different than
+   CHREC_LEFT is:
+   
+   {(uint) 0, +, (uchar) 10} +
+   {(uint) 0, +, (uchar) 250}
+   
+   that would produce a wrong result if CHREC_RIGHT is not (uint):
+   
+   {(uint) 0, +, (uchar) 4}
+
+   instead of
+
+   {(uint) 0, +, (uint) 260}
+*/
 
 tree 
 chrec_convert (tree type, 
@@ -1933,32 +1062,26 @@ chrec_convert (tree type,
 				     chrec_convert (type,
 						    CHREC_RIGHT (chrec)));
 
-    case EXPONENTIAL_CHREC:
-      return build_exponential_chrec (CHREC_VARIABLE (chrec),
-				      chrec_convert (type,
-						     CHREC_LEFT (chrec)),
-				      chrec_convert (type,
-						     CHREC_RIGHT (chrec)));
-      
-    case PEELED_CHREC:
-      return build_peeled_chrec 
-	(CHREC_VARIABLE (chrec), 
-	 chrec_convert (type, CHREC_LEFT (chrec)), 
-	 chrec_convert (type, CHREC_RIGHT (chrec)));
-      
-    case INTERVAL_CHREC:
-      return build_interval_chrec
-	(chrec_convert (type, CHREC_LOW (chrec)), 
-	 chrec_convert (type, CHREC_UP (chrec)));
-      
     default:
       {
-	tree res = convert (type, chrec);
+	tree res = fold_convert (type, chrec);
 
 	/* Don't propagate overflows.  */
 	TREE_OVERFLOW (res) = 0;
-	if (TREE_CODE_CLASS (TREE_CODE (res)) == 'c')
+	if (CONSTANT_CLASS_P (res))
 	  TREE_CONSTANT_OVERFLOW (res) = 0;
+
+	/* But reject constants that don't fit in their type after conversion.
+	   This can happen if TYPE_MIN_VALUE or TYPE_MAX_VALUE are not the
+	   natural values associated with TYPE_PRECISION and TYPE_UNSIGNED,
+	   and can cause problems later when computing niters of loops.  Note
+	   that we don't do the check before converting because we don't want
+	   to reject conversions of negative chrecs to unsigned types.  */
+	if (TREE_CODE (res) == INTEGER_CST
+	    && TREE_CODE (type) == INTEGER_TYPE
+	    && !int_fits_type_p (res, type))
+	  res = chrec_dont_know;
+
 	return res;
       }
     }
@@ -1974,4 +1097,3 @@ chrec_type (tree chrec)
   
   return TREE_TYPE (chrec);
 }
-

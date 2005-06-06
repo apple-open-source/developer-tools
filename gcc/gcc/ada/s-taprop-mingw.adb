@@ -6,7 +6,7 @@
 --                                                                          --
 --                                  B o d y                                 --
 --                                                                          --
---         Copyright (C) 1992-2004, Free Software Foundation, Inc.          --
+--         Copyright (C) 1992-2005, Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -67,7 +67,7 @@ with System.Soft_Links;
 --  Note that we do not use System.Tasking.Initialization directly since
 --  this is a higher level package that we shouldn't depend on. For example
 --  when using the restricted run time, it is replaced by
---  System.Tasking.Restricted.Initialization
+--  System.Tasking.Restricted.Stages.
 
 with System.OS_Primitives;
 --  used for Delay_Modes
@@ -99,7 +99,7 @@ package body System.Task_Primitives.Operations is
    ----------------
 
    Environment_Task_Id : Task_Id;
-   --  A variable to hold Task_Id for the environment task.
+   --  A variable to hold Task_Id for the environment task
 
    Single_RTS_Lock : aliased RTS_Lock;
    --  This is a lock to allow only one thread of control in the RTS at
@@ -113,10 +113,10 @@ package body System.Task_Primitives.Operations is
    pragma Import (C, Dispatching_Policy, "__gl_task_dispatching_policy");
 
    FIFO_Within_Priorities : constant Boolean := Dispatching_Policy = 'F';
-   --  Indicates whether FIFO_Within_Priorities is set.
+   --  Indicates whether FIFO_Within_Priorities is set
 
    Foreign_Task_Elaborated : aliased Boolean := True;
-   --  Used to identified fake tasks (i.e., non-Ada Threads).
+   --  Used to identified fake tasks (i.e., non-Ada Threads)
 
    ------------------------------------
    -- The thread local storage index --
@@ -400,7 +400,6 @@ package body System.Task_Primitives.Operations is
 
    procedure Initialize_Lock (L : access RTS_Lock; Level : Lock_Level) is
       pragma Unreferenced (Level);
-
    begin
       InitializeCriticalSection (CRITICAL_SECTION (L.all)'Unrestricted_Access);
    end Initialize_Lock;
@@ -661,7 +660,6 @@ package body System.Task_Primitives.Operations is
 
    procedure Wakeup (T : Task_Id; Reason : System.Tasking.Task_States) is
       pragma Unreferenced (Reason);
-
    begin
       Cond_Signal (T.Common.LL.CV'Access);
    end Wakeup;
@@ -845,31 +843,27 @@ package body System.Task_Primitives.Operations is
       Priority   : System.Any_Priority;
       Succeeded  : out Boolean)
    is
+      pragma Unreferenced (Stack_Size);
+
+      Initial_Stack_Size : constant := 1024;
+      --  We set the initial stack size to 1024. On Windows there is no way to
+      --  fix a task stack size. Only the initial stack size can be set, the
+      --  operating system will raise the task stack size if needed.
+
       hTask          : HANDLE;
       TaskId         : aliased DWORD;
       pTaskParameter : System.OS_Interface.PVOID;
-      dwStackSize    : DWORD;
       Result         : DWORD;
       Entry_Point    : PTHREAD_START_ROUTINE;
 
    begin
       pTaskParameter := To_Address (T);
 
-      if Stack_Size = Unspecified_Size then
-         dwStackSize := DWORD (Default_Stack_Size);
-
-      elsif Stack_Size < Minimum_Stack_Size then
-         dwStackSize := DWORD (Minimum_Stack_Size);
-
-      else
-         dwStackSize := DWORD (Stack_Size);
-      end if;
-
       Entry_Point := To_PTHREAD_START_ROUTINE (Wrapper);
 
       hTask := CreateThread
          (null,
-          dwStackSize,
+          Initial_Stack_Size,
           Entry_Point,
           pTaskParameter,
           DWORD (Create_Suspended),
@@ -961,7 +955,7 @@ package body System.Task_Primitives.Operations is
    ----------------
 
    procedure Abort_Task (T : Task_Id) is
-   pragma Unreferenced (T);
+      pragma Unreferenced (T);
    begin
       null;
    end Abort_Task;
@@ -1055,7 +1049,6 @@ package body System.Task_Primitives.Operations is
 
    function Check_Exit (Self_ID : ST.Task_Id) return Boolean is
       pragma Unreferenced (Self_ID);
-
    begin
       return True;
    end Check_Exit;
@@ -1066,7 +1059,6 @@ package body System.Task_Primitives.Operations is
 
    function Check_No_Locks (Self_ID : ST.Task_Id) return Boolean is
       pragma Unreferenced (Self_ID);
-
    begin
       return True;
    end Check_No_Locks;

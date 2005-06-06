@@ -1,5 +1,5 @@
 /* Handle errors.
-   Copyright (C) 2000, 2001, 2002, 2003, 2004 Free Software Foundation,
+   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005 Free Software Foundation,
    Inc.
    Contributed by Andy Vaught & Niels Kristian Bech Jensen
 
@@ -28,12 +28,6 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 
 #include "config.h"
 #include "system.h"
-
-#include <string.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-
 #include "flags.h"
 #include "gfortran.h"
 
@@ -52,8 +46,7 @@ static gfc_error_buf error_buffer, warning_buffer;
 void
 gfc_error_init_1 (void)
 {
-
-  terminal_width = gfc_terminal_width();
+  terminal_width = gfc_terminal_width ();
   errors = 0;
   warnings = 0;
   buffer_flag = 0;
@@ -65,7 +58,6 @@ gfc_error_init_1 (void)
 void
 gfc_buffer_error (int flag)
 {
-
   buffer_flag = flag;
 }
 
@@ -76,7 +68,6 @@ gfc_buffer_error (int flag)
 static void
 error_char (char c)
 {
-
   if (buffer_flag)
     {
       if (use_warning_buffer)
@@ -95,7 +86,20 @@ error_char (char c)
   else
     {
       if (c != 0)
-	fputc (c, stderr);
+	{
+	  /* We build up complete lines before handing things
+	     over to the library in order to speed up error printing.  */
+	  static char line[MAX_ERROR_MESSAGE + 1];
+	  static int index = 0;
+
+	  line[index++] = c;
+	  if (c == '\n' || index == MAX_ERROR_MESSAGE)
+	    {
+	      line[index] = '\0';
+	      fputs (line, stderr);
+	      index = 0;
+	    }
+	}
     }
 }
 
@@ -105,13 +109,12 @@ error_char (char c)
 static void
 error_string (const char *p)
 {
-
   while (*p)
     error_char (*p++);
 }
 
 
-/* Show the file, where it was included and the source line give a
+/* Show the file, where it was included and the source line, give a
    locus.  Calls error_printf() recursively, but the recursion is at
    most one level deep.  */
 
@@ -131,7 +134,13 @@ show_locus (int offset, locus * loc)
 
   lb = loc->lb;
   f = lb->file;
-  error_printf ("In file %s:%d\n", f->filename, lb->linenum);
+  error_printf ("In file %s:%d\n", f->filename,
+#ifdef USE_MAPPED_LOCATION
+		LOCATION_LINE (lb->location)
+#else
+		lb->linenum
+#endif
+		);
 
   for (;;)
     {
@@ -338,7 +347,7 @@ error_print (const char *type, const char *format0, va_list argp)
 
 	    case 'C':
 	      if (c == 'C')
-		loc = gfc_current_locus ();
+		loc = &gfc_current_locus;
 
 	      if (have_l1)
 		{
@@ -555,7 +564,6 @@ gfc_warning_now (const char *format, ...)
 void
 gfc_clear_warning (void)
 {
-
   warning_buffer.flag = 0;
 }
 
@@ -566,7 +574,6 @@ gfc_clear_warning (void)
 void
 gfc_warning_check (void)
 {
-
   if (warning_buffer.flag)
     {
       warnings++;
@@ -652,7 +659,7 @@ gfc_internal_error (const char *format, ...)
 
   va_start (argp, format);
 
-  show_loci (gfc_current_locus (), NULL);
+  show_loci (&gfc_current_locus, NULL);
   error_printf ("Internal Error at (1):");
 
   error_print ("", format, argp);
@@ -667,7 +674,6 @@ gfc_internal_error (const char *format, ...)
 void
 gfc_clear_error (void)
 {
-
   error_buffer.flag = 0;
 }
 
@@ -698,7 +704,6 @@ gfc_error_check (void)
 void
 gfc_push_error (gfc_error_buf * err)
 {
-
   err->flag = error_buffer.flag;
   if (error_buffer.flag)
     strcpy (err->message, error_buffer.message);
@@ -712,7 +717,6 @@ gfc_push_error (gfc_error_buf * err)
 void
 gfc_pop_error (gfc_error_buf * err)
 {
-
   error_buffer.flag = err->flag;
   if (error_buffer.flag)
     strcpy (error_buffer.message, err->message);
@@ -744,12 +748,11 @@ gfc_status_char (char c)
 }
 
 
-/* Report the number of warnings and errors that occored to the caller.  */
+/* Report the number of warnings and errors that occurred to the caller.  */
 
 void
 gfc_get_errors (int *w, int *e)
 {
-
   if (w != NULL)
     *w = warnings;
   if (e != NULL)

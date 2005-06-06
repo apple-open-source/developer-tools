@@ -59,7 +59,7 @@ import javax.swing.plaf.LabelUI;
 
 /**
  * This is the Basic Look and Feel class for the JLabel.  One BasicLabelUI
- * object is used to paint all JLabels that utilize the Basic L&F.
+ * object is used to paint all JLabels that utilize the Basic Look and Feel.
  */
 public class BasicLabelUI extends LabelUI implements PropertyChangeListener
 {
@@ -81,7 +81,7 @@ public class BasicLabelUI extends LabelUI implements PropertyChangeListener
    *
    * @param c The {@link JComponent} that a UI is being created for.
    *
-   * @return A label UI for the Basic L&F.
+   * @return A label UI for the Basic Look and Feel.
    */
   public static ComponentUI createUI(JComponent c)
   {
@@ -168,23 +168,20 @@ public class BasicLabelUI extends LabelUI implements PropertyChangeListener
       vr.width = 0;
     if (vr.height < 0)
       vr.height = 0;
-
+      
     Icon icon = (b.isEnabled()) ? b.getIcon() : b.getDisabledIcon();
 
     String text = layoutCL(b, fm, b.getText(), icon, vr, ir, tr);
     
-    if (b.isOpaque())
-    {
-      g.setColor(b.getBackground());
-      g.fillRect(vr.x, vr.y, vr.width, vr.height);
-    }
-
     if (icon != null)
       icon.paintIcon(b, g, ir.x, ir.y);
-    if (b.isEnabled())
-      paintEnabledText(b, g, text, tr.x, tr.y + fm.getAscent());
-    else
-      paintDisabledText(b, g, text, tr.x, tr.y + fm.getAscent());
+    if (text != null && ! text.equals(""))
+      {
+	if (b.isEnabled())
+	  paintEnabledText(b, g, text, tr.x, tr.y + fm.getAscent());
+	else
+	  paintDisabledText(b, g, text, tr.x, tr.y + fm.getAscent());
+      }
     g.setFont(saved_font);
   }
 
@@ -354,6 +351,7 @@ public class BasicLabelUI extends LabelUI implements PropertyChangeListener
     c.setBackground(defaults.getColor("Label.background"));
     c.setFont(defaults.getFont("Label.font"));
     c.setBorder(defaults.getBorder("Label.border"));
+    c.setOpaque(true);
     //XXX: There are properties we don't use called disabledForeground
     //and disabledShadow.
   }

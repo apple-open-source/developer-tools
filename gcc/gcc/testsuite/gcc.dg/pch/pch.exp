@@ -26,6 +26,29 @@ dg-init
 
 set old_dg_do_what_default "${dg-do-what-default}"
 
+# APPLE LOCAL begin
+# Test MACOSX_DEPLOYMENT_TARGET 
+set macosx_deployment_target env(MACOSX_DEPLOYMENT_TARGET)
+setenv MACOSX_DEPLOYMENT_TARGET 10.2
+set test "cfstring-1.c"
+set f [open $test w]
+set v 0
+puts $f "#include \"cfstring-1.h\""
+puts $f "/* { dg-options \"-I./ -Winvalid-pch -save-temps\" } */"
+puts $f "void foo\(\) { x = 0; }"
+puts $f ""
+close $f
+set testh "cfstring-1.hs"
+set f [open $testh w]
+puts $f "int x;"
+puts $f ""
+close $f
+dg-pch $subdir $test [concat [list {-O0 -g}] $torture_without_loops] ".h"    
+set MACOSX_DEPLOYMENT_TARGET $macosx_deployment_target
+file delete $test
+file delete $testh
+# APPLE LOCAL end
+
 # Main loop.
 foreach test [lsort [glob -nocomplain $srcdir/$subdir/*.c]] {
     global torture_without_loops
@@ -36,6 +59,21 @@ foreach test [lsort [glob -nocomplain $srcdir/$subdir/*.c]] {
     # compiles.
     dg-pch $subdir $test [concat [list {-O0 -g}] $torture_without_loops] ".h"
 }
+
+set test "largefile.c"
+set testh "largefile.hs"
+set f [open $test w]
+set v 0
+for { set v 0 } { $v < 10000 } { incr v } {
+    puts $f "#define MACRO_${v} \"1234567890\" \"$v\""
+}
+puts $f "#include \"largefile.h\""
+close $f
+set f [open $testh w]
+close $f
+dg-pch $subdir $test [concat [list {-O0 -g}] $torture_without_loops] ".h"    
+file delete $test
+file delete $testh
 
 set dg-do-what-default "$old_dg_do_what_default"
 

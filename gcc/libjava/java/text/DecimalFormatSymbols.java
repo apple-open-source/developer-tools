@@ -52,7 +52,7 @@ import java.util.ResourceBundle;
  * normally handled automatically, but an application can override
  * values as desired using this class.
  *
- * @author Tom Tromey <tromey@cygnus.com>
+ * @author Tom Tromey (tromey@cygnus.com)
  * @author Aaron M. Renn (arenn@urbanophile.com)
  * @date February 24, 1999
  */
@@ -83,8 +83,8 @@ public final class DecimalFormatSymbols implements Cloneable, Serializable
     this (Locale.getDefault());
   }
 
-  private final String safeGetString (ResourceBundle bundle,
-				      String name, String def)
+  private String safeGetString(ResourceBundle bundle,
+                               String name, String def)
   {
     if (bundle != null)
       {
@@ -99,8 +99,8 @@ public final class DecimalFormatSymbols implements Cloneable, Serializable
     return def;
   }
 
-  private final char safeGetChar (ResourceBundle bundle,
-				  String name, char def)
+  private char safeGetChar(ResourceBundle bundle,
+                           String name, char def)
   {
     String r = null;
     if (bundle != null)
@@ -130,7 +130,7 @@ public final class DecimalFormatSymbols implements Cloneable, Serializable
     try
       {
 	res = ResourceBundle.getBundle("gnu.java.locale.LocaleInformation",
-				       loc);
+		loc, ClassLoader.getSystemClassLoader());
       }
     catch (MissingResourceException x)
       {

@@ -637,7 +637,6 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
    so they can't be static.  */
 
 extern void pfatal_with_name (const char *) ATTRIBUTE_NORETURN;
-extern void fancy_abort (void) ATTRIBUTE_NORETURN;
 extern void botch (const char *) ATTRIBUTE_NORETURN;
 
 extern void fatal (const char *format, ...) ATTRIBUTE_PRINTF_1 ATTRIBUTE_NORETURN;
@@ -738,7 +737,7 @@ typedef enum st {
   st_StaticProc	= stStaticProc,	/* load time only static procs */
   st_Constant	= stConstant,	/* const */
   st_Str	= stStr,	/* string */
-  st_Number	= stNumber,	/* pure number (ie. 4 NOR 2+2) */
+  st_Number	= stNumber,	/* pure number (i.e. 4 NOR 2+2) */
   st_Expr	= stExpr,	/* 2+2 vs. 4 */
   st_Type	= stType,	/* post-coercion SER */
   st_Max	= stMax		/* max type+1 */
@@ -5471,13 +5470,12 @@ error (const char *format, ...)
   saber_stop ();
 }
 
-/* More 'friendly' abort that prints the line and file.
-   config.h can #define abort fancy_abort if you like that sort of thing.  */
+/* More 'friendly' abort that prints the line and file.  */
 
 void
-fancy_abort (void)
+fancy_abort (const char *file, int line, const char *func)
 {
-  fatal ("internal abort");
+  fatal ("abort in %s, at %s:%d", func, file, line);
 }
 
 

@@ -71,7 +71,7 @@ extern int target_flags;
     { "no-45", -8, "" },						\
 /* is 11/10 */								\
     { "10", -12, N_("Generate code for an 11/10") },			\
-/* use movstrhi for bcopy */						\
+/* use movmemhi for bcopy */						\
     { "bcopy", 16, NULL },						\
     { "bcopy-builtin", -16, NULL },					\
 /* use 32 bit for int */						\
@@ -628,12 +628,6 @@ maybe ac0 ? - as option someday! */
   FUNCTION_ARG (CUM, MODE, TYPE, NAMED)
 */
 
-/* For an arg passed partly in registers and partly in memory,
-   this is the number of registers used.
-   For args passed entirely in registers or entirely in memory, zero.  */
-
-#define FUNCTION_ARG_PARTIAL_NREGS(CUM, MODE, TYPE, NAMED) 0
-
 /* Output assembler code to FILE to increment profiler label # LABELNO
    for profiling a function entry.  */
 
@@ -1144,8 +1138,6 @@ JMP	FUNCTION	0x0058  0x0000 <- FUNCTION
 {									\
   if (LEVEL >= 3)							\
     {									\
-      if (! SIZE)							\
-        flag_inline_functions		= 1;				\
       flag_omit_frame_pointer		= 1;				\
       /* flag_unroll_loops			= 1; */			\
     }									\

@@ -1,5 +1,5 @@
 /* Variable tracking routines for the GNU compiler.
-   Copyright (C) 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -244,7 +244,7 @@ typedef struct variable_def
 } *variable;
 
 /* Hash function for DECL for VARIABLE_HTAB.  */
-#define VARIABLE_HASH_VAL(decl) ((size_t) (decl))
+#define VARIABLE_HASH_VAL(decl) (DECL_UID (decl))
 
 /* Pointer to the BB's information specific to variable tracking pass.  */
 #define VTI(BB) ((variable_tracking_info) (BB)->aux)
@@ -266,6 +266,9 @@ static bool emit_notes;
 
 /* Fake variable for stack pointer.  */
 tree frame_base_decl;
+
+/* Stack adjust caused by function prologue.  */
+static HOST_WIDE_INT frame_stack_adjust;
 
 /* Local function prototypes.  */
 static void stack_adjust_offset_pre_post (rtx, HOST_WIDE_INT *,
@@ -370,7 +373,7 @@ stack_adjust_offset_pre_post (rtx pattern, HOST_WIDE_INT *pre,
       else
 	*post -= INTVAL (XEXP (src, 1));
     }
-  else if (GET_CODE (dest) == MEM)
+  else if (MEM_P (dest))
     {
       /* (set (mem (pre_dec (reg sp))) (foo)) */
       src = XEXP (dest, 0);
@@ -474,7 +477,7 @@ bb_stack_adjust_offset (basic_block bb)
 	offset += VTI (bb)->mos[i].u.adjust;
       else if (VTI (bb)->mos[i].type != MO_CALL)
 	{
-	  if (GET_CODE (VTI (bb)->mos[i].u.loc) == MEM)
+	  if (MEM_P (VTI (bb)->mos[i].u.loc))
 	    {
 	      VTI (bb)->mos[i].u.loc
 		= adjust_stack_reference (VTI (bb)->mos[i].u.loc, -offset);
@@ -484,7 +487,7 @@ bb_stack_adjust_offset (basic_block bb)
   VTI (bb)->out.stack_adjust = offset;
 }
 
-/* Compute stack adjustment caused by function prolog.  */
+/* Compute stack adjustment caused by function prologue.  */
 
 static HOST_WIDE_INT
 prologue_stack_adjust (void)
@@ -500,7 +503,7 @@ prologue_stack_adjust (void)
   end = NEXT_INSN (BB_END (bb));
   for (insn = BB_HEAD (bb); insn != end; insn = NEXT_INSN (insn))
     {
-      if (GET_CODE (insn) == NOTE
+      if (NOTE_P (insn)
 	  && NOTE_LINE_NUMBER (insn) == NOTE_INSN_PROLOGUE_END)
 	break;
 
@@ -523,30 +526,30 @@ prologue_stack_adjust (void)
 static bool
 vt_stack_adjustments (void)
 {
-  edge *stack;
+  edge_iterator *stack;
   int sp;
 
   /* Initialize entry block.  */
   VTI (ENTRY_BLOCK_PTR)->visited = true;
-  VTI (ENTRY_BLOCK_PTR)->out.stack_adjust = 0;
+  VTI (ENTRY_BLOCK_PTR)->out.stack_adjust = frame_stack_adjust;
 
   /* Allocate stack for back-tracking up CFG.  */
-  stack = xmalloc ((n_basic_blocks + 1) * sizeof (edge));
+  stack = xmalloc ((n_basic_blocks + 1) * sizeof (edge_iterator));
   sp = 0;
 
   /* Push the first edge on to the stack.  */
-  stack[sp++] = ENTRY_BLOCK_PTR->succ;
+  stack[sp++] = ei_start (ENTRY_BLOCK_PTR->succs);
 
   while (sp)
     {
-      edge e;
+      edge_iterator ei;
       basic_block src;
       basic_block dest;
 
       /* Look at the edge on the top of the stack.  */
-      e = stack[sp - 1];
-      src = e->src;
-      dest = e->dest;
+      ei = stack[sp - 1];
+      src = ei_edge (ei)->src;
+      dest = ei_edge (ei)->dest;
 
       /* Check if the edge destination has been visited yet.  */
       if (!VTI (dest)->visited)
@@ -555,10 +558,10 @@ vt_stack_adjustments (void)
 	  VTI (dest)->in.stack_adjust = VTI (src)->out.stack_adjust;
 	  bb_stack_adjust_offset (dest);
 
-	  if (dest->succ)
+	  if (EDGE_COUNT (dest->succs) > 0)
 	    /* Since the DEST node has been visited for the first
 	       time, check its successors.  */
-	    stack[sp++] = dest->succ;
+	    stack[sp++] = ei_start (dest->succs);
 	}
       else
 	{
@@ -569,9 +572,9 @@ vt_stack_adjustments (void)
 	      return false;
 	    }
 
-	  if (e->succ_next)
+	  if (! ei_one_before_end_p (ei))
 	    /* Go to the next edge.  */
-	    stack[sp - 1] = e->succ_next;
+	    ei_next (&stack[sp - 1]);
 	  else
 	    /* Return to previous level if there are no more edges.  */
 	    sp--;
@@ -589,6 +592,9 @@ adjust_stack_reference (rtx mem, HOST_WIDE_INT adjustment)
 {
   rtx adjusted_mem;
   rtx tmp;
+
+  if (adjustment == 0)
+    return mem;
 
   adjusted_mem = copy_rtx (mem);
   XEXP (adjusted_mem, 0) = replace_rtx (XEXP (adjusted_mem, 0),
@@ -1099,8 +1105,8 @@ variable_union (void **slot, void *data)
 		   node2 = dst->var_part[j].loc_chain; node && node2;
 		   node = node->next, node2 = node2->next)
 		{
-		  if (!((GET_CODE (node2->loc) == REG
-			 && GET_CODE (node->loc) == REG
+		  if (!((REG_P (node2->loc)
+			 && REG_P (node->loc)
 			 && REGNO (node2->loc) == REGNO (node->loc))
 			|| rtx_equal_p (node2->loc, node->loc)))
 		    break;
@@ -1136,8 +1142,8 @@ variable_union (void **slot, void *data)
 	      /* Find location from NODE.  */
 	      for (jj = 0; jj < dst_l; jj++)
 		{
-		  if ((GET_CODE (vui[jj].lc->loc) == REG
-		       && GET_CODE (node->loc) == REG
+		  if ((REG_P (vui[jj].lc->loc)
+		       && REG_P (node->loc)
 		       && REGNO (vui[jj].lc->loc) == REGNO (node->loc))
 		      || rtx_equal_p (vui[jj].lc->loc, node->loc))
 		    {
@@ -1246,7 +1252,7 @@ variable_part_different_p (variable_part *vp1, variable_part *vp2)
     {
       for (lc2 = vp2->loc_chain; lc2; lc2 = lc2->next)
 	{
-	  if (GET_CODE (lc1->loc) == REG && GET_CODE (lc2->loc) == REG)
+	  if (REG_P (lc1->loc) && REG_P (lc2->loc))
 	    {
 	      if (REGNO (lc1->loc) == REGNO (lc2->loc))
 		break;
@@ -1282,8 +1288,8 @@ variable_different_p (variable var1, variable var2,
 	return true;
       if (compare_current_location)
 	{
-	  if (!((GET_CODE (var1->var_part[i].cur_loc) == REG
-		 && GET_CODE (var2->var_part[i].cur_loc) == REG
+	  if (!((REG_P (var1->var_part[i].cur_loc)
+		 && REG_P (var2->var_part[i].cur_loc)
 		 && (REGNO (var1->var_part[i].cur_loc)
 		     == REGNO (var2->var_part[i].cur_loc)))
 		|| rtx_equal_p (var1->var_part[i].cur_loc,
@@ -1435,6 +1441,7 @@ static bool
 track_expr_p (tree expr)
 {
   rtx decl_rtl;
+  tree realdecl;
 
   /* If EXPR is not a parameter or a variable do not track it.  */
   if (TREE_CODE (expr) != VAR_DECL && TREE_CODE (expr) != PARM_DECL)
@@ -1448,14 +1455,29 @@ track_expr_p (tree expr)
   decl_rtl = DECL_RTL_IF_SET (expr);
   if (!decl_rtl)
     return 0;
+  
+  /* If this expression is really a debug alias of some other declaration, we 
+     don't need to track this expression if the ultimate declaration is
+     ignored.  */
+  realdecl = expr;
+  if (DECL_DEBUG_EXPR (realdecl)
+      && DECL_DEBUG_EXPR_IS_FROM (realdecl))
+    {
+      realdecl = DECL_DEBUG_EXPR (realdecl);
+      /* ??? We don't yet know how to emit DW_OP_piece for variable
+	 that has been SRA'ed.  */
+      if (!DECL_P (realdecl))
+	return 0;
+    }
 
-  /* Do not track EXPR if it should be ignored for debugging purposes.  */
-  if (DECL_IGNORED_P (expr))
+  /* Do not track EXPR if REALDECL it should be ignored for debugging
+     purposes.  */ 
+  if (DECL_IGNORED_P (realdecl))
     return 0;
 
   /* Do not track global variables until we are able to emit correct location
      list for them.  */
-  if (TREE_STATIC (expr))
+  if (TREE_STATIC (realdecl))
     return 0;
 
   /* When the EXPR is a DECL for alias of some variable (see example)
@@ -1466,13 +1488,13 @@ track_expr_p (tree expr)
      extern char **_dl_argv_internal __attribute__ ((alias ("_dl_argv")));
      char **_dl_argv;
   */
-  if (GET_CODE (decl_rtl) == MEM
+  if (MEM_P (decl_rtl)
       && contains_symbol_ref (XEXP (decl_rtl, 0)))
     return 0;
 
   /* If RTX is a memory it should not be very large (because it would be
      an array or struct).  */
-  if (GET_CODE (decl_rtl) == MEM)
+  if (MEM_P (decl_rtl))
     {
       /* Do not track structures and arrays.  */
       if (GET_MODE (decl_rtl) == BLKmode)
@@ -1493,7 +1515,7 @@ count_uses (rtx *loc, void *insn)
 {
   basic_block bb = BLOCK_FOR_INSN ((rtx) insn);
 
-  if (GET_CODE (*loc) == REG)
+  if (REG_P (*loc))
     {
 #ifdef ENABLE_CHECKING
 	if (REGNO (*loc) >= FIRST_PSEUDO_REGISTER)
@@ -1501,7 +1523,7 @@ count_uses (rtx *loc, void *insn)
 #endif
 	VTI (bb)->n_mos++;
     }
-  else if (GET_CODE (*loc) == MEM
+  else if (MEM_P (*loc)
 	   && MEM_EXPR (*loc)
 	   && track_expr_p (MEM_EXPR (*loc)))
     {
@@ -1534,7 +1556,7 @@ count_stores (rtx loc, rtx expr ATTRIBUTE_UNUSED, void *insn)
 static int
 add_uses (rtx *loc, void *insn)
 {
-  if (GET_CODE (*loc) == REG)
+  if (REG_P (*loc))
     {
       basic_block bb = BLOCK_FOR_INSN ((rtx) insn);
       micro_operation *mo = VTI (bb)->mos + VTI (bb)->n_mos++;
@@ -1544,7 +1566,7 @@ add_uses (rtx *loc, void *insn)
       mo->u.loc = *loc;
       mo->insn = (rtx) insn;
     }
-  else if (GET_CODE (*loc) == MEM
+  else if (MEM_P (*loc)
 	   && MEM_EXPR (*loc)
 	   && track_expr_p (MEM_EXPR (*loc)))
     {
@@ -1574,7 +1596,7 @@ add_uses_1 (rtx *x, void *insn)
 static void
 add_stores (rtx loc, rtx expr, void *insn)
 {
-  if (GET_CODE (loc) == REG)
+  if (REG_P (loc))
     {
       basic_block bb = BLOCK_FOR_INSN ((rtx) insn);
       micro_operation *mo = VTI (bb)->mos + VTI (bb)->n_mos++;
@@ -1585,7 +1607,7 @@ add_stores (rtx loc, rtx expr, void *insn)
       mo->u.loc = loc;
       mo->insn = (rtx) insn;
     }
-  else if (GET_CODE (loc) == MEM
+  else if (MEM_P (loc)
 	   && MEM_EXPR (loc)
 	   && track_expr_p (MEM_EXPR (loc)))
     {
@@ -1629,9 +1651,9 @@ compute_bb_dataflow (basic_block bb)
 	    {
 	      rtx loc = VTI (bb)->mos[i].u.loc;
 
-	      if (GET_CODE (loc) == REG)
+	      if (REG_P (loc))
 		var_reg_delete_and_set (out, loc);
-	      else if (GET_CODE (loc) == MEM)
+	      else if (MEM_P (loc))
 		var_mem_delete_and_set (out, loc);
 	    }
 	    break;
@@ -1641,9 +1663,9 @@ compute_bb_dataflow (basic_block bb)
 	    {
 	      rtx loc = VTI (bb)->mos[i].u.loc;
 
-	      if (GET_CODE (loc) == REG)
+	      if (REG_P (loc))
 		var_reg_delete (out, loc);
-	      else if (GET_CODE (loc) == MEM)
+	      else if (MEM_P (loc))
 		var_mem_delete (out, loc);
 	    }
 	    break;
@@ -1653,9 +1675,8 @@ compute_bb_dataflow (basic_block bb)
 	      rtx base;
 
 	      out->stack_adjust += VTI (bb)->mos[i].u.adjust;
-	      base = gen_rtx_MEM (Pmode,
-				  gen_rtx_PLUS (Pmode, stack_pointer_rtx,
-						GEN_INT (out->stack_adjust)));
+	      base = gen_rtx_MEM (Pmode, plus_constant (stack_pointer_rtx,
+							out->stack_adjust));
 	      set_frame_base_location (out, base);
 	    }
 	    break;
@@ -1695,13 +1716,10 @@ vt_find_locations (void)
   in_worklist = sbitmap_alloc (last_basic_block);
   in_pending = sbitmap_alloc (last_basic_block);
   sbitmap_zero (in_worklist);
-  sbitmap_zero (in_pending);
 
   FOR_EACH_BB (bb)
-    {
-      fibheap_insert (pending, bb_order[bb->index], bb);
-      SET_BIT (in_pending, bb->index);
-    }
+    fibheap_insert (pending, bb_order[bb->index], bb);
+  sbitmap_ones (in_pending);
 
   while (!fibheap_empty (pending))
     {
@@ -1721,12 +1739,13 @@ vt_find_locations (void)
 	  if (!TEST_BIT (visited, bb->index))
 	    {
 	      bool changed;
+	      edge_iterator ei;
 
 	      SET_BIT (visited, bb->index);
 
 	      /* Calculate the IN set as union of predecessor OUT sets.  */
 	      dataflow_set_clear (&VTI (bb)->in);
-	      for (e = bb->pred; e; e = e->pred_next)
+	      FOR_EACH_EDGE (e, ei, bb->preds)
 		{
 		  dataflow_set_union (&VTI (bb)->in, &VTI (e->src)->out);
 		}
@@ -1734,7 +1753,7 @@ vt_find_locations (void)
 	      changed = compute_bb_dataflow (bb);
 	      if (changed)
 		{
-		  for (e = bb->succ; e; e = e->succ_next)
+		  FOR_EACH_EDGE (e, ei, bb->succs)
 		    {
 		      if (e->dest == EXIT_BLOCK_PTR)
 			continue;
@@ -1918,9 +1937,8 @@ variable_was_changed (variable var, htab_t htab)
 }
 
 /* Set the location of frame_base_decl to LOC in dataflow set SET.  This
-   function expects that
-   frame_base_decl has already one location for offset 0 in the variable table.
- */
+   function expects that frame_base_decl has already one location for offset 0
+   in the variable table.  */
 
 static void
 set_frame_base_location (dataflow_set *set, rtx loc)
@@ -1999,7 +2017,7 @@ set_variable_part (dataflow_set *set, rtx loc, tree decl, HOST_WIDE_INT offset)
 	  node = var->var_part[pos].loc_chain;
 
 	  if (node
-	      && ((GET_CODE (node->loc) == REG && GET_CODE (loc) == REG
+	      && ((REG_P (node->loc) && REG_P (loc)
 		   && REGNO (node->loc) == REGNO (loc))
 		  || rtx_equal_p (node->loc, loc)))
 	    {
@@ -2046,7 +2064,7 @@ set_variable_part (dataflow_set *set, rtx loc, tree decl, HOST_WIDE_INT offset)
   for (node = var->var_part[pos].loc_chain; node; node = next)
     {
       next = node->next;
-      if ((GET_CODE (node->loc) == REG && GET_CODE (loc) == REG
+      if ((REG_P (node->loc) && REG_P (loc)
 	   && REGNO (node->loc) == REGNO (loc))
 	  || rtx_equal_p (node->loc, loc))
 	{
@@ -2115,7 +2133,7 @@ delete_variable_part (dataflow_set *set, rtx loc, tree decl,
 	      for (node = var->var_part[pos].loc_chain; node;
 		   node = node->next)
 		{
-		  if ((GET_CODE (node->loc) == REG && GET_CODE (loc) == REG
+		  if ((REG_P (node->loc) && REG_P (loc)
 		       && REGNO (node->loc) == REGNO (loc))
 		      || rtx_equal_p (node->loc, loc))
 		    {
@@ -2130,7 +2148,7 @@ delete_variable_part (dataflow_set *set, rtx loc, tree decl,
 	  for (node = *nextp; node; node = next)
 	    {
 	      next = node->next;
-	      if ((GET_CODE (node->loc) == REG && GET_CODE (loc) == REG
+	      if ((REG_P (node->loc) && REG_P (loc)
 		   && REGNO (node->loc) == REGNO (loc))
 		  || rtx_equal_p (node->loc, loc))
 		{
@@ -2146,8 +2164,8 @@ delete_variable_part (dataflow_set *set, rtx loc, tree decl,
 	     we have to emit new location so add the variable to set
 	     of changed variables.  */
 	  if (var->var_part[pos].cur_loc
-	      && ((GET_CODE (loc) == REG
-		   && GET_CODE (var->var_part[pos].cur_loc) == REG
+	      && ((REG_P (loc)
+		   && REG_P (var->var_part[pos].cur_loc)
 		   && REGNO (loc) == REGNO (var->var_part[pos].cur_loc))
 		  || rtx_equal_p (loc, var->var_part[pos].cur_loc)))
 	    {
@@ -2375,7 +2393,7 @@ emit_notes_in_bb (basic_block bb)
 	    {
 	      rtx loc = VTI (bb)->mos[i].u.loc;
 
-	      if (GET_CODE (loc) == REG)
+	      if (REG_P (loc))
 		var_reg_delete_and_set (&set, loc);
 	      else
 		var_mem_delete_and_set (&set, loc);
@@ -2392,7 +2410,7 @@ emit_notes_in_bb (basic_block bb)
 	    {
 	      rtx loc = VTI (bb)->mos[i].u.loc;
 
-	      if (GET_CODE (loc) == REG)
+	      if (REG_P (loc))
 		var_reg_delete (&set, loc);
 	      else
 		var_mem_delete (&set, loc);
@@ -2409,9 +2427,8 @@ emit_notes_in_bb (basic_block bb)
 	      rtx base;
 
 	      set.stack_adjust += VTI (bb)->mos[i].u.adjust;
-	      base = gen_rtx_MEM (Pmode,
-				  gen_rtx_PLUS (Pmode, stack_pointer_rtx,
-						GEN_INT (set.stack_adjust)));
+	      base = gen_rtx_MEM (Pmode, plus_constant (stack_pointer_rtx,
+							set.stack_adjust));
 	      set_frame_base_location (&set, base);
 	      emit_notes_for_changes (insn, EMIT_NOTE_AFTER_INSN);
 	    }
@@ -2463,7 +2480,7 @@ vt_emit_notes (void)
 static bool
 vt_get_decl_and_offset (rtx rtl, tree *declp, HOST_WIDE_INT *offsetp)
 {
-  if (GET_CODE (rtl) == REG)
+  if (REG_P (rtl))
     {
       if (REG_ATTRS (rtl))
 	{
@@ -2472,7 +2489,7 @@ vt_get_decl_and_offset (rtx rtl, tree *declp, HOST_WIDE_INT *offsetp)
 	  return true;
 	}
     }
-  else if (GET_CODE (rtl) == MEM)
+  else if (MEM_P (rtl))
     {
       if (MEM_ATTRS (rtl))
 	{
@@ -2490,11 +2507,7 @@ static void
 vt_add_function_parameters (void)
 {
   tree parm;
-  HOST_WIDE_INT stack_adjust = 0;
   
-  if (!frame_pointer_needed)
-    stack_adjust = prologue_stack_adjust ();
-
   for (parm = DECL_ARGUMENTS (current_function_decl);
        parm; parm = TREE_CHAIN (parm))
     {
@@ -2529,11 +2542,9 @@ vt_add_function_parameters (void)
 #endif
 
       incoming = eliminate_regs (incoming, 0, NULL_RTX);
-      if (!frame_pointer_needed && GET_CODE (incoming) == MEM)
-	incoming = adjust_stack_reference (incoming, -stack_adjust);
       out = &VTI (ENTRY_BLOCK_PTR)->out;
 
-      if (GET_CODE (incoming) == REG)
+      if (REG_P (incoming))
 	{
 #ifdef ENABLE_CHECKING
 	  if (REGNO (incoming) >= FIRST_PSEUDO_REGISTER)
@@ -2543,7 +2554,7 @@ vt_add_function_parameters (void)
 			     parm, offset, incoming);
 	  set_variable_part (out, incoming, parm, offset);
 	}
-      else if (GET_CODE (incoming) == MEM)
+      else if (MEM_P (incoming))
 	{
 	  set_variable_part (out, incoming, parm, offset);
 	}
@@ -2582,7 +2593,7 @@ vt_initialize (void)
 		}
 	      note_uses (&PATTERN (insn), count_uses_1, insn);
 	      note_stores (PATTERN (insn), count_stores, insn);
-	      if (GET_CODE (insn) == CALL_INSN)
+	      if (CALL_P (insn))
 		VTI (bb)->n_mos++;
 	    }
 	}
@@ -2632,7 +2643,7 @@ vt_initialize (void)
 		    }
 		}
 
-	      if (GET_CODE (insn) == CALL_INSN)
+	      if (CALL_P (insn))
 		{
 		  micro_operation *mo = VTI (bb)->mos + VTI (bb)->n_mos++;
 
@@ -2701,9 +2712,12 @@ vt_initialize (void)
       DECL_NAME (frame_base_decl) = get_identifier ("___frame_base_decl");
       TREE_TYPE (frame_base_decl) = char_type_node;
       DECL_ARTIFICIAL (frame_base_decl) = 1;
+      DECL_IGNORED_P (frame_base_decl) = 1;
 
       /* Set its initial "location".  */
-      base = gen_rtx_MEM (Pmode, stack_pointer_rtx);
+      frame_stack_adjust = -prologue_stack_adjust ();
+      base = gen_rtx_MEM (Pmode, plus_constant (stack_pointer_rtx,
+						frame_stack_adjust));
       set_variable_part (&VTI (ENTRY_BLOCK_PTR)->out, base, frame_base_decl, 0);
     }
   else

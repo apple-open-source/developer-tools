@@ -45,22 +45,30 @@ void test03()
   oss.imbue(loc_hk);
   const time_put<wchar_t>& tim_put = use_facet<time_put<wchar_t> >(oss.getloc()); 
 
-  iterator_type os_it03 = tim_put.put(oss.rdbuf(), oss, '*', &time1, 'a');
+  iterator_type os_it03 = tim_put.put(oss.rdbuf(), oss, L'*', &time1, 'a');
   wstring result3 = oss.str();
   VERIFY( result3 == L"Sun" );
 
   oss.str(empty); // "%A, %B %d, %Y"
-  iterator_type os_it25 = tim_put.put(oss.rdbuf(), oss, '*', &time1, 'x');
+  iterator_type os_it25 = tim_put.put(oss.rdbuf(), oss, L'*', &time1, 'x');
   wstring result25 = oss.str(); // "Sunday, April 04, 1971"
+  VERIFY( result25 == L"Sunday, April 04, 1971" );
+
   oss.str(empty); // "%I:%M:%S %Z"
-  iterator_type os_it26 = tim_put.put(oss.rdbuf(), oss, '*', &time1, 'X');
-  wstring result26 = oss.str(); // "12:00:00 PST"
+  iterator_type os_it26 = tim_put.put(oss.rdbuf(), oss, L'*', &time1, 'X');
+  wstring result26 = oss.str(); // "12:00:00 CET" or whatever timezone
+  VERIFY( result26.find(L"12:00:00") != wstring::npos );
+
   oss.str(empty);
-  iterator_type os_it35 = tim_put.put(oss.rdbuf(), oss, '*', &time1, 'x', 'E');
+  iterator_type os_it35 = tim_put.put(oss.rdbuf(), oss, L'*', &time1, 'x', 'E');
   wstring result35 = oss.str(); // "Sunday, April 04, 1971"
+  VERIFY( result35 == L"Sunday, April 04, 1971" );
+
   oss.str(empty);
-  iterator_type os_it36 = tim_put.put(oss.rdbuf(), oss, '*', &time1, 'X', 'E');
-  wstring result36 = oss.str(); // "12:00:00 PST"
+  iterator_type os_it36 = tim_put.put(oss.rdbuf(), oss, L'*', &time1, 'X', 'E');
+  wstring result36 = oss.str(); // "12:00:00 CET"
+  VERIFY( result36.find(L"12:00:00") != wstring::npos );
+
 }
 
 int main()

@@ -1,5 +1,6 @@
 /* Part of CPP library.  (Precompiled header reading/writing.)
-   Copyright (C) 2000, 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005
+   Free Software Foundation, Inc.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -222,12 +223,6 @@ count_defs (cpp_reader *pfile ATTRIBUTE_UNUSED, cpp_hashnode *hn, void *ss_p)
       {
 	struct cpp_string news;
 	void **slot;
-
-        /* APPLE LOCAL begin Symbol Separation */
-        if (pfile->cinfo_state == CINFO_WRITE && pfile->cb.is_builtin_identifier)
-          if (pfile->cb.is_builtin_identifier (hn))
-            return 1;
-        /* APPLE LOCAL end Symbol Separation */
 	
 	news.len = NODE_LEN (hn);
 	news.text = NODE_NAME (hn);
@@ -268,12 +263,6 @@ write_defs (cpp_reader *pfile ATTRIBUTE_UNUSED, cpp_hashnode *hn, void *ss_p)
 	struct cpp_string news;
 	void **slot;
 	
-        /* APPLE LOCAL begin Symbol Separation */
-        if (pfile->cinfo_state == CINFO_WRITE && pfile->cb.is_builtin_identifier)
-          if (pfile->cb.is_builtin_identifier (hn))
-            return 1;
-        /* APPLE LOCAL end Symbol Separation */
-
 	news.len = NODE_LEN (hn);
 	news.text = NODE_NAME (hn);
 	slot = htab_find (ss->definedhash, &news);
@@ -357,17 +346,6 @@ cpp_write_pch_deps (cpp_reader *r, FILE *f)
 int
 cpp_write_pch_state (cpp_reader *r, FILE *f)
 {
-  struct macrodef_struct z;
-
-  /* Write out the list of defined identifiers.  */
-  cpp_forall_identifiers (r, write_macdef, f);
-  memset (&z, 0, sizeof (z));
-  if (fwrite (&z, sizeof (z), 1, f) != 1)
-    {
-      cpp_errno (r, CPP_DL_ERROR, "while writing precompiled header");
-      return -1;
-    }
-
   if (!r->deps)
     r->deps = deps_init ();
 
@@ -431,8 +409,7 @@ collect_ht_nodes (cpp_reader *pfile ATTRIBUTE_UNUSED, cpp_hashnode *hn,
    - anything that was not defined then, but is defined now, was not
      used by the PCH.
 
-   APPLE LOCAL Symbol Separation
-   NAME is used to print warnings if `warn_invalid_pch' or `warn_invalid_sr'
+   NAME is used to print warnings if `warn_invalid_pch' is set in the
    reader's flags.
 */
 
@@ -467,13 +444,22 @@ cpp_valid_state (cpp_reader *r, const char *name, int fd)
       if (m.name_length == 0)
 	break;
 
+      /* If this file is already preprocessed, there won't be any
+	 macros defined, and that's OK.  */
+      if (CPP_OPTION (r, preprocessed))
+	{
+	  if (lseek (fd, m.definition_length, SEEK_CUR) == -1)
+	    goto error;
+	  continue;
+	}
+
       if (m.definition_length > namebufsz)
 	{
 	  free (namebuf);
 	  namebufsz = m.definition_length + 256;
 	  namebuf = xmalloc (namebufsz);
 	}
-      
+
       if ((size_t)read (fd, namebuf, m.definition_length) 
 	  != m.definition_length)
 	goto error;
@@ -488,8 +474,7 @@ cpp_valid_state (cpp_reader *r, const char *name, int fd)
 	  || h->type != NT_MACRO
 	  || h->flags & NODE_POISONED)
 	{
-          /* APPLE LOCAL Symbol Separtion */
-          if (CPP_OPTION (r, warn_invalid_pch) || CPP_OPTION (r, warn_invalid_sr))
+	  if (CPP_OPTION (r, warn_invalid_pch))
 	    cpp_error (r, CPP_DL_WARNING_SYSHDR,
 		       "%s: not used because `%.*s' not defined",
 		       name, m.name_length, namebuf);
@@ -501,8 +486,7 @@ cpp_valid_state (cpp_reader *r, const char *name, int fd)
       if (m.definition_length != ustrlen (newdefn)
 	  || memcmp (namebuf, newdefn, m.definition_length) != 0)
 	{
-	  /* APPLE LOCAL Symbol Separtion */
-	  if (CPP_OPTION (r, warn_invalid_pch) || CPP_OPTION (r, warn_invalid_sr))
+	  if (CPP_OPTION (r, warn_invalid_pch))
 	    cpp_error (r, CPP_DL_WARNING_SYSHDR,
 	       "%s: not used because `%.*s' defined as `%s' not `%.*s'",
 		       name, m.name_length, namebuf, newdefn + m.name_length,
@@ -551,8 +535,7 @@ cpp_valid_state (cpp_reader *r, const char *name, int fd)
  	++i;
       else
 	{
-	  /* APPLE LOCAL Symbol Separtion */
-	  if (CPP_OPTION (r, warn_invalid_pch) || CPP_OPTION (r, warn_invalid_sr))
+	  if (CPP_OPTION (r, warn_invalid_pch))
 	    cpp_error (r, CPP_DL_WARNING_SYSHDR, 
 		       "%s: not used because `%s' is defined",
 		       name, first);
@@ -580,46 +563,64 @@ cpp_valid_state (cpp_reader *r, const char *name, int fd)
   return 1;
 }
 
-/* Save all the existing macros and assertions.  
-   This code assumes that there might be hundreds, but not thousands of
-   existing definitions.  */
-
-struct save_macro_item {
-  struct save_macro_item *next;
-  struct cpp_hashnode macs[64];
-};
+/* Save all the existing macros.  */
 
 struct save_macro_data 
 {
-  struct save_macro_item *macros;
+  uchar **defns;
   size_t count;
+  size_t array_size;
   char **saved_pragmas;
 };
 
-/* Save the definition of a single macro, so that it will persist across
-   a PCH restore.  */
+/* Save the definition of a single macro, so that it will persist
+   across a PCH restore.  Because macro data is in GCed memory, which
+   will be blown away by PCH, it must be temporarily copied to
+   malloced memory.  (The macros will refer to identifier nodes which
+   are also GCed and so on, so the copying is done by turning them
+   into self-contained strings.)  The assumption is that most macro
+   definitions will come from the PCH file, not from the compilation
+   before the PCH file is loaded, so it doesn't matter that this is
+   a little expensive.
+
+   It would reduce the cost even further if macros defined in the PCH
+   file were not saved in this way, but this is not done (yet), except
+   for builtins, and for #assert by default.  */
 
 static int 
-save_macros (cpp_reader *r ATTRIBUTE_UNUSED, cpp_hashnode *h, void *data_p)
+save_macros (cpp_reader *r, cpp_hashnode *h, void *data_p)
 {
   struct save_macro_data *data = (struct save_macro_data *)data_p;
   if (h->type != NT_VOID
       && (h->flags & NODE_BUILTIN) == 0)
     {
-      cpp_hashnode *save;
-      if (data->count == ARRAY_SIZE (data->macros->macs))
+      if (data->count == data->array_size)
 	{
-	  struct save_macro_item *d = data->macros;
-	  data->macros = xmalloc (sizeof (struct save_macro_item));
-	  data->macros->next = d;
-	  data->count = 0;
+	  data->array_size *= 2;
+	  data->defns = xrealloc (data->defns, (data->array_size 
+						* sizeof (uchar *)));
 	}
-      save = data->macros->macs + data->count;
+      
+      switch (h->type)
+	{
+	case NT_ASSERTION:
+	  /* Not currently implemented.  */
+	  return 1;
+
+	case NT_MACRO:
+	  {
+	    const uchar * defn = cpp_macro_definition (r, h);
+	    size_t defnlen = ustrlen (defn);
+
+	    data->defns[data->count] = xmemdup (defn, defnlen, defnlen + 2);
+	    data->defns[data->count][defnlen] = '\n';
+	  }
+	  break;
+	  
+	default:
+	  abort ();
+	}
       data->count++;
-      memcpy (save, h, sizeof (struct cpp_hashnode));
-      HT_STR (&save->ident) = xmemdup (HT_STR (HT_NODE (save)),
-				       HT_LEN (HT_NODE (save)),
-				       HT_LEN (HT_NODE (save)) + 1);
     }
   return 1;
 }
@@ -632,8 +633,9 @@ cpp_prepare_state (cpp_reader *r, struct save_macro_data **data)
 {
   struct save_macro_data *d = xmalloc (sizeof (struct save_macro_data));
   
-  d->macros = NULL;
-  d->count = ARRAY_SIZE (d->macros->macs);
+  d->array_size = 512;
+  d->defns = xmalloc (d->array_size * sizeof (d->defns[0]));
+  d->count = 0;
   cpp_forall_identifiers (r, save_macros, d);
   d->saved_pragmas = _cpp_save_pragma_names (r);
   *data = d;
@@ -647,17 +649,14 @@ int
 cpp_read_state (cpp_reader *r, const char *name, FILE *f,
 		struct save_macro_data *data)
 {
-  struct macrodef_struct m;
-  size_t defnlen = 256;
-  unsigned char *defn = xmalloc (defnlen);
-  struct lexer_state old_state;
-  struct save_macro_item *d;
-  size_t i, mac_count;
-  /* APPLE LOCAL pch distcc --mrs */
+  size_t i;
+  /* APPLE LOCAL begin pch distcc --mrs */
   void (*saved_line_change)  PARAMS ((cpp_reader *, const cpp_token *, int));
 
-  /* APPLE LOCAL pch distcc --mrs */
   saved_line_change = r->cb.line_change;
+  /* APPLE LOCAL end pch distcc --mrs */
+
+  struct lexer_state old_state;
 
   /* Restore spec_nodes, which will be full of references to the old 
      hashtable entries and so will now be invalid.  */
@@ -669,73 +668,30 @@ cpp_read_state (cpp_reader *r, const char *name, FILE *f,
     s->n__VA_ARGS__     = cpp_lookup (r, DSC("__VA_ARGS__"));
   }
 
-  /* Run through the carefully-saved macros, insert them.  */
-  d = data->macros;
-  mac_count = data->count;
-  while (d)
-    {
-      struct save_macro_item *nextd;
-      for (i = 0; i < mac_count; i++)
-	{
-	  cpp_hashnode *h;
-	  
-	  h = cpp_lookup (r, HT_STR (HT_NODE (&d->macs[i])), 
-			  HT_LEN (HT_NODE (&d->macs[i])));
-	  h->type = d->macs[i].type;
-	  h->flags = d->macs[i].flags;
-	  h->value = d->macs[i].value;
-	  free ((void *)HT_STR (HT_NODE (&d->macs[i])));
-	}
-      nextd = d->next;
-      free (d);
-      d = nextd;
-      mac_count = ARRAY_SIZE (d->macs);
-    }
-
-  _cpp_restore_pragma_names (r, data->saved_pragmas);
-
-  free (data);
-
   old_state = r->state;
-
   r->state.in_directive = 1;
   r->state.prevent_expansion = 1;
   r->state.angled_headers = 0;
-
   /* APPLE LOCAL pch distcc --mrs */
   r->cb.line_change = 0;
 
-  /* Read in the identifiers that must be defined.  */
-  for (;;)
+  /* Run through the carefully-saved macros, insert them.  */
+  for (i = 0; i < data->count; i++)
     {
       cpp_hashnode *h;
-      
-      if (fread (&m, sizeof (m), 1, f) != 1)
-	goto error;
-      
-      if (m.name_length == 0)
-	break;
+      size_t namelen;
+      uchar *defn;
 
-      if (defnlen < m.definition_length + 1)
+      namelen = ustrcspn (data->defns[i], "( \n");
+      h = cpp_lookup (r, data->defns[i], namelen);
+      defn = data->defns[i] + namelen;
+
+      /* The PCH file is valid, so we know that if there is a definition
+	 from the PCH file it must be the same as the one we had
+	 originally, and so do not need to restore it.  */
+      if (h->type == NT_VOID)
 	{
-	  defnlen = m.definition_length + 256;
-	  defn = xrealloc (defn, defnlen);
-	}
-
-      if (fread (defn, 1, m.definition_length, f) != m.definition_length)
-	goto error;
-      defn[m.definition_length] = '\n';
-      
-      h = cpp_lookup (r, defn, m.name_length);
-
-      if (h->type == NT_MACRO)
-	_cpp_free_definition (h);
-      if (m.flags & NODE_POISONED)
-	h->flags |= NODE_POISONED | NODE_DIAGNOSTIC;
-      else if (m.name_length != m.definition_length)
-	{
-	  if (cpp_push_buffer (r, defn + m.name_length, 
-			       m.definition_length - m.name_length, true)
+	  if (cpp_push_buffer (r, defn, ustrchr (defn, '\n') - defn, true)
 	      != NULL)
 	    {
 	      _cpp_clean_line (r);
@@ -746,14 +702,16 @@ cpp_read_state (cpp_reader *r, const char *name, FILE *f,
 	  else
 	    abort ();
 	}
-    }
 
+      free (data->defns[i]);
+    }
   r->state = old_state;
-    /* APPLE LOCAL pch distcc --mrs */
+  /* APPLE LOCAL pch distcc --mrs */
   r->cb.line_change = saved_line_change;
 
-  free (defn);
-  defn = NULL;
+  _cpp_restore_pragma_names (r, data->saved_pragmas);
+
+  free (data);
 
   if (deps_restore (r->deps, f, CPP_OPTION (r, restore_pch_deps) ? name : NULL)
       != 0)

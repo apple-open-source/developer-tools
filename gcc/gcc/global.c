@@ -1,6 +1,6 @@
 /* Allocate registers for pseudo-registers that span basic blocks.
    Copyright (C) 1987, 1988, 1991, 1994, 1996, 1997, 1998,
-   1999, 2000, 2002, 2003, 2004 Free Software Foundation, Inc.
+   1999, 2000, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -24,16 +24,15 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
-
 #include "machmode.h"
 #include "hard-reg-set.h"
 #include "rtl.h"
 #include "tm_p.h"
 #include "flags.h"
-#include "basic-block.h"
 #include "regs.h"
 #include "function.h"
 #include "insn-config.h"
+#include "recog.h"
 #include "reload.h"
 #include "output.h"
 #include "toplev.h"
@@ -331,11 +330,14 @@ static void reg_dies (int, enum machine_mode, struct insn_chain *);
 
 static void allocate_bb_info (void);
 static void free_bb_info (void);
+static bool check_earlyclobber (rtx);
+static void mark_reg_use_for_earlyclobber_1 (rtx *, void *);
+static int mark_reg_use_for_earlyclobber (rtx *, void *);
 static void calculate_local_reg_bb_info (void);
 static void set_up_bb_rts_numbers (void);
 static int rpost_cmp (const void *, const void *);
-static bool modify_bb_reg_pav (basic_block, basic_block, bool);
 static void calculate_reg_pav (void);
+static void modify_reg_pav (void);
 static void make_accurate_live_analysis (void);
 
 
@@ -485,12 +487,12 @@ global_alloc (FILE *file)
 	&& (! current_function_has_nonlocal_label
 	    || REG_N_CALLS_CROSSED (i) == 0))
       {
-	if (reg_renumber[i] < 0 && reg_may_share[i] && reg_allocno[reg_may_share[i]] >= 0)
+	if (reg_renumber[i] < 0
+	    && reg_may_share[i] && reg_allocno[reg_may_share[i]] >= 0)
 	  reg_allocno[i] = reg_allocno[reg_may_share[i]];
 	else
 	  reg_allocno[i] = max_allocno++;
-	if (REG_LIVE_LENGTH (i) == 0)
-	  abort ();
+	gcc_assert (REG_LIVE_LENGTH (i));
       }
     else
       reg_allocno[i] = -1;
@@ -707,7 +709,7 @@ allocno_compare (const void *v1p, const void *v2p)
 static void
 global_conflicts (void)
 {
-  int i;
+  unsigned i;
   basic_block b;
   rtx insn;
   int *block_start_allocnos;
@@ -733,25 +735,25 @@ global_conflicts (void)
 	 since one hard reg can be used with various sizes.
 	 Therefore, we must require that all the hard regs
 	 implicitly live as part of a multi-word hard reg
-	 are explicitly marked in basic_block_live_at_start.  */
+	 be explicitly marked in basic_block_live_at_start.  */
 
       {
 	regset old = b->global_live_at_start;
 	int ax = 0;
+	reg_set_iterator rsi;
 
 	REG_SET_TO_HARD_REG_SET (hard_regs_live, old);
-	EXECUTE_IF_SET_IN_REG_SET (old, FIRST_PSEUDO_REGISTER, i,
-				   {
-				     int a = reg_allocno[i];
-				     if (a >= 0)
-				       {
-					 SET_ALLOCNO_LIVE (a);
-					 block_start_allocnos[ax++] = a;
-				       }
-				     else if ((a = reg_renumber[i]) >= 0)
-				       mark_reg_live_nc
-					 (a, PSEUDO_REGNO_MODE (i));
-				   });
+	EXECUTE_IF_SET_IN_REG_SET (old, FIRST_PSEUDO_REGISTER, i, rsi)
+	  {
+	    int a = reg_allocno[i];
+	    if (a >= 0)
+	      {
+		SET_ALLOCNO_LIVE (a);
+		block_start_allocnos[ax++] = a;
+	      }
+	    else if ((a = reg_renumber[i]) >= 0)
+	      mark_reg_live_nc (a, PSEUDO_REGNO_MODE (i));
+	  }
 
 	/* Record that each allocno now live conflicts with each hard reg
 	   now live.
@@ -772,7 +774,7 @@ global_conflicts (void)
 		   evaluates X.
 
 		3. Either X or Y is not evaluated on the path to P
-		   (ie it is used uninitialized) and thus the
+		   (i.e. it is used uninitialized) and thus the
 		   conflict can be ignored.
 
 	    In cases #1 and #2 the conflict will be recorded when we
@@ -786,8 +788,9 @@ global_conflicts (void)
 	   regs live across such edges.  */
 	{
 	  edge e;
+	  edge_iterator ei;
 
-	  for (e = b->pred; e ; e = e->pred_next)
+	  FOR_EACH_EDGE (e, ei, b->preds)
 	    if (e->flags & EDGE_ABNORMAL)
 	      break;
 
@@ -893,7 +896,7 @@ global_conflicts (void)
 			{
 			  rtx set = XVECEXP (PATTERN (insn), 0, i);
 			  if (GET_CODE (set) == SET
-			      && GET_CODE (SET_DEST (set)) != REG
+			      && !REG_P (SET_DEST (set))
 			      && !rtx_equal_p (reg, SET_DEST (set))
 			      && reg_overlap_mentioned_p (reg, SET_DEST (set)))
 			    used_in_output = 1;
@@ -940,11 +943,11 @@ expand_preferences (void)
   for (insn = get_insns (); insn; insn = NEXT_INSN (insn))
     if (INSN_P (insn)
 	&& (set = single_set (insn)) != 0
-	&& GET_CODE (SET_DEST (set)) == REG
+	&& REG_P (SET_DEST (set))
 	&& reg_allocno[REGNO (SET_DEST (set))] >= 0)
       for (link = REG_NOTES (insn); link; link = XEXP (link, 1))
 	if (REG_NOTE_KIND (link) == REG_DEAD
-	    && GET_CODE (XEXP (link, 0)) == REG
+	    && REG_P (XEXP (link, 0))
 	    && reg_allocno[REGNO (XEXP (link, 0))] >= 0
 	    && ! CONFLICTP (reg_allocno[REGNO (SET_DEST (set))],
 			    reg_allocno[REGNO (XEXP (link, 0))]))
@@ -1529,7 +1532,7 @@ mark_reg_store (rtx reg, rtx setter, void *data ATTRIBUTE_UNUSED)
   if (GET_CODE (reg) == SUBREG)
     reg = SUBREG_REG (reg);
 
-  if (GET_CODE (reg) != REG)
+  if (!REG_P (reg))
     return;
 
   regs_set[n_regs_set++] = reg;
@@ -1586,7 +1589,7 @@ mark_reg_conflicts (rtx reg)
   if (GET_CODE (reg) == SUBREG)
     reg = SUBREG_REG (reg);
 
-  if (GET_CODE (reg) != REG)
+  if (!REG_P (reg))
     return;
 
   regno = REGNO (reg);
@@ -1689,9 +1692,9 @@ set_preference (rtx dest, rtx src)
   /* Get the reg number for both SRC and DEST.
      If neither is a reg, give up.  */
 
-  if (GET_CODE (src) == REG)
+  if (REG_P (src))
     src_regno = REGNO (src);
-  else if (GET_CODE (src) == SUBREG && GET_CODE (SUBREG_REG (src)) == REG)
+  else if (GET_CODE (src) == SUBREG && REG_P (SUBREG_REG (src)))
     {
       src_regno = REGNO (SUBREG_REG (src));
 
@@ -1707,9 +1710,9 @@ set_preference (rtx dest, rtx src)
   else
     return;
 
-  if (GET_CODE (dest) == REG)
+  if (REG_P (dest))
     dest_regno = REGNO (dest);
-  else if (GET_CODE (dest) == SUBREG && GET_CODE (SUBREG_REG (dest)) == REG)
+  else if (GET_CODE (dest) == SUBREG && REG_P (SUBREG_REG (dest)))
     {
       dest_regno = REGNO (SUBREG_REG (dest));
 
@@ -1810,7 +1813,7 @@ reg_becomes_live (rtx reg, rtx setter ATTRIBUTE_UNUSED, void *regs_set)
   if (GET_CODE (reg) == SUBREG)
     reg = SUBREG_REG (reg);
 
-  if (GET_CODE (reg) != REG)
+  if (!REG_P (reg))
     return;
 
   regno = REGNO (reg);
@@ -1863,9 +1866,8 @@ build_insn_chain (rtx first)
   struct insn_chain **p = &reload_insn_chain;
   struct insn_chain *prev = 0;
   basic_block b = ENTRY_BLOCK_PTR->next_bb;
-  regset_head live_relevant_regs_head;
 
-  live_relevant_regs = INITIALIZE_REG_SET (live_relevant_regs_head);
+  live_relevant_regs = ALLOC_REG_SET (&reg_obstack);
 
   for (; first; first = NEXT_INSN (first))
     {
@@ -1873,21 +1875,21 @@ build_insn_chain (rtx first)
 
       if (first == BB_HEAD (b))
 	{
-	  int i;
+	  unsigned i;
+	  bitmap_iterator bi;
 
 	  CLEAR_REG_SET (live_relevant_regs);
 
-	  EXECUTE_IF_SET_IN_BITMAP
-	    (b->global_live_at_start, 0, i,
-	     {
-	       if (i < FIRST_PSEUDO_REGISTER
-		   ? ! TEST_HARD_REG_BIT (eliminable_regset, i)
-		   : reg_renumber[i] >= 0)
-		 SET_REGNO_REG_SET (live_relevant_regs, i);
-	     });
+	  EXECUTE_IF_SET_IN_BITMAP (b->global_live_at_start, 0, i, bi)
+	    {
+	      if (i < FIRST_PSEUDO_REGISTER
+		  ? ! TEST_HARD_REG_BIT (eliminable_regset, i)
+		  : reg_renumber[i] >= 0)
+		SET_REGNO_REG_SET (live_relevant_regs, i);
+	    }
 	}
 
-      if (GET_CODE (first) != NOTE && GET_CODE (first) != BARRIER)
+      if (!NOTE_P (first) && !BARRIER_P (first))
 	{
 	  c = new_insn_chain ();
 	  c->prev = prev;
@@ -1905,7 +1907,7 @@ build_insn_chain (rtx first)
 
 	      for (link = REG_NOTES (first); link; link = XEXP (link, 1))
 		if (REG_NOTE_KIND (link) == REG_DEAD
-		    && GET_CODE (XEXP (link, 0)) == REG)
+		    && REG_P (XEXP (link, 0)))
 		  reg_dies (REGNO (XEXP (link, 0)), GET_MODE (XEXP (link, 0)),
 			    c);
 
@@ -1927,7 +1929,7 @@ build_insn_chain (rtx first)
 
 	      for (link = REG_NOTES (first); link; link = XEXP (link, 1))
 		if (REG_NOTE_KIND (link) == REG_UNUSED
-		    && GET_CODE (XEXP (link, 0)) == REG)
+		    && REG_P (XEXP (link, 0)))
 		  reg_dies (REGNO (XEXP (link, 0)), GET_MODE (XEXP (link, 0)),
 			    c);
 	    }
@@ -1944,14 +1946,15 @@ build_insn_chain (rtx first)
 	 the previous real insn is a JUMP_INSN.  */
       if (b == EXIT_BLOCK_PTR)
 	{
-	  for (first = NEXT_INSN (first) ; first; first = NEXT_INSN (first))
-	    if (INSN_P (first)
-		&& GET_CODE (PATTERN (first)) != USE
-		&& ! ((GET_CODE (PATTERN (first)) == ADDR_VEC
-		       || GET_CODE (PATTERN (first)) == ADDR_DIFF_VEC)
-		      && prev_real_insn (first) != 0
-		      && GET_CODE (prev_real_insn (first)) == JUMP_INSN))
-	      abort ();
+#ifdef ENABLE_CHECKING
+	  for (first = NEXT_INSN (first); first; first = NEXT_INSN (first))
+	    gcc_assert (!INSN_P (first)
+			|| GET_CODE (PATTERN (first)) == USE
+			|| ((GET_CODE (PATTERN (first)) == ADDR_VEC
+			     || GET_CODE (PATTERN (first)) == ADDR_DIFF_VEC)
+			    && prev_real_insn (first) != 0
+			    && JUMP_P (prev_real_insn (first))));
+#endif
 	  break;
 	}
     }
@@ -2055,7 +2058,7 @@ dump_global_regs (FILE *file)
    conflicts and as a consequence worse register allocation.  The
    typical example where the information can be different is a
    register initialized in the loop at the basic block preceding the
-   loop in CFG. */
+   loop in CFG.  */
 
 /* The following structure contains basic block data flow information
    used to calculate partial availability of registers.  */
@@ -2064,12 +2067,16 @@ struct bb_info
 {
   /* The basic block reverse post-order number.  */
   int rts_number;
+  /* Registers used uninitialized in an insn in which there is an
+     early clobbered register might get the same hard register.  */
+  bitmap earlyclobber;
   /* Registers correspondingly killed (clobbered) and defined but not
      killed afterward in the basic block.  */
   bitmap killed, avloc;
-  /* Registers partially available correspondingly at the start and
-     end of the basic block.  */
-  bitmap pavin, pavout;
+  /* Registers partially available and living (in other words whose
+     values were calculated and used) correspondingly at the start
+     and end of the basic block.  */
+  bitmap live_pavin, live_pavout;
 };
 
 /* Macros for accessing data flow information of basic blocks.  */
@@ -2078,8 +2085,8 @@ struct bb_info
 #define BB_INFO_BY_INDEX(N) BB_INFO (BASIC_BLOCK(N))
 
 /* The function allocates the info structures of each basic block.  It
-   also initialized PAVIN and PAVOUT as if all hard registers were
-   partially available.  */
+   also initialized LIVE_PAVIN and LIVE_PAVOUT as if all hard
+   registers were partially available.  */
 
 static void
 allocate_bb_info (void)
@@ -2090,20 +2097,21 @@ allocate_bb_info (void)
   bitmap init;
 
   alloc_aux_for_blocks (sizeof (struct bb_info));
-  init = BITMAP_XMALLOC ();
+  init = BITMAP_ALLOC (NULL);
   for (i = 0; i < FIRST_PSEUDO_REGISTER; i++)
     bitmap_set_bit (init, i);
   FOR_EACH_BB (bb)
     {
       bb_info = bb->aux;
-      bb_info->avloc = BITMAP_XMALLOC ();
-      bb_info->killed = BITMAP_XMALLOC ();
-      bb_info->pavin = BITMAP_XMALLOC ();
-      bb_info->pavout = BITMAP_XMALLOC ();
-      bitmap_copy (bb_info->pavin, init);
-      bitmap_copy (bb_info->pavout, init);
+      bb_info->earlyclobber = BITMAP_ALLOC (NULL);
+      bb_info->avloc = BITMAP_ALLOC (NULL);
+      bb_info->killed = BITMAP_ALLOC (NULL);
+      bb_info->live_pavin = BITMAP_ALLOC (NULL);
+      bb_info->live_pavout = BITMAP_ALLOC (NULL);
+      bitmap_copy (bb_info->live_pavin, init);
+      bitmap_copy (bb_info->live_pavout, init);
     }
-  BITMAP_XFREE (init);
+  BITMAP_FREE (init);
 }
 
 /* The function frees the allocated info of all basic blocks.  */
@@ -2117,10 +2125,11 @@ free_bb_info (void)
   FOR_EACH_BB (bb)
     {
       bb_info = BB_INFO (bb);
-      BITMAP_XFREE (bb_info->pavout);
-      BITMAP_XFREE (bb_info->pavin);
-      BITMAP_XFREE (bb_info->killed);
-      BITMAP_XFREE (bb_info->avloc);
+      BITMAP_FREE (bb_info->live_pavout);
+      BITMAP_FREE (bb_info->live_pavin);
+      BITMAP_FREE (bb_info->killed);
+      BITMAP_FREE (bb_info->avloc);
+      BITMAP_FREE (bb_info->earlyclobber);
     }
   free_aux_for_blocks ();
 }
@@ -2138,7 +2147,7 @@ mark_reg_change (rtx reg, rtx setter, void *data)
   if (GET_CODE (reg) == SUBREG)
     reg = SUBREG_REG (reg);
 
-  if (GET_CODE (reg) != REG)
+  if (!REG_P (reg))
     return;
 
   regno = REGNO (reg);
@@ -2150,6 +2159,135 @@ mark_reg_change (rtx reg, rtx setter, void *data)
     bitmap_clear_bit (bb_info->avloc, regno);
 }
 
+/* Classes of registers which could be early clobbered in the current
+   insn.  */
+
+static varray_type earlyclobber_regclass;
+
+/* This function finds and stores register classes that could be early
+   clobbered in INSN.  If any earlyclobber classes are found, the function
+   returns TRUE, in all other cases it returns FALSE.  */
+
+static bool
+check_earlyclobber (rtx insn)
+{
+  int opno;
+  bool found = false;
+
+  extract_insn (insn);
+
+  VARRAY_POP_ALL (earlyclobber_regclass);
+  for (opno = 0; opno < recog_data.n_operands; opno++)
+    {
+      char c;
+      bool amp_p;
+      int i;
+      enum reg_class class;
+      const char *p = recog_data.constraints[opno];
+
+      class = NO_REGS;
+      amp_p = false;
+      for (;;)
+	{
+	  c = *p;
+	  switch (c)
+	    {
+	    case '=':  case '+':  case '?':
+	    case '#':  case '!':
+	    case '*':  case '%':
+	    case 'm':  case '<':  case '>':  case 'V':  case 'o':
+	    case 'E':  case 'F':  case 'G':  case 'H':
+	    case 's':  case 'i':  case 'n':
+	    case 'I':  case 'J':  case 'K':  case 'L':
+	    case 'M':  case 'N':  case 'O':  case 'P':
+	    case 'X':
+	    case '0': case '1':  case '2':  case '3':  case '4':
+	    case '5': case '6':  case '7':  case '8':  case '9':
+	      /* These don't say anything we care about.  */
+	      break;
+
+	    case '&':
+	      amp_p = true;
+	      break;
+	    case '\0':
+	    case ',':
+	      if (amp_p && class != NO_REGS)
+		{
+		  found = true;
+		  for (i = VARRAY_ACTIVE_SIZE (earlyclobber_regclass) - 1;
+		       i >= 0; i--)
+		    if (VARRAY_INT (earlyclobber_regclass, i) == (int) class)
+		      break;
+		  if (i < 0)
+		    VARRAY_PUSH_INT (earlyclobber_regclass, (int) class);
+		}
+	      
+	      amp_p = false;
+	      class = NO_REGS;
+	      break;
+
+	    case 'r':
+	      class = GENERAL_REGS;
+	      break;
+
+	    default:
+	      class = REG_CLASS_FROM_CONSTRAINT (c, p);
+	      break;
+	    }
+	  if (c == '\0')
+	    break;
+	  p += CONSTRAINT_LEN (c, p);
+	}
+    }
+
+  return found;
+}
+
+/* The function checks that pseudo-register *X has a class
+   intersecting with the class of pseudo-register could be early
+   clobbered in the same insn.
+   This function is a no-op if earlyclobber_regclass is empty.  */
+
+static int
+mark_reg_use_for_earlyclobber (rtx *x, void *data ATTRIBUTE_UNUSED)
+{
+  enum reg_class pref_class, alt_class;
+  int i, regno;
+  basic_block bb = data;
+  struct bb_info *bb_info = BB_INFO (bb);
+
+  if (GET_CODE (*x) == REG && REGNO (*x) >= FIRST_PSEUDO_REGISTER)
+    {
+      regno = REGNO (*x);
+      if (bitmap_bit_p (bb_info->killed, regno)
+	  || bitmap_bit_p (bb_info->avloc, regno))
+	return 0;
+      pref_class = reg_preferred_class (regno);
+      alt_class = reg_alternate_class (regno);
+      for (i = VARRAY_ACTIVE_SIZE (earlyclobber_regclass) - 1; i >= 0; i--)
+	if (reg_classes_intersect_p (VARRAY_INT (earlyclobber_regclass, i),
+				     pref_class)
+	    || (VARRAY_INT (earlyclobber_regclass, i) != NO_REGS
+		&& reg_classes_intersect_p (VARRAY_INT (earlyclobber_regclass,
+							i),
+					    alt_class)))
+	  {
+	    bitmap_set_bit (bb_info->earlyclobber, regno);
+	    break;
+	  }
+    }
+  return 0;
+}
+
+/* The function processes all pseudo-registers in *X with the aid of
+   previous function.  */
+
+static void
+mark_reg_use_for_earlyclobber_1 (rtx *x, void *data)
+{
+  for_each_rtx (x, mark_reg_use_for_earlyclobber, data);
+}
+
 /* The function calculates local info for each basic block.  */
 
 static void
@@ -2158,12 +2296,18 @@ calculate_local_reg_bb_info (void)
   basic_block bb;
   rtx insn, bound;
 
+  VARRAY_INT_INIT (earlyclobber_regclass, 20,
+		   "classes of registers early clobbered in an insn");
   FOR_EACH_BB (bb)
     {
       bound = NEXT_INSN (BB_END (bb));
       for (insn = BB_HEAD (bb); insn != bound; insn = NEXT_INSN (insn))
 	if (INSN_P (insn))
-	  note_stores (PATTERN (insn), mark_reg_change, bb);
+	  {
+	    note_stores (PATTERN (insn), mark_reg_change, bb);
+	    if (check_earlyclobber (insn))
+	      note_uses (&PATTERN (insn), mark_reg_use_for_earlyclobber_1, bb);
+	  }
     }
 }
 
@@ -2193,40 +2337,23 @@ rpost_cmp (const void *bb1, const void *bb2)
   return BB_INFO (b2)->rts_number - BB_INFO (b1)->rts_number;
 }
 
-/* The function calculates partial availability of registers.  The
-   function calculates partial availability at the end of basic block
-   BB by propagating partial availability at end of predecessor basic
-   block PRED.  The function returns true if the partial availability
-   at the end of BB has been changed or if CHANGED_P.  We have the
-   following equations:
+/* Temporary bitmap used for live_pavin, live_pavout calculation.  */
+static bitmap temp_bitmap;
 
-     bb.pavin = empty for entry block | union (pavout of predecessors)
-     bb.pavout = union (bb.pavin - b.killed, bb.avloc)  */
+/* The function calculates partial register availability according to
+   the following equations:
 
-static bool
-modify_bb_reg_pav (basic_block bb, basic_block pred, bool changed_p)
-{
-  struct bb_info *bb_info;
-  bitmap bb_pavin, bb_pavout;
-
-  bb_info = BB_INFO (bb);
-  bb_pavin = bb_info->pavin;
-  bb_pavout = bb_info->pavout;
-  if (pred->index != ENTRY_BLOCK)
-    bitmap_a_or_b (bb_pavin, bb_pavin, BB_INFO (pred)->pavout);
-  changed_p |= bitmap_union_of_diff (bb_pavout, bb_info->avloc,
-				     bb_pavin, bb_info->killed);
-  return changed_p;
-}
-
-/* The function calculates partial register availability.  */
+     bb.live_pavin
+       = empty for entry block
+         | union (live_pavout of predecessors) & global_live_at_start
+     bb.live_pavout = union (bb.live_pavin - bb.killed, bb.avloc)
+                      & global_live_at_end  */
 
 static void
 calculate_reg_pav (void)
 {
   basic_block bb, succ;
   edge e;
-  bool changed_p;
   int i, nel;
   varray_type bbs, new_bbs, temp;
   basic_block *bb_array;
@@ -2234,6 +2361,7 @@ calculate_reg_pav (void)
 
   VARRAY_BB_INIT (bbs, n_basic_blocks, "basic blocks");
   VARRAY_BB_INIT (new_bbs, n_basic_blocks, "basic blocks for the next iter.");
+  temp_bitmap = BITMAP_ALLOC (NULL);
   FOR_EACH_BB (bb)
     {
       VARRAY_PUSH_BB (bbs, bb);
@@ -2247,20 +2375,39 @@ calculate_reg_pav (void)
       sbitmap_zero (wset);
       for (i = 0; i < nel; i++)
 	{
+	  edge_iterator ei;
+	  struct bb_info *bb_info;
+	  bitmap bb_live_pavin, bb_live_pavout;
+	      
 	  bb = bb_array [i];
-	  changed_p = 0;
-	  for (e = bb->pred; e; e = e->pred_next)
-	    changed_p = modify_bb_reg_pav (bb, e->src, changed_p);
-	  if (changed_p)
-	    for (e = bb->succ; e; e = e->succ_next)
-	      {
-		succ = e->dest;
-		if (succ->index != EXIT_BLOCK && !TEST_BIT (wset, succ->index))
-		  {
-		    SET_BIT (wset, succ->index);
-		    VARRAY_PUSH_BB (new_bbs, succ);
-		  }
-	      }
+	  bb_info = BB_INFO (bb);
+	  bb_live_pavin = bb_info->live_pavin;
+	  bb_live_pavout = bb_info->live_pavout;
+	  FOR_EACH_EDGE (e, ei, bb->preds)
+	    {
+	      basic_block pred = e->src;
+
+	      if (pred->index != ENTRY_BLOCK)
+		bitmap_ior_into (bb_live_pavin, BB_INFO (pred)->live_pavout);
+	    }
+	  bitmap_and_into (bb_live_pavin, bb->global_live_at_start);
+	  bitmap_ior_and_compl (temp_bitmap, bb_info->avloc,
+				bb_live_pavin, bb_info->killed);
+	  bitmap_and_into (temp_bitmap, bb->global_live_at_end);
+	  if (! bitmap_equal_p (temp_bitmap, bb_live_pavout))
+	    {
+	      bitmap_copy (bb_live_pavout, temp_bitmap);
+	      FOR_EACH_EDGE (e, ei, bb->succs)
+		{
+		  succ = e->dest;
+		  if (succ->index != EXIT_BLOCK
+		      && !TEST_BIT (wset, succ->index))
+		    {
+		      SET_BIT (wset, succ->index);
+		      VARRAY_PUSH_BB (new_bbs, succ);
+		    }
+		}
+	    }
 	}
       temp = bbs;
       bbs = new_bbs;
@@ -2268,14 +2415,85 @@ calculate_reg_pav (void)
       VARRAY_POP_ALL (new_bbs);
     }
   sbitmap_free (wset);
+  BITMAP_FREE (temp_bitmap);
+}
+
+/* The function modifies partial availability information for two
+   special cases to prevent incorrect work of the subsequent passes
+   with the accurate live information based on the partial
+   availability.  */
+
+static void
+modify_reg_pav (void)
+{
+  basic_block bb;
+  struct bb_info *bb_info;
+#ifdef STACK_REGS
+  int i;
+  HARD_REG_SET zero, stack_hard_regs, used;
+  bitmap stack_regs;
+
+  CLEAR_HARD_REG_SET (zero);
+  CLEAR_HARD_REG_SET (stack_hard_regs);
+  for (i = FIRST_STACK_REG; i <= LAST_STACK_REG; i++)
+    SET_HARD_REG_BIT(stack_hard_regs, i);
+  stack_regs = BITMAP_ALLOC (NULL);
+  for (i = FIRST_PSEUDO_REGISTER; i < max_regno; i++)
+    {
+      COPY_HARD_REG_SET (used, reg_class_contents[reg_preferred_class (i)]);
+      IOR_HARD_REG_SET (used, reg_class_contents[reg_alternate_class (i)]);
+      AND_HARD_REG_SET (used, stack_hard_regs);
+      GO_IF_HARD_REG_EQUAL(used, zero, skip);
+      bitmap_set_bit (stack_regs, i);
+    skip:
+      ;
+    }
+#endif
+  FOR_EACH_BB (bb)
+    {
+      bb_info = BB_INFO (bb);
+      
+      /* Reload can assign the same hard register to uninitialized
+	 pseudo-register and early clobbered pseudo-register in an
+	 insn if the pseudo-register is used first time in given BB
+	 and not lived at the BB start.  To prevent this we don't
+	 change life information for such pseudo-registers.  */
+      bitmap_ior_into (bb_info->live_pavin, bb_info->earlyclobber);
+#ifdef STACK_REGS
+      /* We can not use the same stack register for uninitialized
+	 pseudo-register and another living pseudo-register because if the
+	 uninitialized pseudo-register dies, subsequent pass reg-stack
+	 will be confused (it will believe that the other register
+	 dies).  */
+      bitmap_ior_into (bb_info->live_pavin, stack_regs);
+#endif
+    }
+#ifdef STACK_REGS
+  BITMAP_FREE (stack_regs);
+#endif
 }
 
 /* The following function makes live information more accurate by
    modifying global_live_at_start and global_live_at_end of basic
-   blocks.  After the function call a register lives at a program
-   point only if it is initialized on a path from CFG entry to the
-   program point.  The standard GCC life analysis permits registers to
-   live uninitialized. */
+   blocks.
+
+   The standard GCC life analysis permits registers to live
+   uninitialized, for example:
+
+       R is never used
+       .....
+       Loop:
+         R is defined
+       ...
+       R is used.
+
+   With normal life_analysis, R would be live before "Loop:".
+   The result is that R causes many interferences that do not
+   serve any purpose.
+
+   After the function call a register lives at a program point
+   only if it is initialized on a path from CFG entry to the
+   program point.  */
 
 static void
 make_accurate_live_analysis (void)
@@ -2289,14 +2507,13 @@ make_accurate_live_analysis (void)
   calculate_local_reg_bb_info ();
   set_up_bb_rts_numbers ();
   calculate_reg_pav ();
+  modify_reg_pav ();
   FOR_EACH_BB (bb)
     {
       bb_info = BB_INFO (bb);
       
-      bitmap_a_and_b (bb->global_live_at_start, bb->global_live_at_start,
-		      bb_info->pavin);
-      bitmap_a_and_b (bb->global_live_at_end, bb->global_live_at_end,
-		      bb_info->pavout);
+      bitmap_and_into (bb->global_live_at_start, bb_info->live_pavin);
+      bitmap_and_into (bb->global_live_at_end, bb_info->live_pavout);
     }
   free_bb_info ();
 }

@@ -1,5 +1,5 @@
 /* DWARF2 exception handling and frame unwind runtime interface routines.
-   Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003
+   Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
    Free Software Foundation, Inc.
 
    This file is part of GCC.
@@ -40,7 +40,7 @@
 #include "unwind-pe.h"
 #include "unwind-dw2-fde.h"
 #include "gthr.h"
-
+#include "unwind-dw2.h"
 
 #ifndef __USING_SJLJ_EXCEPTIONS__
 
@@ -51,12 +51,6 @@
 #define STACK_GROWS_DOWNWARD 1
 #endif
 
-/* A target can override (perhaps for backward compatibility) how
-   many dwarf2 columns are unwound.  */
-#ifndef DWARF_FRAME_REGISTERS
-#define DWARF_FRAME_REGISTERS FIRST_PSEUDO_REGISTER
-#endif
-
 /* Dwarf frame registers used for pre gcc 3.0 compiled glibc.  */
 #ifndef PRE_GCC3_DWARF_FRAME_REGISTERS
 #define PRE_GCC3_DWARF_FRAME_REGISTERS DWARF_FRAME_REGISTERS
@@ -64,11 +58,6 @@
 
 #ifndef DWARF_REG_TO_UNWIND_COLUMN
 #define DWARF_REG_TO_UNWIND_COLUMN(REGNO) (REGNO)
-#endif
-
-/* A target can do some update context frobbing.  */
-#ifndef MD_FROB_UPDATE_CONTEXT
-#define MD_FROB_UPDATE_CONTEXT(CTX, FS) do { } while (0)
 #endif
 
 /* This is the register and unwind state for a particular frame.  This
@@ -87,58 +76,6 @@ struct _Unwind_Context
 /* Byte size of every register managed by these routines.  */
 static unsigned char dwarf_reg_size_table[DWARF_FRAME_REGISTERS+1];
 
-
-/* The result of interpreting the frame unwind info for a frame.
-   This is all symbolic at this point, as none of the values can
-   be resolved until the target pc is located.  */
-typedef struct
-{
-  /* Each register save state can be described in terms of a CFA slot,
-     another register, or a location expression.  */
-  struct frame_state_reg_info
-  {
-    struct {
-      union {
-	_Unwind_Word reg;
-	_Unwind_Sword offset;
-	const unsigned char *exp;
-      } loc;
-      enum {
-	REG_UNSAVED,
-	REG_SAVED_OFFSET,
-	REG_SAVED_REG,
-	REG_SAVED_EXP
-      } how;
-    } reg[DWARF_FRAME_REGISTERS+1];
-
-    /* Used to implement DW_CFA_remember_state.  */
-    struct frame_state_reg_info *prev;
-  } regs;
-
-  /* The CFA can be described in terms of a reg+offset or a
-     location expression.  */
-  _Unwind_Sword cfa_offset;
-  _Unwind_Word cfa_reg;
-  const unsigned char *cfa_exp;
-  enum {
-    CFA_UNSET,
-    CFA_REG_OFFSET,
-    CFA_EXP
-  } cfa_how;
-
-  /* The PC described by the current frame state.  */
-  void *pc;
-
-  /* The information we care about from the CIE/FDE.  */
-  _Unwind_Personality_Fn personality;
-  _Unwind_Sword data_align;
-  _Unwind_Word code_align;
-  _Unwind_Word retaddr_column;
-  unsigned char fde_encoding;
-  unsigned char lsda_encoding;
-  unsigned char saw_z;
-  void *eh_ptr;
-} _Unwind_FrameState;
 
 /* Read unaligned data from the instruction buffer.  */
 
@@ -187,6 +124,11 @@ _Unwind_GetGR (struct _Unwind_Context *context, int index)
 {
   int size;
   void *ptr;
+
+#ifdef DWARF_ZERO_REG
+  if (index == DWARF_ZERO_REG)
+    return 0;
+#endif
 
   index = DWARF_REG_TO_UNWIND_COLUMN (index);
   if (index >= (int) sizeof(dwarf_reg_size_table))
@@ -310,6 +252,10 @@ _Unwind_GetTextRelBase (struct _Unwind_Context *context)
   return (_Unwind_Ptr) context->bases.tbase;
 }
 #endif
+
+#ifdef MD_UNWIND_SUPPORT
+#include MD_UNWIND_SUPPORT
+#endif
 
 /* Extract any interesting information from the CIE for the translation
    unit F belongs to.  Return a pointer to the byte after the augmentation,
@@ -320,7 +266,7 @@ extract_cie_info (const struct dwarf_cie *cie, struct _Unwind_Context *context,
 		  _Unwind_FrameState *fs)
 {
   const unsigned char *aug = cie->augmentation;
-  const unsigned char *p = aug + strlen (aug) + 1;
+  const unsigned char *p = aug + strlen ((const char *)aug) + 1;
   const unsigned char *ret = NULL;
   _Unwind_Word utmp;
 
@@ -680,6 +626,10 @@ execute_stack_op (const unsigned char *op_ptr, const unsigned char *op_end,
 	case DW_OP_mul:
 	case DW_OP_or:
 	case DW_OP_plus:
+	case DW_OP_shl:
+	case DW_OP_shr:
+	case DW_OP_shra:
+	case DW_OP_xor:
 	case DW_OP_le:
 	case DW_OP_ge:
 	case DW_OP_eq:
@@ -866,12 +816,15 @@ execute_cfa_program (const unsigned char *insn_ptr,
 
 	case DW_CFA_restore_extended:
 	  insn_ptr = read_uleb128 (insn_ptr, &reg);
+	  /* FIXME, this is wrong; the CIE might have said that the
+	     register was saved somewhere.  */
 	  fs->regs.reg[DWARF_REG_TO_UNWIND_COLUMN(reg)].how = REG_UNSAVED;
 	  break;
 
 	case DW_CFA_undefined:
 	case DW_CFA_same_value:
 	  insn_ptr = read_uleb128 (insn_ptr, &reg);
+	  fs->regs.reg[DWARF_REG_TO_UNWIND_COLUMN(reg)].how = REG_UNSAVED;
 	  break;
 
 	case DW_CFA_nop:
@@ -896,7 +849,7 @@ execute_cfa_program (const unsigned char *insn_ptr,
 		unused_rs = unused_rs->prev;
 	      }
 	    else
-	      new_rs = __builtin_alloca (sizeof (struct frame_state_reg_info));
+	      new_rs = alloca (sizeof (struct frame_state_reg_info));
 
 	    *new_rs = fs->regs;
 	    fs->regs.prev = new_rs;
@@ -1018,14 +971,11 @@ uw_frame_state_for (struct _Unwind_Context *context, _Unwind_FrameState *fs)
   fde = _Unwind_Find_FDE (context->ra - 1, &context->bases);
   if (fde == NULL)
     {
+#ifdef MD_FALLBACK_FRAME_STATE_FOR
       /* Couldn't find frame unwind info for this function.  Try a
 	 target-specific fallback mechanism.  This will necessarily
 	 not provide a personality routine or LSDA.  */
-#ifdef MD_FALLBACK_FRAME_STATE_FOR
-      MD_FALLBACK_FRAME_STATE_FOR (context, fs, success);
-      return _URC_END_OF_STACK;
-    success:
-      return _URC_NO_REASON;
+      return MD_FALLBACK_FRAME_STATE_FOR (context, fs);
 #else
       return _URC_END_OF_STACK;
 #endif
@@ -1231,7 +1181,9 @@ uw_update_context_1 (struct _Unwind_Context *context, _Unwind_FrameState *fs)
 	break;
       }
 
+#ifdef MD_FROB_UPDATE_CONTEXT
   MD_FROB_UPDATE_CONTEXT (context, fs);
+#endif
 }
 
 /* CONTEXT describes the unwind state for a frame, and FS describes the FDE
@@ -1329,6 +1281,12 @@ uw_install_context_1 (struct _Unwind_Context *current,
 		      struct _Unwind_Context *target)
 {
   long i;
+  _Unwind_SpTmp sp_slot;
+
+  /* If the target frame does not have a saved stack pointer,
+     then set up the target's CFA.  */
+  if (!_Unwind_GetGRPtr (target, __builtin_dwarf_sp_column ()))
+	_Unwind_SetSpColumn (target, target->cfa, &sp_slot);
 
   for (i = 0; i < DWARF_FRAME_REGISTERS; ++i)
     {
@@ -1339,25 +1297,22 @@ uw_install_context_1 (struct _Unwind_Context *current,
 	memcpy (c, t, dwarf_reg_size_table[i]);
     }
 
-#ifdef EH_RETURN_STACKADJ_RTX
-  {
-    void *target_cfa;
+  /* If the current frame doesn't have a saved stack pointer, then we
+     need to rely on EH_RETURN_STACKADJ_RTX to get our target stack
+     pointer value reloaded.  */
+  if (!_Unwind_GetGRPtr (current, __builtin_dwarf_sp_column ()))
+    {
+      void *target_cfa;
 
-    /* If the last frame records a saved stack pointer, use it.  */
-    if (_Unwind_GetGRPtr (target, __builtin_dwarf_sp_column ()))
       target_cfa = _Unwind_GetPtr (target, __builtin_dwarf_sp_column ());
-    else
-      target_cfa = target->cfa;
 
-    /* We adjust SP by the difference between CURRENT and TARGET's CFA.  */
-    if (STACK_GROWS_DOWNWARD)
-      return target_cfa - current->cfa + target->args_size;
-    else
-      return current->cfa - target_cfa - target->args_size;
-  }
-#else
+      /* We adjust SP by the difference between CURRENT and TARGET's CFA.  */
+      if (STACK_GROWS_DOWNWARD)
+	return target_cfa - current->cfa + target->args_size;
+      else
+	return current->cfa - target_cfa - target->args_size;
+    }
   return 0;
-#endif
 }
 
 static inline _Unwind_Ptr
@@ -1368,5 +1323,24 @@ uw_identify_context (struct _Unwind_Context *context)
 
 
 #include "unwind.inc"
+
+#if defined (USE_GAS_SYMVER) && defined (SHARED) && defined (USE_LIBUNWIND_EXCEPTIONS)
+alias (_Unwind_Backtrace);
+alias (_Unwind_DeleteException);
+alias (_Unwind_FindEnclosingFunction);
+alias (_Unwind_ForcedUnwind);
+alias (_Unwind_GetDataRelBase);
+alias (_Unwind_GetTextRelBase);
+alias (_Unwind_GetCFA);
+alias (_Unwind_GetGR);
+alias (_Unwind_GetIP);
+alias (_Unwind_GetLanguageSpecificData);
+alias (_Unwind_GetRegionStart);
+alias (_Unwind_RaiseException);
+alias (_Unwind_Resume);
+alias (_Unwind_Resume_or_Rethrow);
+alias (_Unwind_SetGR);
+alias (_Unwind_SetIP);
+#endif
 
 #endif /* !USING_SJLJ_EXCEPTIONS */

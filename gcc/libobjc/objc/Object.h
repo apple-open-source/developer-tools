@@ -30,6 +30,10 @@ Boston, MA 02111-1307, USA.  */
 #include <objc/objc.h>
 #include <objc/typedstream.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*
  * All classes are derived from Object.  As such,
  * this is the overhead tacked onto those objects.
@@ -120,5 +124,9 @@ Boston, MA 02111-1307, USA.  */
 - awake;
 
 @end
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

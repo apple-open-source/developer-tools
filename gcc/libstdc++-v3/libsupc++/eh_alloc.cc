@@ -31,15 +31,28 @@
 // for cross-architecture compatibility are noted with "@@@".
 
 #include <cstdlib>
+#if _GLIBCXX_HOSTED
 #include <cstring>
+#endif
 #include <climits>
 #include <exception>
 #include "unwind-cxx.h"
 #include "bits/c++config.h"
 #include "bits/gthr.h"
 
-using namespace __cxxabiv1;
+#if _GLIBCXX_HOSTED
+using std::free;
+using std::malloc;
+using std::memcpy;
+#else
+// In a freestanding environment, these functions may not be
+// available -- but for now, we assume that they are.
+extern "C" void *malloc (std::size_t);
+extern "C" void free(void *);
+extern "C" int memset (void *, int, std::size_t);
+#endif
 
+using namespace __cxxabiv1;
 
 // ??? How to control these parameters.
 
@@ -102,12 +115,12 @@ emergency_mutex_init ()
 
 
 extern "C" void *
-__cxa_allocate_exception(std::size_t thrown_size) throw()
+__cxxabiv1::__cxa_allocate_exception(std::size_t thrown_size) throw()
 {
   void *ret;
 
   thrown_size += sizeof (__cxa_exception);
-  ret = std::malloc (thrown_size);
+  ret = malloc (thrown_size);
 
   if (! ret)
     {
@@ -142,14 +155,20 @@ __cxa_allocate_exception(std::size_t thrown_size) throw()
 	std::terminate ();
     }
 
-  std::memset (ret, 0, sizeof (__cxa_exception));
+  // We have an uncaught exception as soon as we allocate memory.  This
+  // yields uncaught_exception() true during the copy-constructor that
+  // initializes the exception object.  See Issue 475.
+  __cxa_eh_globals *globals = __cxa_get_globals ();
+  globals->uncaughtExceptions += 1;
+
+  memset (ret, 0, sizeof (__cxa_exception));
 
   return (void *)((char *)ret + sizeof (__cxa_exception));
 }
 
 
 extern "C" void
-__cxa_free_exception(void *vptr) throw()
+__cxxabiv1::__cxa_free_exception(void *vptr) throw()
 {
   char *ptr = (char *) vptr;
   if (ptr >= &emergency_buffer[0][0]
@@ -167,5 +186,5 @@ __cxa_free_exception(void *vptr) throw()
 #endif
     }
   else
-    std::free (ptr - sizeof (__cxa_exception));
+    free (ptr - sizeof (__cxa_exception));
 }

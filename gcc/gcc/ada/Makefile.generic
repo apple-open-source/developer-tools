@@ -181,12 +181,12 @@ vpath %$(AR_EXT) $(OBJ_DIR)
 # character be part of a pathname on UNIX and this character can't be used in
 # a pathname on Windows.
 
-clean_deps = $(subst :,|,$(DEPS_PROJECTS:%=clean_%))
-compile_deps = $(subst :,|,$(DEPS_PROJECTS:%=compile_%))
-object_deps = $(subst :,|,$(DEPS_PROJECTS:%=object_%))
-ada_deps = $(subst :,|,$(DEPS_PROJECTS:%=ada_%))
-c_deps = $(subst :,|,$(DEPS_PROJECTS:%=c_%))
-c++_deps = $(subst :,|,$(DEPS_PROJECTS:%=c++_%))
+clean_deps = $(subst :,__GPRCOLON__,$(DEPS_PROJECTS:%=clean_%))
+compile_deps = $(subst :,__GPRCOLON__,$(DEPS_PROJECTS:%=compile_%))
+object_deps = $(subst :,__GPRCOLON__,$(DEPS_PROJECTS:%=object_%))
+ada_deps = $(subst :,__GPRCOLON__,$(DEPS_PROJECTS:%=ada_%))
+c_deps = $(subst :,__GPRCOLON__,$(DEPS_PROJECTS:%=c_%))
+c++_deps = $(subst :,__GPRCOLON__,$(DEPS_PROJECTS:%=c++_%))
 
 # Default target is to build (compile/bind/link)
 all: build
@@ -200,22 +200,22 @@ c: $(c_deps) internal-c
 c++: $(c++deps) internal-c++
 
 $(clean_deps): force
-	@$(MAKE) -C $(dir $(subst |,:,$(@:clean_%=%))) -f Makefile.$(notdir $@) internal-clean
+	@$(MAKE) -C $(dir $(subst __GPRCOLON__,:,$(@:clean_%=%))) -f Makefile.$(notdir $@) internal-clean
 
 $(compile_deps): force
-	@$(MAKE) -C $(dir $(subst |,:,$(@:compile_%=%))) -f Makefile.$(notdir $@) internal-compile
+	@$(MAKE) -C $(dir $(subst __GPRCOLON__,:,$(@:compile_%=%))) -f Makefile.$(notdir $@) internal-compile
 
 $(object_deps): force
-	@$(MAKE) -C $(dir $(subst |,:,$(@:object_%=%))) -f Makefile.$(notdir $@) internal-archive-objects ARCHIVE=$(ARCHIVE)
+	@$(MAKE) -C $(dir $(subst __GPRCOLON__,:,$(@:object_%=%))) -f Makefile.$(notdir $@) internal-archive-objects ARCHIVE=$(ARCHIVE)
 
 $(ada_deps): force
-	@$(MAKE) -C $(dir $(subst |,:,$(@:ada_%=%))) -f Makefile.$(notdir $@) internal-ada
+	@$(MAKE) -C $(dir $(subst __GPRCOLON__,:,$(@:ada_%=%))) -f Makefile.$(notdir $@) internal-ada
 
 $(c_deps): force
-	@$(MAKE) -C $(dir $(subst |,:,$(@:c_%=%))) -f Makefile.$(notdir $@) internal-c
+	@$(MAKE) -C $(dir $(subst __GPRCOLON__,:,$(@:c_%=%))) -f Makefile.$(notdir $@) internal-c
 
 $(c++_deps): force
-	@$(MAKE) -C $(dir $(subst |,:,$(@:c++_%=%))) -f Makefile.$(notdir $@) internal-c++
+	@$(MAKE) -C $(dir $(subst __GPRCOLON__,:,$(@:c++_%=%))) -f Makefile.$(notdir $@) internal-c++
 
 ifneq ($(EXEC),)
    EXEC_RULE=-o $(EXEC)
@@ -344,7 +344,7 @@ link:
 else
 
 link: $(EXEC_DIR)/$(EXEC) archive-objects
-$(EXEC_DIR)/$(EXEC): $(OBJ_FILES)
+$(EXEC_DIR)/$(EXEC): $(OBJECTS)
 	@$(display) $(LINKER) -o $(EXEC_DIR)/$(EXEC) $(OBJ_DIR)/$(MAIN_OBJECT) $(LDFLAGS) $(FLDFLAGS)
 	@$(LINKER) -o $(EXEC_DIR)/$(EXEC) $(OBJ_DIR)/$(MAIN_OBJECT) $(LDFLAGS) $(FLDFLAGS)
 endif
@@ -374,13 +374,13 @@ else
 link: $(LINKER) archive-objects force
 	@$(display) $(GNATMAKE) $(EXEC_RULE) -B -P$(PROJECT_FILE) $(ADA_SOURCES)
 	@$(GNATMAKE) $(EXEC_RULE) -B -P$(PROJECT_FILE) $(ADA_SOURCES) \
-		 -largs $(MAIN_OBJECT) $(LARGS) $(LDFLAGS) $(FLDFLAGS)
+		 -largs $(OBJ_DIR)/$(MAIN_OBJECT) $(LARGS) $(LDFLAGS) $(FLDFLAGS)
 
 internal-build: $(LINKER) archive-objects force
-	@$(display) $(GNATMAKE) -B -P$(PROJECT_FILE) $(ADA_SOURCES) $(EXEC_RULE) $(ADAFLAGS)
+	@$(display) $(GNATMAKE) $(EXEC_RULE) -B -P$(PROJECT_FILE) $(ADA_SOURCES) $(ADAFLAGS)
 	@$(GNATMAKE) $(EXEC_RULE) \
 		 -B -P$(PROJECT_FILE) $(ADA_SOURCES) $(ADAFLAGS) \
-		 -largs $(MAIN_OBJECT) $(LARGS) $(LDFLAGS) $(FLDFLAGS)
+		 -largs $(OBJ_DIR)/$(MAIN_OBJECT) $(LARGS) $(LDFLAGS) $(FLDFLAGS)
 endif
 
 else

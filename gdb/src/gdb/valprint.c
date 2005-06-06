@@ -36,14 +36,12 @@
 #include "doublest.h"
 
 #include <errno.h>
+#include <ctype.h> /* APPLE LOCAL: for isprint() */
 
 /* Prototypes for local functions */
 
 static int partial_memory_read (CORE_ADDR memaddr, char *myaddr,
 				int len, int *errnoptr);
-
-static void print_hex_chars (struct ui_file *, unsigned char *,
-			     unsigned int);
 
 static void show_print (char *, int);
 
@@ -188,8 +186,8 @@ val_print_type_code_int (struct type *type, char *valaddr,
       LONGEST val;
 
       if (TYPE_UNSIGNED (type)
-	  && extract_long_unsigned_integer (valaddr, TYPE_LENGTH (type),
-					    &val))
+	  && extract_long_unsigned_integer_with_byte_order 
+	  (valaddr, TYPE_LENGTH (type), &val, TYPE_BYTE_ORDER (type)))
 	{
 	  print_longest (stream, 'u', 0, val);
 	}
@@ -199,18 +197,14 @@ val_print_type_code_int (struct type *type, char *valaddr,
 	     LONGEST.  For signed values, one could assume two's
 	     complement (a reasonable assumption, I think) and do
 	     better than this.  */
-	  print_hex_chars (stream, (unsigned char *) valaddr,
-			   TYPE_LENGTH (type));
+	  print_hex_chars_with_byte_order (stream, (const bfd_byte *) valaddr,
+					   TYPE_LENGTH (type), TYPE_BYTE_ORDER (type));
 	}
     }
   else
     {
-#ifdef PRINT_TYPELESS_INTEGER
-      PRINT_TYPELESS_INTEGER (stream, type, unpack_long (type, valaddr));
-#else
       print_longest (stream, TYPE_UNSIGNED (type) ? 'u' : 'd', 0,
 		     unpack_long (type, valaddr));
-#endif
     }
 }
 
@@ -456,9 +450,9 @@ print_floating (char *valaddr, struct type *type, struct ui_file *stream)
       if (floatformat_is_negative (fmt, valaddr))
 	fprintf_filtered (stream, "-");
       fprintf_filtered (stream, "nan(");
-      fprintf_filtered (stream, local_hex_format_prefix ());
-      fprintf_filtered (stream, floatformat_mantissa (fmt, valaddr));
-      fprintf_filtered (stream, local_hex_format_suffix ());
+      fputs_filtered (local_hex_format_prefix (), stream);
+      fputs_filtered (floatformat_mantissa (fmt, valaddr), stream);
+      fputs_filtered (local_hex_format_suffix (), stream);
       fprintf_filtered (stream, ")");
       return;
     }
@@ -519,7 +513,7 @@ print_binary_chars (struct ui_file *stream, unsigned char *valaddr,
 
   /* FIXME: We should be not printing leading zeroes in most cases.  */
 
-  fprintf_filtered (stream, local_binary_format_prefix ());
+  fputs_filtered (local_binary_format_prefix (), stream);
   if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
     {
       for (p = valaddr;
@@ -557,8 +551,27 @@ print_binary_chars (struct ui_file *stream, unsigned char *valaddr,
 	    }
 	}
     }
-  fprintf_filtered (stream, local_binary_format_suffix ());
+  fputs_filtered (local_binary_format_suffix (), stream);
 }
+
+/* APPLE LOCAL: Formatting for OSType variables.  */
+void
+print_ostype (struct ui_file *stream, unsigned char *valaddr)
+{
+    unsigned int buf_extracted = extract_unsigned_integer (valaddr, 4);
+    int i;
+    for (i = 3; i >= 0; i--)
+      {
+        unsigned char c = (buf_extracted >> (i * 8)) & 0xff;
+        if (c == '\'')
+          fprintf_filtered (stream, "\\'");
+        else if (isprint (c))
+          fprintf_filtered (stream, "%c", c);
+        else
+          fprintf_filtered (stream, "\\%.3o", (unsigned int) c);
+      }
+}
+
 
 /* VALADDR points to an integer of LEN bytes.
  * Print it in octal on stream or format it in buf.
@@ -606,7 +619,7 @@ print_octal_chars (struct ui_file *stream, unsigned char *valaddr, unsigned len)
   cycle = (len * BITS_IN_BYTES) % BITS_IN_OCTAL;
   carry = 0;
 
-  fprintf_filtered (stream, local_octal_format_prefix ());
+  fputs_filtered (local_octal_format_prefix (), stream);
   if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
     {
       for (p = valaddr;
@@ -705,7 +718,7 @@ print_octal_chars (struct ui_file *stream, unsigned char *valaddr, unsigned len)
 	}
     }
 
-  fprintf_filtered (stream, local_octal_format_suffix ());
+  fputs_filtered (local_octal_format_suffix (), stream);
 }
 
 /* VALADDR points to an integer of LEN bytes.
@@ -748,7 +761,7 @@ print_decimal_chars (struct ui_file *stream, unsigned char *valaddr,
       digits[i] = 0;
     }
 
-  fprintf_filtered (stream, local_decimal_format_prefix ());
+  fputs_filtered (local_decimal_format_prefix (), stream);
 
   /* Ok, we have an unknown number of bytes of data to be printed in
    * decimal.
@@ -845,20 +858,23 @@ print_decimal_chars (struct ui_file *stream, unsigned char *valaddr,
     }
   xfree (digits);
 
-  fprintf_filtered (stream, local_decimal_format_suffix ());
+  fputs_filtered (local_decimal_format_suffix (), stream);
 }
 
 /* VALADDR points to an integer of LEN bytes.  Print it in hex on stream.  */
 
-static void
-print_hex_chars (struct ui_file *stream, unsigned char *valaddr, unsigned len)
+void
+print_hex_chars_with_byte_order (struct ui_file *stream, const bfd_byte *valaddr,
+				 unsigned int len, int byte_order)
 {
   unsigned char *p;
 
   /* FIXME: We should be not printing leading zeroes in most cases.  */
 
-  fprintf_filtered (stream, local_hex_format_prefix ());
-  if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
+  fputs_filtered (local_hex_format_prefix (), stream);
+  if (byte_order == BFD_ENDIAN_UNKNOWN)
+    byte_order = TARGET_BYTE_ORDER;
+  if (byte_order == BFD_ENDIAN_BIG)
     {
       for (p = valaddr;
 	   p < valaddr + len;
@@ -876,7 +892,86 @@ print_hex_chars (struct ui_file *stream, unsigned char *valaddr, unsigned len)
 	  fprintf_filtered (stream, "%02x", *p);
 	}
     }
-  fprintf_filtered (stream, local_hex_format_suffix ());
+  fputs_filtered (local_hex_format_suffix (), stream);
+}
+
+/* APPLE LOCAL: Given an array type TYPE, and memory address VALADDR,
+   return the appropriate memory address for the index specified by I.
+   Does not check I against the bounds of the array (nor should it, as
+   GDB allows the user to print array elements past the standard array
+   bounds. */
+
+static const bfd_byte *val_elt_addr (struct type *type, 
+				     const bfd_byte *valaddr,
+				     unsigned int i)
+{
+  struct type *elttype;
+  unsigned eltlen;
+  LONGEST lowerbound, upperbound, stride;
+
+  get_array_bounds (type, &lowerbound, &upperbound, &stride);
+  if (stride == 1)
+    ;
+  else if (stride == -1)
+    i = (upperbound - i);
+  else
+    internal_error (__FILE__, __LINE__, _("unsupported stride %lld"), stride);
+
+  elttype = TYPE_TARGET_TYPE (type);
+  eltlen = TYPE_LENGTH (check_typedef (elttype));
+
+  return (valaddr + i * eltlen);
+}
+
+void
+print_hex_chars (struct ui_file *stream, const bfd_byte *valaddr,
+ 		 unsigned int len)
+{
+  print_hex_chars_with_byte_order (stream, valaddr, len, BFD_ENDIAN_UNKNOWN);
+}
+
+/* VALADDR points to a char integer of LEN bytes.  Print it out in appropriate language form on stream.  
+   Omit any leading zero chars.  */
+
+void
+print_char_chars_with_byte_order (struct ui_file *stream, const bfd_byte *valaddr,
+				   unsigned int len, int byte_order)
+{
+  unsigned char *p;
+
+  if (byte_order == BFD_ENDIAN_UNKNOWN)
+    byte_order = TARGET_BYTE_ORDER;
+  if (byte_order == BFD_ENDIAN_BIG)
+    {
+      p = valaddr;
+      while (p < valaddr + len - 1 && *p == 0)
+	++p;
+
+      while (p < valaddr + len)
+	{
+	  LA_EMIT_CHAR (*p, stream, '\'');
+	  ++p;
+	}
+    }
+  else
+    {
+      p = valaddr + len - 1;
+      while (p > valaddr && *p == 0)
+	--p;
+
+      while (p >= valaddr)
+	{
+	  LA_EMIT_CHAR (*p, stream, '\'');
+	  --p;
+	}
+    }
+}
+
+void
+print_char_chars (struct ui_file *stream, const bfd_byte *valaddr,
+		  unsigned int len)
+{
+  print_char_chars_with_byte_order (stream, valaddr, len, BFD_ENDIAN_UNKNOWN);
 }
 
 /*  Called by various <lang>_val_print routines to print elements of an
@@ -910,6 +1005,8 @@ val_print_array_elements (struct type *type, char *valaddr, CORE_ADDR address,
 
   annotate_array_section_begin (i, elttype);
 
+  /* APPLE LOCAL: use val_elt_addr instead of explicit address arithmetic. */
+
   for (; i < len && things_printed < print_max; i++)
     {
       if (i != 0)
@@ -929,7 +1026,7 @@ val_print_array_elements (struct type *type, char *valaddr, CORE_ADDR address,
       rep1 = i + 1;
       reps = 1;
       while ((rep1 < len) &&
-	     !memcmp (valaddr + i * eltlen, valaddr + rep1 * eltlen, eltlen))
+	     !memcmp (val_elt_addr (type, valaddr, i), val_elt_addr (type, valaddr, rep1), eltlen))
 	{
 	  ++reps;
 	  ++rep1;
@@ -937,7 +1034,7 @@ val_print_array_elements (struct type *type, char *valaddr, CORE_ADDR address,
 
       if (reps > repeat_count_threshold)
 	{
-	  val_print (elttype, valaddr + i * eltlen, 0, 0, stream, format,
+	  val_print (elttype, val_elt_addr (type, valaddr, i), 0, 0, stream, format,
 		     deref_ref, recurse + 1, pretty);
 	  annotate_elt_rep (reps);
 	  fprintf_filtered (stream, " <repeats %u times>", reps);
@@ -948,7 +1045,7 @@ val_print_array_elements (struct type *type, char *valaddr, CORE_ADDR address,
 	}
       else
 	{
-	  val_print (elttype, valaddr + i * eltlen, 0, 0, stream, format,
+	  val_print (elttype, val_elt_addr (type, valaddr, i), 0, 0, stream, format,
 		     deref_ref, recurse + 1, pretty);
 	  annotate_elt ();
 	  things_printed++;
@@ -1187,14 +1284,12 @@ val_print_string (CORE_ADDR addr, int len, int width, struct ui_file *stream)
    knows what they really did here.  Radix setting is confusing, e.g.
    setting the input radix to "10" never changes it!  */
 
-/* ARGSUSED */
 static void
 set_input_radix (char *args, int from_tty, struct cmd_list_element *c)
 {
   set_input_radix_1 (from_tty, input_radix);
 }
 
-/* ARGSUSED */
 static void
 set_input_radix_1 (int from_tty, unsigned radix)
 {
@@ -1222,7 +1317,6 @@ set_input_radix_1 (int from_tty, unsigned radix)
     }
 }
 
-/* ARGSUSED */
 static void
 set_output_radix (char *args, int from_tty, struct cmd_list_element *c)
 {
@@ -1286,7 +1380,6 @@ set_radix (char *arg, int from_tty)
 
 /* Show both the input and output radices. */
 
-/*ARGSUSED */
 static void
 show_radix (char *arg, int from_tty)
 {
@@ -1308,7 +1401,6 @@ show_radix (char *arg, int from_tty)
 }
 
 
-/*ARGSUSED */
 static void
 set_print (char *arg, int from_tty)
 {
@@ -1317,7 +1409,6 @@ set_print (char *arg, int from_tty)
   help_list (setprintlist, "set print ", -1, gdb_stdout);
 }
 
-/*ARGSUSED */
 static void
 show_print (char *args, int from_tty)
 {

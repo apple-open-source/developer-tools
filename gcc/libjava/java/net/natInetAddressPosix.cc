@@ -167,7 +167,7 @@ java::net::InetAddress::lookup (jstring host, java::net::InetAddress* iaddr,
 #else
       // FIXME: this is insufficient if some other piece of code calls
       // this gethostbyname.
-      JvSynchronize sync (java::net::InetAddress::localhostAddress);
+      JvSynchronize sync (java::net::InetAddress::loopbackAddress);
       hptr = gethostbyname (hostname);
 #endif /* HAVE_GETHOSTBYNAME_R */
     }
@@ -221,7 +221,7 @@ java::net::InetAddress::lookup (jstring host, java::net::InetAddress* iaddr,
 #else /* HAVE_GETHOSTBYADDR_R */
       // FIXME: this is insufficient if some other piece of code calls
       // this gethostbyaddr.
-      JvSynchronize sync (java::net::InetAddress::localhostAddress);
+      JvSynchronize sync (java::net::InetAddress::loopbackAddress);
       hptr = gethostbyaddr (val, len, type);
 #endif /* HAVE_GETHOSTBYADDR_R */
     }
@@ -229,13 +229,6 @@ java::net::InetAddress::lookup (jstring host, java::net::InetAddress* iaddr,
     {
       if (!all)
         host = JvNewStringUTF (hptr->h_name);
-      java::lang::SecurityException *ex = checkConnect (host);
-      if (ex != NULL)
-	{
-	  if (iaddr == NULL || iaddr->addr == NULL)
-	    throw ex;
-	  hptr = NULL;
-	}
     }
   if (hptr == NULL)
     {

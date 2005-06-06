@@ -1,5 +1,5 @@
 /* DoubleBufferImpl.java -- 
-   Copyright (C) 2002, 2003 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -80,6 +80,8 @@ final class DoubleBufferImpl extends DoubleBuffer
   
   public DoubleBuffer compact ()
   {
+    checkIfReadOnly();
+    mark = -1;
     int copied = 0;
     
     while (remaining () > 0)
@@ -89,6 +91,7 @@ final class DoubleBufferImpl extends DoubleBuffer
       }
 
     position (copied);
+    limit(capacity());
     return this;
   }
   
@@ -98,10 +101,16 @@ final class DoubleBufferImpl extends DoubleBuffer
   }
 
   /**
-   * Relative get method. Reads the next <code>double</code> from the buffer.
+   * Reads the <code>double</code> at this buffer's current position,
+   * and then increments the position.
+   *
+   * @exception BufferUnderflowException If there are no remaining
+   * <code>double</code>s in this buffer.
    */
   public double get ()
   {
+    checkForUnderflow();
+
     double result = backing_buffer [position ()];
     position (position () + 1);
     return result;
@@ -110,13 +119,15 @@ final class DoubleBufferImpl extends DoubleBuffer
   /**
    * Relative put method. Writes <code>value</code> to the next position
    * in the buffer.
-   * 
+   *
+   * @exception BufferOverflowException If there no remaining 
+   * space in this buffer.
    * @exception ReadOnlyBufferException If this buffer is read-only.
    */
   public DoubleBuffer put (double value)
   {
-    if (readOnly)
-      throw new ReadOnlyBufferException ();
+    checkIfReadOnly();
+    checkForOverflow();
 	  	    
     backing_buffer [position ()] = value;
     position (position () + 1);
@@ -132,11 +143,13 @@ final class DoubleBufferImpl extends DoubleBuffer
    */
   public double get (int index)
   {
+    checkIndex(index);
+
     return backing_buffer [index];
   }
   
   /**
-   * Absolute put method. Writes <code>value</value> to position
+   * Absolute put method. Writes <code>value</code> to position
    * <code>index</code> in the buffer.
    *
    * @exception IndexOutOfBoundsException If index is negative or not smaller
@@ -145,9 +158,9 @@ final class DoubleBufferImpl extends DoubleBuffer
    */
   public DoubleBuffer put (int index, double value)
   {
-    if (readOnly)
-      throw new ReadOnlyBufferException ();
-    	    
+    checkIfReadOnly();
+    checkIndex(index);
+
     backing_buffer [index] = value;
     return this;
   }

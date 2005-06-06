@@ -1,5 +1,5 @@
 /* ObjectStreamField.java -- Class used to store name and class of fields
-   Copyright (C) 1998, 1999, 2003 Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2003, 2004  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -38,9 +38,9 @@ exception statement from your version. */
 
 package java.io;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
 import gnu.java.lang.reflect.TypeSignature;
+
+import java.lang.reflect.Field;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 
@@ -64,7 +64,6 @@ public class ObjectStreamField implements Comparable
   {
     this (field.getName(), field.getType());
     this.field = field;
-    toset = !Modifier.isFinal(field.getModifiers());
   }
 
   /**
@@ -87,6 +86,7 @@ public class ObjectStreamField implements Comparable
    *
    * @param name Name of the field to export.
    * @param type Type of the field in the concerned class.
+   * @param unshared true if field will be unshared, false otherwise.
    */
   public ObjectStreamField (String name, Class type, boolean unshared)
   {
@@ -238,9 +238,16 @@ public class ObjectStreamField implements Comparable
     return typename.length() == 1;
   }
 
-  public int compareTo (Object o)
+  /**
+   * Compares this object to the given object.
+   *
+   * @param obj the object to compare to.
+   *
+   * @return -1, 0 or 1.
+   */
+  public int compareTo (Object obj)
   {
-    ObjectStreamField f = (ObjectStreamField)o;
+    ObjectStreamField f = (ObjectStreamField) obj;
     boolean this_is_primitive = isPrimitive ();
     boolean f_is_primitive = f.isPrimitive ();
 
@@ -348,6 +355,11 @@ public class ObjectStreamField implements Comparable
 	 " in class " + field.getDeclaringClass());
   }
 
+  /**
+   * Returns a string representing this object.
+   *
+   * @return the string.
+   */
   public String toString ()
   {
     return "ObjectStreamField< " + type + " " + name + " >";
@@ -355,109 +367,46 @@ public class ObjectStreamField implements Comparable
 
   final void setBooleanField(Object obj, boolean val)
   {
-    try
-      {
-	field.setBoolean(obj, val);
-      }
-    catch(IllegalAccessException x)
-      {
-	throw new InternalError(x.getMessage());
-      }
+    VMObjectStreamClass.setBooleanNative(field, obj, val);  
   }
-  
+
   final void setByteField(Object obj, byte val)
   {
-    try
-      {
-	field.setByte(obj, val);
-      }
-    catch(IllegalAccessException x)
-      {
-	throw new InternalError(x.getMessage());
-      }
+    VMObjectStreamClass.setByteNative(field, obj, val);
   }
   
   final void setCharField(Object obj, char val)
   {
-    try
-      {
-	field.setChar(obj, val);
-      }
-    catch(IllegalAccessException x)
-      {
-	throw new InternalError(x.getMessage());
-      }
+    VMObjectStreamClass.setCharNative(field, obj, val);
   }
   
   final void setShortField(Object obj, short val)
   {
-    try
-      {
-	field.setShort(obj, val);
-      }
-    catch(IllegalAccessException x)
-      {
-	throw new InternalError(x.getMessage());
-      }
+    VMObjectStreamClass.setShortNative(field, obj, val);
   }
-  
+
   final void setIntField(Object obj, int val)
   {
-    try
-      {
-	field.setInt(obj, val);
-      }
-    catch(IllegalAccessException x)
-      {
-	throw new InternalError(x.getMessage());
-      }
+    VMObjectStreamClass.setIntNative(field, obj, val);
   }
   
   final void setLongField(Object obj, long val)
   {
-    try
-      {
-	field.setLong(obj, val);
-      }
-    catch(IllegalAccessException x)
-      {
-	throw new InternalError(x.getMessage());
-      }
+    VMObjectStreamClass.setLongNative(field, obj, val);
   }
   
   final void setFloatField(Object obj, float val)
   {
-    try
-      {
-	field.setFloat(obj, val);
-      }
-    catch(IllegalAccessException x)
-      {
-	throw new InternalError(x.getMessage());
-      }
+    VMObjectStreamClass.setFloatNative(field, obj, val);
   }
   
   final void setDoubleField(Object obj, double val)
   {
-    try
-      {
-	field.setDouble(obj, val);
-      }
-    catch(IllegalAccessException x)
-      {
-	throw new InternalError(x.getMessage());
-      }
+    VMObjectStreamClass.setDoubleNative(field, obj, val);
   }
   
   final void setObjectField(Object obj, Object val)
   { 
-    try
-      {
-	field.set(obj, val);
-      }
-    catch(IllegalAccessException x)
-      {
-	throw new InternalError(x.getMessage());
-      }
+    VMObjectStreamClass.setObjectNative(field, obj, val);
   }
 }

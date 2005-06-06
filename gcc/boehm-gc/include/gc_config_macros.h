@@ -1,43 +1,7 @@
 /*
  * This should never be included directly.  It is included only from gc.h.
  * We separate it only to make gc.h more suitable as documentation.
- * 
- * Some tests for old macros.  These violate our namespace rules and will
- * disappear shortly.  Use the GC_ names.
  */
-#if defined(SOLARIS_THREADS) || defined(_SOLARIS_THREADS)
-# define GC_SOLARIS_THREADS
-#endif
-#if defined(_SOLARIS_PTHREADS)
-# define GC_SOLARIS_PTHREADS
-#endif
-#if defined(IRIX_THREADS)
-# define GC_IRIX_THREADS
-#endif
-#if defined(DGUX_THREADS)
-# if !defined(GC_DGUX386_THREADS)
-#  define GC_DGUX386_THREADS
-# endif
-#endif
-#if defined(AIX_THREADS)
-# define GC_AIX_THREADS
-#endif
-#if defined(HPUX_THREADS)
-# define GC_HPUX_THREADS
-#endif
-#if defined(OSF1_THREADS)
-# define GC_OSF1_THREADS
-#endif
-#if defined(LINUX_THREADS)
-# define GC_LINUX_THREADS
-#endif
-#if defined(WIN32_THREADS)
-# define GC_WIN32_THREADS
-#endif
-#if defined(USE_LD_WRAP)
-# define GC_USE_LD_WRAP
-#endif
-
 #if !defined(_REENTRANT) && (defined(GC_SOLARIS_THREADS) \
 		             || defined(GC_SOLARIS_PTHREADS) \
 			     || defined(GC_HPUX_THREADS) \
@@ -97,7 +61,10 @@
 # endif
 #endif /* GC_THREADS */
 
-#if defined(GC_THREADS) && !defined(GC_PTHREADS) && defined(MSWIN32)
+#if defined(GC_THREADS) && !defined(GC_PTHREADS) && \
+    (defined(_WIN32) || defined(_MSC_VER) || defined(__CYGWIN__) \
+     || defined(__MINGW32__) || defined(__BORLANDC__) \
+     || defined(_WIN32_WCE))
 # define GC_WIN32_THREADS
 #endif
 
@@ -106,8 +73,9 @@
 #endif
 
 # define __GC
-# include <stddef.h>
-# ifdef _WIN32_WCE
+# ifndef _WIN32_WCE
+#   include <stddef.h>
+# else /* ! _WIN32_WCE */
 /* Yet more kluges for WinCE */
 #   include <stdlib.h>		/* size_t is defined here */
     typedef long ptrdiff_t;	/* ptrdiff_t is not defined */

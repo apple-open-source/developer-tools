@@ -1,6 +1,6 @@
 /* Specific flags and argument handling of the front-end of the 
    GNU compiler for the Java(TM) language.
-   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003
+   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -68,7 +68,7 @@ static const char jvgenmain_spec[] =
 		   %<fcompile-resource* %<fassert %<fno-assert \
 		   %<femit-class-file %<femit-class-files %<fencoding*\
 		   %<fuse-boehm-gc %<fhash-synchronization %<fjni\
-		   %<findirect-dispatch \
+		   %<findirect-dispatch %<fnew-verifier\
 		   %<fno-store-check %<foutput-class-dir\
 		   %<fclasspath* %<fCLASSPATH* %<fbootclasspath*\
 		   %<fextdirs*\
@@ -324,9 +324,11 @@ lang_specific_driver (int *in_argc, const char *const **in_argv,
 		saw_o = 1;
 	      quote = argv[i];
 	    }
-	  else if (strcmp(argv[i], "-classpath") == 0
-		   || strcmp(argv[i], "-bootclasspath") == 0
-		   || strcmp(argv[i], "-CLASSPATH") == 0)
+	  else if (strcmp (argv[i], "-classpath") == 0
+		   || strcmp (argv[i], "-bootclasspath") == 0
+		   || strcmp (argv[i], "-CLASSPATH") == 0
+		   || strcmp (argv[i], "-encoding") == 0
+		   || strcmp (argv[i], "-extdirs") == 0)
 	    {
 	      quote = argv[i];
 	      added -= 1;
@@ -412,13 +414,13 @@ lang_specific_driver (int *in_argc, const char *const **in_argv,
     }
 
   if (quote)
-    fatal ("argument to `%s' missing\n", quote);
+    fatal ("argument to '%s' missing\n", quote);
 
   if (saw_D && ! main_class_name)
-    fatal ("can't specify `-D' without `--main'\n");
+    fatal ("can't specify '-D' without '--main'\n");
 
   if (main_class_name && ! verify_class_name (main_class_name))
-    fatal ("`%s' is not a valid class name", main_class_name);
+    fatal ("'%s' is not a valid class name", main_class_name);
 
   num_args = argc + added;
   if (saw_resource)
@@ -507,7 +509,9 @@ lang_specific_driver (int *in_argc, const char *const **in_argv,
 
       if (strcmp (argv[i], "-classpath") == 0
 	  || strcmp (argv[i], "-bootclasspath") == 0
-	  || strcmp (argv[i], "-CLASSPATH") == 0)
+	  || strcmp (argv[i], "-CLASSPATH") == 0
+	  || strcmp (argv[i], "-encoding") == 0
+	  || strcmp (argv[i], "-extdirs") == 0)
 	{
 	  arglist[j] = concat ("-f", argv[i]+1, "=", argv[i+1], NULL);
 	  i++;
@@ -527,7 +531,7 @@ lang_specific_driver (int *in_argc, const char *const **in_argv,
       if (strncmp (argv[i], "-fmain=", 7) == 0)
 	{
 	  if (! will_link)
-	    fatal ("cannot specify `main' class when not linking");
+	    fatal ("cannot specify 'main' class when not linking");
 	  --j;
 	  continue;
 	}

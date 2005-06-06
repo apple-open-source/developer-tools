@@ -35,6 +35,7 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package javax.swing.text;
 
 import java.awt.Color;
@@ -50,568 +51,453 @@ import javax.swing.event.CaretListener;
 
 /**
  * StyledEditorKit
- * @author	Andrew Selkirk
- * @version	1.0
+ *
+ * @author Andrew Selkirk
  */
 public class StyledEditorKit extends DefaultEditorKit
 {
-  static final long serialVersionUID = 7002391892985555948L;
-
-	//-------------------------------------------------------------
-	// Classes ----------------------------------------------------
-	//-------------------------------------------------------------
-
-	/**
-	 * UnderlineAction
-	 */
-	public static class UnderlineAction extends StyledEditorKit.StyledTextAction {
-
-		//-------------------------------------------------------------
-		// Initialization ---------------------------------------------
-		//-------------------------------------------------------------
-
-		/**
-		 * Constructor UnderlineAction
-		 */
-		public UnderlineAction() {
-			super("TODO");
-			// TODO
-		} // UnderlineAction()
-
-
-		//-------------------------------------------------------------
-		// Methods ----------------------------------------------------
-		//-------------------------------------------------------------
-
-		/**
-		 * actionPerformed
-		 * @param event TODO
-		 */
-		public void actionPerformed(ActionEvent event) {
-			// TODO
-		} // actionPerformed()
-
-
-	} // UnderlineAction
-
-	/**
-	 * ItalicAction
-	 */
-	public static class ItalicAction extends StyledEditorKit.StyledTextAction {
-
-		//-------------------------------------------------------------
-		// Initialization ---------------------------------------------
-		//-------------------------------------------------------------
-
-		/**
-		 * Constructor ItalicAction
-		 */
-		public ItalicAction() {
-			super("TODO");
-			// TODO
-		} // ItalicAction()
-
-
-		//-------------------------------------------------------------
-		// Methods ----------------------------------------------------
-		//-------------------------------------------------------------
-
-		/**
-		 * actionPerformed
-		 * @param event TODO
-		 */
-		public void actionPerformed(ActionEvent event) {
-			// TODO
-		} // actionPerformed()
-
-
-	} // ItalicAction
-
-	/**
-	 * BoldAction
-	 */
-	public static class BoldAction extends StyledEditorKit.StyledTextAction {
-
-		//-------------------------------------------------------------
-		// Initialization ---------------------------------------------
-		//-------------------------------------------------------------
-
-		/**
-		 * Constructor BoldAction
-		 */
-		public BoldAction() {
-			super("TODO");
-			// TODO
-		} // BoldAction()
-
-
-		//-------------------------------------------------------------
-		// Methods ----------------------------------------------------
-		//-------------------------------------------------------------
-
-		/**
-		 * actionPerformed
-		 * @param event TODO
-		 */
-		public void actionPerformed(ActionEvent event) {
-			// TODO
-		} // actionPerformed()
-
-
-	} // BoldAction
-
-	/**
-	 * AlignmentAction
-	 */
-	public static class AlignmentAction extends StyledEditorKit.StyledTextAction {
-
-		//-------------------------------------------------------------
-		// Variables --------------------------------------------------
-		//-------------------------------------------------------------
-
-		/**
-		 * a
-		 */
-		private int a;
-
-
-		//-------------------------------------------------------------
-		// Initialization ---------------------------------------------
-		//-------------------------------------------------------------
-
-		/**
-		 * Constructor AlignmentAction
-		 * @param nm TODO
-		 * @param a TODO
-		 */
-		public AlignmentAction(String nm, int a) {
-			super("TODO");
-			// TODO
-		} // AlignmentAction()
-
-
-		//-------------------------------------------------------------
-		// Methods ----------------------------------------------------
-		//-------------------------------------------------------------
-
-		/**
-		 * actionPerformed
-		 * @param event TODO
-		 */
-		public void actionPerformed(ActionEvent event) {
-			// TODO
-		} // actionPerformed()
-
-
-	} // AlignmentAction
-
-	/**
-	 * ForegroundAction
-	 */
-	public static class ForegroundAction extends StyledEditorKit.StyledTextAction {
-
-		//-------------------------------------------------------------
-		// Variables --------------------------------------------------
-		//-------------------------------------------------------------
-
-		/**
-		 * fg
-		 */
-		private Color fg;
-
-
-		//-------------------------------------------------------------
-		// Initialization ---------------------------------------------
-		//-------------------------------------------------------------
-
-		/**
-		 * Constructor ForegroundAction
-		 * @param nm TODO
-		 * @param fg TODO
-		 */
-		public ForegroundAction(String nm, Color fg) {
-			super("TODO");
-			// TODO
-		} // ForegroundAction()
-
-
-		//-------------------------------------------------------------
-		// Methods ----------------------------------------------------
-		//-------------------------------------------------------------
-
-		/**
-		 * actionPerformed
-		 * @param event TODO
-		 */
-		public void actionPerformed(ActionEvent event) {
-			// TODO
-		} // actionPerformed()
-
-
-	} // ForegroundAction
-
-	/**
-	 * FontSizeAction
-	 */
-	public static class FontSizeAction extends StyledEditorKit.StyledTextAction {
-
-		//-------------------------------------------------------------
-		// Variables --------------------------------------------------
-		//-------------------------------------------------------------
-
-		/**
-		 * size
-		 */
-		private int size;
-
-
-		//-------------------------------------------------------------
-		// Initialization ---------------------------------------------
-		//-------------------------------------------------------------
-
-		/**
-		 * Constructor FontSizeAction
-		 * @param nm TODO
-		 * @param size TODO
-		 */
-		public FontSizeAction(String nm, int size) {
-			super("TODO");
-			// TODO
-		} // FontSizeAction()
-
-
-		//-------------------------------------------------------------
-		// Methods ----------------------------------------------------
-		//-------------------------------------------------------------
-
-		/**
-		 * actionPerformed
-		 * @param event TODO
-		 */
-		public void actionPerformed(ActionEvent event) {
-			// TODO
-		} // actionPerformed()
-
-
-	} // FontSizeAction
-
-	/**
-	 * FontFamilyAction
-	 */
-	public static class FontFamilyAction extends StyledEditorKit.StyledTextAction {
-
-		//-------------------------------------------------------------
-		// Variables --------------------------------------------------
-		//-------------------------------------------------------------
-
-		/**
-		 * family
-		 */
-		private String family;
-
-
-		//-------------------------------------------------------------
-		// Initialization ---------------------------------------------
-		//-------------------------------------------------------------
-
-		/**
-		 * Constructor FontFamilyAction
-		 * @param nm TODO
-		 * @param family TODO
-		 */
-		public FontFamilyAction(String nm, String family) {
-			super("TODO");
-			// TODO
-		} // FontFamilyAction()
-
-
-		//-------------------------------------------------------------
-		// Methods ----------------------------------------------------
-		//-------------------------------------------------------------
-
-		/**
-		 * actionPerformed
-		 * @param event TODO
-		 */
-		public void actionPerformed(ActionEvent event) {
-			// TODO
-		} // actionPerformed()
-
-
-	} // FontFamilyAction
-
-	/**
-	 * StyledTextAction
-	 */
-	public abstract static class StyledTextAction extends TextAction {
-
-		//-------------------------------------------------------------
-		// Initialization ---------------------------------------------
-		//-------------------------------------------------------------
-
-		/**
-		 * Constructor StyledTextAction
-		 * @param nm TODO
-		 */
-		public StyledTextAction(String nm) {
-			super(nm);
-			// TODO
-		} // StyledTextAction()
-
-
-		//-------------------------------------------------------------
-		// Methods ----------------------------------------------------
-		//-------------------------------------------------------------
-
-		/**
-		 * getEditor
-		 * @param event TODO
-		 * @returns JEditorPane
-		 */
-		protected final JEditorPane getEditor(ActionEvent event) {
-			return null; // TODO
-		} // getEditor()
-
-		/**
-		 * setCharacterAttributes
-		 * @param value0 TODO
-		 * @param value1 TODO
-		 * @param value2 TODO
-		 */
-		protected final void setCharacterAttributes(JEditorPane value0, AttributeSet value1, boolean value2) {
-			// TODO
-		} // setCharacterAttributes()
-
-		/**
-		 * getStyledDocument
-		 * @param value0 TODO
-		 * @returns StyledDocument
-		 */
-		protected final StyledDocument getStyledDocument(JEditorPane value0) {
-			return null; // TODO
-		} // getStyledDocument()
-
-		/**
-		 * getStyledEditorKit
-		 * @param value0 TODO
-		 * @returns StyledEditorKit
-		 */
-		protected final StyledEditorKit getStyledEditorKit(JEditorPane value0) {
-			return null; // TODO
-		} // getStyledEditorKit()
-
-		/**
-		 * setParagraphAttributes
-		 * @param value0 TODO
-		 * @param value1 TODO
-		 * @param value2 TODO
-		 */
-		protected final void setParagraphAttributes(JEditorPane value0, AttributeSet value1, boolean value2) {
-			// TODO
-		} // setParagraphAttributes()
-
-
-	} // StyledTextAction
-
-	/**
-	 * StyledViewFactory
-	 */
-	static class StyledViewFactory implements ViewFactory {
-
-		//-------------------------------------------------------------
-		// Initialization ---------------------------------------------
-		//-------------------------------------------------------------
-
-		/**
-		 * Constructor StyledViewFactory
-		 */
-		StyledViewFactory() {
-			// TODO
-		} // StyledViewFactory()
-
-
-		//-------------------------------------------------------------
-		// Methods ----------------------------------------------------
-		//-------------------------------------------------------------
-
-		/**
-		 * create
-		 * @param value0 TODO
-		 * @returns View
-		 */
-		public View create(Element value0) {
-			return null; // TODO
-		} // create()
-
-
-	} // StyledViewFactory
-
-	/**
-	 * AttributeTracker
-	 */
-	 class AttributeTracker implements CaretListener, PropertyChangeListener, Serializable {
-
-		//-------------------------------------------------------------
-		// Variables --------------------------------------------------
-		//-------------------------------------------------------------
-
-
-		//-------------------------------------------------------------
-		// Initialization ---------------------------------------------
-		//-------------------------------------------------------------
-
-		/**
-		 * Constructor AttributeTracker
-		 * @param value0 TODO
-		 */
-		AttributeTracker(StyledEditorKit value0) {
-			// TODO
-		} // AttributeTracker()
-
-
-		//-------------------------------------------------------------
-		// Methods ----------------------------------------------------
-		//-------------------------------------------------------------
-
-		/**
-		 * updateInputAttributes
-		 * @param value0 TODO
-		 * @param value1 TODO
-		 * @param value2 TODO
-		 */
-		void updateInputAttributes(int value0, int value1, JTextComponent value2) {
-			// TODO
-		} // updateInputAttributes()
-
-		/**
-		 * propertyChange
-		 * @param value0 TODO
-		 */
-		public void propertyChange(PropertyChangeEvent value0) {
-			// TODO
-		} // propertyChange()
-
-		/**
-		 * caretUpdate
-		 * @param value0 TODO
-		 */
-		public void caretUpdate(CaretEvent value0) {
-			// TODO
-		} // caretUpdate()
-
-
-	} // AttributeTracker
-
-
-	//-------------------------------------------------------------
-	// Variables --------------------------------------------------
-	//-------------------------------------------------------------
-
-	/**
-	 * currentRun
-	 */
-	Element currentRun;
-
-	/**
-	 * currentParagraph
-	 */
-	Element currentParagraph;
-
-	/**
-	 * inputAttributes
-	 */
-	MutableAttributeSet inputAttributes;
-
-
-	//-------------------------------------------------------------
-	// Initialization ---------------------------------------------
-	//-------------------------------------------------------------
-
-	/**
-	 * Constructor StyledEditorKit
-	 */
-	public StyledEditorKit() {
-		// TODO
-	} // StyledEditorKit()
-
-
-	//-------------------------------------------------------------
-	// Methods ----------------------------------------------------
-	//-------------------------------------------------------------
-
-	/**
-	 * clone
-	 * @returns Object
-	 */
-	public Object clone() {
-		return null; // TODO
-	} // clone()
-
-	/**
-	 * getActions
-	 * @returns Action[]
-	 */
-	public Action[] getActions() {
-		return null; // TODO
-	} // getActions()
-
-	/**
-	 * getInputAttributes
-	 * @returns MutableAttributeSet
-	 */
-	public MutableAttributeSet getInputAttributes() {
-		return null; // TODO
-	} // getInputAttributes()
-
-	/**
-	 * getCharacterAttributeRun
-	 * @returns Element
-	 */
-	public Element getCharacterAttributeRun() {
-		return null; // TODO
-	} // getCharacterAttributeRun()
-
-	/**
-	 * createDefaultDocument
-	 * @returns Document
-	 */
-	public Document createDefaultDocument() {
-		return null; // TODO
-	} // createDefaultDocument()
-
-	/**
-	 * install
-	 * @param component TODO
-	 */
-	public void install(JEditorPane component) {
-		// TODO
-	} // install()
-
-	/**
-	 * deinstall
-	 * @param component TODO
-	 */
-	public void deinstall(JEditorPane component) {
-		// TODO
-	} // deinstall()
-
-	/**
-	 * getViewFactory
-	 * @returns ViewFactory
-	 */
-	public ViewFactory getViewFactory() {
-		return null; // TODO
-	} // getViewFactory()
-
-	/**
-	 * createInputAttributes
-	 * @param element TODO
-	 * @param set TODO
-	 */
-	protected void createInputAttributes(Element element,
-			MutableAttributeSet set) {
-		// TODO
-	} // createInputAttributes()
-
-
-} // StyledEditorKit
+  private static final long serialVersionUID = 7002391892985555948L;
+
+  /**
+   * UnderlineAction
+   */
+  public static class UnderlineAction extends StyledEditorKit.StyledTextAction
+  {
+    /**
+     * Constructor UnderlineAction
+     */
+    public UnderlineAction()
+    {
+      super("TODO");
+      // TODO
+    }
+
+    /**
+     * actionPerformed
+     * @param event TODO
+     */
+    public void actionPerformed(ActionEvent event)
+    {
+      // TODO
+    }
+  }
+
+  /**
+   * ItalicAction
+   */
+  public static class ItalicAction extends StyledEditorKit.StyledTextAction
+  {
+    /**
+     * Constructor ItalicAction
+     */
+    public ItalicAction()
+    {
+      super("TODO");
+      // TODO
+    }
+
+    /**
+     * actionPerformed
+     * @param event TODO
+     */
+    public void actionPerformed(ActionEvent event)
+    {
+      // TODO
+    }
+  }
+
+  /**
+   * BoldAction
+   */
+  public static class BoldAction extends StyledEditorKit.StyledTextAction
+  {
+    /**
+     * Constructor BoldAction
+     */
+    public BoldAction()
+    {
+      super("TODO");
+      // TODO
+    }
+
+    /**
+     * actionPerformed
+     * @param event TODO
+     */
+    public void actionPerformed(ActionEvent event)
+    {
+      // TODO
+    }
+  }
+
+  /**
+   * AlignmentAction
+   */
+  public static class AlignmentAction extends StyledEditorKit.StyledTextAction
+  {
+    /**
+     * a
+     */
+    private int a;
+
+    /**
+     * Constructor AlignmentAction
+     * @param nm TODO
+     * @param a TODO
+     */
+    public AlignmentAction(String nm, int a)
+    {
+      super("TODO");
+      // TODO
+    }
+
+    /**
+     * actionPerformed
+     * @param event TODO
+     */
+    public void actionPerformed(ActionEvent event)
+    {
+      // TODO
+    }
+  }
+
+  /**
+   * ForegroundAction
+   */
+  public static class ForegroundAction extends StyledEditorKit.StyledTextAction
+  {
+    /**
+     * fg
+     */
+    private Color fg;
+
+    /**
+     * Constructor ForegroundAction
+     * @param nm TODO
+     * @param fg TODO
+     */
+    public ForegroundAction(String nm, Color fg)
+    {
+      super("TODO");
+      // TODO
+    }
+
+    /**
+     * actionPerformed
+     * @param event TODO
+     */
+    public void actionPerformed(ActionEvent event)
+    {
+      // TODO
+    }
+  }
+
+  /**
+   * FontSizeAction
+   */
+  public static class FontSizeAction extends StyledEditorKit.StyledTextAction
+  {
+    /**
+     * size
+     */
+    private int size;
+
+    /**
+     * Constructor FontSizeAction
+     * @param nm TODO
+     * @param size TODO
+     */
+    public FontSizeAction(String nm, int size)
+    {
+      super("TODO");
+      // TODO
+    }
+
+    /**
+     * actionPerformed
+     * @param event TODO
+     */
+    public void actionPerformed(ActionEvent event)
+    {
+      // TODO
+    }
+  }
+
+  /**
+   * FontFamilyAction
+   */
+  public static class FontFamilyAction extends StyledEditorKit.StyledTextAction
+  {
+    /**
+     * family
+     */
+    private String family;
+
+    /**
+     * Constructor FontFamilyAction
+     * @param nm TODO
+     * @param family TODO
+     */
+    public FontFamilyAction(String nm, String family)
+    {
+      super("TODO");
+      // TODO
+    }
+
+    /**
+     * actionPerformed
+     * @param event TODO
+     */
+    public void actionPerformed(ActionEvent event)
+    {
+      // TODO
+    }
+  }
+
+  /**
+   * StyledTextAction
+   */
+  public abstract static class StyledTextAction extends TextAction
+  {
+    /**
+     * Constructor StyledTextAction
+     * @param nm TODO
+     */
+    public StyledTextAction(String nm)
+    {
+      super(nm);
+      // TODO
+    }
+
+    /**
+     * getEditor
+     * @param event TODO
+     * @returns JEditorPane
+     */
+    protected final JEditorPane getEditor(ActionEvent event)
+    {
+      return null; // TODO
+    }
+
+    /**
+     * setCharacterAttributes
+     * @param value0 TODO
+     * @param value1 TODO
+     * @param value2 TODO
+     */
+    protected final void setCharacterAttributes(JEditorPane value0,
+                                                AttributeSet value1,
+                                                boolean value2)
+    {
+      // TODO
+    }
+
+    /**
+     * getStyledDocument
+     * @param value0 TODO
+     * @returns StyledDocument
+     */
+    protected final StyledDocument getStyledDocument(JEditorPane value0)
+    {
+      return null; // TODO
+    }
+
+    /**
+     * getStyledEditorKit
+     * @param value0 TODO
+     * @returns StyledEditorKit
+     */
+    protected final StyledEditorKit getStyledEditorKit(JEditorPane value0)
+    {
+      return null; // TODO
+    }
+
+    /**
+     * setParagraphAttributes
+     * @param value0 TODO
+     * @param value1 TODO
+     * @param value2 TODO
+     */
+    protected final void setParagraphAttributes(JEditorPane value0,
+                                                AttributeSet value1,
+                                                boolean value2)
+    {
+      // TODO
+    }
+  }
+
+  /**
+   * StyledViewFactory
+   */
+  static class StyledViewFactory
+    implements ViewFactory
+  {
+    /**
+     * Constructor StyledViewFactory
+     */
+    StyledViewFactory()
+    {
+      // TODO
+    }
+
+    /**
+     * create
+     * @param value0 TODO
+     * @returns View
+     */
+    public View create(Element value0)
+    {
+      return null; // TODO
+    }
+  }
+
+  /**
+   * AttributeTracker
+   */
+  class AttributeTracker
+    implements CaretListener, PropertyChangeListener, Serializable
+  {
+    /**
+     * Constructor AttributeTracker
+     * @param value0 TODO
+     */
+    AttributeTracker(StyledEditorKit value0)
+    {
+      // TODO
+    }
+
+    /**
+     * updateInputAttributes
+     * @param value0 TODO
+     * @param value1 TODO
+     * @param value2 TODO
+     */
+    void updateInputAttributes(int value0, int value1, JTextComponent value2)
+    {
+      // TODO
+    }
+
+    /**
+     * propertyChange
+     * @param value0 TODO
+     */
+    public void propertyChange(PropertyChangeEvent value0)
+    {
+      // TODO
+    }
+
+    /**
+     * caretUpdate
+     * @param value0 TODO
+     */
+    public void caretUpdate(CaretEvent value0)
+    {
+      // TODO
+    }
+  }
+
+  /**
+   * currentRun
+   */
+  Element currentRun;
+
+  /**
+   * currentParagraph
+   */
+  Element currentParagraph;
+
+  /**
+   * inputAttributes
+   */
+  MutableAttributeSet inputAttributes;
+
+  /**
+   * Constructor StyledEditorKit
+   */
+  public StyledEditorKit()
+  {
+    // TODO
+  }
+
+  /**
+   * clone
+   * @returns Object
+   */
+  public Object clone()
+  {
+    return null; // TODO
+  }
+
+  /**
+   * getActions
+   * @returns Action[]
+   */
+  public Action[] getActions()
+  {
+    return null; // TODO
+  }
+
+  /**
+   * getInputAttributes
+   * @returns MutableAttributeSet
+   */
+  public MutableAttributeSet getInputAttributes()
+  {
+    return null; // TODO
+  }
+
+  /**
+   * getCharacterAttributeRun
+   * @returns Element
+   */
+  public Element getCharacterAttributeRun()
+  {
+    return null; // TODO
+  }
+
+  /**
+   * createDefaultDocument
+   * @returns Document
+   */
+  public Document createDefaultDocument()
+  {
+    return null; // TODO
+  }
+
+  /**
+   * install
+   * @param component TODO
+   */
+  public void install(JEditorPane component)
+  {
+    // TODO
+  }
+
+  /**
+   * deinstall
+   * @param component TODO
+   */
+  public void deinstall(JEditorPane component)
+  {
+    // TODO
+  }
+
+  /**
+   * getViewFactory
+   * @returns ViewFactory
+   */
+  public ViewFactory getViewFactory()
+  {
+    return null; // TODO
+  }
+
+  /**
+   * createInputAttributes
+   * @param element TODO
+   * @param set TODO
+   */
+  protected void createInputAttributes(Element element, MutableAttributeSet set)
+  {
+    // TODO
+  }
+}

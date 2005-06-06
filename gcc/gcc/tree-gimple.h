@@ -28,61 +28,68 @@ Boston, MA 02111-1307, USA.  */
 extern tree create_tmp_var_raw (tree, const char *);
 extern tree create_tmp_var_name (const char *);
 extern tree create_tmp_var (tree, const char *);
-extern bool is_gimple_tmp_var (tree);
 extern tree get_initialized_tmp_var (tree, tree *, tree *);
 extern tree get_formal_tmp_var (tree, tree *);
 extern void declare_tmp_vars (tree, tree);
 
-extern tree rationalize_compound_expr (tree);
-extern tree right_assocify_expr (tree);
 extern void annotate_all_with_locus (tree *, location_t);
 
 /* Validation of GIMPLE expressions.  Note that these predicates only check
    the basic form of the expression, they don't recurse to make sure that
    underlying nodes are also of the right form.  */
 
+typedef bool (*gimple_predicate)(tree);
+
 /* Returns true iff T is a valid GIMPLE statement.  */
-bool is_gimple_stmt (tree);
+extern bool is_gimple_stmt (tree);
 
 /* Returns true iff TYPE is a valid type for a scalar register variable.  */
-bool is_gimple_reg_type (tree);
+extern bool is_gimple_reg_type (tree);
 /* Returns true iff T is a scalar register variable.  */
-bool is_gimple_reg (tree);
+extern bool is_gimple_reg (tree);
+/* Returns true if T is a GIMPLE temporary variable, false otherwise.  */
+extern bool is_gimple_formal_tmp_var (tree);
+/* Returns true if T is a GIMPLE temporary register variable.  */
+extern bool is_gimple_formal_tmp_reg (tree);
 /* Returns true iff T is any sort of variable.  */
-bool is_gimple_variable (tree);
+extern bool is_gimple_variable (tree);
 /* Returns true iff T is a variable or an INDIRECT_REF (of a variable).  */
-bool is_gimple_min_lval (tree);
-/* Returns true iff T is an lvalue other than an INDIRECT_REF.  */
-bool is_gimple_addr_expr_arg (tree);
+extern bool is_gimple_min_lval (tree);
+/* Returns true iff T is something whose address can be taken.  */
+extern bool is_gimple_addressable (tree);
 /* Returns true iff T is any valid GIMPLE lvalue.  */
-bool is_gimple_lvalue (tree);
+extern bool is_gimple_lvalue (tree);
 
 /* Returns true iff T is a GIMPLE restricted function invariant.  */
-bool is_gimple_min_invariant (tree);
+extern bool is_gimple_min_invariant (tree);
 /* Returns true iff T is a GIMPLE rvalue.  */
-bool is_gimple_val (tree);
-/* Returns true iff T is a valid rhs for a MODIFY_EXPR.  */
-bool is_gimple_rhs (tree);
+extern bool is_gimple_val (tree);
+/* Returns true iff T is a GIMPLE asm statement input.  */
+extern bool is_gimple_asm_val (tree);
+/* Returns true iff T is a valid rhs for a MODIFY_EXPR where the LHS is a
+   GIMPLE temporary, a renamed user variable, or something else,
+   respectively.  */
+extern bool is_gimple_formal_tmp_rhs (tree);
+extern bool is_gimple_reg_rhs (tree);
+extern bool is_gimple_mem_rhs (tree);
+/* Returns the appropriate one of the above three predicates for the LHS
+   T.  */
+extern gimple_predicate rhs_predicate_for (tree);
 
 /* Returns true iff T is a valid if-statement condition.  */
-bool is_gimple_condexpr (tree);
+extern bool is_gimple_condexpr (tree);
 
 /* Returns true iff T is a type conversion.  */
-bool is_gimple_cast (tree);
-/* Returns true iff T is a valid CONSTRUCTOR element (either an rvalue or
-   another CONSTRUCTOR).  */
-bool is_gimple_constructor_elt (tree);
+extern bool is_gimple_cast (tree);
 /* Returns true iff T is a variable that does not need to live in memory.  */
-bool is_gimple_non_addressable (tree t);
+extern bool is_gimple_non_addressable (tree t);
 
+/* Returns true iff T is a valid call address expression.  */
+extern bool is_gimple_call_addr (tree);
 /* If T makes a function call, returns the CALL_EXPR operand.  */
-tree get_call_expr_in (tree t);
+extern tree get_call_expr_in (tree t);
 
-void recalculate_side_effects (tree);
-
-void append_to_statement_list (tree, tree *);
-void append_to_statement_list_force (tree, tree *);
-void append_to_compound_expr (tree, tree *);
+extern void recalculate_side_effects (tree);
 
 /* FIXME we should deduce this from the predicate.  */
 typedef enum fallback_t {
@@ -100,27 +107,30 @@ enum gimplify_status {
   GS_ALL_DONE	= 1	/* The expression is fully gimplified.  */
 };
 
-enum gimplify_status gimplify_expr (tree *, tree *, tree *,
-				    bool (*) (tree), fallback_t);
-void gimplify_stmt (tree *);
-void gimplify_to_stmt_list (tree *);
-void gimplify_body (tree *, tree);
-void push_gimplify_context (void);
-void pop_gimplify_context (tree);
+extern enum gimplify_status gimplify_expr (tree *, tree *, tree *,
+					   bool (*) (tree), fallback_t);
+extern void gimplify_type_sizes (tree, tree *);
+extern void gimplify_one_sizepos (tree *, tree *);
+extern void gimplify_stmt (tree *);
+extern void gimplify_to_stmt_list (tree *);
+extern void gimplify_body (tree *, tree, bool);
+extern void push_gimplify_context (void);
+extern void pop_gimplify_context (tree);
+extern void gimplify_and_add (tree, tree *);
 
 /* Miscellaneous helpers.  */
-tree get_base_address (tree t);
-void gimple_add_tmp_var (tree);
-tree gimple_current_bind_expr (void);
-void gimple_push_bind_expr (tree);
-void gimple_pop_bind_expr (void);
-void unshare_all_trees (tree);
-tree voidify_wrapper_expr (tree);
-tree gimple_build_eh_filter (tree, tree, tree);
-tree build_and_jump (tree *);
-tree alloc_stmt_list (void);
-void free_stmt_list (tree);
-tree force_labels_r (tree *, int *, void *);
+extern void gimple_add_tmp_var (tree);
+extern tree gimple_current_bind_expr (void);
+extern void gimple_push_bind_expr (tree);
+extern void gimple_pop_bind_expr (void);
+extern void unshare_all_trees (tree);
+extern tree voidify_wrapper_expr (tree, tree);
+extern tree gimple_build_eh_filter (tree, tree, tree);
+extern tree build_and_jump (tree *);
+extern tree alloc_stmt_list (void);
+extern void free_stmt_list (tree);
+extern tree force_labels_r (tree *, int *, void *);
+extern enum gimplify_status gimplify_va_arg_expr (tree *, tree *, tree *);
 
 /* In tree-nested.c.  */
 extern void lower_nested_functions (tree);

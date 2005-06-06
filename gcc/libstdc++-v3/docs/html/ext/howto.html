@@ -53,7 +53,7 @@
    <li><a href="mt_allocator.html"><code>__mt_alloc</code> </a></li>
    <li><a href="#4">Compile-time checks</a></li>
    <li><a href="#5">LWG Issues</a></li>
-   <li><a href="../18_support/howto.html#5">Demangling</a></li>
+   <li><a href="../18_support/howto.html#6">Demangling</a></li>
 </ul>
 
 <hr />
@@ -165,7 +165,7 @@
    <p>Here are the issues which have resulted in code changes to the library.
       The links are to the specific defect reports from a <strong>partial
       copy</strong> of the Issues List.  You can read the full version online
-      at the <a href="http://www.dkuug.dk/jtc1/sc22/wg21/">ISO C++
+      at the <a href="http://www.open-std.org/jtc1/sc22/wg21/">ISO C++
       Committee homepage</a>, linked to on the
       <a href="http://gcc.gnu.org/readings.html">GCC &quot;Readings&quot;
       page</a>.  If
@@ -351,7 +351,7 @@
         should probably not be calling <code>underflow()</code>.
     </dd> -->
 
-    <dt><a href="lwg-active.html#167">167</a>:
+    <dt><a href="lwg-defects.html#167">167</a>:
         <em>Improper use of traits_type::length()</em>
     </dt>
     <dd><code>op&lt;&lt;</code> with a <code>const char*</code> was
@@ -406,13 +406,19 @@
         However, no specification is given what this constructor should do.
     </dd>
 
+    <dt><a href="lwg-defects.html#243">243</a>:
+        <em>get and getline when sentry reports failure</em>
+    </dt>
+    <dd>Store a null character only if the character array has a non-zero size.
+    </dd>
+
     <dt><a href="lwg-defects.html#251">251</a>:
         <em>basic_stringbuf missing allocator_type</em>
     </dt>
-    <dd>This nested typdef was originally not specified.
+    <dd>This nested typedef was originally not specified.
     </dd>
 
-    <dt><a href="lwg-active.html#253">253</a>:
+    <dt><a href="lwg-defects.html#253">253</a>:
         <em>valarray helper functions are almost entirely useless</em>
     </dt>
     <dd>Make the copy constructor and copy-assignment operator declarations
@@ -479,16 +485,40 @@
     <dd>Change the format string to &quot;%.0Lf&quot;.
     </dd>
 
-    <dt><a href="lwg-active.html#389">389</a>:
+    <dt><a href="lwg-defects.html#365">365</a>:
+        <em>Lack of const-qualification in clause 27</em>
+    </dt>
+    <dd>Add const overloads of <code>is_open</code>.
+    </dd>
+
+    <dt><a href="lwg-defects.html#389">389</a>:
         <em>Const overload of valarray::operator[] returns by value</em>
     </dt>
     <dd>Change it to return a <code>const T&amp;</code>.
     </dd>
 
-    <dt><a href="lwg-active.html#402">402</a>:
+    <dt><a href="lwg-defects.html#402">402</a>:
         <em>Wrong new expression in [some_]allocator::construct</em>
     </dt>
     <dd>Replace &quot;new&quot; with &quot;::new&quot;.
+    </dd>
+
+    <dt><a href="lwg-active.html#409">409</a>:
+        <em>Closing an fstream should clear the error state</em>
+    </dt>
+    <dd>Have <code>open</code> clear the error flags.
+    </dd>
+
+    <dt><a href="lwg-active.html#434">434</a>:
+        <em>bitset::to_string() hard to use</em>
+    </dt>
+    <dd>Add three overloads, taking fewer template arguments.
+    </dd>
+
+    <dt><a href="lwg-active.html#453">453</a>:
+        <em>basic_stringbuf::seekoff need not always fail for an empty stream</em>
+    </dt>
+    <dd>Don't fail if the next pointer is null and newoff is zero.
     </dd>
 <!--
     <dt><a href="lwg-defects.html#"></a>:

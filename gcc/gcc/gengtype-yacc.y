@@ -1,6 +1,6 @@
 /* -*- indented-text -*- */
 /* Process source files and output type information.
-   Copyright (C) 2002 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2004 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -44,6 +44,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 %token STRUCT
 %token ENUM
 %token ALIAS
+%token NESTED_PTR
 %token <s>PARAM_IS
 %token NUM
 %token PERCENTPERCENT "%%"
@@ -159,10 +160,10 @@ yacc_ids: /* empty */
 	{ $$ = NULL; }
      | yacc_ids ID
         {
-	  pair_p p = xcalloc (1, sizeof (*p));
+	  pair_p p = XCNEW (struct pair);
 	  p->next = $1;
 	  p->line = lexer_line;
-	  p->opt = xmalloc (sizeof (*(p->opt)));
+	  p->opt = XNEW (struct options);
 	  p->opt->name = "tag";
 	  p->opt->next = NULL;
 	  p->opt->info = (char *)$2;
@@ -170,10 +171,10 @@ yacc_ids: /* empty */
 	}
      | yacc_ids CHAR
         {
-	  pair_p p = xcalloc (1, sizeof (*p));
+	  pair_p p = XCNEW (struct pair);
 	  p->next = $1;
 	  p->line = lexer_line;
-	  p->opt = xmalloc (sizeof (*(p->opt)));
+	  p->opt = XNEW (struct options);
 	  p->opt->name = "tag";
 	  p->opt->next = NULL;
 	  p->opt->info = xasprintf ("'%s'", $2);
@@ -184,7 +185,7 @@ yacc_ids: /* empty */
 struct_fields: { $$ = NULL; }
 	       | type optionsopt ID bitfieldopt ';' struct_fields
 	          {
-	            pair_p p = xmalloc (sizeof (*p));
+	            pair_p p = XNEW (struct pair);
 		    p->type = adjust_field_type ($1, $2);
 		    p->opt = $2;
 		    p->name = $3;
@@ -194,7 +195,7 @@ struct_fields: { $$ = NULL; }
 		  }
 	       | type optionsopt ID ARRAY ';' struct_fields
 	          {
-	            pair_p p = xmalloc (sizeof (*p));
+	            pair_p p = XNEW (struct pair);
 		    p->type = adjust_field_type (create_array ($1, $4), $2);
 		    p->opt = $2;
 		    p->name = $3;
@@ -204,7 +205,7 @@ struct_fields: { $$ = NULL; }
 		  }
 	       | type optionsopt ID ARRAY ARRAY ';' struct_fields
 	          {
-	            pair_p p = xmalloc (sizeof (*p));
+	            pair_p p = XNEW (struct pair);
 		    p->type = create_array (create_array ($1, $5), $4);
 		    p->opt = $2;
 		    p->name = $3;
@@ -279,6 +280,16 @@ option:   ID
             { $$ = create_option ($1, (void *)$3); }
 	| type_option '(' type ')'
 	    { $$ = create_option ($1, adjust_field_type ($3, NULL)); }
+	| NESTED_PTR '(' type ',' stringseq ',' stringseq ')'
+	    {
+	      struct nested_ptr_data d;
+
+	      d.type = adjust_field_type ($3, NULL);
+	      d.convert_to = $5;
+	      d.convert_from = $7;
+	      $$ = create_option ("nested_ptr",
+				  xmemdup (&d, sizeof (d), sizeof (d)));
+	    }
 	;
 
 optionseq: option
@@ -303,9 +314,9 @@ stringseq: STRING
 	     {
 	       size_t l1 = strlen ($1);
 	       size_t l2 = strlen ($2);
-	       char *s = xrealloc ((char *)$1, l1 + l2 + 1);
+	       char *s = XRESIZEVEC (char, $1, l1 + l2 + 1);
 	       memcpy (s + l1, $2, l2 + 1);
-	       free ((void *)$2);
+	       XDELETE ($2);
 	       $$ = s;
 	     }
 	   ;

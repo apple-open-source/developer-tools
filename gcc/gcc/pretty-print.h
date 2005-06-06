@@ -158,6 +158,8 @@ struct pretty_print_info
 #define pp_append_text(PP, B, E) \
   pp_base_append_text (pp_base (PP), B, E)
 #define pp_flush(PP)            pp_base_flush (pp_base (PP))
+#define pp_prepare_to_format(PP, TI, LOC) \
+  pp_base_prepare_to_format (pp_base (PP), TI, LOC)
 #define pp_format_text(PP, TI)  pp_base_format_text (pp_base (PP), TI)
 #define pp_format_verbatim(PP, TI) \
   pp_base_format_verbatim (pp_base (PP), TI)
@@ -229,7 +231,7 @@ struct pretty_print_info
                  IDENTIFIER_POINTER (T) + IDENTIFIER_LENGTH (T))
 
 #define pp_unsupported_tree(PP, T)                         \
-  pp_verbatim (pp_base (PP), "#`%s' not supported by %s#", \
+  pp_verbatim (pp_base (PP), "#%qs not supported by %s#", \
                tree_code_name[(int) TREE_CODE (T)], __FUNCTION__)
 
 
@@ -248,9 +250,21 @@ extern const char *pp_base_formatted_text (pretty_printer *);
 extern const char *pp_base_last_position_in_text (const pretty_printer *);
 extern void pp_base_emit_prefix (pretty_printer *);
 extern void pp_base_append_text (pretty_printer *, const char *, const char *);
-extern void pp_printf (pretty_printer *, const char *, ...) ATTRIBUTE_PRINTF_2;
+
+/* This header may be included before toplev.h, hence the duplicate
+   definitions to allow for GCC-specific formats.  */
+#if GCC_VERSION >= 3005
+#define ATTRIBUTE_GCC_PPDIAG(m, n) __attribute__ ((__format__ (__gcc_diag__, m ,n))) ATTRIBUTE_NONNULL(m)
+#else
+#define ATTRIBUTE_GCC_PPDIAG(m, n) ATTRIBUTE_NONNULL(m)
+#endif
+extern void pp_printf (pretty_printer *, const char *, ...)
+     ATTRIBUTE_GCC_PPDIAG(2,3);
+
 extern void pp_verbatim (pretty_printer *, const char *, ...);
 extern void pp_base_flush (pretty_printer *);
+extern void pp_base_prepare_to_format (pretty_printer *, text_info *,
+				       location_t *);
 extern void pp_base_format_text (pretty_printer *, text_info *);
 extern void pp_base_format_verbatim (pretty_printer *, text_info *);
 

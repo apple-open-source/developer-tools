@@ -1,5 +1,5 @@
 /* Definitions of target machine for GNU compiler.  Sun 68000/68020 version.
-   Copyright (C) 2000, 2002 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2002, 2004 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -23,6 +23,7 @@ Boston, MA 02111-1307, USA.  */
 #ifdef RTX_CODE
 extern HOST_WIDE_INT m68k_initial_elimination_offset (int from, int to);
 extern const char *output_move_const_into_data_reg (rtx *);
+extern int valid_mov3q_const (rtx);
 extern const char *output_move_simode_const (rtx *);
 extern const char *output_move_simode (rtx *);
 extern const char *output_move_himode (rtx *);
@@ -40,28 +41,20 @@ extern const char *output_iorsi3 (rtx *);
 extern const char *output_xorsi3 (rtx *);
 extern void m68k_output_pic_call (rtx dest);
 extern void output_dbcc_and_branch (rtx *);
-extern int const_uint32_operand (rtx, enum machine_mode);
-extern int const_sint32_operand (rtx, enum machine_mode);
 extern int floating_exact_log2 (rtx);
-extern int not_sp_operand (rtx, enum machine_mode);
-extern int valid_dbcc_comparison_p (rtx, enum machine_mode);
-extern int extend_operator (rtx, enum machine_mode);
 extern bool strict_low_part_peephole_ok (enum machine_mode mode, rtx first_insn, rtx target);
 
 /* Functions from m68k.c used in macros.  */
-extern bool symbolic_operand (rtx, enum machine_mode);
 extern int standard_68881_constant_p (rtx);
 extern void print_operand_address (FILE *, rtx);
 extern void print_operand (FILE *, rtx, int);
 extern void notice_update_cc (rtx, rtx);
-extern int general_src_operand (rtx, enum machine_mode);
-extern int nonimmediate_src_operand (rtx, enum machine_mode);
-extern int memory_src_operand (rtx, enum machine_mode);
-extern int pcrel_address (rtx, enum machine_mode);
 extern rtx legitimize_pic_address (rtx, enum machine_mode, rtx);
+
 #endif /* RTX_CODE */
 
 extern int flags_in_68881 (void);
 extern bool use_return_insn (void);
 extern void override_options (void);
 extern void init_68881_table (void);
+extern int m68k_hard_regno_rename_ok(unsigned int, unsigned int);

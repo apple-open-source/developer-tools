@@ -184,8 +184,6 @@ extern int target_flags;
 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,/*r224..r255*/\
 1,1,1,1}
 
-#define NON_SAVING_SETJMP 0
-
 #define REG_ALLOC_ORDER {			\
     0x88,0x89,0x8a,0x8b,0x8c,0x8d,0x8e,0x8f,	\
     0x90,0x91,0x92,0x93,0x94,0x95,0x96,0x97,	\
@@ -454,9 +452,6 @@ enum reg_class {
 #define LIBCALL_VALUE(MODE)  gen_rtx_REG ((MODE), REG_RESULT)
 
 #define FUNCTION_VALUE_REGNO_P(N) ((N) == REG_RESULT)
-
-/* Indicate that large structures are passed by reference.  */
-#define FUNCTION_ARG_PASS_BY_REFERENCE(CUM,MODE,TYPE,NAMED)	0
 
 #define DEFAULT_PCC_STRUCT_RETURN 0
 
@@ -807,8 +802,6 @@ extern int ip2k_reorg_merge_qimode;
 
 #define FUNCTION_PROFILER(FILE, LABELNO)  \
   fprintf ((FILE), "/* profiler %d */", (LABELNO))
-
-#define TARGET_MEM_FUNCTIONS
 
 #undef ENDFILE_SPEC
 #undef LINK_SPEC

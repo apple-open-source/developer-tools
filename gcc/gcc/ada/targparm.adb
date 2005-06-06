@@ -53,6 +53,7 @@ package body Targparm is
       FFO,  --   Fractional_Fixed_Ops
       MOV,  --   Machine_Overflows
       MRN,  --   Machine_Rounds
+      PAS,  --   Preallocated_Stacks
       S64,  --   Support_64_Bit_Divides
       SAG,  --   Support_Aggregates
       SCA,  --   Support_Composite_Assign
@@ -94,6 +95,7 @@ package body Targparm is
    FFO_Str : aliased constant Source_Buffer := "Fractional_Fixed_Ops";
    MOV_Str : aliased constant Source_Buffer := "Machine_Overflows";
    MRN_Str : aliased constant Source_Buffer := "Machine_Rounds";
+   PAS_Str : aliased constant Source_Buffer := "Preallocated_Stacks";
    S64_Str : aliased constant Source_Buffer := "Support_64_Bit_Divides";
    SAG_Str : aliased constant Source_Buffer := "Support_Aggregates";
    SCA_Str : aliased constant Source_Buffer := "Support_Composite_Assign";
@@ -132,6 +134,7 @@ package body Targparm is
       FFO_Str'Access,
       MOV_Str'Access,
       MRN_Str'Access,
+      PAS_Str'Access,
       S64_Str'Access,
       SAG_Str'Access,
       SCA_Str'Access,
@@ -151,6 +154,33 @@ package body Targparm is
 
       HIM_Str'Access,
       LSI_Str'Access);
+
+   -----------------------
+   -- Local Subprograms --
+   -----------------------
+
+   procedure Set_Profile_Restrictions (P : Profile_Name);
+   --  Set Restrictions_On_Target for the given profile
+
+   ------------------------------
+   -- Set_Profile_Restrictions --
+   ------------------------------
+
+   procedure Set_Profile_Restrictions (P : Profile_Name) is
+      R : Restriction_Flags  renames Profile_Info (P).Set;
+      V : Restriction_Values renames Profile_Info (P).Value;
+
+   begin
+      for J in R'Range loop
+         if R (J) then
+            Restrictions_On_Target.Set (J) := True;
+
+            if J in All_Parameter_Restrictions then
+               Restrictions_On_Target.Value (J) := V (J);
+            end if;
+         end if;
+      end loop;
+   end Set_Profile_Restrictions;
 
    ---------------------------
    -- Get_Target_Parameters --
@@ -213,6 +243,26 @@ package body Targparm is
          --  Skip comments quickly
 
          if System_Text (P) = '-' then
+            goto Line_Loop_Continue;
+
+         --  Test for pragma Profile (Ravenscar);
+
+         elsif System_Text (P .. P + 26) =
+                 "pragma Profile (Ravenscar);"
+         then
+            Set_Profile_Restrictions (Ravenscar);
+            Opt.Task_Dispatching_Policy := 'F';
+            Opt.Locking_Policy     := 'C';
+            P := P + 27;
+            goto Line_Loop_Continue;
+
+         --  Test for pragma Profile (Restricted);
+
+         elsif System_Text (P .. P + 27) =
+                 "pragma Profile (Restricted);"
+         then
+            Set_Profile_Restrictions (Restricted);
+            P := P + 28;
             goto Line_Loop_Continue;
 
          --  Test for pragma Restrictions
@@ -326,6 +376,13 @@ package body Targparm is
             Write_Eol;
             Fatal := True;
             Set_Standard_Output;
+
+         --  Test for pragma Detect_Blocking;
+
+         elsif System_Text (P .. P + 22) = "pragma Detect_Blocking;" then
+            P := P + 23;
+            Opt.Detect_Blocking := True;
+            goto Line_Loop_Continue;
 
          --  Discard_Names
 
@@ -503,6 +560,7 @@ package body Targparm is
                      when FFO => Fractional_Fixed_Ops_On_Target      := Result;
                      when MOV => Machine_Overflows_On_Target         := Result;
                      when MRN => Machine_Rounds_On_Target            := Result;
+                     when PAS => Preallocated_Stacks_On_Target       := Result;
                      when S64 => Support_64_Bit_Divides_On_Target    := Result;
                      when SAG => Support_Aggregates_On_Target        := Result;
                      when SCA => Support_Composite_Assign_On_Target  := Result;

@@ -447,7 +447,7 @@ gen_type (const char *ret_val, tree t, formals_style style)
 	  break;
 
         default:
-          abort ();
+          gcc_unreachable ();
         }
     }
   if (TYPE_READONLY (t))
@@ -554,11 +554,12 @@ gen_aux_info_record (tree fndecl, int is_definition, int is_implicit,
   if (flag_gen_aux_info)
     {
       static int compiled_from_record = 0;
+      expanded_location xloc = expand_location (DECL_SOURCE_LOCATION (fndecl));
 
       /* Each output .X file must have a header line.  Write one now if we
 	 have not yet done so.  */
 
-      if (! compiled_from_record++)
+      if (!compiled_from_record++)
 	{
 	  /* The first line tells which directory file names are relative to.
 	     Currently, -aux-info works only for files in the working
@@ -569,8 +570,7 @@ gen_aux_info_record (tree fndecl, int is_definition, int is_implicit,
       /* Write the actual line of auxiliary info.  */
 
       fprintf (aux_info_file, "/* %s:%d:%c%c */ %s;",
-	       DECL_SOURCE_FILE (fndecl),
-	       DECL_SOURCE_LINE (fndecl),
+	       xloc.file, xloc.line,
 	       (is_implicit) ? 'I' : (is_prototyped) ? 'N' : 'O',
 	       (is_definition) ? 'F' : 'C',
 	       gen_decl (fndecl, is_definition, ansi));

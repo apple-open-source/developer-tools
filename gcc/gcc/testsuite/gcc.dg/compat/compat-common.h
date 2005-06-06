@@ -24,5 +24,20 @@
 #define DEBUG_FINI
 #endif
 
+#ifdef __GNUC__
+#define CINT(x, y) (x + y * __extension__ 1i)
+#define CDBL(x, y) (x + y * __extension__ 1i)
+#else
+#ifdef __SUNPRO_C
+/* ??? Complex support without <complex.h>.  */
+#else
+#include <complex.h>
+#endif
+#ifndef SKIP_COMPLEX_INT
+#define CINT(x, y) ((_Complex int) (x + y * _Complex_I))
+#endif
+#define CDBL(x, y) (x + y * _Complex_I)
+#endif
+
 extern void abort (void);
 extern int fails;

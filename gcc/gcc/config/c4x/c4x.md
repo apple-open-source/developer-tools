@@ -320,8 +320,8 @@
 ;        op3             fetch executed
 ; This means that we can allow any instruction in the last delay slot
 ; and only instructions which modify registers in the first two. 
-; lda can not be executed in the first delay slot 
-; and ldpk can not be executed in the first two delay slots.
+; lda cannot be executed in the first delay slot 
+; and ldpk cannot be executed in the first two delay slots.
 
 (define_attr "onlyreg" "false,true"
        (cond [(eq_attr "type" "unary,unarycc")
@@ -474,37 +474,22 @@
   ])
 
 ;
-; C4x FUNCTIONAL UNITS
-;
-; Define functional units for instruction scheduling to minimize
-; pipeline conflicts.
+; C4x PIPELINE MODEL
 ;
 ; With the C3x, an external memory write (with no wait states) takes
 ; two cycles and an external memory read (with no wait states) takes
 ; one cycle.  However, an external read following an external write
 ; takes two cycles.  With internal memory, reads and writes take
 ; half a cycle.
-;
 ; When a C4x address register is loaded it will not be available for
 ; an extra machine cycle.  Calculating with a C4x address register
-; makes it unavailable for 2 machine cycles.  To notify GCC of these
-; pipeline delays, each of the auxiliary and index registers are declared
-; as separate functional units.
+; makes it unavailable for 2 machine cycles.
 ;
-; (define_function_unit NAME MULTIPLICITY SIMULTANEITY
-;			TEST READY-DELAY ISSUE-DELAY [CONFLICT-LIST])
-;
-; MULTIPLICITY 1 (C4x has no independent identical function units)
-; SIMULTANEITY 0 (C4x is pipelined)
-; READY_DELAY  1 (Results usually ready after every cyle)
-; ISSUE_DELAY  1 (Can issue insns every cycle)
-
 ; Just some dummy definitions. The real work is done in c4x_adjust_cost.
 ; These are needed so the min/max READY_DELAY is known.
 
-(define_function_unit "dummy" 1 0 (const_int 0) 1 1)
-(define_function_unit "dummy" 1 0 (const_int 0) 2 1)
-(define_function_unit "dummy" 1 0 (const_int 0) 3 1)
+(define_insn_reservation "any_insn" 1 (const_int 1) "nothing")
+(define_insn_reservation "slowest_insn" 3 (const_int 0) "nothing")
 
 ; The attribute setar0 is set to 1 for insns where ar0 is a dst operand.
 ; Note that the attributes unarycc and binarycc do not apply
@@ -5589,7 +5574,7 @@
   "0"
   "")
 
-(define_expand "movstrqi_small"
+(define_expand "movmemqi_small"
   [(parallel [(set (mem:BLK (match_operand:BLK 0 "src_operand" ""))
                    (mem:BLK (match_operand:BLK 1 "src_operand" "")))
               (use (match_operand:QI 2 "immediate_operand" ""))
@@ -5649,7 +5634,7 @@
 ; operand 3 is the shared alignment
 ; operand 4 is a scratch register
 
-(define_insn "movstrqi_large"
+(define_insn "movmemqi_large"
   [(set (mem:BLK (match_operand:QI 0 "addr_reg_operand" "a"))
         (mem:BLK (match_operand:QI 1 "addr_reg_operand" "a")))
    (use (match_operand:QI 2 "immediate_operand" "i"))
@@ -5696,7 +5681,7 @@
  [(set_attr "type" "multi")])
 
 ; Operand 2 is the count, operand 3 is the alignment.
-(define_expand "movstrqi"
+(define_expand "movmemqi"
   [(parallel [(set (mem:BLK (match_operand:BLK 0 "src_operand" ""))
                    (mem:BLK (match_operand:BLK 1 "src_operand" "")))
               (use (match_operand:QI 2 "immediate_operand" ""))
@@ -5717,11 +5702,11 @@
    tmp = gen_reg_rtx (QImode);
    /* Disabled because of reload problems.  */
    if (0 && INTVAL (operands[2]) < 8)
-     emit_insn (gen_movstrqi_small (operands[0], operands[1], operands[2],
+     emit_insn (gen_movmemqi_small (operands[0], operands[1], operands[2],
                                     operands[3], tmp));
    else
      {
-      emit_insn (gen_movstrqi_large (operands[0], operands[1], operands[2],
+      emit_insn (gen_movmemqi_large (operands[0], operands[1], operands[2],
                                      operands[3], tmp));
      }
    DONE;
@@ -5924,7 +5909,7 @@
  "push\\t%0"
  [(set_attr "type" "push")])
 
-; we can not use this because the popf will destroy the low 8 bits
+; we cannot use this because the popf will destroy the low 8 bits
 ;(define_insn "pophf"
 ;  [(set (match_operand:HF 0 "reg_operand" "=h")
 ;        (mem:HF (post_dec:QI (reg:QI 20))))

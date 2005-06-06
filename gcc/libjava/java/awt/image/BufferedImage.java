@@ -1,4 +1,5 @@
-/* Copyright (C) 2000, 2002, 2003  Free Software Foundation
+/* BufferedImage.java --
+   Copyright (C) 2000, 2002, 2003, 2004  Free Software Foundation
 
 This file is part of GNU Classpath.
 
@@ -37,6 +38,8 @@ exception statement from your version. */
 
 package java.awt.image;
 
+import gnu.java.awt.ComponentDataBlitOp;
+
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.GraphicsEnvironment;
@@ -45,9 +48,10 @@ import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.Transparency;
 import java.awt.color.ColorSpace;
+import java.util.HashSet;
 import java.util.Hashtable;
+import java.util.Iterator;
 import java.util.Vector;
-import gnu.java.awt.ComponentDataBlitOp;
 
 /**
  * A buffered image always starts at coordinates (0, 0).
@@ -57,7 +61,7 @@ import gnu.java.awt.ComponentDataBlitOp;
  * height of the image. This tile is always considered to be checked
  * out.
  * 
- * @author Rolf W. Rasmussen <rolfwr@ii.uib.no>
+ * @author Rolf W. Rasmussen (rolfwr@ii.uib.no)
  */
 public class BufferedImage extends Image
   implements WritableRenderedImage
@@ -77,20 +81,20 @@ public class BufferedImage extends Image
                           TYPE_BYTE_BINARY    = 12,
                           TYPE_BYTE_INDEXED   = 13;
   
-  final static int[] bits3 = { 8, 8, 8 };
-  final static int[] bits4 = { 8, 8, 8 };
-  final static int[] bits1byte = { 8 };
-  final static int[] bits1ushort = { 16 };
+  static final int[] bits3 = { 8, 8, 8 };
+  static final int[] bits4 = { 8, 8, 8 };
+  static final int[] bits1byte = { 8 };
+  static final int[] bits1ushort = { 16 };
   
-  final static int[] masks_int = { 0x00ff0000,
+  static final int[] masks_int = { 0x00ff0000,
 				   0x0000ff00,
 				   0x000000ff,
 				   DataBuffer.TYPE_INT };
-  final static int[] masks_565 = { 0xf800,
+  static final int[] masks_565 = { 0xf800,
 				   0x07e0,
 				   0x001f,
 				   DataBuffer.TYPE_USHORT};
-  final static int[] masks_555 = { 0x7c00,
+  static final int[] masks_555 = { 0x7c00,
 				   0x03e0,
 				   0x001f,
 				   DataBuffer.TYPE_USHORT};
@@ -442,7 +446,57 @@ public class BufferedImage extends Image
     
   public ImageProducer getSource()
   {
-    throw new UnsupportedOperationException("not implemented");
+    return new ImageProducer() {
+        
+        HashSet consumers = new HashSet();
+
+        public void addConsumer(ImageConsumer ic)
+        {
+          consumers.add(ic);
+        }
+
+        public boolean isConsumer(ImageConsumer ic)
+        {
+          return consumers.contains(ic);
+        }
+
+        public void removeConsumer(ImageConsumer ic)
+        {
+          consumers.remove(ic);
+        }
+
+        public void startProduction(ImageConsumer ic)
+        {
+          int x = 0;
+          int y = 0;
+          int width = getWidth();
+          int height = getHeight();
+          int stride = width;
+          int offset = 0;
+          int[] pixels = getRGB(x, y, 
+                                width, height, 
+                                (int[])null, offset, stride);
+          ColorModel model = getColorModel();
+
+          consumers.add(ic);
+
+          Iterator i = consumers.iterator();
+          while(i.hasNext())
+            {
+              ImageConsumer c = (ImageConsumer) i.next();
+              c.setHints(ImageConsumer.SINGLEPASS);
+              c.setDimensions(getWidth(), getHeight());
+              c.setPixels(x, y, width, height, model, pixels, offset, stride);
+              c.imageComplete(ImageConsumer.STATICIMAGEDONE);
+            }
+        }
+
+        public void requestTopDownLeftRightResend(ImageConsumer ic)
+        {
+          startProduction(ic);
+        }
+
+      };
   }
   
   public Vector getSources()

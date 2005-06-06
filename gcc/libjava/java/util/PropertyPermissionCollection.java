@@ -1,5 +1,5 @@
 /* PropertyPermissionCollection.java -- a collection of PropertyPermissions
-   Copyright (C) 2002 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2004, 2005  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -47,7 +47,7 @@ import java.security.PermissionCollection;
  * PropertyPermissions, and correctly implements <code>implies</code>. It
  * is synchronized, as specified in the superclass.
  *
- * @author Eric Blake <ebb9@email.byu.edu>
+ * @author Eric Blake (ebb9@email.byu.edu)
  * @status an undocumented class, but this matches Sun's serialization
  */
 class PropertyPermissionCollection extends PermissionCollection
@@ -103,10 +103,12 @@ class PropertyPermissionCollection extends PermissionCollection
   /**
    * Returns true if this collection implies the given permission. This even
    * returns true for this case:
-   * <p>
-<pre>collection.add(new PropertyPermission("a.*", "read"));
-collection.add(new PropertyPermission("a.b.*", "write"));
-collection.implies(new PropertyPermission("a.b.c", "read,write"));</pre>
+   *
+   * <pre>
+   * collection.add(new PropertyPermission("a.*", "read"));
+   * collection.add(new PropertyPermission("a.b.*", "write"));
+   * collection.implies(new PropertyPermission("a.b.c", "read,write"));
+   * </pre>
    *
    * @param permission the permission to check
    * @return true if it is implied by this
@@ -145,7 +147,7 @@ collection.implies(new PropertyPermission("a.b.c", "read,write"));</pre>
               return true;
           }
 
-        prefixLength = name.lastIndexOf('.', prefixLength);
+        prefixLength = name.lastIndexOf('.', prefixLength - 1);
         if (prefixLength < 0)
           return false;
         name = name.substring(0, prefixLength + 1) + '*';

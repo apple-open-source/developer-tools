@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2004, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -65,6 +65,7 @@ package body Snames is
      "_abort_signal#" &
      "_alignment#" &
      "_assign#" &
+     "_atcb#" &
      "_chain#" &
      "_clean#" &
      "_controller#" &
@@ -81,6 +82,7 @@ package body Snames is
      "_secondary_stack#" &
      "_service#" &
      "_size#" &
+     "_stack#" &
      "_tags#" &
      "_task#" &
      "_task_id#" &
@@ -104,8 +106,6 @@ package body Snames is
      "float_io#" &
      "integer_io#" &
      "modular_io#" &
-     "a_textio#" &
-     "a_witeio#" &
      "const#" &
      "<error>#" &
      "go#" &
@@ -119,8 +119,9 @@ package body Snames is
      "system#" &
      "text_io#" &
      "wide_text_io#" &
+     "wide_wide_text_io#" &
      "no_dsa#" &
-     "glade_dsa#" &
+     "garlic_dsa#" &
      "polyorb_dsa#" &
      "addr#" &
      "async#" &
@@ -145,6 +146,7 @@ package body Snames is
      "target#" &
      "req#" &
      "obj_typecode#" &
+     "stub#" &
      "Oabs#" &
      "Oand#" &
      "Omod#" &
@@ -166,10 +168,12 @@ package body Snames is
      "Oexpon#" &
      "ada_83#" &
      "ada_95#" &
+     "ada_05#" &
      "c_pass_by_copy#" &
      "compile_time_warning#" &
      "component_alignment#" &
      "convention_identifier#" &
+     "detect_blocking#" &
      "discard_names#" &
      "elaboration_checks#" &
      "eliminate#" &
@@ -190,6 +194,7 @@ package body Snames is
      "persistent_data#" &
      "persistent_object#" &
      "profile#" &
+     "profile_warnings#" &
      "propagate_exceptions#" &
      "queuing_policy#" &
      "ravenscar#" &
@@ -249,7 +254,6 @@ package body Snames is
      "inline_always#" &
      "inline_generic#" &
      "inspection_point#" &
-     "interface#" &
      "interface_name#" &
      "interrupt_handler#" &
      "interrupt_priority#" &
@@ -269,7 +273,6 @@ package body Snames is
      "obsolescent#" &
      "optimize#" &
      "optional_overriding#" &
-     "overriding#" &
      "pack#" &
      "page#" &
      "passive#" &
@@ -350,15 +353,16 @@ package body Snames is
      "name#" &
      "nca#" &
      "no#" &
-     "on#" &
-     "parameter_types#" &
-     "reference#" &
+     "no_dependence#" &
      "no_dynamic_attachment#" &
      "no_dynamic_interrupts#" &
      "no_requeue#" &
      "no_requeue_statements#" &
      "no_task_attributes#" &
      "no_task_attributes_package#" &
+     "on#" &
+     "parameter_types#" &
+     "reference#" &
      "restricted#" &
      "result_mechanism#" &
      "result_type#" &
@@ -422,6 +426,7 @@ package body Snames is
      "first_bit#" &
      "fixed_value#" &
      "fore#" &
+     "has_access_values#" &
      "has_discriminants#" &
      "identity#" &
      "img#" &
@@ -442,6 +447,7 @@ package body Snames is
      "max_size_in_storage_elements#" &
      "maximum_alignment#" &
      "mechanism_code#" &
+     "mod#" &
      "model_emin#" &
      "model_epsilon#" &
      "model_mantissa#" &
@@ -469,6 +475,7 @@ package body Snames is
      "small#" &
      "storage_size#" &
      "storage_unit#" &
+     "stream_size#" &
      "tag#" &
      "target_name#" &
      "terminated#" &
@@ -486,6 +493,7 @@ package body Snames is
      "value_size#" &
      "version#" &
      "wchar_t_size#" &
+     "wide_wide_width#" &
      "wide_width#" &
      "width#" &
      "word_size#" &
@@ -507,7 +515,9 @@ package body Snames is
      "truncation#" &
      "value#" &
      "wide_image#" &
+     "wide_wide_image#" &
      "wide_value#" &
+     "wide_wide_value#" &
      "output#" &
      "read#" &
      "write#" &
@@ -562,7 +572,6 @@ package body Snames is
      "is#" &
      "limited#" &
      "loop#" &
-     "mod#" &
      "new#" &
      "not#" &
      "null#" &
@@ -619,16 +628,24 @@ package body Snames is
      "requeue#" &
      "tagged#" &
      "raise_exception#" &
+     "ada_roots#" &
      "binder#" &
+     "binder_driver#" &
      "body_suffix#" &
      "builder#" &
      "compiler#" &
+     "compiler_driver#" &
+     "compiler_kind#" &
+     "compute_dependency#" &
      "cross_reference#" &
+     "default_linker#" &
      "default_switches#" &
+     "dependency_option#" &
      "exec_dir#" &
      "executable#" &
      "executable_suffix#" &
      "extends#" &
+     "externally_built#" &
      "finder#" &
      "global_configuration_pragmas#" &
      "gnatls#" &
@@ -636,6 +653,8 @@ package body Snames is
      "implementation#" &
      "implementation_exceptions#" &
      "implementation_suffix#" &
+     "include_option#" &
+     "language_processing#" &
      "languages#" &
      "library_dir#" &
      "library_auto_init#" &
@@ -652,6 +671,7 @@ package body Snames is
      "linker#" &
      "local_configuration_pragmas#" &
      "locally_removed_files#" &
+     "metrics#" &
      "naming#" &
      "object_dir#" &
      "pretty_printer#" &
@@ -667,7 +687,10 @@ package body Snames is
      "specification_suffix#" &
      "switches#" &
      "unaligned_valid#" &
-      "#";
+     "interface#" &
+     "overriding#" &
+     "synchronized#" &
+     "#";
 
    ---------------------
    -- Generated Names --
@@ -795,6 +818,8 @@ package body Snames is
    begin
       if N = Name_AST_Entry then
          return Pragma_AST_Entry;
+      elsif N = Name_Interface then
+         return Pragma_Interface;
       elsif N = Name_Storage_Size then
          return Pragma_Storage_Size;
       elsif N = Name_Storage_Unit then
@@ -967,6 +992,7 @@ package body Snames is
    begin
       return N in First_Pragma_Name .. Last_Pragma_Name
         or else N = Name_AST_Entry
+        or else N = Name_Interface
         or else N = Name_Storage_Size
         or else N = Name_Storage_Unit;
    end Is_Pragma_Name;

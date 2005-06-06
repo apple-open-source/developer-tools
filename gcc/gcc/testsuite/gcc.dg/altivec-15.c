@@ -1,18 +1,30 @@
-/* APPLE LOCAL file AltiVec */
-/* This is a compile-only test for interaction of "-maltivec" and "-save-temps".  */
-/* Author:  Ziemowit Laski  <zlaski@apple.com>.  */
 /* { dg-do compile { target powerpc*-*-* } } */
-/* { dg-options "-save-temps -maltivec" } */
+/* { dg-xfail-if "" { "powerpc-ibm-aix*" } { "-maltivec" } { "" } } */
+/* { dg-options "-maltivec" } */
 
-#define vector_float vector float
-#define vector_float_foo vector float foo
-#define vector_float_bar_eq vector float bar =
+#include <altivec.h>
 
-/* NB: Keep the following split across three lines.  */
-vector
+/* Test whether the C front-end is not excessively picky about
+   the integral types and literals that AltiVec instrinsics will
+   accept.  */
+
+vector int vi = { 1, 2, 3, 4 };
+
 int
-a1 = { 100, 200, 300, 400 };
+main (void)
+{
+    unsigned long ul = 2;
+    signed long sl = 2;
+    unsigned int ui = 2;
+    signed int si = 2;
+    float fl = 2.0;
 
-vector_float f1 = { 1.0, 2.0, 3.0, 4.0 };  
-vector_float_foo = { 3.0, 4.0, 5.0, 6.0 };
-vector_float_bar_eq { 8.0, 7.0, 6.0, 5.0 };
+    vec_dst (&vi, ul, '\0');
+    vec_dst (&vi, sl, 0);
+    vec_dst (&vi, ui, '\0');
+    vec_dst (&vi, si, 0);
+    vec_dstst (&vi, (short)fl, '\0');
+
+    return 0;
+}
+

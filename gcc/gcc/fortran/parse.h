@@ -1,5 +1,5 @@
 /* Parser header
-   Copyright (C) 2003 Free Software Foundaton, Inc.
+   Copyright (C) 2003 Free Software Foundation, Inc.
    Contributed by Steven Bosscher
 
 This file is part of GCC.
@@ -40,10 +40,12 @@ typedef struct gfc_state_data
 {
   gfc_compile_state state;
   gfc_symbol *sym;              /* Block name associated with this level */
+  gfc_symtree *do_variable;     /* For DO blocks the iterator variable.  */
+
   struct gfc_code *head, *tail;
   struct gfc_state_data *previous;
 
-  /* Block-specific state data. */
+  /* Block-specific state data.  */
   union
   {
     gfc_st_label *end_do_label;
@@ -57,6 +59,7 @@ extern gfc_state_data *gfc_state_stack;
 #define gfc_current_block() (gfc_state_stack->sym)
 #define gfc_current_state() (gfc_state_stack->state)
 
+int gfc_check_do_variable (gfc_symtree *);
 try gfc_find_state (gfc_compile_state);
 gfc_state_data *gfc_enclosing_unit (gfc_compile_state *);
 const char *gfc_ascii_statement (gfc_statement);

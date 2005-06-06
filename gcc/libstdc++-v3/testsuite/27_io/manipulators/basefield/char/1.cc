@@ -35,22 +35,37 @@
 struct MyNP : std::numpunct<char>
 {
   std::string do_grouping() const;
-  char   do_thousands_sep() const;
+  char do_thousands_sep() const;
 };
 
-std::string MyNP::do_grouping() const { std::string s("\3"); return s; }
-char   MyNP::do_thousands_sep() const { return ' '; }
+std::string
+MyNP::do_grouping() const
+{
+  std::string s("\3");
+  return s;
+}
 
+char
+MyNP::do_thousands_sep() const
+{ return ' '; }
 
 void test01()
 {
   bool test __attribute__((unused)) = true;
-
-  const char lit[] = "0123 456\n: 01 234 567:\n:0123 456   :\n"
-                     ":    012 345:\n:     01 234:\n:0726 746 425:\n"
-                     ":04 553 207 :\n:   0361 100:\n:       0173:\n"
-                     "0x12 345 678\n|0x000012 345 678|\n|0x12 345 6780000|\n"
-                     "|00000x12 345 678|\n|0x000012 345 678|\n";
+  const char lit[] = "0123 456\n"
+                     ": 01 234 567:\n"
+                     ":0123 456   :\n"
+                     ":    012 345:\n"
+                     ":     01 234:\n"
+                     ":0726 746 425:\n"
+                     ":04 553 207 :\n"
+                     ":   0361 100:\n"
+                     ":       0173:\n"
+                     "0x12 345 678\n"
+                     "|0x000012 345 678|\n"
+                     "|0x12 345 6780000|\n"
+                     "|00000x12 345 678|\n"
+                     "|0x000012 345 678|\n";
 
   std::ostringstream oss;
   oss.imbue(std::locale(std::locale(), new MyNP));
@@ -102,27 +117,10 @@ void test01()
   VERIFY( oss.good() );
   VERIFY( oss.str() == lit );
 }
+
 int 
 main() 
 {
   test01();
   return 0;
 }
-
-// Projected output:
-/*
-0123 456
-: 01 234 567:
-:0123 456   :
-:    012 345:
-:     01 234:
-:0726 746 425:
-:04 553 207 :
-:   0361 100:
-:       0173:
-0x12 345 678
-|0x000012 345 678|
-|0x12 345 6780000|
-|00000x12 345 678|
-|0x000012 345 678|
-*/

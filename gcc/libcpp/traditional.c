@@ -1,5 +1,5 @@
 /* CPP Library - traditional lexical analysis and macro expansion.
-   Copyright (C) 2002, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2004, 2005 Free Software Foundation, Inc.
    Contributed by Neil Booth, May 2002
 
 This program is free software; you can redistribute it and/or modify it
@@ -76,7 +76,7 @@ enum ls {ls_none = 0,		/* Normal state.  */
 	 ls_predicate,		/* After the predicate, maybe paren?  */
 	 ls_answer};		/* In answer to predicate.  */
 
-/* Lexing TODO: Maybe handle space in escaped newlines.  Stop cpplex.c
+/* Lexing TODO: Maybe handle space in escaped newlines.  Stop lex.c
    from recognizing comments and directives during its lexing pass.  */
 
 static const uchar *skip_whitespace (cpp_reader *, const uchar *, int);
@@ -701,6 +701,7 @@ push_replacement_text (cpp_reader *pfile, cpp_hashnode *node)
       cpp_macro *macro = node->value.macro;
       macro->used = 1;
       text = macro->exp.text;
+      macro->traditional = 1;
       len = macro->count;
     }
 
@@ -934,6 +935,7 @@ save_replacement_text (cpp_reader *pfile, cpp_macro *macro,
       memcpy (exp, pfile->out.base, len);
       exp[len] = '\n';
       macro->exp.text = exp;
+      macro->traditional = 1;
       macro->count = len;
     }
   else
@@ -949,6 +951,7 @@ save_replacement_text (cpp_reader *pfile, cpp_macro *macro,
       exp = BUFF_FRONT (pfile->a_buff);
       block = (struct block *) (exp + macro->count);
       macro->exp.text = exp;
+      macro->traditional = 1;
 
       /* Write out the block information.  */
       block->text_len = len;

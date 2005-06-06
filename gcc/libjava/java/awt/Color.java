@@ -1,5 +1,5 @@
 /* Color.java -- represents a color in Java
-   Copyright (C) 1999, 2002 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2002, 2005  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -53,7 +53,7 @@ import java.io.Serializable;
  * <a href="http://www.w3.org/pub/WWW/Graphics/Color/sRGB.html">
  * http://www.w3.org/pub/WWW/Graphics/Color/sRGB.html</a>.
  *
- * @author Aaron M. Renn <arenn@urbanophile.com>
+ * @author Aaron M. Renn (arenn@urbanophile.com)
  * @see ColorSpace
  * @see AlphaComposite
  * @since 1.0
@@ -506,7 +506,7 @@ public class Color implements Paint, Serializable
 
   /**
    * Returns the RGB value for this color, in the sRGB color space. The blue
-   * value will be in bits 0-7, green in 8-15, red in 6-23, and alpha value in
+   * value will be in bits 0-7, green in 8-15, red in 16-23, and alpha value in
    * 24-31.
    *
    * @return the RGB value for this color
@@ -772,9 +772,9 @@ public class Color implements Paint, Serializable
         if (red == max)
           array[0] = (green - blue) / delta;
         else if (green == max)
-          array[0] = 1 / 3 + (blue - red) / delta;
+          array[0] = 1f / 3 + (blue - red) / delta;
         else
-          array[0] = 2 / 3 + (red - green) / delta;
+          array[0] = 2f / 3 + (red - green) / delta;
         if (array[0] < 0)
           array[0]++;
       }

@@ -23,6 +23,13 @@ if [is_remote host] {
     }
 }
 
+# APPLE LOCAL begin headermaps
+file mkdir d
+foreach header { A.h bA.h c.h d/d.h } {
+    remote_download host $srcdir/$subdir/inc/$header $header
+}
+# APPLE LOCAL end headermaps
+
 # Load support procs.
 load_lib gcc-dg.exp
 

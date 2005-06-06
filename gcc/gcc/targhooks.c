@@ -62,6 +62,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "tm_p.h"
 #include "target-def.h"
 
+
 void
 default_external_libcall (rtx fun ATTRIBUTE_UNUSED)
 {
@@ -113,7 +114,7 @@ default_builtin_setjmp_frame_value (void)
   return virtual_stack_vars_rtx;
 }
 
-/* Generic hook that takes a CUMULATIVE_ARGS pointer and returns true.  */
+/* Generic hook that takes a CUMULATIVE_ARGS pointer and returns false.  */
 
 bool
 hook_bool_CUMULATIVE_ARGS_false (CUMULATIVE_ARGS *ca ATTRIBUTE_UNUSED)
@@ -122,17 +123,34 @@ hook_bool_CUMULATIVE_ARGS_false (CUMULATIVE_ARGS *ca ATTRIBUTE_UNUSED)
 }
 
 bool
-default_pretend_outgoing_varargs_named(CUMULATIVE_ARGS *ca ATTRIBUTE_UNUSED)
+default_pretend_outgoing_varargs_named (CUMULATIVE_ARGS *ca ATTRIBUTE_UNUSED)
 {
-  return (targetm.calls.setup_incoming_varargs != default_setup_incoming_varargs);
+  return (targetm.calls.setup_incoming_varargs
+	  != default_setup_incoming_varargs);
 }
 
+/* APPLE LOCAL begin Altivec */
 bool
 default_skip_vec_args(tree type ATTRIBUTE_UNUSED,
 		      int pass ATTRIBUTE_UNUSED,
 		      int* last_pass ATTRIBUTE_UNUSED)
 {
   return false;
+}
+/* APPLE LOCAL end Altivec */
+
+enum machine_mode
+default_eh_return_filter_mode (void)
+{
+  return word_mode;
+}
+
+/* The default implementation of TARGET_SHIFT_TRUNCATION_MASK.  */
+
+unsigned HOST_WIDE_INT
+default_shift_truncation_mask (enum machine_mode mode)
+{
+  return SHIFT_COUNT_TRUNCATED ? GET_MODE_BITSIZE (mode) - 1 : 0;
 }
 
 /* Generic hook that takes a CUMULATIVE_ARGS pointer and returns true.  */
@@ -142,3 +160,152 @@ hook_bool_CUMULATIVE_ARGS_true (CUMULATIVE_ARGS * a ATTRIBUTE_UNUSED)
 {
   return true;
 }
+
+
+/* The generic C++ ABI specifies this is a 64-bit value.  */
+tree
+default_cxx_guard_type (void)
+{
+  return long_long_integer_type_node;
+}
+
+
+/* Returns the size of the cookie to use when allocating an array
+   whose elements have the indicated TYPE.  Assumes that it is already
+   known that a cookie is needed.  */
+
+tree
+default_cxx_get_cookie_size (tree type)
+{
+  tree cookie_size;
+
+  /* We need to allocate an additional max (sizeof (size_t), alignof
+     (true_type)) bytes.  */
+  tree sizetype_size;
+  tree type_align;
+
+  sizetype_size = size_in_bytes (sizetype);
+  type_align = size_int (TYPE_ALIGN_UNIT (type));
+  if (INT_CST_LT_UNSIGNED (type_align, sizetype_size))
+    cookie_size = sizetype_size;
+  else
+    cookie_size = type_align;
+
+  return cookie_size;
+}
+
+/* Return true if a parameter must be passed by reference.  This version
+   of the TARGET_PASS_BY_REFERENCE hook uses just MUST_PASS_IN_STACK.  */
+
+bool
+hook_pass_by_reference_must_pass_in_stack (CUMULATIVE_ARGS *c ATTRIBUTE_UNUSED,
+	enum machine_mode mode ATTRIBUTE_UNUSED, tree type ATTRIBUTE_UNUSED,
+	bool named_arg ATTRIBUTE_UNUSED)
+{
+  return targetm.calls.must_pass_in_stack (mode, type);
+}
+
+/* Return true if a parameter follows callee copies conventions.  This
+   version of the hook is true for all named arguments.  */
+
+bool
+hook_callee_copies_named (CUMULATIVE_ARGS *ca ATTRIBUTE_UNUSED,
+			  enum machine_mode mode ATTRIBUTE_UNUSED,
+			  tree type ATTRIBUTE_UNUSED, bool named)
+{
+  return named;
+}
+
+/* Emit any directives required to unwind this instruction.  */
+
+void
+default_unwind_emit (FILE * stream ATTRIBUTE_UNUSED,
+		     rtx insn ATTRIBUTE_UNUSED)
+{
+  /* Should never happen.  */
+  gcc_unreachable ();
+}
+
+/* True if MODE is valid for the target.  By "valid", we mean able to
+   be manipulated in non-trivial ways.  In particular, this means all
+   the arithmetic is supported.
+
+   By default we guess this means that any C type is supported.  If
+   we can't map the mode back to a type that would be available in C,
+   then reject it.  Special case, here, is the double-word arithmetic
+   supported by optabs.c.  */
+
+bool
+default_scalar_mode_supported_p (enum machine_mode mode)
+{
+  int precision = GET_MODE_PRECISION (mode);
+
+  switch (GET_MODE_CLASS (mode))
+    {
+    case MODE_PARTIAL_INT:
+    case MODE_INT:
+      if (precision == CHAR_TYPE_SIZE)
+	return true;
+      if (precision == SHORT_TYPE_SIZE)
+	return true;
+      if (precision == INT_TYPE_SIZE)
+	return true;
+      if (precision == LONG_TYPE_SIZE)
+	return true;
+      if (precision == LONG_LONG_TYPE_SIZE)
+	return true;
+      if (precision == 2 * BITS_PER_WORD)
+	return true;
+      return false;
+
+    case MODE_FLOAT:
+      if (precision == FLOAT_TYPE_SIZE)
+	return true;
+      if (precision == DOUBLE_TYPE_SIZE)
+	return true;
+      if (precision == LONG_DOUBLE_TYPE_SIZE)
+	return true;
+      return false;
+
+    default:
+      gcc_unreachable ();
+    }
+}
+
+bool
+hook_bool_CUMULATIVE_ARGS_mode_tree_bool_false (
+	CUMULATIVE_ARGS *ca ATTRIBUTE_UNUSED,
+	enum machine_mode mode ATTRIBUTE_UNUSED,
+	tree type ATTRIBUTE_UNUSED, bool named ATTRIBUTE_UNUSED)
+{
+  return false;
+}
+
+bool
+hook_bool_CUMULATIVE_ARGS_mode_tree_bool_true (
+	CUMULATIVE_ARGS *ca ATTRIBUTE_UNUSED,
+	enum machine_mode mode ATTRIBUTE_UNUSED,
+	tree type ATTRIBUTE_UNUSED, bool named ATTRIBUTE_UNUSED)
+{
+  return true;
+}
+
+int
+hook_int_CUMULATIVE_ARGS_mode_tree_bool_0 (
+	CUMULATIVE_ARGS *ca ATTRIBUTE_UNUSED,
+	enum machine_mode mode ATTRIBUTE_UNUSED,
+	tree type ATTRIBUTE_UNUSED, bool named ATTRIBUTE_UNUSED)
+{
+  return 0;
+}
+/* APPLE LOCAL begin mainline 2005-04-14 */
+
+const char *
+hook_invalid_arg_for_unprototyped_fn (
+      tree typelist ATTRIBUTE_UNUSED,
+      tree funcdecl ATTRIBUTE_UNUSED,
+      tree val ATTRIBUTE_UNUSED)
+{
+  return NULL;
+}
+/* APPLE LOCAL end mainline 2005-04-14 */

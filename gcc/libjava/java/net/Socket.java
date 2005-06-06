@@ -39,6 +39,7 @@ exception statement from your version. */
 package java.net;
 
 import gnu.java.net.PlainSocketImpl;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -311,8 +312,7 @@ public class Socket
     // that default.  JDK 1.2 doc infers not to do a bind.
   }
 
-  // This has to be accessible from java.net.ServerSocket.
-  SocketImpl getImpl() throws SocketException
+  private SocketImpl getImpl() throws SocketException
   {
     try
       {
@@ -480,7 +480,8 @@ public class Socket
 
   /**
    * Returns the local address to which this socket is bound.  If this socket
-   * is not connected, then <code>null</code> is returned.
+   * is not connected, then a wildcard address, for which
+   * @see isAnyLocalAddress() is <code>true</code>, is returned.
    *
    * @return The local address
    *
@@ -488,6 +489,9 @@ public class Socket
    */
   public InetAddress getLocalAddress()
   {
+    if (! isBound())
+      return InetAddress.ANY_IF;
+
     InetAddress addr = null;
 
     try
@@ -516,7 +520,7 @@ public class Socket
 
   /**
    * Returns the port number of the remote end of the socket connection.  If
-   * this socket is not connected, then -1 is returned.
+   * this socket is not connected, then 0 is returned.
    *
    * @return The remote port this socket is connected to
    */
@@ -527,15 +531,14 @@ public class Socket
 
     try
       {
-	if (getImpl() != null)
-	  return getImpl().getPort();
+	return getImpl().getPort();
       }
     catch (SocketException e)
       {
 	// This cannot happen as we are connected.
       }
 
-    return -1;
+    return 0;
   }
 
   /**
@@ -1155,6 +1158,9 @@ public class Socket
    */
   public void setReuseAddress(boolean reuseAddress) throws SocketException
   {
+    if (isClosed())
+      throw new SocketException("socket is closed");
+
     getImpl().setOption(SocketOptions.SO_REUSEADDR,
                         Boolean.valueOf(reuseAddress));
   }
@@ -1217,6 +1223,9 @@ public class Socket
   {
     try
       {
+	if (getImpl() == null)
+	  return false;
+
 	return getImpl().getInetAddress() != null;
       }
     catch (SocketException e)

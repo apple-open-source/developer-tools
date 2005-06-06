@@ -1,5 +1,5 @@
 /* Mudflap: narrow-pointer bounds-checking by tree rewriting.
-   Copyright (C) 2002, 2003 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004 Free Software Foundation, Inc.
    Contributed by Frank Ch. Eigler <fche@redhat.com>
    and Graydon Hoare <graydon@redhat.com>
 
@@ -74,8 +74,6 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
    use plain macros in mf-runtime.h.  */
 
 
-#ifdef WRAP_malloc
-
 #if PIC
 /* A special bootstrap variant. */
 void *
@@ -85,6 +83,7 @@ __mf_0fn_malloc (size_t c)
   return NULL;
 }
 #endif
+
 
 #undef malloc
 WRAPPER(void *, malloc, size_t c)
@@ -108,10 +107,7 @@ WRAPPER(void *, malloc, size_t c)
 
   return result;
 }
-#endif
 
-
-#ifdef WRAP_calloc
 
 #ifdef PIC
 /* A special bootstrap variant. */
@@ -135,6 +131,7 @@ __mf_0fn_calloc (size_t c, size_t n)
   return NULL;
 }
 #endif
+
 
 #undef calloc
 WRAPPER(void *, calloc, size_t c, size_t n)
@@ -164,9 +161,7 @@ WRAPPER(void *, calloc, size_t c, size_t n)
   
   return result;
 }
-#endif
 
-#ifdef WRAP_realloc
 
 #if PIC
 /* A special bootstrap variant. */
@@ -176,6 +171,7 @@ __mf_0fn_realloc (void *buf, size_t c)
   return NULL;
 }
 #endif
+
 
 #undef realloc
 WRAPPER(void *, realloc, void *buf, size_t c)
@@ -203,7 +199,8 @@ WRAPPER(void *, realloc, void *buf, size_t c)
   __mf_opts.wipe_heap = 0;
 
   if (LIKELY(buf))
-    __mfu_unregister (buf, 0);
+    __mfu_unregister (buf, 0, __MF_TYPE_HEAP_I); 
+  /* NB: underlying region may have been __MF_TYPE_HEAP. */
   
   if (LIKELY(result))
     {
@@ -220,10 +217,7 @@ WRAPPER(void *, realloc, void *buf, size_t c)
 
   return result;
 }
-#endif
 
-
-#ifdef WRAP_free
 
 #if PIC
 /* A special bootstrap variant. */
@@ -257,7 +251,8 @@ WRAPPER(void, free, void *buf)
     }
   UNLOCKTH ();
 
-  __mf_unregister (buf, 0);
+  __mf_unregister (buf, 0, __MF_TYPE_HEAP_I);
+  /* NB: underlying region may have been __MF_TYPE_HEAP. */
 
   if (UNLIKELY(__mf_opts.free_queue_length > 0))
     {
@@ -297,10 +292,7 @@ WRAPPER(void, free, void *buf)
       CALL_REAL (free, base);
     }
 }
-#endif
 
-
-#ifdef WRAP_mmap
 
 #if PIC
 /* A special bootstrap variant. */
@@ -353,10 +345,7 @@ WRAPPER(void *, mmap,
 
   return result;
 }
-#endif
 
-
-#ifdef WRAP_munmap
 
 #if PIC
 /* A special bootstrap variant. */
@@ -391,14 +380,11 @@ WRAPPER(int , munmap, void *start, size_t length)
       uintptr_t offset;
 
       for (offset=0; offset<length; offset+=ps)
-	__mf_unregister ((void *) CLAMPADD (base, offset), ps);
+	__mf_unregister ((void *) CLAMPADD (base, offset), ps, __MF_TYPE_HEAP_I);
     }
   return result;
 }
-#endif
 
-
-#ifdef WRAP_alloca
 
 /* This wrapper is a little different, as it's called indirectly from
    __mf_fini also to clean up pending allocations.  */ 
@@ -428,12 +414,14 @@ __mf_wrap_alloca_indirect (size_t c)
 
   /* Free any previously alloca'd blocks that belong to deeper-nested functions,
      which must therefore have exited by now.  */
-#define DEEPER_THAN < /* for x86 */
+
+#define DEEPER_THAN < /* XXX: for x86; steal find_stack_direction() from libiberty/alloca.c */
+
   while (alloca_history &&
 	 ((uintptr_t) alloca_history->stack DEEPER_THAN (uintptr_t) stack))
     {
       struct alloca_tracking *next = alloca_history->next;
-      __mf_unregister (alloca_history->ptr, 0);
+      __mf_unregister (alloca_history->ptr, 0, __MF_TYPE_HEAP);
       CALL_REAL (free, alloca_history->ptr);
       CALL_REAL (free, alloca_history);
       alloca_history = next;
@@ -473,6 +461,4 @@ WRAPPER(void *, alloca, size_t c)
 {
   return __mf_wrap_alloca_indirect (c);
 }
-
-#endif
 

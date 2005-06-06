@@ -1,5 +1,5 @@
 /* Thread -- an independent thread of executable code
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
    Free Software Foundation
 
 This file is part of GNU Classpath.
@@ -36,14 +36,16 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package java.lang;
 
 import gnu.gcj.RawData;
+import gnu.gcj.RawDataManaged;
 
 /* Written using "Java Class Libraries", 2nd edition, ISBN 0-201-31002-3
  * "The Java Language Specification", ISBN 0-201-63451-1
  * plus online API docs for JDK 1.2 beta from http://www.javasoft.com.
- * Status:  Believed complete to version 1.4, with caveats. We do not 
+ * Status:  Believed complete to version 1.4, with caveats. We do not
  *          implement the deprecated (and dangerous) stop, suspend, and resume
  *          methods. Security implementation is not complete.
  */
@@ -78,7 +80,7 @@ import gnu.gcj.RawData;
  *
  * @author Tom Tromey
  * @author John Keiser
- * @author Eric Blake <ebb9@email.byu.edu>
+ * @author Eric Blake (ebb9@email.byu.edu)
  * @see Runnable
  * @see Runtime#exit(int)
  * @see #run()
@@ -127,7 +129,7 @@ public class Thread implements Runnable
   RawData interp_frame;
 
   // Our native data - points to an instance of struct natThread.
-  private Object data;
+  private RawDataManaged data;
 
   /**
    * Allocates a new <code>Thread</code> object. This constructor has
@@ -320,6 +322,9 @@ public class Thread implements Runnable
 
   private Thread (Thread current, ThreadGroup g, Runnable r, String n)
   {
+    // Make sure the current thread may create a new thread.
+    checkAccess();
+    
     // The Class Libraries book says ``threadName cannot be null''.  I
     // take this to mean NullPointerException.
     if (n == null)
@@ -861,7 +866,7 @@ public class Thread implements Runnable
    * @see SecurityManager#checkPermission(Permission)
    * @deprecated unsafe operation, try not to use
    */
-  public final native void stop(Throwable e);
+  public final native void stop(Throwable t);
 
   /**
    * Suspend this Thread.  It will not come back, ever, unless it is resumed.

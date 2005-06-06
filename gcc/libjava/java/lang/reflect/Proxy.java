@@ -1,5 +1,5 @@
 /* Proxy.java -- build a proxy class that implements reflected interfaces
-   Copyright (C) 2001, 2002, 2003 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2002, 2003, 2004, 2005  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -38,15 +38,16 @@ exception statement from your version. */
 
 package java.lang.reflect;
 
-import java.io.Serializable;
-import java.security.ProtectionDomain;
-import java.util.Map;
-import java.util.HashMap;
-import java.util.Set;
-import java.util.HashSet;
-import java.util.Iterator;
 import gnu.classpath.Configuration;
 import gnu.java.lang.reflect.TypeSignature;
+
+import java.io.Serializable;
+import java.security.ProtectionDomain;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * This class allows you to dynamically create an instance of any (or
@@ -153,7 +154,7 @@ import gnu.java.lang.reflect.TypeSignature;
  * @see InvocationHandler
  * @see UndeclaredThrowableException
  * @see Class
- * @author Eric Blake <ebb9@email.byu.edu>
+ * @author Eric Blake (ebb9@email.byu.edu)
  * @since 1.3
  * @status updated to 1.4, except for the use of ProtectionDomain
  */
@@ -458,7 +459,7 @@ public class Proxy implements Serializable
    * Helper class for mapping unique ClassLoader and interface combinations
    * to proxy classes.
    *
-   * @author Eric Blake <ebb9@email.byu.edu>
+   * @author Eric Blake (ebb9@email.byu.edu)
    */
   private static final class ProxyType
   {
@@ -564,7 +565,7 @@ public class Proxy implements Serializable
    * without worrying about return type, declaring class, or throws clause,
    * and which reduces the maximally common throws clause between two methods
    *
-   * @author Eric Blake <ebb9@email.byu.edu>
+   * @author Eric Blake (ebb9@email.byu.edu)
    */
   private static final class ProxySignature
   {
@@ -717,13 +718,13 @@ public class Proxy implements Serializable
    * A flat representation of all data needed to generate bytecode/instantiate
    * a proxy class.  This is basically a struct.
    *
-   * @author Eric Blake <ebb9@email.byu.edu>
+   * @author Eric Blake (ebb9@email.byu.edu)
    */
   private static final class ProxyData
   {
     /**
-     * The package this class is in.  Possibly null, meaning the unnamed
-     * package.
+     * The package this class is in <b>including the trailing dot</b>
+     * or an empty string for the unnamed (aka default) package.
      */
     String pack;
 
@@ -754,7 +755,7 @@ public class Proxy implements Serializable
     /**
      * For unique id's
      */
-    private static int count = 0;
+    private static int count;
 
     /**
      * The id of this proxy class
@@ -769,18 +770,17 @@ public class Proxy implements Serializable
     }
 
     /**
-     * Return the name of a package given the name of a class.
-     * Returns null if no package.  We use this in preference to
+     * Return the name of a package (including the trailing dot)
+     * given the name of a class.
+     * Returns an empty string if no package.  We use this in preference to
      * using Class.getPackage() to avoid problems with ClassLoaders
      * that don't set the package.
      */
-    static String getPackage(Class k)
+    private static String getPackage(Class k)
     {
       String name = k.getName();
       int idx = name.lastIndexOf('.');
-      if (idx >= 0)
-	return name.substring(0, idx);
-      return null;
+      return name.substring(0, idx + 1);
     }
 
     /**
@@ -871,7 +871,7 @@ public class Proxy implements Serializable
    * this code is not loaded in memory if the VM has a native
    * implementation instead.
    *
-   * @author Eric Blake <ebb9@email.byu.edu>
+   * @author Eric Blake (ebb9@email.byu.edu)
    */
   private static final class ClassFactory
   {
@@ -961,8 +961,7 @@ public class Proxy implements Serializable
       // access_flags
       putU2(Modifier.SUPER | Modifier.FINAL | Modifier.PUBLIC);
       // this_class
-      qualName = ((data.pack == null ? "" : data.pack + '.')
-                  + "$Proxy" + data.id);
+      qualName = (data.pack + "$Proxy" + data.id);
       putU2(classInfo(TypeSignature.getEncodingOfClass(qualName, false)));
       // super_class
       putU2(classInfo("java/lang/reflect/Proxy"));
@@ -1304,7 +1303,7 @@ public class Proxy implements Serializable
      *        implies the bootstrap class loader
      * @return the proxy class Class object
      */
-    final Class generate(ClassLoader loader)
+    Class generate(ClassLoader loader)
     {
       byte[] bytecode = new byte[pool.length() + stream.length()];
       // More efficient to bypass calling charAt() repetitively.
@@ -1325,38 +1324,30 @@ public class Proxy implements Serializable
 
       try
         {
-          // XXX Do we require more native support here?
-
           Class vmClassLoader = Class.forName("java.lang.VMClassLoader");
           Class[] types = {ClassLoader.class, String.class,
                            byte[].class, int.class, int.class,
                            ProtectionDomain.class };
           Method m = vmClassLoader.getDeclaredMethod("defineClass", types);
-
-          // Bypass the security check of setAccessible(true), since this
-          // is trusted code. But note the comment above about the security
-          // risk of doing this outside a synchronized block.
+          // We can bypass the security check of setAccessible(true), since
+	  // we're in the same package.
           m.flag = true;
+
           Object[] args = {loader, qualName, bytecode, new Integer(0),
                            new Integer(bytecode.length),
                            Object.class.getProtectionDomain() };
           Class clazz = (Class) m.invoke(null, args);
-          m.flag = false;
 
           // Finally, initialize the m field of the proxy class, before
           // returning it.
-
-          // No security risk here, since clazz has not been exposed yet,
-          // so user code cannot grab the same reflection object.
           Field f = clazz.getDeclaredField("m");
           f.flag = true;
           // we can share the array, because it is not publicized
           f.set(null, methods);
-          f.flag = false;
 
           return clazz;
         }
-      catch (Throwable e)
+      catch (Exception e)
         {
           // assert false;
           throw (Error) new InternalError("Unexpected: " + e).initCause(e);

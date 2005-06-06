@@ -1,5 +1,5 @@
 /* BorderLayout.java -- A layout manager class
-   Copyright (C) 1999, 2002 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2002, 2005  Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -43,7 +43,7 @@ package java.awt;
   * in certain sectors of the parent container.
   *
   * @author Aaron M. Renn (arenn@urbanophile.com)
-  * @author Rolf W. Rasmussen  <rolfwr@ii.uib.no>
+  * @author Rolf W. Rasmussen  (rolfwr@ii.uib.no)
   */
 public class BorderLayout implements LayoutManager2, java.io.Serializable
 {
@@ -592,13 +592,21 @@ layoutContainer(Container target)
 
       int x1 = i.left;
       int x2 = x1 + w.width + hgap;
-      int x3 = Math.max(x2 + w.width + hgap, t.width - i.right - e.width);
+      int x3;
+      if (t.width <= i.right + e.width)
+        x3 = x2 + w.width + hgap;
+      else
+        x3 = t.width - i.right - e.width;
       int ww = t.width - i.right - i.left;
 
       int y1 = i.top;
       int y2 = y1 + n.height + vgap;
       int midh = Math.max(e.height, Math.max(w.height, c.height));
-      int y3 = Math.max(y2 + midh + vgap, t.height - i.bottom - s.height);
+      int y3;
+      if (t.height <= i.bottom + s.height)
+        y3 = y2 + midh + vgap;
+      else
+        y3 = t.height - i.bottom - s.height;
       int hh = y3-y2-vgap;
 
       setBounds(center, x2, y2, x3-x2-hgap, hh);

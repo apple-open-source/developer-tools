@@ -27,6 +27,7 @@
 --  This package deals with the implementation of the Restrictions pragma
 
 with Rident; use Rident;
+with Table;
 with Types;  use Types;
 with Uintp;  use Uintp;
 
@@ -93,7 +94,6 @@ package Restrict is
      (No_IO,                       "text_io "),
      (No_IO,                       "a-witeio"),
      (No_Task_Attributes_Package,  "a-tasatt"),
-     (No_Streams,                  "a-stream"),
      (No_Unchecked_Conversion,     "a-unccon"),
      (No_Unchecked_Conversion,     "unchconv"),
      (No_Unchecked_Deallocation,   "a-uncdea"),
@@ -133,6 +133,33 @@ package Restrict is
       No_Elaboration_Code                => True,
       others                             => False);
 
+   --  The following table records entries made by Restrictions pragmas
+   --  that specify a parameter for No_Dependence. Each such pragma makes
+   --  an entry in this table.
+
+   --  Note: we have chosen to implement this restriction in the "syntactic"
+   --  form, where we do not check that the named package is a language defined
+   --  package, but instead we allow arbitrary package names. The discussion of
+   --  this issue is not complete in the ARG, but the sense seems to be leaning
+   --  in this direction, which makes more sense to us, since it is much more
+   --  useful, and much easier to implement.
+
+   type ND_Entry is record
+      Unit : Node_Id;
+      --  The unit parameter from the No_Dependence pragma
+
+      Warn : Boolean;
+      --  True if from Restriction_Warnings, False if from Restrictions
+   end record;
+
+   package No_Dependence is new Table.Table (
+     Table_Component_Type => ND_Entry,
+     Table_Index_Type     => Int,
+     Table_Low_Bound      => 0,
+     Table_Initial        => 200,
+     Table_Increment      => 200,
+     Table_Name           => "Name_No_Dependence");
+
    -----------------
    -- Subprograms --
    -----------------
@@ -162,6 +189,11 @@ package Restrict is
    --  restrictions, and in this case indicates the exact count for the
    --  violation. If the exact count is not known, V is left at its
    --  default value of -1 which indicates an unknown count.
+
+   procedure Check_Restriction_No_Dependence (U : Node_Id; Err : Node_Id);
+   --  Called when a dependence on a unit is created (either implicitly, or by
+   --  an explicit WITH clause). U is a node for the unit involved, and Err
+   --  is the node to which an error will be attached if necessary.
 
    procedure Check_Elaboration_Code_Allowed (N : Node_Id);
    --  Tests to see if elaboration code is allowed by the current restrictions
@@ -200,11 +232,11 @@ package Restrict is
    --  handlers are present. This function is called by Gigi when it needs to
    --  expand an AT END clean up identifier with no exception handler.
 
-   function Process_Restriction_Synonyms (Id : Name_Id) return Name_Id;
-   --  Id is the name of a restriction. If it is one of synonyms that we
-   --  allow for historical purposes (for list see System.Rident), then
-   --  the proper official name is returned. Otherwise the argument is
-   --  returned unchanged.
+   function Process_Restriction_Synonyms (N : Node_Id) return Name_Id;
+   --  Id is a node whose Chars field contains the name of a restriction.
+   --  If it is one of synonyms that we allow for historical purposes (for
+   --  list see System.Rident), then the proper official name is returned.
+   --  Otherwise the Chars field of the argument is returned unchanged.
 
    function Restriction_Active (R : All_Restrictions) return Boolean;
    pragma Inline (Restriction_Active);
@@ -213,13 +245,20 @@ package Restrict is
    --  active. Always use Check_Restriction to record a violation.
 
    function Restricted_Profile return Boolean;
-   --  Tests to see if tasking operations follow the GNAT restricted run time
-   --  profile.
+   --  Tests if set of restrictions corresponding to Profile (Restricted) is
+   --  currently in effect (set by pragma Profile, or by an appropriate set
+   --  of individual Restrictions pragms). Returns True only if all the
+   --  required restrictions are set.
 
-   procedure Set_Ravenscar (N : Node_Id);
-   --  Enables the set of restrictions for Ravenscar. N is the corresponding
-   --  pragma node, which is used for error messages on any constructs that
-   --  violate the profile.
+   procedure Set_Profile_Restrictions
+     (P    : Profile_Name;
+      N    : Node_Id;
+      Warn : Boolean);
+   --  Sets the set of restrictions associated with the given profile
+   --  name. N is the node of the construct to which error messages
+   --  are to be attached as required. Warn is set True for the case
+   --  of Profile_Warnings where the restrictions are set as warnings
+   --  rather than legality requirements.
 
    procedure Set_Restriction
      (R : All_Boolean_Restrictions;
@@ -235,10 +274,11 @@ package Restrict is
    --  Similar to the above, except that this is used for the case of a
    --  parameter restriction, and the corresponding value V is given.
 
-   procedure Set_Restricted_Profile (N : Node_Id);
-   --  Enables the set of restrictions for pragma Restricted_Run_Time. N is
-   --  the corresponding pragma node, which is used for error messages on
-   --  constructs that violate the profile.
+   procedure Set_Restriction_No_Dependence
+     (Unit : Node_Id;
+      Warn : Boolean);
+   --  Sets given No_Dependence restriction in table if not there already.
+   --  Warn is True if from Restriction_Warnings, False if from Restrictions.
 
    function Tasking_Allowed return Boolean;
    pragma Inline (Tasking_Allowed);

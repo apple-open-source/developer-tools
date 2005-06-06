@@ -1,5 +1,5 @@
 /* Definitions for target OS TPF for GNU compiler, for IBM S/390 hardware
-   Copyright (C) 2003 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004 Free Software Foundation, Inc.
    Contributed by P.J. Darcy (darcypj@us.ibm.com),
                   Hartmut Penner (hpenner@de.ibm.com), and
                   Ulrich Weigand (uweigand@de.ibm.com).
@@ -25,6 +25,8 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #define _TPF_H
 
 /* TPF wants the following macros defined/undefined as follows.  */
+#undef TARGET_TPF
+#define TARGET_TPF 1
 #undef ASM_APP_ON
 #define ASM_APP_ON "#APP\n"
 #undef ASM_APP_OFF
@@ -50,11 +52,18 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 
 /* TPF OS specific stack-pointer offset.  */
 #undef STACK_POINTER_OFFSET
-#define STACK_POINTER_OFFSET 		280
+#define STACK_POINTER_OFFSET 		448
 
-/* When building for TPF, set a generic default target that is 64 bits.  */
+/* When building for TPF, set a generic default target that is 64 bits.
+   Also, enable TPF profiling support and the standard backchain by default.  */
 #undef TARGET_DEFAULT
-#define TARGET_DEFAULT             0x33
+#define TARGET_DEFAULT		(MASK_64BIT | MASK_ZARCH | MASK_HARD_FLOAT \
+				 | MASK_TPF_PROFILING | MASK_BACKCHAIN)
+/* Exception handling.  */
+
+/* Select a format to encode pointers in exception handling data.  */
+#undef ASM_PREFERRED_EH_DATA_FORMAT
+#define ASM_PREFERRED_EH_DATA_FORMAT(CODE, GLOBAL) DW_EH_PE_absptr
 
 /* TPF OS specific compiler settings.  */
 #undef TARGET_OS_CPP_BUILTINS
@@ -92,6 +101,9 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #undef CPLUSPLUS_CPP_SPEC
 #define CPLUSPLUS_CPP_SPEC "-D_GNU_SOURCE %(cpp)"
 
+#undef  ASM_SPEC
+#define ASM_SPEC "%{m31&m64}%{mesa&mzarch}%{march=*}"
+
 #undef  LIB_SPEC
 #define LIB_SPEC "%{pthread:-lpthread} -lc"
 
@@ -107,6 +119,8 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
       %{!static: \
         %{rdynamic:-export-dynamic} \
         %{!dynamic-linker:-dynamic-linker /lib/ld64.so}}}"
+
+#define MD_UNWIND_SUPPORT "config/s390/tpf-unwind.h"
 
 #endif /* ! _TPF_H */
 

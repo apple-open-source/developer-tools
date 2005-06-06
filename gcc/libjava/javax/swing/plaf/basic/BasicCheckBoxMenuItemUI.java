@@ -1,4 +1,4 @@
-/* BasicCheckBoxMenuItemUI.java
+/* BasicCheckBoxMenuItemUI.java --
    Copyright (C) 2002, 2004 Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
@@ -35,6 +35,7 @@ this exception to your version of the library, but you are not
 obligated to do so.  If you do not wish to do so, delete this
 exception statement from your version. */
 
+
 package javax.swing.plaf.basic;
 
 import java.awt.event.MouseEvent;
@@ -47,19 +48,38 @@ import javax.swing.UIDefaults;
 import javax.swing.UIManager;
 import javax.swing.plaf.ComponentUI;
 
-
+/**
+ * DOCUMENT ME!
+ */
 public class BasicCheckBoxMenuItemUI extends BasicMenuItemUI
 {
+  /**
+   * Factory method to create a BasicCheckBoxMenuItemUI for the given {@link
+   * JComponent}, which should be a JCheckBoxMenuItem
+   *
+   * @param c The {@link JComponent} a UI is being created for.
+   *
+   * @return A BasicCheckBoxMenuItemUI for the {@link JComponent}.
+   */
   public static ComponentUI createUI(final JComponent c)
   {
     return new BasicCheckBoxMenuItemUI();
   }
 
+  /**
+   * DOCUMENT ME!
+   *
+   * @return $returnType$ DOCUMENT ME!
+   */
   protected String getPropertyPrefix()
   {
-    return null; // TODO
+    return null;
   }
 
+  /**
+   * This method installs the defaults that are defined in  the Basic look and
+   * feel for this JRadioButtonMenuItem
+   */
   protected void installDefaults()
   {
     super.installDefaults();
@@ -68,8 +88,17 @@ public class BasicCheckBoxMenuItemUI extends BasicMenuItemUI
     checkIcon = defaults.getIcon("CheckBoxMenuItem.checkIcon");
   }
 
-  void processMouseEvent(JMenuItem item, MouseEvent e, MenuElement[] path,
-                         MenuSelectionManager manager)
+  /**
+   * DOCUMENT ME!
+   *
+   * @param item DOCUMENT ME!
+   * @param e DOCUMENT ME!
+   * @param path DOCUMENT ME!
+   * @param manager DOCUMENT ME!
+   */
+  public void processMouseEvent(JMenuItem item, MouseEvent e,
+                                MenuElement[] path,
+                                MenuSelectionManager manager)
   {
   }
 }

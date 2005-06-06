@@ -39,25 +39,65 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "flags.h"
 #include "ggc.h"
 #include "rtl.h"
-#include "expr.h"
 #include "output.h"
 #include "timevar.h"
 #include "predict.h"
 #include "tree-inline.h"
+#include "tree-gimple.h"
 #include "langhooks.h"
 
 /* Create an empty statement tree rooted at T.  */
 
-void
-begin_stmt_tree (tree *t)
+tree
+push_stmt_list (void)
 {
-  /* We create a trivial EXPR_STMT so that last_tree is never NULL in
-     what follows.  We remove the extraneous statement in
-     finish_stmt_tree.  */
-  *t = build_nt (EXPR_STMT, void_zero_node);
-  last_tree = *t;
-  last_expr_type = NULL_TREE;
-  last_expr_filename = input_filename;
+  tree t;
+  t = alloc_stmt_list ();
+  TREE_CHAIN (t) = cur_stmt_list;
+  cur_stmt_list = t;
+  return t;
+}
+
+/* Finish the statement tree rooted at T.  */
+
+tree
+pop_stmt_list (tree t)
+{
+  tree u = cur_stmt_list, chain;
+
+  /* Pop statement lists until we reach the target level.  The extra
+     nestings will be due to outstanding cleanups.  */
+  while (1)
+    {
+      chain = TREE_CHAIN (u);
+      TREE_CHAIN (u) = NULL_TREE;
+      if (t == u)
+	break;
+      u = chain;
+    }
+  cur_stmt_list = chain;
+
+  /* If the statement list is completely empty, just return it.  This is
+     just as good small as build_empty_stmt, with the advantage that 
+     statement lists are merged when they appended to one another.  So
+     using the STATEMENT_LIST avoids pathological buildup of EMPTY_STMT_P
+     statements.  */
+  if (TREE_SIDE_EFFECTS (t))
+    {
+      tree_stmt_iterator i = tsi_start (t);
+
+      /* If the statement list contained exactly one statement, then
+	 extract it immediately.  */
+      if (tsi_one_before_end_p (i))
+	{
+	  u = tsi_stmt (i);
+	  tsi_delink (&i);
+	  free_stmt_list (t);
+	  t = u;
+	}
+    }
+
+  return t;
 }
 
 /* T is a statement.  Add it to the statement-tree.  */
@@ -65,91 +105,31 @@ begin_stmt_tree (tree *t)
 tree
 add_stmt (tree t)
 {
-  if (!EXPR_LOCUS (t))
-    annotate_with_locus (t, input_location);
+  enum tree_code code = TREE_CODE (t);
 
-  /* Add T to the statement-tree.  */
-  TREE_CHAIN (last_tree) = t;
-  last_tree = t;
+  if ((EXPR_P (t) || STATEMENT_CODE_P (code)) && code != LABEL_EXPR)
+    {
+      if (!EXPR_HAS_LOCATION (t))
+	SET_EXPR_LOCATION (t, input_location);
 
-  /* When we expand a statement-tree, we must know whether or not the
-     statements are full-expressions.  We record that fact here.  */
-  STMT_IS_FULL_EXPR_P (last_tree) = stmts_are_full_exprs_p ();
+      /* When we expand a statement-tree, we must know whether or not the
+	 statements are full-expressions.  We record that fact here.  */
+      STMT_IS_FULL_EXPR_P (t) = stmts_are_full_exprs_p ();
+    }
+
+  if (code == LABEL_EXPR || code == CASE_LABEL_EXPR)
+    STATEMENT_LIST_HAS_LABEL (cur_stmt_list) = 1;
+
+  /* Add T to the statement-tree.  Non-side-effect statements need to be
+     recorded during statement expressions.  */
+  append_to_statement_list_force (t, &cur_stmt_list);
 
   return t;
 }
 
-/* Create a declaration statement for the declaration given by the
-   DECL.  */
-
-void
-add_decl_stmt (tree decl)
-{
-  tree decl_stmt;
-
-  /* We need the type to last until instantiation time.  */
-  decl_stmt = build_stmt (DECL_STMT, decl);
-  add_stmt (decl_stmt);
-}
-
-/* Add a scope-statement to the statement-tree.  BEGIN_P indicates
-   whether this statements opens or closes a scope.  PARTIAL_P is true
-   for a partial scope, i.e, the scope that begins after a label when
-   an object that needs a cleanup is created.  If BEGIN_P is nonzero,
-   returns a new TREE_LIST representing the top of the SCOPE_STMT
-   stack.  The TREE_PURPOSE is the new SCOPE_STMT.  If BEGIN_P is
-   zero, returns a TREE_LIST whose TREE_VALUE is the new SCOPE_STMT,
-   and whose TREE_PURPOSE is the matching SCOPE_STMT with
-   SCOPE_BEGIN_P set.  */
-
-tree
-add_scope_stmt (int begin_p, int partial_p)
-{
-  tree *stack_ptr = current_scope_stmt_stack ();
-  tree ss;
-  tree top = *stack_ptr;
-
-  /* Build the statement.  */
-  ss = build_stmt (SCOPE_STMT, NULL_TREE);
-  SCOPE_BEGIN_P (ss) = begin_p;
-  SCOPE_PARTIAL_P (ss) = partial_p;
-
-  /* Keep the scope stack up to date.  */
-  if (begin_p)
-    {
-      top = tree_cons (ss, NULL_TREE, top);
-      *stack_ptr = top;
-    }
-  else
-    {
-      if (partial_p != SCOPE_PARTIAL_P (TREE_PURPOSE (top)))
-	abort ();
-      TREE_VALUE (top) = ss;
-      *stack_ptr = TREE_CHAIN (top);
-    }
-
-  /* Add the new statement to the statement-tree.  */
-  add_stmt (ss);
-
-  return top;
-}
-
-/* Finish the statement tree rooted at T.  */
-
-void
-finish_stmt_tree (tree *t)
-{
-  tree stmt;
-
-  /* Remove the fake extra statement added in begin_stmt_tree.  */
-  stmt = TREE_CHAIN (*t);
-  *t = stmt;
-  last_tree = NULL_TREE;
-}
-
 /* Build a generic statement based on the given type of node and
    arguments. Similar to `build_nt', except that we set
-   EXPR_LOCUS to be the current source location.  */
+   EXPR_LOCATION to be the current source location.  */
 /* ??? This should be obsolete with the lineno_stmt productions
    in the grammar.  */
 
@@ -164,8 +144,9 @@ build_stmt (enum tree_code code, ...)
   va_start (p, code);
 
   ret = make_node (code);
+  TREE_TYPE (ret) = void_type_node;
   length = TREE_CODE_LENGTH (code);
-  annotate_with_locus (ret, input_location);
+  SET_EXPR_LOCATION (ret, input_location);
 
   /* Most statements have implicit side effects all on their own, 
      such as control transfer.  For those that do, we'll compute
@@ -194,41 +175,6 @@ build_stmt (enum tree_code code, ...)
   return ret;
 }
 
-/* Create RTL for the local static variable DECL.  */
-
-void
-make_rtl_for_local_static (tree decl)
-{
-  const char *asmspec = NULL;
-
-  /* If we inlined this variable, we could see it's declaration
-     again.  */
-  if (TREE_ASM_WRITTEN (decl))
-    return;
-
-  /* If the DECL_ASSEMBLER_NAME is not the same as the DECL_NAME, then
-     either we already created RTL for this DECL (and since it was a
-     local variable, its DECL_ASSEMBLER_NAME got hacked up to prevent
-     clashes with other local statics with the same name by a previous
-     call to make_decl_rtl), or the user explicitly requested a
-     particular assembly name for this variable, using the GNU
-     extension for this purpose:
-
-       int i asm ("j");
-
-     There's no way to know which case we're in, here.  But, it turns
-     out we're safe.  If there's already RTL, then
-     rest_of_decl_compilation ignores the ASMSPEC parameter, so we
-     may as well not pass it in.  If there isn't RTL, then we didn't
-     already create RTL, which means that the modification to
-     DECL_ASSEMBLER_NAME came only via the explicit extension.  */
-  if (DECL_ASSEMBLER_NAME (decl) != DECL_NAME (decl)
-      && !DECL_RTL_SET_P (decl))
-    asmspec = IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (decl));
-
-  rest_of_decl_compilation (decl, asmspec, /*top_level=*/0, /*at_end=*/0);
-}
-
 /* Let the back-end know about DECL.  */
 
 void
@@ -240,32 +186,10 @@ emit_local_var (tree decl)
       if (DECL_HARD_REGISTER (decl))
 	/* The user specified an assembler name for this variable.
 	   Set that up now.  */
-	rest_of_decl_compilation
-	  (decl, IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (decl)),
-	   /*top_level=*/0, /*at_end=*/0);
+	rest_of_decl_compilation (decl, 0, 0);
       else
 	expand_decl (decl);
     }
-
-  if (DECL_INITIAL (decl))
-    {
-      /* Actually do the initialization.  */
-      if (stmts_are_full_exprs_p ())
-	expand_start_target_temps ();
-
-      expand_decl_init (decl);
-
-      if (stmts_are_full_exprs_p ())
-	expand_end_target_temps ();
-    }
-}
-
-/* Build the node for a return statement and return it.  */
-
-tree
-build_return_stmt (tree expr)
-{
-  return (build_stmt (RETURN_STMT, expr));
 }
 
 /* Build a break statement node and return it.  */
@@ -284,21 +208,10 @@ build_continue_stmt (void)
   return (build_stmt (CONTINUE_STMT));
 }
 
-/* Create a CASE_LABEL tree node and return it.  */
+/* Create a CASE_LABEL_EXPR tree node and return it.  */
 
 tree
 build_case_label (tree low_value, tree high_value, tree label_decl)
 {
-  return build_stmt (CASE_LABEL, low_value, high_value, label_decl);
-}
-
-/* We're about to expand T, a statement.  Set up appropriate context
-   for the substitution.  */
-
-void
-prep_stmt (tree t)
-{
-  if (EXPR_LOCUS (t))
-    input_location = *EXPR_LOCUS (t);
-  current_stmt_tree ()->stmts_are_full_exprs_p = STMT_IS_FULL_EXPR_P (t);
+  return build_stmt (CASE_LABEL_EXPR, low_value, high_value, label_decl);
 }

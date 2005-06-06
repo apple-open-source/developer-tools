@@ -20,11 +20,14 @@
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
+#ifndef RLD
 #include <stdio.h>
 #include <limits.h>
+#endif /* RLD */
 #include <mach-o/fat.h>
 #include <stuff/best_arch.h>
 
+#ifndef RLD
 /*
  * cpusubtype_findbestarch() is passed a cputype and cpusubtype and a set of
  * fat_arch structs and selects the best one that matches (if any) and returns
@@ -44,7 +47,9 @@ struct fat_arch *fat_archs,
 unsigned long nfat_archs)
 {
     unsigned long i;
+#ifndef ARCH64
     long lowest_family, lowest_model, lowest_index;
+#endif
 
 	/*
 	 * Look for the first exact match.
@@ -60,6 +65,45 @@ unsigned long nfat_archs)
 	 * cputype dependent.
 	 */
 	switch(cputype){
+
+#ifdef ARCH64 /* 64-bit architectures */
+
+	case CPU_TYPE_POWERPC64:
+	    /*
+	     * An exact match as not found.  So for all the PowerPC64 subtypes
+	     * pick the subtype from the following order starting from a subtype
+	     * that will work (contains 64-bit instructions or altivec if
+	     * needed):
+	     *	970 (currently only the one 64-bit subtype)
+	     * For an unknown subtype pick only the ALL type if it exists.
+	     */
+	    switch(cpusubtype){
+	    case CPU_SUBTYPE_POWERPC_ALL:
+		/*
+		 * The CPU_SUBTYPE_POWERPC_ALL is only used by the development
+		 * environment tools when building a generic ALL type binary.
+		 * In the case of a non-exact match we pick the most current
+		 * processor.
+		 */
+	    case CPU_SUBTYPE_POWERPC_970:
+		for(i = 0; i < nfat_archs; i++){
+		    if(fat_archs[i].cputype != cputype)
+			continue;
+		    if(fat_archs[i].cpusubtype == CPU_SUBTYPE_POWERPC_970)
+			return(fat_archs + i);
+		}
+	    default:
+		for(i = 0; i < nfat_archs; i++){
+		    if(fat_archs[i].cputype != cputype)
+			continue;
+		    if(fat_archs[i].cpusubtype == CPU_SUBTYPE_POWERPC_ALL)
+			return(fat_archs + i);
+		}
+	    }
+	    break;
+
+#else /* !defined(ARCH64) 32-bit architectures */
+
 	case CPU_TYPE_I386:
 	    switch(cpusubtype){
 	    default:
@@ -269,22 +313,6 @@ unsigned long nfat_archs)
 		}
 	    }
 	    break;
-#ifdef INTERIM_PPC64
-	case CPU_TYPE_POWERPC64:
-	    /*
-	     * An exact match as not found.  Currently the interim ppc64 format
-	     * only has one subtype.  If other subtypes are added this code
-	     * will not know about them so just pick the
-	     * CPU_SUBTYPE_POWERPC64_ALL if it exists.
-	     */
-	    for(i = 0; i < nfat_archs; i++){
-		if(fat_archs[i].cputype != cputype)
-		    continue;
-		if(fat_archs[i].cpusubtype == CPU_SUBTYPE_POWERPC64_ALL)
-		    return(fat_archs + i);
-	    }
-	    break;
-#endif /* INTERIM_PPC64 */
 	case CPU_TYPE_VEO:
 	    /*
 	     * An exact match was not found.  So for the VEO subtypes if VEO1
@@ -333,11 +361,15 @@ unsigned long nfat_archs)
 		    return(fat_archs + i);
 	    }
 	    break;
+
+#endif /* 32-bit architectures */
+
 	default:
 	    return(NULL);
 	}
 	return(NULL);
 }
+#endif /* RLD */
 
 /*
  * cpusubtype_combine() returns the resulting cpusubtype when combining two
@@ -355,61 +387,16 @@ cpu_type_t cputype,
 cpu_subtype_t cpusubtype1,
 cpu_subtype_t cpusubtype2)
 {
+	/*
+	 * We now combine any i386 subtype to the ALL subtype.
+	 */
+	if(cputype == CPU_TYPE_I386)
+	    return(CPU_SUBTYPE_I386_ALL);
+
 	if(cpusubtype1 == cpusubtype2)
 	    return(cpusubtype1);
 
 	switch(cputype){
-	case CPU_TYPE_I386:
-	    /*
-	     * For compatiblity with pre-Rhapsody CR1 systems the subtypes that
-	     * previously existed are handled the same as before.  So going in
-	     * we know we don't have an exact match because of the test done
-	     * at the beginning of the routine.
-	     */
-	    if((cpusubtype1 == CPU_SUBTYPE_I386_ALL ||
-	        /* cpusubtype1 == CPU_SUBTYPE_386 || same as above */
-	        cpusubtype1 == CPU_SUBTYPE_486 ||
-	        cpusubtype1 == CPU_SUBTYPE_486SX ||
-	        cpusubtype1 == CPU_SUBTYPE_586) &&
-	       (cpusubtype2 == CPU_SUBTYPE_I386_ALL ||
-	        /* cpusubtype2 == CPU_SUBTYPE_386 || same as above */
-	        cpusubtype2 == CPU_SUBTYPE_486 ||
-	        cpusubtype2 == CPU_SUBTYPE_486SX ||
-	        cpusubtype2 == CPU_SUBTYPE_586)){
-		/* return the highest subtype of the two */
-		if(cpusubtype1 == CPU_SUBTYPE_586 ||
-		   cpusubtype2 == CPU_SUBTYPE_586)
-		    return(CPU_SUBTYPE_586);
-		if(cpusubtype1 == CPU_SUBTYPE_486SX ||
-		   cpusubtype2 == CPU_SUBTYPE_486SX)
-		    return(CPU_SUBTYPE_486SX);
-		if(cpusubtype1 == CPU_SUBTYPE_486 ||
-		   cpusubtype2 == CPU_SUBTYPE_486)
-		    return(CPU_SUBTYPE_486);
-		break; /* logically can't get here */
-	    }
-	    /*
-	     * If either is a MODEL_ALL type select the one with the highest
-	     * family type.  Note that only the old group of subtypes (ALL, 386,
-	     * 486, 486SX, 586) can ever have MODEL_ALL (a model number of
-	     * zero).  Since the cases both subtypes being in the old group are
-	     * handled above this makes the the highest family type the one that
-	     * is not MODEL_ALL.
-	     */
-	    if(CPU_SUBTYPE_INTEL_MODEL(cpusubtype1) ==
-	       CPU_SUBTYPE_INTEL_MODEL_ALL)
-		return(cpusubtype2);
-	    if(CPU_SUBTYPE_INTEL_MODEL(cpusubtype2) ==
-	       CPU_SUBTYPE_INTEL_MODEL_ALL)
-		return(cpusubtype1);
-	    /*
-	     * For all other families and models they must match exactly to
-	     * combine and since that test was done at the start of this routine
-	     * we know these do not match and do not combine.
-	     */
-	    return((cpu_subtype_t)-1);
-	    break; /* logically can't get here */
-
 	case CPU_TYPE_MC680x0:
 	    if(cpusubtype1 != CPU_SUBTYPE_MC680x0_ALL &&
 	       cpusubtype1 != CPU_SUBTYPE_MC68030_ONLY &&
@@ -450,6 +437,22 @@ cpu_subtype_t cpusubtype2)
 	    if(cpusubtype1 == CPU_SUBTYPE_POWERPC_601 ||
 	       cpusubtype2 == CPU_SUBTYPE_POWERPC_601)
 		return(CPU_SUBTYPE_POWERPC_601);
+
+	    if(cpusubtype1 > cpusubtype2)
+		return(cpusubtype1);
+	    else
+		return(cpusubtype2);
+	    break; /* logically can't get here */
+
+	case CPU_TYPE_POWERPC64:
+	    /*
+	     * Combining with the ALL type becomes the other type.  All other
+	     * non exact matches combine to the higher value subtype.
+	     */
+	    if(cpusubtype1 == CPU_SUBTYPE_POWERPC_ALL)
+		return(cpusubtype2);
+	    if(cpusubtype2 == CPU_SUBTYPE_POWERPC_ALL)
+		return(cpusubtype1);
 
 	    if(cpusubtype1 > cpusubtype2)
 		return(cpusubtype1);
@@ -522,6 +525,7 @@ cpu_subtype_t cpusubtype2)
 	return((cpu_subtype_t)-1); /* logically can't get here */
 }
 
+#ifndef RLD
 /*
  * cpusubtype_execute() returns TRUE if the exec_cpusubtype can be used for
  * execution on the host_cpusubtype for the specified cputype (this routine is
@@ -671,6 +675,7 @@ cpu_subtype_t exec_cpusubtype) /* can be the ALL type */
 	    case CPU_SUBTYPE_PENTPRO:
 	    case CPU_SUBTYPE_PENTII_M3:
 	    case CPU_SUBTYPE_PENTII_M5:
+	    case CPU_SUBTYPE_PENTIUM_4:
 		return(TRUE);
 	    default:
 		return(FALSE);
@@ -787,3 +792,4 @@ cpu_subtype_t exec_cpusubtype) /* can be the ALL type */
 	}
 	return(FALSE); /* logically can't get here */
 }
+#endif /* RLD */

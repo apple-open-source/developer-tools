@@ -1,5 +1,5 @@
 /* Functions to analyze and validate GIMPLE trees.
-   Copyright (C) 2002, 2003 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004 Free Software Foundation, Inc.
    Contributed by Diego Novillo <dnovillo@redhat.com>
    Rewritten by Jason Merrill <jason@redhat.com>
 
@@ -27,178 +27,31 @@ Boston, MA 02111-1307, USA.  */
 #include "tm.h"
 #include "tree.h"
 #include "tree-gimple.h"
+#include "tree-flow.h"
 #include "output.h"
 #include "rtl.h"
 #include "expr.h"
 #include "bitmap.h"
 
-/* GCC GIMPLE structure
-
-   Inspired by the SIMPLE C grammar at
-
-	http://www-acaps.cs.mcgill.ca/info/McCAT/McCAT.html
-
-   function:
-     FUNCTION_DECL
-       DECL_SAVED_TREE -> block
-   block:
-     BIND_EXPR
-       BIND_EXPR_VARS -> DECL chain
-       BIND_EXPR_BLOCK -> BLOCK
-       BIND_EXPR_BODY -> compound-stmt
-   compound-stmt:
-     COMPOUND_EXPR
-       op0 -> non-compound-stmt
-       op1 -> stmt
-     | EXPR_VEC
-       (or other alternate solution)
-   stmt: compound-stmt | non-compound-stmt
-   non-compound-stmt:
-     block
-     | if-stmt
-     | switch-stmt
-     | jump-stmt
-     | label-stmt
-     | try-stmt
-     | modify-stmt
-     | call-stmt
-   if-stmt:
-     COND_EXPR
-       op0 -> condition
-       op1 -> stmt
-       op2 -> stmt
-   switch-stmt:
-     SWITCH_EXPR
-       op0 -> val
-       op1 -> stmt
-       op2 -> array of case labels (as LABEL_DECLs?)
-         FIXME: add case value info
-   jump-stmt:
-       GOTO_EXPR
-         op0 -> LABEL_DECL | '*' ID
-     | RETURN_EXPR
-         op0 -> modify-stmt | NULL_TREE
-	 (maybe -> RESULT_DECL | NULL_TREE? seems like some of expand_return
-	  depends on getting a MODIFY_EXPR.)
-     | THROW_EXPR?  do we need/want such a thing for opts, perhaps
-         to generate an ERT_THROW region?  I think so.
-	 Hmm...this would only work at the GIMPLE level, where we know that
-	   the call args don't have any EH impact.  Perhaps
-	   annotation of the CALL_EXPR would work better.
-     | RESX_EXPR
-   label-stmt:
-     LABEL_EXPR
-         op0 -> LABEL_DECL
-     | CASE_LABEL_EXPR
-         CASE_LOW -> val | NULL_TREE
-         CASE_HIGH -> val | NULL_TREE
-	 CASE_LABEL -> LABEL_DECL  FIXME
-   try-stmt:
-     TRY_CATCH_EXPR
-       op0 -> stmt
-       op1 -> handler
-     | TRY_FINALLY_EXPR
-       op0 -> stmt
-       op1 -> stmt
-   handler:
-     catch-seq
-     | EH_FILTER_EXPR
-     | stmt
-   modify-stmt:
-     MODIFY_EXPR
-       op0 -> lhs
-       op1 -> rhs | COND_EXPR
-   call-stmt: CALL_EXPR
-     op0 -> ID | '&' ID
-     op1 -> arglist
-
-   addr-expr-arg : compref | ID
-   lhs: addr-expr-arg | '*' ID | bitfieldref
-   min-lval: ID | '*' ID
-   bitfieldref :
-     BIT_FIELD_REF
-       op0 -> compref | min-lval
-       op1 -> CONST
-       op2 -> CONST
-   compref :
-     COMPONENT_REF
-       op0 -> compref | min-lval
-     | ARRAY_REF
-       op0 -> compref | min-lval
-       op1 -> val
-     | REALPART_EXPR
-     | IMAGPART_EXPR
-
-   condition : val | val relop val
-   val : ID | CONST
-
-   rhs        : varname | CONST
-	      | '*' ID
-	      | '&' addr-expr-arg
-	      | call_expr
-	      | unop val
-	      | val binop val
-	      | '(' cast ')' val
-
-	      (cast here stands for all valid C typecasts)
-
-      unop
-	      : '+'
-	      | '-'
-	      | '!'
-	      | '~'
-
-      binop
-	      : relop | '-'
-	      | '+'
-	      | '/'
-	      | '*'
-	      | '%'
-	      | '&'
-	      | '|'
-	      | '<<'
-	      | '>>'
-	      | '^'
-
-      relop
-	      : '<'
-	      | '<='
-	      | '>'
-	      | '>='
-	      | '=='
-	      | '!='
-
-*/
+/* For the definitive definition of GIMPLE, see doc/tree-ssa.texi.  */
 
 static inline bool is_gimple_id (tree);
 
 /* Validation of GIMPLE expressions.  */
 
-/* Return nonzero if T is a GIMPLE RHS:
-
-      rhs     : varname | CONST
-	      | '*' ID
-	      | '&' varname_or_temp
-	      | call_expr
-	      | unop val
-	      | val binop val
-	      | '(' cast ')' val
-	      | <CONSTRUCTOR <gimple_val ...>>
-
-   The last option is only valid GIMPLE for vector and complex types;
-   aggregate types should have their constructors decomposed.  */
+/* Return true if T is a GIMPLE RHS for an assignment to a temporary.  */
 
 bool
-is_gimple_rhs (tree t)
+is_gimple_formal_tmp_rhs (tree t)
 {
   enum tree_code code = TREE_CODE (t);
 
   switch (TREE_CODE_CLASS (code))
     {
-    case '1':
-    case '2':
-    case '<':
-      return 1;
+    case tcc_unary:
+    case tcc_binary:
+    case tcc_comparison:
+      return true;
 
     default:
       break;
@@ -214,80 +67,104 @@ is_gimple_rhs (tree t)
     case CALL_EXPR:
     case CONSTRUCTOR:
     case COMPLEX_EXPR:
-      /* FIXME lower VA_ARG_EXPR.  */
-    case VA_ARG_EXPR:
     case INTEGER_CST:
     case REAL_CST:
     case STRING_CST:
     case COMPLEX_CST:
     case VECTOR_CST:
-      return 1;
+    case OBJ_TYPE_REF:
+      return true;
 
     default:
       break;
     }
 
-  if (is_gimple_lvalue (t) || is_gimple_val (t))
-    return 1;
-
-  return 0;
+  return is_gimple_lvalue (t) || is_gimple_val (t);
 }
 
-/* Returns nonzero if T is a valid CONSTRUCTOR component in GIMPLE, either
-   a val or another CONSTRUCTOR.  */
+/* Returns true iff T is a valid RHS for an assignment to a renamed
+   user -- or front-end generated artificial -- variable.  */
 
 bool
-is_gimple_constructor_elt (tree t)
+is_gimple_reg_rhs (tree t)
 {
-  return (is_gimple_val (t)
-	  || TREE_CODE (t) == CONSTRUCTOR);
+  /* If the RHS of the MODIFY_EXPR may throw or make a nonlocal goto
+     and the LHS is a user variable, then we need to introduce a formal
+     temporary.  This way the optimizers can determine that the user
+     variable is only modified if evaluation of the RHS does not throw.
+
+     Don't force a temp of a non-renamable type; the copy could be
+     arbitrarily expensive.  Instead we will generate a V_MAY_DEF for
+     the assignment.  */
+
+  if (is_gimple_reg_type (TREE_TYPE (t))
+      && ((TREE_CODE (t) == CALL_EXPR && TREE_SIDE_EFFECTS (t))
+	  || tree_could_throw_p (t)))
+    return false;
+
+  return is_gimple_formal_tmp_rhs (t);
 }
 
-/*  Return nonzero if T is a valid LHS for a GIMPLE assignment expression.  */
+/* Returns true iff T is a valid RHS for an assignment to an un-renamed
+   LHS, or for a call argument.  */
+
+bool
+is_gimple_mem_rhs (tree t)
+{
+  /* If we're dealing with a renamable type, either source or dest must be
+     a renamed variable.  Also force a temporary if the type doesn't need
+     to be stored in memory, since it's cheap and prevents erroneous
+     tailcalls (PR 17526).  */
+  if (is_gimple_reg_type (TREE_TYPE (t))
+      || TYPE_MODE (TREE_TYPE (t)) != BLKmode)
+    return is_gimple_val (t);
+  else
+    return is_gimple_formal_tmp_rhs (t);
+}
+
+/* Returns the appropriate RHS predicate for this LHS.  */
+
+gimple_predicate
+rhs_predicate_for (tree lhs)
+{
+  if (is_gimple_formal_tmp_var (lhs))
+    return is_gimple_formal_tmp_rhs;
+  else if (is_gimple_reg (lhs))
+    return is_gimple_reg_rhs;
+  else
+    return is_gimple_mem_rhs;
+}
+
+/*  Return true if T is a valid LHS for a GIMPLE assignment expression.  */
 
 bool
 is_gimple_lvalue (tree t)
 {
-  return (is_gimple_addr_expr_arg (t)
-	  || TREE_CODE (t) == INDIRECT_REF
+  return (is_gimple_addressable (t)
+	  || TREE_CODE (t) == WITH_SIZE_EXPR
 	  /* These are complex lvalues, but don't have addresses, so they
 	     go here.  */
 	  || TREE_CODE (t) == BIT_FIELD_REF);
 }
 
-
-/*  Return nonzero if T is a GIMPLE condition:
-
-      condexpr
-	      : val
-	      | val relop val  */
+/*  Return true if T is a GIMPLE condition.  */
 
 bool
 is_gimple_condexpr (tree t)
 {
-  return (is_gimple_val (t)
-	  || TREE_CODE_CLASS (TREE_CODE (t)) == '<');
+  return (is_gimple_val (t) || COMPARISON_CLASS_P (t));
 }
 
-
-/*  Return nonzero if T is a valid operand for '&':
-
-      varname
-	      : arrayref
-	      | compref
-	      | ID     */
+/*  Return true if T is something whose address can be taken.  */
 
 bool
-is_gimple_addr_expr_arg (tree t)
+is_gimple_addressable (tree t)
 {
-  return (is_gimple_id (t)
-	  || TREE_CODE (t) == ARRAY_REF
-	  || TREE_CODE (t) == COMPONENT_REF
-	  || TREE_CODE (t) == REALPART_EXPR
-	  || TREE_CODE (t) == IMAGPART_EXPR);
+  return (is_gimple_id (t) || handled_component_p (t)
+	  || INDIRECT_REF_P (t));
 }
 
-/* Return nonzero if T is function invariant.  Or rather a restricted
+/* Return true if T is function invariant.  Or rather a restricted
    form of function invariant.  */
 
 bool
@@ -303,14 +180,15 @@ is_gimple_min_invariant (tree t)
     case STRING_CST:
     case COMPLEX_CST:
     case VECTOR_CST:
-      return !TREE_OVERFLOW (t);
+      /* APPLE LOCAL mainline 4102133 */
+      return true;
 
     default:
       return false;
     }
 }
 
-/* Return nonzero if T looks like a valid GIMPLE statement.  */
+/* Return true if T looks like a valid GIMPLE statement.  */
 
 bool
 is_gimple_stmt (tree t)
@@ -323,10 +201,9 @@ is_gimple_stmt (tree t)
   switch (code)
     {
     case BIND_EXPR:
-      /* APPLE LOCAL AV if-conversion -dpatel  */
-      /* Remove case for COND_EXPR from here.  */
+    case COND_EXPR:
       /* These are only valid if they're void.  */
-      return VOID_TYPE_P (TREE_TYPE (t));
+      return TREE_TYPE (t) == NULL || VOID_TYPE_P (TREE_TYPE (t));
 
     case SWITCH_EXPR:
     case GOTO_EXPR:
@@ -341,29 +218,20 @@ is_gimple_stmt (tree t)
     case RESX_EXPR:
     case PHI_NODE:
     case STATEMENT_LIST:
-      /* APPLE LOCAL AV if-conversion -dpatel  */
-      /* Add case for COND_EXPR.  */
-    case COND_EXPR:
       /* These are always void.  */
-      return 1;
+      return true;
 
-    case VA_ARG_EXPR:
-      /* FIXME this should be lowered.  */
-      return 1;
-
-    case COMPOUND_EXPR:
-      /* FIXME should we work harder to make COMPOUND_EXPRs void?  */
     case CALL_EXPR:
     case MODIFY_EXPR:
       /* These are valid regardless of their type.  */
-      return 1;
+      return true;
 
     default:
-      return 0;
+      return false;
     }
 }
 
-/* Return nonzero if T is a variable.  */
+/* Return true if T is a variable.  */
 
 bool
 is_gimple_variable (tree t)
@@ -374,7 +242,7 @@ is_gimple_variable (tree t)
 	  || TREE_CODE (t) == SSA_NAME);
 }
 
-/*  Return nonzero if T is a GIMPLE identifier (something with an address).  */
+/*  Return true if T is a GIMPLE identifier (something with an address).  */
 
 static inline bool
 is_gimple_id (tree t)
@@ -382,12 +250,12 @@ is_gimple_id (tree t)
   return (is_gimple_variable (t)
 	  || TREE_CODE (t) == FUNCTION_DECL
 	  || TREE_CODE (t) == LABEL_DECL
+	  || TREE_CODE (t) == CONST_DECL
 	  /* Allow string constants, since they are addressable.  */
 	  || TREE_CODE (t) == STRING_CST);
 }
 
-/* Return nonzero if TYPE is a suitable type for a scalar register
-   variable.  */
+/* Return true if TYPE is a suitable type for a scalar register variable.  */
 
 bool
 is_gimple_reg_type (tree type)
@@ -397,7 +265,7 @@ is_gimple_reg_type (tree type)
 }
 
 
-/* Return nonzero if T is a scalar register variable.  */
+/* Return true if T is a scalar register variable.  */
 
 bool
 is_gimple_reg (tree t)
@@ -405,16 +273,67 @@ is_gimple_reg (tree t)
   if (TREE_CODE (t) == SSA_NAME)
     t = SSA_NAME_VAR (t);
 
-  return (is_gimple_variable (t)
-	  && is_gimple_reg_type (TREE_TYPE (t))
-	  /* A volatile decl is not acceptable because we can't reuse it as
-	     needed.  We need to copy it into a temp first.  */
-	  && ! TREE_THIS_VOLATILE (t)
-	  && ! TREE_ADDRESSABLE (t)
-	  && ! needs_to_live_in_memory (t));
+  if (!is_gimple_variable (t))
+    return false;
+  if (!is_gimple_reg_type (TREE_TYPE (t)))
+    return false;
+
+  /* A volatile decl is not acceptable because we can't reuse it as
+     needed.  We need to copy it into a temp first.  */
+  if (TREE_THIS_VOLATILE (t))
+    return false;
+
+  /* We define "registers" as things that can be renamed as needed,
+     which with our infrastructure does not apply to memory.  */
+  if (needs_to_live_in_memory (t))
+    return false;
+
+  /* Hard register variables are an interesting case.  For those that
+     are call-clobbered, we don't know where all the calls are, since
+     we don't (want to) take into account which operations will turn
+     into libcalls at the rtl level.  For those that are call-saved,
+     we don't currently model the fact that calls may in fact change
+     global hard registers, nor do we examine ASM_CLOBBERS at the tree
+     level, and so miss variable changes that might imply.  All around,
+     it seems safest to not do too much optimization with these at the
+     tree level at all.  We'll have to rely on the rtl optimizers to
+     clean this up, as there we've got all the appropriate bits exposed.  */
+  if (TREE_CODE (t) == VAR_DECL && DECL_HARD_REGISTER (t))
+    return false;
+
+  return true;
 }
 
-/* Return nonzero if T is a GIMPLE variable whose address is not needed.  */
+/* Returns true if T is a GIMPLE formal temporary variable.  */
+
+bool
+is_gimple_formal_tmp_var (tree t)
+{
+  if (TREE_CODE (t) == SSA_NAME)
+    return true;
+
+  return TREE_CODE (t) == VAR_DECL && DECL_GIMPLE_FORMAL_TEMP_P (t);
+}
+
+/* Returns true if T is a GIMPLE formal temporary register variable.  */
+
+bool
+is_gimple_formal_tmp_reg (tree t)
+{
+  /* The intent of this is to get hold of a value that won't change.
+     An SSA_NAME qualifies no matter if its of a user variable or not.  */
+  if (TREE_CODE (t) == SSA_NAME)
+    return true;
+
+  /* We don't know the lifetime characteristics of user variables.  */
+  if (!is_gimple_formal_tmp_var (t))
+    return false;
+
+  /* Finally, it must be capable of being placed in a register.  */
+  return is_gimple_reg (t);
+}
+
+/* Return true if T is a GIMPLE variable whose address is not needed.  */
 
 bool
 is_gimple_non_addressable (tree t)
@@ -422,13 +341,10 @@ is_gimple_non_addressable (tree t)
   if (TREE_CODE (t) == SSA_NAME)
     t = SSA_NAME_VAR (t);
 
-  return (is_gimple_variable (t)
-	  && ! TREE_ADDRESSABLE (t)
-	  && ! needs_to_live_in_memory (t));
+  return (is_gimple_variable (t) && ! needs_to_live_in_memory (t));
 }
 
-/*  Return nonzero if T is a GIMPLE rvalue, i.e. an identifier or a
-    constant.  */
+/* Return true if T is a GIMPLE rvalue, i.e. an identifier or a constant.  */
 
 bool
 is_gimple_val (tree t)
@@ -437,7 +353,7 @@ is_gimple_val (tree t)
   if (is_gimple_variable (t)
       && is_gimple_reg_type (TREE_TYPE (t))
       && !is_gimple_reg (t))
-    return 0;
+    return false;
 
   /* FIXME make these decls.  That can happen only when we expose the
      entire landing-pad construct at the tree level.  */
@@ -447,13 +363,18 @@ is_gimple_val (tree t)
   return (is_gimple_variable (t) || is_gimple_min_invariant (t));
 }
 
+/* Similarly, but accept hard registers as inputs to asm statements.  */
 
-/*  Return true if T is a GIMPLE minimal lvalue, of the form
+bool
+is_gimple_asm_val (tree t)
+{
+  if (TREE_CODE (t) == VAR_DECL && DECL_HARD_REGISTER (t))
+    return true;
 
-    min_lval: ID | '(' '*' ID ')'
+  return is_gimple_val (t);
+}
 
-    This never actually appears in the original SIMPLE grammar, but is
-    repeated in several places.  */
+/* Return true if T is a GIMPLE minimal lvalue.  */
 
 bool
 is_gimple_min_lval (tree t)
@@ -462,8 +383,7 @@ is_gimple_min_lval (tree t)
 	  || TREE_CODE (t) == INDIRECT_REF);
 }
 
-/*  Return nonzero if T is a typecast operation of the form
-    '(' cast ')' val.  */
+/* Return true if T is a typecast operation.  */
 
 bool
 is_gimple_cast (tree t)
@@ -476,6 +396,14 @@ is_gimple_cast (tree t)
           || TREE_CODE (t) == FIX_ROUND_EXPR);
 }
 
+/* Return true if T is a valid op0 of a CALL_EXPR.  */
+
+bool
+is_gimple_call_addr (tree t)
+{
+  return (TREE_CODE (t) == OBJ_TYPE_REF
+	  || is_gimple_val (t));
+}
 
 /* If T makes a function call, return the corresponding CALL_EXPR operand.
    Otherwise, return NULL_TREE.  */
@@ -483,142 +411,54 @@ is_gimple_cast (tree t)
 tree
 get_call_expr_in (tree t)
 {
+  if (TREE_CODE (t) == MODIFY_EXPR)
+    t = TREE_OPERAND (t, 1);
+  if (TREE_CODE (t) == WITH_SIZE_EXPR)
+    t = TREE_OPERAND (t, 0);
   if (TREE_CODE (t) == CALL_EXPR)
     return t;
-  else if (TREE_CODE (t) == MODIFY_EXPR
-	   && TREE_CODE (TREE_OPERAND (t, 1)) == CALL_EXPR)
-    return TREE_OPERAND (t, 1);
-  else if (TREE_CODE (t) == RETURN_EXPR
-           && TREE_OPERAND (t, 0)
-	   && TREE_CODE (TREE_OPERAND (t, 0)) == MODIFY_EXPR
-	   && TREE_CODE (TREE_OPERAND (TREE_OPERAND (t, 0), 1)) == CALL_EXPR)
-    return TREE_OPERAND (TREE_OPERAND (t, 0), 1);
-
   return NULL_TREE;
 }
 
+/* Given a memory reference expression T, return its base address.
+   The base address of a memory reference expression is the main
+   object being referenced.  For instance, the base address for
+   'array[i].fld[j]' is 'array'.  You can think of this as stripping
+   away the offset part from a memory address.
 
-/* Given an _EXPR TOP, reorganize all of the nested _EXPRs with the same
-   code so that they only appear as the second operand.  This should only
-   be used for tree codes which are truly associative, such as
-   COMPOUND_EXPR and TRUTH_ANDIF_EXPR.  Arithmetic is not associative
-   enough, due to the limited precision of arithmetic data types.
-
-   This transformation is conservative; the operand 0 of a matching tree
-   node will only change if it is also a matching node.  */
-
-tree
-right_assocify_expr (tree top)
-{
-  tree *p = &top;
-  enum tree_code code = TREE_CODE (*p);
-  while (TREE_CODE (*p) == code)
-    {
-      tree cur = *p;
-      tree lhs = TREE_OPERAND (cur, 0);
-      if (TREE_CODE (lhs) == code)
-	{
-	  /* There's a left-recursion.  If we have ((a, (b, c)), d), we
-	     want to rearrange to (a, (b, (c, d))).  */
-	  tree *q;
-
-	  /* Replace cur with the lhs; move (a, *) up.  */
-	  *p = lhs;
-
-	  if (code == COMPOUND_EXPR)
-	    {
-	      /* We need to give (b, c) the type of c; previously lhs had
-		 the type of b.  */
-	      TREE_TYPE (lhs) = TREE_TYPE (cur);
-	      if (TREE_SIDE_EFFECTS (cur))
-		TREE_SIDE_EFFECTS (lhs) = 1;
-	    }
-
-	  /* Walk through the op1 chain from there until we find something
-	     with a different code.  In this case, c.  */
-	  for (q = &TREE_OPERAND (lhs, 1); TREE_CODE (*q) == code;
-	       q = &TREE_OPERAND (*q, 1))
-	    TREE_TYPE (*q) = TREE_TYPE (cur);
-
-	  /* Change (*, d) into (c, d).  */
-	  TREE_OPERAND (cur, 0) = *q;
-
-	  /* And plug it in where c used to be.  */
-	  *q = cur;
-	}
-      else
-	p = &TREE_OPERAND (cur, 1);
-    }
-  return top;
-}
-
-/* Normalize the statement TOP.  If it is a COMPOUND_EXPR, reorganize it so
-   that we can traverse it without recursion.  If it is null, replace it
-   with a nop.  */
-
-tree
-rationalize_compound_expr (tree top)
-{
-  if (top == NULL_TREE)
-    top = build_empty_stmt ();
-  else if (TREE_CODE (top) == COMPOUND_EXPR)
-    top = right_assocify_expr (top);
-
-  return top;
-}
-
-/* Given a memory reference expression, return the base address.  Note that,
-   in contrast with get_base_var, this will not recurse inside INDIRECT_REF
-   expressions.  Therefore, given the reference PTR->FIELD, this function
-   will return *PTR.  Whereas get_base_var would've returned PTR.  */
+   This function calls handled_component_p to strip away all the inner
+   parts of the memory reference until it reaches the base object.  */
 
 tree
 get_base_address (tree t)
 {
-  do
-    {
-      if (SSA_VAR_P (t)
-	  || TREE_CODE (t) == STRING_CST
-	  || TREE_CODE (t) == CONSTRUCTOR
-	  || TREE_CODE (t) == INDIRECT_REF)
-	return t;
-
-      switch (TREE_CODE (t))
-	{
-	case ARRAY_REF:
-	case COMPONENT_REF:
-	case REALPART_EXPR:
-	case IMAGPART_EXPR:
-	case BIT_FIELD_REF:
-	  t = TREE_OPERAND (t, 0);
-	  break;
-
-	default:
-	  return NULL_TREE;
-	}
-    }
-  while (t);
-
-  return t;
+  while (handled_component_p (t))
+    t = TREE_OPERAND (t, 0);
+  
+  if (SSA_VAR_P (t)
+      || TREE_CODE (t) == STRING_CST
+      || TREE_CODE (t) == CONSTRUCTOR
+      || INDIRECT_REF_P (t))
+    return t;
+  else
+    return NULL_TREE;
 }
-
 
 void
 recalculate_side_effects (tree t)
 {
   enum tree_code code = TREE_CODE (t);
-  int fro = first_rtl_op (code);
+  int len = TREE_CODE_LENGTH (code);
   int i;
 
   switch (TREE_CODE_CLASS (code))
     {
-    case 'e':
+    case tcc_expression:
       switch (code)
 	{
 	case INIT_EXPR:
 	case MODIFY_EXPR:
 	case VA_ARG_EXPR:
-	case RTL_EXPR:
 	case PREDECREMENT_EXPR:
 	case PREINCREMENT_EXPR:
 	case POSTDECREMENT_EXPR:
@@ -632,17 +472,21 @@ recalculate_side_effects (tree t)
 	}
       /* Fall through.  */
 
-    case '<':  /* a comparison expression */
-    case '1':  /* a unary arithmetic expression */
-    case '2':  /* a binary arithmetic expression */
-    case 'r':  /* a reference */
+    case tcc_comparison:  /* a comparison expression */
+    case tcc_unary:       /* a unary arithmetic expression */
+    case tcc_binary:      /* a binary arithmetic expression */
+    case tcc_reference:   /* a reference */
       TREE_SIDE_EFFECTS (t) = TREE_THIS_VOLATILE (t);
-      for (i = 0; i < fro; ++i)
+      for (i = 0; i < len; ++i)
 	{
 	  tree op = TREE_OPERAND (t, i);
 	  if (op && TREE_SIDE_EFFECTS (op))
 	    TREE_SIDE_EFFECTS (t) = 1;
 	}
       break;
+
+    default:
+      /* Can never be used with non-expressions.  */
+      gcc_unreachable ();
    }
 }

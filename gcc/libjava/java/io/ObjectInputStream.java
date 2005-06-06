@@ -1,5 +1,6 @@
 /* ObjectInputStream.java -- Class used to read serialized objects
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003 Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2005
+   Free Software Foundation, Inc.
 
 This file is part of GNU Classpath.
 
@@ -42,15 +43,17 @@ import gnu.classpath.Configuration;
 import gnu.java.io.ObjectIdentityWrapper;
 
 import java.lang.reflect.Array;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Proxy;
+import java.security.AccessController;
+import java.security.PrivilegedAction;
 import java.util.Arrays;
 import java.util.Hashtable;
 import java.util.Vector;
-
 
 public class ObjectInputStream extends InputStream
   implements ObjectInput, ObjectStreamConstants
@@ -134,6 +137,9 @@ public class ObjectInputStream extends InputStream
     this.isDeserializing = true;
 
     byte marker = this.realInputStream.readByte();
+
+    depth += 2;
+
     if(dump) dumpElement("MARKER: 0x" + Integer.toHexString(marker) + " ");
 
     try
@@ -151,9 +157,9 @@ public class ObjectInputStream extends InputStream
 	  case TC_BLOCKDATALONG:
 	    {
 	      if (marker == TC_BLOCKDATALONG)
-		if(dump) dumpElementln("BLOCKDATALONG");
+		{ if(dump) dumpElementln("BLOCKDATALONG"); }
 	      else
-		if(dump) dumpElementln("BLOCKDATA");
+		{ if(dump) dumpElementln("BLOCKDATA"); }
 	      readNextBlock(marker);
 	      throw new StreamCorruptedException("Unexpected blockData");
 	    }
@@ -275,29 +281,7 @@ public class ObjectInputStream extends InputStream
 	      
 	      if (osc.realClassIsExternalizable)
 		{
-		  Externalizable obj = null;
-		  
-		  try
-		    {
-		      obj = (Externalizable)clazz.newInstance();
-		    }
-		  catch (InstantiationException e)
-		    {
-		      throw new ClassNotFoundException
-			("Instance of " + clazz + " could not be created");
-		    }
-		  catch (IllegalAccessException e)
-		    {
-		      throw new ClassNotFoundException
-			("Instance of " + clazz + " could not be created because class or "
-			 + "zero-argument constructor is not accessible");
-		    }
-		  catch (NoSuchMethodError e)
-		    {
-		      throw new ClassNotFoundException
-			("Instance of " + clazz
-			 + " could not be created because zero-argument constructor is not defined");
-		    }
+		  Externalizable obj = osc.newInstance();
 		  
 		  int handle = assignNewHandle(obj);
 		  
@@ -310,15 +294,23 @@ public class ObjectInputStream extends InputStream
 		  obj.readExternal(this);
 		  
 		  if (read_from_blocks)
-		    setBlockDataMode(oldmode);
+                    {
+		      setBlockDataMode(oldmode);
+                      if (!oldmode)
+			if (this.realInputStream.readByte() != TC_ENDBLOCKDATA)
+			    throw new IOException("No end of block data seen for class with readExternal (ObjectInputStream) method.");
+                    }
 		  
 		  ret_val = processResolution(osc, obj, handle);
 		  break;
 		} // end if (osc.realClassIsExternalizable)
 
-	      Object obj = newObject(clazz, osc.firstNonSerializableParent);
+	      Object obj = newObject(clazz, osc.firstNonSerializableParentConstructor);
 	      
 	      int handle = assignNewHandle(obj);
+	      Object prevObject = this.currentObject;
+	      ObjectStreamClass prevObjectStreamClass = this.currentObjectStreamClass;
+	      
 	      this.currentObject = obj;
 	      ObjectStreamClass[] hierarchy =
 		inputGetObjectStreamClasses(clazz);
@@ -341,34 +333,42 @@ public class ObjectInputStream extends InputStream
 		      boolean oldmode = setBlockDataMode(true);
 		      callReadMethod(readObjectMethod, this.currentObjectStreamClass.forClass(), obj);
 		      setBlockDataMode(oldmode);
-		      if(dump) dumpElement("ENDBLOCKDATA? ");
-		      try
-			{
-			  // FIXME: XXX: This try block is to catch EOF which is
-			  // thrown for some objects.  That indicates a bug in the logic.
-			  if (this.realInputStream.readByte() != TC_ENDBLOCKDATA)
-			    throw new IOException
-			      ("No end of block data seen for class with readObject (ObjectInputStream) method.");
-			  if(dump) dumpElementln("yes");
-			}
-		      catch (EOFException e)
-			{
-			  if(dump) dumpElementln("no, got EOFException");
-			}
-		      catch (IOException e)
-			{
-			  if(dump) dumpElementln("no, got IOException");
-			}
 		    }
 		  else
 		    {
 		      readFields(obj, currentObjectStreamClass);
 		    }
+
+		  if (this.currentObjectStreamClass.hasWriteMethod())
+		    {
+		      if(dump) dumpElement("ENDBLOCKDATA? ");
+		      try
+			{
+			  // FIXME: XXX: This try block is to
+			  // catch EOF which is thrown for some
+			  // objects.  That indicates a bug in
+			  // the logic.
+
+			  if (this.realInputStream.readByte() != TC_ENDBLOCKDATA)
+			    throw new IOException
+			      ("No end of block data seen for class with readObject (ObjectInputStream) method.");
+			  if(dump) dumpElementln("yes");
+			}
+// 		      catch (EOFException e)
+// 			{
+// 			  if(dump) dumpElementln("no, got EOFException");
+// 			}
+		      catch (IOException e)
+			{
+			  if(dump) dumpElementln("no, got IOException");
+			}
+		    }
 		}
 
-	      this.currentObject = null;
-	      this.currentObjectStreamClass = null;
+	      this.currentObject = prevObject;
+	      this.currentObjectStreamClass = prevObjectStreamClass;
 	      ret_val = processResolution(osc, obj, handle);
+		  
 	      break;
 	    }
 
@@ -396,6 +396,8 @@ public class ObjectInputStream extends InputStream
 	setBlockDataMode(old_mode);
 	
 	this.isDeserializing = was_deserializing;
+	
+	depth -= 2;
 	
 	if (! was_deserializing)
 	  {
@@ -499,7 +501,8 @@ public class ObjectInputStream extends InputStream
 						  flags, fields);
     assignNewHandle(osc);
 
-    ClassLoader currentLoader = currentLoader();
+    if (callersClassLoader == null)
+      callersClassLoader = currentLoader();
 	      
     for (int i = 0; i < field_count; i++)
       {
@@ -520,12 +523,40 @@ public class ObjectInputStream extends InputStream
 	  class_name = String.valueOf(type_code);
 		  
 	fields[i] =
-	  new ObjectStreamField(field_name, class_name, currentLoader);
+	  new ObjectStreamField(field_name, class_name, callersClassLoader);
       }
 	      
     /* Now that fields have been read we may resolve the class
      * (and read annotation if needed). */
-    Class clazz = resolveClass(osc);
+    Class clazz;
+    try
+      {
+	clazz = resolveClass(osc);
+      }
+    catch (ClassNotFoundException cnfe)
+      {
+	// Maybe it was an primitive class?
+	if (name.equals("void"))
+	  clazz = Void.TYPE;
+	else if (name.equals("boolean"))
+	  clazz = Boolean.TYPE;
+	else if (name.equals("byte"))
+	  clazz = Byte.TYPE;
+	else if (name.equals("short"))
+	  clazz = Short.TYPE;
+	else if (name.equals("char"))
+	  clazz = Character.TYPE;
+	else if (name.equals("int"))
+	  clazz = Integer.TYPE;
+	else if (name.equals("long"))
+	  clazz = Long.TYPE;
+	else if (name.equals("float"))
+	  clazz = Float.TYPE;
+	else if (name.equals("double"))
+	  clazz = Double.TYPE;
+	else
+	  throw cnfe;
+      }
 
     boolean oldmode = setBlockDataMode(true);
     osc.setClass(clazz, lookupClass(clazz.getSuperclass()));
@@ -535,16 +566,45 @@ public class ObjectInputStream extends InputStream
     // find the first non-serializable, non-abstract
     // class in clazz's inheritance hierarchy
     Class first_nonserial = clazz.getSuperclass();
-    while (Serializable.class.isAssignableFrom(first_nonserial)
-	|| Modifier.isAbstract(first_nonserial.getModifiers()))
+    // Maybe it is a primitive class, those don't have a super class,
+    // or Object itself.  Otherwise we can keep getting the superclass
+    // till we hit the Object class, or some other non-serializable class.
+
+    if (first_nonserial == null)
+      first_nonserial = clazz;
+    else
+      while (Serializable.class.isAssignableFrom(first_nonserial)
+	     || Modifier.isAbstract(first_nonserial.getModifiers()))
 	first_nonserial = first_nonserial.getSuperclass();
 
-    osc.firstNonSerializableParent = first_nonserial;
+    final Class local_constructor_class = first_nonserial;
+
+    osc.firstNonSerializableParentConstructor =
+        (Constructor)AccessController.doPrivileged(new PrivilegedAction()
+          {
+            public Object run()
+            {
+              try
+                {
+                  Constructor c = local_constructor_class.
+                                    getDeclaredConstructor(new Class[0]);
+                  if (Modifier.isPrivate(c.getModifiers()))
+                    return null;
+                  return c;
+                }
+              catch (NoSuchMethodException e)
+                {
+                  // error will be reported later, in newObject()
+                  return null;
+                }
+            }
+          });
+
     osc.realClassIsSerializable = Serializable.class.isAssignableFrom(clazz);
     osc.realClassIsExternalizable = Externalizable.class.isAssignableFrom(clazz);
 
     ObjectStreamField[] stream_fields = osc.fields;
-    ObjectStreamField[] real_fields = ObjectStreamClass.lookup(clazz).fields;
+    ObjectStreamField[] real_fields = ObjectStreamClass.lookupForClassObject(clazz).fields;
     ObjectStreamField[] fieldmapping = new ObjectStreamField[2 * Math.max(stream_fields.length, real_fields.length)];
 
     int stream_idx = 0;
@@ -710,7 +770,16 @@ public class ObjectInputStream extends InputStream
   protected Class resolveClass(ObjectStreamClass osc)
     throws ClassNotFoundException, IOException
   {
-    return Class.forName(osc.getName(), true, currentLoader());
+    if (callersClassLoader == null)
+      {
+	callersClassLoader = currentLoader ();
+	if (Configuration.DEBUG && dump)
+	  {
+	    dumpElementln ("CallersClassLoader = " + callersClassLoader);
+	  }
+      }
+
+    return Class.forName(osc.getName(), true, callersClassLoader);
   }
 
   /**
@@ -743,8 +812,10 @@ public class ObjectInputStream extends InputStream
    */
   private ObjectStreamClass lookupClass(Class clazz)
   {
-    ObjectStreamClass oclazz;
+    if (clazz == null)
+      return null;
 
+    ObjectStreamClass oclazz;
     oclazz = (ObjectStreamClass)classLookupTable.get(clazz);
     if (oclazz == null)
       return ObjectStreamClass.lookup(clazz);
@@ -1116,7 +1187,7 @@ public class ObjectInputStream extends InputStream
    *
    * XXX: finish up comments
    */
-  public static abstract class GetField
+  public abstract static class GetField
   {
     public abstract ObjectStreamClass getObjectStreamClass();
 
@@ -1303,10 +1374,10 @@ public class ObjectInputStream extends InputStream
 
 	  int off = field.getOffset();
 
-	  return (long)(((prim_field_data[off++] & 0xFF) << 56)
-			| ((prim_field_data[off++] & 0xFF) << 48)
-			| ((prim_field_data[off++] & 0xFF) << 40)
-			| ((prim_field_data[off++] & 0xFF) << 32)
+	  return (long)(((prim_field_data[off++] & 0xFFL) << 56)
+			| ((prim_field_data[off++] & 0xFFL) << 48)
+			| ((prim_field_data[off++] & 0xFFL) << 40)
+			| ((prim_field_data[off++] & 0xFFL) << 32)
 			| ((prim_field_data[off++] & 0xFF) << 24)
 			| ((prim_field_data[off++] & 0xFF) << 16)
 			| ((prim_field_data[off++] & 0xFF) << 8)
@@ -1340,10 +1411,10 @@ public class ObjectInputStream extends InputStream
 	  int off = field.getOffset();
 
 	  return Double.longBitsToDouble
-	    ( (long) (((prim_field_data[off++] & 0xFF) << 56)
-		      | ((prim_field_data[off++] & 0xFF) << 48)
-		      | ((prim_field_data[off++] & 0xFF) << 40)
-		      | ((prim_field_data[off++] & 0xFF) << 32)
+	    ( (long) (((prim_field_data[off++] & 0xFFL) << 56)
+		      | ((prim_field_data[off++] & 0xFFL) << 48)
+		      | ((prim_field_data[off++] & 0xFFL) << 40)
+		      | ((prim_field_data[off++] & 0xFFL) << 32)
 		      | ((prim_field_data[off++] & 0xFF) << 24)
 		      | ((prim_field_data[off++] & 0xFF) << 16)
 		      | ((prim_field_data[off++] & 0xFF) << 8)
@@ -1760,14 +1831,14 @@ public class ObjectInputStream extends InputStream
 
   // returns a new instance of REAL_CLASS that has been constructed
   // only to the level of CONSTRUCTOR_CLASS (a super class of REAL_CLASS)
-  private Object newObject (Class real_class, Class constructor_class)
-    throws ClassNotFoundException
+  private Object newObject (Class real_class, Constructor constructor)
+    throws ClassNotFoundException, IOException
   {
+    if (constructor == null)
+        throw new InvalidClassException("Missing accessible no-arg base class constructor for " + real_class.getName()); 
     try
       {
-	Object obj = allocateObject (real_class);
-	callConstructor (constructor_class, obj);
-	return obj;
+	return allocateObject(real_class, constructor.getDeclaringClass(), constructor);
       }
     catch (InstantiationException e)
       {
@@ -1802,13 +1873,10 @@ public class ObjectInputStream extends InputStream
    * @param sm SecurityManager instance which should be called.
    * @return The current class loader in the calling stack.
    */
-  private static ClassLoader currentClassLoader (SecurityManager sm)
-  {
-    // FIXME: This is too simple.
-    return ClassLoader.getSystemClassLoader ();
-  }
+  private static native ClassLoader currentClassLoader (SecurityManager sm);
 
-  private void callReadMethod (Method readObject, Class klass, Object obj) throws IOException
+  private void callReadMethod (Method readObject, Class klass, Object obj)
+    throws ClassNotFoundException, IOException
   {
     try
       {
@@ -1822,6 +1890,8 @@ public class ObjectInputStream extends InputStream
 	  throw (RuntimeException) exception;
 	if (exception instanceof IOException)
 	  throw (IOException) exception;
+        if (exception instanceof ClassNotFoundException)
+          throw (ClassNotFoundException) exception;
 
 	throw new IOException("Exception thrown from readObject() on " +
 			       klass + ": " + exception.getClass().getName());
@@ -1836,10 +1906,8 @@ public class ObjectInputStream extends InputStream
     prereadFields = null;
   }
     
-  private native Object allocateObject (Class clazz)
+  private native Object allocateObject(Class clazz, Class constr_clazz, Constructor constructor)
     throws InstantiationException;
-
-  private native void callConstructor (Class clazz, Object obj);
 
   private static final int BUFFER_SIZE = 1024;
 
@@ -1862,7 +1930,11 @@ public class ObjectInputStream extends InputStream
   private Hashtable classLookupTable;
   private GetField prereadFields;
 
-  private static boolean dump = false && Configuration.DEBUG;
+  private ClassLoader callersClassLoader;
+  private static boolean dump;
+
+  // The nesting depth for debugging output
+  private int depth = 0;
 
   private void dumpElement (String msg)
   {
@@ -1872,6 +1944,9 @@ public class ObjectInputStream extends InputStream
   private void dumpElementln (String msg)
   {
     System.out.println(msg);
+    for (int i = 0; i < depth; i++)
+      System.out.print (" ");
+    System.out.print (Thread.currentThread() + ": ");
   }
 
   static
@@ -1881,24 +1956,24 @@ public class ObjectInputStream extends InputStream
 	System.loadLibrary ("javaio");
       }
   }
+
+  // used to keep a prioritized list of object validators
+  private static final class ValidatorAndPriority implements Comparable
+  {
+    int priority;
+    ObjectInputValidation validator;
+
+    ValidatorAndPriority (ObjectInputValidation validator, int priority)
+    {
+      this.priority = priority;
+      this.validator = validator;
+    }
+
+    public int compareTo (Object o)
+    {
+      ValidatorAndPriority vap = (ValidatorAndPriority)o;
+      return this.priority - vap.priority;
+    }
+  }
 }
 
-
-// used to keep a prioritized list of object validators
-class ValidatorAndPriority implements Comparable
-{
-  int priority;
-  ObjectInputValidation validator;
-
-  ValidatorAndPriority (ObjectInputValidation validator, int priority)
-  {
-    this.priority = priority;
-    this.validator = validator;
-  }
-
-  public int compareTo (Object o)
-  {
-    ValidatorAndPriority vap = (ValidatorAndPriority)o;
-    return this.priority - vap.priority;
-  }
-}

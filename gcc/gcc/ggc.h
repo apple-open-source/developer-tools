@@ -209,6 +209,8 @@ extern struct alloc_zone *garbage_zone;
 extern struct alloc_zone *rtl_zone;
 /* For regular tree allocations.  */
 extern struct alloc_zone *tree_zone;
+/* When set, ggc_collect will do collection.  */
+extern bool ggc_force_collect;
 
 /* The internal primitive.  */
 extern void *ggc_alloc_stat (size_t MEM_STAT_DECL);
@@ -233,12 +235,19 @@ extern void *ggc_calloc (size_t, size_t);
 /* Free a block.  To be used when known for certain it's not reachable.  */
 extern void ggc_free (void *);
  
-extern void ggc_record_overhead (size_t, size_t MEM_STAT_DECL);
+extern void ggc_record_overhead (size_t, size_t, void * MEM_STAT_DECL);
+extern void ggc_free_overhead (void *);
+extern void ggc_prune_overhead_list (void);
 
 extern void dump_ggc_loc_statistics (void);
 
-#define ggc_alloc_rtx(CODE)                    \
-  ((rtx) ggc_alloc_typed (gt_ggc_e_7rtx_def, RTX_SIZE (CODE)))
+/* Type-safe, C++-friendly versions of ggc_alloc() and gcc_calloc().  */
+#define GGC_NEW(T)		((T *) ggc_alloc (sizeof (T)))
+#define GGC_CNEW(T)		((T *) ggc_alloc_cleared (sizeof (T)))
+#define GGC_NEWVEC(T, N)	((T *) ggc_alloc ((N) * sizeof(T)))
+#define GGC_CNEWVEC(T, N)	((T *) ggc_alloc_cleared ((N) * sizeof(T)))
+#define GGC_NEWVAR(T, S)	((T *) ggc_alloc ((S)))
+#define GGC_CNEWVAR(T, S)	((T *) ggc_alloc_cleared ((S)))
 
 #define ggc_alloc_rtvec(NELT)						  \
   ((rtvec) ggc_alloc_typed (gt_ggc_e_9rtvec_def, sizeof (struct rtvec_def) \

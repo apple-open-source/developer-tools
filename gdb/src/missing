@@ -165,7 +165,7 @@ WARNING: \`$1' is missing on your system.  You should only need it if
 WARNING: \`$1' is needed, and you do not seem to have it handy on your
          system.  You might have modified some files without having the
          proper tools for further handling them.
-         You can get \`$1Help2man' as part of \`Autoconf' from any GNU
+         You can get \`$1' as part of \`Autoconf' from any GNU
          archive site."
 
     file=`echo "$*" | sed -n 's/.*--output[ =]*\([^ ]*\).*/\1/p'`

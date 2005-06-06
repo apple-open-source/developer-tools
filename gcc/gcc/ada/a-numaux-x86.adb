@@ -62,9 +62,9 @@ package body Ada.Numerics.Aux is
    pragma Inline (Is_Nan);
    pragma Inline (Reduce);
 
-   ---------------------------------
-   --  Basic Elementary Functions --
-   ---------------------------------
+   --------------------------------
+   -- Basic Elementary Functions --
+   --------------------------------
 
    --  This section implements a few elementary functions that are used to
    --  build the more complex ones. This ordering enables better inlining.
@@ -500,7 +500,7 @@ package body Ada.Numerics.Aux is
                   Inputs   => Double'Asm_Input  ("0", Reduced_X));
          else
             Asm (Template  => "fsincos" & NL
-                            & "fdivp   %%st(1)" & NL
+                            & "fdivp   %%st, %%st(1)" & NL
                             & "fchs",
                   Outputs  => Double'Asm_Output ("=t", Result),
                   Inputs   => Double'Asm_Input  ("0", Reduced_X));

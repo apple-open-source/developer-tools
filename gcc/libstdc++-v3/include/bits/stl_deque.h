@@ -1,6 +1,6 @@
 // Deque implementation -*- C++ -*-
 
-// Copyright (C) 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+// Copyright (C) 2001, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -87,10 +87,11 @@ namespace _GLIBCXX_STD
   /**
    *  @brief A deque::iterator.
    *
-   *  Quite a bit of intelligence here.  Much of the functionality of deque is
-   *  actually passed off to this class.  A deque holds two of these internally,
-   *  marking its valid range.  Access to elements is done as offsets of either
-   *  of those two, relying on operator overloading in this class.
+   *  Quite a bit of intelligence here.  Much of the functionality of
+   *  deque is actually passed off to this class.  A deque holds two
+   *  of these internally, marking its valid range.  Access to
+   *  elements is done as offsets of either of those two, relying on
+   *  operator overloading in this class.
    *
    *  @if maint
    *  All the functions are op overloads except for _M_set_node.
@@ -219,9 +220,9 @@ namespace _GLIBCXX_STD
       { return *(*this + __n); }
 
       /** @if maint
-       *  Prepares to traverse new_node.  Sets everything except _M_cur, which
-       *  should therefore be set by the caller immediately afterwards, based on
-       *  _M_first and _M_last.
+       *  Prepares to traverse new_node.  Sets everything except
+       *  _M_cur, which should therefore be set by the caller
+       *  immediately afterwards, based on _M_first and _M_last.
        *  @endif
        */
       void
@@ -419,15 +420,16 @@ namespace _GLIBCXX_STD
     };
 
   template<typename _Tp, typename _Alloc>
-  _Deque_base<_Tp,_Alloc>::~_Deque_base()
-  {
-    if (this->_M_impl._M_map)
+    _Deque_base<_Tp, _Alloc>::
+    ~_Deque_base()
     {
-      _M_destroy_nodes(this->_M_impl._M_start._M_node,
-		       this->_M_impl._M_finish._M_node + 1);
-      _M_deallocate_map(this->_M_impl._M_map, this->_M_impl._M_map_size);
+      if (this->_M_impl._M_map)
+	{
+	  _M_destroy_nodes(this->_M_impl._M_start._M_node,
+			   this->_M_impl._M_finish._M_node + 1);
+	  _M_deallocate_map(this->_M_impl._M_map, this->_M_impl._M_map_size);
+	}
     }
-  }
 
   /**
    *  @if maint
@@ -441,12 +443,14 @@ namespace _GLIBCXX_STD
   */
   template<typename _Tp, typename _Alloc>
     void
-    _Deque_base<_Tp,_Alloc>::_M_initialize_map(size_t __num_elements)
+    _Deque_base<_Tp, _Alloc>::
+    _M_initialize_map(size_t __num_elements)
     {
-      size_t __num_nodes = __num_elements / __deque_buf_size(sizeof(_Tp)) + 1;
+      const size_t __num_nodes = (__num_elements/ __deque_buf_size(sizeof(_Tp))
+				  + 1);
 
       this->_M_impl._M_map_size = std::max((size_t) _S_initial_map_size,
-				   __num_nodes + 2);
+					   size_t(__num_nodes + 2));
       this->_M_impl._M_map = _M_allocate_map(this->_M_impl._M_map_size);
 
       // For "small" maps (needing less than _M_map_size nodes), allocation
@@ -478,7 +482,8 @@ namespace _GLIBCXX_STD
 
   template<typename _Tp, typename _Alloc>
     void
-    _Deque_base<_Tp,_Alloc>::_M_create_nodes(_Tp** __nstart, _Tp** __nfinish)
+    _Deque_base<_Tp, _Alloc>::
+    _M_create_nodes(_Tp** __nstart, _Tp** __nfinish)
     {
       _Tp** __cur;
       try
@@ -495,7 +500,8 @@ namespace _GLIBCXX_STD
 
   template<typename _Tp, typename _Alloc>
     void
-    _Deque_base<_Tp,_Alloc>::_M_destroy_nodes(_Tp** __nstart, _Tp** __nfinish)
+    _Deque_base<_Tp, _Alloc>::
+    _M_destroy_nodes(_Tp** __nstart, _Tp** __nfinish)
     {
       for (_Tp** __n = __nstart; __n < __nfinish; ++__n)
 	_M_deallocate_node(*__n);
@@ -525,28 +531,27 @@ namespace _GLIBCXX_STD
    *  - size_t      _M_map_size
    *  - iterator    _M_start, _M_finish
    *
-   *  map_size is at least 8.  %map is an array of map_size pointers-to-"nodes".
-   *  (The name %map has nothing to do with the std::map class, and "nodes"
-   *  should not be confused with std::list's usage of "node".)
+   *  map_size is at least 8.  %map is an array of map_size
+   *  pointers-to-"nodes".  (The name %map has nothing to do with the
+   *  std::map class, and "nodes" should not be confused with
+   *  std::list's usage of "node".)
    *
-   *  A "node" has no specific type name as such, but it is referred to as
-   *  "node" in this file.  It is a simple array-of-Tp.  If Tp is very large,
-   *  there will be one Tp element per node (i.e., an "array" of one).
-   *  For non-huge Tp's, node size is inversely related to Tp size:  the
-   *  larger the Tp, the fewer Tp's will fit in a node.  The goal here is to
-   *  keep the total size of a node relatively small and constant over different
-   *  Tp's, to improve allocator efficiency.
+   *  A "node" has no specific type name as such, but it is referred
+   *  to as "node" in this file.  It is a simple array-of-Tp.  If Tp
+   *  is very large, there will be one Tp element per node (i.e., an
+   *  "array" of one).  For non-huge Tp's, node size is inversely
+   *  related to Tp size: the larger the Tp, the fewer Tp's will fit
+   *  in a node.  The goal here is to keep the total size of a node
+   *  relatively small and constant over different Tp's, to improve
+   *  allocator efficiency.
    *
-   *  **** As I write this, the nodes are /not/ allocated using the high-speed
-   *  memory pool.  There are 20 hours left in the year; perhaps I can fix
-   *  this before 2002.
-   *
-   *  Not every pointer in the %map array will point to a node.  If the initial
-   *  number of elements in the deque is small, the /middle/ %map pointers will
-   *  be valid, and the ones at the edges will be unused.  This same situation
-   *  will arise as the %map grows:  available %map pointers, if any, will be on
-   *  the ends.  As new nodes are created, only a subset of the %map's pointers
-   *  need to be copied "outward".
+   *  Not every pointer in the %map array will point to a node.  If
+   *  the initial number of elements in the deque is small, the
+   *  /middle/ %map pointers will be valid, and the ones at the edges
+   *  will be unused.  This same situation will arise as the %map
+   *  grows: available %map pointers, if any, will be on the ends.  As
+   *  new nodes are created, only a subset of the %map's pointers need
+   *  to be copied "outward".
    *
    *  Class invariants:
    * - For any nonsingular iterator i:
@@ -558,16 +563,17 @@ namespace _GLIBCXX_STD
    *    - i.cur is a pointer in the range [i.first, i.last).  NOTE:
    *      the implication of this is that i.cur is always a dereferenceable
    *      pointer, even if i is a past-the-end iterator.
-   * - Start and Finish are always nonsingular iterators.  NOTE: this means that
-   *   an empty deque must have one node, a deque with <N elements (where N is
-   *   the node buffer size) must have one node, a deque with N through (2N-1)
-   *   elements must have two nodes, etc.
-   * - For every node other than start.node and finish.node, every element in
-   *   the node is an initialized object.  If start.node == finish.node, then
-   *   [start.cur, finish.cur) are initialized objects, and the elements outside
-   *   that range are uninitialized storage.  Otherwise, [start.cur, start.last)
-   *   and [finish.first, finish.cur) are initialized objects, and [start.first,
-   *   start.cur) and [finish.cur, finish.last) are uninitialized storage.
+   * - Start and Finish are always nonsingular iterators.  NOTE: this
+   * means that an empty deque must have one node, a deque with <N
+   * elements (where N is the node buffer size) must have one node, a
+   * deque with N through (2N-1) elements must have two nodes, etc.
+   * - For every node other than start.node and finish.node, every
+   * element in the node is an initialized object.  If start.node ==
+   * finish.node, then [start.cur, finish.cur) are initialized
+   * objects, and the elements outside that range are uninitialized
+   * storage.  Otherwise, [start.cur, start.last) and [finish.first,
+   * finish.cur) are initialized objects, and [start.first, start.cur)
+   * and [finish.cur, finish.last) are uninitialized storage.
    * - [%map, %map + map_size) is a valid, non-empty range.
    * - [start.node, finish.node] is a valid range contained within
    *   [%map, %map + map_size).
@@ -595,14 +601,14 @@ namespace _GLIBCXX_STD
 
     public:
       typedef _Tp                                value_type;
-      typedef value_type*                        pointer;
-      typedef const value_type*                  const_pointer;
+      typedef typename _Alloc::pointer           pointer;
+      typedef typename _Alloc::const_pointer     const_pointer;
+      typedef typename _Alloc::reference         reference;
+      typedef typename _Alloc::const_reference   const_reference;
       typedef typename _Base::iterator           iterator;
       typedef typename _Base::const_iterator     const_iterator;
       typedef std::reverse_iterator<const_iterator>   const_reverse_iterator;
       typedef std::reverse_iterator<iterator>         reverse_iterator;
-      typedef value_type&                        reference;
-      typedef const value_type&                  const_reference;
       typedef size_t                             size_type;
       typedef ptrdiff_t                          difference_type;
       typedef typename _Base::allocator_type     allocator_type;
@@ -672,8 +678,9 @@ namespace _GLIBCXX_STD
        */
       deque(const deque& __x)
       : _Base(__x.get_allocator(), __x.size())
-      { std::uninitialized_copy(__x.begin(), __x.end(),
-				this->_M_impl._M_start); }
+      { std::__uninitialized_copy_a(__x.begin(), __x.end(), 
+				    this->_M_impl._M_start,
+				    this->get_allocator()); }
 
       /**
        *  @brief  Builds a %deque from a range.
@@ -695,7 +702,7 @@ namespace _GLIBCXX_STD
 	: _Base(__a)
         {
 	  // Check whether it's an integral type.  If so, it's not an iterator.
-	  typedef typename _Is_integer<_InputIterator>::_Integral _Integral;
+	  typedef typename std::__is_integer<_InputIterator>::__type _Integral;
 	  _M_initialize_dispatch(__first, __last, _Integral());
 	}
 
@@ -705,7 +712,8 @@ namespace _GLIBCXX_STD
        *  way.  Managing the pointer is the user's responsibilty.
        */
       ~deque()
-      { std::_Destroy(this->_M_impl._M_start, this->_M_impl._M_finish); }
+      { std::_Destroy(this->_M_impl._M_start, this->_M_impl._M_finish,
+		      this->get_allocator()); }
 
       /**
        *  @brief  %Deque assignment operator.
@@ -722,10 +730,10 @@ namespace _GLIBCXX_STD
        *  @param  n  Number of elements to be assigned.
        *  @param  val  Value to be assigned.
        *
-       *  This function fills a %deque with @a n copies of the given value.
-       *  Note that the assignment completely changes the %deque and that the
-       *  resulting %deque's size is the same as the number of elements assigned.
-       *  Old data may be lost.
+       *  This function fills a %deque with @a n copies of the given
+       *  value.  Note that the assignment completely changes the
+       *  %deque and that the resulting %deque's size is the same as
+       *  the number of elements assigned.  Old data may be lost.
        */
       void
       assign(size_type __n, const value_type& __val)
@@ -747,7 +755,7 @@ namespace _GLIBCXX_STD
         void
         assign(_InputIterator __first, _InputIterator __last)
         {
-	  typedef typename _Is_integer<_InputIterator>::_Integral _Integral;
+	  typedef typename std::__is_integer<_InputIterator>::__type _Integral;
 	  _M_assign_dispatch(__first, __last, _Integral());
 	}
 
@@ -774,50 +782,53 @@ namespace _GLIBCXX_STD
       { return this->_M_impl._M_start; }
 
       /**
-       *  Returns a read/write iterator that points one past the last element in
-       *  the %deque.  Iteration is done in ordinary element order.
+       *  Returns a read/write iterator that points one past the last
+       *  element in the %deque.  Iteration is done in ordinary
+       *  element order.
        */
       iterator
       end()
       { return this->_M_impl._M_finish; }
 
       /**
-       *  Returns a read-only (constant) iterator that points one past the last
-       *  element in the %deque.  Iteration is done in ordinary element order.
+       *  Returns a read-only (constant) iterator that points one past
+       *  the last element in the %deque.  Iteration is done in
+       *  ordinary element order.
        */
       const_iterator
       end() const
       { return this->_M_impl._M_finish; }
 
       /**
-       *  Returns a read/write reverse iterator that points to the last element
-       *  in the %deque.  Iteration is done in reverse element order.
+       *  Returns a read/write reverse iterator that points to the
+       *  last element in the %deque.  Iteration is done in reverse
+       *  element order.
        */
       reverse_iterator
       rbegin()
       { return reverse_iterator(this->_M_impl._M_finish); }
 
       /**
-       *  Returns a read-only (constant) reverse iterator that points to the
-       *  last element in the %deque.  Iteration is done in reverse element
-       *  order.
+       *  Returns a read-only (constant) reverse iterator that points
+       *  to the last element in the %deque.  Iteration is done in
+       *  reverse element order.
        */
       const_reverse_iterator
       rbegin() const
       { return const_reverse_iterator(this->_M_impl._M_finish); }
 
       /**
-       *  Returns a read/write reverse iterator that points to one before the
-       *  first element in the %deque.  Iteration is done in reverse element
-       *  order.
+       *  Returns a read/write reverse iterator that points to one
+       *  before the first element in the %deque.  Iteration is done
+       *  in reverse element order.
        */
       reverse_iterator
       rend() { return reverse_iterator(this->_M_impl._M_start); }
 
       /**
-       *  Returns a read-only (constant) reverse iterator that points to one
-       *  before the first element in the %deque.  Iteration is done in reverse
-       *  element order.
+       *  Returns a read-only (constant) reverse iterator that points
+       *  to one before the first element in the %deque.  Iteration is
+       *  done in reverse element order.
        */
       const_reverse_iterator
       rend() const
@@ -839,10 +850,11 @@ namespace _GLIBCXX_STD
        *  @param  new_size  Number of elements the %deque should contain.
        *  @param  x  Data with which new elements should be populated.
        *
-       *  This function will %resize the %deque to the specified number of
-       *  elements.  If the number is smaller than the %deque's current size the
-       *  %deque is truncated, otherwise the %deque is extended and new elements
-       *  are populated with given data.
+       *  This function will %resize the %deque to the specified
+       *  number of elements.  If the number is smaller than the
+       *  %deque's current size the %deque is truncated, otherwise the
+       *  %deque is extended and new elements are populated with given
+       *  data.
        */
       void
       resize(size_type __new_size, const value_type& __x)
@@ -858,17 +870,18 @@ namespace _GLIBCXX_STD
        *  @brief  Resizes the %deque to the specified number of elements.
        *  @param  new_size  Number of elements the %deque should contain.
        *
-       *  This function will resize the %deque to the specified number of
-       *  elements.  If the number is smaller than the %deque's current size the
-       *  %deque is truncated, otherwise the %deque is extended and new elements
-       *  are default-constructed.
+       *  This function will resize the %deque to the specified number
+       *  of elements.  If the number is smaller than the %deque's
+       *  current size the %deque is truncated, otherwise the %deque
+       *  is extended and new elements are default-constructed.
        */
       void
       resize(size_type new_size)
       { resize(new_size, value_type()); }
 
       /**
-       *  Returns true if the %deque is empty.  (Thus begin() would equal end().)
+       *  Returns true if the %deque is empty.  (Thus begin() would
+       *  equal end().)
        */
       bool
       empty() const
@@ -876,26 +889,30 @@ namespace _GLIBCXX_STD
 
       // element access
       /**
-       *  @brief  Subscript access to the data contained in the %deque.
-       *  @param  n  The index of the element for which data should be accessed.
+       *  @brief Subscript access to the data contained in the %deque.
+       *  @param n The index of the element for which data should be
+       *  accessed.
        *  @return  Read/write reference to data.
        *
        *  This operator allows for easy, array-style, data access.
-       *  Note that data access with this operator is unchecked and out_of_range
-       *  lookups are not defined. (For checked lookups see at().)
+       *  Note that data access with this operator is unchecked and
+       *  out_of_range lookups are not defined. (For checked lookups
+       *  see at().)
        */
       reference
       operator[](size_type __n)
       { return this->_M_impl._M_start[difference_type(__n)]; }
 
       /**
-       *  @brief  Subscript access to the data contained in the %deque.
-       *  @param  n  The index of the element for which data should be accessed.
+       *  @brief Subscript access to the data contained in the %deque.
+       *  @param n The index of the element for which data should be
+       *  accessed.
        *  @return  Read-only (constant) reference to data.
        *
        *  This operator allows for easy, array-style, data access.
-       *  Note that data access with this operator is unchecked and out_of_range
-       *  lookups are not defined. (For checked lookups see at().)
+       *  Note that data access with this operator is unchecked and
+       *  out_of_range lookups are not defined. (For checked lookups
+       *  see at().)
        */
       const_reference
       operator[](size_type __n) const
@@ -913,21 +930,26 @@ namespace _GLIBCXX_STD
     public:
       /**
        *  @brief  Provides access to the data contained in the %deque.
-       *  @param  n  The index of the element for which data should be accessed.
+       *  @param n The index of the element for which data should be
+       *  accessed.
        *  @return  Read/write reference to data.
        *  @throw  std::out_of_range  If @a n is an invalid index.
        *
-       *  This function provides for safer data access.  The parameter is first
-       *  checked that it is in the range of the deque.  The function throws
-       *  out_of_range if the check fails.
+       *  This function provides for safer data access.  The parameter
+       *  is first checked that it is in the range of the deque.  The
+       *  function throws out_of_range if the check fails.
        */
       reference
       at(size_type __n)
-      { _M_range_check(__n); return (*this)[__n]; }
+      {
+	_M_range_check(__n);
+	return (*this)[__n];
+      }
 
       /**
        *  @brief  Provides access to the data contained in the %deque.
-       *  @param  n  The index of the element for which data should be accessed.
+       *  @param n The index of the element for which data should be
+       *  accessed.
        *  @return  Read-only (constant) reference to data.
        *  @throw  std::out_of_range  If @a n is an invalid index.
        *
@@ -943,12 +965,12 @@ namespace _GLIBCXX_STD
       }
 
       /**
-       *  Returns a read/write reference to the data at the first element of the
-       *  %deque.
+       *  Returns a read/write reference to the data at the first
+       *  element of the %deque.
        */
       reference
       front()
-      { return *this->_M_impl._M_start; }
+      { return *begin(); }
 
       /**
        *  Returns a read-only (constant) reference to the data at the first
@@ -956,7 +978,7 @@ namespace _GLIBCXX_STD
        */
       const_reference
       front() const
-      { return *this->_M_impl._M_start; }
+      { return *begin(); }
 
       /**
        *  Returns a read/write reference to the data at the last element of the
@@ -965,7 +987,7 @@ namespace _GLIBCXX_STD
       reference
       back()
       {
-	iterator __tmp = this->_M_impl._M_finish;
+	iterator __tmp = end();
 	--__tmp;
 	return *__tmp;
       }
@@ -977,7 +999,7 @@ namespace _GLIBCXX_STD
       const_reference
       back() const
       {
-	const_iterator __tmp = this->_M_impl._M_finish;
+	const_iterator __tmp = end();
 	--__tmp;
 	return *__tmp;
       }
@@ -987,16 +1009,17 @@ namespace _GLIBCXX_STD
        *  @brief  Add data to the front of the %deque.
        *  @param  x  Data to be added.
        *
-       *  This is a typical stack operation.  The function creates an element at
-       *  the front of the %deque and assigns the given data to it.  Due to the
-       *  nature of a %deque this operation can be done in constant time.
+       *  This is a typical stack operation.  The function creates an
+       *  element at the front of the %deque and assigns the given
+       *  data to it.  Due to the nature of a %deque this operation
+       *  can be done in constant time.
        */
       void
       push_front(const value_type& __x)
       {
 	if (this->_M_impl._M_start._M_cur != this->_M_impl._M_start._M_first)
 	  {
-	    std::_Construct(this->_M_impl._M_start._M_cur - 1, __x);
+	    this->_M_impl.construct(this->_M_impl._M_start._M_cur - 1, __x);
 	    --this->_M_impl._M_start._M_cur;
 	  }
 	else
@@ -1007,9 +1030,10 @@ namespace _GLIBCXX_STD
        *  @brief  Add data to the end of the %deque.
        *  @param  x  Data to be added.
        *
-       *  This is a typical stack operation.  The function creates an element at
-       *  the end of the %deque and assigns the given data to it.  Due to the
-       *  nature of a %deque this operation can be done in constant time.
+       *  This is a typical stack operation.  The function creates an
+       *  element at the end of the %deque and assigns the given data
+       *  to it.  Due to the nature of a %deque this operation can be
+       *  done in constant time.
        */
       void
       push_back(const value_type& __x)
@@ -1017,7 +1041,7 @@ namespace _GLIBCXX_STD
 	if (this->_M_impl._M_finish._M_cur
 	    != this->_M_impl._M_finish._M_last - 1)
 	  {
-	    std::_Construct(this->_M_impl._M_finish._M_cur, __x);
+	    this->_M_impl.construct(this->_M_impl._M_finish._M_cur, __x);
 	    ++this->_M_impl._M_finish._M_cur;
 	  }
 	else
@@ -1038,7 +1062,7 @@ namespace _GLIBCXX_STD
 	if (this->_M_impl._M_start._M_cur
 	    != this->_M_impl._M_start._M_last - 1)
 	  {
-	    std::_Destroy(this->_M_impl._M_start._M_cur);
+	    this->_M_impl.destroy(this->_M_impl._M_start._M_cur);
 	    ++this->_M_impl._M_start._M_cur;
 	  }
 	else
@@ -1060,7 +1084,7 @@ namespace _GLIBCXX_STD
 	    != this->_M_impl._M_finish._M_first)
 	  {
 	    --this->_M_impl._M_finish._M_cur;
-	    std::_Destroy(this->_M_impl._M_finish._M_cur);
+	    this->_M_impl.destroy(this->_M_impl._M_finish._M_cur);
 	  }
 	else
 	  _M_pop_back_aux();
@@ -1097,9 +1121,9 @@ namespace _GLIBCXX_STD
        *  @param  first  An input iterator.
        *  @param  last   An input iterator.
        *
-       *  This function will insert copies of the data in the range [first,last)
-       *  into the %deque before the location specified by @a pos.  This is
-       *  known as "range insert."
+       *  This function will insert copies of the data in the range
+       *  [first,last) into the %deque before the location specified
+       *  by @a pos.  This is known as "range insert."
        */
       template<typename _InputIterator>
         void
@@ -1107,7 +1131,7 @@ namespace _GLIBCXX_STD
 	       _InputIterator __last)
         {
 	  // Check whether it's an integral type.  If so, it's not an iterator.
-	  typedef typename _Is_integer<_InputIterator>::_Integral _Integral;
+	  typedef typename std::__is_integer<_InputIterator>::__type _Integral;
 	  _M_insert_dispatch(__position, __first, __last, _Integral());
 	}
 
@@ -1226,8 +1250,8 @@ namespace _GLIBCXX_STD
        *  @brief Fills the %deque with copies of value.
        *  @param  value  Initial value.
        *  @return   Nothing.
-       *  @pre _M_start and _M_finish have already been initialized, but none of
-       *       the %deque's elements have yet been constructed.
+       *  @pre _M_start and _M_finish have already been initialized,
+       *  but none of the %deque's elements have yet been constructed.
        *
        *  This function is called only when the user provides an explicit size
        *  (with or without an explicit exemplar value).
@@ -1283,8 +1307,8 @@ namespace _GLIBCXX_STD
 	    erase(std::copy(__first, __last, begin()), end());
 	}
 
-      // Called by assign(n,t), and the range assign when it turns out to be the
-      // same thing.
+      // Called by assign(n,t), and the range assign when it turns out
+      // to be the same thing.
       void
       _M_fill_assign(size_type __n, const value_type& __val)
       {
@@ -1410,9 +1434,9 @@ namespace _GLIBCXX_STD
        *  @if maint
        *  @brief Memory-handling helpers for the major %map.
        *
-       *  Makes sure the _M_map has space for new nodes.  Does not actually add
-       *  the nodes.  Can invalidate _M_map pointers.  (And consequently, %deque
-       *  iterators.)
+       *  Makes sure the _M_map has space for new nodes.  Does not
+       *  actually add the nodes.  Can invalidate _M_map pointers.
+       *  (And consequently, %deque iterators.)
        *  @endif
        */
       void

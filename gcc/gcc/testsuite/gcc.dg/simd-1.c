@@ -14,8 +14,8 @@ v2si c, d;
 v8hi e;
 uv4si f;
 
-int foo __attribute__((mode(DI)));
-int foo1 __attribute__((mode(SI)));
+long long foo;
+int foo1;
 short foo2 __attribute__((vector_size (8)));
 
 void

@@ -110,8 +110,7 @@ package Sem_Util is
 
    procedure Check_Potentially_Blocking_Operation (N : Node_Id);
    --  N is one of the statement forms that is a potentially blocking
-   --  operation. If it appears within a protected action, emit warning
-   --  and raise Program_Error.
+   --  operation. If it appears within a protected action, emit warning.
 
    procedure Check_VMS (Construct : Node_Id);
    --  Check that this the target is OpenVMS, and if so, return with
@@ -334,6 +333,10 @@ package Sem_Util is
    --  The third argument supplies a source location for constructed
    --  nodes returned by this function.
 
+   procedure Get_Library_Unit_Name_String (Decl_Node : Node_Id);
+   --  Retrieve the fully expanded name of the library unit declared by
+   --  Decl_Node into the name buffer.
+
    function Get_Name_Entity_Id (Id : Name_Id) return Entity_Id;
    --  An entity value is associated with each name in the name table. The
    --  Get_Name_Entity_Id function fetches the Entity_Id of this entity,
@@ -357,6 +360,13 @@ package Sem_Util is
    --  Task_Body_Procedure field from the corresponding task type
    --  declaration.
 
+   function Has_Access_Values (T : Entity_Id) return Boolean;
+   --  Returns true if type or subtype T is an access type, or has a
+   --  component (at any recursive level) that is an access type. This
+   --  is a conservative predicate, if it is not known whether or not
+   --  T contains access values (happens for generic formals in some
+   --  cases), then False is returned.
+
    function Has_Declarations (N : Node_Id) return Boolean;
    --  Determines if the node can have declarations
 
@@ -367,6 +377,14 @@ package Sem_Util is
    function Has_Private_Component (Type_Id : Entity_Id) return Boolean;
    --  Check if a type has a (sub)component of a private type that has not
    --  yet received a full declaration.
+
+   function Has_Stream (T : Entity_Id) return Boolean;
+   --  Tests if type T is derived from Ada.Streams.Root_Stream_Type, or
+   --  in the case of a composite type, has a component for which this
+   --  predicate is True, and if so returns True. Otherwise a result of
+   --  False means that there is no Stream type in sight. For a private
+   --  type, the test is applied to the underlying type (or returns False
+   --  if there is no underlying type).
 
    function Has_Tagged_Component (Typ : Entity_Id) return Boolean;
    --  Typ must be a composite type (array or record). This function is used
@@ -496,6 +514,7 @@ package Sem_Util is
    function Is_Local_Variable_Reference (Expr : Node_Id) return Boolean;
    --  Determines whether Expr is a refeference to a variable or IN OUT
    --  mode parameter of the current enclosing subprogram.
+   --  Why are OUT parameters not considered here ???
 
    function Is_Object_Reference (N : Node_Id) return Boolean;
    --  Determines if the tree referenced by N represents an object. Both
@@ -537,7 +556,8 @@ package Sem_Util is
    function Is_Statement (N : Node_Id) return Boolean;
    --  Check if the node N is a statement node. Note that this includes
    --  the case of procedure call statements (unlike the direct use of
-   --  the N_Statement_Other_Than_Procedure_Call subtype from Sinfo)
+   --  the N_Statement_Other_Than_Procedure_Call subtype from Sinfo).
+   --  Note that a label is *not* a statement, and will return False.
 
    function Is_Transfer (N : Node_Id) return Boolean;
    --  Returns True if the node N is a statement which is known to cause
