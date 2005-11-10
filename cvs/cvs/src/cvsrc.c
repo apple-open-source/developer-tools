@@ -1,5 +1,10 @@
 /*
- * Copyright (c) 1993 david d zuhn
+ * Copyright (C) 1986-2005 The Free Software Foundation, Inc.
+ *
+ * Portions Copyright (C) 1998-2005 Derek Price, Ximbiot <http://ximbiot.com>,
+ *                                  and others.
+ *
+ * Portions Copyright (C) 1993 david d zuhn
  * 
  * Written by david d `zoo' zuhn while at Cygnus Support
  * 
@@ -30,7 +35,7 @@ void
 read_cvsrc (argc, argv, cmdname)
     int *argc;
     char ***argv;
-    char *cmdname;
+    const char *cmdname;
 {
     char *homedir;
     char *homeinit;
@@ -65,13 +70,15 @@ read_cvsrc (argc, argv, cmdname)
     /* determine filename for ~/.cvsrc */
 
     homedir = get_homedir ();
+    /* If we can't find a home directory, ignore ~/.cvsrc.  This may
+       make tracking down problems a bit of a pain, but on the other
+       hand it might be obnoxious to complain when CVS will function
+       just fine without .cvsrc (and many users won't even know what
+       .cvsrc is).  */
     if (!homedir)
 	return;
 
-    homeinit = (char *) xmalloc (strlen (homedir) + strlen (cvsrc) + 10);
-    strcpy (homeinit, homedir);
-    strcat (homeinit, "/");
-    strcat (homeinit, cvsrc);
+    homeinit = strcat_filename_onto_homedir (homedir, cvsrc);
 
     /* if it can't be read, there's no point to continuing */
 
@@ -96,7 +103,7 @@ read_cvsrc (argc, argv, cmdname)
 
 	/* stop if we match the current command */
 	if (!strncmp (line, cmdname, command_len)
-	    && isspace (*(line + command_len)))
+	    && isspace ((unsigned char) *(line + command_len)))
 	{
 	    found = 1;
 	    break;

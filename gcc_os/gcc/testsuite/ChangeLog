@@ -1,3 +1,28 @@
+2004-11-05  Ziemowit Laski  <zlaski@apple.com>
+            
+	<rdar://problem/3867969> False positive on detecting missing [super dealloc]
+	* objc.dg/super-dealloc-2.m: New test.
+
+2004-10-29  Ziemowit Laski <zlaski@apple.com>
+
+	<rdar://problem/3812527> gcc_os-1801: DejaGnu failure: obj-c++.dg/lookup-ivar-1.mm (test for excess errors)
+	* obj-c++.dg/lookup-ivar-1.mm, obj-c++.dg/method-1.mm, obj-c++.dg/selector-1.mm,
+	obj-c++.dg/super-class-1.mm: Zero out compile options.
+
+2004-10-29  Ziemowit Laski <zlaski@apple.com>
+
+	<rdar://problem/3721879> gcc should warn when -dealloc methods don't call [super dealloc]
+	* objc.dg/super-dealloc-1.m: New test.
+
+2004-08-25  Ziemowit Laski  <zlaski@apple.com>
+
+	* objc.dg/objc-gc-3.m (main): Return 0 on success.
+
+2004-08-24  Ziemowit Laski  <zlaski@apple.com>
+
+	Radar 3767166
+	* objc.dg/objc-gc-3.m: New test case.
+
 2003-03-04  Roger Sayle  <roger@eyesopen.com>
 
 	* g++.old-deja/g++.other/builtins10.C: New test for PR 9367.

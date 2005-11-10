@@ -142,10 +142,24 @@ struct gcc_target
        too much undo-able setup involved in invoking output_mi_thunk.
        Could be fixed by making output_mi_thunk emit rtl instead of
        text to the output file.  */
-    bool (* can_output_mi_thunk) PARAMS ((tree thunk_decl,
-				          HOST_WIDE_INT delta,
-				          HOST_WIDE_INT vcall_offset,
-				          tree function_decl));
+   bool (* can_output_mi_thunk) PARAMS ((tree thunk_decl,
+				 HOST_WIDE_INT delta,
+				 HOST_WIDE_INT vcall_offset,
+				 tree function_decl));
+
+    /* APPLE LOCAL begin deep branch prediction pic-base; copied from FSF mainline */
+   /* Output any boilerplate text needed at the beginning of a
+      translation unit.  */
+   void (*file_start) (void);
+
+   /* Output any boilerplate text needed at the end of a
+      translation unit.  */
+   void (*file_end) (void);
+
+   /* Output an assembler pseudo-op to declare a library function name
+      external.  */
+   void (*external_libcall) (rtx);
+    /* APPLE LOCAL end deep branch prediction pic-base; copied from FSF mainline */
   } asm_out;
 
   /* Functions relating to instruction scheduling.  */

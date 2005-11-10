@@ -530,6 +530,9 @@ extern void default_globalize_label PARAMS ((FILE *, const char *));
 extern void default_internal_label PARAMS ((FILE *, const char *, unsigned long));
 extern bool default_valid_pointer_mode PARAMS ((enum machine_mode));
 /* APPLE LOCAL end - 3.4 scheduler update */
+/* APPLE LOCAL begin deep branch prediction pic-base; copied from FSF mainline.  */
+extern void default_file_start (void);
+/* APPLE LOCAL end deep branch prediction pic-base; copied from FSF mainline.  */
 
 /* Emit data for vtable gc for GNU binutils.  */
 extern void assemble_vtable_entry PARAMS ((struct rtx_def *, HOST_WIDE_INT));

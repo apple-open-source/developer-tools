@@ -43,7 +43,7 @@ struct gdb_i386_thread_fpstate
 {
   unsigned int fpkind;
   unsigned int initialized;
-  unsigned char hw_state[GDB_i386_FP_SSE2_STATE_SIZE];
+  unsigned char hw_fu_state[GDB_i386_FP_SSE2_STATE_SIZE];
   unsigned int exc_status;
 };
 

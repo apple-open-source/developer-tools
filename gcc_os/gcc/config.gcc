@@ -262,11 +262,11 @@ xscale-*-*)
 	;;
 i[34567]86-*-*)
 	cpu_type=i386
-	extra_headers="mmintrin.h xmmintrin.h"
+	extra_headers="mmintrin.h mm3dnow.h xmmintrin.h"
 	;;
 x86_64-*-*)
 	cpu_type=i386
-	extra_headers="mmintrin.h xmmintrin.h"
+	extra_headers="mmintrin.h mm3dnow.h xmmintrin.h"
 	;;
 ia64-*-*)
 	extra_headers=ia64intrin.h

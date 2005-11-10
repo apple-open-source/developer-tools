@@ -3,6 +3,7 @@
    ambiguity.  */
 /* Author: Ziemowit Laski <zlaski@apple.com>.  */
 /* { dg-do compile } */
+/* { dg-options "" } */
 
 #import <objc/objc.h>
 

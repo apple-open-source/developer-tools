@@ -20,6 +20,7 @@ export INSTALL_OWNER default = $(USER) ;
 export INSTALL_GROUP default = $(GROUP) ;
 export FRAMEWORK_VERSION default = "A" ;
 REMOVE_CVS_FROM_RESOURCES default = YES ;
+REMOVE_SVN_FROM_RESOURCES default = YES ;
 COPY_PHASE_STRIP default = NO ;
 PREBINDING default = YES ;
 SET_DIR_MODE_OWNER_GROUP default = YES ;
@@ -109,12 +110,12 @@ rule BeginProduct
     HEADER_SUBDIRECTORY = $(1:B) ;
 
     # the following sequence of tests sets up CC, CPLUSPLUS, LD, and LDPLUSPLUS appropriately,
-    # depending on whether we're using GCC 2.95.2, 3.1, 3.3, or 3.5 (either explicitly or implicitly)
+    # depending on whether we're using GCC 2.95.2, 3.1, 3.3, 3.5 or 4.0 (either explicitly or implicitly)
 
     # a hack to detect attempt to use GCC 3, and to set the 'GCC_VERSION' build setting accordingly
     if $(USE_GCC3) = YES  ||  $(USE_GCC2) = NO  ||  $(CC) = "/usr/bin/gcc3" {
         # use either the default gcc version if available or default to 3.1
-        if $(_DEFAULT_GCC_VERSION) = 3.1 || $(_DEFAULT_GCC_VERSION) = 3.3 || $(_DEFAULT_GCC_VERSION) = 3.5 {
+        if $(_DEFAULT_GCC_VERSION) = 3.1 || $(_DEFAULT_GCC_VERSION) = 3.3 || $(_DEFAULT_GCC_VERSION) = 3.5 || $(_DEFAULT_GCC_VERSION) = 4.0 {
             GCC_VERSION default = $(_DEFAULT_GCC_VERSION) ;
         }
         else {
@@ -125,7 +126,7 @@ rule BeginProduct
         GCC_VERSION default = 2.x ;
     }
     else {
-        if $(_DEFAULT_GCC_VERSION) = 3.1 || $(_DEFAULT_GCC_VERSION) = 3.3 || $(_DEFAULT_GCC_VERSION) = 3.5 {
+        if $(_DEFAULT_GCC_VERSION) = 3.1 || $(_DEFAULT_GCC_VERSION) = 3.3 || $(_DEFAULT_GCC_VERSION) = 3.5 || $(_DEFAULT_GCC_VERSION) = 4.0 {
             GCC_VERSION default = $(_DEFAULT_GCC_VERSION) ;
         }
         else if $(_DEFAULT_GCC_VERSION) = 2.95.2 {
@@ -138,7 +139,11 @@ rule BeginProduct
 
     # set up CC, CPLUSPLUS, LD, and LDPLUSPLUS appropriately (this logic is temporary, and is
     # expected to be phased out once we have per-build-phase compiler choices)
-    if $(GCC_VERSION) = 3.5 {
+    if $(GCC_VERSION) = 4.0 {
+        CC default = /usr/bin/gcc-4.0 ;
+        CPLUSPLUS default = /usr/bin/g++-4.0 ;
+    }
+    else if $(GCC_VERSION) = 3.5 {
         CC default = /usr/bin/gcc-3.5 ;
         CPLUSPLUS default = /usr/bin/g++-3.5 ;
     }
@@ -254,19 +259,17 @@ rule BeginProduct
         INSTALL_DIR default = $(INSTALL_ROOT) ;
     }
     # Initialize the search paths
-    if $(TARGET_BUILD_DIR) != $(BUILD_DIR) {
-        HEADER_SEARCH_PATHS = $(TARGET_BUILD_DIR)$(/)include $(BUILD_DIR)$(/)include $(HEADER_SEARCH_PATHS) ;
+    if $(TARGET_BUILD_DIR) != $(BUILT_PRODUCTS_DIR) {
+        HEADER_SEARCH_PATHS = $(TARGET_BUILD_DIR)$(/)include $(BUILT_PRODUCTS_DIR)$(/)include $(HEADER_SEARCH_PATHS) ;
     }
     else {
-        HEADER_SEARCH_PATHS = $(BUILD_DIR)$(/)include $(HEADER_SEARCH_PATHS) ;
+        HEADER_SEARCH_PATHS = $(BUILT_PRODUCTS_DIR)$(/)include $(HEADER_SEARCH_PATHS) ;
     }
-    FRAMEWORK_SEARCH_PATHS = $(BUILD_ROOT) $(FRAMEWORK_SEARCH_PATHS) ;
+    FRAMEWORK_SEARCH_PATHS = $(BUILT_PRODUCTS_DIR) $(FRAMEWORK_SEARCH_PATHS) ;
     REZ_SEARCH_PATHS default = $(BUILT_PRODUCTS_DIR) $(HEADER_SEARCH_PATHS) ;
-    LIBRARY_SEARCH_PATHS = $(BUILD_ROOT) $(LIBRARY_SEARCH_PATHS) ;
+    LIBRARY_SEARCH_PATHS = $(BUILT_PRODUCTS_DIR) $(LIBRARY_SEARCH_PATHS) ;
     if $(DEPLOYMENT_LOCATION) = YES && $(BUILT_PRODUCTS_DIR) {
         HEADER_SEARCH_PATHS = $(BUILT_PRODUCTS_DIR)$(/)include $(HEADER_SEARCH_PATHS) ;
-        FRAMEWORK_SEARCH_PATHS = $(BUILT_PRODUCTS_DIR) $(FRAMEWORK_SEARCH_PATHS) ;
-        LIBRARY_SEARCH_PATHS = $(BUILT_PRODUCTS_DIR) $(LIBRARY_SEARCH_PATHS) ;
     }
     # Initialize the file lists
     DERIVED_FILES = ;

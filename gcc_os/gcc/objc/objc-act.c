@@ -69,6 +69,9 @@ Boston, MA 02111-1307, USA.  */
 /* APPLE LOCAL Panther ObjC enhancements */
 #define OBJC_VOID_AT_END	build_tree_list (NULL_TREE, void_type_node)
 
+/* APPLE LOCAL ObjC super dealloc */
+static unsigned int should_call_super_dealloc = 0;
+
 /* APPLE LOCAL indexing dpatel */
 #include "genindex.h"
 
@@ -135,7 +138,8 @@ char *util_firstobj;
    the module (file) was compiled for, and is recorded in the
    module descriptor.  */
 
-#define OBJC_VERSION	(flag_next_runtime ? 5 : 8)
+/* APPLE LOCAL XJR */
+#define OBJC_VERSION	(flag_next_runtime ? 6 : 8)
 #define PROTOCOL_VERSION 2
 
 /* (Decide if these can ever be validly changed.) */
@@ -414,7 +418,6 @@ static const char *TAG_EXECCLASS;
 static const char *default_constant_string_class_name;
 
 /* APPLE LOCAL begin XJR */
-#define CLS_ISAUTO			0x1000L
 #define CLS_EXTENDED			0x2000L
 #define TAG_ASSIGNIVAR			"objc_assign_ivar"
 #define TAG_ASSIGNGLOBAL		"objc_assign_global"
@@ -3167,17 +3170,12 @@ objc_substitute_decl (expr, oldexpr, newexpr)
       return build_component_ref (objc_substitute_decl (TREE_OPERAND (expr, 0),
 							oldexpr,
 							newexpr),
-				  DECL_NAME
-				  (objc_substitute_decl (TREE_OPERAND (expr, 1),
-							 oldexpr,
-							 newexpr)));
+				  DECL_NAME (TREE_OPERAND (expr, 1)));
     case ARRAY_REF:
       return build_array_ref (objc_substitute_decl (TREE_OPERAND (expr, 0),
 						    oldexpr,
 						    newexpr),
-			      objc_substitute_decl (TREE_OPERAND (expr, 1),
-						    oldexpr,
-						    newexpr));
+			      TREE_OPERAND (expr, 1));
     case INDIRECT_REF:
       return build_indirect_ref (objc_substitute_decl (TREE_OPERAND (expr, 0),
 						       oldexpr,
@@ -3198,15 +3196,17 @@ objc_build_ivar_assignment (outervar, lhs, rhs)
   */
   tree offs
     = objc_substitute_decl
-      (lhs, outervar, build_c_cast (TREE_TYPE (outervar), integer_zero_node));
+      (lhs, outervar, convert (TREE_TYPE (outervar), integer_zero_node));
   tree func
-    = (flag_objc_fast ? objc_assign_ivar_fast_decl : objc_assign_ivar_decl);
+    = (flag_objc_direct_dispatch
+       ? objc_assign_ivar_fast_decl
+       : objc_assign_ivar_decl);
 
-  offs = build_c_cast (integer_type_node, build_unary_op (ADDR_EXPR, offs, 0));
+  offs = convert (integer_type_node, build_unary_op (ADDR_EXPR, offs, 0));
   offs = fold (offs);
   func_params = tree_cons (NULL_TREE, 
-	build_c_cast (id_type, rhs),
-	    tree_cons (NULL_TREE, build_c_cast (id_type, outervar),
+	convert (id_type, rhs),
+	    tree_cons (NULL_TREE, convert (id_type, outervar),
 		tree_cons (NULL_TREE, offs,
 		    NULL_TREE)));
 
@@ -3219,8 +3219,8 @@ objc_build_global_assignment (lhs, rhs)
      tree lhs, rhs;
 {
   tree func_params = tree_cons (NULL_TREE,
-	build_c_cast (id_type, rhs),
-	    tree_cons (NULL_TREE, build_c_cast (build_pointer_type (id_type),
+	convert (id_type, rhs),
+	    tree_cons (NULL_TREE, convert (build_pointer_type (id_type),
 		      build_unary_op (ADDR_EXPR, lhs, 0)),
 		    NULL_TREE));
 
@@ -3233,8 +3233,8 @@ objc_build_strong_cast_assignment (lhs, rhs)
      tree lhs, rhs;
 {
   tree func_params = tree_cons (NULL_TREE,
-	build_c_cast (id_type, rhs),
-	    tree_cons (NULL_TREE, build_c_cast (build_pointer_type (id_type),
+	convert (id_type, rhs),
+	    tree_cons (NULL_TREE, convert (build_pointer_type (id_type),
 		      build_unary_op (ADDR_EXPR, lhs, 0)), 
 		    NULL_TREE));
 
@@ -5991,8 +5991,7 @@ generate_shared_structures ()
        convert (integer_type_node,
 		TYPE_SIZE_UNIT (CLASS_STATIC_TEMPLATE
 				(implementation_template))),
-       /* APPLE LOCAL XJR */
-       CLS_FACTORY | (CLASS_USES_GC (implementation_template) ? CLS_ISAUTO : 0),
+       CLS_FACTORY,
        UOBJC_INSTANCE_METHODS_decl,
        UOBJC_INSTANCE_VARIABLES_decl,
        protocol_decl);
@@ -6484,6 +6483,12 @@ finish_message_expr (receiver, sel_name, method_params)
 	       || (TREE_CODE (receiver) == COMPOUND_EXPR 
 		   && !IS_SUPER (rtype)));
 
+  /* APPLE LOCAL begin ObjC super dealloc */
+  /* If we are calling [super dealloc], reset our warning flag.  */
+  if (super && !strcmp ("dealloc", IDENTIFIER_POINTER (sel_name)))
+    should_call_super_dealloc = 0;
+  /* APPLE LOCAL end ObjC super dealloc */
+
   /* If the receiver is a class object, retrieve the corresponding 
      @interface, if one exists. */
   is_class = receiver_is_class_object (receiver, self, super);
@@ -6662,7 +6667,9 @@ build_objc_method_call (super_flag, method_prototype, lookup_object,
   tree sender = (super_flag ? umsg_super_decl :
 		 /* APPLE LOCAL begin XJR */
 		 flag_nil_receivers
-		 ? (flag_objc_fast ? umsg_fast_decl : umsg_decl)
+		 ? (flag_objc_direct_dispatch
+		    ? umsg_fast_decl
+		    : umsg_decl)
 		 : umsg_nonnil_decl);
 		 /* APPLE LOCAL end XJR */
   tree rcv_p = (super_flag ? super_type	: id_type);
@@ -7808,19 +7815,6 @@ start_class (code, class_name, super_name, protocol_list)
   class = make_node (code);
   TYPE_BINFO (class) = make_tree_vec (6);
 
-  /* APPLE LOCAL begin XJR */
-  CLASS_USES_GC (class) = flag_objc_gc;
-  if (objc_storage_class)
-    {
-      if (objc_storage_class == ridpointers[(int) RID_AUTO])
-	CLASS_USES_GC (class) = 1;
-      else if (objc_storage_class == ridpointers[(int) RID_STATIC])
-	CLASS_USES_GC (class) = 0;
-      else
-	error ("Only `auto' or `static' allowed as @interface storage class");
-    }
-  /* APPLE LOCAL end XJR */
-
   CLASS_NAME (class) = class_name;
   CLASS_SUPER_NAME (class) = super_name;
   CLASS_CLS_METHODS (class) = NULL_TREE;
@@ -8830,6 +8824,16 @@ start_method_def (method)
   /* APPLE LOCAL Objective-C++ */
   /* remove unused local var.  */
 
+  /* APPLE LOCAL begin ObjC super dealloc */
+  /* If we are defining a "dealloc" method in a non-root class, we will need
+     to check if a [super dealloc] is missing, and warn if it is.  */
+  if(CLASS_SUPER_NAME (objc_implementation_context)
+     && !strcmp ("dealloc", IDENTIFIER_POINTER (METHOD_SEL_NAME (method))))
+    should_call_super_dealloc = 1;
+  else
+    should_call_super_dealloc = 0;
+  /* APPLE LOCAL end ObjC super dealloc */
+    
   /* Required to implement _msgSuper.  */
   objc_method_context = method;
   UOBJC_SUPER_decl = NULL_TREE;
@@ -9301,6 +9305,11 @@ finish_method_def ()
   objc_method_context = NULL_TREE;
   /* APPLE LOCAL indexing dpatel */
   flag_suppress_builtin_indexing = 0;
+
+  /* APPLE LOCAL begin ObjC super dealloc */
+  if (should_call_super_dealloc)
+    warning ("method possibly missing a [super dealloc] call");
+  /* APPLE LOCAL end ObjC super dealloc */
 }
 
 #if 0

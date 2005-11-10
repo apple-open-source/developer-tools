@@ -461,7 +461,7 @@ extern int warn_assign_intercept;
 /* Nonzero means jump to entry points provided in high memory comm page.  
    This is solely a performance improvement, so this option may be a no-op
    for some targets.  */
-extern int flag_objc_fast;
+extern int flag_objc_direct_dispatch;
 
 /* Nonzero means include ObjC classes in the garbage collection scheme
    by default, unless the class is marked `static'.  When zero, only

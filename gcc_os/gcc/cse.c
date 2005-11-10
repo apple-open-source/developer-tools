@@ -5660,7 +5660,13 @@ cse_insn (insn, libcall_insn)
 	    {
 	      trial = src_folded, src_folded_cost = MAX_COST;
 	      if (src_folded_force_flag)
-		trial = force_const_mem (mode, trial);
+		/* APPLE LOCAL begin force constant mem */
+		{
+		  rtx forced = force_const_mem (mode, trial);
+		  if (forced)
+		    trial = forced;
+		}
+		/* APPLE LOCAL end force constant mem */
 	    }
 	  else if (src
 		   && preferrable (src_cost, src_regcost,

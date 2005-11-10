@@ -268,6 +268,8 @@ objcp_lookup_identifier (token, id, check_conflict)
   else if (objc_id && *id && IDENTIFIER_BINDING (token)) 
     warning ("local declaration of `%s' hides instance variable",
 	     IDENTIFIER_POINTER (token));
+  else if (objc_id)
+    *id = objc_id;  /* No conflict, so use the ivar. */
 	     
   return (objc_id != NULL_TREE);
 }  

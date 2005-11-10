@@ -1,4 +1,3 @@
-/* APPLE LOCAL file mainline and 4.0 branch 2005-03-31  */
 /* { dg-do compile } */
 /* { dg-options "-O2" } */
 /* Test check use_block_copy bit propagation in sra element hierarchy.  */

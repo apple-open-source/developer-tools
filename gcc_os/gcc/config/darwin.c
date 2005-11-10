@@ -96,6 +96,12 @@ make_decl_coalesced (decl, private_extern_p)
 }
 /* APPLE LOCAL end coalescing  */
 
+/* APPLE LOCAL begin backport 3721776 fix from FSF mainline. */
+/* Nonzero if the user passes the -mone-byte-bool switch, which forces
+   sizeof(bool) to be 1. */
+const char *darwin_one_byte_bool = 0;
+/* APPLE LOCAL end backport 3721776 fix from FSF mainline. */
+
 int
 name_needs_quotes (name)
      const char *name;
@@ -328,7 +334,9 @@ machopic_function_base_name ()
 
   if (function_base_func_name != current_name)
     {
-      current_function_uses_pic_offset_table = 1;
+      /* APPLE LOCAL deep branch prediction pic-base */
+      if (cfun)
+	current_function_uses_pic_offset_table = 1;
 
       /* Save mucho space and time.  Some of the C++ mangled names are over
 	 700 characters long!  Note that we produce a label containing a '-'
@@ -362,7 +370,6 @@ static GTY(()) tree machopic_non_lazy_pointers;
    a new one.  */
 
 /* APPLE LOCAL weak import */
-/* machopic_non_lazy_ptr_list_entry separated from machopic_non_lazy_ptr_name */
 static tree
 machopic_non_lazy_ptr_list_entry (name, create_p)
      const char *name;
@@ -553,137 +560,170 @@ machopic_indirect_data_reference (orig, reg)
      rtx orig, reg;
 {
   rtx ptr_ref = orig;
-  
+
   if (! MACHOPIC_INDIRECT)
     return orig;
 
-  if (GET_CODE (orig) == SYMBOL_REF)
+  /* APPLE LOCAL begin dynamic-no-pic  */
+  switch (GET_CODE (orig))
     {
-      const char *name = XSTR (orig, 0);
-      /* APPLE LOCAL  dynamic-no-pic  */
-      int defined = machopic_data_defined_p (name);
-      /* APPLE LOCAL weak import */
-      tree sym;
+    case SYMBOL_REF:
+      {
+	const char *name;
+	int defined;
+	/* APPLE LOCAL weak import */
+	tree sym;
 
-      if (defined && MACHO_DYNAMIC_NO_PIC_P ())
-	{
+	name = XSTR (orig, 0);
+	defined = machopic_data_defined_p (name);
+
+	if (defined && MACHO_DYNAMIC_NO_PIC_P ())
+	  {
 #if defined (TARGET_TOC)
-           emit_insn (gen_macho_high (reg, orig));  
-           emit_insn (gen_macho_low (reg, reg, orig));
-#else
-	   /* some other cpu -- writeme!  */
-	   abort ();
-#endif
-	   return reg;
-	}
-      else if (defined)
-	{
+	    emit_insn (gen_macho_high (reg, orig));  
+	    emit_insn (gen_macho_low (reg, reg, orig));
+#else /* defined (TARGET_TOC) */
+#if defined (TARGET_386)
+	    return orig;
+#else /* defined (TARGET_386) */
+	    /* some other cpu -- writeme!  */
+	    abort ();
+#endif /* defined (TARGET_386) */
+#endif /* defined (TARGET_TOC) */
+	    return reg;
+	  }
+	else if (defined)
+	  {
 #if defined (TARGET_TOC) || defined (HAVE_lo_sum)
-	  rtx pic_base = gen_rtx (SYMBOL_REF, Pmode, 
-				  machopic_function_base_name ());
-	  rtx offset = gen_rtx (CONST, Pmode,
-				gen_rtx (MINUS, Pmode, orig, pic_base));
+	    rtx pic_base = gen_rtx (SYMBOL_REF, Pmode, 
+				    machopic_function_base_name ());
+	    rtx offset = gen_rtx (CONST, Pmode,
+				  gen_rtx (MINUS, Pmode, orig, pic_base));
 #endif
 
 #if defined (TARGET_TOC) /* i.e., PowerPC */
-	  rtx hi_sum_reg = reg;
+	    rtx hi_sum_reg = reg;
 
-	  if (reg == NULL)
-	    abort ();
+	    if (reg == NULL)
+	      abort ();
 
-	  emit_insn (gen_rtx (SET, Pmode, hi_sum_reg,
-			      gen_rtx (PLUS, Pmode, pic_offset_table_rtx,
-				       gen_rtx (HIGH, Pmode, offset))));
-	  emit_insn (gen_rtx (SET, Pmode, reg,
-			      gen_rtx (LO_SUM, Pmode, hi_sum_reg, offset)));
+	    emit_insn (gen_rtx (SET, Pmode, hi_sum_reg,
+				gen_rtx (PLUS, Pmode, pic_offset_table_rtx,
+					 gen_rtx (HIGH, Pmode, offset))));
+	    emit_insn (gen_rtx (SET, Pmode, reg,
+				gen_rtx (LO_SUM, Pmode, hi_sum_reg, offset)));
 
-	  orig = reg;
+	    orig = reg;
 #else
 #if defined (HAVE_lo_sum)
-	  if (reg == 0) abort ();
+	    if (reg == 0) abort ();
 
-	  emit_insn (gen_rtx (SET, VOIDmode, reg,
-			      gen_rtx (HIGH, Pmode, offset)));
-	  emit_insn (gen_rtx (SET, VOIDmode, reg,
-			      gen_rtx (LO_SUM, Pmode, reg, offset)));
-	  /* APPLE LOCAL ? */
-	  emit_insn (gen_rtx (USE, VOIDmode, pic_offset_table_rtx));
+	    emit_insn (gen_rtx (SET, VOIDmode, reg,
+				gen_rtx (HIGH, Pmode, offset)));
+	    emit_insn (gen_rtx (SET, VOIDmode, reg,
+				gen_rtx (LO_SUM, Pmode, reg, offset)));
+	    /* APPLE LOCAL ? */
+	    emit_insn (gen_rtx (USE, VOIDmode, pic_offset_table_rtx));
 
-	  orig = gen_rtx (PLUS, Pmode, pic_offset_table_rtx, reg);
+	    orig = gen_rtx (PLUS, Pmode, pic_offset_table_rtx, reg);
 #endif
 #endif
+	    return orig;
+	  }
+
+	/* APPLE LOCAL weak import */
+	sym = machopic_non_lazy_ptr_list_entry (name, /*create:*/ 1);
+	IDENTIFIER_WEAK_IMPORT (TREE_PURPOSE (sym)) =
+	  IDENTIFIER_WEAK_IMPORT (TREE_VALUE (sym)) =
+	  SYMBOL_REF_WEAK_IMPORT (orig);
+
+	ptr_ref = gen_rtx (SYMBOL_REF, Pmode,
+			   IDENTIFIER_POINTER (TREE_PURPOSE (sym)));
+
+	ptr_ref = gen_rtx_MEM (Pmode, ptr_ref);
+	RTX_UNCHANGING_P (ptr_ref) = 1;
+
+#ifdef TARGET_386
+	if (reg && TARGET_DYNAMIC_NO_PIC)
+	  {
+	    emit_insn (gen_rtx (SET, Pmode, reg, ptr_ref));
+	    ptr_ref = reg;
+	  }
+#endif	/* TARGET_386 */
+	return ptr_ref;
+      }
+      break;
+
+    case CONST:
+      {
+	rtx base, result;
+
+	/* If "(const (plus ...", walk the PLUS and return that result.
+	   PLUS processing (below) will restore the "(const ..." if
+	   appropriate.  */
+	if (GET_CODE (XEXP (orig, 0)) == PLUS)
+	  return machopic_indirect_data_reference (XEXP (orig, 0), reg);
+	else 
 	  return orig;
-	}
+      }
+      break;
 
-      /* APPLE LOCAL weak import */
-      sym = machopic_non_lazy_ptr_list_entry (name, /*create:*/ 1);
-      IDENTIFIER_WEAK_IMPORT (TREE_PURPOSE (sym)) =
-	IDENTIFIER_WEAK_IMPORT (TREE_VALUE (sym)) =
-	    SYMBOL_REF_WEAK_IMPORT (orig);
+    case MEM:
+      {
+	XEXP (ptr_ref, 0) = machopic_indirect_data_reference (XEXP (orig, 0), reg);
+	return ptr_ref;
+      }
+      break;
 
-      ptr_ref = gen_rtx (SYMBOL_REF, Pmode,
-		    IDENTIFIER_POINTER (TREE_PURPOSE (sym)));
+    case PLUS:
+      {
+	rtx base, result;
 
-      ptr_ref = gen_rtx_MEM (Pmode, ptr_ref);
-      RTX_UNCHANGING_P (ptr_ref) = 1;
-
-      return ptr_ref;
-    }
-  else if (GET_CODE (orig) == CONST)
-    {
-      rtx base, result;
-
-      /* legitimize both operands of the PLUS */
-      if (GET_CODE (XEXP (orig, 0)) == PLUS)
-	{
-	  base = machopic_indirect_data_reference (XEXP (XEXP (orig, 0), 0),
-						   reg);
-	  orig = machopic_indirect_data_reference (XEXP (XEXP (orig, 0), 1),
-						   (base == reg ? 0 : reg));
-	}
-      else 
-	return orig;
-
-      if (MACHOPIC_PURE && GET_CODE (orig) == CONST_INT)
-	result = plus_constant (base, INTVAL (orig));
-      else
-	result = gen_rtx (PLUS, Pmode, base, orig);
-
-      if (MACHOPIC_JUST_INDIRECT && GET_CODE (base) == MEM)
-	{
-	  if (reg)
-	    {
-	      emit_move_insn (reg, result);
-	      result = reg;
-	    }
-	  else
-	    {
-	      result = force_reg (GET_MODE (result), result);
-	    }
-	}
-
-      return result;
-
-    }
-  else if (GET_CODE (orig) == MEM)
-    XEXP (ptr_ref, 0) = machopic_indirect_data_reference (XEXP (orig, 0), reg);
-  /* When the target is i386, this code prevents crashes due to the
-     compiler's ignorance on how to move the PIC base register to
-     other registers.  (The reload phase sometimes introduces such
-     insns.)  */
-  else if (GET_CODE (orig) == PLUS
-	   && GET_CODE (XEXP (orig, 0)) == REG
-	   && REGNO (XEXP (orig, 0)) == PIC_OFFSET_TABLE_REGNUM
-#ifdef I386
-	   /* Prevent the same register from being erroneously used
-	      as both the base and index registers.  */
-	   && GET_CODE (XEXP (orig, 1)) == CONST
+	/* When the target is i386, this code prevents crashes due to the
+	   compiler's ignorance on how to move the PIC base register to
+	   other registers.  (The reload phase sometimes introduces such
+	   insns.)  */
+	if (GET_CODE (XEXP (orig, 0)) == REG
+	    && REGNO (XEXP (orig, 0)) == PIC_OFFSET_TABLE_REGNUM
+#ifdef TARGET_386
+	    /* Prevent the same register from being erroneously used
+	       as both the base and index registers.  */
+	    && GET_CODE (XEXP (orig, 1)) == CONST
 #endif
-	   && reg)
-    {
-      emit_move_insn (reg, XEXP (orig, 0));
-      XEXP (ptr_ref, 0) = reg;
-    }
+	    && reg)
+	  {
+	    emit_move_insn (reg, XEXP (orig, 0));
+	    XEXP (ptr_ref, 0) = reg;
+	    return ptr_ref;
+	  }
+
+	/* Legitimize both operands of the PLUS.  */
+	base = machopic_indirect_data_reference (XEXP (orig, 0), reg);
+	orig = machopic_indirect_data_reference (XEXP (orig, 1),
+						 (base == reg ? 0 : reg));
+	if (MACHOPIC_INDIRECT && GET_CODE (orig) == CONST_INT)
+	  result = plus_constant (base, INTVAL (orig));
+	else
+	  result = gen_rtx (PLUS, Pmode, base, orig);
+
+	if (MACHOPIC_JUST_INDIRECT && GET_CODE (base) == MEM)
+	  {
+	    if (reg)
+	      {
+		emit_move_insn (reg, result);
+		result = reg;
+	      }
+	    else
+	      result = force_reg (GET_MODE (result), result);
+	  }
+	return result;
+      }
+      break;
+
+    default:
+      break;
+    }	/* End switch (GET_CODE (orig)) */
+  /* APPLE LOCAL end dynamic-no-pic */
   return ptr_ref;
 }
 
@@ -974,6 +1014,13 @@ machopic_legitimize_pic_address (orig, mode, reg)
 	  pic_ref = plus_constant (base, INTVAL (orig));
 	  is_complex = 1;
 	}
+      /* APPLE LOCAL begin 3769675 */
+      /* There are three addends present; try to construct
+	 (plus (plus reg reg) const).  */
+      else if (GET_CODE (orig) == PLUS
+	       && GET_CODE (XEXP (orig, 0)) == REG)
+	pic_ref = gen_rtx (PLUS, Pmode, gen_rtx (PLUS, Pmode, base, XEXP (orig, 0)), XEXP (orig, 1));
+      /* APPLE LOCAL end 3769675 */
       else
 	pic_ref = gen_rtx (PLUS, Pmode, base, orig);
 
@@ -1853,5 +1900,32 @@ darwin_asm_output_dwarf_delta (file, size, lab1, lab2)
   if (islocaldiff)
     fprintf (file, "\n\t.long L$set$%d", darwin_dwarf_label_counter++);
 }
+
+/* APPLE LOCAL begin deep branch prediction pic-base */
+void
+darwin_file_start (void)
+{
+#ifdef ASM_FILE_START
+  ASM_FILE_START (asm_out_file);
+#endif
+}
+
+void
+darwin_file_end (void)
+{
+#ifdef ASM_FILE_END
+  ASM_FILE_END (asm_out_file);
+#endif
+  machopic_finish (asm_out_file);
+  if (strcmp (lang_hooks.name, "GNU C++") == 0)
+    {
+      constructor_section ();
+      destructor_section ();
+      ASM_OUTPUT_ALIGN (asm_out_file, 1);
+    }
+  /* APPLE LOCAL radar 3563020 */
+  fprintf (asm_out_file, "\t.subsections_via_symbols\n");
+}
+/* APPLE LOCAL end deep branch prediction pic-base */
 
 #include "gt-darwin.h"

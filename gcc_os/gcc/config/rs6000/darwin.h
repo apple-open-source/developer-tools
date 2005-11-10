@@ -173,32 +173,22 @@ Boston, MA 02111-1307, USA.  */
 #define RS6000_OUTPUT_BASENAME(FILE, NAME)	\
     assemble_name (FILE, NAME);
 
-/* This causes the text and symbol-stub sections to come out adjacent
-   in the assembly code, hence out of the linker.  This is needed to
-   prevent out-of-range branches when there is a large data section.
-   If -static, don't.  Alas, there is no flag_static, so we look for
-   its inverse (-fpic or -mdynamic-no-pic).  */
-
-#define ASM_FILE_START(FILE)	\
-  if (flag_pic || MACHO_DYNAMIC_NO_PIC_P ()) \
-    { \
-      fprintf (FILE, "\t.section __TEXT,__text,regular,pure_instructions\n"); \
-      if (MACHO_DYNAMIC_NO_PIC_P ()) \
-        { \
-          fprintf (FILE, "\t.section __TEXT,__symbol_stub1,"); \
-          fprintf (FILE, "symbol_stubs,pure_instructions,16\n"); \
-        } \
-      else \
-        { \
-          fprintf (FILE, "\t.section __TEXT,__picsymbolstub1,"); \
-          fprintf (FILE, "symbol_stubs,pure_instructions,32\n"); \
-        } \
-    }
+/* APPLE LOCAL begin dynamic-no-pic */
+extern void darwin_rs6000_file_start (void);
+#undef TARGET_ASM_FILE_START
+#define TARGET_ASM_FILE_START darwin_rs6000_file_start
+/* APPLE LOCAL end dynamic-no-pic */
 
 /* Globalizing directive for a label.  */
 #undef GLOBAL_ASM_OP
 #define GLOBAL_ASM_OP "\t.globl "
 #undef TARGET_ASM_GLOBALIZE_LABEL
+
+/* APPLE LOCAL begin deep branch prediction pic-base */
+extern void darwin_file_end (void);
+#undef TARGET_ASM_FILE_END
+#define TARGET_ASM_FILE_END darwin_file_end
+/* APPLE LOCAL end deep branch prediction pic-base */
 
 /* This is how to output an internal label prefix.  rs6000.c uses this
    when generating traceback tables.  */
@@ -390,9 +380,13 @@ extern unsigned round_type_align (union tree_node*, unsigned, unsigned); /* rs60
 /* Address of indirect call must be computed here */
 #define MAGIC_INDIRECT_CALL_REG 12
 
-/* For binary compatibility with 2.95; Darwin/PPC C APIs use bool from
-   stdbool.h, which was an int-sized enum in 2.95.  */
-#define BOOL_TYPE_SIZE INT_TYPE_SIZE
+/* APPLE LOCAL begin backport 3721776 fix from FSF mainline. */
+/* For binary compatibility with 2.95; Darwin C APIs use bool from
+   stdbool.h, which was an int-sized enum in 2.95.  Users can explicitly
+   choose to have sizeof(bool)==1 with the -mone-byte-bool switch. */
+extern const char *darwin_one_byte_bool;
+#define BOOL_TYPE_SIZE (darwin_one_byte_bool ? CHAR_TYPE_SIZE : INT_TYPE_SIZE)
+/* APPLE LOCAL end backport 3721776 fix from FSF mainline. */
 
 /* APPLE LOCAL OS pragma hook */
 /* Register generic Darwin pragmas as "OS" pragmas.  */

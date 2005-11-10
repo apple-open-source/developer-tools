@@ -127,6 +127,8 @@ extern int target_flags;
 #define MASK_3DNOW_A		0x00020000	/* Support Athlon 3Dnow builtins */
 #define MASK_128BIT_LONG_DOUBLE 0x00040000	/* long double size is 128bit */
 #define MASK_64BIT		0x00080000	/* Produce 64bit code */
+/* APPLE LOCAL dynamic-no-pic */
+#define MASK_MACHO_DYNAMIC_NO_PIC 0x00100000	/* Dynamic linking, non-PIC ("default" for other *NIX platforms) */
 
 /* Unused:			0x03f0000	*/
 

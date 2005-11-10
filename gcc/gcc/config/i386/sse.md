@@ -281,11 +281,13 @@
   "TARGET_SSE"
   "movq\t{%1, %0|%0, %1}")
 
+;; APPLE LOCAL begin 4279065
 (define_insn "sse_storeqv4si"
   [(set (match_operand:V2SI 0 "memory_operand" "=m")
-	(unspec:V2SI [(subreg:V2SI (match_operand:V4SI 1 "register_operand" "x") 0)] UNSPEC_STOQ))]
+	(unspec:V2SI [(match_operand:V4SI 1 "register_operand" "x")] UNSPEC_STOQ))]
   "TARGET_SSE"
   "movq\t{%1, %0|%0, %1}")
+;; APPLE LOCAL end 4279065
 
 (define_insn "sse_movqv4si"
   [(set (match_operand:V4SI 0 "register_operand" "=x")

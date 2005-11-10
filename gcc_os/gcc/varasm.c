@@ -5689,4 +5689,39 @@ default_internal_label (stream, prefix, labelno)
 }
 /* APPLE LOCAL end - 3.4 scheduler update */
 
+/* APPLE LOCAL begin deep branch prediction pic-base; copied from FSF mainline.  */
+/* This is the default behavior at the beginning of a file.  It's
+   controlled by two other target-hook toggles.  */
+void
+default_file_start (void)
+{
+#if 0	/* APPLE LOCAL begin deep branch prediction pic-base */
+  if (targetm.file_start_app_off && !flag_verbose_asm)
+    fputs (ASM_APP_OFF, asm_out_file);
+
+  if (targetm.file_start_file_directive)
+    output_file_directive (asm_out_file, main_input_filename);
+#endif	/* APPLE LOCAL end deep branch prediction pic-base */
+}
+
+/* This is a generic routine suitable for use as TARGET_ASM_FILE_END
+   which emits a special section directive used to indicate whether or
+   not this object file needs an executable stack.  This is primarily
+   a GNU extension to ELF but could be used on other targets.  */
+
+int trampolines_created;
+
+void
+file_end_indicate_exec_stack (void)
+{
+#if 0	/* APPLE LOCAL begin deep branch prediction pic-base */
+  unsigned int flags = SECTION_DEBUG;
+  if (trampolines_created)
+    flags |= SECTION_CODE;
+
+  named_section_flags (".note.GNU-stack", flags);
+#endif	/* APPLE LOCAL end deep branch prediction pic-base */
+}
+/* APPLE LOCAL end deep branch prediction pic-base; copied from FSF mainline.  */
+
 #include "gt-varasm.h"

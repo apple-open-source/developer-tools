@@ -2,7 +2,7 @@
 /* A compile-only test for insertion 'bla' comm page jumps. */
 /* Developed by Ziemowit Laski  <zlaski@apple.com>  */
 /* { dg-do compile { target powerpc*-*-darwin* } } */
-/* { dg-options "-fnext-runtime -fobjc-gc -fobjc-fast -Wassign-intercept" } */
+/* { dg-options "-fnext-runtime -fobjc-gc -fobjc-direct-dispatch -Wassign-intercept" } */
 
 #include <objc/Object.h>
 

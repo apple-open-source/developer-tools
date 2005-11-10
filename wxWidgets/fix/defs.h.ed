@@ -1,0 +1,16 @@
+/assume default 32bit/d
+/SIZEOF_SIZE_T/a
+.
+.,.+1c
+#if defined(__ppc__) || defined(__i386__)
+        #define SIZEOF_SIZE_T 4
+        #define SIZEOF_VOID_P 4
+#elif defined(__ppc64__)
+        #define SIZEOF_SIZE_T 8
+        #define SIZEOF_VOID_P 8
+#else
+#error architecture not supported
+#endif
+.
+/  \&\& !defined( __POWERPC__ )/s///
+w

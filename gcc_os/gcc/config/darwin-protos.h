@@ -69,6 +69,10 @@ extern void machopic_finish PARAMS ((FILE *));
 
 extern void machopic_output_possible_stub_label PARAMS ((FILE *, const char*));
 
+/* APPLE LOCAL begin better pic-base sequence */
+extern void darwin_textcoal_nt_section (void);
+extern void darwin_datacoal_nt_section (void);
+/* APPLE LOCAL end better pic-base sequence */
 extern void darwin_exception_section PARAMS ((void));
 extern void darwin_eh_frame_section PARAMS ((void));
 extern void machopic_select_section PARAMS ((tree, int,
@@ -110,6 +114,9 @@ extern int darwin_set_section_for_var_p PARAMS ((tree, int, int));
 extern tree darwin_handle_odd_attribute (tree *, tree, tree, int, bool *);
 /* APPLE LOCAL XJR */
 extern tree darwin_handle_objc_gc_attribute (tree *, tree, tree, int, bool *);
+
+/* APPLE LOCAL deep branch prediction pic-base */
+extern void darwin_file_end (void);
 
 /* Expanded by EXTRA_SECTION_FUNCTIONS into varasm.o.  */
 extern void const_section PARAMS ((void));

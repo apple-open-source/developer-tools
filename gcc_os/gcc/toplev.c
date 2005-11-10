@@ -2512,9 +2512,8 @@ compile_file ()
       timevar_pop (TV_DUMP);
     }
 
-#ifdef ASM_FILE_END
-  ASM_FILE_END (asm_out_file);
-#endif
+  /* APPLE LOCAL deep branch prediction pic-base; copied from FSF mainline.  */
+  targetm.asm_out.file_end ();
 
   /* Attach a special .ident directive to the end of the file to identify
      the version of GCC which compiled this code.  The format of the .ident
@@ -5177,9 +5176,8 @@ init_asm_output (name)
 
   if (!flag_syntax_only)
     {
-#ifdef ASM_FILE_START
-      ASM_FILE_START (asm_out_file);
-#endif
+      /* APPLE LOCAL deep branch prediction pic-base; copied from FSF mainline.  */
+      targetm.asm_out.file_start ();
 
 #ifdef ASM_COMMENT_START
       if (flag_verbose_asm)

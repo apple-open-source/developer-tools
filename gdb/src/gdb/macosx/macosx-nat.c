@@ -330,10 +330,10 @@ _initialize_macosx_nat ()
   memset (ops, 0, sizeof (struct serial_ops));
   ops->name = "unix";
   ops->next = 0;
-  ops->sopen = macosx_classic_unix_open;
-  ops->sclose = macosx_classic_unix_close;
+  ops->open = macosx_classic_unix_open;
+  ops->close = macosx_classic_unix_close;
   ops->readchar = ser_unix_readchar;
-  ops->swrite = ser_unix_write;
+  ops->write = ser_unix_write;
   ops->flush_output = ser_unix_nop_flush_output;
   ops->flush_input = ser_unix_flush_input;
   ops->send_break = ser_unix_nop_send_break;

@@ -4327,7 +4327,7 @@ emit_library_call_value_1 (retval, orgfun, value, fn_type, outmode, nargs, p)
 	  if (GET_CODE (valreg) == PARALLEL)
 	    {
 	      temp = gen_reg_rtx (outmode);
-	      emit_group_store (temp, valreg, outmode);
+	      emit_group_store (temp, valreg, GET_MODE_SIZE (outmode));
 	      valreg = temp;
 	    }
 
@@ -4370,7 +4370,7 @@ emit_library_call_value_1 (retval, orgfun, value, fn_type, outmode, nargs, p)
 	{
 	  if (value == 0)
 	    value = gen_reg_rtx (outmode);
-	  emit_group_store (value, valreg, outmode);
+	  emit_group_store (value, valreg, GET_MODE_SIZE (outmode));
 	}
       else if (value != 0)
 	emit_move_insn (value, valreg);

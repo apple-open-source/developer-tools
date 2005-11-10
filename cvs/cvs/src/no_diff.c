@@ -1,6 +1,11 @@
 /*
- * Copyright (c) 1992, Brian Berliner and Jeff Polk
- * Copyright (c) 1989-1992, Brian Berliner
+ * Copyright (C) 1986-2005 The Free Software Foundation, Inc.
+ *
+ * Portions Copyright (C) 1998-2005 Derek Price, Ximbiot <http://ximbiot.com>,
+ *                                  and others.
+ *
+ * Portions Copyright (C) 1992, Brian Berliner and Jeff Polk
+ * Portions Copyright (C) 1989-1992, Brian Berliner
  * 
  * You may distribute under the terms of the GNU General Public License as
  * specified in the README file that comes with the CVS source distribution.
@@ -8,13 +13,14 @@
  * No Difference
  * 
  * The user file looks modified judging from its time stamp; however it needn't
- * be.  No_difference() finds out whether it is or not. If it is not, it
+ * be.  No_Difference() finds out whether it is or not. If it is not, it
  * updates the administration.
  * 
  * returns 0 if no differences are found and non-zero otherwise
  */
 
 #include "cvs.h"
+#include <assert.h>
 
 int
 No_Difference (finfo, vers)
@@ -49,8 +55,9 @@ No_Difference (finfo, vers)
 	options = xstrdup ("");
 
     tocvsPath = wrap_tocvs_process_file (finfo->file);
-    retcode = RCS_cmp_file (vers->srcfile, vers->vn_user, options,
-			    tocvsPath == NULL ? finfo->file : tocvsPath);
+    retcode = RCS_cmp_file( vers->srcfile, vers->vn_user, (char **)NULL,
+                            (char *)NULL, options,
+			    tocvsPath == NULL ? finfo->file : tocvsPath );
     if (retcode == 0)
     {
 	/* no difference was found, so fix the entries file */
@@ -70,7 +77,8 @@ No_Difference (finfo, vers)
 
 	/* update the entdata pointer in the vers_ts structure */
 	p = findnode (finfo->entries, finfo->file);
-	vers->entdata = (Entnode *) p->data;
+	assert (p);
+	vers->entdata = p->data;
 
 	ret = 0;
     }
@@ -82,13 +90,8 @@ No_Difference (finfo, vers)
 	/* Need to call unlink myself because the noexec variable
 	 * has been set to 1.  */
 	if (trace)
-	    (void) fprintf (stderr, "%c-> unlink (%s)\n",
-#ifdef SERVER_SUPPORT
-			    (server_active) ? 'S' : ' ',
-#else
-			    ' ',
-#endif
-			    tocvsPath);
+	    (void) fprintf (stderr, "%s-> unlink (%s)\n",
+			    CLIENT_SERVER_STR, tocvsPath);
 	if ( CVS_UNLINK (tocvsPath) < 0)
 	    error (0, errno, "could not remove %s", tocvsPath);
     }

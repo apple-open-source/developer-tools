@@ -1454,6 +1454,15 @@ override_options ()
   }
 
   /* APPLE LOCAL begin dynamic-no-pic */
+#if TARGET_MACHO
+      if (MACHO_DYNAMIC_NO_PIC_P ())
+	{
+	  if (flag_pic)
+	    warning ("-mdynamic-no-pic overrides -fpic or -fPIC");
+	  flag_pic = 0;
+	}
+      else
+#endif
   if (flag_pic == 1)
     {
       /* Darwin doesn't support -fpic.  */
@@ -3416,6 +3425,11 @@ symbolic_operand (op, mode)
 		  || XINT (op, 1) == UNSPEC_GOTOFF
 		  || XINT (op, 1) == UNSPEC_GOTPCREL)))
 	return 1;
+      /* APPLE LOCAL begin dynamic-no-pic */
+      /* Fall through:  */
+
+    case PLUS:
+      /* APPLE LOCAL end dynamic-no-pic */
       if (GET_CODE (op) != PLUS
 	  || GET_CODE (XEXP (op, 1)) != CONST_INT)
 	return 0;
@@ -4677,7 +4691,8 @@ get_pc_thunk_name (name, regno)
      char name[32];
      unsigned int regno;
 {
-  if (USE_HIDDEN_LINKONCE)
+  /* APPLE LOCAL deep branch prediction pic-base */
+  if (USE_HIDDEN_LINKONCE || TARGET_MACHO)
     sprintf (name, "__i686.get_pc_thunk.%s", reg_names[regno]);
   else
     ASM_GENERATE_INTERNAL_LABEL (name, "LPR", regno);
@@ -4687,8 +4702,9 @@ get_pc_thunk_name (name, regno)
 /* This function generates code for -fpic that loads %ebx with
    the return address of the caller and then returns.  */
 
+/* APPLE LOCAL deep branch prediction pic-base */
 void
-ix86_asm_file_end (file)
+ix86_file_end (file)
      FILE *file;
 {
   rtx xops[2];
@@ -4722,6 +4738,18 @@ ix86_asm_file_end (file)
 	  fputc ('\n', file);
 	  ASM_DECLARE_FUNCTION_NAME (file, name, decl);
 	}
+      /* APPLE LOCAL begin deep branch prediction pic-base */
+      else if (TARGET_MACHO)
+	{
+	  darwin_textcoal_nt_section ();
+	  fputs (".weak_definition\t", asm_out_file);
+	  assemble_name (asm_out_file, name);
+	  fputs ("\n.private_extern\t", asm_out_file);
+	  assemble_name (asm_out_file, name);
+	  fputs ("\n", asm_out_file);
+	  ASM_OUTPUT_LABEL (asm_out_file, name);
+	}
+      /* APPLE LOCAL end deep branch prediction pic-base */
       else
 	{
 	  text_section ();
@@ -4758,7 +4786,9 @@ output_set_got (dest)
 #if TARGET_MACHO
       /* Output the "canonical" label name ("Lxx$pb") here too.  This
          is what will be referred to by the Mach-O PIC subsystem.  */
-      ASM_OUTPUT_LABEL (asm_out_file, machopic_function_base_name ());
+      /* APPLE LOCAL deep branch prediction pic-base */
+      if (current_function_decl)
+	ASM_OUTPUT_LABEL (asm_out_file, machopic_function_base_name ());
 #endif
       (*targetm.asm_out.internal_label) (asm_out_file, "L",
 				 CODE_LABEL_NUMBER (XEXP (xops[2], 0)));
@@ -4775,12 +4805,24 @@ output_set_got (dest)
       xops[2] = gen_rtx_SYMBOL_REF (Pmode, ggc_strdup (name));
       xops[2] = gen_rtx_MEM (QImode, xops[2]);
       output_asm_insn ("call\t%X2", xops);
+      /* APPLE LOCAL begin deep branch prediction pic-base */
+#if TARGET_MACHO
+      /* Output the "canonical" label name ("Lxx$pb") here too.  This
+         is what will be referred to by the Mach-O PIC subsystem.  */
+      if (cfun)
+	ASM_OUTPUT_LABEL (asm_out_file, machopic_function_base_name ());
+#endif
+      /* APPLE LOCAL end deep branch prediction pic-base */
     }
 
+  /* APPLE LOCAL begin deep branch prediction pic-base */
+#if !TARGET_MACHO
   if (!flag_pic || TARGET_DEEP_BRANCH_PREDICTION)
     output_asm_insn ("add{l}\t{%1, %0|%0, %1}", xops);
-  else if (!TARGET_MACHO)
+  else
     output_asm_insn ("add{l}\t{%1+[.-%a2], %0|%0, %a1+(.-%a2)}", xops);
+#endif	/* !TARGET_MACHO */
+  /* APPLE LOCAL end deep branch prediction pic-base */
 
   return "";
 }
@@ -5637,6 +5679,10 @@ legitimate_constant_p (x)
       /* TLS symbols are not constant.  */
       if (tls_symbolic_operand (x, Pmode))
 	return false;
+      /* APPLE LOCAL begin dynamic-no-pic */
+      if (TARGET_MACHO && TARGET_DYNAMIC_NO_PIC)
+	return machopic_name_defined_p (XSTR (x, 0));
+      /* APPLE LOCAL end dynamic-no-pic */
       break;
 
     case CONST:
@@ -5657,7 +5703,24 @@ legitimate_constant_p (x)
 	  default:
 	    return false;
 	  }
+
+      /* APPLE LOCAL begin dynamic-no-pic */
+      if (GET_CODE (inner) == PLUS)
+	return legitimate_constant_p (inner);
+      /* APPLE LOCAL end dynamic-no-pic */
       break;
+
+      /* APPLE LOCAL begin dynamic-no-pic */
+    case PLUS:
+      {
+	rtx left = XEXP (x, 0);
+	rtx right = XEXP (x, 1);
+	bool left_is_constant = legitimate_constant_p (left);
+	bool right_is_constant = legitimate_constant_p (right);
+	return left_is_constant && right_is_constant;
+      }
+      break;
+      /* APPLE LOCAL end dynamic-no-pic */
 
     default:
       break;
@@ -5694,10 +5757,10 @@ constant_address_p (x)
       return TARGET_64BIT;
 
     case CONST:
-      /* For Mach-O, really believe the CONST.  */
       if (TARGET_MACHO)
-	return true;
-      /* Otherwise fall through.  */
+	/* APPLE LOCAL dynamic-no-pic *** replacing "return true;" */
+	return legitimate_constant_p (XEXP (x, 0));
+
     case SYMBOL_REF:
       return !flag_pic && legitimate_constant_p (x);
 
@@ -6005,11 +6068,14 @@ legitimate_address_p (mode, addr, strict)
 	    goto report_error;
 	  }
 
-      else if (flag_pic && (SYMBOLIC_CONST (disp)
+      /* APPLE LOCAL begin dynamic-no-pic */
+      else if ((flag_pic || MACHO_DYNAMIC_NO_PIC_P ())
+	       && (SYMBOLIC_CONST (disp)
 #if TARGET_MACHO
-			    && !machopic_operand_p (disp)
-#endif
-			    ))
+		   && !machopic_operand_p (disp)
+#endif /* TARGET_MACHO */
+		   ))
+      /* APPLE LOCAL end dynamic-no-pic */
 	{
 	is_legitimate_pic:
 	  if (TARGET_64BIT && (index || base))
@@ -6026,11 +6092,18 @@ legitimate_address_p (mode, addr, strict)
 		  goto report_error;
 		}
 	    }
-	  else if (! legitimate_pic_address_disp_p (disp))
+	  /* APPLE LOCAL begin dynamic-no-pic */
+	  else if (flag_pic && ! legitimate_pic_address_disp_p (disp))
 	    {
 	      reason = "displacement is an invalid pic construct";
 	      goto report_error;
 	    }
+	  else if (TARGET_DYNAMIC_NO_PIC && !legitimate_constant_p (disp))
+	    {
+	      reason = "displacment must be referenced via non_lazy_pointer";
+	      goto report_error;
+	    }
+	  /* APPLE LOCAL end dynamic-no-pic */
 
           /* This code used to verify that a symbolic pic displacement
 	     includes the pic_offset_table_rtx register.
@@ -6507,8 +6580,17 @@ legitimize_address (x, oldx, mode)
       return dest;
     }
 
-  if (flag_pic && SYMBOLIC_CONST (x))
-    return legitimize_pic_address (x, 0);
+  /* APPLE LOCAL begin dynamic-no-pic */
+  if (SYMBOLIC_CONST (x))
+    {
+      if (flag_pic)
+	return legitimize_pic_address (x, 0);
+#if TARGET_MACHO
+      else if (MACHO_DYNAMIC_NO_PIC_P ())
+	return machopic_indirect_data_reference (x, 0);
+#endif /* TARGET_MACHO */
+    }
+  /* APPLE LOCAL end dynamic-no-pic */
 
   /* Canonicalize shifts by 0, 1, 2, 3 into multiply */
   if (GET_CODE (x) == ASHIFT
@@ -8384,30 +8466,31 @@ ix86_expand_move (mode, operands)
 	  op1 = tmp;
 	}
     }
-  else if (flag_pic && mode == Pmode && symbolic_operand (op1, Pmode))
+  /* APPLE LOCAL begin dynamic-no-pic */
+  else if ((flag_pic || MACHO_DYNAMIC_NO_PIC_P ())
+	   && mode == Pmode && symbolic_operand (op1, Pmode))
+  /* APPLE LOCAL end dynamic-no-pic */
     {
 #if TARGET_MACHO
-      if (MACHOPIC_PURE)
+      /* APPLE LOCAL begin dynamic-no-pic */
+      if (MACHOPIC_INDIRECT)
 	{
 	  rtx temp = ((reload_in_progress
 		       || ((op0 && GET_CODE (op0) == REG)
 			   && mode == Pmode))
 		      ? op0 : gen_reg_rtx (Pmode));
 	  op1 = machopic_indirect_data_reference (op1, temp);
-	  op1 = machopic_legitimize_pic_address (op1, mode,
-						 temp == op1 ? 0 : temp);
+	  if (MACHOPIC_PURE)
+	    op1 = machopic_legitimize_pic_address (op1, mode,
+						   temp == op1 ? 0 : temp);
 	}
-      else
-	{
-	  if (MACHOPIC_INDIRECT)
-	    op1 = machopic_indirect_data_reference (op1, 0);
-	}
-      if (op0 != op1)
+      if (op0 != op1 && GET_CODE (op0) != MEM)
 	{
 	  insn = gen_rtx_SET (VOIDmode, op0, op1);
 	  emit_insn (insn);
+	  return;
 	}
-      return;
+      /* APPLE LOCAL end dynamic-no-pic */
 #endif /* TARGET_MACHO */
       if (GET_CODE (op0) == MEM)
 	op1 = force_reg (Pmode, op1);
@@ -8487,7 +8570,7 @@ ix86_expand_vector_move (mode, operands)
   /* Make operand1 a register if it isn't already.  */
   if (!no_new_pseudos
       && !register_operand (operands[0], mode)
-      && !register_operand (operands[1], mode))
+     && !register_operand (operands[1], mode))
     {
       rtx temp = force_reg (GET_MODE (operands[1]), operands[1]);
       emit_move_insn (operands[0], temp);
@@ -11816,7 +11899,9 @@ ix86_expand_call (retval, fnaddr, callarg1, callarg2, pop, sibcall)
     abort ();
 
 #if TARGET_MACHO
-  if (flag_pic && GET_CODE (XEXP (fnaddr, 0)) == SYMBOL_REF)
+  /* APPLE LOCAL dynamic-no-pic */
+  if ((flag_pic || MACHO_DYNAMIC_NO_PIC_P ())
+      && GET_CODE (XEXP (fnaddr, 0)) == SYMBOL_REF)
     fnaddr = machopic_indirect_call_target (fnaddr);
 #else
   /* Static functions and indirect calls don't need the pic register.  */
@@ -15266,21 +15351,40 @@ machopic_output_stub (file, symb, stub)
 
   sprintf (lazy_ptr_name, "L%d$lz", label);
 
+  /* Choose one of three possible sections for this stub.  */
   if (MACHOPIC_PURE)
-    machopic_picsymbol_stub_section ();
+    {
+      /* APPLE LOCAL begin deep branch prediction pic-base */
+      if (TARGET_DEEP_BRANCH_PREDICTION)
+	machopic_picsymbol_stub2_section ();	/* 25 byte PIC stub.  */
+      else
+	machopic_picsymbol_stub_section ();	/* 26 byte PIC stub.  */
+      /* APPLE LOCAL end deep branch prediction pic-base */
+    }
   else
-    machopic_symbol_stub_section ();
+    machopic_symbol_stub_section ();	/* -mdynamic-no-pic 16 byte stub.  */
 
   fprintf (file, "%s:\n", stub);
   fprintf (file, "\t.indirect_symbol %s\n", symbol_name);
 
   if (MACHOPIC_PURE)
     {
-      fprintf (file, "\tcall LPC$%d\nLPC$%d:\tpopl %%eax\n", label, label);
+      /* APPLE LOCAL begin deep branch prediction pic-base */
+      /* PIC stubs.  */
+      if (TARGET_DEEP_BRANCH_PREDICTION)
+	{
+	  output_set_got (gen_rtx_REG (SImode, 0 /* EAX */));
+	  fprintf (file, "LPC$%d:\n", label);
+	}
+      else
+	fprintf (file, "\tcall LPC$%d\nLPC$%d:\tpopl %%eax\n", label, label);
+      /* APPLE LOCAL end deep branch prediction pic-base */
       fprintf (file, "\tmovl %s-LPC$%d(%%eax),%%edx\n", lazy_ptr_name, label);
       fprintf (file, "\tjmp %%edx\n");
     }
   else
+    /* APPLE LOCAL comment */
+    /* -mdynamic-no-pic stub.  */
     fprintf (file, "\tjmp *%s\n", lazy_ptr_name);
   
   fprintf (file, "%s:\n", binder_name);
@@ -15295,11 +15399,38 @@ machopic_output_stub (file, symb, stub)
 
   fprintf (file, "\tjmp dyld_stub_binding_helper\n");
 
-  machopic_lazy_symbol_ptr_section ();
+  /* APPLE LOCAL begin deep branch prediction pic-base.  */
+  /* N.B. Keep the correspondence of these
+     'symbol_ptr/symbol_ptr2/symbol_ptr3' sections consistent with the
+     old-pic/new-pic/non-pic stubs; altering this will break
+     compatibility with existing dylibs.  */
+  if (MACHOPIC_PURE)
+    {
+      /* PIC stubs.  */
+      if (TARGET_DEEP_BRANCH_PREDICTION)
+	machopic_lazy_symbol_ptr2_section ();
+      else
+	machopic_lazy_symbol_ptr_section ();
+    }
+  else
+    {
+      /* -mdynamic-no-pic stub.  */
+      machopic_lazy_symbol_ptr3_section ();
+    }
+  /* APPLE LOCAL end deep branch prediction pic-base.  */
   fprintf (file, "%s:\n", lazy_ptr_name);
   fprintf (file, "\t.indirect_symbol %s\n", symbol_name);
   fprintf (file, "\t.long %s\n", binder_name);
 }
+
+/* APPLE LOCAL begin deep branch prediction pic-base */
+void
+darwin_x86_file_end (void)
+{
+  darwin_file_end ();
+  ix86_file_end (asm_out_file);
+}
+/* APPLE LOCAL end deep branch prediction pic-base */
 #endif /* TARGET_MACHO */
 
 /* Order the registers for register allocator.  */

@@ -399,7 +399,7 @@ int warn_assign_intercept = 0;
 /* Nonzero means jump to entry points provided in high memory comm page.
    This is solely a performance improvement, so this option may be a no-op
    for some targets.  */
-int flag_objc_fast = 0;
+int flag_objc_direct_dispatch = 0;
 
 /* Nonzero means include ObjC classes in the garbage collection scheme
    by default, unless the class is marked `static'.  When zero, only

@@ -1,0 +1,89 @@
+/WXWIN_OS_DESCRIPTION/s/\(Darwin [^ ]*\) .*/\1 Power Macintosh"/
+/WORDS_BIGENDIAN/c
+#if defined(__ppc__) || defined(__ppc64__)
+#define WORDS_BIGENDIAN 1
+#elif defined(__i386__)
+/* #undef WORDS_BIGENDIAN */
+#else
+#error architecture not supported */
+#endif
+.
+/__POWERPC__/c
+#if defined(__ppc__) || defined(__ppc64__)
+#define __POWERPC__ 1
+#elif defined(__i386__)
+#define __INTEL__ 1
+#else
+#error architecture not supported */
+#endif
+.
+/HAVE_DLOPEN/c
+#define HAVE_DLOPEN 1
+.
+/HAVE_FTIME/c
+#define HAVE_FTIME 1
+.
+/HAVE_NANOSLEEP/c
+#define HAVE_NANOSLEEP 1
+.
+/HAVE_SIGEMPTYSET/c
+#define HAVE_SIGEMPTYSET 1
+.
+/HAVE_VSSCANF/c
+#define HAVE_VSSCANF 1
+.
+/SIZEOF_VOID_P/c
+#if defined(__ppc__) || defined(__i386__)
+#define SIZEOF_VOID_P 4
+#elif defined(__ppc64__)
+#define SIZEOF_VOID_P 8
+#else
+#error architecture not supported */
+#endif
+.
+/SIZEOF_LONG/c
+#if defined(__ppc__) || defined(__i386__)
+#define SIZEOF_LONG 4
+#elif defined(__ppc64__)
+#define SIZEOF_LONG 8
+#else
+#error architecture not supported */
+#endif
+.
+/SIZEOF_SIZE_T/c
+#if defined(__ppc__) || defined(__i386__)
+#define SIZEOF_SIZE_T 4
+#elif defined(__ppc64__)
+#define SIZEOF_SIZE_T 8
+#else
+#error architecture not supported */
+#endif
+.
+/HAVE_DLOPEN/c
+#define HAVE_DLOPEN 1
+.
+/HAVE_DLERROR/c
+#define HAVE_DLERROR 1
+.
+/HAVE_FLOCK/c
+#define HAVE_FLOCK 1
+.
+/HAVE_GETHOSTNAME/c
+#define HAVE_GETHOSTNAME 1
+.
+/HAVE_MKTEMP/c
+#define HAVE_MKTEMP 1
+.
+/HAVE_NANOSLEEP/c
+#define HAVE_NANOSLEEP 1
+.
+/HAVE_SETENV/c
+#define HAVE_SETENV 1
+.
+/HAVE_FCNTL_H/c
+#define HAVE_FCNTL_H 1
+.
+/HAVE_WCTYPE_H/c
+#define HAVE_WCTYPE_H 1
+.
+w

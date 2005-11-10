@@ -1,0 +1,41 @@
+/SIZEOF_LONG/c
+#if defined(__ppc__) || defined(__i386__)
+#define SIZEOF_LONG 4
+#elif defined(__ppc64__)
+#define SIZEOF_LONG 8
+#else
+#error architecture not supported
+#endif
+.
+/SIZEOF_SIZE_T/a
+.
+.,.+2c
+#if defined(__ppc__) || defined(__i386__)
+#define SIZEOF_SIZE_T 4
+#define SIZEOF_VOID_P 4
+#elif defined(__ppc64__)
+#define SIZEOF_SIZE_T 8
+#define SIZEOF_VOID_P 8
+#else
+#error architecture not supported
+#endif
+.
+/WORDS_BIGENDIAN/c
+#if defined(__ppc__) || defined(__ppc64__)
+#define WORDS_BIGENDIAN 1
+#elif defined(__i386__)
+/* #undef WORDS_BIGENDIAN */
+#else
+#error architecture not supported
+#endif
+.
+/__POWERPC__/c
+#if defined(__ppc__) || defined(__ppc64__)
+#define __POWERPC__ 1
+#elif defined(__i386__)
+#define __INTEL__ 1
+#else
+#error architecture not supported
+#endif
+.
+w

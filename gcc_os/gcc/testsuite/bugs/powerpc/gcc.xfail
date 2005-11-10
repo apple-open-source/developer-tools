@@ -272,7 +272,7 @@
 3239685: gcc.dg/debug/debug-2.c -gstabs3 -O3 scan-assembler xyzzy
 3240498: gcc.dg/altivec-7.c (test for excess errors)
 3240498: gcc.dg/altivec-8.c (test for excess errors)
-3240568: gcc.dg/uninit-C.c (test for excess errors)
+#3240568: gcc.dg/uninit-C.c (test for excess errors)
 3240749: gcc.dg/duff-2.c (test for excess errors)
 3240754: gcc.dg/simd-1.c  (test for errors, line 57)
 3240754: gcc.dg/simd-1.c  (test for errors, line 58)
@@ -281,13 +281,21 @@
 3240754: gcc.dg/simd-1.c (test for excess errors)
 3266222: gcc.dg/pch/apple-altivec-1.c -O0 -g assembly comparison
 3266222: gcc.dg/pch/apple-altivec-1.c  -O3 -g  assembly comparison
-3723012: gcc.c-torture/execute/20000822-1.c compilation,  -fast
-3723012: gcc.c-torture/execute/20010209-1.c compilation,  -fast
-3723012: gcc.c-torture/execute/nestfunc-1.c compilation,  -fast
-3723012: gcc.c-torture/execute/nestfunc-2.c compilation,  -fast
-3723012: gcc.c-torture/execute/nestfunc-3.c compilation,  -fast
-3723012: gcc.c-torture/execute/921017-1.c compilation,  -fast
-3723012: gcc.c-torture/execute/970217-1.c execution,  -fast
+#3723012: gcc.c-torture/execute/20000822-1.c compilation,  -fast
+#3723012: gcc.c-torture/execute/20010209-1.c compilation,  -fast
+#3723012: gcc.c-torture/execute/nestfunc-1.c compilation,  -fast
+#3723012: gcc.c-torture/execute/nestfunc-2.c compilation,  -fast
+#3723012: gcc.c-torture/execute/nestfunc-3.c compilation,  -fast
+#3723012: gcc.c-torture/execute/921017-1.c compilation,  -fast
+#3723012: gcc.c-torture/execute/970217-1.c execution,  -fast
+#3723467: gcc.c-torture/execute/eeprof-1.c execution,  -fast
+3717771: gcc.c-torture/execute/20000822-1.c compilation,  -fast
+#3717771: gcc.c-torture/execute/20010209-1.c compilation,  -fast
+3717771: gcc.c-torture/execute/nestfunc-1.c compilation,  -fast
+3717771: gcc.c-torture/execute/nestfunc-2.c compilation,  -fast
+3717771: gcc.c-torture/execute/nestfunc-3.c compilation,  -fast
+3717771: gcc.c-torture/execute/921017-1.c compilation,  -fast
+3717771: gcc.c-torture/execute/970217-1.c execution,  -fast
 3723467: gcc.c-torture/execute/eeprof-1.c execution,  -fast
 3673618: gcc.c-torture/execute/ieee/fp-cmp-1.c execution,  -fast
 3673618: gcc.c-torture/execute/ieee/fp-cmp-2.c execution,  -fast
@@ -297,6 +305,17 @@
 3673618: gcc.c-torture/execute/ieee/mzero2.c execution,  -fast
 3673618: gcc.c-torture/execute/ieee/rbug.c execution,  -fast
 3719001: gcc.dg/noncompile/930622-2.c  -fast  (test for excess errors)
-3723667: gcc.dg/pch/inline-3.c  -fast  assembly comparison
-3723667: gcc.dg/pch/inline-4.c  -fast  assembly comparison
-
+#3723667: gcc.dg/pch/inline-3.c  -fast  assembly comparison
+#3723667: gcc.dg/pch/inline-4.c  -fast  assembly comparison
+#3731677: gcc.c-torture/execute/20000603-1.c execution,  -fast
+#3731677: gcc.c-torture/execute/20010119-1.c compilation,  -fast
+#3731677: gcc.c-torture/execute/bcp-1.c execution,  -fast
+3717771: gcc.c-torture/execute/920612-2.c compilation,  -fast
+3717771: gcc.c-torture/execute/931002-1.c compilation,  -fast
+3855246: gcc.dg/long-branch-begin.c (test for excess errors)
+3916694: gcc.c-torture/execute/stdio-opt-3.c execution,  -O1
+3916694: gcc.c-torture/execute/stdio-opt-3.c execution,  -O2
+3916694: gcc.c-torture/execute/stdio-opt-3.c execution,  -O3 -fomit-frame-pointer
+3916694: gcc.c-torture/execute/stdio-opt-3.c execution,  -O3 -g
+3916694: gcc.c-torture/execute/stdio-opt-3.c execution,  -Os
+3916694: gcc.c-torture/execute/stdio-opt-3.c execution,  -fast

@@ -253,6 +253,7 @@ in the following sections.
 @c APPLE LOCAL begin ObjC options
 -fgnu-runtime  -fnext-runtime  @gol
 -fno-nil-receivers (APPLE ONLY) @gol
+-fobjc-direct-dispatch (APPLE ONLY) @gol
 -fobjc-exceptions (APPLE ONLY) @gol
 -freplace-objc-classes (APPLE ONLY) @gol
 -fzero-link (APPLE ONLY) @gol
@@ -556,7 +557,10 @@ in the following sections.
 -segprot -segs_read_only_addr -segs_read_write_addr @gol
 -single_module -static -sub_library -sub_umbrella @gol
 -twolevel_namespace -umbrella -undefined @gol
--unexported_symbols_list -weak_reference_mismatches -whatsloaded}
+-unexported_symbols_list -weak_reference_mismatches -whatsloaded
+@c APPLE LOCAL backport 3721776 from FSF mainline
+-mone-byte-bool
+}
 
 @c APPLE LOCAL prune man page
 @ignore
@@ -2077,8 +2081,18 @@ used.
 Assume that all Objective-C message dispatches (e.g., 
 @code{[receiver message:arg]}) in this translation unit ensure that the receiver 
 is not @code{nil}.  This allows for more efficient entry points in the runtime to be 
-used.  Currently, this option is only available in conjunciton with 
+used.  Currently, this option is only available in conjunction with
 the NeXT runtime.
+
+@item -fobjc-direct-dispatch @r{(APPLE ONLY)}
+@opindex -fobjc-direct-dispatch
+For some functions (such as @code{objc_msgSend}) called very frequently by
+Objective-C programs, special entry points exist in high memory that may be jumped
+to directly (e.g., via the @code{"bla"} instruction on the PowerPC) for improved
+performance.  The @option{-fobjc-direct-dispatch} option will cause such jumps
+to be generated.  This option is only available in conjunction with the NeXT
+runtime; furthermore, programs built with the @option{-fobjc-direct-dispatch}
+option will only run on Mac OS X 10.4 (Tiger) or later systems.
 
 @item -fobjc-exceptions @r{(APPLE ONLY)}
 @opindex -fobjc-exceptions
@@ -7824,6 +7838,21 @@ See man ld(1) for more information.
 @opindex bundle_loader
 This specifies the @var{executable} that will be loading the build
 output file being linked. See man ld(1) for more information.
+
+@c APPLE LOCAL begin backport 3721776 from FSF mainline
+@item -mone-byte-bool
+@opindex -mone-byte-bool
+Override the defaults for @samp{bool} so that @samp{sizeof(bool)==1}.
+By default @samp{sizeof(bool)} is @samp{4} when compiling for 
+Darwin/PowerPC and @samp{1} when compiling for Darwin/x86, so this
+option has no effect on x86.
+
+@strong{Warning:} The @option{-mone-byte-bool} switch causes GCC
+to generate code that is not binary compatible with code generated
+without that switch.  Using this switch may require recompiling all
+other modules in a program, including system libraries.  Use this 
+switch to conform to a non-default data model.
+@c APPLE LOCAL end backport 3721776 from FSF mainline
 
 @item -allowable_client  @var{client_name}
 @item -arch_only

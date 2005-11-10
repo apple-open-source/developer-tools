@@ -150,6 +150,27 @@ Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 #define TARGET_ASM_EH_FRAME_SECTION default_eh_frame_section
 #endif
 
+/* APPLE LOCAL begin deep branch prediction pic-base; copied from FSF mainline */
+#ifndef TARGET_ASM_FILE_START
+#define TARGET_ASM_FILE_START default_file_start
+#endif
+
+#ifndef TARGET_ASM_FILE_END
+#define TARGET_ASM_FILE_END hook_void_void
+#endif
+
+#ifndef TARGET_ASM_FILE_START_FILE_DIRECTIVE
+#define TARGET_ASM_FILE_START_FILE_DIRECTIVE false
+#endif
+
+#ifndef TARGET_ASM_EXTERNAL_LIBCALL
+/* APPLE LOCAL begin deep branch prediction pic-base; kludge: delete this when FSF merge supplies "targhooks.h".  */
+static void default_external_libcall (rtx KLUDGE_please_delete_me) {}
+/* APPLE LOCAL end deep branch prediction pic-base; kludge: delete this when FSF merge supplies "targhooks.h".  */
+#define TARGET_ASM_EXTERNAL_LIBCALL default_external_libcall
+#endif
+/* APPLE LOCAL end deep branch prediction pic-base; copied from FSF mainline */
+
 #define TARGET_ASM_ALIGNED_INT_OP				\
 		       {TARGET_ASM_ALIGNED_HI_OP,		\
 			TARGET_ASM_ALIGNED_SI_OP,		\
@@ -186,7 +207,12 @@ Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 			TARGET_ASM_CONSTRUCTOR,			\
 			TARGET_ASM_DESTRUCTOR,                  \
                         TARGET_ASM_OUTPUT_MI_THUNK,             \
-                        TARGET_ASM_CAN_OUTPUT_MI_THUNK }
+/* APPLE LOCAL begin deep branch prediction pic-base; copied from FSF mainline */	\
+                        TARGET_ASM_CAN_OUTPUT_MI_THUNK,         \
+                        TARGET_ASM_FILE_START,                  \
+                        TARGET_ASM_FILE_END,			\
+			TARGET_ASM_EXTERNAL_LIBCALL}
+/* APPLE LOCAL end deep branch prediction pic-base; copied from FSF mainline */
 
 /* Scheduler hooks.  All of these default to null pointers, which
    haifa-sched.c looks for and handles.  */

@@ -3,7 +3,7 @@
    'not', etc., is allowed inside ObjC selectors.  */
 /* Author: Ziemowit Laski <zlaski@apple.com>.  */
 /* { dg-do compile } */
-
+/* { dg-options "" } */
 
 @interface Int1 
 + (int)and_eq:(int)arg1 and:(int)arg2;

@@ -27,13 +27,9 @@
 // invalidate any other reasons why the executable file might be covered by
 // the GNU General Public License.
 
-/* APPLE LOCAL begin libcc_kext */
-#ifndef LIBCC_KEXT	/* Kludge: easier than identifying correct -Ipath, and unnecessary for kext */
 #include <bits/c++config.h>
 #include <cxxabi.h>
 #include "unwind-cxx.h"
-#endif
-/* APPLE LOCAL end libcc_kext */
 
 #if _GLIBCXX_HOSTED
 #ifdef _GLIBCXX_HAVE_UNISTD_H
@@ -55,14 +51,6 @@
 extern "C" void
 __cxxabiv1::__cxa_pure_virtual (void)
 {
-
-/* APPLE LOCAL begin libcc_kext */
-#ifndef LIBCC_KEXT
   writestr ("pure virtual method called\n");
   std::terminate ();
-#else
-  extern void panic (void);
-  panic ();
-#endif
-/* APPLE LOCAL end libcc_kext */
 }

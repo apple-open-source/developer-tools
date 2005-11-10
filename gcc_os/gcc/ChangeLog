@@ -1,3 +1,143 @@
+2004-12-10  Stuart Hastings  <stuart@apple.com>
+
+	Radar 3868767
+	* gcc/testsuite/gcc.apple/r3868767.c: New.
+
+2004-12-10  Eric Albert  <ejalbert@apple.com>
+	    Stuart Hastings  <stuart@apple.com>
+
+	Radar 3868767
+	* gcc/config/i386/darwin.h (ASM_SPEC): -force_cpusubtype_ALL default.
+	(TARGET_SUBTARGET_DEFAULT): SSE2 default.
+	(SUBTARGET_OVERRIDE_OPTIONS): disable SSE2 if -mmmx or -msse used;
+	if -mfpmath not set, default to -mfpmath=sse.
+	
+2004-11-05  Ziemowit Laski  <zlaski@apple.com>
+
+	<rdar://problem/3867969> False positive on detecting missing [super dealloc]
+        * objc/objc-act.c (finish_message_expr, start_method_def): Check for method
+	'dealloc' instead of methods beginning with 'dealloc...'.
+
+2004-10-29  Chuck Fleming  <fleming@apple.com>
+	    Ziemowit Laski  <zlaski@apple.com>
+
+	<rdar://problem/3721879> gcc should warn when -dealloc methods don't call [super dealloc]
+	* objc/objc-act.c (should_call_super_dealloc): New global variable.
+	(finish_message_expr): Clear should_call_super_dealloc if calling
+	[super dealloc].
+	(start_method_def): Set should_call_super_dealloc if defining a 'dealloc'
+	method in a non-root class.
+	(finish_method_def): If finishing a 'dealloc' method in a non-root class,
+	warn if '[super dealloc]' has not been seen.
+
+2004-10-06  Ziemowit Laski  <zlaski@apple.com>
+
+	<rdar://problem/3767166> compiler generates a load from 0x8
+	* objc/objc-act.c (objc_substitute_decl): Add missing parenths after
+	DECL_NAME accessor.
+
+2004-09-29  Stuart Hastings  <stuart@apple.com>
+
+	<rdar://problem/3819436> binaries built w/-mdynamic-no-pic crash on exit
+	* gcc/config/darwin.h (machopic_lazy_symbol_ptr3_section) New.
+	* gcc/config/i386/i386.c (output_stub) Use it.
+	
+2004-09-21  Stuart Hastings  <stuart@apple.com>
+
+	<rdar://problem/3808279> gcc_os-1800 breaks Finder_FE-495
+	<rdar://problem/3806628> gcc_os-1800 breaks securityd project
+	* gcc/cse.c(cse_insn): check result of force_const_mem before using.
+	
+2004-09-15  Stuart Hastings  <stuart@apple.com>
+
+	<rdar://problem/3769675> 8A237: gcc -arch i386 internal compiler error
+	* gcc/config/darwin.c (machopic_legitimize_pic_address): Arrange
+	(plus (plus reg reg) const).
+	
+2004-09-14  Stuart Hastings  <stuart@apple.com>
+
+	<rdar://problem/3513554> Extracting an __m128i from a va_list reads from
+	the wrong address and crashes if built with -O0 or -Os
+	* gcc/builtins.c (std_expand_builtin_va_arg): backport some runtime-stack-alignment
+	code from FSF.
+	
+2004-09-10  Stuart Hastings  <stuart@apple.com>
+
+	<rdar://problem/3126682> pic-base sequence confuses branch predictor
+	<rdar://problem/3039565> x86 should get -mdynamic-no-pic support
+	* gcc/output.h (declare_file_start): Declare.
+	* gcc/target-def.h: Add TARGET_ASM_CAN_OUTPUT_MI_THUNK,
+	TARGET_ASM_FILE_START,TARGET_ASM_FILE_END,TARGET_ASM_EXTERNAL_LIBCALL hooks.
+	* gcc/target.h (can_output_mi_thunk,file_start,file_end,external_libcall):
+	New target hooks.
+	* gcc/toplev.c (compile_file): Replace ASM_FILE_START and ASM_FILE_END
+	with targetm.asm_out.file_start and targetm.asm_out.file_end.
+	* gcc/varasm.c (default_file_start, file_end_indicate_exec_stack) New.
+	* gcc/config/darwin-protos.h (darwin_textcoal_nt_section,
+	darwin_datacoal_nt_section, darwin_file_end): Declare.
+	* gcc/config/darwin.c (machopic_function_base_name): Check for non-null cfun before using.
+	(machopic_indirect_data_reference): Add -mdynamic-no-pic support for x86.
+	(darwin_file_start, darwin_file_end): New.
+	* gcc/config/darwin.h (ASM_FILE_END): Remove.  (NON_LAZY_POINTER_SUFFIX, STUB_SUFFIX): New.
+	(ASM_OUTPUT_LABELREF): Revise to use NON_LAZY_POINTER_SUFFIX and STUB_SUFFIX.
+	(EXTRA_SECTIONS): Add in_machopic_picsymbol_stub2, in_darwin_textcoal_nt, and
+	in_darwin_datacoal_nt.
+	(EXTRA_SECTION_FUNCTIONS): Add machopic_lazy_symbol_ptr2_section, darwin_textcoal_nt_section,
+	and darwin_datacoal_nt_section.
+	* gcc/config/i386/darwin.h (CC1_SPEC): Remove existing -mdynamic-no-pic option, add logic to warn
+	when -mdynamic-no-pic used with -static or -fPIC.
+	(TARGET_DEEP_BRANCH_PREDICTION): Remove.
+	(darwin_x86_file_end): Declare.  (TARGET_ASM_FILE_END) New.  (darwin_named_section_is): Declare.
+	(MASK_MACHO_DYNAMIC_NO_PIC): Un-defeat.
+	* gcc/config/i386/i386-protos.h (ix86_asm_file_end): Change extern to ix86_file_end.
+	* gcc/config/i386/i386.c (override_options): Warn for -mdynamic-no-pic -fpic/-fPIC.
+	(symbolic_operand): Add -mdynamic-no-pic support.  (get_pc_thunk_name): Enable for TARGET_MACHO.
+	(ix86_asm_file_end): Change name to ix86_file_end, add support for darwin_textcoal_nt_section
+	and darwin_datacoal_nt_section.  (output_set_got): Check current_function_decl before use,
+	TARGET_MACHO support.  (legitimate_constant_p, legitimate_address_p, ix86_expand_move,
+	ix86_expand_call, machopic_output_stub): support for -mdynamic-no-pic and
+	TARGET_DEEP_BRANCH_PREDICTION.  (darwin_x86_file_end) New.
+	* gcc/config/i386/i386.h (MASK_MACHO_DYNAMIC_NO_PIC) Define.
+	* gcc/config/rs6000/darwin.h (ASM_FILE_START) Remove.  (TARGET_ASM_FILE_START,
+	TARGET_ASM_FILE_END, darwin_file_end): Define.
+	* gcc/config/rs6000/rs6000.c (darwin_rs6000_file_start) New.
+
+2004-09-09  Stuart Hastings  <stuart@apple.com>
+
+	<rdar://problem/3067626> gcc3 vector codegen bug
+	<rdar://problem/3223364> gcc-3.3 internal compiler error
+	* config/i386/i386.md: Typos in MMX/SSE immediate shifts.
+	
+2004-09-07  Stuart Hastings  <stuart@apple.com>
+
+	<rdar://problem/3736592> 3DNow! intrinsics header
+	* gcc/config/i386/mm3dnow.h: New header file.
+	* gcc/config.gcc: tweak for new mm3dnow.h header.
+	* gcc/testsuite/gcc.dg/i386-3dnow-1.c: New testcase for 3DNow!
+	* gcc/testsuite/gcc.dg/i386-3dnow-2.c: New testcase for 3DNow!
+	* gcc/testsuite/gcc.dg/i386-3dnowA-1.c: New testcase for 3DNow!
+	* gcc/testsuite/gcc.dg/i386-3dnowA-2.c: New testcase for 3DNow!
+	
+2004-09-02  Dale Johannesen  <dalej@apple.com>
+
+	Radar 3775798
+	* config/rs6000/power4.md:  Increase store latency to 12.
+
+2004-08-24  Ziemowit Laski  <zlaski@apple.com>
+
+	Radar 3767166
+	* objc/objc-act.c (objc_substitute_decl): Do not perform
+	substitutions for the second operand of an ARRAY_REF or
+	COMPONENT_REF node.
+	(objc_build_ivar_assignment, objc_build_global_assignment,
+	objc_build_strong_cast_assignment): Call convert() instead
+	of build_c_cast().
+
+2004-08-23  Dale Johannesen <dalej@apple.com>
+	Radar 3770591
+	* tree-inline.c (initialize_inlined_parameters):  Promote/
+	truncate constants to correct type.  From FSF 3.4.1.
+
 2004-07-12  Matthew Sachs <msachs@apple.com>
 	Radar 3676770
 	* bad cw asm codegen in 3.3

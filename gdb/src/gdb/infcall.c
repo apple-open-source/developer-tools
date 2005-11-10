@@ -376,7 +376,6 @@ push_dummy_code (struct gdbarch *gdbarch,
 				    args, nargs, value_type, real_pc, bp_addr);
 }
 
-
 /* All this stuff with a dummy frame may seem unnecessarily complicated
    (why not just save registers in GDB?).  The purpose of pushing a dummy
    frame which looks just like a real frame is so that if you call a

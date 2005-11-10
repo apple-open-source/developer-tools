@@ -43,7 +43,7 @@ static struct unrecog *unrecog_head;
    no open(), no nothing.  */
 void
 fileattr_startdir (repos)
-    char *repos;
+    const char *repos;
 {
     assert (fileattr_stored_repos == NULL);
     fileattr_stored_repos = xstrdup (repos);
@@ -126,7 +126,7 @@ fileattr_read ()
 		   any line other than the first for that filename.  This
 		   is the way that CVS has behaved since file attributes
 		   were first introduced.  */
-		free (newnode);
+		freenode (newnode);
 	}
 	else if (line[0] == 'D')
 	{
@@ -139,6 +139,7 @@ fileattr_read ()
 		       "file attribute database corruption: tab missing in %s",
 		       fname);
 	    ++p;
+	    if (fileattr_default_attrs) free (fileattr_default_attrs);
 	    fileattr_default_attrs = xstrdup (p);
 	}
 	else
@@ -513,6 +514,7 @@ fileattr_write ()
     FILE *fp;
     char *fname;
     mode_t omask;
+    struct unrecog *p;
 
     if (!attrs_modified)
 	return;
@@ -588,6 +590,7 @@ fileattr_write ()
 	    {
 		error (0, errno, "cannot make directory %s", repname);
 		(void) umask (omask);
+		free (fname);
 		free (repname);
 		return;
 	    }
@@ -599,6 +602,7 @@ fileattr_write ()
 	{
 	    error (0, errno, "cannot write %s", fname);
 	    (void) umask (omask);
+	    free (fname);
 	    return;
 	}
     }
@@ -616,17 +620,10 @@ fileattr_write ()
     }
 
     /* Then any other attributes.  */
-    while (unrecog_head != NULL)
+    for (p = unrecog_head; p != NULL; p = p->next)
     {
-	struct unrecog *p;
-
-	p = unrecog_head;
 	fputs (p->line, fp);
 	fputs ("\012", fp);
-
-	unrecog_head = p->next;
-	free (p->line);
-	free (p);
     }
 
     if (fclose (fp) < 0)
@@ -649,4 +646,11 @@ fileattr_free ()
     if (fileattr_default_attrs != NULL)
 	free (fileattr_default_attrs);
     fileattr_default_attrs = NULL;
+    while (unrecog_head)
+    {
+	struct unrecog *p = unrecog_head;
+	unrecog_head = p->next;
+	free (p->line);
+	free (p);
+    }
 }

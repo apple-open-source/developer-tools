@@ -135,6 +135,10 @@ Boston, MA 02111-1307, USA.  */
   { "-seg_addr_table_filename", "-Zseg_addr_table_filename" }, \
   { "-filelist", "-Xlinker -filelist -Xlinker" },  \
   { "-flat_namespace", "-Zflat_namespace" },  \
+  /* APPLE LOCAL begin XJR */ \
+  /* The "-fobjc-fast" option is deprecated.  */ \
+  { "-fobjc-fast", "-fobjc-direct-dispatch" }, \
+  /* APPLE LOCAL end XJR */ \
   { "-force_cpusubtype_ALL", "-Zforce_cpusubtype_ALL" },  \
   { "-force_flat_namespace", "-Zforce_flat_namespace" },  \
   { "-image_base", "-Zimage_base" },  \
@@ -146,6 +150,19 @@ Boston, MA 02111-1307, USA.  */
   { "-static", "-static -Wa,-static" },  \
   { "-single_module", "-Zsingle_module" },  \
   { "-unexported_symbols_list", "-Zunexported_symbols_list" }
+
+/* APPLE LOCAL begin backport 3721776 fix from FSF mainline. */
+/* Nonzero if the user has chosen to force sizeof(bool) to be 1
+   by providing the -mone-byte-bool switch.  It would be better
+   to use SUBTARGET_SWITCHES for this instead of SUBTARGET_OPTIONS,
+   but there are no more bits in rs6000 TARGET_SWITCHES.  Note
+   that this switch has no "no-" variant. */
+extern const char *darwin_one_byte_bool;
+
+#undef  SUBTARGET_OPTIONS
+#define SUBTARGET_OPTIONS						\
+   {"one-byte-bool", &darwin_one_byte_bool, N_("Set sizeof(bool) to 1"), 0 }
+/* APPLE LOCAL end backport 3721776 fix from FSF mainline. */
 
 /* APPLE LOCAL begin XJR */
 #define SUBTARGET_OS_CPP_BUILTINS()					\
@@ -414,21 +431,6 @@ do { text_section ();							\
 #undef	ASM_FILE_START
 #define ASM_FILE_START(FILE)
 
-#undef	ASM_FILE_END
-#define ASM_FILE_END(FILE)						\
-    do {								\
-      machopic_finish (asm_out_file);                            	\
-      if (strcmp (lang_hooks.name, "GNU C++") == 0)			\
-	{								\
-	  constructor_section ();					\
-	  destructor_section ();					\
-	  ASM_OUTPUT_ALIGN (FILE, 1);					\
-	}								\
-      /* APPLE LOCAL begin radar 3563020 */                             \
-       fprintf (asm_out_file, "\t.subsections_via_symbols\n");          \
-      /* APPLE LOCAL begin radar 3563020 */                             \
-    } while (0)
-
 #define ASM_OUTPUT_SKIP(FILE,SIZE)  \
   fprintf (FILE, "\t.space %d\n", SIZE)
 
@@ -485,28 +487,42 @@ do { text_section ();							\
     ASM_OUTPUT_LABEL (FILE, xname);                                     \
   } while (0)
 
+/* APPLE LOCAL begin deep branch prediction pic-base */
+/* The suffix attached to non-lazy pointer symbols.  */
+#define NON_LAZY_POINTER_SUFFIX "$non_lazy_ptr"
+/* The suffix attached to stub symbols.  */
+#define STUB_SUFFIX "$stub"
+/* APPLE LOCAL end deep branch prediction pic-base */
+
 /* Wrap new method names in quotes so the assembler doesn't gag.
    Make Objective-C internal symbols local.  */
 
+/* APPLE LOCAL begin deep branch prediction pic-base */
 #undef	ASM_OUTPUT_LABELREF
 #define ASM_OUTPUT_LABELREF(FILE,NAME)					     \
   do {									     \
        const char *xname = darwin_strip_name_encoding (NAME);		     \
        if (xname[0] == '&' || xname[0] == '*')				     \
          {								     \
-           int len = strlen (xname);					     \
-	   if (len > 6 && !strcmp ("$stub", xname + len - 5))		     \
+           unsigned int len = strlen (xname);				     \
+	   if (len > (strlen (STUB_SUFFIX) + 1)				     \
+	       && !strcmp (STUB_SUFFIX, xname + len			     \
+			   - strlen (STUB_SUFFIX)))			     \
 	     machopic_validate_stub_or_non_lazy_ptr (xname, 1);		     \
-	   else if (len > 7 && !strcmp ("$stub\"", xname + len - 6))	     \
+	   else if (len > (strlen (STUB_SUFFIX "\"") + 1)		     \
+		    && !strcmp (STUB_SUFFIX "\"", xname + len		     \
+				- strlen (STUB_SUFFIX "\"")))		     \
 	     machopic_validate_stub_or_non_lazy_ptr (xname, 1);		     \
-	   else if (len > 14 && !strcmp ("$non_lazy_ptr", xname + len - 13)) \
+	   else if (len > (strlen (NON_LAZY_POINTER_SUFFIX) + 1)	     \
+		    && !strcmp (NON_LAZY_POINTER_SUFFIX, xname + len	     \
+				- strlen (NON_LAZY_POINTER_SUFFIX)))	     \
 	     machopic_validate_stub_or_non_lazy_ptr (xname, 0);		     \
-	   /* APPLE LOCAL begin Objective-C++ */			\
-	   if (xname[1] != '"' && name_needs_quotes (&xname[1]))		\
-	     fprintf (FILE, "\"%s\"", &xname[1]);			\
-	   else								\
-	     fputs (&xname[1], FILE); 					\
-	   /* APPLE LOCAL end Objective-C++ */				\
+	   /* APPLE LOCAL begin Objective-C++ */			     \
+	   if (xname[1] != '"' && name_needs_quotes (&xname[1]))	     \
+	     fprintf (FILE, "\"%s\"", &xname[1]);			     \
+	   else								     \
+	     fputs (&xname[1], FILE);					     \
+	   /* APPLE LOCAL end Objective-C++ */				     \
 	 }								     \
        else if (xname[0] == '+' || xname[0] == '-')			     \
          fprintf (FILE, "\"%s\"", xname);				     \
@@ -514,13 +530,14 @@ do { text_section ();							\
          fprintf (FILE, "L%s", xname);					     \
        else if (!strncmp (xname, ".objc_class_name_", 17))		     \
 	 fprintf (FILE, "%s", xname);					     \
-	 /* APPLE LOCAL begin Objective-C++  */				\
-       else if (xname[0] != '"' && name_needs_quotes (xname))		\
-	 fprintf (FILE, "\"%s\"", xname);				\
-	 /* APPLE LOCAL end Objective-C++  */				\
+	 /* APPLE LOCAL begin Objective-C++  */				     \
+       else if (xname[0] != '"' && name_needs_quotes (xname))		     \
+	 fprintf (FILE, "\"%s\"", xname);				     \
+	 /* APPLE LOCAL end Objective-C++  */				     \
        else								     \
          fprintf (FILE, "_%s", xname);					     \
   } while (0)
+/* APPLE LOCAL end deep branch prediction pic-base */
 
 /* Output before executable code.  */
 #undef TEXT_SECTION_ASM_OP
@@ -606,10 +623,17 @@ FUNCTION ()								\
   in_objc_meth_var_types, in_objc_cls_refs, 		\
   in_machopic_nl_symbol_ptr,				\
   in_machopic_lazy_symbol_ptr,				\
+  in_machopic_lazy_symbol_ptr2,				\
+  in_machopic_lazy_symbol_ptr3,				\
   in_machopic_symbol_stub,				\
   in_machopic_symbol_stub1,				\
   in_machopic_picsymbol_stub,				\
   in_machopic_picsymbol_stub1,				\
+  /* APPLE LOCAL dynamic-no-pic */			\
+  in_machopic_picsymbol_stub2,				\
+  /* APPLE LOCAL begin deep branch prediction pic-base */\
+  in_darwin_textcoal_nt, in_darwin_datacoal_nt,		\
+  /* APPLE LOCAL end deep branch prediction pic-base */	\
   in_darwin_exception, in_darwin_eh_frame,		\
   num_sections
 
@@ -723,6 +747,12 @@ SECTION_FUNCTION (objc_cls_refs_section,	\
 SECTION_FUNCTION (machopic_lazy_symbol_ptr_section,	\
 		in_machopic_lazy_symbol_ptr,		\
 		".lazy_symbol_pointer", 0)      	\
+SECTION_FUNCTION (machopic_lazy_symbol_ptr2_section,	\
+		in_machopic_lazy_symbol_ptr2,		\
+		".section __DATA, __la_sym_ptr2,lazy_symbol_pointers", 0)      	\
+SECTION_FUNCTION (machopic_lazy_symbol_ptr3_section,	\
+		in_machopic_lazy_symbol_ptr3,		\
+		".section __DATA, __la_sym_ptr3,lazy_symbol_pointers", 0)      	\
 SECTION_FUNCTION (machopic_nl_symbol_ptr_section,	\
 		in_machopic_nl_symbol_ptr,		\
 		".non_lazy_symbol_pointer", 0)      	\
@@ -738,6 +768,19 @@ SECTION_FUNCTION (machopic_picsymbol_stub_section,	\
 SECTION_FUNCTION (machopic_picsymbol_stub1_section,	\
 		in_machopic_picsymbol_stub1,		\
 		".section __TEXT,__picsymbolstub1,symbol_stubs,pure_instructions,32", 0)      		\
+/* APPLE LOCAL begin dynamic-no-pic */			\
+SECTION_FUNCTION (machopic_picsymbol_stub2_section,	\
+		in_machopic_picsymbol_stub2,		\
+		".section __TEXT,__picsymbolstub2,symbol_stubs,pure_instructions,25", 0)      		\
+/* APPLE LOCAL end dynamic-no-pic */			\
+/* APPLE LOCAL begin deep branch prediction pic-base */			\
+SECTION_FUNCTION (darwin_textcoal_nt_section,		\
+		in_darwin_textcoal_nt,			\
+		".section __TEXT,__textcoal_nt,coalesced,no_toc", 0)\
+SECTION_FUNCTION (darwin_datacoal_nt_section,		\
+		in_darwin_datacoal_nt,			\
+		".section __DATA,__datacoal_nt,coalesced,no_toc", 0)\
+/* APPLE LOCAL end deep branch prediction pic-base */				\
 SECTION_FUNCTION (darwin_exception_section,		\
 		in_darwin_exception,			\
 		".section __DATA,__gcc_except_tab", 0)	\
@@ -1233,6 +1276,8 @@ do { fputs (".zerofill __DATA, __common, ", (FILE));            \
 #define ASM_APP_ON ""
 #undef ASM_APP_OFF
 #define ASM_APP_OFF ""
+
+#define WINT_TYPE "int"
 
 /* APPLE LOCAL include guard for darwin.h */
 #endif /* CONFIG_DARWIN_H  */

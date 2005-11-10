@@ -1676,11 +1676,24 @@ typedef struct rs6000_stack {
 /* Define how to find the value returned by a library function
    assuming the value has mode MODE.  */
 
-#define LIBCALL_VALUE(MODE)						\
-  gen_rtx_REG (MODE, ALTIVEC_VECTOR_MODE (MODE) ? ALTIVEC_ARG_RETURN	\
-		     : GET_MODE_CLASS (MODE) == MODE_FLOAT		\
-		     && TARGET_HARD_FLOAT && TARGET_FPRS		\
-		     ? FP_ARG_RETURN : GP_ARG_RETURN)
+/* APPLE LOCAL 64bit registers, ABI32bit */
+#define LIBCALL_VALUE(MODE)                                             \
+  ((MODE == DImode && TARGET_POWERPC64 && TARGET_32BIT)                 \
+   ? gen_rtx (PARALLEL, DImode,                                         \
+              gen_rtvec (2,                                             \
+                         gen_rtx_EXPR_LIST (VOIDmode,                   \
+                                 gen_rtx_REG (SImode,                   \
+                                              GP_ARG_RETURN),           \
+                                              const0_rtx),              \
+                         gen_rtx_EXPR_LIST (VOIDmode,                   \
+                                 gen_rtx_REG (SImode,                   \
+                                              GP_ARG_RETURN + 1),       \
+                                              gen_rtx_CONST_INT         \
+                                                (SImode, 4))))          \
+  : gen_rtx_REG (MODE, ALTIVEC_VECTOR_MODE (MODE) ? ALTIVEC_ARG_RETURN  \
+                     : GET_MODE_CLASS (MODE) == MODE_FLOAT              \
+                     && TARGET_HARD_FLOAT && TARGET_FPRS                \
+                     ? FP_ARG_RETURN : GP_ARG_RETURN))
 
 /* The AIX ABI for the RS/6000 specifies that all structures are
    returned in memory.  The Darwin ABI does the same.  The SVR4 ABI

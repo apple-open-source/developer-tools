@@ -38,7 +38,7 @@ Boston, MA 02111-1307, USA.  */
       builtin_define ("__i386");                \
       builtin_define ("__LITTLE_ENDIAN__");     \
       /* APPLE LOCAL XJR */                     \
-      SUBTARGET_OS_CPP_BUILTINS ();             \    
+      SUBTARGET_OS_CPP_BUILTINS ();             \
     }                                           \
   while (0)
 
@@ -46,18 +46,17 @@ Boston, MA 02111-1307, USA.  */
    the kernel or some such.  */
 
 #undef CC1_SPEC
-/* APPLE LOCAL dynamic-no-pic */
+/* APPLE LOCAL begin dynamic-no-pic */
 /* APPLE LOCAL ignore -mcpu=G4 -mcpu=G5 */
-/* When -mdynamic-no-pic finally works, remove the "xx" below.  FIXME!!  */
-#define CC1_SPEC "%{!static:%{!mxxdynamic-no-pic:-fPIC}} %{!<faltivec} %{!<mlong-branch} %{!<mlongcall} %{!<mcpu=G4} %{!<mcpu=G5}"
+#define CC1_SPEC "%{!<faltivec} %{!<mlong-branch} %{!<mlongcall} %{!<mcpu=G4} %{!<mcpu=G5} \
+%{static: %{Zdynamic: %e conflicting code gen style switches are used}} \
+%{static: %{mdynamic-no-pic: %e conflicting code gen style switches are used}} \
+%{!static:%{!mdynamic-no-pic:-fPIC}}"
+/* APPLE LOCAL end dynamic-no-pic */
 
 /* APPLE LOCAL asm flags */
-/* APPLE LOCAL ignore PPC cpu names */
-#define ASM_SPEC "-arch %T \
-  %{Zforce_cpusubtype_ALL:-force_cpusubtype_ALL} \
-  %{!Zforce_cpusubtype_ALL:%{mmmx:-force_cpusubtype_ALL}\
-			   %{msse:-force_cpusubtype_ALL}\
-			   %{msse2:-force_cpusubtype_ALL}}"
+/* APPLE LOCAL always pass -force_cpusubtype_ALL */
+#define ASM_SPEC "-arch %T -force_cpusubtype_ALL"
 
 /* APPLE LOCAL change from FSF3.4 */
 /* These are used by -fbranch-probabilities */
@@ -91,12 +90,16 @@ Boston, MA 02111-1307, USA.  */
 /* By default, target has a 80387, uses IEEE compatible arithmetic,
    and returns float values in the 387.  */
 
-#define TARGET_SUBTARGET_DEFAULT (MASK_80387 | MASK_IEEE_FP | MASK_FLOAT_RETURNS)
+/* APPLE LOCAL default to SSE2 and -fpmath=sse */
+/* APPLE LOCAL use SSE2 by default */
+#define TARGET_SUBTARGET_DEFAULT (MASK_80387 | MASK_IEEE_FP | MASK_FLOAT_RETURNS | MASK_SSE2)
 
-/* TARGET_DEEP_BRANCH_PREDICTION is incompatible with Mach-O PIC.  */
-
-#undef TARGET_DEEP_BRANCH_PREDICTION
-#define TARGET_DEEP_BRANCH_PREDICTION   0
+/* APPLE LOCAL begin deep branch prediction pic-base */
+extern void darwin_x86_file_end (void);
+#undef TARGET_ASM_FILE_END
+#define TARGET_ASM_FILE_END darwin_x86_file_end
+#undef ASM_FILE_END
+/* APPLE LOCAL end deep branch prediction pic-base */
 
 /* Define the syntax of pseudo-ops, labels and comments.  */
 
@@ -108,6 +111,9 @@ Boston, MA 02111-1307, USA.  */
 #define ASM_SHORT "\t.word\t"
 #define ASM_LONG "\t.long\t"
 /* Darwin as doesn't do ".quad".  */
+
+/* APPLE LOCAL deep branch prediction pic-base */
+extern int darwin_named_section_is (const char *);
 
 #undef ASM_OUTPUT_ALIGN
 #define ASM_OUTPUT_ALIGN(FILE,LOG)	\
@@ -164,8 +170,7 @@ extern unsigned round_type_align (union tree_node*, unsigned, unsigned); /* rs60
 /* We've run out of bits in 'target_flags'.  So we re-use some bits that
    will never be used on Darwin.
    NO_RED_ZONE only applies to 64-bit x86 stuff (Hammer).
-   We don't do stack probing, and we never use Intel syntax.
-   Note that TARGET_DEEP_BRANCH_PREDICTION is incompatible with MACH-O PIC.  */
+   We don't do stack probing, and we never use Intel syntax.  */
 
 enum
 {
@@ -180,9 +185,6 @@ enum
 #undef MASK_STACK_PROBE
 #define MASK_STACK_PROBE 0
 
-#undef TARGET_DEEP_BRANCH_PREDICTION
-#define TARGET_DEEP_BRANCH_PREDICTION	0
-
 /* Get HOST_WIDE_INT and CONST_INT to be 32 bits, for compile time
    space/speed.  */
 #undef MAX_LONG_TYPE_SIZE
@@ -194,9 +196,7 @@ enum
 #define MASK_ALIGN_MAC68K       old_x86_MASK_STACK_PROBE
 #define TARGET_ALIGN_MAC68K     (target_flags & MASK_ALIGN_MAC68K)
 
-/* For now, disable dynamic-no-pic.  We'll need to go through i386.c
-   with a fine-tooth comb looking for refs to flag_pic!  */
-#define MASK_MACHO_DYNAMIC_NO_PIC 0
+/* APPLE LOCAL dynamic-no-pic */
 #define TARGET_DYNAMIC_NO_PIC	  (target_flags & MASK_MACHO_DYNAMIC_NO_PIC)
 
 /* APPLE LOCAL begin Macintosh alignment 2002-2-19 ff */
@@ -249,10 +249,13 @@ enum
 
 #undef SUBTARGET_OVERRIDE_OPTIONS
 /* Force Darwin/x86 to default as "-march=i686 -mcpu=pentium4".  */
+/* APPLE LOCAL default to SSE2 and -fpmath=sse */
 #define SUBTARGET_OVERRIDE_OPTIONS \
   do { \
   if (!ix86_arch_string) ix86_arch_string = "pentiumpro"; \
   if (!ix86_cpu_string) ix86_cpu_string = "pentium4"; \
+  if (target_flags_explicit & (MASK_MMX | MASK_SSE)) target_flags &= ~MASK_SSE2; \
+  if (TARGET_SSE && !ix86_fpmath_string) ix86_fpmath_string = "sse"; \
   } while (0)
 
 /* APPLE LOCAL SSE stack alignment */

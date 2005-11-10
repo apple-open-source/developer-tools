@@ -283,10 +283,11 @@ static void sanitize_cpp_opts PARAMS ((void));
   OPT("fnil-receivers",		CL_ALL,	  OPT_fnil_receivers)		     \
   OPT("fnonansi-builtins",	CL_CXX,   OPT_fnonansi_builtins)	     \
   OPT("fnonnull-objects",	CL_CXX,   OPT_fnonnull_objects)		     \
+  /* APPLE LOCAL XJR */	\
+  OPT("fobjc-direct-dispatch",	CL_OBJC,   OPT_fobjc_direct_dispatch)	     \
   /* APPLE LOCAL Panther ObjC enhancements */   \
   OPT("fobjc-exceptions",	CL_ALL,   OPT_fobjc_exceptions)		     \
-  /* APPLE LOCAL begin XJR */	\
-  OPT("fobjc-fast",		CL_OBJC,   OPT_fobjc_fast)		     \
+  /* APPLE LOCAL XJR */	\
   OPT("fobjc-gc",		CL_OBJC,   OPT_fobjc_gc)		     \
   /* APPLE LOCAL end XJR */	\
   OPT("foperator-names",	CL_CXX,   OPT_foperator_names)		     \
@@ -1248,13 +1249,15 @@ c_common_decode_option (argc, argv)
     case OPT_fnil_receivers:
       flag_nil_receivers = on;
       break;
+    /* APPLE LOCAL begin XJR */
+    case OPT_fobjc_direct_dispatch:
+      flag_objc_direct_dispatch = on;
+      break;
+    /* APPLE LOCAL end XJR */
     case OPT_fobjc_exceptions:
       flag_objc_exceptions = on;
       break;
     /* APPLE LOCAL begin XJR */
-    case OPT_fobjc_fast:
-      flag_objc_fast = on;
-      break;
     case OPT_fobjc_gc:
       flag_objc_gc = on;
       break;

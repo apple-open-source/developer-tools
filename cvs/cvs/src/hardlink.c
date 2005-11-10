@@ -11,7 +11,9 @@
 /* Collect and manage hardlink info associated with a particular file.  */
 
 #include "cvs.h"
-#include "hardlink.h"
+
+#ifdef PRESERVE_PERMISSIONS_SUPPORT
+# include "hardlink.h"
 
 /* The structure currently used to manage hardlink info is a list.
    Therefore, most of the functions which manipulate hardlink data
@@ -63,10 +65,10 @@ lookup_file_by_inode (filepath)
     /* inodestr contains the hexadecimal representation of an
        inode, so it requires two bytes of text to represent
        each byte of the inode number. */
-    inodestr = (char *) xmalloc (2*sizeof(ino_t)*sizeof(char) + 1);
+    inodestr = (char *) xmalloc (2*sizeof(ino_t) + 1);
     if (stat (file, &sb) < 0)
     {
-	if (errno == ENOENT)
+	if (existence_error (errno))
 	{
 	    /* The file doesn't exist; we may be doing an update on a
 	       file that's been removed.  A nonexistent file has no
@@ -85,9 +87,9 @@ lookup_file_by_inode (filepath)
     if (hp == NULL)
     {
 	hp = getnode ();
-	hp->type = UNKNOWN;
+	hp->type = NT_UNKNOWN;
 	hp->key = inodestr;
-	hp->data = (char *) getlist();
+	hp->data = getlist();
 	hp->delproc = dellist;
 	(void) addnode (hardlist, hp);
     }
@@ -96,14 +98,14 @@ lookup_file_by_inode (filepath)
 	free (inodestr);
     }
 
-    p = findnode ((List *) hp->data, filepath);
+    p = findnode (hp->data, filepath);
     if (p == NULL)
     {
 	p = getnode();
-	p->type = UNKNOWN;
+	p->type = NT_UNKNOWN;
 	p->key = xstrdup (filepath);
 	p->data = NULL;
-	(void) addnode ((List *) hp->data, p);
+	(void) addnode (hp->data, p);
     }
 
     return p;
@@ -128,7 +130,7 @@ update_hardlink_info (file)
 	/* file is a relative pathname; assume it's from the current
 	   working directory. */
 	char *dir = xgetwd();
-	path = xmalloc (sizeof(char) * (strlen(dir) + strlen(file) + 2));
+	path = xmalloc (strlen(dir) + strlen(file) + 2);
 	sprintf (path, "%s/%s", dir, file);
 	free (dir);
     }
@@ -143,8 +145,8 @@ update_hardlink_info (file)
     }
 
     if (n->data == NULL)
-	n->data = (char *) xmalloc (sizeof (struct hardlink_info));
-    hlinfo = (struct hardlink_info *) n->data;
+	n->data = xmalloc (sizeof (struct hardlink_info));
+    hlinfo = n->data;
     hlinfo->status = T_UPTODATE;
     hlinfo->checked_out = 1;
 }
@@ -176,8 +178,7 @@ list_linked_files_on_disk (file)
     else
     {
 	char *dir = xgetwd();
-	path = (char *) xmalloc (sizeof(char) *
-				 (strlen(dir) + strlen(file) + 2));
+	path = (char *) xmalloc (strlen(dir) + strlen(file) + 2);
 	sprintf (path, "%s/%s", dir, file);
 	free (dir);
     }
@@ -193,15 +194,15 @@ list_linked_files_on_disk (file)
     /* inodestr contains the hexadecimal representation of an
        inode, so it requires two bytes of text to represent
        each byte of the inode number. */
-    inodestr = (char *) xmalloc (2*sizeof(ino_t)*sizeof(char) + 1);
+    inodestr = (char *) xmalloc (2*sizeof(ino_t) + 1);
     sprintf (inodestr, "%lx", (unsigned long) sb.st_ino);
 
     /* Make sure the files linked to this inode are sorted. */
     n = findnode (hardlist, inodestr);
-    sortlist ((List *) n->data, fsortcmp);
+    sortlist (n->data, fsortcmp);
 
     free (inodestr);
-    return (List *) n->data;
+    return n->data;
 }
 
 /* Compare the files in the `key' fields of two lists, returning 1 if
@@ -280,7 +281,7 @@ find_checkedout_proc (node, data)
     /* Look at this file in the hardlist and see whether the checked_out
        field is 1, meaning that it has been checked out during this CVS run. */
     path = (char *)
-	xmalloc (sizeof(char) * (strlen (dir) + strlen (node->key) + 2));
+	xmalloc (strlen (dir) + strlen (node->key) + 2);
     sprintf (path, "%s/%s", dir, node->key);
     link = lookup_file_by_inode (path);
     free (path);
@@ -293,7 +294,7 @@ find_checkedout_proc (node, data)
 	return 0;
     }
 
-    hlinfo = (struct hardlink_info *) link->data;
+    hlinfo = link->data;
     if (hlinfo->checked_out)
     {
 	/* This file has been checked out recently, so it's safe to
@@ -303,4 +304,4 @@ find_checkedout_proc (node, data)
 
     return 0;
 }
-
+#endif /* PRESERVE_PERMISSIONS_SUPPORT */

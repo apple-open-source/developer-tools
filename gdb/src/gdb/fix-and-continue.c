@@ -2558,7 +2558,12 @@ update_picbase_register (struct symbol *new_fun)
   CORE_ADDR pic_base_value;
   if (i386_find_picbase_setup (BLOCK_START (SYMBOL_BLOCK_VALUE (new_fun)),
                                &pic_base_value, &pic_base_reg))
-    write_register (pic_base_reg, pic_base_value);
+    {
+      if (fix_and_continue_debug_flag)
+        printf_filtered ("DEBUG: updating picbase in register %d to 0x%s\n", 
+                         pic_base_reg, paddr_nz (pic_base_value));
+      write_register (pic_base_reg, pic_base_value);
+    }
 
 #endif
 }

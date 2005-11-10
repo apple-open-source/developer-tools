@@ -16440,6 +16440,32 @@ toc_section ()
 {
 }
 
+/* APPLE LOCAL begin dynamic-no-pic */
+void
+darwin_rs6000_file_start()
+{
+  /* This causes the text and symbol-stub sections to come out adjacent
+     in the assembly code, hence out of the linker.  This is needed to
+     prevent out-of-range branches when there is a large data section.
+     If -static, don't.  Alas, there is no flag_static, so we look for
+     its inverse (-fpic or -mdynamic-no-pic).  */
+  if (flag_pic || MACHO_DYNAMIC_NO_PIC_P ())
+    {
+      fprintf (asm_out_file, "\t.section __TEXT,__text,regular,pure_instructions\n");
+      if (MACHO_DYNAMIC_NO_PIC_P ())
+        {
+          fprintf (asm_out_file, "\t.section __TEXT,__symbol_stub1,");
+          fprintf (asm_out_file, "symbol_stubs,pure_instructions,16\n");
+        }
+      else
+        {
+          fprintf (asm_out_file, "\t.section __TEXT,__picsymbolstub1,");
+          fprintf (asm_out_file, "symbol_stubs,pure_instructions,32\n");
+        }
+    }
+}
+/* APPLE LOCAL end dynamic-no-pic */
+
 #endif /* TARGET_MACHO */
 
 /* APPLE LOCAL begin AltiVec */

@@ -1,5 +1,11 @@
 /*
- * Copyright (c) 1992, Brian Berliner
+ * Copyright (C) 1986-2005 The Free Software Foundation, Inc.
+ *
+ * Portions Copyright (C) 1998-2005 Derek Price, Ximbiot <http://ximbiot.com>,
+ *                                  and others.
+ *
+ * Portions Copyright (C) 1992, Brian Berliner and Jeff Polk
+ * Portions Copyright (C) 1989-1992, Brian Berliner
  * 
  * You may distribute under the terms of the GNU General Public License as
  * specified in the README file that comes with the CVS source distribution.
@@ -18,8 +24,11 @@
 #include "getline.h"
 
 #ifdef MY_NDBM
+# ifndef O_ACCMODE
+#   define O_ACCMODE (O_RDONLY | O_WRONLY | O_RDWR)
+# endif /* defined O_ACCMODE */
 
-static void mydbm_load_file PROTO ((FILE *, List *));
+static void mydbm_load_file PROTO ((FILE *, List *, char *));
 
 /* Returns NULL on error in which case errno has been set to indicate
    the error.  Can also call error() itself.  */
@@ -33,7 +42,8 @@ mydbm_open (file, flags, mode)
     FILE *fp;
     DBM *db;
 
-    fp = CVS_FOPEN (file, FOPEN_BINARY_READ);
+    fp = CVS_FOPEN (file, (flags & O_ACCMODE) != O_RDONLY ?
+                                 FOPEN_BINARY_READWRITE : FOPEN_BINARY_READ);
     if (fp == NULL && !(existence_error (errno) && (flags & O_CREAT)))
 	return ((DBM *) 0);
 
@@ -44,7 +54,7 @@ mydbm_open (file, flags, mode)
 
     if (fp != NULL)
     {
-	mydbm_load_file (fp, db->dbm_list);
+	mydbm_load_file (fp, db->dbm_list, file);
 	if (fclose (fp) < 0)
 	    error (0, errno, "cannot close %s", file);
     }
@@ -177,12 +187,12 @@ mydbm_store (db, key, value, flags)
     node->type = NDBMNODE;
 
     node->key = xmalloc (key.dsize + 1);
-    strncpy (node->key, key.dptr, key.dsize);
-    node->key[key.dsize] = '\0';
+    *node->key = '\0';
+    strncat (node->key, key.dptr, key.dsize);
 
     node->data = xmalloc (value.dsize + 1);
-    strncpy (node->data, value.dptr, value.dsize);
-    node->data[value.dsize] = '\0';
+    *(char *)node->data = '\0';
+    strncat (node->data, value.dptr, value.dsize);
 
     db->modified = 1;
     if (addnode (db->dbm_list, node) == -1)
@@ -195,9 +205,10 @@ mydbm_store (db, key, value, flags)
 }
 
 static void
-mydbm_load_file (fp, list)
+mydbm_load_file (fp, list, filename)
     FILE *fp;
     List *list;
+    char *filename;	/* Used in error messages. */
 {
     char *line = NULL;
     size_t line_size;
@@ -206,13 +217,17 @@ mydbm_load_file (fp, list)
     char *cp, *vp;
     int cont;
     int line_length;
+    int line_num;
 
     value_allocated = 1;
     value = xmalloc (value_allocated);
 
     cont = 0;
-    while ((line_length = getstr (&line, &line_size, fp, '\012', 0)) >= 0)
+    line_num=0;
+    while ((line_length = 
+            getstr (&line, &line_size, fp, '\012', 0, GETLINE_NO_LIMIT)) >= 0)
     {
+	line_num++;
 	if (line_length > 0 && line[line_length - 1] == '\012')
 	{
 	    /* Strip the newline.  */
@@ -263,7 +278,7 @@ mydbm_load_file (fp, list)
 	if (value[0] == '#')
 	    continue;			/* comment line */
 	vp = value;
-	while (*vp && isspace (*vp))
+	while (*vp && isspace ((unsigned char) *vp))
 	    vp++;
 	if (*vp == '\0')
 	    continue;			/* empty line */
@@ -277,23 +292,30 @@ mydbm_load_file (fp, list)
 	    char *kp;
 
 	    kp = vp;
-	    while (*vp && !isspace (*vp))
+	    while (*vp && !isspace ((unsigned char) *vp))
 		vp++;
-	    *vp++ = '\0';		/* NULL terminate the key */
+	    if (*vp)
+		*vp++ = '\0';		/* NULL terminate the key */
 	    p->type = NDBMNODE;
 	    p->key = xstrdup (kp);
-	    while (*vp && isspace (*vp))
+	    while (*vp && isspace ((unsigned char) *vp))
 		vp++;			/* skip whitespace to value */
 	    if (*vp == '\0')
 	    {
-		error (0, 0, "warning: NULL value for key `%s'", p->key);
+		if (!really_quiet)
+		    error (0, 0,
+			"warning: NULL value for key `%s' at line %d of `%s'",
+			p->key, line_num, filename);
 		freenode (p);
 		continue;
 	    }
 	    p->data = xstrdup (vp);
 	    if (addnode (list, p) == -1)
 	    {
-		error (0, 0, "duplicate key found for `%s'", p->key);
+		if (!really_quiet)
+		    error (0, 0,
+			"duplicate key found for `%s' at line %d of `%s'",
+			p->key, line_num, filename);
 		freenode (p);
 	    }
 	}

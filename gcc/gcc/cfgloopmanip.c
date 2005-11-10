@@ -1279,7 +1279,22 @@ loop_split_edge_with (edge e, rtx insns)
   return new_bb;
 }
 
-/* Uses the natural loop discovery to recreate loop notes.  */
+/* APPLE LOCAL begin 4203984 */
+/* Uses the natural loop discovery to recreate loop notes.
+
+   The RTL loop optimizer is sensitive to lexical order of
+   blocks, unfortunately.  For now, look for cases where there
+   is a jump from a loop into a region that's not between the 
+   header and the latch, and all paths from there wind up going
+   back inside the loop (similar to Fortran 66 Extended DO).
+   (The "logically inside the loop" property falls out of the 
+   dominator computation that is already being done.)
+   Move the blocks involved in that between the header/latch
+   if there is a place to do that (i.e. unconditional branch 
+   within the loop).  This may result in branch-to-next-insn 
+   in some cases which will get cleaned up later.  More
+   rearrangements along this line  are possible. */
+/* APPLE LOCAL end 4203984 */
 void
 create_loop_notes (void)
 {
@@ -1288,6 +1303,8 @@ create_loop_notes (void)
   struct loop *loop;
   basic_block *first, *last, bb, pbb;
   struct loop **stack, **top;
+  /* APPLE LOCAL 4203984 */
+  unsigned int i;
 
 #ifdef ENABLE_CHECKING
   /* Verify that there really are no loop notes.  */
@@ -1300,6 +1317,134 @@ create_loop_notes (void)
   free_dominance_info (CDI_DOMINATORS);
   if (loops.num > 1)
     {
+      /* APPLE LOCAL begin 4203984 */
+      basic_block * shadow;
+      signed char * in_body;
+      /* Make a pass to find a spot in each loop where we might be able
+	 to move code that belongs in that loop, i.e. a block ending
+	 in an unconditional branch.  Could be extended for noreturn
+	 calls, etc. */
+      shadow = xcalloc (loops.num, sizeof (basic_block));
+      /* in_body:  0 before header or latch seen, 1 after header and before latch,
+	 -1 otherwise (which includes case where latch precedes header).
+	 When header==latch there is no zone where in_body==1.  */
+      in_body = xcalloc (loops.num, sizeof (signed char));
+      FOR_EACH_BB (bb)
+	{
+	  loop = bb->loop_father;
+	  if (loop->num == 0)
+	    continue;
+	  if (bb == loop->header && in_body[loop->num] == 0)
+	    in_body[loop->num] = 1;
+	  if (bb == loop->latch)
+	    in_body[loop->num] = -1;
+	  if (in_body[loop->num] == 1 
+	      && shadow[loop->num] == 0
+	      && BB_END (bb) 
+	      && JUMP_P (BB_END (bb))
+	      && onlyjump_p (BB_END (bb)) 
+	      && any_uncondjump_p (BB_END (bb)))
+	    shadow[loop->num] = bb;
+	 }
+      /* Check for loops where the header and/or latch are not marked as part of the
+	 loop.  Exceptionally twisted CFGs can produce these, and this code won't 
+         work with them.  */ 
+      for (i = 1; i < loops.num; i++)
+	{
+	  loop = loops.parray[i];
+	  if (loop->header->loop_father != loop
+	      || loop->latch->loop_father != loop)
+	    shadow[i] = 0;
+	}
+      /* Make a pass to find code outside the loop that belongs inside, and
+	 moves it in. */
+      memset (in_body, 0, sizeof(char) * loops.num);
+      FOR_EACH_BB (bb)
+	{
+	  loop = bb->loop_father;
+	  if (loop->num == 0 || shadow[loop->num] == 0)
+	    continue;
+	  if (bb == loop->header)
+	    {
+	      if (in_body[loop->num] == 0)
+		in_body[loop->num] = 1;
+	    }
+	  if (bb == loop->latch)
+	    in_body[loop->num] = -1;
+	  if (bb != loop->header && bb != loop->latch && in_body[loop->num] != 1)
+	    {
+	      rtx last_insn, table;
+	      basic_block next_bb = bb->next_bb;
+	      basic_block prev_bb = bb->prev_bb;
+	      basic_block restart_bb = prev_bb;
+	      edge e = find_edge (bb, next_bb);
+	      edge e2 = find_edge (prev_bb, bb);
+	      /* If all exits from bb are non-fallthrough, we can just move it.
+		 If there is a fallthrough and it belongs to the same loop we 
+		 do, the next iteration will move it up to follow bb in its new 
+		 location, and again we can just move it. If fallthrough leads 
+	         outside the loop, add an unconditional branch to the end of bb, 
+		 or a new block containing a branch to the fallthrough block if 
+		 there is already a conditional branch at the end of bb; that 
+		 gets us into one of the first two cases.   Creating
+		 a new block hoses the dominator-based info stored in loops->cfg; 
+		 however, that is not used anywhere.  */
+	      if (e && (e->flags & EDGE_FALLTHRU) && next_bb->loop_father != loop)
+		{
+		  basic_block new_bb;
+		  /* force_nonfallthru doesn't work if the destination is EXIT_BLOCK.
+		     Create a new block in between for force_nonfallthru to jump to.  */
+		  if (e->dest == EXIT_BLOCK_PTR)
+		    {
+		      new_bb = split_edge (e);
+		      new_bb->loop_father = EXIT_BLOCK_PTR->loop_father;
+		      new_bb->loop_depth = 0;
+		    }
+		  new_bb = force_nonfallthru (e);
+		  if (new_bb)
+		    {
+		      new_bb->loop_father = loop;
+		      new_bb->loop_depth = shadow[loop->num]->loop_depth;
+		    }
+ 		}
+	      /* If we have a fallthrough edge leading into this block, and the source is
+		 not in the same loop as we are, we must fix up the predecessor similarly.
+		 (If the predecessor is in the same loop, at this point it has been
+		 moved and is no longer prev_bb but the edge is still there; we need do
+		 nothing, the edge will be correct again after we move this block.
+		 If the predecessor is not in the same loop and we moved it, the
+		 fallthrough edge was removed earlier by the code above.) */
+	      if (e2 && (e2->flags & EDGE_FALLTHRU) && prev_bb->loop_father != loop)
+		{
+		  basic_block new_bb = force_nonfallthru (e2);
+		  if (new_bb)
+		    {
+		      new_bb->loop_father = prev_bb->loop_father;
+		      new_bb->loop_depth = prev_bb->loop_depth;
+		      restart_bb = new_bb;
+		    }
+		}
+	      /* Move insns in block within insn list, with following jump 
+		 table and BARRIER if any. */
+	      last_insn = BB_END (bb);
+	      if (tablejump_p (last_insn, NULL, &table))
+		last_insn = table;
+	      if (BARRIER_P (NEXT_INSN (last_insn)))
+		last_insn = NEXT_INSN (last_insn);
+	      reorder_insns_nobb(BB_HEAD (bb), last_insn, 
+				 PREV_INSN (BB_HEAD (shadow[loop->num]->next_bb)));
+	      /* Move block within block list.  */
+	      unlink_block (bb);
+	      link_block (bb, shadow[loop->num]);
+	      /* Next block to be moved will go after this one. */
+	      shadow[loop->num] = bb;
+	      bb = restart_bb;
+	    }
+	}
+      free (in_body);
+      free (shadow);
+      /* APPLE LOCAL end 4203984 */
+
       last = xcalloc (loops.num, sizeof (basic_block));
 
       FOR_EACH_BB (bb)

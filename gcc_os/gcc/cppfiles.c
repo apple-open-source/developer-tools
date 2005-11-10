@@ -437,8 +437,10 @@ find_or_create_entry (pfile, fname)
   splay_tree_node node;
   struct include_file *file;
   char *name = xstrdup (fname);
+  int saved_errno;
 
   _cpp_simplify_pathname (name);
+  saved_errno = errno;
   node = splay_tree_lookup (pfile->all_include_files, (splay_tree_key) name);
   if (node)
     free (name);
@@ -447,7 +449,7 @@ find_or_create_entry (pfile, fname)
       file = xcnew (struct include_file);
       file->name = name;
       file->header_name = name;
-      file->err_no = errno;
+      file->err_no = saved_errno;
       node = splay_tree_insert (pfile->all_include_files,
 				(splay_tree_key) file->name,
 				(splay_tree_value) file);
@@ -727,29 +729,43 @@ open_file (pfile, filename)
   else
     file->fd = open (file->name, O_RDONLY | O_NOCTTY | O_BINARY, 0666);
 
-  if (file->fd != -1 && fstat (file->fd, &file->st) == 0)
+  if (file->fd != -1)
     {
-      /* APPLE LOCAL begin #import inode hack 2001-10-29 sts */
-      new_inode = file->st.st_ino;
-      new_device = file->st.st_dev;
-      if (splay_tree_foreach (pfile->all_include_files, inode_finder, 0))
+      if (fstat (file->fd, &file->st) == 0)
 	{
-	  close (file->fd);
-	  file->fd  = -1;
-	  return repl_file;
+	  /* APPLE LOCAL begin #import inode hack 2001-10-29 sts */
+	  new_inode = file->st.st_ino;
+	  new_device = file->st.st_dev;
+	  if (splay_tree_foreach (pfile->all_include_files, inode_finder, 0))
+	    {
+	      close (file->fd);
+	      file->fd  = -1;
+	      return repl_file;
+	    }
+	  /* APPLE LOCAL end #import inode hack 2001-10-29 sts */
+
+	  if (!S_ISDIR (file->st.st_mode))
+	    {
+	      file->err_no = 0;
+	      return file;
+	    }
+
+          /* Ignore a directory and continue the search.  The file we're
+             looking for may be elsewhere in the search path.  */
+	  errno = ENOENT;
 	}
-      /* APPLE LOCAL end #import inode hack 2001-10-29 sts */
+      else
+	{
+	  fprintf (stderr, "fstat fails after open success, should not happen!  file is %s, errno is %d\n",
+		   file->name, errno);
+	  pause ();
+	}
 
-      if (!S_ISDIR (file->st.st_mode))
-	return file;
-
-      /* If it's a directory, we return null and continue the search
-	 as the file we're looking for may appear elsewhere in the
-	 search path.  */
-      errno = ENOENT;
       close (file->fd);
       file->fd = -1;
     }
+  else if (errno == ENOTDIR)
+    errno = ENOENT;
 
   file->err_no = errno;
   return 0;
@@ -852,7 +868,10 @@ open_file_pch (pfile, filename)
 	  else
 	    file = validate_pch (pfile, filename, pchname);
 	  if (file)
-	    return file;
+	    {
+	      file->err_no = 0;
+	      return file;
+	    }
 	}
     }
   return open_file (pfile, filename);
