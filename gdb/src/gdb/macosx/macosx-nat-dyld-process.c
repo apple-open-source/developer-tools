@@ -21,14 +21,6 @@
    Foundation, Inc., 59 Temple Place - Suite 330,
    Boston, MA 02111-1307, USA.  */
 
-#include "macosx-nat-dyld-info.h"
-#include "macosx-nat-dyld-path.h"
-#include "macosx-nat-dyld-io.h"
-#include "macosx-nat-dyld.h"
-#include "macosx-nat-inferior.h"
-#include "macosx-nat-mutils.h"
-#include "macosx-nat-dyld-process.h"
-
 #include "defs.h"
 #include "inferior.h"
 #include "symfile.h"
@@ -56,6 +48,16 @@
 
 #include <sys/mman.h>
 #include <string.h>
+
+#include "macosx-nat-dyld-info.h"
+#include "macosx-nat-dyld-path.h"
+#include "macosx-nat-dyld-io.h"
+#include "macosx-nat-dyld.h"
+#include "macosx-nat-inferior.h"
+#include "macosx-nat-mutils.h"
+#include "macosx-nat-dyld-process.h"
+
+#define INVALID_ADDRESS ((CORE_ADDR) (-1))
 
 extern int dyld_preload_libraries_flag;
 extern int dyld_filter_events_flag;
@@ -271,7 +273,7 @@ dyld_resolve_filename_image (const struct macosx_dyld_thread_status *s,
       return;
     }
 
-  target_read_memory (e->dyld_addr, (char *) &header,
+  target_read_memory (e->dyld_addr, (gdb_byte *) &header,
                       sizeof (struct mach_header));
 
   switch (header.filetype)
@@ -320,21 +322,21 @@ dyld_find_dylib_name (CORE_ADDR addr, int ncmds)
       struct dylinker_command dlcmd;
       char name[256];
 
-      target_read_memory (curpos, (char *) &cmd,
+      target_read_memory (curpos, (gdb_byte *) &cmd,
                           sizeof (struct load_command));
       if (cmd.cmd == LC_ID_DYLIB)
         {
-          target_read_memory (curpos, (char *) &dcmd,
+          target_read_memory (curpos, (gdb_byte *) &dcmd,
                               sizeof (struct dylib_command));
-          target_read_memory (curpos + dcmd.dylib.name.offset, name, 256);
+          target_read_memory (curpos + dcmd.dylib.name.offset, (gdb_byte *) name, 256);
           image_name = savestring (name, strlen (name));
           break;
         }
       else if (cmd.cmd == LC_ID_DYLINKER)
         {
-          target_read_memory (curpos, (char *) &dlcmd,
+          target_read_memory (curpos, (gdb_byte *) &dlcmd,
                               sizeof (struct dylinker_command));
-          target_read_memory (curpos + dlcmd.name.offset, name, 256);
+          target_read_memory (curpos + dlcmd.name.offset, (gdb_byte *) name, 256);
           image_name = savestring (name, strlen (name));
           break;
         }
@@ -628,8 +630,11 @@ dyld_load_library_from_file (const struct dyld_path_info *d,
 
     if (e->abfd == NULL)
       {
+	/* APPLE MERGE error_last_message went away */
+#if 0
 	if (print_errors)
 	  warning (error_last_message ());
+#endif
 	return;
       }
   }
@@ -758,6 +763,35 @@ dyld_symfile_loaded_hook (struct objfile *o)
 {
 }
 
+/* Encapsulate the logic needed to slide an objfile so we can
+   run it on both the objfile and the objfile's associated dSYM,
+   if any, from dyld_load_symfile.  */
+
+static void 
+dyld_slide_objfile (struct objfile *objfile, CORE_ADDR dyld_slide)
+{
+  int i;
+  if (objfile)
+    {
+      struct section_offsets *new_offsets =
+        (struct section_offsets *)
+        xmalloc (SIZEOF_N_SECTION_OFFSETS (objfile->num_sections));
+      tell_breakpoints_objfile_changed (objfile);
+      tell_objc_msgsend_cacher_objfile_changed (objfile);
+      for (i = 0; i < objfile->num_sections; i++)
+        {
+	  new_offsets->offsets[i] = dyld_slide;
+        }
+      if (info_verbose)
+        printf_filtered ("Relocating symbols from %s...", objfile->name);
+      gdb_flush (gdb_stdout);
+      objfile_relocate (objfile, new_offsets);
+      xfree (new_offsets);
+      if (info_verbose)
+        printf_filtered ("done\n");
+    }
+}
+
 void
 dyld_load_symfile (struct dyld_objfile_entry *e)
 {
@@ -790,23 +824,8 @@ dyld_load_symfile (struct dyld_objfile_entry *e)
 
   if (e->objfile != NULL)
     {
-      struct section_offsets *new_offsets =
-        (struct section_offsets *)
-        xmalloc (SIZEOF_N_SECTION_OFFSETS (e->objfile->num_sections));
-      tell_breakpoints_objfile_changed (e->objfile);
-      tell_objc_msgsend_cacher_objfile_changed (e->objfile);
-      for (i = 0; i < e->objfile->num_sections; i++)
-        {
-          new_offsets->offsets[i] = e->dyld_slide;
-        }
-      if (info_verbose)
-        printf_filtered ("Relocating symbols from %s...", e->objfile->name);
-      gdb_flush (gdb_stdout);
-      objfile_relocate (e->objfile, new_offsets);
-      xfree (new_offsets);
-      if (info_verbose)
-        printf_filtered ("done\n");
-
+      dyld_slide_objfile (e->objfile, e->dyld_slide);
+      dyld_slide_objfile (e->objfile->separate_debug_objfile, e->dyld_slide);
     }
   else
     {
@@ -866,7 +885,7 @@ dyld_load_symfile (struct dyld_objfile_entry *e)
               (e->objfile->obfd, commsec, buf, 0, len) != TRUE)
             warning ("unable to read commpage data");
 
-          e->commpage_bfd = bfd_memopenr (bfdname, NULL, buf, len);
+          e->commpage_bfd = bfd_memopenr (bfdname, NULL, (bfd_byte *) buf, len);
 
           if (!bfd_check_format (e->commpage_bfd, bfd_object))
             {
@@ -1070,6 +1089,12 @@ dyld_is_objfile_loaded (struct objfile *obj)
   if (obj == NULL)
     return 0;
 
+  /* If we have a debug only object file that is to be used for another
+     objfile, return the fact that it's backlinked file is loaded instead
+     of itself.  */
+  if (obj->separate_debug_objfile_backlink != NULL)
+    return dyld_is_objfile_loaded (obj->separate_debug_objfile_backlink);
+    
   /* A SYMS_ONLY_OBJFILE is an objfile added by the user, either with
      add-symbol-file or "sharedlibrary specify-symbol-file"; it shadows
      an actually loaded & resident objfile, but breakpoints will be
@@ -1277,82 +1302,79 @@ dyld_libraries_similar (struct dyld_path_info *d,
   return 0;
 }
 
-/* Do dyld_objfile_entry OLDENT and NEWENT have the same filename?  In
-   other words, are they the same dylib/bundle/executable/etc ?  */
-
-int
-dyld_libraries_compatible (struct dyld_path_info *d,
-                           struct dyld_objfile_entry *newent,
-                           struct dyld_objfile_entry *oldent)
+ /* Do dyld_objfile_entry OLDENT and NEWENT have the same filename?  In
+    other words, are they the same dylib/bundle/executable/etc ?  */
+  
+  int
+  dyld_libraries_compatible (struct dyld_path_info *d,
+                            struct dyld_objfile_entry *newent,
+                            struct dyld_objfile_entry *oldent)
 {
   const char *newname = NULL;
   const char *oldname = NULL;
-
+  
   CHECK_FATAL (oldent != NULL);
   CHECK_FATAL (newent != NULL);
-
+  
   /* If either prefix is non-NULL, then they must both be the same string. */
-
+  
   if (oldent->prefix != NULL || newent->prefix != NULL)
     {
       if (oldent->prefix == NULL || newent->prefix == NULL)
-        return 0;
+	return 0;
       if (strcmp (oldent->prefix, newent->prefix) != 0)
-        return 0;
+	return 0;
     }
-
+  
   newname = dyld_entry_filename (newent, d, DYLD_ENTRY_FILENAME_LOADED);
   oldname = dyld_entry_filename (oldent, d, DYLD_ENTRY_FILENAME_LOADED);
 
   /* If we've already loaded the objfile from memory, and from the
      same address, then we can go ahead and re-use it.
-
+ 
      FIXME: What if dyld has moved libraries around, or plug-ins have
      been unloaded and re-loaded for whatever reason, and we now have
      some other library loaded at this address?  We should probably
      store some token in the loaded_* information to provide for more
      reliable matching.
   */
-
-  if ((oldent->loaded_from_memory) && (oldent->loaded_addr == newent->dyld_addr))
-    {
-      gdb_assert (dyld_libraries_similar (d, newent, oldent));
-      return 1;
-    }
-
+ 
+  if (oldent->loaded_from_memory && oldent->loaded_addr == newent->dyld_addr)
+    return dyld_libraries_similar (d, newent, oldent);
+ 
   /* If either filename is non-NULL, then they must both be the same string. */
-
+  
   if (oldname != NULL || newname != NULL)
     {
       if (oldname == NULL || newname == NULL)
-        return 0;
+	return 0;
       if (strcmp (oldname, newname) != 0)
-        return 0;
+	return 0;
     }
-
+  
   if (dyld_always_read_from_memory_flag)
     {
       if (oldent->loaded_from_memory != newent->loaded_from_memory)
-        {
-          return 0;
-        }
+	{
+	  return 0;
+	}
     }
 
-  /* The same bundle can be loaded more than once under certain
-     circumstances.  Both dyld_objfile_entries will be dyld_reason_dyld,
-     both will have the same filename, but they'll have different dyld_addr's
-     (different load addresses).
-     It's not entirely clear to me whether this is technically legal, but
-     it happens in real world use.  cf <rdar://problem/4308315> 
+   /* The same bundle can be loaded more than once under certain
+      circumstances.  Both dyld_objfile_entries will be dyld_reason_dyld,
+      both will have the same filename, but they'll have different dyld_addr's
+      (different load addresses).
+      It's not entirely clear to me whether this is technically legal, but
+      it happens in real world use.  cf <rdar://problem/4308315> 
 
-     When this comes up, we should say that the two libraries are not
-     "compatible".  This is not an error condition.  Yes, that means
-     there will be two dyld_objfile_entry's with the same filename and
-     two struct objfile's with the same filename, but that's how we roll.  */
- 
+      When this comes up, we should say that the two libraries are not
+      "compatible".  This is not an error condition.  Yes, that means
+      there will be two dyld_objfile_entry's with the same filename and
+      two struct objfile's with the same filename, but that's how we roll.  */
+
   return dyld_libraries_similar (d, newent, oldent);
 }
-
+  
 /* Move the load data (whatever distinction that is -- not all the
    fields are moved) from the SRC dyld_objfile_entry into DEST.
    Upon completion, SRC won't have any of its load data fields set.  */
@@ -1376,7 +1398,7 @@ dyld_objfile_move_load_data (struct dyld_objfile_entry *src,
   /* If we are re-running, and haven't resolved the new load data
      flags, go ahead and pick them up from the previous run. */
 
-  if ((src->load_flag > 0) && (dest->load_flag < 0))
+  if (src->load_flag > 0 && dest->load_flag < 0)
     {
       dest->load_flag = src->load_flag;
     }
@@ -1441,22 +1463,22 @@ dyld_merge_shlib (const struct macosx_dyld_thread_status *s,
 
   DYLD_ALL_OBJFILE_INFO_ENTRIES (oldinfos, oldent, i)
     if (dyld_libraries_compatible (d, newent, oldent))
-    {
-      dyld_objfile_move_load_data (oldent, newent);
-      if (newent->reason & dyld_reason_executable_mask)
-        symfile_objfile = newent->objfile;
-      return;
-    }
+      {
+        dyld_objfile_move_load_data (oldent, newent);
+        if (newent->reason & dyld_reason_executable_mask)
+          symfile_objfile = newent->objfile;
+        return;
+      }
 
-  DYLD_ALL_OBJFILE_INFO_ENTRIES (oldinfos, oldent, i)
-    if ((newent->reason & dyld_reason_image_mask)
-        && dyld_libraries_similar (d, newent, oldent) && oldent->objfile != NULL)
-    {
-      dyld_objfile_move_load_data (oldent, newent);
-      if (newent->reason & dyld_reason_executable_mask)
-        symfile_objfile = newent->objfile;
-      return;
-    }
+  if (newent->reason & dyld_reason_image_mask)
+    DYLD_ALL_OBJFILE_INFO_ENTRIES (oldinfos, oldent, i)
+      if (oldent->objfile != NULL && dyld_libraries_similar (d, newent, oldent))
+        {
+          dyld_objfile_move_load_data (oldent, newent);
+          if (newent->reason & dyld_reason_executable_mask)
+            symfile_objfile = newent->objfile;
+          return;
+        }
 }
 
 /* Go through all the dyld_objfile_entry's in OBJINFO, looking for

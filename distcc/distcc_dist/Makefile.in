@@ -170,7 +170,7 @@ common_obj = src/arg.o src/argutil.o					\
 	src/safeguard.o src/snprintf.o src/timeval.o			\
 	src/ncpus.o							\
 	lzo/minilzo.o \
-    src/versinfo.o src/cpp_dialect.o src/indirect_client.o src/indirect_server.o src/indirect_util.o
+    src/versinfo.o src/cpp_dialect.o src/indirect_client.o src/indirect_server.o
 
 distcc_obj = src/backoff.o						\
 	src/climasq.o src/clinet.o src/clirpc.o				\

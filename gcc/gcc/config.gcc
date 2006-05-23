@@ -363,8 +363,12 @@ case ${target} in
   target_gtfiles="\$(srcdir)/config/darwin.c"
   c_target_objs="darwin-c.o"
   cxx_target_objs="darwin-c.o"
-  extra_parts="crt2.o"
+ # APPLE LOCAL begin mainline 2006-03-15 3992198
+ # APPLE LOCAL end mainline 2006-03-15 3992198
   extra_objs="darwin.o"
+ # APPLE LOCAL begin mainline 2006-03-15 3992198
+  default_use_cxa_atexit=yes
+ # APPLE LOCAL end mainline 2006-03-15 3992198
   case ${enable_threads} in
     "" | yes | posix) thread_file='posix' ;;
   esac
@@ -1579,6 +1583,9 @@ powerpc-*-beos*)
 powerpc-*-darwin*)
  # APPLE LOCAL begin mainline 2005-10-02 4218570
  # APPLE LOCAL end mainline 2005-10-02 4218570
+ # APPLE LOCAL begin mainline 2006-03-15 3992198
+	extra_parts="crt2.o"
+ # APPLE LOCAL end mainline 2006-03-15 3992198
 	case ${target} in
  # APPLE LOCAL begin mainline 2005-09-01 3449986
 	  *-darwin1[0-9]* | *-darwin[8-9]*)

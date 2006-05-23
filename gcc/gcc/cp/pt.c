@@ -8556,6 +8556,17 @@ tsubst_copy_and_build (tree t,
       else
 	return cxx_sizeof_or_alignof_expr (op1, TREE_CODE (t));
 
+    /* APPLE LOCAL begin radar 4278774 */
+    case AT_ENCODE_EXPR:
+      {
+	op1 = TREE_OPERAND (t, 0);
+	++skip_evaluation;
+	op1 = RECUR (op1);
+	--skip_evaluation;
+	return objc_build_encode_expr (op1);
+      }
+    /* APPLE LOCAL end radar 4278774 */
+
     case MODOP_EXPR:
       {
 	tree r = build_x_modify_expr

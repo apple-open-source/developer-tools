@@ -492,7 +492,7 @@ GDB_FILE *gdb_open_output(FILE *f, gdb_output_filter_ftype filter, void *data)
 	
 	u->uiout		   = uiout;
 	u->completion_hook	   = rl_completion_display_matches_hook;
-	u->query_hook	           = query_hook;
+	u->query_hook	           = deprecated_query_hook;
 	u->rl_startup_hook	   = rl_startup_hook;
 	u->command_line_input_hook = command_line_input_hook;
     }
@@ -572,7 +572,7 @@ GDB_FILE *gdb_redirect_output(GDB_FILE *stream)
 	default_gdb_uiout           = INITIAL_GDB_VALUE(uiout, uiout);
 	default_gdb_completion_hook = INITIAL_GDB_VALUE(rl_completion_display_matches_hook, rl_completion_display_matches_hook);
 	default_rl_startup_hook	    = INITIAL_GDB_VALUE(rl_startup_hook, rl_startup_hook);
-	__default_gdb_query_hook    = query_hook;
+	__default_gdb_query_hook    = deprecated_query_hook;
 	
 	firsttime = 0;
 	
@@ -596,7 +596,7 @@ GDB_FILE *gdb_redirect_output(GDB_FILE *stream)
 	
 	uiout                                = default_gdb_uiout;
 	rl_completion_display_matches_hook   = default_gdb_completion_hook;
-	query_hook			     = __default_gdb_query_hook;
+	deprecated_query_hook		     = __default_gdb_query_hook;
 	rl_startup_hook			     = default_rl_startup_hook;
 	command_line_input_hook		     = default_command_line_input_hook;
 	//fprintf(stderr, "  gdb_redirect_output0: stream == gdb_default_stdout\n");
@@ -619,7 +619,7 @@ GDB_FILE *gdb_redirect_output(GDB_FILE *stream)
 	    
 	    uiout 				 = u->uiout;
 	    rl_completion_display_matches_hook   = u->completion_hook;
-	    query_hook			     	 = u->query_hook;
+	    deprecated_query_hook		 = u->query_hook;
 	    rl_startup_hook			 = u->rl_startup_hook;
 	    command_line_input_hook		 = u->command_line_input_hook;
 	    
@@ -663,7 +663,7 @@ GDB_FILE *gdb_redirect_output(GDB_FILE *stream)
 	    
 	    uiout 				 = output->uiout;
 	    rl_completion_display_matches_hook   = __cmd_completion_display_hook;
-	    query_hook			     	 = my_query_hook;
+	    deprecated_query_hook		 = my_query_hook;
 	    rl_startup_hook			 = my_rl_startup_hook;
 	    
 	    //fprintf(stderr, "  gdb_redirect_output3: ui_file = %X, data = %X, magic_nbr = %X, &magic = %X\n",
@@ -960,7 +960,7 @@ static int my_query_hook(char *format, va_list ap)
     gdb_fflush(gdb_current_stderr);
     
     vsprintf(msg, format, ap);
-    query_hook = NULL;				/* avoid recursion			*/
+    deprecated_query_hook = NULL;		/* avoid recursion			*/
     
     if (__default_gdb_query_hook)
     	result = call_default_query_hook("%s", msg);
@@ -971,7 +971,7 @@ static int my_query_hook(char *format, va_list ap)
     gdb_fflush(gdb_current_stdout);
     gdb_fflush(gdb_current_stderr);
     
-    query_hook = my_query_hook;
+    deprecated_query_hook = my_query_hook;
         
     return (result);
 }

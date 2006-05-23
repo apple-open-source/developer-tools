@@ -3,8 +3,8 @@
    declaration, not just the specifiers.  Test with -pedantic-errors.  */
 /* Origin: Joseph Myers <jsm@polyomino.org.uk> */
 /* { dg-do compile } */
-/* { dg-options "-pedantic-errors" } */
-
+/* APPLE LOCAL testsuite nested functions */
+/* { dg-options "-pedantic-errors  -fnested-functions" } */
 auto void f0 (void) {} /* { dg-error "error: function definition declared 'auto'" } */
 register void f1 (void) {} /* { dg-error "error: function definition declared 'register'" } */
 typedef void f2 (void) {} /* { dg-error "error: function definition declared 'typedef'" } */
@@ -18,10 +18,9 @@ void f7 (typedef int); /* { dg-error "error: storage class specified for paramet
 auto int x; /* { dg-error "error: file-scope declaration of 'x' specifies 'auto'" } */
 register int y; /* { dg-error "error: file-scope declaration of 'y' specifies 'register'" } */
 
-/* APPLE LOCAL begin testsuite nested functions */
-void h (void) { extern void x (void) {} } /* { dg-error "error: nested function 'x' declared 'extern'|nested functions are not supported on MacOSX" } */
-/* { dg-error "error: ISO C forbids nested functions" "nested" { target *-*-* } 22 } */
-/* APPLE LOCAL end testsuite nested functions */
+void h (void) { extern void x (void) {} } /* { dg-error "error: nested function 'x' declared 'extern'" } */
+/* { dg-error "error: ISO C forbids nested functions" "nested" { target *-*-* } 21 } */
+
 void
 g (void)
 {
@@ -37,12 +36,10 @@ extern const void q1;
 static void r; /* { dg-error "error: variable or field 'r' declared void" } */
 static const void r1; /* { dg-error "error: variable or field 'r1' declared void" } */
 
-/* APPLE LOCAL begin testsuite nested functions */
-register void f8 (void); /* { dg-error "error: invalid storage class for function 'f8'|nested functions are not supported on MacOSX" } */
-/* { dg-error "error: file-scope declaration of 'f8' specifies 'register'" "register function" { target *-*-* } 41 } */
+register void f8 (void); /* { dg-error "error: invalid storage class for function 'f8'" } */
+/* { dg-error "error: file-scope declaration of 'f8' specifies 'register'" "register function" { target *-*-* } 39 } */
 
-void i (void) { auto void y (void) {} } /* { dg-error "error: ISO C forbids nested functions|nested functions are not supported on MacOSX" } */
+void i (void) { auto void y (void) {} } /* { dg-error "error: ISO C forbids nested functions" } */
+/* { dg-error "error: function definition declared 'auto'" "nested" { target *-*-* } 42 } */
 
-/* { dg-error "error: function definition declared 'auto'" "nested" { target *-*-* } 44 } */
-/* APPLE LOCAL end testsuite nested functions */
 inline int main (void) { return 0; } /* { dg-error "error: cannot inline function 'main'" } */

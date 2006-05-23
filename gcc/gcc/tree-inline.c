@@ -1111,8 +1111,19 @@ static tree
 inline_forbidden_p (tree fndecl)
 {
   location_t saved_loc = input_location;
-  tree ret = walk_tree_without_duplicates (&DECL_SAVED_TREE (fndecl),
-					   inline_forbidden_p_1, fndecl);
+  /* APPLE LOCAL begin CW asm blocks */
+  tree ret;
+  if (DECL_IASM_ASM_FUNCTION (fndecl)
+      && ! flag_ms_asms)
+    {
+      inline_forbidden_reason
+	= G_("%Jfunction %qF can never be inlined because it was declared with asm");
+      return fndecl;
+    }
+
+  ret = walk_tree_without_duplicates (&DECL_SAVED_TREE (fndecl),
+				      inline_forbidden_p_1, fndecl);
+  /* APPLE LOCAL end CW asm blocks */
 
   input_location = saved_loc;
   return ret;

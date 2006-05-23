@@ -233,6 +233,7 @@ int dcc_get_lock_dir(char **path_ret) WARN_UNUSED;
 int dcc_get_state_dir(char **path_ret) WARN_UNUSED;
 int dcc_get_top_dir(char **path_ret) WARN_UNUSED;
 int dcc_get_tmp_top(const char **p_ret) WARN_UNUSED;
+int dcc_get_tmpfile_path(const char *file_part, char **path_ret);
 int dcc_set_owner(const char *path);
 
 /* cleanup.c */

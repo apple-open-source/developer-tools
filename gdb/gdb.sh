@@ -5,8 +5,8 @@ requested_architecture=""
 architecture_to_use=""
 
 # classic-inferior-support
-oah750_mode=0
-oah750_binary=""
+translate_mode=0
+translate_binary=""
 
 PATH=$PATH:/sbin:/bin:/usr/sbin:/usr/bin
 
@@ -50,7 +50,7 @@ fi
 
 case "$1" in
   --help)
-    echo "  --oah750           Debug applications running under oah750." >&2
+    echo "  --translate        Debug applications running under translate." >&2
     echo "  -arch i386|ppc     Specify a gdb targetting either ppc or i386" >&2
     ;;
   -arch=* | -a=* | --arch=*)
@@ -60,19 +60,19 @@ case "$1" in
     shift
     requested_architecture="$1"
     shift;;
-  -oah750 | --oah750 | -oah* | --oah*)
-    oah750_mode=1
+  -translate | --translate | -oah* | --oah*)
+    translate_mode=1
     shift;;
 esac
 
-if [ $oah750_mode -eq 1 ]
+if [ $translate_mode -eq 1 ]
 then
-  if [ "$host_architecture" = i386 -a -x /usr/libexec/oah/oah750 ]
+  if [ "$host_architecture" = i386 -a -x /usr/libexec/oah/translate ]
   then
     requested_architecture="ppc"
-    oah750_binary=/usr/libexec/oah/oah750
+    translate_binary="/usr/libexec/oah/translate -execOAH"
   else
-    echo ERROR: oah750 not available.  Running in normal debugger mode. >&2
+    echo ERROR: translate not available.  Running in normal debugger mode. >&2
   fi
 fi
 
@@ -105,9 +105,27 @@ case "$architecture_to_use" in
         ;;
 esac
 
+# When running under CodeWarrior we want to invoke a gdb binary
+# specifically intended/qualified for its use.
+
+parent=`ps -Awwwo pid,command | 
+          awk -v ppid=$PPID '{if ($1 == ppid ) {print}}' |
+          sed -e 's,^ *,,' -e 's,[^ ]* *,,'`
+if [ -n "$parent" ]
+then
+  case "$parent" in
+    *CodeWarrior*)
+      if [ -x "${GDBROOT}/usr/libexec/gdb/gdb-for-codewarrior" ]
+      then
+        gdb="${GDBROOT}/usr/libexec/gdb/gdb-for-codewarrior"
+      fi
+    ;;
+  esac
+fi
+
 if [ ! -x "$gdb" ]; then
     echo "Unable to start GDB: cannot find binary in '$gdb'"
     exit 1
 fi
 
-exec $oah750_binary "$gdb" "$@"
+exec $translate_binary "$gdb" "$@"

@@ -21,28 +21,29 @@
 #include <stdarg.h>
 
 #include "gdb_private_interfaces.h"
-
 #include "target.h"
 #include "value.h"
 #include "command.h"
-#include "top.h"	// execute_command, get_prompt, instream, line, word brk completer
-#include "gdbtypes.h"	// enum type_code, builtin_type_void_data_ptr
-#include "gdbcmd.h" 	// cmdlist, execute_user_command, filename_completer
+#include "top.h"        // execute_command, get_prompt, instream, line, word brk completer
+#include "gdbtypes.h"   // enum type_code, builtin_type_void_data_ptr
+#include "gdbcmd.h"     // cmdlist, execute_user_command, filename_completer
 #include "completer.h"  // cmdlist, execute_user_command, filename_completer
 /* FIXME: We should not have to rely on these details, but there aren't
    interfaces for all the cmd_list_element bits we need here yet. */
 #include "cli/cli-decode.h"
-#include "expression.h" // parse_expression 
-#include "inferior.h"	// stop_bpstat, read_sp
-#include "symtab.h"	// struct symtab_and_line, find_pc_line, find_pc_sect_function
-#include "frame.h"   	// selected_frame
-#include "gdbarch.h"	// DEPRECATED_REGISTER_VIRTUAL_SIZE, gdbarch_tdep
-#include "ppc-tdep.h"	// struct gdbarch_tdep (wordsize)
-#include "gdbcore.h"	// memory_error
-#include "objfiles.h"	// find_pc_section, struct objfile, struct obj_section
-#include "bfd.h"	// bfd_get_filename, bfd_section_name
-#include "symfile.h"	// overlay_debugging and related functions
-#include "block.h"	// BLOCK_START
+#include "expression.h" // parse_expression
+#include "inferior.h"   // stop_bpstat, read_sp
+#include "symtab.h"     // struct symtab_and_line, find_pc_line, find_pc_sect_function
+#include "frame.h"      // selected_frame
+#include "gdbarch.h"    // gdbarch_tdep
+#include "regcache.h"   // register_size
+#include "ppc-tdep.h"   // struct gdbarch_tdep (wordsize)
+#include "gdbcore.h"    // memory_error
+#include "objfiles.h"   // find_pc_section, struct objfile, struct obj_section
+#include "bfd.h"        // bfd_get_filename, bfd_section_name
+#include "symfile.h"    // overlay_debugging and related functions
+#include "block.h"      // BLOCK_START
+#include "exceptions.h"
 
 #define CLASS_BASE 100
 
@@ -177,13 +178,19 @@ static void intercept_help_commands(char *arg, int from_tty)
  
  This must be called before any other of the interface routines to do some required
  initialization.
+ Returns 1 if the initialization succeeds, 0 if it fails.
 */
 
-void gdb_initialize(void)
+int gdb_initialize(void)
 {
     static initialized = 0;
     
     if (!initialized) {
+      if (gdbarch_bfd_arch_info (current_gdbarch)->arch != bfd_arch_powerpc)
+	{
+	    warning ("The MacsBug plugin is only supported for PowerPC targets.");
+            return 0;
+        }
     	initialized = 1;
 	
 	/* If this is the first instance of the plugin support library then set 	*/
@@ -203,6 +210,7 @@ void gdb_initialize(void)
 	gdb_help_command = INITIAL_GDB_VALUE(help_command, 
 				     	     gdb_replace_command("help", intercept_help_commands));
     }
+    return 1;
 }
 
 
@@ -449,9 +457,7 @@ void gdb_enable_filename_completion(char *theCommand)
     c = lookup_cmd(&s, cmdlist, "", 1, 1);
     
     if (c) {
-      /* TURMERIC Merge - completer_word_break_characters has been removed from gdb. */
-      set_cmd_completer(c, filename_completer);
-      /* c->completer_word_break_characters = gdb_completer_filename_word_break_characters; */ /* FIXME */
+      set_cmd_completer (c, filename_completer);
     }
 }
 
@@ -1136,7 +1142,7 @@ int gdb_eval_silent(char *expression, ...)
 	vsprintf(line, expression, ap);
 	va_end(ap);
 	
-	catch_errors((catch_errors_ftype *)wrap_parse_and_eval, line, NULL, RETURN_MASK_ALL);
+	catch_errors(wrap_parse_and_eval, line, NULL, RETURN_MASK_ALL);
 	
 	gdb_close_output(redirect_stderr);
 	gdb_close_output(redirect_stdout);
@@ -1594,7 +1600,7 @@ static int is_var_defined(char *theVariable)
 {
     struct value *vp = value_of_internalvar(lookup_internalvar(theVariable+1));
     
-    return ((vp) && VALUE_TYPE(vp) && TYPE_CODE(VALUE_TYPE(vp)) != TYPE_CODE_VOID);
+    return ((vp) && value_type(vp) && TYPE_CODE(value_type(vp)) != TYPE_CODE_VOID);
 }
 
 
@@ -1648,7 +1654,7 @@ char *gdb_set_register(char *theRegister, void *value, int size)
     if (!target_has_registers)
     	return ("no registers available at this time");
     
-    if ((frame = get_selected_frame()) == NULL)
+    if ((frame = get_selected_frame(NULL)) == NULL)
       return ("no frame selected");
     
     if (*start == '$')
@@ -1659,7 +1665,7 @@ char *gdb_set_register(char *theRegister, void *value, int size)
     if (regnum < 0)
     	return ("bad register");
     
-    if (DEPRECATED_REGISTER_VIRTUAL_SIZE(regnum) != size)
+    if (register_size (current_gdbarch, regnum) != size)
     	return ("invalid register length");
     
     vp = expression_to_value_ptr(theRegister);
@@ -1669,7 +1675,7 @@ char *gdb_set_register(char *theRegister, void *value, int size)
     if (VALUE_LVAL(vp) != lval_register)
     	return ("left operand of assignment is not an lvalue");
     
-    deprecated_write_register_bytes(VALUE_ADDRESS(vp) + VALUE_OFFSET(vp), (char *)value, size);
+    deprecated_write_register_bytes(VALUE_ADDRESS(vp) + value_offset(vp), (char *)value, size);
     
     return (NULL);
 }
@@ -1678,29 +1684,29 @@ char *gdb_set_register(char *theRegister, void *value, int size)
 /*-------------------------------------------------------------*
  | gdb_get_register - return the value of a specified register |
  *-------------------------------------------------------------*
- 
+
  Returns the value of theRegister (e.g., "$r0") in the provided value buffer.  The
  value pointer is returned as the function result and the value is copied to the
  specified buffer (assumed large enough to hold the value and at least a long long).
  If the register is invalid, or its value cannot be obtained, NULL is returned and
  the value buffer (treated as a long* pointer) is set with one of the following
  error codes:
-    
+
     Gdb_GetReg_NoRegs     no registers available at this time
     Gdb_GetReg_NoFrame    no frame selected
     Gdb_GetReg_BadReg     bad register (gdb doesn't know this register)
     Gdb_GetReg_NoValue    value not available
- 
+
  Always use this function instead of, say, gdb_get_int(), to get register values
  because (a) it is more efficient (not expression evaluation is done) and (b) it
- is more accurate in that GDB might not be in the proper context to get the 
+ is more accurate in that GDB might not be in the proper context to get the
  current register frame value.
 */
 
 void *gdb_get_register(char *theRegister, void *value)
 {
-    int 	      regnum;
-    char 	      *end;
+    int               regnum;
+    char              *end;
     struct frame_info *frame;
     
     if (!target_has_registers) {
@@ -1709,7 +1715,7 @@ void *gdb_get_register(char *theRegister, void *value)
 	return (NULL);
     }
     
-    if ((frame = get_selected_frame()) == NULL) {
+    if ((frame = get_selected_frame(NULL)) == NULL) {
 	//strcpy((char *) value, "no frame selected");
 	*(long long *)value = Gdb_GetReg_NoFrame;
 	return (NULL);
@@ -1733,7 +1739,7 @@ void *gdb_get_register(char *theRegister, void *value)
     }
     
     //if (size)
-    //	*size = DEPRECATED_REGISTER_VIRTUAL_SIZE(regnum);
+    //	*size = register_size (current_gdbarch, regnum);
     //gdb_printf("type = %d\n", TYPE_CODE(gdbarch_register_virtual_type(current_gdbarch, regnum)));
     
     return (value);
@@ -1752,7 +1758,7 @@ GDB_ADDRESS gdb_get_sp(void)
     /* This is a hack.  Sometimes gdb leaves the deprecated_selected_frame null, but	*/
     /* still uses it.  get_selected_frame will force it to get set. 			*/
     
-    get_selected_frame ();
+    get_selected_frame (NULL);
    
     /* Note, the above comment and call were done in a different context getting the	*/
     /* sp, not the pc.  That was made unnecessary when the code to get the sp was	*/
@@ -1780,7 +1786,7 @@ GDB_ADDRESS gdb_get_sp(void)
 
 int gdb_get_reg_size(int regnum)
 {
-    return (DEPRECATED_REGISTER_VIRTUAL_SIZE(regnum));
+    return (register_size (current_gdbarch, regnum));
 }
 
 
@@ -2457,7 +2463,7 @@ int gdb_is_string(char *expression)
     if (!vp)
     	return (0);
     
-    type = TYPE_CODE(VALUE_TYPE(vp));
+    type = TYPE_CODE(value_type(vp));
     
     //fprintf(stderr, "vp->type->code = %d\n", (int)type);
     

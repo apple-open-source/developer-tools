@@ -574,29 +574,29 @@ void init_macsbug_set(void)
 
     gdb_define_set_generic(check_all_sets);
     
-    gdb_define_set("ditto",           set_ditto,        Set_String, &ditto_args,         0, DITTO_DESCRIPTION);
-    gdb_define_set("unmangle",        set_unmangle,     Set_String, &unmangle_args,      0, UNMANGLE_DESCRIPTION);
-    gdb_define_set("dx",              set_dx,     	Set_String, &dx_args,            0, DX_DESCRIPTION);
+    gdb_define_set("ditto",           set_ditto,        Set_String, &ditto_args,         DITTO_DESCRIPTION);
+    gdb_define_set("unmangle",        set_unmangle,     Set_String, &unmangle_args,      UNMANGLE_DESCRIPTION);
+    gdb_define_set("dx",              set_dx,     	Set_String, &dx_args,            DX_DESCRIPTION);
     
-    gdb_define_set("mb-ditto",        set_ditto,        Set_String, &ditto_args,         0, DITTO_DESCRIPTION);
-    gdb_define_set("mb-unmangle",     set_unmangle,     Set_String, &unmangle_args,      0, UNMANGLE_DESCRIPTION);
-    gdb_define_set("mb-echo",         set_echo,         Set_String, &echo_args,          0, ECHO_DESCRIPTION);
-    gdb_define_set("mb-wrap",         set_wrap,         Set_String, &wrap_args,          0, WRAP_DESCRIPTION);
-    gdb_define_set("mb-so-si-source", set_so_si_source, Set_String, &sosi_args,          0, SOSI_DESCRIPTION);
-    gdb_define_set("mb-dx",  	      set_dx,           Set_String, &dx_args,            0, DX_DESCRIPTION);
-    gdb_define_set("mb-sidebar",      set_sidebar,      Set_String, &sidebar_args,       0, SIDEBAR_DESCRIPTION);
+    gdb_define_set("mb-ditto",        set_ditto,        Set_String, &ditto_args,         DITTO_DESCRIPTION);
+    gdb_define_set("mb-unmangle",     set_unmangle,     Set_String, &unmangle_args,      UNMANGLE_DESCRIPTION);
+    gdb_define_set("mb-echo",         set_echo,         Set_String, &echo_args,          ECHO_DESCRIPTION);
+    gdb_define_set("mb-wrap",         set_wrap,         Set_String, &wrap_args,          WRAP_DESCRIPTION);
+    gdb_define_set("mb-so-si-source", set_so_si_source, Set_String, &sosi_args,          SOSI_DESCRIPTION);
+    gdb_define_set("mb-dx",  	      set_dx,           Set_String, &dx_args,            DX_DESCRIPTION);
+    gdb_define_set("mb-sidebar",      set_sidebar,      Set_String, &sidebar_args,       SIDEBAR_DESCRIPTION);
    
-    gdb_define_set("mb-tab",          set_tab,          Set_Int,    &new_tab_value,      0, TAB_DESCRIPTION);
-    gdb_define_set("mb-pc-area",      set_pc_area,      Set_Int,    &new_pc_area_lines,  0, PC_AREA_DESCRIPTION);
-    gdb_define_set("mb-cmd-area",     set_cmd_area,     Set_Int,    &new_cmd_area_lines, 0, CMD_AREA_DESCRIPTION);
-    gdb_define_set("mb-history",      set_history_size, Set_Int,    &new_max_history,    0, HISTORY_DESCRIPTION);
+    gdb_define_set("mb-tab",          set_tab,          Set_Int,    &new_tab_value,      TAB_DESCRIPTION);
+    gdb_define_set("mb-pc-area",      set_pc_area,      Set_Int,    &new_pc_area_lines,  PC_AREA_DESCRIPTION);
+    gdb_define_set("mb-cmd-area",     set_cmd_area,     Set_Int,    &new_cmd_area_lines, CMD_AREA_DESCRIPTION);
+    gdb_define_set("mb-history",      set_history_size, Set_Int,    &new_max_history,    HISTORY_DESCRIPTION);
    
-    gdb_define_set("mb-hexdump-width",set_hexdump_width,Set_Int,    &new_hexdump_width,  0, HEXDUMP_WIDTH_DESCRIPTION);
-    gdb_define_set("mb-hexdump-group",set_hexdump_group,Set_Int,    &new_hexdump_group,  0, HEXDUMP_GROUP_DESCRIPTION);
+    gdb_define_set("mb-hexdump-width",set_hexdump_width,Set_Int,    &new_hexdump_width,  HEXDUMP_WIDTH_DESCRIPTION);
+    gdb_define_set("mb-hexdump-group",set_hexdump_group,Set_Int,    &new_hexdump_group,  HEXDUMP_GROUP_DESCRIPTION);
     
-    gdb_define_set("mb-arch",         set_arch,         Set_String, &new_arch,           0, SET_ARCH_DESCRIPTION);
-    
-    //gdb_define_set("mb-testing",    set_mb_testing,   Set_Int,    &new_testing,        0, TESTING_DESCRIPTION);
+    gdb_define_set("mb-arch",         set_arch,         Set_String, &new_arch,           SET_ARCH_DESCRIPTION);
+
+    //gdb_define_set("mb-testing",    set_mb_testing,   Set_Int,    &new_testing,        TESTING_DESCRIPTION);
     
     /* Init the string values for the SHOW command. It has to be malloc'ed space. From	*/
     /* this point on we'll maintain them as the values changed.				*/

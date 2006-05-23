@@ -48,6 +48,7 @@ typedef struct
 		} u2;
 } Bitfields;
 
+#pragma ms_struct on
 #pragma reverse_bitfields on
 int main()
 {

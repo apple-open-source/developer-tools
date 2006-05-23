@@ -19,6 +19,7 @@ union {
 } unorm = { 5, 1, 6, 2 };
 
 #pragma reverse_bitfields on
+#pragma ms_struct on
 typedef struct TestState 
 {
     unsigned int fBlah : 7;     //  
@@ -60,4 +61,5 @@ int main(){
   if (unorm.raw[1] != 0x0d000000) abort();
   if (u.raw[0] != 0x00000085) abort();
   if (u.raw[1] != 0x00000106) abort();
+  return 0;
 }

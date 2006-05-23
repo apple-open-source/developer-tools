@@ -269,7 +269,7 @@ SHELL=${CONFIG_SHELL-/bin/sh}
 # Identity of this package.
 PACKAGE_NAME='distcc'
 PACKAGE_TARNAME='distcc'
-PACKAGE_VERSION='2.18.3-Apple'
+PACKAGE_VERSION='2.18.3-Apple.1'
 PACKAGE_STRING='distcc 2.18.3'
 PACKAGE_BUGREPORT='distcc@lists.samba.org'
 

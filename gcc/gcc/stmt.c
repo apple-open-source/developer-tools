@@ -917,7 +917,7 @@ expand_asm_operands (tree string, tree outputs, tree inputs,
 
       /* APPLE LOCAL begin CW asm blocks. */
       /* Crude way of detecting an entry static label declaration 
-	 (See cw_asm_entry).  Make this a local symbol. */
+	 (See iasm_entry).  Make this a local symbol. */
       if (i == 0 && !TREE_CHAIN (tail) 
 	  && strcmp (TREE_STRING_POINTER (string), "%0:") == 0
 	  && GET_CODE (op) == SYMBOL_REF)

@@ -1,4 +1,4 @@
-/* APPLE LOCAL  file */
+/* APPLE LOCAL file */
 #ifndef STAB_TYPES_H
 #define STAB_TYPES_H
 

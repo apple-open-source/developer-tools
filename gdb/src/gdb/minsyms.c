@@ -145,7 +145,15 @@ add_minsym_to_demangled_hash_table (struct minimal_symbol *sym,
    Note:  One instance where there may be duplicate minimal symbols with
    the same name is when the symbol tables for a shared library and the
    symbol tables for an executable contain global symbols with the same
-   names (the dynamic linker deals with the duplication).  */
+   names (the dynamic linker deals with the duplication).
+
+   It's also possible to have minimal symbols with different mangled
+   names, but identical demangled names.  For example, the GNU C++ v3
+   ABI requires the generation of two (or perhaps three) copies of
+   constructor functions --- "in-charge", "not-in-charge", and
+   "allocate" copies; destructors may be duplicated as well.
+   Obviously, there must be distinct mangled names for each of these,
+   but the demangled names are all the same: S::S or S::~S.  */
 
 struct minimal_symbol *
 lookup_minimal_symbol (const char *name, const char *sfile,
@@ -650,26 +658,32 @@ prim_record_minimal_symbol_and_info (const char *name, CORE_ADDR address,
   struct msym_bunch *new;
   struct minimal_symbol *msymbol;
 
+  /* APPLE LOCAL: Re-factor the mst_file_text check up one level.
+     Don't modify the symbol name when checking it against
+     __gcc_compiled. */
+
   if (ms_type == mst_file_text)
     {
       /* Don't put gcc_compiled, __gnu_compiled_cplus, and friends into
-         the minimal symbols, because if there is also another symbol
-         at the same address (e.g. the first function of the file),
-         lookup_minimal_symbol_by_pc would have no way of getting the
-         right one.  */
+	 the minimal symbols, because if there is also another symbol
+	 at the same address (e.g. the first function of the file),
+	 lookup_minimal_symbol_by_pc would have no way of getting the
+	 right one.  */
       if (name[0] == 'g'
 	  && (strcmp (name, GCC_COMPILED_FLAG_SYMBOL) == 0
 	      || strcmp (name, GCC2_COMPILED_FLAG_SYMBOL) == 0))
 	return (NULL);
 
       {
-	const char *tempstring = name;
-	if (tempstring[0] == get_symbol_leading_char (objfile->obfd))
-	  ++tempstring;
-	if (strncmp (tempstring, "__gnu_compiled", 14) == 0)
-	  return (NULL);
+        const char *tempstring = name;
+        if (tempstring[0] == get_symbol_leading_char (objfile->obfd))
+          ++tempstring;
+        if (strncmp (tempstring, "__gnu_compiled", 14) == 0)
+          return (NULL);
       }
     }
+ 
+  /* END APPLE LOCAL */
 
   if (msym_bunch_index == BUNCH_SIZE)
     {
@@ -691,7 +705,7 @@ prim_record_minimal_symbol_and_info (const char *name, CORE_ADDR address,
   /* FIXME:  This info, if it remains, needs its own field.  */
   MSYMBOL_INFO (msymbol) = info;	/* FIXME! */
   MSYMBOL_SIZE (msymbol) = 0;
-  /* APPLE LOCAL fix-and-continue */
+  /* APPLE LOCAL: fix-and-continue */
   MSYMBOL_OBSOLETED (msymbol) = 0;
 
   /* The hash pointers must be cleared! If they're not,
@@ -868,7 +882,7 @@ build_minimal_symbol_hash_tables (struct objfile *objfile)
       add_minsym_to_hash_table (msym, objfile->msymbol_hash);
 
       msym->demangled_hash_next = 0;
-      if (SYMBOL_DEMANGLED_NAME (msym) != NULL)
+      if (SYMBOL_SEARCH_NAME (msym) != SYMBOL_LINKAGE_NAME (msym))
 	add_minsym_to_demangled_hash_table (msym,
                                             objfile->msymbol_demangled_hash);
     }

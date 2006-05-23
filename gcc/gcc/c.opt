@@ -702,6 +702,12 @@ C++ ObjC++ Joined
 fnew-abi
 C++ ObjC++
 
+; APPLE LOCAL begin nested functions 4258406 4357979
+fnested-functions
+C ObjC Var(flag_nested_functions)
+Allow nested functions.
+; APPLE LOCAL end nested functions 4258406 4357979
+
 fnext-runtime
 ObjC ObjC++
 Generate code for NeXT (Apple Mac OS X) runtime environment
@@ -848,9 +854,21 @@ fuse-cxa-atexit
 C++ ObjC++
 Use __cxa_atexit to register destructors
 
+; APPLE LOCAL begin mainline 2006-02-24 4086777
+fuse-cxa-get-exception-ptr
+C++ ObjC++
+Use __cxa_get_exception_ptr in exception handling
+
+; APPLE LOCAL end mainline 2006-02-24 4086777
 fvisibility-inlines-hidden
 C++ ObjC++
 Marks all inlined methods as having hidden visibility
+
+; APPLE LOCAL begin ms tinfo compat 4230099
+fvisibility-ms-compat
+C++ ObjC++ Var(flag_visibility_ms_compat)
+Changes visibility to match Microsoft Visual Studio by default
+; APPLE LOCAL end ms tinfo compat 4230099
 
 fvtable-gc
 C++ ObjC++

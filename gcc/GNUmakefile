@@ -18,11 +18,10 @@ include $(CoreOSMakefiles)/Standard/Standard.make
 # Enable Apple extensions to (gnu)make.
 USE_APPLE_PB_SUPPORT = all
 
-HOSTS = ppc i386 # `arch`
-targets = echo $${TARGETS:-'ppc i386'}
+RC_ARCHS := ppc i386
+HOSTS = $(RC_ARCHS)
+targets = echo $(RC_ARCHS)
 TARGETS := $(shell $(targets))
-
-RC_ARCHS = $(HOSTS)
 
 SRCROOT = .
 

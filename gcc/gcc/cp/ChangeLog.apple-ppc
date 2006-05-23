@@ -1,3 +1,129 @@
+2006-04-26  Mike Stump  <mrs@apple.com>
+
+	Radar 4505741
+	Rename cw_ to iasm_:
+	See ../ChangeLog.apple-ppc for additional changes.
+	* cp-tree.h: Rename ds_cw_asm to ds_iasm_asm.
+	* decl.c: Likewise.
+	Rename cw_asm_p to iasm_p.
+	* parser.c: Likewise.
+	Rename cp_lexer_cw_bol to cp_lexer_iasm_bol.
+	Rename cp_parser_cw_asm_compound_statement to cp_parser_iasm_compound_statement.
+	Rename cp_parser_cw_asm_top_statement to cp_parser_iasm_top_statement.
+	Rename cp_parser_cw_asm_declaration_seq_opt to cp_parser_iasm_declaration_seq_opt.
+	Rename cp_parser_cw_asm_line_seq_opt to cp_parser_iasm_line_seq_opt.
+	Rename cp_parser_cw_asm_line to cp_parser_iasm_line.
+	Rename cp_parser_cw_skip_to_eol to cp_parser_iasm_skip_to_eol.
+	Rename cp_parser_cw_maybe_skip_comments to cp_parser_iasm_maybe_skip_comments.
+	Rename cp_parser_cw_asm_statement_seq_opt to cp_parser_iasm_statement_seq_opt.
+	Rename cw_build_identifier_string to iasm_build_identifier_string.
+	Rename cp_parser_cw_identifier to cp_parser_iasm_identifier.
+	Rename cp_parser_cw_identifier_or_number to cp_parser_iasm_identifier_or_number.
+	Rename cp_parser_cw_asm_maybe_prefix to cp_parser_iasm_maybe_prefix.
+	Rename cp_parser_cw_asm_statement to cp_parser_iasm_statement.
+	Rename cp_parser_cw_skip_to_next_asm to cp_parser_iasm_skip_to_next_asm.
+	Rename cp_parser_cw_asm_operands to cp_parser_iasm_operands.
+	Rename cp_parser_cw_asm_operand to cp_parser_iasm_operand.
+	Rename cp_parser_cw_asm_relative_branch to cp_parser_iasm_relative_branch.
+	Rename cp_parser_cw_asm_postfix_expression to cp_parser_iasm_postfix_expression.
+	* semantics.c: Likewise.
+	Rename cw_asm_cp_build_component_ref to iasm_cp_build_component_ref.
+
+2006-04-17  Devang Patel  <dpatel@apple.com>
+
+	Radar 4499790
+	* parser.c (cp_parser_string_literal): Enable pascal strings for
+	wchars.
+
+2006-04-12  Mike Stump  <mrs@apple.com>
+
+	Radar 4477426 4466768
+	* parser.c (cw_build_identifier_string): Handle pseudo instructions bettter.
+
+2006-03-13  Mike Stump  <mrs@apple.com>
+
+	Radar 4230099
+	* decl2.c (determine_visibility): Add suppport for
+	-fvisibility-ms-compat.
+	* decl.c (cxx_init_decl_processing): Likewise.
+
+2006-02-08  Mike Stump  <mrs@apple.com>
+
+	Radar 4407059
+	* parser.c (cp_parser_unary_operator): Only recognize "offset"
+	when doing x86 assembly.
+
+2006-01-20  Mike Stump  <mrs@apple.com>
+
+	Radar 4381918
+	* decl.c (start_preparsed_function): Avoid warnings about lack of return
+	in asm functions.
+
+2005-12-14  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 4278774
+	* pt.c (cxx_sizeof_or_alignof_expr): Instantiate @endcode(T).
+	* parser.c (cp_parser_objc_encode_expression): Build a templatized 
+	parse tree for @encode(T).
+
+2005-12-13  Mike Stump  <mrs@apple.com>
+
+	* Revert 2005-12-07  Devang Patel  <dpatel@apple.com> Radar 4137741
+
+2005-12-08  Mike Stump  <mrs@apple.com>
+
+	Radar 4371551
+	* parser.c (cp_parser_cw_asm_postfix_expression): Also handle
+	exprs with no type.
+
+2005-12-07  Devang Patel  <dpatel@apple.com>
+   	    Ziemowit Laski  <zlaski@apple.com>
+
+        Radar 4137741
+        * cp-objcp-common.h: Revert Radar 4133801 changes.
+        * cp-tree.h: Likewise.
+        * decl2.c: Likewise.
+        * parser.c: Likewise.
+        (cp_lexer_handle_pragma): Rename to cp_lexer_handle_pragma_etc();
+        handle CPP_BINCL and CPP_EINCL tokens in addition to CPP_PRAGMA.
+        (cp_lexer_new_main): Set defer_file_change_debug_hooks flag
+        in preprocessor.
+        (cp_parser_statement, cp_parser_declaration_seq_opt,
+        cp_parser_member_specification_opt, cp_parser_cw_asm_declaration_seq_opt,
+        cp_parser_cw_asm_statement, cp_parser_objc_interstitial_code):
+        Call cp_lexer_handle_pragma_etc() for CPP_BINCL and CPP_EINCL tokens
+        also.
+
+2005-11-08  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 4330422
+
+	* typeck.c (comp_ptr_ttypes_real): Remove the hack. un-volatize the
+	artiificially 'volatized' type before doing pointer comparison.
+
+2005-10-17  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 4290840
+	
+	* parser.c (cp_parser_objc_method_keyword_params): Check for valid
+	method parameters and issue error.
+	(cp_parser_objc_method_definition_list): Check for invalid tokens
+	which cannot start a function definition.
+
+2005-10-14  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 4294425
+
+	* parser.c (cp_parser_objc_message_args): Check for missing message
+	arguments and syntax error.
+
+2005-10-13  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 4261146
+
+	* parser.c (cp_parser_objc_class_ivars): Check for @end/eof while
+	looking for '}'.
+
 2005-10-04  Devang Patel  <dpatel@apple.com>
 
         Radar 4278470

@@ -1272,12 +1272,6 @@ set_debug_level (enum debug_info_type type, int extended, const char *arg)
 #elif defined DBX_DEBUGGING_INFO
 	      write_symbols = DBX_DEBUG;
 #endif
-/* APPLE LOCAL begin dwarf */
-/* Even though DWARF2_DEBUGGING_INFO is defined, use stabs for
-   debugging symbols with -ggdb.  Remove this local patch when we
-   switch to dwarf.  */
-	      write_symbols = DBX_DEBUG;
-/* APPLE LOCAL end dwarf */
 	    }
 
 	  if (write_symbols == NO_DEBUG)

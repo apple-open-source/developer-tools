@@ -1,5 +1,7 @@
 /* APPLE LOCAL file AltiVec */
 /* { dg-do compile { target powerpc*-*-* } } */
+/* For 64-bit we need 64-bit headers.  */
+/* { dg-xfail-if "" { powerpc*-*-darwin* } { "-m64" } { "" } } */
 /* { dg-options "-O3 -finline-limit=9999 -faltivec -Wa,-force_cpusubtype_ALL -fdump-ipa-cgraph -S" } */
 /* Inliner should inline always-inline AltiVec(tm) functions when -faltivec is on.  */
 /* <rdar://problem/3837835> Selective inlining of functions that use Altivec */
@@ -130,6 +132,9 @@ main()
   exit(0);
 }
 
-/* { dg-final { scan-tree-dump-times "callee has AltiVec" 0 "cgraph" } } */
-/* { dg-final { scan-assembler-not "vIntDotProduct" } } */
-/* { dg-final { scan-assembler-not "mainInt" } } */
+/* { dg-final { global compiler_flags; if ![string match "*-m64 *" $compiler_flags]
+   { scan-tree-dump-times "callee has AltiVec" 0 "cgraph" } } } */
+/* { dg-final { global compiler_flags; if ![string match "*-m64 *" $compiler_flags]
+   { scan-assembler-not "vIntDotProduct" } } } */
+/* { dg-final { global compiler_flags; if ![string match "*-m64 *" $compiler_flags]
+   { scan-assembler-not "mainInt" } } } */

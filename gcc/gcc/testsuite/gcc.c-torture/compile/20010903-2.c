@@ -1,5 +1,5 @@
-/* APPLE LOCAL  nested functions */
-/* { dg-xfail-if "" { "*-*-darwin*" } { "*" } { "" } } */
+/* APPLE LOCAL testsuite nested functions */
+/* { dg-options "-fnested-functions" } */
 extern int __dummy (void *__preg, const char *__string);
 extern int rpmatch (const char *response);
 

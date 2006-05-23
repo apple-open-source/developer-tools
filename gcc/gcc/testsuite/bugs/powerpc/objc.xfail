@@ -53,6 +53,14 @@
 4261575: objc.dg/const-str-7.m (test for excess errors)
 4261575: objc.dg/const-str-8.m (test for excess errors)
 #
+# the following fail with -m64 on Leopard only
+4385129: objc.dg/const-cfstring-1.m (test for excess errors)
+4385129: objc.dg/const-cfstring-3.m (test for excess errors)
+4385129: objc.dg/const-cfstring-6.m (test for excess errors)
+4385167: objc.dg/bitfield-3.m (test for excess errors)
+4385167: objc.dg/bitfield-5.m (test for excess errors)
+4385167:  objc.dg/layout-1.m (test for excess errors)
+#
 # the following failures are for x86 only
-4283396: objc.dg/const-cfstring-1.m (test for excess errors)
-4283396: objc.dg/exceptionCodeGenBug.m (test for excess errors)
+#4283396: objc.dg/const-cfstring-1.m (test for excess errors)
+#4283396: objc.dg/exceptionCodeGenBug.m (test for excess errors)

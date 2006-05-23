@@ -63,6 +63,8 @@ Boston, MA 02111-1307, USA.  */
 #define SUBTARGET_EXTRA_SPECS					\
   /* APPLE LOCAL begin mainline 2005-04-11 */			\
   { "darwin_arch", "i386" },					\
+  /* APPLE LOCAL mainline 2005-11-15 4271575 */			\
+  { "darwin_crt2", "" },					\
   { "darwin_subarch", "i386" },
   /* APPLE LOCAL end mainline 2005-04-11 */
 
@@ -167,8 +169,6 @@ extern void darwin_x86_file_end (void);
 #define MASK_ALIGN_MAC68K	0x20000000
 #define TARGET_ALIGN_MAC68K	(target_flags & MASK_ALIGN_MAC68K)
 
-#define REGISTER_TARGET_PRAGMAS DARWIN_REGISTER_TARGET_PRAGMAS
-
 #define ROUND_TYPE_ALIGN(TYPE, COMPUTED, SPECIFIED) \
   (((TREE_CODE (TYPE) == RECORD_TYPE \
      || TREE_CODE (TYPE) == UNION_TYPE \
@@ -203,12 +203,8 @@ extern void darwin_x86_file_end (void);
       else fprintf (FILE, "\tcall mcount\n");				\
     } while (0)
 
-/* APPLE LOCAL begin SSE stack alignment */
-#define BASIC_STACK_BOUNDARY (128)
-/* APPLE LOCAL end SSE stack alignment */
-
 /* APPLE LOCAL CW asm blocks */
-extern int flag_cw_asm_blocks;
+extern int flag_iasm_blocks;
 /* APPLE LOCAL begin fix-and-continue x86 */
 #undef SUBTARGET_OVERRIDE_OPTIONS
 #define SUBTARGET_OVERRIDE_OPTIONS				\
@@ -236,10 +232,16 @@ extern int flag_cw_asm_blocks;
       }								\
     /* APPLE LOCAL end AT&T-style stub 4164563 */		\
     /* APPLE LOCAL begin CW asm blocks */			\
-    if (flag_cw_asm_blocks)					\
+    if (flag_iasm_blocks)					\
       flag_ms_asms = 1;						\
     /* APPLE LOCAL end CW asm blocks */				\
   } while (0)
+
+/* APPLE LOCAL begin kexts */
+#define C_COMMON_OVERRIDE_OPTIONS do {		\
+  SUBTARGET_C_COMMON_OVERRIDE_OPTIONS;		\
+} while (0)
+/* APPLE LOCAL end kexts */
 
 /* True, iff we're generating fast turn around debugging code.  When
    true, we arrange for function prologues to start with 6 nops so
@@ -250,6 +252,38 @@ extern int flag_cw_asm_blocks;
 #define TARGET_FIX_AND_CONTINUE (darwin_fix_and_continue)
 /* APPLE LOCAL end fix-and-continue x86 */
 
-/* APPLE LOCAL begin CW asm blocks */
-#define CW_ASM_REGISTER_NAME(STR, BUF) i386_cw_asm_register_name (STR, BUF)
-/* APPLE LOCAL end CW asm blocks */
+/* APPLE LOCAL begin mainline 2006-02-21 4439051 */
+/* Darwin uses the standard DWARF register numbers but the default
+   register numbers for STABS.  Fortunately for 64-bit code the
+   default and the standard are the same.  */
+#undef DBX_REGISTER_NUMBER
+#define DBX_REGISTER_NUMBER(n) 					\
+  (TARGET_64BIT ? dbx64_register_map[n]				\
+   : write_symbols == DWARF2_DEBUG ? svr4_dbx_register_map[n]	\
+   : dbx_register_map[n])
+
+/* Unfortunately, the 32-bit EH information also doesn't use the standard
+   DWARF register numbers.  */
+#define DWARF2_FRAME_REG_OUT(n, for_eh)					\
+  (! (for_eh) || write_symbols != DWARF2_DEBUG || TARGET_64BIT ? (n)	\
+   : (n) == 5 ? 4							\
+   : (n) == 4 ? 5							\
+   : (n) >= 11 && (n) <= 18 ? (n) + 1					\
+   : (n))
+/* APPLE LOCAL end mainline 2006-02-21 4439051 */
+
+/* APPLE LOCAL begin 4457939 stack alignment mishandled */
+/* <rdar://problem/4471596> stack alignment is not handled properly
+
+   Please remove this entire a**le local when addressing this
+   Radar.  */
+extern void ix86_darwin_init_expanders (void);
+#define INIT_EXPANDERS (ix86_darwin_init_expanders ())
+/* APPLE LOCAL end 4457939 stack alignment mishandled */
+/* APPLE LOCAL begin mainline */
+#undef REGISTER_TARGET_PRAGMAS
+#define REGISTER_TARGET_PRAGMAS() DARWIN_REGISTER_TARGET_PRAGMAS()
+
+#undef TARGET_SET_DEFAULT_TYPE_ATTRIBUTES
+#define TARGET_SET_DEFAULT_TYPE_ATTRIBUTES darwin_set_default_type_attributes
+/* APPLE LOCAL end mainline */

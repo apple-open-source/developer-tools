@@ -4,8 +4,7 @@
 /* { dg-do run } */
 /* { dg-options "-malign-mac68k -DSIZE=10" } */
 
-/* dg-skip-if would be better, should be in the next merge after 2004-01.  */
-/* { dg-xfail-if "" { powerpc*-*-darwin* } { "-m64" } { "" } } */
+/* { dg-skip-if "" { powerpc*-*-darwin* } { "-m64" } { "" } } */
 
 /*
  * GCC alignment test for command line options for setting alignment modes.

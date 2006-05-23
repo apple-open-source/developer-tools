@@ -1,5 +1,5 @@
 /* simple.c -- BFD simple client routines
-   Copyright 2002, 2003
+   Copyright 2002, 2003, 2004, 2005
    Free Software Foundation, Inc.
    Contributed by MontaVista Software, Inc.
 
@@ -17,7 +17,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #include "bfd.h"
 #include "sysdep.h"
@@ -48,6 +48,7 @@ simple_dummy_undefined_symbol (struct bfd_link_info *link_info ATTRIBUTE_UNUSED,
 
 static bfd_boolean
 simple_dummy_reloc_overflow (struct bfd_link_info *link_info ATTRIBUTE_UNUSED,
+			     struct bfd_link_hash_entry *entry ATTRIBUTE_UNUSED,
 			     const char *name ATTRIBUTE_UNUSED,
 			     const char *reloc_name ATTRIBUTE_UNUSED,
 			     bfd_vma addend ATTRIBUTE_UNUSED,
@@ -78,6 +79,24 @@ simple_dummy_unattached_reloc (struct bfd_link_info *link_info ATTRIBUTE_UNUSED,
   return TRUE;
 }
 
+static bfd_boolean
+simple_dummy_multiple_definition (struct bfd_link_info *link_info ATTRIBUTE_UNUSED,
+				  const char *name ATTRIBUTE_UNUSED,
+				  bfd *obfd ATTRIBUTE_UNUSED,
+				  asection *osec ATTRIBUTE_UNUSED,
+				  bfd_vma oval ATTRIBUTE_UNUSED,
+				  bfd *nbfd ATTRIBUTE_UNUSED,
+				  asection *nsec ATTRIBUTE_UNUSED,
+				  bfd_vma nval ATTRIBUTE_UNUSED)
+{
+  return TRUE;
+}
+
+static void
+simple_dummy_einfo (const char *fmt ATTRIBUTE_UNUSED, ...)
+{
+}
+
 struct saved_output_info
 {
   bfd_vma offset;
@@ -92,8 +111,12 @@ simple_save_output_info (bfd *abfd ATTRIBUTE_UNUSED,
   struct saved_output_info *output_info = ptr;
   output_info[section->index].offset = section->output_offset;
   output_info[section->index].section = section->output_section;
-  section->output_offset = 0;
-  section->output_section = section;
+  if ((section->flags & SEC_DEBUGGING) != 0
+      || section->output_section == NULL)
+    {
+      section->output_offset = 0;
+      section->output_section = section;
+    }
 }
 
 static void
@@ -117,12 +140,9 @@ SYNOPSIS
 DESCRIPTION
 	Returns the relocated contents of section @var{sec}.  The symbols in
 	@var{symbol_table} will be used, or the symbols from @var{abfd} if
-	@var{symbol_table} is NULL.  The output offsets for all sections will
+	@var{symbol_table} is NULL.  The output offsets for debug sections will
 	be temporarily reset to 0.  The result will be stored at @var{outbuf}
 	or allocated with @code{bfd_malloc} if @var{outbuf} is @code{NULL}.
-
-	Generally all sections in @var{abfd} should have their
-	@code{output_section} pointing back to the original section.
 
 	Returns @code{NULL} on a fatal error; ignores errors applying
 	particular relocations.
@@ -140,42 +160,21 @@ bfd_simple_get_relocated_section_contents (bfd *abfd,
   bfd_byte *contents, *data;
   int storage_needed;
   void *saved_offsets;
-  bfd_boolean saved_reloc_done = sec->reloc_done;
-
-#undef RETURN
-#define RETURN(x)				\
-  do						\
-    {						\
-      sec->reloc_done = saved_reloc_done;	\
-      return (x);				\
-    }						\
-  while (0)
-
-  /* Foul hack to prevent bfd_section_size aborts.  The reloc_done flag
-     only controls that macro (and the related size macros), selecting
-     between _raw_size and _cooked_size.  We may be called with relocation
-     done or not, so we need to save the done-flag and mark the section as
-     not relocated.
-
-     Debug sections won't change size while we're only relocating.  There
-     may be trouble here someday if it tries to run relaxation
-     unexpectedly, so make sure.  */
-  BFD_ASSERT (sec->_raw_size == sec->_cooked_size);
-  sec->reloc_done = 0;
 
   if (! (sec->flags & SEC_RELOC))
     {
-      bfd_size_type size = bfd_section_size (abfd, sec);
+      bfd_size_type amt = sec->rawsize > sec->size ? sec->rawsize : sec->size;
+      bfd_size_type size = sec->rawsize ? sec->rawsize : sec->size;
 
       if (outbuf == NULL)
-	contents = bfd_malloc (size);
+	contents = bfd_malloc (amt);
       else
 	contents = outbuf;
 
       if (contents)
 	bfd_get_section_contents (abfd, sec, contents, 0, size);
 
-      RETURN (contents);
+      return contents;
     }
 
   /* In order to use bfd_get_relocated_section_contents, we need
@@ -192,20 +191,22 @@ bfd_simple_get_relocated_section_contents (bfd *abfd,
   callbacks.reloc_overflow = simple_dummy_reloc_overflow;
   callbacks.reloc_dangerous = simple_dummy_reloc_dangerous;
   callbacks.unattached_reloc = simple_dummy_unattached_reloc;
+  callbacks.multiple_definition = simple_dummy_multiple_definition;
+  callbacks.einfo = simple_dummy_einfo;
 
   memset (&link_order, 0, sizeof (link_order));
   link_order.next = NULL;
   link_order.type = bfd_indirect_link_order;
   link_order.offset = 0;
-  link_order.size = bfd_section_size (abfd, sec);
+  link_order.size = sec->size;
   link_order.u.indirect.section = sec;
 
   data = NULL;
   if (outbuf == NULL)
     {
-      data = bfd_malloc (bfd_section_size (abfd, sec));
+      data = bfd_malloc (sec->size);
       if (data == NULL)
-	RETURN (NULL);
+	return NULL;
       outbuf = data;
     }
 
@@ -224,7 +225,7 @@ bfd_simple_get_relocated_section_contents (bfd *abfd,
     {
       if (data)
 	free (data);
-      RETURN (NULL);
+      return NULL;
     }
   bfd_map_over_sections (abfd, simple_save_output_info, saved_offsets);
 
@@ -248,24 +249,9 @@ bfd_simple_get_relocated_section_contents (bfd *abfd,
   if (contents == NULL && data != NULL)
     free (data);
 
-#if 0
-  /* NOTE: cagney/2003-04-05: This free, which was introduced on
-     2003-03-31 to stop a memory leak, caused a memory corruption
-     between GDB and BFD.  The problem, which is stabs specific, can
-     be identified by a bunch of failures in relocate.exp vis:
-
-       gdb.base/relocate.exp: get address of static_bar
-
-     Details of the problem can be found on the binutils@ mailing
-     list, see the discussion thread: "gdb.mi/mi-cli.exp failures".  */
-  if (storage_needed != 0)
-    free (symbol_table);
-#endif
-
   bfd_map_over_sections (abfd, simple_restore_output_info, saved_offsets);
   free (saved_offsets);
 
   _bfd_generic_link_hash_table_free (link_info.hash);
-
-  RETURN (contents);
+  return contents;
 }

@@ -1738,11 +1738,12 @@ build_array_ref (tree array, tree index)
     return error_mark_node;
 
   /* APPLE LOCAL begin CW asm blocks */
-  if (inside_cw_asm_block)
+  if (inside_iasm_block)
     {
       if (TREE_CODE (array) == BRACKET_EXPR
-	  || TREE_CODE (index) == IDENTIFIER_NODE)
-	return cw_build_bracket (array, index);
+	  || TREE_CODE (index) == IDENTIFIER_NODE
+	  || TREE_TYPE (index) == NULL_TREE)
+	return iasm_build_bracket (array, index);
     }
   /* APPLE LOCAL end CW asm blocks */
 
@@ -1877,7 +1878,7 @@ build_external_ref (tree id, int fun)
      also handy to assume undeclared names as labels, although it
      would be better to have a second pass and complain about names in
      the block that are not labels.  */
-  if (inside_cw_asm_block)
+  if (inside_iasm_block)
     {
       if (decl)
 	{
@@ -1886,7 +1887,7 @@ build_external_ref (tree id, int fun)
 	  /* Locals and parms just need to be left alone for now.  */
 	}
       else
-	return cw_do_id (id);
+	return iasm_do_id (id);
     }
   /* APPLE LOCAL end CW asm blocks */
 
@@ -2421,7 +2422,7 @@ parser_build_binary_op (enum tree_code code, struct c_expr arg1,
   enum tree_code code2 = arg2.original_code;
 
   /* APPLE LOCAL begin CW asm blocks */
-  if (inside_cw_asm_block)
+  if (inside_iasm_block)
     {
       if (TREE_CODE (arg1.value) == IDENTIFIER_NODE
 	  || TREE_CODE (arg2.value) == IDENTIFIER_NODE
@@ -6835,15 +6836,15 @@ c_finish_goto_ptr (tree expr)
 }
 
 /* APPLE LOCAL begin CW asm blocks */
-#ifndef CW_SEE_OPCODE
-#define CW_SEE_OPCODE(YYCHAR, T) YYCHAR
+#ifndef IASM_SEE_OPCODE
+#define IASM_SEE_OPCODE(YYCHAR, T) YYCHAR
 #endif
 #define TYPESPEC 1
 #define IDENTIFIER 2
 int
-cw_asm_typename_or_reserved (tree value)
+iasm_typename_or_reserved (tree value)
 {
-  if (CW_SEE_OPCODE (TYPESPEC, value) == IDENTIFIER)
+  if (IASM_SEE_OPCODE (TYPESPEC, value) == IDENTIFIER)
     return 0;
 
   return (C_IS_RESERVED_WORD (value));
@@ -6854,7 +6855,7 @@ cw_asm_typename_or_reserved (tree value)
    through the usual process.  */
 
 tree
-cw_asm_c_build_component_ref (tree typename, tree component)
+iasm_c_build_component_ref (tree typename, tree component)
 {
   tree val, type, fake_datum;
   enum tree_code code;
@@ -6869,6 +6870,13 @@ cw_asm_c_build_component_ref (tree typename, tree component)
   else if (TREE_CODE (typename) == LABEL_DECL)
     typename = DECL_NAME (typename);
 
+  /* We allow [eax].16 to refer to [eax + 16].  */
+  if (TREE_CODE (component) == INTEGER_CST
+      && TREE_CODE (typename) == BRACKET_EXPR)
+    {
+      return iasm_build_bracket (typename, component);
+    }
+
   val = lookup_name (typename);
   if (val)
     {
@@ -6876,12 +6884,6 @@ cw_asm_c_build_component_ref (tree typename, tree component)
     }
   else
     {
-      /* We allow [eax].16 to refer to [eax + 16].  */
-      if (TREE_CODE (component) == INTEGER_CST
-	  && TREE_CODE (typename) == BRACKET_EXPR)
-	{
-	  return cw_build_bracket (typename, component);
-	}
       /* A structure tag will have been assumed to be a label; pick
 	 out the original name.  */
       if (strncmp ("LASM", IDENTIFIER_POINTER (typename), 4) == 0)

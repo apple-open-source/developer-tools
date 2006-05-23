@@ -1,5 +1,5 @@
-/* APPLE LOCAL  nested functions */
-/* { dg-xfail-if "" { "*-*-darwin*" } { "*" } { "" } } */
+/* APPLE LOCAL testsuite nested functions */
+/* { dg-options "-fnested-functions" } */
 int
 sub1 (char *p, int i)
 {

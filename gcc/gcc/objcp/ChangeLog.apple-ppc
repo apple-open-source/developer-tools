@@ -1,3 +1,10 @@
+2005-10-12  Fariborz Jahanian <fjahanian@apple.com>
+
+        Radar 4291785
+
+	* objcp-decl.c (objcp_finish_struct): Call objc_detect_field_duplicates for
+	ivar duplicate detection.
+
 2005-06-30 Devang Patel  <dpatel@apple.com>
 
 	* lang-specs.h: While making PCH, invoke as if -fsave-repository

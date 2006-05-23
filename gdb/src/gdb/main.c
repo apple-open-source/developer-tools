@@ -1,8 +1,8 @@
 /* Top level stuff for GDB, the GNU debugger.
 
    Copyright 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-   1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004 Free Software
-   Foundation, Inc.
+   1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -28,6 +28,7 @@
 #include "symfile.h"
 #include "gdbcore.h"
 
+#include "exceptions.h"
 #include "getopt.h"
 
 #include <sys/types.h>
@@ -49,12 +50,6 @@ int display_time;
 
 int display_space;
 
-/* Whether this is the async version or not.  The async version is
-   invoked on the command line with the -nw --async options.  In this
-   version, the usual command_loop is substituted by and event loop which
-   processes UI events asynchronously. */
-int event_loop_p = 1;
-
 /* The selected interpreter.  This will be used as a set command
    variable, so it should always be malloc'ed - since
    do_setshow_command will free it. */
@@ -73,15 +68,12 @@ struct ui_file *gdb_stdout;
 struct ui_file *gdb_stderr;
 struct ui_file *gdb_stdlog;
 struct ui_file *gdb_stdin;
+/* APPLE LOCAL gdb_null */
 struct ui_file *gdb_null;
 /* target IO streams */
 struct ui_file *gdb_stdtargin;
 struct ui_file *gdb_stdtarg;
 struct ui_file *gdb_stdtargerr;
-
-/* Used to initialize error() - defined in utils.c */
-
-extern void error_init (void);
 
 /* Whether to enable writing into executable and core files */
 extern int write_files;
@@ -152,8 +144,9 @@ captured_main (void *data)
   /* Number of elements used.  */
   int ndir;
 
+  /* APPLE LOCAL globalbuf */
   struct stat homebuf, cwdbuf, globalbuf;
-  char *homedir, *homeinit;
+  char *homedir;
 
   int i;
 
@@ -168,6 +161,7 @@ captured_main (void *data)
   bindtextdomain (PACKAGE, LOCALEDIR);
   textdomain (PACKAGE);
 
+  /* APPLE LOCAL memory */
 #ifdef USE_MMALLOC
   init_mmalloc_default_pool ((PTR) NULL);
 #endif
@@ -200,6 +194,7 @@ captured_main (void *data)
   getcwd (gdb_dirbuf, sizeof (gdb_dirbuf));
   current_directory = gdb_dirbuf;
 
+  /* APPLE LOCAL gdb_null */
   gdb_null = ui_file_new ();
   gdb_stdout = stdio_fileopen (stdout);
   gdb_stderr = stdio_fileopen (stderr);
@@ -208,9 +203,6 @@ captured_main (void *data)
   gdb_stdin = stdio_fileopen (stdin);
   gdb_stdtargerr = gdb_stderr;	/* for moment */
   gdb_stdtargin = gdb_stdin;	/* for moment */
-
-  /* initialize error() */
-  error_init ();
 
   /* Set the sysroot path.  */
 #ifdef TARGET_SYSTEM_ROOT_RELOCATABLE
@@ -263,8 +255,6 @@ captured_main (void *data)
     };
     static struct option long_options[] =
     {
-      {"async", no_argument, &event_loop_p, 1},
-      {"noasync", no_argument, &event_loop_p, 0},
 #if defined(TUI)
       {"tui", no_argument, 0, OPT_TUI},
 #endif
@@ -321,6 +311,7 @@ captured_main (void *data)
       {"statistics", no_argument, 0, OPT_STATISTICS},
       {"write", no_argument, &write_files, 1},
       {"args", no_argument, &set_args, 1},
+     {"l", required_argument, 0, 'l'},
       {0, no_argument, 0, 0}
     };
 
@@ -537,7 +528,7 @@ extern int gdbtk_test (char *);
   }
 
   /* Initialize all files.  Give the interpreter a chance to take
-     control of the console via the init_ui_hook()) */
+     control of the console via the deprecated_init_ui_hook ().  */
   gdb_init (argv[0]);
 
   /* Do these (and anything which might call wrap_here or *_filtered)
@@ -566,18 +557,22 @@ extern int gdbtk_test (char *);
      it isn't encapsulated in MI output.  */
   if (!quiet && strcmp (interpreter_p, INTERP_MI1) == 0)
     {
+      /* APPLE LOCAL begin don't print dots */
       /* Print all the junk at the top. */
       print_gdb_version (gdb_stdout);
       printf_filtered ("\n");
+      /* APPLE LOCAL end don't print dots */
       wrap_here ("");
       gdb_flush (gdb_stdout);	/* Force to screen during slow operations */
     }
 
 
+  /* APPLE LOCAL begin */
   if (state_change_hook)
     {
       state_change_hook (STATE_ACTIVE);
     }
+  /* APPLE LOCAL end */
   
   /* Install the default UI.  All the interpreters should have had a
      look at things by now.  Initialize the default interpreter. */
@@ -586,8 +581,9 @@ extern int gdbtk_test (char *);
     /* Find it.  */
     struct interp *interp = interp_lookup (interpreter_p);
     if (interp == NULL)
-      error ("Interpreter `%s' unrecognized", interpreter_p);
+      error (_("Interpreter `%s' unrecognized"), interpreter_p);
     /* Install it.  */
+    /* APPLE LOCAL clarity */
     if (interp_set (interp) == NULL)
       {
         fprintf_unfiltered (gdb_stderr,
@@ -618,13 +614,15 @@ extern int gdbtk_test (char *);
   /* We may get more than one warning, don't double space all of them... */
   warning_pre_print = _("\nwarning: ");
 
+  /* APPLE LOCAL begin move inits up */
   /* Make sure that they are zero in case one of them fails (this
      guarantees that they won't match if either exists).  */
   
-  memset (&globalbuf, 0, sizeof (struct stat));
   memset (&homebuf, 0, sizeof (struct stat));
   memset (&cwdbuf, 0, sizeof (struct stat));
-  
+  /* APPLE LOCAL end move inits up */
+  /* APPLE LOCAL begin global gdbinit */
+  memset (&globalbuf, 0, sizeof (struct stat));
   stat (gdbinit_global, &globalbuf);
   if (!inhibit_gdbinit)
     {
@@ -632,6 +630,7 @@ extern int gdbtk_test (char *);
 	 source_file (gdbinit_global, 0);
     }
   do_cleanups (ALL_CLEANUPS);
+  /* APPLE LOCAL end global gdbinit */
  
   /* Read and execute $HOME/.gdbinit file, if it exists.  This is done
      *before* all the command line arguments are processed; it sets
@@ -640,13 +639,11 @@ extern int gdbtk_test (char *);
   homedir = getenv ("HOME");
   if (homedir)
     {
-      homeinit = (char *) alloca (strlen (homedir) +
-				  strlen (gdbinit) + 10);
-      strcpy (homeinit, homedir);
-      strcat (homeinit, "/");
-      strcat (homeinit, gdbinit);
+      char *homeinit = xstrprintf ("%s/%s", homedir, gdbinit);
 
+      /* APPLE LOCAL move inits up */
       stat (homeinit, &homebuf);
+      /* APPLE LOCAL gdbinit */
       if (!inhibit_gdbinit)
 	if ((globalbuf.st_dev != homebuf.st_dev) || (globalbuf.st_ino != homebuf.st_ino))
 	  {
@@ -682,10 +679,12 @@ extern int gdbtk_test (char *);
 	catch_command_errors (symbol_file_add_main, symarg, 0, RETURN_MASK_ALL);
     }
 
-  if (state_change_hook && (symarg != NULL))
+  /* APPLE LOCAL begin */
+  if (state_change_hook && symarg != NULL)
     {
       state_change_hook (STATE_INFERIOR_LOADED);
     }
+  /* APPLE LOCAL end */
   
   /* After the symbol file has been read, print a newline to get us
      beyond the copyright line...  But errors should still set off
@@ -775,6 +774,13 @@ extern int gdbtk_test (char *);
 
   if (batch)
     {
+      if (attach_flag)
+	/* Either there was a problem executing the command in the
+	   batch file aborted early, or the batch file forgot to do an
+	   explicit detach.  Explicitly detach the inferior ensuring
+	   that there are no zombies.  */
+	target_detach (NULL, 0);
+      
       /* We have hit the end of the batch file.  */
       exit (0);
     }
@@ -814,13 +820,13 @@ extern int gdbtk_test (char *);
       if (!SET_TOP_LEVEL ())
 	{
 	  do_cleanups (ALL_CLEANUPS);	/* Do complete cleanup */
-	  /* GUIs generally have their own command loop, mainloop, or whatever.
-	     This is a good place to gain control because many error
-	     conditions will end up here via longjmp(). */
-	  if (command_loop_hook)
-	    command_loop_hook ();
+	  /* GUIs generally have their own command loop, mainloop, or
+	     whatever.  This is a good place to gain control because
+	     many error conditions will end up here via longjmp().  */
+	  if (deprecated_command_loop_hook)
+	    deprecated_command_loop_hook ();
 	  else
-	    command_loop ();
+	    deprecated_command_loop ();
 	  quit_command ((char *) 0, instream == stdin);
 	}
     }
@@ -873,9 +879,6 @@ Options:\n\n\
   --args             Arguments after executable-file are passed to inferior\n\
 "), stream);
   fputs_unfiltered (_("\
-  --[no]async        Enable (disable) asynchronous version of CLI\n\
-"), stream);
-  fputs_unfiltered (_("\
   -b BAUDRATE        Set serial port baud rate used for remote debugging.\n\
   --batch            Exit after processing options.\n\
   --cd=DIR           Change current directory to DIR.\n\
@@ -896,6 +899,7 @@ Options:\n\n\
                      Select a specific interpreter / user interface\n\
 "), stream);
   fputs_unfiltered (_("\
+  -l TIMEOUT         Set timeout in seconds for remote debugging.\n\
   --mapped           Use mapped symbol files if supported on this system.\n\
   --nw		     Do not use a window interface.\n\
   --nx               Do not read "), stream);
@@ -926,3 +930,19 @@ GDB manual (available as on-line info or a printed manual).\n\
 Report bugs to \"bug-gdb@gnu.org\".\
 "), stream);
 }
+
+#if 0
+#include "cli/cli-cmds.h"
+#include "cli/cli-decode.h"
+
+struct cmd_list_element *
+add_set_cmd (char *name,
+	     enum command_class class,
+	     var_types var_type,
+	     void *var,
+	     char *doc,
+	     struct cmd_list_element **list)
+{
+  return deprecated_add_set_cmd (name, class, var_type, var, doc, list);
+}
+#endif

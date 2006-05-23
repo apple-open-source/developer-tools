@@ -1,12 +1,10 @@
 /WXWIN_OS_DESCRIPTION/s/\(Darwin [^ ]*\) .*/\1 Power Macintosh"/
 /WORDS_BIGENDIAN/c
-#if defined(__ppc__) || defined(__ppc64__)
+#ifdef __BIG_ENDIAN__
 #define WORDS_BIGENDIAN 1
-#elif defined(__i386__)
+#else /* !__BIG_ENDIAN__ */
 /* #undef WORDS_BIGENDIAN */
-#else
-#error architecture not supported */
-#endif
+#endif /* __BIG_ENDIAN__ */
 .
 /__POWERPC__/c
 #if defined(__ppc__) || defined(__ppc64__)
@@ -33,31 +31,25 @@
 #define HAVE_VSSCANF 1
 .
 /SIZEOF_VOID_P/c
-#if defined(__ppc__) || defined(__i386__)
-#define SIZEOF_VOID_P 4
-#elif defined(__ppc64__)
+#ifdef __LP64__
 #define SIZEOF_VOID_P 8
-#else
-#error architecture not supported */
-#endif
+#else /* !__LP64__ */
+#define SIZEOF_VOID_P 4
+#endif /* __LP64__ */
 .
 /SIZEOF_LONG/c
-#if defined(__ppc__) || defined(__i386__)
-#define SIZEOF_LONG 4
-#elif defined(__ppc64__)
+#ifdef __LP64__
 #define SIZEOF_LONG 8
-#else
-#error architecture not supported */
-#endif
+#else /* !__LP64__ */
+#define SIZEOF_LONG 4
+#endif /* __LP64__ */
 .
 /SIZEOF_SIZE_T/c
-#if defined(__ppc__) || defined(__i386__)
-#define SIZEOF_SIZE_T 4
-#elif defined(__ppc64__)
+#ifdef __LP64__
 #define SIZEOF_SIZE_T 8
-#else
-#error architecture not supported */
-#endif
+#else /* !__LP64__ */
+#define SIZEOF_SIZE_T 4
+#endif /* __LP64__ */
 .
 /HAVE_DLOPEN/c
 #define HAVE_DLOPEN 1

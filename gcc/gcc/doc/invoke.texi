@@ -196,6 +196,8 @@ in the following sections.
 -fconstant-cfstrings (APPLE ONLY) @gol
 @c APPLE LOCAL non lvalue assign
 -fnon-lvalue-assign (APPLE ONLY) @gol
+@c APPLE LOCAL nested functions 4357979 */
+-fno-nested-functions @gol
 @c APPLE LOCAL pch distcc --mrs
 -fpch-preprocess (APPLE ONLY) @gol
 -fsigned-bitfields  -fsigned-char @gol
@@ -229,6 +231,8 @@ in the following sections.
 -frepo  -fno-rtti  -fstats  -ftemplate-depth-@var{n} @gol
 -fno-threadsafe-statics -fuse-cxa-atexit  -fno-weak  -nostdinc++ @gol
 -fno-default-inline  -fvisibility-inlines-hidden @gol
+@c APPLE LOCAL ms tinfo compat 4230099
+-fvisibility-ms-compat
 -Wabi  -Wctor-dtor-privacy @gol
 -Wnon-virtual-dtor  -Wreorder @gol
 -Weffc++  -Wno-deprecated  -Wstrict-null-sentinel @gol
@@ -372,6 +376,8 @@ Objective-C and Objective-C++ Dialects}.
 -fno-inline  -fno-math-errno  -fno-peephole  -fno-peephole2 @gol
 -funsafe-math-optimizations  -ffinite-math-only @gol
 -fno-trapping-math  -fno-zero-initialized-in-bss @gol
+@c APPLE LOCAL 4356747 stack realign
+-mstackrealign @gol
 -fomit-frame-pointer  -foptimize-register-move @gol
 -foptimize-sibling-calls  -fprefetch-loop-arrays @gol
 -fprofile-generate -fprofile-use @gol
@@ -1430,6 +1436,13 @@ Allow conditional expressions with mismatched types in the second and
 third arguments.  The value of such an expression is void.  This option
 is not supported for C++.
 
+@c APPLE LOCAL begin nested functions 4357979
+@item -fno-nested-functions
+@opindex fno-nested-functions
+Disable nested functions.  This option is not supported for C++ or
+Objective-C++.  On Darwin, nested functions are disabled by default.
+@c APPLE LOCAL end nested functions 4357979
+
 @c APPLE LOCAL begin pch distcc --mrs
 @item -fpch-preprocess
 @opindex fpch-preprocess
@@ -1438,7 +1451,7 @@ Enable PCH processing even when @option{-E} or @option{-save-temps} is used.
 
 @c APPLE LOCAL begin non lvalue assign
 @item -fnon-lvalue-assign
-@item fnon-lvalue-assign
+@opindex fnon-lvalue-assign
 C and C++ forbid the use of casts and conditional expressions as lvalues, e.g.:
 
 @smallexample
@@ -1738,22 +1751,70 @@ Register destructors for objects with static storage duration with the
 This option is required for fully standards-compliant handling of static
 destructors, but will only work if your C library supports
 @code{__cxa_atexit}.
-@c APPLE LOCAL manual
-This option is not supported on Mac OS X.
+
+@c APPLE LOCAL begin mainline 2006-02-24 4086777
+@item -fno-use-cxa-get-exception-ptr
+@opindex fno-use-cxa-get-exception-ptr
+Don't use the @code{__cxa_get_exception_ptr} runtime routine.  This
+will cause @code{std::uncaught_exception} to be incorrect, but is necessary
+if the runtime routine is not available.
+@c APPLE LOCAL end mainline 2006-02-24 4086777
 
 @item -fvisibility-inlines-hidden
 @opindex fvisibility-inlines-hidden
-Causes all inlined methods to be marked with
+@c APPLE LOCAL begin mainline 2006-04-03 4383613
+This switch declares that the user does not attempt to compare
+pointers to inline methods where the addresses of the two functions
+were taken in different shared objects.
+
+The effect of this is that GCC may, effectively, mark inline methods with
 @code{__attribute__ ((visibility ("hidden")))} so that they do not
 appear in the export table of a DSO and do not require a PLT indirection
 when used within the DSO@.  Enabling this option can have a dramatic effect
 on load and link times of a DSO as it massively reduces the size of the
-dynamic export table when the library makes heavy use of templates.  While
-it can cause bloating through duplication of code within each DSO where
-it is used, often the wastage is less than the considerable space occupied
-by a long symbol name in the export table which is typical when using
-templates and namespaces.  For even more savings, combine with the
-@option{-fvisibility=hidden} switch.
+dynamic export table when the library makes heavy use of templates.
+
+The behaviour of this switch is not quite the same as marking the
+methods as hidden directly.  Normally if there is a class with default
+visibility which has a hidden method, the effect of this is that the
+method must be defined in only one shared object.  This switch does
+not have this restriction.
+
+You may mark a method as having a visibility explicitly to negate the
+effect of the switch for that method.  For example, if you do want to
+compare pointers to a particular inline method, you might mark it as
+having default visibility.
+
+@c APPLE LOCAL end mainline 2006-04-03 4383613
+@c APPLE LOCAL begin ms tinfo compat 4230099
+@item -fvisibility-ms-compat
+@opindex fvisibility-ms-compat
+This flag attempts to use visibility settings to make GCC's C++
+linkage model compatible with that of Microsoft Visual Studio.
+
+The flag makes these changes to GCC's linkage model:
+
+1. It sets the default visibility to 'hidden', like 
+@option{-fvisibility=hidden}.
+2. Types, but not their members, are not hidden by default.
+3. The One Definition Rule is relaxed for types without explicit
+visibility specifications which are defined in more than one different
+shared object: those declarations are permitted if they would have
+been permitted when this option was not used.
+
+This option is discouraged, rather, it is preferable for types to be
+explicitly exported as desired on a per-class basis.  Unfortunately
+because Visual Studio can't compare two different hidden types as
+unequal for the purposes of type_info and exception handling, users
+are able to write code that relies upon this behavior.
+
+Among the consequences of these changes are that static data members
+of the same type with the same name but defined in different shared
+objects will be different, so changing one will not change the other;
+and that pointers to function members defined in different shared
+objects will not compare equal.  When this flag is given, it is a
+violation of the ODR to define types with the same name differently.
+@c APPLE LOCAL end ms tinfo compat 4230099
 
 @item -fno-weak
 @opindex fno-weak
@@ -2232,8 +2293,8 @@ to be unlocked properly.
 @item -fobjc-gc
 @opindex fobjc-gc
 Enable garbage collection (GC) for Objective-C objects.  The resulting binary
-can only be used on Mac OS X 10.5 (Leopard) and later systems, due to additional
-functionality needed in the (NeXT) Objective-C runtime.
+requires additional runtime support which is not present in any released
+version of Mac OS X.
 
 When the @option{-fobjc-gc} switch is specified, the compiler will replace
 assignments to instance variables (ivars) and to certain kinds of pointers to
@@ -4629,10 +4690,8 @@ optimized for G5 will not run on PPC7450. To optimize for PPC7450, add
 @option{-mcpu=7450} on command line.
 
 @option{-fast} currently enables the following optimization flags (for G5 and PPC7450). 
-These flags may change in the future. You cannot override any of these options if you use 
-@option{-fast} except by setting @option{-mcpu=7450}. 
-
-To build shared libraries with @option{-fast}, specify @option{-fPIC} on command line. 
+These flags may change in the future.  You cannot override any of these options if you use 
+@option{-fast} except by setting @option{-mcpu=7450} (or @option{-fPIC}, see below). 
 
 @gccoptlist{-O3
 -falign-loops-max-skip=15
@@ -4640,7 +4699,7 @@ To build shared libraries with @option{-fast}, specify @option{-fPIC} on command
 -falign-loops=16
 -falign-jumps=16
 -falign-functions=16
--malign-natural (except when -fastf is speified)
+-malign-natural (except when -fastf is specified)
 -ffast-math
 -funroll-loops
 -ftree-loop-linear
@@ -4651,6 +4710,10 @@ To build shared libraries with @option{-fast}, specify @option{-fPIC} on command
 -fsched-interblock
 -fgcse-sm
 -mpowerpc64}
+
+To build shared libraries with @option{-fast}, specify @option{-fPIC}
+on the command line as @option{-fast} turns on @option{-mdynamic-no-pic}
+otherwise.
 
 Important notes: @option{-ffast-math} results in code that is not necessarily 
 IEEE-compliant.  @option{-fstrict-aliasing} is highly likely break 
@@ -5281,6 +5344,10 @@ at @option{-O} and higher.
 @item -ftree-loop-linear
 Perform linear loop transformations on tree.  This flag can improve cache
 performance and allow further loop optimizations to take place.
+@c APPLE LOCAL begin buggy opt 4420531 3950497 3984937 4013797
+This flag is known to have bugs that cause incorrect code to be generated in
+some rare cases. Note this flag is included in -fast.
+@c APPLE LOCAL end buggy opt 4420531 3950497 3984937 4013797
 
 @item -ftree-loop-im
 Perform loop invariant motion on trees.  This pass moves only invariants that
@@ -5356,8 +5423,8 @@ the loop is entered.  This usually makes programs run more slowly.
 @opindex -fsplit-ivs-in-unroller
 Enables expressing of values of induction variables in later iterations
 of the unrolled loop using the value in the first iteration.  This breaks
-long dependency chains, thus improving efficiency of the scheduling passes
-(for best results, @option{-fweb} should be used as well).
+@c APPLE LOCAL 3791237 mainline
+long dependency chains, thus improving efficiency of the scheduling passes.
 
 Combination of @option{-fweb} and CSE is often sufficient to obtain the
 same effect.  However in cases the loop body is more complicated than
@@ -5619,10 +5686,8 @@ passes, such as CSE, loop optimizer and trivial dead code remover.  It can,
 however, make debugging impossible, since variables will no longer stay in a
 ``home register''.
 
-@c APPLE LOCAL 4231761 -Oz
-Enabled at levels @option{-O2}, @option{-O3}, @option{-Os}, and @option{-Oz} (APPLE ONLY)
-on targets where the default format for debugging information supports
-variable tracking.
+@c APPLE LOCAL 3791237 mainline
+Enabled by default with @option{-funroll-loops}.
 
 @item -fno-cprop-registers
 @opindex fno-cprop-registers
@@ -5891,9 +5956,12 @@ Enabled with @option{-fprofile-use}.
 @opindex funroll-loops
 Unroll loops whose number of iterations can be determined at compile time or
 upon entry to the loop.  @option{-funroll-loops} implies
-@option{-frerun-cse-after-loop}.  It also turns on complete loop peeling
-(i.e.@: complete removal of loops with small constant number of iterations).
-This option makes code larger, and may or may not make it run faster.
+@c APPLE LOCAL begin 3791237
+@option{-frerun-cse-after-loop} and @option{-fweb}.
+It also turns on complete loop peeling (i.e.@: complete removal of loops with
+small constant number of iterations).  This option makes code larger, and may
+or may not make it run faster.
+@c APPLE LOCAL end 3791237
 
 Enabled with @option{-fprofile-use}.
 
@@ -8103,7 +8171,13 @@ altered by adding a zero word at the end of every vtable.
 @option{-fno-exceptions} and @option{-static} must also be used with
 this flag.  @option{-findirect-virtual-calls} and
 @option{-fterminated-vtables} are accepted for backwards compatibility
-but will be removed in the future.  (APPLE ONLY)
+but will be removed in the future.
+On Intel x86-based Apple platforms, the kernel and its extensions run
+with a four-byte aligned stack
+(@option{-mpreferred-stack-boundary=2}); function prologues inside
+kernel extentions won't keep the usual 16-byte alignment required
+everywhere else in OS X.
+(APPLE ONLY)
 @c APPLE LOCAL end KEXT
 
 @item -all_load
@@ -9301,8 +9375,11 @@ functional units well resulting in instable performance.
 
 @item -masm=@var{dialect}
 @opindex masm=@var{dialect}
-Output asm instructions using selected @var{dialect}.  Supported choices are
-@samp{intel} or @samp{att} (the default one).
+@c APPLE LOCAL begin mainline 4298982
+Output asm instructions using selected @var{dialect}.  Supported
+choices are @samp{intel} or @samp{att} (the default one).  Darwin does
+not support @samp{intel}.
+@c APPLE LOCAL end mainline 4298982
 
 @item -mieee-fp
 @itemx -mno-ieee-fp
@@ -9438,6 +9515,22 @@ function by using the function attribute @samp{regparm}.
 @var{num} is nonzero, then you must build all modules with the same
 value, including any libraries.  This includes the system libraries and
 startup modules.
+
+@c APPLE LOCAL begin 4356747 stack realign
+@item -mstackrealign
+@opindex mstackrealign
+Realign the stack at entry.  On the Intel x86, the
+@option{-mstackrealign} option will generate an alternate
+prologue/epilogue that realigns the runtime stack.  This supports
+mixing legacy codes that keep a 4-byte aligned stack with modern codes
+that keep a 16-byte stack for SSE compatibility.  The alternate
+prologue and epilogue are slower and bigger than the regular ones, and
+they require one dedicated register for the entire function.  This
+also lowers the number of registers available if used in conjunction
+with the @code{regparm} attribute.  Nested functions encountered while
+@option{-mstackrealign} is on will generate warnings, and they will
+not realign the stack when called.
+@c APPLE LOCAL end 4356747 stack realign
 
 @item -mpreferred-stack-boundary=@var{num}
 @opindex mpreferred-stack-boundary
@@ -11726,6 +11819,12 @@ names in the assembly language output using symbolic forms.
 @itemx -mno-longcall
 @opindex mlongcall
 @opindex mno-longcall
+@c APPLE LOCAL begin 4222119
+@item -mlong-branch
+@itemx -mno-long-branch
+@opindex mlong-branch
+@opindex mno-long-branch
+@c APPLE LOCAL end 4222119
 Default to making all function calls indirectly, using a register, so
 that functions which reside further than 32 megabytes (33,554,432
 bytes) from the current location can be called.  This setting can be
@@ -11748,9 +11847,12 @@ island''.  The ``branch island'' is appended to the body of the
 calling function; it computes the full 32-bit address of the callee
 and jumps to it.
 
-On Mach-O (Darwin) systems, this option directs the compiler emit to
-the glue for every direct call, and the Darwin linker decides whether
-to use or discard it.
+@c APPLE LOCAL begin 4222119
+On Mach-O (Darwin) systems, @option{-mlongcall} directs the compiler
+emit to the glue for every direct call, and the Darwin linker decides
+whether to use or discard it.  @option{-mlong-branch} is a synonym for
+@option{-mlongcall}.
+@c APPLE LOCAL end 4222119
 
 In the future, we may cause GCC to ignore all longcall specifications
 when the linker is known to generate glue.
@@ -13205,6 +13307,14 @@ as hidden as so to avoid PLT indirection overheads---making this
 abundantly clear also aids readability and self-documentation of the code.
 Note that due to ISO C++ specification requirements, operator new and
 operator delete must always be of default visibility.
+
+@c APPLE LOCAL begin mainline 2006-04-03 4383613
+Be aware that headers from outside your project, in particular system
+headers and headers from any other library you use, may not be
+expecting to be compiled with visibility other than the default.  You
+may need to explicitly say @samp{#pragma GCC visibility push(default)}
+before including any such headers.
+@c APPLE LOCAL end mainline 2006-04-03 4383613
 
 An overview of these techniques, their benefits and how to use them
 is at @w{@uref{http://www.nedprod.com/programs/gccvisibility.html}}.

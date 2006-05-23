@@ -3258,6 +3258,11 @@ output_function_exception_table (void)
   targetm.asm_out.exception_section ();
 #endif
 
+  /* APPLE LOCAL begin mainline */
+  /* If the target wants a label to begin the table, emit it here.  */
+  targetm.asm_out.except_table_label (asm_out_file);
+
+  /* APPLE LOCAL end mainline */
   have_tt_data = (VARRAY_ACTIVE_SIZE (cfun->eh->ttype_data) > 0
 		  || VARRAY_ACTIVE_SIZE (cfun->eh->ehspec_data) > 0);
 

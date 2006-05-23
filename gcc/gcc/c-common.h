@@ -589,6 +589,13 @@ extern int flag_working_directory;
 
 extern int flag_use_cxa_atexit;
 
+/* APPLE LOCAL begin mainline 2006-02-24 4086777 */
+/* Nonzero to use __cxa_get_exception_ptr in the C++ exception-handling
+   logic.  */
+
+extern int flag_use_cxa_get_exception_ptr;
+
+/* APPLE LOCAL end mainline 2006-02-24 4086777 */
 /* Nonzero means make the default pedwarns warnings instead of errors.
    The value of this flag is ignored if -pedantic is specified.  */
 
@@ -989,9 +996,13 @@ extern void c_parse_error (const char *, enum cpp_ttype, tree);
 extern tree objc_is_class_name (tree);
 extern tree objc_is_object_ptr (tree);
 extern void objc_check_decl (tree);
+/* APPLE LOCAL radar 4281748 */
+extern void objc_check_global_decl (tree);
 extern int objc_is_reserved_word (tree);
 /* APPLE LOCAL 4154928 */
 extern tree objc_common_type (tree, tree);
+/* APPLE LOCAL 4330422 */
+extern tree objc_non_volatilized_type (tree);
 /* APPLE LOCAL begin mainline */
 /* Prototype for 'objc_comptypes' removed.  */
 extern bool objc_compare_types (tree, tree, int, tree);
@@ -1016,6 +1027,10 @@ extern tree objc_build_string_object (tree);
 extern tree objc_get_protocol_qualified_type (tree, tree);
 extern tree objc_get_class_reference (tree);
 extern tree objc_get_class_ivars (tree);
+/* APPLE LOCAL begin radar 4291785 */
+extern tree objc_get_interface_ivars (tree);
+extern void objc_detect_field_duplicates (tree);
+/* APPLE LOCAL end radar 4291785 */
 extern void objc_start_class_interface (tree, tree, tree);
 extern void objc_start_category_interface (tree, tree, tree);
 extern void objc_start_protocol (tree, tree);

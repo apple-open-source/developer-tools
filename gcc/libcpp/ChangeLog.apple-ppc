@@ -1,3 +1,51 @@
+2006-04-25  Mike Stump  <mrs@apple.com>
+
+	Radar 4505741
+	* lex.c: Rename cw_asm_states to iasm_states.
+	Rename cw_asm_in_operands to iasm_in_operands.
+	Rename cw_asm_state to iasm_state.
+	Rename cw_asm_label_follows to iasm_label_follows.
+	Rename flag_cw_asm_blocks to flag_iasm_blocks.
+	* macro.c: Likewise.
+	* makedepend.c: Likewise.	
+
+2006-04-17  Devang Patel  <dpatel@apple.com>
+
+	Radar 4499790
+	* charset.c (cpp_interpret_string): Enable pascal strings for wchars.
+
+2005-12-13  Mike Stump  <mrs@apple.com>
+
+	* Revert 2005-12-07  Devang Patel  <dpatel@apple.com> Radar 4137741
+
+2005-12-09  Mike Stump  <mrs@apple.com>
+
+	Radar 4371958
+	* macro.c (cpp_get_token): Be sure to reset the BOL flag when
+	injecting macro bodies, as we wouldn't want a previous value.
+
+2005-12-07  Devang Patel  <dpatel@apple.com>
+   	    Ziemowit Laski  <zlaski@apple.com>
+
+        Radar 4137741
+        * directives.c (_cpp_do_file_change): If preprocessor
+        defer_file_change_debug_hooks flag is set, synthesize CPP_BINCL
+        and CPP_EINCL tokens.
+        * init.c (cpp_create_reader): Initialize token run (and associated
+        pointers) for storing CPP_EINCL tokens.
+        * internal.h (struct cpp_reader): Add new fields for storing
+        CPP_EINCL tokens.
+        (_cpp_next_tokenrun): Add declaration.
+        * lex.c (next_tokenrun): Make externally visible and rename to
+        _cpp_next_tokenrun().
+        (_cpp_temp_token): Call _cpp_next_tokenrun() instead of
+        next_tokenrun().
+        (_cpp_lex_token): Likewise; return any pending CPP_EINCL tokens
+        before returning token actually read.
+        * include/cpplib.h (TTYPE_TABLE): Define new CPP_BINCL and CPP_EINCL
+        token types, similar to CPP_PRAGMA.
+        (cpp_options): Define new defer_file_change_debug_hooks flag.
+
 2005-08-22  Mike Stump  <mrs@apple.com>
 
 	Radar 4211954

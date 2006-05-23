@@ -63,12 +63,20 @@ segv_handler (int sig ATTRIBUTE_UNUSED,
 	      void *scp)
 {
   ucontext_t *uc = (ucontext_t *)scp;
+/* APPLE LOCAL begin mainline 4.1 2005-12-05 4240962 */
+  sigset_t sigset;
+/* APPLE LOCAL end mainline 4.1 2005-12-05 4240962 */
   unsigned faulting_insn;
 
   /* The fault might have happened when trying to run some instruction, in
      which case the next line will segfault _again_.  Handle this case.  */
   signal (SIGSEGV, segv_crash_handler);
+/* APPLE LOCAL begin mainline 4.1 2005-12-05 4240962 */
+  sigemptyset (&sigset);
+  sigaddset (&sigset, SIGSEGV);
+  sigprocmask (SIG_UNBLOCK, &sigset, NULL);
 
+/* APPLE LOCAL end mainline 4.1 2005-12-05 4240962 */
   faulting_insn = *(unsigned *)uc->uc_mcontext->ss.srr0;
 
   /* Note that this only has to work for GCC, so we don't have to deal

@@ -1,5 +1,5 @@
-/* APPLE LOCAL  nested functions */
-/* { dg-xfail-if "" { "*-*-darwin*" } { "*" } { "" } } */
+/* APPLE LOCAL testsuite nested functions */
+/* { dg-options "-fnested-functions" } */
 I_wacom ()
 {
   char buffer[50], *p;

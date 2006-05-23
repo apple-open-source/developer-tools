@@ -183,6 +183,8 @@ CONSTRAINT(ridbits_fit, RID_LAST_MODIFIER < sizeof(unsigned long) * CHAR_BIT);
 static const struct resword reswords[] =
 {
   { "_Complex",		RID_COMPLEX,	0 },
+  /* APPLE LOCAL CW asm blocks */
+  { "_asm",		RID_ASM,	0 },
   { "__FUNCTION__",	RID_FUNCTION_NAME, 0 },
   { "__PRETTY_FUNCTION__", RID_PRETTY_FUNCTION_NAME, 0 },
   { "__alignof", 	RID_ALIGNOF,	0 },

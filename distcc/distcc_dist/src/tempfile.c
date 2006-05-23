@@ -108,6 +108,90 @@ int dcc_set_owner(const char *path)
     return result;
 }
 
+/*
+ Construct a path string in the temporary directory.
+ This function constructs a path in the temporary directory by catenating several directory names and an optional file name.
+ It can also optionally create the corresponding directories in the filesystem.
+ path_ret returns the result by reference. This buffer is of size MAXPATHLEN should be freed when no longer needed.
+ create_directories specifies whether to create directories in the filesystem
+ file_part specifies an optional filename to append to the path. It may be NULL, in which case nothing is appended beyond the last directory. The file is not created in the filesystem.
+ The variable arguments are all const char *, and are pointers to the individual directory names that should comprise the final path. This function handles directory names with leading or trailing slash characters.
+ */
+int dcc_make_tmpfile_path(char **path_ret, int create_directories, const char *file_part, ...)
+{
+    char *path;
+    const char *tempdir;
+    int result = 0;
+    
+    result = dcc_get_tmp_top(&tempdir);
+
+    if (result == 0) {
+        path = (char *)malloc(MAXPATHLEN);
+        if (!path)
+            result = -1;
+    }
+
+    if (result == 0) {
+        int path_len, part_len;
+        const char *path_part;
+        va_list         va;
+
+        strcpy(path, tempdir);
+        path_len = strlen(path);
+        
+        va_start(va, file_part);
+        for (path_part = va_arg(va, const char *); result == 0 && path_part != NULL; path_part = va_arg(va, const char *)) {
+            part_len = strlen(path_part);
+            if (path_len + part_len + 2 < MAXPATHLEN) {
+                if (path_part[0] != '/')
+                    path[path_len++] = '/';
+                if (create_directories) {
+                    int i;
+                    for (i = 0; result == 0 && i<part_len; i++) {
+                        if (i > 0 && path_part[i] == '/') {
+                            path[path_len] = 0;
+                            result = dcc_mkdir(path);
+                        }
+                        path[path_len++] = path_part[i];
+                    }
+                    path[path_len] = 0;
+                } else {
+                    strcpy(&path[path_len], path_part);
+                    path_len += part_len;
+                }
+                if (path[path_len] == '/') {
+                    path[path_len] = 0;
+                    path_len--;
+                } else {
+                    if (create_directories) {
+                        result = dcc_mkdir(path);
+                    }
+                }
+            } else {
+                result = -1;
+            }
+        }
+        va_end(va);
+        
+        if (file_part) {
+            part_len = strlen(file_part);
+            if (path_len + part_len + 2 < MAXPATHLEN) {
+                if (file_part[0] != '/')
+                    path[path_len++] = '/';
+                strcpy(&path[path_len], file_part);
+            } else {
+                result = -1;
+            }
+        }
+    }
+    if (result != 0 && path) {
+        free(path);
+        path = NULL;
+    }
+    *path_ret = path;
+    return result;   
+}
+
 int dcc_get_tmp_top(const char **p_ret)
 {
     static const char *d = NULL;
@@ -169,6 +253,13 @@ int dcc_get_top_dir(char **path_ret)
         }
     }
 
+    /* We want all the lock files to reside on a local filesystem. */
+    if (asprintf(path_ret, "/var/tmp/distcc.%d", getuid()) == -1) {
+        rs_log_error("asprintf failed");
+        return EXIT_OUT_OF_MEMORY;
+    }
+
+    /*
     if ((env = getenv("HOME")) == NULL) {
         rs_log_warning("HOME is not set; can't find distcc directory");
         return EXIT_BAD_ARGUMENTS;
@@ -178,6 +269,7 @@ int dcc_get_top_dir(char **path_ret)
         rs_log_error("asprintf failed");
         return EXIT_OUT_OF_MEMORY;
     }
+    */
 
     ret = dcc_mkdir(*path_ret);
     if (ret == 0)

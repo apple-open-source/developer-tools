@@ -1,7 +1,7 @@
 /* Multi-process/thread control for GDB, the GNU debugger.
 
    Copyright 1986, 1987, 1988, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003 Free Software Foundation, Inc.
+   1999, 2000, 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
 
    Contributed by Lynx Real-Time Systems, Inc.  Los Gatos, CA.
 
@@ -30,6 +30,7 @@
 #include "value.h"
 #include "target.h"
 #include "gdbthread.h"
+#include "exceptions.h"
 #include "command.h"
 #include "gdbcmd.h"
 #include "regcache.h"
@@ -282,10 +283,10 @@ do_captured_list_thread_ids (struct ui_out *uiout, void *arg)
 /* Official gdblib interface function to get a list of thread ids and
    the total number. */
 enum gdb_rc
-gdb_list_thread_ids (struct ui_out *uiout)
+gdb_list_thread_ids (struct ui_out *uiout, char **error_message)
 {
-  return catch_exceptions (uiout, do_captured_list_thread_ids, NULL,
-			   NULL, RETURN_MASK_ALL);
+  return catch_exceptions_with_msg (uiout, do_captured_list_thread_ids, NULL,
+				    error_message, RETURN_MASK_ALL);
 }
 
 /* Load infrun state for the thread PID.  */
@@ -295,7 +296,6 @@ load_infrun_state (ptid_t ptid,
 		   CORE_ADDR *prev_pc,
 		   int *trap_expected,
 		   struct breakpoint **step_resume_breakpoint,
-		   struct breakpoint **through_sigtramp_breakpoint,
 		   CORE_ADDR *step_range_start,
 		   CORE_ADDR *step_range_end,
 		   struct frame_id *step_frame_id,
@@ -303,9 +303,8 @@ load_infrun_state (ptid_t ptid,
 		   int *another_trap,
 		   int *stepping_through_solib_after_catch,
 		   bpstat *stepping_through_solib_catchpoints,
-		   int *stepping_through_sigtramp,
 		   int *current_line,
-		   struct symtab **current_symtab, CORE_ADDR *step_sp)
+		   struct symtab **current_symtab)
 {
   struct thread_info *tp;
 
@@ -318,7 +317,6 @@ load_infrun_state (ptid_t ptid,
   *prev_pc = tp->prev_pc;
   *trap_expected = tp->trap_expected;
   *step_resume_breakpoint = tp->step_resume_breakpoint;
-  *through_sigtramp_breakpoint = tp->through_sigtramp_breakpoint;
   *step_range_start = tp->step_range_start;
   *step_range_end = tp->step_range_end;
   *step_frame_id = tp->step_frame_id;
@@ -328,10 +326,8 @@ load_infrun_state (ptid_t ptid,
     tp->stepping_through_solib_after_catch;
   *stepping_through_solib_catchpoints =
     tp->stepping_through_solib_catchpoints;
-  *stepping_through_sigtramp = tp->stepping_through_sigtramp;
   *current_line = tp->current_line;
   *current_symtab = tp->current_symtab;
-  *step_sp = tp->step_sp;
 }
 
 /* Save infrun state for the thread PID.  */
@@ -341,7 +337,6 @@ save_infrun_state (ptid_t ptid,
 		   CORE_ADDR prev_pc,
 		   int trap_expected,
 		   struct breakpoint *step_resume_breakpoint,
-		   struct breakpoint *through_sigtramp_breakpoint,
 		   CORE_ADDR step_range_start,
 		   CORE_ADDR step_range_end,
 		   const struct frame_id *step_frame_id,
@@ -349,9 +344,8 @@ save_infrun_state (ptid_t ptid,
 		   int another_trap,
 		   int stepping_through_solib_after_catch,
 		   bpstat stepping_through_solib_catchpoints,
-		   int stepping_through_sigtramp,
 		   int current_line,
-		   struct symtab *current_symtab, CORE_ADDR step_sp)
+		   struct symtab *current_symtab)
 {
   struct thread_info *tp;
 
@@ -364,7 +358,6 @@ save_infrun_state (ptid_t ptid,
   tp->prev_pc = prev_pc;
   tp->trap_expected = trap_expected;
   tp->step_resume_breakpoint = step_resume_breakpoint;
-  tp->through_sigtramp_breakpoint = through_sigtramp_breakpoint;
   tp->step_range_start = step_range_start;
   tp->step_range_end = step_range_end;
   tp->step_frame_id = (*step_frame_id);
@@ -372,10 +365,8 @@ save_infrun_state (ptid_t ptid,
   tp->another_trap = another_trap;
   tp->stepping_through_solib_after_catch = stepping_through_solib_after_catch;
   tp->stepping_through_solib_catchpoints = stepping_through_solib_catchpoints;
-  tp->stepping_through_sigtramp = stepping_through_sigtramp;
   tp->current_line = current_line;
   tp->current_symtab = current_symtab;
-  tp->step_sp = step_sp;
 }
 
 /* Return true if TP is an active thread. */
@@ -418,14 +409,8 @@ info_threads_command (char *arg, int from_tty)
   struct thread_info *tp;
   ptid_t current_ptid;
   struct frame_info *cur_frame;
-  int saved_frame_level = frame_relative_level (get_selected_frame ());
-  int counter;
+  struct frame_id saved_frame_id = get_frame_id (get_selected_frame (NULL));
   char *extra_info;
-
-  /* Check that there really is a frame.  This happens when a simulator
-     is connected but not loaded or running, for instance.  */
-  if (legacy_frame_p (current_gdbarch) && saved_frame_level < 0)
-    error ("No frame.");
 
   prune_threads ();
   target_find_new_threads ();
@@ -437,11 +422,7 @@ info_threads_command (char *arg, int from_tty)
       else
 	printf_filtered ("  ");
 
-#ifdef HPUXHPPA
       printf_filtered ("%d %s", tp->num, target_tid_to_str (tp->ptid));
-#else
-      printf_filtered ("%d %s", tp->num, target_pid_to_str (tp->ptid));
-#endif
 
       extra_info = target_extra_thread_info (tp);
       if (extra_info)
@@ -449,32 +430,28 @@ info_threads_command (char *arg, int from_tty)
       puts_filtered ("  ");
 
       switch_to_thread (tp->ptid);
-      print_stack_frame (get_selected_frame (), -1, 0);
+      print_stack_frame (get_selected_frame (NULL), 0, LOCATION);
     }
 
   switch_to_thread (current_ptid);
 
-  /* Code below copied from "up_silently_base" in "stack.c".
-   * It restores the frame set by the user before the "info threads"
-   * command.  We have finished the info-threads display by switching
-   * back to the current thread.  That switch has put us at the top
-   * of the stack (leaf frame).
-   */
-  counter = saved_frame_level;
-  cur_frame = find_relative_frame (get_selected_frame (), &counter);
-  if (counter != 0)
+  /* Restores the frame set by the user before the "info threads"
+     command.  We have finished the info-threads display by switching
+     back to the current thread.  That switch has put us at the top of
+     the stack (leaf frame).  */
+  cur_frame = frame_find_by_id (saved_frame_id);
+  if (cur_frame == NULL)
     {
-      /* Ooops, can't restore, tell user where we are. */
-      warning ("Couldn't restore frame in current thread, at frame 0");
-      print_stack_frame (get_selected_frame (), -1, 0);
+      /* Ooops, can't restore, tell user where we are.  */
+      warning (_("Couldn't restore frame in current thread, at frame 0"));
+      print_stack_frame (get_selected_frame (NULL), 0, LOCATION);
     }
   else
     {
       select_frame (cur_frame);
+      /* re-show current frame. */
+      show_stack_frame (cur_frame);
     }
-
-  /* re-show current frame. */
-  show_stack_frame (cur_frame);
 }
 
 /* Switch from one thread to another. */
@@ -500,8 +477,8 @@ switch_to_thread (ptid_t ptid)
   stop_pc = read_pc ();
   select_frame (get_current_frame ());
 
-  /* APPPLE LOCAL Finally, if the scheduler-locking is on, then we should reset the thread
-     we are trying to run. */
+  /* APPPLE LOCAL Finally, if the scheduler-locking is on, then we should 
+     reset the thread we are trying to run. */
   if (scheduler_lock_on_p ())
     scheduler_run_this_ptid (inferior_ptid);
 
@@ -561,7 +538,7 @@ thread_apply_all_command (char *cmd, int from_tty)
   char *saved_cmd;
 
   if (cmd == NULL || *cmd == '\000')
-    error ("Please specify a command following the thread ID list");
+    error (_("Please specify a command following the thread ID list"));
 
   old_chain = make_cleanup_restore_current_thread (inferior_ptid, 0);
 
@@ -577,13 +554,9 @@ thread_apply_all_command (char *cmd, int from_tty)
     if (thread_alive (tp))
       {
 	switch_to_thread (tp->ptid);
-#ifdef HPUXHPPA
-	printf_filtered ("\nThread %d (%s):\n",
+	printf_filtered (_("\nThread %d (%s):\n"),
 			 tp->num, target_tid_to_str (inferior_ptid));
-#else
-	printf_filtered ("\nThread %d (%s):\n", tp->num,
-			 target_pid_to_str (inferior_ptid));
-#endif
+
 	/* APPLE LOCAL: Use safe_execute_command for this.  If the command 
 	   has an error for one thread, that's no reason not to run it for
 	   the next thread.  */
@@ -606,12 +579,12 @@ thread_apply_command (char *tidlist, int from_tty)
   char *saved_cmd;
 
   if (tidlist == NULL || *tidlist == '\000')
-    error ("Please specify a thread ID list");
+    error (_("Please specify a thread ID list"));
 
   for (cmd = tidlist; *cmd != '\000' && !isalpha (*cmd); cmd++);
 
   if (*cmd == '\000')
-    error ("Please specify a command following the thread ID list");
+    error (_("Please specify a command following the thread ID list"));
 
   old_chain = make_cleanup_restore_current_thread (inferior_ptid, 0);
 
@@ -626,7 +599,7 @@ thread_apply_command (char *tidlist, int from_tty)
 
       start = strtol (tidlist, &p, 10);
       if (p == tidlist)
-	error ("Error parsing %s", tidlist);
+	error (_("Error parsing %s"), tidlist);
       tidlist = p;
 
       while (*tidlist == ' ' || *tidlist == '\t')
@@ -637,7 +610,7 @@ thread_apply_command (char *tidlist, int from_tty)
 	  tidlist++;		/* Skip the - */
 	  end = strtol (tidlist, &p, 10);
 	  if (p == tidlist)
-	    error ("Error parsing %s", tidlist);
+	    error (_("Error parsing %s"), tidlist);
 	  tidlist = p;
 
 	  while (*tidlist == ' ' || *tidlist == '\t')
@@ -651,19 +624,14 @@ thread_apply_command (char *tidlist, int from_tty)
 	  tp = find_thread_id (start);
 
 	  if (!tp)
-	    warning ("Unknown thread %d.", start);
+	    warning (_("Unknown thread %d."), start);
 	  else if (!thread_alive (tp))
-	    warning ("Thread %d has terminated.", start);
+	    warning (_("Thread %d has terminated."), start);
 	  else
 	    {
 	      switch_to_thread (tp->ptid);
-#ifdef HPUXHPPA
-	      printf_filtered ("\nThread %d (%s):\n", tp->num,
+	      printf_filtered (_("\nThread %d (%s):\n"), tp->num,
 			       target_tid_to_str (inferior_ptid));
-#else
-	      printf_filtered ("\nThread %d (%s):\n", tp->num,
-			       target_pid_to_str (inferior_ptid));
-#endif
 	      execute_command (cmd, from_tty);
 	      strcpy (cmd, saved_cmd);	/* Restore exact command used previously */
 	    }
@@ -690,20 +658,15 @@ thread_command (char *tidstr, int from_tty)
     {
       /* Don't generate an error, just say which thread is current. */
       if (target_has_stack)
-	printf_filtered ("[Current thread is %d (%s)]\n",
+	printf_filtered (_("[Current thread is %d (%s)]\n"),
 			 pid_to_thread_id (inferior_ptid),
-#if defined(HPUXHPPA)
-			 target_tid_to_str (inferior_ptid)
-#else
-			 target_pid_to_str (inferior_ptid)
-#endif
-	  );
+			 target_tid_to_str (inferior_ptid));
       else
-	error ("No stack.");
+	error (_("No stack."));
       return;
     }
 
-  gdb_thread_select (uiout, tidstr, 1);
+  gdb_thread_select (uiout, tidstr, 1, NULL);
 }
 
 extern int scheduler_lock_on ();
@@ -722,10 +685,10 @@ do_captured_thread_select (struct ui_out *uiout,
   tp = find_thread_id (num);
 
   if (!tp)
-    error ("Thread ID %d not known.", num);
+    error (_("Thread ID %d not known."), num);
 
   if (!thread_alive (tp))
-    error ("Thread ID %d has terminated.\n", num);
+    error (_("Thread ID %d has terminated."), num);
 
   switch_to_thread (tp->ptid);
 
@@ -749,23 +712,23 @@ do_captured_thread_select (struct ui_out *uiout,
   /* Remember to run the context hook here - since this changes
      thread context */
   
-  if (context_hook)
-    context_hook (pid_to_thread_id (inferior_ptid));
+  if (deprecated_context_hook)
+    deprecated_context_hook (pid_to_thread_id (inferior_ptid));
   
   return GDB_RC_OK;
 }
 
 enum gdb_rc
-gdb_thread_select (struct ui_out *uiout,
-		   char *tidstr, int print)
+gdb_thread_select (struct ui_out *uiout, char *tidstr, int print,
+		   char **error_message)
 {
   struct select_thread_args args;
 
   args.tidstr = tidstr;
   args.print = print;
 
-  return catch_exceptions (uiout, do_captured_thread_select, (void *) &args,
-			   NULL, RETURN_MASK_ALL);
+  return catch_exceptions_with_msg (uiout, do_captured_thread_select, &args,
+				    error_message, RETURN_MASK_ALL);
 }
 
 /* Commands with a prefix of `thread'.  */
@@ -777,18 +740,19 @@ _initialize_thread (void)
   static struct cmd_list_element *thread_apply_list = NULL;
 
   add_info ("threads", info_threads_command,
-	    "IDs of currently known threads.");
+	    _("IDs of currently known threads."));
 
-  add_prefix_cmd ("thread", class_run, thread_command,
-		  "Use this command to switch between threads.\n\
-The new thread ID must be currently known.", &thread_cmd_list, "thread ", 1, &cmdlist);
+  add_prefix_cmd ("thread", class_run, thread_command, _("\
+Use this command to switch between threads.\n\
+The new thread ID must be currently known."),
+		  &thread_cmd_list, "thread ", 1, &cmdlist);
 
   add_prefix_cmd ("apply", class_run, thread_apply_command,
-		  "Apply a command to a list of threads.",
+		  _("Apply a command to a list of threads."),
 		  &thread_apply_list, "apply ", 1, &thread_cmd_list);
 
   add_cmd ("all", class_run, thread_apply_all_command,
-	   "Apply a command to all threads.", &thread_apply_list);
+	   _("Apply a command to all threads."), &thread_apply_list);
 
   if (!xdb_commands)
     add_com_alias ("t", "thread", class_run, 1);

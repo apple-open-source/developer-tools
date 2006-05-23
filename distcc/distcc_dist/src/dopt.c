@@ -44,6 +44,7 @@
 #include "exitcode.h"
 #include "daemon.h"
 #include "access.h"
+#include "indirect_util.h"
 
 int opt_niceness = 5;           /* default */
 
@@ -83,6 +84,17 @@ int opt_log_stderr = 0;
  */
 int opt_lifetime = 0;
 
+/**
+ * The priority of this build machine relative to other build machines.
+ * This is set by the --priority argument. It is not used by distcc,
+ * but it is used by Xcode when sorting the hosts in DISTCC_HOSTS.
+ * The default value is 10 so that a build machine which has enabled
+ * distccd via launchctl (without using Xcode) will be treated as
+ * a high priority build machine. Xcode sets the priority of a low
+ * priority machine to 0.
+ */
+int build_machine_priority = 10;
+
 const char *arg_pid_file = NULL;
 const char *arg_log_file = NULL;
 
@@ -116,6 +128,10 @@ const struct poptOption options[] = {
     { "version", 0,      POPT_ARG_NONE, 0, 'V', 0, 0 },
     { "wizard", 'W',     POPT_ARG_NONE, 0, 'W', 0, 0 },
     { "host-info", 'I',     POPT_ARG_NONE, 0, 'I', 0, 0 },
+    { "max-cache-age", 0, POPT_ARG_INT,  &pullfile_cache_max_age,  0, 0, 0 },
+    { "max-cache-size", 0, POPT_ARG_INT,  &pullfile_max_cache_size,  0, 0, 0 },
+    { "min-disk-free", 0, POPT_ARG_INT,  &pullfile_min_free_space,  0, 0, 0 },
+    { "priority", 0,     POPT_ARG_INT,  &build_machine_priority,  0, 0, 0 },
     { 0, 0, 0, 0, 0, 0, 0 }
 };
 
@@ -134,6 +150,9 @@ static void distccd_show_usage(void)
 "    -N, --nice LEVEL           lower priority, 20=most nice\n"
 "    --user USER                if run by root, change to this persona\n"
 "    --jobs, -j LIMIT           maximum tasks at any time\n"
+"    --max-cache-age            maximum time cached file are kept (hours)\n"
+"    --max-cache-size           maximum disk use for cached files (Mb)\n"
+"    --min-disk-free            minimum free space to preserve on cache filesystem (Mb)\n"
 "  Networking:\n"
 "    -p, --port PORT            TCP port to listen on\n"
 "    --listen ADDRESS           IP address to listen on\n"

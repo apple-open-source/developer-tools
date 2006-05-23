@@ -2707,6 +2707,17 @@ lookup_name (tree name)
   return 0;
 }
 
+/* APPLE LOCAL begin mainline lookup_name 4125055 */
+/* Similar to `lookup_name' for the benefit of common code and the C++
+   front end.  */
+
+tree
+lookup_name_two (tree name, int ARG_UNUSED (prefer_type))
+{
+  return lookup_name (name);
+}
+/* APPLE LOCAL end mainline lookup_name 4125055 */
+
 /* Similar to `lookup_name' but look only at the indicated scope.  */
 
 static tree
@@ -3315,6 +3326,14 @@ start_decl (struct c_declarator *declarator, struct c_declspecs *declspecs,
       && DECL_UNINLINABLE (decl)
       && lookup_attribute ("noinline", DECL_ATTRIBUTES (decl)))
     warning ("%Jinline function %qD given attribute noinline", decl, decl);
+
+    
+  /* APPLE LOCAL begin radar 4281748 */
+  if (c_dialect_objc () 
+      && (TREE_CODE (decl) == VAR_DECL
+          || TREE_CODE (decl) == FUNCTION_DECL))
+      objc_check_global_decl (decl);
+  /* APPLE LOCAL end radar 4281748 */
 
   /* Add this decl to the current scope.
      TEM may equal DECL or it may be a previous decl of the same name.  */
@@ -4807,14 +4826,14 @@ grokdeclarator (const struct c_declarator *declarator,
       }
 
     /* APPLE LOCAL begin CW asm blocks */
-    if (declspecs->cw_asm_specbit)
+    if (declspecs->iasm_asm_specbit)
       {
 	/* Record that this is a decl of a CW-style asm function.  */
-	if (flag_cw_asm_blocks)
+	if (flag_iasm_blocks)
 	  {
-	    DECL_CW_ASM_FUNCTION (decl) = 1;
-	    DECL_CW_ASM_NORETURN (decl) = 0;
-	    DECL_CW_ASM_FRAME_SIZE (decl) = -2;
+	    DECL_IASM_ASM_FUNCTION (decl) = 1;
+	    DECL_IASM_NORETURN (decl) = 0;
+	    DECL_IASM_FRAME_SIZE (decl) = -2;
 	  }
 	else
 	  error ("asm functions not enabled, use `-fasm-blocks'");
@@ -5476,7 +5495,12 @@ finish_struct (tree t, tree fieldlist, tree attributes)
 	saw_named_field = 1;
     }
 
-  detect_field_duplicates (fieldlist);
+  /* APPLE LOCAL begin radar 4291785 */
+  if (c_dialect_objc ())
+    objc_detect_field_duplicates (objc_get_interface_ivars (fieldlist));
+  else
+    detect_field_duplicates (fieldlist);
+  /* APPLE LOCAL end radar 4291785 */
 
   /* Now we have the nearly final fieldlist.  Record it,
      then lay out the structure or union (including the fields).  */
@@ -6174,10 +6198,12 @@ start_function (struct c_declspecs *declspecs, struct c_declarator *declarator,
   /* If this was a function declared as an assembly function, change
      the state to expect to see C decls, possibly followed by assembly
      code.  */
-  if (DECL_CW_ASM_FUNCTION (current_function_decl))
+  if (DECL_IASM_ASM_FUNCTION (current_function_decl))
     {
-      cw_asm_state = cw_asm_decls;
-      cw_asm_in_decl = 0;
+      iasm_state = iasm_decls;
+      iasm_in_decl = false;
+      current_function_returns_abnormally = 1;
+      TREE_NO_WARNING (current_function_decl) = 1;
     }
   /* APPLE LOCAL end CW asm blocks */
   start_fname_decls ();
@@ -7062,7 +7088,7 @@ build_null_declspecs (void)
   ret->volatile_p = false;
   ret->restrict_p = false;
   /* APPLE LOCAL CW asm blocks */
-  ret->cw_asm_specbit = false;
+  ret->iasm_asm_specbit = false;
   /* APPLE LOCAL private extern */
   ret->private_extern_p = false;
   return ret;
@@ -7419,8 +7445,8 @@ declspecs_add_scspec (struct c_declspecs *specs, tree scspec)
     {
       /* APPLE LOCAL begin CW asm blocks */
     case RID_ASM:
-      dupe = specs->cw_asm_specbit;
-      specs->cw_asm_specbit = true;
+      dupe = specs->iasm_asm_specbit;
+      specs->iasm_asm_specbit = true;
       break;
       /* APPLE LOCAL end CW asm blocks */
     case RID_INLINE:

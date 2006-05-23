@@ -3543,7 +3543,7 @@ typedef enum cp_decl_spec {
   ds_complex,
   ds_thread,
   /* APPLE LOCAL CW asm blocks. */
-  ds_cw_asm,
+  ds_iasm_asm,
   ds_last
 } cp_decl_spec;
 
@@ -4433,7 +4433,7 @@ extern int cp_gimplify_expr		        (tree *, tree *, tree *);
 extern void cp_genericize			(tree);
 
 /* APPLE LOCAL begin CW asm blocks */
-extern tree cw_asm_cp_build_component_ref	(tree, tree);
+extern tree iasm_cp_build_component_ref		(tree, tree);
 /* APPLE LOCAL end CW asm blocks */
 
 /* APPLE LOCAL begin 4133801 */

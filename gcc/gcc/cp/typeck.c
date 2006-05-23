@@ -2752,7 +2752,7 @@ build_x_binary_op (enum tree_code code, tree arg1, tree arg2,
 
   /* APPLE LOCAL begin CW asm blocks */
   /* I think this is dead now.  */
-  if (inside_cw_asm_block)
+  if (inside_iasm_block)
     if (TREE_CODE (arg1) == IDENTIFIER_NODE
 	|| TREE_CODE (arg2) == IDENTIFIER_NODE
 	|| TREE_TYPE (arg1) == NULL_TREE
@@ -6579,18 +6579,20 @@ comp_ptr_ttypes_real (tree to, tree from, int constp)
 	 so the usual checks are not appropriate.  */
       if (TREE_CODE (to) != FUNCTION_TYPE && TREE_CODE (to) != METHOD_TYPE)
 	{
+	  /* APPLE LOCAL begin radar 4330422 */
 	  /* APPLE LOCAL begin mainline */
 	  /* In Objective-C++, some types may have been 'volatilized' by
 	     the compiler; when comparing them here, the volatile
 	     qualification must be ignored.  */
-	  bool objc_quals_match = objc_type_quals_match (to, from);
-
-	  if (!at_least_as_qualified_p (to, from) && !objc_quals_match)
+	  tree nv_to = objc_non_volatilized_type (to);
+	  tree nv_from = objc_non_volatilized_type (from);
+	
+	  if (!at_least_as_qualified_p (nv_to, nv_from))
 	  /* APPLE LOCAL end mainline */
 	    return 0;
 
 	  /* APPLE LOCAL mainline */
-	  if (!at_least_as_qualified_p (from, to) && !objc_quals_match)
+	  if (!at_least_as_qualified_p (nv_from, nv_to))
 	    {
 	      if (constp == 0)
 		return 0;
@@ -6598,7 +6600,8 @@ comp_ptr_ttypes_real (tree to, tree from, int constp)
 	    }
 
 	  if (constp > 0)
-	    constp &= TYPE_READONLY (to);
+	    constp &= TYPE_READONLY (nv_to);
+	  /* APPLE LOCAL end radar 4330422 */
 	}
 
       if (TREE_CODE (to) != POINTER_TYPE && !TYPE_PTRMEM_P (to))
@@ -6867,7 +6870,7 @@ non_reference (tree t)
 
 /* APPLE LOCAL begin CW asm blocks */
 tree
-cw_asm_cp_build_component_ref (tree datum, tree component)
+iasm_cp_build_component_ref (tree datum, tree component)
 {
   tree expr = finish_class_member_access_expr (datum, component);
   /* If this is not a real component reference, extract the field

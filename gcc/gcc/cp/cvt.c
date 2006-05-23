@@ -1043,11 +1043,14 @@ build_expr_type_conversion (int desires, tree expr, bool complain)
   tree conv = NULL_TREE;
   tree winner = NULL_TREE;
 
+  /* APPLE LOCAL begin mainline */
   if (expr == null_node 
       && (desires & WANT_INT) 
-      && !(desires & WANT_NULL))
+      && !(desires & WANT_NULL)
+      && warn_conversion)
     warning ("converting NULL to non-pointer type");
     
+  /* APPLE LOCAL end mainline */
   basetype = TREE_TYPE (expr);
 
   if (basetype == error_mark_node)

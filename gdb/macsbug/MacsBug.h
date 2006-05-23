@@ -214,7 +214,7 @@ extern Special_Refresh_States immediate_flush;	/* Special_Refresh_States state s
 
 extern void run_command(char *arg, int from_tty);
 extern void init_macsbug_patches(void);
-extern int find_breakpt(GDB_ADDRESS address); 	/* -1 means not found			*/
+extern int find_breakpt(GDB_ADDRESS address);	/* -1 means not found			*/
 
 extern int control_level;			/* if, while, etc. nesting level	*/
 extern int reading_raw;				/* reading raw data for if, while, etc.	*/

@@ -34,7 +34,11 @@
 #include "defs.h"
 #include "gdbcore.h"
 #include "serial.h"
+#include "ser-base.h"
 #include "ser-unix.h"
+#include "inferior.h"
+#include "objc-lang.h"
+#include "infcall.h"
 
 #include "macosx-nat-dyld.h"
 #include "macosx-nat-dyld-info.h"
@@ -174,7 +178,7 @@ classic_socket_exists_p (pid_t pid)
   char name[PATH_MAX];
   struct stat sb;
 
-  sprintf (name, "/tmp/oah750.gdb.%d", pid);
+  sprintf (name, "/tmp/translate.gdb.%d", pid);
   if (stat (name, &sb) != 0)
     return 0;
   if (sb.st_mode & S_IFSOCK)
@@ -292,10 +296,17 @@ void
 attach_to_classic_process (pid_t pid)
 {
   char name[PATH_MAX];
-  sprintf (name, "unix:/tmp/oah750.gdb.%d", pid);
+  sprintf (name, "unix:/tmp/translate.gdb.%d", pid);
   push_remote_target (name, 0);
   macosx_classic_create_inferior (pid);
   remote_ops.to_stop = macosx_classic_stop_inferior;
+
+  /* Debugging translated processes means no inferior function calls.  So
+     no malloc, no calling into the objc runtime to look anything up, etc.  */
+
+  inferior_function_calls_disabled_p = 1;
+  lookup_objc_class_p = 0;
+
   update_current_target ();
 }
 
@@ -332,20 +343,22 @@ _initialize_macosx_nat ()
   ops->next = 0;
   ops->open = macosx_classic_unix_open;
   ops->close = macosx_classic_unix_close;
-  ops->readchar = ser_unix_readchar;
-  ops->write = ser_unix_write;
-  ops->flush_output = ser_unix_nop_flush_output;
-  ops->flush_input = ser_unix_flush_input;
-  ops->send_break = ser_unix_nop_send_break;
-  ops->go_raw = ser_unix_nop_raw;
-  ops->get_tty_state = ser_unix_nop_get_tty_state;
-  ops->set_tty_state = ser_unix_nop_set_tty_state;
-  ops->print_tty_state = ser_unix_nop_print_tty_state;
-  ops->noflush_set_tty_state = ser_unix_nop_noflush_set_tty_state;
-  ops->setbaudrate = ser_unix_nop_setbaudrate;
-  ops->setstopbits = ser_unix_nop_setstopbits;
-  ops->drain_output = ser_unix_nop_drain_output;
-  ops->async = ser_unix_async;
+  ops->readchar = ser_base_readchar;
+  ops->write = ser_base_write;
+  ops->flush_output = ser_base_flush_output;
+  ops->flush_input = ser_base_flush_input;
+  ops->send_break = ser_base_send_break;
+  ops->go_raw = ser_base_raw;
+  ops->get_tty_state = ser_base_get_tty_state;
+  ops->set_tty_state = ser_base_set_tty_state;
+  ops->print_tty_state = ser_base_print_tty_state;
+  ops->noflush_set_tty_state = ser_base_noflush_set_tty_state;
+  ops->setbaudrate = ser_base_setbaudrate;
+  ops->setstopbits = ser_base_setstopbits;
+  ops->drain_output = ser_base_drain_output;
+  ops->async = ser_base_async;
+  ops->read_prim = ser_unix_read_prim;
+  ops->write_prim = ser_unix_write_prim;
   serial_add_interface (ops);
 
 }

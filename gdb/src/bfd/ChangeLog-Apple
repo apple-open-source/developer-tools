@@ -1,37 +1,132 @@
+2006-03-02  Jason Molenda  (jmolenda@apple.com)
+
+	* archive.c (bfd_generic_openr_next_archived_file): Fix location
+	of #endif from previous change for aesthetic correctness - no
+	actual change of code.
+
+2006-03-02  Jason Molenda  (jmolenda@apple.com)
+
+        * archive.c (_bfd_get_elt_at_filepos): Disable code to handle
+        nested archives; conflicts with universal + .a archive files.
+        (bfd_generic_openr_next_archived_file): Ditto.
+
+2006-02-24  Greg Clayton  (gclayton@apple.com)
+
+        * mach-o.c (bfd_mach_o_scan_read_command): read the UUID
+        load command for mach-o files and save the UUID into the
+        mach_o_data.
+        (bfd_mach_o_get_uuid): added this new function to allow
+        access to the uuid data.
+
+        * mach-o.h : added uuid field to mach_o_data_struct structure and added
+        function prototype for bfd_mach_o_get_uuid().
+
+2006-01-11  Jason Molenda  (jmolenda@apple.com)
+
+	* mach-o.h (bfd_mach_o_load_command_type): Add BFD_MACH_O_LC_UUID.
+	* mach-o.c (bfd_mach_o_scan_read_command): Ignore BFD_MACH_O_LC_UUID
+	for now.
+
+2005-12-16  Jason Molenda  (jmolenda@apple.com)
+
+	* cache.c (bfd_cache_close): Remove merge #if 0 fixme.
+
 2005-09-30  Jim Ingham  <jingham@apple.com>
 
-	* mach-o.h: Add BFD_MACH_O_LC_SEGMENT_64.  
-	modify def'n of bfd_mach_o_core_fetch_environment.
-	* mach-o.c (bfd_mach_o_scan_read_command): Ignore
-	BFD_MACH_O_LC_SEGMENT_64.
-	(bfd_mach_o_lookup_section): Handle both 32 and 64 bit
-	segments.
-	(bfd_mach_o_core_parse_environment): Use bfd_size_type
-	for file sizes, since a 64 bit executable might be loaded
-	above 32 bits.
-	(bfd_mach_o_core_fetch_environment): Handle both 32 and
-	64 bit segments.  Also use bfd_size_type.
-	(bfd_mach_o_core_file_failing_command) Ditto.
-	
+        * mach-o.h: Add BFD_MACH_O_LC_SEGMENT_64.  
+        modify def'n of bfd_mach_o_core_fetch_environment.
+        * mach-o.c (bfd_mach_o_scan_read_command): Ignore
+        BFD_MACH_O_LC_SEGMENT_64.
+        (bfd_mach_o_lookup_section): Handle both 32 and 64 bit
+        segments.
+        (bfd_mach_o_core_parse_environment): Use bfd_size_type
+        for file sizes, since a 64 bit executable might be loaded
+        above 32 bits.
+        (bfd_mach_o_core_fetch_environment): Handle both 32 and
+        64 bit segments.  Also use bfd_size_type.
+        (bfd_mach_o_core_file_failing_command) Ditto.
+        
 2005-08-29  Eric Albert  (ejalbert@apple.com)
 
-	* mach-o.h (bfd_mach_o_i386_thread_flavour): Update values to
-	the new ones the kernel is using.
-	* mach-o.c (bfd_mach_o_i386_flavour_string): Update accordingly.
+        * mach-o.h (bfd_mach_o_i386_thread_flavour): Update values to
+        the new ones the kernel is using.
+        * mach-o.c (bfd_mach_o_i386_flavour_string): Update accordingly.
 
 2005-07-27  Jim Ingham  <jingham@apple.com>
 
-	* mach-o.c (mach_o_flatten_sections): Do this for the 64
-	bit mach-o as well as the 32 bit.
+        * mach-o.c (mach_o_flatten_sections): Do this for the 64
+        bit mach-o as well as the 32 bit.
 
 2005-07-27  Jim Ingham  <jingham@apple.com>
 
-	* mach-o-target.c: Make the archive entries for the mach_o_be
-	and mach_o_le target handle ar archives.  
+        * mach-o-target.c: Make the archive entries for the mach_o_be
+        and mach_o_le target handle ar archives.  
+        
+2005-08-02  Klee Dienes  <kdienes@apple.com>
+
+	* bfd.c (bfd_preserve_save): Remove BFD_IO_FUNCS.
+	* bfdwin.c (_bfd_get_file_window_malloc): Only include if needed.
+	(bfd_get_file_window): Remove support for BFD_IO_FUNCS.
+
+2005-07-06  Klee Dienes  <kdienes@apple.com>
+
+	* bfd-in.h (BFD_IO_FUNCS): Remove.
+	(struct bfd_io_functions): Remove.
+	* bfdio.c (bfd_seek): Fix the archive-handling code.
+	* libbfd.h (_bfd_window_internal): REFCOUNT should be 30 bits, not
+	31, since we have an extra bit in mapped.
+	* opncls.c (bfd_funopenr): Remove.
+	
+2005-06-21  Klee Dienes  <kdienes@apple.com>
+
+	* bfdwin.c (_bfd_window_internal): The 'mapped' field needs to
+	be 2 bits, not just 1.
+	* mach-o.c: Fix up some type warnings.
+
+2005-06-17  Klee Dienes  <kdienes@apple.com>
+
+	* cache.c (cache_bread): Revert the change from 06-13.  We'll
+	definitely need to revisit this later.
+	* bfdio.c (bfd_seek): Don't adjust for archives twice.
+
+2005-06-15  Klee Dienes  <kdienes@apple.com>
+
+	* mach-o.c: Set the "size" field of the sections, not rawsize.
+
+2005-06-13  Klee Dienes  <kdienes@apple.com>
+
+	* bfdio.c: Remove BFD_IO_FUNCS support (it's been replaced in
+	the upstream BFD by iovec).  Re-merge the other local changes
+	(mostly archive support and error-handling changes) into the new
+	upstream sources.
+	* cache.c (cache_bread): Change the code to match the comment.
+	* configure.in: Enable AM_BINUTILS_WARNINGS, to pull in
+	warnings.m4 and get @WARN_CFLAGS@.
+	* format.c (bfd_check_format_matches): Revert to FSF sources
+	(there's a good chance we'll need to pull in our local changes later).
+	* libbfd-in.h (_bfd_io_close): Add prototype.
+	* libbfd.c: Remove duplicate definitions of *_PUT/GET_32/64.
+	* libbfd.h: Restore bfd_cache_lookup_null and BFD_CACHE_ITERATOR.
+	(_bfd_io_close): Add prototype.  
+
+	* mach-o.c: Update copyright notification.  Fix whitespace to FSF
+	sources.  Re-merge local changes into FSF sources.  Add
+	definitions of N_TEXT/N_DATA/N_BSS.  Reorganize sources to match
+	FSF layout.  Pull in the stabs-parsing code from macosx-tdep.c in
+	the GDB sources:
+	(macosx_symbol_types): New static data.
+	(bfd_mach_o_symbool_type_base): New function.
+	(bfd_mach_o_symbol_types_init): New function.
+	(bfd_mach_o_symbol_type): New function.
+	(bfd_mach_o_get_symbol_info): Update to properly process stabs
+	data.
+
+	* opncls.c (get_debug_link_info): Remove merge lossage.
+	* section.c (SEC_COFF_SHARED_LIBRARY): Remove duplicate definition.
 	
 2005-05-11  Klee Dienes  <kdienes@apple.com>
 
-	mach-o.c (bfd_mach_o_core_parse_environment): Add prototype; make
+	* mach-o.c (bfd_mach_o_core_parse_environment): Add prototype; make
 	static.  Add comment.  Change the behavior to return -2 if we
 	can't find the beginning, instead of doing something completely
 	useless.
@@ -39,7 +134,7 @@
 	Move the "resize the buffer as necessary" logic from
 	bfd_mach_o_core_parse_environment.  Also move the code to malloc the
 	result buffer.
-	mach-o.h (bfd_mach_o_core_fetch_environment): Update to return bfd_boolean.
+	* mach-o.h (bfd_mach_o_core_fetch_environment): Update to return bfd_boolean.
 	
 2005-03-24  Jason Molenda  (jmolenda@apple.com)
 

@@ -1,3 +1,89 @@
+2006-04-25  Eric Christopher  <echristo@apple.com>
+
+	Radar 4529978
+	* gcc.dg/pragma-ms_struct.c: New.
+
+2006-03-24  Geoffrey Keating  <geoffk@apple.com>
+
+	Radar 4485597
+	* objc.dg/dwarf-2.m: New.
+	* obj-c++.dg/dwarf-2.mm: New.
+
+2005-12-02  Mark Mitchell  <mark@codesourcery.com>
+
+	Radar 4458276
+	PR c++/24173
+	* g++.dg/template/friend40.C: New test.
+
+2006-03-15  Geoffrey Keating  <geoffk@apple.com>
+
+	Radar 3992198
+	* g++.old-deja/g++.other/init18.C: New.
+	* g++.old-deja/g++.other/init5.C: Remove xfail.
+
+2006-03-09  Eric Christopher  <echristo@apple.com>
+
+	Radar 4461050
+        * gcc.c-torture/compile/20060309-1.c: New.
+
+2006-02-24  Geoffrey Keating  <geoffk@apple.com>
+
+	Radar 4086777
+	* g++.dg/eh/uncaught1.C: Add dg-options for ppc-darwin.
+	* g++.dg/eh/uncaught2.C: New.
+	* g++.dg/eh/uncaught3.C: New.
+
+2006-02-21  Geoffrey Keating  <geoffk@apple.com>
+
+	Radar 4439051
+	* g++.dg/eh/spbp.C: New.
+
+2006-01-21  Mark Mitchell  <mark@codesourcery.com>
+
+	PR c++/25895
+	* g++.dg/inherit/conv2.C: New test.
+
+	PR c++/25856
+	* g++.dg/parse/dtor7.C: New test.
+
+	PR c++/25858
+	* g++.dg/template/crash44.C: New test.
+
+2005-12-26  Mark Mitchell  <mark@codesourcery.com>
+
+	PR c++/25439
+	* g++.dg/parse/crash17.C: Adjust error markers.
+	* g++.dg/template/error20.C: New test.
+
+2005-12-19  Mark Mitchell  <mark@codesourcery.com>
+
+       PR c++/24915
+       * g++.dg/template/overload8.C: New test.
+
+2006-01-18  Eric Christopher  <echristo@apple.com>
+
+	* g++.dg/eh/table.C: New.
+
+2006-01-17  Eric Christopher  <echristo@apple.com>
+
+	* g++.old-deja/g++.warn/impint.C: Add -Wconversion.
+	* g++.old-deja/g++.warn/impint2.C: Ditto.
+	* g++.old-deja/g++.other/null1.C: Ditto.
+	* g++.dg/warn/conv2.C: Ditto.
+	* g++.dg/warn/conv4.C: New file.
+
+2006-01-02  Geoffrey Keating  <geoffk@apple.com>
+
+	* g++.dg/debug/debug9.C: New.
+
+2005-12-05  Geoffrey Keating  <geoffk@apple.com>
+
+	* gcc.dg/darwin-weakimport-3.c: New.
+
+2005-11-11  Mike Stump  <mrs@apple.com>
+
+	* g++.old-deja/g++.mike/unused.C: Add.
+
 2005-10-20  Geoffrey Keating  <geoffk@apple.com>
 
 	* obj-c++.dg/except-1.mm: New.
@@ -111,7 +197,7 @@
 
 	PR fortran/21912
 	* gfortran.dg/array_constructor_4.f90: New test.
-	
+
 	* gfortran.dg/forall_1.f90: Set previously uninitialized variable.
 
 2005-06-05  Mark Mitchell  <mark@codesourcery.com>
@@ -206,7 +292,7 @@
 	* gfortran.dg/implicit_5.f90: New test.
 
 2005-06-01  Feng Wang  <fengwang@nudt.edu.cn>
- 
+
 	PR fortran/20883
 	* gfortran/assign_4.f90: New test.
 	* gfortran/assign_2.f90: Change compile to run.

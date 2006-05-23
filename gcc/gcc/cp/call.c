@@ -4239,8 +4239,10 @@ convert_like_real (conversion *convs, tree expr, tree fn, int argnum,
     {
       tree t = non_reference (totype);
 
+      /* APPLE LOCAL begin mainline */
       /* Issue warnings about peculiar, but valid, uses of NULL.  */
-      if (ARITHMETIC_TYPE_P (t) && expr == null_node)
+      if (ARITHMETIC_TYPE_P (t) && expr == null_node
+	  && warn_conversion)
 	{
 	  if (fn)
 	    warning ("passing NULL to non-pointer argument %P of %qD",
@@ -4251,7 +4253,8 @@ convert_like_real (conversion *convs, tree expr, tree fn, int argnum,
 
       /* Warn about assigning a floating-point type to an integer type.  */
       if (TREE_CODE (TREE_TYPE (expr)) == REAL_TYPE
-	  && TREE_CODE (t) == INTEGER_TYPE)
+	  && TREE_CODE (t) == INTEGER_TYPE
+	  && warn_conversion)
 	{
 	  if (fn)
 	    warning ("passing %qT for argument %P to %qD",
@@ -4268,13 +4271,14 @@ convert_like_real (conversion *convs, tree expr, tree fn, int argnum,
 	      if (fn)
 		warning ("passing negative value %qE for argument %P to %qD",
 			 expr, argnum, fn);
-	      else
+	      else if (warn_conversion)
 		warning ("converting negative value %qE to %qT", expr, t);
 	    }
 	  
 	  overflow_warning (expr);
 	}
     }
+  /* APPLE LOCAL end mainline */
 
   switch (convs->kind)
     {

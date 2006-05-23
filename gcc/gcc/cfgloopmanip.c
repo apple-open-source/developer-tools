@@ -29,6 +29,8 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "cfgloop.h"
 #include "cfglayout.h"
 #include "output.h"
+/* APPLE LOCAL 4321079 */
+#include "options.h"
 
 static void duplicate_subloops (struct loops *, struct loop *, struct loop *);
 static void copy_loops_to (struct loops *, struct loop **, int,
@@ -1279,6 +1281,69 @@ loop_split_edge_with (edge e, rtx insns)
   return new_bb;
 }
 
+/* APPLE LOCAL begin 4321079 */
+/* Rearrange blocks to eliminate some jumps.
+   When a block bb ends in an unconditional branch, and the target does not
+   have a fallthru predecessor, hoist the target to follow bb.  This breaks even
+   at worst (when we have to introduce another branch at the end of the
+   target, where there used to be a fallthrough.)  To avoid infinite loops,
+   move blocks only backwards.
+   Other cases may be added. */
+static void straighten_blocks(void)
+{
+  basic_block bb, target;
+  edge_iterator ei;
+  edge e;
+  rtx last_insn, table;
+  compact_blocks ();
+  FOR_EACH_BB (bb)
+    {
+      if (BB_END (bb) 
+	  && JUMP_P (BB_END (bb))
+	  && onlyjump_p (BB_END (bb)) 
+	  && any_uncondjump_p (BB_END (bb))
+	  && JUMP_LABEL (BB_END (bb))
+	  && bb->next_bb != EXIT_BLOCK_PTR)
+	{
+	  target = BLOCK_FOR_INSN (JUMP_LABEL (BB_END (bb)));
+	  if (bb->index >= target->index)
+	    continue;
+	  if (target->next_bb == EXIT_BLOCK_PTR)
+	    continue;
+	  FOR_EACH_EDGE (e, ei, target->preds)
+	    if (e->flags & EDGE_FALLTHRU)
+	      break;
+	  if (e)
+	    continue;
+	  /* This pair of blocks qualifies. */
+	  /* Move insns in block within insn list, with following jump 
+	     table and BARRIER if any. */
+	  last_insn = BB_END (target);
+	  if (tablejump_p (last_insn, NULL, &table))
+	    last_insn = table;
+	  if (BARRIER_P (NEXT_INSN (last_insn)))
+	    last_insn = NEXT_INSN (last_insn);
+	  reorder_insns_nobb(BB_HEAD (target), last_insn, PREV_INSN (BB_HEAD (bb->next_bb)));
+	  /* Move block within block list.  */
+	  unlink_block (target);
+	  link_block (target, bb);
+	  /* If target had a fallthru edge, it doesn't now. */
+	  FOR_EACH_EDGE (e, ei, target->succs)
+	    if (e->flags & EDGE_FALLTHRU)
+	      force_nonfallthru (e);
+	  /* Remove jump insn.  This fixes up BB_END. */
+	  delete_insn (BB_END (bb));
+	  /* Remove following BARRIER. */
+	  if (BARRIER_P (NEXT_INSN (BB_END (bb))))
+	    delete_insn (NEXT_INSN (BB_END (bb)));
+	  /* bb->target edge is now fallthru. */
+	  e = find_edge (bb, target);
+	  e->flags |= EDGE_FALLTHRU;
+	}
+    }
+}
+/* APPLE LOCAL end 4321079 */
+
 /* APPLE LOCAL begin 4203984 */
 /* Uses the natural loop discovery to recreate loop notes.
 
@@ -1305,6 +1370,8 @@ create_loop_notes (void)
   struct loop **stack, **top;
   /* APPLE LOCAL 4203984 */
   unsigned int i;
+  /* APPLE LOCAL 4390273 */
+  bool prev_bb_moved;
 
 #ifdef ENABLE_CHECKING
   /* Verify that there really are no loop notes.  */
@@ -1313,11 +1380,23 @@ create_loop_notes (void)
 		NOTE_LINE_NUMBER (insn) != NOTE_INSN_LOOP_BEG);
 #endif
 
+  /* APPLE LOCAL begin 4321079 */
+  /* Gcov doesn't deal well with line numbers that don't correspond to a.
+     a contiguous block of code, so disable this in that case. */
+  if (!flag_test_coverage)
+    straighten_blocks();
+  /* APPLE LOCAL end 4321079 */
+
   flow_loops_find (&loops, LOOP_TREE);
+  /* APPLE LOCAL begin 4203984 mainline candidate */
+  /* RTL optimizer rejects loops with multiple entry points, so make
+     sure all loops have preheaders. */
+  create_preheaders (&loops, 0);
+  /* APPLE LOCAL end 4203984 mainline candidate */
   free_dominance_info (CDI_DOMINATORS);
   if (loops.num > 1)
     {
-      /* APPLE LOCAL begin 4203984 */
+      /* APPLE LOCAL begin 4203984 4390273 */
       basic_block * shadow;
       signed char * in_body;
       /* Make a pass to find a spot in each loop where we might be able
@@ -1359,11 +1438,15 @@ create_loop_notes (void)
       /* Make a pass to find code outside the loop that belongs inside, and
 	 moves it in. */
       memset (in_body, 0, sizeof(char) * loops.num);
+      prev_bb_moved = false;
       FOR_EACH_BB (bb)
 	{
 	  loop = bb->loop_father;
 	  if (loop->num == 0 || shadow[loop->num] == 0)
-	    continue;
+	    {
+	      prev_bb_moved = false;
+	      continue;
+	    }
 	  if (bb == loop->header)
 	    {
 	      if (in_body[loop->num] == 0)
@@ -1408,13 +1491,15 @@ create_loop_notes (void)
 		    }
  		}
 	      /* If we have a fallthrough edge leading into this block, and the source is
-		 not in the same loop as we are, we must fix up the predecessor similarly.
-		 (If the predecessor is in the same loop, at this point it has been
-		 moved and is no longer prev_bb but the edge is still there; we need do
+		 not in the same loop as we are or was not moved on the previous iteration, 
+		 we must fix up the predecessor similarly.  (If the predecessor is in the
+		 same loop and was moved on the previous iteration, at this point it
+		 is no longer prev_bb but the edge is still there; we need do
 		 nothing, the edge will be correct again after we move this block.
 		 If the predecessor is not in the same loop and we moved it, the
 		 fallthrough edge was removed earlier by the code above.) */
-	      if (e2 && (e2->flags & EDGE_FALLTHRU) && prev_bb->loop_father != loop)
+	      if (e2 && (e2->flags & EDGE_FALLTHRU) && 
+		  (prev_bb->loop_father != loop || !prev_bb_moved))
 		{
 		  basic_block new_bb = force_nonfallthru (e2);
 		  if (new_bb)
@@ -1439,11 +1524,82 @@ create_loop_notes (void)
 	      /* Next block to be moved will go after this one. */
 	      shadow[loop->num] = bb;
 	      bb = restart_bb;
+	      prev_bb_moved = true;
 	    }
+	  else
+	    prev_bb_moved = false;
 	}
       free (in_body);
       free (shadow);
-      /* APPLE LOCAL end 4203984 */
+      /* APPLE LOCAL end 4203984 4390273 */
+
+      /* APPLE LOCAL begin 4321079 */
+      /* Look for 2-block loops, where the first block contains both header and exit test, and
+	 the second (latch) unconditionally branches to the first.  You get better code in this
+	 case by putting the latch first, and changing the preheader to jump down to the header.
+	 One branch per iteration instead of two.  Currently restricted to case where exit
+	 (jumped to from header) immediately follows latch.  Could be expanded. */
+      for (i = 1; i < loops.num; i++)
+	{
+	  rtx latch_label;
+	  edge pre_e, exit_e, fall_e, latch_e;
+	  basic_block header, latch, pre_bb, new_bb;
+	  loop = loops.parray[i];
+	  header = loop->header;
+	  latch = loop->latch;
+	  if (loop->num_nodes != 2
+	      || header->next_bb != latch
+	      || EDGE_COUNT (header->preds) != 2
+	      || EDGE_COUNT (header->succs) != 2
+	      || EDGE_COUNT (latch->succs) != 1
+	      || EDGE_COUNT (latch->preds) != 1
+	      || !BB_END (latch)
+	      || !JUMP_P (BB_END (latch))
+	      || !onlyjump_p (BB_END (latch))
+	      || !any_uncondjump_p (BB_END (latch))
+	      || !BB_END (header)
+	      || !JUMP_P (BB_END (header))
+	      || !JUMP_LABEL (BB_END (header))
+	      || latch->next_bb != BLOCK_FOR_INSN (JUMP_LABEL (BB_END (header))))
+	    continue;
+	  fall_e = find_edge (header, latch);
+	  if (!fall_e || !(fall_e->flags & EDGE_FALLTHRU))
+	    continue;
+	  pre_e = loop_preheader_edge (loop);
+	  if (!pre_e || !(pre_e->flags & EDGE_FALLTHRU))
+	    continue;
+	  latch_e = loop_latch_edge (loop);
+	  exit_e = BRANCH_EDGE (header);
+
+	  pre_bb = pre_e->src;
+	  new_bb = force_nonfallthru (pre_e);
+	  if (new_bb)
+	    new_bb->loop_father = pre_bb->loop_father;
+	  /* Reverse conditional branch.  This could, in principle, fail, in
+	     which case give up (although I don't think that happens on our targets).
+	     This does not touch edges or change their probabilities. */
+	  latch_label = block_label (latch);
+	  if (!invert_jump (BB_END (header), latch_label, 0))
+	    continue;
+	  /* Remove unconditional branch out of latch.  This fixes up BB_END. */
+	  delete_insn (BB_END (latch));
+	  /* Remove following BARRIER. */
+	  if (BARRIER_P (NEXT_INSN (BB_END (latch))))
+	    delete_insn (NEXT_INSN (BB_END (latch)));
+	  /* Move insns in block within insn list.  Can't be a tablejump and
+	     we already handled the barrier. */
+	  reorder_insns_nobb(BB_HEAD (latch), BB_END (latch), 
+			     PREV_INSN (BB_HEAD (header)));
+	  /* Move block within block list.  */
+	  unlink_block (latch);
+	  link_block (latch, header->prev_bb);
+	  /* Fix fallthru bits on edges.  Probabilities are OK. */
+	  pre_e->flags &= ~EDGE_FALLTHRU;
+	  fall_e->flags &= ~EDGE_FALLTHRU;
+	  latch_e->flags |= EDGE_FALLTHRU;
+	  exit_e->flags |= EDGE_FALLTHRU;
+	}
+      /* APPLE LOCAL end 4321079 */
 
       last = xcalloc (loops.num, sizeof (basic_block));
 

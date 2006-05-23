@@ -1,6 +1,6 @@
 # Host: IA86 running Mac OS X
 
-SER_HARDWIRE = ser-unix.o ser-tcp.o
+SER_HARDWIRE = ser-base.o ser-unix.o ser-tcp.o
 
 XM_FILE = xm-i386-macosx.h
 

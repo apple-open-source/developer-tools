@@ -2442,8 +2442,8 @@ finish_id_expression (tree id_expression,
 	{
 	  /* Name lookup failed.  */
 	  /* APPLE LOCAL begin CW asm blocks */
-	  if (inside_cw_asm_block)
-	    return cw_do_id (id_expression);
+	  if (inside_iasm_block)
+	    return iasm_do_id (id_expression);
 	  /* APPLE LOCAL end CW asm blocks */
 
 	  if (scope 
@@ -2493,7 +2493,7 @@ finish_id_expression (tree id_expression,
   /* APPLE LOCAL begin CW asm blocks */
   /* Accept raw type decls, which will be used in offset-getting
      expressions like "type.field(r3)".  */
-  else if (TREE_CODE (decl) == TYPE_DECL && inside_cw_asm_block)
+  else if (TREE_CODE (decl) == TYPE_DECL && inside_iasm_block)
     {
       *idk = CP_ID_KIND_NONE;
       return decl;

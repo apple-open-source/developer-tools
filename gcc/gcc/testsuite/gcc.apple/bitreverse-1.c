@@ -25,6 +25,7 @@
 
 
 #pragma reverse_bitfields on
+#pragma ms_struct on
 
 typedef struct
 {

@@ -1,8 +1,8 @@
 /* This testcase failed, because scope containing baz was not emitted
    (doesn't contain any instructions) and DWARF-2 couldn't find baz origin.  */
 /* { dg-do compile } */
-/* APPLE LOCAL testsuite nested funcs */
-/* { dg-xfail-if "" { *-*-darwin* } } */
+/* APPLE LOCAL testsuite nested functions */
+/* { dg-options "-fnested-functions" } */
 
 struct A { char *a, *b, *c, *d; };
 

@@ -1,6 +1,6 @@
 # Host: PowerPC running Mac OS X
 
-SER_HARDWIRE = ser-unix.o ser-tcp.o
+SER_HARDWIRE = ser-base.o ser-unix.o ser-tcp.o
 
 XM_FILE = xm-ppc-macosx.h
 
@@ -36,6 +36,7 @@ NAT_FILE = nm-ppc-macosx.h
 NATDEPFILES = \
 	fork-child.o \
 	inftarg.o \
+	gcore.o \
 	$(PPC_FILES) \
 	$(MACOSX_FILES) \
 	$(CFM_FILES)

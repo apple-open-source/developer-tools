@@ -48,246 +48,83 @@
 #include "trace.h"
 
 
-/**
- * Compute the MD5 checksum of the file at path.
- * Assumes that path indicates a file, not a directory.
- * Returns NULL on error or if no file exists at path.
- **/
-static char *dcc_compute_file_checksum(const char *path)
+/* 
+ Handle a pull request.
+ 
+ In response, we send a file size to transfer.
+ If the file size is zero it indicates we have nothing to send. If the 
+ */
+static int dcc_handle_remote_indirection_pull(int ifd)
 {
-    int fd = open(path, O_RDONLY, 0777);
-
-    if ( fd > 0 ) {
-        char    buffer[1024];
-        MD5_CTX ctx;
-        int     numBytes;
-
-        MD5_Init(&ctx);
-
-        while ( ( numBytes = read(fd, buffer, 1024) ) && numBytes != -1 ) {
-            MD5_Update(&ctx, buffer, numBytes);
-        }
-
-        close(fd);
-
-        if ( numBytes == -1 ) {
-            rs_log_error("Unable to read %s: %s", path, strerror(errno));
-            return NULL;
-        } else {
-            char *checksum = (char *)malloc(MD5_DIGEST_LENGTH + 1);
-            int   i;
-
-            MD5_Final((unsigned char *)checksum, &ctx);
-
-            for ( i = 0; i < MD5_DIGEST_LENGTH; i++ ) {
-                if ( checksum[i] == '\0' ) {
-                    checksum[i] = (char) 1;
-                }
-            }
-
-            checksum[MD5_DIGEST_LENGTH] = '\0';
-
-            return checksum;
-        }
-    } else {
-        return NULL;
+    unsigned path_length;
+    char path[MAXPATHLEN];
+    int result = 0;
+    unsigned file_stat_info_flag, pull_response;
+    off_t file_size, send_size;
+    struct timespec mod_time;
+    struct stat st_pullfile;
+    
+    /*
+     Fetch the pull info from the build machine.
+     It will start by sending us a path length, and the path.
+     */     
+    if ((result = dcc_r_token_int(ifd, indirection_path_length_token, &path_length)) != 0) {
+        rs_log_error("unable to fetch indirection path length");
     }
-}
-
-
-/**
- * Compute the MD5 checksum of the directory at path.
- * Assumes that path indicates a directory, not a file, and that
- * this directory contains no subdirectories.
- * Returns NULL on error or if no directory exists at
- * path.
- **/
-static char *dcc_compute_directory_checksum(const char *path)
-{
-    char *checksum = NULL;
-    int   cwd      = open(".", O_RDONLY, 0777);
-
-    if ( chdir(path) ) {
-        rs_log_error("Unable to chdir to %s", path);
-    } else {
-        int    numFiles;
-        char **filenames = dcc_filenames_in_directory(path, &numFiles);
-
-        if ( filenames != NULL ) {
-            checksum = (char *) malloc(numFiles *
-                                       (MAXNAMLEN + 1 + MD5_DIGEST_LENGTH + 1)
-                                       + 1);
-
-            if ( checksum != NULL ) {
-                int i;
-                char *fileChecksum;
-                char *filename;
-
-                for ( i = 0; i < numFiles; i++ ) {
-                    filename = filenames[i];
-
-                    strcat(checksum, filename);
-                    strcat(checksum, "\n");
-
-                    fileChecksum = dcc_compute_file_checksum(filename);
-
-                    if ( fileChecksum == NULL ) {
-                        rs_log_error("Unable to compute checksum for %s in %s",
-                                     filename, path);
-                        strcat(checksum, "UNKNOWN");
-                    } else {
-                        strcat(checksum, fileChecksum);
-                        free(fileChecksum);
-                    }
-
-                    strcat(checksum, "\n");
-
-                    free(filename);
+    
+    if (result == 0) {
+        if ((result = dcc_readx(ifd, path, path_length)) != 0)
+            rs_log_error("unable to fetch indirection path");
+        path[path_length] = 0;
+    }
+    
+    if (result == 0) {
+        if ((result = dcc_r_token_int(ifd, indirection_file_stat_token, &file_stat_info_flag)) != 0) {
+            rs_log_error("unable to fetch indirection file stat token");
+        } else {
+            if (file_stat_info_flag == indirection_file_stat_info_present) {
+                // build machine has a cached file and will send us the mod time
+                if (result == 0) result = dcc_readx(ifd, &file_size, sizeof(file_size));
+                if (result == 0) result = dcc_readx(ifd, &mod_time, sizeof(mod_time));
+                if (result != 0) rs_log_error("unable to fetch indirection file stat info");
+            }
+        }
+    }
+        
+    /* validate the size and mod time of the file against the local filesystem. */
+    if (result == 0) {
+        if (stat(path, &st_pullfile) != 0) {
+            result = -1;
+            pull_response = indirection_pull_response_file_missing;
+            rs_log_warning("Unable to send pull file: %s - %s", path, strerror(errno));
+        } else {
+            if (file_stat_info_flag == indirection_file_stat_info_present && st_pullfile.st_size == file_size && st_pullfile.st_mtimespec.tv_sec == mod_time.tv_sec && st_pullfile.st_mtimespec.tv_nsec == mod_time.tv_nsec) {
+                pull_response = indirection_pull_response_file_ok;
+                rs_log_info("using cached pull file");
+            } else {
+                if (file_stat_info_flag == indirection_file_stat_info_present) {
+                    rs_log_info("pull file changed, sending");
+                    rs_log_info("my size = %d, my seconds = %d, my nsec = %d\nhis size = %d, his seconds = %d, his nsec = %d", (int)st_pullfile.st_size, st_pullfile.st_mtimespec.tv_sec, st_pullfile.st_mtimespec.tv_nsec, (int)file_size, mod_time.tv_sec, mod_time.tv_nsec);
+                } else {
+                    rs_log_info("pull file missing, sending");
+                }
+                pull_response = indirection_pull_response_file_download;
+            }
+        }
+        if ((result = dcc_x_token_int(ifd, indirection_pull_response_token, pull_response)) != 0) {
+            rs_log_error("unable to send pull response code");
+        } else {
+            if (pull_response == indirection_pull_response_file_download) {
+                if (dcc_x_file(ifd, path, indirection_pull_file, DCC_COMPRESS_LZO1X, &send_size) ||
+                    dcc_writex(ifd, &st_pullfile.st_mtimespec, sizeof(st_pullfile.st_mtimespec))) {
+                    rs_log_error("failure sending pull file");
                 }
             }
         }
-
-        free(filenames);
-    }
-
-    fchdir(cwd);
-    close(cwd);
-
-    return checksum;
-}
-
-
-/**
- * Compute a checksum for path, and compares this checksum to
- * checksum.
- * Provides the computed checksum via currentChecksum.
- * Indicates the file type of path via isDirectory.
- * This checksum is cached on a remote host, along with the file or
- * directory at path.
- * The remote host returns this checksum to the client to determine whether 
- * the cached file needs to be refreshed.
- * Checksum computation and comparison occurs only on the client.
- * As an optimization, a timestamp prefixes the checksum.
- * If the timestamp prefix matches the current timestamp of path, 
- * returns 1 and leaves currentChecksum and
- * isDirectory unset.
- * If the timestamp prefix does not match, computes the checksum for
- * path and sets currentChecksum and
- * isDirectory.
- * If that checksum matches (without timestamp), returns 2.
- * If that checksum does not match, returns 0.
- **/
-static int dcc_compare_checksum(const char *path, const char *checksum,
-                                char **currentChecksum, int *isDirectory)
-{
-    int         comparison_value  = -1;
-    char       *first             = NULL;
-    time_t      currentTimestamp;
-    time_t      previousTimestamp;
-    struct stat sb;
-
-    *currentChecksum  = (char *) "UNKNOWN";
-    *isDirectory      = 0;
-     currentTimestamp = -1;
-
-    if ( stat(path, &sb) != 0 ) {
-        rs_log_error("Unable to stat %s", path);
-        return -1;
-    }
-
-    currentTimestamp = sb.st_ctime;
-
-    if ( checksum != NULL ) {
-        first = strchr(checksum, '\n');
-
-        if ( first == NULL ) {
-            rs_log_error("Invalid checksum");
-            comparison_value = -1;
-        } else {
-            first[0] = '\0';
-            previousTimestamp = strtoul(checksum, (char**)NULL, 10);
-            first[0] = '\n';
-
-            if ( currentTimestamp == previousTimestamp ) {
-                return 1;
-            }
-        }
-    }
-
-    if ( sb.st_mode & S_IFDIR ) {
-        *isDirectory = 1;
-        *currentChecksum = dcc_compute_directory_checksum(path);
     } else {
-        *currentChecksum = dcc_compute_file_checksum(path);
+        // we failed somewhere reading the request
     }
-
-    if ( *currentChecksum == NULL ) {
-        *currentChecksum = (char *) "UNKNOWN";
-        comparison_value = -1;
-    } else {
-        // Prepend the new timestamp to the new checksum.
-        // 50 + 1 for the prepended timestamp + newline
-        char *tstamped = (char *)malloc(50 + 1 + strlen(*currentChecksum) + 1);
-
-        comparison_value = -1;
-
-        snprintf(tstamped, 50 + 1, "%lu\n", currentTimestamp);
-        strcat(tstamped, *currentChecksum);
-
-        if ( first != NULL ) {
-            comparison_value = ( strcmp(&(first[1]), *currentChecksum) == 0 ) ? 2 : 0;
-        }
-
-        free(*currentChecksum);
-        *currentChecksum = tstamped;
-
-    }
-
-    return comparison_value;
-}
-
-
-/**
- * Transmits the contents of name to a remote host via
- * netfd.
- * Returns 0 on error, 1 otherwise.
- **/
-static int dcc_push_directory_file(int netfd, const char *name) {
-    size_t name_length = strlen(name) + 1;
-    off_t bytes;
-
-    if ( dcc_x_token_int(netfd, result_name_token, name_length) ) {
-        rs_log_error("Unable to transmit name length for %s", name);
-        return 0;
-    } else if ( dcc_writex(netfd, name, name_length) ) {
-        rs_log_error("Unable to transmit name \"%s\"", name);
-        return 0;
-    } else if ( dcc_x_file(netfd, name, result_item_token, DCC_COMPRESS_LZO1X, &bytes) ) {
-        rs_log_error("Unable to transmit %s", name);
-        return 0;
-    } else {
-        return 1;
-    }
-}
-
-
-/**
- * Transmits checksum to a remote host via netfd.
- * Returns 0 on error, 1 otherwise.
- **/
-static int dcc_send_new_checksum(int netfd, const char *path,
-                                 const char *checksum)
-{
-    size_t checksum_length = strlen(checksum) + 1;
-
-    if ( dcc_x_token_int(netfd, checksum_length_token, checksum_length) ||
-         dcc_writex(netfd, checksum, checksum_length) ) {
-        rs_log_error("Unable to transmit checksum for %s", path);
-        return 0;
-    } else {
-        rs_log_info("Successfully transmitted checksum for %s", path);
-        return 1;
-    }
+    return result;
 }
 
 
@@ -300,120 +137,12 @@ static int dcc_send_new_checksum(int netfd, const char *path,
  **/
 int dcc_handle_remote_indirection_request(int ifd, int operation)
 {
+    int result;
     if ( operation == indirection_request_pull ) {
-        unsigned length;
-        char path[MAXPATHLEN];
-
-        if ( dcc_r_token_int(ifd, operation_pull_token, &length) ||
-             dcc_readx(ifd, path, length) ) {
-            rs_log_error("Unable to receive %s request", operation_pull_token);
-            dcc_x_token_int(ifd, result_type_token, result_type_nothing);
-            return 0;
-        } else {
-            char *checksum        = NULL;
-            unsigned   checksumLength;
-            char *currentChecksum = NULL;
-            int   exitVal         = 0;
-            int   isDirectory;
-
-            rs_log_info("Server desires %s", path);
-
-            if (dcc_r_token_int(ifd, checksum_length_token, &checksumLength)) {
-                rs_log_error("Unable to receive checksum length for %s", path);
-            } else {
-                if ( checksumLength > 0 ) {
-                    checksum = malloc(checksumLength + 1);
-
-                    if ( dcc_readx(ifd, checksum, checksumLength) ) {
-                        rs_log_error("Unable to receive checksum for %s", path);
-                    }
-                }
-            }
-
-            exitVal = dcc_compare_checksum(path, checksum, &currentChecksum,
-                                           &isDirectory);
-
-            if ( checksum != NULL ) {
-                free(checksum);
-            }
-
-            if ( exitVal == 1 ) {
-                rs_log_info("Checksum matched for %s", path);
-                dcc_x_token_int(ifd, result_type_token, result_type_nothing);
-            } else if ( exitVal == 2 ) {
-                rs_log_info("Checksum matched, but timestamp didn't for %s",
-                            path);
-                dcc_x_token_int(ifd, result_type_token,
-                                result_type_checksum_only);
-                exitVal = dcc_send_new_checksum(ifd, path, currentChecksum);
-            } else {
-                if ( exitVal == -1 && checksum) {
-                    rs_log_error("Unable to compare checksums");
-                }
-
-                if ( isDirectory ) {
-                    int    cwd = open(".", O_RDONLY, 0777);
-                    int    fileCount;
-                    char **filenames = dcc_filenames_in_directory(path,
-                                                                  &fileCount);
-                    int    i;
-
-                    if ( filenames == NULL || fileCount <= 0 || chdir(path) ) {
-                        rs_log_error("Unable to read files in %s", path);
-                        dcc_x_token_int(ifd, result_type_token,
-                                        result_type_nothing);
-                    } else {
-                        if ( dcc_x_token_int(ifd, result_type_token,
-                                             result_type_dir) ) {
-                            rs_log_error("Unable to transmit dir result type");
-                        }
-
-                        if ( dcc_x_token_int(ifd, result_count_token,
-                                             fileCount) ) {
-                            rs_log_error("Unable to dir file count");
-                        }
-
-                        for ( i = 0; i < fileCount; i++ ) {
-                            dcc_push_directory_file(ifd, filenames[i]);
-                            free(filenames[i]);
-                        }
-
-                        free(filenames);
-
-                        exitVal = dcc_send_new_checksum(ifd, path,
-                                                        currentChecksum);
-                    }
-
-                    fchdir(cwd);
-                    close(cwd);
-                } else {
-                    off_t bytes;
-
-                    if ( dcc_x_token_int(ifd, result_type_token,
-                                         result_type_file) ) {
-                        rs_log_error("Unable to transmit file result type");
-                    }
-
-                    if ( dcc_x_file(ifd, path, result_item_token,
-                         DCC_COMPRESS_LZO1X, &bytes) ) {
-                        rs_log_error("Unable to transmit file %s", path);
-                    } else {
-                        exitVal = dcc_send_new_checksum(ifd, path,
-                                                        currentChecksum);
-                    }
-                }
-            }
-
-            if ( currentChecksum != NULL && currentChecksum != "UNKNOWN" ) {
-                free(currentChecksum);
-            }
-
-            return exitVal;
-        }
+        result = dcc_handle_remote_indirection_pull(ifd);
     } else {
         rs_log_error("Unsupported indirection operation: %d", operation);
-        return 0;
+        result = -1;
     }
-
-    return 1;
+    return result;
 }

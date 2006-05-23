@@ -1,3 +1,334 @@
+2006-04-25  Eric Christopher  <echristo@apple.com>
+
+	Radar 4529978
+	* target-def.h (TARGET_SET_DEFAULT_TYPE_ATTRIBUTES): Bracket
+	with #ifndef/#endif.
+	* config/darwin-c.c (darwin_ms_struct): New.
+	(darwin_pragma_ms_struct): Ditto.
+	(darwin_set_default_type_attributes): Ditto.
+	* config/darwin-protos.h (darwin_pragma_ms_struct): Declare.
+	* config/darwin.h (DARWIN_REGISTER_TARGET_PRAGMAS):
+	Register ms_struct pragma.
+	* config/i386/darwin.h (REGISTER_TARGET_PRAGMAS): Declare.
+	(TARGET_SET_DEFAULT_TYPE_ATTRIBUTES): Ditto.
+	* config/rs6000/rs6000.c (rs6000_set_default_type_attributes): Call
+	darwin_set_default_type_attributes if TARGET_MACHO.
+
+2006-04-25  Geoffrey Keating  <geoffk@apple.com>
+
+	Radar 4498201
+	* dwarf2out.c (size_of_locs): Don't fill dw_loc_addr if there
+	are no branches.
+
+	Radar 4498201
+	* dwarf2asm.c (dw2_asm_output_data): Don't generate RTL just
+	to print an integer.
+
+2006-04-24  Geoffrey Keating  <geoffk@apple.com>
+
+	Radar 4498201
+	* dwarf2out.c (verify_marks_clear): New.
+	(prune_unused_types): Call verify_marks_clear initially, not
+	prune_unmark_dies.
+
+2006-04-21  Geoffrey Keating  <geoffk@apple.com>
+
+	Radar 4498201
+	* dwarf2out.c (struct die_struct): Document that die_sib makes
+	a circular linked list.
+	(FOR_EACH_CHILD): New.
+	(reverse_die_lists): Delete.
+	(reverse_all_dies): Delete.
+	(add_dwarf_attr): Correct documentation.
+	(remove_child_with_prev): New.
+	(remove_child_TAG): Update for change to die_struct, use
+	remove_child_with_prev.
+	(add_child_die): Update for change to die_struct.
+	(splice_child_die): Use remove_child_with_prev and add_child_die.
+	(print_die): Use FOR_EACH_CHILD.
+	(die_checksum): Likewise.
+	(assign_symbol_names): Likewise.
+	(output_location_lists): Likewise.
+	(build_abbrev_table): Likewise.
+	(calc_die_sizes): Likewise.
+	(mark_dies): Likewise.
+	(unmark_dies): Likewise.
+	(unmark_all_dies): Likewise.
+	(output_die): Likewise.
+	(prune_unused_types_mark): Likewise.
+	(prune_unused_types_walk): Likewise.
+	(same_die_p): Update for change to die_struct.
+	(break_out_includes): Likewise.
+	(prune_unused_types_prune): Likewise.
+	(add_sibling_attributes): Use FOR_EACH_CHILD, simplify logic.
+	(prune_unmark_dies): Use FOR_EACH_CHILD, don't clear die_mark if
+	it's already clear.
+	(dwarf2out_finish): Don't call reverse_all_dies.
+
+2006-04-04  Eric Christopher  <echristo@apple.com>
+
+	Radar 4525014
+	* config/rs6000/rs6000.c (TARGET_MS_BITFIELD_LAYOUT_P): Define.
+	(TARGET_USE_MS_BITFIELD_LAYOUT): Ditto.
+	(rs6000_handle_struct_attribute): New.
+	(rs6000_ms_bitfield_layout_p): Ditto.
+
+2006-04-17  Geoffrey Keating  <geoffk@apple.com>
+
+	Radar 4498201
+	* dwarf2out.c (free_AT): Delete.
+	(remove_AT): Update string ref counts.
+	(remove_child_TAG): Don't call free_die.
+	(free_die): Delete.
+	(break_out_includes): Don't call free_die on DW_TAG_GNU_BINCL
+	or DW_TAG_GNU_EINCL.
+	(prune_unused_types_walk_attribs): Reset string refcounts.
+	(prune_unused_types_update_strings): New.
+	(prune_unused_types_prune): Don't make unnecessary stores.  Don't
+	call free_die.  Do call prune_unused_types_update_strings.
+	(prune_unused_types): Empty debug_str_hash.
+
+2006-04-10  Geoffrey Keating  <geoffk@apple.com>
+
+	Radar 4498201
+	* dwarf2out.c (struct dw_attr_struct): Remove dw_attr_next.
+	Declare VECs of this type.
+	(struct die_struct): Make field die_attr a VEC of dw_attr_struct.
+	(remove_children): Delete.
+	(add_dwarf_attr): Use VEC routines.
+	(add_AT_flag): Update for changes to add_dwarf_attr.
+	(add_AT_int): Likewise.
+	(add_AT_unsigned): Likewise.
+	(add_AT_long_long): Likewise.
+	(add_AT_vec): Likewise.
+	(add_AT_string): Likewise.
+	(add_AT_die_ref): Likewise.
+	(add_AT_fde_ref): Likewise.
+	(add_AT_loc): Likewise.
+	(add_AT_loc_list): Likewise.
+	(add_AT_addr): Likewise.
+	(add_AT_lbl_id): Likewise.
+	(add_AT_lineptr): Likewise.
+	(add_AT_macptr): Likewise.
+	(add_AT_offset): Likewise.
+	(add_AT_range_list): Likewise.
+	(get_AT): Use VEC_iterate.
+	(remove_AT): Use VEC_ordered_remove.
+	(free_die): Fold remove_children into here; have it use VEC_iterate.
+	(print_die): Use VEC_iterate on attrs.
+	(reverse_die_lists): Don't reverse attr lists.
+	(die_checksum): Use VEC_iterate on attrs.
+	(same_die_p): Likewise.
+	(output_location_lists): Likewise.
+	(build_abbrev_table): Likewise.
+	(size_of_die): Likewise.
+	(unmark_all_dies): Likewise.
+	(output_abbrev_section): Likewise.
+	(output_die): Likewise.
+	(prune_unused_types_walk_attribs): Likewise.
+
+2006-04-04  Geoffrey Keating  <geoffk@apple.com>
+
+	Radar 4502209
+	* config/darwin-crt3.c (atexit): Pass &__dso_handle rather than
+	NULL for dso parameter to atexit_common.
+
+	Radar 4383613
+	* doc/extend.texi (Function Attributes): Rewrite visibility
+	attribute documentation.
+	* doc/invoke.texi (C++ Dialect Options): Rewrite
+	-fvisibility-inlines-hidden documentation to describe something
+	entirely different, although in practise compatible.
+	(Code Gen Options): Warn about system headers in -fvisibility=
+	documentation.
+
+2006-03-22  Eric Christopher  <echristo@apple.com>
+
+        Radar 4419200
+        2006-01-27  H.J. Lu  <hongjiu.lu@intel.com>
+
+        * config/i386/emmintrin.h (_mm_cvtsd_f64): Add missing Intel
+        intrinsic.
+        (_mm_cvtsi128_si64): Likewise.
+        (_mm_cvtsd_si64): Likewise.
+        (_mm_cvttsd_si64): Likewise.
+        (_mm_cvtsi64_sd): Likewise.
+        (_mm_cvtsi64_si128): Likewise.
+        * config/i386/mmintrin.h (_m_from_int64): Likewise.
+        (_mm_cvtsi64_m64): Likewise.
+        (_m_to_int64): Likewise.
+        (_mm_cvtm64_si64): Likewise.
+        * config/i386/xmmintrin.h (_mm_cvtss_si64): Likewise.
+        (_mm_cvttss_si64): Likewise.
+        (_mm_cvtsi64_ss): Likewise.
+        (_mm_cvtss_f32): Likewise.
+
+2006-03-30  Geoffrey Keating  <geoffk@apple.com>
+
+	Radar 4495520
+	* config/darwin.h (LINK_COMMAND_SPEC): Don't try to protect %S with
+	!Zdynamiclib.
+
+2006-03-24  Geoffrey Keating  <geoffk@apple.com>
+
+	Radar 4485597
+	* dwarf2out.c (is_c_family): Understand new DWARF3 language types.
+	(is_cxx): Likewise.
+	(gen_compile_unit_die): Use new language types for Objective-C and
+	Objective-C++.
+	(dwarf2out_decl): Use is_cxx rather than testing explicitly against
+	DW_LANG_C_plus_plus.
+
+2006-03-01  Jakub Jelinek  <jakub@redhat.com>
+
+	* dwarf2.h (DW_TAG_condition, DW_TAG_shared_type): New constants
+	from DWARF 3.
+	(DW_AT_description, DW_AT_binary_scale, DW_AT_decimal_scale,
+	DW_AT_small, DW_AT_decimal_sign, DW_AT_digit_count,
+	DW_AT_picture_string, DW_AT_mutable, DW_AT_threads_scaled,
+	DW_AT_explicit, DW_AT_object_pointer, DW_AT_endianity,
+	DW_AT_elemental, DW_AT_pure, DW_AT_recursive): New.
+	(DW_OP_form_tls_address, DW_OP_call_frame_cfa, DW_OP_bit_piece): New.
+	(DW_ATE_packed_decimal, DW_ATE_numeric_string, DW_ATE_edited,
+	DW_ATE_signed_fixed, DW_ATE_unsigned_fixed): New.
+	(DW_DS_unsigned, DW_DS_leading_overpunch, DW_DS_trailing_overpunch,
+	DW_DS_leading_separate, DW_DS_trailing_separate): New.
+	(DW_END_default, DW_END_big, DW_END_little): New.
+	(DW_END_lo_user, DW_END_hi_user): Define.
+	(DW_LNE_lo_user, DW_LNE_hi_user): Define.
+	(DW_CFA_val_offset, DW_CFA_val_offset_sf, DW_CFA_val_expression): New.
+	(DW_LANG_PLI, DW_LANG_ObjC, DW_LANG_ObjC_plus_plus, DW_LANG_UPC,
+	DW_LANG_D): New.
+
+2006-03-15  Geoffrey Keating  <geoffk@apple.com>
+
+	Radar 3992198
+	* config.gcc (*-*-darwin*): Don't build crt2.o for all Darwin ports.
+	Do switch on default_use_cxa_atexit.
+	(powerpc*-*-darwin*): Build crt2.o on powerpc.
+	* config/darwin-crt3.o: New.
+	* config/darwin.h (LINK_SPEC): If -shared-libgcc, make linker default
+	to 10.3.  Pass '-multiply_defined suppress' if crt3.o is in use.
+	(STARTFILE_SPEC): Add crt3.o when -shared-libgcc and appropriate
+	OS version.
+	* config/rs6000/t-darwin: Move crt2.o building to here.
+	* config/rs6000/darwin.h (C_COMMON_OVERRIDE_OPTIONS): Update
+	Mac OS version for using __cxa_get_exception_ptr.  Don't test versions
+	of __cxa_atexit.
+
+2006-03-07  Geoffrey Keating  <geoffk@apple.com>
+
+	Radar 4466819
+	* dwarf2out.c (DWARF2_FRAME_REG_OUT): Move up in file.
+	(expand_builtin_dwarf_sp_column): Call DWARF2_FRAME_REG_OUT.
+	(expand_builtin_init_dwarf_reg_sizes): Likewise.
+
+	Radar 4446590
+	* config/i386/i386.c (ix86_delegitimize_address): Handle Darwin
+	addresses with offsets; reorganize.
+
+2006-03-02  Eric Christopher  <echristo@apple.com>
+
+	* config/i386/i386.c (machopic_output_stub): Add indirection to
+	jump.
+
+2006-02-24  Geoffrey Keating  <geoffk@apple.com>
+
+	Radar 4086777
+	* doc/tm.texi (Run-time Target): Document C_COMMON_OVERRIDE_OPTIONS.
+	* doc/invoke.texi (C++ Dialect Options): Document
+	-fno-use-cxa-get-exception-ptr.
+	* configure.ac: Define DEFAULT_USE_CXA_ATEXIT to 2 not 1.
+	* configure: Regenerate.
+	* c.opt (fuse-cxa-get-exception-ptr): New.
+	* c-opts.c (c_common_handle_option): Handle
+	OPT_fuse_cxa_get_exception_ptr.
+	* c-common.c (flag_use_cxa_atexit): Update documentation.
+	(flag_use_cxa_get_exception_ptr): New.
+	* c-common.h (flag_use_cxa_get_exception_ptr): New.
+	* config/rs6000/darwin.h (SUBTARGET_OVERRIDE_OPTIONS): Improve
+	documentation.
+	(C_COMMON_OVERRIDE_OPTIONS): New.
+
+2006-02-21  Geoffrey Keating  <geoffk@apple.com>
+
+	Radar 4439051
+	* config/i386/darwin.h (DWARF2_FRAME_REG_OUT): New.
+
+2006-02-13  Geoffrey Keating  <geoffk@apple.com>
+
+	Radar 4433453
+	* dwarf2out.c (base_type_die): Don't add AT_name here.
+	(subrange_type_die): Don't add AT_name here.
+	(modified_type_die): Rearrange code flow.  Do add AT_name here.
+
+2006-02-10  Geoffrey Keating  <geoffk@apple.com>
+
+	Radar 4439051
+	* config/i386/darwin.h (DBX_REGISTER_NUMBER): Define.
+
+2006-02-07  Geoffrey Keating  <geoffk@apple.com>
+
+	Radar 4430041
+	* config/i386/i386.c (ix86_delegitimize_address): Support Darwin
+	PIC addresses.
+
+2006-01-06  Eric Christopher  <echristo@apple.com>
+
+        * doc/tm.texi (TARGET_ASM_EMIT_EXCEPT_TABLE_LABEL): Document.
+        (TARGET_UNWIND_EMIT): Fix spelling.
+        * target.h (gcc_target): Add except_table_label.
+        * except.c (output_function_exception_table): Use.
+        * varasm.c (default_emit_except_table_label): New.
+        * target-def.h (TARGET_ASM_EMIT_EXCEPT_TABLE_LABEL): New default
+        define.
+        (asm_out): Add here.
+        * output.h (default_emit_except_table_label): Prototype.
+        * config/darwin-protos.h (darwin_emit_except_table_label): Ditto.
+        * config/darwin.c (darwin_emit_except_table_label): Define.
+        * config/darwin.h (TARGET_ASM_EMIT_EXCEPT_TABLE): Ditto.
+
+2006-01-02  Geoffrey Keating  <geoffk@apple.com>
+
+	* dwarf2out.c (have_switched_text_section): Delete.
+	(have_multiple_function_sections): New.
+	(have_location_lists): Make 'bool'.
+	(add_AT_loc_list): Use 'true' not '1'.
+	(dwarf2out_switch_text_section): Set have_multiple_function_sections.
+	(output_loc_list): Use have_multiple_function_sections.
+	(output_ranges): Likewise.
+	(dwarf2out_begin_function): Set have_multiple_function_sections if
+	necessary.
+	(dwarf2out_source_line): Don't fake separate_line_info_table_in_use.
+	Check function_section rather than DECL_SECTION_NAME.
+	(dwarf2out_finish): Use have_multiple_function_sections.
+	Don't clear have_location_lists.
+
+2005-12-06  Geoffrey Keating  <geoffk@apple.com>
+
+	* config/darwin.h (TARGET_CXX_CLASS_DATA_ALWAYS_COMDAT): New.
+
+2005-12-05  Geoffrey Keating  <geoffk@apple.com>
+
+	* config/darwin.c (machopic_select_section): It's not defined
+	as weak if it's only marked as weak_import.
+
+	* config/rs6000/host-darwin.c (segv_handler): Unblock SEGV so
+	we don't go into an infinite loop.
+
+2005-11-15  Mike Stump  <mrs@apple.com>
+
+	* c-decl.c (lookup_name_two): Add.
+	* c-tree.h (lookup_name_two): Likewise.
+	* c-common.c (handle_cleanup_attribute): Use lookup_name_two instead.
+	* config/darwin-c.c (darwin_pragma_unused): Likewise.
+
+2005-11-14  Mike Stump  <mrs@apple.com>
+
+	* config/i386/i386.c (override_options): -masm=intel isn't
+	supported on darwin.
+	* doc/invoke.texi (i386 and x86-64 Options): Likewise.
+
 2005-10-06  Geoffrey Keating  <geoffk@apple.com>
 
 	* config/t-slibgcc-darwin (SHLIB_MAPFILES): Use '+='.
@@ -48,7 +379,7 @@
 	* config/rs6000/t-darwin (SHLIB_VERPFX): Define.
 
 2005-09-01  Richard Henderson  <rth@redhat.com>
-       
+
         PR 23668
 	Radar 4232562
         * config/i386/i386.c (ix86_expand_vector_init_one_var): Restore
@@ -113,8 +444,8 @@
 
 2005-08-31  Fariborz Jahanian <fjahanian@apple.com>
 
-        * expr.c (expand_expr_real_1): Compare size of address 
-        mode to target's address mode size in deciding expansion of 
+        * expr.c (expand_expr_real_1): Compare size of address
+        mode to target's address mode size in deciding expansion of
         the constant address.
 
 2005-07-19  Richard Henderson  <rth@redhat.com>
@@ -359,6 +690,13 @@
 	PR c/21879
 	* c-decl.c (start_function): Restore label_context_stack_se and
 	label_context_stack_vm  if returning with an error.
+
+2005-06-03  Gabriel Dos Reis  <gdr@integrable-solutions.net>
+
+	* configure.ac: Check declaration for asprintf, needed by
+	libiberty.h.
+	* configure: Regenerate.
+	* config.in: Likewise.
 
 2005-06-03  Andrew Pinski  <pinskia@physics.uc.edu>
 

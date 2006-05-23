@@ -153,10 +153,10 @@ do {									\
 
 /* APPLE LOCAL begin CW asm blocks */
 /* This token is a pseudo-storage-class.  */
-%token CW_ASM_KEYWORD
-%type <ttype> CW_ASM_KEYWORD
+%token IASM_ASM_KEYWORD
+%type <ttype> IASM_ASM_KEYWORD
 /* These tokens indicate beginning and end of each asm line.  */
-%token CW_ASM_BOL CW_ASM_EOL
+%token IASM_BOL IASM_EOL
 /* APPLE LOCAL end CW asm blocks */
 
 /* Add precedence rules to solve dangling else s/r conflict */
@@ -252,14 +252,14 @@ do {									\
 %type <ttype> identifiers_or_typenames
 
 /* APPLE LOCAL begin CW asm blocks */
-%type <ttype> cw_identifier cw_identifier1 cw_maybe_prefix
-%type <exprtype> cw_asm_expr_no_commas cw_asm_unary_expr 
-%type <exprtype> cw_asm_primary
-%type <ttype> cw_asm_operands cw_nonnull_asm_operands 
-%type <exprtype> cw_asm_operand
-%type <ttype> cw_asm_stmt cw_asm_stmt_nobol single_cw_asm_stmt
-%type <ttype> cw_asm_compstmt cw_asm_compstmt_start 
-/*cw_asm_compstmt_nostart */
+%type <ttype> iasm_identifier iasm_identifier1 iasm_maybe_prefix
+%type <exprtype> iasm_expr_no_commas iasm_unary_expr 
+%type <exprtype> iasm_primary
+%type <ttype> iasm_operands iasm_nonnull_operands 
+%type <exprtype> iasm_operand
+%type <ttype> iasm_stmt iasm_stmt_nobol single_iasm_stmt
+%type <ttype> iasm_compstmt iasm_compstmt_start 
+/* iasm_compstmt_nostart */
 /* APPLE LOCAL end CW asm blocks */
 
 %type <itype> setspecs setspecs_fp extension
@@ -379,12 +379,12 @@ static inline int _yylex (void);
 static int  yylex (void);
 static void init_reswords (void);
 /* APPLE LOCAL begin CW asm blocks */
-static int cw_asm_lineno = 0;
-#ifndef CW_SEE_OPCODE
-#define CW_SEE_OPCODE(YYCHAR, T) YYCHAR
+static int iasm_lineno = 0;
+#ifndef IASM_SEE_OPCODE
+#define IASM_SEE_OPCODE(YYCHAR, T) YYCHAR
 #endif
 
-static tree c_parse_cw_maybe_prefix (tree id);
+static tree c_parse_iasm_maybe_prefix (tree id);
 /* APPLE LOCAL end CW asm blocks */
 
   /* Initialization routine for this file.  */
@@ -875,7 +875,7 @@ datadecl:
 lineno_decl:
 	  save_location decl
 		/* APPLE LOCAL CW asm blocks */
-		{ if (flag_cw_asm_blocks) cw_asm_in_decl = 0; }
+		{ if (flag_iasm_blocks) iasm_in_decl = false; }
 	;
 
 /* records the type and storage class specs to use for processing
@@ -1324,6 +1324,12 @@ typespec_nonreserved_nonattr:
 		    error ("%<typeof%> applied to a bit-field");
 		  $$.kind = ctsk_typeof;
 		  $$.spec = TREE_TYPE ($3.value);
+		  /* APPLE LOCAL begin radar 4204796 */
+		  if (c_dialect_objc() 
+		      && lookup_attribute ("objc_volatilized", TYPE_ATTRIBUTES ($$.spec)))
+		    $$.spec = build_qualified_type
+				($$.spec, (TYPE_QUALS ($$.spec) & ~TYPE_QUAL_VOLATILE));
+		  /* APPLE LOCAL end radar 4204796 */
 		  pop_maybe_used (variably_modified_type_p ($$.spec,
 							    NULL_TREE)); }
 	| typeof '(' typename ')'
@@ -1450,7 +1456,7 @@ any_word:
 scspec:
 	  STATIC
 	  /* APPLE LOCAL CW asm blocks */
-	| CW_ASM_KEYWORD
+	| IASM_ASM_KEYWORD
 	| SCSPEC
 	;
 
@@ -1532,9 +1538,10 @@ nested_function:
 	declarator
 		{ if (pedantic)
 		    pedwarn ("ISO C forbids nested functions");
-/* APPLE LOCAL begin 4258406 */
-		    error ("nested functions are not supported on MacOSX");
-/* APPLE LOCAL end 4258406 */
+/* APPLE LOCAL begin nested functions 4258406 4357979 */
+		  else if (flag_nested_functions == 0)
+		    error ("nested functions are disabled, use -fnested-functions to re-enable");
+/* APPLE LOCAL end nested functions 4258406 4357979 */
 
 		  push_function_context ();
 		  if (!start_function (current_declspecs, $1,
@@ -1565,9 +1572,10 @@ notype_nested_function:
 	notype_declarator
 		{ if (pedantic)
 		    pedwarn ("ISO C forbids nested functions");
-/* APPLE LOCAL begin 4258406 */
-		    error ("nested functions are not on MacOSX");
-/* APPLE LOCAL end 4258406 */
+/* APPLE LOCAL begin nested functions 4258406 4357979*/
+		  else if (flag_nested_functions == 0)
+		    error ("nested functions are disabled, use -fnested-functions to re-enable");
+/* APPLE LOCAL end nested functions 4258406 4357979 */
 
 		  push_function_context ();
 		  if (!start_function (current_declspecs, $1,
@@ -1615,6 +1623,12 @@ after_type_declarator:
 		{ $$ = make_pointer_declarator ($2, $3); }
 	| TYPENAME
 		{ $$ = build_id_declarator ($1); }
+/* APPLE LOCAL begin radar 4281748 */
+@@ifobjc
+	| CLASSNAME
+		{ $$ = build_id_declarator ($1); }
+@@end_ifobjc
+/* APPLE LOCAL end radar 4281748 */
 	;
 
 /* Kinds of declarator that can appear in a parameter list
@@ -2068,7 +2082,7 @@ compstmt_nostart: '}'
 	| maybe_label_decls compstmt_contents_nonempty '}'
 		/* APPLE LOCAL begin CW asm blocks */
 		{
-		  if (flag_cw_asm_blocks) inside_cw_asm_block = 0;
+		  if (flag_iasm_blocks) inside_iasm_block = 0;
 		}
 		/* APPLE LOCAL end CW asm blocks */
 	;
@@ -2095,127 +2109,127 @@ compstmt: compstmt_start compstmt_nostart
 	;
 
 /* APPLE LOCAL begin CW asm blocks */
-cw_save_location: save_location
-		{ cw_asm_lineno = input_line; }
+iasm_save_location: save_location
+		{ iasm_lineno = input_line; }
 	;
 
 /* A CW-style asm statement is recognized by having a BOL token preceding it.  */
-cw_asm_stmt: CW_ASM_BOL cw_save_location cw_asm_stmt_list CW_ASM_EOL
+iasm_stmt: IASM_BOL iasm_save_location iasm_stmt_list IASM_EOL
 		{ $$ = NULL_TREE; }
 	;
 
-cw_asm_stmt_nobol: cw_save_location cw_asm_stmt_list CW_ASM_EOL
+iasm_stmt_nobol: iasm_save_location iasm_stmt_list IASM_EOL
 		{
 		  $$ = NULL_TREE;
-		  cw_asm_state = cw_asm_none;
-		  cw_asm_at_bol = 0;
+		  iasm_state = iasm_none;
+		  iasm_at_bol = false;
 		}
 	;
 
 /* A single line may have multiple statements separated by ';'.  */
-cw_asm_stmt_list:
+iasm_stmt_list:
 	  /* empty */
-	| single_cw_asm_stmt
+	| single_iasm_stmt
 		{}
-	| cw_asm_stmt_list ';' cw_maybe_comment single_cw_asm_stmt
-	| cw_asm_stmt_list ';' cw_maybe_comment
-	| cw_asm_stmt_list ASM_KEYWORD single_cw_asm_stmt
-	| cw_asm_stmt_list ASM_KEYWORD cw_maybe_comment
+	| iasm_stmt_list ';' iasm_maybe_comment single_iasm_stmt
+	| iasm_stmt_list ';' iasm_maybe_comment
+	| iasm_stmt_list ASM_KEYWORD single_iasm_stmt
+	| iasm_stmt_list ASM_KEYWORD iasm_maybe_comment
 	;
 
-cw_maybe_comment:
+iasm_maybe_comment:
 		{
 		  if (flag_ms_asms)
 		    {
-		      cw_skip_to_eol ();
+		      iasm_skip_to_eol ();
 		      yychar = YYEMPTY;
 		    }
 		}
 	;
 
-cw_identifier:
-	  cw_identifier1 ' '
+iasm_identifier:
+	  iasm_identifier1 ' '
 		{ $$ = $1; }
-	| cw_identifier1
-		{ $$ = $1; cw_split_next = 0; }
+	| iasm_identifier1
+		{ $$ = $1; iasm_split_next = 0; }
 	;
 
-cw_identifier1:
+iasm_identifier1:
 	  identifier
 		{
-		  if (cw_split_next &&
+		  if (iasm_split_next &&
 		      (yychar == '.'
 		       || yychar == '+'
 		       || yychar == '-'))
 		    {
-		      cw_insert_saved_token ();
+		      iasm_insert_saved_token ();
 		      yychar = ' ';
 		    }
 		}
-	| cw_identifier1 '.'
-		{ $$ = cw_get_identifier ($1, "."); }
-	| cw_identifier1 '+'
-		{ $$ = cw_get_identifier ($1, "+"); }
-	| cw_identifier1 '-'
-		{ $$ = cw_get_identifier ($1, "-"); }
+	| iasm_identifier1 '.'
+		{ $$ = iasm_get_identifier ($1, "."); }
+	| iasm_identifier1 '+'
+		{ $$ = iasm_get_identifier ($1, "+"); }
+	| iasm_identifier1 '-'
+		{ $$ = iasm_get_identifier ($1, "-"); }
 	| '.' identifier
 		{ $$ = prepend_char_identifier ($2, '.'); }
 	;
 
-cw_maybe_prefix:
-	  cw_identifier
-		{ $$ = c_parse_cw_maybe_prefix ($1); }
+iasm_maybe_prefix:
+	  iasm_identifier
+		{ $$ = c_parse_iasm_maybe_prefix ($1); }
 	;
 
 /* A single statement consists of one or more labels (identified by a
    leading '@' and/or a trailing ':'), optionally followed by opcode
    and operands.  */
-single_cw_asm_stmt:
-	  cw_maybe_prefix
-		{ cw_asm_in_operands = 1; }
-	  cw_asm_operands
-		{ $$ = cw_asm_stmt ($1, $3, cw_asm_lineno); }
-	| identifier STATIC cw_asm_operand
-		{ $$ = cw_asm_entry ($1, $2, $3.value); }
-	| identifier SCSPEC cw_asm_operand
-		{ $$ = cw_asm_entry ($1, $2, $3.value); }
-	| cw_asm_label
+single_iasm_stmt:
+	  iasm_maybe_prefix
+		{ iasm_in_operands = true; }
+	  iasm_operands
+		{ $$ = iasm_stmt ($1, $3, iasm_lineno); }
+	| identifier STATIC iasm_operand
+		{ $$ = iasm_entry ($1, $2, $3.value); }
+	| identifier SCSPEC iasm_operand
+		{ $$ = iasm_entry ($1, $2, $3.value); }
+	| iasm_label
 		{}	
-	| cw_asm_label single_cw_asm_stmt
+	| iasm_label single_iasm_stmt
 		{}	
 	;
 
-cw_asm_label:
+iasm_label:
 	  identifier ':'
-		{ cw_asm_label ($1, 0); }
+		{ iasm_label ($1, 0); }
 	| '@' identifier
-		{ cw_asm_label ($2, 1); }
+		{ iasm_label ($2, 1); }
 	| '@' identifier ':'
-		{ cw_asm_label ($2, 1); }
+		{ iasm_label ($2, 1); }
 	| '@' CONSTANT
-		{ cw_asm_label ($2, 1); }
+		{ iasm_label ($2, 1); }
 	| '@' CONSTANT ':'
-		{ cw_asm_label ($2, 1); }
+		{ iasm_label ($2, 1); }
 	;
 
-cw_asm_stmts:
+iasm_stmts:
 	  stmt
 		{}
-	| cw_asm_stmts stmt
+	| iasm_stmts stmt
 		{}
 	;
 
 /* An asm block within a function is simpler than asm functions; no
    declarations are possible, so we switch to the block interior state
    immediately.  */
-cw_asm_compstmt_start: ASM_KEYWORD '{'
+iasm_compstmt_start: ASM_KEYWORD '{'
 		{
-		  if (flag_cw_asm_blocks)
+		  if (flag_iasm_blocks)
 		    {
-		      cw_asm_state = cw_asm_asm;
-		      inside_cw_asm_block = 1;
-		      cw_asm_at_bol = 1;
-		      clear_cw_asm_labels ();
+		      iasm_state = iasm_asm;
+		      inside_iasm_block = true;
+		      iasm_at_bol = true;
+		      iasm_clear_labels ();
 		    }
 		  else
 		    /* This will probably choke badly... */
@@ -2224,58 +2238,58 @@ cw_asm_compstmt_start: ASM_KEYWORD '{'
 		}
         ;
 
-cw_asm_compstmt: ASM_KEYWORD
+iasm_compstmt: ASM_KEYWORD
 		{
-		  if (flag_cw_asm_blocks)
+		  if (flag_iasm_blocks)
 		    {
-		      cw_asm_state = cw_asm_asm;
-		      inside_cw_asm_block = 1;
-		      clear_cw_asm_labels ();
+		      iasm_state = iasm_asm;
+		      inside_iasm_block = true;
+		      iasm_clear_labels ();
 		      if (yychar == ';' && flag_ms_asms)
 			{
-			  cw_skip_to_eol ();
+			  iasm_skip_to_eol ();
 			  yychar = YYEMPTY;
 			}
-		      yychar = CW_SEE_OPCODE (yychar, yylval.ttype);
+		      yychar = IASM_SEE_OPCODE (yychar, yylval.ttype);
 		    }
 		  else
 		    /* This will probably choke badly... */
 		    error ("asm blocks not enabled, use `-fasm-blocks'");
 		  $<ttype>$ = c_begin_compound_stmt (true);
 		}
-	  cw_asm_stmt_nobol
+	  iasm_stmt_nobol
 		{
 		  $$ = c_finish_expr_stmt ($3);
-		  inside_cw_asm_block = 0;
+		  inside_iasm_block = false;
 		  $<ttype>$ = c_end_compound_stmt ($<ttype>2, true);
 		}
         ;
 
-cw_asm_compstmt_nostart:
+iasm_compstmt_nostart:
 	  '}'
-	| cw_asm_compstmt_contents_nonempty '}'
-		{ inside_cw_asm_block = 0; }
+	| iasm_compstmt_contents_nonempty '}'
+		{ inside_iasm_block = false; }
 	;
 
-cw_asm_compstmt_contents_nonempty:
-	  cw_asm_stmts
+iasm_compstmt_contents_nonempty:
+	  iasm_stmts
 	| error
 	;
 
-cw_asm_compstmt: cw_asm_compstmt_start cw_asm_compstmt_nostart
+iasm_compstmt: iasm_compstmt_start iasm_compstmt_nostart
 		{ $$ = c_end_compound_stmt ($1, true); }
 	;
 
-cw_asm_operands:
+iasm_operands:
 	  /* empty */
 		{ $$ = NULL_TREE; }
-	| cw_nonnull_asm_operands
+	| iasm_nonnull_operands
 	;
 
-cw_nonnull_asm_operands:
-	  cw_asm_operand
+iasm_nonnull_operands:
+	  iasm_operand
 		{ $$ = build_tree_list (NULL_TREE, $1.value); }
-	| cw_nonnull_asm_operands ',' cw_asm_operand
+	| iasm_nonnull_operands ',' iasm_operand
 		{ $$ = chainon ($1, build_tree_list (NULL_TREE, $3.value)); }
 	;
 
@@ -2283,9 +2297,9 @@ cw_nonnull_asm_operands:
    all the semantic actions would need to be tweaked to handle the
    possibility of CW asm coming through.  For example, "offset(reg)"
    would be handled by function call code (bleah).  */
-cw_asm_operand:	cw_asm_expr_no_commas
-	| cw_asm_operand '(' cw_asm_expr_no_commas ')'
-		{ $$.value = cw_asm_build_register_offset ($1.value, $3.value); 
+iasm_operand: iasm_expr_no_commas
+	| iasm_operand '(' iasm_expr_no_commas ')'
+		{ $$.value = iasm_build_register_offset ($1.value, $3.value); 
 		  $$.original_code = ERROR_MARK;  }
 	;
 /* APPLE LOCAL end CW asm blocks */
@@ -2473,9 +2487,9 @@ stmt_nocomp:
 	| switch_statement
 		{ $$ = NULL_TREE; }
 	/* APPLE LOCAL begin CW asm blocks */
-	| cw_asm_compstmt
+	| iasm_compstmt
 		{ $$ = c_finish_expr_stmt ($1); }
-	| cw_asm_stmt
+	| iasm_stmt
 		{ $$ = c_finish_expr_stmt ($1); }
 	/* APPLE LOCAL end CW asm blocks */
 	| BREAK ';'
@@ -2687,77 +2701,81 @@ start_string_translation:
         ;
 
 /* APPLE LOCAL begin CW asm blocks */
-cw_asm_expr_no_commas:
-	 cw_asm_unary_expr
-	| cw_asm_expr_no_commas '+' cw_asm_expr_no_commas
+iasm_expr_no_commas:
+	 iasm_unary_expr
+	| iasm_expr_no_commas '+' iasm_expr_no_commas
 		{ $$ = parser_build_binary_op ($2, $1, $3); }
-	| cw_asm_expr_no_commas '-' cw_asm_expr_no_commas
+	| iasm_expr_no_commas '-' iasm_expr_no_commas
 		{ $$ = parser_build_binary_op ($2, $1, $3); }
-	| cw_asm_expr_no_commas '*' cw_asm_expr_no_commas
+	| iasm_expr_no_commas '*' iasm_expr_no_commas
 		{ $$ = parser_build_binary_op ($2, $1, $3); }
-	| cw_asm_expr_no_commas '/' cw_asm_expr_no_commas
+	| iasm_expr_no_commas '/' iasm_expr_no_commas
 		{ $$ = parser_build_binary_op ($2, $1, $3); }
-	| cw_asm_expr_no_commas '%' cw_asm_expr_no_commas
+	| iasm_expr_no_commas '%' iasm_expr_no_commas
 		{ $$ = parser_build_binary_op ($2, $1, $3); }
-	| cw_asm_expr_no_commas LSHIFT cw_asm_expr_no_commas
+	| iasm_expr_no_commas LSHIFT iasm_expr_no_commas
 		{ $$ = parser_build_binary_op ($2, $1, $3); }
-	| cw_asm_expr_no_commas RSHIFT cw_asm_expr_no_commas
+	| iasm_expr_no_commas RSHIFT iasm_expr_no_commas
 		{ $$ = parser_build_binary_op ($2, $1, $3); }
-	| cw_asm_expr_no_commas ARITHCOMPARE cw_asm_expr_no_commas
+	| iasm_expr_no_commas ARITHCOMPARE iasm_expr_no_commas
 		{ $$ = parser_build_binary_op ($2, $1, $3); }
-	| cw_asm_expr_no_commas EQCOMPARE cw_asm_expr_no_commas
+	| iasm_expr_no_commas EQCOMPARE iasm_expr_no_commas
 		{ $$ = parser_build_binary_op ($2, $1, $3); }
-	| cw_asm_expr_no_commas '&' cw_asm_expr_no_commas
+	| iasm_expr_no_commas '&' iasm_expr_no_commas
 		{ $$ = parser_build_binary_op ($2, $1, $3); }
-	| cw_asm_expr_no_commas '|' cw_asm_expr_no_commas
+	| iasm_expr_no_commas '|' iasm_expr_no_commas
 		{ $$ = parser_build_binary_op ($2, $1, $3); }
-	| cw_asm_expr_no_commas '^' cw_asm_expr_no_commas
+	| iasm_expr_no_commas '^' iasm_expr_no_commas
 		{ $$ = parser_build_binary_op ($2, $1, $3); }
-	| cw_asm_expr_no_commas ANDAND
+	| iasm_expr_no_commas ANDAND
 		{ $1.value = c_common_truthvalue_conversion
 		    (default_conversion ($1.value));
 		  skip_evaluation += $1.value == boolean_false_node; }
-	  cw_asm_expr_no_commas
+	  iasm_expr_no_commas
 		{ skip_evaluation -= $1.value == boolean_false_node;
 		  $$ = parser_build_binary_op (TRUTH_ANDIF_EXPR, $1, $4); }
-	| cw_asm_expr_no_commas OROR
+	| iasm_expr_no_commas OROR
 		{ $1.value = c_common_truthvalue_conversion
 		    (default_conversion ($1.value));
 		  skip_evaluation += $1.value == boolean_true_node; }
-	  cw_asm_expr_no_commas
+	  iasm_expr_no_commas
 		{ skip_evaluation -= $1.value == boolean_true_node;
 		  $$ = parser_build_binary_op (TRUTH_ORIF_EXPR, $1, $4); }
 	;
 
-cw_asm_unary_expr:
-	cw_asm_primary
-	| cw_asm_primary IDENTIFIER cw_asm_unary_expr
+iasm_unary_expr:
+	iasm_primary
+	| iasm_primary IDENTIFIER iasm_unary_expr
 		{
 		  /* Handle things like: inc dword ptr [eax]  */
 		  if (strcasecmp (IDENTIFIER_POINTER ($2), "ptr") != 0)
 		    error ("expected %<ptr%>");
-		  $$.value = cw_ptr_conv ($1.value, $3.value);
+		  $$.value = iasm_ptr_conv ($1.value, $3.value);
 		  $$.original_code = ERROR_MARK;
 		}
-	| '*' cw_asm_unary_expr   %prec UNARY
+	| '*' iasm_unary_expr   %prec UNARY
 		{ $$.value = build_indirect_ref ($2.value, "unary *");
                   $$.original_code = ERROR_MARK; }
-	| unop cw_asm_unary_expr  %prec UNARY
+	| unop iasm_unary_expr  %prec UNARY
 		{ 
 		  if (TREE_CODE ($2.value) == COMPOUND_EXPR)
 		    {
 		      tree neg = build_unary_op ($1, TREE_OPERAND ($2.value, 0), 0);
 		      tree reg = TREE_OPERAND ($2.value, 1);
-		      $$.value = cw_asm_build_register_offset (neg, reg);
+		      $$.value = iasm_build_register_offset (neg, reg);
 		    }
 		  else
 		    {
-		      $$.value = build_unary_op ($1, $2.value, 0);
+		      if (TREE_CODE ($2.value) == LABEL_DECL
+			  && $1 == ADDR_EXPR)
+			$$.value = finish_label_address_expr (DECL_NAME ($2.value));
+		      else
+			$$.value = build_unary_op ($1, $2.value, 0);
 		      overflow_warning ($$.value);
 		    }
 		  $$.original_code = ERROR_MARK;
 		}
-	| sizeof cw_asm_unary_expr  %prec UNARY
+	| sizeof iasm_unary_expr  %prec UNARY
 		{ skip_evaluation--;
                   if (TREE_CODE ($2.value) == COMPONENT_REF
                       && DECL_C_BIT_FIELD (TREE_OPERAND ($2.value, 1)))
@@ -2773,7 +2791,7 @@ cw_asm_unary_expr:
 		{ skip_evaluation--;
                   $$.value = c_sizeof (groktypename ($3));
                   $$.original_code = ERROR_MARK; }
-	| alignof cw_asm_unary_expr  %prec UNARY
+	| alignof iasm_unary_expr  %prec UNARY
 		{ skip_evaluation--;
                   $$.value = c_alignof_expr ($2.value);
                   $$.original_code = ERROR_MARK; }
@@ -2783,7 +2801,7 @@ cw_asm_unary_expr:
                   $$.original_code = ERROR_MARK; }
 	;
 
-cw_asm_primary:
+iasm_primary:
 	IDENTIFIER
 		{
                   if (yychar == YYEMPTY)
@@ -2803,30 +2821,30 @@ cw_asm_primary:
 		{ $$.value = $1; $$.original_code = ERROR_MARK; }
 	| STRING
 		{ $$.value = $1; $$.original_code = STRING_CST; }
-	| '(' cw_asm_expr_no_commas ')'
+	| '(' iasm_expr_no_commas ')'
 		{ char class = TREE_CODE_CLASS (TREE_CODE ($2.value));
 		  if (IS_EXPR_CODE_CLASS (class))
 		    $2.original_code = ERROR_MARK;
 		  $$ = $2; }
 	| '(' error ')'
 		{ $$.value = error_mark_node; $$.original_code = ERROR_MARK; }
-	| cw_asm_primary '[' cw_asm_expr_no_commas ']'   %prec '.'
+	| iasm_primary '[' iasm_expr_no_commas ']'   %prec '.'
 		{ $$.value = build_array_ref ($1.value, $3.value);
                   $$.original_code = ERROR_MARK; }
-	| '[' cw_asm_expr_no_commas ']'   %prec '.'
-		{ $$.value = cw_build_bracket ($2.value, NULL_TREE);
+	| '[' iasm_expr_no_commas ']'   %prec '.'
+		{ $$.value = iasm_build_bracket ($2.value, NULL_TREE);
                   $$.original_code = ERROR_MARK; }
 	| TYPENAME '.' identifier
-		{ $$.value = cw_asm_c_build_component_ref ($1, $3);
+		{ $$.value = iasm_c_build_component_ref ($1, $3);
                   $$.original_code = ERROR_MARK; }
-	| cw_asm_primary '.' identifier
-		{ $$.value = cw_asm_c_build_component_ref ($1.value, $3);
+	| iasm_primary '.' identifier
+		{ $$.value = iasm_c_build_component_ref ($1.value, $3);
                   $$.original_code = ERROR_MARK; }
-	| cw_asm_primary '.' CONSTANT
+	| iasm_primary '.' CONSTANT
 		{ /* We allow [eax].16 to refer to [eax + 16].  */
-		  $$.value = cw_asm_c_build_component_ref ($1.value, $3);
+		  $$.value = iasm_c_build_component_ref ($1.value, $3);
                   $$.original_code = ERROR_MARK; }
-	| cw_asm_primary POINTSAT identifier
+	| iasm_primary POINTSAT identifier
 		{
                   tree expr = build_indirect_ref ($1.value, "->");
                   $$.value = build_component_ref (expr, $3);
@@ -3315,7 +3333,8 @@ objc_qual:
 objc_quals:
 	  objc_quals objc_qual
 		{
-		  $$ = chainon ($1, build_tree_list (NULL_TREE, $2));
+		  /* APPLE LOCAL radar 4301047 */
+		  $$ = chainon (build_tree_list (NULL_TREE, $2), $1);
 		}
 	| /* NULL */
 		{
@@ -3485,6 +3504,8 @@ static const struct resword reswords[] =
 {
   { "_Bool",		RID_BOOL,	0 },
   { "_Complex",		RID_COMPLEX,	0 },
+  /* APPLE LOCAL CW asm blocks */
+  { "_asm",		RID_ASM,	0 },
   { "__FUNCTION__",	RID_FUNCTION_NAME, 0 },
   { "__PRETTY_FUNCTION__", RID_PRETTY_FUNCTION_NAME, 0 },
   { "__alignof",	RID_ALIGNOF,	0 },
@@ -3795,11 +3816,11 @@ yylexname (void)
 	    /* Change the code.  No need to change the name though,
 	       won't matter to parser.  */
 	    if (next_tok_type != CPP_OPEN_PAREN)
-	      yycode = CW_ASM_KEYWORD;
+	      yycode = IASM_ASM_KEYWORD;
 	  }
-	if (CW_SEE_OPCODE (TYPESPEC, yylval.ttype) == IDENTIFIER
-	    && cw_asm_state >= cw_asm_decls
-	    && cw_asm_in_operands == 0)
+	if (IASM_SEE_OPCODE (TYPESPEC, yylval.ttype) == IDENTIFIER
+	    && iasm_state >= iasm_decls
+	    && iasm_in_operands == false)
 	  {
 	    /* If this was an opcode, prefer it.  */
 	    return IDENTIFIER;
@@ -3933,9 +3954,9 @@ _yylex (void)
       /* Convert a lexer-returned beginning-of-line token into a
 	 parser token.  */
     case CPP_BOL:
-      return CW_ASM_BOL;
+      return IASM_BOL;
     case CPP_EOL:
-      return CW_ASM_EOL;
+      return IASM_EOL;
       /* APPLE LOCAL end CW asm blocks */
 
     case CPP_OBJC_STRING:
@@ -4026,11 +4047,11 @@ c_parse_file (void)
 
 /* APPLE LOCAL begin CW asm blocks */
 static tree
-c_parse_cw_maybe_prefix (tree id)
+c_parse_iasm_maybe_prefix (tree id)
 {
   tree prefix_list = NULL_TREE;;
 
-  while (cw_is_prefix (id))
+  while (iasm_is_prefix (id))
     {
       if (yychar == YYEMPTY)
 	yychar = YYLEX;

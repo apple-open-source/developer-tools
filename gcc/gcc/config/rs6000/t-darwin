@@ -29,3 +29,15 @@ LIB2ADDEH += $(srcdir)/config/rs6000/darwin-fallback.c
 
 darwin-fpsave.o:	$(srcdir)/config/rs6000/darwin-asm.h
 darwin-tramp.o:		$(srcdir)/config/rs6000/darwin-asm.h
+ # APPLE LOCAL begin mainline 2006-03-15 3992198
+
+# APPLE LOCAL 4505290
+DARWIN_EXTRA_CRT_BUILD_CFLAGS = -mlongcall
+
+# Explain how to build crt2.o
+$(T)crt2$(objext): $(srcdir)/config/darwin-crt2.c $(GCC_PASSES) \
+	$(TCONFIG_H) stmp-int-hdrs tsystem.h
+	# APPLE LOCAL use -mlongcall for large text support
+	$(GCC_FOR_TARGET) $(GCC_CFLAGS) $(INCLUDES) $(MULTILIB_CFLAGS) -mlongcall \
+	  -c $(srcdir)/config/darwin-crt2.c -o $(T)crt2$(objext)
+ # APPLE LOCAL end mainline 2006-03-15 3992198

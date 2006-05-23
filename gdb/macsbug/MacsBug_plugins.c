@@ -2233,7 +2233,8 @@ static void wh(char *arg, int from_tty)
 
 void init_from_gdb(void)
 {
-    gdb_initialize();
+    if (!gdb_initialize())
+        return 0;   
     
     macsbug_class 	   = gdb_define_class("macsbug", "MacsBug commands");
     macsbug_internal_class = Gdb_Private;

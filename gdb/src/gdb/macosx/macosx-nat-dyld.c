@@ -61,6 +61,8 @@
 #include "macosx-nat-dyld-path.h"
 #include "macosx-nat-dyld-process.h"
 
+#include "macosx-tdep.h"
+
 #include <AvailabilityMacros.h>
 
 #define MACH64 (MAC_OS_X_VERSION_MAX_ALLOWED >= 1040)
@@ -291,7 +293,7 @@ lookup_dyld_address (macosx_dyld_thread_status *status, const char *s)
   xfree (ns);
 
   if (msym == NULL)
-    return (CORE_ADDR) - 1;
+    return INVALID_ADDRESS;
 
   sym_addr = SYMBOL_VALUE_ADDRESS (msym);
   return (sym_addr + status->dyld_slide);
@@ -307,9 +309,12 @@ macosx_init_addresses (macosx_dyld_thread_status *s)
 {
   struct dyld_raw_infos infos;
 
-  s->image_infos = lookup_dyld_address (s, "dyld_all_image_infos");
+  s->dyld_image_infos = lookup_dyld_address (s, "dyld_all_image_infos");
 
-  dyld_read_raw_infos (s->image_infos, &infos);
+  if (s->dyld_image_infos == INVALID_ADDRESS)
+    return;
+
+  dyld_read_raw_infos (s->dyld_image_infos, &infos);
 
   s->dyld_version = infos.version;
   s->dyld_notify = infos.dyld_notify + s->dyld_slide;
@@ -599,7 +604,7 @@ macosx_dyld_init (macosx_dyld_thread_status *s, bfd *exec_bfd)
   if (dyld_address != INVALID_ADDRESS)
     {
       struct mach_header header;
-      target_read_memory (dyld_address, (char *) &header,
+      target_read_memory (dyld_address, (gdb_byte *) &header,
                           sizeof (struct mach_header));
       if (s->dyld_name == NULL)
         s->dyld_name = dyld_find_dylib_name (dyld_address, header.ncmds);
@@ -790,7 +795,7 @@ macosx_solib_add (const char *filename, int from_tty,
       notify = libraries_changed && dyld_stop_on_shlibs_updated;
     }
   else if (cfm_status->cfm_breakpoint != NULL
-           && cfm_status->cfm_breakpoint->loc->address == read_pc ())
+	   && cfm_status->cfm_breakpoint->loc->address == read_pc ())
     {
       /* no cfm support for incremental update yet */
       libraries_changed = macosx_dyld_update (0);
@@ -873,6 +878,7 @@ macosx_dyld_thread_init (macosx_dyld_thread_status *s)
   s->dyld_name = NULL;
   s->dyld_addr = INVALID_ADDRESS;
   s->dyld_slide = INVALID_ADDRESS;
+  s->dyld_image_infos = INVALID_ADDRESS;
   s->dyld_version = 0;
   s->dyld_breakpoint = NULL;
   dyld_zero_path_info (&s->path_info);
@@ -983,7 +989,7 @@ dyld_info_process_raw (struct dyld_objfile_entry *entry,
   struct load_command cmd;
   struct dylib_command dcmd;
 
-  target_read_memory (header, (char *) &headerbuf, sizeof (struct mach_header));
+  target_read_memory (header, (gdb_byte *) &headerbuf, sizeof (struct mach_header));
 
   switch (headerbuf.filetype)
     {
@@ -1030,13 +1036,13 @@ dyld_info_process_raw (struct dyld_objfile_entry *entry,
 
       for (i = 0; i < headerbuf.ncmds; i++)
         {
-          target_read_memory (curpos, (char *) &cmd,
+          target_read_memory (curpos, (gdb_byte *) &cmd,
                               sizeof (struct load_command));
           if (cmd.cmd == LC_ID_DYLIB)
             {
-              target_read_memory (curpos, (char *) &dcmd,
+              target_read_memory (curpos, (gdb_byte *) &dcmd,
                                   sizeof (struct dylib_command));
-              target_read_memory (curpos + dcmd.dylib.name.offset, namebuf,
+              target_read_memory (curpos + dcmd.dylib.name.offset, (gdb_byte *) namebuf,
                                   256);
               break;
             }
@@ -1078,11 +1084,11 @@ dyld_info_process_raw (struct dyld_objfile_entry *entry,
 
   for (i = 0; i < headerbuf.ncmds; i++)
     {
-      target_read_memory (curpos, (char *) &cmd, sizeof (struct load_command));
+      target_read_memory (curpos, (gdb_byte *) &cmd, sizeof (struct load_command));
       if (cmd.cmd == LC_SEGMENT)
         {
           struct segment_command segcmd;
-          target_read_memory (curpos, (char *) &segcmd,
+          target_read_memory (curpos, (gdb_byte *) &segcmd,
                               sizeof (struct segment_command));
           if (strcmp (segcmd.segname, "__TEXT") == 0)
             {
@@ -1093,7 +1099,7 @@ dyld_info_process_raw (struct dyld_objfile_entry *entry,
       else if (cmd.cmd == LC_SEGMENT_64)
         {
           struct segment_command_64 segcmd;
-          target_read_memory (curpos, (char *) &segcmd,
+          target_read_memory (curpos, (gdb_byte *) &segcmd,
                               sizeof (struct segment_command_64));
           if (strcmp (segcmd.segname, "__TEXT") == 0)
             {
@@ -1165,20 +1171,10 @@ dyld_info_process_raw (struct dyld_objfile_entry *entry,
 static void
 dyld_read_raw_infos (CORE_ADDR addr, struct dyld_raw_infos *info)
 {
-  char *buf = (char *) alloca (sizeof (struct dyld_raw_infos));
+  gdb_byte *buf = (gdb_byte *) alloca (sizeof (struct dyld_raw_infos));
   int wordsize = gdbarch_tdep (current_gdbarch)->wordsize;
 
-  /* if ADDR is zero, we're looking at a not-yet-running process,
-     e.g. the user did "file such-and-so" from the CLI.  Why are we
-     down in this function then?  macosx-nat-dyld is mysterious and mere
-     mortals are not meant to understand all its motivations.  So we
-     assign 0's to everything and pretend everything is all right.  */
-
-  if (addr == 0)
-    {
-      info->version = info->num_info = info->info_array = info->dyld_notify = 0;
-      return;
-    }
+  gdb_assert (addr != INVALID_ADDRESS);
 
   /* The struct dyld_raw_infos in the inferior consists of two 4-byte
      words and two (inferior) wordsize words.  */
@@ -1199,7 +1195,7 @@ dyld_read_raw_infos (CORE_ADDR addr, struct dyld_raw_infos *info)
 static void
 dyld_info_read_raw_data (CORE_ADDR addr, int num, struct dyld_raw_info *rinfo)
 {
-  char *buf;
+  gdb_byte *buf;
   int i;
   int size_of_dyld_raw_info_in_inferior;
   int wordsize = gdbarch_tdep (current_gdbarch)->wordsize;
@@ -1215,7 +1211,7 @@ dyld_info_read_raw_data (CORE_ADDR addr, int num, struct dyld_raw_info *rinfo)
 
   for (i = 0; i < num; i++)
     {
-      char *ebuf = buf + (i * size_of_dyld_raw_info_in_inferior);
+      gdb_byte *ebuf = buf + (i * size_of_dyld_raw_info_in_inferior);
       rinfo[i].addr = extract_unsigned_integer (ebuf, wordsize);
       ebuf += wordsize;
       rinfo[i].name = extract_unsigned_integer (ebuf, wordsize);
@@ -1238,7 +1234,7 @@ dyld_info_read_raw (struct macosx_dyld_thread_status *status,
   struct dyld_raw_infos info;
   struct dyld_raw_info *ninfo;
 
-  dyld_read_raw_infos (status->image_infos, &info);
+  dyld_read_raw_infos (status->dyld_image_infos, &info);
 
   ninfo = xmalloc (info.num_info * sizeof (struct dyld_raw_info));
 
@@ -1305,7 +1301,13 @@ dyld_info_read (struct macosx_dyld_thread_status *status,
   if (dyldonly)
     return;
 
-  dyld_info_read_raw (status, &rinfo, &nrinfo);
+  if (status->dyld_image_infos != INVALID_ADDRESS)
+    dyld_info_read_raw (status, &rinfo, &nrinfo);
+  else
+    {
+      rinfo = NULL;
+      nrinfo = 0;
+    }
 
   for (i = 0; i < nrinfo; i++)
     {
@@ -1384,6 +1386,17 @@ macosx_dyld_update (int dyldonly)
         make_cleanup_ui_out_notify_begin_end (uiout, "shlibs-updated");
       do_cleanups (notify_cleanup);
     }
+
+  /* Try to insert the CFM shared library breakpoint, if necessary.
+     This used to be handled by dyld_symfile_loaded_hook, but that
+     hook was only called when symbol files were read, not when the
+     library image was added.  We should probably make a hook that
+     gets called on all image loads, and use that to trigger the CFM
+     breakpoint.  But this is expedient in the meantime, and
+     inexpensive (one symbol lookup per shared library event, until
+     the CFM code gets loaded). */
+
+  macosx_cfm_init (&macosx_status->cfm_status);
 
   /* Try to insert the CFM shared library breakpoint, if necessary.
      This used to be handled by dyld_symfile_loaded_hook, but that
@@ -1696,27 +1709,34 @@ set_load_state_1 (struct dyld_objfile_entry *e,
     return;
 
   /* This is a bit of a hack, but I don't want to have to throw away and
-     reconstitute the bfd.  So I am hiding it from dyld_remove_objfile.
-     I may give up on this!  Turns out the bfd's strtab for the fake
-     stabstr section is actually a pointer to the version allocated on
-     the objfile's objstack!!!  So I need to null this out so it gets reset.  */
-  {
-    int ret;
-    struct bfd_mach_o_load_command *gsymtab;
+     reconstitute the bfd.  So I am hiding it from dyld_remove_objfile
+     in TMP_BFD.  I may give up on this!  */ 
+  tmp_bfd = e->objfile->obfd;
+  e->objfile->obfd = NULL;
 
-    tmp_bfd = e->objfile->obfd;
-    ret = bfd_mach_o_lookup_command (tmp_bfd, BFD_MACH_O_LC_SYMTAB, &gsymtab);
-    if (ret != 1)
-      {
-        warning
-          ("Error fetching LC_SYMTAB load command from object file \"%s\"",
-           tmp_bfd->filename);
-      }
-    else if (gsymtab->command.symtab.strtab == DBX_STRINGTAB (e->objfile))
-      gsymtab->command.symtab.strtab = NULL;
+  /* Turns out the bfd's strtab for the fake stabstr section is
+     actually a pointer to the version allocated on the objfile's
+     objstack!!!  So I need to null this out so it gets reset.  */
+  
+  /* Only hide away the string table if this IS a mach_o file.  It might be a CFM binary. */
+  
+  if (bfd_get_flavour (tmp_bfd)  == bfd_target_mach_o_flavour)
+    {
+      
+      int ret;
+      struct bfd_mach_o_load_command *gsymtab;
+      
+      ret = bfd_mach_o_lookup_command (tmp_bfd, BFD_MACH_O_LC_SYMTAB, &gsymtab);
+      if (ret != 1)
+	{
+	  warning
+	    ("Error fetching LC_SYMTAB load command from object file \"%s\"",
+	     tmp_bfd->filename);
+	}
+      else if (gsymtab->command.symtab.strtab == DBX_STRINGTAB (e->objfile))
+	gsymtab->command.symtab.strtab = NULL;
+    }
 
-    e->objfile->obfd = NULL;
-  }
   tell_breakpoints_objfile_changed (e->objfile);
   tell_objc_msgsend_cacher_objfile_changed (e->objfile);
 
@@ -1976,7 +1996,6 @@ info_sharedlibrary_raw_cfm_command (char *args, int from_tty)
 static void
 info_sharedlibrary_raw_dyld_command (char *args, int from_tty)
 {
-  task_t task = macosx_status->task;
   struct dyld_objfile_info info;
 
   dyld_objfile_info_init (&info);
@@ -2169,8 +2188,6 @@ sharedlibrary_command (char *arg, int from_tty)
 void
 _initialize_macosx_nat_dyld ()
 {
-  struct cmd_list_element *cmd = NULL;
-
   dyld_stderr = fdopen (fileno (stderr), "w+");
 
   add_prefix_cmd ("sharedlibrary", class_run, sharedlibrary_command,
@@ -2234,60 +2251,69 @@ _initialize_macosx_nat_dyld ()
                   "Generic command for showing shlib settings.",
                   &showshliblist, "show sharedlibrary ", 0, &showlist);
 
-  cmd = add_set_cmd ("filter-events", class_obscure, var_boolean,
-                     (char *) &dyld_filter_events_flag,
-                     "Set if GDB should filter shared library events to a minimal set.",
-                     &setshliblist);
-  add_show_from_set (cmd, &showshliblist);
+  add_setshow_boolean_cmd ("filter-events", class_obscure,
+			   &dyld_filter_events_flag, _("\
+Set if GDB should filter shared library events to a minimal set."), _("\
+Show if GDB should filter shared library events to a minimal set."), NULL,
+			   NULL, NULL,
+			   &setshliblist, &showshliblist);
 
-  cmd = add_set_cmd ("preload-libraries", class_obscure, var_boolean,
-                     (char *) &dyld_preload_libraries_flag,
-                     "Set if GDB should pre-load symbols for DYLD libraries.",
-                     &setshliblist);
-  add_show_from_set (cmd, &showshliblist);
+  add_setshow_boolean_cmd ("preload-libraries", class_obscure,
+			   &dyld_preload_libraries_flag, _("\
+Set if GDB should pre-load symbols for DYLD libraries."), _("\
+Show if GDB should pre-load symbols for DYLD libraries."), NULL,
+			   NULL, NULL,
+			   &setshliblist, &showshliblist);
 
-  cmd = add_set_cmd ("load-dyld-symbols", class_obscure, var_boolean,
-                     (char *) &dyld_load_dyld_symbols_flag,
-                     "Set if GDB should load symbol information for the dynamic linker.",
-                     &setshliblist);
-  add_show_from_set (cmd, &showshliblist);
+  add_setshow_boolean_cmd ("load-dyld-symbols", class_obscure,
+			   &dyld_load_dyld_symbols_flag, _("\
+Set if GDB should load symbol information for the dynamic linker."), _("\
+Show if GDB should load symbol information for the dynamic linker."), NULL,
+			   NULL, NULL,
+			   &setshliblist, &showshliblist);
 
-  cmd = add_set_cmd ("load-dyld-shlib-symbols", class_obscure, var_boolean,
-                     (char *) &dyld_load_dyld_shlib_symbols_flag,
-                     "Set if GDB should load symbol information for DYLD-based shared libraries.",
-                     &setshliblist);
-  deprecate_cmd (cmd, "set sharedlibrary load-rules");
-  add_show_from_set (cmd, &showshliblist);
+  add_setshow_boolean_cmd ("load-dyld-shlib-symbols", class_obscure,
+			   &dyld_load_dyld_shlib_symbols_flag, _("\
+Set if GDB should load symbol information for DYLD-based shared libraries."), _("\
+Show if GDB should load symbol information for DYLD-based shared libraries."), NULL,
+			   NULL, NULL,
+			   &setshliblist, &showshliblist);
+/* APPLE MERGE  deprecate_cmd (cmd, "set sharedlibrary load-rules"); */
 
-  cmd = add_set_cmd ("load-cfm-shlib-symbols", class_obscure, var_boolean,
-                     (char *) &dyld_load_cfm_shlib_symbols_flag,
-                     "Set if GDB should load symbol information for CFM-based shared libraries.",
-                     &setshliblist);
-  deprecate_cmd (cmd, "set sharedlibrary load-rules");
-  add_show_from_set (cmd, &showshliblist);
+  add_setshow_boolean_cmd ("load-cfm-shlib-symbols", class_obscure,
+			   &dyld_load_cfm_shlib_symbols_flag, _("\
+Set if GDB should load symbol information for CFM-based shared libraries."), _("\
+Show if GDB should load symbol information for CFM-based shared libraries."), NULL,
+			   NULL, NULL,
+			   &setshliblist, &showshliblist);
+/* APPLE MERGE  deprecate_cmd (cmd, "set sharedlibrary load-rules"); */
 
-  cmd = add_set_cmd ("dyld-symbols-prefix", class_obscure, var_string,
-                     (char *) &dyld_symbols_prefix,
-                     "Set the prefix that GDB should prepend to all symbols for the dynamic linker.",
-                     &setshliblist);
-  add_show_from_set (cmd, &showshliblist);
+  add_setshow_string_cmd ("dyld-symbols-prefix", class_obscure,
+			    &dyld_symbols_prefix, _("\
+Set the prefix that GDB should prepend to all symbols for the dynamic linker."), _("\
+Show the prefix that GDB should prepend to all symbols for the dynamic linker."), NULL,
+			    NULL, NULL,
+			    &setshliblist, &showshliblist);
+
   dyld_symbols_prefix = xstrdup (dyld_symbols_prefix);
 
-  cmd = add_set_cmd ("always-read-from-memory", class_obscure, var_boolean,
-                     (char *) &dyld_always_read_from_memory_flag,
-                     "Set if GDB should always read loaded images from the inferior's memory.",
-                     &setshliblist);
-  add_show_from_set (cmd, &showshliblist);
+  add_setshow_boolean_cmd ("always-read-from-memory", class_obscure,
+			   &dyld_always_read_from_memory_flag, _("\
+Set if GDB should always read loaded images from the inferior's memory."), _("\
+Show if GDB should always read loaded images from the inferior's memory."), NULL,
+			   NULL, NULL,
+			   &setshliblist, &showshliblist);
 
-  cmd = add_set_cmd ("print-basenames", class_obscure, var_boolean,
-                     (char *) &dyld_print_basenames_flag,
-                     "Set if GDB should print the basenames of loaded files when printing progress messages.",
-                     &setshliblist);
-  add_show_from_set (cmd, &showshliblist);
+  add_setshow_boolean_cmd ("print-basenames", class_obscure,
+			   &dyld_print_basenames_flag, _("\
+Set if GDB should print the basenames of loaded files when printing progress messages."), _("\
+Show if GDB should print the basenames of loaded files when printing progress messages."), NULL,
+			   NULL, NULL,
+			   &setshliblist, &showshliblist);
 
-  cmd = add_set_cmd ("load-rules", class_support, var_string,
-                     (char *) &dyld_load_rules,
-                     "Set the rules governing the level of symbol loading for shared libraries.\n\
+  add_setshow_string_cmd ("load-rules", class_support,
+			  &dyld_load_rules, _("\
+Set the rules governing the level of symbol loading for shared libraries.\n\
  * Each load rule is a triple.\n\
  * The command takes a flattened list of triples.\n\
  * The first two elements of the triple specify the library, by giving \n\
@@ -2297,50 +2323,61 @@ _initialize_macosx_nat_dyld ()
       - The options are:  all, extern, container or none.\n\
 \n\
 Example: To load only external symbols from all dyld-based system libraries, use: \n\
-    set sharedlibrary load-rules dyld ^/System/Library.* extern\n", &setshliblist);
-  add_show_from_set (cmd, &showshliblist);
+    set sharedlibrary load-rules dyld ^/System/Library.* extern\n"),
+			  "XYZ",
+			  NULL,
+			  NULL, NULL,
+			  &setshliblist, &showshliblist);
 
-  cmd = add_set_cmd ("minimal-load-rules", class_support, var_string,
-                     (char *) &dyld_minimal_load_rules,
-                     "Set the minimal DYLD load rules.  These prime the main list.\n\
+  add_setshow_string_cmd ("minimal-load-rules", class_support,
+			  &dyld_minimal_load_rules, _("\
+Set the minimal DYLD load rules.  These prime the main list.\n\
 gdb relies on some of these for proper functioning, so don't remove elements from it\n\
-unless you know what you are doing.", &setshliblist);
-  add_show_from_set (cmd, &showshliblist);
+unless you know what you are doing."),
+			  "xyz",
+			  NULL,
+			  NULL, NULL,
+			  &setshliblist, &showshliblist);
 
-  cmd = add_set_cmd ("dyld", class_obscure, var_zinteger,
-                     (char *) &dyld_debug_flag,
-                     "Set if printing dyld communication debugging statements.",
-                     &setdebuglist);
-  add_show_from_set (cmd, &showdebuglist);
+  add_setshow_zinteger_cmd ("dyld", class_obscure,
+			    &dyld_debug_flag, _("\
+Set if printing dyld communication debugging statements."), _("\
+Show if printing dyld communication debugging statements."), NULL,
+			    NULL, NULL,
+			    &setdebuglist, &showdebuglist);
 
   dyld_minimal_load_rules =
     xstrdup
     ("\"dyld\" \"CarbonCore$\\\\|CarbonCore_[^/]*$\" all \".*\" \"dyld$\" extern \".*\" \".*\" none");
   dyld_load_rules = xstrdup ("\".*\" \".*\" all");
 
-  cmd = add_set_cmd ("stop-on-shlibs-added", class_support, var_zinteger,
-                     (char *) &dyld_stop_on_shlibs_added,
-                     "Set if a shlib event should be reported on a shlibs-added event.",
-                     &setshliblist);
-  add_show_from_set (cmd, &showshliblist);
+  add_setshow_zinteger_cmd ("stop-on-shlibs-added", class_support,
+			    &dyld_stop_on_shlibs_added, _("\
+Set if a shlib event should be reported on a shlibs-added event."), _("\
+Show if a shlib event should be reported on a shlibs-added event."), NULL,
+			    NULL, NULL,
+			    &setshliblist, &showshliblist);
 
-  cmd = add_set_cmd ("stop-on-shlibs-updated", class_support, var_zinteger,
-                     (char *) &dyld_stop_on_shlibs_updated,
-                     "Set if a shlib event should be reported on a shlibs-updated event.",
-                     &setshliblist);
-  add_show_from_set (cmd, &showshliblist);
+  add_setshow_zinteger_cmd ("stop-on-shlibs-updated", class_support,
+			    &dyld_stop_on_shlibs_updated, _("\
+Set if a shlib event should be reported on a shlibs-updated event."), _("\
+Show if a shlib event should be reported on a shlibs-updated event."), NULL,
+			    NULL, NULL,
+			    &setshliblist, &showshliblist);
 
-  cmd = add_set_cmd ("combine-shlibs-added", class_support, var_zinteger,
-                     (char *) &dyld_combine_shlibs_added,
-                     "Set if GDB should combine shlibs-added events from the same image into a single event.",
-                     &setshliblist);
-  add_show_from_set (cmd, &showshliblist);
+  add_setshow_zinteger_cmd ("combine-shlibs-added", class_support,
+			    &dyld_combine_shlibs_added, _("\
+Set if GDB should combine shlibs-added events from the same image into a single event."), _("\
+Show if GDB should combine shlibs-added events from the same image into a single event."), NULL,
+			    NULL, NULL,
+			    &setshliblist, &showshliblist);
 
-  cmd = add_set_cmd ("reload-on-downgrade", class_support, var_zinteger,
-                     (char *) &dyld_reload_on_downgrade_flag,
-                     "Set if GDB should re-read symbol files in order to remove symbol information.",
-                     &setshliblist);
-  add_show_from_set (cmd, &showshliblist);
+  add_setshow_zinteger_cmd ("reload-on-downgrade", class_support,
+			    &dyld_reload_on_downgrade_flag, _("\
+Set if GDB should re-read symbol files in order to remove symbol information."), _("\
+Show if GDB should re-read symbol files in order to remove symbol information."), NULL,
+			    NULL, NULL,
+			    &setshliblist, &showshliblist);
 
   add_cmd ("cache-symfiles", class_run, dyld_cache_symfiles_command,
            "Generate persistent caches of symbol files for the current executable state.",

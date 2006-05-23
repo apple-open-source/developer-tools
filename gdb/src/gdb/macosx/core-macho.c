@@ -1,3 +1,4 @@
+/* APPLE LOCAL file Darwin */
 /* Mac OS X support for GDB, the GNU debugger.
    Copyright 1997, 1998, 1999, 2000, 2001, 2002
    Free Software Foundation, Inc.
@@ -42,7 +43,8 @@
 #include "gdbcore.h"
 #include "gdbthread.h"
 #include "regcache.h"
-#include "bfd.h"
+#include "exec.h"
+#include "readline/readline.h"
 
 #include <errno.h>
 #include <signal.h>
@@ -50,7 +52,7 @@
 
 struct target_ops macho_core_ops;
 
-static struct sec *
+static struct bfd_section *
 lookup_section (bfd *abfd, unsigned int n)
 {
   struct bfd_section *sect = NULL;
@@ -235,8 +237,7 @@ core_open (char *filename, int from_tty)
       /* Now, set up the frame cache, and print the top of stack.  */
       flush_cached_frames ();
       select_frame (get_current_frame ());
-      print_stack_frame (deprecated_selected_frame,
-                         frame_relative_level (deprecated_selected_frame), 1);
+      print_stack_frame (get_selected_frame (NULL), 1, SRC_AND_LOC);
     }
   else
     {
@@ -337,7 +338,7 @@ init_macho_core_ops ()
   macho_core_ops.to_fetch_registers = core_fetch_registers;
   macho_core_ops.to_prepare_to_store = core_prepare_to_store;
   macho_core_ops.to_store_registers = core_store_registers;
-  macho_core_ops.to_xfer_memory = xfer_memory;
+  macho_core_ops.deprecated_xfer_memory = xfer_memory;
   macho_core_ops.to_files_info = core_files_info;
   macho_core_ops.to_create_inferior = find_default_create_inferior;
   macho_core_ops.to_pid_to_str = macosx_core_ptid_to_str;

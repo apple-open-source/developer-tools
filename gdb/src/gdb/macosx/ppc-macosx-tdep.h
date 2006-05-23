@@ -8,6 +8,12 @@
 
 #define INVALID_ADDRESS ((CORE_ADDR) (-1))
 
+/* A regression to pre-gdbarch days, until we decide on a final
+   solution.  */
+#ifndef PRINT_EXTRA_FRAME_INFO
+#define PRINT_EXTRA_FRAME_INFO(NEXT,CACHE) ppc_print_extra_frame_info (NEXT, CACHE)
+#endif
+
 const char *ppc_register_name (int regno);
 
 /* core stack frame decoding functions */

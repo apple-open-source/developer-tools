@@ -25,6 +25,11 @@ if ![istarget "powerpc-apple-darwin*"] {
     return
 }
 
+if [target_info exists nocarbon64] {
+    verbose "Skipping Carbon tests on 64-bit PowerPC."
+    return
+}
+
 if $tracelevel then {
         strace $tracelevel
 }

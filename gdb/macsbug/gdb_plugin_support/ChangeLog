@@ -1,3 +1,35 @@
+2006-03-28  Jason Molenda  (jmolenda@apple.com)
+
+        * gdb_set.c (my_set): Recognize new
+        var_auto_boolean, var_optional_filename.
+        (__my_set_hook_guts): Treat var_auto_boolean as a Set_Boolean 
+        which is not correct.  Treat var_optional_filename as
+        Set_Filename which is less likely to cause problems.
+
+2006-02-16  Stan Shebs  <shebs@apple.com>
+
+	* gdb.c: Uncomment #if 0 "APPLE MERGE" bits.
+	* gdb_special_events.c: Likewise.
+
+2006-01-26  Jim Ingham  <jingham@apple.com>
+
+	* gdb.h: Change gdb_initialize to return int.
+	* gdb.c: gdb_initialize returns int, 1 for success, 0 for failure.
+	Use this to block loading plugin if target is not ppc.
+	
+2005-12-21  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.c (gdb_set_register, gdb_get_register, gdb_get_sp):
+	Don't use DEPRECATED_REGISTER_VIRTUAL_SIZE.
+	* gdb_set.c (define_set): Hack the add_set_cmd call to be close,
+	but not really right, to how this is supposed to work with the
+	current sources.
+	* gdb_sspecial_events.c (gdb_special_events): Update variable name.
+
+2005-12-16  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb_private_interfaces.h (GDB4): Hardcode to be 0.
+
 2005-07-25  Ira Ruben  <iraruben@acm.org>
 
 	* Makefile: Changed copyright date.
@@ -105,13 +137,6 @@
 	
 	* gdb_testing.i: Changed copyright date.
 	Used gdb_testw() to experiment with getting objfile pathname.
-
-2005-01-21  Jim Ingham  <jingham@apple.com>
-
-	* gdb_io_redirection.c: gcc 4.0 doesn't allow static function
-	prototypes in a function body, so I moved the prototypes to
-	before the function that used to contain it.
-	* gdb_set.c: Ditto.
 
 2004-03-24  Klee Dienes  <kdienes@apple.com>
 

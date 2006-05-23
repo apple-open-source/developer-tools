@@ -2,7 +2,7 @@
 /* Origin: Joseph Myers <jsm@polyomino.org.uk> */
 /* { dg-do compile } */
 /* APPLE LOCAL testsuite nested functions */
-/* { dg-skip-if "" { "*-*-darwin*" } { "*" } { "" } } */
+/* { dg-options "-fnested-functions" } */
 
 void
 foo (int a)

@@ -1,10 +1,62 @@
+2006-04-18  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile: Don't remove the symroot between phases.
+
+2006-04-17  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile: Make installed MacsBug plugin setgid procmod.
+
+2006-04-17  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.sh: If the parent process is "CodeWarrior", invoke
+	gdb-for-codewarrior.
+
+2006-01-31  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile: Remove a bunch of unused sections of the Makefile.
+
+2006-01-24  Stan Shebs  <shebs@apple.com>
+
+	* Makefile (GDB_VERSION): Update.
+
+2005-12-16  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile (CDEBUGFLAGS): Drop -mdynamic-no-pic for now; libintl
+	builds in a way that requires the relocations to be present even
+	though only a .a file is finally generated.
+
+2005-12-16  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile: Remove references to mmalloc.
+
+2005-12-16  Jim Ingham  <jingham@apple.com>
+
+	* Makefile: Pass the GDB_RC_VERSION separately to the gdb 
+	submake.
+	
+2005-12-01  Ronnie Misra (rgmisra@apple.com)
+
+        * gdb.sh: Update to recognize new translate program path/command 
+        line parameter.
+
+2005-11-09  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.sh (oah750_binary): Add "-execOAH" command line parameter
+	when invoking oah750 so it knows to leave our procmod setgid 
+	permissions in tact.
+
 2005-10-19  Jason Molenda  (jmolenda@apple.com)
 
-	* gdb.sh: Copy DYLD_* into GDB_DYLD_* to get past the setgid barrier.
+        * gdb.sh: Copy DYLD_* into GDB_DYLD_* to get past the setgid barrier.
 
 2005-09-30  Jason Molenda  (jmolenda@apple.com)
 
-	* Makefile: make the gdb binaries setgid procmod.
+        * Makefile: make the gdb binaries setgid procmod.
+
+2005-06-07  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile (GDB_RC_VERSION): Bump to 450.  Tumeric will be
+	in the 420-449 range.
 
 2005-05-28  Jason Molenda  (jmolenda@apple.com)
 

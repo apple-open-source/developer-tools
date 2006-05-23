@@ -90,7 +90,7 @@ struct mi_cmd mi_cmds[] =
   { "file-fix-file-is-grooved", { NULL, 0 }, NULL, mi_cmd_file_fix_file_is_grooved },
   { "file-list-exec-sections", { NULL, 0 }, NULL, NULL },
   { "file-list-exec-source-file", { NULL, 0 }, 0, mi_cmd_file_list_exec_source_file},
-  { "file-list-exec-source-files", { NULL, 0 }, NULL, NULL },
+  { "file-list-exec-source-files", { NULL, 0 }, NULL, mi_cmd_file_list_exec_source_files },
   { "file-list-shared-libraries", { NULL, 0 }, NULL, NULL },
   { "file-list-symbol-files", { NULL, 0 }, NULL, NULL },
   {"file-list-statics", {NULL, 0}, 0, mi_cmd_file_list_statics},
@@ -108,7 +108,9 @@ struct mi_cmd mi_cmds[] =
   { "gdb-show", { "show", 1 }, NULL, NULL },
   { "gdb-source", { NULL, 0 }, NULL, NULL },
   { "gdb-unset", { "unset", 1 }, NULL, NULL },
-  { "gdb-version", { "show version", 0 }, 0 },
+  { "gdb-version", { NULL, 0 }, NULL, mi_cmd_show_version },
+  { "inferior-tty-set", { NULL, 0 }, NULL, mi_cmd_inferior_tty_set},
+  { "inferior-tty-show", { NULL, 0 }, NULL, mi_cmd_inferior_tty_show},
   { "interpreter-set", { NULL, 0 }, 0, mi_cmd_interpreter_set },
   { "interpreter-exec", { NULL, 0 }, 0, mi_cmd_interpreter_exec},
   { "interpreter-complete", { NULL, 0 }, 0, mi_cmd_interpreter_complete},
@@ -132,7 +134,7 @@ struct mi_cmd mi_cmds[] =
   { "signal-list-handle-actions", { NULL, 0 }, NULL, NULL },
   { "signal-list-signal-types", { NULL, 0 }, NULL, NULL },
   { "stack-info-depth", { NULL, 0 }, 0, mi_cmd_stack_info_depth},
-  { "stack-info-frame", { NULL, 0 }, NULL, NULL },
+  { "stack-info-frame", { NULL, 0 }, 0, mi_cmd_stack_info_frame},
   { "stack-list-arguments", { NULL, 0 }, 0, mi_cmd_stack_list_args},
   { "stack-list-exception-handlers", { NULL, 0 }, NULL, NULL },
   { "stack-list-frames", { NULL, 0 }, 0, mi_cmd_stack_list_frames},
@@ -181,6 +183,8 @@ struct mi_cmd mi_cmds[] =
   { "trace-save", { NULL, 0 }, NULL, NULL },
   { "trace-start", { NULL, 0 }, NULL, NULL },
   { "trace-stop", { NULL, 0 }, NULL, NULL },
+  /* APPLE LOCAL checkpoints */
+  { "undo", { "undo", 0 }, 0 },
   { "var-assign", { NULL, 0 }, 0, mi_cmd_var_assign},
   { "var-create", { NULL, 0 }, 0, mi_cmd_var_create},
   { "var-delete", { NULL, 0 }, 0, mi_cmd_var_delete},
@@ -271,7 +275,7 @@ build_table (struct mi_cmd *commands)
       struct mi_cmd **entry = lookup_table (command->name);
       if (*entry)
 	internal_error (__FILE__, __LINE__,
-			"command `%s' appears to be duplicated",
+			_("command `%s' appears to be duplicated"),
 			command->name);
       *entry = command;
       if (0)

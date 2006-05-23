@@ -21,16 +21,16 @@
    Foundation, Inc., 59 Temple Place - Suite 330,
    Boston, MA 02111-1307, USA.  */
 
-#include "macosx-nat-inferior.h"
-#include "macosx-nat-mutils.h"
-#include "macosx-nat-dyld-io.h"
-
 #include "defs.h"
 #include "inferior.h"
 #include "symfile.h"
 #include "symtab.h"
 #include "gdbcmd.h"
 #include "objfiles.h"
+
+#include "macosx-nat-inferior.h"
+#include "macosx-nat-mutils.h"
+#include "macosx-nat-dyld-io.h"
 
 #include <string.h>
 

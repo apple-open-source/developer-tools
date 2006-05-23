@@ -195,6 +195,26 @@ assumes daemon mode at startup if stdin is a tty, so
 --daemon should be explicitly specified when
 starting distccd from a script or in a non-interactive
 ssh connection.
+.TP 
+.B --max-cache-age HOURS
+Specifies the maximum time to keep a cached pch file.
+The value is computed based on the last file access, and
+is constrained to be at most 72 hours (the default).
+.TP 
+.B --max-cache-size MB
+Specifies the maximum total disk use in Mb allowed for the
+pch cache. A value of zero (the default) allows the cache
+to grow without an explicit upper size limit.
+.TP 
+.B --min-disk-free MB
+Specifies the minimum disk free space in Mb to preserve on
+the filesystem containing the pch cache. The default
+is 2048, and the minimum is 512.
+.B --priority PRIORITY
+Specifies an integer priority for the build machine. Machines
+with higher priorities will be ordered towards the beginning
+of the DISTCC_HOSTS list by Xcode. This setting is not used
+by distcc.
 .SH "SEARCH PATHS"
 .PP
 distcc can pass either a relative or an absolute name for the compiler
@@ -247,6 +267,17 @@ On Linux, turn on the TCP_DEFER_ACCEPT socket option.  Defaults to on.
 .B "TMPDIR"
 Directory for temporary files such as preprocessor output.  By default
 /tmp/ is used.
+.SH "PCH CACHING"
+The Mac OS X version of distccd includes support for precompiled
+header (pch) files. distccd caches these files in TMPDIR, and provides
+options for managing the cache based on file access times and disk use.
+The pch files are downloaded from the client machines as needed and
+stored on a per user, per client machine basis. To minimize build times
+the pch cache should be sufficiently large. If there is insufficient
+space then pch files may be repeatedly downloaded during a build.
+distccd will emit a warning if it detects that the cache constraints
+require discarding recently downloaded pch files (possibly due to a
+full disk.)
 .SH "SEE ALSO"
 distcc(1), ccache(1), gcc(1), make(1)
 .I http://distcc.samba.org/

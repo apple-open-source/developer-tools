@@ -176,6 +176,7 @@ struct typeinfo GTY(())
   enum typestatus status;
   int file_number;
   int type_number;
+  /* APPLE LOCAL dbxout_type rewrite.  */
   int q_type_number;
 };
 
@@ -196,6 +197,7 @@ static GTY(()) int typevec_len;
 
 static GTY(()) int next_type_number;
 
+/* APPLE LOCAL begin dbxout_type rewrite.  */
 struct  qualified_typeinfo GTY(())
 {
   int pointer_type;
@@ -210,7 +212,7 @@ static GTY ((length ("q_typevec_len"))) struct qualified_typeinfo *q_typevec;
 static GTY(()) int q_typevec_len;
 static GTY(()) int next_q_type_number;
 static int dbxout_next_q_type_number (void);
-
+/* APPLE LOCAL end dbxout_type rewrite.  */
 /* The C front end may call dbxout_symbol before dbxout_init runs.
    We save all such decls in this list and output them when we get
    to dbxout_init.  */
@@ -720,10 +722,20 @@ dbxout_begin_complex_stabs_noforcetext (void)
 #define stabstr_S(str) obstack_grow (&stabstr_ob, str, strlen(str))
 
 /* Add the text of ID, an IDENTIFIER_NODE, to the string being built.  */
-#define stabstr_I(id) obstack_grow (&stabstr_ob, \
-                                    IDENTIFIER_POINTER (id), \
-                                    IDENTIFIER_LENGTH (id))
+/* APPLE LOCAL begin 4310696 */
+static void
+stabstr_I (tree id)
+{
 
+  if ((strcmp (lang_hooks.name, "GNU C++") == 0
+       || strcmp (lang_hooks.name, "GNU Objective-C++") == 0)
+      && IDENTIFIER_LENGTH (id) > 2
+      && strncmp ("$_", IDENTIFIER_POINTER (id), 2) == 0)
+    obstack_grow (&stabstr_ob, "$_", 2);
+  else  
+      obstack_grow (&stabstr_ob, IDENTIFIER_POINTER (id), IDENTIFIER_LENGTH (id));
+}
+/* APPLE LOCAL end 4310696 */
 /* Add NUM, a signed decimal number, to the string being built.  */
 static void
 stabstr_D (HOST_WIDE_INT num)
@@ -1082,8 +1094,10 @@ dbxout_init (const char *input_file_name)
   typevec_len = 100;
   typevec = ggc_calloc (typevec_len, sizeof typevec[0]);
 
+  /* APPLE LOCAL begin dbxout_type rewrite.  */
   q_typevec_len = 100;
   q_typevec = ggc_calloc (q_typevec_len, sizeof q_typevec[0]);
+  /* APPLE LOCAL end dbxout_type rewrite.  */
   /* APPLE LOCAL begin ss2 */
   /* Open dbx_out_file */
   if (flag_save_repository
@@ -1147,6 +1161,11 @@ dbxout_init (const char *input_file_name)
       targetm.asm_out.internal_label (dbx_out_file, "Ltext", 0);
     }
 
+  /* APPLE LOCAL begin symbol separation, dwarf 4386531 */
+  dbxout_begin_empty_stabs (N_OSO);
+  dbxout_stab_value_zero ();
+  /* APPLE LOCAL end symbol separation, dwarf 4386531 */
+
   /* Emit an N_OPT stab to indicate that this file was compiled by GCC.
      The string used is historical.  */
 #ifndef NO_DBX_GCC_MARKER
@@ -1190,8 +1209,10 @@ dbxout_init (const char *input_file_name)
 	dbxout_symbol (TREE_VALUE (t), 0);
       preinit_symbols = 0;
     }
-  /* APPLE LOCAL dbxout_type rewrite.  */
+  /* APPLE LOCAL begin dbxout_type rewrite.  */
+  dbxout_queue_type (void_type_node);
   dbxout_flush_type_queue ();
+  /* APPLE LOCAL end dbxout_type rewrite.  */
   /* APPLE LOCAL 4215975 */
   anon_place_holder = get_identifier ("__anon__");
 }
@@ -1519,8 +1540,10 @@ dbxout_finish (const char *filename ATTRIBUTE_UNUSED)
 	fatal_error ("error closing %s: %m", asm_file_name);
     }
   /* APPLE LOCAL end ss2 */
+  /* APPLE LOCAL too many changes */
 }
 
+/* APPLE LOCAL begin dbxout_type rewrite.  */
 /* If TYPE is a qualified type then note this info in
    q_typevec.  */
 static void
@@ -1620,12 +1643,13 @@ dbxout_reusable_type (tree type)
     }
   return 0;
 }
-
+/* APPLE LOCAL end dbxout_type rewrite.  */
 /* Output the index of a type.  */
 
 static void
 dbxout_type_index (tree type)
 {
+  /* APPLE LOCAL begin dbxout_type rewrite.  */
   struct typeinfo *t = NULL;
 
   if (TYPE_SYMTAB_ADDRESS (type) == 0)
@@ -1640,6 +1664,7 @@ dbxout_type_index (tree type)
 #else
 
   t = &typevec[TYPE_SYMTAB_ADDRESS (type)];
+  /* APPLE LOCAL end dbxout_type rewrite.  */
   stabstr_C ('(');
   stabstr_D (t->file_number);
   stabstr_C (',');

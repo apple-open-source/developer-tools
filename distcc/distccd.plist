@@ -17,8 +17,10 @@
 		<string>/usr/bin/distccd</string>
 		<string>--no-detach</string>
 		<string>--daemon</string>
-        <string>--nice</string>
-        <string>20</string>
+	        <string>--priority</string>
+        	<string>10</string>
+		<string>--min-disk-free</string>
+		<string>512</string>
 	</array>
 	<key>RunAtLoad</key>
 	<true/>

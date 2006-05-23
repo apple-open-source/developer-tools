@@ -1,3 +1,10 @@
+2006-01-31  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile.am: Don't descend into the doc directory - it is
+	building info files in srcdir and causing the buildit machinery
+	problems.
+	* Makefile.in: Updated.
+
 2002-04-24  Klee Dienes  <kdienes@apple.com>
 
 	* configure: Regenerate.

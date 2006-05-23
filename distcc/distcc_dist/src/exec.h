@@ -21,12 +21,17 @@
  */
 
 /* indirect_server.c */
+#define INDIRECT_READ_BUFSZ 1024
 typedef struct _indirect {
     int childWrite[2];
     int parentWrite[2];
     char *hostname;
     int in_fd;
     int out_fd;
+    
+    char read_buf[INDIRECT_READ_BUFSZ];
+    int read_buf_pos;
+    int read_buf_used;
 } dcc_indirection;
 
 int dcc_prepare_indirect(dcc_indirection *);

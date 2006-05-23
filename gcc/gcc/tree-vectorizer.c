@@ -1150,6 +1150,8 @@ vect_print_dump_info (enum verbosity_levels vl, LOC loc ATTRIBUTE_UNUSED)
     return false;
 
   /* APPLE LOCAL begin AV dump */
+  if (!vect_dump)
+    return false;
   fprintf (vect_dump, "\n%s:%d: note: ", LOC_FILE (vect_loop_location), 
 	   LOC_LINE (vect_loop_location));
   /* APPLE LOCAL end AV dump */

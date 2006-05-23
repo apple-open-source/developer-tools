@@ -21,13 +21,14 @@
    Foundation, Inc., 59 Temple Place - Suite 330,
    Boston, MA 02111-1307, USA.  */
 
-#include "macosx-nat-inferior.h"
-#include "macosx-nat-cfmthread.h"
-
 #include "defs.h"
 #include "gdbcmd.h"
 #include "breakpoint.h"
 #include "annotate.h"
+#include "inferior.h"
+
+#include "macosx-nat-inferior.h"
+#include "macosx-nat-cfmthread.h"
 
 static CORE_ADDR
 lookup_address (const char *s)

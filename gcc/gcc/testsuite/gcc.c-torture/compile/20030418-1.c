@@ -1,5 +1,5 @@
-/* APPLE LOCAL  nested functions */
-/* { dg-xfail-if "" { "*-*-darwin*" } { "*" } { "" } } */
+/* APPLE LOCAL testsuite nested functions */
+/* { dg-options "-fnested-functions" } */
 /* PR optimization/7675 */
 /* Contributed by Volker Reichelt */
 

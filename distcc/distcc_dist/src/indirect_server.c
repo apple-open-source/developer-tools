@@ -33,11 +33,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <sys/dirent.h>
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/mount.h>
+#include <fts.h>
 #include "distcc.h"
 #include "bulk.h"
 #include "config.h"
@@ -49,8 +52,10 @@
 
 
 static const char message_terminator = '\n';
-
-
+static const char *pch_cache_dir = "pch_cache";
+unsigned pullfile_cache_max_age = 36;
+unsigned pullfile_max_cache_size = 0;
+unsigned pullfile_min_free_space = 2048;
 
 /**
  * Receive messages from a child process (typically GCC 3.3 and later).
@@ -66,29 +71,26 @@ static const char message_terminator = '\n';
  **/
 static int read_from_child(dcc_indirection *indirect, char *buffer, const int size)
 {
-    int idx = 0;
-    int result;
-
-    if ( size <= 0 ) {
-        return 0;
-    }
-
-    do {
-        result = read(indirect->childWrite[0], &buffer[idx], 1);
-
-        if ( result <= 0 || idx >= size ) {
-            return 0;
-        } else {
-            idx += result;
+    int pos = 0;
+    for (;;) {
+        if (indirect->read_buf_pos >= indirect->read_buf_used) {
+            indirect->read_buf_used = read(indirect->childWrite[0], &indirect->read_buf, INDIRECT_READ_BUFSZ);
+            indirect->read_buf_pos = 0;
         }
-    } while ( buffer[idx - 1] != message_terminator );
-
-    // Straighten out the string termination.
-    buffer[idx - 1] = '\0';
-
-    return 1;
+        if (indirect->read_buf_used <= 0) {
+            return 0;
+        }
+        while (pos < size && indirect->read_buf_pos < indirect->read_buf_used) {
+            if (indirect->read_buf[indirect->read_buf_pos] == '\n') {
+                buffer[pos] = 0;
+                indirect->read_buf_pos++;
+                return 1;
+            } else {
+                buffer[pos++] = indirect->read_buf[indirect->read_buf_pos++];
+            }
+        }
+    }
 }
-
 
 /**
  * Write message to a child process (typically GCC 3.3 and later).
@@ -129,288 +131,237 @@ static int write_to_child(dcc_indirection *indirect, const char *message)
     return 1;
 }
 
-
-/**
- * Create path_to_dir, including any intervening directories.
- * Behaves similarly to mkdir -p.
- * Permissions are set to ug=rwx,o-rwx.
- *
- * path_to_dir must not be NULL
- **/
-static int mkdir_p(const char *path_to_dir)
+static int lock_pullfile()
 {
-    char *path = strdup(path_to_dir);
-    char current_path[MAXPATHLEN];
-    char *latest_path_element;
+    static char *pull_lock = NULL;
+    if (pull_lock == NULL) {
+        if (dcc_make_tmpfile_path(&pull_lock, 1, "pull_lockfile", NULL)) {
+            return -1;
+        }
+    }
+    return open(pull_lock, O_WRONLY|O_CREAT|O_EXLOCK, 0777);
+}
 
-    current_path[0] = '\0';
-    latest_path_element = strtok(path, "/");
+typedef struct _CachedPullfile {
+    char *path;
+    time_t accessTime;
+    off_t size; // size in kb
+    struct _CachedPullfile *next;
+} CachedPullfile;
 
-    while ( strlen(current_path) < MAXPATHLEN - MAXNAMLEN - 1 ) {
-        if ( latest_path_element == NULL ) {
-            break;
-        } else {
-            strcat(current_path, "/");
-            strcat(current_path, latest_path_element);
-
-            // 504 == \770 == ug=rwx,o-rwx
-            if ( mkdir(current_path, 504) == 0 ) {
-                rs_trace("Created directory %s", current_path);
-            } else {
-                if ( errno == EEXIST ) {
-                    rs_trace("Directory exists: %s", current_path);
+/*
+ This function walks the pullfile cache directory and builds up lists of all the files it contains.
+ The files are sorted into an array of linked lists (cache_lists), where each list contains the files
+ whose access times are in that age group. cache_lists[0] through cache_lists[5] contain a list of files
+ that were accessed within the last hour, in 10 minute intervals. The remaining cache_list entries have a
+ granularity of hours, so cache_lists[6] contains files last accessed between 1 and 2 hours ago, cache_lists[7]
+ contains files last accesssed between 2 and 3 hours ago, etc. The last cache_list entry contains all
+ files whose access times do not fall in any of the earlier buckets.
+ If there are no files in a certain age period then the cache_lists entry
+ will be NULL.
+ Additionally, the total size of all cached files (in kb) is returned in total_file_size.
+ */
+static void dcc_all_cached_files(char *root, CachedPullfile **cache_lists, int cache_lists_size, long *total_file_size)
+{
+    CachedPullfile *result = NULL;
+    char *cache_root[2];
+    time_t current_time = time(NULL), age;
+    cache_root[0] = root;
+    cache_root[1] = NULL;
+    *total_file_size = 0;
+    bzero(cache_lists, cache_lists_size * sizeof(CachedPullfile *));
+    FTS *fts_handle = fts_open(cache_root, FTS_NOCHDIR, NULL);
+    if (fts_handle != NULL) {
+        FTSENT *file;
+        int entry_index;
+        do {
+            file = fts_read(fts_handle);
+            if ((file != NULL) && (file->fts_info == FTS_F)) {
+                CachedPullfile *newNode = (CachedPullfile *)malloc(sizeof(CachedPullfile));
+                newNode->path = (char *)malloc(file->fts_pathlen + 1);
+                bcopy(file->fts_path, newNode->path, file->fts_pathlen);
+                newNode->path[file->fts_pathlen] = 0;
+                newNode->accessTime = file->fts_statp->st_mtimespec.tv_sec;
+                newNode->size = (file->fts_statp->st_size + 1023) / 1024;
+                // Figure out what cache_lists bucket to put the file into.
+                age = current_time - file->fts_statp->st_atimespec.tv_sec;
+                if (age > 60 * 60) {
+                    // it's at least one hour old so calculate time in hours starting with bucket 6
+                    entry_index = 5 + age / (60 * 60);
                 } else {
-                    rs_log_error("Unable to create directory %s: %s",
-                                 current_path, strerror(errno));
-                    return 0;
+                    // it's less than one hour old so calculate time in 10 minute intervals starting with bucket 0
+                    entry_index = age / (10 * 60);
                 }
+                if (entry_index >= cache_lists_size)
+                    entry_index = cache_lists_size - 1;
+                newNode->next = cache_lists[entry_index];
+                cache_lists[entry_index] = newNode;
+                *total_file_size += newNode->size;
             }
-
-            latest_path_element = strtok(NULL, "/");
-        }
-    }
-
-    free(path);
-
-    if ( latest_path_element == NULL ) {
-        return 1;
-    } else {
-        return 0;
+        } while (file != NULL);
+        fts_close(fts_handle);
     }
 }
 
-
-/**
- * Creates a temporary file at tmp_path to store
- * checksum.
- **/
-static char *dcc_create_checksum_tmpfile(const char *tmp_path,
-                                         const char *checksum)
+static long dcc_free_cached_files(CachedPullfile **cache_lists, int cache_lists_size, int delete_files)
 {
-    char *checksum_tmpfile = malloc(MAXPATHLEN);
-    int   fd;
-
-    if ( checksum_tmpfile == NULL ) {
-        rs_log_error("Unable to allocate space for checksum_tmpfile");
-        return NULL;
-    }
-
-    strncpy(checksum_tmpfile, tmp_path, MAXPATHLEN);
-    strcat(checksum_tmpfile, checksum_suffix);
-
-    // do not need to mkdir_p, since this should always happen after
-    // the files represented by the checksum are laid down
-
-    fd = open(checksum_tmpfile, O_WRONLY|O_CREAT, 0777);
-
-    if ( fd < 0 ) {
-        rs_log_error("Unable to create %s", checksum_tmpfile);
-        return NULL; 
-    } else {
-        size_t checksum_length = strlen(checksum);
-
-        if ( write(fd, checksum, checksum_length) == (ssize_t)checksum_length ){
-            rs_trace("Wrote checksum to %s", checksum_tmpfile);
-            close(fd);
-            return checksum_tmpfile;
-        } else {
-            rs_log_error("Unable to write checksum to %s", checksum_tmpfile);
-            close(fd);
-            remove(checksum_tmpfile);
-            return NULL;
-        }
-    }
-}
-
-
-/**
- * Pulls a checksum for the previously requested file over the socket
- * specified by netfd.  Stores the checksum at
- * tmp_path.
- **/
-static char *dcc_pull_checksum(int netfd, const char *tmp_path)
-{
-    unsigned checksum_length = 0;
-
-    if ( dcc_r_token_int(netfd, checksum_length_token, &checksum_length)
-         || checksum_length <= 0 ) {
-        rs_log_error("No incoming checksum for path %s", tmp_path);
-        return NULL;
-    } else {
-        char *checksum = malloc(checksum_length + 1);
-
-        if ( dcc_readx(netfd, checksum, checksum_length) ) {
-            rs_log_error("Unable to read checksum for path %s", tmp_path);
-            free(checksum);
-            return NULL;
-        } else {
-            char *tmp_checksum_filename = dcc_create_checksum_tmpfile(tmp_path,
-                                                                      checksum);
-            free(checksum);
-            return tmp_checksum_filename;
-        }
-    }
-}
-
-
-/**
- * Pushes the existing checksum for the previously requested file
- * over the socket specified by netfd.
- * hostname used strictly to disambiguate logging.
- **/
-static int dcc_push_checksum(int netfd, const char *hostname,
-                               const char *checksum)
-{
-    size_t checksum_length = ( checksum == NULL ) ? 0 : strlen(checksum) + 1;
-
-    if ( dcc_x_token_int(netfd, checksum_length_token, checksum_length) ) {
-        rs_log_error("Unable to transmit checksum length %u to %s",
-                     checksum_length, hostname);
-        return 0;
-    } else if ( checksum_length > 0 ) {
-        if ( dcc_writex(netfd, checksum, checksum_length) ) {
-            rs_log_error("Unable to transmit checksum \"%s\" to %s",
-                         checksum, hostname);
-            return 0;
-        }
-    }
-
-    return 1;
-}
-
-
-/**
- * Reads the contents of cached_path_checksum.
- * cached_path_checksum_size is used as a hint for the size
- * of the buffer to return.  The returned buffer must be freed by the caller.
- **/
-static char *dcc_read_checksum(const char *cached_path_checksum,
-                               size_t cached_path_checksum_size)
-{
-    int   remaining_buffer = cached_path_checksum_size + 1;
-    char *checksum         = malloc(remaining_buffer);
-
-    if ( checksum == NULL ) {
-        rs_log_error("Unable to allocate space for checksum_tmpfile");
-    } else {
-        int checksum_file = open(cached_path_checksum, O_RDONLY, 0777);
-
-        if ( checksum_file <= 0 ) {
-            rs_log_error("Unable to open %s", cached_path_checksum);
-            free(checksum);
-            checksum = NULL;
-        } else {
-            int num_read = -1;
-
-            while ( remaining_buffer > 0 &&
-                    ( num_read = read(checksum_file, checksum,
-                                      remaining_buffer) ) > 0 ) {
-                remaining_buffer -= num_read;
+    CachedPullfile *next;
+    int i;
+    long removed_size = 0;
+    for (i=0; i<cache_lists_size; i++) {
+        while (cache_lists[i] != NULL) {
+            if (delete_files) {
+                rs_log_info("removing cached pull file: %s", cache_lists[i]->path);
+                unlink(cache_lists[i]->path);
+                removed_size += cache_lists[i]->size;
             }
-
-            checksum[cached_path_checksum_size] = '\0';
-
-            if ( num_read < 0 ||
-                 strlen(checksum) < cached_path_checksum_size ) {
-                rs_log_error("Unable to read checksum from %s",
-                             cached_path_checksum);
-                free(checksum);
-                checksum = NULL;
-            }
-
-            close(checksum_file);
+            next = cache_lists[i]->next;
+            free(cache_lists[i]->path);
+            free(cache_lists[i]);
+            cache_lists[i] = next;
         }
     }
-
-    return checksum;
+    return removed_size;
 }
 
-
-/**
- * Pulls the previously requested directory over the socket specified by
- * netfd.  Currently, this directory cannot contain any
- * subdirectories.  tmp_path specifies the location on the
- * server where the directory will be stored.  hostname is
- * used only to disambiguate logging.
- **/
-static void dcc_pull_directory_file(int netfd, const char *hostname,
-                                   const char *tmp_path)
+static void dcc_emit_cache_warning(char *fmt)
 {
-    int cwd = open(".", O_RDONLY, 0777);
-
-    if ( chdir(tmp_path) ) {
-        rs_log_error("Unable to chdir to %s", tmp_path);
+    char hostbuf[_POSIX_HOST_NAME_MAX+1], *host;
+    if (gethostname(hostbuf, _POSIX_HOST_NAME_MAX+1)) {
+        host = "UNKNOWN";
+        rs_log_warning("Failed to get host name: %s", strerror(errno));
     } else {
-        unsigned incomingBytes;
+        host = hostbuf;
+    }
+    rs_log_warning(fmt, host);
+}    
 
-        if ( dcc_r_token_int(netfd, result_name_token, &incomingBytes)
-             || incomingBytes <= 0 ) {
-            rs_log_error("No incoming file from %s for directory %s",
-                         hostname, tmp_path);
-        } else {
-            char filename[incomingBytes];
+/*
+ Traverses the indirection file cache and removes cached files.
+ max_age - any files not accessed withing max_age hours are removed. max_age has a hardcoded maximum constraint (currently 72), and zero is interpreted as max.
+ max_used - files are removed until the total size occupied is max_used or less (Mb). Zero is interpreted as no restriction on total cache size.
+ min_free - files are removed until at least min_free (Mb) is available on the volume. min_free has a hardcoded minimum (currently 512).
+ */
+int dcc_prune_indirection_cache(unsigned max_age, unsigned max_used, unsigned min_free)
+{
+    int result = 0, pullfile_lock, age, done, cached_files_size;
+    long total_cache_size, initial_total_size; // size in kb
+    struct statfs fs_stat;
+    char *cache_root;
+    
+    if (max_age == 0 || max_age > 72)
+        max_age = 72;
+    if (min_free < 512)
+        min_free = 512;
+    cached_files_size = max_age + 5;
+    CachedPullfile *cached_files[cached_files_size];
+    
+    /*
+     The strategy is to build a list of files in the cache up front.
+     Then we traverse the list and remove any files that exceed the age limit.
+     If we have then satisfied the max_used and min_free requirements then we are done.
+     If we have not then we reduce the max_age and traverse the list again.
+     */
+    if (dcc_make_tmpfile_path(&cache_root, 0, NULL, pch_cache_dir, NULL) == 0) {
+        dcc_all_cached_files(cache_root, cached_files, cached_files_size, &total_cache_size);
+        initial_total_size = total_cache_size;
+        age = cached_files_size - 1;
 
-            if ( dcc_readx(netfd, filename, incomingBytes) ) {
-                rs_log_error("Unable to read filename from %s for file in directory %s", hostname, tmp_path);
-            } else {
-                if (dcc_r_token_int(netfd, result_item_token, &incomingBytes)) {
-                    rs_log_error("Unable to read length from %s for file %s in %s", hostname, filename, tmp_path);
+        do {
+            /* removed the next least recently accessed chunk of files */
+            /* note that the first time through the loop we remove all the files that are too old */
+            /* subsequent passes continue removing files until the space requirements are satisfied */
+            total_cache_size -= dcc_free_cached_files(&cached_files[age], 1, 1);
+            
+            /* if we still exceed the max size there is no reason to do the statfs */
+            if (max_used == 0 || (total_cache_size + 1023) / 1024 < max_used) {
+
+                /* Check the free space on the filesystem. */
+                if (statfs(cache_root, &fs_stat) == 0) {
+		     if (fs_stat.f_bavail < 1024 * 1024 / fs_stat.f_bsize * min_free) {
+                        /* Insufficient free space. If will wind up removing all the files emit a warning. */
+                        if (age == 1)
+                            dcc_emit_cache_warning("Emptied distcc pch cache on %s due to insufficient free disk space. Build times may be slower.");
+                            done = 0;
+                    } else {
+                        done = 1;
+                    }
                 } else {
-                    if ( dcc_r_file_timed(netfd, filename, incomingBytes, DCC_COMPRESS_LZO1X) ) {
-                        rs_log_error("Failed to retrieve from %s incoming file %s/%s", hostname, tmp_path, filename);
-                    } else {
-                        rs_log_info("Stored incoming file from %s at %s in %s",
-                                    hostname, filename, tmp_path);
-                    }
+                    rs_log_warning("(dcc_all_cached_files) failed to get free space: %s", strerror(errno));
+                    done = 1;
                 }
+            } else {
+                /* Still too much cached data. If we will wind up removing all the files emit a warning */
+                if (age == 1)
+                    dcc_emit_cache_warning("Exceeded distcc pch cache size on %s within a short time interval. Cache size may be too small for the client load. Build times may be slower.");
+                done = 0;
             }
-        }
+            age--;
+        } while (age >= 0 && !done);
+        free(cache_root);
+        dcc_free_cached_files(cached_files, max_age, 0);
+    } else {
+        rs_log_warning("(dcc_all_cached_files) failed to construct cache path");
     }
+    return result;
+}
 
-    fchdir(cwd);
-    close(cwd);
+/*  Ensure that the available space on the PCH cache volume is greater than pullfile_min_free_space
+ *  (settable from the command line with --min-disk-free).  If the available space is below the threshold,
+ *  prune the PCH cache and re-check the space, returning failure if pruning didn't free enough space.  */
+int dcc_ensure_free_space()
+{ 
+	char *cache_root;	    // the pch cache root directory.
+	struct statfs fs_stat;  // filesystem stats for the cache volume.
+
+	/* The pch cache directory isn't created until the first indirection request,
+	 * so if we can't access it we still return success.  */
+	if (dcc_make_tmpfile_path(&cache_root, 0, NULL, pch_cache_dir, NULL) != 0) 
+		return 0;
+	if (access(cache_root, R_OK) != 0) 
+		return 0;
+	
+	/* If the pch cache directory exists, but we can't stat it, something is wrong.
+	 * Return failure to dcc_service_job, so the job is recompiled locally on the 
+	 * recruiter machine.  */
+	if (statfs(cache_root, &fs_stat) != 0) { 
+		dcc_emit_cache_warning("dcc_cache_free_mb: unable to determine free space for cache");
+		return -1;
+	}	
+
+	/* The pch cache dir exists.  If the free space on the volume is greater than
+     * pullfile_min_free_space (--min-disk-free), return success.  */
+	if (fs_stat.f_bavail > 1024 * 1024 / fs_stat.f_bsize * pullfile_min_free_space)
+		return 0;
+	
+	/* We're below the minimum free  space on the cache volume.  Prune the pch cache
+	 * directory  */
+	int pull_lockfd = lock_pullfile();
+	dcc_prune_indirection_cache(0, 0, pullfile_min_free_space);
+    if (pull_lockfd != -1)
+        close(pull_lockfd);
+	/* Something bad happened to the cache volume during the prune, return failure to
+	 * and refuse the job  */
+	if (statfs(cache_root, &fs_stat) != 0) { 
+		dcc_emit_cache_warning("dcc_cache_free_mb: unable to determine free space for cache");
+		return -1;
+	}
+	/* return (available space > minimum)  */
+	return (fs_stat.f_bavail > 1024 * 1024 / fs_stat.f_bsize * pullfile_min_free_space);
 }
 
 
-/**
- * Remove path (not including intervening directories).
- * All files in path are removed, as well.
- * Does not remove subdirectories of path.
- **/
-static int dcc_rmdir(const char *path) {
-    int    numFiles;
-    char **filenames = dcc_filenames_in_directory(path, &numFiles);
-
-    if ( filenames != NULL ) {
-        int dir = open(path, O_RDONLY, 0777);
-
-        if ( dir > 0 ) {
-            int cwd = open(".", O_RDONLY, 0777);
-
-            if ( fchdir(dir) == 0 ) {
-                int i;
-
-                for ( i = 0; i < numFiles && filenames[i] != NULL; i++ ) {
-                    if ( unlink(filenames[i]) ) {
-                        rs_log_error("Unable to remove %s from %s",
-                                     filenames[i], path);
-                    } else {
-                        rs_trace("Removed %s from %s", filenames[i], path);
-                    }
-
-                    free(filenames[i]);
-                }
-            }
-
-            fchdir(cwd);
-            close(cwd);
-            close(dir);
-        }
-
-        free(filenames);
+static int use_pullfile(char *pullfile, char **path_in_use)
+{
+    char file[64];
+    sprintf(file, "pch_%d", getpid());
+    if (dcc_make_tmpfile_path(path_in_use, 1, file, NULL))
+        return -1;
+    if (dcc_add_cleanup(*path_in_use)) {
+        rs_log_warning("Unable to add cleanup file: %s", *path_in_use);
     }
-
-    return rmdir(path);
+    unlink(*path_in_use);
+    return link(pullfile, *path_in_use);
 }
 
 
@@ -420,297 +371,138 @@ static int dcc_rmdir(const char *path) {
  **/
 static int dcc_handle_pull(dcc_indirection *indirect)
 {
-    char  *actual_path          = NULL;
+    char  *indirection_path     = NULL;
     size_t hostname_length      = strlen(indirect->hostname) + 1;
-    char   response[MAXPATHLEN], pull_lock[MAXPATHLEN], cached_path_checksum[MAXPATHLEN];
-    const char  *tempdir;
-
-    if (dcc_get_tmp_top(&tempdir))
-        return -1;
-    size_t tempdir_length       = strlen(tempdir) + 1;
-    int    pull_lockfd;
+    char   pullfile[MAXPATHLEN];
+    int result = 0;
+    unsigned has_local_file = 0, pullfile_len, pull_response;
+    struct stat st_pch;
+    char *pch_cache_filename = NULL, *file_part_separator, *actual_path;
     
-    strcpy(pull_lock, tempdir);
-    strcat(pull_lock, "/");
-    strcat(pull_lock, indirect->hostname);
-    mkdir_p(pull_lock);
-    strcat(pull_lock, "/pull_lockfile");
-    pull_lockfd = open(pull_lock, O_WRONLY|O_CREAT|O_EXLOCK, 0777);
-
-    if ( read_from_child(indirect, response, MAXPATHLEN) ) {
-        size_t response_length = strlen(response) + 1;
-        size_t total_length  = tempdir_length + hostname_length
-            + response_length;
-        char *cached_path = malloc(total_length);
-        int    cached_path_exists;
-        int    cached_path_checksum_exists;
-        size_t cached_path_checksum_size;
-        char  *checksum = NULL;
-        struct stat sb;
-        
-        rs_trace("Attempting to pull %s", response);
-        
-        strcpy(cached_path, tempdir);
-        if (indirect->hostname[0] != '/')
-            strcat(cached_path, "/");
-        strcat(cached_path, indirect->hostname);
-        if (response[0] != '/')
-            strcat(cached_path, "/");
-        strcat(cached_path, response);
-        
-        strncpy(cached_path_checksum, cached_path, total_length);
-        strncat(cached_path_checksum, checksum_suffix, checksum_suffix_length);
-        
-        cached_path_exists = ( stat(cached_path, &sb) == 0 );
-        cached_path_checksum_exists = ( stat(cached_path_checksum, &sb) == 0 );
-        cached_path_checksum_size = sb.st_size;
-        
-        if ( cached_path_exists && cached_path_checksum_exists &&
-             cached_path_checksum_size > 0 ) {
-            checksum = dcc_read_checksum(cached_path_checksum,
-                                         cached_path_checksum_size);
-        }
-        
-        if ( dcc_x_token_int(indirect->out_fd, indirection_request_token,
-                             indirection_request_pull)
-             || dcc_x_token_int(indirect->out_fd, operation_pull_token, response_length)
-             || dcc_writex(indirect->out_fd, response, response_length) ) {
-            rs_log_error("Unable to transmit filename to %s", indirect->hostname);
-            actual_path = response;
+    int pull_lockfd = lock_pullfile();
+    
+    /* Fetch the path and construct the corresponding path in the file cache. */
+    if ( read_from_child(indirect, pullfile, MAXPATHLEN) ) {
+        file_part_separator = strrchr(pullfile, '/');
+        if (file_part_separator) {
+            // we temporarily strip the filename off of the path
+            *file_part_separator = 0;
+            pch_cache_filename = NULL;
+            result = dcc_make_tmpfile_path(&pch_cache_filename, 0, &file_part_separator[1], pch_cache_dir, indirect->hostname, pullfile, NULL);
         } else {
-            if ( ! dcc_push_checksum(indirect->out_fd, indirect->hostname, checksum) ) {
-                actual_path = response;
-            }
+            rs_log_error("Unable to resolve indirection request for relative path.");
+            result = -1;
         }
-        
-        if ( checksum != NULL ) {
-            free(checksum);
-            checksum = NULL;
-        }
-        
-        if ( actual_path == NULL ) {
-            unsigned result_type = result_type_nothing;
-            
-            if ( dcc_r_token_int(indirect->in_fd, result_type_token, &result_type) ) {
-                rs_log_error("Unable to read result type from %s", indirect->hostname);
-                actual_path = response;
-            } else if ( result_type == result_type_nothing ||
-                        result_type == result_type_checksum_only ) {
-                // the client says that it has nothing or nothing newer
-                // than what the server has 
-                
-                if ( cached_path_exists && cached_path_checksum_exists ) {
-                    rs_log_info("Using cached version: %s", cached_path);
-                    actual_path = cached_path;
-                } else {
-                    rs_log_error("Unable to find %s on %s", response, indirect->hostname);
-                    actual_path = response;
-                }
-                
-                if ( result_type == result_type_checksum_only ) {
-                    char *tmpName;
-                    dcc_make_tmpnam(indirect->hostname, "pullfile", &tmpName);
-                    char *tmpChecksumName = NULL;
-                    char *lastSlash       = strrchr(tmpName, '/');
-                    
-                    lastSlash[0] = '\0';
-                    
-                    if ( mkdir_p(tmpName) ) {
-                        lastSlash[0] = '/';
-                        
-                        tmpChecksumName = dcc_pull_checksum(indirect->in_fd, tmpName);
-                        
-                        if ( tmpChecksumName != NULL ) {
-                            
-                            if ( rename(tmpChecksumName, cached_path_checksum)){
-                                rs_log_error("Failed to move %s to %s: %s",
-                                             tmpChecksumName,
-                                             cached_path_checksum,
-                                             strerror(errno));
-                            } else {
-                                rs_trace("Moved %s to %s", tmpChecksumName,
-                                         cached_path_checksum);
-                            }
-                                                        
-                            free(tmpChecksumName);
-                        }
-                    } else {
-                        rs_log_error("Unable to create directory %s", tmpName);
-                    }
-                }
-            } else if ( result_type == result_type_file ) {
-                char *tmpChecksumName = NULL;
-                char *tmpName;
-                // FIXME: check return
-                dcc_make_tmpnam(indirect->hostname, "pullfile", &tmpName);
-                char *lastSlash       = strrchr(tmpName, '/');
-                unsigned   incomingBytes;
-                
-                if ( dcc_r_token_int(indirect->in_fd, result_item_token, &incomingBytes)
-                     || incomingBytes <= 0 ) {
-                    rs_log_error("No incoming file for path %s", response);
-                    actual_path = response;
-                } else {
-                    lastSlash[0] = '\0';
-                    
-                    if ( mkdir_p(tmpName) ) {
-                        lastSlash[0] = '/';
-                        if ( dcc_r_file_timed(indirect->in_fd, tmpName, incomingBytes, DCC_COMPRESS_LZO1X)
-                             == 0 ) {
-                            rs_log_info("Stored incoming file at %s", tmpName);
-                            tmpChecksumName = dcc_pull_checksum(indirect->in_fd, tmpName);
-                        } else {
-                            rs_log_error("Failed to retrieve incoming file %s",
-                                         tmpName);
-                            actual_path = response;
-                        }
-                    } else {
-                        rs_log_error("Unable to create directory %s", tmpName);
-                        actual_path = response;
-                    }
-                    
-                }
-                
-                if ( actual_path == NULL ) {
-                    // move the temp files into the cached location
-                    int xfd;
-                    
-                    lastSlash = strrchr(cached_path, '/');
-                    
-                    lastSlash[0] = '\0';
-                    
-                    if ( ! mkdir_p(cached_path) ) {
-                        rs_log_error("Unable to create directory %s",
-                                     cached_path);
-                    }
-                    
-                    lastSlash[0] = '/';
-                    
-                    if ( rename(tmpName, cached_path) ) {
-                        rs_log_error("Failed to move %s to %s: %s", tmpName,
-                                     cached_path, strerror(errno));
-                        actual_path = response;
-                    } else {
-                        rs_trace("Moved %s to %s", tmpName, cached_path);
-                        actual_path = cached_path;
-                        
-                        if ( tmpChecksumName != NULL ) {                  
-                            if ( rename(tmpChecksumName, cached_path_checksum)){
-                                rs_log_error("Failed to move %s to %s: %s",
-                                             tmpChecksumName,
-                                             cached_path_checksum,
-                                             strerror(errno));
-                            } else {
-                                rs_trace("Moved %s to %s", tmpChecksumName,
-                                         cached_path_checksum);
-                            }
-                        }
-                    }
-                }
-                
-                // cleanup
-                
-                if ( tmpChecksumName != NULL ) {
-                    free(tmpChecksumName);
-                }
-                
-            } else if ( result_type == result_type_dir ) {
-                char *tmpChecksumName = NULL;
-                char *tmpName;
-                // FIXME: check return
-                dcc_make_tmpnam(indirect->hostname, "pullfile", &tmpName);
-                unsigned   fileCount;
-                
-                if ( dcc_r_token_int(indirect->in_fd, result_count_token, &fileCount)
-                     || fileCount <= 0 ) {
-                    rs_log_error("No incoming files for path %s", response);
-                    actual_path = response;
-                } else {
-                    if ( mkdir_p(tmpName) ) {
-                        int i;
-                        
-                        for ( i = 0; i < fileCount; i++ ) {
-                            dcc_pull_directory_file(indirect->in_fd, indirect->hostname, tmpName);
-                        }
-                        
-                        tmpChecksumName = dcc_pull_checksum(indirect->in_fd, tmpName);
-                    } else {
-                        rs_log_error("Unable to create directory %s", tmpName);
-                        actual_path = response;
-                    }
-                }
-                
-                if ( actual_path == NULL ) {
-                    // move the temp files into the cached location
-                    int xfd;
-                    
-                    if ( dcc_rmdir(cached_path) ) {
-                        char *lastSlash = strrchr(cached_path, '/');
-                        
-                        rs_log_error("Unable to remove %s", cached_path);
-                        
-                        lastSlash[0] = '\0';
-                        
-                        if ( ! mkdir_p(cached_path) ) {
-                            rs_log_error("Unable to create directory %s",
-                                         cached_path);
-                            actual_path = response;
-                        }
-                        
-                        lastSlash[0] = '/';
-                    }
-                    
-                    if ( rename(tmpName, cached_path) ) {
-                        rs_log_error("Failed to move %s to %s: %s", tmpName,
-                                     cached_path, strerror(errno));
-                        actual_path = response;
-                    } else {
-                        rs_trace("Moved %s to %s", tmpName, cached_path);
-                        
-                        actual_path = cached_path;
-                        
-                        if ( tmpChecksumName != NULL ) {                  
-                            if ( rename(tmpChecksumName, cached_path_checksum)){
-                                rs_log_error("Failed to move %s to %s: %s",
-                                             tmpChecksumName,
-                                             cached_path_checksum,
-                                             strerror(errno));
-                            } else {
-                                rs_trace("Moved %s to %s", tmpChecksumName,
-                                         cached_path_checksum);
-                            }
-                        }
-                    }
-                }
-                
-                // cleanup
-                
-                if ( tmpChecksumName != NULL ) {
-                    free(tmpChecksumName);
-                }
-                
-            }
-        }
-        
     } else {
-        rs_log_error("Unable to receive %s request", operation_pull_token);
-        actual_path = (char *) "UNKNOWN";
+        result = -1;
+        rs_log_error("Unable to receive pull request");
+    }
+    
+    /* Check if the cached path exists. If not, construct the directory tree it will live in. */
+    if (result == 0) {
+        if (stat(pch_cache_filename, &st_pch) != 0) {
+            if (errno == ENOENT) {
+                if (pch_cache_filename) {
+                    free(pch_cache_filename);
+                    pch_cache_filename = NULL;
+                }
+                result = dcc_make_tmpfile_path(&pch_cache_filename, 1, &file_part_separator[1], pch_cache_dir, indirect->hostname, pullfile, NULL);
+            } else {
+                result = -1;
+            }
+        } else {
+            has_local_file = 1;
+        }
+    }
+    
+    /* At this point we send the query to the client */
+    if (result == 0) {
+        // restore the filename
+        *file_part_separator = '/';
+        pullfile_len = strlen(pullfile);
+        if (dcc_x_token_int(indirect->out_fd, indirection_request_token, indirection_request_pull) ||
+            dcc_x_token_int(indirect->out_fd, indirection_path_length_token, pullfile_len) ||
+            dcc_writex(indirect->out_fd, pullfile, pullfile_len)) {
+            result = -1;
+        } else {
+            /* if we have a file cached locally send the stat info, otherwise send the flag that we don't have a file */
+            if (has_local_file) {
+                if (result == 0) result = dcc_x_token_int(indirect->out_fd, indirection_file_stat_token, indirection_file_stat_info_present);
+                if (result == 0) result = dcc_writex(indirect->out_fd, &st_pch.st_size, sizeof(st_pch.st_size));
+                if (result == 0) result = dcc_writex(indirect->out_fd, &st_pch.st_mtimespec, sizeof(st_pch.st_mtimespec));
+            } else {
+                if (dcc_x_token_int(indirect->out_fd, indirection_file_stat_token, indirection_no_file_stat_info))
+                    result = -1;
+            }
+        }
+    }
+    
+    /* read the client's response */
+    if (result == 0) {
+        if (dcc_r_token_int(indirect->out_fd, indirection_pull_response_token, &pull_response)) {
+            result = -1;
+        } else {
+            struct timespec mod_time;
+            struct timeval mod_timeval[2];
+            
+            switch (pull_response) {
+                case indirection_pull_response_file_ok:
+                    break;
+                case indirection_pull_response_file_download:
+                    if (has_local_file)
+                        unlink(pch_cache_filename);
+                    result = dcc_r_token_file(indirect->out_fd, indirection_pull_file, pch_cache_filename, DCC_COMPRESS_LZO1X);
+                    if (result == 0) {
+                        result = dcc_readx(indirect->out_fd, &mod_time, sizeof(mod_time));
+                        if (result == 0) {
+                            mod_timeval[0].tv_sec = time(NULL);
+                            mod_timeval[0].tv_usec = 0;
+                            mod_timeval[1].tv_sec = mod_time.tv_sec;
+                            mod_timeval[1].tv_usec = mod_time.tv_nsec / 1000;
+                            if (utimes(pch_cache_filename, mod_timeval))
+                                rs_log_warning("Failed to set modification time on pull file: %s - %s", pch_cache_filename, strerror(errno));
+                        } else {
+                            dcc_emit_cache_warning("Failed to transfer pch file to build machine %s.");
+                        }
+                    }
+                    break;
+                case indirection_pull_response_file_missing:
+                    if (has_local_file) {
+                        unlink(pch_cache_filename);
+                    }
+                    result = -1;
+                    break;
+                default:
+                    rs_log_error("unknown indirection pull response: %d", pull_response);
+                    result = -1;
+                    break;
+            }
+        }
+    }
+    
+    if (result != 0) {
+        rs_log_error("indirection request failed, substituting /dev/null");
+        actual_path = (char *) "/dev/null";
+    } else {
+        result = use_pullfile(pch_cache_filename, &actual_path);
     }
     
     if ( write_to_child(indirect, actual_path) ) {
-        rs_log_info("Using %s", actual_path);
+        rs_log_info("Using %s (linked to %s)", pch_cache_filename, actual_path);
     } else {
         rs_log_error("Unable to contact child for path %s", actual_path);
     }
     
     // cleanup
+    if (pch_cache_filename)
+        free(pch_cache_filename);
     
-    if ( actual_path != response ) {
-        free(actual_path);
-    }
+    if (pull_response == indirection_pull_response_file_download)
+        dcc_prune_indirection_cache(pullfile_cache_max_age, pullfile_max_cache_size, pullfile_min_free_space);
+        
     if (pull_lockfd != -1)
         close(pull_lockfd);
-    return 0;
+    return result;
 }
 
 
@@ -719,12 +511,9 @@ static int dcc_handle_pull(dcc_indirection *indirect)
  * (typically gcc 3.3).  Communication between the two processes occurs over
  * a parent-child pipe pair.  Only "pull" operations are currently implemented.
  * Invokes dcc_handle_pull to do so.
- * ifd is a pointer to the file descriptor for the socket
- * that the client and server use to communicate.
  **/
 static void *dcc_handle_indirection(dcc_indirection *indirect)
 {
-    char *hostname = (char *) "unknown";
     struct sockaddr_in sain;
     size_t sain_length = sizeof(sain);
     size_t actual_length = sain_length;
@@ -733,11 +522,12 @@ static void *dcc_handle_indirection(dcc_indirection *indirect)
     // Grab the incoming hostname for use in creating a cache path on this
     // host for the desired files.
 
-    if ( getpeername(indirect->in_fd, (struct sockaddr *) &sain, (socklen_t *) &actual_length)
+    if (getpeername(indirect->in_fd, (struct sockaddr *) &sain, (socklen_t *) &actual_length)
          == 0 && actual_length <= sain_length ) {
         indirect->hostname = inet_ntoa(sain.sin_addr);
     } else {
         rs_log_error("Unable to determine remote hostname; using \"unknown\"");
+        indirect->hostname = "unknown";
     }
 
     do {
@@ -807,6 +597,7 @@ void dcc_close_pipe_end_parent(dcc_indirection *indirect)
  **/
 int dcc_prepare_indirect(dcc_indirection *indirect)
 {
+    indirect->read_buf_used = indirect->read_buf_pos = 0;
     indirect->childWrite[0] = -1;
     indirect->childWrite[1] = -1;
     

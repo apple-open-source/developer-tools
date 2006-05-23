@@ -80,6 +80,8 @@ struct ppc_function_properties
 
 struct ppc_frame_cache
 {
+  unsigned int magic;
+
   /* Base address.  */
   CORE_ADDR stack;
   CORE_ADDR frame;

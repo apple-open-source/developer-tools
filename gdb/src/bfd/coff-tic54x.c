@@ -1,5 +1,6 @@
 /* BFD back-end for TMS320C54X coff binaries.
-   Copyright 1999, 2000, 2001, 2002, 2003 Free Software Foundation, Inc.
+   Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005
+   Free Software Foundation, Inc.
    Contributed by Timothy Wall (twall@cygnus.com)
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -16,8 +17,8 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 #include "bfd.h"
 #include "sysdep.h"
@@ -38,12 +39,6 @@ static bfd_boolean tic54x_set_section_contents
   PARAMS ((bfd *, sec_ptr, const PTR, file_ptr, bfd_size_type));
 static reloc_howto_type *coff_tic54x_rtype_to_howto
   PARAMS ((bfd *, asection *, struct internal_reloc *, struct coff_link_hash_entry *, struct internal_syment *, bfd_vma *));
-static bfd_vma tic54x_getl32
-  PARAMS ((const bfd_byte *));
-static void tic54x_putl32
-  PARAMS ((bfd_vma, bfd_byte *));
-static bfd_signed_vma tic54x_getl_signed_32
-  PARAMS ((const bfd_byte *));
 static bfd_boolean tic54x_set_arch_mach
   PARAMS ((bfd *, enum bfd_architecture, unsigned long));
 static reloc_howto_type * tic54x_coff_reloc_type_lookup
@@ -61,33 +56,32 @@ static bfd_boolean ticoff_bfd_is_local_label_name
    Don't bother with 64-bits, as there aren't any.  */
 
 static bfd_vma
-tic54x_getl32 (addr)
-  const bfd_byte *addr;
+tic54x_getl32 (const void *p)
 {
+  const bfd_byte *addr = p;
   unsigned long v;
 
   v  = (unsigned long) addr[2];
   v |= (unsigned long) addr[3] << 8;
   v |= (unsigned long) addr[0] << 16;
   v |= (unsigned long) addr[1] << 24;
-  return (bfd_vma) v;
+  return v;
 }
 
 static void
-tic54x_putl32 (data, addr)
-     bfd_vma data;
-     bfd_byte *addr;
+tic54x_putl32 (bfd_vma data, void *p)
 {
-  addr[2] = (bfd_byte)data;
-  addr[3] = (bfd_byte) (data >>  8);
-  addr[0] = (bfd_byte) (data >> 16);
-  addr[1] = (bfd_byte) (data >> 24);
+  bfd_byte *addr = p;
+  addr[2] = data & 0xff;
+  addr[3] = (data >>  8) & 0xff;
+  addr[0] = (data >> 16) & 0xff;
+  addr[1] = (data >> 24) & 0xff;
 }
 
-bfd_signed_vma
-tic54x_getl_signed_32 (addr)
-     register const bfd_byte *addr;
+static bfd_signed_vma
+tic54x_getl_signed_32 (const void *p)
 {
+  const bfd_byte *addr = p;
   unsigned long v;
 
   v  = (unsigned long) addr[2];
@@ -334,6 +328,15 @@ ticoff_bfd_is_local_label_name (abfd, name)
 
 #define coff_bfd_is_local_label_name ticoff_bfd_is_local_label_name
 
+/* Clear the r_reserved field in relocs.  */
+#define SWAP_OUT_RELOC_EXTRA(abfd,src,dst) \
+  do \
+    { \
+      dst->r_reserved[0] = 0; \
+      dst->r_reserved[1] = 0; \
+    } \
+  while (0)
+
 /* Customize coffcode.h; the default coff_ functions are set up to use COFF2;
    coff_bad_format_hook uses BADMAG, so set that for COFF2.  The COFF1
    and COFF0 vectors use custom _bad_format_hook procs instead of setting
@@ -370,8 +373,8 @@ tic54x_reloc_processing (relent, reloc, symbols, abfd, section)
       if (reloc->r_symndx < 0 || reloc->r_symndx >= obj_conv_table_size (abfd))
         {
           (*_bfd_error_handler)
-            (_("%s: warning: illegal symbol index %ld in relocs"),
-             bfd_archive_filename (abfd), reloc->r_symndx);
+            (_("%B: warning: illegal symbol index %ld in relocs"),
+             abfd, reloc->r_symndx);
           relent->sym_ptr_ptr = bfd_abs_section_ptr->symbol_ptr_ptr;
           ptr = NULL;
         }

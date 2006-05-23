@@ -1,4 +1,4 @@
-$Id: README.packaging,v 1.1.1.1 2005/07/08 23:30:14 behnke Exp $  -*- indented-text -*-
+$Id: README.packaging,v 1.1 2005/07/08 23:30:14 behnke Exp $  -*- indented-text -*-
 
 Please read this file if you distribute packages of distcc and
 consider these requests.

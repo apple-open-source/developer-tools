@@ -438,14 +438,13 @@ store_bit_field (rtx str_rtx, unsigned HOST_WIDE_INT bitsize,
 	     || (offset * BITS_PER_UNIT % bitsize == 0
 		 && MEM_ALIGN (op0) % GET_MODE_BITSIZE (fieldmode) == 0))))
     {
-      if (GET_MODE (op0) != fieldmode)
-	{
-	  if (MEM_P (op0))
-	    op0 = adjust_address (op0, fieldmode, offset);
-	  else
-	    op0 = simplify_gen_subreg (fieldmode, op0, GET_MODE (op0),
-				       byte_offset);
-	}
+      /* APPLE LOCAL begin 4338167 mainline */
+      if (MEM_P (op0))
+	op0 = adjust_address (op0, fieldmode, offset);
+      else if (GET_MODE (op0) != fieldmode)
+	op0 = simplify_gen_subreg (fieldmode, op0, GET_MODE (op0),
+				   byte_offset);
+      /* APPLE LOCAL end 4338167 mainline */
       emit_move_insn (op0, value);
       return value;
     }
@@ -656,6 +655,8 @@ store_bit_field (rtx str_rtx, unsigned HOST_WIDE_INT bitsize,
 	    bestmode = GET_MODE (op0);
 
 	  if (bestmode == VOIDmode
+	      /* APPLE LOCAL 4345871 mainline */
+	      || GET_MODE_SIZE (bestmode) < GET_MODE_SIZE (fieldmode)
 	      || (SLOW_UNALIGNED_ACCESS (bestmode, MEM_ALIGN (op0))
 		  && GET_MODE_BITSIZE (bestmode) > MEM_ALIGN (op0)))
 	    goto insv_loses;
@@ -1427,6 +1428,13 @@ extract_bit_field (rtx str_rtx, unsigned HOST_WIDE_INT bitsize,
 		  xbitpos = bitnum % unit;
 		  xop0 = adjust_address (xop0, bestmode, xoffset);
 
+	          /* APPLE LOCAL begin 4338167 mainline */
+		  /* Make sure register is big enough for the whole field. */
+		  if (xoffset * BITS_PER_UNIT + unit 
+		      < offset * BITS_PER_UNIT + bitsize)
+		    goto extzv_loses;
+	          /* APPLE LOCAL end 4338167 mainline */
+
 		  /* Fetch it to a register in that size.  */
 		  xop0 = force_reg (bestmode, xop0);
 
@@ -1555,6 +1563,13 @@ extract_bit_field (rtx str_rtx, unsigned HOST_WIDE_INT bitsize,
 		  xoffset = (bitnum / unit) * GET_MODE_SIZE (bestmode);
 		  xbitpos = bitnum % unit;
 		  xop0 = adjust_address (xop0, bestmode, xoffset);
+
+	          /* APPLE LOCAL begin 4338167 mainline */
+		  /* Make sure register is big enough for the whole field. */
+		  if (xoffset * BITS_PER_UNIT + unit 
+		      < offset * BITS_PER_UNIT + bitsize)
+		    goto extv_loses;
+	          /* APPLE LOCAL end 4338167 mainline */
 
 		  /* Fetch it to a register in that size.  */
 		  xop0 = force_reg (bestmode, xop0);
@@ -2257,19 +2272,8 @@ expand_shift (enum tree_code code, enum machine_mode mode, rtx shifted,
 	  temp = expand_binop (mode,
 			       left ? rotl_optab : rotr_optab,
 			       shifted, op1, target, unsignedp, methods);
-
-	  /* If we don't have the rotate, but we are rotating by a constant
-	     that is in range, try a rotate in the opposite direction.  */
-
-	  if (temp == 0 && GET_CODE (op1) == CONST_INT
-	      && INTVAL (op1) > 0
-	      && (unsigned int) INTVAL (op1) < GET_MODE_BITSIZE (mode))
-	    temp = expand_binop (mode,
-				 left ? rotr_optab : rotl_optab,
-				 shifted,
-				 GEN_INT (GET_MODE_BITSIZE (mode)
-					  - INTVAL (op1)),
-				 target, unsignedp, methods);
+	  /* APPLE LOCAL mainline pr17886 */
+	  /* Deleted code here for pr17886 */
 	}
       else if (unsignedp)
 	temp = expand_binop (mode,

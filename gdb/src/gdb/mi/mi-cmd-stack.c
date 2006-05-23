@@ -1,5 +1,5 @@
 /* MI Command Set - stack commands.
-   Copyright 2000, 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright 2000, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
    Contributed by Cygnus Solutions (a Red Hat company).
 
    This file is part of GDB.
@@ -99,11 +99,8 @@ mi_cmd_stack_list_frames (char *command, char **argv, int argc)
   struct cleanup *cleanup_stack;
   struct frame_info *fi;
 
-  if (!target_has_stack)
-    error ("mi_cmd_stack_list_frames: No stack.");
-
   if (argc > 2 || argc == 1)
-    error ("mi_cmd_stack_list_frames: Usage: [FRAME_LOW FRAME_HIGH]");
+    error (_("mi_cmd_stack_list_frames: Usage: [FRAME_LOW FRAME_HIGH]"));
 
   if (argc == 2)
     {
@@ -126,7 +123,7 @@ mi_cmd_stack_list_frames (char *command, char **argv, int argc)
        i++, fi = get_prev_frame (fi));
 
   if (fi == NULL)
-    error ("mi_cmd_stack_list_frames: Not enough frames in stack.");
+    error (_("mi_cmd_stack_list_frames: Not enough frames in stack."));
 
   cleanup_stack = make_cleanup_ui_out_list_begin_end (uiout, "stack");
 
@@ -137,19 +134,14 @@ mi_cmd_stack_list_frames (char *command, char **argv, int argc)
        i++, fi = get_prev_frame (fi))
     {
       QUIT;
-      /* level == i: always print the level 'i'
-         source == LOC_AND_ADDRESS: print the location and the address 
-         always, even for level 0.
+      /* Print the location and the address always, even for level 0.
          args == 0: don't print the arguments. */
-      print_frame_info (fi /* frame info */ ,
-			i /* level */ ,
-			LOC_AND_ADDRESS /* source */ ,
-			0 /* args */ );
+      print_frame_info (fi, 1, LOC_AND_ADDRESS, 0 /* args */ );
     }
 
   do_cleanups (cleanup_stack);
   if (i < frame_high)
-    error ("mi_cmd_stack_list_frames: Not enough frames in stack.");
+    error (_("mi_cmd_stack_list_frames: Not enough frames in stack."));
 
   return MI_CMD_DONE;
 }
@@ -273,11 +265,8 @@ mi_cmd_stack_info_depth (char *command, char **argv, int argc)
   int i;
   struct frame_info *fi;
 
-  if (!target_has_stack)
-    error ("mi_cmd_stack_info_depth: No stack.");
-
   if (argc > 1)
-    error ("mi_cmd_stack_info_depth: Usage: [MAX_DEPTH]");
+    error (_("mi_cmd_stack_info_depth: Usage: [MAX_DEPTH]"));
 
   if (argc == 1)
     frame_high = atoi (argv[0]);
@@ -341,16 +330,17 @@ enum mi_cmd_result
 mi_cmd_stack_list_locals (char *command, char **argv, int argc)
 {
   struct frame_info *frame;
-  enum print_values values;
+  enum print_values print_values;
+  /* APPLE LOCAL mi */
   int all_blocks;
 
   if (argc < 1 || argc > 2)
     error ("mi_cmd_stack_list_locals: Usage: PRINT_VALUES [ALL_BLOCKS]");
 
-  frame = get_selected_frame ();
+   frame = get_selected_frame (NULL);
 
-  values = mi_decode_print_values (argv[0]);
-  if (values == PRINT_BAD_INPUT)
+  print_values = mi_decode_print_values (argv[0]);
+  if (print_values == PRINT_BAD_INPUT)
     error ("%s", print_values_bad_input_string);
 
   if (argc >= 2)
@@ -358,7 +348,8 @@ mi_cmd_stack_list_locals (char *command, char **argv, int argc)
   else
     all_blocks = 0;
 
-  list_args_or_locals (1, values, frame, all_blocks);
+  list_args_or_locals (1, print_values, frame, all_blocks);
+
   return MI_CMD_DONE;
 }
 
@@ -377,7 +368,7 @@ mi_cmd_stack_list_args (char *command, char **argv, int argc)
   struct cleanup *cleanup_stack_args;
 
   if (argc < 1 || argc > 3 || argc == 2)
-    error ("mi_cmd_stack_list_args: Usage: PRINT_VALUES [FRAME_LOW FRAME_HIGH]");
+    error (_("mi_cmd_stack_list_args: Usage: PRINT_VALUES [FRAME_LOW FRAME_HIGH]"));
 
   if (argc == 3)
     {
@@ -404,7 +395,7 @@ mi_cmd_stack_list_args (char *command, char **argv, int argc)
        i++, fi = get_prev_frame (fi));
 
   if (fi == NULL)
-    error ("mi_cmd_stack_list_args: Not enough frames in stack.");
+    error (_("mi_cmd_stack_list_args: Not enough frames in stack."));
 
   cleanup_stack_args = make_cleanup_ui_out_list_begin_end (uiout, "stack-args");
 
@@ -424,7 +415,7 @@ mi_cmd_stack_list_args (char *command, char **argv, int argc)
 
   do_cleanups (cleanup_stack_args);
   if (i < frame_high)
-    error ("mi_cmd_stack_list_args: Not enough frames in stack.");
+    error (_("mi_cmd_stack_list_args: Not enough frames in stack."));
 
   return MI_CMD_DONE;
 }
@@ -508,6 +499,7 @@ list_args_or_locals (int locals, enum print_values values, struct frame_info *fi
   ui_out_stream_delete (stb);
 }
 
+/* APPLE LOCAL begin -file-list-statics */
 /* This implements the command -file-list-statics.  It takes three or four
    arguments, a filename, a shared library, and the standard PRINT_VALUES
    argument, and an optional filter.  
@@ -635,13 +627,19 @@ mi_cmd_file_list_statics (char *command, char **argv, int argc)
     error ("mi_cmd_file_list_statics: Usage: -file FILE -shlib SHLIB"
 	   " VALUES"
 	   " [-filter FILTER] [-constants 0/1]");
+
+  /* APPLE LOCAL: Make sure we have symbols loaded for requested SHLIBNAME.  */
+  if (*shlibname != '\0')
+    if (objfile_name_set_load_state (shlibname, OBJF_SYM_ALL, 0) == -1)
+      warning ("Couldn't raise load level state for requested shlib: \"%s\"",
+                shlibname);
   
   if (strcmp (filename, CURRENT_FRAME_COOKIE) == 0)
     {
       CORE_ADDR pc;
       struct obj_section *objsec;
 
-      pc = get_frame_pc (get_selected_frame ());
+      pc = get_frame_pc (get_selected_frame (NULL));
       objsec = find_pc_section (pc);
       if (objsec != NULL && objsec->objfile != NULL)
         cleanup_list = make_cleanup_restrict_to_objfile (objsec->objfile);
@@ -779,6 +777,12 @@ mi_cmd_file_list_globals (char *command, char **argv, int argc)
 	   " [-filter FILTER] [-constants 0/1]");
   
   stb = ui_out_stream_new (uiout);
+
+  /* APPLE LOCAL: Make sure we have symbols loaded for requested SHLIBNAME.  */
+  if (*shlibname != '\0')
+    if (objfile_name_set_load_state (shlibname, OBJF_SYM_ALL, 0) == -1)
+      warning ("Couldn't raise load level state for requested shlib: \"%s\"",
+                shlibname);
 
   if (*filename != '\0')
     {
@@ -1146,24 +1150,29 @@ print_syms_for_block (struct block *block,
 
   do_cleanups (old_chain);
 }
+/* APPLE LOCAL end mi */
 
 enum mi_cmd_result
 mi_cmd_stack_select_frame (char *command, char **argv, int argc)
 {
-  if (!target_has_stack)
-    error ("mi_cmd_stack_select_frame: No stack.");
+  if (argc == 0 || argc > 1)
+    error (_("mi_cmd_stack_select_frame: Usage: FRAME_SPEC"));
 
-  if (argc > 1)
-    error ("mi_cmd_stack_select_frame: Usage: [FRAME_SPEC]");
-
-  /* with no args, don't change frame */
-  if (argc == 0)
-    select_frame_command (0, 1 /* not used */ );
-  else
-    select_frame_command (argv[0], 1 /* not used */ );
+  select_frame_command (argv[0], 1 /* not used */ );
   return MI_CMD_DONE;
 }
 
+enum mi_cmd_result
+mi_cmd_stack_info_frame (char *command, char **argv, int argc)
+{
+  if (argc > 0)
+    error (_("mi_cmd_stack_info_frame: No arguments required"));
+  
+  print_frame_info (get_selected_frame (NULL), 1, LOC_AND_ADDRESS, 0);
+  return MI_CMD_DONE;
+}
+
+/* APPLE LOCAL begin hooks */
 void 
 mi_interp_stack_changed_hook (void)
 {
@@ -1213,7 +1222,4 @@ mi_interp_context_hook (int thread_id)
   do_cleanups (list_cleanup);
   uiout = saved_ui_out;
 }
-
-
-
-
+/* APPLE LOCAL end hooks */

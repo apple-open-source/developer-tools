@@ -62,6 +62,16 @@ static void print_arch(
 static void print_cputype(
     cpu_type_t cputype,
     cpu_subtype_t cpusubtype);
+
+#if i386_THREAD_STATE == 1
+#ifdef i386_EXCEPTION_STATE_COUNT
+static void print_mmst_reg(
+    struct mmst_reg *r);
+static void print_xmm_reg(
+    struct xmm_reg *r);
+#endif /* defined(i386_EXCEPTION_STATE_COUNT) */
+#endif /* i386_THREAD_STATE == 1 */
+
 static void print_unknown_state(
     char *begin,
     char *end,
@@ -1348,6 +1358,7 @@ enum bool very_verbose)
     routines_command_t rc;
     struct twolevel_hints_command hints;
     struct prebind_cksum_command cs;
+    struct uuid_command uuid;
 
 	host_byte_sex = get_host_byte_sex();
 	swapped = host_byte_sex != load_commands_byte_sex;
@@ -1601,6 +1612,16 @@ enum bool very_verbose)
 		if(swapped)
 		    swap_prebind_cksum_command(&cs, host_byte_sex);
 		print_prebind_cksum_command(&cs);
+		break;
+
+	    case LC_UUID:
+		memset((char *)&uuid, '\0', sizeof(struct uuid_command));
+		size = left < sizeof(struct uuid_command) ?
+		       left : sizeof(struct uuid_command);
+		memcpy((char *)&uuid, (char *)lc, size);
+		if(swapped)
+		    swap_uuid_command(&uuid, host_byte_sex);
+		print_uuid_command(&uuid);
 		break;
 
 	    default:
@@ -1944,6 +1965,8 @@ enum bool verbose)
 		printf(" LIVE_SUPPORT");
 	    if(section_attributes & S_ATTR_SELF_MODIFYING_CODE)
 		printf(" SELF_MODIFYING_CODE");
+	    if(section_attributes & S_ATTR_DEBUG)
+		printf(" DEBUG");
 	    if(section_attributes & S_ATTR_SOME_INSTRUCTIONS)
 		printf(" SOME_INSTRUCTIONS");
 	    if(section_attributes & S_ATTR_EXT_RELOC)
@@ -2520,6 +2543,32 @@ struct prebind_cksum_command *cksum)
 	else
 	    printf("\n");
 	printf("   cksum 0x%08x\n", (unsigned int)cksum->cksum);
+}
+
+/*
+ * print an LC_UUID command.  The uuid_command structure
+ * specified must be aligned correctly and in the host byte sex.
+ */
+void
+print_uuid_command(
+struct uuid_command *uuid)
+{
+	printf("     cmd LC_UUID\n");
+	printf(" cmdsize %u", uuid->cmdsize);
+	if(uuid->cmdsize != sizeof(struct uuid_command))
+	    printf(" Incorrect size\n");
+	else
+	    printf("\n");
+	printf("   uuid 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x"
+	       "\n", (unsigned int)uuid->uuid[0], (unsigned int)uuid->uuid[1],
+	       (unsigned int)uuid->uuid[2],  (unsigned int)uuid->uuid[3],
+	       (unsigned int)uuid->uuid[4],  (unsigned int)uuid->uuid[5],
+	       (unsigned int)uuid->uuid[6],  (unsigned int)uuid->uuid[7]);
+	printf("        0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x"
+	       "\n", (unsigned int)uuid->uuid[8],  (unsigned int)uuid->uuid[9],
+	       (unsigned int)uuid->uuid[10], (unsigned int)uuid->uuid[11],
+	       (unsigned int)uuid->uuid[12], (unsigned int)uuid->uuid[13],
+	       (unsigned int)uuid->uuid[14], (unsigned int)uuid->uuid[15]);
 }
 
 /*
@@ -3534,9 +3583,14 @@ enum byte_sex thread_states_byte_sex)
 	    i386_thread_state_t cpu;
 /* current i386 thread states */
 #if i386_THREAD_STATE == 1
+#ifndef i386_EXCEPTION_STATE_COUNT
 	    char *fpu;
+	    unsigned long fpu_size;
+#else /* defined(i386_EXCEPTION_STATE_COUNT) */
+	    i386_float_state_t fpu;
+#endif /* defined(i386_EXCEPTION_STATE_COUNT) */
 	    i386_exception_state_t exc;
-	    unsigned long fpu_size, f, g;
+	    unsigned long f, g;
 #endif /* i386_THREAD_STATE == 1 */
 
 /* i386 thread states on older releases */
@@ -3611,6 +3665,7 @@ enum byte_sex thread_states_byte_sex)
 			printf("      count %lu (not i386_FLOAT_STATE_COUNT)\n",
 			       count);
 		    left = end - begin;
+#ifndef i386_EXCEPTION_STATE_COUNT
 		    fpu = begin;
 		    if(left >= sizeof(struct i386_float_state)){
 			fpu_size = sizeof(struct i386_float_state);
@@ -3629,7 +3684,142 @@ enum byte_sex thread_states_byte_sex)
 			}
 			printf("\n");
 		    }
+#else /* defined(i386_EXCEPTION_STATE_COUNT) */
+		    if(left >= sizeof(i386_float_state_t)){
+		        memcpy((char *)&fpu, begin,
+			       sizeof(i386_float_state_t));
+		        begin += sizeof(i386_float_state_t);
+		    }
+		    else{
+		        memset((char *)&fpu, '\0',
+			       sizeof(i386_float_state_t));
+		        memcpy((char *)&fpu, begin, left);
+		        begin += left;
+		    }
+		    if(swapped)
+			swap_i386_float_state(&fpu, host_byte_sex);
+		    printf("\t    fpu_reserved[0] %d fpu_reserved[1] %d\n",
+			   fpu.fpu_reserved[0], fpu.fpu_reserved[1]);
+		    printf("\t    control: invalid %d denorm %d zdiv %d ovrfl "
+			   "%d undfl %d precis %d\n",
+			   fpu.fpu_fcw.invalid,
+			   fpu.fpu_fcw.denorm,
+			   fpu.fpu_fcw.zdiv,
+			   fpu.fpu_fcw.ovrfl,
+			   fpu.fpu_fcw.undfl,
+			   fpu.fpu_fcw.precis);
+		    printf("\t\t     pc ");
+		    switch(fpu.fpu_fcw.pc){
+		    case FP_PREC_24B:
+			printf("FP_PREC_24B ");
+			break;
+		    case FP_PREC_53B:
+			printf("FP_PREC_53B ");
+			break;
+		    case FP_PREC_64B:
+			printf("FP_PREC_64B ");
+			break;
+		    default:
+			printf("%d ", fpu.fpu_fcw.pc);
+			break;
+		    }
+		    printf("rc ");
+		    switch(fpu.fpu_fcw.rc){
+		    case FP_RND_NEAR:
+			printf("FP_RND_NEAR ");
+			break;
+		    case FP_RND_DOWN:
+			printf("FP_RND_DOWN ");
+			break;
+		    case FP_RND_UP:
+			printf("FP_RND_UP ");
+			break;
+		    case FP_CHOP:
+			printf("FP_CHOP ");
+			break;
+		    }
+		    printf("\n");
+		    printf("\t    status: invalid %d denorm %d zdiv %d ovrfl "
+			   "%d undfl %d precis %d stkflt %d\n",
+			   fpu.fpu_fsw.invalid,
+			   fpu.fpu_fsw.denorm,
+			   fpu.fpu_fsw.zdiv,
+			   fpu.fpu_fsw.ovrfl,
+			   fpu.fpu_fsw.undfl,
+			   fpu.fpu_fsw.precis,
+			   fpu.fpu_fsw.stkflt);
+		    printf("\t            errsumm %d c0 %d c1 %d c2 %d tos %d "
+			   "c3 %d busy %d\n",
+			   fpu.fpu_fsw.errsumm,
+			   fpu.fpu_fsw.c0,
+			   fpu.fpu_fsw.c1,
+			   fpu.fpu_fsw.c2,
+			   fpu.fpu_fsw.tos,
+			   fpu.fpu_fsw.c3,
+			   fpu.fpu_fsw.busy);
+		    printf("\t    fpu_ftw 0x%02x fpu_rsrv1 0x%02x fpu_fop "
+			   "0x%04x fpu_ip 0x%08x\n",
+			   (unsigned int)fpu.fpu_ftw,
+			   (unsigned int)fpu.fpu_rsrv1,
+			   (unsigned int)fpu.fpu_fop,
+			   (unsigned int)fpu.fpu_ip);
+		    printf("\t    fpu_cs 0x%04x fpu_rsrv2 0x%04x fpu_dp 0x%08x "
+			   "fpu_ds 0x%04x\n",
+			   (unsigned int)fpu.fpu_cs,
+			   (unsigned int)fpu.fpu_rsrv2,
+			   (unsigned int)fpu.fpu_dp,
+			   (unsigned int)fpu.fpu_ds);
+		    printf("\t    fpu_rsrv3 0x%04x fpu_mxcsr 0x%08x "
+			   "fpu_mxcsrmask 0x%08x\n",
+			   (unsigned int)fpu.fpu_rsrv3,
+			   (unsigned int)fpu.fpu_mxcsr,
+			   (unsigned int)fpu.fpu_mxcsrmask);
+		    printf("\t    fpu_stmm0:\n");
+		    print_mmst_reg(&fpu.fpu_stmm0);
+		    printf("\t    fpu_stmm1:\n");
+		    print_mmst_reg(&fpu.fpu_stmm1);
+		    printf("\t    fpu_stmm2:\n");
+		    print_mmst_reg(&fpu.fpu_stmm2);
+		    printf("\t    fpu_stmm3:\n");
+		    print_mmst_reg(&fpu.fpu_stmm3);
+		    printf("\t    fpu_stmm4:\n");
+		    print_mmst_reg(&fpu.fpu_stmm4);
+		    printf("\t    fpu_stmm5:\n");
+		    print_mmst_reg(&fpu.fpu_stmm5);
+		    printf("\t    fpu_stmm6:\n");
+		    print_mmst_reg(&fpu.fpu_stmm6);
+		    printf("\t    fpu_stmm7:\n");
+		    print_mmst_reg(&fpu.fpu_stmm7);
+		    printf("\t    fpu_xmm0:\n");
+		    print_xmm_reg(&fpu.fpu_xmm0);
+		    printf("\t    fpu_xmm1:\n");
+		    print_xmm_reg(&fpu.fpu_xmm1);
+		    printf("\t    fpu_xmm2:\n");
+		    print_xmm_reg(&fpu.fpu_xmm2);
+		    printf("\t    fpu_xmm3:\n");
+		    print_xmm_reg(&fpu.fpu_xmm3);
+		    printf("\t    fpu_xmm4:\n");
+		    print_xmm_reg(&fpu.fpu_xmm4);
+		    printf("\t    fpu_xmm5:\n");
+		    print_xmm_reg(&fpu.fpu_xmm5);
+		    printf("\t    fpu_xmm6:\n");
+		    print_xmm_reg(&fpu.fpu_xmm6);
+		    printf("\t    fpu_xmm7:\n");
+		    print_xmm_reg(&fpu.fpu_xmm7);
+		    printf("\t    fpu_rsrv4:\n");
+		    for(f = 0; f < 14; f++){
+			printf("\t            ");
+			for(g = 0; g < 16; g++){
+			    printf("%02x ",
+				   (unsigned int)(fpu.fpu_rsrv4[f*g] & 0xff));
+			}
+			printf("\n");
+		    }
+		    printf("\t    fpu_reserved1 0x%08x\n",
+			   (unsigned int)fpu.fpu_reserved1);
+#endif /* defined(i386_EXCEPTION_STATE_COUNT) */
 		    break;
+
 		case i386_EXCEPTION_STATE:
 		    printf("     flavor i386_EXCEPTION_STATE\n");
 		    if(count == I386_EXCEPTION_STATE_COUNT)
@@ -3915,6 +4105,48 @@ enum byte_sex thread_states_byte_sex)
 	    }
 	}
 }
+
+/* current i386 thread states */
+#if i386_THREAD_STATE == 1
+#ifdef i386_EXCEPTION_STATE_COUNT
+
+static
+void
+print_mmst_reg(
+struct mmst_reg *r)
+{
+    unsigned long f;
+
+	printf("\t      mmst_reg  ");
+	for(f = 0; f < 10; f++){
+	    printf("%02x ",
+		   (unsigned int)(r->mmst_reg[f] & 0xff));
+	}
+	printf("\n");
+	printf("\t      mmst_rsrv ");
+	for(f = 0; f < 6; f++){
+	    printf("%02x ",
+		   (unsigned int)(r->mmst_rsrv[f] & 0xff));
+	}
+	printf("\n");
+}
+
+static
+void
+print_xmm_reg(
+struct xmm_reg *r)
+{
+    unsigned long f;
+
+	printf("\t      xmm_reg ");
+	for(f = 0; f < 16; f++){
+	    printf("%02x ",
+		   (unsigned int)(r->xmm_reg[f] & 0xff));
+	}
+	printf("\n");
+}
+#endif /* defined(i386_EXCEPTION_STATE_COUNT) */
+#endif /* i386_THREAD_STATE == 1 */
 
 static
 void

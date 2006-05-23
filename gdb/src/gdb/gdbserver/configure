@@ -309,7 +309,7 @@ ac_includes_default="\
 # include <unistd.h>
 #endif"
 
-ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS CC CFLAGS LDFLAGS CPPFLAGS ac_ct_CC EXEEXT OBJEXT build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os INSTALL_PROGRAM INSTALL_SCRIPT INSTALL_DATA CPP EGREP GDBSERVER_DEPFILES GDBSERVER_LIBS USE_THREAD_DB LIBOBJS LTLIBOBJS'
+ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS CC CFLAGS LDFLAGS CPPFLAGS ac_ct_CC EXEEXT OBJEXT build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os INSTALL_PROGRAM INSTALL_SCRIPT INSTALL_DATA CPP EGREP RDYNAMIC GDBSERVER_DEPFILES GDBSERVER_LIBS USE_THREAD_DB LIBOBJS LTLIBOBJS'
 ac_subst_files=''
 
 # Initialize some variables set by options.
@@ -830,6 +830,11 @@ Fine tuning of the installation directories:
 _ACEOF
 
   cat <<\_ACEOF
+
+Program names:
+  --program-prefix=PREFIX            prepend PREFIX to installed program names
+  --program-suffix=SUFFIX            append SUFFIX to installed program names
+  --program-transform-name=PROGRAM   run sed PROGRAM on installed program names
 
 System types:
   --build=BUILD     configure for building on BUILD [guessed]
@@ -2411,6 +2416,20 @@ test -z "$INSTALL_SCRIPT" && INSTALL_SCRIPT='${INSTALL}'
 test -z "$INSTALL_DATA" && INSTALL_DATA='${INSTALL} -m 644'
 
 
+test "$program_prefix" != NONE &&
+  program_transform_name="s,^,$program_prefix,;$program_transform_name"
+# Use a double $ so make ignores it.
+test "$program_suffix" != NONE &&
+  program_transform_name="s,\$,$program_suffix,;$program_transform_name"
+# Double any \ or $.  echo might interpret backslashes.
+# By default was `s,x,x', remove it if useless.
+cat <<\_ACEOF >conftest.sed
+s/[\\$]/&&/g;s/;s,x,x,$//
+_ACEOF
+program_transform_name=`echo $program_transform_name | sed -f conftest.sed`
+rm conftest.sed
+
+
 
 ac_ext=c
 ac_cpp='$CPP $CPPFLAGS'
@@ -3062,9 +3081,9 @@ fi
 done
 
 
-echo "$as_me:$LINENO: checking whether strerror must be declared" >&5
-echo $ECHO_N "checking whether strerror must be declared... $ECHO_C" >&6
-if test "${bfd_cv_decl_needed_strerror+set}" = set; then
+echo "$as_me:$LINENO: checking whether strerror is declared" >&5
+echo $ECHO_N "checking whether strerror is declared... $ECHO_C" >&6
+if test "${ac_cv_have_decl_strerror+set}" = set; then
   echo $ECHO_N "(cached) $ECHO_C" >&6
 else
   cat >conftest.$ac_ext <<_ACEOF
@@ -3073,25 +3092,14 @@ _ACEOF
 cat confdefs.h >>conftest.$ac_ext
 cat >>conftest.$ac_ext <<_ACEOF
 /* end confdefs.h.  */
-
-#include <stdio.h>
-#ifdef HAVE_STRING_H
-#include <string.h>
-#else
-#ifdef HAVE_STRINGS_H
-#include <strings.h>
-#endif
-#endif
-#ifdef HAVE_STDLIB_H
-#include <stdlib.h>
-#endif
-#ifdef HAVE_UNISTD_H
-#include <unistd.h>
-#endif
+$ac_includes_default
 int
 main ()
 {
-char *(*pfn) = (char *(*)) strerror
+#ifndef strerror
+  char *p = (char *) strerror;
+#endif
+
   ;
   return 0;
 }
@@ -3118,37 +3126,119 @@ if { (eval echo "$as_me:$LINENO: \"$ac_compile\"") >&5
   ac_status=$?
   echo "$as_me:$LINENO: \$? = $ac_status" >&5
   (exit $ac_status); }; }; then
-  bfd_cv_decl_needed_strerror=no
+  ac_cv_have_decl_strerror=yes
 else
   echo "$as_me: failed program was:" >&5
 sed 's/^/| /' conftest.$ac_ext >&5
 
-bfd_cv_decl_needed_strerror=yes
+ac_cv_have_decl_strerror=no
 fi
 rm -f conftest.err conftest.$ac_objext conftest.$ac_ext
 fi
+echo "$as_me:$LINENO: result: $ac_cv_have_decl_strerror" >&5
+echo "${ECHO_T}$ac_cv_have_decl_strerror" >&6
+if test $ac_cv_have_decl_strerror = yes; then
 
-echo "$as_me:$LINENO: result: $bfd_cv_decl_needed_strerror" >&5
-echo "${ECHO_T}$bfd_cv_decl_needed_strerror" >&6
-if test $bfd_cv_decl_needed_strerror = yes; then
-
-cat >>confdefs.h <<\_ACEOF
-#define NEED_DECLARATION_STRERROR 1
+cat >>confdefs.h <<_ACEOF
+#define HAVE_DECL_STRERROR 1
 _ACEOF
+
+
+else
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_DECL_STRERROR 0
+_ACEOF
+
 
 fi
 
+
+
+echo "$as_me:$LINENO: checking for socklen_t" >&5
+echo $ECHO_N "checking for socklen_t... $ECHO_C" >&6
+if test "${ac_cv_type_socklen_t+set}" = set; then
+  echo $ECHO_N "(cached) $ECHO_C" >&6
+else
+  cat >conftest.$ac_ext <<_ACEOF
+/* confdefs.h.  */
+_ACEOF
+cat confdefs.h >>conftest.$ac_ext
+cat >>conftest.$ac_ext <<_ACEOF
+/* end confdefs.h.  */
+#include <sys/types.h>
+#include <sys/socket.h>
+
+
+int
+main ()
+{
+if ((socklen_t *) 0)
+  return 0;
+if (sizeof (socklen_t))
+  return 0;
+  ;
+  return 0;
+}
+_ACEOF
+rm -f conftest.$ac_objext
+if { (eval echo "$as_me:$LINENO: \"$ac_compile\"") >&5
+  (eval $ac_compile) 2>conftest.er1
+  ac_status=$?
+  grep -v '^ *+' conftest.er1 >conftest.err
+  rm -f conftest.er1
+  cat conftest.err >&5
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); } &&
+	 { ac_try='test -z "$ac_c_werror_flag"
+			 || test ! -s conftest.err'
+  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); }; } &&
+	 { ac_try='test -s conftest.$ac_objext'
+  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); }; }; then
+  ac_cv_type_socklen_t=yes
+else
+  echo "$as_me: failed program was:" >&5
+sed 's/^/| /' conftest.$ac_ext >&5
+
+ac_cv_type_socklen_t=no
+fi
+rm -f conftest.err conftest.$ac_objext conftest.$ac_ext
+fi
+echo "$as_me:$LINENO: result: $ac_cv_type_socklen_t" >&5
+echo "${ECHO_T}$ac_cv_type_socklen_t" >&6
+if test $ac_cv_type_socklen_t = yes; then
+
+cat >>confdefs.h <<_ACEOF
+#define HAVE_SOCKLEN_T 1
+_ACEOF
+
+
+fi
 
 . ${srcdir}/configure.srv
 
 if test "${srv_linux_usrregs}" = "yes"; then
-  cat >>confdefs.h <<\_ACEOF
+
+cat >>confdefs.h <<\_ACEOF
 #define HAVE_LINUX_USRREGS 1
 _ACEOF
 
 fi
 
 if test "${srv_linux_regsets}" = "yes"; then
+
+cat >>confdefs.h <<\_ACEOF
+#define HAVE_LINUX_REGSETS 1
+_ACEOF
+
+
   echo "$as_me:$LINENO: checking for PTRACE_GETREGS" >&5
 echo $ECHO_N "checking for PTRACE_GETREGS... $ECHO_C" >&6
   if test "${gdbsrv_cv_have_ptrace_getregs+set}" = set; then
@@ -3204,8 +3294,9 @@ fi
   echo "$as_me:$LINENO: result: $gdbsrv_cv_have_ptrace_getregs" >&5
 echo "${ECHO_T}$gdbsrv_cv_have_ptrace_getregs" >&6
   if test "${gdbsrv_cv_have_ptrace_getregs}" = "yes"; then
-    cat >>confdefs.h <<\_ACEOF
-#define HAVE_LINUX_REGSETS 1
+
+cat >>confdefs.h <<\_ACEOF
+#define HAVE_PTRACE_GETREGS 1
 _ACEOF
 
   fi
@@ -3265,7 +3356,8 @@ fi
   echo "$as_me:$LINENO: result: $gdbsrv_cv_have_ptrace_getfpxregs" >&5
 echo "${ECHO_T}$gdbsrv_cv_have_ptrace_getfpxregs" >&6
   if test "${gdbsrv_cv_have_ptrace_getfpxregs}" = "yes"; then
-    cat >>confdefs.h <<\_ACEOF
+
+cat >>confdefs.h <<\_ACEOF
 #define HAVE_PTRACE_GETFPXREGS 1
 _ACEOF
 
@@ -3586,7 +3678,8 @@ fi
     echo "$as_me:$LINENO: result: $gdb_cv_prfpregset_t_broken" >&5
 echo "${ECHO_T}$gdb_cv_prfpregset_t_broken" >&6
     if test $gdb_cv_prfpregset_t_broken = yes; then
-      cat >>confdefs.h <<\_ACEOF
+
+cat >>confdefs.h <<\_ACEOF
 #define PRFPREGSET_T_BROKEN 1
 _ACEOF
 
@@ -3685,6 +3778,7 @@ void ps_pglobal_lookup() {}
    void ps_lsetregs() {}
    void ps_lgetfpregs() {}
    void ps_lsetfpregs() {}
+   void ps_get_thread_area() {}
    void ps_getpid() {}
 int
 main ()
@@ -3742,6 +3836,7 @@ void ps_pglobal_lookup() {}
    void ps_lsetregs() {}
    void ps_lgetfpregs() {}
    void ps_lsetfpregs() {}
+   void ps_get_thread_area() {}
    void ps_getpid() {}
 int
 main ()
@@ -3782,11 +3877,11 @@ srv_cv_thread_db=no
 fi
 rm -f conftest.err conftest.$ac_objext \
       conftest$ac_exeext conftest.$ac_ext
- LIBS="$old_LIBS"
 
 fi
 echo "$as_me:$LINENO: result: $srv_cv_thread_db" >&5
 echo "${ECHO_T}$srv_cv_thread_db" >&6
+ LIBS="$old_LIBS"
 
 fi
 rm -f conftest.err conftest.$ac_objext \
@@ -3800,6 +3895,56 @@ echo "$as_me: WARNING: Disabling thread support in gdbserver." >&2;}
   else
     srv_libs="$srv_cv_thread_db"
   fi
+  old_LDFLAGS="$LDFLAGS"
+  LDFLAGS="$LDFLAGS -rdynamic"
+  cat >conftest.$ac_ext <<_ACEOF
+/* confdefs.h.  */
+_ACEOF
+cat confdefs.h >>conftest.$ac_ext
+cat >>conftest.$ac_ext <<_ACEOF
+/* end confdefs.h.  */
+
+int
+main ()
+{
+
+  ;
+  return 0;
+}
+_ACEOF
+rm -f conftest.$ac_objext conftest$ac_exeext
+if { (eval echo "$as_me:$LINENO: \"$ac_link\"") >&5
+  (eval $ac_link) 2>conftest.er1
+  ac_status=$?
+  grep -v '^ *+' conftest.er1 >conftest.err
+  rm -f conftest.er1
+  cat conftest.err >&5
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); } &&
+	 { ac_try='test -z "$ac_c_werror_flag"
+			 || test ! -s conftest.err'
+  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); }; } &&
+	 { ac_try='test -s conftest$ac_exeext'
+  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); }; }; then
+  RDYNAMIC=-rdynamic
+else
+  echo "$as_me: failed program was:" >&5
+sed 's/^/| /' conftest.$ac_ext >&5
+
+RDYNAMIC=
+fi
+rm -f conftest.err conftest.$ac_objext \
+      conftest$ac_exeext conftest.$ac_ext
+
+  LDFLAGS="$old_LDFLAGS"
 fi
 
 if test "$srv_linux_thread_db" = "yes"; then
@@ -4456,6 +4601,7 @@ s,@INSTALL_SCRIPT@,$INSTALL_SCRIPT,;t t
 s,@INSTALL_DATA@,$INSTALL_DATA,;t t
 s,@CPP@,$CPP,;t t
 s,@EGREP@,$EGREP,;t t
+s,@RDYNAMIC@,$RDYNAMIC,;t t
 s,@GDBSERVER_DEPFILES@,$GDBSERVER_DEPFILES,;t t
 s,@GDBSERVER_LIBS@,$GDBSERVER_LIBS,;t t
 s,@USE_THREAD_DB@,$USE_THREAD_DB,;t t

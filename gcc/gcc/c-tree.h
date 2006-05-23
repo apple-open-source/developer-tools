@@ -280,7 +280,7 @@ struct c_declspecs {
   BOOL_BITFIELD private_extern_p : 1;
   /* APPLE LOCAL end private extern */
   /* APPLE LOCAL CW asm blocks */
-  BOOL_BITFIELD cw_asm_specbit : 1;
+  BOOL_BITFIELD iasm_asm_specbit : 1;
   /* Whether the type defaulted to "int" because there were no type
      specifiers.  */
   BOOL_BITFIELD default_int_p;
@@ -485,6 +485,8 @@ extern tree grokparm (const struct c_parm *);
 extern tree implicitly_declare (tree);
 extern void keep_next_level (void);
 extern tree lookup_name (tree);
+/* APPLE LOCAL mainline lookup_name 4125055 */
+extern tree lookup_name_two (tree, int);
 extern void pending_xref_error (void);
 extern void c_push_function_context (struct function *);
 extern void c_pop_function_context (struct function *);

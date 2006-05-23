@@ -7770,7 +7770,12 @@ general_induction_var (const struct loop *loop, rtx x, rtx *src_reg,
   rtx orig_x = x;
 
   /* If this is an invariant, forget it, it isn't a giv.  */
-  if (loop_invariant_p (loop, x) == 1)
+  /* APPLE LOCAL begin radar 4491613 */
+  /* If a loop jumps to the bottom of the loop first, then jumps back
+     to the top of the loop, and its induction variable may trap, 
+     the induction variable shouldn't be a giv. */
+  if (loop_invariant_p (loop, x) == 1 || (loop->top && may_trap_p (x)))
+  /* APPLE LOCAL end radar 4491613 */
     return 0;
 
   *pbenefit = 0;

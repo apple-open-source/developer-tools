@@ -1,7 +1,6 @@
-/* APPLE LOCAL begin testsuite nested functions */
-// { dg-do compile }
-/* { dg-xfail-if "" { *-*-darwin* } } */
-/* APPLE LOCAL end testsuite nested functions */
+/* APPLE LOCAL testsuite nested functions */
+// { dg-options "-fnested-functions" }
+
 extern int printf (const char *, ...);
 
 int foo() {

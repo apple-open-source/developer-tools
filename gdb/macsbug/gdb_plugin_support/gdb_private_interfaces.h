@@ -30,9 +30,14 @@
 /* "random" defin grepped from defs.h into something more appropriate.  It's a shame	*/
 /* gdb doesn't have some version macro in some header to make this cleaner.		*/
 
-#ifdef GDB_MULTI_ARCH_PARTIAL
+/* 
 #define GDB4 0					/* beyond gdb 4.x			*/
-#else
+
+#if 0  /* I am a horrible person and Ira is going to be annoyed when he sees
+          this but I need to get buildit builds working again and I'm not
+          too concerned aout interoperating with pre-gdb5 gdb's.  
+          jmolenda/2005-12-16 */
+
 #define GDB4 1					/* gdb 4.x				*/
 #endif
 
@@ -88,7 +93,7 @@ typedef struct {				/* initialized by or initial value...	*/
     void (*rl_startup_hook)(void);		/* NULL					*/
     char *(*command_line_input_hook)(char *, int, char *); /* NULL 			*/
     void (*help_command)(char *, int);		/* gdb command definition		*/
-    void (*set_hook)(struct cmd_list_element *);/* NULL					*/
+    void (*deprecated_set_hook)(struct cmd_list_element *);/* NULL					*/
     
     char input_handler_defined;			/* these tell us when above are defined	*/
     char gdb_stdout_defined;
@@ -101,7 +106,7 @@ typedef struct {				/* initialized by or initial value...	*/
     char rl_startup_hook_defined;
     char command_line_input_hook_defined;
     char help_command_defined;
-    char set_hook_defined;
+    char deprecated_set_hook_defined;
     
     /* The following fields are carried in this global struct to support multiple	*/
     /* instances of the plugin library to communicate with one another.			*/

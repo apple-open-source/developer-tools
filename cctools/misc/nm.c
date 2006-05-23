@@ -516,7 +516,7 @@ void *cookie)
 	    lc = (struct load_command *)((char *)lc + lc->cmdsize);
 	}
 	if(st == NULL || st->nsyms == 0){
-	    error("no name list");
+	    warning("no name list");
 	    return;
 	}
 	if(process_flags.nsects > 0){
@@ -1215,8 +1215,8 @@ char *arch_name,
 struct value_diff *value_diffs)
 {
     unsigned long i;
-    unsigned char c, *p;
-    char *ta_xfmt, *i_xfmt, *spaces;
+    unsigned char c;
+    char *ta_xfmt, *i_xfmt, *spaces, *p;
 
 	if(ofile->mh != NULL){
 	    ta_xfmt = "%08llx";

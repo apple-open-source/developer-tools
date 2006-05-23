@@ -6248,7 +6248,8 @@ expand_expr_addr_expr_1 (tree exp, rtx target, enum machine_mode tmode,
       result = convert_memory_address (tmode, result);
       tmp = convert_memory_address (tmode, tmp);
 
-      if (modifier == EXPAND_SUM)
+      /* APPLE LOCAL mainline 4.0.2 radar 4093122 */
+      if (modifier == EXPAND_SUM || modifier == EXPAND_INITIALIZER)
 	result = gen_rtx_PLUS (tmode, result, tmp);
       else
 	{

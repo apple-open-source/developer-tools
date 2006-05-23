@@ -163,7 +163,7 @@ typedef void (*Gdb_Prompt_Positioning)(int);	/* prompt positioning function prot
 			       | Initialization and Setup |
 			       *--------------------------*/
 
-void gdb_initialize(void);
+int gdb_initialize(void);
     /* You MUST call this function before using any of the other gdb support routines. */
 
 Gdb_Cmd_Class gdb_define_class(char *className, char *classTitle);
@@ -413,7 +413,7 @@ typedef void (*Gdb_Set_Funct)(char *theSetting,	/* SET handler function prototyp
        associations. */
 
 void gdb_define_set(char *theSetting, Gdb_Set_Funct sfunct, Gdb_Set_Type type,
-		    void *value_ptr, int for_set_and_show, char *helpInfo);
+		    void *value_ptr, char *helpInfo);
     /* This provides a way to extend the gdb SET to include your own settings and to
        allow SHOW to display your current settings.  A gdb SET command has the general
        form,
@@ -502,11 +502,6 @@ void gdb_define_set(char *theSetting, Gdb_Set_Funct sfunct, Gdb_Set_Type type,
 			   in the sfunct when the sfunct is called as a result of
 			   gdb_define_set_enum().  See it's comments for further details.
 			   
-	 for_set_and_show  Normally the sfunct is only called when a SET command is
-	                   done.  But by setting for_set_and_show to a non-zero value
-			   it will also be called for SHOW as well.  The sfunc has
-			   a parameter indicating why it's being called (see below).
-	 
 	 helpInfo          This is a short help info to be used for HELP SHOW and
 	                   when SHOW displays the current setting.  THE HELP INFO STRING
 			   MUST BEGIN WITH THE SEQUENCE OF CHARACTERS "Set " EXACTLY.  If
@@ -531,7 +526,7 @@ void gdb_define_set(char *theSetting, Gdb_Set_Funct sfunct, Gdb_Set_Type type,
 	 gdb_replace_command(). */
 
 void gdb_define_set_enum(char *theSetting, Gdb_Set_Funct sfunct, char *enumlist[],
-			 void *value_ptr, int for_set_and_show, char *helpInfo);
+			 void *value_ptr, char *helpInfo);
     /* This is almost identical to gdb_define_set() above except that in place of the
        type, a pointer to a NULL terminated list of acceptable string pointers is
        expected.  For example,

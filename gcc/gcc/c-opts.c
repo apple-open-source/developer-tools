@@ -270,7 +270,10 @@ c_common_handle_option (size_t scode, const char *arg, int value)
 
       /* APPLE LOCAL begin ss2 */
     case OPT_fsave_repository_:
-      flag_save_repository = 1;
+      if (write_symbols != DBX_DEBUG)
+	error ("-fsave-repository may only be used with STABS debugging");
+      else
+	flag_save_repository = 1;
       break;
       /* APPLE LOCAL end ss2 */
 
@@ -618,7 +621,7 @@ c_common_handle_option (size_t scode, const char *arg, int value)
 
       /* APPLE LOCAL begin CW asm blocks */
     case OPT_fasm_blocks:
-      flag_cw_asm_blocks = value;
+      flag_iasm_blocks = value;
       break;
       /* APPLE LOCAL end CW asm blocks */
 
@@ -856,6 +859,12 @@ c_common_handle_option (size_t scode, const char *arg, int value)
       flag_use_cxa_atexit = value;
       break;
       
+/* APPLE LOCAL begin mainline 2006-02-24 4086777 */
+    case OPT_fuse_cxa_get_exception_ptr:
+      flag_use_cxa_get_exception_ptr = value;
+      break;
+      
+/* APPLE LOCAL end mainline 2006-02-24 4086777 */
     case OPT_fvisibility_inlines_hidden:
       visibility_options.inlines_hidden = value;
       break;
@@ -1051,6 +1060,14 @@ c_common_post_options (const char **pfilename)
   register_include_chains (parse_in, sysroot, iprefix,
 			   std_inc, std_cxx_inc && c_dialect_cxx (), verbose);
 
+/* APPLE LOCAL begin mainline 2006-02-24 4086777 */
+#ifdef C_COMMON_OVERRIDE_OPTIONS
+  /* Some machines may reject certain combinations of C
+     language-specific options.  */
+  C_COMMON_OVERRIDE_OPTIONS;
+#endif
+
+/* APPLE LOCAL end mainline 2006-02-24 4086777 */
   flag_inline_trees = 1;
 
   /* Use tree inlining.  */

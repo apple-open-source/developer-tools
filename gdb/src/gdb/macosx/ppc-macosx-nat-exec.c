@@ -21,13 +21,6 @@
    Foundation, Inc., 59 Temple Place - Suite 330,
    Boston, MA 02111-1307, USA.  */
 
-#include "ppc-macosx-regs.h"
-#include "ppc-macosx-regnums.h"
-#include "ppc-macosx-thread-status.h"
-#include "ppc-macosx-regs.h"
-#include "macosx-nat-mutils.h"
-#include "macosx-nat-inferior.h"
-
 #include "defs.h"
 #include "frame.h"
 #include "inferior.h"
@@ -37,6 +30,13 @@
 #include "symfile.h"
 #include "objfiles.h"
 #include "regcache.h"
+
+#include "ppc-macosx-regs.h"
+#include "ppc-macosx-regnums.h"
+#include "ppc-macosx-thread-status.h"
+#include "ppc-macosx-regs.h"
+#include "macosx-nat-mutils.h"
+#include "macosx-nat-inferior.h"
 
 extern macosx_inferior_status *macosx_status;
 
@@ -48,11 +48,11 @@ validate_inferior_registers (int regno)
     {
       for (i = 0; i < NUM_REGS; i++)
         {
-          if (!deprecated_register_valid[i])
+          if (!register_cached (i))
             fetch_inferior_registers (i);
         }
     }
-  else if (!deprecated_register_valid[regno])
+  else if (!register_cached (regno))
     {
       fetch_inferior_registers (regno);
     }

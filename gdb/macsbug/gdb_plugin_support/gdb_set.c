@@ -43,7 +43,7 @@ typedef struct Set_Info {			/* user defined set cmd list entries:	*/
 static Set_Info *set_list = NULL;		/* list of user defined set commands	*/
    
 static void define_set(char *theSetting, Gdb_Set_Funct sfunct, Gdb_Set_Type type,
-		       void *value_ptr, int for_set_and_show, char *enumlist[],
+		       void *value_ptr, char *enumlist[],
 		       char *helpInfo);
 static void my_set(char *ignore, int from_tty, struct cmd_list_element *c);
 static void my_set_hook(struct cmd_list_element *c);    
@@ -136,11 +136,6 @@ static void my_set_hook(struct cmd_list_element *c);
 		     the sfunct when the sfunct is called as a result of
 		     gdb_define_set_enum().  See it's comments for further details.
 		     
-   for_set_and_show  Normally the sfunct is only called when a SET command is done.  But
-                     by setting for_set_and_show to a non-zero value it will also be
-		     called for SHOW as well.  The sfunc has a parameter indicating why
-		     it's being called (see below).
-   
    helpInfo          This is a short help info to be used for HELP SHOW and when SHOW
                      displays the current setting.  THE HELP INFO STRING MUST BEGIN WITH
 		     THE SEQUENCE OF CHARACTERS "Set " EXACTLY.  If helpInfo is passed as
@@ -182,9 +177,9 @@ static void my_set_hook(struct cmd_list_element *c);
 */
 
 void gdb_define_set(char *theSetting, Gdb_Set_Funct sfunct, Gdb_Set_Type type,
-		    void *value_ptr, int for_set_and_show, char *helpInfo)
+		    void *value_ptr, char *helpInfo)
 {
-    define_set(theSetting, sfunct, type, value_ptr, for_set_and_show, NULL, helpInfo);
+    define_set(theSetting, sfunct, type, value_ptr, NULL, helpInfo);
 }
 
 
@@ -210,9 +205,9 @@ void gdb_define_set(char *theSetting, Gdb_Set_Funct sfunct, Gdb_Set_Type type,
 */
 
 void gdb_define_set_enum(char *theSetting, Gdb_Set_Funct sfunct, char *enumlist[],
-                         void *value_ptr, int for_set_and_show, char *helpInfo)
+                         void *value_ptr, char *helpInfo)
 {
-    define_set(theSetting, sfunct, Set_Enum, value_ptr, for_set_and_show, enumlist, helpInfo);
+    define_set(theSetting, sfunct, Set_Enum, value_ptr, enumlist, helpInfo);
 }
 
 
@@ -233,9 +228,9 @@ void gdb_define_set_generic(Gdb_Set_Funct sfunct)
     #define SET_GENERIC ((Gdb_Set_Type)-1)
 
     if (sfunct)
-    	define_set(NULL, sfunct, SET_GENERIC, NULL, 0, NULL, NULL);
+    	define_set(NULL, sfunct, SET_GENERIC, NULL, NULL, NULL);
     else
-    	set_hook = gdb_set_hook;
+    	deprecated_set_hook = gdb_set_hook;
 }
 
 
@@ -254,7 +249,7 @@ void gdb_define_set_generic(Gdb_Set_Funct sfunct)
 */
 
 static void define_set(char *theSetting, Gdb_Set_Funct sfunct, Gdb_Set_Type type,
-		       void *value_ptr, int for_set_and_show, char *enumlist[],
+		       void *value_ptr, char *enumlist[],
 		       char *helpInfo)
 {
     struct cmd_list_element *c_set, *c_show;
@@ -277,7 +272,7 @@ static void define_set(char *theSetting, Gdb_Set_Funct sfunct, Gdb_Set_Type type
 	
 	default:
 	    if (theSetting == NULL && type == SET_GENERIC) {	/* handle set_hook...	*/
-		set_hook            = my_set_hook;
+		deprecated_set_hook            = my_set_hook;
 		users_generic_sfunc = sfunct;
 		return;
 	    }
@@ -293,26 +288,26 @@ static void define_set(char *theSetting, Gdb_Set_Funct sfunct, Gdb_Set_Type type
     if (!helpInfo || !*helpInfo) {		/* handle default help...		*/
 	switch (type) {
 	    case Set_Boolean:
-	    	sprintf(help, "Set %s on | off", theSetting);
+	    	sprintf(help, "%s on | off", theSetting);
 	    	break;
 	    
 	    case Set_UInt0:
 	    case Set_Int0:
 	    case Set_Int:
-	    	sprintf(help, "Set %s n", theSetting);
+	    	sprintf(help, "%s n", theSetting);
 	    	break;
 		
 	    case Set_String:
 	    case Set_String_NoEsc:
-	    	sprintf(help, "Set %s string of characters...", theSetting);
+	    	sprintf(help, "%s string of characters...", theSetting);
 	    	break;
 	   
 	   case Set_Filename:
-	    	sprintf(help, "Set %s filename", theSetting);
+	    	sprintf(help, "%s filename", theSetting);
 	    	break;
 		
 	    case Set_Enum:
-	    	i = sprintf(help, "Set %s ", theSetting);
+	    	i = sprintf(help, "%s ", theSetting);
 		p = (char **)enumlist;
 		while (*p) {
 		    strcpy(&help[i], *p);
@@ -332,28 +327,21 @@ static void define_set(char *theSetting, Gdb_Set_Funct sfunct, Gdb_Set_Type type
     }
     
     /* Define the SET setting to gdb (enums handled differently)...			*/
-    
-    if (type != Set_Enum)
-    	c_set = add_set_cmd(theSetting, class_support, var_type, (char *)value_ptr, helpInfo,
-				            &setlist);
-    else
-    	c_set = add_set_enum_cmd(theSetting, class_support, enumlist, (char *)value_ptr,
-			     	  helpInfo, &setlist);
-    
-    /* If a function handler is defined before add_show_from_set() it will be called 	*/
-    /* by both SET and SHOW.  If defined after add_show_from_set() it will be called 	*/
-    /* only for SET.  If no sfunct is specified then only the value will be set by SET.	*/ 
-    
-    if (sfunct) {
-	if (for_set_and_show) {
-	    c_set->function.sfunc = my_set;
-	    c_show = add_show_from_set(c_set, &showlist);
-	} else {
-	    c_show = add_show_from_set(c_set, &showlist);
-	    c_set->function.sfunc = my_set;
-	}
-    } else 
-        c_show = add_show_from_set(c_set, &showlist);
+
+    /* FIXME: The following calls are not just bogus but simply wrong -- I've got to
+       get TOT building and this is hosing it so I'm making this compile but I'm not
+       holding up much hope that this function still works correctly.  Sorry Ira.  I'll
+       try to get back to this soon...  jmolenda/2005-12-19  */
+    if (var_type == var_boolean)
+      add_setshow_boolean_cmd(theSetting, class_support, (char *)value_ptr, helpInfo,
+                                      helpInfo, helpInfo, NULL, NULL, &setlist, &showlist);
+    if (var_type == var_uinteger)
+      add_setshow_uinteger_cmd(theSetting, class_support, (char *)value_ptr, helpInfo,
+                                      helpInfo, helpInfo, NULL, NULL, &setlist, &showlist);
+
+    if (type == Set_Enum)
+      add_setshow_enum_cmd(theSetting, class_support, enumlist, (char **) value_ptr,
+			   NULL, NULL, helpInfo, my_set, NULL, &setlist, &showlist);
     
     /* If theSetting was prviously specified only remember the most recent call...	*/
     
@@ -419,6 +407,7 @@ static void my_set(char *ignore, int from_tty, struct cmd_list_element *c)
     
     switch (c->var_type) {
 	case var_boolean:			/* *(int *)c->var			*/
+	case var_auto_boolean:			/* *(int *)c->var			*/
 	case var_uinteger:			/* *(unsigned int *)c->var		*/
 	case var_integer:			/* *(int *)c->var			*/
 	case var_zinteger:			/* *(unsigned int *)c->var		*/
@@ -427,6 +416,7 @@ static void my_set(char *ignore, int from_tty, struct cmd_list_element *c)
 	    
 	case var_string:			/* *(unsigned char **)c->var		*/
 	case var_string_noescape:
+	case var_optional_filename:
 	case var_filename:
 	case var_enum:				/* *(char **)c->var			*/
 	    value = (void *)(char **)c->var;
@@ -453,11 +443,12 @@ static void my_set(char *ignore, int from_tty, struct cmd_list_element *c)
 void __my_set_hook_guts(struct cmd_list_element *c, Gdb_Set_Type *type, void **value)
 {
     switch (c->var_type) {
+	case var_auto_boolean:			/* *(int *)c->var			*/
 	case var_boolean:			/* *(int *)c->var			*/
 	    *type  = Set_Boolean;
 	    *value = (void *)(int *)c->var;
 	    break;
-	
+
 	case var_uinteger:			/* *(unsigned int *)c->var		*/
 	    *type  = Set_UInt0;
 	    *value = (void *)(unsigned int *)c->var;
@@ -483,6 +474,7 @@ void __my_set_hook_guts(struct cmd_list_element *c, Gdb_Set_Type *type, void **v
 	    *value = (void *)(unsigned char **)c->var;
 	    break;
 	    
+	case var_optional_filename:		/* *(unsigned char **)c->var		*/
 	case var_filename:			/* *(unsigned char **)c->var		*/
 	    *type  = Set_Filename;
 	    *value = (void *)(unsigned char **)c->var;
@@ -536,7 +528,7 @@ void __initialize_set(void)
     if (!initialized) {
     	initialized = 1;
 	//gdb_set_hook = set_hook;
-	gdb_set_hook = INITIAL_GDB_VALUE(set_hook, set_hook);
+	gdb_set_hook = INITIAL_GDB_VALUE(deprecated_set_hook, deprecated_set_hook);
     }
 }
 

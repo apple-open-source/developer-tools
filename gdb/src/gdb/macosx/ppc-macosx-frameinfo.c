@@ -334,7 +334,7 @@ ppc_parse_instructions (CORE_ADDR start, CORE_ADDR end,
                   props->frameptr_used = 0;
 
                   props->lr_saved = pc;
-                  props->lr_offset = 8;
+                  props->lr_offset = TARGET_PTR_BIT / 4;
                   lr_reg = 0;
                   lr_64_reg = 0;
 
@@ -383,7 +383,7 @@ ppc_parse_instructions (CORE_ADDR start, CORE_ADDR end,
                     }
                   /* The LR also gets saved in saveFP... */
                   props->lr_saved = pc;
-                  props->lr_offset = 8;
+                  props->lr_offset = TARGET_PTR_BIT / 4;
                   lr_reg = 0;
                   lr_64_reg = 0;
 
@@ -1010,7 +1010,11 @@ ppc_frame_function_properties (struct frame_info *next_frame,
     lbounds = *bounds;
   else
     {
-      lbounds.prologue_start = get_frame_pc (this_frame);
+      /* BOUNDS can be NULL if there is no minsym for the address and 
+         THIS_FRAME can be NULL if NEXT_FRAME is inside the main function. 
+	 We need to be sure to not call get_frame_pc() using a NULL frame.  */
+      lbounds.prologue_start = this_frame ? get_frame_pc (this_frame) : 
+					    INVALID_ADDRESS;
       lbounds.body_start = INVALID_ADDRESS;
       lbounds.epilogue_start = INVALID_ADDRESS;
       lbounds.function_end = INVALID_ADDRESS;

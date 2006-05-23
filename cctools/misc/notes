@@ -9,6 +9,53 @@ To Do:
   could have been set otherwise and does not print the next line.
 - Maybe add fat support for segedit(1)
 
+Changes for the 5.21 release (the cctools-590.40 release):
+- Fixed a bug in pagestuff(1) where it would crash if it was processing a Mach-O
+  file with no LC_SYMTAB command.  It crashed in print_symbols() because it
+  lacked a check for fp->st not being NULL.  The fix was to add a check for
+  fp->st being NULL and just returning in that case.  Radar bug #4495141.
+
+Changes for the 5.21 release (the cctools-590.37 release):
+- Changed check_indirect_symtab() in strip.c so that nmedit(1) and strip(1)
+  would allow an indirect symbol table entry to just have INDIRECT_SYMBOL_ABS
+  as well as (INDIRECT_SYMBOL_LOCAL | INDIRECT_SYMBOL_ABS).  This is because
+  ld(1) puts this out in some cases.  Radar bug #4461173.
+- Added passing ld(1)'s -t flag through libtool(1).  Radar bug #4213190.
+
+Changes for the 5.21 release (the cctools-590.35 release):
+- Added a warning to nmedit(1) when it sees a global coalesced symbol to say it
+  can't make global coalesced symbols into a static symbols and suggest the use
+  of ld(1)'s -exported_symbols_list option for a final linked images.  The
+  change was in strip.c in edit_symtab() to add the warning an a boolean to
+  only print it once.  Radar bug #4269492.
+- Changed seg_hack so it doesn't affect debug sections.  Radar bug #4421656.
+
+Changes for the 5.21 release (the cctools-590.34 release):
+- Make 'nm: no name list' a warning, not an error.  Radar bug #4421611.
+
+Changes for the 5.21 release (the cctools-590.32 release):
+- Change edit_symtab in strip.c to handle the different format
+  of the DWARF debug map.  Add new functions cmp_bsearch_global and
+  cmp_bsearch_global_64.  Radar bug #4421583.
+
+Changes for the 5.21 release (the cctools-590.31 release):
+- Added the -no_uuid flag to strip(1) to remove LC_UUID load commands.  Radar
+  bug #4415536.
+- Added the -no_uuid flag to libtool(1) to pass on to ld(1).  Radar bug
+  #4415529.
+
+Changes for the 5.20 release (the cctools-590.20 release):
+- Removed the warnings when building. Radar bug #4340147.
+  - Added -fno-builtin-round to the Makefile.
+  - Changed the local variable p to a char * in print_symbols() in nm.c .
+  - Changed the cast of argument 3 of the call to bootstrap_look_up() to
+    (unsigned int *) in tellProjectBuilder() in libtool.c .
+- Fixed a bug in redo_prebinding in the support for new i386 self (dyld)
+  modifiying code stubs.  The problem was with calculation for the new
+  displacement of the jmp instruction for non-prebound undefined symbols not
+  taking in to account that the symbol is also being slid.  The fix was in
+  update_self_modifying_stubs() in redo_prebinding.c code.  Radar bug #4335281.
+
 Changes for the 5.19 release (the cctools-590.18 release):
 - Fixed a bug in nmedit(1) when it tried to change a global coalesced symbol
   into a static and did not get the r_symbolnum for relocation entries set

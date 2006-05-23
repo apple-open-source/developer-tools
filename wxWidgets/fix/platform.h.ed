@@ -16,14 +16,12 @@
 /WORDS_BIGENDIAN/a
 .
 .,.+2c
-#    if defined(__ppc__) || defined(__ppc64__)
+#    ifdef __BIG_ENDIAN__
 #        ifndef WORDS_BIGENDIAN
 #            define WORDS_BIGENDIAN 1
 #        endif
-#    elif defined(__i386__)
+#    else /* !__BIG_ENDIAN__ */
 #        /* #undef WORDS_BIGENDIAN */
-#    else
-#        error architecture not supported
-#    endif
+#    endif /* __BIG_ENDIAN__ */
 .
 w

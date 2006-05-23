@@ -8,7 +8,7 @@ Configure	      = ../configure
 Extra_Configure_Flags = --disable-static --with-mac --with-opengl --enable-optimize --enable-debug_flag --enable-geometry --enable-sound --enable-display --disable-precomp-headers --enable-unicode --enable-monolithic --with-regex=sys
 
 Extra_CC_Flags       += -Wall -fno-common
-Extra_Cxx_Flags      += -Wall -fno-common
+Extra_Cxx_Flags      += -Wall -fno-common -fvisibility-inlines-hidden
 Extra_Install_Flags   = DESTDIR=${DSTROOT}
 
 # It's a GNU Source project, but we need to totally override install

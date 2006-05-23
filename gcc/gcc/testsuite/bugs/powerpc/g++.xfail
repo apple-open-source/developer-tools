@@ -34,6 +34,8 @@
 4194030: g++.dg/lookup/hidden-temp-class4.C  (test for errors, line 9)
 4194030: g++.dg/lookup/hidden-temp-class6.C (test for excess errors)
 4194030: g++.dg/lookup/hidden-temp-class7.C  (test for errors, line 13)
+4285232: g++.dg/4285232.C scan-assembler-not \\$0,
+4531667: g++.dg/bitreverse-23.C execution test
 #
 # The following tests fail only when the c++ suite is run through Obj-C++.
 3904139: g++.dg/ext/fnname3.C execution test
@@ -68,6 +70,7 @@
 #
 # The following tests fail only when the c++ suite is run with -mcpu=G5
 3719311: g++.dg/template/warn1.C  (test for warnings, line 12)
+0000000: g++.dg/align-test-1.C (test for excess errors)
 #
 # The following tests fail only when the c++ suite is run with -m64
 3964999: g++.old-deja/g++.pt/const2.C (test for excess errors)
@@ -126,6 +129,22 @@
 4157563: ./debug-1.H -O2 -g (test for excess errors)
 4157563: ./debug-1.H -O2 (test for excess errors)
 4157563: ./debug-1.H -fastcp (test for excess errors)
+4385013: g++.dg/apple-longcall-2.C scan-assembler \tjmp
+4385013: g++.dg/apple-longcall-3.C scan-assembler \tjmp
+4385013: g++.dg/apple-longcall-3.C scan-assembler \tjbsr
+4385013: g++.dg/apple-longcall-3.C scan-assembler-not \tbl[\t ]
+# and these fail only on Leopard
+4385023: g++.dg/compat/eh/unexpected1 cp_compat_x_tst.o-cp_compat_y_tst.o execute
+4385023: g++.dg/eh/unexpected1.C execution test
+4385023: g++.old-deja/g++.eh/spec2.C execution test
+4385023: g++.old-deja/g++.eh/spec3.C execution test
+4385023: g++.old-deja/g++.eh/spec4.C execution test
+4385023: g++.old-deja/g++.mike/eh33.C execution test
+4385023: g++.old-deja/g++.mike/eh50.C execution test
+4385023: g++.old-deja/g++.mike/eh51.C execution test
+#4440880: g++.dg/opt/pr17697-1.C execution test
+#4440880: g++.dg/opt/pr17697-2.C execution test
+#4440880: g++.dg/opt/pr17697-3.C execution test
 #
 # The following tests fail only when the c++ suite is run on x86
 4241732: g++.dg/asm-block-11.C (test for excess errors)

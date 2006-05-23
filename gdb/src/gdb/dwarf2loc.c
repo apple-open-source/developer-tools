@@ -1,5 +1,7 @@
 /* DWARF 2 location expression support for GDB.
-   Copyright 2003 Free Software Foundation, Inc.
+
+   Copyright 2003, 2005 Free Software Foundation, Inc.
+
    Contributed by Daniel Jacobowitz, MontaVista Software, Inc.
 
    This file is part of GDB.
@@ -30,6 +32,7 @@
 #include "ax-gdb.h"
 #include "regcache.h"
 #include "objfiles.h"
+#include "exceptions.h"
 
 #include "elf/dwarf2.h"
 #include "dwarf2expr.h"
@@ -49,15 +52,19 @@
    For now, only return the first matching location expression; there
    can be more than one in the list.  */
 
-static char *
+static gdb_byte *
 find_location_expression (struct dwarf2_loclist_baton *baton,
 			  size_t *locexpr_length, CORE_ADDR pc)
 {
-  CORE_ADDR base_address = baton->base_address;
   CORE_ADDR low, high;
-  char *loc_ptr, *buf_end;
-  unsigned int addr_size = TARGET_ADDR_BIT / TARGET_CHAR_BIT, length;
+  gdb_byte *loc_ptr, *buf_end;
+  int length;
+  unsigned int addr_size = TARGET_ADDR_BIT / TARGET_CHAR_BIT;
   CORE_ADDR base_mask = ~(~(CORE_ADDR)1 << (addr_size * 8 - 1));
+  /* Adjust base_address for relocatable objects.  */
+  CORE_ADDR base_offset = ANOFFSET (baton->objfile->section_offsets,
+				    SECT_OFF_TEXT (baton->objfile));
+  CORE_ADDR base_address = baton->base_address + base_offset;
 
   loc_ptr = baton->data;
   buf_end = baton->data + baton->size;
@@ -116,12 +123,12 @@ dwarf_expr_read_reg (void *baton, int dwarf_regnum)
   struct dwarf_expr_baton *debaton = (struct dwarf_expr_baton *) baton;
   CORE_ADDR result, save_addr;
   enum lval_type lval_type;
-  char *buf;
+  gdb_byte *buf;
   int optimized, regnum, realnum, regsize;
 
   regnum = DWARF2_REG_TO_REGNUM (dwarf_regnum);
   regsize = register_size (current_gdbarch, regnum);
-  buf = (char *) alloca (regsize);
+  buf = alloca (regsize);
 
   frame_register (debaton->frame, regnum, &optimized, &lval_type, &save_addr,
 		  &realnum, buf);
@@ -135,7 +142,7 @@ dwarf_expr_read_reg (void *baton, int dwarf_regnum)
 /* Read memory at ADDR (length LEN) into BUF.  */
 
 static void
-dwarf_expr_read_mem (void *baton, char *buf, CORE_ADDR addr, size_t len)
+dwarf_expr_read_mem (void *baton, gdb_byte *buf, CORE_ADDR addr, size_t len)
 {
   read_memory (addr, buf, len);
 }
@@ -144,7 +151,7 @@ dwarf_expr_read_mem (void *baton, char *buf, CORE_ADDR addr, size_t len)
    describing the frame base.  Return a pointer to it in START and
    its length in LENGTH.  */
 static void
-dwarf_expr_frame_base (void *baton, unsigned char **start, size_t * length)
+dwarf_expr_frame_base (void *baton, gdb_byte **start, size_t * length)
 {
   /* FIXME: cagney/2003-03-26: This code should be using
      get_frame_base_address(), and then implement a dwarf2 specific
@@ -170,7 +177,7 @@ dwarf_expr_frame_base (void *baton, unsigned char **start, size_t * length)
     }
 
   if (*start == NULL)
-    error ("Could not find the frame base for \"%s\".",
+    error (_("Could not find the frame base for \"%s\"."),
 	   SYMBOL_NATURAL_NAME (framefunc));
 }
 
@@ -180,16 +187,84 @@ static CORE_ADDR
 dwarf_expr_tls_address (void *baton, CORE_ADDR offset)
 {
   struct dwarf_expr_baton *debaton = (struct dwarf_expr_baton *) baton;
-  CORE_ADDR addr;
+  volatile CORE_ADDR addr = 0;
 
-  if (target_get_thread_local_address_p ())
-    addr = target_get_thread_local_address (inferior_ptid,
-					    debaton->objfile,
-					    offset);
+  if (target_get_thread_local_address_p ()
+      && gdbarch_fetch_tls_load_module_address_p (current_gdbarch))
+    {
+      ptid_t ptid = inferior_ptid;
+      struct objfile *objfile = debaton->objfile;
+      volatile struct gdb_exception ex;
+
+      TRY_CATCH (ex, RETURN_MASK_ALL)
+	{
+	  CORE_ADDR lm_addr;
+	  
+	  /* Fetch the load module address for this objfile.  */
+	  lm_addr = gdbarch_fetch_tls_load_module_address (current_gdbarch,
+	                                                   objfile);
+	  /* If it's 0, throw the appropriate exception.  */
+	  if (lm_addr == 0)
+	    throw_error (TLS_LOAD_MODULE_NOT_FOUND_ERROR,
+			 _("TLS load module not found"));
+
+	  addr = target_get_thread_local_address (ptid, lm_addr, offset);
+	}
+      /* If an error occurred, print TLS related messages here.  Otherwise,
+         throw the error to some higher catcher.  */
+      if (ex.reason < 0)
+	{
+	  int objfile_is_library = (objfile->flags & OBJF_SHARED);
+
+	  switch (ex.error)
+	    {
+	    case TLS_NO_LIBRARY_SUPPORT_ERROR:
+	      error (_("Cannot find thread-local variables in this thread library."));
+	      break;
+	    case TLS_LOAD_MODULE_NOT_FOUND_ERROR:
+	      if (objfile_is_library)
+		error (_("Cannot find shared library `%s' in dynamic"
+		         " linker's load module list"), objfile->name);
+	      else
+		error (_("Cannot find executable file `%s' in dynamic"
+		         " linker's load module list"), objfile->name);
+	      break;
+	    case TLS_NOT_ALLOCATED_YET_ERROR:
+	      if (objfile_is_library)
+		error (_("The inferior has not yet allocated storage for"
+		         " thread-local variables in\n"
+		         "the shared library `%s'\n"
+		         "for %s"),
+		       objfile->name, target_pid_to_str (ptid));
+	      else
+		error (_("The inferior has not yet allocated storage for"
+		         " thread-local variables in\n"
+		         "the executable `%s'\n"
+		         "for %s"),
+		       objfile->name, target_pid_to_str (ptid));
+	      break;
+	    case TLS_GENERIC_ERROR:
+	      if (objfile_is_library)
+		error (_("Cannot find thread-local storage for %s, "
+		         "shared library %s:\n%s"),
+		       target_pid_to_str (ptid),
+		       objfile->name, ex.message);
+	      else
+		error (_("Cannot find thread-local storage for %s, "
+		         "executable file %s:\n%s"),
+		       target_pid_to_str (ptid),
+		       objfile->name, ex.message);
+	      break;
+	    default:
+	      throw_exception (ex);
+	      break;
+	    }
+	}
+    }
   /* It wouldn't be wrong here to try a gdbarch method, too; finding
      TLS is an ABI-specific thing.  But we don't do that yet.  */
   else
-    error ("Cannot find thread-local variables on this target");
+    error (_("Cannot find thread-local variables on this target"));
 
   return addr;
 }
@@ -199,10 +274,10 @@ dwarf_expr_tls_address (void *baton, CORE_ADDR offset)
    of FRAME.  */
 static struct value *
 dwarf2_evaluate_loc_desc (struct symbol *var, struct frame_info *frame,
-			  unsigned char *data, unsigned short size,
+			  gdb_byte *data, unsigned short size,
 			  struct objfile *objfile)
 {
-  CORE_ADDR result;
+  struct gdbarch *arch = get_frame_arch (frame);
   struct value *retval;
   struct dwarf_expr_baton baton;
   struct dwarf_expr_context *ctx;
@@ -211,7 +286,7 @@ dwarf2_evaluate_loc_desc (struct symbol *var, struct frame_info *frame,
     {
       retval = allocate_value (SYMBOL_TYPE (var));
       VALUE_LVAL (retval) = not_lval;
-      VALUE_OPTIMIZED_OUT (retval) = 1;
+      set_value_optimized_out (retval, 1);
     }
 
   baton.frame = frame;
@@ -225,21 +300,61 @@ dwarf2_evaluate_loc_desc (struct symbol *var, struct frame_info *frame,
   ctx->get_tls_address = dwarf_expr_tls_address;
 
   dwarf_expr_eval (ctx, data, size);
-  result = dwarf_expr_fetch (ctx, 0);
-
-  if (ctx->in_reg)
+  /* APPLE LOCAL begin DW_op_pieces for PPC registers */
+  if (ctx->num_pieces == 2
+      && ctx->pieces[0].in_reg
+      && ctx->pieces[1].in_reg
+      && (ctx->pieces[0].value + 1) == ctx->pieces[1].value
+      && CONVERT_REGISTER_P (ctx->pieces[0].value, SYMBOL_TYPE (var))
+      )
     {
-      int regnum = DWARF2_REG_TO_REGNUM (result);
-      retval = value_from_register (SYMBOL_TYPE (var), regnum, frame);
+      CORE_ADDR dwarf_regnum = ctx->pieces[0].value;
+      int gdb_regnum = DWARF2_REG_TO_REGNUM (dwarf_regnum);
+      retval = value_from_register (SYMBOL_TYPE (var), gdb_regnum, frame);
+    }
+  else
+    /* APPLE LOCAL end DW_op_pieces for PPC registers */
+  if (ctx->num_pieces > 0)
+    {
+      /* APPLE LOCAL begin mainline */
+      int i;
+      long offset = 0;
+      bfd_byte *contents;
+
+      retval = allocate_value (SYMBOL_TYPE (var));
+      contents = value_contents_raw (retval);
+      for (i = 0; i < ctx->num_pieces; i++)
+	{
+	  struct dwarf_expr_piece *p = &ctx->pieces[i];
+	  if (p->in_reg)
+	    {
+	      bfd_byte regval[MAX_REGISTER_SIZE];
+	      int gdb_regnum = DWARF2_REG_TO_REGNUM (p->value);
+	      get_frame_register (frame, gdb_regnum, regval);
+	      memcpy (contents + offset, regval, p->size);
+	    }
+	  else /* In memory?  */
+	    {
+	      read_memory (p->value, contents + offset, p->size);
+	    }
+	  offset += p->size;
+	}
+      /* APPLE LOCAL end mainline */
+    }
+  else if (ctx->in_reg)
+    {
+      CORE_ADDR dwarf_regnum = dwarf_expr_fetch (ctx, 0);
+      int gdb_regnum = DWARF2_REG_TO_REGNUM (dwarf_regnum);
+      retval = value_from_register (SYMBOL_TYPE (var), gdb_regnum, frame);
     }
   else
     {
-      retval = allocate_value (SYMBOL_TYPE (var));
-      VALUE_BFD_SECTION (retval) = SYMBOL_BFD_SECTION (var);
+      CORE_ADDR address = dwarf_expr_fetch (ctx, 0);
 
+      retval = allocate_value (SYMBOL_TYPE (var));
       VALUE_LVAL (retval) = lval_memory;
-      VALUE_LAZY (retval) = 1;
-      VALUE_ADDRESS (retval) = result;
+      set_value_lazy (retval, 1);
+      VALUE_ADDRESS (retval) = address;
     }
 
   free_dwarf_expr_context (ctx);
@@ -269,16 +384,16 @@ needs_frame_read_reg (void *baton, int regnum)
 
 /* Reads from memory do not require a frame.  */
 static void
-needs_frame_read_mem (void *baton, char *buf, CORE_ADDR addr, size_t len)
+needs_frame_read_mem (void *baton, gdb_byte *buf, CORE_ADDR addr, size_t len)
 {
   memset (buf, 0, len);
 }
 
 /* Frame-relative accesses do require a frame.  */
 static void
-needs_frame_frame_base (void *baton, unsigned char **start, size_t * length)
+needs_frame_frame_base (void *baton, gdb_byte **start, size_t * length)
 {
-  static char lit0 = DW_OP_lit0;
+  static gdb_byte lit0 = DW_OP_lit0;
   struct needs_frame_baton *nf_baton = baton;
 
   *start = &lit0;
@@ -300,7 +415,7 @@ needs_frame_tls_address (void *baton, CORE_ADDR offset)
    requires a frame to evaluate.  */
 
 static int
-dwarf2_loc_desc_needs_frame (unsigned char *data, unsigned short size)
+dwarf2_loc_desc_needs_frame (gdb_byte *data, unsigned short size)
 {
   struct needs_frame_baton baton;
   struct dwarf_expr_context *ctx;
@@ -319,18 +434,29 @@ dwarf2_loc_desc_needs_frame (unsigned char *data, unsigned short size)
 
   in_reg = ctx->in_reg;
 
+  if (ctx->num_pieces > 0)
+    {
+      int i;
+
+      /* If the location has several pieces, and any of them are in
+         registers, then we will need a frame to fetch them from.  */
+      for (i = 0; i < ctx->num_pieces; i++)
+        if (ctx->pieces[i].in_reg)
+          in_reg = 1;
+    }
+
   free_dwarf_expr_context (ctx);
 
   return baton.needs_frame || in_reg;
 }
 
 static void
-dwarf2_tracepoint_var_ref (struct symbol * symbol, struct agent_expr * ax,
-			   struct axs_value * value, unsigned char *data,
+dwarf2_tracepoint_var_ref (struct symbol *symbol, struct agent_expr *ax,
+			   struct axs_value *value, gdb_byte *data,
 			   int size)
 {
   if (size == 0)
-    error ("Symbol \"%s\" has been optimized out.",
+    error (_("Symbol \"%s\" has been optimized out."),
 	   SYMBOL_PRINT_NAME (symbol));
 
   if (size == 1
@@ -353,11 +479,11 @@ dwarf2_tracepoint_var_ref (struct symbol * symbol, struct agent_expr * ax,
 	 as above.  */
       int frame_reg;
       LONGEST frame_offset;
-      unsigned char *buf_end;
+      gdb_byte *buf_end;
 
       buf_end = read_sleb128 (data + 1, data + size, &frame_offset);
       if (buf_end != data + size)
-	error ("Unexpected opcode after DW_OP_fbreg for symbol \"%s\".",
+	error (_("Unexpected opcode after DW_OP_fbreg for symbol \"%s\"."),
 	       SYMBOL_PRINT_NAME (symbol));
 
       TARGET_VIRTUAL_FRAME_POINTER (ax->scope, &frame_reg, &frame_offset);
@@ -370,7 +496,7 @@ dwarf2_tracepoint_var_ref (struct symbol * symbol, struct agent_expr * ax,
       value->kind = axs_lvalue_memory;
     }
   else
-    error ("Unsupported DWARF opcode in the location of \"%s\".",
+    error (_("Unsupported DWARF opcode in the location of \"%s\"."),
 	   SYMBOL_PRINT_NAME (symbol));
 }
 
@@ -483,15 +609,20 @@ loclist_read_variable (struct symbol *symbol, struct frame_info *frame)
 {
   struct dwarf2_loclist_baton *dlbaton = SYMBOL_LOCATION_BATON (symbol);
   struct value *val;
-  unsigned char *data;
+  gdb_byte *data;
   size_t size;
 
   data = find_location_expression (dlbaton, &size,
 				   frame ? get_frame_pc (frame) : 0);
   if (data == NULL)
-    error ("Variable \"%s\" is not available.", SYMBOL_NATURAL_NAME (symbol));
-
-  val = dwarf2_evaluate_loc_desc (symbol, frame, data, size, dlbaton->objfile);
+    {
+      val = allocate_value (SYMBOL_TYPE (symbol));
+      VALUE_LVAL (val) = not_lval;
+      set_value_optimized_out (val, 1);
+    }
+  else
+    val = dwarf2_evaluate_loc_desc (symbol, frame, data, size,
+				    dlbaton->objfile);
 
   return val;
 }
@@ -525,12 +656,12 @@ loclist_tracepoint_var_ref (struct symbol * symbol, struct agent_expr * ax,
 			    struct axs_value * value)
 {
   struct dwarf2_loclist_baton *dlbaton = SYMBOL_LOCATION_BATON (symbol);
-  unsigned char *data;
+  gdb_byte *data;
   size_t size;
 
   data = find_location_expression (dlbaton, &size, ax->scope);
   if (data == NULL)
-    error ("Variable \"%s\" is not available.", SYMBOL_NATURAL_NAME (symbol));
+    error (_("Variable \"%s\" is not available."), SYMBOL_NATURAL_NAME (symbol));
 
   dwarf2_tracepoint_var_ref (symbol, ax, value, data, size);
 }

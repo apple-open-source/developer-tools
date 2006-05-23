@@ -21,27 +21,29 @@
  */
 
 
-#define checksum_length_token        "SUML"
-#define checksum_suffix              ".sum"
-#define checksum_suffix_length       4
+#define indirection_request_token    "INDR"
 #define indirection_request_pull     0
 #define indirection_request_push     1
 #define indirection_complete         2
-#define indirection_request_token    "INDR"
 #define indirection_protocol_version "1"
-#define operation_both_token         "BOTH"
+
+#define indirection_path_length_token   "PLEN"
+#define indirection_file_stat_token     "FSTI"
+#define indirection_file_stat_info_present 1
+#define indirection_no_file_stat_info      2
+
+#define indirection_pull_response_token "PULR"
+#define indirection_pull_response_file_ok 1
+#define indirection_pull_response_file_download 2
+#define indirection_pull_response_file_missing 3
+
+#define indirection_pull_file       "FILE"
+
 #define operation_pull_token         "PULL"
+#define operation_both_token         "BOTH"
 #define operation_push_token         "PUSH"
 #define operation_version_token      "VERS"
-#define result_count_token           "NUMF"
-#define result_item_token            "FILE"
-#define result_name_token            "NAME"
-#define result_type_checksum_only    3
-#define result_type_dir              2
-#define result_type_file             1
-#define result_type_nothing          0
-#define result_type_token            "TYPE"
-#define token_length                 4
 
-
-char **dcc_filenames_in_directory(const char *dir_path, int *numFiles);
+extern unsigned pullfile_cache_max_age;
+extern unsigned pullfile_max_cache_size;
+extern unsigned pullfile_min_free_space;

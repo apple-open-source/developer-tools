@@ -119,11 +119,11 @@ macosx_symbol_type_base (macho_type)
       break;
 
     case BFD_MACH_O_N_INDR:
-      /* complain (&unsupported_indirect_symtype_complaint, local_hex_string (macho_type)); */
+      /* complain (&unsupported_indirect_symtype_complaint, hex_string (macho_type)); */
       return macho_type;
 
     default:
-      /* complain (&unknown_macho_symtype_complaint, local_hex_string (macho_type)); */
+      /* complain (&unknown_macho_symtype_complaint, hex_string (macho_type)); */
       return macho_type;
     }
   mtype &= ~BFD_MACH_O_N_TYPE;
@@ -169,7 +169,7 @@ macosx_symbol_type (macho_type, macho_sect, abfd)
 
           if (sect == NULL)
             {
-              /* complain (&unknown_macho_section_complaint, local_hex_string (macho_sect)); */
+              /* complain (&unknown_macho_section_complaint, hex_string (macho_sect)); */
             }
           else if ((sect->segname != NULL)
                    && (strcmp (sect->segname, "__DATA") == 0))
@@ -187,14 +187,14 @@ macosx_symbol_type (macho_type, macho_sect, abfd)
             }
           else
             {
-              /* complain (&unknown_macho_section_complaint, local_hex_string (macho_sect)); */
+              /* complain (&unknown_macho_section_complaint, hex_string (macho_sect)); */
               ntype |= N_DATA;
             }
         }
 
       else
         {
-          /* complain (&unknown_macho_section_complaint, local_hex_string (macho_sect)); */
+          /* complain (&unknown_macho_section_complaint, hex_string (macho_sect)); */
           ntype |= N_DATA;
         }
     }
@@ -358,9 +358,9 @@ info_trampoline_command (char *exp, int from_tty)
 
   expr = parse_expression (exp);
   val = evaluate_expression (expr);
-  if (TYPE_CODE (VALUE_TYPE (val)) == TYPE_CODE_REF)
+  if (TYPE_CODE (value_type (val)) == TYPE_CODE_REF)
     val = value_ind (val);
-  if ((TYPE_CODE (VALUE_TYPE (val)) == TYPE_CODE_FUNC)
+  if ((TYPE_CODE (value_type (val)) == TYPE_CODE_FUNC)
       && (VALUE_LVAL (val) == lval_memory))
     address = VALUE_ADDRESS (val);
   else

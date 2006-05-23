@@ -1,3 +1,4 @@
+# APPLE LOCAL file Darwin
 # Target: PowerPC running Mac OS X
 
 MT_CFLAGS = \
@@ -21,4 +22,4 @@ TDEPFILES = \
 	symread.o \
 	pefread.o
 
-TM_FILE = tm-ppc-macosx.h
+DEPRECATED_TM_FILE = tm-ppc-macosx.h

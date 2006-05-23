@@ -6,7 +6,7 @@ ifeq "macos" "$(RC_OS)"
 			 [ "$(RC_RELEASE)" != "Bunsen" ] &&    \
 			 [ "$(RC_RELEASE)" != "Gonzo"  ] &&    \
 			 [ "$(RC_RELEASE)" != "Kodiak" ]; then \
-	     echo -Wno-long-double -no-cpp-precomp ; \
+	     echo -Wno-long-double -no-cpp-precomp -fno-builtin-round; \
 	     fi; )
 endif
 
@@ -19,21 +19,8 @@ USE_DEPENDENCY_FILE := $(shell if [ "$(notdir $(CC))" != "mwccppc" ] && \
 	     echo YES ; else echo NO ; \
 	     fi; )
 
-# This won't happen for a while 
-#ifeq "macos" "$(RC_OS)"
-# PRIVATEHEADERS := $(shell if [ "$(RC_RELEASE)" = "Beaker" ] ||    \
-#			       [ "$(RC_RELEASE)" = "Bunsen" ] ||    \
-#			       [ "$(RC_RELEASE)" = "Gonzo" ]; then \
-#			 echo /System/Library; else echo /MacOSX/System; fi; \
-#		)/Frameworks/System.framework/PrivateHeaders
-#else
-#  PRIVATEHEADERS = /System/Library/Frameworks/System.framework/PrivateHeaders
-#endif
-PRIVATEHEADERS = /System/Library/Frameworks/System.framework/PrivateHeaders
-
 CFLAGS = $(OFLAG) -g -I$(SRCROOT) -I$(SRCROOT)/../include -I$(OFILE_DIR) \
-	$(GCC_FLAGS) -DNeXT_MOD \
-	-I$(NEXT_ROOT)$(PRIVATEHEADERS)
+	$(GCC_FLAGS) -DNeXT_MOD 
 
 LIBSTUFF_DIR = -L$(SYMROOT)/../../libstuff
 LIBSTUFF = -lstuff

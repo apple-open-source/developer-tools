@@ -65,3 +65,10 @@ extern int hook_int_CUMULATIVE_ARGS_mode_tree_bool_0
 extern const char *hook_invalid_arg_for_unprototyped_fn
   (tree, tree, tree);
 /* APPLE LOCAL end mainline 2005-04-14 */
+/* APPLE LOCAL begin 4375453 */
+extern bool vector_alignment_reachable (tree, bool);
+extern bool default_vector_alignment_reachable (tree, bool);
+/* APPLE LOCAL end 4375453 */
+/* APPLE LOCAL begin mainline 2006-02-17 4356747 stack realign */
+extern rtx default_internal_arg_pointer (void);
+/* APPLE LOCAL end mainline 2006-02-17 4356747 stack realign */

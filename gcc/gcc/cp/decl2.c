@@ -1657,6 +1657,12 @@ determine_visibility (tree decl)
 			  the ABI.  */
 		       && !DECL_CONSTRUCTION_VTABLE_P (decl))))
 	DECL_VISIBILITY (decl) = VISIBILITY_DEFAULT;
+      /* APPLE LOCAL begin ms tinfo compat 4230099 */
+      else if (TREE_CODE (decl) == VAR_DECL
+	       && flag_visibility_ms_compat
+	       && DECL_TINFO_P (decl))
+	DECL_VISIBILITY (decl) = VISIBILITY_DEFAULT;
+      /* APPLE LOCAL end ms tinfo compat 4230099 */
       else
 	{
 	  DECL_VISIBILITY (decl) = CLASSTYPE_VISIBILITY (class_type);

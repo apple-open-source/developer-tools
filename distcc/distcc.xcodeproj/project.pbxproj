@@ -126,7 +126,6 @@
 		B3399AF0089064D600B2C72F /* cpp_dialect.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = cpp_dialect.h; sourceTree = "<group>"; };
 		B372695D0896E09A001F5128 /* indirect_client.h */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.c.h; path = indirect_client.h; sourceTree = "<group>"; };
 		B372695E0896E09A001F5128 /* indirect_server.c */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.c.c; path = indirect_server.c; sourceTree = "<group>"; };
-		B37269600896E09A001F5128 /* indirect_util.c */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.c.c; path = indirect_util.c; sourceTree = "<group>"; };
 		B37269610896E09A001F5128 /* indirect_util.h */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.c.h; path = indirect_util.h; sourceTree = "<group>"; };
 		B37269790896E0ED001F5128 /* indirect_client.c */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.c.c; path = indirect_client.c; sourceTree = "<group>"; };
 		B387DA8B087EFCAC00A8560D /* Common.make */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = text; path = Common.make; sourceTree = "<group>"; };
@@ -494,7 +493,6 @@
 				B37269790896E0ED001F5128 /* indirect_client.c */,
 				B372695D0896E09A001F5128 /* indirect_client.h */,
 				B372695E0896E09A001F5128 /* indirect_server.c */,
-				B37269600896E09A001F5128 /* indirect_util.c */,
 				B37269610896E09A001F5128 /* indirect_util.h */,
 				B387DB8C087F266800A8560D /* io.c */,
 				B387DB8D087F266800A8560D /* loadfile.c */,
@@ -649,6 +647,59 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		8D5B0CAC093BFD9000250A19 /* BuildAndIntegration */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COPY_PHASE_STRIP = YES;
+				GCC_GENERATE_DEBUGGING_SYMBOLS = NO;
+				OPTIMIZATION_CFLAGS = "-O0";
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = "";
+				OTHER_REZFLAGS = "";
+				PRODUCT_NAME = LaunchdConfig;
+				SECTORDER_FLAGS = "";
+				WARNING_CFLAGS = (
+					"-Wmost",
+					"-Wno-four-char-constants",
+					"-Wno-unknown-pragmas",
+				);
+			};
+			name = BuildAndIntegration;
+		};
+		8D5B0CAD093BFD9000250A19 /* BuildAndIntegration */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COPY_PHASE_STRIP = YES;
+				GCC_GENERATE_DEBUGGING_SYMBOLS = NO;
+				OPTIMIZATION_CFLAGS = "-O0";
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = "";
+				OTHER_REZFLAGS = "";
+				PRODUCT_NAME = distcc;
+				SECTORDER_FLAGS = "";
+				WARNING_CFLAGS = (
+					"-Wmost",
+					"-Wno-four-char-constants",
+					"-Wno-unknown-pragmas",
+				);
+			};
+			name = BuildAndIntegration;
+		};
+		8D5B0CAE093BFD9000250A19 /* BuildAndIntegration */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = (
+					ppc,
+					i386,
+				);
+				COPY_PHASE_STRIP = YES;
+				CURRENT_PROJECT_VERSION = 42;
+				MACOSX_DEPLOYMENT_TARGET = 10.4;
+				SDKROOT = /Developer/SDKs/MacOSX10.4u.sdk;
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = BuildAndIntegration;
+		};
 		B3BA8F23087CA0CC009521B6 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -657,9 +708,8 @@
 					i386,
 				);
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 39;
+				CURRENT_PROJECT_VERSION = 42;
 				MACOSX_DEPLOYMENT_TARGET = 10.4;
-				SDKROOT = /Developer/SDKs/MacOSX10.4u.sdk;
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Debug;
@@ -672,7 +722,7 @@
 					i386,
 				);
 				COPY_PHASE_STRIP = YES;
-				CURRENT_PROJECT_VERSION = 39;
+				CURRENT_PROJECT_VERSION = 42;
 				MACOSX_DEPLOYMENT_TARGET = 10.4;
 				SDKROOT = /Developer/SDKs/MacOSX10.4u.sdk;
 				VERSIONING_SYSTEM = "apple-generic";
@@ -750,24 +800,30 @@
 			buildConfigurations = (
 				B3BA8F23087CA0CC009521B6 /* Debug */,
 				B3BA8F24087CA0CC009521B6 /* Release */,
+				8D5B0CAE093BFD9000250A19 /* BuildAndIntegration */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = BuildAndIntegration;
 		};
 		B3BA8F2F087CA105009521B6 /* Build configuration list for PBXAggregateTarget "Config Files" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				B3BA8F30087CA105009521B6 /* Debug */,
 				B3BA8F31087CA105009521B6 /* Release */,
+				8D5B0CAC093BFD9000250A19 /* BuildAndIntegration */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = BuildAndIntegration;
 		};
 		B3CC5D01087DFBC700EB91A2 /* Build configuration list for PBXLegacyTarget "distcc" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				B3CC5D02087DFBC700EB91A2 /* Debug */,
 				B3CC5D03087DFBC700EB91A2 /* Release */,
+				8D5B0CAD093BFD9000250A19 /* BuildAndIntegration */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = BuildAndIntegration;
 		};
 /* End XCConfigurationList section */
 	};

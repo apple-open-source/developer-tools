@@ -21,15 +21,6 @@
    Foundation, Inc., 59 Temple Place - Suite 330,
    Boston, MA 02111-1307, USA.  */
 
-#include "macosx-nat-inferior-debug.h"
-#include "macosx-nat-dyld.h"
-#include "macosx-nat-inferior.h"
-#include "macosx-nat-mutils.h"
-#include "macosx-nat-sigthread.h"
-#include "macosx-nat-threads.h"
-
-#include "macosx-xdep.h"
-
 #include "defs.h"
 #include "inferior.h"
 #include "target.h"
@@ -50,6 +41,15 @@
 
 #include <string.h>
 #include <ctype.h>
+
+#include "macosx-nat-inferior-debug.h"
+#include "macosx-nat-dyld.h"
+#include "macosx-nat-inferior.h"
+#include "macosx-nat-mutils.h"
+#include "macosx-nat-sigthread.h"
+#include "macosx-nat-threads.h"
+
+#include "macosx-xdep.h"
 
 #include <AvailabilityMacros.h>
 
@@ -270,7 +270,7 @@ macosx_debug_regions (task_t task, mach_vm_address_t address, int max)
 }
 
 void
-macosx_debug_port_info (task_t task, port_t port)
+macosx_debug_port_info (task_t task, mach_port_t port)
 {
 #if 0
   kern_return_t kret;
@@ -466,17 +466,17 @@ macosx_debug_notification_message (struct macosx_inferior_status *inferior,
 void
 _initialize_macosx_inferior_debug ()
 {
-  struct cmd_list_element *cmd;
+  add_setshow_boolean_cmd ("timestamps", class_obscure,
+			   &timestamps_debug_flag, _("\
+Set if GDB print timestamps before any terminal output."), _("\
+Show if GDB print timestamps before any terminal output."), NULL,
+			   NULL, NULL,
+			   &setdebuglist, &showdebuglist);
 
-  cmd = add_set_cmd ("timestamps", class_obscure, var_boolean,
-                     (char *) &timestamps_debug_flag,
-                     "Set if GDB print timestamps before any terminal output.",
-                     &setdebuglist);
-  add_show_from_set (cmd, &showdebuglist);
-
-  cmd = add_set_cmd ("inferior", class_obscure, var_zinteger,
-                     (char *) &inferior_debug_flag,
-                     "Set if printing inferior communication debugging statements.",
-                     &setdebuglist);
-  add_show_from_set (cmd, &showdebuglist);
+  add_setshow_zinteger_cmd ("inferior", class_obscure,
+			    &inferior_debug_flag, _("\
+Set if printing inferior communication debugging statements."), _("\
+Show if printing inferior communication debugging statements."), NULL,
+			    NULL, NULL,
+			    &setdebuglist, &showdebuglist);
 }

@@ -1,5 +1,5 @@
-/* APPLE LOCAL  nested functions */
-/* { dg-xfail-if "" { "*-*-darwin*" } { "*" } { "" } } */
+/* APPLE LOCAL testsuite nested functions */
+/* { dg-options "-fnested-functions" } */
 typedef __SIZE_TYPE__ size_t;
 extern int printf (const char *, ...);
 extern void *memset (void *, int, size_t);

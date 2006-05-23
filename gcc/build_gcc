@@ -30,8 +30,7 @@ BOOTSTRAP=${BOOTSTRAP-bootstrap}
 # $RC_NONARCH_CFLAGS (and mysteriously prepends '-pipe' thereto).
 # We will allow this to override the default $CFLAGS and $CXXFLAGS.
 
-CFLAGS=${RC_NONARCH_CFLAGS/-pipe/}
-CFLAGS=${CFLAGS:-"-g -O2"}
+CFLAGS="-g -O2 ${RC_NONARCH_CFLAGS/-pipe/}"
 
 # This isn't a parameter; it is the architecture of the current machine.
 BUILD=`arch | $TRANSLATE_ARCH`
@@ -107,6 +106,7 @@ CONFIGFLAGS="--disable-checking -enable-werror \
   --enable-languages=c,objc,c++,obj-c++ \
   --program-transform-name=/^[cg][^.-]*$/s/$/-$MAJ_VERS/ \
   --with-gxx-include-dir=\${prefix}/include/c++/$LIBSTDCXX_VERSION \
+  --with-slibdir=/usr/lib \
   --build=$BUILD-apple-darwin$DARWIN_VERS"
 
 # Figure out how many make processes to run.
@@ -408,7 +408,7 @@ rm -rf * || exit 1
 
 # Save executables and libraries.
 cd $DEST_DIR || exit 1
-find . \( -perm -0111 -or -name \*.a \) -type f -print \
+find . \( -perm -0111 -or -name \*.a -or -name \*.dylib \) -type f -print \
   | cpio -pdml $SYM_DIR || exit 1
 # Save source files.
 mkdir $SYM_DIR/src || exit 1

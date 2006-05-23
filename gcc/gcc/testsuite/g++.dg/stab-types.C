@@ -1,4 +1,4 @@
-/* APPLE LOCAL  file */
+/* APPLE LOCAL file */
 /* Contributed by Devang Patel  <dpatel@apple.com>  */
 
 /* { dg-do compile } */

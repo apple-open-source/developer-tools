@@ -251,11 +251,11 @@ struct function GTY(())
 
   /* APPLE LOCAL begin CW asm blocks */
   /* Nonzero if this is an all-assembly function.  */
-  unsigned int cw_asm_function : 1;
+  unsigned int iasm_asm_function : 1;
   /* Nonzero if we don't want to emit any return instructions. */
-  unsigned int cw_asm_noreturn : 1;
+  unsigned int iasm_noreturn : 1;
   /* If nonzero, use this as the explicitly-defined frame size.  */
-  int cw_asm_frame_size;
+  int iasm_frame_size;
   /* APPLE LOCAL end CW asm blocks */
 
   /* Offset to end of allocated area of stack frame.

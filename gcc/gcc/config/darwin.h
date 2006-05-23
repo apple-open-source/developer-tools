@@ -106,12 +106,12 @@ extern int machopic_symbol_defined_p (rtx);
    name, that also takes an argument, needs to be modified so the
    prefix is different, otherwise a '*' after the shorter option will
    match with the longer one.
-   
+
    The SUBTARGET_OPTION_TRANSLATE_TABLE macro, which _must_ be defined
    in gcc/config/{i386,rs6000}/darwin.h, should contain any additional
    command-line option translations specific to the particular target
    architecture.  */
-   
+
 #define TARGET_OPTION_TRANSLATE_TABLE \
 /* APPLE LOCAL KEXT terminated-vtables */ \
   { "-fterminated-vtables", "-fapple-kext" }, \
@@ -137,7 +137,7 @@ extern int machopic_symbol_defined_p (rtx);
   { "-segs_read_only_addr", "-Zsegs_read_only_addr" }, \
   { "-segs_read_write_addr", "-Zsegs_read_write_addr" }, \
   { "-seg_addr_table", "-Zseg_addr_table" }, \
-  /* APPLE LOCAL why did I do that?  -- mrs */ \
+  /* APPLE LOCAL mainline 4.2 3941990 */ \
   { "-seg_addr_table_filename", "-Zfn_seg_addr_table_filename" }, \
   { "-filelist", "-Xlinker -filelist -Xlinker" },  \
   { "-framework", "-Xlinker -framework -Xlinker" },  \
@@ -181,7 +181,7 @@ extern int darwin_running_cxx;
    but there are no more bits in rs6000 TARGET_SWITCHES.  Note
    that this switch has no "no-" variant. */
 extern const char *darwin_one_byte_bool;
-  
+
 /* APPLE LOCAL begin pragma reverse_bitfields */
 /* True if pragma reverse_bitfields is in effect. */
 extern GTY(()) int darwin_reverse_bitfields;
@@ -209,6 +209,7 @@ extern const char *darwin_macho_att_stub_switch;
    0 },									\
 /* APPLE LOCAL end mainline 2005-09-01 3449986 */			\
   {"no-fix-and-continue", &darwin_fix_and_continue_switch,		\
+/* APPLE LOCAL added comma to this line for subsequent A-L additions */ \
    N_("Don't generate code suitable for fast turn around debugging"), 0}, \
   /* APPLE LOCAL begin AT&T-style stub 4164563 */			\
   {"att-stubs", &darwin_macho_att_stub_switch,				\
@@ -269,6 +270,13 @@ do {									\
   /* APPLE LOCAL end kexts */                                           \
 } while(0)
 
+/* APPLE LOCAL begin kexts */
+#define SUBTARGET_C_COMMON_OVERRIDE_OPTIONS do {	\
+  if (flag_apple_kext && flag_use_cxa_atexit == 2)	\
+    flag_use_cxa_atexit = 0;				\
+} while (0)
+/* APPLE LOCAL end kexts */
+
 #define SUBTARGET_INIT_BUILTINS		\
 do {					\
   darwin_init_cfstring_builtins ();	\
@@ -308,7 +316,7 @@ do {					\
    !strcmp (STR, "Zsegs_read_only_addr") ? 1 :  \
    !strcmp (STR, "Zsegs_read_write_addr") ? 1 : \
    !strcmp (STR, "Zseg_addr_table") ? 1 :       \
-  /* APPLE LOCAL why did I do that?  -- mrs */ \
+  /* APPLE LOCAL mainline 4.2 3941990 */ \
    !strcmp (STR, "Zfn_seg_addr_table_filename") ? 1 :\
    !strcmp (STR, "seg1addr") ? 1 :              \
    !strcmp (STR, "segprot") ? 3 :               \
@@ -359,9 +367,12 @@ do {					\
     %l %X %{d} %{s} %{t} %{Z} \
     %{!Zdynamiclib:%{A} %{e*} %{m} %{N} %{n} %{r} %{u*} %{x} %{z}} \
     %{@:-o %f%u.out}%{!@:%{o*}%{!o:-o a.out}} \
-    %{!Zdynamiclib:%{!A:%{!nostdlib:%{!nostartfiles:%S}}}} \
+"/* APPLE LOCAL mainline 2006-04-01 4495520 */"\
+    %{!A:%{!nostdlib:%{!nostartfiles:%S}}} \
 "/* APPLE LOCAL add fcreate-profile */"\
     %{L*} %(link_libgcc) %o %{fprofile-arcs|fprofile-generate|fcreate-profile:-lgcov} \
+"/* APPLE LOCAL nested functions 4357979  */"\
+    %{fnested-functions: -allow_stack_execute} \
     %{!nostdlib:%{!nodefaultlibs:%G %L}} \
     %{!A:%{!nostdlib:%{!nostartfiles:%E}}} %{T*} %{F*} }}}}}}}}"
 
@@ -417,9 +428,16 @@ do {					\
    %{Zinit*:-init %*} \
 "/* APPLE LOCAL mainline 2005-09-01 3449986 */"\
    %{mmacosx-version-min=*:-macosx_version_min %*} \
+"/* APPLE LOCAL mainline 2006-03-15 3992198 */"\
+   %{!mmacosx-version-min=*:%{shared-libgcc:-macosx_version_min 10.3}} \
    %{nomultidefs} \
    %{Zmulti_module:-multi_module} %{Zsingle_module:-single_module} \
    %{Zmultiply_defined*:-multiply_defined %*} \
+"/* APPLE LOCAL begin mainline 2006-03-15 3992198 */"\
+   %{!Zmultiply_defined*:%{shared-libgcc: \
+     %:version-compare(< 10.5 mmacosx-version-min= -multiply_defined) \
+     %:version-compare(< 10.5 mmacosx-version-min= suppress)}} \
+"/* APPLE LOCAL end mainline 2006-03-15 3992198 */"\
    %{Zmultiplydefinedunused*:-multiply_defined_unused %*} \
    %{prebind} %{noprebind} %{nofixprebinding} %{prebind_all_twolevel_modules} \
    %{read_only_relocs} \
@@ -428,7 +446,7 @@ do {					\
    %{Zsegs_read_only_addr*:-segs_read_only_addr %*} \
    %{Zsegs_read_write_addr*:-segs_read_write_addr %*} \
    %{Zseg_addr_table*: -seg_addr_table %*} \
-   "/* APPLE LOCAL why did I do that?  -- mrs */" \
+   "/* APPLE LOCAL mainline 4.2 3941990 */" \
    %{Zfn_seg_addr_table_filename*:-seg_addr_table_filename %*} \
    %{sub_library*} %{sub_umbrella*} \
    "/* APPLE LOCAL mainline 4.1 2005-06-03 */" \
@@ -456,7 +474,7 @@ do {					\
 /* APPLE LOCAL begin mainline 2005-09-01 3449986 */
 
 /* APPLE LOCAL end mainline 2005-09-01 3449986 */
-/* APPLE LOCAL begin 4276161 */
+/* APPLE LOCAL begin mainline 2005-11-15 4276161 */
 /* Support -mmacosx-version-min by supplying different (stub) libgcc_s.dylib
    libraries to link against, and by not linking against libgcc_s on
    earlier-than-10.3.9.
@@ -466,11 +484,14 @@ do {					\
    be in a new format, or the fallback routine might be changed; if
    you want to explicitly link against the static version of those
    routines, because you know you don't need to unwind through system
-   libraries, you need to explicitly say -static-libgcc.  */
+   libraries, you need to explicitly say -static-libgcc.
+
+   If it is linked against, it has to be before -lgcc, because it may
+   need symbols from -lgcc.  */
 #undef REAL_LIBGCC_SPEC
 #define REAL_LIBGCC_SPEC						   \
 /* APPLE LOCAL libgcc_static.a  */					   \
-   "%{static:-lgcc_static; static-libgcc: -lgcc -lgcc_eh;		   \
+   "%{static:-lgcc_static; static-libgcc: -lgcc_eh -lgcc;		   \
       shared-libgcc|fexceptions:					   \
        %:version-compare(!> 10.5 mmacosx-version-min= -lgcc_s.10.4)	   \
        %:version-compare(>= 10.5 mmacosx-version-min= -lgcc_s.10.5)	   \
@@ -479,25 +500,29 @@ do {					\
        %:version-compare(>= 10.5 mmacosx-version-min= -lgcc_s.10.5)	   \
        -lgcc}"
 
-/* APPLE LOCAL end 4276161 */
-/* We specify crt0.o as -lcrt0.o so that ld will search the library path.  */
-/* We don't want anything to do with crt2.o in the 64-bit case;
-   testing the PowerPC-specific -m64 flag here is a little irregular,
-   but it's overkill to make copies of this spec for each target
-   arch.  */
+/* APPLE LOCAL end mainline 2005-11-15 4276161 */
+/* APPLE LOCAL begin 4484188 */
+/* We specify crt0.o as -lcrt0.o so that ld will search the library path.
+
+   crt3.o provides __cxa_atexit on systems that don't have it.  Since
+   it's only used with C++, which requires passing -shared-libgcc, key
+   off that to avoid unnecessarily adding a destructor to every
+   powerpc program built.  */
 
 #undef  STARTFILE_SPEC
-#define STARTFILE_SPEC  \
-  "%{!Zdynamiclib:%{Zbundle:%{!static:-lbundle1.o}} \
-     %{!Zbundle:%{pg:%{static:-lgcrt0.o} \
-                     %{!static:%{object:-lgcrt0.o} \
-                               %{!object:%{preload:-lgcrt0.o} \
-                                 %{!preload:-lgcrt1.o %{!m64: crt2.o%s}}}}} \
-                %{!pg:%{static:-lcrt0.o} \
-                      %{!static:%{object:-lcrt0.o} \
-                                %{!object:%{preload:-lcrt0.o} \
-                                  %{!preload:-lcrt1.o %{!m64: crt2.o%s}}}}}}}"
+#define STARTFILE_SPEC							    \
+  "%{!Zdynamiclib:%{Zbundle:%{!static:-lbundle1.o}}			    \
+     %{!Zbundle:%{pg:%{static:-lgcrt0.o}				    \
+                     %{!static:%{object:-lgcrt0.o}			    \
+                               %{!object:%{preload:-lgcrt0.o}		    \
+                                 %{!preload:-lgcrt1.o %(darwin_crt2)}}}}    \
+                %{!pg:%{static:-lcrt0.o}				    \
+                      %{!static:%{object:-lcrt0.o}			    \
+                                %{!object:%{preload:-lcrt0.o}		    \
+                                  %{!preload:-lcrt1.o %(darwin_crt2)}}}}}}  \
+  %{shared-libgcc:%:version-compare(< 10.5 mmacosx-version-min= crt3.o%s)}"
 
+/* APPLE LOCAL end 4484188 */
 /* The native Darwin linker doesn't necessarily place files in the order
    that they're specified on the link line.  Thus, it is pointless
    to put anything in ENDFILE_SPEC.  */
@@ -518,16 +543,18 @@ do {					\
 #define DWARF2_DEBUGGING_INFO
 #define PREFERRED_DEBUGGING_TYPE DBX_DEBUG
 
-#define DEBUG_FRAME_SECTION   "__DWARFA,__debug_frame,coalesced,no_toc+strip_static_syms"
-#define DEBUG_INFO_SECTION    "__DWARFA,__debug_info"
-#define DEBUG_ABBREV_SECTION  "__DWARFA,__debug_abbrev"
-#define DEBUG_ARANGES_SECTION "__DWARFA,__debug_aranges"
-#define DEBUG_MACINFO_SECTION "__DWARFA,__debug_macinfo"
-#define DEBUG_LINE_SECTION    "__DWARFA,__debug_line"
-#define DEBUG_LOC_SECTION     "__DWARFA,__debug_loc"
-#define DEBUG_PUBNAMES_SECTION        "__DWARFA,__debug_pubnames"
-#define DEBUG_STR_SECTION     "__DWARFA,__debug_str"
-#define DEBUG_RANGES_SECTION  "__DWARFA,__debug_ranges"
+/* APPLE LOCAL begin mainline 2006-03-16 dwarf2 section flags */
+#define DEBUG_FRAME_SECTION	"__DWARF,__debug_frame,regular,debug"
+#define DEBUG_INFO_SECTION	"__DWARF,__debug_info,regular,debug"
+#define DEBUG_ABBREV_SECTION	"__DWARF,__debug_abbrev,regular,debug"
+#define DEBUG_ARANGES_SECTION	"__DWARF,__debug_aranges,regular,debug"
+#define DEBUG_MACINFO_SECTION	"__DWARF,__debug_macinfo,regular,debug"
+#define DEBUG_LINE_SECTION	"__DWARF,__debug_line,regular,debug"
+#define DEBUG_LOC_SECTION	"__DWARF,__debug_loc,regular,debug"
+#define DEBUG_PUBNAMES_SECTION	"__DWARF,__debug_pubnames,regular,debug"
+#define DEBUG_STR_SECTION	"__DWARF,__debug_str,regular,debug"
+#define DEBUG_RANGES_SECTION	"__DWARF,__debug_ranges,regular,debug"
+/* APPLE LOCAL end mainline 2006-03-16 dwarf2 section flags */
 
 /* APPLE LOCAL begin gdb only used symbols */
 /* Support option to generate stabs for only used symbols. */
@@ -582,9 +609,9 @@ do {					\
    links to, so there's no need for weak-ness for that.  */
 #define GTHREAD_USE_WEAK 0
 
-/* The Darwin linker imposes two limitations on common symbols: they 
+/* The Darwin linker imposes two limitations on common symbols: they
    can't have hidden visibility, and they can't appear in dylibs.  As
-   a consequence, we should never use common symbols to represent 
+   a consequence, we should never use common symbols to represent
    vague linkage. */
 #undef USE_COMMON_FOR_ONE_ONLY
 #define USE_COMMON_FOR_ONE_ONLY 0
@@ -594,6 +621,12 @@ do {					\
 #undef TARGET_WEAK_NOT_IN_ARCHIVE_TOC
 #define TARGET_WEAK_NOT_IN_ARCHIVE_TOC 1
 
+/* APPLE LOCAL begin mainline 4.2 2005-12-06 4263752 */
+/* On Darwin, we don't (at the time of writing) have linkonce sections
+   with names, so it's safe to make the class data not comdat.  */
+#define TARGET_CXX_CLASS_DATA_ALWAYS_COMDAT hook_bool_void_false
+
+/* APPLE LOCAL end mainline 4.2 2005-12-06 4263752 */
 /* We make exception information linkonce. */
 #undef TARGET_USES_WEAK_UNWIND_INFO
 #define TARGET_USES_WEAK_UNWIND_INFO 1
@@ -601,12 +634,17 @@ do {					\
 /* We need to use a nonlocal label for the start of an EH frame: the
    Darwin linker requires that a coalesced section start with a label. */
 #undef FRAME_BEGIN_LABEL
-#define FRAME_BEGIN_LABEL "EH_frame"
+/* APPLE LOCAL mainline 2006-03-16 dwarf2 4392520 */
+#define FRAME_BEGIN_LABEL (for_eh ? "EH_frame" : "Lframe")
 
-/* Emit a label for the FDE corresponding to DECL.  EMPTY means 
+/* Emit a label for the FDE corresponding to DECL.  EMPTY means
    emit a label for an empty FDE. */
 #define TARGET_ASM_EMIT_UNWIND_LABEL darwin_emit_unwind_label
 
+/* APPLE LOCAL begin mainline */
+/* Emit a label to separate the exception table.  */
+#define TARGET_ASM_EMIT_EXCEPT_TABLE_LABEL darwin_emit_except_table_label
+/* APPLE LOCAL end mainline */
 /* Our profiling scheme doesn't LP labels and counter words.  */
 
 #define NO_PROFILE_COUNTERS	1
@@ -764,7 +802,7 @@ do {					\
 
 /* Ensure correct alignment of bss data.  */
 
-#undef	ASM_OUTPUT_ALIGNED_DECL_LOCAL					
+#undef	ASM_OUTPUT_ALIGNED_DECL_LOCAL
 #define ASM_OUTPUT_ALIGNED_DECL_LOCAL(FILE, DECL, NAME, SIZE, ALIGN)	\
   do {									\
     fputs (".lcomm ", (FILE));						\
@@ -841,6 +879,10 @@ FUNCTION (void)								\
   /* APPLE LOCAL AT&T-style stub 4164563 */				\
   in_machopic_picsymbol_stub3,						\
   in_darwin_exception, in_darwin_eh_frame,				\
+  /* APPLE LOCAL begin ObjC new abi  */					\
+  in_objc_classlist_section,						\
+  in_objc_message_refs_section,						\
+  /* APPLE LOCAL end ObjC new abi  */					\
   num_sections
 
 /* APPLE LOCAL begin AT&T-style stub 4164563 */
@@ -1020,6 +1062,17 @@ SECTION_FUNCTION (darwin_eh_frame_section,				\
 		in_darwin_eh_frame,					\
 		".section " EH_FRAME_SECTION_NAME ",__eh_frame"		\
 		  EH_FRAME_SECTION_ATTR, 0)				\
+/* APPLE LOCAL begin ObjC new abi */					\
+SECTION_FUNCTION (objc_classlist_section,				\
+		  in_objc_classlist_section,				\
+		  ".section __OBJC, __classlist, regular, no_dead_strip", 1) 		\
+SECTION_FUNCTION (objc_data_section,					\
+		  in_data,						\
+		  ".data", 1) 						\
+SECTION_FUNCTION (objc_message_refs_section,				\
+		  in_objc_message_refs_section,				\
+		  ".section __OBJC2, __message_refs, regular, no_dead_strip", 1)	\
+/* APPLE LOCAL end ObjC new abi */					\
 \
 static void					\
 objc_section_init (void)			\
@@ -1243,6 +1296,11 @@ enum machopic_addr_class {
 #define ASM_OUTPUT_DWARF_DELTA(FILE,SIZE,LABEL1,LABEL2)  \
   darwin_asm_output_dwarf_delta (FILE, SIZE, LABEL1, LABEL2)
 
+/* APPLE LOCAL begin mainline 2006-03-16 dwarf 4383509 */
+#define ASM_OUTPUT_DWARF_OFFSET(FILE,SIZE,LABEL,BASE)  \
+  darwin_asm_output_dwarf_offset (FILE, SIZE, LABEL, BASE)
+
+/* APPLE LOCAL end mainline 2006-03-16 dwarf 4383509 */
 #define ASM_MAYBE_OUTPUT_ENCODED_ADDR_RTX(ASM_OUT_FILE, ENCODING, SIZE, ADDR, DONE)	\
       if (ENCODING == ASM_PREFERRED_EH_DATA_FORMAT (2, 1)) {				\
 	darwin_non_lazy_pcrel (ASM_OUT_FILE, ADDR);					\
@@ -1282,6 +1340,10 @@ enum machopic_addr_class {
     /* APPLE LOCAL pragma fenv */                               \
     c_register_pragma ("GCC", "fenv", darwin_pragma_fenv);	\
     c_register_pragma (0, "unused", darwin_pragma_unused);	\
+    /* APPLE LOCAL begin mainline */				\
+    c_register_pragma (0, "ms_struct",				\
+			darwin_pragma_ms_struct);		\
+    /* APPLE LOCAL end mainline */				\
     /* APPLE LOCAL begin pragma reverse_bitfields */		\
     c_register_pragma (0, "reverse_bitfields",			\
 			darwin_pragma_reverse_bitfields);	\
@@ -1316,7 +1378,7 @@ extern void abort_assembly_and_exit (int status) ATTRIBUTE_NORETURN;
          : MIN ((DESIRED), 16))
 #else
 #define PEG_ALIGN_FOR_MAC68K(DESIRED)   MIN ((DESIRED), 16)
-#endif 
+#endif
 /* APPLE LOCAL end Macintosh alignment 2002-2-13 --ff */
 
 /* APPLE LOCAL begin KEXT double destructor */

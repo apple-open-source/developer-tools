@@ -25,6 +25,7 @@
 
 #include "gdb_obstack.h"	/* For obstack internals.  */
 #include "symfile.h"		/* For struct psymbol_allocation_list */
+#include <sqlite3.h>
 
 struct bcache;
 struct htab;
@@ -44,9 +45,8 @@ struct objfile_data;
    to the user executable's recorded entry point, as if the call had been made
    directly by the kernel.
 
-   The traditional gdb method of using this info is to use the
-   recorded entry point to set the variables
-   deprecated_entry_file_lowpc and deprecated_entry_file_highpc from
+   The traditional gdb method of using this info was to use the
+   recorded entry point to set the entry-file's lowpc and highpc from
    the debugging information, where these values are the starting
    address (inclusive) and ending address (exclusive) of the
    instruction space in the executable which correspond to the
@@ -57,7 +57,7 @@ struct objfile_data;
 
    NOTE: cagney/2003-09-09: It turns out that this "traditional"
    method doesn't work.  Corinna writes: ``It turns out that the call
-   to deprecated_inside_entry_file destroys a meaningful backtrace
+   to test for "inside entry file" destroys a meaningful backtrace
    under some conditions.  E. g. the backtrace tests in the asm-source
    testcase are broken for some targets.  In this test the functions
    are all implemented as part of one file and the testcase is not
@@ -109,26 +109,11 @@ struct entry_info
 
     CORE_ADDR entry_point;
 
-#define INVALID_ENTRY_POINT (~0)	/* ~0 will not be in any file, we hope.  */
-
-    /* Start (inclusive) and end (exclusive) of function containing the
-       entry point. */
-
-    CORE_ADDR entry_func_lowpc;
-    CORE_ADDR entry_func_highpc;
-
-    /* Start (inclusive) and end (exclusive) of object file containing the
-       entry point. */
-
-    CORE_ADDR deprecated_entry_file_lowpc;
-    CORE_ADDR deprecated_entry_file_highpc;
-
-    /* Start (inclusive) and end (exclusive) of the user code main() function. */
+    /* APPLE LOCAL: Start (inclusive) and end (exclusive) of the user code 
+       main() function. */
 
     CORE_ADDR main_func_lowpc;
     CORE_ADDR main_func_highpc;
-
-/* Use these values when any of the above ranges is invalid.  */
 
 /* We use these values because it guarantees that there is no number that is
    both >= LOWPC && < HIGHPC.  It is also highly unlikely that 3 is a valid
@@ -136,6 +121,8 @@ struct entry_info
 
 #define INVALID_ENTRY_LOWPC (3)
 #define INVALID_ENTRY_HIGHPC (1)
+
+#define INVALID_ENTRY_POINT (~0)	/* ~0 will not be in any file, we hope.  */
 
   };
 
@@ -373,26 +360,35 @@ struct objfile
 
     /* Information about stabs.  Will be filled in with a dbx_symfile_info
        struct by those readers that need it. */
+    /* NOTE: cagney/2004-10-23: This has been replaced by per-objfile
+       data points implemented using "data" and "num_data" below.  For
+       an example of how to use this replacement, see "objfile_data"
+       in "mips-tdep.c".  */
 
-    struct dbx_symfile_info *sym_stab_info;
+    struct dbx_symfile_info *deprecated_sym_stab_info;
 
     /* Hook for information for use by the symbol reader (currently used
        for information shared by sym_init and sym_read).  It is
        typically a pointer to malloc'd memory.  The symbol reader's finish
        function is responsible for freeing the memory thusly allocated.  */
+    /* NOTE: cagney/2004-10-23: This has been replaced by per-objfile
+       data points implemented using "data" and "num_data" below.  For
+       an example of how to use this replacement, see "objfile_data"
+       in "mips-tdep.c".  */
 
-    void *sym_private;
+    void *deprecated_sym_private;
 
     /* Hook for target-architecture-specific information.  This must
        point to memory allocated on one of the obstacks in this objfile,
        so that it gets freed automatically when reading a new object
        file. */
 
-    void *obj_private;
+    void *deprecated_obj_private;
 
     /* Per objfile data-pointers required by other GDB modules.  */
     /* FIXME: kettenis/20030711: This mechanism could replace
-       sym_stab_info, sym_private and obj_private entirely.  */
+       deprecated_sym_stab_info, deprecated_sym_private and
+       deprecated_obj_private entirely.  */
 
     void **data;
     unsigned num_data;
@@ -487,6 +483,10 @@ struct objfile
        "is this objfile resident in memory" check and assume that, in the case
        of a breakpoint in a hand-added symbol file, it's always resident.  */
     int syms_only_objfile;
+    
+    /* APPLE LOCAL begin dwarf repository  */
+    int uses_sql_repository;
+    /* APPLE LOCAL end dwarf repository  */
   };
 
 /* Defines for the objfile flag word. */
@@ -530,6 +530,11 @@ struct objfile
    command. */
 
 #define OBJF_USERLOADED	(1 << 5)	/* User loaded */
+
+/* APPLE LOCAL: Treat separate debug files special so we don't add
+   the sections to the ordered list while initially creating the objfile
+   in symbol_file_add() since the backlink pointer will not be valid yet.  */
+#define OBJF_SEPARATE_DEBUG_FILE (1 << 6)	/* Separate debug file */
 
 
 /* APPLE LOCAL: The following OBJF_SYM_ constants are used to limit
@@ -677,6 +682,10 @@ int objfile_set_load_state (struct objfile *, int, int);
 int pc_set_load_state (CORE_ADDR, int, int);
 int objfile_name_set_load_state (char *, int, int);
 
+/* APPLE LOCAL begin dwarf repository  */
+extern unsigned get_objfile_registry_num_registrations (void);
+/* APPLE LOCAL end dwarf repository  */
+
 /* APPLE LOCAL begin fix-and-continue */
 struct symtab *symtab_get_first (struct objfile *, int );
 struct symtab *symtab_get_next (struct symtab *, int );
@@ -690,8 +699,8 @@ struct partial_symtab *psymtab_get_next (struct partial_symtab *, int );
        (obj) = objfile_get_next (obj))
 
 #define	ALL_OBJFILES_SAFE(obj,nxt) \
-  for ((obj) = object_files; 	   \
-       (obj) != NULL? ((nxt)=(obj)->next,1) :0;	\
+  for ((obj) = objfile_get_first(); 	   \
+       (obj) != NULL? ((nxt)=objfile_get_next((obj)),1) :0;	\
        (obj) = (nxt))
 
 /* Traverse all symtabs in one objfile.  */
@@ -764,17 +773,17 @@ struct partial_symtab *psymtab_get_next (struct partial_symtab *, int );
 
 #define SECT_OFF_DATA(objfile) \
      ((objfile->sect_index_data == -1) \
-      ? (internal_error (__FILE__, __LINE__, "sect_index_data not initialized"), -1) \
+      ? (internal_error (__FILE__, __LINE__, _("sect_index_data not initialized")), -1) \
       : objfile->sect_index_data)
 
 #define SECT_OFF_RODATA(objfile) \
      ((objfile->sect_index_rodata == -1) \
-      ? (internal_error (__FILE__, __LINE__, "sect_index_rodata not initialized"), -1) \
+      ? (internal_error (__FILE__, __LINE__, _("sect_index_rodata not initialized")), -1) \
       : objfile->sect_index_rodata)
 
 #define SECT_OFF_TEXT(objfile) \
      ((objfile->sect_index_text == -1) \
-      ? (internal_error (__FILE__, __LINE__, "sect_index_text not initialized"), -1) \
+      ? (internal_error (__FILE__, __LINE__, _("sect_index_text not initialized")), -1) \
       : objfile->sect_index_text)
 
 /* Sometimes the .bss section is missing from the objfile, so we don't

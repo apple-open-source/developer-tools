@@ -565,7 +565,7 @@ static int bsearch_compar_bkpt(const void *a1, const void *a2)
 
 int find_breakpt(GDB_ADDRESS address)
 {
-    int 	i = -1;
+    int 	  i = -1;
     GDB_ADDRESS *p;
    
     if (bkpt_tbl_index >= 0) {
@@ -601,8 +601,8 @@ static int qsort_compar_bkpt(const void *a1, const void *a2)
  
  We get control here whenever a breakpoint is added.  Here we keep from adding duplicates
  and build the sorted bkpt_tbl.  We keep the table sorted so that the disassembly can
- use bsearch to look up addresses.  We also do a bsearch in find_breakpt() to check
- for the presence of breakpoints too.
+ use bsearch to look up addresses.  We also do a bsearch in find_breakpt()
+ to check for the presence of breakpoints too.
 */
 
 static void new_breakpoint(GDB_ADDRESS address, int enabled)
@@ -612,7 +612,7 @@ static void new_breakpoint(GDB_ADDRESS address, int enabled)
     if (!enabled)				/* can this ever happen?		*/
     	return;
 	
-    i = find_breakpt(address);			/* find the breakpoint			*/
+    i = find_breakpt(address);   		/* find the breakpoint			*/
     if (i >= 0)					/* if already recorded...		*/
     	return;					/* ...don't record duplicates		*/
 	
@@ -629,7 +629,7 @@ static void new_breakpoint(GDB_ADDRESS address, int enabled)
     
     if (0)
 	for (i = 0; i <= bkpt_tbl_index; ++i)
-	    gdb_printf("after add: %2d. 0x%.8llX\n", i+1, (long long)bkpt_tbl[i]);
+	    gdb_printf("after add: %2d. 0x%.8lX\n", i+1, (long long) bkpt_tbl[i]);
 }
 
 

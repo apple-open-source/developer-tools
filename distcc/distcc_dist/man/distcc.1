@@ -449,12 +449,12 @@ not split into words and is not executed through the shell.
 .B "DISTCC_DIR"
 Per-user configuration directory to store lock files and state files.
 By default 
-.B ~/.distcc/ 
+.B /var/tmp/distcc.{UID}/ 
 is used.
 .TP
 .B "TMPDIR"
 Directory for temporary files such as preprocessor output.  By default
-/tmp/ is used.
+/tmp/distcc is used.
 .TP
 .B "UNCACHED_ERR_FD"
 If set and if DISTCC_LOG is not set, distcc errors are written to the

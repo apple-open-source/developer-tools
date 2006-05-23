@@ -1857,7 +1857,8 @@ tree-data-ref.o: tree-data-ref.c $(CONFIG_H) $(SYSTEM_H) coretypes.h $(TM_H) \
 tree-vect-analyze.o: tree-vect-analyze.c $(CONFIG_H) $(SYSTEM_H) coretypes.h $(TM_H) \
    errors.h $(GGC_H) $(OPTABS_H) $(TREE_H) $(RTL_H) $(BASIC_BLOCK_H) diagnostic.h \
    $(TREE_FLOW_H) $(TREE_DUMP_H) $(TIMEVAR_H) cfgloop.h \
-   tree-vectorizer.h tree-data-ref.h $(SCEV_H) $(EXPR_H)
+# APPLE LOCAL 4375453 \
+   tree-vectorizer.h tree-data-ref.h $(SCEV_H) $(EXPR_H) $(TARGET_H) 
 tree-vect-transform.o: tree-vect-transform.c $(CONFIG_H) $(SYSTEM_H) coretypes.h $(TM_H) \
    errors.h $(GGC_H) $(OPTABS_H) $(TREE_H) $(RTL_H) $(BASIC_BLOCK_H) diagnostic.h \
    $(TREE_FLOW_H) $(TREE_DUMP_H) $(TIMEVAR_H) cfgloop.h target.h tree-pass.h $(EXPR_H) \
@@ -2126,7 +2127,8 @@ loop-iv.o : loop-iv.c $(CONFIG_H) $(SYSTEM_H) $(RTL_H) $(GGC_H) \
 loop-invariant.o : loop-invariant.c $(CONFIG_H) $(SYSTEM_H) $(RTL_H) $(GGC_H) \
    $(BASIC_BLOCK_H) hard-reg-set.h cfgloop.h $(EXPR_H) coretypes.h $(TM_H) \
    function.h $(FLAGS_H) df.h
-cfgloopmanip.o : cfgloopmanip.c $(CONFIG_H) $(SYSTEM_H) $(RTL_H) \
+# APPLE LOCAL 4321079 options.h
+cfgloopmanip.o : cfgloopmanip.c $(CONFIG_H) $(SYSTEM_H) $(RTL_H) options.h \
    $(BASIC_BLOCK_H) hard-reg-set.h $(CFGLOOP_H) $(CFGLAYOUT_H) output.h coretypes.h $(TM_H)
 loop-init.o : loop-init.c $(CONFIG_H) $(SYSTEM_H) $(RTL_H) \
    $(BASIC_BLOCK_H) hard-reg-set.h $(CFGLOOP_H) $(CFGLAYOUT_H) \

@@ -99,7 +99,7 @@ typedef struct P5 {
     UINT8		f2;
 } P5;
 
-#ifdef __VEC__
+#ifdef __APPLE_ALTIVEC__
 typedef struct P61 {
     vector signed short *	f1;
     UINT8		f2;
@@ -108,7 +108,7 @@ typedef struct P61 {
 
 /* === vectors === */
 
-#ifdef __VEC__
+#ifdef __APPLE_ALTIVEC__
 typedef struct V1 {
     vector signed short f1;
     UINT8		f2;

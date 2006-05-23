@@ -161,7 +161,12 @@ proc c-torture-execute { sources args } {
 	verbose "Testing $testcase, $option" 1
 
 	set options ""
-	lappend options "additional_flags=-w $option"
+	# APPLE LOCAL begin testsuite nested functions
+	# -lgcc is a stupid hack around to avoid a tons of failures best shown by:
+	# FAIL: gcc.dg/trampoline-1.c (test for excess errors)
+	# Remove -lgcc when that testcase works
+	lappend options "additional_flags=-w -fnested-functions -lgcc $option"
+	# APPLE LOCAL end testsuite nested functions
 	if { $additional_flags != "" } {
 	    lappend options "additional_flags=$additional_flags";
 	}

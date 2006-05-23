@@ -1,6 +1,6 @@
 /* Objective-C language support routines for GDB, the GNU debugger.
 
-   Copyright 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
 
    Contributed by Apple Computer, Inc.
    Written by Michael Snyder.
@@ -30,6 +30,7 @@
 #include "language.h"
 #include "c-lang.h"
 #include "objc-lang.h"
+#include "exceptions.h"
 #include "complaints.h"
 #include "value.h"
 #include "symfile.h"
@@ -107,14 +108,14 @@ lookup_struct_typedef (char *name, struct block *block, int noerr)
       if (noerr)
 	return 0;
       else 
-	error ("No struct type named %s.", name);
+	error (_("No struct type named %s."), name);
     }
   if (TYPE_CODE (SYMBOL_TYPE (sym)) != TYPE_CODE_STRUCT)
     {
       if (noerr)
 	return 0;
       else
-	error ("This context has class, union or enum %s, not a struct.", 
+	error (_("This context has class, union or enum %s, not a struct."), 
 	       name);
     }
   return sym;
@@ -135,6 +136,7 @@ lookup_objc_class (char *classname)
 
   if (function == NULL)
     {
+      /* APPLE LOCAL begin Objective-C */
       if (lookup_minimal_symbol("objc_lookUpClass", 0, 0))
 	function = create_cached_function ("objc_lookUpClass",
 					   builtin_type_voidptrfuncptr);
@@ -142,10 +144,8 @@ lookup_objc_class (char *classname)
 	function = create_cached_function ("objc_lookup_class",
 					   builtin_type_voidptrfuncptr);
       else
-	{
-	  complaint (&symfile_complaints, "no way to lookup Objective-C classes");
-	  return 0;
-	}
+        return 0;
+      /* APPLE LOCAL end Objective-C */
     }
 
   classval = value_string (classname, strlen (classname) + 1);
@@ -171,6 +171,7 @@ lookup_child_selector_nocache (char *selname)
 
   if (function == NULL)
     {
+      /* APPLE LOCAL begin Objective-C */
       if (lookup_minimal_symbol("sel_getUid", 0, 0))
 	function = create_cached_function ("sel_getUid",
 					   builtin_type_voidptrfuncptr);
@@ -183,6 +184,7 @@ lookup_child_selector_nocache (char *selname)
 	  complaint (&symfile_complaints, "no way to lookup Objective-C selectors");
 	  return 0;
 	}
+      /* APPLE LOCAL end Objective-C */
     }
 
   selstring = value_coerce_array (value_string (selname, 
@@ -196,7 +198,7 @@ lookup_child_selector_nocache (char *selname)
 
 struct selector_entry {
   char *name;
-  int val;
+  CORE_ADDR val;
   struct selector_entry *next;
 };
 
@@ -313,9 +315,9 @@ value_nsstring (char *ptr, int len)
       nsstringValue = call_function_by_hand(function, 3, &stringValue[0]);
     }
   else
-    error ("NSString: internal error -- no way to create new NSString");
+    error (_("NSString: internal error -- no way to create new NSString"));
 
-  VALUE_TYPE(nsstringValue) = type;
+  deprecated_set_value_type (nsstringValue, type);
   return nsstringValue;
 }
 
@@ -460,7 +462,7 @@ objc_printchar (int c, struct ui_file *stream)
    FORCE_ELLIPSES.  */
 
 static void
-objc_printstr (struct ui_file *stream, char *string, 
+objc_printstr (struct ui_file *stream, const gdb_byte *string, 
 	       unsigned int length, int width, int force_ellipses)
 {
   unsigned int i;
@@ -588,7 +590,7 @@ objc_create_fundamental_type (struct objfile *objfile, int typeid)
 	type = init_type (TYPE_CODE_INT,
 			  TARGET_INT_BIT / TARGET_CHAR_BIT,
 			  0, "<?type?>", objfile);
-        warning ("internal error: no C/C++ fundamental type %d", typeid);
+        warning (_("internal error: no C/C++ fundamental type %d"), typeid);
 	break;
       case FT_VOID:
 	type = init_type (TYPE_CODE_VOID,
@@ -785,9 +787,11 @@ const struct language_defn objc_language_defn = {
   range_check_off,
   type_check_off,
   case_sensitive_on,
+  array_row_major,
   &exp_descriptor_standard,
   objc_parse,
   objc_error,
+  null_post_parser,
   objc_printchar,		/* Print a character constant */
   objc_printstr,		/* Function to print string constant */
   objc_emit_char,
@@ -800,18 +804,17 @@ const struct language_defn objc_language_defn = {
   basic_lookup_symbol_nonlocal, /* lookup_symbol_nonlocal */
   basic_lookup_transparent_type,/* lookup_transparent_type */
   objc_demangle,                /* Language specific symbol demangler */
-  {"",     "",    "",  ""},	/* Binary format info */
-  {"0%lo",  "0",   "o", ""},	/* Octal format info */
-  {"%ld",   "",    "d", ""},	/* Decimal format info */
-  {"0x%lx", "0x",  "x", ""},	/* Hex format info */
+  NULL,				/* Language specific class_name_from_physname */
   objc_op_print_tab,		/* expression operators for printing */
   1,				/* c-style arrays */
   0,				/* String lower bound */
   &builtin_type_char,		/* Type of string elements */
   default_word_break_characters,
+  NULL, /* FIXME: la_language_arch_info.  */
   LANG_MAGIC
 };
 
+/* APPLE LOCAL begin Objective-C++ */
 const struct language_defn objcplus_language_defn = {
   "objective-c++",				/* Language name */
   language_objcplus,
@@ -819,9 +822,11 @@ const struct language_defn objcplus_language_defn = {
   range_check_off,
   type_check_off,
   case_sensitive_on,
+  array_row_major,
   &exp_descriptor_standard,
   objc_parse,
   objc_error,
+  null_post_parser,
   objc_printchar,		/* Print a character constant */
   objc_printstr,		/* Function to print string constant */
   objc_emit_char,
@@ -834,15 +839,13 @@ const struct language_defn objcplus_language_defn = {
   basic_lookup_symbol_nonlocal,	/* lookup_symbol_nonlocal */
   basic_lookup_transparent_type,/* lookup_transparent_type */
   objcplus_demangle,		/* Language specific symbol demangler */
-  {"",     "",    "",  ""},	/* Binary format info */
-  {"0%lo",  "0",   "o", ""},	/* Octal format info */
-  {"%ld",   "",    "d", ""},	/* Decimal format info */
-  {"0x%lx", "0x",  "x", ""},	/* Hex format info */
+  NULL,
   objc_op_print_tab,		/* Expression operators for printing */
   1,				/* C-style arrays */
   0,				/* String lower bound */
   &builtin_type_char,		/* Type of string elements */
   default_word_break_characters,
+  NULL, /* FIXME: la_language_arch_info.  */
   LANG_MAGIC
 };
 
@@ -921,7 +924,7 @@ end_msglist(void)
   msglist_sel = sel->msglist_sel;
   selid = lookup_child_selector(p);
   if (!selid)
-    error("Can't find selector \"%s\"", p);
+    error (_("Can't find selector \"%s\""), p);
   write_exp_elt_longcst (selid);
   xfree(p);
   write_exp_elt_longcst (val);	/* Number of args */
@@ -968,12 +971,12 @@ compare_selectors (const void *a, const void *b)
   aname = SYMBOL_PRINT_NAME (*(struct symbol **) a);
   bname = SYMBOL_PRINT_NAME (*(struct symbol **) b);
   if (aname == NULL || bname == NULL)
-    error ("internal: compare_selectors(1)");
+    error (_("internal: compare_selectors(1)"));
 
   aname = strchr(aname, ' ');
   bname = strchr(bname, ' ');
   if (aname == NULL || bname == NULL)
-    error ("internal: compare_selectors(2)");
+    error (_("internal: compare_selectors(2)"));
 
   return specialcmp (aname+1, bname+1);
 }
@@ -1028,7 +1031,7 @@ selectors_info (char *regexp, int from_tty)
     {
       val = re_comp (myregexp);
       if (val != 0)
-	error ("Invalid regexp (%s): %s", val, regexp);
+	error (_("Invalid regexp (%s): %s"), val, regexp);
     }
 
   /* First time thru is JUST to get max length and count.  */
@@ -1058,7 +1061,7 @@ selectors_info (char *regexp, int from_tty)
     }
   if (matches)
     {
-      printf_filtered ("Selectors matching \"%s\":\n\n", 
+      printf_filtered (_("Selectors matching \"%s\":\n\n"), 
 		       regexp ? regexp : "*");
 
       sym_arr = alloca (matches * sizeof (struct symbol *));
@@ -1105,7 +1108,7 @@ selectors_info (char *regexp, int from_tty)
       begin_line();
     }
   else
-    printf_filtered ("No selectors matching \"%s\"\n", regexp ? regexp : "*");
+    printf_filtered (_("No selectors matching \"%s\"\n"), regexp ? regexp : "*");
 }
 
 /*
@@ -1123,7 +1126,7 @@ compare_classes (const void *a, const void *b)
   aname = SYMBOL_PRINT_NAME (*(struct symbol **) a);
   bname = SYMBOL_PRINT_NAME (*(struct symbol **) b);
   if (aname == NULL || bname == NULL)
-    error ("internal: compare_classes(1)");
+    error (_("internal: compare_classes(1)"));
 
   return specialcmp (aname+1, bname+1);
 }
@@ -1168,7 +1171,7 @@ classes_info (char *regexp, int from_tty)
     {
       val = re_comp (myregexp);
       if (val != 0)
-	error ("Invalid regexp (%s): %s", val, regexp);
+	error (_("Invalid regexp (%s): %s"), val, regexp);
     }
 
   /* First time thru is JUST to get max length and count.  */
@@ -1192,7 +1195,7 @@ classes_info (char *regexp, int from_tty)
     }
   if (matches)
     {
-      printf_filtered ("Classes matching \"%s\":\n\n", 
+      printf_filtered (_("Classes matching \"%s\":\n\n"), 
 		       regexp ? regexp : "*");
       sym_arr = alloca (matches * sizeof (struct symbol *));
       matches = 0;
@@ -1231,7 +1234,7 @@ classes_info (char *regexp, int from_tty)
       begin_line();
     }
   else
-    printf_filtered ("No classes matching \"%s\"\n", regexp ? regexp : "*");
+    printf_filtered (_("No classes matching \"%s\"\n"), regexp ? regexp : "*");
 }
 
 /* 
@@ -1443,7 +1446,8 @@ find_methods (struct symtab *symtab, char type,
   struct minimal_symbol *msymbol = NULL;
   struct block *block = NULL;
   struct symbol *sym = NULL;
-
+  struct cleanup * old_list = NULL;
+  
   char *symname = NULL;
 
   char ntype = '\0';
@@ -1522,7 +1526,26 @@ find_methods (struct symtab *symtab, char type,
 	  ((nselector == NULL) || (strcmp (selector, nselector) != 0)))
 	continue;
 
-      sym = find_pc_sect_function (SYMBOL_VALUE_ADDRESS (msymbol), SYMBOL_BFD_SECTION (msymbol));
+      /* APPLE LOCAL: Restrict the scope of the search when calling
+	 find_pc_sect_function() to the current objfile that we
+	 already have else we will get a recursive call that can
+	 modify the restrict list and can cause an infinite loop.  */
+      if (objfile->separate_debug_objfile)
+        {
+	  old_list = 
+             make_cleanup_restrict_to_objfile (objfile->separate_debug_objfile);
+	  sym = find_pc_sect_function (SYMBOL_VALUE_ADDRESS (msymbol), 
+                                       SYMBOL_BFD_SECTION (msymbol));
+	  do_cleanups (old_list);
+        }
+      if (sym == NULL)
+        {
+	  old_list = make_cleanup_restrict_to_objfile (objfile);
+	  sym = find_pc_sect_function (SYMBOL_VALUE_ADDRESS (msymbol), 
+                                       SYMBOL_BFD_SECTION (msymbol));
+	  do_cleanups (old_list);
+        }
+      
       if (sym != NULL)
         {
           const char *newsymname = SYMBOL_NATURAL_NAME (sym);
@@ -1701,7 +1724,7 @@ print_object_command (char *args, int from_tty)
   int unwind;
   CORE_ADDR string_addr, object_addr;
   int i = 0;
-  char c = -1;
+  gdb_byte c = 0;
   const char *fn_name;
 
   if (!args || !*args)
@@ -1728,29 +1751,36 @@ print_object_command (char *args, int from_tty)
     do_cleanups (old_chain);
   }
 
-  if (object != NULL && TYPE_CODE(VALUE_TYPE (object)) == TYPE_CODE_ERROR)
+  /* APPLE LOCAL begin */
+  if (object != NULL && TYPE_CODE(value_type (object)) == TYPE_CODE_ERROR)
     {
       struct type *id_type;
       id_type = lookup_typename ("id", NULL, 1);
       if (id_type)
-	object = value_cast (id_type, object);
+      object = value_cast (id_type, object);
     }
+  /* APPLE LOCAL end */
 
   /* Validate the address for sanity.  */
   object_addr = value_as_long (object);
   read_memory (object_addr, &c, 1);
 
+  /* APPLE LOCAL begin */
   fn_name = "_NSPrintForDebugger";
-  if (lookup_minimal_symbol (fn_name, NULL, NULL) == NULL) 
+  if (lookup_minimal_symbol (fn_name, NULL, NULL) == NULL)
     {
       fn_name = "_CFPrintForDebugger";
-      if (lookup_minimal_symbol (fn_name, NULL, NULL) == NULL) 
-        error ("Unable to locate _NSPrintForDebugger or _CFPrintForDebugger in child process");
+      if (lookup_minimal_symbol (fn_name, NULL, NULL) == NULL)
+        error (_("Unable to locate _NSPrintForDebugger or _CFPrintForDebugger "
+               "in child process"));
     }
   function = find_function_in_inferior (fn_name,
-					builtin_type_voidptrfuncptr);
+                                        builtin_type_voidptrfuncptr);
+  /* APPLE LOCAL end */
+
   if (function == NULL)
-    error ("Unable to locate _NSPrintForDebugger or _CFPrintForDebugger in child process");
+    error (_("Unable to locate _NSPrintForDebugger or _CFPrintForDebugger in "
+             "child process"));
 
   unwind = set_unwind_on_signal (1);
   cleanup_chain = make_cleanup (set_unwind_on_signal, unwind);
@@ -1761,10 +1791,10 @@ print_object_command (char *args, int from_tty)
 
   string_addr = value_as_long (description);
   if (string_addr == 0)
-    error ("object returns null description");
+    error (_("object returns null description"));
 
   read_memory (string_addr + i++, &c, 1);
-  if (c != '\0')
+  if (c != 0)
     do
       { /* Read and print characters up to EOS.  */
 	QUIT;
@@ -1772,7 +1802,7 @@ print_object_command (char *args, int from_tty)
 	read_memory (string_addr + i++, &c, 1);
       } while (c != 0);
   else
-    printf_filtered("<object returns empty description>");
+    printf_filtered(_("<object returns empty description>"));
   printf_filtered ("\n");
 }
 
@@ -1824,41 +1854,45 @@ static void
 find_objc_msgsend (void)
 {
   unsigned int i;
+
+  /* APPLE LOCAL cached objc msgsend table */
   if (cached_objc_msgsend_table_is_valid)
     return;
 
-  for (i = 0; i < nmethcalls; i++) {
+  for (i = 0; i < nmethcalls; i++) 
+    {
 
-    struct minimal_symbol *func, *orig_func;
+      struct minimal_symbol *func, *orig_func;
 
-    /* Try both with and without underscore.  */
-    func = lookup_minimal_symbol (methcalls[i].name, NULL, NULL);
-    if ((func == NULL) && (methcalls[i].name[0] == '_')) {
-      func = lookup_minimal_symbol (methcalls[i].name + 1, NULL, NULL);
-    }
-    if (func == NULL) { 
-      methcalls[i].begin = 0;
-      methcalls[i].end = 0;
-      continue; 
-    }
-    
-    methcalls[i].begin = SYMBOL_VALUE_ADDRESS (func);
-    orig_func = func;
-
-    do {
-      methcalls[i].end = SYMBOL_VALUE_ADDRESS (++func);
-    } while (methcalls[i].begin == methcalls[i].end);
-    /* APPLE LOCAL: If we didn't find a higher symbol, it means this
-       was the last symbol in the objfile, so we set end to the end of
-       the section.  */
-
-    if (methcalls[i].end == 0 && orig_func->ginfo.bfd_section != NULL)
-      {
-	methcalls[i].end = orig_func->ginfo.bfd_section->lma 
-	  + orig_func->ginfo.bfd_section->_raw_size;
+      /* Try both with and without underscore.  */
+      func = lookup_minimal_symbol (methcalls[i].name, NULL, NULL);
+      if ((func == NULL) && (methcalls[i].name[0] == '_')) {
+        func = lookup_minimal_symbol (methcalls[i].name + 1, NULL, NULL);
       }
-  }
+      if (func == NULL) { 
+        methcalls[i].begin = 0;
+        methcalls[i].end = 0;
+        continue; 
+      }
+    
+      methcalls[i].begin = SYMBOL_VALUE_ADDRESS (func);
+      orig_func = func;
 
+      do {
+        methcalls[i].end = SYMBOL_VALUE_ADDRESS (++func);
+      } while (methcalls[i].begin == methcalls[i].end);
+
+      /* APPLE LOCAL: If we didn't find a higher symbol, it means this
+         was the last symbol in the objfile, so we set end to the end of
+         the section.  */
+
+      if (methcalls[i].end == 0 && orig_func->ginfo.bfd_section != NULL)
+        {
+	  methcalls[i].end = orig_func->ginfo.bfd_section->lma 
+                             + orig_func->ginfo.bfd_section->size;
+        }
+    }
+  /* APPLE LOCAL cached objc msgsend table */
   cached_objc_msgsend_table_is_valid = 1;
 }
 
@@ -1871,6 +1905,7 @@ tell_objc_msgsend_cacher_objfile_changed (struct objfile *obj __attribute__ ((__
 {
   cached_objc_msgsend_table_is_valid = 0;
 }
+/* APPLE LOCAL end */
 
 /* find_objc_msgcall (replaces pc_off_limits)
  *
@@ -1957,11 +1992,11 @@ _initialize_objc_language (void)
   add_language (&objc_language_defn);
   add_language (&objcplus_language_defn);
   add_info ("selectors", selectors_info,    /* INFO SELECTORS command.  */
-	    "All Objective-C selectors, or those matching REGEXP.");
+	    _("All Objective-C selectors, or those matching REGEXP."));
   add_info ("classes", classes_info, 	    /* INFO CLASSES   command.  */
-	    "All Objective-C classes, or those matching REGEXP.");
+	    _("All Objective-C classes, or those matching REGEXP."));
   add_com ("print-object", class_vars, print_object_command, 
-	   "Ask an Objective-C object to print itself.");
+	   _("Ask an Objective-C object to print itself."));
   add_com_alias ("po", "print-object", class_vars, 1);
 }
 
@@ -2251,7 +2286,7 @@ value_objc_target_type (struct value *val, struct block *block)
 {
   struct type *base_type, *dynamic_type = NULL;
 
-  base_type = check_typedef (VALUE_TYPE (val));
+  base_type = check_typedef (value_type (val));
 
   for (;;)
     {
@@ -2275,23 +2310,41 @@ value_objc_target_type (struct value *val, struct block *block)
     {
       int i;
       char *t_field_name;
+      short nfields;
       
-      if (TYPE_NFIELDS (base_type) == 0)
-	return NULL;
-
+      t_field_name = NULL;
+      nfields = TYPE_NFIELDS (base_type); 
+      
       /* The first field is the isa field (offset by TYPE_N_BASECLASSES in
-	 case we ever add hierarchy info to the ObjC class types.)  
+        case we ever add hierarchy info to the ObjC class types.)  
          isa points to the dynamic type class object.  The "name" field of
          that object gives us the dynamic class name.  However, again we
          might get an incomplete type that we have baseclass info for,
          so make sure we aren't indexing past the end of the fields array.  */
 
-      i = TYPE_N_BASECLASSES (base_type);
+      while (base_type && nfields != 0)
+        {
+         i = TYPE_N_BASECLASSES (base_type);
+         if (i >= nfields)
+           return NULL;
+         
+         t_field_name = TYPE_FIELD_NAME (base_type, i);
+      
+         /* DWARF information will have an artificial member with no name
+            that points to a base class that actually may have it's first member
+            that is named "isa". So keep getting the */
+         if (t_field_name && t_field_name[0] == '\0')
+           {
+             base_type = TYPE_FIELD_TYPE(base_type, i);
+             if (base_type)
+               nfields = TYPE_NFIELDS (base_type); 
+             else
+               nfields = 0;
+           }
+         else
+           break;
+       }
 
-      if (i >= TYPE_NFIELDS (base_type))
-	return NULL;
-
-      t_field_name = TYPE_FIELD_NAME (base_type, i);
       if (t_field_name && (strcmp_iw (t_field_name, "isa") == 0))
 	{
 	  struct symbol *class_symbol;
@@ -2345,12 +2398,14 @@ _initialize_objc_lang ()
 			   " situations before calling print-object.",
 			   "Show whether to override the check for potentially unsafe"
 			   " situations before calling print-object.",
+			   "??",
 			   NULL, NULL,
 			   &setlist, &showlist);
 		      
   add_setshow_boolean_cmd ("lookup-objc-class", no_class, &lookup_objc_class_p,
 			   "Set whether we should attempt to lookup Obj-C classes when we resolve symbols.",
 			   "Show whether we should attempt to lookup Obj-C classes when we resolve symbols.",
+			   "??",
 			   NULL, NULL,
 			   &setlist, &showlist);
 }

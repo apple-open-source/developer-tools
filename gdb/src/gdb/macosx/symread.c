@@ -1056,15 +1056,15 @@ sym_read_functions (struct objfile *objfile,
 static void
 sym_symfile_init (struct objfile *objfile)
 {
-  objfile->sym_stab_info =
+  objfile->deprecated_sym_stab_info =
     xmmalloc (objfile->md, sizeof (struct dbx_symfile_info));
 
-  memset ((PTR) objfile->sym_stab_info, 0, sizeof (struct dbx_symfile_info));
+  memset ((PTR) objfile->deprecated_sym_stab_info, 0, sizeof (struct dbx_symfile_info));
 
-  objfile->sym_private =
+  objfile->deprecated_sym_private =
     xmmalloc (objfile->md, sizeof (struct sym_symfile_info));
 
-  memset (objfile->sym_private, 0, sizeof (struct sym_symfile_info));
+  memset (objfile->deprecated_sym_private, 0, sizeof (struct sym_symfile_info));
 
   objfile->flags |= OBJF_REORDERED;
   init_entry_point_info (objfile);

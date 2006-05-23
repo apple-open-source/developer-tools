@@ -4,7 +4,8 @@
    options.  */
 /* Origin: Joseph Myers <jsm@polyomino.org.uk> */
 /* { dg-do compile } */
-/* { dg-options "" } */
+/* APPLE LOCAL testsuite nested functions */
+/* { dg-options "-fnested-functions" } */
 
 auto void f0 (void) {} /* { dg-warning "warning: function definition declared 'auto'" } */
 register void f1 (void) {} /* { dg-error "error: function definition declared 'register'" } */
@@ -41,7 +42,3 @@ register void f8 (void); /* { dg-error "error: invalid storage class for functio
 void i (void) { auto void y (void) {} }
 
 inline int main (void) { return 0; } /* { dg-warning "warning: cannot inline function 'main'" } */
-/* APPLE LOCAL begin testsuite nested functions */
-/* { dg-error "error: nested functions are not supported on MacOSX" "nested" { target *-*-darwin* } 22 } */
-/* { dg-error "error: nested functions are not supported on MacOSX" "nested" { target *-*-darwin* } 41 } */
-/* APPLE LOCAL end testsuite nested functions */

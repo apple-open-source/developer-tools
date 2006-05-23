@@ -1,6 +1,6 @@
 /* { dg-do run } */
 /* APPLE LOCAL testsuite nested functions */
-/* { dg-xfail-if "" { *-*-darwin* } } */
+/* { dg-options "-O2 -g -fnested-functions" } */
 /* Verify that the search for function happens in the proper scope.  */
 
 extern void exit(int);

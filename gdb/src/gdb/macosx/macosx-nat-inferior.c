@@ -21,24 +21,6 @@
    Foundation, Inc., 59 Temple Place - Suite 330,
    Boston, MA 02111-1307, USA.  */
 
-#include "macosx-nat-dyld.h"
-#include "macosx-nat-inferior.h"
-#include "macosx-nat-infthread.h"
-#include "macosx-nat-inferior-debug.h"
-#include "macosx-nat-mutils.h"
-#include "macosx-nat-excthread.h"
-#include "macosx-nat-sigthread.h"
-#include "macosx-nat-threads.h"
-#include "macosx-xdep.h"
-/* classic-inferior-support */
-#include "macosx-nat.h"
-#include "macosx-nat-inferior-util.h"
-#include "macosx-nat-dyld-process.h"
-
-#if WITH_CFM
-#include "macosx-nat-cfm.h"
-#endif
-
 #include "defs.h"
 #include "top.h"
 #include "inferior.h"
@@ -56,6 +38,8 @@
 #include "event-loop.h"
 #include "inf-loop.h"
 #include "gdb_stat.h"
+#include "exceptions.h"
+#include "checkpoint.h"
 
 #include "bfd.h"
 
@@ -74,6 +58,44 @@
 #include <libxml/parser.h>
 #include <libxml/tree.h>
 #endif
+
+#include "macosx-nat-dyld.h"
+#include "macosx-nat-inferior.h"
+#include "macosx-nat-infthread.h"
+#include "macosx-nat-inferior-debug.h"
+#include "macosx-nat-mutils.h"
+#include "macosx-nat-excthread.h"
+#include "macosx-nat-sigthread.h"
+#include "macosx-nat-threads.h"
+#include "macosx-xdep.h"
+/* classic-inferior-support */
+#include "macosx-nat.h"
+#include "macosx-nat-inferior-util.h"
+#include "macosx-nat-dyld-process.h"
+
+#if WITH_CFM
+#include "macosx-nat-cfm.h"
+#endif
+
+#define MACH64 (MAC_OS_X_VERSION_MAX_ALLOWED >= 1040)
+
+#if MACH64
+
+#include <mach/mach_vm.h>
+
+#else /* ! MACH64 */
+
+#define mach_vm_size_t vm_size_t
+#define mach_vm_address_t vm_address_t
+#define mach_vm_read vm_read
+#define mach_vm_write vm_write
+#define mach_vm_region vm_region
+#define mach_vm_protect vm_protect
+#define VM_REGION_BASIC_INFO_COUNT_64 VM_REGION_BASIC_INFO_COUNT
+#define VM_REGION_BASIC_INFO_64 VM_REGION_BASIC_INFO
+
+#endif /* MACH64 */
+
 
 #ifndef EXC_SOFT_SIGNAL
 #define EXC_SOFT_SIGNAL 0
@@ -103,7 +125,7 @@ extern int standard_can_async_p (void);
 
 extern bfd *exec_bfd;
 
-extern struct target_ops child_ops;
+extern struct target_ops deprecated_child_ops;
 extern struct target_ops macosx_child_ops;
 
 extern struct target_ops exec_ops;
@@ -214,7 +236,7 @@ static void macosx_ptrace_me ();
 static void macosx_ptrace_him (int pid);
 
 static void macosx_child_create_inferior (char *exec_file, char *allargs,
-                                          char **env);
+                                          char **env, int from_tty);
 
 static void macosx_child_files_info (struct target_ops *ops);
 
@@ -836,6 +858,8 @@ macosx_process_events (struct macosx_inferior_status *inferior,
         {
           break;
         }
+
+      event_count++;
       if (source == NEXT_SOURCE_ERROR)
 	{
 	  /* We couldn't read from the inferior exception port.  Dunno why,
@@ -847,9 +871,13 @@ macosx_process_events (struct macosx_inferior_status *inferior,
 	  status->value.integer = 0;
 	  return 0;
 	}
+      else if (source == NEXT_SOURCE_SIGNAL)
+	{
+	  event = macosx_add_to_pending_events (source, buf);
+	  other_count++;
+	}
       else
         {
-          event_count++;
 
 	  event = macosx_add_to_pending_events (source, buf);
 	  event_type = get_event_type ((macosx_exception_thread_message *) buf);
@@ -1075,7 +1103,7 @@ macosx_child_resume (ptid_t ptid, int step, enum target_signal signal)
 
   macosx_inferior_resume_mach (macosx_status, -1);
 
-  if (event_loop_p && target_can_async_p ())
+  if (target_can_async_p ())
     target_async (inferior_event_handler, 0);
 
   if (target_is_async_p ())
@@ -1154,7 +1182,7 @@ static void
 macosx_mourn_inferior ()
 {
   unpush_target (&macosx_child_ops);
-  child_ops.to_mourn_inferior ();
+  deprecated_child_ops.to_mourn_inferior ();
   macosx_inferior_destroy (macosx_status);
 
   inferior_ptid = null_ptid;
@@ -1812,7 +1840,8 @@ macosx_ptrace_him (int pid)
 }
 
 static void
-macosx_child_create_inferior (char *exec_file, char *allargs, char **env)
+macosx_child_create_inferior (char *exec_file, char *allargs, char **env,
+			      int from_tty)
 {
   if ((exec_bfd != NULL) &&
       (exec_bfd->xvec->flavour == bfd_target_pef_flavour
@@ -1837,7 +1866,7 @@ macosx_child_create_inferior (char *exec_file, char *allargs, char **env)
 
   attach_flag = 0;
 
-  if (event_loop_p && target_can_async_p ())
+  if (target_can_async_p ())
     target_async (inferior_event_handler, 0);
 
   clear_proceed_status ();
@@ -1920,7 +1949,7 @@ interrupt_query (void)
 Give up (and stop debugging it)? "))
     {
       target_mourn_inferior ();
-      throw_exception (RETURN_QUIT);
+      deprecated_throw_reason (RETURN_QUIT);
     }
 
   target_terminal_inferior ();
@@ -2572,11 +2601,222 @@ macosx_print_extra_stop_info (int code, CORE_ADDR address)
   ui_out_text (uiout, "\n");
 }
 
+/* Info for a random fork (actually a random process). When fork-based checkpoints
+   are fully functional, this can go away.  */
+
+/* static */ void
+cpfork_info (char *args, int from_tty)
+{
+  task_t itask;
+  int pid;
+  int ret;
+
+  if (args == NULL)
+    {
+      error_no_arg ("process-id to attach");
+    }
+
+  macosx_lookup_task (args, &itask, &pid);
+  if (itask == TASK_NULL)
+    {
+      error ("unable to locate task");
+      return;
+    }
+
+  ret = call_ptrace (PTRACE_ATTACHEXC, pid, 0, 0);
+  if (ret != 0)
+    {
+      if (errno == EPERM)
+	{
+	  error ("Unable to attach to process-id %d: %s (%d).\n"
+		 "This request requires that the target process be neither setuid nor "
+		 "setgid and have the same real userid as the debugger, or that the "
+		 "debugger be running with administrator privileges.",
+		 pid, strerror (errno), errno);
+	}
+      else
+	{
+	  error ("Unable to attach to process-id %d: %s (%d)",
+		 pid, strerror (errno), errno);
+	}
+      return;
+    }
+  printf ("Attached\n");
+
+ {
+    vm_address_t        address = 0;
+    vm_size_t           size = 0;
+    kern_return_t       err = 0;
+    int cnt = 0;
+
+    while (1) {
+      if (cnt++ > 6)
+	break;
+      mach_msg_type_number_t  count;
+      struct vm_region_submap_info_64 info;
+      int nestingDepth;
+
+      count = VM_REGION_SUBMAP_INFO_COUNT_64;
+      printf("count now %d\n", count);
+      err = vm_region_recurse_64(itask, &address, &size, &nestingDepth,
+				 (vm_region_info_64_t)&info,&count);
+      if (err == KERN_INVALID_ADDRESS) {
+	break;
+      } else if (err) {
+	mach_error("vm_region",err);
+	break; // reached last region
+      }
+      printf("count now %d\n", count);
+      printf("addr %x size %d\n", address, size);
+
+      {
+	int rslt;
+	unsigned char buf[10000];
+	vm_offset_t mempointer;       /* local copy of inferior's memory */
+	mach_msg_type_number_t memcopied;     /* for vm_read to use */
+
+	memset(buf, 0, 9999);
+
+	rslt = mach_vm_read (itask, address, 1000 + cnt * 4, &mempointer, &memcopied);
+
+	printf("rslt is %d, copied %d\n", rslt, memcopied);
+	if (rslt == KERN_SUCCESS)
+	  {
+	    int i;
+
+	    memcpy (buf, ((unsigned char *) 0) + mempointer, 1000);
+
+	    for (i = 0; i < 25; ++i)
+	      {
+		printf("%x ", (int) buf[i]);
+	      }
+	    printf("\n");
+	  }
+      }
+
+      if (info.is_submap) { // is it a submap?
+	nestingDepth++;
+      } else {
+	address = address+size;
+      }
+    }
+ }
+
+  ret = call_ptrace (PTRACE_DETACH, pid, 1, 0);
+
+  task_resume (itask);
+
+}
+
+/* Checkpoint support.  */
+
+/* Given a checkpoint, collect blocks of memory from the fork that is serving
+   as its "backing store", and install them into the current inferior.  */
+
+void
+fork_memcache_put (struct checkpoint *cp)
+{
+  task_t itask;
+  int ret;
+  int kret;
+  int pid = cp->pid;
+  vm_address_t        address = 0;
+  vm_size_t           size = 0;
+  kern_return_t       err = 0;
+  int cnt = 0;
+
+  kret = task_for_pid (mach_task_self (), pid, &itask);
+  if (kret != KERN_SUCCESS)
+    {
+      error ("Unable to locate task for process-id %d: %s.", pid,
+	     MACH_ERROR_STRING (kret));
+    }
+  if (itask == TASK_NULL)
+    {
+      error ("unable to locate task");
+      return;
+    }
+
+  ret = call_ptrace (PTRACE_ATTACHEXC, pid, 0, 0);
+  if (ret != 0)
+    {
+      if (errno == EPERM)
+	{
+	  error ("Unable to attach to process-id %d: %s (%d).\n"
+		 "This request requires that the target process be neither setuid nor "
+		 "setgid and have the same real userid as the debugger, or that the "
+		 "debugger be running with administrator privileges.",
+		 pid, strerror (errno), errno);
+	}
+      else
+	{
+	  error ("Unable to attach to process-id %d: %s (%d)",
+		 pid, strerror (errno), errno);
+	}
+      return;
+    }
+
+  while (1)
+    {
+      mach_msg_type_number_t  count;
+      struct vm_region_submap_info_64 info;
+      int nesting_depth;
+
+      count = VM_REGION_SUBMAP_INFO_COUNT_64;
+      err = vm_region_recurse_64 (itask, &address, &size, &nesting_depth,
+				  (vm_region_info_64_t) &info, &count);
+      if (err == KERN_INVALID_ADDRESS)
+	{
+	  break;
+	}
+      else if (err)
+	{
+	  mach_error ("vm_region",err);
+	  break; // reached last region
+	}
+
+      if (info.protection & VM_PROT_WRITE)
+	{
+	  int rslt;
+	  unsigned char buf[10000];
+	  vm_offset_t mempointer;       /* local copy of inferior's memory */
+	  mach_msg_type_number_t memcopied;     /* for vm_read to use */
+
+	  printf("count now %d addr %x size %d\n", count, address, size);
+	  
+	  memset(buf, 0, 9999);
+
+	  rslt = mach_vm_read (itask, address, size, &mempointer, &memcopied);
+
+	  printf("rslt is %d, copied %d\n", rslt, memcopied);
+	  if (rslt == KERN_SUCCESS)
+	    {
+	      int i;
+
+	      memcpy (buf, ((unsigned char *) 0) + mempointer, 1000);
+
+#if 0
+	      for (i = 0; i < 25; ++i)
+		{
+		  printf("%x ", (int) buf[i]);
+		}
+	      printf("\n");
+#endif
+
+	      target_write_memory (address, buf, 900);
+	    }
+	}
+      
+      if (info.is_submap)
+	nesting_depth++;
+      else
+	address += size;
+    }
+}
+
 void
 _initialize_macosx_inferior ()
 {
-  struct cmd_list_element *cmd;
-
   CHECK_FATAL (macosx_status == NULL);
   macosx_status = (struct macosx_inferior_status *)
     xmalloc (sizeof (struct macosx_inferior_status));
@@ -2587,8 +2827,8 @@ _initialize_macosx_inferior ()
   dyld_objfile_info_init (&macosx_status->dyld_status.current_info);
 
   init_child_ops ();
-  macosx_child_ops = child_ops;
-  child_ops.to_can_run = NULL;
+  macosx_child_ops = deprecated_child_ops;
+  deprecated_child_ops.to_can_run = NULL;
 
   init_exec_ops ();
   macosx_exec_ops = exec_ops;
@@ -2638,7 +2878,8 @@ _initialize_macosx_inferior ()
   macosx_child_ops.to_thread_alive = macosx_child_thread_alive;
   macosx_child_ops.to_pid_to_str = macosx_pid_to_str;
   macosx_child_ops.to_load = NULL;
-  macosx_child_ops.to_xfer_memory = mach_xfer_memory;
+  macosx_child_ops.deprecated_xfer_memory = mach_xfer_memory;
+  macosx_child_ops.to_xfer_partial = mach_xfer_partial;
   macosx_child_ops.to_can_async_p = standard_can_async_p;
   macosx_child_ops.to_is_async_p = standard_is_async_p;
   macosx_child_ops.to_terminal_inferior = macosx_terminal_inferior;
@@ -2658,6 +2899,13 @@ _initialize_macosx_inferior ()
   macosx_child_ops.to_get_current_exception_event
     = macosx_get_current_exception_event;
 
+  macosx_child_ops.to_find_exception_catchpoints
+    = macosx_find_exception_catchpoints;
+  macosx_child_ops.to_enable_exception_callback
+    = macosx_enable_exception_callback;
+  macosx_child_ops.to_get_current_exception_event
+    = macosx_get_current_exception_event;
+
   add_target (&macosx_exec_ops);
   add_target (&macosx_child_ops);
 
@@ -2665,48 +2913,58 @@ _initialize_macosx_inferior ()
   inferior_debug (2, "GDB task: 0x%lx, pid: %d\n", mach_task_self (),
                   getpid ());
 
-  cmd =
-    add_set_cmd ("inferior-bind-exception-port", class_obscure, var_boolean,
-                 (char *) &inferior_bind_exception_port_flag,
-                 "Set if GDB should bind the task exception port.", &setlist);
-  add_show_from_set (cmd, &showlist);
+  add_setshow_boolean_cmd ("inferior-bind-exception-port", class_obscure,
+			   &inferior_bind_exception_port_flag, _("\
+Set if GDB should bind the task exception port."), _("\
+Show if GDB should bind the task exception port."), NULL,
+			   NULL, NULL,
+			   &setlist, &showlist);
 
-  cmd = add_set_cmd ("inferior-handle-exceptions", class_obscure, var_boolean,
-                     (char *) &inferior_handle_exceptions_flag,
-                     "Set if GDB should handle exceptions or pass them to the UNIX handler.",
-                     &setlist);
-  add_show_from_set (cmd, &showlist);
+  add_setshow_boolean_cmd ("inferior-handle-exceptions", class_obscure,
+			   &inferior_handle_exceptions_flag, _("\
+Set if GDB should handle exceptions or pass them to the UNIX handler."), _("\
+Show if GDB should handle exceptions or pass them to the UNIX handler."), NULL,
+			   NULL, NULL,
+			   &setlist, &showlist);
 
-  cmd = add_set_cmd ("inferior-handle-all-events", class_obscure, var_boolean,
-                     (char *) &inferior_handle_all_events_flag,
-                     "Set if GDB should immediately handle all exceptions upon each stop, "
-                     "or only the first received.", &setlist);
-  add_show_from_set (cmd, &showlist);
+  add_setshow_boolean_cmd ("inferior-handle-all-events", class_obscure,
+			   &inferior_handle_all_events_flag, _("\
+Set if GDB should immediately handle all exceptions upon each stop, "
+							       "or only the first received."), _("\
+Show if GDB should immediately handle all exceptions upon each stop, "
+												 "or only the first received."), NULL,
+			   NULL, NULL,
+			   &setlist, &showlist);
 
-  cmd = add_set_cmd ("inferior-ptrace", class_obscure, var_boolean,
-                     (char *) &inferior_ptrace_flag,
-                     "Set if GDB should attach to the subprocess using ptrace ().",
-                     &setlist);
-  add_show_from_set (cmd, &showlist);
+  add_setshow_boolean_cmd ("inferior-ptrace", class_obscure,
+			   &inferior_ptrace_flag, _("\
+Set if GDB should attach to the subprocess using ptrace ()."), _("\
+Show if GDB should attach to the subprocess using ptrace ()."), NULL,
+			   NULL, NULL,
+			   &setlist, &showlist);
 
-  cmd = add_set_cmd ("inferior-ptrace-on-attach", class_obscure, var_boolean,
-                     (char *) &inferior_ptrace_on_attach_flag,
-                     "Set if GDB should attach to the subprocess using ptrace ().",
-                     &setlist);
-  add_show_from_set (cmd, &showlist);
-
-  cmd = add_set_cmd ("inferior-auto-start-dyld", class_obscure, var_boolean,
-                     (char *) &inferior_auto_start_dyld_flag,
-                     "Set if GDB should enable debugging of dyld shared libraries.",
-                     &setlist);
-  add_show_from_set (cmd, &showlist);
-  set_cmd_sfunc (cmd, macosx_set_auto_start_dyld);
+  add_setshow_boolean_cmd ("inferior-ptrace-on-attach", class_obscure,
+			   &inferior_ptrace_on_attach_flag, _("\
+Set if GDB should attach to the subprocess using ptrace ()."), _("\
+Show if GDB should attach to the subprocess using ptrace ()."), NULL,
+			   NULL, NULL,
+			   &setlist, &showlist);
+ 
+ add_setshow_boolean_cmd ("inferior-auto-start-dyld", class_obscure,
+			   &inferior_auto_start_dyld_flag, _("\
+Set if GDB should enable debugging of dyld shared libraries."), _("\
+Show if GDB should enable debugging of dyld shared libraries."), NULL,
+			   macosx_set_auto_start_dyld, NULL,
+			   &setlist, &showlist);
 
 #if WITH_CFM
-  cmd = add_set_cmd ("inferior-auto-start-cfm", class_obscure, var_boolean,
-                     (char *) &inferior_auto_start_cfm_flag,
-                     "Set if GDB should enable debugging of CFM shared libraries.",
-                     &setlist);
-  add_show_from_set (cmd, &showlist);
+  add_setshow_boolean_cmd ("inferior-auto-start-cfm", class_obscure,
+			   &inferior_auto_start_cfm_flag, _("\
+Set if GDB should enable debugging of CFM shared libraries."), _("\
+Show if GDB should enable debugging of CFM shared libraries."), NULL,
+			   NULL, NULL,
+			   &setlist, &showlist);
 #endif /* WITH_CFM */
+
+  add_info ("fork", cpfork_info, "help");
 }

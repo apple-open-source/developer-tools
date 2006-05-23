@@ -21,12 +21,6 @@
    Foundation, Inc., 59 Temple Place - Suite 330,
    Boston, MA 02111-1307, USA.  */
 
-#include "ppc-macosx-tdep.h"
-#include "ppc-macosx-regs.h"
-#include "ppc-macosx-regnums.h"
-#include "ppc-macosx-tdep.h"
-#include "ppc-macosx-frameinfo.h"
-
 #include "defs.h"
 #include "frame.h"
 #include "inferior.h"
@@ -44,6 +38,7 @@
 #include "frame-base.h"
 #include "frame-unwind.h"
 #include "dummy-frame.h"
+#include "gdb_assert.h"
 
 #include "libbfd.h"
 
@@ -53,10 +48,27 @@
 #include "gdbarch.h"
 #include "osabi.h"
 
+#include "ppc-macosx-tdep.h"
+#include "ppc-macosx-regs.h"
+#include "ppc-macosx-regnums.h"
+#include "ppc-macosx-tdep.h"
+#include "ppc-macosx-frameinfo.h"
+
 #include <mach/mach.h>
 #include <mach/mach_host.h>
 #include <mach/host_info.h>
 #include <mach/machine.h>
+
+/* static */ void
+rs6000_value_to_register (struct frame_info *frame,
+                          int regnum,
+                          struct type *type,
+                          const gdb_byte *from);
+/* static */ void
+rs6000_register_to_value (struct frame_info *frame,
+                          int regnum,
+                          struct type *type,
+                          gdb_byte *to);
 
 extern int backtrace_past_main;
 
@@ -101,6 +113,8 @@ extern int backtrace_past_main;
    0x0e0     redzone
 */
 
+const unsigned int PPC_FRAME_MAGIC = 0xfe30a3d7;
+
 const unsigned int PPC_SIGCONTEXT_PC_OFFSET = 0x90;
 const unsigned int PPC_SIGCONTEXT_SP_OFFSET = 0x9c;
 
@@ -144,6 +158,9 @@ ppc_alloc_frame_cache (void)
   int i;
 
   cache = FRAME_OBSTACK_ZALLOC (struct ppc_frame_cache);
+
+  cache->magic = PPC_FRAME_MAGIC;
+
   cache->saved_regs =
     (CORE_ADDR *) frame_obstack_zalloc ((NUM_REGS) * sizeof (CORE_ADDR));
 
@@ -169,9 +186,17 @@ struct ppc_frame_cache *
 ppc_frame_cache (struct frame_info *next_frame, void **this_cache)
 {
   struct ppc_frame_cache *cache;
+  ppc_function_boundaries *bounds;
+  ppc_function_boundaries lbounds;
+  CORE_ADDR pc;
+  int before_frame_setup;
 
   if (*this_cache)
-    return *this_cache;
+    {
+      cache = *this_cache;
+      gdb_assert (cache->magic == PPC_FRAME_MAGIC);
+      return cache;
+    }
 
   cache = ppc_alloc_frame_cache ();
   *this_cache = cache;
@@ -184,6 +209,32 @@ ppc_frame_cache (struct frame_info *next_frame, void **this_cache)
 
   cache->pc = frame_func_unwind (next_frame);
 
+  /* When we're within the prologue, the function looks frameless and
+     should be treated as such.  */
+  bounds = ppc_frame_function_boundaries (next_frame, this_cache);
+  if (bounds != NULL)
+    {
+      lbounds = *bounds;
+      pc = frame_pc_unwind (next_frame);
+      before_frame_setup = (pc >= lbounds.prologue_start
+			    && pc < lbounds.body_start);
+      if (!before_frame_setup)
+	cache->stack = read_memory_unsigned_integer (cache->stack, TARGET_PTR_BIT / 8);
+    }
+
+  extern int frame_debug;
+  if (frame_debug)
+    {
+      fprintf_unfiltered (gdb_stdlog, "\
+{{ ppc_frame_cache (nxframe=%d) ",
+			  frame_relative_level (next_frame));
+      fprintf_unfiltered (gdb_stdlog, "->");
+      fprintf_unfiltered (gdb_stdlog, " pc=0x%llx", (unsigned long long) cache->pc);
+      fprintf_unfiltered (gdb_stdlog, " stack=0x%llx", (unsigned long long) cache->stack);
+      fprintf_unfiltered (gdb_stdlog, " frame=0x%llx", (unsigned long long) cache->frame);
+      fprintf_unfiltered (gdb_stdlog, " }}\n");
+    }
+
   return cache;
 }
 
@@ -195,6 +246,9 @@ ppc_print_extra_frame_info (struct frame_info *next_frame, void **this_cache)
   struct ppc_frame_cache *cache;
   struct ppc_function_boundaries *bounds;
   struct ppc_function_properties *props;
+
+if (get_frame_type (get_prev_frame (next_frame)) == DUMMY_FRAME)
+    return;
 
   cache = ppc_frame_cache (next_frame, this_cache);
 
@@ -234,7 +288,7 @@ ppc_print_extra_frame_info (struct frame_info *next_frame, void **this_cache)
 static struct frame_id
 ppc_unwind_dummy_id (struct gdbarch *gdbarch, struct frame_info *next_frame)
 {
-  char buf[8];
+  gdb_byte buf[8];
   CORE_ADDR fp;
 
   frame_unwind_register (next_frame, SP_REGNUM, buf);
@@ -315,6 +369,7 @@ ppc_frame_find_prev_sp (struct frame_info * next_frame, void **this_cache)
 {
   ppc_function_properties *props = NULL;
   CORE_ADDR sp;
+  CORE_ADDR pc;
 
   sp = frame_unwind_register_unsigned (next_frame, SP_REGNUM);
   if (sp == 0)
@@ -325,6 +380,14 @@ ppc_frame_find_prev_sp (struct frame_info * next_frame, void **this_cache)
     return 0;
 
   if (props->frameless)
+    return sp;
+
+  /* If we're in the prologue prior to frame setup, act as if the
+     function was frameless, otherwise dereferencing the sp will go
+     one frame too far.  */
+  pc = frame_pc_unwind (next_frame);
+  if (pc >= frame_func_unwind (next_frame) 
+      && (props->frameptr_pc != INVALID_ADDRESS) && (pc < props->frameptr_pc))
     return sp;
 
   return read_memory_unsigned_integer (sp,
@@ -395,13 +458,14 @@ ppc_breakpoint_from_pc (CORE_ADDR * addr, int *size)
 }
 
 static struct type *
-ppc_register_virtual_type (int n)
+ppc_register_virtual_type (struct gdbarch *gdbarch, int n)
 {
   if (((n >= PPC_MACOSX_FIRST_GP_REGNUM) && (n <= PPC_MACOSX_LAST_GP_REGNUM))
       || (n == PPC_MACOSX_PC_REGNUM)
       || (n == PPC_MACOSX_PS_REGNUM)
       || (n == PPC_MACOSX_LR_REGNUM)
-      || (n == PPC_MACOSX_CTR_REGNUM) || (n == PPC_MACOSX_XER_REGNUM))
+      || (n == PPC_MACOSX_CTR_REGNUM)
+      || (n == PPC_MACOSX_XER_REGNUM))
     {
       /* I think it's okay to always treat registers as long long.  We always use
          the 64 bit calls even on G4 systems, and let the system cut this down to 32
@@ -458,7 +522,7 @@ static void
 ppc_frame_prev_register (struct frame_info *next_frame, void **this_cache,
                          int regnum, int *optimizedp,
                          enum lval_type *lvalp, CORE_ADDR * addrp,
-                         int *realnump, void *valuep)
+                         int *realnump, gdb_byte *valuep)
 {
   struct ppc_frame_cache *cache = ppc_frame_cache (next_frame, this_cache);
   CORE_ADDR *saved_regs = NULL;
@@ -532,8 +596,7 @@ ppc_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 	      *((int *) valuep) = 0;
 	    }
 
-          read_memory (*addrp, ((char *) valuep) + offset,
-                       wordsize);
+          read_memory (*addrp, valuep + offset, wordsize);
         }
       return;
     }
@@ -557,7 +620,7 @@ ppc_frame_this_id (struct frame_info *next_frame, void **this_cache,
     {
       ULONGEST prev_frame_addr = 0;
       if (safe_read_memory_unsigned_integer
-          (cache->stack, TARGET_PTR_BIT / 8, &prev_frame_addr))
+          (cache->frame, TARGET_PTR_BIT / 8, &prev_frame_addr))
         {
           if (safe_read_memory_unsigned_integer
               (prev_frame_addr, TARGET_PTR_BIT / 8, &prev_frame_addr))
@@ -569,7 +632,10 @@ ppc_frame_this_id (struct frame_info *next_frame, void **this_cache,
         }
     }
 
-  (*this_id) = frame_id_build (cache->frame, cache->pc);
+  /* cache->stack is the previous function's frame, works better as id
+     in prologues, because, technically, the frame doesn't exist
+     yet, and shouldn't be used.  */
+  (*this_id) = frame_id_build (cache->stack, cache->pc);
 }
 
 static struct ppc_frame_cache *
@@ -689,7 +755,7 @@ ppc_sigtramp_frame_prev_register (struct frame_info *next_frame,
                                   void **this_cache,
                                   int regnum, int *optimizedp,
                                   enum lval_type *lvalp, CORE_ADDR * addrp,
-                                  int *realnump, void *valuep)
+                                  int *realnump, gdb_byte *valuep)
 {
   struct ppc_frame_cache *cache =
     ppc_sigtramp_frame_cache (next_frame, this_cache);
@@ -709,26 +775,20 @@ ppc_sigtramp_frame_prev_register (struct frame_info *next_frame,
       if (valuep)
         {
           int reg_size = register_size (current_gdbarch, regnum);
-          if (regnum == PPC_MACOSX_CR_REGNUM)
-            {
+          if ((regnum == PPC_MACOSX_CR_REGNUM) || (regnum == PPC_MACOSX_MQ_REGNUM))
               size = 4;
-              offset = reg_size - size;
-            }
           else if (PPC_MACOSX_IS_GP_REGNUM (regnum) || PPC_MACOSX_IS_GSP_REGNUM (regnum))
-            {
               size = cache->sigtramp_gp_store_size;
-              offset = reg_size - size;
-            }
           else
-            {
               size = reg_size;
-              offset = 0;
-            }
+
+	  gdb_assert (reg_size >= size);
+	  offset = reg_size - size;
 
           if (reg_size > size)
             bzero ((char *) valuep, reg_size - size);
 
-          read_memory (*addrp, ((char *) valuep) + offset, size);
+          read_memory (*addrp, valuep + offset, size);
         }
       return;
     }
@@ -750,7 +810,7 @@ ppc_sigtramp_frame_sniffer (struct frame_info *next_frame)
   char *name;
 
   find_pc_partial_function (pc, &name, NULL, NULL);
-  if (PC_IN_SIGTRAMP (pc, name))
+  if (legacy_pc_in_sigtramp (pc, name))
     return &ppc_sigtramp_frame_unwind;
 
   return NULL;
@@ -796,9 +856,9 @@ ppc_fetch_pointer_argument (struct frame_info *frame, int argi,
 }
 
 static CORE_ADDR
-ppc_integer_to_address (struct type *type, void *buf)
+ppc_integer_to_address (struct gdbarch *gdbarch, struct type *type, const gdb_byte *buf)
 {
-  char *tmp = alloca (TYPE_LENGTH (builtin_type_void_data_ptr));
+  gdb_byte *tmp = alloca (TYPE_LENGTH (builtin_type_void_data_ptr));
   LONGEST val = unpack_long (type, buf);
   store_unsigned_integer (tmp, TYPE_LENGTH (builtin_type_void_data_ptr), val);
   return extract_unsigned_integer (tmp,
@@ -821,10 +881,8 @@ ppc_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   gdbarch = gdbarch_alloc (&info, tdep);
 
   tdep->wordsize = -1;
-  tdep->regoff = 0;
   tdep->regs = 0;
   tdep->ppc_gp0_regnum = -1;
-  tdep->ppc_gplast_regnum = -1;
   tdep->ppc_toc_regnum = -1;
   tdep->ppc_ps_regnum = -1;
   tdep->ppc_cr_regnum = -1;
@@ -840,9 +898,24 @@ ppc_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   tdep->lr_frame_offset = -1;
 
   tdep->wordsize = 4;
+  tdep->ppc_toc_regnum = 2;
+  tdep->ppc_cr_regnum = PPC_MACOSX_CR_REGNUM;
+  tdep->ppc_ctr_regnum = PPC_MACOSX_CTR_REGNUM;
+  tdep->ppc_xer_regnum = PPC_MACOSX_XER_REGNUM;
+  tdep->ppc_sr0_regnum = 71;
+  tdep->ppc_vr0_regnum = PPC_MACOSX_FIRST_VP_REGNUM;
+  tdep->ppc_vrsave_regnum = PPC_MACOSX_VRSAVE_REGNUM;
+  tdep->ppc_ev0_upper_regnum = -1;
+  tdep->ppc_ev0_regnum = -1;
+  tdep->ppc_ev31_regnum = -1;
+  tdep->ppc_acc_regnum = -1;
+  tdep->ppc_spefscr_regnum = -1;
+
+  tdep->ppc_fp0_regnum = PPC_MACOSX_FIRST_FP_REGNUM;
+  tdep->ppc_fpscr_regnum = PPC_MACOSX_FPSCR_REGNUM;
+
   tdep->ppc_lr_regnum = PPC_MACOSX_LR_REGNUM;
   tdep->ppc_gp0_regnum = PPC_MACOSX_FIRST_GP_REGNUM;
-  tdep->ppc_vr0_regnum = PPC_MACOSX_FIRST_VP_REGNUM;
 
   set_gdbarch_num_regs (gdbarch, PPC_MACOSX_NUM_REGS);
   set_gdbarch_sp_regnum (gdbarch, PPC_MACOSX_SP_REGNUM);
@@ -850,12 +923,9 @@ ppc_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_ps_regnum (gdbarch, PPC_MACOSX_PS_REGNUM);
   set_gdbarch_fp0_regnum (gdbarch, PPC_MACOSX_FIRST_FP_REGNUM);
 
-  set_gdbarch_register_name (gdbarch, ppc_register_name);
-  set_gdbarch_deprecated_max_register_raw_size (gdbarch, 16);
-  set_gdbarch_deprecated_max_register_virtual_size (gdbarch, 16);
-  set_gdbarch_deprecated_register_virtual_type (gdbarch,
-                                                ppc_register_virtual_type);
 
+  set_gdbarch_register_name (gdbarch, ppc_register_name);
+  set_gdbarch_register_type (gdbarch, ppc_register_virtual_type);
   set_gdbarch_addr_bit (gdbarch, 4 * TARGET_CHAR_BIT);
   set_gdbarch_ptr_bit (gdbarch, 4 * TARGET_CHAR_BIT);
   set_gdbarch_short_bit (gdbarch, 2 * TARGET_CHAR_BIT);
@@ -864,7 +934,7 @@ ppc_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_long_long_bit (gdbarch, 8 * TARGET_CHAR_BIT);
   set_gdbarch_float_bit (gdbarch, 4 * TARGET_CHAR_BIT);
   set_gdbarch_double_bit (gdbarch, 8 * TARGET_CHAR_BIT);
-  set_gdbarch_long_double_bit (gdbarch, 8 * TARGET_CHAR_BIT);
+  set_gdbarch_long_double_bit (gdbarch, 16 * TARGET_CHAR_BIT);
 
   switch (info.byte_order)
     {
@@ -890,12 +960,12 @@ ppc_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   set_gdbarch_return_value (gdbarch, ppc_darwin_abi_return_value);
 
-  set_gdbarch_use_struct_convention (gdbarch, ppc_use_struct_convention);
+  set_gdbarch_deprecated_use_struct_convention (gdbarch, ppc_use_struct_convention);
 
   set_gdbarch_skip_prologue (gdbarch, ppc_skip_prologue);
   set_gdbarch_inner_than (gdbarch, core_addr_lessthan);
   set_gdbarch_decr_pc_after_break (gdbarch, 0);
-  set_gdbarch_function_start_offset (gdbarch, 0);
+  set_gdbarch_deprecated_function_start_offset (gdbarch, 0);
   set_gdbarch_breakpoint_from_pc (gdbarch, ppc_breakpoint_from_pc);
 
   set_gdbarch_unwind_dummy_id (gdbarch, ppc_unwind_dummy_id);
@@ -906,8 +976,6 @@ ppc_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   set_gdbarch_skip_trampoline_code (gdbarch, macosx_skip_trampoline_code);
 
-  set_gdbarch_in_solib_call_trampoline (gdbarch,
-                                        macosx_in_solib_call_trampoline);
   set_gdbarch_in_solib_return_trampoline (gdbarch,
                                           macosx_in_solib_return_trampoline);
 
@@ -921,9 +989,6 @@ ppc_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_integer_to_address (gdbarch, ppc_integer_to_address);
 
   set_gdbarch_fetch_pointer_argument (gdbarch, ppc_fetch_pointer_argument);
-
-  set_gdbarch_deprecated_print_extra_frame_info (gdbarch,
-                                                 ppc_print_extra_frame_info);
 
   /* Hook in ABI-specific overrides, if they have been registered.  */
   gdbarch_init_osabi (info, gdbarch);
@@ -964,6 +1029,7 @@ ppc_fast_show_stack (int show_frames, int get_names,
   struct frame_info *fi = NULL;
   int i = 0;
   int err = 0;
+  ULONGEST prev_fp = 0;
   ULONGEST next_fp = 0;
   ULONGEST pc = 0;
 
@@ -1028,7 +1094,7 @@ ppc_fast_show_stack (int show_frames, int get_names,
 
       i++;
 
-      if (!backtrace_past_main && inside_main_func (pc))
+      if (!backtrace_past_main && inside_main_func (fi))
         goto ppc_count_finish;
     }
   while (i < 5);
@@ -1041,11 +1107,13 @@ ppc_fast_show_stack (int show_frames, int get_names,
 
   while (1)
     {
+      prev_fp = fp;
       if ((sigtramp_start <= pc) && (pc <= sigtramp_end))
         {
           fp = next_fp + 0x70 + 0xc;
           if (!safe_read_memory_unsigned_integer (fp, 4, &next_fp))
             goto ppc_count_finish;
+	  /* FIXME need to get pc from prev_fp */
           if (!safe_read_memory_unsigned_integer (fp - 0xc, 4, &pc))
             goto ppc_count_finish;
           fp = next_fp;
@@ -1068,7 +1136,7 @@ ppc_fast_show_stack (int show_frames, int get_names,
 	      goto ppc_count_finish;
 	    }
           if (!safe_read_memory_unsigned_integer
-              (fp + PPC_MACOSX_DEFAULT_LR_SAVE, 4, &pc))
+              (prev_fp + PPC_MACOSX_DEFAULT_LR_SAVE, 4, &pc))
             goto ppc_count_finish;
         }
 
@@ -1076,7 +1144,7 @@ ppc_fast_show_stack (int show_frames, int get_names,
         print_fun (uiout, i, pc, fp);
       i++;
 
-      if (!backtrace_past_main && inside_main_func (pc))
+      if (!backtrace_past_main && addr_inside_main_func (pc))
         goto ppc_count_finish;
 
       if (i >= count_limit)
@@ -1169,7 +1237,7 @@ ppc_macosx_convert_register_p (int regno, struct type *type)
 
 static void
 ppc_macosx_value_to_register (struct frame_info *frame, int regno,
-                              struct type *type, const void *buf)
+                              struct type *type, const gdb_byte *buf)
 {
   int len = TYPE_LENGTH (type);
   int wordsize = gdbarch_tdep (current_gdbarch)->wordsize;
@@ -1177,12 +1245,12 @@ ppc_macosx_value_to_register (struct frame_info *frame, int regno,
   int upper_half_size;
   int num_regs;
   int i;
-  char reg_buf[8] = { 0 };
+  gdb_byte reg_buf[8] = { 0 };
 
 
   if (len <= wordsize)
     {
-      legacy_value_to_register (frame, regno, type, buf);
+      rs6000_value_to_register (frame, regno, type, buf);
       return;
     }
 
@@ -1200,7 +1268,7 @@ ppc_macosx_value_to_register (struct frame_info *frame, int regno,
 
 static void
 ppc_macosx_register_to_value (struct frame_info *frame, int regno,
-                              struct type *type, void *buf)
+                              struct type *type, gdb_byte *buf)
 {
   int len = TYPE_LENGTH (type);
   int wordsize = gdbarch_tdep (current_gdbarch)->wordsize;
@@ -1211,7 +1279,7 @@ ppc_macosx_register_to_value (struct frame_info *frame, int regno,
 
   if (len <= wordsize)
     {
-      legacy_register_to_value (frame, regno, type, buf);
+      rs6000_register_to_value (frame, regno, type, buf);
       return;
     }
 
@@ -1221,7 +1289,7 @@ ppc_macosx_register_to_value (struct frame_info *frame, int regno,
 
   for (i = 0; i < num_regs; i++)
     {
-      char reg_buf[8];
+      gdb_byte reg_buf[8];
 
       get_frame_register (frame, regno + i, reg_buf);
       memcpy (((bfd_byte *) buf) + i * wordsize, reg_buf + upper_half_size,
@@ -1255,7 +1323,7 @@ ppc_macosx_init_abi_64 (struct gdbarch_info info, struct gdbarch *gdbarch)
   set_gdbarch_long_long_bit (gdbarch, 8 * TARGET_CHAR_BIT);
   set_gdbarch_float_bit (gdbarch, 4 * TARGET_CHAR_BIT);
   set_gdbarch_double_bit (gdbarch, 8 * TARGET_CHAR_BIT);
-  set_gdbarch_long_double_bit (gdbarch, 8 * TARGET_CHAR_BIT);
+  set_gdbarch_long_double_bit (gdbarch, 16 * TARGET_CHAR_BIT);
 
   set_gdbarch_push_dummy_call (gdbarch, ppc64_darwin_abi_push_dummy_call);
   set_gdbarch_return_value (gdbarch, ppc64_darwin_abi_return_value);
@@ -1414,8 +1482,6 @@ ppc_macosx_get_longjmp_target (CORE_ADDR * pc)
 void
 _initialize_ppc_tdep ()
 {
-  struct cmd_list_element *cmd = NULL;
-
   register_gdbarch_init (bfd_arch_powerpc, ppc_gdbarch_init);
 
   gdbarch_register_osabi_sniffer (bfd_arch_unknown, bfd_target_mach_o_flavour,
@@ -1427,14 +1493,17 @@ _initialize_ppc_tdep ()
   gdbarch_register_osabi (bfd_arch_powerpc, bfd_mach_ppc64,
                           GDB_OSABI_DARWIN64, ppc_macosx_init_abi_64);
 
-  cmd = add_set_cmd ("ppc", class_obscure, var_boolean,
-                     (char *) &ppc_debugflag,
-                     "Set if printing PPC stack analysis debugging statements.",
-                     &setdebuglist), add_show_from_set (cmd, &showdebuglist);
+  add_setshow_boolean_cmd ("ppc", class_obscure,
+			   &ppc_debugflag, _("\
+Set if printing PPC stack analysis debugging statements."), _("\
+Show if printing PPC stack analysis debugging statements."), NULL,
+			   NULL, NULL,
+			   &setdebuglist, &showdebuglist);
 
-  cmd = add_set_cmd
-    ("ppc-maximum-frame-size", class_obscure, var_uinteger,
-     (char *) &ppc_max_frame_size,
-     "Set the maximum size to expect for a valid PPC frame.", &setlist);
-  add_show_from_set (cmd, &showlist);
+  add_setshow_uinteger_cmd ("ppc-maximum-frame-size", class_obscure,
+			    &ppc_max_frame_size, _("\
+Set the maximum size to expect for a valid PPC frame."), _("\
+Show the maximum size to expect for a valid PPC frame."), NULL,
+			    NULL, NULL,
+			    &setlist, &showlist);
 }

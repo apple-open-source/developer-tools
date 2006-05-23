@@ -31,6 +31,8 @@
 #include "gdbcmd.h"
 #include "regcache.h"
 #include "value.h"
+#include "exceptions.h"
+#include "cli-out.h"
 
 #include "macosx-nat-mutils.h"
 #include "macosx-nat-inferior.h"
@@ -125,7 +127,7 @@ child_get_pagesize ()
    Returns the length copied. */
 
 static int
-mach_xfer_memory_remainder (CORE_ADDR memaddr, char *myaddr,
+mach_xfer_memory_remainder (CORE_ADDR memaddr, gdb_byte *myaddr,
                             int len, int write,
                             struct mem_attrib *attrib,
                             struct target_ops *target)
@@ -214,7 +216,7 @@ mach_xfer_memory_remainder (CORE_ADDR memaddr, char *myaddr,
 }
 
 static int
-mach_xfer_memory_block (CORE_ADDR memaddr, char *myaddr,
+mach_xfer_memory_block (CORE_ADDR memaddr, gdb_byte *myaddr,
                         int len, int write,
                         struct mem_attrib *attrib, struct target_ops *target)
 {
@@ -285,7 +287,7 @@ mach_xfer_memory_block (CORE_ADDR memaddr, char *myaddr,
 }
 
 int
-mach_xfer_memory (CORE_ADDR memaddr, char *myaddr,
+mach_xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr,
                   int len, int write,
                   struct mem_attrib *attrib, struct target_ops *target)
 {
@@ -298,7 +300,7 @@ mach_xfer_memory (CORE_ADDR memaddr, char *myaddr,
   mach_msg_type_number_t r_info_size;
 
   CORE_ADDR cur_memaddr;
-  unsigned char *cur_myaddr;
+  gdb_byte *cur_myaddr;
   int cur_len;
 
   unsigned int pagesize = child_get_pagesize ();
@@ -484,8 +486,32 @@ mach_xfer_memory (CORE_ADDR memaddr, char *myaddr,
   return len - cur_len;
 }
 
+LONGEST
+mach_xfer_partial (struct target_ops *ops,
+		   enum target_object object, const char *annex,
+		   gdb_byte *readbuf, const gdb_byte *writebuf,
+		   ULONGEST offset, LONGEST len)
+{
+  switch (object)
+    {
+    case TARGET_OBJECT_MEMORY:
+      {
+	ssize_t nbytes = len;
+
+	if (readbuf)
+	  nbytes = mach_xfer_memory (offset, readbuf, nbytes, 0, NULL, ops);
+	if (writebuf && nbytes > 0)
+	  nbytes = mach_xfer_memory (offset, writebuf, nbytes, 1, NULL, ops);
+	return nbytes;
+      }
+
+    default:
+      return -1;
+    }
+}
+
 int
-macosx_port_valid (port_t port)
+macosx_port_valid (mach_port_t port)
 {
   mach_port_type_t ptype;
   kern_return_t ret;
@@ -613,7 +639,7 @@ macosx_primary_thread_of_task (task_t task)
 
 kern_return_t
 macosx_msg_receive (mach_msg_header_t * msgin, size_t msg_size,
-                    unsigned long timeout, port_t port)
+                    unsigned long timeout, mach_port_t port)
 {
   kern_return_t kret;
   mach_msg_option_t options;
@@ -703,8 +729,8 @@ macosx_allocate_space_in_inferior (int len)
   alloc.len = len;
   alloc.addr = 0;
 
-  ret = catch_exceptions (null_uiout, macosx_allocate_space_in_inferior_helper, &alloc,
-			  "", RETURN_MASK_ALL);
+  ret = catch_exceptions (null_uiout, macosx_allocate_space_in_inferior_helper,
+                          &alloc, RETURN_MASK_ALL);
 
   do_cleanups (cleanups);
   gdb_stderr = saved_gdb_stderr;
@@ -719,12 +745,13 @@ macosx_allocate_space_in_inferior (int len)
 void
 _initialize_macosx_mutils ()
 {
-  struct cmd_list_element *cmd;
-
   mutils_stderr = fdopen (fileno (stderr), "w+");
 
-  cmd = add_set_cmd ("mutils", class_obscure, var_boolean,
-                     (char *) &mutils_debugflag,
-                     "Set if printing inferior memory debugging statements.",
-                     &setdebuglist), add_show_from_set (cmd, &showdebuglist);
+  add_setshow_boolean_cmd ("mutils", class_obscure,
+			   &mutils_debugflag, _("\
+Set if printing inferior memory debugging statements."), _("\
+Show if printing inferior memory debugging statements."), NULL,
+			   NULL, NULL,
+			   &setdebuglist, &showdebuglist);
 }
+

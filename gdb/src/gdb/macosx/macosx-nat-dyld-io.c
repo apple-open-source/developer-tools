@@ -21,10 +21,6 @@
    Foundation, Inc., 59 Temple Place - Suite 330,
    Boston, MA 02111-1307, USA.  */
 
-#include "macosx-nat-inferior.h"
-#include "macosx-nat-mutils.h"
-#include "macosx-nat-dyld-info.h"
-
 #include "defs.h"
 #include "inferior.h"
 #include "symfile.h"
@@ -32,6 +28,8 @@
 #include "gdbcmd.h"
 #include "objfiles.h"
 #include "target.h"
+#include "exceptions.h"
+#include "gdbcore.h"
 
 #include <string.h>
 #include <sys/stat.h>
@@ -40,21 +38,41 @@
 #include <mach-o/loader.h>
 #include <mach-o/dyld_debug.h>
 
+#include "libbfd.h"
+
 #include "mach-o.h"
+
+#include "macosx-nat-inferior.h"
+#include "macosx-nat-mutils.h"
+#include "macosx-nat-dyld-info.h"
 
 struct inferior_info
 {
   bfd_vma addr;
   bfd_vma offset;
   bfd_vma len;
+  void *read;
 };
 
-static bfd_size_type
-inferior_read (PTR iodata, PTR data, bfd_size_type size, bfd_size_type nitems, 
-               bfd *abfd, bfd_vma where)
+static void *
+inferior_open (bfd *abfd, void *open_closure)
 {
-  struct inferior_info *iptr = (struct inferior_info *) iodata;
-  int ret;
+  struct inferior_info *in = NULL;
+  struct inferior_info *ret = NULL;
+
+  in = (struct inferior_info *) open_closure;
+  ret = bfd_zalloc (abfd, sizeof (struct inferior_info));
+
+  *ret = *in;
+
+  return ret;
+}
+
+static file_ptr
+inferior_read_generic (bfd *abfd, void *stream, void *data, file_ptr nbytes, file_ptr offset)
+{
+  struct inferior_info *iptr = (struct inferior_info *) stream;
+  volatile struct gdb_exception except;
 
   CHECK_FATAL (iptr != NULL);
 
@@ -69,28 +87,31 @@ inferior_read (PTR iodata, PTR data, bfd_size_type size, bfd_size_type nitems,
       return 0;
     }
 
-  if (where > iptr->len)
+  if (offset > iptr->len)
     {
       bfd_set_error (bfd_error_no_contents);
       return 0;
     }
 
-  ret =
-    current_target.to_xfer_memory (iptr->addr + where, data, (size * nitems),
-                                   0, 0, &current_target);
-  if (ret <= 0)
+  TRY_CATCH (except, RETURN_MASK_ERROR)
+    {
+      read_memory (iptr->addr + offset, data, nbytes);
+    }
+
+  if (except.reason < 0)
     {
       bfd_set_error (bfd_error_system_call);
       return 0;
     }
-  return ret;
+
+  return nbytes;
 }
 
-static bfd_size_type
-mach_o_inferior_read (PTR iodata, PTR data, bfd_size_type size, 
-                      bfd_size_type nitems, bfd *abfd, bfd_vma where)
+static file_ptr
+inferior_read_mach_o (bfd *abfd, void *stream, void *data, file_ptr nbytes, file_ptr offset)
 {
-  struct inferior_info *iptr = (struct inferior_info *) iodata;
+  volatile struct gdb_exception except;
+  struct inferior_info *iptr = (struct inferior_info *) stream;
   unsigned int i;
   int ret;
 
@@ -127,16 +148,18 @@ mach_o_inferior_read (PTR iodata, PTR data, bfd_size_type size,
           {
             struct bfd_mach_o_segment_command *segment =
               &cmd->command.segment;
-            if ((where >= segment->fileoff)
-                && (where < (segment->fileoff + segment->filesize)))
+            if ((offset  >= segment->fileoff)
+                && (offset < (segment->fileoff + segment->filesize)))
               {
                 bfd_vma infaddr =
                   (segment->vmaddr + iptr->offset +
-                   (where - segment->fileoff));
-                ret =
-                  current_target.to_xfer_memory (infaddr, data,
-                                                 (size * nitems), 0, NULL,
-                                                 &current_target);
+                   (offset - segment->fileoff));
+		
+		TRY_CATCH (except, RETURN_MASK_ERROR)
+		  {
+		    read_memory (infaddr, data, nbytes);
+		  }
+
                 if (ret <= 0)
                   {
                     bfd_set_error (bfd_error_system_call);
@@ -148,37 +171,27 @@ mach_o_inferior_read (PTR iodata, PTR data, bfd_size_type size,
       }
   }
 
-
   bfd_set_error (bfd_error_no_contents);
   return 0;
 }
 
-static bfd_size_type
-inferior_write (PTR iodata, const PTR data, bfd_size_type size, 
-                bfd_size_type nitems, bfd *abfd, bfd_vma where)
+static file_ptr
+inferior_read (bfd *abfd, void *stream, void *data, file_ptr nbytes, file_ptr offset)
 {
-  error ("unable to write to in-memory images");
+  if ((strcmp (bfd_get_target (abfd), "mach-o-be") == 0)
+      || (strcmp (bfd_get_target (abfd), "mach-o-le") == 0)
+      || (strcmp (bfd_get_target (abfd), "mach-o") == 0))
+    {
+      if (bfd_mach_o_valid (abfd))
+	return inferior_read_mach_o (abfd, stream, data, nbytes, offset);
+    }
+
+  return inferior_read_generic (abfd, stream, data, nbytes, offset);
 }
 
 static int
-inferior_flush (PTR iodata, bfd *abfd)
+inferior_close (bfd *abfd, void *stream)
 {
-  return 0;
-}
-
-static bfd_boolean
-inferior_close (PTR iodata, bfd *abfd)
-{
-  xfree (iodata);
-  return 1;
-}
-
-static int
-inferior_stat (PTR iodata, bfd *abfd, struct stat *statbuf)
-{
-  struct inferior_info *iptr = (struct inferior_info *) iodata;
-  memset (statbuf, 0, sizeof (struct stat));
-  statbuf->st_size = iptr->len;
   return 0;
 }
 
@@ -186,22 +199,14 @@ static bfd *
 inferior_bfd_generic (const char *name, CORE_ADDR addr, CORE_ADDR offset, 
                       CORE_ADDR len)
 {
-  struct inferior_info *iptr = NULL;
-  struct bfd_io_functions fdata;
+  struct inferior_info info;
   char *filename = NULL;
-  bfd *ret = NULL;
+  bfd *abfd = NULL;
 
-  iptr = (struct inferior_info *) xmalloc (sizeof (struct inferior_info));
-  iptr->addr = addr;
-  iptr->offset = offset;
-  iptr->len = len;
-
-  fdata.iodata = iptr;
-  fdata.read_func = &inferior_read;
-  fdata.write_func = &inferior_write;
-  fdata.flush_func = &inferior_flush;
-  fdata.close_func = &inferior_close;
-  fdata.stat_func = &inferior_stat;
+  info.addr = addr;
+  info.offset = offset;
+  info.len = len;
+  info.read = 0;
 
   if (name != NULL)
     {
@@ -220,96 +225,35 @@ inferior_bfd_generic (const char *name, CORE_ADDR addr, CORE_ADDR offset,
       return NULL;
     }
 
-  ret = bfd_funopenr (filename, NULL, &fdata);
-  if (ret == NULL)
+  abfd = bfd_openr_iovec (filename, NULL, 
+			 inferior_open, &info,
+			 inferior_read, inferior_close);
+  if (abfd == NULL)
     {
       warning ("Unable to open memory image for \"%s\"; skipping", name);
       return NULL;
     }
 
-  if (bfd_check_format (ret, bfd_archive))
-    {
-      bfd *abfd = NULL;
-
-#if defined (__ppc__)
-      const bfd_arch_info_type *thisarch =
-        bfd_lookup_arch (bfd_arch_powerpc, 0);
-#elif defined (__i386__)
-      const bfd_arch_info_type *thisarch = bfd_lookup_arch (bfd_arch_i386, 0);
-#else
-      const bfd_arch_info_type *thisarch =
-        bfd_lookup_arch (bfd_arch_powerpc, 0);
-#endif
-      for (;;)
-        {
-
-          const bfd_arch_info_type *subarch = NULL;
-
-          if (thisarch == NULL)
-            {
-              break;
-            }
-          abfd = bfd_openr_next_archived_file (ret, abfd);
-          if (abfd == NULL)
-            {
-              break;
-            }
-          if (!bfd_check_format (abfd, bfd_object))
-            {
-              abfd = NULL;
-              break;
-            }
-          subarch = bfd_get_arch_info (abfd);
-
-          if (subarch->compatible (subarch, thisarch));
-        }
-      if (abfd != NULL)
-        {
-          ret = abfd;
-        }
-    }
-
   /* FIXME: should check for errors from bfd_close (for one thing, on
      error it does not free all the storage associated with the bfd).  */
 
-  if (!bfd_check_format (ret, bfd_object))
+  if (!bfd_check_format (abfd, bfd_object))
     {
-      warning ("Unable to read symbols from %s: %s.", bfd_get_filename (ret),
+      warning ("Unable to read symbols from %s: %s.", bfd_get_filename (abfd),
                bfd_errmsg (bfd_get_error ()));
-      bfd_close (ret);
+      bfd_close (abfd);
       return NULL;
     }
 
-  return ret;
+  return abfd;
 }
 
 bfd *
 inferior_bfd (const char *name, CORE_ADDR addr, CORE_ADDR offset, CORE_ADDR len)
 {
-  bfd *ret = inferior_bfd_generic (name, addr, offset, len);
-  if (ret == NULL)
-    return ret;
+  bfd *abfd = inferior_bfd_generic (name, addr, offset, len);
+  if (abfd == NULL)
+    return abfd;
 
-  if ((strcmp (bfd_get_target (ret), "mach-o-be") == 0)
-      || (strcmp (bfd_get_target (ret), "mach-o-le") == 0)
-      || (strcmp (bfd_get_target (ret), "mach-o") == 0))
-    {
-      struct bfd_io_functions *fun =
-        (struct bfd_io_functions *) ret->iostream;
-      CHECK_FATAL (fun != NULL);
-
-      fun->read_func = mach_o_inferior_read;
-    }
-
-  if ((strcmp (bfd_get_target (ret), "pef") == 0)
-      || (strcmp (bfd_get_target (ret), "pef-xlib") == 0))
-    {
-      struct bfd_io_functions *fun =
-        (struct bfd_io_functions *) ret->iostream;
-      CHECK_FATAL (fun != NULL);
-
-      /* no changes necessary */
-    }
-
-  return ret;
+  return abfd;
 }

@@ -1,3 +1,4 @@
+# APPLE LOCAL file Darwin
 # Target: IA86 running Mac OS X
 
 MT_CFLAGS = \
@@ -18,4 +19,4 @@ TDEPFILES = \
 	symread.o \
 	pefread.o
 
-TM_FILE= tm-i386-macosx.h
+DEPRECATED_TM_FILE= tm-i386-macosx.h

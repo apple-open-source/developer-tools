@@ -600,6 +600,48 @@ machopic_indirect_data_reference (rtx orig, rtx reg)
   return ptr_ref;
 }
 
+/* APPLE LOCAL begin 4380289 */
+/* Force a Mach-O stub.  Expects MEM(SYM_REF(foo)).  No sanity
+   checking.  */
+static inline rtx
+machopic_force_stub (rtx target)
+{
+  rtx sym_ref = XEXP (target, 0);
+  rtx new_target;
+  enum machine_mode mem_mode = GET_MODE (target);
+  enum machine_mode sym_mode = GET_MODE (XEXP (target, 0));
+  tree decl = SYMBOL_REF_DECL (sym_ref);
+  const char *stub_name = XSTR (sym_ref, 0);
+
+  stub_name = machopic_indirection_name (sym_ref, /*stub_p=*/true);
+
+  new_target = gen_rtx_MEM (mem_mode, gen_rtx_SYMBOL_REF (sym_mode, stub_name));
+  SYMBOL_REF_DECL (XEXP (new_target, 0)) = decl;
+  MEM_READONLY_P (new_target) = 1;
+  MEM_NOTRAP_P (new_target) = 1;
+  return new_target;
+}
+
+/* Like machopic_indirect_call_target, but always stubify,
+   and don't re-stubify anything already stubified.  */
+rtx
+machopic_force_indirect_call_target (rtx target)
+{
+  if (MEM_P (target))
+  {
+    rtx sym_ref = XEXP (target, 0);
+    const char *stub_name = XSTR (sym_ref, 0);
+    unsigned int stub_name_length = strlen (stub_name);
+      
+    /* If "$stub" suffix absent, add it.  */
+    if (stub_name_length < 6 || strcmp ("$stub", stub_name + stub_name_length - 5))
+      target = machopic_force_stub (target);
+  }
+
+  return target;
+}
+/* APPLE LOCAL end 4380289 */
+
 /* Transform TARGET (a MEM), which is a function call target, to the
    corresponding symbol_stub if necessary.  Return a new MEM.  */
 
@@ -613,18 +655,9 @@ machopic_indirect_call_target (rtx target)
       && GET_CODE (XEXP (target, 0)) == SYMBOL_REF
       && !(SYMBOL_REF_FLAGS (XEXP (target, 0))
 	   & MACHO_SYMBOL_FLAG_DEFINED))
-    {
-      rtx sym_ref = XEXP (target, 0);
-      const char *stub_name = machopic_indirection_name (sym_ref, 
-							 /*stub_p=*/true);
-      enum machine_mode mode = GET_MODE (sym_ref);
-      tree decl = SYMBOL_REF_DECL (sym_ref);
-      
-      XEXP (target, 0) = gen_rtx_SYMBOL_REF (mode, stub_name);
-      SYMBOL_REF_DECL (XEXP (target, 0)) = decl;
-      MEM_READONLY_P (target) = 1;
-      MEM_NOTRAP_P (target) = 1;
-    }
+    /* APPLE LOCAL begin 4380289 */
+    target = machopic_force_stub (target);
+    /* APPLE LOCAL end 4380289 */
 
   return target;
 }
@@ -1130,7 +1163,12 @@ machopic_select_section (tree exp, int reloc,
 			 unsigned HOST_WIDE_INT align ATTRIBUTE_UNUSED)
 {
   void (*base_function)(void);
-  bool weak_p = DECL_P (exp) && DECL_WEAK (exp);
+/* APPLE LOCAL begin mainline 4.2 2005-12-05 4290187 */
+  bool weak_p = (DECL_P (exp) && DECL_WEAK (exp)
+		 && (lookup_attribute ("weak", DECL_ATTRIBUTES (exp))
+		     || ! lookup_attribute ("weak_import",
+					    DECL_ATTRIBUTES (exp))));
+/* APPLE LOCAL end mainline 4.2 2005-12-05 4290187 */
   /* APPLE LOCAL begin mainline 2005-04-15 <radar 4078608> */
   static void (* const base_funs[][2])(void) = {
     { text_section, text_coal_section },
@@ -1229,6 +1267,15 @@ machopic_select_section (tree exp, int reloc,
 	objc_meth_var_types_section ();
       else if (!strncmp (name, "_OBJC_CLASS_REFERENCES", 22))
 	objc_cls_refs_section ();
+      /* APPLE LOCAL begin ObjC new abi */
+      else if (!strncmp (name, "_OBJC_CLASSLIST_", 16))
+	objc_classlist_section ();
+      else if (!strncmp (name, "_OBJC_CLASS_RO_$", 16) 
+	       || !strncmp (name, "_OBJC_METACLASS_RO_$", 20))
+	objc_data_section ();
+      else if (!strncmp (name, "_OBJC_MESSAGE_REF", 17))
+	objc_message_refs_section ();
+      /* APPLE LOCAL end ObjC new abi */
       else if (!strncmp (name, "_OBJC_CLASS_", 12))
 	objc_class_section ();
       else if (!strncmp (name, "_OBJC_METACLASS_", 16))
@@ -1557,14 +1604,16 @@ darwin_emit_unwind_label (FILE *file, tree decl, int for_eh, int empty)
   const char *base = IDENTIFIER_POINTER (id);
   unsigned int base_len = IDENTIFIER_LENGTH (id);
 
-  const char *suffix = ".eh";
+  /* APPLE LOCAL dwarf2 section flags */
+  static const char suffix[] = ".eh";
 
   int need_quotes = name_needs_quotes (base);
   int quotes_len = need_quotes ? 2 : 0;
   char *lab;
 
   if (! for_eh)
-    suffix = ".eh1";
+    /* APPLE LOCAL dwarf2 section flags */
+    return;
 
   /* APPLE LOCAL begin mainline */
   lab = xmalloc (strlen (prefix)
@@ -1605,7 +1654,19 @@ darwin_emit_unwind_label (FILE *file, tree decl, int for_eh, int empty)
 
   free (lab);
 }
+/* APPLE LOCAL begin mainline */
+static GTY(()) unsigned long except_table_label_num;
 
+void
+darwin_emit_except_table_label (FILE *file)
+{
+  char section_start_label[30];
+
+  ASM_GENERATE_INTERNAL_LABEL (section_start_label, "GCC_except_table",
+			       except_table_label_num++);
+  ASM_OUTPUT_LABEL (file, section_start_label);
+}
+/* APPLE LOCAL end mainline */
 /* Generate a PC-relative reference to a Mach-O non-lazy-symbol.  */ 
 
 void
@@ -1672,6 +1733,64 @@ darwin_asm_output_dwarf_delta (FILE *file, int size,
   if (islocaldiff)
     fprintf (file, "\n\t%s L$set$%d", directive, darwin_dwarf_label_counter++);
 }
+
+/* APPLE LOCAL begin dwarf 4383509 */
+/* Output labels for the start of the DWARF sections if necessary.  */
+void
+darwin_file_start (void)
+{
+  if (write_symbols == DWARF2_DEBUG)
+    {
+      static const char * const debugnames[] = 
+	{
+	  DEBUG_FRAME_SECTION,
+	  DEBUG_INFO_SECTION,
+	  DEBUG_ABBREV_SECTION,
+	  DEBUG_ARANGES_SECTION,
+	  DEBUG_MACINFO_SECTION,
+	  DEBUG_LINE_SECTION,
+	  DEBUG_LOC_SECTION,
+	  DEBUG_PUBNAMES_SECTION,
+	  DEBUG_STR_SECTION,
+	  DEBUG_RANGES_SECTION
+	};
+      size_t i;
+
+      for (i = 0; i < ARRAY_SIZE (debugnames); i++)
+	{
+	  int namelen;
+
+	  named_section_flags (debugnames[i], SECTION_DEBUG);
+	  
+	  gcc_assert (strncmp (debugnames[i], "__DWARF,", 8) == 0);
+	  gcc_assert (strchr (debugnames[i] + 8, ','));
+	  
+	  namelen = strchr (debugnames[i] + 8, ',') - (debugnames[i] + 8);
+	  fprintf (asm_out_file, "Lsection%.*s:\n", namelen, debugnames[i] + 8);
+	}
+    }
+}
+
+/* Output an offset in a DWARF section on Darwin.  On Darwin, DWARF section
+   offsets are not represented using relocs in .o files; either the
+   section never leaves the .o file, or the linker or other tool is
+   responsible for parsing the DWARF and updating the offsets.  */
+
+void
+darwin_asm_output_dwarf_offset (FILE *file, int size, const char * lab,
+				const char *base)
+{
+  char sname[64];
+  int namelen;
+  
+  gcc_assert (strncmp (base, "__DWARF,", 8) == 0);
+  gcc_assert (strchr (base + 8, ','));
+
+  namelen = strchr (base + 8, ',') - (base + 8);
+  sprintf (sname, "*Lsection%.*s", namelen, base + 8);
+  darwin_asm_output_dwarf_delta (file, size, lab, sname);
+}
+/* APPLE LOCAL end dwarf 4383509 */
 
 void
 darwin_file_end (void)
@@ -2010,7 +2129,7 @@ darwin_build_constant_cfstring (tree str)
    otherwise return NULL signifying that we have no special
    knowledge.  */
 tree
-darwin_cw_asm_special_label (tree id)
+darwin_iasm_special_label (tree id)
 {
   const char *name = IDENTIFIER_POINTER (id);
 

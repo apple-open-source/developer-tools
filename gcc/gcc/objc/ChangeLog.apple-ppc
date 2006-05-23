@@ -1,3 +1,213 @@
+2006-03-10  Fariborz Jahanian <fjahanian@apple.com>
+
+        Radar 4407151
+        * objc/objc-act.c (objc_is_class_name): template parameter is not
+        an objective class name.
+        (objc_generate_cxx_cdtors): Check for the null
+        objc_implementation_context.
+	
+2006-02-07  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 4219590
+	* objc/objc-act.c (objc_start_method_definition): Initialize break/continue
+	labels.
+
+2005-11-29  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 4349690
+
+	* objc/objc-act.c (update_var_decl): New.
+	(generate_strings, generate_shared_structures): Reuse old decl 
+	and update it.
+	(generate_category): A new argument added so the old
+	decl can be updated and used.
+	
+2005-11-29  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 4349670
+
+	* objc/objc-act.c (init_objc_symtab): Use 'short' type for constant
+	initializer initializing a 'short' field.
+
+2005-11-18  Fariborz Jahanian <fjahanian@apple.com>
+
+	objc new meta-data definitions - part 2
+
+	* objc/objc-act.c (build_v2_ivar_t_template): New
+	(build_v2_ivar_list_t_template): New
+	(generate_v2_ivar_lists): New
+	(build_v2_ivar_list_initializer): New
+	(generate_v2_ivars_list): New
+	(generate_v2_dispatch_tables): New
+	(ivar_offset_ref): New
+	(generate_v2_ivar_offset_ref_lists): New
+	(generate_v2_protocol_list): New
+	(build_v2_protocol_reference): New
+	(generate_v2_protocol_references): New
+	(generate_v2_protocols): New
+	(build_v2_descriptor_table_initializer): New
+	(generate_v2_method_descriptors): New
+	(synth_module_prologue): Declare type 'struct ivar_list_t*'
+        (build_message_reference_decl): Use a new indexing for building
+     	message_ref names.
+	(generate_descriptor_table): Added the 'newabi' arg to initilize the
+	'entsize' field for 'method_list_t' meta data.	
+	(build_protocol_initializer): Added the 'newabi' arg so as not
+	to initialize the non-existing 'isa' field for 'struct protocol_t'
+	meta data in the new abi.
+	(build_method_list_template): For new abi add 'entsize' field to
+	'struct method_list_t'.
+	(generate_dispatch_table): Added the 'newabi' argument so for new
+	abi we set the 'entsize' field of 'struct method_list_t'.	
+	(generate_protocol_list): Removed the 'newabi' argument and its use.
+	New abi now has its own generate_v2_protocol_list routine.
+	(generate_v2_shared_structures): Call generate_v2_protocol_references
+	and generate_v2_protocol_list. 
+	(finish_objc): Generate new ivar-list, method-list, protocol-list
+	meta data.
+
+	* objc/objc-act.h: Assortment of new macro and global variable declarations.
+
+2005-11-14  Fariborz Jahanian <fjahanian@apple.com>
+
+	objc new messaging - part 3
+
+	* objc/objc-act.c (build_message_reference_decl): New
+	(build_selector_messenger_reference): Declare the variable
+	with type "struct message_ref_t" for later initialization.
+	(build_message_ref_translation_table): Initialize the 
+	variable of type "struct message_ref_t" with the {message_name,
+	selector}.
+	(objc_copy_to_temp_side_effect_params): Fix gcc_assert(...).
+
+2005-11-11  Fariborz Jahanian <fjahanian@apple.com>
+
+	objc new messaging - part 2
+
+	* objc/objc-act.c (build_selector_messenger_reference): New
+	(build_message_ref_translation_table): New
+	(objc_copy_to_temp_side_effect_params): New
+	(objc_create_temporary_var): New
+	(build_message_ref_template): Reorder fields in message_ref_t
+	struct for better code gen.
+	(objc_finish_message_expr): Initialization of message_ref_t table
+	is now done at link-time. Also, check conditions for object comparison
+	with 'nil'. 
+	(build_newabi_build_objc_method_call): Check for object being 'nil' before
+	making the call to message handlers.
+	(finish_objc): Generate 'struct message_ref_t' translation table.
+
+	* objc/objc-act.h: Assortment of new macro and global variable declarations.
+
+2005-11-08  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 4330422
+
+	* objc/objc-act.c (objc_non_volatilized_type): New
+
+2005-11-07  Fariborz Jahanian <fjahanian@apple.com>
+
+	objc new messaging - part 1
+
+	* objc/objc-act.c (synth_module_prologue): Generate builtin function 
+	decls for all messaging calls.
+	(build_message_ref_template): Declare 'struct _message_ref_t' and
+	'struct _super_message_ref_t' types.
+	(generate_newabi_shared_structures): Fix reported bugs on 'instanceStart' 
+	and 'ivars' fields of the class meta data.
+	(get_arg_type_list): For new abi, select objc_newabi_super_selector_type or
+	objc_newabi_selector_type for selector type.
+	(objc_finish_message_expr): For new abi, generate new messaging run-time 
+	calls.
+	(build_objc_method_call): New.
+	* objc/objc-act.h: Assorment of new defines and new global declaration in
+	support of new messaging calls.
+
+2005-11-01  Fariborz Jahanian <fjahanian@apple.com>
+
+	objc new meta-data definitions - part 1
+
+	* objc/objc-act.c (create_global_decl): New
+	(create_extern_decl): New
+	(build_classlist_reference_decl): New
+	(build_classlist_translation_table): New
+	(build_newabi_protocol_template): New
+	(build_newabi_class_template): New
+	(newabi_append_ro): New
+	(build_class_t_initializer): New
+	(generate_newabi_shared_structures): New
+	(synth_module_prologue): Declare IMP type objc_imp_type
+        and use it as needed.
+	Declare new globals and call build_newabi_protocol_template(...) when
+	-fobjc-newabi is specified.
+	(build_private_template): Save type of an Interface in CLASS_TYPE field.
+	(generate_protocol_list): New argument added.
+	(synth_forward_declarations): With -fabj-newabi build new class and metaclass 
+	"class_t" types.
+	(continue_class): Save class and metaclass declarations.
+	(finish_objc): Restore global class and metaclass declarations.
+	With -fobjc-newabi call generate_newabi_shared_structures(...).
+	Also build classlist translation table if needed.
+	* objc/objc-act.h (imp_entry): class_newabi_decl and meta_newabi_decl fields 
+	added.	
+	(enum objc_tree_index): New enumerators added.
+	Several global variables declared.
+	* config/darwin-protos.h (objc_classlist_section, objc_data_section): New declarations.
+	* config/darwin.c (machopic_select_section): Added conditional calls to
+	objc_classlist_section() and objc_data_section().
+	* config/darwin.h: (objc_classlist_section, objc_data_section): New functions.
+	(objc_section_init): New sections to initialize.
+	
+2005-10-10  Fariborz Jahanian <fjahanian@apple.com>
+
+        Radar 4301047
+
+	* objc-act.c (encode_type): Remove the hack.
+
+2005-10-17  Fariborz Jahanian <fjahanian@apple.com>
+
+        Radar 4290840
+
+	* objc-act.c (objc_start_method_definition): Check for error_mark_node for
+	the selector name and make a quick exit.
+
+2005-10-12  Fariborz Jahanian <fjahanian@apple.com>
+
+        Radar 4291785
+
+	* objc-act.c (objc_get_interface_ivars): New function.
+	(objc_detect_field_duplicates): Ditto.
+	(objc_collecting_ivars): New flag.
+	(continue_class): Set and reset objc_collecting_ivars for context.
+	* objc-act.h (TOTAL_CLASS_RAW_IVARS): New field for interface types.
+	
+2005-10-10  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 4291099
+	* objc-act.c (objc_generate_write_barrier): Add write-barriers for 
+	c++'s ctor initializer list.
+
+2005-10-07  Fariborz Jahanian <fjahanian@apple.com>
+
+        Radar 4204796
+	* objc-act.c (objc_build_volatilized_type): Build 'volatilzed'
+	types with proper attribute set and correctly.
+	(objc_volatilize_decl): Remove unneeded code.
+	(objc_type_quals_match): Use the new attribute to check on
+	'volatilzed' type.
+	(hash_init): removed unneeded code.
+	
+2005-10-04  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 4278236
+	* objc-act.c (objc_declare_class): Pick the right
+	type tree.
+
+2005-10-04  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 4281748
+	* objc-act.c (objc_check_global_decl): New
+
 2005-10-07  Fariborz Jahanian <fjahanian@apple.com>
 
 	radar 4292010

@@ -1006,12 +1006,16 @@ make_declarator (cp_declarator_kind kind)
   return declarator;
 }
 
-/* Make a declarator for a generalized identifier.  If non-NULL, the
-   identifier is QUALIFYING_SCOPE::UNQUALIFIED_NAME; otherwise, it is
-   just UNQUALIFIED_NAME.  */
+/* APPLE LOCAL begin mainline 2005-12-27 4431091 */
+/* Make a declarator for a generalized identifier.  If
+   QUALIFYING_SCOPE is non-NULL, the identifier is
+   QUALIFYING_SCOPE::UNQUALIFIED_NAME; otherwise, it is just
+   UNQUALIFIED_NAME.  SFK indicates the kind of special function this
+   is, if any.   */
 
 static cp_declarator *
-make_id_declarator (tree qualifying_scope, tree unqualified_name)
+make_id_declarator (tree qualifying_scope, tree unqualified_name,
+                    special_function_kind sfk)
 {
   cp_declarator *declarator;
 
@@ -1028,13 +1032,18 @@ make_id_declarator (tree qualifying_scope, tree unqualified_name)
   if (qualifying_scope && TYPE_P (qualifying_scope))
     qualifying_scope = TYPE_MAIN_VARIANT (qualifying_scope);
 
+  gcc_assert (TREE_CODE (unqualified_name) == IDENTIFIER_NODE
+           || TREE_CODE (unqualified_name) == BIT_NOT_EXPR
+           || TREE_CODE (unqualified_name) == TEMPLATE_ID_EXPR);
+
   declarator = make_declarator (cdk_id);
   declarator->u.id.qualifying_scope = qualifying_scope;
   declarator->u.id.unqualified_name = unqualified_name;
-  declarator->u.id.sfk = sfk_none;
+  declarator->u.id.sfk = sfk;
 
   return declarator;
 }
+/* APPLE LOCAL end mainline 2005-12-27 4431091 */
 
 /* Make a declarator for a pointer to TARGET.  CV_QUALIFIERS is a list
    of modifiers such as const or volatile to apply to the pointer
@@ -2052,37 +2061,37 @@ static tree cp_parser_make_typename_type
   (cp_parser *, tree, tree);
 
 /* APPLE LOCAL begin CW asm blocks */
-static tree cp_parser_cw_asm_compound_statement
+static tree cp_parser_iasm_compound_statement
   (cp_parser *);
-static void cp_parser_cw_asm_declaration_seq_opt
+static void cp_parser_iasm_declaration_seq_opt
   (cp_parser *);
-static void cp_parser_cw_asm_line_seq_opt
+static void cp_parser_iasm_line_seq_opt
   (cp_parser *);
-static void cp_parser_cw_asm_line
+static void cp_parser_iasm_line
   (cp_parser *);
-static void cp_parser_cw_asm_statement_seq_opt
+static void cp_parser_iasm_statement_seq_opt
   (cp_parser *);
-static void cp_parser_cw_asm_statement
+static void cp_parser_iasm_statement
   (cp_parser *);
-static tree cp_parser_cw_asm_operands
+static tree cp_parser_iasm_operands
   (cp_parser *);
-static tree cp_parser_cw_asm_operand
+static tree cp_parser_iasm_operand
   (cp_parser *);
-static tree cp_parser_cw_asm_postfix_expression
+static tree cp_parser_iasm_postfix_expression
   (cp_parser *, bool);
-static tree cp_parser_cw_identifier_or_number
+static tree cp_parser_iasm_identifier_or_number
   (cp_parser* parser);
-static tree cw_build_identifier_string
+static tree iasm_build_identifier_string
   (cp_parser* parser, const char* str);
-static tree cp_parser_cw_asm_relative_branch
+static tree cp_parser_iasm_relative_branch
   (cp_parser *parser);
-static tree
-cp_parser_cw_asm_top_statement (cp_parser *parser);
-static void
-cp_parser_cw_maybe_skip_comments (cp_parser *parser);
+static tree cp_parser_iasm_top_statement
+  (cp_parser *parser);
+static void cp_parser_iasm_maybe_skip_comments
+  (cp_parser *parser);
 
-#ifndef CW_SEE_OPCODE
-#define CW_SEE_OPCODE(YYCHAR, T) YYCHAR
+#ifndef IASM_SEE_OPCODE
+#define IASM_SEE_OPCODE(YYCHAR, T) YYCHAR
 #endif
 #define TYPESPEC 1
 #define IDENTIFIER 2
@@ -2837,9 +2846,13 @@ cp_parser_string_literal (cp_parser *parser, bool translate, bool wide_ok)
       if (tok->type == CPP_WSTRING)
 	wide = true;
       /* APPLE LOCAL begin pascal strings */
-      else if (CPP_OPTION (parse_in, pascal_strings)
-	       && str.text[1] == '\\' && str.text[2] == 'p')
-	pascal_p = true;
+      if (CPP_OPTION (parse_in, pascal_strings))
+	{
+	  if (wide && str.text[0] == 'L' && str.text[2] == '\\' && str.text[3] == 'p')
+	    pascal_p = true;
+	  else if (str.text[1] == '\\' && str.text[2] == 'p')
+	    pascal_p = true;
+	}
       /* APPLE LOCAL end pascal strings */
 
       strs = &str;
@@ -2858,9 +2871,13 @@ cp_parser_string_literal (cp_parser *parser, bool translate, bool wide_ok)
 	  if (tok->type == CPP_WSTRING)
 	    wide = true;
 	  /* APPLE LOCAL begin pascal strings */
-	  else if (count == 1 && CPP_OPTION (parse_in, pascal_strings)
-		   && str.text[1] == '\\' && str.text[2] == 'p')
-	    pascal_p = true;
+	  if (CPP_OPTION (parse_in, pascal_strings) && count == 1)
+	    {
+	      if (wide && str.text[0] == 'L' && str.text[2] == '\\' && str.text[3] == 'p')
+		pascal_p = true;
+	      else if (str.text[1] == '\\' && str.text[2] == 'p')
+		pascal_p = true;
+	    }
 	  /* APPLE LOCAL end pascal strings */
 
 	  obstack_grow (&str_ob, &str, sizeof (cpp_string));
@@ -2877,11 +2894,6 @@ cp_parser_string_literal (cp_parser *parser, bool translate, bool wide_ok)
       cp_parser_error (parser, "a wide string is invalid in this context");
       wide = false;
     }
-
-  /* APPLE LOCAL begin pascal strings */
-  if (wide)
-    pascal_p = false;
-  /* APPLE LOCAL end pascal strings */
 
   if ((translate ? cpp_interpret_string : cpp_interpret_string_notranslate)
       /* APPLE LOCAL pascal strings */
@@ -3357,15 +3369,15 @@ cp_parser_primary_expression (cp_parser *parser,
       /* Anything else is an error.  */
     default:
       /* APPLE LOCAL begin CW asm blocks */
-      if (inside_cw_asm_block)
+      if (inside_iasm_block)
 	{
 	  if (token->type == CPP_OPEN_SQUARE)
 	    {
 	      tree expr;
 	      cp_lexer_consume_token (parser->lexer);
-	      expr = cp_parser_cw_asm_operand (parser);
+	      expr = cp_parser_iasm_operand (parser);
 	      cp_parser_require (parser, CPP_CLOSE_SQUARE, "`]'");
-	      return cw_build_bracket (expr, NULL_TREE);
+	      return iasm_build_bracket (expr, NULL_TREE);
 	    }
 	}
       /* APPLE LOCAL end CW asm blocks */
@@ -3737,7 +3749,7 @@ cp_parser_unqualified_id (cp_parser* parser,
       /* APPLE LOCAL begin CW asm blocks C++ */
     case CPP_NUMBER:
       {
-	if (flag_cw_asm_blocks && inside_cw_asm_block
+	if (flag_iasm_blocks && inside_iasm_block
 	    && TREE_CODE (token->value) == INTEGER_CST)
 	  {
 	    char buf[60];
@@ -5113,7 +5125,7 @@ cp_parser_unary_expression (cp_parser *parser, bool address_p, bool cast_p)
 	{
   	  /* APPLE LOCAL begin CW asm blocks */
 	case RID_SIZEOF:
-  	  if (inside_cw_asm_block)
+  	  if (inside_iasm_block)
 	    break;
 
 	case RID_ALIGNOF:
@@ -5204,7 +5216,7 @@ cp_parser_unary_expression (cp_parser *parser, bool address_p, bool cast_p)
      relative branch syntax.  This is to allow "b *+8" which 
      is disallwed by darwin's assembler but nevertheless is needed to 
      be compatible with CW tools. */
-  if (inside_cw_asm_block && unary_operator == INDIRECT_REF)
+  if (inside_iasm_block && unary_operator == INDIRECT_REF)
     {
       cp_token *token = cp_lexer_peek_nth_token (parser->lexer, 2);
       if (token->type == CPP_PLUS || token->type == CPP_MINUS)
@@ -5258,6 +5270,15 @@ cp_parser_unary_expression (cp_parser *parser, bool address_p, bool cast_p)
 	  non_constant_p = "`&'";
 	  /* Fall through.  */
 	case BIT_NOT_EXPR:
+	  /* APPLE LOCAL begin CW asm blocks */
+	  if (inside_iasm_block
+	      && unary_operator == ADDR_EXPR
+	      && TREE_CODE (cast_expression) == LABEL_DECL)
+	    {
+	      expression = finish_label_address_expr (DECL_NAME (cast_expression));
+	      break;
+	    }
+	  /* APPLE LOCAL end CW asm blocks */
 	  expression = build_x_unary_op (unary_operator, cast_expression);
 	  break;
 
@@ -5270,7 +5291,7 @@ cp_parser_unary_expression (cp_parser *parser, bool address_p, bool cast_p)
 	case NEGATE_EXPR:
 	case TRUTH_NOT_EXPR:
 	  /* APPLE LOCAL begin CW asm blocks */
-	  if (inside_cw_asm_block && TREE_TYPE (cast_expression) == 0)
+	  if (inside_iasm_block && TREE_TYPE (cast_expression) == 0)
 	    {
 	      expression = build1 (unary_operator, NULL_TREE, cast_expression);
 	      break;
@@ -5295,8 +5316,8 @@ cp_parser_unary_expression (cp_parser *parser, bool address_p, bool cast_p)
   /* Postfix expressions in CW asm are more restricted and handled
      quite differently, so diverge from the usual expression
      precedence sequence here.  */
-  if (inside_cw_asm_block)
-    return cp_parser_cw_asm_postfix_expression (parser, address_p);
+  if (inside_iasm_block)
+    return cp_parser_iasm_postfix_expression (parser, address_p);
   /* APPLE LOCAL end CW asm blocks */
 
   return cp_parser_postfix_expression (parser, address_p, cast_p);
@@ -5330,7 +5351,8 @@ cp_parser_unary_operator (cp_token* token)
 
       /* APPLE LOCAL begin CW asm blocks */
     case CPP_NAME:
-      if (cw_asm_state >= cw_asm_decls
+      if (iasm_state >= iasm_decls
+	  && flag_ms_asms
 	  && strcasecmp (IDENTIFIER_POINTER (token->value), "offset") == 0)
 	return ADDR_EXPR;
       /* APPLE LOCAL end CW asm blocks */
@@ -5905,7 +5927,7 @@ cp_parser_binary_expression (cp_parser* parser, bool cast_p)
       new_prec = TOKEN_PRECEDENCE (token);
 
       /* APPLE LOCAL begin CW asm blocks */
-      if (flag_cw_asm_blocks && inside_cw_asm_block)
+      if (flag_iasm_blocks && inside_iasm_block)
 	{
 	  if ((token->flags & BOL) != 0)
 	    new_prec = PREC_NOT_OPERATOR;
@@ -5944,7 +5966,7 @@ cp_parser_binary_expression (cp_parser* parser, bool cast_p)
       lookahead_prec = TOKEN_PRECEDENCE (token);
 
       /* APPLE LOCAL begin CW asm blocks */
-      if (flag_cw_asm_blocks && inside_cw_asm_block)
+      if (flag_iasm_blocks && inside_iasm_block)
 	{
 	  if ((token->flags & BOL) != 0)
 	    lookahead_prec = PREC_NOT_OPERATOR;
@@ -5982,14 +6004,14 @@ cp_parser_binary_expression (cp_parser* parser, bool cast_p)
         }
 
       /* APPLE LOCAL begin CW asm blocks */
-      if (inside_cw_asm_block && TREE_CODE (rhs) == COMPOUND_EXPR)
+      if (inside_iasm_block && TREE_CODE (rhs) == COMPOUND_EXPR)
 	{
 	  gcc_assert (TREE_CODE (TREE_OPERAND (rhs, 1)) == IDENTIFIER_NODE);
 	  lhs = build_x_binary_op (tree_type, lhs, TREE_OPERAND (rhs, 0), &overloaded_p);
-	  lhs = cw_asm_build_register_offset (lhs, TREE_OPERAND (rhs, 1));
+	  lhs = iasm_build_register_offset (lhs, TREE_OPERAND (rhs, 1));
 	  return lhs;
 	}
-      if (inside_cw_asm_block)
+      if (inside_iasm_block)
 	{
 	  if (TREE_CODE (rhs) ==  IDENTIFIER_NODE
 	      || TREE_CODE (lhs) ==  IDENTIFIER_NODE
@@ -6688,23 +6710,23 @@ cp_parser_compound_statement (cp_parser *parser, tree in_statement_expr,
   /* APPLE LOCAL begin CW asm blocks */
   /* Maybe this is the body of an asm function, which has asm lines
      following the decls.  */
-  if (cw_asm_state >= cw_asm_decls)
+  if (iasm_state >= iasm_decls)
     {
       cp_token *token = cp_lexer_peek_token (parser->lexer);
-      cw_asm_in_decl = 1;
-      if (token->value && CW_SEE_OPCODE (TYPESPEC, token->value) == IDENTIFIER)
+      iasm_in_decl = 1;
+      if (token->value && IASM_SEE_OPCODE (TYPESPEC, token->value) == IDENTIFIER)
 	{
 	  token->keyword = RID_MAX;
 	  token->type = CPP_NAME;
 	}
-      cp_parser_cw_asm_declaration_seq_opt (parser);
-      cw_asm_in_decl = 0;
-      cw_asm_state = cw_asm_asm;
-      inside_cw_asm_block = 1;
-      clear_cw_asm_labels ();
-      cp_parser_cw_asm_line_seq_opt (parser);
-      cw_asm_state = cw_asm_none;
-      inside_cw_asm_block = 0;
+      cp_parser_iasm_declaration_seq_opt (parser);
+      iasm_in_decl = 0;
+      iasm_state = iasm_asm;
+      inside_iasm_block = 1;
+      iasm_clear_labels ();
+      cp_parser_iasm_line_seq_opt (parser);
+      iasm_state = iasm_none;
+      inside_iasm_block = 0;
     }
   else
   /* APPLE LOCAL end CW asm blocks */
@@ -6720,7 +6742,7 @@ cp_parser_compound_statement (cp_parser *parser, tree in_statement_expr,
 
 /* APPLE LOCAL begin CW asm blocks */
 static bool
-cp_lexer_cw_bol (cp_lexer* lexer)
+cp_lexer_iasm_bol (cp_lexer* lexer)
 {
   cp_token *token = cp_lexer_peek_token (lexer);
 
@@ -6757,9 +6779,9 @@ cp_parser_statement_seq_opt (cp_parser* parser, tree in_statement_expr)
       cp_parser_statement (parser, in_statement_expr);
 
       /* APPLE LOCAL begin CW asm blocks */
-      if (flag_cw_asm_blocks
-	  && cw_asm_state >= cw_asm_decls
-	  && (cp_lexer_cw_bol (parser->lexer)
+      if (flag_iasm_blocks
+	  && iasm_state >= iasm_decls
+	  && (cp_lexer_iasm_bol (parser->lexer)
 	      || cp_lexer_next_token_is (parser->lexer, CPP_NAME)))
 	break;
       /* APPLE LOCAL end CW asm blocks */
@@ -7587,7 +7609,7 @@ cp_parser_simple_declaration (cp_parser* parser,
       /* APPLE LOCAL begin CW asm blocks */
       /* We might have seen an asm opcode, and it's time to switch to
 	 asm instruction handling.  */
-      if (flag_cw_asm_blocks && cw_asm_state >= cw_asm_decls)
+      if (flag_iasm_blocks && iasm_state >= iasm_decls)
 	return;
       /* APPLE LOCAL end CW asm blocks */
 
@@ -7706,8 +7728,8 @@ cp_parser_simple_declaration (cp_parser* parser,
   cp_parser_require (parser, CPP_SEMICOLON, "`;'");
 
   /* APPLE LOCAL begin CW asm blocks */
-  if (flag_cw_asm_blocks)
-    cw_asm_in_decl = 0;
+  if (flag_iasm_blocks)
+    iasm_in_decl = 0;
   /* APPLE LOCAL end CW asm blocks */
 
  done:
@@ -7870,7 +7892,7 @@ cp_parser_decl_specifier_seq (cp_parser* parser,
 	case RID_ASM:
 	  /* Consume the token.  */
 	  cp_lexer_consume_token (parser->lexer);
-	  ++decl_specs->specs[(int) ds_cw_asm];
+	  ++decl_specs->specs[(int) ds_iasm_asm];
 	  break;
 	  /* APPLE LOCAL end CW asm blocks */
 
@@ -11042,12 +11064,12 @@ cp_parser_asm_definition (cp_parser* parser, bool statement_p ATTRIBUTE_UNUSED)
   cp_token *nextup;
   /* Detect when a leading `asm' is actually a spec of an asm function
      rather than an asm statement or block.  */
-  if (flag_cw_asm_blocks)
+  if (flag_iasm_blocks)
     {
       nextup = cp_lexer_peek_nth_token (parser->lexer, 2);
       if (statement_p
 	  && nextup->value
-	  && CW_SEE_OPCODE (TYPESPEC, nextup->value) == IDENTIFIER)
+	  && IASM_SEE_OPCODE (TYPESPEC, nextup->value) == IDENTIFIER)
 	{
 	  nextup->keyword = RID_MAX;
 	  nextup->type = CPP_NAME;
@@ -11061,7 +11083,7 @@ cp_parser_asm_definition (cp_parser* parser, bool statement_p ATTRIBUTE_UNUSED)
 	    || (nextup->type == CPP_DOT)
 	    || (nextup->type == CPP_SEMICOLON)
 	    || (nextup->type == CPP_NAME
-		&& !cw_asm_typename_or_reserved (nextup->value))))
+		&& !iasm_typename_or_reserved (nextup->value))))
 	{
 	  /* An asm function - we'll treat the `asm' as if it were a
 	     storage class spec, which will eventually affect function
@@ -11087,8 +11109,8 @@ cp_parser_asm_definition (cp_parser* parser, bool statement_p ATTRIBUTE_UNUSED)
   /* A CW-style asm block is introduced by an open brace.  */
   if (cp_lexer_next_token_is (parser->lexer, CPP_OPEN_BRACE))
     {
-      if (flag_cw_asm_blocks)
-	cp_parser_cw_asm_compound_statement (parser);
+      if (flag_iasm_blocks)
+	cp_parser_iasm_compound_statement (parser);
       else
 	error ("asm blocks not enabled, use `-fasm-blocks'");
       return;
@@ -11099,8 +11121,8 @@ cp_parser_asm_definition (cp_parser* parser, bool statement_p ATTRIBUTE_UNUSED)
       || cp_lexer_next_token_is_keyword (parser->lexer, RID_ASM)
       || cp_lexer_next_token_is (parser->lexer, CPP_SEMICOLON))
     {
-      if (flag_cw_asm_blocks)
-	cp_parser_cw_asm_top_statement (parser);
+      if (flag_iasm_blocks)
+	cp_parser_iasm_top_statement (parser);
       else
 	error ("asm blocks not enabled, use `-fasm-blocks'");
       return;
@@ -11877,6 +11899,9 @@ cp_parser_direct_declarator (cp_parser* parser,
 	{
 	  tree qualifying_scope;
 	  tree unqualified_name;
+      /* APPLE LOCAL begin mainline 2005-12-27 4431091 */
+      special_function_kind sfk;
+      /* APPLE LOCAL end mainline 2005-12-27 4431091 */
 
 	  /* Parse a declarator-id */
 	  if (dcl_kind == CP_PARSER_DECLARATOR_EITHER)
@@ -11934,8 +11959,8 @@ cp_parser_direct_declarator (cp_parser* parser,
 	      qualifying_scope = type;
 	    }
 
-	  declarator = make_id_declarator (qualifying_scope, 
-					   unqualified_name);
+      /* APPLE LOCAL begin mainline 2005-12-27 4431091 */
+      sfk = sfk_none;
 	  if (unqualified_name)
 	    {
 	      tree class_type;
@@ -11946,39 +11971,65 @@ cp_parser_direct_declarator (cp_parser* parser,
 	      else
 		class_type = current_class_type;
 
-	      if (class_type)
+	      if (TREE_CODE (unqualified_name) == TYPE_DECL)
 		{
-		  if (TREE_CODE (unqualified_name) == BIT_NOT_EXPR)
-		    declarator->u.id.sfk = sfk_destructor;
-		  else if (IDENTIFIER_TYPENAME_P (unqualified_name))
-		    declarator->u.id.sfk = sfk_conversion;
-		  else if (/* There's no way to declare a constructor
-			      for an anonymous type, even if the type
-			      got a name for linkage purposes.  */
-			   !TYPE_WAS_ANONYMOUS (class_type)
-			   && (constructor_name_p (unqualified_name,
-						   class_type)
-			       || (TREE_CODE (unqualified_name) == TYPE_DECL
-				   && (same_type_p 
-				       (TREE_TYPE (unqualified_name),
-					class_type)))))
-		    declarator->u.id.sfk = sfk_constructor;
-
-		  if (ctor_dtor_or_conv_p && declarator->u.id.sfk != sfk_none)
-		    *ctor_dtor_or_conv_p = -1;
+		  /* APPLE LOCAL begin mainline 2006-01-22 4416452 */
+		  tree name_type = TREE_TYPE (unqualified_name);
+		  if (class_type && same_type_p (name_type, class_type))
+		    {
 		  if (qualifying_scope
-		      && TREE_CODE (unqualified_name) == TYPE_DECL
-		      && CLASSTYPE_USE_TEMPLATE (TREE_TYPE (unqualified_name)))
+		      && CLASSTYPE_USE_TEMPLATE (name_type))
 		    {
 		      error ("invalid use of constructor as a template");
-		      inform ("use %<%T::%D%> instead of %<%T::%T%> to name "
-                              "the constructor in a qualified name",
+		      inform ("use %<%T::%D%> instead of %<%T::%D%> to "
+                              "name the constructor in a qualified name",
                               class_type,
 			      DECL_NAME (TYPE_TI_TEMPLATE (class_type)),
-			      class_type, class_type);
+			      class_type, name_type);
+		      declarator = cp_error_declarator;
+		      break;
+		    }
+		  else
+		    unqualified_name = constructor_name (class_type);
+		    }
+		  /* APPLE LOCAL end mainline 2006-01-22 4416452 */
+		  else
+		    {
+		      /* We do not attempt to print the declarator
+		         here because we do not have enough
+		         information about its original syntactic
+		         form.  */
+		      cp_parser_error (parser, "invalid declarator"); /* PR 25663 */
+		      declarator = cp_error_declarator;
+		      break;
 		    }
 		}
+		
+		if (class_type)
+		  {
+		    if (TREE_CODE (unqualified_name) == BIT_NOT_EXPR)
+		      sfk = sfk_destructor;
+		    else if (IDENTIFIER_TYPENAME_P (unqualified_name))
+		      sfk = sfk_conversion;
+		    else if (/* There's no way to declare a constructor
+		                for an anonymous type, even if the type
+		                got a name for linkage purposes.  */
+		              !TYPE_WAS_ANONYMOUS (class_type)
+		              && constructor_name_p (unqualified_name,
+		                                     class_type))
+		    {
+		      unqualified_name = constructor_name (class_type);
+		      sfk = sfk_constructor;
+	            }
+
+		    if (ctor_dtor_or_conv_p && sfk != sfk_none)
+		      *ctor_dtor_or_conv_p = -1;
+		  }
 	    }
+	  declarator = make_id_declarator (qualifying_scope,
+	                                   unqualified_name,
+	                                   sfk);
+      /* APPLE LOCAL end mainline 2005-12-27 4431091 */
 
 	handle_declarator:;
 	  scope = get_scope_of_declarator (declarator);
@@ -12188,6 +12239,8 @@ cp_parser_cv_qualifier_seq_opt (cp_parser* parser)
 static tree
 cp_parser_declarator_id (cp_parser* parser)
 {
+  /* APPLE LOCAL begin mainline 2005-12-27 4431091 */
+  tree id;
   /* The expression must be an id-expression.  Assume that qualified
      names are the names of types so that:
 
@@ -12202,11 +12255,15 @@ cp_parser_declarator_id (cp_parser* parser)
        int S<T>::R<T>::i = 3;
 
      will work, too.  */
-  return cp_parser_id_expression (parser,
+  id = cp_parser_id_expression (parser,
 				  /*template_keyword_p=*/false,
 				  /*check_dependency_p=*/false,
 				  /*template_p=*/NULL,
 				  /*declarator_p=*/true);
+  if (BASELINK_P (id))
+    id = BASELINK_FUNCTIONS (id);
+  return id;
+  /* APPLE LOCAL end mainline 2005-12-27 4431091 */
 }
 
 /* Parse a type-id.
@@ -13961,13 +14018,16 @@ cp_parser_member_declaration (cp_parser* parser)
 	      /* Combine the attributes.  */
 	      attributes = chainon (prefix_attributes, attributes);
 
+	      /* APPLE LOCAL begin mainline 2005-12-27 4431091 */
 	      /* Create the bitfield declaration.  */
 	      decl = grokbitfield (identifier
 				   ? make_id_declarator (NULL_TREE,
-							 identifier)
+							 identifier,
+							 sfk_none)
 				   : NULL,
 				   &decl_specifiers,
 				   width);
+	      /* APPLE LOCAL end mainline 2005-12-27 4431091 */
 	      /* Apply the attributes.  */
 	      cplus_decl_attributes (&decl, attributes, /*flags=*/0);
 	    }
@@ -16806,63 +16866,63 @@ cp_parser_allow_gnu_extensions_p (cp_parser* parser)
 /* This is the section of CW-asm-specific parsing functions.  */
 
 static tree
-cp_parser_cw_asm_compound_statement (cp_parser *parser)
+cp_parser_iasm_compound_statement (cp_parser *parser)
 {
   tree compound_stmt;
 
-  cw_asm_state = cw_asm_asm;
-  inside_cw_asm_block = 1;
-  cw_asm_at_bol = 1;
-  clear_cw_asm_labels ();
+  iasm_state = iasm_asm;
+  inside_iasm_block = 1;
+  iasm_at_bol = 1;
+  iasm_clear_labels ();
   if (!cp_parser_require (parser, CPP_OPEN_BRACE, "`{'"))
     return error_mark_node;
   /* Begin the compound-statement.  */
   compound_stmt = begin_compound_stmt (/*has_no_scope=*/false);
   /* Parse an (optional) statement-seq.  */
-  cp_parser_cw_asm_line_seq_opt (parser);
+  cp_parser_iasm_line_seq_opt (parser);
   /* Finish the compound-statement.  */
   finish_compound_stmt (compound_stmt);
   /* Consume the `}'.  */
   cp_parser_require (parser, CPP_CLOSE_BRACE, "`}'");
   /* We're done with the block of asm.  */
-  cw_asm_at_bol = 0;
-  inside_cw_asm_block = 0;
-  cw_asm_state = cw_asm_none;
+  iasm_at_bol = 0;
+  inside_iasm_block = 0;
+  iasm_state = iasm_none;
   return compound_stmt;
 }
 
 static tree
-cp_parser_cw_asm_top_statement (cp_parser *parser)
+cp_parser_iasm_top_statement (cp_parser *parser)
 {
   tree compound_stmt;
 
-  cw_asm_state = cw_asm_asm;
-  inside_cw_asm_block = 1;
-  cw_asm_at_bol = 1;
-  clear_cw_asm_labels ();
+  iasm_state = iasm_asm;
+  inside_iasm_block = 1;
+  iasm_at_bol = 1;
+  iasm_clear_labels ();
   /* Begin the compound-statement.  */
   compound_stmt = begin_compound_stmt (/*has_no_scope=*/false);
-  if (!cp_lexer_cw_bol (parser->lexer))
+  if (!cp_lexer_iasm_bol (parser->lexer))
     {    
       /* Parse a line.  */
-      cp_parser_cw_asm_line (parser);
+      cp_parser_iasm_line (parser);
     }
   /* Finish the compound-statement.  */
   finish_compound_stmt (compound_stmt);
   /* We're done with the block of asm.  */
-  cw_asm_at_bol = 0;
-  inside_cw_asm_block = 0;
-  cw_asm_state = cw_asm_none;
+  iasm_at_bol = 0;
+  inside_iasm_block = 0;
+  iasm_state = iasm_none;
   return compound_stmt;
 }
 
 static void
-cp_parser_cw_asm_declaration_seq_opt (cp_parser* parser)
+cp_parser_iasm_declaration_seq_opt (cp_parser* parser)
 {
   cp_token *token = cp_lexer_peek_token (parser->lexer);
 
   if (token->type == CPP_NAME
-      && !cw_asm_typename_or_reserved (token->value))
+      && !iasm_typename_or_reserved (token->value))
     return;
 
   /* Scan declarations until there aren't any more.  */
@@ -16881,8 +16941,8 @@ cp_parser_cw_asm_declaration_seq_opt (cp_parser* parser)
       if (token->type == CPP_PRAGMA)
 	cp_lexer_handle_pragma (parser->lexer);
 
-      if (cw_asm_state >= cw_asm_decls
-	  && (cp_lexer_cw_bol (parser->lexer)
+      if (iasm_state >= iasm_decls
+	  && (cp_lexer_iasm_bol (parser->lexer)
 	      || cp_lexer_next_token_is (parser->lexer, CPP_NAME)))
 	break;
     }
@@ -16895,7 +16955,7 @@ cp_parser_cw_asm_declaration_seq_opt (cp_parser* parser)
      line-seq [opt] line  */
 
 static void
-cp_parser_cw_asm_line_seq_opt (cp_parser* parser)
+cp_parser_iasm_line_seq_opt (cp_parser* parser)
 {
   /* Scan lines of asm until there aren't any more.  */
   while (true)
@@ -16906,20 +16966,20 @@ cp_parser_cw_asm_line_seq_opt (cp_parser* parser)
 	break;
 
       /* Parse the line.  */
-      cp_parser_cw_asm_line (parser);
+      cp_parser_iasm_line (parser);
     }
 }
 
 static void
-cp_parser_cw_asm_line (cp_parser* parser)
+cp_parser_iasm_line (cp_parser* parser)
 {
-  cp_parser_cw_asm_statement_seq_opt (parser);
+  cp_parser_iasm_statement_seq_opt (parser);
 }
 
 /* Skip tokens until the end of line is seen.  */
 
 static void
-cp_parser_cw_skip_to_eol (cp_parser *parser)
+cp_parser_iasm_skip_to_eol (cp_parser *parser)
 {
   while (true)
     {
@@ -16931,7 +16991,7 @@ cp_parser_cw_skip_to_eol (cp_parser *parser)
       if (token->type == CPP_EOF)
 	break;
       /* If the next token starts a new line, stop.  */
-      if (cp_lexer_cw_bol (parser->lexer))
+      if (cp_lexer_iasm_bol (parser->lexer))
 	break;
       /* Otherwise, consume the token.  */
       cp_lexer_consume_token (parser->lexer);
@@ -16939,14 +16999,14 @@ cp_parser_cw_skip_to_eol (cp_parser *parser)
 }
 
 static void
-cp_parser_cw_maybe_skip_comments (cp_parser *parser)
+cp_parser_iasm_maybe_skip_comments (cp_parser *parser)
 {
   if (flag_ms_asms
       && cp_lexer_next_token_is (parser->lexer, CPP_SEMICOLON))
     {
       /* Eat the ';', then skip rest of characters on this line. */
       cp_lexer_consume_token (parser->lexer);
-      cp_parser_cw_skip_to_eol (parser);
+      cp_parser_iasm_skip_to_eol (parser);
     }
 }
 
@@ -16954,7 +17014,7 @@ cp_parser_cw_maybe_skip_comments (cp_parser *parser)
    the line.  */
 
 static void
-cp_parser_cw_asm_statement_seq_opt (cp_parser* parser)
+cp_parser_iasm_statement_seq_opt (cp_parser* parser)
 {
   int check;
   /* Scan statements until there aren't any more.  */
@@ -16967,7 +17027,7 @@ cp_parser_cw_asm_statement_seq_opt (cp_parser* parser)
 	  /* ; denotes comments in MS-style asms. */
 	  if (flag_ms_asms)
 	    {
-	      cp_parser_cw_maybe_skip_comments (parser);
+	      cp_parser_iasm_maybe_skip_comments (parser);
 	      return;
 	    }
 	  cp_lexer_consume_token (parser->lexer);
@@ -16979,40 +17039,55 @@ cp_parser_cw_asm_statement_seq_opt (cp_parser* parser)
       else
 	{
 	  /* Parse a single statement.  */
-	  cp_parser_cw_asm_statement (parser);
+	  cp_parser_iasm_statement (parser);
 	  check = 1;
 	}
 
       if (cp_lexer_next_token_is (parser->lexer, CPP_CLOSE_BRACE)
 	  || cp_lexer_next_token_is (parser->lexer, CPP_EOF)
 	  /* We parse at most, one line.  */
-	  || cp_lexer_cw_bol (parser->lexer))
+	  || cp_lexer_iasm_bol (parser->lexer))
 	return;
 
       if (check
 	  && !(cp_lexer_next_token_is (parser->lexer, CPP_CLOSE_BRACE)
 	       || cp_lexer_next_token_is (parser->lexer, CPP_SEMICOLON)
 	       || cp_lexer_next_token_is_keyword (parser->lexer, RID_ASM)
-	       || cp_lexer_cw_bol (parser->lexer)))
+	       || cp_lexer_iasm_bol (parser->lexer)))
 	{
 	  cp_parser_error (parser, "expected `;' or `}' `asm' or end-of-line");
 	}
     }
-  if (!cp_lexer_cw_bol (parser->lexer))
-    cp_parser_cw_maybe_skip_comments (parser);
+  if (!cp_lexer_iasm_bol (parser->lexer))
+    cp_parser_iasm_maybe_skip_comments (parser);
 }
 
 /* Build an identifier comprising the string passed and the
    next token. */
 
 static tree
-cw_build_identifier_string (cp_parser* parser, const char* str)
+iasm_build_identifier_string (cp_parser* parser, const char* str)
 {
   char *buf;
   int len;
   tree id;
 
-  id = cp_parser_cw_identifier_or_number (parser);
+  if (strcmp (str, ".") == 0
+      && (cp_lexer_peek_token (parser->lexer)->flags & PREV_WHITE) == 0)
+    {
+      if (cp_lexer_next_token_is_keyword (parser->lexer, RID_SHORT))
+	{
+	  cp_lexer_consume_token (parser->lexer);
+	  return get_identifier (".short");
+	}
+      if (cp_lexer_next_token_is_keyword (parser->lexer, RID_LONG))
+	{
+	  cp_lexer_consume_token (parser->lexer);
+	  return get_identifier (".long");
+	}
+    }
+
+  id = cp_parser_iasm_identifier_or_number (parser);
   len = strlen (str);
   buf = (char *) alloca (IDENTIFIER_LENGTH (id) + len + 1);
   memcpy (buf, str, len);
@@ -17026,7 +17101,7 @@ cw_build_identifier_string (cp_parser* parser, const char* str)
    the identifier.  */
 
 static tree
-cp_parser_cw_identifier (cp_parser* parser)
+cp_parser_iasm_identifier (cp_parser* parser)
 {
   cp_token *token;
   tree t;
@@ -17063,10 +17138,10 @@ cp_parser_cw_identifier (cp_parser* parser)
       {
         /* .align */
         cp_lexer_consume_token (parser->lexer);
-        t = cw_build_identifier_string (parser, ".");
+        t = iasm_build_identifier_string (parser, ".");
       }
   else if (token->value
-	   && CW_SEE_OPCODE (TYPESPEC, token->value) == IDENTIFIER)
+	   && IASM_SEE_OPCODE (TYPESPEC, token->value) == IDENTIFIER)
     {
       cp_lexer_consume_token (parser->lexer);
       t = token->value;
@@ -17108,11 +17183,11 @@ cp_parser_cw_identifier (cp_parser* parser)
 
   cp_lexer_consume_token (parser->lexer);
 
-  return cw_get_identifier (t, str);
+  return iasm_get_identifier (t, str);
 }
 
 static tree
-cp_parser_cw_identifier_or_number (cp_parser* parser)
+cp_parser_iasm_identifier_or_number (cp_parser* parser)
 {
   cp_token *token;
 
@@ -17131,16 +17206,16 @@ cp_parser_cw_identifier_or_number (cp_parser* parser)
 }
 
 static tree
-cp_parser_cw_asm_maybe_prefix (cp_parser *parser, tree id)
+cp_parser_iasm_maybe_prefix (cp_parser *parser, tree id)
 {
   tree prefix_list = NULL_TREE;
 
-  while (cw_is_prefix (id))
+  while (iasm_is_prefix (id))
     {
-      if (cp_lexer_cw_bol (parser->lexer))
+      if (cp_lexer_iasm_bol (parser->lexer))
 	break;
       prefix_list = tree_cons (NULL_TREE, id, prefix_list);
-      id = cp_parser_cw_identifier (parser);
+      id = cp_parser_iasm_identifier (parser);
     }
 
   if (prefix_list)
@@ -17149,7 +17224,7 @@ cp_parser_cw_asm_maybe_prefix (cp_parser *parser, tree id)
 }
 
 static void
-cp_parser_cw_asm_statement (cp_parser* parser)
+cp_parser_iasm_statement (cp_parser* parser)
 {
   tree aname, scspec, anothername, operands;
 
@@ -17169,19 +17244,19 @@ cp_parser_cw_asm_statement (cp_parser* parser)
       else if (cp_lexer_next_token_is (parser->lexer, CPP_ATSIGN))
 	{
 	  cp_lexer_consume_token (parser->lexer);
-	  aname = cp_parser_cw_identifier_or_number (parser);
+	  aname = cp_parser_iasm_identifier_or_number (parser);
 	  /* Optional ':' after a label.  */
 	  if (cp_lexer_next_token_is (parser->lexer, CPP_COLON))
 	    cp_lexer_consume_token (parser->lexer);
-	  cw_asm_label (aname, 1);
+	  iasm_label (aname, 1);
 	}
       else
 	{
-	  aname = cp_parser_cw_identifier (parser);
+	  aname = cp_parser_iasm_identifier (parser);
 	  if (cp_lexer_next_token_is (parser->lexer, CPP_COLON))
 	    {
 	      cp_lexer_consume_token (parser->lexer);
-	      cw_asm_label (aname, 0);
+	      iasm_label (aname, 0);
 	    }
 	  else
 	    {
@@ -17192,37 +17267,37 @@ cp_parser_cw_asm_statement (cp_parser* parser)
 
 	      if (scspec)
 		{
-		  anothername = cp_parser_cw_asm_operand (parser);
-		  cw_asm_entry (aname, scspec, anothername);
+		  anothername = cp_parser_iasm_operand (parser);
+		  iasm_entry (aname, scspec, anothername);
 		}
 	      else
 		{
-		  aname = cp_parser_cw_asm_maybe_prefix (parser, aname);
-		  cw_asm_in_operands = 1;
-		  operands = cp_parser_cw_asm_operands (parser);
-		  cw_asm_stmt (aname, operands, input_line);
+		  aname = cp_parser_iasm_maybe_prefix (parser, aname);
+		  iasm_in_operands = 1;
+		  operands = cp_parser_iasm_operands (parser);
+		  iasm_stmt (aname, operands, input_line);
 		}
-	      if (cp_lexer_cw_bol (parser->lexer))
+	      if (cp_lexer_iasm_bol (parser->lexer))
 		return;
 	      break;
 	    }
 	}
 
-      if (cp_lexer_cw_bol (parser->lexer))
+      if (cp_lexer_iasm_bol (parser->lexer))
 	return;
     }
-  cp_parser_cw_maybe_skip_comments (parser);
+  cp_parser_iasm_maybe_skip_comments (parser);
 }
 
 /* Eat tokens until we get back to something we recognize.  */
 
 static void
-cp_parser_cw_skip_to_next_asm (cp_parser *parser)
+cp_parser_iasm_skip_to_next_asm (cp_parser *parser)
 {
   cp_token *token = cp_lexer_peek_token (parser->lexer);
   do
     {
-      if (cp_lexer_cw_bol (parser->lexer)
+      if (cp_lexer_iasm_bol (parser->lexer)
 	  || token->type == CPP_SEMICOLON
 	  || token->type == CPP_CLOSE_BRACE
 	  || token->type == CPP_EOF
@@ -17234,21 +17309,21 @@ cp_parser_cw_skip_to_next_asm (cp_parser *parser)
 }
 
 tree
-cp_parser_cw_asm_operands (cp_parser *parser)
+cp_parser_iasm_operands (cp_parser *parser)
 {
   tree operands = NULL_TREE, operand;
 
   while (true)
     {
       /* If we're looking at the end of the line, then we've run out of operands.  */
-      if (cp_lexer_cw_bol (parser->lexer)
+      if (cp_lexer_iasm_bol (parser->lexer)
 	  || cp_lexer_next_token_is (parser->lexer, CPP_SEMICOLON)
 	  || cp_lexer_next_token_is (parser->lexer, CPP_CLOSE_BRACE)
 	  || cp_lexer_next_token_is (parser->lexer, CPP_EOF)
 	  || cp_lexer_next_token_is_keyword (parser->lexer, RID_ASM))
 	break;
 
-      operand = cp_parser_cw_asm_operand (parser);
+      operand = cp_parser_iasm_operand (parser);
 
       if (operand && operand != error_mark_node)
 	{
@@ -17258,7 +17333,7 @@ cp_parser_cw_asm_operands (cp_parser *parser)
 	}
       else
 	{
-	  cp_parser_cw_skip_to_next_asm (parser);
+	  cp_parser_iasm_skip_to_next_asm (parser);
 	  return NULL_TREE;
 	}
     }
@@ -17267,7 +17342,7 @@ cp_parser_cw_asm_operands (cp_parser *parser)
 }
 
 tree
-cp_parser_cw_asm_operand (cp_parser *parser)
+cp_parser_iasm_operand (cp_parser *parser)
 {
   tree operand;
 
@@ -17280,7 +17355,7 @@ cp_parser_cw_asm_operand (cp_parser *parser)
 /* Need to handle case of relative branch using: .[+|-]number
    syntax */
 static tree
-cp_parser_cw_asm_relative_branch (cp_parser *parser)
+cp_parser_iasm_relative_branch (cp_parser *parser)
 {
   cp_token *token;
   token = cp_lexer_peek_nth_token (parser->lexer, 2);
@@ -17291,7 +17366,7 @@ cp_parser_cw_asm_relative_branch (cp_parser *parser)
       cp_lexer_consume_token (parser->lexer);
       /* consume '-' or '+' */
       cp_lexer_consume_token (parser->lexer);
-      return cw_build_identifier_string (parser, str);
+      return iasm_build_identifier_string (parser, str);
    }
   return error_mark_node;
 }
@@ -17325,7 +17400,7 @@ cp_parser_cw_asm_relative_branch (cp_parser *parser)
    Returns a representation of the expression.  */
 
 static tree
-cp_parser_cw_asm_postfix_expression (cp_parser *parser, bool address_p)
+cp_parser_iasm_postfix_expression (cp_parser *parser, bool address_p)
 {
   bool for_offsetof = false;
   cp_token *token;
@@ -17377,7 +17452,7 @@ cp_parser_cw_asm_postfix_expression (cp_parser *parser, bool address_p)
 
 	if (token->type == CPP_DOT || token->type == CPP_MULT)
 	  {
-	    postfix_expression = cp_parser_cw_asm_relative_branch (parser);
+	    postfix_expression = cp_parser_iasm_relative_branch (parser);
 	    if (postfix_expression != error_mark_node)
 	      break;
 	  }
@@ -17491,12 +17566,13 @@ cp_parser_cw_asm_postfix_expression (cp_parser *parser, bool address_p)
 	    /* Look for the closing `]'.  */
 	    cp_parser_require (parser, CPP_CLOSE_SQUARE, "`]'");
 
-	    if (inside_cw_asm_block)
+	    if (inside_iasm_block)
 	      {
 		if (TREE_CODE (postfix_expression) == BRACKET_EXPR
-		    || TREE_CODE (index) == IDENTIFIER_NODE)
+		    || TREE_CODE (index) == IDENTIFIER_NODE
+		    || TREE_TYPE (index) == NULL_TREE)
 		  {
-		    postfix_expression = cw_build_bracket (postfix_expression, index);
+		    postfix_expression = iasm_build_bracket (postfix_expression, index);
 		    break;
 		  }
 	      }
@@ -17528,7 +17604,7 @@ cp_parser_cw_asm_postfix_expression (cp_parser *parser, bool address_p)
 	      }
 
 	    postfix_expression =
-	      cw_asm_build_register_offset (postfix_expression, expr);
+	      iasm_build_register_offset (postfix_expression, expr);
 
 	    cp_parser_require (parser, CPP_CLOSE_PAREN, "`)'");
 
@@ -17570,8 +17646,8 @@ cp_parser_cw_asm_postfix_expression (cp_parser *parser, bool address_p)
 		  {
 		    /* Consume the `.' or `->' operator.  */
 		    cp_lexer_consume_token (parser->lexer);
-		    postfix_expression = cw_build_bracket (postfix_expression,
-							   new_token->value);
+		    postfix_expression = iasm_build_bracket (postfix_expression,
+							     new_token->value);
 		    cp_lexer_consume_token (parser->lexer);
 		    break;
 		  }
@@ -17666,7 +17742,7 @@ cp_parser_cw_asm_postfix_expression (cp_parser *parser, bool address_p)
 		  adjust_result_of_qualified_name_lookup 
 		    (name, BINFO_TYPE (BASELINK_BINFO (name)), scope);
 		postfix_expression
-		  = cw_asm_cp_build_component_ref (postfix_expression, name);
+		  = iasm_cp_build_component_ref (postfix_expression, name);
 	      }
 	    /* Otherwise, try the pseudo-destructor-name production.  */
 	    else
@@ -17702,8 +17778,8 @@ cp_parser_cw_asm_postfix_expression (cp_parser *parser, bool address_p)
 	      /* Handle things like: inc dword ptr [eax]  */
 	      tree type = postfix_expression;
 	      cp_lexer_consume_token (parser->lexer);
-	      postfix_expression = cp_parser_cw_asm_postfix_expression (parser, address_p);
-	      postfix_expression = cw_ptr_conv (type, postfix_expression);
+	      postfix_expression = cp_parser_iasm_postfix_expression (parser, address_p);
+	      postfix_expression = iasm_ptr_conv (type, postfix_expression);
 	    }
 
 	default:
@@ -17717,11 +17793,11 @@ cp_parser_cw_asm_postfix_expression (cp_parser *parser, bool address_p)
 }
 
 int
-cw_asm_typename_or_reserved (tree value)
+iasm_typename_or_reserved (tree value)
 {
   tree type_decl;
 
-  if (CW_SEE_OPCODE (TYPESPEC, value) == IDENTIFIER)
+  if (IASM_SEE_OPCODE (TYPESPEC, value) == IDENTIFIER)
     return 0;
 
   if (C_IS_RESERVED_WORD (value))
@@ -17900,7 +17976,13 @@ cp_parser_objc_message_args (cp_parser* parser)
 
       token = cp_lexer_peek_token (parser->lexer);
     }
-
+  /* APPLE LOCAL begin radar 4294425 */
+  if (sel_args == NULL_TREE && addl_args == NULL_TREE)
+    {
+      cp_parser_error (parser, "objective-c++ message argument(s) are expected");
+      return build_tree_list (error_mark_node, error_mark_node);
+    }
+  /* APPLE LOCAL end radar 4294425 */
   return build_tree_list (sel_args, addl_args);
 }
 
@@ -17926,6 +18008,15 @@ cp_parser_objc_encode_expression (cp_parser* parser)
       error ("`@encode' must specify a type as an argument");
       return error_mark_node;
     }
+
+  /* APPLE LOCAL begin radar 4278774 */
+  if (dependent_type_p (type))
+    {
+      tree value = build_min (AT_ENCODE_EXPR, size_type_node, type);
+      TREE_READONLY (value) = 1;
+      return value;
+    }
+  /* APPLE LOCAL end radar 4278774 */
 
   return objc_build_encode_expr (type);
 }
@@ -18262,7 +18353,13 @@ cp_parser_objc_method_keyword_params (cp_parser* parser)
 
       token = cp_lexer_peek_token (parser->lexer);
     }
-
+  /* APPLE LOCAL begin radar 4290840 */
+  if (params == NULL_TREE)
+    {
+      cp_parser_error (parser, "objective-c++ method declaration is expected");
+      return error_mark_node;
+    }
+  /* APPLE LOCAL end radar 4290840 */
   return params;
 }
 
@@ -18383,6 +18480,8 @@ cp_parser_objc_method_definition_list (cp_parser* parser)
 
       if (token->type == CPP_PLUS || token->type == CPP_MINUS)
 	{
+	  /* APPLE LOCAL radar 4290840 */
+	  cp_token *ptk;
 	  push_deferring_access_checks (dk_deferred);
 	  objc_start_method_definition
 	   (cp_parser_objc_method_signature (parser));
@@ -18391,12 +18490,20 @@ cp_parser_objc_method_definition_list (cp_parser* parser)
 	  if (cp_lexer_next_token_is (parser->lexer, CPP_SEMICOLON))
 	    cp_lexer_consume_token (parser->lexer);
 
-	  perform_deferred_access_checks ();
-	  stop_deferring_access_checks ();
-	  meth = cp_parser_function_definition_after_declarator (parser,
-								 false);
-	  pop_deferring_access_checks ();
-	  objc_finish_method_definition (meth);
+	  /* APPLE LOCAL begin radar 4290840 */
+	  /* Check for all possibilities of illegal lookahead tokens. */
+	  ptk = cp_lexer_peek_token (parser->lexer);
+	  if (!(ptk->type == CPP_PLUS || ptk->type == CPP_MINUS 
+		|| ptk->type == CPP_EOF || ptk->keyword == RID_AT_END))
+	    {
+	      perform_deferred_access_checks ();
+	      stop_deferring_access_checks ();
+	      meth = cp_parser_function_definition_after_declarator (parser,
+								     false);
+	      pop_deferring_access_checks ();
+	      objc_finish_method_definition (meth);
+	    }
+	  /* APPLE LOCAL end radar 4290840 */
 	}
       else
 	/* Allow for interspersed non-ObjC++ code.  */
@@ -18421,7 +18528,10 @@ cp_parser_objc_class_ivars (cp_parser* parser)
   cp_lexer_consume_token (parser->lexer);  /* Eat '{'.  */
   token = cp_lexer_peek_token (parser->lexer);
 
-  while (token->type != CPP_CLOSE_BRACE)
+  /* APPLE LOCAL begin radar 4261146 */
+  while (token->type != CPP_CLOSE_BRACE 
+	&& token->keyword != RID_AT_END && token->type != CPP_EOF)
+  /* APPLE LOCAL end radar 4261146 */
     {
       cp_decl_specifier_seq declspecs;
       int decl_class_or_enum_p;
@@ -18456,9 +18566,12 @@ cp_parser_objc_class_ivars (cp_parser* parser)
 	      && (cp_lexer_peek_nth_token (parser->lexer, 2)->type
 		  == CPP_COLON))
 	    {
+	      /* APPLE LOCAL begin 2005-12-27 4431091 */
 	      /* Get the name of the bitfield.  */
 	      declarator = make_id_declarator (NULL_TREE,
-					       cp_parser_identifier (parser));
+					       cp_parser_identifier (parser),
+					       sfk_none);
+	      /* APPLE LOCAL end 2005-12-27 4431091 */
 
 	     eat_colon:
 	      cp_lexer_consume_token (parser->lexer);  /* Eat ':'.  */

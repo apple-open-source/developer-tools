@@ -1,3 +1,41 @@
+2006-06-04  Devang Patel  <dpatel@apple.com>
+
+	* README.Apple: Remove outdated info.
+
+2006-06-04  Devang Patel  <dpatel@apple.com>
+
+	* README.Apple: Update web links.
+
+2006-03-15  Devang Patel  <dpatel@apple.com>
+
+	Radar 4468705
+	* build_gcc (MACOSX_DEPLOYMENT_TARGET): Do not unset.
+
+2006-03-09  Devang Patel  <dpatel@apple.com>
+
+	Radar 4468705
+	* build_gcc (MACOSX_DEPLOYMENT_TARGET): Unset.
+
+2006-01-23  Geoffrey Keating  <geoffk@apple.com>
+
+	Radar 4332100
+	* build_gcc (CONFIGFLAGS): Add --with-slibdir.
+
+2006-01-17  Geoffrey Keating  <geoffk@apple.com>
+
+	Radar 4396225
+	* build_gcc: Copy dylibs before stripping.
+
+2005-10-24  Matthew Sachs  <msachs@apple.com>
+
+	Radar 4292858
+	* GNUmakefile: Take HOSTS and TARGETS from RC_ARCHS if it's set.
+
+2005-10-17  Geoffrey Keating  <geoffk@apple.com>
+
+	Radar 4278941
+	* build_gcc (CFLAGS): Just prepend to RC_NONARCH_CFLAGS.
+
 2005-10-07  Matthew Sachs  <msachs@apple.com>
 
 	Radar 4193453

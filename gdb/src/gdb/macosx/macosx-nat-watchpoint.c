@@ -21,14 +21,6 @@
    Foundation, Inc., 59 Temple Place - Suite 330,
    Boston, MA 02111-1307, USA.  */
 
-#include "macosx-nat-watchpoint.h"
-#include "macosx-nat-dyld.h"
-#include "macosx-nat-inferior.h"
-#include "macosx-nat-mutils.h"
-#include "macosx-nat-sigthread.h"
-#include "macosx-nat-threads.h"
-#include "macosx-xdep.h"
-
 #include "defs.h"
 #include "inferior.h"
 #include "target.h"
@@ -38,6 +30,14 @@
 #include "gdbcmd.h"
 #include "gdbcore.h"
 #include "gdbthread.h"
+
+#include "macosx-nat-watchpoint.h"
+#include "macosx-nat-dyld.h"
+#include "macosx-nat-inferior.h"
+#include "macosx-nat-mutils.h"
+#include "macosx-nat-sigthread.h"
+#include "macosx-nat-threads.h"
+#include "macosx-xdep.h"
 
 #include <AvailabilityMacros.h>
 
@@ -138,7 +138,7 @@ write_protect_page (int pid, CORE_ADDR page_start)
 {
   mach_vm_address_t r_start;
   mach_vm_size_t r_size;
-  port_t r_object_name;
+  mach_port_t r_object_name;
 
   vm_region_basic_info_data_t r_data;
   mach_msg_type_number_t r_info_size;

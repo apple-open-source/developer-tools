@@ -1,38 +1,107 @@
+2006-03-31  Jason Molenda  (jmolenda@apple.com)
+
+	* mi-cmd-stack.c (mi_cmd_file_list_statics): Raise the load level of
+	the specifed objfile before looking at its statics.
+        (mi_cmd_file_list_globals): Raise the load level of the specifed 
+	objfile before looking at its globals.
+
+2006-01-23  Stan Shebs  <shebs@apple.com>
+
+	* mi-cmd-var.c (mi_cmd_var_update): Initialize print_values.
+
+2006-01-18  Jim Ingham  <jingham@apple.com>
+
+	* mi-main.c (captured_mi_execute_command): Print "^error"
+	on error, even if there's no error message.
+	(mi_execute_async_cli_command) fetch the last error message
+	from the exception that was returned (this is where this went
+	to in the latest merge...)
+	
+2006-01-11  Jim Ingham  <jingham@apple.com>
+
+	* mi-cmd-var.c (_initialize_mi_cmd_var): Fix typo in
+	name of mi-show-protections command.
+	
+2005-12-29  Stan Shebs  <shebs@apple.com>
+
+	* mi-cmds.c (mi_cmds): Add undo command.
+
+2005-12-16  Jim Ingham  <jingham@apple.com>
+
+	* mi-cmds.c: Add mi_cmd_show_version.
+	* mi-main.c (mi_cmd_show_version): New function.
+	
+2005-12-15  Greg Clayton  (gclayton@apple.com)
+
+        * mi-cmd-var.c (mi_cmd_var_create): Allow for creation
+        of varobj by using file:line to specify the block it is
+        to be created in.
+        (_initialize_mi_cmd_var): Removed unused variable.
+
 2005-10-13  Jason Molenda  (jmolenda@apple.com)
 
-	* mi-cmds.c (mi_cmds): New command, 
-	file-sharedlibrary-apply-load-rules-all, mapped to the
-	"sharedlibrary apply-load-rules all" console.
+        * mi-cmds.c (mi_cmds): New command, 
+        file-sharedlibrary-apply-load-rules-all, mapped to the
+        "sharedlibrary apply-load-rules all" console.
 
 2005-09-12  Klee Dienes  <kdienes@apple.com>
 
-	* mi-cmd-disas.c (mi_cmd_disassemble): Update usage strings.  Add
-	support for -n and -p arguments when specifying a file and line
-	number.  Update to new interface to find_pc_offset.
-
-2005-09-01  Klee Dienes  <kdienes@apple.com>
-
-	* mi-cmd-disas.c (mi_cmd_disassemble_usage): New function.
-	(mi_cmd_disassemble): Add new options "-p" and "-P".  Update
-	command parser; use mi_cmd_disassemble_usage.  Use the new syntax
-	to gdb_disassembly.  Implement the "-p" (show instructions before
-	the address) feature.
+        * mi-cmd-disas.c (mi_cmd_disassemble): Update usage strings.  Add
+        support for -n and -p arguments when specifying a file and line
+        number.  Update to new interface to find_pc_offset.
 
 2005-06-21  Jim Ingham  <jingham@apple.com>
 
-	* mi-cmd-file.c (mi_cmd_file_core_file): New function.
-	* mi-main.c (mi_cmd_target_attach): New function.
-	* mi-cmds.{c,h}: Add these two commands.
-	
-2005-06-14  Jim Ingham  <jingham@apple.com>
+        * mi-cmd-file.c (mi_cmd_file_core_file): New function.
+        * mi-main.c (mi_cmd_target_attach): New function.
+        * mi-cmds.{c,h}: Add these two commands.
+        
+ 2005-09-01  Klee Dienes  <kdienes@apple.com>
+ 
+ 	* mi-cmd-disas.c (mi_cmd_disassemble_usage): New function.
+ 	(mi_cmd_disassemble): Add new options "-p" and "-P".  Update
+ 	command parser; use mi_cmd_disassemble_usage.  Use the new syntax
+ 	to gdb_disassembly.  Implement the "-p" (show instructions before
+ 	the address) feature.
 
+2005-08-08  Klee Dienes  <kdienes@apple.com>
+
+	* mi-main.c (captured_mi_execute_command): Revert the change
+	made to TOT to use interpreter-exec to execute the command.
+
+2005-08-08  Klee Dienes  <kdienes@apple.com>
+
+	* mi-cmd-file.c (mi_cmd_file_list_exec_source_file): Use
+	symtab_to_fullname to expand the symtab.
+
+2005-08-08  Klee Dienes  <kdienes@apple.com>
+
+	* mi-cmd-var.c (mi_cmd_var_list_children): Apply the previous
+	patch from Jim Ingham from the branch.  Clean up merge lossage.
+
+2005-08-08  Jim Ingham  <jingham@apple.com>
+	   
 	* mi-cmd-var.c (mi_cmd_var_list_children): Add the
 	--show-protection flag.  When this is on, we don't show the
 	fake children.  Even when it's not we don't show the fake
 	children if there is ONLY a public child.
 	(_initialize_mi_cmd_var): Add a "set" variable to control
 	the default for showing protections.
-	
+
+2005-07-07  Klee Dienes  <kdienes@apple.com>
+
+	* mi-main.c (mi_error_last_message): Remove.
+	(mi_cmd_thread_select): Update call to gdb_thread_select.  Clean
+	up merge lossage.
+	(mi_cmd_data_write_register_values): Clean up merge lossage.
+	(captured_mi_execute_command): Update comment.  Clean up merge
+	lossage, mostly by re-porting from the new code to include the
+	Apple-local changes.
+	(mi_interpreter_exec_continuation): Clean up merge.
+	(mi_execute_command): Convert to the new exception-handling
+	mechanism.
+	(mi_execute_async_cli_command): Ditto.
+
 2005-05-16  Jason Molenda  (jmolenda@apple.com)
 
 	* mi-main.c (mi_cmd_thread_set_pc): Lift old_fun initialization

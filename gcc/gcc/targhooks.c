@@ -61,6 +61,8 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "target.h"
 #include "tm_p.h"
 #include "target-def.h"
+/* APPLE LOCAL mainline 2006-02-17 4356747 stack realign */
+#include "hard-reg-set.h"
 
 
 void
@@ -309,3 +311,40 @@ hook_invalid_arg_for_unprototyped_fn (
   return NULL;
 }
 /* APPLE LOCAL end mainline 2005-04-14 */
+
+/* APPLE LOCAL begin 4375453 */
+bool
+default_vector_alignment_reachable (tree type, bool is_packed)
+{
+  if (is_packed)
+    return false;
+
+  /* Assuming that types whose size is > pointer-size are not
+     guaranteed to be naturally aligned.  */
+  if (tree_int_cst_compare (TYPE_SIZE (type),
+			    bitsize_int (POINTER_SIZE)) > 0)
+    return false;
+
+  /* Assuming that types whose size is <= pointer-size are
+     naturally aligned.  */
+  return true;
+}
+/* APPLE LOCAL end 4375453 */
+
+/* APPLE LOCAL begin mainline 2006-02-17 4356747 stack realign */
+rtx
+default_internal_arg_pointer (void)
+{
+  /* If the reg that the virtual arg pointer will be translated into is
+     not a fixed reg or is the stack pointer, make a copy of the virtual
+     arg pointer, and address parms via the copy.  The frame pointer is
+     considered fixed even though it is not marked as such.  */
+  if ((ARG_POINTER_REGNUM == STACK_POINTER_REGNUM
+       || ! (fixed_regs[ARG_POINTER_REGNUM]
+	     || ARG_POINTER_REGNUM == FRAME_POINTER_REGNUM)))
+    return copy_to_reg (virtual_incoming_args_rtx);
+  else
+    return virtual_incoming_args_rtx;
+}
+/* APPLE LOCAL end mainline 2006-02-17 4356747 stack realign */
+

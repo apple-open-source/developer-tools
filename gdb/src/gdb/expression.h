@@ -192,7 +192,7 @@ enum exp_opcode
     /* This is EXACTLY like OP_FUNCALL but is semantically different.  
        In F77, array subscript expressions, substring expressions
        and function calls are  all exactly the same syntactically. They may 
-       only be dismabiguated at runtime.  Thus this operator, which 
+       only be disambiguated at runtime.  Thus this operator, which 
        indicates that we have found something of the form <name> ( <stuff> ) */
     OP_F77_UNDETERMINED_ARGLIST,
 
@@ -377,6 +377,8 @@ struct expression
 /* From parse.c */
 
 extern struct expression *parse_expression (char *);
+
+extern struct expression *parse_expression_in_context (char *, int);
 
 extern struct expression *parse_exp_1 (char **, struct block *, int);
 

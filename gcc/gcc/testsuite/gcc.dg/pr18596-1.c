@@ -1,7 +1,6 @@
 /* { dg-do compile } */
 /* APPLE LOCAL testsuite nested functions */
-/* { dg-skip-if "" { "*-*-darwin*" } { "*" } { "" } } */
-/* { dg-options "-fno-unit-at-a-time" } */
+/* { dg-options "-fno-unit-at-a-time -fnested-functions" } */
 
 int f(int i)
 {

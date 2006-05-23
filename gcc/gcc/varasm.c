@@ -582,7 +582,17 @@ function_section (tree decl)
       bool unlikely = insns && scan_ahead_for_unlikely_executed_note (insns);
 
 #ifdef USE_SELECT_SECTION_FOR_FUNCTIONS
-      targetm.asm_out.select_section (decl, unlikely, DECL_ALIGN (decl));
+      /* APPLE LOCAL begin mainline 2006-02-13 radar 4373419 */
+      if (DECL_SECTION_NAME (decl))
+	{
+	  if (unlikely)
+	    unlikely_text_section ();
+	  else
+	    named_section (decl, 0, 0);
+	}
+      else
+        targetm.asm_out.select_section (decl, unlikely, DECL_ALIGN (decl));
+      /* APPLE LOCAL end mainline 2006-02-13 radar 4373419 */
 #else
       if (unlikely)
 	unlikely_text_section ();
@@ -2325,6 +2335,17 @@ const_desc_hash (const void *ptr)
   return ((struct constant_descriptor_tree *)ptr)->hash;
 }
 
+/* APPLE LOCAL begin fwritable strings  */
+#if defined(TARGET_MACHO)
+ #if (TARGET_MACHO == 0)
+ #define darwin_constant_cfstring_p(X) (0)
+ #endif
+#else
+ #define darwin_constant_cfstring_p(X) (0)
+#endif
+/* APPLE LOCAL end fwritable strings  */
+
+
 static hashval_t
 const_hash_1 (const tree exp)
 {
@@ -3982,54 +4003,50 @@ output_constructor (tree exp, unsigned HOST_WIDE_INT size,
   if (HOST_BITS_PER_WIDE_INT < BITS_PER_UNIT)
     abort ();
 
-  /* APPLE LOCAL begin bitfield reversal 4228294 */
-  if (TREE_CODE (type) == RECORD_TYPE)
+  /* APPLE LOCAL begin bitfield reversal 4228294 4387676 4388773 */
+  if (TREE_CODE (type) == RECORD_TYPE && TYPE_FIELDS (type))
     {
-      if (TREE_FIELDS_REVERSED (type))
+      /* If bitfields were reversed they will not be in ascending
+	 address order here, which confuses the code below.   Sort
+	 the constructor.  Note that the type retains the old
+	 ordering, for debug info purposes.  (The comment below that
+	 says FIELD goes through the structure fields is misleading;
+	 FIELD is set from the constructor, not the type, so uses
+	 the constructor list's ordering.)  */
+      tree head, last, afterlast, prev = NULL;
+      for (head = CONSTRUCTOR_ELTS (exp);
+	   head;
+	   prev = head, head = TREE_CHAIN (head))
 	{
-	  /* If bitfields were reversed they will not be in ascending
-	     address order here, which confuses the code below.   Sort
-	     the constructor.  Note that the type retains the old
-	     ordering, for debug info purposes.  (The comment below that
-	     says FIELD goes through the structure fields is misleading;
-	     FIELD is set from the constructor, not the type, so uses
-	     the constructor list's ordering.)  */
-	  tree head, last, afterlast, prev = NULL;
-	  for (head = CONSTRUCTOR_ELTS (exp);
-	       head;
-	       prev = head, head = TREE_CHAIN (head))
+	  if (TREE_PURPOSE (head))
 	    {
-	      if (TREE_PURPOSE (head))
+	      HOST_WIDE_INT pos = int_bit_position (TREE_PURPOSE (head));
+	      /* Find next field that is after "head" in memory. */
+	      last = head;
+	      afterlast = TREE_CHAIN (head);
+	      while (afterlast && TREE_PURPOSE (afterlast)
+		     && int_bit_position (TREE_PURPOSE (afterlast)) < pos)
 		{
-		  HOST_WIDE_INT pos = int_bit_position (TREE_PURPOSE (head));
-		  /* Find next field that isn't a bitfield, or is after "head"
-		     in memory. */
-		  last = head;
-		  afterlast = TREE_CHAIN (head);
-		  while (afterlast && TREE_PURPOSE (afterlast)
-			 && int_bit_position (TREE_PURPOSE (afterlast)) < pos)
-		    {
-		      last = afterlast;
-		      afterlast = TREE_CHAIN (last);
-		    }
-		  /* Reverse fields head..last inclusive.  */
-		  if (last != head)
-		    {
-		      TREE_CHAIN (last) = NULL;
-		      last = nreverse (head);
-		      if (prev)
-			TREE_CHAIN (prev) = last;
-		      else
-			CONSTRUCTOR_ELTS (exp) = last;
-		      TREE_CHAIN (head) = afterlast;
-		      /* Outer loop will continue at afterlast. */
-		    }
+		  last = afterlast;
+		  afterlast = TREE_CHAIN (last);
+		}
+	      /* Reverse fields head..last inclusive.  */
+	      if (last != head)
+		{
+		  TREE_CHAIN (last) = NULL;
+		  last = nreverse (head);
+		  if (prev)
+		    TREE_CHAIN (prev) = last;
+		  else
+		    CONSTRUCTOR_ELTS (exp) = last;
+		  TREE_CHAIN (head) = afterlast;
+		  /* Outer loop will continue at afterlast. */
 		}
 	    }
 	}
       field = TYPE_FIELDS (type);
     }
-  /* APPLE LOCAL end bitfield reversal 4228294 */
+  /* APPLE LOCAL end bitfield reversal 4228294 4387676 4388773 */
 
   if (TREE_CODE (type) == ARRAY_TYPE
       && TYPE_DOMAIN (type) != 0)
@@ -5506,6 +5523,16 @@ default_emit_unwind_label (FILE * stream ATTRIBUTE_UNUSED,
 { 
 }
 
+/* APPLE LOCAL begin mainline */
+/* Default function to output a label to divide up the exception table.
+   The default is to do nothing.  A target that needs/wants to divide
+   up the table must provide it's own function to do this.  */
+void
+default_emit_except_table_label (FILE * stream ATTRIBUTE_UNUSED)
+{
+}
+
+/* APPLE LOCAL end mainline */
 /* This is how to output an internal numbered label where PREFIX is
    the class of label and LABELNO is the number within the class.  */
 

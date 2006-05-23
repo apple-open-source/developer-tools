@@ -21,11 +21,6 @@
    Foundation, Inc., 59 Temple Place - Suite 330,
    Boston, MA 02111-1307, USA.  */
 
-#include "macosx-nat-inferior.h"
-#include "macosx-nat-inferior-util.h"
-#include "macosx-nat-inferior-debug.h"
-#include "macosx-nat-mutils.h"
-
 #include "defs.h"
 #include "inferior.h"
 #include "target.h"
@@ -38,6 +33,11 @@
 #include <stdio.h>
 #include <sys/param.h>
 #include <sys/dir.h>
+
+#include "macosx-nat-inferior.h"
+#include "macosx-nat-inferior-util.h"
+#include "macosx-nat-inferior-debug.h"
+#include "macosx-nat-mutils.h"
 
 extern macosx_inferior_status *macosx_status;
 

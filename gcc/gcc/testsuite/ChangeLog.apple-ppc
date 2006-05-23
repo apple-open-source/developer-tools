@@ -1,3 +1,667 @@
+2006-04-28  Eric Christopher  <echristo@apple.com>
+
+        Radar 4454599
+        * gcc.apple/bitreverse-13.c: Remove.
+        * gcc.apple/bitreverse-19.c: Ditto.
+        * gcc.apple/bitreverse-2.c: Ditto.
+        * gcc.apple/bitreverse-20.c: Ditto.
+        * gcc.apple/bitreverse-21.c: Ditto.
+        * gcc.apple/bitreverse-24.c: Ditto.
+        * gcc.apple/bitreverse-27.c: Ditto.
+        * gcc.apple/bitreverse-4.c: Ditto.
+        * gcc.apple/bitreverse-5.c: Ditto.
+        * gcc.apple/bitreverse-6.c: Ditto.
+        * gcc.apple/bitreverse-7.c: Ditto.
+        * gcc.apple/bitreverse-8.c: Ditto.
+	* gcc.apple/bitreverse-18.c: Add #pragma ms_struct
+	to locations where we turn on pragma reverse_bitfields.
+	* gcc.apple/bitreverse-3.c: Ditto.
+	* gcc.apple/bitreverse-11.c: Ditto.
+	* gcc.apple/bitreverse-15.c: Ditto.
+	* gcc.apple/bitreverse-12.c: Ditto.
+	* gcc.apple/bitreverse-16.c: Ditto.
+	* gcc.apple/bitreverse-25.c: Ditto.
+	* gcc.apple/bitreverse-1.c: Ditto.
+	* gcc.apple/bitreverse-9.c: Ditto.
+	* gcc.apple/bitreverse-17.c: Ditto.
+	* gcc.apple/bitreverse-22.c: Ditto.
+	* gcc.apple/bitreverse-26.c: Ditto.
+	* gcc.apple/bitreverse-10.c: Ditto.
+	* gcc.apple/bitreverse-14.c: Ditto.
+	* g++.dg/bitreverse-10.C: Ditto.
+	* g++.dg/bitreverse-23.C: Ditto.
+
+2006-04-27  Hui-May Chang  <hm.chang@apple.com>
+
+	Radar 4314956
+	* g++.dg/sibcall-opt.C: Remove.
+
+2006-04-27  Mike Stump  <mrs@apple.com>
+
+	Radar 4529992
+	* g++.apple/asm-block-50.C: Expect warning for [ptr][4].
+	* gcc.apple/asm-block-50.c: Likewise.
+
+2006-04-27  Devang Patel  <dpatel@apple.com>
+
+	* gcc.target/i386/m64-1.c: Update line numbers in dg-warning.
+
+2006-04-26  Hui-May Chang  <hm.chang@apple.com>
+
+	Radar 4314956
+	* g++.dg/sibcall-opt.C: New.
+
+2006-04-26  Mike Stump  <mrs@apple.com>
+
+	Radar 4505697
+	* g++.apple/asm-block-51.C: Add.
+	* gcc.apple/asm-block-51.c: Add.
+
+2006-04-26  Mike Stump  <mrs@apple.com>
+
+	Radar 4505741
+	* gcc.apple/asm-block-46.c: Fix warning line.
+	* g++.apple/asm-block-31.C: Add -mdynamic-no-pic to silence warning.
+	* gcc.apple/asm-block-31.c: Likwise.
+	* g++.apple/asm-block-35.C: Likwise.
+	* gcc.apple/asm-block-35.c: Likwise.
+	* g++.apple/asm-block-50.C: Add.
+	* gcc.apple/asm-block-50.c: Add.
+	
+2006-04-25  Devang Patel  <dpatel@apple.com>
+
+	Radar 4505813
+	* gcc.target/i386/m64-1.c: New.
+	* gcc.target/i386/m64-2.c: New.
+
+2006-04-18  Dale Johannesen  <dalej@apple.com>
+
+	Radar 4516827
+	* gcc.apple/4516827.c:  New.
+
+2006-04-18  Devang Patel  <dpatel@apple.com>
+
+	Radar 4475058
+	* g++.dg/R4475058.C: New.
+
+2006-04-17  Devang Patel  <dpatel@apple.com>
+
+	Radar 4499790
+	* gcc.apple/R4499790.c: New.
+	* gcc.apple/R4499790-2.c: New.
+	* gcc.apple/pascal-strings-2.c: Update.
+	* g++.dg/pascal-strings-2.C: Update.
+
+2006-04-12  Mike Stump  <mrs@apple.com>
+
+	Radar 4477426 4466768
+	* g++.apple/asm-block-49.C: Add.
+	* gcc.apple/asm-block-49.c: Add.
+
+	Radar 4498501
+	* gcc.apple/asm-block-13.C: Update.
+	* g++.apple/asm-block-13.c: Update.
+
+2006-04-06  Stuart Hastings  <stuart@apple.com>
+
+	Radar 4499627
+	* gcc.apple/4499627.c: New.
+	* gcc.apple/4209085.c: Remove.
+
+2006-03-28  Mike Stump  <mrs@apple.com>
+
+	* asm-array-ref.C, asm-block-1.C: Move from g++.dg to g++.apple.
+	* asm-block-2.C, asm-block-3.C, asm-block-4.C, asm-block-5.C: Likwise.
+	* asm-block-6.C, asm-block-7.C, asm-block-8.C, asm-block-9.C: Likwise.
+	* asm-block-10.C, asm-block-11.C, asm-block-12.C: Likewise.
+	* asm-block-13.C, asm-block-14.C, asm-block-15.C: Likewise.
+	* asm-block-16.C, asm-block-17.C, asm-block-18.C: Likewise.
+	* asm-block-19.C, asm-block-20.C, asm-block-21.C: Likewise.
+	* asm-block-22.C, asm-block-23.C, asm-block-24.C: Likewise.
+	* asm-block-25.C, asm-block-26.C, asm-block-27.C: Likewise.
+	* asm-block-28.C, asm-block-29.C, asm-block-30.C: Likewise.
+	* asm-block-31.C, asm-block-32.C, asm-block-33.C: Likewise.
+	* asm-block-34.C, asm-block-35.C, asm-block-36.C: Likewise.
+	* asm-block-37.C, asm-block-38.C, asm-block-39.C: Likewise.
+	* asm-block-40.C, asm-block-41.C, asm-block-42.C: Likewise.
+	* asm-block-43.C, asm-block-44.C, asm-block-45.C: Likewise.
+	* asm-block-46.C, asm-block-47.C: Likewise.
+	* asm-block-48.C, asm-block-dot-align.C, asm-function-1.C: Likewise.
+	* asm-function-2.C, asm-function-3.C, asm-function-4.C: Likewise.
+	* asm-function-5.C, asm-function-6.C, asm-function-7.C: Likewise.
+	* asm-function-8.C, asm-function-9.C, asm-function-10.C: Likewise.
+	* asm-function-11.C, asm-function-12.C, asm-function-13.C: Likewise.
+	* asm-function-14.C, asm-function-15.C, asm-function-16.C: Likewise.
+	* asm-function-17.C, asm-function-18.C, asm-function-19.C: Likewise.
+	* asm-function-20.C, asm-nested-struct-1.C: Likewise.
+	* asm-static-entry-1.C: Likewise.
+
+2006-03-24  Stuart Hastings  <stuart@apple.com>
+
+	Radar 4443946
+	gcc.apple/4443946.c: New.
+
+2006-03-24  Stuart Hastings  <stuart@apple.com>
+
+	Radar 4474259
+	* gcc.apple/4474259.c: New.
+
+2006-03-22  Geoffrey Keating  <geoffk@apple.com>
+
+	Radar 4484188
+	* g++.old-deja/g++.other/init19.C: New.
+
+2006-03-17  Stuart Hastings  <stuart@apple.com>
+
+	Radar 4474655
+	* g++.apple/474655.C: New.
+
+2006-03-17  Stuart Hastings  <stuart@apple.com>
+
+	* g++.dg/4425360.C: Tweak for -m64.
+
+2006-03-16  Geoffrey Keating  <geoffk@apple.com>
+
+	Radar 4481011
+	* g++.dg/bitreverse-23.C: Avoid uninitialised-data problem.
+
+2006-03-13  Mike Stump  <mrs@apple.com>
+
+	Radar 4230099
+	* g++.apple/apple.exp: Add.
+	* g++.apple/visibility-1.C: Add.
+
+2006-03-13  Stuart Hastings  <stuart@apple.com>
+
+	Radar 4474655
+	* testsuite/g++.dg/4448096-2.C: Remove.
+
+2006-03-10  Fariborz Jahanian <fjahanian@apple.com>
+        
+        Radar 4407151
+        * obj-c++.dg/template-7.mm: New.
+
+2006-03-07  Stuart Hastings  <stuart@apple.com>
+
+	Radar 4457939
+	* dg.apple/4457979.c: New.
+
+2006-03-07  Mike Stump  <mrs@apple.com>
+
+	Radar 4408780
+	* g++.dg/asm-block-13.C: Update.
+	* gcc.apple/asm-block-13.c: Update.
+
+2006-03-03  Stuart Hastings  <stuart@apple.com>
+
+	Radar 4425360
+	* g++.dg/4425360.C: New.
+
+2006-02-28  Devang Patel  <dpatel@apple.com>
+	    Dorit Nuzman  <dorit@apple.com>
+
+	Radar 4375453
+        * gcc.dg/vect/vect-align-2.c: New.
+
+2006-02-27  Stuart Hastings  <stuart@apple.com>
+
+	Radar 4356747
+	* testsuite/gcc.target/i386/20060210-1.c: New.
+	* testsuite/gcc.target/i386/20060210-2.c: New.
+	* testsuite/gcc.target/i386/20060210-3.c: New.
+	* testsuite/gcc.target/i386/20060210-4.c: New.
+	* gcc/testsuite/ChangeLog.apple-ppc: Fix.
+
+2006-02-27  Stuart Hastings  <stuart@apple.com>
+
+	Radar 4448096
+	* testsuite/gcc.target/i386/4448096-1.c: New.
+	* testsuite/g++.dg/4448096-2.C: New.
+
+2006-02-24  Mike Stump  <mrs@apple.com>
+
+	Radar 4456673
+	* gcc.apple/asm-block-48.c: Add.
+	* g++.dg/asm-block-48.C: Add.
+
+2006-02-24  Mike Stump  <mrs@apple.com>
+
+	Radar 4298040
+	* g++.dg/asm-block-47.C: Add.
+	* g++.dg/asm-block-13.C: Update.
+	* gcc.apple/asm-block-13.c: Update.
+
+2006-02-17  Stuart Hastings  <stuart@apple.com>
+
+	* gcc.dg/4176531.c: Fix target.
+
+2006-02-16  Mike Stump  <mrs@apple.com>
+
+	Radar 4419735
+	* gcc.apple/asm-block-45.c: Add.
+	* gcc.apple/asm-block-46.c: Add.
+	* g++.dg/asm-block-45.C: Add.
+	* g++.dg/asm-block-46.C: Add.
+
+2006-02-14  Eric Christopher  <echristo@apple.com>
+
+	Radar 4385016 4331438
+	* gcc.apple/altivec-maltivec-1.c: xfail for 64bit.
+	* gcc.apple/altivec-faltivec-1.c: Ditto.
+	* gcc.apple/altivec-faltivec-2.c: Ditto.
+	* gcc.apple/default-cpu-1.c: Skip for 64bit.
+	* gcc.apple/default-cpu-2.c: Ditto.
+	* gcc.apple/align-test-5c: Ditto.
+	* gcc.apple/asm-test-nofralloc.c: Ditto.
+
+2006-02-14  Mike Stump  <mrs@apple.com>
+
+	Radar 4443942
+	* gcc.apple/asm-block-44.c: Add.
+	* g++.dg/asm-block-44.C: Add.
+
+2006-02-14  Mike Stump  <mrs@apple.com>
+
+	Radar 4415216
+	* gcc.apple/asm-block-43.c: Add.
+	* g++.dg/asm-block-43.C: Add.
+
+2006-02-14  Josh Conner  <jconner@apple.com>
+
+	Radar 4373419
+	PR target/25376
+	* gcc.dg/pr25376: New test.
+	* lib/target-supports.exp (check_named_sections_available):
+	Only compile named-sections test -- don't assemble.
+
+2006-02-10  Dale Johannesen  <dalej@apple.com>
+	
+	Radar 4430139 4431497
+	* gcc.apple/bitreverse-10.c:  Return from main.
+	* gcc.apple/bitreverse-18.c:  New.
+	* gcc.apple/bitreverse-19.c:  New.
+	* gcc.apple/bitreverse-20.c:  New.
+	* gcc.apple/bitreverse-21.c:  New.
+	* gcc.apple/bitreverse-22.c:  New.
+	* gcc.apple/bitreverse-24.c:  New.
+	* gcc.apple/bitreverse-25.c:  New.
+	* gcc.apple/bitreverse-26.c:  New.
+	* gcc.apple/bitreverse-27.c:  New.
+	* g++.dg/bitreverse-10.C:  Return from main.
+	* g++.dg/bitreverse-23.C:  New.
+
+2006-02-09  Mike Stump  <mrs@apple.com>
+
+	Radar 4399388
+	* gcc.apple/asm-block-42.c: Add.
+	* g++.dg/asm-block-42.C: Add.
+
+2006-02-08  Mike Stump  <mrs@apple.com>
+
+	Radar 4429851
+	* gcc.apple/asm-block-41.c: Add.
+	* g++.dg/asm-block-41.C: Add.
+
+2006-02-08  Mike Stump  <mrs@apple.com>
+
+	Radar 4407059
+	* gcc.apple/asm-block-40.c: Add.
+	* g++.dg/asm-block-40.C: Add.
+
+2005-02-07  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 4219590
+	* objc.dg/break-in-ifstmt.m: New.
+
+2006-02-06  Devang Patel  <dpatel@apple.com>
+	
+       Radar 4385002
+       * gcc.dg/vect/vect-align-1.c: Update.
+
+2006-02-03  Mike Stump  <mrs@apple.com>
+
+	Radar 4432782
+	* gcc.apple/asm-block-39.c: Add.
+	* g++.dg/asm-block-39.C: Add.
+
+2006-02-02  Mike Stump  <mrs@apple.com>
+
+	Radar 4433955
+	* gcc.apple/asm-block-37.c: Add.
+	* gcc.apple/asm-block-38.c: Add.
+	* g++.dg/asm-block-37.C: Add.
+	* g++.dg/asm-block-38.C: Add.
+
+2006-02-01  Devang Patel  <dpatel@apple.com>
+
+	Radar 4208007
+	* gcc.dg/R4208007.c: New.
+	
+2006-01-31  Devang Patel  <dpatel@apple.com>
+
+	Radar 4382844
+	* g++.dg/vect/R4382844.cc: New.
+
+2006-01-28  Dale Johannesen  <dalej@apple.com>
+
+	Radar 4420068
+	* gcc.apple/bitreverse-17.c:  New.
+
+2006-01-27  Stuart Hastings  <stuart@apple.com>
+
+	Radar 4176531
+	* testsuite/gcc.dg/4176531.c: New.
+
+2006-01-23  Devang Patel  <dpatel@apple.com>
+
+        Radar 4334498
+        * g++.dg/stab-4334498.C: New.
+
+2006-01-20  Eric Christopher  <echristo@apple.com>
+
+	* g++.old-deja/g++.other/warn4.C: Compile
+	with -Wconversion.
+
+2006-01-20  Mike Stump  <mrs@apple.com>
+
+	Radar 4381918
+	* gcc.apple/asm-function-19.c: Add.
+	* gcc.apple/asm-function-20.c: Add.
+	* g++.dg/asm-function-19.C: Add.
+	* g++.dg/asm-function-20.C: Add.
+
+2006-01-13  Dale Johannesen  <dalej@apple.com>
+
+	Radar 4401223 4401224
+	* gcc.apple/bitreverse-15.c:  Fix for 64-bit.
+	* gcc.apple/bitreverse-16.c:  Ditto.
+
+2006-01-13  Stuart Hastings  <stuart@apple.com>
+
+	Radar 4386991
+	* gcc/testsuite/g++.dg/4386991.C: New.
+	* gcc/testsuite/g++.dg/4285232.C: XFAIL.
+	* gcc/testsuite/bugs/powerpc/g++.xfail: Ditto.
+
+2006-01-13  Dale Johannesen  <dalej@apple.com>
+
+	Radar 4401223 4401224
+	* gcc.apple/bitreverse-15.c:  New.
+	* gcc.apple/bitreverse-16.c:  New.
+
+2005-12-22  Dale Johannesen  <dalej@apple.com>
+
+	Radar 4387676 4388773
+	* gcc.apple/bitreverse-14.c:  New.
+
+2005-12-21  Stuart Hastings  <stuart@apple.com>
+
+	Radar 4380298, 4299630
+	* g++.dg/apple-longcall-3.C: New.
+
+2005-12-14  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 4278774
+	* obj-c++.dg/encode-9.mm: New.
+
+2005-12-14  Dale Johannesen  <dalej@apple.com>
+
+	Radar 4271691 (partial)
+	* gcc.target/i386/4271691.c:  New.
+
+2005-12-09  Mike Stump  <mrs@apple.com>
+
+	Radar 4371958
+	* gcc.apple/asm-block-36.c: Add.
+	* g++.dg/asm-block-36.C: Add.
+
+2005-12-09  Mike Stump  <mrs@apple.com>
+
+	Radar 4371551
+	* gcc.apple/asm-block-35.c: Add.
+	* g++.dg/asm-block-35.C: Add.
+
+2005-12-09  Dale Johannesen  <dalej@apple.com>
+
+	Radar 4233898
+	* gcc.c-torture/execute/4233898.c: New.
+
+2005-12-08  Dale Johannesen  <dalej@apple.com>
+
+	Radar 4285232
+	* g++.dg/4285232.C:  New.
+
+2005-12-08  Devang Patel  <dpatel@apple.com>
+
+	Radar 4298879
+	* gcc.apple/default-cpu-1.c: New.
+	* gcc.apple/default-cpu-2.c: New.
+	* gcc.apple/default-cpu-3.c: New.
+
+2005-12-07  Devang Patel  <dpatel@apple.com>
+
+	Radar 4333194
+	* gcc.dg/vect/vect-align-1.c: New.
+
+2005-12-07  Dale Johannesen  <dalej@apple.com>
+
+	Radar 4349512
+	* g++.dg/4349512.C:  New.
+
+2005-12-07  Stuart Hastings  <stuart@apple.com>
+
+	Radar 4299630
+	* g++.dg/apple-longcall-2.C: New.
+
+2005-12-06  Dale Johannesen  <dalej@apple.com>
+
+	Radar 4332318
+	* gcc.target/i386/sse-17.c:  New.
+
+2005-12-03  Mike Stump  <mrs@apple.com>
+
+	* lib/c-torture.exp: Added -fnested-functions.
+	* lib/objc-torture.exp (objc-torture-execute): Likewise.
+	* gcc.apple/nested-func-1.c: Likewise.
+	* gcc.c-torture/compile/20010226-1.c: Likewise.
+	* gcc.c-torture/compile/20010605-1.c: Likewise.
+	* gcc.c-torture/compile/20010903-2.c: Likewise.
+	* gcc.c-torture/compile/20011023-1.c: Likewise.
+	* gcc.c-torture/compile/20020309-1.c: Likewise.
+	* gcc.c-torture/compile/20021204-1.c: Likewise.
+	* gcc.c-torture/compile/20030418-1.c: Likewise.
+	* gcc.c-torture/compile/20030716-1.c: Likewise.
+	* gcc.c-torture/compile/20031011-1.c: Likewise.
+	* gcc.c-torture/compile/20040310-1.c: Likewise.
+	* gcc.c-torture/compile/20040317-3.c: Likewise.
+	* gcc.c-torture/compile/20050119-1.c: Likewise.
+	* gcc.c-torture/compile/20050122-2.c: Likewise.
+	* gcc.c-torture/compile/920415-1.c: Likewise.
+	* gcc.c-torture/compile/930506-2.c: Likewise.
+	* gcc.c-torture/compile/951116-1.c: Likewise.
+	* gcc.c-torture/compile/nested-1.c: Likewise.
+	* gcc.c-torture/compile/nested-2.c: Likewise.
+	* gcc.dg/20011130-1.c: Likewise.
+	* gcc.dg/20021014-1.c: Likewise.
+	* gcc.dg/20030331-2.c: Likewise.
+	* gcc.dg/20031218-2.c: Likewise.
+	* gcc.dg/20031218-3.c: Likewise.
+	* gcc.dg/20050607-1.c: Likewise.
+	* gcc.dg/cleanup-7.c: Likewise.
+	* gcc.dg/debug/debug-3.c: Likewise.
+	* gcc.dg/debug/debug-4.c: Likewise.
+	* gcc.dg/debug/debug-5.c: Likewise.
+	* gcc.dg/declspec-10.c: Likewise.
+	* gcc.dg/declspec-11.c: Likewise.
+	* gcc.dg/declspec-9.c: Likewise.
+	* gcc.dg/nest.c: Likewise.
+	* gcc.dg/nested-func-1.c: Likewise.
+	* gcc.dg/nested-func-2.c: Likewise.
+	* gcc.dg/noncompile/label-1.c: Likewise.
+	* gcc.dg/pr18596-1.c: Likewise.
+	* gcc.dg/pr18596-2.c: Likewise.
+	* gcc.dg/pr18963-1.c: Likewise.
+	* gcc.dg/torture/nested-fn-1.c: Likewise.
+	* gcc.dg/trampoline-1.c: Likewise.
+	* gcc.dg/wtr-func-def-1.c: Likewise.
+	* objc.dg/nested-func-1.m: Likewise.
+
+	* gcc.c-torture/execute/20000822-1.x: Remove.
+	* gcc.c-torture/execute/20010209-1.x: Remove.
+	* gcc.c-torture/execute/20010605-1.x: Remove.
+	* gcc.c-torture/execute/20030501-1.x: Remove.
+	* gcc.c-torture/execute/20040520-1.x: Remove.
+	* gcc.c-torture/execute/920415-1.x: Remove.
+	* gcc.c-torture/execute/920428-2.x: Remove.
+	* gcc.c-torture/execute/920501-7.x: Remove.
+	* gcc.c-torture/execute/920612-2.x: Remove.
+	* gcc.c-torture/execute/920721-4.x: Remove.
+	* gcc.c-torture/execute/921017-1.x: Remove.
+	* gcc.c-torture/execute/921215-1.x: Remove.
+	* gcc.c-torture/execute/931002-1.x: Remove.
+	* gcc.c-torture/execute/comp-goto-2.x: Remove.
+	* gcc.c-torture/execute/nest-stdar-1.x: Remove.
+	* gcc.c-torture/execute/nestfunc-1.x: Remove.
+	* gcc.c-torture/execute/nestfunc-2.x: Remove.
+	* gcc.c-torture/execute/nestfunc-3.x: Remove.
+	* gcc.c-torture/execute/nestfunc-4.x: Remove.
+	* gcc.c-torture/execute/nestfunc-5.x: Remove.
+	* gcc.c-torture/execute/nestfunc-6.x: Remove.
+	* objc/execute/nested-1.x: Remove.
+	* objc/execute/nested-2.x: Remove.
+	* objc/execute/nested-3.x: Remove.
+
+2005-12-02  Mike Stump  <mrs@apple.com>
+
+	Radar 4363798
+	* gcc.apple/asm-block-34.c: Add.
+	* g++.dg/asm-block-34.C: Add.
+
+2005-12-01  Dale Johannesen  <dalej@apple.com>
+
+	Radar 4350099
+	* gcc.apple/bitreverse-13.c:  New.
+
+2005-11-30  Dale Johannesen  <dalej@apple.com>
+
+	Radar 4347034
+	* gcc.c-torture/compile/pr24930.c:  New.
+
+2005-11-16  Devang Patel  <dpatel@apple.com>
+
+        Radar 4345760
+        * g++.dg/ss/ss.exp: Fix link test.
+        * gcc.dg/ss/ss.exp: Fix link test.
+
+2005-11-15  Dale Johannesen  <dalej@apple.com>
+
+        * gcc.apple/pragma.c:  New.
+
+2005-11-14  Dale Johannesen  <dalej@apple.com>
+
+	* gcc.c-torture/execute/20051113-1.c:  New.
+
+2005-11-14  Devang Patel  <dpatel@apple.com>
+
+	Radar 4053179
+	* gcc.dg/tree-ssa-vect/pr16105.c: Remove.
+	* gcc.dg/tree-ssa-vect/ifc-01.c: Remove.
+	* gcc.dg/tree-ssa-vect/ifc-02.c: Remove.
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-31.c: Remove.
+	* gcc.dg/tree-ssa-vect/tree-vect.h: Remove.
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-35.c: Remove.
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect.exp: Remove.
+	* gcc.dg/tree-ssa-vect : Remove.
+
+2005-11-09  Mike Stump  <mrs@apple.com>
+
+	Radar 4300193
+	* gcc.apple/asm-block-33.c: Add.
+	* g++.dg/asm-block-33.C: Add.
+
+2005-11-08  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 4330422
+
+	* obj-c++.dg/try-catch-15.mm: New
+
+2005-11-07  Dale Johannesen  <dalej@apple.com>
+
+        gcc.dg/darwin64-abi.c:  Fix to test for 
+        correct location of rightmost bits of
+        struct pararmeters.
+
+2005-10-31  Devang Patel  <dpatel@apple.com>
+
+	Radar 4310696
+	* g++.dg/stab-anon-struct-1.C: New.
+
+2005-10-20  Devang Patel  <dpatel@apple.com>
+
+	* gcc.apple/execute/picbase-1.x: New.
+
+2005-10-19  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 4301047
+
+	obj-c++.dg/proto-qual-1.mm: Fix test to match 3.3 ABI
+	objc.dg/proto-qual-1.m: Ditto
+	obj-c++.dg/threedotthree-abi-1.mm: New
+	objc.dg/threedotthree-abi-1.m: New
+
+2005-10-17  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 4290840
+
+	obj-c++.dg/syntax-error-7.mm: New
+
+2005-10-14  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 4294425
+
+	obj-c++.dg/syntax-error-6.mm: New
+
+2005-10-13  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 4261146
+
+	obj-c++.dg/syntax-error-5.mm: New
+
+2005-10-11  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 4291785
+	
+	objc.dg/naming-4.m: New
+	objc.dg/naming-5.m: New
+	obj-c++.dg/naming-1.mm: New
+	obj-c++.dg/naming-2.mm: New
+
+2005-10-10  Fariborz Jahanian <fjahanian@apple.com>
+
+        Radar 4291099
+	obj-c++.dg/objc-gc-9.mm: New.
+
+2005-10-07  Fariborz Jahanian <fjahanian@apple.com>
+
+        Radar 4204796
+	obj-c++.dg/try-catch-12.mm: New
+	obj-c++.dg/try-catch-13.mm: New
+	obj-c++.dg/try-catch-14.mm: New
+	objc.dg/try-catch-11.m: New
+	objc.dg/try-catch-12.m: New
+	objc.dg/try-catch-13.m: New
+	
+2005-10-04  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 4278236
+	* obj-c++.dg/bad-forward-decl.mm: New
+
+2005-10-04  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 4281748
+	* objc.dg/naming-2.m: Update
+	* objc.dg/naming-3.m: New
+
 2005-10-28  Stuart Hastings  <stuart@apple.com>
 
 	Radar 4164563

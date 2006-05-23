@@ -1033,6 +1033,8 @@ duplicate_decls (tree newdecl, tree olddecl)
   unsigned olddecl_uid = DECL_UID (olddecl);
   int olddecl_friend = 0, types_match = 0;
   int new_defines_function = 0;
+  /* APPLE LOCAL mainline 2005-12-02 Radar 4458276  */
+  tree new_template;
 
   if (newdecl == olddecl)
     return olddecl;
@@ -1678,6 +1680,8 @@ duplicate_decls (tree newdecl, tree olddecl)
   if (! DECL_EXTERNAL (olddecl))
     DECL_EXTERNAL (newdecl) = 0;
 
+  /* APPLE LOCAL mainline 2005-12-02 Radar 4458276  */
+  new_template = NULL_TREE;
   if (DECL_LANG_SPECIFIC (newdecl) && DECL_LANG_SPECIFIC (olddecl))
     {
       DECL_INTERFACE_KNOWN (newdecl) |= DECL_INTERFACE_KNOWN (olddecl);
@@ -1700,6 +1704,10 @@ duplicate_decls (tree newdecl, tree olddecl)
 	DECL_LANG_SPECIFIC (olddecl)->decl_flags.u2;
       DECL_NONCONVERTING_P (newdecl) = DECL_NONCONVERTING_P (olddecl);
       DECL_REPO_AVAILABLE_P (newdecl) = DECL_REPO_AVAILABLE_P (olddecl);
+      /* APPLE LOCAL begin mainline 2005-12-02 Radar 4458276  */
+      if (DECL_TEMPLATE_INFO (newdecl))
+	new_template = DECL_TI_TEMPLATE (newdecl);
+      /* APPLE LOCAL end  mainline 2005-12-02 Radar 4458276  */
       DECL_TEMPLATE_INFO (newdecl) = DECL_TEMPLATE_INFO (olddecl);
       DECL_INITIALIZED_IN_CLASS_P (newdecl)
         |= DECL_INITIALIZED_IN_CLASS_P (olddecl);
@@ -1847,7 +1855,8 @@ duplicate_decls (tree newdecl, tree olddecl)
 	      (char *) newdecl + sizeof (struct tree_common),
 	      function_size - sizeof (struct tree_common));
 
-      if (DECL_TEMPLATE_INSTANTIATION (newdecl))
+      /* APPLE LOCAL mainline 2005-12-02 Radar 4458276  */
+      if (new_template)
 	/* If newdecl is a template instantiation, it is possible that
 	   the following sequence of events has occurred:
 
@@ -1870,7 +1879,8 @@ duplicate_decls (tree newdecl, tree olddecl)
 	   instantiations so that if we try to do the instantiation
 	   again we won't get the clobbered declaration.  */
 	reregister_specialization (newdecl,
-				   DECL_TI_TEMPLATE (newdecl),
+				   /* APPLE LOCAL mainline 2005-12-02 Radar 4458276  */
+				   new_template,
 				   olddecl);
     }
   else
@@ -2944,6 +2954,10 @@ cxx_init_decl_processing (void)
     }
   if (flag_inline_functions)
     flag_inline_trees = 2;
+  /* APPLE LOCAL begin ms tinfo compat 4230099 */
+  if (flag_visibility_ms_compat)
+    default_visibility = VISIBILITY_HIDDEN;
+  /* APPLE LOCAL end ms tinfo compat 4230099 */
 
   /* Force minimum function alignment if using the least significant
      bit of function pointers to store the virtual bit.  */
@@ -6634,7 +6648,7 @@ grokdeclarator (const cp_declarator *declarator,
   cp_storage_class storage_class;
   bool unsigned_p, signed_p, short_p, long_p, thread_p;
   /* APPLE LOCAL CW asm blocks */
-  bool cw_asm_p;
+  bool iasm_p;
   bool type_was_error_mark_node = false;
 
   signed_p = declspecs->specs[(int)ds_signed];
@@ -6643,7 +6657,7 @@ grokdeclarator (const cp_declarator *declarator,
   long_p = declspecs->specs[(int)ds_long];
   thread_p = declspecs->specs[(int)ds_thread];
   /* APPLE LOCAL CW asm blocks */
-  cw_asm_p = declspecs->specs[(int)ds_cw_asm];
+  iasm_p = declspecs->specs[(int)ds_iasm_asm];
 
   if (decl_context == FUNCDEF)
     funcdef_flag = 1, decl_context = NORMAL;
@@ -6697,10 +6711,7 @@ grokdeclarator (const cp_declarator *declarator,
 		else if (TREE_CODE (qualifying_scope) == NAMESPACE_DECL)
 		  in_namespace = qualifying_scope;
 	      }
-	    if (TREE_CODE (decl) == BASELINK)
-	      decl = BASELINK_FUNCTIONS (decl);
-	    if (decl == error_mark_node)
-	      return error_mark_node;
+	    /* APPLE LOCAL begin mainline 2005-12-27 4431091 */
 	    switch (TREE_CODE (decl))
 	      {
 	      case BIT_NOT_EXPR:
@@ -6764,11 +6775,7 @@ grokdeclarator (const cp_declarator *declarator,
 		  }
 		break;
 
-	      case TYPE_DECL:
-		dname = constructor_name (TREE_TYPE (decl));
-		name = IDENTIFIER_POINTER (dname);
-		break;
-
+              /* APPLE LOCAL end mainline 2005-12-27 4431091 */
 	      default:
 		gcc_unreachable ();
 	      }
@@ -7246,8 +7253,7 @@ grokdeclarator (const cp_declarator *declarator,
   else
     {
       unqualified_id = id_declarator->u.id.unqualified_name;
-      if (TREE_CODE (unqualified_id) == BASELINK)
-	unqualified_id = BASELINK_FUNCTIONS (unqualified_id);
+      /* APPLE LOCAL begin mainline 2005-12-27 4431091 */
       switch (TREE_CODE (unqualified_id))
 	{
 	case BIT_NOT_EXPR:
@@ -7255,11 +7261,7 @@ grokdeclarator (const cp_declarator *declarator,
 	    = constructor_name (TREE_OPERAND (unqualified_id, 0));
 	  break;
 
-	case TYPE_DECL:
-	  unqualified_id
-	    = constructor_name (TREE_TYPE (unqualified_id));
-	  break;
-
+        /* APPLE LOCAL end mainline 2005-12-27 4431091 */
 	case IDENTIFIER_NODE:
 	case TEMPLATE_ID_EXPR:
 	  break;
@@ -8380,14 +8382,14 @@ grokdeclarator (const cp_declarator *declarator,
       DECL_THIS_STATIC (decl) = 1;
 
     /* APPLE LOCAL begin CW asm blocks */
-    if (cw_asm_p)
+    if (iasm_p)
       {
 	/* Record that this is a decl of a CW-style asm function.  */
-	if (flag_cw_asm_blocks)
+	if (flag_iasm_blocks)
 	  {
-	    DECL_CW_ASM_FUNCTION (decl) = 1;
-	    DECL_CW_ASM_NORETURN (decl) = 0;
-	    DECL_CW_ASM_FRAME_SIZE (decl) = -2;
+	    DECL_IASM_ASM_FUNCTION (decl) = 1;
+	    DECL_IASM_NORETURN (decl) = 0;
+	    DECL_IASM_FRAME_SIZE (decl) = -2;
 	  }
 	else
 	  error ("asm functions not enabled, use `-fasm-blocks'");
@@ -10394,10 +10396,12 @@ start_preparsed_function (tree decl1, tree attrs, int flags)
   /* If this was a function declared as an assembly function, change
      the state to expect to see C++ decls, possibly followed by assembly
      code.  */
-  if (DECL_CW_ASM_FUNCTION (current_function_decl))
+  if (DECL_IASM_ASM_FUNCTION (current_function_decl))
     {
-      cw_asm_state = cw_asm_decls;
-      cw_asm_in_decl = 0;
+      iasm_state = iasm_decls;
+      iasm_in_decl = 0;
+      current_function_returns_abnormally = 1;
+      TREE_NO_WARNING (current_function_decl) = 1;
     }
   /* APPLE LOCAL end CW asm blocks */
 
@@ -10594,6 +10598,14 @@ begin_destructor_body (void)
 {
   tree if_stmt;
   tree compound_stmt;
+  /* APPLE LOCAL begin mainline 2006-01-22 4416452 */
+  /* If the CURRENT_CLASS_TYPE is incomplete, we will have already
+     issued an error message. ÊWe still want to try to process the
+     body of the function, but initialize_vtbl_ptrs will crash if
+     TYPE_BINFO is NULL. Ê*/
+  if (!COMPLETE_TYPE_P (current_class_type))
+    return;
+  /* APPLE LOCAL end mainline 2006-01-22 4416452 */
 
   /* If the dtor is empty, and we know there is not any possible
      way we could use any vtable entries, before they are possibly

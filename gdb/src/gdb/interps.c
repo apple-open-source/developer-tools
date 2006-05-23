@@ -42,6 +42,7 @@
 #include "gdb-events.h"
 #include "gdb_assert.h"
 #include "top.h"		/* For command_loop.  */
+#include "exceptions.h"
 
 struct interp
 {
@@ -166,7 +167,7 @@ interp_set (struct interp *interp)
 	  && !current_interpreter->procs->suspend_proc (current_interpreter->
 							data))
 	{
-	  error ("Could not suspend interpreter \"%s\"\n",
+	  error (_("Could not suspend interpreter \"%s\"."),
 		 current_interpreter->name);
 	}
     }
@@ -208,7 +209,7 @@ interp_set (struct interp *interp)
      interpreter through them.  */
 
 #if 0
-  /* Clear out any installed interpreter hooks/event handlers. */
+  /* Clear out any installed interpreter hooks/event handlers.  */
   clear_interpreter_hooks ();
 #endif
 
@@ -217,7 +218,7 @@ interp_set (struct interp *interp)
     {
       if (old_interp == NULL || !interp_set (old_interp))
 	internal_error (__FILE__, __LINE__,
-			"Failed to initialize new interp \"%s\" %s",
+			_("Failed to initialize new interp \"%s\" %s"),
 			interp->name, "and could not restore old interp!\n");
       return NULL;
     }
@@ -268,6 +269,12 @@ interp_lookup (const char *name)
 
 /* Returns the current interpreter. */
 
+struct interp *
+current_interp (void)
+{
+  return current_interpreter;
+}
+
 struct ui_out *
 interp_ui_out (struct interp *interp)
 {
@@ -306,17 +313,15 @@ void
 current_interp_command_loop (void)
 {
   /* Somewhat messy.  For the moment prop up all the old ways of
-     selecting the command loop.  `command_loop_hook' should be
-     deprecated.  */
-  if (command_loop_hook != NULL)
-    command_loop_hook ();
+     selecting the command loop.  `deprecated_command_loop_hook'
+     should be deprecated.  */
+  if (deprecated_command_loop_hook != NULL)
+    deprecated_command_loop_hook ();
   else if (current_interpreter != NULL
 	   && current_interpreter->procs->command_loop_proc != NULL)
     current_interpreter->procs->command_loop_proc (current_interpreter->data);
-  else if (event_loop_p)
-    cli_command_loop (NULL);
   else
-    command_loop ();
+    cli_command_loop (NULL);
 }
 
 int
@@ -347,14 +352,14 @@ interp_exec_p (struct interp *interp)
   return interp->procs->exec_proc != NULL;
 }
 
-int
+struct gdb_exception
 interp_exec (struct interp *interp, const char *command_str)
 {
   if (interp->procs->exec_proc != NULL)
     {
       return interp->procs->exec_proc (interp->data, command_str);
     }
-  return 0;
+  return exception_none;
 }
 
 
@@ -371,40 +376,39 @@ interp_complete (struct interp *interp,
 }
 
 
-/* A convenience routine that nulls out all the
-   common command hooks.  Use it when removing your interpreter in its 
-   suspend proc. */
+/* A convenience routine that nulls out all the common command hooks.
+   Use it when removing your interpreter in its suspend proc.  */
 void
 clear_interpreter_hooks (void)
 {
-  init_ui_hook = 0;
-  print_frame_info_listing_hook = 0;
+  deprecated_init_ui_hook = 0;
+  deprecated_print_frame_info_listing_hook = 0;
   /*print_frame_more_info_hook = 0; */
-  query_hook = 0;
-  warning_hook = 0;
-  create_breakpoint_hook = 0;
-  delete_breakpoint_hook = 0;
-  modify_breakpoint_hook = 0;
-  interactive_hook = 0;
-  registers_changed_hook = 0;
-  readline_begin_hook = 0;
-  readline_hook = 0;
-  readline_end_hook = 0;
-  register_changed_hook = 0;
-  memory_changed_hook = 0;
-  context_hook = 0;
-  target_wait_hook = 0;
-  call_command_hook = 0;
-  error_hook = 0;
-  error_begin_hook = 0;
-  command_loop_hook = 0;
+  deprecated_query_hook = 0;
+  deprecated_warning_hook = 0;
+  deprecated_create_breakpoint_hook = 0;
+  deprecated_delete_breakpoint_hook = 0;
+  deprecated_modify_breakpoint_hook = 0;
+  deprecated_interactive_hook = 0;
+  deprecated_registers_changed_hook = 0;
+  deprecated_readline_begin_hook = 0;
+  deprecated_readline_hook = 0;
+  deprecated_readline_end_hook = 0;
+  deprecated_register_changed_hook = 0;
+  deprecated_memory_changed_hook = 0;
+  deprecated_context_hook = 0;
+  deprecated_target_wait_hook = 0;
+  deprecated_call_command_hook = 0;
+  deprecated_error_hook = 0;
+  deprecated_error_begin_hook = 0;
+  deprecated_command_loop_hook = 0;
   clear_gdb_event_hooks ();
 }
 
-/* This is a lazy init routine, called the first time
-   the interpreter module is used.  I put it here just in case, but I haven't
-   thought of a use for it yet.  I will probably bag it soon, since I don't
-   think it will be necessary. */
+/* This is a lazy init routine, called the first time the interpreter
+   module is used.  I put it here just in case, but I haven't thought
+   of a use for it yet.  I will probably bag it soon, since I don't
+   think it will be necessary.  */
 static void
 initialize_interps (void)
 {
@@ -425,7 +429,7 @@ interpreter_exec_cmd (char *args, int from_tty)
   prules = buildargv (args);
   if (prules == NULL)
     {
-      error ("unable to parse arguments");
+      error (_("unable to parse arguments"));
     }
 
   nrules = 0;
@@ -438,27 +442,29 @@ interpreter_exec_cmd (char *args, int from_tty)
     }
 
   if (nrules < 2)
-    error ("usage: interpreter-exec <interpreter> [ <command> ... ]");
+    error (_("usage: interpreter-exec <interpreter> [ <command> ... ]"));
 
   interp_to_use = interp_lookup (prules[0]);
   if (interp_to_use == NULL)
-    error ("Could not find interpreter \"%s\".", prules[0]);
+    error (_("Could not find interpreter \"%s\"."), prules[0]);
 
   /* Temporarily set interpreters quiet */
   use_quiet = interp_set_quiet (interp_to_use, 1);
 
+  /* APPLE LOCAL get old quiet */
   old_interp = interp_set (interp_to_use);
   if (old_interp == NULL)
-    error ("Could not switch to interpreter \"%s\".", prules[0]);
+    error (_("Could not switch to interpreter \"%s\"."), prules[0]);
   old_quiet = interp_set_quiet (old_interp, 1);
 
   for (i = 1; i < nrules; i++)
     {
-      if (!interp_exec (interp_to_use, prules[i]))
+      struct gdb_exception e = interp_exec (interp_to_use, prules[i]);
+      if (e.reason < 0)
 	{
 	  interp_set (old_interp);
 	  interp_set_quiet (interp_to_use, old_quiet);
-	  error ("error in command: \"%s\".", prules[i]);
+	  error (_("error in command: \"%s\"."), prules[i]);
 	  break;
 	}
     }
@@ -588,14 +594,15 @@ _initialize_interpreter (void)
 {
   struct cmd_list_element *c;
 
-  c = add_set_cmd ("interpreter", class_support,
-		   var_string,
-		   &interpreter_p,
-		   "Set the interpreter for gdb.",
-		   &setlist);
-  set_cmd_sfunc (c, set_interpreter_cmd);
-  add_show_from_set(c, &showlist);
+  add_setshow_string_cmd ("interpreter", class_support,
+			  &interpreter_p, _("\
+Set the interpreter for gdb."), _("\
+Show the interpreter for gdb."), NULL,
+			  set_interpreter_cmd, NULL,
+			  &setlist, &showlist);
+  /* APPLE MERGE 
   set_cmd_completer (c, interpreter_completer);
+  */
 
   add_cmd ("interpreters", class_support,
 	       list_interpreter_cmd,
@@ -603,9 +610,9 @@ _initialize_interpreter (void)
 	       &infolist);
 
   c = add_cmd ("interpreter-exec", class_support,
-	       interpreter_exec_cmd,
-	       "Execute a command in an interpreter.  It takes two arguments:\n\
+	       interpreter_exec_cmd, _("\
+Execute a command in an interpreter.  It takes two arguments:\n\
 The first argument is the name of the interpreter to use.\n\
-The second argument is the command to execute.\n", &cmdlist);
+The second argument is the command to execute.\n"), &cmdlist);
   set_cmd_completer (c, interpreter_completer);
 }

@@ -4,7 +4,7 @@
 
 /* { dg-do compile } */
 /* APPLE LOCAL testsuite nested functions */
-/* { dg-skip-if "" { "*-*-darwin*" } { "*" } { "" } } */
+/* { dg-options "-fnested-functions" } */
 
 struct S {
   void (*f)(int);

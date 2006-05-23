@@ -1868,9 +1868,16 @@ process_options (void)
   if (flag_unroll_all_loops)
     flag_unroll_loops = 1;
 
-  /* The loop unrolling code assumes that cse will be run after loop.  */
+  /* APPLE LOCAL begin 3791237 */
+  /* The loop unrolling code assumes that cse will be run after loop.
+     Turning on web has the effect of live range splitting for unrolled
+     induction variables, and is beneficial for scheduling. */
   if (flag_unroll_loops || flag_peel_loops)
-    flag_rerun_cse_after_loop = 1;
+    {
+      flag_rerun_cse_after_loop = 1;
+      flag_web = 1;
+    }
+  /* APPLE LOCAL end 3791237 */
 
   /* If explicitly asked to run new loop optimizer, switch off the old
      one.  */

@@ -1,6 +1,6 @@
 /* APPLE LOCAL file driver driver */
 /* Darwin driver program that handles -arch commands and invokes
-   appropriate compiler driver. 
+   appropriate compiler driver.
    Copyright (C) 2004, 2005 Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -36,7 +36,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "stdbool.h"
 /* Hack!.
    Pay the price for including darwin.h.  */
-typedef int tree;  
+typedef int tree;
 #define GTY(x) /* nothing */
 /* Include darwin.h for SWITCH_TAKES_ARG and
    WORD_SWIATCH_TAKES_ARG. */
@@ -63,12 +63,11 @@ char *curr_dir;
 /* Use if -o flag is absent.  */
 const char *final_output = "a.out";
 
-/* Variabless to track presence and/or absence of important command 
+/* Variabless to track presence and/or absence of important command
    line options.  */
 int compile_only_request = 0;
 int asm_output_request = 0;
 int dash_capital_m_seen = 0;
-int fnasm_seen  = 0;
 int preprocessed_output_request = 0;
 int ima_is_used = 0;
 int dash_dynamiclib_seen = 0;
@@ -127,7 +126,7 @@ int new_argc;
 /* Argument list for 'lipo'.  */
 const char **lipo_argv;
 
-/* Info about the sub process. Need one subprocess for each arch plus 
+/* Info about the sub process. Need one subprocess for each arch plus
    additional one for 'lipo'.  */
 struct command
 {
@@ -167,7 +166,7 @@ static int add_arch_options (int, const char **, int);
 static int remove_arch_options (const char**, int);
 static void add_arch (const char *);
 
-/* Find arch name for the given input string. If input name is NULL then local 
+/* Find arch name for the given input string. If input name is NULL then local
    arch name is used.  */
 
 static const char *
@@ -202,7 +201,7 @@ get_arch_name (const char *name)
       else
 	all_info++;
     }
-  
+
   return all_info->name;
 }
 
@@ -253,8 +252,8 @@ delete_out_files (void)
   struct stat st;
   int i = 0;
 
-  for (i = 0, temp = out_files[i]; 
-       temp && i < total_argc * MAX_ARCHES; 
+  for (i = 0, temp = out_files[i];
+       temp && i < total_argc * MAX_ARCHES;
        temp = out_files[++i])
     if (stat (temp, &st) >= 0 && S_ISREG (st.st_mode))
       unlink (temp);
@@ -310,7 +309,7 @@ debug_command_line (const char **debug_argv, int debug_argc)
   fprintf (stderr,"%s: arg count = %d\n", progname, debug_argc);
 
   for (i = 0; debug_argv[i]; i++)
-    fprintf (stderr,"%s: arg [%d] %s\n", progname, i, debug_argv[i]);    
+    fprintf (stderr,"%s: arg [%d] %s\n", progname, i, debug_argv[i]);
 }
 #endif
 
@@ -361,18 +360,18 @@ initialize (void)
      to compiler driver:
 
      Each "-arch" "<blah>" is replaced by approriate "-mcpu=<blah>".
-     That leaves one additional arg space available. 
+     That leaves one additional arg space available.
 
      Note that only one -m* is supplied to each compiler driver. Which
      means, extra "-arch" "<blah>" are removed from the original command
-     line. But lets not count how many additional slots are available.  
+     line. But lets not count how many additional slots are available.
 
      Driver driver may need to specify temp. output file name, say
      "-o" "foobar". That needs two extra argments.
 
      Sometimes linker wants one additional "-Wl,-arch_multiple".
 
-     Sometimes linker wants to see "-final_output" "outputname". 
+     Sometimes linker wants to see "-final_output" "outputname".
 
      In the end, we may need five extra arguments, plus one extra
      space for the NULL terminator.  */
@@ -391,7 +390,7 @@ initialize (void)
   if (!lipo_argv)
     abort ();
 
-  /* Need separate out_files for each arch, max is MAX_ARCHES. 
+  /* Need separate out_files for each arch, max is MAX_ARCHES.
      Need separate out_files for each input file.  */
 
   out_files = (const char **) malloc ((total_argc * MAX_ARCHES) * sizeof (const char *));
@@ -424,8 +423,8 @@ final_cleanup (void)
   free (lipo_argv);
   free (out_files);
 
-  for (i = 0, next = in_files; 
-       i < num_infiles && next; 
+  for (i = 0, next = in_files;
+       i < num_infiles && next;
        i++)
     {
       next = in_files->next;
@@ -468,7 +467,7 @@ static int
 do_lipo (int start_outfile_index, const char *out_file)
 {
   int i, j, pid;
-  char *errmsg_fmt, *errmsg_arg; 
+  char *errmsg_fmt, *errmsg_arg;
 
   /* Populate lipo arguments.  */
   lipo_argv[0] = "lipo";
@@ -487,7 +486,7 @@ do_lipo (int start_outfile_index, const char *out_file)
 #ifdef DEBUG
   debug_command_line (lipo_argv, j);
 #endif
- 
+
   if (verbose_flag)
     {
       for (i = 0; lipo_argv[i]; i++)
@@ -495,11 +494,11 @@ do_lipo (int start_outfile_index, const char *out_file)
       fprintf (stderr, "\n");
     }
   pid = pexecute (lipo_argv[0], (char *const *)lipo_argv, progname, NULL, &errmsg_fmt,
-		  &errmsg_arg, PEXECUTE_SEARCH | PEXECUTE_LAST); 
-  
+		  &errmsg_arg, PEXECUTE_SEARCH | PEXECUTE_LAST);
+
   if (pid == -1)
     pfatal_pexecute (errmsg_fmt, errmsg_arg);
-  
+
   return do_wait (pid, lipo_argv[0]);
 }
 
@@ -508,10 +507,10 @@ do_lipo (int start_outfile_index, const char *out_file)
 static int
 do_compile (const char **current_argv, int current_argc)
 {
-  char *errmsg_fmt, *errmsg_arg; 
+  char *errmsg_fmt, *errmsg_arg;
   int index = 0;
   int ret = 0;
-  
+
   int dash_o_index = current_argc;
   int of_index = current_argc + 1;
   int argc_count = current_argc + 2;
@@ -521,7 +520,7 @@ do_compile (const char **current_argv, int current_argc)
       int additional_arch_options = 0;
 
       current_argv[0] = get_driver_name (get_arch_name (arches[index]));
-      
+
       /* setup output file.  */
       out_files[num_outfiles] = make_temp_file (".out");
       current_argv[dash_o_index] = "-o";
@@ -532,7 +531,7 @@ do_compile (const char **current_argv, int current_argc)
 	 before removing this option.  */
       additional_arch_options = add_arch_options (index, current_argv, argc_count);
       argc_count += additional_arch_options;
-      
+
       commands[index].prog = current_argv[0];
       commands[index].argv = current_argv;
 
@@ -541,16 +540,16 @@ do_compile (const char **current_argv, int current_argc)
 #ifdef DEBUG
       debug_command_line (current_argv, argc_count);
 #endif
-      commands[index].pid = pexecute (current_argv[0], 
-				      (char *const *)current_argv, 
-				      progname, NULL, 
+      commands[index].pid = pexecute (current_argv[0],
+				      (char *const *)current_argv,
+				      progname, NULL,
 				      &errmsg_fmt,
-				      &errmsg_arg, 
+				      &errmsg_arg,
 				      PEXECUTE_SEARCH | PEXECUTE_LAST);
-      
+
       if (commands[index].pid == -1)
 	pfatal_pexecute (errmsg_fmt, errmsg_arg);
-      
+
       /* Remove the last arch option added in the current_argv list.  */
       if (additional_arch_options)
 	argc_count -= remove_arch_options (current_argv, argc_count);
@@ -580,14 +579,14 @@ do_compile_separately (void)
   if (num_infiles == 1 || ima_is_used)
     abort ();
 
-  /* Total number of arguments in separate compiler invocation is : 
-     total number of original arguments - total no input files + one input 
+  /* Total number of arguments in separate compiler invocation is :
+     total number of original arguments - total no input files + one input
      file + "-o" + output file .  */
   new_new_argv = (const char **) malloc ((new_argc - num_infiles + 4) * sizeof (const char *));
   if (!new_new_argv)
     abort ();
 
-  for (current_ifn = in_files; current_ifn && current_ifn->name; 
+  for (current_ifn = in_files; current_ifn && current_ifn->name;
        current_ifn = current_ifn->next)
     {
       struct input_filename *ifn = in_files;
@@ -603,18 +602,18 @@ do_compile_separately (void)
 
  	      if (!strcmp (new_argv[i], current_ifn->name))
 		{
-		  /* If it is current input file name then add it in the new 
+		  /* If it is current input file name then add it in the new
 		     list.  */
 		  new_new_argv[new_new_argc++] = new_argv[i];
 		}
-	      /* This input file can  not appear in 
+	      /* This input file can  not appear in
 		 again on the command line so next time look for next input
 		 file.  */
 	      ifn = ifn->next;
 	    }
 	  else
 	    {
-	      /* This argument is not a input file name. Add it into new 
+	      /* This argument is not a input file name. Add it into new
 		 list.  */
 	      new_new_argv[new_new_argc++] = new_argv[i];
 	    }
@@ -632,38 +631,11 @@ do_lipo_separately (void)
 {
   int ifn_index;
   struct input_filename *ifn;
-  for (ifn_index = 0, ifn = in_files; 
-       ifn_index < num_infiles && ifn && ifn->name; 
+  for (ifn_index = 0, ifn = in_files;
+       ifn_index < num_infiles && ifn && ifn->name;
        ifn_index++, ifn = ifn->next)
     do_lipo (ifn_index * num_arches,
 	     strip_path_and_suffix (ifn->name, ".o"));
-}
-
-/* Invoke 'nasm' */
-static int 
-do_nasm ()
-{
-  int pid;
-  char *errmsg_fmt, *errmsg_arg; 
-
-  /* We're explicitly setting all of the arguments here and
-     ignoring any additional that come in via the command line
-     since XCode passes gcc and gas command line options and these
-     can conflict with nasm's command line options.  */
-  new_argv[0] = "nasm";
-  new_argv[1] = "-f macho";
-  new_argv[2] = in_files->name;
-  new_argv[3] = "-o";
-  new_argv[4] = output_filename;
-  new_argv[5] = NULL;
-
-  pid = pexecute (new_argv[0], (char *const *)new_argv, progname, NULL, 
-		  &errmsg_fmt, &errmsg_arg, PEXECUTE_SEARCH | PEXECUTE_LAST); 
-  
-  if (pid == -1)
-    pfatal_pexecute (errmsg_fmt, errmsg_arg);
-  
-  return do_wait (pid, new_argv[0]);
 }
 
 /* Replace -arch <blah> options with appropriate "-mcpu=<blah>" OR
@@ -734,7 +706,7 @@ remove_arch_options (const char **current_argv, int arch_index)
 #ifdef DEBUG
       debug_command_line (current_argv, arch_index);
 #endif
-  
+
   return 1;
 }
 
@@ -758,13 +730,13 @@ add_arch (const char *new_arch)
 
 /* Rewrite the command line as requested in the QA_OVERRIDE_GCC3_OPTIONS
    environment variable -- used for testing the compiler, working around bugs
-   in the Apple build environment, etc. 
+   in the Apple build environment, etc.
 
    The override string is made up of a set of space-separated clauses.  The
    first letter of each clause describes what's to be done:
    +string       Add string as a new argument (at the end of the command line).
                  Multi-word command lines can be added with +x +y
-   s/x/y/        substitute x for y in the command line. X must be an entire 
+   s/x/y/        substitute x for y in the command line. X must be an entire
                  argument, and can be a regular expression as accepted by the
                  POSIX regexp code.  Y will be substituted as a single argument,
                  and will not have regexp replacements added in.
@@ -791,7 +763,7 @@ add_arch (const char *new_arch)
    particular change to stop, but additional changes in the environment
    variable to be applied.
 
-   Key details: 
+   Key details:
    * we always want to be able to adjust optimization levels for testing
    * adding options is a common task
    * substitution and deletion are less common.
@@ -813,14 +785,14 @@ const int ARG_ARRAY_INCREMENT_SIZE = 8;
    responsible for allocation and deallocation of all objects in the
    array */
 
-void read_args (int argc, char **argv) 
+void read_args (int argc, char **argv)
 {
   int i;
 
   arg_array_size = argc+10;
   arg_count = argc;
   arg_array = (char**) malloc(sizeof(char*)*arg_array_size);
-  
+
   for (i=0;i<argc;i++) {
     arg_array[i] = malloc (strlen (argv[i])+1);
     strcpy (arg_array[i], argv[i]);
@@ -828,12 +800,12 @@ void read_args (int argc, char **argv)
 }
 
 /* Insert the argument before pos. */
-void insert_arg(int pos, char *arg_to_insert) 
+void insert_arg(int pos, char *arg_to_insert)
 {
   int i;
   char *newArg = malloc (strlen (arg_to_insert)+1);
   strcpy(newArg, arg_to_insert);
-  
+
   if (arg_count == arg_array_size) {
     /* expand array */
     arg_array_size = arg_count + ARG_ARRAY_INCREMENT_SIZE;
@@ -846,7 +818,7 @@ void insert_arg(int pos, char *arg_to_insert)
 
   arg_array[pos] = newArg;
   arg_count++;
-  
+
   if (confirm_changes)
     fprintf(stderr,"### Adding argument %s at position %d\n",arg_to_insert, pos);
 }
@@ -875,7 +847,7 @@ void append_arg (char *str)
     arg_array_size = arg_count + ARG_ARRAY_INCREMENT_SIZE;
     arg_array = (char**) realloc (arg_array, arg_array_size);
   }
-  
+
   arg_array[arg_count++] = new_arg;
 }
 
@@ -887,7 +859,7 @@ void delete_arg(int pos) {
 
   free (arg_array[pos]);
 
-  for (i=pos; i < arg_count; i++) 
+  for (i=pos; i < arg_count; i++)
     arg_array[i] = arg_array[i+1];
 
   arg_count--;
@@ -901,7 +873,7 @@ void replace_optimization_level (char *new_level) {
   int optionFound = 0;
   char *new_opt = malloc(strlen(new_opt)+3);
   sprintf(new_opt, "-O%s",new_level);
-  
+
 
   for (i=0;i<arg_count;i++) {
     if (strncmp(arg_array[i],"-O",2) == 0) {
@@ -910,7 +882,7 @@ void replace_optimization_level (char *new_level) {
       break;
     }
   }
-  
+
   if (optionFound == 0)
     /* No optimization level?  Add it! */
     append_arg (new_opt);
@@ -936,7 +908,7 @@ char *arg_string(char *str, int begin, int len) {
    The search string can be a regular expression, but the replace string
    must be a literal; the search must also be for a full argument, not for
    a chain of arguments.  The result will be treated as a single argument.
-   
+
    Return true if success, false if bad failure.
 */
 
@@ -949,10 +921,10 @@ bool search_and_replace (char *str) {
 
   char *searchStr;
   char *replaceStr;
-  char *replacedStr; 
+  char *replacedStr;
   const int  ERRSIZ = 512;
   char errbuf[ERRSIZ];
-  
+
 
   if (str[0] != '/') {
     return false;
@@ -962,7 +934,7 @@ bool search_and_replace (char *str) {
 
   if (str[1 + searchLen] != '/')
     return false;
-    
+
   replaceLen = strcspn(str+1+searchLen+1, "/\0");
 
   if (str[1 + searchLen + 1 +replaceLen] != '/')
@@ -1011,13 +983,13 @@ int find_arg (char *str) {
 
   return matchIndex;
 }
-  
+
 void rewrite_command_line (char *override_options_line, int *argc, char ***argv){
   int line_pos = 0;
-  
+
   read_args (*argc, *argv);
 
-  if (override_options_line[0] == '#') 
+  if (override_options_line[0] == '#')
     {
       confirm_changes = 0;
       line_pos++;
@@ -1030,7 +1002,7 @@ void rewrite_command_line (char *override_options_line, int *argc, char ***argv)
 
   /* Loop through all commands in the file */
 
-  while (override_options_line[line_pos] != '\0') 
+  while (override_options_line[line_pos] != '\0')
     {
       char first_char;
       char *searchStr;
@@ -1044,7 +1016,7 @@ void rewrite_command_line (char *override_options_line, int *argc, char ***argv)
 	  line_pos++;
 	  continue;
 	}
-      
+
       /* The first non-space character is the command. */
       first_char = override_options_line[line_pos];
       line_pos++;
@@ -1074,7 +1046,7 @@ void rewrite_command_line (char *override_options_line, int *argc, char ***argv)
 	searchStr = arg_string(override_options_line, line_pos, arg_len);
 	if ((search_index = find_arg(searchStr)) != -1) {
 	  if (search_index >= arg_count -1) {
-	    if (confirm_changes) 
+	    if (confirm_changes)
 	      fprintf(stderr,"Not enough arguments to do X\n");
 	  } else {
 	    delete_arg(search_index); /* Delete the matching argument */
@@ -1125,7 +1097,7 @@ main (int argc, const char **argv)
 {
   size_t i;
   int l, pid, ret, argv_0_len, prog_len;
-  char *errmsg_fmt, *errmsg_arg; 
+  char *errmsg_fmt, *errmsg_arg;
   char *override_option_str = NULL;
   total_argc = argc;
   argv_0_len = strlen (argv[0]);
@@ -1153,7 +1125,7 @@ main (int argc, const char **argv)
 #endif
 
   /* Before we get too far, rewrite the command line with any requested overrides */
-  if ((override_option_str = getenv ("QA_OVERRIDE_GCC3_OPTIONS")) != NULL) 
+  if ((override_option_str = getenv ("QA_OVERRIDE_GCC3_OPTIONS")) != NULL)
     rewrite_command_line(override_option_str, &argc, (char***)&argv);
 
 
@@ -1196,11 +1168,7 @@ main (int argc, const char **argv)
 	{
 	  new_argv[new_argc++] = argv[i];
 	  dash_dynamiclib_seen = 1;
-        }	
-      else if (!strcmp (argv[i], "-fnasm"))
-	{
-	  fnasm_seen = 1;
-	}
+        }
       else if (!strcmp (argv[i], "-v"))
 	{
 	  new_argv[new_argc++] = argv[i];
@@ -1245,7 +1213,8 @@ main (int argc, const char **argv)
 	{
 	  new_argv[new_argc++] = argv[i];
 	}
-      else if (! strcmp (argv[i], "-save-temps"))
+      else if (! strcmp (argv[i], "-save-temps")
+	       || ! strcmp (argv[i], "--save-temps"))
 	{
 	  new_argv[new_argc++] = argv[i];
 	  save_temps_seen = 1;
@@ -1276,7 +1245,7 @@ main (int argc, const char **argv)
 	    dash_capital_m_seen = 1;
 
 	  /* Now copy this flag's arguments, if any, appropriately.  */
-	  if ((SWITCH_TAKES_ARG (c) > (p[1] != 0)) 
+	  if ((SWITCH_TAKES_ARG (c) > (p[1] != 0))
 	      || WORD_SWITCH_TAKES_ARG (p))
 	    {
 	      int j = 0;
@@ -1297,7 +1266,7 @@ main (int argc, const char **argv)
 		  j++;
 		}
 	    }
-	    
+
 	}
       else
 	{
@@ -1323,20 +1292,17 @@ main (int argc, const char **argv)
     fatal ("no input files");
 #endif
 
-  if (fnasm_seen)
-    return do_nasm ();
-
   if (num_arches > 1)
     {
-      if (preprocessed_output_request 
+      if (preprocessed_output_request
 	  || save_temps_seen
-	  || asm_output_request 
+	  || asm_output_request
 	  || dash_capital_m_seen)
 	fatal ("-E, -S, -save-temps and -M options are not allowed with multiple -arch flags");
     }
-  /* If -arch is not present OR Only one -arch <blah> is specified.  
+  /* If -arch is not present OR Only one -arch <blah> is specified.
      Invoke appropriate compiler driver.  FAT build is not required in this
-     case.  */ 
+     case.  */
 
   if (num_arches == 0 || num_arches == 1)
     {
@@ -1366,14 +1332,14 @@ main (int argc, const char **argv)
 
       /* Add the NULL.  */
       new_argv[new_argc] = NULL;
-  
+
 #ifdef DEBUG
       debug_command_line (new_argv, new_argc);
 #endif
 
-      pid = pexecute (new_argv[0], (char *const *)new_argv, progname, NULL, 
-		      &errmsg_fmt, &errmsg_arg, PEXECUTE_SEARCH | PEXECUTE_LAST); 
-      
+      pid = pexecute (new_argv[0], (char *const *)new_argv, progname, NULL,
+		      &errmsg_fmt, &errmsg_arg, PEXECUTE_SEARCH | PEXECUTE_LAST);
+
       if (pid == -1)
 	pfatal_pexecute (errmsg_fmt, errmsg_arg);
 
@@ -1399,7 +1365,7 @@ main (int argc, const char **argv)
 	{
 	  const char *out_file;
 
-	     /* Create output file name based on 
+	     /* Create output file name based on
 	     input filename, if required.  */
 	  if (compile_only_request && !output_filename && num_infiles == 1)
 	    out_file = strip_path_and_suffix (in_files->name, ".o");

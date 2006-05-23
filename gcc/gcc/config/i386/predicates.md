@@ -640,10 +640,40 @@
   return 1;
 })
 
+/* APPLE LOCAL begin mainline candidate 4283414 */
+/* Return true if operand is a vector constant that is all ones. */
+(define_predicate "vector_all_ones_operand"
+  (match_code "const_vector")
+{
+  int nunits = GET_MODE_NUNITS (mode);
+
+  if (GET_CODE (op) == CONST_VECTOR
+      && CONST_VECTOR_NUNITS (op) == nunits)
+    {
+      int i;
+      for (i = 0; i < nunits; ++i)
+        {
+          rtx x = CONST_VECTOR_ELT (op, i);
+          if (x != constm1_rtx)
+            return 0;
+        }
+      return 1;
+    }
+
+  return 0;
+})
+
 ;; Return 1 when OP is operand acceptable for standard SSE move.
 (define_predicate "vector_move_operand"
   (ior (match_operand 0 "nonimmediate_operand")
+       (and (match_code "const_vector")
+	    (match_test "standard_sse_constant_p (op) > 0"))))
+
+;; Return true if OP is a nonimmediate or a zero.
+(define_predicate "nonimmediate_or_0_operand"
+  (ior (match_operand 0 "nonimmediate_operand")
        (match_operand 0 "const0_operand")))
+/* APPLE LOCAL end mainline candidate 4283414 */
 
 ;; Return true if OP is a register or a zero.
 (define_predicate "reg_or_0_operand"

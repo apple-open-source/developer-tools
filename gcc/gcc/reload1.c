@@ -620,6 +620,11 @@ int something_needs_operands_changed;
 /* Nonzero means we couldn't get enough spill regs.  */
 static int failure;
 
+/* APPLE LOCAL begin 4321079 */
+/* Make parameter of 'reload' visible to other functions.  */
+static int from_global;
+/* APPLE LOCAL end 4321079 */
+
 /* Main entry point for the reload pass.
 
    FIRST is the first insn of the function being compiled.
@@ -640,6 +645,10 @@ reload (rtx first, int global)
   rtx insn;
   struct elim_table *ep;
   basic_block bb;
+
+  /* APPLE LOCAL begin 4321079 */
+  from_global = global;
+  /* APPLE LOCAL end 4321079 */
 
   /* Make sure even insns with volatile mem refs are recognizable.  */
   init_recog ();
@@ -822,6 +831,14 @@ reload (rtx first, int global)
   for (i = LAST_VIRTUAL_REGISTER + 1; i < max_regno; i++)
     alter_reg (i, -1);
 
+  /* APPLE LOCAL begin 4321079 */
+  if (from_global)
+    {
+      extern void remove_invalidated_death_notes (rtx);
+      remove_invalidated_death_notes (first);
+    }
+  /* APPLE LOCAL end 4321079 */
+
   /* If we have some registers we think can be eliminated, scan all insns to
      see if there is an insn that sets one of these registers to something
      other than itself plus a constant.  If so, the register cannot be
@@ -891,6 +908,10 @@ reload (rtx first, int global)
       set_initial_elim_offsets ();
       set_initial_label_offsets ();
 
+      /* APPLE LOCAL begin 4271691 */
+      something_changed = 0;
+      /* APPLE LOCAL end 4271691 */
+
       /* For each pseudo register that has an equivalent location defined,
 	 try to eliminate any eliminable registers (such as the frame pointer)
 	 assuming initial offsets for the replacement register, which
@@ -943,6 +964,12 @@ reload (rtx first, int global)
 		reg_equiv_memory_loc[i] = 0;
 		reg_equiv_init[i] = 0;
 		alter_reg (i, -1);
+		/* APPLE LOCAL begin 4271691 */
+		/* Since this might be a reuse of an existing stack slot
+		   rather than a new one, the frame size did not necessarily
+		   increase.  Make sure we do another pass. */
+	        something_changed = 1;
+		/* APPLE LOCAL end 4271691 */
 	      }
 	  }
 
@@ -965,7 +992,8 @@ reload (rtx first, int global)
       CLEAR_REG_SET (&spilled_pseudos);
       did_spill = 0;
 
-      something_changed = 0;
+      /* APPLE LOCAL begin 4271691 something_changed=0 moved earlier */
+      /* APPLE LOCAL end 4271691 */
 
       /* If we allocated any new memory locations, make another pass
 	 since it might have changed elimination offsets.  */
@@ -1949,9 +1977,21 @@ alter_reg (int i, int from_reg)
 	 inherent space, and no less total space, then the previous slot.  */
       if (from_reg == -1)
 	{
-	  /* No known place to spill from => no slot to reuse.  */
-	  x = assign_stack_local (GET_MODE (regno_reg_rtx[i]), total_size,
-				  inherent_size == total_size ? 0 : -1);
+	  /* APPLE LOCAL begin 4321079 */
+	  extern rtx find_tied_stack_pseudo (int);
+	  /* Ask global reg allocator for a stack slot already assigned
+	     to a pseudo tied to this one.  */
+	  if (from_global)
+	    x = find_tied_stack_pseudo (i);
+	  else
+	    x = NULL;
+
+	  if (!x)
+	    /* No known place to spill from => no slot to reuse.  */
+	    x = assign_stack_local (GET_MODE (regno_reg_rtx[i]), total_size,
+				    inherent_size == total_size ? 0 : -1);
+	  /* APPLE LOCAL end 4321079 */
+
 	  if (BYTES_BIG_ENDIAN)
 	    /* Cancel the  big-endian correction done in assign_stack_local.
 	       Get the address of the beginning of the slot.
@@ -3474,7 +3514,7 @@ init_elim_table (void)
   /* Does this function require a frame pointer?  */
 
   /* APPLE LOCAL begin CW asm blocks */
-  if (cfun->cw_asm_function)
+  if (cfun->iasm_asm_function)
     frame_pointer_needed = 0;
   else
     frame_pointer_needed = (! flag_omit_frame_pointer

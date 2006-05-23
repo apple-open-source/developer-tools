@@ -21,11 +21,7 @@
    Foundation, Inc., 59 Temple Place - Suite 330,
    Boston, MA 02111-1307, USA.  */
 
-#include "macosx-nat-inferior.h"
-#include "macosx-nat-cfm.h"
-#include "macosx-nat-dyld-info.h"
-
-#define TRUE_FALSE_ALREADY_DEFINED
+/*#define TRUE_FALSE_ALREADY_DEFINED */
 
 #include "defs.h"
 #include "inferior.h"
@@ -40,6 +36,10 @@
 #include "gdbcore.h"
 #include "event-top.h"
 #include "objfiles.h"
+
+#include "macosx-nat-inferior.h"
+#include "macosx-nat-cfm.h"
+#include "macosx-nat-dyld-info.h"
 
 #define IS_BC_x(instruction) \
 ((((instruction) & 0xFC000000) >> 26) == 16)
@@ -106,7 +106,7 @@ metrowerks_step (CORE_ADDR range_start, CORE_ADDR range_stop, int step_into)
   if (frame == NULL)
     error ("No current frame");
   step_frame_id = get_frame_id (frame);
-  step_sp = read_sp ();
+  /* APPLE MERGE   step_sp = read_sp (); */
 
   step_range_start = range_start;
   step_range_end = range_stop;
@@ -134,12 +134,12 @@ metrowerks_step_command (char *args, int from_tty)
   if (args != NULL)
     async_exec = strip_bg_char (&args);
 
-  if (event_loop_p && async_exec && !target_can_async_p ())
+  if (async_exec && !target_can_async_p ())
     error ("Asynchronous execution not supported on this target.");
 
   /* If we don't get a request of running in the bg, then we need
      to simulate synchronous (fg) execution. */
-  if (event_loop_p && !async_exec && target_can_async_p ())
+  if (!async_exec && target_can_async_p ())
     {
       async_disable_stdin ();
     }

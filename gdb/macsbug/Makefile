@@ -190,6 +190,8 @@ install				:	all $(DSTDIR)
 	chmod 644 $(DSTDIR)/$(GDBINIT)
 	strip -x $(SYMROOT)/$(PLUGIN) -o $(DSTDIR)/$(PLUGIN)
 	chmod 755 $(DSTDIR)/$(PLUGIN)
+	chgrp procmod $(SYMROOT)/$(PLUGIN) && chmod g+s $(SYMROOT)/$(PLUGIN)
+	chgrp procmod $(DSTDIR)/$(PLUGIN) && chmod g+s $(DSTDIR)/$(PLUGIN)
 
 #--------------------------------------------------------------------------------------#
 #                        *-------------*

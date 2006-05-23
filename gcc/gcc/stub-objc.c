@@ -56,6 +56,21 @@ void
 objc_check_decl (tree ARG_UNUSED (decl))
 {
 }
+
+/* APPLE LOCAL begin radar 4281748 */
+void
+objc_check_global_decl (tree ARG_UNUSED (decl))
+{
+}
+/* APPLE LOCAL end radar 4281748 */
+
+/* APPLE LOCAL begin radar 4330422 */
+tree
+objc_non_volatilized_type (tree type)
+{
+  return type;
+}
+/* APPLE LOCAL end radar 4330422 */
    
 int
 objc_is_reserved_word (tree ARG_UNUSED (ident))
@@ -265,6 +280,18 @@ objc_get_class_ivars (tree ARG_UNUSED (name))
   return 0;
 }
 /* APPLE LOCAL end mainline */
+
+/* APPLE LOCAL begin radar 4291785 */
+tree
+objc_get_interface_ivars (tree ARG_UNUSED (fieldlist))
+{
+  return 0;
+}
+void
+objc_detect_field_duplicates (tree ARG_UNUSED (fieldlist))
+{
+}
+/* APPLE LOCAL end radar 4291785 */
 
 tree
 objc_get_protocol_qualified_type (tree ARG_UNUSED (name),

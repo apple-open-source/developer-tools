@@ -67,37 +67,43 @@
 4078995: gcc.c-torture/execute/ieee/mzero6.c execution,  -fast
 #4084907: gcc.c-torture/execute/20050316-1.c execution,  -fast
 4084941: gcc.dg/vect/vect-98.c scan-tree-dump-times not vectorized: complicated access pattern 1
-4271531: gcc.c-torture/execute/20000822-1.c execution,  -O0
-4271531: gcc.c-torture/execute/20000822-1.c execution,  -O1
-4271531: gcc.c-torture/execute/20000822-1.c execution,  -O2
-4271531: gcc.c-torture/execute/20000822-1.c execution,  -O3 -fomit-frame-pointer
-4271531: gcc.c-torture/execute/20000822-1.c execution,  -O3 -g
-4271531: gcc.c-torture/execute/20000822-1.c execution,  -Os
-4271531: gcc.c-torture/execute/20000822-1.c execution,  -fast
-4271531: gcc.c-torture/execute/nestfunc-3.c execution,  -O0
-4271531: gcc.c-torture/execute/nestfunc-3.c execution,  -O1
-4271531: gcc.c-torture/execute/nestfunc-3.c execution,  -O2
-4271531: gcc.c-torture/execute/nestfunc-3.c execution,  -O3 -fomit-frame-pointer
-4271531: gcc.c-torture/execute/nestfunc-3.c execution,  -O3 -fomit-frame-pointer -funroll-loops
-4271531: gcc.c-torture/execute/nestfunc-3.c execution,  -O3 -fomit-frame-pointer -funroll-all-loops -finline-functions
-4271531: gcc.c-torture/execute/nestfunc-3.c execution,  -O3 -g
-4271531: gcc.c-torture/execute/nestfunc-3.c execution,  -Os
-4271531: gcc.c-torture/execute/nestfunc-3.c execution,  -fast
-4271531: gcc.c-torture/execute/nestfunc-5.c execution,  -O0
-4271531: gcc.c-torture/execute/nestfunc-5.c execution,  -O1
-4271531: gcc.c-torture/execute/nestfunc-5.c execution,  -O2
-4271531: gcc.c-torture/execute/nestfunc-5.c execution,  -O3 -fomit-frame-pointer
-4271531: gcc.c-torture/execute/nestfunc-5.c execution,  -O3 -g
-4271531: gcc.c-torture/execute/nestfunc-5.c execution,  -Os
-4271531: gcc.c-torture/execute/nestfunc-5.c execution,  -fast
-4271531: gcc.c-torture/execute/nestfunc-6.c execution,  -O0
-4271531: gcc.c-torture/execute/nestfunc-6.c execution,  -O1
-4271531: gcc.c-torture/execute/nestfunc-6.c execution,  -O2
-4271531: gcc.c-torture/execute/nestfunc-6.c execution,  -O3 -fomit-frame-pointer
-4271531: gcc.c-torture/execute/nestfunc-6.c execution,  -O3 -g
-4271531: gcc.c-torture/execute/nestfunc-6.c execution,  -Os
-4271531: gcc.c-torture/execute/nestfunc-6.c execution,  -fast
-4271531: gcc.dg/trampoline-1.c execution test
+#4271531: gcc.c-torture/execute/20000822-1.c execution,  -O0
+#4271531: gcc.c-torture/execute/20000822-1.c execution,  -O1
+#4271531: gcc.c-torture/execute/20000822-1.c execution,  -O2
+#4271531: gcc.c-torture/execute/20000822-1.c execution,  -O3 -fomit-frame-pointer
+#4271531: gcc.c-torture/execute/20000822-1.c execution,  -O3 -g
+#4271531: gcc.c-torture/execute/20000822-1.c execution,  -Os
+#4271531: gcc.c-torture/execute/20000822-1.c execution,  -fast
+#4271531: gcc.c-torture/execute/nestfunc-3.c execution,  -O0
+#4271531: gcc.c-torture/execute/nestfunc-3.c execution,  -O1
+#4271531: gcc.c-torture/execute/nestfunc-3.c execution,  -O2
+#4271531: gcc.c-torture/execute/nestfunc-3.c execution,  -O3 -fomit-frame-pointer
+#4271531: gcc.c-torture/execute/nestfunc-3.c execution,  -O3 -fomit-frame-pointer -funroll-loops
+#4271531: gcc.c-torture/execute/nestfunc-3.c execution,  -O3 -fomit-frame-pointer -funroll-all-loops -finline-functions
+#4271531: gcc.c-torture/execute/nestfunc-3.c execution,  -O3 -g
+#4271531: gcc.c-torture/execute/nestfunc-3.c execution,  -Os
+#4271531: gcc.c-torture/execute/nestfunc-3.c execution,  -fast
+#4271531: gcc.c-torture/execute/nestfunc-5.c execution,  -O0
+#4271531: gcc.c-torture/execute/nestfunc-5.c execution,  -O1
+#4271531: gcc.c-torture/execute/nestfunc-5.c execution,  -O2
+#4271531: gcc.c-torture/execute/nestfunc-5.c execution,  -O3 -fomit-frame-pointer
+#4271531: gcc.c-torture/execute/nestfunc-5.c execution,  -O3 -g
+#4271531: gcc.c-torture/execute/nestfunc-5.c execution,  -Os
+#4271531: gcc.c-torture/execute/nestfunc-5.c execution,  -fast
+#4271531: gcc.c-torture/execute/nestfunc-6.c execution,  -O0
+#4271531: gcc.c-torture/execute/nestfunc-6.c execution,  -O1
+#4271531: gcc.c-torture/execute/nestfunc-6.c execution,  -O2
+#4271531: gcc.c-torture/execute/nestfunc-6.c execution,  -O3 -fomit-frame-pointer
+#4271531: gcc.c-torture/execute/nestfunc-6.c execution,  -O3 -g
+#4271531: gcc.c-torture/execute/nestfunc-6.c execution,  -Os
+#4271531: gcc.c-torture/execute/nestfunc-6.c execution,  -fast
+#4271531: gcc.dg/trampoline-1.c execution test
+4366412: gcc.dg/trampoline-1.c (test for excess errors)
+4385002: gcc.dg/vect/vect-align-1.c scan-tree-dump-times Inappropriate alignment 1
+4176531: gcc.dg/4176531.c (test for excess errors)
+4176531: gcc.dg/4176531.c scan-assembler-not fild
+4176531: gcc.dg/4176531.c scan-assembler-not fist
+4531674: gcc.apple/bitreverse-22.c execution test
 #
 # the following failures occur only when the tests are being run through ObjC
 3904213: gcc.dg/20040813-1.c scan-assembler .stabs.*100,0,2
@@ -126,6 +132,15 @@
 3966342: gcc.dg/20020919-1.c  (test for errors, line 231)
 #4054717: gcc.dg/compat/scalar-by-value-1 c_compat_x_tst.o-c_compat_y_tst.o execute
 #4054717: gcc.dg/compat/struct-by-value-7a c_compat_x_tst.o-c_compat_y_tst.o execute
+#4345871: gcc.c-torture/execute/20051113-1.c compilation,  -O0
+#4345871: gcc.c-torture/execute/20051113-1.c compilation,  -O1
+#4345871: gcc.c-torture/execute/20051113-1.c compilation,  -O2
+#4345871: gcc.c-torture/execute/20051113-1.c compilation,  -O3 -fomit-frame-pointer
+#4345871: gcc.c-torture/execute/20051113-1.c compilation,  -O3 -fomit-frame-pointer -funroll-loops
+#4345871: gcc.c-torture/execute/20051113-1.c compilation,  -O3 -fomit-frame-pointer -funroll-all-loops -finline-functions
+#4345871: gcc.c-torture/execute/20051113-1.c compilation,  -O3 -g
+#4345871: gcc.c-torture/execute/20051113-1.c compilation,  -Os
+#4345871: gcc.c-torture/execute/20051113-1.c compilation,  -fast
 #
 # the following failures are for -mcpu=G5
 #4085878: gcc.apple/altivec-5.c  (test for warnings, line 30)
@@ -144,6 +159,8 @@
 3788046: gcc.dg/simd-2.c (test for excess errors)
 3719311: gcc.dg/void-cast-2.c  (test for warnings, line 7)
 3719311: gcc.dg/void-cast-2.c  (test for warnings, line 8)
+4385016: gcc.apple/default-cpu-1.c scan-assembler machine ppc7400
+0000000: gcc.apple/align-test-1.c (test for excess errors)
 #
 # the following failures are for -m64
 3966342: gcc.apple/altivec-1.c (test for excess errors)
@@ -154,46 +171,46 @@
 3966342: gcc.dg/pr17133.c (test for excess errors)
 3966342: gcc.dg/lvalue-cast-1.c (test for excess errors)
 3939205: gcc.apple/altivec-faltivec-1.c (test for excess errors)
-#3939205: gcc.apple/altivec-faltivec-1.c scan-tree-dump-times callee has AltiVec 2
+3939205: gcc.apple/altivec-faltivec-1.c scan-tree-dump-times callee has AltiVec 2
 3939205: gcc.apple/altivec-faltivec-2.c (test for excess errors)
 3939205: gcc.apple/altivec-maltivec-1.c (test for excess errors)
 3939205: gcc.dg/framework-1.c (test for excess errors)
-3967637: gcc.dg/debug/20020220-1.c -gdwarf-21 (test for excess errors)
-3967637: gcc.dg/debug/20020220-1.c -gdwarf-21 -O (test for excess errors)
-3967637: gcc.dg/debug/20020220-1.c -gdwarf-21 -O3 (test for excess errors)
-3967637: gcc.dg/debug/20020220-1.c -gdwarf-21 -fast (test for excess errors)
-3967637: gcc.dg/debug/20020220-1.c -gdwarf-2 (test for excess errors)
-3967637: gcc.dg/debug/20020220-1.c -gdwarf-2 -O (test for excess errors)
-3967637: gcc.dg/debug/20020220-1.c -gdwarf-2 -O3 (test for excess errors)
-3967637: gcc.dg/debug/20020220-1.c -gdwarf-2 -fast (test for excess errors)
-3967637: gcc.dg/debug/20020220-1.c -gdwarf-23 (test for excess errors)
-3967637: gcc.dg/debug/20020220-1.c -gdwarf-23 -O (test for excess errors)
-3967637: gcc.dg/debug/20020220-1.c -gdwarf-23 -O3 (test for excess errors)
-3967637: gcc.dg/debug/20020220-1.c -gdwarf-23 -fast (test for excess errors)
-3967637: gcc.dg/debug/20020327-1.c -gdwarf-21 (test for excess errors)
-3967637: gcc.dg/debug/20020327-1.c -gdwarf-21 -O (test for excess errors)
-3967637: gcc.dg/debug/20020327-1.c -gdwarf-21 -O3 (test for excess errors)
-3967637: gcc.dg/debug/20020327-1.c -gdwarf-21 -fast (test for excess errors)
-3967637: gcc.dg/debug/20020327-1.c -gdwarf-2 (test for excess errors)
-3967637: gcc.dg/debug/20020327-1.c -gdwarf-2 -O (test for excess errors)
-3967637: gcc.dg/debug/20020327-1.c -gdwarf-2 -O3 (test for excess errors)
-3967637: gcc.dg/debug/20020327-1.c -gdwarf-2 -fast (test for excess errors)
-3967637: gcc.dg/debug/20020327-1.c -gdwarf-23 (test for excess errors)
-3967637: gcc.dg/debug/20020327-1.c -gdwarf-23 -O (test for excess errors)
-3967637: gcc.dg/debug/20020327-1.c -gdwarf-23 -O3 (test for excess errors)
-3967637: gcc.dg/debug/20020327-1.c -gdwarf-23 -fast (test for excess errors)
-3967637: gcc.dg/debug/trivial.c -gdwarf-21 (test for excess errors)
-3967637: gcc.dg/debug/trivial.c -gdwarf-21 -O (test for excess errors)
-3967637: gcc.dg/debug/trivial.c -gdwarf-21 -O3 (test for excess errors)
-3967637: gcc.dg/debug/trivial.c -gdwarf-21 -fast (test for excess errors)
-3967637: gcc.dg/debug/trivial.c -gdwarf-2 (test for excess errors)
-3967637: gcc.dg/debug/trivial.c -gdwarf-2 -O (test for excess errors)
-3967637: gcc.dg/debug/trivial.c -gdwarf-2 -O3 (test for excess errors)
-3967637: gcc.dg/debug/trivial.c -gdwarf-2 -fast (test for excess errors)
-3967637: gcc.dg/debug/trivial.c -gdwarf-23 (test for excess errors)
-3967637: gcc.dg/debug/trivial.c -gdwarf-23 -O (test for excess errors)
-3967637: gcc.dg/debug/trivial.c -gdwarf-23 -O3 (test for excess errors)
-3967637: gcc.dg/debug/trivial.c -gdwarf-23 -fast (test for excess errors)
+#3967637: gcc.dg/debug/20020220-1.c -gdwarf-21 (test for excess errors)
+#3967637: gcc.dg/debug/20020220-1.c -gdwarf-21 -O (test for excess errors)
+#3967637: gcc.dg/debug/20020220-1.c -gdwarf-21 -O3 (test for excess errors)
+#3967637: gcc.dg/debug/20020220-1.c -gdwarf-21 -fast (test for excess errors)
+#3967637: gcc.dg/debug/20020220-1.c -gdwarf-2 (test for excess errors)
+#3967637: gcc.dg/debug/20020220-1.c -gdwarf-2 -O (test for excess errors)
+#3967637: gcc.dg/debug/20020220-1.c -gdwarf-2 -O3 (test for excess errors)
+#3967637: gcc.dg/debug/20020220-1.c -gdwarf-2 -fast (test for excess errors)
+#3967637: gcc.dg/debug/20020220-1.c -gdwarf-23 (test for excess errors)
+#3967637: gcc.dg/debug/20020220-1.c -gdwarf-23 -O (test for excess errors)
+#3967637: gcc.dg/debug/20020220-1.c -gdwarf-23 -O3 (test for excess errors)
+#3967637: gcc.dg/debug/20020220-1.c -gdwarf-23 -fast (test for excess errors)
+#3967637: gcc.dg/debug/20020327-1.c -gdwarf-21 (test for excess errors)
+#3967637: gcc.dg/debug/20020327-1.c -gdwarf-21 -O (test for excess errors)
+#3967637: gcc.dg/debug/20020327-1.c -gdwarf-21 -O3 (test for excess errors)
+#3967637: gcc.dg/debug/20020327-1.c -gdwarf-21 -fast (test for excess errors)
+#3967637: gcc.dg/debug/20020327-1.c -gdwarf-2 (test for excess errors)
+#3967637: gcc.dg/debug/20020327-1.c -gdwarf-2 -O (test for excess errors)
+#3967637: gcc.dg/debug/20020327-1.c -gdwarf-2 -O3 (test for excess errors)
+#3967637: gcc.dg/debug/20020327-1.c -gdwarf-2 -fast (test for excess errors)
+#3967637: gcc.dg/debug/20020327-1.c -gdwarf-23 (test for excess errors)
+#3967637: gcc.dg/debug/20020327-1.c -gdwarf-23 -O (test for excess errors)
+#3967637: gcc.dg/debug/20020327-1.c -gdwarf-23 -O3 (test for excess errors)
+#3967637: gcc.dg/debug/20020327-1.c -gdwarf-23 -fast (test for excess errors)
+#3967637: gcc.dg/debug/trivial.c -gdwarf-21 (test for excess errors)
+#3967637: gcc.dg/debug/trivial.c -gdwarf-21 -O (test for excess errors)
+#3967637: gcc.dg/debug/trivial.c -gdwarf-21 -O3 (test for excess errors)
+#3967637: gcc.dg/debug/trivial.c -gdwarf-21 -fast (test for excess errors)
+#3967637: gcc.dg/debug/trivial.c -gdwarf-2 (test for excess errors)
+#3967637: gcc.dg/debug/trivial.c -gdwarf-2 -O (test for excess errors)
+#3967637: gcc.dg/debug/trivial.c -gdwarf-2 -O3 (test for excess errors)
+#3967637: gcc.dg/debug/trivial.c -gdwarf-2 -fast (test for excess errors)
+#3967637: gcc.dg/debug/trivial.c -gdwarf-23 (test for excess errors)
+#3967637: gcc.dg/debug/trivial.c -gdwarf-23 -O (test for excess errors)
+#3967637: gcc.dg/debug/trivial.c -gdwarf-23 -O3 (test for excess errors)
+#3967637: gcc.dg/debug/trivial.c -gdwarf-23 -fast (test for excess errors)
 3967747: gcc.dg/cleanup-10.c execution test
 3967747: gcc.dg/cleanup-11.c execution test
 3967747: gcc.dg/cleanup-8.c execution test
@@ -215,15 +232,15 @@
 3968604: gcc.dg/pch/apple-altivec-1.c  -Os  (test for excess errors) #1
 3996036: gcc.dg/Wpadded.c (test for excess errors)
 #4063657: gcc.apple/asm-block-2.c execution test
-4078608: gcc.misc-tests/bprob-1.c compilation,  -fast  -fbranch-probabilities
-4078608: gcc.misc-tests/bprob-1.c compilation,  -fast  -ftree-based-profiling -fbranch-probabilities
-4078777: gcc.misc-tests/bprob-2.c execution,    -fast  -ftree-based-profiling -fprofile-arcs
-4096268: gcc.misc-tests/bprob-1.c execution,    -fast  -fbranch-probabilities
-4096268: gcc.misc-tests/bprob-1.c execution,    -fast  -ftree-based-profiling -fbranch-probabilities
+#4078608: gcc.misc-tests/bprob-1.c compilation,  -fast  -fbranch-probabilities
+#4078608: gcc.misc-tests/bprob-1.c compilation,  -fast  -ftree-based-profiling -fbranch-probabilities
+#4078777: gcc.misc-tests/bprob-2.c execution,    -fast  -ftree-based-profiling -fprofile-arcs
+#4096268: gcc.misc-tests/bprob-1.c execution,    -fast  -fbranch-probabilities
+#4096268: gcc.misc-tests/bprob-1.c execution,    -fast  -ftree-based-profiling -fbranch-probabilities
 4078834: gcc.dg/pr18096-1.c stack frame too large (test for warnings, line 11)
 #4078985: gcc.c-torture/compile/920617-1.c  -fast  (test for excess errors)
 #4078985: gcc.c-torture/compile/991202-1.c  -fast  (test for excess errors)
-4078990: gcc.c-torture/execute/comp-goto-1.c execution,  -fast
+#4078990: gcc.c-torture/execute/comp-goto-1.c execution,  -fast
 4085016: gcc.dg/altivec-14.c  (test for warnings, line 7)
 4085016: gcc.dg/altivec-14.c  (test for warnings, line 8)
 4085016: gcc.dg/altivec-14.c  (test for warnings, line 9)
@@ -249,6 +266,38 @@
 4239312: gcc.c-torture/execute/loop-2b.c compilation,  -O3 -g
 4239312: gcc.c-torture/execute/loop-2b.c compilation,  -Os
 4157563: gcc.dg/stabs-4232445.c (test for excess errors)
+4331438: gcc.apple/asm-test-nofralloc.c execution test
+4331439: gcc.apple/longcall-1.c (test for excess errors)
+#4331447: gcc.apple/fix-and-continue-1.c (test for excess errors)
+#4440905: gcc.dg/range-test-1.c (test for excess errors)
+4464421: gcc.dg/vect/pr18536.c scan-tree-dump-times vectorized 1 loops 1
+4464421: gcc.dg/vect/pr20122.c scan-tree-dump-times vectorized 1 loops 2
+4464421: gcc.dg/vect/vect-28.c scan-tree-dump-times vectorized 1 loops 1
+4464421: gcc.dg/vect/vect-28.c scan-tree-dump-times Alignment of access forced using peeling 1
+4464421: gcc.dg/vect/vect-33.c scan-tree-dump-times vectorized 1 loops 1
+4464421: gcc.dg/vect/vect-33.c scan-tree-dump-times Alignment of access forced using peeling 1
+4464421: gcc.dg/vect/vect-44.c scan-tree-dump-times vectorized 1 loops 1
+4464421: gcc.dg/vect/vect-44.c scan-tree-dump-times Alignment of access forced using peeling 1
+4464421: gcc.dg/vect/vect-50.c scan-tree-dump-times vectorized 1 loops 1
+4464421: gcc.dg/vect/vect-50.c scan-tree-dump-times Alignment of access forced using peeling 1
+4464421: gcc.dg/vect/vect-64.c scan-tree-dump-times vectorized 3 loops 1
+4464421: gcc.dg/vect/vect-64.c scan-tree-dump-times Alignment of access forced using peeling 2
+4464421: gcc.dg/vect/vect-69.c scan-tree-dump-times vectorized 4 loops 1
+4464421: gcc.dg/vect/vect-69.c scan-tree-dump-times Alignment of access forced using peeling 2
+4464421: gcc.dg/vect/vect-70.c scan-tree-dump-times vectorized 1 loops 1
+4464421: gcc.dg/vect/vect-70.c scan-tree-dump-times Alignment of access forced using peeling 1
+4464421: gcc.dg/vect/vect-80.c scan-tree-dump-times vectorized 1 loops 1
+4464421: gcc.dg/vect/vect-80.c scan-tree-dump-times Alignment of access forced using peeling 1
+4464421: gcc.dg/vect/vect-85.c scan-tree-dump-times vectorized 1 loops 1
+4464421: gcc.dg/vect/vect-87.c scan-tree-dump-times vectorized 1 loops 1
+4464421: gcc.dg/vect/vect-87.c scan-tree-dump-times Alignment of access forced using peeling 1
+4464421: gcc.dg/vect/vect-88.c scan-tree-dump-times vectorized 1 loops 1
+4464421: gcc.dg/vect/vect-88.c scan-tree-dump-times Alignment of access forced using peeling 1
+4464421: gcc.dg/vect/vect-96.c scan-tree-dump-times vectorized 1 loops 1
+4464421: gcc.dg/vect/vect-96.c scan-tree-dump-times Vectorizing an unaligned access 1
+4464421: gcc.dg/vect/vect-96.c scan-tree-dump-times Alignment of access forced using peeling 1
+4464421: gcc.dg/vect/vect-ifcvt-9.c scan-tree-dump-times vectorized 1 loops 2
+4085016: gcc.apple/align-test-5c.c (test for excess errors)
 #
 # the following failures are for x86 only
 3846097: gcc.c-torture/execute/builtins/strcat.c execution,  -fast
@@ -259,8 +308,8 @@
 4087219: gcc.dg/i386-asm-3.c (test for excess errors)
 4087327: gcc.dg/clobbers.c (test for excess errors)
 4087330: gcc.dg/sibcall-6.c execution test
-4053179: gcc.dg/vect/vect-none.c scan-tree-dump-times vectorized 0 loops 2
-4053179: gcc.dg/vect/vect-none.c scan-tree-dump-times vectorized 1 loops 1
+#4053179: gcc.dg/vect/vect-none.c scan-tree-dump-times vectorized 0 loops 2
+#4053179: gcc.dg/vect/vect-none.c scan-tree-dump-times vectorized 1 loops 1
 #4015764: gcc.c-torture/compile/20000518-1.c  -O1  (test for excess errors)
 #4015764: gcc.c-torture/compile/20000518-1.c  -O2  (test for excess errors)
 #4015764: gcc.c-torture/compile/20000518-1.c  -O3 -fomit-frame-pointer  (test for excess errors)
@@ -298,7 +347,7 @@
 4015940: gcc.dg/lvalue-cast-1.c  (test for warnings, line 20)
 4015940: gcc.dg/lvalue-cast-1.c (test for excess errors)
 #4015922: gcc.dg/struct-ret-libc.c (test for excess errors)
-4053179: gcc.dg/tree-ssa-vect/ifc-01.c execution test
+#4053179: gcc.dg/tree-ssa-vect/ifc-01.c execution test
 #4064388: gcc.c-torture/execute/simd-1.c execution,  -O0
 #4064388: gcc.c-torture/execute/simd-2.c execution,  -O0
 #4064388: gcc.c-torture/execute/simd-2.c execution,  -O1
@@ -350,3 +399,6 @@
 4189611: gcc.misc-tests/i386-pf-none-1.c  -march=pentium2  scan-assembler-not fetch
 4218476: gcc.c-torture/execute/builtin-return-address-1.c execution,  -O3 -fomit-frame-pointer
 4241732: gcc.apple/asm-block-11.c (test for excess errors)
+4339874: gcc.dg/i386-3dnowA-1.c (test for excess errors)
+4339874: gcc.dg/i386-3dnowA-2.c (test for excess errors)
+4339874: gcc.target/i386/abi-1.c (test for excess errors)

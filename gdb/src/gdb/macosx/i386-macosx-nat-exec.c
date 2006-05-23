@@ -51,11 +51,11 @@ validate_inferior_registers (int regno)
     {
       for (i = 0; i < NUM_REGS; i++)
         {
-          if (!deprecated_register_valid[i])
+          if (!register_cached (i))
             fetch_inferior_registers (i);
         }
     }
-  else if (!deprecated_register_valid[regno])
+  else if (!register_cached (regno))
     {
       fetch_inferior_registers (regno);
     }
@@ -148,7 +148,7 @@ fetch_inferior_registers (int regno)
   if (! fetched)
     {
       warning ("unknown register %d", regno);
-      supply_register (regno, NULL);
+      regcache_raw_supply (current_regcache, regno, NULL);
     }
 }
 

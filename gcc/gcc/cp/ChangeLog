@@ -1,3 +1,58 @@
+2005-12-02  Mark Mitchell  <mark@codesourcery.com>
+
+	Radar 4458276
+	PR c++/24173
+	* decl.c (duplicate_decls): Don't rely on DECL_TEMPLATE_INFO after
+	clobbering newdecl.
+
+2006-02-24  Geoffrey Keating  <geoffk@apple.com>
+
+	Radar 4086777
+	* except.c (expand_start_catch_block): Handle
+	flag_use_cxa_get_exception_ptr.
+
+2006-01-21  Mark Mitchell  <mark@codesourcery.com>
+
+	PR c++/25895
+	* class.c (build_base_path): Generate a NOP_EXPR instead of a
+	COMPONENT_REF if the base and derived classes are at the same
+	address.
+
+	PR c++/25856
+	* decl.c (begin_destructor_body): Robustify.
+
+	PR c++/25858 
+	* parser.c (cp_parser_direct_declarator): Robustify.
+
+2005-12-26  Mark Mitchell  <mark@codesourcery.com>
+
+	PR c++/25439
+	* decl.c (grokdeclarator): Remove dead code.
+	* ptree.c (cxx_print_xnode): Handle BASELINK.
+	* parser.c (make_id_declarator): Add sfk parameter.  
+	(cp_parser_direct_declarator): Do not pass TYPE_DECLs to
+	make_id_declarator.
+	(cp_parser_declarator_id): Simplify BASELINKs here.
+	(cp_parser_member_declaration): Adjust calls to
+	make_id_declarator.
+
+2005-12-19  Mark Mitchell  <mark@codesourcery.com>
+
+       PR c++/24915
+       * class.c (add_method): Do not treat templates as identical unless
+       their return types are the same.
+
+2006-01-17  Eric Christopher  <echristo@apple.com>
+
+        * call.c (convert_like_real): When issuing conversion
+        warnings, depend on warn_conversion.
+        * cvt.c (build_expr_type_conversion): Ditto.
+
+2005-11-15  Mike Stump  <mrs@apple.com>
+
+	* name-lookup.c (lookup_name_two): Add.
+	* name-lookup.h: Likewise.
+
 2005-07-28  Mike Stump  <mrs@apple.com>
 
 	* pt.c (check_explicit_specialization): Add visibility logic.

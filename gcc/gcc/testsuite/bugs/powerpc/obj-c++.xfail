@@ -22,3 +22,12 @@
 4261715: obj-c++.dg/const-str-9.mm scan-assembler .section __OBJC, __cstring_object
 4261715: obj-c++.dg/const-str-9.mm scan-assembler .long\t__NSConstantStringClassReference\n\t.long\t.*\n\t.long\t5\n\t.data
 4261575: obj-c++.dg/template-4.mm (test for excess errors)
+#
+# the following fail with -m64 on Leopard only 
+4385129: obj-c++.dg/const-cfstring-1.mm (test for excess errors)
+4385129: obj-c++.dg/const-cfstring-3.mm (test for excess errors)
+4385129: obj-c++.dg/const-cfstring-6.mm (test for excess errors)
+4385129: obj-c++.dg/except-1.mm (test for excess errors)
+4385167: obj-c++.dg/bitfield-1.mm (test for excess errors)
+4385167: obj-c++.dg/bitfield-4.mm (test for excess errors)
+4385167: obj-c++.dg/layout-1.mm (test for excess errors) 

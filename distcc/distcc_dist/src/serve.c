@@ -85,6 +85,8 @@
 #include "daemon.h"
 #include "versinfo.h"
 
+/* From indirect_server.c */
+extern int dcc_ensure_pch_cache_size_mb(int min_size_in_mb);
 
 /**
  * We copy all serious distccd messages to this file, as well as sending the
@@ -157,6 +159,11 @@ int dcc_service_job(int in_fd,
     if ((ret = dcc_check_client(cli_addr, cli_len, opt_allowed)) != 0)
         goto out;
 
+	/* Ensure that we have at least pullfile_min_free_space MB (--min-disk-free)
+	 * on the volume holding the PCH cache, and fail if pruning doesn't alleviate
+	 * the pressure. */
+	if ((ret = dcc_ensure_free_space()) != 0)
+		goto out;
     ret = dcc_run_job(in_fd, out_fd);
 
 out:
@@ -271,6 +278,8 @@ int dcc_send_host_info(int out_fd)
     char *compilerKey = "COMPILER=";
     char *ncpusKey = "CPUS=";
     char *cpuSpeedKey = "CPUSPEED=";
+    char *maxJobsKey = "JOBS=";
+    char *priorityKey = "PRIORITY=";
     char *distcc = "DISTCC=" PACKAGE_VERSION "\n";
     char *sysInfo = dcc_get_system_version();
     char **compilers = dcc_get_all_compiler_versions();
@@ -300,6 +309,12 @@ int dcc_send_host_info(int out_fd)
     if (cpuSpeed > 0) {
         len += strlen(cpuSpeedKey) + 32; // 31 digits for cpu speed
     }
+    if (dcc_max_kids > 0) {
+        len += strlen(maxJobsKey) + 8; // 7 digits for job count should be plenty
+    }
+    if (build_machine_priority > 0) {
+        len += strlen(maxJobsKey) + 32; // 31 digits for priority
+    }
     msg = malloc(len+1);
     msg[0] = 0;
     if (sysInfo) {
@@ -325,6 +340,15 @@ int dcc_send_host_info(int out_fd)
         strcat(msg, cpuSpeedKey);
         sprintf(&msg[strlen(msg)], "%llu\n", cpuSpeed);
     }
+    if (dcc_max_kids > 0) {
+        strcat(msg, maxJobsKey);
+        sprintf(&msg[strlen(msg)], "%d\n", dcc_max_kids);
+    }
+    if (build_machine_priority > 0) {
+        strcat(msg, priorityKey);
+        sprintf(&msg[strlen(msg)], "%d\n", build_machine_priority);
+    }
+    
     // a bit of a hack - if we are writing to stdout then just print the string
     if (out_fd == 1)
         ret = write(out_fd, msg, len)==len;

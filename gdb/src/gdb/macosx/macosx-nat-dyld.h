@@ -30,7 +30,7 @@ typedef enum macosx_dyld_thread_state macosx_dyld_thread_state;
 struct macosx_dyld_thread_status
 {
 
-  CORE_ADDR image_infos;
+  CORE_ADDR dyld_image_infos;
   unsigned long dyld_version;
   CORE_ADDR dyld_notify;
 

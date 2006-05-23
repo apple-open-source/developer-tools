@@ -21,19 +21,20 @@
    Foundation, Inc., 59 Temple Place - Suite 330,
    Boston, MA 02111-1307, USA.  */
 
-#include "macosx-nat-mutils.h"
-#include "macosx-nat-inferior.h"
-#include "macosx-nat-inferior-debug.h"
-
 #include "defs.h"
 #include "symtab.h"
 #include "gdbtypes.h"
 #include "gdbcore.h"
 #include "value.h"
 #include "gdbcmd.h"
+#include "inferior.h"
 
 #include <sys/param.h>
 #include <sys/sysctl.h>
+
+#include "macosx-nat-mutils.h"
+#include "macosx-nat-inferior.h"
+#include "macosx-nat-inferior-debug.h"
 
 extern macosx_inferior_status *macosx_status;
 
@@ -188,7 +189,7 @@ static void
 info_mach_port_command (char *args, int from_tty)
 {
   task_t task;
-  port_t port;
+  mach_port_t port;
 
   CHECK_ARGS ("Task and port", args);
   sscanf (args, "0x%x 0x%x", &task, &port);
@@ -317,13 +318,13 @@ info_mach_region_command (char *exp, int from_tty)
 
   expr = parse_expression (exp);
   val = evaluate_expression (expr);
-  if (TYPE_CODE (VALUE_TYPE (val)) == TYPE_CODE_REF)
+  if (TYPE_CODE (value_type (val)) == TYPE_CODE_REF)
     {
       val = value_ind (val);
     }
   /* In rvalue contexts, such as this, functions are coerced into
      pointers to functions. */
-  if (TYPE_CODE (VALUE_TYPE (val)) == TYPE_CODE_FUNC
+  if (TYPE_CODE (value_type (val)) == TYPE_CODE_FUNC
       && VALUE_LVAL (val) == lval_memory)
     {
       address = VALUE_ADDRESS (val);

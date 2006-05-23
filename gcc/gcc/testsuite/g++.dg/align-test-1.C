@@ -152,7 +152,7 @@ class C20 {
 
 /* === vectors === */
 
-#ifdef __VEC__
+#ifdef __APPLE_ALTIVEC__
 class VC1 {
   public:
     vector signed short f1;

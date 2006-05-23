@@ -4,8 +4,7 @@
 
 /* { dg-do compile } */
 /* APPLE LOCAL testsuite nested functions */
-/* { dg-xfail-if "" { *-*-darwin* } } */
-/* { dg-options "-O2 -g" } */
+/* { dg-options "-O2 -g -fnested-functions" } */
 
 int f1 (int y)
 {

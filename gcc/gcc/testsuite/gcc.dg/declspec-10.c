@@ -3,7 +3,8 @@
    declaration, not just the specifiers.  Test with -pedantic.  */
 /* Origin: Joseph Myers <jsm@polyomino.org.uk> */
 /* { dg-do compile } */
-/* { dg-options "-pedantic" } */
+/* APPLE LOCAL testsuite nested functions */
+/* { dg-options "-pedantic -fnested-functions" } */
 
 auto void f0 (void) {} /* { dg-warning "warning: function definition declared 'auto'" } */
 register void f1 (void) {} /* { dg-error "error: function definition declared 'register'" } */
@@ -18,10 +19,9 @@ void f7 (typedef int); /* { dg-error "error: storage class specified for paramet
 auto int x; /* { dg-error "error: file-scope declaration of 'x' specifies 'auto'" } */
 register int y; /* { dg-warning "warning: file-scope declaration of 'y' specifies 'register'" } */
 
-/* APPLE LOCAL begin testsuite nested functions */
-void h (void) { extern void x (void) {} } /* { dg-error "error: nested function 'x' declared 'extern'|nested functions are not supported on MacOSX" } */
+void h (void) { extern void x (void) {} } /* { dg-error "error: nested function 'x' declared 'extern'" } */
+/* APPLE LOCAL testsuite nested functions */
 /* { dg-warning "warning: ISO C forbids nested functions" "nested" { target *-*-* } 22 } */
-/* APPLE LOCAL end testsuite nested functions */
 
 void
 g (void)
@@ -45,7 +45,6 @@ register void f8 (void); /* { dg-error "error: invalid storage class for functio
 void i (void) { auto void y (void) {} } /* { dg-warning "warning: ISO C forbids nested functions" } */
 /* APPLE LOCAL begin testsuite nested functions */
 /* { dg-warning "warning: function definition declared 'auto'" "nested" { target *-*-* } 45 } */
-/* { dg-error "nested functions are not supported on MacOSX" "" { target *-*-darwin* } 45 } */
 /* APPLE LOCAL end testsuite nested functions */
 
 inline int main (void) { return 0; } /* { dg-warning "warning: cannot inline function 'main'" } */

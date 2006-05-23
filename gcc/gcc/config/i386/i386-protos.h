@@ -42,6 +42,8 @@ extern int standard_80387_constant_p (rtx);
 extern const char *standard_80387_constant_opcode (rtx);
 extern rtx standard_80387_constant_rtx (int);
 extern int standard_sse_constant_p (rtx);
+/* APPLE LOCAL mainline candidate 4283414 */
+extern const char *standard_sse_constant_opcode (rtx insn, rtx x);
 extern int symbolic_reference_mentioned_p (rtx);
 extern bool extended_reg_mentioned_p (rtx);
 extern bool x86_extended_QIreg_mentioned_p (rtx);
@@ -137,6 +139,11 @@ extern void ix86_expand_binary_operator (enum rtx_code,
 extern int ix86_binary_operator_ok (enum rtx_code, enum machine_mode, rtx[]);
 extern void ix86_expand_unary_operator (enum rtx_code, enum machine_mode,
 					rtx[]);
+/* APPLE LOCAL begin 4176531 */
+extern const char *ix86_expand_convert_DF2SI_sse (rtx *);
+extern const char *ix86_expand_convert_SF2SI_sse (rtx *);
+extern const char *ix86_expand_convert_DI2DF_sse (rtx *);
+/* APPLE LOCAL end 4176531 */
 extern rtx ix86_build_signbit_mask (enum machine_mode, bool, bool);
 extern void ix86_expand_fp_absneg_operator (enum rtx_code, enum machine_mode,
 					    rtx[]);
@@ -151,7 +158,10 @@ extern void ix86_expand_branch (enum rtx_code, rtx);
 extern int ix86_expand_setcc (enum rtx_code, rtx);
 extern int ix86_expand_int_movcc (rtx[]);
 extern int ix86_expand_fp_movcc (rtx[]);
-extern void ix86_split_sse_movcc (rtx[]);
+/* APPLE LOCAL begin mainline April 14, 2005 Radar 4053179 */
+extern bool ix86_expand_fp_vcond (rtx[]);
+extern bool ix86_expand_int_vcond (rtx[], bool);
+/* APPLE LOCAL end mainline April 14, 2005 Radar 4053179 */
 extern int ix86_expand_int_addcc (rtx[]);
 extern void ix86_expand_call (rtx, rtx, rtx, rtx, rtx, int);
 extern void x86_initialize_trampoline (rtx, rtx, rtx);
@@ -269,9 +279,15 @@ extern enum rtx_code ix86_fp_compare_code_to_integer (enum rtx_code);
 #endif
 
 /* APPLE LOCAL begin CW asm blocks */
-extern const char *i386_cw_asm_register_name (const char *regname, char *buf);
-extern bool cw_x86_needs_swapping (const char *);
-extern bool cw_print_op (char *buf, tree arg, unsigned argnum, tree *uses,
-			 bool must_be_reg, bool must_not_be_reg, void *);
-extern void x86_cw_print_prefix (char *buf, tree prefix_list);
+extern const char *i386_iasm_register_name (const char *regname, char *buf);
+extern bool iasm_x86_needs_swapping (const char *);
+extern bool iasm_print_op (char *buf, tree arg, unsigned argnum, tree *uses,
+			   bool must_be_reg, bool must_not_be_reg, void *);
+extern void iasm_x86_print_prefix (char *buf, tree prefix_list);
+extern tree iasm_raise_reg (tree);
 /* APPLE LOCAL end CW asm blocks */
+
+/* APPLE LOCAL begin 4356747 stack realign */
+/* Note to merger: this decl will vanish when the i386.opt file arrives in the merge.  */
+extern const char *ix86_force_align_arg_pointer;
+/* APPLE LOCAL end 4356747 stack realign */

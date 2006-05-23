@@ -38,3 +38,4 @@ extern int opt_log_stderr;
 extern int opt_lifetime;
 extern char *opt_listen_addr;
 extern int opt_niceness;
+extern int build_machine_priority;

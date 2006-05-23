@@ -21,18 +21,18 @@
    Foundation, Inc., 59 Temple Place - Suite 330,
    Boston, MA 02111-1307, USA.  */
 
+#include "defs.h"
+#include "gdbcmd.h"
+#include "event-loop.h"
+#include "inferior.h"
+
 #include "macosx-nat-inferior.h"
 #include "macosx-nat-excthread.h"
 #include "macosx-nat-mutils.h"
 #include "macosx-nat-inferior-debug.h"
 #include "macosx-nat-inferior-util.h"
 
-#include "defs.h"
-#include "gdbcmd.h"
-#include "event-loop.h"
-
 #include <stdlib.h>
-#include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
 
@@ -505,13 +505,12 @@ macosx_exception_thread (void *arg)
 void
 _initialize_macosx_nat_excthread ()
 {
-  struct cmd_list_element *cmd = NULL;
-
   excthread_stderr_re = fdopen (fileno (stderr), "w+");
 
-  cmd = add_set_cmd ("exceptions", class_obscure, var_zinteger,
-                     (char *) &excthread_debugflag,
-                     "Set if printing exception thread debugging statements.",
-                     &setdebuglist);
-  add_show_from_set (cmd, &showdebuglist);
+  add_setshow_zinteger_cmd ("exceptions", class_obscure,
+			    &excthread_debugflag, _("\
+Set if printing exception thread debugging statements."), _("\
+Show if printing exception thread debugging statements."), NULL,
+			    NULL, NULL,
+			    &setdebuglist, &showdebuglist);
 }

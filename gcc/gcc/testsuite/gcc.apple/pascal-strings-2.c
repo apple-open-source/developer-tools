@@ -6,7 +6,7 @@
 
 typedef __WCHAR_TYPE__ wchar_t;
 
-const wchar_t *pascalStr1 = L"\pHi!"; /* { dg-warning "unknown escape sequence" } */
+const wchar_t *pascalStr1 = L"\pHi!"; /* { dg-bogus "unknown escape sequence" } */
 const wchar_t *pascalStr2 = L"Bye\p!"; /* { dg-warning "unknown escape sequence" } */
 
 const wchar_t *initErr0 = "\pHi";   /* { dg-warning "incompatible pointer type" } */

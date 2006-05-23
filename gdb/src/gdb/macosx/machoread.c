@@ -66,15 +66,15 @@ macho_new_init (struct objfile *objfile)
 static void
 macho_symfile_init (struct objfile *objfile)
 {
-  objfile->sym_stab_info =
+  objfile->deprecated_sym_stab_info =
     xmmalloc (objfile->md, sizeof (struct dbx_symfile_info));
 
-  memset ((PTR) objfile->sym_stab_info, 0, sizeof (struct dbx_symfile_info));
+  memset ((PTR) objfile->deprecated_sym_stab_info, 0, sizeof (struct dbx_symfile_info));
 
-  objfile->sym_private =
+  objfile->deprecated_sym_private =
     xmmalloc (objfile->md, sizeof (struct macho_symfile_info));
 
-  memset (objfile->sym_private, 0, sizeof (struct macho_symfile_info));
+  memset (objfile->deprecated_sym_private, 0, sizeof (struct macho_symfile_info));
 
   objfile->flags |= OBJF_REORDERED;
   init_entry_point_info (objfile);
@@ -111,8 +111,8 @@ macho_build_psymtabs (struct objfile *objfile, int mainline,
   bfd *sym_bfd = objfile->obfd;
   char *name = bfd_get_filename (sym_bfd);
   asection *stabsect;
+  struct obj_section *os;
   asection *stabstrsect;
-  asection *text_sect, *coalesced_text_sect;
   asection *local_stabsect, *nonlocal_stabsect;
 
 #if 0
@@ -131,54 +131,88 @@ macho_build_psymtabs (struct objfile *objfile, int mainline,
       ("macho_build_psymtabs:  Found stabs (%s), but not string section (%s)",
        stab_name, stabstr_name);
 
-  objfile->sym_stab_info = (struct dbx_symfile_info *)
+  objfile->deprecated_sym_stab_info = (struct dbx_symfile_info *)
     xmmalloc (objfile->md, sizeof (struct dbx_symfile_info));
-  memset (objfile->sym_stab_info, 0, sizeof (struct dbx_symfile_info));
+  memset (objfile->deprecated_sym_stab_info, 0, sizeof (struct dbx_symfile_info));
 
   gdb_assert (text_name != NULL);
   gdb_assert (data_name != NULL);
 
-  /* APPLE LOCAL: Lots of symbols also end up in the coalesced text section
-     in C++ and we don't want them to get the wrong section...  */
+  /* For text, data, coalesced text and bss we want to get the 
+     struct obj_section's instead of BFD asections.  The asection will have
+     the intended load address, but if the file slid at load-time those 
+     addresses will not be reliable.  For other sections, e.g. DBX_STRINGTAB,
+     it's fine to refer to the file's asection.  */
+
+  DBX_TEXT_SECTION (objfile) = NULL;
+  ALL_OBJFILE_OSECTIONS (objfile, os)
+    if (os->the_bfd_section && os->the_bfd_section->name  
+        && strcmp (os->the_bfd_section->name, text_name) == 0)
+      {
+        DBX_TEXT_SECTION (objfile) = os;
+        break;
+      }
+
+  DBX_DATA_SECTION (objfile) = NULL;
+  ALL_OBJFILE_OSECTIONS (objfile, os)
+    if (os->the_bfd_section && os->the_bfd_section->name  
+        && strcmp (os->the_bfd_section->name, data_name) == 0)
+      {
+        DBX_DATA_SECTION (objfile) = os;
+        break;
+      }
+
+  DBX_COALESCED_TEXT_SECTION (objfile) = NULL;
   if (coalesced_text_name != NULL)
-    DBX_COALESCED_TEXT_SECTION (objfile) =
-      bfd_get_section_by_name (sym_bfd, coalesced_text_name);
-  else
-    DBX_COALESCED_TEXT_SECTION (objfile) = NULL;
+    ALL_OBJFILE_OSECTIONS (objfile, os)
+      if (os->the_bfd_section && os->the_bfd_section->name  
+          && strcmp (os->the_bfd_section->name, coalesced_text_name) == 0)
+        {
+          DBX_COALESCED_TEXT_SECTION (objfile) = os;
+          break;
+        }
 
-  DBX_TEXT_SECTION (objfile) = bfd_get_section_by_name (sym_bfd, text_name);
-  DBX_DATA_SECTION (objfile) = bfd_get_section_by_name (sym_bfd, data_name);
-
+  DBX_BSS_SECTION (objfile) = NULL;
   if (bss_name != NULL)
-    {
-      DBX_BSS_SECTION (objfile) = bfd_get_section_by_name (sym_bfd, bss_name);
-    }
+    ALL_OBJFILE_OSECTIONS (objfile, os)
+      if (os->the_bfd_section && os->the_bfd_section->name  
+          && strcmp (os->the_bfd_section->name, bss_name) == 0)
+        {
+          DBX_BSS_SECTION (objfile) = os;
+          break;
+        }
 
   if (!DBX_TEXT_SECTION (objfile))
     {
-      error ("Can't find %s section in symbol file", text_name);
+      warning ("Can't find %s section in symbol file", text_name);
     }
   if (!DBX_DATA_SECTION (objfile))
     {
       warning ("Can't find %s section in symbol file", data_name);
     }
 
-  text_sect = DBX_TEXT_SECTION (objfile);
-
-  DBX_TEXT_ADDR (objfile) = bfd_section_vma (sym_bfd, text_sect);
-  DBX_TEXT_SIZE (objfile) = bfd_section_size (sym_bfd, text_sect);
+  if (DBX_TEXT_SECTION (objfile))
+    {
+      DBX_TEXT_ADDR (objfile) = DBX_TEXT_SECTION (objfile)->addr;
+      DBX_TEXT_SIZE (objfile) = DBX_TEXT_SECTION (objfile)->endaddr - 
+                                DBX_TEXT_SECTION (objfile)->addr;
+    }
+  else
+    {
+      DBX_TEXT_ADDR (objfile) = 0;
+      DBX_TEXT_SIZE (objfile) = 0;
+    }
 
   /* APPLE LOCAL: Pre-fetch the addresses for the coalesced section as well.
      Note: It is not an error not to have a coalesced section...  */
 
-  coalesced_text_sect = DBX_COALESCED_TEXT_SECTION (objfile);
-
-  if (coalesced_text_sect)
+  if (DBX_COALESCED_TEXT_SECTION (objfile))
     {
       DBX_COALESCED_TEXT_ADDR (objfile) =
-        bfd_section_vma (sym_bfd, coalesced_text_sect);
+                                DBX_COALESCED_TEXT_SECTION (objfile)->addr;
       DBX_COALESCED_TEXT_SIZE (objfile) =
-        bfd_section_size (sym_bfd, coalesced_text_sect);
+                                DBX_COALESCED_TEXT_SECTION (objfile)->endaddr - 
+                                DBX_COALESCED_TEXT_SECTION (objfile)->addr;
     }
   else
     {
@@ -323,7 +357,7 @@ macho_symfile_read (struct objfile *objfile, int mainline)
                         "LC_SEGMENT.__DATA.__data",
                         "LC_SEGMENT.__DATA.__bss");
 
-  if (dwarf2_has_info (abfd))
+  if (dwarf2_has_info (objfile))
     {
       /* DWARF 2 sections */
       dwarf2_build_psymtabs (objfile, mainline);
@@ -540,21 +574,21 @@ static struct sym_fns macho_sym_fns = {
 void
 _initialize_machoread ()
 {
-  struct cmd_list_element *cmd;
-
   add_symtab_fns (&macho_sym_fns);
 
 #if HAVE_MMAP
-  cmd = add_set_cmd ("mmap-string-tables", class_obscure, var_boolean,
-                     (char *) &mmap_strtabflag,
-                     "Set if GDB should use mmap() to read STABS info.",
-                     &setlist);
-  add_show_from_set (cmd, &showlist);
+  add_setshow_boolean_cmd ("mmap-string-tables", class_obscure,
+			   &mmap_strtabflag, _("\
+Set if GDB should use mmap() to read STABS info."), _("\
+Show if GDB should use mmap() to read STABS info."), NULL,
+			   NULL, NULL,
+			   &setlist, &showlist);
 #endif
 
-  cmd = add_set_cmd ("mach-o-process-exports", class_obscure, var_boolean,
-                     (char *) &mach_o_process_exports_flag,
-                     "Set if GDB should process indirect function stub symbols from object files.",
-                     &setlist);
-  add_show_from_set (cmd, &showlist);
+  add_setshow_boolean_cmd ("mach-o-process-exports", class_obscure,
+			   &mach_o_process_exports_flag, _("\
+Set if GDB should process indirect function stub symbols from object files."), _("\
+Show if GDB should process indirect function stub symbols from object files."), NULL,
+			   NULL, NULL,
+			   &setlist, &showlist);
 }

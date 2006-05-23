@@ -4,7 +4,7 @@
 /* { dg-do compile } */
 /* { dg-options "-fpascal-strings" } */
 
-const wchar_t *pascalStr1 = L"\pHi!"; /* { dg-warning "unknown escape sequence" } */
+const wchar_t *pascalStr1 = L"\pHi!"; /* { dg-bogus "unknown escape sequence" } */
 const wchar_t *pascalStr2 = L"Bye\p!"; /* { dg-warning "unknown escape sequence" } */
 
 const wchar_t *initErr0 = "\pHi";   /* { dg-error "cannot convert" } */

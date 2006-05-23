@@ -34,7 +34,7 @@
 #include "target.h"
 #include "gdbcmd.h"
 #include "bcache.h"
-
+#include "mdebugread.h"
 #include "gdb_assert.h"
 #include <sys/types.h>
 #include "gdb_stat.h"
@@ -48,7 +48,10 @@
 #include "block.h"
 #include "dictionary.h"
 
+#include "db-access-functions.h"
+
 #ifdef NM_NEXTSTEP
+#include "inferior.h"
 #include "macosx-nat-dyld.h"
 #endif
 
@@ -62,8 +65,6 @@ static void objfile_remove_from_restrict_list (struct objfile *);
 
 /* Variables to make obsolete commands available.  */
 static char *cached_symfile_path = NULL;
-static char *cached_symfile_dir = NULL;
-static int check_timestamp = 1;
 int mapped_symbol_files = 0;
 int use_mapped_symbol_files = 0;  // Temporarily disable jmolenda 2004-05-13
 
@@ -331,6 +332,10 @@ create_objfile (bfd *abfd)
   objfile->sect_index_bss = -1;
   objfile->sect_index_rodata = -1;
 
+  /* APPLE LOCAL begin dwarf repository  */
+  objfile->uses_sql_repository = 0;
+  /* APPLE LOCAL end dwarf repository  */
+
   return objfile;
 }
 
@@ -394,7 +399,6 @@ number_of_dots (const char *s)
 	numdots++;
       s++;
     }
-
   return numdots;
 }
 
@@ -409,6 +413,14 @@ objfile_delete_from_ordered_sections (struct objfile *objfile)
   
   struct obj_section *s;
   
+  /* APPLE LOCAL: we need to check if this is a separate debug files and try to 
+     remove the sections to the ordered list if so. The backlink will not be
+     setup when the separate debug objfile is in the process of being created, 
+     so a flag was added to make sure we can tell.  */
+  if (objfile->separate_debug_objfile_backlink || 
+      objfile->flags & OBJF_SEPARATE_DEBUG_FILE)
+	return;	
+
   /* Do deletion of the sections by building up an array of
      "to be removed" indices, and then block compact the array using
      these indices.  */
@@ -532,6 +544,14 @@ objfile_add_to_ordered_sections (struct objfile *objfile)
   struct obj_section_with_index *insert_list = static_insert_list;
   int insert_list_size;
 
+  /* APPLE LOCAL: we need to check if this is a separate debug files and not 
+     add the sections to the ordered list if so. The backlink will not be setup
+     when the separate debug objfile is in the process of being created, so a 
+     flag was added to make sure it never gets added.  */
+  if (objfile->separate_debug_objfile_backlink || 
+      objfile->flags & OBJF_SEPARATE_DEBUG_FILE)
+	return;
+	
   CHECK_FATAL (objfile != NULL);
 
   /* First find the index for insertion of all the sections in
@@ -732,10 +752,8 @@ init_entry_point_info (struct objfile *objfile)
       /* Examination of non-executable.o files.  Short-circuit this stuff.  */
       objfile->ei.entry_point = INVALID_ENTRY_POINT;
     }
-  objfile->ei.deprecated_entry_file_lowpc = INVALID_ENTRY_LOWPC;
-  objfile->ei.deprecated_entry_file_highpc = INVALID_ENTRY_HIGHPC;
-  objfile->ei.entry_func_lowpc = INVALID_ENTRY_LOWPC;
-  objfile->ei.entry_func_highpc = INVALID_ENTRY_HIGHPC;
+
+  /* APPLE LOCAL: Initialize main_func_lowpc and main_func_highpc. */
   objfile->ei.main_func_lowpc = INVALID_ENTRY_LOWPC;
   objfile->ei.main_func_highpc = INVALID_ENTRY_HIGHPC;
 }
@@ -793,7 +811,7 @@ put_objfile_before (struct objfile *objfile, struct objfile *before_this)
     }
   
   internal_error (__FILE__, __LINE__,
-		  "put_objfile_before: before objfile not in list");
+		  _("put_objfile_before: before objfile not in list"));
 }
 
 /* Put OBJFILE at the front of the list.  */
@@ -868,7 +886,7 @@ unlink_objfile (struct objfile *objfile)
     }
 
   internal_error (__FILE__, __LINE__,
-		  "unlink_objfile: objfile already unlinked");
+		  _("unlink_objfile: objfile already unlinked"));
 }
 
 
@@ -894,6 +912,7 @@ free_objfile (struct objfile *objfile)
   if (objfile->separate_debug_objfile)
     {
       free_objfile (objfile->separate_debug_objfile);
+      objfile->separate_debug_objfile = NULL;
     }
   
   if (objfile->separate_debug_objfile_backlink)
@@ -928,7 +947,7 @@ free_objfile (struct objfile *objfile)
     {
       char *name = bfd_get_filename (objfile->obfd);
       if (!bfd_close (objfile->obfd))
-	warning ("cannot close \"%s\": %s",
+	warning (_("cannot close \"%s\": %s"),
 		 name, bfd_errmsg (bfd_get_error ()));
       xfree (name);
     }
@@ -966,12 +985,12 @@ free_objfile (struct objfile *objfile)
   objfile_free_data (objfile);
   if (objfile->name != NULL)
     {
-      xmfree (objfile->md, objfile->name);
+      xfree (objfile->name);
     }
   if (objfile->global_psymbols.list)
-    xmfree (objfile->md, objfile->global_psymbols.list);
+    xfree (objfile->global_psymbols.list);
   if (objfile->static_psymbols.list)
-    xmfree (objfile->md, objfile->static_psymbols.list);
+    xfree (objfile->static_psymbols.list);
   /* Free the obstacks for non-reusable objfiles */
   bcache_xfree (objfile->psymbol_cache);
   bcache_xfree (objfile->macro_cache);
@@ -981,7 +1000,11 @@ free_objfile (struct objfile *objfile)
   if (objfile->demangled_names_hash)
     htab_delete (objfile->demangled_names_hash);
   obstack_free (&objfile->objfile_obstack, 0);
-  xmfree (objfile->md, objfile);
+  /* APPLE LOCAL begin dwarf repository  */
+  if (objfile->uses_sql_repository)
+    close_dwarf_repositories (objfile);
+  /* APPLE LOCAL end dwarf repository  */
+  xfree (objfile);
   objfile = NULL;
 }
 
@@ -1121,15 +1144,6 @@ objfile_relocate (struct objfile *objfile, struct section_offsets *new_offsets)
 		  SYMBOL_VALUE_ADDRESS (sym) +=
 		    ANOFFSET (delta, SYMBOL_SECTION (sym));
 		}
-#ifdef MIPS_EFI_SYMBOL_NAME
-	      /* Relocate Extra Function Info for ecoff.  */
-
-	      else if (SYMBOL_CLASS (sym) == LOC_CONST
-		       && SYMBOL_DOMAIN (sym) == LABEL_DOMAIN
-		       && strcmp (DEPRECATED_SYMBOL_NAME (sym), MIPS_EFI_SYMBOL_NAME) == 0)
-		ecoff_relocate_efi (sym, ANOFFSET (delta,
-						   s->block_line_section));
-#endif
 	    }
 	}
     }
@@ -1196,6 +1210,16 @@ objfile_relocate (struct objfile *objfile, struct section_offsets *new_offsets)
         objfile->ei.entry_point += ANOFFSET (delta, SECT_OFF_TEXT (objfile));
     }
 
+  /* APPLE LOCAL: We use these addresses to determine whether minsyms'
+     text segments (__TEXT vs coalesced for instance) so we need to keep them
+     up to date along with any slides that happen to the objfile.  */
+  DBX_TEXT_ADDR (objfile) += ANOFFSET (delta, SECT_OFF_TEXT (objfile));
+  if (DBX_COALESCED_TEXT_ADDR (objfile) != 0)
+    {
+      DBX_COALESCED_TEXT_ADDR (objfile) += ANOFFSET (delta, 
+                                                     SECT_OFF_TEXT (objfile));
+    }
+
   {
     struct obj_section *s;
     bfd *abfd;
@@ -1214,24 +1238,6 @@ objfile_relocate (struct objfile *objfile, struct section_offsets *new_offsets)
 
     objfile_add_to_ordered_sections (objfile);
   }
-
-  if (objfile->ei.entry_func_lowpc != INVALID_ENTRY_LOWPC)
-    {
-      objfile->ei.entry_func_lowpc += ANOFFSET (delta, SECT_OFF_TEXT (objfile));
-      objfile->ei.entry_func_highpc += ANOFFSET (delta, SECT_OFF_TEXT (objfile));
-    }
-
-  if (objfile->ei.deprecated_entry_file_lowpc != INVALID_ENTRY_LOWPC)
-    {
-      objfile->ei.deprecated_entry_file_lowpc += ANOFFSET (delta, SECT_OFF_TEXT (objfile));
-      objfile->ei.deprecated_entry_file_highpc += ANOFFSET (delta, SECT_OFF_TEXT (objfile));
-    }
-
-  if (objfile->ei.main_func_lowpc != INVALID_ENTRY_LOWPC)
-    {
-      objfile->ei.main_func_lowpc += ANOFFSET (delta, SECT_OFF_TEXT (objfile));
-      objfile->ei.main_func_highpc += ANOFFSET (delta, SECT_OFF_TEXT (objfile));
-    }
 
   /* Relocate breakpoints as necessary, after things are relocated. */
   breakpoint_re_set (objfile);
@@ -1334,8 +1340,9 @@ find_pc_sect_section (CORE_ADDR pc, struct bfd_section *section)
   /* APPLE LOCAL end search in ordered sections */
   
   ALL_OBJSECTIONS (objfile, s)
-    if ((section == 0 || section == s->the_bfd_section) &&
-	s->addr <= pc && pc < s->endaddr)
+    if (objfile->separate_debug_objfile_backlink == NULL
+        && (section == 0 || section == s->the_bfd_section) 
+	&& s->addr <= pc && pc < s->endaddr)
       return (s);
 
   return (NULL);
@@ -1415,8 +1422,36 @@ objfile_restrict_search (int on)
 void
 objfile_add_to_restrict_list (struct objfile *objfile)
 {
-  struct objfile_list *new_objfile = (struct objfile_list *)
-    xmalloc (sizeof (struct objfile_list));
+  struct objfile_list *new_objfile;
+
+  /* APPLE LOCAL: we need to check if this is a separate debug file and not 
+     add it, but add the original objfile file to the restrict list as the 
+     objfile_get_first() and objfile_get_next() functions will correctly always
+     return the separate debug file first, followed by the original executable 
+     file.  */
+  if (objfile->separate_debug_objfile_backlink || 
+      objfile->flags & OBJF_SEPARATE_DEBUG_FILE)
+    {
+      /* We need to check for the backlink as it may be NULL if we are in the
+         process of creating the separate debug objfile */
+      if (objfile->separate_debug_objfile_backlink)
+	objfile_add_to_restrict_list (objfile->separate_debug_objfile_backlink);
+      return;
+    }
+
+  
+  /* APPLE LOCAL: First check to make sure the objfile isn't already in 
+     the list.  */
+  for (new_objfile = objfile_list; 
+       new_objfile != NULL;
+       new_objfile = new_objfile->next)
+    {
+      if (new_objfile->objfile == objfile)
+	return;
+    }
+
+  /* Add the file to the restrict list.  */
+  new_objfile = (struct objfile_list *) xmalloc (sizeof (struct objfile_list));
   new_objfile->next = objfile_list;
   new_objfile->objfile = objfile;
   objfile_list = new_objfile;
@@ -1537,6 +1572,27 @@ objfile_matches_name (struct objfile *objfile, char *name)
   return objfile_no_match;
 }
 
+void
+push_front_restrict_list (struct objfile_list **requested_list_head, 
+                          struct objfile *objfile)
+{
+  struct objfile_list *new_requested_list_head 
+    = (struct objfile_list *) xmalloc (sizeof (struct objfile_list));
+  new_requested_list_head->objfile = objfile;
+  new_requested_list_head->next = *requested_list_head;
+  *requested_list_head = new_requested_list_head;
+}
+
+void clear_restrict_list (struct objfile_list **requested_list_head)
+{
+  while (*requested_list_head != NULL)
+    {
+      struct objfile_list *list_ptr;
+      list_ptr = *requested_list_head;
+      *requested_list_head = list_ptr->next;
+      xfree (list_ptr);
+    }
+}
 /* Restricts the objfile search to the REQUESTED_SHILB.  Returns
    a cleanup for the restriction, or -1 if no such shlib is
    found.  */
@@ -1556,34 +1612,38 @@ make_cleanup_restrict_to_shlib (char *requested_shlib)
      on the filename, in case the user just gave us the library name.  */
   ALL_OBJFILES (tmp_obj)
     {
-      enum objfile_matches_name_return match = objfile_matches_name (tmp_obj, requested_shlib); 
+      enum objfile_matches_name_return match = 
+                             objfile_matches_name (tmp_obj, requested_shlib); 
       if (match == objfile_match_exact)
 	{
 	  /* Okay, we found an exact match, so throw away a list if we
-	     we had found any other matches, and break.  */
-	  requested_objfile = tmp_obj;
-	  while (requested_list != NULL)
-	    {
-	      struct objfile_list *list_ptr;
-	      list_ptr = requested_list;
-	      requested_list = list_ptr->next;
-	      xfree (list_ptr);
-	    }
-	  requested_list = NULL;
+	     we had found any other matches, and break.  
+	     APPLE LOCAL: If the exact match we found was a separate
+	     debug file (dSYM), then add the original executable
+	     first since objfile_get_first() and objfile_get_next()
+	     functions will always return this separate debug objfile
+	     first, followed by the original executable.  */
+
+	  clear_restrict_list (&requested_list);
+	  if (tmp_obj->separate_debug_objfile_backlink)
+	    requested_objfile = tmp_obj->separate_debug_objfile_backlink;
+	  else
+	    requested_objfile = tmp_obj;
 	  break;
 	}
       else if (match == objfile_match_base)
 	{
-	  struct objfile_list *new_element 
-	    = (struct objfile_list *) xmalloc (sizeof (struct objfile_list));
-	  new_element->objfile = tmp_obj;
-	  new_element->next = requested_list;
-	  requested_list = new_element;
+          /* APPLE LOCAL: Only add object file themselves -- never
+             add the separate debug objfiles.  */
+	  if (tmp_obj->separate_debug_objfile_backlink == NULL)
+	    {
+	      push_front_restrict_list (&requested_list, tmp_obj);
+	    }
 	}
     }
 
   if (requested_objfile != NULL)
-      return make_cleanup_restrict_to_objfile (requested_objfile);
+    return make_cleanup_restrict_to_objfile (requested_objfile);
   else if (requested_list != NULL)
     return make_cleanup_restrict_to_objfile_list (requested_list);
   else
@@ -1602,8 +1662,20 @@ objfile_get_first ()
     return object_files;
   else
     {
+      /* APPLE LOCAL: When iterating we always return a separate
+	 debug file first, and then return the objfile for the
+	 separate debug file second to make sure we get debug
+	 information from the separate debug file first, and then
+	 fall back onto the original executable file for any extra
+	 debug information that it may contain such as stabs
+	 information that is not part of the debug map.  */
+
       objfile_list_ptr = objfile_list->next;
-      return objfile_list->objfile;
+      if (objfile_list->objfile 
+          && objfile_list->objfile->separate_debug_objfile)
+	return objfile_list->objfile->separate_debug_objfile;
+      else
+	return objfile_list->objfile;
     }
 }
 
@@ -1615,7 +1687,7 @@ objfile_get_first ()
 struct objfile *
 objfile_get_next (struct objfile *in_objfile)
 {
-  struct objfile *objfile;
+  struct objfile *objfile = NULL;
   
   if (!restrict_search || objfile_list == NULL)
     {
@@ -1625,13 +1697,37 @@ objfile_get_next (struct objfile *in_objfile)
 	return NULL;
     }
 
-  if (objfile_list_ptr == NULL)
+  /* APPLE LOCAL: If IN_OBJFILE is a separate debug file, return
+     the corresponding executable file next without advancing the
+     restrict list pointer. This helps us assure that the restrict
+     list can never get out of sync where the separate debug file
+     comes after the original executable file.  */
+
+  if (in_objfile->separate_debug_objfile_backlink)
+    objfile = in_objfile->separate_debug_objfile_backlink;
+  else
     {
-      return NULL;
+      /* Skip all separate debug files as they will be returned by the objfile
+         who owns them only to ensure that the separate debug file always comes
+	 first. This also implies that separate debug files never need to be
+	 added to the restrict list -- as this code will always skip them.  */
+      while (objfile_list_ptr)
+	{
+	  objfile = objfile_list_ptr->objfile;
+	  objfile_list_ptr = objfile_list_ptr->next;
+	  
+	  if (objfile->separate_debug_objfile_backlink == NULL)
+	    break;
+	  
+	  if (objfile_list_ptr == NULL)
+	    return NULL;
+	}
+      
+      /* Always return the separate debug file for an objfile first so we get
+         any symbols we can out of this file first.  */
+      if (objfile && objfile->separate_debug_objfile)
+	objfile = objfile->separate_debug_objfile;
     }
-  
-  objfile = objfile_list_ptr->objfile;
-  objfile_list_ptr = objfile_list_ptr->next;
 
   return objfile;
 }
@@ -1971,6 +2067,14 @@ objfile_free_data (struct objfile *objfile)
   objfile->data = NULL;
 }
 
+/* APPLE LOCAL begin dwarf repository  */
+unsigned
+get_objfile_registry_num_registrations (void)
+{
+  return objfile_data_registry.num_registrations;
+}
+/* APPLE LOCAL end dwarf repository  */
+
 void
 clear_objfile_data (struct objfile *objfile)
 {
@@ -1996,61 +2100,13 @@ objfile_data (struct objfile *objfile, const struct objfile_data *data)
 void
 _initialize_objfiles (void)
 {
-  struct cmd_list_element *c;
-
-  c = add_set_cmd ("generate-cached-symfiles", class_obscure, var_boolean,
-		   (char *) &mapped_symbol_files,
-		   "Set if GDB should generate persistent symbol tables by default.",
-		   &setlist);
-  add_show_from_set (c, &showlist);
-
-  c = add_set_cmd ("use-cached-symfiles", class_obscure, var_boolean,
-		   (char *) &use_mapped_symbol_files,
-		   "Set if GDB should use persistent symbol tables by default.",
-		   &setlist);
-  add_show_from_set (c, &showlist);
-
-  c = add_set_cmd ("generate-precompiled-symfiles", class_obscure, var_boolean,
-		   (char *) &mapped_symbol_files,
-		   "Set if GDB should generate persistent symbol tables by default.",
-		   &setlist);
-  add_show_from_set (c, &showlist);
-
-  c = add_set_cmd ("use-precompiled-symfiles", class_obscure, var_boolean,
-		   (char *) &use_mapped_symbol_files,
-		   "Set if GDB should use persistent symbol tables by default.",
-		   &setlist);
-  add_show_from_set (c, &showlist);
-
-  c =
-    add_set_cmd ("cached-symfiles-check-timestamp", class_obscure,
-                 var_boolean, (char *) &check_timestamp,
-                 "Set if GDB should ignore cached symbol files with incorrect timestamps.",
-                 &setlist);
-  add_show_from_set (c, &showlist);
-
-  add_show_from_set
-    (add_set_cmd ("cached-symfile-path", class_support, var_string,
-                  (char *) &cached_symfile_path,
-                  "Set list of directories to search for cached symbol files.",
-                  &setlist), &showlist);
-
   cached_symfile_path =
     xstrdup ("./gdb-symfile-cache:./syms:/usr/libexec/gdb/symfiles");
 
-  add_show_from_set
-    (add_set_cmd ("cached-symfile-dir", class_support, var_string,
-                  (char *) &cached_symfile_dir,
-                  "Set directory in which to generate cached symbol files.",
-                  &setlist), &showlist);
-
-  cached_symfile_dir = xstrdup ("./gdb-symfile-cache");
-
   /* APPLE LOCAL: We don't want to raise load levels for MetroWerks.  */
-  c = add_set_cmd ("auto-raise-load-levels", class_obscure, var_boolean, 
-		   (char *) &should_auto_raise_load_state, 
-		   "Set if GDB should raise the symbol loading level on"
-		   " all frames found in backtraces.",
-		   &setlist);
-  add_show_from_set (c, &showlist);
+  add_setshow_boolean_cmd ("auto-raise-load-levels", class_obscure,
+			   &should_auto_raise_load_state, _("\
+Set if GDB should raise the symbol loading level on all frames found in backtraces."), _("\
+Show if GDB should raise the symbol loading level on all frames found in backtraces."), NULL,
+			   NULL, NULL, &setlist, &showlist);
 }
