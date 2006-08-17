@@ -353,7 +353,8 @@ struct minimal_symbol
 
   unsigned long size;
 
-#ifdef SOFUN_ADDRESS_MAYBE_MISSING
+/* APPLE LOCAL: We don't need the struct minimal_symbol member filename.  */
+#if defined(SOFUN_ADDRESS_MAYBE_MISSING) && !defined(NM_NEXTSTEP)
   /* Which source file is this symbol in?  Only relevant for mst_file_*.  */
   char *filename;
 #endif

@@ -448,6 +448,9 @@ Start it from the beginning? "))
 #if defined(SOLIB_RESTART)
       SOLIB_RESTART ();
 #endif
+      /* APPLE LOCAL checkpoints */
+      clear_all_checkpoints ();
+
       init_wait_for_inferior ();
     }
 }
@@ -467,7 +470,7 @@ run_command_1 (char *args, int from_tty, int tbreak_at_main)
   clear_breakpoint_hit_counts ();
 
   /* APPLE LOCAL checkpoints */
-  clear_checkpoints ();
+  clear_all_checkpoints ();
 
   /* Purge old solib objfiles. */
   objfile_purge_solibs ();
@@ -2102,6 +2105,9 @@ attach_command (char *args, int from_tty)
 #else
       clear_solib ();
 #endif
+
+  /* APPLE LOCAL checkpoints */
+  clear_all_checkpoints ();
 
   target_attach (args, from_tty);
 

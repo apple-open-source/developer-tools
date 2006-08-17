@@ -6,6 +6,7 @@ MT_CFLAGS = \
 	-I$(srcdir)/macosx
 
 TDEPFILES = \
+	amd64-tdep.o \
 	core-macho.o \
 	i386-tdep.o \
 	i387-tdep.o \

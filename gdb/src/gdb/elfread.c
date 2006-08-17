@@ -225,7 +225,8 @@ elf_symtab_read (struct objfile *objfile, int dynamic)
 	      msym = record_minimal_symbol
 		((char *) sym->name, symaddr,
 		 mst_solib_trampoline, sym->section, objfile);
-#ifdef SOFUN_ADDRESS_MAYBE_MISSING
+/* APPLE LOCAL: We don't need the struct minimal_symbol member filename.  */
+#if defined(SOFUN_ADDRESS_MAYBE_MISSING) && !defined(NM_NEXTSTEP)
 	      if (msym != NULL)
 		msym->filename = filesymname;
 #endif
@@ -443,7 +444,8 @@ elf_symtab_read (struct objfile *objfile, int dynamic)
 		unsigned long size = ((elf_symbol_type *) sym)->internal_elf_sym.st_size;
 		MSYMBOL_SIZE(msym) = size;
 	      }
-#ifdef SOFUN_ADDRESS_MAYBE_MISSING
+/* APPLE LOCAL: We don't need the struct minimal_symbol member filename.  */
+#if defined(SOFUN_ADDRESS_MAYBE_MISSING) && !defined(NM_NEXTSTEP)
 	      if (msym != NULL)
 		msym->filename = filesymname;
 #endif

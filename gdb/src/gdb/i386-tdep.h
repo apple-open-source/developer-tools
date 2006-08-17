@@ -67,9 +67,11 @@ struct gdbarch_tdep
   struct regset *fpregset;
   size_t sizeof_fpregset;
 
-  /* APPLE LOCAL: This cpu family is only 32 bit, but we use wordsize to 
-     distinguish between ppc32 and ppc64 -- so to allow for generic code,
-     we have wordsize over here, too.  */
+  /* APPLE LOCAL: We use the wordsize to be the size of the 
+     GPR registers that are actually passed in the ABI.  This isn't
+     an issue for Intel, where we always pass the full size of
+     the register that the ABI allows, but this is here to
+     match PowerPC. */
   int wordsize;           /* size in bytes of fixed-point word */
 
   /* Register number for %st(0).  The register numbers for the other

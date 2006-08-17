@@ -25,7 +25,7 @@ int LaLaFunction()
                 {
         case 200 :
                 {
-                if (rgbee[bar].wVal == 2) 
+                if (rgbee[bar].wVal == 2)
                         goto LNeverChange;
                 break;
                 }

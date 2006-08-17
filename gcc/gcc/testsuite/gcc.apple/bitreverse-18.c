@@ -14,7 +14,7 @@ typedef unsigned int DWORD;
 #define USE_STRUCT_WRAPPER 0
 
 #pragma pack(push, 2)
-typedef struct 
+typedef struct
 {
 	DWORD	a;
 #if USE_STRUCT_WRAPPER

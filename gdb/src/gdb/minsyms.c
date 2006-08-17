@@ -215,7 +215,8 @@ lookup_minimal_symbol (const char *name, const char *sfile,
 			case mst_file_text:
 			case mst_file_data:
 			case mst_file_bss:
-#ifdef SOFUN_ADDRESS_MAYBE_MISSING
+/* APPLE LOCAL: We don't need the struct minimal_symbol member filename.  */
+#if defined(SOFUN_ADDRESS_MAYBE_MISSING) && !defined(NM_NEXTSTEP)
 			  /* APPLE LOCAL: If the minsym doesn't have a
 			     filename set, don't allow it to match
 			     anything.  This isn't perhaps optimal,
@@ -693,6 +694,10 @@ prim_record_minimal_symbol_and_info (const char *name, CORE_ADDR address,
       msym_bunch = new;
     }
   msymbol = &msym_bunch->contents[msym_bunch_index];
+/* APPLE LOCAL: Initialize the msymbol->filename to NULL.  */
+#if defined(SOFUN_ADDRESS_MAYBE_MISSING) && !defined(NM_NEXTSTEP)
+  msymbol->filename = NULL;
+#endif
   SYMBOL_INIT_LANGUAGE_SPECIFIC (msymbol, language_unknown);
   SYMBOL_LANGUAGE (msymbol) = language_auto;
   SYMBOL_SET_NAMES (msymbol, (char *)name, strlen (name), objfile);

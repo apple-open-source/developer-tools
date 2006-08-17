@@ -1818,6 +1818,8 @@ generic_mourn_inferior (void)
   breakpoint_init_inferior (inf_exited);
   registers_changed ();
 
+  value_clear_inferior_string_pool ();
+
   reopen_exec_file ();
   reinit_frame_cache ();
 
@@ -2092,9 +2094,10 @@ deprecated_debug_xfer_memory (CORE_ADDR memaddr, bfd_byte *myaddr, int len,
 						attrib, target);
 
   /* FIXME-32x64--assumes memaddr fits in unsigned long. */
+  /* APPLE LOCAL: fixed via paddr_nz.  */
   fprintf_unfiltered (gdb_stdlog,
-		      "target_xfer_memory (0x%x, xxx, %d, %s, xxx) = %d",
-		      (unsigned int) memaddr,	/* possable truncate long long */
+		      "target_xfer_memory (0x%s, xxx, %d, %s, xxx) = %d",
+		      paddr_nz (memaddr),
 		      len, write ? "write" : "read", retval);
 
   if (retval > 0)
@@ -2139,9 +2142,10 @@ debug_to_insert_breakpoint (CORE_ADDR addr, gdb_byte *save)
   retval = debug_target.to_insert_breakpoint (addr, save);
 
   /* FIXME-32x64--assumes maddr fits in unsigned long. */
+  /* APPLE LOCAL:  Fixed - paddr_nz addr.  */
   fprintf_unfiltered (gdb_stdlog,
-		      "target_insert_breakpoint (0x%lx, xxx) = %ld\n",
-		      (unsigned long) addr,
+		      "target_insert_breakpoint (0x%s, xxx) = %ld\n",
+		      paddr_nz (addr),
 		      (unsigned long) retval);
   return retval;
 }
@@ -2154,9 +2158,10 @@ debug_to_remove_breakpoint (CORE_ADDR addr, gdb_byte *save)
   retval = debug_target.to_remove_breakpoint (addr, save);
 
   /* FIXME-32x64--assumes addr fits in unsigned long. */
+  /* APPLE LOCAL:  Fixed - paddr_nz addr.  */
   fprintf_unfiltered (gdb_stdlog,
-		      "target_remove_breakpoint (0x%lx, xxx) = %ld\n",
-		      (unsigned long) addr,
+		      "target_remove_breakpoint (0x%s, xxx) = %ld\n",
+		      paddr_nz (addr),
 		      (unsigned long) retval);
   return retval;
 }

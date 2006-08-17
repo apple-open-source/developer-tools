@@ -160,7 +160,7 @@
 3719311: gcc.dg/void-cast-2.c  (test for warnings, line 7)
 3719311: gcc.dg/void-cast-2.c  (test for warnings, line 8)
 4385016: gcc.apple/default-cpu-1.c scan-assembler machine ppc7400
-0000000: gcc.apple/align-test-1.c (test for excess errors)
+4255172: gcc.apple/align-test-1.c (test for excess errors)
 #
 # the following failures are for -m64
 3966342: gcc.apple/altivec-1.c (test for excess errors)

@@ -152,8 +152,11 @@ LIBICONV = @LIBICONV@
 
 # APPLE LOCAL: location of libxml header files & libraries
 
-#LIBXML2_CFLAGS = @LIBXML2_INCLUDES@
-#LIBXML2_LDFLAGS = @LIBXML2_LIBS@
+LIBXML2_CFLAGS = @LIBXML2_INCLUDES@
+LIBXML2_LDFLAGS = @LIBXML2_LIBS@
+
+# APPLE LOCAL: We need to weak link to Carbon for the "open" command.
+CARBON_LDFLAGS = @CARBON_LIBS@
 
 # Did the user give us a --with-sysroot option?
 TARGET_SYSTEM_ROOT = @TARGET_SYSTEM_ROOT@
@@ -394,7 +397,7 @@ INSTALLED_LIBS=-lbfd -lreadline -lopcodes -liberty \
 CLIBS = $(SIM) $(READLINE) $(OPCODES) $(BFD) $(INTL) $(LIBIBERTY) \
 	$(XM_CLIBS) $(TM_CLIBS) $(NAT_CLIBS) $(GDBTKLIBS) @LIBS@ \
 	$(LIBICONV) \
-        $(LIBXML2_LDFLAGS) \
+        $(LIBXML2_LDFLAGS) $(CARBON_LDFLAGS) \
 	$(MMALLOC) $(WIN32LIBS) $(LIBSQLITE3)
 
 CDEPS = $(XM_CDEPS) $(TM_CDEPS) $(NAT_CDEPS) $(SIM) $(BFD_DEP) $(READLINE_DEP) \

@@ -2740,6 +2740,17 @@ assign_parm_setup_reg (struct assign_parm_data_all *all, tree parm,
   promoted_nominal_mode
     = promote_mode (data->nominal_type, data->nominal_mode, &unsignedp, 0);
 
+  /* APPLE LOCAL begin CW asm blocks */
+  /* In asm functions with no stack frame, leave it in the register.  */
+  if (cfun->iasm_frame_size == -2
+      && cfun->iasm_noreturn)
+    {
+      parmreg = DECL_INCOMING_RTL (parm);
+      if (promoted_nominal_mode != GET_MODE (parmreg))
+	warning ("wrong mode for arg %qD", parm);
+    }
+  else
+  /* APPLE LOCAL end CW asm blocks */
   parmreg = gen_reg_rtx (promoted_nominal_mode);
 
   if (!DECL_ARTIFICIAL (parm))

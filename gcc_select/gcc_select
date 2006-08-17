@@ -29,7 +29,7 @@
 
 #######################################################################
 
-GCC_SELECT_VERSION="2.18"
+GCC_SELECT_VERSION="2.19"
 
 #######################################################################
 
@@ -530,6 +530,7 @@ WRAP_HELP
     else
       $dashn mkdir -p $usr/lib
       for lib in $symlink_libs; do
+	[ ! -f $usr/lib/$lib -o -L $usr/lib/$lib ] || continue
 	$dashn rm -f $usr/lib/$lib
 	if [ -e /usr/lib/gcc/darwin/default/$lib ]; then
 	  $dashn ln -sf gcc/darwin/default/$lib $usr/lib/$lib
@@ -537,6 +538,7 @@ WRAP_HELP
       done
       $dashn mkdir -p $usr/local/lib
       for lib in $symlink_local_libs; do            
+	[ ! -f $usr/local/lib/$lib -o -L $usr/local/lib/$lib ] || continue
 	$dashn rm -f $usr/local/lib/$lib
 	if [ -e /usr/lib/gcc/darwin/default/$lib ]; then            
 	  $dashn ln -sf ../gcc/darwin/default/$lib $usr/local/lib/$lib

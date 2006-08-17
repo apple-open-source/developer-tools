@@ -40,7 +40,18 @@ export GDB_DYLD_PATHS_ROOT
 export GDB_DYLD_IMAGE_SUFFIX
 export GDB_DYLD_INSERT_LIBRARIES
 
-host_architecture=`(unset DYLD_PRINT_LIBRARIES; "arch") 2>/dev/null` || host_architecture=""
+# dyld will warn if any of these are set and the user invokes a setgid program
+# like gdb.
+unset DYLD_FRAMEWORK_PATH
+unset DYLD_FALLBACK_FRAMEWORK_PATH
+unset DYLD_LIBRARY_PATH
+unset DYLD_FALLBACK_LIBRARY_PATH
+unset DYLD_ROOT_PATH
+unset DYLD_PATHS_ROOT
+unset DYLD_IMAGE_SUFFIX
+unset DYLD_INSERT_LIBRARIES
+
+host_architecture=`/usr/bin/arch 2>/dev/null` || host_architecture=""
 
 if [ -z "$host_architecture" ]; then
     echo "There was an error executing 'arch(1)'; assuming 'ppc'.";

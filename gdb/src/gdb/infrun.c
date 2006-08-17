@@ -865,6 +865,25 @@ proceed (CORE_ADDR addr, enum target_signal siggnal, int step)
 {
   int oneproc = 0;
 
+  /* APPLE LOCAL begin checkpoints */
+  /* Warn the user about attempts to continue forward from any
+     rolled-back state.  */
+  {
+    extern int rolled_back;
+    static int warned_proceed = 0;
+
+    if (rolled_back && !warned_proceed)
+      {
+	int go_p = query (_("Proceeding from a rollback; are you sure? "));
+
+	warned_proceed = 1;
+
+	if (!go_p)
+	  return;
+      }
+  }
+  /* APPLE LOCAL end checkpoints */
+
   if (step > 0)
     step_start_function = find_pc_function (read_pc ());
   if (step < 0)
@@ -3510,11 +3529,6 @@ Further execution is probably impossible.\n"));
     }
   breakpoints_inserted = 0;
 
-  /* APPLE LOCAL begin checkpoints */
-  if (auto_checkpointing)
-    maybe_create_checkpoint ();
-  /* APPLE LOCAL end checkpoints */
-
   /* APPLE LOCAL: omission of breakpoint_auto_delete call.  */
 
   /* If an auto-display called a function and that got a signal,
@@ -3530,15 +3544,21 @@ Further execution is probably impossible.\n"));
 
   target_terminal_ours ();
 
-  /* Look up the hook_stop and run it (CLI internally handles problem
-     of stop_command's pre-hook not existing).  */
-  if (stop_command)
-    catch_errors (hook_stop_stub, stop_command,
-		  "Error while running hook_stop:\n", RETURN_MASK_ALL);
+  /* APPLE LOCAL: I moved the call to the stop_command from here
+     to after the stack is set up.  Otherwise, commands called in
+     the stop hook will get the wrong current_sal.  */
 
   if (!target_has_stack)
     {
+      /* APPLE LOCAL: Since I had to move this to below finding the frame,
+	 we should also call it here or it won't get called...  */
 
+      /* Look up the hook_stop and run it (CLI internally handles problem
+	 of stop_command's pre-hook not existing).  */
+      if (stop_command)
+	catch_errors (hook_stop_stub, stop_command,
+		      "Error while running hook_stop:\n", RETURN_MASK_ALL);
+      
       goto done;
     }
 
@@ -3661,6 +3681,17 @@ Further execution is probably impossible.\n"));
 	}
     }
 
+  /* APPLE LOCAL: This was moved from above the section of code that 
+     prints the bottom-most stack frame.  */
+
+  /* Look up the hook_stop and run it (CLI internally handles problem
+     of stop_command's pre-hook not existing).  */
+  if (stop_command)
+    catch_errors (hook_stop_stub, stop_command,
+		  "Error while running hook_stop:\n", RETURN_MASK_ALL);
+
+  /* END APPLE LOCAL  */
+
   /* Save the function value return registers, if we care.
      We might be about to restore their previous contents.  */
   if (proceed_to_finish)
@@ -3710,6 +3741,14 @@ done:
 
   annotate_stopped ();
   observer_notify_normal_stop (stop_bpstat);
+
+  /* APPLE LOCAL begin checkpoints */
+  {
+    void maybe_create_checkpoint (void);
+    if (auto_checkpointing)
+      maybe_create_checkpoint ();
+  }
+  /* APPLE LOCAL end checkpoints */
 }
 
 static int

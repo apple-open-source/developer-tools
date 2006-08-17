@@ -146,6 +146,8 @@ extern void data_coal_section (void);
 extern void cstring_section (void);
 extern void literal4_section (void);
 extern void literal8_section (void);
+/* APPLE LOCAL x86_64 */
+extern void literal16_section (void);
 extern void constructor_section (void);
 extern void mod_init_section (void);
 extern void mod_term_section (void);

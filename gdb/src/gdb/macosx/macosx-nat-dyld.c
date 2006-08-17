@@ -89,6 +89,7 @@
 #if defined (__powerpc__) || defined (__ppc__) || defined (__ppc64__)
 #include "ppc-tdep.h"
 #elif defined (__i386__)
+#include "amd64-tdep.h"
 #include "i386-tdep.h"
 #else
 #error "Unrecognized target architecture."
@@ -466,21 +467,24 @@ macosx_locate_dyld (CORE_ADDR *value, CORE_ADDR hint)
     {
       kern_return_t kret = KERN_SUCCESS;
       vm_region_basic_info_data_64_t info;
-      int info_cnt = sizeof (vm_region_basic_info_data_64_t);
+      mach_msg_type_number_t info_cnt = sizeof (vm_region_basic_info_data_64_t);
       mach_vm_address_t test_addr = VM_MIN_ADDRESS;
       mach_vm_size_t size = 0;
-      mach_port_t object_name = PORT_NULL;
+      mach_port_t object_name = MACH_PORT_NULL;
       task_t target_task = macosx_status->task;
 
-  info_cnt = VM_REGION_BASIC_INFO_COUNT_64;
+      info_cnt = VM_REGION_BASIC_INFO_COUNT_64;
 
       do
         {
           kret = mach_vm_region (target_task, &test_addr,
                             &size, VM_REGION_BASIC_INFO_64,
-                            (vm_region_info_t) & info, &info_cnt,
+                            (vm_region_info_t) &info, &info_cnt,
                             &object_name);
 
+          /* This function is initially called before the inferior
+             process has started executing; we'll get back a KERN_NO_SPACE.
+             When we try again once running the inferior we'll try again.  */
           if (kret != KERN_SUCCESS)
             return -1;
 
@@ -613,9 +617,9 @@ macosx_dyld_init (macosx_dyld_thread_status *s, bfd *exec_bfd)
          we need to use this over in the tdep.c file where we don't always
          have access to the macosx_dyld_thread_status or macosx_status
          structures.  */
-      if (header.cputype == CPU_TYPE_POWERPC)
+      if (header.cputype == CPU_TYPE_POWERPC || header.cputype == CPU_TYPE_I386)
         osabi_seen_in_attached_dyld = GDB_OSABI_DARWIN;
-      if (header.cputype == CPU_TYPE_POWERPC64)
+      if (header.cputype == CPU_TYPE_POWERPC64 || header.cputype == GDB_CPU_TYPE_X86_64)
         osabi_seen_in_attached_dyld = GDB_OSABI_DARWIN64;
     }
 
@@ -671,8 +675,28 @@ FETCH_ARGUMENT (int i)
 static ULONGEST
 FETCH_ARGUMENT (int i)
 {
-  CORE_ADDR stack = read_register (SP_REGNUM);
-  return read_memory_unsigned_integer (stack + (4 * (i + 1)), 4);
+  if (gdbarch_osabi (current_gdbarch) == GDB_OSABI_DARWIN64)
+    {
+      int reg = 0;
+      switch (i)
+        {
+          case 0:
+            reg = AMD64_RDI_REGNUM;
+            break;
+          case 1:
+            reg = AMD64_RSI_REGNUM;
+            break;
+          case 2:
+            reg = AMD64_RDX_REGNUM;
+            break;
+        }
+      return read_register (reg);
+    }
+  else
+    {
+      CORE_ADDR stack = read_register (SP_REGNUM);
+      return read_memory_unsigned_integer (stack + (4 * (i + 1)), 4);
+    }
 }
 #else
 #error unknown architecture
@@ -1386,17 +1410,6 @@ macosx_dyld_update (int dyldonly)
         make_cleanup_ui_out_notify_begin_end (uiout, "shlibs-updated");
       do_cleanups (notify_cleanup);
     }
-
-  /* Try to insert the CFM shared library breakpoint, if necessary.
-     This used to be handled by dyld_symfile_loaded_hook, but that
-     hook was only called when symbol files were read, not when the
-     library image was added.  We should probably make a hook that
-     gets called on all image loads, and use that to trigger the CFM
-     breakpoint.  But this is expedient in the meantime, and
-     inexpensive (one symbol lookup per shared library event, until
-     the CFM code gets loaded). */
-
-  macosx_cfm_init (&macosx_status->cfm_status);
 
   /* Try to insert the CFM shared library breakpoint, if necessary.
      This used to be handled by dyld_symfile_loaded_hook, but that

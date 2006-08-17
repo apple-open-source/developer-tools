@@ -19,11 +19,31 @@
 #define LAST_VP_REGNUM 40
 #define NUM_VP_REGS ((LAST_VP_REGNUM + 1) - FIRST_VP_REGNUM)
 
+#define IS_GP_REGNUM_64(regno) ((regno >= FIRST_GP_REGNUM_64) && (regno <= LAST_GP_REGNUM_64))
+#define IS_FP_REGNUM_64(regno) ((regno >= FIRST_FP_REGNUM_64) && (regno <= LAST_FP_REGNUM_64))
+#define IS_VP_REGNUM_64(regno) ((regno >= FIRST_VP_REGNUM_64) && (regno <= LAST_VP_REGNUM_64))
+
+#define FIRST_GP_REGNUM_64 0
+#define LAST_GP_REGNUM_64 23
+#define NUM_GP_REGS_64 ((LAST_GP_REGNUM_64 + 1) - FIRST_GP_REGNUM_64)
+
+#define FIRST_FP_REGNUM_64 24
+#define LAST_FP_REGNUM_64 39
+#define NUM_FP_REGS_64 ((LAST_FP_REGNUM_64 + 1) - FIRST_FP_REGNUM_64)
+
+#define FIRST_VP_REGNUM_64 40
+#define LAST_VP_REGNUM_64 55
+#define NUM_VP_REGS_64 ((LAST_VP_REGNUM_64 + 1) - FIRST_VP_REGNUM_64)
+
 void i386_macosx_fetch_gp_registers (gdb_i386_thread_state_t *sp_regs);
 void i386_macosx_store_gp_registers (gdb_i386_thread_state_t *sp_regs);
+void x86_64_macosx_fetch_gp_registers (gdb_x86_thread_state64_t *sp_regs);
+void x86_64_macosx_store_gp_registers (gdb_x86_thread_state64_t *sp_regs);
 
-void i386_macosx_fetch_fp_registers (gdb_i386_thread_fpstate_t *fp_regs);
-int i386_macosx_store_fp_registers (gdb_i386_thread_fpstate_t *fp_regs);
+void i386_macosx_fetch_fp_registers (gdb_i386_float_state_t *fp_regs);
+int i386_macosx_store_fp_registers (gdb_i386_float_state_t *fp_regs);
+void x86_64_macosx_fetch_fp_registers (gdb_x86_float_state64_t *fp_regs);
+int x86_64_macosx_store_fp_registers (gdb_x86_float_state64_t *fp_regs);
 
 #define INVALID_ADDRESS ((CORE_ADDR) (-1))
 

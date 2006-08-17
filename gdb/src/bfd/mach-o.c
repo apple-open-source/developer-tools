@@ -451,6 +451,12 @@ bfd_mach_o_convert_architecture (bfd_mach_o_cpu_type mtype,
       *type = bfd_arch_i386;
       *subtype = bfd_mach_i386_i386;
       break;
+    /* APPLE LOCAL begin x86_64 */
+    case BFD_MACH_O_CPU_TYPE_X86_64:
+      *type = bfd_arch_i386;
+      *subtype = bfd_mach_x86_64;
+      break;
+    /* APPLE LOCAL end x86_64 */
     case BFD_MACH_O_CPU_TYPE_MIPS: *type = bfd_arch_mips; break;
     case BFD_MACH_O_CPU_TYPE_MC98000: *type = bfd_arch_m98k; break;
     case BFD_MACH_O_CPU_TYPE_HPPA: *type = bfd_arch_hppa; break;
@@ -1310,6 +1316,14 @@ bfd_mach_o_i386_flavour_string (unsigned int flavour)
     case BFD_MACH_O_i386_THREAD_STATE: return "i386_THREAD_STATE";
     case BFD_MACH_O_i386_FLOAT_STATE: return "i386_FLOAT_STATE";
     case BFD_MACH_O_i386_EXCEPTION_STATE: return "i386_EXCEPTION_STATE";
+    /* APPLE LOCAL begin x86_64 */
+    case BFD_MACH_O_x86_THREAD_STATE64: return "x86_THREAD_STATE64";
+    case BFD_MACH_O_x86_FLOAT_STATE64: return "x86_FLOAT_STATE64";
+    case BFD_MACH_O_x86_EXCEPTION_STATE64: return "x86_EXCEPTION_STATE64";
+    case BFD_MACH_O_x86_THREAD_STATE: return "x86_THREAD_STATE";
+    case BFD_MACH_O_x86_FLOAT_STATE: return "x86_FLOAT_STATE";
+    case BFD_MACH_O_x86_EXCEPTION_STATE: return "x86_EXCEPTION_STATE";
+    /* APPLE LOCAL end x86_64 */
     case BFD_MACH_O_i386_THREAD_STATE_NONE: return "THREAD_STATE_NONE";
     default: return "UNKNOWN";
     }
@@ -2027,6 +2041,20 @@ bfd_mach_o_scan_start_address (bfd *abfd)
 
           abfd->start_address = bfd_h_get_64 (abfd, buf);
         }
+      /* APPLE LOCAL begin x86_64 */
+      else if ((mdata->header.cputype == BFD_MACH_O_CPU_TYPE_X86_64)
+               && (cmd->flavours[i].flavour == BFD_MACH_O_x86_THREAD_STATE64))
+        {
+          unsigned char buf[8];
+
+          bfd_seek (abfd, cmd->flavours[i].offset + (16 * 8), SEEK_SET);
+
+          if (bfd_bread (buf, 8, abfd) != 8)
+            return -1;
+
+          abfd->start_address = bfd_h_get_64 (abfd, buf);
+        }
+      /* APPLE LOCAL end x86_64 */
 
     }
 

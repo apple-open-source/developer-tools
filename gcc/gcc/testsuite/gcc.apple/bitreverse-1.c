@@ -7,16 +7,16 @@
 
 /*
 	Fun with bitfields!
-	
+
 	This needs to generate the same output when compiled with CodeWarrior and
 	with XCode. Following is the output I see.
-	
+
 	CodeWarrior:
-	
+
 	u1: 0x0000808b
 	u2: 0x51010001 0x00004045
-	
-	
+
+
 	XCode:
 
 	u1: 0xa2020002
@@ -89,7 +89,7 @@ int main()
 	bitfields.u2.bits.b8 = 1;
 	bitfields.u2.bits.b9 = 1;
 
-	if (bitfields.u1.i1 != 0x0000808b || 
+	if (bitfields.u1.i1 != 0x0000808b ||
 	    bitfields.u2.ints.i2 != 0x51010001 ||
 	    bitfields.u2.ints.i3 != 0x00004045)
 	  return 42;

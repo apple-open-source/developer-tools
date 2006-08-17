@@ -1208,6 +1208,17 @@ machopic_select_section (tree exp, int reloc,
 	       TREE_INT_CST_LOW (size) == 8 &&
 	       TREE_INT_CST_HIGH (size) == 0)
 	literal8_section ();
+      /* APPLE LOCAL begin x86_64 */
+#ifndef HAVE_GAS_LITERAL16
+#define HAVE_GAS_LITERAL16 0
+#endif
+      else if (HAVE_GAS_LITERAL16
+	       && TARGET_64BIT
+	       && TREE_CODE (size) == INTEGER_CST
+	       && TREE_INT_CST_LOW (size) == 16
+	       && TREE_INT_CST_HIGH (size) == 0)
+	literal16_section ();
+      /* APPLE LOCAL end x86_64 */
       else
 	base_function ();
     }
@@ -1328,6 +1339,15 @@ machopic_select_rtx_section (enum machine_mode mode, rtx x,
 	   && (GET_CODE (x) == CONST_INT
 	       || GET_CODE (x) == CONST_DOUBLE))
     literal4_section ();
+  /* APPLE LOCAL begin x86_64 */
+  else if (HAVE_GAS_LITERAL16
+	   && TARGET_64BIT
+	   && GET_MODE_SIZE (mode) == 16
+	   && (GET_CODE (x) == CONST_INT
+	       || GET_CODE (x) == CONST_DOUBLE
+	       || GET_CODE (x) == CONST_VECTOR))
+    literal16_section ();
+  /* APPLE LOCAL end x86_64 */
   else if (MACHOPIC_INDIRECT
 	   && (GET_CODE (x) == SYMBOL_REF
 	       || GET_CODE (x) == CONST
@@ -1527,7 +1547,8 @@ darwin_set_section_for_var_p (tree exp, int reloc, int align)
 	  if (TREE_INT_CST_HIGH (size) != 0)
 	    return 0;
 
-	  /* Put integer and float consts in the literal4|8 sections.  */
+	  /* APPLE LOCAL x86_64 */
+	  /* Put integer and float consts in the literal4|8|16 sections.  */
 
 	  if (TREE_INT_CST_LOW (size) == 4)
 	    {
@@ -1539,6 +1560,15 @@ darwin_set_section_for_var_p (tree exp, int reloc, int align)
 	      literal8_section ();                                
 	      return 1;
 	    }
+	  /* APPLE LOCAL begin x86_64 */
+	  else if (HAVE_GAS_LITERAL16
+		   && TARGET_64BIT
+		   && TREE_INT_CST_LOW (size) == 16)
+	    {
+	      literal16_section ();
+	      return 1;
+	    }
+	  /* APPLE LOCAL end x86_64 */
 	}
     }
   return 0;

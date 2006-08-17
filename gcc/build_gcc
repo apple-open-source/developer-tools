@@ -70,7 +70,7 @@ VERS=`sed -n -e '/version_string/s/.*\"\([^ \"]*\)[ \"].*/\1/p' \
 MAJ_VERS=`echo $VERS | sed 's/\([0-9]*\.[0-9]*\)[.-].*/\1/'`
 
 # This is the default architecture for i386 configurations.
-I386_CPU="--with-arch=pentium-m --with-tune=prescott"
+I386_CPU="--with-arch=nocona --with-tune=generic"
 
 # This is the libstdc++ version to use.
 LIBSTDCXX_VERSION=4.0.0
@@ -82,6 +82,9 @@ if [ x"`file /usr/lib/crt1.o | grep 'architecture ppc64'`" == x ]; then
 fi
 
 echo DARWIN_VERS = $DARWIN_VERS
+
+# If the user has CC set in their environment unset it now
+unset CC
 
 ########################################
 # Run the build.
@@ -117,8 +120,8 @@ if [ -z "$SYSCTL" ]; then
   SYSCTL=`sysctl -n hw.ncpu`
 fi
 
-# sysctl -n hw.* does not work when invoked via B&I chroot /BuildRoot. 
-# Builders can default to 2, since even if they are single processor, 
+# sysctl -n hw.* does not work when invoked via B&I chroot /BuildRoot.
+# Builders can default to 2, since even if they are single processor,
 # nothing else is running on the machine.
 if [ -z "$SYSCTL" ]; then
   SYSCTL=2
@@ -246,7 +249,7 @@ cp -Rp $DIR/dst-$BUILD-$BUILD$DEST_ROOT/share/man .$DEST_ROOT/share/ \
 # libexec
 cd $DIR/dst-$BUILD-$BUILD$DEST_ROOT/libexec/gcc/$BUILD-apple-darwin$DARWIN_VERS/$VERS \
   || exit 1
-LIBEXEC_FILES=`find . -type f -print || exit 1` 
+LIBEXEC_FILES=`find . -type f -print || exit 1`
 LIBEXEC_DIRS=`find . -type d -print || exit 1`
 cd $DEST_DIR || exit 1
 for t in $TARGETS ; do
@@ -268,7 +271,7 @@ done
 BIN_FILES=`ls $DIR/dst-$BUILD-$BUILD$DEST_ROOT/bin | grep '^[^-]*-[0-9.]*$' \
   | grep -v gccbug | grep -v gcov || exit 1`
 mkdir .$DEST_ROOT/bin
-for f in $BIN_FILES ; do 
+for f in $BIN_FILES ; do
   lipo -output .$DEST_ROOT/bin/$f -create $DIR/dst-*$DEST_ROOT/bin/$f || exit 1
 done
 # gcov, which is special only because it gets built multiple times and lipo
@@ -292,9 +295,7 @@ for t in $TARGETS ; do
 done
 
 SHARED_LIBS="libgcc_s.1.dylib libgcc_s.10.4.dylib libgcc_s.10.5.dylib"
-if echo $HOSTS | grep -q powerpc ; then
-  SHARED_LIBS="${SHARED_LIBS} libgcc_s_ppc64.1.dylib"
-fi
+
 for l in $SHARED_LIBS ; do
   CANDIDATES=()
   for t in $TARGETS ; do
@@ -308,6 +309,10 @@ for l in $SHARED_LIBS ; do
     lipo -output .$DEST_ROOT/lib/$l -create "${CANDIDATES[@]}" || exit 1
   fi
 done
+
+# For backwards compatibility link libgcc_s.1.dylib to the 64-bit versions.
+ln -s ./libgcc_s.1.dylib .$DEST_ROOT/lib/libgcc_s_ppc64.1.dylib
+ln -s ./libgcc_s.1.dylib .$DEST_ROOT/lib/libgcc_s_x86_64.1.dylib
 
 for t in $TARGETS ; do
   ln -s ../../../libstdc++.6.dylib \
@@ -394,7 +399,7 @@ lipo -output $DEST_DIR/$DEST_ROOT/bin/g++-$MAJ_VERS -create \
 
 ln -f $DEST_DIR/$DEST_ROOT/bin/g++-$MAJ_VERS $DEST_DIR/$DEST_ROOT/bin/c++-$MAJ_VERS || exit 1
 
-rm $DEST_DIR/$DEST_ROOT/bin/tmp-*-gcc-$MAJ_VERS || exit 1 
+rm $DEST_DIR/$DEST_ROOT/bin/tmp-*-gcc-$MAJ_VERS || exit 1
 rm $DEST_DIR/$DEST_ROOT/bin/tmp-*-g++-$MAJ_VERS || exit 1
 
 

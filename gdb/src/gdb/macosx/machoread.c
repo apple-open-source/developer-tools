@@ -162,6 +162,18 @@ macho_build_psymtabs (struct objfile *objfile, int mainline,
         break;
       }
 
+  /* If there is no __DATA, __data section we still need to come up
+     with something for any symbols in the __DATA segment (e.g. something
+     in __DATA, __common) so let's point to the segment itself.  */
+  if (DBX_DATA_SECTION (objfile) == NULL)
+    ALL_OBJFILE_OSECTIONS (objfile, os)
+      if (os->the_bfd_section && os->the_bfd_section->name  
+          && strcmp (os->the_bfd_section->name, "LC_SEGMENT.__DATA") == 0)
+        {
+          DBX_DATA_SECTION (objfile) = os;
+          break;
+        }
+
   DBX_COALESCED_TEXT_SECTION (objfile) = NULL;
   if (coalesced_text_name != NULL)
     ALL_OBJFILE_OSECTIONS (objfile, os)
@@ -182,13 +194,65 @@ macho_build_psymtabs (struct objfile *objfile, int mainline,
           break;
         }
 
+  /* Zero length sections will have a BFD asection but not a struct
+     obj_section.  */
   if (!DBX_TEXT_SECTION (objfile))
     {
-      warning ("Can't find %s section in symbol file", text_name);
+      asection *text_sect = bfd_get_section_by_name (sym_bfd, text_name);
+      if (text_sect)
+        {
+          DBX_TEXT_SECTION (objfile) = (struct obj_section *) 
+                             obstack_alloc (&objfile->objfile_obstack,
+                                     sizeof (struct obj_section));
+          DBX_TEXT_SECTION (objfile)->addr = 
+                                  bfd_section_vma (sym_bfd, text_sect);
+          DBX_TEXT_SECTION (objfile)->endaddr =
+                                  bfd_section_vma (sym_bfd, text_sect) +
+                                  bfd_section_size (sym_bfd, text_sect);
+          DBX_TEXT_SECTION (objfile)->objfile = objfile;
+          DBX_TEXT_SECTION (objfile)->the_bfd_section = text_sect;
+        }
     }
+
+  /* Zero length sections will have a BFD asection but not a struct
+     obj_section.  */
   if (!DBX_DATA_SECTION (objfile))
     {
-      warning ("Can't find %s section in symbol file", data_name);
+      asection *data_sect = bfd_get_section_by_name (sym_bfd, data_name);
+      if (data_sect)
+        {
+          DBX_DATA_SECTION (objfile) = (struct obj_section *) 
+                             obstack_alloc (&objfile->objfile_obstack,
+                                     sizeof (struct obj_section));
+          DBX_DATA_SECTION (objfile)->addr = 
+                                  bfd_section_vma (sym_bfd, data_sect);
+          DBX_DATA_SECTION (objfile)->endaddr =
+                                  bfd_section_vma (sym_bfd, data_sect) +
+                                  bfd_section_size (sym_bfd, data_sect);
+          DBX_DATA_SECTION (objfile)->objfile = objfile;
+          DBX_DATA_SECTION (objfile)->the_bfd_section = data_sect;
+        }
+    }
+
+  /* Zero length sections will have a BFD asection but not a struct
+     obj_section.  */
+  if (!DBX_COALESCED_TEXT_SECTION (objfile))
+    {
+      asection *textcoal_sect = bfd_get_section_by_name (sym_bfd, 
+                                                         coalesced_text_name);
+      if (textcoal_sect)
+        {
+          DBX_COALESCED_TEXT_SECTION (objfile) = (struct obj_section *) 
+                             obstack_alloc (&objfile->objfile_obstack,
+                                     sizeof (struct obj_section));
+          DBX_COALESCED_TEXT_SECTION (objfile)->addr = 
+                                  bfd_section_vma (sym_bfd, textcoal_sect);
+          DBX_COALESCED_TEXT_SECTION (objfile)->endaddr =
+                                  bfd_section_vma (sym_bfd, textcoal_sect) +
+                                  bfd_section_size (sym_bfd, textcoal_sect);
+          DBX_COALESCED_TEXT_SECTION (objfile)->objfile = objfile;
+          DBX_COALESCED_TEXT_SECTION (objfile)->the_bfd_section = textcoal_sect;
+        }
     }
 
   if (DBX_TEXT_SECTION (objfile))

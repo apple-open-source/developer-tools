@@ -1060,11 +1060,19 @@ dyld_print_entry_info (struct dyld_objfile_entry *j, int shlibnum, int baselen)
   ui_out_spaces (uiout, 1);
 
   ui_out_field_string (uiout, "dyld-addr", addrbuf);
-  ui_out_spaces (uiout, 10 - strlen (addrbuf));
+  /* For a 64-bit program, the number 10 here is not correct.  
+     I don't want to change the formatting for all 32-bit but
+     make sure ui_out_spaces gets a non-negative value.  */
+  if (strlen (addrbuf) < 10)
+    ui_out_spaces (uiout, 10 - strlen (addrbuf));
   ui_out_spaces (uiout, 1);
 
   ptr = dyld_reason_string (j->reason);
-  ui_out_spaces (uiout, 11 - strlen (ptr));
+  /* For a 64-bit program, the number 11 here is not correct.  
+     I don't want to change the formatting for all 32-bit but
+     make sure ui_out_spaces gets a non-negative value.  */
+  if (strlen (ptr) < 11)
+    ui_out_spaces (uiout, 11 - strlen (ptr));
   ui_out_field_string (uiout, "reason", ptr);
   ui_out_spaces (uiout, 1);
 

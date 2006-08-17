@@ -21,11 +21,11 @@ typedef struct _S5
 int TestS5(void)
 {
  S5 s5 = {0};
- 
+
  s5.s1 = 0x5678;
  s5.s2 = 0xABCD;
 
-  if (sizeof(S5) != 12 
+  if (sizeof(S5) != 12
   || s5.s1 != 0x5678
   || s5.l3 != 0x5678
   || s5.s2 != 0xabcd
@@ -34,7 +34,7 @@ int TestS5(void)
   return 0;
 
 #if 0
- printf("size %d\n", sizeof(S5)); 
+ printf("size %d\n", sizeof(S5));
  printf("s5.l3 = 0x%x, s5.l4 = 0x%x\n", s5.l3, s5.l4);
 #endif
 }

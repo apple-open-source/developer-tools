@@ -62,11 +62,9 @@ main()
   normal_fn ();
   nofralloc_fn ();
   fralloc_fn ();
-  /*
   fralloc_fn_1 ();
   fralloc_fn_2 ();
   fralloc_fn_3 ();
-  */
   if (f6 () != 1234)
     abort ();
   return 0;

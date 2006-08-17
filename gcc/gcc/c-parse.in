@@ -2082,7 +2082,8 @@ compstmt_nostart: '}'
 	| maybe_label_decls compstmt_contents_nonempty '}'
 		/* APPLE LOCAL begin CW asm blocks */
 		{
-		  if (flag_iasm_blocks) inside_iasm_block = 0;
+		  if (flag_iasm_blocks)
+		    iasm_end_block ();
 		}
 		/* APPLE LOCAL end CW asm blocks */
 	;
@@ -2260,7 +2261,7 @@ iasm_compstmt: ASM_KEYWORD
 	  iasm_stmt_nobol
 		{
 		  $$ = c_finish_expr_stmt ($3);
-		  inside_iasm_block = false;
+		  iasm_end_block ();
 		  $<ttype>$ = c_end_compound_stmt ($<ttype>2, true);
 		}
         ;
@@ -2268,7 +2269,9 @@ iasm_compstmt: ASM_KEYWORD
 iasm_compstmt_nostart:
 	  '}'
 	| iasm_compstmt_contents_nonempty '}'
-		{ inside_iasm_block = false; }
+		{
+		  iasm_end_block ();
+		}
 	;
 
 iasm_compstmt_contents_nonempty:

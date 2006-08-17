@@ -1,3 +1,16 @@
+2006-06-11  Eric Christopher  <echristo@apple.com>
+
+	Radar 4581948
+	PR middle-end/27948
+	* stor-layout.c (place_field): Remove check for
+	remaining_in_alignment when aligning at the end of a run.
+
+2006-05-08  Eric Christopher  <echristo@apple.com>
+
+	Radar 4537881
+	* unwind-dw2-fde-darwin.c (examine_objects): Only check data
+	section for ppc.
+
 2006-04-25  Eric Christopher  <echristo@apple.com>
 
 	Radar 4529978
@@ -144,24 +157,24 @@
 
 2006-03-22  Eric Christopher  <echristo@apple.com>
 
-        Radar 4419200
-        2006-01-27  H.J. Lu  <hongjiu.lu@intel.com>
+	Radar 4419200
+	2006-01-27  H.J. Lu  <hongjiu.lu@intel.com>
 
-        * config/i386/emmintrin.h (_mm_cvtsd_f64): Add missing Intel
-        intrinsic.
-        (_mm_cvtsi128_si64): Likewise.
-        (_mm_cvtsd_si64): Likewise.
-        (_mm_cvttsd_si64): Likewise.
-        (_mm_cvtsi64_sd): Likewise.
-        (_mm_cvtsi64_si128): Likewise.
-        * config/i386/mmintrin.h (_m_from_int64): Likewise.
-        (_mm_cvtsi64_m64): Likewise.
-        (_m_to_int64): Likewise.
-        (_mm_cvtm64_si64): Likewise.
-        * config/i386/xmmintrin.h (_mm_cvtss_si64): Likewise.
-        (_mm_cvttss_si64): Likewise.
-        (_mm_cvtsi64_ss): Likewise.
-        (_mm_cvtss_f32): Likewise.
+	* config/i386/emmintrin.h (_mm_cvtsd_f64): Add missing Intel
+	intrinsic.
+	(_mm_cvtsi128_si64): Likewise.
+	(_mm_cvtsd_si64): Likewise.
+	(_mm_cvttsd_si64): Likewise.
+	(_mm_cvtsi64_sd): Likewise.
+	(_mm_cvtsi64_si128): Likewise.
+	* config/i386/mmintrin.h (_m_from_int64): Likewise.
+	(_mm_cvtsi64_m64): Likewise.
+	(_m_to_int64): Likewise.
+	(_mm_cvtm64_si64): Likewise.
+	* config/i386/xmmintrin.h (_mm_cvtss_si64): Likewise.
+	(_mm_cvttss_si64): Likewise.
+	(_mm_cvtsi64_ss): Likewise.
+	(_mm_cvtss_f32): Likewise.
 
 2006-03-30  Geoffrey Keating  <geoffk@apple.com>
 

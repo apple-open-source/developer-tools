@@ -749,6 +749,16 @@ then
 fi
 AC_SUBST(LIBXML2_INCLUDES)
 AC_SUBST(LIBXML2_LIBS)
+
+case "$host" in
+  *-apple-darwin* | *-apple-macos*)
+  AC_MSG_CHECKING([for Carbon framework])
+  if test -d /System/Library/Frameworks/Carbon.framework ; then
+    CARBON_LIBS="-framework Carbon"
+  fi
+  ;;
+esac
+AC_SUBST(CARBON_LIBS)
 # APPLE LOCAL end
 
 if test "$ac_cv_header_sys_procfs_h" = yes; then
@@ -1602,8 +1612,15 @@ dnl  superset of ASCII containing the characters needed for French,
 dnl  German, Spanish, Italian, and possibly others), but if were
 dnl  *were* to support any host character sets other than ISO-8859-1,
 dnl  here's where we'd detect it.
+
+case "$host" in
+  *-apple-darwin* | *-apple-macos*)
+  ;;
+  *)
 AC_DEFINE(GDB_DEFAULT_HOST_CHARSET, "ISO-8859-1",
           [Define to be a string naming the default host character set.])
+  ;;
+esac
 
 AM_ICONV
 

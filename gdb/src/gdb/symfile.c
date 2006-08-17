@@ -1183,30 +1183,16 @@ symbol_file_add_with_addrs_or_offsets (bfd *abfd, int from_tty,
 	  gdb_flush (gdb_stdout);
 	}
     }
-  syms_from_objfile (objfile, addrs, offsets, num_offsets,
-		     mainline, from_tty);
-
-  /* We now have at least a partial symbol table.  Check to see if the
-     user requested that all symbols be read on initial access via either
-     the gdb startup command line or on a per symbol file basis.  Expand
-     all partial symbol tables for this objfile if so. */
-
-  if ((flags & OBJF_READNOW) || readnow_symbol_files)
-    {
-      if (from_tty || info_verbose)
-	{
-	  printf_unfiltered (_("expanding to full symbols..."));
-	  wrap_here ("");
-	  gdb_flush (gdb_stdout);
-	}
-
-      /* APPLE LOCAL ALL_OBJFILE_PSYMTABS */
-      ALL_OBJFILE_PSYMTABS (objfile, psymtab)
-	{
-	  psymtab_to_symtab (psymtab);
-	}
-    }
-
+  
+  /* APPLE LOCAL: Move the finding and parsing of dSYM files before
+     syms_from_objfile() for the main objfile.  If there is a dSYM file
+     and it's UUID matches, we can avoid parsing any debug map symbols
+     since they will all be contained in the dSYM file. Problems can
+     arise when we have both debug map information and dSYM information
+     where certain line numbers will be found in both sets of information,
+     yet a lookup based on an address for something found in the debug map
+     will always be found in the dSYM information first and can cause a
+     variety of mismatches.  */
   debugfile = find_separate_debug_file (objfile);
   if (debugfile)
     {
@@ -1232,13 +1218,40 @@ symbol_file_add_with_addrs_or_offsets (bfd *abfd, int from_tty,
 	 that usage of the ALL_OBJFILES_SAFE macro will stay safe. */
       put_objfile_before (objfile->separate_debug_objfile, objfile);
 
-      /* APPLE LOCAL: Add all partial symbols from dSYM file to main executable
-         in case it has been stripped. Stepping is very unhappy without 
-	 msymbols.  */
-      append_psymbols_as_msymbols(objfile);
-
       xfree (debugfile);
+
+      /* APPLE LOCAL: Check the UUID so if there is a UUID mismatch, the
+         separate_debug_objfile will be freed and NULLed prior to calling
+	 syms_from_objfile(objfile) below. We need to do this so we know
+	 wether or not to ignore debug map entries when parsing symbols. */
+      check_for_matching_uuid (objfile);
     }
+
+
+  syms_from_objfile (objfile, addrs, offsets, num_offsets,
+		     mainline, from_tty);
+
+  /* We now have at least a partial symbol table.  Check to see if the
+     user requested that all symbols be read on initial access via either
+     the gdb startup command line or on a per symbol file basis.  Expand
+     all partial symbol tables for this objfile if so. */
+
+  if ((flags & OBJF_READNOW) || readnow_symbol_files)
+    {
+      if (from_tty || info_verbose)
+	{
+	  printf_unfiltered (_("expanding to full symbols..."));
+	  wrap_here ("");
+	  gdb_flush (gdb_stdout);
+	}
+
+      /* APPLE LOCAL ALL_OBJFILE_PSYMTABS */
+      ALL_OBJFILE_PSYMTABS (objfile, psymtab)
+	{
+	  psymtab_to_symtab (psymtab);
+	}
+    }
+
 
   /* APPLE LOCAL skip no debug symbols warning? */
 
@@ -1266,8 +1279,11 @@ symbol_file_add_with_addrs_or_offsets (bfd *abfd, int from_tty,
 
   new_symfile_objfile (objfile, mainline, from_tty);
 
-  /* APPLE LOCAL */
-  check_for_matching_uuid (objfile);
+  /* APPLE LOCAL: Add all partial symbols from dSYM file to main executable
+     in case it has been stripped. Stepping is very unhappy without 
+     msymbols.  */
+  if (objfile->separate_debug_objfile)
+    append_psymbols_as_msymbols(objfile);
 
   if (deprecated_target_new_objfile_hook)
     deprecated_target_new_objfile_hook (objfile);

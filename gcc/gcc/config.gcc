@@ -261,15 +261,19 @@ xscale-*-*)
 	cpu_type=arm
 	extra_headers="mmintrin.h"
 	;;
+# APPLE LOCAL begin mni 4424835
 i[34567]86-*-*)
 	cpu_type=i386
-	extra_headers="mmintrin.h mm3dnow.h xmmintrin.h emmintrin.h pmmintrin.h"
+	extra_headers="mmintrin.h mm3dnow.h xmmintrin.h emmintrin.h
+		       pmmintrin.h tmmintrin.h"
 	;;
 x86_64-*-*)
 	cpu_type=i386
-	extra_headers="mmintrin.h mm3dnow.h xmmintrin.h emmintrin.h pmmintrin.h"
+	extra_headers="mmintrin.h mm3dnow.h xmmintrin.h emmintrin.h
+		       pmmintrin.h tmmintrin.h"
 	need_64bit_hwint=yes
 	;;
+# APPLE LOCAL end mni
 ia64-*-*)
 	extra_headers=ia64intrin.h
 	need_64bit_hwint=yes
@@ -1583,9 +1587,9 @@ powerpc-*-beos*)
 powerpc-*-darwin*)
  # APPLE LOCAL begin mainline 2005-10-02 4218570
  # APPLE LOCAL end mainline 2005-10-02 4218570
- # APPLE LOCAL begin mainline 2006-03-15 3992198
-	extra_parts="crt2.o"
- # APPLE LOCAL end mainline 2006-03-15 3992198
+ # APPLE LOCAL begin mainline candidate 2006-06-22 4512244
+	extra_parts="${extra_parts} crt2.o"
+ # APPLE LOCAL end mainline candidate 2006-06-22 4512244
 	case ${target} in
  # APPLE LOCAL begin mainline 2005-09-01 3449986
 	  *-darwin1[0-9]* | *-darwin[8-9]*)
@@ -2275,6 +2279,10 @@ if test x$with_cpu = x ; then
       # A Cirrus ARM variant.
       with_cpu="ep9312"
       ;;
+# APPLE LOCAL begin mainline 2006-04-19 4434601
+    i386-*-*)
+      with_cpu=i386
+      ;;
     i486-*-*)
       with_cpu=i486
       ;;
@@ -2326,14 +2334,28 @@ if test x$with_cpu = x ; then
         pentium_m-*)
           with_cpu=pentium-m
           ;;
-        *)
+        pentiumpro-*)
           with_cpu=pentiumpro
+          ;;
+        *)
+          with_cpu=generic
           ;;
       esac
       ;;
     x86_64-*-*)
+      case ${target_noncanonical} in
+        k8-*|opteron-*|athlon_64-*)
       with_cpu=k8
       ;;
+        nocona-*)
+          with_cpu=nocona
+          ;;
+        *)
+          with_cpu=generic
+          ;;
+      esac
+      ;;
+# APPLE LOCAL end mainline 2006-04-19 4434601
     alphaev6[78]*-*-*)
       with_cpu=ev67
       ;;
@@ -2529,20 +2551,30 @@ case "${target}" in
 		esac
 		;;
 
+# APPLE LOCAL begin mainline 2006-04-19 4434601
 	i[34567]86-*-* | x86_64-*-*)
 		supported_defaults="arch cpu tune"
 		for which in arch cpu tune; do
 			eval "val=\$with_$which"
 			case ${val} in
-			"" | i386 | i486 \
+			i386 | i486 \
 			| i586 | pentium | pentium-mmx | winchip-c6 | winchip2 \
 			| c3 | c3-2 | i686 | pentiumpro | pentium2 | pentium3 \
 			| pentium4 | k6 | k6-2 | k6-3 | athlon | athlon-tbird \
-			| athlon-4 | athlon-xp | athlon-mp | k8 | opteron \
-			| athlon64 | athlon-fx | prescott | pentium-m \
-			| pentium4m | pentium3m| nocona)
+			| athlon-4 | athlon-xp | athlon-mp \
+			| prescott | pentium-m | pentium4m | pentium3m)
+				case "${target}" in
+				  x86_64-*-*)
+				      echo "CPU given in --with-$which=$val doesn't support 64bit mode." 1>&2
+				      exit 1
+				      ;;
+				esac
 				# OK
 				;;
+			"" | k8 | opteron | athlon64 | athlon-fx | nocona | generic)
+				# OK
+				;;
+# APPLE LOCAL end mainline 2006-04-19 4434601
 			*)
 				echo "Unknown CPU given in --with-$which=$val." 1>&2
 				exit 1

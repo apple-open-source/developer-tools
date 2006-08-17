@@ -123,7 +123,7 @@ INCLUDES 			= 	-I$(PLUGIN_SUPPORT) -I.
 
 OPT				=	-O2
 
-CFLAGS 				= 	-g 				\
+CFLAGS 				= 	-gdwarf-2			\
 					$(OPT)				\
 					-c				\
 					-DVERSION=\""$(VERSION)"\"	\
@@ -188,7 +188,9 @@ install				:	all $(DSTDIR)
 	chmod 644 $(DSTDIR)/README.txt $(DSTDIR)/README.html $(DSTDIR)/$(OLD_GDBINIT)
 	cp -p $(GDBINIT) "$(DSTDIR)/$(GDBINIT)"
 	chmod 644 $(DSTDIR)/$(GDBINIT)
+	dsymutil -o $(SYMROOT)/$(PLUGIN).dSYM $(SYMROOT)/$(PLUGIN)
 	strip -x $(SYMROOT)/$(PLUGIN) -o $(DSTDIR)/$(PLUGIN)
+	cp $(DSTDIR)/$(PLUGIN) $(SYMROOT)/$(PLUGIN)
 	chmod 755 $(DSTDIR)/$(PLUGIN)
 	chgrp procmod $(SYMROOT)/$(PLUGIN) && chmod g+s $(SYMROOT)/$(PLUGIN)
 	chgrp procmod $(DSTDIR)/$(PLUGIN) && chmod g+s $(DSTDIR)/$(PLUGIN)

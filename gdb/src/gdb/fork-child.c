@@ -474,6 +474,26 @@ startup_inferior (int ntraps)
       wait_for_inferior ();
       if (stop_signal != TARGET_SIGNAL_TRAP)
 	{
+        /* APPLE LOCAL: If we are getting a bad access or bad
+           instruction here, don't just send it back to the app,
+           since then we'll just loop forever here.  This can
+           happen when you have "start-with-shell" non-zero, and
+           the shell crashes.  */
+#ifdef NM_NEXTSTEP
+        if (stop_signal == TARGET_EXC_BAD_ACCESS 
+          || stop_signal == TARGET_EXC_BAD_INSTRUCTION)
+          {
+            warning ("The target crashed on startup, maybe the shell is crashing.\n"
+                    "\"Try set start-with-shell 0\" to workaround.");
+	    /* For now we don't seem to be able to unwind successfully
+		from this error, so I am just aborting.  Throwing
+		an error or just breaking both lead to gdb just
+		hanging, which isn't helpful...  */
+            abort ();
+          }
+#endif
+        /* END APPLE LOCAL */
+
 	  /* Let shell child handle its own signals in its own way.
 	     FIXME: what if child has exited?  Must exit loop
 	     somehow.  */

@@ -49,7 +49,15 @@ typedef enum bfd_mach_o_i386_thread_flavour
     BFD_MACH_O_i386_THREAD_STATE = 1,
     BFD_MACH_O_i386_FLOAT_STATE = 2,
     BFD_MACH_O_i386_EXCEPTION_STATE = 3,
-    BFD_MACH_O_i386_THREAD_STATE_NONE = 4,
+    /* APPLE LOCAL begin x86_64 */
+    BFD_MACH_O_x86_THREAD_STATE64 = 4,
+    BFD_MACH_O_x86_FLOAT_STATE64 = 5,
+    BFD_MACH_O_x86_EXCEPTION_STATE64 = 6,
+    BFD_MACH_O_x86_THREAD_STATE = 7,
+    BFD_MACH_O_x86_FLOAT_STATE = 8,
+    BFD_MACH_O_x86_EXCEPTION_STATE = 9,
+    BFD_MACH_O_i386_THREAD_STATE_NONE = 10,
+    /* APPLE LOCAL end x86_64 */
 }
 bfd_mach_o_i386_thread_flavour;
 
@@ -108,6 +116,8 @@ typedef enum bfd_mach_o_cpu_type
   BFD_MACH_O_CPU_TYPE_POWERPC = 18
   /* APPLE LOCAL 64-bit */
   , BFD_MACH_O_CPU_TYPE_POWERPC_64 = (18 | BFD_MACH_O_CPU_IS64BIT)
+  /* APPLE LOCAL x86_64 */
+  , BFD_MACH_O_CPU_TYPE_X86_64 = (BFD_MACH_O_CPU_TYPE_I386 | BFD_MACH_O_CPU_IS64BIT)
 }
 bfd_mach_o_cpu_type;
 

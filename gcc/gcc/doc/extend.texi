@@ -6396,9 +6396,15 @@ All of them generate the machine instruction that is part of the name.
 v8qi __builtin_ia32_paddb (v8qi, v8qi)
 v4hi __builtin_ia32_paddw (v4hi, v4hi)
 v2si __builtin_ia32_paddd (v2si, v2si)
+@c APPLE LOCAL begin radar 4395773
+di __builtin_ia32_paddq (di, di)
+@c APPLE LOCAL end radar 4395773
 v8qi __builtin_ia32_psubb (v8qi, v8qi)
 v4hi __builtin_ia32_psubw (v4hi, v4hi)
 v2si __builtin_ia32_psubd (v2si, v2si)
+@c APPLE LOCAL begin radar 4395773
+di __builtin_ia32_psubq (di, di)
+@c APPLE LOCAL end radar 4395773
 v8qi __builtin_ia32_paddsb (v8qi, v8qi)
 v4hi __builtin_ia32_paddsw (v4hi, v4hi)
 v8qi __builtin_ia32_psubsb (v8qi, v8qi)
@@ -6428,6 +6434,23 @@ v2si __builtin_ia32_punpckldq (v2si, v2si)
 v8qi __builtin_ia32_packsswb (v4hi, v4hi)
 v4hi __builtin_ia32_packssdw (v2si, v2si)
 v8qi __builtin_ia32_packuswb (v4hi, v4hi)
+@c APPLE LOCAL begin radar 4395773
+void __builtin_ia32_emms (void)
+v4hi __builtin_ia32_psllw (v4hi, di)
+v2si __builtin_ia32_pslld (v2si, di)
+di __builtin_ia32_psllq (di, di)
+v4hi __builtin_ia32_psrlw (v4hi, di)
+v2si __builtin_ia32_psrld (v2si, di)
+di __builtin_ia32_psrlq (di, di)
+v4hi __builtin_ia32_psraw (v4hi, di)
+v2si __builtin_ia32_psrad (v2si, di)
+v4hi __builtin_ia32_pshufw (v4hi, int)
+v2si __builtin_ia32_pmaddwd (v4hi, v4hi)
+v2si __builtin_ia32_vec_init_v2si (int, int)
+v4hi __builtin_ia32_vec_init_v4hi (short, short, short, short)
+v8qi __builtin_ia32_vec_init_v8qi (char, char, char, char, char, char, char, char)
+int __builtin_ia32_vec_ext_v2si (v2si, int)
+@c APPLE LOCAL end radar 4395773
 @end smallexample
 
 The following built-in functions are made available either with
@@ -6437,6 +6460,9 @@ instruction that is part of the name.
 
 @smallexample
 v4hi __builtin_ia32_pmulhuw (v4hi, v4hi)
+@c APPLE LOCAL begin radar 4395773
+di __builtin_ia32_pmulhuq (di, di)
+@c APPLE LOCAL end radar 4395773
 v8qi __builtin_ia32_pavgb (v8qi, v8qi)
 v4hi __builtin_ia32_pavgw (v4hi, v4hi)
 v4hi __builtin_ia32_psadbw (v8qi, v8qi)
@@ -6450,6 +6476,10 @@ int __builtin_ia32_pmovmskb (v8qi)
 void __builtin_ia32_maskmovq (v8qi, v8qi, char *)
 void __builtin_ia32_movntq (di *, di)
 void __builtin_ia32_sfence (void)
+@c APPLE LOCAL begin radar 4395773
+int __builtin_ia32_vec_ext_v4hi (v4hi, int)
+v4hi __builtin_ia32_vec_set_v4hi (v4hi, int, int)
+@c APPLE LOCAL end radar 4395773
 @end smallexample
 
 The following built-in functions are available when @option{-msse} is used.
@@ -6524,6 +6554,16 @@ v4sf __builtin_ia32_sqrtss (v4sf)
 v4sf __builtin_ia32_shufps (v4sf, v4sf, int)
 void __builtin_ia32_movntps (float *, v4sf)
 int __builtin_ia32_movmskps (v4sf)
+@c APPLE LOCAL begin radar 4395773
+void __builtin_ia32_ldmxcsr (unsigned)
+unsigned __builtin_ia32_stmxcsr (void)
+v2df __builtin_ia32_vec_ext_v2df (v2df, int)
+v2di __builtin_ia32_vec_ext_v2di (v2di, int)
+v4sf __builtin_ia32_vec_ext_v4sf (v4sf, int)
+v4si __builtin_ia32_vec_ext_v4si (v4si, int)
+v8hi __builtin_ia32_vec_set_v8hi (v8hi, int, int)
+unsigned int __builtin_ia32_vec_ext_v8hi (v8hi, int)
+@c APPLE LOCAL end radar 4395773
 @end smallexample
 
 The following built-in functions are available when @option{-msse} is used.
@@ -6551,6 +6591,180 @@ Generates the @code{movhps} machine instruction as a store to memory.
 Generates the @code{movlps} machine instruction as a store to memory.
 @end table
 
+@c APPLE LOCAL begin radar 4395773
+The following built-in functions are available when @option{-msse2} is used.
+All of them generate the machine instruction that is part of the name.
+
+@smallexample
+v2df __builtin_ia32_addpd (v2df, v2df)
+v2df __builtin_ia32_subpd (v2df, v2df)
+v2df __builtin_ia32_mulpd (v2df, v2df)
+v2df __builtin_ia32_divpd (v2df, v2df)
+v2df __builtin_ia32_addsd (v2df, v2df)
+v2df __builtin_ia32_subsd (v2df, v2df)
+v2df __builtin_ia32_mulsd (v2df, v2df)
+v2df __builtin_ia32_divsd (v2df, v2df)
+v2df __builtin_ia32_cmpeqpd (v2df, v2df)
+v2df __builtin_ia32_cmpltpd (v2df, v2df)
+v2df __builtin_ia32_cmplepd (v2df, v2df)
+v2df __builtin_ia32_cmpgtpd (v2df, v2df)
+v2df __builtin_ia32_cmpgepd (v2df, v2df)
+v2df __builtin_ia32_cmpunordpd (v2df, v2df)
+v2df __builtin_ia32_cmpneqpd (v2df, v2df)
+v2df __builtin_ia32_cmpnltpd (v2df, v2df)
+v2df __builtin_ia32_cmpnlepd (v2df, v2df)
+v2df __builtin_ia32_cmpngtpd (v2df, v2df)
+v2df __builtin_ia32_cmpngepd (v2df, v2df)
+v2df __builtin_ia32_cmpordpd (v2df, v2df)
+v2df __builtin_ia32_cmpeqsd (v2df, v2df)
+v2df __builtin_ia32_cmpltsd (v2df, v2df)
+v2df __builtin_ia32_cmplesd (v2df, v2df)
+v2df __builtin_ia32_cmpunordsd (v2df, v2df)
+v2df __builtin_ia32_cmpneqsd (v2df, v2df)
+v2df __builtin_ia32_cmpnltsd (v2df, v2df)
+v2df __builtin_ia32_cmpnlesd (v2df, v2df)
+v2df __builtin_ia32_cmpordsd (v2df, v2df)
+v2df __builtin_ia32_minpd (v2df, v2df)
+v2df __builtin_ia32_maxpd (v2df, v2df)
+v2df __builtin_ia32_minsd (v2df, v2df)
+v2df __builtin_ia32_maxsd (v2df, v2df)
+v2df __builtin_ia32_andpd (v2df, v2df)
+v2df __builtin_ia32_andnpd (v2df, v2df)
+v2df __builtin_ia32_orpd (v2df, v2df)
+v2df __builtin_ia32_xorpd (v2df, v2df)
+v2df __builtin_ia32_movsd (v2df, v2df)
+v2df __builtin_ia32_unpckhpd (v2df, v2df)
+v2df __builtin_ia32_unpcklpd (v2df, v2df)
+v16qi __builtin_ia32_paddb128 (v16qi, v16qi)
+v8hi __builtin_ia32_paddw128 (v8hi, v8hi)
+v4si __builtin_ia32_paddd128 (v4si, v4si)
+v2di __builtin_ia32_paddq128 (v2di, v2di)
+v16qi __builtin_ia32_psubb128 (v16qi, v16qi)
+v8hi __builtin_ia32_psubw128 (v8hi, v8hi)
+v4si __builtin_ia32_psubd128 (v4si, v4si)
+v2di __builtin_ia32_psubq128 (v2di, v2di)
+v16qi __builtin_ia32_paddsb128 (v16qi, v16qi)
+v8hi __builtin_ia32_paddsw128 (v8hi, v8hi)
+v16qi __builtin_ia32_psubsb128 (v16qi, v16qi)
+v8hi __builtin_ia32_psubsw128 (v8hi, v8hi)
+v16qi __builtin_ia32_paddusb128 (v16qi, v16qi)
+v8hi __builtin_ia32_paddusw128 (v8hi, v8hi)
+v16qi __builtin_ia32_psubusb128 (v16qi, v16qi)
+v8hi __builtin_ia32_psubusw128 (v8hi, v8hi)
+v8hi __builtin_ia32_pmullw128 (v8hi, v8hi)
+v8hi __builtin_ia32_pmulhw128 (v8hi, v8hi)
+v2di __builtin_ia32_pand128 (v2di, v2di)
+v2di __builtin_ia32_pandn128 (v2di, v2di)
+v2di __builtin_ia32_por128 (v2di, v2di)
+v2di __builtin_ia32_pxor128 (v2di, v2di)
+v16qi __builtin_ia32_pavgb128 (v16qi, v16qi)
+v8hi __builtin_ia32_pavgw128 (v8hi, v8hi)
+v16qi __builtin_ia32_pcpmeqb128 (v16qi, v16qi)
+v8hi __builtin_ia32_pcpmeqw128 (v8hi, v8hi)
+v4si __builtin_ia32_pcpmeqd128 (v4si, v4si)
+v16qi __builtin_ia32_pcpmgtb128 (v16qi, v16qi)
+v8hi __builtin_ia32_pcpmgtw128 (v8hi, v8hi)
+v4si __builtin_ia32_pcpmgtd128 (v4si, v4si)
+v16qi __builtin_ia32_pmaxub128 (v16qi, v16qi)
+v8hii __builtin_ia32_pmaxsw128 (v8hi, v8hi)
+v16qi __builtin_ia32_pminub128 (v16qi, v16qi)
+v8hii __builtin_ia32_pminsw128 (v8hi, v8hi)
+v16qi __builtin_ia32_punpckhbw128 (v16qi, v16qi)
+v8hi __builtin_ia32_punpckhwd128 (v8hi, v8hi)
+v4si __builtin_ia32_punpckhdq128 (v4si, v4si)
+v2di __builtin_ia32_punpckhqdq128 (v2di, v2di)
+v16qi __builtin_ia32_punpcklbw128 (v16qi, v16qi)
+v8hi __builtin_ia32_punpcklwd128 (v8hi, v8hi)
+v4si __builtin_ia32_punpckldq128 (v4si, v4si)
+v2di __builtin_ia32_punpcklqdq128 (v2di, v2di)
+v8hi __builtin_ia32_packsswb128 (v8hi, v8hi)
+v4si __builtin_ia32_packssdw128 (v4si, v4si)
+v8hi __builtin_ia32_packuswb128 (v8hi, v8hi)
+v8hi __builtin_ia32_pmulhuw128 (v8hi, v8hi)
+v8hi __builtin_ia32_psllwi128 (v8hi, v8hi)
+v4si __builtin_ia32_pslldi128 (v4si, v4si)
+v2di __builtin_ia32_psllqi128 (v2di, v2di)
+v8hi __builtin_ia32_psrlwi128 (v8hi, v8hi)
+v4si __builtin_ia32_psrldi128 (v4si, v4si)
+v2di __builtin_ia32_psrlqi128 (v2di, v2di)
+v8hi __builtin_ia32_psrawi128 (v8hi, v8hi)
+v4si __builtin_ia32_psradi128 (v4si, v4si)
+v8hi __builtin_ia32_pmaddwd128 (v8hi, v8hi)
+v2di __builtin_ia32_pmovmskb128 (v2di, v2di)
+int __builtin_ia32_movmskpd (v2df)
+v2df __builtin_ia32_sqrtpd (v2df)
+v2df __builtin_ia32_cvtdq2pd (v4si)
+v4sf __builtin_ia32_cvtdq2ps (v4si)
+v2di __builtin_ia32_cvtpd2dq (v2df)
+v2si __builtin_ia32_cvtpd2pi (v2df)
+v2sf __builtin_ia32_cvtpd2ps (v2df)
+v2di __builtin_ia32_cvtpd2dq (v2df)
+v2si __builtin_ia32_cvtpd2pi (v2df)
+v2si __builtin_ia32_cvtsd2si (v2df)
+v2df __builtin_ia32_cvtps2pq (v4sf)
+void __builtin_ia32_maskmovdqu (v16qi, v16qi, char *)
+v2df __builtin_ia32_loadupd (double const *)
+void __builtin_ia32_storeupd (double *, v2df)
+v2df __builtin_ia32_loadhpd (v2df, double const *)
+v2df __builtin_ia32_loadlpd (v2df, double const *)
+void __builtin_ia32_movnti (int *, int)
+void __builtin_ia32_movntpd (double *, v2df)
+void __builtin_ia32_movntpq (v2di *, v2di)
+v4si __builtin_ia32_pshufd (v4si, int)
+v8hi __builtin_ia32_pshuflw (v8hi, int)
+v8hi __builtin_ia32_pshufhw (v8hi, int)
+v2di __builtin_ia32_psadbw128 (v16qi, v16qi)
+v2df __builtin_ia32_sqrtpd (v2df)
+v2df __builtin_ia32_sqrtsd (v2df)
+v2df __builtin_ia32_shufpd (v2df, v2df, int)
+v2df __builtin_ia32_cvtdq2pd (v4si)
+v4sf __builtin_ia32_cvtdq2ps (v4si)
+v4si __builtin_ia32_cvtpd2dq (v2df)
+v2si __builtin_ia32_cvtpd2pi (v2df)
+v4sf __builtin_ia32_cvtpd2ps (v2df)
+v4si __builtin_ia32_cvtbpd2dq (v2df)
+v2si __builtin_ia32_cvttpd2pi (v2df)
+v2df __builtin_ia32_cvtpi2pd (v2si)
+int __builtin_ia32_cvtsd2si (v2df)
+int __builtin_ia32_cvttsd2si (v2df)
+v2di __builtin_ia32_cvtsd2si64 (v2df)
+v2di __builtin_ia32_cvttsd2si64 (v2df)
+v4si __builtin_ia32_cvtps2dq (v4sf)
+v2df __builtin_ia32_cvtps2dq (v4sf)
+v4si __builtin_ia32_cvttps2dq (v4sf)
+v2df __builtin_ia32_cvtsi2sd (v2df, int)
+v2df __builtin_ia32_cvtsi642sd (v2df, v2di)
+v4sf __builtin_ia32_cvtsd2ss (v4sf, v2df)
+v2df __builtin_ia32_cvtss2sd (v2df, v2sf)
+void __builtin_ia32_clflush (void const *)
+void __builtin_ia32_lfence (void)
+void __builtin_ia32_mfence (void)
+v16qi __builtin_ia32_loaddqu (char const *)
+void __builtin_ia32_storedqu (char const *, v16qi)
+di __builtin_ia32_pmuludq (v2si, v2si)
+v2di __builtin_ia32_pmuludq128 (v4si, v4si)
+v8hi __builtin_ia32_psllw128 (v8hi, v2di)
+v4si __builtin_ia32_pslld128 (v4si, v2di)
+v2di __builtin_ia32_psllq128 (v2di, v2di)
+v8hi __builtin_ia32_psrlw128 (v8hi, v2di)
+v4si __builtin_ia32_psrld128 (v4si, v2di)
+v2di __builtin_ia32_psrlq128 (v2di, v2di)
+v8hi __builtin_ia32_psraw128 (v8hi, v2di)
+v4si __builtin_ia32_psrad128 (v4si, v2di)
+v2di __builtin_ia32_pslldqi128 (v2di, int)
+v8hi __builtin_ia32_psllwi128 (v8hi, int)
+v4si __builtin_ia32_pslldi128 (v4si, int)
+v2di __builtin_ia32_psllqi128 (v2di, int)
+v2di __builtin_ia32_psrldqi128 (v2di, int)
+v8hi __builtin_ia32_psrlwi128 (v8hi, int)
+v4si __builtin_ia32_psrldi128 (v4si, int)
+v2di __builtin_ia32_psrlqi128 (v2di, int)
+v8hi __builtin_ia32_psrawi128 (v8hi, int)
+v4si __builtin_ia32_psradi128 (v4si, int)
+v4si __builtin_ia32_pmaddwd128 (v8hi, v8hi)
+@end smallexample
+@c APPLE LOCAL begin radar 4395773
+
 The following built-in functions are available when @option{-msse3} is used.
 All of them generate the machine instruction that is part of the name.
 
@@ -6576,6 +6790,53 @@ The following built-in functions are available when @option{-msse3} is used.
 Generates the @code{movddup} machine instruction as a load from memory.
 @end table
 
+@c APPLE LOCAL begin mni 4424835
+The following built-in functions are available when @option{-mmni} is used.
+All of them generate the machine instruction that is part of the name
+with MMX registers.
+
+@smallexample
+v2si __builtin_ia32_phaddd (v2si, v2si)
+v4hi __builtin_ia32_phaddw (v4hi, v4hi)
+v4hi __builtin_ia32_phaddsw (v4hi, v4hi)
+v2si __builtin_ia32_phsubd (v2si, v2si)
+v4hi __builtin_ia32_phsubw (v4hi, v4hi)
+v4hi __builtin_ia32_phsubsw (v4hi, v4hi)
+v8qi __builtin_ia32_pmaddubsw (v8qi, v8qi)
+v4hi __builtin_ia32_pmulhrsw (v4hi, v4hi)
+v8qi __builtin_ia32_pshufb (v8qi, v8qi)
+v8qi __builtin_ia32_psignb (v8qi, v8qi)
+v2si __builtin_ia32_psignd (v2si, v2si)
+v4hi __builtin_ia32_psignw (v4hi, v4hi)
+long long __builtin_ia32_palignr (long long, long long, int)
+v8qi __builtin_ia32_pabsb (v8qi)
+v2si __builtin_ia32_pabsd (v2si)
+v4hi __builtin_ia32_pabsw (v4hi)
+@end smallexample
+
+The following built-in functions are available when @option{-mmni} is used.
+All of them generate the machine instruction that is part of the name
+with SSE registers.
+
+@smallexample
+v4si __builtin_ia32_phaddd128 (v4si, v4si)
+v8hi __builtin_ia32_phaddw128 (v8hi, v8hi)
+v8hi __builtin_ia32_phaddsw128 (v8hi, v8hi)
+v4si __builtin_ia32_phsubd128 (v4si, v4si)
+v8hi __builtin_ia32_phsubw128 (v8hi, v8hi)
+v8hi __builtin_ia32_phsubsw128 (v8hi, v8hi)
+v16qi __builtin_ia32_pmaddubsw128 (v16qi, v16qi)
+v8hi __builtin_ia32_pmulhrsw128 (v8hi, v8hi)
+v16qi __builtin_ia32_pshufb128 (v16qi, v16qi)
+v16qi __builtin_ia32_psignb128 (v16qi, v16qi)
+v4si __builtin_ia32_psignd128 (v4si, v4si)
+v8hi __builtin_ia32_psignw128 (v8hi, v8hi)
+v2di __builtin_ia32_palignr (v2di, v2di, int)
+v16qi __builtin_ia32_pabsb128 (v16qi)
+v4si __builtin_ia32_pabsd128 (v4si)
+v8hi __builtin_ia32_pabsw128 (v8hi)
+@end smallexample
+@c APPLE LOCAL end mni
 The following built-in functions are available when @option{-m3dnow} is used.
 All of them generate the machine instruction that is part of the name.
 

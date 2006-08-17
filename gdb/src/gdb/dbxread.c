@@ -1541,6 +1541,9 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
   /* When the SO we're currently processing is a DWARF debug map, 
      this is set.  */
   int in_dwarf_debug_map = 0;
+  
+  /* When we have a dSYM file associated with this objfile, this is set.  */
+  int have_dsym_file = objfile->separate_debug_objfile != NULL;
 
   /* END APPLE LOCAL */
 
@@ -1628,6 +1631,11 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
       namestring = NULL;
 
       NEXT_SYMBOL (nlist, sect_p, abfd);
+
+      /* APPLE LOCAL: Skip all debug map nlist entries when we have a 
+	 dSYM file.  */
+      if (have_dsym_file && in_dwarf_debug_map && nlist.n_type != N_SO)
+         continue;
 
       if (nlist.n_type == N_SLINE)
 	{
@@ -1777,7 +1785,8 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
             }
 
           /* Skip the "_" at the start of symbol names */
-          namestring++;
+          if (namestring[0] == leading_char)
+            namestring++;
 
           /* Function beginning N_FUN */
           if (nlist.n_type == N_FUN)
@@ -1994,10 +2003,14 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
 				 dependency_list, dependencies_used,
 				 prev_textlow_not_set);
 		    pst = (struct partial_symtab *) 0;
-		    includes_used = 0;
-		    dependencies_used = 0;
-                    in_dwarf_debug_map = 0;
 		  }
+		/* APPLE LOCAL: Move the resetting of the following three
+		   variables out of the above if statement since we may
+		   have a NULL PST when we are ignoring debug map nlist
+		   entries due to having a dSYM file.  */
+		includes_used = 0;
+		dependencies_used = 0;
+		in_dwarf_debug_map = 0;
 	      }
 
 	    prev_so_symnum = symnum;
@@ -2031,6 +2044,25 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
             /* APPLE LOCAL: Try getting the file's language from 'desc' field */
             psymtab_language = read_so_stab_language_hint (nlist.n_desc);
 
+            /* APPLE LOCAL begin: dSYM with debug map.  */
+	    /* If we have a dSYM file, check the next nlist entry to see if
+	       it is a N_OSO since we will need to ignore all debug map
+	       information.  */
+	    if (have_dsym_file)
+	      {
+		struct internal_nlist next_nlist;
+		PEEK_SYMBOL(next_nlist, sect_p, abfd);
+		/* Don't create a psymtab for files that are debug map entries
+		   when we have a dSYM file.  */
+		if (next_nlist.n_type == N_OSO && next_nlist.n_desc == 1)
+		  {
+		    in_dwarf_debug_map = 1;
+		    continue;
+		  }
+	      }
+	    /* APPLE LOCAL end: dSYM with debug map */
+
+    
 	    /* Some other compilers (C++ ones in particular) emit useless
 	       SOs for non-existant .c files.  We ignore all subsequent SOs that
 	       immediately follow the first.  */
@@ -3537,10 +3569,27 @@ read_oso_nlists (bfd *oso_bfd, struct partial_symtab *pst,
 
       if (record_standard)
         {
+          char *c;
 
           /* APPLE LOCAL symbol prefixes */
           namestring = set_namestring_1 (strtab_size, strtab_data,
                                          leading_char, nlist, prefix);
+
+          /* Skip over names like "foo.h" and ".objc_class_name_SKTGraphic".
+             These artifical things do not correspond to user-level constructs
+	     and will not be mentioned in the DWARF so the debug
+	     map will never be called to translate their addresses.
+	     We'll pick up minsyms for all of them in the final
+	     executable.
+             NB: We still need to allow things like "my_static_symbol.324"
+             which are user-visible file-static variables that the compiler
+             has made unique by appending a numeric suffix.  */
+
+          c = strchr (namestring, '.');
+          if (c != NULL 
+              && (*(c + 1) < '0' || *(c + 1) > '9'))
+            continue;
+
           if (leading_char == namestring[0])
             namestring++;
 

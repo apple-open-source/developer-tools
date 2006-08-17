@@ -1,3 +1,36 @@
+2006-06-22  Jason Molenda  (jmolenda@apple.com)
+
+	* i386-dis.c: Imported two patches from HJ Lu from
+		http://sourceware.org/ml/binutils/2006-02/msg00149.html
+		http://sourceware.org/ml/binutils/2006-02/msg00150.html
+	His changelog entry:
+
+	2006-02-11  H.J. Lu  <hongjiu.lu@intel.com>
+
+		* i386-dis.c ('Z'): Add a new macro.
+		(dis386_twobyte): Use "movZ" for control register moves.
+	2006-02-11  H.J. Lu  <hongjiu.lu@intel.com>
+
+		* i386-dis.c (dis386_twobyte): Use "movZ" for debug register
+		moves.
+
+2006-05-02  Eric Albert (ejalbert@apple.com)
+
+	* i386-dis.c: Add MNI instruction disassembly support.
+	(THREE_BYTE_0, THREE_BYTE_1): New.
+	(dis386_twobyte[]): Updated.
+	(twobyte_has_modrm[]): Updated.
+	(three_byte_table[]): New.
+	(print_insn): Updated.
+
+2006-03-25  Eric Albert  (ejalbert@apple.com)
+
+	* i386-dis.c (OP_J): Displacements here are signed 32-bit values,
+	not unsigned.  Also, do math on them as signed values rather than
+	unsigned values.
+	(print_insn): Do math on RIP-relative offsets as signed values
+	rather than unsigned values.
+
 2005-04-14  Jason Molenda  (jmolenda@apple.com)
 
 	* i386-dis.c (OP_E): Print disp8 and disp32 displacement offsets

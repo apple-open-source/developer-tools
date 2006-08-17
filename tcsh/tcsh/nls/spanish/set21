@@ -1,0 +1,5 @@
+$ $Id: set21,v 1.1.1.2 2001/06/28 23:11:22 bbraun Exp $
+$ tc.disc.c
+$set 21 
+1 No he podido leer los caracteres locales.\n
+2 No he podido establecer los caracteres locales.\n

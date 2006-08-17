@@ -1,3 +1,12 @@
+2006-03-22  Eric Albert  (ejalbert@apple.com)
+
+	* mach-o.h (bfd_mach_o_i386_thread_flavour): Add the x86-64 and virtual
+	flavors.
+	* mach-o.c (bfd_mach_o_convert_architecture): Add
+	BFD_MACH_O_CPU_TYPE_X86_64.
+	(bfd_mach_o_i386_flavour_string): Add the x86-64 and virtual flavors.
+	(bfd_mach_o_scan_start_address): Handle x86-64 thread states.
+
 2006-03-02  Jason Molenda  (jmolenda@apple.com)
 
 	* archive.c (bfd_generic_openr_next_archived_file): Fix location

@@ -1770,6 +1770,15 @@ reverse_search_command (char *regex, int from_tty)
   fclose (stream);
   return;
 }
+
+/* APPLE LOCAL: When we set the pathname-substitutions, we also
+   need to clear the cached source info.  */
+void
+set_pathname_substitution (char *args, int from_tty, struct cmd_list_element * c)
+{
+  forget_cached_source_info ();
+  last_source_error = 0;
+}
 
 void
 _initialize_source (void)
@@ -1856,7 +1865,7 @@ Show number of source lines gdb will list by default."), NULL,
 			  &pathname_substitutions, _("\
 Set string substitutions to be used when searching for source files."), _("\
 Show string substitutions to be used when searching for source files."), NULL,
-			  NULL, NULL,
+			  set_pathname_substitution, NULL,
 			  &setlist, &showlist);
   /* APPLE LOCAL end pathname substitution */
 }

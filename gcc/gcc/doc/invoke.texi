@@ -591,7 +591,8 @@ Objective-C and Objective-C++ Dialects}.
 -mno-fp-ret-in-387  -msoft-float  -msvr3-shlib @gol
 -mno-wide-multiply  -mrtd  -malign-double @gol
 -mpreferred-stack-boundary=@var{num} @gol
--mmmx  -msse  -msse2 -msse3 -m3dnow @gol
+@c APPLE LOCAL mni
+-mmmx  -msse  -msse2 -msse3 -mmni -m3dnow @gol
 -mthreads  -mno-align-stringops  -minline-all-stringops @gol
 -mpush-args  -maccumulate-outgoing-args  -m128bit-long-double @gol
 -m96bit-long-double  -mregparm=@var{num}  -momit-leaf-frame-pointer @gol
@@ -9244,6 +9245,7 @@ linker.
 These @samp{-m} options are defined for the i386 and x86-64 family of
 computers:
 
+@c APPLE LOCAL begin mainline 2006-04-19 4434601
 @table @gcctabopt
 @item -mtune=@var{cpu-type}
 @opindex mtune
@@ -9251,6 +9253,23 @@ Tune to @var{cpu-type} everything applicable about the generated code, except
 for the ABI and the set of available instructions.  The choices for
 @var{cpu-type} are:
 @table @emph
+@item generic
+Produce code optimized for the most common IA32/AMD64/EM64T processors.
+If you know the CPU on which your code will run, then you should use
+the corresponding @option{-mtune} option instead of
+@option{-mtune=generic}.  But, if you do not know exactly what CPU users
+of your application will have, then you should use this option.
+
+As new processors are deployed in the marketplace, the behavior of this
+option will change.  Therefore, if you upgrade to a newer version of
+GCC, the code generated option will change to reflect the processors
+that were most common when that version of GCC was released.
+
+There is no @option{-march=generic} option because @option{-march}
+indicates the instruction set the compiler can use, and there is no
+generic instruction set applicable to all processors.  In contrast,
+@option{-mtune} indicates the processor (or, in this case, collection of
+processors) for which the code is optimized.
 @item i386
 Original Intel's i386 CPU@.
 @item i486
@@ -9259,8 +9278,12 @@ Intel's i486 CPU@.  (No scheduling is implemented for this chip.)
 Intel Pentium CPU with no MMX support.
 @item pentium-mmx
 Intel PentiumMMX CPU based on Pentium core with MMX instruction set support.
-@item i686, pentiumpro
+@item pentiumpro
 Intel PentiumPro CPU@.
+@item i686
+Same as @code{generic}, but when used as @code{march} option, PentiumPro
+instruction set will be used, so the code will run on all i686 familly chips.
+@c APPLE LOCAL end mainline 2006-04-19 4434601
 @item pentium2
 Intel Pentium2 CPU based on PentiumPro core with MMX instruction set support.
 @item pentium3, pentium3m
@@ -9568,6 +9591,10 @@ preferred alignment to @option{-mpreferred-stack-boundary=2}.
 @itemx -mno-sse2
 @item -msse3
 @itemx -mno-sse3
+@c APPLE LOCAL begin mni 4424835
+@item -mmni
+@itemx -mno-mni
+@c APPLE LOCAL end mni
 @item -m3dnow
 @itemx -mno-3dnow
 @opindex mmmx

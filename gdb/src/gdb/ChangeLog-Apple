@@ -1,7 +1,206 @@
+2006-07-18  Jason Molenda  (jmolenda@apple.com)
+
+        * amd64-tdep.c (amd64_analyze_prologue): Skip over fix-and-continue
+        generated nop insns when looking for the prologue.
+
+2006-06-13  Jim Ingham  <jingham@apple.com>
+
+	* Makefile.in: Uncomment the LIBXML2 variables
+	* config.in: Put the LIBXML2 defines back (lost
+	in the merge.)
+	
+2006-06-12  Jim Ingham  <jingham@apple.com>
+
+	* charset.c: Add a utf-8 charset.
+	(utf_8_print_literally): New function.
+	(utf_8_to_control): New function.
+	(utf_8_family_charset): New function.
+	(register_charset): Register it.
+	* configure.ac: Make UTF-8 the macosx native
+	default.
+	
+2006-06-11  Stan Shebs  <shebs@apple.com>
+
+	* checkpoint.c (create_checkpoint_command): Add a check.
+	(collect_checkpoint): Improve cpfork lookup, use direct_memcache_get.
+	(delete_checkpoint): New.
+	(map_checkpoint_numbers): New.
+	(clear_all_checkpoints): Rename from clear_checkpoints.
+	(_initialize_checkpoint): Add checkpoint deletion command.
+	* infcmd.c (kill_if_already_running): Clear checkpoints.
+	(attach_command): Ditto.
+	* top.c (quit_target): Ditto.
+	* infrun.c (proceed): Query about proceeding after rollback.
+
+2006-06-05  Jim Ingham  <jingham@apple.com>
+
+	* valops.c (allocate_string_in_inferior): New function.
+	(value_clear_inferior_string_pool): New function.
+	(value_string): use allocate_string_in_inferior.
+	* target.c (generic_mourn_inferior): Clear out string pool.
+	* values.h: define value_clear_inferior_string_pool.
+	
+2006-06-01  Jim Ingham  <jingham@apple.com>
+
+	* source.c (set_pathname_substitution): New function.
+	(_initialize_source): Add set_pathname_substution as
+	the set function.
+
+2006-06-01  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile.in (gdb): Remove MACOSX_DEPLOYMENT_TARGET setting;
+	it was only needed while we were weak linking to Carbon.
+
+2006-06-01  Jim Ingham  (jingham@apple.com)
+
+	* varobj.c (varobj_create): Check the return from
+	gdb_value_fetch_lazy, and set error if it fails.
+	(varobj_update): Call value_fetch_lazy on the new
+	value if necessary, and handle the error if this
+	doesn't work.
+
+2006-05-30  Jason Molenda  (jmolenda@apple.com)
+
+	* configure.ac: Link to Carbon normally, not weak.
+	* configure: Regenerated.
+
+2006-05-30  Jim Ingham  <jingham@apple.com>
+
+	* varobj.c (varobj_get_type_index_from_fake_child): Skip
+	static fields.
+	(cplus_real_type_index_for_fake_child_ind): Ditto.
+
+2006-05-25  Jason Molenda  (jmolenda@apple.com)
+
+	* dbxread.c (read_oso_nlists): Do ingest file static variables
+	which have had a ".[0-9]+" suffix added by the compiler.
+
+2006-05-24  Jason Molenda  (jmolenda@apple.com)
+
+	* dbxread.c (read_dbx_symtab): Only skip the first character
+	of the name if it is the bfd_prefix_char, i.e. don't skip the
+	first char of ObjC method function names.
+	(read_oso_nlists): Don't create OSO nlist records for artifical
+	nlist entries that contain "." in the names.
+
+2006-05-24  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile.in (gdb): Set MACOSX_DEPLOYMENT_TARGET when doing the
+	final app link to avoid weak linking warnings from the static link
+	editor.
+
+2006-05-23  Jim Ingham  <jingham@apple.com>
+
+	* configure.ac: If the carbon framework exists, weak link to it.
+	* Makefile.in: Add the carbon framework weakly to the gdb link.
+	* infrun.c (normal_stop): Move the call to the stop_command to 
+	AFTER the point where the bottom frame is set.  Otherwise the
+	hook-stop commands will get the old version of the cursal, not the
+	current one.
+	
+2006-05-23  Jason Molenda  (jmolenda@apple.com)
+
+	* objc-lang.c: Update for 64-bit objc runtime.
+	(get_addrsize): New function.  May prove to be too inefficient to
+	fetch this every time; possibly cache the value and dirty the cache
+	when exec_bfd is changed.
+	(print_object_command): Whitespace fixes; treat address values as such.
+	(read_objc_method): Updated for 64 bit objc runtime.
+	(read_objc_method_list_nmethods): Ditto.  Renamed from 
+	read_objc_methlist_nmethods to be consistent with the structure
+	name in the objc runtime.
+	(read_objc_method_list_method): Ditto.
+	(read_objc_object): Updated for 64 bit objc runtime.
+	(read_objc_super): Ditto.
+	(read_objc_class): Ditto.
+	(find_implementation_from_class): Ditto.
+	(value_objc_target_type): Ditto.
+
+2006-05-22  Jason Molenda  (jmolenda@apple.com)
+
+	* linespec.c (decode_line_1): Don't do method lookup for
+	"main".
+
+2006-05-17  Jason Molenda  (jmolenda@apple.com)
+
+	* target.c (deprecated_debug_xfer_memory): Use paddr_nz to print
+	addresses, not any of the printf builtin formatters.
+	(debug_to_insert_breakpoint): Ditto.
+	(debug_to_remove_breakpoint): Ditto.
+
+2006-05-15  Jim Ingham <jingham@apple.com>
+
+	* objfiles.c (objfile_set_load_state): Discriminate between
+	real error and the user not requesting auto-loading.
+	(objfile_name_set_load_state): Ditto.
+
+2006-05-11  Jim Ingham <jingham@apple.com>
+
+	* config/xm-macosx.h: Include signal.h.
+	* fork-child.c (startup_inferior): Recognize a crash in the
+	shell instead of in the inferior process and flag it as such.
+
+2006-05-10  Greg Clayton  (gclayton.com)
+
+	* dbxread.c (read_dbx_symtab): Skip adding any debug map symbols
+	when we have a dSYM file.
+
+	* symfile.c (symbol_file_add_with_addrs_or_offsets): Moved the
+	code that locates and parses the dSYM file for a given objfile to
+	happen before syms_from_objfile() gets called. When we know if a
+	dSYM file exists and is that the UUIDs match for a given executable
+	before calling syms_from_objfile(), we will know wether to ignore
+	the debug map entries we may find in the main executable.
+
+	* elfread.c (elf_symtab_read): Change #ifdef condition that
+	surrounds msym->filename code to only be enabled for when
+	SOFUN_ADDRESS_MAYBE_MISSING is defined and NM_NEXTSTEP is NOT
+	defined since we don't need the filename member for OS X
+	development. The only place that sets this member is in elfread.c.
+
+	* symmisc.c (dump_msymbols): Ditto.
+
+	* symtab.h (struct minimal_symbo): Ditto.
+
+	* minsyms.c (lookup_minimal_symbol): Ditto.
+	(prim_record_minimal_symbol_and_info): Added initialization for the
+	filename member of minimal_symbol since it was not getting
+	initialized to NULL.
+
+2006-05-09  Jason Molenda  (jmolenda@apple.com)
+
+	* procfs.c (proc_update_threads): Fix flipped bit in a comment
+	from cosmic ray hitting cvs server or something.
+
+2006-05-02  Jason Molenda  (jmolenda@apple.com)
+
+        * environ.c (smuggle_dyld_settings): dyld no longer truncates
+        DYLD_FRAMEWORK_PATH etc to an empty string; it now excludes it
+        entirely from the child's environment.  Fix logic in this function
+        to handle that correctly.
+
+2006-05-02  Stan Shebs  <shebs@apple.com>
+
+	* checkpoint.h (enum cp_type): New, for types of checkpoints.
+	(struct checkpoint): Add type and logical prev/next fields.
+	* checkpoint.c: General redesign to use new fields, various
+	cleanup.
+	(_initialize_checkpoint): New commands "redo" and "now".
+	* infrun.c (normal_stop): Move auto-checkpointing to end.
+
+2006-03-28  Eric Albert  (ejalbert@apple.com)
+
+	* i386-tdep.h (struct gdbarch_tdep): Update the comment for wordsize to
+	account for x86-64.
+
+2006-03-23  Eric Albert  (ejalbert@apple.com)
+
+	* config/i386/macosx.mt (TDEPFILES): Add amd64-tdep.o.
+
 2006-04-28  Jason Molenda  (jmolenda@apple.com)
 
-        * fix-and-continue.c (create_current_active_funcs_list): Don't xstrdup
-        a NULL char* like we tend to have in DWARF programs.
+	* fix-and-continue.c (create_current_active_funcs_list): Don't xstrdup
+	a NULL char* like we tend to have in DWARF programs.
 
 2006-04-27  Jason Molenda  (jmolenda@apple.com)
 
@@ -204,6 +403,15 @@
 2006-03-28  Jim Ingham  (jingham@apple.com)
 
 	* configure.ac: Disable TUI by default.
+
+2006-03-28  Eric Albert  (ejalbert@apple.com)
+
+	* i386-tdep.h (struct gdbarch_tdep): Update the comment for wordsize to
+	account for x86-64.
+
+2006-03-23  Eric Albert  (ejalbert@apple.com)
+
+	* config/i386/macosx.mt (TDEPFILES): Add amd64-tdep.o.
 
 2006-03-21  Jason Molenda  (jmolenda@apple.com)
 

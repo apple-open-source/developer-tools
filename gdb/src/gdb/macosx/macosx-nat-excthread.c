@@ -238,7 +238,7 @@ macosx_exception_thread_init (macosx_exception_thread_status *s)
   s->error_transmit_fd = -1;
   s->error_receive_fd = -1;
 
-  s->inferior_exception_port = PORT_NULL;
+  s->inferior_exception_port = MACH_PORT_NULL;
 
   memset (&s->saved_exceptions, 0, sizeof (s->saved_exceptions));
   memset (&s->saved_exceptions_step, 0, sizeof (s->saved_exceptions_step));

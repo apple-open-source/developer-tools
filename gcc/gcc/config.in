@@ -385,6 +385,11 @@
 /* Define if your assembler and linker support .hidden. */
 #undef HAVE_GAS_HIDDEN
 
+/* APPLE LOCAL begin x86_64 literal16 */
+/* Define if your assembler supports .literal16. */
+#undef HAVE_GAS_LITERAL16
+/* APPLE LOCAL end x86_64 literal16 */
+
 /* Define if your assembler supports specifying the maximum number of bytes to
    skip when using the GAS .p2align command. */
 #undef HAVE_GAS_MAX_SKIP_P2ALIGN

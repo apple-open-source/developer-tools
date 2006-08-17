@@ -23,7 +23,7 @@ int TestS2(void)
  u.ss.c = 0x15;
  u.ss.s1 = 0x15;
  u.ss.s2 = 0x15;
- 
+
  if (sizeof(S2) != 3 || u.x[0] != 0x152a1500)
     abort();
   return 0;
@@ -47,7 +47,7 @@ int TestS3(void)
  u.ss.c = 0x15;
  u.ss.s1 = 0x15;
  u.ss.s2 = 0x15;
- 
+
  if (sizeof(S3) != 4 || u.x[0] != 0x15002a15)
     abort();
   return 0;
@@ -69,7 +69,7 @@ int TestS4(void)
  u.ss.c = 0x15;
  u.ss.s1 = 0x15;
  u.ss.s2 = 0x15;
- 
+
  if (sizeof(S4) != 4 || u.x[0] != 0x15002a15)
     abort();
   return 0;

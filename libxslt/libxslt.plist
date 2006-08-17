@@ -1,0 +1,20 @@
+<plist version="1.0">
+<dict>
+	<key>OpenSourceProject</key>
+	<string>libxslt</string>
+	<key>OpenSourceVersion</key>
+	<string>1.1.11</string>
+	<key>OpenSourceWebsiteURL</key>
+	<string>http://xmlsoft.org/</string>
+	<key>OpenSourceURL</key>
+	<string>http://ftp.gnome.org/pub/gnome/sources/libxslt/1.1/libxslt-1.1.11.tar.bz2</string>
+	<key>OpenSourceMD5</key>
+	<string>988e9f97d59bf881842082fbe5ec9927</string>
+	<key>OpenSourceImportDate</key>
+	<string>2004-10-22</string>
+	<key>OpenSourceLicense</key>
+	<string>other</string>
+	<key>OpenSourceLicenseFile</key>
+	<string>libxslt.txt</string>
+</dict>
+</plist>

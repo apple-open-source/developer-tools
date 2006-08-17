@@ -775,6 +775,14 @@ amd64_analyze_prologue (CORE_ADDR pc, CORE_ADDR current_pc,
 
   op = read_memory_unsigned_integer (pc, 1);
 
+  /* APPLE LOCAL skip the fix and continue nop's */
+  while (op == 0x90              /* nop */
+         && pc < current_pc)
+    {
+      pc += 1;
+      op = read_memory_unsigned_integer (pc, 1);
+    }
+
   if (op == 0x55)		/* pushq %rbp */
     {
       /* Take into account that we've executed the `pushq %rbp' that

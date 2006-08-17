@@ -35,10 +35,12 @@ _foo3:
 		
 		
 		
+	.align 2
 _bar:
 		nop
 		
 		
+	.align 2
 	.globl _xx
 	.globl __xx
 _xx:
@@ -46,6 +48,7 @@ __xx:
 		nop
 		
 		
+	.align 2
 _ok:
 		nop
 		

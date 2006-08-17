@@ -1,0 +1,6 @@
+$ $Id: set14,v 1.1.1.2 2001/06/28 23:11:08 bbraun Exp $
+$ sh.file.c
+$set 14 
+1 \nTrop de %s !!\n
+2 noms dans le fichier des mots de passe
+3 fichiers

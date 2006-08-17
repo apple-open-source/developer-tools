@@ -6722,11 +6722,11 @@ cp_parser_compound_statement (cp_parser *parser, tree in_statement_expr,
       cp_parser_iasm_declaration_seq_opt (parser);
       iasm_in_decl = 0;
       iasm_state = iasm_asm;
-      inside_iasm_block = 1;
+      inside_iasm_block = true;
       iasm_clear_labels ();
       cp_parser_iasm_line_seq_opt (parser);
       iasm_state = iasm_none;
-      inside_iasm_block = 0;
+      iasm_end_block ();
     }
   else
   /* APPLE LOCAL end CW asm blocks */
@@ -16871,7 +16871,7 @@ cp_parser_iasm_compound_statement (cp_parser *parser)
   tree compound_stmt;
 
   iasm_state = iasm_asm;
-  inside_iasm_block = 1;
+  inside_iasm_block = true;
   iasm_at_bol = 1;
   iasm_clear_labels ();
   if (!cp_parser_require (parser, CPP_OPEN_BRACE, "`{'"))
@@ -16886,7 +16886,7 @@ cp_parser_iasm_compound_statement (cp_parser *parser)
   cp_parser_require (parser, CPP_CLOSE_BRACE, "`}'");
   /* We're done with the block of asm.  */
   iasm_at_bol = 0;
-  inside_iasm_block = 0;
+  iasm_end_block ();
   iasm_state = iasm_none;
   return compound_stmt;
 }
@@ -16897,7 +16897,7 @@ cp_parser_iasm_top_statement (cp_parser *parser)
   tree compound_stmt;
 
   iasm_state = iasm_asm;
-  inside_iasm_block = 1;
+  inside_iasm_block = true;
   iasm_at_bol = 1;
   iasm_clear_labels ();
   /* Begin the compound-statement.  */
@@ -16911,7 +16911,7 @@ cp_parser_iasm_top_statement (cp_parser *parser)
   finish_compound_stmt (compound_stmt);
   /* We're done with the block of asm.  */
   iasm_at_bol = 0;
-  inside_iasm_block = 0;
+  iasm_end_block ();
   iasm_state = iasm_none;
   return compound_stmt;
 }
@@ -18415,6 +18415,10 @@ cp_parser_objc_interstitial_code (cp_parser* parser)
   /* Allow stray semicolons.  */
   else if (token->type == CPP_SEMICOLON)
     cp_lexer_consume_token (parser->lexer);
+  /* APPLE LOCAL begin radar 4508851 */
+  else if (token->keyword == RID_NAMESPACE)
+    cp_parser_namespace_definition (parser);
+  /* APPLE LOCAL end radar 4508851 */
   /* APPLE LOCAL begin 4093475 */
   /* Other stray characters must generate errors.  */
   else if (token->type == CPP_OPEN_BRACE || token->type == CPP_CLOSE_BRACE)

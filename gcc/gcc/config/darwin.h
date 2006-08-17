@@ -106,12 +106,12 @@ extern int machopic_symbol_defined_p (rtx);
    name, that also takes an argument, needs to be modified so the
    prefix is different, otherwise a '*' after the shorter option will
    match with the longer one.
-
+   
    The SUBTARGET_OPTION_TRANSLATE_TABLE macro, which _must_ be defined
    in gcc/config/{i386,rs6000}/darwin.h, should contain any additional
    command-line option translations specific to the particular target
    architecture.  */
-
+   
 #define TARGET_OPTION_TRANSLATE_TABLE \
 /* APPLE LOCAL KEXT terminated-vtables */ \
   { "-fterminated-vtables", "-fapple-kext" }, \
@@ -181,7 +181,7 @@ extern int darwin_running_cxx;
    but there are no more bits in rs6000 TARGET_SWITCHES.  Note
    that this switch has no "no-" variant. */
 extern const char *darwin_one_byte_bool;
-
+  
 /* APPLE LOCAL begin pragma reverse_bitfields */
 /* True if pragma reverse_bitfields is in effect. */
 extern GTY(()) int darwin_reverse_bitfields;
@@ -485,7 +485,7 @@ do {					\
    you want to explicitly link against the static version of those
    routines, because you know you don't need to unwind through system
    libraries, you need to explicitly say -static-libgcc.
-
+   
    If it is linked against, it has to be before -lgcc, because it may
    need symbols from -lgcc.  */
 #undef REAL_LIBGCC_SPEC
@@ -510,15 +510,15 @@ do {					\
    powerpc program built.  */
 
 #undef  STARTFILE_SPEC
-#define STARTFILE_SPEC							    \
-  "%{!Zdynamiclib:%{Zbundle:%{!static:-lbundle1.o}}			    \
-     %{!Zbundle:%{pg:%{static:-lgcrt0.o}				    \
-                     %{!static:%{object:-lgcrt0.o}			    \
-                               %{!object:%{preload:-lgcrt0.o}		    \
-                                 %{!preload:-lgcrt1.o %(darwin_crt2)}}}}    \
-                %{!pg:%{static:-lcrt0.o}				    \
-                      %{!static:%{object:-lcrt0.o}			    \
-                                %{!object:%{preload:-lcrt0.o}		    \
+#define STARTFILE_SPEC  \
+  "%{!Zdynamiclib:%{Zbundle:%{!static:-lbundle1.o}} \
+     %{!Zbundle:%{pg:%{static:-lgcrt0.o} \
+                     %{!static:%{object:-lgcrt0.o} \
+                               %{!object:%{preload:-lgcrt0.o} \
+                                 %{!preload:-lgcrt1.o %(darwin_crt2)}}}} \
+                %{!pg:%{static:-lcrt0.o} \
+                      %{!static:%{object:-lcrt0.o} \
+                                %{!object:%{preload:-lcrt0.o} \
                                   %{!preload:-lcrt1.o %(darwin_crt2)}}}}}}  \
   %{shared-libgcc:%:version-compare(< 10.5 mmacosx-version-min= crt3.o%s)}"
 
@@ -534,15 +534,16 @@ do {					\
   %{Zforce_cpusubtype_ALL:-force_cpusubtype_ALL} \
   %{!Zforce_cpusubtype_ALL:%{faltivec:-force_cpusubtype_ALL}}"
 /* APPLE LOCAL end radar 4161346 */
-
-/* We use Dbx symbol format.  */
-
+/* APPLE LOCAL begin mainline */
+/* We use Dbx symbol format on 32 bit systems  */
 #define DBX_DEBUGGING_INFO 1
 
 /* Also enable Dwarf 2 as an option.  */
 #define DWARF2_DEBUGGING_INFO
-#define PREFERRED_DEBUGGING_TYPE DBX_DEBUG
 
+/* Default to stabs */
+#define PREFERRED_DEBUGGING_TYPE DBX_DEBUG
+/* APPLE LOCAL end mainline */
 /* APPLE LOCAL begin mainline 2006-03-16 dwarf2 section flags */
 #define DEBUG_FRAME_SECTION	"__DWARF,__debug_frame,regular,debug"
 #define DEBUG_INFO_SECTION	"__DWARF,__debug_info,regular,debug"
@@ -609,9 +610,9 @@ do {					\
    links to, so there's no need for weak-ness for that.  */
 #define GTHREAD_USE_WEAK 0
 
-/* The Darwin linker imposes two limitations on common symbols: they
+/* The Darwin linker imposes two limitations on common symbols: they 
    can't have hidden visibility, and they can't appear in dylibs.  As
-   a consequence, we should never use common symbols to represent
+   a consequence, we should never use common symbols to represent 
    vague linkage. */
 #undef USE_COMMON_FOR_ONE_ONLY
 #define USE_COMMON_FOR_ONE_ONLY 0
@@ -637,7 +638,7 @@ do {					\
 /* APPLE LOCAL mainline 2006-03-16 dwarf2 4392520 */
 #define FRAME_BEGIN_LABEL (for_eh ? "EH_frame" : "Lframe")
 
-/* Emit a label for the FDE corresponding to DECL.  EMPTY means
+/* Emit a label for the FDE corresponding to DECL.  EMPTY means 
    emit a label for an empty FDE. */
 #define TARGET_ASM_EMIT_UNWIND_LABEL darwin_emit_unwind_label
 
@@ -802,7 +803,7 @@ do {					\
 
 /* Ensure correct alignment of bss data.  */
 
-#undef	ASM_OUTPUT_ALIGNED_DECL_LOCAL
+#undef	ASM_OUTPUT_ALIGNED_DECL_LOCAL					
 #define ASM_OUTPUT_ALIGNED_DECL_LOCAL(FILE, DECL, NAME, SIZE, ALIGN)	\
   do {									\
     fputs (".lcomm ", (FILE));						\
@@ -848,6 +849,8 @@ FUNCTION (void)								\
 #define EXTRA_SECTIONS							\
   in_text_coal, in_text_unlikely, in_text_unlikely_coal,		\
   in_const, in_const_data, in_cstring, in_literal4, in_literal8,	\
+  /* APPLE LOCAL x86_64 */						\
+  in_literal16,								\
   in_const_coal, in_const_data_coal, in_data_coal,			\
   in_constructor, in_destructor, in_mod_init, in_mod_term,		\
   in_objc_class, in_objc_meta_class, in_objc_category,			\
@@ -928,6 +931,11 @@ SECTION_FUNCTION (literal4_section,				\
 SECTION_FUNCTION (literal8_section,				\
 		  in_literal8,					\
 		  ".literal8", 0)				\
+		 /* APPLE LOCAL begin x86_64 */			\
+SECTION_FUNCTION (literal16_section,				\
+		  in_literal16,					\
+		  ".literal16", 0)				\
+		 /* APPLE LOCAL end x86_64 */			\
 SECTION_FUNCTION (constructor_section,				\
 		  in_constructor,				\
 		  ".constructor", 0)				\
@@ -1206,10 +1214,13 @@ enum machopic_addr_class {
 /* Macros defining the various PIC cases.  */
 
 #define MACHO_DYNAMIC_NO_PIC_P	(TARGET_DYNAMIC_NO_PIC)
+/* APPLE LOCAL begin mach-o cleanup */
+#undef MACHOPIC_INDIRECT
 #define MACHOPIC_INDIRECT	(flag_pic || MACHO_DYNAMIC_NO_PIC_P)
 #define MACHOPIC_JUST_INDIRECT	(flag_pic == 1 || MACHO_DYNAMIC_NO_PIC_P)
+#undef MACHOPIC_PURE
 #define MACHOPIC_PURE		(flag_pic == 2 && ! MACHO_DYNAMIC_NO_PIC_P)
-
+/* APPLE LOCAL end mach-o cleanup */
 #undef TARGET_ENCODE_SECTION_INFO
 #define TARGET_ENCODE_SECTION_INFO  darwin_encode_section_info
 #undef TARGET_STRIP_NAME_ENCODING
@@ -1301,11 +1312,6 @@ enum machopic_addr_class {
   darwin_asm_output_dwarf_offset (FILE, SIZE, LABEL, BASE)
 
 /* APPLE LOCAL end mainline 2006-03-16 dwarf 4383509 */
-#define ASM_MAYBE_OUTPUT_ENCODED_ADDR_RTX(ASM_OUT_FILE, ENCODING, SIZE, ADDR, DONE)	\
-      if (ENCODING == ASM_PREFERRED_EH_DATA_FORMAT (2, 1)) {				\
-	darwin_non_lazy_pcrel (ASM_OUT_FILE, ADDR);					\
-	goto DONE;									\
-      }
 
 /* Experimentally, putting jump tables in text is faster on SPEC.
    Also this is needed for correctness for coalesced functions.  */
@@ -1378,7 +1384,7 @@ extern void abort_assembly_and_exit (int status) ATTRIBUTE_NORETURN;
          : MIN ((DESIRED), 16))
 #else
 #define PEG_ALIGN_FOR_MAC68K(DESIRED)   MIN ((DESIRED), 16)
-#endif
+#endif 
 /* APPLE LOCAL end Macintosh alignment 2002-2-13 --ff */
 
 /* APPLE LOCAL begin KEXT double destructor */

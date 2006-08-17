@@ -380,6 +380,7 @@ fetch_data (struct disassemble_info *info, bfd_byte *addr)
 #define USE_GROUPS 2
 #define USE_PREFIX_USER_TABLE 3
 #define X86_64_SPECIAL 4
+#define IS_3BYTE_OPCODE 5
 
 #define FLOAT	  NULL, NULL, FLOATCODE, NULL, 0, NULL, 0
 
@@ -445,6 +446,9 @@ fetch_data (struct disassemble_info *info, bfd_byte *addr)
 
 #define X86_64_0  NULL, NULL, X86_64_SPECIAL, NULL,  0, NULL, 0
 
+#define THREE_BYTE_0 NULL, NULL, IS_3BYTE_OPCODE, NULL, 0, NULL, 0
+#define THREE_BYTE_1 NULL, NULL, IS_3BYTE_OPCODE, NULL, 1, NULL, 0
+
 typedef void (*op_rtn) (int bytemode, int sizeflag);
 
 struct dis386 {
@@ -482,6 +486,7 @@ struct dis386 {
    'W' => print 'b' or 'w' ("w" or "de" in intel mode)
    'X' => print 's', 'd' depending on data16 prefix (for XMM)
    'Y' => 'q' if instruction has an REX 64bit overwrite prefix
+   'Z' => print 'q' in 64bit mode and behave as 'L' otherwise
 
    Many of the above letters print nothing in Intel mode.  See "putop"
    for the details.
@@ -821,10 +826,10 @@ static const struct dis386 dis386_twobyte[] = {
   { "(bad)",		XX, XX, XX },
   { "(bad)",		XX, XX, XX },
   /* 20 */
-  { "movL",		Rm, Cm, XX },
-  { "movL",		Rm, Dm, XX },
-  { "movL",		Cm, Rm, XX },
-  { "movL",		Dm, Rm, XX },
+  { "movZ",		Rm, Cm, XX },
+  { "movZ",		Rm, Dm, XX },
+  { "movZ",		Cm, Rm, XX },
+  { "movZ",		Dm, Rm, XX },
   { "movL",		Rd, Td, XX },
   { "(bad)",		XX, XX, XX },
   { "movL",		Td, Rd, XX },
@@ -848,9 +853,9 @@ static const struct dis386 dis386_twobyte[] = {
   { "(bad)",		XX, XX, XX },
   { "(bad)",		XX, XX, XX },
   /* 38 */
+  { THREE_BYTE_0 },
   { "(bad)",		XX, XX, XX },
-  { "(bad)",		XX, XX, XX },
-  { "(bad)",		XX, XX, XX },
+  { THREE_BYTE_1 },
   { "(bad)",		XX, XX, XX },
   { "(bad)",		XX, XX, XX },
   { "(bad)",		XX, XX, XX },
@@ -1103,7 +1108,7 @@ static const unsigned char twobyte_has_modrm[256] = {
   /* 00 */ 1,1,1,1,0,0,0,0,0,0,0,0,0,1,0,1, /* 0f */
   /* 10 */ 1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0, /* 1f */
   /* 20 */ 1,1,1,1,1,0,1,0,1,1,1,1,1,1,1,1, /* 2f */
-  /* 30 */ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* 3f */
+  /* 30 */ 0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0, /* 3f */
   /* 40 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* 4f */
   /* 50 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* 5f */
   /* 60 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* 6f */
@@ -1126,7 +1131,7 @@ static const unsigned char twobyte_uses_SSE_prefix[256] = {
   /* 00 */ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* 0f */
   /* 10 */ 1,1,1,0,0,0,1,0,0,0,0,0,0,0,0,0, /* 1f */
   /* 20 */ 0,0,0,0,0,0,0,0,0,0,1,0,1,1,0,0, /* 2f */
-  /* 30 */ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* 3f */
+  /* 30 */ 0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0, /* 3f */
   /* 40 */ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* 4f */
   /* 50 */ 0,1,1,1,0,0,0,0,1,1,1,1,1,1,1,1, /* 5f */
   /* 60 */ 0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1, /* 6f */
@@ -1739,6 +1744,79 @@ static const struct dis386 x86_64_table[][2] = {
   },
 };
 
+static const struct dis386 three_byte_table[][32] = {
+  /* THREE_BYTE_0 */
+  {
+    { "pshufb",		MX, EM, XX },
+    { "phaddw",		MX, EM, XX },
+    { "phaddd",		MX, EM, XX },
+    { "phaddsw",	MX, EM, XX },
+    { "pmaddubsw",	MX, EM, XX },
+    { "phsubw",		MX, EM, XX },
+    { "phsubd",		MX, EM, XX },
+    { "phsubsw",	MX, EM, XX },
+    { "psignb",		MX, EM, XX },
+    { "psignw",		MX, EM, XX },
+    { "psignd",		MX, EM, XX },
+    { "pmulhrsw",	MX, EM, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "pabsb",		MX, EM, XX },
+    { "pabsw",		MX, EM, XX },
+    { "pabsd",		MX, EM, XX },
+    { "(bad)",		XX, XX, XX }
+  },
+  /* THREE_BYTE_1 */
+  {
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "palignr",	MX, EM, Ib },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX },
+    { "(bad)",		XX, XX, XX }
+  },
+};
+
 #define INTERNAL_DISASSEMBLER_ERROR _("<internal disassembler error>")
 
 static void
@@ -2192,7 +2270,15 @@ print_insn (bfd_vma pc, disassemble_info *info)
 	}
     }
 
-  if (need_modrm)
+  if (dp->name == NULL && dp->bytemode1 == IS_3BYTE_OPCODE)
+    {
+      FETCH_DATA (info, codep + 2);
+      dp = &three_byte_table[dp->bytemode2][*codep++];
+      mod = (*codep >> 6) & 3;
+      reg = (*codep >> 3) & 7;
+      rm = *codep & 7;
+    }
+  else if (need_modrm)
     {
       FETCH_DATA (info, codep + 1);
       mod = (*codep >> 6) & 3;
@@ -2342,8 +2428,9 @@ print_insn (bfd_vma pc, disassemble_info *info)
     if (op_index[i] != -1 && op_riprel[i])
       {
 	(*info->fprintf_func) (info->stream, "        # ");
-	(*info->print_address_func) ((bfd_vma) (start_pc + codep - start_codep
-						+ op_address[op_index[i]]), info);
+	/* APPLE LOCAL fix improper sign extension */
+	(*info->print_address_func) ((bfd_vma) (start_pc + (codep - start_codep
+						+ op_address[op_index[i]])), info);
       }
   return codep - priv.the_buffer;
 }
@@ -2838,6 +2925,15 @@ putop (const char *template, int sizeflag)
 	    break;
 	  *obufp++ = 'l';
 	  break;
+	case 'Z':
+	  if (intel_syntax)
+	    break;
+	  if (mode_64bit && (sizeflag & SUFFIX_ALWAYS))
+	    {
+	      *obufp++ = 'q';
+	      break;
+	    }
+	  /* Fall through.  */
 	case 'L':
 	  if (intel_syntax)
 	    break;
@@ -3857,7 +3953,8 @@ OP_sI (int bytemode, int sizeflag)
 static void
 OP_J (int bytemode, int sizeflag)
 {
-  bfd_vma disp;
+  /* APPLE LOCAL fix improper sign extension */
+  bfd_signed_vma disp;
   bfd_vma mask = -1;
 
   switch (bytemode)
@@ -3884,7 +3981,8 @@ OP_J (int bytemode, int sizeflag)
       oappend (INTERNAL_DISASSEMBLER_ERROR);
       return;
     }
-  disp = (start_pc + codep - start_codep + disp) & mask;
+  /* APPLE LOCAL fix improper sign extension */
+  disp = (start_pc + (codep - start_codep + disp)) & mask;
   set_op (disp, 0);
   print_operand_value (scratchbuf, 1, disp);
   oappend (scratchbuf);

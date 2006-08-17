@@ -439,8 +439,8 @@ asm void bar() { fool:
 	lgdt	fool
 	lgs	eax, fooi
 	lidt	fool
-	lldt	eax
-	lldt	fool
+	lldt	ax
+	lldt	foos
 	lmsw	fool
 	loop	.-24
 	loope	.-24
@@ -452,8 +452,8 @@ asm void bar() { fool:
 	lsl	eax, eax
 	lsl	eax, fooi
 	lss	eax, fooi
-	ltr	eax
-	ltr	fool
+	ltr	ax
+	ltr	foos
 	maskmovdqu	xmm0, xmm0
 	maskmovq	mm0, mm0
 	maxpd	xmm0, xmm0

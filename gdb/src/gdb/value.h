@@ -43,6 +43,10 @@ struct value;
 /* APPLE LOCAL value caching */
 struct cached_value;
 
+/* APPLE LOCAL: This is the function that clears out the cached strings
+   in the target.  */
+void value_clear_inferior_string_pool (void);
+
 /* Values are stored in a chain, so that they can be deleted easily
    over calls to the inferior.  Values assigned to internal variables
    or put into the value history are taken off this list.  */

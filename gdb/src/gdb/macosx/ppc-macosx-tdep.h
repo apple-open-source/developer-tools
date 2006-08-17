@@ -59,20 +59,20 @@ int ppc_invalid_float (char *f, size_t len);
 
 void ppc_debug (const char *fmt, ...);
 
-int
-ppc_fast_show_stack (int show_frames, int get_names,
+int ppc_fast_show_stack (int show_frames, int get_names,
                      unsigned int count_limit, unsigned int print_limit,
                      unsigned int *count,
                      void (print_fun) (struct ui_out * uiout, int frame_num,
                                        CORE_ADDR pc, CORE_ADDR fp));
 
-CORE_ADDR
-ppc_frame_find_prev_fp (struct frame_info *next_frame, void **this_cache);
+CORE_ADDR ppc_frame_unwind_sp (struct frame_info *next_frame, void **this_cache);
 
-CORE_ADDR
-ppc_frame_find_prev_sp (struct frame_info *next_frame, void **this_cache);
+CORE_ADDR ppc_frame_unwind_fp (struct frame_info *next_frame, void **this_cache);
 
-CORE_ADDR
-ppc_frame_find_prev_pc (struct frame_info *next_frame, void **this_cache);
+CORE_ADDR ppc_frame_unwind_fp_for_dereferencing (struct frame_info *next_frame, void **this_cache);
+
+CORE_ADDR ppc_frame_find_prev_sp (struct frame_info *next_frame, void **this_cache);
+
+CORE_ADDR ppc_frame_find_prev_pc (struct frame_info *next_frame, void **this_cache);
 
 #endif /* __GDB_PPC_MACOSX_TDEP_H__ */

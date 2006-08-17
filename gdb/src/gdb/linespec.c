@@ -897,10 +897,19 @@ decode_line_1 (char **argptr, int funfirstline, struct symtab *default_symtab,
   if (allow_objc_selectors_flag)
     {
       struct symtabs_and_lines values;
-      values = decode_objc (argptr, funfirstline, NULL,
-			    canonical, saved_arg);
-      if (values.sals != NULL)
-	return values;
+      /* APPLE LOCAL: Don't look for method name matches if
+	 it's ``main''.  AppKit has a couple of classes with "main"
+	 methods now and this means every time you type "b main"
+	 on an ObjC program you get a "Select one of the following"
+	 dialogue.  Lame.  And it doesn't look like we can talk the
+	 AppKit guys down, so hack it in here.  */
+      if (!saved_arg || strcmp (saved_arg, "main") != 0)
+        {
+          values = decode_objc (argptr, funfirstline, NULL,
+                                canonical, saved_arg);
+          if (values.sals != NULL)
+	    return values;
+        }
     }
 
   /* Does it look like there actually were two parts?  */

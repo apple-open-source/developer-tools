@@ -70,7 +70,7 @@
 #
 # The following tests fail only when the c++ suite is run with -mcpu=G5
 3719311: g++.dg/template/warn1.C  (test for warnings, line 12)
-0000000: g++.dg/align-test-1.C (test for excess errors)
+4255172: g++.dg/align-test-1.C (test for excess errors)
 #
 # The following tests fail only when the c++ suite is run with -m64
 3964999: g++.old-deja/g++.pt/const2.C (test for excess errors)

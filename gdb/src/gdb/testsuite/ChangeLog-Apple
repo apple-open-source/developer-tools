@@ -1,3 +1,39 @@
+2006-06-12  Jim Ingham  <jingham@apple.com>
+
+	* gdb.base/charset.exp: Don't try to convert from UTF-8 to 
+	anything else.
+	* gdb.base/charset.c: Add utf_8_string.
+	
+2006-06-07  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.apple/recurse-stepi.exp: Disassemble recurse to aid in
+	the reading of the log file after the fact.
+
+2006-06-07  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.apple/recurse-stepi.exp: Include stack pointer display.
+	Check that the last two functions on the stack are recurse (a=10)
+	followed by main.
+
+2006-06-07  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.apple/recurse.c: Copied from gdb.base.
+	* gdb.apple/recurse-stepi.exp: Single instruction step through
+	the recursion functions, checking that we can backtrace back to
+	main at every point.
+
+2006-05-30  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.apple/weak.exp: Update to work correctly with ld64.
+
+2006-05-11  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.apple/open.exp: Test that the "open" command exists.
+
+2006-05-08  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.apple/pc-verify.exp: Also recognize "rip" as the name of the PC.
+
 2006-04-27  Jason Molenda  (jmolenda@apple.com)
 
 	* gdb.stabs/weird.exp: site_xfail a failure due to the warning

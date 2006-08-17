@@ -6729,6 +6729,7 @@ iasm_identifier (tree expr)
 #endif
 
 /* Return true iff id is a instruction prefix.  */
+
 bool
 iasm_is_prefix (tree ARG_UNUSED (id))
 {
@@ -6887,7 +6888,40 @@ iasm_extra_clobbers (const char *opcode, tree *clobbersp)
     }
 }
 
+/* True when we've seen frfree and we need to delete the next blr.  */
+
+static GTY(()) bool iasm_delete_blr;
+
+/* True when we've seen frfree followed by blr, used to give give
+   errors for instructions that follow blr.  */
+
+static GTY(()) bool iasm_saw_frfree_blr;
+
+/* Used to ensure that we see a blr after frfree before the block
+   ends.  */
+
+static void
+iasm_ensure_blr_last (void)
+{
+  if (iasm_delete_blr)
+    {
+      error ("blr must follow frfree");
+      iasm_delete_blr = false;
+    }
+  iasm_saw_frfree_blr = false;
+}
+
+/* Called to end asm blocks.  */
+
+void
+iasm_end_block (void)
+{
+  inside_iasm_block = false;
+  iasm_ensure_blr_last ();
+}
+
 /* Build an asm statement from CW-syntax bits.  */
+
 tree
 iasm_stmt (tree expr, tree args, int lineno)
 {
@@ -6925,10 +6959,24 @@ iasm_stmt (tree expr, tree args, int lineno)
 
   opcodename = IDENTIFIER_POINTER (expr);
 
+  if (iasm_saw_frfree_blr)
+    error ("not allowed after frfree blr");
+
+  if (iasm_delete_blr)
+    {
+      if (strcmp (opcodename, "blr") == 0)
+	{
+	  iasm_delete_blr = false;
+	  iasm_saw_frfree_blr = true;
+	  input_location.line = saved_lineno;
+	  return NULL_TREE;
+	}
+    }
+
   /* Handle special directives specially.  */
   if (strcmp (opcodename, "entry") == 0)
     return iasm_entry (expr, NULL_TREE, TREE_VALUE (args));
-  else if (strcmp (opcodename, "fralloc") == 0)
+  else if (strcmp (opcodename, "fralloc") == 0 && ! flag_ms_asms)
     {
       /* The correct default size is target-specific, so leave this as
 	 a cookie for the backend.  */
@@ -6948,24 +6996,36 @@ iasm_stmt (tree expr, tree args, int lineno)
 	  else
 	    error ("fralloc argument is not an integer");
 	}
+      input_location.line = saved_lineno;
       return NULL_TREE;
     }
-  else if (strcmp (opcodename, "frfree") == 0)
+  else if (strcmp (opcodename, "frfree") == 0 && ! flag_ms_asms)
     {
+#if 0
+      /* We'd like to generate an elilogue right here and let the user
+	 do the return, but...  */
       DECL_IASM_NORETURN (current_function_decl) = 1;
+#else
+      iasm_delete_blr = true;
+#endif
       /* Create a default-size frame retroactively.  */
       if (DECL_IASM_FRAME_SIZE (current_function_decl) == (unsigned int)-2)
 	DECL_IASM_FRAME_SIZE (current_function_decl) = (unsigned int)-1;
+      input_location.line = saved_lineno;
       return NULL_TREE;
     }
   else if (strcmp (opcodename, "nofralloc") == 0)
     {
       DECL_IASM_NORETURN (current_function_decl) = 1;
       DECL_IASM_FRAME_SIZE (current_function_decl) = -2;
+      input_location.line = saved_lineno;
       return NULL_TREE;
     }
   else if (strcmp (opcodename, "machine") == 0)
-    return NULL_TREE;
+    {
+      input_location.line = saved_lineno;
+      return NULL_TREE;
+    }
   else if (strcmp (opcodename, "opword") == 0)
     opcodename = " .long";
   else if (strncmp (opcodename, "_emit", 5) == 0)
@@ -6992,10 +7052,15 @@ iasm_stmt (tree expr, tree args, int lineno)
 
   IASM_CANONICALIZE_OPERANDS (opcodename, new_opcode, args, &e);
 
-  IASM_PRINT_PREFIX(iasm_buffer, prefix_list);
+  IASM_PRINT_PREFIX (iasm_buffer, prefix_list);
 
   if (strcmp (opcodename, " .machine") == 0)
     e.no_label_map = true;
+#ifdef TARGET_386
+  else if (strcasecmp (opcodename, "call") == 0
+	   || strcasecmp (opcodename, "jmp") == 0)
+    e.modifier = "A";
+#endif
 
   strcat (iasm_buffer, new_opcode);
   strcat (iasm_buffer, " ");
@@ -7063,6 +7128,20 @@ iasm_stmt (tree expr, tree args, int lineno)
   iasm_set_constraints (iasm_num_constraints (inputs, outputs), inputs, outputs);
 
   iasm_extra_clobbers (opcodename, &clobbers);
+#ifdef TARGET_386
+  if (num_args == 1
+      && (strcasecmp ("mulw", new_opcode) == 0
+	  || strcasecmp ("imulw", new_opcode) == 0
+	  || strcasecmp ("divw", new_opcode) == 0
+	  || strcasecmp ("idivw", new_opcode) == 0
+	  || strcasecmp ("mull", new_opcode) == 0
+	  || strcasecmp ("imull", new_opcode) == 0
+	  || strcasecmp ("divl", new_opcode) == 0
+	  || strcasecmp ("idivl", new_opcode) == 0))
+    clobbers = tree_cons (NULL_TREE,
+			  build_string (3, "edx"),
+			  clobbers);
+#endif
 
   /* Treat as volatile always.  */
   stmt = build_stmt (ASM_EXPR, sexpr, outputs, inputs, clobbers, uses);
@@ -7220,6 +7299,7 @@ iasm_print_operand (char *buf, tree arg, unsigned argnum,
   enum machine_mode mode;
   int unsignedp, volatilep;
   tree op0;
+  const char *modifier = "";
 
   STRIP_NOPS (arg);
 
@@ -7256,7 +7336,20 @@ iasm_print_operand (char *buf, tree arg, unsigned argnum,
       /* There was no other spelling I could find that would work.
 	 :-( Hope this stays working.  */
       iasm_force_constraint ("X", e);
-      iasm_get_register_var (arg, "l", buf, argnum, must_be_reg, e);
+      modifier = "l";
+      if (e->modifier)
+	{
+	  modifier = e->modifier;
+	  e->modifier = 0;
+	}
+#ifdef TARGET_386
+      if (strcmp (modifier, "A") == 0)
+	{
+	  modifier = "l";
+	  strcat (buf, "*");
+	}
+#endif
+      iasm_get_register_var (arg, modifier, buf, argnum, must_be_reg, e);
       iasm_force_constraint (0, e);
       break;
 
@@ -7265,7 +7358,12 @@ iasm_print_operand (char *buf, tree arg, unsigned argnum,
       arg = iasm_raise_reg (arg);
       if (TREE_CODE (arg) == VAR_DECL)
 	{
-	  iasm_get_register_var (arg, "", buf, argnum, must_be_reg, e);
+	  if (e->modifier)
+	    {
+	      modifier = e->modifier;
+	      e->modifier = 0;
+	    }
+	  iasm_get_register_var (arg, modifier, buf, argnum, must_be_reg, e);
 	  break;
 	}
 #endif
@@ -7310,6 +7408,14 @@ iasm_print_operand (char *buf, tree arg, unsigned argnum,
 
 	  IASM_VALID_PIC (arg, e);
 
+#ifdef TARGET_386
+	  if (e->modifier && strcmp (e->modifier, "A") == 0)
+	    {
+	      modifier = e->modifier;
+	      e->modifier = 0;
+	      strcat (buf, "*");
+	    }
+#endif
 	  IASM_OFFSET_PREFIX (e, buf);
 	  mark_referenced (DECL_ASSEMBLER_NAME (arg));
 	  real_name = targetm.strip_name_encoding (name);
@@ -7332,7 +7438,15 @@ iasm_print_operand (char *buf, tree arg, unsigned argnum,
       break;
 
     case FUNCTION_DECL:
-      iasm_get_register_var (arg, IASM_FUNCTION_MODIFIER, buf, argnum, must_be_reg, e);
+      modifier = IASM_FUNCTION_MODIFIER;
+#ifdef TARGET_386
+	  if (e->modifier && strcmp (e->modifier, "A") == 0)
+	    {
+	      e->modifier = 0;
+	      strcat (buf, "*");
+	    }
+#endif
+      iasm_get_register_var (arg, modifier, buf, argnum, must_be_reg, e);
       break;
 
     case COMPOUND_EXPR:
@@ -7413,6 +7527,13 @@ iasm_print_operand (char *buf, tree arg, unsigned argnum,
       break;
 
     case INDIRECT_REF:
+#ifdef TARGET_386
+	  if (e->modifier && strcmp (e->modifier, "A") == 0)
+	    {
+	      e->modifier = 0;
+	      strcat (buf, "*");
+	    }
+#endif
       iasm_get_register_var (arg, "", buf, argnum, must_be_reg, e);
       break;
 
@@ -7481,6 +7602,7 @@ iasm_reg_name (tree id)
 }
 
 /* Build an asm label from CW-syntax bits.  */
+
 tree
 iasm_label (tree labid, int atsign)
 {
@@ -7709,6 +7831,7 @@ iasm_build_register_offset (tree offset, tree regname)
 /* Given some bits of info from the parser, determine if this is a
    valid entry statement, and then generate traditional asm statements
    to create the label. The entry may be either static or extern.  */
+
 tree
 iasm_entry (tree keyword, tree scspec, tree fn)
 {

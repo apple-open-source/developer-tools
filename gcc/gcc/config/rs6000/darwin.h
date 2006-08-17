@@ -543,3 +543,12 @@ extern const char *darwin_one_byte_bool;
    || (darwin_macosx_version_min				\
        && strverscmp (darwin_macosx_version_min, "10.3") >= 0))
 /* APPLE LOCAL end mainline 2005-09-01 3449986 */
+
+/* APPLE LOCAL begin x86_64 */
+#define ASM_MAYBE_OUTPUT_ENCODED_ADDR_RTX(ASM_OUT_FILE, ENCODING, SIZE, ADDR, DONE)	\
+  if (ENCODING == ASM_PREFERRED_EH_DATA_FORMAT (2, 1))       \
+    {				                                         \
+	  darwin_non_lazy_pcrel (ASM_OUT_FILE, ADDR);            \
+	  goto DONE;                                             \
+    }
+/* APPLE LOCAL end x86_64 */

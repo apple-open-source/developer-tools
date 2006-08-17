@@ -116,6 +116,8 @@ struct arch_config_guess_map arch_config_map [] =
   {"i386", "i686"},
   {"ppc", "powerpc"},
   {"ppc64", "powerpc"},
+  /* APPLE LOCAL x86_64 support 2006-02-02 */
+  {"x86_64", "i686"},
   {NULL, NULL}
 };
 
@@ -175,25 +177,36 @@ get_arch_name (const char *name)
   const NXArchInfo * a_info;
   const NXArchInfo * all_info;
   cpu_type_t cputype;
+  struct arch_config_guess_map *map;
+  const char *aname;
 
-  /* Find cputype associated with the given name.  */
-  if (!name)
-    a_info = NXGetLocalArchInfo ();
+  if (name)
+    {
+      /* Find config name based on arch name.  */
+      aname = NULL;
+      map = arch_config_map;
+      while (map->arch_name)
+	{
+	  if (!strcmp (map->arch_name, name))
+	    return name;
+	  else map++;
+	}
+      a_info = NXGetArchInfoFromName (name);
+    }
   else
-    a_info = NXGetArchInfoFromName (name);
+    a_info = NXGetLocalArchInfo ();
 
   if (!a_info)
     fatal ("Invalid arch name : %s", name);
 
-  cputype = a_info->cputype;
-
-  /* Now collect ALL supported arch info.  */
-  all_info = NXGetAllArchInfos ();
+  all_info = NXGetAllArchInfos();
 
   if (!all_info)
-    fatal ("Unable to collect arch info for %s", name);
+    fatal ("Unable to get architecture information");
 
   /* Find first arch. that matches cputype.  */
+  cputype = a_info->cputype;
+
   while (all_info->name)
     {
       if (all_info->cputype == cputype)
@@ -686,6 +699,10 @@ add_arch_options (int index, const char **current_argv, int arch_index)
     current_argv[arch_index] = "-march=pentiumpro";
   else if (!strcmp (arches[index], "pentIIm3"))
     current_argv[arch_index] = "-march=pentium2";
+  /* APPLE LOCAL begin x86_64 support 2006-02-02 */
+  else if (!strcmp (arches[index], "x86_64"))
+    current_argv[arch_index] = "-m64";
+  /* APPLE LOCAL end x86_64 support 2006-02-02 */
   else
     count = 0;
 

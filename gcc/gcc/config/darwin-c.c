@@ -82,7 +82,7 @@ static const char *find_subframework_header (cpp_reader *pfile, const char *head
      else
        mode = power
    These modes are saved on the alignment stack by saving the values
-   of maximum_field_alignment, TARGET_ALIGN_MAC68K, and
+   of maximum_field_alignment, TARGET_ALIGN_MAC68K, and 
    TARGET_ALIGN_NATURAL.  */
 typedef struct align_stack
 {
@@ -97,7 +97,7 @@ static struct align_stack * field_align_stack = NULL;
 
 /* APPLE LOCAL begin Macintosh alignment 2001-12-17 --ff */
 static void
-push_field_alignment (int bit_alignment,
+push_field_alignment (int bit_alignment, 
 		      int mac68k_alignment, int natural_alignment)
 {
   align_stack *entry = (align_stack *) xmalloc (sizeof (align_stack));
@@ -213,10 +213,10 @@ darwin_pragma_options (cpp_reader *pfile ATTRIBUTE_UNUSED)
 
 /* APPLE LOCAL begin Macintosh alignment 2002-1-22 --ff */
 /* #pragma pack ()
-   #pragma pack (N)
+   #pragma pack (N)  
    #pragma pack (pop[,id])
    #pragma pack (push[,id],N)
-
+   
    We have a problem handling the semantics of these directives since,
    to play well with the Macintosh alignment directives, we want the
    usual pack(N) form to do a push of the previous alignment state.
@@ -298,7 +298,7 @@ else
 
   if (c_lex (&x) != CPP_EOF)
     warning ("junk at end of '#pragma pack'");
-
+    
   if (action != pop)
     {
       switch (align)
@@ -315,7 +315,7 @@ else
 	    BAD2 ("alignment must be a small power of two, not %d", align);
 	}
     }
-
+  
   switch (action)
     {
     case pop:   pop_field_alignment ();		      break;
@@ -658,7 +658,7 @@ framework_construct_pathname (const char *fname, cpp_dir *dir)
   /* Append framework_header_dirs and header file name */
   for (i = 0; framework_header_dirs[i].dirName; i++)
     {
-      strncpy (&frname[frname_len],
+      strncpy (&frname[frname_len], 
 	       framework_header_dirs[i].dirName,
 	       framework_header_dirs[i].dirNameLen);
       strcpy (&frname[frname_len + framework_header_dirs[i].dirNameLen],
@@ -682,8 +682,8 @@ find_subframework_file (const char *fname, const char *pname)
 {
   char *sfrname;
   const char *dot_framework = ".framework/";
-  char *bufptr;
-  int sfrname_len, i, fname_len;
+  char *bufptr; 
+  int sfrname_len, i, fname_len; 
   struct cpp_dir *fast_dir;
   static struct cpp_dir subframe_dir;
   struct stat st;
@@ -693,7 +693,7 @@ find_subframework_file (const char *fname, const char *pname)
   /* Subframework files must have / in the name.  */
   if (bufptr == 0)
     return 0;
-
+    
   fname_len = bufptr - fname;
   fast_dir = find_framework (fname, fname_len);
 
@@ -708,7 +708,7 @@ find_subframework_file (const char *fname, const char *pname)
     return 0;
 
   /* Now translate. For example,                  +- bufptr
-     fname = CarbonCore/OSUtils.h                 |
+     fname = CarbonCore/OSUtils.h                 | 
      pname = /System/Library/Frameworks/Foundation.framework/Headers/Foundation.h
      into
      sfrname = /System/Library/Frameworks/Foundation.framework/Frameworks/CarbonCore.framework/Headers/OSUtils.h */
@@ -716,10 +716,10 @@ find_subframework_file (const char *fname, const char *pname)
   sfrname = (char *) xmalloc (strlen (pname) + strlen (fname) + 2 +
 			      strlen ("Frameworks/") + strlen (".framework/")
 			      + strlen ("PrivateHeaders"));
-
+ 
   bufptr += strlen (dot_framework);
 
-  sfrname_len = bufptr - pname;
+  sfrname_len = bufptr - pname; 
 
   strncpy (&sfrname[0], pname, sfrname_len);
 
@@ -735,12 +735,12 @@ find_subframework_file (const char *fname, const char *pname)
   /* Append framework_header_dirs and header file name */
   for (i = 0; framework_header_dirs[i].dirName; i++)
     {
-      strncpy (&sfrname[sfrname_len],
+      strncpy (&sfrname[sfrname_len], 
 	       framework_header_dirs[i].dirName,
 	       framework_header_dirs[i].dirNameLen);
       strcpy (&sfrname[sfrname_len + framework_header_dirs[i].dirNameLen],
 	      &fname[fname_len]);
-
+    
       if (stat (sfrname, &st) == 0)
 	{
 	  if (fast_dir != &subframe_dir)
@@ -797,7 +797,7 @@ add_framework_path (char *path)
   add_cpp_dir_path (p, BRACKET);
 }
 
-static const char *framework_defaults [] =
+static const char *framework_defaults [] = 
   {
     "/System/Library/Frameworks",
     "/Library/Frameworks",
@@ -814,9 +814,9 @@ darwin_register_objc_includes (const char *sysroot, const char *iprefix,
   /* We do not do anything if we do not want the standard includes. */
   if (!stdinc)
     return;
-
+  
   fname = GCC_INCLUDE_DIR "-gnu-runtime";
-
+  
   /* Register the GNU OBJC runtime include path if we are compiling  OBJC
     with GNU-runtime.  */
 
@@ -833,13 +833,13 @@ darwin_register_objc_includes (const char *sysroot, const char *iprefix,
           /* FIXME: wrap the headers for C++awareness.  */
 	  add_path (str, SYSTEM, /*c++aware=*/false, false);
 	}
-
+      
       /* Should this directory start with the sysroot?  */
       if (sysroot)
 	str = concat (sysroot, fname, NULL);
       else
 	str = update_path (fname, "");
-
+      
       add_path (str, SYSTEM, /*c++aware=*/false, false);
     }
 }
@@ -963,13 +963,13 @@ darwin_pragma_call_on_unload (cpp_reader *pfile ATTRIBUTE_UNUSED)
 
 /* Return the value of darwin_macosx_version_min suitable for the
    __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ macro,
-   so '10.4.2' becomes 1042.
+   so '10.4.2' becomes 1042.  
    Print a warning if the version number is not known.  */
 static const char *
 version_as_macro (void)
 {
   static char result[] = "1000";
-
+  
   if (strncmp (darwin_macosx_version_min, "10.", 3) != 0)
     goto fail;
   if (! ISDIGIT (darwin_macosx_version_min[3]))
@@ -987,9 +987,9 @@ version_as_macro (void)
     }
   else
     result[3] = '0';
-
+  
   return result;
-
+  
  fail:
   error ("Unknown value %qs of -mmacosx-version-min",
 	 darwin_macosx_version_min);

@@ -87,7 +87,10 @@ main(int argc, char *argv[])
 	addarg("-std=iso9899:1999");
 	addarg("-pedantic");
 	addarg("-Wextra-tokens");
+#if defined (__ppc__)
+	/* on ppc long double doesn't work */
 	addarg("-mlong-double-64");
+#endif
 	addarg("-fmath-errno");
 	addarg("-fno-builtin-pow");
 	addarg("-fno-builtin-powl");

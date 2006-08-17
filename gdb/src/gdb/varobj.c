@@ -839,7 +839,15 @@ varobj_create (char *objname,
 					       &(var->dynamic_type));
 
 	      if (value_lazy (var->value))
-		gdb_value_fetch_lazy (var->value);
+               {
+                 if (!gdb_value_fetch_lazy (var->value))
+                   {
+                     var->value = NULL;
+                     var->error = 1;
+                   }
+                 else
+                   var->error = 0;
+               }
 	    }
 	  else
 	    {
@@ -1380,6 +1388,12 @@ varobj_update (struct varobj **varp, struct varobj_changelist **changelist)
      has changed. */
   type_changed = VAROBJ_TYPE_CHANGED;
   new = value_of_root (varp, &type_changed);
+  if (new != NULL && value_lazy (new))
+    {
+      if (!gdb_value_fetch_lazy (new))
+      new = NULL;
+    }
+
   if (new == NULL)
     {
       int retval;
@@ -2982,6 +2996,8 @@ varobj_get_type_index_from_fake_child (struct varobj *parent, int index)
 	  if (TYPE_VPTR_BASETYPE (type) == type
 	      && type_index == TYPE_VPTR_FIELDNO (type))
                     ; /* ignore vptr */
+	  else if (TYPE_FIELD_STATIC (type, type_index))
+	    ; /* APPLE LOCAL: ignore static fields.  */
 	  else if (TYPE_FIELD_PRIVATE (type, type_index))
 	    --index;
 	  ++type_index;
@@ -2995,8 +3011,10 @@ varobj_get_type_index_from_fake_child (struct varobj *parent, int index)
 	  if (TYPE_VPTR_BASETYPE (type) == type
 	      && type_index == TYPE_VPTR_FIELDNO (type))
 	    ; /* ignore vptr */
-                  else if (TYPE_FIELD_PROTECTED (type, type_index))
-                    --index;
+	  else if (TYPE_FIELD_STATIC (type, type_index))
+	    ; /* APPLE LOCAL: ignore static fields.  */
+	  else if (TYPE_FIELD_PROTECTED (type, type_index))
+	    --index;
 	  ++type_index;
 	}
       --type_index;
@@ -3008,6 +3026,8 @@ varobj_get_type_index_from_fake_child (struct varobj *parent, int index)
 	  if (TYPE_VPTR_BASETYPE (type) == type
 	      && type_index == TYPE_VPTR_FIELDNO (type))
 	    ; /* ignore vptr */
+	  else if (TYPE_FIELD_STATIC (type, type_index))
+	    ; /* APPLE LOCAL: ignore static fields.  */
 	  else if (!TYPE_FIELD_PRIVATE (type, type_index) &&
 		   !TYPE_FIELD_PROTECTED (type, type_index))
 	    --index;
@@ -3350,6 +3370,12 @@ cplus_class_num_children (struct type *type, int children[3])
       /* If we have a virtual table pointer, omit it. */
       if (TYPE_VPTR_BASETYPE (type) == type && TYPE_VPTR_FIELDNO (type) == i)
 	continue;
+      /* APPLE LOCAL: Don't include static members in the object.
+	 These should be viewed as globals.  Plus, if we do this we
+	 get into trouble when a class has a static member which is an
+	 object of the class.  */
+      if (TYPE_FIELD_STATIC (type, i))
+	continue;
 
       if (TYPE_FIELD_PROTECTED (type, i))
 	children[v_protected]++;
@@ -3380,6 +3406,10 @@ cplus_real_type_index_for_fake_child_index (struct type *type,
             if (TYPE_VPTR_BASETYPE (type) == type
 	        && TYPE_VPTR_FIELDNO (type) == i)
 	        continue;
+	    /* APPLE LOCAL: Don't include static members in the
+	       object printing.  */
+	    if (TYPE_FIELD_STATIC (type, i))
+	      continue;
 
             if (!TYPE_FIELD_PROTECTED (type, i) 
                  && !TYPE_FIELD_PRIVATE (type, i))
@@ -3401,6 +3431,10 @@ cplus_real_type_index_for_fake_child_index (struct type *type,
             if (TYPE_VPTR_BASETYPE (type) == type
 	        && TYPE_VPTR_FIELDNO (type) == i)
 	        continue;
+	    /* APPLE LOCAL: Don't include static members in the
+	       object printing.  */
+	    if (TYPE_FIELD_STATIC (type, i))
+	      continue;
 
             if (TYPE_FIELD_PROTECTED (type, i))
               {
@@ -3421,6 +3455,10 @@ cplus_real_type_index_for_fake_child_index (struct type *type,
             if (TYPE_VPTR_BASETYPE (type) == type
 	        && TYPE_VPTR_FIELDNO (type) == i)
 	        continue;
+	    /* APPLE LOCAL: Don't include static members in the
+	       object printing.  */
+	    if (TYPE_FIELD_STATIC (type, i))
+	      continue;
 
             if (TYPE_FIELD_PRIVATE (type, i))
               {

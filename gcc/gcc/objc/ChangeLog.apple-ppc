@@ -1,3 +1,19 @@
+2006-05-24  Mike Stump  <mrs@apple.com>
+
+	* objc-act.c (JBLEN): Update for x86_64.
+
+2006-05-18  Stuart Hastings  <stuart@apple.com>
+
+	Radar 4385273
+	* gcc/objc/objc-act.c (objc_build_synchronized): Update JBLEN
+	for 64-bit.
+
+2006-04-27  Fariborz Jahanian <fjahanian@apple.com>
+
+        Radar 4399973 (backport from 4327263)
+	* objc/objc-act.c (init_module_descriptor): Remove file name
+	from module descriptors.
+
 2006-03-10  Fariborz Jahanian <fjahanian@apple.com>
 
         Radar 4407151

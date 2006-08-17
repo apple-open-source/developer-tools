@@ -2969,6 +2969,12 @@ emit_case_nodes (rtx index, case_node_ptr node, rtx default_label,
   enum machine_mode mode = GET_MODE (index);
   enum machine_mode imode = TYPE_MODE (index_type);
 
+  /* APPLE LOCAL begin mainline 4561329 */
+  /* Handle indices detected as constant during RTL expansion.  */
+  if (mode == VOIDmode)
+    mode = imode;
+  /* APPLE LOCAL end mainline 4561329 */
+
   /* See if our parents have already tested everything for us.
      If they have, emit an unconditional jump for this node.  */
   if (node_is_bounded (node, index_type))

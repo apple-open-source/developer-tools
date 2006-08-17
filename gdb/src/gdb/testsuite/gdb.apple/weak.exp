@@ -54,7 +54,7 @@ if  { [gdb_compile "${libsrcfile}" "${libbinfile}" executable [list debug $addit
 global env
 
 set ::env(MACOSX_DEPLOYMENT_TARGET) "10.2"
-set additional_flags "additional_flags=-L${objdir}/${subdir} -lweak"
+set additional_flags "additional_flags=-L${objdir}/${subdir} -weak-lweak"
 if  { [gdb_compile "${srcfile}" "${binfile}" executable [list debug $additional_flags]] != "" } {
      gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
 }

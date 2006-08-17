@@ -19,6 +19,14 @@ struct dyld_objfile_entry;
 #include "macosx-nat-dyld-info.h"
 #include "macosx-nat-dyld-path.h"
 
+/* Imported definitions from <mach/machine.h> which may not be available on
+   older systems.  */
+typedef int                     gdb_integer_t;
+typedef gdb_integer_t       gdb_cpu_type_t;
+#define GDB_CPU_ARCH_ABI64  0x01000000
+#define GDB_CPU_TYPE_X86            ((gdb_cpu_type_t) 7)
+#define GDB_CPU_TYPE_X86_64         (GDB_CPU_TYPE_X86 | GDB_CPU_ARCH_ABI64)
+
 enum macosx_dyld_thread_state
 {
   dyld_clear,

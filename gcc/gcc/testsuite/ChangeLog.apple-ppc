@@ -1,18 +1,151 @@
+2006-06-22  Mike Stump  <mrs@apple.com>
+
+	Radar 4535822
+	* (g++.apple/asm-block-13.C): Fix lldt and ltr.
+	* (gcc.apple/asm-block-13.c): Fix lldt and ltr.
+	* (g++.apple/asm-block-21.C): Update.
+	* (gcc.apple/asm-block-21.c): Update.
+
+2006-06-11  Eric Christopher  <echristo@apple.com>
+
+	Radar 4581948
+	Backport from mainline:
+	2006-06-11  Eric Christopher  <echristo@apple.com>
+
+        PR middle-end/27948
+        * gcc.dg/bf-ms-layout.c: Run on darwin.
+        * gcc.dg/bf-no-ms-layout: Ditto.
+        * gcc.dg/attr-ms_struct-2.c: New.
+        * gcc.dg/bf-ms-layout-2.c: Ditto.
+
+	2006-06-04 Eric Christopher <echristo@apple.com>
+
+        * gcc.dg/attr-ms_struct-1.c: New.
+
+2006-06-06  Eric Christopher  <echristo@apple.com>
+
+	Radar 4555787
+	* gcc.dg/darwin-literal16-1.c: Run on i?86-*-darwin only.
+
+2006-06-04  Eric Christopher  <echristo@apple.com>
+
+	Radar 4087219
+	Radar 4087313
+	Radar 4573129
+	Radar 4087327
+	Radar 4573129
+	Radar 4087327
+	Radar 3966342
+	Radar 4015940
+	Radar 4015896
+	Radar 4573130
+	Backport from mainline:
+	2006-06-02  Eric Christopher  <echristo@apple.com>
+
+        * gcc.c-torture/compile/20000804-1.c: Skip if i?86-darwin.
+        * gcc.target/i386/20020523-1.c: Skip if darwin.
+        * gcc.target/i386/asm-3.c: Ditto.
+        * gcc.target/i386/20011119-1.c: Ditto.
+        * gcc.target/i386/clobbers.c: Remove pic part of test.
+
+	Backport from mainline:
+	2006-04-04  Eric Christopher  <echristo@apple.com>
+
+        * gcc.target/i386/387-1.c: Allow regexp to match darwin
+        stubs.
+        * gcc.target/i386/387-5.c: Ditto.
+
+	* gcc.dg/i386-cmov1.c: Bring in from mainline.
+	* gcc.dg/i386-mul.c: Ditto.
+	* gcc.dg/i386-ssetype-1.c: Ditto.
+	* gcc.dg/i386-ssetype-3.c: Ditto.
+	* gcc.dg/i386-ssetype-5.c: Ditto.
+	* gcc.dg/i386-local2.c: Ditto. Skip on darwin.
+	* gcc.dg/20020919-1.c: Skip if darwin.
+	* gcc.dg/lvalue-cast-1.c: Only compile on powerpc.
+	* gcc.dg/20020312-2.c: Fix conditional for darwin.
+	* gcc.apple/dg.exp: Move to...
+	* gcc.apple/apple.exp: ... here.
+
+2006-05-30  Eric Christopher  <echristo@apple.com>
+
+	* gcc.dg/darwin-literal16-1.c: New.
+
+2006-05-11  Stuart Hastings  <stuart@apple.com>
+
+	* gcc/testsute/gcc.apple/4525731-2.c: Fix typo.
+
+2006-05-10  Stuart Hastings  <stuart@apple.com>
+
+	Radar 4525731
+	* gcc/testsute/gcc.apple/4525731-1.c: New.
+	* gcc/testsute/gcc.apple/4525731-2.c: New.
+
+2006-04-27  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 4399973 (backport from 4327263)
+	* objc.dg/objc-nofilename-1.m: New.
+
+2006-06-13  Matthew Sachs  <msachs@apple.com>
+
+	Radar 4085016
+	Backport from mainline:
+	2006-06-13  Matthew Sachs  <msachs@apple.com>
+
+	* lib/target-supports-dg.exp (check-flags): Include TOOL_OPTIONS in
+	the list of compiler flags; this causes those flags to be checked
+	for things like dg-skip-if.
+
+	2005-03-04  Matthew Sachs  <msachs@apple.com>
+
+	* gcc.exp (gcc_target_compile): Put braces around
+	additional_flags=$TOOL_OPTIONS; allows for whitespace in $TOOL_OPTIONS.
+	* objc.exp (objc_target_compile): Likewise.
+	* treelang.exp (treelang_target_compile): Likewise.
+
+2006-06-05  Roger Sayle  <roger@eyesopen.com>
+	Stuart Hastings  <stuart@apple.com>
+
+	Radar 4561329
+	PR middle-end/26557
+	* gcc.c-torture/compile/switch-1.c: New test case.
+
+2006-05-30  Mike Stump  <mrs@apple.com>
+
+	Rarar 4527214
+	* g++.apple/asm-block-52.C: Add.
+	* gcc.apple/asm-block-52.c: Add.
+
+2006-05-18  Mike Stump  <mrs@apple.com>
+
+	Radar 4501833
+	* gcc.apple/asm-function-2.c: Enable rest of testcase.
+	* g++.apple/asm-function-2.C: Likewise.
+	* gcc.apple/asm-function-21.c: Add.
+	* gcc.apple/asm-function-22.c: Add.
+	* g++.apple/asm-function-21.C: Add.
+	* g++.apple/asm-function-22.C: Add.
+
+2006-04-26  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 4508851
+	* obj-c++.dg/method-namespace-1.mm: New.
+
 2006-04-28  Eric Christopher  <echristo@apple.com>
 
-        Radar 4454599
-        * gcc.apple/bitreverse-13.c: Remove.
-        * gcc.apple/bitreverse-19.c: Ditto.
-        * gcc.apple/bitreverse-2.c: Ditto.
-        * gcc.apple/bitreverse-20.c: Ditto.
-        * gcc.apple/bitreverse-21.c: Ditto.
-        * gcc.apple/bitreverse-24.c: Ditto.
-        * gcc.apple/bitreverse-27.c: Ditto.
-        * gcc.apple/bitreverse-4.c: Ditto.
-        * gcc.apple/bitreverse-5.c: Ditto.
-        * gcc.apple/bitreverse-6.c: Ditto.
-        * gcc.apple/bitreverse-7.c: Ditto.
-        * gcc.apple/bitreverse-8.c: Ditto.
+	Radar 4454599
+	* gcc.apple/bitreverse-13.c: Remove.
+	* gcc.apple/bitreverse-19.c: Ditto.
+	* gcc.apple/bitreverse-2.c: Ditto.
+	* gcc.apple/bitreverse-20.c: Ditto.
+	* gcc.apple/bitreverse-21.c: Ditto.
+	* gcc.apple/bitreverse-24.c: Ditto.
+	* gcc.apple/bitreverse-27.c: Ditto.
+	* gcc.apple/bitreverse-4.c: Ditto.
+	* gcc.apple/bitreverse-5.c: Ditto.
+	* gcc.apple/bitreverse-6.c: Ditto.
+	* gcc.apple/bitreverse-7.c: Ditto.
+	* gcc.apple/bitreverse-8.c: Ditto.
 	* gcc.apple/bitreverse-18.c: Add #pragma ms_struct
 	to locations where we turn on pragma reverse_bitfields.
 	* gcc.apple/bitreverse-3.c: Ditto.
@@ -67,7 +200,7 @@
 	* gcc.apple/asm-block-35.c: Likwise.
 	* g++.apple/asm-block-50.C: Add.
 	* gcc.apple/asm-block-50.c: Add.
-	
+
 2006-04-25  Devang Patel  <dpatel@apple.com>
 
 	Radar 4505813
@@ -177,9 +310,9 @@
 	* testsuite/g++.dg/4448096-2.C: Remove.
 
 2006-03-10  Fariborz Jahanian <fjahanian@apple.com>
-        
-        Radar 4407151
-        * obj-c++.dg/template-7.mm: New.
+
+	Radar 4407151
+	* obj-c++.dg/template-7.mm: New.
 
 2006-03-07  Stuart Hastings  <stuart@apple.com>
 
@@ -201,7 +334,7 @@
 	    Dorit Nuzman  <dorit@apple.com>
 
 	Radar 4375453
-        * gcc.dg/vect/vect-align-2.c: New.
+	* gcc.dg/vect/vect-align-2.c: New.
 
 2006-02-27  Stuart Hastings  <stuart@apple.com>
 
@@ -275,7 +408,7 @@
 	Only compile named-sections test -- don't assemble.
 
 2006-02-10  Dale Johannesen  <dalej@apple.com>
-	
+
 	Radar 4430139 4431497
 	* gcc.apple/bitreverse-10.c:  Return from main.
 	* gcc.apple/bitreverse-18.c:  New.
@@ -314,7 +447,7 @@
 	* objc.dg/break-in-ifstmt.m: New.
 
 2006-02-06  Devang Patel  <dpatel@apple.com>
-	
+
        Radar 4385002
        * gcc.dg/vect/vect-align-1.c: Update.
 
@@ -336,7 +469,7 @@
 
 	Radar 4208007
 	* gcc.dg/R4208007.c: New.
-	
+
 2006-01-31  Devang Patel  <dpatel@apple.com>
 
 	Radar 4382844
@@ -354,8 +487,8 @@
 
 2006-01-23  Devang Patel  <dpatel@apple.com>
 
-        Radar 4334498
-        * g++.dg/stab-4334498.C: New.
+	Radar 4334498
+	* g++.dg/stab-4334498.C: New.
 
 2006-01-20  Eric Christopher  <echristo@apple.com>
 
@@ -549,13 +682,13 @@
 
 2005-11-16  Devang Patel  <dpatel@apple.com>
 
-        Radar 4345760
-        * g++.dg/ss/ss.exp: Fix link test.
-        * gcc.dg/ss/ss.exp: Fix link test.
+	Radar 4345760
+	* g++.dg/ss/ss.exp: Fix link test.
+	* gcc.dg/ss/ss.exp: Fix link test.
 
 2005-11-15  Dale Johannesen  <dalej@apple.com>
 
-        * gcc.apple/pragma.c:  New.
+	* gcc.apple/pragma.c:  New.
 
 2005-11-14  Dale Johannesen  <dalej@apple.com>
 
@@ -587,9 +720,9 @@
 
 2005-11-07  Dale Johannesen  <dalej@apple.com>
 
-        gcc.dg/darwin64-abi.c:  Fix to test for 
-        correct location of rightmost bits of
-        struct pararmeters.
+	gcc.dg/darwin64-abi.c:  Fix to test for
+	correct location of rightmost bits of
+	struct pararmeters.
 
 2005-10-31  Devang Patel  <dpatel@apple.com>
 
@@ -630,7 +763,7 @@
 2005-10-11  Fariborz Jahanian <fjahanian@apple.com>
 
 	Radar 4291785
-	
+
 	objc.dg/naming-4.m: New
 	objc.dg/naming-5.m: New
 	obj-c++.dg/naming-1.mm: New
@@ -638,19 +771,19 @@
 
 2005-10-10  Fariborz Jahanian <fjahanian@apple.com>
 
-        Radar 4291099
+	Radar 4291099
 	obj-c++.dg/objc-gc-9.mm: New.
 
 2005-10-07  Fariborz Jahanian <fjahanian@apple.com>
 
-        Radar 4204796
+	Radar 4204796
 	obj-c++.dg/try-catch-12.mm: New
 	obj-c++.dg/try-catch-13.mm: New
 	obj-c++.dg/try-catch-14.mm: New
 	objc.dg/try-catch-11.m: New
 	objc.dg/try-catch-12.m: New
 	objc.dg/try-catch-13.m: New
-	
+
 2005-10-04  Fariborz Jahanian <fjahanian@apple.com>
 
 	Radar 4278236
@@ -668,7 +801,7 @@
 	gcc.apple/i386-att-stub-1.c:  New.
 
 2005-10-21  Devang Patel  <dpatel@apple.com>
- 
+
        * g++.dg/stab-types.C: New.
        * g++.dg/stab-types.h: New.
 
@@ -676,8 +809,8 @@
 
 	Radar 4300871
 	* g++.dg/bincl-2.C: New.
-        * g++.dg/bincl-2.h: New.
-        * g++.dg/bincl-22.h: New.
+	* g++.dg/bincl-2.h: New.
+	* g++.dg/bincl-22.h: New.
 
 2005-10-13  Stuart Hastings  <stuart@apple.com>
 
@@ -746,8 +879,8 @@
 
 2005-09-28  Devang Patel  <dpatel@apple.com>
 
-        * g++.dg/pch/pragma-1.C: New.
-        * g++.dg/pch/pragma-1.Hs: New.
+	* g++.dg/pch/pragma-1.C: New.
+	* g++.dg/pch/pragma-1.Hs: New.
 
 2005-09-28  Devang Patel  <dpatel@apple.com>
 
@@ -850,7 +983,7 @@
 	* gcc.dg/i386-lshiftrt-1.c: New
 
 2005-09-23  Mike Stump  <mrs@apple.com>
-	
+
 	Radar 4259442
 	* g++.dg/asm-block-12.C: Add.
 	* g++.dg/asm-block-13.C: Add.
@@ -878,16 +1011,16 @@
 
 2005-09-15  Devang Patel  <dpatel@apple.com>
 
-        dbxout_type rewrite.
-        * gcc.dg/stabs-attrib-vect-darwin.c: Update. 
-        * gcc.dg/stabs-4209166.c: New.
-        * gcc.dg/stabs-4223137.c: New.
-        * gcc.dg/stabs-4232445.c: New.
+	dbxout_type rewrite.
+	* gcc.dg/stabs-attrib-vect-darwin.c: Update.
+	* gcc.dg/stabs-4209166.c: New.
+	* gcc.dg/stabs-4223137.c: New.
+	* gcc.dg/stabs-4232445.c: New.
 	* obj-c++.dg/stabs-2.mm: Update.
 
 2005-09-15  Devang Patel  <dpatel@apple.com>
 
-        Radar 4241538
+	Radar 4241538
 	* gcc.dg/altivec-4241538.c: New.
 
 2005-09-08  Dale Johannesen  <dalej@apple.com>
@@ -913,7 +1046,7 @@
 
 2005-08-30  Fariborz Jahanian <fjahanian@apple.com>
 
-        Radar 4235138
+	Radar 4235138
 	* g++.dg/asm-nested-struct-1.C: New.
 	* gcc.apple/asm-nested-struct-1.c: New.
 
@@ -1150,7 +1283,7 @@
 
 2005-07-26  Dale Johannesen  <dalej@apple.com>
 
-        * gcc.apple/4182984.c:  New.
+	* gcc.apple/4182984.c:  New.
 
 2005-07-22  Devang Patel  <dpatel@apple.com>
 
@@ -1234,9 +1367,9 @@
 
 2005-07-06  Dale Johannesen  <dalej@apple.com>
 
-        Radar 4158356
-        * gcc.apple/4158356.c:  New.
-        * g++.dg/tree-ssa/ssa-sra-2.C:  Modified to pass.
+	Radar 4158356
+	* gcc.apple/4158356.c:  New.
+	* g++.dg/tree-ssa/ssa-sra-2.C:  Modified to pass.
 
 2005-07-04  Devang Patel  <dpatel@apple.com>
 
@@ -1327,7 +1460,7 @@
 2005-06-20  Dale Johannesen  <dalej@apple.com>
 
 	Radar 4151537
-        * objc.dg/nopicsetup.m:  New.
+	* objc.dg/nopicsetup.m:  New.
 
 2005-06-15  Devang Patel  <dpatel@apple.com>
 
@@ -1548,8 +1681,8 @@
 2005-04-14  Devang Patel  <dpatel@apple.com>
 
 	Radar 3972515
-        * lib/target-supports.exp (check_effective_target_vect_shif): New.
-        * gcc.dg/vect/vect-shift-1.c: New test.
+	* lib/target-supports.exp (check_effective_target_vect_shif): New.
+	* gcc.dg/vect/vect-shift-1.c: New test.
 
 2005-04-12  Devang Patel  <dpatel@apple.com>
 
@@ -1589,7 +1722,7 @@
 2005-04-07  Devang Patel  <dpatel@apple.com>
 
 	Radar 4069922
-        * g++.dg/tree-sra/ssa-sra-3.C: New test.
+	* g++.dg/tree-sra/ssa-sra-3.C: New test.
 
 2005-04-02  Ziemowit Laski  <zlaski@apple.com>
 
@@ -1696,7 +1829,7 @@
 
 	2005-01-18  Michael Matz  <matz@suse.de>
 
-        * gcc.dg/Wno-pointer-sign.c: New test for -Wno-pointer-sign.
+	* gcc.dg/Wno-pointer-sign.c: New test for -Wno-pointer-sign.
 
 2005-02-22  Dale Johannesen  <dalej@apple.com>
 
@@ -1788,7 +1921,7 @@
 
 2005-02-16  Fariborz Jahanian <fjahanian@apple.com>
 
-        Radar 3970655
+	Radar 3970655
 
 	* g++.dg/asm-function-13.C: New.
 	* gcc.apple/asm-function-13.c: New.
@@ -1812,7 +1945,7 @@
 2005-02-11  Devang Patel  <dpatel@apple.com>
 
 	Radar 3996800
-        * gcc.dg/pch/pch.exp: Test MACOSX_DEPLOYMENT_TARGET and -save-temps.
+	* gcc.dg/pch/pch.exp: Test MACOSX_DEPLOYMENT_TARGET and -save-temps.
 
 2005-02-10  Ziemowit Laski  <zlaski@apple.com>
 
@@ -1877,8 +2010,8 @@
 
 2004-01-31  Devang Patel  <dpatel@apple.com>
 
-        Radar 3978580
-        * gcc.apple/const-cfstring-4.c: New test.
+	Radar 3978580
+	* gcc.apple/const-cfstring-4.c: New test.
 
 2005-01-31  Dale Johannesen  <dalej@apple.com>
 
@@ -1906,7 +2039,7 @@
 
 2005-01-27  Matt Austern  <austern@apple.com>
 
-        Radar 3971445
+	Radar 3971445
 	* obj-c++.dg/template-5.mm: New.
 	* obj-c++.dg/template-6.mm: New.
 
@@ -1918,7 +2051,7 @@
 2005-01-26  Matt Austern  <austern@apple.com>
 
 	Radar 3972840
-        * g++.dg/kext9.C: New.
+	* g++.dg/kext9.C: New.
 
 2005-01-26  Devang Patel  <dpatel@apple.com>
 
@@ -1997,8 +2130,8 @@
 
 2005-01-19  Matt Austern  <austern@apple.com>
 
-            Radar 3960754
-            * obj-c++.dg/overload-1.mm: New.
+	    Radar 3960754
+	    * obj-c++.dg/overload-1.mm: New.
 
 2005-01-17  Ziemowit Laski  <zlaski@apple.com>
 
@@ -2060,10 +2193,10 @@
 	* gcc.apple/notailcall-1.c: Now tests PPC in addition to x86.
 
 2005-01-06  Andrew Pinski  <pinskia@physics.uc.edu>
-            Stuart Hastings  <stuart@apple.com>
+	    Stuart Hastings  <stuart@apple.com>
 
-        Radar 3830232
-        * gcc/testsuite/gcc.apple/notailcall-1.c: New testcase (also recorded in gcc/ChangeLog.apple-ppc).
+	Radar 3830232
+	* gcc/testsuite/gcc.apple/notailcall-1.c: New testcase (also recorded in gcc/ChangeLog.apple-ppc).
 
 2005-01-06  Robert Bowdidge <bowdidge@apple.com>
 
@@ -2071,7 +2204,7 @@
 
 2005-01-06  Ziemowit Laski  <zlaski@apple.com>
 
-        Radar 3925982
+	Radar 3925982
 	* obj-c++.dg/encode-1.mm: New.
 	* objc.dg/encode-6.m: New.
 
@@ -2089,7 +2222,7 @@
 	* obj-c++.dg/empty-private-1.mm: New test.
 
 2005-01-05  Mark Mitchell  <mark@codesourcery.com>
-            Matt Austern  <austern@apple.com>
+	    Matt Austern  <austern@apple.com>
 
 	Radar 3934803
 	PR c++/18369
@@ -2122,14 +2255,14 @@
 
 2004-12-20  Matt Austern  <austern@apple.com>
 
-        Radar 3845716
-        PR c++/19044
+	Radar 3845716
+	PR c++/19044
 	* g++.dg/ext/builtin6.C: New
 
 2004-12-16  Ziemowit Laski  <zlaski@apple.com>
 
 	Radar 3921172 (from mainline)
-        * objc.dg/stabs-1.m: New.
+	* objc.dg/stabs-1.m: New.
 
 2004-12-15  Dale Johannesen  <dalej@apple.com>
 
@@ -2168,8 +2301,8 @@
 
 2004-12-10  Devang Patel  <dpatel@apple.com>
 
-        Radar 3909961
-        * gcc.apple/Wextra-tokens-2.c: New test.
+	Radar 3909961
+	* gcc.apple/Wextra-tokens-2.c: New test.
 
 2004-12-07  Dale Johannesen  <dalej@apple.com>
 
@@ -2255,7 +2388,7 @@
 
 2004-11-08  Ziemowit Laski  <zlaski@apple.com>
 
-        Radar 3853429
+	Radar 3853429
 	* objc.dg/const-str-8.m, objc.dg/const-str-9.m,
 	objc.dg/const-cfstring-3.m, objc.dg/const-cfstring-4.m:
 	New tests.
@@ -2289,7 +2422,7 @@
 
 2004-10-29  Devang Patel  <dpatel@apple.com>
 
-        FSF merge cleanup.
+	FSF merge cleanup.
 	* gcc.dg/tree-ssa-vect/ifc-03.c: Remove test.
 	* gcc.dg/tree-ssa-vect/ifc-03.c: Remove.test.
 	* gcc.dg/tree-ssa-vect/tree-vect.h (exit): Add extern decl.
@@ -2380,9 +2513,9 @@
 
 2004-10-18  Robert Bowdidge <bowdidge@apple.com>
 
-        Radar 3843618
-        * Add g++.dg/lookup/koenig4.C: Bring the fix for PR/17829 over
-        from mainline so that Finder_FE will build again.
+	Radar 3843618
+	* Add g++.dg/lookup/koenig4.C: Bring the fix for PR/17829 over
+	from mainline so that Finder_FE will build again.
 
 2004-10-18  Ziemowit Laski  <zlaski@apple.com>
 
@@ -2391,8 +2524,8 @@
 
 2004-10-18  Devang Patel  <dpatel@apple.com>
 
-        Radar 3753408
-        * gcc.dg/tree-ssa-vect/tree-ssa-vect-21.c: Remove test.
+	Radar 3753408
+	* gcc.dg/tree-ssa-vect/tree-ssa-vect-21.c: Remove test.
 
 2004-10-13  Geoffrey Keating  <geoffk@apple.com>
 
@@ -2474,11 +2607,11 @@
 
 	Remove Symbol Separation.
 	Radar 3555440. Reviewed by Mike Stump.
-        * gcc.dg/ss/README: Remove.
-        * gcc.dg/ss/ss.exp: Remove.
-        * gcc.dg/ss/one.c: Remove.
-        * gcc.dg/ss/one.ssh: Remove.
-        * gcc.dg/ss/ss-cmd1.c: Remove.
+	* gcc.dg/ss/README: Remove.
+	* gcc.dg/ss/ss.exp: Remove.
+	* gcc.dg/ss/one.c: Remove.
+	* gcc.dg/ss/one.ssh: Remove.
+	* gcc.dg/ss/ss-cmd1.c: Remove.
 
 2004-08-03  Stan Shebs  <shebs@apple.com>
 
@@ -2495,8 +2628,8 @@
 
 2004-07-30  Devang Patel  <dpatel@apple.com>
 
-         Re-implement -fwritable-strings support.
-         Radar : 3699482
+	Re-implement -fwritable-strings support.
+	Radar : 3699482
 
 	* gcc.apple/fwritable-strings.c: New test.
 

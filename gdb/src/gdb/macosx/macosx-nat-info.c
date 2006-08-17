@@ -21,6 +21,17 @@
    Foundation, Inc., 59 Temple Place - Suite 330,
    Boston, MA 02111-1307, USA.  */
 
+/* The name of the ppc_thread_state structure, and the names of its
+   members, have been changed for Unix conformance reasons.  The easiest
+   way to have gdb build on systems with the older names and systems
+   with the newer names is to build this compilation unit with the
+   non-conformant define below.  This doesn't seem to cause the resulting
+   binary any problems but it seems like it could cause us problems in
+   the future.  It'd be good to remove this at some point when compiling on
+   Tiger is no longer important.  */
+
+#define __DARWIN_UNIX03 0
+
 #include "defs.h"
 #include "symtab.h"
 #include "gdbtypes.h"

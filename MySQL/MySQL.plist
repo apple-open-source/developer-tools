@@ -1,0 +1,22 @@
+<plist version="1.0">
+<array>
+<dict>
+        <key>OpenSourceProject</key>
+        <string>MySQL</string>
+        <key>OpenSourceVersion</key>
+        <string>4.1.13a</string>
+        <key>OpenSourceURL</key>
+        <string>http://mysql.he.net/Downloads/MySQL-4.1/mysql-4.1.13a.tar.gz</string>
+        <key>OpenSourceSHA1</key>
+        <string>77c5c5dd418235dc82a2e0c120dc695d97dc6a8e</string>
+        <key>OpenSourceImportDate</key>
+        <string>2005-08-15</string>
+        <key>OpenSourceModifications</key>
+        <array/>
+        <key>OpenSourceLicense</key>
+        <string>GPL</string>
+        <key>OpenSourceLicenseFile</key>
+        <string>MySQL.txt</string>
+</dict>
+</array>
+</plist>

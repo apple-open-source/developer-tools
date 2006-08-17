@@ -1748,14 +1748,15 @@ static int should_auto_raise_load_state = 0;
    allow the value of the "auto-raise-load-level" set variable to
    override the setting.  But if gdb needs to have this done, set
    FORCE to 1.  
-   Returns the original load state, or -1 for an error.  */
+   Returns the original load state, or -2 if the gdb auto-raise 
+   settings rejected the change, or -1 for an error.  */
 
 int
 objfile_set_load_state (struct objfile *o, int load_state, int force)
 {
 
   if (!force && !should_auto_raise_load_state)
-    return -1;
+    return -2;
 
   /* FIXME: For now, we are not going to REDUCE the load state.  That is
      because we can't track which varobj's would need to get reconstructed
@@ -1774,7 +1775,7 @@ objfile_set_load_state (struct objfile *o, int load_state, int force)
 
 /* Set the symbol loading level of the objfile that includes
    the address PC to LOAD_STATE.  FORCE has the same meaning
-   as for objfile_set_load_state.  */
+   as for objfile_set_load_state, as does the return value.  */
 
 int
 pc_set_load_state (CORE_ADDR pc, int load_state, int force)
@@ -1795,13 +1796,16 @@ pc_set_load_state (CORE_ADDR pc, int load_state, int force)
   
 }
 
+/* Sets the load state of an objfile by name.  FORCE, LOAD_STATE
+   and the return value are the same as for objfile_set_load_state.  */
+
 int
 objfile_name_set_load_state (char *name, int load_state, int force)
 {
   struct objfile *tmp_obj;
 
   if (!force && !should_auto_raise_load_state)
-    return -1;
+    return -2;
 
   if (name == NULL)
     return -1;

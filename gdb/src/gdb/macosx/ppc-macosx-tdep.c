@@ -39,6 +39,7 @@
 #include "frame-unwind.h"
 #include "dummy-frame.h"
 #include "gdb_assert.h"
+#include "complaints.h"
 
 #include "libbfd.h"
 
@@ -151,95 +152,6 @@ ppc_debug (const char *fmt, ...)
     }
 }
 
-static struct ppc_frame_cache *
-ppc_alloc_frame_cache (void)
-{
-  struct ppc_frame_cache *cache;
-  int i;
-
-  cache = FRAME_OBSTACK_ZALLOC (struct ppc_frame_cache);
-
-  cache->magic = PPC_FRAME_MAGIC;
-
-  cache->saved_regs =
-    (CORE_ADDR *) frame_obstack_zalloc ((NUM_REGS) * sizeof (CORE_ADDR));
-
-  cache->prev_pc = (CORE_ADDR) - 1;
-  cache->prev_sp = (CORE_ADDR) - 1;
-
-  cache->stack = (CORE_ADDR) - 1;
-  cache->frame = (CORE_ADDR) - 1;
-  cache->pc = (CORE_ADDR) - 1;
-
-  for (i = 0; i < NUM_REGS; i++)
-    cache->saved_regs[i] = -1;
-  cache->saved_regs_valid = 0;
-
-  cache->properties_valid = 0;
-
-  cache->boundaries_status = 0;
-
-  return cache;
-}
-
-struct ppc_frame_cache *
-ppc_frame_cache (struct frame_info *next_frame, void **this_cache)
-{
-  struct ppc_frame_cache *cache;
-  ppc_function_boundaries *bounds;
-  ppc_function_boundaries lbounds;
-  CORE_ADDR pc;
-  int before_frame_setup;
-
-  if (*this_cache)
-    {
-      cache = *this_cache;
-      gdb_assert (cache->magic == PPC_FRAME_MAGIC);
-      return cache;
-    }
-
-  cache = ppc_alloc_frame_cache ();
-  *this_cache = cache;
-
-  cache->stack = frame_unwind_register_unsigned (next_frame, SP_REGNUM);
-  if (cache->stack == 0)
-    return cache;
-
-  cache->frame = ppc_frame_find_prev_fp (next_frame, this_cache);
-
-  cache->pc = frame_func_unwind (next_frame);
-
-  /* When we're within the prologue, the function looks frameless and
-     should be treated as such.  */
-  bounds = ppc_frame_function_boundaries (next_frame, this_cache);
-  if (bounds != NULL)
-    {
-      lbounds = *bounds;
-      pc = frame_pc_unwind (next_frame);
-      before_frame_setup = (pc >= lbounds.prologue_start
-			    && pc < lbounds.body_start);
-      if (!before_frame_setup)
-	cache->stack = read_memory_unsigned_integer (cache->stack, TARGET_PTR_BIT / 8);
-    }
-
-  extern int frame_debug;
-  if (frame_debug)
-    {
-      fprintf_unfiltered (gdb_stdlog, "\
-{{ ppc_frame_cache (nxframe=%d) ",
-			  frame_relative_level (next_frame));
-      fprintf_unfiltered (gdb_stdlog, "->");
-      fprintf_unfiltered (gdb_stdlog, " pc=0x%llx", (unsigned long long) cache->pc);
-      fprintf_unfiltered (gdb_stdlog, " stack=0x%llx", (unsigned long long) cache->stack);
-      fprintf_unfiltered (gdb_stdlog, " frame=0x%llx", (unsigned long long) cache->frame);
-      fprintf_unfiltered (gdb_stdlog, " }}\n");
-    }
-
-  return cache;
-}
-
-/* function implementations */
-
 void
 ppc_print_extra_frame_info (struct frame_info *next_frame, void **this_cache)
 {
@@ -285,27 +197,98 @@ if (get_frame_type (get_prev_frame (next_frame)) == DUMMY_FRAME)
     }
 }
 
-static struct frame_id
-ppc_unwind_dummy_id (struct gdbarch *gdbarch, struct frame_info *next_frame)
+static struct ppc_frame_cache *
+ppc_alloc_frame_cache (void)
 {
-  gdb_byte buf[8];
-  CORE_ADDR fp;
+  struct ppc_frame_cache *cache;
+  int i;
 
-  frame_unwind_register (next_frame, SP_REGNUM, buf);
-  fp =
-    extract_unsigned_integer (buf,
-                              register_size (current_gdbarch, SP_REGNUM));
+  cache = FRAME_OBSTACK_ZALLOC (struct ppc_frame_cache);
 
-  return frame_id_build (fp, frame_pc_unwind (next_frame));
+  cache->magic = PPC_FRAME_MAGIC;
+
+  cache->saved_regs =
+    (CORE_ADDR *) frame_obstack_zalloc ((NUM_REGS) * sizeof (CORE_ADDR));
+
+  cache->prev_pc = (CORE_ADDR) -1;
+  cache->prev_sp = (CORE_ADDR) -1;
+
+  cache->sp = (CORE_ADDR) -1;
+  cache->fp = (CORE_ADDR) -1;
+  cache->pc = (CORE_ADDR) -1;
+  cache->fp_for_dereferencing = (CORE_ADDR) -1;
+
+  for (i = 0; i < NUM_REGS; i++)
+    cache->saved_regs[i] = -1;
+  cache->saved_regs_valid = 0;
+
+  cache->properties_valid = 0;
+
+  cache->boundaries_status = 0;
+
+  return cache;
 }
 
-CORE_ADDR
-ppc_frame_find_prev_pc (struct frame_info * next_frame, void **this_cache)
+struct ppc_frame_cache *
+ppc_frame_cache (struct frame_info *next_frame, void **this_cache)
 {
+  struct ppc_frame_cache *cache;
 
+  if (*this_cache)
+    {
+      cache = *this_cache;
+      gdb_assert (cache->magic == PPC_FRAME_MAGIC);
+      return cache;
+    }
+
+  cache = ppc_alloc_frame_cache ();
+  *this_cache = cache;
+
+  cache->sp = ppc_frame_unwind_sp (next_frame, this_cache);
+  if (cache->sp == 0)
+    return cache;
+
+  cache->fp = ppc_frame_unwind_fp (next_frame, this_cache);
+
+  /* The PC field has the value of the function start unless we can't
+     determine a function start address, e.g. in a completely stripped
+     executable.  In that case we'll use the current PC value.  */
+
+  cache->pc = frame_func_unwind (next_frame);
+  if (cache->pc == 0)
+    cache->pc = frame_pc_unwind (next_frame);
+
+  /* A frame pointer which can be dereferenced to find the caller's
+     frame pointer and follow the chain.  */
+
+  cache->fp_for_dereferencing = ppc_frame_unwind_fp_for_dereferencing 
+                                                      (next_frame, this_cache);
+
+  extern int frame_debug;
+  if (frame_debug)
+    {
+      fprintf_unfiltered (gdb_stdlog, "\
+{{ ppc_frame_cache (nxframe=%d) ",
+			  frame_relative_level (next_frame));
+      fprintf_unfiltered (gdb_stdlog, "->");
+      fprintf_unfiltered (gdb_stdlog, " pc=0x%s", paddr_nz (cache->pc));
+      fprintf_unfiltered (gdb_stdlog, " sp=0x%s", paddr_nz (cache->sp));
+      fprintf_unfiltered (gdb_stdlog, " fp=0x%s", paddr_nz (cache->fp));
+      fprintf_unfiltered (gdb_stdlog, " }}\n");
+    }
+
+  return cache;
+}
+
+/* Assuming a frame chain of: (outer) prev <-> this <-> next (inner)
+   return the value of prev's pc.  */
+
+CORE_ADDR
+ppc_frame_find_prev_pc (struct frame_info *next_frame, void **this_cache)
+{
   struct ppc_frame_cache *cache;
   ppc_function_properties *props = NULL;
-  CORE_ADDR prev;
+  CORE_ADDR prev_sp, this_pc;
 
   cache = ppc_frame_cache (next_frame, this_cache);
 
@@ -313,34 +296,41 @@ ppc_frame_find_prev_pc (struct frame_info * next_frame, void **this_cache)
   if (props == NULL)
     return 0;
 
-  prev = ppc_frame_find_prev_sp (next_frame, this_cache);
+  prev_sp = ppc_frame_find_prev_sp (next_frame, this_cache);
+  this_pc = frame_pc_unwind (next_frame);
 
-  if ((props->lr_saved) && (props->lr_saved < frame_pc_unwind (next_frame)))
+  /* Has the return address (link register) been saved to memory already?  */
+  if (props->lr_saved && props->lr_saved < this_pc)
     {
-      return read_memory_unsigned_integer (prev + props->lr_offset,
-                                           gdbarch_addr_bit (current_gdbarch)
-                                           / 8);
+      return read_memory_unsigned_integer (prev_sp + props->lr_offset,
+                                       gdbarch_addr_bit (current_gdbarch) / 8);
     }
-  else if ((props->lr_reg >= 0) &&
-           (props->lr_invalid) &&
-           (frame_pc_unwind (next_frame) > props->lr_invalid) &&
-           (frame_pc_unwind (next_frame) <= props->lr_valid_again))
+  else if (props->lr_reg >= 0
+           && props->lr_invalid
+           && this_pc > props->lr_invalid
+           && this_pc <= props->lr_valid_again)
     {
+      /* Or is the link register value in a register?  */
       return frame_unwind_register_unsigned (next_frame, props->lr_reg);
     }
   else
     {
-      return frame_unwind_register_unsigned (next_frame,
-                                             PPC_MACOSX_LR_REGNUM);
+      return frame_unwind_register_unsigned (next_frame, PPC_MACOSX_LR_REGNUM);
     }
 }
 
+/* Given NEXT_FRAME, find the fp for NEXT_FRAME->prev, i.e. the 'this' frame. 
+   If this function is in its prologue, the address of what the frame pointer
+   WILL be set to is returned.  This gives you a consistent fp as you stepi
+   through the function prologue/body but it means that you can't dereference
+   the stored memory at the fp and get the caller's fp.  */
+
 CORE_ADDR
-ppc_frame_find_prev_fp (struct frame_info * next_frame, void **this_cache)
+ppc_frame_unwind_fp (struct frame_info *next_frame, void **this_cache)
 {
   struct ppc_frame_cache *cache;
   ppc_function_properties *props;
-  CORE_ADDR prev_fp;
+  CORE_ADDR this_fp, this_pc, this_func, next_sp;
 
   cache = ppc_frame_cache (next_frame, this_cache);
 
@@ -348,49 +338,219 @@ ppc_frame_find_prev_fp (struct frame_info * next_frame, void **this_cache)
   if (props == NULL)
     return frame_unwind_register_unsigned (next_frame, SP_REGNUM);
 
-  if (props->frameptr_used && (props->frameptr_reg > 0))
-    {
-      /* Be a little bit careful here.  We are trying to unwind the frameptr register,
-         but we might get it wrong (for instance because we mis-parsed a prolog and
-         got the stored location wrong.)  So if the fp value looks ridiculous, fall
-         back on the SP value - which we seem to get right more consistently... */
+  if (props->frameless)
+    return frame_unwind_register_unsigned (next_frame, SP_REGNUM);
 
-      CORE_ADDR this_sp = get_frame_register_unsigned (next_frame, SP_REGNUM);
-      prev_fp = frame_unwind_register_unsigned (next_frame, props->frameptr_reg);
-      if (prev_fp >= this_sp && prev_fp - this_sp < 0xfffff)
-          return prev_fp;
+  this_pc = frame_pc_unwind (next_frame);
+  this_func = frame_func_unwind (next_frame);
+
+  /* The stack pointer (r1) hasn't yet been changed, but it will be moved
+     a little while later.  Compute its final address and return that as 
+     the frame ptr value.  
+     It is desirable that the frame pointer's value not change while
+     stepping through a function so the user doesn't see spurious 
+     "function stepped into" type messages from gdb.  */
+
+  if (props->stack_offset_pc != INVALID_ADDRESS
+      && this_pc >= this_func
+      && this_pc <= props->stack_offset_pc)
+    {
+      CORE_ADDR this_sp;
+      this_sp = frame_unwind_register_unsigned (next_frame, SP_REGNUM);
+      return this_sp - props->offset;
+    }
+
+  /* No frame pointer is used in this function, so return the stack pointer's
+     value.  To get to this conditional, the stack pointer (r1) has already
+     been adjusted for this function's stack frame so no additional adjustment 
+     is necessary.  */
+
+  if (props->frameptr_used == 0)
+    return frame_unwind_register_unsigned (next_frame, SP_REGNUM);
+
+  /* The stack pointer (r1) has been moved to its final address but the
+     value hasn't been copied into the frame pointer reg (often r30) yet.
+     Return the value in r1 as the frame pointer value.  */
+
+  if (props->frameptr_used && props->frameptr_reg > 0
+      && props->frameptr_pc != INVALID_ADDRESS
+      && this_pc > props->stack_offset_pc
+      && this_pc <= props->frameptr_pc)
+    {
+      return frame_unwind_register_unsigned (next_frame, SP_REGNUM);
+    }
+
+  /* With a few safety checks, we can safely return the value of the frame
+     pointer register at this point.  */
+
+  if (props->frameptr_used && props->frameptr_reg > 0)
+    {
+      /* Be a little bit careful here.  We are trying to unwind the
+	 frameptr register, but we might get it wrong (for instance
+	 because we mis-parsed a prologue and got the stored location
+	 wrong.)  So if the fp value looks ridiculous, fall back
+	 on the SP value - which we seem to get right more
+	 consistently... */
+
+      next_sp = get_frame_register_unsigned (next_frame, SP_REGNUM);
+      this_fp = frame_unwind_register_unsigned (next_frame, 
+                                                props->frameptr_reg);
+      if (this_fp >= next_sp && this_fp - next_sp < 0xfffff)
+          return this_fp;
+      complaint (&symfile_complaints, 
+                                  "sanity check failed in ppc_frame_unwind_fp");
+    }
+
+  /* And if all else fails, return the value of the stack pointer (r1) 
+     register.  */
+
+  return frame_unwind_register_unsigned (next_frame, SP_REGNUM);
+}
+
+/* Given NEXT_FRAME, find the fp for NEXT_FRAME->prev, i.e. the 'this' frame
+   which can be dereferenced. 
+   When ppc_frame_unwind_fp() is called in a prologue you'll get an address
+   of what the frame pointer WILL be, not what it is right now.  But over in
+   ppc_frame_this_id () we're going to dereference it to walk the chain of
+   frames to see if this is the last real frame.
+   So for the purposes of dereferencing, return a frame pointer that is
+   likely to dereference to something sensible.  */
+
+CORE_ADDR
+ppc_frame_unwind_fp_for_dereferencing (struct frame_info *next_frame, 
+                                       void **this_cache)
+{
+  struct ppc_frame_cache *cache;
+  ppc_function_properties *props;
+  CORE_ADDR this_fp, this_pc, next_sp;
+
+  cache = ppc_frame_cache (next_frame, this_cache);
+
+  props = ppc_frame_function_properties (next_frame, this_cache);
+  if (props == NULL)
+    return frame_unwind_register_unsigned (next_frame, SP_REGNUM);
+
+  this_pc = frame_pc_unwind (next_frame);
+
+  /* If we've executed the instructions that set up the frame pointer reg
+     already, return that.  */
+
+  if (props->frameptr_used && props->frameptr_reg > 0
+      && this_pc > props->frameptr_pc)
+    {
+      /* Be a little bit careful here.  We are trying to unwind the
+	 frameptr register, but we might get it wrong (for instance
+	 because we mis-parsed a prologue and got the stored location
+	 wrong.)  So if the fp value looks ridiculous, fall back
+	 on the SP value - which we seem to get right more
+	 consistently... */
+
+      next_sp = get_frame_register_unsigned (next_frame, SP_REGNUM);
+      this_fp = frame_unwind_register_unsigned (next_frame, 
+                                                props->frameptr_reg);
+      if (this_fp >= next_sp && this_fp - next_sp < 0xfffff)
+          return this_fp;
+      complaint (&symfile_complaints, 
+                "sanity check failed in ppc_frame_unwind_fp_for_dereferencing");
+    }
+
+
+  /* Otherwise let's assume that the stack pointer points to memory
+     that can be dereferenced to get to the previous frame.  */
+
+  return frame_unwind_register_unsigned (next_frame, SP_REGNUM);
+}
+
+
+/* Given NEXT_FRAME, find the sp for NEXT_FRAME->prev, i.e. this frame. */
+
+CORE_ADDR
+ppc_frame_unwind_sp (struct frame_info *next_frame, void **this_cache)
+{
+  struct ppc_frame_cache *cache;
+  ppc_function_properties *props;
+  CORE_ADDR this_pc;
+
+  cache = ppc_frame_cache (next_frame, this_cache);
+
+  props = ppc_frame_function_properties (next_frame, this_cache);
+  if (props == NULL)
+    return frame_unwind_register_unsigned (next_frame, SP_REGNUM);
+
+  this_pc = frame_pc_unwind (next_frame);
+
+  /* When we're early in the prologue neither the stack pointer nor
+     the frame pointer have been set yet - they still have the
+     caller's values - but they'll be set up in a few instructions.
+     Figure out what the real sp value will be for this frame and
+     return that.  */
+
+  if (this_pc >= frame_func_unwind (next_frame)
+      && props->stack_offset_pc != INVALID_ADDRESS
+      && this_pc <= props->stack_offset_pc)
+    {
+      return frame_unwind_register_unsigned 
+                                    (next_frame, SP_REGNUM) - props->offset;
     }
 
   return frame_unwind_register_unsigned (next_frame, SP_REGNUM);
 }
 
+
+/* Assuming a frame chain of: (outer) prev <-> this <-> next (inner)
+   return the value of prev's stack pointer.  */
+
 CORE_ADDR
-ppc_frame_find_prev_sp (struct frame_info * next_frame, void **this_cache)
+ppc_frame_find_prev_sp (struct frame_info *next_frame, void **this_cache)
 {
   ppc_function_properties *props = NULL;
-  CORE_ADDR sp;
-  CORE_ADDR pc;
+  CORE_ADDR this_sp, this_pc, this_func;
 
-  sp = frame_unwind_register_unsigned (next_frame, SP_REGNUM);
-  if (sp == 0)
+  /* Get 'this' frame's stack pointer and prologue analysis.  */
+
+  this_sp = frame_unwind_register_unsigned (next_frame, SP_REGNUM);
+  if (this_sp == 0)
     return 0;
 
   props = ppc_frame_function_properties (next_frame, this_cache);
   if (props == NULL)
     return 0;
 
-  if (props->frameless)
-    return sp;
+  /* If 'this' is frameless, 'prev's stack pointer is the same as
+     the stack pointer in 'this'.  */
 
-  /* If we're in the prologue prior to frame setup, act as if the
+  if (props->frameless)
+    return this_sp;
+
+  this_pc = frame_pc_unwind (next_frame);
+  this_func = frame_func_unwind (next_frame);
+
+  /* If we're in the 'this' prologue prior to frame setup, act as if the
      function was frameless, otherwise dereferencing the sp will go
      one frame too far.  */
-  pc = frame_pc_unwind (next_frame);
-  if (pc >= frame_func_unwind (next_frame) 
-      && (props->frameptr_pc != INVALID_ADDRESS) && (pc < props->frameptr_pc))
-    return sp;
+  if (this_pc >= this_func
+      && props->stack_offset_pc != INVALID_ADDRESS
+      && this_pc <= props->stack_offset_pc)
+    {
+      return this_sp;
+    }
 
-  return read_memory_unsigned_integer (sp,
+  /* If there is a frame pointer (r30) set up, dereference from that instead
+     of the stack pointer (r1).  The stack pointer will be moved down if this
+     is an alloca/variable length array function and will no longer dereference
+     to the saved stack pointer correctly.  */
+
+   if (props->frameptr_used && props->frameptr_reg > 0
+      && props->frameptr_pc != INVALID_ADDRESS
+      && this_pc > props->frameptr_pc)
+    {
+      this_sp = frame_unwind_register_unsigned 
+                                             (next_frame, props->frameptr_reg);
+    }
+
+  /* Get 'prev's stored sp off the stack.  */
+
+  return read_memory_unsigned_integer (this_sp,
                                        gdbarch_addr_bit (current_gdbarch) /
                                        8);
 }
@@ -467,9 +627,9 @@ ppc_register_virtual_type (struct gdbarch *gdbarch, int n)
       || (n == PPC_MACOSX_CTR_REGNUM)
       || (n == PPC_MACOSX_XER_REGNUM))
     {
-      /* I think it's okay to always treat registers as long long.  We always use
-         the 64 bit calls even on G4 systems, and let the system cut this down to 32
-         bits.  */
+      /* I think it's okay to always treat registers as long long.
+	 We always use the 64 bit calls even on G4 systems, and let
+	 the system cut this down to 32 bits.  */
       return builtin_type_unsigned_long_long;
     }
   if ((n >= PPC_MACOSX_FIRST_VP_REGNUM) && (n <= PPC_MACOSX_LAST_VP_REGNUM))
@@ -509,7 +669,7 @@ ppc_frame_base_address (struct frame_info *next_frame, void **this_cache)
 {
   struct ppc_frame_cache *cache = ppc_frame_cache (next_frame, this_cache);
 
-  return cache->frame;
+  return cache->fp;
 }
 
 static CORE_ADDR
@@ -521,11 +681,13 @@ ppc_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
 static void
 ppc_frame_prev_register (struct frame_info *next_frame, void **this_cache,
                          int regnum, int *optimizedp,
-                         enum lval_type *lvalp, CORE_ADDR * addrp,
+                         enum lval_type *lvalp, CORE_ADDR *addrp,
                          int *realnump, gdb_byte *valuep)
 {
   struct ppc_frame_cache *cache = ppc_frame_cache (next_frame, this_cache);
   CORE_ADDR *saved_regs = NULL;
+  ppc_function_properties *props;
+  props = ppc_frame_function_properties (next_frame, this_cache);
 
   if (regnum == SP_REGNUM)
     {
@@ -605,37 +767,51 @@ ppc_frame_prev_register (struct frame_info *next_frame, void **this_cache,
                          optimizedp, lvalp, addrp, realnump, valuep);
 }
 
+static struct frame_id
+ppc_unwind_dummy_id (struct gdbarch *gdbarch, struct frame_info *next_frame)
+{
+  gdb_byte buf[8];
+  CORE_ADDR fp;
+
+  frame_unwind_register (next_frame, SP_REGNUM, buf);
+  fp =
+    extract_unsigned_integer (buf,
+                              register_size (current_gdbarch, SP_REGNUM));
+
+  return frame_id_build (fp, frame_pc_unwind (next_frame));
+}
+
 static void
 ppc_frame_this_id (struct frame_info *next_frame, void **this_cache,
                    struct frame_id *this_id)
 {
+  ULONGEST prev_frame_addr = 0;
   struct ppc_frame_cache *cache = ppc_frame_cache (next_frame, this_cache);
 
-  if (cache->stack == 0)
+  if (cache->sp == 0 || cache->fp == 0)
     {
       *this_id = null_frame_id;
       return;
     }
-  else
+
+  /* This double dereference check is needed to see if we're on the
+     last frame from a stripped executable or a thread that doesn't
+     have a main() function to stop at.  If you remove this you'll get
+     (best case), an extra frame on each thread with an address of 0x0.  */
+
+  if (safe_read_memory_unsigned_integer
+      (cache->fp_for_dereferencing, TARGET_PTR_BIT / 8, &prev_frame_addr))
     {
-      ULONGEST prev_frame_addr = 0;
       if (safe_read_memory_unsigned_integer
-          (cache->frame, TARGET_PTR_BIT / 8, &prev_frame_addr))
-        {
-          if (safe_read_memory_unsigned_integer
-              (prev_frame_addr, TARGET_PTR_BIT / 8, &prev_frame_addr))
-            if (prev_frame_addr == 0)
-              {
-                *this_id = null_frame_id;
-                return;
-              }
-        }
+          (prev_frame_addr, TARGET_PTR_BIT / 8, &prev_frame_addr))
+        if (prev_frame_addr == 0)
+          {
+            *this_id = null_frame_id;
+            return;
+          }
     }
 
-  /* cache->stack is the previous function's frame, works better as id
-     in prologues, because, technically, the frame doesn't exist
-     yet, and shouldn't be used.  */
-  (*this_id) = frame_id_build (cache->stack, cache->pc);
+  (*this_id) = frame_id_build (cache->fp, cache->pc);
 }
 
 static struct ppc_frame_cache *
@@ -659,14 +835,13 @@ ppc_sigtramp_frame_cache (struct frame_info *next_frame, void **this_cache)
   cache = ppc_alloc_frame_cache ();
   *this_cache = cache;
 
-  cache->stack = frame_unwind_register_unsigned (next_frame, SP_REGNUM);
-  if (cache->stack == 0)
+  cache->sp = frame_unwind_register_unsigned (next_frame, SP_REGNUM);
+  if (cache->sp == 0)
     return cache;
 
   cache->pc = frame_func_unwind (next_frame);
-  cache->frame = cache->stack;
 
-  sigframe = read_memory_unsigned_integer (cache->stack, TARGET_PTR_BIT / 8);
+  sigframe = read_memory_unsigned_integer (cache->sp, TARGET_PTR_BIT / 8);
   context =
     read_memory_unsigned_integer (sigframe + 0xd4, TARGET_PTR_BIT / 8);
   length = read_memory_unsigned_integer (sigframe + 0xd0, TARGET_INT_BIT / 8);
@@ -747,7 +922,7 @@ ppc_sigtramp_frame_this_id (struct frame_info *next_frame, void **this_cache,
     ppc_sigtramp_frame_cache (next_frame, this_cache);
 
   /* See the end of ppc_push_dummy_call.  */
-  (*this_id) = frame_id_build (cache->frame, frame_pc_unwind (next_frame));
+  (*this_id) = frame_id_build (cache->fp, frame_pc_unwind (next_frame));
 }
 
 static void
@@ -775,7 +950,7 @@ ppc_sigtramp_frame_prev_register (struct frame_info *next_frame,
       if (valuep)
         {
           int reg_size = register_size (current_gdbarch, regnum);
-          if ((regnum == PPC_MACOSX_CR_REGNUM) || (regnum == PPC_MACOSX_MQ_REGNUM))
+          if (regnum == PPC_MACOSX_CR_REGNUM || regnum == PPC_MACOSX_MQ_REGNUM)
               size = 4;
           else if (PPC_MACOSX_IS_GP_REGNUM (regnum) || PPC_MACOSX_IS_GSP_REGNUM (regnum))
               size = cache->sigtramp_gp_store_size;
@@ -856,7 +1031,8 @@ ppc_fetch_pointer_argument (struct frame_info *frame, int argi,
 }
 
 static CORE_ADDR
-ppc_integer_to_address (struct gdbarch *gdbarch, struct type *type, const gdb_byte *buf)
+ppc_integer_to_address (struct gdbarch *gdbarch, struct type *type, 
+                        const gdb_byte *buf)
 {
   gdb_byte *tmp = alloca (TYPE_LENGTH (builtin_type_void_data_ptr));
   LONGEST val = unpack_long (type, buf);
@@ -1136,7 +1312,7 @@ ppc_fast_show_stack (int show_frames, int get_names,
 	      goto ppc_count_finish;
 	    }
           if (!safe_read_memory_unsigned_integer
-              (prev_fp + PPC_MACOSX_DEFAULT_LR_SAVE, 4, &pc))
+              (fp + PPC_MACOSX_DEFAULT_LR_SAVE, 4, &pc))
             goto ppc_count_finish;
         }
 
@@ -1446,7 +1622,7 @@ ppc_mach_o_osabi_sniffer_use_dyld_hint (bfd *abfd)
 #define PPC_64_JMP_LR 0xa8
 
 static int
-ppc_macosx_get_longjmp_target_helper (unsigned int offset, CORE_ADDR * pc)
+ppc_macosx_get_longjmp_target_helper (unsigned int offset, CORE_ADDR *pc)
 {
   CORE_ADDR jmp_buf;
   ULONGEST long_addr = 0;
@@ -1468,13 +1644,13 @@ ppc_macosx_get_longjmp_target_helper (unsigned int offset, CORE_ADDR * pc)
 }
 
 static int
-ppc_64_macosx_get_longjmp_target (CORE_ADDR * pc)
+ppc_64_macosx_get_longjmp_target (CORE_ADDR *pc)
 {
   return ppc_macosx_get_longjmp_target_helper (PPC_64_JMP_LR, pc);
 }
 
 static int
-ppc_macosx_get_longjmp_target (CORE_ADDR * pc)
+ppc_macosx_get_longjmp_target (CORE_ADDR *pc)
 {
   return ppc_macosx_get_longjmp_target_helper (PPC_JMP_LR, pc);
 }

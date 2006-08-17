@@ -84,6 +84,8 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
    5. Allocate the variables in that order; each if possible into
    a preferred register, else into another register.  */
 
+/* APPLE LOCAL CW asm blocks */
+extern int flag_iasm_blocks;
 /* Number of pseudo-registers which are candidates for allocation.  */
 
 static int max_allocno;
@@ -434,8 +436,8 @@ global_alloc (FILE *file)
     /* APPLE LOCAL begin CW asm blocks 4443946 */
     {
       if (!flag_iasm_blocks)
-	error ("%s cannot be used in asm here",
-	       reg_names[HARD_FRAME_POINTER_REGNUM]);
+    error ("%s cannot be used in asm here",
+	   reg_names[HARD_FRAME_POINTER_REGNUM]);
     }
     /* APPLE LOCAL end CW asm blocks 4443946 */
   else

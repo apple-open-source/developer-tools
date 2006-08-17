@@ -155,15 +155,25 @@ struct translation {
 
 /* The global lists of character sets and translations.  */
 
+/* APPLE LOCAL: UTF-8  */
 
-#ifndef GDB_DEFAULT_HOST_CHARSET
-#define GDB_DEFAULT_HOST_CHARSET "ISO-8859-1"
+#ifdef NM_NEXTSTEP
+  #ifndef GDB_DEFAULT_HOST_CHARSET
+  #define GDB_DEFAULT_HOST_CHARSET "UTF-8"
+  #endif
+
+  #ifndef GDB_DEFAULT_TARGET_CHARSET
+  #define GDB_DEFAULT_TARGET_CHARSET "UTF-8"
+  #endif
+#else
+  #ifndef GDB_DEFAULT_HOST_CHARSET
+  #define GDB_DEFAULT_HOST_CHARSET "ISO-8859-1"
+  #endif
+
+  #ifndef GDB_DEFAULT_TARGET_CHARSET
+  #define GDB_DEFAULT_TARGET_CHARSET "ISO-8859-1"
+  #endif
 #endif
-
-#ifndef GDB_DEFAULT_TARGET_CHARSET
-#define GDB_DEFAULT_TARGET_CHARSET "ISO-8859-1"
-#endif
-
 static const char *host_charset_name = GDB_DEFAULT_HOST_CHARSET;
 static void
 show_host_charset_name (struct ui_file *file, int from_tty,
@@ -187,6 +197,7 @@ static const char *host_charset_enum[] =
 {
   "ASCII",
   "ISO-8859-1",
+  "UTF-8",
   0
 };
 
@@ -194,6 +205,7 @@ static const char *target_charset_enum[] =
 {
   "ASCII",
   "ISO-8859-1",
+  "UTF-8",
   "EBCDIC-US",
   "IBM1047",
   0
@@ -339,6 +351,41 @@ iso_8859_family_charset (const char *name)
 }
 
 
+
+/* APPLE LOCAL: UTF-8 */
+/* UTF-8 family functions.  */
+/* I am adding this UTF-8 charset.  It is actually a little
+   bogus, since we don't do conversions among multi-byte charsets.
+   But this will get us to pass the characters uninterpreted to
+   the terminal, and they will get printed correctly.  */
+
+static int
+utf_8_print_literally (void *baton, int c)
+{
+  c &= 0xff;
+
+  return ((0x20 <= c && c <= 0x7e) /* ascii printables */
+          || (! sevenbit_strings && 0x7e <= c)); /* iso 8859 printables */
+}
+
+
+static int
+utf_8_to_control (void *baton, int c, int *ctrl_char)
+{
+  *ctrl_char = (c & 0200) | (c & 037);
+  return 1;
+}
+
+
+/* Construct an ISO-8859-like character set.  */
+static struct charset *
+utf_8_family_charset (const char *name)
+{
+  return simple_charset (name, 1,
+                         utf_8_print_literally, 0,
+                         utf_8_to_control, 0);
+}
+/* END APPLE LOCAL. */
 
 /* EBCDIC family functions.  */
 
@@ -1205,6 +1252,10 @@ _initialize_charset (void)
   register_charset (iso_8859_family_charset ("ISO-8859-1"));
   register_charset (ebcdic_family_charset ("EBCDIC-US"));
   register_charset (ebcdic_family_charset ("IBM1047"));
+
+  /* APPLE LOCAL: Add the UTF8 charset  */
+  register_charset (utf_8_family_charset ("UTF-8"));
+
   register_iconv_charsets ();
 
   {
@@ -1220,7 +1271,11 @@ _initialize_charset (void)
       { "EBCDIC-US",  "IBM1047",    ebcdic_us_to_ibm1047_table },
       { "IBM1047",    "ASCII",      ibm1047_to_ascii_table },
       { "IBM1047",    "ISO-8859-1", ibm1047_to_iso_8859_1_table },
-      { "IBM1047",    "EBCDIC-US",  ibm1047_to_ebcdic_us_table }
+      { "IBM1047",    "EBCDIC-US",  ibm1047_to_ebcdic_us_table },
+      /* APPLE LOCAL: Reuse the ISO_8859_1 table which is just a pass-through
+	 of the lower 128 characters.  */
+      { "ASCII",   "UTF-8", ascii_to_iso_8859_1_table },
+      { "UTF-8", "ASCII",      iso_8859_1_to_ascii_table }
     };
 
     int i;

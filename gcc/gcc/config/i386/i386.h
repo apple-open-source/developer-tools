@@ -96,13 +96,11 @@ extern int target_flags;
 
 /* configure can arrange to make this 2, to force a 486.  */
 
+/* APPLE LOCAL begin mainline 2006-04-19 4434601 */
 #ifndef TARGET_CPU_DEFAULT
-#ifdef TARGET_64BIT_DEFAULT
-#define TARGET_CPU_DEFAULT TARGET_CPU_DEFAULT_k8
-#else
-#define TARGET_CPU_DEFAULT 0
+#define TARGET_CPU_DEFAULT TARGET_CPU_DEFAULT_generic
 #endif
-#endif
+/* APPLE LOCAL end mainline 2006-04-19 4434601 */
 
 /* APPLE LOCAL begin mainline 2005-04-11 4010614 */
 #ifndef TARGET_FPMATH_DEFAULT
@@ -139,7 +137,8 @@ extern int target_flags;
 #define MASK_SSEREGPARM		0x01000000	/* Pass float & double in SSE regs */
 #define TARGET_SSEREGPARM (target_flags & MASK_SSEREGPARM)
 /* APPLE LOCAL end regparmandstackparm; delete at 4.1 merge (when i386.opt file appears) */
-
+/* APPLE LOCAL mni */
+#define MASK_MNI		0x02000000
 /* Unused:			0x03e0000	*/
 
 /* APPLE LOCAL begin AT&T-style stub 4164563 */
@@ -241,6 +240,11 @@ extern int target_flags;
 #define TARGET_K8 (ix86_tune == PROCESSOR_K8)
 #define TARGET_ATHLON_K8 (TARGET_K8 || TARGET_ATHLON)
 #define TARGET_NOCONA (ix86_tune == PROCESSOR_NOCONA)
+/* APPLE LOCAL begin mainline 2006-04-19 4434601 */
+#define TARGET_GENERIC32 (ix86_tune == PROCESSOR_GENERIC32)
+#define TARGET_GENERIC64 (ix86_tune == PROCESSOR_GENERIC64)
+#define TARGET_GENERIC (TARGET_GENERIC32 || TARGET_GENERIC64)
+/* APPLE LOCAL end mainline 2006-04-19 4434601 */
 
 #define TUNEMASK (1 << ix86_tune)
 extern const int x86_use_leave, x86_push_memory, x86_zero_extend_with_and;
@@ -264,6 +268,10 @@ extern const int x86_sse_typeless_stores, x86_sse_load0_by_pxor;
 extern const int x86_use_ffreep;
 extern const int x86_inter_unit_moves, x86_schedule;
 extern const int x86_use_bt;
+/* APPLE LOCAL begin mainline 2006-04-19 4434601 */
+extern const int x86_use_incdec;
+extern const int x86_pad_returns;
+/* APPLE LOCAL end mainline 2006-04-19 4434601 */
 extern int x86_prefetch_sse;
 
 #define TARGET_USE_LEAVE (x86_use_leave & TUNEMASK)
@@ -313,7 +321,8 @@ extern int x86_prefetch_sse;
 #define TARGET_MEMORY_MISMATCH_STALL (x86_memory_mismatch_stall & TUNEMASK)
 #define TARGET_PROLOGUE_USING_MOVE (x86_prologue_using_move & TUNEMASK)
 #define TARGET_EPILOGUE_USING_MOVE (x86_epilogue_using_move & TUNEMASK)
-#define TARGET_DECOMPOSE_LEA (x86_decompose_lea & TUNEMASK)
+/* APPLE LOCAL mainline 2006-04-19 4434601 */
+/* TARGET_DECOMPOSE_LEA removed */
 #define TARGET_PREFETCH_SSE (x86_prefetch_sse)
 #define TARGET_SHIFT1 (x86_shift1 & TUNEMASK)
 #define TARGET_USE_FFREEP (x86_use_ffreep & TUNEMASK)
@@ -322,6 +331,10 @@ extern int x86_prefetch_sse;
 #define TARGET_FOUR_JUMP_LIMIT (x86_four_jump_limit & TUNEMASK)
 #define TARGET_SCHEDULE (x86_schedule & TUNEMASK)
 #define TARGET_USE_BT (x86_use_bt & TUNEMASK)
+/* APPLE LOCAL begin mainline 2006-04-19 4434601 */
+#define TARGET_USE_INCDEC (x86_use_incdec & TUNEMASK)
+#define TARGET_PAD_RETURNS (x86_pad_returns & TUNEMASK)
+/* APPLE LOCAL end mainline 2006-04-19 4434601 */
 
 #define TARGET_STACK_PROBE (target_flags & MASK_STACK_PROBE)
 
@@ -339,6 +352,8 @@ extern int x86_prefetch_sse;
 #define TARGET_MMX ((target_flags & MASK_MMX) != 0)
 #define TARGET_3DNOW ((target_flags & MASK_3DNOW) != 0)
 #define TARGET_3DNOW_A ((target_flags & MASK_3DNOW_A) != 0)
+/* APPLE LOCAL mni */
+#define TARGET_MNI ((target_flags & MASK_MNI) != 0)
 
 #define TARGET_RED_ZONE (!(target_flags & MASK_NO_RED_ZONE))
 
@@ -432,6 +447,12 @@ extern int x86_prefetch_sse;
     N_("Support MMX, SSE, SSE2 and SSE3 built-in functions and code generation") },\
   { "no-sse3",			 -MASK_SSE3,				      \
     N_("Do not support MMX, SSE, SSE2 and SSE3 built-in functions and code generation") },\
+    /* APPLE LOCAL begin mni 4424835 */						      \
+  { "mni",			 MASK_MNI,				      \
+    N_("Support MNI built-in functions and code generation") },		      \
+  { "no-mni",			 -MASK_MNI,				      \
+    N_("Do not support MNI built-in functions and code generation") },	      \
+  /* APPLE LOCAL end mni */						      \
   { "128bit-long-double",	 MASK_128BIT_LONG_DOUBLE,		      \
     N_("sizeof(long double) is 16") },					      \
   { "96bit-long-double",	-MASK_128BIT_LONG_DOUBLE,		      \
@@ -473,6 +494,10 @@ extern int x86_prefetch_sse;
    it's analogous to similar code for Mach-O on PowerPC.  darwin.h
    redefines this to 1.  */
 #define TARGET_MACHO 0
+/* APPLE LOCAL begin mach-o cleanup */
+#define MACHOPIC_INDIRECT 0
+#define MACHOPIC_PURE 0
+/* APPLE LOCAL end mach-o cleanup */
 
 /* Subtargets may reset this to 1 in order to enable 96-bit long double
    with the rounding mode forced to 53 bits.  */
@@ -658,6 +683,10 @@ extern int x86_prefetch_sse;
 	builtin_define ("__SSE2__");				\
       if (TARGET_SSE3)						\
 	builtin_define ("__SSE3__");				\
+      /* APPLE LOCAL begin mni 4424835 */				\
+      if (TARGET_MNI)						\
+	builtin_define ("__MNI__");				\
+      /* APPLE LOCAL end mni */					\
       if (TARGET_SSE_MATH && TARGET_SSE)			\
 	builtin_define ("__SSE_MATH__");			\
       if (TARGET_SSE_MATH && TARGET_SSE2)			\
@@ -738,12 +767,16 @@ extern int x86_prefetch_sse;
 #define TARGET_CPU_DEFAULT_pentium_m 14
 #define TARGET_CPU_DEFAULT_prescott 15
 #define TARGET_CPU_DEFAULT_nocona 16
+/* APPLE LOCAL begin mainline 2006-04-19 4434601 */
+#define TARGET_CPU_DEFAULT_generic 17
 
 #define TARGET_CPU_DEFAULT_NAMES {"i386", "i486", "pentium", "pentium-mmx",\
 				  "pentiumpro", "pentium2", "pentium3", \
 				  "pentium4", "k6", "k6-2", "k6-3",\
 				  "athlon", "athlon-4", "k8", \
-				  "pentium-m", "prescott", "nocona"}
+				  "pentium-m", "prescott", "nocona", \
+				  "generic"}
+/* APPLE LOCAL end mainline 2006-04-19 4434601 */
 
 #ifndef CC1_SPEC
 #define CC1_SPEC "%(cc1_cpu) "
@@ -944,8 +977,12 @@ extern int x86_prefetch_sse;
    for details.  */
 
 #define STACK_REGS
+/* APPLE LOCAL begin mainline */
 #define IS_STACK_MODE(MODE)					\
-  ((MODE) == DFmode || (MODE) == SFmode || (MODE) == XFmode)	\
+  (((MODE) == SFmode && (!TARGET_SSE || !TARGET_SSE_MATH))	\
+   || ((MODE) == DFmode && (!TARGET_SSE2 || !TARGET_SSE_MATH))  \
+   || (MODE) == XFmode)
+/* APPLE LOCAL end mainline */
 
 /* Number of actual hardware registers.
    The hardware registers are assigned numbers for the compiler
@@ -2367,11 +2404,17 @@ do {									\
 #define ASM_OUTPUT_ADDR_DIFF_ELT(FILE, BODY, VALUE, REL) \
   ix86_output_addr_diff_elt ((FILE), (VALUE), (REL))
 
-/* Under some conditions we need jump tables in the text section, because
-   the assembler cannot handle label differences between sections.  */
+/* APPLE LOCAL begin x86_64 support 2006-02-02 */
+
+/* Under some conditions we need jump tables in the text section,
+   because the assembler cannot handle label differences between
+   sections.  This is the case for x86_64 on Mach-O for example. */
 
 #define JUMP_TABLES_IN_TEXT_SECTION \
-  (!TARGET_64BIT && flag_pic && !HAVE_AS_GOTOFF_IN_DATA)
+  (flag_pic && ((TARGET_MACHO && TARGET_64BIT) \
+   || (!TARGET_64BIT && !HAVE_AS_GOTOFF_IN_DATA)))
+
+/* APPLE LOCAL end x86_64 support 2006-02-02 */
 
 /* Emit a dtp-relative reference to a TLS variable.  */
 
@@ -2429,6 +2472,10 @@ enum processor_type
   PROCESSOR_PENTIUM4,
   PROCESSOR_K8,
   PROCESSOR_NOCONA,
+/* APPLE LOCAL begin mainline 2006-04-19 4434601 */
+  PROCESSOR_GENERIC32,
+  PROCESSOR_GENERIC64,
+/* APPLE LOCAL end mainline 2006-04-19 4434601 */
   PROCESSOR_max
 };
 
@@ -2667,8 +2714,8 @@ struct machine_function GTY(())
 extern tree iasm_x86_canonicalize_operands (const char **, tree, void *);
 /* On x86, we can rewrite opcodes, change argument ordering and so no... */
 #define IASM_CANONICALIZE_OPERANDS(OPCODE, NEW_OPCODE, IARGS, E)		\
-  do {									\
-    NEW_OPCODE = OPCODE;						\
+  do {								\
+    NEW_OPCODE = OPCODE;					\
     IARGS = iasm_x86_canonicalize_operands (&NEW_OPCODE, IARGS, E);	\
   } while (0)
 
@@ -3080,7 +3127,7 @@ extern tree iasm_x86_canonicalize_operands (const char **, tree, void *);
   { "lgs", 1, "=" U(r16 ",") r32 U("," r64)},\
   { "lgs", 2, U(m16 ",") m32 U("," m64)},\
   { "lidt", 1, "m"},		\
-  { "lldt", 1, "rm"},		\
+  { "lldt", 1, rm16},		\
   { "lmsw", 1, "m"},		\
   { "lods", 1, U("m")},		\
   { "loop", 1, rel8},		\
@@ -3092,7 +3139,7 @@ extern tree iasm_x86_canonicalize_operands (const char **, tree, void *);
   { "lsl", 2, rm16 "," rm32},	\
   { "lss", 1, "=" U(r16 ",") r32 U("," r64)},\
   { "lss", 2, U(m16 ",") m32 U("," m64)},\
-  { "ltr", 1, "rm"},		\
+  { "ltr", 1, rm16},		\
   { "maskmovdqu", 1, "x"},	\
   { "maskmovdqu", 2, "x"},	\
   { "maskmovq", 1, "y"},	\
@@ -3226,8 +3273,8 @@ extern tree iasm_x86_canonicalize_operands (const char **, tree, void *);
   { "pandn", 2, "xm,ym"},	\
   { "pavgb", 1, "+x,y"},	\
   { "pavgb", 2, "xm,ym"},	\
-  { "pavgw", 1, "+x,y"},	\
-  { "pavgw", 2, "xm,ym"},	\
+  { "pavgw", 1, "+x,y"},		\
+  { "pavgw", 2, "xm,ym"},		\
   { "pcmpeqb", 1, "+x,y"},	\
   { "pcmpeqb", 2, "xm,ym"},	\
   { "pcmpeqd", 1, "+x,y"},	\
@@ -3312,17 +3359,17 @@ extern tree iasm_x86_canonicalize_operands (const char **, tree, void *);
   { "psubd", 1, "+x,y"},	\
   { "psubd", 2, "xm,ym"},	\
   { "psubq", 1, "+x,y"},	\
-  { "psubq", 2, "xm,ym"},	\
-  { "psubsb", 1, "+x,y"},      	\
-  { "psubsb", 2, "xm,ym"},     	\
-  { "psubsw", 1, "+x,y"},      	\
-  { "psubsw", 2, "xm,ym"},     	\
+  { "psubq", 2, "xm,ym"},		\
+  { "psubsb", 1, "+x,y"},       	\
+  { "psubsb", 2, "xm,ym"},       	\
+  { "psubsw", 1, "+x,y"},       	\
+  { "psubsw", 2, "xm,ym"},       	\
   { "psubusb", 1, "+x,y"},	\
   { "psubusb", 2, "xm,ym"},	\
   { "psubusw", 1, "+x,y"},	\
   { "psubusw", 2, "xm,ym"},	\
-  { "psubw", 1, "+x,y"},	\
-  { "psubw", 2, "xm,ym"},	\
+  { "psubw", 1, "+x,y"},		\
+  { "psubw", 2, "xm,ym"},		\
   { "punpckhbw", 1, "+x,y"},	\
   { "punpckhbw", 2, "xm,ym"},	\
   { "punpckhdq", 1, "+x,y"},	\
@@ -3469,12 +3516,6 @@ extern tree iasm_x86_canonicalize_operands (const char **, tree, void *);
   { "rdtsc", { "edx", "eax"} }
 
 #define IASM_FUNCTION_MODIFIER "P"
-
-#define IASM_VALID_PIC(DECL, E)						\
-  do {									\
-    if (E->as_immediate && ! TARGET_DYNAMIC_NO_PIC && flag_pic)		\
-      warning ("non-pic addressing form not suitible for pic code");	\
-  } while (0)
 
 #define IASM_REGISTER_NAME(STR, BUF) i386_iasm_register_name (STR, BUF)
 

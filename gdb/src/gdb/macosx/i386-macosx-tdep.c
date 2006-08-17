@@ -29,21 +29,28 @@
 #include "floatformat.h"
 #include "symtab.h"
 #include "regcache.h"
+#include "libbfd.h"
+
 #include "i387-tdep.h"
 #include "i386-tdep.h"
+#include "amd64-tdep.h"
 #include "osabi.h"
 #include "ui-out.h"
 #include "symtab.h"
 #include "frame.h"
 
-#include "i386-macosx-thread-status.h"
-
 #include <mach/thread_status.h>
+#include <sys/sysctl.h>
 
 #include "i386-macosx-tdep.h"
 
-/* Unused on the x86 side of things -- this is only needed to
-   help distinguish between ppc32 and ppc64 binaries on the PPC side. */
+static enum gdb_osabi i386_mach_o_osabi_sniffer_use_dyld_hint (bfd *abfd);
+
+/* When we're doing native debugging, and we attach to a process,
+   we start out by finding the in-memory dyld -- the osabi of that
+   dyld is stashed away here for use when picking the right osabi of
+   a fat file.  In the case of cross-debugging, none of this happens
+   and this global remains untouched.  */
 
 enum gdb_osabi osabi_seen_in_attached_dyld = GDB_OSABI_UNKNOWN;
 
@@ -56,6 +63,14 @@ regcache_raw_supply (current_regcache, regnum, buf);
 #define collect_unsigned_int(regnum, addr)\
 regcache_raw_collect (current_regcache, regnum, buf); \
 (* (addr)) = extract_unsigned_integer (buf, 4);
+
+#define supply_unsigned_int64(regnum, val)\
+store_unsigned_integer (buf, 8, val); \
+regcache_raw_supply (current_regcache, regnum, buf);
+
+#define collect_unsigned_int64(regnum, addr)\
+regcache_raw_collect (current_regcache, regnum, buf); \
+(* (addr)) = extract_unsigned_integer (buf, 8);
 
 void
 i386_macosx_fetch_gp_registers (gdb_i386_thread_state_t *sp_regs)
@@ -70,7 +85,7 @@ i386_macosx_fetch_gp_registers (gdb_i386_thread_state_t *sp_regs)
   supply_unsigned_int (6, sp_regs->esi);
   supply_unsigned_int (7, sp_regs->edi);
   supply_unsigned_int (8, sp_regs->eip);
-  supply_unsigned_int (9, sp_regs->efl);
+  supply_unsigned_int (9, sp_regs->eflags);
   supply_unsigned_int (10, sp_regs->cs);
   supply_unsigned_int (11, sp_regs->ss);
   supply_unsigned_int (12, sp_regs->ds);
@@ -92,7 +107,7 @@ i386_macosx_store_gp_registers (gdb_i386_thread_state_t *sp_regs)
   collect_unsigned_int (6, &sp_regs->esi);
   collect_unsigned_int (7, &sp_regs->edi);
   collect_unsigned_int (8, &sp_regs->eip);
-  collect_unsigned_int (9, &sp_regs->efl);
+  collect_unsigned_int (9, &sp_regs->eflags);
   collect_unsigned_int (10, &sp_regs->cs);
   collect_unsigned_int (11, &sp_regs->ss);
   collect_unsigned_int (12, &sp_regs->ds);
@@ -101,17 +116,78 @@ i386_macosx_store_gp_registers (gdb_i386_thread_state_t *sp_regs)
   collect_unsigned_int (15, &sp_regs->gs);
 }
 
+void
+x86_64_macosx_fetch_gp_registers (gdb_x86_thread_state64_t *sp_regs)
+{
+  unsigned char buf[8];
+  supply_unsigned_int64 (AMD64_RAX_REGNUM, sp_regs->rax);
+  supply_unsigned_int64 (AMD64_RBX_REGNUM, sp_regs->rbx);
+  supply_unsigned_int64 (AMD64_RCX_REGNUM, sp_regs->rcx);
+  supply_unsigned_int64 (AMD64_RDX_REGNUM, sp_regs->rdx);
+  supply_unsigned_int64 (AMD64_RDI_REGNUM, sp_regs->rdi);
+  supply_unsigned_int64 (AMD64_RSI_REGNUM, sp_regs->rsi);
+  supply_unsigned_int64 (AMD64_RBP_REGNUM, sp_regs->rbp);
+  supply_unsigned_int64 (AMD64_RSP_REGNUM, sp_regs->rsp);
+  supply_unsigned_int64 (AMD64_R8_REGNUM, sp_regs->r8);
+  supply_unsigned_int64 (AMD64_R8_REGNUM + 1, sp_regs->r9);
+  supply_unsigned_int64 (AMD64_R8_REGNUM + 2, sp_regs->r10);
+  supply_unsigned_int64 (AMD64_R8_REGNUM + 3, sp_regs->r11);
+  supply_unsigned_int64 (AMD64_R8_REGNUM + 4, sp_regs->r12);
+  supply_unsigned_int64 (AMD64_R8_REGNUM + 5, sp_regs->r13);
+  supply_unsigned_int64 (AMD64_R8_REGNUM + 6, sp_regs->r14);
+  supply_unsigned_int64 (AMD64_R8_REGNUM + 7, sp_regs->r15);
+  supply_unsigned_int64 (AMD64_RIP_REGNUM, sp_regs->rip);
+  supply_unsigned_int64 (AMD64_EFLAGS_REGNUM, sp_regs->rflags);
+  supply_unsigned_int64 (AMD64_CS_REGNUM, sp_regs->cs);
+  supply_unsigned_int64 (AMD64_FS_REGNUM, sp_regs->fs);
+  supply_unsigned_int64 (AMD64_GS_REGNUM, sp_regs->gs);
+}
+
+void
+x86_64_macosx_store_gp_registers (gdb_x86_thread_state64_t *sp_regs)
+{
+  unsigned char buf[8];
+  collect_unsigned_int64 (AMD64_RAX_REGNUM, &sp_regs->rax);
+  collect_unsigned_int64 (AMD64_RBX_REGNUM, &sp_regs->rbx);
+  collect_unsigned_int64 (AMD64_RCX_REGNUM, &sp_regs->rcx);
+  collect_unsigned_int64 (AMD64_RDX_REGNUM, &sp_regs->rdx);
+  collect_unsigned_int64 (AMD64_RDI_REGNUM, &sp_regs->rdi);
+  collect_unsigned_int64 (AMD64_RSI_REGNUM, &sp_regs->rsi);
+  collect_unsigned_int64 (AMD64_RBP_REGNUM, &sp_regs->rbp);
+  collect_unsigned_int64 (AMD64_RSP_REGNUM, &sp_regs->rsp);
+  collect_unsigned_int64 (AMD64_R8_REGNUM, &sp_regs->r8);
+  collect_unsigned_int64 (AMD64_R8_REGNUM + 1, &sp_regs->r9);
+  collect_unsigned_int64 (AMD64_R8_REGNUM + 2, &sp_regs->r10);
+  collect_unsigned_int64 (AMD64_R8_REGNUM + 3, &sp_regs->r11);
+  collect_unsigned_int64 (AMD64_R8_REGNUM + 4, &sp_regs->r12);
+  collect_unsigned_int64 (AMD64_R8_REGNUM + 5, &sp_regs->r13);
+  collect_unsigned_int64 (AMD64_R8_REGNUM + 6, &sp_regs->r14);
+  collect_unsigned_int64 (AMD64_R8_REGNUM + 7, &sp_regs->r15);
+  collect_unsigned_int64 (AMD64_RIP_REGNUM, &sp_regs->rip);
+  collect_unsigned_int64 (AMD64_EFLAGS_REGNUM, &sp_regs->rflags);
+  collect_unsigned_int64 (AMD64_CS_REGNUM, &sp_regs->cs);
+  collect_unsigned_int64 (AMD64_FS_REGNUM, &sp_regs->fs);
+  collect_unsigned_int64 (AMD64_GS_REGNUM, &sp_regs->gs);
+}
+
 /* Fetching the the registers from the inferior into our reg cache.
    FP_REGS is a structure that mirrors the Mach structure
-   struct i386_float_state.  The "hw_fu_state" buffer inside that
-   structure mirrors the Mach struct i386_fx_save, which is identical
+   struct i386_float_state.  The "fpu_fcw" field inside that
+   structure is the start of a block which is identical
    to the FXSAVE/FXRSTOR instructions' format.  */
 
 void
-i386_macosx_fetch_fp_registers (gdb_i386_thread_fpstate_t *fp_regs)
+i386_macosx_fetch_fp_registers (gdb_i386_float_state_t *fp_regs)
 {
-  i387_swap_fxsave (current_regcache, &fp_regs->hw_fu_state);
-  i387_supply_fxsave (current_regcache, -1, &fp_regs->hw_fu_state);
+  i387_swap_fxsave (current_regcache, &fp_regs->fpu_fcw);
+  i387_supply_fxsave (current_regcache, -1, &fp_regs->fpu_fcw);
+}
+
+void
+x86_64_macosx_fetch_fp_registers (gdb_x86_float_state64_t *fp_regs)
+{
+  i387_swap_fxsave (current_regcache, &fp_regs->fpu_fcw);
+  i387_supply_fxsave (current_regcache, -1, &fp_regs->fpu_fcw);
 }
 
 /* Get the floating point registers from our local register cache
@@ -122,14 +198,21 @@ i386_macosx_fetch_fp_registers (gdb_i386_thread_fpstate_t *fp_regs)
    inferior -- this function returns 0.  */
 
 int
-i386_macosx_store_fp_registers (gdb_i386_thread_fpstate_t *fp_regs)
+i386_macosx_store_fp_registers (gdb_i386_float_state_t *fp_regs)
 {
-  memset (fp_regs, 0, sizeof (gdb_i386_thread_fpstate_t));
-  fp_regs->fpkind = GDB_i386_FP_SSE2; /* Corresponds to Mach's FP_FXSR */
-  fp_regs->initialized = 1;
-  fp_regs->exc_status = 0;
-  i387_fill_fxsave ((unsigned char *) &fp_regs->hw_fu_state, -1);
-  i387_swap_fxsave (current_regcache, &fp_regs->hw_fu_state);
+  memset (fp_regs, 0, sizeof (gdb_i386_float_state_t));
+  i387_fill_fxsave ((unsigned char *) &fp_regs->fpu_fcw, -1);
+  i387_swap_fxsave (current_regcache, &fp_regs->fpu_fcw);
+
+  return 1;
+}
+
+int
+x86_64_macosx_store_fp_registers (gdb_x86_float_state64_t *fp_regs)
+{
+  memset (fp_regs, 0, sizeof (gdb_x86_float_state64_t));
+  i387_fill_fxsave ((unsigned char *) &fp_regs->fpu_fcw, -1);
+  i387_swap_fxsave (current_regcache, &fp_regs->fpu_fcw);
 
   return 1;
 }
@@ -263,6 +346,36 @@ static int i386_macosx_thread_state_reg_offset[] =
   15 * 4    /* GS */
 };
 
+/* Offsets into the struct x86_thread_state64 where we'll find the saved regs. */
+/* From <mach/i386/thread_status.h and amd64-tdep.h */
+static int x86_64_macosx_thread_state_reg_offset[] =
+{
+  0 * 8,			/* %rax */
+  1 * 8,			/* %rbx */
+  2 * 8,			/* %rcx */
+  3 * 8,			/* %rdx */
+  5 * 8,			/* %rsi */
+  4 * 8,			/* %rdi */
+  6 * 8,			/* %rbp */
+  7 * 8,			/* %rsp */
+  8 * 8,			/* %r8 ... */
+  9 * 8,
+  10 * 8,
+  11 * 8,
+  12 * 8,
+  13 * 8,
+  14 * 8,
+  15 * 8,			/* ... %r15 */
+  16 * 8,			/* %rip */
+  17 * 8,			/* %rflags */
+  18 * 8,			/* %cs */
+  -1,				/* %ss */
+  -1,				/* %ds */
+  -1,				/* %es */
+  19 * 8,			/* %fs */
+  20 * 8			/* %gs */
+};
+
 static CORE_ADDR
 i386_integer_to_address (struct gdbarch *gdbarch, struct type *type, 
                          const gdb_byte *buf)
@@ -298,12 +411,133 @@ i386_macosx_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   set_gdbarch_integer_to_address (gdbarch, i386_integer_to_address);
 }
 
+static void
+x86_macosx_init_abi_64 (struct gdbarch_info info, struct gdbarch *gdbarch)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+
+  tdep->wordsize = 8;
+
+  amd64_init_abi (info, gdbarch);
+
+  set_gdbarch_skip_trampoline_code (gdbarch, macosx_skip_trampoline_code);
+
+  set_gdbarch_in_solib_return_trampoline (gdbarch,
+                                          macosx_in_solib_return_trampoline);
+
+  tdep->struct_return = reg_struct_return;
+
+  /* We don't do signals yet. */
+  tdep->sigcontext_addr = NULL;
+  tdep->sc_reg_offset = x86_64_macosx_thread_state_reg_offset;
+  tdep->sc_num_regs = ARRAY_SIZE (x86_64_macosx_thread_state_reg_offset);
+
+  tdep->jb_pc_offset = 148;
+  set_gdbarch_integer_to_address (gdbarch, i386_integer_to_address);
+}
+
+static int
+i386_mach_o_query_64bit ()
+{
+  int result;
+  int supports64bit;
+  size_t sz;
+  
+  sz = sizeof(supports64bit);
+  result = sysctlbyname("hw.optional.x86_64", &supports64bit, &sz, NULL, 0);
+  return (result == 0 &&
+          sz == sizeof(supports64bit) &&
+          supports64bit);
+}
+
 static enum gdb_osabi
 i386_mach_o_osabi_sniffer (bfd *abfd)
 {
+  enum gdb_osabi ret;
+  ret = i386_mach_o_osabi_sniffer_use_dyld_hint (abfd);
+  if (ret == GDB_OSABI_DARWIN64 || ret == GDB_OSABI_DARWIN)
+    return ret;
+
+  if (bfd_check_format (abfd, bfd_archive))
+    {
+      enum gdb_osabi best = GDB_OSABI_UNKNOWN;
+      enum gdb_osabi cur = GDB_OSABI_UNKNOWN;
+
+      bfd *nbfd = NULL;
+      for (;;)
+        {
+          nbfd = bfd_openr_next_archived_file (abfd, nbfd);
+
+          if (nbfd == NULL)
+            break;
+          if (!bfd_check_format (nbfd, bfd_object))
+            continue;
+
+          cur = i386_mach_o_osabi_sniffer (nbfd);
+          if (cur == GDB_OSABI_DARWIN64 &&
+              best != GDB_OSABI_DARWIN64 && i386_mach_o_query_64bit ())
+            best = cur;
+
+          if (cur == GDB_OSABI_DARWIN &&
+              best != GDB_OSABI_DARWIN64 && best != GDB_OSABI_DARWIN)
+            best = cur;
+        }
+      return best;
+    }
+
+  if (!bfd_check_format (abfd, bfd_object))
+    return GDB_OSABI_UNKNOWN;
+
   if (strcmp (bfd_get_target (abfd), "mach-o-le") == 0
       || strcmp (bfd_get_target (abfd), "mach-o-fat") == 0)
-    return GDB_OSABI_DARWIN;
+    {
+      if (bfd_default_compatible (bfd_get_arch_info (abfd),
+                                  bfd_lookup_arch (bfd_arch_i386,
+                                                   bfd_mach_x86_64)))
+        return GDB_OSABI_DARWIN64;
+
+      if (bfd_default_compatible (bfd_get_arch_info (abfd),
+                                  bfd_lookup_arch (bfd_arch_i386,
+                                                   bfd_mach_i386_i386)))
+        return GDB_OSABI_DARWIN;
+
+      return GDB_OSABI_UNKNOWN;
+    }
+
+  return GDB_OSABI_UNKNOWN;
+}
+
+/* If we're attaching to a process, we start by finding the dyld that
+   is loaded and go from there.  So when we're selecting the OSABI,
+   prefer the osabi of the actually-loaded dyld when we can.  */
+
+static enum gdb_osabi
+i386_mach_o_osabi_sniffer_use_dyld_hint (bfd *abfd)
+{
+  if (osabi_seen_in_attached_dyld == GDB_OSABI_UNKNOWN)
+    return GDB_OSABI_UNKNOWN;
+
+  bfd *nbfd = NULL;
+  for (;;)
+    {
+      nbfd = bfd_openr_next_archived_file (abfd, nbfd);
+
+      if (nbfd == NULL)
+        break;
+      if (!bfd_check_format (nbfd, bfd_object))
+        continue;
+      if (bfd_default_compatible (bfd_get_arch_info (nbfd),
+                                  bfd_lookup_arch (bfd_arch_i386,
+                                                   bfd_mach_x86_64))
+          && osabi_seen_in_attached_dyld == GDB_OSABI_DARWIN64)
+        return GDB_OSABI_DARWIN64;
+
+      if (bfd_default_compatible (bfd_get_arch_info (nbfd),
+                                  bfd_lookup_arch (bfd_arch_i386,
+                                                   bfd_mach_i386_i386))
+          && osabi_seen_in_attached_dyld == GDB_OSABI_DARWIN)
+        return GDB_OSABI_DARWIN;
+    }
 
   return GDB_OSABI_UNKNOWN;
 }
@@ -488,4 +722,6 @@ _initialize_i386_macosx_tdep (void)
   gdbarch_register_osabi (bfd_arch_i386, 0, GDB_OSABI_DARWIN,
                           i386_macosx_init_abi);
 
+  gdbarch_register_osabi (bfd_arch_i386, bfd_mach_x86_64,
+                          GDB_OSABI_DARWIN64, x86_macosx_init_abi_64);
 }

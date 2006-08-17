@@ -1,0 +1,137 @@
+.TH SLAPADD 8C "RELEASEDATE" "OpenLDAP LDVERSION"
+.\" $OpenLDAP: pkg/ldap/doc/man/man8/slapadd.8,v 1.15.2.7 2004/07/25 21:53:13 hyc Exp $
+.\" Copyright 1998-2004 The OpenLDAP Foundation All Rights Reserved.
+.\" Copying restrictions apply.  See COPYRIGHT/LICENSE.
+.SH NAME
+slapadd \- Add entries to a SLAPD database
+.SH SYNOPSIS
+.B /usr/sbin/slapadd
+.B [\-v]
+.B [\-c]
+.B [\-u]
+.B [\-p]
+.B [\-r]
+.B [\-w]
+.B [\-d level]
+.B [\-b suffix]
+.B [\-n dbnum]
+.B [\-i rid1,rid2,...]
+.B [\-f slapd.conf]
+.B [\-l ldif-file]
+.SH DESCRIPTION
+.LP
+.B Slapadd
+is used to add entries specified in LDAP Directory Interchange Format
+(LDIF) to a
+.BR slapd (8)
+database.
+It opens the given database determined by the database number or
+suffix and adds entries corresponding to the provided LDIF to
+the database.  The LDIF input is read from standard input or
+the specified file.
+.LP
+As
+.B slapadd
+is designed to accept LDIF in database order, as produced by
+.BR slapcat (8),
+it does not verify that superior entries exist before
+adding an entry, does not perform all user and system
+schema checks, and does not maintain operational
+attributes (such as createTimeStamp and modifiersName). 
+.SH OPTIONS
+.TP
+.B \-v
+enable verbose mode.
+.TP
+.B \-c
+enable continue (ignore errors) mode.
+.TP
+.B \-u
+enable dry-run (don't write to backend) mode.
+.TP
+.BI \-p
+If the LDIF input represents a syncrepl consumer replica,
+promote it to the syncrepl provider's content after adding
+the entries.
+.TP
+.BI \-r
+If  the  LDIF  input represents a  syncrepl  provider, demote 
+it  to  the syncrepl consumer replica after adding the entries.
+.TP
+.BI \-w
+When used with either 
+.B \-p
+or
+.B \-r,
+rebuild the new syncrepl
+information from the contents of the added entries.
+The syncrepl information contained in the LDIF input
+file is ignored.
+.TP
+.BI \-d " level"
+enable debugging messages as defined by the specified
+.IR level .
+.TP
+.BI \-b " suffix" 
+Use the specified \fIsuffix\fR to determine which database to
+add entries to.  The \-b cannot be used in conjunction
+with the
+.B \-n
+option.
+.TP
+.BI \-n " dbnum"
+Add entries to the \fIdbnum\fR\-th database listed in the
+configuration file.  The
+.B \-n
+cannot be used in conjunction with the
+.B \-b
+option.
+.TP
+.BI \-i " rid1,rid2,..."
+Specify the replication ids for one or more syncrepl consumer
+replicas contained in the LDIF input. If omitted, 0 is used
+as the replication id.
+.TP
+.BI \-f " slapd.conf"
+specify an alternative
+.BR slapd.conf (5)
+file.
+.TP
+.BI \-l " ldif-file"
+Read LDIF from the specified file instead of standard input.
+.SH LIMITATIONS
+Your
+.BR slapd (8)
+should not be running 
+when you do this to ensure consistency of the database.
+.LP
+.B slapadd 
+may not provide naming or schema checks.  It is advisable to
+use
+.BR ldapadd (1)
+when adding new entries into an existing directory.
+.SH EXAMPLES
+To import the entries specified in file
+.B ldif
+into your
+.BR slapd (8)
+database give the command:
+.LP
+.nf
+.ft tt
+	/usr/sbin/slapadd -l ldif
+.ft
+.fi
+.SH "SEE ALSO"
+.BR ldap (3),
+.BR ldif (5),
+.BR slapcat (8),
+.BR ldapadd (1),
+.BR slapd (8)
+.LP
+"OpenLDAP Administrator's Guide" (http://www.OpenLDAP.org/doc/admin/)
+.SH ACKNOWLEDGEMENTS
+.B OpenLDAP
+is developed and maintained by The OpenLDAP Project (http://www.openldap.org/).
+.B OpenLDAP
+is derived from University of Michigan LDAP 3.3 Release.  

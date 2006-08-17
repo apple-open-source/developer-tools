@@ -1,3 +1,17 @@
+2006-05-18  Mike Stump  <mrs@apple.com>
+
+	Radar 4501833
+	* parser.c (cp_parser_compound_statement): Use iasm_end_block to
+	end inline assmebly blocks.
+	(cp_parser_iasm_compound_statement): Likewise.
+	(cp_parser_iasm_top_statement): Likewise.
+
+2006-04-26  Fariborz Jahanian <fjahanian@apple.com>
+
+        Radar 4508851
+	* parser.c (cp_parser_objc_interstitial_code): Recognize
+	and parse RID_NAMESPACE keyword.
+
 2006-04-26  Mike Stump  <mrs@apple.com>
 
 	Radar 4505741

@@ -1,0 +1,5 @@
+if [ "${Target}" = "AppleBMacEthernet" ]; then
+	Targets='AppleBMacEthernet'
+else
+	Targets='AppleBMacEthernet'
+fi

@@ -1,5 +1,5 @@
 GDB_VERSION = 6.3.50-20050815
-GDB_RC_VERSION = 477
+GDB_RC_VERSION = 563
 
 BINUTILS_VERSION = 2.13-20021117
 BINUTILS_RC_VERSION = 46
@@ -118,7 +118,7 @@ RANLIB = ranlib
 NM = nm
 CC_FOR_BUILD = gcc
 
-CDEBUGFLAGS = -g
+CDEBUGFLAGS = -gdwarf-2
 CFLAGS = $(CDEBUGFLAGS) $(RC_CFLAGS)
 HOST_ARCHITECTURE = UNKNOWN
 
@@ -165,7 +165,7 @@ CONFIG_OTHER_OPTIONS=--disable-serial-configure
 ifneq ($(findstring macosx,$(CANONICAL_ARCHS))$(findstring darwin,$(CANONICAL_ARCHS)),)
 CC = gcc -arch $(HOST_ARCHITECTURE)
 CC_FOR_BUILD = NEXT_ROOT= gcc
-CDEBUGFLAGS = -g -Os
+CDEBUGFLAGS = -gdwarf-2 -Os
 
 CFLAGS = $(strip $(RC_CFLAGS_NOARCH) $(CDEBUGFLAGS) -Wall -Wimplicit -Wno-long-double)
 HOST_ARCHITECTURE = $(shell echo $* | sed -e 's/--.*//' -e 's/powerpc/ppc/' -e 's/-apple-macosx.*//' -e 's/-apple-macos.*//' -e 's/-apple-darwin.*//')
@@ -430,8 +430,11 @@ install-gdb-macosx: install-gdb-macosx-common
 	set -e; for target in $(CANONICAL_ARCHS); do \
 		lipo -create $(OBJROOT)/$${target}--$${target}/gdb/gdb \
 			-output $(SYMROOT)/$(LIBEXEC_GDB_DIR)/gdb-$${target}; \
+		dsymutil -o $(SYMROOT)/$(LIBEXEC_GDB_DIR)/gdb-$${target}.dSYM \
+                         $(SYMROOT)/$(LIBEXEC_GDB_DIR)/gdb-$${target}; \
 	 	strip -S -o $(DSTROOT)/$(LIBEXEC_GDB_DIR)/gdb-$${target} \
 			$(SYMROOT)/$(LIBEXEC_GDB_DIR)/gdb-$${target}; \
+		cp $(DSTROOT)/$(LIBEXEC_GDB_DIR)/gdb-$${target} $(SYMROOT)/$(LIBEXEC_GDB_DIR)/gdb-$${target}; \
 	done
 
 install-gdb-fat: install-gdb-macosx-common
@@ -442,8 +445,12 @@ install-gdb-fat: install-gdb-macosx-common
 		-output $(SYMROOT)/$(LIBEXEC_GDB_DIR)/gdb-$(I386_TARGET)
 
 	set -e; for target in $(CANONICAL_ARCHS); do \
+		dsymutil -o $(SYMROOT)/$(LIBEXEC_GDB_DIR)/gdb-$${target}.dSYM \
+                         $(SYMROOT)/$(LIBEXEC_GDB_DIR)/gdb-$${target}; \
 	 	strip -S -o $(DSTROOT)/$(LIBEXEC_GDB_DIR)/gdb-$${target} \
 			$(SYMROOT)/$(LIBEXEC_GDB_DIR)/gdb-$${target}; \
+		cp $(DSTROOT)/$(LIBEXEC_GDB_DIR)/gdb-$${target} \
+                   $(SYMROOT)/$(LIBEXEC_GDB_DIR)/gdb-$${target}; \
 		if echo $${target} | egrep '^[^-]*-apple-darwin' > /dev/null; then \
 			echo "stripping __objcInit"; \
 			echo "__objcInit" > /tmp/macosx-syms-to-remove; \
@@ -617,5 +624,5 @@ installsrc:
 
 
 check:
-	[ -z `find . -name \*~ -o -name .\#\*` ] || \
+	[ -z "`find . -name \*~ -o -name .\#\*`" ] || \
 		(echo 'Emacs or CVS backup files present; not copying.' && exit 1)

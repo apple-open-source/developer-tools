@@ -1,6 +1,6 @@
 /* APPLE LOCAL file CW asm blocks */
 /* { dg-do assemble { target i?86*-*-darwin* } } */
-/* { dg-options { -fasm-blocks -msse3 } } */
+/* { dg-options { -m64 -fasm-blocks -msse3 } } */
 /* Radar 4249602 */
 
 void foo() {
@@ -10,6 +10,6 @@ void foo() {
     inc byte ptr [ecx]
     inc word ptr [ecx]
     inc dword ptr [ecx]
-    inc qword ptr [ecx] /* { dg-bogus "no such 386 instruction" "" { xfail *-*-* } } */
+    inc qword ptr [ecx] /* { dg-bogus "no such 386 instruction" "" } */
   }
 }

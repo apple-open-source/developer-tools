@@ -81,26 +81,25 @@ ppc_print_boundaries (ppc_function_boundaries * bounds)
   if (bounds->prologue_start != INVALID_ADDRESS)
     {
       printf_filtered
-        (" The function prologue begins at %s.\n",
-         core_addr_to_string (bounds->prologue_start));
+        (" The function prologue begins at 0x%s.\n",
+         paddr_nz (bounds->prologue_start));
     }
   if (bounds->body_start != INVALID_ADDRESS)
     {
       printf_filtered
-        (" The function body begins at %s.\n",
-         core_addr_to_string (bounds->body_start));
+        (" The function body begins at 0x%s.\n", paddr_nz (bounds->body_start));
     }
   if (bounds->epilogue_start != INVALID_ADDRESS)
     {
       printf_filtered
-        (" The function epilogue begins at %s.\n",
-         core_addr_to_string (bounds->epilogue_start));
+        (" The function epilogue begins at 0x%s.\n",
+         paddr_nz (bounds->epilogue_start));
     }
   if (bounds->function_end != INVALID_ADDRESS)
     {
       printf_filtered
-        (" The function ends at %s.\n",
-         core_addr_to_string (bounds->function_end));
+        (" The function ends at 0x%s.\n",
+         paddr_nz (bounds->function_end));
     }
 }
 
@@ -132,6 +131,8 @@ ppc_print_properties (ppc_function_properties * props)
           printf_filtered
             (" %d bytes of integer and floating-point registers have been saved:\n",
              props->offset);
+	  printf_filtered (" 0x%s is the stack setup address.\n", 
+                           paddr_nz (props->stack_offset_pc));
         }
       if (props->saved_gpr >= 0)
         {
@@ -526,6 +527,7 @@ ppc_parse_instructions (CORE_ADDR start, CORE_ADDR end,
         {                       /* stdu r1,NUM(r1) */
           props->frameless = 0;
           props->offset = extract_ds (op);
+	  props->stack_offset_pc = pc;
           offset2 = props->offset;
           goto processed_insn;
 
@@ -537,6 +539,7 @@ ppc_parse_instructions (CORE_ADDR start, CORE_ADDR end,
         {                       /* stwu r1,NUM(r1)  or stdu r1,NUM(r1) */
           props->frameless = 0;
           props->offset = SIGNED_SHORT (op);
+	  props->stack_offset_pc = pc;
           offset2 = props->offset;
           goto processed_insn;
 
@@ -547,6 +550,7 @@ ppc_parse_instructions (CORE_ADDR start, CORE_ADDR end,
         {
           /* addis 0,0,NUM, (i.e. lis r0, NUM) used for >= 32k frames */
           props->offset = (op & 0x0000ffff) << 16;
+	  props->stack_offset_pc = pc;
           props->frameless = 0;
           goto processed_insn;
 
@@ -567,6 +571,7 @@ ppc_parse_instructions (CORE_ADDR start, CORE_ADDR end,
         {
           /* ori 0,0,NUM, 2nd half of >= 32k frames */
           props->offset |= (op & 0x0000ffff);
+	  props->stack_offset_pc = pc;
           props->frameless = 0;
           goto processed_insn;
 
@@ -575,6 +580,7 @@ ppc_parse_instructions (CORE_ADDR start, CORE_ADDR end,
         {                       /* stwux 1,1,0 */
           props->frameless = 0;
           offset2 = props->offset;
+	  props->stack_offset_pc = pc;
           goto processed_insn;
         }
       /* Gcc on MacOS X uses r30 for the frame pointer */
@@ -763,6 +769,7 @@ ppc_parse_instructions (CORE_ADDR start, CORE_ADDR end,
                                || (op & 0xffff0000) == 0xf8210000)
                         {                       /* stwu r1,NUM(r1)  or stdu r1,NUM(r1) */
                           props->frameless = 0;
+			  props->stack_offset_pc = pc;
                           props->offset = SIGNED_SHORT (op);
                           last_recognized_insn = pc;
                         }
@@ -829,6 +836,7 @@ ppc_clear_function_properties (ppc_function_properties * properties)
     }
 
   properties->offset = -1;
+  properties->stack_offset_pc = INVALID_ADDRESS;
 
   properties->saved_gpr = -1;
   properties->saved_fpr = -1;
@@ -905,12 +913,12 @@ ppc_find_function_boundaries (ppc_function_boundaries_request * request,
    the address we return for it IS the sp for the next frame.  */
 
 CORE_ADDR *
-ppc_frame_saved_regs (struct frame_info * next_frame, void **this_cache)
+ppc_frame_saved_regs (struct frame_info *next_frame, void **this_cache)
 {
   struct ppc_frame_cache *cache;
   ppc_function_properties *props;
   CORE_ADDR *saved_regs;
-  CORE_ADDR prev_sp;
+  CORE_ADDR prev_sp, this_pc, this_func;
   int i;
 
   cache = ppc_frame_cache (next_frame, this_cache);
@@ -951,10 +959,9 @@ ppc_frame_saved_regs (struct frame_info * next_frame, void **this_cache)
           int fpr = PPC_MACOSX_FIRST_FP_REGNUM + i;
 	  if (props->fpr_bitmap[i])
 	    {
-	      long offset =
-		props->fpr_offset +
-		((i - props->saved_fpr) * register_size (current_gdbarch,
-							 PPC_MACOSX_FIRST_FP_REGNUM));
+	      long offset = props->fpr_offset +
+                        ((i - props->saved_fpr) * register_size 
+                          (current_gdbarch, PPC_MACOSX_FIRST_FP_REGNUM));
 	      saved_regs[fpr] = prev_sp + offset;
 	    }
         }
@@ -966,9 +973,9 @@ ppc_frame_saved_regs (struct frame_info * next_frame, void **this_cache)
         {
           int gpr = PPC_MACOSX_FIRST_GP_REGNUM + i;
           int wordsize = (gdbarch_tdep (current_gdbarch))->wordsize;
-          /* Need to use the wordsize here rather than the register size since the
-             G5 always has 8 byte registers, but 32 bit apps only store into the
-             lower wordsize.  */
+          /* Need to use the wordsize here rather than the register
+             size since the G5 always has 8 byte registers, but 32
+             bit apps only store into the lower wordsize.  */
 	  if (props->gpr_bitmap[i])
 	    {
 	      long offset =
@@ -976,6 +983,23 @@ ppc_frame_saved_regs (struct frame_info * next_frame, void **this_cache)
 	      saved_regs[gpr] = prev_sp + offset;
 	    }
         }
+    }
+
+  /* The frame pointer is a really important register to get correct.
+     If we haven't updated the frame pointer register in 'this' func
+     yet, then let's assume that the register still contains the caller's
+     correct frame pointer register.  Mark the location in saved_regs as
+     -1 so the current reg value will be returned as the prev function's
+     reg value.  */
+
+  this_pc = frame_pc_unwind (next_frame);
+  this_func = frame_func_unwind (next_frame);
+  if (props->frameptr_used && props->frameptr_reg > 0
+     && props->frameptr_pc != INVALID_ADDRESS
+     && this_pc >= this_func
+     && this_pc <= props->frameptr_pc)
+    {
+      saved_regs[props->frameptr_reg] = -1;
     }
 
   cache->saved_regs_valid = 1;

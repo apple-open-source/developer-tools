@@ -106,7 +106,7 @@ INCLUDES 			= 	\
 
 OPT				=	-O2
 
-CFLAGS 				= 	-g 			\
+CFLAGS 				= 	-gdwarf-2		\
 					$(OPT)			\
 					-c			\
 					-w			\

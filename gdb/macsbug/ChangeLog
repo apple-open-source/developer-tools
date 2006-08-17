@@ -1,3 +1,9 @@
+2006-05-02  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile: Build with -gdwarf-2 by default.
+	Create a dSYM file, make the MacsBug_plugin in
+	the SRCROOT stripped.
+
 2006-04-17  Jason Molenda  (jmolenda@apple.com)
 
 	* Makefile: Make the MacsBug plugin setgid procmod.

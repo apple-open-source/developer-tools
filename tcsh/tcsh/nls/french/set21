@@ -1,0 +1,5 @@
+$ $Id: set21,v 1.1.1.2 2001/06/28 23:11:09 bbraun Exp $
+$ tc.disc.c
+$set 21 
+1 ne peut obtenir les caractères locaux.\n
+2 ne peut définir les catactères locaux.\n

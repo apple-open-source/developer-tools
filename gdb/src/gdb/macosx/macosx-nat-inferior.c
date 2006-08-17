@@ -384,7 +384,8 @@ macosx_handle_exception (macosx_exception_thread_message *msg,
         switch (msg->exception_data[0])
           {
           case EXC_SOFT_SIGNAL:
-            status->value.sig = msg->exception_data[1];
+            status->value.sig = 
+                              target_signal_from_host (msg->exception_data[1]);
             macosx_status->stopped_in_softexc = 1;
             break;
           default:
@@ -2610,38 +2611,19 @@ cpfork_info (char *args, int from_tty)
   task_t itask;
   int pid;
   int ret;
+  int total = 0;
 
   if (args == NULL)
     {
-      error_no_arg ("process-id to attach");
+      pid = ptid_get_pid (inferior_ptid);
     }
 
   macosx_lookup_task (args, &itask, &pid);
   if (itask == TASK_NULL)
     {
-      error ("unable to locate task");
+      error ("unable to locate task with pid %d", pid);
       return;
     }
-
-  ret = call_ptrace (PTRACE_ATTACHEXC, pid, 0, 0);
-  if (ret != 0)
-    {
-      if (errno == EPERM)
-	{
-	  error ("Unable to attach to process-id %d: %s (%d).\n"
-		 "This request requires that the target process be neither setuid nor "
-		 "setgid and have the same real userid as the debugger, or that the "
-		 "debugger be running with administrator privileges.",
-		 pid, strerror (errno), errno);
-	}
-      else
-	{
-	  error ("Unable to attach to process-id %d: %s (%d)",
-		 pid, strerror (errno), errno);
-	}
-      return;
-    }
-  printf ("Attached\n");
 
  {
     vm_address_t        address = 0;
@@ -2650,14 +2632,11 @@ cpfork_info (char *args, int from_tty)
     int cnt = 0;
 
     while (1) {
-      if (cnt++ > 6)
-	break;
       mach_msg_type_number_t  count;
       struct vm_region_submap_info_64 info;
       int nestingDepth;
 
       count = VM_REGION_SUBMAP_INFO_COUNT_64;
-      printf("count now %d\n", count);
       err = vm_region_recurse_64(itask, &address, &size, &nestingDepth,
 				 (vm_region_info_64_t)&info,&count);
       if (err == KERN_INVALID_ADDRESS) {
@@ -2666,33 +2645,29 @@ cpfork_info (char *args, int from_tty)
 	mach_error("vm_region",err);
 	break; // reached last region
       }
-      printf("count now %d\n", count);
-      printf("addr %x size %d\n", address, size);
 
-      {
-	int rslt;
-	unsigned char buf[10000];
-	vm_offset_t mempointer;       /* local copy of inferior's memory */
-	mach_msg_type_number_t memcopied;     /* for vm_read to use */
+      ++total;
 
-	memset(buf, 0, 9999);
-
-	rslt = mach_vm_read (itask, address, 1000 + cnt * 4, &mempointer, &memcopied);
-
-	printf("rslt is %d, copied %d\n", rslt, memcopied);
-	if (rslt == KERN_SUCCESS)
+      if (info.protection & VM_PROT_WRITE)
+	{
+	  printf("addr 0x%x size 0x%x (", address, size);
 	  {
-	    int i;
+	    int rslt;
+	    vm_offset_t mempointer;       /* local copy of inferior's memory */
+	    mach_msg_type_number_t memcopied;     /* for vm_read to use */
 
-	    memcpy (buf, ((unsigned char *) 0) + mempointer, 1000);
+	    rslt = mach_vm_read (itask, address, 16, &mempointer, &memcopied);
 
-	    for (i = 0; i < 25; ++i)
+	    if (rslt == KERN_SUCCESS)
 	      {
-		printf("%x ", (int) buf[i]);
+		int i;
+
+		for (i = 0; i < 16; ++i)
+		  printf("%x ", ((unsigned char *) mempointer)[i]);
 	      }
-	    printf("\n");
 	  }
-      }
+	  printf(")\n");
+	}
 
       if (info.is_submap) { // is it a submap?
 	nestingDepth++;
@@ -2701,14 +2676,73 @@ cpfork_info (char *args, int from_tty)
       }
     }
  }
-
-  ret = call_ptrace (PTRACE_DETACH, pid, 1, 0);
-
-  task_resume (itask);
-
+  printf ("%d regions total.\n", total);
 }
 
 /* Checkpoint support.  */
+
+/* Given a checkpoint, collect blocks of memory from the inferior and
+   save them in GDB. This is very inefficient, and should only be used
+   as a fallback.  */
+
+void
+direct_memcache_get (struct checkpoint *cp)
+{
+  task_t itask;
+  int ret;
+  int kret;
+  int pid = cp->pid;
+  vm_address_t        address = 0;
+  vm_size_t           size = 0;
+  kern_return_t       err = 0;
+  int cnt = 0;
+
+  kret = task_for_pid (mach_task_self (), pid, &itask);
+  if (kret != KERN_SUCCESS)
+    {
+      error ("Unable to locate task for process-id %d: %s.", pid,
+	     MACH_ERROR_STRING (kret));
+    }
+  if (itask == TASK_NULL)
+    {
+      error ("unable to locate task");
+      return;
+    }
+
+  while (1)
+    {
+      mach_msg_type_number_t  count;
+      struct vm_region_submap_info_64 info;
+      int nesting_depth;
+
+      count = VM_REGION_SUBMAP_INFO_COUNT_64;
+      err = vm_region_recurse_64 (itask, &address, &size, &nesting_depth,
+				  (vm_region_info_64_t) &info, &count);
+      if (err == KERN_INVALID_ADDRESS)
+	{
+	  break;
+	}
+      else if (err)
+	{
+	  mach_error ("vm_region",err);
+	  break; // reached last region
+	}
+
+      if (info.protection & VM_PROT_WRITE)
+	{
+	  int rslt;
+	  vm_offset_t mempointer;       /* local copy of inferior's memory */
+	  mach_msg_type_number_t memcopied;     /* for vm_read to use */
+
+	  memcache_get (cp, address, size);
+	}
+      
+      if (info.is_submap)
+	nesting_depth++;
+      else
+	address += size;
+    }
+}
 
 /* Given a checkpoint, collect blocks of memory from the fork that is serving
    as its "backing store", and install them into the current inferior.  */
@@ -2737,25 +2771,6 @@ fork_memcache_put (struct checkpoint *cp)
       return;
     }
 
-  ret = call_ptrace (PTRACE_ATTACHEXC, pid, 0, 0);
-  if (ret != 0)
-    {
-      if (errno == EPERM)
-	{
-	  error ("Unable to attach to process-id %d: %s (%d).\n"
-		 "This request requires that the target process be neither setuid nor "
-		 "setgid and have the same real userid as the debugger, or that the "
-		 "debugger be running with administrator privileges.",
-		 pid, strerror (errno), errno);
-	}
-      else
-	{
-	  error ("Unable to attach to process-id %d: %s (%d)",
-		 pid, strerror (errno), errno);
-	}
-      return;
-    }
-
   while (1)
     {
       mach_msg_type_number_t  count;
@@ -2778,32 +2793,21 @@ fork_memcache_put (struct checkpoint *cp)
       if (info.protection & VM_PROT_WRITE)
 	{
 	  int rslt;
-	  unsigned char buf[10000];
 	  vm_offset_t mempointer;       /* local copy of inferior's memory */
 	  mach_msg_type_number_t memcopied;     /* for vm_read to use */
 
-	  printf("count now %d addr %x size %d\n", count, address, size);
+	  if (0)
+	    printf("count now %d addr 0x%x size 0x%x\n", count, address, size);
 	  
-	  memset(buf, 0, 9999);
-
 	  rslt = mach_vm_read (itask, address, size, &mempointer, &memcopied);
 
-	  printf("rslt is %d, copied %d\n", rslt, memcopied);
+	  if (0)
+	    printf("rslt is %d, copied %d\n", rslt, memcopied);
+
 	  if (rslt == KERN_SUCCESS)
 	    {
-	      int i;
-
-	      memcpy (buf, ((unsigned char *) 0) + mempointer, 1000);
-
-#if 0
-	      for (i = 0; i < 25; ++i)
-		{
-		  printf("%x ", (int) buf[i]);
-		}
-	      printf("\n");
-#endif
-
-	      target_write_memory (address, buf, 900);
+	      int err;
+	      target_write_memory_partial (address, mempointer, memcopied, &err);
 	    }
 	}
       

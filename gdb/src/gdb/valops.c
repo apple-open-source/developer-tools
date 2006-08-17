@@ -1054,6 +1054,111 @@ value_array (int lowbound, int highbound, struct value **elemvec)
   return (val);
 }
 
+/* APPLE LOCAL: We call value_string alot in objC.  Instead of
+   allocating a string every time this function is called, we allocate
+   one copy of the string and put it in a hash table.  Then if we find
+   the string already there the second time, we just return that.
+
+   You have to clear out the hash table on rerun.  
+   I do this in generic_mourn_inferior.  */
+
+struct string_in_child
+{
+  char *str;
+  int len;
+  CORE_ADDR addr;
+  struct string_in_child *next;
+};
+
+#define STRING_HASH_TABLE_SIZE 2039
+static struct string_in_child *string_table[STRING_HASH_TABLE_SIZE];
+
+/* FIXME: Clear this out on rerun... */
+
+/* Compute a hash code for a string.  This is the msymbol_has routine,
+   altered to remove the assumption that STRING has no embedded NULLs.
+   The comments for value_string say the input to that might have
+   embedded NULLS, so we need to handle that case as well.  h*/
+
+unsigned int
+inferior_string_hash (const char *string, int len)
+{
+  unsigned int hash = 0;
+  int i;
+  for (i = 0; i < len; i++)
+    hash = hash * 67 + string[i] - 113;
+  return hash;
+}
+
+static CORE_ADDR
+allocate_string_in_inferior (char *str, int len)
+{
+  struct string_in_child *ptr;
+  unsigned int hash = inferior_string_hash (str, len) % STRING_HASH_TABLE_SIZE;
+
+  if (string_table[hash] != NULL)
+    {
+      for (ptr = string_table[hash]; ptr != NULL; ptr = ptr->next)
+	{
+	  if (len == ptr->len)
+	    {
+	      /* Note, use memcmp here because the strings
+		 in value_string may have embedded nulls.  */
+	      if (memcmp (str, ptr->str, len) == 0)
+		  return ptr->addr;
+	    }
+	}
+    }
+
+  ptr = (struct string_in_child *) xmalloc (sizeof (struct string_in_child));
+  ptr->len = len;
+
+  ptr->str = xmalloc (len);
+  memcpy (ptr->str, str, len);
+
+  ptr->addr = allocate_space_in_inferior (len);
+  write_memory (ptr->addr, (gdb_byte *) ptr->str, len);
+
+  if (string_table[hash] == NULL)
+    {
+      string_table[hash] = ptr;
+      ptr->next = NULL;
+    }
+  else
+    {
+      ptr->next = string_table[hash];
+      string_table[hash] = ptr;
+    }
+
+  return ptr->addr;
+}
+
+/* This clears out the string pool, and the strings we've allocated on
+   the gdb side.  */
+
+void
+value_clear_inferior_string_pool ()
+{
+  struct string_in_child *free_me, *ptr;
+  int i;
+
+  for (i = 0; i < STRING_HASH_TABLE_SIZE; i++)
+    {
+      if (string_table[i] != NULL)
+	{
+	  ptr = string_table[i];
+	  while (ptr != NULL)
+	    {
+	      free_me = ptr;
+	      ptr = ptr->next;
+	      xfree (free_me->str);
+	      xfree (free_me);
+	    }
+	  string_table[i] = NULL;
+	}
+    }
+}
+
 /* Create a value for a string constant by allocating space in the inferior,
    copying the data into that space, and returning the address with type
    TYPE_CODE_STRING.  PTR points to the string constant data; LEN is number
@@ -1084,9 +1189,10 @@ value_string (char *ptr, int len)
 
   /* Allocate space to store the string in the inferior, and then
      copy LEN bytes from PTR in gdb to that address in the inferior. */
+  /* APPLE LOCAL: Use the string pool.  */
 
-  addr = allocate_space_in_inferior (len);
-  write_memory (addr, (gdb_byte *) ptr, len);
+  addr = allocate_string_in_inferior (ptr, len);
+  /* END APPLE LOCAL */
 
   val = value_at_lazy (stringtype, addr);
   return (val);

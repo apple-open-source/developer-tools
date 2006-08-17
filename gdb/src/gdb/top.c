@@ -1241,6 +1241,9 @@ quit_target (void *arg)
         target_kill ();
     }
 
+  /* APPLE LOCAL checkpoints */
+  clear_all_checkpoints ();
+
   /* UDI wants this, to kill the TIP.  */
   target_close (&current_target, 1);
 

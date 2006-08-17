@@ -1,3 +1,28 @@
+2006-06-27  Eric Christopher  <echristo@apple.com>
+
+	Radar 4512244
+	* build_gcc: Fix soft links for 64-bit multilibs.
+
+2006-06-22  Eric Christopher  <echristo@apple.com>
+
+	Radar 4512244
+	* build_gcc: Remove libgcc extra library handling. Create
+	soft links for 64-bit multilib.
+
+2006-05-05  Eric Christopher  <echristo@apple.com>
+
+	Radar 4471963
+	* build_gcc: Change default x86 processor to nocona and
+	tuning to generic.
+
+2006-03-12  Eric Christopher  <echristo@apple.com>
+
+	* build_gcc: Support x86_64 multilib.
+
+2006-05-06  Eric Christopher  <echristo@apple.com>
+
+	* build_gcc: Unset CC.
+
 2006-06-04  Devang Patel  <dpatel@apple.com>
 
 	* README.Apple: Remove outdated info.
@@ -98,7 +123,7 @@
 
 2005-04-11  Geoffrey Keating  <geoffk@apple.com>
 
-	* build_gcc: Use I386_CPU each time something is configured 
+	* build_gcc: Use I386_CPU each time something is configured
 	to target x86.
 	(I386_CPU): New.
 
@@ -110,7 +135,7 @@
 	(__lwbrx, __rlwnm, __rlwinm, __mulhw, __mulhwu): Use int
 	instead of long	for 32-bit values.
 	(__cntlzw, __cntlzd): Use existing builtins.
-	
+
 2005-01-24  Robert Bowdidge <bowdidge@apple.com>
 	Radar 3971437
 	* build_gcc: run nmedit on libcc_kext.a so that dependent kexts can
@@ -152,9 +177,9 @@
 2004-11-23  Geoffrey Keating  <geoffk@apple.com>
 
 	Radar 3893528
-	* build_gcc: Don't install any header from more-hdrs 
+	* build_gcc: Don't install any header from more-hdrs
 	that Libc has already provided.
-	
+
 	* fixincludes/inclhack.def (darwin_stdint_guards_intn): Remove
 	_DECLARED from end of guard macro names.
 	(darwin_stdint_guards_intptr): Likewise.
@@ -175,7 +200,7 @@
 2004-11-12  Matt Austern  <austern@apple.com>
 
 	* build_gcc: don't install more_hdrs/assert.h on Tiger systems.
-	
+
 2004-11-09  Geoffrey Keating  <geoffk@apple.com>
 
 	* build_gcc: lipo the libexec/.../install-tools files together.
@@ -218,14 +243,14 @@
 
 2004-10-07  Robert Bowdidge <bowdidge@apple.com>
 
-	* build_gcc: Remove earlier patch for copying cpp into 
+	* build_gcc: Remove earlier patch for copying cpp into
 	/usr/libexec/blah.  /usr/bin/cpp will now use gcc -E to do preprocessing
         rather than each compiler's cpp.
 
 2004-09-27  Robert Bowdidge <bowdidge@apple.com>
 
 	* build_gcc: change cp -r to cp -R to ensure we copy symbolic links
-       
+
 2004-09-27  Robert Bowdidge <bowdidge@apple.com>
 
 	* build_gcc: set install names and dependent library references
@@ -246,7 +271,7 @@
 
 2004-09-23  Robert Bowdidge <bowdidge@apple.com>
 
-	Change build_gcc so it continues to put cpp in 
+	Change build_gcc so it continues to put cpp in
         /usr/libexec/gcc/darwin/(architecture)/(version).
 	This is neeed so /usr/bin/cpp will continue to work when changing
 	to gcc-3.5 or gcc-4.0.  Radar 3763777.
@@ -298,7 +323,7 @@
 
 	* Merge lno-branch as of 2004-07-19\ 00:00Z into
 	apple-ppc-branch.  The merged compiler is tagged as
-	after-lno-20040719-merge-to-apple-ppc. The pre-merge compiler is 
+	after-lno-20040719-merge-to-apple-ppc. The pre-merge compiler is
 	tagged as before-lno-20040719-merge-to-apple-ppc. The merge point
 	is tagged as apple-ppc-merge-20040719 on the lno-branch.
 

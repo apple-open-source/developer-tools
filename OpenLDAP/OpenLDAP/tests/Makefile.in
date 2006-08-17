@@ -1,0 +1,57 @@
+# Makefile.in for tests
+# $OpenLDAP: pkg/ldap/tests/Makefile.in,v 1.38.2.6 2004/01/01 18:16:42 kurt Exp $
+## This work is part of OpenLDAP Software <http://www.openldap.org/>.
+##
+## Copyright 1998-2004 The OpenLDAP Foundation.
+## All rights reserved.
+##
+## Redistribution and use in source and binary forms, with or without
+## modification, are permitted only as authorized by the OpenLDAP
+## Public License.
+##
+## A copy of this license is available in the file LICENSE in the
+## top-level directory of the distribution or, alternatively, at
+## <http://www.OpenLDAP.org/license.html>.
+
+RUN=./run
+SUBDIRS= progs
+
+BUILD_BDB=@BUILD_BDB@
+BUILD_HDB=@BUILD_HDB@
+BUILD_LDBM=@BUILD_LDBM@
+
+test tests:
+	@$(MAKE) bdb
+	@$(MAKE) hdb
+	@$(MAKE) ldbm
+
+bdb test-bdb:	bdb-$(BUILD_BDB)
+bdb-no:
+	@echo "run configure with --enable-bdb"
+
+bdb-yes bdb-mod: FORCE
+	@echo "Initiating LDAP tests for BDB..."
+	@$(RUN) -b bdb all
+
+hdb test-hdb:	hdb-$(BUILD_HDB)
+hdb-no:
+	@echo "run configure with --enable-hdb"
+
+hdb-yes hdb-mod: FORCE
+	@echo "Initiating LDAP tests for HDB..."
+	@$(RUN) -b hdb all
+
+ldbm test-ldbm:	ldbm-$(BUILD_LDBM)
+ldbm-no:
+	@echo "run configure with --enable-ldbm"
+
+ldbm-yes ldbm-mod:	FORCE
+	@echo "Initiating LDAP tests for LDBM..."
+	@$(RUN) -b ldbm all
+
+clean-local:	FORCE
+	-$(RM) -r testrun *leak *gmon *core
+
+veryclean-local: FORCE
+	@-$(RM) data schema ucdata
+

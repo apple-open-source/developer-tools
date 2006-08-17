@@ -31,6 +31,13 @@ struct memcache
   gdb_byte *cache;
 };
 
+enum cp_type {
+  unset = '?',
+  manual = 'M',
+  autogen = 'A',
+  reexec = 'r'
+};
+
 /* A checkpoint is a saved state of the inferior at a particular point
    in time.  Ideally it includes all state, but may be incomplete in
    some way, and software should cope with that.  It is basically
@@ -39,10 +46,25 @@ struct memcache
 
 struct checkpoint
 {
+  enum cp_type type;
+
+  /* A unique identifier for each checkpoint. These are assigned
+     consecutively throughout a debugging session.  */
+  int number;
+
+  /* Double linkage for the complete list of checkpoints.  */
   struct checkpoint *next;
   struct checkpoint *prev;
+
+  /* The lnext/lprev linkage connects the line of checkpoints that
+     correspond to states prior to the latest (current) state of
+     the program. Checkpoints not in this line represent alternate
+     lines of execution that may be randomly accessed by number, but
+     that did not lead to the current state.  */
+  struct checkpoint *lnext;
+  struct checkpoint *lprev;
+
   struct checkpoint *immediate_prev;
-  int number;
   int sequence_number;
 
   struct regcache *regs;

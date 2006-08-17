@@ -1,3 +1,226 @@
+2006-07-13  Jason Molenda  (jmolenda@apple.com)
+
+	* i386-macosx-nat-exec.c (fetch_inferior_registers): If the
+	new-style thread_get_state call fails, try the old style one.
+
+2006-06-28  Jason Molenda  (jmolenda@apple.com)
+
+        * ppc-macosx-tdep.c (ppc_frame_unwind_fp): Correct call to complaint.
+        (ppc_frame_unwind_fp_for_dereferencing): Ditto.
+
+2006-06-26  Eric Albert  (ejalbert@apple.com)
+
+	* i386-macosx-nat-exec.c (fetch_inferior_registers): If inferior
+	arch unknown, do a preliminary thread get state to determine whether
+	it is a 32 or 64 bit process and update osabi appropriately.
+
+2006-06-19  Jason Molenda  (jmolenda@apple.com)
+
+        * ppc-macosx-frameinfo.c (ppc_print_boundaries): Prepend 0x
+        before addesses.
+        (ppc_parse_instructions): Jim's change to record location of
+        stack pointer being set (stack_offset_pc).
+        (ppc_clear_function_properties): Initialize stack_offset_pc.
+        (ppc_find_function_boundaries): Whitespace.
+        (ppc_frame_saved_regs): Ditto.  Mark frame pointer reg as containing
+        caller's fp if it hasn't been modified yet.
+        * ppc-macosx-frameinfo.h (stack_offset_pc): Jim's newly added field.
+        (struct ppc_frame_cache): Add a couple comments, plus 
+        fp_for_dereferencing.
+        * ppc-macosx-tdep.c (ppc_print_extra_frame_info): Move this function
+        higher in the file so similar functions are next to one another.
+        (ppc_alloc_frame_cache): Update to new structure field names.
+        (ppc_frame_cache): Update to new structure field names.
+        Set the cache->pc to the actual pc value instead of the address of
+        the function start.
+        Correct some prev vs. this confusion in the naming conventions.
+        (ppc_frame_unwind_fp): Rewritten.
+        (ppc_frame_unwind_fp_for_dereferencing): New function.
+        (ppc_sigtramp_frame_cache): Updated for new field names.
+        (ppc_sigtramp_frame_prev_register, ppc_integer_to_address): Whitespace.
+        (ppc_mach_o_osabi_sniffer_use_dyld_hint): Ditto.
+        (ppc_64_macosx_get_longjmp_target): Ditto.
+        (ppc_macosx_get_longjmp_target): Ditto.
+        * ppc-macosx-tdep.h: New prototype for 
+        ppc_frame_unwind_fp_for_dereferencing.
+        Rename ppc_frame_find_prev_sp to ppc_frame_unwind_sp.
+        New prototype for ppc_frame_find_prev_sp.
+
+2006-06-11  Stan Shebs  <shebs@apple.com>
+
+	* macosx-nat-inferior.c (cpfork_info): General cleanup.
+	(direct_memcache_get): New, direct access by region for
+	checkpointing.
+
+2006-06-07  Jim Ingham  <jingham@apple.com>
+
+	* macosx-tdep.c (open_file_with_LS): Warn on error from the 
+	script execution.  Also remember to dispose the OSAID.
+	
+2006-06-02  Jason Molenda  (jmolenda@apple.com)
+
+	* machoread.c (macho_build_psymtabs): In the absence of a 
+	__DATA, __data section use the __DATA segment itself for any
+	minsyms we might create in there.
+
+2006-06-02  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-info.c: Use the old pre-conformant version of the
+	ppc thread_status structure.
+
+2006-05-30  Jason Molenda  (jmolenda@apple.com)
+
+        * i386-macosx-thread-status.h: Define GDB_THREAD_STATE_NONE in terms
+        of the system's installed THREAD_STATE_NONE.
+
+2006-05-30  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (open_file_with_LS): Don't dlopen ApplicationServices
+	or Carbon - we now link to Carbon so these are both already available.
+
+2006-05-30  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-infthread.c (modify_trace_bit): Add comment and
+	reformat whitespace a little.
+
+2006-05-30  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-dyld.c (macosx_locate_dyld) PORT_NULL -> MACH_PORT_NULL.
+	* macosx-nat-excthread.c (macosx_exception_thread_init): Ditto.
+
+2006-05-23  Jim Ingham  <jingham@apple.com>
+
+	* macosx-tdep.c: (open_file_with_LS): New function.
+	(open_command): parse off line-number & use open_file_with_LS
+	to set the selection to the line-number as well as the file.
+	
+2006-05-17  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-dyld-info.c (dyld_print_entry_info): Fix "info shared"
+	output issue with 64-bit programs.
+
+2006-05-17  Jason Molenda  (jmolenda@apple.com)
+
+        * macosx-nat-dyld.c (macosx_locate_dyld): Add comment so I don't
+        get confused about this being called w/o a running inferior again.
+        (macosx_dyld_update): Only try to insert the CFM breakpoint once.
+
+2006-05-16  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (open_command): Make static.
+
+2006-05-11  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-tdep.c (open_command): New command to open a source file
+	via LaunchServices (e.g. in Xcode).
+	(_initialize_macosx_tdep): Register it.
+
+2006-05-09  Jim Ingham  <jingham@apple.com>
+
+	* macosx-xdep.c: Move flush_stack_command and
+	update_command from here to...
+	* macosx-tdep.c: Here.  They should be able to
+	build for the cross debugger, but the xdep file is
+	not built then.
+	
+2006-05-03  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-inferior.c (macosx-handle_exception): Translate the
+	signal from a Mach message to enum target_signal.
+
+2006-05-02  Stan Shebs  <shebs@apple.com>
+
+	* macosx-nat-inferior.c (cpfork_info): Remove attach/detach code,
+	display all regions, display a total count.
+	(fork_memcache_put): Copy entire region correctly.
+
+2006-05-01  Jason Molenda  (jmolenda@apple.com)
+
+	* machoread.c (macho_build_psymtabs): Create empty obj_sections
+	for sections that are empty so we can find the asection pointer
+	when creating minsyms.
+
+2006-05-01  Jason Molenda  (jmolenda@apple.com)
+
+	* i386-macosx-thread-status.h: Include mach_types.h because we
+	use one of its types in our definitions here.
+
+2006-04-28  Jason Molenda  (jmolenda@apple.com)
+
+	* i386-macosx-tdep.c (i386_macosx_store_fp_registers): Refer to
+	gdb_i386_float_state_t.
+	* i386-macosx-tdep.h: Move definition of GDB_CPU_TYPE_64 from here...
+	* macosx-nat-dyld.h: To here.  Needed by macosx-nat-dyld.c.
+	* i386-macosx-thread-status.h: Provide definitions of
+	gdb_i386_thread_fpstate_t and GDB_i386_THREAD_FPSTATE_COUNT.
+
+2006-04-28  Jason Molenda  (jmolenda@apple.com)
+
+	* i386-macosx-thread-status.h: Copy latest version of 
+	mach/i386/thread_status.h so the new x86_64 definitions are 
+	available on older systems.
+	* i386-macosx-nat-exec.c: Use the "gdb_" prefixed copies of all
+	the i386/thread_status.h structures/definitions.
+	* i386-macosx-tdep.c: Ditto.
+	* macosx-nat-infthread.c: Ditto.
+	* i386-macosx-tdep.h: Ditto.  Include i386-macosx-thread-status.h
+	instead of <mach/i386/thread_status.h>.
+	Add definition of GDB_CPU_TYPE_X86_64.
+	* macosx-nat-dyld.c (macosx_dyld_init): Use GDB_ prefixed copy of
+	CPU_TYPE_X86_64.
+
+2006-03-30  Eric Albert  (ejalbert@apple.com)
+
+	* macosx-nat-dyld.c (FETCH_ARGUMENT): Add support for x86-64.
+	(macosx_dyld_init): Set osabi based on the header for Intel, too.
+
+2006-03-28  Eric Albert  (ejalbert@apple.com)
+
+	* i386-macosx-nat-exec.c: Remove i386-macosx-thread-status.h.
+	(fetch_inferior_registers): Add support for x86-64 thread states.
+	(store_inferior_registers): Add support for x86-64 thread states.
+	* i386-macosx-tdep.c: Remove i386-macosx-thread-status.h.
+	(supply_unsigned_int64): Added.
+	(collect_unsigned_int64): Added.
+	(i386_macosx_fetch_gp_registers): Switch to i386_thread_state_t and fix
+	some compiler warnings.
+	(i386_macosx_store_gp_registers): Switch to i386_thread_state_t and fix
+	some compiler warnings.
+	(x86_64_macosx_fetch_gp_registers): Added.
+	(x86_64_macosx_store_gp_registers): Added.
+	(i386_macosx_fetch_fp_registers): Switch to i386_float_state_t.
+	(x86_64_macosx_fetch_fp_registers): Added.
+	(i386_macosx_store_fp_registers): Switch to i386_float_state_t.
+	(x86_64_macosx_store_fp_registers): Added.
+	(i386_macosx_thread_state_addr): Fix some compiler warnings.
+	(i386_integer_to_address): Fix a compiler warning.
+	* i386-macosx-tdep.h: Switch from i386-macosx-thread-status.h to
+	mach/i386/thread_status.h.  Added FIRST_GP_REGNUM_64 and friends.
+	Added prototypes for the functions added to i386-macosx-tdep.c.
+	(IS_GP_REGNUM_64): Added.
+	(IS_FP_REGNUM_64): Added.
+	(IS_VP_REGNUM_64): Added.
+	* macosx-nat-infthread.c: Remove i386-macosx-thread-status.h.
+	(modify_trace_bit): Add support for x86-64 thread states.
+
+2006-03-23  Eric Albert  (ejalbert@apple.com)
+
+	* i386-macosx-tdep.c: Add libbfd.h, amd64-tdep.h, and sys/sysctl.h.
+	Note that osabi_seen_in_attached_dyld is now used.
+	(x86_64_macosx_thread_state_reg_offset): Added.
+	(i386_integer_to_address): Change the last argument to a
+	const gdb_byte * to avoid a warning.
+	(x86_macosx_init_abi_64): Added.
+	(i386_mach_o_query_64bit): Added.
+	(i386_mach_o_osabi_sniffer): Sniff for x86-64 binaries.
+	(i386_mach_o_osabi_sniffer_use_dyld_hint): Added.
+	(_initialize_i386_macosx_tdep): Register the Darwin x86-64 ABI.
+
+2006-04-28  Jason Molenda  (jmolenda@apple.com)
+
+	* ppc-macosx-tdep.c (ppc_frame_find_prev_sp): Add comments about
+	how this function works.
+
 2006-04-27  Jason Molenda  (jmolenda@apple.com)
 
 	* machoread.c (macho_build_psymtabs): DBX_TEXT_SECTION et al are

@@ -48,6 +48,7 @@
 #include "gdb_assert.h"
 #include "inferior.h"
 #include "demangle.h"          /* For cplus_demangle */
+#include "osabi.h"
 
 #include <ctype.h>
 
@@ -90,6 +91,20 @@ int lookup_objc_class_p = 1;
 /* Should we override the check for things like malloc on the stack above us before
    calling PO?  */
 int call_po_at_unsafe_times = 0;
+
+
+/* APPLE LOCAL: At several places we grope in the objc runtime to
+   find addresses of methods and such; we need to know how large
+   an address is on the executable program.  */
+
+static int
+get_addrsize (void)
+{
+  if (exec_bfd && gdbarch_lookup_osabi (exec_bfd) == GDB_OSABI_DARWIN64)
+    return 8;
+  else
+    return 4;
+}
 
 /* Lookup a structure type named "struct NAME", visible in lexical
    block BLOCK.  If NOERR is nonzero, return zero if NAME is not
@@ -1587,9 +1602,10 @@ find_methods (struct symtab *symtab, char type,
     *ndebug = cdebug;
 }
 
-char *find_imps (struct symtab *symtab, struct block *block,
-		 char *method, struct symbol **syms, 
-		 unsigned int *nsym, unsigned int *ndebug)
+char *
+find_imps (struct symtab *symtab, struct block *block,
+           char *method, struct symbol **syms, 
+           unsigned int *nsym, unsigned int *ndebug)
 {
   char type = '\0';
   char *class = NULL;
@@ -1752,17 +1768,17 @@ print_object_command (char *args, int from_tty)
   }
 
   /* APPLE LOCAL begin */
-  if (object != NULL && TYPE_CODE(value_type (object)) == TYPE_CODE_ERROR)
+  if (object != NULL && TYPE_CODE (value_type (object)) == TYPE_CODE_ERROR)
     {
       struct type *id_type;
       id_type = lookup_typename ("id", NULL, 1);
       if (id_type)
-      object = value_cast (id_type, object);
+        object = value_cast (id_type, object);
     }
   /* APPLE LOCAL end */
 
   /* Validate the address for sanity.  */
-  object_addr = value_as_long (object);
+  object_addr = value_as_address (object);
   read_memory (object_addr, &c, 1);
 
   /* APPLE LOCAL begin */
@@ -1789,7 +1805,7 @@ print_object_command (char *args, int from_tty)
 
   do_cleanups (cleanup_chain);
 
-  string_addr = value_as_long (description);
+  string_addr = value_as_address (description);
   if (string_addr == 0)
     error (_("object returns null description"));
 
@@ -2003,51 +2019,67 @@ _initialize_objc_language (void)
 static void 
 read_objc_method (CORE_ADDR addr, struct objc_method *method)
 {
-  method->name  = read_memory_unsigned_integer (addr + 0, 4);
-  method->types = read_memory_unsigned_integer (addr + 4, 4);
-  method->imp   = read_memory_unsigned_integer (addr + 8, 4);
+  int addrsize = get_addrsize ();
+  method->name  = read_memory_unsigned_integer (addr + 0, addrsize);
+  method->types = read_memory_unsigned_integer (addr + addrsize, addrsize);
+  method->imp   = read_memory_unsigned_integer (addr + addrsize * 2, addrsize);
 }
 
-static 
-unsigned long read_objc_methlist_nmethods (CORE_ADDR addr)
+static unsigned long 
+read_objc_method_list_nmethods (CORE_ADDR addr)
 {
-  return read_memory_unsigned_integer (addr + 4, 4);
+  int addrsize = get_addrsize ();
+  return read_memory_unsigned_integer (addr + addrsize, 4);
 }
 
 static void 
-read_objc_methlist_method (CORE_ADDR addr, unsigned long num, 
-			   struct objc_method *method)
+read_objc_method_list_method (CORE_ADDR addr, unsigned long num, 
+                              struct objc_method *method)
 {
-  gdb_assert (num < read_objc_methlist_nmethods (addr));
-  read_objc_method (addr + 8 + (12 * num), method);
+  int addrsize = get_addrsize ();
+  int offset;
+
+  /* 64-bit objc runtime has an extra field in here.  */
+  if (addrsize == 8)
+    offset = addrsize + 4 + 4;
+  else
+    offset = addrsize + 4;
+
+  gdb_assert (num < read_objc_method_list_nmethods (addr));
+  read_objc_method (addr + offset + (3 * addrsize * num), method);
 }
   
 static void 
 read_objc_object (CORE_ADDR addr, struct objc_object *object)
 {
-  object->isa = read_memory_unsigned_integer (addr, 4);
+  int addrsize = get_addrsize ();
+  object->isa = read_memory_unsigned_integer (addr, addrsize);
 }
 
 static void 
 read_objc_super (CORE_ADDR addr, struct objc_super *super)
 {
-  super->receiver = read_memory_unsigned_integer (addr, 4);
-  super->class = read_memory_unsigned_integer (addr + 4, 4);
+  int addrsize = get_addrsize ();
+  super->receiver = read_memory_unsigned_integer (addr, addrsize);
+  super->class = read_memory_unsigned_integer (addr + addrsize, addrsize);
 };
 
 static void 
 read_objc_class (CORE_ADDR addr, struct objc_class *class)
 {
-  class->isa = read_memory_unsigned_integer (addr, 4);
-  class->super_class = read_memory_unsigned_integer (addr + 4, 4);
-  class->name = read_memory_unsigned_integer (addr + 8, 4);
-  class->version = read_memory_unsigned_integer (addr + 12, 4);
-  class->info = read_memory_unsigned_integer (addr + 16, 4);
-  class->instance_size = read_memory_unsigned_integer (addr + 18, 4);
-  class->ivars = read_memory_unsigned_integer (addr + 24, 4);
-  class->methods = read_memory_unsigned_integer (addr + 28, 4);
-  class->cache = read_memory_unsigned_integer (addr + 32, 4);
-  class->protocols = read_memory_unsigned_integer (addr + 36, 4);
+  int addrsize = get_addrsize ();
+  class->isa = read_memory_unsigned_integer (addr, addrsize);
+  class->super_class = read_memory_unsigned_integer (addr + addrsize, addrsize);
+  class->name = read_memory_unsigned_integer (addr + addrsize * 2, addrsize);
+  class->version = read_memory_unsigned_integer (addr + addrsize * 3, addrsize);
+  class->info = read_memory_unsigned_integer (addr + addrsize * 4, addrsize); 
+  class->instance_size = read_memory_unsigned_integer 
+                                               (addr + addrsize * 5, addrsize);
+  class->ivars = read_memory_unsigned_integer (addr + addrsize * 6, addrsize);
+  class->methods = read_memory_unsigned_integer (addr + addrsize * 7, addrsize);
+  class->cache = read_memory_unsigned_integer (addr + addrsize * 8, addrsize);
+  class->protocols = read_memory_unsigned_integer 
+                                                (addr + addrsize * 9, addrsize);
 }
 
 static CORE_ADDR
@@ -2056,6 +2088,7 @@ find_implementation_from_class (CORE_ADDR class, CORE_ADDR sel)
   CORE_ADDR subclass = class;
   char sel_str[2048];
   int npasses;
+  int addrsize = get_addrsize ();
   
   sel_str[0] = '\0';
 
@@ -2114,27 +2147,26 @@ find_implementation_from_class (CORE_ADDR class, CORE_ADDR sel)
 	    }
 	  else
 	    {
-	      mlist = read_memory_unsigned_integer (class_str.methods + 
-						    (4 * mlistnum), 4);
-	      
+	      mlist = read_memory_unsigned_integer 
+                          (class_str.methods + (addrsize * mlistnum), addrsize);
+
 	      /* The ObjC runtime uses NULL to indicate then end of the
 		 method chunk pointers within an allocation block,
-		 and -1 for the end of an allocation block.  
-		 FIXME: We will have to change this when we get a 64 bit
-		 runtime.  */
-	      
-	      if (mlist == 0 || mlist == 0xffffffff) 
+		 and -1 for the end of an allocation block.  */
+
+	      if (mlist == 0 || mlist == 0xffffffff 
+                  || mlist == 0xffffffffffffffffULL)
 		break;
 	    }
 
-	  nmethods = read_objc_methlist_nmethods (mlist);
+	  nmethods = read_objc_method_list_nmethods (mlist);
 
 	  for (i = 0; i < nmethods; i++) 
 	    {
 	      struct objc_method meth_str;
 	      char name_str[2048];
 
-	      read_objc_methlist_method (mlist, i, &meth_str);
+	      read_objc_method_list_method (mlist, i, &meth_str);
 
 	      if (!class_initialized)
 		read_memory_string (meth_str.name, name_str, 2047);
@@ -2285,6 +2317,7 @@ struct type *
 value_objc_target_type (struct value *val, struct block *block)
 {
   struct type *base_type, *dynamic_type = NULL;
+  int addrsize = get_addrsize ();
 
   base_type = check_typedef (value_type (val));
 
@@ -2335,7 +2368,7 @@ value_objc_target_type (struct value *val, struct block *block)
             that is named "isa". So keep getting the */
          if (t_field_name && t_field_name[0] == '\0')
            {
-             base_type = TYPE_FIELD_TYPE(base_type, i);
+             base_type = TYPE_FIELD_TYPE (base_type, i);
              if (base_type)
                nfields = TYPE_NFIELDS (base_type); 
              else
@@ -2354,15 +2387,20 @@ value_objc_target_type (struct value *val, struct block *block)
 	  long info_field;
 
 	  isa_addr = 
-	    read_memory_unsigned_integer (value_as_address (val), 4);
+	    read_memory_unsigned_integer (value_as_address (val), addrsize);
+
+          /* isa_addr now points to a struct objc_class in the inferior.  */
+
 	  /* APPLE LOCAL: Don't look up the dynamic type if the isa is the
 	     MetaClass class, since then we are looking at the Class object
 	     which doesn't have the fields of an object of the class.  */
-	  info_field = read_memory_unsigned_integer (isa_addr + 16, 4);
+	  info_field = read_memory_unsigned_integer 
+                                         (isa_addr + addrsize * 4, addrsize);
 	  if (info_field & CLS_META)
 	    return NULL;
 
-	  name_addr =  read_memory_unsigned_integer (isa_addr + 8, 4);
+	  name_addr =  read_memory_unsigned_integer 
+                                           (isa_addr + addrsize * 2, addrsize);
 
 	  read_memory_string (name_addr, class_name, 255);
 	  class_symbol = lookup_symbol (class_name, block, STRUCT_DOMAIN, 0, 0);

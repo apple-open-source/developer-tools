@@ -620,10 +620,10 @@ debug_rli (record_layout_info rli)
   fprintf (stderr, "\naligns: rec = %u, unpack = %u, off = %u\n",
 	   rli->record_align, rli->unpacked_align,
 	   rli->offset_align);
-  /* APPLE LOCAL begin ms_struct */
+  /* APPLE LOCAL begin mainline */
   if (rli->remaining_in_alignment)
     fprintf (stderr, "remaining_in_alignment = %u\n", rli->remaining_in_alignment);
-  /* APPLE LOCAL end ms_struct */
+  /* APPLE LOCAL end mainline */
   if (rli->packed_maybe_necessary)
     fprintf (stderr, "packed may be necessary\n");
 
@@ -705,7 +705,7 @@ update_alignment_for_field (record_layout_info rli, tree field,
   /* Record must have at least as much alignment as any field.
      Otherwise, the alignment of the field within the record is
      meaningless.  */
-  /* APPLE LOCAL begin ms_struct */
+  /* APPLE LOCAL begin mainline */
   if (targetm.ms_bitfield_layout_p (rli->t))
     {
       /* Here, the alignment of the underlying type of a bitfield can
@@ -729,7 +729,7 @@ update_alignment_for_field (record_layout_info rli, tree field,
 	  rli->unpacked_align = MAX (rli->unpacked_align, TYPE_ALIGN (type));
 	}
     }
-  /* APPLE LOCAL end ms_struct */
+  /* APPLE LOCAL end mainline */
 #ifdef PCC_BITFIELD_TYPE_MATTERS
   else if (is_bitfield && PCC_BITFIELD_TYPE_MATTERS)
     {
@@ -873,15 +873,17 @@ place_field (record_layout_info rli, tree field)
 
   /* Work out the known alignment so far.  Note that A & (-A) is the
      value of the least-significant bit in A that is one.  */
+  /* APPLE LOCAL begin reverse_bitfields */
   if (! integer_zerop (rli->bitpos))
     {
       int realoffset = tree_low_cst (rli->bitpos, 1);
-      /* APPLE LOCAL begin ms_struct */
+
       if (targetm.reverse_bitfields_p (rli->t))
 	realoffset += rli->remaining_in_alignment;
-      /* APPLE LOCAL end ms_struct */
+
       known_align = realoffset & -realoffset;
     }
+  /* APPLE LOCAL end reverse_bitfields */
   else if (integer_zerop (rli->offset))
     known_align = BIGGEST_ALIGNMENT;
   else if (host_integerp (rli->offset, 1))
@@ -911,14 +913,14 @@ place_field (record_layout_info rli, tree field)
 	rli->packed_maybe_necessary = 1;
     }
 
-  /* APPLE LOCAL begin ms_struct */
+  /* APPLE LOCAL begin mainline */
   /* Does this field automatically have alignment it needs by virtue
      of the fields that precede it and the record's own alignment?
      We already align ms_struct fields, so don't re-align them.  */
   if (known_align < desired_align
       && !targetm.ms_bitfield_layout_p (rli->t))
     {
-      /* APPLE LOCAL end ms_struct */
+      /* APPLE LOCAL end mainline */
       /* No, we need to skip space before this field.
 	 Bump the cumulative size to multiple of field alignment.  */
 
@@ -1055,7 +1057,7 @@ place_field (record_layout_info rli, tree field)
 
      Note: for compatibility, we use the type size, not the type alignment
      to determine alignment, since that matches the documentation */
-  /* APPLE LOCAL begin ms_struct */
+  /* APPLE LOCAL begin mainline */
   if (targetm.ms_bitfield_layout_p (rli->t))
     {
       /* At this point, either the prior or current are bitfields,
@@ -1087,6 +1089,7 @@ place_field (record_layout_info rli, tree field)
 
 	      if (rli->remaining_in_alignment < bitsize)
 		{
+		  /* APPLE LOCAL begin reverse_bitfields */
 		  if (!targetm.reverse_bitfields_p (rli->t))
 		    {
 		  /* out of bits; bump up to next 'word'.  */
@@ -1147,6 +1150,7 @@ place_field (record_layout_info rli, tree field)
 		  /* Ensure we don't go negative.  */
 		  gcc_assert (tree_low_cst (rli->bitpos, 0) >= 0);
 		}
+	      /* APPLE LOCAL end reverse_bitfields */
 
 	      rli->remaining_in_alignment -= bitsize;
 	    }
@@ -1160,11 +1164,10 @@ place_field (record_layout_info rli, tree field)
 		 type and where we first started working on that type.
 		 Note: since the beginning of the field was aligned then
 		 of course the end will be too.  No round needed.  */
-
+	      /* APPLE LOCAL begin reverse_bitfields */
 	      if (!targetm.reverse_bitfields_p (rli->t))
 		{
-		  if (!integer_zerop (DECL_SIZE (rli->prev_field))
-		      && rli->remaining_in_alignment)
+		  if (!integer_zerop (DECL_SIZE (rli->prev_field)))
 		    {
 		      rli->bitpos
 			= size_binop (PLUS_EXPR, rli->bitpos,
@@ -1193,7 +1196,7 @@ place_field (record_layout_info rli, tree field)
 	      else
 		prev_saved = NULL;
 		}
-
+	      /* APPLE LOCAL end reverse_bitfields */
 	      /* Cause a new bitfield to be captured, either this time (if
 		 currently a bitfield) or next time we see one.  */
 	      if (!DECL_BIT_FIELD_TYPE(field)
@@ -1244,6 +1247,7 @@ place_field (record_layout_info rli, tree field)
 
 	  rli->bitpos = round_up (rli->bitpos, type_align);
 
+	  /* APPLE LOCAL begin reverse_bitfields */
 	  /* If we're reversing add this to the field starting at the
 	     "right" end of the alignment.  */
 	  if (targetm.reverse_bitfields_p (rli->t)
@@ -1256,7 +1260,7 @@ place_field (record_layout_info rli, tree field)
 						    TYPE_SIZE (type)),
 					DECL_SIZE (field));
 	    }
-
+	  /* APPLE LOCAL end reverse_bitfields */
           /* If we really aligned, don't allow subsequent bitfields
 	     to undo that.  */
 	  rli->prev_field = NULL;
@@ -1264,14 +1268,13 @@ place_field (record_layout_info rli, tree field)
       /* Nothing we've done should let bitpos be negative.  */
       gcc_assert (tree_low_cst (rli->bitpos, 0) >= 0);
     }
-  /* APPLE LOCAL end ms_struct */
   /* Offset so far becomes the position of this field after normalizing.  */
   normalize_rli (rli);
 
     DECL_FIELD_BIT_OFFSET (field) = rli->bitpos;
   DECL_FIELD_OFFSET (field) = rli->offset;
   SET_DECL_OFFSET_ALIGN (field, rli->offset_align);
-
+  /* APPLE LOCAL end mainline */
   /* If this field ended up more aligned than we thought it would be (we
      approximate this by seeing if its position changed), lay out the field
      again; perhaps we can use an integral mode for it now.  */
@@ -1316,7 +1319,7 @@ place_field (record_layout_info rli, tree field)
       rli->bitpos = bitsize_zero_node;
       rli->offset_align = MIN (rli->offset_align, desired_align);
     }
-  /* APPLE LOCAL begin ms_struct */
+  /* APPLE LOCAL begin reverse_bitfields */
   else if (targetm.ms_bitfield_layout_p (rli->t))
     {
       if (!targetm.reverse_bitfields_p (rli->t))
@@ -1365,7 +1368,7 @@ place_field (record_layout_info rli, tree field)
 	}
       normalize_rli (rli);
     }
-  /* APPLE LOCAL end ms_struct */
+  /* APPLE LOCAL end reverse_bitfields */
   else
     {
       rli->bitpos = size_binop (PLUS_EXPR, rli->bitpos, DECL_SIZE (field));

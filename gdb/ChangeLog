@@ -1,3 +1,17 @@
+2006-05-02  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile: Default to building with -gdwarf-2.
+	(install-gdb-macosx, install-gdb-fat): Create dSYM files,
+	strip the binaries that are left in SYMROOT.
+
+2006-05-01  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.sh: Unset the DYLD_* env vars before invoking gdb;
+	dyld-60 and later issue a warning when a setgid program is invoked
+	and these env vars are not honored by dyld.  
+	* Makefile (check): Properly quote filename check so that multiple
+	matches don't yield a shell error.
+
 2006-04-18  Jason Molenda  (jmolenda@apple.com)
 
 	* Makefile: Don't remove the symroot between phases.

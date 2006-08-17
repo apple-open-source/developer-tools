@@ -1,7 +1,367 @@
-2006-05-15  Eric Christopher  <echristo@apple.com>
+2006-06-26  Hui-May Chang  <hm.chang@apple.com>
 
-	Radar 4549340
-	* stor-layout.c (layout_decl): Fix typo.
+	Radar 4395773
+	* doc/extend.texi: Document SSE2 built-in functions and other new functions.
+
+2006-06-26  Eric Christopher  <echristo@apple.com>
+
+	Radar 4512244
+	* config/t-slibgcc-darwin (SHLIB_SUFFIX): Depend only on ppc64
+	for suffix.
+
+2006-06-14  Mike Stump  <mrs@apple.com>
+
+	Radar 4586112
+	* configure.ac (HAVE_GAS_LITERAL16): Add.
+	* config/darwin.c (HAVE_GAS_LITERAL16): Default to 0.
+	* config/i386/t-darwin: Don't assume we can always build x86_64 multilib.
+
+2006-06-26  Eric Christopher  <echristo@apple.com>
+
+	Radar 4601627
+	* config/t-slibgcc-darwin (SHLIB_MAPFILES): Revert previous patch.
+
+2006-06-26  Eric Christopher  <echristo@apple.com>
+
+	Radar 4601584
+	* config.gcc: Revert part of previous patch.
+	* config/t-darwin: Ditto.
+
+2006-06-23  Eric Christopher  <echristo@apple.com>
+
+	Radar 4476324
+	* config/i386/i386.c (standard_sse_mode_p): New.
+	(standard_sse_constant_p): Use.
+	* config/i386/predicates.md (vector_move_operand): Revert
+	patch for 4283414.
+	(nonimmediate_or_sse_const_operand): Define.
+	* config/i386/sse.md (*mov<mode>_internal): Use.
+	(*movv4sf_internal): Ditto.
+	(*movv2df_internal): Ditto.
+
+2006-06-23  Mike Stump  <mrs@apple.com>
+
+	Radar 4591284
+	* config/i386/tmmintrin.h: Add __always_inline__ and __nodebug__.
+
+2006-06-22  Eric Christopher  <echristo@apple.com>
+
+	Radar 4512244
+	* config.gcc (*-*-darwin*): Add crt3.o to extra_parts.
+	(powerpc-*-darwin*): Add ${extra_parts}.
+	* config/t-darwin (EXTRA_MULTILIB_PARTS): Remove.
+	* config/t-slibgcc-darwin: Rewrite libgcc_s.1.dylib handling.
+
+2006-06-22  Eric Christopher  <echristo@apple.com>
+
+	Radar 4598165
+	* config/i386/i386.c (ix86_preferred_reload_class): Bring in
+	rest of patch for 3501055 from mainline.
+	* config/i386/i386.h (IS_STACK_MODE): Ditto.
+
+2006-06-22  Mike Stump  <mrs@apple.com>
+
+	Radar 4535822
+	* c-common.c (iasm_stmt): Update for new assembler.
+	(iasm_print_operand): Likewise.
+	* config/asm.h: Likewise.
+	* config/i386/i386.c (iasm_x86_canonicalize_operands): Likewise.
+	* config/i386/i386.h (TARGET_IASM_OP_CONSTRAINT): Fix constraints
+	for lldt and ltr.
+
+2006-06-05 Hui-May Chang <hm.chang@apple.com>
+
+	Radar 4469713
+	* i386.c (ix86_init_mmx_sse_builtins)
+	The return type of builtin function, __builtin_ia32_vec_ext_v8hi,
+	should be an unsigned instead of a signed type.
+
+2006-06-05  Eric Christopher  <echristo@apple.com>
+
+	Radar 4560266
+	* config/i386/darwin.h (OPTION_DEFAULT_SPECS): Remove port
+	specific version.
+
+2006-05-30  Eric Christopher  <echristo@apple.com>
+
+	Radar 4555787
+	* config/darwin-protos.h (literal16_section): Prototype.
+	* config/darwin.h (EXTRA_SECTION): Define.
+	(EXTRA_SECTION_FUNCTIONS): Define.
+	* config/darwin.c (machopic_select_section): Use.
+	Conditionalize on TARGET_64BIT.
+	(machopic_select_rtx_section): Ditto.
+	(darwin_set_section_for_var_p): Ditto.
+
+2006-05-26  Paolo Bonzini  <bonzini@gnu.org>
+	Dale Johannesen  <dalej@apple.com>
+	Stuart Hastings <stuart@apple.com>
+
+	Fragment from this FSF trunk patch:
+	PR target/19653
+	* config/i386/i386.c (ix86_preferred_reload_class): Force
+	using SSE registers (and return NO_REGS for floating-point
+	constants) if math is done with SSE.
+
+2006-05-11  Stuart Hastings  <stuart@apple.com>
+
+	Radar 4525731
+	* gcc/config/i386/i386.c (ix86_handle_cconv_attribute):
+	Diagnose force_align_arg_pointer versus regparm collisions.
+	(ix86_function_regparm): Reduce number of regparms available
+	when force_align_arg_pointer in use.
+
+2006-05-10  Eric Christopher  <echristo@apple.com>
+	    H.J. Lu  <hongjiu.lu@intel.com>
+
+	Radar 4424835
+	* config.gcc (i[34567]86-*-*): Add tmmintrin.h to extra_headers.
+	(x86_64-*-*): Likewise.
+	* config/i386/i386.c (pta_flags): Add PTA_MNI.
+	(override_options): Check MNI.
+	(ix86_builtins): Add IX86_BUILTIN_PHADDW, IX86_BUILTIN_PHADDD,
+	IX86_BUILTIN_PHADDSW, IX86_BUILTIN_PHSUBW, IX86_BUILTIN_PHSUBD,
+	IX86_BUILTIN_PHSUBSW, IX86_BUILTIN_PMADDUBSW,
+	IX86_BUILTIN_PMULHRSW, IX86_BUILTIN_PSHUFB,
+	IX86_BUILTIN_PSIGNB, IX86_BUILTIN_PSIGNW, IX86_BUILTIN_PSIGND,
+	IX86_BUILTIN_PALIGNR, IX86_BUILTIN_PABSB, IX86_BUILTIN_PABSW,
+	IX86_BUILTIN_PABSD, IX86_BUILTIN_PHADDW128,
+	IX86_BUILTIN_PHADDD128, IX86_BUILTIN_PHADDSW128,
+	IX86_BUILTIN_PHSUBW128, IX86_BUILTIN_PHSUBD128,
+	IX86_BUILTIN_PHSUBSW128, IX86_BUILTIN_PMADDUBSW128,
+	IX86_BUILTIN_PMULHRSW128, IX86_BUILTIN_PSHUFB128,
+	IX86_BUILTIN_PSIGNB128, IX86_BUILTIN_PSIGNW128,
+	IX86_BUILTIN_PSIGND128, IX86_BUILTIN_PALIGNR128,
+	IX86_BUILTIN_PABSB128, IX86_BUILTIN_PABSW128 and
+	IX86_BUILTIN_PABSD128.
+	(bdesc_2arg): Add MNI.
+	(bdesc_1arg): Likewise.
+	(ix86_init_mmx_sse_builtins): Support MNI.
+	(ix86_expand_builtin): Likewise.
+	* config/i386/i386.h (TARGET_CPU_CPP_BUILTINS): Likewise.
+	* config/i386/i386.md (UNSPEC_PSHUFB): New.
+	(UNSPEC_PSIGN): Likewise.
+	(UNSPEC_PALIGNR): Likewise.
+	Include mmx.md before sse.md.
+	* config/i386/i386.opt: Add -mmni.
+	* config/i386/sse.md (mni_phaddwv8hi3): New pattern for MNI.
+	(mni_phaddwv4hi3): Likewise.
+	(mni_phadddv4si3): Likewise.
+	(mni_phadddv2si3): Likewise.
+	(mni_phaddswv8hi3): Likewise.
+	(mni_phaddswv4hi3): Likewise.
+	(mni_phsubwv8hi3): Likewise.
+	(mni_phsubwv4hi3): Likewise.
+	(mni_phsubdv4si3): Likewise.
+	(mni_phsubdv2si3): Likewise.
+	(mni_phsubswv8hi3): Likewise.
+	(mni_phsubswv4hi3): Likewise.
+	(mni_pmaddubswv8hi3): Likewise.
+	(mni_pmaddubswv4hi3): Likewise.
+	(mni_pmulhrswv8hi3): Likewise.
+	(mni_pmulhrswv4hi3): Likewise.
+	(mni_pshufbv16qi3): Likewise.
+	(mni_pshufbv8qi3): Likewise.
+	(mni_psign<mode>3): Likewise.
+	(mni_psign<mode>3): Likewise.
+	(mni_palignrti): Likewise.
+	(mni_palignrdi): Likewise.
+	(mni_pabs<mode>2): Likewise.
+	(mni_pabs<mode>2): Likewise.
+	* config/i386/tmmintrin.h: New file.
+	* doc/extend.texi: Document MNI built-in functions.
+	* doc/invoke.texi: Document -mmni/-mno-mni switches.
+
+2006-05-10  Eric Christopher  <echristo@apple.com>
+
+	Radar 4541111
+	* config/i386/i386.c (override_options): Disable
+	-fomit-frame-pointer.
+
+2005-05-06  Eric Christopher  <echristo@apple.com>
+
+	Radar 4539437
+	* config/i386/i386.c (processor_alias_table): Remove
+	PTA_SSE3 for nocona.
+
+2006-05-05  Eric Christopher  <echristo@apple.com>
+	    Nate Begeman  <nbegeman@apple.com>
+
+	Radar 4434601
+	Backport from mainline:
+	2006-01-19  Jan Hubicka  <jh@suse.cz>
+            H.J. Lu  <hongjiu.lu@intel.com>
+	    Evandro Menezes <evandro.menezes@amd.com>
+
+	* invoke.texi (generic): Document
+	(i686) Update.
+	* config.gcc: Make x86_64-* and i686-* default to generic tuning.
+	* i386.h (TARGET_GENERIC32, TARGET_GENERIC64, TARGET_GENERIC,
+	TARGET_USE_INCDEC, TARGET_PAD_RETURNS): New macros.
+	(x86_use_incdec, x86_pad_returns): New variables
+	(TARGET_CPU_DEFAULT_generic): New constant
+	(TARGET_CPU_DEFAULT_NAMES): Add generic.
+	(enum processor_type): Add generic32 and generic64.
+	* i386.md (cpu attribute): Add generic32/generic64
+	(movhi splitter): Behave sanely when both partial_reg_dependency and
+	partial_reg_stall are set.
+	(K8 splitters): Enable for generic as well.
+	* predicates.md (incdec_operand): Use TARGET_INCDEC
+	(aligned_operand): Avoid memory mismatch stalls.
+	* athlon.md: Enable for generic64, new patterns for 128bit moves.
+	* ppro.md: Enable for generic32
+	* i386.c (generic64_cost, generic32_cost): New.
+	(m_GENERIC32, m_GENERIC64, m_GENERIC): New macros.
+	(x86_use_leave): Enable for generic64.  (x86_use_sahf,
+	x86_ext_80387_constants): Enable for generic32.  (x86_push_memory,
+	x86_movx, x86_unroll_strlen, x86_deep_branch, x86_use_simode_fiop,
+	x86_use_cltd, x86_promote_QImode, x86_sub_esp_4, x86_sub_esp_8,
+	x86_add_esp_4, x86_add_esp_8, x86_integer_DFmode_moves,
+	x86_partial_reg_dependency, x86_memory_mismatch_stall,
+	x86_accumulate_outgoing_args, x86_prologue_using_move,
+	x86_epilogue_using_move, x86_arch_always_fancy_math_387,
+	x86_sse_partial_reg_dependency, x86_four_jump_limit, x86_schedule):
+	Enable for generic.
+	(x86_use_incdec, x86_pad_returns): New.
+	(override_options): Add generic32 and generic64, translate "generic"
+	to generic32/generic64 and "i686" to "generic32", refuse
+	"generic32"/"generic64" as arch target.
+	(ix86_issue_rate, ix86_adjust_cost): Handle generic as athlon.
+	(ix86_reorg): Honor PAD_RETURNS.
+
+2006-05-02  Eric Christopher  <echristo@apple.com>
+
+	Radar 4534752
+	* config/i386/i386.h (MACHOPIC_UNDEFINED_FUNCTION): Remove define.
+	* config/i386/i386.c (output_pic_addr_const): Bracket machopic routines
+	with TARGET_MACHO.
+	* config/darwin.h (MACHOPIC_INDIRECT): Undef before defining.
+	(MACHOPIC_PURE): Ditto.
+
+2006-05-02  Eric Christopher  <echristo@apple.com>
+
+	Radar 4534752
+	* config/rs6000/rs6000.c (reset_optimization_options): Bracket by TARGET_MACHO.
+	* config/i386/i386.c (reset_optimization_options): Ditto.
+	(ix86_file_end): Ditto.
+	* config/i386/i386.h (MACHOPIC_INDIRECT): Define to 0.
+	(MACHOPIC_UNDEFINED_FUNCTION): Ditto.
+	(MACHOPIC_PURE): Ditto.
+
+2006-05-02  Eric Christopher  <echristo@apple.com>
+
+        Radar 4533898
+        * global.c (flag_cw_asm_blocks): Change to
+        flag_iasm_blocks.
+        * config/i386/i386.h (IASM_VALID_PIC): Move...
+        * config/i386/darwin.h: ... here.
+
+2006-05-01  Eric Christopher  <echristo@apple.com>
+
+        Radar 4533757
+        * global.c (flag_cw_asm_blocks): Declare.
+
+2006-04-10  Eric Christopher  <echristo@apple.com>
+
+	Radar 4467352
+	* config/i386/darwin.h (SUBTARGET_OVERRIDE_OPTIONS): Disable
+	mdynamic-no-pic for 64-bit.
+
+2006-04-04  Eric Albert  <ejalbert@apple.com>
+
+	Radar 4502551
+	* config/darwin.h (PREFERRED_DEBUGGING_TYPE): Default to stabs for all
+	configurations.
+
+2006-03-27  Eric Christopher  <echristo@apple.com>
+
+	Radar 4446385
+	* config/darwin-driver.c (get_arch_name): Rewrite.
+
+2006-06-22  Geoffrey Keating  <geoffk@apple.com>
+
+	Radar 4599002
+	* dwarf2out.c (dwarf2out_finish): Move output_line_info call
+	after debug_info output.
+
+2006-06-14  Geoffrey Keating  <geoffk@apple.com>
+
+	Radar 4587142
+	* dwarf2out.c (dwarf_file_data): New.
+	(enum dw_val_class): Add dw_val_class_file.
+	(struct dw_val_struct): Add val_file.
+	(file_table): Change to a hash table.
+	(file_table_emitted): Delete.
+	(file_table_last_lookup_index): Delete.
+	(emitcount): Delete.
+	(last_emitted_file): New.
+	(lookup_filename): Change prototype to return a struct dwarf_file_data.
+	(init_file_table): Delete.
+	(maybe_emit_file): Change prototype to take a struct dwarf_file_data.
+	(AT_addr): Add comment.
+	(add_AT_file): New.
+	(AT_file): New.
+	(get_AT_file): New.
+	(print_die): Handle dw_val_class_file.
+	(print_dwarf_line_table): Update for new file table structure.
+	(attr_checksum): Do checksum a filename.
+	(same_dw_val_p, same_attr_p): Do compare a filename.
+	(size_of_die): Handle dw_val_class_file.
+	(value_format): Likewise.
+	(output_die): Likewise.  Also, call maybe_emit_file here.
+	(struct file_info): Constify filenames.  Make file_idx a pointer
+	to a struct dwarf_file_data.
+	(struct dir_info): Constify directory names.  Remove 'used' field.
+	(struct file_name_acquire_data): New.
+	(file_name_acquire): New.
+	(output_file_names): Modify to handle new file data structures.
+	(add_src_coords_attributes): Use add_AT_file.
+	(add_call_src_coords_attributes): Likewise.
+	(dwarf2out_imported_module_or_decl): Likewise.
+	(gen_subprogram_die): Modify for new file data structures.
+	(gen_variable_die): Likewise.
+	(file_table_eq): New.
+	(file_table_hash): New.
+	(file_table_last_lookup): New.
+	(lookup_filename): Rewrite to handle new file data structures.
+	(maybe_emit_file): Rewrite to handle new file data structures.
+	(dwarf2out_source_line): Always call lookup_filename and
+	maybe_emit_file.
+	(dwarf2out_init): Create file_table here.
+	(prune_unused_types_walk_attribs): Don't call maybe_emit_file here.
+	(file_table_relative_p): New.
+	(dwarf2out_finish): Change detection of relative filenames
+	to work with new file data structures.
+
+2006-06-05  Roger Sayle  <roger@eyesopen.com>
+	Stuart Hastings  <stuart@apple.com>
+
+	Radar 4561329
+	PR middle-end/26557
+	* stmt.c (emit_case_nodes): Handle the case where the index is a
+	CONST_INT, where the comparison mode is specified by the index type.
+
+2006-05-30  Mike Stump  <mrs@apple.com>
+
+	Rarar 4527214
+	* c-common.c (iasm_stmt): Fix clobbers for mul/imul/div/idiv.
+
+2006-05-18  Mike Stump  <mrs@apple.com>
+
+	Radar 4501833
+	* c-common.c (iasm_delete_blr): Add.
+	(iasm_saw_frfree_blr): Add.
+	(iasm_ensure_blr_last): Add.
+	(iasm_stmt): Add logic to ensure that blr follows frfree and that
+	blr is last.  Manage line numbes better.  Only allow fralloc and
+	frfree on ppc.
+	* c-parse.in (compstmt_nostart): Use iasm_end_block to end inline
+	assmebly blocks.
+	(iasm_compstmt): Likewise.
+	(iasm_compstmt_nostart): Likewise.
+	* config/asm.h (iasm_end_block): Add.
+	* function.c (assign_parm_setup_reg): Don't spill to memory for a
+	frameless asm function.
 
 2006-05-03  Mike Stump  <mrs@apple.com>
 
@@ -16,14 +376,14 @@
 
 2006-04-27  Eric Christopher  <echristo@apple.com>
 
-       Radar 4454599
-       Radar 4481146
-       * stor-layout.c (update_alignment_for_field): Unconditionalize
-       ms_bitfield_layout_p code. Handle non-bitfield fields. Remove
-       extra alignment code.
-       (place_field): Don't realign if ms_bitfield_layout_p. Unconditionalize
-       ms_bitfield_layout_p code. Rewrite handling of structure fields.
-       Rewrite bitfield reversal handling.
+	Radar 4454599
+	Radar 4481146
+	* stor-layout.c (update_alignment_for_field): Unconditionalize
+	ms_bitfield_layout_p code. Handle non-bitfield fields. Remove
+	extra alignment code.
+	(place_field): Don't realign if ms_bitfield_layout_p. Unconditionalize
+	ms_bitfield_layout_p code. Rewrite handling of structure fields.
+	Rewrite bitfield reversal handling.
 
 2006-04-27  Hui-May Chang  <hm.chang@apple.com>
 
@@ -337,6 +697,65 @@
 	Radar 4474259
 	* gcc/config/i386/i386.c (cw_reg_comp): Use strcasecmp.
 	(x86_canonicalize_operands): Exception for movd.
+
+2006-03-22  Eric Christopher  <echristo@apple.com>
+	    Eric Albert  <ejalbert@apple.com>
+
+	Radar 4485288
+	* config/i386/darwin.h (ASM_MAYBE_OUTPUT_ENCODED_ADDR_RTX): Emit a
+	@GOTPCREL expression for x86_64.
+
+2006-03-22  Eric Christopher  <echristo@apple.com>
+	    Devang Patel  <dpatel@apple.com>
+
+	* config/darwin-driver.c (get_arch_name): If arch exists in
+	table do not call NXGetLocalArchInfo().
+
+2006-03-19  Eric Christopher  <echristo@apple.com>
+	    Eric Albert  <ejalbert@apple.com>
+
+	* config/i386/darwin.h (ASM_MAYBE_OUTPUT_ENCODED_ADDR_RTX): Copy from
+	config/darwin.h and disable for x86_64.
+	* config/rs6000/darwin.h (ASM_MAYBE_OUTPUT_ENCODED_ADDR_RTX): Copy from
+	config/darwin.h.
+	* config/darwin.h (ASM_MAYBE_OUTPUT_ENCODED_ADDR_RTX): Remove.
+
+2006-03-19  Eric Albert  <ejalbert@apple.com>
+
+	* config/i386/darwin.h (FUNCTION_PROFILER): Disable stub generation
+	for 64-bit.
+
+2006-03-12  Eric Christopher  <echristo@apple.com>
+
+	* config.gcc: Remove x86_64 specific changes.
+	* config/i386/darwin32.h: Remove.
+	* config/i386/darwin64.h: Ditto.
+	* config/i386/t-darwin32: Ditto.
+	* config/i386/t-darwin64: Ditto.
+	* config/i386/t-darwin: Add m64 multilib.
+	* config/i386/darwin.h: Revert previous x86_64 specific changes.
+	(TARGET_64BIT): Define.
+	(PTRDIFF_TYPE): Ditto.
+	(MAX_BITS_PER_WORD): Ditto.
+	(TARGET_OS_CPP_BUILTINS): Add 64-bit support.
+	(ASM_SPEC): Ditto.
+	(SUBTARGET_EXTRA_SPECS): Ditto.
+	(ASM_QUAD): Define.
+	* config/i386/i386.c (processor_alias_table): Add 64bit to possible
+	pentium-m and prescott chips.
+	* config/darwin-driver.c (arch_config_guess_map): Move x86_64 to i686
+	processor.
+
+2006-03-03  Eric Christopher  <echristo@apple.com>
+
+	* config/i386/i386.h (JUMP_TABLES_IN_TEXT_SECTION): Fix typo.
+	* config/i386/darwin64.h (SIZE_TYPE): Redefine.
+	(PTRDIFF_TYPE): Ditto.
+	(WCHAR_TYPE): Ditto.
+	(WCHAR_TYPE_SIZE): Ditto.
+	* config/i386/i386.c (override_options): Clean up flag_pic.
+	(ix86_function_ok_for_sibcall): Fix conditional for TARGET_MACHO.
+	(ix86_expand_move): Ditto.
 
 2006-03-22  Eric Christopher  <echristo@apple.com>
 

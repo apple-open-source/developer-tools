@@ -124,15 +124,23 @@ smuggle_dyld_settings (struct gdb_environ *e)
       const char *real_val = get_in_environ (e, env_names[i].real_name);
       const char *smuggled_val = get_in_environ (e, env_names[i].smuggled_name);
 
-      if (real_val == NULL || smuggled_val == NULL)
+      if (real_val == NULL && smuggled_val == NULL)
         continue;
 
-       /* Is the value of the DYLD_* env var truncated? */
-      if (real_val[0] != '\0')
+      if (smuggled_val == NULL)
         continue;
 
-       set_in_environ (e, env_names[i].real_name, smuggled_val);
-     }
+      /* Is the value of the DYLD_* env var truncated to ""? */
+      if (real_val != NULL && real_val[0] != '\0')
+        continue;
+
+      /* real_val has a value and it looks legitimate - don't overwrite it
+         with the smuggled version.  */
+      if (real_val != NULL)
+        continue;
+
+      set_in_environ (e, env_names[i].real_name, smuggled_val);
+    }
 }
 
 /* Return the vector of environment E.

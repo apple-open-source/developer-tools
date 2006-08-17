@@ -212,7 +212,6 @@ gdb_expect {
     }
 }
 
-
 send_gdb "set target-charset\n"
 gdb_expect {
     -re "Requires an argument. Valid arguments are (\[^ \t\n\r,.\]*)" {
@@ -243,6 +242,16 @@ gdb_expect {
     timeout {
 	fail "(timeout) capture valid target charsets"
     }
+}
+
+# APPLE LOCAL: We can't convert from UTF-8 to anything else but UTF-8,
+# since we don't do multi-byte conversions.  BUT we don't really care about
+# this, since we only intend UTF-8 to be used when both target & host are
+# UTF-8.  Otherwise we are happy with the errors.  So just leave this out
+# of the valid charsets.
+
+if {[info exists charsets(UTF-8)]} {
+    set charsets(UTF-8) 0
 }
 
 # Make sure that GDB supports every host/target charset combination.
@@ -281,6 +290,7 @@ foreach host_charset [all_charset_names] {
         # Now try setting every possible target character set,
         # given that host charset.
         foreach target_charset [all_charset_names] {
+	    # APPLE LOCAL: Don't try to convert to utf-8
             set testname "try `set target-charset $target_charset'"
             send_gdb "set target-charset $target_charset\n"
             gdb_expect {

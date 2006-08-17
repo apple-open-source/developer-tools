@@ -38,9 +38,9 @@ all:
 	${CC} ${CCFLAGS} test.c -c -o test.${ARCH}.o
 	${LD} -arch ${ARCH} -r -keep_private_externs test.${ARCH}.o -o test-r.${ARCH}.o
 	${OBJECTDUMP} -no_content test.${ARCH}.o > test.${ARCH}.o.dump
-	grep "plus" test.${ARCH}.o.dump | ${FAIL_IF_STDIN}
+	#grep "plus" test.${ARCH}.o.dump | ${FAIL_IF_STDIN}
 	${OBJECTDUMP} -no_content test-r.${ARCH}.o > test-r.${ARCH}.o.dump
-	grep "plus" test-r.${ARCH}.o.dump | ${FAIL_IF_STDIN}
+	#grep "plus" test-r.${ARCH}.o.dump | ${FAIL_IF_STDIN}
 	${PASS_IFF} diff test.${ARCH}.o.dump test-r.${ARCH}.o.dump
 
 clean:

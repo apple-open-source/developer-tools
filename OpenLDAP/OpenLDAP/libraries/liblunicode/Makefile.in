@@ -1,0 +1,57 @@
+# Makefile.in for LDAP -llunicode
+# $OpenLDAP: pkg/ldap/libraries/liblunicode/Makefile.in,v 1.20.2.2 2004/01/01 18:16:31 kurt Exp $
+## This work is part of OpenLDAP Software <http://www.openldap.org/>.
+##
+## Copyright 1998-2004 The OpenLDAP Foundation.
+## All rights reserved.
+##
+## Redistribution and use in source and binary forms, with or without
+## modification, are permitted only as authorized by the OpenLDAP
+## Public License.
+##
+## A copy of this license is available in the file LICENSE in the
+## top-level directory of the distribution or, alternatively, at
+## <http://www.OpenLDAP.org/license.html>.
+
+LIBRARY = liblunicode.a
+
+XXDIR = $(srcdir)/*/
+XXHEADERS = ucdata.h ure.h
+
+XXSRCS	= ucdata.c ucgendat.c ure.c urestubs.c
+SRCS	= ucstr.c
+OBJS	= ucdata.o ure.o urestubs.o ucstr.o
+
+XLIB = $(LIBRARY)
+XLIBS = $(LDAP_LIBLBER_LA) $(LDAP_LIBLUTIL_A)
+PROGRAMS = ucgendat
+
+LDAP_INCDIR= ../../include       
+LDAP_LIBDIR= ../../libraries
+
+ucgendat: $(XLIBS) ucgendat.o
+	$(LTLINK) -o $@ ucgendat.o $(LIBS)
+	./ucgendat $(srcdir)/UnicodeData.txt -x $(srcdir)/CompositionExclusions.txt
+
+DATFILES = case.dat cmbcl.dat comp.dat ctype.dat decomp.dat num.dat kdecomp.dat
+
+install-local: $(PROGRAMS) FORCE
+	-$(MKDIR) $(DESTDIR)$(datadir)/ucdata
+	@for i in $(DATFILES); do \
+		echo $(INSTALL) $(INSTALLFLAGS) -m 644 $$i $(DESTDIR)$(datadir)/ucdata; \
+		$(INSTALL) $(INSTALLFLAGS) -m 644 $$i $(DESTDIR)$(datadir)/ucdata; \
+	done
+
+.links :
+	@for i in $(XXSRCS) $(XXHEADERS); do \
+		$(RM) $$i ; \
+		$(LN_S) $(XXDIR)$$i . ; \
+	done
+	touch .links
+
+$(XXSRCS) : .links
+
+clean-local: FORCE
+	@$(RM) *.dat .links $(XXHEADERS)
+
+depend-common: .links

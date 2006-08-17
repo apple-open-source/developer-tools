@@ -1,0 +1,281 @@
+OpenLDAP 2.2 Change Log
+
+OpenLDAP 2.2.19 Release
+	Fixed slapd check for mandatory filter in authz-regexp URI (ITS#3396)
+	Fixed slapd bad descriptor check (ITS#3400)
+	Fixed slapd ACI when the subject contains '#' (ITS#3303)
+	Fixed back-ldap malformed URI check for multiple URIs (ITS#3399)
+	Fixed back-ldap/back-meta static definition of be_open() (ITS#3387)
+	Fixed back-bdb cache bugs (ITS#3356, #3358), ctxcsn memory leak
+	Build Environment
+		Fixed lber.h dup portability bug
+		Updated BDB mismatch messages (ITS#3375)
+		Added BDB 4.3 detection
+
+OpenLDAP 2.2.18 Release
+	Fixed libldap schema keyword sensitivity (ITS#3334)
+	Fixed libldap DN filter sensitivity (ITS#3334)
+	Fixed libldap intermediate response tags (ITS#3381)
+	Fixed slapd matching rule name sensitivity (ITS#3334)
+	Fixed slapd multiple value delete (ITS#3346)
+	Fixed slapd referral memory leak
+	Fixed slapd mods2entry memory leak
+	Fixed slapd psearch consistency bug
+	Updated back-sql
+	Documentation
+		Updated release documents
+
+OpenLDAP 2.2.17 Release
+	Fixed slapd syncrepl memory leak bugs
+	Documentation
+		Updated ldif(5)
+
+OpenLDAP 2.2.16 Release
+	Fixed libldap getaddrinfo hints portability bug (ITS#3279)
+	Fixed libldap find_connection bug (ITS#3280)
+	Fixed libldap SASL host connected to bug (ITS#3298)
+	Fixed libldap SASL proper sockbuf bug
+	Fixed libldap results lc bug (ITS#3250)
+	Fixed ldapsearch paged results size 0 bug 
+	Fixed slapd syncrepl SSF propagation bug (ITS#3131)
+	Fixed slapd ACL sets bug (ITS#3140)
+	Fixed slapd bind referral bug (ITS#3264)
+	Fixed slapd syncrepl misc bugs (ITS#3259,3297)
+	Fixed slapd overlays CSN CTX bug (ITS#3288)
+	Fixed slapd sun_path portability bug
+	Fixed slapd permissive modify bug
+	Fixed slapd hang bug (ITS#3309)
+	Fixed slapcommon shutdown bug (ITS#3326)
+	Fixed back-bdb CSN CTX bug (ITS#3301)
+	Fixed back-bdb id2entry bug
+	Fixed back-bdb syncrepl psearch delete bug (ITS#3309)
+	Fixed back-ldap/meta known controls bugs (ITS#3291)
+	Fixed back-monitor syncrepl bug (ITS#3265)
+	Fixed slurpd replog error message bug (ITS#3275)
+	Added slapd syncrepl exattrs (ITS#3289)
+	Updated slapd SLAPI
+	Updated LDAP C++ library
+	Documentation
+		Updated provided RFCs and I-Ds
+		Updated ldap_url(3) (ITS#3310)
+
+OpenLDAP 2.2.15 Release
+	Fixed back-bdb DB_DEADLOCK memory leak bug (ITS#3213)
+	Fixed back-bdb dbcache locking bug (ITS#3201)
+	Fixed back-bdb ctxcsn locking bug
+	Fixed back-bdb modify index corruption (ITS#3226)
+	Fixed back-bdb leaking locks in tools (ITS#3245)
+	Fixed back-bdb leaking locks in overlays (ITS#3255)
+	Fixed back-hdb dn2id bug with unsigned chars
+	Fixed back-ldap shared connections failover (ITS#3217)
+	Fixed back-ldap validate/pretty values (ITS#3218)
+	Fixed back-monitor/backglue clash in tool mode (ITS#3254)
+	Fixed slapi slapi_int_compute_output_ber attrs bug
+	Fixed slapd uniqueMember/nameUID bugs (ITS#3210)
+	Fixed slapd uniqueMemberMatch empty DN portion bug (ITS#3247)
+	Fixed slapd oidValidate 0 bug (ITS#3211)
+	Fixed slapd operational attribute log message bug (ITS#3205)
+	Fixed slapd pagedResults invalid cookie bug (ITS#3089)
+	Fixed slapd group ACL locking bug (ITS#3173)
+	Fixed slapd ACI caching bug (caching disabled, ITS#3215)
+	Fixed slapd abandon/cancel pending bug
+	Fixed slapd attribute description syntax bug
+	Fixed slapadd dryrun mode (ITS#3244)
+	Fixed libldap SASL re-encode bug
+	Fixed libldap sasl_encode 64-bit bug (ITS#3054,3212)
+	Fixed libldap matchedValues parsing bug (ITS#3208,3216)
+	Fixed libldap DN '=' handling
+	Fixed libldap_r runqueue bug
+	Fixed librewrite empty rewriteContext leak (ITS#3256)
+	Fixed ldapmodify controls input bug (ITS#3257)
+	Updated libldap_r read/writer locks
+	Build environments
+		Added additional res_query detection for MacOS X
+		Added default ldapi:// SSF build setting
+		Fixed OPENLDAP_FD_SETSIZE macro handlling
+		Fixed slapd linking on MS Windows
+		Fixed backend module linking
+	Documentation
+		Misc. man page cleanup
+
+OpenLDAP 2.2.14 Release
+	Fixed back-bdb ignore deadlock bug (ITS#3188)
+	Fixed back-bdb pagedResults no end cookie bug (ITS#3161)
+	Fixed back-bdb pagedResults clear controls bug (ITS#3182)
+	Fixed back-bdb pagedResults ignore control bug
+	Fixed back-hdb empty suffix bugs (ITS#3063,3186)
+	Fixed back-meta freeit bug (ITS#3190)
+	Fixed slapi prototypes bug (ITS#3166)
+	Fixed slapi internal search limit bugs (ITS#3183)
+	Added slapd -l USER/DAEMON options (ITS#3187)
+	Build environments
+		Fixed back-sql trace builds
+	Documentation
+		Fixed slapd.access(5) dn.regex $$ bug
+
+OpenLDAP 2.2.13 Release
+	Fixed pcache CSN pending segfault (ITS#3180)
+	Added libldap cert check extension (ITS#3134)
+
+OpenLDAP 2.2.12 Release
+	Fixed slapd empty DN uniqueMember normalization
+	Fixed slapd empty DN in proxyAuthx control
+	Fixed slapd parsing of auth{cz} "dn:<pat>" rules
+	Fixed slapd first component bug (ITS#3118)
+	Fixed slapd TOLOWER macro use bug (ITS#3115)
+	Fixed slapd TLS context clash bug (ITS#3109)
+	Fixed slapd ACL set recursion (ITS#3140)
+	Fixed slapd entry2mods normalization bug (ITS#3144,3152)
+	Fixed slapd extended match memory leak (ITS#3146)
+	Fixed slapd syncrepl persist interval issue (ITS#3064)
+	Fixed slapd abandon/cancel pending bug (ITS#3160)
+	Fixed slapd sl_malloc memory leak (ITS#3155)
+	Fixed back-ldap normalization bug 
+	Fixed pcache cache_entries init bug (ITS#3150)
+	Fixed pcache consistency_check bug (ITS#3151)
+	Fixed pcache erroneous reply (ITS#3153)
+	Fixed pcache remove_query_data bug (ITS#3170)
+	Fixed libldap SASL mutex init bug (ITS#3123)
+	Fixed libldap SASL buffering bug (ITS#3139)
+	Fixed liblutil passwd seed len bug (ITS#3169)
+	Build Environment
+		Fixed liblber memory debug portability bug (ITS#3116)
+		Fixed back-perl perl portability bug (ITS#2554,2946)
+
+OpenLDAP 2.2.11 Release
+	Fixed slapd undefined objectclass bug (ITS#3097)
+	Fixed slapd acl dn="" bug
+	Updated slapd limits handling
+	Build Environment
+		Fixed MacOSX sl_free interop bug (ITS#3092)
+		Fixed libtool -static bug
+		Added Berkeley DB mismatch check
+
+OpenLDAP 2.2.10 Release
+	Build Environment
+		Fix configure bug (ITS#3094)
+
+OpenLDAP 2.2.9 Release
+	Fixed slapd syncrepl replication bugs (ITS#3055,3056,3069)
+	Fixed slapd slurpd update bugs
+	Fixed slapd inappropriate bind error disclosure bugs
+	Fixed slapd sun_path portability bug
+	Fixed slapd passwd referral memory leak
+	Fixed slapd sasl userdb checkpass bug (ITS#3048)
+	Fixed slapd duplicate value detection (ITS#3066)
+	Fixed slapd permissive modify control (ITS#3068)
+	Fixed slapd updateref handling
+	Fixed slapd saslauthz subtree scope bug (ITS#3077)
+	Fixed back-bdb paged results bug (ITS#3076)
+	Fixed back-bdb "" suffix bug (ITS#3063)
+	Fixed back-bdb/hdb/ldbm approx w/o index bug (ITS#3062)
+	Fixed back-meta compare return code (ITS#3042)
+	Fixed back-ldbm IDL delete bug (ITS#3046)
+	Fixed back-ldbm modrdn indexing bug (ITS#3059)
+	Fixed libldap parse_oid core dump bug (ITS#3065)
+	Fixed ldapmodify missing error information bug (ITS#3057)
+	Fixed ldapsearch paged results error handling
+	Updated slapd limits handling
+	Updated slapd overlay framework
+	Added slapd Delivery Method syntax validation (ITS#3052)
+	Added libldap ditContentRule oidMacro support (ITS#2920)
+	Removed lint
+	Build Environment
+		Fixed slapd dynamic backend build (ITS#3044)
+		Fixed slaptools DESTDIR handling (ITS#3070)
+		Removed deprecated configure options
+		Updated configure backend/overlay options
+		  Requires changes in module configuration practices
+
+OpenLDAP 2.2.8 Release
+	Fixed slapd/slapadd syncrepl bugs (ITS#2948,2995)
+	Fixed slapd sasl-regexp multiple entry bug (ITS#3033)
+	Fixed slapd bind method portability bug (ITS#3038)
+	Fixed libldap try_read1msg bug (ITS#2982)
+	Added slapd numericStringOrderingMatch rule support (ITS#2988)
+	Added slurpd replication interval config option (ITS#2768)
+	Build Environment
+		Fixed shared library soname issues (ITS#3035)
+		  May requires changes in link practices of dependent apps
+
+OpenLDAP 2.2.7 Release
+	Fixed slapd IDL avl_delete failure bug (ITS#3004)
+	Fixed slapd erroneous illegal filter handling (ITS#2977)
+	Fixed slapd syncrepl bugs (multiple)
+	Fixed slapd value regex ACL bug (ITS#3008)
+	Fixed slapd SASL dnauthz bug (ITS#2961)
+	Fixed slapcat tools bug (ITS#2974)
+	Fixed back-monitor crash when used with overlays (ITS#3023)
+	Fixed back-ldap massaged base free (ITS#2999)
+	Fixed back-meta memory leak issues (ITS#2986)
+	Fixed back-glue search abandon handling (ITS#2999)
+	Fixed back-sql undefined attribute name request bug (ITS#3005)
+	Fixed back-sql oracle-related issues (ITS#2641)
+	Fixed back-bdb empty suffix/contextCSN bug (ITS#2970)
+	Fixed libldap/slapd '=' escape in DN (ITS#3009)
+	Fixed back-sql attribute subtype in search request
+	Updated ldapsearch paged results handling
+	Added total operation count in back-monitor (ITS#2983)
+	Added slapd ACL peername/expand styles (ITS#2907, ITS#3010)
+	Added slapd ACL set logging (ITS#2949)
+	Build Environment
+		Fixed overlay module build issue (ITS#2978)
+		Fixed libldap T_SRV portability bug (ITS#2990)
+		Fixed AIX portability issues (ITS#2997,2998)
+		Fixed shared library soname versioning (ITS#3016)
+		  Requires changes in link practices of dependent apps
+		Updated MS win32 port (ITS#2992)
+	Documentation
+		Fixed ldapmodrdn(1) manpage (ITS#3003)
+		Updated release documents
+
+OpenLDAP 2.2.6 Release
+	Fixed slapd SASL callback handling (ITS#2926)
+	Fixed slapd backglue sizelimit bug (ITS#2888)
+	Fixed slapd numericStringMatch bug (ITS#2938)
+	Fixed libldap maxbuf handling (ITS#2944,2956)
+	Fixed libldap_r abandon msgid mutex bug 
+	Fixed liblutil NS MTA MD5 passwd len bug (ITS#2899)
+	Fixed slapd pcache DB init bug (ITS#2960)
+	Updated libldap reference handling (ITS#2984)
+	Updated slapd syncrepl support (multiple)
+	Updated slapd connection deferred logging (ITS#2959)
+	Updated slapd filter logging
+	Updated back-ldap
+	Updated back-bdb to use Btree indices instead of Hashes
+		Requires recreation of indices of existing databases
+	Added slapd limit groups (ITS#2967)
+	Build Environment
+		Fixed test021 portable echo bug (ITS#2933, ITS#2879)
+		Fixed EBCDIC conversion bugs (ITS#2962)
+	Documentation
+		Misc. man page updates
+	Contributed Software
+		Added slapd passwd modules
+		Updated libcldap++
+
+OpenLDAP 2.2.5 Release
+	Fixed slapd filter bug (ITS#2901)
+	Fixed slapd/syncrepl shutdown bug (ITS#2910)
+	Fixed back-glue sizeExceeded bug (ITS#2888)
+	Fixed back-bdb syncrepl psearch add bug
+	Fixed back-bdb/tools duplicate entry detection (ITS#2905)
+	Fixed back-ldap suffix massage when --enable-rewrite=no (ITS#2923)
+	Updated slapi to honor access denied return value from ACL plugins
+	Fixed slapcat backglue subsequent subordinates bug (ITS#2924)
+	Updated slappasswd error reporting (ITS#2906)
+	Fixed CYGWIN/MINGW threading bug (ITS#2921)
+	Fixed GYGWIN/MINGW ldapsearch glob problem (ITS#2922)
+	Build environment
+		Fixed slapd passwd portable C bug (ITS#2900)
+		Fixed librewrite portable C bug (ITS#2908)
+		Fixed libldap/dnssrv.c building on MacOS X
+		Fixed CYGWIN/MINGW configure issues (ITS#2918)
+		Fixed z/OS configure issues
+	Documentation
+		Updated ldapsearch(1) -t description (ITS#2925)
+
+
+OpenLDAP 2.2.4 Release
+	Initial release for "general" use.
+
