@@ -316,6 +316,54 @@ proc gdb_breakpoint { function args } {
     return 1;
 }    
 
+# Set a breakpoint at FUNCTION.  If there is an additional argument it is
+# a list of options; the only currently supported option is allow-pending.
+# This version of the function returns a list:
+# 1) breakpoint kind {line address pending}
+# 2) breakpoint no 
+# 3) line number or the address of the breakpoint
+
+proc gdb_breakpoint_2 { function args } {
+    global gdb_prompt
+    global decimal
+    global hex
+
+    set pending_response n
+    if {[lsearch -exact [lindex $args 0] allow-pending] != -1} {
+	set pending_response y
+    }
+
+    set retval [list error "" ""]
+
+    send_gdb "break $function\n"
+    # The first two regexps are what we get with -g, the third is without -g.
+    gdb_expect 30 {
+	-re "Breakpoint \(\[0-9\]*\) at .*: file .*, line \($decimal\).\r\n$gdb_prompt $" {
+	    set retval [list line $expect_out(1,string) $expect_out(2,string)]
+	}
+	-re "Breakpoint \(\[0-9\]*\): file .*, line \($decimal\).\r\n$gdb_prompt $" {
+	    set retval [list line $expect_out(1,string) $expect_out(2,string)]
+	}
+	-re "Breakpoint \(\[0-9\]*\) at \($hex\)\r\n$gdb_prompt $" {
+	    set retval [list address $expect_out(1,string) $expect_out(2,string)]
+	}
+	-re "Breakpoint \[0-9\]* \\(.*\\) pending.*$gdb_prompt $" {
+		if {$pending_response == "n"} {
+			fail "setting breakpoint at $function"
+			return 0
+		}
+	    set retval [list pending $expect_out(1,integer) ""]
+	}
+	-re "Make breakpoint pending.*y or \\\[n\\\]. $" { 
+		send_gdb "$pending_response\n"
+		exp_continue
+	}
+	-re "$gdb_prompt $" { fail "setting breakpoint at $function" ; return 0 }
+	timeout { fail "setting breakpoint at $function (timeout)" ; return 0 }
+    }
+    return $retval;
+}    
+
 # Set breakpoint at function and run gdb until it breaks there.
 # Since this is the only breakpoint that will be set, if it stops
 # at a breakpoint, we will assume it is the one we want.  We can't

@@ -48,10 +48,15 @@ struct iasm_md_Extra_info {
     const char *constraint;
     tree var;
     unsigned int argnum;
-    char *arg_p;
     bool must_be_reg;
     bool was_output;
   } dat[IASM_MAX_ARG];
+
+  int num_rewrites;
+  struct {
+    int dat_index;
+    char *arg_p;
+  } rewrite[IASM_MAX_ARG];
 
   bool no_label_map;
   const char *modifier;

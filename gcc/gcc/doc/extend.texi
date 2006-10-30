@@ -6763,7 +6763,7 @@ v8hi __builtin_ia32_psrawi128 (v8hi, int)
 v4si __builtin_ia32_psradi128 (v4si, int)
 v4si __builtin_ia32_pmaddwd128 (v8hi, v8hi)
 @end smallexample
-@c APPLE LOCAL begin radar 4395773
+@c APPLE LOCAL end radar 4395773
 
 The following built-in functions are available when @option{-msse3} is used.
 All of them generate the machine instruction that is part of the name.

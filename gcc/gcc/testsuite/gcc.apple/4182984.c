@@ -1,5 +1,6 @@
 /* APPLE LOCAL file 4182984 */
 /* { dg-do run { target i?86-*-darwin* } } */
+/* { dg-skip-if "" { i?86-*-darwin* } { "-m64" } { "" } } */
 /* { dg-options "-O3" } */
 typedef unsigned int UINT;
 typedef unsigned long UINT32;

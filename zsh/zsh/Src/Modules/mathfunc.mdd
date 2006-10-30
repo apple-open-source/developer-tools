@@ -1,7 +1,0 @@
-name=zsh/mathfunc
-link=dynamic
-load=no
-
-autobins="mathfunc"
-
-objects="mathfunc.o"

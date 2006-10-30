@@ -1,3 +1,149 @@
+2006-09-21  Mike Stump  <mrs@apple.com>
+
+	Radar 4736998
+	* g++.apple/asm-block-60.C: Add.
+	* gcc.apple/asm-block-60.c: Add.
+
+2006-09-06  Stuart Hastings  <stuart@apple.com>
+
+	Radar 4515157
+	* gcc.apple/default-x86_64-sse3.c: New.
+
+2006-09-05  Mike Stump  <mrs@apple.com>
+
+	Radar 4699545
+	* g++.apple/asm-block-59.C: Add.
+	* gcc.apple/asm-block-59.c: Add.
+
+2006-06-29  Mike Stump  <mrs@apple.com>
+
+	Radar 4560301
+	* g++.apple/asm-block-53.C: Add.
+	* gcc.apple/asm-block-53.c: Add.
+
+2006-08-29  Mike Stump  <mrs@apple.com>
+
+	Radar 4699524
+	* g++.apple/asm-block-58.C: Add.
+	* gcc.apple/asm-block-58.c: Add.
+
+2006-08-29  Hui-May Chang  <hm.chang@apple.com>
+
+        Radar 4645709
+        * gcc.apple/i386-bitmask1.c, i386-bitmask2.c: New.
+
+2006-08-25  Hui-May Chang  <hm.chang@apple.com>
+
+        Radar 4614623, 4700281
+        * gcc.apple/i386-unaligned-movaps.c: New.
+
+2006-08-24  Mike Stump  <mrs@apple.com>
+
+	Radar 4682427
+	* g++.apple/asm-block-57.C: Add.
+	* gcc.apple/asm-block-57.c: Add.
+
+2006-07-28  Mike Stump  <mrs@apple.com>
+
+	Radar 4653181
+	* g++.apple/asm-block-56.C: Add.
+	* gcc.apple/asm-block-56.c: Add.
+
+2006-07-27  Eric Christopher  <echristo@apple.com>
+
+    Radar 4655246
+    * gcc.target/i386/compress-float-sse-pic.c: Require
+    ilp32.
+    * gcc.target/i386/4448096-1.c: Ditto.
+    * gcc.target/i386/m64-2.c: Ditto.
+    * gcc.target/i386/compress-float-387.c: Ditto.
+    * gcc.target/i386/compress-float-sse.c: Ditto.
+    * gcc.target/i386/compress-float-387-pic.c: Ditto.
+    * gcc.target/i386/stdcall.c: Ditto.
+    * gcc.target/i386/20060210-1.c: Ditto.
+    * gcc.target/i386/20060210-2.c: Ditto.
+    * gcc.target/i386/sse-2.c: Ditto.
+    * gcc.target/i386/20060210-3.c: Ditto.
+    * gcc.target/i386/20060210-4.c: Ditto.
+    * gcc.dg/attr-ms_struct-2.c: Ditto.
+    * gcc.dg/i386-387-8.c: Ditto.
+    * gcc.dg/20031102-1.c: Ditto.
+    * gcc.dg/attr-ms_struct-1.c: Ditto.
+    * g++.apple/asm-block-13.C: Ditto.
+    * g++.apple/asm-block-32.C: Ditto.
+    * g++.apple/asm-block-17.C: Ditto.
+    * g++.apple/asm-block-36.C: Ditto.
+    * g++.apple/asm-block-55.C: Ditto.
+    * g++.apple/asm-block-41.C: Ditto.
+    * g++.apple/asm-block-24.C: Ditto.
+    * g++.apple/asm-block-45.C: Ditto.
+    * g++.apple/asm-block-7.C: Ditto.
+    * g++.apple/asm-block-31.C: Ditto.
+    * g++.apple/asm-block-50.C: Ditto.
+    * g++.apple/asm-block-33.C: Ditto.
+    * g++.apple/asm-block-35.C: Ditto.
+    * g++.apple/asm-block-18.C: Ditto.
+    * g++.apple/asm-block-54.C: Ditto.
+    * g++.apple/asm-block-25.C: Ditto.
+    * gcc.misc-tests/linkage.exp: Fix handling of i?86-*-darwin*
+    when passing -m64.
+
+2006-07-26  Eric Christopher  <echristo@apple.com>
+
+    Radar 4652083
+    * gcc.apple/asm-block-35.c: Skip for 64-bit.
+
+2006-07-26  Eric Christopher  <echristo@apple.com>
+
+    Radar 4652083
+    * gcc.apple/asm-block-18.c: Skip for 64-bit.
+    * gcc.apple/align-test-5d.c: Ditto.
+    * gcc.apple/asm-block-6.c: Ditto.
+    * gcc.apple/asm-block-36.c: Ditto.
+    * gcc.apple/asm-block-45.c: Ditto.
+    * gcc.apple/asm-block-7.c: Ditto.
+    * gcc.apple/asm-block-13.c: Ditto.
+    * gcc.apple/asm-block-31.c: Ditto.
+    * gcc.apple/asm-block-32.c: Ditto.
+    * gcc.apple/asm-block-41.c: Ditto.
+    * gcc.apple/asm-block-24.c: Ditto.
+    * gcc.apple/asm-block-50.c: Ditto.
+    * gcc.apple/asm-block-33.c: Ditto.
+    * gcc.apple/asm-block-25.c: Ditto.
+    * gcc.apple/const-cfstring-3.c: Ditto.
+    * gcc.apple/asm-block-17.c: Ditto.
+    * gcc.apple/align-test-5b: Run on ppc only. Skip for 64-bit.
+
+2006-07-05  Eric Christopher  <echristo@apple.com>
+
+	Radar 4597270
+	* g++.apple/4474655.C: Look for x86_64 vector convert
+	as well.
+
+2006-07-05  Eric Christopher  <echristo@apple.com>
+
+	Radar 4597288
+	Radar 4597308
+	* g++.old-deja/g++.abi/align.C: Merge from mainline.
+	* g++.dg/other/i386-1.C: Ditto.
+
+2006-07-05  Eric Christopher  <echristo@apple.com>
+
+	Radar 4614695
+	* gcc.apple/i386-regparmandstackparm-1.c: Skip for x86_64.
+	* gcc.apple/4525731-2.c: Ditto.
+	* gcc.apple/i386-ssetype-6.c: Ditto.
+	* gcc.apple/4182984.c: Ditto.
+	* gcc.apple/i386-deep-branch-predict-1.c: Ditto.
+	* gcc.apple/opt-size-2.c: Ditto.
+	* gcc.apple/4104248.c: Ditto.
+	* gcc.apple/4104248.c: Ditto.
+	* gcc.apple/4167459.c: Ditto.
+	* gcc.apple/i386-att-stub-1.c: Ditto.
+	* gcc.apple/4113078.c: Ditto.
+	* gcc.apple/4525731-1.c: Ditto.
+	* gcc.apple/dynamic-no-pic-1.c: Ditto.
+
 2006-06-22  Mike Stump  <mrs@apple.com>
 
 	Radar 4535822

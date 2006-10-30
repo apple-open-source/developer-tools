@@ -1,6 +1,0 @@
-#compdef strip
-
-local expl
-
-_description files expl executable
-_files "$expl[@]" -g '*(-*)'

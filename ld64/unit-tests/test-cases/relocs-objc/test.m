@@ -34,7 +34,6 @@
 
 
 @implementation Foo
-
 - (id) init
 {
 	self = [super init];
@@ -45,6 +44,16 @@
 {
 	[self class];
 }
-
 @end
+
+
+
+@interface Base
+@end
+
+
+@implementation Base
+@end
+
+
 

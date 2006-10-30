@@ -1,3 +1,10 @@
+2006-10-19  Jim Ingham  <jingham@apple.com>
+
+	* lib/gdb.exp (gdb_breakpoint_2): New proc, returns the breakpoint
+	number, whether the breakpoint was set by file or just address, and
+	the line or address.
+	* gdb.apple/debug-in-ofile/*: Add tests for missing .o files for DWARF.
+	
 2006-06-12  Jim Ingham  <jingham@apple.com>
 
 	* gdb.base/charset.exp: Don't try to convert from UTF-8 to 

@@ -186,7 +186,9 @@ i386_macosx_fetch_fp_registers (gdb_i386_float_state_t *fp_regs)
 void
 x86_64_macosx_fetch_fp_registers (gdb_x86_float_state64_t *fp_regs)
 {
+#if 0 /* APPLE LOCAL */
   i387_swap_fxsave (current_regcache, &fp_regs->fpu_fcw);
+#endif
   i387_supply_fxsave (current_regcache, -1, &fp_regs->fpu_fcw);
 }
 

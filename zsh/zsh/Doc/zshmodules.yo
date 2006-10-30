@@ -1,3 +1,0 @@
-manpage(ZSHMODULES)(1)(date())(zsh version())
-manpagename(zshmodules)(zsh loadable modules)
-includefile(Zsh/modules.yo)

@@ -1,3 +1,33 @@
+2006-09-12  Jim Ingham  <jingham@apple.com>
+
+        * i386-macosx-nat-exec.c (fetch_inferior_registers): Call
+        gdbarch_init_info before calling gdbarch_info_fill.
+
+2006-08-25  Jim Ingham  <jingham@apple.com>
+
+        * macosx-tdep.c (dyld_symbol_stub_function_address): Make sure
+        we are looking up the stub target by mangled name, not demangled.
+
+2006-08-25  Jim Ingham  <jingham@apple.com>
+
+        * ppc-macosx-frameinfo.h: fp_for_dereferencing -> sp_for_dereferencing.
+        * ppc-macosx-tdep.c (ppc_frame_unwind_sp_for_dereferencing): Replaces
+        ppc_frame_unwind_fp_for_dereferencing.
+        (ppc_alloc_frame_cache): fp_for_dereferencing -> sp_for_dereferencing
+        (ppc_frame_cache): ditto.
+        (ppc_frame_this_id): ditto.
+        (ppc_frame_find_prev_sp): Use the memory pointed to by the sp not the
+        fp to find the previous frame.  The compiler always updates this when
+        it moves the stack pointer, but the value under the frame pointer can
+        get overwritten.
+
+2006-07-24  Eric Albert  (ejalbert@apple.com)
+
+        * i386-macosx-nat-exec.c (fetch_inferior_registers): Use macro
+        to detect XMM et al regs.
+        * i386-macosx-tdep.c (i386_macosx_fetch_fp_registers): Don't swap
+        the x86_64 fp regs.
+
 2006-07-13  Jason Molenda  (jmolenda@apple.com)
 
 	* i386-macosx-nat-exec.c (fetch_inferior_registers): If the

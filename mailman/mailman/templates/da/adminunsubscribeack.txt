@@ -1,2 +1,0 @@
-%(member)s er nu taget ud af listen %(listname)s.
-

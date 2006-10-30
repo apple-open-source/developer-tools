@@ -1,3 +1,9 @@
+2006-07-20  Mike Stump  <mrs@apple.com>
+
+	Radar 4634676
+	* decl2.c (determine_visibility_from_class): Don't use hidden
+	visibility for explicit instantiations.
+
 2005-10-28  Andrew Pinski  <pinskia@physics.uc.edu>
 
 	PR C++/23229

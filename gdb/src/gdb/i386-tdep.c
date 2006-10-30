@@ -1332,8 +1332,10 @@ i386_skip_prologue (CORE_ADDR start_pc)
 	}
 
       /* addl y,%ebx */
+      /* APPLE LOCAL begin Remove erroneous ';' from end of condition test  */
       if (delta > 0 && op == 0x81
-	  && read_memory_unsigned_integer (pc + delta + 1, 1) == 0xc3);
+	  && read_memory_unsigned_integer (pc + delta + 1, 1) == 0xc3)
+      /* APPLE LOCAL end remove erroneous ';'  */
 	{
 	  pc += delta + 6;
 	}

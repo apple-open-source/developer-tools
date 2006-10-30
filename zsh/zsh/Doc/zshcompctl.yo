@@ -1,3 +1,0 @@
-manpage(ZSHCOMPCTL)(1)(date())(zsh version())
-manpagename(zshcompctl)(zsh programmable completion)
-includefile(Zsh/compctl.yo)

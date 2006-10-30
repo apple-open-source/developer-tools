@@ -139,6 +139,7 @@ fetch_inferior_registers (int regno)
       if (ret != KERN_SUCCESS)
         goto retry_using_old_call;
       MACH_CHECK_ERROR (ret);
+      gdbarch_info_init (&info);
       gdbarch_info_fill (current_gdbarch, &info);
       info.byte_order = gdbarch_byte_order (current_gdbarch);
       if (gp_regs.tsh.flavor == GDB_x86_THREAD_STATE64)
@@ -172,8 +173,7 @@ fetch_inferior_registers (int regno)
 
       if ((regno == -1) 
           || IS_FP_REGNUM_64 (regno)
-          || i386_sse_regnum_p (current_gdbarch, regno)
-          || i386_mxcsr_regnum_p (current_gdbarch, regno))
+          || IS_VP_REGNUM_64 (regno))
         {
           gdb_x86_float_state_t fp_regs;
           unsigned int fp_count = GDB_x86_FLOAT_STATE_COUNT;
@@ -255,8 +255,7 @@ store_inferior_registers (int regno)
 
       if ((regno == -1)
           || IS_FP_REGNUM_64 (regno)
-          || i386_sse_regnum_p (current_gdbarch, regno)
-          || i386_mxcsr_regnum_p (current_gdbarch, regno))
+          || IS_VP_REGNUM_64 (regno))
         {
           gdb_x86_float_state_t fp_regs;
           kern_return_t ret;

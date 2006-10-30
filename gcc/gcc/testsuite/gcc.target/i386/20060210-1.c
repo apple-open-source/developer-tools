@@ -4,6 +4,8 @@
    version probably won't have the -fnested-functions option, and it's
    required on OS X.  */
 /* { dg-options "-std=gnu99 -fnested-functions" } */
+/* APPLE LOCAL x86_64 */
+/* { dg-require-effective-target ilp32 } */
 #include <stdio.h>
 #include <stdlib.h>
 #include <emmintrin.h>

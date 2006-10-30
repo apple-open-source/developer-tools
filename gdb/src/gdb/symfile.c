@@ -1508,7 +1508,7 @@ The directory where separate debug symbols are searched for is \"%s\".\n"),
 /* APPLE LOCAL: Replace the entire find_separate_debug_file function
    by #if'ing it out.  */
 
-#ifdef NM_NEXTSTEP
+#ifdef TM_NEXTSTEP
 
 #if ! defined (APPLE_DSYM_EXT_AND_SUBDIRECTORY)
 #define APPLE_DSYM_EXT_AND_SUBDIRECTORY ".dSYM/Contents/Resources/DWARF/"
@@ -1600,7 +1600,7 @@ find_separate_debug_file (struct objfile *objfile)
   return NULL;
 }
 
-#else /* NM_NEXTSTEP */
+#else /* TM_NEXTSTEP */
 
 /* APPLE LOCAL: This function is #if'ed out entirely so we can replace
    it with our own version above.  */
@@ -1682,7 +1682,7 @@ find_separate_debug_file (struct objfile *objfile)
   return NULL;
 }
 
-#endif /* NM_NEXTSTEP */
+#endif /* TM_NEXTSTEP */
 
 /* This is the symbol-file command.  Read the file, analyze its
    symbols, and add a struct symtab to a symtab list.  The syntax of

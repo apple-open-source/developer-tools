@@ -73,7 +73,7 @@
    and lwp id onto the lwp field.  The tid field is used to indicate
    whether the lwp is a tid or not.  
    
-   FIXME: Check that core file support is not broken.  (See original
+   FIXME: Check that core file support is not bBoken.  (See original
    #if 0'd comments above.)
    FIXME: Restructure uw-thread.c so that the struct ptid fields
    can be used as intended. */

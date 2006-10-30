@@ -2414,8 +2414,19 @@ check_field_in (struct type *type, const char *name)
     }
 
   for (i = TYPE_N_BASECLASSES (type) - 1; i >= 0; i--)
-    if (check_field_in (TYPE_BASECLASS (type, i), name))
-      return 1;
+    {
+      /* APPLE LOCAL: see the comment about opaque types in
+	 check_typedef.  If the baseclass is opaque, then we
+	 need to call check_typedef to resolve it to the real
+	 type.  */
+      struct type *baseclass = TYPE_BASECLASS (type, i);
+      if (TYPE_STUB (baseclass) || TYPE_IS_OPAQUE (baseclass))
+	CHECK_TYPEDEF (baseclass);
+
+      if (check_field_in (baseclass, name))
+	return 1;
+      /* END APPLE LOCAL */
+    }
 
   return 0;
 }

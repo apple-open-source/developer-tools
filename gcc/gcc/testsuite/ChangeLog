@@ -1,3 +1,14 @@
+2006-09-20  Eric Christopher  <echristo@apple.com>
+
+	Radar 4632262
+	* gcc.target/i386/sse3-not-fisttp.c: New.
+
+2005-10-31  Jan Hubicka  <jh@suse.cz>
+
+        Radar 4651177
+	PR target/20928
+	* gcc.c-torture/compile/pr20928.c: New test.
+
 2005-10-28  Andrew Pinski  <pinskia@physics.uc.edu>
 
 	PR C++/23229

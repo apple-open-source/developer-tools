@@ -1,7 +1,0 @@
-name=zsh/zprof
-link=dynamic
-load=no
-
-autobins="zprof"
-
-objects="zprof.o"

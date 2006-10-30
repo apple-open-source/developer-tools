@@ -97,7 +97,7 @@ struct ppc_frame_cache
      in use, to find the caller's frame pointer.  So for that code we need to
      record a valid fp that can be dereferenced, not the location of what
      the sp/fp will eventually be set to.  */
-  CORE_ADDR fp_for_dereferencing; 
+  CORE_ADDR sp_for_dereferencing; 
 
   CORE_ADDR prev_pc;       /* Caller's pc value (return address) */
   CORE_ADDR prev_sp;       /* Caller's stack pointer */

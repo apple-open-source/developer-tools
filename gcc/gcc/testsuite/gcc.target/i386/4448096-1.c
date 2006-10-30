@@ -1,5 +1,7 @@
 /* APPLE LOCAL file 4448096 */
 /* { dg-do compile { target i?86-*-* } } */
+/* APPLE LOCAL x86_64 */
+/* { dg-require-effective-target ilp32 } */
 /* { dg-options "-O2 -mpreferred-stack-boundary=2 -mfpmath=sse -msse2" } */
 #include <stdlib.h>
 double d = 42.0;

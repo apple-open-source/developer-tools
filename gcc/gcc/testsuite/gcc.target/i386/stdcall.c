@@ -1,5 +1,7 @@
 /* APPLE LOCAL file 4284121 */
 /* { dg-do run } */
+/* APPLE LOCAL x86_64 */
+/* { dg-require-effective-target ilp32 } */
 /* { dg-options "-O2" } */
 /* Test stack computations with stdcall attribute.  */
 /* Primarily for darwin, although should work elsewhere. */

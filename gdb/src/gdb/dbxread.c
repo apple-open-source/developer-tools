@@ -1541,7 +1541,10 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
   /* When the SO we're currently processing is a DWARF debug map, 
      this is set.  */
   int in_dwarf_debug_map = 0;
-  
+
+  /* If the .o file for a "debug in .o file" case is missing, this is set.  */
+  int missing_oso_file = 0;
+
   /* When we have a dSYM file associated with this objfile, this is set.  */
   int have_dsym_file = objfile->separate_debug_objfile != NULL;
 
@@ -1636,6 +1639,13 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
 	 dSYM file.  */
       if (have_dsym_file && in_dwarf_debug_map && nlist.n_type != N_SO)
          continue;
+
+      /* If we are missing this .o file, we have to process all the regular
+	 linker symbols - to build up the minsyms, and scan for the closing
+	 N_SO, but we don't want to ingest any of the stabs.  */
+
+      if (missing_oso_file && (nlist.n_type & N_STAB) && nlist.n_type != N_SO)
+	continue;
 
       if (nlist.n_type == N_SLINE)
 	{
@@ -1760,6 +1770,7 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
 		includes_used = 0;
 		dependencies_used = 0;
                 in_dwarf_debug_map = 0;
+		missing_oso_file = 0;
 	      }
 	    else
 	      past_first_source_file = 1;
@@ -1831,19 +1842,23 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
               && namestring[0] == '_'
               && namestring[1] == 'Z'
               && namestring[2] == 'T'
-              && namestring[3] == 'V'
-              && namestring[4] >= '0' && namestring[4] <= '9')
+              && namestring[3] == 'V')
             {
-              int i = 4;
-              while (namestring[i] >= '0' && namestring[i] <= '9')
-                i++;
-              if (namestring[i] != '\0')
-                {
-                  add_psymbol_to_list (&namestring[i], strlen (&namestring[i]),
-                                       STRUCT_DOMAIN, LOC_TYPEDEF,
-                                       &objfile->static_psymbols,
-                                       0, 0,
-                                       psymtab_language, objfile);
+	      /* The class name could include a namespace or many, so 
+		 we use the demangler to unpack the name for us here.  */
+	      char *demangled = cplus_demangle_v3 (namestring, DMGL_ANSI);
+	      if (demangled != NULL)
+		{
+		  if (strstr (demangled, "vtable for ") != NULL)
+		    {
+		      add_psymbol_to_list (demangled + 11, 
+                                           strlen (demangled) - 11,
+					   STRUCT_DOMAIN, LOC_TYPEDEF,
+					   &objfile->static_psymbols,
+					   0, 0,
+					   psymtab_language, objfile);
+		    }
+		  xfree (demangled);
                 }
             }
 
@@ -2011,6 +2026,7 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
 		includes_used = 0;
 		dependencies_used = 0;
 		in_dwarf_debug_map = 0;
+		missing_oso_file = 0;
 	      }
 
 	    prev_so_symnum = symnum;
@@ -2048,16 +2064,67 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
 	    /* If we have a dSYM file, check the next nlist entry to see if
 	       it is a N_OSO since we will need to ignore all debug map
 	       information.  */
-	    if (have_dsym_file)
+	    /* Also, if the next stab is an N_OSO, but the OSO file is missing,
+	       then we will have to ignore all the debug map entries for this
+	       .o section.  */
+
 	      {
 		struct internal_nlist next_nlist;
 		PEEK_SYMBOL(next_nlist, sect_p, abfd);
-		/* Don't create a psymtab for files that are debug map entries
-		   when we have a dSYM file.  */
 		if (next_nlist.n_type == N_OSO && next_nlist.n_desc == 1)
 		  {
-		    in_dwarf_debug_map = 1;
-		    continue;
+		    char *oso_namestring;
+		    struct stat buf;
+		    int stat_ret;
+		    char *maybe_dot_a_name;
+
+		    /* Don't create a psymtab for files that are debug map entries
+		       when we have a dSYM file.  */
+		    if (have_dsym_file)
+		      {
+			in_dwarf_debug_map = 1;
+			continue;
+		      }
+
+		    oso_namestring = set_namestring (objfile, next_nlist, NULL);
+		    maybe_dot_a_name = oso_namestring;
+
+		    /* If the debug info is in an archive file, then the OSO string
+		       will be "/foo/bar/baz.a(blubby.o)" so we need to peel off
+		       the parentheses, and put the archive name in MAYBE_DOT_A_NAME.  
+		       FIXME - We are stripping off the (foo.o) in two places now.
+		       We should probably make a function out of this.
+		       FIXME - won't work if your object file has a '(' in the name.  
+		       FIXME - Should we cache missing .a files, since we are
+		       going to look them up once per missing .o file in the .a?  */
+		    if (oso_namestring[strlen (oso_namestring) - 1] == ')')
+		      {
+			int dot_a_name_len;
+			char *l_paren;
+			l_paren = strrchr (oso_namestring, '(');
+			if (l_paren != NULL)
+			  {
+			    dot_a_name_len = l_paren - oso_namestring;
+			    maybe_dot_a_name = (char *) xmalloc ((dot_a_name_len  + 1) 
+								 * sizeof (char));
+			    memcpy (maybe_dot_a_name, oso_namestring, dot_a_name_len);
+			    maybe_dot_a_name[dot_a_name_len] = '\0';
+			  }
+		      }
+
+		    stat_ret = stat (maybe_dot_a_name, &buf);
+		    if (oso_namestring != maybe_dot_a_name)
+		      xfree (maybe_dot_a_name);
+
+		    if (stat_ret != 0)
+		      {
+			warning ("Could not find object file \"%s\" - no debug "
+				 "information available for \"%s\".\n",
+				 oso_namestring, namestring);
+			in_dwarf_debug_map = 1;
+			missing_oso_file = 1;
+			continue;
+		      }
 		  }
 	      }
 	    /* APPLE LOCAL end: dSYM with debug map */
@@ -2742,6 +2809,7 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
 	    includes_used = 0;
 	    dependencies_used = 0;
             in_dwarf_debug_map = 0;
+	    missing_oso_file = 0;
 	  }
 #endif
 	  continue;
@@ -2840,6 +2908,7 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
 		   text_end > pst->texthigh ? text_end : pst->texthigh,
 		   dependency_list, dependencies_used, textlow_not_set);
       in_dwarf_debug_map = 0;
+      missing_oso_file = 0;
     }
 
   do_cleanups (back_to);
@@ -3570,28 +3639,50 @@ read_oso_nlists (bfd *oso_bfd, struct partial_symtab *pst,
       if (record_standard)
         {
           char *c;
+          int name_has_dot = 0;
+          int name_is_anon_namespace = 0;
+          int name_dot_followed_by_digit = 0;
 
           /* APPLE LOCAL symbol prefixes */
           namestring = set_namestring_1 (strtab_size, strtab_data,
                                          leading_char, nlist, prefix);
 
-          /* Skip over names like "foo.h" and ".objc_class_name_SKTGraphic".
-             These artifical things do not correspond to user-level constructs
-	     and will not be mentioned in the DWARF so the debug
-	     map will never be called to translate their addresses.
-	     We'll pick up minsyms for all of them in the final
-	     executable.
-             NB: We still need to allow things like "my_static_symbol.324"
-             which are user-visible file-static variables that the compiler
-             has made unique by appending a numeric suffix.  */
-
-          c = strchr (namestring, '.');
-          if (c != NULL 
-              && (*(c + 1) < '0' || *(c + 1) > '9'))
-            continue;
-
           if (leading_char == namestring[0])
             namestring++;
+
+          /* Symbol names like "foo.h" and ".objc_class_name_SKTGraphic" are
+             not relevant to the user and will only confuse things.  */
+
+          c = strchr (namestring, '.');
+          if (c != NULL)
+            name_has_dot = 1;
+
+          /* However, symbols in a C++ anonymous namespace will have dots
+             in them, and that's A-OK.  e.g. (anonymous namespace)::foo(int)
+             in a.cc is _ZN33_GLOBAL__N_a.cc_00000000_3D44F7283fooEi.  */
+
+          if (name_has_dot && namestring[0] == '_' && namestring[1] == 'Z')
+            {
+              char *demangled = cplus_demangle_v3 (namestring, DMGL_ANSI);
+              if (demangled != NULL)
+                {
+                  if (strstr (demangled, "anonymous namespace") != NULL)
+                    name_is_anon_namespace = 1;
+                  xfree (demangled);
+                }
+            }
+
+          /* If the dot is followed by a number, we're probably looking
+             at a function static variable, e.g "foo () {static int myvar;}"
+             will give you a linker symbol name of myvar.3821 or some similarly
+             unique name.  */
+          if (name_has_dot && *(c + 1) >= '0' && *(c + 1) <= '9')
+                name_dot_followed_by_digit = 1;
+
+          if (name_has_dot 
+              && !name_is_anon_namespace 
+              && !name_dot_followed_by_digit)
+            continue;
 
           (*nlists)[*nlists_count].addr = nlist.n_value;
           (*nlists)[*nlists_count].name = xstrdup (namestring);

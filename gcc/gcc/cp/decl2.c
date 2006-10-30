@@ -1633,6 +1633,10 @@ determine_visibility (tree decl)
 	  DECL_VISIBILITY_SPECIFIED (decl) = 1;
 	}
       else if (TREE_CODE (decl) == FUNCTION_DECL
+	       /* APPLE LOCAL begin mainline */
+	       && (! DECL_LANG_SPECIFIC (decl)
+		   || ! DECL_EXPLICIT_INSTANTIATION (decl))
+	       /* APPLE LOCAL end mainline */
 	       && DECL_DECLARED_INLINE_P (decl)
 	       && visibility_options.inlines_hidden)
 	{

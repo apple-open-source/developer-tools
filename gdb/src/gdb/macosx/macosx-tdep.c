@@ -268,9 +268,9 @@ dyld_symbol_stub_function_address (CORE_ADDR pc, const char **name)
 
   /* found a name, now find a symbol and address */
 
-  sym = lookup_symbol (lname, 0, VAR_DOMAIN, 0, 0);
+  sym = lookup_symbol_global (lname, lname, VAR_DOMAIN, 0);
   if ((sym == NULL) && (lname[0] == '_'))
-    sym = lookup_symbol (lname + 1, 0, VAR_DOMAIN, 0, 0);
+    sym = lookup_symbol_global (lname + 1, lname + 1, VAR_DOMAIN, 0);
   if (sym != NULL && SYMBOL_BLOCK_VALUE (sym) != NULL)
     return BLOCK_START (SYMBOL_BLOCK_VALUE (sym));
 

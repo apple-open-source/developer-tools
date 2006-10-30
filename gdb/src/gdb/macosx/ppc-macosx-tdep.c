@@ -132,6 +132,10 @@ static int ppc_macosx_get_longjmp_target (CORE_ADDR * pc);
 static int ppc_64_macosx_get_longjmp_target (CORE_ADDR * pc);
 static enum gdb_osabi ppc_mach_o_osabi_sniffer_use_dyld_hint (bfd *abfd);
 
+CORE_ADDR
+ppc_frame_unwind_sp_for_dereferencing (struct frame_info *next_frame, 
+                                       void **this_cache);
+
 /* When we're doing native debugging, and we attach to a process,
    we start out by finding the in-memory dyld -- the osabi of that
    dyld is stashed away here for use when picking the right osabi of
@@ -216,7 +220,7 @@ ppc_alloc_frame_cache (void)
   cache->sp = (CORE_ADDR) -1;
   cache->fp = (CORE_ADDR) -1;
   cache->pc = (CORE_ADDR) -1;
-  cache->fp_for_dereferencing = (CORE_ADDR) -1;
+  cache->sp_for_dereferencing = (CORE_ADDR) -1;
 
   for (i = 0; i < NUM_REGS; i++)
     cache->saved_regs[i] = -1;
@@ -258,11 +262,10 @@ ppc_frame_cache (struct frame_info *next_frame, void **this_cache)
   if (cache->pc == 0)
     cache->pc = frame_pc_unwind (next_frame);
 
-  /* A frame pointer which can be dereferenced to find the caller's
-     frame pointer and follow the chain.  */
+  /* A stack pointer which can be dereferenced to find the caller's
+     stack pointer and follow the chain.  */
 
-  cache->fp_for_dereferencing = ppc_frame_unwind_fp_for_dereferencing 
-                                                      (next_frame, this_cache);
+  cache->sp_for_dereferencing = ppc_frame_unwind_sp_for_dereferencing (next_frame, this_cache);
 
   extern int frame_debug;
   if (frame_debug)
@@ -407,62 +410,23 @@ ppc_frame_unwind_fp (struct frame_info *next_frame, void **this_cache)
   return frame_unwind_register_unsigned (next_frame, SP_REGNUM);
 }
 
-/* Given NEXT_FRAME, find the fp for NEXT_FRAME->prev, i.e. the 'this' frame
-   which can be dereferenced. 
-   When ppc_frame_unwind_fp() is called in a prologue you'll get an address
-   of what the frame pointer WILL be, not what it is right now.  But over in
-   ppc_frame_this_id () we're going to dereference it to walk the chain of
-   frames to see if this is the last real frame.
-   So for the purposes of dereferencing, return a frame pointer that is
-   likely to dereference to something sensible.  */
+/* Given NEXT_FRAME, find the stack pointer for NEXT_FRAME->prev,
+   i.e. the 'this' frame which can be dereferenced.  This is almost
+   identical to ppc_frame_unwind_sp, except that we don't try to do
+   anything clever with the prologue parsing, since that really never
+   helps us for this, and sometimes leads us astray.
+   I could eliminate this function, and go back to straight grabbing
+   the SP_REGNUM value, but this stuff always needs fiddling, and I'm
+   not going to bet we won't have to put something BACK in here later.
+  */
 
 CORE_ADDR
-ppc_frame_unwind_fp_for_dereferencing (struct frame_info *next_frame, 
+ppc_frame_unwind_sp_for_dereferencing (struct frame_info *next_frame,
                                        void **this_cache)
 {
-  struct ppc_frame_cache *cache;
-  ppc_function_properties *props;
-  CORE_ADDR this_fp, this_pc, next_sp;
-
-  cache = ppc_frame_cache (next_frame, this_cache);
-
-  props = ppc_frame_function_properties (next_frame, this_cache);
-  if (props == NULL)
-    return frame_unwind_register_unsigned (next_frame, SP_REGNUM);
-
-  this_pc = frame_pc_unwind (next_frame);
-
-  /* If we've executed the instructions that set up the frame pointer reg
-     already, return that.  */
-
-  if (props->frameptr_used && props->frameptr_reg > 0
-      && this_pc > props->frameptr_pc)
-    {
-      /* Be a little bit careful here.  We are trying to unwind the
-	 frameptr register, but we might get it wrong (for instance
-	 because we mis-parsed a prologue and got the stored location
-	 wrong.)  So if the fp value looks ridiculous, fall back
-	 on the SP value - which we seem to get right more
-	 consistently... */
-
-      next_sp = get_frame_register_unsigned (next_frame, SP_REGNUM);
-      this_fp = frame_unwind_register_unsigned (next_frame, 
-                                                props->frameptr_reg);
-      if (this_fp >= next_sp && this_fp - next_sp < 0xfffff)
-          return this_fp;
-      complaint (&symfile_complaints, 
-                "sanity check failed in ppc_frame_unwind_fp_for_dereferencing");
-    }
-
-
-  /* Otherwise let's assume that the stack pointer points to memory
-     that can be dereferenced to get to the previous frame.  */
-
+  /* We always just assume that this is in the STACK POINTER... */
   return frame_unwind_register_unsigned (next_frame, SP_REGNUM);
 }
-
-
-/* Given NEXT_FRAME, find the sp for NEXT_FRAME->prev, i.e. this frame. */
 
 CORE_ADDR
 ppc_frame_unwind_sp (struct frame_info *next_frame, void **this_cache)
@@ -535,20 +499,14 @@ ppc_frame_find_prev_sp (struct frame_info *next_frame, void **this_cache)
       return this_sp;
     }
 
-  /* If there is a frame pointer (r30) set up, dereference from that instead
-     of the stack pointer (r1).  The stack pointer will be moved down if this
-     is an alloca/variable length array function and will no longer dereference
-     to the saved stack pointer correctly.  */
-
-   if (props->frameptr_used && props->frameptr_reg > 0
-      && props->frameptr_pc != INVALID_ADDRESS
-      && this_pc > props->frameptr_pc)
-    {
-      this_sp = frame_unwind_register_unsigned 
-                                             (next_frame, props->frameptr_reg);
-    }
-
-  /* Get 'prev's stored sp off the stack.  */
+  /* It might seem reasonable to use the frame pointer rather than the
+     stack pointer to unwind the stack, but that's not right.
+     The compiler actually moves the previous sp value to the location
+     pointed to by the new stack pointer, when it moves the stack
+     pointer.  And sometimes, it even overwrites the value pointed to
+     by the frame pointer.  So while you need the frame pointer to get
+     the locals, etc, you have to use the stack pointer to follow the
+     chain.  */
 
   return read_memory_unsigned_integer (this_sp,
                                        gdbarch_addr_bit (current_gdbarch) /
@@ -800,7 +758,7 @@ ppc_frame_this_id (struct frame_info *next_frame, void **this_cache,
      (best case), an extra frame on each thread with an address of 0x0.  */
 
   if (safe_read_memory_unsigned_integer
-      (cache->fp_for_dereferencing, TARGET_PTR_BIT / 8, &prev_frame_addr))
+      (cache->sp_for_dereferencing, TARGET_PTR_BIT / 8, &prev_frame_addr))
     {
       if (safe_read_memory_unsigned_integer
           (prev_frame_addr, TARGET_PTR_BIT / 8, &prev_frame_addr))

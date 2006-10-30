@@ -311,8 +311,8 @@ for l in $SHARED_LIBS ; do
 done
 
 # For backwards compatibility link libgcc_s.1.dylib to the 64-bit versions.
-ln -s ./libgcc_s.1.dylib .$DEST_ROOT/lib/libgcc_s_ppc64.1.dylib
-ln -s ./libgcc_s.1.dylib .$DEST_ROOT/lib/libgcc_s_x86_64.1.dylib
+ln -s libgcc_s.1.dylib .$DEST_ROOT/lib/libgcc_s_ppc64.1.dylib
+ln -s libgcc_s.1.dylib .$DEST_ROOT/lib/libgcc_s_x86_64.1.dylib
 
 for t in $TARGETS ; do
   ln -s ../../../libstdc++.6.dylib \

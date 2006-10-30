@@ -1,11 +1,11 @@
 /* APPLE LOCAL file Macintosh alignment */
 /* align-test-5*.c are all the same code but with different options.  */
 
-/* { dg-do run } */
+/* { dg-do run { target powerpc*-*-darwin* } } */
 /* { dg-options "-malign-power -DSIZE=12" } */
 
 /* We have a different test to pick up the warning from 64-bit case.  */
-/* { dg-xfail-if "" { powerpc*-*-darwin* } { "-m64" } { "" } } */
+/* { dg-skip-if "" { powerpc*-*-darwin* } { "-m64" } { "" } } */
 
 /*
  * GCC alignment test for command line options for setting alignment modes.

@@ -197,10 +197,13 @@ char *dcc_get_system_version(void)
         char *sw_vers = dcc_run_simple_command("/usr/bin/sw_vers");
         if (sw_vers) {
             char *prodVers, *prodVersStr = "ProductVersion:";
+	    char *buildVers, *buildVersStr = "BuildVersion:";
             char *nl;
             char archbuf[32];
             
             prodVers = strstr(sw_vers, prodVersStr);
+	    buildVers = strstr(sw_vers, buildVersStr);
+
             if (prodVers) {
                 // find the start of the actual version string
                 prodVers += strlen(prodVersStr);
@@ -215,6 +218,20 @@ char *dcc_get_system_version(void)
                 prodVers = "Unknown";
                 rs_log_warning("failed to parse ProcuctVersion from sw_vers");
             }
+
+	    if (buildVers) { 
+	      buildVers += strlen(buildVersStr);
+	      while (isspace(*buildVers))
+		buildVers++;
+	      nl = buildVers;
+	      while (*nl != 0 && *nl != '\n')
+		nl++;
+	      *nl = 0;
+	    }
+	    else {
+	      buildVers = "Unknown";
+	      rs_log_warning("failed to parse BuildVersion from sw_vers");
+	    }
             
             const NXArchInfo *myArch = NXGetLocalArchInfo();
             const char *archName;
@@ -239,8 +256,8 @@ char *dcc_get_system_version(void)
             }
             
             // construct a string of the form 10.x.y (ppc)
-            ret = malloc(strlen(prodVers) + strlen(archName) + strlen(" ()") + 1);
-            sprintf(ret, "%s (%s)", prodVers, archName);
+            ret = malloc(strlen(prodVers) + strlen(buildVers) + strlen(archName) + strlen(" ()") + 1);
+            sprintf(ret, "%s (%s, %s)", prodVers, buildVers, archName);
             free(sw_vers);
         }
     }

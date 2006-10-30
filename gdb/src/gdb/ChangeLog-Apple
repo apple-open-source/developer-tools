@@ -1,7 +1,55 @@
+2006-10-19  Jim Ingham  <jingham@apple.com>
+
+	* dbxread.c (read_dbx_symtab): handle the case where we
+	have an OSO record, but the file it points to is missing.
+
+2006-09-26  Jason Molenda  (jmolenda@apple.com)
+
+        * dbxread.c (read_oso_nlists): Ignore symbols with a '.' in their name
+        except for function static vars and, now, functions in a C++ anonymous
+        namespace.
+
+2006-08-29  Caroline Tice  <ctice@apple.com>
+
+        * i386-tdep.c (i386_skip_prologue):  Remove erroneous ';' at the end of
+        a condition on an if statement.  It was causing incorrect parsing of
+        i386 prologues with gcc 1518.
+
+2006-09-01  Jim Ingham  <jingham@apple.com>
+
+        * valops.c: (check_field_in): If the baseclass type is a stub,
+        call CHECK_TYPEDEF on it before searching in it.
+
+2006-09-01  Jim Ingham  <jingham@apple.com>
+
+        * dbxread.c (read_dbx_symtab): Demangle the vtable symbol name
+        to get the classname.  Otherwise we miss classes in namespaces.
+
+2006-08-21  Jason Molenda  (jmolenda@apple.com)
+
+        * dwarfread.c (locval): A stack of zero elements is legal.
+        * dwarf2read.c (decode_locdesc): Ditto.
+
+2006-08-21  Jason Molenda  (jmolenda@apple.com)
+
+        Patch from Will Drewry <wad@google.com> and 
+        Tavis Ormandy <taviso@google.com> to address CVE-2006-4146.
+
+        * dwarfread.c (locval): Don't walk off the location description stack.
+        * dwarf2read.c (decode_locdesc): Don't walk off the location 
+        description stack.
+
 2006-07-18  Jason Molenda  (jmolenda@apple.com)
 
         * amd64-tdep.c (amd64_analyze_prologue): Skip over fix-and-continue
         generated nop insns when looking for the prologue.
+
+2006-06-28  Greg Clayton  <gclayton@apple.com>
+
+        * symfile.c (find_separate_debug_file): Use Apple-specific version of
+        this function to find dSYM files when TM_NEXTSTEP is defined instead of
+        using NM_NEXTSTEP.  NM_NEXTSTEP isn't defined for cross-gdb's but we
+        still need to look for dSYM files in those cases.
 
 2006-06-13  Jim Ingham  <jingham@apple.com>
 

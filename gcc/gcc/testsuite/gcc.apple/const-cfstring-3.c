@@ -4,6 +4,7 @@
 /* Developed by Ziemowit Laski <zlaski@apple.com>.  */
 
 /* { dg-do compile { target *-*-darwin* } } */
+/* { dg-skip-if "" { *-*-darwin* } { "-m64" } { "" } } */
 /* { dg-options "-fconstant-cfstrings" } */
 
 typedef const struct __CFString *CFStringRef;

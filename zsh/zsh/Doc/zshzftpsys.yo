@@ -1,3 +1,0 @@
-manpage(ZSHZFTPSYS)(1)(date())(zsh version())
-manpagename(zshzftpsys)(zftp function front-end)
-includefile(Zsh/zftpsys.yo)

@@ -770,8 +770,8 @@ const int x86_use_bit_test = m_386;
 const int x86_unroll_strlen = m_486 | m_PENT | m_PPRO | m_ATHLON_K8 | m_K6 | m_GENERIC;
 const int x86_cmove = m_PPRO | m_ATHLON_K8 | m_PENT4 | m_NOCONA;
 /* APPLE LOCAL end mainline 2006-04-19 4434601 */
-/* APPLE LOCAL mainline 2005-03-16 4054919 */
-const int x86_fisttp = m_NOCONA;
+/* APPLE LOCAL mainline 4054919 4632262 */
+/* Deleted something here.  */
 const int x86_3dnow_a = m_ATHLON_K8;
 /* APPLE LOCAL mainline */
 const int x86_deep_branch = m_PPRO | m_K6 | m_ATHLON_K8 | m_PENT4 | m_NOCONA | m_GENERIC;
@@ -1507,7 +1507,7 @@ override_options (void)
 				        | PTA_MMX | PTA_PREFETCH_SSE},
       {"prescott", PROCESSOR_NOCONA, PTA_SSE | PTA_SSE2 | PTA_SSE3
 				        | PTA_MMX | PTA_PREFETCH_SSE},
-      {"nocona", PROCESSOR_NOCONA, PTA_SSE | PTA_SSE2 | PTA_64BIT
+      {"nocona", PROCESSOR_NOCONA, PTA_SSE | PTA_SSE2 | PTA_SSE3 | PTA_64BIT
 				        | PTA_MMX | PTA_PREFETCH_SSE},
       {"k6", PROCESSOR_K6, PTA_MMX},
       {"k6-2", PROCESSOR_K6, PTA_MMX | PTA_3DNOW},
@@ -1703,6 +1703,11 @@ override_options (void)
 	    && !(target_flags_explicit & MASK_MNI))
 	  target_flags |= MASK_MNI;
 	/* APPLE LOCAL end mni */
+	/* APPLE LOCAL begin 4515157 */
+	/* For 32-bit Mach-O, default to SSE3 off.  */
+	if (TARGET_MACHO && !TARGET_64BIT && !(target_flags_explicit & MASK_SSE3))
+	  target_flags &= ~MASK_SSE3;
+	/* APPLE LOCAL end 4515157 */
 	if (processor_alias_table[i].flags & PTA_PREFETCH_SSE)
 	  x86_prefetch_sse = true;
 	if (TARGET_64BIT && !(processor_alias_table[i].flags & PTA_64BIT))
@@ -6506,8 +6511,21 @@ legitimize_pic_address (rtx orig, rtx reg)
     }
   else
     {
-      if (GET_CODE (addr) == CONST)
+      /* APPLE LOCAL begin mainline */
+      if (GET_CODE (addr) == CONST_INT
+	  && !x86_64_immediate_operand (addr, VOIDmode))
 	{
+	  if (reg)
+	{
+	      emit_move_insn (reg, addr);
+	      new = reg;
+	    }
+	  else
+	    new = force_reg (Pmode, addr);
+	}
+      else if (GET_CODE (addr) == CONST)
+	{
+	  /* APPLE LOCAL end mainline */
 	  addr = XEXP (addr, 0);
 
 	  /* We must match stuff we generate before.  Assume the only
@@ -8751,6 +8769,9 @@ void
 ix86_expand_vector_move (enum machine_mode mode, rtx operands[])
 {
   rtx op0 = operands[0], op1 = operands[1];
+  /* APPLE LOCAL begin radar 4614623, 4700281 */
+  cfun->uses_vector = 1;
+  /* APPLE LOCAL end radar 4614623, 4700281 */
 
   /* Force constants other than zero into memory.  We do not know how
      the instructions used to build constants modify the upper 64 bits
@@ -18320,7 +18341,8 @@ ix86_expand_vector_init_duplicate (bool mmx_ok, enum machine_mode mode,
     {
     case V2SImode:
     case V2SFmode:
-      if (!mmx_ok && !TARGET_SSE)
+      /* APPLE LOCAL 4643646 */
+      if (!mmx_ok)
 	return false;
       /* FALLTHRU */
 
@@ -19903,7 +19925,15 @@ iasm_canonicalize_bracket_1 (tree* argp, tree top)
 	      if (INTEGRAL_TYPE_P (type))
 		type = TREE_TYPE (TREE_OPERAND (arg, 0));
 	      TREE_TYPE (arg) = type;
-	}
+	    }
+	  if (TREE_CODE (arg) == PLUS_EXPR
+	      && TREE_TYPE (arg) == NULL_TREE
+	      && TREE_TYPE (TREE_OPERAND (arg, 0))
+	      && TREE_TYPE (TREE_OPERAND (arg, 0)) == TREE_TYPE (TREE_OPERAND (arg, 1)))
+	    {
+	      tree type = TREE_TYPE (TREE_OPERAND (arg, 0));
+	      TREE_TYPE (arg) = type;
+	    }
 	}
       return rtype;
 
@@ -19969,6 +19999,7 @@ static tree
 iasm_indirect (tree addr)
 {
   if (TREE_CODE (addr) == ADDR_EXPR
+      && TREE_CODE (TREE_TYPE (TREE_OPERAND (addr, 0))) != ARRAY_TYPE
       /* && TREE_CODE (TREE_OPERAND (addr, 0)) == ARRAY_REF */)
     return TREE_OPERAND (addr, 0);
 
@@ -20057,12 +20088,15 @@ iasm_canonicalize_bracket (tree arg)
 
   /* Handle [INTEGER_CST][ptr][op3] */
   if (TREE_OPERAND (arg, 1)
-      && TREE_TYPE (arg) == void_type_node
       && TREE_CODE (TREE_OPERAND (arg, 0)) == INTEGER_CST
       && TREE_CODE (TREE_OPERAND (arg, 1)) == BRACKET_EXPR
       && TREE_TYPE (TREE_OPERAND (TREE_OPERAND (arg, 1), 0))
       && POINTER_TYPE_P (TREE_TYPE (TREE_OPERAND (TREE_OPERAND (arg, 1), 0)))
-      && TREE_TYPE (TREE_TYPE (TREE_OPERAND (TREE_OPERAND (arg, 1), 0))) != void_type_node)
+      && TREE_TYPE (TREE_TYPE (TREE_OPERAND (TREE_OPERAND (arg, 1), 0))) != void_type_node
+      && (TREE_TYPE (arg) == void_type_node
+	  || (TREE_TYPE (arg) == get_identifier ("word")
+	      && (TYPE_MODE (TREE_TYPE (TREE_TYPE (TREE_OPERAND (TREE_OPERAND (arg, 1), 0))))
+		  == HImode))))
     {
       tree op3 = TREE_OPERAND (TREE_OPERAND (arg, 1), 1);
       tree addr = iasm_add (TREE_OPERAND (TREE_OPERAND (arg, 1), 0),
@@ -20223,9 +20257,15 @@ iasm_x86_canonicalize_operands (const char **opcode_p, tree iargs, void *ep)
   if (opcode[0] == ' ' && iasm_is_pseudo (opcode+1))
     e->pseudo = true;
 
+  if (strcasecmp (opcode, "movs") == 0)
+    args = NULL_TREE;
   /* movsx isn't part of the AT&T syntax, they spell it movs.  */
-  if (strcasecmp (opcode, "movsx") == 0)
+  else if (strcasecmp (opcode, "movsx") == 0)
     opcode = "movs";
+  else if (strcasecmp (opcode, "pushfd") == 0)
+    *opcode_p = "pushf";
+  else if (strcasecmp (opcode, "popfd") == 0)
+    *opcode_p = "popf";
 
   /* movzx isn't part of the AT&T syntax, they spell it movz.  */
   if (strcasecmp (opcode, "movzx") == 0)
@@ -20271,6 +20311,8 @@ iasm_x86_canonicalize_operands (const char **opcode_p, tree iargs, void *ep)
 	   || strcasecmp (opcode, "fxrstor") == 0
 	   || strcasecmp (opcode, "fxsave") == 0
 	   || strcasecmp (opcode, "invlpg") == 0
+	   || strcasecmp (opcode, "jmp") == 0
+	   || strcasecmp (opcode, "call") == 0
 	   || strcasecmp (opcode, "ja") == 0
 	   || strcasecmp (opcode, "jae") == 0
 	   || strcasecmp (opcode, "jb") == 0

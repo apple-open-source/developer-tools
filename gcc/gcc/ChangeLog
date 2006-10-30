@@ -1,3 +1,16 @@
+2006-09-20  Eric Christopher  <echristo@apple.com>
+
+	Radar 4632262
+	* config/i386/i386.c (x86_fisttp): Remove.
+	* config/i386/i386.h (x86_fisttp): Ditto.
+	(TARGET_FISTTP): Ditto.
+
+2005-10-31  Jan Hubicka  <jh@suse.cz>
+
+        Radar 4651177
+	PR target/20928
+	* i386.c (legitimize_pic_address): Deal with large immediates.
+
 2006-06-11  Eric Christopher  <echristo@apple.com>
 
 	Radar 4581948

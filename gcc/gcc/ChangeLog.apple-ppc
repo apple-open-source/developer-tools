@@ -1,3 +1,79 @@
+2006-09-22  Mike Stump  <mrs@apple.com>
+
+	Radar 4736998
+	* config/i386/i386.c (iasm_x86_canonicalize_operands): Avoid
+	outputting arguments for movs, as the assembler can mis-assemble
+	it.
+
+2006-09-22  Stuart Hastings  <stuart@hastings.org>
+
+	* gcc/config/i386/i386.c (processor_alias_table): Remove APPLE
+	LOCAL comment.
+
+2006-09-06  Stuart Hastings  <stuart@hastings.org>
+
+	Radar 4515157
+	* gcc/config/i386/i386.c (processor_alias_table): Enable SSE3
+	for nocona.  (override_options): Turn SSE3 off for 32-bit
+	Mach-O unless explicitly enabled on command line.
+
+2006-09-05  Mike Stump  <mrs@apple.com>
+
+	Radar 4699545
+	* config/i386/i386.c (iasm_indirect): Avoid doing bad things with
+	ARRAY_TYPEs.
+	(iasm_canonicalize_bracket): Handle [var][edx+edx].
+	(iasm_canonicalize_bracket_1): Allow edx+edx to have a type so
+	that we can pass it to the optimizer.
+
+2006-06-29  Mike Stump  <mrs@apple.com>
+
+	Radar 4560301
+	* c-common.c (iasm_stmt): Fix argument numbers for repeated arguments.
+	* config/asm.h: Likewise.
+
+2006-08-29  Mike Stump  <mrs@apple.com>
+
+	Radar 4699524
+	* config/i386/i386.c (iasm_x86_canonicalize_operands): Add
+	pushfd/popfd.
+
+2006-08-29  Hui-May Chang  <hm.chang@apple.com>
+
+	Radar 4645709
+	* config/i386/i386.md (movstrictqi_and): Update the whole register
+	for a byte operand.
+
+2006-08-25  Hui-May Chang  <hm.chang@apple.com>
+
+	Radar 4614623, 4700281
+	* config/i386/i386.c (ix86_expand_vector_move): Set cfun->uses_vector to 1
+	to honor the alignment requirement of vector instructions.
+
+2006-08-24  Mike Stump  <mrs@apple.com>
+
+	Radar 4682427
+	* c-common.c (iasm_stmt): Fix jmp/call.
+	* config/i386/i386.c (iasm_x86_canonicalize_operands): Likewise.
+
+2006-07-28  Mike Stump  <mrs@apple.com>
+
+	Radar 4653181
+	* c-common.c (iasm_stmt): Don't clabber edx when edx is used
+	as an operand.  Ensure that it is an input output operand, if
+	used.
+
+2006-07-27  Stuart Hastings  <stuart@apple.com>
+
+	Radar 4643646
+	* gcc/config/i386/i386.c (ix86_expand_vector_init_duplicate):
+	Omit TARGET_SSE check.
+
+2006-07-05  Hui-May Chang  <hm.chang@apple.com>
+
+	* doc/extend.texi: Fixed the unmatched APPLE LOCAL marker introduced by
+	the previous checkin for radar 4395773.
+
 2006-06-26  Hui-May Chang  <hm.chang@apple.com>
 
 	Radar 4395773

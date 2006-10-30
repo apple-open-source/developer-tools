@@ -1,5 +1,6 @@
 /* APPLE LOCAL file 420513 */
 /* { dg-do compile { target i?86-*-* } } */
+/* { dg-skip-if "" { i?86-*-* } { "-m64" } { "" } } */
 /* { dg-options "-O2" } */
 
 /* Look for both entry points to the regparmandstackparm function.  */

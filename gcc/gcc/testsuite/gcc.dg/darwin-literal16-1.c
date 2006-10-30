@@ -1,6 +1,6 @@
 /* APPLE LOCAL file x86_64 */
 /* Test that we emit literal16 for 64-bit targets right now.  */
-/* { dg-do compile { target i?i86-*-darwin* } } */
+/* { dg-do compile { target i?86-*-darwin* } } */
 /* { dg-options "-m64" } */
 /* { dg-final { scan-assembler "literal16" } } */
 #include <math.h>

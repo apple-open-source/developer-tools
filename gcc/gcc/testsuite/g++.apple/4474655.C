@@ -14,4 +14,4 @@ main ()
    disabled SSE vector instructions; this test insures that these
    instructions are permitted and generated.  See also
    gcc.apple/4448096-1.c.  */
-/* { dg-final { scan-assembler "maxsd" } } */
+/* { dg-final { scan-assembler "(maxsd|cvttsd2si)" } } */

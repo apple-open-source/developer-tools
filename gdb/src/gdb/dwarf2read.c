@@ -9804,6 +9804,16 @@ decode_locdesc (struct dwarf_block *blk, struct dwarf2_cu *cu)
 		     dwarf_stack_op_name (op));
 	  return (stack[stacki]);
 	}
+      /* Enforce maximum stack depth of 63 to avoid ++stacki writing
+         outside of the given size. Also enforce minimum > 0.
+         -- wad@google.com 14 Aug 2006 */
+      if (stacki >= sizeof (stack) / sizeof (*stack) - 1)
+        internal_error (__FILE__, __LINE__,
+                        _("location description stack too deep: %d"),
+                        stacki);
+      if (stacki < 0)
+        internal_error (__FILE__, __LINE__,
+                        _("location description stack too shallow"));
     }
   return (stack[stacki]);
 }

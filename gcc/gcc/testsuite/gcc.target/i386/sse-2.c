@@ -1,5 +1,7 @@
 /* APPLE LOCAL begin radar 4043818 */
 /* { dg-do compile { target i?86*-*-* } } */
+/* APPLE LOCAL x86_64 */
+/* { dg-require-effective-target ilp32 } */
 /* { dg-options "-O3 -msse" } */
 /* { dg-final { scan-assembler-times "movq" 4 } } */
 

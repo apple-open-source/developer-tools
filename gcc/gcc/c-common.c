@@ -7059,7 +7059,31 @@ iasm_stmt (tree expr, tree args, int lineno)
 #ifdef TARGET_386
   else if (strcasecmp (opcodename, "call") == 0
 	   || strcasecmp (opcodename, "jmp") == 0)
-    e.modifier = "A";
+    {
+      if (args
+	  && TREE_CODE (TREE_VALUE (args)) != LABEL_DECL
+	  && TREE_CODE (TREE_VALUE (args)) != FUNCTION_DECL)
+	e.modifier = "A";
+      else
+	iasm_force_constraint ("X", &e);
+    }
+#endif
+
+#ifdef TARGET_386
+  if (args
+      && TREE_CHAIN (args) == 0
+      && (strcasecmp ("mulw", new_opcode) == 0
+	  || strcasecmp ("imulw", new_opcode) == 0
+	  || strcasecmp ("divw", new_opcode) == 0
+	  || strcasecmp ("idivw", new_opcode) == 0
+	  || strcasecmp ("mull", new_opcode) == 0
+	  || strcasecmp ("imull", new_opcode) == 0
+	  || strcasecmp ("divl", new_opcode) == 0
+	  || strcasecmp ("idivl", new_opcode) == 0))
+    {
+      if (TREE_VALUE (args) == get_identifier ("%edx"))
+	iasm_force_constraint ("+r", &e);
+    }
 #endif
 
   strcat (iasm_buffer, new_opcode);
@@ -7086,22 +7110,34 @@ iasm_stmt (tree expr, tree args, int lineno)
   buf = iasm_buffer + strlen (iasm_buffer);
   {
     int i = 0;
-    for (n = 0; (int)n < e.num; ++n)
+    static int rw_arg[IASM_MAX_ARG];
+    memset (rw_arg, 255, sizeof (rw_arg));
+    for (n = 0; (int)n < e.num_rewrites; ++n)
       {
-	if (e.dat[n].was_output)
+	if (e.dat[e.rewrite[n].dat_index].was_output)
 	  {
 	    gcc_assert (i < 10);
-	    e.dat[n].arg_p[0] = '0' + i++;
+	    if (rw_arg[e.rewrite[n].dat_index] == -1)
+	      {
+		rw_arg[e.rewrite[n].dat_index] = i;
+		e.rewrite[n].arg_p[0] = '0' + i++;
+	      } else
+		e.rewrite[n].arg_p[0] = '0' + rw_arg[e.rewrite[n].dat_index];
 	  }
       }
 
     /* Then, process non-output args as they come last.  */
-    for (n = 0; (int)n < e.num; ++n)
+    for (n = 0; (int)n < e.num_rewrites; ++n)
       {
-	if (! e.dat[n].was_output)
+	if (! e.dat[e.rewrite[n].dat_index].was_output)
 	  {
 	    gcc_assert (i < 10);
-	    e.dat[n].arg_p[0] = '0' + i++;
+	    if (rw_arg[e.rewrite[n].dat_index] == -1)
+	      {
+		rw_arg[e.rewrite[n].dat_index] = i;
+		e.rewrite[n].arg_p[0] = '0' + i++;
+	      } else
+		e.rewrite[n].arg_p[0] = '0' + rw_arg[e.rewrite[n].dat_index];
 	  }
       }
   }
@@ -7138,9 +7174,12 @@ iasm_stmt (tree expr, tree args, int lineno)
 	  || strcasecmp ("imull", new_opcode) == 0
 	  || strcasecmp ("divl", new_opcode) == 0
 	  || strcasecmp ("idivl", new_opcode) == 0))
-    clobbers = tree_cons (NULL_TREE,
-			  build_string (3, "edx"),
-			  clobbers);
+    {
+      if (TREE_VALUE (args) != get_identifier ("%edx"))
+	clobbers = tree_cons (NULL_TREE,
+			      build_string (3, "edx"),
+			      clobbers);
+    }
 #endif
 
   /* Treat as volatile always.  */
@@ -7568,7 +7607,9 @@ iasm_get_register_var (tree var, const char *modifier, char *buf, unsigned argnu
 	  buf += strlen (buf);
 	  gcc_assert (n < 10);
 	  sprintf (buf, "%d", n);
-	  e->dat[n].arg_p = buf;
+	  e->rewrite[e->num_rewrites].arg_p = buf;
+	  e->rewrite[e->num_rewrites].dat_index = n;
+	  ++(e->num_rewrites);
 	  return;
 	}
     }
@@ -7581,7 +7622,9 @@ iasm_get_register_var (tree var, const char *modifier, char *buf, unsigned argnu
   buf += strlen (buf);
   gcc_assert (n < 10);
   sprintf (buf, "%d", n);
-  e->dat[n].arg_p = buf;
+  e->rewrite[e->num_rewrites].arg_p = buf;
+  e->rewrite[e->num_rewrites].dat_index = n;
+  ++(e->num_rewrites);
 
   ++(e->num);
 }
