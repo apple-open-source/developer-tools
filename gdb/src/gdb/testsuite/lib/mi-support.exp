@@ -963,7 +963,7 @@ proc mi_step { test } {
 # Can not match -re ".*\r\n${mi_gdb_prompt}", because of false positives
 # after the first prompt is printed.
 
-proc mi_execute_to_helper { cmd reason func args file line extra test } {
+proc mi_execute_to_helper { cmd reason func args file line extra_before extra_after test {during_run ".*"}} {
     global suppress_flag
     if { $suppress_flag } {
 	return -1
@@ -980,12 +980,16 @@ proc mi_execute_to_helper { cmd reason func args file line extra test } {
 # inserted into the result by the caller of this function.
 
     gdb_expect {
-	-re ".*220\\^running\r\n${mi_gdb_prompt}.*220\\*stopped,reason=\"$reason\",thread-id=\"$decimal\"$extra\r\n$mi_gdb_prompt$" {
+	-re ".*220\\^running\r\n${mi_gdb_prompt}${during_run}220\\*stopped,reason=\"$reason\",${extra_before}thread-id=\"$decimal\"$extra_after\r\n$mi_gdb_prompt$" {
 	    pass "$test"
             mi_check_current_frame "$func" "$file" "$line" "$test loc-check"
 	    return 0
 	}
-	-re ".*220\\^running\r\n${mi_gdb_prompt}.*220\\*stopped,reason=\"$reason\",thread-id=\"$decimal\",frame=\{addr=\"$hex\",func=\".*\",args=\[\\\[\{\].*\[\\\]\}\],file=\".*\",fullname=\"${fullname_syntax}.*\",line=\"\[0-9\]*\"\}.*\r\n$mi_gdb_prompt$" {
+	-re ".*220\\^running\r\n${mi_gdb_prompt}.*220\\*stopped,reason=\"$reason\",${extra_before}thread-id=\"$decimal\"$extra_after\r\n$mi_gdb_prompt$" {
+	    fail "$test (didn't match during_run condition)"
+	    return -1
+	}
+	-re ".*220\\^running\r\n${mi_gdb_prompt}${during_run}220\\*stopped,reason=\"$reason\",thread-id=\"$decimal\",frame=\{addr=\"$hex\",func=\".*\",args=\[\\\[\{\].*\[\\\]\}\],file=\".*\",fullname=\"${fullname_syntax}.*\",line=\"\[0-9\]*\"\}.*\r\n$mi_gdb_prompt$" {
 	    fail "$test (stopped at wrong place)"
 	    return -1
 	}
@@ -1000,9 +1004,14 @@ proc mi_execute_to_helper { cmd reason func args file line extra test } {
     }
 }
 
-proc mi_execute_to { cmd reason func args file line extra test } {
+proc mi_continue_to_watchpoint { func args file line number exp old new test } {
+    set wpt "wpt=\{number=\"$number\",exp=\"$exp\"\},value=\{old=\"$old\",new=\"$new\"\},"
+    mi_execute_to_helper "exec-continue" "watchpoint-trigger" $func $args $file $line $wpt "" $test
+}
+
+proc mi_execute_to { cmd reason func args file line extra test {during_run .*}} {
     mi_execute_to_helper "$cmd" "$reason" "$func" "\\\[$args\\\]" \
-	"$file" "$line" "$extra" "$test"
+	"$file" "$line" "" "$extra" "$test" $during_run
 }
 
 proc mi_next_to { func args file line test } {
@@ -1024,14 +1033,14 @@ proc mi_finish_to { func args file line result ret test } {
 
 # APPLE LOCAL: When we stop due to a breakpoint, we'll get COMMANDS & TIMES fields.
 
-proc mi_continue_to { bkptno func args file line test } {
+proc mi_continue_to { bkptno func args file line test {during_run .*}} {
     mi_execute_to "exec-continue" "breakpoint-hit\",commands=\"no\",times=\"\[0-9\]+\",bkptno=\"$bkptno" \
-	"$func" "$args" "$file" "$line" "" "$test"
+	"$func" "$args" "$file" "$line" "" "$test" $during_run
 }
 
 proc mi0_execute_to { cmd reason func args file line extra test } {
     mi_execute_to_helper "$cmd" "$reason" "$func" "\{$args\}" \
-	"$file" "$line" "$extra" "$test"
+	"$file" "$line" "" "$extra" "$test"
 }
 
 proc mi0_next_to { func args file line test } {

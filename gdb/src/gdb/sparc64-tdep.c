@@ -496,7 +496,8 @@ sparc64_frame_this_id (struct frame_info *next_frame, void **this_cache,
 
 static void
 sparc64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
-			     int regnum, int *optimizedp,
+			     /* APPLE LOCAL variable opt states.  */
+			     int regnum, enum opt_state *optimizedp,
 			     enum lval_type *lvalp, CORE_ADDR *addrp,
 			     int *realnump, gdb_byte *valuep)
 {
@@ -505,7 +506,8 @@ sparc64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 
   if (regnum == SPARC64_PC_REGNUM || regnum == SPARC64_NPC_REGNUM)
     {
-      *optimizedp = 0;
+      /* APPLE LOCAL variable opt states.  */
+      *optimizedp = opt_okay;
       *lvalp = not_lval;
       *addrp = 0;
       *realnump = -1;
@@ -526,7 +528,8 @@ sparc64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 
     if (wcookie != 0 && !cache->frameless_p && regnum == SPARC_I7_REGNUM)
       {
-	*optimizedp = 0;
+	/* APPLE LOCAL variable opt states.  */
+	*optimizedp = opt_okay;
 	*lvalp = not_lval;
 	*addrp = 0;
 	*realnump = -1;
@@ -548,7 +551,8 @@ sparc64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
   if (!cache->frameless_p
       && regnum >= SPARC_L0_REGNUM && regnum <= SPARC_I7_REGNUM)
     {
-      *optimizedp = 0;
+      /* APPLE LOCAL variable opt states.  */
+      *optimizedp = opt_okay;
       *lvalp = lval_memory;
       *addrp = cache->base + (regnum - SPARC_L0_REGNUM) * 8;
       *realnump = -1;
@@ -568,7 +572,8 @@ sparc64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
       && regnum >= SPARC_O0_REGNUM && regnum <= SPARC_O7_REGNUM)
     regnum += (SPARC_I0_REGNUM - SPARC_O0_REGNUM);
 
-  *optimizedp = 0;
+  /* APPLE LOCAL variable opt states.  */
+  *optimizedp = opt_okay;
   *lvalp = lval_register;
   *addrp = 0;
   *realnump = regnum;

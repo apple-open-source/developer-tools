@@ -79,11 +79,15 @@ evaluate_subexp (struct type *expect_type, struct expression *exp,
 CORE_ADDR
 parse_and_eval_address (char *exp)
 {
-  struct expression *expr = parse_expression (exp);
+  /* APPLE LOCAL begin initialize innermost_block  */
+  struct expression *expr;
   CORE_ADDR addr;
-  struct cleanup *old_chain =
-    make_cleanup (free_current_contents, &expr);
+  struct cleanup *old_chain;
 
+  innermost_block = NULL;
+  expr = parse_expression (exp);
+  old_chain = make_cleanup (free_current_contents, &expr);
+  /* APPLE LOCAL end initialize innermost_block  */
   addr = value_as_address (evaluate_expression (expr));
   do_cleanups (old_chain);
   return addr;
@@ -95,11 +99,15 @@ parse_and_eval_address (char *exp)
 CORE_ADDR
 parse_and_eval_address_1 (char **expptr)
 {
-  struct expression *expr = parse_exp_1 (expptr, (struct block *) 0, 0);
+  /* APPLE LOCAL begin initialize innermost_block  */
+  struct expression *expr;
   CORE_ADDR addr;
-  struct cleanup *old_chain =
-    make_cleanup (free_current_contents, &expr);
+  struct cleanup *old_chain;
 
+  innermost_block = NULL;
+  expr = parse_exp_1 (expptr, (struct block *) 0, 0);
+  old_chain = make_cleanup (free_current_contents, &expr);
+  /* APPLE LOCAL end initialize innermost_block  */
   addr = value_as_address (evaluate_expression (expr));
   do_cleanups (old_chain);
   return addr;
@@ -110,11 +118,15 @@ parse_and_eval_address_1 (char **expptr)
 LONGEST
 parse_and_eval_long (char *exp)
 {
-  struct expression *expr = parse_expression (exp);
+  /* APPLE LOCAL begin initialize innermost_block  */
+  struct expression *expr;
   LONGEST retval;
-  struct cleanup *old_chain =
-    make_cleanup (free_current_contents, &expr);
+  struct cleanup *old_chain;
 
+  innermost_block = NULL;
+  expr = parse_expression (exp);
+  old_chain = make_cleanup (free_current_contents, &expr);
+  /* APPLE LOCAL end initialize innermost_block  */
   retval = value_as_long (evaluate_expression (expr));
   do_cleanups (old_chain);
   return (retval);
@@ -123,11 +135,15 @@ parse_and_eval_long (char *exp)
 struct value *
 parse_and_eval (char *exp)
 {
-  struct expression *expr = parse_expression (exp);
+  /* APPLE LOCAL begin initialize innermost_block  */
+  struct expression *expr;
   struct value *val;
-  struct cleanup *old_chain =
-    make_cleanup (free_current_contents, &expr);
+  struct cleanup *old_chain;
 
+  innermost_block = NULL;
+  expr = parse_expression (exp);
+  old_chain = make_cleanup (free_current_contents, &expr);
+  /* APPLE LOCAL end initialize innermost_block  */
   val = evaluate_expression (expr);
   do_cleanups (old_chain);
   return val;
@@ -140,11 +156,15 @@ parse_and_eval (char *exp)
 struct value *
 parse_to_comma_and_eval (char **expp)
 {
-  struct expression *expr = parse_exp_1 (expp, (struct block *) 0, 1);
+  /* APPLE LOCAL begin initialize innermost_block  */
+  struct expression *expr;
   struct value *val;
-  struct cleanup *old_chain =
-    make_cleanup (free_current_contents, &expr);
+  struct cleanup *old_chain;
 
+  innermost_block = NULL;
+  expr = parse_exp_1 (expp, (struct block *) 0, 1);
+  old_chain = make_cleanup (free_current_contents, &expr);
+  /* APPLE LOCAL end initialize innermost_block  */
   val = evaluate_expression (expr);
   do_cleanups (old_chain);
   return val;
@@ -732,17 +752,20 @@ evaluate_subexp_standard (struct type *expect_type,
 	struct symbol *sym = NULL;
 	CORE_ADDR addr = 0;
 
-        /* APPLE LOCAL: FIXME: selector can be sign-extended because .longconst
-           is signed; mask off the upper 32 bits for now.  Must be fixed for
-           ObjC 64-bit programs.  */
-	selector = exp->elts[pc + 1].longconst & 0xffffffff;
+        /* APPLE LOCAL: SELECTOR can be sign-extended because .longconst
+           is signed; mask off the upper 32 bits if we're not a 64 bit 
+           program.  */
+        if (TARGET_PTR_BIT == 64)
+	  selector = exp->elts[pc + 1].longconst;
+        else
+	  selector = exp->elts[pc + 1].longconst & 0xffffffff;
 	nargs = exp->elts[pc + 2].longconst;
 	argvec = (struct value **) alloca (sizeof (struct value *) 
 					   * (nargs + 5));
 
 	(*pos) += 3;
 
-	selector_type = lookup_pointer_type (builtin_type_void);
+	selector_type = lookup_pointer_type (builtin_type_void_data_ptr);
 	if (noside == EVAL_AVOID_SIDE_EFFECTS)
 	  sub_no_side = EVAL_NORMAL;
 	else
@@ -750,13 +773,12 @@ evaluate_subexp_standard (struct type *expect_type,
 
 	target = evaluate_subexp (selector_type, exp, pos, sub_no_side);
 
-	/* APPLE LOCAL: If we go on from here we are goint to try to look
+	/* APPLE LOCAL: If we go on from here we are going to try to look
 	   up TARGET as an objc class.  But getting the target (OP_VAR_VALUE)
 	   when NOSIDE is EVAL_SKIP just returns "1", which is not going to 
 	   work when we start grubbing around in memory there.  */
 	if (noside == EVAL_SKIP)
 	  goto nosideret;
-
 
 	if (value_as_long (target) == 0)
  	  return value_from_longest (builtin_type_long, 0);
@@ -815,7 +837,7 @@ evaluate_subexp_standard (struct type *expect_type,
            before calling the method itself, let's just grope around in
            the ObjC runtime like we do elsewhere and speed everything up. */
 
-        addr = find_implementation (value_as_address (target), selector);
+        addr = find_implementation (value_as_address (target), selector, 0);
         if (addr == 0)
           error ("Target does not respond to this message selector.");
 
@@ -2285,6 +2307,8 @@ parse_and_eval_type (char *p, int length)
   tmp[length + 1] = ')';
   tmp[length + 2] = '0';
   tmp[length + 3] = '\0';
+  /* APPLE LOCAL initialize innermost_block  */
+  innermost_block = NULL;
   expr = parse_expression (tmp);
   if (expr->elts[0].opcode != UNOP_CAST)
     error (_("Internal error in eval_type."));

@@ -46,6 +46,7 @@
 #include "macosx-nat-dyld-process.h"
 
 extern macosx_inferior_status *macosx_status;
+extern macosx_dyld_thread_status macosx_dyld_status;
 extern int inferior_auto_start_cfm_flag;
 extern int inferior_auto_start_dyld_flag;
 
@@ -144,25 +145,27 @@ macosx_classic_create_inferior (pid_t pid)
           // remove all the currently cached objfiles since we've started 
           // a new session
 
-          DYLD_ALL_OBJFILE_INFO_ENTRIES (&macosx_status->dyld_status.current_info, e, i)
+          DYLD_ALL_OBJFILE_INFO_ENTRIES (&macosx_dyld_status.current_info, e, i)
           {
               dyld_remove_objfile (e);
               dyld_objfile_entry_clear (e);
           }
 
-          macosx_dyld_init (&macosx_status->dyld_status, exec_bfd);
+          macosx_dyld_init (&macosx_dyld_status, exec_bfd);
           // remove all the old objfiles to work around rdar://4091532
-          DYLD_ALL_OBJFILE_INFO_ENTRIES (&macosx_status->dyld_status.current_info, e, i)
+          DYLD_ALL_OBJFILE_INFO_ENTRIES (&macosx_dyld_status.current_info, e, i)
           {
               dyld_remove_objfile (e);
               dyld_objfile_entry_clear (e);
           }
           macosx_dyld_update (1);
         }
+#if WITH_CFM
       if (inferior_auto_start_cfm_flag) 
         {
           macosx_cfm_thread_init (&macosx_status->cfm_status);
         }
+#endif
     }
 }
 

@@ -1,3 +1,8 @@
+2006-08-04  Mike Stump  <mrs@apple.com>
+
+	Radar 4669052
+	* Make-lang.in (objc-parse.y): Ensure that we don't rebuild.
+
 2006-05-24  Mike Stump  <mrs@apple.com>
 
 	* objc-act.c (JBLEN): Update for x86_64.

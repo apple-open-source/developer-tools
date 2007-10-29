@@ -231,7 +231,7 @@ complete_command (char *arg, int from_tty)
     arg = "";
   argpoint = strlen (arg);
   /* APPLE LOCAL refactor command completion */
-  cli_interpreter_complete (NULL, arg, arg, argpoint);
+  cli_interpreter_complete (NULL, arg, arg, argpoint, -1);
 }
 
 /* APPLE LOCAL begin refactor command completion */
@@ -244,7 +244,7 @@ complete_command (char *arg, int from_tty)
 
 int
 cli_interpreter_complete (void *data, char *word, char *command_buffer, 
-			  int cursor)
+			  int cursor, int limit)
 {
   char **completions;
   struct cleanup *old_chain;
@@ -255,6 +255,7 @@ cli_interpreter_complete (void *data, char *word, char *command_buffer,
   if (completions)
     {
       int item, size;
+      int items_printed = 0;
 
       for (size = 0; completions[size]; ++size)
 	;
@@ -269,6 +270,7 @@ cli_interpreter_complete (void *data, char *word, char *command_buffer,
 	  /* APPLE LOCAL begin */
 	  ui_out_field_string (uiout, "c", completions[item]);
 	  ui_out_text (uiout, "\n");
+          items_printed++;
 	  /* APPLE LOCAL end */
 	  next_item = item + 1;
 	  while (next_item < size
@@ -280,7 +282,26 @@ cli_interpreter_complete (void *data, char *word, char *command_buffer,
 
 	  xfree (completions[item]);
 	  item = next_item;
-	}
+
+          /* APPLE LOCAL: The mi output doesn't have the
+             ``Display all 236609 possibilities? (y or n)'' 
+             feature that readline gives us for free, so we
+             need a facility to limit the number of matches
+             returned.  */
+          if (limit != -1 && items_printed >= limit)
+            {
+              int i;
+              for (i = item; i < size && completions[i]; i++)
+                {
+                  xfree (completions[i]);
+                  completions[i] = NULL;
+                }
+              size = item;
+              if (ui_out_is_mi_like_p (uiout))
+                ui_out_field_string (uiout, "limited", "true");
+              break;
+            }
+        }
 
       xfree (completions);
     }
@@ -629,7 +650,9 @@ edit_command (char *arg, int from_tty)
       /* Now should only be one argument -- decode it in SAL */
 
       arg1 = arg;
-      sals = decode_line_1 (&arg1, 0, 0, 0, 0, 0);
+      /* APPLE LOCAL begin return multiple symbols  */
+      sals = decode_line_1 (&arg1, 0, 0, 0, 0, 0, 0);
+      /* APPLE LOCAL end return multiple symbols  */
 
       if (! sals.nelts) return;  /*  C++  */
       if (sals.nelts > 1) {
@@ -658,8 +681,8 @@ edit_command (char *arg, int from_tty)
         {
           if (sal.symtab == 0)
 	    /* FIXME-32x64--assumes sal.pc fits in long.  */
-	    error (_("No source file for address %s."),
-		   hex_string ((unsigned long) sal.pc));
+            /* APPLE LOCAL: Fixed by using paddr_nz.  */
+	    error (_("No source file for address 0x%s."), paddr_nz (sal.pc));
           sym = find_pc_function (sal.pc);
           if (sym)
 	    {
@@ -762,7 +785,9 @@ list_command (char *arg, int from_tty)
     dummy_beg = 1;
   else
     {
-      sals = decode_line_1 (&arg1, 0, 0, 0, 0, 0);
+      /* APPLE LOCAL begin return multiple symbols  */
+      sals = decode_line_1 (&arg1, 0, 0, 0, 0, 0, 0);
+      /* APPLE LOCAL end return multiple symbols  */
 
       if (!sals.nelts)
 	return;			/*  C++  */
@@ -801,9 +826,11 @@ list_command (char *arg, int from_tty)
       else
 	{
 	  if (dummy_beg)
-	    sals_end = decode_line_1 (&arg1, 0, 0, 0, 0, 0);
+	    /* APPLE LOCAL begin return multiple symbols  */
+	    sals_end = decode_line_1 (&arg1, 0, 0, 0, 0, 0, 0);
 	  else
-	    sals_end = decode_line_1 (&arg1, 0, sal.symtab, sal.line, 0, 0);
+	    sals_end = decode_line_1 (&arg1, 0, sal.symtab, sal.line, 0, 0, 0);
+	    /* APPLE LOCAL end return multiple symbols  */
 	  if (sals_end.nelts == 0)
 	    return;
 	  if (sals_end.nelts > 1)
@@ -841,8 +868,8 @@ list_command (char *arg, int from_tty)
     {
       if (sal.symtab == 0)
 	/* FIXME-32x64--assumes sal.pc fits in long.  */
-	error (_("No source file for address %s."),
-	       hex_string ((unsigned long) sal.pc));
+        /* APPLE LOCAL: Fixed by using paddr_nz.  */
+	error (_("No source file for address 0x%s."), paddr_nz (sal.pc));
       sym = find_pc_function (sal.pc);
       if (sym)
 	{

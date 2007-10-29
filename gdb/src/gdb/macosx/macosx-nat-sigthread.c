@@ -209,7 +209,7 @@ macosx_signal_thread (void *arg)
 void
 _initialize_macosx_nat_sigthread ()
 {
-  sigthread_stderr_re = fdopen (fileno (stderr), "w+");
+  sigthread_stderr_re = fdopen (fileno (stderr), "w");
 
   add_setshow_boolean_cmd ("signals", no_class,
 			   &sigthread_debugflag, _("\

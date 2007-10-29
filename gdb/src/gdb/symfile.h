@@ -194,6 +194,12 @@ extern void new_symfile_objfile (struct objfile *, int, int);
 extern struct objfile *symbol_file_add (const char *, int,
 					struct section_addr_info *, int, int);
  
+/* APPLE LOCAL: Use this one for editing in place...  */
+extern struct objfile *symbol_file_add_using_objfile (struct objfile *,
+						      const char *, int,
+						      struct section_addr_info *, int, int);
+/* END APPLE LOCAL */
+
 extern struct objfile *symbol_file_add_from_bfd (bfd *, int,
                                                  struct section_addr_info *,
                                                  int, int);
@@ -334,12 +340,16 @@ extern int dwarf2_has_info (struct objfile *);
 
 extern void dwarf2_build_psymtabs (struct objfile *, int);
 extern void dwarf2_build_frame_info (struct objfile *);
+extern void dwarf2_kext_psymtab_to_symtab (struct partial_symtab *);
 extern void dwarf2_debug_map_psymtab_to_symtab (struct partial_symtab *);
+/* APPLE LOCAL: Scanning pubtypes tables for psymbols.  */
+extern void dwarf2_scan_pubtype_for_psymbols (struct partial_symtab *, 
+					      struct objfile *, enum language);
 
 /* From dbxread.c */
 
-extern struct bfd *open_bfd_from_oso (struct partial_symtab *pst, 
-                                      bfd **containing_archive);
+extern struct bfd *open_bfd_from_oso (struct partial_symtab *pst, int *cached);
+extern void clear_containing_archive_cache (void);
 
 struct nlist_rec 
 {
@@ -373,7 +383,13 @@ extern void elfmdebug_build_psymtabs (struct objfile *,
 extern bfd *symfile_bfd_open_safe (const char *filename, int mainline);
 
 extern struct objfile *symbol_file_add_bfd_safe
-(bfd *abfd, int from_tty, struct section_addr_info *addrs,
+(bfd *abfd, int from_tty, struct section_addr_info *addrs, struct section_offsets *offsets,
+ int mainline, int flags, int symflags, CORE_ADDR mapaddr, const char *prefix,
+ char *kext_bundle);
+
+extern struct objfile *symbol_file_add_bfd_using_objfile
+(struct objfile *, bfd *abfd, int from_tty, struct section_addr_info *addrs,
+ struct section_offsets *offsets,
  int mainline, int flags, int symflags, CORE_ADDR mapaddr, const char *prefix);
 
 /* APPLE LOCAL: pick the slice of a fat file matching the current arch.  */

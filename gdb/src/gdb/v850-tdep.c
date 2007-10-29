@@ -897,7 +897,8 @@ v850_frame_cache (struct frame_info *next_frame, void **this_cache)
 
 static void
 v850_frame_prev_register (struct frame_info *next_frame, void **this_cache,
-			  int regnum, int *optimizedp,
+			  /* APPLE LOCAL variable opt states.  */
+			  int regnum, enum opt_state *optimizedp,
 			  enum lval_type *lvalp, CORE_ADDR *addrp,
 			  int *realnump, void *valuep)
 {

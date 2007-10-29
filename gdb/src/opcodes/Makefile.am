@@ -87,6 +87,7 @@ CFILES = \
 	i370-dis.c \
 	i370-opc.c \
 	i386-dis.c \
+	i386-opc.c \
 	i860-dis.c \
 	i960-dis.c \
 	ia64-dis.c \
@@ -217,6 +218,7 @@ ALL_MACHINES = \
 	h8500-dis.lo \
 	hppa-dis.lo \
 	i386-dis.lo \
+	i386-opc.lo \
 	i370-dis.lo \
 	i370-opc.lo \
 	i860-dis.lo \

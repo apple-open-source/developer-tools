@@ -1287,7 +1287,8 @@ libgcc.mk: config.status Makefile mklibgcc $(LIB2ADD) $(LIB2ADD_ST) xgcc$(exeext
 	mv tmp-libgcc.mk libgcc.mk
 
 # All the things that might cause us to want to recompile bits of libgcc.
-LIBGCC_DEPS = $(GCC_PASSES) $(LANGUAGES) stmp-int-hdrs $(STMP_FIXPROTO) \
+# APPLE LOCAL -j safe no dep on LANGUAGES, GCC_PASSES is enough
+LIBGCC_DEPS = $(GCC_PASSES) stmp-int-hdrs $(STMP_FIXPROTO) \
 	libgcc.mk $(srcdir)/libgcc2.c $(srcdir)/libgcov.c $(TCONFIG_H) \
 	$(MACHMODE_H) longlong.h gbl-ctors.h config.status \
 	tsystem.h $(FPBIT) $(DPBIT) $(TPBIT) $(LIB2ADD) \
@@ -1411,6 +1412,8 @@ c-parse.y: c-parse.in
 	sed -e "/^@@ifobjc.*/,/^@@end_ifobjc.*/d" \
 	    -e "/^@@ifc.*/d" -e "/^@@end_ifc.*/d" $< >>tmp-c-parse.y
 	$(SHELL) $(srcdir)/../move-if-change tmp-c-parse.y $@
+	# APPLE LOCAL mainline rewrite
+	touch $@
 
 c-incpath.o: c-incpath.c c-incpath.h $(CONFIG_H) $(SYSTEM_H) $(CPPLIB_H) \
 		intl.h prefix.h coretypes.h $(TM_H) cppdefault.h $(TARGET_H) \

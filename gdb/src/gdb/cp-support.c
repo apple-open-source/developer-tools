@@ -820,7 +820,10 @@ cp_lookup_rtti_type (const char *name, struct block *block)
 
   if (rtti_sym == NULL)
     {
-      warning (_("RTTI symbol not found for class '%s'"), name);
+      /* APPLE LOCAL: Make this a complaint so developers aren't flooded
+         with this not-helpful information.  */
+      complaint (&symfile_complaints, _("RTTI symbol not found for class '%s'"),
+                 name);
       return NULL;
     }
 

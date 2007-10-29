@@ -35,7 +35,7 @@
 #include "macosx-nat-dyld.h"
 #include "macosx-nat-inferior.h"
 
-extern macosx_inferior_status *macosx_status;
+extern macosx_dyld_thread_status macosx_dyld_status;
 
 #define assert CHECK_FATAL
 
@@ -346,10 +346,9 @@ dyld_library_basename (const char *path, const char **s, int *len,
   const char *dyld_image_suffix = NULL;
 
   /* If the user specified a DYLD_IMAGE_SUFFIX, get a pointer to that string. */
-  if (macosx_status != NULL
-      && macosx_status->dyld_status.path_info.image_suffix != NULL)
+  if (macosx_dyld_status.path_info.image_suffix != NULL)
     {
-      dyld_image_suffix = macosx_status->dyld_status.path_info.image_suffix;
+      dyld_image_suffix = macosx_dyld_status.path_info.image_suffix;
     }
 
   if (is_framework != NULL)

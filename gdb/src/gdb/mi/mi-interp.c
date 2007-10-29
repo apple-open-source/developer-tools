@@ -34,6 +34,10 @@
 #include "mi-cmds.h"
 #include "mi-out.h"
 #include "mi-console.h"
+/* APPLE LOCAL begin subroutine inlining  */
+#include "mi-common.h"
+#include "inlining.h"
+/* APPLE LOCAL end subroutine inlining  */
 
 struct mi_interp
 {
@@ -300,6 +304,25 @@ mi_cmd_interpreter_exec (char *command, char **argv, int argc)
   mi_remove_notify_hooks ();
   interp_set_quiet (interp_to_use, old_quiet);
   
+  /* APPLE LOCAL begin subroutine inlining  */
+
+  if (argc >= 2
+      && strcmp (argv[0], "console-quoted") == 0
+      && strcmp (argv[1], "step") ==  0
+      && stepping_into_inlined_subroutine)
+    {
+      stop_step = 1;
+      if (current_command_token)
+	fputs_unfiltered (current_command_token, raw_stdout);
+      fputs_unfiltered ("^running\n", raw_stdout);
+      
+      ui_out_field_string (uiout, "reason",
+			   async_reason_lookup
+			   (EXEC_ASYNC_END_STEPPING_RANGE));
+    }
+
+  /* APPLE LOCAL end subroutine inlining  */
+
   /* Okay, now let's see if the command set the inferior going...
      Tricky point - have to do this AFTER resetting the interpreter, since
      changing the interpreter will clear out all the continuations for
@@ -370,6 +393,7 @@ mi_cmd_interpreter_complete (char *command, char **argv, int argc)
 {
   struct interp *interp_to_use;
   int cursor;
+  int limit = 200;
   
   if (argc < 2 || argc > 3)
     {
@@ -396,7 +420,7 @@ mi_cmd_interpreter_complete (char *command, char **argv, int argc)
       cursor = strlen (argv[1]);
     }
 
-  if (interp_complete (interp_to_use, argv[1], argv[1], cursor) == 0)
+  if (interp_complete (interp_to_use, argv[1], argv[1], cursor, limit) == 0)
       return MI_CMD_ERROR;
   else
     return MI_CMD_DONE;
@@ -435,6 +459,8 @@ mi_insert_notify_hooks (void)
   continue_command_hook = mi_interp_continue_command_hook;
   run_command_hook = mi_interp_run_command_hook;
 
+  hand_call_function_hook = mi_interp_hand_call_function_hook;
+
 }
 
 void
@@ -455,6 +481,8 @@ mi_remove_notify_hooks ()
   stepping_command_hook = NULL;
   continue_command_hook = NULL;
   run_command_hook = NULL;
+
+  hand_call_function_hook = NULL;
 }
 
 int

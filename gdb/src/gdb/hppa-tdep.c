@@ -43,6 +43,8 @@
 #include "gdbcmd.h"
 #include "objfiles.h"
 #include "hppa-tdep.h"
+/* APPLE LOCAL variable opt states.  */
+#include "value.h"
 
 static int hppa_debug = 0;
 
@@ -333,7 +335,7 @@ read_unwind_info (struct objfile *objfile)
   struct hppa_unwind_info *ui;
   struct hppa_objfile_private *obj_private;
 
-  text_offset = ANOFFSET (objfile->section_offsets, 0);
+  text_offset = objfile_section_offset (objfile, 0);
   ui = (struct hppa_unwind_info *) obstack_alloc (&objfile->objfile_obstack,
 					   sizeof (struct hppa_unwind_info));
 
@@ -2102,7 +2104,8 @@ hppa_frame_this_id (struct frame_info *next_frame, void **this_cache,
 static void
 hppa_frame_prev_register (struct frame_info *next_frame,
 			  void **this_cache,
-			  int regnum, int *optimizedp,
+			  /* APPLE LOCAL variable opt states.  */
+			  int regnum, enum opt_state *optimizedp,
 			  enum lval_type *lvalp, CORE_ADDR *addrp,
 			  int *realnump, gdb_byte *valuep)
 {
@@ -2218,7 +2221,8 @@ hppa_fallback_frame_this_id (struct frame_info *next_frame, void **this_cache,
 static void
 hppa_fallback_frame_prev_register (struct frame_info *next_frame,
 			  void **this_cache,
-			  int regnum, int *optimizedp,
+			  /* APPLE LOCAL variable opt states.  */
+			  int regnum, enum opt_state *optimizedp,
 			  enum lval_type *lvalp, CORE_ADDR *addrp,
 			  int *realnump, gdb_byte *valuep)
 {
@@ -2302,8 +2306,9 @@ hppa_stub_frame_this_id (struct frame_info *next_frame,
 
 static void
 hppa_stub_frame_prev_register (struct frame_info *next_frame,
-			       void **this_prologue_cache,
-			       int regnum, int *optimizedp,
+			       void **this_prologue_cache,	
+			       /* APPLE LOCAL variable opt states.  */
+			       int regnum, enum opt_state *optimizedp,
 			       enum lval_type *lvalp, CORE_ADDR *addrp,
 			       int *realnump, gdb_byte *valuep)
 {
@@ -2594,7 +2599,8 @@ hppa_find_global_pointer (struct value *function)
 void
 hppa_frame_prev_register_helper (struct frame_info *next_frame,
 			         struct trad_frame_saved_reg saved_regs[],
-				 int regnum, int *optimizedp,
+				 /* APPLE LOCAL variable opt states.  */
+				 int regnum, enum opt_state *optimizedp,
 				 enum lval_type *lvalp, CORE_ADDR *addrp,
 				 int *realnump, gdb_byte *valuep)
 {
@@ -2616,7 +2622,8 @@ hppa_frame_prev_register_helper (struct frame_info *next_frame,
 	}
 
       /* It's a computed value.  */
-      *optimizedp = 0;
+      /* APPLE LOCAL variable opt states.  */
+      *optimizedp = opt_other;
       *lvalp = not_lval;
       *addrp = 0;
       *realnump = -1;
@@ -2634,7 +2641,8 @@ hppa_frame_prev_register_helper (struct frame_info *next_frame,
 	store_unsigned_integer (valuep, register_size (arch, regnum), 0);
 
       /* It's a computed value.  */
-      *optimizedp = 0;
+      /* APPLE LOCAL variable opt states.  */
+      *optimizedp = opt_other;
       *lvalp = not_lval;
       *addrp = 0;
       *realnump = -1;

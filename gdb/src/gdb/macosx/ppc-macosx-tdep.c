@@ -40,6 +40,8 @@
 #include "dummy-frame.h"
 #include "gdb_assert.h"
 #include "complaints.h"
+#include "user-regs.h"
+#include "objfiles.h"
 
 #include "libbfd.h"
 
@@ -70,8 +72,6 @@ rs6000_register_to_value (struct frame_info *frame,
                           int regnum,
                           struct type *type,
                           gdb_byte *to);
-
-extern int backtrace_past_main;
 
 #undef XMALLOC
 #define XMALLOC(TYPE) ((TYPE*) xmalloc (sizeof (TYPE)))
@@ -130,20 +130,11 @@ static void ppc_macosx_init_abi_64 (struct gdbarch_info info,
 
 static int ppc_macosx_get_longjmp_target (CORE_ADDR * pc);
 static int ppc_64_macosx_get_longjmp_target (CORE_ADDR * pc);
-static enum gdb_osabi ppc_mach_o_osabi_sniffer_use_dyld_hint (bfd *abfd);
+static struct value *ppc_value_of_builtin_frame_fp_reg (struct frame_info *);
 
 CORE_ADDR
 ppc_frame_unwind_sp_for_dereferencing (struct frame_info *next_frame, 
                                        void **this_cache);
-
-/* When we're doing native debugging, and we attach to a process,
-   we start out by finding the in-memory dyld -- the osabi of that
-   dyld is stashed away here for use when picking the right osabi of
-   a fat file.  In the case of cross-debugging, none of this happens
-   and this global remains untouched.  */
-
-enum gdb_osabi osabi_seen_in_attached_dyld = GDB_OSABI_UNKNOWN;
-
 void
 ppc_debug (const char *fmt, ...)
 {
@@ -163,7 +154,7 @@ ppc_print_extra_frame_info (struct frame_info *next_frame, void **this_cache)
   struct ppc_function_boundaries *bounds;
   struct ppc_function_properties *props;
 
-if (get_frame_type (get_prev_frame (next_frame)) == DUMMY_FRAME)
+  if (get_frame_type (get_prev_frame (next_frame)) == DUMMY_FRAME)
     return;
 
   cache = ppc_frame_cache (next_frame, this_cache);
@@ -638,7 +629,8 @@ ppc_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
 
 static void
 ppc_frame_prev_register (struct frame_info *next_frame, void **this_cache,
-                         int regnum, int *optimizedp,
+			 /* APPLE LOCAL variable opt states.  */
+                         int regnum, enum opt_state *optimizedp,
                          enum lval_type *lvalp, CORE_ADDR *addrp,
                          int *realnump, gdb_byte *valuep)
 {
@@ -649,7 +641,8 @@ ppc_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 
   if (regnum == SP_REGNUM)
     {
-      *optimizedp = 0;
+      /* APPLE LOCAL variable opt states.  */
+      *optimizedp = opt_okay;
       *lvalp = not_lval;
       *addrp = 0;
       *realnump = -1;
@@ -668,7 +661,8 @@ ppc_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 
   if (regnum == PC_REGNUM)
     {
-      *optimizedp = 0;
+      /* APPLE LOCAL variable opt states.  */
+      *optimizedp = opt_okay;
       *lvalp = not_lval;
       *addrp = 0;
       *realnump = -1;
@@ -689,7 +683,8 @@ ppc_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 
   if ((saved_regs != NULL) && (saved_regs[regnum] != -1))
     {
-      *optimizedp = 0;
+      /* APPLE LOCAL variable opt states.  */
+      *optimizedp = opt_okay;
       *lvalp = lval_memory;
       *addrp = cache->saved_regs[regnum];
       *realnump = -1;
@@ -886,7 +881,8 @@ ppc_sigtramp_frame_this_id (struct frame_info *next_frame, void **this_cache,
 static void
 ppc_sigtramp_frame_prev_register (struct frame_info *next_frame,
                                   void **this_cache,
-                                  int regnum, int *optimizedp,
+				  /* APPLE LOCAL variable opt states.  */
+                                  int regnum, enum opt_state *optimizedp,
                                   enum lval_type *lvalp, CORE_ADDR * addrp,
                                   int *realnump, gdb_byte *valuep)
 {
@@ -901,7 +897,8 @@ ppc_sigtramp_frame_prev_register (struct frame_info *next_frame,
       int size;
       int offset = 0;
 
-      *optimizedp = 0;
+      /* APPLE LOCAL variable opt states.  */
+      *optimizedp = opt_okay;
       *lvalp = lval_memory;
       *addrp = cache->saved_regs[regnum];
       *realnump = -1;
@@ -999,6 +996,13 @@ ppc_integer_to_address (struct gdbarch *gdbarch, struct type *type,
                                    TYPE_LENGTH (builtin_type_void_data_ptr));
 }
 
+/* Align to 16 byte boundary */
+static CORE_ADDR
+ppc_macosx_frame_align (struct gdbarch *gdbarch, CORE_ADDR addr)
+{
+   return (addr & -16);
+}
+
 static struct gdbarch *
 ppc_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 {
@@ -1089,7 +1093,9 @@ ppc_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
     }
 
   set_gdbarch_push_dummy_call (gdbarch, ppc_darwin_abi_push_dummy_call);
-
+  set_gdbarch_frame_align (gdbarch, ppc_macosx_frame_align);
+  set_gdbarch_frame_red_zone_size (gdbarch, 224);
+  
   set_gdbarch_stab_reg_to_regnum (gdbarch, ppc_macosx_stab_reg_to_regnum);
 
   set_gdbarch_return_value (gdbarch, ppc_darwin_abi_return_value);
@@ -1135,10 +1141,8 @@ ppc_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 /*
  * This is set to the FAST_COUNT_STACK macro for ppc.  The return value
  * is 1 if no errors were encountered traversing the stack, and 0 otherwise.
- * it sets count to the stack depth.  If SHOW_FRAMES is 1, then it also
- * emits a list of frame info bits, with the pc & fp for each frame to
- * the current UI_OUT.  If GET_NAMES is 1, it also emits the names for
- * each frame (though this slows the function a good bit.)
+ * It sets COUNT to the stack depth.  If PRINT_FUN is non-null, then 
+ * it will be passed the pc & fp for each frame as it is encountered.
  */
 
 /*
@@ -1151,8 +1155,7 @@ ppc_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
  */
 
 int
-ppc_fast_show_stack (int show_frames, int get_names,
-                     unsigned int count_limit, unsigned int print_limit,
+ppc_fast_show_stack (unsigned int count_limit, unsigned int print_limit,
                      unsigned int *count,
                      void (print_fun) (struct ui_out * uiout, int frame_num,
                                        CORE_ADDR pc, CORE_ADDR fp))
@@ -1160,83 +1163,37 @@ ppc_fast_show_stack (int show_frames, int get_names,
   CORE_ADDR fp = 0;
   static CORE_ADDR sigtramp_start = 0;
   static CORE_ADDR sigtramp_end = 0;
-  struct frame_info *fi = NULL;
-  int i = 0;
+  unsigned int i = 0;
   int err = 0;
+  struct frame_info *fi;
+  int more_frames = 1;
   ULONGEST prev_fp = 0;
   ULONGEST next_fp = 0;
   ULONGEST pc = 0;
+  int wordsize = gdbarch_tdep (current_gdbarch)->wordsize;
+  
+  more_frames = fast_show_stack_trace_prologue (count_limit, print_limit, wordsize,
+						&sigtramp_start, &sigtramp_end,
+						&i, &fi, print_fun);
 
-  if (sigtramp_start == 0)
-    {
-      char *name;
-      struct minimal_symbol *msymbol;
-
-      msymbol = lookup_minimal_symbol ("_sigtramp", NULL, NULL);
-      if (msymbol == NULL)
-        warning
-          ("Couldn't find minimal symbol for \"_sigtramp\" - backtraces may be unreliable");
-      else
-        {
-          pc = SYMBOL_VALUE_ADDRESS (msymbol);
-          if (find_pc_partial_function (pc, &name,
-                                        &sigtramp_start, &sigtramp_end) == 0)
-            {
-              error
-                ("Couldn't find _sigtramp symbol -- backtraces will be unreliable");
-            }
-        }
-    }
-
-  /* Get the first two frames.  If anything funky is going on, it will
-     be here.  The second frame helps us get above frameless functions
-     called from signal handlers.  Above these frames we have to deal
-     with sigtramps and alloca frames, that is about all. */
-
-  if (show_frames)
-    ui_out_begin (uiout, ui_out_type_list, "frames");
-
-  i = 0;
-  if (i >= count_limit)
-    goto ppc_count_finish;
-
-  fi = get_current_frame ();
-  if (fi == NULL)
+  if (more_frames < 0)
     {
       err = 1;
       goto ppc_count_finish;
     }
 
-  if (show_frames && print_fun && (i < print_limit))
-    print_fun (uiout, i, get_frame_pc (fi), get_frame_base (fi));
-  i = 1;
-
-  do
-    {
-      if (i >= count_limit)
-        goto ppc_count_finish;
-
-      fi = get_prev_frame (fi);
-      if (fi == NULL)
-        goto ppc_count_finish;
-
-      pc = get_frame_pc (fi);
-      fp = get_frame_base (fi);
-
-      if (show_frames && print_fun && (i < print_limit))
-        print_fun (uiout, i, pc, fp);
-
-      i++;
-
-      if (!backtrace_past_main && inside_main_func (fi))
-        goto ppc_count_finish;
-    }
-  while (i < 5);
-
-  if (!safe_read_memory_unsigned_integer (fp, 4, &next_fp))
+  if (i >= count_limit || !more_frames)
     goto ppc_count_finish;
 
-  if (i >= count_limit)
+  /* There's a complication with PPC.  We want to report the frame pointer, because
+     that stays constant through the lifetime of the function, so it is the good
+     "fingerprint" for the function.  But on MacOS X, the frame pointer is not
+     guaranteed to point to the previous frame's address, sometimes that gets
+     overwritten.  The STACK POINTER is what consistently points to the previous
+     frame's address.  So use that for dereferencing.  */
+
+  fp = get_frame_sp (fi);
+  if (!safe_read_memory_unsigned_integer (fp, wordsize, &next_fp))
     goto ppc_count_finish;
 
   while (1)
@@ -1245,19 +1202,19 @@ ppc_fast_show_stack (int show_frames, int get_names,
       if ((sigtramp_start <= pc) && (pc <= sigtramp_end))
         {
           fp = next_fp + 0x70 + 0xc;
-          if (!safe_read_memory_unsigned_integer (fp, 4, &next_fp))
+          if (!safe_read_memory_unsigned_integer (fp, wordsize, &next_fp))
             goto ppc_count_finish;
 	  /* FIXME need to get pc from prev_fp */
-          if (!safe_read_memory_unsigned_integer (fp - 0xc, 4, &pc))
+          if (!safe_read_memory_unsigned_integer (fp - 0xc, wordsize, &pc))
             goto ppc_count_finish;
           fp = next_fp;
-          if (!safe_read_memory_unsigned_integer (fp, 4, &next_fp))
+          if (!safe_read_memory_unsigned_integer (fp, wordsize, &next_fp))
             goto ppc_count_finish;
         }
       else
         {
           fp = next_fp;
-          if (!safe_read_memory_unsigned_integer (fp, 4, &next_fp))
+          if (!safe_read_memory_unsigned_integer (fp, wordsize, &next_fp))
             goto ppc_count_finish;
           if (next_fp == 0)
             goto ppc_count_finish;
@@ -1270,11 +1227,18 @@ ppc_fast_show_stack (int show_frames, int get_names,
 	      goto ppc_count_finish;
 	    }
           if (!safe_read_memory_unsigned_integer
-              (fp + PPC_MACOSX_DEFAULT_LR_SAVE, 4, &pc))
+              (fp + PPC_MACOSX_DEFAULT_LR_SAVE * wordsize, wordsize, &pc))
             goto ppc_count_finish;
         }
 
-      if (show_frames && print_fun && (i < print_limit))
+      /* Let's raise the load level here.  That will mean that if we are 
+	 going to print the names, they will be accurate.  Also, it means
+	 if the main executable has it's load-state lowered, we'll detect
+	 main correctly.  */
+      
+      pc_set_load_state (pc, OBJF_SYM_ALL, 0);
+
+      if (print_fun && (i < print_limit))
         print_fun (uiout, i, pc, fp);
       i++;
 
@@ -1286,7 +1250,7 @@ ppc_fast_show_stack (int show_frames, int get_names,
     }
 
 ppc_count_finish:
-  if (show_frames)
+  if (print_fun)
     ui_out_end (uiout, ui_out_type_list);
 
   *count = i;
@@ -1439,6 +1403,11 @@ ppc_macosx_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   set_gdbarch_register_to_value (gdbarch, ppc_macosx_register_to_value);
   set_gdbarch_value_to_register (gdbarch, ppc_macosx_value_to_register);
   set_gdbarch_convert_register_p (gdbarch, ppc_macosx_convert_register_p);
+  /* APPLE LOCAL: Replace built in fp user reg read callback.
+     The ppc frame information knows if a frame uses a frame pointer and if
+     so which register it actually is in. Overriding this allows us to modify
+     the frame pointer intelligently using "print $fp = <expr>"  */
+  user_reg_replace (gdbarch, "fp", ppc_value_of_builtin_frame_fp_reg);
 
 }
 
@@ -1461,8 +1430,15 @@ ppc_macosx_init_abi_64 (struct gdbarch_info info, struct gdbarch *gdbarch)
 
   set_gdbarch_push_dummy_call (gdbarch, ppc64_darwin_abi_push_dummy_call);
   set_gdbarch_return_value (gdbarch, ppc64_darwin_abi_return_value);
-
+  set_gdbarch_frame_red_zone_size (gdbarch, 288);
+  set_gdbarch_frame_align (gdbarch, ppc_macosx_frame_align);
+  
   set_gdbarch_get_longjmp_target (gdbarch, ppc_64_macosx_get_longjmp_target);
+  /* APPLE LOCAL: Replace built in fp user reg read callback.
+     The ppc frame information knows if a frame uses a frame pointer and if
+     so which register it actually is in. Overriding this allows us to modify
+     the frame pointer intelligently using "print $fp = <expr>"  */
+  user_reg_replace (gdbarch, "fp", ppc_value_of_builtin_frame_fp_reg);
 }
 
 static int
@@ -1479,101 +1455,20 @@ ppc_mach_o_query_64bit ()
           info.cpu_subtype == CPU_SUBTYPE_POWERPC_970);
 }
 
-/* Two functions in one!  If this is a "bfd_archive" (read: a MachO fat file),
-   recurse for each separate fork of the fat file.
-   If this is not a fat file, detect whether the file is ppc32 or ppc64.
-   Before either of these, check if we've already sniffed an appropriate
-   OSABI from dyld (in the case of attaching to a process) and prefer that.  */
+/* Two functions in one!  If this is a fat file (bfd_archive with
+   target name mach-o-fat) recurse for each separate fork of the fat
+   file.  If this is not a fat file, detect whether the file is ppc32
+   or ppc64.  Before either of these, check if we've already sniffed
+   an appropriate OSABI from dyld (in the case of attaching to a
+   process) and prefer that.  */
 
 static enum gdb_osabi
 ppc_mach_o_osabi_sniffer (bfd *abfd)
 {
-  enum gdb_osabi ret;
-  ret = ppc_mach_o_osabi_sniffer_use_dyld_hint (abfd);
-  if (ret == GDB_OSABI_DARWIN64 || ret == GDB_OSABI_DARWIN)
-    return ret;
-
-  if (bfd_check_format (abfd, bfd_archive))
-    {
-      enum gdb_osabi best = GDB_OSABI_UNKNOWN;
-      enum gdb_osabi cur = GDB_OSABI_UNKNOWN;
-
-      bfd *nbfd = NULL;
-      for (;;)
-        {
-          nbfd = bfd_openr_next_archived_file (abfd, nbfd);
-
-          if (nbfd == NULL)
-            break;
-          if (!bfd_check_format (nbfd, bfd_object))
-            continue;
-
-          cur = ppc_mach_o_osabi_sniffer (nbfd);
-          if (cur == GDB_OSABI_DARWIN64 &&
-              best != GDB_OSABI_DARWIN64 && ppc_mach_o_query_64bit ())
-            best = cur;
-
-          if (cur == GDB_OSABI_DARWIN &&
-              best != GDB_OSABI_DARWIN64 && best != GDB_OSABI_DARWIN)
-            best = cur;
-        }
-      return best;
-    }
-
-  if (!bfd_check_format (abfd, bfd_object))
-    return GDB_OSABI_UNKNOWN;
-
-  if (strcmp (bfd_get_target (abfd), "mach-o-be") == 0)
-    {
-      if (bfd_default_compatible (bfd_get_arch_info (abfd),
-                                  bfd_lookup_arch (bfd_arch_powerpc,
-                                                   bfd_mach_ppc64)))
-        return GDB_OSABI_DARWIN64;
-
-      if (bfd_default_compatible (bfd_get_arch_info (abfd),
-                                  bfd_lookup_arch (bfd_arch_powerpc,
-                                                   bfd_mach_ppc)))
-        return GDB_OSABI_DARWIN;
-
-      return GDB_OSABI_UNKNOWN;
-    }
-
-  return GDB_OSABI_UNKNOWN;
-}
-
-/* If we're attaching to a process, we start by finding the dyld that
-   is loaded and go from there.  So when we're selecting the OSABI,
-   prefer the osabi of the actually-loaded dyld when we can.  */
-
-static enum gdb_osabi
-ppc_mach_o_osabi_sniffer_use_dyld_hint (bfd *abfd)
-{
-  if (osabi_seen_in_attached_dyld == GDB_OSABI_UNKNOWN)
-    return GDB_OSABI_UNKNOWN;
-
-  bfd *nbfd = NULL;
-  for (;;)
-    {
-      nbfd = bfd_openr_next_archived_file (abfd, nbfd);
-
-      if (nbfd == NULL)
-        break;
-      if (!bfd_check_format (nbfd, bfd_object))
-        continue;
-      if (bfd_default_compatible (bfd_get_arch_info (nbfd),
-                                  bfd_lookup_arch (bfd_arch_powerpc,
-                                                   bfd_mach_ppc64))
-          && osabi_seen_in_attached_dyld == GDB_OSABI_DARWIN64)
-        return GDB_OSABI_DARWIN64;
-
-      if (bfd_default_compatible (bfd_get_arch_info (nbfd),
-                                  bfd_lookup_arch (bfd_arch_powerpc,
-                                                   bfd_mach_ppc))
-          && osabi_seen_in_attached_dyld == GDB_OSABI_DARWIN)
-        return GDB_OSABI_DARWIN;
-    }
-
-  return GDB_OSABI_UNKNOWN;
+  return generic_mach_o_osabi_sniffer (abfd,
+				       bfd_arch_powerpc,
+				       bfd_mach_ppc, bfd_mach_ppc64,
+				       ppc_mach_o_query_64bit);
 }
 
 #define PPC_JMP_LR 0x54
@@ -1611,6 +1506,40 @@ static int
 ppc_macosx_get_longjmp_target (CORE_ADDR *pc)
 {
   return ppc_macosx_get_longjmp_target_helper (PPC_JMP_LR, pc);
+}
+
+/* Callback function for user_reg_replace (). This function will get the
+   current value of the frame pointer for the current frame based off of
+   the ppc specific frame information. If the frame uses a frame register
+   other than the SP, it will return that register, otherwise it will return
+   the SP value. This allows modification of the ppc frame pointer from
+   expressions using the "print $fp = <expr>" format.  */
+static struct value *
+ppc_value_of_builtin_frame_fp_reg (struct frame_info *frame)
+{
+  CORE_ADDR frame_pc;
+  ppc_function_properties *props;
+  /* Get the ppc specific frame information for this frame.  */
+  props = ppc_frame_function_properties (frame_next_hack (frame), 
+					 frame_cache_hack (frame));
+  if (props)
+    {
+      /* Get the current frame PC and make sure that our pc is 
+         beyond the instruction that sets up the frame pointer register.  */
+      frame_pc = get_frame_pc (frame);
+
+      if (props->frameptr_used && props->frameptr_reg > 0
+	 && props->frameptr_pc != INVALID_ADDRESS
+	 && props->frameptr_pc <= frame_pc)
+	{
+	  /* We are using a Frame Pointer register other than
+	     the stack pointer, return its value.  */
+	  return value_of_register (props->frameptr_reg, frame);
+	}
+    }
+  /* Default to using the SP as our frame pointer if we don't find
+     any information to the contrary.  */
+  return value_of_register (PPC_MACOSX_SP_REGNUM, frame);
 }
 
 void

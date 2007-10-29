@@ -2076,7 +2076,8 @@ rs6000_stab_reg_to_regnum (int num)
 
 
 /* Convert a Dwarf 2 register number to a GDB register number.  */
-static int
+/* APPLE LOCAL: Make function global so ppc-macosx-tdep.c can refer to it.  */
+int
 rs6000_dwarf2_reg_to_regnum (int num)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
@@ -2112,6 +2113,10 @@ rs6000_dwarf2_reg_to_regnum (int num)
       case 612:
         return tdep->ppc_spefscr_regnum;
       default:
+      /* APPLE LOCAL: Don't just ingest an unrecognized register
+         number in the hopes that it might be correctly understood.
+         Let the user know something is wrong with the debug info.  */
+        warning ("Unrecognized DWARF register number %d", num);
         return num;
       }
 }
@@ -2958,7 +2963,8 @@ rs6000_frame_this_id (struct frame_info *next_frame, void **this_cache,
 static void
 rs6000_frame_prev_register (struct frame_info *next_frame,
 				 void **this_cache,
-				 int regnum, int *optimizedp,
+			         /* APPLE LOCAL variable opt states.  */
+				 int regnum, enum opt_state *optimizedp,
 				 enum lval_type *lvalp, CORE_ADDR *addrp,
 				 int *realnump, gdb_byte *valuep)
 {

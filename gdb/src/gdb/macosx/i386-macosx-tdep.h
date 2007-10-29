@@ -35,15 +35,32 @@
 #define LAST_VP_REGNUM_64 55
 #define NUM_VP_REGS_64 ((LAST_VP_REGNUM_64 + 1) - FIRST_VP_REGNUM_64)
 
-void i386_macosx_fetch_gp_registers (gdb_i386_thread_state_t *sp_regs);
-void i386_macosx_store_gp_registers (gdb_i386_thread_state_t *sp_regs);
-void x86_64_macosx_fetch_gp_registers (gdb_x86_thread_state64_t *sp_regs);
-void x86_64_macosx_store_gp_registers (gdb_x86_thread_state64_t *sp_regs);
+/* All fetch functions below that don't end with '_raw' assume that the
+   register structure argument is in host endian byte order and, if
+   needed, endian swap the values into target endian format and store 
+   the values into the register cache. The register cache stores 
+   register values in target endian byte order.
+   
+   All fetch functions that do end with '_raw' will trust that the
+   register structure argument is already in target endian format and
+   will copy the values in without swapping.  */
 
+void i386_macosx_fetch_gp_registers (gdb_i386_thread_state_t *sp_regs);
+void i386_macosx_fetch_gp_registers_raw (gdb_i386_thread_state_t *sp_regs);
+void i386_macosx_store_gp_registers (gdb_i386_thread_state_t *sp_regs);
+void i386_macosx_store_gp_registers_raw (gdb_i386_thread_state_t *sp_regs);
+void x86_64_macosx_fetch_gp_registers (gdb_x86_thread_state64_t *sp_regs);
+void x86_64_macosx_fetch_gp_registers_raw (gdb_x86_thread_state64_t *sp_regs);
+void x86_64_macosx_store_gp_registers (gdb_x86_thread_state64_t *sp_regs);
+void x86_64_macosx_store_gp_registers_raw (gdb_x86_thread_state64_t *sp_regs);
 void i386_macosx_fetch_fp_registers (gdb_i386_float_state_t *fp_regs);
-int i386_macosx_store_fp_registers (gdb_i386_float_state_t *fp_regs);
+void i386_macosx_fetch_fp_registers_raw (gdb_i386_float_state_t *fp_regs);
+int  i386_macosx_store_fp_registers (gdb_i386_float_state_t *fp_regs);
+int  i386_macosx_store_fp_registers_raw (gdb_i386_float_state_t *fp_regs);
 void x86_64_macosx_fetch_fp_registers (gdb_x86_float_state64_t *fp_regs);
-int x86_64_macosx_store_fp_registers (gdb_x86_float_state64_t *fp_regs);
+void x86_64_macosx_fetch_fp_registers_raw (gdb_x86_float_state64_t *fp_regs);
+int  x86_64_macosx_store_fp_registers (gdb_x86_float_state64_t *fp_regs);
+int  x86_64_macosx_store_fp_registers_raw (gdb_x86_float_state64_t *fp_regs);
 
 #define INVALID_ADDRESS ((CORE_ADDR) (-1))
 

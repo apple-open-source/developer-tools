@@ -583,7 +583,9 @@ gen_var_ref (struct agent_expr *ax, struct axs_value *value, struct symbol *var)
       break;
 
     case LOC_BLOCK:
-      ax_const_l (ax, BLOCK_START (SYMBOL_BLOCK_VALUE (var)));
+      /* APPLE LOCAL begin address ranges  */
+      ax_const_l (ax, BLOCK_LOWEST_PC (SYMBOL_BLOCK_VALUE (var)));
+      /* APPLE LOCAL end address ranges  */
       value->kind = axs_rvalue;
       break;
 
@@ -1828,6 +1830,8 @@ agent_command (char *exp, int from_tty)
   if (exp == 0)
     error_no_arg (_("expression to translate"));
 
+  /* APPLE LOCAL initialize innermost_block  */
+  innermost_block = NULL;
   expr = parse_expression (exp);
   old_chain = make_cleanup (free_current_contents, &expr);
   agent = gen_trace_for_expr (get_frame_pc (fi), expr);

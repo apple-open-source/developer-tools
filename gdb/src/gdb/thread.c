@@ -42,6 +42,8 @@
 #include <sys/types.h>
 #include <signal.h>
 #include "ui-out.h"
+/* APPLE LOCAL - subroutine inlining  */
+#include "inlining.h"
 
 /*#include "lynxos-core.h" */
 
@@ -62,7 +64,9 @@ static int thread_alive (struct thread_info *);
 static void info_threads_command (char *, int);
 static void thread_apply_command (char *, int);
 static void restore_current_thread (ptid_t, int);
+/* APPLE LOCAL: I need this, move it to gdbthreads.h
 static void prune_threads (void);
+*/
 
 void
 delete_step_resume_breakpoint (void *arg)
@@ -298,6 +302,8 @@ load_infrun_state (ptid_t ptid,
 		   struct breakpoint **step_resume_breakpoint,
 		   CORE_ADDR *step_range_start,
 		   CORE_ADDR *step_range_end,
+		   /* APPLE LOCAL step ranges  */
+		   struct address_range_list **stepping_ranges,
 		   struct frame_id *step_frame_id,
 		   int *handling_longjmp,
 		   int *another_trap,
@@ -319,6 +325,8 @@ load_infrun_state (ptid_t ptid,
   *step_resume_breakpoint = tp->step_resume_breakpoint;
   *step_range_start = tp->step_range_start;
   *step_range_end = tp->step_range_end;
+  /* APPLE LOCAL step ranges  */
+  *stepping_ranges = tp->stepping_ranges;
   *step_frame_id = tp->step_frame_id;
   *handling_longjmp = tp->handling_longjmp;
   *another_trap = tp->another_trap;
@@ -339,6 +347,8 @@ save_infrun_state (ptid_t ptid,
 		   struct breakpoint *step_resume_breakpoint,
 		   CORE_ADDR step_range_start,
 		   CORE_ADDR step_range_end,
+		   /* APPLE LOCAL step ranges  */
+		   struct address_range_list *stepping_ranges,
 		   const struct frame_id *step_frame_id,
 		   int handling_longjmp,
 		   int another_trap,
@@ -360,6 +370,8 @@ save_infrun_state (ptid_t ptid,
   tp->step_resume_breakpoint = step_resume_breakpoint;
   tp->step_range_start = step_range_start;
   tp->step_range_end = step_range_end;
+  /* APPLE LOCAL step ranges  */
+  tp->stepping_ranges = stepping_ranges;
   tp->step_frame_id = (*step_frame_id);
   tp->handling_longjmp = handling_longjmp;
   tp->another_trap = another_trap;
@@ -431,6 +443,9 @@ info_threads_command (char *arg, int from_tty)
 
       switch_to_thread (tp->ptid);
       print_stack_frame (get_selected_frame (NULL), 0, LOCATION);
+      /* APPLE LOCAL begin subroutine inlining  */
+      clear_inlined_subroutine_print_frames ();
+      /* APPLE LOCAL end subroutine inlining  */
     }
 
   switch_to_thread (current_ptid);
@@ -445,6 +460,9 @@ info_threads_command (char *arg, int from_tty)
       /* Ooops, can't restore, tell user where we are.  */
       warning (_("Couldn't restore frame in current thread, at frame 0"));
       print_stack_frame (get_selected_frame (NULL), 0, LOCATION);
+      /* APPLE LOCAL begin subroutine inlining  */
+      clear_inlined_subroutine_print_frames ();
+      /* APPLE LOCAL end subroutine inlining  */
     }
   else
     {
@@ -475,6 +493,14 @@ switch_to_thread (ptid_t ptid)
   flush_cached_frames ();
   registers_changed ();
   stop_pc = read_pc ();
+  /* APPLE LOCAL begin subroutine inlining  */
+  /* If the PC has changed since the last time we updated the
+     global_inlined_call_stack data, we need to verify the current
+     data and possibly update it.  */
+  if (stop_pc != inlined_function_call_stack_pc ())
+    inlined_function_update_call_stack (stop_pc);
+  /* APPLE LOCAL end subroutine inlining  */
+
   select_frame (get_current_frame ());
 
   /* APPPLE LOCAL Finally, if the scheduler-locking is on, then we should 
@@ -491,7 +517,12 @@ restore_current_thread (ptid_t ptid, int print)
     {
       switch_to_thread (ptid);
       if (print)
-	print_stack_frame (get_current_frame (), 0, -1);
+	/* APPLE LOCAL begin subroutine inlining  */
+	{
+	  print_stack_frame (get_current_frame (), 0, -1);
+	  clear_inlined_subroutine_print_frames ();
+	}
+        /* APPLE LOCAL end subroutine inlining  */
     }
 }
 
@@ -704,9 +735,24 @@ do_captured_thread_select (struct ui_out *uiout,
       ui_out_text (uiout, target_pid_to_str (inferior_ptid));
 #endif
       ui_out_text (uiout, ")]\n");
+
+      /* APPLE LOCAL begin subroutine inlining  */
+      /* If we're inside an inlined function, we may have gotten there
+	 via a 'step' from the call site, which automatically flushes
+	 the frames, so there may not be a current frame.  In that case
+	 this is not an error.  */
+      if (deprecated_selected_frame == NULL)
+	{
+	  if (get_frame_type (get_current_frame ()) != INLINED_FRAME)
+	    error (_("No selected frame."));
+	  else
+	    select_frame (get_current_frame ());
+	}
       
       print_stack_frame (deprecated_selected_frame,
 			 frame_relative_level (deprecated_selected_frame), 1);
+      clear_inlined_subroutine_print_frames ();
+      /* APPLE LOCAL end subroutine inlining  */
 
     }
   /* Remember to run the context hook here - since this changes

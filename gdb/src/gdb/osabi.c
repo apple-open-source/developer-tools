@@ -201,13 +201,18 @@ gdbarch_register_osabi_sniffer (enum bfd_architecture arch,
 enum gdb_osabi
 gdbarch_lookup_osabi (bfd *abfd)
 {
-  struct gdb_osabi_sniffer *sniffer;
-  enum gdb_osabi osabi, match;
-  int match_specific;
-
   /* If we aren't in "auto" mode, return the specified OS ABI.  */
   if (user_osabi_state == osabi_user)
     return user_selected_osabi;
+  return gdbarch_lookup_osabi_from_bfd (abfd);
+}
+
+enum gdb_osabi
+gdbarch_lookup_osabi_from_bfd (bfd *abfd)
+{
+  struct gdb_osabi_sniffer *sniffer;
+  enum gdb_osabi osabi, match;
+  int match_specific;
 
   /* If we don't have a binary, return the default OS ABI (if set) or
      an inconclusive result (otherwise).  */
@@ -557,6 +562,28 @@ generic_elf_osabi_sniffer (bfd *abfd)
   return osabi;
 }
 
+int
+set_osabi_from_string (char *in_osabi_string)
+{
+  struct gdbarch_info info;
+  int i;
+  for (i = 1; i < GDB_OSABI_INVALID; i++)
+    if (strcmp (in_osabi_string, gdbarch_osabi_name (i)) == 0)
+      {
+	set_osabi_string = xstrdup (in_osabi_string);
+	user_selected_osabi = i;
+	user_osabi_state = osabi_user;
+	break;
+      }
+  if (i == GDB_OSABI_INVALID)
+    return 0;
+  gdbarch_info_init (&info);
+  if (! gdbarch_update_p (info))
+    return 0;
+
+  return 1;
+}
+
 static void
 set_osabi (char *args, int from_tty, struct cmd_list_element *c)
 {

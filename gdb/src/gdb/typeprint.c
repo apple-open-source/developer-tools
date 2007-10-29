@@ -151,6 +151,8 @@ whatis_exp (char *exp, int show)
 
   if (exp)
     {
+      /* APPLE LOCAL initialize innermost_block  */
+      innermost_block = NULL;
       expr = parse_expression (exp);
       old_chain = make_cleanup (free_current_contents, &expr);
       val = evaluate_type (expr);
@@ -238,6 +240,8 @@ ptype_command (char *typename, int from_tty)
     }
   else
     {
+      /* APPLE LOCAL initialize innermost_block  */
+      innermost_block = NULL;
       expr = parse_expression (typename);
       old_chain = make_cleanup (free_current_contents, &expr);
       type = ptype_eval (expr);
@@ -354,6 +358,8 @@ maintenance_print_type (char *typename, int from_tty)
 
   if (typename != NULL)
     {
+      /* APPLE LOCAL initialize innermost_block  */
+      innermost_block = NULL;
       expr = parse_expression (typename);
       old_chain = make_cleanup (free_current_contents, &expr);
       if (expr->elts[0].opcode == OP_TYPE)

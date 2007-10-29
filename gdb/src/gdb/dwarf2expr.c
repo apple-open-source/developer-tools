@@ -106,7 +106,8 @@ dwarf_expr_fetch (struct dwarf_expr_context *ctx, int n)
 }
 
 /* Add a new piece to CTX's piece list.  */
-static void
+/* APPLE LOCAL variable initialized status  */
+void
 add_piece (struct dwarf_expr_context *ctx,
            int in_reg, CORE_ADDR value, ULONGEST size)
 {
@@ -213,7 +214,8 @@ dwarf2_read_address (gdb_byte *buf, gdb_byte *buf_end, int *bytes_read)
 
 /* Return the type of an address, for unsigned arithmetic.  */
 
-static struct type *
+/* APPLE LOCAL variable initialized status.  */
+struct type *
 unsigned_address_type (void)
 {
   switch (TARGET_ADDR_BIT / TARGET_CHAR_BIT)
@@ -232,7 +234,8 @@ unsigned_address_type (void)
 
 /* Return the type of an address, for signed arithmetic.  */
 
-static struct type *
+/* APPLE LOCAL variable initialized status  */
+struct type *
 signed_address_type (void)
 {
   switch (TARGET_ADDR_BIT / TARGET_CHAR_BIT)
@@ -257,6 +260,8 @@ execute_stack_op (struct dwarf_expr_context *ctx,
 		  gdb_byte *op_ptr, gdb_byte *op_end)
 {
   ctx->in_reg = 0;
+  /* APPLE LOCAL variable initialized status.  */
+  ctx->var_status = 1;  /* Default is initialized.  */
 
   while (op_ptr < op_end)
     {
@@ -383,7 +388,11 @@ execute_stack_op (struct dwarf_expr_context *ctx,
 	case DW_OP_reg29:
 	case DW_OP_reg30:
 	case DW_OP_reg31:
-	  if (op_ptr != op_end && *op_ptr != DW_OP_piece)
+	  /* APPLE LOCAL begin variable initialized status  */
+	  if (op_ptr != op_end 
+	      && *op_ptr != DW_OP_piece 
+	      && *op_ptr != DW_OP_APPLE_uninit)
+	  /* APPLE LOCAL end variable initialized status  */
 	    error (_("DWARF-2 expression error: DW_OP_reg operations must be "
 		   "used either alone or in conjuction with DW_OP_piece."));
 
@@ -394,7 +403,11 @@ execute_stack_op (struct dwarf_expr_context *ctx,
 
 	case DW_OP_regx:
 	  op_ptr = read_uleb128 (op_ptr, op_end, &reg);
-	  if (op_ptr != op_end && *op_ptr != DW_OP_piece)
+	  /* APPLE LOCAL begin variable initialized status  */
+	  if (op_ptr != op_end 
+	      && *op_ptr != DW_OP_piece
+	      && *op_ptr != DW_OP_APPLE_uninit)
+	  /* APPLE LOCAL end variable initialized status  */
 	    error (_("DWARF-2 expression error: DW_OP_reg operations must be "
 		   "used either alone or in conjuction with DW_OP_piece."));
 
@@ -559,6 +572,10 @@ execute_stack_op (struct dwarf_expr_context *ctx,
 	      op_ptr = read_uleb128 (op_ptr, op_end, &reg);
 	      result += reg;
 	      break;
+	      /* APPLE LOCAL begin eliminate warning about incomplete switch stmt */
+	    default:
+	      break;
+	      /* APPLE LOCAL end eliminate warning... */
 	    }
 	  break;
 
@@ -703,6 +720,12 @@ execute_stack_op (struct dwarf_expr_context *ctx,
             ctx->in_reg = 0;
           }
           goto no_push;
+
+	/* APPLE LOCAL begin variable initialized status  */
+	case DW_OP_APPLE_uninit:
+	  ctx->var_status = 0;
+	  goto no_push;
+	/* APPLE LOCAL end variable initialized status  */
 
 	default:
 	  error (_("Unhandled dwarf expression opcode 0x%x"), op);

@@ -57,6 +57,10 @@
 #include "mi-main.h"
 #include "block.h"
 #include "version.h"
+/* APPLE LOCAL begin subroutine inlining  */
+#include "mi-common.h"
+#include "inlining.h"
+/* APPLE LOCAL end subroutine inlining  */
 
 enum
   {
@@ -92,6 +96,7 @@ struct mi_continuation_arg
   char *token;
   struct mi_timestamp *timestamp;
   struct cleanup *cleanups;
+  struct cleanup *exec_error_cleanups;
 };
 
 static void free_continuation_arg (struct mi_continuation_arg *arg);
@@ -137,6 +142,7 @@ static void mi_execute_cli_command (const char *cmd, int arg_p, char *args);
 static enum mi_cmd_result mi_execute_async_cli_command (char *mi, char *args, int from_tty);
 
 void mi_exec_async_cli_cmd_continuation (struct continuation_arg *arg);
+void mi_exec_error_cleanup (void *in_arg);
 
 static int register_changed_p (int regnum);
 static int get_register (int regnum, int format);
@@ -594,8 +600,10 @@ mi_cmd_thread_set_pc (char *command, char **argv, int argc)
      around in optimized code is cruising for a brusing.  */
 
   new_fun = find_pc_function (new_pc);
+  /* APPLE LOCAL begin address ranges  */
   if (avoid_prologue && new_fun 
-      && BLOCK_START (SYMBOL_BLOCK_VALUE (new_fun)) == new_pc)
+      && BLOCK_LOWEST_PC (SYMBOL_BLOCK_VALUE (new_fun)) == new_pc)
+  /* APPLE LOCAL end address ranges  */
     {
       sal = find_function_start_sal (new_fun, 1);
       new_pc = sal.pc;
@@ -619,6 +627,13 @@ mi_cmd_thread_set_pc (char *command, char **argv, int argc)
      properly step over it. */
 
   stop_pc = new_pc;
+  /* APPLE LOCAL begin subroutine inlining  */
+  /* If the PC has changed since the last time we updated the
+     global_inlined_call_stack data, we need to verify the current
+     data and possibly update it.  */
+  if (stop_pc != inlined_function_call_stack_pc ())
+    inlined_function_update_call_stack (stop_pc);
+  /* APPLE LOCAL end subroutine inlining  */
 
   /* Update the current source location as well, so 'list' will do the right
      thing.  */
@@ -2142,6 +2157,9 @@ mi_execute_async_cli_command (char *mi, char *args, int from_tty)
       add_continuation (mi_exec_async_cli_cmd_continuation, 
 			(struct continuation_arg *) arg);
 
+      arg->exec_error_cleanups 
+	= make_exec_error_cleanup (mi_exec_error_cleanup, (void *) arg);
+
       except = safe_execute_command (uiout, /*ui */ run, 0 /*from_tty */ );
       do_cleanups (old_cleanups);
 
@@ -2152,11 +2170,31 @@ mi_execute_async_cli_command (char *mi, char *args, int from_tty)
 	  fputs_unfiltered ("^running\n", raw_stdout);
 	  
 	}
+      /* APPLE LOCAL begin inlined subroutine  */
+      /* If we are stepping from an inlined subroutine call site into the
+	 inlined subroutine, the target will not be executing, but it is
+	 not an error.  */
+      else if (strcmp (mi, "step") == 0
+	       && stepping_into_inlined_subroutine)
+	{
+	  stop_step = 1;
+	  if (current_command_token)
+	    fputs_unfiltered (current_command_token, raw_stdout);
+	  fputs_unfiltered ("^running\n", raw_stdout);
+	      
+	  ui_out_field_string (uiout, "reason",
+			       async_reason_lookup 
+			       (EXEC_ASYNC_END_STEPPING_RANGE));
+	  mi_exec_async_cli_cmd_continuation (arg);
+	}
+      /* APPLE LOCAL end inlined subroutine  */
       else
 	{
 	  /* If we didn't manage to set the inferior going, that's
 	     most likely an error... */
 	  discard_all_continuations ();
+	  if (arg->exec_error_cleanups != (struct cleanups *) -1)
+	    discard_exec_error_cleanups (arg->exec_error_cleanups);
 	  free_continuation_arg (arg);
 	  if (except.message != NULL)
 	    mi_error_message = xstrdup (except.message);
@@ -2169,6 +2207,30 @@ mi_execute_async_cli_command (char *mi, char *args, int from_tty)
     }
 
   return MI_CMD_DONE;
+}
+
+void
+mi_exec_error_cleanup (void *in_arg)
+{
+  struct mi_continuation_arg *arg =
+    (struct mi_continuation_arg *) in_arg;
+  struct ui_out *saved_ui_out = uiout;
+
+  uiout = interp_ui_out (mi_interp);
+
+  if (arg && arg->token)
+    {
+      fputs_unfiltered (arg->token, raw_stdout);
+    }
+  fputs_unfiltered ("*stopped", raw_stdout);
+  ui_out_field_string (uiout, "reason", "error");
+  if (do_timings && arg && arg->timestamp)
+    print_diff_now (arg->timestamp);
+  mi_out_put (uiout, raw_stdout);
+  fputs_unfiltered ("\n", raw_stdout);
+  fputs_unfiltered ("(gdb) \n", raw_stdout);
+  gdb_flush (raw_stdout);
+  uiout = saved_ui_out;
 }
 
 void
@@ -2194,6 +2256,12 @@ mi_exec_async_cli_cmd_continuation (struct continuation_arg *in_arg)
 	  arg->cleanups = NULL;
 	}
       
+      if (arg->exec_error_cleanups != (struct cleanups *) -1)
+	{
+	  discard_exec_error_cleanups (arg->exec_error_cleanups);
+	  arg->exec_error_cleanups = -1;
+	}
+
       fputs_unfiltered ("*stopped", raw_stdout);
       if (do_timings && arg && arg->timestamp)
 	print_diff_now (arg->timestamp);
@@ -2353,6 +2421,31 @@ mi_interp_run_command_hook ()
   return 0;
 }
 
+void
+mi_interp_hand_call_function_hook ()
+{
+  /* Notify if the user is causing a function to be called
+     when the scheduler is not locked.  This may cause the stack
+     on another thread to change, and so the UI should refresh it's
+     stack info.  */
+
+    if (!scheduler_lock_on_p ()) 
+      {
+	struct cleanup *list_cleanup;
+	struct ui_out *saved_ui_out = uiout;
+
+	uiout = interp_ui_out (mi_interp);
+	
+	list_cleanup = make_cleanup_ui_out_list_begin_end (uiout, "MI_HOOK_RESULT");
+	ui_out_field_string (uiout, "HOOK_TYPE", "function-called");
+	do_cleanups (list_cleanup);
+	uiout = saved_ui_out;
+#if 0
+  mi_output_async_notification ("rerun");
+#endif	
+      }
+}
+
 /* mi_setup_continuation_arg - sets up a continuation structure
    with the timer info and the command token, for use with
    an asyncronous mi command.  Will only cleanup the exec_cleanup
@@ -2383,6 +2476,7 @@ mi_setup_continuation_arg (struct cleanup *cleanups)
     arg->timestamp = NULL;
 
   arg->cleanups = cleanups;
+  arg->exec_error_cleanups = (struct cleanup *) -1;
 
   return arg;
 }
@@ -2432,8 +2526,8 @@ print_diff (struct mi_timestamp *start, struct mi_timestamp *end)
        wallclock_diff (start, end) / 1000000.0, 
        user_diff (start, end) / 1000000.0, 
        system_diff (start, end) / 1000000.0,
-       start->wallclock.tv_sec, start->wallclock.tv_usec,
-       end->wallclock.tv_sec, end->wallclock.tv_usec);
+       (int) start->wallclock.tv_sec, (int) start->wallclock.tv_usec,
+       (int) end->wallclock.tv_sec, (int) end->wallclock.tv_usec);
   }
 
 static long 

@@ -29,7 +29,7 @@ static char *dcc_run_simple_command(const char *commandLine)
 {
     FILE *output;
     char *versionInfo = NULL;;
-    int buffSize = 1024, len = 0;
+    int buffSize = MAXPATHLEN, len = 0;
     
     output = popen(commandLine, "r");
     if (output) {
@@ -154,7 +154,7 @@ char *dcc_get_compiler_version(char *compilerPath)
 
 int dcc_is_allowed_compiler(char *path)
 {
-    return dcc_compiler_info_for_path(path) != NULL;
+	return dcc_compiler_info_for_path(path) != NULL;
 }
 
 /*
@@ -216,7 +216,7 @@ char *dcc_get_system_version(void)
                 *nl = 0;
             } else {
                 prodVers = "Unknown";
-                rs_log_warning("failed to parse ProcuctVersion from sw_vers");
+                rs_log_warning("failed to parse ProductVersion from sw_vers");
             }
 
 	    if (buildVers) { 
@@ -255,8 +255,8 @@ char *dcc_get_system_version(void)
                 archName = "unknown";
             }
             
-            // construct a string of the form 10.x.y (ppc)
-            ret = malloc(strlen(prodVers) + strlen(buildVers) + strlen(archName) + strlen(" ()") + 1);
+            // construct a string of the form 10.x.y (9A192, ppc)
+            ret = malloc(strlen(prodVers) + strlen(buildVers) + strlen(archName) + strlen(" (, )") + 1);
             sprintf(ret, "%s (%s, %s)", prodVers, buildVers, archName);
             free(sw_vers);
         }

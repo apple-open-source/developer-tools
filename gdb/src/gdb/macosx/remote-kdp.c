@@ -1452,6 +1452,52 @@ kdp_async (void (*callback) (enum inferior_event_type event_type,
     }
 }
 
+/* This set of hardware watchpoint stubs currently do nothing, but we
+   have to be sure to set them, so we don't pick up the ones from the
+   macosx "exec" target.  */
+
+int
+kdp_can_use_hw_breakpoint (int unused1, int unused2, int unused3)
+{
+  return 0;
+}
+
+int
+kdp_stopped_by_watchpoint (void)
+{
+  return 0;
+}
+
+int
+kdp_stopped_data_address (struct target_ops *unused1, CORE_ADDR *unused2)
+{
+  return 0;
+}
+
+int
+kdp_insert_watchpoint (CORE_ADDR unused1, int unused2, int unused3)
+{
+  return 0;
+}
+
+int
+kdp_remove_watchpoint (CORE_ADDR unused1, int unused2, int unused3)
+{
+  return 0;
+}
+
+int
+kdp_insert_hw_breakpoint (CORE_ADDR unused1, gdb_byte *unused2)
+{
+  return 0;
+}
+
+int
+kdp_remove_hw_breakpoint (CORE_ADDR unused1, gdb_byte *unused2)
+{
+  return 0;
+}
+
 static void
 init_kdp_ops (void)
 {
@@ -1471,6 +1517,14 @@ init_kdp_ops (void)
   kdp_ops.to_files_info = kdp_files_info;
   kdp_ops.to_insert_breakpoint = memory_insert_breakpoint;
   kdp_ops.to_remove_breakpoint = memory_remove_breakpoint;
+  kdp_ops.to_can_use_hw_breakpoint = kdp_can_use_hw_breakpoint;
+  kdp_ops.to_stopped_by_watchpoint = kdp_stopped_by_watchpoint;
+  kdp_ops.to_stopped_data_address = kdp_stopped_data_address;
+  kdp_ops.to_insert_watchpoint = kdp_insert_watchpoint;
+  kdp_ops.to_remove_watchpoint = kdp_remove_watchpoint;
+  kdp_ops.to_insert_hw_breakpoint = kdp_insert_hw_breakpoint;
+  kdp_ops.to_remove_hw_breakpoint = kdp_remove_hw_breakpoint;
+  kdp_ops.to_have_continuable_watchpoint = 0;
   kdp_ops.to_detach = kdp_detach;
   kdp_ops.to_kill = kdp_kill;
   kdp_ops.to_load = kdp_load;

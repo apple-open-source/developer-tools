@@ -36,7 +36,6 @@
 
 #include <mach-o/nlist.h>
 #include <mach-o/loader.h>
-#include <mach-o/dyld_debug.h>
 
 #include "libbfd.h"
 
@@ -68,20 +67,83 @@ inferior_open (bfd *abfd, void *open_closure)
   return ret;
 }
 
+/* The target for the inferior_bfd type may "macos-child" in the case
+   of a regular process, "remote" in the case of a translated (Rosetta) 
+   application where we're controlling it via remote protocol, or
+   "core-macho" for core files.  
+
+   Returns zero if the inferior bfd is not supported for the current target
+   type, or non-zero if it is supported.  */
+
+static int
+valid_target_for_inferior_bfd ()
+{
+  return strcmp (current_target.to_shortname, "macos-child") == 0
+      || strcmp (current_target.to_shortname, "remote") == 0 
+      || strcmp (current_target.to_shortname, "core-macho") == 0;
+}
+
+/* Return non-zero if the bfd target is mach-o.  */
+
+static int
+bfd_target_is_mach_o (bfd *abfd)
+{
+  return strcmp (bfd_get_target (abfd), "mach-o-be") == 0
+      || strcmp (bfd_get_target (abfd), "mach-o-le") == 0
+      || strcmp (bfd_get_target (abfd), "mach-o") == 0;
+}
+
+
+size_t
+inferior_read_memory_partial (CORE_ADDR addr, int nbytes, char *mbuf)
+{
+  size_t nbytes_read = 0;
+  int error = 0;
+
+  volatile struct gdb_exception except;
+
+  TRY_CATCH (except, RETURN_MASK_ERROR)
+    {
+      /* Read as much memory as we can.  */
+      while (nbytes_read < nbytes)
+	{
+	  int num = target_read_memory_partial (addr + nbytes_read, 
+						mbuf + nbytes_read,
+						nbytes - nbytes_read,
+						&error);
+	  /* If we don't get any data or get an error, break out of the
+	     loop.  */
+	  if (num <= 0)
+	    break;
+	  /* We got some bytes, note what we got and keep trying.  */
+	  nbytes_read += num;
+	}
+    }
+    
+  if (nbytes_read == 0)
+    {
+      /* Set the bfd error if we didn't get anything.  */
+      bfd_set_error (bfd_error_system_call);
+    }
+  else if (nbytes_read < nbytes)
+    {
+      /* Fill any extra bytes that weren't able to be read with zero if we
+         were at least able to read some bytes.  */
+      memset (mbuf + nbytes_read, 0, nbytes - nbytes_read);
+    }
+  /* Return the number of bytes read.  */
+  return nbytes_read;
+}
+
+
 static file_ptr
 inferior_read_generic (bfd *abfd, void *stream, void *data, file_ptr nbytes, file_ptr offset)
 {
   struct inferior_info *iptr = (struct inferior_info *) stream;
-  volatile struct gdb_exception except;
 
   CHECK_FATAL (iptr != NULL);
 
-  /* The target may be "macos-child" in the case of a regular process,
-     or it may be "remote" in the case of a translated (Rosetta)
-     application where we're controlling it via remote protocol.  */
-
-  if (strcmp (current_target.to_shortname, "macos-child") != 0
-      && strcmp (current_target.to_shortname, "remote") != 0)
+  if (!valid_target_for_inferior_bfd ())
     {
       bfd_set_error (bfd_error_no_contents);
       return 0;
@@ -93,44 +155,24 @@ inferior_read_generic (bfd *abfd, void *stream, void *data, file_ptr nbytes, fil
       return 0;
     }
 
-  TRY_CATCH (except, RETURN_MASK_ERROR)
-    {
-      read_memory (iptr->addr + offset, data, nbytes);
-    }
-
-  if (except.reason < 0)
-    {
-      bfd_set_error (bfd_error_system_call);
-      return 0;
-    }
-
-  return nbytes;
+  return inferior_read_memory_partial (iptr->addr + offset, nbytes, data);
 }
 
 static file_ptr
 inferior_read_mach_o (bfd *abfd, void *stream, void *data, file_ptr nbytes, file_ptr offset)
 {
-  volatile struct gdb_exception except;
   struct inferior_info *iptr = (struct inferior_info *) stream;
   unsigned int i;
-  int ret;
 
   CHECK_FATAL (iptr != NULL);
 
-  /* The target may be "macos-child" in the case of a regular process,
-     or it may be "remote" in the case of a translated (Rosetta)
-     application where we're controlling it via remote protocol.  */
-
-  if (strcmp (current_target.to_shortname, "macos-child") != 0
-      && strcmp (current_target.to_shortname, "remote") != 0)
+  if (!valid_target_for_inferior_bfd ())
     {
       bfd_set_error (bfd_error_no_contents);
       return 0;
     }
 
-  if ((strcmp (bfd_get_target (abfd), "mach-o-be") != 0)
-      && (strcmp (bfd_get_target (abfd), "mach-o-le") != 0)
-      && (strcmp (bfd_get_target (abfd), "mach-o") != 0))
+  if (!bfd_target_is_mach_o (abfd))
     {
       bfd_set_error (bfd_error_invalid_target);
       return 0;
@@ -143,6 +185,11 @@ inferior_read_mach_o (bfd *abfd, void *stream, void *data, file_ptr nbytes, file
     for (i = 0; i < mdata->header.ncmds; i++)
       {
         struct bfd_mach_o_load_command *cmd = &mdata->commands[i];
+	/* Break out of the loop if we find any zero load commands
+	   since this can happen if we are currently reading the
+	   load commands.  */
+	if (cmd->type == 0)
+	  break;
         if (cmd->type == BFD_MACH_O_LC_SEGMENT
 	    || cmd->type == BFD_MACH_O_LC_SEGMENT_64)
           {
@@ -152,20 +199,66 @@ inferior_read_mach_o (bfd *abfd, void *stream, void *data, file_ptr nbytes, file
                 && (offset < (segment->fileoff + segment->filesize)))
               {
                 bfd_vma infaddr =
-                  (segment->vmaddr + iptr->offset +
-                   (offset - segment->fileoff));
-		
-		TRY_CATCH (except, RETURN_MASK_ERROR)
-		  {
-		    read_memory (infaddr, data, nbytes);
-		  }
+                  (segment->vmaddr + (offset - segment->fileoff));
 
-                if (ret <= 0)
-                  {
-                    bfd_set_error (bfd_error_system_call);
-                    return 0;
-                  }
-                return ret;
+		/* If the offset (slide) is set to an invalid value, we 
+		   need to figure out any rigid slides automatically. We do
+		   this by finding the __TEXT segment that gets registered 
+		   with the bfd (as a section). The address found in this
+		   bfd section can help us to determine a single slide 
+		   amount by taking the difference from the address provided.
+		   This assumes that the mach header is at the beginning of
+		   the __TEXT segment which is currently true for all of our
+		   current binaries. 
+		   
+		   Automatically finding the slide amount is used when we
+		   are reading an image from memory when we don't already 
+		   know the slide amount. This can occur whilst attaching
+		   or when we have a core file and we can only read the load
+		   address from the dyld_all_image_infos array. This array
+		   contains the mach header address in memory only, and not
+		   the original load address contained in the load commands.
+		   We normally get the slide amount from dyld when we hit 
+		   the breakpoint that we set in dyld where dyld computes 
+		   this information for us.
+		   
+		   For mach images in the shared cache, all the addresses 
+		   in the mach load commands will be fixed up and the 
+		   the header address will be the same as the __TEXT segment.
+		   Non-shared cache mach images have all segments loaded 
+		   read only, so the addresses remain as they were on disk. 
+		   The only way to know the slide amount is to read the 
+		   segment load commands. So instead of having to do a two
+		   pass solution where we must first find all of the slide
+		   amounts, the offset can be set to INVALID_ADDRESS and we
+		   will figure it out as we go.  */
+
+		if (iptr->offset == INVALID_ADDRESS)
+		  {
+		    /* Figure out the slide amount automatically.  */
+		    asection *text_sect;
+		    /* See if we have read the text segment yet? */
+		    text_sect = bfd_get_section_by_name (abfd, 
+							 TEXT_SEGMENT_NAME);
+		    if (text_sect)
+		      {
+			/* The slide amount is the current load mach header
+			   address (which is always at the start of the __TEXT
+			   segment) minus the __TEXT segment address in the
+			   mach load commands in memory.  */
+			bfd_vma slide = iptr->addr - 
+					bfd_section_vma (abfd, text_sect);
+			infaddr = infaddr + slide;
+		      }
+		  }
+		else
+		  {
+		    /* We were given an offset (slide) when this bfd was 
+		       created, so we are going to use that.  */
+		    infaddr = infaddr + iptr->offset;
+		  }
+		
+		return inferior_read_memory_partial (infaddr, nbytes, data);
               }
           }
       }
@@ -178,15 +271,17 @@ inferior_read_mach_o (bfd *abfd, void *stream, void *data, file_ptr nbytes, file
 static file_ptr
 inferior_read (bfd *abfd, void *stream, void *data, file_ptr nbytes, file_ptr offset)
 {
-  if ((strcmp (bfd_get_target (abfd), "mach-o-be") == 0)
-      || (strcmp (bfd_get_target (abfd), "mach-o-le") == 0)
-      || (strcmp (bfd_get_target (abfd), "mach-o") == 0))
+  file_ptr bytes_read = 0;
+  if (bfd_target_is_mach_o (abfd) && bfd_mach_o_valid (abfd))
     {
-      if (bfd_mach_o_valid (abfd))
-	return inferior_read_mach_o (abfd, stream, data, nbytes, offset);
+      /* Try to read using the mach translation first if we have a mach
+         binary.  */
+      bytes_read = inferior_read_mach_o (abfd, stream, data, nbytes, offset);
     }
 
-  return inferior_read_generic (abfd, stream, data, nbytes, offset);
+  if (bytes_read == 0)
+    bytes_read = inferior_read_generic (abfd, stream, data, nbytes, offset);
+  return bytes_read;
 }
 
 static int
@@ -205,13 +300,17 @@ inferior_bfd_generic (const char *name, CORE_ADDR addr, CORE_ADDR offset,
 
   info.addr = addr;
   info.offset = offset;
-  info.len = len;
+  info.len = len; 
   info.read = 0;
 
   if (name != NULL)
     {
-      xasprintf (&filename, "[memory object \"%s\" at 0x%s for 0x%s]",
-                 name, paddr_nz (addr), paddr_nz (len));
+      if (len == INVALID_ADDRESS)
+	xasprintf (&filename, "[memory object \"%s\" at 0x%s]",
+		   name, paddr_nz (addr));
+      else
+	xasprintf (&filename, "[memory object \"%s\" at 0x%s for 0x%s]",
+		   name, paddr_nz (addr), paddr_nz (len));
     }
   else
     {
@@ -256,4 +355,22 @@ inferior_bfd (const char *name, CORE_ADDR addr, CORE_ADDR offset, CORE_ADDR len)
     return abfd;
 
   return abfd;
+}
+
+/* Returns true if the bfd is based out of memory.  */
+int
+macosx_bfd_is_in_memory (bfd *abfd)
+{
+  if (abfd)
+    {
+      /* Is this a standard bfd where a buffer was handed to a bfd using 
+         bfd_memopenr of by memory mapping it? */
+      if (abfd->flags & BFD_IN_MEMORY)
+	return 1;
+      /* Was this mapped as a memory object?  */
+      if (abfd->filename != NULL
+	  && strstr (abfd->filename, "[memory object") == abfd->filename)
+	return 1;
+    }
+  return 0;
 }

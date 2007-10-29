@@ -56,6 +56,82 @@ case "$host" in
 esac
 dnl APPLE LOCAL end mmap() always works right on Darwin.  Take our word for it.
 
+
+dnl APPLE LOCAL if we have mach_exc.def, use the 64 bit exceptions.
+case "$host" in
+  *-apple-darwin* | *-apple-maocsx*)
+    AC_MSG_CHECKING([whether we can use 64 bit mach exceptions])
+    if test -r "/usr/include/mach/mach_exc.defs"; then
+      AC_DEFINE(HAVE_64_BIT_MACH_EXCEPTIONS, 1, [Define to 1 if you have 64 bit mach exceptions.])
+      MACH_EXC_SERVER_PREFACE='mach_'
+      AC_MSG_RESULT(yes)
+    else
+      MACH_EXC_SERVER_PREFACE=
+      AC_MSG_RESULT(no)
+    fi
+    AC_SUBST(MACH_EXC_SERVER_PREFACE)
+;;
+esac
+
+dnl APPLE LOCAL check for posix_spawn and the "arch" program.  Note we don't
+dnl trust the "arch" program if the posix_spawn headers aren't present, since
+dnl Tiger has an "arch" but it only echos the current system architecture.
+case "$host" in
+  *-apple-darwin* | *-apple-macosx*)
+    AC_MSG_CHECKING([whether posix_spawn supports SETEXEC])
+    AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
+[[#include <spawn.h>;]],
+[[int foo = POSIX_SPAWN_SETEXEC;]])],
+      gdb_cv_posix_spawn=yes,
+      gdb_cv_posix_spawn=no)
+    if test $gdb_cv_posix_spawn = yes; then
+      AC_DEFINE(USE_POSIX_SPAWN,1,[Define to 1 to use posix_spawn instead of execvp.])
+      AC_MSG_CHECKING([whether we should use arch for exec])
+      if test -r "/usr/bin/arch"; then
+        AC_DEFINE(USE_ARCH_FOR_EXEC, 1, [Define to 1 to use the arch program instead of exec.])
+        AC_MSG_RESULT(yes)
+      else
+        AC_MSG_RESULT(no)
+      fi
+    fi
+    AC_MSG_RESULT($gdb_cv_posix_spawn)
+;;
+esac
+
+dnl APPLE LOCAL check for the 64 bit stack logging function named
+dnl __mach_stack_logging_enumerate_records and define 
+dnl HAVE_64_BIT_STACK_LOGGING if it is found. If it isn't found, 
+dnl check for the 32 bit stack logging function named 
+dnl stack_logging_enumerate_records and define 
+dnl HAVE_32_BIT_STACK_LOGGING if it is available.
+case "$host" in
+  *-apple-darwin* | *-apple-macosx*)
+    AC_MSG_CHECKING([whether 64 bit stack logging is supported])
+    AC_LINK_IFELSE([AC_LANG_PROGRAM(
+[[extern int __mach_stack_logging_enumerate_records();]],
+[[__mach_stack_logging_enumerate_records();]])],
+      gdb_cv_stack_logging_64=yes,
+      gdb_cv_stack_logging_64=no)
+    if test $gdb_cv_stack_logging_64 = yes; then
+      AC_DEFINE(HAVE_64_BIT_STACK_LOGGING,1,[Define to 1 to use 64 bit stack logging functions.])
+    fi
+    AC_MSG_RESULT($gdb_cv_stack_logging_64)
+
+    if test $gdb_cv_stack_logging_64 = no; then
+    	AC_MSG_CHECKING([whether 32 bit stack logging is supported])
+    	AC_LINK_IFELSE([AC_LANG_PROGRAM(
+[[extern int stack_logging_enumerate_records();]],
+[[stack_logging_enumerate_records();]])],
+      	gdb_cv_stack_logging_32=yes,
+      	gdb_cv_stack_logging_32=no)
+    	if test $gdb_cv_stack_logging_32 = yes; then
+      	  AC_DEFINE(HAVE_32_BIT_STACK_LOGGING,1,[Define to 1 to use 64 bit stack logging functions.])
+    	fi
+    	AC_MSG_RESULT($gdb_cv_stack_logging_32)
+	fi
+;;
+esac
+
 dnl Set up for gettext.  PACKAGE is used when we call bindtextdomain.
 
 CY_GNU_GETTEXT
@@ -728,38 +804,53 @@ case "$host" in
     gdb_cv_scanf_has_long_double=yes
   ;;
 esac
-AC_PATH_PROG(LIBXML2_CONFIG, xml2-config, no)
-if test "x$LIBXML2_CONFIG" != "xno"
-then
-  AC_MSG_CHECKING([for libxml2 includes])
-  LIBXML2_INCLUDES=`$LIBXML2_CONFIG --cflags`
-  AC_MSG_RESULT($LIBXML2_INCLUDES)
-  AC_MSG_CHECKING([for libxml2 libraries])
-  LIBXML2_LIBS=`$LIBXML2_CONFIG --libs`
-  AC_MSG_RESULT($LIBXML2_LIBS)
-  CPPFLAGS="$CPPFLAGS $LIBXML2_INCLUDES"
-  AC_CHECK_HEADERS(libxml/parser.h libxml/tree.h)
-  AC_CHECK_LIB(xml2, xmlParseFile)
-fi
-if test "x$ac_cv_header_libxml_tree_h" = "xyes" -a \
-     "x$ac_cv_header_libxml_parser_h" = "xyes" -a \
-     "x$ac_cv_lib_xml2_xmlParseFile" = "xyes"
-then
-  AC_DEFINE(LIBXML2_IS_USABLE, 1, [libxml2 on this system is usable])
-fi
-AC_SUBST(LIBXML2_INCLUDES)
-AC_SUBST(LIBXML2_LIBS)
 
 case "$host" in
   *-apple-darwin* | *-apple-macos*)
   AC_MSG_CHECKING([for Carbon framework])
-  if test -d /System/Library/Frameworks/Carbon.framework ; then
+  if test -d /System/Library/Frameworks/Carbon.framework
+  then
     CARBON_LIBS="-framework Carbon"
+    AC_MSG_RESULT(yes)
+  else
+    AC_MSG_RESULT(no)
   fi
   ;;
 esac
 AC_SUBST(CARBON_LIBS)
+
+case "$host" in
+  *-apple-darwin* | *-apple-macos*)
+  AC_MSG_CHECKING([for DebugSymbols framework])
+  if test -d /System/Library/PrivateFrameworks/DebugSymbols.framework
+  then
+	AC_DEFINE(HAVE_DEBUG_SYMBOLS_FRAMEWORK, 1, [Define if DebugSymbols framework is present.])
+    DEBUG_SYMBOLS_LIBS="-F/System/Library/PrivateFrameworks -framework DebugSymbols"
+    AC_MSG_RESULT(yes)
+  else
+    AC_MSG_RESULT(no)
+  fi
+  ;;
+esac
+AC_SUBST(DEBUG_SYMBOLS_LIBS)
+
+# APPLE LOCAL: Use the pre-conformant headers/functions so we stand a 
+# better chance of running on older systems.
+UNIX03_UGH_CFLAGS=-D__DARWIN_UNIX03=0
+AC_SUBST(UNIX03_UGH_CFLAGS)
+
+# APPLE LOCAL: Enable MIG checking for macosx/macosx.defs.
+MIG_CHECKING=-D__MigTypeCheck=1
+AC_SUBST(MIG_CHECKING)
+
 # APPLE LOCAL end
+
+# APPLE LOCAL: See if we have the i386 debug register structs, i.e.
+# whether we can use the i386 hardware registers for watchpoints or if we'll
+# need to use the old page-protection method.
+
+AC_CHECK_TYPES(x86_debug_state32_t, [], [],
+               [#include <mach/mach_types.h>])
 
 if test "$ac_cv_header_sys_procfs_h" = yes; then
   BFD_HAVE_SYS_PROCFS_TYPE(pstatus_t)

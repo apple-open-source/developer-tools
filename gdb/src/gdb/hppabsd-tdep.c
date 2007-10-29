@@ -147,8 +147,7 @@ hppabsd_find_global_pointer (struct value *function)
 		  /* The OpenBSD ld.so doesn't relocate DT_PLTGOT, so
 		     we have to do it ourselves.  */
 		  pltgot = extract_unsigned_integer (buf, sizeof buf);
-		  pltgot += ANOFFSET (sec->objfile->section_offsets,
-				      SECT_OFF_TEXT (sec->objfile));
+		  pltgot += objfile_text_section_offset (sec->objfile);
 		  return pltgot;
 		}
 

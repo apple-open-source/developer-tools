@@ -49,6 +49,9 @@ enum bptype
   {
     bp_none = 0,		/* Eventpoint has been deleted. */
     bp_breakpoint,		/* Normal breakpoint */
+    /* APPLE LOCAL begin subroutine inlining  */
+    bp_inlined_breakpoint,      /* Breakpoint at an inlined subroutine */
+    /* APPLE LOCAL end subroutine inlining  */
     bp_hardware_breakpoint,	/* Hardware assisted breakpoint */
     bp_until,			/* used by until command */
     bp_finish,			/* used by finish command */
@@ -441,6 +444,13 @@ struct breakpoint
        range...  */
     struct objfile *bp_objfile;
 
+    /* APPLE LOCAL begin radar 5273932  */
+    /* Objfile name of where the bp was set.  Used to save the name 
+       of the objfile if the objfile pointer needs to be re-set to NULL.  */
+
+    char *bp_objfile_name;
+    /* APPLE LOCAL end radar 5273932  */
+
     /* Used for save-breakpoints.  */ 
     int original_flags;
 
@@ -719,9 +729,11 @@ extern void break_command (char *, int);
 extern void hbreak_command_wrapper (char *, int);
 extern void thbreak_command_wrapper (char *, int);
 extern void rbreak_command_wrapper (char *, int);
-extern void watch_command_wrapper (char *, int);
-extern void awatch_command_wrapper (char *, int);
-extern void rwatch_command_wrapper (char *, int);
+/* APPLE LOCAL: Added by_location argument.  */
+extern void watch_command_wrapper (char *, int, int);
+extern void awatch_command_wrapper (char *, int, int);
+extern void rwatch_command_wrapper (char *, int, int);
+/* END APPLE LOCAL */
 extern void tbreak_command (char *, int);
 
 extern int insert_breakpoints (void);

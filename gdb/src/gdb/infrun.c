@@ -51,6 +51,8 @@
 
 #include "gdb_assert.h"
 #include "mi/mi-common.h"
+/* APPLE LOCAL - subroutine inlining  */
+#include "inlining.h"
 
 /* APPLE LOCAL: need objfile.h for pc_set_load_state.  */
 #include "objfiles.h"
@@ -59,11 +61,6 @@
 #if TM_NEXTSTEP && TARGET_POWERPC
 #include "ppc-macosx-regnums.h"
 #endif
-
-/* APPLE LOCAL: codewarrior support */
-int metrowerks_stepping = 0;
-CORE_ADDR metrowerks_step_func_start = 0;
-CORE_ADDR metrowerks_step_func_end = 0;
 
 /* APPLE LOCAL begin old watchpoint hackery */
 #if !defined(TARGET_DISABLE_HW_WATCHPOINTS)
@@ -460,6 +457,11 @@ follow_exec (int pid, char *execd_pathname)
   step_resume_breakpoint = NULL;
   step_range_start = 0;
   step_range_end = 0;
+  /* APPLE LOCAL begin subroutine inlining  */
+  stepping_over_inlined_subroutine = 0;
+  finishing_inlined_subroutine = 0;
+  stepping_ranges = NULL;    /* APPLE LOCAL step ranges  */
+  /* APPLE LOCAL end subroutine inlining  */
 
   /* What is this a.out's name? */
   printf_unfiltered (_("Executing new program: %s\n"), execd_pathname);
@@ -603,7 +605,7 @@ set_scheduler_locking_mode (enum scheduler_locking_mode new_mode)
   else if (scheduler_mode == schedlock_step)
     old_mode = scheduler_locking_step;
   else
-    error ("Invalid old scheduler mode: %d", scheduler_mode);
+    error ("Invalid old scheduler mode: %d", (int) scheduler_mode);
 
   switch (new_mode)
     {
@@ -783,10 +785,16 @@ clear_proceed_status (void)
   step_range_start = 0;
   step_range_end = 0;
   step_frame_id = null_frame_id;
+  /* APPLE LOCAL subroutine inlining  */
+  stepping_over_inlined_subroutine = 0;
   step_over_calls = STEP_OVER_UNDEBUGGABLE;
   stop_after_trap = 0;
   stop_soon = NO_STOP_QUIETLY;
   proceed_to_finish = 0;
+  /* APPLE LOCAL subroutine inlining  */
+  finishing_inlined_subroutine = 0;
+  /* APPLE LOCAL step ranges  */
+  stepping_ranges = NULL;
   breakpoint_proceeded = 1;	/* We're about to proceed... */
 
   /* Discard any remaining commands or status from previous stop.  */
@@ -829,6 +837,13 @@ prepare_to_proceed (void)
 	  flush_cached_frames ();
 	  registers_changed ();
 	  stop_pc = wait_pc;
+	  /* APPLE LOCAL begin subroutine inlining  */
+	  /* If the PC has changed since the last time we updated the
+	     global_inlined_call_stack data, we need to verify the current
+	     data and possibly update it.  */
+	  if (stop_pc != inlined_function_call_stack_pc ())
+	    inlined_function_update_call_stack (stop_pc);
+	  /* APPLE LOCAL end subroutine inlining  */
 	  select_frame (get_current_frame ());
 	}
 
@@ -865,6 +880,7 @@ proceed (CORE_ADDR addr, enum target_signal siggnal, int step)
 {
   int oneproc = 0;
 
+#if 0
   /* APPLE LOCAL begin checkpoints */
   /* Warn the user about attempts to continue forward from any
      rolled-back state.  */
@@ -872,7 +888,7 @@ proceed (CORE_ADDR addr, enum target_signal siggnal, int step)
     extern int rolled_back;
     static int warned_proceed = 0;
 
-    if (rolled_back && !warned_proceed)
+    if (rolled_back && !warned_proceed && from_tty)
       {
 	int go_p = query (_("Proceeding from a rollback; are you sure? "));
 
@@ -883,6 +899,7 @@ proceed (CORE_ADDR addr, enum target_signal siggnal, int step)
       }
   }
   /* APPLE LOCAL end checkpoints */
+#endif
 
   if (step > 0)
     step_start_function = find_pc_function (read_pc ());
@@ -1113,8 +1130,6 @@ void handle_inferior_event (struct execution_control_state *ecs);
 
 static void step_into_function (struct execution_control_state *ecs);
 static void insert_step_resume_breakpoint_at_frame (struct frame_info *step_frame);
-static void insert_step_resume_breakpoint_at_sal (struct symtab_and_line sr_sal,
-						  struct frame_id sr_id);
 static void stop_stepping (struct execution_control_state *ecs);
 static void prepare_to_wait (struct execution_control_state *ecs);
 static void keep_going (struct execution_control_state *ecs);
@@ -1236,20 +1251,6 @@ fetch_inferior_event (void *client_data)
          function. Let the continuations for the commands do the rest,
          if there are any. */
       do_exec_cleanups (old_cleanups);
-      /* APPLE LOCAL begin: codewarrior support.  */
-      /* FIXME: Because proceed is asynchronous, I need to unset
-	 metrowerks_stepping here.  I tried to do it with an exec
-	 cleanup, but it turns out that the old_cleanups is set
-	 in handle_inferior_event, so anything you put on the
-	 exec_cleanups chain BEFORE you get the first inferior
-	 event never gets run. */
-      if (metrowerks_stepping)
-	{
-	  metrowerks_stepping = 0;
-	  metrowerks_step_func_start = 0;
-	  metrowerks_step_func_end = 0;
-	}
-      /* APPLE LOCAL end  */
       normal_stop ();
       if (step_multi && stop_step)
 	inferior_event_handler (INF_EXEC_CONTINUE, NULL);
@@ -1317,7 +1318,8 @@ context_switch (struct execution_control_state *ecs)
       save_infrun_state (inferior_ptid, prev_pc,
 			 trap_expected, step_resume_breakpoint,
 			 step_range_start,
-			 step_range_end, &step_frame_id,
+			 /* APPLE LOCAL step ranges  */
+			 step_range_end, stepping_ranges, &step_frame_id,
 			 ecs->handling_longjmp, ecs->another_trap,
 			 ecs->stepping_through_solib_after_catch,
 			 ecs->stepping_through_solib_catchpoints,
@@ -1327,7 +1329,8 @@ context_switch (struct execution_control_state *ecs)
       load_infrun_state (ecs->ptid, &prev_pc,
 			 &trap_expected, &step_resume_breakpoint,
 			 &step_range_start,
-			 &step_range_end, &step_frame_id,
+			 /* APPLE LOCAL step ranges  */
+			 &step_range_end, &stepping_ranges, &step_frame_id,
 			 &ecs->handling_longjmp, &ecs->another_trap,
 			 &ecs->stepping_through_solib_after_catch,
 			 &ecs->stepping_through_solib_catchpoints,
@@ -1620,6 +1623,13 @@ handle_inferior_event (struct execution_control_state *ecs)
       pending_follow.fork_event.child_pid = ecs->ws.value.related_pid;
 
       stop_pc = read_pc ();
+      /* APPLE LOCAL begin subroutine inlining  */
+      /* If the PC has changed since the last time we updated the
+	 global_inlined_call_stack data, we need to verify the current
+	 data and possibly update it.  */
+      if (stop_pc != inlined_function_call_stack_pc ())
+	inlined_function_update_call_stack (stop_pc);
+      /* APPLE LOCAL end subroutine inlining  */
 
       stop_bpstat = bpstat_stop_status (stop_pc, ecs->ptid, 0);
 
@@ -1669,6 +1679,13 @@ handle_inferior_event (struct execution_control_state *ecs)
       xfree (pending_follow.execd_pathname);
 
       stop_pc = read_pc_pid (ecs->ptid);
+      /* APPLE LOCAL begin subroutine inlining  */
+      /* If the PC has changed since the last time we updated the
+	 global_inlined_call_stack data, we need to verify the current
+	 data and possibly update it.  */
+      if (stop_pc != inlined_function_call_stack_pc ())
+	inlined_function_update_call_stack (stop_pc);
+      /* APPLE LOCAL end subroutine inlining  */
       ecs->saved_inferior_ptid = inferior_ptid;
       inferior_ptid = ecs->ptid;
 
@@ -1744,6 +1761,13 @@ handle_inferior_event (struct execution_control_state *ecs)
     }
 
   stop_pc = read_pc_pid (ecs->ptid);
+  /* APPLE LOCAL begin subroutine inlining  */
+  /* If the PC has changed since the last time we updated the
+     global_inlined_call_stack data, we need to verify the current
+     data and possibly update it.  */
+  if (stop_pc != inlined_function_call_stack_pc ())
+    inlined_function_update_call_stack (stop_pc);
+  /* APPLE LOCAL end subroutine inlining  */
 
   if (debug_infrun)
     fprintf_unfiltered (gdb_stdlog, "infrun: stop_pc = 0x%s\n", paddr_nz (stop_pc));
@@ -1904,8 +1928,8 @@ handle_inferior_event (struct execution_control_state *ecs)
 			   target_pid_or_tid_to_str (inferior_ptid));
 	}
       /* APPLE LOCAL end mi */
-      
-      flush_cached_frames ();
+
+      flush_cached_frames ();      
     }
 
   if (SOFTWARE_SINGLE_STEP_P () && singlestep_breakpoints_inserted_p)
@@ -1953,7 +1977,19 @@ handle_inferior_event (struct execution_control_state *ecs)
 	fprintf_unfiltered (gdb_stdlog, "infrun: STOPPED_BY_WATCHPOINT\n");
       remove_breakpoints ();
       registers_changed ();
-      target_resume (ecs->ptid, 1, TARGET_SIGNAL_0);	/* Single step */
+      if (SOFTWARE_SINGLE_STEP_P ())
+       {
+         /* Do it the hard way, w/temp breakpoints */
+         SOFTWARE_SINGLE_STEP (TARGET_SIGNAL_0, 1 /*insert-breakpoints */ );
+         /* and do not pull these breakpoints until after a `wait' in
+            `wait_for_inferior' */
+         singlestep_breakpoints_inserted_p = 1;
+         singlestep_ptid = ecs->ptid;
+         /* Run to our single step breakpoint */
+         target_resume (ecs->ptid, 0, TARGET_SIGNAL_0); 
+       }
+      else
+       target_resume (ecs->ptid, 1, TARGET_SIGNAL_0);  /* Single step */
 
       ecs->waiton_ptid = ecs->ptid;
       ecs->wp = &(ecs->ws);
@@ -2204,7 +2240,10 @@ extern void macosx_print_extra_stop_info (int, CORE_ADDR);
 
       if (step_range_end != 0
 	  && stop_signal != TARGET_SIGNAL_0
-	  && stop_pc >= step_range_start && stop_pc < step_range_end
+	  /* APPLE LOCAL begin step ranges  */
+	  && ((stop_pc >= step_range_start && stop_pc < step_range_end)
+	      || (is_within_stepping_ranges (stop_pc)))
+	  /* APPLE LOCAL end step ranges  */
 	  && frame_id_eq (get_frame_id (get_current_frame ()),
 			  step_frame_id)
 	  && step_resume_breakpoint == NULL)
@@ -2593,25 +2632,11 @@ extern void macosx_print_extra_stop_info (int, CORE_ADDR);
      Note that step_range_end is the address of the first instruction
      beyond the step range, and NOT the address of the last instruction
      within it! */
-  if (stop_pc >= step_range_start && stop_pc < step_range_end)
+  /* APPLE LOCAL begin step ranges  */
+  if ((stop_pc >= step_range_start && stop_pc < step_range_end)
+      || (is_within_stepping_ranges (stop_pc)))
+  /* APPLE LOCAL end step ranges  */
     {
-      /* APPLE LOCAL begin codewarrior support */
-      /* Here is a subtle point.  If you start stepping IN a prologue,
-	 you will record the step_frame_id BEFORE it has been set
-	 for the frame.  Then when you go to set a step resume breakpoint,
-	 you will put the step_frame_id into it.  This won't match
-	 the current frame's address till you return to your frame's caller
-	 so you won't remove the step_resume_breakpoint.  Since
-	 step_resume_breakpoint shortcuts the check for stepping_range,
-	 you won't ever stop... */
-
-      if (metrowerks_stepping)
-	{
-	  struct frame_id current_frame_id = get_frame_id (get_current_frame ());
-	  if (! frame_id_eq (step_frame_id, current_frame_id))
-	    step_frame_id = current_frame_id;
-	}
-      /* APPLE LOCAL end codewarrior support */
 
       if (debug_infrun)
 	 fprintf_unfiltered (gdb_stdlog, "infrun: stepping inside range [0x%s-0x%s]\n",
@@ -2694,90 +2719,45 @@ extern void macosx_print_extra_stop_info (int, CORE_ADDR);
       return;
     }
 
-  /* We have reached the end of the stepping range.  The code
-     following will do the right thing if the region we are stepping
-     in has symbols, but the in_prologue part of the test assumes
-     that we have just stepped into a subroutine if we find ourselves
-     in code for which we have NO symbols.  We can't really change
-     that behavior, but we can trap some common cases where we KNOW
-     that we haven't just stepped into a function. */
+  /* APPLE LOCAL: We may have gotten to a new dylib - for instance by a
+     direct jump - rather than a stub.  In that case, we would have
+     set the stop_func_name and _start & _stop wrong since we didn't
+     have debug info.  So we need to up the level of the stop_pc and
+     also re-fetch the stop_func_start and the stop_func_name.  
+     ALSO, we changed the "It's a subroutine call" test depend
+     explicitly on the frame unwinder.  That works better if we
+     have debug info, so let's make sure we up the load level here
+     before we try to unwind from the stop_pc.  */
   
-  if (metrowerks_stepping)
-    {
-      /* The case we handle here is branching within current function.
-	 To detect this case, we use the step_func ranges that were passed to
-	 us from Metrowerks.  */
-  
-      if (stop_pc == step_range_end
-	  || ((metrowerks_step_func_start != 0)
-	      && (metrowerks_step_func_start < stop_pc
-		  && stop_pc <= metrowerks_step_func_end)))
+  {
+      /* APPLE LOCAL: raise load levels */
+      int load_state;
+
+      load_state = pc_set_load_state (stop_pc, OBJF_SYM_ALL, 0);      
+      if (load_state != OBJF_SYM_ALL)
 	{
-	  stop_step = 1;
-	  print_stop_reason (END_STEPPING_RANGE, 0);
-	  stop_stepping (ecs);
-	  return;
+	  find_pc_partial_function (stop_pc, &ecs->stop_func_name,
+				    &ecs->stop_func_start, &ecs->stop_func_end);
 	}
+  }
+  /* END APPLE LOCAL */
 
-      /* Check to see if we have just stepped out of a function.  If
-	 so, then we know we haven't just stepped *into* a function,
-	 so just trigger the usual stepped-out-of-stepping-range code.
+  /* Stopping in code that should be next'ed over?  The conditional
+     expression below compares the frame ID we began stepping to
+     the previous frame id of the current frame.  If they're equal
+     then we've stepped into a new routine.  
+     A common bug here is that gdb doesn't unwind correctly from
+     some stub routine or hand written assembly code and the previous
+     frame == steping frame comparison fails.  */
 
-	 This code will triger whenever $pc == $lr, but it's hard to
-	 imagine where this could happen aside from function returns.
-	 One case is in the PIC code in function prologues, but
-	 CodeWarrior won't ever be doing metrowerks-steps across these
-	 addresses.  In any case, if we do trigger this check
-	 accidentally, the consequence will be that the step/next
-	 operation will stop too quickly --- which is much better than
-	 the current behavior of running away whenever we try to step
-	 out of a function. 
-
-	 Note that if/when we remove this code, we also want to remove
-	 the inclusion of "ppc-macosx-regnums.h" at the top of this
-	 source file.
-      */
-
-#if 0 /* APPLE MERGE probably needs to go somewhere? */
-      if (debug_infrun)
-	 fprintf_unfiltered (gdb_stdlog, "infrun: stepped into subroutine\n");
-
-      if ((step_over_calls == STEP_OVER_NONE)
-	  || ((step_range_end == 1)
-	      && in_prologue (prev_pc, ecs->stop_func_start)))
-	{
-	  /* I presume that step_over_calls is only 0 when we're
-	     supposed to be stepping at the assembly language level
-	     ("stepi").  Just stop.  */
-	  /* Also, maybe we just did a "nexti" inside a prolog, so we
-	     thought it was a subroutine call but it was not.  Stop as
-	     well.  FENN */
-	  stop_step = 1;
-	  print_stop_reason (END_STEPPING_RANGE, 0);
-	  stop_stepping (ecs);
-	  return;
-	}
-#endif
-
-#if TM_NEXTSTEP && TARGET_POWERPC
-      if (stop_pc == read_register (PPC_MACOSX_LR_REGNUM))
-	{
-	  stop_step = 1;
-	  print_stop_reason (END_STEPPING_RANGE, 0);
-	  stop_stepping (ecs);
-	  return;
-	}
-#endif
-
-    }
-  /* APPLE LOCAL end  */
-
-  if (frame_id_eq (frame_unwind_id (get_current_frame ()), step_frame_id))
+  if (frame_id_eq (frame_unwind_id (get_current_frame ()), step_frame_id)
+      || stepping_over_inlined_subroutine)
     {
       /* It's a subroutine call.  */
       CORE_ADDR real_stop_pc;
-      /* APPLE LOCAL: raise load levels */
-      int load_state;
+      char *file_name;
+      int line;
+      int column;
 
       if (debug_infrun)
 	 fprintf_unfiltered (gdb_stdlog, "infrun: stepped into subroutine\n");
@@ -2804,8 +2784,38 @@ extern void macosx_print_extra_stop_info (int, CORE_ADDR);
 	     address (the address at which the caller will
 	     resume).  */
 	  /* APPLE LOCAL: Don't crash if we can't get the previous frame.  */
-	  struct frame *prev_frame = get_prev_frame (get_current_frame ());
-	  if (prev_frame)
+	  /* APPLE LOCAL: FIx struct type to avoid warning.  */
+	  struct frame_info *prev_frame = get_prev_frame (get_current_frame ());
+	  /* APPLE LOCAL begin subroutine inlining  */
+	  if (stepping_over_inlined_subroutine
+	      && (stop_pc == step_range_end
+		  /* APPLE LOCAL step ranges  */
+		  || is_at_stepping_ranges_end (stop_pc)))
+	    {
+	      stop_step = 1;
+	      print_stop_reason (END_STEPPING_RANGE, 0);
+	      stop_stepping (ecs);
+	      return;
+	    }
+	  /* The following clause is supposed to catch the situation
+	     where the user was stepping over an inlined call, the
+	     step_range_end instruction is never actually hit, and
+	     the next instruction happens to be the start of another
+	     inlined subroutine.  */
+	  else if (stepping_over_inlined_subroutine
+		   && frame_id_eq (get_frame_id (prev_frame), step_frame_id)
+		   && get_frame_type (get_current_frame ()) == INLINED_FRAME
+		   && at_inlined_call_site_p (&file_name, &line, &column )
+		   && current_inlined_subroutine_call_stack_start_pc ()
+		   == stop_pc)
+	    {
+	      stop_step = 1;
+	      print_stop_reason (END_STEPPING_RANGE, 0);
+	      stop_stepping (ecs);
+	      return;
+	    }
+	  /* APPLE LOCAL end subroutine inlining  */
+	  else if (prev_frame)
 	    {
 	      insert_step_resume_breakpoint_at_frame (prev_frame);
 	      keep_going (ecs);
@@ -2833,19 +2843,6 @@ extern void macosx_print_extra_stop_info (int, CORE_ADDR);
 	  stop_stepping (ecs);
 	  return;
 	}
-
-      /* APPLE LOCAL: We may have gotten to a new dylib - for instance by a
-         direct jump - rather than a stub.  In that case, we would have
-         set the stop_func_name and _start & _stop wrong since we didn't
-         have debug info.  So we need to up the level of the stop_pc and
-         also re-fetch the stop_func_start and the stop_func_name.  */
-
-      load_state = pc_set_load_state (stop_pc, OBJF_SYM_ALL, 0);
-      if (load_state != OBJF_SYM_ALL)
-        {
-          find_pc_partial_function (stop_pc, &ecs->stop_func_name,
-                                  &ecs->stop_func_start, &ecs->stop_func_end);
-        }
 
       /* If we are in a function call trampoline (a stub between the
          calling routine and the real function), locate the real
@@ -2920,7 +2917,8 @@ extern void macosx_print_extra_stop_info (int, CORE_ADDR);
          which the caller will resume).  */
       {
 	  /* APPLE LOCAL: Don't crash if we can't get the previous frame.  */
-	  struct frame *prev_frame = get_prev_frame (get_current_frame ());
+	  /* APPLE LOCAL: Fix struct type to avoid warning.  */
+	  struct frame_info *prev_frame = get_prev_frame (get_current_frame ());
 	  if (prev_frame)
 	    {
 	      insert_step_resume_breakpoint_at_frame (prev_frame);
@@ -2936,23 +2934,19 @@ extern void macosx_print_extra_stop_info (int, CORE_ADDR);
       }
     }
 
-  /* APPLE MERGE where should this go? */
-#if 0
-  /* APPLE LOCAL codewarrior support: "metrowerks_stepping" check below.  */
-  if (((stop_pc == ecs->stop_func_start /* Quick test */
-        || in_prologue (stop_pc, ecs->stop_func_start))
-       && !IN_SOLIB_RETURN_TRAMPOLINE (stop_pc, ecs->stop_func_name))
-      || IN_SOLIB_CALL_TRAMPOLINE (stop_pc, ecs->stop_func_name)
-      || (!metrowerks_stepping && ecs->stop_func_name == 0))
-    /* ? */ ;
-#endif
-
   /* If we're in the return path from a shared library trampoline,
      we want to proceed through the trampoline when stepping.  */
   if (IN_SOLIB_RETURN_TRAMPOLINE (stop_pc, ecs->stop_func_name))
     {
       /* Determine where this trampoline returns.  */
       CORE_ADDR real_stop_pc = SKIP_TRAMPOLINE_CODE (stop_pc);
+      /* APPLE LOCAL begin subroutine inlining  */
+      /* If the PC has changed since the last time we updated the
+	 global_inlined_call_stack data, we need to verify the current
+	 data and possibly update it.  */
+      if (real_stop_pc != inlined_function_call_stack_pc ())
+	inlined_function_update_call_stack (real_stop_pc);
+      /* APPLE LOCAL end subroutine inlining  */
 
       if (debug_infrun)
 	 fprintf_unfiltered (gdb_stdlog, "infrun: stepped into solib return tramp\n");
@@ -3010,9 +3004,10 @@ extern void macosx_print_extra_stop_info (int, CORE_ADDR);
       else
 	{
 	  /* Set a breakpoint at callee's return address (the address
-	     at which the caller will resume).  *
-	     /* APPLE LOCAL: Don't crash if we can't get the previous frame.  */
-	  struct frame *prev_frame = get_prev_frame (get_current_frame ());
+	     at which the caller will resume).  */
+          /* APPLE LOCAL: Don't crash if we can't get the previous frame.  */
+	  /* APPLE LOCAL: Fix struct type to avoid warning.  */
+	  struct frame_info *prev_frame = get_prev_frame (get_current_frame ());
 	  if (prev_frame)
 	    {
 	      insert_step_resume_breakpoint_at_frame (prev_frame);
@@ -3056,7 +3051,11 @@ extern void macosx_print_extra_stop_info (int, CORE_ADDR);
 
   if ((stop_pc == ecs->sal.pc)
       && (ecs->current_line != ecs->sal.line
-	  || ecs->current_symtab != ecs->sal.symtab))
+	  /* APPLE LOCAL begin inlined subroutine  */
+	  || ecs->current_symtab != ecs->sal.symtab
+	  || (get_frame_type (get_current_frame ()) == INLINED_FRAME
+	      && step_range_end != 1)))
+          /* APPLE LOCAL end inlined subroutine  */
     {
       /* We are at the start of a different line.  So stop.  Note that
          we don't stop if we step into the middle of a different line.
@@ -3092,18 +3091,12 @@ extern void macosx_print_extra_stop_info (int, CORE_ADDR);
       return;
     }
 
-  /* APPLE LOCAL codewarrior support */
-  if (metrowerks_stepping)
-    {
-      stop_step = 1;
-      print_stop_reason (END_STEPPING_RANGE, 0);
-      stop_stepping (ecs);
-      return;
-    }
-/* APPLE LOCAL codewarrior support */
-
   step_range_start = ecs->sal.pc;
   step_range_end = ecs->sal.end;
+  /* APPLE LOCAL subroutine inlining  */
+  stepping_over_inlined_subroutine = 0;
+  /* APPLE LOCAL step ranges  */
+  stepping_ranges = NULL;
   step_frame_id = get_frame_id (get_current_frame ());
   ecs->current_line = ecs->sal.line;
   ecs->current_symtab = ecs->sal.symtab;
@@ -3227,7 +3220,9 @@ step_into_function (struct execution_control_state *ecs)
 /* Insert a "step resume breakpoint" at SR_SAL with frame ID SR_ID.
    This is used to both functions and to skip over code.  */
 
-static void
+/* APPLE LOCAL begin subroutine inlining  */
+void
+/* APPLE LOCAL end subroutine inlining  */
 insert_step_resume_breakpoint_at_sal (struct symtab_and_line sr_sal,
 				      struct frame_id sr_id)
 {
@@ -3237,6 +3232,12 @@ insert_step_resume_breakpoint_at_sal (struct symtab_and_line sr_sal,
   gdb_assert (step_resume_breakpoint == NULL);
   step_resume_breakpoint = set_momentary_breakpoint (sr_sal, sr_id,
 						     bp_step_resume);
+  /* APPLE LOCAL begin subroutine inlining  */
+  /* Check to see if the breakpoint is at the exit of an inlined subroutine.
+     If so, update the global_inlined_call_stack data appropriately.  */
+  if (inlined_function_end_of_inlined_code_p (sr_sal.pc))
+    adjust_current_inlined_subroutine_stack_position (-1);
+  /* APPLE LOCAL end subroutine inlining  */
   if (breakpoints_inserted)
     insert_breakpoints ();
 }
@@ -3265,7 +3266,10 @@ insert_step_resume_breakpoint_at_frame (struct frame_info *return_frame)
   sr_sal.pc = ADDR_BITS_REMOVE (get_frame_pc (return_frame));
   sr_sal.section = find_pc_overlay (sr_sal.pc);
 
-  insert_step_resume_breakpoint_at_sal (sr_sal, get_frame_id (return_frame));
+  if (stepping_over_inlined_subroutine)
+    insert_step_resume_breakpoint_at_sal (sr_sal, step_frame_id);
+  else
+    insert_step_resume_breakpoint_at_sal (sr_sal, get_frame_id (return_frame));
 }
 
 static void
@@ -3394,9 +3398,18 @@ print_stop_reason (enum inferior_stop_reason stop_reason, int stop_info)
          operation for n > 1 */
       if (!step_multi || !stop_step)
 	if (ui_out_is_mi_like_p (uiout))
-	  ui_out_field_string
-	    (uiout, "reason",
-	     async_reason_lookup (EXEC_ASYNC_END_STEPPING_RANGE));
+	  /* APPLE LOCAL begin subroutine inlining  */
+	  {
+	    if (finishing_inlined_subroutine)
+	      ui_out_field_string 
+		(uiout, "reason",
+		 async_reason_lookup (EXEC_ASYNC_FUNCTION_FINISHED));
+	    else
+	      ui_out_field_string
+		(uiout, "reason",
+		 async_reason_lookup (EXEC_ASYNC_END_STEPPING_RANGE));
+	  }
+         /* APPLE LOCAL end subroutine inlining  */
       break;
     case BREAKPOINT_HIT:
       /* We found a breakpoint. */
@@ -3470,6 +3483,14 @@ print_stop_reason (enum inferior_stop_reason stop_reason, int stop_info)
     }
 }
 
+/* APPLE LOCAL begin checkpoints */
+void
+rollback_stop (void)
+{
+  stop_print_frame = 1;
+  normal_stop ();
+}
+/* APPLE LOCAL end checkpoints */
 
 /* Here to return control to GDB when the inferior stops for real.
    Print appropriate messages, remove breakpoints, give terminal our modes.
@@ -3638,7 +3659,17 @@ Further execution is probably impossible.\n"));
 		     && frame_id_eq (step_frame_id,
 				     get_frame_id (get_current_frame ()))
 		     && step_start_function == find_pc_function (stop_pc))
-		   source_flag = SRC_LINE;	/* finished step, just print source line */
+		   /* APPLE LOCAL begin subroutine inlining  */
+		   /* Finishing out of an inlined subroutine looks very
+		      similar to stepping, but needs to have the full
+		      location printed.  */
+		   {
+		     if (finishing_inlined_subroutine)
+		       source_flag = SRC_AND_LOC;
+		     else
+		       source_flag = SRC_LINE;	/* finished step, just print source line */
+		   }
+		 /* APPLE LOCAL end subroutine inlining  */
 		 else
 		   source_flag = SRC_AND_LOC;	/* print location and source line */
 		 break;
@@ -3674,7 +3705,12 @@ Further execution is probably impossible.\n"));
 	    /* We will usually ask for this again in anything that uses
 	       the mi, so don't print it here. */
 	    if (!interpreter_p || strncmp (interpreter_p, "mi", 2) != 0)
-	    print_stack_frame (get_selected_frame (NULL), 0, source_flag);
+	      /* APPLE LOCAL begin subroutine inlining  */
+	      {
+		print_stack_frame (get_selected_frame (NULL), 0, source_flag);
+		clear_inlined_subroutine_print_frames ();
+	      }
+	      /* APPLE LOCAL end subroutine inlining  */
 
 	  /* Display the auto-display expressions.  */
 	  do_displays ();
@@ -3709,6 +3745,14 @@ Further execution is probably impossible.\n"));
          Can't rely on restore_inferior_status because that only gets
          called if we don't stop in the called function.  */
       stop_pc = read_pc ();
+      /* APPLE LOCAL begin subroutine inlining  */
+      /* If the PC has changed since the last time we updated the
+	 global_inlined_call_stack data, we need to verify the current
+	 data and possibly update it.  */
+      inlined_subroutine_restore_after_dummy_call ();
+      if (stop_pc != inlined_function_call_stack_pc ())
+	inlined_function_update_call_stack (stop_pc);
+      /* APPLE LOCAL end subroutine inlining  */
       select_frame (get_current_frame ());
     }
 
@@ -3751,10 +3795,34 @@ done:
   /* APPLE LOCAL end checkpoints */
 }
 
+/* APPLE LOCAL: Sometimes we don't want to
+   call hook_stop - especially when running
+   functions in the objc parser.  */
+
+static int suppress_hook_stop_p;
+
+static void
+do_cleanup_suppress_hook_stop (void *arg)
+{
+  suppress_hook_stop_p = (int) arg;
+}
+
+struct cleanup *
+make_cleanup_suppress_hook_stop ()
+{
+  int old_value = suppress_hook_stop_p;
+  suppress_hook_stop_p = 1;
+  return make_cleanup (do_cleanup_suppress_hook_stop, (void *) old_value);
+}
+/* END APPLE LOCAL */
 static int
 hook_stop_stub (void *cmd)
 {
-  execute_cmd_pre_hook ((struct cmd_list_element *) cmd);
+  /* APPLE LOCAL - sometimes it's not safe to call the
+     hook stop.  Particularly while parsing expressions 
+     (see objc-lang.c).  */
+  if (!suppress_hook_stop_p)
+    execute_cmd_pre_hook ((struct cmd_list_element *) cmd);
   return (0);
 }
 
@@ -4116,6 +4184,10 @@ signals_info (char *signum_exp, int from_tty)
 
 struct inferior_status
 {
+  /* APPLE LOCAL: You may run one thread but stop in 
+     another.  In that case, you'd better restore the
+     ptid before restoring the registers!  */
+  ptid_t stop_ptid;
   enum target_signal stop_signal;
   CORE_ADDR stop_pc;
   bpstat stop_bpstat;
@@ -4125,6 +4197,8 @@ struct inferior_status
   int trap_expected;
   CORE_ADDR step_range_start;
   CORE_ADDR step_range_end;
+  /* APPLE LOCAL step ranges  */
+  struct address_range_list *stepping_ranges;
   struct frame_id step_frame_id;
   enum step_over_calls_kind step_over_calls;
   CORE_ADDR step_resume_break_address;
@@ -4172,6 +4246,8 @@ save_inferior_status (int restore_stack_info)
   inf_status->trap_expected = trap_expected;
   inf_status->step_range_start = step_range_start;
   inf_status->step_range_end = step_range_end;
+  /* APPLE LOCAL step ranges  */
+  inf_status->stepping_ranges = stepping_ranges;
   inf_status->step_frame_id = step_frame_id;
   inf_status->step_over_calls = step_over_calls;
   inf_status->stop_after_trap = stop_after_trap;
@@ -4191,6 +4267,9 @@ save_inferior_status (int restore_stack_info)
   inf_status->registers = regcache_dup (current_regcache);
 
   inf_status->selected_frame_id = get_frame_id (deprecated_selected_frame);
+  /* APPLE LOCAL: Store stop_ptid.  */
+  inf_status->stop_ptid = inferior_ptid;
+
   return inf_status;
 }
 
@@ -4218,6 +4297,8 @@ restore_selected_frame (void *args)
 void
 restore_inferior_status (struct inferior_status *inf_status)
 {
+  /* Restore stop_ptid.  */
+  inferior_ptid = inf_status->stop_ptid;
   stop_signal = inf_status->stop_signal;
   stop_pc = inf_status->stop_pc;
   stop_step = inf_status->stop_step;
@@ -4226,6 +4307,8 @@ restore_inferior_status (struct inferior_status *inf_status)
   trap_expected = inf_status->trap_expected;
   step_range_start = inf_status->step_range_start;
   step_range_end = inf_status->step_range_end;
+  /* APPLE LOCAL step ranges  */
+  stepping_ranges = inf_status->stepping_ranges;
   step_frame_id = inf_status->step_frame_id;
   step_over_calls = inf_status->step_over_calls;
   stop_after_trap = inf_status->stop_after_trap;

@@ -794,7 +794,7 @@ scan_procs (int *curr_pd_p, quick_procedure_entry *qPD, int max_procs,
 					   LOC_BLOCK,	/* "I am a routine"        */
 					   &objfile->global_psymbols,
 					   (qPD[curr_pd].adrStart +	/* Starting address of rtn */
-				 ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile))),
+				 	   objfile_text_section_offset (objfile),
 					   0,	/* core addr?? */
 		      trans_lang ((enum hp_language) qPD[curr_pd].language),
 					   objfile);
@@ -807,7 +807,7 @@ scan_procs (int *curr_pd_p, quick_procedure_entry *qPD, int max_procs,
 					   LOC_BLOCK,	/* "I am a routine"        */
 					   &objfile->static_psymbols,
 					   (qPD[curr_pd].adrStart +	/* Starting address of rtn */
-				 ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile))),
+				 	   objfile_text_section_offset (objfile),
 					   0,	/* core addr?? */
 		      trans_lang ((enum hp_language) qPD[curr_pd].language),
 					   objfile);
@@ -2001,7 +2001,7 @@ hpread_build_psymtabs (struct objfile *objfile, int mainline)
 		  past_first_source_file = 1;
 
 		valu = hpread_get_textlow (i, hp_symnum, objfile, symcount);
-		valu += ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile));
+		valu += objfile_text_section_offset (objfile);
 		pst = hpread_start_psymtab (objfile,
 					    namestring, valu,
 					    (hp_symnum
@@ -2035,7 +2035,7 @@ hpread_build_psymtabs (struct objfile *objfile, int mainline)
 	      /* Now begin a new module and a new psymtab for it */
 	      set_namestring (dn_bufp, &namestring, objfile);
 	      valu = hpread_get_textlow (i, hp_symnum, objfile, symcount);
-	      valu += ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile));
+	      valu += objfile_text_section_offset (objfile);
 	      if (!pst)
 		{
 		  pst = hpread_start_psymtab (objfile,
@@ -2053,12 +2053,11 @@ hpread_build_psymtabs (struct objfile *objfile, int mainline)
 	    case DNTT_TYPE_ENTRY:
 	      /* The beginning of a function.  DNTT_TYPE_ENTRY may also denote
 	         a secondary entry point.  */
-	      valu = dn_bufp->dfunc.hiaddr + ANOFFSET (objfile->section_offsets,
-						       SECT_OFF_TEXT (objfile));
+	      valu = dn_bufp->dfunc.hiaddr + objfile_text_section_offset (objfile);
 	      if (valu > texthigh)
 		texthigh = valu;
 	      valu = dn_bufp->dfunc.lowaddr +
-		ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile));
+		objfile_text_section_offset (objfile);
 	      set_namestring (dn_bufp, &namestring, objfile);
 	      if (dn_bufp->dfunc.global)
 		add_psymbol_to_list (namestring, strlen (namestring),
@@ -2074,12 +2073,11 @@ hpread_build_psymtabs (struct objfile *objfile, int mainline)
 	      continue;
 
 	    case DNTT_TYPE_DOC_FUNCTION:
-	      valu = dn_bufp->ddocfunc.hiaddr + ANOFFSET (objfile->section_offsets,
-							  SECT_OFF_TEXT (objfile));
+	      valu = dn_bufp->ddocfunc.hiaddr + objfile_text_section_offset (objfile);
 	      if (valu > texthigh)
 		texthigh = valu;
 	      valu = dn_bufp->ddocfunc.lowaddr +
-		ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile));
+		objfile_text_section_offset (objfile);
 	      set_namestring (dn_bufp, &namestring, objfile);
 	      if (dn_bufp->ddocfunc.global)
 		add_psymbol_to_list (namestring, strlen (namestring),
@@ -2169,7 +2167,7 @@ hpread_build_psymtabs (struct objfile *objfile, int mainline)
 		valu = dn_bufp->dsvar.location;
 		/* Relocate in case it's in a shared library */
 		if (storage == LOC_STATIC)
-		  valu += ANOFFSET (objfile->section_offsets, SECT_OFF_DATA (objfile));
+		  valu += objfile_data_section_offset (objfile);
 
 		/* Luckily, dvar, svar, typedef, and tagdef all
 		   have their "global" bit in the same place, so it works
@@ -2384,7 +2382,7 @@ hpread_start_psymtab (struct objfile *objfile, char *filename,
 		      struct partial_symbol **global_syms,
 		      struct partial_symbol **static_syms)
 {
-  int offset = ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile));
+  int offset = objfile_text_section_offset (objfile);
   extern void hpread_psymtab_to_symtab ();
   struct partial_symtab *result =
   start_psymtab_common (objfile, objfile->section_offsets,
@@ -5006,13 +5004,15 @@ hpread_record_lines (struct subfile *subfile, sltpointer s_idx,
     {
       sl_bufp = hpread_get_slt (s_idx, objfile);
       /* Only record "normal" entries in the SLT.  */
+      /* APPLE LOCAL begin subroutine inlining  */
       if (sl_bufp->snorm.sltdesc == SLT_NORMAL
 	  || sl_bufp->snorm.sltdesc == SLT_EXIT)
 	record_line (subfile, sl_bufp->snorm.line,
-		     sl_bufp->snorm.address + offset);
+		     sl_bufp->snorm.address + offset, 0, NORMAL_LT_ENTRY);
       else if (sl_bufp->snorm.sltdesc == SLT_NORMAL_OFFSET)
 	record_line (subfile, sl_bufp->snormoff.line,
-		     sl_bufp->snormoff.address + offset);
+		     sl_bufp->snormoff.address + offset, 0, NORMAL_LT_ENTRY);
+      /* APPLE LOCAL end subroutine inlining  */
       s_idx++;
     }
   return e_idx;
@@ -5370,7 +5370,9 @@ hpread_process_one_debug_symbol (union dnttentry *dn_bufp, char *name,
 						    objfile, offset);
 	  SYMBOL_LINE (sym) = hpread_get_line (dn_bufp->dbegin.address, objfile);
 	}
-      record_line (current_subfile, SYMBOL_LINE (sym), valu);
+      /* APPLE LOCAL begin subroutine inlining  */
+      record_line (current_subfile, SYMBOL_LINE (sym), valu, 0, NORMAL_LT_ENTRY);
+      /* APPLE LOCAL end subroutine inlining  */
       break;
 
     case DNTT_TYPE_DOC_FUNCTION:
@@ -5487,7 +5489,9 @@ hpread_process_one_debug_symbol (union dnttentry *dn_bufp, char *name,
 						    objfile, offset);
 	  SYMBOL_LINE (sym) = hpread_get_line (dn_bufp->dbegin.address, objfile);
 	}
-      record_line (current_subfile, SYMBOL_LINE (sym), valu);
+      /* APPLE LOCAL begin subroutine inlining  */
+      record_line (current_subfile, SYMBOL_LINE (sym), valu, 0, NORMAL_LT_ENTRY);
+      /* APPLE LOCAL end subroutine inlining  */
       break;
 
     case DNTT_TYPE_BEGIN:
@@ -5588,8 +5592,10 @@ hpread_process_one_debug_symbol (union dnttentry *dn_bufp, char *name,
 	  merge_symbol_lists (&param_symbols, &local_symbols);
 	  new = pop_context ();
 	  /* Make a block for the local symbols within.  */
+	  /* APPLE LOCAL begin address ranges  */
 	  finish_block (new->name, &local_symbols, new->old_blocks,
-			new->start_addr, valu, objfile);
+			new->start_addr, valu, NULL, objfile);
+	  /* APPLE LOCAL end address ranges  */
 	  WITHIN_FUNCTION (objfile) = 0;	/* This may have to change for Pascal */
 	  local_symbols = new->locals;
 	  param_symbols = new->params;
@@ -5617,8 +5623,10 @@ hpread_process_one_debug_symbol (union dnttentry *dn_bufp, char *name,
 		lbrac_mismatch_complaint (symnum);
 
 	      /* Make a block for the local symbols within.  */
+	      /* APPLE LOCAL begin address ranges  */
 	      finish_block (new->name, &local_symbols, new->old_blocks,
-			    new->start_addr, valu, objfile);
+			    new->start_addr, valu, NULL, objfile);
+	      /* APPLE LOCAL end address ranges  */
 	      local_symbols = new->locals;
 	      param_symbols = new->params;
 	    }
@@ -5652,8 +5660,10 @@ hpread_process_one_debug_symbol (union dnttentry *dn_bufp, char *name,
 	  if (desc != new->depth)
 	    lbrac_mismatch_complaint ((char *) symnum);
 	  /* Make a block for the local symbols within.  */
+	  /* APPLE LOCAL begin address ranges  */
 	  finish_block (new->name, &local_symbols, new->old_blocks,
-			new->start_addr, valu, objfile);
+			new->start_addr, valu, NULL, objfile);
+	  /* APPLE LOCAL end address ranges  */
 	  local_symbols = new->locals;
 	  param_symbols = new->params;
 #endif

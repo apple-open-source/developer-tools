@@ -180,6 +180,9 @@ bfd_fopen (const char *filename, const char *target, const char *mode, int fd)
   const bfd_target *target_vec;
 
   nbfd = _bfd_new_bfd ();
+#ifdef BFD_TRACK_OPEN_CLOSE
+    printf ("Opening bfd 0x%lx: \"%s\"\n", (unsigned long) nbfd, filename);
+#endif
   if (nbfd == NULL)
     return NULL;
 
@@ -347,6 +350,9 @@ bfd_memopenr (filename, target, addr, len)
   struct bfd_in_memory *mem;
 
   nbfd = _bfd_new_bfd ();
+#ifdef BFD_TRACK_OPEN_CLOSE
+  printf ("Opening memory bfd 0x%lx for: \"%s\"\n", (unsigned long) nbfd, filename);
+#endif
   if (nbfd == NULL)
     return NULL;
 
@@ -767,6 +773,9 @@ bfd_close (bfd *abfd)
 {
   bfd_boolean ret = TRUE;
 
+#ifdef BFD_TRACK_OPEN_CLOSE
+  printf ("Closing bfd 0x%lx: \"%s\"\n", (unsigned long) abfd, abfd->filename);
+#endif
   if (bfd_write_p (abfd))
     {
       if (! BFD_SEND_FMT (abfd, _bfd_write_contents, (abfd)))

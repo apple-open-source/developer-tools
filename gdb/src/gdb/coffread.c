@@ -762,7 +762,7 @@ coff_symtab_read (long symtab_offset, unsigned int nsyms,
       if (ISFCN (cs->c_type) && cs->c_sclass != C_TPDEF)
 	{
 	  /* Record all functions -- external and static -- in minsyms. */
-	  tmpaddr = cs->c_value + ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile));
+	  tmpaddr = cs->c_value + objfile_text_section_offset (objfile); 
 	  record_minimal_symbol (cs->c_name, tmpaddr, mst_text, objfile);
 
 	  fcn_line_ptr = main_aux.x_sym.x_fcnary.x_fcn.x_lnnoptr;
@@ -828,7 +828,7 @@ coff_symtab_read (long symtab_offset, unsigned int nsyms,
 		     followed by a later file with no symbols.  */
 		  if (in_source_file)
 		    complete_symtab (filestring,
-		    cs->c_value + ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile)),
+		    		     cs->c_value + objfile_text_section_offset (objfile),
 				     main_aux.x_scn.x_scnlen);
 		  in_source_file = 0;
 		}
@@ -897,7 +897,7 @@ coff_symtab_read (long symtab_offset, unsigned int nsyms,
  		    || cs->c_sclass == C_THUMBEXTFUNC
  		    || cs->c_sclass == C_THUMBEXT
  		    || (pe_file && (cs->c_sclass == C_STAT)))
-		  tmpaddr += ANOFFSET (objfile->section_offsets, sec);
+		  tmpaddr += objfile_section_offset (objfile, sec);
 
 		if (sec == SECT_OFF_TEXT (objfile))
 		  {
@@ -1010,9 +1010,11 @@ coff_symtab_read (long symtab_offset, unsigned int nsyms,
 	         except for one-line functions, for which it is also the line
 	         number of all the statements and of the closing '}', and
 	         for which we do not have any other statement-line-number. */
+	      /* APPLE LOCAL begin subroutine inlining  */
 	      if (fcn_last_line == 1)
 		record_line (current_subfile, fcn_first_line,
-			     fcn_first_line_addr);
+			     fcn_first_line_addr, 0, NORMAL_LT_ENTRY);
+	      /* APPLE LOCAL end subroutine inlining  */
 	      else
 		enter_linenos (fcn_line_ptr, fcn_first_line, fcn_last_line,
 			       objfile);
@@ -1029,13 +1031,15 @@ coff_symtab_read (long symtab_offset, unsigned int nsyms,
 	         of the epilogue.  */
 			    cs->c_value
 			    + FUNCTION_EPILOGUE_SIZE
-			    + ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile)),
+			    + objfile_text_section_offset (objfile), 
 #else
 			    fcn_cs_saved.c_value
 			    + fcn_aux_saved.x_sym.x_misc.x_fsize
-			    + ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile)),
+			    + objfile_text_section_offset (objfile),
 #endif
-			    objfile
+			    /* APPLE LOCAL begin address ranges  */
+			    NULL, objfile
+			    /* APPLE LOCAL end address ranges  */
 		);
 	      within_function = 0;
 	    }
@@ -1045,7 +1049,7 @@ coff_symtab_read (long symtab_offset, unsigned int nsyms,
 	  if (DEPRECATED_STREQ (cs->c_name, ".bb"))
 	    {
 	      tmpaddr = cs->c_value;
-	      tmpaddr += ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile));
+	      tmpaddr += objfile_text_section_offset (objfile);
 	      push_context (++depth, tmpaddr);
 	    }
 	  else if (DEPRECATED_STREQ (cs->c_name, ".eb"))
@@ -1069,10 +1073,12 @@ coff_symtab_read (long symtab_offset, unsigned int nsyms,
 	      if (local_symbols && context_stack_depth > 0)
 		{
 		  tmpaddr =
-		    cs->c_value + ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile));
+		    cs->c_value + objfile_text_section_offset (objfile);
 		  /* Make a block for the local symbols within.  */
+		  /* APPLE LOCAL begin address ranges  */
 		  finish_block (0, &local_symbols, new->old_blocks,
-				new->start_addr, tmpaddr, objfile);
+				new->start_addr, tmpaddr, NULL, objfile);
+		  /* APPLE LOCAL end address ranges */
 		}
 	      /* Now pop locals of block just finished.  */
 	      local_symbols = new->locals;
@@ -1373,10 +1379,13 @@ enter_linenos (long file_offset, int first_line,
       rawptr += local_linesz;
       /* The next function, or the sentinel, will have L_LNNO32 zero;
 	 we exit. */
+      /* APPLE LOCAL begin  subroutine inlining  */
       if (L_LNNO32 (&lptr) && L_LNNO32 (&lptr) <= last_line)
 	record_line (current_subfile, first_line + L_LNNO32 (&lptr),
 		     lptr.l_addr.l_paddr
-		     + ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile)));
+		     + objfile_text_section_offset (objfile), 
+		     0, NORMAL_LT_ENTRY);
+      /* APPLE LOCAL end subroutine inlining  */
       else
 	break;
     }
@@ -1489,7 +1498,7 @@ process_coff_symbol (struct coff_symbol *cs,
 
   if (ISFCN (cs->c_type))
     {
-      SYMBOL_VALUE (sym) += ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile));
+      SYMBOL_VALUE (sym) += objfile_text_section_offset (objfile);
       SYMBOL_TYPE (sym) =
 	lookup_function_type (decode_function_type (cs, cs->c_type, aux));
 
@@ -1519,7 +1528,7 @@ process_coff_symbol (struct coff_symbol *cs,
 	case C_EXT:
 	  SYMBOL_CLASS (sym) = LOC_STATIC;
 	  SYMBOL_VALUE_ADDRESS (sym) = (CORE_ADDR) cs->c_value;
-	  SYMBOL_VALUE_ADDRESS (sym) += ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile));
+	  SYMBOL_VALUE_ADDRESS (sym) += objfile_text_section_offset (objfile);
 	  add_symbol_to_list (sym, &global_symbols);
 	  break;
 
@@ -1528,7 +1537,7 @@ process_coff_symbol (struct coff_symbol *cs,
 	case C_STAT:
 	  SYMBOL_CLASS (sym) = LOC_STATIC;
 	  SYMBOL_VALUE_ADDRESS (sym) = (CORE_ADDR) cs->c_value;
-	  SYMBOL_VALUE_ADDRESS (sym) += ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile));
+	  SYMBOL_VALUE_ADDRESS (sym) += objfile_text_section_offset (objfile);
 	  if (within_function)
 	    {
 	      /* Static symbol of local scope */

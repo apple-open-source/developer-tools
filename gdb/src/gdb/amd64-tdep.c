@@ -39,6 +39,7 @@
 
 #include "amd64-tdep.h"
 #include "i387-tdep.h"
+#include "i386-amd64-shared-tdep.h"
 
 /* Note that the AMD64 architecture was previously known as x86-64.
    The latter is (forever) engraved into the canonical system name as
@@ -55,7 +56,8 @@ struct amd64_register_info
   struct type **type;
 };
 
-static struct type *amd64_sse_type;
+/* APPLE LOCAL: We'll compare this to NULL later on.  */
+static struct type *amd64_sse_type = NULL;
 
 static struct amd64_register_info const amd64_register_info[] =
 {
@@ -145,33 +147,17 @@ amd64_register_name (int regnum)
 static struct type *
 amd64_register_type (struct gdbarch *gdbarch, int regnum)
 {
-  struct type *t;
-
   gdb_assert (regnum >= 0 && regnum < AMD64_NUM_REGS);
 
-  /* ??? Unfortunately, amd64_init_abi is called too early, and so we
-     cannot create the amd64_sse_type early enough to avoid any check
-     at this point.  */
-  t = *amd64_register_info[regnum].type;
-  if (t != NULL)
-    return t;
+  /* APPLE LOCAL: This would more appropriately be done in
+     amd64_init_abi() but the type system isn't initialized far
+     enough for build_builtin_type_vec128i_big () to execute at
+     that point so we need to do it lazily here.  */
 
-  gdb_assert (amd64_sse_type == NULL);
+  if (amd64_sse_type == NULL)
+    amd64_sse_type = build_builtin_type_vec128i_big ();
 
-  t = init_composite_type ("__gdb_builtin_type_vec128i", TYPE_CODE_UNION);
-  append_composite_type_field (t, "v4_float", builtin_type_v4_float);
-  append_composite_type_field (t, "v2_double", builtin_type_v2_double);
-  append_composite_type_field (t, "v16_int8", builtin_type_v16_int8);
-  append_composite_type_field (t, "v8_int16", builtin_type_v8_int16);
-  append_composite_type_field (t, "v4_int32", builtin_type_v4_int32);
-  append_composite_type_field (t, "v2_int64", builtin_type_v2_int64);
-  append_composite_type_field (t, "uint128", builtin_type_int128);
-
-  TYPE_FLAGS (t) |= TYPE_FLAG_VECTOR;
-  TYPE_NAME (t) = "builtin_type_vec128i";
-      
-  amd64_sse_type = t;
-  return t;
+  return *amd64_register_info[regnum].type;
 }
 
 /* DWARF Register Number Mapping as defined in the System V psABI,
@@ -233,6 +219,89 @@ amd64_dwarf_reg_to_regnum (int reg)
     warning (_("Unmapped DWARF Register #%d encountered."), reg);
 
   return regnum;
+}
+
+/* APPLE LOCAL: Read part of a register with extra swapping.
+
+   The developer's view of the XMM registers is byteswapped from how
+   it actually is -- an extra swapping on top of the usual little endian
+   fun -- and so when we fetch/store the registers from the inferior
+   we swap them so we're using the "user's view" of the registers.
+
+   The main problem that this causes is that several functions in this file
+   know how to store/retrieve values from the XMM registers as per the ABI
+   conventions - and those conventions are written to the actual byte order
+   of the XMM registers, not the user's expected view.  So we do an extra
+   swapping of the reg values we've retrieved before/after changing them
+   for ABI reasons.  */
+
+static void
+swapped_regcache_raw_write_part (struct regcache *regcache, int regnum,
+                                 int offset, int len, const gdb_byte *buf)
+{
+  int j;
+  gdb_byte swapper_buf[16];
+
+  if (regnum < AMD64_XMM0_REGNUM || regnum > AMD64_XMM0_REGNUM + 15)
+    {
+       regcache_raw_write_part (regcache, regnum, offset, len, buf);
+       return;
+    }
+
+  regcache_raw_read (regcache, regnum, swapper_buf);
+  for (j = 0; j < 8; j++)
+    {
+      gdb_byte tmp = swapper_buf[j];
+      swapper_buf[j] = swapper_buf[16 - j - 1];
+      swapper_buf[16 - j - 1] = tmp;
+    }
+
+  memcpy (&swapper_buf[offset], buf, len);
+  for (j = 0; j < 8; j++)
+     {
+       gdb_byte tmp = swapper_buf[j];
+       swapper_buf[j] = swapper_buf[16 - j - 1];
+       swapper_buf[16 - j - 1] = tmp;
+     }
+  regcache_raw_write (regcache, regnum, swapper_buf);
+}
+
+/* APPLE LOCAL: Read part of a register with extra swapping.
+
+   The developer's view of the XMM registers is byteswapped from how
+   it actually is -- an extra swapping on top of the usual little endian
+   fun -- and so when we fetch/store the registers from the inferior
+   we swap them so we're using the "user's view" of the registers.
+
+   The main problem that this causes is that several functions in this file
+   know how to store/retrieve values from the XMM registers as per the ABI
+   conventions - and those conventions are written to the actual byte order
+   of the XMM registers, not the user's expected view.  So we do an extra
+   swapping of the reg values we've retrieved before/after changing them
+   for ABI reasons.  */
+
+static void
+swapped_regcache_raw_read_part (struct regcache *regcache, int regnum,
+                                int offset, int len, gdb_byte *buf)
+{
+  int j;
+  gdb_byte swapper_buf[16];
+
+  if (regnum < AMD64_XMM0_REGNUM || regnum > AMD64_XMM0_REGNUM + 15)
+    {
+       regcache_raw_read_part (regcache, regnum, offset, len, buf);
+       return;
+    }
+
+  regcache_raw_read (regcache, regnum, swapper_buf);
+  for (j = 0; j < 8; j++)
+    {
+      gdb_byte tmp = swapper_buf[j];
+      swapper_buf[j] = swapper_buf[16 - j - 1];
+      swapper_buf[16 - j - 1] = tmp;
+    }
+
+  memcpy (buf, &swapper_buf[offset], len);
 }
 
 /* Return nonzero if a value of type TYPE stored in register REGNUM
@@ -527,6 +596,22 @@ amd64_return_value (struct gdbarch *gdbarch, struct type *type,
 
       gdb_assert (regnum != -1);
 
+      /* APPLE LOCAL: We keep the XMM registers in the "user's view"
+         byte order inside gdb so we need to unswap them before the
+         ABI read/writes which assume the actual machine byte order.  */
+
+      if ((readbuf || writebuf) 
+          && (regnum == sse_regnum[0] || regnum == sse_regnum[1]))
+        {
+          if (readbuf)
+	    swapped_regcache_raw_read_part (regcache, regnum, offset, 
+                                    min (len, 8), readbuf + i * 8);
+          if (writebuf)
+	    swapped_regcache_raw_write_part (regcache, regnum, offset, 
+                                     min (len, 8), writebuf + i * 8);
+          continue;
+        }
+
       if (readbuf)
 	regcache_raw_read_part (regcache, regnum, offset, min (len, 8),
 				readbuf + i * 8);
@@ -640,7 +725,16 @@ amd64_push_arguments (struct regcache *regcache, int nargs,
 	      gdb_assert (regnum != -1);
 	      memset (buf, 0, sizeof buf);
 	      memcpy (buf, valbuf + j * 8, min (len, 8));
-	      regcache_raw_write_part (regcache, regnum, offset, 8, buf);
+
+              /* APPLE LOCAL: We keep the XMM registers in the "user's view"
+                 byte order inside gdb so we need to unswap them before the  
+                 ABI read/writes which assume the actual machine byte order.  */
+
+              if (class[j] == AMD64_SSE || class[j] == AMD64_SSEUP)
+	        swapped_regcache_raw_write_part (regcache, regnum, offset, 8, 
+                                                 buf);
+              else
+	        regcache_raw_write_part (regcache, regnum, offset, 8, buf);
 	    }
 	}
     }
@@ -762,28 +856,62 @@ amd64_alloc_frame_cache (void)
    Any function that doesn't start with this sequence will be assumed
    to have no prologue and thus no valid frame pointer in %rbp.  */
 
+/* APPLE LOCAL: Optionally pass in a NEXT_FRAME if it is available
+   which is used to determine the context of this frame, i.e. is it
+   possible for it to be frameless at all, so we can make a more
+   educated guess.  */
+
 static CORE_ADDR
 amd64_analyze_prologue (CORE_ADDR pc, CORE_ADDR current_pc,
-			struct amd64_frame_cache *cache)
+			struct frame_info *next_frame,
+                        struct amd64_frame_cache *cache)
 {
   static gdb_byte proto[3] = { 0x48, 0x89, 0xe5 }; /* movq %rsp, %rbp */
   gdb_byte buf[3];
   gdb_byte op;
+  int non_prologue_insn_limit = 64; /* Stop looking after 64 unknown insn */
+  int insn_seen;
+  int must_have_stack_frame = 0;
 
+  /* APPLE LOCAL: Could this be a frameless function?
+     If this is the 0th frame, or it was interrupted by a signal
+     or gdb did an inferior function call, it could be frameless.
+     If none of those are true then it must have a stack frame.  */
+  if (next_frame
+      && frame_relative_level (next_frame) > -1
+      && get_frame_type (next_frame) != SIGTRAMP_FRAME
+      && get_frame_type (next_frame) != DUMMY_FRAME)
+    must_have_stack_frame = 1;
+
+  /* If we must have a stack frame, assume this function follows
+     the convention of pushing rbp in the prologue even though it's
+     not necessarily required.  short of the EH frames/CFI info
+     we can't handle the case where the rbp isn't saved/used so
+     we assume it is.  */
+  if (must_have_stack_frame)
+    {
+      cache->saved_regs[AMD64_RBP_REGNUM] = 0;
+      cache->sp_offset += 8;
+      cache->frameless_p = 0;
+      /* Don't return here because this function could be expected
+         to return the CORE_ADDR following the last prologue frame
+         setup insn.  */
+    }
+
+  /* Haven't executed any prologue instructions yet - no stack frame
+     has been set up.  */
   if (current_pc <= pc)
     return current_pc;
 
-  op = read_memory_unsigned_integer (pc, 1);
+  /* Skip over non-prologue instructions looking for a pushq %rbp */
+  insn_seen = 0;
+  while (!i386_push_ebp_pattern_p (pc) 
+         && !i386_ret_pattern_p (pc)
+         && pc < current_pc
+         && insn_seen++ < non_prologue_insn_limit)
+    pc += i386_length_of_this_instruction (pc);
 
-  /* APPLE LOCAL skip the fix and continue nop's */
-  while (op == 0x90              /* nop */
-         && pc < current_pc)
-    {
-      pc += 1;
-      op = read_memory_unsigned_integer (pc, 1);
-    }
-
-  if (op == 0x55)		/* pushq %rbp */
+  if (i386_push_ebp_pattern_p (pc))		/* pushq %rbp */
     {
       /* Take into account that we've executed the `pushq %rbp' that
          starts this instruction sequence.  */
@@ -795,13 +923,19 @@ amd64_analyze_prologue (CORE_ADDR pc, CORE_ADDR current_pc,
         return current_pc;
 
       /* Check for `movq %rsp, %rbp'.  */
-      read_memory (pc + 1, buf, 3);
-      if (memcmp (buf, proto, 3) != 0)
-	return pc + 1;
+      insn_seen = 0;
+      while (!i386_mov_esp_ebp_pattern_p (pc) 
+             && !i386_ret_pattern_p (pc)
+             && pc < current_pc
+             && insn_seen++ < non_prologue_insn_limit)
+        pc += i386_length_of_this_instruction (pc);
+
+      if (!i386_mov_esp_ebp_pattern_p (pc))
+	return pc;
 
       /* OK, we actually have a frame.  */
       cache->frameless_p = 0;
-      return pc + 4;
+      return pc + 3;
     }
 
   return pc;
@@ -815,7 +949,7 @@ amd64_skip_prologue (CORE_ADDR start_pc)
   struct amd64_frame_cache cache;
   CORE_ADDR pc;
 
-  pc = amd64_analyze_prologue (start_pc, 0xffffffffffffffffLL, &cache);
+  pc = amd64_analyze_prologue (start_pc, 0xffffffffffffffffLL, NULL, &cache);
   if (cache.frameless_p)
     return start_pc;
 
@@ -840,7 +974,8 @@ amd64_frame_cache (struct frame_info *next_frame, void **this_cache)
 
   cache->pc = frame_func_unwind (next_frame);
   if (cache->pc != 0)
-    amd64_analyze_prologue (cache->pc, frame_pc_unwind (next_frame), cache);
+    amd64_analyze_prologue (cache->pc, frame_pc_unwind (next_frame), 
+                            next_frame, cache);
 
   if (cache->frameless_p)
     {
@@ -894,7 +1029,8 @@ amd64_frame_this_id (struct frame_info *next_frame, void **this_cache,
 
 static void
 amd64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
-			   int regnum, int *optimizedp,
+			   /* APPLE LOCAL variable opt states.  */
+			   int regnum, enum opt_state *optimizedp,
 			   enum lval_type *lvalp, CORE_ADDR *addrp,
 			   int *realnump, gdb_byte *valuep)
 {
@@ -905,7 +1041,8 @@ amd64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 
   if (regnum == SP_REGNUM && cache->saved_sp)
     {
-      *optimizedp = 0;
+      /* APPLE LOCAL variable opt states.  */
+      *optimizedp = opt_okay;
       *lvalp = not_lval;
       *addrp = 0;
       *realnump = -1;
@@ -919,7 +1056,8 @@ amd64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 
   if (regnum < AMD64_NUM_SAVED_REGS && cache->saved_regs[regnum] != -1)
     {
-      *optimizedp = 0;
+      /* APPLE LOCAL variable opt states.  */
+      *optimizedp = opt_okay;
       *lvalp = lval_memory;
       *addrp = cache->saved_regs[regnum];
       *realnump = -1;
@@ -932,7 +1070,8 @@ amd64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
       return;
     }
 
-  *optimizedp = 0;
+  /* APPLE LOCAL variable opt states.  */
+  *optimizedp = opt_okay;
   *lvalp = lval_register;
   *addrp = 0;
   *realnump = regnum;
@@ -1001,7 +1140,8 @@ amd64_sigtramp_frame_this_id (struct frame_info *next_frame,
 static void
 amd64_sigtramp_frame_prev_register (struct frame_info *next_frame,
 				    void **this_cache,
-				    int regnum, int *optimizedp,
+				    /* APPLE LOCAL variable opt states.  */
+				    int regnum, enum opt_state *optimizedp,
 				    enum lval_type *lvalp, CORE_ADDR *addrp,
 				    int *realnump, gdb_byte *valuep)
 {
@@ -1116,6 +1256,26 @@ amd64_collect_fpregset (const struct regset *regset,
   amd64_collect_fxsave (regcache, regnum, fpregs);
 }
 
+static CORE_ADDR
+amd64_fetch_pointer_argument (struct frame_info *frame, int argi,
+                              struct type *type)
+{
+  static int integer_regnum[] =
+  {
+    AMD64_RDI_REGNUM,           /* %rdi */
+    AMD64_RSI_REGNUM,           /* %rsi */
+    AMD64_RDX_REGNUM,           /* %rdx */
+    AMD64_RCX_REGNUM,           /* %rcx */
+    8,                          /* %r8 */
+    9                           /* %r9 */
+  };
+
+  if (argi < 6)
+    return get_frame_register_unsigned (frame, integer_regnum[argi]);
+  else
+    return 0;
+}
+
 /* Return the appropriate register set for the core section identified
    by SECT_NAME and SECT_SIZE.  */
 
@@ -1170,6 +1330,9 @@ amd64_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   set_gdbarch_pc_regnum (gdbarch, AMD64_RIP_REGNUM); /* %rip */
   set_gdbarch_ps_regnum (gdbarch, AMD64_EFLAGS_REGNUM); /* %eflags */
   set_gdbarch_fp0_regnum (gdbarch, AMD64_ST0_REGNUM); /* %st(0) */
+  /* APPLE LOCAL: Add the frame pointer register so it can be modified
+     in expressions.  */
+  set_gdbarch_deprecated_fp_regnum (gdbarch, AMD64_RBP_REGNUM); /* %rbp */
 
   /* The "default" register numbering scheme for AMD64 is referred to
      as the "DWARF Register Number Mapping" in the System V psABI.
@@ -1211,6 +1374,9 @@ amd64_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   if (tdep->gregset_reg_offset)
     set_gdbarch_regset_from_core_section (gdbarch,
 					  amd64_regset_from_core_section);
+  /* APPLE LOCAL: A handy little function.  */
+  set_gdbarch_fetch_pointer_argument (gdbarch, amd64_fetch_pointer_argument);
+
 }
 
 

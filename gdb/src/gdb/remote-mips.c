@@ -38,6 +38,8 @@
 #include "regcache.h"
 #include <ctype.h>
 #include "mips-tdep.h"
+/* APPLE LOCAL - subroutine inlining  */
+#include "inlining.h"
 
 
 /* Breakpoint types.  Values 0, 1, and 2 must agree with the watch
@@ -1587,7 +1589,18 @@ device is attached to the target board (e.g., /dev/ttya).\n"
   flush_cached_frames ();
   registers_changed ();
   stop_pc = read_pc ();
+  /* APPLE LOCAL begin subroutine inlining  */
+  /* If the PC has changed since the last time we updated the
+     global_inlined_call_stack data, we need to verify the current
+     data and possibly update it.  */
+  if (stop_pc != inlined_function_call_stack_pc ())
+    inlined_function_update_call_stack (stop_pc);
+  /* APPLE LOCAL end subroutine inlining  */
+
   print_stack_frame (get_selected_frame (NULL), 0, SRC_AND_LOC);
+  /* APPLE LOCAL begin subroutine inlining  */
+  clear_inlined_subroutine_print_frames ();
+  /* APPLE LOCAL end subroutine inlining  */
   xfree (serial_port_name);
 }
 

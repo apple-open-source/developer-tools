@@ -35,15 +35,22 @@
 #include "interps.h"
 #include "objc-lang.h"
 #include "gdb_stat.h"
+#include "arch-utils.h"
+#include "gdbarch.h"
 
 #include "gdb_stat.h"
 
 #include <mach-o/nlist.h>
 #include <mach-o/loader.h>
-#include <mach-o/dyld_debug.h>
 
 #ifdef USE_MMALLOC
 #include "mmprivate.h"
+#endif
+
+#if defined (TARGET_POWERPC)
+#include "ppc-macosx-tdep.h"
+#else
+#include "i386-tdep.h"
 #endif
 
 #include <sys/mman.h>
@@ -71,11 +78,42 @@ extern int dyld_reload_on_downgrade_flag;
 extern char *dyld_load_rules;
 extern char *dyld_minimal_load_rules;
 
+/* For the gdbarch_tdep structure so we can get the wordsize. */
+#if defined(TARGET_POWERPC)
+#include "ppc-tdep.h"
+#elif defined (TARGET_I386)
+#include "amd64-tdep.h"
+#include "i386-tdep.h"
+#else
+#error "Unrecognized target architecture."
+#endif
+
 #if WITH_CFM
 extern int inferior_auto_start_cfm_flag;
 #endif /* WITH_CFM */
 
 extern macosx_inferior_status *macosx_status;
+extern macosx_dyld_thread_status macosx_dyld_status;
+
+/* We describe the memory that a bfd will occupy when loaded as a
+   series of memory groups.  If a file's text+data loads together, there
+   will be one group.  If its text and data are separate, there are two
+   groups.  There is no limit on how many groups are supported but there
+   are never more than two today.  */
+
+struct bfd_memory_footprint {
+  CORE_ADDR seg1addr;           /* Address of the __TEXT segment */
+  int num;                      /* Number of bucket groupings in use */
+  int num_allocated;            /* Number of bucket grouping slots allocated */
+  struct bfd_memory_footprint_group *groups;
+};
+
+struct bfd_memory_footprint_group {
+  int offset;    /* Offset from this file's seg1addr in terms of buckets */
+  int length;    /* Length in buckets */
+};
+
+static void mark_buckets_as_used (struct pre_run_memory_map *map, int i, struct bfd_memory_footprint *fp);
 
 static int
 dyld_print_status ()
@@ -103,6 +141,7 @@ dyld_add_inserted_libraries (struct dyld_objfile_info *info,
     {
 
       struct dyld_objfile_entry *e = NULL;
+      char *tmp_name, *real_name;
 
       s2 = strchr (s1, ':');
       if (s2 == NULL)
@@ -111,11 +150,18 @@ dyld_add_inserted_libraries (struct dyld_objfile_info *info,
         }
       CHECK_FATAL (s2 != NULL);
 
-      e = dyld_objfile_entry_alloc (info);
+      tmp_name = savestring (s1, (s2 - s1));
+      real_name = xmalloc (PATH_MAX + 1);
+      if (realpath (tmp_name, real_name) != NULL)
+	{
+	  e = dyld_objfile_entry_alloc (info);
+	  e->user_name = real_name;
+	  e->reason = dyld_reason_init;
+	}
+      else
+	warning ("Couldn't get real path for inserted library %s\n", tmp_name);
 
-      e->user_name = savestring (s1, (s2 - s1));
-      e->reason = dyld_reason_init;
-
+      xfree (tmp_name);
       s1 = s2;
       while (*s1 == ':')
         {
@@ -123,6 +169,9 @@ dyld_add_inserted_libraries (struct dyld_objfile_info *info,
         }
     }
 }
+
+/* Look through the main executable for directly linked
+   dylibs/framework load commands; create dyld_objfile_entries for those.  */
 
 void
 dyld_add_image_libraries (struct dyld_objfile_info *info, bfd *abfd)
@@ -155,6 +204,7 @@ dyld_add_image_libraries (struct dyld_objfile_info *info, bfd *abfd)
       struct bfd_mach_o_load_command *cmd = &mdata->commands[i];
       switch (cmd->type)
         {
+        case BFD_MACH_O_LC_REEXPORT_DYLIB:
         case BFD_MACH_O_LC_LOAD_WEAK_DYLIB:
         case BFD_MACH_O_LC_LOAD_DYLINKER:
         case BFD_MACH_O_LC_LOAD_DYLIB:
@@ -162,6 +212,7 @@ dyld_add_image_libraries (struct dyld_objfile_info *info, bfd *abfd)
 
             struct dyld_objfile_entry *e = NULL;
             char *name = NULL;
+	    char *fixed_name = NULL;
 
             switch (cmd->type)
               {
@@ -180,10 +231,17 @@ dyld_add_image_libraries (struct dyld_objfile_info *info, bfd *abfd)
                       continue;
                     }
 		  name[dcmd->name_len] = '\0';
+		  fixed_name = dyld_fix_path (name);
+		  if (fixed_name != name)
+		    {
+		      xfree (name);
+		      name = fixed_name;
+		    }
                   break;
                 }
               case BFD_MACH_O_LC_LOAD_DYLIB:
               case BFD_MACH_O_LC_LOAD_WEAK_DYLIB:
+              case BFD_MACH_O_LC_REEXPORT_DYLIB:
                 {
                   bfd_mach_o_dylib_command *dcmd = &cmd->command.dylib;
 
@@ -193,11 +251,17 @@ dyld_add_image_libraries (struct dyld_objfile_info *info, bfd *abfd)
                   if (bfd_bread (name, dcmd->name_len, abfd) != dcmd->name_len)
                     {
                       warning
-                        ("Unable to find library name for LC_LOAD_DYLIB or LC_LOAD_WEAK_DYLIB command; ignoring");
+                        ("Unable to find library name for LC_LOAD_DYLIB or LC_LOAD_WEAK_DYLIB or LC_REEXPORT_DYLIB command; ignoring");
                       xfree (name);
                       continue;
                     }
 		  name[dcmd->name_len] = '\0';
+		  fixed_name = dyld_fix_path (name);
+		  if (fixed_name != name)
+		    {
+		      xfree (name);
+		      name = fixed_name;
+		    }
                   break;
                 }
               default:
@@ -243,6 +307,7 @@ dyld_add_image_libraries (struct dyld_objfile_info *info, bfd *abfd)
                 e->prefix = dyld_symbols_prefix;
                 break;
               case BFD_MACH_O_LC_LOAD_DYLIB:
+              case BFD_MACH_O_LC_REEXPORT_DYLIB:
                 break;
               case BFD_MACH_O_LC_LOAD_WEAK_DYLIB:
                 e->reason |= dyld_reason_weak_mask;
@@ -367,12 +432,15 @@ dyld_resolve_filenames (const struct macosx_dyld_thread_status *s,
 static CORE_ADDR
 library_offset (struct dyld_objfile_entry *e)
 {
+  int wordsize = gdbarch_tdep (current_gdbarch)->wordsize;
   CHECK_FATAL (e != NULL);
   if (e->image_addr_valid && e->dyld_valid)
     {
-      /* FIXME: 64bit ? */
-      CHECK_FATAL (e->dyld_addr ==
+      if (wordsize == 4)
+        CHECK_FATAL (e->dyld_addr ==
                    ((e->image_addr + e->dyld_slide) & 0xffffffff)); 
+      else
+        CHECK_FATAL (e->dyld_addr == e->image_addr + e->dyld_slide);
     }
 
   if (e->dyld_valid)
@@ -380,7 +448,13 @@ library_offset (struct dyld_objfile_entry *e)
   else if (e->loaded_from_memory)
     return e->loaded_addr;
   else if (e->image_addr_valid)
-    return e->image_addr;
+    if (e->pre_run_slide_addr_valid)
+      if (wordsize == 4)
+        return (e->image_addr + e->pre_run_slide_addr) & 0xffffffff;
+      else
+        return e->image_addr + e->pre_run_slide_addr;
+    else
+      return e->image_addr;
   else
     return 0;
 }
@@ -581,6 +655,351 @@ dyld_default_load_flag (const struct dyld_path_info *d,
   return OBJF_SYM_NONE;
 }
 
+#define IS_ALIGNED_TO_4096_P(num) (((num) & ~(4096 - 1)) == (num))
+#define ALIGN_TO_4096(num) (IS_ALIGNED_TO_4096_P((num)) ? \
+                              (num) : \
+                              ((num) + 4096) & ~(4096 - 1))
+
+/* Iterate over ABFD's sections to establish the groups of memory that it
+   will require to load.  
+   Does not modify MAP.
+   Returns the memory footprint representation of this ABFD which must be
+   xfreed by the caller.  */
+
+static struct bfd_memory_footprint *
+scan_bfd_for_memory_groups (struct bfd *abfd, struct pre_run_memory_map *map)
+{
+  asection *asect;
+  int seg1addr_set = 0;
+  CORE_ADDR current_bucket_start_addr, current_bucket_end_addr;
+  struct bfd_memory_footprint *fp = (struct bfd_memory_footprint *)
+                               xmalloc (sizeof (struct bfd_memory_footprint));
+  fp->groups = (struct bfd_memory_footprint_group *) 
+                     xmalloc (sizeof (struct bfd_memory_footprint_group) * 2);
+  fp->num = 0;
+  fp->num_allocated = 2;
+
+  for (asect = abfd->sections; asect != NULL; asect = asect->next)
+    {
+      CORE_ADDR this_seg_start, this_seg_end, this_seg_len;
+
+      /* I'm only interested in segments like __TEXT and __DATA.  */
+      if (asect->segment_mark == 0)
+        continue;
+
+      /* PAGEZERO doesn't interest me.  */
+      if (strcmp (asect->name, "LC_SEGMENT.__PAGEZERO") == 0)
+        continue;
+
+      this_seg_start = bfd_section_vma (abfd, asect);
+      this_seg_len = bfd_section_size (abfd, asect);
+      this_seg_end = this_seg_start + this_seg_len;
+      this_seg_end = ALIGN_TO_4096 (this_seg_end);
+
+      /* Don't record a segment (or a load command) which doesn't load 
+         into the address space at all.  */
+      if (this_seg_start == 0)
+        continue;
+
+      if (seg1addr_set == 0)
+       {
+          seg1addr_set = 1;
+          fp->seg1addr = this_seg_start;
+          fp->groups[0].offset = 0;
+          /* New bucket so update these two:  */
+          current_bucket_start_addr = this_seg_start;
+          current_bucket_end_addr = current_bucket_start_addr +
+                     ((this_seg_len / map->bucket_size) + 1) * map->bucket_size;
+          continue;
+        }
+
+      /* This segment fits within the current bucket.  */
+      if (this_seg_end < current_bucket_end_addr)
+        {
+          continue;
+        }
+
+      /* This segment grows the current bucket.  
+         NB: If this segment's start addr is within a single bucket range of
+         the current group's end addr, we'll have two memory groups right
+         after one another - which is pointless.  So if it's within a single
+         bucket length of the current group's end address, combine it with this
+         one.   */
+      if (this_seg_start <= current_bucket_end_addr + map->bucket_size
+          && this_seg_end > current_bucket_end_addr)
+        {
+          /* Expand current_bucket_end_addr by bucket_size increments.  */
+          current_bucket_end_addr = current_bucket_start_addr +
+                     (((this_seg_end - current_bucket_start_addr) / 
+                        map->bucket_size) + 1)
+                     * map->bucket_size;
+          continue;
+        }
+
+      /* This is a new grouping.  */
+
+      /* Record how many buckets the last address range grouping occupies.  */
+      /* Note that current_bucket_{start,end}_addr are aligned to bucket_size
+         boundaries so it is evenly divisible by bucket_size and will be at
+         least bucket_size in size.  */
+      fp->groups[fp->num].length = 
+                   (current_bucket_end_addr - current_bucket_start_addr) / 
+                    map->bucket_size;
+ 
+      fp->num++;
+
+      if (fp->num == fp->num_allocated)
+        {
+          fp->num_allocated *= 2;
+          fp->groups = (struct bfd_memory_footprint_group *) 
+              xrealloc (fp->groups, 
+                sizeof (struct bfd_memory_footprint_group) * fp->num_allocated);
+        }
+
+      /* How many buckets between the last memory grouping and this one?  */
+      fp->groups[fp->num].offset = ((this_seg_start - current_bucket_end_addr) 
+                                    / map->bucket_size) + 1 
+                                    + fp->groups[fp->num - 1].length;
+      current_bucket_start_addr = this_seg_start;
+      current_bucket_end_addr = current_bucket_start_addr +    
+                 ((this_seg_len / map->bucket_size) + 1) * map->bucket_size;
+    
+    }
+
+  /* Update the number of buckets used by the last memory group we saw.  */
+  /* Note that current_bucket_{start,end}_addr are aligned to bucket_size
+     boundaries so it is evenly divisible by bucket_size and will be at
+     least bucket_size in size.  */
+  if (seg1addr_set != 0)
+    {
+      fp->groups[fp->num].length = 
+                   (current_bucket_end_addr - current_bucket_start_addr) / 
+                    map->bucket_size;
+      fp->num++;
+    }
+  else
+    {
+      /* We saw no segments with load addresses in this bfd.  */
+      fp->groups[0].offset = 0;
+      fp->groups[0].length = 0;
+    }
+
+  return fp;
+}
+
+/* Allocate and initialize a new pre-run representation of the inferior's
+   address space.  ABFD is the main executable; its memory regions will be
+   marked as used.
+   The allocated & initialized pre-run memory map is returned.  */
+
+struct pre_run_memory_map *
+create_pre_run_memory_map (struct bfd *abfd)
+{
+  struct bfd_memory_footprint *fp;
+  int i;
+  struct pre_run_memory_map *map = (struct pre_run_memory_map *)
+                                   xmalloc (sizeof (struct pre_run_memory_map));
+  if (gdbarch_tdep (current_gdbarch)->wordsize == 4)
+    {
+      map->number_of_buckets = 400;
+      map->bucket_size = UINT_MAX / map->number_of_buckets;
+      map->bucket_size &= ~(4096 - 1);
+    }
+  else
+    {
+      map->number_of_buckets = 4000;
+      map->bucket_size = ULLONG_MAX / map->number_of_buckets;
+      map->bucket_size &= ~(4096 - 1);
+    }
+
+  map->buckets = (int *) xmalloc (sizeof (int) * map->number_of_buckets);
+  memset (map->buckets, 0, map->number_of_buckets * sizeof (int));
+
+  /* Figure out which bucket this executable will start loading at; 
+     mark its memory areas as used.  */
+  fp = scan_bfd_for_memory_groups (abfd, map);
+  i = fp->seg1addr / map->bucket_size;
+  mark_buckets_as_used (map, i, fp);
+
+  return map;
+}
+
+/* Search the address map for the first range of free buckets that will fit
+   a given request.  
+   STARTING_BUCKET specifies where to start our search; this helps to reduce
+   redundant searching.
+   BUCKETS specifies the number of unused buckets in a row that we need to 
+   find for a match.  
+   Returns the bucket index that can contain the requested group or returns
+   -1 if no matching spot could be found.  */
+
+static int
+find_next_hole (struct pre_run_memory_map *map, 
+                int starting_bucket, 
+                int buckets)
+{
+  int i;
+  i = starting_bucket;
+
+  while (i < map->number_of_buckets)
+    {
+      int j;
+      if (i + buckets >= map->number_of_buckets)
+        return -1;
+
+      /* Skip over used buckets.  */
+      if (map->buckets[i] == 1)
+        {
+          i++;
+          continue;
+        }
+
+      /* Found one open bucket; see if we have enough sequential buckets for
+         this memory group.  */
+      j = i;
+      while (j - i < buckets)
+        {
+          if (map->buckets[j] == 0)
+            j++;
+          else
+            break;
+        }
+
+      /* Found an empty region big enough.  */
+      if (j - i == buckets)
+        {
+          return i;
+        }
+
+      /* Skip past the end of this region we were just examining.  */
+      i = j + 1;
+    }
+
+  return -1;
+}
+
+/* Determine if the address map at STARTING_BUCKET has BUCKETS unused
+   buckets in a row.  Returns 1 if there are BUCKETS unused buckets
+   in a row; 0 if not.  */
+
+static int
+hole_at_p (struct pre_run_memory_map *map,
+           int starting_bucket,
+           int buckets)
+{
+  int i = starting_bucket;
+  while (i - starting_bucket < buckets && map->buckets[i] == 0)
+    i++;
+
+  if (i - starting_bucket == buckets)
+    return 1;
+  else 
+    return 0;
+}
+
+static void
+mark_buckets_as_used (struct pre_run_memory_map *map, int startingbucket, 
+                      struct bfd_memory_footprint *fp)
+{
+  int memgrp, k;
+  for (memgrp = 0; memgrp < fp->num; memgrp++)
+    for (k = 0; k < fp->groups[memgrp].length; k++)
+      map->buckets[startingbucket + fp->groups[memgrp].offset + k] = 1;
+}
+
+void
+free_pre_run_memory_map (struct pre_run_memory_map *map)
+{
+  if (map)
+    xfree (map->buckets);
+  xfree (map);
+}
+
+static void
+free_memory_footprint (struct bfd_memory_footprint *fp)
+{
+  if (fp)
+    xfree (fp->groups);
+  xfree (fp);
+}
+
+/* Given an ABFD and a representation of the inferior's pre-run address space
+   MAP, find an empty space big enough for all of ABFD's memory groupings,
+   mark those regions as used in MAP, and return slide that should be applied
+   to ABFD's load address to keep it from overlapping with other dylibs.  */
+
+static CORE_ADDR
+slide_bfd_in_pre_run_memory_map (struct bfd *abfd, 
+                                 struct pre_run_memory_map *map)
+{
+  int i = 0;
+  int j, k;
+  int intended_loadaddr_bucket;
+  struct bfd_memory_footprint *fp;
+  CORE_ADDR intended_loadaddr;
+  int can_load_at_preferred_addr;
+
+  fp = scan_bfd_for_memory_groups (abfd, map);
+  intended_loadaddr = fp->seg1addr;
+
+  /* See if we can load the dylib at its preferred address. */
+
+  intended_loadaddr_bucket = fp->seg1addr / map->bucket_size;
+  can_load_at_preferred_addr = 1;
+  for (k = 0; k < fp->num; k++)
+    if (!hole_at_p (map, intended_loadaddr_bucket, fp->groups[k].length))
+      {
+        can_load_at_preferred_addr = 0;
+        break;
+      }
+
+  if (can_load_at_preferred_addr)
+    {
+      mark_buckets_as_used (map, intended_loadaddr_bucket, fp);
+      free_memory_footprint (fp);
+      return 0;
+    }
+
+  /* Nope - now try to fit it somewhere in memory starting at the
+     beginning.  */
+
+  while (i < map->number_of_buckets)
+    {
+      j = find_next_hole (map, i, fp->groups[0].length);
+
+      /* Couldn't find a hole; report no slide value at all.  */
+      if (j == -1)
+        {
+          free_memory_footprint (fp);
+          return 0;  
+        }
+
+      /* If there are more than one memory groups, check to ensure that
+         they can all fit.  */
+      for (k = 1; k < fp->num; k++)
+        {
+          if (!hole_at_p (map, j + fp->groups[k].offset, fp->groups[k].length))
+            break;
+        }
+
+      /* Did all the groupings fit?  */
+      if (k == fp->num)
+        {
+          CORE_ADDR loadaddr;
+          mark_buckets_as_used (map, j, fp);
+          free_memory_footprint (fp);
+          loadaddr = map->bucket_size * j;
+          return loadaddr - intended_loadaddr;
+        }
+      i += fp->groups[0].length;
+    }
+
+
+  /* No open slot found; return the dylib's originally intended loadaddr.  */
+  free_memory_footprint (fp);
+  return 0;
+}
+
 void
 dyld_load_library_from_file (const struct dyld_path_info *d,
 			     struct dyld_objfile_entry *e,
@@ -651,7 +1070,7 @@ dyld_load_library_from_memory (const struct dyld_path_info *d,
 {
   const char *name = NULL;
 
-  if (!e->dyld_valid)
+  if (!e->dyld_valid && !core_bfd)
     {
       if (print_errors)
 	{
@@ -665,13 +1084,32 @@ dyld_load_library_from_memory (const struct dyld_path_info *d,
   name = dyld_entry_filename (e, d, DYLD_ENTRY_FILENAME_LOADED);
 
   CHECK_FATAL (e->abfd == NULL);
-  e->abfd = inferior_bfd (name, e->dyld_addr, e->dyld_slide, e->dyld_length);
+  CORE_ADDR slide = e->dyld_slide;
+  CORE_ADDR length = e->dyld_length;
+  if (core_bfd)
+    {
+      /* If we are reading an image from core memory, pass in an invalid 
+         slide amount so we the slide can be automatically determined.  */
+       slide = INVALID_ADDRESS;
+    }
+  if (e->dyld_length == 0)
+    {
+      /* If the length is zero, do not try and limit what can be read from 
+	 memory. Entries in the shared cache can have mach headers that 
+	 contain segment load commands whose data is scattered over quite a
+	 large area of memory and we don't alway know the bounds.  */
+      length = INVALID_ADDRESS;
+    }
+  e->abfd = inferior_bfd (name, e->dyld_addr, slide, length);
   CHECK_FATAL (e->abfd != NULL);
 
   e->loaded_memaddr = e->dyld_addr;
   e->loaded_from_memory = 1;
   e->loaded_error = 0;
 }
+
+/* dyld_load_library opens the bfd for the library in E, and
+   sets some state in E.  */
 
 void
 dyld_load_library (const struct dyld_path_info *d,
@@ -706,9 +1144,13 @@ dyld_load_library (const struct dyld_path_info *d,
   if (dyld_always_read_from_memory_flag)
     read_from_memory = 1;
 
+  /* Always read from memory when we are using a core file.  */
+  if (core_bfd)
+    read_from_memory = 1;
+
   if (read_from_memory)
     dyld_load_library_from_memory (d, e, print_errors);
-  else
+  else if (e->abfd == NULL)
     dyld_load_library_from_file (d, e, print_errors);
 
   /* If we weren't able to load the bfd, there must have been an error
@@ -721,10 +1163,18 @@ dyld_load_library (const struct dyld_path_info *d,
       return;
     }
 
+  if (e->reason & dyld_reason_init && macosx_dyld_status.pre_run_memory_map)
+    {
+      CORE_ADDR addr = slide_bfd_in_pre_run_memory_map (e->abfd, 
+                                        macosx_dyld_status.pre_run_memory_map);
+      e->pre_run_slide_addr_valid = 1;
+      e->pre_run_slide_addr = addr;
+    }
+
   if (e->reason & dyld_reason_image_mask)
     {
       asection *text_sect =
-        bfd_get_section_by_name (e->abfd, "LC_SEGMENT.__TEXT");
+        bfd_get_section_by_name (e->abfd, TEXT_SEGMENT_NAME);
       if (text_sect != NULL)
         {
           e->image_addr = bfd_section_vma (e->abfd, text_sect);
@@ -763,40 +1213,71 @@ dyld_symfile_loaded_hook (struct objfile *o)
 {
 }
 
-/* Encapsulate the logic needed to slide an objfile so we can
-   run it on both the objfile and the objfile's associated dSYM,
-   if any, from dyld_load_symfile.  */
+/* dyld_slide_objfile applies the slide in NEW_OFFSETS, or in
+   DYLD_SLIDE if NEW_OFFSETS is NULL, to OBJFILE, and to the
+   separate_debug_objfile, if it exists.  */
 
 static void 
-dyld_slide_objfile (struct objfile *objfile, CORE_ADDR dyld_slide)
+dyld_slide_objfile (struct objfile *objfile, CORE_ADDR dyld_slide,
+		    struct section_offsets *new_offsets)
 {
   int i;
   if (objfile)
     {
-      struct section_offsets *new_offsets =
-        (struct section_offsets *)
-        xmalloc (SIZEOF_N_SECTION_OFFSETS (objfile->num_sections));
+      struct cleanup *offset_cleanup;
+      if (new_offsets == NULL)
+	{
+	  new_offsets =
+	    (struct section_offsets *)
+	    xmalloc (SIZEOF_N_SECTION_OFFSETS (objfile->num_sections));
+	  for (i = 0; i < objfile->num_sections; i++)
+	    {
+	      new_offsets->offsets[i] = dyld_slide;
+	    }
+	  offset_cleanup = make_cleanup (xfree, new_offsets);
+	}
+      else
+	offset_cleanup = make_cleanup (null_cleanup, NULL);
+
       tell_breakpoints_objfile_changed (objfile);
       tell_objc_msgsend_cacher_objfile_changed (objfile);
-      for (i = 0; i < objfile->num_sections; i++)
-        {
-	  new_offsets->offsets[i] = dyld_slide;
-        }
       if (info_verbose)
         printf_filtered ("Relocating symbols from %s...", objfile->name);
       gdb_flush (gdb_stdout);
       objfile_relocate (objfile, new_offsets);
-      xfree (new_offsets);
+      if (objfile->separate_debug_objfile != NULL)
+	{
+	  struct section_offsets *dsym_offsets;
+	  int num_dsym_offsets;
+
+	  /* The offsets we apply are supposed to be the TOTAL offset,
+	     so we have to add the dsym offset to the one passed in
+	     for the objfile.  */
+	  macho_calculate_offsets_for_dsym (objfile, 
+					    objfile->separate_debug_objfile->obfd,
+					    NULL,
+					    new_offsets,
+					    objfile->num_sections,
+					    &dsym_offsets,
+					    &num_dsym_offsets);
+	  make_cleanup (xfree, dsym_offsets);
+	  objfile_relocate (objfile->separate_debug_objfile, dsym_offsets);
+	}
+      
+
+      do_cleanups (offset_cleanup);
       if (info_verbose)
         printf_filtered ("done\n");
     }
 }
 
-void
-dyld_load_symfile (struct dyld_objfile_entry *e)
+static void
+dyld_load_symfile_internal (struct dyld_objfile_entry *e, 
+                            int preserving_objfile_p)
 {
   struct section_addr_info *addrs;
   int i;
+  int using_orig_objfile = 0;
 
   if (e->loaded_error)
     return;
@@ -822,30 +1303,78 @@ dyld_load_symfile (struct dyld_objfile_entry *e)
       e->loaded_addrisoffset = 1;
     }
 
-  if (e->objfile != NULL)
+  /* This is a little weird, because dlyd_load_symfile is used both
+     to load a symfile, and to slide it.  I want a third use, which
+     is reload it but reuse the objfile structures, so we can
+     reload both the objfile and the commpage objfile "in place".
+     This is the only way I can think of to get ALL_OBJFILES_SAFE 
+     to work when we end up deleting an objfile AND its commpage
+     objfile simultaneously.  */
+
+  if (e->objfile != NULL && !preserving_objfile_p)
     {
-      dyld_slide_objfile (e->objfile, e->dyld_slide);
-      dyld_slide_objfile (e->objfile->separate_debug_objfile, e->dyld_slide);
+      dyld_slide_objfile (e->objfile, e->dyld_slide, e->dyld_section_offsets);
     }
   else
     {
+      volatile struct gdb_exception exc;
 
       CHECK_FATAL (e->abfd != NULL);
 
-      addrs = alloc_section_addr_info (bfd_count_sections (e->abfd));
+      /* If we just have a slide then that means that the whole objfile is 
+	 sliding by the same amount.  So we make up a section_addr_info
+	 struct, and fill each element with the slide value.  Otherwise, we
+	 use the dyld_section_offsets.  */
 
-      for (i = 0; i < addrs->num_sections; i++)
-        {
-          addrs->other[i].name = NULL;
-          addrs->other[i].addr = e->dyld_slide;
-          addrs->other[i].sectindex = 0;
-        }
+      if (e->dyld_section_offsets == NULL)
+	{
+	  addrs = alloc_section_addr_info (bfd_count_sections (e->abfd));
+	  
+	  for (i = 0; i < addrs->num_sections; i++)
+	    {
+	      addrs->other[i].name = NULL;
+              if (e->dyld_valid == 0 && e->pre_run_slide_addr_valid == 1)
+	        addrs->other[i].addr = e->pre_run_slide_addr;
+              else
+	        addrs->other[i].addr = e->dyld_slide;
+	      addrs->other[i].sectindex = 0;
+	    }
+	  
+	  addrs->addrs_are_offsets = 1;
+	}
+      else 
+	addrs = NULL;
 
-      addrs->addrs_are_offsets = 1;
-
-      e->objfile =
-        symbol_file_add_bfd_safe (e->abfd, 0, addrs, 0, 0, e->load_flag, 0,
-                                  e->prefix);
+      if (e->objfile == NULL)
+	{
+	  e->objfile = symbol_file_add_bfd_safe (e->abfd,
+						 0,
+						 addrs,
+						 e->dyld_section_offsets,
+						 0, 0,
+						 e->load_flag,
+						 0,
+						 e->prefix, NULL);
+	}
+      else
+	{
+	  using_orig_objfile = 1;
+	  TRY_CATCH (exc, RETURN_MASK_ALL)
+	    {
+	      e->objfile =
+		symbol_file_add_bfd_using_objfile (e->objfile,
+						   e->abfd, 
+						   0, 
+						   addrs, 
+						   e->dyld_section_offsets,
+						   0, 0, 
+						   e->load_flag, 
+						   0,
+						   e->prefix);
+	    }
+	  if (exc.reason == RETURN_ERROR)
+	    e->objfile = NULL;
+	}
       e->abfd = NULL;
 
       if (e->objfile == NULL)
@@ -894,10 +1423,38 @@ dyld_load_symfile (struct dyld_objfile_entry *e)
             }
 
           if (e->commpage_bfd != NULL)
-            e->commpage_objfile =
-              symbol_file_add_bfd_safe (e->commpage_bfd, 0, 0, 0, 0,
-                                        e->load_flag, 0, e->prefix);
-
+	    {
+	      if (!using_orig_objfile)
+		{
+		  e->commpage_objfile =
+		    symbol_file_add_bfd_safe (e->commpage_bfd, 
+					      0, 
+					      addrs,
+					      0,
+					      0, 0, 
+					      e->load_flag, 
+					      0,
+					      e->prefix, NULL);
+		}
+	      else
+		{
+		  TRY_CATCH (exc, RETURN_MASK_ALL)
+		    {
+		      e->commpage_objfile =
+			symbol_file_add_bfd_using_objfile (e->commpage_objfile,
+							   e->commpage_bfd, 
+							   0, 
+							   addrs, 
+							   0,
+							   0, 0, 
+							   e->load_flag, 
+							   0,
+							   e->prefix);
+		    }
+		  if (exc.reason == RETURN_ERROR)
+		    e->commpage_objfile = NULL;
+		}
+	    }
           e->commpage_bfd = NULL;
         }
     }
@@ -911,6 +1468,18 @@ dyld_load_symfile (struct dyld_objfile_entry *e)
       symfile_objfile = e->objfile;
       return;
     }
+}
+
+void 
+dyld_load_symfile (struct dyld_objfile_entry *e)
+{
+  dyld_load_symfile_internal (e, 0);
+}
+
+void
+dyld_load_symfile_preserving_objfile (struct dyld_objfile_entry *e)
+{
+  dyld_load_symfile_internal (e, 1);
 }
 
 void
@@ -1063,7 +1632,7 @@ dyld_should_reload_objfile_for_flags (struct dyld_objfile_entry *e)
 void
 remove_objfile_from_dyld_records (struct objfile *obj)
 {
-  struct dyld_objfile_info *info = &macosx_status->dyld_status.current_info;
+  struct dyld_objfile_info *info = &macosx_dyld_status.current_info;
   struct dyld_objfile_entry *e;
   int i;
 
@@ -1084,7 +1653,7 @@ dyld_is_objfile_loaded (struct objfile *obj)
 {
   struct dyld_objfile_entry *e;
   int i;
-  struct macosx_dyld_thread_status *status = &macosx_status->dyld_status;
+  struct macosx_dyld_thread_status *status = &macosx_dyld_status;
 
   if (obj == NULL)
     return 0;
@@ -1135,7 +1704,8 @@ dyld_is_objfile_loaded (struct objfile *obj)
 }
 
 void
-dyld_remove_objfile (struct dyld_objfile_entry *e)
+dyld_remove_objfile_internal (struct dyld_objfile_entry *e,
+		     int delete_p)
 {
   char *s = NULL;
 
@@ -1159,12 +1729,23 @@ dyld_remove_objfile (struct dyld_objfile_entry *e)
   xfree (s);
   gdb_flush (gdb_stdout);
 
-  free_objfile (e->objfile);
-  e->objfile = NULL;
+  if (delete_p)
+    {
+      free_objfile (e->objfile);
+      e->objfile = NULL;
+    }
+  else
+    clear_objfile (e->objfile);
 
   if (e->abfd != NULL)
     bfd_close (e->abfd);
   e->abfd = NULL;
+
+  if (e->dyld_section_offsets != NULL)
+    {
+      xfree (e->dyld_section_offsets);
+      e->dyld_section_offsets = NULL;
+    }
 
   if (e->commpage_objfile != NULL)
     {
@@ -1172,8 +1753,13 @@ dyld_remove_objfile (struct dyld_objfile_entry *e)
          are ready for the first time; it needs to be freed along with
          the main objfile. */
 
-      free_objfile (e->commpage_objfile);
-      e->commpage_objfile = NULL;
+      if (delete_p)
+	{
+	  free_objfile (e->commpage_objfile);
+	  e->commpage_objfile = NULL;
+	}
+      else
+	clear_objfile (e->commpage_objfile);
 
       if (e->commpage_bfd != NULL)
         bfd_close (e->commpage_bfd);
@@ -1182,12 +1768,33 @@ dyld_remove_objfile (struct dyld_objfile_entry *e)
 
   e->loaded_name = NULL;
   e->loaded_memaddr = 0;
+  e->pre_run_slide_addr_valid = 0;
+  e->pre_run_slide_addr = 0;
   gdb_flush (gdb_stdout);
 
   if (e->reason & dyld_reason_executable_mask)
     {
       symfile_objfile = e->objfile;
     }
+}
+
+/* dyld_remove_objfile deletes the objfile contained
+   in the objfile entry E.  */
+
+void
+dyld_remove_objfile (struct dyld_objfile_entry *e)
+{
+  dyld_remove_objfile_internal (e, 1);
+}
+
+/* dyld_clear_objfile clears the current contents of
+   the objfile contained in objfile entry E.  You 
+   can thereby edit it "in place".  */
+
+void
+dyld_clear_objfile (struct dyld_objfile_entry *e)
+{
+  dyld_remove_objfile_internal (e, 0);
 }
 
 void
@@ -1305,10 +1912,10 @@ dyld_libraries_similar (struct dyld_path_info *d,
  /* Do dyld_objfile_entry OLDENT and NEWENT have the same filename?  In
     other words, are they the same dylib/bundle/executable/etc ?  */
   
-  int
-  dyld_libraries_compatible (struct dyld_path_info *d,
-                            struct dyld_objfile_entry *newent,
-                            struct dyld_objfile_entry *oldent)
+int
+dyld_libraries_compatible (struct dyld_path_info *d,
+                           struct dyld_objfile_entry *newent,
+                           struct dyld_objfile_entry *oldent)
 {
   const char *newname = NULL;
   const char *oldname = NULL;
@@ -1383,14 +1990,29 @@ void
 dyld_objfile_move_load_data (struct dyld_objfile_entry *src,
                              struct dyld_objfile_entry *dest)
 {
-  gdb_assert (dest->abfd == NULL);
   gdb_assert (dest->commpage_bfd == NULL);
+
+  /* dyld_info_process_raw has to open the bfd for the objfile,
+     so we try to reuse it.  But when the library was read at startup,
+     then the old dyld_objfile_entry already has a bfd.  Use that one,
+     and close the dest one.  */
+
+  if (dest->abfd != NULL && src->abfd != dest->abfd)
+    bfd_close (dest->abfd);
 
   gdb_assert (src->objfile == dest->objfile || dest->objfile == NULL);
   gdb_assert (dest->commpage_objfile == NULL);
 
   dest->abfd = src->abfd;
   dest->objfile = src->objfile;
+
+  if (src->dyld_valid == 0 
+      && dest->dyld_valid == 1 
+      && src->pre_run_slide_addr_valid == 1
+      && src->pre_run_slide_addr != 0)
+    {
+      dyld_slide_objfile (dest->objfile, dest->dyld_slide, 0);
+    }
 
   dest->commpage_bfd = src->commpage_bfd;
   dest->commpage_objfile = src->commpage_objfile;
@@ -1411,9 +2033,12 @@ dyld_objfile_move_load_data (struct dyld_objfile_entry *src,
   dest->loaded_addrisoffset = src->loaded_addrisoffset;
   dest->loaded_from_memory = src->loaded_from_memory;
   dest->loaded_error = src->loaded_error;
+  dest->pre_run_slide_addr_valid = src->pre_run_slide_addr_valid;
+  dest->pre_run_slide_addr = src->pre_run_slide_addr;
 
   src->objfile = NULL;
   src->abfd = NULL;
+  src->dyld_section_offsets = NULL;
 
   src->commpage_bfd = NULL;
   src->commpage_objfile = NULL;
@@ -1427,6 +2052,8 @@ dyld_objfile_move_load_data (struct dyld_objfile_entry *src,
   src->loaded_addrisoffset = 0;
   src->loaded_from_memory = 0;
   src->loaded_error = 0;
+  src->pre_run_slide_addr = 0;
+  src->pre_run_slide_addr_valid = 0;
 
   dyld_objfile_entry_clear (src);
 }
@@ -1577,7 +2204,12 @@ dyld_shlibs_updated (struct dyld_objfile_info *info)
 void
 dyld_update_shlibs (struct dyld_path_info *d, struct dyld_objfile_info *result)
 {
+  struct cleanup *timer_cleanup;
+  static int dyld_timer = -1;
   CHECK_FATAL (result != NULL);
+
+  if (maint_use_timers)
+    timer_cleanup = start_timer (&dyld_timer, "dyld_update_shlibs", "");
 
   dyld_debug ("dyld_update_shlibs: updating shared library information\n");
 
@@ -1586,6 +2218,9 @@ dyld_update_shlibs (struct dyld_path_info *d, struct dyld_objfile_info *result)
   dyld_load_symfiles (result);
 
   dyld_shlibs_updated (result);
+  if (maint_use_timers)
+    do_cleanups (timer_cleanup);
+
 }
 
 void

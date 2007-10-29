@@ -462,6 +462,27 @@ The target architecture is assumed to be %s\n"), arch);
 }
 
 
+int
+set_architecture_from_string (char *new_arch)
+{
+  set_architecture_string = xstrdup (new_arch);
+  struct gdbarch_info info;
+  gdbarch_info_init (&info);
+  info.bfd_arch_info = bfd_scan_arch (set_architecture_string);
+  if (info.bfd_arch_info == NULL)
+    internal_error (__FILE__, __LINE__,
+		    _("set_architecture: bfd_scan_arch failed"));
+  if (gdbarch_update_p (info))
+    target_architecture_auto = 0;
+  else
+    {
+      warning("Architecture `%s' not recognized.\n",
+		       set_architecture_string);
+      return 0;
+    }
+  return 1;
+}
+
 /* Called if the user enters ``set architecture'' with or without an
    argument. */
 
@@ -534,8 +555,6 @@ gdbarch_update_p (struct gdbarch_info info)
 struct gdbarch *
 gdbarch_from_bfd (bfd *abfd)
 {
-  struct gdbarch *old_gdbarch = current_gdbarch;
-  struct gdbarch *new_gdbarch;
   struct gdbarch_info info;
 
   gdbarch_info_init (&info);
@@ -554,6 +573,9 @@ set_gdbarch_from_file (bfd *abfd)
   gdbarch = gdbarch_from_bfd (abfd);
   if (gdbarch == NULL)
     error (_("Architecture of file not recognized."));
+  if (!target_architecture_auto && gdbarch != current_gdbarch)
+    error ("Architecture of file \"%s\" does not match user selected architecture.",
+	   abfd->filename ? abfd->filename : "<UNKNOWN>" );
   deprecated_current_gdbarch_select_hack (gdbarch);
 }
 
@@ -652,7 +674,6 @@ initialize_current_architecture (void)
   /* Create the ``set architecture'' command appending ``auto'' to the
      list of architectures. */
   {
-    struct cmd_list_element *c;
     /* Append ``auto''. */
     int nr;
     for (nr = 0; arches[nr] != NULL; nr++);
@@ -691,16 +712,25 @@ gdbarch_info_init (struct gdbarch_info *info)
 void
 gdbarch_info_fill (struct gdbarch *gdbarch, struct gdbarch_info *info)
 {
-  /* "(gdb) set architecture ...".  */
-  if (info->bfd_arch_info == NULL
-      && !target_architecture_auto
-      && gdbarch != NULL)
-    info->bfd_arch_info = gdbarch_bfd_arch_info (gdbarch);
+  /* APPLE LOCAL: I moved the "info->abfd" test before the gdbarch
+     one.  If somebody passed us in a bfd in the info, they probably
+     meant for us to use that first...  The problem with doing it the
+     other way around is that if there is a user selected
+     architecture, you will always just get that, so you can't ask the
+     question "does the architecture of THIS BFD match the currently
+     selected gdbarch".  That's a useful question to have
+     answered.  */
   if (info->bfd_arch_info == NULL
       && info->abfd != NULL
       && bfd_get_arch (info->abfd) != bfd_arch_unknown
       && bfd_get_arch (info->abfd) != bfd_arch_obscure)
     info->bfd_arch_info = bfd_get_arch_info (info->abfd);
+
+  /* "(gdb) set architecture ...".  */
+  if (info->bfd_arch_info == NULL
+      && !target_architecture_auto
+      && gdbarch != NULL)
+    info->bfd_arch_info = gdbarch_bfd_arch_info (gdbarch);
   if (info->bfd_arch_info == NULL
       && gdbarch != NULL)
     info->bfd_arch_info = gdbarch_bfd_arch_info (gdbarch);
@@ -739,7 +769,6 @@ extern initialize_file_ftype _initialize_gdbarch_utils; /* -Wmissing-prototypes 
 void
 _initialize_gdbarch_utils (void)
 {
-  struct cmd_list_element *c;
   add_setshow_enum_cmd ("endian", class_support,
 			endian_enum, &set_endian_string, _("\
 Set endianness of target."), _("\

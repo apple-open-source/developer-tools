@@ -27,7 +27,21 @@ if $tracelevel then {
 set prms_id 0
 set bug_id 0
 
+set using_dsym 0
+foreach x $board_variant_list {
+    if {$x == ""} {
+	continue
+    }
+    switch $x {
+	dsym  {set using_dsym 1}
+	default {}
+    }
+}
 
+if {$using_dsym} {
+    gdb_suppress_entire_file "This test doesn't work when forcing dsym testing"
+    return 0
+}
 
 set test_name "debug-in-ofile"
 
@@ -90,7 +104,7 @@ if  { [gdb_compile "$objdir/$subdir/main.o $objdir/$subdir/four.o $intermediate_
     gdb_suppress_entire_file "Testcase compile failed for $test_name, so all tests in this file will automatically fail."
 }
 
-# This sets breakpoints on the functions "one" through "six" and
+# This sets breakpoints on the functions "my_one" through "six" and
 # checks to make sure that the breakpoint type is the same as $pbt_ptr(function).
 # Then it continues to each of the breakpoints, and makes sure we get there and
 # can do a backtrace.
@@ -109,7 +123,7 @@ proc do_tests {title bpt_ptr} {
     gdb_expect -re "$gdb_prompt $"
     runto_main
 
-    foreach function {one two three four five six} {
+    foreach function {my_one my_two my_three my_four my_five my_six} {
 	set breakpoints($function) [gdb_breakpoint_2 $function]
 	if {[lindex $breakpoints($function) 0] eq [lindex $expected_bpt($function) 0]} {
 	    pass "$title - Setting bpt at $function"
@@ -118,7 +132,7 @@ proc do_tests {title bpt_ptr} {
 	}
     }
 
-    foreach function {one two three four five six} {
+    foreach function {my_one my_two my_three my_four my_five my_six} {
 	set type [lindex $breakpoints($function) 0] 
         switch $type {
 	    line {gdb_continue $function}
@@ -152,24 +166,24 @@ proc reveal_file {args} {
 
 hide_file one.o six.o
 array set expected_breakpoints {
-    one   address
-    two   line
-    three line
-    four  line
-    five  line
-    six   address
+    my_one   address
+    my_two   line
+    my_three line
+    my_four  line
+    my_five  line
+    my_six   address
 }
 do_tests "missing one.o four.o" expected_breakpoints
 reveal_file one.o six.o
 
 hide_file dbg-in-ofile.a
 array set expected_breakpoints {
-    one   line
-    two   address
-    three line
-    four  line
-    five  address
-    six   line
+    my_one   line
+    my_two   address
+    my_three line
+    my_four  line
+    my_five  address
+    my_six   line
 }
 do_tests "missing .a file" expected_breakpoints
 reveal_file dbg-in-ofile.a
@@ -180,12 +194,12 @@ reveal_file dbg-in-ofile.a
 
 hide_file dbg-in-ofile.o one.o three.o
 array set expected_breakpoints {
-    one   address
-    two   line
-    three address
-    four  line
-    five  line
-    six   line
+    my_one   address
+    my_two   line
+    my_three address
+    my_four  line
+    my_five  line
+    my_six   line
 }
 do_tests "missing ld -r file" expected_breakpoints
 reveal_file dbg-in-ofile.o one.o three.o
@@ -203,12 +217,12 @@ if {[lindex $status 0] != 0} {
     
     hide_file one.o six.o
     array set expected_breakpoints {
-	one   line
-	two   line
-	three line
-	four  line
-	five  line
-	six   line
+	my_one   line
+	my_two   line
+	my_three line
+	my_four  line
+	my_five  line
+	my_six   line
     }
     do_tests "Using dSYM" expected_breakpoints
     reveal_file one.o six.o

@@ -49,7 +49,8 @@ void libunwind_frame_set_descr (struct gdbarch *arch, struct libunwind_descr *de
 void libunwind_frame_this_id (struct frame_info *next_frame, void **this_cache,
 			      struct frame_id *this_id);
 void libunwind_frame_prev_register (struct frame_info *next_frame, void **this_cache,
-				    int regnum, int *optimizedp,
+				    /* APPLE LOCAL variable opt states.  */
+				    int regnum, enum opt_state *optimizedp,
 				    enum lval_type *lvalp, CORE_ADDR *addrp,
 				    int *realnump, void *valuep);
 CORE_ADDR libunwind_frame_base_address (struct frame_info *next_frame, void **this_cache);

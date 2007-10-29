@@ -361,6 +361,8 @@ CODE_FRAGMENT
 .  {* The following flags are used by the ELF linker. *}
 .
 .  {* Mark sections which have been allocated to segments.  *}
+.  {* APPLE LOCAL: For Mach-O, I use this to mean whether this
+.     bfd_section is a Mach-O segment, or a Mach-O section.  *}
 .  unsigned int segment_mark : 1;
 .
 .  {* Type of sec_info information.  *}

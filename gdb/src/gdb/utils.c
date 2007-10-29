@@ -27,6 +27,7 @@
 #include "gdb_string.h"
 #include "event-top.h"
 #include "exceptions.h"
+#include "macosx-self-backtrace.h"
 
 #ifdef TUI
 #include "tui/tui.h"		/* For tui_get_command_dimension.   */
@@ -819,6 +820,15 @@ internal_vproblem (struct internal_problem *problem,
   target_terminal_ours ();
   begin_line ();
 
+  /* APPLE LOCAL: Do a stack crawl of how we got here so we're more likely
+     to get useful bug reports.  */
+  {
+    void *bt_buffer[15];
+    int count = gdb_self_backtrace (bt_buffer, 15);
+    fprintf (stderr, "gdb stack crawl at point of internal error:\n");
+    gdb_self_backtrace_symbols_fd (bt_buffer, count, STDERR_FILENO, 2, 14);
+  }
+
   /* Create a string containing the full error/warning message.  Need
      to call query with this full string, as otherwize the reason
      (error/warning) and question become separated.  Format using a
@@ -1531,7 +1541,16 @@ query (const char *ctlstr, ...)
 	}
       printf_filtered (_("Please answer y or n.\n"));
     }
-
+  /* APPLE LOCAL: Reset QUIT_FLAG since this loop will continue until
+     the user answers the question and will fail at some point in the
+     future when the user isn't expecting it and possible crash gdb. This
+     can happen if the user types "run", and is in the process of answering
+     the question "The program being debugged has been started already.
+     Start it from the beginning? (y or n)" and they hit ^C. This will cause
+     resume in infrun.c to quit while trying to resume the program and leave
+     gdb (at least the Apple version of gdb) in a state from which we can't
+     continue and gdb will crash.  */
+  quit_flag = 0;
   if (annotation_level > 1)
     printf_filtered (("\n\032\032post-query\n"));
   return retval;

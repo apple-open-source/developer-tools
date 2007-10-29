@@ -41,24 +41,7 @@
 
 #include <AvailabilityMacros.h>
 
-#define MACH64 (MAC_OS_X_VERSION_MAX_ALLOWED >= 1040)
-
-#if MACH64
-
 #include <mach/mach_vm.h>
-
-#else /* ! MACH64 */
-
-#define mach_vm_size_t vm_size_t
-#define mach_vm_address_t vm_address_t
-#define mach_vm_read vm_read
-#define mach_vm_write vm_write
-#define mach_vm_region vm_region
-#define mach_vm_protect vm_protect
-#define VM_REGION_BASIC_INFO_COUNT_64 VM_REGION_BASIC_INFO_COUNT
-#define VM_REGION_BASIC_INFO_64 VM_REGION_BASIC_INFO
-
-#endif /* MACH64 */
 
 extern macosx_inferior_status *macosx_status;
 

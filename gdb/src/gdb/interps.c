@@ -284,6 +284,38 @@ interp_ui_out (struct interp *interp)
   return current_interpreter->interpreter_out;
 }
 
+/* APPLE LOCAL: Ira uses this for the MacsBug plugin, where he wants to
+   run the standard CLI interpreter, but he wants to also monkey with 
+   it's output so he can divert it to various places in the display.
+   It's arguable that creating a whole new interpreter (like the TUI 
+   does) is cleaner.  But if all you need to do is reformat output
+   that seems like overkill.
+   Given an input INTERP and NEW_UIOUT, sets the uiout of INTERP
+   to NEW_UIOUT, and returns INTERP's previous INTERP.  
+   If INTERP == NULL, uses the current interpreter.  */
+
+struct ui_out *
+interp_set_ui_out (struct interp *interp, struct ui_out *new_uiout)
+{
+  struct ui_out *prev_uiout;
+  
+  if (new_uiout == NULL)
+    error ("Must provide a new uiout.");
+  
+  if (interp != NULL)
+    {
+      prev_uiout = interp->interpreter_out;
+      interp->interpreter_out = new_uiout;
+    }
+  else
+    {
+      prev_uiout = current_interp()->interpreter_out;
+      current_interp()->interpreter_out = new_uiout; /* use current_interpreter */
+    }
+  
+  return prev_uiout;
+}
+
 /* Returns true if the current interp is the passed in name. */
 int
 current_interp_named_p (const char *interp_name)
@@ -365,11 +397,12 @@ interp_exec (struct interp *interp, const char *command_str)
 
 int
 interp_complete (struct interp *interp, 
-		 char *word, char *command_buffer, int cursor)
+		 char *word, char *command_buffer, int cursor, int limit)
 {
   if (interp->procs->complete_proc != NULL)
     {
-      return interp->procs->complete_proc (interp->data, word, command_buffer, cursor);
+      return interp->procs->complete_proc (interp->data, word, command_buffer, 
+                                           cursor, limit);
     }
   
   return 0;

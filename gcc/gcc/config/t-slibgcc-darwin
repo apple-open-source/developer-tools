@@ -47,7 +47,7 @@ ASM_HIDDEN_OP = .private_extern
 # The actual use of the libraries is controlled by REAL_LIBGCC_SPEC.
 # 
 # This assumes each multilib corresponds to a different architecture.
-libgcc_s.%.dylib : $(SHLIB_VERPFX).%.ver libgcc.a
+libgcc_s.%.dylib : $(SHLIB_VERPFX).%.ver stmp-multilib
 	# When building multilibbed target libraries, all the required
 	# libraries are expected to exist in the multilib directory.
 	MLIBS=`$(GCC_FOR_TARGET) --print-multi-lib \
@@ -66,7 +66,8 @@ libgcc_s.%.dylib : $(SHLIB_VERPFX).%.ver libgcc.a
 	$(LIPO_FOR_TARGET) -output $@ -create $(@)_T*
 	rm $(@)_T*
 
-stmp-lipo: libgcc_s.10.4.dylib libgcc_s.10.5.dylib
+libgcc_s.$(SHLIB_SOVERSION)$(SHLIB_EXT): stmp-multilib libgcc_s.10.4.dylib \
+	libgcc_s.10.5.dylib
 	# When building multilibbed target libraries, all the required
 	# libraries are expected to exist in the multilib directory.
 	MLIBS=`$(GCC_FOR_TARGET) --print-multi-lib \
@@ -78,18 +79,17 @@ stmp-lipo: libgcc_s.10.4.dylib libgcc_s.10.5.dylib
 	$(LIPO_FOR_TARGET) -output libgcc_s.$(SHLIB_SOVERSION)$(SHLIB_EXT) \
 	  -create libgcc_s.$(SHLIB_SOVERSION)$(SHLIB_EXT)_T*
 	rm libgcc_s.$(SHLIB_SOVERSION)$(SHLIB_EXT)_T*
-	$(STAMP) stmp-lipo
 
 # From the point-of-view of the Makefiles, libgcc is built by the 'strip'
 # and 'lipo' commands above.
-LIBGCC=stmp-lipo
+LIBGCC=libgcc_s.$(SHLIB_SOVERSION)$(SHLIB_EXT) libgcc_s.10.4.dylib \
+	libgcc_s.10.5.dylib stmp-multilib
 
 INSTALL_FILES=libgcc_s.10.4.dylib libgcc_s.10.5.dylib libgcc_s.1.dylib
 
-install-darwin-libgcc-stubs : $(INSTALL_FILES) installdirs install-multilib \
-			 	stmp-lipo
+install-darwin-libgcc-stubs : $(INSTALL_FILES) installdirs
 	for d in $(INSTALL_FILES) ; do \
 	  $(INSTALL_DATA) $$d $(DESTDIR)$(slibdir)/$$d || exit 1 ; \
 	done
 
-INSTALL_LIBGCC += install-darwin-libgcc-stubs
+INSTALL_LIBGCC = install-darwin-libgcc-stubs install-multilib

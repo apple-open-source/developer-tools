@@ -2653,6 +2653,23 @@ easy_fp_constant (rtx op, enum machine_mode mode)
       long k[4];
       REAL_VALUE_TYPE rv;
 
+      /* APPLE LOCAL begin mainline 4506977 */
+      /* Note to merger: The enclosing function "easy_fp_constant" has
+	 been moved out of this file, and into the sibling file
+	 "predicates.md", and after that move, it was updated with
+	 this patch.  When "predicates.md" arrives in a merge, please
+	 delete this entire function from rs6000.c.  HTH.  */
+      /* Force constants to memory before reload to utilize
+	 compress_float_constant.
+	 Avoid this when flag_unsafe_math_optimizations is enabled
+	 because RDIV division to reciprocal optimization is not able
+	 to regenerate the division.  */
+      if (TARGET_E500_DOUBLE
+	  || (!reload_in_progress && !reload_completed
+	      && !flag_unsafe_math_optimizations))
+	return 0;
+      /* APPLE LOCAL end mainline 4506977 */
+
       REAL_VALUE_FROM_CONST_DOUBLE (rv, op);
       REAL_VALUE_TO_TARGET_LONG_DOUBLE (rv, k);
 
@@ -2667,8 +2684,22 @@ easy_fp_constant (rtx op, enum machine_mode mode)
       long k[2];
       REAL_VALUE_TYPE rv;
 
-      if (TARGET_E500_DOUBLE)
+      /* APPLE LOCAL begin mainline 4506977 */
+      /* Note to merger: The enclosing function "easy_fp_constant" has
+	 been moved out of this file, and into the sibling file
+	 "predicates.md", and after that move, it was updated with
+	 this patch.  When "predicates.md" arrives in a merge, please
+	 delete this entire function from rs6000.c.  HTH.  */
+      /* Force constants to memory before reload to utilize
+	 compress_float_constant.
+	 Avoid this when flag_unsafe_math_optimizations is enabled
+	 because RDIV division to reciprocal optimization is not able
+	 to regenerate the division.  */
+      if (TARGET_E500_DOUBLE
+	  || (!reload_in_progress && !reload_completed
+	      && !flag_unsafe_math_optimizations))
 	return 0;
+      /* APPLE LOCAL end mainline 4506977 */
 
       REAL_VALUE_FROM_CONST_DOUBLE (rv, op);
       REAL_VALUE_TO_TARGET_DOUBLE (rv, k);
@@ -2681,6 +2712,25 @@ easy_fp_constant (rtx op, enum machine_mode mode)
     {
       long l;
       REAL_VALUE_TYPE rv;
+
+      /* APPLE LOCAL begin mainline 4506977 */
+      /* Note to merger: The enclosing function "easy_fp_constant" has
+	 been moved out of this file, and into the sibling file
+	 "predicates.md", and after that move, it was updated with
+	 this patch.  When "predicates.md" arrives in a merge, please
+	 delete this entire function from rs6000.c.  HTH.  */
+      /* The constant 0.f is easy.  */
+      if (op == CONST0_RTX (SFmode))
+	return 1;
+      /* Force constants to memory before reload to utilize
+	 compress_float_constant.
+	 Avoid this when flag_unsafe_math_optimizations is enabled
+	 because RDIV division to reciprocal optimization is not able
+	 to regenerate the division.  */
+      if (!reload_in_progress && !reload_completed
+	  && !flag_unsafe_math_optimizations)
+	return 0;
+      /* APPLE LOCAL end mainline 4506977 */
 
       REAL_VALUE_FROM_CONST_DOUBLE (rv, op);
       REAL_VALUE_TO_TARGET_SINGLE (rv, l);

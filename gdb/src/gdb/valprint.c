@@ -232,11 +232,24 @@ value_check_printable (struct value *val, struct ui_file *stream)
       return 0;
     }
 
-  if (value_optimized_out (val))
+  /* APPLE LOCAL begin variable opt states.  */
+  switch (value_optimized_out (val))
     {
-      fprintf_filtered (stream, _("<value optimized out>"));
+    case opt_okay:
+      break;
+    case opt_away:
+      fprintf_filtered (stream, _("<variable optimized away by compiler>"));
+      return 0;
+    case opt_evicted:
+    case opt_other:
+      fprintf_filtered (stream, 
+		      _("<value temporarily unavailable, due to optimizations>"));
+      return 0;
+    default:
+      fprintf_filtered (stream, _("<variable not found>"));
       return 0;
     }
+  /* APPLE LOCAL end variable opt states.  */
 
   return 1;
 }

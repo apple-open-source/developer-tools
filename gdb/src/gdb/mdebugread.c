@@ -3989,7 +3989,10 @@ psymtab_to_symtab_1 (struct partial_symtab *pst, char *filename)
 		{
 		  /* Handle encoded stab line number. */
 		  valu += ANOFFSET (pst->section_offsets, SECT_OFF_TEXT (pst->objfile));
-		  record_line (current_subfile, sh.index, valu);
+		  /* APPLE LOCAL begin subroutine inlining  */
+		  record_line (current_subfile, sh.index, valu, 0, 
+			       NORMAL_LT_ENTRY);
+		  /* APPLE LOCAL end subroutine inlining  */
 		}
 	    }
 	  else if (sh.st == stProc || sh.st == stStaticProc
@@ -4699,6 +4702,10 @@ new_block (enum block_type type)
      allocate the block.  Which, in turn, suggests that the block
      should be allocated on an obstack.  */
   struct block *retval = xzalloc (sizeof (struct block));
+
+  /* APPLE LOCAL begin address ranges  */
+  retval->ranges = NULL;
+  /* APPLE LOCAL end address ranges  */
 
   if (type == FUNCTION_BLOCK)
     BLOCK_DICT (retval) = dict_create_linear_expandable ();

@@ -40,7 +40,7 @@ extern int find_objc_msgcall (CORE_ADDR pc, CORE_ADDR *new_pc);
 
 void tell_objc_msgsend_cacher_objfile_changed (struct objfile *);
 
-CORE_ADDR find_implementation (CORE_ADDR object, CORE_ADDR sel);
+CORE_ADDR find_implementation (CORE_ADDR object, CORE_ADDR sel, int stret);
 
 extern char *parse_selector (char *method, char **selector);
 
@@ -54,7 +54,12 @@ extern char *find_imps (struct symtab *symtab, struct block *block,
 
 extern struct value *value_nsstring (char *ptr, int len);
 
-extern struct type *value_objc_target_type (struct value *, struct block *);
+/* APPLE LOCAL: I needed this bit to decorate up the gc-roots command output.  */
+extern struct type *objc_target_type_from_object (CORE_ADDR isa_addr,
+						  struct block *block, int addrsize,
+						  char **class_name);
+
+extern struct type *value_objc_target_type (struct value *, struct block *, char **);
 int should_lookup_objc_class ();
 
 /* for parsing Objective C */

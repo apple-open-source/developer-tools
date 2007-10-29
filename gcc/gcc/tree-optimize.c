@@ -113,6 +113,8 @@ static struct tree_opt_pass pass_all_optimizations =
 static void 
 execute_cleanup_cfg_post_optimizing (void)
 {
+  /* APPLE LOCAL mainline 4506977 */
+  fold_cond_expr_cond ();
   cleanup_tree_cfg ();
   cleanup_dead_labels ();
   group_case_labels ();

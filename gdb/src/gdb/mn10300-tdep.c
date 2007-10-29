@@ -762,7 +762,8 @@ mn10300_frame_this_id (struct frame_info *next_frame,
 static void
 mn10300_frame_prev_register (struct frame_info *next_frame,
 			     void **this_prologue_cache,
-			     int regnum, int *optimizedp,
+			     /* APPLE LOCAL variable opt states.  */
+			     int regnum, enum opt_state *optimizedp,
 			     enum lval_type *lvalp, CORE_ADDR *addrp,
 			     int *realnump, void *bufferp)
 {

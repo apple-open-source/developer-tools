@@ -363,7 +363,7 @@ do {					\
    linkers, and for positional arguments like libraries.  */
 #define LINK_COMMAND_SPEC "\
 %{!fdump=*:%{!fsyntax-only:%{!precomp:%{!c:%{!M:%{!MM:%{!E:%{!S:\
-    %{!Zdynamiclib:%(linker)}%{Zdynamiclib:/usr/bin/libtool} \
+    %{!Zdynamiclib:%(linker)}%{Zdynamiclib:libtool} \
     %l %X %{d} %{s} %{t} %{Z} \
     %{!Zdynamiclib:%{A} %{e*} %{m} %{N} %{n} %{r} %{u*} %{x} %{z}} \
     %{@:-o %f%u.out}%{!@:%{o*}%{!o:-o a.out}} \

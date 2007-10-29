@@ -132,13 +132,12 @@ fetch_inferior_registers (int regno)
       kern_return_t ret = thread_get_state
         (current_thread, GDB_x86_THREAD_STATE, (thread_state_t) & gp_regs,
          &gp_count);
-      /* The above call will fail if this gdb is running on an older
-         kernel that doesn't recognise the new x86_THREAD_STATE type.
-         In that case, assume this is an i386-only system and use the old
-         call.  */
       if (ret != KERN_SUCCESS)
-        goto retry_using_old_call;
-      MACH_CHECK_ERROR (ret);
+	{
+	  printf ("Error calling thread_get_state for GP registers for thread 0x%ulx", current_thread);
+	  MACH_CHECK_ERROR (ret);
+	}
+
       gdbarch_info_init (&info);
       gdbarch_info_fill (current_gdbarch, &info);
       info.byte_order = gdbarch_byte_order (current_gdbarch);
@@ -166,7 +165,11 @@ fetch_inferior_registers (int regno)
           kern_return_t ret = thread_get_state
             (current_thread, GDB_x86_THREAD_STATE, (thread_state_t) & gp_regs,
              &gp_count);
-          MACH_CHECK_ERROR (ret);
+	  if (ret != KERN_SUCCESS)
+	    {
+	      printf ("Error calling thread_get_state for GP registers for thread 0x%ulx", current_thread);
+	      MACH_CHECK_ERROR (ret);
+	    }
           x86_64_macosx_fetch_gp_registers (&gp_regs.uts.ts64);
           fetched++;
         }
@@ -180,14 +183,17 @@ fetch_inferior_registers (int regno)
           kern_return_t ret = thread_get_state
             (current_thread, GDB_x86_FLOAT_STATE, (thread_state_t) & fp_regs,
              &fp_count);
-          MACH_CHECK_ERROR (ret);
+	  if (ret != KERN_SUCCESS)
+	    {
+	      printf ("Error calling thread_get_state for float registers for thread 0x%ulx", current_thread);
+	      MACH_CHECK_ERROR (ret);
+	    }
           x86_64_macosx_fetch_fp_registers (&fp_regs.ufs.fs64);
           fetched++;
         }
     }
   else
     {
-retry_using_old_call:
       if ((regno == -1) || IS_GP_REGNUM (regno))
         {
           gdb_i386_thread_state_t gp_regs;
@@ -195,7 +201,11 @@ retry_using_old_call:
           kern_return_t ret = thread_get_state
             (current_thread, GDB_i386_THREAD_STATE, (thread_state_t) & gp_regs,
              &gp_count);
-          MACH_CHECK_ERROR (ret);
+	  if (ret != KERN_SUCCESS)
+	    {
+	      printf ("Error calling thread_get_state for GP registers for thread 0x%ulx", current_thread);
+	      MACH_CHECK_ERROR (ret);
+	    }
           i386_macosx_fetch_gp_registers (&gp_regs);
           fetched++;
         }
@@ -210,7 +220,11 @@ retry_using_old_call:
           kern_return_t ret = thread_get_state
             (current_thread, GDB_i386_FLOAT_STATE, (thread_state_t) & fp_regs,
              &fp_count);
-          MACH_CHECK_ERROR (ret);
+	  if (ret != KERN_SUCCESS)
+	    {
+	      printf ("Error calling thread_get_state for float registers for thread 0x%ulx", current_thread);
+	      MACH_CHECK_ERROR (ret);
+	    }
           i386_macosx_fetch_fp_registers (&fp_regs);
           fetched++;
         }
@@ -300,3 +314,203 @@ store_inferior_registers (int regno)
         }
     }
 }
+
+
+/* Support for debug registers, boosted mostly from i386-linux-nat.c.  */
+
+#ifndef DR_FIRSTADDR
+#define DR_FIRSTADDR 0
+#endif
+
+#ifndef DR_LASTADDR
+#define DR_LASTADDR 3
+#endif
+
+#ifndef DR_STATUS
+#define DR_STATUS 6
+#endif
+
+#ifndef DR_CONTROL
+#define DR_CONTROL 7
+#endif
+
+
+static void
+i386_macosx_dr_set (int regnum, uint32_t value)
+{
+#ifndef HAVE_X86_DEBUG_STATE32_T
+  return;
+#else
+  int current_pid;
+  thread_t current_thread;
+  x86_debug_state_t dr_regs;
+  kern_return_t ret;
+  unsigned int dr_count = x86_DEBUG_STATE_COUNT;
+
+  gdb_assert (regnum >= 0 && regnum <= DR_CONTROL);
+
+  current_pid = ptid_get_pid (inferior_ptid);
+  current_thread = ptid_get_tid (inferior_ptid);
+
+  dr_regs.dsh.flavor = x86_DEBUG_STATE32;
+  dr_regs.dsh.count = x86_DEBUG_STATE32_COUNT;
+  dr_count = x86_DEBUG_STATE_COUNT;
+  ret = thread_get_state (current_thread, x86_DEBUG_STATE, 
+                          (thread_state_t) &dr_regs, &dr_count);
+
+  if (ret != KERN_SUCCESS)
+    {
+      printf_unfiltered ("Error reading debug registers thread 0x%x via thread_get_state\n", (int) current_thread);
+      MACH_CHECK_ERROR (ret);
+    }
+
+  switch (regnum) 
+    {
+      case 0:
+        dr_regs.uds.ds32.dr0 = value;
+        break;
+      case 1:
+        dr_regs.uds.ds32.dr1 = value;
+        break;
+      case 2:
+        dr_regs.uds.ds32.dr2 = value;
+        break;
+      case 3:
+        dr_regs.uds.ds32.dr3 = value;
+        break;
+      case 4:
+        dr_regs.uds.ds32.dr4 = value;
+        break;
+      case 5:
+        dr_regs.uds.ds32.dr5 = value;
+        break;
+      case 6:
+        dr_regs.uds.ds32.dr6 = value;
+        break;
+      case 7:
+        dr_regs.uds.ds32.dr7 = value;
+        break;
+    }
+
+  ret = thread_set_state (current_thread, x86_DEBUG_STATE, 
+                          (thread_state_t) &dr_regs, dr_count);
+
+  if (ret != KERN_SUCCESS)
+    {
+      printf_unfiltered ("Error writing debug registers thread 0x%x via thread_get_state\n", (int) current_thread);
+      MACH_CHECK_ERROR (ret);
+    }
+#endif /* HAVE_X86_DEBUG_STATE32_T */
+}
+
+
+static uint32_t
+i386_macosx_dr_get (int regnum)
+{
+#ifndef HAVE_X86_DEBUG_STATE32_T
+  return -1;
+#else
+  int current_pid;
+  thread_t current_thread;
+  x86_debug_state_t dr_regs;
+  kern_return_t ret;
+  unsigned int dr_count = x86_DEBUG_STATE_COUNT;
+
+  gdb_assert (regnum >= 0 && regnum <= DR_CONTROL);
+
+  current_pid = ptid_get_pid (inferior_ptid);
+  current_thread = ptid_get_tid (inferior_ptid);
+
+  dr_regs.dsh.flavor = x86_DEBUG_STATE32;
+  dr_regs.dsh.count = x86_DEBUG_STATE32_COUNT;
+  dr_count = x86_DEBUG_STATE_COUNT;
+  ret = thread_get_state (current_thread, x86_DEBUG_STATE, 
+                          (thread_state_t) &dr_regs, &dr_count);
+
+  if (ret != KERN_SUCCESS)
+    {
+      printf_unfiltered ("Error reading debug registers thread 0x%x via thread_get_state\n", (int) current_thread);
+      MACH_CHECK_ERROR (ret);
+    }
+
+  switch (regnum) 
+    {
+      case 0:
+        return dr_regs.uds.ds32.dr0;
+      case 1:
+        return dr_regs.uds.ds32.dr1;
+      case 2:
+        return dr_regs.uds.ds32.dr2;
+      case 3:
+        return dr_regs.uds.ds32.dr3;
+      case 4:
+        return dr_regs.uds.ds32.dr4;
+      case 5:
+        return dr_regs.uds.ds32.dr5;
+      case 6:
+        return dr_regs.uds.ds32.dr6;
+      case 7:
+        return dr_regs.uds.ds32.dr7;
+      default:
+        return -1;
+    }
+
+#endif /* HAVE_X86_DEBUG_STATE32_T */
+}
+
+void
+i386_macosx_dr_set_control (unsigned long control)
+{
+  i386_macosx_dr_set (DR_CONTROL, control);
+}
+
+void
+i386_macosx_dr_set_addr (int regnum, CORE_ADDR addr)
+{
+  gdb_assert (regnum >= 0 && regnum <= DR_LASTADDR - DR_FIRSTADDR);
+
+  i386_macosx_dr_set (DR_FIRSTADDR + regnum, addr);
+}
+
+void
+i386_macosx_dr_reset_addr (int regnum)
+{
+  gdb_assert (regnum >= 0 && regnum <= DR_LASTADDR - DR_FIRSTADDR);
+
+  i386_macosx_dr_set (DR_FIRSTADDR + regnum, 0L);
+}
+
+unsigned long
+i386_macosx_dr_get_status (void)
+{
+  return i386_macosx_dr_get (DR_STATUS);
+}
+
+/* I have no idea why this target vector entry gets passed in the target.
+   That seems REALLY whacky...  */
+
+int
+i386_macosx_target_stopped_data_address (struct target_ops *target, CORE_ADDR *addr)
+{
+  return i386_stopped_data_address (addr);
+}
+
+int 
+i386_macosx_can_use_hw_breakpoint (int unused1, int unused2, int unused3)
+{
+  return 1;
+}
+
+void
+macosx_complete_child_target (struct target_ops *target)
+{
+  target->to_can_use_hw_breakpoint = i386_macosx_can_use_hw_breakpoint;
+  target->to_stopped_by_watchpoint = i386_stopped_by_watchpoint;
+  target->to_stopped_data_address = i386_macosx_target_stopped_data_address;
+  target->to_insert_watchpoint = i386_insert_watchpoint;
+  target->to_remove_watchpoint = i386_remove_watchpoint;
+  target->to_insert_hw_breakpoint = i386_insert_hw_breakpoint;
+  target->to_remove_hw_breakpoint = i386_remove_hw_breakpoint;
+  target->to_have_continuable_watchpoint = 1;
+}
+

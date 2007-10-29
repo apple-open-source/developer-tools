@@ -169,8 +169,7 @@ non_heuristic_proc_desc (CORE_ADDR pc, CORE_ADDR *addrptr)
 
 	      ptr = priv->contents + mid * 32;
 	      pdr_pc = bfd_get_signed_32 (sec->objfile->obfd, ptr);
-	      pdr_pc += ANOFFSET (sec->objfile->section_offsets,
-				  SECT_OFF_TEXT (sec->objfile));
+	      pdr_pc += objfile_text_section_offset (sec->objfile);
 
 	      if (pdr_pc > pc)
 		high = mid;
@@ -187,8 +186,7 @@ non_heuristic_proc_desc (CORE_ADDR pc, CORE_ADDR *addrptr)
 	    {
 	      ptr = priv->contents + (low - 1) * 32;
 	      pdr_pc = bfd_get_signed_32 (sec->objfile->obfd, ptr);
-	      pdr_pc += ANOFFSET (sec->objfile->section_offsets,
-				  SECT_OFF_TEXT (sec->objfile));
+	      pdr_pc += objfile_text_section_offset (sec->objfile);
 	    }
 
 	  /* We don't have a range, so we have no way to know for sure
@@ -238,7 +236,7 @@ non_heuristic_proc_desc (CORE_ADDR pc, CORE_ADDR *addrptr)
   if (b == NULL)
     return NULL;
 
-  if (startaddr > BLOCK_START (b))
+  if (startaddr > BLOCK_LOWEST_PC (b))
     {
       /* This is the "pathological" case referred to in a comment in
          print_frame_info.  It might be better to move this check into
@@ -392,7 +390,8 @@ mips_mdebug_frame_this_id (struct frame_info *next_frame, void **this_cache,
 static void
 mips_mdebug_frame_prev_register (struct frame_info *next_frame,
 				 void **this_cache,
-				 int regnum, int *optimizedp,
+				 /* APPLE LOCAL variable opt states.  */
+				 int regnum, enum opt_state *optimizedp,
 				 enum lval_type *lvalp, CORE_ADDR *addrp,
 				 int *realnump, void *valuep)
 {

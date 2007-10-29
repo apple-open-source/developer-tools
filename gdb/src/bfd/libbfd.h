@@ -215,6 +215,10 @@ int bfd_generic_stat_arch_elt
 
 #define _bfd_read_ar_hdr(abfd) \
   BFD_SEND (abfd, _bfd_read_ar_hdr_fn, (abfd))
+
+/* APPLE LOCAL: Allow a way to clear the cached bfd's in an archive.  */
+void bfd_archive_free_cached_info (bfd *);
+
 
 /* Generic routines to use for BFD_JUMP_TABLE_GENERIC.  Use
    BFD_JUMP_TABLE_GENERIC (_bfd_generic).  */

@@ -1,3 +1,9 @@
+2006-11-13  Stuart Hastings  <stuart@apple.com>
+
+	Radar 4506977, 4736029 (copied from Positron branch)
+	* gcc/testsuite/gcc.apple/4506977.c: New.
+	* gcc/testsuite/gcc.apple/4736029.c: New.
+
 2006-09-21  Mike Stump  <mrs@apple.com>
 
 	Radar 4736998

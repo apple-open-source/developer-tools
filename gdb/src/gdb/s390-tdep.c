@@ -1943,7 +1943,8 @@ s390_frame_this_id (struct frame_info *next_frame,
 static void
 s390_frame_prev_register (struct frame_info *next_frame,
 			  void **this_prologue_cache,
-			  int regnum, int *optimizedp,
+			  /* APPLE LOCAL variable opt states.  */
+			  int regnum, enum opt_state *optimizedp,
 			  enum lval_type *lvalp, CORE_ADDR *addrp,
 			  int *realnump, gdb_byte *bufferp)
 {
@@ -2015,7 +2016,8 @@ s390_stub_frame_this_id (struct frame_info *next_frame,
 static void
 s390_stub_frame_prev_register (struct frame_info *next_frame,
 			       void **this_prologue_cache,
-			       int regnum, int *optimizedp,
+			       /* APPLE LOCAL variable opt states.  */
+			       int regnum, enum opt_state *optimizedp,
 			       enum lval_type *lvalp, CORE_ADDR *addrp,
 			       int *realnump, gdb_byte *bufferp)
 {
@@ -2158,7 +2160,8 @@ s390_sigtramp_frame_this_id (struct frame_info *next_frame,
 static void
 s390_sigtramp_frame_prev_register (struct frame_info *next_frame,
 				   void **this_prologue_cache,
-				   int regnum, int *optimizedp,
+				   /* APPLE LOCAL variable opt states.  */
+				   int regnum, enum opt_state *optimizedp,
 				   enum lval_type *lvalp, CORE_ADDR *addrp,
 				   int *realnump, gdb_byte *bufferp)
 {

@@ -203,7 +203,7 @@ elf_symtab_read (struct objfile *objfile, int dynamic)
 	      continue;
 	    }
 
-          offset = ANOFFSET (objfile->section_offsets, sym->section->index);
+          offset = objfile_section_offset (objfile, sym->section->index);
 	  if (dynamic
 	      && sym->section == &bfd_und_section
 	      && (sym->flags & BSF_FUNCTION))
@@ -226,7 +226,7 @@ elf_symtab_read (struct objfile *objfile, int dynamic)
 		((char *) sym->name, symaddr,
 		 mst_solib_trampoline, sym->section, objfile);
 /* APPLE LOCAL: We don't need the struct minimal_symbol member filename.  */
-#if defined(SOFUN_ADDRESS_MAYBE_MISSING) && !defined(NM_NEXTSTEP)
+#if defined(SOFUN_ADDRESS_MAYBE_MISSING) && !defined(TM_NEXTSTEP)
 	      if (msym != NULL)
 		msym->filename = filesymname;
 #endif
@@ -445,7 +445,7 @@ elf_symtab_read (struct objfile *objfile, int dynamic)
 		MSYMBOL_SIZE(msym) = size;
 	      }
 /* APPLE LOCAL: We don't need the struct minimal_symbol member filename.  */
-#if defined(SOFUN_ADDRESS_MAYBE_MISSING) && !defined(NM_NEXTSTEP)
+#if defined(SOFUN_ADDRESS_MAYBE_MISSING) && !defined(TM_NEXTSTEP)
 	      if (msym != NULL)
 		msym->filename = filesymname;
 #endif

@@ -264,6 +264,9 @@ for t in $TARGETS ; do
       cp -p $DIR/dst-$BUILD-$t$DL/$f .$DL/$f || exit 1
     fi
   done
+  ln -s ../../../../bin/as .$DL/as
+  ln -s ../../../../bin/ld .$DL/ld
+  ln -s ../../../../bin/libtool .$DL/libtool
 done
 
 # bin

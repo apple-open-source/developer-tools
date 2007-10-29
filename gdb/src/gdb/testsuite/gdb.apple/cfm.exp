@@ -57,6 +57,8 @@ gdb_start
 gdb_reinitialize_dir $srcdir/$subdir
 gdb_load ${binfile}
 
+gdb_test "set inferior-auto-start-cfm on" "" "Enable cfm auto start"
+
 if ![runto_main] then { 
   fail "cfm tests suppressed"
   return -1

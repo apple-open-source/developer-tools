@@ -21,6 +21,8 @@
 
 #include "server.h"
 #include "linux-low.h"
+/* APPLE LOCAL - subroutine inlining  */
+#include "../inlining.h"
 
 #include <sys/wait.h>
 #include <stdio.h>
@@ -304,6 +306,13 @@ check_removed_breakpoint (struct process_info *event_child)
   current_inferior = get_process_thread (event_child);
 
   stop_pc = get_stop_pc ();
+  /* APPLE LOCAL begin subroutine inlining  */
+  /* If the PC has changed since the last time we updated the
+     global_inlined_call_stack data, we need to verify the current
+     data and possibly update it.  */
+  if (stop_pc != inlined_function_call_stack_pc ())
+    inlined_function_update_call_stack (stop_pc);
+  /* APPLE LOCAL end subroutine inlining  */
 
   /* If the PC has changed since we stopped, then we shouldn't do
      anything.  This happens if, for instance, GDB handled the
@@ -554,6 +563,13 @@ linux_wait_for_event (struct thread_info *child)
 	return wstat;
 
       stop_pc = get_stop_pc ();
+      /* APPLE LOCAL begin subroutine inlining  */
+      /* If the PC has changed since the last time we updated the
+	 global_inlined_call_stack data, we need to verify the current
+	 data and possibly update it.  */
+      if (stop_pc != inlined_function_call_stack_pc ())
+	inlined_function_update_call_stack (stop_pc);
+      /* APPLE LOCAL end subroutine inlining  */
 
       /* bp_reinsert will only be set if we were single-stepping.
 	 Notice that we will resume the process after hitting

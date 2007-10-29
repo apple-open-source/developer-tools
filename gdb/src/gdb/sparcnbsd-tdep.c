@@ -221,7 +221,9 @@ sparc32nbsd_sigcontext_frame_this_id (struct frame_info *next_frame,
 static void
 sparc32nbsd_sigcontext_frame_prev_register (struct frame_info *next_frame,
 					    void **this_cache,
-					    int regnum, int *optimizedp,
+					    int regnum, 
+					    /* APPLE LOCAL variable opt states.  */
+					    enum opt_state *optimizedp,
 					    enum lval_type *lvalp,
 					    CORE_ADDR *addrp,
 					    int *realnump, gdb_byte *valuep)

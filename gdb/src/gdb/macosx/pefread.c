@@ -102,8 +102,7 @@ pef_symfile_read (struct objfile *objfile, int mainline)
           sym = symbol_table[i];
 
           symaddr = sym->section->vma + sym->value;
-          symaddr +=
-            ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile));
+          symaddr += objfile_text_section_offset (objfile);
 
           /* For non-absolute symbols, use the type of the section
              they are relative to, to intuit text/data.  BFD provides
@@ -131,12 +130,10 @@ pef_symfile_read (struct objfile *objfile, int mainline)
       do_cleanups (back_to);
     }
 
-  if (firstaddr >
-      ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile)))
+  if (firstaddr > objfile_text_section_offset (objfile))
     {
       prim_record_minimal_symbol ("unknown_text",
-                                  ANOFFSET (objfile->section_offsets,
-                                            SECT_OFF_TEXT (objfile)),
+                                  objfile_text_section_offset (objfile),
                                   mst_text, objfile);
     }
 
@@ -162,13 +159,11 @@ pef_symfile_offsets (struct objfile *objfile, struct section_addr_info *addrs)
 
   if (addrs->other[0].addr != 0)
     {
-      objfile_delete_from_ordered_sections (objfile);
       for (i = 0; i < objfile->sections_end - objfile->sections; i++)
         {
           objfile->sections[i].addr += addrs->other[0].addr;
           objfile->sections[i].endaddr += addrs->other[0].addr;
         }
-      objfile_add_to_ordered_sections (objfile);
     }
 
   for (i = 0; i < addrs->num_sections; i++)

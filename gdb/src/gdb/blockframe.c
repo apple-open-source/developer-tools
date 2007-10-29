@@ -97,10 +97,24 @@ addr_inside_main_func (CORE_ADDR pc)
 
       if (mainsym && SYMBOL_CLASS (mainsym) == LOC_BLOCK)
 	{
-	  symfile_objfile->ei.main_func_lowpc =
-	    BLOCK_START (SYMBOL_BLOCK_VALUE (mainsym));
-	  symfile_objfile->ei.main_func_highpc =
-	    BLOCK_END (SYMBOL_BLOCK_VALUE (mainsym));
+	  /* APPLE LOCAL begin address ranges  */
+	  struct block *bl = SYMBOL_BLOCK_VALUE (mainsym);
+
+	  if (BLOCK_RANGES (bl))
+	    {
+	      int last = BLOCK_RANGES (bl)->nelts - 1;
+
+	      symfile_objfile->ei.main_func_lowpc = BLOCK_LOWEST_PC (bl);
+	      symfile_objfile->ei.main_func_highpc = BLOCK_HIGHEST_PC (bl);
+	    }
+	  else
+	    {
+	      symfile_objfile->ei.main_func_lowpc =
+		BLOCK_START (SYMBOL_BLOCK_VALUE (mainsym));
+	      symfile_objfile->ei.main_func_highpc =
+		BLOCK_END (SYMBOL_BLOCK_VALUE (mainsym));
+	    }
+	  /* APPLE LOCAL end address ranges  */
 	}
     }
 
@@ -188,7 +202,9 @@ get_pc_function_start (CORE_ADDR pc)
       if (symbol)
 	{
 	  bl = SYMBOL_BLOCK_VALUE (symbol);
-	  return BLOCK_START (bl);
+	  /* APPLE LOCAL begin address ranges  */
+	  return BLOCK_LOWEST_PC (bl);
+	  /* APPLE LOCAL end address ranges  */
 	}
     }
 
@@ -322,13 +338,19 @@ find_pc_partial_function (CORE_ADDR pc, char **name, CORE_ADDR *address,
 	  /* Checking whether the msymbol has a larger value is for the
 	     "pathological" case mentioned in print_frame_info.  */
 	  f = find_pc_sect_function (mapped_pc, section);
+	  /* APPLE LOCAL begin address ranges  */
 	  if (f != NULL
 	      && (msymbol == NULL
-		  || (BLOCK_START (SYMBOL_BLOCK_VALUE (f))
+		  || (BLOCK_LOWEST_PC (SYMBOL_BLOCK_VALUE (f))
 		      >= SYMBOL_VALUE_ADDRESS (msymbol))))
 	    {
-	      cache_pc_function_low = BLOCK_START (SYMBOL_BLOCK_VALUE (f));
-	      cache_pc_function_high = BLOCK_END (SYMBOL_BLOCK_VALUE (f));
+	      cache_pc_function_low = BLOCK_LOWEST_PC (SYMBOL_BLOCK_VALUE (f));
+	      if (BLOCK_RANGES (SYMBOL_BLOCK_VALUE (f)))
+		cache_pc_function_high = 
+		  BLOCK_HIGHEST_PC (SYMBOL_BLOCK_VALUE (f));
+	      else
+		cache_pc_function_high = BLOCK_END (SYMBOL_BLOCK_VALUE (f));
+	  /* APPLE LOCAL end address ranges  */
 	      cache_pc_function_name = DEPRECATED_SYMBOL_NAME (f);
 	      cache_pc_function_section = section;
 	      goto return_cached_value;
@@ -462,7 +484,9 @@ block_innermost_frame (struct block *block)
       if (frame == NULL)
 	return NULL;
       calling_pc = get_frame_address_in_block (frame);
-      if (calling_pc >= start && calling_pc < end)
+      /* APPLE LOCAL begin address ranges  */
+      if (block_contains_pc (block, calling_pc))
+      /* APPLE LOCAL end address ranges  */
 	return frame;
     }
 }

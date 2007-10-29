@@ -47,6 +47,8 @@
 #include "gdb_assert.h"
 #include "exceptions.h"
 #include "solib.h"
+/* APPLE LOCAL - subroutine inlining  */
+#include "inlining."
 
 #ifndef O_BINARY
 #define O_BINARY 0
@@ -407,6 +409,9 @@ core_open (char *filename, int from_tty)
       flush_cached_frames ();
       select_frame (get_current_frame ());
       print_stack_frame (get_selected_frame (NULL), 1, SRC_AND_LOC);
+      /* APPLE LOCAL begin subroutine inlining  */
+      clear_inlined_subroutine_print_frames ();
+      /* APPLE LOCAL end subroutine inlining  */
     }
   else
     {

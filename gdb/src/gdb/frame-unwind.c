@@ -25,6 +25,8 @@
 #include "gdb_assert.h"
 #include "dummy-frame.h"
 #include "gdb_obstack.h"
+/* APPLE LOCAL - subroutine inlining  */
+#include "inlining.h"
 
 static struct gdbarch_data *frame_unwind_data;
 
@@ -51,8 +53,14 @@ frame_unwind_init (struct obstack *obstack)
      can't override this.  */
   table->list = OBSTACK_ZALLOC (obstack, struct frame_unwind_table_entry);
   table->list->unwinder = dummy_frame_unwind;
+
+  /* APPLE LOCAL begin subroutine inlining  */
+  table->list->next = OBSTACK_ZALLOC (obstack, struct frame_unwind_table_entry);
+  table->list->next->unwinder = inlined_frame_unwind;
+
   /* The insertion point for OSABI sniffers.  */
-  table->osabi_head = &table->list->next;
+  table->osabi_head = &table->list->next->next;
+  /* APPLE LOCAL end subroutine inlining  */
   return table;
 }
 

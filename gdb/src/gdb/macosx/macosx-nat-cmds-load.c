@@ -27,6 +27,7 @@
 #include "gdbcmd.h"
 #include "completer.h"
 #include "readline/readline.h"
+#include "filenames.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -87,6 +88,12 @@ load_plugin (char *arg, int from_tty)
                   grpname);
         }
     }
+
+  /* dyld won't let a setgid program like gdb load a plugin by relative
+     path.  */
+  if (!IS_ABSOLUTE_PATH (path))
+    error ("Usage: load-plugin FULL-PATHNAME\n"
+           "Relative pathnames ('%s') are not permitted.", path);
 
   if (debug_plugins_flag)
     {

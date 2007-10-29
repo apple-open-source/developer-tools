@@ -50,6 +50,8 @@
 #include "symfile.h"
 #include "objfiles.h"
 #include "solib.h"
+/* APPLE LOCAL - subroutine inlining  */
+#include "inlining.h"
 
 /* Prototypes for exported functions. */
 
@@ -521,8 +523,45 @@ print_frame_info (struct frame_info *fi, int print_level,
 			   && (get_frame_pc (fi) != sal.pc));
 
       if (annotation_level)
-	done = identify_source_line (sal.symtab, sal.line, mid_statement,
-				     get_frame_pc (fi));
+	/* APPLE LOCAL begin subroutine inlining  */
+	{
+	  char *filename;
+	  int line;
+	  int column;
+	  struct symtab *tmp_symtab;
+
+	  if (at_inlined_call_site_p (&filename, &line, &column))
+	    {
+	      struct symtab_and_line *current;
+	      current = &sal;
+
+	      while (current->entry_type != INLINED_CALL_SITE_LT_ENTRY
+		     && current->line != line
+		     && current->next)
+		current = current->next;
+
+	      if (sal.entry_type == INLINED_CALL_SITE_LT_ENTRY)
+		sal = *current;
+	      else
+		{
+		  tmp_symtab = find_pc_symtab (stop_pc);
+		  if (tmp_symtab 
+		      && tmp_symtab != sal.symtab
+		      && strcmp (tmp_symtab->filename, filename) == 0)
+		    {
+		      sal.symtab = tmp_symtab;
+		      sal.line = line;
+		      sal.pc = stop_pc;
+		    }
+		}
+	      done = identify_source_line (sal.symtab, sal.line, 0, sal.pc);
+	    }
+	  else
+	    done = identify_source_line (sal.symtab, sal.line, mid_statement,
+					 get_frame_pc (fi));
+	}
+        /* APPLE LOCAL end subroutine inlining  */
+      
       if (!done)
 	{
 	  if (deprecated_print_frame_info_listing_hook)
@@ -531,6 +570,12 @@ print_frame_info (struct frame_info *fi, int print_level,
 						      sal.line + 1, 0);
 	  else
 	    {
+	      /* APPLE LOCAL begin subroutine inlining  */
+	      char *filename;
+	      int line;
+	      int column;
+	      /* APPLE LOCAL end subroutine inlining  */
+
 	      /* We used to do this earlier, but that is clearly
 		 wrong. This function is used by many different
 		 parts of gdb, including normal_stop in infrun.c,
@@ -547,6 +592,22 @@ print_frame_info (struct frame_info *fi, int print_level,
 
 	      if (deprecated_print_frame_info_listing_hook)
 		deprecated_print_frame_info_listing_hook (sal.symtab, sal.line, 1, 0);
+	      /* APPLE LOCAL begin subroutine inlining  */
+	      else if (at_inlined_call_site_p (&filename, &line, &column))
+		{
+		  struct symtab *tmp_symtab;
+		  /* If we're at the call site for an inlined subroutine,
+		     make sure we print out the call site location.  */
+		  if (strcmp (sal.symtab->filename, filename) != 0)
+		    {
+		      tmp_symtab = find_pc_symtab (stop_pc);
+		      if (tmp_symtab != sal.symtab
+			  && strcmp (tmp_symtab->filename, filename) == 0)
+			sal.symtab = tmp_symtab;
+		    }
+		  print_source_lines (sal.symtab, line, 1, 0);
+		}
+	      /* APPLE LOCAL end subroutine inlining  */
 	      else
 		print_source_lines (sal.symtab, sal.line, 1, 0);
 	    }
@@ -570,37 +631,66 @@ print_frame (struct frame_info *fi,
 {
   struct symbol *func;
   char *funname = 0;
+  /* APPLE LOCAL begin subroutine inlining  */
+  char *filename = NULL;
+  int line_num = 0;
+  int column = 0;
+  int inside_inlined;
+  /* APPLE LOCAL end subroutine inlining  */
   enum language funlang = language_unknown;
   struct ui_stream *stb;
   struct cleanup *old_chain;
   struct cleanup *list_chain;
+  /* APPLE LOCAL begin subroutine inlining  */
+  CORE_ADDR inline_end_pc;
+  /* APPLE LOCAL end subroutine inlining  */
 
   stb = ui_out_stream_new (uiout);
   old_chain = make_cleanup_ui_out_stream_delete (stb);
+
+  /* APPLE LOCAL begin subroutine inlining  */
+  /* Check to see if either we are at the call site for an inlined subroutine
+     or if we are within the code of an inlined subroutine.  */
+  inside_inlined = at_inlined_call_site_p (&filename, &line_num, &column);
+  if (!inside_inlined)
+    inside_inlined = in_inlined_function_call_p (&inline_end_pc);
+
+  /* If the current frame is an INLINED_FRAME, call the special function to
+     print out INLINED_FRAME information.  */
+
+  if (get_frame_type (fi) == INLINED_FRAME)
+    {
+      print_inlined_frame (fi, print_level, print_what, print_args, sal, 
+			   line_num);
+      return;
+    }
+  /* APPLE LOCAL end subroutine inlining  */
 
   func = find_pc_function (get_frame_address_in_block (fi));
   if (func)
     {
       /* In certain pathological cases, the symtabs give the wrong
-         function (when we are in the first function in a file which
-         is compiled without debugging symbols, the previous function
-         is compiled with debugging symbols, and the "foo.o" symbol
-         that is supposed to tell us where the file with debugging symbols
-         ends has been truncated by ar because it is longer than 15
-         characters).  This also occurs if the user uses asm() to create
-         a function but not stabs for it (in a file compiled -g).
-
-         So look in the minimal symbol tables as well, and if it comes
-         up with a larger address for the function use that instead.
-         I don't think this can ever cause any problems; there shouldn't
-         be any minimal symbols in the middle of a function; if this is
-         ever changed many parts of GDB will need to be changed (and we'll
-         create a find_pc_minimal_function or some such).  */
+	 function (when we are in the first function in a file which
+	 is compiled without debugging symbols, the previous function
+	 is compiled with debugging symbols, and the "foo.o" symbol
+	 that is supposed to tell us where the file with debugging symbols
+	 ends has been truncated by ar because it is longer than 15
+	 characters).  This also occurs if the user uses asm() to create
+	 a function but not stabs for it (in a file compiled -g).
+	 
+	 So look in the minimal symbol tables as well, and if it comes
+	 up with a larger address for the function use that instead.
+	 I don't think this can ever cause any problems; there shouldn't
+	 be any minimal symbols in the middle of a function; if this is
+	 ever changed many parts of GDB will need to be changed (and we'll
+	 create a find_pc_minimal_function or some such).  */
 
       struct minimal_symbol *msymbol = lookup_minimal_symbol_by_pc (get_frame_address_in_block (fi));
+      /* APPLE LOCAL begin address ranges  */
       if (msymbol != NULL
 	  && (SYMBOL_VALUE_ADDRESS (msymbol)
-	      > BLOCK_START (SYMBOL_BLOCK_VALUE (func))))
+	      > BLOCK_LOWEST_PC (SYMBOL_BLOCK_VALUE (func))))
+      /* APPLE LOCAL end address ranges  */
 	{
 	  /* We also don't know anything about the function besides
 	     its address and name.  */
@@ -679,7 +769,7 @@ print_frame (struct frame_info *fi,
   ui_out_field_stream (uiout, "func", stb);
   ui_out_wrap_hint (uiout, "   ");
   annotate_frame_args ();
-      
+
   ui_out_text (uiout, " (");
   if (print_args)
     {
@@ -691,7 +781,7 @@ print_frame (struct frame_info *fi,
       args_list_chain = make_cleanup_ui_out_list_begin_end (uiout, "args");
       catch_errors (print_args_stub, &args, "", RETURN_MASK_ALL);
       /* FIXME: args must be a list. If one argument is a string it will
-		 have " that will not be properly escaped.  */
+	       have " that will not be properly escaped.  */
       /* Invoke ui_out_tuple_end.  */
       do_cleanups (args_list_chain);
       QUIT;
@@ -699,6 +789,16 @@ print_frame (struct frame_info *fi,
   ui_out_text (uiout, ")");
   if (sal.symtab && sal.symtab->filename)
     {
+      /* APPLE LOCAL begin subroutine inlining  */
+      struct symtab *tmp_symtab;
+
+      tmp_symtab = find_pc_symtab (stop_pc);
+      if (tmp_symtab != sal.symtab
+	  && inside_inlined
+	  && tmp_symtab->filename)
+	sal.symtab = tmp_symtab;
+      /* APPLE LOCAL end subroutine inlining  */
+
       annotate_frame_source_begin ();
       ui_out_wrap_hint (uiout, "   ");
       ui_out_text (uiout, " at ");
@@ -713,7 +813,13 @@ print_frame (struct frame_info *fi,
       annotate_frame_source_file_end ();
       ui_out_text (uiout, ":");
       annotate_frame_source_line ();
-      ui_out_field_int (uiout, "line", sal.line);
+      /* APPLE LOCAL begin subroutine inlining  */
+      if (inside_inlined)
+	ui_out_field_int (uiout, "line", 
+			  current_inlined_bottom_call_site_line ());
+      else
+	ui_out_field_int (uiout, "line", sal.line);
+      /* APPLE LOCAL end subroutine inlining  */
       annotate_frame_source_end ();
     }
 
@@ -1061,7 +1167,7 @@ frame_info (char *addr_exp, int from_tty)
      registers.  */
   {
     enum lval_type lval;
-    int optimized;
+    enum opt_state optimized;
     CORE_ADDR addr;
     int realnum;
     int count;
@@ -1179,6 +1285,10 @@ backtrace_command_1 (char *count_exp, int show_locals, int from_tty)
   int i;
   struct frame_info *trailing;
   int trailing_level;
+  /* APPLE LOCAL begin subroutine inlining  */
+  int inlined_call_stack_position;
+  CORE_ADDR inline_end_pc;
+  /* APPLE LOCAL end subroutine inlining  */
 
   /* APPLE LOCAL: Save/restore current source line around the frame printing.
      If this isn't done, "backtrace" changes the current-source-line setting,
@@ -1198,6 +1308,46 @@ backtrace_command_1 (char *count_exp, int show_locals, int from_tty)
      printing.  Second, it must set the variable count to the number
      of frames which we should print, or -1 if all of them.  */
   trailing = get_current_frame ();
+
+  /* APPLE LOCAL begin subroutine inlining  */
+  inlined_call_stack_position = in_inlined_function_call_p (&inline_end_pc);
+  if (inlined_call_stack_position)
+    {
+      int line;
+      int i;
+      char *fn_name;
+      char *calling_fn_name;
+      char *demangled1;
+      char *demangled2;
+      struct symbol *func;
+      enum language funlang = language_unknown;
+
+      func = find_pc_function (get_frame_address_in_block (trailing));
+
+      funlang = SYMBOL_LANGUAGE (func);
+
+      for (i = inlined_call_stack_position; i > 0; i--)
+	{
+	  fn_name = current_inlined_subroutine_function_name ();
+	  calling_fn_name = current_inlined_subroutine_calling_function_name ();
+	  if (funlang == language_cplus || funlang == language_objcplus)
+	    {
+	      demangled1 = cplus_demangle (fn_name, DMGL_ANSI);
+	      demangled2 = cplus_demangle (calling_fn_name, DMGL_ANSI);
+	      if (demangled1)
+		fn_name = demangled1;
+	      if (demangled2)
+		calling_fn_name = demangled2;
+	    }
+	  line = current_inlined_subroutine_call_site_line ();
+	  ui_out_text_fmt (uiout, 
+			 "Function %s was inlined into function %s at line %d.\n",
+			   fn_name, calling_fn_name, line);
+	  adjust_current_inlined_subroutine_stack_position (-1);
+	}
+      adjust_current_inlined_subroutine_stack_position (inlined_call_stack_position);
+    }
+  /* APPLE LOCAL end subroutine inlining  */
 
   /* APPLE LOCAL: Save/restore current source line around the frame printing */
   original_sal = get_current_source_symtab_and_line ();
@@ -1271,7 +1421,12 @@ backtrace_command_1 (char *count_exp, int show_locals, int from_tty)
          means further attempts to backtrace would fail (on the other
          hand, perhaps the code does or could be fixed to make sure
          the frame->prev field gets set to NULL in that case).  */
-      print_frame_info (fi, 1, LOCATION, 1);
+      /* APPLE LOCAL begin subroutine inlining  */
+      /* We already printed out the inlined information above; don't repeat
+	 it here.  */
+      if (get_frame_type (fi) != INLINED_FRAME)
+	print_frame_info (fi, 1, LOCATION, 1);
+      /* APPLE LOCAL end subroutine inlining  */
       if (show_locals)
 	print_frame_local_vars (fi, 1, gdb_stdout);
     }
@@ -1502,6 +1657,9 @@ print_frame_label_vars (struct frame_info *fi, int this_level_only,
 {
   struct blockvector *bl;
   struct block *block = get_frame_block (fi, 0);
+  /* APPLE LOCAL begin address ranges  */
+  struct block *containing_block;
+  /* APPLE LOCAL end address ranges  */
   int values_printed = 0;
   int index, have_default = 0;
   char *blocks_printed;
@@ -1513,14 +1671,30 @@ print_frame_label_vars (struct frame_info *fi, int this_level_only,
       return;
     }
 
-  bl = blockvector_for_pc (BLOCK_END (block) - 4, &index);
+  /* APPLE LOCAL begin address ranges  */
+  containing_block = block;
+  if (BLOCK_RANGES (block))
+    bl = blockvector_for_pc (BLOCK_RANGE_END (block, 0) - 4, &index);
+  else
+    bl = blockvector_for_pc (BLOCK_END (block) - 4, &index);
+  /* APPLE LOCAL end address ranges  */
+
   blocks_printed = (char *) alloca (BLOCKVECTOR_NBLOCKS (bl) * sizeof (char));
   memset (blocks_printed, 0, BLOCKVECTOR_NBLOCKS (bl) * sizeof (char));
 
   while (block != 0)
     {
-      CORE_ADDR end = BLOCK_END (block) - 4;
+      /* APPLE LOCAL begin address ranges  */
+      CORE_ADDR end;
+      /* APPLE LOCAL end address ranges  */
       int last_index;
+
+      /* APPLE LOCAL begin address ranges  */
+      if (!BLOCK_RANGES (block))
+	end  = BLOCK_END (block) - 4;
+      else
+	end = BLOCK_RANGE_END (block, 0) - 4;
+      /* APPLE LOCAL begin address ranges  */
 
       if (bl != blockvector_for_pc (end, &index))
 	error (_("blockvector blotch"));
@@ -1530,12 +1704,19 @@ print_frame_label_vars (struct frame_info *fi, int this_level_only,
       index += 1;
 
       /* Don't print out blocks that have gone by.  */
+      /* APPLE LOCAL begin address ranges  */
       while (index < last_index
-	     && BLOCK_END (BLOCKVECTOR_BLOCK (bl, index)) < pc)
+	     && !block_contains_pc (BLOCKVECTOR_BLOCK (bl, index), pc))
+	/* && BLOCK_END (BLOCKVECTOR_BLOCK (bl, index)) < pc) */
+      /* APPLE LOCAL end address ranges  */
 	index++;
 
+      /* APPLE LOCAL begin address ranges  */
       while (index < last_index
-	     && BLOCK_END (BLOCKVECTOR_BLOCK (bl, index)) < end)
+	     && contained_in (BLOCKVECTOR_BLOCK (bl, index), 
+			      (const struct block *) containing_block))
+	/* && BLOCK_END (BLOCKVECTOR_BLOCK (bl, index)) < end) */
+      /* APPLE LOCAL end address ranges  */
 	{
 	  if (blocks_printed[index] == 0)
 	    {
@@ -1692,7 +1873,12 @@ select_and_print_frame (struct frame_info *fi)
 {
   select_frame (fi);
   if (fi)
-    print_stack_frame (fi, 1, SRC_AND_LOC);
+    /* APPLE LOCAL begin subroutine inlining  */
+    {
+      print_stack_frame (fi, 1, SRC_AND_LOC);
+      clear_inlined_subroutine_print_frames ();
+    }
+    /* APPLE LOCAL end subroutine inlining  */
 }
 
 /* Return the symbol-block in which the selected frame is executing.
@@ -1790,6 +1976,9 @@ frame_command (char *level_exp, int from_tty)
 {
   select_frame_command (level_exp, from_tty);
   print_stack_frame (get_selected_frame (NULL), 1, SRC_AND_LOC);
+  /* APPLE LOCAL begin subroutine inlining  */
+  clear_inlined_subroutine_print_frames ();
+  /* APPLE LOCAL end subroutine inlining  */
 }
 
 /* The XDB Compatibility command to print the current frame. */
@@ -1798,6 +1987,9 @@ static void
 current_frame_command (char *level_exp, int from_tty)
 {
   print_stack_frame (get_selected_frame ("No stack."), 1, SRC_AND_LOC);
+  /* APPLE LOCAL begin subroutine inlining  */
+  clear_inlined_subroutine_print_frames ();
+  /* APPLE LOCAL end subroutine inlining  */
 }
 
 /* Select the frame up one or COUNT stack levels
@@ -1829,6 +2021,9 @@ up_command (char *count_exp, int from_tty)
 {
   up_silently_base (count_exp);
   print_stack_frame (get_selected_frame (NULL), 1, SRC_AND_LOC);
+  /* APPLE LOCAL begin subroutine inlining  */
+  clear_inlined_subroutine_print_frames ();
+  /* APPLE LOCAL end subroutine inlining  */
 }
 
 /* Select the frame down one or COUNT stack levels
@@ -1869,6 +2064,9 @@ down_command (char *count_exp, int from_tty)
 {
   down_silently_base (count_exp);
   print_stack_frame (get_selected_frame (NULL), 1, SRC_AND_LOC);
+  /* APPLE LOCAL begin subroutine inlining  */
+  clear_inlined_subroutine_print_frames ();
+  /* APPLE LOCAL end subroutine inlining  */
 }
 
 void
@@ -1877,8 +2075,35 @@ return_command (char *retval_exp, int from_tty)
   struct symbol *thisfun;
   struct value *return_value = NULL;
   const char *query_prefix = "";
+  /* APPLE LOCAL begin subroutine inlining  */
+  CORE_ADDR inline_end_pc;
+  int inlined_call_stack_position;
+  /* APPLE LOCAL end subroutine inlining  */
 
   thisfun = get_frame_function (get_selected_frame ("No selected frame."));
+
+  /* APPLE LOCAL begin subroutine inlining  */
+  inlined_call_stack_position = in_inlined_function_call_p (&inline_end_pc);
+  if (inlined_call_stack_position)
+    {
+      int line;
+      int i;
+      char *fn_name;
+      char *calling_fn_name;
+
+      for (i = inlined_call_stack_position; i > 0; i--)
+	{
+	  fn_name = current_inlined_subroutine_function_name ();
+	  calling_fn_name = current_inlined_subroutine_calling_function_name ();
+	  line = current_inlined_subroutine_call_site_line ();
+	  ui_out_text_fmt (uiout, 
+			 "Function %s was inlined into function %s at line %d.\n",
+			   fn_name, calling_fn_name, line);
+	  adjust_current_inlined_subroutine_stack_position (-1);
+	}
+      adjust_current_inlined_subroutine_stack_position (inlined_call_stack_position);
+    }
+  /* APPLE LOCAL end subroutine inlining  */
 
   /* Compute the return value.  If the computation triggers an error,
      let it bail.  If the return type can't be handled, set
@@ -1991,7 +2216,12 @@ If you continue, the return value that you specified will be ignored.\n";
   /* If we are at the end of a call dummy now, pop the dummy frame
      too.  */
   if (get_frame_type (get_current_frame ()) == DUMMY_FRAME)
-    frame_pop (get_current_frame ());
+    /* APPLE LOCAL begin subroutine inlining  */
+    {
+      frame_pop (get_current_frame ());
+      inlined_subroutine_restore_after_dummy_call ();
+    }
+    /* APPLE LOCAL end subroutine inlining  */
 
   /* APPLE LOCAL begin hooks */
   /* The stack has changed, inform anyone who might be listening.  */

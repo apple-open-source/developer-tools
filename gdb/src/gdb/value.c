@@ -154,9 +154,16 @@ struct value
      reset, be sure to consider this use as well!  */
   char lazy;
 
-  /* If nonzero, this is the value of a variable which does not
-     actually exist in the program.  */
-  char optimized_out;
+  /* APPLE LOCAL begin variable opt states.  */
+  /* Value represents what happened to a variable whose value is currently
+     unavailable for some reason.  */
+  enum opt_state optimized_out;
+  /* APPLE LOCAL end variable opt states.  */
+
+  /* APPLE LOCAL begin variable initialized status. */
+  /* If variable, is it initialized or not.  */
+  int var_status;
+  /* APPLE LOCAL end variable initialized status.  */
 
   /* Actual contents of the value.  For use of this value; setting it
      uses the stuff above.  Not valid if lazy is nonzero.  Target
@@ -202,6 +209,24 @@ create_cached_function (name, type)
 
   return ptr;
 }
+
+/* APPLE LOCAL begin variable initialized status  */
+/* Set the var_status field in a value struct.  */
+
+void
+set_var_status (struct value *val, int status)
+{
+  val->var_status = status;
+}
+
+/* Return the var_status field in a value struct.  */
+
+int
+value_var_status (struct value *val)
+{
+  return val->var_status;
+}
+/* APPLE LOCAL end variable initialized status  */
 
 struct value *
 lookup_cached_function (struct cached_value *cval)
@@ -292,6 +317,9 @@ allocate_value (struct type *type)
   val->embedded_offset = 0;
   val->pointed_to_offset = 0;
   val->modifiable = 1;
+  /* APPLE LOCAL begin variable initialized status.  */
+  val->var_status = 1;
+  /* APPLE LOCAL end variable initialized status.  */
   return val;
 }
 
@@ -437,14 +465,16 @@ value_contents_equal (struct value *val1, struct value *val2)
   return (memcmp (value_contents (val1), value_contents (val2), len) == 0);
 }
 
-int
+/* APPLE LOCAL variable opt states.  */
+enum opt_state
 value_optimized_out (struct value *value)
 {
   return value->optimized_out;
 }
 
 void
-set_value_optimized_out (struct value *value, int val)
+/* APPLE LOCAL variable opt states.  */
+set_value_optimized_out (struct value *value, enum opt_state val)
 {
   value->optimized_out = val;
 }
@@ -1381,7 +1411,12 @@ value_fn_field (struct value **arg1p, struct fn_field *f, int j, struct type *ty
   v = allocate_value (ftype);
   if (sym)
     {
-      VALUE_ADDRESS (v) = BLOCK_START (SYMBOL_BLOCK_VALUE (sym));
+      struct block *block = SYMBOL_BLOCK_VALUE (sym);
+      if (block == NULL)
+	error ("value_fn_field: function symbol with no block");
+      /* APPLE LOCAL begin address ranges  */
+      VALUE_ADDRESS (v) = BLOCK_LOWEST_PC (block);
+      /* APPLE LOCAL end address ranges  */
     }
   else
     {

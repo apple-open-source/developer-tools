@@ -35,6 +35,11 @@
 #include "gdbcmd.h"
 #include "regcache.h"
 #include "cp-abi.h"
+#include "exceptions.h"
+/* APPLE LOCAL: Needed for check_safe_call.  */
+#include "gdbthread.h"
+#include "gdb.h"
+/* END APPLE LOCAL  */
 
 #include <errno.h>
 #include "gdb_string.h"
@@ -237,8 +242,12 @@ value_allocate_space_in_inferior (int len)
    and if ARG2 is an lvalue it can be cast into anything at all.  */
 /* In C++, casts may change pointer or object representations.  */
 
+/* APPLE LOCAL: value_cast -> value_cast_1 so I can put the original
+   type back in place before returning.  value_cast does check_typedef,
+   which loses typedef info.  */
+
 struct value *
-value_cast (struct type *type, struct value *arg2)
+value_cast_1 (struct type *type, struct value *arg2)
 {
   enum type_code code1;
   enum type_code code2;
@@ -469,6 +478,27 @@ value_cast (struct type *type, struct value *arg2)
     }
 }
 
+/* APPLE LOCAL: The real value_cast returns in too many places to 
+   easily put the original type back in place.  So I made a little
+   wrapper here.  This means I have to use the deprecated set_value_type,
+   which is a shame, but for now it will have to do.  */
+
+struct value *
+value_cast (struct type *type, struct value *arg2)
+{
+  struct value *ret_val = value_cast_1 (type, arg2);
+
+  /* If the incoming type was a typedef, undo the
+     "check_typedef" since we want to actually cast this
+     to the type we were asked to cast it to, not what
+     that type resolves to.  
+     N.B. Don't do this in all cases, because we may have
+     fixed up a valid type...  */
+  if (TYPE_CODE (type) == TYPE_CODE_TYPEDEF)
+    deprecated_set_value_type (ret_val, type);
+  return ret_val;
+}
+
 /* Create a value of type TYPE that is zero, and return it.  */
 
 struct value *
@@ -566,6 +596,7 @@ value_assign (struct value *toval, struct value *fromval)
   struct type *type;
   struct value *val;
   struct frame_id old_frame;
+  int old_frame_level;
 
   if (!deprecated_value_modifiable (toval))
     error (_("Left operand of assignment is not a modifiable lvalue."));
@@ -582,7 +613,15 @@ value_assign (struct value *toval, struct value *fromval)
   /* Since modifying a register can trash the frame chain, and modifying memory
      can trash the frame cache, we save the old frame and then restore the new
      frame afterwards.  */
-  old_frame = get_frame_id (deprecated_selected_frame);
+  /* APPLE LOCAL: Check to see if our current frame is the innermost frame,
+     and don't attempt to re-find the frame by id if we are at the bottom of
+     the stack. Sometimes if we modify a register that can change the stack,
+     we can cause a call to error to occur when executing frame_find_by_id. 
+     If error is called, it will abort the current command or macro prematurely
+     and cause things to fail.  */
+  old_frame_level = frame_relative_level (deprecated_selected_frame);
+  if (old_frame_level > 0)
+    old_frame = get_frame_id (deprecated_selected_frame);
 
   switch (VALUE_LVAL (toval))
     {
@@ -754,13 +793,30 @@ value_assign (struct value *toval, struct value *fromval)
 	 frame.  Why not create a get_selected_frame() function that,
 	 having saved the selected frame's ID can automatically
 	 re-find the previously selected frame automatically.  */
-
-      {
-	struct frame_info *fi = frame_find_by_id (old_frame);
-	if (fi != NULL)
-	  select_frame (fi);
-      }
-
+      /* APPLE LOCAL: Only re-find the current frame by id if we were not
+         at frame zero, or the sentinel frame. The call to the
+	 reinit_frame_cache function above will restore the frame to frame
+	 zero.  */
+      if (old_frame_level > 0)
+	{
+	  /* Wrap the call to frame_find_by_id in a try/catch block
+	     in case frame_find_by_id calls error.  */
+	  volatile struct gdb_exception e;
+	  TRY_CATCH (e, RETURN_MASK_ERROR)
+	    {
+	      struct frame_info *fi = frame_find_by_id (old_frame);
+	      if (fi != NULL)
+		select_frame (fi);
+	    }
+	    
+	  if (e.reason == RETURN_ERROR)
+	    {
+	      if (e.message != NULL)
+		warning (_("Couldn't restore restore the previous frame: %s"), e.message);
+	      else
+		warning (_("Couldn't restore restore the previous frame."));
+	    }
+	}
       break;
     default:
       break;
@@ -2987,6 +3043,153 @@ cast_into_complex (struct type *type, struct value *val)
     return value_literal_complex (val, value_zero (real_type, not_lval), type);
   else
     error (_("cannot cast non-number to complex"));
+}
+
+/* APPLE LOCAL: This mechanism allows you to check if a call is currently
+   "safe" where safe means no calls matching FUNCARR are on the stack of the
+   current thread (if the scheduler is not locked) or on any thread if it
+   is locked.  */
+
+struct thread_is_safe_args
+{
+  struct thread_info *tp;
+  struct re_pattern_buffer *unsafe_functions;
+  int npatterns;
+  int stack_depth;
+  int unsafe_p;
+};
+
+static int
+do_check_is_thread_unsafe (void *argptr)
+{
+  struct thread_is_safe_args *args = (struct thread_is_safe_args *) argptr;
+  struct frame_info *fi;
+  struct thread_info *tp = args->tp;
+
+  if (tp != NULL)
+    switch_to_thread (tp->ptid);
+
+  /* Look up the stack to make sure none of the malloc
+     calls that might hold the malloc lock are present.
+     We aren't going to crawl the whole stack, but just look
+     up a few levels.  */
+
+  fi = get_current_frame ();
+  if (!fi)
+    return -1;
+
+  while (frame_relative_level (fi) < args->stack_depth)
+    {
+      CORE_ADDR pc;
+      char *sym_name;
+
+      pc = get_frame_pc (fi);
+
+
+      if (find_pc_partial_function (pc, &sym_name, NULL, NULL))
+        {
+          int i;
+	  int len;
+
+	  if (sym_name == NULL)
+	    continue;
+
+	  len = strlen (sym_name);
+          for (i = 0; i < args->npatterns ; i++)
+            {
+              if (regexec (&args->unsafe_functions[i], sym_name, 0, 0, 0) == 0)
+                {
+		  struct cleanup *list_cleanup;
+		  list_cleanup = make_cleanup_ui_out_tuple_begin_end (uiout, "bad_thread");
+                  ui_out_text (uiout, "Unsafe to call functions on thread ");
+		  ui_out_field_int (uiout, "thread", pid_to_thread_id (inferior_ptid));
+		  ui_out_text (uiout, ": ");
+                  ui_out_field_fmt (uiout, "reason", "function: %s on stack",
+                                    sym_name);
+		  ui_out_text (uiout, "\n");
+                  (args->unsafe_p)++;
+		  do_cleanups (list_cleanup);
+		  goto found_it;
+                }
+            }
+        }
+
+      fi = get_prev_frame (fi);
+      if (!fi)
+        break;
+    }
+ found_it:
+  return 1;
+}
+
+/* This is the "iterate_over_threads" callback function.  It increments
+   the int * stuffed into DATA if there is an unsafe function in the
+   first 5 frames of the stack for the thread pointed to by TP.  */
+
+static int
+safe_check_is_thread_unsafe (struct thread_info *tp, void *data)
+{
+  struct thread_is_safe_args *args = (struct thread_is_safe_args *) data;
+  args->tp = tp;
+  struct cleanup *old_chain;
+  
+  old_chain = make_cleanup_restore_current_thread (inferior_ptid, 0);
+
+  catch_errors ((catch_errors_ftype *) do_check_is_thread_unsafe, args,
+		"", RETURN_MASK_ERROR);
+
+  do_cleanups (old_chain);
+
+  return 0;
+}
+
+/* Check whether it is safe to call functions.  If scheduler locking
+   is turned off, we just check whether it is safe to call on the current
+   thread, but if it is turned on we check for all threads.  */
+
+int
+check_safe_call (regex_t unsafe_functions[], 
+		 int npatterns,
+		 int stack_depth, 
+		 enum check_which_threads which_threads)
+{
+  struct thread_is_safe_args args;
+  struct frame_id old_frame_id = get_frame_id (deprecated_safe_get_selected_frame ());
+
+  args.unsafe_p = 0;
+  args.unsafe_functions = unsafe_functions;
+  args.npatterns = npatterns;
+
+  if (which_threads == CHECK_CURRENT_THREAD
+      || (which_threads == CHECK_SCHEDULER_VALUE && !scheduler_lock_on_p ()))
+    safe_check_is_thread_unsafe (NULL, &args);
+  else
+    {
+      struct cleanup *old_cleanups;
+      old_cleanups = make_cleanup_restore_current_thread (inferior_ptid, 0);
+
+      /* Remove all the dead threads from the gdb thread list
+	 before iterating over them.  This prevents unnecessary warnings.  */
+#ifdef NM_NEXTSTEP
+      extern void macosx_prune_threads (thread_array_t, unsigned int);
+      macosx_prune_threads (NULL, 0);
+#else
+      prune_threads ();
+#endif
+      iterate_over_threads (safe_check_is_thread_unsafe, &args);
+      do_cleanups (old_cleanups);
+    }
+
+  if (!frame_id_eq (old_frame_id, null_frame_id))
+    {
+      struct frame_info *old_frame = frame_find_by_id (old_frame_id);
+      if (old_frame == NULL)
+	warning ("check_safe_call: could not restore current frame\n");
+      else
+	select_frame (old_frame);
+    }
+
+  return !args.unsafe_p;
 }
 
 void

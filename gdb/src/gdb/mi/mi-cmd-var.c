@@ -140,8 +140,10 @@ mi_cmd_var_create (char *command, char **argv, int argc)
 		{
 		  /* The variable 's' will be advanced by decode_line_1.  */
 		  char *s = block_addr; 
+		  /* APPLE LOCAL begin return multiple symbols  */
 		  sals = decode_line_1 (&s, 1, (struct symtab *) NULL, 0, NULL, 
-					NULL);
+					NULL, 0);
+		  /* APPLE LOCAL end return multiple symbols  */
 		}
 
 	      if (except.reason >= 0 && sals.nelts >= 1)

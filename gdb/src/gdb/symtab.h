@@ -354,7 +354,7 @@ struct minimal_symbol
   unsigned long size;
 
 /* APPLE LOCAL: We don't need the struct minimal_symbol member filename.  */
-#if defined(SOFUN_ADDRESS_MAYBE_MISSING) && !defined(NM_NEXTSTEP)
+#if defined(SOFUN_ADDRESS_MAYBE_MISSING) && !defined(TM_NEXTSTEP)
   /* Which source file is this symbol in?  Only relevant for mst_file_*.  */
   char *filename;
 #endif
@@ -709,6 +709,20 @@ struct partial_symbol
 #define PSYMBOL_CLASS(psymbol)		(psymbol)->aclass
 
 
+/* APPLE LOCAL begin subroutine inlining  */
+/* Various types of entries that might populate the line table.  */
+
+enum line_table_entry_type
+{
+  NORMAL_LT_ENTRY = 0,                /* "Normal" line table entry  */
+  INLINED_SUBROUTINE_LT_ENTRY,        /* Entry for the actual inlined code of an 
+					 inlined subroutine  */
+  INLINED_CALL_SITE_LT_ENTRY          /* Entry for the call site of an inlined 
+					 subroutine  */
+};
+
+/* APPLE LOCAL end subroutine inlining  */
+
 /* Each item represents a line-->pc (or the reverse) mapping.  This is
    somewhat more wasteful of space than one might wish, but since only
    the files which are actually debugged are read in to core, we don't
@@ -718,6 +732,18 @@ struct linetable_entry
 {
   int line;
   CORE_ADDR pc;
+  /* APPLE LOCAL begin subroutine inlining  */
+
+ /* Normally zero; a non-zero value indicates the range of an inlined
+    function call.  For now.  */
+
+  CORE_ADDR end_pc;
+
+/* For use as we expand the types of information that are stored in
+   the line table, to keep track of which entry is of which type.  */
+
+  enum line_table_entry_type  entry_type; 
+  /* APPLE LOCAL end subroutine inlining  */
 };
 
 /* The order of entries in the linetable is significant.  They should
@@ -1192,6 +1218,15 @@ extern struct symbol *lookup_block_symbol (const struct block *, const char *,
 					   const char *,
 					   const domain_enum);
 
+/* APPLE LOCAL begin return multiple symbols  */
+/* lookup a symbol by name, within a specified block, and return
+   all matching symbols in the block.  */
+
+extern struct symbol_search *lookup_block_symbol_all (const struct block *,
+						      const char *, const char *,
+						      const domain_enum);
+/* APPLE LOCAL end return multiple symbols  */
+
 /* lookup a [struct, union, enum] by name, within a specified block */
 
 extern struct type *lookup_struct (char *, struct block *);
@@ -1343,6 +1378,17 @@ struct symtab_and_line
 
   CORE_ADDR pc;
   CORE_ADDR end;
+  /* APPLE LOCAL begin subroutine inlining  */
+  
+  /* Type of linetable entry this represents.  */
+  enum line_table_entry_type  entry_type; 
+
+  /* If multiple LT entries exist for same address, make a linked list
+     of them.  This happens most often if there are one or more levels of
+     subroutine inlining that occurred at that address.  */
+
+  struct symtab_and_line *next; 
+  /* APPLE LOCAL end subroutine inlining  */
 };
 
 extern void init_sal (struct symtab_and_line *sal);
@@ -1517,6 +1563,13 @@ struct symbol_search
   struct symbol_search *next;
 };
 
+/* APPLE LOCAL begin return multiple symbols  */
+/* lookup by name and return all matching symbols found  */
+extern int lookup_symbol_all (const char *, const struct block *,
+			      const domain_enum, int *, struct symtab **,
+			      struct symbol_search **);
+/* APPLE LOCAL end return multiple symbols  */
+
 extern void search_symbols (char *, domain_enum, int, char **,
 			    struct symbol_search **);
 extern void free_search_symbols (struct symbol_search *);
@@ -1543,5 +1596,10 @@ struct minimal_symbol **find_equivalent_msymbol (struct minimal_symbol *msymbol)
    in particular, SOM executable file with SOM debug info 
    Defined in symtab.c, used in hppa-tdep.c. */
 extern int deprecated_hp_som_som_object_present;
+
+/* APPLE LOCAL begin address ranges  */
+extern void update_inlined_function_line_table_entry (CORE_ADDR, CORE_ADDR,
+						      CORE_ADDR);
+/* APPLE LOCAL end address ranges  */
 
 #endif /* !defined(SYMTAB_H) */

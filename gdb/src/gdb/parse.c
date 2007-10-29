@@ -1038,6 +1038,10 @@ parse_exp_in_context (char **stringptr, struct block *block, int comma,
 		      int void_context_p)
 {
   struct cleanup *old_chain;
+  /* APPLE LOCAL: Suppress the hook_stub while parsing expressions.
+     This can cause us to re-enter the parser, and at least the c parser
+     uses some static variables for state, so this is a bad thing.  */
+  struct cleanup *hook_stop_chain;
 
   lexptr = *stringptr;
   prev_lexptr = NULL;
@@ -1056,7 +1060,9 @@ parse_exp_in_context (char **stringptr, struct block *block, int comma,
   if (block)
     {
       expression_context_block = block;
-      expression_context_pc = BLOCK_START (block);
+      /* APPLE LOCAL begin address ranges  */
+      expression_context_pc = BLOCK_LOWEST_PC (block);
+      /* APPLE LOCAL end address ranges  */
     }
   else
     expression_context_block = get_selected_block (&expression_context_pc);
@@ -1068,9 +1074,13 @@ parse_exp_in_context (char **stringptr, struct block *block, int comma,
   expout->language_defn = current_language;
   make_cleanup (free_current_contents, &expout);
 
+  /* APPLE LOCAL: Don't let the stop hook run here.  */
+  hook_stop_chain = make_cleanup_suppress_hook_stop ();
   if (current_language->la_parser ())
-    current_language->la_error (NULL);
+      current_language->la_error (NULL);
 
+  /* APPLE LOCAL: Turn the stop hook back on.  */
+  do_cleanups (hook_stop_chain);
   discard_cleanups (old_chain);
 
   /* Record the actual number of expression elements, and then

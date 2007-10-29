@@ -44,6 +44,9 @@
 #define LIBTHREAD_DB_SO "libthread_db.so.1"
 #endif
 
+/* APPLE LOCAL - subroutine inlining  */
+#include "inlining.h"
+
 /* If we're running on GNU/Linux, we must explicitly attach to any new
    threads.  */
 
@@ -860,6 +863,14 @@ check_event (ptid_t ptid)
 
   /* Bail out early if we're not at a thread event breakpoint.  */
   stop_pc = read_pc_pid (ptid) - DECR_PC_AFTER_BREAK;
+  /* APPLE LOCAL begin subroutine inlining  */
+  /* If the PC has changed since the last time we updated the
+     global_inlined_call_stack data, we need to verify the current
+     data and possibly update it.  */
+  if (stop_pc != inlined_function_call_stack_pc ())
+    inlined_function_update_call_stack (stop_pc);
+  /* APPLE LOCAL end subroutine inlining  */
+
   if (stop_pc != td_create_bp_addr && stop_pc != td_death_bp_addr)
     return;
 

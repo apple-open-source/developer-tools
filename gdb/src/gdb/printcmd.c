@@ -79,6 +79,9 @@ static CORE_ADDR last_examine_address;
 
 static struct value *last_examine_value;
 
+/* APPLE LOCAL: Use this to truncate the symbolic name in disassembly output.  */
+int disassembly_name_length = -1;
+
 /* Largest offset between a symbolic value and an address, that will be
    printed as `0x1234 <symbol+offset>'.  */
 
@@ -667,7 +670,9 @@ build_address_symbolic (CORE_ADDR addr,  /* IN */
 
   if (symbol)
     {
-      name_location = BLOCK_START (SYMBOL_BLOCK_VALUE (symbol));
+      /* APPLE LOCAL begin address ranges  */
+      name_location = BLOCK_LOWEST_PC (SYMBOL_BLOCK_VALUE (symbol));
+      /* APPLE LOCAL end address ranges  */
       if (do_demangle || asm_demangle)
 	name_temp = SYMBOL_PRINT_NAME (symbol);
       else
@@ -706,6 +711,13 @@ build_address_symbolic (CORE_ADDR addr,  /* IN */
   *offset = addr - name_location;
 
   *name = xstrdup (name_temp);
+  /* APPLE LOCAL: Truncate the name in the disassembly output  */
+  if (disassembly_name_length >= 0)
+    {
+      if (strlen (*name) > disassembly_name_length)
+	(*name)[disassembly_name_length] = '\0';
+    }
+  /* END APPLE LOCAL */
 
   if (print_symbol_filename)
     {
@@ -929,6 +941,8 @@ print_command_1 (char *exp, int inspect, int voidprint)
   if (exp && *exp)
     {
       struct type *type;
+      /* APPLE LOCAL initialize innermost_block  */
+      innermost_block = NULL;
       expr = parse_expression (exp);
       old_chain = make_cleanup (free_current_contents, &expr);
       cleanup = 1;
@@ -1011,6 +1025,8 @@ output_command (char *exp, int from_tty)
       format = fmt.format;
     }
 
+  /* APPLE LOCAL initialize innermost_block  */
+  innermost_block = NULL;
   expr = parse_expression (exp);
   old_chain = make_cleanup (free_current_contents, &expr);
 
@@ -1031,9 +1047,14 @@ output_command (char *exp, int from_tty)
 static void
 set_command (char *exp, int from_tty)
 {
-  struct expression *expr = parse_expression (exp);
-  struct cleanup *old_chain =
-    make_cleanup (free_current_contents, &expr);
+  /* APPLE LOCAL begin initialize innermost_block  */
+  struct expression *expr;
+  struct cleanup *old_chain;
+
+  innermost_block = NULL;
+  expr = parse_expression (exp);
+  old_chain = make_cleanup (free_current_contents, &expr);
+  /* APPLE LOCAL end initialize innermost_block  */
   evaluate_expression (expr);
   do_cleanups (old_chain);
 }
@@ -1259,8 +1280,10 @@ address_info (char *exp, int from_tty)
 	if (block_ptr != NULL)
 	  {
 	    printf_filtered ("a function at address ");
-	    deprecated_print_address_numeric (load_addr = BLOCK_START (block_ptr),
+	    /* APPLE LOCAL begin address ranges  */
+	    deprecated_print_address_numeric (load_addr = BLOCK_LOWEST_PC (block_ptr),
 				   1, gdb_stdout);
+	    /* APPLE LOCAL end address ranges  */
 	    if (section_is_overlay (section))
 	      {
 		load_addr = overlay_unmapped_address (load_addr, section);
@@ -1337,6 +1360,8 @@ x_command (char *exp, int from_tty)
 
   if (exp != 0 && *exp != 0)
     {
+      /* APPLE LOCAL initialize innermost_block  */
+      innermost_block = NULL;
       expr = parse_expression (exp);
       /* Cause expression not to be there any more
          if this command is repeated with Newline.
@@ -2212,6 +2237,15 @@ Show printing of source filename and line number with <symbol>."), NULL,
 			   NULL,
 			   show_print_symbol_filename,
 			   &setprintlist, &showprintlist);
+
+  add_setshow_zinteger_cmd ("disassembly-name-length", no_class, 
+			   &disassembly_name_length, "\
+Set the maximum length of characters to print in the symbol name in disassembly output.\n"
+"A value of -1 means unlimited", 
+			   "\
+Show the maximum length of characters to print in the symbol name in disassembly output", 
+			   NULL, NULL, NULL, 
+			   &setlist, &showlist);
 
   /* For examine/instruction a single byte quantity is specified as
      the data.  This avoids problems with value_at_lazy() requiring a

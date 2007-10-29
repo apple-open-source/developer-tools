@@ -5,7 +5,7 @@
  |                               I/O Redirection Routines                               |
  |                                                                                      |
  |                                     Ira L. Ruben                                     |
- |                       Copyright Apple Computer, Inc. 2000-2005                       |
+ |                       Copyright Apple Computer, Inc. 2000-2006                       |
  |                                                                                      |
  *--------------------------------------------------------------------------------------*
 
@@ -28,6 +28,7 @@
 #include "cli-out.h"
 #include "event-top.h"	// input_handler
 #include "gdbarch.h"
+#include "interps.h"
 
 char *current_cmd_line = NULL;
 
@@ -40,6 +41,7 @@ GDB_FILE *gdb_current_stdout = (GDB_FILE*)1; /* current gdb stdout stream		*/
 GDB_FILE *gdb_current_stderr = (GDB_FILE*)2; /* current gdb stderr stream		*/ 
 
 static int continued_line = 0;		  /* continued line count for prompts		*/
+static struct interp *console_interp;	  /* ptr to gdb's console interpreter		*/
 
 static GDB_FILE *prev_default_stdout_stream = (GDB_FILE*)1;
 static GDB_FILE *prev_default_stderr_stream = (GDB_FILE*)2;
@@ -574,6 +576,8 @@ GDB_FILE *gdb_redirect_output(GDB_FILE *stream)
 	default_rl_startup_hook	    = INITIAL_GDB_VALUE(rl_startup_hook, rl_startup_hook);
 	__default_gdb_query_hook    = deprecated_query_hook;
 	
+	interp_set_ui_out(console_interp, uiout);
+	
 	firsttime = 0;
 	
 	/* Note that the __default_gdb_query_hook can be changed by a Gdb_Before_Query	*/
@@ -599,6 +603,9 @@ GDB_FILE *gdb_redirect_output(GDB_FILE *stream)
 	deprecated_query_hook		     = __default_gdb_query_hook;
 	rl_startup_hook			     = default_rl_startup_hook;
 	command_line_input_hook		     = default_command_line_input_hook;
+	
+	interp_set_ui_out(console_interp, uiout);
+
 	//fprintf(stderr, "  gdb_redirect_output0: stream == gdb_default_stdout\n");
     } else {
 	if (!stream)
@@ -622,6 +629,8 @@ GDB_FILE *gdb_redirect_output(GDB_FILE *stream)
 	    deprecated_query_hook		 = u->query_hook;
 	    rl_startup_hook			 = u->rl_startup_hook;
 	    command_line_input_hook		 = u->command_line_input_hook;
+	    
+	    interp_set_ui_out(console_interp, uiout);
 	    
 	    /* Once we use the data we never use it again...				*/
 	    
@@ -665,6 +674,8 @@ GDB_FILE *gdb_redirect_output(GDB_FILE *stream)
 	    rl_completion_display_matches_hook   = __cmd_completion_display_hook;
 	    deprecated_query_hook		 = my_query_hook;
 	    rl_startup_hook			 = my_rl_startup_hook;
+	    
+	    interp_set_ui_out(console_interp, uiout);
 	    
 	    //fprintf(stderr, "  gdb_redirect_output3: ui_file = %X, data = %X, magic_nbr = %X, &magic = %X\n",
 	    //			    stream, output, output->magic_nbr, &magic);
@@ -1306,6 +1317,8 @@ void __initialize_io(void)
     
     if (!initialized) {
     	initialized = 1;
+	
+	console_interp = interp_lookup(INTERP_CONSOLE);
 	
     	gdb_redirect_output(gdb_default_stdout = gdb_open_output(stdout, NULL, NULL));
     	gdb_redirect_output(gdb_default_stderr = gdb_open_output(stderr, NULL, NULL));

@@ -103,7 +103,9 @@ find_proc_desc (CORE_ADDR pc)
       CORE_ADDR startaddr;
       find_pc_partial_function (pc, NULL, &startaddr, NULL);
 
-      if (startaddr > BLOCK_START (b))
+      /* APPLE LOCAL begin address ranges  */
+      if (startaddr > BLOCK_LOWEST_PC (b))
+      /* APPLE LOCAL end address ranges  */
 	/* This is the "pathological" case referred to in a comment in
 	   print_frame_info.  It might be better to move this check into
 	   symbol reading.  */
@@ -254,7 +256,8 @@ alpha_mdebug_frame_this_id (struct frame_info *next_frame,
 static void
 alpha_mdebug_frame_prev_register (struct frame_info *next_frame,
 				  void **this_prologue_cache,
-				  int regnum, int *optimizedp,
+				  /* APPLE LOCAL variable opt states.  */
+				  int regnum, enum opt_state *optimizedp,
 				  enum lval_type *lvalp, CORE_ADDR *addrp,
 				  int *realnump, gdb_byte *bufferp)
 {
@@ -271,7 +274,8 @@ alpha_mdebug_frame_prev_register (struct frame_info *next_frame,
      do the obvious and pull the value out.  */
   if (info->saved_regs[regnum])
     {
-      *optimizedp = 0;
+      /* APPLE LOCAL variable opt states.  */
+      *optimizedp = opt_okay;
       *lvalp = lval_memory;
       *addrp = info->saved_regs[regnum];
       *realnump = -1;
@@ -284,7 +288,8 @@ alpha_mdebug_frame_prev_register (struct frame_info *next_frame,
      the current stack frame.  */
   if (regnum == ALPHA_SP_REGNUM)
     {
-      *optimizedp = 0;
+      /* APPLE LOCAL variable opt states.  */
+      *optimizedp = opt_okay;
       *lvalp = not_lval;
       *addrp = 0;
       *realnump = -1;

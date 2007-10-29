@@ -191,9 +191,10 @@ ppc_parse_instructions (CORE_ADDR start, CORE_ADDR end,
 {
   CORE_ADDR pc = start;
   CORE_ADDR last_recognized_insn = start;
-  int insn_count = 1;           /* Some patterns occur in a particular order, so I
-                                   keep the instruction count so I can match them
-                                   with more certainty. */
+  int unrecognized_insn_count = 0; /* We want to allow some unrecognized instructions, 
+				      but we don't want to keep scanning forever. 
+				      So this is the number of unrecognized instructions
+				      before we bail from the prologue scanning. */
   int max_insn = 6;             /* If we don't recognize an instruction, keep going
                                    at least this long.  This is supposed to handle
                                    the case where instructions we don't recognize
@@ -229,7 +230,7 @@ ppc_parse_instructions (CORE_ADDR start, CORE_ADDR end,
   CHECK_FATAL ((end >= start) || (end == INVALID_ADDRESS));
 
   for (pc = start; (end == INVALID_ADDRESS) || (pc < end);
-       pc += 4, insn_count++)
+       pc += 4)
     {
       ULONGEST op = 0;
       int insn_recognized = 1;
@@ -563,7 +564,6 @@ ppc_parse_instructions (CORE_ADDR start, CORE_ADDR end,
           /* Don't count the nop's against the instruction limit
              or we will have problems with any complex prologues
              in fix & continue. */
-          insn_count--;
           goto processed_insn;
         }
       /* APPLE LOCAL fix-and-continue end */
@@ -727,7 +727,7 @@ ppc_parse_instructions (CORE_ADDR start, CORE_ADDR end,
       else
         {
           insn_recognized = 0;
-
+	  unrecognized_insn_count++;
           /* We have exceeded our maximum scan length.  So we are going to
              exit the parse.  However, there may be cases where what we have
              learned so far leads us to believe that there are interesting
@@ -735,46 +735,8 @@ ppc_parse_instructions (CORE_ADDR start, CORE_ADDR end,
              We can make the scan more accurate even when we couldn't completely
              ingest the prologue by looking in a focused way for these bits.  */
 
-          if (insn_count > max_insn)
+          if (unrecognized_insn_count > max_insn)
             {
-              int cleanup_length = 6;
-
-              if ((!props->lr_saved
-                  && props->lr_reg != 0xffffffff
-                  && props->lr_invalid != 0
-                   && props->lr_valid_again == INVALID_ADDRESS)
-                  || (props->saved_gpr != -1 && props->offset == -1))
-                {
-                  /* We saw the link register made invalid, but we
-                     also didn't see it saved, or we saw GPR registers saved
-                     but didn't see the stack updated.  Let's try scanning forward
-                     to see when it gets saved or moved back to the lr,
-                     otherwise we will think the return address is always stored
-                     in some register, and end up adding a garbage address to
-                     the stack.  */
-
-                  for (; cleanup_length > 0; pc += 4, cleanup_length--)
-                    {
-                      ULONGEST op = 0;
-
-                      if (!safe_read_memory_unsigned_integer (pc, 4, &op))
-                        break;
-
-                      if ((op & 0xfc1fffff) == 0x7c0803a6)      /* mtlr Rx */
-                        {
-                          props->lr_valid_again = pc;
-                          last_recognized_insn = pc;
-                        }
-                      else if ((op & 0xffff0000) == 0x94210000
-                               || (op & 0xffff0000) == 0xf8210000)
-                        {                       /* stwu r1,NUM(r1)  or stdu r1,NUM(r1) */
-                          props->frameless = 0;
-			  props->stack_offset_pc = pc;
-                          props->offset = SIGNED_SHORT (op);
-                          last_recognized_insn = pc;
-                        }
-                    }
-                }
               break;
             }
         }
@@ -782,6 +744,61 @@ ppc_parse_instructions (CORE_ADDR start, CORE_ADDR end,
       if (insn_recognized)
         last_recognized_insn = pc;
 
+    }
+
+  /* This is kind of a hail mary section of the scanner.  Sometimes we
+     stop scanning the prologue because we exceeded the maximum number
+     of unrecognized instructions, or because we got to the end of the
+     pc range but we aren't really done with the prologue.  There
+     might still be some easy data we could recover if look a little
+     further.  This does that but just for a couple of important
+     things that aren't likely to show up in regular code.  
+     Note, we don't always trust end, because that comes from trying to
+     look at line number ranges for more patches coming from the first
+     line of the function.  But we don't look very far for this 'cause it
+     is expensive.  It is simpler to do a fast scan here that search the
+     line tables.  */
+
+  if (unrecognized_insn_count > max_insn || pc >= end) 
+    { 
+      int cleanup_length = 6;
+      
+      if ((!props->lr_saved
+	   && props->lr_reg != 0xffffffff
+	   && props->lr_invalid != 0
+	   && props->lr_valid_again == INVALID_ADDRESS)
+	  || (props->saved_gpr != -1 && props->offset == -1))
+	{
+	  /* We saw the link register made invalid, but we
+	     also didn't see it saved, or we saw GPR registers saved
+	     but didn't see the stack updated.  Let's try scanning forward
+	     to see when it gets saved or moved back to the lr,
+	     otherwise we will think the return address is always stored
+	     in some register, and end up adding a garbage address to
+	     the stack.  */
+	  
+	  for (; cleanup_length > 0; pc += 4, cleanup_length--)
+	    {
+	      ULONGEST op = 0;
+	      
+	      if (!safe_read_memory_unsigned_integer (pc, 4, &op))
+		break;
+	      
+	      if ((op & 0xfc1fffff) == 0x7c0803a6)      /* mtlr Rx */
+		{
+		  props->lr_valid_again = pc;
+		  last_recognized_insn = pc;
+		}
+	      else if ((op & 0xffff0000) == 0x94210000
+		       || (op & 0xffff0000) == 0xf8210000)
+		{                       /* stwu r1,NUM(r1)  or stdu r1,NUM(r1) */
+		  props->frameless = 0;
+		  props->stack_offset_pc = pc;
+		  props->offset = SIGNED_SHORT (op);
+		  last_recognized_insn = pc;
+		}
+	    }
+	}
     }
 
   if (props->offset != -1)
@@ -864,8 +881,8 @@ ppc_clear_function_properties (ppc_function_properties * properties)
 }
 
 int
-ppc_find_function_boundaries (ppc_function_boundaries_request * request,
-                              ppc_function_boundaries * reply)
+ppc_find_function_boundaries (ppc_function_boundaries_request *request,
+                              ppc_function_boundaries *reply)
 {
   ppc_function_properties props;
   CORE_ADDR lim_pc;

@@ -23,6 +23,8 @@
 #include "frame.h"
 #include "trad-frame.h"
 #include "regcache.h"
+/* APPLE LOCAL variable opt states.  */
+#include "value.h"
 
 struct trad_frame_cache
 {
@@ -133,7 +135,8 @@ trad_frame_set_unknown (struct trad_frame_saved_reg this_saved_regs[],
 void
 trad_frame_get_prev_register (struct frame_info *next_frame,
 			      struct trad_frame_saved_reg this_saved_regs[],
-			      int regnum, int *optimizedp,
+			      /* APPLE LOCAL variable opt states.  */
+			      int regnum, enum opt_state *optimizedp,
 			      enum lval_type *lvalp, CORE_ADDR *addrp,
 			      int *realregp, gdb_byte *bufferp)
 {
@@ -141,7 +144,8 @@ trad_frame_get_prev_register (struct frame_info *next_frame,
   if (trad_frame_addr_p (this_saved_regs, regnum))
     {
       /* The register was saved in memory.  */
-      *optimizedp = 0;
+      /* APPLE LOCAL variable opt states.  */
+      *optimizedp = opt_okay;
       *lvalp = lval_memory;
       *addrp = this_saved_regs[regnum].addr;
       *realregp = -1;
@@ -154,7 +158,8 @@ trad_frame_get_prev_register (struct frame_info *next_frame,
     }
   else if (trad_frame_realreg_p (this_saved_regs, regnum))
     {
-      *optimizedp = 0;
+      /* APPLE LOCAL variable opt states.  */
+      *optimizedp = opt_okay;
       *lvalp = lval_register;
       *addrp = 0;
       *realregp = this_saved_regs[regnum].realreg;
@@ -165,7 +170,8 @@ trad_frame_get_prev_register (struct frame_info *next_frame,
   else if (trad_frame_value_p (this_saved_regs, regnum))
     {
       /* The register's value is available.  */
-      *optimizedp = 0;
+      /* APPLE LOCAL variable opt states.  */
+      *optimizedp = opt_okay;
       *lvalp = not_lval;
       *addrp = 0;
       *realregp = -1;
@@ -183,7 +189,8 @@ trad_frame_get_prev_register (struct frame_info *next_frame,
 void
 trad_frame_get_register (struct trad_frame_cache *this_trad_cache,
 			 struct frame_info *next_frame,
-			 int regnum, int *optimizedp,
+			 /* APPLE LOCAL variable opt states.  */
+			 int regnum, enum opt_state *optimizedp,
 			 enum lval_type *lvalp, CORE_ADDR *addrp,
 			 int *realregp, gdb_byte *bufferp)
 {

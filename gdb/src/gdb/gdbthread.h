@@ -47,6 +47,12 @@ struct thread_info
   struct breakpoint *step_resume_breakpoint;
   CORE_ADDR step_range_start;
   CORE_ADDR step_range_end;
+  /* APPLE LOCAL begin step ranges.  */
+  /* The following is used in a manner similar to step_range_start 
+     and step_range_end, in those cases (currently inlined subroutines)
+     where the function has multiple, non-contiguous ranges of addresses.  */
+  struct address_range_list *stepping_ranges;
+  /* APPLE LOCAL end step ranges.  */
   struct frame_id step_frame_id;
   int current_line;
   struct symtab *current_symtab;
@@ -65,7 +71,8 @@ struct thread_info
      when we finally do stop stepping.  */
   bpstat stepping_through_solib_catchpoints;
 
-  /* APPLE LOCAL suspend count */
+  /* APPLE LOCAL How much have WE suspended (for gdb_suspend_count > 0)
+     or resumed (gdb_suspend_count < 0) the current thread.  */
   int gdb_suspend_count;
 
   /* Private data used by the target vector implementation.  */
@@ -77,6 +84,7 @@ extern struct thread_info *thread_list;
 extern int highest_thread_num;
 
 struct thread_info *find_thread_id (int num);
+void prune_threads (void);
 /* APPLE LOCAL end threads */
 
 /* Create an empty thread list, or empty the existing one.  */
@@ -124,6 +132,8 @@ extern void save_infrun_state (ptid_t ptid,
 			       struct breakpoint *step_resume_breakpoint,
 			       CORE_ADDR step_range_start,
 			       CORE_ADDR step_range_end,
+			       /* APPLE LOCAL step ranges  */
+			       struct address_range_list *stepping_ranges,
 			       const struct frame_id *step_frame_id,
 			       int       handling_longjmp,
 			       int       another_trap,
@@ -140,6 +150,8 @@ extern void load_infrun_state (ptid_t ptid,
 			       struct breakpoint **step_resume_breakpoint,
 			       CORE_ADDR *step_range_start,
 			       CORE_ADDR *step_range_end,
+			       /* APPLE LOCAL step ranges*/
+			       struct address_range_list **stepping_ranges,
 			       struct frame_id *step_frame_id,
 			       int       *handling_longjmp,
 			       int       *another_trap,

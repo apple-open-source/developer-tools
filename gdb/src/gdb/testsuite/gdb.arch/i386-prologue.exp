@@ -33,6 +33,11 @@ if ![istarget "i?86-*-*"] then {
     return
 }
 
+if [target_info exists darwin64] {
+   verbose "This test file not yet adapted for x86-64, skipping."
+   return
+}
+
 set testfile "i386-prologue"
 set srcfile ${testfile}.c
 set binfile ${objdir}/${subdir}/${testfile}

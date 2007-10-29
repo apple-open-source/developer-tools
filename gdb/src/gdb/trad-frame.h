@@ -54,7 +54,8 @@ void trad_frame_set_reg_value (struct trad_frame_cache *this_cache,
 
 void trad_frame_get_register (struct trad_frame_cache *this_trad_cache,
 			      struct frame_info *next_frame,
-			      int regnum, int *optimizedp,
+			      /* APPLE LOCAL variable opt states.  */
+			      int regnum, enum opt_state *optimizedp,
 			      enum lval_type *lvalp, CORE_ADDR *addrp,
 			      int *realregp, gdb_byte *bufferp);
 
@@ -115,7 +116,8 @@ struct trad_frame_saved_reg *trad_frame_alloc_saved_regs (struct frame_info *nex
    register.  */
 void trad_frame_get_prev_register (struct frame_info *next_frame,
 				   struct trad_frame_saved_reg this_saved_regs[],
-				   int regnum, int *optimizedp,
+				   /* APPLE LOCAL variable opt states.  */
+				   int regnum, enum opt_state *optimizedp,
 				   enum lval_type *lvalp, CORE_ADDR *addrp,
 				   int *realregp, gdb_byte *bufferp);
 

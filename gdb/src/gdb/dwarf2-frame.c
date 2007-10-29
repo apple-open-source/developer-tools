@@ -820,7 +820,8 @@ dwarf2_frame_this_id (struct frame_info *next_frame, void **this_cache,
 
 static void
 dwarf2_frame_prev_register (struct frame_info *next_frame, void **this_cache,
-			    int regnum, int *optimizedp,
+			    /* APPLE LOCAL variable opt states.  */
+			    int regnum, enum opt_state *optimizedp,
 			    enum lval_type *lvalp, CORE_ADDR *addrp,
 			    int *realnump, gdb_byte *valuep)
 {
@@ -833,7 +834,8 @@ dwarf2_frame_prev_register (struct frame_info *next_frame, void **this_cache,
     case DWARF2_FRAME_REG_UNDEFINED:
       /* If CFI explicitly specified that the value isn't defined,
 	 mark it as optimized away; the value isn't available.  */
-      *optimizedp = 1;
+      /* APPLE LOCAL variable opt states.  */
+      *optimizedp = opt_away;
       *lvalp = not_lval;
       *addrp = 0;
       *realnump = -1;
@@ -847,7 +849,8 @@ dwarf2_frame_prev_register (struct frame_info *next_frame, void **this_cache,
       break;
 
     case DWARF2_FRAME_REG_SAVED_OFFSET:
-      *optimizedp = 0;
+      /* APPLE LOCAL variable opt states.  */
+      *optimizedp = opt_okay;
       *lvalp = lval_memory;
       *addrp = cache->cfa + cache->reg[regnum].loc.offset;
       *realnump = -1;
@@ -859,7 +862,8 @@ dwarf2_frame_prev_register (struct frame_info *next_frame, void **this_cache,
       break;
 
     case DWARF2_FRAME_REG_SAVED_REG:
-      *optimizedp = 0;
+      /* APPLE LOCAL variable opt states.  */
+      *optimizedp = opt_okay;
       *lvalp = lval_register;
       *addrp = 0;
       *realnump = DWARF2_REG_TO_REGNUM (cache->reg[regnum].loc.reg);
@@ -868,7 +872,8 @@ dwarf2_frame_prev_register (struct frame_info *next_frame, void **this_cache,
       break;
 
     case DWARF2_FRAME_REG_SAVED_EXP:
-      *optimizedp = 0;
+      /* APPLE LOCAL variable opt states.  */
+      *optimizedp = opt_okay;
       *lvalp = lval_memory;
       *addrp = execute_stack_op (cache->reg[regnum].loc.exp,
 				 cache->reg[regnum].exp_len,
@@ -889,7 +894,8 @@ dwarf2_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 	 "undefined").  Code above issues a complaint about this.
 	 Here just fudge the books, assume GCC, and that the value is
 	 more inner on the stack.  */
-      *optimizedp = 0;
+      /* APPLE LOCAL variable opt states.  */
+      *optimizedp = opt_okay;
       *lvalp = lval_register;
       *addrp = 0;
       *realnump = regnum;
@@ -898,7 +904,8 @@ dwarf2_frame_prev_register (struct frame_info *next_frame, void **this_cache,
       break;
 
     case DWARF2_FRAME_REG_SAME_VALUE:
-      *optimizedp = 0;
+      /* APPLE LOCAL variable opt states.  */
+      *optimizedp = opt_okay;
       *lvalp = lval_register;
       *addrp = 0;
       *realnump = regnum;
@@ -907,7 +914,8 @@ dwarf2_frame_prev_register (struct frame_info *next_frame, void **this_cache,
       break;
 
     case DWARF2_FRAME_REG_CFA:
-      *optimizedp = 0;
+      /* APPLE LOCAL variable opt states.  */
+      *optimizedp = opt_okay;
       *lvalp = not_lval;
       *addrp = 0;
       *realnump = -1;
@@ -919,7 +927,8 @@ dwarf2_frame_prev_register (struct frame_info *next_frame, void **this_cache,
       break;
 
     case DWARF2_FRAME_REG_RA_OFFSET:
-      *optimizedp = 0;
+      /* APPLE LOCAL variable opt states.  */
+      *optimizedp = opt_okay;
       *lvalp = not_lval;
       *addrp = 0;
       *realnump = -1;
@@ -1323,7 +1332,7 @@ dwarf2_frame_find_fde (CORE_ADDR *pc)
 	continue;
 
       gdb_assert (objfile->section_offsets);
-      offset = ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile));
+      offset = objfile_text_section_offset (objfile);
 
       while (fde)
 	{

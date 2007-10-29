@@ -4530,11 +4530,20 @@ ada_lookup_symbol (const char *name, const struct block *block0,
           /* Search the list of symtabs for one which contains the
              address of the start of this block.  */
           ALL_SYMTABS (objfile, s)
-          {
+	  {
+	    /* APPLE LOCAL begin address ranges  */
+	    CORE_ADDR end;
+	    /* APPLE LOCAL end address ranges  */
+
             bv = BLOCKVECTOR (s);
             b = BLOCKVECTOR_BLOCK (bv, GLOBAL_BLOCK);
-            if (BLOCK_START (b) <= BLOCK_START (candidates[0].block)
-                && BLOCK_END (b) > BLOCK_START (candidates[0].block))
+
+	    /* APPLE LOCAL begin address ranges  */
+            end = BLOCK_HIGHEST_PC (b);
+
+	    if (BLOCK_LOWEST_PC (b) <= BLOCK_LOWEST_PC (candidates[0].block)
+	        && end > BLOCK_LOWEST_PC (candidates[0].block))
+	    /* APPLE LOCAL end address ranges  */
               {
                 *symtab = s;
                 return fixup_symbol_section (candidates[0].sym, objfile);

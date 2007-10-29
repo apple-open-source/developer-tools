@@ -246,7 +246,8 @@ libunwind_frame_this_id (struct frame_info *next_frame, void **this_cache,
 
 void
 libunwind_frame_prev_register (struct frame_info *next_frame, void **this_cache,
-			       int regnum, int *optimizedp,
+			       /* APPLE LOCAL variable opt states.  */
+			       int regnum, enum opt_state *optimizedp,
 			       enum lval_type *lvalp, CORE_ADDR *addrp,
 			       int *realnump, void *valuep)
 {
@@ -274,7 +275,8 @@ libunwind_frame_prev_register (struct frame_info *next_frame, void **this_cache,
   if (!target_has_registers)
     error (_("No registers."));
 
-  *optimizedp = 0;
+  /* APPLE LOCAL variable opt states.  */
+  *optimizedp = opt_other;
   *addrp = 0;
   *lvalp = not_lval;
   *realnump = -1;
@@ -311,7 +313,8 @@ libunwind_frame_prev_register (struct frame_info *next_frame, void **this_cache,
   switch (sl.type)
     {
     case UNW_SLT_NONE:
-      *optimizedp = 1;
+      /* APPLE LOCAL variable opt states.  */
+      *optimizedp = opt_away;
       break;
 
     case UNW_SLT_MEMORY:

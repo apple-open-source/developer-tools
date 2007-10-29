@@ -35,8 +35,11 @@
 #include "gdbcmd.h"
 #include "command.h" /* for dont_repeat () */
 #include "solib.h"
-
+#include "osabi.h"
 #include <signal.h>
+#ifdef USE_POSIX_SPAWN
+#include <spawn.h>
+#endif
 
 char *exec_argv0 = NULL;
 char *exec_pathname = NULL;
@@ -166,7 +169,14 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
   /* Multiplying the length of exec_file by 4 is to account for the
      fact that it may expand when quoted; it is a worst-case number
      based on every character being '.  */
-  len = 5 + 4 * strlen (exec_file) + 1 + strlen (allargs) + 1 + /*slop */ 12;
+  /* APPLE LOCAL 5 = "exec ", but we have "exec arch -arch x86_64 " at most.
+     so 5->24.  */
+#ifdef USE_ARCH_FOR_EXEC
+  len = 24;
+#else
+  len = 5;
+#endif
+  len += 4 * strlen (exec_file) + 1 + strlen (allargs) + 1 + /*slop */ 12;
   /* If desired, concat something onto the front of ALLARGS.
      SHELL_COMMAND is the result.  */
 #ifdef SHELL_COMMAND_CONCAT
@@ -217,7 +227,29 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
       int need_to_quote;
       const int escape_bang = escape_bang_in_quoted_argument (shell_file);
 
+#ifdef USE_ARCH_FOR_EXEC
+      {
+	char *arch_string = NULL;
+	const char *osabi_name = gdbarch_osabi_name (gdbarch_osabi (current_gdbarch));
+#if defined (TARGET_POWERPC)
+	if (strcmp (osabi_name, "Darwin") == 0)
+	  arch_string = "ppc";
+	else if (strcmp (osabi_name, "Darwin64") == 0)
+	  arch_string = "ppc64";
+#elif defined (TARGET_I386)
+	if (strcmp (osabi_name, "Darwin") == 0)
+	  arch_string = "i386";
+	else if (strcmp (osabi_name, "Darwin64") == 0)
+	  arch_string = "x86_64";
+#endif
+	if (arch_string != NULL)
+	  sprintf (shell_command, "%s exec arch -arch %s ", shell_command, arch_string);
+	else
+	  strcat (shell_command, "exec ");
+      }
+#else
       strcat (shell_command, "exec ");
+#endif
 
       /* Quoting in this style is said to work with all shells.  But
          csh on IRIX 4.0.1 can't deal with it.  So we only quote it if
@@ -385,6 +417,77 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
 	  int i;
 	  char *errstring;
 
+#ifdef USE_POSIX_SPAWN
+	  {
+	    posix_spawnattr_t attr;
+	    int retval;
+	    size_t copied;
+	    cpu_type_t cpu;
+	    int count = 0;
+	    pid_t pid;
+	    const char *osabi_name = gdbarch_osabi_name (gdbarch_osabi (current_gdbarch));
+	    char *fileptr;
+
+	    if (exec_pathname[0] != '\0')
+	      fileptr = exec_pathname;
+	    else
+	      fileptr = exec_file;
+
+#if defined (TARGET_POWERPC)
+	    if (strcmp (osabi_name, "Darwin") == 0)
+	      {
+		cpu = CPU_TYPE_POWERPC;
+		count = 1;
+	      }
+	    else if (strcmp (osabi_name, "Darwin64") == 0)
+	      {
+		cpu = CPU_TYPE_POWERPC64;
+		count = 1;
+	      }
+#elif defined (TARGET_I386)
+	    if (strcmp (osabi_name, "Darwin") == 0)
+	      {
+		cpu = CPU_TYPE_I386;
+		count = 1;
+	      }
+	    else if (strcmp (osabi_name, "Darwin64") == 0)
+	      {
+		cpu = CPU_TYPE_X86_64;
+		count = 1;
+	      }
+#endif
+	    retval = posix_spawnattr_init (&attr);
+	    if (retval != 0)
+	      {
+		warning ("Couldn't initialize attributes for posix_spawn, error: %d", retval);
+		goto try_execvp;
+	      }
+	    retval = posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETEXEC);
+	    if (retval != 0)
+	      {
+		warning ("Couldn't add POSIX_SPAWN_SETEXEC to attributes, error: %d", retval);
+		goto try_execvp;
+	      }
+	    if (count == 1)
+	      {
+		retval = posix_spawnattr_setbinpref_np(&attr, 1, &cpu, &copied);
+		if (retval != 0 || copied != 1)
+		  {
+		    warning ("Couldn't set the binary preferences, error: %d", retval);
+		    goto try_execvp;
+		  }
+	      }
+	    retval = posix_spawnattr_setpgroup (&attr, debug_setpgrp);
+	    if (retval != 0 || copied != 1)
+	      {
+		warning ("Couldn't set the process group, error: %d", retval);
+		goto try_execvp;
+	      }
+	    retval = posix_spawnp (&pid, fileptr, NULL,  &attr, argv, env);
+	    warning ("posix_spawn failed, trying execvp, error: %d", retval);
+	  }
+#endif
+	try_execvp:
 	  if (exec_pathname[0] != '\0')
 	    execvp (exec_pathname, argv);
 	  else
@@ -456,12 +559,6 @@ startup_inferior (int ntraps)
   clear_proceed_status ();
 
   init_wait_for_inferior ();
-
-  /* APPLE LOCAL start with shell */
-  if (start_with_shell_flag)
-    pending_execs = START_INFERIOR_TRAPS_EXPECTED;
-  else
-    pending_execs = START_INFERIOR_TRAPS_EXPECTED_NOSHELL;
 
   inferior_ignoring_startup_exec_events = pending_execs;
   inferior_ignoring_leading_exec_events =
@@ -558,5 +655,6 @@ Set if GDB should use shell to invoke inferior (performs argument expansion in s
 Show if GDB should use shell to invoke inferior (performs argument expansion in shell)."), NULL,
 			   NULL, NULL,
 			   &setlist, &showlist);
+
 }
 /* APPLE LOCAL end start with shell */

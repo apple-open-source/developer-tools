@@ -73,7 +73,8 @@ static void
 tramp_frame_prev_register (struct frame_info *next_frame,
 			   void **this_cache,
 			   int prev_regnum,
-			   int *optimizedp,
+			   /* APPLE LOCAL variable opt states.  */
+			   enum opt_state *optimizedp,
 			   enum lval_type * lvalp,
 			   CORE_ADDR *addrp,
 			   int *realnump, gdb_byte *valuep)

@@ -38,6 +38,8 @@
 #include "serial.h"
 #include "ocd.h"
 #include "regcache.h"
+/* APPLE LOCAL - subroutine inlining  */
+#include "inlining.h"
 
 /* Prototypes for local functions */
 
@@ -226,7 +228,18 @@ ocd_start_remote (void *dummy)
   flush_cached_frames ();
   registers_changed ();
   stop_pc = read_pc ();
+  /* APPLE LOCAL begin subroutine inlining  */
+  /* If the PC has changed since the last time we updated the
+     global_inlined_call_stack data, we need to verify the current
+     data and possibly update it.  */
+  if (stop_pc != inlined_function_call_stack_pc ())
+    inlined_function_update_call_stack (stop_pc);
+  /* APPLE LOCAL end subroutine inlining  */
+
   print_stack_frame (get_selected_frame (NULL), 0, SRC_AND_LOC);
+  /* APPLE LOCAL begin subroutine inlining  */
+  clear_inlined_subroutine_print_frames ();
+  /* APPLE LOCAL end subroutine inlining  */
 
   buf[0] = OCD_LOG_FILE;
   buf[1] = 3;			/* close existing WIGGLERS.LOG */

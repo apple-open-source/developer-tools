@@ -298,7 +298,8 @@ frv_linux_sigtramp_frame_this_id (struct frame_info *next_frame, void **this_cac
 static void
 frv_linux_sigtramp_frame_prev_register (struct frame_info *next_frame,
 				   void **this_cache,
-				   int regnum, int *optimizedp,
+				   /* APPLE LOCAL variable opt states.  */
+				   int regnum, enum opt_state *optimizedp,
 				   enum lval_type *lvalp, CORE_ADDR *addrp,
 				   int *realnump, void *valuep)
 {

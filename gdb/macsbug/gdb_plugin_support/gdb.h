@@ -164,7 +164,8 @@ typedef void (*Gdb_Prompt_Positioning)(int);	/* prompt positioning function prot
 			       *--------------------------*/
 
 int gdb_initialize(void);
-    /* You MUST call this function before using any of the other gdb support routines. */
+    /* You MUST call this function before using any of the other gdb support routines.
+       Returns 1 if the initialization succeeds, 0 if it fails. */
 
 Gdb_Cmd_Class gdb_define_class(char *className, char *classTitle);
     /* Defines a new plugin command class that is NOT one of the predefined classes OR
@@ -413,7 +414,7 @@ typedef void (*Gdb_Set_Funct)(char *theSetting,	/* SET handler function prototyp
        associations. */
 
 void gdb_define_set(char *theSetting, Gdb_Set_Funct sfunct, Gdb_Set_Type type,
-		    void *value_ptr, char *helpInfo);
+		    void *value_ptr, int for_set_and_show, char *helpInfo);
     /* This provides a way to extend the gdb SET to include your own settings and to
        allow SHOW to display your current settings.  A gdb SET command has the general
        form,
@@ -502,6 +503,11 @@ void gdb_define_set(char *theSetting, Gdb_Set_Funct sfunct, Gdb_Set_Type type,
 			   in the sfunct when the sfunct is called as a result of
 			   gdb_define_set_enum().  See it's comments for further details.
 			   
+	 for_set_and_show  Normally the sfunct is only called when a SET command is
+	                   done.  But by setting for_set_and_show to a non-zero value
+			   it will also be called for SHOW as well.  The sfunc has
+			   a parameter indicating why it's being called (see below).
+	 
 	 helpInfo          This is a short help info to be used for HELP SHOW and
 	                   when SHOW displays the current setting.  THE HELP INFO STRING
 			   MUST BEGIN WITH THE SEQUENCE OF CHARACTERS "Set " EXACTLY.  If
@@ -526,7 +532,7 @@ void gdb_define_set(char *theSetting, Gdb_Set_Funct sfunct, Gdb_Set_Type type,
 	 gdb_replace_command(). */
 
 void gdb_define_set_enum(char *theSetting, Gdb_Set_Funct sfunct, char *enumlist[],
-			 void *value_ptr, char *helpInfo);
+			 void *value_ptr, int for_set_and_show, char *helpInfo);
     /* This is almost identical to gdb_define_set() above except that in place of the
        type, a pointer to a NULL terminated list of acceptable string pointers is
        expected.  For example,
@@ -634,6 +640,21 @@ int gdb_interactive(void);
 GDB_ADDRESS gdb_get_function_start(GDB_ADDRESS addr);
     /* Returns the address of the start of the function containing the specified
       address or NULL if the start address cannot be determined. */
+
+char *gdb_address_symbol(GDB_ADDRESS addr, int onlyAddr, char *symbol, int maxLen);
+    /*  Called to convert an address to s symbol.  The function returns the pointer to
+        the symbol string possibly truncated to maxLen characters.  If onlyAddr is
+        non-zero then addr is simply converted to a hex value ("0xXXXX....").  If
+        onlyAddr is 0 then the symbol information associated with the addr is appended
+        to the string.
+
+ 	NULL is never returned from this function.  At a minimum the hex address is
+ 	returned.  The symbol information is not appended if it cannot be determined.
+
+        The full output formats are as follows:
+ 
+          0xXXXX... <name[+offset] in filename>
+          0xXXXX... <name[+offset] at filename:line> */
 
 int gdb_target_arch(void);
     /* Return 8 for a 64-bit target architecture otherwise return 4.  This is used to
@@ -752,9 +773,11 @@ GDB_ADDRESS gdb_read_memory(void *dst, char *src, int n);
        are copied to the plugin memory specified by dst.  The target actual address is
        returned as the function result. */
 
-GDB_ADDRESS gdb_read_memory_from_addr(void *dst, GDB_ADDRESS src, int n);
+GDB_ADDRESS gdb_read_memory_from_addr(void *dst, GDB_ADDRESS src, int n, int report_error);
     /* The n bytes in the target's memory at addr are copied to the plugin memory
-       specified by dst.  The target address is returned as the function result. */
+       specified by dst.  The target address is returned as the function result.
+       If an error is detected while reading NULL is returned if report_error is 0.
+       Otherwise an error message is displayed.  */
 
 void gdb_write_memory(char *dst, void *src, int n);
     /* The n bytes from the (plugin) src are written to the target memory address 
@@ -1210,6 +1233,33 @@ char *gdb_tilde_expand(char *pathname);
     /* Returns an malloc'ed string with is the result of expanding tilde's (~) in the
        specified pathname. */
 
+int gdb_demangled_symbol(char *mangled, char *demangled, int maxLen, int params);
+    /* If demangling is enabled in gdb (SET print demangle |asm-demangle) then try see
+       if the mangled symbol can be demangled (including is parameters if params is
+       non-zero).  The function sets the demangled name (possibly truncated to maxLen
+       characters).
+ 
+       If demangling is not enabled or cannot be done the original mangled name is
+       copied to mangled (again possibly truncated to maxLen unless both demangled
+       and mangled are pointers to the same string).
+ 
+       In all cases the function returns the length of the mangled string.
+ 
+       Note, a convention gdb uses for Mac OS X is to prefix stubs (trampolines) with
+       the string "dyld_stub_".  If this is present in the mangled symbol it is
+       stripped off and the remaining characters used for the mangled symbol.  If that
+       can be demangled the demangled symbol is returned WITHOUT the "dyld_stub_"
+       prefix. */
+
+int gdb_show_objc_object(GDB_ADDRESS addr, char *objStr, int maxLen);
+    /* Ask an object to display itself into the specified object string (up to maxLen
+       characters).  If the string is truncated then '...' is appended to the end of
+       the string.  The function returns the number of characters in the string.  0
+       is returned if the string cannot be generated.
+ 
+       Note, this function is basically a gdb PRINT-OBJECT (PO) command except that
+       the output is returned in the string instead of being written to stdout. */
+
 /*--------------------------------------------------------------------------------------*/
 			    /*------------------------------*
 			     | Low-level gdb event handling |
@@ -1493,7 +1543,49 @@ void gdb_special_events(GdbEvent theEvent, void (*callback)());
 	   provide some kind of feedback that something is going on. */
 
 /*--------------------------------------------------------------------------------------*/
+			     /*--------------------------*
+			      | Object Module Operations |
+			      *--------------------------*/
 
+const char *gdb_is_addr_in_section(GDB_ADDRESS addr, char *segname_sectname);
+    /* This is a rather low-level function which is used to determine whether the
+       specified addr is located within one of an object file's load sections
+       (segname_sectname).  If it is, a (const) pointer to the segname_sectname
+       pointer is returned.  Otherwise NULL is returned.
+ 
+       If segname_sectname is passed as NULL then the function will return a pointer
+       to the first segname_sectname found in ANY of the loaded sections which
+       contains the addr.
+ 
+       The segname_sectname is a string indicating the Mach-o load segname and sectname
+       concatenated with a period (e.g., "__TEXT.__cstring", "__DATA.__cfstring", etc.).
+       See 'struct section' definition in /usr/include/mach-o/loader.h for some details.
+       Also see the Mach-o Runtime ABI documentation.
+ 
+       For repeated tests for different sections for the SAME addr this function caches
+       the gdb search information to avoid needless repeated object file searching.  To
+       clear this cache pass addr with the value 0.  0 is returned for this case too. */
+
+typedef struct Section_Range {
+    GDB_ADDRESS          addr;			/* lowest address in section		*/
+    GDB_ADDRESS          endaddr;		/* 1+highest address in section		*/
+    struct Section_Range *next;			/* next on list				*/
+} Section_Range;
+
+int gdb_find_section(char *segname_sectname, Section_Range **ranges);
+     /* This function searches all the sections in all the loaded object files for the
+        specified segname_sectname.  If found a count is returned as the function result
+        indicating the number of instances found with that section name.  If ranges is
+        not NULL it will be returned as a pointer to a gdb_malloc'ed list (same number
+        of entries as was found) of section address ranges.  Each list entry has the
+        layout shown above.
+        
+        The segname_sectname is a string indicating the Mach-o load segname and sectname
+        concatenated with a period (e.g., "__TEXT.__cstring", "__DATA.__cfstring", etc.).
+        See 'struct section' definition in /usr/include/mach-o/loader.h for some details.
+        Also see the Mach-o Runtime ABI documentation. */
+
+/*--------------------------------------------------------------------------------------*/
 			   /*-------------------------------*
 			    | Implementation Considerations |
 			    *-------------------------------*

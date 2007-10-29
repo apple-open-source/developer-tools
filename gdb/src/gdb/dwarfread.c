@@ -736,8 +736,10 @@ read_lexical_block_scope (struct dieinfo *dip, char *thisdie, char *enddie,
   new = pop_context ();
   if (local_symbols != NULL)
     {
+      /* APPLE LOCAL begin address ranges  */
       finish_block (0, &local_symbols, new->old_blocks, new->start_addr,
-		    dip->at_high_pc, objfile);
+		    dip->at_high_pc, NULL, objfile);
+      /* APPLE LOCAL end address ranges  */
     }
   local_symbols = new->locals;
 }
@@ -1798,8 +1800,10 @@ read_func_scope (struct dieinfo *dip, char *thisdie, char *enddie,
   process_dies (thisdie + dip->die_length, enddie, objfile);
   new = pop_context ();
   /* Make a block for the local symbols within.  */
+  /* APPLE LOCAL begin address ranges  */
   finish_block (new->name, &local_symbols, new->old_blocks,
-		new->start_addr, dip->at_high_pc, objfile);
+		new->start_addr, dip->at_high_pc, NULL, objfile);
+  /* APPLE LOCAL end address ranges  */
   list_in_scope = &file_symbols;
 }
 
@@ -2100,7 +2104,9 @@ decode_line_numbers (char *linetable)
 	  pc += base;
 	  if (line != 0)
 	    {
-	      record_line (current_subfile, line, pc);
+	      /* APPLE LOCAL begin subroutine inlining  */
+	      record_line (current_subfile, line, pc, 0, NORMAL_LT_ENTRY);
+	      /* APPLE LOCAL end subroutine inlining  */
 	    }
 	}
     }

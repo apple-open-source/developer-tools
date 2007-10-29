@@ -24,6 +24,11 @@ if $tracelevel then {
         strace $tracelevel
 }
 
+if [target_info exists darwin64] {
+   verbose "Fix and continue not supported for x86-64/ppc64." 
+   return 
+}
+
 set prms_id 0
 set bug_id 0
 
@@ -51,8 +56,8 @@ gdb_test "next" ".*I am in bar in b.c version 1.*I am in fred.*"  "step over bar
 
 send_gdb "p foo\n"
 gdb_expect {
-  -re ".*$decimal = \{int \\(void\\)\} ($hex) <foo>\[\r\n\]+$gdb_prompt $" {
-    set stage1_foo_addr $expect_out(1,string)
+  -re ".*$decimal = \{int \\((void|)\\)\} ($hex) <foo>\[\r\n\]+$gdb_prompt $" {
+    set stage1_foo_addr $expect_out(2,string)
     pass "get addr of foo() at stage1"
   }
   -re ".*$gdb_prompt $" {
@@ -71,8 +76,8 @@ gdb_test "next" ".*I am in bar in b.c version 2.*I am in fred.*"  "step over bar
 
 send_gdb "p foo\n"
 gdb_expect {
-  -re ".*$decimal = \{int \\(void\\)\} ($hex) <foo>\[\r\n\]+$gdb_prompt $" {
-    set stage2_foo_addr $expect_out(1,string)
+  -re ".*$decimal = \{int \\((void|)\\)\} ($hex) <foo>\[\r\n\]+$gdb_prompt $" {
+    set stage2_foo_addr $expect_out(2,string)
     pass "get addr of foo() at stage2"
   }
   -re ".*$gdb_prompt $" {
@@ -97,8 +102,8 @@ gdb_test "next" ".*I am in bar in b.c version 3.*I am in fred.*"  "step over bar
 
 send_gdb "p foo\n"
 gdb_expect {
-  -re ".*$decimal = \{int \\(void\\)\} ($hex) <foo>\[\r\n\]+$gdb_prompt $" {
-    set stage3_foo_addr $expect_out(1,string)
+  -re ".*$decimal = \{int \\((void|)\\)\} ($hex) <foo>\[\r\n\]+$gdb_prompt $" {
+    set stage3_foo_addr $expect_out(2,string)
     pass "get addr of foo() at stage3"
   }
   -re ".*$gdb_prompt $" {
@@ -123,8 +128,8 @@ gdb_test "next" ".*I am in bar in b.c version 4.*I am in fred.*"  "step over bar
 
 send_gdb "p foo\n"
 gdb_expect {
-  -re ".*$decimal = \{int \\(void\\)\} ($hex) <foo>\[\r\n\]+$gdb_prompt $" {
-    set stage4_foo_addr $expect_out(1,string)
+  -re ".*$decimal = \{int \\((void|)\\)\} ($hex) <foo>\[\r\n\]+$gdb_prompt $" {
+    set stage4_foo_addr $expect_out(2,string)
     pass "get addr of foo() at stage4"
   }
   -re ".*$gdb_prompt $" {
@@ -196,8 +201,8 @@ gdb_test "fix $objdir/$subdir/b-bundlized.o9 $objdir/$subdir/b.c" ".*Fix succeed
 gdb_test "next" ".*I am in bar in b.c version 9.*I am in fred.*"  "step over bar() version 9"
 send_gdb "p foo\n"
 gdb_expect {
-  -re ".*$decimal = \{int \\(void\\)\} ($hex) <foo>\[\r\n\]+$gdb_prompt $" {
-    set stage9_foo_addr $expect_out(1,string)
+  -re ".*$decimal = \{int \\((void|)\\)\} ($hex) <foo>\[\r\n\]+$gdb_prompt $" {
+    set stage9_foo_addr $expect_out(2,string)
     pass "get addr of foo() at stage9"
   }
   -re ".*$gdb_prompt $" {
@@ -305,8 +310,8 @@ gdb_test "fix $objdir/$subdir/b-bundlized.o18 $objdir/$subdir/b.c" ".*Fix succee
 gdb_test "next" ".*I am in bar in b.c version 18.*I am in fred.*"  "step over bar() version 18"
 send_gdb "p foo\n"
 gdb_expect {
-  -re ".*$decimal = \{int \\(void\\)\} ($hex) <foo>\[\r\n\]+$gdb_prompt $" {
-    set stage18_foo_addr $expect_out(1,string)
+  -re ".*$decimal = \{int \\((void|)\\)\} ($hex) <foo>\[\r\n\]+$gdb_prompt $" {
+    set stage18_foo_addr $expect_out(2,string)
     pass "get addr of foo() at stage18"
   }
   -re ".*$gdb_prompt $" {

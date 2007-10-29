@@ -555,7 +555,9 @@ enum dwarf_location_atom
     DW_OP_HP_fltconst8   = 0xe3,
     DW_OP_HP_mod_range   = 0xe4,
     DW_OP_HP_unmod_range = 0xe5,
-    DW_OP_HP_tls         = 0xe6
+    DW_OP_HP_tls         = 0xe6,
+    /* APPLE extensions.  */
+    DW_OP_APPLE_uninit   = 0xf0
   };
 
 #define DW_OP_lo_user	0xe0	/* Implementation-defined range start.  */

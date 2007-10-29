@@ -1,3 +1,281 @@
+2007-07-09  Caroline Tice  <ctice@apple.com>
+
+        * gdb.apple/nested-inlines-console.x86.exp:  Fix test to
+        match new order in which inlined breakpoints are returned.
+        * gdb.apple/nested-inlines-mi.x86.exp:  Likewise.
+        * gdb.apple/nested-inlines-console.exp: Likewise.
+        * gdb.apple/nested-inlines-mi.exp: Likewise.
+
+2007-06-29  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.apple/corefile.exp: Don't try to change the timeout
+	for this test case.
+
+2007-06-26  Jim Ingham  <jingham@apple.com>
+
+	* gdb.apple/debug-in-ofile(one-six.c, dbg-in-ofile.h,
+	debug-in-ofile.exp): Change function names so they won't match
+	symbols in libSystem.
+	* gdb.objc/basicclass.exp: Fix a few failures due to Apple local
+	mods.
+	
+2007-06-21  Jim Ingham  <jingham@apple.com>
+
+	* gdb.apple/add-dsym.exp: Reset gdb_test_apple_dsym correctly.
+	
+2007-06-19  Jim Ingham  <jingham@apple.com>
+
+	* gdb.apple/add-dsym.{c,exp}, gdb.apple/add-dylib-dsym.c:
+	New files, tests for the "add-dsym" command.
+	
+2007-06-05  Jim Ingham  <jingham@apple.com>
+
+	* gdb.apple/file-with-parens.exp: New file.  Tests
+	breakpoint setting in files with parenthesis.
+	* gdb.apple/{file ( my name ).c, file(myname).c}: Test
+	files.
+	
+2007-05-17  Jim Ingham <jingham@apple.com>
+
+	* gdb.apple/check-errno.{c, exp}:New files to check
+	that we can read errno correctly.  Good sniff test
+	for the shared cache code.
+
+	* gdb.apple/arch-test.exp: Take the "-arch" option out
+	of the cflags before building - we want to control what
+	architecture is getting built.
+	
+2007-05-11  Jim Ingham <jingham@apple.com>
+
+	* gdb.apple/dummy.c
+	* gdb.apple/loaded.c
+	* gdb.apple/loader.c
+	* gdb.apple/real.c
+	* gdb.apple/unloading.exp: New testcase.
+	* lib/mi-support.exp (mi_execute_to_helper): Add new argument
+	so you can specify a pattern to match WHILE running.
+	(mi_execute_helper): Pass on the new pattern.
+	(mi_continue_to): Pass on the new pattern.
+	
+2007-05-01  Jim Ingham <jingham@apple.com>
+
+	* gdb.apple/po.exp: Somebody changed the print-object output
+	for NSString.
+	
+2007-04-24  Jim Ingham <jingham@apple.com>
+
+	* lib/gdb.exp (gdb_start, default_gdb_start): Accept an
+	optional "extra_flags" argument so we can add "-arch" flag
+	more cleanly.
+	* gdb.apple/arch-test.exp: Use argument to gdb_start.
+	
+2007-04-18  Jim Ingham <jingham@apple.com>
+
+	* gdb.apple/arch-test.exp: Unset the GDBFLAGS variable.
+	
+2007-04-18  Jim Ingham <jingham@apple.com>
+
+	* gdb.apple/arch-test.{c,exp}: Test the "-arch" flag.
+	
+2007-04-16  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.apple/info-shared-addr.exp: Don't require the presence of cfm
+	support.
+
+2007-04-12  Caroline Tice  <ctice@apple.com>
+
+        * gdb.apple/nested-inlines-xcode-1.exp: Modify messages (for
+        outout matching) to reflect new variable state message.
+        * gdb.apple/nested-inlines-xcode-1.x86.exp: Likewise.
+        * gdb.apple/nested-inlines-xcode-2.exp: Likewise.
+        * gdb.apple/nested-inlines-xcode-2.x86.exp: Likewise.
+        * gdb.apple/nested-inlines-xcode-3.exp: Likewise.
+        * gdb.apple/nested-inlines-xcode-3.x86.exp: Likewise.
+        * gdb.apple/nested-inlines-xcode-4.exp: Likewise.
+        * gdb.apple/nested-inlines-xcode-4.x86.exp: Likewise.
+        * gdb.apple/nested-inlines-xcode-5.exp: Likewise.
+        * gdb.apple/nested-inlines-xcode-5.x86.exp: Likewise.
+        * gdb.apple/nested-inlines-xcode-6.exp: Likewise.
+        * gdb.apple/nested-inlines-xcode-6.x86.exp: Likewise.
+        * gdb.apple/nested-inlines-xcode-7.exp: Likewise.
+        * gdb.apple/nested-inlines-xcode-7.x86.exp: Likewise.
+        * gdb.apple/nested-inlines-xcode-8.exp: Likewise.
+        * gdb.apple/nested-inlines-xcode-8.x86.exp: Likewise.
+        * gdb.apple/nested-inlines-xcode-9.exp: Likewise.
+        * gdb.apple/nested-inlines-xcode-9.x86.exp: Likewise.
+ 
+2007-03-22  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.apple/fix-and-continue/small-c/fix-small-c.exp: Update to work
+	correctly with DWARF/current gdb output.
+
+2007-03-16  Jim Ingham  <jingham@apple.com>
+
+	* gdb.apple/anon-struct.exp: Add a test for 
+	-var-info-path-expression.
+	
+2007-03-15  Jim Ingham  <jingham@apple.com>
+
+	* lib/mi-support.exp (mi_continue_to_watchpoint): New proc
+	(mi_execute_to_helper):  Added extra_before & extra_after instead
+	of just extra.
+	(mi_execute_to, mi0_execute_to): pass the new argument.
+	* gdb.apple/watch-location.{c,exp}: New tests.
+	
+2007-03-06  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.apple/info-shared-addr.exp: Remove metrowerks command
+	uses.
+
+2007-03-01  Caroline Tice  <ctice@apple.com>
+
+	* gdb.apple/macscp-inlining.exp: Remove check for file names.
+	* gdb.apple/macscp-inlining.x86.exp: Likewise
+	* gdb.apple/nested-inlines-console.exp: Fix line numbers for first line
+	of stepping into inlined subroutine.
+	* gdb.apple/nested-inlines-console.x86.exp: Likewise.
+	* gdb/testsuite/gdb.apple/nested-inlines-mi.exp: Likewise.
+	* gdb/testsuite/gdb.apple/nested-inlines-mi.x86.exp: Likewise.
+	* gdb/testsuite/gdb.apple/nested-inlines-xcode-2.exp: Likewise.
+	* gdb/testsuite/gdb.apple/nested-inlines-xcode-2.x86.exp: Likewise.
+	* gdb/testsuite/gdb.apple/nested-inlines-xcode-3.exp: Likewise.
+	* gdb/testsuite/gdb.apple/nested-inlines-xcode-3.x86.exp: Likewise.
+	* gdb/testsuite/gdb.apple/nested-inlines-xcode-4.exp: Likewise.
+	* gdb/testsuite/gdb.apple/nested-inlines-xcode-4.x86.exp: Likewise.
+	* gdb/testsuite/gdb.apple/nested-inlines-xcode-5.exp: Likewise.
+	* gdb/testsuite/gdb.apple/nested-inlines-xcode-5.x86.exp: Likewise.
+	* gdb/testsuite/gdb.apple/nested-inlines-xcode-6.exp: Likewise.
+	* gdb/testsuite/gdb.apple/nested-inlines-xcode-6.x86.exp: Likewise.
+	* gdb/testsuite/gdb.apple/nested-inlines-xcode-7.exp: Likewise.
+	* gdb/testsuite/gdb.apple/nested-inlines-xcode-7.x86.exp: Likewise.
+	* gdb/testsuite/gdb.apple/nested-inlines-xcode-8.exp: Likewise.
+	* gdb/testsuite/gdb.apple/nested-inlines-xcode-8.x86.exp: Likewise.
+	* gdb/testsuite/gdb.apple/nested-inlines-xcode-9.exp: Likewise.
+	* gdb/testsuite/gdb.apple/nested-inlines-xcode-9.x86.exp: Likewise.
+
+2007-02-28  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.apple/gen-x86-prologues.rb: Update the .exp generator along
+	the lines of Greg's last change so it doesn't get overwritten next
+	time this is run.
+
+2007-02-28  Greg Clayton (gclayton@apple.com)
+
+	* gdb.apple/gen-x86-prologues.exp: Don't look for line information
+	for the pattern_N cases since it is bogus for DWARF and correctly
+	missing for the dSYM case.
+
+2007-02-20  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.apple/cfm.exp: Enable the inferior-auto-start-cfm which is now
+	disabled by default.
+
+2007-02-14  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.apple/r3384998.exp: Handle 64-bit addresses correctly.
+
+2007-02-05  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.apple/checkpoint.exp: Disable these not-working test cases.
+	* gdb.apple/gen-x86-prologues.rb: Don't run these tests for x86-64.
+	* gdb.apple/gen-x86-prologues.exp: Regenerated.
+	* gdb.apple/po.exp: Run these tests for x86-64.
+	* gdb.apple/macsp-inlining.x86.exp: Don't run these tests for x86-64.
+	* gdb.apple/nested-inlines-console.exp: Ditto.
+	* gdb.apple/nested-inlines-mi.x86.exp: Ditto.
+	* gdb.apple/nested-inlines-xcode-1.x86.exp: Ditto.
+	* gdb.apple/nested-inlines-xcode-2.x86.exp: Ditto.
+	* gdb.apple/nested-inlines-xcode-3.x86.exp: Ditto.
+	* gdb.apple/nested-inlines-xcode-4.x86.exp: Ditto.
+	* gdb.apple/nested-inlines-xcode-5.x86.exp: Ditto.
+	* gdb.apple/nested-inlines-xcode-6.x86.exp: Ditto.
+	* gdb.apple/nested-inlines-xcode-7.x86.exp: Ditto.
+	* gdb.apple/nested-inlines-xcode-8.x86.exp: Ditto.
+	* gdb.apple/nested-inlines-xcode-9.x86.exp: Ditto.
+	* gdb.apple/prologue-x86.exp: Ditto.
+	* gdb.apple/fix-and-continue/small-c/fix-small-c.exp: Don't run these
+	tests for 64 bit programs.
+	* gdb.apple/fix-and-continue/small-c/mi-fix-small-c.exp: Ditto.
+	* gdb.apple/fix-and-continue/small-objc/fix-small-objc.exp: Ditto.
+	* gdb.arch/i386-prologue.exp: Ditto.
+
+2007-02-02  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.apple/ld-r/ld-r.exp: Update to work in a non-Essential Symbols
+	world.
+
+2007-01-29  Jim Ingham  <jingham@apple.com>
+
+	* gdb.apple/malloc-history.{c,exp}: New tests.
+	
+2007-01-26  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.apple/prologue-x86.c: Fix assembly label so it doesn't conflict.
+
+2007-01-22  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.apple/gused/shantonu.exp: Fix one more -gused use.
+	* gdb.apple/gused/split-pi.exp: Ditto.
+	* gdb.apple/gused/type-qualifications.exp: Ditto.
+
+2007-01-22  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.apple/gused/coalesced1.exp: Used -feliminate-unused-debug-symbols
+	instead of deprecated -gused.
+	* gdb.apple/gused/coalesced2.exp: Ditto.
+	* gdb.apple/ld-r/ld-r.exp: Ditto.
+
+2006-12-13  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.apple/gen-x86-prologues-patterns.txt: Fix more prologues to
+	align their stacks to 16 byte boundaries.
+	* gdb.apple/gen-x86-prologues.c: Regenerated.
+
+2006-12-13  Jason Molenda  (jmolenda@apple.com)
+
+	* lib/gdb.exp (gdb_compile): For the non-dSYM case, rm -rf the dSYM
+	bundle.  It may have been created silently by the compiler or may be
+	left over from a previous test run.
+
+2006-12-13  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.apple/gen-x86-prologues-patterns.txt:  Make assembler
+	labels unique.  Add required 16-byte alignment to one prologue's stack.
+	Set reg to valid addr before dereferencing it.
+	* gdb.apple/gen-x86-prologues.c: Regenerated.
+
+2006-11-02  Caroline Tice  <ctice@apple.com>
+
+	* gdb.apple/nested-inlines-xcode-5.exp: Add ".*" to one test to catch 
+	new stuff the latest version of Leopard occasionally throws in.
+	* gdb.apple/nested-inlines-xcode-6.exp. Likewise.
+	* gdb.apple/nested-inlines-xcode-7.exp. Likewise.
+	* gdb.apple/nested-inlines-xcode-8.exp. Likewise.
+	* gdb.apple/nested-inlines-xcode-9.exp. Likewise.
+
+2006-10-27  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.apple/ostream-defined.exp: Remove the code to execute the test
+	with multiple debug file formats.
+
+2006-10-27  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.apple/ostream-defined.exp: Add dwarf-2 cases.
+	This should really use the current debug format and not try
+	to iterate over them itself.  It was probably added before we
+	were commonly running the testsuite in multiple debug file formats.
+
+2006-10-20  Jim Ingham  <jingham@apple.com>
+
+	* gdb.apple/ld-r/ld-r.exp: Call ranlib after running ar.
+	* gdb.apple/debug-in-ofile/debug-in-ofile.exp: Don't run with dSYM
+	as the test results don't make sense then.
+	
+2006-10-20  Stan Shebs  <shebs@apple.com>
+
+	* gdb.apple/checkpoint.c, gdb.apple/checkpoint.exp: New files, testing
+	for checkpoint/undo.
+
 2006-10-19  Jim Ingham  <jingham@apple.com>
 
 	* lib/gdb.exp (gdb_breakpoint_2): New proc, returns the breakpoint
@@ -5,6 +283,119 @@
 	the line or address.
 	* gdb.apple/debug-in-ofile/*: Add tests for missing .o files for DWARF.
 	
+2006-09-20  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.apple/r4098981.exp, gdb.apple/r4098981.c: Remove these tests.  We
+	get the first dylib load notification before the program gets to _start
+	and that makes the test unuseful.
+
+2006-08-29  Caroline Tice  <ctice@apple.com>
+
+	* gdb.apple/nested-inlines-*.x86.exp: Modifed all x86 test-cases to be
+	less sensitive to variations in the compiler.
+
+2006-08-22  Caroline Tice  <ctice@apple.com>
+
+	* gdb.apple/nested-inlines-*.exp: Modified all the nested-inlines*
+	test cases (both ppc & x86) to use new line numbers resulting from
+	modifications to the code for handling inlined subroutines.
+
+2006-08-16  Caroline Tice  <ctice@apple.com>
+
+	* gdb.apple/macscp-inlining.exp: Add check to prevent running
+	this version on x86.
+	* gdb.apple/nested-inlines-xcode-1.exp: Likewise.
+	* gdb.apple/nested-inlines-xcode-2.exp: Likewise.
+	* gdb.apple/nested-inlines-xcode-3.exp: Likewise.
+	* gdb.apple/nested-inlines-xcode-4.exp: Likewise.
+	* gdb.apple/nested-inlines-xcode-5.exp: Likewise.
+	* gdb.apple/nested-inlines-xcode-6.exp: Likewise.
+	* gdb.apple/nested-inlines-xcode-8.exp: Likewise.
+	* gdb.apple/nested-inlines-console.exp:  Add check to prevent
+	running this version on x86; modify slightly to work on both
+	Tiger & Leopard.
+	* gdb.apple/nested-inlines-mi.exp: Likewise.
+	* gdb.apple/nested-inlines-xcode-7.exp: Likewise.
+	* gdb.apple/nested-inlines-xcode-9.exp: Likewise.
+	   
+2006-08-16  Caroline Tice  <ctice@apple.com>
+
+	* gdb.apple/macscp-inlining.x86.exp: New file, x86 version of the
+	existing test.
+	* gdb.apple/nested-inlines-console.x86.exp: Likewise.
+	* gdb.apple/nested-inlines-mi.x86.exp: Likewise.
+	* gdb.apple/nested-inlines-xcode-1.x86.exp: Likewise.
+	* gdb.apple/nested-inlines-xcode-2.x86.exp: Likewise.
+	* gdb.apple/nested-inlines-xcode-3.x86.exp: Likewise.
+	* gdb.apple/nested-inlines-xcode-4.x86.exp: Likewise.
+	* gdb.apple/nested-inlines-xcode-5.x86.exp: Likewise.
+	* gdb.apple/nested-inlines-xcode-6.x86.exp: Likewise.
+	* gdb.apple/nested-inlines-xcode-7.x86.exp: Likewise.
+	* gdb.apple/nested-inlines-xcode-8.x86.exp: Likewise.
+	* gdb.apple/nested-inlines-xcode-9.x86.exp: Likewise.
+
+2006-08-15  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.apple/macsxp-inlining.exp: Only run for DWARF-ish variations.
+	Don't hardcode -gdwarf-2.
+	* gdb.apple/nested-inlines-*.exp: Ditto.
+
+2006-08-04  Caroline Tice  <ctice@apple.com>
+
+	* gdb.apple/nested-inlines.c: Make output go to stderr instead of
+	stdout.
+	* gdb.apple/nested-inlines-mi.exp:  Use mi_next_to, mi_next_to, and
+	mi_finish_to instead of mi_gdb_test.
+	* gdb.apple/nested-inlines-xcode-9.exp: New test to test issuing
+	commands from gdb console within xcode for maneuvering through 
+	inlined subroutines.
+
+2006-08-03  Jim Ingham  <jingham@apple.com>
+
+	* gdb.apple/xcode/stack-list-frames-lite.exp: Test the -names argument.
+	
+2006-07-27  Caroline Tice  <ctice@apple.com>
+
+	* gdb.apple/macscp1.c, macscp2.h, macscp3.h, macscp4.h: Files copied
+	over from gdb.base for testing maneuvering through inlined subroutines.
+	* gdb.apple/macscp-inlining.exp: New file for testing maneuvering through
+	inlined subroutines.
+	* gdb.apple/nested-inlines-mi.exp: Fix expected line numbers when
+	breakpoint is set (by name) on inlined subroutine.
+	* gdb.apple/nested-inlines-xcode-1.exp: Remove bad tty command; fix 
+	resulting problem with exec-run.
+	* gdb.apple/nested-inlines-xcode-2.exp: Likewise.
+	* gdb.apple/nested-inlines-xcode-3.exp: Likewise.
+	* gdb.apple/nested-inlines-xcode-4.exp: Likewise.
+	* gdb.apple/nested-inlines-xcode-5.exp: Likewise.
+	* gdb.apple/nested-inlines-xcode-6.exp: Likewise.
+	* gdb.apple/nested-inlines-xcode-7.exp: Likewise.
+	* gdb.apple/nested-inlines-xcode-8.exp: Likewise.
+
+2006-07-20  Caroline Tice  <ctice@apple.com>
+
+	* gdb.apple/nested-inlines.c: New file for testing maneuvering through
+	inlined subroutines.
+	* gdb.apple/nested-inlines-console.exp: Likewise.
+	* gdb.apple/nested-inlines-mi.exp: Likewise.
+	* gdb.apple/nested-inlines-xcode-1.exp: Likewise.
+	* gdb.apple/nested-inlines-xcode-2.exp: Likewise.
+	* gdb.apple/nested-inlines-xcode-3.exp: Likewise.
+	* gdb.apple/nested-inlines-xcode-4.exp: Likewise.
+	* gdb.apple/nested-inlines-xcode-5.exp: Likewise.
+	* gdb.apple/nested-inlines-xcode-6.exp: Likewise.
+	* gdb.apple/nested-inlines-xcode-7.exp: Likewise.
+	* gdb.apple/nested-inlines-xcode-8.exp: Likewise.
+
+
+2006-07-13  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.base/help.exp: Account for new attach help text.
+
+2006-07-08  Stan Shebs  <shebs@apple.com>
+
+	* gdb.base/help.exp: Account for checkpoint help.
+
 2006-06-12  Jim Ingham  <jingham@apple.com>
 
 	* gdb.base/charset.exp: Don't try to convert from UTF-8 to 

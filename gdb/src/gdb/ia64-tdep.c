@@ -1576,7 +1576,8 @@ ia64_frame_this_id (struct frame_info *next_frame, void **this_cache,
 
 static void
 ia64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
-			  int regnum, int *optimizedp,
+			  /* APPLE LOCAL variable opt states.  */
+			  int regnum, enum opt_state *optimizedp,
 			  enum lval_type *lvalp, CORE_ADDR *addrp,
 			  int *realnump, gdb_byte *valuep)
 {
@@ -1590,7 +1591,8 @@ ia64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
   if (!target_has_registers)
     error (_("No registers."));
 
-  *optimizedp = 0;
+  /* APPLE LOCAL variable opt states.  */
+  *optimizedp = opt_okay;
   *addrp = 0;
   *lvalp = not_lval;
   *realnump = -1;
@@ -1976,7 +1978,8 @@ ia64_sigtramp_frame_this_id (struct frame_info *next_frame,
 static void
 ia64_sigtramp_frame_prev_register (struct frame_info *next_frame,
 				   void **this_cache,
-				   int regnum, int *optimizedp,
+				   /* APPLE LOCAL variable opt states.  */
+				   int regnum, enum opt_state *optimizedp,
 				   enum lval_type *lvalp, CORE_ADDR *addrp,
 				   int *realnump, gdb_byte *valuep)
 {
@@ -1991,7 +1994,8 @@ ia64_sigtramp_frame_prev_register (struct frame_info *next_frame,
   if (!target_has_registers)
     error (_("No registers."));
 
-  *optimizedp = 0;
+  /* APPLE LOCAL variable opt states.  */
+  *optimizedp = opt_okay;
   *addrp = 0;
   *lvalp = not_lval;
   *realnump = -1;
@@ -2530,7 +2534,7 @@ ia64_find_unwind_table (struct objfile *objfile, unw_word_t ip,
   ehdr = elf_tdata (bfd)->elf_header;
   phdr = elf_tdata (bfd)->phdr;
 
-  load_base = ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile));
+  load_base = objfile_text_section_offset (objfile);
 
   for (i = 0; i < ehdr->e_phnum; ++i)
     {
@@ -2747,7 +2751,8 @@ ia64_libunwind_frame_this_id (struct frame_info *next_frame, void **this_cache,
 static void
 ia64_libunwind_frame_prev_register (struct frame_info *next_frame,
 				    void **this_cache,
-				    int regnum, int *optimizedp,
+				    /* APPLE LOCAL variable opt states.  */
+				    int regnum, enum opt_state *optimizedp,
 				    enum lval_type *lvalp, CORE_ADDR *addrp,
 				    int *realnump, gdb_byte *valuep)
 {
@@ -2885,7 +2890,9 @@ ia64_libunwind_sigtramp_frame_this_id (struct frame_info *next_frame, void **thi
 static void
 ia64_libunwind_sigtramp_frame_prev_register (struct frame_info *next_frame,
 					     void **this_cache,
-					     int regnum, int *optimizedp,
+					     int regnum, 
+					     /* APPLE LOCAL variable opt states.  */
+					     enum opt_state *optimizedp,
 					     enum lval_type *lvalp, CORE_ADDR *addrp,
 					     int *realnump, gdb_byte *valuep)
 

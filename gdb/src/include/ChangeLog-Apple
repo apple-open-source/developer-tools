@@ -1,3 +1,7 @@
+2007-03-21  Caroline Tice  <ctice@apple.com>
+
+	* elf/dwarf2.h: (enum dwarf_location_atom): Add DW_OP_APPLE_uninit.
+
 2006-03-28  Jason Molenda  (jmolenda@apple.com)
 
 	* elf/dwarf2.h: Import 2006-03-27 FSF gdb TOT version to get

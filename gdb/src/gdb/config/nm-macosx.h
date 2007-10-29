@@ -35,27 +35,6 @@ extern int child_wait (int, struct target_waitstatus *, void *);
 
 #define DISABLE_UNSETTABLE_BREAK(addr) 1
 
-int macosx_solib_add (const char *filename, int from_tty,
-		  struct target_ops *targ, int loadsyms);
-#define SOLIB_ADD(filename, from_tty, targ, loadsyms) \
-  macosx_solib_add (filename, from_tty, targ, loadsyms)
-
-#define SOLIB_IN_DYNAMIC_LINKER(pid,pc) 0
-
-#define SOLIB_UNLOADED_LIBRARY_PATHNAME(pid) 0
-
-#define SOLIB_LOADED_LIBRARY_PATHNAME(pid) 0
-
-#define SOLIB_CREATE_CATCH_LOAD_HOOK(pid,tempflag,filename,cond_string) \
-  error("catch of library loads/unloads not yet implemented on this platform")
-
-#define SOLIB_CREATE_CATCH_UNLOAD_HOOK(pid,tempflag,filename,cond_string) \
-  error("catch of library loads/unloads not yet implemented on this platform")
-
-extern void macosx_add_shared_symbol_files ();
-#define ADD_SHARED_SYMBOL_FILES(args, from_tty) \
-  macosx_add_shared_symbol_files (args, from_tty)
-
 enum ptracereq {
   PTRACE_TRACEME = 0,		/* 0, by tracee to begin tracing */
   PTRACE_CHILDDONE = 0,		/* 0, tracee is done with his half */
@@ -74,6 +53,8 @@ enum ptracereq {
   PTRACE_THUPDATE,		/* 13, signal for thread */
   PTRACE_ATTACHEXC		/* 14, attach to running process with signals as exceptions */
 };
+
+#ifndef MACOSX_ACTUAL_HARDWARE_WATCHPOINTS_ARE_SUPPORTED
 
 #define TARGET_HAS_HARDWARE_WATCHPOINTS
 
@@ -109,6 +90,9 @@ int macosx_remove_watchpoint (CORE_ADDR addr, size_t len, int type);
 #define target_remove_watchpoint(addr, len, type) \
   macosx_remove_watchpoint (addr, len, type)
 
+#endif /* MACOSX_ACTUAL_HARDWARE_WATCHPOINTS_ARE_SUPPORTED */
+
+
 char **macosx_process_completer (char *text, char *word);
 #define PROCESS_COMPLETER \
   macosx_process_completer
@@ -116,13 +100,6 @@ char **macosx_process_completer (char *text, char *word);
 #define PROCESS_COMPLETER_WORD_BREAK_CHARACTERS \
   gdb_completer_filename_word_break_characters
 
-#define ENABLE_INCREDIBLY_INAPPROPRIATE_MACOSX_SPECIFIC_HACKS_IN_GENERIC_CODE
 #define NM_NEXTSTEP
-
-/* Dummy definition */
-const char *macosx_pc_solib (CORE_ADDR addr);
-#define PC_SOLIB(addr) ((char *) macosx_pc_solib (addr))
-
-char *macosx_filename_in_bundle (const char *filename, int mainline);
 
 #endif /* _NM_NEXTSTEP_H_ */

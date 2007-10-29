@@ -307,7 +307,8 @@ struct value *
 value_of_register (int regnum, struct frame_info *frame)
 {
   CORE_ADDR addr;
-  int optim;
+  /* APPLE LOCAL variable opt states.  */
+  enum opt_state optim;
   struct value *reg_val;
   int realnum;
   gdb_byte raw_buffer[MAX_REGISTER_SIZE];
@@ -566,12 +567,14 @@ addresses have not been bound by the dynamic loader. Try again when executable i
       break;
 
     case LOC_BLOCK:
+      /* APPLE LOCAL begin address ranges  */
       if (overlay_debugging)
 	VALUE_ADDRESS (v) = symbol_overlayed_address
-	  (BLOCK_START (SYMBOL_BLOCK_VALUE (var)), SYMBOL_BFD_SECTION (var));
+	  (BLOCK_LOWEST_PC (SYMBOL_BLOCK_VALUE (var)), SYMBOL_BFD_SECTION (var));
       else
-	VALUE_ADDRESS (v) = BLOCK_START (SYMBOL_BLOCK_VALUE (var));
+	VALUE_ADDRESS (v) = BLOCK_LOWEST_PC (SYMBOL_BLOCK_VALUE (var));
       return v;
+      /* APPLE LOCAL end address ranges  */
 
     case LOC_REGISTER:
     case LOC_REGPARM:
@@ -636,7 +639,8 @@ addresses have not been bound by the dynamic loader. Try again when executable i
 
     case LOC_OPTIMIZED_OUT:
       VALUE_LVAL (v) = not_lval;
-      set_value_optimized_out (v, 1);
+      /* APPLE LOCAL variable opt states.  */
+      set_value_optimized_out (v, opt_away);
       return v;
 
     default:

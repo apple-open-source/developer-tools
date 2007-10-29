@@ -58,6 +58,8 @@
 #include "i386-tdep.h"
 #include "i387-tdep.h"
 
+#include "i386-amd64-shared-tdep.h"
+
 /* APPLE LOCAL get the prototype for macosx_skip_trampoline_code */
 #include "macosx-tdep.h"
 
@@ -513,217 +515,6 @@ i386_skip_probe (CORE_ADDR pc)
   return pc;
 }
 
-/* Maximum instruction length we need to handle (includes operands).  */
-/* APPLE LOCAL: 7 -- I use this array for an instruction that takes 7 bytes. */
-#define I386_MAX_INSN_LEN	7
-
-/* Instruction description.  */
-struct i386_insn
-{
-  size_t len;
-  unsigned char insn[I386_MAX_INSN_LEN];
-  unsigned char mask[I386_MAX_INSN_LEN];
-};
-
-/* Search for the instruction at PC in the list SKIP_INSNS.  Return
-   the first instruction description that matches.  Otherwise, return
-   NULL.  */
-
-/* APPLE LOCAL: AVOID_PROLOGUE_INSNS is a hack to skip over the byte 
-   combination for push %ebp and mov %esp,%ebp while still allowing 
-   all the other push r32 and mov r32, r32 opcodes.  */
-
-static struct i386_insn *
-i386_match_insn (CORE_ADDR pc, struct i386_insn *skip_insns, 
-                 int avoid_prologue_insns)
-{
-  struct i386_insn *insn;
-  unsigned char op;
-
-  op = read_memory_unsigned_integer (pc, 1);
-
-  if (avoid_prologue_insns && (op == 0x55 || op == 0x6a))
-    return NULL;
-
-  for (insn = skip_insns; insn->len > 0; insn++)
-    {
-      if ((op & insn->mask[0]) == insn->insn[0])
-	{
-	  gdb_byte buf[I386_MAX_INSN_LEN - 1];
-	  int insn_matched = 1;
-	  size_t i;
-
-          /* APPLE LOCAL: We have some 1-byte opcodes we need to recognize.  */
-          if (insn->len == 1)
-            return insn;
-
-	  gdb_assert (insn->len > 1);
-	  gdb_assert (insn->len <= I386_MAX_INSN_LEN);
-
-	  read_memory (pc + 1, buf, insn->len - 1);
-
-          /* APPLE LOCAL: Don't match mov %esp, %ebp */
-          if (avoid_prologue_insns && insn->len == 2 
-              && (op == 0x89 && buf[0] == 0xe5))
-            continue;
-
-          insn_matched = 1;
-	  for (i = 1; i < insn->len; i++)
-	    {
-	      if ((buf[i - 1] & insn->mask[i]) != insn->insn[i])
-		insn_matched = 0;
-	    }
-
-	  if (insn_matched)
-	    return insn;
-	}
-    }
-  
-  return NULL;
-}
-
-/* Some special instructions that might be migrated by GCC into the
-   part of the prologue that sets up the new stack frame.  Because the
-   stack frame hasn't been setup yet, no registers have been saved
-   yet, and only the scratch registers %eax, %ecx and %edx can be
-   touched.  */
-
-struct i386_insn i386_frame_setup_skip_insns[] =
-{
-  /* Check for `movb imm8, r' and `movl imm32, r'. 
-    
-     ??? Should we handle 16-bit operand-sizes here?  */
-
-  /* `movb imm8, %al' and `movb imm8, %ah' */
-  /* `movb imm8, %cl' and `movb imm8, %ch' */
-  { 2, { 0xb0, 0x00 }, { 0xfa, 0x00 } },
-  /* `movb imm8, %dl' and `movb imm8, %dh' */
-  { 2, { 0xb2, 0x00 }, { 0xfb, 0x00 } },
-  /* `movl imm32, %eax' and `movl imm32, %ecx' */
-  { 5, { 0xb8 }, { 0xfe } },
-  /* `movl imm32, %edx' */
-  { 5, { 0xba }, { 0xff } },
-
-  /* Check for `mov imm32, r32'.  Note that there is an alternative
-     encoding for `mov m32, %eax'.
-
-     ??? Should we handle SIB adressing here?
-     ??? Should we handle 16-bit operand-sizes here?  */
-
-  /* `movl m32, %eax' */
-  { 5, { 0xa1 }, { 0xff } },
-  /* `movl m32, %eax' and `movl m32, %ecx' */
-  { 6, { 0x89, 0x05 }, {0xff, 0xf7 } },
-  /* `movl m32, %edx' */
-  { 6, { 0x89, 0x15 }, {0xff, 0xff } },
-
-
-  /* APPLE LOCAL: "01 /r       ADD r/m32, r32" */
-  { 2, { 0x01, 0xd0 }, { 0xff, 0xd0 } },
-  /* APPLE LOCAL: "0F 57 /r    XORPS xmm1, xmm2/m128" */
-  { 3, { 0x0f, 0x57 }, { 0xff, 0xff } },
-  /* APPLE LOCAL: "0F B6 /r    MOVZX r32, r/m8" (aka `movzbl %al, %eax') */
-  { 3, { 0x0f, 0xb6, 0xc0 }, { 0xff, 0xff, 0xc0 } },
-  /* APPLE LOCAL: "0F B7 /r    MOVZX r32, r/m16" (aka `movzwl r16, r32') */
-  { 3, { 0x0f, 0xb7, 0xc0 }, { 0xff, 0xff, 0xc0 } },
-  /* APPLE LOCAL: "25 id       AND EAX, imm32" */
-  { 5, { 0x25 }, { 0xff } },
-  /* APPLE LOCAL: "31 /r       XOR r/m32, r32" */
-  { 2, { 0x31, 0xc0 }, { 0xff, 0xc0 } },
-  /* APPLE LOCAL: "40+ rd      INC r32" */
-  { 1, { 0x40 }, { 0xf8 } },
-  /* APPLE LOCAL: "48+rw       DEC r32" */
-  { 1, { 0x48 }, { 0xf8 } },
-  /* APPLE LOCAL: "50+rd       PUSH r32" */
-  { 1, { 0x50 }, { 0xf8 } },
-  /* APPLE LOCAL: "58+ rd      POP r32" */
-  { 1, { 0x58 }, { 0xf8 } },
-  /* APPLE LOCAL: "B8+ rw      MOV r16, imm16" */
-  { 4, { 0x66, 0xb8 }, { 0xff, 0xf8 } },
-  /* APPLE LOCAL: "74 cb       JE rel8" */
-  { 2, { 0x74 }, { 0xff } },
-  /* APPLE LOCAL: "80 /7 ib    CMP r/m8, imm8" (aka `cmpb imm8,(r32)') */
-  { 3, { 0x80, 0x38 }, { 0xff, 0xf8 } },
-  /* APPLE LOCAL: "81 /4 id    AND r/m32, imm32" */
-  { 6, { 0x81, 0xe0 }, { 0xff, 0xf8 } },
-  /* APPLE LOCAL: "81 /0 id    ADD r/m32, imm32" */
-  { 6, { 0x81, 0xc0 }, { 0xff, 0xf8 } }, 
-  /* APPLE LOCAL: "83 /7 ib    CMP r/m32, imm8" */
-  { 7, { 0x83, 0x3d }, { 0xff, 0xff } },
-  /* APPLE LOCAL: "83 /0 ib    ADD r/m32, imm8" */
-  { 3, { 0x83, 0xc0 }, { 0xff, 0xf8 } },
-  /* APPLE LOCAL: "83 /1 ib    OR r/m32, imm8" */
-  { 3, { 0x83, 0xc8 }, { 0xff, 0xf8 } },
-  /* APPLE LOCAL: "83 /4 ib    AND r/m32, imm8" */
-  { 3, { 0x83, 0xe0 }, { 0xff, 0xf8 } },
-  /* APPLE LOCAL: "83 /5 ib    SUB r/m32, imm8" */
-  { 3, { 0x83, 0xe8 }, { 0xff, 0xf8 } },
-  /* APPLE LOCAL: "83 /7 ib    CMP r/m32, imm8" */
-  { 3, { 0x83, 0xf8 }, { 0xff, 0xf8 } },
-  /* APPLE LOCAL: "85 /r       TEST r/m32, r32" */
-  { 2, { 0x85, 0xc0 }, { 0xff, 0xc0 } },
-  /* APPLE LOCAL: "89 /r       MOV r/m32, r32" (aka `mov r32, (r32)') */
-  { 2, { 0x89, 0x00 }, { 0xff, 0xf8 } },
-  /* APPLE LOCAL: "89 /r       MOV r/m32, r32" (aka `mov r32, (r32)') */
-  { 2, { 0x89, 0x10 }, { 0xff, 0xf8 } },
-  /* APPLE LOCAL: "89 /r       MOV r/m32, r32" */
-  { 2, { 0x89, 0xc0 }, { 0xff, 0xc0 } }, 
-  /* APPLE LOCAL: "8B /r       MOV r32, r/m32" (aka `mov imm8(r32), r32') */
-  { 3, { 0x8b, 0x40 }, { 0xff, 0xf8 } },
-  /* APPLE LOCAL: "8B /r       MOV r32, r/m32" */
-  { 6, { 0x8b, 0x80 }, { 0xff, 0xf8 } },
-  /* APPLE LOCAL: "8B /r       MOV r32, r/m32" (aka `mov imm32(r32), r32') */
-  { 6, { 0x8b, 0x90 }, { 0xff, 0xf8 } },
-  /* APPLE LOCAL: "8D /r       LEA r32, m" (aka `lea imm8(r32), r32') */
-  { 3, { 0x8d, 0x48 }, { 0xff, 0xf8 } },
-  /* APPLE LOCAL: "8D /r       LEA r32, m" (aka `lea imm32(r32), r32') */
-  { 6, { 0x8d, 0x90 }, { 0xff, 0xf8 } },
-  /* APPLE LOCAL: "90          NOP"  for Fix & Continue trampoline padding. */
-  { 1, { 0x90 }, { 0xff } },
-  /* APPLE LOCAL: "A9 id       TEST EAX, imm32" */
-  { 5, { 0xa9 }, { 0xff } },
-  /* APPLE LOCAL: "C1 /4 ib    SAL r/m32, imm8" (aka `shl imm8, r32') */
-  { 3, { 0xc1, 0xe0 }, { 0xff, 0xf8 } },
-  /* APPLE LOCAL: "C1 /7 ib    SAR r/m32, imm8" */
-  { 3, { 0xc1, 0xf8 }, { 0xff, 0xf8 } },
-  /* APPLE LOCAL: "C6 /0       MOV r/m8, imm8" (aka `mov imm8, (r32)') */
-  { 3, { 0xc6, 0x00 }, { 0xff, 0xf8 } },
-  /* APPLE LOCAL: "D9 EE       FLDZ" */
-  { 2, { 0xd9, 0xee }, { 0xff, 0xff } },
-  /* APPLE LOCAL: "E8 cd       CALL rel32" */
-  { 5, { 0xe8 }, { 0xff } },
-  /* APPLE LOCAL: "EB cb       JMP rel8" */
-  { 2, { 0xeb }, { 0xff } },
-  /* APPLE LOCAL: "F7 /6       DIV r/m32" */
-  { 2, { 0xf7, 0xf0 }, { 0xff, 0xf8 } },
-  /* APPLE LOCAL: "FC          CLD" */
-  { 1, { 0xfc }, { 0xff } },
-  /* APPLE LOCAL: "FF /6       PUSH r/m32" */
-  { 6, { 0xff, 0xb0 }, { 0xff, 0xf8 } },
-  /* APPLE LOCAL: "FF /4       JMP r/m32" */
-  { 2, { 0xff, 0xe0 }, { 0xff, 0xf8 } },
-
-
-  /* Check for `xorl r32, r32' and the equivalent `subl r32, r32'.
-     Because of the symmetry, there are actually two ways to encode
-     these instructions; opcode bytes 0x29 and 0x2b for `subl' and
-     opcode bytes 0x31 and 0x33 for `xorl'.  */
-
-  /* `subl %eax, %eax' */
-  { 2, { 0x29, 0xc0 }, { 0xfd, 0xff } },
-  /* `subl %ecx, %ecx' */
-  { 2, { 0x29, 0xc9 }, { 0xfd, 0xff } },
-  /* `subl %edx, %edx' */
-  { 2, { 0x29, 0xd2 }, { 0xfd, 0xff } },
-  /* `xorl %eax, %eax' */
-  { 2, { 0x31, 0xc0 }, { 0xfd, 0xff } },
-  /* `xorl %ecx, %ecx' */
-  { 2, { 0x31, 0xc9 }, { 0xfd, 0xff } },
-  /* `xorl %edx, %edx' */
-  { 2, { 0x31, 0xd2 }, { 0xfd, 0xff } },
-  { 0 }
-};
-
 /* Check whether PC points at a code that sets up a new stack frame.
    If so, it updates CACHE and returns the address of the first
    instruction after the sequence that sets up the frame or LIMIT,
@@ -733,9 +524,17 @@ static CORE_ADDR
 i386_analyze_frame_setup (CORE_ADDR pc, CORE_ADDR limit,
 			  struct i386_frame_cache *cache)
 {
-  struct i386_insn *insn;
   gdb_byte op;
   int skip = 0;
+  int insn_count = 0;
+
+  /* If we iterate over 256 instructions without finding a prologue, we're
+     doing something wrong - stop.  We can get in this state when backtracing
+     through a dylib/etc with no symbols: we have a pc in the middle of it
+     and we consider the start of the function to be the last symbol before
+     the dylib.  We step over all the instructions between those two points,
+     which can be quite large, and take a long time doing it.  */
+  const int insn_limit = 256;
 
   /* APPLE LOCAL: This function returns a CORE_ADDR which is the instruction
      following the last frame-setup instruction we saw such that "frame-setup
@@ -761,35 +560,43 @@ i386_analyze_frame_setup (CORE_ADDR pc, CORE_ADDR limit,
        push $0x0 [ 0x6a 0x00 ]
      the latter instruction is the frame-setup insn in start ().  */
 
-  op = read_memory_unsigned_integer (pc + skip, 1);
-  while (op != 0x55 
-         && (op != 0x6a || read_memory_unsigned_integer (pc + skip + 1, 1) != 0)
-         && pc + skip <= limit)
+  while (!i386_push_ebp_pattern_p (pc + skip) 
+         && pc + skip <= limit
+         && insn_count++ < insn_limit)
     {
-      insn = i386_match_insn (pc + skip, i386_frame_setup_skip_insns, 1);
-      if (insn)
+      if (i386_ret_pattern_p (pc + skip))
         {
-          skip += insn->len;
-          op = read_memory_unsigned_integer (pc + skip, 1);
+          return end_of_frame_setup;
         }
-      else
-        break;
+      skip += i386_length_of_this_instruction (pc + skip);
     }
   pc = pc + skip;
   skip = 0;
+
+  /* Stop searching after a reasonable # of instructions - we're wandering
+     in the weeds if we haven't seen prologue instructions yet.  */
+  if (insn_count >= insn_limit)
+    {
+      /* We have to make an assumption here -- did this function set up a
+         frame or not?  I choose to assume it did.  */
+      cache->saved_regs[I386_EBP_REGNUM] = 0;
+      cache->sp_offset += 4;
+      return end_of_frame_setup;
+    }
 
   /* APPLE LOCAL: If we're now at the limit, don't detect the push %ebp yet. */
   if (limit <= pc)  
     return end_of_frame_setup;
 
-  if (op == 0x55 || op == 0x6a)  /* pushl %ebp || push $0x0 */
+  if (i386_push_ebp_pattern_p (pc))
     {
+      int found_mov_esp_ebp = 0;
       /* Take into account that we've executed the `pushl %ebp' that
 	 starts this instruction sequence.  */
       cache->saved_regs[I386_EBP_REGNUM] = 0;
       cache->sp_offset += 4;
       /* APPLE LOCAL: Skip imm8 operand if we're on `push $0x0' [0x6a 0x00]. */
-      if (op == 0x6a)
+      if (read_memory_unsigned_integer (pc, 1) == 0x6a)
         pc += 2;
       else
         pc++;
@@ -802,40 +609,31 @@ i386_analyze_frame_setup (CORE_ADDR pc, CORE_ADDR limit,
       /* Check for some special instructions that might be migrated by
 	 GCC into the prologue and skip them.  At this point in the
 	 prologue, code should only touch the scratch registers %eax,
-	 %ecx and %edx, so while the number of posibilities is sheer,
+	 %ecx and %edx, so while the number of possibilities is sheer,
 	 it is limited.
 
 	 Make sure we only skip these instructions if we later see the
 	 `movl %esp, %ebp' that actually sets up the frame.  */
       while (pc + skip < limit)
 	{
-	  insn = i386_match_insn (pc + skip, i386_frame_setup_skip_insns, 1);
-	  if (insn == NULL)
-	    break;
-
-	  skip += insn->len;
+          int insn_len = i386_length_of_this_instruction (pc + skip);
+          if (insn_len == 2)
+            {
+              if (i386_mov_esp_ebp_pattern_p (pc + skip))
+                {
+                  found_mov_esp_ebp = 1;
+                  break;
+                }
+            }
+	  skip += insn_len;
 	}
 
       /* If that's all, return now.  */
       if (limit <= pc + skip)
 	return end_of_frame_setup;
 
-      op = read_memory_unsigned_integer (pc + skip, 1);
-
-      /* Check for `movl %esp, %ebp' -- can be written in two ways.  */
-      switch (op)
-	{
-	case 0x8b:
-	  if (read_memory_unsigned_integer (pc + skip + 1, 1) != 0xec)
-	    return end_of_frame_setup;
-	  break;
-	case 0x89:
-	  if (read_memory_unsigned_integer (pc + skip + 1, 1) != 0xe5)
-	    return end_of_frame_setup;
-	  break;
-	default:
-	  return end_of_frame_setup;
-	}
+      if (!i386_mov_esp_ebp_pattern_p (pc + skip))
+        return end_of_frame_setup;
 
       /* OK, we actually have a frame.  We just don't know how large
 	 it is yet.  Set its size to zero.  We'll adjust it if
@@ -897,27 +695,6 @@ i386_analyze_frame_setup (CORE_ADDR pc, CORE_ADDR limit,
   return end_of_frame_setup;
 }
 
-/* APPLE LOCAL: Instructions we're expecting to find in a prologue,
-   so we can skip over these and get to the PIC base setup instruction,
-   if it is done in this function.  */
-
-struct i386_insn i386_frame_setup_insns[] =
-{
-  /* Check for `push r' for any of the registers.  */
-  { 1, { 0x50 }, { 0xf8 } },
-  /* Check for `mov %esp,%ebp'.  */
-  { 2, { 0x89, 0xe5 }, { 0xff, 0xff } },
-  { 2, { 0x8b, 0xec }, { 0xff, 0xff } },
-  /* Check for `sub imm8, %esp'.  */
-  { 3, { 0x83, 0xec }, { 0xff, 0xff } },
-  /* Check for `sub imm32, %esp'.  */
-  { 6, { 0x81, 0xec }, { 0xff, 0xff } },
-  /* Check for `enter imm16, imm8'.  */
-  { 4, { 0xc8 }, { 0xff} },
-
-  { 0 }
-};
-
 /* APPLE LOCAL: Needed by Fix and Continue
    Returns 1 if it found a pic base being set up, 0 if it did not. 
    If PICBASE_ADDR is non-NULL, it will be set to the value of the 
@@ -930,7 +707,6 @@ i386_find_picbase_setup (CORE_ADDR pc, CORE_ADDR *picbase_addr,
 {
   int limit = 32;  /* number made up by me; 32 bytes is enough for a prologue */
   int skip = 0;
-  struct i386_insn *insn;
   int found_call_insn = 0;
   unsigned char op;
 
@@ -939,28 +715,19 @@ i386_find_picbase_setup (CORE_ADDR pc, CORE_ADDR *picbase_addr,
 
   while (skip < limit)
     {
-      insn = i386_match_insn (pc + skip, i386_frame_setup_insns, 0);
-      if (insn)
-        {
-          skip += insn->len;
-          continue;
-        }
-      insn = i386_match_insn (pc + skip, i386_frame_setup_skip_insns, 1);
-
-      if (insn == NULL)
-        {
-          /* no matched instruction - give up */
-          break;
-        }
-
+      int length = i386_length_of_this_instruction (pc + skip);
       /* Did we just find a CALL instruction?  It's probably our 
          picbase setup call.  */
-      if (insn->insn[0] == 0xe8 && insn->len == 5)
+      if (length == 5)
         {
-          found_call_insn = 1;
-          break;
+          uint32_t buf = read_memory_unsigned_integer (pc + skip, 1);
+          if (buf == 0xe8)  /* 0xe8 == CALL disp32 */
+            {
+              found_call_insn = 1;
+              break;
+            }
         }
-      skip += insn->len;
+      skip += length;
     }
 
   /* We've hit our limit without finding a `call rel32' or we've hit
@@ -987,7 +754,7 @@ i386_find_picbase_setup (CORE_ADDR pc, CORE_ADDR *picbase_addr,
       if (picbase_addr != NULL)
         *picbase_addr = offset_from;
       if (picbase_reg != NULL)
-        *picbase_reg = (enum i386_regnum) op | 0x7;
+        *picbase_reg = (enum i386_regnum) op & 0x7;
       return 1;
     }
 
@@ -1054,7 +821,7 @@ i386_find_esp_adjustments (CORE_ADDR pc, CORE_ADDR current_pc)
 {
   unsigned char op, next_op;
   int esp_change = 0;
-  struct i386_insn *insn;
+  int insn_len;
 
   if (pc == current_pc)
     return esp_change;
@@ -1063,6 +830,14 @@ i386_find_esp_adjustments (CORE_ADDR pc, CORE_ADDR current_pc)
  
   while (pc < current_pc)
     {
+      if (i386_picbase_setup_pattern_p (pc, NULL))
+        {
+          /* This is a call and a pop insn so the net effect on ESP
+             is zero.  It is a 6-byte sequence.  */
+          pc += 6;
+          continue;
+        }
+
       op = read_memory_unsigned_integer (pc, 1);
       next_op = read_memory_unsigned_integer (pc + 1, 1);
       
@@ -1120,11 +895,8 @@ i386_find_esp_adjustments (CORE_ADDR pc, CORE_ADDR current_pc)
           continue;
         }
 
-      insn = i386_match_insn (pc, i386_frame_setup_skip_insns, 1);
-      if (insn)
-        pc += insn->len;
-      else
-        return esp_change;  /* Hit an instruction we don't know; stop here. */
+      insn_len = i386_length_of_this_instruction (pc);
+      pc += insn_len;
     }
   return esp_change;
 }
@@ -1282,11 +1054,22 @@ i386_skip_prologue (CORE_ADDR start_pc)
   };
   struct i386_frame_cache cache;
   CORE_ADDR pc;
+  CORE_ADDR endaddr;
   gdb_byte op;
   int i;
 
   cache.locals = -1;
-  pc = i386_analyze_prologue (start_pc, 0xffffffff, &cache);
+  /* APPLE LOCAL: We may get an incorrect ENDADDR from find_pc_partial_function
+     if there are multiple dylibs loading at address 0 - it's possible
+     we'll end up the with endadr of another dylib's function instead of
+     the one we're really trying to put a breakpoint in.  On the other hand
+     when we do the instruction parsing we could be parsing the wrong dylib
+     as well so we're no worse off.  It'd be nice if gdb would remember,
+     when the user says "break open", which object_file's open() it chose
+     instead of just giving us a pc value...  */
+  if (find_pc_partial_function (start_pc, NULL, NULL, &endaddr) == 0)
+    endaddr = 0xffffffff;
+  pc = i386_analyze_prologue (start_pc, endaddr, &cache);
   if (cache.locals < 0)
     return start_pc;
 
@@ -1509,24 +1292,30 @@ i386_frame_this_id (struct frame_info *next_frame, void **this_cache,
 {
   struct i386_frame_cache *cache = i386_frame_cache (next_frame, this_cache);
 
-  /* This marks the outermost frame.  */
-  if (cache->base == 0)
+  /* This marks the outermost frame.  
+     APPLE LOCAL: Don't do this if NEXT_FRAME is the sentinal
+     frame, because then the id we are building should just
+     come from the registers.  */
+  if (get_frame_type (next_frame) != SENTINEL_FRAME)
     {
-      *this_id = null_frame_id;
-      return;
-    }
-  else
-    {
-      ULONGEST prev_frame_addr = 0;
-      if (safe_read_memory_unsigned_integer
-          (cache->base, TARGET_PTR_BIT / 8, &prev_frame_addr))
-        {
-	  if (prev_frame_addr == 0)
+      if (cache->base == 0)
+	{
+	  *this_id = null_frame_id;
+	  return;
+	}
+      else
+	{
+	  ULONGEST prev_frame_addr = 0;
+	  if (safe_read_memory_unsigned_integer
+	      (cache->base, TARGET_PTR_BIT / 8, &prev_frame_addr))
 	    {
-	      *this_id = null_frame_id;
-	      return;
+	      if (prev_frame_addr == 0)
+		{
+		  *this_id = null_frame_id;
+		  return;
+		}
 	    }
-        }
+	}
     }
 
   /* See the end of i386_push_dummy_call.  */
@@ -1535,7 +1324,8 @@ i386_frame_this_id (struct frame_info *next_frame, void **this_cache,
 
 static void
 i386_frame_prev_register (struct frame_info *next_frame, void **this_cache,
-			  int regnum, int *optimizedp,
+			  /* APPLE LOCAL variable opt states.  */
+			  int regnum, enum opt_state *optimizedp,
 			  enum lval_type *lvalp, CORE_ADDR *addrp,
 			  int *realnump, gdb_byte *valuep)
 {
@@ -1564,7 +1354,8 @@ i386_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 
   if (regnum == I386_EFLAGS_REGNUM)
     {
-      *optimizedp = 0;
+      /* APPLE LOCAL variable opt states.  */
+      *optimizedp = opt_okay;
       *lvalp = not_lval;
       *addrp = 0;
       *realnump = -1;
@@ -1584,7 +1375,8 @@ i386_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 
   if (regnum == I386_EIP_REGNUM && cache->pc_in_eax)
     {
-      *optimizedp = 0;
+      /* APPLE LOCAL variable opt states.  */
+      *optimizedp = opt_okay;
       *lvalp = lval_register;
       *addrp = 0;
       *realnump = I386_EAX_REGNUM;
@@ -1595,7 +1387,8 @@ i386_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 
   if (regnum == I386_ESP_REGNUM && cache->saved_sp)
     {
-      *optimizedp = 0;
+      /* APPLE LOCAL variable opt states.  */
+      *optimizedp = opt_okay;
       *lvalp = not_lval;
       *addrp = 0;
       *realnump = -1;
@@ -1609,7 +1402,8 @@ i386_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 
   if (regnum < I386_NUM_SAVED_REGS && cache->saved_regs[regnum] != -1)
     {
-      *optimizedp = 0;
+      /* APPLE LOCAL variable opt states.  */
+      *optimizedp = opt_okay;
       *lvalp = lval_memory;
       *addrp = cache->saved_regs[regnum];
       *realnump = -1;
@@ -1622,7 +1416,8 @@ i386_frame_prev_register (struct frame_info *next_frame, void **this_cache,
       return;
     }
 
-  *optimizedp = 0;
+  /* APPLE LOCAL variable opt states.  */
+  *optimizedp = opt_okay;
   *lvalp = lval_register;
   *addrp = 0;
   *realnump = regnum;
@@ -1697,7 +1492,8 @@ i386_sigtramp_frame_this_id (struct frame_info *next_frame, void **this_cache,
 static void
 i386_sigtramp_frame_prev_register (struct frame_info *next_frame,
 				   void **this_cache,
-				   int regnum, int *optimizedp,
+				   /* APPLE LOCAL variable opt states.  */
+				   int regnum, enum opt_state *optimizedp,
 				   enum lval_type *lvalp, CORE_ADDR *addrp,
 				   int *realnump, gdb_byte *valuep)
 {
@@ -2042,6 +1838,19 @@ static const char *valid_conventions[] =
 };
 static const char *struct_convention = default_struct_convention;
 
+/* Return non-zero if TYPE is a non-POD structure or union type.  */
+
+//static int
+//i386_non_pod_p (struct type *type)
+//{
+  ///* ??? A class with a base class certainly isn't POD, but does this
+     //catch all non-POD structure types?  */
+  //if (TYPE_CODE (type) == TYPE_CODE_STRUCT && TYPE_N_BASECLASSES (type) > 0)
+    //return 1;
+//
+  //return 0;
+//}
+
 /* Return non-zero if TYPE, which is assumed to be a structure or
    union type, should be returned in registers for architecture
    GDBARCH.  */
@@ -2068,6 +1877,14 @@ i386_reg_struct_return_p (struct gdbarch *gdbarch, struct type *type)
       if (TYPE_CODE (type) == TYPE_CODE_FLT)
 	return (len == 4 || len == 8 || len == 12);
     }
+
+  /* Is this a C++ object?  If so, look for a copy constructor.  */
+  //if (i386_non_pod_p (type))
+    //{
+      //return 0;
+      ///*  FIXME copy ctor searching.. */
+      ///* return 0; */
+    //}
 
   return (len == 1 || len == 2 || len == 4 || len == 8);
 }
@@ -2131,70 +1948,6 @@ i386_return_value (struct gdbarch *gdbarch, struct type *type,
   return RETURN_VALUE_REGISTER_CONVENTION;
 }
 
-/* APPLE LOCAL begin i386 vectors */
-static struct type *
-init_vector_type (struct type *elt_type, int n)
-{
-  struct type *array_type;
- 
-  array_type = create_array_type (0, elt_type,
-				  create_range_type (0, builtin_type_int,
-						     0, n-1));
-  TYPE_FLAGS (array_type) |= TYPE_FLAG_VECTOR;
-  return array_type;
-}
-
-static struct type *
-build_builtin_type_vec128i_big (void)
-{
-  /* 128-bit Intel SIMD registers */
-  struct type *t;
-
-  struct type *int16_big;
-  struct type *int32_big;
-  struct type *int64_big;
-  struct type *uint128_big;
-
-  struct type *v4_float_big;
-  struct type *v2_double_big;
-
-  struct type *v16_int8_big;
-  struct type *v8_int16_big;
-  struct type *v4_int32_big;
-  struct type *v2_int64_big;
-
-  int16_big = init_type (TYPE_CODE_INT, 16 / 8, 0, "int16_t", (struct objfile *) NULL);
-  TYPE_BYTE_ORDER (int16_big) = BFD_ENDIAN_BIG;
-  int32_big = init_type (TYPE_CODE_INT, 32 / 8, 0, "int32_t", (struct objfile *) NULL);
-  TYPE_BYTE_ORDER (int32_big) = BFD_ENDIAN_BIG;
-  int64_big = init_type (TYPE_CODE_INT, 64 / 8, 0, "int64_t", (struct objfile *) NULL);
-  TYPE_BYTE_ORDER (int64_big) = BFD_ENDIAN_BIG;
-  uint128_big = init_type (TYPE_CODE_INT, 128 / 8, TYPE_FLAG_UNSIGNED, "uint128_t", (struct objfile *) NULL);
-  TYPE_BYTE_ORDER (uint128_big) = BFD_ENDIAN_BIG;
-
-  v4_float_big = init_vector_type (builtin_type_ieee_single_big, 4);
-  v2_double_big = init_vector_type (builtin_type_ieee_double_big, 2);
-
-  v2_int64_big = init_vector_type (int64_big, 2);
-  v4_int32_big = init_vector_type (int32_big, 4);
-  v8_int16_big = init_vector_type (int16_big, 8);
-  v16_int8_big = init_vector_type (builtin_type_int8, 16);
-
-  t = init_composite_type ("__gdb_builtin_type_vec128i_big", TYPE_CODE_UNION);
-  append_composite_type_field (t, "v4_float", v4_float_big);
-  append_composite_type_field (t, "v2_double", v2_double_big);
-  append_composite_type_field (t, "v16_int8", v16_int8_big);
-  append_composite_type_field (t, "v8_int16", v8_int16_big);
-  append_composite_type_field (t, "v4_int32", v4_int32_big);
-  append_composite_type_field (t, "v2_int64", v2_int64_big);
-  append_composite_type_field (t, "uint128", uint128_big);
-
-  TYPE_FLAGS (t) |= TYPE_FLAG_VECTOR;
-  TYPE_NAME (t) = "builtin_type_vec128i_big";
-  return t;
-}
-/* APPLE LOCAL end i386 vectors */
-
 /* Types for the MMX and SSE registers.  */
 static struct type *i386_mmx_type;
 static struct type *i386_sse_type;
@@ -2918,6 +2671,9 @@ i386_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_pc_regnum (gdbarch, I386_EIP_REGNUM); /* %eip */
   set_gdbarch_ps_regnum (gdbarch, I386_EFLAGS_REGNUM); /* %eflags */
   set_gdbarch_fp0_regnum (gdbarch, I386_ST0_REGNUM); /* %st(0) */
+  /* APPLE LOCAL: Add the frame pointer register so it can be modified
+     in expressions.  */
+  set_gdbarch_deprecated_fp_regnum (gdbarch, I386_EBP_REGNUM); /* %ebp */
 
   /* NOTE: kettenis/20040418: GCC does have two possible register
      numbering schemes on the i386: dbx and SVR4.  These schemes

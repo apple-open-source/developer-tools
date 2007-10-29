@@ -1,3 +1,13 @@
+2006-11-13  Stuart Hastings  <stuart@apple.com>
+
+	Radar 4506977, 4736029 (copied from Positron branch)
+	* gcc/tree-cfg.c (fold_cond_expr_cond): Un-static it.
+	* gcc/tree-flow.h (fold_cond_expr_cond) Extern it.
+	* gcc/tree-optimize.c (execute_cleanup_cfg_post_optimizing): Call it.
+	* gcc/config/rs6000/darwin.md (movdf_low_si): Rewrite to avoid pic-base reference.
+	* gcc/config/rs6000/rs6000.md (zero_reg_mem_operand): New predicate.
+	(extenddftf2_internal): Use it.
+
 2006-09-22  Mike Stump  <mrs@apple.com>
 
 	Radar 4736998
@@ -56,6 +66,12 @@
 	* c-common.c (iasm_stmt): Fix jmp/call.
 	* config/i386/i386.c (iasm_x86_canonicalize_operands): Likewise.
 
+2006-08-04  Mike Stump  <mrs@apple.com>
+
+	Radar 4669052
+	* Makefile.in (LIBGCC_DEPS): Don't depend on LANGUAGES.
+	(c-parse.y): Ensure that we don't rebuild.
+
 2006-07-28  Mike Stump  <mrs@apple.com>
 
 	Radar 4653181
@@ -69,6 +85,13 @@
 	* gcc/config/i386/i386.c (ix86_expand_vector_init_duplicate):
 	Omit TARGET_SSE check.
 
+2006-07-17  Eric Christopher  <echristo@apple.com>
+
+	Radar 4633168
+	Radar 4630878
+	* config/t-slibgcc-darwin (stmp-lipo): Remove.
+	Rewrite libgcc_s.1.dylib dependencies.
+ 
 2006-07-05  Hui-May Chang  <hm.chang@apple.com>
 
 	* doc/extend.texi: Fixed the unmatched APPLE LOCAL marker introduced by

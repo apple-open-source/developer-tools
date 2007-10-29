@@ -53,7 +53,7 @@
 #include "xcoffsolib.h"
 
 /* APPLE LOCAL begin dyld */
-#ifdef NM_NEXTSTEP
+#ifdef MACOSX_DYLD
 #include "macosx-nat-dyld.h"
 #endif
 /* APPLE LOCAL end dyld */
@@ -267,7 +267,7 @@ exec_file_attach (char *filename, int from_tty)
 #endif
 
       /* APPLE LOCAL begin app bundles */
-#ifdef NM_NEXTSTEP
+#ifdef TM_NEXTSTEP
       if (scratch_chan < 0)
 	{
 	  /* APPLE LOCAL: Look for a wrapped executable of the form
@@ -362,7 +362,7 @@ exec_file_attach (char *filename, int from_tty)
 
       push_target (&exec_ops);
 
-#ifdef NM_NEXTSTEP
+#ifdef MACOSX_DYLD
       macosx_init_dyld_symfile (symfile_objfile, exec_bfd);
 #endif
 

@@ -111,6 +111,10 @@ dummy_frame_push (struct regcache *caller_regcache,
       }
     else
       dummy_frame = dummy_frame->next;
+  
+  /* APPLE LOCAL begin subroutine inlining  */
+  inlined_subroutine_save_before_dummy_call ();
+  /* APPLE LOCAL end subroutine inlining  */
 
   dummy_frame = xmalloc (sizeof (struct dummy_frame));
   dummy_frame->regcache = regcache_xmalloc (current_gdbarch);

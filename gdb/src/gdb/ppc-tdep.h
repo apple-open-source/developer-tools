@@ -103,6 +103,7 @@ enum return_value_convention ppc_darwin_abi_return_value (struct gdbarch *gdbarc
 /* From rs6000-tdep.c... */
 int altivec_register_p (int regno);
 int spe_register_p (int regno);
+int rs6000_dwarf2_reg_to_regnum (int num);
 
 /* Return non-zero if the architecture described by GDBARCH has
    floating-point registers (f0 --- f31 and fpscr).  */

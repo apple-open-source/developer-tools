@@ -254,7 +254,9 @@ gdb_varobj_get_value (struct varobj *val1, char **result)
 
 /* APPLE LOCAL: New function. */
 int
-safe_value_objc_target_type (struct value *val, struct block *block, struct type **dynamic_type)
+safe_value_objc_target_type (struct value *val, struct block *block, 
+			     struct type **dynamic_type,
+			     char **dynamic_type_handle)
 {
   volatile struct gdb_exception except;
   struct ui_file *saved_gdb_stderr;
@@ -272,7 +274,7 @@ safe_value_objc_target_type (struct value *val, struct block *block, struct type
 
   TRY_CATCH (except, RETURN_MASK_ALL) 
     {
-      *dynamic_type = value_objc_target_type (val, block);
+      *dynamic_type = value_objc_target_type (val, block, dynamic_type_handle);
     }
 
   gdb_stderr = saved_gdb_stderr;

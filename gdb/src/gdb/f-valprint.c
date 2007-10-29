@@ -646,9 +646,11 @@ info_common_command (char *comname, int from_tty)
 
       struct minimal_symbol *msymbol = lookup_minimal_symbol_by_pc (get_frame_pc (fi));
 
+      /* APPLE LOCAL begin address ranges  */
       if (msymbol != NULL
-	  && (SYMBOL_VALUE_ADDRESS (msymbol)
-	      > BLOCK_START (SYMBOL_BLOCK_VALUE (func))))
+	  && SYMBOL_VALUE_ADDRESS (msymbol)
+	  > BLOCK_LOWEST_PC (SYMBOL_BLOCK_VALUE (func)))
+      /* APPLE LOCAL end address ranges  */
 	funname = DEPRECATED_SYMBOL_NAME (msymbol);
       else
 	funname = DEPRECATED_SYMBOL_NAME (func);
@@ -738,9 +740,11 @@ there_is_a_visible_common_named (char *comname)
 
       struct minimal_symbol *msymbol = lookup_minimal_symbol_by_pc (fi->pc);
 
+      /* APPLE LOCAL begin address ranges  */
       if (msymbol != NULL
 	  && (SYMBOL_VALUE_ADDRESS (msymbol)
-	      > BLOCK_START (SYMBOL_BLOCK_VALUE (func))))
+	      > BLOCK_LOWEST_PC (SYMBOL_BLOCK_VALUE (func))))
+      /* APPLE LOCAL end address ranges  */
 	funname = DEPRECATED_SYMBOL_NAME (msymbol);
       else
 	funname = DEPRECATED_SYMBOL_NAME (func);

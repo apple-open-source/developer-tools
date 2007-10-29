@@ -147,6 +147,10 @@ captured_main (void *data)
   /* APPLE LOCAL globalbuf */
   struct stat homebuf, cwdbuf, globalbuf;
   char *homedir;
+  /* APPLE LOCAL attach -waitfor */
+  char *attach_waitfor = NULL;
+  /* APPLE LOCAL: set the architecture.  */
+  char *initial_arch = NULL;
 
   int i;
 
@@ -251,7 +255,9 @@ captured_main (void *data)
       OPT_STATISTICS,
       OPT_TUI,
       OPT_NOWINDOWS,
-      OPT_WINDOWS
+      OPT_WINDOWS,
+      OPT_WAITFOR,  /* APPLE LOCAL */
+      OPT_ARCH      /* APPLE LOCAL */
     };
     static struct option long_options[] =
     {
@@ -311,6 +317,10 @@ captured_main (void *data)
       {"statistics", no_argument, 0, OPT_STATISTICS},
       {"write", no_argument, &write_files, 1},
       {"args", no_argument, &set_args, 1},
+/* APPLE LOCAL: */
+      {"waitfor", required_argument, 0, OPT_WAITFOR},
+/* APPLE LOCAL: */
+      {"arch", required_argument, 0, OPT_ARCH},
      {"l", required_argument, 0, 'l'},
       {0, no_argument, 0, 0}
     };
@@ -364,6 +374,15 @@ captured_main (void *data)
 	    xfree (interpreter_p);
 	    interpreter_p = xstrdup (INTERP_CONSOLE);
 	    use_windows = 0;
+	    break;
+          /* APPLE LOCAL: */
+          case OPT_WAITFOR:
+            attach_waitfor = (char *) xmalloc (10 + strlen (optarg));
+            sprintf (attach_waitfor, "-waitfor %s", optarg);
+            break;
+	  /* APPLE LOCAL: */
+	  case OPT_ARCH:
+	    initial_arch = xstrdup (optarg);
 	    break;
 	  case 'f':
 	    annotation_level = 1;
@@ -661,6 +680,56 @@ extern int gdbtk_test (char *);
     catch_command_errors (directory_command, dirarg[i], 0, RETURN_MASK_ALL);
   xfree (dirarg);
 
+  /* APPLE LOCAL: If an architecture has been supplied, process it. 
+     FIXME: Note, this is a TOTAL hack.  There should be some gdbarch'y type
+     function that processes these options.  The odd thing is that you would
+     want the SAME function for all the gdbarch'es that are registered, so
+     it actually lives a little above the gdbarch....  
+     Not sure how to do that.  So instead, I just hack...  */
+#if defined (USE_POSIX_SPAWN) || defined (USE_ARCH_FOR_EXEC)
+  if (initial_arch != NULL)
+    {
+      char *arch_string = NULL;
+      char *osabi_string;
+#if defined (TARGET_POWERPC)
+      if (strcmp (initial_arch, "ppc") == 0)
+	{
+	  arch_string = "powerpc:common";
+	  osabi_string = "Darwin";
+	}
+      else if (strcmp (initial_arch, "ppc64") == 0)
+	{
+	  arch_string = "powerpc:common64";
+	  osabi_string = "Darwin64";
+	}
+      else
+	  warning ("invalid argument \"%s\" for \"--arch\", should be one of "
+		 "\"ppc\" or \"ppc64\"\n", initial_arch);
+#elif defined (TARGET_I386)
+      if (strcmp (initial_arch, "i386") == 0)
+	{
+	  arch_string = "i386";
+	  osabi_string = "Darwin";
+	}
+      else if (strcmp (initial_arch, "x86_64") == 0)
+	{
+	  arch_string = "i386:x86-64";
+	  osabi_string = "Darwin64";
+	}
+      else
+	warning ("invalid argument \"%s\" for \"--arch\", should be one of "
+		 "\"i386\" or \"x86_64\"\n", initial_arch);
+#endif
+      if (arch_string != NULL)
+	{
+	  set_architecture_from_string (arch_string);
+	  set_osabi_from_string (osabi_string);
+	}
+    }
+#else
+  warning ("--arch option not supported in this gdb.");
+#endif
+
   if (execarg != NULL
       && symarg != NULL
       && strcmp (execarg, symarg) == 0)
@@ -686,6 +755,13 @@ extern int gdbtk_test (char *);
     }
   /* APPLE LOCAL end */
   
+  /* APPLE LOCAL begin */
+  if (attach_waitfor != NULL)
+    {
+      printf_filtered ("\n");
+      catch_command_errors (attach_command, attach_waitfor, 0, RETURN_MASK_ALL);
+    }
+    
   /* After the symbol file has been read, print a newline to get us
      beyond the copyright line...  But errors should still set off
      the error message with a (single) blank line.  */
@@ -923,6 +999,8 @@ Options:\n\n\
   -w                 Use a window interface.\n\
   --write            Set writing into executable and core files.\n\
   --xdb              XDB compatibility mode.\n\
+  --waitfor=PROCNAME Poll continuously for PROCNAME to launch; attach to it.\n\
+  --arch=ARCH        Run the slice of a Universal file given by ARCH.\n\
 "), stream);
   fputs_unfiltered (_("\n\
 For more information, type \"help\" from within GDB, or consult the\n\

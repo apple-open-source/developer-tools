@@ -36,6 +36,9 @@
 #include "gdb_string.h"
 #include "infcall.h"
 #include "dummy-frame.h"
+/* APPLE LOCAL checkpointing */
+extern void begin_inferior_call_checkpoints (void);
+extern void end_inferior_call_checkpoints (void);
 
 #if defined (NM_NEXTSTEP)
 #include "macosx-nat-infthread.h"
@@ -45,6 +48,22 @@
    the PC in any way) and can terminate the inferior if you try.  */
 int inferior_function_calls_disabled_p = 0;
 #endif
+
+/* APPLE LOCAL: Record the ptid of the thread we are calling functions on.
+   If we get more than one exception while calling a function, prefer the
+   one that we were hand-calling a function on.  */
+ptid_t hand_call_ptid;
+ptid_t get_hand_call_ptid ()
+{
+  return hand_call_ptid;
+}
+
+static void 
+do_reset_hand_call_ptid ()
+{
+  hand_call_ptid = minus_one_ptid;
+}
+/* END APPLE LOCAL  */
 
 /* NOTE: cagney/2003-04-16: What's the future of this code?
 
@@ -339,6 +358,7 @@ hand_function_call (struct value *function, struct type *expect_type,
   CORE_ADDR sp;
   CORE_ADDR dummy_addr;
   struct type *values_type;
+  struct type *orig_return_type = NULL;
   unsigned char struct_return;
   CORE_ADDR struct_addr = 0;
   struct regcache *retbuf;
@@ -360,20 +380,31 @@ hand_function_call (struct value *function, struct type *expect_type,
   /* APPLE LOCAL begin */
   /* Make sure we have a viable return type for the function being called. */
 
-  funaddr = find_function_addr (function, &values_type);
-  values_type = check_typedef (values_type);
+  funaddr = find_function_addr (function, &orig_return_type);
+  values_type = check_typedef (orig_return_type);
 
   /* We don't require expect_type not to be a typedef, so remember to
      run check_typedef here */
 
   if ((values_type == NULL) || (TYPE_CODE (values_type) == TYPE_CODE_ERROR))
     if (expect_type != NULL)
-      values_type = check_typedef (expect_type);
+      {
+	orig_return_type = expect_type;
+	values_type = check_typedef (expect_type);
+      }
 
   if ((values_type == NULL) || (TYPE_CODE (values_type) == TYPE_CODE_ERROR))
-    error ("Unable to call function at 0x%lx: no return type information available.\n"
-           "To call this function anyway, you can cast the return type explicitly (e.g. 'print (float) fabs (3.0)')",
-           (unsigned long) funaddr);
+    {
+      char *sym_name;
+      find_pc_partial_function (funaddr, &sym_name, NULL, NULL);
+
+      error ("Unable to call function \"%s\" at 0x%s: "
+	     "no return type information available.\n"
+	     "To call this function anyway, you can cast the "
+	     "return type explicitly (e.g. 'print (float) fabs (3.0)')",
+	     sym_name ? sym_name : "<unknown>",
+	     paddr_nz (funaddr));
+    }
   /* APPLE LOCAL end */
 
   /* Create a cleanup chain that contains the retbuf (buffer
@@ -783,16 +814,31 @@ You must use a pointer to function type variable. Command ignored."), arg_name);
     make_cleanup (breakpoint_auto_delete_contents, &stop_bpstat);
 
     disable_watchpoints_before_interactive_call_start ();
+    /* APPLE LOCAL checkpointing */
+    begin_inferior_call_checkpoints ();
     proceed_to_finish = 1;	/* We want stop_registers, please... */
+
+    if (hand_call_function_hook != NULL)
+      hand_call_function_hook ();
 
     if (target_can_async_p ())
       saved_async = target_async_mask (0);
     
+    /* APPLE LOCAL: Make the current ptid available to the
+       lower level proceed logic so we can prefer that over
+       other stop reasons.  */
+    hand_call_ptid = inferior_ptid;
+    make_cleanup (do_reset_hand_call_ptid, NULL);
+
     proceed (real_pc, TARGET_SIGNAL_0, 0);
-    
+
+    hand_call_ptid = minus_one_ptid;
+
     if (saved_async)
       target_async_mask (saved_async);
     
+    /* APPLE LOCAL checkpointing */
+    end_inferior_call_checkpoints ();
     enable_watchpoints_after_interactive_call_stop ();
       
     discard_cleanups (old_cleanups);
@@ -906,6 +952,9 @@ the function call)."), name);
   /* Restore the inferior status, via its cleanup.  At this stage,
      leave the RETBUF alone.  */
   do_cleanups (inf_status_cleanup);
+  /* APPLE LOCAL begin subroutine inlining  */
+  inlined_subroutine_restore_after_dummy_call ();
+  /* APPLE LOCAL end subroutine inlining  */
 
   /* Figure out the value returned by the function, return that.  */
   {
@@ -936,6 +985,12 @@ the function call)."), name);
 			      NULL /*write*/);
       }
     do_cleanups (retbuf_cleanup);
+    /* APPLE LOCAL: Now reset this value to the original return
+       type.  That way, if the function was returning a typedef,
+       the value we are returning will have the same type.  */
+    if (retval != NULL)
+      deprecated_set_value_type (retval, orig_return_type);
+
     return retval;
   }
 }
@@ -984,4 +1039,21 @@ The default is to stop in the frame where the signal was received."),
 			   NULL,
 			   show_unwind_on_signal_p,
 			   &setlist, &showlist);
+
+#if defined (NM_NEXTSTEP)
+/* APPLE LOCAL for Greg */
+  add_setshow_boolean_cmd ("disable-inferior-function-calls", no_class,
+			   &inferior_function_calls_disabled_p, _("\
+Set disabling of gdb from running calls in the debugee's context"), _("\
+Show disabling of gdb from running calls in the debugee's context"), _("\
+The disable-inferior-function-calls setting lets the user prevent gdb from\n\
+executing functions in the debugee program's context.  Many gdb commands\n\
+can result in functions being run in the target program, e.g. malloc or objc\n\
+class lookup functions, when you may not expect.  It is rare that people need\n\
+to disable these inferior function calls."),
+			   NULL,
+			   NULL,
+			   &setlist, &showlist);
+#endif
+
 }

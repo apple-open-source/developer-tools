@@ -1,9 +1,9 @@
 #include "dbg-in-ofile.h"
 
 void
-four (int inval, int *outval)
+my_four (int inval, int *outval)
 {
   int tmpval = inval * 4;
-  five (tmpval, &tmpval);
+  my_five (tmpval, &tmpval);
   *outval = tmpval;
 }

@@ -1,3 +1,104 @@
+2007-08-30  Jason Molenda  (jmolenda@apple.com)
+        Apply Kaz Kojima's patch for CVE-2006-2362:
+
+        2006-04-27  Kaz Kojima  <kkojima@rr.iij4u.or.jp>
+
+                PR binutils/2584
+                * tekhex.c (getvalue): Change return type to bfd_boolean and
+                add the new parameter.  Return false if the unexpected character
+                is found.
+                (getsym): Likewise.
+                (first_phase): Change return type to bfd_boolean and return
+                false if the unexpected character is found.  Replace abort
+                with returning false.
+                (pass_over): Change return type to bfd_boolean and the type of
+                the second argument to bfd_boolean (*) (bfd *, int, char *).
+                Return false if FUNC returns false.
+                (tekhex_object_p): Return NULL if pass_over fails.
+
+2006-04-18  Greg Clayton  (gclayton@apple.com)
+
+	* mach-o.c (bfd_mach_o_make_bfd_section): Make any mach-o debug 
+	sections have the SEC_HAS_CONTENTS as the only flag.
+	* mach-o.h (typedef enum bfd_mach_o_section_type): Add the 
+	BFD_MACH_O_S_ATTR_DEBUG definition for debug sections.
+
+2007-04-06  Jim Ingham  <jingham@apple.com>
+
+	* mach-o.c (bfd_mach_o_make_bfd_section, mach_o_scan_read_segment):
+	Use the segment_mark field of the bfd_section to differentiate
+	sections & segments from the Mach-O load commands.
+	* sections.c: Add a comment to segment_mark to indicate we're
+	using it this way.
+	* bfd-in2.h: Regenerate.
+	
+2007-04-03  Jim Ingham  <jingham@apple.com>
+
+	* archive.c (_bfd_clear_archive_entry): New function.
+	(bfd_archive_free_cached_info): New function.
+	(bfd_get_elt_at_filepose): Added printf code for tracking
+	bfd open's and closes.  Controlled by define BFD_TRACK_OPEN_CLOSE.
+	(libbfd-in.h): Declare bfd_archive_free_cached_info.
+	(libbfd.h): Regenerate.
+	* mach-o.c (bfd_mach_o_openr_next_archived_file): More open/close
+	tracking info.
+	(mach_o_bfd_thin_free_cached_info): New function.
+	(mach_o_bfd_fat_free_cached_info): New function.
+	* opncls.c (bfd_fopen): More open and closing tracking.
+	(bfd_memopenr): Ditto.
+	(bfd_close): Ditto.
+	
+2007-03-28  Jason Molenda  (jmolenda@apple.com)
+
+	* mach-o.c (bfd_mach_o_scan_read_command): Don't mask off LC_REQ_DYLD
+	flag from load command type.
+	(bfd_mach_o_load_command_types): Add LC_REQ_DYLD flag to
+	LC_LOAD_WEAK_DYLIB and LC_REEXPORT_DYLIB so the constants match
+	correctly.
+
+2007-03-28  Jason Molenda  (jmolenda@apple.com)
+
+	* mach-o.c (bfd_mach_o_scan_read_command): Skip LC_RPATH load commands
+	for now.
+
+2007-02-09  Jason Molenda  (jmolenda@apple.com)
+
+	* mach-o.h: Add BFD_MACH_O_LC_REEXPORT_DYLIB load command constant.
+	* mach-o.c (bfd_mach_o_write_contents, bfd_mach_o_scan_read_dylib,
+	bfd_mach_o_scan_read_command): Handle BFD_MACH_O_LC_REEXPORT_DYLIB.
+
+2007-01-26  Jason Molenda  (jmolenda@apple.com)
+
+	* bfd-in.h (STRING_COMMA_LEN, CONST_STRNEQ, LITMEMCPY, LITSTRCPY):
+	Import these macro definitions from today's src.apple.com bfd CVS 
+	source tree.
+
+2007-01-24  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile.in: Regenerated with automake 1.9.6.
+	* aclocal.m4: Ditto.
+	* doc/Makefile.in: Ditto.
+	* config.in: Regenerated with autoconf 2.61.
+	* configure: Ditto.
+
+2006-10-03  Jason Molenda  (jmolenda@apple.com)
+
+        * mach-o.h: (enum bfd_mach_o_load_command_type): Add new
+        LC_RPATH, LC_CODE_SIGNATURE, LC_SEGMENT_SPLIT_INFO, LC_REEXPORT_DYLIB.
+        * mach-o.c (bfd_mach_o_scan_read_command): Ignore LC_CODE_SIGNATURE
+        and LC_SEGMENT_SPLIT_INFO.
+
+2006-08-18  Greg Clayton  (gclayton@apple.com)
+
+	* mach-o.c: Added thread state define macros.
+	(bfd_mach_o_i386_flavour_string): Use new thread state define macros.
+	(bfd_mach_o_ppc_flavour_string): Ditto.
+	(bfd_mach_o_i386_flavour_from_string): New function.
+	(bfd_mach_o_ppc_flavour_from_string): New function.
+	(bfd_mach_o_flavour_from_string): New function.
+	(bfd_mach_o_scan_read_dylinker): Support 64 bit variants.
+	* mach-o.h (bfd_mach_o_flavour_from_string): Add prototype.
+
 2006-03-22  Eric Albert  (ejalbert@apple.com)
 
 	* mach-o.h (bfd_mach_o_i386_thread_flavour): Add the x86-64 and virtual

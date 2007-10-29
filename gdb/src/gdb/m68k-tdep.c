@@ -823,7 +823,8 @@ m68k_frame_this_id (struct frame_info *next_frame, void **this_cache,
 
 static void
 m68k_frame_prev_register (struct frame_info *next_frame, void **this_cache,
-			  int regnum, int *optimizedp,
+			  /* APPLE LOCAL variable opt states.  */
+			  int regnum, enum opt_state *optimizedp,
 			  enum lval_type *lvalp, CORE_ADDR *addrp,
 			  int *realnump, gdb_byte *valuep)
 {
@@ -833,7 +834,8 @@ m68k_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 
   if (regnum == M68K_SP_REGNUM && cache->saved_sp)
     {
-      *optimizedp = 0;
+      /* APPLE LOCAL variable opt states.  */
+      *optimizedp = opt_okay;
       *lvalp = not_lval;
       *addrp = 0;
       *realnump = -1;
@@ -847,7 +849,8 @@ m68k_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 
   if (regnum < M68K_NUM_REGS && cache->saved_regs[regnum] != -1)
     {
-      *optimizedp = 0;
+      /* APPLE LOCAL variable opt states.  */
+      *optimizedp = opt_okay;
       *lvalp = lval_memory;
       *addrp = cache->saved_regs[regnum];
       *realnump = -1;
@@ -860,7 +863,8 @@ m68k_frame_prev_register (struct frame_info *next_frame, void **this_cache,
       return;
     }
 
-  *optimizedp = 0;
+  /* APPLE LOCAL variable opt states.  */
+  *optimizedp = opt_okay;
   *lvalp = lval_register;
   *addrp = 0;
   *realnump = regnum;

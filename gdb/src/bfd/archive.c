@@ -281,6 +281,32 @@ _bfd_look_for_bfd_in_cache (bfd *arch_bfd, file_ptr filepos)
     return NULL;
 }
 
+/* APPLE LOCAL: Sometimes we search through an archive for all it's elements
+   to do something to one of them, then we want to close the archive and
+   all the elements that we've opened.  This allows us to close all the elements
+   in the cache so we don't leak them.  */
+
+static int
+_bfd_clear_archive_entry (void **slot, void *htab)
+{
+  struct ar_cache *entry = (struct ar_cache *) *slot;
+  if (entry != NULL && entry->arbfd != NULL)
+    {
+      bfd_close (entry->arbfd);
+      htab_clear_slot (htab, slot);
+    }
+  return 1;
+}
+
+void
+bfd_archive_free_cached_info (bfd *archive)
+{
+  htab_t hash_table = bfd_ardata (archive)->cache;
+  htab_traverse_noresize (hash_table, _bfd_clear_archive_entry, hash_table);
+}
+
+
+/* END APPLE LOCAL */
 static hashval_t
 hash_file_ptr (const PTR p)
 {
@@ -517,7 +543,15 @@ _bfd_get_elt_at_filepos (bfd *archive, file_ptr filepos)
 
   n_nfd = _bfd_look_for_bfd_in_cache (archive, filepos);
   if (n_nfd)
-    return n_nfd;
+    {
+#ifdef BFD_TRACK_OPEN_CLOSE
+      printf ("Opening 0x%lx from cache of archive 0x%lx: \"%s\"\n", 
+	      (unsigned long) n_nfd, 
+	      (unsigned long) archive, 
+	      n_nfd->filename);
+#endif
+      return n_nfd;
+    }
 
   if (0 > bfd_seek (archive, filepos, SEEK_SET))
     return NULL;
@@ -537,7 +571,15 @@ _bfd_get_elt_at_filepos (bfd *archive, file_ptr filepos)
   n_nfd->filename = new_areldata->filename;
 
   if (_bfd_add_bfd_to_archive_cache (archive, filepos, n_nfd))
-    return n_nfd;
+    {
+#ifdef BFD_TRACK_OPEN_CLOSE
+      printf ("Opening 0x%lx from archive 0x%lx: \"%s\"\n", 
+	      (unsigned long) n_nfd,
+	      (unsigned long) archive, 
+	      n_nfd->filename);
+#endif
+      return n_nfd;
+    }
 
   /* Huh?  */
   bfd_release (archive, n_nfd);

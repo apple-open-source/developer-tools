@@ -35,6 +35,8 @@
 #include "gdbcore.h"
 #include "target.h"
 #include "language.h"
+/* APPLE LOCAL - subroutine inlining  */
+#include "annotate.h"
 #include "symfile.h"
 #include "objfiles.h"
 #include "completer.h"
@@ -49,6 +51,8 @@
 #include "solib.h"
 #include <ctype.h>
 #include "gdb_assert.h"
+/* APPLE LOCAL - subroutine inlining  */
+#include "inlining.h"
 
 /* APPLE LOCAL checkpoints */
 #include "checkpoint.h"
@@ -206,12 +210,31 @@ int stop_stack_dummy;
 
 int stopped_by_random_signal;
 
+/* APPLE LOCAL begin subroutine inlining  */
+
+/* Nonzero if user requested stepping over an inlined subroutine.  */
+
+int stepping_over_inlined_subroutine;
+
+/* Nonzero if user requested finishing out of an inlined subroutine.  */
+
+int finishing_inlined_subroutine;
+/* APPLE LOCAL end subroutine inlining  */
+
 /* Range to single step within.
    If this is nonzero, respond to a single-step signal
    by continuing to step if the pc is in this range.  */
 
 CORE_ADDR step_range_start;	/* Inclusive */
 CORE_ADDR step_range_end;	/* Exclusive */
+
+/* APPLE LOCAL begin step ranges  */
+/* Same as step_range_start and step_range_end, except for use with
+   functions (inlined) that have multiple non-contiguous ranges of
+   addresses.  */
+
+struct address_range_list *stepping_ranges;
+/* APPLE LOCAL end step ranges  */
 
 /* Stack frame address as of when stepping command was issued.
    This is how we know when we step into a subroutine call,
@@ -477,6 +500,16 @@ run_command_1 (char *args, int from_tty, int tbreak_at_main)
 
   do_run_cleanups (NULL);
 
+  /* APPLE LOCAL begin subroutine inlining  */
+  /* On our first 'run' of the program, set up the data for keeping
+     track of inlined function calls.  On subsequent runs, blank out
+     the data but re-use the space.  */
+  if (inlined_function_call_stack_initialized_p())
+    inlined_function_reinitialize_call_stack ();
+  else
+    inlined_function_initialize_call_stack ();
+  /* APPLE LOCAL end subroutine inlining  */
+
   /* The comment here used to read, "The exec file is re-read every
      time we do a generic_mourn_inferior, so we just have to worry
      about the symbol file."  The `generic_mourn_inferior' function
@@ -720,6 +753,11 @@ step_1 (int skip_subroutines, int single_inst, char *count_string)
   struct frame_info *frame;
   struct cleanup *cleanups = 0;
   int async_exec = 0;
+  /* APPLE LOCAL begin subroutine inlining  */
+  char *file_name = NULL;
+  int line_num = 0;
+  int column = 0;
+  /* APPLE LOCAL end subroutine inlining  */
 
   ERROR_NO_INFERIOR;
 
@@ -733,7 +771,12 @@ step_1 (int skip_subroutines, int single_inst, char *count_string)
 
   /* If we don't get a request of running in the bg, then we need
      to simulate synchronous (fg) execution. */
-  if (!async_exec && target_can_async_p ())
+  /* APPLE LOCAL begin subroutine inlining  */
+  if (!async_exec && target_can_async_p ()
+      && !single_inst
+      && (skip_subroutines 
+	  || !at_inlined_call_site_p (&file_name, &line_num, &column)))
+  /* APPLE LOCAL end subroutine inlining  */
     {
       /* Simulate synchronous execution */
       async_disable_stdin ();
@@ -858,76 +901,336 @@ step_once (int skip_subroutines, int single_inst, int count)
   struct continuation_arg *arg2;
   struct continuation_arg *arg3; 
   struct frame_info *frame;
+  /* APPLE LOCAL begin subroutine inlining  */
+  char *file_name = NULL;
+  int line_num = 0;
+  int column = 0;
+  int stack_pos;
+  CORE_ADDR end_of_line = (CORE_ADDR) 0;
+  CORE_ADDR inline_start_pc = (CORE_ADDR) 0;
+  CORE_ADDR tmp_end = (CORE_ADDR) 0;
 
-  if (count > 0)
+  if (!single_inst
+      && (stack_pos = at_inlined_call_site_p (&file_name, &line_num, &column)
+	  || rest_of_line_contains_inlined_subroutine (&end_of_line)) 
+      && skip_subroutines)
     {
-      clear_proceed_status ();
+      /* We're trying to 'next' over an inlined function call.  If so,
+	 find the pc for the end of the 'current' inlined subroutine
+	 (we may be nested several inlinings deep), and set the
+	 step-resume breakpoint there.  */
+
+      struct symtab_and_line sal;
+      struct symtab_and_line *cur = NULL;
+
+      /* Find end PC for current inlined subroutine.  */
 
       frame = get_current_frame ();
-      if (!frame)		/* Avoid coredump here.  Why tho? */
-	error (_("No current frame"));
-      step_frame_id = get_frame_id (frame);
 
-      if (!single_inst)
+      if (line_num != 0)
 	{
-	  find_pc_line_pc_range (stop_pc, &step_range_start, &step_range_end);
+	  /* The inlined subroutine is the first bit of code for the line;
+	     it might not be ALL the code for the line, however.  First find
+	     the sal for the inlined subroutine.  */
+	  CORE_ADDR start_pc;
 
-	  /* If we have no line info, switch to stepi mode.  */
-	  if (step_range_end == 0 && step_stop_if_no_debug)
-	    {
-	      step_range_start = step_range_end = 1;
-	    }
-	  else if (step_range_end == 0)
-	    {
-	      char *name;
-	      if (find_pc_partial_function (stop_pc, &name, &step_range_start,
-					    &step_range_end) == 0)
-		error (_("Cannot find bounds of current function"));
+	  start_pc = global_inlined_call_stack.records[stack_pos].start_pc;
 
-	      target_terminal_ours ();
-	      printf_filtered (_("\
-Single stepping until exit from function %s, \n\
-which has no line number information.\n"), name);
+	  sal = find_pc_line (start_pc, 0);
+	  while (sal.entry_type != INLINED_CALL_SITE_LT_ENTRY
+		 ||  sal.line != line_num)
+	    {
+	      cur = sal.next;
+	      if (!cur)
+		break;
+	      sal = *cur;
 	    }
+
+	  if (sal.entry_type == INLINED_CALL_SITE_LT_ENTRY
+	      && sal.line == line_num)
+	    sal.pc = sal.end;
+	  
+	  /* If there is more code to the line than the inlined
+	     subroutine, make the 'next' command step over the rest of
+	     the line as well.  */
+	  
+	  if (end_of_line != 0
+	      && sal.pc != end_of_line)
+	    sal.pc = end_of_line;
 	}
       else
 	{
-	  /* Say we are stepping, but stop after one insn whatever it does.  */
-	  step_range_start = step_range_end = 1;
-	  if (!skip_subroutines)
-	    /* It is stepi.
-	       Don't step over function calls, not even to functions lacking
-	       line numbers.  */
-	    step_over_calls = STEP_OVER_NONE;
+	  /*  There is code for this line before we get to the inlined
+	      subroutine; there may be code for this line after the
+	      inlined subroutine as well.  We want the 'next' command
+	      to step over ALL the code for the line.  */
+	  
+	  gdb_assert (end_of_line != 0);
+	 
+	  if (in_inlined_function_call_p (&tmp_end))
+	    {
+	      if (tmp_end && tmp_end < end_of_line)
+		end_of_line = tmp_end;
+	    }
+ 
+	  sal = find_pc_line (stop_pc, 0);
+	  sal.pc = end_of_line;
+	  sal.end = end_of_line;
 	}
 
-      if (skip_subroutines)
-	step_over_calls = STEP_OVER_ALL;
+      /* Set the breakpoint for the 'next'.  */
 
-      step_multi = (count > 1);
-      arg1 =
-	(struct continuation_arg *) xmalloc (sizeof (struct continuation_arg));
-      arg2 =
-	(struct continuation_arg *) xmalloc (sizeof (struct continuation_arg));
-      arg3 =
-	(struct continuation_arg *) xmalloc (sizeof (struct continuation_arg));
-      arg1->next = arg2;
-      arg1->data.integer = skip_subroutines;
-      arg2->next = arg3;
-      arg2->data.integer = single_inst;
-      arg3->next = NULL;
-      arg3->data.integer = count;
-      add_intermediate_continuation (step_1_continuation, arg1);
+      clear_proceed_status ();
+
+      /* Tell the user what's going on.  */
+
+      ui_out_text  (uiout, "** Stepping over inlined function code. **\n");
+	  
+      /* Set up various necessary variables to make sure we actually stop when
+	 we get to the breakpoint.  */
+
+      if (!frame)		/* Avoid coredump here.  Why tho? */
+	error (_("No current frame"));
+      step_frame_id = get_frame_id (frame);
+      step_range_start = stop_pc;
+      step_range_end = sal.pc;
+      step_over_calls = STEP_OVER_ALL;
+      stepping_over_inlined_subroutine = 1;
+      stepping_ranges = global_inlined_call_stack.records[stack_pos].ranges;
+
       proceed ((CORE_ADDR) -1, TARGET_SIGNAL_DEFAULT, 1);
     }
+  else if (!single_inst 
+	   && at_inlined_call_site_p (&file_name, &line_num, &column))
+    {
+      struct symtab_and_line sal;
+      struct symtab_and_line tmp_sal;
+      struct symtab_and_line *cur = NULL;
+      struct symbol *func_sym;
+      struct symtab *tmp_symtab;
+      int func_first_line = 0;
+      int found = 0;
+
+      stepping_into_inlined_subroutine = 1;
+
+      func_sym = lookup_symbol 
+	((const char *) current_inlined_subroutine_function_name (),
+	 get_selected_block (0), VAR_DOMAIN, 0, &tmp_symtab);
+
+      if (func_sym)
+	{
+	  tmp_sal = find_function_start_sal (func_sym, 1);
+				
+	  func_first_line = tmp_sal.line;
+	}
+      
+      if (current_inlined_subroutine_stack_position ()
+	   < current_inlined_subroutine_stack_size ())
+	{
+	  /* Set up the SAL for printing out the current source location.  */
+
+	  sal = find_pc_line (current_inlined_subroutine_call_stack_start_pc (),
+			      0);
+
+	  for (cur = &sal; cur; cur = cur->next)
+	    if (cur->entry_type == INLINED_SUBROUTINE_LT_ENTRY
+		&& cur->pc == current_inlined_subroutine_call_stack_start_pc ()
+		&& cur->end == current_inlined_subroutine_call_stack_end_pc ())
+	      {
+		sal.symtab = cur->symtab;
+		sal.pc = cur->pc;
+		sal.end = cur->end;
+		sal.line = cur->line;
+		sal.entry_type = cur->entry_type;
+		break;
+	      }
+	  
+	  step_into_current_inlined_subroutine ();
+
+	  /* Flush the existing frames.  This is necessary because we will need
+	     to create a new INLINED_FRAME at level zero for the inlined 
+	     subroutine we are "stepping" into.  */
+	  
+	  flush_cached_frames ();
+
+	}
+      else
+	{
+	  /* We're stepping from the call site of our innermost
+	     inlined subroutine into the innermost inlined subroutine.
+	     We don't actually run the inferior, because the PC is
+	     already AT the beginning of the inlined subroutine.  This
+	     is purely a context change from the user's perspective to
+	     make maneuvering through inlined subroutines less
+	     confusing: We've forced a stop at the call site, where
+	     there is no executable code, before diving into the
+	     subroutine.  */
+	  
+	  
+	  /* Find the INLINED_SUBROUTINE line table entry for the current PC,
+	     with information matching the current record in the 
+	     global_inlined_call_stack.  */
+	  
+	  sal = find_pc_line (stop_pc, 0);
+	  
+	  while (!found)
+	    {
+	      if (sal.entry_type == INLINED_SUBROUTINE_LT_ENTRY
+		  && sal.pc == current_inlined_subroutine_call_stack_start_pc ()
+		  && sal.end == current_inlined_subroutine_call_stack_end_pc ())
+		found = 1;
+	      else
+		{
+		  cur = sal.next;
+		  if (!cur)
+		    break;
+		  sal = *cur;
+		}
+	    }
+	  
+	  gdb_assert (found == 1);
+	  
+	  /* Stepping into an inlined function requires creating a new
+	     INLINED_FRAME, at level 0, so we need to flush the current
+	     set of frames.  */
+	  
+	  flush_cached_frames ();
+
+	  /* Update the global_inlined_call_stack data appropriately.  */
+	  
+	  step_into_current_inlined_subroutine ();
+	  
+	}
+
+      /* Tell the user what we are doing.  */
+	  
+      ui_out_text (uiout, 
+		   "** Simulating stepping into inlined subroutine.  **\n");
+	  
+      /* Tell emacs (or anything else using annotations) to update the 
+	 location.  */
+
+      if (at_inlined_call_site_p (&file_name, &line_num, &column))
+	func_first_line = line_num;
+
+      if (!func_first_line)
+	func_first_line = sal.line;
+
+      annotate_starting ();
+      annotate_frames_invalid ();
+      breakpoints_changed ();
+      annotate_frames_invalid ();
+      if (annotation_level == 0)
+	print_source_lines (sal.symtab, func_first_line, 1, 0);
+      else
+	identify_source_line (sal.symtab, func_first_line, 0, sal.pc);
+      annotate_frame_end ();
+      annotate_stopped ();
+	  
+      /* Make sure the mi interpreter updates the current location
+	 appropriately (including fooling it into believing the
+	 inferior has run, so it can properly finish its 'step'
+	 command).  */
+	  
+      target_executing = 0;
+    }
+  else
+    {
+  /* APPLE LOCAL end subroutine inlining  */
+      if (count > 0)
+	{
+	  /* APPLE LOCAL begin subroutine inlining  */
+	  if (!single_inst
+	      && rest_of_line_contains_inlined_subroutine (&end_of_line))
+	    find_next_inlined_subroutine (stop_pc, &inline_start_pc);
+	  /* APPLE LOCAL end subroutine inlining  */
+	      
+	  clear_proceed_status ();
+
+	  frame = get_current_frame ();
+
+	  while (frame 
+		 && get_frame_type (frame) == INLINED_FRAME)
+	    frame = get_prev_frame (frame);
+
+	  if (!frame)		/* Avoid coredump here.  Why tho? */
+	    error (_("No current frame"));
+	  step_frame_id = get_frame_id (frame);
+
+	  if (!single_inst)
+	    {
+	      find_pc_line_pc_range (stop_pc, &step_range_start, &step_range_end);
+
+	      /* APPLE LOCAL begin subroutine inlining  */
+	      if (inline_start_pc)
+		{
+		  step_range_end = inline_start_pc;
+		  stepping_into_inlined_subroutine = 1;
+		  ui_out_text (uiout, 
+			 "** Stepping to beginning of inlined subroutine.  **\n");
+		}
+	      /* APPLE LOCAL end subroutine inlining  */
+
+
+	      /* If we have no line info, switch to stepi mode.  */
+	      if (step_range_end == 0 && step_stop_if_no_debug)
+		{
+		  step_range_start = step_range_end = 1;
+		}
+	      else if (step_range_end == 0)
+		{
+		  char *name;
+		  if (find_pc_partial_function (stop_pc, &name, &step_range_start,
+						&step_range_end) == 0)
+		    error (_("Cannot find bounds of current function"));
+
+		  target_terminal_ours ();
+		  printf_filtered (_("\
+Single stepping until exit from function %s, \n\
+which has no line number information.\n"), name);
+		}
+	    }
+	  else
+	    {
+	      /* Say we are stepping, but stop after one insn whatever it does. */
+	      step_range_start = step_range_end = 1;
+	      if (!skip_subroutines)
+		/* It is stepi.
+		   Don't step over function calls, not even to functions lacking
+		   line numbers.  */
+		step_over_calls = STEP_OVER_NONE;
+	    }
+
+	  if (skip_subroutines)
+	    step_over_calls = STEP_OVER_ALL;
+
+	  step_multi = (count > 1);
+	  arg1 =
+	   (struct continuation_arg *) xmalloc (sizeof (struct continuation_arg));
+	  arg2 =
+	   (struct continuation_arg *) xmalloc (sizeof (struct continuation_arg));
+	  arg3 =
+	   (struct continuation_arg *) xmalloc (sizeof (struct continuation_arg));
+	  arg1->next = arg2;
+	  arg1->data.integer = skip_subroutines;
+	  arg2->next = arg3;
+	  arg2->data.integer = single_inst;
+	  arg3->next = NULL;
+	  arg3->data.integer = count;
+	  add_intermediate_continuation (step_1_continuation, arg1);
+	  proceed ((CORE_ADDR) -1, TARGET_SIGNAL_DEFAULT, 1);
+	}
+    /* APPLE LOCAL begin subroutine inlining  */  
+    }
+    /* APPLE LOCAL end subroutine inlining  */
 }
 
 /* APPLE LOCAL begin checkpoints */
 /* Experimental for re-execution from a checkpoint, used to reach
    points in a program between checkpoints.  */
 
-char *rx_cp;
-char *active_checkpoint;
+struct checkpoint *rx_cp;
+struct checkpoint *active_checkpoint;
 int magic_flag = 0;
 
 void
@@ -1283,7 +1586,12 @@ until_next_command (int from_tty)
     {
       sal = find_pc_line (pc, 0);
 
-      step_range_start = BLOCK_START (SYMBOL_BLOCK_VALUE (func));
+      /* APPLE LOCAL begin address range; FIXME: just changing the following line
+	 from BLOCK_START to BLOCK_LOWEST_PC may not be enough to make
+	 sure this function really does the right thing for functions with
+	 non-contiguous ranges of addresses. -- ctice  */
+      step_range_start = BLOCK_LOWEST_PC (SYMBOL_BLOCK_VALUE (func));
+      /* APPLE LOCAL end address range  */
       step_range_end = sal.end;
     }
 
@@ -1463,6 +1771,184 @@ finish_command_continuation (struct continuation_arg *arg)
   do_exec_cleanups (cleanups);
 }
 
+/* APPLE LOCAL begin subroutine inlining  */
+
+/* Stuff that needs to be done by the finish command, when performed on
+   an inlined subroutine, after the target has stopped.  Very similar to
+   finish_command_continuation (see that function for further comments). */
+
+static void
+finish_inlined_subroutine_command_continuation (struct continuation_arg *arg)
+{
+  struct cleanup *cleanups;
+  struct symbol *function;
+
+  function = (struct symbol *) arg->data.pointer;
+  cleanups = (struct cleanup *) arg->next->data.pointer;
+
+  if (function != NULL)
+    {
+      struct type *value_type;
+      int struct_return;
+      int gcc_compiled;
+
+      value_type = TYPE_TARGET_TYPE (SYMBOL_TYPE (function));
+      if (!value_type)
+	internal_error (__FILE__, __LINE__,
+			_("finish_inlined_subroutine_command: function has no target type"));
+      
+      if (TYPE_CODE (value_type) == TYPE_CODE_VOID)
+	{
+	  do_exec_cleanups (cleanups);
+	  return;
+	}
+
+      CHECK_TYPEDEF (value_type);
+      gcc_compiled = BLOCK_GCC_COMPILED (SYMBOL_BLOCK_VALUE (function));
+      struct_return = using_struct_return (value_type, gcc_compiled);
+
+      print_return_value (struct_return, value_type);
+    }
+
+  do_exec_cleanups (cleanups);
+}
+
+/* Finish out of an inlined subroutine.  This is acutally done by setting
+   things up as if the user requested a 'next' at the inlined call site
+   (temporary breakpoints cannot be used because, due to the way the
+   compiler lays out inlined code, the requested breakpoint address is often
+   never hit).  Also, call finish_inlined_suborutine_command_continuation
+   to make sure return values are printed out, etc.  */
+
+static void
+finish_inlined_subroutine_command (CORE_ADDR inline_end_pc)
+{
+  int i;  /* Position, in inlined call stack, of subroutine to be 
+	     'finish'ed  */
+  char *file_name;
+  int line_num;
+  int column;
+  struct symtab_and_line sal;
+  struct symtab_and_line *cur = NULL;
+  struct frame_info *frame;
+  CORE_ADDR start_pc;
+  struct symbol *function;
+  struct cleanup *old_chain = NULL;
+  struct continuation_arg *arg1;
+  struct continuation_arg *arg2;
+
+  /* Find the record corresponding to the inlined subroutine we wish
+     to 'finish'.  */
+
+  i = current_inlined_subroutine_stack_position ();
+  if (i > 0
+      && !global_inlined_call_stack.records[i].stepped_into)
+    i--;
+
+  /* If we aren't at an active record on the inlining stack, then we
+     have gotten here by mistake.  */
+
+  gdb_assert (i >= 1);
+  gdb_assert (global_inlined_call_stack.records[i].stepped_into);
+
+  /* Collect the call site information.  */
+
+  file_name = global_inlined_call_stack.records[i].call_site_filename;
+  line_num  = global_inlined_call_stack.records[i].call_site_line;
+  column    = global_inlined_call_stack.records[i].call_site_column;
+  start_pc = global_inlined_call_stack.records[i].start_pc;
+  
+  /* Get the correct sal.  */
+
+  frame = get_current_frame ();
+  sal = find_pc_line (start_pc, 0);
+  while (sal.entry_type != INLINED_CALL_SITE_LT_ENTRY
+	 || sal.line != line_num)
+    {
+      cur = sal.next;
+      if (!cur)
+	break;
+      sal = *cur;
+    }
+
+  if (sal.entry_type == INLINED_CALL_SITE_LT_ENTRY
+      && sal.line == line_num)
+    sal.pc = sal.end;
+
+  /* Proceed as if we are doing 'next' over the inlined subroutine, but 
+     make sure to use prev_frame.  */
+  
+  clear_proceed_status ();
+  if (!frame)
+    error (_("No current frame"));
+  step_frame_id = get_frame_id (get_prev_frame (frame));
+  step_range_start = start_pc;
+  step_range_end = sal.pc;
+  step_over_calls = STEP_OVER_ALL;
+  stepping_over_inlined_subroutine = 1;
+  stepping_ranges = global_inlined_call_stack.records[i].ranges;
+  
+  /* Clena up global inlined call stack to refect no longer being in
+     the subroutien.  */
+
+  global_inlined_call_stack.records[i].stepped_into = 0;
+  adjust_current_inlined_subroutine_stack_position (-1);
+
+  frame = get_prev_frame (deprecated_selected_frame);
+
+  function = find_pc_function (get_frame_pc (frame));
+
+  /* Take care of printing out the return value, if any, of the function
+     we are finishing.  */
+
+  if (target_can_async_p ())
+    {
+      arg1 = 
+	(struct continuation_arg *) xmalloc (sizeof (struct continuation_arg));
+      arg2 = 
+	(struct continuation_arg *) xmalloc (sizeof (struct continuation_arg));
+      arg1->next = arg2;
+      arg2->next = NULL;
+      arg1->data.pointer = function;
+      arg2->data.pointer = old_chain;
+      add_continuation (finish_inlined_subroutine_command_continuation, arg1);
+    }
+
+  finishing_inlined_subroutine = 1;
+  proceed_to_finish = 1;
+  proceed ((CORE_ADDR) -1, TARGET_SIGNAL_DEFAULT, 1);
+  
+  if (!target_can_async_p ())
+    {
+      if (function != NULL)
+	{
+	  struct type *value_type;
+	  int struct_return;
+	  int gcc_compiled;
+	  
+	  value_type = TYPE_TARGET_TYPE (SYMBOL_TYPE (function));
+	  if (!value_type)
+	    internal_error (__FILE__, __LINE__,
+	  _("finish_inlined_subroutine_command: function has no target type"));
+	  
+	  if (TYPE_CODE (value_type) == TYPE_CODE_VOID)
+	    {
+	      do_exec_cleanups (old_chain);
+	      return;
+	    }
+	  
+	  CHECK_TYPEDEF (value_type);
+	  gcc_compiled = BLOCK_GCC_COMPILED (SYMBOL_BLOCK_VALUE (function));
+	  struct_return = using_struct_return (value_type, gcc_compiled);
+	  
+	  print_return_value (struct_return, value_type);
+	}
+      
+      do_exec_cleanups (old_chain);
+    }
+}
+/* APPLE LOCAL end subroutine inlining  */
+
 /* "finish": Set a temporary breakpoint at the place the selected
    frame will return to, then continue.  */
 
@@ -1475,116 +1961,134 @@ finish_command (char *arg, int from_tty)
   struct breakpoint *breakpoint;
   struct cleanup *old_chain;
   struct continuation_arg *arg1, *arg2, *arg3;
+  /* APPLE LOCAL begin subroutine inlining  */
+  CORE_ADDR inline_end_pc = 0;
+  /* APPLE LOCAL end subroutine inlining  */
 
   int async_exec = 0;
 
-  /* Find out whether we must run in the background.  */
-  if (arg != NULL)
-    async_exec = strip_bg_char (&arg);
-
-  /* If we must run in the background, but the target can't do it,
-     error out.  */
-  if (async_exec && !target_can_async_p ())
-    error (_("Asynchronous execution not supported on this target."));
-
-  /* If we are not asked to run in the bg, then prepare to run in the
-     foreground, synchronously.  */
-  if (!async_exec && target_can_async_p ())
+  /* APPLE LOCAL begin subroutine inlining  */
+  /* Check to see if we're trying to finish out of an inlined subroutine
+     call.  If so, we need to use a completely different mechanism (much
+     more similar to stepping over a function).  */
+  if (in_inlined_function_call_p (&inline_end_pc))
+    finish_inlined_subroutine_command (inline_end_pc);
+  else /* Proceed with normal finish.  */
     {
-      /* Simulate synchronous execution.  */
-      async_disable_stdin ();
-    }
+      /* APPLE LOCAL end subroutine inlining  */
 
-  if (arg)
-    error (_("The \"finish\" command does not take any arguments."));
-  if (!target_has_execution)
-    error (_("The program is not running."));
-  if (deprecated_selected_frame == NULL)
-    error (_("No selected frame."));
+      /* Find out whether we must run in the background.  */
+      if (arg != NULL)
+	async_exec = strip_bg_char (&arg);
 
-  frame = get_prev_frame (deprecated_selected_frame);
-  if (frame == 0)
-    error (_("\"finish\" not meaningful in the outermost frame."));
+      /* If we must run in the background, but the target can't do it,
+	 error out.  */
+      if (async_exec && !target_can_async_p ())
+	error (_("Asynchronous execution not supported on this target."));
 
-  clear_proceed_status ();
-
-  sal = find_pc_line (get_frame_pc (frame), 0);
-  sal.pc = get_frame_pc (frame);
-
-  breakpoint = set_momentary_breakpoint (sal, get_frame_id (frame), bp_finish);
-
-  if (!target_can_async_p ())
-    old_chain = make_cleanup_delete_breakpoint (breakpoint);
-  else
-    old_chain = make_exec_cleanup_delete_breakpoint (breakpoint);
-
-  /* Find the function we will return from.  */
-
-  function = find_pc_function (get_frame_pc (deprecated_selected_frame));
-
-  /* Print info on the selected frame, including level number but not
-     source.  */
-  if (from_tty)
-    {
-      printf_filtered (_("Run till exit from "));
-      print_stack_frame (get_selected_frame (NULL), 1, LOCATION);
-    }
-
-  /* If running asynchronously and the target support asynchronous
-     execution, set things up for the rest of the finish command to be
-     completed later on, when gdb has detected that the target has
-     stopped, in fetch_inferior_event.  */
-  if (target_can_async_p ())
-    {
-      arg1 =
-	(struct continuation_arg *) xmalloc (sizeof (struct continuation_arg));
-      arg2 =
-	(struct continuation_arg *) xmalloc (sizeof (struct continuation_arg));
-      arg3 =
-	(struct continuation_arg *) xmalloc (sizeof (struct continuation_arg));
-      arg1->next = arg2;
-      arg2->next = arg3;
-      arg3->next = NULL;
-      arg1->data.pointer = breakpoint;
-      arg2->data.pointer = function;
-      arg3->data.pointer = old_chain;
-      add_continuation (finish_command_continuation, arg1);
-    }
-
-  proceed_to_finish = 1;	/* We want stop_registers, please...  */
-  proceed ((CORE_ADDR) -1, TARGET_SIGNAL_DEFAULT, 0);
-
-  /* Do this only if not running asynchronously or if the target
-     cannot do async execution.  Otherwise, complete this command when
-     the target actually stops, in fetch_inferior_event.  */
-  if (!target_can_async_p ())
-    {
-      /* Did we stop at our breakpoint?  */
-      if (bpstat_find_breakpoint (stop_bpstat, breakpoint) != NULL
-	  && function != NULL)
+      /* If we are not asked to run in the bg, then prepare to run in the
+	 foreground, synchronously.  */
+      if (!async_exec && target_can_async_p ())
 	{
-	  struct type *value_type;
-	  int struct_return;
-	  int gcc_compiled;
-
-	  value_type = TYPE_TARGET_TYPE (SYMBOL_TYPE (function));
-	  if (!value_type)
-	    internal_error (__FILE__, __LINE__,
-			    _("finish_command: function has no target type"));
-
-	  /* FIXME: Shouldn't we do the cleanups before returning?  */
-	  if (TYPE_CODE (value_type) == TYPE_CODE_VOID)
-	    return;
-
-	  CHECK_TYPEDEF (value_type);
-	  gcc_compiled = BLOCK_GCC_COMPILED (SYMBOL_BLOCK_VALUE (function));
-	  struct_return = using_struct_return (value_type, gcc_compiled);
-
-	  print_return_value (struct_return, value_type); 
+	  /* Simulate synchronous execution.  */
+	  async_disable_stdin ();
 	}
 
-      do_cleanups (old_chain);
+      if (arg)
+	error (_("The \"finish\" command does not take any arguments."));
+      if (!target_has_execution)
+	error (_("The program is not running."));
+      if (deprecated_selected_frame == NULL)
+	error (_("No selected frame."));
+
+      frame = get_prev_frame (deprecated_selected_frame);
+      if (frame == 0)
+	error (_("\"finish\" not meaningful in the outermost frame."));
+
+      clear_proceed_status ();
+
+      sal = find_pc_line (get_frame_pc (frame), 0);
+      sal.pc = get_frame_pc (frame);
+
+      breakpoint = set_momentary_breakpoint (sal, get_frame_id (frame), 
+					     bp_finish);
+
+
+      if (!target_can_async_p ())
+	old_chain = make_cleanup_delete_breakpoint (breakpoint);
+      else
+	old_chain = make_exec_cleanup_delete_breakpoint (breakpoint);
+
+      /* Find the function we will return from.  */
+      
+      function = find_pc_function (get_frame_pc (deprecated_selected_frame));
+      
+      /* Print info on the selected frame, including level number but not
+	 source.  */
+      if (from_tty)
+	{
+	  printf_filtered (_("Run till exit from "));
+	  print_stack_frame (get_selected_frame (NULL), 1, LOCATION);
+	}
+  
+      /* If running asynchronously and the target support asynchronous
+	 execution, set things up for the rest of the finish command to be
+	 completed later on, when gdb has detected that the target has
+	 stopped, in fetch_inferior_event.  */
+      if (target_can_async_p ())
+	{
+	  arg1 =
+	    (struct continuation_arg *) xmalloc (sizeof (struct continuation_arg));
+	  arg2 =
+	    (struct continuation_arg *) xmalloc (sizeof (struct continuation_arg));
+	  arg3 =
+	    (struct continuation_arg *) xmalloc (sizeof (struct continuation_arg));
+	  arg1->next = arg2;
+	  arg2->next = arg3;
+	  arg3->next = NULL;
+	  arg1->data.pointer = breakpoint;
+	  arg2->data.pointer = function;
+	  arg3->data.pointer = old_chain;
+	  add_continuation (finish_command_continuation, arg1);
+	}
+      
+      proceed_to_finish = 1;	/* We want stop_registers, please...  */
+      proceed ((CORE_ADDR) -1, TARGET_SIGNAL_DEFAULT, 0);
+      
+      /* Do this only if not running asynchronously or if the target
+	 cannot do async execution.  Otherwise, complete this command when
+	 the target actually stops, in fetch_inferior_event.  */
+      if (!target_can_async_p ())
+	{
+	  /* Did we stop at our breakpoint?  */
+	  if (bpstat_find_breakpoint (stop_bpstat, breakpoint) != NULL
+	      && function != NULL)
+	    {
+	      struct type *value_type;
+	      int struct_return;
+	      int gcc_compiled;
+	      
+	      value_type = TYPE_TARGET_TYPE (SYMBOL_TYPE (function));
+	      if (!value_type)
+		internal_error (__FILE__, __LINE__,
+				_("finish_command: function has no target type"));
+	      
+	      /* FIXME: Shouldn't we do the cleanups before returning?  */
+	      if (TYPE_CODE (value_type) == TYPE_CODE_VOID)
+		return;
+	      
+	      CHECK_TYPEDEF (value_type);
+	      gcc_compiled = BLOCK_GCC_COMPILED (SYMBOL_BLOCK_VALUE (function));
+	      struct_return = using_struct_return (value_type, gcc_compiled);
+	      
+	      print_return_value (struct_return, value_type); 
+	    }
+	  
+	  do_cleanups (old_chain);
+	}
+    /* APPLE LOCAL begin subroutine inlining  */
     }
+    /* APPLE LOCAL end subroutine inlining  */
 }
 
 
@@ -1903,8 +2407,10 @@ default_print_registers_info (struct gdbarch *gdbarch,
 void
 registers_info (char *addr_exp, int fpregs)
 {
-  int regnum, numregs;
-  char *end;
+  /* APPLE LOCAL begin eliminate unused variable warnings  */
+  /* int regnum, numregs;  */
+  /* char *end; */
+  /* APPLE LOCAL end eliminate unused variable warnings  */
 
   if (!target_has_registers)
     error (_("The program has no registers now."));
@@ -2364,7 +2870,11 @@ When using \"attach\" to an existing process, the debugger finds the\n\
 program running in the process, looking first in the current working\n\
 directory, or (if not found there) using the source file search path\n\
 (see the \"directory\" command).  You can also use the \"file\" command\n\
-to specify the program, and to load its symbol table."));
+to specify the program, and to load its symbol table.\n\
+As an Apple extension, the attach command can be given the name of a process.\n\
+You may use tab completion.  The process name is case sensitive.\n\
+You may also use the '-waitfor' argument followed by a process name -- gdb\n\
+will poll and loop waiting for the process by that name to launch."));
 
   /* APPLE LOCAL process completer */
   set_cmd_completer (c, PROCESS_COMPLETER);

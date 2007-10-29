@@ -5,7 +5,7 @@
  |                          MacsBug Plugins Private Interfaces                          |
  |                                                                                      |
  |                                     Ira L. Ruben                                     |
- |                       Copyright Apple Computer, Inc. 2000-2005                       |
+ |                       Copyright Apple Computer, Inc. 2000-2006                       |
  |                                                                                      |
  *--------------------------------------------------------------------------------------*/
 
@@ -24,22 +24,20 @@
 /* We must make sure we don't do anything that is incompatible with the gdb we are	*/
 /* tied to.  So the following macro is defined for that purpose.			*/
 
-/* The GDB_MULTI_ARCH_PARTIAL is not defined in GDB 4.x in defs.h so it's as good as	*/
-/* any other such define to distinguish 4.x and beyond.  All the API files use this	*/
+/* The GDB_MULTI_ARCH_PARTIAL is not defined in GDB 6.x in defs.h so it's as good as	*/
+/* any other such define to distinguish 6.x and beyond.  All the API files use this	*/
 /* header and all of them also require defs.h included.  So we convert the sort of 	*/
-/* "random" defin grepped from defs.h into something more appropriate.  It's a shame	*/
+/* "random" define grepped from defs.h into something more appropriate.  It's a shame	*/
 /* gdb doesn't have some version macro in some header to make this cleaner.		*/
 
-/* 
-#define GDB4 0					/* beyond gdb 4.x			*/
-
-#if 0  /* I am a horrible person and Ira is going to be annoyed when he sees
-          this but I need to get buildit builds working again and I'm not
-          too concerned aout interoperating with pre-gdb5 gdb's.  
-          jmolenda/2005-12-16 */
-
-#define GDB4 1					/* gdb 4.x				*/
+#ifdef GDB_MULTI_ARCH_PARTIAL
+#define GDB_VERSION 5
+#else
+#define GDB_VERSION 6
 #endif
+
+#define GDB4 0				/* kept for historical reasons for gdb 4.x	*/
+					/* we no longer support that older version	*/
 
 /*--------------------------------------------------------------------------------------*/
 /*-------*
@@ -93,7 +91,7 @@ typedef struct {				/* initialized by or initial value...	*/
     void (*rl_startup_hook)(void);		/* NULL					*/
     char *(*command_line_input_hook)(char *, int, char *); /* NULL 			*/
     void (*help_command)(char *, int);		/* gdb command definition		*/
-    void (*deprecated_set_hook)(struct cmd_list_element *);/* NULL					*/
+    void (*deprecated_set_hook)(struct cmd_list_element *);/* NULL			*/
     
     char input_handler_defined;			/* these tell us when above are defined	*/
     char gdb_stdout_defined;
@@ -142,6 +140,16 @@ typedef struct Plugin_Pvt_Data {
     char   		   plugin_name[1];	/* start of plugin's name		*/
 } Plugin_Pvt_Data;
 
+/* Addresses computed in a data type larger than the target architecture's address	*/
+/* (e.g., 64-bit computation on a 32-bit machine) need to be corrected for the target.  */
+/* The FIX_TARGET_ADDR macro checks this and zeroes out the high-order bits if 		*/
+/* necessary (e.g., high order 32-bits of a 64-bit value if we're on a 32-bit target).	*/
+/* Use this macro in all places where an GDB_ADDRESS is supplied as an argument to	*/
+/* gdb.h functions when there is doubt where the specified address is coming from.	*/
+
+#define FIX_TARGET_ADDR(addr) if (TARGET_ADDR_BIT < (sizeof(CORE_ADDR) * HOST_CHAR_BIT)) \
+    				  addr &= ((CORE_ADDR)1 << TARGET_ADDR_BIT) - 1
+
 extern char *tilde_expand(char *pathname);	/* defined in readline.c		*/
 
 
@@ -186,9 +194,9 @@ extern void __my_set_hook_guts(struct cmd_list_element *, Gdb_Set_Type *, void *
 extern int screenwidth, screenheight;
 
 
-/*-------------------------------------------------------------*
- | readline hooks - defined here because header is unavaliable |
- *-------------------------------------------------------------*/
+/*----------------------------------------------------------------------*
+ | readline hooks and data - defined here because header is unavaliable |
+ *----------------------------------------------------------------------*/
 
 extern int rl_read_key(void);			/* read 1 char from terminal and return	*/
 
@@ -199,6 +207,9 @@ extern void (*rl_getc_function)();		/* raw terminal char input  		*/
 extern void (*rl_redisplay_function)();	    	/* called to echo readline chrs & prompt*/
 extern char *rl_display_prompt;			/* readline display prompt if not NULL	*/
 extern char *rl_prompt;				/* primary readline prompt		*/ 
+
+extern FILE *rl_instream;			/* the input stream			*/
+extern FILE *rl_outstream;			/* the output stream			*/
 
 
 /*-------------------------------------------------------------------*

@@ -47,6 +47,15 @@
 /* hostfile */
 #undef GDB_XM_FILE
 
+/* Define to 1 to use 64 bit stack logging functions. */
+#undef HAVE_32_BIT_STACK_LOGGING
+
+/* Define to 1 if you have 64 bit mach exceptions. */
+#undef HAVE_64_BIT_MACH_EXCEPTIONS
+
+/* Define to 1 to use 64 bit stack logging functions. */
+#undef HAVE_64_BIT_STACK_LOGGING
+
 /* Define to 1 if you have `alloca', as a function or macro. */
 #undef HAVE_ALLOCA
 
@@ -71,6 +80,9 @@
 
 /* Define to 1 if you have the `dcgettext' function. */
 #undef HAVE_DCGETTEXT
+
+/* Define if DebugSymbols framework is present. */
+#undef HAVE_DEBUG_SYMBOLS_FRAMEWORK
 
 /* Define to 1 if you have the declaration of `free', and to 0 if you don't.
    */
@@ -111,6 +123,9 @@
 /* Define to 1 if you have the <dirent.h> header file, and it defines `DIR'.
    */
 #undef HAVE_DIRENT_H
+
+/* Define to 1 if you have the <dlfcn.h> header file. */
+#undef HAVE_DLFCN_H
 
 /* Define to 1 if you have the `fork' function. */
 #undef HAVE_FORK
@@ -168,12 +183,6 @@
 
 /* Define to 1 if you have the `w' library (-lw). */
 #undef HAVE_LIBW
-
-/* Define to 1 if you have the <libxml/parser.h> header file. */
-#undef HAVE_LIBXML_PARSER_H
-
-/* Define to 1 if you have the <libxml/tree.h> header file. */
-#undef HAVE_LIBXML_TREE_H
 
 /* Define to 1 if you have the <limits.h> header file. */
 #undef HAVE_LIMITS_H
@@ -504,6 +513,9 @@
 /* Define to 1 if `vfork' works. */
 #undef HAVE_WORKING_VFORK
 
+/* Define to 1 if the system has the type `x86_debug_state32_t'. */
+#undef HAVE_X86_DEBUG_STATE32_T
+
 /* Define to 1 if your system has the _etext variable. */
 #undef HAVE__ETEXT
 
@@ -521,9 +533,6 @@
 
 /* Define as const if the declaration of iconv() needs const. */
 #undef ICONV_CONST
-
-/* libxml2 on this system is usable */
-#undef LIBXML2_IS_USABLE
 
 /* Define if you want to use new multi-fd /proc interface (replaces
    HAVE_MULTIPLE_PROC_FDS as well as other macros). */
@@ -580,7 +589,7 @@
 
 /* If using the C implementation of alloca, define if you know the
    direction of stack growth for your system; otherwise it will be
-   automatically deduced at run-time.
+   automatically deduced at runtime.
 	STACK_DIRECTION > 0 => grows toward higher addresses
 	STACK_DIRECTION < 0 => grows toward lower addresses
 	STACK_DIRECTION = 0 => direction of growth unknown */
@@ -598,8 +607,14 @@
 /* Define if <thread_db.h> has the TD_NOTALLOC error code. */
 #undef THREAD_DB_HAS_TD_NOTALLOC
 
+/* Define to 1 to use the arch program instead of exec. */
+#undef USE_ARCH_FOR_EXEC
+
 /* Define to 1 if the regex included in libiberty should be used. */
 #undef USE_INCLUDED_REGEX
+
+/* Define to 1 to use posix_spawn instead of execvp. */
+#undef USE_POSIX_SPAWN
 
 /* Define if we should use the Windows API, instead of the POSIX API. On
    Windows, we use the Windows API when building for MinGW, but the POSIX API
@@ -641,13 +656,13 @@
 #undef inline
 #endif
 
-/* Define to `long' if <sys/types.h> does not define. */
+/* Define to `long int' if <sys/types.h> does not define. */
 #undef off_t
 
 /* Define to `int' if <sys/types.h> does not define. */
 #undef pid_t
 
-/* Define to `unsigned' if <sys/types.h> does not define. */
+/* Define to `unsigned int' if <sys/types.h> does not define. */
 #undef size_t
 
 /* Define on a GNU/Linux system to work around problems in sys/procfs.h. */

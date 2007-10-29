@@ -60,6 +60,12 @@ mi_get_bp_stopped "1" "\[01\]" "" "foo4" "callfuncs.c" ".*" "run to foo4"
 
 mi_gdb_test "103-mi-verify-command stack-list-frames-lite" {103\^done,name="stack-list-frames-lite",defined="true",implemented="true"} "Verify stack-list-frames-lite defined"
 
+mi_gdb_test "200-stack-list-frames-lite -limit" {200\^error,msg="mi_cmd_stack_list_frames_lite: No argument to -limit."} "-stack-list-frames-lite catch no argument to -limit error"
+
+mi_gdb_test "201-stack-list-frames-lite -names" {201\^error,msg="mi_cmd_stack_list_frames_lite: No argument to -names."} "-stack-list-frames-lite catch no argument to -names error"
+
+mi_gdb_test "202-stack-list-frames-lite -names -limit" {202\^error,msg="mi_cmd_stack_list_frames_lite: Invalid argument to -names."} "-stack-list-frames-lite catch no argument to -names -limit error"
+
 mi_gdb_test "104-stack-list-frames-lite -limit 500" \
   "104\\^done,frames=\\\[0=\{pc=\"$hex\",fp=\"$hex\"\},1=\{pc=\"$hex\",fp=\"$hex\"\},2=\{pc=\"$hex\",fp=\"$hex\"\},3=\{pc=\"$hex\",fp=\"$hex\"\},4=\{pc=\"$hex\",fp=\"$hex\"\}\\\],valid=\"1\",count=\"5\"" "-stack-list-frames-lite -limit 500 works"
 
@@ -98,8 +104,14 @@ mi_gdb_test "115-stack-info-depth" \
 mi_gdb_test "116-stack-list-frames-lite -limit 2" \
   "116\\^done,frames=\\\[0=\{pc=\"$hex\",fp=\"$hex\"\},1=\{pc=\"$hex\",fp=\"$hex\"\}\\\],valid=\"1\",count=\"9\"" "-stack-list-frames-lite -limit 2 works"
 
+mi_gdb_test "116-stack-list-frames-lite -limit 2 -names 1" \
+  "116\\^done,frames=\\\[0=\{pc=\"$hex\",fp=\"$hex\",func=\"foo8\"\},1=\{pc=\"$hex\",fp=\"$hex\",func=\"foo7\"\}\\\],valid=\"1\",count=\"9\"" "-stack-list-frames-lite -limit 2 -names works"
+
 mi_gdb_test "117-stack-list-frames-lite -limit 7" \
   "117\\^done,frames=\\\[0=\{pc=\"$hex\",fp=\"$hex\"\},1=\{pc=\"$hex\",fp=\"$hex\"\},2=\{pc=\"$hex\",fp=\"$hex\"\},3=\{pc=\"$hex\",fp=\"$hex\"\},4=\{pc=\"$hex\",fp=\"$hex\"\},5=\{pc=\"$hex\",fp=\"$hex\"\},6=\{pc=\"$hex\",fp=\"$hex\"\}\\\],valid=\"1\",count=\"9\"" "-stack-list-frames-lite -limit 7 works"
+
+mi_gdb_test "117-stack-list-frames-lite -names 1 -limit 7" \
+  "117\\^done,frames=\\\[0=\{pc=\"$hex\",fp=\"$hex\",func=\"foo8\"\},1=\{pc=\"$hex\",fp=\"$hex\",func=\"foo7\"\},2=\{pc=\"$hex\",fp=\"$hex\",func=\"foo6\"\},3=\{pc=\"$hex\",fp=\"$hex\",func=\"foo5\"\},4=\{pc=\"$hex\",fp=\"$hex\",func=\"foo4\"\},5=\{pc=\"$hex\",fp=\"$hex\",func=\"foo3\"\},6=\{pc=\"$hex\",fp=\"$hex\",func=\"foo2\"\}\\\],valid=\"1\",count=\"9\"" "-stack-list-frames-lite -names -limit 7 works"
 
 set slow_worked 0
 set fast_worked 0

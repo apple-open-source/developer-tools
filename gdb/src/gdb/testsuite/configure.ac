@@ -114,6 +114,7 @@ case "${target}" in
     *-*-darwin*) AC_OUTPUT([gdb.apple/Makefile])
                  AC_OUTPUT([gdb.apple/gused/Makefile])
                  AC_OUTPUT([gdb.apple/ld-r/Makefile])
+		 AC_OUTPUT([gdb.apple/debug-in-ofile/Makefile])
                  AC_OUTPUT([gdb.apple/xcode/Makefile]) ;;
 esac
 

@@ -2307,11 +2307,21 @@ remote_open_1 (char *name, int from_tty, struct target_ops *target,
   /* Set up to detect and load shared libraries.  */
   if (exec_bfd) 	/* No use without an exec file.  */
     {
+#ifdef MACOSX_DYLD
+      /* APPLE LOCAL: for Mac OS X remote targets, init our
+         dyld information instead of currently using the solib
+	 interface that parallels our dyld implementation.  */
+      macosx_dyld_create_inferior_hook ();
+	 
+#else /* MACOSX_DYLD */
+
 #ifdef SOLIB_CREATE_INFERIOR_HOOK
       SOLIB_CREATE_INFERIOR_HOOK (PIDGET (inferior_ptid));
 #else
       solib_create_inferior_hook ();
 #endif
+
+#endif /* MACOSX_DYLD */
       remote_check_symbols (symfile_objfile);
     }
 
@@ -4399,6 +4409,10 @@ remote_mourn_1 (struct target_ops *target)
 {
   unpush_target (target);
   generic_mourn_inferior ();
+#ifdef MACOSX_DYLD
+  extern void macosx_dyld_mourn_inferior (void);
+  macosx_dyld_mourn_inferior();
+#endif
 }
 
 /* In the extended protocol we want to be able to do things like
@@ -5418,6 +5432,12 @@ Specify the serial device it is connected to\n\
   /* APPLE LOCAL classic-inferior-support */
   remote_ops.to_async_mask_value = 0;
   remote_ops.to_magic = OPS_MAGIC;
+#ifdef MACOSX_DYLD
+  extern int dyld_lookup_and_bind_function (char *name);
+  extern int dyld_is_objfile_loaded (struct objfile *obj);
+  remote_ops.to_bind_function = dyld_lookup_and_bind_function;
+  remote_ops.to_check_is_objfile_loaded = dyld_is_objfile_loaded;
+#endif
 }
 
 /* Set up the extended remote vector by making a copy of the standard

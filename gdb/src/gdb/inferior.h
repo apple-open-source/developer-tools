@@ -471,4 +471,12 @@ extern int attach_flag;
 
 extern int start_with_shell_flag;
 
+/* APPLE LOCAL begin subroutine inlining  */
+extern void insert_step_resume_breakpoint_at_sal (struct symtab_and_line,
+						  struct frame_id);
+/* APPLE LOCAL end subroutine inlining  */
+
+/* APPLE LOCAL: Used internally to stop running the hook_stop when that
+   is not appropriate.  */
+struct cleanup *make_cleanup_suppress_hook_stop ();
 #endif /* !defined (INFERIOR_H) */

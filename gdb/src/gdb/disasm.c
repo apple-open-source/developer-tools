@@ -589,8 +589,9 @@ find_pc_offset (CORE_ADDR start, CORE_ADDR *result, int offset, int funclimit,
 
       if (index < -offset)
 	{
-	  /* We weren't able to go far enough back.  */
-	  *result = start;
+	  /* We weren't able to go far enough back; return the earliest
+             instruction of the function.  */
+	  *result = low;
 	  do_cleanups (cleanup);
 	  return 1;
 	} 

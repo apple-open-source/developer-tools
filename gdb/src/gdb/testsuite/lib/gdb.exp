@@ -1121,7 +1121,9 @@ proc gdb_file_cmd { arg } {
 # tests on different hosts all using the same server, things can
 # get really slow.  Give gdb at least 3 minutes to start up.
 #
-proc default_gdb_start { } {
+# APPLE LOCAL: I added "extra_flags" so I could add "-arch" arguments.
+
+proc default_gdb_start {extra_flags} {
     global verbose
     global GDB
     global GDBFLAGS
@@ -1131,7 +1133,7 @@ proc default_gdb_start { } {
 
     gdb_stop_suppressing_tests;
 
-    set res [default_gdb_run "$GDB -nw $GDBFLAGS [host_info gdb_opts]"]
+    set res [default_gdb_run "$GDB -nw $GDBFLAGS $extra_flags [host_info gdb_opts]"]
 
     if { $res < 0 } { return res }
 
@@ -1593,20 +1595,27 @@ proc gdb_compile {source dest type options} {
     # APPLE LOCAL start - run dsymutil on the output file if our global is set
     if {$gdb_test_apple_dsym > 0} {
 		catch { 
-			# if $gdb_test_apple_dsym is non zero, run dsymutil on the dest file
+			# if $gdb_test_apple_dsym is non zero, run dsymutil 
+                        # on the dest file
 
 			set ret [ remote_exec host "dsymutil \"${dest}\"" ]
 	  	
-			# strip the debug map if $gdb_test_apple_dsym is greater than 1 by first
-			# copying the original file by appending "_unstripped" to the $dest name
-			# and then stripping this new file and placing the result back into 
-			# $dest
+			# strip the debug map if $gdb_test_apple_dsym is 
+                        # greater than 1 by first copying the original file 
+                        # by appending "_unstripped" to the $dest name and 
+                        # then stripping this new file and placing the result 
+                        # back into $dest
 			if {$gdb_test_apple_dsym > 1} {
 				set dest_unstripped "${dest}_unstripped"
 				set ret [ remote_exec host "mv -f \"${dest}\" \"${dest_unstripped}\"" ]
 				set ret [ remote_exec host "strip -S -o \"${dest}\" \"${dest_unstripped}\"" ]
 			}
 		}
+    } else {
+        # If the compiler silently created a dSYM, or there is a pre-existing
+        # dSYM from a previous testsuite run, make sure to remove it so we're
+        # testing the non-dSYM case correctly.
+        remote_exec host "rm -rf \"${dest}.dSYM\""
     }
     # APPLE LOCAL end
     
@@ -1959,8 +1968,8 @@ proc gdb_clear_suppressed { } {
     set suppress_flag 0;
 }
 
-proc gdb_start { } {
-    default_gdb_start
+proc gdb_start {{extra_flags ""}} {
+    default_gdb_start $extra_flags
 }
 
 proc gdb_exit { } {

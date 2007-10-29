@@ -224,16 +224,30 @@ free_pending_blocks (void)
    the order the symbols have in the list (reversed from the input
    file).  Put the block on the list of pending blocks.  */
 
+/* APPLE LOCAL address ranges: Add a new parameter, RANGES, for the
+   case in which the block is contained within multiple non-contiguous
+   ranges of addresses.  EITHER the block should have a single START
+   and END value, OR it should have a RANGES value.  If RANGES is
+   non-null, then START and END will be the starting and ending
+   address of the first range in the range list.  For those debug
+   formats or architectures which do not support multiple
+   non-contiguous ranges of addressess (or in the case where a block
+   is all contained within a single contiguous address range), RANGES
+   should just be NULL.  */
+
 void
 finish_block (struct symbol *symbol, struct pending **listhead,
-	      struct pending_block *old_blocks,
-	      CORE_ADDR start, CORE_ADDR end,
-	      struct objfile *objfile)
+	      struct pending_block *old_blocks, 
+	      CORE_ADDR start, CORE_ADDR end, 
+	      /* APPLE LOCAL begin address ranges  */
+	      struct address_range_list *ranges, struct objfile *objfile)
+	      /* APPLE LOCAL end address ranges  */
 {
   struct pending *next, *next1;
   struct block *block;
   struct pending_block *pblock;
   struct pending_block *opblock;
+  int i;
 
   block = allocate_block (&objfile->objfile_obstack);
 
@@ -248,8 +262,26 @@ finish_block (struct symbol *symbol, struct pending **listhead,
 					       *listhead);
     }
 
+  /* APPLE LOCAL begin address ranges  */
+  if (ranges)
+    {
+      /* Figure out the min and max address for this block from the ranges
+         information.  */
+      for (i=0; i<ranges->nelts; i++)
+	{
+	  if (ranges->ranges[i].startaddr < start)
+	    start = ranges->ranges[i].startaddr;
+	  if (ranges->ranges[i].endaddr > end)
+	    end = ranges->ranges[i].endaddr;
+	}
+    }
+  /* APPLE LOCAL end address ranges  */
+
   BLOCK_START (block) = start;
   BLOCK_END (block) = end;
+  /* APPLE LOCAL begin address ranges  */
+  BLOCK_RANGES (block) = ranges;
+  /* APPLE LOCAL end address ranges  */
   /* Superblock filled in when containing block is made */
   BLOCK_SUPERBLOCK (block) = NULL;
   BLOCK_NAMESPACE (block) = NULL;
@@ -379,7 +411,10 @@ finish_block (struct symbol *symbol, struct pending **listhead,
   /* Check to be sure that the blocks have an end address that is
      greater than starting address */
 
-  if (BLOCK_END (block) < BLOCK_START (block))
+  /* APPLE LOCAL begin address ranges  */
+  if (!BLOCK_RANGES (block)
+      && BLOCK_END (block) < BLOCK_START (block))
+  /* APPLE LOCAL end address ranges  */
     {
       if (symbol)
 	{
@@ -396,6 +431,31 @@ finish_block (struct symbol *symbol, struct pending **listhead,
       /* Better than nothing */
       BLOCK_END (block) = BLOCK_START (block);
     }
+  /* APPLE LOCAL begin address ranges  */
+  else if (BLOCK_RANGES (block))
+    {
+      int i;
+      for (i = 0; i < BLOCK_RANGES (block)->nelts; i++)
+	if (BLOCK_RANGE_END (block, i) < BLOCK_RANGE_START (block, i))
+	  {
+	    if (symbol)
+	      {
+		complaint (&symfile_complaints,
+		     _("block end address less than block start address in %s (patched it)"),
+		     SYMBOL_PRINT_NAME (symbol));
+	      }
+	    else
+	      {
+	  complaint (&symfile_complaints,
+		     _("block end address 0x%s less than block start address 0x%s (patched it)"),
+		     paddr_nz (BLOCK_RANGE_END (block, i)), 
+		     paddr_nz (BLOCK_RANGE_START (block, i)));
+	      }
+	    /* Better than nothing */
+	    BLOCK_RANGE_END (block, i) = BLOCK_RANGE_START (block, i);
+	  }
+    }
+  /* APPLE LOCAL end address ranges  */
 #endif
 
   /* Install this block as the superblock of all blocks made since the
@@ -412,8 +472,9 @@ finish_block (struct symbol *symbol, struct pending **listhead,
 	  /* Check to be sure the blocks are nested as we receive
 	     them. If the compiler/assembler/linker work, this just
 	     burns a small amount of time.  */
-	  if (BLOCK_START (pblock->block) < BLOCK_START (block) ||
-	      BLOCK_END (pblock->block) > BLOCK_END (block))
+	  /* APPLE LOCAL begin address ranges  */
+	  if (!contained_in (pblock->block, block))
+	  /* APPLE LOCAL end address ranges  */
 	    {
 	      if (symbol)
 		{
@@ -423,6 +484,18 @@ finish_block (struct symbol *symbol, struct pending **listhead,
 		}
 	      else
 		{
+                  /* APPLE LOCAL: If you've got a function and you know
+                     its name, clap your hands.  Er, I mean, print it.  */
+                  if (pblock->block->function 
+                      && pblock->block->function->ginfo.name)
+		  complaint (&symfile_complaints,
+			     _("inner block (0x%s-0x%s '%s') not inside outer block (0x%s-0x%s)"),
+			     paddr_nz (BLOCK_START (pblock->block)),
+			     paddr_nz (BLOCK_END (pblock->block)),
+                             pblock->block->function->ginfo.name,
+			     paddr_nz (BLOCK_START (block)),
+			     paddr_nz (BLOCK_END (block)));
+                  else
 		  complaint (&symfile_complaints,
 			     _("inner block (0x%s-0x%s) not inside outer block (0x%s-0x%s)"),
 			     paddr_nz (BLOCK_START (pblock->block)),
@@ -430,10 +503,18 @@ finish_block (struct symbol *symbol, struct pending **listhead,
 			     paddr_nz (BLOCK_START (block)),
 			     paddr_nz (BLOCK_END (block)));
 		}
-	      if (BLOCK_START (pblock->block) < BLOCK_START (block))
-		BLOCK_START (pblock->block) = BLOCK_START (block);
-	      if (BLOCK_END (pblock->block) > BLOCK_END (block))
-		BLOCK_END (pblock->block) = BLOCK_END (block);
+	      /* APPLE LOCAL begin address ranges  */
+	      if (!BLOCK_RANGES (pblock->block) && !BLOCK_RANGES (block))
+		{
+		  if (BLOCK_START (pblock->block) < BLOCK_START (block))
+		    BLOCK_START (pblock->block) = BLOCK_START (block);
+		  if (BLOCK_END (pblock->block) > BLOCK_END (block))
+		    BLOCK_END (pblock->block) = BLOCK_END (block);
+                  /* Better than nothing */
+                  if (BLOCK_END (pblock->block) < BLOCK_START (block))
+		    BLOCK_END (pblock->block) = BLOCK_START (block);
+		}
+	      /* APPLE LOCAL end address ranges  */
 	    }
 #endif
 	  BLOCK_SUPERBLOCK (pblock->block) = block;
@@ -555,15 +636,17 @@ make_blockvector (struct objfile *objfile)
     {
       for (i = 1; i < BLOCKVECTOR_NBLOCKS (blockvector); i++)
 	{
-	  if (BLOCK_START (BLOCKVECTOR_BLOCK (blockvector, i - 1))
-	      > BLOCK_START (BLOCKVECTOR_BLOCK (blockvector, i)))
-	    {
-	      CORE_ADDR start
-		= BLOCK_START (BLOCKVECTOR_BLOCK (blockvector, i));
+	  /* APPLE LOCAL begin address ranges  */
+	  CORE_ADDR start1;
+	  CORE_ADDR start2;
 
-	      complaint (&symfile_complaints, _("block at %s out of order"),
-			 hex_string ((LONGEST) start));
-	    }
+	  start1 = BLOCK_LOWEST_PC (BLOCKVECTOR_BLOCK (blockvector, i - 1));
+	  start2 = BLOCK_LOWEST_PC (BLOCKVECTOR_BLOCK (blockvector, i));
+
+	  if (start1 > start2)
+	    complaint (&symfile_complaints, _("block at %s out of order"),
+		       hex_string ((LONGEST) start2));
+	  /* APPLE LOCAL end address ranges  */
 	}
     }
 #endif
@@ -742,9 +825,16 @@ pop_subfile (void)
 
 /* Add a linetable entry for line number LINE and address PC to the
    line vector for SUBFILE.  */
-
+/* APPLE LOCAL begin subroutine inlining  */
+/* The ENTRY_TYPE parameter indicates the type of line table entry
+   (see definition of enum line_table_entry_type).  END_PC wil be zero
+   for most entries, but some entries that need to specify an ending
+   address (such as entries for inlined subroutines) will have a
+   non-zero value in END_PC.  */
 void
-record_line (struct subfile *subfile, int line, CORE_ADDR pc)
+record_line (struct subfile *subfile, int line, CORE_ADDR pc, CORE_ADDR end_pc,
+	     enum line_table_entry_type  entry_type)
+/* APPLE LOCAL end subroutine inlining  */
 {
   struct linetable_entry *e;
   /* Ignore the dummy line number in libg.o */
@@ -780,6 +870,10 @@ record_line (struct subfile *subfile, int line, CORE_ADDR pc)
   e = subfile->line_vector->item + subfile->line_vector->nitems++;
   e->line = line;
   e->pc = ADDR_BITS_REMOVE(pc);
+  /* APPLE LOCAL begin subroutine inlining  */
+  e->end_pc = ADDR_BITS_REMOVE(end_pc);
+  e->entry_type = entry_type;
+  /* APPLE LOCAL end subroutine inlining  */
 }
 
 /* Needed in order to sort line tables from IBM xcoff files.  Sigh!  */
@@ -875,8 +969,10 @@ end_symtab (CORE_ADDR end_addr, struct objfile *objfile, int section)
     {
       cstk = pop_context ();
       /* Make a block for the local symbols within.  */
+      /* APPLE LOCAL begin address ranges  */
       finish_block (cstk->name, &local_symbols, cstk->old_blocks,
-		    cstk->start_addr, end_addr, objfile);
+		    cstk->start_addr, end_addr, NULL, objfile);
+      /* APPLE LOCAL end address ranges  */
 
       if (context_stack_depth > 0)
 	{
@@ -926,10 +1022,12 @@ end_symtab (CORE_ADDR end_addr, struct objfile *objfile, int section)
     {
       /* Define the STATIC_BLOCK & GLOBAL_BLOCK, and build the
          blockvector.  */
+      /* APPLE LOCAL begin address ranges  */
       finish_block (0, &file_symbols, 0, last_source_start_addr, end_addr,
-		    objfile);
+		    NULL, objfile);
       finish_block (0, &global_symbols, 0, last_source_start_addr, end_addr,
-		    objfile);
+		    NULL, objfile);
+      /* APPLE LOCAL end address ranges  */
       blockvector = make_blockvector (objfile);
       cp_finalize_namespace (BLOCKVECTOR_BLOCK (blockvector, STATIC_BLOCK),
 			     &objfile->objfile_obstack);

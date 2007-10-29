@@ -303,9 +303,10 @@ int dcc_map_input_file(int in_fd, off_t in_size, char **buf_ret);
 
 /* XXX: Kind of kludgy, we should do dynamic allocation.  But this will do for
  * now. */
-#ifndef MAXPATHLEN
-#define MAXPATHLEN 4096
+#ifdef MAXPATHLEN
+#   undef MAXPATHLEN
 #endif
+#define MAXPATHLEN 4096
 
 
 #ifndef WCOREDUMP

@@ -110,7 +110,7 @@ pef_load_library (const struct dyld_path_info *d,
         }
       else
         {
-          symbol_file_add_bfd_safe (pbfd, 0, addrs, 0, 0, e->load_flag, 0, 0);
+          symbol_file_add_bfd_safe (pbfd, 0, addrs, 0, 0, 0, e->load_flag, 0, 0, NULL);
         }
     }
 
@@ -139,7 +139,7 @@ pef_load_library (const struct dyld_path_info *d,
         }
       else
         {
-          symbol_file_add_bfd_safe (sbfd, 0, addrs, 0, 0, e->load_flag, 0, 0);
+          symbol_file_add_bfd_safe (sbfd, 0, addrs, 0, 0, 0, e->load_flag, 0, 0, NULL);
         }
     }
 }

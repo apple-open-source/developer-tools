@@ -850,7 +850,7 @@ m32r_frame_this_id (struct frame_info *next_frame,
 static void
 m32r_frame_prev_register (struct frame_info *next_frame,
 			  void **this_prologue_cache,
-			  int regnum, int *optimizedp,
+			  int regnum, enum opt_state *optimizedp,
 			  enum lval_type *lvalp, CORE_ADDR *addrp,
 			  int *realnump, void *bufferp)
 {

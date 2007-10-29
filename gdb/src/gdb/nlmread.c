@@ -183,7 +183,7 @@ nlm_symfile_read (struct objfile *objfile, int mainline)
 
   /* FIXME, should take a section_offsets param, not just an offset.  */
 
-  offset = ANOFFSET (objfile->section_offsets, 0);
+  offset = objfile_section_offset (objfile, 0);
 
   /* Process the NLM export records, which become the bfd's canonical symbol
      table. */

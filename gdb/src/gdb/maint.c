@@ -720,6 +720,241 @@ maintenance_set_profile_cmd (char *args, int from_tty, struct cmd_list_element *
 }
 #endif
 
+
+/* APPLE LOCAL: Provide "functional area" timers...  */
+struct gdb_timer
+{
+  char *name;          /* The name of this timer */
+  char *last_mssg;     /* When you start the timer, you register a mssg to */
+		       /* be printed when it is reported.  This is the mssg.  */
+  long last_start;     /* This is the clock time when the timer was last started.  */
+  long total_time;     /* This is the cumulative time on this timer.  */
+  long last_interval;  /* This is the last interval added to the timer.  */
+
+  long child_times;    /* This is the sum total of times that accrued */
+		       /* in other timers while this one was running.  */
+		       /* We subtract that from this timer's total time.  */
+};
+
+struct gdb_timer_stack
+{
+  struct gdb_timer *timer;
+  struct gdb_timer_stack *next;
+};
+
+static struct gdb_timer *timer_list;
+static struct gdb_timer_stack *timer_stack;
+static int max_timers = 0;
+static int n_timers = 0;
+int maint_use_timers = 0;
+
+/* Turns on and off printing interval timers.  Right now this
+   is an all or nothing thing.  But we could ass a timer regexp 
+   or timer list or something and check the timers against that.  */
+
+static void
+maintenance_interval_display (char *args, int from_tty)
+{
+  extern int display_time;
+
+  if (args == NULL || *args == '\0')
+    printf_unfiltered (_("\"maintenance interval\" takes a numeric argument.\n"));
+  else
+    maint_use_timers = strtol (args, NULL, 10);
+}
+
+/* init_timer makes a new timer with name NAME, and
+   returns the token for the timer.  */
+
+/* Allocate space for a new timer with name "NAME" on the timer_list.
+   This doesn't check whether the timer exists or not, but will always
+   add a new one.  */
+
+static int
+init_timer (char *name)
+{
+  int this_timer;
+
+  if (n_timers == max_timers)
+    {
+      max_timers += 64;
+      timer_list = (struct gdb_timer *) 
+	xrealloc (timer_list, max_timers * sizeof (struct gdb_timer *));
+    }
+  this_timer = n_timers;
+  n_timers++;
+
+  bzero (&timer_list[this_timer], sizeof (struct gdb_timer));
+  timer_list[this_timer].name = xstrdup (name);
+
+  return this_timer;
+}
+
+/* Push TIMER onto the timer stack.  */
+ 
+static void
+push_timer (struct gdb_timer *timer)
+{
+  struct gdb_timer_stack *next = 
+    (struct gdb_timer_stack *) xmalloc (sizeof (struct gdb_timer_stack));
+
+  next->timer = timer;
+  next->next = timer_stack;
+  timer_stack = next;
+}
+
+/* This pops the top timer from the timer stack, and 
+   also charges it's time to the next timer's child_time.  */
+
+void
+pop_timer (void)
+{
+  struct gdb_timer_stack *this_timer = timer_stack;
+  struct gdb_timer_stack *next_timer = timer_stack->next;
+
+  if (next_timer != NULL)
+    next_timer->timer->child_times += this_timer->timer->last_interval
+      + this_timer->timer->child_times;
+
+  timer_stack = next_timer;
+  xfree (this_timer);
+}
+
+/* This gets the current interval for TIMER, and charges it
+   to the timer.  */
+
+static void 
+stop_timer (struct gdb_timer *timer)
+{
+  timer->last_interval = get_run_time () - timer->last_start  - timer->child_times;
+  timer->total_time += timer->last_interval;
+}
+
+/* Print out the data for TIMER.  If LAST_INTERVAL_P is 1, we print out
+   the interval information, otherwise we just print out the total.  */
+
+static void
+report_timer_internal (struct gdb_timer *timer, int last_interval_p)
+{
+  struct cleanup *notify_cleanup;
+  notify_cleanup = make_cleanup_ui_out_notify_begin_end (uiout, "timer-data");
+
+  ui_out_text (uiout, "\n*+*+* Timer ");
+  ui_out_field_string (uiout, "name", timer->name);
+  if (last_interval_p)
+    {
+      ui_out_text (uiout, " - ");
+      ui_out_field_string (uiout, "mssg", timer->last_mssg);
+    }
+  ui_out_text (uiout, " total: ");
+  ui_out_field_fmt (uiout, "total", "%0.5f", timer->total_time/ 1000000.0);
+  if (last_interval_p)
+    {
+      ui_out_text (uiout, " interval: ");
+      ui_out_field_fmt (uiout, "interval", "%0.5f", timer->last_interval / 1000000.0);
+      ui_out_text (uiout, " child times: ");
+      ui_out_field_fmt (uiout, "child", "%0.5f", timer->child_times / 1000000.0);
+    }
+  ui_out_text (uiout, " *-*-*\n");
+  
+  if (last_interval_p)
+    xfree (timer->last_mssg);
+  do_cleanups (notify_cleanup);
+}
+
+/* Report summary times for all timers.  */
+
+static void
+maintenance_report_interval_command (char *args, int is_tty)
+{
+  int i;
+  for (i = 0; i < n_timers; i++)
+    report_timer_internal (&timer_list[i], 0);
+}
+
+/* Stops timer pointed to by PTR, reports it and pops it.
+   For now we require all timers to strictly nest, and throw
+   an error if they don't.  */
+
+static void
+stop_report_timer (void *ptr)
+{
+  struct gdb_timer *timer = (struct gdb_timer *) ptr;
+  if (timer_stack->timer != timer)
+    internal_error (__FILE__, __LINE__, "stoping timer not on top of stack: "
+		    "timer %s top of stack: %s", timer->name, timer_stack->timer->name);
+
+  stop_timer (timer);
+  report_timer_internal (timer, 1);
+  pop_timer ();
+}
+
+/* Starts timer TIMER_ID, STRING is the name associated with this
+   interval.  Returns a cleanup to stop & report it.  N.B. the timers
+   are required to strictly nest.  So be sure you stop your timer in
+   the same scope where you start it.  */
+
+struct cleanup *
+make_cleanup_start_report_timer (int timer_id, char *string)
+{
+  struct gdb_timer *timer;
+  if (timer_id == -1)
+    return make_cleanup (null_cleanup, NULL);
+
+  if (timer_id > n_timers)
+    error ("Invalid timer in start_timers");
+  
+  timer = &timer_list[timer_id];
+
+  push_timer (timer);
+  timer->last_start = get_run_time ();
+  if (string == NULL)
+    string = "<Unknown>";
+
+  timer->last_mssg = xstrdup (string);
+  timer->last_interval = 0;
+  timer->child_times = 0;
+  return make_cleanup (stop_report_timer, timer);
+}
+
+/* Finds the timer NAME or creates a new one if
+   one doesn't already exist.  Returns the timer token.  */
+
+int
+find_timer (char *name)
+{
+  int i;
+  if (maint_use_timers == 0)
+    return -1;
+
+  for (i = 0; i < n_timers; i++)
+    {
+      if (strcmp (timer_list[i].name, name) == 0)
+	return i;
+    }
+  return init_timer (name);
+}
+/* This is the easiest way to start "interval timers".  Pass in
+   a pointer to timer id TIMER_VAR.  First time you call this pass
+   in TIMER_VAR set to -1 and it will find the timer TIMER_NAME and
+   return that timer's TIMER_VAR.  After that, you can pass back
+   the value of TIMER_VAR you got, and we'll start up that timer without
+   having to do the name search.  THIS_MSSG is the message that this
+   interval will be labeled with.  It will return a cleanup you can
+   use to stop the timer.  */
+
+struct cleanup *
+start_timer (int *timer_var, char *timer_name, char *this_mssg)
+{
+  if (*timer_var == -1)
+    *timer_var = find_timer (timer_name);
+  
+  return make_cleanup_start_report_timer (*timer_var, this_mssg);	
+}
+
+
+/* END APPLE LOCAL */
+
 void
 _initialize_maint_cmds (void)
 {
@@ -808,6 +1043,16 @@ displayed, following the command's output."),
 Set the display of space usage.\n\
 If nonzero, will cause the execution space for each command to be\n\
 displayed, following the command's output."),
+	   &maintenancelist);
+
+  /* APPLE LOCAL: interval timers */
+  add_cmd ("interval", class_maintenance, maintenance_interval_display, _("\
+Set the report of low-level interval timers.\n\
+If nonzero, will cause the interval timer data to be gathered and printed."),
+	   &maintenancelist);
+
+  add_cmd ("report-interval", class_maintenance, maintenance_report_interval_command, _("\
+Report the summary values for all the low-level interval timers."),
 	   &maintenancelist);
 
   add_cmd ("type", class_maintenance, maintenance_print_type, _("\

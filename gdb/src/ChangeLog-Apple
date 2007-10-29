@@ -1,42 +1,6 @@
-2006-04-25 Stacey Pang	(stacey_pang@apple.com)
-	Adding more radars to macosx-radars.exp
-	Some are things that should have been transferred but weren't
-	because of the confusion from the merge and some are regressions
-	since Tumeric.  
+2007-01-23  Jason Molenda  (jmolenda@apple.com)
 
-2006-03-10 Stacey Pang	(stacey_pang@apple.com)
-	Adding some nice finishing touches on a few more files in gdb/bin
-	* start_tests - now moves aside useless test directories
-	* lib/TestHelper.pm - configure process has been simplified so
-	  users no longer need a .dejagnurc file to make this work -
-	  this should be helpful if the compiler group wants to run our
-	  tests because they have their own dejagnu harness and .dejagnurc
-	  files.  
-	* lib/tools/ignore_tests - removed my directory so this script can
-	  now be run by anyone no matter where it's installed.  
-	  Note: This isn't perfect ... it still requires manually mucking
-	  with the testsuite/configure script once per check-in to work.  
-	  But it's the best solution at the moment.  
-	* README - describes all of these things.  
-
-2006-03-09 Stacey Pang	(stacey_pang@apple.com)
-	Re-structuring gdb/bin diretory:
-	- README file in gdb/bin has been updated to reflect these changes.
-	- User modifiable config info and libraries are now separate from
-	main testing scripts
-	- Main testing scripts can now find the libaries and tools they
-	need even if gdb/bin directory is relocated.  This means anyone
-	should now be able to use the main testing scripts without
-	modification:  
-	* getInfo [-tools|-sys]        print software versions
-	* mv_logs                      move log files around
-	* report                       analyze and compare log files.  
-	* start_tests                  create,configure test directories
-				       and/or run tests.  
-
-2006-02-21 Stacey Pang	(stacey_pang@apple.com)
-	* Adding gdb/bin directory which contains several automated testing
-	  scripts.  
+	* configure: Regenerated with autoconf-2.61.
 
 2006-02-02  Jason Molenda  (jmolenda@apple.com)
 

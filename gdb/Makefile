@@ -1,5 +1,5 @@
 GDB_VERSION = 6.3.50-20050815
-GDB_RC_VERSION = 573
+GDB_RC_VERSION = 696
 
 BINUTILS_VERSION = 2.13-20021117
 BINUTILS_RC_VERSION = 46
@@ -18,10 +18,7 @@ BINUTILS_RC_VERSION = 46
 # the platform-variables.make file exists.
 
 OS=MACOS
--include /Developer/Makefiles/pb_makefiles/platform-variables.make
-ifndef SYSTEM_DEVELOPER_TOOLS_DOC_DIR
-SYSTEM_DEVELOPER_TOOLS_DOC_DIR=/Developer/Documentation/DeveloperTools
-endif
+SYSTEM_DEVELOPER_TOOLS_DOC_DIR=/Developer/ADC Reference Library/documentation/DeveloperTools
 
 
 ifndef RC_ARCHS
@@ -411,6 +408,11 @@ install-gdb-macosx-common: install-gdb-common
 		$(INSTALL) -c -m 644 $(SRCROOT)/src/gdb/gdb.1 $${dstroot}/$(MAN_DIR)/man1/gdb.1; \
 		perl -pi -e 's,GDB_DOCUMENTATION_DIRECTORY,$(SYSTEM_DEVELOPER_TOOLS_DOC_DIR)/gdb,' $${dstroot}/$(MAN_DIR)/man1/gdb.1; \
 		\
+		$(INSTALL) -c -d $${dstroot}/usr/local/OpenSourceLicenses; \
+		$(INSTALL) -c -d $${dstroot}/usr/local/OpenSourceVersions; \
+		$(INSTALL) -c -m 644 $(SRCROOT)/gdb.plist $${dstroot}/usr/local/OpenSourceVersions; \
+		$(INSTALL) -c -m 644 $(SRCROOT)/gdb.txt $${dstroot}/usr/local/OpenSourceLicenses; \
+		\
 		$(INSTALL) -c -d $${dstroot}/$(CONFIG_DIR); \
 		$(INSTALL) -c -m 644 $(SRCROOT)/gdb.conf $${dstroot}/$(CONFIG_DIR)/gdb.conf; \
 		\
@@ -461,13 +463,6 @@ install-gdb-fat: install-gdb-macosx-common
 
 install-binutils-macosx:
 
-# We no longer install anything in /usr/libexec/binutils -- jmolenda 2004-06-16
-#
-#	set -e; for dstroot in $(SYMROOT) $(DSTROOT); do \
-#		\
-#		$(INSTALL) -c -d $${dstroot}/$(LIBEXEC_BINUTILS_DIR); \
-#	done
-#
 	set -e; for i in $(BINUTILS_BINARIES); do \
 		instname=`echo $${i} | sed -e 's/\\-new//'`; \
 		lipo -create $(patsubst %,$(OBJROOT)/%/binutils/$${i},$(NATIVE_TARGETS)) \
@@ -480,20 +475,16 @@ install-binutils-macosx:
 # don't halt the build. 
 
 install-chmod-macosx:
-	set -e;	if [ `whoami` = 'root' ]; then \
-		for dstroot in $(SYMROOT) $(DSTROOT); do \
+	set -e; for dstroot in $(SYMROOT) $(DSTROOT); do \
 			chown -R root:wheel $${dstroot}; \
 			chmod -R  u=rwX,g=rX,o=rX $${dstroot}; \
 			chmod a+x $${dstroot}/$(LIBEXEC_GDB_DIR)/*; \
 			chmod a+x $${dstroot}/$(DEVEXEC_DIR)/*; \
-		done; \
-	fi
-	-set -e; if [ `whoami` = 'root' ]; then \
-		for dstroot in $(SYMROOT) $(DSTROOT); do \
+		done
+	-set -e; for dstroot in $(SYMROOT) $(DSTROOT); do \
 			chgrp procmod $${dstroot}/$(LIBEXEC_GDB_DIR)/gdb* && chmod g+s $${dstroot}/$(LIBEXEC_GDB_DIR)/gdb*; \
 			chgrp procmod $${dstroot}/$(LIBEXEC_GDB_DIR)/plugins/MacsBug/MacsBug_plugin && chmod g+s $${dstroot}/$(LIBEXEC_GDB_DIR)/plugins/MacsBug/MacsBug_plugin; \
-		done; \
-	fi
+		done
 
 install-source:
 	$(INSTALL) -c -d $(DSTROOT)/$(SOURCE_DIR)
@@ -598,10 +589,14 @@ ifeq "$(CANONICAL_ARCHS)" "powerpc-apple-darwin"
 	$(SUBMAKE) install-macsbug
 endif
 endif
+	$(SUBMAKE) install-libcheckpoint
 	$(SUBMAKE) install-chmod-macosx
 
 install-macsbug:
 	$(SUBMAKE) -C $(SRCROOT)/macsbug GDB_BUILD_ROOT=$(DSTROOT) BINUTILS_BUILD_ROOT=$(DSTROOT) SRCROOT=$(SRCROOT)/macsbug OBJROOT=$(OBJROOT)/powerpc-apple-darwin--powerpc-apple-darwin/macsbug SYMROOT=$(SYMROOT) DSTROOT=$(DSTROOT) install
+ 
+install-libcheckpoint:
+	$(SUBMAKE) -C $(SRCROOT)/libcheckpoint GDB_BUILD_ROOT=$(DSTROOT) BINUTILS_BUILD_ROOT=$(DSTROOT) SRCROOT=$(SRCROOT)/libcheckpoint OBJROOT=$(OBJROOT)/libcheckpoint SYMROOT=$(SYMROOT) DSTROOT=$(DSTROOT) install
  
 install:
 	$(SUBMAKE) check-args
@@ -624,5 +619,10 @@ installsrc:
 
 
 check:
-	[ -z "`find . -name \*~ -o -name .\#\*`" ] || \
-		(echo 'Emacs or CVS backup files present; not copying.' && exit 1)
+	@[ -z "`find . -name \*~ -o -name .\#\*`" ] || \
+	   (echo; echo 'Emacs or CVS backup files present; not copying:'; \
+           find . \( -name \*~ -o -name .#\* \) -print | sed 's,^[.]/,  ,'; \
+           echo Suggest: ; \
+           echo '    ' find . \\\( -name \\\*~ -o -name .#\\\* \\\) -exec rm -f \{\} \\\; -print ; \
+           echo; \
+           exit 1)

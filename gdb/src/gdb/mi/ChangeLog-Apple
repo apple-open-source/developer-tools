@@ -1,3 +1,112 @@
+2007-06-21  Jim Ingham  <jingham@apple.com>
+
+	* mi-main.c (mi_execute_async_cli_command): Use -1 to
+	indicate "no cleanup registered", not NULL.
+	(mi_exec_async_cli_cmd_continuation): Ditto.
+	(mi_setup_continuation_arg): Ditto.
+	
+2007-06-18  Jim Ingham  <jingham@apple.com>
+
+	* mi-cmds.c: Add file-add-dsym.
+	
+2007-06-04  Jim Ingham  <jingham@apple.com>
+
+	* mi-main.c (mi_exec_error_cleanup): New function.
+	(mi_execute_async_cli_command): Register an exec_error_cleanup.
+	(mi_exec_async_cli_cmd_continuation): Discard the exec_error
+	cleanup if all went well.
+	(mi_setup_continuation_arg): Initialize the pointer to the 
+	exec_error_cleanup.
+	
+2007-05-07  Jim Ingham  <jingham@apple.com>
+
+	* mi-interp.c (mi_insert_notify_hooks): Add the hand_call_function
+	hook.
+	(mi_remove_notify_hooks): Remove it.
+	* mi-main.c (mi_interp_hand_call_function_hook): New function.
+	* mi-main.h: Declare mi_interp_hand_call_function_hook.
+	
+2007-04-30  Jim Ingham  <jingham@apple.com>
+
+	* mi-cmd-stack.c (print_syms_for_block): Print LOC_CONST if we
+	are printing consts.
+	(mi_cmd_stack_check_threads): New function.
+	* mi-cmds.c: Add stack-check-threads.
+	* mi-cmds.h: Declare mi_cmd_stack_check_threads.
+	
+2007-04-05  Jason Molenda  (jmolenda@apple.com)
+
+	* mi-cmd-stack.c (list_args_or_locals): Don't print an error
+	message when no blockvector is found (no source for this frame).
+
+2007-03-15  Jim Ingham  <jingham@apple.com>
+
+	* mi-cmd-break.c (mi_cmd_break_watch): Parse out the "-l" flag.
+	
+2007-03-08  Jim Ingham  <jingham@apple.com>
+
+	* mi-cmds.c: Add "gc-roots" and "gc-references".
+	
+2007-02-01  Caroline Tice  <ctice@apple.com>
+
+	* mi-cmd-var.c (mi_cmd_var_create): Add new argument to call to
+	decode_line_1.
+	    
+2007-01-25  Jim Ingham  <jingham@apple.com>
+
+	* mi-cmds.c: Add malloc-history command.
+	
+2006-11-02  Caroline Tice <ctice@apple.com>
+
+        * mi-cmd-stack.c (list_args_or_locals): Replace testing endaddr
+	vs. BLOCK_END with call to contained_in.
+	* mi-main.c (mi_cmd_thread_set_pc): Replace BLOCK_START with
+	BLOCK_LOWEST_PC.
+
+2006-10-31  Jim Ingham  <jingham@apple.com>
+
+	* mi-cmd-stack.c (mi_print_frame_info_lite_base): New function.
+	* (mi_print_frame_info_with_names_lite): New function.
+	* (mi_print_frame_info_lite): Use mi_print_frame_info_lite_base.
+	* (mi_cmd_stack_list_frames_lite): Take -names (0|1), and print
+	function names if this is on.
+	
+2006-09-21  Jim Ingham  <jingham@apple.com>
+
+	* mi-cmd-break.c (mi_async_breakpoint_resolve_event): Add a field to 
+	tell whether the condition was successfully parsed or not.
+	
+2006-08-04  Caroline Tice  (ctice@apple.com)
+
+	* mi-interp.c (mi_cmd_interpreter_exec): Output the appropriate mi
+	messages if stepping into an inlined subroutine via a "console-quoted"
+	command.
+
+2006-08-01  Caroline Tice  (ctice@apple.com)
+
+	* mi-main.c (mi-common.h):  Add new include statement.
+	(mi_execute_async_cli_command):  Output the appropriate messages if
+	stepping into an inlined subroutine (Code moved from execute_command
+	and step_once to here).
+
+2006-07-17  Jason Molenda  (jmolenda@apple.com)
+
+	* mi-main.c (print_diff): Cast new tv_sec and tv_usec types to
+	int for printing.
+
+2006-07-12  Caroline Tice  <ctice@apple.com>
+
+	* mi-cmd-stack.c (inlining.h): New include statement.
+	(mi_cmd_stack_list_frames): Add call to 
+	clear_inlined_subroutine_print_frames.
+	* mi-main.c (inlining.h): New include statement.
+	(mi_cmd_thread_set_pc):  Check to see if the stop_pc has changed since
+	the last time global_inlined_call_stack was updated, and if so
+	re-update global_inlined_call_stack.
+	(mi_execute_async_cli_command): Don't make it an error for the target 
+	not to have executed, if the user requested to 'step' at an inlined
+	subroutine call site.
+
 2006-03-31  Jason Molenda  (jmolenda@apple.com)
 
 	* mi-cmd-stack.c (mi_cmd_file_list_statics): Raise the load level of

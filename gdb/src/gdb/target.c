@@ -40,7 +40,7 @@
 #include "event-loop.h"
 #include "memattr.h"
 #include "gdbcore.h"
-
+#include "checkpoint.h" /* for checkpoint_clear_inferior */
 static void target_info (char *, int);
 
 static void maybe_kill_then_attach (char *, int);
@@ -1819,6 +1819,7 @@ generic_mourn_inferior (void)
   registers_changed ();
 
   value_clear_inferior_string_pool ();
+  checkpoint_clear_inferior ();
 
   reopen_exec_file ();
   reinit_frame_cache ();

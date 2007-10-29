@@ -65,6 +65,8 @@ mi_gdb_test {-var-evaluate-expression var1.public.#anon#2.public.d} {.*value="3"
 
 mi_gdb_test {-var-evaluate-expression var1.public.#anon#2.public.e} {.*value="4"} {value of var1.public.#anon#2.public.e}
 
+    mi_gdb_test {-var-info-path-expression var1.public.#anon#1.public.b} {.*path_expr="\(\(mine\)\.b\)"} {-var-info-path-expression works for var1.public.#anon#1.public.b}
+
 mi_gdb_test {-var-list-children var1.private} {.*numchild="3",children=\[child={name="var1.private.f",exp="f",numchild="0",type="int",typecode="INT",dynamic_type=""},child={name="var1.private.#anon#1",exp="",numchild="1",type="[^"]*",typecode="UNION",dynamic_type=""},child={name="var1.private.#anon#2",exp="",numchild="1",type="[^"]*",typecode="STRUCT",dynamic_type=""}\]} {list children of var1.private}
 
 mi_gdb_test {-var-evaluate-expression var1.private.f} {.*value="5"} {value of var1.private.f}

@@ -230,7 +230,8 @@ CORE_ADDR hppa_symbol_address(const char *sym);
 extern void
   hppa_frame_prev_register_helper (struct frame_info *next_frame,
 				   struct trad_frame_saved_reg *saved_regs,
-				   int regnum, int *optimizedp,
+				   /* APPLE LOCAL variable opt states.  */
+				   int regnum, enum opt_state *optimizedp,
 				   enum lval_type *lvalp, CORE_ADDR *addrp,
 				   int *realnump, gdb_byte *valuep);
 

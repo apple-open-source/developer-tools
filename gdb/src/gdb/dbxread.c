@@ -555,7 +555,9 @@ record_minimal_symbol (char *name, CORE_ADDR address, int type,
          Record it as global even if it's local, not global, so
          lookup_minimal_symbol can find it.  We don't check symbol_leading_char
          because for SunOS4 it always is '_'.  */
-      if (name[8] == 'C' && strcmp ("__DYNAMIC", name) == 0)
+      /* APPLE LOCAL: Don't try to optimize this by checking name[8] == 'C' --
+         that can crash gdb if we have a name shorter than 8 chars long.  */
+      if (strcmp ("__DYNAMIC", name) == 0)
 	ms_type = mst_data;
 
       /* Same with virtual function tables, both global and static.  */
@@ -608,6 +610,13 @@ dbx_symfile_read (struct objfile *objfile, int mainline)
   struct cleanup *back_to;
   file_ptr dbx_symtab_offset;
   int dbx_symtab_count;
+  /* APPLE LOCAL: timers */
+  static int timer = -1;
+  struct cleanup *timer_cleanup;
+
+  if (maint_use_timers)
+    timer_cleanup = start_timer (&timer, "dbx_symfile_read", 
+				 objfile->name ? objfile->name : "<unknown>");
 
   sym_bfd = objfile->obfd;
 
@@ -684,6 +693,8 @@ dbx_symfile_read (struct objfile *objfile, int mainline)
 #endif
 
   do_cleanups (back_to);
+  if (maint_use_timers)
+    do_cleanups (timer_cleanup);
 }
 
 /* Initialize anything that needs initializing when a completely new
@@ -1267,17 +1278,17 @@ read_dbx_dynamic_symtab (struct objfile *objfile)
 
 	  if (bfd_get_section_flags (abfd, sec) & SEC_CODE)
 	    {
-	      sym_value += ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile));
+	      sym_value += objfile_text_section_offset (objfile);
 	      type = N_TEXT;
 	    }
 	  else if (bfd_get_section_flags (abfd, sec) & SEC_DATA)
 	    {
-	      sym_value += ANOFFSET (objfile->section_offsets, SECT_OFF_DATA (objfile));
+	      sym_value += objfile_data_section_offset (objfile);
 	      type = N_DATA;
 	    }
 	  else if (bfd_get_section_flags (abfd, sec) & SEC_ALLOC)
 	    {
-	      sym_value += ANOFFSET (objfile->section_offsets, SECT_OFF_BSS (objfile));
+	      sym_value += objfile_bss_section_offset (objfile);
 	      type = N_BSS;
 	    }
 	  else
@@ -1318,7 +1329,7 @@ read_dbx_dynamic_symtab (struct objfile *objfile)
     {
       arelent *rel = *relptr;
       CORE_ADDR address =
-      rel->address + ANOFFSET (objfile->section_offsets, SECT_OFF_DATA (objfile));
+      rel->address + objfile_data_section_offset (objfile);
 
       switch (bfd_get_arch (abfd))
 	{
@@ -1478,6 +1489,57 @@ end_oso_pst_list (struct oso_pst_list *list, struct objfile *objfile)
 
 /* Setup partial_symtab's describing each source file for which
    debugging information is available. */
+/* APPLE LOCAL: OSO names can be of the form: foo.a(bar.o).  This routine
+   will check OSO_NAME, and if it is not an archive will return 0.  If it
+   is an archive it will return 1.  Also if ARCHIVE_NAME is non null, it
+   will malloc a copy of the path to the archive file. And if MODULE_NAME
+   is not NULL, it will allocate a copy of the member name.
+  
+   FIXME: At present, ld doesn't backslash protect parenthesis in
+   filenames, so there's really no way we can deal with the case where
+   a file name or archive name has a '(' in it.  */
+
+int
+parse_archive_name (char *oso_name, char **archive_name, char **module_name)
+{
+  char *lparen;
+  int ar_name_len;
+  int oso_name_len = strlen (oso_name);
+  if (oso_name[oso_name_len - 1] != ')')
+    return 0;
+
+  if (archive_name == NULL && module_name == NULL)
+    return 1;
+
+  lparen = strrchr (oso_name, '(');
+  if (lparen == NULL)
+    return 0;
+
+  ar_name_len = lparen - oso_name;
+  if (archive_name != NULL)
+    {
+      char *copy;
+      copy = (char *) xmalloc ((ar_name_len  + 1) 
+			       * sizeof (char));
+      memcpy (copy, oso_name, ar_name_len);
+      copy[ar_name_len] = '\0';
+      *archive_name = copy;
+    }
+
+  if (module_name != NULL)
+    {
+      char *copy;
+      int module_name_len;
+      module_name_len = oso_name_len - ar_name_len - 2;
+      copy = (char *) xmalloc ((module_name_len + 1)
+			       * sizeof (char));
+      memcpy (copy, oso_name + ar_name_len + 1, 
+	      module_name_len);
+      copy[module_name_len] = '\0';
+      *module_name = copy;
+    }
+  return 1;
+}
 
 /* APPLE LOCAL: pass in the # of stab nlist records we're going to parse. */
 static void
@@ -1547,6 +1609,13 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
 
   /* When we have a dSYM file associated with this objfile, this is set.  */
   int have_dsym_file = objfile->separate_debug_objfile != NULL;
+
+  /* If the objfile is a kext we need both the dSYM (with the ld -r'ed debug
+     info of the kext) plus the debug map output from kextload when the kext
+     was loaded into the kernel.  Pretend we don't have a dSYM at this point
+     so we'll parse the debug map as we normally would.  */
+  if (objfile->not_loaded_kext_filename)
+    have_dsym_file = 0;
 
   /* END APPLE LOCAL */
 
@@ -1681,19 +1750,19 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
 
 	  case N_TEXT | N_EXT:
 	  case N_NBTEXT | N_EXT:
-	  nlist.n_value += ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile));
+	  nlist.n_value += objfile_text_section_offset (objfile);
 	  goto record_it;
 
 	  case N_DATA | N_EXT:
 	  case N_NBDATA | N_EXT:
-	  nlist.n_value += ANOFFSET (objfile->section_offsets, SECT_OFF_DATA (objfile));
+	  nlist.n_value += objfile_data_section_offset (objfile);
 	  goto record_it;
 
 	  case N_BSS:
 	  case N_BSS | N_EXT:
 	  case N_NBBSS | N_EXT:
 	  case N_SETV | N_EXT:		/* FIXME, is this in BSS? */
-	  nlist.n_value += ANOFFSET (objfile->section_offsets, SECT_OFF_BSS (objfile));
+	  nlist.n_value += objfile_bss_section_offset (objfile);
 	  goto record_it;
 
 	  case N_ABS | N_EXT:
@@ -1703,7 +1772,7 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
                These are not the symbols we use to do the mapping
                from PC to stub target.  So we need to suppress
                reading these in.  */
-#ifdef NM_NEXTSTEP
+#ifdef TM_NEXTSTEP
             if (sect_p && !macosx_record_symbols_from_sect_p (objfile->obfd,
                                                               nlist.n_type,
                                                               nlist.n_other))
@@ -1739,7 +1808,7 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
 	  case N_FN:
 	  case N_FN_SEQ:
 	  case N_TEXT:
-	  nlist.n_value += ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile));
+	  nlist.n_value += objfile_text_section_offset (objfile);
 	  /* APPLE LOCAL symbol prefixes */
 	  namestring = set_namestring (objfile, nlist, prefix);
 
@@ -1802,16 +1871,14 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
           /* Function beginning N_FUN */
           if (nlist.n_type == N_FUN)
             {
-              nlist.n_value += ANOFFSET (objfile->section_offsets, 
-                                         SECT_OFF_TEXT (objfile));
+              nlist.n_value += objfile_text_section_offset (objfile);
               if (textlow_not_set)
                 {
                   pst->textlow = nlist.n_value;
                   textlow_not_set = 0;
                 }
               if (pst->textlow > nlist.n_value
-                  && nlist.n_value != ANOFFSET (objfile->section_offsets,
-                                                SECT_OFF_TEXT (objfile)))
+                  && nlist.n_value != objfile_text_section_offset (objfile))
                 {
                   pst->textlow = nlist.n_value;
                 }
@@ -1877,8 +1944,7 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
 
           if (nlist.n_type == N_STSYM || name_has_dot_in_it)
             {
-              nlist.n_value += ANOFFSET (objfile->section_offsets, 
-                                         data_sect_index);
+              nlist.n_value += objfile_section_offset (objfile, data_sect_index);
               add_psymbol_to_list (namestring, strlen (namestring),
                                    VAR_DOMAIN, LOC_STATIC,
                                    &objfile->static_psymbols,
@@ -1889,8 +1955,7 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
 
           if (nlist.n_type == N_GSYM && !name_has_dot_in_it)
             {
-              nlist.n_value += ANOFFSET (objfile->section_offsets, 
-                                         data_sect_index);
+              nlist.n_value += objfile_section_offset (objfile, data_sect_index);
               add_psymbol_to_list (namestring, strlen (namestring),
                                    VAR_DOMAIN, LOC_STATIC,
                                    &objfile->global_psymbols,
@@ -1905,7 +1970,7 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
 	  char *p;
 
 	  case N_DATA:
-	  nlist.n_value += ANOFFSET (objfile->section_offsets, SECT_OFF_DATA (objfile));
+	  nlist.n_value += objfile_data_section_offset (objfile);
 	  goto record_it;
 
 	  case N_UNDF | N_EXT:
@@ -1985,7 +2050,7 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
 	    static char *dirname_nso;
 	    int prev_textlow_not_set;
 
-	    valu = nlist.n_value + ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile));
+	    valu = nlist.n_value + objfile_text_section_offset (objfile);
 
 	    prev_textlow_not_set = textlow_not_set;
 
@@ -2076,10 +2141,10 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
 		    char *oso_namestring;
 		    struct stat buf;
 		    int stat_ret;
-		    char *maybe_dot_a_name;
+		    char *dot_a_name;
 
-		    /* Don't create a psymtab for files that are debug map entries
-		       when we have a dSYM file.  */
+		    /* Don't create a psymtab for files that are debug map
+		       entries when we have a dSYM file.  */
 		    if (have_dsym_file)
 		      {
 			in_dwarf_debug_map = 1;
@@ -2087,36 +2152,24 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
 		      }
 
 		    oso_namestring = set_namestring (objfile, next_nlist, NULL);
-		    maybe_dot_a_name = oso_namestring;
-
-		    /* If the debug info is in an archive file, then the OSO string
-		       will be "/foo/bar/baz.a(blubby.o)" so we need to peel off
-		       the parentheses, and put the archive name in MAYBE_DOT_A_NAME.  
-		       FIXME - We are stripping off the (foo.o) in two places now.
-		       We should probably make a function out of this.
-		       FIXME - won't work if your object file has a '(' in the name.  
-		       FIXME - Should we cache missing .a files, since we are
-		       going to look them up once per missing .o file in the .a?  */
-		    if (oso_namestring[strlen (oso_namestring) - 1] == ')')
+		    if (parse_archive_name (oso_namestring, &dot_a_name, NULL))
 		      {
-			int dot_a_name_len;
-			char *l_paren;
-			l_paren = strrchr (oso_namestring, '(');
-			if (l_paren != NULL)
-			  {
-			    dot_a_name_len = l_paren - oso_namestring;
-			    maybe_dot_a_name = (char *) xmalloc ((dot_a_name_len  + 1) 
-								 * sizeof (char));
-			    memcpy (maybe_dot_a_name, oso_namestring, dot_a_name_len);
-			    maybe_dot_a_name[dot_a_name_len] = '\0';
-			  }
+			stat_ret = stat (dot_a_name, &buf);
+			xfree (dot_a_name);
 		      }
+		    else
+			stat_ret = stat (oso_namestring, &buf);
 
-		    stat_ret = stat (maybe_dot_a_name, &buf);
-		    if (oso_namestring != maybe_dot_a_name)
-		      xfree (maybe_dot_a_name);
+                    /* kexts are special fun.  If this is a kext with an
+                       associated dSYM (we suppressed have_dsym_file earlier in
+                       this case) then we need the symbol addresses from the
+                       debug map but none of the .o files are present - and
+                       we don't care so skip the stat() test.  
+                       If this is a kext without a dSYM then we should look 
+                       for the .o files.  */
 
-		    if (stat_ret != 0)
+		    if (stat_ret != 0
+                        && objfile->not_loaded_kext_filename == NULL)
 		      {
 			warning ("Could not find object file \"%s\" - no debug "
 				 "information available for \"%s\".\n",
@@ -2232,11 +2285,17 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
                 /* Override the stabs psymtab->symtab expander func.  */
                 pst->read_symtab = dwarf2_debug_map_psymtab_to_symtab;
 
-                /* A DWARF debug map doesn't have function statics
-                   ordered with the functions so we have a single
-                   oso_fun_list struct which no name that all of
-                   the function statics hang off of. */
+                /* A DWARF debug map we put the function static data in the
+                   psymtab itself so we don't use this.  */
                 PSYMTAB_OSO_STATICS (pst) = NULL;
+		/* At this point, we should read in the pubtypes table for this 
+		   pst.  But only if we DON'T have a dSYM file for this psymtab.  
+		   Also obey the read_type_psym_p flag, and don't do the scan
+		   if we are asked not to.  */
+		if (read_type_psym_p && objfile->separate_debug_objfile == NULL
+                    && objfile->not_loaded_kext_filename == NULL)
+		  dwarf2_scan_pubtype_for_psymbols (pst, objfile, 
+						    psymtab_language);
               }
 
             continue;
@@ -2452,7 +2511,7 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
 
 		new_static = (struct oso_fun_static *) xmalloc (sizeof (struct oso_fun_static));
 		new_static->address = nlist.n_value 
-		  + ANOFFSET (objfile->section_offsets, data_sect_index);
+		  + objfile_section_offset (objfile, data_sect_index);
 		sym_name_len = p - namestring;
 		new_static->name = xmalloc (sym_name_len + 1);
 		strncpy (new_static->name, namestring, sym_name_len);
@@ -2472,7 +2531,7 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
 	      }
 	    continue;
 	  case 'S':
-	    nlist.n_value += ANOFFSET (objfile->section_offsets, data_sect_index);
+	    nlist.n_value += objfile_section_offset (objfile, data_sect_index);
 #ifdef STATIC_TRANSFORM_NAME
 	    namestring = STATIC_TRANSFORM_NAME (namestring);
 #endif
@@ -2483,7 +2542,7 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
 				 psymtab_language, objfile);
 	    continue;
 	  case 'G':
-	    nlist.n_value += ANOFFSET (objfile->section_offsets, data_sect_index);
+	    nlist.n_value += objfile_section_offset (objfile, data_sect_index);
 	    /* The addresses in these entries are reported to be
 	       wrong.  See the code that reads 'G's for symtabs. */
 	    add_psymbol_to_list (namestring, p - namestring,
@@ -2627,7 +2686,7 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
 		function_outside_compilation_unit_complaint (name);
 		xfree (name);
 	      }
-	    nlist.n_value += ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile));
+	    nlist.n_value += objfile_text_section_offset (objfile);
 	    /* Kludges for ELF/STABS with Sun ACC */
 	    /* FIXME: namestring is not necessarily a pointer into the string table.
 	       If you pass a non-null "prefix" to set_namestring, then it reuses a static
@@ -2637,8 +2696,7 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
 #ifdef SOFUN_ADDRESS_MAYBE_MISSING
 	    /* Do not fix textlow==0 for .o or NLM files, as 0 is a legit
 	       value for the bottom of the text seg in those cases. */
-	    if (nlist.n_value == ANOFFSET (objfile->section_offsets, 
-					   SECT_OFF_TEXT (objfile)))
+	    if (nlist.n_value == objfile_text_section_offset (objfile))
 	      {
 		CORE_ADDR minsym_valu = 
 		  find_stab_function_addr (namestring, pst->filename, objfile);
@@ -2670,8 +2728,7 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
 		&& (textlow_not_set
 		    || (nlist.n_value < pst->textlow
 			&& (nlist.n_value
-			    != ANOFFSET (objfile->section_offsets,
-					 SECT_OFF_TEXT (objfile))))))
+			    != objfile_text_section_offset (objfile)))))
 	      {
 		pst->textlow = nlist.n_value;
 		textlow_not_set = 0;
@@ -2899,7 +2956,7 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
       /* Don't set pst->texthigh lower than it already is.  */
       CORE_ADDR text_end =
 	(lowest_text_address == (CORE_ADDR) -1
-	 ? (text_addr + ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile)))
+	 ? (text_addr + objfile_text_section_offset (objfile))
 	 : lowest_text_address)
 	+ text_size;
 
@@ -2910,7 +2967,8 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
       in_dwarf_debug_map = 0;
       missing_oso_file = 0;
     }
-
+  
+  clear_containing_archive_cache ();
   do_cleanups (back_to);
 }
 
@@ -3150,6 +3208,86 @@ end_psymtab (struct partial_symtab *pst, char **include_list, int num_includes,
   return pst;
 }
 
+/* This is a convenience routine for closing off the "containing archive"
+   that is passed to you from open_bfd_from_oso.  It closes all the bfd's
+   that you might have opened searching for the right architecture file in
+   a fat file, and then looking for the member within the archive.  So you
+   can't hold onto any of these bfd's after calling this.  */
+
+static void
+close_containing_archive_and_contents (bfd *containing_archive)
+{
+  bfd_free_cached_info (containing_archive);
+  bfd_close (containing_archive);
+}
+
+/* For DWARF files with debug info in .o files, we scan all the .o's for type
+   symbols in the "pubtypes" section.  If the debug info is from an archive file
+   we'll end up opening & closing that .a file MANY times.  So this array stores
+   the a cache of the archives .a files that we've opened.  
+   The use pattern should be that whenever you use find_bfd_from_oso, if CACHED is
+   returned true, then don't close the bfd you were looking at, but rather when you're
+   all done with the objfile you were looking in, call clear_containing_archive_cache.
+*/
+  
+#define PUBTYPE_ARCHIVES_CHUNK 10
+static struct bfd **pubtype_bfd_array;
+static int num_archives_for_pubtypes;
+static int max_num_archives_for_pubtypes;
+
+static bfd *
+find_in_containing_archive_cache (char *archive_name)
+{
+  int i;
+  for (i = 0; i < num_archives_for_pubtypes; i++)
+    {
+      if (strcmp (archive_name, pubtype_bfd_array[i]->filename) == 0)
+	{
+	  return pubtype_bfd_array[i];
+	}
+    }
+  return NULL;
+}
+
+/* Adds CONTAINING_ARCHIVE to the archive cache.  */
+
+static void
+add_to_containing_archive_cache (bfd *containing_archive)
+{
+  
+  int i;
+
+  /* This is a fast check, and if somebody inadvertently adds
+     the same bfd twice, we'll crash when we go to clear the
+     cache, it's worth doing it here.  */
+
+  for (i = 0; i < num_archives_for_pubtypes; i++)
+    if (pubtype_bfd_array[i] == containing_archive)
+      return;
+
+  if (num_archives_for_pubtypes == max_num_archives_for_pubtypes)
+    {
+      max_num_archives_for_pubtypes += PUBTYPE_ARCHIVES_CHUNK;
+      pubtype_bfd_array 
+	= xrealloc (pubtype_bfd_array, 
+		    max_num_archives_for_pubtypes * sizeof (struct bfd *)); 
+    }
+
+  pubtype_bfd_array[num_archives_for_pubtypes++]
+    = containing_archive;
+}
+
+void
+clear_containing_archive_cache ()
+{
+  while (num_archives_for_pubtypes > 0)
+    {
+      struct bfd *archive = pubtype_bfd_array[--num_archives_for_pubtypes];
+      pubtype_bfd_array[num_archives_for_pubtypes] = NULL;
+      close_containing_archive_and_contents (archive);
+    }
+}
+
 /* Given OSO_NAME, returns the bfd for the .o file containing
    that .o.  If the .o is fat, it returns the fork for the current
    architecture.  If the name is of the form:
@@ -3157,67 +3295,42 @@ end_psymtab (struct partial_symtab *pst, char **include_list, int num_includes,
    /Foo/Bar/libfoo.a(member.o)
 
    Then we will iterate through the archive and find the bfd for
-   the .o in question.  In this case, if CONTAINING_ARCHIVE is not
-   null, we will also set that to the archive file, so you can close
-   it when you are done.  
+   the .o in question.  In this case, we'll return CACHED true.
+   If CACHED is true, don't delete the bfd, but rather call
+   clear_containing_archive_cache.  That will close the bfd
+   and anything else we opened to find it.  Note, you don't need
+   to do this till you're all done with looking through the archive,
+   and this will save reopening it over and over.
+
    When we find the bfd, we check its mtime against the OSO_MTIME and
    warn if the times don't match.  */
 
 struct bfd *
-open_bfd_from_oso (struct partial_symtab *pst, bfd **containing_archive)
+open_bfd_from_oso (struct partial_symtab *pst, int *cached)
 {
   struct bfd *oso_bfd, *retval;
-  char *paren_begin;
   long mtime;
   char *oso_name;
   long oso_mtime;
+  char *archive_name;
+  char *member_name;
 
-  if (containing_archive != NULL)
-    *containing_archive = NULL;
+  *cached = 0;
 
   oso_name = PSYMTAB_OSO_NAME (pst);
   oso_mtime = PSYMTAB_OSO_MTIME (pst);
-  /* Be careful here, the paren begin may be part of the
-     path or the file name.  So only process it as an
-     archive name if the name string ENDS with a close
-     paren.  
-     FIXME: I am not handling all possible cases here,
-     if you had a .o file called foo(bar.o, then I would
-     think the module is called bar.o.  But if you do that,
-     then you deserve to be spanked just a little bit.  */
 
-  paren_begin = strrchr (oso_name, '(');
-  if (paren_begin != NULL)
-    {
-      char *paren_end;
-      paren_end = strrchr (oso_name, ')');
-      if (!paren_end || paren_end[1] != '\0')
-	paren_begin = NULL;
-    }
-
-  if (paren_begin == NULL 
-      || paren_begin == oso_name
-      || paren_begin[-1] == '\\')
+  if (parse_archive_name (oso_name, &archive_name, &member_name) == 0)
     {
       oso_bfd = bfd_openr (oso_name, gnutarget);
       if (!oso_bfd)
         {
 	  /* Only error if we do not have a separate debug objfile (dSYM).  */
 	  if (pst->objfile && pst->objfile->separate_debug_objfile != NULL)
-	    {
-	      return NULL;
-	    }
+            return NULL;
 	  else
-	    {
-	      if (strncmp ("/private/var/tmp", oso_name, 16) == 0)
-		error ("Could not find object file \"%s\".\n"
-		       "Did you remember to compile with "
-		       "--save-temps on the gcc compile line?", oso_name);
-	      else
-		error ("Could not find object file: \"%s\"", oso_name);
-	    }
+            error ("Could not find object file: \"%s\"", oso_name);
         }
-
       if (bfd_check_format (oso_bfd, bfd_archive))
 	{
 	  oso_bfd = open_bfd_matching_arch (oso_bfd, bfd_object);
@@ -3231,62 +3344,61 @@ open_bfd_from_oso (struct partial_symtab *pst, bfd **containing_archive)
     }
   else
     {
-      char *archive_name, *member_name, *member_begin, *member_end;
-      int archive_len, member_len;
       struct bfd *archive_bfd, *member_bfd;
       struct stat member_statbuf;
       int status;
+      struct cleanup *free_archive_name, *free_member_name;
+      free_member_name = make_cleanup (xfree, member_name);
+      free_archive_name = make_cleanup (xfree, archive_name);
 
-      archive_len = paren_begin - oso_name;
-      archive_name = alloca (archive_len + 1);
-      archive_name = strncpy (archive_name, oso_name, archive_len);
-      archive_name[archive_len] = '\0';
-      
-      archive_bfd = bfd_openr (archive_name, gnutarget);
+      archive_bfd = find_in_containing_archive_cache (archive_name);
       if (archive_bfd == NULL)
 	{
-	  warning ("Could not open OSO archive file \"%s\"", archive_name);
-	  return NULL;
+	  archive_bfd = bfd_openr (archive_name, gnutarget);
+	  if (archive_bfd == NULL)
+	    {
+	      warning ("Could not open OSO archive file \"%s\"", archive_name);
+	      retval = NULL;
+	      goto do_cleanups;
+	    }
+	  add_to_containing_archive_cache (archive_bfd);
 	}
+      *cached = 1;
+
+      /* If we got here, the archive_bfd archive_name now belongs to the 
+         archive, so we can't free it.  */
+
+      discard_cleanups (free_archive_name);
       if (!bfd_check_format (archive_bfd, bfd_archive))
 	{
 	  warning ("OSO archive file \"%s\" not an archive.",archive_name);
-	  return NULL;
+	  retval = NULL;
+	  goto do_cleanups;
 	}
-      if (strcmp(archive_bfd->xvec->name, "mach-o-fat") == 0)
+
+      if (strcmp (archive_bfd->xvec->name, "mach-o-fat") == 0)
 	{
 	  /* GRRR...  Archives of type mach-o-fat are fat files, not 
 	     .a files.  So look for the .a file matching the current'
 	     architecture.  */
 	  archive_bfd = open_bfd_matching_arch (archive_bfd, bfd_archive);
+
 	  if (archive_bfd == NULL)
 	    {
 	      warning ("Could not open fork matching current "
 		       "architecture for OSO archive \"%s\"",
 		       archive_name);
-	      return NULL;
+	      goto do_cleanups;
+	      retval = NULL;
 	    }
 	  if (!bfd_check_format (archive_bfd, bfd_archive))
 	    {
 	      warning ("Current architecture fork of OSO archive "
 		       "file \"%s\" not an archive", archive_name);
-	      return NULL;
+	      retval = NULL;
+	      goto do_cleanups;
 	    }
 	}
-
-      if (containing_archive != NULL)
-	*containing_archive = archive_bfd;
-
-      /* Now search the archive for the current .o file.  */
-      member_begin = paren_begin + 1;
-      member_end = strrchr (member_begin, ')');
-      if (member_end == NULL)
-	warning ("Mal-formed OSO archive string: \"%s\"", oso_name);
-
-      member_len = member_end - member_begin;
-      member_name = alloca (member_len + 1);
-      strncpy (member_name, member_begin, member_len);
-      member_name[member_len] = '\0';
 
       member_bfd = bfd_openr_next_archived_file (archive_bfd, NULL);
 
@@ -3294,30 +3406,34 @@ open_bfd_from_oso (struct partial_symtab *pst, bfd **containing_archive)
 	{
 	  warning ("Could not read archive members out of OSO archive \"%s\"",
 		   archive_name);
-	  return NULL;
+	  retval = NULL;
+	  goto do_cleanups;
 	}
 
       while (member_bfd != NULL)
 	{
-	  bfd *prev_bfd;
 	  if (strcmp (member_bfd->filename, member_name) == 0)
 	    break;
-	  prev_bfd = member_bfd;
-          member_bfd = bfd_openr_next_archived_file (archive_bfd, prev_bfd);
-	  bfd_close (prev_bfd);
+          member_bfd = bfd_openr_next_archived_file (archive_bfd, member_bfd);
 	}
       if (member_bfd == NULL)
-	warning ("Could not find specified archive member for OSO name \"%s\"",
-		 oso_name);
+	{
+	  warning ("Could not find specified archive member for OSO name \"%s\"",
+		   oso_name);
+	  return NULL;
+	}
+
       retval = member_bfd;
       status = bfd_stat_arch_elt (member_bfd, &member_statbuf);
       if (status == -1) 
 	mtime = 0;
       else
 	mtime = member_statbuf.st_mtime;
+    do_cleanups:
+      do_cleanups (free_member_name);
     }
 
-  if (mtime && oso_mtime && mtime != oso_mtime)
+  if (retval != NULL && mtime && oso_mtime && mtime != oso_mtime)
     warning (".o file \"%s\" more recent than executable timestamp", oso_name);
 
   return retval;
@@ -3333,7 +3449,8 @@ oso_scan_partial_symtab (struct partial_symtab *pst)
 {
   struct internal_nlist nlist;
   struct oso_pst_list *list;
-  struct bfd *oso_bfd, *containing_archive;
+  int cached;
+  struct bfd *oso_bfd;
   struct cleanup *oso_data_cleanup;
   int num_syms, sym_size, strtab_size, sym_offset;
   char *strtab_data;
@@ -3363,7 +3480,7 @@ oso_scan_partial_symtab (struct partial_symtab *pst)
   prefix = SYMBOL_PREFIX (pst);
   objfile = pst->objfile;
 
-  oso_bfd = open_bfd_from_oso (pst, &containing_archive);
+  oso_bfd = open_bfd_from_oso (pst, &cached);
   if (oso_bfd == NULL)
     error ("Couldn't open bfd for .o file: %s\n", PSYMTAB_OSO_NAME (pst));
   if (!bfd_check_format (oso_bfd, bfd_object))
@@ -3371,9 +3488,10 @@ oso_scan_partial_symtab (struct partial_symtab *pst)
   
   leading_char = bfd_get_symbol_leading_char (oso_bfd);
 
-  /* Read the nlist data into stabs_data, and read the string_table into strtab_ptr.  */
-  oso_data_cleanup = stabsect_read_strtab_from_oso (oso_bfd, &num_syms, &sym_size, &strtab_size, 
-				 &stabs_data, &strtab_data);
+  /* Read the nlist data into stabs_data, and read the string_table into 
+     strtab_ptr.  */
+  oso_data_cleanup = stabsect_read_strtab_from_oso (oso_bfd, &num_syms, 
+                           &sym_size, &strtab_size, &stabs_data, &strtab_data);
   
   sym_offset = 0;
   symbuf_end = symbuf_idx = 0;
@@ -3411,17 +3529,19 @@ oso_scan_partial_symtab (struct partial_symtab *pst)
 
 	    if (*namestring == '\0')
 	      {
-		/* This is the end of one symtab.  Consolidate the dependencies.  */
-		LDSYMLEN (current_pst) = symnum * symbol_size - LDSYMOFF (current_pst);
+		/* This is the end of one symtab.  
+                   Consolidate the dependencies.  */
+		LDSYMLEN (current_pst) = symnum * symbol_size - 
+                                                       LDSYMOFF (current_pst);
 		
 		current_pst->number_of_dependencies = dependencies_used;
 		if (dependencies_used)
 		  {
 		    current_pst->dependencies = (struct partial_symtab **)
 		      obstack_alloc (&objfile->objfile_obstack,
-				     dependencies_used * sizeof (struct partial_symtab *));
+                          dependencies_used * sizeof (struct partial_symtab *));
 		    memcpy (current_pst->dependencies, dependency_list,
-			    dependencies_used * sizeof (struct partial_symtab *));
+                          dependencies_used * sizeof (struct partial_symtab *));
 		  }
 		else
 		  current_pst->dependencies = 0;
@@ -3439,11 +3559,13 @@ oso_scan_partial_symtab (struct partial_symtab *pst)
 	       We require that the SO's go into the final linked product in the 
 	       same order, with no omissions, as in the .o file.  This makes the
 	       scan much quicker.  We can relax this if we have to, but it would
-	       be better if the linker just always arranges for this to be true.  */
+	       be better if the linker just always arranges for this 
+               to be true.  */
 	    current_list_element++;
 	    current_pst = list->pst_list[current_list_element]; 
 	    if (strcmp(current_pst->filename, namestring) != 0)
-	      error ("SO in .o file \"%s\" out of order\n", PSYMTAB_OSO_NAME (pst));
+	      error ("SO in .o file \"%s\" out of order\n", 
+                     PSYMTAB_OSO_NAME (pst));
 
 	    LDSYMOFF (current_pst) = first_so_symnum * symbol_size;
 
@@ -3469,7 +3591,8 @@ oso_scan_partial_symtab (struct partial_symtab *pst)
 					   leading_char, nlist, prefix);
 
 
-	    needed_pst = find_corresponding_bincl_psymtab (namestring, nlist.n_value);
+	    needed_pst = find_corresponding_bincl_psymtab (namestring, 
+                                                           nlist.n_value);
 	    if (needed_pst == current_pst)
 	      continue;
 
@@ -3514,10 +3637,10 @@ oso_scan_partial_symtab (struct partial_symtab *pst)
 
   do_cleanups (oso_data_cleanup);
 
-  if (containing_archive != NULL)
-    bfd_close (containing_archive);
-  bfd_close(oso_bfd);
- 
+  if (cached)
+    clear_containing_archive_cache ();
+  else
+    bfd_close(oso_bfd);
 }
 
 /* APPLE LOCAL: Called from dwarf2read.c, this function reads all the
@@ -3561,6 +3684,7 @@ read_oso_nlists (bfd *oso_bfd, struct partial_symtab *pst,
 
   prefix = SYMBOL_PREFIX (pst);
   objfile = pst->objfile;
+  processing_objfile = pst->objfile;  /* Initialize for NEXT_SYMBOL's use */
 
   leading_char = bfd_get_symbol_leading_char (oso_bfd);
   oso_data_cleanup = stabsect_read_strtab_from_oso (oso_bfd, 
@@ -3783,22 +3907,25 @@ dbx_psymtab_to_symtab_1 (struct partial_symtab *pst)
 	  /* If we have an OSO name, then we are looking for the FULL 
 	     symbols in the .o file.  So we have to open that one,
 	     and read it in.  */
-	  struct bfd *oso_bfd, *containing_archive;
+	  struct bfd *oso_bfd;
+	  int cached;
 
-	  oso_bfd = open_bfd_from_oso (pst, &containing_archive);
+	  oso_bfd = open_bfd_from_oso (pst, &cached);
 	  if (oso_bfd == NULL)
-	    error ("Couldn't open bfd for .o file: %s\n", PSYMTAB_OSO_NAME (pst));
-	  if (!bfd_check_format (oso_bfd, bfd_object))
-	    warning ("Not in bfd_object form");
+	    warning ("Couldn't open bfd for .o file: %s\n", PSYMTAB_OSO_NAME (pst));
+	  else
+	    {
+	      if (!bfd_check_format (oso_bfd, bfd_object))
+		warning ("Not in bfd_object form");
 
-	  read_ofile_symtab_from_oso (pst, oso_bfd);
-	  /* FIXME: How do we close all the bfd's we opened while searching
-	     the archive?  There are a bunch of places in bfd/archives.c where
-	     they say closing the member bfd's is not safe without closing
-	     the parent.  */
-	  if (containing_archive != NULL)
-	    bfd_close (containing_archive);
-	  bfd_close(oso_bfd);
+	      read_ofile_symtab_from_oso (pst, oso_bfd);
+	      /* Either dispose of the containing archive & all it's contents,
+		or just the one oso_bfd.  */
+	      if (cached)
+		clear_containing_archive_cache ();
+	      else
+		bfd_close(oso_bfd);
+	    }
 	}
       /* END APPLE LOCAL */
       do_cleanups (old_chain);
@@ -3859,11 +3986,38 @@ stabsect_read_strtab_from_oso (struct bfd *oso_bfd, int *symcount,
   int val;
   char *name = bfd_get_filename (oso_bfd);
   int stabs_size;
-  struct oso_data_cleanup *oso_cleanup 
-    = (struct oso_data_cleanup *) malloc (sizeof (struct oso_data_cleanup));
+  struct oso_data_cleanup *oso_cleanup;
+  static unsigned char *empty_stabs_data = NULL;
+
+
+  /* Must be an empty .o file, return 0 for all the sizes.
+     We also set the stab_data_handle to point at an empty
+     string, that way stab_seek will not mess up the file
+     pointer in the file.  */
 
   if (!stabsect || ! stabstrsect)
-    error ("Couldn't find stabs in .o file %s\n", oso_bfd->filename);
+    {
+      complaint (&symfile_complaints, 
+      "Couldn't find namelist for %s.\n",
+		 name ? name : "<Unknown>");
+
+      if (empty_stabs_data == NULL)
+	{
+	  empty_stabs_data = (unsigned char *) xmalloc (1);
+	  *empty_stabs_data = '\0';
+	}
+      
+      *symcount = 0;
+      *symsize = 0;
+      *strtab_size = 0;
+      *stab_data_handle = empty_stabs_data;
+      *strtab_data_handle = NULL;
+      return make_cleanup (null_cleanup, 0);
+
+    }
+
+  oso_cleanup 
+    = (struct oso_data_cleanup *) malloc (sizeof (struct oso_data_cleanup));
 
   oso_cleanup->stab_data_handle = stab_data_handle;
   oso_cleanup->strtab_data_handle = strtab_data_handle;
@@ -4470,7 +4624,7 @@ read_ofile_symtab_from_oso (struct partial_symtab *pst, struct bfd *oso_bfd)
 	         our offset or we'll add it twice.  */
 
 	      offset = SYMBOL_VALUE_ADDRESS (fun_psym) - nlist.n_value 
-		- ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile));
+		- objfile_text_section_offset (objfile);
 
 	      symbuf_idx = old_symbuf_idx;
 	    }
@@ -4607,7 +4761,7 @@ read_ofile_symtab_from_oso (struct partial_symtab *pst, struct bfd *oso_bfd)
 								  VAR_DOMAIN);
 		    if (static_psym)
 		      nlist.n_value = SYMBOL_VALUE_ADDRESS (static_psym) 
-			- ANOFFSET (objfile->section_offsets, SECT_OFF_DATA (objfile));
+				      - objfile_data_section_offset (objfile);
 		  }
 		break; 
 	      }
@@ -4776,10 +4930,13 @@ process_one_symbol (int type, int desc, CORE_ADDR valu, char *name,
 	     but no N_SLINE stabs.  */
 	  if (sline_found_in_function)
 	    {
+	      /* APPLE LOCAL begin subroutine inlining  */
 	      if (processing_gcc_compilation || !end_fun_absolute_p)
-		record_line (current_subfile, 0, last_function_start + valu);
+		record_line (current_subfile, 0, last_function_start + valu, 0,
+			     NORMAL_LT_ENTRY);
 	      else
-		record_line (current_subfile, 0, valu);
+		record_line (current_subfile, 0, valu, 0, NORMAL_LT_ENTRY);
+	      /* APPLE LOCAL end subroutine inlining  */
 	    }
 
 	  within_function = 0;
@@ -4796,9 +4953,11 @@ process_one_symbol (int type, int desc, CORE_ADDR valu, char *name,
 	    }
 
 	  /* Make a block for the local symbols within.  */
+	  /* APPLE LOCAL begin address ranges  */
 	  finish_block (new->name, &local_symbols, new->old_blocks,
-			new->start_addr, valu_abs,
+			new->start_addr, valu_abs, NULL,
 			objfile);
+	  /* APPLE LOCAL end address ranges  */
 
 	  /* May be switching to an assembler file which may not be using
 	     block relative stabs, so reset the offset.  */
@@ -4923,8 +5082,10 @@ no enclosing block"));
 		  new->start_addr = valu;
 		}
 	      /* Make a block for the local symbols within.  */
+	      /* APPLE LOCAL begin address ranges  */
 	      finish_block (0, &local_symbols, new->old_blocks,
-			    new->start_addr, valu, objfile);
+			    new->start_addr, valu, NULL, objfile);
+	      /* APPLE LOCAL end address ranges  */
 	    }
 	}
       else
@@ -5039,16 +5200,19 @@ no enclosing block"));
 	 So for now, keep adjusting the address of the first N_SLINE
 	 stab, but only for code compiled with GCC.  */
 
+      /* APPLE LOCAL begin subroutine inlining  */
       if (within_function && sline_found_in_function == 0)
 	{
 	  if (processing_gcc_compilation == 2)
-	    record_line (current_subfile, desc, last_function_start);
+	    record_line (current_subfile, desc, last_function_start, 0, 
+			 NORMAL_LT_ENTRY);
 	  else
-	    record_line (current_subfile, desc, valu);
+	    record_line (current_subfile, desc, valu, 0, NORMAL_LT_ENTRY);
 	  sline_found_in_function = 1;
 	}
       else
-	record_line (current_subfile, desc, valu);
+	record_line (current_subfile, desc, valu, 0, NORMAL_LT_ENTRY);
+      /* APPLE LOCAL end subroutine inlining  */
       break;
 
     case N_BCOMM:
@@ -5234,8 +5398,10 @@ no enclosing block"));
 		{
 		  new = pop_context ();
 		  /* Make a block for the local symbols within.  */
+		  /* APPLE LOCAL begin address ranges  */
 		  finish_block (new->name, &local_symbols, new->old_blocks,
-				new->start_addr, valu, objfile);
+				new->start_addr, valu, NULL, objfile);
+		  /* APPLE LOCAL end address ranges  */
 		}
 
 	      new = push_context (0, valu);

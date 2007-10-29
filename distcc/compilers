@@ -1,6 +1,13 @@
 # This file contains a list of the compilers that distcc will allow to be remotely invoked.
 # One compiler per line, newline separated, no whitespace allowed.
 
+/Developer/usr/bin/gcc
+/Developer/usr/bin/cc
+/Developer/usr/bin/gcc-3.3
+/Developer/usr/bin/gcc-4.0
+/Developer/usr/bin/g++
+/Developer/usr/bin/g++-3.3
+/Developer/usr/bin/g++-4.0
 /usr/bin/gcc
 /usr/bin/cc
 /usr/bin/gcc-3.3

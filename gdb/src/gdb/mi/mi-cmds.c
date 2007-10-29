@@ -73,7 +73,7 @@ struct mi_cmd mi_cmds[] =
   { "exec-return", { NULL, 0 }, mi_cmd_exec_return},
   { "exec-run", { NULL, 0 }, mi_cmd_exec_run},
   /* APPLE LOCAL: added exec-safe-call command  */
-  { "exec-safe-call", { NULL, 0 }, mi_cmd_exec_safe_call},
+  { "exec-safe-call", { NULL, 0 }, NULL, mi_cmd_exec_safe_call},
   { "exec-show-arguments", { NULL, 0 }, NULL, NULL },
   { "exec-signal", { NULL, 0 }, NULL, NULL },
   { "exec-step", { NULL, 0 }, mi_cmd_exec_step},
@@ -81,6 +81,8 @@ struct mi_cmd mi_cmds[] =
   { "exec-status", { NULL, 0 }, NULL, mi_cmd_exec_status},
   { "exec-metrowerks-step", { NULL, 0 }, mi_cmd_exec_metrowerks_step},
   { "exec-until", { NULL, 0 }, mi_cmd_exec_until},
+  /* APPLE LOCAL: add-dsym */
+  { "file-add-dsym", {"add-dsym", 1}, NULL, NULL},
   { "file-clear", { NULL, 0 }, NULL, NULL },
   { "file-core-file", { NULL, 0 }, NULL, mi_cmd_file_core_file },
   { "file-exec-and-symbols", { "file", 1 }, NULL, NULL },
@@ -102,6 +104,9 @@ struct mi_cmd mi_cmds[] =
   { "file-sharedlibrary-set-load-state", { "sharedlibrary set-load-state", 1 }, NULL, NULL },
   { "file-sharedlibrary-add-symbol-file", { "sharedlibrary add-symbol-file", 1 }, NULL, NULL },
   { "file-sharedlibrary-remove-symbol-file", { "sharedlibrary remove-symbol-file", 1 }, NULL, NULL },
+  /* APPLE LOCAL: gc-roots & gc-references */
+  { "gc-roots", {"info gc-roots", 1}, NULL, NULL},
+  { "gc-references", {"info gc-references", 1}, NULL, NULL},
   { "gdb-complete", { NULL, 0 }, NULL, NULL },
   { "gdb-exit", { NULL, 0 }, 0, mi_cmd_gdb_exit},
   { "gdb-set", { "set", 1 }, NULL, NULL },
@@ -118,6 +123,8 @@ struct mi_cmd mi_cmds[] =
   { "kod-list", { NULL, 0 }, NULL, NULL },
   { "kod-list-object-types", { NULL, 0 }, NULL, NULL },
   { "kod-show", { NULL, 0 }, NULL, NULL },
+  /* APPLE LOCAL: malloc-history */
+  { "malloc-history", {"info malloc-history", 1}, NULL, NULL},
   { "mi-verify-command", { NULL, 0 }, 0, mi_cmd_mi_verify_command},
   { "mi-enable-timings", { NULL, 0 }, 0, mi_cmd_enable_timings},
   { "mi-no-op", { NULL, 0 }, 0, mi_cmd_mi_no_op},
@@ -133,6 +140,8 @@ struct mi_cmd mi_cmds[] =
   { "signal-handle", { NULL, 0 }, NULL, NULL },
   { "signal-list-handle-actions", { NULL, 0 }, NULL, NULL },
   { "signal-list-signal-types", { NULL, 0 }, NULL, NULL },
+  /* APPLE LOCAL: stack-check-frames  */
+  { "stack-check-threads", { NULL, 0}, 0, mi_cmd_stack_check_threads },
   { "stack-info-depth", { NULL, 0 }, 0, mi_cmd_stack_info_depth},
   { "stack-info-frame", { NULL, 0 }, 0, mi_cmd_stack_info_frame},
   { "stack-list-arguments", { NULL, 0 }, 0, mi_cmd_stack_list_args},

@@ -89,11 +89,14 @@ fi
 
 if [ -n "$requested_architecture" ]
 then
-  if [ "$requested_architecture" != ppc -a "$requested_architecture" != i386 ]
-  then
-    echo Unrecognized architecture \'$requested_architecture\', using host arch. >&2
-    requested_architecture=""
-  fi
+  case $requested_architecture in
+    ppc* | i386 | x86_64)
+     ;;
+    *)
+      echo Unrecognized architecture \'$requested_architecture\', using host arch. >&2
+      requested_architecture=""
+      ;;
+  esac
 fi
 
 if [ -n "$requested_architecture" ]
@@ -103,11 +106,31 @@ else
   architecture_to_use="$host_architecture"
 fi
 
+# If GDB_ROOT is not set, then figure it out
+# from $0.  We need this for gdb's that are
+# not installed in /usr/bin.
+
+GDB_ROOT_SET=${GDB_ROOT:+set}
+if [ "$GDB_ROOT_SET" != "set" ]
+then
+  gdb_bin="$0"
+  if [ -L "$gdb_bin" ]
+  then
+    gdb_bin=`readlink "$gdb_bin"`
+  fi
+  gdb_bin_dirname=`dirname "$gdb_bin"`
+  GDB_ROOT=`cd "$gdb_bin_dirname"/../.. ; pwd`
+  if [ $"GDB_ROOT" = "/" ]
+      then
+        GDB_ROOT=
+  fi
+fi
+
 case "$architecture_to_use" in
-    ppc)
+    ppc*)
         gdb="${GDB_ROOT}/usr/libexec/gdb/gdb-powerpc-apple-darwin"
         ;;
-    i386)
+    i386 | x86_64)
         gdb="${GDB_ROOT}/usr/libexec/gdb/gdb-i386-apple-darwin"
         ;;
     *)
@@ -126,9 +149,9 @@ if [ -n "$parent" ]
 then
   case "$parent" in
     *CodeWarrior*)
-      if [ -x "${GDBROOT}/usr/libexec/gdb/gdb-for-codewarrior" ]
+      if [ -x "${GDB_ROOT}/usr/libexec/gdb/gdb-for-codewarrior" ]
       then
-        gdb="${GDBROOT}/usr/libexec/gdb/gdb-for-codewarrior"
+        gdb="${GDB_ROOT}/usr/libexec/gdb/gdb-for-codewarrior"
       fi
     ;;
   esac
@@ -139,4 +162,9 @@ if [ ! -x "$gdb" ]; then
     exit 1
 fi
 
-exec $translate_binary "$gdb" "$@"
+if [ -n "$requested_architecture" -a $translate_mode -eq 0 ]
+then
+  exec $translate_binary "$gdb" --arch "$requested_architecture" "$@"
+else
+  exec $translate_binary "$gdb" "$@"
+fi

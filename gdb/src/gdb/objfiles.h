@@ -139,6 +139,10 @@ struct entry_info
 
    I'm not sure this could or should be changed, however.  */
 
+/* APPLE LOCAL: Note that for a separate_debug_objfile, the obj_sections
+   are a copy of the sections of the parent objfile.  This is more useful
+   than having them be the sections of the separate debug file, which
+   may, for instance, just have a few DWARF sections and that's all...  */
 struct obj_section
   {
     CORE_ADDR addr;		/* lowest address in section */
@@ -474,6 +478,19 @@ struct objfile
        we leave it a void * here.  */
     void *equivalence_table;
 
+    /* APPLE LOCAL: Mark whether the objfile is a kext or not.
+       kexts have a dSYM file (because they are run through ld -r) but
+       their addresses are not final until kextload has loaded them.
+       We need to combine the debug map output from kextload with the
+       dSYM file from the ld -r which is a rather unusual combination.  */
+
+    /* APPLE LOCAL: If objfile_is_kext is true then this will be the name
+       of the original kext, i.e. the file that was output by ld -r and
+       dsymutil was run on but NOT the output of kextload -s or kextload -a.  
+       We'll need this and the kextload'ed kext image to create the
+       address translation table when reading the DWARF.  */
+    const char *not_loaded_kext_filename;
+
     /* APPLE LOCAL: Mark struct objfile's as to whether they are 
        symbol files or if they represent file images that contain actual
        code that is, or will be, loaded into memory.  
@@ -539,7 +556,7 @@ struct objfile
 
 /* APPLE LOCAL: The following OBJF_SYM_ constants are used to limit
    the scope of how much debug/symbol information we read from
-   a given objfile.  */
+   a given objfile.  All legitimate values should be > 0.  */
 
 #define OBJF_SYM_NONE 0
 #define OBJF_SYM_CONTAINER (1 << 0)
@@ -583,11 +600,18 @@ extern struct objfile *object_files;
 
 extern struct objfile *allocate_objfile (bfd *, int, int symflags, CORE_ADDR mapaddr, const char *prefix);
 
+/* APPLE LOCAL: for use with clear_objfile.  */
+extern struct objfile *allocate_objfile_using_objfile (struct objfile *, bfd *, int, int symflags, 
+						      CORE_ADDR mapaddr, const char *prefix);
+
 extern void init_entry_point_info (struct objfile *);
 
 extern CORE_ADDR entry_point_address (void);
 
 extern int build_objfile_section_table (struct objfile *);
+
+/* APPLE LOCAL */
+extern int objfile_keeps_section (bfd *abfd, asection *asect);
 
 extern void terminate_minimal_symbol_table (struct objfile *objfile);
 
@@ -600,6 +624,9 @@ extern void link_objfile (struct objfile *);
 extern void unlink_objfile (struct objfile *);
 
 extern void free_objfile (struct objfile *);
+
+/* APPLE LOCAL: clear the contents of the objfile but don't delete or unlink it.  */
+extern void clear_objfile (struct objfile *);
 
 extern struct cleanup *make_cleanup_free_objfile (struct objfile *);
 
@@ -667,6 +694,8 @@ enum objfile_matches_name_return
 
 enum objfile_matches_name_return objfile_matches_name (struct objfile *objfile, char *name);
 struct cleanup *make_cleanup_restrict_to_objfile (struct objfile *objfile);
+/* APPLE LOCAL radar 5273932  */
+struct cleanup *make_cleanup_restrict_to_objfile_by_name (char *objfile_name);
 struct cleanup *make_cleanup_restrict_to_shlib (char *shlib);
 
 /* APPLE LOCAL: These manage & look up obj_sections in the ordered_sections
@@ -771,24 +800,43 @@ struct partial_symtab *psymtab_get_next (struct partial_symtab *, int );
   ALL_OBJFILES (objfile)			\
     ALL_OBJFILE_OSECTIONS (objfile, osect)
 
+/* APPLE LOCAL BEGIN: dSYM support
+   Always grab the executable objfile when getting section information.  */
+
+/* Given and objfile, always return the main executable objfile
+   if one exists. It is safe to call this macro with NULL.  */
+struct objfile *executable_objfile (struct objfile *objfile);
+
+/* Given and objfile, always return the separate debug objfile
+   if one exists. It is safe to call this macro with NULL.  */
+struct objfile *separate_debug_objfile (struct objfile *objfile);
+
 #define SECT_OFF_DATA(objfile) \
-     ((objfile->sect_index_data == -1) \
+     ((executable_objfile(objfile)->sect_index_data == -1) \
       ? (internal_error (__FILE__, __LINE__, _("sect_index_data not initialized")), -1) \
-      : objfile->sect_index_data)
+      : executable_objfile(objfile)->sect_index_data)
 
 #define SECT_OFF_RODATA(objfile) \
-     ((objfile->sect_index_rodata == -1) \
+     ((executable_objfile(objfile)->sect_index_rodata == -1) \
       ? (internal_error (__FILE__, __LINE__, _("sect_index_rodata not initialized")), -1) \
-      : objfile->sect_index_rodata)
+      : executable_objfile(objfile)->sect_index_rodata)
 
 #define SECT_OFF_TEXT(objfile) \
-     ((objfile->sect_index_text == -1) \
+     ((executable_objfile(objfile)->sect_index_text == -1) \
       ? (internal_error (__FILE__, __LINE__, _("sect_index_text not initialized")), -1) \
-      : objfile->sect_index_text)
+      : executable_objfile(objfile)->sect_index_text)
 
 /* Sometimes the .bss section is missing from the objfile, so we don't
    want to die here. Let the users of SECT_OFF_BSS deal with an
    uninitialized section index. */
-#define SECT_OFF_BSS(objfile) (objfile)->sect_index_bss
+#define SECT_OFF_BSS(objfile) (executable_objfile(objfile))->sect_index_bss
+
+CORE_ADDR objfile_section_offset (struct objfile *objfile, int sect_idx);
+CORE_ADDR objfile_text_section_offset (struct objfile *objfile);
+CORE_ADDR objfile_data_section_offset (struct objfile *objfile);
+CORE_ADDR objfile_rodata_section_offset (struct objfile *objfile);
+CORE_ADDR objfile_bss_section_offset (struct objfile *objfile);
+
+/* APPLE LOCAL END: Use EXECUTABLE_OBJFILE.  */
 
 #endif /* !defined (OBJFILES_H) */

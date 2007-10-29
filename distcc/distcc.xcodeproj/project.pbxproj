@@ -16,19 +16,6 @@
 				B3236A9508A978AE00609FFD /* license plist */,
 				B3236A9D08A9791400609FFD /* license file */,
 			);
-			buildSettings = {
-				OPTIMIZATION_CFLAGS = "";
-				OTHER_CFLAGS = "";
-				OTHER_LDFLAGS = "";
-				OTHER_REZFLAGS = "";
-				PRODUCT_NAME = LaunchdConfig;
-				SECTORDER_FLAGS = "";
-				WARNING_CFLAGS = (
-					"-Wmost",
-					"-Wno-four-char-constants",
-					"-Wno-unknown-pragmas",
-				);
-			};
 			dependencies = (
 			);
 			name = "Config Files";
@@ -42,23 +29,6 @@
 		B387DBC3087F275300A8560D /* distccd.plist in Launchd .plist */ = {isa = PBXBuildFile; fileRef = B3BA8F32087CA128009521B6 /* distccd.plist */; };
 		B3979746089C5BD100A40359 /* compilers in compilers */ = {isa = PBXBuildFile; fileRef = B3979742089C5B4400A40359 /* compilers */; };
 /* End PBXBuildFile section */
-
-/* Begin PBXBuildStyle section */
-		B3CC5C0F087DA13D00EB91A2 /* Development */ = {
-			isa = PBXBuildStyle;
-			buildSettings = {
-				COPY_PHASE_STRIP = NO;
-			};
-			name = Development;
-		};
-		B3CC5C10087DA13D00EB91A2 /* Deployment */ = {
-			isa = PBXBuildStyle;
-			buildSettings = {
-				COPY_PHASE_STRIP = YES;
-			};
-			name = Deployment;
-		};
-/* End PBXBuildStyle section */
 
 /* Begin PBXContainerItemProxy section */
 		B3CC5D06087DFBE800EB91A2 /* PBXContainerItemProxy */ = {
@@ -594,19 +564,6 @@
 			buildConfigurationList = B3CC5D01087DFBC700EB91A2 /* Build configuration list for PBXLegacyTarget "distcc" */;
 			buildPhases = (
 			);
-			buildSettings = {
-				OPTIMIZATION_CFLAGS = "";
-				OTHER_CFLAGS = "";
-				OTHER_LDFLAGS = "";
-				OTHER_REZFLAGS = "";
-				PRODUCT_NAME = distcc;
-				SECTORDER_FLAGS = "";
-				WARNING_CFLAGS = (
-					"-Wmost",
-					"-Wno-four-char-constants",
-					"-Wno-unknown-pragmas",
-				);
-			};
 			buildToolPath = /usr/bin/make;
 			dependencies = (
 				B3CC5D07087DFBE800EB91A2 /* PBXTargetDependency */,
@@ -621,12 +578,6 @@
 		B3BA8F21087CA0CC009521B6 /* Project object */ = {
 			isa = PBXProject;
 			buildConfigurationList = B3BA8F22087CA0CC009521B6 /* Build configuration list for PBXProject "distcc" */;
-			buildSettings = {
-			};
-			buildStyles = (
-				B3CC5C0F087DA13D00EB91A2 /* Development */,
-				B3CC5C10087DA13D00EB91A2 /* Deployment */,
-			);
 			hasScannedForEncodings = 0;
 			mainGroup = B3BA8F1F087CA0CC009521B6;
 			productRefGroup = B3BA8F3B087CA1DE009521B6 /* Products */;
@@ -693,7 +644,7 @@
 					i386,
 				);
 				COPY_PHASE_STRIP = YES;
-				CURRENT_PROJECT_VERSION = 43;
+				CURRENT_PROJECT_VERSION = 786;
 				MACOSX_DEPLOYMENT_TARGET = 10.4;
 				SDKROOT = /Developer/SDKs/MacOSX10.4u.sdk;
 				VERSIONING_SYSTEM = "apple-generic";
@@ -708,7 +659,7 @@
 					i386,
 				);
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 43;
+				CURRENT_PROJECT_VERSION = 786;
 				MACOSX_DEPLOYMENT_TARGET = 10.4;
 				VERSIONING_SYSTEM = "apple-generic";
 			};
@@ -722,7 +673,7 @@
 					i386,
 				);
 				COPY_PHASE_STRIP = YES;
-				CURRENT_PROJECT_VERSION = 43;
+				CURRENT_PROJECT_VERSION = 786;
 				MACOSX_DEPLOYMENT_TARGET = 10.4;
 				SDKROOT = /Developer/SDKs/MacOSX10.4u.sdk;
 				VERSIONING_SYSTEM = "apple-generic";

@@ -64,6 +64,9 @@
 
    */
 
+/* APPLE LOCAL variable opt states.  */
+#include "value.h"
+
 struct symtab_and_line;
 struct frame_unwind;
 struct frame_base;
@@ -379,6 +382,10 @@ enum frame_type
   /* A fake frame, created by GDB when performing an inferior function
      call.  */
   DUMMY_FRAME,
+  /* APPLE LOCAL begin subroutine inlining  */
+  /* A frame created by GDB to indicate the inlined function bodies.  */
+  INLINED_FRAME,
+  /* APPLE LOCAL end subroutine inlining  */
   /* In a signal handler, various OSs handle this in various ways.
      The main thing is that the frame may be far from normal.  */
   SIGTRAMP_FRAME,
@@ -393,7 +400,9 @@ extern enum frame_type get_frame_type (struct frame_info *);
    fetch/compute the value.  Instead just return the location of the
    value.  */
 extern void frame_register_unwind (struct frame_info *frame, int regnum,
-				   int *optimizedp, enum lval_type *lvalp,
+				   /* APPLE LOCAL variable opt states.  */
+				   enum opt_state *optimizedp, 
+				   enum lval_type *lvalp,
 				   CORE_ADDR *addrp, int *realnump,
 				   gdb_byte *valuep);
 
@@ -427,7 +436,8 @@ extern void frame_unwind_unsigned_register (struct frame_info *frame,
    VALUEP is NULL, the registers value is not fetched/computed.  */
 
 extern void frame_register (struct frame_info *frame, int regnum,
-			    int *optimizedp, enum lval_type *lvalp,
+			    /* APPLE LOCAL variable opt states.  */
+			    enum opt_state *optimizedp, enum lval_type *lvalp,
 			    CORE_ADDR *addrp, int *realnump,
 			    gdb_byte *valuep);
 
@@ -671,5 +681,8 @@ extern void deprecated_update_frame_base_hack (struct frame_info *frame,
 extern struct frame_info *frame_next_hack (struct frame_info *frame);
 extern void *frame_cache_hack (struct frame_info *frame);
 /* APPLE LOCAL end */
+
+/* APPLE LOCAL: Need this for the fast_show_stack routines.  */
+extern int backtrace_past_main;
 
 #endif /* !defined (FRAME_H)  */

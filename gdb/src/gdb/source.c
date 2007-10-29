@@ -87,7 +87,8 @@ static struct symtab *current_source_symtab;
 static int current_source_line;
 
 /* APPLE LOCAL pathname substitution */
-char *pathname_substitutions = NULL;
+static char *pathname_substitutions = NULL;
+static char **pathname_substitutions_argv = NULL;
 
 /* Default number of lines to print with commands like "list".
    This is based on guessing how many long (i.e. more than chars_per_line
@@ -849,7 +850,7 @@ open_source_file_fullpath (const char *dirname, const char *filename,
   char *path = NULL;
   char *ss = NULL;
 
-  char **psubs = NULL;
+  char **psubs = pathname_substitutions_argv;
   char **tsub = NULL;
   int nsubs = 0;
   int csub = 0;
@@ -884,13 +885,6 @@ open_source_file_fullpath (const char *dirname, const char *filename,
       memmove (ss, ss + 2, strlen (ss + 2) + 1);
     }
 
-  if (pathname_substitutions != NULL)
-    {
-      psubs = buildargv (pathname_substitutions);
-      if (psubs == NULL)
-        error ("unable to parse pathname-substitutions");
-    }
-
   nsubs = 0;
 
   if (psubs != NULL)
@@ -922,6 +916,80 @@ open_source_file_fullpath (const char *dirname, const char *filename,
 
   return -1;
 }
+
+/* Set the pairs of pathname substitutions to use when loading source 
+   files. We parse this option list into PATHNAME_SUBSTITUTIONS_ARGV once
+   and then re-use it in open_source_file_fullpath ().  */
+
+static void 
+set_pathname_substitution (char *args, int from_tty, struct cmd_list_element * c)
+{
+  forget_cached_source_info ();
+  last_source_error = 0;
+  int success = 0;
+  
+  /* Free our old path array if we had one.  */
+  if (pathname_substitutions_argv != NULL)
+    {
+      freeargv (pathname_substitutions_argv);
+      pathname_substitutions_argv = NULL;
+    }
+
+  /* Create our new path array and check it.  */
+  if (pathname_substitutions && pathname_substitutions[0])
+    {
+      pathname_substitutions_argv = buildargv (pathname_substitutions);
+      if (pathname_substitutions_argv && pathname_substitutions_argv[0] != NULL)
+	{
+	  /* If we got some valid path substitutions, the we must have an even
+	     number of them.  */
+	  int i;
+	  success = 1;
+	  for (i = 0; success && pathname_substitutions_argv[i] != NULL; i += 2)
+	    {
+	      success = pathname_substitutions_argv[i+1] != NULL;
+	    }
+	}
+	
+      if (!success)
+	{
+	  warning ("An even number of paths must be given, surround paths "
+		   "constaining spaces with single or double quotes.");
+	  freeargv (pathname_substitutions_argv);
+	  pathname_substitutions_argv = NULL;
+	}
+    }
+}
+
+static void
+show_pathname_substitutions (struct ui_file *file, int from_tty,
+			     struct cmd_list_element *c, 
+			     const char *value)
+{
+  char *from;
+  char *to;
+  int i = 0;
+
+  if (pathname_substitutions_argv)
+    {
+      fprintf_filtered (file, _("Current source pathname substitions:\n"));
+      for (i = 0; pathname_substitutions_argv[i] != NULL; i += 2)
+	{
+	  from = pathname_substitutions_argv[i];
+	  to = pathname_substitutions_argv[i+1];
+	  fprintf_filtered (file, _("  [%i] '%s' -> '%s'\n"), i/2 + 1, from, to);
+	}
+    }
+  else
+    fprintf_filtered (file, _("No source path substitions are currently set.\n"));
+
+  if (pathname_substitutions)
+    fprintf_filtered (file, _("\nLast source pathname substition command was:\n"
+			      "set pathname-substitutions%s%s\n"), 
+		      pathname_substitutions[0] ? " " : "",
+		      pathname_substitutions);
+}
+
 /* APPLE LOCAL end open source file fullpath */
 
 /* This function is capable of finding the absolute path to a
@@ -1546,7 +1614,11 @@ line_info (char *arg, int from_tty)
   xfree (sals.sals);
 }
 
-/* APPLE LOCAL begin huh? */
+/* APPLE LOCAL: This routine is used for debugging formats that list
+   source position by character position, rather than line number.
+   SYM is an example of this.  It will convert from the value in the
+   sal from character position to line number.  */
+
 void convert_sal (struct symtab_and_line *sal)
 {
   struct symtab  *symtab = NULL;
@@ -1584,7 +1656,7 @@ void convert_sal (struct symtab_and_line *sal)
 	}
     }
 }
-/* APPLE LOCAL end huh? */
+/* END APPLE LOCAL */
 
 /* Commands to search the source file for a regexp.  */
 
@@ -1770,15 +1842,6 @@ reverse_search_command (char *regex, int from_tty)
   fclose (stream);
   return;
 }
-
-/* APPLE LOCAL: When we set the pathname-substitutions, we also
-   need to clear the cached source info.  */
-void
-set_pathname_substitution (char *args, int from_tty, struct cmd_list_element * c)
-{
-  forget_cached_source_info ();
-  last_source_error = 0;
-}
 
 void
 _initialize_source (void)
@@ -1864,8 +1927,14 @@ Show number of source lines gdb will list by default."), NULL,
   add_setshow_string_cmd ("pathname-substitutions", class_support,
 			  &pathname_substitutions, _("\
 Set string substitutions to be used when searching for source files."), _("\
-Show string substitutions to be used when searching for source files."), NULL,
-			  set_pathname_substitution, NULL,
+Show string substitutions to be used when searching for source files."), _("\
+The string substitutions are space separated pairs of paths where each\n\
+string can be surrounded by quotes if a path contains spaces.\n\
+\n\
+Example:\n\
+pathname-substitutions /path1/from /new/path1/to '/path2/with space/from' /path2/to"),
+			  set_pathname_substitution, 
+			  show_pathname_substitutions,
 			  &setlist, &showlist);
   /* APPLE LOCAL end pathname substitution */
 }

@@ -39,6 +39,8 @@
 #include "gdb-events.h"
 #include "block.h"
 #include "dictionary.h"
+/* APPLE LOCAL -- subroutine inlining  */
+#include "inlining.h"
 
 #include "ax.h"
 #include "ax-gdb.h"
@@ -398,8 +400,10 @@ trace_command (char *arg, int from_tty)
     printf_filtered ("TRACE %s\n", arg);
 
   addr_start = arg;
+  /* APPLE LOCAL begin return multiple symbols  */
   sals = decode_line_1 (&arg, 1, (struct symtab *) NULL, 
-			0, &canonical, NULL);
+			0, &canonical, NULL, 0);
+  /* APPLE LOCAL end return multiple symbols  */
   addr_end = arg;
   if (!sals.nelts)
     return;	/* ??? Presumably decode_line_1 has already warned?  */
@@ -1989,6 +1993,9 @@ finish_tfind_command (char *msg,
 	print_what = SRC_AND_LOC;
 
       print_stack_frame (get_selected_frame (NULL), 1, print_what);
+      /* APPLE LOCAL begin subroutine inlining  */
+      clear_inlined_subroutine_print_frames ();
+      /* APPLE LOCAL end subroutine inlining  */
       do_displays ();
     }
 }
@@ -2380,7 +2387,9 @@ scope_info (char *args, int from_tty)
   if (args == 0 || *args == 0)
     error (_("requires an argument (function, line or *addr) to define a scope"));
 
-  sals = decode_line_1 (&args, 1, NULL, 0, &canonical, NULL);
+  /* APPLE LOCAL begin return multiple symbols  */
+  sals = decode_line_1 (&args, 1, NULL, 0, &canonical, NULL, 0);
+  /* APPLE LOCAL end return multiple symbols  */
   if (sals.nelts == 0)
     return;		/* presumably decode_line_1 has already warned */
 
@@ -2462,8 +2471,10 @@ scope_info (char *args, int from_tty)
 	      break;
 	    case LOC_BLOCK:
 	      printf_filtered ("a function at address ");
-	      deprecated_print_address_numeric (BLOCK_START (SYMBOL_BLOCK_VALUE (sym)),
+	      /* APPLE LOCAL begin address ranges  */
+	      deprecated_print_address_numeric (BLOCK_LOWEST_PC (SYMBOL_BLOCK_VALUE (sym)),
 				     1, gdb_stdout);
+	      /* APPLE LOCAL end address ranges  */
 	      break;
 	    case LOC_BASEREG:
 	      printf_filtered ("a variable at offset %ld from register $%s",

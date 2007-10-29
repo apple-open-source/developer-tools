@@ -6,6 +6,8 @@
 #include "target.h"
 #include "inferior.h"
 
+#include <mach/mach.h>
+
 struct target_ops;
 
 #if (defined __GNUC__)
@@ -30,8 +32,6 @@ void gdb_check (const char *str, const char *file, unsigned int line,
                 const char *func);
 void gdb_check_fatal (const char *str, const char *file, unsigned int line,
                       const char *func);
-
-unsigned int child_get_pagesize (void);
 
 int
 mach_xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr,

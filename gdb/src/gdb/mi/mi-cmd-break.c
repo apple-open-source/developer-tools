@@ -301,14 +301,16 @@ mi_cmd_break_watch (char *command, char **argv, int argc)
 {
   char *expr = NULL;
   enum wp_type type = REG_WP;
+  int watch_location = 0;
   enum opt
     {
-      READ_OPT, ACCESS_OPT
+      READ_OPT, ACCESS_OPT, LOCATION_OPT
     };
   static struct mi_opt opts[] =
   {
     {"r", READ_OPT, 0},
     {"a", ACCESS_OPT, 0},
+    {"l", LOCATION_OPT, 0},
     0
   };
 
@@ -328,6 +330,9 @@ mi_cmd_break_watch (char *command, char **argv, int argc)
 	case ACCESS_OPT:
 	  type = ACCESS_WP;
 	  break;
+	case LOCATION_OPT:
+	  watch_location = 1;
+	  break;
 	}
     }
   if (optind >= argc)
@@ -340,13 +345,13 @@ mi_cmd_break_watch (char *command, char **argv, int argc)
   switch (type)
     {
     case REG_WP:
-      watch_command_wrapper (expr, FROM_TTY);
+      watch_command_wrapper (expr, watch_location, FROM_TTY);
       break;
     case READ_WP:
-      rwatch_command_wrapper (expr, FROM_TTY);
+      rwatch_command_wrapper (expr, watch_location, FROM_TTY);
       break;
     case ACCESS_WP:
-      awatch_command_wrapper (expr, FROM_TTY);
+      awatch_command_wrapper (expr, watch_location, FROM_TTY);
       break;
     default:
       error (_("mi_cmd_break_watch: Unknown watchpoint type."));
@@ -569,6 +574,17 @@ mi_async_breakpoint_resolve_event (int pending_b, int new_b)
   bpt = find_breakpoint (new_b);
   if (bpt->addr_string != NULL)
     ui_out_field_string (uiout, "new_expr", bpt->addr_string);
+
+  /* APPLE LOCAL: Need to tell the UI whether the breakpoint condition was not
+     successfully evaluated, so it can put up an appropriate warning.  */
+  if (bpt->cond_string != NULL)
+    {
+      if (bpt->cond == NULL)
+	ui_out_field_int (uiout, "condition_valid", 0); 
+      else
+	ui_out_field_int (uiout, "condition_valid", 1); 
+    }
+  /* END APPLE LOCAL  */
   gdb_breakpoint_query (uiout, new_b, NULL);
   
   do_cleanups (old_chain);

@@ -973,7 +973,8 @@ avr_frame_this_id (struct frame_info *next_frame,
 static void
 avr_frame_prev_register (struct frame_info *next_frame,
 			  void **this_prologue_cache,
-			  int regnum, int *optimizedp,
+			 /* APPLE LOCAL variable opt states.  */
+			  int regnum, enum opt_state *optimizedp,
 			  enum lval_type *lvalp, CORE_ADDR *addrp,
 			  int *realnump, void *bufferp)
 {
@@ -984,7 +985,8 @@ avr_frame_prev_register (struct frame_info *next_frame,
     {
       if (trad_frame_addr_p (info->saved_regs, regnum))
         {
-          *optimizedp = 0;
+	  /* APPLE LOCAL variable opt states.  */
+          *optimizedp = opt_okay;
           *lvalp = lval_memory;
           *addrp = info->saved_regs[regnum].addr;
           *realnump = -1;

@@ -42,6 +42,8 @@
 #include "observer.h"
 #include "objfiles.h"
 #include "exceptions.h"
+/* APPLE LOCAL - subroutine inlining  */
+#include "inlining.h"
 
 static struct frame_info *get_prev_frame_1 (struct frame_info *this_frame);
 
@@ -123,16 +125,22 @@ show_frame_debug (struct ui_file *file, int from_tty,
 /* APPLE LOCAL begin extra frame info */
 /* See comments in frame_info (). */
 
-struct frame_info *frame_next_hack (struct frame_info *frame)
+struct frame_info *
+frame_next_hack (struct frame_info *frame)
 {
   return frame->next;
 }
 
-void *frame_cache_hack (struct frame_info *frame)
+void *
+frame_cache_hack (struct frame_info *frame)
 {
   return & (frame->prologue_cache);
 }
 /* APPLE LOCAL end extra frame info */
+
+/* APPLE LOCAL: Flag to indicate whether the backtrace sanity checks
+   should be disregarded.  */
+int backtrace_sanity_checks = 1;
 
 /* Flag to indicate whether backtraces should stop at main et.al.  */
 
@@ -199,6 +207,11 @@ fprint_frame_type (struct ui_file *file, enum frame_type type)
     case DUMMY_FRAME:
       fprintf_unfiltered (file, "DUMMY_FRAME");
       return;
+    /* APPLE LOCAL begin subroutine inlining  */
+    case INLINED_FRAME:
+      fprintf_unfiltered (file, "INLINED_FRAME");
+      return;
+    /* APPLE LOCAL end subroutine inlining   */
     case SIGTRAMP_FRAME:
       fprintf_unfiltered (file, "SIGTRAMP_FRAME");
       return;
@@ -290,7 +303,17 @@ frame_unwind_id (struct frame_info *next_frame)
      the frame chain, leading to this function unintentionally
      returning a null_frame_id (e.g., when a caller requests the frame
      ID of "main()"s caller.  */
-  return get_frame_id (get_prev_frame_1 (next_frame));
+
+  /* APPLE LOCAL begin subroutine inlining  */
+  /* This function is attempting to return the frame_id of
+     the caller of "next_frame".  If "next_frame" is an
+     INLINED_FRAME, we need to back up at least one more level.  */
+
+  if (get_frame_type (next_frame) == INLINED_FRAME)
+    return frame_unwind_id (get_prev_frame_1 (next_frame));
+  else
+    return get_frame_id (get_prev_frame_1 (next_frame));
+  /* APPLE LOCAL end subroutine inlining  */
 }
 
 const struct frame_id null_frame_id; /* All zeros.  */
@@ -557,7 +580,8 @@ frame_pop (struct frame_info *this_frame)
 
 void
 frame_register_unwind (struct frame_info *frame, int regnum,
-		       int *optimizedp, enum lval_type *lvalp,
+		       /* APPLE LOCAL variable opt states.  */
+		       enum opt_state *optimizedp, enum lval_type *lvalp,
 		       CORE_ADDR *addrp, int *realnump, gdb_byte *bufferp)
 {
   struct frame_unwind_cache *cache;
@@ -598,7 +622,8 @@ frame_register_unwind (struct frame_info *frame, int regnum,
   if (frame_debug)
     {
       fprintf_unfiltered (gdb_stdlog, "->");
-      fprintf_unfiltered (gdb_stdlog, " *optimizedp=%d", (*optimizedp));
+      /* APPLE LOCAL variable opt states.  */
+      fprintf_unfiltered (gdb_stdlog, " *optimizedp=%d", (int) (*optimizedp));
       fprintf_unfiltered (gdb_stdlog, " *lvalp=%d", (int) (*lvalp));
       fprintf_unfiltered (gdb_stdlog, " *addrp=0x%s", paddr_nz ((*addrp)));
       fprintf_unfiltered (gdb_stdlog, " *bufferp=");
@@ -619,7 +644,8 @@ frame_register_unwind (struct frame_info *frame, int regnum,
 
 void
 frame_register (struct frame_info *frame, int regnum,
-		int *optimizedp, enum lval_type *lvalp,
+		/* APPLE LOCAL variable opt states.  */
+		enum opt_state *optimizedp, enum lval_type *lvalp,
 		CORE_ADDR *addrp, int *realnump, gdb_byte *bufferp)
 {
   /* Require all but BUFFERP to be valid.  A NULL BUFFERP indicates
@@ -640,7 +666,7 @@ frame_register (struct frame_info *frame, int regnum,
 void
 frame_unwind_register (struct frame_info *frame, int regnum, gdb_byte *buf)
 {
-  int optimized;
+  enum opt_state optimized;
   CORE_ADDR addr;
   int realnum;
   enum lval_type lval;
@@ -1029,6 +1055,9 @@ flush_cached_frames (void)
   annotate_frames_invalid ();
   if (frame_debug)
     fprintf_unfiltered (gdb_stdlog, "{ flush_cached_frames () }\n");
+  /* APPLE LOCAL begin subroutine inlining  */
+  flush_inlined_subroutine_frames ();
+  /* APPLE LOCAL begin subroutine inlining  */
 }
 
 /* Flush the frame cache, and start a new one if necessary.  */
@@ -1101,17 +1130,29 @@ get_prev_frame_1 (struct frame_info *this_frame)
      the next frame.  This happens when a frame unwind goes backwards.
      Exclude signal trampolines (due to sigaltstack the frame ID can
      go backwards) and sentinel frames (the test is meaningless).  */
+  /* APPLE LOCAL: Drop the "corrupt stack?" language -- this error is almost
+     always an indication that gdb got confused and the stack is fine.  */
   if (this_frame->next->level >= 0
       && this_frame->next->unwind->type != SIGTRAMP_FRAME
-      && frame_id_inner (this_id, get_frame_id (this_frame->next)))
-    error (_("Previous frame inner to this frame (corrupt stack?)"));
+      && frame_id_inner (this_id, get_frame_id (this_frame->next))
+      && backtrace_sanity_checks)
+    error (_("Previous frame inner to this frame (gdb could not unwind past this frame)"));
 
+  /* APPLE LOCAL begin subroutine inlining  */
   /* Check that this and the next frame are not identical.  If they
      are, there is most likely a stack cycle.  As with the inner-than
-     test above, avoid comparing the inner-most and sentinel frames.  */
+     test above, avoid comparing the inner-most and sentinel frames. 
+     Addendum:  They are NOT necessarily a cycle if both frames are for
+     inlined function calls.  */
+  /* APPLE LOCAL: Drop the "corrupt stack?" language -- this error is almost
+     always an indication that gdb got confused and the stack is fine.  */
   if (this_frame->level > 0
-      && frame_id_eq (this_id, get_frame_id (this_frame->next)))
-    error (_("Previous frame identical to this frame (corrupt stack?)"));
+      && frame_id_eq (this_id, get_frame_id (this_frame->next))
+      && (get_frame_type (this_frame) != INLINED_FRAME
+	  || get_frame_type (this_frame->next) != INLINED_FRAME)
+      && backtrace_sanity_checks)
+    error (_("Previous frame identical to this frame (gdb could not unwind past this frame)"));
+  /* APPLE LOCAL end subroutine inlining  */
 
   /* Allocate the new frame but do not wire it in to the frame chain.
      Some (bad) code in INIT_FRAME_EXTRA_INFO tries to look along
@@ -1266,6 +1307,7 @@ get_prev_frame (struct frame_info *this_frame)
      get_current_frame().  */
   gdb_assert (this_frame != NULL);
 
+  /* APPLE LOCAL begin subroutine inlining  */
   /* tausq/2004-12-07: Dummy frames are skipped because it doesn't make much
      sense to stop unwinding at a dummy frame.  One place where a dummy
      frame may have an address "inside_main_func" is on HPUX.  On HPUX, the
@@ -1275,9 +1317,14 @@ get_prev_frame (struct frame_info *this_frame)
      frame dummies on HPUX, the called function is made to jump back to where 
      the inferior was when the user function was called.  If gdb was inside 
      the main function when we created the dummy frame, the dummy frame will 
-     point inside the main function.  */
+     point inside the main function.  
+     Addendum:  If we're inside an inlined subroutine frame for a function
+     that was inlined into 'main', then inside_main_func might be true and 
+     it would still be correct to unwind (out of the inlined subroutine's 
+     frame).  */
   if (this_frame->level >= 0
       && get_frame_type (this_frame) != DUMMY_FRAME
+      && get_frame_type (this_frame) != INLINED_FRAME
       && !backtrace_past_main
       && inside_main_func (this_frame))
     /* Don't unwind past main().  Note, this is done _before_ the
@@ -1288,6 +1335,7 @@ get_prev_frame (struct frame_info *this_frame)
       frame_debug_got_null_frame (gdb_stdlog, this_frame, "inside main func");
       return NULL;
     }
+  /* APPLE LOCAL end subroutine inlining  */
 
   /* If the user's backtrace limit has been exceeded, stop.  We must
      add two to the current level; one of those accounts for backtrace_limit
@@ -1334,14 +1382,17 @@ get_prev_frame (struct frame_info *this_frame)
   /* Assume that the only way to get a zero PC is through something
      like a SIGSEGV or a dummy frame, and hence that NORMAL frames
      will never unwind a zero PC.  */
+  /* APPLE LOCAL begin subroutine inlining  */
   if (this_frame->level > 0
-      && get_frame_type (this_frame) == NORMAL_FRAME
+      && (get_frame_type (this_frame) == NORMAL_FRAME
+	  || get_frame_type (this_frame) == INLINED_FRAME)
       && get_frame_type (get_next_frame (this_frame)) == NORMAL_FRAME
       && get_frame_pc (this_frame) == 0)
     {
       frame_debug_got_null_frame (gdb_stdlog, this_frame, "zero PC");
       return NULL;
     }
+  /* APPLE LOCAL end subroutine inlining  */
 
   return get_prev_frame_1 (this_frame);
 }
@@ -1408,7 +1459,55 @@ pc_notcurrent (struct frame_info *frame)
 void
 find_frame_sal (struct frame_info *frame, struct symtab_and_line *sal)
 {
-  (*sal) = find_pc_line (get_frame_pc (frame), pc_notcurrent (frame));
+  /* APPLE LOCAL begin subroutine inlining  */
+  struct symtab_and_line temp_sal;
+
+  /* At a pc corresponding to an inlined subroutine call, the line
+     table will contain multiple entries for the pc: one "normal"
+     entry, and two entries for each inlining that occurred there (one
+     for the call site, one for the actual inlining). find_pc_line
+     will return a single symtab_and_line struct (sal).  If there were
+     multiple entries for the pc (because of inlining), the 'next'
+     field of the sal will contain a linked list of all the line table
+     entries found for that pc.  This function then searches through
+     the list to find the appropriate entry for the frame (the normal
+     entry, or one of the inlined subroutine entries) and returns that
+     entry.  */
+
+  temp_sal = find_pc_line (get_frame_pc (frame), pc_notcurrent (frame));
+
+  /* If there were multiple entries returned, and the main entry returned
+     does not match the type of frame we're dealing with, search for the
+     correct entry and return that.  */
+
+  if (get_frame_type (frame) == INLINED_FRAME
+      && temp_sal.entry_type == NORMAL_LT_ENTRY
+      && temp_sal.next)
+    {
+      struct symtab_and_line *cur = &temp_sal;
+
+      while (cur
+	     && cur->next
+	     && (cur->entry_type != INLINED_SUBROUTINE_LT_ENTRY
+		 || cur->end != current_inlined_subroutine_call_stack_end_pc ()))
+	cur = cur->next;
+
+      if (cur
+	  && cur->entry_type == INLINED_SUBROUTINE_LT_ENTRY
+	  && cur->end == current_inlined_subroutine_call_stack_end_pc ())
+	{
+	  temp_sal.symtab  = cur->symtab;
+	  temp_sal.section = cur->section;
+	  temp_sal.line    = cur->line;
+	  temp_sal.pc      = cur->pc;
+	  temp_sal.end     = cur->end;
+	  temp_sal.entry_type = cur->entry_type;
+	  temp_sal.next    = cur->next;
+	}
+    }
+
+  (*sal) = temp_sal;
+  /* APPLE LOCAL end subroutine inlining  */
 }
 
 /* Per "frame.h", return the ``address'' of the frame.  Code should
@@ -1669,6 +1768,27 @@ show_backtrace_cmd (char *args, int from_tty)
   cmd_show_list (show_backtrace_cmdlist, from_tty, "");
 }
 
+/* APPLE LOCAL begin subroutine inlining  */
+/* Since this is a request for registers, and function call inlining
+   has no effect on registers, just keep passing this back until it
+   hits a normal frame, which can then process this request.  */
+void
+inlined_frame_prev_register (struct frame_info *next_frame,
+			     void **this_prologue_cache,
+			     int prev_regnum,
+			     int *optimized,
+			     enum lval_type *lvalp,
+			     CORE_ADDR *addrp,
+			     int *realnump,
+			     gdb_byte *valuep)
+{
+  next_frame->unwind->prev_register (next_frame->next, 
+				     &next_frame->prologue_cache,
+				     prev_regnum, optimized, lvalp, addrp, 
+				     realnump, valuep);
+}
+/* APPLE LOCAL end subroutine inlining  */
+
 void
 _initialize_frame (void)
 {
@@ -1696,6 +1816,20 @@ the backtrace at \"main\".  Set this variable if you need to see the rest\n\
 of the stack trace."),
 			   NULL,
 			   show_backtrace_past_main,
+			   &set_backtrace_cmdlist,
+			   &show_backtrace_cmdlist);
+
+/* APPLE LOCAL */
+  add_setshow_boolean_cmd ("sanity-checks", class_obscure,
+			   &backtrace_sanity_checks, _("\
+Set whether to eanble gdb's backtracing sanity checks."), _("\
+Show whether to enable gdb's backtracing sanity checks."), _("\
+gdb performs a number of sanity checks as it performs a backtrace in case a\n\
+mistake is made or a stack is corrupt; it will stop backtracing when one of\n\
+these checks fails.  Disabling this setting can result in bogus stack frames\n\
+or a continuously looping backtrace."),
+			   NULL,
+			   NULL,
 			   &set_backtrace_cmdlist,
 			   &show_backtrace_cmdlist);
 

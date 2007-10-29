@@ -46,6 +46,10 @@
 #include "serial.h"
 #include "doublest.h"
 #include "gdb_assert.h"
+/* APPLE LOCAL - subroutine inlining  */
+#include "inlining.h"
+/* APPLE LOCAL checkpoint */
+#include "checkpoint.h"
 
 /* readline include files */
 #include "readline/readline.h"
@@ -360,6 +364,9 @@ void (*continue_command_hook) (void);
 /* called when the run command is issued; return 1 means do the run; 0 means do not */ 
 int (*run_command_hook) (void); 
 
+/* called when we call a function by hand.  */
+void (*hand_call_function_hook) (void);
+
 /* Handler for SIGHUP.  */
 
 #ifdef SIGHUP
@@ -449,9 +456,12 @@ execute_command (char *p, int from_tty)
   struct cmd_list_element *c;
   enum language flang;
   static int warned = 0;
-  char *line;
-  
+  char *tmp_line;
+
   free_all_values ();
+  /* APPLE LOCAL begin subroutine inlining  */
+  stepping_into_inlined_subroutine = 0;
+  /* APPLE LOCAL end subroutine inlining  */
 
   /* Force cleanup of any alloca areas if using C alloca instead of
      a builtin alloca.  */
@@ -468,7 +478,7 @@ execute_command (char *p, int from_tty)
   if (*p)
     {
       char *arg;
-      line = p;
+      tmp_line = p;
 
       c = lookup_cmd (&p, cmdlist, "", 0, 1);
 
@@ -508,7 +518,7 @@ execute_command (char *p, int from_tty)
       execute_cmd_pre_hook (c);
 
       if (c->flags & DEPRECATED_WARN_USER)
-	deprecated_cmd_warning (&line);
+	deprecated_cmd_warning (&tmp_line);
 
       if (c->class == class_user)
 	execute_user_command (c, arg);
@@ -520,7 +530,7 @@ execute_command (char *p, int from_tty)
 	deprecated_call_command_hook (c, arg, from_tty & caution);
       else
 	cmd_func (c, arg, from_tty & caution);
-       
+
       /* If this command has been post-hooked, run the hook last. */
       execute_cmd_post_hook (c);
 

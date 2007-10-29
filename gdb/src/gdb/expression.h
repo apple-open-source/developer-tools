@@ -183,10 +183,11 @@ enum exp_opcode
        making three exp_elements.  */
     OP_FUNCALL,
 
-    /* OP_OBJC_MSGCALL is followed by a string in the next exp_element and then an
-       integer.  The string is the selector string.  The integer is the number
-       of arguments to the message call.  That many plus one values are used, 
-       the first one being the object pointer.  This is an Objective C message */
+    /* OP_OBJC_MSGCALL is followed by a string in the next exp_element and 
+       then an integer.  The string is the selector string.  The integer is 
+       the number of arguments to the message call.  That many plus one values 
+       are used, the first one being the object pointer.  This is an 
+       Objective-C message.  */
     OP_OBJC_MSGCALL,
 
     /* This is EXACTLY like OP_FUNCALL but is semantically different.  

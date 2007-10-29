@@ -29,7 +29,7 @@
 
 #######################################################################
 
-GCC_SELECT_VERSION="2.19"
+GCC_SELECT_VERSION="2.19.1"
 
 #######################################################################
 
@@ -387,18 +387,6 @@ WRAP_HELP
             list="$list /usr/include/$header"
           fi
 	done
-	if [ $os_version -lt 100400 ]; then
-	  for lib in $symlink_libs; do
-	    if [ -e /usr/lib/$lib -a ! -L /usr/lib/$lib ]; then
-	      list="$list /usr/lib/$lib"
-	    fi
-	  done
-	  for lib in $symlink_local_libs; do
-	    if [ -e /usr/local/lib/$lib -a ! -L /usr/local/lib/$lib ]; then
-	      list="$list /usr/local/lib/$lib"
-	    fi
-	  done
-	fi
 	if [ "$list" != "" ]; then
 	    show_list "The following file(s) exist on your system but are NOT symlinks." \
 			"Delete them before using gcc_select." $list
@@ -441,7 +429,7 @@ WRAP_HELP
 
     # The following headers are compiler-provided on systems prior to Tiger,
     # and on Tiger systems with compilers prior to gcc 4.0.
-    if [ $os_version -lt 100400 -o $switchto_cc \< 4.0 ]; then
+    if [ $switchto_cc \< 4.0 ]; then
       for file_or_dir in \
           /usr/include/gcc/darwin/$switchto_cc/float.h    \
           /usr/include/gcc/darwin/$switchto_cc/stdarg.h   \
@@ -520,14 +508,6 @@ WRAP_HELP
     done
 
     # Set up the library symlinks...
-    if [ $os_version -ge 100400 -a $(echo "$switchto_cc" | sed 's/^3\.5$/4\.0/' | sed 's/\..*//') -ge 4 ]; then
-      for lib in $symlink_libs libcc_dynamic.a ; do
-	[ -L $usr/lib/$lib ] && $dashn rm -f $usr/lib/$lib
-      done
-      for lib in $symlink_local_libs ; do
-	[ -L $usr/local/lib/$lib ] && $dashn rm -f $usr/local/lib/$lib
-      done
-    else
       $dashn mkdir -p $usr/lib
       for lib in $symlink_libs; do
 	[ ! -f $usr/lib/$lib -o -L $usr/lib/$lib ] || continue
@@ -549,7 +529,6 @@ WRAP_HELP
       if [ ! -e $usr/lib/libcc_dynamic.a ]; then
         $dashn ln -sf gcc/darwin/default/libgcc.a $usr/lib/libcc_dynamic.a
       fi
-    fi
 
     # For gcc 3.5 and above, some of the symlinks we just set up point to nowhere.
     # Get rid of them.
@@ -642,9 +621,9 @@ show_list()
 ### main() ############################################################
 #######################################################################
 
-os_version=$(sw_vers -productVersion | awk -F. '{ printf "%02d%02d%02d", $1, $2, $3 }')
-if [ $os_version -lt 100200 ]; then
-  echo "You must be using MacOS X 10.2 (Jaguar) or later."
+os_version=$(sw_vers -productVersion | awk -F. '{ printf "%02d%02d", $1, $2 }')
+if [ $os_version -ne 1004 ]; then
+  echo "This version of gcc_select can be used only on MacOS X 10.4."
   exit 1
 fi
 switch_it "$@"

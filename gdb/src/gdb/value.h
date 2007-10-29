@@ -25,6 +25,22 @@
 #define VALUE_H 1
 
 #include "doublest.h"
+
+/* APPLE LOCAL: For check_safe_call.  */
+#include "gdb_regex.h"
+
+/* APPLE LOCAL begin variable opt states.  */
+/* These are the various states of a variable whose value may be currently
+   unavailable.  */
+enum opt_state 
+{
+  opt_okay = 0, /* Variable's value is currently available.                    */
+  opt_away,     /* Variable was completely optimized away by the compiler.     */
+  opt_evicted,  /* Variable is TEMPORARILY unavailable (probably overwritten). */
+  opt_other     /* Variable's value is not available; not sure why.            */
+};
+/* APPLE LOCAL end variable opt states.  */
+
 #include "frame.h"		/* For struct frame_id.  */
 
 struct block;
@@ -194,10 +210,11 @@ extern const gdb_byte *value_contents_all (struct value *);
 extern int value_fetch_lazy (struct value *val);
 extern int value_contents_equal (struct value *val1, struct value *val2);
 
-/* If nonzero, this is the value of a variable which does not actually
-   exist in the program.  */
-extern int value_optimized_out (struct value *value);
-extern void set_value_optimized_out (struct value *value, int val);
+/* APPLE LOCAL begin variable opt states.  */
+/* Get & set the opt-state for a variable whose value may not be available.  */
+extern enum opt_state value_optimized_out (struct value *value);
+extern void set_value_optimized_out (struct value *value, enum opt_state val);
+/* APPLE LOCAL end varaiable opt states.  */
 
 /* While the following fields are per- VALUE .CONTENT .PIECE (i.e., a
    single value might have multiple LVALs), this hacked interface is
@@ -577,6 +594,25 @@ extern struct value *lookup_cached_function (struct cached_value *cval);
 
 extern struct value *value_of_local (const char *name, int complain);
 
+/* APPLE LOCAL begin variable initialized status  */
+extern void set_var_status (struct value *, int);
+
+extern int value_var_status (struct value *);
+/* APPLE LOCAL end variable initialized status  */
+
+/* APPLE LOCAL begin check safe call  */
+enum check_which_threads
+  {
+    CHECK_CURRENT_THREAD,
+    CHECK_SCHEDULER_VALUE,
+    CHECK_ALL_THREADS
+  };
+
+extern int check_safe_call (regex_t unsafe[], 
+			    int npatterns,
+			    int stack_depth,
+			    enum check_which_threads which_thread);
+/* APPLE LOCAL end check safe call  */
 int set_unwind_on_signal (int new_val);
 
 #endif /* !defined (VALUE_H) */

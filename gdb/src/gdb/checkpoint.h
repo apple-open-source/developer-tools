@@ -72,15 +72,22 @@ struct checkpoint
 
   int pid;
 
+  /* Flag used to decide which ones to keep.  */
+  int keep;
 };
 
+extern void memcache_get (struct checkpoint *cp, ULONGEST addr, int len);
+
 extern void clear_checkpoints (void);
+extern void clear_all_checkpoints (void);
 extern struct checkpoint *create_checkpoint (void);
 extern struct checkpoint *collect_checkpoint (void);
 extern struct checkpoint *finish_checkpoint (struct checkpoint *cp);
 extern struct checkpoint *find_checkpoint (int num);
 extern void rollback_to_checkpoint (struct checkpoint *cp);
 extern void print_checkpoint_info (struct checkpoint *cp);
+extern int checkpoint_compare (struct checkpoint *cp1, struct checkpoint *cp2);
+extern void checkpoint_clear_inferior ();
 
 extern int auto_checkpointing;
 

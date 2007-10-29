@@ -358,7 +358,7 @@ dump_msymbols (struct objfile *objfile, struct ui_file *outfile)
 	  fprintf_filtered (outfile, "  %s", SYMBOL_DEMANGLED_NAME (msymbol));
 	}
 /* APPLE LOCAL: We don't need the struct minimal_symbol member filename.  */
-#if defined(SOFUN_ADDRESS_MAYBE_MISSING) && !defined(NM_NEXTSTEP)
+#if defined(SOFUN_ADDRESS_MAYBE_MISSING) && !defined(TM_NEXTSTEP)
       if (msymbol->filename)
 	fprintf_filtered (outfile, "  %s", msymbol->filename);
 #endif
@@ -498,9 +498,30 @@ dump_symtab_1 (struct objfile *objfile, struct symtab *symtab,
 	     wants it.  */
 	  fprintf_filtered (outfile, ", %d syms/buckets in ",
 			    dict_size (BLOCK_DICT (b)));
-	  deprecated_print_address_numeric (BLOCK_START (b), 1, outfile);
-	  fprintf_filtered (outfile, "..");
-	  deprecated_print_address_numeric (BLOCK_END (b), 1, outfile);
+
+	  /* APPLE LOCAL begin address ranges  */
+	  if (!BLOCK_RANGES (b))
+	    {
+	      deprecated_print_address_numeric (BLOCK_START (b), 1, outfile);
+	      fprintf_filtered (outfile, "..");
+	      deprecated_print_address_numeric (BLOCK_END (b), 1, outfile);
+	    }
+	  else
+	    {
+	      int j;
+	      for (j = 0; j < BLOCK_RANGES (b)->nelts; j++)
+		{
+		  if (j > 0)
+		    fprintf_filtered (outfile, "\n");
+		  deprecated_print_address_numeric (BLOCK_RANGE_START (b, j), 1,
+						    outfile);
+		  fprintf_filtered (outfile, "..");
+		  deprecated_print_address_numeric (BLOCK_RANGE_END (b, j), 1,
+						    outfile);
+		}
+	    }
+	  /* APPLE LOCAL end address ranges  */
+
 	  if (BLOCK_FUNCTION (b))
 	    {
 	      fprintf_filtered (outfile, ", function %s", DEPRECATED_SYMBOL_NAME (BLOCK_FUNCTION (b)));
@@ -755,13 +776,31 @@ print_symbol (void *args)
 	    {
 	      gdb_print_host_address (SYMBOL_BLOCK_VALUE (symbol), outfile);
 	      fprintf_filtered (outfile, ", ");
-	      deprecated_print_address_numeric (BLOCK_START (SYMBOL_BLOCK_VALUE (symbol)),
+	      /* APPLE LOCAL begin address ranges  */
+	      if (!BLOCK_RANGES (SYMBOL_BLOCK_VALUE (symbol)))
+		{
+		  deprecated_print_address_numeric (BLOCK_START (SYMBOL_BLOCK_VALUE (symbol)),
 				     1,
 				     outfile);
-	      fprintf_filtered (outfile, "..");
-	      deprecated_print_address_numeric (BLOCK_END (SYMBOL_BLOCK_VALUE (symbol)),
+		  fprintf_filtered (outfile, "..");
+		  deprecated_print_address_numeric (BLOCK_END (SYMBOL_BLOCK_VALUE (symbol)),
 				     1,
 				     outfile);
+		}
+	      else
+		{
+		  int j;
+		  for (j =0; 
+		       j < BLOCK_RANGES (SYMBOL_BLOCK_VALUE (symbol))->nelts; j++)
+		    {
+		      if (j > 0)
+			fprintf_filtered (outfile, ",");
+		      deprecated_print_address_numeric (BLOCK_RANGE_START (SYMBOL_BLOCK_VALUE (symbol), j), 1, outfile);
+		      fprintf_filtered (outfile, "..");
+		      deprecated_print_address_numeric (BLOCK_RANGE_END (SYMBOL_BLOCK_VALUE (symbol), j), 1, outfile);
+		    }
+		}
+	      /* APPLE LOCAL end address ranges  */
 	    }
 	  else
 	    fprintf_filtered (outfile, "having NULL block!");
@@ -1217,20 +1256,41 @@ maintenance_check_symtabs (char *ignore, int from_tty)
       }
     if (ps->texthigh == 0)
       continue;
-    if (ps->textlow < BLOCK_START (b) || ps->texthigh > BLOCK_END (b))
+    /* APPLE LOCAL begin address ranges  */
+    if (!block_contains_pc (b, ps->textlow) 
+	|| !block_contains_pc (b, ps->texthigh)) 
       {
-	printf_filtered ("Psymtab ");
+ 	printf_filtered ("Psymtab ");
 	puts_filtered (ps->filename);
 	printf_filtered (" covers ");
 	deprecated_print_address_numeric (ps->textlow, 1, gdb_stdout);
 	printf_filtered (" - ");
 	deprecated_print_address_numeric (ps->texthigh, 1, gdb_stdout);
 	printf_filtered (" but symtab covers only ");
-	deprecated_print_address_numeric (BLOCK_START (b), 1, gdb_stdout);
-	printf_filtered (" - ");
-	deprecated_print_address_numeric (BLOCK_END (b), 1, gdb_stdout);
-	printf_filtered ("\n");
+	if (!BLOCK_RANGES (b))
+	  {
+	    deprecated_print_address_numeric (BLOCK_START (b), 1, gdb_stdout);
+	    printf_filtered (" - ");
+	    deprecated_print_address_numeric (BLOCK_END (b), 1, gdb_stdout);
+	    printf_filtered ("\n");
+	  }
+	else
+	  {
+	    int i;
+	    for (i = 0; i < BLOCK_RANGES (b)->nelts; i++)
+	      {
+		if (i > 0)
+		  printf_filtered (", ");
+		deprecated_print_address_numeric (BLOCK_RANGE_START (b, i),
+						   1, gdb_stdout);
+		printf_filtered (" - ");
+		deprecated_print_address_numeric (BLOCK_RANGE_END (b, i),
+						  1, gdb_stdout);
+	      }
+	    printf_filtered ("\n");
+	  }
       }
+    /* APPLE LOCAL end address ranges  */
   }
 }
 
@@ -1363,13 +1423,18 @@ equivalence_table_add (struct objfile *ofile, const char *name,
   /* FIXME: There should really be some host specific method that we call
      out to to test for equivalence.  Should clean this up if we ever want
      to submit this stuff back.  */
-void equivalence_table_build (struct objfile *ofile)
+void 
+equivalence_table_build (struct objfile *ofile)
 {
   struct equivalence_entry **table;
   struct minimal_symbol *msymbol;
   const char *name, *name_end;
 
-  gdb_assert (ofile->equivalence_table == NULL);
+  /* Somebody might have added some symbols.  Instead of trying
+     to merge the new elements into the current table, let's just
+     delete it and then remake it afresh.  */
+  if (ofile->equivalence_table != NULL)
+    equivalence_table_delete (ofile);
 
   if (! ofile->check_for_equivalence)
     return;

@@ -801,11 +801,16 @@ enter_line_range (struct subfile *subfile, unsigned beginoffset, unsigned endoff
       if (int_lnno.l_lnno == 0)
 	{
 	  *firstLine = read_symbol_lineno (int_lnno.l_addr.l_symndx);
-	  record_line (subfile, 0, addr);
+	  /* APPLE LOCAL begin subroutine inlining  */
+	  record_line (subfile, 0, addr, 0, NORMAL_LT_ENTRY);
+	  /* APPLE LOCAL end subroutine inlining  */
 	  --(*firstLine);
 	}
       else
-	record_line (subfile, *firstLine + int_lnno.l_lnno, addr);
+	/* APPLE LOCAL begin subroutine inlining  */
+	record_line (subfile, *firstLine + int_lnno.l_lnno, addr, 0, 
+		     NORMAL_LT_ENTRY);
+        /* APPLE LOCAL end subroutine inlining  */
       curoffset += linesz;
     }
 }
@@ -1296,13 +1301,15 @@ read_xcoff_symtab (struct partial_symtab *pst)
 		  break;
 		}
 
+	      /* APPLE LOCAL begin address ranges  */
 	      finish_block (new->name, &local_symbols, new->old_blocks,
 			    new->start_addr,
 			    (fcn_cs_saved.c_value
 			     + fcn_aux_saved.x_sym.x_misc.x_fsize
 			     + ANOFFSET (objfile->section_offsets,
 					 SECT_OFF_TEXT (objfile))),
-			    objfile);
+			    NULL, objfile);
+	      /* APPLE LOCAL end address ranges  */
 	      within_function = 0;
 	    }
 	  break;
@@ -1388,12 +1395,14 @@ read_xcoff_symtab (struct partial_symtab *pst)
 	      if (local_symbols && context_stack_depth > 0)
 		{
 		  /* Make a block for the local symbols within.  */
+		  /* APPLE LOCAL begin address ranges  */
 		  finish_block (new->name, &local_symbols, new->old_blocks,
 				new->start_addr,
 				(cs->c_value
 				 + ANOFFSET (objfile->section_offsets,
 					     SECT_OFF_TEXT (objfile))),
-				objfile);
+				NULL, objfile);
+		  /* APPLE LOCAL end address ranges  */
 		}
 	      local_symbols = new->locals;
 	    }

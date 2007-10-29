@@ -32,7 +32,6 @@
 
 #include <mach-o/nlist.h>
 #include <mach-o/loader.h>
-#include <mach-o/dyld_debug.h>
 
 #include <string.h>
 #include <signal.h>
@@ -48,6 +47,8 @@
 #include "macosx-nat-dyld-path.h"
 #include "macosx-nat-inferior.h"
 #include "macosx-nat-mutils.h"
+
+extern macosx_dyld_thread_status macosx_dyld_status;
 
 const char *
 ptrace_request_unparse (int request)
@@ -117,7 +118,7 @@ macosx_inferior_reset (macosx_inferior_status *s)
 
   s->last_thread = THREAD_NULL;
 
-  macosx_dyld_thread_init (&s->dyld_status);
+  macosx_dyld_thread_init (&macosx_dyld_status);
 
   macosx_signal_thread_init (&s->signal_status);
 

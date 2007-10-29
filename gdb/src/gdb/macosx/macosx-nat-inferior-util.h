@@ -1,6 +1,7 @@
 #ifndef __GDB_MACOSX_NAT_INFERIOR_UTIL_H__
 #define __GDB_MACOSX_NAT_INFERIOR_UTIL_H__
 
+#include <mach/mach.h>
 #include "macosx-nat-inferior.h"
 #include "inferior.h"
 

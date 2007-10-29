@@ -350,7 +350,7 @@ exp	: 	'[' TYPENAME
 			    error ("%s is not an ObjC Class", 
 				   copy_name ($2.stoken));
 			  write_exp_elt_opcode (OP_LONG);
-			  write_exp_elt_type (builtin_type_int);
+			  write_exp_elt_type (builtin_type_void_data_ptr);
 			  write_exp_elt_longcst ((LONGEST) class);
 			  write_exp_elt_opcode (OP_LONG);
 			  start_msglist();
@@ -365,7 +365,7 @@ exp	: 	'[' TYPENAME
 exp	:	'[' OBJC_CLASSNAME
 			{
 			  write_exp_elt_opcode (OP_LONG);
-			  write_exp_elt_type (builtin_type_int);
+			  write_exp_elt_type (builtin_type_void_data_ptr);
 			  write_exp_elt_longcst ((LONGEST) $2.class);
 			  write_exp_elt_opcode (OP_LONG);
 			  start_msglist();
@@ -1208,18 +1208,30 @@ parse_number (p, len, parsed_float, putithere)
 #endif
 	}
       p[len] = saved_char;	/* restore the input stream */
-      if (num != 1) 		/* check scanf found ONLY a float ... */
-	return ERROR;
-      /* See if it has `f' or `l' suffix (float or long double).  */
+      if (num == 1) 		/* check scanf found ONLY a float ... */
+        putithere->typed_val_float.type =
+          builtin_type (current_gdbarch)->builtin_double;
+      else if (num == 2)
+	{
+	  /* See if it has `f' or `l' suffix (float or long double).  */
+	  
+	  c = tolower (c);
+	  /* There's no way to tell, using sscanf, whether we actually
+	     did ingest all the input.  But this check will catch things
+	     like: 123fghi.jklmn, though of course it will be fooled by
+	     123fghi.jklmf.  I'm not really all that worried about this,
+	     however.  */
 
-      c = tolower (p[len - 1]);
+	  if (c != p[len-1])
+	    return ERROR;
 
-      if (c == 'f')
-	putithere->typed_val_float.type = builtin_type (current_gdbarch)->builtin_float;
-      else if (c == 'l')
-	putithere->typed_val_float.type = builtin_type (current_gdbarch)->builtin_long_double;
-      else if (isdigit (c) || c == '.')
-	putithere->typed_val_float.type = builtin_type (current_gdbarch)->builtin_double;
+	  if (c == 'f')
+	    putithere->typed_val_float.type = builtin_type (current_gdbarch)->builtin_float;
+	  else if (c == 'l')
+	    putithere->typed_val_float.type = builtin_type (current_gdbarch)->builtin_long_double;
+	  else
+	    return ERROR;
+	}
       else
 	return ERROR;
 

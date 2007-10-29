@@ -101,6 +101,11 @@ struct dwarf_expr_context
      surrounding data.  So the two cases need to be handled
      separately.)  */
   int num_pieces;
+
+  /* APPLE LOCAL begin initialized variable status  */
+  /* For variables, indicates whether the variable is initialized (1) or not (0).  */
+  int var_status;
+  /* APPLE LOCAL end initialized variable status  */
   struct dwarf_expr_piece *pieces;
 };
 
@@ -135,4 +140,11 @@ gdb_byte *read_sleb128 (gdb_byte *buf, gdb_byte *buf_end, LONGEST * r);
 CORE_ADDR dwarf2_read_address (gdb_byte *buf, gdb_byte *buf_end,
 			       int *bytes_read);
 
+/* APPLE LOCAL begin variable initialized status  */
+
+extern struct type *unsigned_address_type (void);
+extern struct type *signed_address_type (void);
+extern void add_piece (struct dwarf_expr_context *, int, CORE_ADDR, ULONGEST);
+
+/* APPLE LOCAL end variable initialized status  */
 #endif /* dwarf2expr.h */

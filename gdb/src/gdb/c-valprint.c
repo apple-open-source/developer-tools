@@ -564,6 +564,11 @@ c_value_print (struct value *val, struct ui_file *stream, int format,
 	}
     }
 
+  /* APPLE LOCAL begin variable initialized status.  */
+  if (value_var_status (val) == 0)
+    fprintf_filtered (stream, " [uninitialized] ");
+  /* APPLE LOCAL end variable initialized status.  */
+
   if (objectprint && (TYPE_CODE (type) == TYPE_CODE_CLASS))
     {
       /* Attempt to determine real type of object */

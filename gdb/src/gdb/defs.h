@@ -1288,6 +1288,7 @@ extern void (*deprecated_error_begin_hook) (void);
 /* APPLE LOCAL begin hooks */
 /* called when the run command is issued; return 1 means do the run; 0 means do not */
 extern int (*run_command_hook) (void);
+extern void (*hand_call_function_hook) (void);
 /* APPLE LOCAL end hooks */
 
 extern int (*deprecated_ui_load_progress_hook) (const char *section,
@@ -1390,4 +1391,8 @@ void gdb_check (const char *str, const char *file, unsigned int line, const char
 void gdb_check_fatal (const char *str, const char *file, unsigned int line, const char *func);
 /* APPLE LOCAL end CHECK macro */
 
+/* APPLE LOCAL: Local timer stuff */
+extern int maint_use_timers;
+struct cleanup *start_timer (int *timer_var, char *timer_name, char *this_mssg);
+    
 #endif /* #ifndef DEFS_H */

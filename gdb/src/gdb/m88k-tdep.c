@@ -719,7 +719,8 @@ m88k_frame_this_id (struct frame_info *next_frame, void **this_cache,
 
 static void
 m88k_frame_prev_register (struct frame_info *next_frame, void **this_cache,
-			  int regnum, int *optimizedp,
+			  /* APPLE LOCAL variable opt states.  */
+			  int regnum, enum opt_state *optimizedp,
 			  enum lval_type *lvalp, CORE_ADDR *addrp,
 			  int *realnump, gdb_byte *valuep)
 {
@@ -742,7 +743,8 @@ m88k_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 	}
 
       /* It's a computed value.  */
-      *optimizedp = 0;
+      /* APPLE LOCAL variable opt states.  */
+      *optimizedp = opt_okay;
       *lvalp = not_lval;
       *addrp = 0;
       *realnump = -1;
