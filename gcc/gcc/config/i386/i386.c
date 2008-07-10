@@ -709,6 +709,66 @@ struct processor_costs generic32_cost = {
   COSTS_N_INSNS (40),			/* cost of FSQRT instruction.  */
 };
 /* APPLE LOCAL end mainline 2006-04-19 4434601 */
+/* APPLE LOCAL begin apple cpu  */
+/* The apple processor should have costs similar to generic and nocona.  */
+static const
+struct processor_costs apple_cost = {
+  COSTS_N_INSNS (1),			/* cost of an add instruction */
+  /* On all chips taken into consideration lea is 2 cycles and more.  With
+     this cost however our current implementation of synth_mult results in
+     use of unnecesary temporary registers causing regression on several
+     SPECfp benchmarks.  */
+  COSTS_N_INSNS (1) + 1,		/* cost of a lea instruction */
+  COSTS_N_INSNS (1),			/* variable shift costs */
+  COSTS_N_INSNS (1),			/* constant shift costs */
+  {COSTS_N_INSNS (3),			/* cost of starting multiply for QI */
+   COSTS_N_INSNS (4),			/*                               HI */
+   COSTS_N_INSNS (3),			/*                               SI */
+   COSTS_N_INSNS (4),			/*                               DI */
+   COSTS_N_INSNS (2)},			/*                               other */
+  0,					/* cost of multiply per each bit set */
+  {COSTS_N_INSNS (18),			/* cost of a divide/mod for QI */
+   COSTS_N_INSNS (26),			/*                          HI */
+   COSTS_N_INSNS (42),			/*                          SI */
+   COSTS_N_INSNS (74),			/*                          DI */
+   COSTS_N_INSNS (74)},			/*                          other */
+  COSTS_N_INSNS (1),			/* cost of movsx */
+  COSTS_N_INSNS (1),			/* cost of movzx */
+  8,					/* "large" insn */
+  17,					/* MOVE_RATIO */
+  4,					/* cost for loading QImode using movzbl */
+  {4, 4, 4},				/* cost of loading integer registers
+					   in QImode, HImode and SImode.
+					   Relative to reg-reg move (2).  */
+  {4, 4, 4},				/* cost of storing integer registers */
+  4,					/* cost of reg,reg fld/fst */
+  {12, 12, 12},				/* cost of loading fp registers
+					   in SFmode, DFmode and XFmode */
+  {6, 6, 8},				/* cost of loading integer registers */
+  2,					/* cost of moving MMX register */
+  {8, 8},				/* cost of loading MMX registers
+					   in SImode and DImode */
+  {8, 8},				/* cost of storing MMX registers
+					   in SImode and DImode */
+  2,					/* cost of moving SSE register */
+  {8, 8, 8},				/* cost of loading SSE registers
+					   in SImode, DImode and TImode */
+  {8, 8, 8},				/* cost of storing SSE registers
+					   in SImode, DImode and TImode */
+  5,					/* MMX or SSE register to integer */
+  64,					/* size of prefetch block */
+  6,					/* number of parallel prefetches */
+  /* Benchmarks shows large regressions on K8 sixtrack benchmark when this value
+     is increased to perhaps more appropriate value of 5.  */
+  3,					/* Branch cost */
+  COSTS_N_INSNS (8),			/* cost of FADD and FSUB insns.  */
+  COSTS_N_INSNS (8),			/* cost of FMUL instruction.  */
+  COSTS_N_INSNS (20),			/* cost of FDIV instruction.  */
+  COSTS_N_INSNS (8),			/* cost of FABS instruction.  */
+  COSTS_N_INSNS (8),			/* cost of FCHS instruction.  */
+  COSTS_N_INSNS (40),			/* cost of FSQRT instruction.  */
+};
+/* APPLE LOCAL end apple cpu */
 
 const struct processor_costs *ix86_cost = &pentium_cost;
 
@@ -839,7 +899,9 @@ const int x86_sse_typeless_stores = m_ATHLON_K8;
 const int x86_sse_load0_by_pxor = m_PPRO | m_PENT4 | m_NOCONA;
 const int x86_use_ffreep = m_ATHLON_K8;
 const int x86_rep_movl_optimal = m_386 | m_PENT | m_PPRO | m_K6;
-const int x86_use_incdec = ~(m_PENT4 | m_NOCONA | m_GENERIC);
+/* APPLE LOCAL begin radar 4577796. */
+const int x86_use_incdec = ~(m_PENT4 | m_NOCONA);
+/* APPLE LOCAL end radar 4577796. */
 
 /* ??? Allowing interunit moves makes it all too easy for the compiler to put
    integer data in xmm registers.  Which results in pretty abysmal code.  */
@@ -1005,6 +1067,8 @@ int const svr4_dbx_register_map[FIRST_PSEUDO_REGISTER+1] =
 
 rtx ix86_compare_op0 = NULL_RTX;
 rtx ix86_compare_op1 = NULL_RTX;
+/* APPLE LOCAL mainline */
+rtx ix86_compare_emitted = NULL_RTX;
 
 #define MAX_386_STACK_LOCALS 3
 /* Size of the register save area.  */
@@ -1219,11 +1283,8 @@ static rtx ix86_struct_value_rtx (tree, int);
 static bool ix86_ms_bitfield_layout_p (tree);
 static tree ix86_handle_struct_attribute (tree *, tree, tree, int, bool *);
 static int extended_reg_mentioned_1 (rtx *, void *);
-/* APPLE LOCAL begin why is this local? */
-#if TARGET_MACHO
-static bool ix86_binds_local_p (tree);
-#endif
-/* APPLE LOCAL end why is this local? */
+/* APPLE LOCAL begin mainline remove x86_binds_local_p  */
+/* APPLE LOCAL end mainline */
 static bool ix86_rtx_costs (rtx, int, int, int *);
 static int min_insn_size (rtx);
 static tree ix86_md_asm_clobbers (tree clobbers);
@@ -1340,12 +1401,12 @@ static void init_ext_80387_constants (void);
 #undef TARGET_MS_BITFIELD_LAYOUT_P
 #define TARGET_MS_BITFIELD_LAYOUT_P ix86_ms_bitfield_layout_p
 
-/* APPLE LOCAL begin why is this local? */
+/* APPLE LOCAL begin mainline */
 #if TARGET_MACHO
 #undef TARGET_BINDS_LOCAL_P
-#define TARGET_BINDS_LOCAL_P ix86_binds_local_p
+#define TARGET_BINDS_LOCAL_P darwin_binds_local_p
 #endif
-/* APPLE LOCAL end why is this local? */
+/* APPLE LOCAL end mainline */
 
 #undef TARGET_ASM_OUTPUT_MI_THUNK
 #define TARGET_ASM_OUTPUT_MI_THUNK x86_output_mi_thunk
@@ -1401,6 +1462,10 @@ static void init_ext_80387_constants (void);
 #undef TARGET_INSERT_ATTRIBUTES
 #define TARGET_INSERT_ATTRIBUTES SUBTARGET_INSERT_ATTRIBUTES
 #endif
+/* APPLE LOCAL begin mainline */
+#undef TARGET_STACK_PROTECT_FAIL
+#define TARGET_STACK_PROTECT_FAIL default_hidden_stack_protect_fail
+/* APPLE LOCAL end mainline */
 
 /* APPLE LOCAL begin mainline 2005-09-20 4205103 */
 #undef TARGET_FUNCTION_VALUE
@@ -1415,6 +1480,40 @@ struct gcc_target targetm = TARGET_INITIALIZER;
 #ifndef DEFAULT_PCC_STRUCT_RETURN
 #define DEFAULT_PCC_STRUCT_RETURN 1
 #endif
+
+/* APPLE LOCAL begin 4760857 optimization pragmas. */
+/* Hoisted so it can be used by reset_optimization_options. */
+static struct ptt
+  {
+    const struct processor_costs *cost;	/* Processor costs */
+    const int target_enable;			/* Target flags to enable.  */
+    const int target_disable;			/* Target flags to disable.  */
+    const int align_loop;			/* Default alignments.  */
+    const int align_loop_max_skip;
+    const int align_jump;
+    const int align_jump_max_skip;
+    const int align_func;
+  }
+const processor_target_table[PROCESSOR_max] =
+  {
+    {&i386_cost, 0, 0, 4, 3, 4, 3, 4},
+    {&i486_cost, 0, 0, 16, 15, 16, 15, 16},
+    {&pentium_cost, 0, 0, 16, 7, 16, 7, 16},
+    {&pentiumpro_cost, 0, 0, 16, 15, 16, 7, 16},
+    {&k6_cost, 0, 0, 32, 7, 32, 7, 32},
+    {&athlon_cost, 0, 0, 16, 7, 16, 7, 16},
+    {&pentium4_cost, 0, 0, 0, 0, 0, 0, 0},
+    {&k8_cost, 0, 0, 16, 7, 16, 7, 16},
+  /* APPLE LOCAL begin mainline 2006-04-19 4434601 */
+    {&nocona_cost, 0, 0, 0, 0, 0, 0, 0},
+    {&generic32_cost, 0, 0, 16, 7, 16, 7, 16},
+  /* APPLE LOCAL apple cpu */
+    {&generic64_cost, 0, 0, 16, 7, 16, 7, 16},
+  /* APPLE LOCAL end mainline 2006-04-19 4434601 */
+  /* APPLE LOCAL apple cpu */
+    {&apple_cost, 0, 0, 16, 7, 16, 7, 16}
+  };
+/* APPLE LOCAL end 4760857 optimization pragmas. */
 
 /* Sometimes certain combinations of command options do not make
    sense on a particular target machine.  You can define a macro
@@ -1434,33 +1533,9 @@ override_options (void)
   /* Comes from final.c -- no real reason to change it.  */
 #define MAX_CODE_ALIGN 16
 
-  static struct ptt
-    {
-      const struct processor_costs *cost;	/* Processor costs */
-      const int target_enable;			/* Target flags to enable.  */
-      const int target_disable;			/* Target flags to disable.  */
-      const int align_loop;			/* Default alignments.  */
-      const int align_loop_max_skip;
-      const int align_jump;
-      const int align_jump_max_skip;
-      const int align_func;
-    }
-  const processor_target_table[PROCESSOR_max] =
-    {
-      {&i386_cost, 0, 0, 4, 3, 4, 3, 4},
-      {&i486_cost, 0, 0, 16, 15, 16, 15, 16},
-      {&pentium_cost, 0, 0, 16, 7, 16, 7, 16},
-      {&pentiumpro_cost, 0, 0, 16, 15, 16, 7, 16},
-      {&k6_cost, 0, 0, 32, 7, 32, 7, 32},
-      {&athlon_cost, 0, 0, 16, 7, 16, 7, 16},
-      {&pentium4_cost, 0, 0, 0, 0, 0, 0, 0},
-      {&k8_cost, 0, 0, 16, 7, 16, 7, 16},
-    /* APPLE LOCAL begin mainline 2006-04-19 4434601 */
-      {&nocona_cost, 0, 0, 0, 0, 0, 0, 0},
-      {&generic32_cost, 0, 0, 16, 7, 16, 7, 16},
-      {&generic64_cost, 0, 0, 16, 7, 16, 7, 16}
-    /* APPLE LOCAL end mainline 2006-04-19 4434601 */
-    };
+  /* APPLE LOCAL begin 4760857 optimization pragmas. */
+  /* processor_target_table moved to file scope. */
+  /* APPLE LOCAL end 4760857 optimization pragmas. */
 
   static const char * const cpu_names[] = TARGET_CPU_DEFAULT_NAMES;
   static struct pta
@@ -1476,10 +1551,10 @@ override_options (void)
 	  PTA_PREFETCH_SSE = 16,
 	  PTA_3DNOW = 32,
 	  PTA_3DNOW_A = 64,
-	  /* APPLE LOCAL begin mni 4424835 */
+	  /* APPLE LOCAL begin ssse3 4424835 */
 	  PTA_64BIT = 128,
-	  PTA_MNI = 256
-	  /* APPLE LOCAL end mni */
+	  PTA_SSSE3 = 256
+	  /* APPLE LOCAL end ssse3 */
 	} flags;
     }
   /* APPLE LOCAL begin x86_64 support */
@@ -1536,6 +1611,10 @@ override_options (void)
       {"generic32", PROCESSOR_GENERIC32, 0 /* flags are only used for -march switch.  */ },
       {"generic64", PROCESSOR_GENERIC64, PTA_64BIT /* flags are only used for -march switch.  */ },
     /* APPLE LOCAL end mainline 2006-04-19 4434601 */
+      /* APPLE LOCAL begin apple cpu */
+      {"apple", PROCESSOR_APPLE, PTA_MMX | PTA_PREFETCH_SSE | PTA_SSE | PTA_SSE2
+				 | PTA_64BIT},
+      /* APPLE LOCAL end apple cpu */
     };
   /* APPLE LOCAL end x86_64 support */
 
@@ -1545,11 +1624,11 @@ override_options (void)
   SUBTARGET_OVERRIDE_OPTIONS;
 #endif
 
-  /* APPLE LOCAL begin constant cfstrings */
+  /* APPLE LOCAL begin mainline */
 #ifdef SUBSUBTARGET_OVERRIDE_OPTIONS
   SUBSUBTARGET_OVERRIDE_OPTIONS;
 #endif
-  /* APPLE LOCAL end constant cfstrings */
+  /* APPLE LOCAL end mainline */
 
   /* APPLE LOCAL begin x86_64 support 2006-02-02 */
   if (TARGET_MACHO && TARGET_64BIT) 
@@ -1698,16 +1777,11 @@ override_options (void)
 	if (processor_alias_table[i].flags & PTA_SSE3
 	    && !(target_flags_explicit & MASK_SSE3))
 	  target_flags |= MASK_SSE3;
-	/* APPLE LOCAL begin mni 4424835 */
-	if (processor_alias_table[i].flags & PTA_MNI
-	    && !(target_flags_explicit & MASK_MNI))
-	  target_flags |= MASK_MNI;
-	/* APPLE LOCAL end mni */
-	/* APPLE LOCAL begin 4515157 */
-	/* For 32-bit Mach-O, default to SSE3 off.  */
-	if (TARGET_MACHO && !TARGET_64BIT && !(target_flags_explicit & MASK_SSE3))
-	  target_flags &= ~MASK_SSE3;
-	/* APPLE LOCAL end 4515157 */
+	/* APPLE LOCAL begin ssse3 4424835 */
+	if (processor_alias_table[i].flags & PTA_SSSE3
+	    && !(target_flags_explicit & MASK_SSSE3))
+	  target_flags |= MASK_SSSE3;
+	/* APPLE LOCAL end ssse3 */
 	if (processor_alias_table[i].flags & PTA_PREFETCH_SSE)
 	  x86_prefetch_sse = true;
 	if (TARGET_64BIT && !(processor_alias_table[i].flags & PTA_64BIT))
@@ -1891,11 +1965,11 @@ override_options (void)
      software floating point, don't use 387 inline instrinsics.  */
   if (!TARGET_80387)
     target_flags |= MASK_NO_FANCY_MATH_387;
-  /* APPLE LOCAL begin mni 4424835 */
-  /* Turn on SSE3 builtins for -mmni.  */
-  if (TARGET_MNI)
+  /* APPLE LOCAL begin ssse3 4424835 */
+  /* Turn on SSE3 builtins for -mssse3.  */
+  if (TARGET_SSSE3)
     target_flags |= MASK_SSE3;
-  /* APPLE LOCAL end mni */
+  /* APPLE LOCAL end ssse3 */
   /* Turn on SSE2 builtins for -msse3.  */
   if (TARGET_SSE3)
     target_flags |= MASK_SSE2;
@@ -1929,6 +2003,12 @@ override_options (void)
 	|= ((MASK_SSE2 | MASK_SSE | MASK_MMX | MASK_128BIT_LONG_DOUBLE)
 	    & ~target_flags_explicit);
 /* APPLE LOCAL begin mainline 2005-04-11 4010614 */
+      /* APPLE LOCAL begin apple cpu */
+      /* For the apple cpu target turn on SSE3 for 64-bit by default.  */
+      if (TARGET_MACHO
+	  && ! strcmp (ix86_arch_string, "apple"))
+	target_flags |= MASK_SSE3 & ~target_flags_explicit;
+      /* APPLE LOCAL end apple cpu */
      }
   else
     {
@@ -2015,6 +2095,20 @@ override_options (void)
       flag_pic = 2;
     }
   /* APPLE LOCAL end dynamic-no-pic */
+  /* APPLE LOCAL begin 4812082 -fast */
+  /* These flags were the best on the software H264 codec, and have therefore
+     been lumped into -fast per 4812082.  They have not been evaluated on
+     any other code, except that -fno-tree-pre is known to lose on the 
+     hardware accelerated version of the codec. */
+  if (flag_fast || flag_fastf || flag_fastcp)
+    {
+      flag_omit_frame_pointer = 1;
+      flag_strict_aliasing = 1;
+      flag_tree_pre = 0;
+      target_flags &= ~MASK_OMIT_LEAF_FRAME_POINTER;
+      align_loops = processor_target_table[ix86_tune].align_loop;
+    }
+  /* APPLE LOCAL end 4812082 -fast */
 }
 
 void
@@ -2056,18 +2150,21 @@ optimization_options (int level, int size ATTRIBUTE_UNUSED)
 #ifdef SUBTARGET_OPTIMIZATION_OPTIONS
   SUBTARGET_OPTIMIZATION_OPTIONS;
 #endif
-  /* APPLE LOCAL begin 4200243 */
-  if (getenv ("RC_FORCE_SSE3"))
-    target_flags |= MASK_SSE3;
+  /* APPLE LOCAL begin 4200243 4700932 */
+  {
+    char *force = getenv ("RC_FORCE_SSE3");
+    if (force && !strcmp (force, "YES"))
+      target_flags |= MASK_SSE3;
+  }
 }
-/* APPLE LOCAL end 4200243 */
+/* APPLE LOCAL end 4200243 4700932 */
 
 /* APPLE LOCAL begin optimization pragmas 3124235/3420242 */
 /* Version of the above for use from #pragma optimization_level.  Only
    per-function flags are reset.  */
 #if TARGET_MACHO
 void
-reset_optimization_options (int level, int size ATTRIBUTE_UNUSED)
+reset_optimization_options (int level, int size)
 {
   /* For -O2 and beyond, turn off -fschedule-insns by default.  It tends to
      make the problem with not enough registers even worse.  */
@@ -2096,6 +2193,24 @@ reset_optimization_options (int level, int size ATTRIBUTE_UNUSED)
 #ifdef SUBTARGET_OPTIMIZATION_OPTIONS
   SUBTARGET_OPTIMIZATION_OPTIONS;
 #endif
+  /* APPLE LOCAL begin 4760857 */
+  if (size)
+    ix86_cost = &size_cost;
+  else
+    ix86_cost = processor_target_table[ix86_tune].cost;
+
+  /* Default align_* from the processor table.  */
+  if (align_loops == 0)
+    {
+      align_loops = processor_target_table[ix86_tune].align_loop;
+      align_loops_max_skip = processor_target_table[ix86_tune].align_loop_max_skip;
+    }
+  if (align_jumps == 0)
+    {
+      align_jumps = processor_target_table[ix86_tune].align_jump;
+      align_jumps_max_skip = processor_target_table[ix86_tune].align_jump_max_skip;
+    }
+  /* APPLE LOCAL end 4760857 */
 }
 #endif
 /* APPLE LOCAL end optimization pragmas 3124235/3420242 */
@@ -2149,7 +2264,7 @@ const struct attribute_spec ix86_attribute_table[] =
 static bool
 ix86_function_ok_for_sibcall (tree decl, tree exp)
 {
-  /* APPLE LOCAL begin mainline 2005-09-20 4205103 */
+  /* APPLE LOCAL begin mainline 2006-04-16 4205103, 4314956 */
   tree func;
   rtx a, b;
 
@@ -2181,9 +2296,16 @@ ix86_function_ok_for_sibcall (tree decl, tree exp)
   a = ix86_function_value (TREE_TYPE (exp), func, false);
   b = ix86_function_value (TREE_TYPE (DECL_RESULT (cfun->decl)),
 			   cfun->decl, false);
-  if (! rtx_equal_p (a, b))
+  if (STACK_REG_P (a) || STACK_REG_P (b))
+    {
+      if (!rtx_equal_p (a, b))
+        return false;
+    }
+  else if (VOID_TYPE_P (TREE_TYPE (DECL_RESULT (cfun->decl))))
+    ;
+  else if (! rtx_equal_p (a, b))
     return false;
-  /* APPLE LOCAL end mainline 2005-09-20 4205103 */
+  /* APPLE LOCAL end mainline 2006-04-16 4205103, 4314956 */
   
   /* If this call is indirect, we'll need to be able to use a call-clobbered
      register for the address of the target function.  Make sure that all
@@ -2445,7 +2567,10 @@ ix86_function_regparm (tree type, tree decl)
 		   && DECL_STRUCT_FUNCTION (decl)->machine->force_align_arg_pointer)
 		  || (!DECL_STRUCT_FUNCTION (decl)
 		      && lookup_attribute (ix86_force_align_arg_pointer_string,
-					   TYPE_ATTRIBUTES (TREE_TYPE (decl)))))
+                  /* APPLE LOCAL begin radar 4861528, 5164498 */
+					   TYPE_ATTRIBUTES (TREE_TYPE (decl))))
+                  || ix86_force_align_arg_pointer)
+                  /* APPLE LOCAL end radar 4861528, 5164498 */
 		local_regparm = 2;
 	    }
 	}
@@ -2741,6 +2866,11 @@ type_natural_mode (tree type)
 	  abort ();
 	}
     }
+  /* APPLE LOCAL begin 4656532 use V1DImode for _m64 */
+  /* Pass V1DImode objects as DImode.  This is for compatibility. */
+  if (TREE_CODE (type) == VECTOR_TYPE && mode == V1DImode && !TARGET_64BIT)
+    return DImode;
+  /* APPLE LOCAL end 4656532 use V1DImode for _m64 */
 
   return mode;
 }
@@ -2903,7 +3033,8 @@ classify_argument (enum machine_mode mode, tree type,
 		  /* Bitfields are always classified as integer.  Handle them
 		     early, since later code would consider them to be
 		     misaligned integers.  */
-		  if (DECL_BIT_FIELD (field))
+		  /* APPLE LOCAL c++ abi for bit-fields 5679636 */
+		  if (DECL_BIT_FIELD_TYPE (field))
 		    {
 		      for (i = int_bit_position (field) / 8 / 8;
 			   i < (int_bit_position (field)
@@ -3752,6 +3883,20 @@ ix86_function_value (tree valtype, tree fntype_or_decl,
 }
 /* APPLE LOCAL end mainline 2005-09-20 4205103 */
 
+/* APPLE LOCAL begin radar 4781080 */
+/* Return true iff must generate call to objcMsgSend for an 
+   fp-returning method. */ 
+bool
+ix86_objc_fpreturn_msgcall (tree ret_type, bool no_long_double)
+{
+  if (no_long_double)
+    return TARGET_64BIT && SCALAR_FLOAT_TYPE_P (ret_type)
+	   && TYPE_MODE (ret_type) != XFmode;
+  else
+    return SCALAR_FLOAT_TYPE_P (ret_type);
+}
+/* APPLE LOCAL end radar 4781080 */
+
 /* Return false iff type is returned in memory.  */
 int
 ix86_return_in_memory (tree type)
@@ -4485,7 +4630,7 @@ standard_80387_constant_rtx (int idx)
 				       XFmode);
 }
 
-/* APPLE LOCAL begin mainline candidate 4283414 */
+/* APPLE LOCAL begin mainline */
 /* Return 1 if mode is a valid mode for sse.  */
 static int
 standard_sse_mode_p (enum machine_mode mode)
@@ -4541,7 +4686,7 @@ standard_sse_constant_opcode (rtx insn, rtx x)
     }
   gcc_unreachable ();
 }
-/* APPLE LOCAL end mainline candidate 4283414 */
+/* APPLE LOCAL end mainline */
 
 /* Returns 1 if OP contains a symbol reference */
 
@@ -4635,7 +4780,8 @@ ix86_setup_frame_addresses (void)
   cfun->machine->accesses_prev_frame = 1;
 }
 
-#if defined(HAVE_GAS_HIDDEN) && defined(SUPPORTS_ONE_ONLY)
+/* APPLE LOCAL mainline */
+#if (defined(HAVE_GAS_HIDDEN) && defined(SUPPORTS_ONE_ONLY)) || TARGET_MACHO
 # define USE_HIDDEN_LINKONCE 1
 #else
 # define USE_HIDDEN_LINKONCE 0
@@ -4678,7 +4824,20 @@ ix86_file_end (void)
 	continue;
 
       get_pc_thunk_name (name, regno);
-
+      /* APPLE LOCAL begin mainline */
+#if TARGET_MACHO
+      if (TARGET_MACHO)
+        {
+          text_coal_section ();
+          fputs ("\t.weak_definition\t", asm_out_file);
+          assemble_name (asm_out_file, name);
+          fputs ("\n\t.private_extern\t", asm_out_file);
+          assemble_name (asm_out_file, name);
+          fputs ("\n", asm_out_file);
+          ASM_OUTPUT_LABEL (asm_out_file, name);
+        }
+      else
+#endif
       if (USE_HIDDEN_LINKONCE)
 	{
 	  tree decl;
@@ -4698,20 +4857,7 @@ ix86_file_end (void)
 	  fputc ('\n', asm_out_file);
 	  ASM_DECLARE_FUNCTION_NAME (asm_out_file, name, decl);
 	}
-      /* APPLE LOCAL begin deep branch prediction pic-base */
-#if TARGET_MACHO
-      else if (TARGET_MACHO)
-	{
-	  text_coal_section ();
-	  fputs (".weak_definition\t", asm_out_file);
-	  assemble_name (asm_out_file, name);
-	  fputs ("\n.private_extern\t", asm_out_file);
-	  assemble_name (asm_out_file, name);
-	  fputs ("\n", asm_out_file);
-	  ASM_OUTPUT_LABEL (asm_out_file, name);
-	}
-#endif
-      /* APPLE LOCAL end deep branch prediction pic-base */
+      /* APPLE LOCAL end mainline */
       else
 	{
 	  text_section ();
@@ -4729,9 +4875,9 @@ ix86_file_end (void)
 }
 
 /* Emit code for the SET_GOT patterns.  */
-
+/* APPLE LOCAL begin mainline */
 const char *
-output_set_got (rtx dest)
+output_set_got (rtx dest, rtx label ATTRIBUTE_UNUSED)
 {
   rtx xops[3];
 
@@ -4740,7 +4886,7 @@ output_set_got (rtx dest)
 
   if (! TARGET_DEEP_BRANCH_PREDICTION || !flag_pic)
     {
-      xops[2] = gen_rtx_LABEL_REF (Pmode, gen_label_rtx ());
+      xops[2] = gen_rtx_LABEL_REF (Pmode, label ? label : gen_label_rtx ());
 
       if (!flag_pic)
 	output_asm_insn ("mov{l}\t{%2, %0|%0, %2}", xops);
@@ -4750,6 +4896,7 @@ output_set_got (rtx dest)
 #if TARGET_MACHO
       /* Output the "canonical" label name ("Lxx$pb") here too.  This
          is what will be referred to by the Mach-O PIC subsystem.  */
+      if (!label)
       ASM_OUTPUT_LABEL (asm_out_file, machopic_function_base_name ());
 #endif
       (*targetm.asm_out.internal_label) (asm_out_file, "L",
@@ -4771,24 +4918,26 @@ output_set_got (rtx dest)
 #if TARGET_MACHO
       /* Output the "canonical" label name ("Lxx$pb") here too.  This
          is what will be referred to by the Mach-O PIC subsystem.  */
-      if (cfun)
+      if (!label)
 	ASM_OUTPUT_LABEL (asm_out_file, machopic_function_base_name ());
+      else
+	targetm.asm_out.internal_label (asm_out_file, "L",
+					CODE_LABEL_NUMBER (label));
 #endif
       /* APPLE LOCAL end deep branch prediction pic-base */
     }
 
-  /* APPLE LOCAL begin deep branch prediction pic-base */
-#if !TARGET_MACHO
+  if (TARGET_MACHO)
+    return "";
+
   if (!flag_pic || TARGET_DEEP_BRANCH_PREDICTION)
     output_asm_insn ("add{l}\t{%1, %0|%0, %1}", xops);
-  else if (!TARGET_MACHO)
+  else
     output_asm_insn ("add{l}\t{%1+[.-%a2], %0|%0, %a1+(.-%a2)}", xops);
-#endif	/* !TARGET_MACHO */
-  /* APPLE LOCAL end deep branch prediction pic-base */
 
   return "";
 }
-
+/* APPLE LOCAL end mainline */
 /* Generate an "push" pattern for input ARG.  */
 
 static rtx
@@ -6567,7 +6716,13 @@ legitimize_pic_address (rtx orig, rtx reg)
 		{
 		  if (INTVAL (op1) < -16*1024*1024
 		      || INTVAL (op1) >= 16*1024*1024)
-		    new = gen_rtx_PLUS (Pmode, force_reg (Pmode, op0), op1);
+                    /* APPLE LOCAL begin mainline 2005-11-07 4905666 */
+                    {
+                      if (!x86_64_immediate_operand (op1, Pmode))
+                        op1 = force_reg (Pmode, op1);
+                      new = gen_rtx_PLUS (Pmode, force_reg (Pmode, op0), op1);
+                    }
+                    /* APPLE LOCAL end mainline 2005-11-07 4905666 */
 		}
 	    }
 	  else
@@ -6958,27 +7113,29 @@ output_pic_addr_const (FILE *file, rtx x, int code)
       break;
 
     case SYMBOL_REF:
-     /* Mark the decl as referenced so that cgraph will output the function.  */
-     if (SYMBOL_REF_DECL (x))
-       mark_decl_referenced (SYMBOL_REF_DECL (x));
+      /* APPLE LOCAL begin mainline whitespace */
+      /* Mark the decl as referenced so that cgraph will output the function.  */
+      if (SYMBOL_REF_DECL (x))
+	mark_decl_referenced (SYMBOL_REF_DECL (x));
+      /* APPLE LOCAL end mainline whitespace */
 
-     /* APPLE LOCAL begin stubify optimized symbols */
-     /* APPLE LOCAL begin x86_64 support 2006-02-02 */
-     if (! TARGET_MACHO || TARGET_64BIT)
-       assemble_name (file, XSTR (x, 0));
-     else
-       {
-	 const char *name = XSTR (x, 0);
-	 if (MACHOPIC_INDIRECT
+      /* APPLE LOCAL begin stubify optimized symbols */
+      /* APPLE LOCAL begin x86_64 support 2006-02-02 */
+      if (! TARGET_MACHO || TARGET_64BIT)
+	assemble_name (file, XSTR (x, 0));
+      else
+	{
+	  const char *name = XSTR (x, 0);
+	  if (MACHOPIC_INDIRECT
 #if TARGET_MACHO
-	     && machopic_classify_symbol (x) == MACHOPIC_UNDEFINED_FUNCTION
+	      && machopic_classify_symbol (x) == MACHOPIC_UNDEFINED_FUNCTION
 #endif
-	     )
-	   name = machopic_indirection_name (x, /*stub_p=*/true);
-	 assemble_name (file, name);
-       }
-     /* APPLE LOCAL end x86_64 support 2006-02-02 */
-     /* APPLE LOCAL end stubify optimized symbols */
+	      )
+	    name = machopic_indirection_name (x, /*stub_p=*/true);
+	  assemble_name (file, name);
+	}
+      /* APPLE LOCAL end x86_64 support 2006-02-02 */
+      /* APPLE LOCAL end stubify optimized symbols */
       if (!TARGET_MACHO && code == 'P' && ! SYMBOL_REF_LOCAL_P (x))
 	fputs ("@PLT", file);
       break;
@@ -8769,9 +8926,9 @@ void
 ix86_expand_vector_move (enum machine_mode mode, rtx operands[])
 {
   rtx op0 = operands[0], op1 = operands[1];
-  /* APPLE LOCAL begin radar 4614623, 4700281 */
+  /* APPLE LOCAL begin radar 4614623 */
   cfun->uses_vector = 1;
-  /* APPLE LOCAL end radar 4614623, 4700281 */
+  /* APPLE LOCAL end radar 4614623 */
 
   /* Force constants other than zero into memory.  We do not know how
      the instructions used to build constants modify the upper 64 bits
@@ -8779,10 +8936,10 @@ ix86_expand_vector_move (enum machine_mode mode, rtx operands[])
      to handle some of them more efficiently.  */
   if ((reload_in_progress | reload_completed) == 0
       && register_operand (op0, mode)
-      /* APPLE LOCAL begin mainline candidate 4283414 */
+      /* APPLE LOCAL begin mainline */
       && CONSTANT_P (op1)
       && standard_sse_constant_p (op1) <= 0)
-      /* APPLE LOCAL end mainline candidate 4283414 */
+    /* APPLE LOCAL end mainline */
     op1 = validize_mem (force_const_mem (mode, op1));
 
   /* Make operand1 a register if it isn't already.  */
@@ -9159,7 +9316,7 @@ ix86_unary_operator_ok (enum rtx_code code ATTRIBUTE_UNUSED,
   return TRUE;
 }
 
-/* APPLE LOCAL begin 4176531 */
+/* APPLE LOCAL begin 4176531 4424891 */
 static void
 ix86_expand_vector_move2 (enum machine_mode mode, rtx op0, rtx op1)
 {
@@ -9185,15 +9342,16 @@ gen_2_4_rtvec (int scalars_per_vector, rtx val, enum machine_mode mode)
   return rval;
 }
 
-/* Convert a DFmode value in an SSE register into an unsigned DImode.
+/* Convert a DFmode value in an SSE register into an unsigned SImode.
    When -fpmath=387, this is done with an x87 st(0)_FP->signed-int-64
    conversion, and ignoring the upper 32 bits of the result.  On
    x86_64, there is an equivalent SSE %xmm->signed-int-64 conversion.
    On x86_32, we don't have the instruction, nor the 64-bit
    destination register it requires.  Do the conversion inline in the
-   SSE registers.  For x86_32, -mfpmath=sse only.  */
+   SSE registers.  Requires SSE2.  For x86_32, -mfpmath=sse,
+   !optimize_size only.  */
 const char *
-ix86_expand_convert_DF2SI_sse (rtx operands[])
+ix86_expand_convert_uns_DF2SI_sse (rtx operands[])
 {
   rtx int_zero_as_fp, int_maxval_as_fp, int_two31_as_fp;
   REAL_VALUE_TYPE rvt_zero, rvt_int_maxval, rvt_int_two31;
@@ -9204,7 +9362,6 @@ ix86_expand_convert_DF2SI_sse (rtx operands[])
   rtx large_xmm_v2di;
   rtx le_op;
   rtx zero_or_two31_xmm;
-  rtx clamped_result_rtx;
   rtx final_result_rtx;
   rtx v_rtx;
   rtx incoming_value;
@@ -9225,13 +9382,15 @@ ix86_expand_convert_DF2SI_sse (rtx operands[])
   gcc_assert (ix86_preferred_stack_boundary >= 128);
 
   fp_value = gen_reg_rtx (V2DFmode);
-  ix86_expand_vector_move2 (V2DFmode, fp_value, gen_rtx_SUBREG (V2DFmode, incoming_value, 0));
+  ix86_expand_vector_move2 (V2DFmode, fp_value,
+			    gen_rtx_SUBREG (V2DFmode, incoming_value, 0));
   large_xmm = gen_reg_rtx (V2DFmode);
   
   v_rtx = gen_rtx_CONST_VECTOR (V2DFmode,
 				gen_2_4_rtvec (2, int_two31_as_fp, DFmode));
   ix86_expand_vector_move2 (DFmode, large_xmm, v_rtx);
-  le_op = gen_rtx_fmt_ee (LE, V2DFmode, gen_rtx_SUBREG (V2DFmode, fp_value, 0), large_xmm);
+  le_op = gen_rtx_fmt_ee (LE, V2DFmode,
+			  gen_rtx_SUBREG (V2DFmode, fp_value, 0), large_xmm);
   /* large_xmm = (fp_value >= 2**31) ? -1 : 0 ; */
   emit_insn (gen_sse2_vmmaskcmpv2df3 (large_xmm, large_xmm, fp_value, le_op));
 
@@ -9261,19 +9420,18 @@ ix86_expand_convert_DF2SI_sse (rtx operands[])
   emit_insn (gen_subv2df3 (fp_value, fp_value, zero_or_two31_xmm));
   /* assert (0 <= fp_value && fp_value < 2**31);
      int_result = trunc (fp_value); */
-  clamped_result_rtx = gen_reg_rtx (V4SImode);
-  emit_insn (gen_sse2_cvttpd2dq (clamped_result_rtx, fp_value));
-  final_result_rtx = gen_reg_rtx (V2DImode);
-  emit_move_insn (final_result_rtx,
-		  gen_rtx_SUBREG (V2DImode, clamped_result_rtx, 0));
+  final_result_rtx = gen_reg_rtx (V4SImode);
+  emit_insn (gen_sse2_cvttpd2dq (final_result_rtx, fp_value));
 
   large_xmm_v2di = gen_reg_rtx (V2DImode);
   emit_move_insn (large_xmm_v2di, gen_rtx_SUBREG (V2DImode, large_xmm, 0));
-  emit_insn (gen_ashlv2di3 (large_xmm_v2di, large_xmm_v2di, gen_rtx_CONST_INT (SImode, 31)));
+  emit_insn (gen_ashlv2di3 (large_xmm_v2di, large_xmm_v2di,
+			    gen_rtx_CONST_INT (SImode, 31)));
 
-  emit_insn (gen_xorv2di3 (final_result_rtx, final_result_rtx, large_xmm_v2di));
+  emit_insn (gen_xorv4si3 (final_result_rtx, final_result_rtx,
+			   gen_rtx_SUBREG (V4SImode, large_xmm_v2di, 0)));
   if (!rtx_equal_p (target, final_result_rtx))
-    emit_move_insn (target, gen_rtx_SUBREG (SImode, final_result_rtx, 0));
+    emit_insn (gen_sse2_stored (target, final_result_rtx));
   return "";
 }
 
@@ -9283,9 +9441,10 @@ ix86_expand_convert_DF2SI_sse (rtx operands[])
    result.  On x86_64, there is an equivalent SSE %xmm->signed-int-64
    conversion.  On x86_32, we don't have the instruction, nor the
    64-bit destination register it requires.  Do the conversion inline
-   in the SSE registers.  For x86_32, -mfpmath=sse only.  */
+   in the SSE registers.  Requires SSE2.  For x86_32, -mfpmath=sse,
+   !optimize_size only.  */
 const char *
-ix86_expand_convert_SF2SI_sse (rtx operands[])
+ix86_expand_convert_uns_SF2SI_sse (rtx operands[])
 {
   rtx int_zero_as_fp, int_two31_as_fp, int_two32_as_fp;
   REAL_VALUE_TYPE rvt_zero, rvt_int_two31, rvt_int_two32;
@@ -9310,7 +9469,8 @@ ix86_expand_convert_SF2SI_sse (rtx operands[])
   real_from_integer (&rvt_int_two31, SFmode, 0x80000000ULL, 0ULL, 1);
   int_two31_as_fp = const_double_from_real_value (rvt_int_two31, SFmode);
 
-  real_from_integer (&rvt_int_two32, SFmode, (HOST_WIDE_INT)0x100000000ULL, 0ULL, 1);
+  real_from_integer (&rvt_int_two32, SFmode, (HOST_WIDE_INT)0x100000000ULL,
+		     0ULL, 1);
   int_two32_as_fp = const_double_from_real_value (rvt_int_two32, SFmode);
 
   incoming_value = force_reg (GET_MODE (operands[1]), operands[1]);
@@ -9318,7 +9478,8 @@ ix86_expand_convert_SF2SI_sse (rtx operands[])
   gcc_assert (ix86_preferred_stack_boundary >= 128);
 
   fp_value = gen_reg_rtx (V4SFmode);
-  ix86_expand_vector_move2 (V4SFmode, fp_value, gen_rtx_SUBREG (V4SFmode, incoming_value, 0));
+  ix86_expand_vector_move2 (V4SFmode, fp_value,
+			    gen_rtx_SUBREG (V4SFmode, incoming_value, 0));
   large_xmm = gen_reg_rtx (V4SFmode);
   
   /* fp_value = MAX (fp_value, 0.0); */
@@ -9342,8 +9503,10 @@ ix86_expand_convert_SF2SI_sse (rtx operands[])
   /* above_two31_xmm = (fp_value >= 2**31) ? 0xffff_ffff : 0 ; */
   above_two31_xmm = gen_reg_rtx (V4SFmode);
   ix86_expand_vector_move2 (SFmode, above_two31_xmm, two31_xmm);
-  le_op = gen_rtx_fmt_ee (LE, V4SFmode, above_two31_xmm, gen_rtx_SUBREG (V4SFmode, two31_xmm, 0));
-  emit_insn (gen_sse_vmmaskcmpv4sf3 (above_two31_xmm, above_two31_xmm, fp_value, le_op));
+  le_op = gen_rtx_fmt_ee (LE, V4SFmode, above_two31_xmm,
+			  gen_rtx_SUBREG (V4SFmode, two31_xmm, 0));
+  emit_insn (gen_sse_vmmaskcmpv4sf3 (above_two31_xmm, above_two31_xmm,
+				     fp_value, le_op));
 
   /* two32_xmm = 0x1_0000_0000; */
   two32_xmm = gen_reg_rtx (V4SFmode);
@@ -9354,21 +9517,28 @@ ix86_expand_convert_SF2SI_sse (rtx operands[])
   /* above_two32_xmm = (fp_value >= 2**32) ? 0xffff_ffff : 0 ; */
   above_two32_xmm = gen_reg_rtx (V4SFmode);
   ix86_expand_vector_move2 (SFmode, above_two32_xmm, two32_xmm);
-  le_op = gen_rtx_fmt_ee (LE, V4SFmode, above_two32_xmm, gen_rtx_SUBREG (V4SFmode, two32_xmm, 0));
-  emit_insn (gen_sse_vmmaskcmpv4sf3 (above_two32_xmm, above_two32_xmm, fp_value, le_op));
+  le_op = gen_rtx_fmt_ee (LE, V4SFmode, above_two32_xmm,
+			  gen_rtx_SUBREG (V4SFmode, two32_xmm, 0));
+  emit_insn (gen_sse_vmmaskcmpv4sf3 (above_two32_xmm, above_two32_xmm,
+				     fp_value, le_op));
 
   /* zero_or_two31_SF_xmm = (above_two31_xmm) ? 2**31 : 0; */
-  emit_insn (gen_andv4sf3 (zero_or_two31_SF_xmm, zero_or_two31_SF_xmm, above_two31_xmm));
+  emit_insn (gen_andv4sf3 (zero_or_two31_SF_xmm, zero_or_two31_SF_xmm,
+			   above_two31_xmm));
 
   /* zero_or_two31_SI_xmm = (above_two31_xmm & 0x8000_0000); */
   zero_or_two31_SI_xmm = gen_reg_rtx (V4SImode);
-  emit_move_insn (zero_or_two31_SI_xmm, gen_rtx_SUBREG (V4SImode, above_two31_xmm, 0));
-  emit_insn (gen_ashlv4si3 (zero_or_two31_SI_xmm, zero_or_two31_SI_xmm, gen_rtx_CONST_INT (SImode, 31)));
+  emit_move_insn (zero_or_two31_SI_xmm,
+		  gen_rtx_SUBREG (V4SImode, above_two31_xmm, 0));
+  emit_insn (gen_ashlv4si3 (zero_or_two31_SI_xmm, zero_or_two31_SI_xmm,
+			    gen_rtx_CONST_INT (SImode, 31)));
 
   /* zero_or_two31_SI_xmm = (above_two_31_xmm << 31); */
   zero_or_two31_SI_xmm = gen_reg_rtx (V4SImode);
-  emit_move_insn (zero_or_two31_SI_xmm, gen_rtx_SUBREG (V4SImode, above_two31_xmm, 0));
-  emit_insn (gen_ashlv4si3 (zero_or_two31_SI_xmm, zero_or_two31_SI_xmm, gen_rtx_CONST_INT (SImode, 31)));
+  emit_move_insn (zero_or_two31_SI_xmm,
+		  gen_rtx_SUBREG (V4SImode, above_two31_xmm, 0));
+  emit_insn (gen_ashlv4si3 (zero_or_two31_SI_xmm, zero_or_two31_SI_xmm,
+			    gen_rtx_CONST_INT (SImode, 31)));
 
   /* if (above_two31_xmm) fp_value -= 2**31;  */
   /* If the input FP value is greater than 2**31, subtract that amount
@@ -9378,7 +9548,8 @@ ix86_expand_convert_SF2SI_sse (rtx operands[])
 
   /* assert (0.0 <= fp_value && fp_value < 2**31);
      int_result_xmm = trunc (fp_value); */
-  /* Apply the SSE double -> signed_int32 conversion to our biased, clamped SF value.  */
+  /* Apply the SSE double -> signed_int32 conversion to our biased,
+     clamped SF value.  */
   int_result_xmm = gen_reg_rtx (V4SImode);
   emit_insn (gen_sse2_cvttps2dq (int_result_xmm, fp_value));
 
@@ -9388,27 +9559,32 @@ ix86_expand_convert_SF2SI_sse (rtx operands[])
      result.
 
      input_fp_value < 2**31: this won't change the value
-     2**31 <= input_fp_value < 2**32: this will restore the 2**31 bias we subtracted earler
-     input_fp_value >= 2**32: this insn doesn't matter; the next insn will clobber this result
+     2**31 <= input_fp_value < 2**32:
+     this will restore the 2**31 bias we subtracted earler
+     input_fp_value >= 2**32: this insn doesn't matter;
+     the next insn will clobber this result
   */
-  emit_insn (gen_addv4si3 (int_result_xmm, int_result_xmm, zero_or_two31_SI_xmm));
+  emit_insn (gen_addv4si3 (int_result_xmm, int_result_xmm,
+			   zero_or_two31_SI_xmm));
 
   /* int_result_xmm |= above_two32_xmm; */
   /* If the input value was greater than 2**32, force the integral
      result to 0xffff_ffff.  */
-  emit_insn (gen_iorv4si3 (int_result_xmm, int_result_xmm, gen_rtx_SUBREG (V4SImode, above_two32_xmm, 0)));
+  emit_insn (gen_iorv4si3 (int_result_xmm, int_result_xmm,
+			   gen_rtx_SUBREG (V4SImode, above_two32_xmm, 0)));
 
   if (!rtx_equal_p (target, int_result_xmm))
-    emit_move_insn (target, gen_rtx_SUBREG (SImode, int_result_xmm, 0));
+    emit_insn (gen_sse2_stored (target, int_result_xmm));
   return "";
 }
 
 /* Convert an unsigned DImode value into a DFmode, using only SSE.
    Expects the 64-bit DImode to be supplied as two 32-bit parts in two
-   SSE %xmm registers; result returned in an %xmm register.  For
-   x86_32, -mfpmath=sse, !optimize_size only.  */
+   SSE %xmm registers; result returned in an %xmm register.  Requires
+   SSE2; will use SSE3 if available.  For x86_32, -mfpmath=sse,
+   !optimize_size only.  */
 const char *
-ix86_expand_convert_DI2DF_sse (rtx operands[])
+ix86_expand_convert_uns_DI2DF_sse (rtx operands[])
 {
   REAL_VALUE_TYPE bias_lo_rvt, bias_hi_rvt;
   rtx bias_lo_rtx, bias_hi_rtx;
@@ -9431,11 +9607,13 @@ ix86_expand_convert_DI2DF_sse (rtx operands[])
 
   fp_value_lo = gen_rtx_SUBREG (SImode, fp_value, 0);
   fp_value_lo_xmm = gen_reg_rtx (V4SImode);
-  emit_insn (gen_sse2_loadld (fp_value_lo_xmm, CONST0_RTX (V4SImode), fp_value_lo));
+  emit_insn (gen_sse2_loadld (fp_value_lo_xmm, CONST0_RTX (V4SImode),
+			      fp_value_lo));
 
   fp_value_hi = gen_rtx_SUBREG (SImode, fp_value, 4);
   fp_value_hi_xmm = gen_reg_rtx (V4SImode);
-  emit_insn (gen_sse2_loadld (fp_value_hi_xmm, CONST0_RTX (V4SImode), fp_value_hi));
+  emit_insn (gen_sse2_loadld (fp_value_hi_xmm, CONST0_RTX (V4SImode),
+			      fp_value_hi));
 
   ix86_expand_vector_move2 (V4SImode, int_xmm, fp_value_hi_xmm);
   emit_insn (gen_sse2_punpckldq (int_xmm, int_xmm, fp_value_lo_xmm));
@@ -9443,9 +9621,9 @@ ix86_expand_convert_DI2DF_sse (rtx operands[])
   exponents_rtvec = gen_rtvec (4, GEN_INT (0x45300000UL),
 			       GEN_INT (0x43300000UL),
 			       CONST0_RTX (SImode), CONST0_RTX (SImode));
-  exponents = validize_mem (force_const_mem (V4SImode,
-					     gen_rtx_CONST_VECTOR (V4SImode,
-								   exponents_rtvec)));
+  exponents = validize_mem (
+    force_const_mem (V4SImode, gen_rtx_CONST_VECTOR (V4SImode,
+						      exponents_rtvec)));
   emit_insn (gen_sse2_punpckldq (int_xmm, int_xmm, exponents));
 
   final_result_xmm = gen_reg_rtx (V2DFmode);
@@ -9474,7 +9652,8 @@ ix86_expand_convert_DI2DF_sse (rtx operands[])
       ix86_expand_vector_move2 (V2DFmode, result_lo_xmm, final_result_xmm);
       emit_insn (gen_sse2_unpckhpd (final_result_xmm, final_result_xmm,
 				    final_result_xmm));
-      emit_insn (gen_addv2df3 (final_result_xmm, final_result_xmm, result_lo_xmm));
+      emit_insn (gen_addv2df3 (final_result_xmm, final_result_xmm,
+			       result_lo_xmm));
     }
 
   if (!rtx_equal_p (target, final_result_xmm))
@@ -9482,7 +9661,161 @@ ix86_expand_convert_DI2DF_sse (rtx operands[])
 
   return "";
 }
-/* APPLE LOCAL end 4176531 */
+/* APPLE LOCAL end 4176531 4424891 */
+
+/* APPLE LOCAL begin 4424891 */
+/* Convert an unsigned SImode value into a DFmode, using only SSE.
+   Result returned in an %xmm register.  For x86_32, -mfpmath=sse,
+   !optimize_size only.  */
+const char *
+ix86_expand_convert_uns_SI2DF_sse (rtx operands[])
+{
+  REAL_VALUE_TYPE rvt_int_two31;
+  rtx int_value_reg;
+  rtx fp_value_xmm, fp_value_as_int_xmm;
+  rtx final_result_xmm;
+  rtx int_two31_as_fp, int_two31_as_fp_vec;
+  rtx v_rtx;
+  rtx target = operands[0];
+
+  gcc_assert (ix86_preferred_stack_boundary >= 128);
+  gcc_assert (GET_MODE (operands[1]) == SImode);
+
+  cfun->uses_vector = 1;
+
+  int_value_reg = gen_reg_rtx (SImode);
+  emit_move_insn (int_value_reg, operands[1]);
+  emit_insn (gen_addsi3 (int_value_reg, int_value_reg,
+			 GEN_INT (-2147483648LL /* MIN_INT */)));
+
+  fp_value_as_int_xmm = gen_reg_rtx (V4SImode);
+  emit_insn (gen_sse2_loadld (fp_value_as_int_xmm, CONST0_RTX (V4SImode),
+			      int_value_reg));
+
+  fp_value_xmm = gen_reg_rtx (V2DFmode);
+  emit_insn (gen_sse2_cvtdq2pd (fp_value_xmm,
+				gen_rtx_SUBREG (V4SImode,
+						fp_value_as_int_xmm, 0)));
+
+  real_from_integer (&rvt_int_two31, DFmode, 0x80000000ULL, 0ULL, 1);
+  int_two31_as_fp = const_double_from_real_value (rvt_int_two31, DFmode);
+  v_rtx = gen_rtx_CONST_VECTOR (V2DFmode,
+				gen_2_4_rtvec (2, int_two31_as_fp, DFmode));
+
+  int_two31_as_fp_vec = validize_mem (force_const_mem (V2DFmode, v_rtx));
+
+  final_result_xmm = gen_reg_rtx (V2DFmode);
+  emit_move_insn (final_result_xmm, fp_value_xmm);
+  emit_insn (gen_sse2_vmaddv2df3 (final_result_xmm, final_result_xmm,
+				  int_two31_as_fp_vec));
+
+  if (!rtx_equal_p (target, final_result_xmm))
+    emit_move_insn (target, gen_rtx_SUBREG (DFmode, final_result_xmm, 0));
+
+  return "";
+}
+
+/* Convert an unsigned SImode value into a SFmode, using only SSE.
+   Result returned in an %xmm register.  For x86_32, -mfpmath=sse,
+   !optimize_size only.  */
+const char *
+ix86_expand_convert_uns_SI2SF_sse (rtx operands[])
+{
+  REAL_VALUE_TYPE rvt_int_1p16;
+  rtx int_hi_reg, int_lo_reg;
+  rtx fp_hi_sf_xmm, fp_lo_sf_xmm;
+  rtx int_1p16_as_fp, int_1p16_as_fp_mem;
+  rtx target = operands[0];
+
+  gcc_assert (ix86_preferred_stack_boundary >= 128);
+  gcc_assert (GET_MODE (operands[1]) == SImode);
+
+  cfun->uses_vector = 1;
+
+  real_from_integer (&rvt_int_1p16, SFmode, 0x10000ULL, 0ULL, 1);
+  int_1p16_as_fp = const_double_from_real_value (rvt_int_1p16, SFmode);
+  int_1p16_as_fp_mem = validize_mem (force_const_mem (SFmode, int_1p16_as_fp));
+
+  int_lo_reg = gen_reg_rtx (SImode);
+  int_hi_reg = gen_reg_rtx (SImode);
+  emit_move_insn (int_lo_reg, operands[1]);
+  emit_move_insn (int_hi_reg, operands[1]);
+  emit_insn (gen_andsi3 (int_lo_reg, int_lo_reg, GEN_INT (0xffff)));
+  emit_insn (gen_lshrsi3 (int_hi_reg, int_hi_reg, GEN_INT (16)));
+
+  fp_hi_sf_xmm = gen_reg_rtx (SFmode);
+  fp_lo_sf_xmm = gen_reg_rtx (SFmode);
+  emit_insn (gen_floatsisf2 (fp_hi_sf_xmm, int_hi_reg));
+  emit_insn (gen_floatsisf2 (fp_lo_sf_xmm, int_lo_reg));
+
+  emit_insn (gen_rtx_SET
+	     (SFmode, fp_hi_sf_xmm,
+	      gen_rtx_fmt_ee (MULT, SFmode, fp_hi_sf_xmm, int_1p16_as_fp_mem)));
+  emit_insn (gen_rtx_SET
+	     (SFmode, fp_hi_sf_xmm,
+	      gen_rtx_fmt_ee (PLUS, SFmode, fp_hi_sf_xmm, fp_lo_sf_xmm)));
+
+  if (!rtx_equal_p (target, fp_hi_sf_xmm))
+    emit_move_insn (target, fp_hi_sf_xmm);
+
+  return "";
+}
+
+/* Convert an unsigned SImode value into a DFmode, using only SSE.
+   Result returned in an %xmm register.  For x86_32, -mfpmath=sse,
+   !optimize_size only.  */
+const char *
+ix86_expand_convert_sign_DI2DF_sse (rtx operands[])
+{
+  rtx my_operands[2];
+  REAL_VALUE_TYPE rvt_int_two32;
+  rtx rvt_int_two32_vec;
+  rtx fp_value_hi_xmm, fp_value_hi_shifted_xmm;
+  rtx final_result_xmm;
+  rtx int_two32_as_fp, int_two32_as_fp_vec;
+  rtx target = operands[0];
+  rtx input = force_reg (DImode, operands[1]);
+
+  gcc_assert (ix86_preferred_stack_boundary >= 128);
+  gcc_assert (GET_MODE (input) == DImode);
+
+  cfun->uses_vector = 1;
+
+  fp_value_hi_xmm = gen_reg_rtx (V2DFmode);
+  emit_insn (gen_sse2_cvtsi2sd (fp_value_hi_xmm, fp_value_hi_xmm,
+				gen_rtx_SUBREG (SImode, input, 4)));
+
+  real_from_integer (&rvt_int_two32, DFmode, 0x100000000ULL, 0ULL, 1);
+  int_two32_as_fp = const_double_from_real_value (rvt_int_two32, DFmode);
+  rvt_int_two32_vec = gen_rtx_CONST_VECTOR (V2DFmode,
+				gen_2_4_rtvec (2, int_two32_as_fp, DFmode));
+
+  int_two32_as_fp_vec = validize_mem (force_const_mem (V2DFmode,
+						       rvt_int_two32_vec));
+
+  fp_value_hi_shifted_xmm = gen_reg_rtx (V2DFmode);
+  emit_move_insn (fp_value_hi_shifted_xmm, fp_value_hi_xmm);
+  emit_insn (gen_sse2_vmmulv2df3 (fp_value_hi_shifted_xmm,
+				  fp_value_hi_shifted_xmm,
+				  int_two32_as_fp_vec));
+
+  my_operands[0] = gen_reg_rtx (DFmode);
+  my_operands[1] = gen_rtx_SUBREG (SImode, input, 0);
+  (void) ix86_expand_convert_uns_SI2DF_sse (my_operands);
+
+  final_result_xmm = REG_P (target) && GET_MODE (target) == V2DFmode
+    ? target : gen_reg_rtx (V2DFmode);
+  emit_move_insn (final_result_xmm, gen_rtx_SUBREG (V2DFmode,
+						    my_operands[0], 0));
+  emit_insn (gen_sse2_vmaddv2df3 (final_result_xmm, final_result_xmm,
+				  fp_value_hi_shifted_xmm));
+
+  if (!rtx_equal_p (target, final_result_xmm))
+    emit_move_insn (target, gen_rtx_SUBREG (DFmode, final_result_xmm, 0));
+
+  return "";
+}
+/* APPLE LOCAL end 4424891 */
 
 /* A subroutine of ix86_expand_fp_absneg_operator and copysign expanders.
    Create a mask for the sign bit in MODE for an SSE register.  If VECT is
@@ -10415,13 +10748,19 @@ ix86_expand_compare (enum rtx_code code, rtx *second_test, rtx *bypass_test)
     *second_test = NULL_RTX;
   if (bypass_test)
     *bypass_test = NULL_RTX;
+  /* APPLE LOCAL begin mainline */
 
-  if (GET_MODE_CLASS (GET_MODE (op0)) == MODE_FLOAT)
+  if (ix86_compare_emitted)
+    {
+      ret = gen_rtx_fmt_ee (code, VOIDmode, ix86_compare_emitted, const0_rtx);
+      ix86_compare_emitted = NULL_RTX;
+    }
+  else if (GET_MODE_CLASS (GET_MODE (op0)) == MODE_FLOAT)
     ret = ix86_expand_fp_compare (code, op0, op1, NULL_RTX,
 				  second_test, bypass_test);
   else
     ret = ix86_expand_int_compare (code, op0, op1);
-
+  /* APPLE LOCAL end mainline */
   return ret;
 }
 
@@ -10745,11 +11084,15 @@ ix86_expand_setcc (enum rtx_code code, rtx dest)
     }
 
   /* Attach a REG_EQUAL note describing the comparison result.  */
+  /* APPLE LOCAL begin mainline */
+  if (ix86_compare_op0 && ix86_compare_op1)
+    {
   equiv = simplify_gen_relational (code, QImode,
 				   GET_MODE (ix86_compare_op0),
 				   ix86_compare_op0, ix86_compare_op1);
   set_unique_reg_note (get_last_insn (), REG_EQUAL, equiv);
-
+    }
+  /* APPLE LOCAL end mainline */
   return 1; /* DONE */
 }
 
@@ -14536,7 +14879,7 @@ enum ix86_builtins
 
   IX86_BUILTIN_MONITOR,
   IX86_BUILTIN_MWAIT,
-  /* APPLE LOCAL begin mni 4424835 */
+  /* APPLE LOCAL begin ssse3 4424835 */
   /* Merom New Instructions.  */
   IX86_BUILTIN_PHADDW,
   IX86_BUILTIN_PHADDD,
@@ -14571,7 +14914,7 @@ enum ix86_builtins
   IX86_BUILTIN_PABSB128,
   IX86_BUILTIN_PABSW128,
   IX86_BUILTIN_PABSD128,
-  /* APPLE LOCAL end mni */
+  /* APPLE LOCAL end ssse3 */
   IX86_BUILTIN_VEC_INIT_V2SI,
   IX86_BUILTIN_VEC_INIT_V4HI,
   IX86_BUILTIN_VEC_INIT_V8QI,
@@ -14701,11 +15044,12 @@ static const struct builtin_description bdesc_2arg[] =
   { MASK_MMX, CODE_FOR_mmx_addv8qi3, "__builtin_ia32_paddb", IX86_BUILTIN_PADDB, 0, 0 },
   { MASK_MMX, CODE_FOR_mmx_addv4hi3, "__builtin_ia32_paddw", IX86_BUILTIN_PADDW, 0, 0 },
   { MASK_MMX, CODE_FOR_mmx_addv2si3, "__builtin_ia32_paddd", IX86_BUILTIN_PADDD, 0, 0 },
-  { MASK_MMX, CODE_FOR_mmx_adddi3, "__builtin_ia32_paddq", IX86_BUILTIN_PADDQ, 0, 0 },
+  /* APPLE LOCAL begin 4656532 use V1DImode for _m64 */
+  { MASK_MMX, CODE_FOR_mmx_addv1di3, "__builtin_ia32_paddq", IX86_BUILTIN_PADDQ, 0, 0 },
   { MASK_MMX, CODE_FOR_mmx_subv8qi3, "__builtin_ia32_psubb", IX86_BUILTIN_PSUBB, 0, 0 },
   { MASK_MMX, CODE_FOR_mmx_subv4hi3, "__builtin_ia32_psubw", IX86_BUILTIN_PSUBW, 0, 0 },
   { MASK_MMX, CODE_FOR_mmx_subv2si3, "__builtin_ia32_psubd", IX86_BUILTIN_PSUBD, 0, 0 },
-  { MASK_MMX, CODE_FOR_mmx_subdi3, "__builtin_ia32_psubq", IX86_BUILTIN_PSUBQ, 0, 0 },
+  { MASK_MMX, CODE_FOR_mmx_subv1di3, "__builtin_ia32_psubq", IX86_BUILTIN_PSUBQ, 0, 0 },
 
   { MASK_MMX, CODE_FOR_mmx_ssaddv8qi3, "__builtin_ia32_paddsb", IX86_BUILTIN_PADDSB, 0, 0 },
   { MASK_MMX, CODE_FOR_mmx_ssaddv4hi3, "__builtin_ia32_paddsw", IX86_BUILTIN_PADDSW, 0, 0 },
@@ -14757,23 +15101,24 @@ static const struct builtin_description bdesc_2arg[] =
   { MASK_SSE | MASK_64BIT, CODE_FOR_sse_cvtsi2ssq, 0, IX86_BUILTIN_CVTSI642SS, 0, 0 },
 
   { MASK_MMX, CODE_FOR_mmx_ashlv4hi3, 0, IX86_BUILTIN_PSLLW, 0, 0 },
-  { MASK_MMX, CODE_FOR_mmx_ashlv4hi3, 0, IX86_BUILTIN_PSLLWI, 0, 0 },
+  { MASK_MMX, CODE_FOR_mmx_ashlv4hi2si, 0, IX86_BUILTIN_PSLLWI, 0, 0 },
   { MASK_MMX, CODE_FOR_mmx_ashlv2si3, 0, IX86_BUILTIN_PSLLD, 0, 0 },
-  { MASK_MMX, CODE_FOR_mmx_ashlv2si3, 0, IX86_BUILTIN_PSLLDI, 0, 0 },
-  { MASK_MMX, CODE_FOR_mmx_ashldi3, 0, IX86_BUILTIN_PSLLQ, 0, 0 },
-  { MASK_MMX, CODE_FOR_mmx_ashldi3, 0, IX86_BUILTIN_PSLLQI, 0, 0 },
+  { MASK_MMX, CODE_FOR_mmx_ashlv2si2si, 0, IX86_BUILTIN_PSLLDI, 0, 0 },
+  { MASK_MMX, CODE_FOR_mmx_ashlv1di3, 0, IX86_BUILTIN_PSLLQ, 0, 0 },
+  { MASK_MMX, CODE_FOR_mmx_ashlv1di2si, 0, IX86_BUILTIN_PSLLQI, 0, 0 },
 
   { MASK_MMX, CODE_FOR_mmx_lshrv4hi3, 0, IX86_BUILTIN_PSRLW, 0, 0 },
-  { MASK_MMX, CODE_FOR_mmx_lshrv4hi3, 0, IX86_BUILTIN_PSRLWI, 0, 0 },
+  { MASK_MMX, CODE_FOR_mmx_lshrv4hi2si, 0, IX86_BUILTIN_PSRLWI, 0, 0 },
   { MASK_MMX, CODE_FOR_mmx_lshrv2si3, 0, IX86_BUILTIN_PSRLD, 0, 0 },
-  { MASK_MMX, CODE_FOR_mmx_lshrv2si3, 0, IX86_BUILTIN_PSRLDI, 0, 0 },
-  { MASK_MMX, CODE_FOR_mmx_lshrdi3, 0, IX86_BUILTIN_PSRLQ, 0, 0 },
-  { MASK_MMX, CODE_FOR_mmx_lshrdi3, 0, IX86_BUILTIN_PSRLQI, 0, 0 },
+  { MASK_MMX, CODE_FOR_mmx_lshrv2si2si, 0, IX86_BUILTIN_PSRLDI, 0, 0 },
+  { MASK_MMX, CODE_FOR_mmx_lshrv1di3, 0, IX86_BUILTIN_PSRLQ, 0, 0 },
+  { MASK_MMX, CODE_FOR_mmx_lshrv1di2si, 0, IX86_BUILTIN_PSRLQI, 0, 0 },
 
   { MASK_MMX, CODE_FOR_mmx_ashrv4hi3, 0, IX86_BUILTIN_PSRAW, 0, 0 },
-  { MASK_MMX, CODE_FOR_mmx_ashrv4hi3, 0, IX86_BUILTIN_PSRAWI, 0, 0 },
+  { MASK_MMX, CODE_FOR_mmx_ashrv4hi2si, 0, IX86_BUILTIN_PSRAWI, 0, 0 },
   { MASK_MMX, CODE_FOR_mmx_ashrv2si3, 0, IX86_BUILTIN_PSRAD, 0, 0 },
-  { MASK_MMX, CODE_FOR_mmx_ashrv2si3, 0, IX86_BUILTIN_PSRADI, 0, 0 },
+  { MASK_MMX, CODE_FOR_mmx_ashrv2si2si, 0, IX86_BUILTIN_PSRADI, 0, 0 },
+  /* APPLE LOCAL end 4656532 use V1DImode for _m64 */
 
   { MASK_SSE | MASK_3DNOW_A, CODE_FOR_mmx_psadbw, 0, IX86_BUILTIN_PSADBW, 0, 0 },
   { MASK_MMX, CODE_FOR_mmx_pmaddwd, 0, IX86_BUILTIN_PMADDWD, 0, 0 },
@@ -14912,35 +15257,35 @@ static const struct builtin_description bdesc_2arg[] =
   { MASK_SSE3, CODE_FOR_sse3_haddv4sf3, "__builtin_ia32_haddps", IX86_BUILTIN_HADDPS, 0, 0 },
   { MASK_SSE3, CODE_FOR_sse3_haddv2df3, "__builtin_ia32_haddpd", IX86_BUILTIN_HADDPD, 0, 0 },
   { MASK_SSE3, CODE_FOR_sse3_hsubv4sf3, "__builtin_ia32_hsubps", IX86_BUILTIN_HSUBPS, 0, 0 },
-  /* APPLE LOCAL begin mni 4424835 */
+  /* APPLE LOCAL begin ssse3 4424835 */
   { MASK_SSE3, CODE_FOR_sse3_hsubv2df3, "__builtin_ia32_hsubpd", IX86_BUILTIN_HSUBPD, 0, 0 },
 
-  /* MNI MMX */
-  { MASK_MNI, CODE_FOR_mni_phaddwv8hi3, "__builtin_ia32_phaddw128", IX86_BUILTIN_PHADDW128, 0, 0 },
-  { MASK_MNI, CODE_FOR_mni_phaddwv4hi3, "__builtin_ia32_phaddw", IX86_BUILTIN_PHADDW, 0, 0 },
-  { MASK_MNI, CODE_FOR_mni_phadddv4si3, "__builtin_ia32_phaddd128", IX86_BUILTIN_PHADDD128, 0, 0 },
-  { MASK_MNI, CODE_FOR_mni_phadddv2si3, "__builtin_ia32_phaddd", IX86_BUILTIN_PHADDD, 0, 0 },
-  { MASK_MNI, CODE_FOR_mni_phaddswv8hi3, "__builtin_ia32_phaddsw128", IX86_BUILTIN_PHADDSW128, 0, 0 },
-  { MASK_MNI, CODE_FOR_mni_phaddswv4hi3, "__builtin_ia32_phaddsw", IX86_BUILTIN_PHADDSW, 0, 0 },
-  { MASK_MNI, CODE_FOR_mni_phsubwv8hi3, "__builtin_ia32_phsubw128", IX86_BUILTIN_PHSUBW128, 0, 0 },
-  { MASK_MNI, CODE_FOR_mni_phsubwv4hi3, "__builtin_ia32_phsubw", IX86_BUILTIN_PHSUBW, 0, 0 },
-  { MASK_MNI, CODE_FOR_mni_phsubdv4si3, "__builtin_ia32_phsubd128", IX86_BUILTIN_PHSUBD128, 0, 0 },
-  { MASK_MNI, CODE_FOR_mni_phsubdv2si3, "__builtin_ia32_phsubd", IX86_BUILTIN_PHSUBD, 0, 0 },
-  { MASK_MNI, CODE_FOR_mni_phsubswv8hi3, "__builtin_ia32_phsubsw128", IX86_BUILTIN_PHSUBSW128, 0, 0 },
-  { MASK_MNI, CODE_FOR_mni_phsubswv4hi3, "__builtin_ia32_phsubsw", IX86_BUILTIN_PHSUBSW, 0, 0 },
-  { MASK_MNI, CODE_FOR_mni_pmaddubswv8hi3, "__builtin_ia32_pmaddubsw128", IX86_BUILTIN_PMADDUBSW128, 0, 0 },
-  { MASK_MNI, CODE_FOR_mni_pmaddubswv4hi3, "__builtin_ia32_pmaddubsw", IX86_BUILTIN_PMADDUBSW, 0, 0 },
-  { MASK_MNI, CODE_FOR_mni_pmulhrswv8hi3, "__builtin_ia32_pmulhrsw128", IX86_BUILTIN_PMULHRSW128, 0, 0 },
-  { MASK_MNI, CODE_FOR_mni_pmulhrswv4hi3, "__builtin_ia32_pmulhrsw", IX86_BUILTIN_PMULHRSW, 0, 0 },
-  { MASK_MNI, CODE_FOR_mni_pshufbv16qi3, "__builtin_ia32_pshufb128", IX86_BUILTIN_PSHUFB128, 0, 0 },
-  { MASK_MNI, CODE_FOR_mni_pshufbv8qi3, "__builtin_ia32_pshufb", IX86_BUILTIN_PSHUFB, 0, 0 },
-  { MASK_MNI, CODE_FOR_mni_psignv16qi3, "__builtin_ia32_psignb128", IX86_BUILTIN_PSIGNB128, 0, 0 },
-  { MASK_MNI, CODE_FOR_mni_psignv8qi3, "__builtin_ia32_psignb", IX86_BUILTIN_PSIGNB, 0, 0 },
-  { MASK_MNI, CODE_FOR_mni_psignv8hi3, "__builtin_ia32_psignw128", IX86_BUILTIN_PSIGNW128, 0, 0 },
-  { MASK_MNI, CODE_FOR_mni_psignv4hi3, "__builtin_ia32_psignw", IX86_BUILTIN_PSIGNW, 0, 0 },
-  { MASK_MNI, CODE_FOR_mni_psignv4si3, "__builtin_ia32_psignd128", IX86_BUILTIN_PSIGND128, 0, 0 },
-  { MASK_MNI, CODE_FOR_mni_psignv2si3, "__builtin_ia32_psignd", IX86_BUILTIN_PSIGND, 0, 0 }
-  /* APPLE LOCAL end mni */
+  /* SSSE3 MMX */
+  { MASK_SSSE3, CODE_FOR_ssse3_phaddwv8hi3, "__builtin_ia32_phaddw128", IX86_BUILTIN_PHADDW128, 0, 0 },
+  { MASK_SSSE3, CODE_FOR_ssse3_phaddwv4hi3, "__builtin_ia32_phaddw", IX86_BUILTIN_PHADDW, 0, 0 },
+  { MASK_SSSE3, CODE_FOR_ssse3_phadddv4si3, "__builtin_ia32_phaddd128", IX86_BUILTIN_PHADDD128, 0, 0 },
+  { MASK_SSSE3, CODE_FOR_ssse3_phadddv2si3, "__builtin_ia32_phaddd", IX86_BUILTIN_PHADDD, 0, 0 },
+  { MASK_SSSE3, CODE_FOR_ssse3_phaddswv8hi3, "__builtin_ia32_phaddsw128", IX86_BUILTIN_PHADDSW128, 0, 0 },
+  { MASK_SSSE3, CODE_FOR_ssse3_phaddswv4hi3, "__builtin_ia32_phaddsw", IX86_BUILTIN_PHADDSW, 0, 0 },
+  { MASK_SSSE3, CODE_FOR_ssse3_phsubwv8hi3, "__builtin_ia32_phsubw128", IX86_BUILTIN_PHSUBW128, 0, 0 },
+  { MASK_SSSE3, CODE_FOR_ssse3_phsubwv4hi3, "__builtin_ia32_phsubw", IX86_BUILTIN_PHSUBW, 0, 0 },
+  { MASK_SSSE3, CODE_FOR_ssse3_phsubdv4si3, "__builtin_ia32_phsubd128", IX86_BUILTIN_PHSUBD128, 0, 0 },
+  { MASK_SSSE3, CODE_FOR_ssse3_phsubdv2si3, "__builtin_ia32_phsubd", IX86_BUILTIN_PHSUBD, 0, 0 },
+  { MASK_SSSE3, CODE_FOR_ssse3_phsubswv8hi3, "__builtin_ia32_phsubsw128", IX86_BUILTIN_PHSUBSW128, 0, 0 },
+  { MASK_SSSE3, CODE_FOR_ssse3_phsubswv4hi3, "__builtin_ia32_phsubsw", IX86_BUILTIN_PHSUBSW, 0, 0 },
+  { MASK_SSSE3, CODE_FOR_ssse3_pmaddubswv8hi3, "__builtin_ia32_pmaddubsw128", IX86_BUILTIN_PMADDUBSW128, 0, 0 },
+  { MASK_SSSE3, CODE_FOR_ssse3_pmaddubswv4hi3, "__builtin_ia32_pmaddubsw", IX86_BUILTIN_PMADDUBSW, 0, 0 },
+  { MASK_SSSE3, CODE_FOR_ssse3_pmulhrswv8hi3, "__builtin_ia32_pmulhrsw128", IX86_BUILTIN_PMULHRSW128, 0, 0 },
+  { MASK_SSSE3, CODE_FOR_ssse3_pmulhrswv4hi3, "__builtin_ia32_pmulhrsw", IX86_BUILTIN_PMULHRSW, 0, 0 },
+  { MASK_SSSE3, CODE_FOR_ssse3_pshufbv16qi3, "__builtin_ia32_pshufb128", IX86_BUILTIN_PSHUFB128, 0, 0 },
+  { MASK_SSSE3, CODE_FOR_ssse3_pshufbv8qi3, "__builtin_ia32_pshufb", IX86_BUILTIN_PSHUFB, 0, 0 },
+  { MASK_SSSE3, CODE_FOR_ssse3_psignv16qi3, "__builtin_ia32_psignb128", IX86_BUILTIN_PSIGNB128, 0, 0 },
+  { MASK_SSSE3, CODE_FOR_ssse3_psignv8qi3, "__builtin_ia32_psignb", IX86_BUILTIN_PSIGNB, 0, 0 },
+  { MASK_SSSE3, CODE_FOR_ssse3_psignv8hi3, "__builtin_ia32_psignw128", IX86_BUILTIN_PSIGNW128, 0, 0 },
+  { MASK_SSSE3, CODE_FOR_ssse3_psignv4hi3, "__builtin_ia32_psignw", IX86_BUILTIN_PSIGNW, 0, 0 },
+  { MASK_SSSE3, CODE_FOR_ssse3_psignv4si3, "__builtin_ia32_psignd128", IX86_BUILTIN_PSIGND128, 0, 0 },
+  { MASK_SSSE3, CODE_FOR_ssse3_psignv2si3, "__builtin_ia32_psignd", IX86_BUILTIN_PSIGND, 0, 0 }
+  /* APPLE LOCAL end ssse3 */
 };
 
 static const struct builtin_description bdesc_1arg[] =
@@ -14987,16 +15332,16 @@ static const struct builtin_description bdesc_1arg[] =
   /* SSE3 */
   { MASK_SSE3, CODE_FOR_sse3_movshdup, 0, IX86_BUILTIN_MOVSHDUP, 0, 0 },
   { MASK_SSE3, CODE_FOR_sse3_movsldup, 0, IX86_BUILTIN_MOVSLDUP, 0, 0 },
-  /* APPLE LOCAL begin mni 4424835 */
+  /* APPLE LOCAL begin ssse3 4424835 */
 
-  /* MNI */
-  { MASK_MNI, CODE_FOR_mni_pabsv16qi2, "__builtin_ia32_pabsb128", IX86_BUILTIN_PABSB128, 0, 0 },
-  { MASK_MNI, CODE_FOR_mni_pabsv8qi2, "__builtin_ia32_pabsb", IX86_BUILTIN_PABSB, 0, 0 },
-  { MASK_MNI, CODE_FOR_mni_pabsv8hi2, "__builtin_ia32_pabsw128", IX86_BUILTIN_PABSW128, 0, 0 },
-  { MASK_MNI, CODE_FOR_mni_pabsv4hi2, "__builtin_ia32_pabsw", IX86_BUILTIN_PABSW, 0, 0 },
-  { MASK_MNI, CODE_FOR_mni_pabsv4si2, "__builtin_ia32_pabsd128", IX86_BUILTIN_PABSD128, 0, 0 },
-  { MASK_MNI, CODE_FOR_mni_pabsv2si2, "__builtin_ia32_pabsd", IX86_BUILTIN_PABSD, 0, 0 }
-  /* APPLE LOCAL end mni */
+  /* SSSE3 */
+  { MASK_SSSE3, CODE_FOR_ssse3_pabsv16qi2, "__builtin_ia32_pabsb128", IX86_BUILTIN_PABSB128, 0, 0 },
+  { MASK_SSSE3, CODE_FOR_ssse3_pabsv8qi2, "__builtin_ia32_pabsb", IX86_BUILTIN_PABSB, 0, 0 },
+  { MASK_SSSE3, CODE_FOR_ssse3_pabsv8hi2, "__builtin_ia32_pabsw128", IX86_BUILTIN_PABSW128, 0, 0 },
+  { MASK_SSSE3, CODE_FOR_ssse3_pabsv4hi2, "__builtin_ia32_pabsw", IX86_BUILTIN_PABSW, 0, 0 },
+  { MASK_SSSE3, CODE_FOR_ssse3_pabsv4si2, "__builtin_ia32_pabsd128", IX86_BUILTIN_PABSD128, 0, 0 },
+  { MASK_SSSE3, CODE_FOR_ssse3_pabsv2si2, "__builtin_ia32_pabsd", IX86_BUILTIN_PABSD, 0, 0 }
+  /* APPLE LOCAL end ssse3 */
 };
 
 static void
@@ -15015,6 +15360,7 @@ ix86_init_builtins (void)
 /* Set up all the MMX/SSE builtins.  This is not called if TARGET_MMX
    is zero.  Otherwise, if TARGET_SSE is not set, only expand the MMX
    builtins.  */
+/* APPLE LOCAL begin 4656532 use V1DImode for _m64 */
 static void
 ix86_init_mmx_sse_builtins (void)
 {
@@ -15032,6 +15378,7 @@ ix86_init_mmx_sse_builtins (void)
   tree V4HI_type_node = build_vector_type_for_mode (intHI_type_node, V4HImode);
   tree V8QI_type_node = build_vector_type_for_mode (intQI_type_node, V8QImode);
   tree V8HI_type_node = build_vector_type_for_mode (intHI_type_node, V8HImode);
+  tree V1DI_type_node = build_vector_type_for_mode (long_long_integer_type_node, V1DImode);
 
   tree pchar_type_node = build_pointer_type (char_type_node);
   tree pcchar_type_node = build_pointer_type (
@@ -15041,7 +15388,7 @@ ix86_init_mmx_sse_builtins (void)
 			     build_type_variant (float_type_node, 1, 0));
   tree pv2si_type_node = build_pointer_type (V2SI_type_node);
   tree pv2di_type_node = build_pointer_type (V2DI_type_node);
-  tree pdi_type_node = build_pointer_type (long_long_unsigned_type_node);
+  tree pv1di_type_node = build_pointer_type (V1DI_type_node);
 
   /* Comparisons.  */
   tree int_ftype_v4sf_v4sf
@@ -15087,14 +15434,17 @@ ix86_init_mmx_sse_builtins (void)
   tree v4hi_ftype_v4hi_int
     = build_function_type_list (V4HI_type_node,
 				V4HI_type_node, integer_type_node, NULL_TREE);
-  tree v4hi_ftype_v4hi_di
+  tree v4hi_ftype_v4hi_v1di
     = build_function_type_list (V4HI_type_node,
-				V4HI_type_node, long_long_unsigned_type_node,
+				V4HI_type_node, V1DI_type_node,
 				NULL_TREE);
-  tree v2si_ftype_v2si_di
+  tree v2si_ftype_v2si_int
     = build_function_type_list (V2SI_type_node,
-				V2SI_type_node, long_long_unsigned_type_node,
-				NULL_TREE);
+				V2SI_type_node, integer_type_node, NULL_TREE);
+  tree v2si_ftype_v2si_v1di
+    = build_function_type_list (V2SI_type_node,
+				V2SI_type_node, V1DI_type_node, NULL_TREE);
+
   tree void_ftype_void
     = build_function_type (void_type_node, void_list_node);
   tree void_ftype_unsigned
@@ -15127,17 +15477,16 @@ ix86_init_mmx_sse_builtins (void)
   tree void_ftype_pfloat_v4sf
     = build_function_type_list (void_type_node,
 				pfloat_type_node, V4SF_type_node, NULL_TREE);
-  tree void_ftype_pdi_di
+  tree void_ftype_pv1di_v1di
     = build_function_type_list (void_type_node,
-				pdi_type_node, long_long_unsigned_type_node,
-				NULL_TREE);
+				pv1di_type_node, V1DI_type_node, NULL_TREE);
   tree void_ftype_pv2di_v2di
     = build_function_type_list (void_type_node,
 				pv2di_type_node, V2DI_type_node, NULL_TREE);
   /* Normal vector unops.  */
   tree v4sf_ftype_v4sf
     = build_function_type_list (V4SF_type_node, V4SF_type_node, NULL_TREE);
-  /* APPLE LOCAL begin mni 4424835 */
+  /* APPLE LOCAL begin ssse3 4424835 */
   tree v16qi_ftype_v16qi
     = build_function_type_list (V16QI_type_node, V16QI_type_node, NULL_TREE);
   tree v8hi_ftype_v8hi
@@ -15148,7 +15497,7 @@ ix86_init_mmx_sse_builtins (void)
     = build_function_type_list (V8QI_type_node, V8QI_type_node, NULL_TREE);
   tree v4hi_ftype_v4hi
     = build_function_type_list (V4HI_type_node, V4HI_type_node, NULL_TREE);
-  /* APPLE LOCAL end mni */
+  /* APPLE LOCAL end ssse3 */
 
   /* Normal vector binops.  */
   tree v4sf_ftype_v4sf_v4sf
@@ -15163,17 +15512,21 @@ ix86_init_mmx_sse_builtins (void)
   tree v2si_ftype_v2si_v2si
     = build_function_type_list (V2SI_type_node,
 				V2SI_type_node, V2SI_type_node, NULL_TREE);
-  tree di_ftype_di_di
-    = build_function_type_list (long_long_unsigned_type_node,
-				long_long_unsigned_type_node,
-				long_long_unsigned_type_node, NULL_TREE);
-  /* APPLE LOCAL begin mni 4424835 */
-  tree di_ftype_di_di_int
-    = build_function_type_list (long_long_unsigned_type_node,
-				long_long_unsigned_type_node,
-				long_long_unsigned_type_node,
+  tree v1di_ftype_v1di_v1di
+    = build_function_type_list (V1DI_type_node,
+				V1DI_type_node, V1DI_type_node, NULL_TREE);
+  /* APPLE LOCAL begin 4684674 */
+  tree v1di_ftype_v1di_int
+    = build_function_type_list (V1DI_type_node,
+				V1DI_type_node, integer_type_node, NULL_TREE);
+  /* APPLE LOCAL end 4684674 */
+  /* APPLE LOCAL begin ssse3 4424835 */
+  tree v1di_ftype_v1di_v1di_int
+    = build_function_type_list (V1DI_type_node,
+				V1DI_type_node,
+				V1DI_type_node,
 				integer_type_node, NULL_TREE);
-  /* APPLE LOCAL end mni */
+  /* APPLE LOCAL end ssse3 */
 
   tree v2si_ftype_v2sf
     = build_function_type_list (V2SI_type_node, V2SF_type_node, NULL_TREE);
@@ -15279,11 +15632,11 @@ ix86_init_mmx_sse_builtins (void)
   tree v2di_ftype_v2di_int
     = build_function_type_list (V2DI_type_node,
 				V2DI_type_node, integer_type_node, NULL_TREE);
-  /* APPLE LOCAL begin mni 4424835 */
+  /* APPLE LOCAL begin ssse3 4424835 */
   tree v2di_ftype_v2di_v2di_int
     = build_function_type_list (V2DI_type_node, V2DI_type_node,
 				V2DI_type_node, integer_type_node, NULL_TREE);
-  /* APPLE LOCAL end mni */
+  /* APPLE LOCAL end ssse3 */
   tree v4si_ftype_v4si_int
     = build_function_type_list (V4SI_type_node,
 				V4SI_type_node, integer_type_node, NULL_TREE);
@@ -15299,11 +15652,11 @@ ix86_init_mmx_sse_builtins (void)
   tree v4si_ftype_v8hi_v8hi
     = build_function_type_list (V4SI_type_node,
 				V8HI_type_node, V8HI_type_node, NULL_TREE);
-  tree di_ftype_v8qi_v8qi
-    = build_function_type_list (long_long_unsigned_type_node,
+  tree v1di_ftype_v8qi_v8qi
+    = build_function_type_list (V1DI_type_node,
 				V8QI_type_node, V8QI_type_node, NULL_TREE);
-  tree di_ftype_v2si_v2si
-    = build_function_type_list (long_long_unsigned_type_node,
+  tree v1di_ftype_v2si_v2si
+    = build_function_type_list (V1DI_type_node,
 				V2SI_type_node, V2SI_type_node, NULL_TREE);
   tree v2di_ftype_v16qi_v16qi
     = build_function_type_list (V2DI_type_node,
@@ -15386,8 +15739,8 @@ ix86_init_mmx_sse_builtins (void)
 	case V2SImode:
 	  type = v2si_ftype_v2si_v2si;
 	  break;
-	case DImode:
-	  type = di_ftype_di_di;
+	case V1DImode:
+	  type = v1di_ftype_v1di_v1di;
 	  break;
 
 	default:
@@ -15405,7 +15758,7 @@ ix86_init_mmx_sse_builtins (void)
 
       def_builtin (d->mask, d->name, type, d->code);
     }
-  /* APPLE LOCAL begin mni 4424835 */
+  /* APPLE LOCAL begin ssse3 4424835 */
   /* Add all builtins that are more or less simple operations on 1 operand.  */
   for (i = 0, d = bdesc_1arg; i < ARRAY_SIZE (bdesc_1arg); i++, d++)
     {
@@ -15449,19 +15802,27 @@ ix86_init_mmx_sse_builtins (void)
 
       def_builtin (d->mask, d->name, type, d->code);
     }
-  /* APPLE LOCAL end mni */
+  /* APPLE LOCAL end ssse3 */
   /* Add the remaining MMX insns with somewhat more complicated types.  */
   def_builtin (MASK_MMX, "__builtin_ia32_emms", void_ftype_void, IX86_BUILTIN_EMMS);
-  def_builtin (MASK_MMX, "__builtin_ia32_psllw", v4hi_ftype_v4hi_di, IX86_BUILTIN_PSLLW);
-  def_builtin (MASK_MMX, "__builtin_ia32_pslld", v2si_ftype_v2si_di, IX86_BUILTIN_PSLLD);
-  def_builtin (MASK_MMX, "__builtin_ia32_psllq", di_ftype_di_di, IX86_BUILTIN_PSLLQ);
+  def_builtin (MASK_MMX, "__builtin_ia32_psllw", v4hi_ftype_v4hi_v1di, IX86_BUILTIN_PSLLW);
+  def_builtin (MASK_MMX, "__builtin_ia32_psllwi", v4hi_ftype_v4hi_int, IX86_BUILTIN_PSLLWI);
+  def_builtin (MASK_MMX, "__builtin_ia32_pslld", v2si_ftype_v2si_v1di, IX86_BUILTIN_PSLLD);
+  def_builtin (MASK_MMX, "__builtin_ia32_pslldi", v2si_ftype_v2si_int, IX86_BUILTIN_PSLLDI);
+  def_builtin (MASK_MMX, "__builtin_ia32_psllq", v1di_ftype_v1di_v1di, IX86_BUILTIN_PSLLQ);
+  def_builtin (MASK_MMX, "__builtin_ia32_psllqi", v1di_ftype_v1di_int, IX86_BUILTIN_PSLLQI);
 
-  def_builtin (MASK_MMX, "__builtin_ia32_psrlw", v4hi_ftype_v4hi_di, IX86_BUILTIN_PSRLW);
-  def_builtin (MASK_MMX, "__builtin_ia32_psrld", v2si_ftype_v2si_di, IX86_BUILTIN_PSRLD);
-  def_builtin (MASK_MMX, "__builtin_ia32_psrlq", di_ftype_di_di, IX86_BUILTIN_PSRLQ);
+  def_builtin (MASK_MMX, "__builtin_ia32_psrlw", v4hi_ftype_v4hi_v1di, IX86_BUILTIN_PSRLW);
+  def_builtin (MASK_MMX, "__builtin_ia32_psrlwi", v4hi_ftype_v4hi_int, IX86_BUILTIN_PSRLWI);
+  def_builtin (MASK_MMX, "__builtin_ia32_psrld", v2si_ftype_v2si_v1di, IX86_BUILTIN_PSRLD);
+  def_builtin (MASK_MMX, "__builtin_ia32_psrldi", v2si_ftype_v2si_int, IX86_BUILTIN_PSRLDI);
+  def_builtin (MASK_MMX, "__builtin_ia32_psrlq", v1di_ftype_v1di_v1di, IX86_BUILTIN_PSRLQ);
+  def_builtin (MASK_MMX, "__builtin_ia32_psrlqi", v1di_ftype_v1di_int, IX86_BUILTIN_PSRLQI);
 
-  def_builtin (MASK_MMX, "__builtin_ia32_psraw", v4hi_ftype_v4hi_di, IX86_BUILTIN_PSRAW);
-  def_builtin (MASK_MMX, "__builtin_ia32_psrad", v2si_ftype_v2si_di, IX86_BUILTIN_PSRAD);
+  def_builtin (MASK_MMX, "__builtin_ia32_psraw", v4hi_ftype_v4hi_v1di, IX86_BUILTIN_PSRAW);
+  def_builtin (MASK_MMX, "__builtin_ia32_psrawi", v4hi_ftype_v4hi_int, IX86_BUILTIN_PSRAWI);
+  def_builtin (MASK_MMX, "__builtin_ia32_psrad", v2si_ftype_v2si_v1di, IX86_BUILTIN_PSRAD);
+  def_builtin (MASK_MMX, "__builtin_ia32_psradi", v2si_ftype_v2si_int, IX86_BUILTIN_PSRADI);
 
   def_builtin (MASK_MMX, "__builtin_ia32_pshufw", v4hi_ftype_v4hi_int, IX86_BUILTIN_PSHUFW);
   def_builtin (MASK_MMX, "__builtin_ia32_pmaddwd", v2si_ftype_v4hi_v4hi, IX86_BUILTIN_PMADDWD);
@@ -15502,11 +15863,11 @@ ix86_init_mmx_sse_builtins (void)
   def_builtin (MASK_SSE, "__builtin_ia32_movmskps", int_ftype_v4sf, IX86_BUILTIN_MOVMSKPS);
   def_builtin (MASK_SSE | MASK_3DNOW_A, "__builtin_ia32_pmovmskb", int_ftype_v8qi, IX86_BUILTIN_PMOVMSKB);
   def_builtin (MASK_SSE, "__builtin_ia32_movntps", void_ftype_pfloat_v4sf, IX86_BUILTIN_MOVNTPS);
-  def_builtin (MASK_SSE | MASK_3DNOW_A, "__builtin_ia32_movntq", void_ftype_pdi_di, IX86_BUILTIN_MOVNTQ);
+  def_builtin (MASK_SSE | MASK_3DNOW_A, "__builtin_ia32_movntq", void_ftype_pv1di_v1di, IX86_BUILTIN_MOVNTQ);
 
   def_builtin (MASK_SSE | MASK_3DNOW_A, "__builtin_ia32_sfence", void_ftype_void, IX86_BUILTIN_SFENCE);
 
-  def_builtin (MASK_SSE | MASK_3DNOW_A, "__builtin_ia32_psadbw", di_ftype_v8qi_v8qi, IX86_BUILTIN_PSADBW);
+  def_builtin (MASK_SSE | MASK_3DNOW_A, "__builtin_ia32_psadbw", v1di_ftype_v8qi_v8qi, IX86_BUILTIN_PSADBW);
 
   def_builtin (MASK_SSE, "__builtin_ia32_rcpps", v4sf_ftype_v4sf, IX86_BUILTIN_RCPPS);
   def_builtin (MASK_SSE, "__builtin_ia32_rcpss", v4sf_ftype_v4sf, IX86_BUILTIN_RCPSS);
@@ -15604,7 +15965,7 @@ ix86_init_mmx_sse_builtins (void)
   def_builtin (MASK_SSE2, "__builtin_ia32_loaddqu", v16qi_ftype_pcchar, IX86_BUILTIN_LOADDQU);
   def_builtin (MASK_SSE2, "__builtin_ia32_storedqu", void_ftype_pchar_v16qi, IX86_BUILTIN_STOREDQU);
 
-  def_builtin (MASK_SSE2, "__builtin_ia32_pmuludq", di_ftype_v2si_v2si, IX86_BUILTIN_PMULUDQ);
+  def_builtin (MASK_SSE2, "__builtin_ia32_pmuludq", v1di_ftype_v2si_v2si, IX86_BUILTIN_PMULUDQ);
   def_builtin (MASK_SSE2, "__builtin_ia32_pmuludq128", v2di_ftype_v4si_v4si, IX86_BUILTIN_PMULUDQ128);
 
   def_builtin (MASK_SSE2, "__builtin_ia32_psllw128", v8hi_ftype_v8hi_v2di, IX86_BUILTIN_PSLLW128);
@@ -15658,14 +16019,14 @@ ix86_init_mmx_sse_builtins (void)
   def_builtin (MASK_SSE, "__builtin_ia32_storelv4si", ftype, IX86_BUILTIN_STOREQ);
   /* APPLE LOCAL end 4099020 */
 
-  /* APPLE LOCAL begin mni 4424835 */
+  /* APPLE LOCAL begin ssse3 4424835 */
   /* Merom New Instructions.  */
-  def_builtin (MASK_MNI, "__builtin_ia32_palignr128",
+  def_builtin (MASK_SSSE3, "__builtin_ia32_palignr128",
 	       v2di_ftype_v2di_v2di_int, IX86_BUILTIN_PALIGNR128);
-  def_builtin (MASK_MNI, "__builtin_ia32_palignr", di_ftype_di_di_int,
+  def_builtin (MASK_SSSE3, "__builtin_ia32_palignr", v1di_ftype_v1di_v1di_int,
 	       IX86_BUILTIN_PALIGNR);
 
-  /* APPLE LOCAL end mni */
+  /* APPLE LOCAL end ssse3 */
   /* Access to the vec_init patterns.  */
   ftype = build_function_type_list (V2SI_type_node, integer_type_node,
 				    integer_type_node, NULL_TREE);
@@ -15741,6 +16102,7 @@ ix86_init_mmx_sse_builtins (void)
   def_builtin (MASK_SSE | MASK_3DNOW_A, "__builtin_ia32_vec_set_v4hi",
 	       ftype, IX86_BUILTIN_VEC_SET_V4HI);
 }
+/* APPLE LOCAL end 4656532 use V1DImode for _m64 */
 
 /* Errors in the source file can cause expand_expr to return const0_rtx
    where we expect a vector.  To avoid crashing, use one of the vector
@@ -16161,7 +16523,7 @@ ix86_expand_builtin (tree exp, rtx target, rtx subtarget ATTRIBUTE_UNUSED,
   tree arglist = TREE_OPERAND (exp, 1);
   tree arg0, arg1, arg2;
   rtx op0, op1, op2, pat;
-  /* APPLE LOCAL mni */
+  /* APPLE LOCAL ssse3 */
   enum machine_mode tmode, mode0, mode1, mode2, mode3;
   unsigned int fcode = DECL_FUNCTION_CODE (fndecl);
 
@@ -16281,7 +16643,8 @@ ix86_expand_builtin (tree exp, rtx target, rtx subtarget ATTRIBUTE_UNUSED,
     case IX86_BUILTIN_MOVNTPS:
       return ix86_expand_store_builtin (CODE_FOR_sse_movntv4sf, arglist);
     case IX86_BUILTIN_MOVNTQ:
-      return ix86_expand_store_builtin (CODE_FOR_sse_movntdi, arglist);
+      /* APPLE LOCAL 4656532 use V1DImode for _m64 */
+      return ix86_expand_store_builtin (CODE_FOR_sse_movntv1di, arglist);
 
     case IX86_BUILTIN_LDMXCSR:
       op0 = expand_expr (TREE_VALUE (arglist), NULL_RTX, VOIDmode, 0);
@@ -16541,17 +16904,19 @@ ix86_expand_builtin (tree exp, rtx target, rtx subtarget ATTRIBUTE_UNUSED,
     case IX86_BUILTIN_LDDQU:
       return ix86_expand_unop_builtin (CODE_FOR_sse3_lddqu, arglist,
 				       target, 1);
-      /* APPLE LOCAL begin mni 4424835 */
+      /* APPLE LOCAL begin ssse3 4424835 */
     case IX86_BUILTIN_PALIGNR:
     case IX86_BUILTIN_PALIGNR128:
       if (fcode == IX86_BUILTIN_PALIGNR)
 	{
-	  icode = CODE_FOR_mni_palignrdi;
-	  mode = DImode;
+          /* APPLE LOCAL begin 4656532 use V1DImode for _m64 */
+	  icode = CODE_FOR_ssse3_palignrv1di;
+	  mode = V1DImode;
+          /* APPLE LOCAL end 4656532 use V1DImode for _m64 */
 	}
       else
 	{
-	  icode = CODE_FOR_mni_palignrti;
+	  icode = CODE_FOR_ssse3_palignrti;
 	  mode = V2DImode;
 	}
       arg0 = TREE_VALUE (arglist);
@@ -16588,7 +16953,7 @@ ix86_expand_builtin (tree exp, rtx target, rtx subtarget ATTRIBUTE_UNUSED,
       emit_insn (pat);
       return target;
 
-      /* APPLE LOCAL end mni */
+      /* APPLE LOCAL end ssse3 */
     case IX86_BUILTIN_VEC_INIT_V2SI:
     case IX86_BUILTIN_VEC_INIT_V4HI:
     case IX86_BUILTIN_VEC_INIT_V8QI:
@@ -17201,21 +17566,6 @@ ix86_memory_move_cost (enum machine_mode mode, enum reg_class class, int in)
     }
 }
 
-/* APPLE LOCAL begin why is this local? */
-#if TARGET_MACHO
-/* Cross-module name binding.  Darwin does not support overriding
-   functions at dynamic-link time.  */
-
-static bool
-ix86_binds_local_p (tree decl)
-{
-  /* APPLE LOCAL kext treat vtables as overridable  */
-  return default_binds_local_p_1 (decl, 
-	flag_apple_kext && lang_hooks.vtable_p (decl));
-}
-#endif
-/* APPLE LOCAL end why is this local? */
-
 /* Compute a (partial) cost for rtx X.  Return true if the complete
    cost has been computed, and false if subexpressions should be
    scanned.  In either case, *TOTAL contains the cost result.  */
@@ -17586,7 +17936,8 @@ machopic_output_stub (FILE *file, const char *symb, const char *stub)
 	{
 	  /* 25-byte PIC stub using "CALL get_pc_thunk".  */
 	  rtx tmp = gen_rtx_REG (SImode, 2 /* ECX */);
-	  output_set_got (tmp);	/* "CALL ___<cpu>.get_pc_thunk.cx".  */
+	  /* APPLE LOCAL mainline */
+	  output_set_got (tmp, NULL_RTX);	/* "CALL ___<cpu>.get_pc_thunk.cx".  */
 	  fprintf (file, "LPC$%d:\tmovl\t%s-LPC$%d(%%ecx),%%ecx\n", label, lazy_ptr_name, label);
 	}
       else
@@ -17975,7 +18326,8 @@ x86_output_mi_thunk (FILE *file ATTRIBUTE_UNUSED,
 #endif /* TARGET_MACHO */
 	{
 	  tmp = gen_rtx_REG (SImode, 2 /* ECX */);
-	  output_set_got (tmp);
+	  /* APPLE LOCAL mainline */
+	  output_set_got (tmp, NULL_RTX);
 
 	  xops[1] = tmp;
 	  output_asm_insn ("mov{l}\t{%0@GOT(%1), %1|%1, %0@GOT[%1]}", xops);
@@ -17988,11 +18340,11 @@ static void
 x86_file_start (void)
 {
   default_file_start ();
-/* APPLE LOCAL begin dwarf 4383509 */
+/* APPLE LOCAL begin mainline 2006-03-16 dwarf 4383509 */
 #if TARGET_MACHO
   darwin_file_start ();
 #endif
-/* APPLE LOCAL end dwarf 4383509 */
+/* APPLE LOCAL end mainline 2006-03-16 dwarf 4383509 */
   if (X86_FILE_START_VERSION_DIRECTIVE)
     fputs ("\t.version\t\"01.01\"\n", asm_out_file);
   if (X86_FILE_START_FLTUSED)
@@ -18288,23 +18640,53 @@ x86_emit_floatuns (rtx operands[2])
   enum machine_mode mode, inmode;
 
   inmode = GET_MODE (operands[1]);
-  if (inmode != SImode
-      && inmode != DImode)
-    abort ();
-
-  /* APPLE LOCAL begin 4176531 */
-  /* This initial implementation for x86_32 supports only unsigned-DI
-     => DF.  Not used when 'optimize_size' is on.  */
-  if (!TARGET_64BIT && inmode == DImode && !optimize_size)
+  /* APPLE LOCAL begin 4176531 4424891 4639472 */
+  mode = GET_MODE (operands[0]);
+  if (!TARGET_64BIT && !optimize_size)
     {
-      ix86_expand_convert_DI2DF_sse (operands);
-      return;
+      switch (mode)
+	{
+	case DFmode:
+	  switch (inmode)
+	    {
+	    case SImode:
+	      ix86_expand_convert_uns_SI2DF_sse (operands);
+	      return;
+	    case DImode:
+	      ix86_expand_convert_uns_DI2DF_sse (operands);
+	      return;
+	    default:
+	      abort ();
+	      break;
+	    }
+	  break;
+
+	case SFmode:
+	  switch (inmode)
+	    {
+	    case SImode:
+	      ix86_expand_convert_uns_SI2SF_sse (operands);
+	      return;
+	    case DImode:
+	      /* ix86_expand_convert_uns_DI2SF_sse (operands); *//* Not Yet Implemented */
+	      break;
+	    default:
+	      abort ();
+	      break;
+	    }
+	  break;
+
+	default:
+	  abort ();
+	  break;
+	}
     }
-  /* APPLE LOCAL end 4176531 */
+  /* APPLE LOCAL end 4176531 4424891 4639472 */
 
   out = operands[0];
   in = force_reg (inmode, operands[1]);
-  mode = GET_MODE (out);
+  /* APPLE LOCAL begin one line deletion 4424891 */
+  /* APPLE LOCAL end one line deletion 4424891 */
   neglab = gen_label_rtx ();
   donelab = gen_label_rtx ();
   i1 = gen_reg_rtx (Pmode);
@@ -20624,5 +21006,4 @@ iasm_print_op (char *buf, tree arg, unsigned argnum, tree *uses,
   return true;
 }
 /* APPLE LOCAL end CW asm blocks */
-
 #include "gt-i386.h"

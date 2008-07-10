@@ -1,4 +1,0 @@
-/_wrap_MenuBar_FindMenu(/a
-.
-/((wxMenuBar const \*)arg1)/s//arg1/
-w

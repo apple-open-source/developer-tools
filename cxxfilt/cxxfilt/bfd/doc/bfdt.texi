@@ -87,8 +87,8 @@ struct bfd
   /* Pointer to linked list of sections.  */
   struct bfd_section *sections;
 
-  /* The place where we add to the section list.  */
-  struct bfd_section **section_tail;
+  /* The last section on the section list.  */
+  struct bfd_section *section_last;
 
   /* The number of sections.  */
   unsigned int section_count;
@@ -216,6 +216,7 @@ typedef enum bfd_error
   bfd_error_bad_value,
   bfd_error_file_truncated,
   bfd_error_file_too_big,
+  bfd_error_on_input,
   bfd_error_invalid_error_code
 @}
 bfd_error_type;
@@ -234,10 +235,13 @@ Return the current BFD error condition.
 @subsubsection @code{bfd_set_error}
 @strong{Synopsis}
 @example
-void bfd_set_error (bfd_error_type error_tag);
+void bfd_set_error (bfd_error_type error_tag, ...);
 @end example
 @strong{Description}@*
 Set the BFD error condition to be @var{error_tag}.
+If @var{error_tag} is bfd_error_on_input, then this function
+takes two more parameters, the input bfd where the error
+occurred, and the bfd_error_type error.
 
 @findex bfd_errmsg
 @subsubsection @code{bfd_errmsg}
@@ -306,7 +310,10 @@ bfd_error_handler_type bfd_get_error_handler (void);
 @strong{Description}@*
 Return the BFD error handler function.
 
-@section Symbols
+@section Miscellaneous
+
+
+@subsection Miscellaneous functions
 
 
 @findex bfd_get_reloc_upper_bound
@@ -558,12 +565,20 @@ Not enough memory exists to create private data for @var{obfd}.
 @strong{Description}@*
 The following functions exist but have not yet been documented.
 @example
-#define bfd_sizeof_headers(abfd, reloc) \
-       BFD_SEND (abfd, _bfd_sizeof_headers, (abfd, reloc))
+#define bfd_sizeof_headers(abfd, info) \
+       BFD_SEND (abfd, _bfd_sizeof_headers, (abfd, info))
 
 #define bfd_find_nearest_line(abfd, sec, syms, off, file, func, line) \
        BFD_SEND (abfd, _bfd_find_nearest_line, \
                  (abfd, sec, syms, off, file, func, line))
+
+#define bfd_find_line(abfd, syms, sym, file, line) \
+       BFD_SEND (abfd, _bfd_find_line, \
+                 (abfd, syms, sym, file, line))
+
+#define bfd_find_inliner_info(abfd, file, func, line) \
+       BFD_SEND (abfd, _bfd_find_inliner_info, \
+                 (abfd, file, func, line))
 
 #define bfd_debug_info_start(abfd) \
        BFD_SEND (abfd, _bfd_debug_info_start, (abfd))
@@ -663,7 +678,7 @@ struct bfd_preserve
   flagword flags;
   const struct bfd_arch_info *arch_info;
   struct bfd_section *sections;
-  struct bfd_section **section_tail;
+  struct bfd_section *section_last;
   unsigned int section_count;
   struct bfd_hash_table section_htab;
 @};
@@ -707,4 +722,51 @@ void bfd_preserve_finish (bfd *, struct bfd_preserve *);
 This function should be called when the bfd state saved by
 bfd_preserve_save is no longer needed.  ie. when the back-end
 object_p function returns with success.
+
+@findex bfd_emul_get_maxpagesize
+@subsubsection @code{bfd_emul_get_maxpagesize}
+@strong{Synopsis}
+@example
+bfd_vma bfd_emul_get_maxpagesize (const char *);
+@end example
+@strong{Description}@*
+Returns the maximum page size, in bytes, as determined by
+emulation.
+
+@strong{Returns}@*
+Returns the maximum page size in bytes for ELF, abort
+otherwise.
+
+@findex bfd_emul_set_maxpagesize
+@subsubsection @code{bfd_emul_set_maxpagesize}
+@strong{Synopsis}
+@example
+void bfd_emul_set_maxpagesize (const char *, bfd_vma);
+@end example
+@strong{Description}@*
+For ELF, set the maximum page size for the emulation.  It is
+a no-op for other formats.
+
+@findex bfd_emul_get_commonpagesize
+@subsubsection @code{bfd_emul_get_commonpagesize}
+@strong{Synopsis}
+@example
+bfd_vma bfd_emul_get_commonpagesize (const char *);
+@end example
+@strong{Description}@*
+Returns the common page size, in bytes, as determined by
+emulation.
+
+@strong{Returns}@*
+Returns the common page size in bytes for ELF, abort otherwise.
+
+@findex bfd_emul_set_commonpagesize
+@subsubsection @code{bfd_emul_set_commonpagesize}
+@strong{Synopsis}
+@example
+void bfd_emul_set_commonpagesize (const char *, bfd_vma);
+@end example
+@strong{Description}@*
+For ELF, set the common page size for the emulation.  It is
+a no-op for other formats.
 

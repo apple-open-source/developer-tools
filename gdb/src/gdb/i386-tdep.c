@@ -528,13 +528,14 @@ i386_analyze_frame_setup (CORE_ADDR pc, CORE_ADDR limit,
   int skip = 0;
   int insn_count = 0;
 
-  /* If we iterate over 256 instructions without finding a prologue, we're
-     doing something wrong - stop.  We can get in this state when backtracing
-     through a dylib/etc with no symbols: we have a pc in the middle of it
-     and we consider the start of the function to be the last symbol before
-     the dylib.  We step over all the instructions between those two points,
-     which can be quite large, and take a long time doing it.  */
-  const int insn_limit = 256;
+  /* If we iterate over 50 instructions max. 
+     We can get in this state when backtracing through a dylib/etc
+     with no symbols: we have a pc in the middle of it and we
+     consider the start of the function to be the last symbol before
+     the dylib.  We step over all the instructions between those
+     two points, which can be quite large, and take a long time
+     doing it.  */
+  const int insn_limit = 50;
 
   /* APPLE LOCAL: This function returns a CORE_ADDR which is the instruction
      following the last frame-setup instruction we saw such that "frame-setup
@@ -614,7 +615,7 @@ i386_analyze_frame_setup (CORE_ADDR pc, CORE_ADDR limit,
 
 	 Make sure we only skip these instructions if we later see the
 	 `movl %esp, %ebp' that actually sets up the frame.  */
-      while (pc + skip < limit)
+      while (pc + skip < limit && insn_count++ < insn_limit)
 	{
           int insn_len = i386_length_of_this_instruction (pc + skip);
           if (insn_len == 2)
@@ -629,7 +630,7 @@ i386_analyze_frame_setup (CORE_ADDR pc, CORE_ADDR limit,
 	}
 
       /* If that's all, return now.  */
-      if (limit <= pc + skip)
+      if (limit <= pc + skip && insn_limit < insn_limit)
 	return end_of_frame_setup;
 
       if (!i386_mov_esp_ebp_pattern_p (pc + skip))
@@ -685,13 +686,16 @@ i386_analyze_frame_setup (CORE_ADDR pc, CORE_ADDR limit,
 	  return end_of_frame_setup;
 	}
     }
-  else if (op == 0xc8)		/* enter */
+  else 
     {
-      cache->locals = read_memory_unsigned_integer (pc + 1, 2);
-      end_of_frame_setup = pc + 4;
-      return end_of_frame_setup;
+      op = read_memory_unsigned_integer (pc, 1);
+      if (op == 0xc8)		/* enter */
+        {
+          cache->locals = read_memory_unsigned_integer (pc + 1, 2);
+          end_of_frame_setup = pc + 4;
+          return end_of_frame_setup;
+        }
     }
-
   return end_of_frame_setup;
 }
 
@@ -1036,8 +1040,14 @@ i386_analyze_prologue (CORE_ADDR pc, CORE_ADDR current_pc,
 		       struct i386_frame_cache *cache)
 {
   pc = i386_follow_jump (pc);
+
+  /* APPLE LOCAL: These functions doesn't do anything on our system's
+     calling convention so skip them.  */
+#if 0
   pc = i386_analyze_struct_return (pc, current_pc, cache);
   pc = i386_skip_probe (pc);
+#endif
+
   pc = i386_analyze_frame_setup (pc, current_pc, cache);
   return i386_analyze_register_saves (pc, current_pc, cache);
 }
@@ -1068,7 +1078,7 @@ i386_skip_prologue (CORE_ADDR start_pc)
      when the user says "break open", which object_file's open() it chose
      instead of just giving us a pc value...  */
   if (find_pc_partial_function (start_pc, NULL, NULL, &endaddr) == 0)
-    endaddr = 0xffffffff;
+    endaddr = start_pc + 512;  /* 512 bytes is more than enough.  */
   pc = i386_analyze_prologue (start_pc, endaddr, &cache);
   if (cache.locals < 0)
     return start_pc;
@@ -1218,8 +1228,12 @@ i386_frame_cache (struct frame_info *next_frame, void **this_cache)
   if (cache->base == 0)
     return cache;
 
-  cache->pc = frame_func_unwind (next_frame); /* function start address */
+  /* We want to make sure we get the function beginning right or
+     analyze_prologue will be reading off into the weeds.  So make sure
+     the load level is raised before we get the function pc.  */
   current_pc = frame_pc_unwind (next_frame);
+  pc_set_load_state (current_pc, OBJF_SYM_ALL, 0);
+  cache->pc = frame_func_unwind (next_frame); /* function start address */
 
   /* Only do i386_analyze_prologue () if we found a debug symbol pointing to
      the actual start of the function.  */
@@ -1298,7 +1312,9 @@ i386_frame_this_id (struct frame_info *next_frame, void **this_cache,
      come from the registers.  */
   if (get_frame_type (next_frame) != SENTINEL_FRAME)
     {
-      if (cache->base == 0)
+      if (cache->base == 0 
+          || (get_prev_frame (next_frame) != NULL 
+              && frame_pc_unwind (get_prev_frame (next_frame)) == 0))
 	{
 	  *this_id = null_frame_id;
 	  return;

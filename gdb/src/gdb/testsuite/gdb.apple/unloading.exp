@@ -93,10 +93,43 @@ gdb_expect {
   }
 }
 
+send_gdb "210-gdb-set sharedlibrary load-rules dyld .* extern\n"
+gdb_expect {
+    -re "210\\^done\[\r\n\]+$mi_gdb_prompt$" {
+    pass "setting sharedlibrary load rules to extern."
+  }
+  timeout {
+    fail "(timeout) setting sharedlibrary load rules to extern."
+  }
+}
+send_gdb "211-gdb-set auto-raise-load-levels 1\n"
+gdb_expect {
+    -re "211\\^done\[\r\n\]+$mi_gdb_prompt$" {
+    pass "setting sharedlibrary load rules to extern."
+  }
+  timeout {
+    fail "(timeout) setting sharedlibrary load rules to extern."
+  }
+}
+
 set libs_loaded {.*\r\n=shlibs-added,shlib-info=\[num="[0-9]+",name="loaded.bundle",.*\].*\r\n=shlibs-added,shlib-info=\[num="[0-9]+",name="libreal.dylib".*\]\r\n.*}
 set libs_unloaded {.*\r\n=shlibs-removed,shlib-info=\[num="[0-9]+",name="loaded.bundle",.*\].*\r\n=shlibs-removed,shlib-info=\[num="[0-9]+",name="libreal.dylib".*\]\r\n.*}
 
 mi_continue_to 2 real_function ".*" real.c "4" "Run to real function first time" $libs_loaded
 
 mi_continue_to 2 real_function ".*" real.c "4" "Run to real function second time" $libs_unloaded$libs_loaded
+
+send_gdb "220-exec-run\n"
+gdb_expect {
+    -re "220\\*stopped,reason=\"breakpoint-hit\",commands=\"no\",times=\"1\",bkptno=\"1\",thread-id=\"$decimal\"\[\r\n\]+$mi_gdb_prompt$" {
+    pass "Rerunning."
+  }
+  timeout {
+    fail "(timeout) rerunning"
+  }
+}
+
+mi_continue_to 2 real_function ".*" real.c "4" "Rerun to real function first time" $libs_loaded
+
+mi_continue_to 2 real_function ".*" real.c "4" "Rerun to real function second time" $libs_unloaded$libs_loaded
 

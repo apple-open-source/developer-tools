@@ -5,7 +5,7 @@
    on MacOS X 10.1.2 and later.  */
 /* Developed by Ziemowit Laski <zlaski@apple.com>.  */
 
-/* { dg-do run { target *-*-darwin* } } */
+/* { dg-do run { target powerpc*-*-darwin* i?86*-*-darwin* } } */
 /* { dg-options "-fconstant-cfstrings -framework Cocoa" } */
 
 #import <Foundation/NSString.h>

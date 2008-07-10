@@ -1122,6 +1122,8 @@ struct execution_control_state
   enum infwait_states infwait_state;
   ptid_t waiton_ptid;
   int wait_some_more;
+  /* APPLE LOCAL: Arm switch jumptable hackery.  */
+  int stepping_through_switch_glue;
 };
 
 void init_execution_control_state (struct execution_control_state *ecs);
@@ -1287,6 +1289,8 @@ init_execution_control_state (struct execution_control_state *ecs)
   /* APPLE LOCAL: Set code to -1 - means nothing interesting here.  */
   ecs->ws.code = -1;
   ecs->wp = &(ecs->ws);
+  /* APPLE LOCAL: Start off with 0  */
+  ecs->stepping_through_switch_glue = 0;
 }
 
 /* Return the cached copy of the last pid/waitstatus returned by
@@ -1440,6 +1444,13 @@ handle_inferior_event (struct execution_control_state *ecs)
 
   int sw_single_step_trap_p = 0;
   int stopped_by_watchpoint = -1;	/* Mark as unknown.  */
+
+  /* APPLE LOCAL - Some convenience variables we'll need
+     below.  */
+
+  struct frame_id prev_frame_id;
+  struct gdb_exception e;
+  /* END APPLE LOCAL */
 
   /* Cache the last pid/waitstatus. */
   target_last_wait_ptid = ecs->ptid;
@@ -2577,6 +2588,26 @@ extern void macosx_print_extra_stop_info (int, CORE_ADDR);
      test for stepping.  But, if not stepping,
      do not stop.  */
 
+  /* If we are currently stepping through the glue that implements
+     switch then keep going till we're out.  */
+
+#ifdef IN_SWITCH_GLUE
+  if (ecs->stepping_through_switch_glue)
+    {
+      if (IN_SWITCH_GLUE (stop_pc))
+	{
+	  if (debug_infrun)
+	    fprintf_unfiltered (gdb_stdlog, "infrun: stepping through switch glue at %s.\n",
+				paddr_nz (stop_pc));
+	  ecs->another_trap = 1;
+	  keep_going (ecs);
+	  return;
+	}
+      else
+	ecs->stepping_through_switch_glue = 0;
+    }
+#endif /* IN_SWITCH_GLUE */
+
   /* Are we stepping to get the inferior out of the dynamic linker's
      hook (and possibly the dld itself) after catching a shlib
      event?  */
@@ -2734,7 +2765,7 @@ extern void macosx_print_extra_stop_info (int, CORE_ADDR);
       int load_state;
 
       load_state = pc_set_load_state (stop_pc, OBJF_SYM_ALL, 0);      
-      if (load_state != OBJF_SYM_ALL)
+      if ((OBJF_SYM_LEVELS_MASK & load_state) != OBJF_SYM_ALL)
 	{
 	  find_pc_partial_function (stop_pc, &ecs->stop_func_name,
 				    &ecs->stop_func_start, &ecs->stop_func_end);
@@ -2749,9 +2780,20 @@ extern void macosx_print_extra_stop_info (int, CORE_ADDR);
      A common bug here is that gdb doesn't unwind correctly from
      some stub routine or hand written assembly code and the previous
      frame == steping frame comparison fails.  */
+  /* APPLE LOCAL: Some jokers like to put the stack pointer in
+     unreadable memory occasionally.  Don't error out of 
+     handle_inferior_event for that...  */
 
-  if (frame_id_eq (frame_unwind_id (get_current_frame ()), step_frame_id)
+    TRY_CATCH (e, RETURN_MASK_ALL)
+      {
+	prev_frame_id = frame_unwind_id (get_current_frame ());
+      }
+    if (e.reason != NO_ERROR)
+      prev_frame_id = null_frame_id;
+
+  if (frame_id_eq (prev_frame_id, step_frame_id)
       || stepping_over_inlined_subroutine)
+    /* END APPLE LOCAL */
     {
       /* It's a subroutine call.  */
       CORE_ADDR real_stop_pc;
@@ -2762,6 +2804,18 @@ extern void macosx_print_extra_stop_info (int, CORE_ADDR);
       if (debug_infrun)
 	 fprintf_unfiltered (gdb_stdlog, "infrun: stepped into subroutine\n");
 
+#ifdef IN_SWITCH_GLUE
+      if (IN_SWITCH_GLUE (stop_pc))
+	{
+	  ecs->stepping_through_switch_glue = 1;
+	  if (debug_infrun)
+	    fprintf_unfiltered (gdb_stdlog, "infrun: stepped into switch glue at %s.\n",
+				paddr_nz (stop_pc));
+	  ecs->another_trap = 1;
+	  keep_going (ecs);
+	  return;
+	}
+#endif
       if ((step_over_calls == STEP_OVER_NONE)
 	  || ((step_range_end == 1)
 	      && in_prologue (prev_pc, ecs->stop_func_start)))
@@ -3165,7 +3219,8 @@ step_into_function (struct execution_control_state *ecs)
      Otherwise, just go to end of prologue.  */
   if (ecs->sal.end
       && ecs->sal.pc != ecs->stop_func_start
-      && ecs->sal.end < ecs->stop_func_end)
+      && ecs->sal.end < ecs->stop_func_end
+      && ecs->stop_func_start != skip_language_trampoline (stop_pc))
     ecs->stop_func_start = ecs->sal.end;
 
   /* Architectures which require breakpoint adjustment might not be able
@@ -3397,16 +3452,13 @@ print_stop_reason (enum inferior_stop_reason stop_reason, int stop_info)
       /* Print a message only if not in the middle of doing a "step n"
          operation for n > 1 */
       if (!step_multi || !stop_step)
-	if (ui_out_is_mi_like_p (uiout))
-	  /* APPLE LOCAL begin subroutine inlining  */
 	  {
+	    /* APPLE LOCAL begin subroutine inlining  */
 	    if (finishing_inlined_subroutine)
-	      ui_out_field_string 
-		(uiout, "reason",
+	      ui_out_print_annotation_string (uiout, 0, "reason",
 		 async_reason_lookup (EXEC_ASYNC_FUNCTION_FINISHED));
 	    else
-	      ui_out_field_string
-		(uiout, "reason",
+	      ui_out_print_annotation_string (uiout, 0, "reason",
 		 async_reason_lookup (EXEC_ASYNC_END_STEPPING_RANGE));
 	  }
          /* APPLE LOCAL end subroutine inlining  */
@@ -3418,19 +3470,18 @@ print_stop_reason (enum inferior_stop_reason stop_reason, int stop_info)
     case SIGNAL_EXITED:
       /* The inferior was terminated by a signal. */
       annotate_signalled ();
-      if (ui_out_is_mi_like_p (uiout))
-	ui_out_field_string
-	  (uiout, "reason",
-	   async_reason_lookup (EXEC_ASYNC_EXITED_SIGNALLED));
+      ui_out_print_annotation_string (uiout, 0, "reason",
+			       async_reason_lookup (EXEC_ASYNC_EXITED_SIGNALLED));
       ui_out_text (uiout, "\nProgram terminated with signal ");
       annotate_signal_name ();
-      ui_out_field_string (uiout, "signal-name",
+      ui_out_print_annotation_string (uiout, 1, "signal-name",
 			   target_signal_to_name (stop_info));
       annotate_signal_name_end ();
       ui_out_text (uiout, ", ");
       annotate_signal_string ();
-      ui_out_field_string (uiout, "signal-meaning",
+      ui_out_print_annotation_string (uiout, 1, "signal-meaning",
 			   target_signal_to_string (stop_info));
+      
       annotate_signal_string_end ();
       ui_out_text (uiout, ".\n");
       ui_out_text (uiout, "The program no longer exists.\n");
@@ -3440,8 +3491,7 @@ print_stop_reason (enum inferior_stop_reason stop_reason, int stop_info)
       annotate_exited (stop_info);
       if (stop_info)
 	{
-	  if (ui_out_is_mi_like_p (uiout))
-	    ui_out_field_string (uiout, "reason", 
+	  ui_out_print_annotation_string (uiout, 0, "reason", 
 				 async_reason_lookup (EXEC_ASYNC_EXITED));
 	  ui_out_text (uiout, "\nProgram exited with code ");
 	  ui_out_field_fmt (uiout, "exit-code", "0%o",
@@ -3450,9 +3500,7 @@ print_stop_reason (enum inferior_stop_reason stop_reason, int stop_info)
 	}
       else
 	{
-	  if (ui_out_is_mi_like_p (uiout))
-	    ui_out_field_string
-	      (uiout, "reason",
+	  ui_out_print_annotation_string (uiout, 0, "reason",
 	       async_reason_lookup (EXEC_ASYNC_EXITED_NORMALLY));
 	  ui_out_text (uiout, "\nProgram exited normally.\n");
 	}
@@ -3463,15 +3511,14 @@ print_stop_reason (enum inferior_stop_reason stop_reason, int stop_info)
       annotate_signal ();
       ui_out_text (uiout, "\nProgram received signal ");
       annotate_signal_name ();
-      if (ui_out_is_mi_like_p (uiout))
-	ui_out_field_string
-	  (uiout, "reason", async_reason_lookup (EXEC_ASYNC_SIGNAL_RECEIVED));
-      ui_out_field_string (uiout, "signal-name",
+      ui_out_print_annotation_string (uiout, 0, "reason", 
+			       async_reason_lookup (EXEC_ASYNC_SIGNAL_RECEIVED));
+      ui_out_print_annotation_string (uiout, 1, "signal-name",
 			   target_signal_to_name (stop_info));
       annotate_signal_name_end ();
       ui_out_text (uiout, ", ");
       annotate_signal_string ();
-      ui_out_field_string (uiout, "signal-meaning",
+      ui_out_print_annotation_string (uiout, 1, "signal-meaning",
 			   target_signal_to_string (stop_info));
       annotate_signal_string_end ();
       ui_out_text (uiout, ".\n");
@@ -3634,8 +3681,7 @@ Further execution is probably impossible.\n"));
 		  if (num == solib_finish_bp->number)
 		    {
 		      solib_step_bpstat_p = 1;
-		      if (interpreter_p && strcmp (interpreter_p, "mi") == 0)
-			ui_out_field_string (uiout, "reason",
+		      ui_out_print_annotation_string (uiout, 0, "reason",
 					     "function-finished");
 		      solib_finish_bp = NULL;
 		    }
@@ -3692,8 +3738,7 @@ Further execution is probably impossible.\n"));
 	  if (ui_out_is_mi_like_p (uiout))
 	    source_flag = LOC_AND_ADDRESS;
 
-	  if (ui_out_is_mi_like_p (uiout))
-	    ui_out_field_int (uiout, "thread-id",
+	  ui_out_print_annotation_int (uiout, 0, "thread-id",
 			      pid_to_thread_id (inferior_ptid));
 	  /* The behavior of this routine with respect to the source
 	     flag is:
@@ -4321,6 +4366,8 @@ restore_inferior_status (struct inferior_status *inf_status)
   /* FIXME: Is the restore of stop_registers always needed. */
   regcache_xfree (stop_registers);
   stop_registers = inf_status->stop_registers;
+
+  flush_inlined_subroutine_frames ();
 
   /* The inferior can be gone if the user types "print exit(0)"
      (and perhaps other times).  */

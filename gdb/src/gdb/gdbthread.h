@@ -35,6 +35,8 @@ struct symtab;
 /* For struct frame_id.  */
 #include "frame.h"
 
+#include "inlining.h"
+
 struct thread_info
 {
   struct thread_info *next;
@@ -77,6 +79,8 @@ struct thread_info
 
   /* Private data used by the target vector implementation.  */
   struct private_thread_info *private;
+
+  struct inlined_function_data *thread_inlined_call_stack;
 };
 
 /* APPLE LOCAL begin threads */

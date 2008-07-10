@@ -6,6 +6,8 @@
 
 /* { dg-do compile } */
 /* { dg-options "-O2 -frename-registers -fpic" } */
+/* APPLE LOCAL -mdynamic-no-pic incompatible with -fpic */
+/* { dg-skip-if "Not valid with -mdynamic-no-pic" { *-*-darwin* } { "-mdynamic-no-pic" } { "" } } */
 
 typedef unsigned long XID;
 typedef XID Window;

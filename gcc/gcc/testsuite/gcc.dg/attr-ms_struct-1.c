@@ -1,4 +1,4 @@
-/* APPLE LOCAL file mainilne */
+/* APPLE LOCAL file mainline */
 /* Test for MS structure sizes.  */
 /* { dg-do run { target *-*-interix* *-*-mingw* *-*-cygwin* i?86-*-darwin* } } */
 /* APPLE LOCAL x86_64 */

@@ -2077,6 +2077,13 @@ rs6000_stab_reg_to_regnum (int num)
 
 /* Convert a Dwarf 2 register number to a GDB register number.  */
 /* APPLE LOCAL: Make function global so ppc-macosx-tdep.c can refer to it.  */
+
+/* APPLE LOCAL: These register mappings are defined in pages
+   3-46 through 3-48 of
+	http://refspecs.freestandards.org/elf/elfspec_ppc.pdf
+   The altivec regnos are defined in section 3.7 of
+	http://www.freescale.com/files/32bit/doc/ref_manual/ALTIVECPIM.pdf */
+
 int
 rs6000_dwarf2_reg_to_regnum (int num)
 {
@@ -2093,6 +2100,20 @@ rs6000_dwarf2_reg_to_regnum (int num)
     return tdep->ppc_vr0_regnum + (num - 1124);
   else if (1200 <= num && num < 1200 + 32)
     return tdep->ppc_ev0_regnum + (num - 1200);
+  /* APPLE LOCAL FIXME: Hack to work around gcc outputting altivec registers
+     at its internal register numbering offset (77) instead of the DWARF
+     register numbering offset (1124) -- with exceptions for registers in
+     that range which have assigned meanings by the ABI spec.  
+     Technically the range 70-85 are the segment registers (SR0-SR15)
+     but gdb already didn't recognize those so it should be safe to override
+     them temporarily.  */
+  else if (77 <= num && num < 77 + 32
+           && num != 99
+           && num != 100
+           && num != 101
+           && num != 108
+           && num != 109)
+    return tdep->ppc_vr0_regnum + (num - 77);
   else
     switch (num)
       {

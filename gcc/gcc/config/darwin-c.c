@@ -65,7 +65,9 @@ static void push_field_alignment (int, int, int);
 /* APPLE LOCAL end Macintosh alignment 2001-12-17 --ff */
 static void pop_field_alignment (void);
 static const char *find_subframework_file (const char *, const char *);
-static void add_system_framework_path (char *);
+/* APPLE LOCAL begin iframework for 4.3 4094959 */
+/* Remove add_system_framework_path */
+/* APPLE LOCAL end iframework for 4.3 4094959 */
 static const char *find_subframework_header (cpp_reader *pfile, const char *header,
 					     cpp_dir **dirp);
 
@@ -96,6 +98,12 @@ typedef struct align_stack
 static struct align_stack * field_align_stack = NULL;
 
 /* APPLE LOCAL begin Macintosh alignment 2001-12-17 --ff */
+/* APPLE LOCAL begin radar 4679943 */
+/* natural_alignment == 0 means "off"
+   natural_alignment == 1 means "on"
+   natural_alignment == 2 means "unchanged"  */
+/* APPLE LOCAL end radar 4679943 */
+
 static void
 push_field_alignment (int bit_alignment, 
 		      int mac68k_alignment, int natural_alignment)
@@ -113,10 +121,13 @@ push_field_alignment (int bit_alignment,
     rs6000_alignment_flags |= MASK_ALIGN_MAC68K;
   else
     rs6000_alignment_flags &= ~MASK_ALIGN_MAC68K;
-  if (natural_alignment)
+
+  /* APPLE LOCAL begin radar 4679943 */
+  if (natural_alignment == 1)
     rs6000_alignment_flags |= MASK_ALIGN_NATURAL;
-  else
+  else if (natural_alignment == 0)
     rs6000_alignment_flags &= ~MASK_ALIGN_NATURAL;
+  /* APPLE LOCAL end radar 4679943 */
 }
 /* APPLE LOCAL end Macintosh alignment 2001-12-17 --ff */
 
@@ -319,8 +330,10 @@ else
   switch (action)
     {
     case pop:   pop_field_alignment ();		      break;
-    case push:  push_field_alignment (align, 0, 0);   break;
-    case set:   				      break;
+    /* APPLE LOCAL begin radar 4679943 */
+    case push:  push_field_alignment (align, 0, 2);   break;
+    /* APPLE LOCAL end radar 4679943 */
+    case set:                                         break;
     }
 }
 /* APPLE LOCAL end Macintosh alignment 2002-1-22 --ff */
@@ -447,6 +460,37 @@ pop_opt_level (void)
   optimize = level & 0xffff;
 }
 
+/* APPLE LOCAL begin 4760857 optimization pragmas */
+/* Set the global flags as required by #pragma optimization_level or
+   #pragma optimize_size.  */
+
+static void darwin_set_flags_from_pragma (void)
+{
+  set_flags_from_O (false);
+
+  /* Enable new loop optimizer pass if any of its optimizations is called.  */
+  if (flag_move_loop_invariants
+      || flag_unswitch_loops
+      || flag_peel_loops
+      || flag_unroll_loops
+      || flag_branch_on_count_reg)
+    flag_loop_optimize2 = 1;
+
+  /* This is expected to be defined in each target.   Should contain
+     any snippets from OPTIMIZATION_OPTIONS and OVERRIDE_OPTIONS that
+     set per-func flags on the basis of -O level. */
+  reset_optimization_options (optimize, optimize_size);
+
+  if (align_loops <= 0) align_loops = 1;
+  if (align_loops_max_skip > align_loops || !align_loops)
+    align_loops_max_skip = align_loops - 1;
+  if (align_jumps <= 0) align_jumps = 1;
+  if (align_jumps_max_skip > align_jumps || !align_jumps)
+    align_jumps_max_skip = align_jumps - 1;
+  if (align_labels <= 0) align_labels = 1;
+}
+/* APPLE LOCAL end 4760857 optimization pragmas */
+
 void
 darwin_pragma_opt_level  (cpp_reader *pfile ATTRIBUTE_UNUSED)
 {
@@ -476,10 +520,9 @@ darwin_pragma_opt_level  (cpp_reader *pfile ATTRIBUTE_UNUSED)
   else
     BAD ("malformed '#pragma optimization_level [GCC] {0|1|2|3|reset}', ignoring");
 
-  set_flags_from_O (false);
-
-  /* This is expected to be defined in each target. */
-  reset_optimization_options (optimize, optimize_size);
+  /* APPLE LOCAL begin 4760857 optimization pragmas */
+  darwin_set_flags_from_pragma ();
+  /* APPLE LOCAL end 4760857 optimization pragmas */
 
   if (c_lex (&t) != CPP_EOF)
     warning ("junk at end of '#pragma optimization_level'");
@@ -510,10 +553,9 @@ darwin_pragma_opt_size  (cpp_reader *pfile ATTRIBUTE_UNUSED)
   else
     BAD ("malformed '#pragma optimize_for_size { on | off | reset }', ignoring");
 
-  set_flags_from_O (false);
-
-  /* This is expected to be defined in each target. */
-  reset_optimization_options (optimize, optimize_size);
+  /* APPLE LOCAL begin 4760857 optimization pragmas */
+  darwin_set_flags_from_pragma ();
+  /* APPLE LOCAL end 4760857 optimization pragmas */
 
   if (c_lex (&t) != CPP_EOF)
     warning ("junk at end of '#pragma optimize_for_size'");
@@ -966,7 +1008,8 @@ darwin_pragma_call_on_unload (cpp_reader *pfile ATTRIBUTE_UNUSED)
    so '10.4.2' becomes 1042.  
    Print a warning if the version number is not known.  */
 static const char *
-version_as_macro (void)
+/* APPLE LOCAL ARM 5683689 */
+macosx_version_as_macro (void)
 {
   static char result[] = "1000";
   
@@ -996,6 +1039,81 @@ version_as_macro (void)
   return "1000";
 }
 
+/* APPLE LOCAL begin ARM 5683689 */
+/* Return the value of darwin_iphoneos_version_min suitable for the
+   __ENVIRONMENT_IPHONE_OS_VERSION_MIN_REQUIRED__ macro.  Unlike the
+   __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ macros, minor version
+   numbers are left-zero-padded.  e.g., '1.2.3' becomes 10203.
+   The last/third version number (patch level?) is optional, and
+   defaults to '00' if not specified.  In the case of a parse error,
+   print a warning and return 10200.  */
+static const char *
+iphoneos_version_as_macro (void)
+{
+  static char result[sizeof ("99.99.99") + 1];
+  const char *src_ptr = darwin_iphoneos_version_min;
+  char *result_ptr = &result[0];
+
+  if (! darwin_iphoneos_version_min)
+    goto fail;
+
+  if (! ISDIGIT (*src_ptr))
+    goto fail;
+
+  /* Copy over the major version number.  */
+  *result_ptr++ = *src_ptr++;
+
+  if (ISDIGIT (*src_ptr))
+    *result_ptr++ = *src_ptr++;
+
+  if (*src_ptr != '.')
+    goto fail;
+
+  src_ptr++;
+
+  /* Start parsing the minor version number.  */
+  if (! ISDIGIT (*src_ptr))
+    goto fail;
+
+  /* Zero-pad a single-digit value, or copy a two-digit value.  */
+  *result_ptr++ = ISDIGIT (*(src_ptr + 1)) ? *src_ptr++ : '0';
+  *result_ptr++ = *src_ptr++;
+
+  /* Parse the third version number (patch level?)  */
+  if (*src_ptr == '\0')
+    {
+      /* Not present -- default to zeroes.  */
+      *result_ptr++ = '0';
+      *result_ptr++ = '0';
+    }
+  else if (*src_ptr == '.')
+    {
+      src_ptr++;
+
+      if (! ISDIGIT (*src_ptr))
+	goto fail;
+
+      /* Zero-pad a single-digit value, or copy a two-digit value.  */
+      *result_ptr++ = ISDIGIT (*(src_ptr + 1)) ? *src_ptr++ : '0';
+      *result_ptr++ = *src_ptr++;
+    }
+  else
+    goto fail;
+
+  /* Verify and copy the terminating NULL.  */
+  if (*src_ptr != '\0')
+    goto fail;
+ 
+  *result_ptr++ = '\0'; 
+  return result;
+  
+ fail:
+  error ("Unknown value %qs of -miphoneos-version-min",
+	 darwin_iphoneos_version_min);
+  return "10200";
+}
+/* APPLE LOCAL end ARM 5683689 */
+
 /* Define additional CPP flags for Darwin.   */
 
 #define builtin_define(TXT) cpp_define (pfile, TXT)
@@ -1009,10 +1127,15 @@ darwin_cpp_builtins (cpp_reader *pfile)
   /* APPLE LOCAL Apple version */
   /* Don't define __APPLE_CC__ here.  */
 
+/* APPLE LOCAL begin ARM 5683689 */
   if (darwin_macosx_version_min)
     builtin_define_with_value ("__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__",
-			       version_as_macro(), false);
+			       macosx_version_as_macro(), false);
+  else
+    builtin_define_with_value ("__ENVIRONMENT_IPHONE_OS_VERSION_MIN_REQUIRED__",
+			       iphoneos_version_as_macro(), false);
 
+/* APPLE LOCAL end ARM 5683689 */
   /* APPLE LOCAL begin constant cfstrings */
   if (darwin_constant_cfstrings)
     builtin_define ("__CONSTANT_CFSTRINGS__");
@@ -1036,9 +1159,91 @@ darwin_cpp_builtins (cpp_reader *pfile)
       builtin_define ("__weak=");
     }
   /* APPLE LOCAL end ObjC GC */
+  /* APPLE LOCAL begin C* warnings to easy porting to new abi */
+  if (flag_objc_abi == 2)
+    builtin_define ("__OBJC2__");
+  /* APPLE LOCAL end C* warnings to easy porting to new abi */
+  /* APPLE LOCAL begin radar 5072864 */
+  if (flag_objc_zerocost_exceptions)
+    builtin_define ("OBJC_ZEROCOST_EXCEPTIONS");
+  /* APPLE LOCAL begin radar 4899595 */
+  if (flag_objc_new_property)
+    builtin_define ("OBJC_NEW_PROPERTIES");
+  /* APPLE LOCAL end radar 4899595 */
+  /* APPLE LOCAL end radar 5072864 */
   /* APPLE LOCAL begin radar 4224728 */
   if (flag_pic)
     builtin_define ("__PIC__");
   /* APPLE LOCAL end radar 4224728 */
 }
 /* APPLE LOCAL end mainline 2005-09-01 3449986 */
+
+/* APPLE LOCAL begin iframework for 4.3 4094959 */
+bool
+darwin_handle_c_option (size_t code, const char *arg, int value ATTRIBUTE_UNUSED)
+{
+  switch (code)
+    {
+    default:
+      /* Options with a flag are otherwise assumed to be handled.  */
+      if (cl_options[code].flag_var)
+	break;
+
+      /* Unrecognized options that we said we'd handle turn into
+	 errors if not listed here if they don't have a flag.  */
+      return false;
+
+    case OPT_iframework:
+      add_system_framework_path (xstrdup (arg));
+      break;
+    }
+  return true;
+}
+/* APPLE LOCAL end iframework for 4.3 4094959 */
+
+/* APPLE LOCAL begin radar 4985544 - radar 5096648 */
+/* This routine checks that FORMAT_NUM'th argument ARGUMENT has the 'CFStringRef' type. */
+bool
+objc_check_format_cfstring (tree argument,
+                            unsigned HOST_WIDE_INT format_num,
+                            bool *no_add_attrs)
+{
+  unsigned HOST_WIDE_INT i;
+  bool ok = true;
+  tree CFStringRef_decl;
+
+  for (i = 1; i != format_num; i++)
+    {
+      if (argument == 0)
+        break;
+       argument = TREE_CHAIN (argument);
+    }
+
+  CFStringRef_decl = lookup_name_two (get_identifier ("CFStringRef"), 0);
+  if (!CFStringRef_decl || TREE_CODE (CFStringRef_decl) != TYPE_DECL)
+    ok = false;
+  else
+    {
+      tree t1 = TREE_VALUE (argument);
+      tree t2 = TREE_TYPE (CFStringRef_decl);
+      if (t1 != t2)
+        ok = false;
+    }
+
+  if (!ok)
+    {
+      error ("format CFString argument not an 'CFStringRef' type");
+      *no_add_attrs = true;
+    }
+  return ok;
+}
+/* APPLE LOCAL end radar 4985544 - radar 5096648 */
+/* APPLE LOCAL begin radar 2996215 */
+/* Objc wrapper to call libcpp's conversion routine. */
+bool
+objc_cvt_utf8_utf16 (const unsigned char *inbuf, size_t length, 
+		     unsigned char **uniCharBuf, size_t *numUniChars)
+{
+  return cpp_utf8_utf16 (parse_in, inbuf, length, uniCharBuf, numUniChars);
+}
+/* APPLE LOCAL end radar 2996215 */

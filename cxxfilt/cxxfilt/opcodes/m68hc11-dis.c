@@ -1,5 +1,6 @@
 /* m68hc11-dis.c -- Motorola 68HC11 & 68HC12 disassembly
-   Copyright 1999, 2000, 2001, 2002, 2003 Free Software Foundation, Inc.
+   Copyright 1999, 2000, 2001, 2002, 2003, 2006
+   Free Software Foundation, Inc.
    Written by Stephane Carrez (stcarrez@nerim.fr)
 
 This program is free software; you can redistribute it and/or modify
@@ -14,7 +15,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #include <stdio.h>
 
@@ -692,11 +693,11 @@ print_insn (bfd_vma memaddr, struct disassemble_info* info, int arch)
          opcode table content.  */
       if (format & ~(M6811_OP_PAGE4 | M6811_OP_PAGE3 | M6811_OP_PAGE2))
 	{
-	  (*info->fprintf_func) (info->stream, "; Error, format: %x", format);
+	  (*info->fprintf_func) (info->stream, "; Error, format: %lx", format);
 	}
       if (pos != opcode->size)
 	{
-	  (*info->fprintf_func) (info->stream, "; Error, size: %d expect %d",
+	  (*info->fprintf_func) (info->stream, "; Error, size: %ld expect %d",
 				 pos, opcode->size);
 	}
 #endif

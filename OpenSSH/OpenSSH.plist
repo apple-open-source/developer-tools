@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>OpenSourceImportDate</key>
+	<string>2006-11-10</string>
+	<key>OpenSourceLicense</key>
+	<string>BSD</string>
+	<key>OpenSourceLicenseFile</key>
+	<string>OpenSSH.txt</string>
+	<key>OpenSourceModifications</key>
+	<array>
+		<string>kerberos patches from www.sxw.org.uk</string>
+	</array>
+	<key>OpenSourceProject</key>
+	<string>OpenSSH</string>
+	<key>OpenSourceSHA1</key>
+	<string>2eefcbbeb9e4fa16fa4500dec107d1a09d3d02d7</string>
+	<key>OpenSourceURL</key>
+	<string>http://www.openssh.org/</string>
+	<key>OpenSourceVersion</key>
+	<string>4.5p1</string>
+	<key>OpenSourceWebsiteURL</key>
+	<string>http://openssh.org/</string>
+</dict>
+</plist>

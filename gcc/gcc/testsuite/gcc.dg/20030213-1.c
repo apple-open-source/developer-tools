@@ -1,6 +1,8 @@
 /* Testcase for http://gcc.gnu.org/ml/gcc-patches/2003-02/msg01017.html */
 /* { dg-do link } */
 /* { dg-options "-O -fpic" } */
+/* APPLE LOCAL -mdynamic-no-pic incompatible with -fpic */
+/* { dg-skip-if "Not valid with -mdynamic-no-pic" { *-*-darwin* } { "-mdynamic-no-pic" } { "" } } */
 /* { dg-warning "not supported" "PIC unsupported" { target cris-*-elf* cris-*-aout* mmix-*-* } 0 } */
 /* { dg-bogus "\[Uu\]nresolved symbol .(_GLOBAL_OFFSET_TABLE_|\[_.A-Za-z\]\[_.0-9A-Za-z\]*@(PLT|GOT|GOTOFF))" "PIC unsupported" { xfail *-*-netware* } 0 } */
 

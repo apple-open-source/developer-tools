@@ -15,7 +15,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #include "bfd.h"
 #include "sysdep.h"
@@ -31,5 +31,23 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #define COFF_WITH_PE
 #define PCRELOFFSET        TRUE
 #define COFF_LONG_SECTION_NAMES
+
+#define COFF_SECTION_ALIGNMENT_ENTRIES \
+{ COFF_SECTION_NAME_EXACT_MATCH (".bss"), \
+  COFF_ALIGNMENT_FIELD_EMPTY, COFF_ALIGNMENT_FIELD_EMPTY, 2 }, \
+{ COFF_SECTION_NAME_EXACT_MATCH (".data"), \
+  COFF_ALIGNMENT_FIELD_EMPTY, COFF_ALIGNMENT_FIELD_EMPTY, 2 }, \
+{ COFF_SECTION_NAME_EXACT_MATCH (".rdata"), \
+  COFF_ALIGNMENT_FIELD_EMPTY, COFF_ALIGNMENT_FIELD_EMPTY, 2 }, \
+{ COFF_SECTION_NAME_EXACT_MATCH (".text"), \
+  COFF_ALIGNMENT_FIELD_EMPTY, COFF_ALIGNMENT_FIELD_EMPTY, 2 }, \
+{ COFF_SECTION_NAME_PARTIAL_MATCH (".idata"), \
+  COFF_ALIGNMENT_FIELD_EMPTY, COFF_ALIGNMENT_FIELD_EMPTY, 2 }, \
+{ COFF_SECTION_NAME_EXACT_MATCH (".pdata"), \
+  COFF_ALIGNMENT_FIELD_EMPTY, COFF_ALIGNMENT_FIELD_EMPTY, 2 }, \
+{ COFF_SECTION_NAME_PARTIAL_MATCH (".debug"), \
+  COFF_ALIGNMENT_FIELD_EMPTY, COFF_ALIGNMENT_FIELD_EMPTY, 0 }, \
+{ COFF_SECTION_NAME_PARTIAL_MATCH (".gnu.linkonce.wi."), \
+  COFF_ALIGNMENT_FIELD_EMPTY, COFF_ALIGNMENT_FIELD_EMPTY, 0 }
 
 #include "coff-arm.c"

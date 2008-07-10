@@ -82,4 +82,5 @@ macho_calculate_offsets_for_dsym (struct objfile *main_objfile,
    platform specific nat code.  It allows each platform to add platform specific
    stuff to the macosx_child_target.  */
 void macosx_complete_child_target (struct target_ops *target);
+
 #endif /* __GDB_MACOSX_NAT_INFERIOR_H__ */

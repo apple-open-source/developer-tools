@@ -1,4 +1,5 @@
-/* { dg-do run } */
+/* APPLE LOCAL mainline ARM doesn't apply if !PCC_BITFIELD_TYPE_MATTERS */
+/* { dg-do run { target { ! arm*-*-darwin* } } } */
 
 /* Check bitfields and non-bitfields are aligned & sized similarly.
 

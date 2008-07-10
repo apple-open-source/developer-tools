@@ -152,8 +152,9 @@ LIBICONV = @LIBICONV@
 
 # APPLE LOCAL: location of carbon header files & libraries
 
-# APPLE LOCAL: We need to weak link to Carbon for the "open" command.
-CARBON_LDFLAGS = @CARBON_LIBS@
+# APPLE LOCAL: We need to weak link to Carbon for the "open" command, and we
+# need CoreFoundation for the plist parsing code.
+CARBON_LDFLAGS = -framework CoreFoundation @CARBON_LIBS@
 
 # APPLE LOCAL: Use DebugSymbols framework if available for dSYM finding
 DEBUG_SYMBOLS_LDFLAGS = @DEBUG_SYMBOLS_LIBS@

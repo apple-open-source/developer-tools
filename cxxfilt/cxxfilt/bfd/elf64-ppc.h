@@ -15,12 +15,12 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 void ppc64_elf_init_stub_bfd
   (bfd *, struct bfd_link_info *);
 bfd_boolean ppc64_elf_edit_opd
-  (bfd *, struct bfd_link_info *, bfd_boolean);
+  (bfd *, struct bfd_link_info *, bfd_boolean, bfd_boolean);
 asection *ppc64_elf_tls_setup
   (bfd *, struct bfd_link_info *);
 bfd_boolean ppc64_elf_tls_optimize

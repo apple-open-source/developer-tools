@@ -1,14 +1,15 @@
 /* APPLE LOCAL file ObjC GC */
 /* A compile-only test for insertion of write barriers. */
 /* Developed by Ziemowit Laski  <zlaski@apple.com>  */
-/* { dg-do compile { target *-*-darwin* } } */
+/* { dg-do compile { target powerpc*-*-darwin* i?86*-*-darwin* } } */
 /* { dg-options "-fnext-runtime -fobjc-gc -Wassign-intercept" } */
 
 #ifndef __OBJC_GC__
 #error Missing __OBJC_GC__ manifest constant
 #endif
 
-#include <objc/Object.h>
+/* APPLE LOCAL radar 4894756 */
+#include "../objc/execute/Object2.h"
 
 @class Underspecified;
 @class MyClass;

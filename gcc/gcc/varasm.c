@@ -850,14 +850,16 @@ decode_reg_name (const char *asmspec)
   return -1;
 }
 
-/* Create the DECL_RTL for a VAR_DECL or FUNCTION_DECL.  DECL should
-   have static storage duration.  In other words, it should not be an
-   automatic variable, including PARM_DECLs.
+/* APPLE LOCAL begin ARM 4492314 */
+/* Create the DECL_RTL for a CONST_DECL, VAR_DECL or FUNCTION_DECL.
+   DECL should have static storage duration.  In other words, it should
+   not be an automatic variable, including PARM_DECLs.
 
    There is, however, one exception: this function handles variables
    explicitly placed in a particular register by the user.
 
    This is never called for PARM_DECL nodes.  */
+/* APPLE LOCAL end ARM 4492314 */
 
 void
 make_decl_rtl (tree decl)
@@ -909,6 +911,20 @@ make_decl_rtl (tree decl)
 
       return;
     }
+
+  /* APPLE LOCAL begin ARM 4492314 */
+  if (TREE_CODE (decl) == CONST_DECL)
+    {
+      tree init = DECL_INITIAL (decl);
+
+      if (init == NULL_TREE)
+	abort ();
+
+      x = output_constant_def (init, 0);
+      SET_DECL_RTL (decl, x);
+      return;
+    }
+  /* APPLE LOCAL end ARM 4492314 */
 
   name = IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (decl));
 
@@ -2275,6 +2291,8 @@ decode_addr_const (tree exp, struct addr_const *value)
     {
     case VAR_DECL:
     case FUNCTION_DECL:
+    /* APPLE LOCAL ARM 4492314 */
+    case CONST_DECL:
       x = DECL_RTL (target);
       break;
 

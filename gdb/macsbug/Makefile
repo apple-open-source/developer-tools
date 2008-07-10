@@ -81,11 +81,11 @@ PLUGIN_SUPPORT			= 	$(API_DIR)/gdb_plugin_support
 BUILD_VERSION			=	10.4
 
 ifndef BINUTILS_BUILD_ROOT
-BINUTILS_BUILD_ROOT = $(NEXT_ROOT)
+BINUTILS_BUILD_ROOT = $(SDKROOT)
 endif
 
 ifndef GDB_BUILD_ROOT
-GDB_BUILD_ROOT = $(NEXT_ROOT)
+GDB_BUILD_ROOT = $(SDKROOT)
 endif
 
 # The following defines $(gdb_plugin_support.o) as a function of using the Makefile
@@ -223,8 +223,8 @@ install				:	all $(DSTDIR)
 #                        *-------------*
 
 $(SYMROOT)/$(PLUGIN) 		: 	gdb_plugin_support.o $(OBJS) 
-	$(CC) $(LDFLAGS) $(OBJS) $(gdb_plugin_support.o) -o $(SYMROOT)/$(PLUGIN)
-	$(FIXUP)
+	$(CC) $(LDFLAGS) $(OBJS) -arch ppc $(gdb_plugin_support.o) -o $(SYMROOT)/$(PLUGIN)
+	-$(FIXUP)
 
 $(OFILE_DIR)/MacsBug_utils.o 	: 	MacsBug_utils.c MacsBug_testing.i 	\
 					$(HFILES) 				\

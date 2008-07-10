@@ -419,6 +419,13 @@ c_cpp_builtins (cpp_reader *pfile)
   /* Misc.  */
   builtin_define_with_value ("__VERSION__", version_string, 1);
 
+  /* APPLE LOCAL begin mainline */
+  if (flag_gnu89_inline)
+    cpp_define (pfile, "__GNUC_GNU_INLINE__");
+  else
+    cpp_define (pfile, "__GNUC_STDC_INLINE__");
+  /* APPLE LOCAL end mainline */
+
   /* Definitions for LP64 model.  */
   if (TYPE_PRECISION (long_integer_type_node) == 64
       && POINTER_SIZE == 64
@@ -465,6 +472,15 @@ c_cpp_builtins (cpp_reader *pfile)
 
   if (targetm.handle_pragma_extern_prefix)
     cpp_define (pfile, "__PRAGMA_EXTERN_PREFIX");
+  /* APPLE LOCAL begin mainline */
+  /* Make the choice of the stack protector runtime visible to source code.
+     The macro names and values here were chosen for compatibility with an
+     earlier implementation, i.e. ProPolice.  */
+  if (flag_stack_protect == 2)
+    cpp_define (pfile, "__SSP_ALL__=2");
+  else if (flag_stack_protect == 1)
+    cpp_define (pfile, "__SSP__=1");
+  /* APPLE LOCAL end mainline */
 
   /* A straightforward target hook doesn't work, because of problems
      linking that hook's body when part of non-C front ends.  */

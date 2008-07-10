@@ -23,6 +23,7 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
 #include "obstack.h"
 #include "frags.h"
 #include "messages.h"
+#include "input-scrub.h"
 
 struct obstack frags = { 0 };	/* All, and only, frags live here. */
 
@@ -195,6 +196,9 @@ char *opcode)
 {
     register char  *retval;
 
+#ifdef ARM
+    as_file_and_line (&frag_now->fr_file, &frag_now->fr_line);
+#endif /* ARM */
     frag_grow (max_chars);
     retval = obstack_next_free (&frags);
     obstack_blank_fast (&frags, max_chars);
@@ -205,6 +209,9 @@ char *opcode)
     frag_now->fr_offset = offset;
     frag_now->fr_opcode = opcode;
     frag_new (max_chars);
+#ifdef ARM
+    as_file_and_line (&frag_now->fr_file, &frag_now->fr_line);
+#endif /* ARM */
     return (retval);
 }				/* frag_var() */
 
@@ -246,10 +253,29 @@ int fill_size,
 int max_bytes_to_fill)
 {
     void *fr_literal;
+    int max_chars;
+#ifdef I386
+	/*
+	 * For x86 architecures in sections containing only instuctions being
+	 * padded with nops that are aligned to 16 bytes or less and are
+	 * assembled -dynamic we will actually end up padding with the optimal
+	 * nop sequence.  So for that make sure there is the maximum number of
+	 * bytes allocated in the frag to use for this.
+	 */
+	if((frchain_now->frch_section.flags & S_ATTR_PURE_INSTRUCTIONS) != 0 &&
+	   fill_size == 1 && *fill == (char)0x90 && flagseen['k'] == TRUE){
+	    if(power_of_2_alignment > 4)
+		max_chars = 15;
+	    else
+		max_chars = (1 << power_of_2_alignment) - 1;
+	}
+	else
+#endif /* 386 */
+	max_chars = fill_size + (fill_size - 1);
 
 	fr_literal = (void *)
 	    frag_var(rs_align,				/* type */
-		     fill_size + (fill_size - 1),	/* max_chars */
+		     max_chars,				/* max_chars */
 		     fill_size,				/* var */
 		     (relax_substateT)max_bytes_to_fill,/* subtype */
 		     (symbolS *)0,			/* symbol */

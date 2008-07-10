@@ -1,7 +1,20 @@
 RC_OS = macos
 OFLAG = -O
+LTO = -DLTO_SUPPORT
+OPEN = -D__OPEN_SOURCE__
 LEGACY = -D_MACH_I386_THREAD_STATUS_FPSTATE_LEGACY_FIELD_NAMES_ \
 	 -D_ARCHITECTURE_I386_FPU_FPSTATE_LEGACY_FIELD_NAMES_
+
+ifeq "" "$(NEXT_ROOT)"
+KERN = -fno-builtin -finline -fno-keep-inline-functions -fsigned-bitfields \
+       -force_cpusubtype_ALL -msoft-float -nostdinc \
+       -iwithsysroot /System/Library/Frameworks/Kernel.framework/PrivateHeaders/libsa \
+       -iwithsysroot /System/Library/Frameworks/Kernel.framework/PrivateHeaders \
+       -iwithsysroot /System/Library/Frameworks/Kernel.framework/Headers/libsa \
+       -iwithsysroot /System/Library/Frameworks/Kernel.framework/Headers/bsd \
+       -iwithsysroot /System/Library/Frameworks/Kernel.framework/Headers \
+       -DKERNEL -DKERNEL_PRIVATE -DAPPLE -DNeXT -DLIBSA_PRIVATE
+else
 KERN = -fno-builtin -finline -fno-keep-inline-functions -fsigned-bitfields \
        -force_cpusubtype_ALL -msoft-float -nostdinc \
 -I$(NEXT_ROOT)/System/Library/Frameworks/Kernel.framework/PrivateHeaders/libsa \
@@ -10,16 +23,9 @@ KERN = -fno-builtin -finline -fno-keep-inline-functions -fsigned-bitfields \
        -I$(NEXT_ROOT)/System/Library/Frameworks/Kernel.framework/Headers/bsd \
        -I$(NEXT_ROOT)/System/Library/Frameworks/Kernel.framework/Headers \
        -DKERNEL -DKERNEL_PRIVATE -DAPPLE -DNeXT -DLIBSA_PRIVATE
-
-ifeq "macos" "$(RC_OS)"
-  X_CFLAGS := $(shell if [ "$(RC_RELEASE)" != "Beaker" ] &&    \
-			 [ "$(RC_RELEASE)" != "Bunsen" ] &&    \
-			 [ "$(RC_RELEASE)" != "Gonzo"  ] &&    \
-			 [ "$(RC_RELEASE)" != "Kodiak" ]; then \
-	     echo -Wno-long-double -no-cpp-precomp -fno-builtin-round; \
-	     fi; )
 endif
 
+X_CFLAGS = -fno-builtin-round
 
 USE_DEPENDENCY_FILE := $(shell if [ "$(notdir $(CC))" != "mwccppc" ] && \
 				  [ "$(RC_XBS)" != "YES" ]; then \
@@ -27,9 +33,10 @@ USE_DEPENDENCY_FILE := $(shell if [ "$(notdir $(CC))" != "mwccppc" ] && \
 	     fi; )
 	
 ifeq "mwccppc" "$(notdir $(CC))"
-  CFLAGS = $(OFLAG) -g -gccinc -I$(SRCROOT)/../include $(LEGACY)
+  CFLAGS = $(OFLAG) $(OPEN) $(LTO) -g -gccinc -I$(SRCROOT)/../include $(LEGACY)
 else
-  CFLAGS = $(OFLAG) -g -I$(SRCROOT)/../include -Wall $(X_CFLAGS) $(LEGACY)
+  CFLAGS = $(OFLAG) $(OPEN) $(LTO) -g -I$(SRCROOT)/../include -Wall \
+	   $(X_CFLAGS) $(LEGACY)
 endif
 
 ifneq "" "$(wildcard /bin/mkdirs)"
@@ -43,11 +50,15 @@ SYMROOT = .
 OBJROOT = .
 OFILE_DIRS = $(OBJROOT)/static_obj $(OBJROOT)/dynamic_obj \
 	     $(OBJROOT)/profile_obj $(OBJROOT)/shlib_obj \
-	     $(OBJROOT)/static64_obj $(OBJROOT)/dynamic64_obj \
-	     $(OBJROOT)/profile64_obj $(OBJROOT)/static_kld_obj
+	     $(OBJROOT)/static_kld_obj
 OFILE_DIR = $(OBJROOT)
 VPATH = $(OFILE_DIR)
 
+ifeq "$(EFITOOLS)" "efitools"
+	COFF_BYTESEX = coff_bytesex.c
+else
+	COFF_BYTESEX =
+endif
 CFILES = allocate.c errors.c arch.c execute.c bytesex.c round.c hppa.c \
 	  swap_headers.c reloc.c version_number.c get_toc_byte_sex.c \
 	  best_arch.c fatals.c arch_usage.c ofile.c ofile_error.c print.c \
@@ -55,12 +66,21 @@ CFILES = allocate.c errors.c arch.c execute.c bytesex.c round.c hppa.c \
 	  breakout.c writeout.c checkout.c fatal_arch.c ofile_get_word.c \
 	  vm_flush_cache.c hash_string.c dylib_roots.c guess_short_name.c \
 	  SymLoc.c get_arch_from_host.c crc32.c macosx_deployment_target.c \
-	  symbol_list.c unix_standard_mode.c
+	  symbol_list.c unix_standard_mode.c lto.c $(COFF_BYTESEX)
 OBJS = $(CFILES:.c=.o)
 INSTALL_FILES = $(CFILES) Makefile notes
 
-all: $(OFILE_DIRS) $(SYMROOT) static dynamic profile \
-	static64 dynamic64 profile64 static_kld $(RC_OS)
+ifeq "$(OLD_LIBKLD)" "YES"
+	STATIC_KLD = static_kld
+else
+	STATIC_KLD = 
+endif
+
+all: $(OFILE_DIRS) $(SYMROOT) static dynamic profile $(STATIC_KLD) $(RC_OS)
+
+lib_ofiles: $(OFILE_DIRS) $(SYMROOT) dynamic
+
+lib_ofiles_install: lib_ofiles
 
 teflon macos:
 
@@ -126,36 +146,6 @@ static_kld: $(OBJROOT)/static_kld_obj
 		RC_ARCHS="$(RC_ARCHS)";					\
 	fi
 
-static64: $(OBJROOT)/static64_obj
-	@if [ $(SRCROOT) = . ];						\
-	then								\
-	    cd static64_obj;						\
-		$(MAKE) -f ../Makefile libstuff64.a			\
-		PRODUCT=libstuff64.a					\
-		VPATH=.. 						\
-		OFILE_DIR=.						\
-		SRCROOT=..						\
-		SYMROOT=..						\
-		COPTS="-static -DARCH64"				\
-		OFLAG="$(OFLAG)"					\
-		CFILES="$(CFILES)"					\
-		RC_CFLAGS="$(RC_CFLAGS)"				\
-		RC_ARCHS="$(RC_ARCHS)";					\
-	else								\
-	    cd $(OBJROOT)/static64_obj;					\
-		$(MAKE) -f $(SRCROOT)/Makefile libstuff64.a		\
-		PRODUCT=libstuff64.a					\
-		VPATH=$(SRCROOT)					\
-		OFILE_DIR=$(OBJROOT)/static64_obj			\
-		SRCROOT=$(SRCROOT)					\
-		SYMROOT=$(SYMROOT)					\
-		COPTS="-static -DARCH64"				\
-		OFLAG="$(OFLAG)"					\
-		CFILES="$(CFILES)"					\
-		RC_CFLAGS="$(RC_CFLAGS)"				\
-		RC_ARCHS="$(RC_ARCHS)";					\
-	fi
-
 dynamic: $(OBJROOT)/dynamic_obj
 	@if [ $(SRCROOT) = . ];						\
 	then								\
@@ -186,36 +176,6 @@ dynamic: $(OBJROOT)/dynamic_obj
 		RC_ARCHS="$(RC_ARCHS)";					\
 	fi
 
-dynamic64: $(OBJROOT)/dynamic64_obj
-	@if [ $(SRCROOT) = . ];						\
-	then								\
-	    cd dynamic64_obj;						\
-		$(MAKE) -f ../Makefile libstuff64.dylib			\
-		PRODUCT=libstuff64.dylib				\
-		VPATH=.. 						\
-		OFILE_DIR=.						\
-		SRCROOT=..						\
-		SYMROOT=..						\
-		COPTS="-dynamic -DARCH64"				\
-		OFLAG="$(OFLAG)"					\
-		CFILES="$(CFILES)"					\
-		RC_CFLAGS="$(RC_CFLAGS)"				\
-		RC_ARCHS="$(RC_ARCHS)";					\
-	else								\
-	    cd $(OBJROOT)/dynamic64_obj;				\
-		$(MAKE) -f $(SRCROOT)/Makefile libstuff64.dylib		\
-		PRODUCT=libstuff64.dylib				\
-		VPATH=$(SRCROOT)					\
-		OFILE_DIR=$(OBJROOT)/dynamic64_obj			\
-		SRCROOT=$(SRCROOT)					\
-		SYMROOT=$(SYMROOT)					\
-		COPTS="-dynamic -DARCH64"				\
-		OFLAG="$(OFLAG)"					\
-		CFILES="$(CFILES)"					\
-		RC_CFLAGS="$(RC_CFLAGS)"				\
-		RC_ARCHS="$(RC_ARCHS)";					\
-	fi
-
 profile: $(OBJROOT)/profile_obj
 	@if [ $(SRCROOT) = . ];						\
 	then								\
@@ -239,34 +199,6 @@ profile: $(OBJROOT)/profile_obj
 		SRCROOT=$(SRCROOT)					\
 		SYMROOT=$(SYMROOT)					\
 		COPTS="-dynamic -pg"					\
-		OFLAG="$(OFLAG)"					\
-		RC_CFLAGS="$(RC_CFLAGS)"				\
-		RC_ARCHS="$(RC_ARCHS)";					\
-	fi
-
-profile64: $(OBJROOT)/profile64_obj
-	@if [ $(SRCROOT) = . ];						\
-	then								\
-	    cd profile64_obj;						\
-		$(MAKE) -f ../Makefile libstuff64_p.a			\
-		PRODUCT=libstuff64_p.a					\
-		VPATH=.. 						\
-		OFILE_DIR=.						\
-		SRCROOT=..						\
-		SYMROOT=..						\
-		COPTS="-dynamic -pg -DARCH64"				\
-		OFLAG="$(OFLAG)"					\
-		RC_CFLAGS="$(RC_CFLAGS)"				\
-		RC_ARCHS="$(RC_ARCHS)";					\
-	else								\
-	    cd $(OBJROOT)/profile64_obj;				\
-		$(MAKE) -f $(SRCROOT)/Makefile libstuff64_p.a		\
-		PRODUCT=libstuff64_p.a					\
-		VPATH=$(SRCROOT)					\
-		OFILE_DIR=$(OBJROOT)/profile64_obj			\
-		SRCROOT=$(SRCROOT)					\
-		SYMROOT=$(SYMROOT)					\
-		COPTS="-dynamic -pg -DARCH64"				\
 		OFLAG="$(OFLAG)"					\
 		RC_CFLAGS="$(RC_CFLAGS)"				\
 		RC_ARCHS="$(RC_ARCHS)";					\
@@ -306,9 +238,19 @@ $(PRODUCT):	$(OFILE_DIR) $(SYMROOT) $(OBJS)
 ifeq "NO" "$(USE_DEPENDENCY_FILE)"
 .c.o:
 	$(CC) $(CFLAGS) $(RC_CFLAGS) $(COPTS) -c -o $(OFILE_DIR)/$*.o $<
+
+lto.o: lto.c
+	$(CC) -std=c99 $(CFLAGS) $(RC_CFLAGS) $(COPTS) -c \
+		-o $(OFILE_DIR)/$*.o $<
 else
 .c.o:
 	$(CC) $(CFLAGS) $(RC_CFLAGS) $(COPTS) -c \
+		-MD -dependency-file $(OFILE_DIR)/$*.d \
+		-o $(OFILE_DIR)/$*.o $<
+	md -d -u $(OFILE_DIR)/Makedep $(OFILE_DIR)/$*.d
+
+lto.o: lto.c
+	$(CC) -std=c99 $(CFLAGS) $(RC_CFLAGS) $(COPTS) -c \
 		-MD -dependency-file $(OFILE_DIR)/$*.d \
 		-o $(OFILE_DIR)/$*.o $<
 	md -d -u $(OFILE_DIR)/Makedep $(OFILE_DIR)/$*.d
@@ -317,7 +259,6 @@ endif
 clean shlib_clean:
 	-rm -r -f $(OFILE_DIRS)
 	-rm -f libstuff.a libstuff.dylib libstuff_p.a libstuff_s.a
-	-rm -f libstuff64.a libstuff64.dylib libstuff64_p.a
 
 install: all
 

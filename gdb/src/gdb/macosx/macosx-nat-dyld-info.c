@@ -216,12 +216,12 @@ void
 dyld_objfile_info_pack (struct dyld_objfile_info *i)
 {
   int j;
-  for (j = 0; j < i->nents; j++)
+  for (j = 0; j < i->nents - 1; j++)
     {
       if (!i->entries[j].allocated)
         {
           memmove (&i->entries[j], &i->entries[j + 1],
-                   (i->nents - j) * sizeof (struct dyld_objfile_entry));
+                   (i->nents - j - 1) * sizeof (struct dyld_objfile_entry));
           i->nents--;
           j--;
         }
@@ -1110,17 +1110,21 @@ dyld_print_entry_info (struct dyld_objfile_entry *j, int shlibnum, int baselen)
   ui_out_field_string (uiout, "reason", ptr);
   ui_out_spaces (uiout, 1);
 
-  if (j->load_flag == OBJF_SYM_ALL)
+  if ((j->load_flag & OBJF_SYM_LEVELS_MASK) == OBJF_SYM_ALL)
     {
       ptr = "Y";
     }
-  else if (j->load_flag == OBJF_SYM_NONE)
+  else if ((j->load_flag & OBJF_SYM_LEVELS_MASK) == OBJF_SYM_NONE)
     {
       ptr = "N";
     }
-  else if (j->load_flag == OBJF_SYM_EXTERN)
+  else if ((j->load_flag & OBJF_SYM_LEVELS_MASK) == OBJF_SYM_EXTERN)
     {
       ptr = "E";
+    }
+  else if ((j->load_flag & OBJF_SYM_LEVELS_MASK) == OBJF_SYM_CONTAINER)
+    {
+      ptr = "C";
     }
   else
     {
@@ -1142,18 +1146,22 @@ dyld_print_entry_info (struct dyld_objfile_entry *j, int shlibnum, int baselen)
             {
               ptr = "!";
             }
-          else if (j->objfile->symflags == OBJF_SYM_ALL)
+          else if ((j->objfile->symflags & OBJF_SYM_LEVELS_MASK) == OBJF_SYM_ALL)
             {
               ptr = "Y";
             }
-          else if (j->objfile->symflags == OBJF_SYM_NONE)
+          else if ((j->objfile->symflags & OBJF_SYM_LEVELS_MASK) == OBJF_SYM_NONE)
             {
               ptr = "N";
             }
-          else if (j->objfile->symflags == OBJF_SYM_EXTERN)
+          else if ((j->objfile->symflags & OBJF_SYM_LEVELS_MASK) == OBJF_SYM_EXTERN)
             {
               ptr = "E";
             }
+	  else if ((j->load_flag & OBJF_SYM_LEVELS_MASK) == OBJF_SYM_CONTAINER)
+	    {
+	      ptr = "C";
+	    }
           else
             {
               ptr = "?";

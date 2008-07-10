@@ -1,7 +1,7 @@
 /* Low-level I/O routines for BFDs.
 
    Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004, 2005
+   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006
    Free Software Foundation, Inc.
 
    Written by Cygnus Support.
@@ -20,7 +20,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #include "sysdep.h"
 
@@ -60,6 +60,16 @@ real_fseek (FILE *file, file_ptr offset, int whence)
   return fseeko (file, offset, whence);
 #else
   return fseek (file, offset, whence);
+#endif
+}
+
+FILE *
+real_fopen (const char *filename, const char *modes)
+{
+#if defined (HAVE_FOPEN64)
+  return fopen64 (filename, modes);
+#else
+  return fopen (filename, modes);
 #endif
 }
 
@@ -105,6 +115,15 @@ bfd_size_type
 bfd_bread (void *ptr, bfd_size_type size, bfd *abfd)
 {
   size_t nread;
+
+  /* If this is an archive element, don't read past the end of
+     this element.  */
+  if (abfd->arelt_data != NULL)
+    {
+      size_t maxbytes = ((struct areltdata *) abfd->arelt_data)->parsed_size;
+      if (size > maxbytes)
+	size = maxbytes;
+    }
 
   if ((abfd->flags & BFD_IN_MEMORY) != 0)
     {
@@ -391,7 +410,7 @@ FUNCTION
 	bfd_get_size
 
 SYNOPSIS
-	long bfd_get_size (bfd *abfd);
+	file_ptr bfd_get_size (bfd *abfd);
 
 DESCRIPTION
 	Return the file size (as read from file system) for the file
@@ -419,7 +438,7 @@ DESCRIPTION
 	size reasonable?".
 */
 
-long
+file_ptr
 bfd_get_size (bfd *abfd)
 {
   struct stat buf;

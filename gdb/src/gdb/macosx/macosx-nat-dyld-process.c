@@ -23,7 +23,6 @@
 
 #include "defs.h"
 #include "inferior.h"
-#include "symfile.h"
 #include "symtab.h"
 #include "gdbcmd.h"
 #include "objfiles.h"
@@ -37,6 +36,7 @@
 #include "gdb_stat.h"
 #include "arch-utils.h"
 #include "gdbarch.h"
+#include "symfile.h"
 
 #include "gdb_stat.h"
 
@@ -49,8 +49,10 @@
 
 #if defined (TARGET_POWERPC)
 #include "ppc-macosx-tdep.h"
-#else
+#elif defined(TARGET_I386)
 #include "i386-tdep.h"
+#elif defined(TARGET_ARM)
+#include "arm-tdep.h"
 #endif
 
 #include <sys/mman.h>
@@ -78,12 +80,16 @@ extern int dyld_reload_on_downgrade_flag;
 extern char *dyld_load_rules;
 extern char *dyld_minimal_load_rules;
 
+static int dyld_check_uuids_flag = 0;
+
 /* For the gdbarch_tdep structure so we can get the wordsize. */
 #if defined(TARGET_POWERPC)
 #include "ppc-tdep.h"
 #elif defined (TARGET_I386)
 #include "amd64-tdep.h"
 #include "i386-tdep.h"
+#elif defined (TARGET_ARM)
+#include "arm-tdep.h"
 #else
 #error "Unrecognized target architecture."
 #endif
@@ -102,6 +108,7 @@ extern macosx_dyld_thread_status macosx_dyld_status;
    are never more than two today.  */
 
 struct bfd_memory_footprint {
+  const char *filename;         /* filename of this bfd */
   CORE_ADDR seg1addr;           /* Address of the __TEXT segment */
   int num;                      /* Number of bucket groupings in use */
   int num_allocated;            /* Number of bucket grouping slots allocated */
@@ -256,6 +263,19 @@ dyld_add_image_libraries (struct dyld_objfile_info *info, bfd *abfd)
                       continue;
                     }
 		  name[dcmd->name_len] = '\0';
+
+                  /* Ignore dylibs starting with "@rpath" because we don't 
+                     know how to resolve them correctly yet.  This means
+                     people who want to put breakpoints in one of these
+                     dylibs will have to use a future-breakpoint instead;
+                     not the end of the world.  */
+                  if (strncmp (name, "@rpath", 6) == 0)
+                    {
+                      xfree (name);
+                      name = NULL;
+                      break;
+                    }
+
 		  fixed_name = dyld_fix_path (name);
 		  if (fixed_name != name)
 		    {
@@ -267,6 +287,11 @@ dyld_add_image_libraries (struct dyld_objfile_info *info, bfd *abfd)
               default:
                 abort ();
               }
+
+            /* If NAME is null, this is an @rpath dylib that
+               we want to skip over.  */
+            if (name == NULL)
+              continue;
 
             if (name[0] == '\0')
               {
@@ -678,6 +703,7 @@ scan_bfd_for_memory_groups (struct bfd *abfd, struct pre_run_memory_map *map)
                      xmalloc (sizeof (struct bfd_memory_footprint_group) * 2);
   fp->num = 0;
   fp->num_allocated = 2;
+  fp->filename = abfd->filename;
 
   for (asect = abfd->sections; asect != NULL; asect = asect->next)
     {
@@ -710,6 +736,11 @@ scan_bfd_for_memory_groups (struct bfd *abfd, struct pre_run_memory_map *map)
           current_bucket_start_addr = this_seg_start;
           current_bucket_end_addr = current_bucket_start_addr +
                      ((this_seg_len / map->bucket_size) + 1) * map->bucket_size;
+          /* Did we overflow?  We don't round current_bucket_start_addr down
+             to a bucket boundary so if it's right near the top of memory,
+             current_bucket_start_addr + bucket_size may overflow.  */
+          if (current_bucket_end_addr < current_bucket_start_addr)
+            current_bucket_end_addr = (CORE_ADDR) -1;
           continue;
         }
 
@@ -733,6 +764,11 @@ scan_bfd_for_memory_groups (struct bfd *abfd, struct pre_run_memory_map *map)
                      (((this_seg_end - current_bucket_start_addr) / 
                         map->bucket_size) + 1)
                      * map->bucket_size;
+          /* Did we overflow?  We don't round current_bucket_start_addr down  
+             to a bucket boundary so if it's right near the top of memory,  
+             current_bucket_start_addr + bucket_size may overflow.  */
+          if (current_bucket_end_addr < current_bucket_start_addr)
+            current_bucket_end_addr = (CORE_ADDR) -1;
           continue;
         }
 
@@ -763,7 +799,11 @@ scan_bfd_for_memory_groups (struct bfd *abfd, struct pre_run_memory_map *map)
       current_bucket_start_addr = this_seg_start;
       current_bucket_end_addr = current_bucket_start_addr +    
                  ((this_seg_len / map->bucket_size) + 1) * map->bucket_size;
-    
+      /* Did we overflow?  We don't round current_bucket_start_addr down  
+         to a bucket boundary so if it's right near the top of memory,  
+         current_bucket_start_addr + bucket_size may overflow.  */
+      if (current_bucket_end_addr < current_bucket_start_addr)
+        current_bucket_end_addr = (CORE_ADDR) -1;
     }
 
   /* Update the number of buckets used by the last memory group we saw.  */
@@ -775,6 +815,16 @@ scan_bfd_for_memory_groups (struct bfd *abfd, struct pre_run_memory_map *map)
       fp->groups[fp->num].length = 
                    (current_bucket_end_addr - current_bucket_start_addr) / 
                     map->bucket_size;
+
+      /* Does this grouping overflow?  We don't round current_bucket_start_addr
+         down  to a bucket boundary so if it's right near the top of memory,  
+         current_bucket_start_addr + bucket_size may overflow.  If so, remember
+         to add one to the bucket calculation.  */
+      CORE_ADDR recalculated_endaddr = current_bucket_start_addr + 
+                             (map->bucket_size * fp->groups[fp->num].length);
+      if (recalculated_endaddr < current_bucket_end_addr)
+        fp->groups[fp->num].length += 1;
+
       fp->num++;
     }
   else
@@ -897,14 +947,27 @@ hole_at_p (struct pre_run_memory_map *map,
     return 0;
 }
 
+/* Given a list of memory buckets required for this bfd in FP, and a
+   starting bucket number in MAP, mark the appropriate buckets in 
+   MAP as used.  */
+
 static void
 mark_buckets_as_used (struct pre_run_memory_map *map, int startingbucket, 
                       struct bfd_memory_footprint *fp)
 {
   int memgrp, k;
   for (memgrp = 0; memgrp < fp->num; memgrp++)
-    for (k = 0; k < fp->groups[memgrp].length; k++)
-      map->buckets[startingbucket + fp->groups[memgrp].offset + k] = 1;
+    {
+      struct bfd_memory_footprint_group *group = &fp->groups[memgrp];
+      int initial_bkt = startingbucket + group->offset;
+
+      if (initial_bkt + group->length > map->number_of_buckets)
+        warning ("sharedlibrary preload-libraries exceeded map array while "
+                 "processing '%s'", fp->filename);
+      for (k = 0; k < group->length; k++)
+        if (initial_bkt + k < map->number_of_buckets)
+          map->buckets[initial_bkt + k] = 1;
+    }
 }
 
 void
@@ -1126,6 +1189,7 @@ dyld_load_library (const struct dyld_path_info *d,
   if (e->reason & dyld_reason_executable_mask)
     CHECK_FATAL (e->objfile == symfile_objfile);
 
+ try_again_please:
   /* For now, we only print any error messages the first time we try
      to load a bfd.  It would be nice to use a more subtle mechanism
      here, that would avoid repeating the error messages when we retry
@@ -1151,7 +1215,126 @@ dyld_load_library (const struct dyld_path_info *d,
   if (read_from_memory)
     dyld_load_library_from_memory (d, e, print_errors);
   else if (e->abfd == NULL)
-    dyld_load_library_from_file (d, e, print_errors);
+    {
+      dyld_load_library_from_file (d, e, print_errors);
+      if (e->abfd == NULL)
+	{
+	  read_from_memory = 1;
+	  /* If the target is "remote" we want to lower the load level
+	     on libraries that we're going to have to read out of memory.  */
+	  if (target_is_remote ())
+	    {
+	      e->load_flag = OBJF_SYM_CONTAINER;
+	    }
+	  goto try_again_please;
+	}
+      else if (bfd_mach_o_stub_library (e->abfd) || bfd_mach_o_encrypted_binary (e->abfd))
+	{
+	  /* If we find a stub library as the backing file,
+	     then switch to reading from memory.  */
+	  e->load_flag = OBJF_SYM_CONTAINER | OBJF_SYM_DONT_CHANGE;
+	  bfd_close (e->abfd);
+	  e->abfd = NULL;
+	  e->loaded_name = NULL;
+	  read_from_memory = 1;
+	  goto try_again_please;
+	}
+      else if (dyld_check_uuids_flag && e->dyld_valid)
+	{
+	  /* To speed things up in the common case where the UUID's
+	     match, we find the offset of the UUID load command in the
+	     on disk binary, and go directly to that offset in the 
+	     in memory copy.  If that is a load command, then we compare
+	     those.  If we don't find one there, then we have to search
+	     through the load commands in memory.  
+	     Note: Don't check if e->dyld_valid is not true, since then we ONLY
+	     have a file we've read from load commands for this bfd, and don't
+	     have an in memory copy yet.  */
+
+	  struct mach_o_data_struct *mdata = NULL;
+	  int i;
+	  bfd_vma uuid_addr = (bfd_vma) -1;
+	  unsigned char mem_uuid[16];
+	  int matches = 0;
+	  unsigned char file_uuid[16];
+
+	  CHECK_FATAL (bfd_mach_o_valid (e->abfd));
+	  mdata = e->abfd->tdata.mach_o_data;
+	  for (i = 0; i < mdata->header.ncmds; i++)
+	    {
+	      /* Find the UUID command in the on disk copy of the
+		 binary.  */
+	      if (mdata->commands[i].type == BFD_MACH_O_LC_UUID)
+		{
+		  uuid_addr = mdata->commands[i].offset;
+		  bfd_mach_o_get_uuid (e->abfd, file_uuid, sizeof (file_uuid));
+		  break;
+		}
+	    }
+
+	  /* If there is no UUID command, we obviously can't do any checking.  */
+	  if (uuid_addr != (bfd_vma) -1)
+	    {
+	      struct gdb_exception exc;
+	      int error;
+	      int found_uuid = 0;
+	      
+	      uuid_addr += e->dyld_addr;
+	      TRY_CATCH (exc, RETURN_MASK_ALL)
+		{
+		  error = target_read_uuid (uuid_addr, mem_uuid);
+		}
+	      
+	      /* Do the check with the UUID we found in the spot where it would be
+		 if the binaries were the same.  If that works, we're done.  Otherwise
+		 look through the in memory version directly for the LC_UUID.  */
+	      if (exc.reason == NO_ERROR && error == 0)
+		matches = (memcmp(mem_uuid, file_uuid, sizeof (file_uuid)) == 0);
+
+	      if (!matches)
+		{
+		  struct mach_header header;
+		  bfd_vma curpos = e->dyld_addr + sizeof (struct mach_header);
+		  struct load_command cmd;
+		  target_read_mach_header (e->dyld_addr, &header);
+
+		  for (i = 0; i < header.ncmds; i++)
+		    {
+		      if (target_read_load_command (curpos, &cmd) != 0)
+			break;
+		      if (cmd.cmd == BFD_MACH_O_LC_UUID)
+			{
+			  if (target_read_uuid (curpos, mem_uuid) == 0) 
+			    found_uuid = 1;
+			  break;
+			}
+		      curpos += cmd.cmdsize;
+		    }
+		  matches = (memcmp(mem_uuid, file_uuid, sizeof (file_uuid)) == 0);
+		}
+	      
+	      if (!matches)
+		{
+		  warning (_("UUID mismatch detected with the loaded library "
+			     "- on disk is:\n\t%s"),
+			   e->abfd->filename);
+		  if (ui_out_is_mi_like_p (uiout))
+		    {
+		      struct cleanup *notify_cleanup =
+			make_cleanup_ui_out_notify_begin_end (uiout, 
+							      "uuid-mismatch-with-loaded-file");
+		      ui_out_field_string (uiout, "file", e->abfd->filename);
+		      do_cleanups (notify_cleanup);
+		    }
+		  bfd_close (e->abfd);
+		  e->abfd = NULL;
+		  e->loaded_name = NULL;
+		  read_from_memory = 1;
+		  goto try_again_please;
+		}
+	    }
+	}
+    }
 
   /* If we weren't able to load the bfd, there must have been an error
      somewhere.  Flag it, so we don't print error messages the next
@@ -1303,6 +1486,11 @@ dyld_load_symfile_internal (struct dyld_objfile_entry *e,
       e->loaded_addrisoffset = 1;
     }
 
+  if (e->loaded_from_memory == 1)
+    {
+      e->loaded_memaddr = e->loaded_addr;
+    }
+
   /* This is a little weird, because dlyd_load_symfile is used both
      to load a symfile, and to slide it.  I want a third use, which
      is reload it but reuse the objfile structures, so we can
@@ -1320,6 +1508,16 @@ dyld_load_symfile_internal (struct dyld_objfile_entry *e,
       volatile struct gdb_exception exc;
 
       CHECK_FATAL (e->abfd != NULL);
+
+      /* Is this in the shared cache?  If so, and we don't already
+         have section offsets, we need to call a special routine to
+         compute the offsets -- dylibs in the shared cache have
+         different slide values for different sections.  */
+
+      if (e->in_shared_cache && e->dyld_section_offsets == NULL
+          && e->dyld_valid)
+        e->dyld_section_offsets = 
+                  get_sectoffs_for_shared_cache_dylib (e, e->loaded_addr);
 
       /* If we just have a slide then that means that the whole objfile is 
 	 sliding by the same amount.  So we make up a section_addr_info
@@ -1359,18 +1557,36 @@ dyld_load_symfile_internal (struct dyld_objfile_entry *e,
       else
 	{
 	  using_orig_objfile = 1;
+	  int i, num_offsets;
+	  struct bfd_section *this_sect;
+
+          /* bfd sections are not the same as objfile sections.  */
+	  num_offsets = 0;
+	  if (e->dyld_section_offsets != NULL)
+	    {
+	      this_sect = e->abfd->sections;
+	      for (i = 0; 
+                   i < bfd_count_sections (e->abfd); 
+                   i++, this_sect = this_sect->next)
+		{
+		  if (objfile_keeps_section (e->abfd, this_sect))
+		    num_offsets++;
+		}
+	    }
+
 	  TRY_CATCH (exc, RETURN_MASK_ALL)
 	    {
 	      e->objfile =
-		symbol_file_add_bfd_using_objfile (e->objfile,
+		symbol_file_add_with_addrs_or_offsets_using_objfile (e->objfile,
 						   e->abfd, 
 						   0, 
 						   addrs, 
 						   e->dyld_section_offsets,
+                                                   num_offsets,
 						   0, 0, 
 						   e->load_flag, 
 						   0,
-						   e->prefix);
+						   e->prefix, NULL);
 	    }
 	  if (exc.reason == RETURN_ERROR)
 	    e->objfile = NULL;
@@ -1609,6 +1825,11 @@ dyld_should_reload_objfile_for_flags (struct dyld_objfile_entry *e)
      is set.  Otherwise, only reload on upgrade. */
   if (e->load_flag == e->objfile->symflags)
     return DYLD_NO_CHANGE;
+  else if (e->objfile->symflags & OBJF_SYM_DONT_CHANGE)
+    {
+      e->load_flag = e->objfile->symflags;
+      return DYLD_NO_CHANGE;
+    }
   else if (e->load_flag & ~e->objfile->symflags)
     return DYLD_UPGRADE;
   else
@@ -1664,32 +1885,19 @@ dyld_is_objfile_loaded (struct objfile *obj)
   if (obj->separate_debug_objfile_backlink != NULL)
     return dyld_is_objfile_loaded (obj->separate_debug_objfile_backlink);
     
-  /* A SYMS_ONLY_OBJFILE is an objfile added by the user, either with
-     add-symbol-file or "sharedlibrary specify-symbol-file"; it shadows
-     an actually loaded & resident objfile, but breakpoints will be
-     associated with the syms-only-objfile.  So under the theory that
-     users don't add-symbol-file things which haven't been loaded yet,
-     set breakpoints in this unconditionally.  */
+  /* A SYMS_ONLY_OBJFILE is an objfile added by the user with
+     add-symbol-file; it shadows an actually loaded & resident objfile, 
+     but breakpoints will be associated with the syms-only-objfile.  
+     So under the theory that users don't add-symbol-file things which 
+     haven't been loaded yet, set breakpoints in this unconditionally.  */
   if (obj->syms_only_objfile == 1)
     return 1;
 
-  /* Another problem is that since we don't consider anything mapped till
-     we get the first dyld notification, we won't set any breakpoints
-     in the main executable before dyld runs (notably _start), and we won't
-     hit any breakpoints in the early parts of the dyld code either.  
-     To work around this, we ALWAYS consider the symfile_objfile loaded, and
-     always consider dyld loaded. 
-     The reason for this whole exercise was to make sure breakpoints in a
-     shared library didn't overwrite the dyld area for the main executable.
-     So considering the executable always mapped is fine.
-     We are adding the possibility that if somebody builds a dyld based at
-     0x0 and then sets a breakpoint early on, they will run into the
-     bug again.  But there are a small number of people in the world who
-     debug dyld itself, and they can learn to always base dyld somewhere 
-     above the executable if they want to avoid this problem.  */
-
-  if (obj == symfile_objfile)
-    return 1;
+  /* Another problem is that since we don't consider anything mapped
+     till we get the first dyld notification, we won't set any
+     breakpoints in dyld and so and we won't hit any breakpoints in
+     the early parts of the dyld code.
+     To work around this, we ALWAYS consider dyld loaded. */
 
   if (bfd_hash_lookup (&obj->obfd->section_htab, "LC_ID_DYLINKER", 0, 0) != NULL)
     return 1;
@@ -1950,21 +2158,32 @@ dyld_libraries_compatible (struct dyld_path_info *d,
     return dyld_libraries_similar (d, newent, oldent);
  
   /* If either filename is non-NULL, then they must both be the same string. */
-  
+  /* Be careful, if we're loaded from memory, then the original entry just has
+     the filename from the load commands, but the made entry says "memory object...".  */
   if (oldname != NULL || newname != NULL)
     {
       if (oldname == NULL || newname == NULL)
 	return 0;
-      if (strcmp (oldname, newname) != 0)
-	return 0;
+      if (oldent->loaded_from_memory && newent->loaded_from_memory)
+	{
+	  char *mem_obj_str = "[memory object \"";
+	  int offset = strlen (mem_obj_str);
+	  if ((strstr (newname, mem_obj_str) == newname
+	       && strstr (newname, oldname) == newname + offset)
+	      ||(strstr (oldname, mem_obj_str) == oldname
+		 && strstr (oldname, newname) == oldname + offset))
+	    return dyld_libraries_similar (d, newent, oldent);
+	}
+      else
+	{
+	  if (strcmp (oldname, newname) != 0)
+	    return 0;
+	}
     }
   
-  if (dyld_always_read_from_memory_flag)
+  if (oldent->loaded_from_memory != newent->loaded_from_memory)
     {
-      if (oldent->loaded_from_memory != newent->loaded_from_memory)
-	{
-	  return 0;
-	}
+      return 0;
     }
 
    /* The same bundle can be loaded more than once under certain
@@ -2243,4 +2462,10 @@ dyld_purge_cached_libraries (struct dyld_objfile_info *info)
 void
 _initialize_macosx_nat_dyld_process ()
 {
+  add_setshow_boolean_cmd ("check-uuids", class_obscure,
+			   &dyld_check_uuids_flag, _("\
+Set if GDB should check the binary UUID between the file on disk and the one loaded in memory."), _("\
+Set if GDB should check the binary UUID between the file on disk and the one loaded in memory."), NULL,
+			   NULL, NULL,
+			   &setshliblist, &showshliblist);
 }

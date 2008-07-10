@@ -361,6 +361,11 @@ struct function GTY(())
 
   /* The variables unexpanded so far.  */
   tree unexpanded_var_list;
+  /* APPLE LOCAL begin mainline */
+  /* A variable living at the top of the frame that holds a known value.
+     Used for detecting stack clobbers.  */
+  tree stack_protect_guard;
+  /* APPLE LOCAL end mainline */
 
   /* Collected bit flags.  */
 
@@ -452,6 +457,13 @@ struct function GTY(())
   /* APPLE LOCAL begin 3837835  */
   unsigned int uses_vector : 1;
   /* APPLE LOCAL end 3837835  */
+  /* APPLE LOCAL ARM 4790140 compact switch tables */
+  unsigned int needs_4byte_alignment : 1;
+
+  /* APPLE LOCAL begin ARM reliable backtraces */
+  unsigned int calls_builtin_ret_addr : 1;
+  unsigned int calls_builtin_frame_addr : 1;
+  /* APPLE LOCAL end ARM reliable backtraces */
 };
 
 /* The function currently being compiled.  */
@@ -493,6 +505,10 @@ extern int trampolines_created;
 #define current_function_epilogue_delay_list (cfun->epilogue_delay_list)
 #define current_function_has_nonlocal_label (cfun->has_nonlocal_label)
 #define current_function_has_nonlocal_goto (cfun->has_nonlocal_goto)
+/* APPLE LOCAL begin ARM reliable backtraces */
+#define current_function_calls_builtin_ret_addr (cfun->calls_builtin_ret_addr)
+#define current_function_calls_builtin_frame_addr (cfun->calls_builtin_frame_addr)
+/* APPLE LOCAL end ARM reliable backtraces */
 
 #define return_label (cfun->x_return_label)
 #define naked_return_label (cfun->x_naked_return_label)

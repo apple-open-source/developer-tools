@@ -1,4 +1,4 @@
-/* APPLE LOCAL file mni 4424835 */
+/* APPLE LOCAL file ssse3 4424835 */
 /* Copyright (C) 2006 Free Software Foundation, Inc.
 
    This file is part of GCC.
@@ -31,7 +31,7 @@
 #ifndef _TMMINTRIN_H_INCLUDED
 #define _TMMINTRIN_H_INCLUDED
 
-#ifdef __MNI__
+#ifdef __SSSE3__
 #include <pmmintrin.h>
 
 /* APPLE LOCAL begin nodebug inline */
@@ -182,8 +182,10 @@ _mm_sign_pi32 (__m64 __X, __m64 __Y)
   return (__m64) __builtin_ia32_psignd ((__v2si)__X, (__v2si)__Y);
 }
 
+/* APPLE LOCAL begin 5814283 */
 #define _mm_alignr_epi8(__X, __Y, __N) \
-  ((__m128i)__builtin_ia32_palignr128 ((__v2di) __X, (__v2di) __Y, (__N) * 8))
+  ((__m128i)__builtin_ia32_palignr128 ((__v2di)(__X), (__v2di)(__Y), (__N) * 8))
+/* APPLE LOCAL end 5814283 */
 
 #define _mm_alignr_pi8(__X, __Y, __N) \
   ((__m64)__builtin_ia32_palignr ((long long) (__X), (long long) (__Y), (__N) * 8))
@@ -228,6 +230,6 @@ _mm_abs_pi32 (__m64 __X)
 #undef __always_inline__
 /* APPLE LOCAL end nodebug inline */
 
-#endif /* __MNI__ */
+#endif /* __SSSE3__ */
 
 #endif /* _TMMINTRIN_H_INCLUDED */

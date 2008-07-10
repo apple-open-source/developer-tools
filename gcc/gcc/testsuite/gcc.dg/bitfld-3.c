@@ -1,5 +1,6 @@
 /* Test for bitfield alignment in structs and unions.  */
-/* { dg-do run }  */
+/* APPLE LOCAL mainline ARM doesn't apply if !PCC_BITFIELD_TYPE_MATTERS */
+/* { dg-do run { target { ! arm*-*-darwin* } } }  */
 /* { dg-options "-O2" }  */
 
 extern void abort (void);

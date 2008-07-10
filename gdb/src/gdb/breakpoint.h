@@ -883,6 +883,7 @@ void gnu_v3_update_exception_catchpoints (enum exception_event_kind ex_event,
 int handle_gnu_v3_exceptions (enum exception_event_kind ex_event);
 
 void tell_breakpoints_objfile_changed (struct objfile *objfile);
+void tell_breakpoints_objfile_removed (struct objfile *objfile);
 /* APPLE LOCAL end breakpoints */
 
 /* Indicator of whether exception catchpoints should be nuked between

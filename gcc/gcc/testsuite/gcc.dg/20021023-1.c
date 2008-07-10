@@ -2,6 +2,8 @@
    considered as local_symbolic_operand.  */
 /* { dg-do compile } */
 /* { dg-options "-O2 -fpic" } */
+/* APPLE LOCAL -mdynamic-no-pic incompatible with -fpic */
+/* { dg-skip-if "Not valid with -mdynamic-no-pic" { *-*-darwin* } { "-mdynamic-no-pic" } { "" } } */
 
 typedef __builtin_va_list va_list;
 

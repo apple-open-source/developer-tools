@@ -28,6 +28,8 @@
 #include "gdbcore.h"
 #include "elf/dwarf2.h"
 #include "dwarf2expr.h"
+/* APPLE LOCAL variable initialized status  */
+#include "exceptions.h"
 
 /* Local prototypes.  */
 
@@ -710,6 +712,41 @@ execute_stack_op (struct dwarf_expr_context *ctx,
             ULONGEST size;
             CORE_ADDR addr_or_regnum;
 
+            /* APPLE LOCAL: DW_OP_piece requires that a register or address
+               be pushed on the stack.  The dwarf_expr_pop () call below will 
+               error() if the stack doesn't have something there.
+               (NB: The standard allows for a DW_OP_piece operator with NO
+                location specified -- this would indicate a variable which
+                has been partially optimized away by the compiler.  gcc does
+                not emit these today.)
+
+	       gcc-4.0 is generating bad expressions for 64-bit
+	       variables in 32-bit programs when location lists are
+	       being used.  These bad expressions follow a very
+	       regular pattern - they have two DW_OP_piece operators
+	       showing the low/high 4-bytes of the 8-byte data,
+	       then they have a DW_OP_piece with no address/register
+	       specified, then they have another one or two DW_OP_piece
+	       operators specifying additional data.  Here is an example:
+
+         TAG_variable [31]  
+          AT_name( "loffset" )
+          AT_decl_file( 0x01 )
+          AT_decl_line( 0x75 )
+          AT_type( {0x00055936} ( uint64_t ) )
+          AT_location( 0x00019b4c
+             0x0003acb8 - 0x0003ad58: reg20, piece 0x0004, reg21, piece 0x0004
+             0x0003ad58 - 0x0003b050: reg20, piece 0x0004, reg21, piece 0x0004, piece 0x0008, reg21 , piece 0x0004
+             0x0003b050 - 0x0003b118: reg20, piece 0x0004, reg21, piece 0x0004 )
+
+               As a hack, instead of error()ing out here, we will recgonize 
+               that we're facing this broken debug info from the compiler
+               and stop evaluating this expression at this point.  We've
+               already retrieved the full variable location by now.  */
+
+            if (ctx->stack_len == 0)
+              return;
+
             /* Record the piece.  */
             op_ptr = read_uleb128 (op_ptr, op_end, &size);
             addr_or_regnum = dwarf_expr_fetch (ctx, 0);
@@ -723,7 +760,14 @@ execute_stack_op (struct dwarf_expr_context *ctx,
 
 	/* APPLE LOCAL begin variable initialized status  */
 	case DW_OP_APPLE_uninit:
+#if 0
+          /* gcc-4.2 is not outputting trustworthy DW_OP_APPLE_uninit flags; 
+             ignore them for now.  */
 	  ctx->var_status = 0;
+	  /* If the variable is uninitialized, throw an error instead of
+	     trying to evaluate it.  */
+	  throw_error (GENERIC_ERROR, "Variable is currently uninitialized.");
+#endif
 	  goto no_push;
 	/* APPLE LOCAL end variable initialized status  */
 

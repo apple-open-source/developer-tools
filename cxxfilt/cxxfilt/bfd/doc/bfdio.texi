@@ -43,7 +43,7 @@ from the archive header for archive members).
 @subsubsection @code{bfd_get_size}
 @strong{Synopsis}
 @example
-long bfd_get_size (bfd *abfd);
+file_ptr bfd_get_size (bfd *abfd);
 @end example
 @strong{Description}@*
 Return the file size (as read from file system) for the file

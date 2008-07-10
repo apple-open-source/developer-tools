@@ -1,5 +1,5 @@
 ##
-# Copyright (c) 2006 Apple Computer, Inc. All rights reserved.
+# Copyright (c) 2006-2007 Apple Inc. All rights reserved.
 #
 # @APPLE_LICENSE_HEADER_START@
 # 
@@ -23,23 +23,18 @@
 TESTROOT = ../..
 include ${TESTROOT}/include/common.makefile
 
-SHELL = bash # use bash shell so we can redirect just stderr
 
 #
-# The point of this test is a check that ld
-# can figure out which architecture is needed 
-# by looking at the .o files when -arch is not used.
+# Check that ld can figure out architecture from .o files without -arch option
 #
 
 run: all
 
 all:
-	${CC} ${CCFLAGS} hello.c -c -o hello.o  -mmacosx-version-min=10.4
-	${LD} -lcrt1.o hello.o -o hello -lSystem 2> fail.log
-	${FAIL_IF_BAD_MACHO} hello
-	file hello | grep ${ARCH} | ${PASS_IFF_STDIN}
+	${CC} ${CCFLAGS} hello.c -c -o hello.o 
+	${FAIL_IF_BAD_OBJ} hello.o
+	${LD} ${LDFLAGS} -lcrt1.o hello.o -o hello -lSystem
+	file hello | grep ${FILEARCH} | ${PASS_IFF_STDIN}
 
 clean:
-	rm  hello.o hello fail.log
-	
-
+	rm -rf hello.o hello

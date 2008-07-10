@@ -1,0 +1,68 @@
+.Dd March 29, 2002 
+.Dt MKEXTUNPACK 8
+.Os Darwin
+.Sh NAME
+.Nm mkextunpack
+.Nd extracts the contents of a multikext (mkext) archive
+.Sh SYNOPSIS
+.Nm
+.Op Fl v
+.Op Fl a Ar arch
+.Op Fl d Ar output_directory
+.Ar mkext_file
+.Sh DESCRIPTION
+The
+.Nm
+program list the contents of a multikext file,
+.Ar mkext_file ,
+or unarchives the contents into
+.Ar output_directory
+(which must exist).
+The
+.Fl v
+option causes
+.Nm
+to print the name if each kext as it finds them.
+.Sh DIAGNOSTICS
+.Nm
+exits with a zero status upon success.
+Upon failure, it prints an error message
+and exits with a nonzero status.
+.Pp
+With a nonsegreated mkext file,
+wherein each kext may contain a universal binary,
+.Nm
+simply unpacks the contents.
+With an mkext file segregated by architecture
+(that is, with distinct internal archives of architecture-specific kexts),
+.Nm
+attempts by default to unpack or list kexts
+for the current machine's architecture.
+To choose a particular architecture
+to extract or list,
+use the
+.Fl a
+option.
+.Pp
+There is no simple way to unpack a segregated mkext file
+into a set of kexts with universal binaries,
+but you can unpack each of its component architectures
+to separate directories for examination.
+.Sh SEE ALSO 
+.Xr mkextcache 8
+.Sh BUGS
+The mkext file format doesn't record the original filenames
+of the kexts, so
+.Nm
+has to guess at what they are.
+It does this by using the value of the CFBundleExecutable
+property of the kext's info dictionary
+(Project Builder sets this to the base name of the kext
+bundle by default, but the developer can change it).
+If that property doesn't exist, the last component of the
+CFBundleIdentifier is used.
+Duplicates have an incrementing index appended to the name.
+Kexts that have no CFBundleExecutable or CFBundleIdentifier property
+are named
+.Dq NameUnknown-n.kext ,
+where n is a number.

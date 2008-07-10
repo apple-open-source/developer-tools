@@ -537,6 +537,11 @@ start_record_layout (tree t)
   rli->offset_align = MAX (rli->record_align, BIGGEST_ALIGNMENT);
 
 #ifdef STRUCTURE_SIZE_BOUNDARY
+/* APPLE LOCAL begin ARM Macintosh alignment */
+#ifdef PEG_ALIGN_FOR_MAC68K
+  if (! TARGET_ALIGN_MAC68K)
+#endif
+/* APPLE LOCAL end ARM Macintosh alignment */
   /* Packed structures don't need to have minimum size.  */
   if (! TYPE_PACKED (t))
     rli->record_align = MAX (rli->record_align, (unsigned) STRUCTURE_SIZE_BOUNDARY);
@@ -1094,13 +1099,12 @@ place_field (record_layout_info rli, tree field)
 		    {
 		  /* out of bits; bump up to next 'word'.  */
 		  rli->offset = DECL_FIELD_OFFSET (rli->prev_field);
-
 		  rli->bitpos
 		    = size_binop (PLUS_EXPR, TYPE_SIZE (type),
 				  DECL_FIELD_BIT_OFFSET (rli->prev_field));
 		  rli->prev_field = field;
 		  rli->remaining_in_alignment
-			= tree_low_cst (TYPE_SIZE (type), 1);
+		    = tree_low_cst (TYPE_SIZE (type), 1);
 		    }
 		  else
 		    {

@@ -1,6 +1,6 @@
 /* APPLE LOCAL file Macintosh alignment */
 
-/* { dg-do run } */
+/* { dg-do run { target { powerpc*-*-darwin* i?86*-*-darwin* } } } */
 /* { dg-options "-Wno-long-long" } */
 
 /*
@@ -227,7 +227,7 @@ typedef struct A6 {
     UINT8	f2;
 } A6;
 
-#ifdef __VEC__
+#ifdef __APPLE_ALTIVEC__
 typedef struct A7 {
     vector signed short	f1[4];
     UINT8		f2;
@@ -271,7 +271,7 @@ typedef struct U4 {
     UINT8	f2;
 } U4;
 
-#ifdef __VEC__
+#ifdef __APPLE_ALTIVEC__
 typedef union U5 {
     UINT8		f1;
     vector signed short	f2;
@@ -345,7 +345,7 @@ typedef struct M68K2 {
     UINT8	f2;
 } M68K2;
 
-#ifdef __VEC__
+#ifdef __APPLE_ALTIVEC__
 #pragma options align=mac68k
 
 typedef struct M68K3 {
@@ -373,7 +373,7 @@ typedef struct M68K6 {
 } M68K6;
 
 #pragma options align=reset
-#endif /* __VEC__ */
+#endif /* __APPLE_ALTIVEC__ */
 
 #pragma options align=mac68k
 
@@ -503,11 +503,11 @@ int main(int argc, char *argv[])
     check(Q(sizeof(P4)), 8, 16, 8, "long long * as 1st field");
     check(Q(sizeof(P5)), 8, 16, 8, "function * as 1st field");
     
-#ifdef __VEC__
+#ifdef __APPLE_ALTIVEC__
     check(Q(sizeof(P6)), 8, 16, 8, "vector signed short * as 1st field");
 #endif
 
-#ifdef __VEC__
+#ifdef __APPLE_ALTIVEC__
     /* === vectors === */
     
     /* ??? Do we want to test all the possible vector data types? ??? */
@@ -552,7 +552,7 @@ int main(int argc, char *argv[])
     check(Q(sizeof(A4)), 48, 48, 40, "embedding struct with array of doubles as 1st field");
     check(Q(sizeof(A5)), 40, 40, 36, "array of long longs as 1st field");
     check(Q(sizeof(A6)), 48, 48, 40, "embedding struct with array of long longs as 1st field");
-#ifdef __VEC__
+#ifdef __APPLE_ALTIVEC__
     check(Q(sizeof(A7)), 80, 80, 80, "array of vectors as 1st field");
     check(Q(sizeof(A8)), 96, 96, 96, "embedding struct with array of vectors as 1st field");
 #endif
@@ -565,7 +565,7 @@ int main(int argc, char *argv[])
     check(Q(sizeof(U2)), 16, 16, 12, "embedding union with double");
     check(Q(sizeof(U3)),  8,  8, 8, "union with long long");
     check(Q(sizeof(U4)), 16, 16, 12, "embedding union with long long");
-#if __VEC__
+#if __APPLE_ALTIVEC__
     check(Q(sizeof(U5)), 16, 16, 16, "union with vector");
     check(Q(sizeof(U6)), 32, 32, 32, "embedding union with vector");
 #endif
@@ -588,7 +588,7 @@ int main(int argc, char *argv[])
     check(Q(sizeof(M68K0)),  6,  6, 6, "mac68k struct with long");
     check(Q(sizeof(M68K1)), 10, 10, 10, "mac68k struct with double as 1st field");
     check(Q(sizeof(M68K2)), 12, 12, 12, "embedding mac68k struct with double as 1st field");
-#ifdef __VEC__
+#ifdef __APPLE_ALTIVEC__
     check(Q(sizeof(M68K3)), 32, 32, 32,  "mac68k struct with vector as 1st field");
     check(Q(sizeof(M68K4)), 48, 48, 48, "embedding mac68k struct with vector as 1st field in a mac68k struct");
     check(Q(sizeof(M68K5)), 48, 48, 48, "embedding mac68k struct with vector as 1st field in a power struct");

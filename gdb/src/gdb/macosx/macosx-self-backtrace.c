@@ -70,6 +70,11 @@ gdb_self_backtrace (void **buffer, int bufsize)
   static void *sigtramp_start;
   static void *sigtramp_end;
 
+  /* Only implemented on ppc & i386 right now.  */
+#if !defined (__ppc__) && !defined (__ppc64__) && !defined (__i386__)
+  return 0;
+#endif
+
   if (sigtramp_addr_range_looked_up == 0)
     if (look_up_sigtramp_addr_range (&sigtramp_start, &sigtramp_end))
       sigtramp_addr_range_looked_up = 1;

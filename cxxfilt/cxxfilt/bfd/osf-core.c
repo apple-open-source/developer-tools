@@ -1,5 +1,5 @@
 /* BFD back-end for OSF/1 core files.
-   Copyright 1993, 1994, 1995, 1998, 1999, 2001, 2002, 2003, 2004
+   Copyright 1993, 1994, 1995, 1998, 1999, 2001, 2002, 2003, 2004, 2006
    Free Software Foundation, Inc.
 
 This file is part of BFD, the Binary File Descriptor library.
@@ -16,7 +16,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 /* This file can only be compiled on systems which use OSF/1 style
    core files.  */
@@ -26,7 +26,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #include "libbfd.h"
 
 #include <sys/user.h>
+#ifdef OSF_CORE
 #include <sys/core.h>
+#endif
 
 /* forward declarations */
 
@@ -38,8 +40,7 @@ static char *osf_core_core_file_failing_command
   PARAMS ((bfd *));
 static int osf_core_core_file_failing_signal
   PARAMS ((bfd *));
-static bfd_boolean osf_core_core_file_matches_executable_p
-  PARAMS ((bfd *, bfd *));
+#define osf_core_core_file_matches_executable_p generic_core_file_matches_executable_p
 static void swap_abort
   PARAMS ((void));
 
@@ -66,11 +67,10 @@ make_bfd_asection (abfd, name, flags, size, vma, filepos)
 {
   asection *asect;
 
-  asect = bfd_make_section_anyway (abfd, name);
+  asect = bfd_make_section_anyway_with_flags (abfd, name, flags);
   if (!asect)
     return NULL;
 
-  asect->flags = flags;
   asect->size = size;
   asect->vma = vma;
   asect->filepos = filepos;
@@ -94,7 +94,7 @@ osf_core_core_file_p (abfd)
   if (val != sizeof core_header)
     return NULL;
 
-  if (strncmp (core_header.magic, "Core", 4) != 0)
+  if (! CONST_STRNEQ (core_header.magic, "Core"))
     return NULL;
 
   core_hdr (abfd) = (struct osf_core_struct *)
@@ -169,14 +169,6 @@ osf_core_core_file_failing_signal (abfd)
      bfd *abfd;
 {
   return core_signal (abfd);
-}
-
-static bfd_boolean
-osf_core_core_file_matches_executable_p (core_bfd, exec_bfd)
-     bfd *core_bfd ATTRIBUTE_UNUSED;
-     bfd *exec_bfd ATTRIBUTE_UNUSED;
-{
-  return TRUE;		/* FIXME, We have no way of telling at this point */
 }
 
 /* If somebody calls any byte-swapping routines, shoot them.  */

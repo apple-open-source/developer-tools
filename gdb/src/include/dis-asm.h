@@ -275,6 +275,8 @@ extern void print_arm_disassembler_options (FILE *);
 extern void parse_arm_disassembler_option (char *);
 extern int get_arm_regname_num_options (void);
 extern int set_arm_regname_option (int);
+extern bfd_boolean set_arm_show_opcode_bytes_option (bfd_boolean);
+
 extern int get_arm_regnames (int, const char **, const char **, const char *const **);
 extern bfd_boolean arm_symbol_is_valid (asymbol *, struct disassemble_info *);
 

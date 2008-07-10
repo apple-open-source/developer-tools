@@ -2148,7 +2148,26 @@ is_ancestor (struct type *base, struct type *dclass)
   return 0;
 }
 
+/* APPLE LOCAL: Like is_ancestor except that we only have the name of
+   BASE, not the type.  */
+int
+is_ancestor_by_name (const char *base, struct type *dclass)
+{
+  int i;
 
+  CHECK_TYPEDEF (dclass);
+
+  if (TYPE_NAME (dclass) &&
+      !strcmp (base, TYPE_NAME (dclass)))
+    return 1;
+
+  for (i = 0; i < TYPE_N_BASECLASSES (dclass); i++)
+    if (is_ancestor_by_name (base, TYPE_BASECLASS (dclass, i)))
+      return 1;
+
+  return 0;
+
+}
 
 /* See whether DCLASS has a virtual table.  This routine is aimed at
    the HP/Taligent ANSI C++ runtime model, and may not work with other
@@ -3737,6 +3756,106 @@ gdbtypes_post_init (struct gdbarch *gdbarch)
 
   return builtin_type;
 }
+
+
+/* APPLE LOCAL BEGIN: Helper functions for easily building bitfield
+   built in types. 
+
+   Build a builtin enum type named NAME that represents a single integer
+   bitfield that is SIZE bytes long. FLAGS from the TYPE_FLAG_xxx definitions
+   can be OR'ed together to modify the enumeration. This can be used to
+   create internal enumeration types for use with the build_builtin_bitfield ()
+   function. NAME is the name of the built in type and should start with 
+   "__gdb_builtin_type" followed by the type name. ENUMS is an array of 
+   NUM_ENUMS gdbtypes_enum_info structures that describe each enumeration. 
+   This function will copy NAME and gdbtypes_enum_info.name strings -- creating
+   a potential memory leak -- but since builtin types need to permanently be
+   around and are typically created in the initialization functions, the leak 
+   should be small and contained.
+   
+   Sample code:
+    struct type *enum_type;
+    static struct gdbtypes_enum_info enums[] = {
+      {"one",	1 },
+      {"two",	2 },
+      {"three",	3 },
+      {"six",	6 }
+    };
+    uint32_t num_enums = sizeof (enums)/sizeof (enums[0]);
+    enum_type build_builtin_enum ("__gdb_builtin_type_small_numbers", 4, 
+				  TYPE_FLAG_UNSIGNED, enums, num_enums);
+   */
+struct type *
+build_builtin_enum (const char *name, uint32_t size, int flags, 
+		    struct gdbtypes_enum_info *enums, uint32_t num_enums)
+{
+  int i;
+  struct type *t = init_type (TYPE_CODE_ENUM, size, flags, xstrdup (name), 
+			      (struct objfile *) NULL);
+  TYPE_NFIELDS (t) = num_enums;
+  const int fields_size = sizeof (struct field) * TYPE_NFIELDS (t);
+  TYPE_FIELDS (t) = xmalloc (fields_size);
+  memset (TYPE_FIELDS (t), 0, fields_size);
+  for (i = 0; i < num_enums; i++)
+    {
+      TYPE_FIELD_NAME (t, i) = xstrdup (enums[i].name);
+      TYPE_FIELD_BITPOS (t, i) = enums[i].value;  
+    }
+  gdb_assert (i == TYPE_NFIELDS (t));
+  TYPE_LENGTH (t) = size;
+  return t;
+}
+
+/* Helper function that builds a builtin bitfield type named NAME that  
+   represents a single integer bitfield that is SIZE bytes long. This can 
+   be used as a register's type to display a register's contents as a 
+   structure containing bitfields. NAME is the name of the built in type 
+   and should start with "__gdb_builtin_type" followed by the type name. 
+   BITFIELDS is an array of NUM_BITFIELDS gdbtypes_bitfield_info structures 
+   that describe each bitfield in the type. 
+   This function will copy NAME and gdbtypes_bitfield_info.name strings -- 
+   creating a potential memory leak -- but since builtin types need to 
+   permanently be around and are typically created in the initialization 
+   functions, the leak should be small and contained.
+   Sample code:
+  
+    type * bitfield_type;
+    struct gdbtypes_bitfield_info bitfields[] = {
+      {"bit31",  builtin_type_uint32,  31, 31 },
+      {"num",   enum_type,             15,  8 }, 
+      {"nibble", builtin_type_uint32,   3,  0 }
+    };
+    uint32_t num_bitfields = sizeof (bitfields)/sizeof (bitfields[0]);
+    bitfield_type = build_builtin_bitfield ("__gdb_builtin_type_test", 4, 
+					   bitfields, num_bitfields);
+*/
+struct type *
+build_builtin_bitfield (const char *name, uint32_t size, 
+			struct gdbtypes_bitfield_info *bitfields, 
+			uint32_t num_bitfields)
+{
+  struct type *t;
+  t = init_composite_type (xstrdup (name), TYPE_CODE_STRUCT);
+  TYPE_NFIELDS (t) = num_bitfields;
+  const int fields_size = sizeof (struct field) * TYPE_NFIELDS (t);
+  TYPE_FIELDS (t) = xmalloc (fields_size);
+  memset (TYPE_FIELDS (t), 0, fields_size);
+  int i = 0;
+
+  for (i = 0; i < num_bitfields; i++)
+    {
+      TYPE_FIELD_NAME (t, i) = xstrdup (bitfields[i].name);
+      TYPE_FIELD_TYPE (t, i) = bitfields[i].type;
+      TYPE_FIELD_BITSIZE (t, i) = bitfields[i].msbit - bitfields[i].lsbit + 1;
+      TYPE_FIELD_BITPOS (t, i) = bitfields[i].lsbit;  
+    }
+  gdb_assert (i == TYPE_NFIELDS (t));
+  TYPE_LENGTH (t) = size;
+  return t;
+}
+
+/* APPLE LOCAL END.  */
+
 
 extern void _initialize_gdbtypes (void);
 void

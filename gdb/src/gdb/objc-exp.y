@@ -107,6 +107,9 @@
 #define	YYDEBUG	0		/* Default to no yydebug support.  */
 #endif
 
+/* APPLE LOCAL - Avoid calling lookup_objc_class unnecessarily.  */
+static int square_bracket_seen = 0;
+
 int
 yyparse PARAMS ((void));
 
@@ -754,14 +757,48 @@ variable:	name_not_typename
 			    }
 			  else if ($1.is_a_field_of_this)
 			    {
+                              struct symbol *func;
+                              enum runtime_type runtime = OBJC_RUNTIME;
+
 			      /* C++/ObjC: it hangs off of `this'/'self'.  
 				 Must not inadvertently convert from a 
 				 method call to data ref.  */
+
 			      if (innermost_block == 0 || 
 				  contained_in (block_found, innermost_block))
 				innermost_block = block_found;
-			      write_exp_elt_opcode (OP_OBJC_SELF);
-			      write_exp_elt_opcode (OP_OBJC_SELF);
+                              if (innermost_block)
+                                {
+                                  func = BLOCK_FUNCTION (innermost_block);
+                                }
+                              else
+                                func = NULL;
+
+                              /* If this is an ObjC++ file we could have either
+                                 a C++ function or an ObjC function - which
+                                 determines whether OP_OBJC_SELF or OP_THIS is
+                                 the right opcode to add here.  */
+
+                              if (func 
+                                  && TYPE_RUNTIME (SYMBOL_TYPE (func)) != OBJC_RUNTIME)
+                                {
+                                  if (SYMBOL_LANGUAGE(func) == language_cplus
+                                      || SYMBOL_LANGUAGE(func) == language_objcplus)
+                                    {
+                                      runtime = CPLUS_RUNTIME;
+                                    }
+                                }
+
+                              if (runtime == OBJC_RUNTIME)
+                                {
+			          write_exp_elt_opcode (OP_OBJC_SELF);
+			          write_exp_elt_opcode (OP_OBJC_SELF);
+                                }
+                              else
+                                {
+			          write_exp_elt_opcode (OP_THIS);
+			          write_exp_elt_opcode (OP_THIS);
+                                }
 			      write_exp_elt_opcode (STRUCTOP_PTR);
 			      write_exp_string ($1.stoken);
 			      write_exp_elt_opcode (STRUCTOP_PTR);
@@ -1454,8 +1491,10 @@ yylex ()
 #endif
     case '<':
     case '>':
-    case '[':
-    case ']':
+      /* APPLE LOCAL begin avoid calling lookup_objc_class unnecessarily  */
+      /* case '[':  Moved out below.  */
+      /* case ']':  Moved out below.  */
+      /* APPLE LOCAL end avoid calling lookup_objc_class unnecessarily  */
     case '?':
     case ':':
     case '=':
@@ -1465,6 +1504,18 @@ yylex ()
       lexptr++;
       return tokchr;
 
+    /* APPLE LOCAL begin avoid calling lookup_objc_class unnecessarily  */
+    case '[':
+      square_bracket_seen = 1;
+      lexptr++;
+      return tokchr;
+
+    case ']':
+      square_bracket_seen = 0;
+      lexptr++;
+      return tokchr;
+
+    /* APPLE LOCAL end avoid calling lookup_objc_class unnecessarily  */
     case '@':
       if (strncmp(tokstart, "@selector", 9) == 0)
 	{
@@ -1794,9 +1845,12 @@ yylex ()
       {
         extern struct symbol *lookup_struct_typedef ();
         sym = lookup_struct_typedef (tmp, expression_context_block, 1);
-        if (sym)
+	/* APPLE LOCAL begin avoid calling lookup_objc_class unnecessarily  */
+        if (sym && square_bracket_seen)
           {
 	    CORE_ADDR Class = lookup_objc_class(tmp);
+	    square_bracket_seen = 0;
+	    /* APPLE LOCAL end avoid calling lookup_objc_class unnecessarily  */
 	    if (Class)
 	      {
 	        yylval.class.class = Class;

@@ -41,11 +41,13 @@
 
 /* For the gdbarch_tdep structure so we can get the wordsize. */
 
-#if defined (__powerpc__) || defined (__ppc__) || defined (__ppc64__)
+#if defined (TARGET_POWERPC)
 #include "ppc-tdep.h"
-#elif defined (__i386__)
+#elif defined (TARGET_I386)
 #include "amd64-tdep.h"
 #include "i386-tdep.h"
+#elif defined (TARGET_ARM)
+#include "arm-tdep.h"
 #else
 #error "Unrecognized target architecture."
 #endif
@@ -84,6 +86,8 @@ static FILE *mutils_stderr = NULL;
 static int mutils_debugflag = 0;
 
 extern macosx_inferior_status *macosx_status;
+static const char* g_macosx_protection_strs [8] = 
+{ "---", "--r", "-w-", "-wr", "x--", "x-r", "xw-", "xwr" };
 
 void
 mutils_debug (const char *fmt, ...)
@@ -199,10 +203,11 @@ mach_xfer_memory_remainder (CORE_ADDR memaddr, gdb_byte *myaddr,
 	 If we figure out that not writing whole pages causes problems
 	 of it's own, then we will have to revisit this.  */
 
+#if defined (TARGET_POWERPC)
       vm_machine_attribute_val_t flush = MATTR_VAL_CACHE_FLUSH;
       /* This vm_machine_attribute only works on PPC, so no reason
 	 to keep failing on x86... */
-#if defined (TARGET_POWERPC)
+
       kret = vm_machine_attribute (mach_task_self (), mempointer,
                                    pagesize, MATTR_CACHE, &flush);
       if (kret != KERN_SUCCESS)
@@ -298,6 +303,18 @@ mach_xfer_memory_block (CORE_ADDR memaddr, gdb_byte *myaddr,
   return len;
 }
 
+
+#if defined (VM_REGION_SUBMAP_SHORT_INFO_COUNT_64)
+
+/* We probably have a Leopard based build since 
+   VM_REGION_SUBMAP_SHORT_INFO_COUNT_64 was defined, so we will assign
+   the functions to call for MACOSX_GET_REGION_INFO and MACOSX_VM_PROTECT.  */
+
+#define macosx_get_region_info macosx_vm_region_recurse_short
+#define macosx_vm_protect macosx_vm_protect_range
+
+#else /* #if defined (VM_REGION_SUBMAP_SHORT_INFO_COUNT_64)  */
+
 /* We need to build Salt on Tiger, but we want to try to run it on Leopard.
    On Leopard, there is both the SHORT and regular versions of the mach_vm_region_recurse
    call.  BUT the latter is MUCH slower on Leopard than on Tiger, whereas the short form
@@ -306,7 +323,6 @@ mach_xfer_memory_block (CORE_ADDR memaddr, gdb_byte *myaddr,
    over.  Then we try the call, and if we get KERN_INVALID_ARGUMENT, we know
    that we're on Tiger, and switch over to the long form.  */
 
-#ifndef VM_REGION_SUBMAP_SHORT_INFO_COUNT_64
   struct vm_region_submap_short_info_64 {
     vm_prot_t		protection;     /* present access protection */
     vm_prot_t		max_protection; /* max avail through vm_prot */
@@ -325,108 +341,309 @@ mach_xfer_memory_block (CORE_ADDR memaddr, gdb_byte *myaddr,
   
   typedef struct vm_region_submap_short_info_64	*vm_region_submap_short_info_64_t;
   typedef struct vm_region_submap_short_info_64	 vm_region_submap_short_info_data_64_t;
-  
+
 #define VM_REGION_SUBMAP_SHORT_INFO_COUNT_64	((mach_msg_type_number_t) \
 						 (sizeof(vm_region_submap_short_info_data_64_t)/sizeof(int)))
-  
-  vm_region_submap_info_data_64_t r_data;
 
+/* We probably have a Tiger based build since 
+   VM_REGION_SUBMAP_SHORT_INFO_COUNT_64 wasn't defined, so we will assign
+   the functions to call for MACOSX_GET_REGION_INFO and MACOSX_VM_PROTECT.  */
+#if defined (TARGET_ARM)
+
+/* ARM TARGET */
+#define macosx_get_region_info macosx_vm_region_recurse_long
+#define macosx_vm_protect macosx_vm_protect_region
+
+#else /* #if defined (TARGET_ARM)  */
+
+/* All other Tiger based targets.  */
+
+/* Use the get_region_info variant call that tries both the long and short
+   and region subrange calls.  */
+#define macosx_get_region_info macosx_get_region_info_both
+
+/* Use the vm_protect call that protect by the current region address.  */
+#define macosx_vm_protect macosx_vm_protect_region
+
+#endif  /* #else defined (TARGET_ARM)  */
+
+
+#endif  /* #else defined (TARGET_ARM)  */
+
+
+/* The old Tiger code used to call mach_vm_region to get the region 
+   info, but this would return a very large region of memory and we
+   would be modifying permissions on this large chunk.  */
 static kern_return_t
-macosx_get_region_info (task_t task, 
-			mach_vm_address_t *r_start,
-			mach_vm_address_t *r_end,
-			mach_vm_size_t *r_size,
-			vm_prot_t *prot)
+macosx_vm_region (task_t task, 
+		  mach_vm_address_t addr,
+		  mach_vm_address_t *r_start,
+		  mach_vm_size_t *r_size,
+		  vm_prot_t *prot,
+		  vm_prot_t *max_prot)
 {
-  vm_region_submap_short_info_data_64_t r_short_data;
-  vm_region_submap_info_data_64_t r_long_data;
-  static int use_short_info = 1;
   mach_msg_type_number_t r_info_size;
-  natural_t r_depth;
   kern_return_t kret;
-
-  r_depth = 1000;
-  try_recurse_again:
-  
-  if (use_short_info)
+  mach_port_t r_object_name;
+  vm_region_basic_info_data_64_t r_basic_data;
+ 
+  r_info_size = VM_REGION_BASIC_INFO_COUNT_64;
+  kret = mach_vm_region (macosx_status->task, r_start, r_size,
+			 VM_REGION_BASIC_INFO_64,
+			 (vm_region_info_t) & r_basic_data, &r_info_size,
+			  &r_object_name);
+  if (kret == KERN_SUCCESS)
     {
-      r_info_size = VM_REGION_SUBMAP_SHORT_INFO_COUNT_64;
-      kret = mach_vm_region_recurse (task, 
-				     r_start, r_size,
-				     & r_depth,
-				     (vm_region_recurse_info_t) &r_short_data, 
-				     &r_info_size);
-      if (kret == KERN_INVALID_ARGUMENT)
-	{
-	  use_short_info = 0;
-	  mutils_debug ("vm_region_submap_short_info not supported, switching"
-			" to long info.\n");
-	  goto try_recurse_again;
-	}
-      *prot = r_short_data.protection;
+      *prot = r_basic_data.protection;
+      *max_prot = r_basic_data.max_protection;
+      mutils_debug ("macosx_vm_region ( 0x%8s ): [ 0x%8s - 0x%8s ) prot = %c%c%s "
+		    "max_prot = %c%c%s\n",
+		    paddr (addr),
+		    paddr (*r_start), 
+		    paddr (*r_start + *r_size), 
+		    *prot & VM_PROT_COPY ? 'c' : '-',
+		    *prot & VM_PROT_NO_CHANGE ? '!' : '-',
+		    g_macosx_protection_strs[*prot & 7],
+		    *max_prot & VM_PROT_COPY ? 'c' : '-',
+		    *max_prot & VM_PROT_NO_CHANGE ? '!' : '-',
+		    g_macosx_protection_strs[*max_prot & 7]);
     }
   else
     {
-      r_info_size = VM_REGION_SUBMAP_INFO_COUNT_64;
-      kret = mach_vm_region_recurse (task, 
-				     r_start, r_size,
-				     & r_depth,
-				     (vm_region_recurse_info_t) &r_long_data, 
-				     &r_info_size);
-      *prot = r_long_data.protection;
+      mutils_debug ("macosx_vm_region ( 0x%8s ): ERROR %s\n",
+		    paddr (addr), MACH_ERROR_STRING (kret));
+      *r_start = 0;
+      *r_size = 0;
+      *prot = VM_PROT_NONE;
+      *max_prot = VM_PROT_NONE;
     }
-  
+  return kret;
+
+}
+
+
+static kern_return_t
+macosx_vm_region_recurse_long (task_t task, 
+			       mach_vm_address_t addr,
+			       mach_vm_address_t *r_start,
+			       mach_vm_size_t *r_size,
+			       vm_prot_t *prot,
+			       vm_prot_t *max_prot)
+{
+  vm_region_submap_info_data_64_t r_long_data;
+  mach_msg_type_number_t r_info_size;
+  natural_t r_depth;
+  kern_return_t kret;
+
+  r_info_size = VM_REGION_SUBMAP_INFO_COUNT_64;
+  r_depth = 1000;
+  *r_start = addr;
+    
+  kret = mach_vm_region_recurse (task, 
+				 r_start, r_size,
+				 & r_depth,
+				 (vm_region_recurse_info_t) &r_long_data, 
+				 &r_info_size);
+  if (kret == KERN_SUCCESS)
+    {
+      *prot = r_long_data.protection;
+      *max_prot = r_long_data.max_protection;
+      mutils_debug ("macosx_vm_region_recurse_long ( 0x%8s ): [ 0x%8s - 0x%8s ) "
+		    "depth = %d, prot = %c%c%s max_prot = %c%c%s\n",
+		    paddr (addr),
+		    paddr (*r_start), 
+		    paddr (*r_start + *r_size), 
+		    r_depth, 
+		    *prot & VM_PROT_COPY ? 'c' : '-',
+		    *prot & VM_PROT_NO_CHANGE ? '!' : '-',
+		    g_macosx_protection_strs[*prot & 7],
+		    *max_prot & VM_PROT_COPY ? 'c' : '-',
+		    *max_prot & VM_PROT_NO_CHANGE ? '!' : '-',
+		    g_macosx_protection_strs[*max_prot & 7]);
+    }
+  else
+    {
+      mutils_debug ("macosx_vm_region_recurse_long ( 0x%8s ): ERROR %s\n",
+		    paddr (addr), MACH_ERROR_STRING (kret));
+      *r_start = 0;
+      *r_size = 0;
+      *prot = VM_PROT_NONE;
+      *max_prot = VM_PROT_NONE;
+    }
+
   return kret;
 }
-/* However, if we have the short form defined, use a simpler version of
-   macosx_get_region_info that just uses the short form.  Ultimately,
-   we will just switch over to this function when we no longer need to
-   build on Tiger.  */
-#else
+
+
 static kern_return_t
-macosx_get_region_info (task_t task, 
-			mach_vm_address_t *r_start,
-			mach_vm_address_t *r_end,
-			mach_vm_size_t *r_size,
-			vm_prot_t *prot)
+macosx_vm_region_recurse_short (task_t task, 
+				mach_vm_address_t addr,
+				mach_vm_address_t *r_start,
+				mach_vm_size_t *r_size,
+				vm_prot_t *prot,
+				vm_prot_t *max_prot)
 {
   vm_region_submap_short_info_data_64_t r_short_data;
   mach_msg_type_number_t r_info_size;
   natural_t r_depth;
   kern_return_t kret;
 
-  r_depth = 1000;
   r_info_size = VM_REGION_SUBMAP_SHORT_INFO_COUNT_64;
+  r_depth = 1000;
+  *r_start = addr;
+
   kret = mach_vm_region_recurse (task, 
 				 r_start, r_size,
 				 & r_depth,
 				 (vm_region_recurse_info_t) &r_short_data, 
 				 &r_info_size);
-  *prot = r_short_data.protection;
+  if (kret == KERN_SUCCESS)
+    {
+      *prot = r_short_data.protection;
+      *max_prot = r_short_data.max_protection;
+      mutils_debug ("macosx_vm_region_recurse_short ( 0x%8s ): [ 0x%8s - 0x%8s ) "
+		    "depth = %d, prot = %c%c%s max_prot = %c%c%s\n",
+		    paddr (addr),
+		    paddr (*r_start), 
+		    paddr (*r_start + *r_size), 
+		    r_depth, 
+		    *prot & VM_PROT_COPY ? 'c' : '-',
+		    *prot & VM_PROT_NO_CHANGE ? '!' : '-',
+		    g_macosx_protection_strs[*prot & 7],
+		    *max_prot & VM_PROT_COPY ? 'c' : '-',
+		    *max_prot & VM_PROT_NO_CHANGE ? '!' : '-',
+		    g_macosx_protection_strs[*max_prot & 7]);
+    }
+  else
+    {
+      mutils_debug ("macosx_vm_region_recurse_short ( 0x%8s ): ERROR %s\n",
+		    paddr (addr), MACH_ERROR_STRING (kret));
+      *r_start = 0;
+      *r_size = 0;
+      *prot = VM_PROT_NONE;
+      *max_prot = VM_PROT_NONE;
+    }
   return kret;
 }
 
-#endif
+
+
+
+static kern_return_t
+macosx_vm_protect_range (task_t task,
+			 mach_vm_address_t region_start, 
+			 mach_vm_size_t region_size,
+			 mach_vm_address_t addr,
+			 mach_vm_size_t size,
+			 vm_prot_t prot,
+			 boolean_t set_max)
+{
+  kern_return_t kret;
+  mach_vm_address_t protect_addr;
+  mach_vm_size_t protect_size;
+
+  /* On Leopard we want to protect the smallest range possible.  */
+  protect_addr = addr;
+  protect_size = size;
+
+  kret = mach_vm_protect (task, protect_addr, protect_size, set_max, prot);
+  mutils_debug ("macosx_vm_protect_range ( 0x%8s ):  [ 0x%8s - 0x%8s ) %s = %c%c%s => %s\n",
+		paddr (addr),
+		paddr (protect_addr), 
+		paddr (protect_addr + protect_size), 
+		set_max ? "max_prot" : "prot",
+		prot & VM_PROT_COPY ? 'c' : '-',
+		prot & VM_PROT_NO_CHANGE ? '!' : '-',
+		g_macosx_protection_strs[prot & 7],
+		kret ? MACH_ERROR_STRING (kret) : "0");
+  return kret;
+}
+
+static kern_return_t
+macosx_vm_protect_region (task_t task,
+			  mach_vm_address_t region_start, 
+			  mach_vm_size_t region_size,
+			  mach_vm_address_t addr,
+			  mach_vm_size_t size,
+			  vm_prot_t prot,
+			  boolean_t set_max)
+{
+  kern_return_t kret;
+  mach_vm_address_t protect_addr;
+  mach_vm_size_t protect_size;
+  
+  /* On Tiger we want to set protections at the region level.  */
+  protect_addr = region_start;
+  protect_size = region_size;
+
+  kret = mach_vm_protect (task, protect_addr, protect_size, set_max, prot);
+
+  mutils_debug ("macosx_vm_protect_region ( 0x%8s ):  [ 0x%8s - 0x%8s ) %s = %c%c%s => %s\n",
+		paddr (addr),
+		paddr (protect_addr), 
+		paddr (protect_addr + protect_size), 
+		set_max ? "max_prot" : "prot",
+		prot & VM_PROT_COPY ? 'c' : '-',
+		prot & VM_PROT_NO_CHANGE ? '!' : '-',
+		g_macosx_protection_strs[prot & 7],
+		kret ? MACH_ERROR_STRING (kret) : "0");
+
+  return kret;
+}
+
+
+static kern_return_t
+macosx_get_region_info_both (task_t task, 
+			     mach_vm_address_t addr,
+			     mach_vm_address_t *r_start,
+			     mach_vm_size_t *r_size,
+			     vm_prot_t *prot,
+			     vm_prot_t *max_prot)
+{
+  static int use_short_info = 1;
+
+  kern_return_t kret;
+  
+  if (use_short_info)
+    {
+      kret = macosx_vm_region_recurse_short (task, addr, r_start, r_size, 
+					     prot, max_prot);
+
+      if (kret == KERN_INVALID_ARGUMENT)
+	{
+	  use_short_info = 0;
+	  mutils_debug ("vm_region_submap_short_info not supported, switching"
+			" to long info.\n");
+	  kret = macosx_vm_region_recurse_long (task, addr, r_start, r_size, 
+						prot, max_prot);
+	}
+    }
+  else
+    {
+      kret = macosx_vm_region_recurse_long (task, addr, r_start, r_size, 
+					    prot, max_prot);
+    }
+
+  return kret;
+}
 
 int
 mach_xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr,
                   int len, int write,
                   struct mem_attrib *attrib, struct target_ops *target)
 {
-  mach_vm_address_t r_start;
-  mach_vm_address_t r_end;
-  mach_vm_size_t r_size;
-  natural_t r_depth;
-  mach_port_t r_object_name;
+  mach_vm_address_t r_start = 0;
+  mach_vm_address_t r_end = 0;
+  mach_vm_size_t r_size = 0;
 
-  vm_prot_t orig_protection;
+  vm_prot_t orig_protection = 0;
+  vm_prot_t max_orig_protection = 0;
 
   CORE_ADDR cur_memaddr;
   gdb_byte *cur_myaddr;
   int cur_len;
 
   vm_size_t pagesize = child_get_pagesize ();
-  vm_machine_attribute_val_t flush = MATTR_VAL_CACHE_FLUSH;
   kern_return_t kret;
   int ret;
 
@@ -448,15 +665,13 @@ mach_xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr,
   
   /* check for case where memory available only at address greater than address specified */
   {
-    r_start = memaddr;
-
-    kret = macosx_get_region_info (macosx_status->task,
-				   &r_start, &r_end, &r_size,
-				   &orig_protection);
+    kret = macosx_get_region_info (macosx_status->task, memaddr, &r_start, &r_size,
+				   &orig_protection, &max_orig_protection);
     if (kret != KERN_SUCCESS)
       {
         return 0;
       }
+    
     if (r_start > memaddr)
       {
         if ((r_start - memaddr) <= MINUS_INT_MIN)
@@ -482,15 +697,13 @@ mach_xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr,
 
   while (cur_len > 0)
     {
+      int changed_protections = 0;
 
-      r_start = cur_memaddr;
-      
       /* We want the inner-most map containing our address, so set
 	 the recurse depth to some high value, and call mach_vm_region_recurse.  */
-
-      kret = macosx_get_region_info (macosx_status->task, 
-				     &r_start, &r_end, &r_size,
-				     &orig_protection);
+      kret = macosx_get_region_info (macosx_status->task, cur_memaddr,
+				     &r_start, &r_size, &orig_protection,
+				     &max_orig_protection);
       
       if (r_start > cur_memaddr)
         {
@@ -502,32 +715,48 @@ mach_xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr,
 
       if (write)
         {
-	  mach_vm_size_t prot_size;
-
-	  if (cur_len < r_size - (cur_memaddr - r_start))
-	    prot_size = cur_len;
+	  /* Keep the execute permission if we modify protections.  */
+	  vm_prot_t new_prot = VM_PROT_READ | VM_PROT_WRITE;
+	  	  
+	  /* Do we need to modify our protections?  */
+	  if (orig_protection & VM_PROT_WRITE)
+	    {
+	      /* We don't need to modify our protections.  */
+	      kret = KERN_SUCCESS;
+	      mutils_debug ("We already have write access to the region "
+			    "containing: 0x%s, skipping permission modification.\n",
+			    paddr_nz (cur_memaddr));
+	    }
 	  else
-	    prot_size = cur_memaddr - r_start;
+	    {
+	      changed_protections = 1;
+	      mach_vm_size_t prot_size;
 
-	  mutils_debug ("vm protect: start %s, size: %ld, read/write\n",
-			paddr_nz (cur_memaddr), prot_size);
+	      if (cur_len < r_size - (cur_memaddr - r_start))
+		prot_size = cur_len;
+	      else
+		prot_size = cur_memaddr - r_start;
 
-          kret = mach_vm_protect (macosx_status->task, cur_memaddr, prot_size, 0,
-				  VM_PROT_READ | VM_PROT_WRITE);
-          if (kret != KERN_SUCCESS)
-            {
-	      mutils_debug ("Without COPY failed: %s (0x%lx)\n",
-			    MACH_ERROR_STRING (kret), kret);
-              kret = mach_vm_protect (macosx_status->task, cur_memaddr, prot_size, 0,
-                                 VM_PROT_COPY | VM_PROT_READ | VM_PROT_WRITE);
-            }
-          if (kret != KERN_SUCCESS)
-            {
-              mutils_debug
-                ("Unable to add write access to region at 0x%s: %s (0x%lx)",
-                 paddr_nz (r_start), MACH_ERROR_STRING (kret), kret);
-              break;
-            }
+	      kret = macosx_vm_protect (macosx_status->task, r_start, r_size, 
+					cur_memaddr, prot_size, new_prot, 0);
+
+	      if (kret != KERN_SUCCESS)
+		{
+		  mutils_debug ("Without COPY failed: %s (0x%lx)\n",
+				MACH_ERROR_STRING (kret), kret);
+		  kret = macosx_vm_protect (macosx_status->task, r_start, r_size, 
+					    cur_memaddr, prot_size, 
+					    VM_PROT_COPY | new_prot, 0);
+		}
+
+	      if (kret != KERN_SUCCESS)
+		{
+		  mutils_debug
+		    ("Unable to add write access to region at 0x%s: %s (0x%lx)\n",
+		     paddr_nz (r_start), MACH_ERROR_STRING (kret), kret);
+		  break;
+		}
+	    }
         }
 
       r_end = r_start + r_size;
@@ -572,6 +801,7 @@ mach_xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr,
 	  /* This vm_machine_attribute isn't supported on i386,
 	     so let's not try.  */
 #if defined (TARGET_POWERPC)
+	  vm_machine_attribute_val_t flush = MATTR_VAL_CACHE_FLUSH;
           kret = vm_machine_attribute (macosx_status->task, r_start, r_size,
                                        MATTR_CACHE, &flush);
           if (kret != KERN_SUCCESS)
@@ -593,23 +823,25 @@ mach_xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr,
                 }
             }
 #endif
-	  mach_vm_size_t prot_size;
-	  if (cur_len < r_size - (cur_memaddr - r_start))
-	    prot_size = cur_len;
-	  else
-	    prot_size = cur_memaddr - r_start;
+	  /* Try and restore permissions on the minimal address range.  */
+	  if (changed_protections)
+	    {
+	      mach_vm_size_t prot_size;
+	      if (cur_len < r_size - (cur_memaddr - r_start))
+		prot_size = cur_len;
+	      else
+		prot_size = cur_memaddr - r_start;
 
-	  mutils_debug ("vm protect: start %s, size: 0x%llx, orig_prot: %d\n",
-			paddr_nz (cur_memaddr), prot_size, orig_protection);
-
-          kret = mach_vm_protect (macosx_status->task, cur_memaddr, prot_size, 0,
-                             orig_protection);
-          if (kret != KERN_SUCCESS)
-            {
-              mutils_debug
-                ("Unable to restore original permissions for region at 0x%s - error \"%s\" (%lu)\n",
-                 paddr_nz (cur_memaddr), MACH_ERROR_STRING (kret), (unsigned long) kret);
-            }
+	      kret = macosx_vm_protect (macosx_status->task, r_start, r_size, 
+					cur_memaddr, prot_size, 
+					orig_protection, 0);
+	      if (kret != KERN_SUCCESS)
+		{
+		  warning
+		    ("Unable to restore original permissions for region at 0x%s",
+		     paddr_nz (r_start));
+		}
+	    }
         }
 
 
@@ -625,6 +857,7 @@ mach_xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr,
 
   return len - cur_len;
 }
+
 
 LONGEST
 mach_xfer_partial (struct target_ops *ops,
@@ -719,40 +952,6 @@ macosx_pid_valid (int pid)
   mutils_debug ("kill (%d, 0) : ret = %d, errno = %d (%s)\n", pid,
                 ret, errno, strerror (errno));
   return ((ret == 0) || ((errno != ESRCH) && (errno != ECHILD)));
-}
-
-void
-mach_check_error (kern_return_t ret, const char *file,
-                  unsigned int line, const char *func)
-{
-  if (ret == KERN_SUCCESS)
-    {
-      return;
-    }
-  if (func == NULL)
-    {
-      func = "[UNKNOWN]";
-    }
-
-  error ("error on line %u of \"%s\" in function \"%s\": %s (0x%lx)\n",
-         line, file, func, MACH_ERROR_STRING (ret), (unsigned long) ret);
-}
-
-void
-mach_warn_error (kern_return_t ret, const char *file,
-                 unsigned int line, const char *func)
-{
-  if (ret == KERN_SUCCESS)
-    {
-      return;
-    }
-  if (func == NULL)
-    {
-      func = "[UNKNOWN]";
-    }
-
-  warning ("error on line %u of \"%s\" in function \"%s\": %s (0x%ux)",
-           line, file, func, MACH_ERROR_STRING (ret), ret);
 }
 
 thread_t
@@ -1452,7 +1651,7 @@ gc_print_references (CORE_ADDR list_addr, int wordsize)
 	  
       ui_out_text (uiout, " Kind: ");
 
-      if (kind >= AUTO_BLOCK_GLOBAL && kind < AUTO_BLOCK_BYTES)
+      if (kind >= AUTO_BLOCK_GLOBAL && kind <= AUTO_BLOCK_BYTES)
 	{
 	  ui_out_field_string (uiout, "kind", auto_kind_strings[kind]);
 	  ui_out_text (uiout, auto_kind_spacer[kind]);
@@ -1806,7 +2005,7 @@ gc_reference_tracing_command (char *arg, int from_tty)
 void
 _initialize_macosx_mutils ()
 {
-  mutils_stderr = fdopen (fileno (stderr), "w+");
+  mutils_stderr = fdopen (fileno (stderr), "w");
 
   add_setshow_boolean_cmd ("mutils", class_obscure,
 			   &mutils_debugflag, _("\

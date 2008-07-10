@@ -3,6 +3,8 @@
    ASM_SIMPLIFY_DWARF_ADDR hook.  */
 /* { dg-do compile } */
 /* { dg-options "-O2 -fpic -g" } */
+/* APPLE LOCAL -mdynamic-no-pic incompatible with -fpic */
+/* { dg-skip-if "Not valid with -mdynamic-no-pic" { *-*-darwin* } { "-mdynamic-no-pic" } { "" } } */
 /* { dg-warning "not supported" "PIC unsupported" { target cris-*-elf* mmix-*-* } 0 } */
 
 static inline char *

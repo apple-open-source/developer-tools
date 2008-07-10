@@ -395,4 +395,7 @@ extern struct objfile *symbol_file_add_bfd_using_objfile
 /* APPLE LOCAL: pick the slice of a fat file matching the current arch.  */
 bfd *open_bfd_matching_arch (bfd *archive_bfd, bfd_format expected_format);
 
+struct objfile *symbol_file_add_with_addrs_or_offsets_using_objfile (struct objfile *, bfd *, int, struct section_addr_info *, struct section_offsets *, int, int, int, int, CORE_ADDR, const char *, char *);
+
+
 #endif /* !defined(SYMFILE_H) */

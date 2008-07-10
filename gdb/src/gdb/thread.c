@@ -336,6 +336,8 @@ load_infrun_state (ptid_t ptid,
     tp->stepping_through_solib_catchpoints;
   *current_line = tp->current_line;
   *current_symtab = tp->current_symtab;
+
+  restore_thread_inlined_call_stack (ptid);
 }
 
 /* Save infrun state for the thread PID.  */
@@ -379,6 +381,8 @@ save_infrun_state (ptid_t ptid,
   tp->stepping_through_solib_catchpoints = stepping_through_solib_catchpoints;
   tp->current_line = current_line;
   tp->current_symtab = current_symtab;
+
+  save_thread_inlined_call_stack (ptid);
 }
 
 /* Return true if TP is an active thread. */
@@ -430,16 +434,22 @@ info_threads_command (char *arg, int from_tty)
   for (tp = thread_list; tp; tp = tp->next)
     {
       if (ptid_equal (tp->ptid, current_ptid))
-	printf_filtered ("* ");
+	ui_out_text (uiout, "* ");
       else
-	printf_filtered ("  ");
+	ui_out_text (uiout, "  ");
 
-      printf_filtered ("%d %s", tp->num, target_tid_to_str (tp->ptid));
+      ui_out_field_int (uiout, "threadno", tp->num);
+      ui_out_text (uiout, " ");
+      ui_out_field_string (uiout, "target_tid", target_tid_to_str (tp->ptid));
 
       extra_info = target_extra_thread_info (tp);
       if (extra_info)
-	printf_filtered (" (%s)", extra_info);
-      puts_filtered ("  ");
+	{
+	  ui_out_text (uiout, " (");
+	  ui_out_field_string (uiout, "extra_info", extra_info);
+	  ui_out_text (uiout, ")");
+	}
+      ui_out_text (uiout, "  ");
 
       switch_to_thread (tp->ptid);
       print_stack_frame (get_selected_frame (NULL), 0, LOCATION);
@@ -489,10 +499,12 @@ switch_to_thread (ptid_t ptid)
   if (ptid_equal (ptid, inferior_ptid))
     return;
 
+  save_thread_inlined_call_stack (inferior_ptid);
   inferior_ptid = ptid;
   flush_cached_frames ();
   registers_changed ();
   stop_pc = read_pc ();
+  restore_thread_inlined_call_stack (inferior_ptid);
   /* APPLE LOCAL begin subroutine inlining  */
   /* If the PC has changed since the last time we updated the
      global_inlined_call_stack data, we need to verify the current

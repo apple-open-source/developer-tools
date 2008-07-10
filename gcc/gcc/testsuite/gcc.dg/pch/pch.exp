@@ -28,8 +28,14 @@ set old_dg_do_what_default "${dg-do-what-default}"
 
 # APPLE LOCAL begin
 # Test MACOSX_DEPLOYMENT_TARGET 
-set macosx_deployment_target env(MACOSX_DEPLOYMENT_TARGET)
-setenv MACOSX_DEPLOYMENT_TARGET 10.2
+# Due to a TCL bug (Radar 5823211), unsetenv() does not work properly.
+# The var will be set to empty, not unset, and then the linker complains.
+#set macosx_deployment_target_saved 0
+#if [info exists env(MACOSX_DEPLOYMENT_TARGET)] {
+#    set macosx_deployment_target "$env(MACOSX_DEPLOYMENT_TARGET)"
+#    set macosx_deployment_target_saved 1
+#}
+#setenv MACOSX_DEPLOYMENT_TARGET 10.4
 set test "cfstring-1.c"
 set f [open $test w]
 set v 0
@@ -44,7 +50,13 @@ puts $f "int x;"
 puts $f ""
 close $f
 dg-pch $subdir $test [concat [list {-O0 -g}] $torture_without_loops] ".h"    
-set MACOSX_DEPLOYMENT_TARGET $macosx_deployment_target
+# Due to a TCL bug (Radar 5823211), unsetenv() does not work properly.
+# The var will be set to empty, not unset, and then the linker complains.
+#if { ${macosx_deployment_target_saved} == 1 } {
+#    setenv MACOSX_DEPLOYMENT_TARGET "$macosx_deployment_target"
+#} else {
+#    unsetenv MACOSX_DEPLOYMENT_TARGET
+#}
 file delete $test
 file delete $testh
 # APPLE LOCAL end

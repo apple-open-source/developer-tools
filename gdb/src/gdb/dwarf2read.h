@@ -31,8 +31,7 @@ struct oso_final_addr_tuple {
    addresses we find in the .o file DWARF entries.  */
 
 struct oso_to_final_addr_map {
-  char *pst_filename;
-
+  struct partial_symtab *pst;
   int entries;
   struct oso_final_addr_tuple *tuples;
   

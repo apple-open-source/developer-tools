@@ -1,5 +1,5 @@
 /* BFD back-end for mmo objects (MMIX-specific object-format).
-   Copyright 2001, 2002, 2003, 2004, 2005
+   Copyright 2001, 2002, 2003, 2004, 2005, 2006
    Free Software Foundation, Inc.
    Written by Hans-Peter Nilsson (hp@bitrange.com).
    Infrastructure and other bits originally copied from srec.c and
@@ -19,7 +19,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 /*
 SECTION
@@ -387,7 +387,7 @@ static void mmo_print_symbol (bfd *, void *, asymbol *,
 			      bfd_print_symbol_type);
 static bfd_boolean mmo_set_section_contents (bfd *, sec_ptr, const void *,
 					     file_ptr, bfd_size_type);
-static int mmo_sizeof_headers (bfd *, bfd_boolean);
+static int mmo_sizeof_headers (bfd *, struct bfd_link_info *);
 static long mmo_get_reloc_upper_bound (bfd *, asection *);
 static bfd_boolean mmo_internal_write_header (bfd *);
 static bfd_boolean mmo_internal_write_post (bfd *, int, asection *);
@@ -1853,6 +1853,7 @@ mmo_scan (bfd *abfd)
 		    rsec
 		      = bfd_make_section_old_way (abfd,
 						  MMIX_REG_CONTENTS_SECTION_NAME);
+		    rsec->flags |= SEC_LINKER_CREATED;
 		    rsec->vma = z * 8;
 		    loc = mmo_get_loc (rsec, z * 8, (255 - z) * 8);
 		    bfd_put_64 (abfd, first_octa, loc);
@@ -1916,7 +1917,7 @@ mmo_scan (bfd *abfd)
 		/* This must be the last 32-bit word in an mmo file.
 		   Let's find out.  */
 		struct stat statbuf;
-		long curpos = bfd_tell (abfd);
+		file_ptr curpos = bfd_tell (abfd);
 
 		if (bfd_stat (abfd, &statbuf) < 0)
 		  goto error_return;
@@ -2006,19 +2007,21 @@ mmo_scan (bfd *abfd)
    we point out the shape of allocated section contents.  */
 
 static bfd_boolean
-mmo_new_section_hook (bfd *abfd ATTRIBUTE_UNUSED, asection *newsect)
+mmo_new_section_hook (bfd *abfd, asection *newsect)
 {
-  /* We zero-fill all fields and assume NULL is represented by an all
-     zero-bit pattern.  */
-  newsect->used_by_bfd =
-    bfd_zalloc (abfd, sizeof (struct mmo_section_data_struct));
-
   if (!newsect->used_by_bfd)
-    return FALSE;
+    {
+      /* We zero-fill all fields and assume NULL is represented by an all
+	 zero-bit pattern.  */
+      newsect->used_by_bfd
+	= bfd_zalloc (abfd, sizeof (struct mmo_section_data_struct));
+      if (!newsect->used_by_bfd)
+	return FALSE;
+    }
 
   /* Always align to at least 32-bit words.  */
   newsect->alignment_power = 2;
-  return TRUE;
+  return _bfd_generic_new_section_hook (abfd, newsect);
 }
 
 /* We already have section contents loaded for sections that have
@@ -2146,6 +2149,7 @@ mmo_canonicalize_symtab (bfd *abfd, asymbol **alocation)
 	    {
 	      c->section
 		= bfd_make_section_old_way (abfd, MMIX_REG_SECTION_NAME);
+	      c->section->flags |= SEC_LINKER_CREATED;
 	    }
 	  else
 	    {
@@ -2227,7 +2231,7 @@ mmo_print_symbol (bfd *abfd, void *afile, asymbol *symbol,
 
 static int
 mmo_sizeof_headers (bfd *abfd ATTRIBUTE_UNUSED,
-		    bfd_boolean exec ATTRIBUTE_UNUSED)
+		    struct bfd_link_info *info ATTRIBUTE_UNUSED)
 {
   return 0;
 }
@@ -2417,10 +2421,10 @@ mmo_internal_write_section (bfd *abfd, asection *sec)
       bfd_set_error (bfd_error_bad_value);
       return FALSE;
     }
-  else if (strncmp (sec->name, MMIX_OTHER_SPEC_SECTION_PREFIX,
-		    strlen (MMIX_OTHER_SPEC_SECTION_PREFIX)) == 0)
+  else if (CONST_STRNEQ (sec->name, MMIX_OTHER_SPEC_SECTION_PREFIX))
     {
       int n = atoi (sec->name + strlen (MMIX_OTHER_SPEC_SECTION_PREFIX));
+
       mmo_write_tetra_raw (abfd, (LOP << 24) | (LOP_SPEC << 16) | n);
       return (! abfd->tdata.mmo_data->have_error
 	      && mmo_write_chunk_list (abfd, mmo_section_data (sec)->head));
@@ -3202,6 +3206,7 @@ mmo_canonicalize_reloc (bfd *abfd ATTRIBUTE_UNUSED,
 /* FIXME: We can do better on this one, if we have a dwarf2 .debug_line
    section or if MMO line numbers are implemented.  */
 #define mmo_find_nearest_line _bfd_nosymbols_find_nearest_line
+#define mmo_find_inliner_info _bfd_nosymbols_find_inliner_info
 #define mmo_make_empty_symbol _bfd_generic_make_empty_symbol
 #define mmo_bfd_make_debug_symbol _bfd_nosymbols_bfd_make_debug_symbol
 #define mmo_read_minisymbols _bfd_generic_read_minisymbols

@@ -124,7 +124,7 @@ static char *old_regs;
    down to continuation routines. */
 struct mi_timestamp *current_command_ts;
 
-static int do_timings = 0;
+static int do_timings = 1;
 
 /* Points to the current interpreter, used by the mi context callbacks.  */
 struct interp *mi_interp;
@@ -175,7 +175,13 @@ static void print_diff (struct mi_timestamp *start, struct mi_timestamp *end);
 static long wallclock_diff (struct mi_timestamp *start, struct mi_timestamp *end);
 static long user_diff (struct mi_timestamp *start, struct mi_timestamp *end);
 static long system_diff (struct mi_timestamp *start, struct mi_timestamp *end);
+static void start_remote_counts (struct mi_timestamp *tv, const char *token);
+static void end_remote_counts (struct mi_timestamp *tv);
 
+ /* When running a synchronous target, we would like to have interpreter-exec
+    give the same output as for an asynchronous one.  Use this to tell us that
+    it did run so we can fake up the output.  */
+ int mi_interp_exec_cmd_did_run;
 
 /* Command implementations. FIXME: Is this libgdb? No.  This is the MI
    layer that calls libgdb.  Any operation used in the below should be
@@ -289,15 +295,7 @@ mi_cmd_exec_interrupt (char *args, int from_tty)
       return MI_CMD_ERROR;
     }
     
-  if (0)
-    {
-      interrupt_target_command (args, from_tty);
-    }
-  else
-    {
-      int pid = PIDGET (inferior_ptid);
-      kill (pid, SIGINT);
-    }
+  interrupt_target_command (args, from_tty);
 
   if (current_command_token) {
     fputs_unfiltered (current_command_token, raw_stdout);
@@ -591,7 +589,12 @@ mi_cmd_thread_set_pc (char *command, char **argv, int argc)
      to set the CLI default source/line #'s and such.  */
   sal = find_pc_line (new_pc, 0);
   if (sal.symtab != s)
-    error ("mi_cmd_thread_set_pc: Found symtab '%s' by filename lookup, but symtab '%s' by PC lookup.", s->filename, sal.symtab->filename);
+    {
+      if (s == NULL || sal.symtab == NULL)
+        error ("mi_cmd_thread_set_pc: Found one symtab by filename lookup, but symtab another by PC lookup, and one of them is null.");
+      else
+        error ("mi_cmd_thread_set_pc: Found symtab '%s' by filename lookup, but symtab '%s' by PC lookup.", s->filename, sal.symtab->filename);
+    }
 
   /* By default we don't want to let someone set the PC into the middle
      of the prologue or the quality of their debugging experience will 
@@ -698,7 +701,6 @@ mi_cmd_file_fix_file (char *command, char **argv, int argc)
 {
   char *source_filename = NULL;
   char *bundle_filename = NULL;
-  char *object_filename = NULL;
   char *solib_filename = NULL;
   int optind = 0;
   char *optarg;
@@ -721,9 +723,7 @@ mi_cmd_file_fix_file (char *command, char **argv, int argc)
     {
       bundle_filename = argv[0];
       source_filename = argv[1];
-      if (argc == 3)
-        object_filename = argv[2];
-      fix_command_1 (source_filename, bundle_filename, object_filename, NULL);
+      fix_command_1 (source_filename, bundle_filename, NULL);
       return MI_CMD_DONE;
     }
 
@@ -747,8 +747,6 @@ mi_cmd_file_fix_file (char *command, char **argv, int argc)
           make_cleanup (xfree, source_filename);
           break;
         case OBJECT_OPT:
-          object_filename = xstrdup (optarg);
-          make_cleanup (xfree, object_filename);
           break;
         case SOLIB_OPT:
           solib_filename = xstrdup (optarg);
@@ -763,8 +761,7 @@ mi_cmd_file_fix_file (char *command, char **argv, int argc)
      error ("mi_cmd_file_fix_file: Usage -f source-filename -b bundle-filename "
             "[-o object-filename] [-s dylib-filename]");
 
-   fix_command_1 (source_filename, bundle_filename, object_filename, 
-                  solib_filename);
+   fix_command_1 (source_filename, bundle_filename, solib_filename);
 
    do_cleanups (wipe);
    return MI_CMD_DONE;
@@ -1044,7 +1041,7 @@ static int
 get_register (int regnum, int format)
 {
   gdb_byte buffer[MAX_REGISTER_SIZE];
-  int optim;
+  enum opt_state optim;
   int realnum;
   CORE_ADDR addr;
   enum lval_type lval;
@@ -1369,7 +1366,7 @@ mi_cmd_data_read_memory (char *command, char **argv, int argc)
   static struct mi_opt opts[] =
   {
     {"o", OFFSET_OPT, 1},
-    0
+    {0, 0, 0},
   };
 
   while (1)
@@ -1449,16 +1446,14 @@ mi_cmd_data_read_memory (char *command, char **argv, int argc)
   total_bytes = word_size * nr_rows * nr_cols;
   mbuf = xcalloc (total_bytes, 1);
   make_cleanup (xfree, mbuf);
-  nr_bytes = 0;
-  while (nr_bytes < total_bytes)
+
+  nr_bytes = target_read (&current_target, TARGET_OBJECT_MEMORY, NULL,
+			  mbuf, addr, total_bytes);
+  if (nr_bytes <= 0)
     {
-      int error;
-      long num = target_read_memory_partial (addr + nr_bytes, mbuf + nr_bytes,
-					     total_bytes - nr_bytes,
-					     &error);
-      if (num <= 0)
-	break;
-      nr_bytes += num;
+      do_cleanups (cleanups);
+      mi_error_message = xstrdup ("Unable to read memory.");
+      return MI_CMD_ERROR;
     }
 
   /* output the header information. */
@@ -1571,7 +1566,7 @@ mi_cmd_data_write_memory (char *command, char **argv, int argc)
   static struct mi_opt opts[] =
   {
     {"o", OFFSET_OPT, 1},
-    0
+    {0, 0, 0},
   };
 
   while (1)
@@ -1743,12 +1738,39 @@ captured_mi_execute_command (struct ui_out *uiout, void *data)
       if (do_timings)
 	current_command_ts = context->cmd_start;
 
+      /* Set this to 0 so we don't mistakenly think this command
+        caused the target to run under interpreter-exec.  */
+      mi_interp_exec_cmd_did_run = 0;
       args->rc = mi_cmd_execute (context);
 
+      /* Check if CURRENT_COMMAND_TS has been nulled out ... if the
+         mi_cmd_execute command completed the command and printed out
+         the timing information already (e.g. see mi_execute_async_cli_command)
+         we don't want to double-print.  */
+      if (current_command_ts == NULL)
+        context->cmd_start = NULL;
+
       if (do_timings)
+        {
           timestamp (&cmd_finished);
+          if (context->cmd_start)
+            end_remote_counts (context->cmd_start);
+        }
       
-      if (!target_can_async_p () || !target_executing
+      if (!target_can_async_p () && mi_interp_exec_cmd_did_run)
+        {
+          fputs_unfiltered ("(gdb) \n", raw_stdout);
+          gdb_flush (raw_stdout);
+          if (current_command_token)
+            {
+              fputs_unfiltered (current_command_token, raw_stdout);
+            }
+          fputs_unfiltered ("*stopped", raw_stdout);
+          mi_out_put (saved_uiout, raw_stdout);
+          mi_out_rewind (saved_uiout);
+          fputs_unfiltered ("\n", raw_stdout);
+        }
+      else if (!target_can_async_p () || !target_executing
 	  || mi_command_completes_while_target_executing (context->command))
 	{
 	  /* print the result if there were no errors 
@@ -1768,7 +1790,9 @@ captured_mi_execute_command (struct ui_out *uiout, void *data)
 	      /* Have to check cmd_start, since the command could be
 		 "mi-enable-timings". */
 	      if (do_timings && context->cmd_start)
+                {
 		  print_diff (context->cmd_start, &cmd_finished);
+                }
 	      fputs_unfiltered ("\n", raw_stdout);
 	    }
 	  else if (args->rc == MI_CMD_QUIET)
@@ -1881,7 +1905,10 @@ mi_interpreter_exec_continuation (struct continuation_arg *in_arg)
 
       fputs_unfiltered ("*stopped", raw_stdout);
       if (do_timings && arg && arg->timestamp)
-	print_diff_now (arg->timestamp);
+        {
+          end_remote_counts (arg->timestamp);
+	  print_diff_now (arg->timestamp);
+        }
       mi_out_put (uiout, raw_stdout);
       fputs_unfiltered ("\n", raw_stdout);
       
@@ -1893,7 +1920,10 @@ mi_interpreter_exec_continuation (struct continuation_arg *in_arg)
       if (target_can_async_p()) 
 	{
 	  if (arg && arg->timestamp)
-	    timestamp (arg->timestamp);
+            {
+	      timestamp (arg->timestamp);
+              start_remote_counts (arg->timestamp, arg->token);
+            }
 	  
 	  add_continuation (mi_interpreter_exec_continuation, 
 			  (struct continuation_arg *) arg);
@@ -1917,7 +1947,10 @@ mi_interpreter_exec_continuation (struct continuation_arg *in_arg)
 	    fputs_unfiltered (arg->token, raw_stdout);
 	  fputs_unfiltered ("*started", raw_stdout);
 	  if (do_timings && arg && arg->timestamp)
-	    print_diff_now (arg->timestamp);
+            {
+              end_remote_counts (arg->timestamp);
+	      print_diff_now (arg->timestamp);
+            }
 	  mi_out_put (uiout, raw_stdout);
 	  fputs_unfiltered ("\n", raw_stdout);
 	}
@@ -1957,6 +1990,7 @@ mi_execute_command (char *cmd, int from_tty)
 	  command->cmd_start = (struct mi_timestamp *)
 	    xmalloc (sizeof (struct mi_timestamp));
 	  timestamp (command->cmd_start);
+          start_remote_counts (command->cmd_start, command->token);
 	}
 
       args.command = command;
@@ -2122,6 +2156,20 @@ mi_execute_async_cli_command (char *mi, char *args, int from_tty)
       /* Do this before doing any printing.  It would appear that some
          print code leaves garbage around in the buffer. */
       do_cleanups (old_cleanups);
+
+      /* We should do whatever breakpoint actions are pending.
+       This works even if the breakpoint command causes the target
+       to continue, but we won't exit bpstat_do_actions here till
+       the target is all the way stopped.
+
+       Note, I am doing this before putting out the *stopped.  If we
+       told the UI that we had stopped & continued again, we would
+       have to figure out how to tell it that as well.  This is
+       easier.  If the command continues the target, the UI will
+       just think it hasn't stopped yet, which is probably also
+       okay.  */
+       bpstat_do_actions (&stop_bpstat);
+
       /* If the target was doing the operation synchronously we fake
          the stopped message. */
       if (current_command_token)
@@ -2130,7 +2178,12 @@ mi_execute_async_cli_command (char *mi, char *args, int from_tty)
         }
       fputs_unfiltered ("*stopped", raw_stdout);
       if (current_command_ts)
-	print_diff_now (current_command_ts);
+        {
+          end_remote_counts (current_command_ts);
+	  print_diff_now (current_command_ts);
+          xfree (current_command_ts);
+          current_command_ts = NULL;  /* Indicate that the ts was printed */
+        }
       return MI_CMD_QUIET;
     }
   else
@@ -2225,7 +2278,10 @@ mi_exec_error_cleanup (void *in_arg)
   fputs_unfiltered ("*stopped", raw_stdout);
   ui_out_field_string (uiout, "reason", "error");
   if (do_timings && arg && arg->timestamp)
-    print_diff_now (arg->timestamp);
+    {
+      end_remote_counts (arg->timestamp);
+      print_diff_now (arg->timestamp);
+    }
   mi_out_put (uiout, raw_stdout);
   fputs_unfiltered ("\n", raw_stdout);
   fputs_unfiltered ("(gdb) \n", raw_stdout);
@@ -2264,7 +2320,10 @@ mi_exec_async_cli_cmd_continuation (struct continuation_arg *in_arg)
 
       fputs_unfiltered ("*stopped", raw_stdout);
       if (do_timings && arg && arg->timestamp)
-	print_diff_now (arg->timestamp);
+        {
+          end_remote_counts (arg->timestamp);
+	  print_diff_now (arg->timestamp);
+        }
       mi_out_put (uiout, raw_stdout);
       fputs_unfiltered ("\n", raw_stdout);
       
@@ -2287,7 +2346,10 @@ mi_exec_async_cli_cmd_continuation (struct continuation_arg *in_arg)
 	  /* Reset the timer, we will just accumulate times for this
 	     command. */
 	  if (do_timings && arg && arg->timestamp)
-	    timestamp (arg->timestamp);
+            {
+	      timestamp (arg->timestamp);
+              start_remote_counts (arg->timestamp, arg->token);
+            }
 	  add_continuation (mi_exec_async_cli_cmd_continuation, 
 			    (struct continuation_arg *) arg);
 	}
@@ -2389,6 +2451,17 @@ route_output_through_mi (char *prefix, char *notification)
 
 }
 
+static void
+route_output_to_mi_result (const char *name, const char *string)
+{
+  struct ui_out *mi_uiout;
+  if (mi_interp != NULL)
+    {
+      mi_uiout = interp_ui_out (mi_interp);
+      ui_out_field_string (mi_uiout, name, string);
+    }
+}
+
 void
 mi_output_async_notification (char *notification)
 {
@@ -2411,6 +2484,43 @@ void
 mi_interp_continue_command_hook ()
 {
   output_control_change_notification("continuing");
+}
+
+static void
+mi_interp_sync_fake_running ()
+{
+  char *prefix;
+  int free_me = 0;
+
+  if (current_command_token)
+    {
+      prefix = xmalloc (strlen (current_command_token) + 2);
+      sprintf (prefix, "%s^", current_command_token);
+      free_me = 1;
+    }
+  else
+    prefix = "^";
+
+  route_output_through_mi (prefix,"running");
+  if (free_me)
+    xfree (prefix);
+  ui_out_set_annotation_printer (route_output_to_mi_result);
+}
+
+void
+mi_interp_sync_stepping_command_hook ()
+{
+  mi_interp_exec_cmd_did_run = 1;
+  output_control_change_notification("stepping");
+  mi_interp_sync_fake_running ();
+}
+
+void
+mi_interp_sync_continue_command_hook ()
+{
+  mi_interp_exec_cmd_did_run = 1;
+  output_control_change_notification("continuing");
+  mi_interp_sync_fake_running ();
 }
 
 int
@@ -2489,7 +2599,11 @@ free_continuation_arg (struct mi_continuation_arg *arg)
       if (arg->token)
 	xfree (arg->token);
       if (arg->timestamp)
-	xfree (arg->timestamp);
+        {
+          end_remote_counts (arg->timestamp);
+	  xfree (arg->timestamp);
+          arg->timestamp = NULL;
+        }
       xfree (arg);
     }
 }
@@ -2499,57 +2613,112 @@ free_continuation_arg (struct mi_continuation_arg *arg)
 
 static void 
 timestamp (struct mi_timestamp *tv)
-  {
-    gettimeofday (&tv->wallclock, NULL);
-    getrusage (RUSAGE_SELF, &tv->rusage);
-  }
+{
+  gettimeofday (&tv->wallclock, NULL);
+  getrusage (RUSAGE_SELF, &tv->rusage);
+  tv->remotestats.mi_token[0] = '\0';
+  tv->remotestats.assigned_to_global = 0;
+}
+
+/* The remote protocol packet counts are updated over in remote.c
+   which won't have access to the saved timestamps that are handled
+   here in mi-main.c so we need to push/pop a "current remote stats"
+   global whenever we start/end recording timestamp.. */
+
+static void
+start_remote_counts (struct mi_timestamp *tv, const char *token)
+{
+  /* Initialize the gdb remote packet counts; set this as the current
+     remote stats struct.  */
+  tv->remotestats.pkt_sent = 0;
+  tv->remotestats.pkt_recvd = 0;
+  tv->remotestats.acks_sent = 0;
+  tv->remotestats.acks_recvd = 0;
+  timerclear (&tv->remotestats.totaltime);
+  tv->saved_remotestats = current_remote_stats;
+  if (token)
+    {
+      int bufsz = sizeof (tv->remotestats.mi_token);
+      strncpy (tv->remotestats.mi_token, token, bufsz - 1);
+      tv->remotestats.mi_token[bufsz - 1] = '\0';
+    }
+  else
+    tv->remotestats.mi_token[0] = '\0';
+  current_remote_stats = &tv->remotestats;
+  tv->remotestats.assigned_to_global = 1;
+}
+
+static void
+end_remote_counts (struct mi_timestamp *tv)
+{
+  if (tv && tv->remotestats.assigned_to_global)
+    {
+      current_remote_stats = tv->saved_remotestats;
+      tv->remotestats.assigned_to_global = 0;
+    }
+}
 
 static void 
 print_diff_now (struct mi_timestamp *start)
-  {
-    struct mi_timestamp now;
-    timestamp (&now);
-    print_diff (start, &now);
-  }
+{
+  struct mi_timestamp now;
+  timestamp (&now);
+  print_diff (start, &now);
+}
 
 static void
 copy_timestamp (struct mi_timestamp *dst, struct mi_timestamp *src)
-  {
-    memcpy (dst, src, sizeof (struct mi_timestamp));
-  }
+{
+  memcpy (dst, src, sizeof (struct mi_timestamp));
+}
 
 static void 
 print_diff (struct mi_timestamp *start, struct mi_timestamp *end)
-  {
-    fprintf_unfiltered (raw_stdout,
-       ",time={wallclock=\"%0.5f\",user=\"%0.5f\",system=\"%0.5f\",start=\"%d.%06d\",end=\"%d.%06d\"}", 
-       wallclock_diff (start, end) / 1000000.0, 
-       user_diff (start, end) / 1000000.0, 
-       system_diff (start, end) / 1000000.0,
-       (int) start->wallclock.tv_sec, (int) start->wallclock.tv_usec,
-       (int) end->wallclock.tv_sec, (int) end->wallclock.tv_usec);
-  }
+{
+  fprintf_unfiltered (raw_stdout,
+     ",time={wallclock=\"%0.5f\",user=\"%0.5f\",system=\"%0.5f\",start=\"%d.%06d\",end=\"%d.%06d\"}", 
+     wallclock_diff (start, end) / 1000000.0, 
+     user_diff (start, end) / 1000000.0, 
+     system_diff (start, end) / 1000000.0,
+     (int) start->wallclock.tv_sec, (int) start->wallclock.tv_usec,
+     (int) end->wallclock.tv_sec, (int) end->wallclock.tv_usec);
+
+  /* If we have any remote protocol stats, print them.  */
+  if (start->remotestats.pkt_sent != 0 || start->remotestats.pkt_recvd != 0)
+    {
+      fprintf_unfiltered (raw_stdout,
+        ",remotestats={packets_sent=\"%d\",packets_received=\"%d\","
+        "acks_sent=\"%d\",acks_received=\"%d\","
+        "time=\"%0.5f\","
+        "total_packets_sent=\"%lld\",total_packets_received=\"%lld\"}",
+        start->remotestats.pkt_sent, start->remotestats.pkt_recvd,
+        start->remotestats.acks_sent, start->remotestats.acks_recvd,
+        (double) ((start->remotestats.totaltime.tv_sec * 1000000) + start->remotestats.totaltime.tv_usec) / 1000000.0,
+        total_packets_sent, total_packets_received);
+    }
+}
 
 static long 
 wallclock_diff (struct mi_timestamp *start, struct mi_timestamp *end)
-  {
-    return ((end->wallclock.tv_sec - start->wallclock.tv_sec) * 1000000) +
-           (end->wallclock.tv_usec - start->wallclock.tv_usec);
-  }
+{
+  struct timeval result;
+  timersub (&end->wallclock, &start->wallclock, &result);
+  return result.tv_sec * 1000000 + result.tv_usec;
+}
 
 static long 
 user_diff (struct mi_timestamp *start, struct mi_timestamp *end)
-  {
-    return 
-     ((end->rusage.ru_utime.tv_sec - start->rusage.ru_utime.tv_sec) * 1000000) +
-      (end->rusage.ru_utime.tv_usec - start->rusage.ru_utime.tv_usec);
-  }
+{
+  struct timeval result;
+  timersub (&(end->rusage.ru_utime), &(start->rusage.ru_utime), &result);
+  return result.tv_sec * 1000000 + result.tv_usec;
+}
 
 static long 
 system_diff (struct mi_timestamp *start, struct mi_timestamp *end)
-  {
-    return 
-     ((end->rusage.ru_stime.tv_sec - start->rusage.ru_stime.tv_sec) * 1000000) +
-      (end->rusage.ru_stime.tv_usec - start->rusage.ru_stime.tv_usec);
-  }
+{
+  struct timeval result;
+  timersub (&(end->rusage.ru_stime), &(start->rusage.ru_stime), &result);
+  return result.tv_sec * 1000000 + result.tv_usec;
+}
 /* APPLE LOCAL end mi */

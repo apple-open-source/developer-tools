@@ -77,6 +77,8 @@ struct ui_file *gdb_stdtargerr;
 
 /* Whether to enable writing into executable and core files */
 extern int write_files;
+/* APPLE LOCAL: Set the osabi via option.  */
+void set_osabi_option (const char *osabi_str);
 
 static void print_gdb_help (struct ui_file *);
 
@@ -125,6 +127,9 @@ captured_main (void *data)
   char *corearg = NULL;
   char *cdarg = NULL;
   char *ttyarg = NULL;
+  /* APPLE LOCAL: Set the osabi via option.  */
+  char *osabiarg = NULL;  
+
 
   /* These are static so that we can take their address in an initializer.  */
   static int print_help;
@@ -257,7 +262,8 @@ captured_main (void *data)
       OPT_NOWINDOWS,
       OPT_WINDOWS,
       OPT_WAITFOR,  /* APPLE LOCAL */
-      OPT_ARCH      /* APPLE LOCAL */
+      OPT_ARCH,     /* APPLE LOCAL */
+      OPT_OSABI	    /* APPLE LOCAL */
     };
     static struct option long_options[] =
     {
@@ -321,7 +327,9 @@ captured_main (void *data)
       {"waitfor", required_argument, 0, OPT_WAITFOR},
 /* APPLE LOCAL: */
       {"arch", required_argument, 0, OPT_ARCH},
-     {"l", required_argument, 0, 'l'},
+/* APPLE LOCAL: */
+      {"osabi", required_argument, 0, OPT_OSABI},
+      {"l", required_argument, 0, 'l'},
       {0, no_argument, 0, 0}
     };
 
@@ -375,15 +383,32 @@ captured_main (void *data)
 	    interpreter_p = xstrdup (INTERP_CONSOLE);
 	    use_windows = 0;
 	    break;
-          /* APPLE LOCAL: */
-          case OPT_WAITFOR:
-            attach_waitfor = (char *) xmalloc (10 + strlen (optarg));
-            sprintf (attach_waitfor, "-waitfor %s", optarg);
-            break;
+	  /* APPLE LOCAL: */
+	  case OPT_WAITFOR:
+	    attach_waitfor = (char *) xmalloc (10 + strlen (optarg));
+	    sprintf (attach_waitfor, "-waitfor %s", optarg);
+	    break;
 	  /* APPLE LOCAL: */
 	  case OPT_ARCH:
 	    initial_arch = xstrdup (optarg);
 	    break;
+	  /* APPLE LOCAL: Set the osabi via option. This option was 
+	     added along with a modification to the gdb driver shell script
+	     for armv6. Binaries with the "arm" architecture (ARM v4T)
+	     and "armv6" (ARM v6) can be inter mixed on armv6 capaable 
+	     targets since all instructions in the ARM v4T instruction set
+	     are present in the ARM v6 instruction set. The same gdb
+	     executable is used for both, and the osabi set/show variable
+	     controls which gets used for cross targets. We need to set this
+	     variable prior to loading any executables so that the correct
+	     slice of a fat file can be selected. Now gdb can be launched
+	     with the "armv6" arch along with an executable and the correct
+	     slice will be selected:
+	     gdb -arch armv6 <file>  */
+	  case OPT_OSABI:
+	    osabiarg = optarg;
+	    break;
+	  /* APPLE LOCAL END */
 	  case 'f':
 	    annotation_level = 1;
 /* We have probably been invoked from emacs.  Disable window interface.  */
@@ -719,6 +744,20 @@ extern int gdbtk_test (char *);
       else
 	warning ("invalid argument \"%s\" for \"--arch\", should be one of "
 		 "\"i386\" or \"x86_64\"\n", initial_arch);
+#elif defined (TARGET_ARM)
+      if (strcmp (initial_arch, "arm") == 0)
+	{
+	  arch_string = "arm";
+	  osabi_string = "Darwin";
+	}
+      else if (strcmp (initial_arch, "armv6") == 0)
+	{
+	  arch_string = "armv6";
+	  osabi_string = "DarwinV6";
+	}
+      else
+	warning ("invalid argument \"%s\" for \"--arch\", should be one of "
+		 "\"armv\" or \"armv6\"\n", initial_arch);
 #endif
       if (arch_string != NULL)
 	{
@@ -729,6 +768,11 @@ extern int gdbtk_test (char *);
 #else
   warning ("--arch option not supported in this gdb.");
 #endif
+
+  /* APPLE LOCAL BEGIN: Set the osabi via option.  */
+  if (osabiarg != NULL)
+    set_osabi_option (osabiarg);
+  /* APPLE LOCAL END */
 
   if (execarg != NULL
       && symarg != NULL
@@ -1001,6 +1045,7 @@ Options:\n\n\
   --xdb              XDB compatibility mode.\n\
   --waitfor=PROCNAME Poll continuously for PROCNAME to launch; attach to it.\n\
   --arch=ARCH        Run the slice of a Universal file given by ARCH.\n\
+  --osabi=OSABI      Set the osabi prior to loading any executables.\n\
 "), stream);
   fputs_unfiltered (_("\n\
 For more information, type \"help\" from within GDB, or consult the\n\

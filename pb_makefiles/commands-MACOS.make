@@ -77,6 +77,7 @@ ifneq "" "$(wildcard /bin/chgrp)"
 else
   CHGRP = /usr/bin/chgrp
 endif
+COMPRESSMANPAGES = $(MAKEFILEPATH)/bin/compress-man-pages.pl -d $(DSTROOT)
 
 AWK = /usr/bin/awk
 TR = /usr/bin/tr

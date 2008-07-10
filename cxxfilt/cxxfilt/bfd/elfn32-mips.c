@@ -23,7 +23,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 /* This file handles MIPS ELF targets.  SGI Irix 5 uses a slightly
    different MIPS ELF from other targets.  This matters when linking.
@@ -60,8 +60,6 @@ static bfd_reloc_status_type mips_elf_gprel32_reloc
 static bfd_reloc_status_type gprel32_with_gp
   (bfd *, asymbol *, arelent *, asection *, bfd_boolean, void *, bfd_vma);
 static bfd_reloc_status_type mips_elf_shift6_reloc
-  (bfd *, arelent *, asymbol *, void *, asection *, bfd *, char **);
-static bfd_reloc_status_type mips16_jump_reloc
   (bfd *, arelent *, asymbol *, void *, asection *, bfd *, char **);
 static bfd_reloc_status_type mips16_gprel_reloc
   (bfd *, arelent *, asymbol *, void *, asection *, bfd *, char **);
@@ -262,9 +260,11 @@ static reloc_howto_type elf_mips_howto_table_rel[] =
 	 0x0000ffff,		/* dst_mask */
 	 FALSE),		/* pcrel_offset */
 
-  /* 16 bit PC relative reference.  */
+  /* 16 bit PC relative reference.  Note that the ABI document has a typo
+     and claims R_MIPS_PC16 to be not rightshifted, rendering it useless.
+     We do the right thing here.  */
   HOWTO (R_MIPS_PC16,		/* type */
-	 0,			/* rightshift */
+	 2,			/* rightshift */
 	 2,			/* size (0 = byte, 1 = short, 2 = long) */
 	 16,			/* bitsize */
 	 TRUE,			/* pc_relative */
@@ -754,6 +754,21 @@ static reloc_howto_type elf_mips_howto_table_rel[] =
 	 0x0000ffff,		/* src_mask */
 	 0x0000ffff,		/* dst_mask */
 	 FALSE),		/* pcrel_offset */
+
+  /* 32 bit relocation with no addend.  */
+  HOWTO (R_MIPS_GLOB_DAT,	/* type */
+	 0,			/* rightshift */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 32,			/* bitsize */
+	 FALSE,			/* pc_relative */
+	 0,			/* bitpos */
+	 complain_overflow_dont, /* complain_on_overflow */
+	 _bfd_mips_elf_generic_reloc, /* special_function */
+	 "R_MIPS_GLOB_DAT",	/* name */
+	 FALSE,			/* partial_inplace */
+	 0x0,			/* src_mask */
+	 0xffffffff,		/* dst_mask */
+	 FALSE),		/* pcrel_offset */
 };
 
 /* The relocation table used for SHT_RELA sections.  */
@@ -913,9 +928,11 @@ static reloc_howto_type elf_mips_howto_table_rela[] =
 	 0x0000ffff,		/* dst_mask */
 	 FALSE),		/* pcrel_offset */
 
-  /* 16 bit PC relative reference.  */
+  /* 16 bit PC relative reference.  Note that the ABI document has a typo
+     and claims R_MIPS_PC16 to be not rightshifted, rendering it useless.
+     We do the right thing here.  */
   HOWTO (R_MIPS_PC16,		/* type */
-	 0,			/* rightshift */
+	 2,			/* rightshift */
 	 2,			/* size (0 = byte, 1 = short, 2 = long) */
 	 16,			/* bitsize */
 	 TRUE,			/* pc_relative */
@@ -1425,6 +1442,21 @@ static reloc_howto_type elf_mips_howto_table_rela[] =
 	 0x0000ffff,		/* src_mask */
 	 0x0000ffff,		/* dst_mask */
 	 FALSE),		/* pcrel_offset */
+
+  /* 32 bit relocation with no addend.  */
+  HOWTO (R_MIPS_GLOB_DAT,	/* type */
+	 0,			/* rightshift */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 32,			/* bitsize */
+	 FALSE,			/* pc_relative */
+	 0,			/* bitpos */
+	 complain_overflow_dont, /* complain_on_overflow */
+	 _bfd_mips_elf_generic_reloc, /* special_function */
+	 "R_MIPS_GLOB_DAT",	/* name */
+	 FALSE,			/* partial_inplace */
+	 0x0,			/* src_mask */
+	 0xffffffff,		/* dst_mask */
+	 FALSE),		/* pcrel_offset */
 };
 
 static reloc_howto_type elf_mips16_howto_table_rel[] =
@@ -1440,7 +1472,7 @@ static reloc_howto_type elf_mips16_howto_table_rel[] =
 	 			/* This needs complex overflow
 				   detection, because the upper four
 				   bits must match the PC.  */
-	 mips16_jump_reloc,	/* special_function */
+	 _bfd_mips_elf_generic_reloc, /* special_function */
 	 "R_MIPS16_26",		/* name */
 	 TRUE,			/* partial_inplace */
 	 0x3ffffff,		/* src_mask */
@@ -1512,7 +1544,7 @@ static reloc_howto_type elf_mips16_howto_table_rela[] =
 	 			/* This needs complex overflow
 				   detection, because the upper four
 				   bits must match the PC.  */
-	 mips16_jump_reloc,	/* special_function */
+	 _bfd_mips_elf_generic_reloc, /* special_function */
 	 "R_MIPS16_26",		/* name */
 	 FALSE,			/* partial_inplace */
 	 0x3ffffff,		/* src_mask */
@@ -1897,28 +1929,6 @@ mips_elf_shift6_reloc (bfd *abfd, arelent *reloc_entry, asymbol *symbol,
 				      error_message);
 }
 
-/* Handle a mips16 jump.  */
-
-static bfd_reloc_status_type
-mips16_jump_reloc (bfd *abfd ATTRIBUTE_UNUSED,
-		   arelent *reloc_entry ATTRIBUTE_UNUSED,
-		   asymbol *symbol ATTRIBUTE_UNUSED,
-		   void *data ATTRIBUTE_UNUSED,
-		   asection *input_section, bfd *output_bfd ATTRIBUTE_UNUSED,
-		   char **error_message ATTRIBUTE_UNUSED)
-{
-  static bfd_boolean warned = FALSE;
-
-  /* FIXME.  */
-  if (! warned)
-    (*_bfd_error_handler)
-      (_("Linking mips16 objects into %s format is not supported"),
-       bfd_get_target (input_section->output_section->owner));
-  warned = TRUE;
-
-  return bfd_reloc_undefined;
-}
-
 /* Handle a mips16 GP relative reloc.  */
 
 static bfd_reloc_status_type
@@ -1981,7 +1991,7 @@ static const struct elf_reloc_map mips_reloc_map[] =
   /* There is no BFD reloc for R_MIPS_REL32.  */
   { BFD_RELOC_CTOR, R_MIPS_32 },
   { BFD_RELOC_64, R_MIPS_64 },
-  { BFD_RELOC_16_PCREL, R_MIPS_PC16 },
+  { BFD_RELOC_16_PCREL_S2, R_MIPS_PC16 },
   { BFD_RELOC_HI16_S, R_MIPS_HI16 },
   { BFD_RELOC_LO16, R_MIPS_LO16 },
   { BFD_RELOC_GPREL16, R_MIPS_GPREL16 },
@@ -2065,8 +2075,6 @@ bfd_elf32_bfd_reloc_type_lookup (bfd *abfd ATTRIBUTE_UNUSED,
       return &elf_mips_gnu_vtinherit_howto;
     case BFD_RELOC_VTABLE_ENTRY:
       return &elf_mips_gnu_vtentry_howto;
-    case BFD_RELOC_16_PCREL_S2:
-      return &elf_mips_gnu_rela16_s2;
     default:
       bfd_set_error (bfd_error_bad_value);
       return NULL;
@@ -2315,12 +2323,15 @@ static const struct ecoff_debug_swap mips_elf32_ecoff_debug_swap = {
 #define elf_backend_create_dynamic_sections \
 					_bfd_mips_elf_create_dynamic_sections
 #define elf_backend_check_relocs	_bfd_mips_elf_check_relocs
+#define elf_backend_merge_symbol_attribute \
+					_bfd_mips_elf_merge_symbol_attribute
 #define elf_backend_adjust_dynamic_symbol \
 					_bfd_mips_elf_adjust_dynamic_symbol
 #define elf_backend_always_size_sections \
 					_bfd_mips_elf_always_size_sections
 #define elf_backend_size_dynamic_sections \
 					_bfd_mips_elf_size_dynamic_sections
+#define elf_backend_init_index_section	_bfd_elf_init_1_index_section
 #define elf_backend_relocate_section	_bfd_mips_elf_relocate_section
 #define elf_backend_finish_dynamic_symbol \
 					_bfd_mips_elf_finish_dynamic_symbol
@@ -2356,6 +2367,7 @@ static const struct ecoff_debug_swap mips_elf32_ecoff_debug_swap = {
 #define elf_backend_mips_irix_compat	elf_n32_mips_irix_compat
 #define elf_backend_mips_rtype_to_howto	mips_elf_n32_rtype_to_howto
 #define bfd_elf32_find_nearest_line	_bfd_mips_elf_find_nearest_line
+#define bfd_elf32_find_inliner_info	_bfd_mips_elf_find_inliner_info
 #define bfd_elf32_new_section_hook	_bfd_mips_elf_new_section_hook
 #define bfd_elf32_set_section_contents	_bfd_mips_elf_set_section_contents
 #define bfd_elf32_bfd_get_relocated_section_contents \
@@ -2377,10 +2389,8 @@ static const struct ecoff_debug_swap mips_elf32_ecoff_debug_swap = {
 #define TARGET_BIG_SYM                  bfd_elf32_nbigmips_vec
 #define TARGET_BIG_NAME                 "elf32-nbigmips"
 
-/* The SVR4 MIPS ABI says that this should be 0x10000, but Irix 5 uses
-   a value of 0x1000, and we are compatible.
-   FIXME: How does this affect NewABI?  */
-#define ELF_MAXPAGESIZE			0x1000
+#define ELF_MAXPAGESIZE			0x10000
+#define ELF_COMMONPAGESIZE		0x1000
 
 #include "elf32-target.h"
 
@@ -2391,15 +2401,15 @@ static const struct ecoff_debug_swap mips_elf32_ecoff_debug_swap = {
 #undef TARGET_BIG_NAME
 
 #undef ELF_MAXPAGESIZE
+#undef ELF_COMMONPAGESIZE
 
 #define TARGET_LITTLE_SYM               bfd_elf32_ntradlittlemips_vec
 #define TARGET_LITTLE_NAME              "elf32-ntradlittlemips"
 #define TARGET_BIG_SYM                  bfd_elf32_ntradbigmips_vec
 #define TARGET_BIG_NAME                 "elf32-ntradbigmips"
 
-/* The SVR4 MIPS ABI says that this should be 0x10000, and Linux uses
-   page sizes of up to that limit, so we need to respect it.  */
 #define ELF_MAXPAGESIZE			0x10000
+#define ELF_COMMONPAGESIZE		0x1000
 #define elf32_bed			elf32_tradbed
 
 /* Include the target file again for this target.  */

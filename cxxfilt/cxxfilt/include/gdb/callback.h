@@ -1,5 +1,5 @@
 /* Remote target system call callback support.
-   Copyright 1997 Free Software Foundation, Inc.
+   Copyright 1997, 2007 Free Software Foundation, Inc.
    Contributed by Cygnus Solutions.
 
 This file is part of GDB.
@@ -50,11 +50,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
 #ifndef va_start
 #include <ansidecl.h>
-#ifdef ANSI_PROTOTYPES
 #include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
 #endif
 /* Needed for enum bfd_endian.  */
 #include "bfd.h"

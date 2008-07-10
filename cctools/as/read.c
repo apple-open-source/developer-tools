@@ -73,6 +73,13 @@ char *input_line_pointer = NULL;
  */
 char *buffer_limit = NULL;	/* -> 1 + last char in buffer. */
 
+/* FROM line 164 */
+#define TARGET_BYTES_BIG_ENDIAN 0 /* HACK */
+/* TARGET_BYTES_BIG_ENDIAN is required to be defined to either 0 or 1
+   in the tc-<CPU>.h file.  See the "Porting GAS" section of the
+   internals manual.  */
+int target_big_endian = TARGET_BYTES_BIG_ENDIAN;
+
 /*
  * This table is used by the macros is_name_beginner() and is_part_of_name()
  * defined in read.h .
@@ -285,9 +292,9 @@ static const struct builtin_section builtin_sections[] = {
     /*
      * The text section must be first in this list as it is used by
      * read_a_source_file() to do the equivalent of a .text at the start
-     * of the file and for s_builtin_section() to set S_ATTR_PURE_INSTRUCTIONS.
+     * of the file.
      */
-    { "text",                "__TEXT", "__text" },
+    { "text",                "__TEXT", "__text", S_ATTR_PURE_INSTRUCTIONS },
     { "const",               "__TEXT", "__const" },
     { "static_const",        "__TEXT", "__static_const" },
     { "cstring",             "__TEXT", "__cstring", S_CSTRING_LITERALS },
@@ -386,7 +393,9 @@ static struct hash_control *ppcasm_po_hash = NULL;
  * The routines that implement the pseudo-ops.
  */
 #if !defined(I860) /* i860 has it's own align and org */
-static void s_align(int value);
+static void s_align(int value, int bytes_p);
+static void s_align_bytes(int arg);
+static void s_align_ptwo(int arg);
 static void s_org(int value);
 #endif
 static void s_private_extern(int value);
@@ -435,11 +444,14 @@ static void s_ppcasm_end(int value);
  */
 static const pseudo_typeS pseudo_table[] = {
 #if !defined(I860) /* i860 has it's own align and org */
-  { "align",	s_align,	1	},
-  { "align32",	s_align,	4	},
-  { "p2align",	s_align,	1	},
-  { "p2alignw",	s_align,	2	},
-  { "p2alignl",	s_align,	4	},
+  { "align",	s_align_ptwo,	1	},
+  { "align32",	s_align_ptwo,	4	},
+  { "p2align",	s_align_ptwo,	1	},
+  { "p2alignw",	s_align_ptwo,	2	},
+  { "p2alignl",	s_align_ptwo,	4	},
+  { "balign",	s_align_bytes,	1	},
+  { "balignw",	s_align_bytes,	2	},
+  { "balignl",	s_align_bytes,  4	},
   { "org",	s_org,		0	},
 #endif
 #ifndef M88K /* m88k has it's own abs that uses the s_abs() in here */
@@ -484,6 +496,7 @@ static const pseudo_typeS pseudo_table[] = {
   { "include",	s_include,	0	},
   { "macro",	s_macro,	0	},
   { "endmacro",	s_endmacro,	0	},
+  { "endm",	s_endmacro,	0	},
   { "macros_on",s_macros_on,	0	},
   { "macros_off",s_macros_off,	0	},
   { "if",	s_if,		0	},
@@ -847,7 +860,8 @@ char *buffer)
 			   hash_find(po_hash, s+1) to determine if it is one */
     char *the_macro;	/* pointer to a macro name returned by
 			   hash_find(ma_hash, s) to determine if it is one */
-    int digit_value;	/* the value of a digit label as an integer, 1: == 1 */
+    int temp;		/* the value of a number label as an integer, 1: == 1 */
+    char *backup;
 
 	/* since this is a buffer of full lines it must end in a new line */
 	know(buffer_limit[-1] == '\n');
@@ -1115,16 +1129,19 @@ char *buffer)
 
 	    /* local label  ("4:") */
 	    if(isdigit(c)){
-		digit_value = c - '0';
-		if(*input_line_pointer++ == ':' ){
-		    local_colon(digit_value);
+		backup = input_line_pointer;
+		temp = c - '0';
+		/* Read the whole number.  */
+		while(isdigit(*input_line_pointer))
+		{
+		    temp = (temp * 10) + *input_line_pointer - '0';
+		    ++input_line_pointer;
 		}
-		else{
-		    as_bad("Spurious digit %d.", digit_value);
-		    input_line_pointer--;
-		    ignore_rest_of_line();
+		if(*input_line_pointer++ == ':'){
+		    local_colon(temp);
+		    continue;
 		}
-		continue;
+		input_line_pointer = backup;
 	    }
 
 	    /*
@@ -1545,6 +1562,30 @@ int value)
 
 #if !defined(I860) /* i860 has it's own align and org */
 /*
+ * s_align_bytes() handles the .align pseudo-op where ".align 4" means align to
+ * a 4 byte boundary.
+ */
+static
+void
+s_align_bytes(
+int arg)
+{
+	s_align(arg, 1);
+}
+
+/*
+ * s_align_ptwo() handles the .align pseudo-op on where ".align 4" means align
+ * to a 2**4 boundary.
+ */
+static
+void
+s_align_ptwo
+(int arg)
+{
+	s_align(arg, 0);
+}
+
+/*
  * s_align() implements the pseudo ops
  *  .align    align_expression [ , 1byte_fill_expression [,max_bytes_to_fill]]
  *  .p2align  align_expression [ , 1byte_fill_expression [,max_bytes_to_fill]]
@@ -1554,14 +1595,16 @@ int value)
  * Where align_expression is a power of 2 alignment.
  * 
  * The parameter fill_size can only be 1, 2 or 4 which is the size of the
- * fill_expression.
+ * fill_expression.  If the parameter bytes_p is non-zero the alignment value
+ * is interpreted as the byte boundary, rather than the power of 2.
  */
 static
 void
 s_align(
-int fill_size)
+int fill_size,
+int bytes_p)
 {
-    int power_of_2_alignment;
+    int power_of_2_alignment, byte_alignment, i;
     long temp_fill, fill_specified, max_bytes_to_fill;
     char fill[4];
 
@@ -1569,7 +1612,19 @@ int fill_size)
 	    as_bad("Internal error, s_align() called with bad fill_size %d",
 		    fill_size);
 
-	power_of_2_alignment = get_absolute_expression();
+	if(bytes_p == 0){
+	    power_of_2_alignment = get_absolute_expression();
+	}
+	else{
+	    byte_alignment = get_absolute_expression();
+	    if(byte_alignment != 0){
+		for(i = 0; (byte_alignment & 1) == 0; i++)
+		    byte_alignment >>= 1;
+		if(byte_alignment != 1)
+		    as_bad("alignment not a power of 2");
+		power_of_2_alignment = i;
+	    }
+	}
 #define MAX_ALIGNMENT (15)
 	if(power_of_2_alignment > MAX_ALIGNMENT)
 	    as_warn("Alignment too large: %d. assumed.",
@@ -1675,6 +1730,7 @@ int value)
     char *p;
     signed_target_addr_t temp;
     symbolS *symbolP;
+    int power_of_2_alignment;
 
 	if(*input_line_pointer == '"')
 	    name = input_line_pointer + 1;
@@ -1696,6 +1752,19 @@ int value)
 	    ignore_rest_of_line();
 	    return;
 	}
+	power_of_2_alignment = 0;
+#define MAX_ALIGNMENT (15)
+	if(*input_line_pointer == ','){
+	    input_line_pointer++;
+	    power_of_2_alignment = get_absolute_expression();
+	    if(power_of_2_alignment > MAX_ALIGNMENT)
+		as_warn("Alignment too large: %d. assumed.",
+			power_of_2_alignment = MAX_ALIGNMENT);
+	    else if(power_of_2_alignment < 0){
+		as_warn("Alignment negative. 0 assumed.");
+		power_of_2_alignment = 0;
+	    }
+	}
 	*p = 0;
 	symbolP = symbol_find_or_make(name);
 	*p = c;
@@ -1715,6 +1784,7 @@ int value)
 	else{
 	    symbolP -> sy_value = temp;
 	    symbolP -> sy_type |= N_EXT;
+	    SET_COMM_ALIGN(symbolP->sy_desc, power_of_2_alignment);
 	}
 	know(symbolP->sy_frag == &zero_address_frag);
 	demand_empty_rest_of_line();
@@ -2013,7 +2083,7 @@ int value)
     char *name;
     char c;
     char *p;
-    int size;
+    signed_target_addr_t size;
     symbolS *symbolP;
     int align;
     static frchainS *bss = NULL;
@@ -2033,7 +2103,7 @@ int value)
 	}
 	input_line_pointer ++;
 	if((size = get_absolute_expression()) < 0){
-	    as_bad("BSS length (%d.) <0! Ignored.", size);
+	    as_bad("BSS length (" TA_DFMT ".) <0! Ignored.", size);
 	    ignore_rest_of_line();
 	    return;
 	}
@@ -2369,31 +2439,18 @@ const struct builtin_section *s)
 	    if((s->flags & SECTION_TYPE) == S_NON_LAZY_SYMBOL_POINTERS ||
 	       (s->flags & SECTION_TYPE) == S_LAZY_SYMBOL_POINTERS ||
 	       (s->flags & SECTION_TYPE) == S_SYMBOL_STUBS ||
+#if !(defined(I386) && defined(ARCH64))
 	       (s->flags & SECTION_TYPE) == S_MOD_INIT_FUNC_POINTERS ||
 	       (s->flags & SECTION_TYPE) == S_MOD_TERM_FUNC_POINTERS ||
-	       (s->flags & SECTION_ATTRIBUTES) != 0)
+#endif
+	       (s->flags & SECTION_ATTRIBUTES & ~S_ATTR_PURE_INSTRUCTIONS) != 0)
 		as_fatal("incompatible feature used: directive .%s (must "
 			 "specify \"-dynamic\" to be used)", s->directive);
 	}
-	/*
-	 * If we allowed to use the new features that are incompatible with 3.2
-	 * and this is the text section (which relys on the fact that the text
-	 * section is first in the built in sections list) then add the
-	 * S_ATTR_PURE_INSTRUCTIONS to the section attributes.
-	 */
-	if(flagseen['k'] && s == builtin_sections){
-	    frcP = section_new(s->segname, s->sectname,
-			       s->flags & SECTION_TYPE,
-			       (s->flags & SECTION_ATTRIBUTES) |
-					S_ATTR_PURE_INSTRUCTIONS,
-			       s->sizeof_stub);
-	}
-	else{
-	    frcP = section_new(s->segname, s->sectname,
-			       s->flags & SECTION_TYPE,
-			       s->flags & SECTION_ATTRIBUTES, 
-			       s->sizeof_stub);
-	}
+	frcP = section_new(s->segname, s->sectname,
+			   s->flags & SECTION_TYPE,
+			   s->flags & SECTION_ATTRIBUTES, 
+			   s->sizeof_stub);
 	if(frcP->frch_section.align < s->default_align)
 	    frcP->frch_section.align = s->default_align;
 	return(frcP->frch_nsect);
@@ -2430,6 +2487,7 @@ int value)
 	}
 	p = input_line_pointer - 1;
 
+	SKIP_WHITESPACE();
 	sectname = input_line_pointer;
 	do{
 	    d = *input_line_pointer++ ;
@@ -2588,6 +2646,7 @@ int value)
 	}
 	p = input_line_pointer - 1;
 
+	SKIP_WHITESPACE();
 	sectname = input_line_pointer;
 	do{
 	    d = *input_line_pointer++ ;
@@ -3107,13 +3166,18 @@ symbolS *symbolP)
 	    }
 	    else
 		as_bad("Complex expression. Absolute segment assumed." );
-	    /* fall through */
+	    symbolP->sy_type = N_ABS | ext;
+	    symbolP->sy_other = 0; /* NO_SECT */
+	    symbolP->sy_value = exp.X_add_number;
+	    symbolP->sy_frag = &zero_address_frag;
+	    break;
 
 	case SEG_ABSOLUTE:
 	    symbolP->sy_type = N_ABS | ext;
 	    symbolP->sy_other = 0; /* NO_SECT */
 	    symbolP->sy_value = exp.X_add_number;
 	    symbolP->sy_frag = &zero_address_frag;
+	    symbolP->expression = NULL;
 	    break;
 
 	case SEG_SECT:
@@ -3165,7 +3229,11 @@ int nbytes) /* nbytes == 1 for .byte, 2 for .word, 4 for .long, 8 for .quad */
     char *p;		/* points into the frag */
     segT segment;
     expressionS exp;
+#ifndef TC_CONS_FIX_NEW
+    fixS *fixP;
+#endif
 
+	memset(&exp, '\0', sizeof(exp));
 	/*
 	 * Input_line_pointer -> 1st char after pseudo-op-code and could legally
 	 * be a end-of-line. (Or, less legally an eof - which we cope with.)
@@ -3259,7 +3327,7 @@ int nbytes) /* nbytes == 1 for .byte, 2 for .word, 4 for .long, 8 for .quad */
 		    nbytes,
 		    &exp);
 #else
-		fix_new(frag_now,
+		fixP = fix_new(frag_now,
 			p - frag_now->fr_literal,
 			nbytes,
 			exp.X_add_symbol,
@@ -3268,6 +3336,12 @@ int nbytes) /* nbytes == 1 for .byte, 2 for .word, 4 for .long, 8 for .quad */
 			0,
 			0,
 			0);
+		/*
+		 * If we have the special assembly time constant expression
+		 * of the difference of two symbols defined in the same section 
+		 * then divided by exactly 2 mark the fix to indicate this.
+		 */
+		fixP->fx_sectdiff_divide_by_two = exp.X_sectdiff_divide_by_two;
 #endif
 		break;
 
@@ -4072,7 +4146,7 @@ int value)
 	    errorString = hash_insert(ma_hash, macro_name,
 				      obstack_finish(&macros));
 	    if(errorString != NULL && *errorString)
-		as_bad("The macro named \"%s\" is already defined",
+		as_warn("The macro named \"%s\" is already defined",
 			macro_name);
 	    macro_name = NULL;
 	}
@@ -4142,6 +4216,7 @@ char *macro_contents)
 	    else{
 		int parenthesis_depth = 0;
 		do{
+		    SKIP_WHITESPACE();
 		    c = *input_line_pointer++;
 		    if(parenthesis_depth){
 			if(c == ')')
@@ -4400,6 +4475,7 @@ int value)
     char *arch_name, c;
     struct arch_flag arch_flag;
     cpu_subtype_t new_cpusubtype;
+    const struct arch_flag *family_arch_flag;
 
 	arch_name = input_line_pointer;
 	/*
@@ -4411,26 +4487,32 @@ int value)
 	*--input_line_pointer = 0;
 
 	if(force_cpusubtype_ALL == FALSE){
-	    if(get_arch_from_flag(arch_name, &arch_flag) == 0){
+	    family_arch_flag = NULL;
+	    if(strcmp(arch_name, "all") == 0){
+		family_arch_flag = get_arch_family_from_cputype(md_cputype);
+		if(family_arch_flag != NULL)
+		    arch_flag = *family_arch_flag;
+	    }
+	    if(family_arch_flag == NULL &&
+	       get_arch_from_flag(arch_name, &arch_flag) == 0){
 		as_bad("unknown .machine argument: %s", arch_name);
+		return;
+	    }
+	    if(arch_flag.cputype != md_cputype){
+		as_bad("invalid .machine argument: %s", arch_name);
 	    }
 	    else{
-		if(arch_flag.cputype != md_cputype){
-		    as_bad("invalid .machine argument: %s", arch_name);
+		new_cpusubtype = cpusubtype_combine(md_cputype,
+						    md_cpusubtype,
+						    arch_flag.cpusubtype);
+		if(new_cpusubtype == -1){
+		    as_bad(".machine argument: %s can not be combined "
+			    "with previous .machine directives, -arch "
+			    "arguments or machine specific instructions",
+			    arch_name);
 		}
 		else{
-		    new_cpusubtype = cpusubtype_combine(md_cputype,
-						        md_cpusubtype,
-						        arch_flag.cpusubtype);
-		    if(new_cpusubtype == -1){
-			as_bad(".machine argument: %s can not be combined "
-				"with previous .machine directives, -arch "
-				"arguments or machine specific instructions",
-				arch_name);
-		    }
-		    else{
-			archflag_cpusubtype = new_cpusubtype;
-		    }
+		    archflag_cpusubtype = new_cpusubtype;
 		}
 	    }
 	}

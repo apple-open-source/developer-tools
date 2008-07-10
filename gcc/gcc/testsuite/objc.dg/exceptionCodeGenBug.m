@@ -1,6 +1,6 @@
 /* APPLE LOCAL file 4174405 */
-/* { dg-options "-Os -mdynamic-no-pic -framework Cocoa" } */
-/* { dg-do run } */
+/* { dg-options "-Os -mdynamic-no-pic -fobjc-exceptions -framework Cocoa" } */
+/* { dg-do run { target powerpc*-*-darwin* i?86*-*-darwin* } } */
 // /usr/bin/gcc-4.0 -x objective-c -arch i386 -pipe -Wno-trigraphs -fpascal-strings -fasm-blocks -Os -Wreturn-type -Wunused-variable -fmessage-length=0 fvisibility=hidden -mdynamic-no-pic -framework Cocoa exceptionCodeGen.m
 
 #import <Foundation/Foundation.h>

@@ -588,39 +588,7 @@ i386_align_code (fragP, count)
   static const char f32_1[] =
     {0x90};					/* nop			*/
   static const char f32_2[] =
-    {0x89,0xf6};				/* movl %esi,%esi	*/
-  static const char f32_3[] =
-    {0x8d,0x76,0x00};				/* leal 0(%esi),%esi	*/
-  static const char f32_4[] =
-    {0x8d,0x74,0x26,0x00};			/* leal 0(%esi,1),%esi	*/
-  static const char f32_5[] =
-    {0x90,					/* nop			*/
-     0x8d,0x74,0x26,0x00};			/* leal 0(%esi,1),%esi	*/
-  static const char f32_6[] =
-    {0x8d,0xb6,0x00,0x00,0x00,0x00};		/* leal 0L(%esi),%esi	*/
-  static const char f32_7[] =
-    {0x8d,0xb4,0x26,0x00,0x00,0x00,0x00};	/* leal 0L(%esi,1),%esi */
-  static const char f32_8[] =
-    {0x90,					/* nop			*/
-     0x8d,0xb4,0x26,0x00,0x00,0x00,0x00};	/* leal 0L(%esi,1),%esi */
-  static const char f32_9[] =
-    {0x89,0xf6,					/* movl %esi,%esi	*/
-     0x8d,0xbc,0x27,0x00,0x00,0x00,0x00};	/* leal 0L(%edi,1),%edi */
-  static const char f32_10[] =
-    {0x8d,0x76,0x00,				/* leal 0(%esi),%esi	*/
-     0x8d,0xbc,0x27,0x00,0x00,0x00,0x00};	/* leal 0L(%edi,1),%edi */
-  static const char f32_11[] =
-    {0x8d,0x74,0x26,0x00,			/* leal 0(%esi,1),%esi	*/
-     0x8d,0xbc,0x27,0x00,0x00,0x00,0x00};	/* leal 0L(%edi,1),%edi */
-  static const char f32_12[] =
-    {0x8d,0xb6,0x00,0x00,0x00,0x00,		/* leal 0L(%esi),%esi	*/
-     0x8d,0xbf,0x00,0x00,0x00,0x00};		/* leal 0L(%edi),%edi	*/
-  static const char f32_13[] =
-    {0x8d,0xb6,0x00,0x00,0x00,0x00,		/* leal 0L(%esi),%esi	*/
-     0x8d,0xbc,0x27,0x00,0x00,0x00,0x00};	/* leal 0L(%edi,1),%edi */
-  static const char f32_14[] =
-    {0x8d,0xb4,0x26,0x00,0x00,0x00,0x00,	/* leal 0L(%esi,1),%esi */
-     0x8d,0xbc,0x27,0x00,0x00,0x00,0x00};	/* leal 0L(%edi,1),%edi */
+    {0x66,0x90};				/* xchg %ax,%ax */
   static const char f32_15[] =
     {0xeb,0x0d,0x90,0x90,0x90,0x90,0x90,	/* jmp .+15; lotsa nops	*/
      0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90};
@@ -640,53 +608,80 @@ i386_align_code (fragP, count)
   static const char f16_8[] =
     {0x8d,0xb4,0x00,0x00,			/* lea 0w(%si),%si	*/
      0x8d,0xbd,0x00,0x00};			/* lea 0w(%di),%di	*/
-  static const char *const f32_patt[] = {
-    f32_1, f32_2, f32_3, f32_4, f32_5, f32_6, f32_7, f32_8,
-    f32_9, f32_10, f32_11, f32_12, f32_13, f32_14, f32_15
-  };
   static const char *const f16_patt[] = {
     f32_1, f32_2, f16_3, f16_4, f16_5, f16_6, f16_7, f16_8,
     f32_15, f32_15, f32_15, f32_15, f32_15, f32_15, f32_15
   };
+  /* nopl (%[re]ax) */
+  static const char alt_3[] =
+    {0x0f,0x1f,0x00};
+  /* nopl 0(%[re]ax) */
+  static const char alt_4[] =
+    {0x0f,0x1f,0x40,0x00};
+  /* nopl 0(%[re]ax,%[re]ax,1) */
+  static const char alt_5[] =
+    {0x0f,0x1f,0x44,0x00,0x00};
+  /* nopw 0(%[re]ax,%[re]ax,1) */
+  static const char alt_6[] =
+    {0x66,0x0f,0x1f,0x44,0x00,0x00};
+  /* nopl 0L(%[re]ax) */
+  static const char alt_7[] =
+    {0x0f,0x1f,0x80,0x00,0x00,0x00,0x00};
+  /* nopl 0L(%[re]ax,%[re]ax,1) */
+  static const char alt_8[] =
+    {0x0f,0x1f,0x84,0x00,0x00,0x00,0x00,0x00};
+  /* nopw 0L(%[re]ax,%[re]ax,1) */
+  static const char alt_9[] =
+    {0x66,0x0f,0x1f,0x84,0x00,0x00,0x00,0x00,0x00};
+  /* nopw %cs:0L(%[re]ax,%[re]ax,1) */
+  static const char alt_10[] =
+    {0x66,0x2e,0x0f,0x1f,0x84,0x00,0x00,0x00,0x00,0x00};
+  /* data16
+     nopw %cs:0L(%[re]ax,%[re]ax,1) */
+  static const char alt_short_11[] =
+    {0x0f,0x1f,0x44,0x00,0x00,
+     0x66,0x0f,0x1f,0x44,0x00,0x00};
+  /* nopw 0(%[re]ax,%[re]ax,1)
+     nopw 0(%[re]ax,%[re]ax,1) */
+  static const char alt_short_12[] =
+    {0x66,0x0f,0x1f,0x44,0x00,0x00,
+     0x66,0x0f,0x1f,0x44,0x00,0x00};
+  /* nopw 0(%[re]ax,%[re]ax,1)
+     nopl 0L(%[re]ax) */
+  static const char alt_short_13[] =
+    {0x66,0x0f,0x1f,0x44,0x00,0x00,
+     0x0f,0x1f,0x80,0x00,0x00,0x00,0x00};
+  /* nopl 0L(%[re]ax)
+     nopl 0L(%[re]ax) */
+  static const char alt_short_14[] =
+    {0x0f,0x1f,0x80,0x00,0x00,0x00,0x00,
+     0x0f,0x1f,0x80,0x00,0x00,0x00,0x00};
+  /* nopl 0L(%[re]ax)
+     nopl 0L(%[re]ax,%[re]ax,1) */
+  static const char alt_short_15[] =
+    {0x0f,0x1f,0x80,0x00,0x00,0x00,0x00,
+     0x0f,0x1f,0x84,0x00,0x00,0x00,0x00,0x00};
+  static const char *const alt_short_patt[] = {
+    f32_1, f32_2, alt_3, alt_4, alt_5, alt_6, alt_7, alt_8,
+    alt_9, alt_10, alt_short_11, alt_short_12, alt_short_13,
+    alt_short_14, alt_short_15
+  };
+  const char *const *patt = alt_short_patt;
 
   if (count <= 0 || count > 15)
     return;
 
-  /* The recommended way to pad 64bit code is to use NOPs preceded by
-     maximally four 0x66 prefixes.  Balance the size of nops.  */
-  if (flag_code == CODE_64BIT)
+  if (flag_code == CODE_16BIT)
     {
-      int i;
-      int nnops = (count + 3) / 4;
-      int len = count / nnops;
-      int remains = count - nnops * len;
-      int pos = 0;
-
-      for (i = 0; i < remains; i++)
-	{
-	  memset (fragP->fr_literal + fragP->fr_fix + pos, 0x66, len);
-	  fragP->fr_literal[fragP->fr_fix + pos + len] = 0x90;
-	  pos += len + 1;
-	}
-      for (; i < nnops; i++)
-	{
-	  memset (fragP->fr_literal + fragP->fr_fix + pos, 0x66, len - 1);
-	  fragP->fr_literal[fragP->fr_fix + pos + len - 1] = 0x90;
-	  pos += len;
-	}
+      memcpy (fragP->fr_literal + fragP->fr_fix,
+	      f16_patt[count - 1], count);
+      if (count > 8)
+	/* Adjust jump offset.  */
+	fragP->fr_literal[fragP->fr_fix + 1] = count - 2;
     }
   else
-    if (flag_code == CODE_16BIT)
-      {
-	memcpy (fragP->fr_literal + fragP->fr_fix,
-		f16_patt[count - 1], count);
-	if (count > 8)
-	  /* Adjust jump offset.  */
-	  fragP->fr_literal[fragP->fr_fix + 1] = count - 2;
-      }
-    else
-      memcpy (fragP->fr_literal + fragP->fr_fix,
-	      f32_patt[count - 1], count);
+    memcpy (fragP->fr_literal + fragP->fr_fix,
+	    patt[count - 1], count);
   fragP->fr_var = count;
 }
 
@@ -1587,7 +1582,9 @@ md_assemble (line)
   if (i.imm_operands)
     optimize_imm ();
 
-  if (i.disp_operands)
+  /* Don't optimize displacement for movabs since it only takes 64bit
+     displacement.  */
+  if (i.disp_operands && strcmp (mnemonic, "movabs") != 0)
     optimize_disp ();
 
   /* Next, we find a template that matches the given insn,
@@ -2291,37 +2288,51 @@ optimize_disp ()
   int op;
 
   for (op = i.operands; --op >= 0;)
-    if ((i.types[op] & Disp) && i.op[op].disps->X_op == O_constant)
+    if (i.types[op] & Disp)
       {
-	offsetT disp = i.op[op].disps->X_add_number;
+	if (i.op[op].disps->X_op == O_constant)
+	  {
+	    offsetT disp = i.op[op].disps->X_add_number;
 
-	if (i.types[op] & Disp16)
-	  {
-	    /* We know this operand is at most 16 bits, so
-	       convert to a signed 16 bit number before trying
-	       to see whether it will fit in an even smaller
-	       size.  */
-
-	    disp = (((disp & 0xffff) ^ 0x8000) - 0x8000);
+	    if ((i.types[op] & Disp16)
+		&& (disp & ~(offsetT) 0xffff) == 0)
+	      {
+		/* If this operand is at most 16 bits, convert
+		   to a signed 16 bit number and don't use 64bit
+		   displacement.  */
+		disp = (((disp & 0xffff) ^ 0x8000) - 0x8000);
+		i.types[op] &= ~Disp64;
+	      }
+	    if ((i.types[op] & Disp32)
+		&& (disp & ~(((offsetT) 2 << 31) - 1)) == 0)
+	      {
+		/* If this operand is at most 32 bits, convert
+		   to a signed 32 bit number and don't use 64bit
+		   displacement.  */
+		disp &= (((offsetT) 2 << 31) - 1);
+		disp = (disp ^ ((offsetT) 1 << 31)) - ((addressT) 1 << 31);
+		i.types[op] &= ~Disp64;
+	      }
+	    if (!disp && (i.types[op] & BaseIndex))
+	      {
+		i.types[op] &= ~Disp;
+		i.op[op].disps = 0;
+		i.disp_operands--;
+	      }
+	    else if (flag_code == CODE_64BIT)
+	      {
+		if (fits_in_signed_long (disp))
+		  i.types[op] |= Disp32S;
+		if (fits_in_unsigned_long (disp))
+		  i.types[op] |= Disp32;
+	      }
+	    if ((i.types[op] & (Disp32 | Disp32S | Disp16))
+		&& fits_in_signed_byte (disp))
+	      i.types[op] |= Disp8;
 	  }
-	else if (i.types[op] & Disp32)
-	  {
-	    /* We know this operand is at most 32 bits, so convert to a
-	       signed 32 bit number before trying to see whether it will
-	       fit in an even smaller size.  */
-	    disp &= (((offsetT) 2 << 31) - 1);
-	    disp = (disp ^ ((offsetT) 1 << 31)) - ((addressT) 1 << 31);
-	  }
-	if (flag_code == CODE_64BIT)
-	  {
-	    if (fits_in_signed_long (disp))
-	      i.types[op] |= Disp32S;
-	    if (fits_in_unsigned_long (disp))
-	      i.types[op] |= Disp32;
-	  }
-	if ((i.types[op] & (Disp32 | Disp32S | Disp16))
-	    && fits_in_signed_byte (disp))
-	  i.types[op] |= Disp8;
+	else
+	  /* We only support 64bit displacement on constants.  */
+	  i.types[op] &= ~Disp64;
       }
 }
 
@@ -2988,12 +2999,45 @@ process_operands ()
      is converted into xor %reg, %reg.  */
   if (i.tm.opcode_modifier & regKludge)
     {
-      unsigned int first_reg_op = (i.types[0] & Reg) ? 0 : 1;
-      /* Pretend we saw the extra register operand.  */
-      assert (i.op[first_reg_op + 1].regs == 0);
-      i.op[first_reg_op + 1].regs = i.op[first_reg_op].regs;
-      i.types[first_reg_op + 1] = i.types[first_reg_op];
-      i.reg_operands = 2;
+	if (i.tm.cpu_flags & CpuSSE4)
+	{
+	   /* The first operand in instruction blendvpd, blendvps and
+	      pblendvb in SSE4.1 is implicit and must be xmm0.  */
+	   assert (i.operands == 3
+		   && i.reg_operands >= 2
+		   && i.types[0] == RegXMM);
+	   if (i.op[0].regs->reg_num != 0)
+	     {
+	       if (intel_syntax)
+		 as_bad (_("the last operand of `%s' must be `%sxmm0'"),
+			 i.tm.name, "%");
+	       else
+		 as_bad (_("the first operand of `%s' must be `%sxmm0'"),
+			 i.tm.name, "%");
+	       return 0;
+	     }
+	   i.op[0] = i.op[1];
+	   i.op[1] = i.op[2];
+	   i.types[0] = i.types[1];
+	   i.types[1] = i.types[2];
+	   i.operands--;
+	   i.reg_operands--;
+
+	   /* We need to adjust fields in i.tm since they are used by
+	      build_modrm_byte.  */
+	   i.tm.operand_types [0] = i.tm.operand_types [1];
+	   i.tm.operand_types [1] = i.tm.operand_types [2];
+	   i.tm.operands--;
+	 }
+       else
+	 {
+	   unsigned int first_reg_op = (i.types[0] & Reg) ? 0 : 1;
+	   /* Pretend we saw the extra register operand.  */
+	   assert (i.op[first_reg_op + 1].regs == 0);
+	   i.op[first_reg_op + 1].regs = i.op[first_reg_op].regs;
+	   i.types[first_reg_op + 1] = i.types[first_reg_op];
+	   i.reg_operands = 2;
+	 }
     }
 
   if (i.tm.opcode_modifier & ShortForm)
@@ -3648,11 +3692,11 @@ output_insn ()
       unsigned int prefix_shift;
 #endif
 
-      /* All opcodes on i386 have either 1 or 2 bytes, PadLock instructions
-	 have 3 bytes.  We may use one more higher byte to specify a prefix
-	 the instruction requires.  */
-      if ((i.tm.cpu_flags & CpuPadLock) != 0
-	  && (i.tm.base_opcode & 0xff000000) != 0)
+      /* All opcodes on i386 have either 1 or 2 bytes, PadLock and SSE4
+	 instructions have 3 bytes.  We may use one more higher byte to specify
+	 a prefix the instruction requires.  */
+      if ((i.tm.cpu_flags & (CpuPadLock | CpuSSE4)) != 0 &&
+	  (i.tm.base_opcode & 0xff000000) != 0)
         {
 	  unsigned int prefix;
 	  prefix = (i.tm.base_opcode >> 24) & 0xff;
@@ -3665,8 +3709,10 @@ output_insn ()
 	if ((i.tm.cpu_flags & CpuPadLock) == 0
 #ifdef NeXT_MOD
 	    /* MNI instructions are one byte longer than others. */
-        && (((i.tm.cpu_flags & CpuMNI) == 0 && (i.tm.base_opcode & 0xff0000) != 0)
-	    || ((i.tm.cpu_flags & CpuMNI) != 0 && (i.tm.base_opcode & 0xff000000) != 0))
+        && (((i.tm.cpu_flags & CpuMNI) == 0 &&
+	     (i.tm.base_opcode & 0xff0000) != 0) ||
+	    ((i.tm.cpu_flags & CpuMNI) != 0 &&
+	     (i.tm.base_opcode & 0xff000000) != 0))
 #else
 	    && (i.tm.base_opcode & 0xff0000) != 0
 #endif
@@ -3700,7 +3746,7 @@ output_insn ()
       else
 	{
 #ifdef NeXT_MOD
-	  if ((i.tm.cpu_flags & (CpuPadLock | CpuMNI)) != 0)
+	  if ((i.tm.cpu_flags & (CpuPadLock | CpuMNI | CpuSSE4)) != 0)
 #else
 	  if ((i.tm.cpu_flags & CpuPadLock) != 0)
 #endif
@@ -6005,19 +6051,23 @@ x86_64_fixup_symbol(fixS *fix, int nsect, symbolS **sym)
 	 * does not start with 'L', is not a stab, and is in the same
 	 * section.
 	 *
-	 * Local labels in sections with fixed-size data, fixups in DWARF
-	 * debug sections, and local labels with no previous symbol in
-	 * their section are an exception to this rule.  We emit
+	 * Local labels in sections with fixed-size data and fixups in DWARF
+	 * debug sections are an exception to this rule.  We emit
 	 * non-external relocations for those, but the offset is the
 	 * RIP-relative offset, which is calculated from the end of the
 	 * instruction.  We assume that the fixP ends at the end of the
 	 * instruction.  We only make this adjustment for PC-relative
 	 * fixups.
+	 *
+	 * Local labels with no previous symbol in their section the symbol and
+	 * offset are left unchanged (even for PC-relative fixups).  So the
+	 * relocation will be done by our caller with the local symbol and no
+	 * relocation entry will be emitted.
 	 */
 	symbolS *prev_symbol;
 	long offset = 0;
 
-	if (sym != NULL && *sym != NULL && is_local_symbol(*sym) && (((*sym)->sy_type & N_SECT) == N_SECT))
+	if (sym != NULL && *sym != NULL && is_local_symbol(*sym) && (((*sym)->sy_type & N_SECT) == N_SECT) && !is_section_cstring_literals((*sym)->sy_other))
 	{
 		if (is_section_debug(nsect) || section_has_fixed_size_data((*sym)->sy_other))
 		{
@@ -6037,6 +6087,17 @@ x86_64_fixup_symbol(fixS *fix, int nsect, symbolS **sym)
 			}
 			else if (fix->fx_pcrel)
 			{
+			     /*
+			      * There is no previous symbol that is a non-local
+			      * symbol and this fix up is pc relative.  If this
+			      * symbol is defined in a section and the fix up is
+			      * for the same section, don't change the offset
+			      * becase the relocation must be done with the
+			      * local symbol to be correct.  And in this case no
+			      * relocation entry will need to be created.
+			      */
+			     if(((*sym)->sy_nlist.n_type & N_TYPE) == N_SECT &&
+				(*sym)->sy_nlist.n_sect != nsect)
 				offset -= md_pcrel_from(fix);
 			}
 		}
@@ -6053,7 +6114,7 @@ x86_64_fixup_symbol(fixS *fix, int nsect, symbolS **sym)
 		{
 			fix->fx_localsy = x86_64_resolve_local_symbol(fix->fx_localsy);
 		}
-		if (fix->fx_localsy == *sym)
+		if (fix->fx_localsy == *sym && fix->fx_r_type != X86_64_RELOC_GOT_LOAD)
 		{
 			/* We don't need a relocation entry for this fixup. */
 			fix->fx_pcrel_reloc = FALSE;

@@ -233,6 +233,8 @@ macosx_inferior_resume_mach (macosx_inferior_status *s, int count)
       kret = task_resume (s->task);
       if (kret != KERN_SUCCESS)
         {
+	  inferior_debug (2, "resume task failed, (suspend count: %d)\n",
+			  s->suspend_count);
           return kret;
         }
       s->suspend_count--;
@@ -292,9 +294,9 @@ macosx_inferior_resume_ptrace (macosx_inferior_status *s, unsigned int thread,
   if ((s->stopped_in_softexc) && (thread != 0))
     {
       if (call_ptrace (PTRACE_THUPDATE, s->pid, (PTRACE_ARG3_TYPE) thread, nsignal) != 0)
-        error ("Error calling ptrace (%s (0x%lx), %d, %d, %d): %s",
+        error ("Error calling ptrace (%s (0x%lx), %d, 0x%x, %d): %s",
                ptrace_request_unparse (PTRACE_THUPDATE),
-               (unsigned long) PTRACE_THUPDATE, s->pid, 1, nsignal,
+               (unsigned long) PTRACE_THUPDATE, s->pid, thread, nsignal,
                strerror (errno));
     }
 

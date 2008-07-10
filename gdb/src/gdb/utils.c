@@ -3476,3 +3476,50 @@ align_down (ULONGEST v, int n)
   gdb_assert (n && (n & (n-1)) == 0);
   return (v & -n);
 }
+
+/* Break up SCRATCH into an argument vector suitable for passing to
+   execvp and store it in ARGV.  E.g., on "run a b c d" this routine
+   would get as input the string "a b c d", and as output it would
+   fill in ARGV with the four arguments "a", "b", "c", "d".  */
+
+/* APPLE LOCAL: Moved this from fork-child since I need it in remote
+   and fork-child doesn't get built for a cross.  I also changed this
+   to report argv as well.  */
+void
+breakup_args (char *scratch, int *argc, char **argv)
+{
+  char *cp = scratch;
+
+  *argc = 0;
+
+  for (;;)
+    {
+      /* Scan past leading separators */
+      while (*cp == ' ' || *cp == '\t' || *cp == '\n')
+	cp++;
+
+      /* Break if at end of string.  */
+      if (*cp == '\0')
+	break;
+
+      /* Take an arg.  */
+      *argv++ = cp;
+      (*argc)++;
+
+      /* Scan for next arg separator */
+      while (!(*cp == '\0' || *cp == ' ' || *cp == '\t' || *cp == '\n'))
+	{
+	  cp++;
+	}
+
+      /* No separators => end of string => break */
+      if (*cp == '\0')
+	break;
+
+      /* Replace the separator with a terminator.  */
+      *cp++ = '\0';
+    }
+
+  /* Null-terminate the vector.  */
+  *argv = NULL;
+}

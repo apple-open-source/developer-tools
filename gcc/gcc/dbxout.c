@@ -424,10 +424,14 @@ const struct gcc_debug_hooks dbx_debug_hooks =
   dbxout_type_decl,			 /* type_decl */
   debug_nothing_tree_tree,               /* imported_module_or_decl */
   debug_nothing_tree,		         /* deferred_inline_function */
-  debug_nothing_tree,		         /* outlining_inline_function */
+  /* APPLE LOCAL begin mainline 2006-05-15 rewrite 4548482  */
+  debug_nothing_tree_loc,	         /* outlining_inline_function */
+  /* APPLE LOCAL end mainline 2006-05-15 rewrite 4548482  */
   debug_nothing_rtx,		         /* label */
   dbxout_handle_pch,		         /* handle_pch */
   debug_nothing_rtx,		         /* var_location */
+  /* APPLE LOCAL opt diary */
+  debug_nothing_od_msg_loc,              /* Optimization Diary Entry */
   0                                      /* start_end_main_source_file */
 };
 #endif /* DBX_DEBUGGING_INFO  */
@@ -455,10 +459,14 @@ const struct gcc_debug_hooks xcoff_debug_hooks =
   dbxout_type_decl,			 /* type_decl */
   debug_nothing_tree_tree,               /* imported_module_or_decl */
   debug_nothing_tree,		         /* deferred_inline_function */
-  debug_nothing_tree,		         /* outlining_inline_function */
+  /* APPLE LOCAL begin mainline 2006-05-15 rewrite 4548482  */
+  debug_nothing_tree_loc,	         /* outlining_inline_function */
+  /* APPLE LOCAL end mainline 2006-05-15 rewrite 4548482  */
   debug_nothing_rtx,		         /* label */
   dbxout_handle_pch,		         /* handle_pch */
   debug_nothing_rtx,		         /* var_location */
+  /* APPLE LOCAL opt diary */
+  debug_nothing_od_msg_loc,              /* Optimization Diary Entry */
   0                                      /* start_end_main_source_file */
 };
 #endif /* XCOFF_DEBUGGING_INFO  */
@@ -1044,13 +1052,13 @@ dbxout_function_end (tree decl)
 				
 #endif
 
-  /* APPLE LOCAL begin Essenstial Symbols */
+  /* APPLE LOCAL begin Essential Symbols */
   if (!NO_DBX_BNSYM_ENSYM)
     {
       dbxout_flush_type_queue ();
       dbxout_stabd (N_ENSYM, 0);
     }
-  /* APPLE LOCAL end Essenstial Symbols */
+  /* APPLE LOCAL end Essential Symbols */
 }
 #endif /* DBX_DEBUGGING_INFO */
 
@@ -1347,6 +1355,10 @@ dbxout_end_source_file (unsigned int line ATTRIBUTE_UNUSED)
   /* APPLE LOCAL dbxout_type rewrite.  */
   dbxout_flush_type_queue ();
 #ifdef DBX_USE_BINCL
+  /* APPLE LOCAL begin 4547137 */
+  if (!current_file)
+    return;
+  /* APPLE LOCAL end 4547137 */
   /* Emit EINCL stab only if BINCL is not pending.  */
   if (current_file->bincl_status == BINCL_PROCESSED)
     {
@@ -1539,9 +1551,8 @@ dbxout_finish (const char *filename ATTRIBUTE_UNUSED)
       if (fclose (dbx_out_file) != 0)
 	fatal_error ("error closing %s: %m", asm_file_name);
     }
-  /* APPLE LOCAL end ss2 */
-  /* APPLE LOCAL too many changes */
 }
+  /* APPLE LOCAL end ss2 */
 
 /* APPLE LOCAL begin dbxout_type rewrite.  */
 /* If TYPE is a qualified type then note this info in
@@ -2268,7 +2279,14 @@ dbxout_complete_type (tree type, tree main_variant)
       tree ttype;
 
       stabstr_C ('=');
-      stabstr_C ('B');
+
+      /* In Objective-C, EH handling mechanism volatizes variables.
+	 It is implementation detail and no need to put that info
+	 into stabs. This is true for Objective-C++ also. strncmp 
+	 check validates both languages.  */
+      if (strncmp (lang_hooks.name, "GNU Objective-C", 15)
+	  || !lookup_attribute ("objc_volatilized", TYPE_ATTRIBUTES (type)))
+	stabstr_C ('B');
       ttype = build_type_variant (type, 0, TYPE_READONLY (type)); /* ??? */
 
       dbxout_next_type_number (ttype);      
@@ -3924,6 +3942,15 @@ dbxout_parms (tree parms)
 	      number = INTVAL (XEXP (XEXP (DECL_RTL (parms), 0), 1));
 	    else
 	      number = 0;
+
+/* APPLE LOCAL begin ARM prefer SP to FP */
+#ifdef TARGET_ARM
+	    /* I'm not sure why this wasn't here in the first place --
+	       we surely need it.  */
+	    number = DEBUGGER_ARG_OFFSET (number,
+					  XEXP (DECL_RTL (parms), 0));
+#endif
+/* APPLE LOCAL end ARM prefer SP to FP */
 
 	    /* Make a big endian correction if the mode of the type of the
 	       parameter is not the same as the mode of the rtl.  */

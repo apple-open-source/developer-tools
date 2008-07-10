@@ -22,6 +22,7 @@ extern int flag_iasm_blocks;
 extern enum iasm_states iasm_state;
 extern bool iasm_in_decl;
 extern bool inside_iasm_block;
+extern bool iasm_kill_regs;
 extern bool iasm_at_bol;
 extern int iasm_in_operands;
 extern const cpp_token *iasm_split_next;

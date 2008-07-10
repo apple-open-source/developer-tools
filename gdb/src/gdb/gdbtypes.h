@@ -555,6 +555,12 @@ struct type
 /* C++ language-specific information for TYPE_CODE_STRUCT and TYPE_CODE_UNION
    nodes.  */
 
+enum runtime_type
+  {
+    CPLUS_RUNTIME,
+    OBJC_RUNTIME,
+  };
+
 struct cplus_struct_type
   {
     /* Number of base classes this type derives from.  The baseclasses are
@@ -587,6 +593,12 @@ struct cplus_struct_type
 #define DECLARED_TYPE_STRUCT 2
 #define DECLARED_TYPE_TEMPLATE 3
     short declared_type;	/* One of the above codes */
+
+    /* APPLE LOCAL: The struct cplus_struct_type actually gets used for
+       ObjC AND C++ Objects.  But for some things you need to treat ObjC
+       objects differently.  So we record here in the type which runtime
+       this object belongs to.  */
+    enum runtime_type runtime_type;
 
     /* For derived classes, the number of base classes is given by n_baseclasses
        and virtual_field_bits is a bit vector containing one bit per base class.
@@ -781,6 +793,25 @@ struct badness_vector
     int *rank;
   };
 
+/* APPLE LOCAL BEGIN: Helper function type defintions for easily 
+   building bitfield built in types.  */
+struct gdbtypes_enum_info
+  {
+    const char *name;
+    int32_t value;
+  };
+
+/* Struct used by  for quickly creating enumerations to be used with */
+struct gdbtypes_bitfield_info
+  {
+    const char *name;
+    struct type *type;
+    uint8_t msbit;
+    uint8_t lsbit;
+  };
+/* APPLE LOCAL END.  */
+
+
 /* The default value of TYPE_CPLUS_SPECIFIC(T) points to the
    this shared static structure. */
 
@@ -817,6 +848,8 @@ extern void allocate_cplus_struct_type (struct type *);
 #define TYPE_FIELDS(thistype) TYPE_MAIN_TYPE(thistype)->fields
 #define TYPE_TEMPLATE_ARGS(thistype) TYPE_CPLUS_SPECIFIC_NONULL(thistype)->template_args
 #define TYPE_INSTANTIATIONS(thistype) TYPE_CPLUS_SPECIFIC_NONULL(thistype)->instantiations
+/* APPLE LOCAL: Which runtime this type belongs to:  */
+#define TYPE_RUNTIME(thistype) (TYPE_CPLUS_SPECIFIC_NONULL(thistype)->runtime_type)
 
 #define TYPE_INDEX_TYPE(type) TYPE_FIELD_TYPE (type, 0)
 #define TYPE_LOW_BOUND(range_type) TYPE_FIELD_BITPOS (range_type, 0)
@@ -1278,6 +1311,8 @@ extern int get_discrete_bounds (struct type *, LONGEST *, LONGEST *);
 extern int get_array_bounds (struct type *, LONGEST *, LONGEST *, LONGEST *);
 
 extern int is_ancestor (struct type *, struct type *);
+/* APPLE LOCAL: Version where we only know the ancestor by name: */
+int is_ancestor_by_name (const char *base, struct type *dclass);
 
 extern int has_vtable (struct type *);
 
@@ -1383,5 +1418,16 @@ extern void maintenance_print_type (char *, int);
 /* APPLE LOCAL: This is to handle arrays whose element types were undefined
    when the array type was constructed.  */
 extern void cleanup_undefined_arrays (void);
+
+/* APPLE LOCAL BEGIN: Helper functions for easily building bitfield 
+   built in types.  */
+extern struct type *build_builtin_enum (const char *name, uint32_t size, 
+					int flags, struct gdbtypes_enum_info *, 
+					uint32_t n);
+
+extern struct type *build_builtin_bitfield (const char *name, uint32_t size, 
+					    struct gdbtypes_bitfield_info *, 
+					    uint32_t n);
+/* APPLE LOCAL END.  */
 
 #endif /* GDBTYPES_H */

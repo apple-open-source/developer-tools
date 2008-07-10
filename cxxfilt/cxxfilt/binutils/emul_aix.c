@@ -1,6 +1,6 @@
 /* Binutils emulation layer.
-   Copyright 2002, 2003 Free Software Foundation, Inc.
-   Written by Tom Rix, Redhat.
+   Copyright 2002, 2003, 2006 Free Software Foundation, Inc.
+   Written by Tom Rix, Red Hat Inc.
 
    This file is part of GNU Binutils.
 
@@ -16,7 +16,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #include "binemul.h"
 #include "bfdlink.h"
@@ -126,25 +126,25 @@ ar_emul_aix5_replace (bfd **after_bfd, char *file_name, bfd_boolean verbose)
 static bfd_boolean
 ar_emul_aix_parse_arg (char *arg)
 {
-  if (strncmp (arg, "-X32_64", 6) == 0)
+  if (CONST_STRNEQ (arg, "-X32_64"))
     {
       big_archive = TRUE;
       X32 = TRUE;
       X64 = TRUE;
     }
-  else if (strncmp (arg, "-X32", 3) == 0)
+  else if (CONST_STRNEQ (arg, "-X32"))
     {
       big_archive = TRUE;
       X32 = TRUE;
       X64 = FALSE;
     }
-  else if (strncmp (arg, "-X64", 3) == 0)
+  else if (CONST_STRNEQ (arg, "-X64"))
     {
       big_archive = TRUE;
       X32 = FALSE;
       X64 = TRUE;
     }
-  else if (strncmp (arg, "-g", 2) == 0)
+  else if (CONST_STRNEQ (arg, "-g"))
     {
       big_archive = FALSE;
       X32 = TRUE;
@@ -161,7 +161,6 @@ struct bin_emulation_xfer_struct bin_aix_emulation =
   ar_emul_aix_usage,
   ar_emul_aix_append,
   ar_emul_aix_replace,
-  ar_emul_default_create,
   ar_emul_aix_parse_arg,
 };
 
@@ -170,6 +169,5 @@ struct bin_emulation_xfer_struct bin_aix5_emulation =
   ar_emul_aix_usage,
   ar_emul_aix5_append,
   ar_emul_aix5_replace,
-  ar_emul_default_create,
   ar_emul_aix_parse_arg,
 };

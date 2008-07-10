@@ -1,0 +1,40 @@
+<plist version="1.0">
+<array>
+	<dict>
+		<key>OpenSourceProject</key>
+		<string>ksh</string>
+		<key>OpenSourceVersion</key>
+		<string>2007-03-28</string>
+		<key>OpenSourceWebsiteURL</key>
+		<string>http://public.research.att.com/~gsf/download/</string>
+		<key>OpenSourceURL</key>
+		<string>http://public.research.att.com/~gsf/download/tgz/ast-ksh.2007-03-28.tgz</string>
+		<key>OpenSourceSHA1</key>
+		<string>332c3acf640c899cd2de3531be6446b3c3edc617</string>
+		<key>OpenSourceImportDate</key>
+		<string>2007-05-18</string>
+		<key>OpenSourceLicense</key>
+		<string>Other</string>
+		<key>OpenSourceLicenseFile</key>
+		<string>ksh.txt</string>
+	</dict>
+	<dict>
+		<key>OpenSourceProject</key>
+		<string>ksh</string>
+		<key>OpenSourceVersion</key>
+		<string>2006-03-28</string>
+		<key>OpenSourceWebsiteURL</key>
+		<string>http://public.research.att.com/~gsf/download/</string>
+		<key>OpenSourceURL</key>
+		<string>http://public.research.att.com/~gsf/download/tgz/INIT.2007-03-28.tgz</string>
+		<key>OpenSourceSHA1</key>
+		<string>e74a912858533631ed24eb2714d4be7b46a60ab8</string>
+		<key>OpenSourceImportDate</key>
+		<string>2007-05-18</string>
+		<key>OpenSourceLicense</key>
+		<string>Other</string>
+		<key>OpenSourceLicenseFile</key>
+		<string>ksh.txt</string>
+	</dict>
+</array>
+</plist>

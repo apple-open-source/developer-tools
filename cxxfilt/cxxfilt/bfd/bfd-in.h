@@ -1,7 +1,8 @@
 /* Main header file for the bfd library -- portable access to object files.
 
    Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
+   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006
+   Free Software Foundation, Inc.
 
    Contributed by Cygnus Support.
 
@@ -19,7 +20,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #ifndef __BFD_H_SEEN__
 #define __BFD_H_SEEN__
@@ -41,6 +42,30 @@ extern "C" {
 #define CONCAT4(a,b,c,d) XCONCAT2(CONCAT2(a,b),CONCAT2(c,d))
 #endif
 #endif
+
+/* This is a utility macro to handle the situation where the code
+   wants to place a constant string into the code, followed by a
+   comma and then the length of the string.  Doing this by hand
+   is error prone, so using this macro is safer.  The macro will
+   also safely handle the case where a NULL is passed as the arg.  */
+#define STRING_COMMA_LEN(STR) (STR), ((STR) ? sizeof (STR) - 1 : 0)
+/* Unfortunately it is not possible to use the STRING_COMMA_LEN macro
+   to create the arguments to another macro, since the preprocessor
+   will mis-count the number of arguments to the outer macro (by not
+   evaluating STRING_COMMA_LEN and so missing the comma).  This is a
+   problem for example when trying to use STRING_COMMA_LEN to build
+   the arguments to the strncmp() macro.  Hence this alternative
+   definition of strncmp is provided here.
+   
+   Note - these macros do NOT work if STR2 is not a constant string.  */
+#define CONST_STRNEQ(STR1,STR2) (strncmp ((STR1), (STR2), sizeof (STR2) - 1) == 0)
+  /* strcpy() can have a similar problem, but since we know we are
+     copying a constant string, we can use memcpy which will be faster
+     since there is no need to check for a NUL byte inside STR.  We
+     can also save time if we do not need to copy the terminating NUL.  */
+#define LITMEMCPY(DEST,STR2) memcpy ((DEST), (STR2), sizeof (STR2) - 1)
+#define LITSTRCPY(DEST,STR2) memcpy ((DEST), (STR2), sizeof (STR2))
+
 
 /* The word size used by BFD on the host.  This may be 64 with a 32
    bit target if the host is 64 bit, or if other 64 bit targets have
@@ -135,6 +160,9 @@ typedef unsigned long bfd_size_type;
 #define sprintf_vma(s,x) sprintf (s, "%08lx", x)
 
 #endif /* not BFD64  */
+
+#define HALF_BFD_SIZE_TYPE \
+  (((bfd_size_type) 1) << (8 * sizeof (bfd_size_type) / 2))
 
 #ifndef BFD_HOST_64_BIT
 /* Fall back on a 32 bit type.  The idea is to make these types always
@@ -322,7 +350,8 @@ typedef struct bfd_section *sec_ptr;
   (((sec)->rawsize ? (sec)->rawsize : (sec)->size) \
    / bfd_octets_per_byte (bfd))
 
-typedef struct stat stat_type;
+/* Forward define.  */
+struct stat;
 
 typedef enum bfd_print_symbol
 {
@@ -370,8 +399,6 @@ struct bfd_hash_table
 {
   /* The hash array.  */
   struct bfd_hash_entry **table;
-  /* The number of slots in the hash table.  */
-  unsigned int size;
   /* A function used to create new elements in the hash table.  The
      first entry is itself a pointer to an element.  When this
      function is first invoked, this pointer will be NULL.  However,
@@ -384,6 +411,14 @@ struct bfd_hash_table
    /* An objalloc for this hash table.  This is a struct objalloc *,
      but we use void * to avoid requiring the inclusion of objalloc.h.  */
   void *memory;
+  /* The number of slots in the hash table.  */
+  unsigned int size;
+  /* The number of entries in the hash table.  */
+  unsigned int count;
+  /* The size of elements.  */
+  unsigned int entsize;
+  /* If non-zero, don't grow the hash table.  */
+  unsigned int frozen:1;
 };
 
 /* Initialize a hash table.  */
@@ -391,7 +426,8 @@ extern bfd_boolean bfd_hash_table_init
   (struct bfd_hash_table *,
    struct bfd_hash_entry *(*) (struct bfd_hash_entry *,
 			       struct bfd_hash_table *,
-			       const char *));
+			       const char *),
+   unsigned int);
 
 /* Initialize a hash table specifying a size.  */
 extern bfd_boolean bfd_hash_table_init_n
@@ -399,7 +435,7 @@ extern bfd_boolean bfd_hash_table_init_n
    struct bfd_hash_entry *(*) (struct bfd_hash_entry *,
 			       struct bfd_hash_table *,
 			       const char *),
-   unsigned int size);
+   unsigned int, unsigned int);
 
 /* Free up a hash table.  */
 extern void bfd_hash_table_free
@@ -629,27 +665,39 @@ enum dynamic_lib_link_class {
   DYN_NO_NEEDED = 8
 };
 
+enum notice_asneeded_action {
+  notice_as_needed,
+  notice_not_needed,
+  notice_needed
+};
+
 extern bfd_boolean bfd_elf_record_link_assignment
-  (bfd *, struct bfd_link_info *, const char *, bfd_boolean);
+  (bfd *, struct bfd_link_info *, const char *, bfd_boolean,
+   bfd_boolean);
 extern struct bfd_link_needed_list *bfd_elf_get_needed_list
   (bfd *, struct bfd_link_info *);
 extern bfd_boolean bfd_elf_get_bfd_needed_list
   (bfd *, struct bfd_link_needed_list **);
 extern bfd_boolean bfd_elf_size_dynamic_sections
   (bfd *, const char *, const char *, const char *, const char * const *,
-   struct bfd_link_info *, struct bfd_section **, struct bfd_elf_version_tree *);
+   struct bfd_link_info *, struct bfd_section **,
+   struct bfd_elf_version_tree *);
+extern bfd_boolean bfd_elf_size_dynsym_hash_dynstr
+  (bfd *, struct bfd_link_info *);
 extern void bfd_elf_set_dt_needed_name
   (bfd *, const char *);
 extern const char *bfd_elf_get_dt_soname
   (bfd *);
 extern void bfd_elf_set_dyn_lib_class
-  (bfd *, int);
+  (bfd *, enum dynamic_lib_link_class);
 extern int bfd_elf_get_dyn_lib_class
   (bfd *);
 extern struct bfd_link_needed_list *bfd_elf_get_runpath_list
   (bfd *, struct bfd_link_info *);
 extern bfd_boolean bfd_elf_discard_info
   (bfd *, struct bfd_link_info *);
+extern unsigned int _bfd_elf_default_action_discarded
+  (struct bfd_section *);
 
 /* Return an upper bound on the number of bytes required to store a
    copy of ABFD's program header table entries.  Return -1 if an error
@@ -694,8 +742,20 @@ extern int bfd_get_sign_extend_vma
 extern struct bfd_section *_bfd_elf_tls_setup
   (bfd *, struct bfd_link_info *);
 
+extern void _bfd_fix_excluded_sec_syms
+  (bfd *, struct bfd_link_info *);
+
+extern unsigned bfd_m68k_mach_to_features (int);
+
+extern int bfd_m68k_features_to_mach (unsigned);
+
 extern bfd_boolean bfd_m68k_elf32_create_embedded_relocs
-  (bfd *, struct bfd_link_info *, struct bfd_section *, struct bfd_section *, char **);
+  (bfd *, struct bfd_link_info *, struct bfd_section *, struct bfd_section *,
+   char **);
+
+extern bfd_boolean bfd_bfin_elf32_create_embedded_relocs
+  (bfd *, struct bfd_link_info *, struct bfd_section *, struct bfd_section *,
+   char **);
 
 /* SunOS shared library support routines for the linker.  */
 
@@ -704,7 +764,8 @@ extern struct bfd_link_needed_list *bfd_sunos_get_needed_list
 extern bfd_boolean bfd_sunos_record_link_assignment
   (bfd *, struct bfd_link_info *, const char *);
 extern bfd_boolean bfd_sunos_size_dynamic_sections
-  (bfd *, struct bfd_link_info *, struct bfd_section **, struct bfd_section **, struct bfd_section **);
+  (bfd *, struct bfd_link_info *, struct bfd_section **,
+   struct bfd_section **, struct bfd_section **);
 
 /* Linux shared library support routines for the linker.  */
 
@@ -785,6 +846,27 @@ extern bfd_boolean bfd_coff_set_symbol_class
 extern bfd_boolean bfd_m68k_coff_create_embedded_relocs
   (bfd *, struct bfd_link_info *, struct bfd_section *, struct bfd_section *, char **);
 
+/* ARM VFP11 erratum workaround support.  */
+typedef enum
+{
+  BFD_ARM_VFP11_FIX_DEFAULT,
+  BFD_ARM_VFP11_FIX_NONE,
+  BFD_ARM_VFP11_FIX_SCALAR,
+  BFD_ARM_VFP11_FIX_VECTOR
+} bfd_arm_vfp11_fix;
+
+extern void bfd_elf32_arm_init_maps
+  (bfd *);
+
+extern void bfd_elf32_arm_set_vfp11_fix
+  (bfd *, struct bfd_link_info *);
+
+extern bfd_boolean bfd_elf32_arm_vfp11_erratum_scan
+  (bfd *, struct bfd_link_info *);
+
+extern void bfd_elf32_arm_vfp11_fix_veneer_locations
+  (bfd *, struct bfd_link_info *);
+
 /* ARM Interworking support.  Called from linker.  */
 extern bfd_boolean bfd_arm_allocate_interworking_sections
   (struct bfd_link_info *);
@@ -810,16 +892,26 @@ extern bfd_boolean bfd_elf32_arm_allocate_interworking_sections
   (struct bfd_link_info *);
 
 extern bfd_boolean bfd_elf32_arm_process_before_allocation
-  (bfd *, struct bfd_link_info *, int);
+  (bfd *, struct bfd_link_info *);
 
 void bfd_elf32_arm_set_target_relocs
-  (struct bfd_link_info *, int, char *, int);
+  (struct bfd_link_info *, int, char *, int, int, bfd_arm_vfp11_fix);
 
 extern bfd_boolean bfd_elf32_arm_get_bfd_for_interworking
   (bfd *, struct bfd_link_info *);
 
 extern bfd_boolean bfd_elf32_arm_add_glue_sections_to_bfd
   (bfd *, struct bfd_link_info *);
+
+/* ELF ARM mapping symbol support */
+#define BFD_ARM_SPECIAL_SYM_TYPE_MAP	(1 << 0)
+#define BFD_ARM_SPECIAL_SYM_TYPE_TAG	(1 << 1)
+#define BFD_ARM_SPECIAL_SYM_TYPE_OTHER  (1 << 2)
+#define BFD_ARM_SPECIAL_SYM_TYPE_ANY	(~0)
+extern bfd_boolean bfd_is_arm_special_symbol_name
+  (const char * name, int type);
+
+extern void bfd_elf32_arm_set_byteswap_code (struct bfd_link_info *, int);
 
 /* ARM Note section processing.  */
 extern bfd_boolean bfd_arm_merge_machines

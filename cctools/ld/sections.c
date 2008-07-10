@@ -70,6 +70,7 @@
 #include "m88k_reloc.h"
 #include "hppa_reloc.h"
 #include "sparc_reloc.h"
+#include "arm_reloc.h"
 #include "sets.h"
 #include "hash_string.h"
 #include "layout.h"
@@ -185,10 +186,6 @@ static unsigned long ambiguous_specifications = 0;
 
 static void layout_ordered_section(
     struct merged_section *ms);
-static unsigned long align_to_input_mod(
-    unsigned long output_offset,
-    unsigned long input_offset,
-    unsigned long align);
 static void create_name_arrays(
     void);
 static struct archive_name *create_archive_name(
@@ -2011,13 +2008,14 @@ struct merged_section *ms)
 	if(load_map == TRUE || dead_strip == TRUE)
 	    create_order_load_maps(ms, order - 1);
 }
+#endif /* !RLD */
 
 /*
  * align_to_input_mod() is passed the current output_offset, and returns the
  * next output_offset aligned to the passed input offset modulus the passed
  * power of 2 alignment.
  */
-static
+__private_extern__
 unsigned long
 align_to_input_mod(
 unsigned long output_offset,
@@ -2034,6 +2032,7 @@ unsigned long align)
 	    return(round(output_offset, (1 << align)) + input_mod);
 }
 
+#ifndef RLD
 /*
  * is_literal_output_offset_live() is passed a pointer to a merged literal
  * section and an output_offset in there and returns if the literal for that
@@ -3637,6 +3636,9 @@ unsigned long *nextrel)
 		    else if(arch_flag.cputype == CPU_TYPE_I860)
 			i860_reloc(fake_contents, fake_relocs, map);
 #endif /* RLD */
+		    else if(arch_flag.cputype == CPU_TYPE_ARM)
+			arm_reloc(fake_contents, fake_relocs, &fake_map,
+				  NULL, 0);
 
 		    /* now pick up the correct resulting r_symbolnum */
 		    r_symbolnum = fake_relocs[0].r_symbolnum;
@@ -4017,6 +4019,8 @@ struct section_map *map)
 	else if(arch_flag.cputype == CPU_TYPE_I860)
 	    i860_reloc(contents, relocs, map);
 #endif /* RLD */
+	else if(arch_flag.cputype == CPU_TYPE_ARM)
+	    arm_reloc(contents, relocs, map, NULL, 0);
 	else
 	    fatal("internal error: output_section() called with unknown "
 		  "cputype (%d) set", arch_flag.cputype);
@@ -4296,6 +4300,9 @@ char *contents)
 			    map->fine_relocs[i].merged_symbol) == TRUE){
     			    value = map->fine_relocs[i].merged_symbol->
 				    nlist.n_value;
+			    if((map->fine_relocs[i].merged_symbol->
+				nlist.n_desc & N_ARM_THUMB_DEF))
+				value |= 1;
 			}
 			else if(map->fine_relocs[i].local_symbol == FALSE){
 			    undefined_map = bsearch(&index,
@@ -4316,6 +4323,8 @@ char *contents)
 				merged_symbol = (struct merged_symbol *)
 						merged_symbol->nlist.n_value;
 			    value = merged_symbol->nlist.n_value;
+			    if((merged_symbol->nlist.n_desc & N_ARM_THUMB_DEF))
+				value |= 1;
 			}
 			else{
 			    if(nlists[index].n_sect == NO_SECT)
@@ -4335,6 +4344,8 @@ char *contents)
 							nlists[index].n_value -
 							section_map->s->addr);
 			    }
+			    if((nlists[index].n_desc & N_ARM_THUMB_DEF))
+				value |= 1;
 			}
 			if(host_byte_sex != target_byte_sex)
 			    value = SWAP_LONG(value);
@@ -4411,6 +4422,9 @@ char *contents)
 			map->fine_relocs[i].merged_symbol) == TRUE){
 			value = map->fine_relocs[i].merged_symbol->
 				nlist.n_value;
+			if((map->fine_relocs[i].merged_symbol->
+			    nlist.n_desc & N_ARM_THUMB_DEF))
+			    value |= 1;
 		    }
 		    else if(map->fine_relocs[i].local_symbol == FALSE){
 			undefined_map = bsearch(&index,
@@ -4431,6 +4445,8 @@ char *contents)
 			    merged_symbol = (struct merged_symbol *)
 					    merged_symbol->nlist.n_value;
 			value = merged_symbol->nlist.n_value;
+			if((merged_symbol->nlist.n_desc & N_ARM_THUMB_DEF))
+			    value |= 1;
 		    }
 		    else{
 			if(nlists[index].n_sect == NO_SECT)
@@ -4450,6 +4466,8 @@ char *contents)
 						    nlists[index].n_value -
 						    section_map->s->addr);
 			}
+			if((nlists[index].n_desc & N_ARM_THUMB_DEF))
+			    value |= 1;
 		    }
 		    if(host_byte_sex != target_byte_sex)
 			value = SWAP_LONG(value);
@@ -5655,6 +5673,8 @@ struct object_file *obj)
 		generic_reloc(contents, relocs, map, FALSE, &refs, i);
 	    else if(arch_flag.cputype == CPU_TYPE_I386)
 		generic_reloc(contents, relocs, map, TRUE, &refs, i);
+	    else if(arch_flag.cputype == CPU_TYPE_ARM)
+	      arm_reloc(contents, relocs, map, &refs, i);
 	    else if(arch_flag.cputype == CPU_TYPE_MC88000 ||
 		    arch_flag.cputype == CPU_TYPE_HPPA ||
 		    arch_flag.cputype == CPU_TYPE_SPARC ||

@@ -1,5 +1,5 @@
 /* Internal demangler interface for g++ V3 ABI.
-   Copyright (C) 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
    Written by Ian Lance Taylor <ian@wasabisystems.com>.
 
    This file is part of the libiberty library, which is part of GCC.
@@ -25,7 +25,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA. 
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA. 
 */
 
 /* This file provides some definitions shared by cp-demangle.c and
@@ -123,10 +123,16 @@ struct d_info
   int expansion;
 };
 
+/* To avoid running past the ending '\0', don't:
+   - call d_peek_next_char if d_peek_char returned '\0'
+   - call d_advance with an 'i' that is too large
+   - call d_check_char(di, '\0')
+   Everything else is safe.  */
 #define d_peek_char(di) (*((di)->n))
 #define d_peek_next_char(di) ((di)->n[1])
 #define d_advance(di, i) ((di)->n += (i))
-#define d_next_char(di) (*((di)->n++))
+#define d_check_char(di, c) (d_peek_char(di) == c ? ((di)->n++, 1) : 0)
+#define d_next_char(di) (d_peek_char(di) == '\0' ? '\0' : *((di)->n++))
 #define d_str(di) ((di)->n)
 
 /* Functions and arrays in cp-demangle.c which are referenced by
@@ -137,8 +143,9 @@ struct d_info
 #define CP_STATIC_IF_GLIBCPP_V3 extern
 #endif
 
-CP_STATIC_IF_GLIBCPP_V3
-const struct demangle_operator_info cplus_demangle_operators[];
+#ifndef IN_GLIBCPP_V3
+extern const struct demangle_operator_info cplus_demangle_operators[];
+#endif
 
 #define D_BUILTIN_TYPE_COUNT (26)
 
@@ -148,14 +155,14 @@ cplus_demangle_builtin_types[D_BUILTIN_TYPE_COUNT];
 
 CP_STATIC_IF_GLIBCPP_V3
 struct demangle_component *
-cplus_demangle_mangled_name PARAMS ((struct d_info *, int));
+cplus_demangle_mangled_name (struct d_info *, int);
 
 CP_STATIC_IF_GLIBCPP_V3
 struct demangle_component *
-cplus_demangle_type PARAMS ((struct d_info *));
+cplus_demangle_type (struct d_info *);
 
 extern void
-cplus_demangle_init_info PARAMS ((const char *, int, size_t, struct d_info *));
+cplus_demangle_init_info (const char *, int, size_t, struct d_info *);
 
 /* cp-demangle.c needs to define this a little differently */
 #undef CP_STATIC_IF_GLIBCPP_V3

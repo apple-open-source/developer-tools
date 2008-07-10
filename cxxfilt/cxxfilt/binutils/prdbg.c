@@ -1,5 +1,5 @@
 /* prdbg.c -- Print out generic debugging information.
-   Copyright 1995, 1996, 1999, 2002, 2003, 2004
+   Copyright 1995, 1996, 1999, 2002, 2003, 2004, 2006
    Free Software Foundation, Inc.
    Written by Ian Lance Taylor <ian@cygnus.com>.
    Tags style generation written by Salvador E. Tropea <set@computer.org>.
@@ -18,8 +18,8 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 /* This file prints out the generic debugging information, by
    supplying a set of routines to debug_write.  */
@@ -724,8 +724,8 @@ pr_function_type (void *p, int argcount, bfd_boolean varargs)
 
   /* Now the return type is on the top of the stack.  */
 
-  s = (char *) xmalloc (len);
-  strcpy (s, "(|) (");
+  s = xmalloc (len);
+  LITSTRCPY (s, "(|) (");
 
   if (argcount < 0)
     strcat (s, "/* unknown */");
@@ -910,11 +910,10 @@ pr_method_type (void *p, bfd_boolean domain, int argcount, bfd_boolean varargs)
       domain_type = pop_type (info);
       if (domain_type == NULL)
 	return FALSE;
-      if (strncmp (domain_type, "class ", sizeof "class " - 1) == 0
+      if (CONST_STRNEQ (domain_type, "class ")
 	  && strchr (domain_type + sizeof "class " - 1, ' ') == NULL)
 	domain_type += sizeof "class " - 1;
-      else if (strncmp (domain_type, "union class ",
-			sizeof "union class ") == 0
+      else if (CONST_STRNEQ (domain_type, "union class ")
 	       && (strchr (domain_type + sizeof "union class " - 1, ' ')
 		   == NULL))
 	domain_type += sizeof "union class " - 1;
@@ -1317,7 +1316,7 @@ pr_class_baseclass (void *p, bfd_vma bitpos, bfd_boolean virtual,
   if (t == NULL)
     return FALSE;
 
-  if (strncmp (t, "class ", sizeof "class " - 1) == 0)
+  if (CONST_STRNEQ (t, "class "))
     t += sizeof "class " - 1;
 
   /* Push it back on to take advantage of the prepend_type and
@@ -2154,12 +2153,10 @@ tg_class_static_member (void *p, const char *name,
 
   len_var = strlen (name);
   len_class = strlen (info->stack->next->type);
-  full_name = (char *) xmalloc (len_var + len_class + 3);
+  full_name = xmalloc (len_var + len_class + 3);
   if (! full_name)
     return FALSE;
-  memcpy (full_name, info->stack->next->type, len_class);
-  memcpy (full_name + len_class, "::", 2);
-  memcpy (full_name + len_class + 2, name, len_var + 1);
+  sprintf (full_name, "%s::%s", info->stack->next->type, name);
 
   if (! substitute_type (info, full_name))
     return FALSE;
@@ -2199,7 +2196,7 @@ tg_class_baseclass (void *p, bfd_vma bitpos ATTRIBUTE_UNUSED,
   if (t == NULL)
     return FALSE;
 
-  if (strncmp (t, "class ", sizeof "class " - 1) == 0)
+  if (CONST_STRNEQ (t, "class "))
     t += sizeof "class " - 1;
 
   /* Push it back on to take advantage of the prepend_type and

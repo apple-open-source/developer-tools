@@ -40,6 +40,8 @@ extern int find_objc_msgcall (CORE_ADDR pc, CORE_ADDR *new_pc);
 
 void tell_objc_msgsend_cacher_objfile_changed (struct objfile *);
 
+void objc_clear_caches ();
+
 CORE_ADDR find_implementation (CORE_ADDR object, CORE_ADDR sel, int stret);
 
 extern char *parse_selector (char *method, char **selector);

@@ -200,7 +200,7 @@ classic_socket_exists_p (pid_t pid)
    because the process is running under a different uid and gdb isn't
    being run by root.)  */
 
-static int
+int
 is_pid_classic (pid_t pid)
 {
   int mib[] = { CTL_KERN, KERN_CLASSIC, pid };
@@ -249,10 +249,6 @@ can_attach (pid_t target_pid)
     {
       if (target_is_classic == 0)
           return 1;
-
-      /* Support debugging of classic runtime infrastructure */
-      if (target_is_classic == 1)
-        return 1;
 
       /* List processes we couldn't get classic status of.  Fixme - these
          are all processes running under other uids so we can't inspect

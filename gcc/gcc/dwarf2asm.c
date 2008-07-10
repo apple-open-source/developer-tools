@@ -126,7 +126,7 @@ dw2_asm_output_delta (int size, const char *lab1, const char *lab2,
   va_end (ap);
 }
 
-/* APPLE LOCAL begin dwarf 4383509 */
+/* APPLE LOCAL begin mainline 2006-03-16 dwarf 4383509 */
 /* Output a section-relative reference to a LABEL, which was placed in
    the section named BASE.  In general this can only be done for
    debugging symbols.  E.g. on most targets with the GNU linker, this
@@ -137,14 +137,14 @@ dw2_asm_output_delta (int size, const char *lab1, const char *lab2,
 void
 dw2_asm_output_offset (int size, const char *label, const char * base,
 		       const char *comment, ...)
-/* APPLE LOCAL end dwarf 4383509 */
+/* APPLE LOCAL end mainline 2006-03-16 dwarf 4383509 */
 {
   va_list ap;
 
   va_start (ap, comment);
 
 #ifdef ASM_OUTPUT_DWARF_OFFSET
-/* APPLE LOCAL dwarf 4383509 */
+/* APPLE LOCAL mainline 2006-03-16 dwarf 4383509 */
   ASM_OUTPUT_DWARF_OFFSET (asm_out_file, size, label, base);
 #else
   dw2_assemble_integer (size, gen_rtx_SYMBOL_REF (Pmode, label));

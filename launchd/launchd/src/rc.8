@@ -1,0 +1,29 @@
+.Dd May 31, 2006
+.Dt RC 8
+.Os Darwin
+.Sh NAME
+.Nm rc
+.Nd command script for boot
+.Sh SYNOPSIS
+.Nm rc
+.Nm rc.local
+.Sh DESCRIPTION
+Prior to Mac OS X 10.5, the
+.Nm rc
+script
+was used to bootstrap the OS. As of Leopard, the system is self-bootstrapped via
+.Xr launchd 8
+which uses the
+.Xr launchctl 1
+bootstrap subcommand to read in launchd jobs from the standard locations.
+For compatibility reasons, the
+.Nm rc.local
+script still continues to work.
+.Pp
+The startup file
+.Nm rc.local
+reside in
+.Pa /etc .
+.Sh SEE ALSO
+.Xr launchd 8 ,
+.Xr launchctl 1

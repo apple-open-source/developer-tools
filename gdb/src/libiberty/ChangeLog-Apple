@@ -1,3 +1,8 @@
+2008-03-27  Jason Molenda  (jmolenda@apple.com)
+
+	* cplus-dem.c, cp-demangle.h, cp-demangle.c:  Imported the versions
+	circa 2007-05-08 from the FSF cvs repository.
+
 2007-01-23  Jason Molenda  (jmolenda@apple.com)
 
 	* configure: Regenerated with autoconf-2.61 to handle dSYM files

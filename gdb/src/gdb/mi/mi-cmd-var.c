@@ -1123,7 +1123,8 @@ varobj_update_one (struct varobj *var, enum print_values print_values)
   /* nc == 0 means that nothing has changed.
      nc == -1 means that an error occured in updating the variable.
      nc == -2 means the variable has changed type. 
-     nc == -3 means that the variable has gone out of scope. */
+     nc == -3 means that the variable has gone out of scope. 
+     nc == -4 means that the variable has come in to scope.  */
      
   if (nc == 0)
     return 1;
@@ -1133,6 +1134,15 @@ varobj_update_one (struct varobj *var, enum print_values print_values)
       cleanup = make_cleanup_ui_out_tuple_begin_end (uiout, "varobj");
       ui_out_field_string (uiout, "name", varobj_get_objname(var));
       ui_out_field_string (uiout, "in_scope", "false");
+      do_cleanups (cleanup);
+      return -1;
+    }
+  else if (nc == -4)
+    {
+      /* APPLE LOCAL: each varobj tuple is named with VAROBJ; not anonymous */
+      cleanup = make_cleanup_ui_out_tuple_begin_end (uiout, "varobj");
+      ui_out_field_string (uiout, "name", varobj_get_objname(var));
+      ui_out_field_string (uiout, "in_scope", "true");
       do_cleanups (cleanup);
       return -1;
     }

@@ -1,5 +1,5 @@
 /* BFD back-end for Intel 386 COFF files (DJGPP variant with a stub).
-   Copyright 1997, 1998, 1999, 2000, 2001, 2002 Free Software Foundation, Inc.
+   Copyright 1997, 1998, 1999, 2000, 2001, 2002, 2006 Free Software Foundation, Inc.
    Written by Robert Hoehne.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -16,7 +16,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 /* This file handles now also stubbed coff images. The stub is a small
    DOS executable program before the coff image to load it in memory
@@ -354,7 +354,7 @@ create_go32_stub (abfd)
 	  close (f);
 	  goto stub_end;
 	}
-      if (memcmp (magic, "go32stub", 8) != 0)
+      if (! CONST_STRNEQ (magic, "go32stub"))
 	{
 	  close (f);
 	  goto stub_end;

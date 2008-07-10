@@ -503,25 +503,12 @@ struct loop_info
 #define PREFETCH_CONDITIONAL 1
 #endif
 
-/* APPLE LOCAL begin avoid out-of-bounds refs */
-/* If the first or last uid lies outside the loop, assume the
-   lifetime extends to that end of the loop. */
 #define LOOP_REG_LIFETIME(LOOP, REGNO) \
-(((REGNO_LAST_UID (REGNO) > max_uid_for_loop) \
-  ? (INSN_LUID ((LOOP)->end)) \
-  : (REGNO_LAST_LUID (REGNO))) \
- - ((REGNO_FIRST_UID (REGNO) > max_uid_for_loop) \
-  ? (INSN_LUID ((LOOP)->start)) \
-  : (REGNO_FIRST_LUID (REGNO))))
+((REGNO_LAST_LUID (REGNO) - REGNO_FIRST_LUID (REGNO)))
 
-/* uid's that are too big are derived from nested loops and are
-   not referenced outside this loop, hence they are not global. */
 #define LOOP_REG_GLOBAL_P(LOOP, REGNO) \
-((REGNO_LAST_UID (REGNO) > max_uid_for_loop) ? 0 : \
-(((REGNO_FIRST_UID (REGNO) > max_uid_for_loop) ? 0 : \
-((((REGNO_LAST_LUID (REGNO) > INSN_LUID ((LOOP)->end) \
- || REGNO_FIRST_LUID (REGNO) < INSN_LUID ((LOOP)->start))))))))
-/* APPLE LOCAL end avoid out-of-bounds refs */
+((REGNO_LAST_LUID (REGNO) > INSN_LUID ((LOOP)->end) \
+ || REGNO_FIRST_LUID (REGNO) < INSN_LUID ((LOOP)->start)))
 
 #define LOOP_REGNO_NREGS(REGNO, SET_DEST) \
 ((REGNO) < FIRST_PSEUDO_REGISTER \

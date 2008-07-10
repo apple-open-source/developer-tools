@@ -219,6 +219,8 @@ reopen_exec_file (void)
       exec_open (filename, 0);
       /* APPLE LOCAL begin hooks */
       tell_breakpoints_objfile_changed (NULL);
+      /* APPLE LOOCAL cache lookup values for improved performance  */
+      symtab_clear_cached_lookup_values ();
       tell_objc_msgsend_cacher_objfile_changed (NULL);
       /* APPLE LOCAL end hooks */
     }

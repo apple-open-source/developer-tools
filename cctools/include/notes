@@ -1,9 +1,149 @@
-Changes for the 5.23 release (the cctools-622.9 release):
-- Added LC_CODE_SIGNATURE constant to <mach-o/loader.h> . Radar bug #5467724.
+Changes for the 5.25 release (the cctools-698 release):
+- Added support for LLVM bitcode files.  Radar bug #5712460.
+  It was added undef the ifdef LTO_SUPPORT and can be disabled by setting the
+  LTO Makefile macro to nothing instead of its default -DLTO_SUPPORT .
+  - Added the enum value OFILE_LLVM_BITCODE to "stuff/ofile.h"
+  - Added the fields lto, lto_cputype and lto_cpusubtype to the ofile struct in
+    "stuff/ofile.h".
+  - Added the header file "stuff/lto.h" and added it to the Makefile.
 
-Changes for the 5.23 release (the cctools-622.5 release):
-- Support the new x86-64 relocation entry types for signed relocations
-  with offsets.  Radar bug #4664658.
+Changes for the 5.25 release (the cctools-697 release):
+
+Changes for the 5.25 release (the cctools-696 release):
+- Changed <mach/arm/thread_status.h> to use _ARM_THREAD_STATUS_H_ and not
+  _MACH_ARM_THREAD_STATUS_H_.
+
+Changes for the 5.25 release (the cctools-691 release):
+- Added encryption_info_command and LC_ENCRYPTION_INFO to <mach-o/loader.h> .
+  Radar bug #5811987
+- Added swap_encryption_command() to "stuff/bytesex.h". Radar bug #5811994.
+
+Changes for the 5.25 release (the cctools-688 release):
+- Added LC_LAZY_LOAD_DYLIB and S_LAZY_DYLIB_SYMBOL_POINTERS to
+  <mach-o/loader.h> . Radar bug #5760930
+
+Changes for the 5.25 release (the cctools-681 release):
+- Removed all __OPEN_SOURCE__ references in Makefile, notes, stuff/bytesex.h,
+  stuff/symbol.h, mach/machine.h, mach-o/nlist.h .
+- Added IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER to coff/aouthdr.h .
+
+Changes for the 5.25 release (the cctools-680 release):
+- Added support for ARMv7. Radar bug #5490815.
+  - Picked up opcode/arm.h from the last GNU binutils v2 source.
+  - Added CPU_SUBTYPE_ARM_V7 to mach/machine.h
+- Added coff/{ms_dos_stub.h,filehdr.h,aouthdr.h,scnhdr.h,syment.h} based on
+  GNU binutils headers.  Radar bug #5536661.
+- Added swap_ms_dos_stub(), swap_filehdr(), swap_aouthdr(), swap_scnhdr(),
+  swap_syment() to coff/bytesex.h .  Radar bug #5536661.
+
+Changes for the 5.25 release (the cctools-676 release):
+- Added coff/base_relocs.h and coff/bytesex.h .  Radar bug #5218665.
+
+Changes for the 5.25 release (the cctools-675 release):
+- Added extern "C" #if'ed in for __cplusplus to <mach-o/nlist.h> .  Radar bug
+  #5419852.
+- Added the new ld_r_ofile field in the struct object in "stuff/breakout.h"
+  the is set in strip(1) when making an ld -r of an object for stripping DWARF
+  so free_archs() in libstuff can call ofile_unmap() on it.  Radar bug #5343015.
+
+Changes for the 5.25 release (the cctools-673 release):
+- Changed the sources so the arm stuff is not in the open source version.
+  Radar bug #5326431.
+  - Changed the Makefile to #ifndef __OPEN_SOURCE__ out the arm files and to
+    run unifdef on nlist.h
+  - Added #ifndef __OPEN_SOURCE__ to the following files to bracket arm code:
+    mach/machine.h, mach-o/nlist.h, stuff/bytesex.h and stuff/symbol.h .
+
+Changes for the 5.24 release (the cctools-663 release):
+- Changed <stuff/macosx_deployment_target.h> so that it now has a struct
+  that contains the major, minor and name of the macosx_deployment_target.
+  And also changed the prototype of get_macosx_deployment_target() to take
+  just a pointer to the struct.  Radar bug #5132019.
+
+Changes for the 5.24 release (the cctools-660 release):
+- Added extern "C" #if'ed in for __cplusplus to <mach-o/swap.h> and updated
+  other headers to not have a trailing semicolon after the closing curly brace
+  for the extern "C".  Radar bug #5075908.
+
+Changes for the 5.24 release (the cctools-656 release):
+- Added MH_PIE to <mach-o/loader.h> .  Radar bug #5041291.
+
+Changes for the 5.24 release (the cctools-653 release):
+- Added GMONTYPE_DYLD2_STATE to <sys/gmon.h> .  Radar bug #4960162.
+
+Changes for the 5.24 release (the cctools-651 release):
+- Added the headers_swapped field to the ofile struct in "stuff/ofile.h".
+  Radar bug #4970647.
+
+Changes for the 5.24 release (the cctools-649 release):
+- Added S_DTRACE_DOF to to <mach-o/loader.h> .  Radar bug #4918330.
+
+Changes for the 5.24 release (the cctools-648 release):
+- Ported <sys/gmon.h> to 64-bit. Radar bug #4601274.
+
+Changes for the 5.24 release (the cctools-645 release):
+- Added support for rpath load command.  Radar bug #4822880.
+  - Added swap_rpath_command() to "stuff/bytesex.h" .
+- Added extern "C" #if'ed in for __cplusplus to <mach-o/getsect.h> .
+  Radar bug #4814441.
+
+Changes for the 5.24 release (the cctools-644 release):
+- Added CPU_SUBTYPE_VEO_3 and CPU_SUBTYPE_VEO_4 to "mach/machine.h".
+  Radar bug #4799550.
+- Changed get_stack_addr_from_flag() in "stuff/arch.c" to return a uint64_t.
+  Radar bug #4458775.
+
+Changes for the 5.24 release (the cctools-640 release):
+- Added the capability bit macros to <mach/machine.h> . Radar bug #4754462.
+
+Changes for the 5.24 release (the cctools-638 release):
+- Added the input_indirectsym_pad field to the object struct in
+  <stuff/breakout.h> to deal with the fact that 64-bit object may or may not
+  have padding after the indirect symbol table entries if they have an odd
+  number of entries.  Radar bug #4747408.
+
+Changes for the 5.24 release (the cctools-637 release):
+- Added the macros GET_COMM_ALIGN() and SET_COMM_ALIGN() to <mach-o/nlist.h> .
+  Radar bug #4597166.
+
+Changes for the 5.24 release (the cctools-634 release):
+- Added support for split info load command and data.  Radar bug #4695477.
+  - Added the split_info_cmd, output_split_info_data, and
+    output_split_info_data_size fields to the object struct in the header
+    "stuff/breakout.h".
+
+Changes for the 5.24 release (the cctools-632 release):
+- Ported some headers to used when compiled for 64-bit hosts.
+  Radar bug #4407440.
+  - Added SWAP_INT() macro to <stuff/bytesex.h> and added an #ifndef __LP64__ 
+    around the SWAP_LONG() macro.
+  - Changed the parameter types of swap_indirect_symbols() to be a uint32_t *
+    and a uint32_t in <stuff/bytesex.h>.
+  - Ported <stuff/breakout.h> by not using ranlib structs since ran_un.ran_name
+    can be used when compiling for 64-bit hosts.
+    - Added the new toc_entry struct to <stuff/breakout.h>.
+    - Changed the toc_nranlibs field name in the arch struct to ntocs.
+    - Added the new toc_entries field to the arch struct.
+  - Ported <stuff/ofile.h> and changed ofile_get_word()'s parameter 'word' to
+    a uint32_t pointer from an unsigned long pointer.
+
+Changes for the 5.24 release (the cctools-630 release):
+- Picked up the changes that got dropped from the the cctools-622.5 release:
+  - Support the new x86-64 relocation entry types for signed relocations
+    with offsets.  Radar bug #4664658.
+  Radar bug #4678307.
+
+Changes for the 5.24 release (the cctools-626 release):
+- Added support for code signature load command and data.  Radar bug #4588023.
+  - Added the code_sig_cmd, output_code_sig_data, and output_code_sig_data_size
+    fields to the object struct in the header "stuff/breakout.h".  Also removed
+    the output_indirect_symtab64 field since it should not be there as all
+    indirect symbol table entries are 32-bit indexes into the symbol table.
+  - Added swap_linkedit_data_command() to "stuff/bytesex.h" .
+
+Changes for the 5.24 release (the cctools-624 release):
+- Added Mach-O enhancements for Leopard to <mach-o/loader.h>.  Radar bug
+  #4614861.
 
 Changes for the 5.23 release (the cctools-620 release):
 - Added the routines swap_x86_state_hdr(), swap_x86_float_state64(),

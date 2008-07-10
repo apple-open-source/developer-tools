@@ -542,6 +542,20 @@ find_pc_offset (CORE_ADDR start, CORE_ADDR *result, int offset, int funclimit,
   gdb_assert (low <= start);
   gdb_assert (offset < 0);
 
+  /* A sanity check:  If we've stepped into some area of memory where
+     gdb doesn't have symbols and the GUI requests we disassemble from $pc, 
+     gdb can come up with very large LOW-HIGH regions of memory to disassemble
+     through.  As a sanity check, if this function starts four pages before
+     the given $pc and we're in MI mode (so we have a GUI that may be 
+     requesting nonsensical things), shortcircuit this operation.  */
+     
+  if (start - low > -offset && start - low > 16384 
+      && ui_out_is_mi_like_p (uiout))
+    {
+      *result = start;
+      return 1;
+    }
+
   /* There's no point searching for more instructions slots than there
      are bytes.  If we were given a PEEKLIMIT of -1, or a PEEKLIMIT
      higher than we need, set it to the number of bytes from the start

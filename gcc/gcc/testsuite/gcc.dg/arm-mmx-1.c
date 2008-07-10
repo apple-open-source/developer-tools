@@ -3,6 +3,8 @@
 /* { dg-do compile { target arm*-*-* strongarm*-*-* xscale*-*-*} } */
 /* { dg-options "-O -mno-apcs-frame -mcpu=iwmmxt -mabi=iwmmxt" } */
 /* { dg-final { global compiler_flags; if ![string match "*-mthumb *" $compiler_flags] { scan-assembler "ldmfd\[ 	]sp!.*ip,\[ ]*pc" } } } */
+/* APPLE LOCAL alternate frame layout */
+/* { dg-skip-if "" { arm*-apple-darwin* } { "*" } { "" } } */
 
 /* This function uses all the call-saved registers, namely r4, r5, r6,
    r7, r8, r9, sl, fp.  Since we also save lr, that leaves an odd

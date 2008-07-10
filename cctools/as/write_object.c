@@ -4,7 +4,7 @@
 #include <sys/file.h>
 #include <libc.h>
 #include <mach/mach.h>
-#include "stuff/target_arch.h"
+#include "arch64_32.h"
 #include "stuff/openstep_mach.h"
 #include <mach-o/loader.h>
 #include <mach-o/reloc.h>
@@ -25,6 +25,9 @@
 #ifdef SPARC
 #include <mach-o/sparc/reloc.h>
 #endif
+#ifdef ARM
+#include <mach-o/arm/reloc.h>
+#endif
 #if defined(I386) && defined(ARCH64)
 #include <mach-o/x86_64/reloc.h>
 #endif
@@ -41,6 +44,9 @@
 #include "messages.h"
 #include "xmalloc.h"
 #include "input-scrub.h"
+#if defined(I386) && defined(ARCH64)
+#include "i386.h"
+#endif
 #ifdef I860
 #define RELOC_SECTDIFF		I860_RELOC_SECTDIFF
 #define RELOC_LOCAL_SECTDIFF	I860_RELOC_SECTDIFF
@@ -71,6 +77,11 @@
 #define RELOC_SECTDIFF		GENERIC_RELOC_SECTDIFF
 #define RELOC_LOCAL_SECTDIFF	GENERIC_RELOC_LOCAL_SECTDIFF
 #define RELOC_PAIR		GENERIC_RELOC_PAIR
+#endif
+#ifdef ARM
+#define RELOC_SECTDIFF		ARM_RELOC_SECTDIFF
+#define RELOC_LOCAL_SECTDIFF	ARM_RELOC_SECTDIFF
+#define RELOC_PAIR		ARM_RELOC_PAIR
 #endif
 
 /*
@@ -110,7 +121,8 @@ static unsigned long nrelocs_for_fix(
 static unsigned long fix_to_relocation_entries(
     struct fix *fixP,
     unsigned long sect_addr,
-    struct relocation_info *riP);
+    struct relocation_info *riP,
+    unsigned long debug_section);
 #ifdef I860
 static void
     I860_tweeks(void);
@@ -128,7 +140,8 @@ char *out_file_name)
     segment_command_t		reloc_segment;
     struct symtab_command	symbol_table;
     struct dysymtab_command	dynamic_symbol_table;
-    unsigned long		section_type, *indirect_symbols;
+    unsigned long		section_type;
+    uint32_t			*indirect_symbols;
     isymbolS			*isymbolP;
     unsigned long		i, j, nsects, nsyms, strsize, nindirectsyms;
 
@@ -508,7 +521,9 @@ char *out_file_name)
 					fixP,
 					frchainP->frch_section.addr,
 					(struct relocation_info *)(output_addr +
-								   offset));
+								   offset),
+				        frchainP->frch_section.flags &
+					  S_ATTR_DEBUG);
 	    }
 	}
 	if(host_byte_sex != md_target_byte_sex)
@@ -560,7 +575,7 @@ char *out_file_name)
 		}
 	    }
 	    if(host_byte_sex != md_target_byte_sex){
-		indirect_symbols = (unsigned long *)(output_addr +
+		indirect_symbols = (uint32_t *)(output_addr +
 				    dynamic_symbol_table.indirectsymoff);
 		swap_indirect_symbols(indirect_symbols, nindirectsyms, 
 				      md_target_byte_sex);
@@ -866,7 +881,11 @@ long *string_byte_count)
 		    /* don't keep this symbol */
 		    *symbolPP = symbolP->sy_next;
 		}
-	        else if(flagseen['L'] || (symbolP->sy_type & N_EXT) != 0){
+	        else if(flagseen['L'] || (symbolP->sy_type & N_EXT) != 0
+#if defined(I386) && defined(ARCH64)
+			|| is_section_cstring_literals(symbolP->sy_other)
+#endif
+		){
 		    if((symbolP->sy_type & N_EXT) == 0){
 			nlocalsym++;
 			symbolP->sy_number = *symbol_number;
@@ -1076,7 +1095,8 @@ unsigned long
 fix_to_relocation_entries(
 struct fix *fixP,
 unsigned long sect_addr,
-struct relocation_info *riP)
+struct relocation_info *riP,
+unsigned long debug_section)
 {
     struct symbol *symbolP;
     unsigned long count;
@@ -1134,7 +1154,11 @@ struct relocation_info *riP)
 	 * Or if this is an external coalesced symbol.
 	 */
 #if defined(I386) && defined(ARCH64)
-	if (fixP->fx_subsy == NULL && !is_local_symbol(symbolP)) {
+	if(fixP->fx_subsy == NULL &&
+	   (!debug_section || (symbolP->sy_type & N_TYPE) == N_UNDF) &&
+	   (!is_local_symbol(symbolP) ||
+	    ((symbolP->sy_type & N_TYPE) == N_SECT &&
+	     is_section_cstring_literals(symbolP->sy_other)) ) ) {
 #else
 	if((symbolP->sy_type & N_TYPE) == N_UNDF ||
 	   ((symbolP->sy_type & N_EXT) == N_EXT &&
@@ -1370,6 +1394,10 @@ struct relocation_info *riP)
 #ifdef SPARC
 	if(fixP->fx_r_type == SPARC_RELOC_HI22 ||
 	   fixP->fx_r_type == SPARC_RELOC_LO10)
+#endif
+#ifdef ARM
+	if(FALSE) /* currently don't have any arm machine specific relocs
+		     that have a pair relocation entry */
 #endif
 	{
 	    memset(riP, '\0', sizeof(struct relocation_info));

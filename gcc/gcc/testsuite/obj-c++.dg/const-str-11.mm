@@ -5,6 +5,7 @@
 
 /* { dg-options "-fnext-runtime -fno-constant-cfstrings -fconstant-string-class=XStr" } */
 /* { dg-do compile { target *-*-darwin* } } */
+/* { dg-skip-if "" { *-*-darwin* } { "-m64" } { "" } } */
 
 #include <objc/Object.h>
 
@@ -20,7 +21,11 @@
 }
 @end
 
+#if OBJC_API_VERSION >= 2
+extern Class _XStrClassReference;
+#else
 extern struct objc_class _XStrClassReference;
+#endif
 
 const XStr *appKey = @"MyApp";
 

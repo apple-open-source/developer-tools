@@ -1,6 +1,6 @@
 /* ar.c - Archive modify and extract.
    Copyright 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
-   2001, 2002, 2003, 2004, 2005
+   2001, 2002, 2003, 2004, 2005, 2006
    Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
@@ -17,7 +17,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 /*
    Bugs: should use getopt the way tar does (complete w/optional -) and
@@ -49,8 +49,6 @@
 #define O_BINARY 0
 #endif
 
-#define BUFSIZE 8192
-
 /* Kludge declaration from BFD!  This is ugly!  FIXME!  XXX */
 
 struct ar_hdr *
@@ -70,13 +68,13 @@ static void replace_members
   (bfd *, char **files_to_replace, bfd_boolean quick);
 static void print_descr (bfd * abfd);
 static void write_archive (bfd *);
-static void ranlib_only (const char *archname);
-static void ranlib_touch (const char *archname);
+static int  ranlib_only (const char *archname);
+static int  ranlib_touch (const char *archname);
 static void usage (int);
 
 /** Globals and flags */
 
-int mri_mode;
+static int mri_mode;
 
 /* This flag distinguishes between ar and ranlib:
    1 means this is 'ranlib'; 0 means this is 'ar'.
@@ -244,7 +242,8 @@ usage (int help)
       fprintf (s, _("  [S]          - do not build a symbol table\n"));
       fprintf (s, _("  [v]          - be verbose\n"));
       fprintf (s, _("  [V]          - display the version number\n"));
-
+      fprintf (s, _("  @<file>      - read options from <file>\n"));
+ 
       ar_emul_usage (s);
     }
   else
@@ -253,6 +252,7 @@ usage (int help)
       fprintf (s, _("Usage: %s [options] archive\n"), program_name);
       fprintf (s, _(" Generate an index to speed access to archives\n"));
       fprintf (s, _(" The options are:\n\
+  @<file>                      Read options from <file>\n\
   -h --help                    Print this help message\n\
   -V --version                 Print version information\n"));
     }
@@ -362,6 +362,8 @@ main (int argc, char **argv)
   program_name = argv[0];
   xmalloc_set_program_name (program_name);
 
+  expandargv (&argc, &argv);
+
   if (is_ranlib < 0)
     {
       char *temp;
@@ -418,6 +420,7 @@ main (int argc, char **argv)
 
   if (is_ranlib)
     {
+      int status = 0;
       bfd_boolean touch = FALSE;
 
       if (argc < 2
@@ -427,7 +430,7 @@ main (int argc, char **argv)
 	usage (0);
       if (strcmp (argv[1], "-V") == 0
 	  || strcmp (argv[1], "-v") == 0
-	  || strncmp (argv[1], "--v", 3) == 0)
+	  || CONST_STRNEQ (argv[1], "--v"))
 	print_version ("ranlib");
       arg_index = 1;
       if (strcmp (argv[1], "-t") == 0)
@@ -438,12 +441,12 @@ main (int argc, char **argv)
       while (arg_index < argc)
 	{
 	  if (! touch)
-	    ranlib_only (argv[arg_index]);
+	    status |= ranlib_only (argv[arg_index]);
 	  else
-	    ranlib_touch (argv[arg_index]);
+	    status |= ranlib_touch (argv[arg_index]);
 	  ++arg_index;
 	}
-      xexit (0);
+      xexit (status);
     }
 
   if (argc == 2 && strcmp (argv[1], "-M") == 0)
@@ -595,10 +598,7 @@ main (int argc, char **argv)
 
       if ((operation == none || operation == print_table)
 	  && write_armap == 1)
-	{
-	  ranlib_only (argv[arg_index]);
-	  xexit (0);
-	}
+	xexit (ranlib_only (argv[arg_index]));
 
       if (operation == none)
 	fatal (_("no operation specified"));
@@ -777,10 +777,10 @@ open_inarch (const char *archive_filename, const char *file)
 static void
 print_contents (bfd *abfd)
 {
-  int ncopied = 0;
+  size_t ncopied = 0;
   char *cbuf = xmalloc (BUFSIZE);
   struct stat buf;
-  long size;
+  size_t size;
   if (bfd_stat_arch_elt (abfd, &buf) != 0)
     /* xgettext:c-format */
     fatal (_("internal stat error on %s"), bfd_get_filename (abfd));
@@ -795,8 +795,8 @@ print_contents (bfd *abfd)
   while (ncopied < size)
     {
 
-      int nread;
-      int tocopy = size - ncopied;
+      size_t nread;
+      size_t tocopy = size - ncopied;
       if (tocopy > BUFSIZE)
 	tocopy = BUFSIZE;
 
@@ -805,7 +805,12 @@ print_contents (bfd *abfd)
 	/* xgettext:c-format */
 	fatal (_("%s is not a valid archive"),
 	       bfd_get_filename (bfd_my_archive (abfd)));
-      fwrite (cbuf, 1, nread, stdout);
+
+      /* fwrite in mingw32 may return int instead of size_t. Cast the
+	 return value to size_t to avoid comparison between signed and
+	 unsigned values.  */
+      if ((size_t) fwrite (cbuf, 1, nread, stdout) != nread)
+	fatal ("stdout: %s", strerror (errno));
       ncopied += tocopy;
     }
   free (cbuf);
@@ -826,19 +831,15 @@ extract_file (bfd *abfd)
 {
   FILE *ostream;
   char *cbuf = xmalloc (BUFSIZE);
-  int nread, tocopy;
-  long ncopied = 0;
-  long size;
+  size_t nread, tocopy;
+  size_t ncopied = 0;
+  size_t size;
   struct stat buf;
 
   if (bfd_stat_arch_elt (abfd, &buf) != 0)
     /* xgettext:c-format */
     fatal (_("internal stat error on %s"), bfd_get_filename (abfd));
   size = buf.st_size;
-
-  if (size < 0)
-    /* xgettext:c-format */
-    fatal (_("stat returns negative size for %s"), bfd_get_filename (abfd));
 
   if (verbose)
     printf ("x - %s\n", bfd_get_filename (abfd));
@@ -888,7 +889,12 @@ extract_file (bfd *abfd)
 
 	    output_file = ostream;
 	  }
-	fwrite (cbuf, 1, nread, ostream);
+
+	/* fwrite in mingw32 may return int instead of size_t. Cast
+	   the return value to size_t to avoid comparison between
+	   signed and unsigned values.  */
+	if ((size_t) fwrite (cbuf, 1, nread, ostream) != nread)
+	  fatal ("%s: %s", output_filename, strerror (errno));
 	ncopied += tocopy;
       }
 
@@ -922,6 +928,9 @@ write_archive (bfd *iarch)
   strcpy (old_name, bfd_get_filename (iarch));
   new_name = make_tempname (old_name);
 
+  if (new_name == NULL)
+    bfd_fatal ("could not create temporary file whilst writing archive");
+  
   output_filename = new_name;
 
   obfd = bfd_openw (new_name, bfd_get_target (iarch));
@@ -1191,23 +1200,24 @@ replace_members (bfd *arch, char **files_to_move, bfd_boolean quick)
     output_filename = NULL;
 }
 
-static void
+static int
 ranlib_only (const char *archname)
 {
   bfd *arch;
 
   if (get_file_size (archname) < 1)
-    return;
+    return 1;
   write_armap = 1;
   arch = open_inarch (archname, (char *) NULL);
   if (arch == NULL)
     xexit (1);
   write_archive (arch);
+  return 0;
 }
 
 /* Update the timestamp of the symbol map of an archive.  */
 
-static void
+static int
 ranlib_touch (const char *archname)
 {
 #ifdef __GO32__
@@ -1219,7 +1229,7 @@ ranlib_touch (const char *archname)
   char **matching;
 
   if (get_file_size (archname) < 1)
-    return;
+    return 1;
   f = open (archname, O_RDWR | O_BINARY, 0);
   if (f < 0)
     {
@@ -1250,6 +1260,7 @@ ranlib_touch (const char *archname)
   if (! bfd_close (arch))
     bfd_fatal (archname);
 #endif
+  return 0;
 }
 
 /* Things which are interesting to map over all or some of the files: */

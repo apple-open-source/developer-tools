@@ -151,8 +151,15 @@ modify_trace_bit (thread_t thread, int value)
 
 }
 
+#elif defined (TARGET_ARM) /* ARM HACK: kernel doesn't support hardware single step on ARM.  */
+kern_return_t
+modify_trace_bit (thread_t thread, int value)
+{
+  /* abort (); */
+  return KERN_SUCCESS;
+}
 #else
-#error unknown architecture
+#error "unknown architecture"
 #endif
 
 void
@@ -417,6 +424,8 @@ get_application_thread_port (thread_t our_name)
 
   vm_deallocate (mach_task_self (), (vm_address_t) names,
                  names_count * sizeof (mach_port_t));
+  vm_deallocate (mach_task_self (), (vm_address_t) types,
+                 types_count * sizeof (mach_port_t));
 
   return (thread_t) match;
 }

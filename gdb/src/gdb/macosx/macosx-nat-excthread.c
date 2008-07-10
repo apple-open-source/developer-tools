@@ -605,6 +605,11 @@ macosx_exception_thread (void *arg)
 	}
       excthread_debug_re (2, "Resuming task\n");
       task_resume (s->task);
+      if (kret != KERN_SUCCESS)
+	excthread_debug_re (2, "resumed task.\n");
+      else
+	excthread_debug_re (2, "resume task failed\n");
+
     }
 }
 

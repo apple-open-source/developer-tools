@@ -184,6 +184,16 @@ powerpc*-*-*)
 	gdb_host_double_format="&floatformat_ieee_double_big"
 	gdb_host_long_double_format="&floatformat_ieee_double_big"
 	;;
+arm-*-darwin* | arm-*-macos10*)
+        gdb_host_float_format="&floatformat_ieee_single_little"
+        gdb_host_double_format="&floatformat_ieee_double_little"
+        gdb_host_long_double_format="&floatformat_ieee_double_little"
+        ;;
+arm*-*-*)
+        gdb_host_float_format="&floatformat_ieee_single_big"
+        gdb_host_double_format="&floatformat_ieee_double_big"
+        gdb_host_long_double_format="&floatformat_ieee_double_big"
+        ;;
 *)
 	gdb_host_float_format=0
 	gdb_host_double_format=0

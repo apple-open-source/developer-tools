@@ -6,6 +6,7 @@
 #include "macosx-nat-threads.h"
 
 #include <mach/machine.h>       /* cpu_type_t, cpu_subtype_t */
+#include <mach-o/loader.h>      /* struct mach_header, struct load_command */
 
 struct objfile;
 struct target_waitstatus;
@@ -60,6 +61,17 @@ struct macosx_dyld_thread_status
 
   struct breakpoint *dyld_breakpoint;
 
+  /* There are two ways to tell if libSystem's version of
+     malloc is initialized.  If dyld_version is 1, then 
+     you have to break on malloc_inited_breakpoint, and 
+     if you hit it, then everything is kosher.  */
+  struct breakpoint *malloc_inited_breakpoint;
+  /* if dyld_version is 2 or greater, there's a bool
+     in the dyld all_image_infos structure that tells us
+     this directly.  */
+
+  int libsystem_initialized;
+
   CORE_ADDR dyld_addr;
   CORE_ADDR dyld_slide;
   const char *dyld_name;
@@ -104,10 +116,26 @@ void macosx_init_dyld (struct macosx_dyld_thread_status *s,
 void macosx_init_dyld_symfile (struct objfile *o, bfd *abfd);
 void macosx_dyld_mourn_inferior (void);
 
+int target_is_remote ();
 int macosx_dyld_update (int dyldonly);
 int dyld_lookup_and_bind_function (char *name);
 void update_section_tables_dyld (struct dyld_objfile_info *s);
 void update_section_tables ();
 char *dyld_fix_path (char *path);
+
+void macosx_set_malloc_inited (int new_val);
+int macosx_get_malloc_inited (void);
+struct section_offsets *get_sectoffs_for_shared_cache_dylib (struct dyld_objfile_entry *, CORE_ADDR);
+int target_read_mach_header (CORE_ADDR addr,
+                            struct mach_header *mh);
+int target_read_load_command (CORE_ADDR addr,
+                                    struct load_command *load_cmd);
+int target_read_uuid (CORE_ADDR addr, unsigned char *uuid);
+
+/* From macosx-nat-dyld.c.  */
+extern struct cmd_list_element *setshliblist;
+extern struct cmd_list_element *showshliblist;
+
+
 
 #endif /* __GDB_MACOSX_NAT_DYLD_H__ */

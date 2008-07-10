@@ -1154,6 +1154,16 @@ proc default_gdb_start {extra_flags} {
     set gdb_spawn_id -1;
     # force the height to "unlimited", so no pagers get used
 
+    send_gdb "set locate-dsym 0\n"
+    gdb_expect 10 {
+	-re "$gdb_prompt $" { 
+	    verbose "Setting locate-dsym to 0." 2
+	}
+	timeout {
+	    warning "Couldn't set the locate-dsym to 0"
+	}
+    }
+
     send_gdb "set height 0\n"
     gdb_expect 10 {
 	-re "$gdb_prompt $" { 

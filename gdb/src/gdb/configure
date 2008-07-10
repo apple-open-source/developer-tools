@@ -1570,6 +1570,7 @@ Optional Features:
   --enable-FEATURE[=ARG]  include FEATURE [ARG=yes]
   --enable-maintainer-mode  enable make rules and dependencies not useful
 			  (and sometimes confusing) to the casual installer
+  --disable-arch-for-exec disable use of arch for exec
   --disable-nls           do not use Native Language Support
   --disable-gdbcli        disable command-line interface (CLI)
   --disable-gdbmi         disable machine-interface (MI)
@@ -1581,6 +1582,11 @@ Optional Features:
   --enable-fast-install[=PKGS]
                           optimize for fast installation [default=yes]
   --disable-libtool-lock  avoid locking (might break parallel builds)
+  --disable-carbon-framework
+                          disable Carbon framework use even when available
+  --disable-debug-symbols-framework
+                          disable DebugSymbols framework use even when
+                          available
   --enable-build-warnings Enable build-time compiler warnings if gcc is used
   --enable-gdb-build-warnings Enable GDB specific build-time compiler warnings if gcc is used
   --enable-sim            Link gdb with simulator
@@ -2065,9 +2071,7 @@ fi
 
   { echo "$as_me:$LINENO: result: $USE_MAINTAINER_MODE" >&5
 echo "${ECHO_T}$USE_MAINTAINER_MODE" >&6; }
-
-
-if test $USE_MAINTAINER_MODE = yes; then
+   if test $USE_MAINTAINER_MODE = yes; then
   MAINTAINER_MODE_TRUE=
   MAINTAINER_MODE_FALSE='#'
 else
@@ -3796,10 +3800,19 @@ esac
 
 
 case "$host" in
+  arm-apple-*)
+    # No 64 bit exceptions for Apple ARM
+    { echo "$as_me:$LINENO: checking whether we can use 64 bit mach exceptions" >&5
+echo $ECHO_N "checking whether we can use 64 bit mach exceptions... $ECHO_C" >&6; }
+    MACH_EXC_SERVER_PREFACE=
+    { echo "$as_me:$LINENO: result: (disabled!) no" >&5
+echo "${ECHO_T}(disabled!) no" >&6; }
+
+    ;;
   *-apple-darwin* | *-apple-maocsx*)
     { echo "$as_me:$LINENO: checking whether we can use 64 bit mach exceptions" >&5
 echo $ECHO_N "checking whether we can use 64 bit mach exceptions... $ECHO_C" >&6; }
-    if test -r "/usr/include/mach/mach_exc.defs"; then
+    if test -r "$SDKROOT/usr/include/mach/mach_exc.defs"; then
 
 cat >>confdefs.h <<\_ACEOF
 #define HAVE_64_BIT_MACH_EXCEPTIONS 1
@@ -3818,6 +3831,10 @@ echo "${ECHO_T}no" >&6; }
 esac
 
 case "$host" in
+  arm-apple-*)
+    # We need to turn off arch for exec for now as it doesn't support launching
+    # a specified architecture in a universal mach file.
+    ;;
   *-apple-darwin* | *-apple-macosx*)
     { echo "$as_me:$LINENO: checking whether posix_spawn supports SETEXEC" >&5
 echo $ECHO_N "checking whether posix_spawn supports SETEXEC... $ECHO_C" >&6; }
@@ -3862,29 +3879,51 @@ sed 's/^/| /' conftest.$ac_ext >&5
 fi
 
 rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+    { echo "$as_me:$LINENO: result: $gdb_cv_posix_spawn" >&5
+echo "${ECHO_T}$gdb_cv_posix_spawn" >&6; }
+
     if test $gdb_cv_posix_spawn = yes; then
 
 cat >>confdefs.h <<\_ACEOF
 #define USE_POSIX_SPAWN 1
 _ACEOF
 
+
+      # Check whether --enable-arch-for-exec was given.
+if test "${enable_arch_for_exec+set}" = set; then
+  enableval=$enable_arch_for_exec; case $enableval in
+          yes | no)
+            enable_arch_exec="$enableval" ;;
+          *)
+            { { echo "$as_me:$LINENO: error: bad value '$enableval' for --disable-arch-for-exec" >&5
+echo "$as_me: error: bad value '$enableval' for --disable-arch-for-exec" >&2;}
+   { (exit 1); exit 1; }; } ;;
+      	esac
+else
+  enable_arch_exec=yes
+fi
+
+
       { echo "$as_me:$LINENO: checking whether we should use arch for exec" >&5
 echo $ECHO_N "checking whether we should use arch for exec... $ECHO_C" >&6; }
-      if test -r "/usr/bin/arch"; then
+      if test x"$enable_arch_exec" = xyes; then
+        if test -r "/usr/bin/arch"; then
 
 cat >>confdefs.h <<\_ACEOF
 #define USE_ARCH_FOR_EXEC 1
 _ACEOF
 
-        { echo "$as_me:$LINENO: result: yes" >&5
+          { echo "$as_me:$LINENO: result: yes" >&5
 echo "${ECHO_T}yes" >&6; }
-      else
-        { echo "$as_me:$LINENO: result: no" >&5
+        else
+          { echo "$as_me:$LINENO: result: no" >&5
 echo "${ECHO_T}no" >&6; }
+        fi
+      else
+        { echo "$as_me:$LINENO: result: (disabled) no" >&5
+echo "${ECHO_T}(disabled) no" >&6; }
       fi
     fi
-    { echo "$as_me:$LINENO: result: $gdb_cv_posix_spawn" >&5
-echo "${ECHO_T}$gdb_cv_posix_spawn" >&6; }
 ;;
 esac
 
@@ -8461,7 +8500,7 @@ ia64-*-hpux*)
   ;;
 *-*-irix6*)
   # Find out which ABI we are using.
-  echo '#line 8464 "configure"' > conftest.$ac_ext
+  echo '#line 8503 "configure"' > conftest.$ac_ext
   if { (eval echo "$as_me:$LINENO: \"$ac_compile\"") >&5
   (eval $ac_compile) 2>&5
   ac_status=$?
@@ -10605,11 +10644,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:10608: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:10647: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:10612: \$? = $ac_status" >&5
+   echo "$as_me:10651: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -10873,11 +10912,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:10876: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:10915: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:10880: \$? = $ac_status" >&5
+   echo "$as_me:10919: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -10977,11 +11016,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:10980: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:11019: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>out/conftest.err)
    ac_status=$?
    cat out/conftest.err >&5
-   echo "$as_me:10984: \$? = $ac_status" >&5
+   echo "$as_me:11023: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s out/conftest2.$ac_objext
    then
      # The compiler can only warn and ignore the option if not recognized
@@ -13285,7 +13324,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<EOF
-#line 13288 "configure"
+#line 13327 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -13385,7 +13424,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<EOF
-#line 13388 "configure"
+#line 13427 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -15721,11 +15760,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:15724: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:15763: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:15728: \$? = $ac_status" >&5
+   echo "$as_me:15767: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -15825,11 +15864,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:15828: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:15867: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>out/conftest.err)
    ac_status=$?
    cat out/conftest.err >&5
-   echo "$as_me:15832: \$? = $ac_status" >&5
+   echo "$as_me:15871: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s out/conftest2.$ac_objext
    then
      # The compiler can only warn and ignore the option if not recognized
@@ -17395,11 +17434,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:17398: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:17437: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:17402: \$? = $ac_status" >&5
+   echo "$as_me:17441: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -17499,11 +17538,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:17502: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:17541: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>out/conftest.err)
    ac_status=$?
    cat out/conftest.err >&5
-   echo "$as_me:17506: \$? = $ac_status" >&5
+   echo "$as_me:17545: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s out/conftest2.$ac_objext
    then
      # The compiler can only warn and ignore the option if not recognized
@@ -19697,11 +19736,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:19700: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:19739: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:19704: \$? = $ac_status" >&5
+   echo "$as_me:19743: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -19965,11 +20004,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:19968: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:20007: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:19972: \$? = $ac_status" >&5
+   echo "$as_me:20011: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -20069,11 +20108,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:20072: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:20111: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>out/conftest.err)
    ac_status=$?
    cat out/conftest.err >&5
-   echo "$as_me:20076: \$? = $ac_status" >&5
+   echo "$as_me:20115: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s out/conftest2.$ac_objext
    then
      # The compiler can only warn and ignore the option if not recognized
@@ -33032,41 +33071,91 @@ esac
 
 case "$host" in
   *-apple-darwin* | *-apple-macos*)
-  { echo "$as_me:$LINENO: checking for Carbon framework" >&5
+    # Check whether --enable-carbon-framework was given.
+if test "${enable_carbon_framework+set}" = set; then
+  enableval=$enable_carbon_framework; case $enableval in
+      yes | no)
+        enable_carbon_framework="$enableval" ;;
+      *)
+        { { echo "$as_me:$LINENO: error: bad value '$enableval' for --disable-carbon-framework" >&5
+echo "$as_me: error: bad value '$enableval' for --disable-carbon-framework" >&2;}
+   { (exit 1); exit 1; }; } ;;
+    esac
+else
+  enable_carbon_framework=no
+fi
+
+
+    { echo "$as_me:$LINENO: checking for Carbon framework" >&5
 echo $ECHO_N "checking for Carbon framework... $ECHO_C" >&6; }
-  if test -d /System/Library/Frameworks/Carbon.framework
-  then
-    CARBON_LIBS="-framework Carbon"
-    { echo "$as_me:$LINENO: result: yes" >&5
+    if test x"$enable_carbon_framework" = xyes; then
+      if test -d "$SDKROOT/System/Library/Frameworks/Carbon.framework"
+      then
+
+cat >>confdefs.h <<\_ACEOF
+#define USE_CARBON_FRAMEWORK 1
+_ACEOF
+
+        CARBON_LIBS="-framework Carbon"
+        { echo "$as_me:$LINENO: result: yes" >&5
 echo "${ECHO_T}yes" >&6; }
-  else
-    { echo "$as_me:$LINENO: result: no" >&5
+      else
+        { echo "$as_me:$LINENO: result: no" >&5
 echo "${ECHO_T}no" >&6; }
-  fi
-  ;;
+      fi
+    else
+      { echo "$as_me:$LINENO: result: (disabled) no" >&5
+echo "${ECHO_T}(disabled) no" >&6; }
+    fi
+    ;;
 esac
+
 
 
 case "$host" in
+  arm-apple-*)
+  # We won't be using DebugSymbols.framework to locate dSYM files for ARM yet.
+  ;;
   *-apple-darwin* | *-apple-macos*)
-  { echo "$as_me:$LINENO: checking for DebugSymbols framework" >&5
+    # Check whether --enable-debug-symbols-framework was given.
+if test "${enable_debug_symbols_framework+set}" = set; then
+  enableval=$enable_debug_symbols_framework; case $enableval in
+      yes | no)
+        enable_debug_symbols_framework="$enableval" ;;
+      *)
+        { { echo "$as_me:$LINENO: error: bad value '$enableval' for --disable-debug-symbols-framework" >&5
+echo "$as_me: error: bad value '$enableval' for --disable-debug-symbols-framework" >&2;}
+   { (exit 1); exit 1; }; } ;;
+    esac
+else
+  enable_debug_symbols_framework=yes
+fi
+
+
+    { echo "$as_me:$LINENO: checking for DebugSymbols framework" >&5
 echo $ECHO_N "checking for DebugSymbols framework... $ECHO_C" >&6; }
-  if test -d /System/Library/PrivateFrameworks/DebugSymbols.framework
-  then
+    if test x"$enable_debug_symbols_framework" = xyes; then
+      if test -d "$SDKROOT/System/Library/PrivateFrameworks/DebugSymbols.framework"
+      then
 
 cat >>confdefs.h <<\_ACEOF
-#define HAVE_DEBUG_SYMBOLS_FRAMEWORK 1
+#define USE_DEBUG_SYMBOLS_FRAMEWORK 1
 _ACEOF
 
-    DEBUG_SYMBOLS_LIBS="-F/System/Library/PrivateFrameworks -framework DebugSymbols"
-    { echo "$as_me:$LINENO: result: yes" >&5
+        DEBUG_SYMBOLS_LIBS="-F/System/Library/PrivateFrameworks -framework DebugSymbols"
+        { echo "$as_me:$LINENO: result: yes" >&5
 echo "${ECHO_T}yes" >&6; }
-  else
-    { echo "$as_me:$LINENO: result: no" >&5
+      else
+        { echo "$as_me:$LINENO: result: no" >&5
 echo "${ECHO_T}no" >&6; }
-  fi
+      fi
+    else
+      { echo "$as_me:$LINENO: result: (disabled) no" >&5
+echo "${ECHO_T}(disabled) no" >&6; }
+    fi
   ;;
 esac
+
 
 
 # APPLE LOCAL: Use the pre-conformant headers/functions so we stand a

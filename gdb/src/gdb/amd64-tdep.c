@@ -1024,6 +1024,11 @@ amd64_frame_this_id (struct frame_info *next_frame, void **this_cache,
   if (cache->base == 0)
     return;
 
+  if (get_frame_type (next_frame) != SENTINEL_FRAME
+      && get_prev_frame (next_frame) != NULL
+      && frame_pc_unwind (get_prev_frame (next_frame)) == 0)
+    return;
+
   (*this_id) = frame_id_build (cache->base + 16, cache->pc);
 }
 

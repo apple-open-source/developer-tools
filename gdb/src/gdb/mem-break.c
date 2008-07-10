@@ -41,18 +41,30 @@
    by the caller to be long enough to save BREAKPOINT_LEN bytes (this
    is accomplished via BREAKPOINT_MAX).  */
 
+/* APPLE LOCAL: Override trust-readonly-sections.  */
+extern int set_trust_readonly (int);
+/* END APPLE LOCAL */
+
 int
 default_memory_insert_breakpoint (CORE_ADDR addr, bfd_byte *contents_cache)
 {
   int val;
   const unsigned char *bp;
   int bplen;
+  /* APPLE LOCAL: Override trust-readonly-sections.  */
+  int old_readonly;
+  struct cleanup *reset_trust_readonly;
+  /* END APPLE LOCAL */
 
   /* Determine appropriate breakpoint contents and size for this address.  */
   bp = BREAKPOINT_FROM_PC (&addr, &bplen);
   if (bp == NULL)
     error (_("Software breakpoints not implemented for this target."));
 
+  /* APPLE LOCAL: For breakpoints we should override the trust_readonly setting.  */
+  old_readonly = set_trust_readonly (0);
+  reset_trust_readonly = make_cleanup (set_trust_readonly, old_readonly);
+  /* END APPLE LOCAL */
   /* Save the memory contents.  */
   val = target_read_memory (addr, contents_cache, bplen);
 
@@ -60,6 +72,7 @@ default_memory_insert_breakpoint (CORE_ADDR addr, bfd_byte *contents_cache)
   if (val == 0)
     val = target_write_memory (addr, bp, bplen);
 
+  do_cleanups (reset_trust_readonly);
   return val;
 }
 
@@ -71,7 +84,10 @@ default_memory_remove_breakpoint (CORE_ADDR addr, bfd_byte *contents_cache)
   int bplen;
   int val;
   unsigned char cur_contents[BREAKPOINT_MAX];
-
+  /* APPLE LOCAL: Override trust-readonly-sections.  */
+  int old_readonly;
+  struct cleanup *reset_trust_readonly;
+  /* END APPLE LOCAL */
 
   /* Determine appropriate breakpoint contents and size for this address.  */
   bp = BREAKPOINT_FROM_PC (&addr, &bplen);
@@ -82,7 +98,11 @@ default_memory_remove_breakpoint (CORE_ADDR addr, bfd_byte *contents_cache)
      overwritten our trap between the time we last inserted it and
      now.  So if the current contents is not our trap, let's use what
      got written there as the contents_cache..  */
-  
+  /* ALSO, we have to unset trust_readonly if it's set, because for 
+     this we're counting on getting the value we wrote there.  */
+
+  old_readonly = set_trust_readonly (0);
+  reset_trust_readonly = make_cleanup (set_trust_readonly, old_readonly);
   val = target_read_memory (addr, cur_contents, bplen);
   
   /* I don't know why we wouldn't be able to read the memory where we
@@ -90,15 +110,19 @@ default_memory_remove_breakpoint (CORE_ADDR addr, bfd_byte *contents_cache)
      to write it either, most likely...  */
   
   if (val != 0)
-    return val;
-
+    goto cleanup;
+  
   if (memcmp (cur_contents, bp, bplen) != 0)
     {
       memcpy (contents_cache, cur_contents, bplen);
-      return 0;
+      val = 0;
     }
   else
-    return target_write_memory (addr, contents_cache, bplen);
+    val = target_write_memory (addr, contents_cache, bplen);
+  
+ cleanup:
+  do_cleanups(reset_trust_readonly);
+  return val;
   /* END APPLE LOCAL */
 }
 

@@ -171,6 +171,9 @@ mi_print_frame_info_lite_base (struct ui_out *uiout,
   if (with_names)
     {
       struct minimal_symbol *msym ;
+      struct obj_section *osect;
+      int has_debug_info = 0;
+      struct partial_symtab *pst;
 
       /* APPLE LOCAL: if we are going to print names, we should raise
          the load level to ALL.  We will avoid doing psymtab to symtab,
@@ -188,7 +191,24 @@ mi_print_frame_info_lite_base (struct ui_out *uiout,
 	    ui_out_field_string (uiout, "func", "<\?\?\?\?>");
 	  else
 	    ui_out_field_string (uiout, "func", name);
-	}      
+	} 
+      /* This is a pretty quick and dirty way to check whether there
+	 are debug symbols for this PC...  I don't care WHAT symbol
+	 contains the PC, just that there's some psymtab that
+	 does.  */
+      osect = find_pc_sect_in_ordered_sections (pc, NULL);
+      if (osect != NULL && osect->objfile != NULL)
+	{
+	  ALL_OBJFILE_PSYMTABS (osect->objfile, pst)
+	    {
+	      if (pc >= pst->textlow && pc < pst->texthigh)
+		{
+		  has_debug_info = 1;
+		  break;
+		}
+	    }
+	}
+      ui_out_field_int (uiout, "has_debug", has_debug_info);
     }
   ui_out_text (uiout, "\n");
   do_cleanups (list_cleanup);

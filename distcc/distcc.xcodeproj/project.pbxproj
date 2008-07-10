@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 42;
+	objectVersion = 44;
 	objects = {
 
 /* Begin PBXAggregateTarget section */
@@ -12,7 +12,7 @@
 			buildConfigurationList = B3BA8F2F087CA105009521B6 /* Build configuration list for PBXAggregateTarget "Config Files" */;
 			buildPhases = (
 				B387DBC1087F273D00A8560D /* Launchd .plist */,
-				B3979744089C5B7900A40359 /* compilers */,
+				B3979744089C5B7900A40359 /* distcc_compilers */,
 				B3236A9508A978AE00609FFD /* license plist */,
 				B3236A9D08A9791400609FFD /* license file */,
 			);
@@ -27,7 +27,7 @@
 		B3236A9808A978E700609FFD /* distcc.plist in license plist */ = {isa = PBXBuildFile; fileRef = B3236A8608A976CE00609FFD /* distcc.plist */; };
 		B3236AA108A97BD700609FFD /* distcc.txt in license file */ = {isa = PBXBuildFile; fileRef = B3236AA008A97BCE00609FFD /* distcc.txt */; };
 		B387DBC3087F275300A8560D /* distccd.plist in Launchd .plist */ = {isa = PBXBuildFile; fileRef = B3BA8F32087CA128009521B6 /* distccd.plist */; };
-		B3979746089C5BD100A40359 /* compilers in compilers */ = {isa = PBXBuildFile; fileRef = B3979742089C5B4400A40359 /* compilers */; };
+		B3979746089C5BD100A40359 /* distcc_compilers in distcc_compilers */ = {isa = PBXBuildFile; fileRef = B3979742089C5B4400A40359 /* distcc_compilers */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -74,15 +74,15 @@
 			name = "Launchd .plist";
 			runOnlyForDeploymentPostprocessing = 1;
 		};
-		B3979744089C5B7900A40359 /* compilers */ = {
+		B3979744089C5B7900A40359 /* distcc_compilers */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 8;
-			dstPath = /private/etc;
+			dstPath = /usr/share;
 			dstSubfolderSpec = 0;
 			files = (
-				B3979746089C5BD100A40359 /* compilers in compilers */,
+				B3979746089C5BD100A40359 /* distcc_compilers in distcc_compilers */,
 			);
-			name = compilers;
+			name = distcc_compilers;
 			runOnlyForDeploymentPostprocessing = 1;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -257,7 +257,7 @@
 		B387DBB9087F266800A8560D /* survey.txt */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = text; path = survey.txt; sourceTree = "<group>"; };
 		B387DBBB087F266800A8560D /* comfychair.py */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = text.script.python; path = comfychair.py; sourceTree = "<group>"; };
 		B387DBBC087F266800A8560D /* testdistcc.py */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = text.script.python; path = testdistcc.py; sourceTree = "<group>"; };
-		B3979742089C5B4400A40359 /* compilers */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = text; path = compilers; sourceTree = "<group>"; };
+		B3979742089C5B4400A40359 /* distcc_compilers */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = text; path = distcc_compilers; sourceTree = "<group>"; };
 		B3BA8F32087CA128009521B6 /* distccd.plist */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = text.xml; path = distccd.plist; sourceTree = "<group>"; };
 		B3CC5CFD087DFB8F00EB91A2 /* Makefile */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.make; path = Makefile; sourceTree = "<group>"; };
 		B3CC5D78087DFCD100EB91A2 /* Makefile.in */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = text; name = Makefile.in; path = distcc_dist/Makefile.in; sourceTree = "<group>"; };
@@ -531,7 +531,7 @@
 				B3236AA008A97BCE00609FFD /* distcc.txt */,
 				B3236A8608A976CE00609FFD /* distcc.plist */,
 				B3BA8F32087CA128009521B6 /* distccd.plist */,
-				B3979742089C5B4400A40359 /* compilers */,
+				B3979742089C5B4400A40359 /* distcc_compilers */,
 				B3BA8F3B087CA1DE009521B6 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -578,10 +578,12 @@
 		B3BA8F21087CA0CC009521B6 /* Project object */ = {
 			isa = PBXProject;
 			buildConfigurationList = B3BA8F22087CA0CC009521B6 /* Build configuration list for PBXProject "distcc" */;
+			compatibilityVersion = "Xcode 3.0";
 			hasScannedForEncodings = 0;
 			mainGroup = B3BA8F1F087CA0CC009521B6;
 			productRefGroup = B3BA8F3B087CA1DE009521B6 /* Products */;
 			projectDirPath = "";
+			projectRoot = "";
 			targets = (
 				B3CC5D00087DFBA800EB91A2 /* distcc */,
 				B3BA8F2B087CA0FF009521B6 /* Config Files */,
@@ -603,7 +605,8 @@
 			buildSettings = {
 				COPY_PHASE_STRIP = YES;
 				GCC_GENERATE_DEBUGGING_SYMBOLS = NO;
-				OPTIMIZATION_CFLAGS = "-O0";
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS_NOT_USED_IN_PRECOMPS = "_FORTIFY_SOURCE=2";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = "";
 				OTHER_REZFLAGS = "";
@@ -622,7 +625,8 @@
 			buildSettings = {
 				COPY_PHASE_STRIP = YES;
 				GCC_GENERATE_DEBUGGING_SYMBOLS = NO;
-				OPTIMIZATION_CFLAGS = "-O0";
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS_NOT_USED_IN_PRECOMPS = "_FORTIFY_SOURCE=2";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = "";
 				OTHER_REZFLAGS = "";
@@ -644,9 +648,8 @@
 					i386,
 				);
 				COPY_PHASE_STRIP = YES;
-				CURRENT_PROJECT_VERSION = 786;
-				MACOSX_DEPLOYMENT_TARGET = 10.4;
-				SDKROOT = /Developer/SDKs/MacOSX10.4u.sdk;
+				CURRENT_PROJECT_VERSION = 1088;
+				GCC_PREPROCESSOR_DEFINITIONS_NOT_USED_IN_PRECOMPS = "_FORTIFY_SOURCE=2";
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = BuildAndIntegration;
@@ -659,8 +662,7 @@
 					i386,
 				);
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 786;
-				MACOSX_DEPLOYMENT_TARGET = 10.4;
+				CURRENT_PROJECT_VERSION = 1088;
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Debug;
@@ -673,9 +675,7 @@
 					i386,
 				);
 				COPY_PHASE_STRIP = YES;
-				CURRENT_PROJECT_VERSION = 786;
-				MACOSX_DEPLOYMENT_TARGET = 10.4;
-				SDKROOT = /Developer/SDKs/MacOSX10.4u.sdk;
+				CURRENT_PROJECT_VERSION = 1088;
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Release;
@@ -685,7 +685,7 @@
 			buildSettings = {
 				COPY_PHASE_STRIP = NO;
 				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
-				OPTIMIZATION_CFLAGS = "-O0";
+				GCC_OPTIMIZATION_LEVEL = 0;
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = "";
 				OTHER_REZFLAGS = "";
@@ -704,7 +704,7 @@
 			buildSettings = {
 				COPY_PHASE_STRIP = YES;
 				GCC_GENERATE_DEBUGGING_SYMBOLS = NO;
-				OPTIMIZATION_CFLAGS = "-O0";
+				GCC_OPTIMIZATION_LEVEL = 0;
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = "";
 				OTHER_REZFLAGS = "";
@@ -729,7 +729,7 @@
 			buildSettings = {
 				COPY_PHASE_STRIP = YES;
 				GCC_GENERATE_DEBUGGING_SYMBOLS = NO;
-				OPTIMIZATION_CFLAGS = "-O0";
+				GCC_OPTIMIZATION_LEVEL = 0;
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = "";
 				OTHER_REZFLAGS = "";

@@ -1,6 +1,6 @@
 /* APPLE LOCAL file ObjC GC */
 /* Using -fobjc-gc should not mess with how 'super' gets handled. */
-/* { dg-do compile } */
+/* { dg-do compile { target powerpc*-*-darwin* i?86*-*-darwin* } } */
 /* { dg-options "-fnext-runtime -fobjc-gc" } */
 /* Contributed by Ziemowit Laski <zlaski@apple.com>  */
 

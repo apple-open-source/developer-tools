@@ -897,13 +897,15 @@ vax-*-*)
     stage1_cflags="-J"
   fi
   ;;
-powerpc-*-darwin*)
+# APPLE LOCAL begin mainline
+powerpc*-*-darwin*)
   # The spiffy cpp-precomp chokes on some legitimate constructs in GCC
   # sources; use -no-cpp-precomp to get to GNU cpp.
   # Apple's GCC has bugs in designated initializer handling, so disable
   # that too.
   stage1_cflags="-no-cpp-precomp -DHAVE_DESIGNATED_INITIALIZERS=0"
   ;;
+# APPLE LOCAL end mainline
 esac
 AC_SUBST(stage1_cflags)
 
@@ -1088,6 +1090,14 @@ gcc_AC_CHECK_DECLS(times, , ,[
 #endif
 ])
 
+# APPLE LOCAL begin mainline 2006-06-02 4508814
+gcc_AC_CHECK_DECLS(sigaltstack, , ,[
+#include "ansidecl.h"
+#include "system.h"
+#include <signal.h>
+])
+# APPLE LOCAL end mainline 2006-06-02 4508814
+
 # More time-related stuff.
 AC_CACHE_CHECK(for struct tms, ac_cv_struct_tms, [
 AC_TRY_COMPILE([
@@ -1270,6 +1280,24 @@ if test "$host_xm_file" != "$build_xm_file"; then
 		done
 	fi
 fi
+
+# APPLE LOCAL begin mainline 2006-06-02 4508814
+case ${host} in
+  powerpc*-*-darwin*)
+    AC_CACHE_CHECK([whether mcontext_t fields have underscores],
+      gcc_cv_mcontext_underscores,
+      AC_COMPILE_IFELSE([
+#include <ucontext.h>
+int main() { mcontext_t m; if (m->ss.srr0) return 0; return 0; }
+],
+	gcc_cv_mcontext_underscores=no, gcc_cv_mcontext_underscores=yes))
+      if test $gcc_cv_mcontext_underscores = yes; then
+        AC_DEFINE(HAS_MCONTEXT_T_UNDERSCORES,,dnl
+          [mcontext_t fields start with __])
+      fi
+    ;;
+esac
+# APPLE LOCAL end mainline 2006-06-02 4508814
 
 # ---------
 # Threading
@@ -1623,14 +1651,19 @@ for f in $build_xm_file; do
   esac
 done
 
-# Define macro CROSS_COMPILE in compilation if this is a cross-compiler.
+ # APPLE LOCAL begin mainline 4.3 2006-12-13 CROSS_DIRECTORY_STRUCTURE 4697325
+# Define macro CROSS_DIRECTORY_STRUCTURE in compilation if this is a
+# cross-compiler which does not use the native headers and libraries.
+ # APPLE LOCAL end mainline 4.3 2006-12-13 CROSS_DIRECTORY_STRUCTURE 4697325
 # Also use all.cross instead of all.internal and adjust SYSTEM_HEADER_DIR.
 CROSS=						AC_SUBST(CROSS)
 ALL=all.internal				AC_SUBST(ALL)
 SYSTEM_HEADER_DIR='$(NATIVE_SYSTEM_HEADER_DIR)'	AC_SUBST(SYSTEM_HEADER_DIR)
 if test x$host != x$target
 then
-	CROSS="-DCROSS_COMPILE"
+ # APPLE LOCAL begin mainline 4.3 2006-12-13 CROSS_DIRECTORY_STRUCTURE 4697325
+	CROSS="-DCROSS_DIRECTORY_STRUCTURE"
+ # APPLE LOCAL end mainline 4.3 2006-12-13 CROSS_DIRECTORY_STRUCTURE 4697325
 	ALL=all.cross
 	SYSTEM_HEADER_DIR='$(CROSS_SYSTEM_HEADER_DIR)'
 	case "$host","$target" in

@@ -19,7 +19,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #include "bfd.h"
 #include "sysdep.h"
@@ -2510,8 +2510,9 @@ _bfd_sh_align_load_span (abfd, sec, contents, swap, relocs,
 
 		  next2_insn = bfd_get_16 (abfd, contents + i + 4);
 		  next2_op = sh_insn_info (next2_insn);
-		  if ((next2_op->flags & (LOAD | STORE)) == 0
-		      && sh_load_use (insn, op, next2_insn, next2_op))
+		  if (next2_op == NULL
+		      || ((next2_op->flags & (LOAD | STORE)) == 0
+			  && sh_load_use (insn, op, next2_insn, next2_op)))
 		    ok = FALSE;
 		}
 

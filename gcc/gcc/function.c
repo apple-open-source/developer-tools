@@ -61,6 +61,8 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "target.h"
 #include "cfglayout.h"
 #include "tree-gimple.h"
+/* APPLE LOCAL mainline */
+#include "predict.h"
 
 #ifndef LOCAL_ALIGNMENT
 #define LOCAL_ALIGNMENT(TYPE, ALIGNMENT) ALIGNMENT
@@ -356,11 +358,12 @@ free_after_compilation (struct function *f)
 HOST_WIDE_INT
 get_func_frame_size (struct function *f)
 {
-#ifdef FRAME_GROWS_DOWNWARD
+  /* APPLE LOCAL begin mainline */
+  if (FRAME_GROWS_DOWNWARD)
   return -f->x_frame_offset;
-#else
+  else
   return f->x_frame_offset;
-#endif
+  /* APPLE LOCAL end mainline */
 }
 
 /* Return size needed for stack frame based on slots so far allocated.
@@ -421,9 +424,10 @@ assign_stack_local_1 (enum machine_mode mode, HOST_WIDE_INT size, int align,
   else
     alignment = align / BITS_PER_UNIT;
 
-#ifdef FRAME_GROWS_DOWNWARD
+  /* APPLE LOCAL begin mainline */
+  if (FRAME_GROWS_DOWNWARD)
   function->x_frame_offset -= size;
-#endif
+  /* APPLE LOCAL end mainline */
 
   /* Ignore alignment we can't do with expected alignment of the boundary.  */
   if (alignment * BITS_PER_UNIT > PREFERRED_STACK_BOUNDARY)
@@ -449,17 +453,18 @@ assign_stack_local_1 (enum machine_mode mode, HOST_WIDE_INT size, int align,
 	  division with a negative dividend isn't as well defined as we might
 	  like.  So we instead assume that ALIGNMENT is a power of two and
 	  use logical operations which are unambiguous.  */
-#ifdef FRAME_GROWS_DOWNWARD
+      /* APPLE LOCAL begin mainline */
+      if (FRAME_GROWS_DOWNWARD)
       function->x_frame_offset
 	= (FLOOR_ROUND (function->x_frame_offset - frame_phase,
 			(unsigned HOST_WIDE_INT) alignment)
 	   + frame_phase);
-#else
+      else
       function->x_frame_offset
 	= (CEIL_ROUND (function->x_frame_offset - frame_phase,
 		       (unsigned HOST_WIDE_INT) alignment)
 	   + frame_phase);
-#endif
+      /* APPLE LOCAL end mainline */
     }
 
   /* On a big-endian machine, if we are allocating more space than we will use,
@@ -480,9 +485,10 @@ assign_stack_local_1 (enum machine_mode mode, HOST_WIDE_INT size, int align,
 			  (function->x_frame_offset + bigend_correction,
 			   Pmode));
 
-#ifndef FRAME_GROWS_DOWNWARD
+  /* APPLE LOCAL begin mainline */
+  if (!FRAME_GROWS_DOWNWARD)
   function->x_frame_offset += size;
-#endif
+  /* APPLE LOCAL end mainline */
 
   x = gen_rtx_MEM (mode, addr);
 
@@ -724,20 +730,24 @@ assign_stack_temp_for_type (enum machine_mode mode, HOST_WIDE_INT size, int keep
 	 can be either above or below this stack slot depending on which
 	 way the frame grows.  We include the extra space if and only if it
 	 is above this slot.  */
-#ifdef FRAME_GROWS_DOWNWARD
+      /* APPLE LOCAL begin mainline */
+      if (FRAME_GROWS_DOWNWARD)
       p->size = frame_offset_old - frame_offset;
-#else
+      else
       p->size = size;
-#endif
 
       /* Now define the fields used by combine_temp_slots.  */
-#ifdef FRAME_GROWS_DOWNWARD
+      if (FRAME_GROWS_DOWNWARD)
+	{
       p->base_offset = frame_offset;
       p->full_size = frame_offset_old - frame_offset;
-#else
+	}
+      else
+	{
       p->base_offset = frame_offset_old;
       p->full_size = frame_offset - frame_offset_old;
-#endif
+	}
+      /* APPLE LOCAL end mainline */
       p->address = 0;
 
       selected = p;
@@ -2521,6 +2531,15 @@ assign_parm_adjust_stack_rtl (struct assign_parm_data_one *data)
 	   && data->nominal_mode != BLKmode
 	   && data->nominal_mode != data->passed_mode)
     stack_parm = NULL;
+  /* APPLE LOCAL begin mainline */
+  /* If stack protection is in effect for this function, don't leave any
+     pointers in their passed stack slots.  */
+  else if (cfun->stack_protect_guard
+	   && (flag_stack_protect == 2
+	       || data->passed_pointer
+	       || POINTER_TYPE_P (data->nominal_type)))
+    stack_parm = NULL;
+  /* APPLE LOCAL end mainline */
 
   data->stack_parm = stack_parm;
 }
@@ -4097,11 +4116,104 @@ expand_main_function (void)
   /* APPLE LOCAL begin mainline 2006-02-17 4356747 stack realign */
   /* deletion */
   /* APPLE LOCAL end mainline 2006-02-17 4356747 stack realign */
+/* APPLE LOCAL begin mainline */
+
 #ifndef HAS_INIT_SECTION
   emit_library_call (init_one_libfunc (NAME__MAIN), LCT_NORMAL, VOIDmode, 0);
 #endif
 }
 
+/* Expand code to initialize the stack_protect_guard.  This is invoked at
+   the beginning of a function to be protected.  */
+
+#ifndef HAVE_stack_protect_set
+# define HAVE_stack_protect_set         0
+# define gen_stack_protect_set(x,y)     (gcc_unreachable (), NULL_RTX)
+#endif
+
+void
+stack_protect_prologue (void)
+{
+  tree guard_decl = targetm.stack_protect_guard ();
+  rtx x, y;
+
+  /* Avoid expand_expr here, because we don't want guard_decl pulled
+     into registers unless absolutely necessary.  And we know that
+     cfun->stack_protect_guard is a local stack slot, so this skips
+     all the fluff.  */
+  x = validize_mem (DECL_RTL (cfun->stack_protect_guard));
+  y = validize_mem (DECL_RTL (guard_decl));
+
+  /* Allow the target to copy from Y to X without leaking Y into a
+     register.  */
+  if (HAVE_stack_protect_set)
+    {
+      rtx insn = gen_stack_protect_set (x, y);
+      if (insn)
+        {
+          emit_insn (insn);
+          return;
+        }
+    }
+
+  /* Otherwise do a straight move.  */
+  emit_move_insn (x, y);
+}
+
+/* Expand code to verify the stack_protect_guard.  This is invoked at
+   the end of a function to be protected.  */
+
+#ifndef HAVE_stack_protect_test
+# define HAVE_stack_protect_test                0
+# define gen_stack_protect_test(x, y, z)        (gcc_unreachable (), NULL_RTX)
+#endif
+
+void
+stack_protect_epilogue (void)
+{
+  tree guard_decl = targetm.stack_protect_guard ();
+  rtx label = gen_label_rtx ();
+  rtx x, y, tmp;
+
+  /* Avoid expand_expr here, because we don't want guard_decl pulled
+     into registers unless absolutely necessary.  And we know that
+     cfun->stack_protect_guard is a local stack slot, so this skips
+     all the fluff.  */
+  x = validize_mem (DECL_RTL (cfun->stack_protect_guard));
+  y = validize_mem (DECL_RTL (guard_decl));
+
+  /* Allow the target to compare Y with X without leaking either into
+     a register.  */
+  switch (HAVE_stack_protect_test != 0)
+    {
+    case 1:
+      tmp = gen_stack_protect_test (x, y, label);
+      if (tmp)
+        {
+          emit_insn (tmp);
+          break;
+        }
+      /* FALLTHRU */
+
+    default:
+      emit_cmp_and_jump_insns (x, y, EQ, NULL_RTX, ptr_mode, 1, label);
+      break;
+    }
+
+  /* The noreturn predictor has been moved to the tree level.  The rtl-level
+     predictors estimate this branch about 20%, which isn't enough to get
+     things moved out of line.  Since this is the only extant case of adding
+     a noreturn function at the rtl level, it doesn't seem worth doing ought
+     except adding the prediction by hand.  */
+  tmp = get_last_insn ();
+  if (JUMP_P (tmp))
+    predict_insn_def (tmp, PRED_NORETURN, TAKEN);
+
+  expand_expr_stmt (targetm.stack_protect_fail ());
+  emit_label (label);
+}
+
+/* APPLE LOCAL end mainline */
 /* Start the RTL for a new function, and set variables used for
    emitting RTL.
    SUBR is the FUNCTION_DECL node.
@@ -4587,6 +4699,12 @@ expand_function_end (void)
 
   /* Output the label for the naked return from the function.  */
   emit_label (naked_return_label);
+
+  /* APPLE LOCAL begin mainline */
+  /* If stack protection is enabled for this function, check the guard.  */
+  if (cfun->stack_protect_guard)
+    stack_protect_epilogue ();
+  /* APPLE LOCAL end mainline */
 
   /* If we had calls to alloca, and this machine needs
      an accurate stack pointer to exit the function,

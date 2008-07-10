@@ -1,6 +1,8 @@
 // PR middle-end/21492
 // { dg-do compile }
 // { dg-options "-Os -fPIC" }
+// APPLE LOCAL -mdynamic-no-pic incompatible with -fPIC
+// { dg-skip-if "Not valid with -mdynamic-no-pic" { *-*-darwin* } { "-mdynamic-no-pic" } { "" } }
 
 extern char *bar (const char *, const char *);
 extern char *baz (char *, const char *);

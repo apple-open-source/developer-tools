@@ -80,6 +80,10 @@ void default_elf_make_msymbol_special (asymbol *sym, struct minimal_symbol *msym
 
 void default_coff_make_msymbol_special (int val, struct minimal_symbol *msym);
 
+/* Do nothing version of dbx_make_msymbol_special. */
+
+void default_dbx_make_msymbol_special (int16_t desc, struct minimal_symbol *msym);
+
 /* Version of cannot_fetch_register() / cannot_store_register() that
    always fails. */
 

@@ -1,0 +1,3 @@
+g/^exec - ${CC} ${mam_cc_FLAGS}/s//& ${ARCH_CCFLAGS}/
+g/^exec - ${CC} ${CCLDFLAGS} ${mam_cc_FLAGS}/s//& ${ARCH_CCFLAGS}/
+w

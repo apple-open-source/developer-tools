@@ -24,19 +24,19 @@ Boston, MA 02111-1307, USA.  */
 #undef TARGET_MACHO
 #define TARGET_MACHO 1
 
-/* APPLE LOCAL begin x86_64 support */
+/* APPLE LOCAL begin mainline */
 #undef  TARGET_64BIT
 #define TARGET_64BIT (target_flags & MASK_64BIT)
 
 #define TARGET_VERSION fprintf (stderr, " (i686 Darwin)");
-/* APPLE LOCAL end x86_64 support */
+/* APPLE LOCAL end mainline */
 
 /* APPLE LOCAL begin mainline 2005-04-11 4010614 */
 #undef TARGET_FPMATH_DEFAULT
 #define TARGET_FPMATH_DEFAULT (TARGET_SSE ? FPMATH_SSE : FPMATH_387)
 /* APPLE LOCAL end mainline 2005-04-11 4010614 */
 
-/* APPLE LOCAL begin x86_64 support */
+/* APPLE LOCAL begin mainline */
 #undef PTRDIFF_TYPE
 #define PTRDIFF_TYPE (TARGET_64BIT ? "long int" : "int")
 
@@ -51,44 +51,67 @@ Boston, MA 02111-1307, USA.  */
       else					\
 	builtin_define ("__i386__");		\
       builtin_define ("__LITTLE_ENDIAN__");     \
-/* APPLE LOCAL mainline 2005-09-01 3449986 */	\
       darwin_cpp_builtins (pfile);		\
     }                                           \
   while (0)
-/* APPLE LOCAL end x86_64 support */
+/* APPLE LOCAL end mainline */
 
 /* We want -fPIC by default, unless we're using -static to compile for
    the kernel or some such.  */
 
 #undef CC1_SPEC
-/* APPLE LOCAL begin dynamic-no-pic */
-#define CC1_SPEC "\
-%{g: %{!fno-eliminate-unused-debug-symbols: -feliminate-unused-debug-symbols }} \
-"/* APPLE LOCAL ignore -mcpu=G4 -mcpu=G5 */"\
-%{!static:%{!mdynamic-no-pic:-fPIC}} %<faltivec %<mno-fused-madd %<mlong-branch %<mlongcall %<mcpu=G4 %<mcpu=G5"
-/* APPLE LOCAL end dynamic-no-pic */
+/* APPLE LOCAL mainline */
+#define CC1_SPEC "%{!mkernel:%{!static:%{!mdynamic-no-pic:-fPIC}}} \
+  "/* APPLE LOCAL ARM ignore -mthumb and -mno-thumb */"\
+  %<mthumb %<mno-thumb \
+  "/* APPLE LOCAL ARM 5683689 */"\
+  %{!mmacosx-version-min=*: %{!miphoneos-version-min=*: %(darwin_cc1_minversion)}} \
+  "/* APPLE LOCAL ignore -mcpu=G4 -mcpu=G5 */"\
+  %<faltivec %<mno-fused-madd %<mlong-branch %<mlongcall %<mcpu=G4 %<mcpu=G5 \
+  %{g: %{!fno-eliminate-unused-debug-symbols: -feliminate-unused-debug-symbols }}"
 
 /* APPLE LOCAL AltiVec */
 #define CPP_ALTIVEC_SPEC "%<faltivec"
 
-/* APPLE LOCAL begin x86_64 support */
+/* APPLE LOCAL begin mainline */
 #undef ASM_SPEC
-#define ASM_SPEC "%{m64: -arch x86_64 -force_cpusubtype_ALL} \
-                  %{!m64: -arch i386 -force_cpusubtype_ALL}"
+#define ASM_SPEC "-arch %(darwin_arch) -force_cpusubtype_ALL"
+
 #define DARWIN_ARCH_SPEC "%{m64:x86_64;:i386}"
 #define DARWIN_SUBARCH_SPEC "					\
   %{m64: x86_64}						\
   %{!m64: i386}"
 
+/* APPLE LOCAL begin mainline 2007-03-13 5005743 5040758 */ \
+/* Determine a minimum version based on compiler options.  */
+#define DARWIN_MINVERSION_SPEC				\
+ "%{!m64|fgnu-runtime:10.4;				\
+    ,objective-c|,objc-cpp-output:10.5;			\
+    ,objective-c++|,objective-c++-cpp-output:10.5;	\
+    :10.4}"
+
+/* APPLE LOCAL end mainline 2007-03-13 5005743 5040758 */ \
+/* APPLE LOCAL begin ARM 5683689 */
+/* Default cc1 option for specifying minimum version number.  */
+#define DARWIN_CC1_MINVERSION_SPEC "-mmacosx-version-min=%(darwin_minversion)"
+
+/* Default ld option for specifying minimum version number.  */
+#define DARWIN_LD_MINVERSION_SPEC "-macosx_version_min %(darwin_minversion)"
+
+/* Use macosx version numbers by default.  */
+#define DARWIN_DEFAULT_VERSION_TYPE  DARWIN_VERSION_MACOSX
+/* APPLE LOCAL end ARM 5683689 */
+
+/* APPLE LOCAL ARM 5681645 */
+#define DARWIN_IPHONEOS_LIBGCC_SPEC "-lgcc_s.10.5 -lgcc"
+
 #undef SUBTARGET_EXTRA_SPECS
 #define SUBTARGET_EXTRA_SPECS					\
-  /* APPLE LOCAL begin mainline 2005-04-11 */			\
+  DARWIN_EXTRA_SPECS						\
   { "darwin_arch", DARWIN_ARCH_SPEC },				\
-  /* APPLE LOCAL mainline 2005-11-15 4271575 */			\
   { "darwin_crt2", "" },					\
   { "darwin_subarch", DARWIN_SUBARCH_SPEC },
-  /* APPLE LOCAL end mainline 2005-04-11 */
-/* APPLE LOCAL end x86_64 support */
+/* APPLE LOCAL end mainline */
 
 /* Use the following macro for any Darwin/x86-specific command-line option
    translation.  */
@@ -131,7 +154,10 @@ extern void darwin_x86_file_end (void);
 
 #define TARGET_DYNAMIC_NO_PIC	(target_flags & MASK_MACHO_DYNAMIC_NO_PIC)
 /* APPLE LOCAL end dynamic-no-pic */
-
+/* APPLE LOCAL begin mainline */
+#undef GOT_SYMBOL_NAME
+#define GOT_SYMBOL_NAME (machopic_function_base_name ())
+/* APPLE LOCAL end mainline */
 /* Define the syntax of pseudo-ops, labels and comments.  */
 
 #define LPREFIX "L"
@@ -159,23 +185,9 @@ extern void darwin_x86_file_end (void);
             fprintf (FILE, "\t%s %d\n", ALIGN_ASM_OP, (LOG)); \
         }				\
     } while (0)
-
-/* This says how to output an assembler line
-   to define a global common symbol.  */
-
-#define ASM_OUTPUT_COMMON(FILE, NAME, SIZE, ROUNDED)  \
-( fputs (".comm ", (FILE)),			\
-  assemble_name ((FILE), (NAME)),		\
-  fprintf ((FILE), ",%lu\n", (unsigned long)(ROUNDED)))
-
-/* This says how to output an assembler line
-   to define a local common symbol.  */
-
-#define ASM_OUTPUT_LOCAL(FILE, NAME, SIZE, ROUNDED)  \
-( fputs (".lcomm ", (FILE)),			\
-  assemble_name ((FILE), (NAME)),		\
-  fprintf ((FILE), ","HOST_WIDE_INT_PRINT_UNSIGNED"\n", (ROUNDED)))
-
+/* APPLE LOCAL begin mainline */
+/* Removed ASM_OUTPUT_COMMON and ASM_OUTPUT_LOCAL */
+/* APPLE LOCAL end mainline */
 
 /* APPLE LOCAL begin Macintosh alignment 2002-2-19 --ff */
 #define MASK_ALIGN_NATURAL	0x40000000
@@ -226,6 +238,11 @@ extern int flag_iasm_blocks;
 #undef SUBTARGET_OVERRIDE_OPTIONS
 #define SUBTARGET_OVERRIDE_OPTIONS				\
   do {								\
+    /* APPLE LOCAL begin ARM 5683689 */				\
+    if (!darwin_macosx_version_min				\
+	&& !darwin_iphoneos_version_min)			\
+      darwin_macosx_version_min = "10.1";			\
+    /* APPLE LOCAL end ARM 5683689 */				\
     /* Handle -mfix-and-continue.  */				\
     if (darwin_fix_and_continue_switch)				\
       {								\
@@ -341,4 +358,12 @@ extern void ix86_darwin_init_expanders (void);
     if (E->as_immediate && ! TARGET_DYNAMIC_NO_PIC && flag_pic)		\
       warning ("non-pic addressing form not suitible for pic code");	\
   } while (0)
-/* APPLE LOCAL end CW asm blocks */
+/* APPLE LOCAL end cw asm blocks */
+
+/* APPLE LOCAL begin 4106131 */
+#undef TARGET_DEEP_BRANCH_PREDICTION
+#define TARGET_DEEP_BRANCH_PREDICTION ((m_PPRO | m_K6 | m_ATHLON_K8 | m_PENT4) & TUNEMASK)
+/* APPLE LOCAL end 4106131 */
+
+/* APPLE LOCAL KEXT */
+#define TARGET_SUPPORTS_KEXTABI1 (! TARGET_64BIT)

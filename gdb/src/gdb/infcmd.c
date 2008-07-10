@@ -796,6 +796,10 @@ step_1 (int skip_subroutines, int single_inst, char *count_string)
   /* In synchronous case, all is well, just use the regular for loop. */
   if (!target_can_async_p ())
     {
+      /* APPLE LOCAL: Stepping command hook here.  */
+      if (stepping_command_hook)
+	stepping_command_hook ();
+
       for (; count > 0; count--)
 	{
 	  clear_proceed_status ();
@@ -957,6 +961,23 @@ step_once (int skip_subroutines, int single_inst, int count)
 	  if (end_of_line != 0
 	      && sal.pc != end_of_line)
 	    sal.pc = end_of_line;
+	  else
+	    {
+	      /* Check to see if there is any more to this line... */
+	      struct symtab_and_line tmp_sal;
+
+	      tmp_sal = find_pc_line (sal.end, 0);
+	      if (tmp_sal.symtab == sal.symtab
+		  && tmp_sal.line == sal.line
+		  && tmp_sal.entry_type == NORMAL_LT_ENTRY
+		  && tmp_sal.end > sal.end)
+		{
+		  sal.pc = tmp_sal.end;
+		  sal.end = tmp_sal.end;
+		}
+	    }
+
+	  
 	}
       else
 	{
@@ -984,7 +1005,8 @@ step_once (int skip_subroutines, int single_inst, int count)
 
       /* Tell the user what's going on.  */
 
-      ui_out_text  (uiout, "** Stepping over inlined function code. **\n");
+      if (dwarf2_debug_inlined_stepping)
+	ui_out_text  (uiout, "** Stepping over inlined function code. **\n");
 	  
       /* Set up various necessary variables to make sure we actually stop when
 	 we get to the breakpoint.  */
@@ -996,7 +1018,12 @@ step_once (int skip_subroutines, int single_inst, int count)
       step_range_end = sal.pc;
       step_over_calls = STEP_OVER_ALL;
       stepping_over_inlined_subroutine = 1;
-      stepping_ranges = global_inlined_call_stack.records[stack_pos].ranges;
+      if (current_inlined_subroutine_stack_size() > 0
+	  && stack_pos > 0
+	  && stack_pos < current_inlined_subroutine_stack_size ())
+	stepping_ranges = global_inlined_call_stack.records[stack_pos].ranges;
+      else
+	stepping_ranges = 0;
 
       proceed ((CORE_ADDR) -1, TARGET_SIGNAL_DEFAULT, 1);
     }
@@ -1004,30 +1031,19 @@ step_once (int skip_subroutines, int single_inst, int count)
 	   && at_inlined_call_site_p (&file_name, &line_num, &column))
     {
       struct symtab_and_line sal;
-      struct symtab_and_line tmp_sal;
       struct symtab_and_line *cur = NULL;
-      struct symbol *func_sym;
       struct symtab *tmp_symtab;
       int func_first_line = 0;
       int found = 0;
 
       stepping_into_inlined_subroutine = 1;
 
-      func_sym = lookup_symbol 
-	((const char *) current_inlined_subroutine_function_name (),
-	 get_selected_block (0), VAR_DOMAIN, 0, &tmp_symtab);
-
-      if (func_sym)
-	{
-	  tmp_sal = find_function_start_sal (func_sym, 1);
-				
-	  func_first_line = tmp_sal.line;
-	}
-      
       if (current_inlined_subroutine_stack_position ()
 	   < current_inlined_subroutine_stack_size ())
 	{
 	  /* Set up the SAL for printing out the current source location.  */
+
+	  step_into_current_inlined_subroutine ();
 
 	  sal = find_pc_line (current_inlined_subroutine_call_stack_start_pc (),
 			      0);
@@ -1044,8 +1060,6 @@ step_once (int skip_subroutines, int single_inst, int count)
 		sal.entry_type = cur->entry_type;
 		break;
 	      }
-	  
-	  step_into_current_inlined_subroutine ();
 
 	  /* Flush the existing frames.  This is necessary because we will need
 	     to create a new INLINED_FRAME at level zero for the inlined 
@@ -1088,8 +1102,6 @@ step_once (int skip_subroutines, int single_inst, int count)
 		}
 	    }
 	  
-	  gdb_assert (found == 1);
-	  
 	  /* Stepping into an inlined function requires creating a new
 	     INLINED_FRAME, at level 0, so we need to flush the current
 	     set of frames.  */
@@ -1103,18 +1115,17 @@ step_once (int skip_subroutines, int single_inst, int count)
 	}
 
       /* Tell the user what we are doing.  */
-	  
-      ui_out_text (uiout, 
-		   "** Simulating stepping into inlined subroutine.  **\n");
+      if (dwarf2_debug_inlined_stepping)
+	ui_out_text (uiout, 
+		     "** Simulating stepping into inlined subroutine.  **\n");
 	  
       /* Tell emacs (or anything else using annotations) to update the 
 	 location.  */
 
       if (at_inlined_call_site_p (&file_name, &line_num, &column))
-	func_first_line = line_num;
-
-      if (!func_first_line)
-	func_first_line = sal.line;
+	  func_first_line = line_num;
+      else
+	func_first_line = inlined_function_find_first_line (sal);
 
       annotate_starting ();
       annotate_frames_invalid ();
@@ -1166,8 +1177,9 @@ step_once (int skip_subroutines, int single_inst, int count)
 		{
 		  step_range_end = inline_start_pc;
 		  stepping_into_inlined_subroutine = 1;
-		  ui_out_text (uiout, 
-			 "** Stepping to beginning of inlined subroutine.  **\n");
+		  if (dwarf2_debug_inlined_stepping)
+		    ui_out_text (uiout, 
+		        "** Stepping to beginning of inlined subroutine.  **\n");
 		}
 	      /* APPLE LOCAL end subroutine inlining  */
 
@@ -1957,6 +1969,7 @@ finish_command (char *arg, int from_tty)
 {
   struct symtab_and_line sal;
   struct frame_info *frame;
+  struct frame_info *selected_frame;
   struct symbol *function;
   struct breakpoint *breakpoint;
   struct cleanup *old_chain;
@@ -1998,10 +2011,12 @@ finish_command (char *arg, int from_tty)
 	error (_("The \"finish\" command does not take any arguments."));
       if (!target_has_execution)
 	error (_("The program is not running."));
-      if (deprecated_selected_frame == NULL)
-	error (_("No selected frame."));
 
-      frame = get_prev_frame (deprecated_selected_frame);
+      /* APPLE LOCAL: If there's no selected frame, default to the
+	 current frame.  */
+      selected_frame = get_selected_frame ("No selected frame.");
+
+      frame = get_prev_frame (selected_frame);
       if (frame == 0)
 	error (_("\"finish\" not meaningful in the outermost frame."));
 
@@ -2021,14 +2036,14 @@ finish_command (char *arg, int from_tty)
 
       /* Find the function we will return from.  */
       
-      function = find_pc_function (get_frame_pc (deprecated_selected_frame));
+      function = find_pc_function (get_frame_pc (selected_frame));
       
       /* Print info on the selected frame, including level number but not
 	 source.  */
       if (from_tty)
 	{
 	  printf_filtered (_("Run till exit from "));
-	  print_stack_frame (get_selected_frame (NULL), 1, LOCATION);
+	  print_stack_frame (selected_frame, 1, LOCATION);
 	}
   
       /* If running asynchronously and the target support asynchronous

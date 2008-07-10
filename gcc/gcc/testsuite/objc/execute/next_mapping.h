@@ -13,22 +13,42 @@
 #include <string.h>
 /* APPLE LOCAL end mainline */
 
+/* APPLE LOCAL begin radar 4894756 */
+#if __OBJC2__
+#undef OBJC_API_VERSION
+#define OBJC_API_VERSION 2
+#endif
 #define objc_get_class(C)			objc_getClass(C)
 #define objc_get_meta_class(C)			objc_getMetaClass(C)
 #define class_get_class_method(C, S)		class_getClassMethod(C, S)
 #define class_get_instance_method(C, S)		class_getInstanceMethod(C, S)
-#define method_get_imp(M)			(((Method)M)->method_imp)
 #define sel_get_name(S)				sel_getName(S)
 #define class_create_instance(C)		class_createInstance(C, 0)
 #define	class_get_class_name(C)			object_getClassName(C)
+
+#if OBJC_API_VERSION >= 2
+#define method_get_imp(M)			(method_getImplementation((Method)M))
+#define class_get_super_class(C)		(class_getSuperclass((Class)C))
+#define object_get_class(O)			(object_getClass((id)O))
+#define object_get_super_class(O)		class_get_super_class(object_get_class(O))
+#define class_is_meta_class(C)			(class_isMetaClass((Class)C) ? YES: NO)
+#define object_is_class(O)			class_is_meta_class(object_get_class(O))
+#define object_is_meta_class(O)			(object_is_class(O) && class_is_meta_class(O) \
+						 && class_is_meta_class(object_get_class(O)))
+#define class_is_class(C)			(class_is_meta_class(C) == NO)
+#else
+#define method_get_imp(M)			(((Method)M)->method_imp)
 #define class_get_super_class(C)		(((struct objc_class *)C)->super_class)
 #define object_get_super_class(O)		class_get_super_class(*(struct objc_class **)O)
-#define objc_lookup_class(N)			objc_lookUpClass(N)
 #define object_get_class(O)			(*(struct objc_class **)O)
-#define class_is_class(C)			(CLS_GETINFO((struct objc_class *)C, CLS_CLASS)? YES: NO)
 #define class_is_meta_class(C)			(CLS_GETINFO((struct objc_class *)C, CLS_META)? YES: NO)
 #define object_is_class(O)			class_is_meta_class(*(struct objc_class **)O)
 #define object_is_meta_class(O)			(class_is_meta_class(O) && class_is_meta_class(*(struct objc_class **)O))
+#define class_is_class(C)			(CLS_GETINFO((struct objc_class *)C, CLS_CLASS)? YES: NO)
+#endif
+
+#define objc_lookup_class(N)			objc_lookUpClass(N)
+/* APPLE LOCAL end radar 4894756 */
 
 /* You need either an empty +initialize method or an empty -forward:: method. 
    The NeXT runtime unconditionally sends +initialize to classes when they are 
@@ -75,6 +95,12 @@
 typedef struct{ char a; } __small_struct;
 #define STRUCTURE_SIZE_BOUNDARY (BITS_PER_UNIT * sizeof (__small_struct))
 /* APPLE LOCAL end mainline */
+
+/* APPLE LOCAL begin ARM support !PCC_BITFIELD_TYPE_MATTERS targets */
+typedef struct { char x; char :0; char y; } test_struct_1;
+typedef struct { char x; int :0; char y; } test_struct_2;
+#define PCC_BITFIELD_TYPE_MATTERS (sizeof (test_struct_1) != sizeof (test_struct_2))
+/* APPLE LOCAL end ARM support !PCC_BITFIELD_TYPE_MATTERS targets */
 
 /* Not sure why the following are missing from NeXT objc headers... */
 
@@ -587,16 +613,27 @@ objc_skip_argspec (const char *type)
   return type;
 }
 
+/* APPLE LOCAL begin radar 4842177 */
+#if OBJC_API_VERSION >= 2
+typedef Method PMETH;
+#else
+typedef struct objc_method *PMETH;
+#endif
+
 /*
   Return the number of arguments that the method MTH expects.
   Note that all methods need two implicit arguments `self' and
   `_cmd'.
 */
 int
-method_get_number_of_arguments (struct objc_method *mth)
+method_get_number_of_arguments (PMETH mth)
 {
   int i = 0;
+#if OBJC_API_VERSION >= 2
+  const char *type = method_getTypeEncoding(mth);
+#else
   const char *type = mth->method_types;
+#endif
   while (*type)
     {
       type = objc_skip_argspec (type);
@@ -612,9 +649,13 @@ method_get_number_of_arguments (struct objc_method *mth)
 */
 
 int
-method_get_sizeof_arguments (struct objc_method *mth)
+method_get_sizeof_arguments (PMETH mth)
 {
+#if OBJC_API_VERSION >= 2
+  const char *type = objc_skip_typespec (method_getTypeEncoding(mth));
+#else
   const char *type = objc_skip_typespec (mth->method_types);
+#endif
   return atoi (type);
 }
 
@@ -664,11 +705,16 @@ method_get_next_argument (arglist_t argframe, const char **type)
   method_get_next_argument.
 */
 char *
-method_get_first_argument (struct objc_method *m,
+method_get_first_argument (PMETH m,
 			   arglist_t argframe,
 			   const char **type)
 {
+#if OBJC_API_VERSION >= 2
+  *type = method_getTypeEncoding(m);
+#else
   *type = m->method_types;
+#endif
+
   return method_get_next_argument (argframe, type);
 }
 
@@ -679,11 +725,15 @@ method_get_first_argument (struct objc_method *m,
 */
 
 char *
-method_get_nth_argument (struct objc_method *m,
+method_get_nth_argument (PMETH m,
 			 arglist_t argframe, int arg,
 			 const char **type)
 {
+#if OBJC_API_VERSION >= 2
+  const char *t = objc_skip_argspec (method_getTypeEncoding(m));
+#else
   const char *t = objc_skip_argspec (m->method_types);
+#endif
 
   if (arg > method_get_number_of_arguments (m))
     return 0;
@@ -802,14 +852,20 @@ objc_layout_structure_next_member (struct objc_struct_layout *layout)
 
   type = objc_skip_type_qualifiers (layout->type);
 
-  desired_align = objc_alignof_type (type) * BITS_PER_UNIT;
+/* APPLE LOCAL begin ARM support !PCC_BITFIELD_TYPE_MATTERS targets */
+  if (!PCC_BITFIELD_TYPE_MATTERS && *type == _C_BFLD)
+    desired_align = 0;
+  else
+    desired_align = objc_alignof_type (type) * BITS_PER_UNIT;
+/* APPLE LOCAL end ARM support !PCC_BITFIELD_TYPE_MATTERS targets */
 
   /* Record must have at least as much alignment as any field.
      Otherwise, the alignment of the field within the record
      is meaningless.  */
   layout->record_align = MAX (layout->record_align, desired_align);
 
-  if (*type == _C_BFLD)
+  /* APPLE LOCAL ARM support !PCC_BITFIELD_TYPE_MATTERS targets */
+  if (*type == _C_BFLD && PCC_BITFIELD_TYPE_MATTERS)
     {
       int bfld_size = atoi (++type);
       int int_align = __alignof__ (int) * BITS_PER_UNIT;
@@ -877,7 +933,9 @@ void objc_layout_structure_get_info (struct objc_struct_layout *layout,
    This code is derived from the GNU runtime's NXConstantString implementation.
 */
 
+#if OBJC_API_VERSION < 2
 struct objc_class _NSConstantStringClassReference;
+#endif
 
 @interface NSConstantString : Object
 {
@@ -909,9 +967,12 @@ struct objc_class _NSConstantStringClassReference;
 
 void objc_constant_string_init (void) __attribute__((constructor));
 void objc_constant_string_init (void) {
+#if OBJC_API_VERSION < 2
   memcpy (&_NSConstantStringClassReference,
 	  objc_getClass ("NSConstantString"),
 	  sizeof (_NSConstantStringClassReference));
+#endif
 }
+/* APPLE LOCAL end radar 4842177 */
 
 #endif  /* #ifdef __NEXT_RUNTIME__ */

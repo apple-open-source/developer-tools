@@ -39,8 +39,6 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "intl.h"
 #include "tm_p.h"
 #include "splay-tree.h"
-/* APPLE LOCAL 4133801 */
-#include "langhooks.h"
 #include "debug.h"
 /* APPLE LOCAL AltiVec */
 #include "../libcpp/internal.h"
@@ -285,8 +283,11 @@ fe_file_change (const struct line_map *new_map)
 	  input_line = included_at;
 	  push_srcloc (new_map->to_file, 1);
 #endif
-	  /* APPLE LOCAL 4133801 */
-	  lang_hooks.start_source_file (included_at, new_map->to_file);
+	  /* APPLE LOCAL begin 4137741 */
+	  /* Call through the debug hook, unless this is being deferred.  */
+	  if (!CPP_OPTION (parse_in, defer_file_change_debug_hooks))
+	    (*debug_hooks->start_source_file) (included_at, new_map->to_file);
+	  /* APPLE LOCAL end 4137741 */
 #ifndef NO_IMPLICIT_EXTERN_C
 	  if (c_header_level)
 	    ++c_header_level;
@@ -309,8 +310,12 @@ fe_file_change (const struct line_map *new_map)
 	}
 #endif
       pop_srcloc ();
-      /* APPLE LOCAL 4133801 */
-      lang_hooks.end_source_file (new_map->to_line, new_map->to_file);
+
+      /* APPLE LOCAL begin 4137741 */
+      /* Call through the debug hook, unless this is being deferred.  */
+      if (!CPP_OPTION (parse_in, defer_file_change_debug_hooks))
+	(*debug_hooks->end_source_file) (new_map->to_line);
+      /* APPLE LOCAL end 4137741 */
     }
 
   update_header_times (new_map->to_file);
@@ -430,7 +435,7 @@ c_lex_with_flags (tree *value, unsigned char *cpp_flags)
       if (tok->type == CPP_CLOSE_BRACE && iasm_state >= iasm_decls)
 	{
 	  iasm_state = iasm_none;
-	  iasm_saved_token = tok;
+	  _cpp_backup_tokens (parse_in, 1);
 	  iasm_at_bol = false;
 	  --c_lex_depth;
 	  timevar_pop (TV_CPP);
@@ -559,6 +564,8 @@ c_lex_with_flags (tree *value, unsigned char *cpp_flags)
 	{
 	  location_t atloc = input_location;
 	  
+	  /* APPLE LOCAL CW asm blocks */
+	  ++parse_in->keep_tokens;
 	retry_at:
 	  tok = cpp_get_token (parse_in);
 	  type = tok->type;
@@ -587,7 +594,7 @@ c_lex_with_flags (tree *value, unsigned char *cpp_flags)
                 {
                   /* This is necessary for C++, as we don't have the tight
                      integration between the lexer and the parser... */
-                  iasm_saved_token = tok;
+		  _cpp_backup_tokens (parse_in, 1);
                   /* Return the @-sign verbatim.  */
                   *value = NULL;
                   tok = lasttok;
@@ -600,21 +607,17 @@ c_lex_with_flags (tree *value, unsigned char *cpp_flags)
 	      error ("%Hstray %<@%> in program", &atloc);
 	      goto retry_after_at;
 	    }
+	  /* APPLE LOCAL CW asm blocks */
+	  --parse_in->keep_tokens;
 	  break;
 	}
 	/* APPLE LOCAL begin CW asm blocks C++ */
 	if (flag_iasm_blocks_local)
 	  {
-	    do 
-	      tok = cpp_get_token (parse_in);
-	    while (tok->type == CPP_PADDING);
 	    /* This is necessary for C++, as we don't have the tight
 	       integration between the lexer and the parser... */
-	       iasm_saved_token = tok;
 	    /* Return the @-sign verbatim.  */
 	    *value = NULL;
-	    tok = lasttok;
-	    type = tok->type;
 	    break;
 	  }
        /* APPLE LOCAL end CW asm blocks C++ */
@@ -693,10 +696,12 @@ c_lex_with_flags (tree *value, unsigned char *cpp_flags)
 	     or '+'. This is to allow "b *+8" which is disallwed by darwin's
 	     assembler but nevertheless is needed to be compatible with CW tools. */
   	  lasttok = tok;
+	  ++parse_in->keep_tokens;
 	  do
               tok = cpp_get_token (parse_in);
           while (tok->type == CPP_PADDING);
-	  iasm_saved_token = tok;
+	  _cpp_backup_tokens (parse_in, 1);
+	  --parse_in->keep_tokens;
 	  if (tok->type == CPP_PLUS || tok->type == CPP_MINUS)
 	      type = CPP_DOT;
 	  tok = lasttok;
@@ -704,7 +709,16 @@ c_lex_with_flags (tree *value, unsigned char *cpp_flags)
       *value = NULL_TREE;
       break;
     /* APPLE LOCAL end CW asm blocks */
+    /* APPLE LOCAL begin 4137741 */
+    /* For CPP_BINCL and CPP_EINCL tokens, we shall need to propagate
+       line number information; the location field shall already include
+       the desired file name.  */
+    case CPP_BINCL:
+    case CPP_EINCL:
+      *value = build_int_cst (integer_type_node, (HOST_WIDE_INT) tok->src_loc);
+      break;
 
+    /* APPLE LOCAL end 4137741 */
       /* These tokens should not be visible outside cpplib.  */
     case CPP_HEADER_NAME:
     case CPP_COMMENT:
@@ -724,7 +738,11 @@ c_lex_with_flags (tree *value, unsigned char *cpp_flags)
     --c_lex_depth;
   /* APPLE LOCAL end CW asm blocks */
 
-  if (!no_more_pch)
+    /* APPLE LOCAL begin 4137741 */
+  if (!no_more_pch
+      && type != CPP_BINCL
+      && type != CPP_EINCL)
+    /* APPLE LOCAL end 4137741 */
     {
       no_more_pch = true;
       c_common_no_more_pch ();

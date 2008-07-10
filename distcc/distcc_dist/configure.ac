@@ -11,7 +11,7 @@ dnl Process this file with autoconf to produce a configure script
 
 # As of 0.6cvs, distcc no longer uses automake, only autoconf.
 AC_PREREQ(2.53)
-AC_INIT(distcc, 2.18.3, [distcc@lists.samba.org])
+AC_INIT(distcc, 2.18.5, [distcc@lists.samba.org])
 AC_CONFIG_HEADERS(src/config.h)
 AC_CANONICAL_HOST
 

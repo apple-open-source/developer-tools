@@ -7,8 +7,8 @@ APPLE_INTERNAL_TOOLS default = /AppleInternal/Developer/Tools ;
 SYSTEM_DEVELOPER_TOOLS default = "$(SYSTEM_DEVELOPER_DIR)/Tools" ;
 # Variables for invoking commands using explict paths
 # except where built in shell functions should be used
-ASM		default = "$(DEVELOPER_BIN_DIR)/as" ;
-BRIDGET         default = "$(DEVELOPER_BIN_DIR)/bridget" ;
+ASM		    default = "$(DEVELOPER_BIN_DIR)/as" ;
+BRIDGET     default = "$(DEVELOPER_BIN_DIR)/bridget" ;
 # CC defined in BeginProduct rule based on value of GCC_VERSION and other settings
 CD		default = cd ;
 CHMOD		default = /bin/chmod ;
@@ -27,14 +27,14 @@ JAR		default = /usr/bin/jar ;
 export JAVA_COMPILER	default = /usr/bin/javac ;
 export JAVACONFIG	default = "$(DEVELOPER_BIN_DIR)/javaconfig" ;
 # LD defined in BeginProduct rule based value of GCC_VERSION and other settings
-LEX		default = "$(DEVELOPER_BIN_DIR)/lex" ;
+LEX		    default = "$(DEVELOPER_BIN_DIR)/lex" ;
 LIBTOOL		default = "$(DEVELOPER_BIN_DIR)/libtool" ;
 LN		default = /bin/ln ;
-LNRESOLVE       default = "$(SYSTEM_DEVELOPER_TOOLS)/lnresolve" ;
+LNRESOLVE   default = "$(SYSTEM_DEVELOPER_TOOLS)/lnresolve" ;
 MAKEPSEUDOLIB	default = $(APPLE_INTERNAL_TOOLS)/MakePseudoLibrary ;
 MERGEINFO	default = /usr/lib/mergeInfo ;
 MKDIR		default = /bin/mkdir ;
-MIG		default = "$(DEVELOPER_BIN_DIR)/mig" ;
+MIG		    default = "$(DEVELOPER_BIN_DIR)/mig" ;
 MV		default = /bin/mv ;
 NMEDIT		default = "$(DEVELOPER_BIN_DIR)/nmedit" ;
 OSAC		default = /usr/bin/osacompile ;

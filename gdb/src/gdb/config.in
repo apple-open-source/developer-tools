@@ -81,9 +81,6 @@
 /* Define to 1 if you have the `dcgettext' function. */
 #undef HAVE_DCGETTEXT
 
-/* Define if DebugSymbols framework is present. */
-#undef HAVE_DEBUG_SYMBOLS_FRAMEWORK
-
 /* Define to 1 if you have the declaration of `free', and to 0 if you don't.
    */
 #undef HAVE_DECL_FREE
@@ -609,6 +606,12 @@
 
 /* Define to 1 to use the arch program instead of exec. */
 #undef USE_ARCH_FOR_EXEC
+
+/* Define if Carbon framework is available and we should use it. */
+#undef USE_CARBON_FRAMEWORK
+
+/* Define if DebugSymbols framework is available and we should use it. */
+#undef USE_DEBUG_SYMBOLS_FRAMEWORK
 
 /* Define to 1 if the regex included in libiberty should be used. */
 #undef USE_INCLUDED_REGEX

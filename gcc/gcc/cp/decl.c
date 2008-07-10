@@ -1212,6 +1212,10 @@ duplicate_decls (tree newdecl, tree olddecl)
     }
   else if (TREE_CODE (olddecl) != TREE_CODE (newdecl))
     {
+      /* APPLE LOCAL begin radar 4829851 */
+      if (c_dialect_objc () && DECL_P (newdecl))
+        objc_check_global_decl (newdecl);
+      /* APPLE LOCAL end radar 4829851 */
       if ((TREE_CODE (olddecl) == TYPE_DECL && DECL_ARTIFICIAL (olddecl)
 	   && TREE_CODE (newdecl) != TYPE_DECL
 	   && ! (TREE_CODE (newdecl) == TEMPLATE_DECL
@@ -2875,7 +2879,7 @@ initialize_predefined_identifiers (void)
 	IDENTIFIER_CTOR_OR_DTOR_P (*pid->node) = 1;
     }
   /* APPLE LOCAL begin KEXT 2.95-ptmf-compatibility --turly */
-  if (flag_apple_kext)
+  if (TARGET_KEXTABI == 1)
     {
       /* This is snarfed from the 2.95 cp-tree.h.  The mechanism is
 	 completely different from gcc3 (see cp-tree.h, and read the
@@ -3002,7 +3006,7 @@ cxx_init_decl_processing (void)
 #endif
 
   /* APPLE LOCAL begin KEXT 2.95-ptmf-compatibility --turly */
-  if (flag_apple_kext)
+  if (TARGET_KEXTABI == 1)
     delta_type_node = short_integer_type_node;
   else
   /* APPLE LOCAL end KEXT 2.95-ptmf-compatibility --turly */
@@ -3828,6 +3832,10 @@ start_decl (const cp_declarator *declarator,
 
   /* Set attributes here so if duplicate decl, will have proper attributes.  */
   cplus_decl_attributes (&decl, attributes, 0);
+  /* APPLE LOCAL begin radar 4592503 */
+  if (c_dialect_objc ())
+    objc_checkon_weak_attribute (decl);
+  /* APPLE LOCAL end radar 4592503 */
 
   /* If #pragma weak was used, mark the decl weak now.  */
   maybe_apply_pragma_weak (decl);
@@ -6125,7 +6133,7 @@ build_ptrmemfunc_type (tree type)
       = build_ptrmemfunc_type (TYPE_MAIN_VARIANT (type));
 
   /* APPLE LOCAL begin KEXT 2.95-ptmf-compatibility --turly */
-  if (flag_apple_kext)
+  if (TARGET_KEXTABI == 1)
     {
       tree u = make_aggr_type (UNION_TYPE);
       SET_IS_AGGR_TYPE (u, 0);
@@ -9778,6 +9786,10 @@ finish_enum (tree enumtype)
 
 	  /* Update the minimum and maximum values, if appropriate.  */
 	  value = DECL_INITIAL (decl);
+	  /* APPLE LOCAL begin mainline */
+	  if (value == error_mark_node)
+	    value = integer_zero_node;
+	  /* APPLE LOCAL end mainline */
 	  /* Figure out what the minimum and maximum values of the
 	     enumerators are.  */
 	  if (!minnode)
@@ -9880,10 +9892,16 @@ finish_enum (tree enumtype)
      type of the enumeration.  */
   for (values = TYPE_VALUES (enumtype); values; values = TREE_CHAIN (values))
     {
+      /* APPLE LOCAL begin mainline */
+      location_t saved_location;
+
       decl = TREE_VALUE (values);
+      saved_location = input_location;
+      input_location = DECL_SOURCE_LOCATION (decl);
       value = perform_implicit_conversion (underlying_type,
 					   DECL_INITIAL (decl));
-
+      input_location = saved_location;
+      /* APPLE LOCAL end mainline */
       /* Do not clobber shared ints.  */
       value = copy_node (value);
       
@@ -9971,8 +9989,13 @@ build_enumerator (tree name, tree value, tree enumtype)
 	      value = build_int_cst_wide (TREE_TYPE (prev_value), lo, hi);
 	      overflowed |= !int_fits_type_p (value, TREE_TYPE (prev_value));
 
+	      /* APPLE LOCAL begin mainline */
 	      if (overflowed)
+		{
 		error ("overflow in enumeration values at %qD", name);
+		  value = error_mark_node;
+		}
+	      /* APPLE LOCAL end mainline */
 	    }
 	  else
 	    value = integer_zero_node;
@@ -11195,7 +11218,7 @@ cxx_maybe_build_cleanup (tree decl)
 			 && CLASSTYPE_VBASECLASSES (type));
       /* APPLE LOCAL begin KEXT double destructor */
       special_function_kind dtor = sfk_complete_destructor;
-      if (flag_apple_kext
+      if (TARGET_KEXTABI == 1
 	  && has_apple_kext_compatibility_attr_p (type))
 	{
 	  /* If we have a trivial operator delete (), we can go ahead and

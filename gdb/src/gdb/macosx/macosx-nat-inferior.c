@@ -55,6 +55,7 @@
 #include <ctype.h>
 #include <sys/param.h>
 #include <sys/sysctl.h>
+#include <sys/proc.h>
 #include <mach/mach_error.h>
 
 #include "macosx-nat-dyld.h"
@@ -90,8 +91,11 @@
 #define SINGLE_STEP EXC_I386_SGL
 #elif defined (TARGET_POWERPC)
 #define SINGLE_STEP 5
+#elif defined (TARGET_ARM)
+#define SINGLE_STEP 5  /* ARM HACK - the system doesn't support 
+			  hardware single stepping...  */
 #else
-error unknown architecture
+#error "unknown architecture"
 #endif
 
 #define _dyld_debug_make_runnable(a, b) DYLD_FAILURE
@@ -145,6 +149,17 @@ struct macosx_pending_event
   unsigned char *buf;
   struct macosx_pending_event *next;
   struct macosx_pending_event *prev;
+};
+
+/* A list of processes already running at gdb-startup with the same
+   name.  Used for the "-waitfor" command line option so we can ignore
+   existing zombies/running copies of the process/etc and detect a newly
+   launched version.  */
+
+struct pid_list
+{
+  int count;
+  pid_t *pids;
 };
 
 struct macosx_pending_event *pending_event_chain, *pending_event_tail;
@@ -218,6 +233,9 @@ static void macosx_child_files_info (struct target_ops *ops);
 static char *macosx_pid_to_str (ptid_t tpid);
 
 static int macosx_child_thread_alive (ptid_t tpid);
+
+static struct pid_list *find_existing_processes_by_name (const char *procname);
+static int pid_present_on_pidlist (pid_t pid, struct pid_list *proclist);
 
 static void
 macosx_handle_signal (macosx_signal_thread_message *msg,
@@ -1082,10 +1100,10 @@ macosx_check_new_threads (thread_array_t thread_list, unsigned int nthreads)
 static void
 macosx_child_stop (void)
 {
-  extern pid_t inferior_process_group;
+  pid_t pid = PIDGET (inferior_ptid);
   int ret;
 
-  ret = kill (inferior_process_group, SIGINT);
+  ret = kill (pid, SIGINT);
 }
 
 static void
@@ -1239,6 +1257,7 @@ macosx_mourn_inferior ()
   macosx_dyld_mourn_inferior ();
 
   macosx_clear_pending_events ();
+  remove_thread_event_breakpoints ();
 }
 
 void
@@ -1260,7 +1279,8 @@ macosx_fetch_task_info (struct kinfo_proc **info, size_t * count)
 }
 
 char **
-macosx_process_completer_quoted (char *text, char *word, int quote)
+macosx_process_completer_quoted (char *text, char *word, int quote, 
+                                 struct pid_list *ignorepids)
 {
   struct kinfo_proc *proc = NULL;
   size_t count, i, found = 0;
@@ -1282,6 +1302,11 @@ macosx_process_completer_quoted (char *text, char *word, int quote)
     {
       /* classic-inferior-support */
       if (!can_attach (proc[i].kp_proc.p_pid))
+        continue;
+      if (pid_present_on_pidlist (proc[i].kp_proc.p_pid, ignorepids))
+        continue;
+      /* Skip zombie processes */
+      if (proc[i].kp_proc.p_stat == SZOMB || proc[i].kp_proc.p_stat == 0)
         continue;
       char *temp =
         (char *) xmalloc (strlen (proc[i].kp_proc.p_comm) + 1 + 16);
@@ -1329,11 +1354,12 @@ macosx_process_completer_quoted (char *text, char *word, int quote)
 char **
 macosx_process_completer (char *text, char *word)
 {
-  return macosx_process_completer_quoted (text, word, 1);
+  return macosx_process_completer_quoted (text, word, 1, NULL);
 }
 
 static void
-macosx_lookup_task_local (char *pid_str, int pid, task_t * ptask, int *ppid)
+macosx_lookup_task_local (char *pid_str, int pid, task_t * ptask, int *ppid,
+                          struct pid_list *ignorepids)
 {
   CHECK_FATAL (ptask != NULL);
   CHECK_FATAL (ppid != NULL);
@@ -1357,7 +1383,8 @@ macosx_lookup_task_local (char *pid_str, int pid, task_t * ptask, int *ppid)
   else
     {
       struct cleanup *cleanups = NULL;
-      char **ret = macosx_process_completer_quoted (pid_str, pid_str, 0);
+      char **ret = macosx_process_completer_quoted (pid_str, pid_str, 0, 
+                                                    ignorepids);
       char *tmp = NULL;
       char *tmp2 = NULL;
       unsigned long lpid = 0;
@@ -1417,7 +1444,7 @@ macosx_lookup_task_local (char *pid_str, int pid, task_t * ptask, int *ppid)
    include the pathname of the process.  */
 
 static void
-wait_for_process_by_name (const char *procname)
+wait_for_process_by_name (const char *procname, struct pid_list *ignorepids)
 {
   struct kinfo_proc *proc = NULL;
   size_t count, i;
@@ -1433,6 +1460,8 @@ wait_for_process_by_name (const char *procname)
       macosx_fetch_task_info (&proc, &count);
       for (i = 0; i < count; i++)
         {
+          if (pid_present_on_pidlist (proc[i].kp_proc.p_pid, ignorepids))
+            continue;
           if (strncmp (proc[i].kp_proc.p_comm, procname, MAXCOMLEN) == 0)
             {
               xfree (proc);
@@ -1444,12 +1473,65 @@ wait_for_process_by_name (const char *procname)
     }
 }
 
+/* -waitfor should ignore any processes by name that are already
+   up & running -- we want to attach to the first newly-launched
+   process.  So we begin by creating a list of all processes
+   with that name that are executing/zombied/etc.  
+   This function returns an xmalloc'ed array - the caller is 
+   responsible for freeing it.  
+   NULL is returned if there are no matching processes. */
+
+static struct pid_list *
+find_existing_processes_by_name (const char *procname)
+{
+  struct kinfo_proc *proc = NULL;
+  struct pid_list *pidlist;
+  size_t count, i;
+  int matching_processes, j;
+
+  macosx_fetch_task_info (&proc, &count);
+  for (i = 0, matching_processes = 0; i < count; i++)
+    if (strncmp (proc[i].kp_proc.p_comm, procname, MAXCOMLEN) == 0)
+      matching_processes++;
+  if (matching_processes == 0)
+    {
+      xfree (proc);
+      return NULL;
+    }
+
+  pidlist = (struct pid_list *) xmalloc (sizeof (struct pid_list));
+  pidlist->count = matching_processes;
+  pidlist->pids = (pid_t *) xmalloc (sizeof (pid_t) * matching_processes);
+  
+  for (i = 0, j = 0; i < count; i++)
+    if (strncmp (proc[i].kp_proc.p_comm, procname, MAXCOMLEN) == 0)
+      pidlist->pids[j++] = proc[i].kp_proc.p_pid;
+
+  xfree (proc);
+  return pidlist;
+}
+
+/* Returns 1 if PID is present on PROCLIST. 
+   0 if PID is not present or PROCLIST is empty.  */
+
 static int
-macosx_lookup_task (char *args, task_t * ptask, int *ppid)
+pid_present_on_pidlist (pid_t pid, struct pid_list *proclist)
+{
+  int i;
+  if (proclist == NULL)
+    return 0;
+  for (i = 0; i < proclist->count ; i++)
+    if (proclist->pids[i] == pid)
+      return 1;
+  return 0;
+}
+
+static int
+macosx_lookup_task (char *args, task_t *ptask, int *ppid)
 {
   char *pid_str = NULL;
   char *tmp = NULL;
-
+  struct pid_list *ignorepids = NULL; /* processes to ignore */
   struct cleanup *cleanups = NULL;
   char **argv = NULL;
   unsigned int argc;
@@ -1493,7 +1575,13 @@ macosx_lookup_task (char *args, task_t * ptask, int *ppid)
            pid_str = argv[1];
            if (strlen (pid_str) > MAXCOMLEN)
              pid_str[MAXCOMLEN] = '\0';
-           wait_for_process_by_name (pid_str);
+           ignorepids = find_existing_processes_by_name (pid_str);
+           if (ignorepids)
+             {
+               make_cleanup (xfree, ignorepids->pids);
+               make_cleanup (xfree, ignorepids);
+             }
+           wait_for_process_by_name (pid_str, ignorepids);
 	   break;
         }
     default:
@@ -1513,7 +1601,7 @@ macosx_lookup_task (char *args, task_t * ptask, int *ppid)
       pid = lpid;
     }
 
-  macosx_lookup_task_local (pid_str, pid, ptask, ppid);
+  macosx_lookup_task_local (pid_str, pid, ptask, ppid, ignorepids);
 
   do_cleanups (cleanups);
   return 0;
@@ -1567,6 +1655,12 @@ macosx_child_attach (char *args, int from_tty)
       return;
     }
   
+  /* A native (i386) gdb trying to attach to a translated (ppc) app will
+     result in a gdb crash.  Let's flag it as an error instead.  */
+  if (is_pid_classic (getpid ()) == 0 && is_pid_classic (pid) == 1)
+    warning ("Attempting to attach to a PPC process with an i386 "
+             "native gdb - attach will not succeed.");
+
   macosx_create_inferior_for_task (macosx_status, itask, pid);
 
   macosx_exception_thread_create (&macosx_status->exception_status,
@@ -1686,6 +1780,48 @@ macosx_child_attach (char *args, int from_tty)
     {
       macosx_solib_add (NULL, 0, NULL, 0);
     }
+
+  /* I don't have any good way to know whether the malloc library
+     has been initialized yet.  But I'm going to guess that we are
+     unlikely to be able to attach BEFORE then...  */
+  /* BUT sometimes we get a process that has been stopped at the
+     first instruction when launched so we can attach to it.  In
+     that case, we know that malloc hasn't been inited.  We had
+     better not set malloc inited in that case, or somebody will
+     try to call a function that does malloc, and we will corrupt
+     the target.
+
+     Note, we don't know what the "first instruction is" we are just
+     relying on the fact that it's currently _dyld_start.  Yecch...
+     But I can't think of anything better to do.  */
+  {
+    extern char *dyld_symbols_prefix;
+    int result;
+    char *name;
+    CORE_ADDR addr;
+
+    result = find_pc_partial_function (stop_pc, &name, &addr, NULL);
+    if (result != 0)
+      {
+	char *decorated_dyld_start;
+	decorated_dyld_start = xmalloc ( strlen ("_dyld_start") 
+				   + strlen (dyld_symbols_prefix) + 1);
+	sprintf (decorated_dyld_start, "%s_dyld_start", dyld_symbols_prefix);
+	/* I also check to make sure we're not too far away from
+	   _dyld_start, in case dyld gets stripped and there are a
+	   bunch of functions after dyld_start that don't have
+	   symbols.  */
+	if (strcmp (name, decorated_dyld_start) != 0
+	    || stop_pc - addr > 30 )
+	  {
+	    macosx_set_malloc_inited (1);
+	  }
+	xfree (decorated_dyld_start);
+      }
+    else
+      macosx_set_malloc_inited (1);
+
+  }  
 }
 
 static void
@@ -1939,7 +2075,7 @@ macosx_ptrace_him (int pid)
 static void
 macosx_child_create_inferior (char *exec_file, char *allargs, char **env,
 			      int from_tty)
-{
+{  
   if ((exec_bfd != NULL) &&
       (exec_bfd->xvec->flavour == bfd_target_pef_flavour
        || exec_bfd->xvec->flavour == bfd_target_pef_xlib_flavour))
@@ -1947,6 +2083,10 @@ macosx_child_create_inferior (char *exec_file, char *allargs, char **env,
       error
         ("Can't run a PEF binary - use LaunchCFMApp as the executable file.");
     }
+
+  /* It's not safe to call functions in the target until we've initialized
+     the libsystem malloc package.  So for now, mark it unsafe.  */
+  macosx_set_malloc_inited (0);
 
   fork_inferior (exec_file, allargs, env, macosx_ptrace_me, macosx_ptrace_him,
                  NULL, NULL);
@@ -2188,192 +2328,6 @@ macosx_async (void (*callback) (enum inferior_event_type event_type,
     }
 }
 
-struct sal_chain
-{
-  struct sal_chain *next;
-  struct symtab_and_line sal;
-};
-
-/* On some platforms, you need to turn on the exception callback
-   to hit the catchpoints for exceptions.  Not on Mac OS X. */
-
-int
-macosx_enable_exception_callback (enum exception_event_kind kind, int enable)
-{
-  return 1;
-}
-
-/* The MacOS X implemenatation of the find_exception_catchpoints
-   target vector entry.  Relies on the __cxa_throw and
-   __cxa_begin_catch functions from libsupc++.  */
-
-struct symtabs_and_lines *
-macosx_find_exception_catchpoints (enum exception_event_kind kind,
-                                   struct objfile *restrict_objfile)
-{
-  struct symtabs_and_lines *return_sals;
-  char *symbol_name;
-  struct objfile *objfile;
-  struct minimal_symbol *msymbol;
-  unsigned int hash;
-  struct sal_chain *sal_chain = 0;
-
-  switch (kind)
-    {
-    case EX_EVENT_THROW:
-      symbol_name = "__cxa_throw";
-      break;
-    case EX_EVENT_CATCH:
-      symbol_name = "__cxa_begin_catch";
-      break;
-    default:
-      error ("We currently only handle \"throw\" and \"catch\"");
-    }
-
-  hash = msymbol_hash (symbol_name) % MINIMAL_SYMBOL_HASH_SIZE;
-
-  ALL_OBJFILES (objfile)
-  {
-    for (msymbol = objfile->msymbol_hash[hash];
-         msymbol != NULL; msymbol = msymbol->hash_next)
-      if (MSYMBOL_TYPE (msymbol) == mst_text
-          && (strcmp_iw (SYMBOL_LINKAGE_NAME (msymbol), symbol_name) == 0))
-        {
-          /* We found one, add it here... */
-          CORE_ADDR catchpoint_address;
-          CORE_ADDR past_prologue;
-
-          struct sal_chain *next
-            = (struct sal_chain *) alloca (sizeof (struct sal_chain));
-
-          next->next = sal_chain;
-          init_sal (&next->sal);
-          next->sal.symtab = NULL;
-
-          catchpoint_address = SYMBOL_VALUE_ADDRESS (msymbol);
-          past_prologue = SKIP_PROLOGUE (catchpoint_address);
-
-          next->sal.pc = past_prologue;
-          next->sal.line = 0;
-          next->sal.end = past_prologue;
-
-          sal_chain = next;
-
-        }
-  }
-
-  if (sal_chain)
-    {
-      int index = 0;
-      struct sal_chain *temp;
-
-      for (temp = sal_chain; temp != NULL; temp = temp->next)
-        index++;
-
-      return_sals = (struct symtabs_and_lines *)
-        xmalloc (sizeof (struct symtabs_and_lines));
-      return_sals->nelts = index;
-      return_sals->sals =
-        (struct symtab_and_line *) xmalloc (index *
-                                            sizeof (struct symtab_and_line));
-
-      for (index = 0; sal_chain; sal_chain = sal_chain->next, index++)
-        return_sals->sals[index] = sal_chain->sal;
-      return return_sals;
-    }
-  else
-    return NULL;
-
-}
-
-/* Returns data about the current exception event */
-
-struct exception_event_record *
-macosx_get_current_exception_event ()
-{
-  static struct exception_event_record *exception_event = NULL;
-  struct frame_info *curr_frame;
-  struct frame_info *fi;
-  CORE_ADDR pc;
-  int stop_func_found;
-  char *stop_name;
-  char *typeinfo_str;
-
-  if (exception_event == NULL)
-    {
-      exception_event = (struct exception_event_record *)
-        xmalloc (sizeof (struct exception_event_record));
-      exception_event->exception_type = NULL;
-    }
-
-  curr_frame = get_current_frame ();
-  if (!curr_frame)
-    return (struct exception_event_record *) NULL;
-
-  pc = get_frame_pc (curr_frame);
-  stop_func_found = find_pc_partial_function (pc, &stop_name, NULL, NULL);
-  if (!stop_func_found)
-    return (struct exception_event_record *) NULL;
-
-  if (strcmp (stop_name, "__cxa_throw") == 0)
-    {
-
-      fi = get_prev_frame (curr_frame);
-      if (!fi)
-        return (struct exception_event_record *) NULL;
-
-      exception_event->throw_sal = find_pc_line (get_frame_pc (fi), 1);
-
-      /* FIXME: We don't know the catch location when we
-         have just intercepted the throw.  Can we walk the
-         stack and redo the runtimes exception matching
-         to figure this out? */
-      exception_event->catch_sal.pc = 0x0;
-      exception_event->catch_sal.line = 0;
-
-      exception_event->kind = EX_EVENT_THROW;
-
-    }
-  else if (strcmp (stop_name, "__cxa_begin_catch") == 0)
-    {
-      fi = get_prev_frame (curr_frame);
-      if (!fi)
-        return (struct exception_event_record *) NULL;
-
-      exception_event->catch_sal = find_pc_line (get_frame_pc (fi), 1);
-
-      /* By the time we get here, we have totally forgotten
-         where we were thrown from... */
-      exception_event->throw_sal.pc = 0x0;
-      exception_event->throw_sal.line = 0;
-
-      exception_event->kind = EX_EVENT_CATCH;
-
-
-    }
-
-#ifdef THROW_CATCH_FIND_TYPEINFO
-  typeinfo_str =
-    THROW_CATCH_FIND_TYPEINFO (curr_frame, exception_event->kind);
-#else
-  typeinfo_str = NULL;
-#endif
-
-  if (exception_event->exception_type != NULL)
-    xfree (exception_event->exception_type);
-
-  if (typeinfo_str == NULL)
-    {
-      exception_event->exception_type = NULL;
-    }
-  else
-    {
-      exception_event->exception_type = xstrdup (typeinfo_str);
-    }
-
-  return exception_event;
-}
-
 static char *macosx_unsafe_functions[] = {
   "malloc",
   "free",
@@ -2388,6 +2342,11 @@ static int num_unsafe_patterns;
 int
 macosx_check_safe_call (void)
 {
+  /* If we haven't initialized the malloc library yet, don't even
+     try to call functions.  It is very unlikely to succeed...  */
+  if (macosx_get_malloc_inited () == 0)
+      return 0;
+
   if (macosx_unsafe_patterns == NULL)
     {
       int i;
@@ -2412,7 +2371,6 @@ macosx_check_safe_call (void)
 			      macosx_unsafe_functions[i], err_str);
 	    }
 	}
-      
     }
   return check_safe_call (macosx_unsafe_patterns, num_unsafe_patterns, 5, 
 			  CHECK_SCHEDULER_VALUE);
@@ -2632,9 +2590,8 @@ fork_memcache_put (struct checkpoint *cp)
 
 	  if (rslt == KERN_SUCCESS)
 	    {
-	      int err;
-	      target_write_memory_partial (address, (char *)mempointer, 
-                                           memcopied, &err);
+	      target_write (&current_target, TARGET_OBJECT_MEMORY, NULL,
+			    (bfd_byte *) mempointer, address, memcopied);
 	    }
 	}
       

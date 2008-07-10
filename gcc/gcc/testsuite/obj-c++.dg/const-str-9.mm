@@ -4,6 +4,7 @@
 
 /* { dg-options "-fnext-runtime -fno-constant-cfstrings" } */
 /* { dg-do compile { target *-*-darwin* } } */
+/* { dg-skip-if "" { *-*-darwin* } { "-m64" } { "" } } */
 
 #include <objc/Object.h>
 
@@ -13,7 +14,11 @@
 }
 @end
 
+#   if (MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_X_VERSION_10_5 || __OBJC2__)
+extern Class _NSConstantStringClassReference;
+#else
 extern struct objc_class _NSConstantStringClassReference;
+#endif
 
 const NSConstantString *appKey = @"MyApp";
 

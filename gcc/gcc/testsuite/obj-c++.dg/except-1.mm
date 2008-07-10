@@ -1,6 +1,6 @@
 /* APPLE LOCAL file mainline 2005-10-20 4308031 */
 /* { dg-do run { target "*-*-darwin*" } } */
-/* { dg-options "-framework Foundation" } */
+/* { dg-options "-framework Foundation -framework CoreFoundation" } */
 
 /* This tests that exceptions work.  It used to fail because
    objc_msgSend was marked with DECL_NOTHROW. 

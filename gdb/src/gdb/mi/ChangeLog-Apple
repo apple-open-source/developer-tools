@@ -1,3 +1,98 @@
+2008-05-12  Jim Ingham  <jingham@apple.com>
+
+	* mi-main.c (mi_execute_async_cli_command): In the synchronous
+	target case, do the breakpoint actions after running the target.
+	
+2008-02-21  Jim Ingham  <jingham@apple.com>
+
+       * mi-interp.c (mi_cmd_interpreter_exec): set
+       mi_interp_exec_cmd_did_run to 0 before executing the command.
+       (mi_insert_notify_hooks): Use the sync stepping notify
+       hooks if the target is synchronous.
+       (mi_remove_notify_hooks): Turn off the annotation printer.
+       * mi-main.c (captured_mi_execute_command): Another place
+       where we initialize mi_interp_exec_cmd_did_run.
+       Also, if after running the command we notice that the target
+       did run, then print out the prompt & *stopped so we duplicate
+       the async result.
+       (route_output_through_mi): Const-ify input strings.
+       (route_output_to_mi_result): New function.
+       (mi_interp_fake_sync_running): New function.
+       (mi_interp_sync_stepping_command_hook): New function. 
+       (mi_interp_sync_continue_command_hook): New function.
+       * mi-main.h: Declare the latter two hooks.
+
+2008-02-08  Jason Molenda  (jmolenda@apple.com)
+
+       * mi-main.c (do_timings): Enable mi-timings by default.
+
+2008-01-18  Greg Clayton  <gclayton@apple.com>
+
+        * mi-cmd-stack.c (mi_print_frame_info_lite_base): Return wether file
+        has debug info in it in the mi response.
+
+2008-01-30  Jason Molenda  (jmolenda@apple.com)
+
+        * mi-main.c (start_remote_counts): Take an additional argument, the
+        current MI token (sequence # in the form of an ascii string).
+        (mi_interpreter_exec_continuation): Updated call.
+        (mi_execute_command): Same.
+        (mi_exec_async_cli_cmd_continuation): Same.
+        (timestamp): Initialize mi_token field.
+
+2008-01-25  Caroline Tice  <ctice@apple.com>
+
+	* mi-cmd-var.c (varobj_update_one):  If varobj_update  returns
+	-4 (a new return value), mark varobj as having come back
+	into scope, after being out of scope.
+
+2008-01-18  Jim Ingham  <jingham@apple.com>
+
+	* mi-main.c (mi_cmd_data_read_memory): Replace the loop over 
+	target_read_memory_partial with target_read.
+	
+2008-01-14  Jason Molenda  (jmolenda@apple.com)
+
+	* mi-main.c (print_diff): Include the total number of remote protocol
+	packets sent/received in the remotestats= info.
+
+2008-01-11  Jason Molenda  (jmolenda@apple.com)
+
+	* mi-main.c (start_remote_counts, end_remote_counts): New functions
+	to start/stop recording of remote protocol packets used for MI 
+	commands.
+	(mi_cmd_thread_set_pc): Fix compiler warning.
+	(get_register): Ditto.
+	(mi_cmd_data_read_memory, mi_cmd_data_write_memory): Ditto.
+	(captured_mi_execute_command): Avoid printing timing info twice.
+	(mi_execute_async_cli_command): Free/NULL the current_command_ts to
+	indicate that the timing info has already been printed.
+	(mi_interpreter_exec_continuation): Updated to start/stop recording
+	protocol packets for mi commands.
+	(mi_execute_command): Ditto.
+	(mi_exec_error_cleanup): Ditto.
+	(mi_exec_async_cli_cmd_continuation): Ditto.
+	(free_continuation_arg): Ditto.
+	(print_diff): Print remote protocol packet info, if recorded.
+	(wallclock_diff, user_diff, system_diff): Use timersub for time math.
+	* mi-parse.h: Add remote stats to struct mi_timestamp.
+
+2008-01-10  Jason Molenda  (jmolenda@apple.com)
+
+	* mi-main.c (mi_cmd_exec_interrupt): Call interrupt_target_command
+	directly so we call the target vector's to_stop method instead of
+	sending a SIGINT via kill.
+
+2007-11-15  Jason Molenda  (jmolenda@apple.com)
+
+	* mi-main.c (mi_cmd_thread_set_pc): Check that we have symtabs
+	before we try to dereference them when printing an error message.
+
+2007-08-21  Jason Molenda  (jmolenda@apple.com)
+
+	* mi-main.c (mi_cmd_file_fix_file): Ignore -o (object filename)
+	option to file-fix-file.
+
 2007-06-21  Jim Ingham  <jingham@apple.com>
 
 	* mi-main.c (mi_execute_async_cli_command): Use -1 to

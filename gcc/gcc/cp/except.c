@@ -42,7 +42,8 @@ Boston, MA 02111-1307, USA.  */
 static void push_eh_cleanup (tree);
 static tree prepare_eh_type (tree);
 static tree build_eh_type_type (tree);
-static tree do_begin_catch (void);
+/* APPLE LOCAL radar 2848255 */
+static tree do_begin_catch (tree);
 static int dtor_nothrow (tree);
 static tree do_end_catch (tree);
 static bool decl_is_java_type (tree decl, int err);
@@ -173,15 +174,28 @@ do_get_exception_ptr (void)
 					     NULL_TREE));
 }
 
+/* APPLE LOCAL begin radar 2848255 */
+tree objcp_build_eh_type_type (tree type)
+{
+  return build_eh_type_type (type);
+}
+/* APPLE LOCAL end radar 2848255 */
+
 /* Build up a call to __cxa_begin_catch, to tell the runtime that the
    exception has been handled.  */
 
 static tree
-do_begin_catch (void)
+/* APPLE LOCAL radar 2848255 */
+do_begin_catch (tree type)
 {
   tree fn;
 
-  fn = get_identifier ("__cxa_begin_catch");
+  /* APPLE LOCAL begin radar 2848255 */
+  if (c_dialect_objc () && objc2_valid_objc_catch_type (type))
+    fn = get_identifier ("objc_begin_catch");
+  else
+    fn = get_identifier ("__cxa_begin_catch");
+  /* APPLE LOCAL end radar 2848255 */
   if (!get_global_value_if_present (fn, &fn))
     {
       /* Declare void* __cxa_begin_catch (void *).  */
@@ -219,7 +233,12 @@ do_end_catch (tree type)
 {
   tree fn, cleanup;
 
-  fn = get_identifier ("__cxa_end_catch");
+  /* APPLE LOCAL begin radar 2848255 */
+  if (c_dialect_objc () && objc2_valid_objc_catch_type (type))
+    fn = get_identifier ("objc_end_catch");
+  else
+    fn = get_identifier ("__cxa_end_catch");
+  /* APPLE LOCAL end radar 2848255 */
   if (!get_global_value_if_present (fn, &fn))
     {
       /* Declare void __cxa_end_catch ().  */
@@ -436,7 +455,8 @@ expand_start_catch_block (tree decl)
   /* If there's no decl at all, then all we need to do is make sure
      to tell the runtime that we've begun handling the exception.  */
   if (decl == NULL)
-    finish_expr_stmt (do_begin_catch ());
+    /* APPLE LOCAL radar 2848255 */
+    finish_expr_stmt (do_begin_catch (NULL_TREE));
 
   /* If the C++ object needs constructing, we need to do that before
      calling __cxa_begin_catch, so that std::uncaught_exception gets
@@ -448,7 +468,8 @@ expand_start_catch_block (tree decl)
     {
       exp = do_get_exception_ptr ();
       initialize_handler_parm (decl, exp);
-      finish_expr_stmt (do_begin_catch ());
+      /* APPLE LOCAL radar 2848255 */
+      finish_expr_stmt (do_begin_catch (type));
     }
 
   /* Otherwise the type uses a bitwise copy, and we don't have to worry
@@ -456,7 +477,8 @@ expand_start_catch_block (tree decl)
      copy with the return value of __cxa_end_catch instead.  */
   else
     {
-      tree init = do_begin_catch ();
+      /* APPLE LOCAL radar 2848255 */
+      tree init = do_begin_catch (type);
       exp = create_temporary_var (ptr_type_node);
       DECL_REGISTER (exp) = 1;
       cp_finish_decl (exp, init, NULL_TREE, LOOKUP_ONLYCONVERTING);
@@ -631,6 +653,11 @@ build_throw (tree exp)
       fn = OVL_CURRENT (fn);
       exp = build_function_call (fn, tree_cons (NULL_TREE, exp, NULL_TREE));
     }
+  /* APPLE LOCAL begin radar 2848255 */
+  else if (c_dialect_objc () 
+           && exp && objc2_valid_objc_catch_type (TREE_TYPE (exp)))
+    return objc2_build_throw_call (exp);
+  /* APPLE LOCAL end radar 2848255 */
   else if (exp)
     {
       tree throw_type;
@@ -716,6 +743,13 @@ build_throw (tree exp)
          preevaluate.  */
       temp_expr = NULL_TREE;
       stabilize_init (exp, &temp_expr);
+
+      /* APPLE LOCAL begin mainline 4950109 */
+      /* Wrap the initialization in a CLEANUP_POINT_EXPR so that cleanups
+	          for temporaries within the initialization are run before the one
+		  for the exception object, preserving LIFO order.  */
+      exp = build1 (CLEANUP_POINT_EXPR, void_type_node, exp);
+      /* APPLE LOCAL end mainline 4950109 */
 
       if (elided)
 	exp = build2 (TRY_CATCH_EXPR, void_type_node, exp,

@@ -1,5 +1,5 @@
 /* BFD back-end for IBM RS/6000 "XCOFF64" files.
-   Copyright 2000, 2001, 2002, 2003, 2004, 2005
+   Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006
    Free Software Foundation, Inc.
    Written Clinton Popetz.
    Contributed by Cygnus Support.
@@ -18,7 +18,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #include "bfd.h"
 #include "sysdep.h"
@@ -127,7 +127,7 @@ extern bfd_boolean _bfd_xcoff_write_armap
 extern bfd_boolean _bfd_xcoff_write_archive_contents
   PARAMS ((bfd *));
 extern int _bfd_xcoff_sizeof_headers
-  PARAMS ((bfd *, bfd_boolean));
+  PARAMS ((bfd *, struct bfd_link_info *));
 extern void _bfd_xcoff_swap_sym_in
   PARAMS ((bfd *, PTR, PTR));
 extern unsigned int _bfd_xcoff_swap_sym_out
@@ -161,7 +161,7 @@ static const bfd_target *xcoff64_archive_p
 static bfd *xcoff64_openr_next_archived_file
   PARAMS ((bfd *, bfd *));
 static int xcoff64_sizeof_headers
-  PARAMS ((bfd *, bfd_boolean));
+  PARAMS ((bfd *, struct bfd_link_info *));
 static asection *xcoff64_create_csect_from_smclas
   PARAMS ((bfd *, union internal_auxent *, const char *));
 static bfd_boolean xcoff64_is_lineno_count_overflow
@@ -1983,10 +1983,12 @@ xcoff64_archive_p (abfd)
   if (bfd_ardata (abfd) == (struct artdata *) NULL)
     goto error_ret_restore;
 
-  bfd_ardata (abfd)->cache = NULL;
-  bfd_ardata (abfd)->archive_head = NULL;
-  bfd_ardata (abfd)->symdefs = NULL;
-  bfd_ardata (abfd)->extended_names = NULL;
+  /* Already cleared by bfd_zalloc above.
+     bfd_ardata (abfd)->cache = NULL;
+     bfd_ardata (abfd)->archive_head = NULL;
+     bfd_ardata (abfd)->symdefs = NULL;
+     bfd_ardata (abfd)->extended_names = NULL;
+     bfd_ardata (abfd)->extended_names_size = 0;  */
   bfd_ardata (abfd)->first_file_filepos = bfd_scan_vma (hdr.firstmemoff,
 							(const char **) NULL,
 							10);
@@ -2054,9 +2056,8 @@ xcoff64_openr_next_archived_file (archive, last_file)
    always uses an a.out header.  */
 
 static int
-xcoff64_sizeof_headers (abfd, reloc)
-     bfd *abfd;
-     bfd_boolean reloc ATTRIBUTE_UNUSED;
+xcoff64_sizeof_headers (bfd *abfd,
+			struct bfd_link_info *info ATTRIBUTE_UNUSED)
 {
   int size;
 
@@ -2680,6 +2681,7 @@ const bfd_target rs6000coff64_vec =
     /* Copy */
     _bfd_xcoff_copy_private_bfd_data,
     ((bfd_boolean (*) (bfd *, bfd *)) bfd_true),
+    _bfd_generic_init_private_section_data,
     ((bfd_boolean (*) (bfd *, asection *, bfd *, asection *)) bfd_true),
     ((bfd_boolean (*) (bfd *, asymbol *, bfd *, asymbol *)) bfd_true),
     ((bfd_boolean (*) (bfd *, bfd *)) bfd_true),
@@ -2713,6 +2715,8 @@ const bfd_target rs6000coff64_vec =
     coff_bfd_is_target_special_symbol,
     coff_get_lineno,
     coff_find_nearest_line,
+    _bfd_generic_find_line,
+    coff_find_inliner_info,
     coff_bfd_make_debug_symbol,
     _bfd_generic_read_minisymbols,
     _bfd_generic_minisymbol_to_symbol,
@@ -2928,6 +2932,7 @@ const bfd_target aix5coff64_vec =
     /* Copy */
     _bfd_xcoff_copy_private_bfd_data,
     ((bfd_boolean (*) (bfd *, bfd *)) bfd_true),
+    _bfd_generic_init_private_section_data,
     ((bfd_boolean (*) (bfd *, asection *, bfd *, asection *)) bfd_true),
     ((bfd_boolean (*) (bfd *, asymbol *, bfd *, asymbol *)) bfd_true),
     ((bfd_boolean (*) (bfd *, bfd *)) bfd_true),
@@ -2961,6 +2966,8 @@ const bfd_target aix5coff64_vec =
     coff_bfd_is_target_special_symbol,
     coff_get_lineno,
     coff_find_nearest_line,
+    _bfd_generic_find_line,
+    coff_find_inliner_info,
     coff_bfd_make_debug_symbol,
     _bfd_generic_read_minisymbols,
     _bfd_generic_minisymbol_to_symbol,

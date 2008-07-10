@@ -1,2 +1,0 @@
-g/wxMBConvUTF16BE/s//wxMBConvUTF16/g
-w

@@ -76,6 +76,10 @@ extensions, accepted by GCC in C89 mode and in C++.
 * Return Address::      Getting the return or frame address of a function.
 * Vector Extensions::   Using vector instructions through built-in functions.
 * Offsetof::            Special syntax for implementing @code{offsetof}.
+@c APPLE LOCAL begin mainline
+* Object Size Checking:: Built-in functions for limited buffer overflow
+                        checking.
+@c APPLE LOCAL end mainline
 * Other Builtins::      Other built-in functions.
 * Target Builtins::     Built-in functions specific to particular targets.
 * Target Format Checks:: Format checks specific to particular targets.
@@ -3597,25 +3601,46 @@ packed))}.
 @cindex open coding
 @cindex macros, inline alternative
 
-By declaring a function @code{inline}, you can direct GCC to
+@c APPLE LOCAL begin for-4_3 4134307
+By declaring a function inline, you can direct GCC to make
+calls to that function faster.  One way GCC can achieve this is to
 integrate that function's code into the code for its callers.  This
 makes execution faster by eliminating the function-call overhead; in
-addition, if any of the actual argument values are constant, their known
-values may permit simplifications at compile time so that not all of the
-inline function's code needs to be included.  The effect on code size is
-less predictable; object code may be larger or smaller with function
-inlining, depending on the particular case.  Inlining of functions is an
-optimization and it really ``works'' only in optimizing compilation.  If
-you don't use @option{-O}, no function is really inline.
+addition, if any of the actual argument values are constant, their
+known values may permit simplifications at compile time so that not
+all of the inline function's code needs to be included.  The effect on
+code size is less predictable; object code may be larger or smaller
+with function inlining, depending on the particular case.  You can
+also direct GCC to try to integrate all ``simple enough'' functions
+into their callers with the option @option{-finline-functions}.
 
-Inline functions are included in the ISO C99 standard, but there are
-currently substantial differences between what GCC implements and what
-the ISO C99 standard requires.
+GCC implements three different semantics of declaring a function
+inline.  One is available with @option{-std=gnu89}, another when
+@option{-std=c99} or @option{-std=gnu99}, and the third is used when
+compiling C++.
 
 To declare a function inline, use the @code{inline} keyword in its
 declaration, like this:
 
 @smallexample
+static inline int
+inc (int *a)
+@{
+  (*a)++;
+@}
+@end smallexample
+
+If you are writing a header file to be included in ISO C89 programs, write
+@code{__inline__} instead of @code{inline}.  @xref{Alternate Keywords}.
+
+The three types of inlining behave similarly in two important cases:
+when the @code{inline} keyword is used on a @code{static} function,
+like the example above, and when a function is first declared without
+using the @code{inline} keyword and then is defined with
+@code{inline}, like this:
+
+@smallexample
+extern int inc (int *a);
 inline int
 inc (int *a)
 @{
@@ -3623,32 +3648,8 @@ inc (int *a)
 @}
 @end smallexample
 
-(If you are writing a header file to be included in ISO C programs, write
-@code{__inline__} instead of @code{inline}.  @xref{Alternate Keywords}.)
-You can also make all ``simple enough'' functions inline with the option
-@option{-finline-functions}.
-
-@opindex Winline
-Note that certain usages in a function definition can make it unsuitable
-for inline substitution.  Among these usages are: use of varargs, use of
-alloca, use of variable sized data types (@pxref{Variable Length}),
-use of computed goto (@pxref{Labels as Values}), use of nonlocal goto,
-and nested functions (@pxref{Nested Functions}).  Using @option{-Winline}
-will warn when a function marked @code{inline} could not be substituted,
-and will give the reason for the failure.
-
-Note that in C and Objective-C, unlike C++, the @code{inline} keyword
-does not affect the linkage of the function.
-
-@cindex automatic @code{inline} for C++ member fns
-@cindex @code{inline} automatic for C++ member fns
-@cindex member fns, automatically @code{inline}
-@cindex C++ member fns, automatically @code{inline}
-@opindex fno-default-inline
-GCC automatically inlines member functions defined within the class
-body of C++ programs even if they are not explicitly declared
-@code{inline}.  (You can override this with @option{-fno-default-inline};
-@pxref{C++ Dialect Options,,Options Controlling C++ Dialect}.)
+In both of these common cases, the program behaves the same as if you
+had not used the @code{inline} keyword, except for its speed.
 
 @cindex inline functions, omission of
 @opindex fkeep-inline-functions
@@ -3663,6 +3664,36 @@ neither can recursive calls within the definition).  If there is a
 nonintegrated call, then the function is compiled to assembler code as
 usual.  The function must also be compiled as usual if the program
 refers to its address, because that can't be inlined.
+
+@opindex Winline
+Note that certain usages in a function definition can make it unsuitable
+for inline substitution.  Among these usages are: use of varargs, use of
+alloca, use of variable sized data types (@pxref{Variable Length}),
+use of computed goto (@pxref{Labels as Values}), use of nonlocal goto,
+and nested functions (@pxref{Nested Functions}).  Using @option{-Winline}
+will warn when a function marked @code{inline} could not be substituted,
+and will give the reason for the failure.
+
+@cindex automatic @code{inline} for C++ member fns
+@cindex @code{inline} automatic for C++ member fns
+@cindex member fns, automatically @code{inline}
+@cindex C++ member fns, automatically @code{inline}
+@opindex fno-default-inline
+As required by ISO C++, GCC considers member functions defined within
+the body of a class to be marked inline even if they are
+not explicitly declared with the @code{inline} keyword.  You can
+override this with @option{-fno-default-inline}; @pxref{C++ Dialect
+Options,,Options Controlling C++ Dialect}.
+
+GCC does not inline any functions when not optimizing unless you specify
+the @samp{always_inline} attribute for the function, like this:
+
+@smallexample
+/* @r{Prototype.}  */
+inline void foo (const char) __attribute__((always_inline));
+@end smallexample
+
+The remainder of this section is specific to GNU C89 inlining.
 
 @cindex non-static inline function
 When an inline function is not @code{static}, then the compiler must assume
@@ -3686,21 +3717,7 @@ The definition in the header file will cause most calls to the function
 to be inlined.  If any uses of the function remain, they will refer to
 the single copy in the library.
 
-Since GCC eventually will implement ISO C99 semantics for
-inline functions, it is best to use @code{static inline} only
-to guarantee compatibility.  (The
-existing semantics will remain available when @option{-std=gnu89} is
-specified, but eventually the default will be @option{-std=gnu99} and
-that will implement the C99 semantics, though it does not do so yet.)
-
-GCC does not inline any functions when not optimizing unless you specify
-the @samp{always_inline} attribute for the function, like this:
-
-@smallexample
-/* @r{Prototype.}  */
-inline void foo (const char) __attribute__((always_inline));
-@end smallexample
-
+@c APPLE LOCAL end for-4_3 4134307
 @node Extended Asm
 @section Assembler Instructions with C Expression Operands
 @cindex extended @code{asm}
@@ -4828,7 +4845,141 @@ This extension is sufficient such that
 is a suitable definition of the @code{offsetof} macro.  In C++, @var{type}
 may be dependent.  In either case, @var{member} may consist of a single
 identifier, or a sequence of member accesses and array references.
+@c APPLE LOCAL begin mainline
+@node Object Size Checking
+@section Object Size Checking Builtins
+@findex __builtin_object_size
+@findex __builtin___memcpy_chk
+@findex __builtin___mempcpy_chk
+@findex __builtin___memmove_chk
+@findex __builtin___memset_chk
+@findex __builtin___strcpy_chk
+@findex __builtin___stpcpy_chk
+@findex __builtin___strncpy_chk
+@findex __builtin___strcat_chk
+@findex __builtin___strncat_chk
+@findex __builtin___sprintf_chk
+@findex __builtin___snprintf_chk
+@findex __builtin___vsprintf_chk
+@findex __builtin___vsnprintf_chk
+@findex __builtin___printf_chk
+@findex __builtin___vprintf_chk
+@findex __builtin___fprintf_chk
+@findex __builtin___vfprintf_chk
 
+GCC implements a limited buffer overflow protection mechanism
+that can prevent some buffer overflow attacks.
+
+@deftypefn {Built-in Function} {size_t} __builtin_object_size (void * @var{ptr}, int @var{type})
+is a built-in construct that returns a constant number of bytes from
+@var{ptr} to the end of the object @var{ptr} pointer points to
+(if known at compile time).  @code{__builtin_object_size} never evaluates
+its arguments for side-effects.  If there are any side-effects in them, it
+returns @code{(size_t) -1} for @var{type} 0 or 1 and @code{(size_t) 0}
+for @var{type} 2 or 3.  If there are multiple objects @var{ptr} can
+point to and all of them are known at compile time, the returned number
+is the maximum of remaining byte counts in those objects if @var{type} & 2 is
+0 and minimum if nonzero.  If it is not possible to determine which objects
+@var{ptr} points to at compile time, @code{__builtin_object_size} should
+return @code{(size_t) -1} for @var{type} 0 or 1 and @code{(size_t) 0}
+for @var{type} 2 or 3.
+
+@var{type} is an integer constant from 0 to 3.  If the least significant
+bit is clear, objects are whole variables, if it is set, a closest
+surrounding subobject is considered the object a pointer points to.
+The second bit determines if maximum or minimum of remaining bytes
+is computed.
+
+@smallexample
+struct V @{ char buf1[10]; int b; char buf2[10]; @} var;
+char *p = &var.buf1[1], *q = &var.b;
+
+/* Here the object p points to is var.  */
+assert (__builtin_object_size (p, 0) == sizeof (var) - 1);
+/* The subobject p points to is var.buf1.  */
+assert (__builtin_object_size (p, 1) == sizeof (var.buf1) - 1);
+/* The object q points to is var.  */
+assert (__builtin_object_size (q, 0)
+        == (char *) (&var + 1) - (char *) &var.b);
+/* The subobject q points to is var.b.  */
+assert (__builtin_object_size (q, 1) == sizeof (var.b));
+@end smallexample
+@end deftypefn
+
+There are built-in functions added for many common string operation
+functions, e.g. for @code{memcpy} @code{__builtin___memcpy_chk}
+built-in is provided.  This built-in has an additional last argument,
+which is the number of bytes remaining in object the @var{dest}
+argument points to or @code{(size_t) -1} if the size is not known.
+
+The built-in functions are optimized into the normal string functions
+like @code{memcpy} if the last argument is @code{(size_t) -1} or if
+it is known at compile time that the destination object will not
+be overflown.  If the compiler can determine at compile time the
+object will be always overflown, it issues a warning.
+
+The intended use can be e.g.
+
+@smallexample
+#undef memcpy
+#define bos0(dest) __builtin_object_size (dest, 0)
+#define memcpy(dest, src, n) \
+  __builtin___memcpy_chk (dest, src, n, bos0 (dest))
+
+char *volatile p;
+char buf[10];
+/* It is unknown what object p points to, so this is optimized
+   into plain memcpy - no checking is possible.  */
+memcpy (p, ``abcde'', n);
+/* Destination is known and length too.  It is known at compile
+   time there will be no overflow.  */
+memcpy (&buf[5], ``abcde'', 5);
+/* Destination is known, but the length is not known at compile time.
+   This will result in __memcpy_chk call that can check for overflow
+   at runtime.  */
+memcpy (&buf[5], ``abcde'', n);
+/* Destination is known and it is known at compile time there will
+   be overflow.  There will be a warning and __memcpy_chk call that
+   will abort the program at runtime.  */
+memcpy (&buf[6], ``abcde'', 5);
+@end smallexample
+
+Such built-in functions are provided for @code{memcpy}, @code{mempcpy},
+@code{memmove}, @code{memset}, @code{strcpy}, @code{stpcpy}, @code{strncpy},
+@code{strcat} and @code{strncat}.
+
+There are also checking built-in functions for formatted output functions.
+@smallexample
+int __builtin___sprintf_chk (char *s, int flag, size_t os, const char *fmt, ...);
+int __builtin___snprintf_chk (char *s, size_t maxlen, int flag, size_t os,
+                              const char *fmt, ...);
+int __builtin___vsprintf_chk (char *s, int flag, size_t os, const char *fmt,
+                              va_list ap);
+int __builtin___vsnprintf_chk (char *s, size_t maxlen, int flag, size_t os,
+                               const char *fmt, va_list ap);
+@end smallexample
+
+The added @var{flag} argument is passed unchanged to @code{__sprintf_chk}
+etc. functions and can contain implementation specific flags on what
+additional security measures the checking function might take, such as
+handling @code{%n} differently.
+
+The @var{os} argument is the object size @var{s} points to, like in the
+other built-in functions.  There is a small difference in the behavior
+though, if @var{os} is @code{(size_t) -1}, the built-in functions are
+optimized into the non-checking functions only if @var{flag} is 0, otherwise
+the checking function is called with @var{os} argument set to
+@code{(size_t) -1}.
+
+In addition to this, there are checking built-in functions
+@code{__builtin___printf_chk}, @code{__builtin___vprintf_chk},
+@code{__builtin___fprintf_chk} and @code{__builtin___vfprintf_chk}.
+These have just one additional argument, @var{flag}, right before
+format string @var{fmt}.  If the compiler is able to optimize them to
+@code{fputc} etc. functions, it will, otherwise the checking function
+should be called and the @var{flag} argument passed to it.
+
+@c APPLE LOCAL end mainline
 @node Other Builtins
 @section Other built-in functions provided by GCC
 @cindex built-in functions
@@ -6378,7 +6529,8 @@ The following machine modes are available for use with MMX built-in functions
 (@pxref{Vector Extensions}): @code{V2SI} for a vector of two 32-bit integers,
 @code{V4HI} for a vector of four 16-bit integers, and @code{V8QI} for a
 vector of eight 8-bit integers.  Some of the built-in functions operate on
-MMX registers as a whole 64-bit entity, these use @code{DI} as their mode.
+@c APPLE LOCAL begin 4656532 use V1DI for _m64
+MMX registers as a whole 64-bit entity, these use @code{V1DI} as their mode.
 
 If 3Dnow extensions are enabled, @code{V2SF} is used as a mode for a vector
 of two 32-bit floating point values.
@@ -6397,13 +6549,13 @@ v8qi __builtin_ia32_paddb (v8qi, v8qi)
 v4hi __builtin_ia32_paddw (v4hi, v4hi)
 v2si __builtin_ia32_paddd (v2si, v2si)
 @c APPLE LOCAL begin radar 4395773
-di __builtin_ia32_paddq (di, di)
+v1di __builtin_ia32_paddq (v1di, v1di)
 @c APPLE LOCAL end radar 4395773
 v8qi __builtin_ia32_psubb (v8qi, v8qi)
 v4hi __builtin_ia32_psubw (v4hi, v4hi)
 v2si __builtin_ia32_psubd (v2si, v2si)
 @c APPLE LOCAL begin radar 4395773
-di __builtin_ia32_psubq (di, di)
+v1di __builtin_ia32_psubq (v1di, v1di)
 @c APPLE LOCAL end radar 4395773
 v8qi __builtin_ia32_paddsb (v8qi, v8qi)
 v4hi __builtin_ia32_paddsw (v4hi, v4hi)
@@ -6415,10 +6567,10 @@ v8qi __builtin_ia32_psubusb (v8qi, v8qi)
 v4hi __builtin_ia32_psubusw (v4hi, v4hi)
 v4hi __builtin_ia32_pmullw (v4hi, v4hi)
 v4hi __builtin_ia32_pmulhw (v4hi, v4hi)
-di __builtin_ia32_pand (di, di)
-di __builtin_ia32_pandn (di,di)
-di __builtin_ia32_por (di, di)
-di __builtin_ia32_pxor (di, di)
+v1di __builtin_ia32_pand (v1di, v1di)
+v1di __builtin_ia32_pandn (v1di,v1di)
+v1di __builtin_ia32_por (v1di, v1di)
+v1di __builtin_ia32_pxor (v1di, v1di)
 v8qi __builtin_ia32_pcmpeqb (v8qi, v8qi)
 v4hi __builtin_ia32_pcmpeqw (v4hi, v4hi)
 v2si __builtin_ia32_pcmpeqd (v2si, v2si)
@@ -6436,14 +6588,24 @@ v4hi __builtin_ia32_packssdw (v2si, v2si)
 v8qi __builtin_ia32_packuswb (v4hi, v4hi)
 @c APPLE LOCAL begin radar 4395773
 void __builtin_ia32_emms (void)
-v4hi __builtin_ia32_psllw (v4hi, di)
-v2si __builtin_ia32_pslld (v2si, di)
-di __builtin_ia32_psllq (di, di)
-v4hi __builtin_ia32_psrlw (v4hi, di)
-v2si __builtin_ia32_psrld (v2si, di)
-di __builtin_ia32_psrlq (di, di)
-v4hi __builtin_ia32_psraw (v4hi, di)
-v2si __builtin_ia32_psrad (v2si, di)
+v4hi __builtin_ia32_psllw (v4hi, v1di)
+v4hi __builtin_ia32_psllwi (v4hi, int)
+v2si __builtin_ia32_pslld (v2si, v1di)
+v2si __builtin_ia32_pslldi (v2si, int)
+v1di __builtin_ia32_psllq (v1di, v1di)
+@c APPLE LOCAL radar 4684674
+v1di __builtin_ia32_psllqi (v1di, int)
+v4hi __builtin_ia32_psrlw (v4hi, v1di)
+v4hi __builtin_ia32_psrlwi (v4hi, int)
+v2si __builtin_ia32_psrld (v2si, v1di)
+v2si __builtin_ia32_psrldi (v2si, int)
+v1di __builtin_ia32_psrlq (v1di, v1di)
+@c APPLE LOCAL radar 4684674
+v1di __builtin_ia32_psrlqi (v1di, int)
+v4hi __builtin_ia32_psraw (v4hi, v1di)
+v4hi __builtin_ia32_psrawi (v4hi, int)
+v2si __builtin_ia32_psrad (v2si, v1di)
+v2si __builtin_ia32_psradi (v2si, int)
 v4hi __builtin_ia32_pshufw (v4hi, int)
 v2si __builtin_ia32_pmaddwd (v4hi, v4hi)
 v2si __builtin_ia32_vec_init_v2si (int, int)
@@ -6460,9 +6622,6 @@ instruction that is part of the name.
 
 @smallexample
 v4hi __builtin_ia32_pmulhuw (v4hi, v4hi)
-@c APPLE LOCAL begin radar 4395773
-di __builtin_ia32_pmulhuq (di, di)
-@c APPLE LOCAL end radar 4395773
 v8qi __builtin_ia32_pavgb (v8qi, v8qi)
 v4hi __builtin_ia32_pavgw (v4hi, v4hi)
 v4hi __builtin_ia32_psadbw (v8qi, v8qi)
@@ -6474,7 +6633,7 @@ int __builtin_ia32_pextrw (v4hi, int)
 v4hi __builtin_ia32_pinsrw (v4hi, int, int)
 int __builtin_ia32_pmovmskb (v8qi)
 void __builtin_ia32_maskmovq (v8qi, v8qi, char *)
-void __builtin_ia32_movntq (di *, di)
+void __builtin_ia32_movntq (v1di *, v1di)
 void __builtin_ia32_sfence (void)
 @c APPLE LOCAL begin radar 4395773
 int __builtin_ia32_vec_ext_v4hi (v4hi, int)
@@ -6790,8 +6949,8 @@ The following built-in functions are available when @option{-msse3} is used.
 Generates the @code{movddup} machine instruction as a load from memory.
 @end table
 
-@c APPLE LOCAL begin mni 4424835
-The following built-in functions are available when @option{-mmni} is used.
+@c APPLE LOCAL begin ssse3 4424835
+The following built-in functions are available when @option{-mssse3} is used.
 All of them generate the machine instruction that is part of the name
 with MMX registers.
 
@@ -6808,13 +6967,14 @@ v8qi __builtin_ia32_pshufb (v8qi, v8qi)
 v8qi __builtin_ia32_psignb (v8qi, v8qi)
 v2si __builtin_ia32_psignd (v2si, v2si)
 v4hi __builtin_ia32_psignw (v4hi, v4hi)
-long long __builtin_ia32_palignr (long long, long long, int)
+v1di __builtin_ia32_palignr (v1di, v1di, int)
 v8qi __builtin_ia32_pabsb (v8qi)
 v2si __builtin_ia32_pabsd (v2si)
 v4hi __builtin_ia32_pabsw (v4hi)
 @end smallexample
+@c APPLE LOCAL end 4656532 use V1DI for _m64
 
-The following built-in functions are available when @option{-mmni} is used.
+The following built-in functions are available when @option{-mssse3} is used.
 All of them generate the machine instruction that is part of the name
 with SSE registers.
 
@@ -6836,7 +6996,7 @@ v16qi __builtin_ia32_pabsb128 (v16qi)
 v4si __builtin_ia32_pabsd128 (v4si)
 v8hi __builtin_ia32_pabsw128 (v8hi)
 @end smallexample
-@c APPLE LOCAL end mni
+@c APPLE LOCAL end ssse3
 The following built-in functions are available when @option{-m3dnow} is used.
 All of them generate the machine instruction that is part of the name.
 
@@ -9234,6 +9394,17 @@ This pragma sets the alignment of fields in structures.  The values of
 properly; to restore the previous setting, use @code{reset} for the
 @var{alignment}.
 
+@c APPLE LOCAL begin radar 4827197
+The @code{power} setting, when compiling for the Intel target, does not
+fully emulate the alignments on native PowerPC targets.  When the first
+field within a struct is of type @code{double}, this causes the struct
+to be 8-byte aligned on PowerPC target, but only 4-byte aligned on
+Intel target.  When such a struct is nested within another aggregate,
+differing layouts on the two targets can occur.  In such a case, a dummy
+field @code{char : 0;} can be inserted before the @code{double} to achieve
+the same layout on both targets.
+@c APPLE LOCAL end radar 4827197
+
 @item segment @var{tokens}@dots{}
 @cindex pragma, segment
 This pragma is accepted, but has no effect.
@@ -9371,13 +9542,16 @@ way of knowing that that happened.)
 @node Structure-Packing Pragmas
 @subsection Structure-Packing Pragmas
 
+@c APPLE LOCAL begin radar 4679943
 For compatibility with Win32, GCC supports a set of @code{#pragma}
 directives which change the maximum alignment of members of structures,
 unions, and classes subsequently defined.  The @var{n} value below always
-is required to be a small power of two and specifies the new alignment
-in bytes.
+is required to be a small power of two and specifies the new maximum
+alignment in bytes.
 
 @enumerate
+@c APPLE LOCAL prune man page
+@ignore
 @item @code{#pragma pack(@var{n})} simply sets the new alignment.
 @item @code{#pragma pack()} sets the alignment to the one that was in
 effect when compilation started (see also command line option
@@ -9390,7 +9564,20 @@ Note that @code{#pragma pack([@var{n}])} does not influence this internal
 stack; thus it is possible to have @code{#pragma pack(push)} followed by
 multiple @code{#pragma pack(@var{n})} instances and finalized by a single
 @code{#pragma pack(pop)}.
+@c APPLE LOCAL prune man page
+@end ignore
+
+@item @code{#pragma pack(@var{n})} pushes the current maximum alignment setting
+onto an internal stack and then sets the new maximum alignment. (APPLE ONLY)
+@item @code{#pragma pack()} acts like a @code{#pragma pack(pop)} directive.
+(APPLE ONLY)
+@item @code{#pragma pack(push[,@var{n}])} pushes the current maximum alignment
+setting onto an internal stack and then optionally sets the new maximum
+alignment.
+@item @code{#pragma pack(pop)} restores the maximum alignment setting to the
+one saved at the top of the internal stack (and removes that stack entry).
 @end enumerate
+@c APPLE LOCAL end radar 4679943
 
 @node Weak Pragmas
 @subsection Weak Pragmas

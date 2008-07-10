@@ -1076,6 +1076,8 @@ parse_exp_in_context (char **stringptr, struct block *block, int comma,
 
   /* APPLE LOCAL: Don't let the stop hook run here.  */
   hook_stop_chain = make_cleanup_suppress_hook_stop ();
+  /* APPLE LOCAL address ranges */
+  innermost_block = NULL;
   if (current_language->la_parser ())
       current_language->la_error (NULL);
 

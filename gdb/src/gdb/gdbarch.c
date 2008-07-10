@@ -195,6 +195,7 @@ struct gdbarch
   gdbarch_deprecated_use_struct_convention_ftype *deprecated_use_struct_convention;
   gdbarch_deprecated_extract_struct_value_address_ftype *deprecated_extract_struct_value_address;
   gdbarch_skip_prologue_ftype *skip_prologue;
+  gdbarch_skip_prologue_addr_ctx_ftype *skip_prologue_addr_ctx;
   gdbarch_inner_than_ftype *inner_than;
   gdbarch_breakpoint_from_pc_ftype *breakpoint_from_pc;
   gdbarch_adjust_breakpoint_address_ftype *adjust_breakpoint_address;
@@ -227,6 +228,7 @@ struct gdbarch
   gdbarch_construct_inferior_arguments_ftype *construct_inferior_arguments;
   gdbarch_elf_make_msymbol_special_ftype *elf_make_msymbol_special;
   gdbarch_coff_make_msymbol_special_ftype *coff_make_msymbol_special;
+  gdbarch_dbx_make_msymbol_special_ftype *dbx_make_msymbol_special;
   const char * name_of_malloc;
   int cannot_step_breakpoint;
   int have_nonsteppable_watchpoint;
@@ -322,6 +324,7 @@ struct gdbarch startup_gdbarch =
   0,  /* deprecated_use_struct_convention */
   0,  /* deprecated_extract_struct_value_address */
   0,  /* skip_prologue */
+  0,  /* skip_prologue_addr_ctx */
   0,  /* inner_than */
   0,  /* breakpoint_from_pc */
   0,  /* adjust_breakpoint_address */
@@ -354,6 +357,7 @@ struct gdbarch startup_gdbarch =
   construct_inferior_arguments,  /* construct_inferior_arguments */
   0,  /* elf_make_msymbol_special */
   0,  /* coff_make_msymbol_special */
+  0,  /* dbx_make_msymbol_special */
   "malloc",  /* name_of_malloc */
   0,  /* cannot_step_breakpoint */
   0,  /* have_nonsteppable_watchpoint */
@@ -450,6 +454,7 @@ gdbarch_alloc (const struct gdbarch_info *info,
   current_gdbarch->construct_inferior_arguments = construct_inferior_arguments;
   current_gdbarch->elf_make_msymbol_special = default_elf_make_msymbol_special;
   current_gdbarch->coff_make_msymbol_special = default_coff_make_msymbol_special;
+  current_gdbarch->dbx_make_msymbol_special = default_dbx_make_msymbol_special;
   current_gdbarch->name_of_malloc = "malloc";
   current_gdbarch->register_reggroup_p = default_register_reggroup_p;
   /* gdbarch_alloc() */
@@ -575,6 +580,7 @@ verify_gdbarch (struct gdbarch *current_gdbarch)
   /* Skip verify of deprecated_extract_struct_value_address, has predicate */
   if (current_gdbarch->skip_prologue == 0)
     fprintf_unfiltered (log, "\n\tskip_prologue");
+  /* Skip verify of skip_prologue_addr_ctx, has predicate */
   if (current_gdbarch->inner_than == 0)
     fprintf_unfiltered (log, "\n\tinner_than");
   if (current_gdbarch->breakpoint_from_pc == 0)
@@ -609,6 +615,7 @@ verify_gdbarch (struct gdbarch *current_gdbarch)
   /* Skip verify of construct_inferior_arguments, invalid_p == 0 */
   /* Skip verify of elf_make_msymbol_special, invalid_p == 0 */
   /* Skip verify of coff_make_msymbol_special, invalid_p == 0 */
+  /* Skip verify of dbx_make_msymbol_special, invalid_p == 0 */
   /* Skip verify of name_of_malloc, invalid_p == 0 */
   /* Skip verify of cannot_step_breakpoint, invalid_p == 0 */
   /* Skip verify of have_nonsteppable_watchpoint, invalid_p == 0 */
@@ -829,6 +836,15 @@ gdbarch_dump (struct gdbarch *current_gdbarch, struct ui_file *file)
   fprintf_unfiltered (file,
                       "gdbarch_dump: convert_register_p = <0x%lx>\n",
                       (long) current_gdbarch->convert_register_p);
+#ifdef DBX_MAKE_MSYMBOL_SPECIAL
+  fprintf_unfiltered (file,
+                      "gdbarch_dump: %s # %s\n",
+                      "DBX_MAKE_MSYMBOL_SPECIAL(desc, msym)",
+                      XSTRING (DBX_MAKE_MSYMBOL_SPECIAL (desc, msym)));
+#endif
+  fprintf_unfiltered (file,
+                      "gdbarch_dump: dbx_make_msymbol_special = <0x%lx>\n",
+                      (long) current_gdbarch->dbx_make_msymbol_special);
 #ifdef DECR_PC_AFTER_BREAK
   fprintf_unfiltered (file,
                       "gdbarch_dump: DECR_PC_AFTER_BREAK # %s\n",
@@ -1536,6 +1552,24 @@ gdbarch_dump (struct gdbarch *current_gdbarch, struct ui_file *file)
   fprintf_unfiltered (file,
                       "gdbarch_dump: skip_prologue = <0x%lx>\n",
                       (long) current_gdbarch->skip_prologue);
+#ifdef SKIP_PROLOGUE_ADDR_CTX_P
+  fprintf_unfiltered (file,
+                      "gdbarch_dump: %s # %s\n",
+                      "SKIP_PROLOGUE_ADDR_CTX_P()",
+                      XSTRING (SKIP_PROLOGUE_ADDR_CTX_P ()));
+#endif
+  fprintf_unfiltered (file,
+                      "gdbarch_dump: gdbarch_skip_prologue_addr_ctx_p() = %d\n",
+                      gdbarch_skip_prologue_addr_ctx_p (current_gdbarch));
+#ifdef SKIP_PROLOGUE_ADDR_CTX
+  fprintf_unfiltered (file,
+                      "gdbarch_dump: %s # %s\n",
+                      "SKIP_PROLOGUE_ADDR_CTX(addr_ctx)",
+                      XSTRING (SKIP_PROLOGUE_ADDR_CTX (addr_ctx)));
+#endif
+  fprintf_unfiltered (file,
+                      "gdbarch_dump: skip_prologue_addr_ctx = <0x%lx>\n",
+                      (long) current_gdbarch->skip_prologue_addr_ctx);
   fprintf_unfiltered (file,
                       "gdbarch_dump: skip_solib_resolver = <0x%lx>\n",
                       (long) current_gdbarch->skip_solib_resolver);
@@ -2921,6 +2955,30 @@ set_gdbarch_skip_prologue (struct gdbarch *gdbarch,
 }
 
 int
+gdbarch_skip_prologue_addr_ctx_p (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  return gdbarch->skip_prologue_addr_ctx != NULL;
+}
+
+CORE_ADDR
+gdbarch_skip_prologue_addr_ctx (struct gdbarch *gdbarch, struct address_context *addr_ctx)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->skip_prologue_addr_ctx != NULL);
+  if (gdbarch_debug >= 2)
+    fprintf_unfiltered (gdb_stdlog, "gdbarch_skip_prologue_addr_ctx called\n");
+  return gdbarch->skip_prologue_addr_ctx (addr_ctx);
+}
+
+void
+set_gdbarch_skip_prologue_addr_ctx (struct gdbarch *gdbarch,
+                                    gdbarch_skip_prologue_addr_ctx_ftype skip_prologue_addr_ctx)
+{
+  gdbarch->skip_prologue_addr_ctx = skip_prologue_addr_ctx;
+}
+
+int
 gdbarch_inner_than (struct gdbarch *gdbarch, CORE_ADDR lhs, CORE_ADDR rhs)
 {
   gdb_assert (gdbarch != NULL);
@@ -3538,6 +3596,23 @@ set_gdbarch_coff_make_msymbol_special (struct gdbarch *gdbarch,
                                        gdbarch_coff_make_msymbol_special_ftype coff_make_msymbol_special)
 {
   gdbarch->coff_make_msymbol_special = coff_make_msymbol_special;
+}
+
+void
+gdbarch_dbx_make_msymbol_special (struct gdbarch *gdbarch, int16_t desc, struct minimal_symbol *msym)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->dbx_make_msymbol_special != NULL);
+  if (gdbarch_debug >= 2)
+    fprintf_unfiltered (gdb_stdlog, "gdbarch_dbx_make_msymbol_special called\n");
+  gdbarch->dbx_make_msymbol_special (desc, msym);
+}
+
+void
+set_gdbarch_dbx_make_msymbol_special (struct gdbarch *gdbarch,
+                                      gdbarch_dbx_make_msymbol_special_ftype dbx_make_msymbol_special)
+{
+  gdbarch->dbx_make_msymbol_special = dbx_make_msymbol_special;
 }
 
 const char *

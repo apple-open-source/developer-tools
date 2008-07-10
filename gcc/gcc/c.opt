@@ -306,6 +306,11 @@ Wimport
 C ObjC C++ ObjC++
 Deprecated.  This switch has no effect.
 
+;APPLE LOCAL begin mainline 2883585 2005-04-20
+Wint-to-pointer-cast
+C ObjC Var(warn_int_to_pointer_cast) Init(1)
+Warn when there is a cast to a pointer from an integer of a different size
+;APPLE LOCAL end mainline 2883585 2005-04-20
 Winvalid-offsetof
 C++ ObjC++ Var(warn_invalid_offsetof) Init(1)
 Warn about invalid uses of the \"offsetof\" macro
@@ -420,6 +425,11 @@ Wpointer-arith
 C ObjC C++ ObjC++ Var(warn_pointer_arith)
 Warn about function pointer arithmetic
 
+;APPLE LOCAL begin mainline 2883585 2005-04-20
+Wpointer-to-int-cast
+C ObjC Var(warn_pointer_to_int_cast) Init(1)
+Warn when a pointer is cast to an integer of a different size
+;APPLE LOCAL end mainline 2883585 2005-04-20
 Wprotocol
 ObjC ObjC++ Var(warn_protocol) Init(1)
 Warn if inherited methods are unimplemented
@@ -580,11 +590,14 @@ fcheck-new
 C++ ObjC++
 Check the return value of new
 
-; APPLE LOCAL begin structor decloning
+; APPLE LOCAL begin ARM structor thunks
+; Nonzero if we prefer to clone con/de/structors.  Alternative is to
+; gen multiple tiny thunk-esque things that call/jump to a unified
+; con/de/structor.  This is a classic size/speed tradeoff.
 fclone-structors
-C++ ObjC++
+C++ ObjC++ Var(flag_clone_structors)
 Factor out certain duplicate code in constructors and destructors
-; APPLE LOCAL end structor decloning
+; APPLE LOCAL end ARM structor thunks
 
 fcond-mismatch
 C ObjC C++ ObjC++
@@ -728,21 +741,53 @@ C++ ObjC++
 fnonnull-objects
 C++ ObjC++
 
+; APPLE LOCAL begin radar 4705250
+fobjc-atdefs
+ObjC ObjC++ Var(flag_objc_atdefs) Init(-1)
+Allow use of @defs
+; APPLE LOCAL end radar 4705250
+
 ; APPLE LOCAL begin mainline
 fobjc-call-cxx-cdtors
-ObjC++
+ObjC++ Var(flag_objc_call_cxx_cdtors) Init(-1)
 Generate special ObjC methods to initialize/destroy non-POD C++ ivars, if needed
 ; APPLE LOCAL end mainline
 
 ; APPLE LOCAL begin mainline
+; APPLE LOCAL begin radar 4590221
 fobjc-direct-dispatch
-ObjC ObjC++ Var(flag_objc_direct_dispatch)
+ObjC ObjC++ Var(flag_objc_direct_dispatch) Init(-1)
 Allow fast jumps (via comm page) to the message dispatcher
+; APPLE LOCAL end radar 4590221
 ; APPLE LOCAL end mainline
 
 fobjc-exceptions
 ObjC ObjC++
 Enable Objective-C exception and synchronization syntax
+
+; APPLE LOCAL begin ARM hybrid objc-2.0
+fobjc-legacy-dispatch
+ObjC ObjC++ Var(flag_objc_legacy_dispatch) Init(-1)
+Use Objective-C v1 message dispatching
+; APPLE LOCAL end ARM hybrid objc-2.0
+
+; APPLE LOCAL begin radar 2848255
+fobjc-zerocost-exceptions
+ObjC ObjC++ Var(flag_objc_zerocost_exceptions) Init(0)
+Enable Objective-C zero-cost exception
+; APPLE LOCAL end radar 2848255
+
+; APPLE LOCAL begin objc new property - not for  merge to the FSF
+fobjc-new-property
+C C++ ObjC ObjC++ Var(flag_objc_new_property) Init(1)
+Enable Objective-C new property syntax and semantics
+; APPLE LOCAL end objc new property - not for  merge to the FSF
+
+; APPLE LOCAL begin radar 4810609
+fobjc-gc-only
+ObjC ObjC++ Var(flag_objc_gc_only)  Init(0)
+Program only supprts (GC) in ObjC/ObjC++ programs
+; APPLE LOCAL end radar 4810609
 
 ; APPLE LOCAL begin mainline
 fobjc-gc
@@ -938,6 +983,12 @@ iwithprefixbefore
 C ObjC C++ ObjC++ Joined Separate
 -iwithprefixbefore <dir>	Add <dir> to the end of the main include path
 
+; APPLE LOCAL begin ARM iwithsysroot 4917039
+iwithsysroot
+C ObjC C++ ObjC++ Joined Separate
+-iwithsysroot <dir> Add <sysroot>/<dir> to the start of the system include path
+; APPLE LOCAL end ARM iwithsysroot 4917039
+
 lang-asm
 C Undocumented
 
@@ -967,6 +1018,12 @@ C ObjC C++ ObjC++
 print-objc-runtime-info
 ObjC ObjC++
 Generate C header of platform-specific features
+
+; APPLE LOCAL begin radar 5082000
+print-objc-ivar-layout
+ObjC ObjC++
+Generate GC ivar layout information
+; APPLE LOCAL end radar 5082000
 
 ; APPLE LOCAL begin mainline 4.1 2005-06-17 3988498
 print-pch-checksum

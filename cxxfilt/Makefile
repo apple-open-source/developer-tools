@@ -2,9 +2,9 @@
 # cxxfilt Makefile
 ##
 
-# The --target is because bfd doesn't actually work on powerpc-darwin;
+# The --target is because bfd doesn't actually work on powerpc-darwin.
 # libiberty doesn't care about the target, but c++filt does, in one
-# very small way: it cares whether or not the target prepends an
+# very small way: it needs to know whether or not the target prepends an
 # underscore.  It turns out that this target does prepend an underscore.
 FAKE_TARGET=mn10300-elf
 
@@ -25,11 +25,11 @@ include ./GNUSource.make
 # Automatic Extract & Patch
 AEP            = YES
 AEP_Project    = binutils
-AEP_Version    = 2.16
+AEP_Version    = 070207
 AEP_ProjVers   = $(AEP_Project)-$(AEP_Version)
 AEP_Filename   = $(AEP_ProjVers).tar.bz2
 AEP_ExtractDir = $(AEP_ProjVers)
-AEP_Patches    = 
+AEP_Patches    = libiberty-demangle-5046344.patch libiberty-printf.patch
 
 ifeq ($(suffix $(AEP_Filename)),.bz2)
 AEP_ExtractOption = j
@@ -45,6 +45,7 @@ ifeq ($(AEP),YES)
 	$(TAR) -C $(SRCROOT) -$(AEP_ExtractOption)xf $(SRCROOT)/$(AEP_Filename)
 	$(RMDIR) $(SRCROOT)/$(Project)
 	$(MV) $(SRCROOT)/$(AEP_ExtractDir) $(SRCROOT)/$(Project)
+	$(RM) -r $(SRCROOT)/$(Project)/{gas,ld,gprof}
 	for patchfile in $(AEP_Patches); do \
 		cd $(SRCROOT)/$(Project) && patch -p0 < $(SRCROOT)/patches/$$patchfile; \
 	done

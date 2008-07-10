@@ -8481,6 +8481,17 @@ tsubst_copy_and_build (tree t,
       if (TREE_CODE (op1) == SCOPE_REF)
 	op1 = tsubst_qualified_id (op1, args, complain, in_decl, 
 				   /*done=*/true, /*address_p=*/true);
+      /* APPLE LOCAL begin constant cfstrings - radar 4557092 */
+      /* CFSTRING is represented as an ADDR_EXPR of a CONST_DECL node whose 
+         DECL_INITIAL field holds the CONSTRUCTOR initializer. We cannot 
+	 fold away CONST_DECL part since this results in ADDR_EXPR of 
+	 CONSTRUCTOR node which is wrong and causes gimplifier to assign 
+	 CONSTRUCTOR to a local temporary and function returning address 
+	 of this temporary. */
+      else if (TREE_CODE (op1) == CONST_DECL 
+	       && TREE_CODE (DECL_INITIAL (op1)) == CONSTRUCTOR)
+	;
+      /* APPLE LOCAL end constant cfstrings - radar 4557092 */
       else
 	op1 = tsubst_non_call_postfix_expression (op1, args, complain, 
 						  in_decl);
@@ -12224,7 +12235,10 @@ value_dependent_expression_p (tree expression)
   /* A `sizeof' expression is value-dependent if the operand is
      type-dependent.  */
   if (TREE_CODE (expression) == SIZEOF_EXPR
-      || TREE_CODE (expression) == ALIGNOF_EXPR)
+  /* APPLE LOCAL begin radar 5619052 */
+      || TREE_CODE (expression) == ALIGNOF_EXPR
+      || TREE_CODE (expression) == AT_ENCODE_EXPR)
+  /* APPLE LOCAL end radar 5619052 */
     {
       expression = TREE_OPERAND (expression, 0);
       if (TYPE_P (expression))
@@ -12332,7 +12346,10 @@ type_dependent_expression_p (tree expression)
       || TREE_CODE (expression) == TYPEID_EXPR
       || TREE_CODE (expression) == DELETE_EXPR
       || TREE_CODE (expression) == VEC_DELETE_EXPR
-      || TREE_CODE (expression) == THROW_EXPR)
+      /* APPLE LOCAL begin radar 5619052 */
+      || TREE_CODE (expression) == THROW_EXPR
+      || TREE_CODE (expression) == AT_ENCODE_EXPR)
+      /* APPLE LOCAL end radar 5619052 */
     return false;
 
   /* The types of these expressions depends only on the type to which

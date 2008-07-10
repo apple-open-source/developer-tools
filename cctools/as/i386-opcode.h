@@ -83,15 +83,16 @@ static const template i386_optab[] =
 
 /* Move instructions.  */
 #define MOV_AX_DISP32 0xa0
-/* In the 64bit mode the short form mov immediate is redefined to have
-   64bit displacement value.  */
+/* We put the 64bit displacement first and we only mark constants
+   larger than 32bit as Disp64.  */
+{ "mov",   2,	0xa0, X, Cpu64,  bwlq_Suf|D|W,			{ Disp64, Acc, 0 } },
 { "mov",   2,	0xa0, X, CpuNo64,bwl_Suf|D|W,			{ Disp16|Disp32, Acc, 0 } },
 #if NeXT_MOD
 #define MOV_REG_MEM (0x88 | D | W)
 #endif
 { "mov",   2,	0x88, X, 0,	 bwlq_Suf|D|W|Modrm,		{ Reg, Reg|AnyMem, 0} },
 /* In the 64bit mode the short form mov immediate is redefined to have
-   64bit displacement value.  */
+   64bit value.  */
 { "mov",   2,	0xb0, X, 0,	 bwl_Suf|W|ShortForm,		{ EncImm, Reg8|Reg16|Reg32, 0 } },
 { "mov",   2,	0xc6, 0, 0,	 bwlq_Suf|W|Modrm,		{ EncImm, Reg|AnyMem, 0 } },
 { "mov",   2,	0xb0, X, Cpu64,	 q_Suf|W|ShortForm,		{ Imm64, Reg64, 0 } },
@@ -224,8 +225,10 @@ static const template i386_optab[] =
 {"cmc",	   0,	0xf5, X, 0,	 NoSuf,			{ 0, 0, 0} },
 {"lahf",   0,	0x9f, X, 0,	 NoSuf,			{ 0, 0, 0} },
 {"sahf",   0,	0x9e, X, 0,	 NoSuf,			{ 0, 0, 0} },
+{"pushfd",  0,	0x9c, X, CpuNo64,wl_Suf|DefaultSize,	{ 0, 0, 0} },
 {"pushf",  0,	0x9c, X, CpuNo64,wl_Suf|DefaultSize,	{ 0, 0, 0} },
 {"pushf",  0,	0x9c, X, Cpu64,	 wq_Suf|DefaultSize|NoRex64,{ 0, 0, 0} },
+{"popfd",   0,	0x9d, X, CpuNo64,wl_Suf|DefaultSize,	{ 0, 0, 0} },
 {"popf",   0,	0x9d, X, CpuNo64,wl_Suf|DefaultSize,	{ 0, 0, 0} },
 {"popf",   0,	0x9d, X, Cpu64,	 wq_Suf|DefaultSize|NoRex64,{ 0, 0, 0} },
 {"stc",	   0,	0xf9, X, 0,	 NoSuf,			{ 0, 0, 0} },
@@ -563,7 +566,11 @@ static const template i386_optab[] =
 {"bound",  2,	0x62, X, Cpu186|CpuNo64, wl_Suf|Modrm,		{ WordReg, WordMem, 0} },
 
 {"hlt",	   0,	0xf4, X, 0,	 NoSuf,			{ 0, 0, 0} },
-/* nop is actually 'xchgl %eax, %eax'.  */
+
+{"nop",    1, 0x0f1f, X, Cpu686, wl_Suf|Modrm,		{ WordMem, 0, 0} },
+
+/* nop is actually "xchg %ax,%ax" in 16bit mode, "xchg %eax,%eax" in
+   32bit mode and "xchg %rax,%rax" in 64bit mode.  */
 {"nop",	   0,	0x90, X, 0,	 NoSuf,			{ 0, 0, 0} },
 
 /* Protection control.  */
@@ -1184,6 +1191,8 @@ static const template i386_optab[] =
 {"pavgw",     2, 0x660fe3,  X, CpuSSE2,NoSuf|IgnoreSize|Modrm,	{ RegXMM|LLongMem, RegXMM, 0 } },
 {"pextrw",    3, 0x0fc5,    X, CpuMMX2,lq_Suf|IgnoreSize|Modrm,	{ Imm8, RegMMX|InvMem, Reg32|Reg64 } },
 {"pextrw",    3, 0x660fc5,  X, CpuSSE2,lq_Suf|IgnoreSize|Modrm,	{ Imm8, RegXMM|InvMem, Reg32|Reg64 } },
+{"pextrw",   3, 0x660f3a15,  X, CpuSSE4, NoSuf|IgnoreSize|Modrm, { Imm8, RegXMM, Reg32|LLongMem } },
+{"pextrw",   3, 0x660f3a15,  X, CpuSSE4|Cpu64, NoSuf|IgnoreSize|Modrm, { Imm8, RegXMM, Reg64|LLongMem } },
 {"pinsrw",    3, 0x0fc4,    X, CpuMMX2,lq_Suf|IgnoreSize|Modrm,	{ Imm8, Reg32|Reg64|ShortMem, RegMMX } },
 {"pinsrw",    3, 0x660fc4,  X, CpuSSE2,lq_Suf|IgnoreSize|Modrm,	{ Imm8, Reg32|Reg64|ShortMem, RegXMM } },
 {"pmaxsw",    2, 0x0fee,    X, CpuMMX2,NoSuf|IgnoreSize|Modrm,	{ RegMMX|LLongMem, RegMMX, 0 } },
@@ -1436,6 +1445,83 @@ static const template i386_optab[] =
 {"xsha256",   0, 0xf30fa6d0, X, Cpu686|CpuPadLock, NoSuf|IsString, { 0, 0, 0} },
 /* Alias for xstorerng.  */
 {"xstore",    0, 0x000fa7c0, X, Cpu686|CpuPadLock, NoSuf|IsString, { 0, 0, 0} },
+
+/* SSE4 instructions */
+{"roundps",   3, 0x660f3a08,  X, CpuSSE4, NoSuf|IgnoreSize|Modrm,	{ Imm8, RegXMM|LLongMem, RegXMM } },
+{"roundpd",   3, 0x660f3a09,  X, CpuSSE4, NoSuf|IgnoreSize|Modrm,	{ Imm8, RegXMM|LLongMem, RegXMM } },
+{"roundss",   3, 0x660f3a0a,  X, CpuSSE4, NoSuf|IgnoreSize|Modrm,	{ Imm8, RegXMM|LLongMem, RegXMM } },
+{"roundsd",   3, 0x660f3a0b,  X, CpuSSE4, NoSuf|IgnoreSize|Modrm,	{ Imm8, RegXMM|LLongMem, RegXMM } },
+{"blendps",   3, 0x660f3a0c,  X, CpuSSE4, NoSuf|IgnoreSize|Modrm,	{ Imm8, RegXMM|LLongMem, RegXMM } },
+{"blendpd",   3, 0x660f3a0d,  X, CpuSSE4, NoSuf|IgnoreSize|Modrm,	{ Imm8, RegXMM|LLongMem, RegXMM } },
+{"blendvpd",   3, 0x660f3815, X, CpuSSE4,NoSuf|IgnoreSize|Modrm|regKludge,	{ RegXMM, RegXMM|LLongMem, RegXMM } },
+{"blendvpd",   2, 0x660f3815, X, CpuSSE4,NoSuf|IgnoreSize|Modrm,	{ RegXMM|LLongMem, RegXMM, 0 } },
+{"blendvps",   3, 0x660f3814, X, CpuSSE4,NoSuf|IgnoreSize|Modrm|regKludge,	{ RegXMM, RegXMM|LLongMem, RegXMM } },
+{"blendvps",   2, 0x660f3814, X, CpuSSE4,NoSuf|IgnoreSize|Modrm,	{ RegXMM|LLongMem, RegXMM, 0 } },
+{"dppd",   3, 0x660f3a41,  X, CpuSSE4, NoSuf|IgnoreSize|Modrm,	{ Imm8, RegXMM|LLongMem, RegXMM } },
+{"dpps",   3, 0x660f3a40,  X, CpuSSE4, NoSuf|IgnoreSize|Modrm,        { Imm8, RegXMM|LLongMem, RegXMM } },
+{"extractps",   3, 0x660f3a17,  X, CpuSSE4, NoSuf|IgnoreSize|Modrm,   { Imm8, RegXMM, Reg32|LongMem } },
+{"extractps",   3, 0x660f3a17,  X, CpuSSE4|Cpu64, NoSuf|IgnoreSize|Modrm,    { Imm8, RegXMM, Reg64|LongMem } },
+{"insertps",   3, 0x660f3a21,  X, CpuSSE4, NoSuf|IgnoreSize|Modrm,    { Imm8, RegXMM|LongMem, RegXMM } },
+{"insertps",   3, 0x660f3a21,  X, CpuSSE4|Cpu64, NoSuf|IgnoreSize|Modrm,     { Imm8, RegXMM|LongMem, RegXMM } },
+{"movntdqa",    2, 0x660f382a,  X, CpuSSE4, NoSuf|IgnoreSize|Modrm,   { LLongMem, RegXMM, 0 } },
+{"mpsadbw",   3, 0x660f3a42,  X, CpuSSE4, NoSuf|IgnoreSize|Modrm,     { Imm8, RegXMM|LLongMem, RegXMM } },
+{"packusdw",    2, 0x660f382b,  X, CpuSSE4, NoSuf|IgnoreSize|Modrm,   { RegXMM|LLongMem, RegXMM, 0 } },
+{"pblendvb",   3, 0x660f3810, X, CpuSSE4,NoSuf|IgnoreSize|Modrm|regKludge,      { RegXMM, RegXMM|LLongMem, RegXMM } },
+{"pblendvb",   2, 0x660f3810, X, CpuSSE4,NoSuf|IgnoreSize|Modrm,      { RegXMM|LLongMem, RegXMM, 0 } },
+{"pblendw",   3, 0x660f3a0e,  X, CpuSSE4, NoSuf|IgnoreSize|Modrm,     { Imm8, RegXMM|LLongMem, RegXMM } },
+{"pcmpeqq",   2, 0x660f3829, X, CpuSSE4,NoSuf|IgnoreSize|Modrm,       { RegXMM|LLongMem, RegXMM, 0 } },
+{"pextrb",   3, 0x660f3a14,  X, CpuSSE4, NoSuf|IgnoreSize|Modrm,      { Imm8, RegXMM, Reg32|LLongMem } },
+{"pextrb",   3, 0x660f3a14,  X, CpuSSE4|Cpu64, NoSuf|IgnoreSize|Modrm,       { Imm8, RegXMM, Reg64|LLongMem } },
+{"pextrd",   3, 0x660f3a16,  X, CpuSSE4, NoSuf|IgnoreSize|Modrm,      { Imm8, RegXMM, Reg32|LongMem } },
+{"pextrq",   3, 0x660f3a16,  X, CpuSSE4|Cpu64, NoSuf|IgnoreSize|Modrm|Size64,       { Imm8, RegXMM, Reg64|LongMem } },
+{"phminposuw",   2, 0x660f3841, X, CpuSSE4,NoSuf|IgnoreSize|Modrm,    { RegXMM|LLongMem, RegXMM, 0 } },
+{"pinsrb",   3, 0x660f3a20,  X, CpuSSE4, NoSuf|IgnoreSize|Modrm,      { Imm8, Reg32|LLongMem, RegXMM } },
+{"pinsrb",   3, 0x660f3a20,  X, CpuSSE4|Cpu64, NoSuf|IgnoreSize|Modrm,       { Imm8, Reg64|LLongMem, RegXMM } },
+{"pinsrd",   3, 0x660f3a22,  X, CpuSSE4, NoSuf|IgnoreSize|Modrm,      { Imm8, Reg32|LLongMem, RegXMM } },
+{"pinsrq",   3, 0x660f3a22,  X, CpuSSE4|Cpu64, NoSuf|IgnoreSize|Modrm|Size64,       { Imm8, Reg64|LLongMem, RegXMM } },
+{"pmaxsb",   2, 0x660f383c, X, CpuSSE4,NoSuf|IgnoreSize|Modrm,        { RegXMM|LLongMem, RegXMM, 0 } },
+{"pmaxsd",   2, 0x660f383d, X, CpuSSE4,NoSuf|IgnoreSize|Modrm,        { RegXMM|LLongMem, RegXMM, 0 } },
+{"pmaxud",   2, 0x660f383f, X, CpuSSE4,NoSuf|IgnoreSize|Modrm,        { RegXMM|LLongMem, RegXMM, 0 } },
+{"pmaxuw",   2, 0x660f383e, X, CpuSSE4,NoSuf|IgnoreSize|Modrm,        { RegXMM|LLongMem, RegXMM, 0 } },
+{"pminsb",   2, 0x660f3838, X, CpuSSE4,NoSuf|IgnoreSize|Modrm,        { RegXMM|LLongMem, RegXMM, 0 } },
+{"pminsd",   2, 0x660f3839, X, CpuSSE4,NoSuf|IgnoreSize|Modrm,        { RegXMM|LLongMem, RegXMM, 0 } },
+{"pminud",   2, 0x660f383b, X, CpuSSE4,NoSuf|IgnoreSize|Modrm,        { RegXMM|LLongMem, RegXMM, 0 } },
+{"pminuw",   2, 0x660f383a, X, CpuSSE4,NoSuf|IgnoreSize|Modrm,        { RegXMM|LLongMem, RegXMM, 0 } },
+{"pmovsxbw",   2, 0x660f3820, X, CpuSSE4,NoSuf|IgnoreSize|Modrm,      { RegXMM|LLongMem, RegXMM, 0 } },
+{"pmovsxbd",   2, 0x660f3821, X, CpuSSE4,NoSuf|IgnoreSize|Modrm,      { RegXMM|LongMem, RegXMM, 0 } },
+{"pmovsxbq",   2, 0x660f3822, X, CpuSSE4,NoSuf|IgnoreSize|Modrm,      { RegXMM|WordMem, RegXMM, 0 } },
+{"pmovsxwd",   2, 0x660f3823, X, CpuSSE4,NoSuf|IgnoreSize|Modrm,      { RegXMM|LLongMem, RegXMM, 0 } },
+{"pmovsxwq",   2, 0x660f3824, X, CpuSSE4,NoSuf|IgnoreSize|Modrm,      { RegXMM|LongMem, RegXMM, 0 } },
+{"pmovsxdq",   2, 0x660f3825, X, CpuSSE4,NoSuf|IgnoreSize|Modrm,      { RegXMM|LLongMem, RegXMM, 0 } },
+{"pmovzxbw",   2, 0x660f3830, X, CpuSSE4,NoSuf|IgnoreSize|Modrm,      { RegXMM|LLongMem, RegXMM, 0 } },
+{"pmovzxbd",   2, 0x660f3831, X, CpuSSE4,NoSuf|IgnoreSize|Modrm,      { RegXMM|LongMem, RegXMM, 0 } },
+{"pmovzxbq",   2, 0x660f3832, X, CpuSSE4,NoSuf|IgnoreSize|Modrm,      { RegXMM|WordMem, RegXMM, 0 } },
+{"pmovzxwd",   2, 0x660f3833, X, CpuSSE4,NoSuf|IgnoreSize|Modrm,      { RegXMM|LLongMem, RegXMM, 0 } },
+{"pmovzxwq",   2, 0x660f3834, X, CpuSSE4,NoSuf|IgnoreSize|Modrm,      { RegXMM|LongMem, RegXMM, 0 } },
+{"pmovzxdq",   2, 0x660f3835, X, CpuSSE4,NoSuf|IgnoreSize|Modrm,      { RegXMM|LLongMem, RegXMM, 0 } },
+{"pmuldq",   2, 0x660f3828, X, CpuSSE4,NoSuf|IgnoreSize|Modrm,        { RegXMM|LLongMem, RegXMM, 0 } },
+{"pmulld",   2, 0x660f3840, X, CpuSSE4,NoSuf|IgnoreSize|Modrm,        { RegXMM|LLongMem, RegXMM, 0 } },
+{"ptest",   2, 0x660f3817, X, CpuSSE4,NoSuf|IgnoreSize|Modrm, { RegXMM|LLongMem, RegXMM, 0 } },
+
+/* SSE4.2 instructions */
+{"crc32b", 2, 0xf20f38f0, X, CpuSSE4, NoSuf|IgnoreSize|Modrm, { Reg8|ByteMem, Reg32, 0 } },
+{"crc32b", 2, 0xf20f38f0, X, CpuSSE4|Cpu64, NoSuf|Size64|Modrm, { Reg8|ByteMem, Reg64, 0 } },
+{"crc32", 2, 0xf20f38f0, X, CpuSSE4, NoSuf|IgnoreSize|Modrm, { Reg8, Reg32, 0 } },
+{"crc32", 2, 0xf20f38f0, X, CpuSSE4|Cpu64, NoSuf|Size64|Modrm, { Reg8, Reg64, 0 } },
+{"crc32", 2, 0xf20f38f1, X, CpuSSE4, NoSuf|Size16|Modrm, { Reg16, Reg32, 0 } },
+{"crc32", 2, 0xf20f38f1, X, CpuSSE4, w_Suf|Modrm, { Reg16|WordMem, Reg32, 0 } },
+{"crc32", 2, 0xf20f38f1, X, CpuSSE4, NoSuf|IgnoreSize|Modrm, { Reg32, Reg32, 0 } },
+{"crc32", 2, 0xf20f38f1, X, CpuSSE4, l_Suf|IgnoreSize|Modrm, { Reg32|LongMem, Reg32, 0 } },
+{"crc32", 2, 0xf20f38f1, X, CpuSSE4|Cpu64, NoSuf|Size64|Modrm, { Reg64, Reg64, 0 } },
+{"crc32", 2, 0xf20f38f1, X, CpuSSE4|Cpu64, q_Suf|Size64|Modrm, { Reg64|LLongMem, Reg64, 0 } },
+{"pcmpestri",   3, 0x660f3a61,  X, CpuSSE4, NoSuf|IgnoreSize|Modrm,	{ Imm8, RegXMM|LLongMem, RegXMM } },
+{"pcmpestrm",   3, 0x660f3a60,  X, CpuSSE4, NoSuf|IgnoreSize|Modrm,	{ Imm8, RegXMM|LLongMem, RegXMM } },
+{"pcmpistri",   3, 0x660f3a63,  X, CpuSSE4, NoSuf|IgnoreSize|Modrm,	{ Imm8, RegXMM|LLongMem, RegXMM } },
+{"pcmpistrm",   3, 0x660f3a62,  X, CpuSSE4, NoSuf|IgnoreSize|Modrm,	{ Imm8, RegXMM|LLongMem, RegXMM } },
+{"pcmpgtq",   2, 0x660f3837, X, CpuSSE4,NoSuf|IgnoreSize|Modrm,	{ RegXMM|LLongMem, RegXMM, 0 } },
+{"popcnt", 2, 0xf30fb8, X, 0, NoSuf|Size16|Modrm, { Reg16|WordMem, Reg16, 0 } },
+{"popcnt", 2, 0xf30fb8, X, 0, NoSuf|Size32|Modrm, { Reg32|LongMem, Reg32, 0 } },
+{"popcnt", 2, 0xf30fb8, X, Cpu64, NoSuf|Size64|Modrm, { Reg64|LLongMem, Reg64, 0 } },
 
 /* sentinel */
 {NULL, 0, 0, 0, 0, 0, { 0, 0, 0} }

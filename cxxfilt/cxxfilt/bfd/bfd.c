@@ -1,6 +1,6 @@
 /* Generic BFD library interface and support routines.
    Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2005
+   2000, 2001, 2002, 2003, 2004, 2005, 2006
    Free Software Foundation, Inc.
    Written by Cygnus Support.
 
@@ -18,7 +18,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 /*
 SECTION
@@ -111,8 +111,8 @@ CODE_FRAGMENT
 .  {* Pointer to linked list of sections.  *}
 .  struct bfd_section *sections;
 .
-.  {* The place where we add to the section list.  *}
-.  struct bfd_section **section_tail;
+.  {* The last section on the section list.  *}
+.  struct bfd_section *section_last;
 .
 .  {* The number of sections.  *}
 .  unsigned int section_count;
@@ -216,6 +216,11 @@ CODE_FRAGMENT
 #include "libecoff.h"
 #undef obj_symbols
 #include "elf-bfd.h"
+
+#ifndef EXIT_FAILURE
+#define EXIT_FAILURE 1
+#endif
+
 
 /* provide storage for subsystem, stack and heap data which may have been
    passed in on the command line.  Ld puts this data into a bfd_link_info
@@ -266,6 +271,7 @@ CODE_FRAGMENT
 .  bfd_error_bad_value,
 .  bfd_error_file_truncated,
 .  bfd_error_file_too_big,
+.  bfd_error_on_input,
 .  bfd_error_invalid_error_code
 .}
 .bfd_error_type;
@@ -273,6 +279,8 @@ CODE_FRAGMENT
 */
 
 static bfd_error_type bfd_error = bfd_error_no_error;
+static bfd *input_bfd = NULL;
+static bfd_error_type input_error = bfd_error_no_error;
 
 const char *const bfd_errmsgs[] =
 {
@@ -295,6 +303,7 @@ const char *const bfd_errmsgs[] =
   N_("Bad value"),
   N_("File truncated"),
   N_("File too big"),
+  N_("Error reading %s: %s"),
   N_("#<Invalid error code>")
 };
 
@@ -320,16 +329,32 @@ FUNCTION
 	bfd_set_error
 
 SYNOPSIS
-	void bfd_set_error (bfd_error_type error_tag);
+	void bfd_set_error (bfd_error_type error_tag, ...);
 
 DESCRIPTION
 	Set the BFD error condition to be @var{error_tag}.
+	If @var{error_tag} is bfd_error_on_input, then this function
+	takes two more parameters, the input bfd where the error
+	occurred, and the bfd_error_type error.
 */
 
 void
-bfd_set_error (bfd_error_type error_tag)
+bfd_set_error (bfd_error_type error_tag, ...)
 {
   bfd_error = error_tag;
+  if (error_tag == bfd_error_on_input)
+    {
+      /* This is an error that occurred during bfd_close when
+	 writing an archive, but on one of the input files.  */
+      va_list ap;
+
+      va_start (ap, error_tag);
+      input_bfd = va_arg (ap, bfd *);
+      input_error = va_arg (ap, int);
+      if (input_error >= bfd_error_on_input)
+	abort ();
+      va_end (ap);
+    }
 }
 
 /*
@@ -350,6 +375,19 @@ bfd_errmsg (bfd_error_type error_tag)
 #ifndef errno
   extern int errno;
 #endif
+  if (error_tag == bfd_error_on_input)
+    {
+      char *buf;
+      const char *msg = bfd_errmsg (input_error);
+
+      if (asprintf (&buf, _(bfd_errmsgs [error_tag]), input_bfd->filename, msg)
+	  != -1)
+	return buf;
+
+      /* Ick, what to do on out of memory?  */
+      return msg;
+    }
+
   if (error_tag == bfd_error_system_call)
     return xstrerror (errno);
 
@@ -377,16 +415,10 @@ DESCRIPTION
 void
 bfd_perror (const char *message)
 {
-  if (bfd_get_error () == bfd_error_system_call)
-    /* Must be a system error then.  */
-    perror ((char *) message);
+  if (message == NULL || *message == '\0')
+    fprintf (stderr, "%s\n", bfd_errmsg (bfd_get_error ()));
   else
-    {
-      if (message == NULL || *message == '\0')
-	fprintf (stderr, "%s\n", bfd_errmsg (bfd_get_error ()));
-      else
-	fprintf (stderr, "%s: %s\n", message, bfd_errmsg (bfd_get_error ()));
-    }
+    fprintf (stderr, "%s: %s\n", message, bfd_errmsg (bfd_get_error ()));
 }
 
 /*
@@ -414,6 +446,23 @@ static const char *_bfd_error_program_name;
 
    %A section name from section.  For group components, print group name too.
    %B file name from bfd.  For archive components, prints archive too.
+
+   Note - because these two extra format specifiers require special handling
+   they are scanned for and processed in this function, before calling
+   vfprintf.  This means that the *arguments* for these format specifiers
+   must be the first ones in the variable argument list, regardless of where
+   the specifiers appear in the format string.  Thus for example calling
+   this function with a format string of:
+
+      "blah %s blah %A blah %d blah %B"
+
+   would involve passing the arguments as:
+
+      "blah %s blah %A blah %d blah %B",
+        asection_for_the_%A,
+	bfd_for_the_%B,
+	string_for_the_%s,
+	integer_for_the_%d);
  */
 
 void
@@ -437,7 +486,7 @@ _bfd_default_error_handler (const char *fmt, ...)
   /* Reserve enough space for the existing format string.  */
   avail -= strlen (fmt) + 1;
   if (avail > 1000)
-    abort ();
+    _exit (EXIT_FAILURE);
 
   p = fmt;
   while (1)
@@ -478,7 +527,11 @@ _bfd_default_error_handler (const char *fmt, ...)
 	      if (p[1] == 'B')
 		{
 		  bfd *abfd = va_arg (ap, bfd *);
-		  if (abfd->my_archive)
+
+		  if (abfd == NULL)
+		    /* Invoking %B with a null bfd pointer is an internal error.  */
+		    abort ();
+		  else if (abfd->my_archive)
 		    snprintf (bufp, avail, "%s(%s)",
 			      abfd->my_archive->filename, abfd->filename);
 		  else
@@ -487,10 +540,14 @@ _bfd_default_error_handler (const char *fmt, ...)
 	      else
 		{
 		  asection *sec = va_arg (ap, asection *);
-		  bfd *abfd = sec->owner;
+		  bfd *abfd;
 		  const char *group = NULL;
 		  struct coff_comdat_info *ci;
 
+		  if (sec == NULL)
+		    /* Invoking %A with a null section pointer is an internal error.  */
+		    abort ();
+		  abfd = sec->owner;
 		  if (abfd != NULL
 		      && bfd_get_flavour (abfd) == bfd_target_elf_flavour
 		      && elf_next_in_group (sec) != NULL
@@ -626,7 +683,10 @@ bfd_get_error_handler (void)
 
 /*
 SECTION
-	Symbols
+	Miscellaneous
+
+SUBSECTION
+	Miscellaneous functions
 */
 
 /*
@@ -772,10 +832,6 @@ bfd_assert (const char *file, int line)
 /* A more or less friendly abort message.  In libbfd.h abort is
    defined to call this function.  */
 
-#ifndef EXIT_FAILURE
-#define EXIT_FAILURE 1
-#endif
-
 void
 _bfd_abort (const char *file, int line, const char *fn)
 {
@@ -788,7 +844,7 @@ _bfd_abort (const char *file, int line, const char *fn)
       (_("BFD %s internal error, aborting at %s line %d\n"),
        BFD_VERSION_STRING, file, line);
   (*_bfd_error_handler) (_("Please report this bug.\n"));
-  xexit (EXIT_FAILURE);
+  _exit (EXIT_FAILURE);
 }
 
 /*
@@ -847,14 +903,16 @@ bfd_get_sign_extend_vma (bfd *abfd)
 
   name = bfd_get_target (abfd);
 
-  /* Return a proper value for DJGPP & PE COFF (x86 COFF variants).
+  /* Return a proper value for DJGPP & PE COFF.
      This function is required for DWARF2 support, but there is
      no place to store this information in the COFF back end.
      Should enough other COFF targets add support for DWARF2,
      a place will have to be found.  Until then, this hack will do.  */
-  if (strncmp (name, "coff-go32", sizeof ("coff-go32") - 1) == 0
+  if (CONST_STRNEQ (name, "coff-go32")
       || strcmp (name, "pe-i386") == 0
-      || strcmp (name, "pei-i386") == 0)
+      || strcmp (name, "pei-i386") == 0
+      || strcmp (name, "pe-arm-wince-little") == 0
+      || strcmp (name, "pei-arm-wince-little") == 0)
     return 1;
 
   bfd_set_error (bfd_error_wrong_format);
@@ -1154,12 +1212,20 @@ FUNCTION
 DESCRIPTION
 	The following functions exist but have not yet been documented.
 
-.#define bfd_sizeof_headers(abfd, reloc) \
-.       BFD_SEND (abfd, _bfd_sizeof_headers, (abfd, reloc))
+.#define bfd_sizeof_headers(abfd, info) \
+.       BFD_SEND (abfd, _bfd_sizeof_headers, (abfd, info))
 .
 .#define bfd_find_nearest_line(abfd, sec, syms, off, file, func, line) \
 .       BFD_SEND (abfd, _bfd_find_nearest_line, \
 .                 (abfd, sec, syms, off, file, func, line))
+.
+.#define bfd_find_line(abfd, syms, sym, file, line) \
+.       BFD_SEND (abfd, _bfd_find_line, \
+.                 (abfd, syms, sym, file, line))
+.
+.#define bfd_find_inliner_info(abfd, file, func, line) \
+.       BFD_SEND (abfd, _bfd_find_inliner_info, \
+.                 (abfd, file, func, line))
 .
 .#define bfd_debug_info_start(abfd) \
 .       BFD_SEND (abfd, _bfd_debug_info_start, (abfd))
@@ -1286,11 +1352,10 @@ bfd_record_phdr (bfd *abfd,
 
   amt = sizeof (struct elf_segment_map);
   amt += ((bfd_size_type) count - 1) * sizeof (asection *);
-  m = bfd_alloc (abfd, amt);
+  m = bfd_zalloc (abfd, amt);
   if (m == NULL)
     return FALSE;
 
-  m->next = NULL;
   m->p_type = type;
   m->p_flags = flags;
   m->p_paddr = at;
@@ -1390,7 +1455,7 @@ CODE_FRAGMENT
 .  flagword flags;
 .  const struct bfd_arch_info *arch_info;
 .  struct bfd_section *sections;
-.  struct bfd_section **section_tail;
+.  struct bfd_section *section_last;
 .  unsigned int section_count;
 .  struct bfd_hash_table section_htab;
 .};
@@ -1424,18 +1489,19 @@ bfd_preserve_save (bfd *abfd, struct bfd_preserve *preserve)
   preserve->arch_info = abfd->arch_info;
   preserve->flags = abfd->flags;
   preserve->sections = abfd->sections;
-  preserve->section_tail = abfd->section_tail;
+  preserve->section_last = abfd->section_last;
   preserve->section_count = abfd->section_count;
   preserve->section_htab = abfd->section_htab;
 
-  if (! bfd_hash_table_init (&abfd->section_htab, bfd_section_hash_newfunc))
+  if (! bfd_hash_table_init (&abfd->section_htab, bfd_section_hash_newfunc,
+			     sizeof (struct section_hash_entry)))
     return FALSE;
 
   abfd->tdata.any = NULL;
   abfd->arch_info = &bfd_default_arch_struct;
   abfd->flags &= BFD_IN_MEMORY;
   abfd->sections = NULL;
-  abfd->section_tail = &abfd->sections;
+  abfd->section_last = NULL;
   abfd->section_count = 0;
 
   return TRUE;
@@ -1465,7 +1531,7 @@ bfd_preserve_restore (bfd *abfd, struct bfd_preserve *preserve)
   abfd->flags = preserve->flags;
   abfd->section_htab = preserve->section_htab;
   abfd->sections = preserve->sections;
-  abfd->section_tail = preserve->section_tail;
+  abfd->section_last = preserve->section_last;
   abfd->section_count = preserve->section_count;
 
   /* bfd_release frees all memory more recently bfd_alloc'd than
@@ -1499,4 +1565,131 @@ bfd_preserve_finish (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_preserve *preserve)
      inside bfd_alloc'd memory.  The section hash is on a separate
      objalloc.  */
   bfd_hash_table_free (&preserve->section_htab);
+}
+
+/*
+FUNCTION
+	bfd_emul_get_maxpagesize
+
+SYNOPSIS
+ 	bfd_vma bfd_emul_get_maxpagesize (const char *);
+
+DESCRIPTION
+	Returns the maximum page size, in bytes, as determined by
+	emulation.
+
+RETURNS
+	Returns the maximum page size in bytes for ELF, abort
+	otherwise.
+*/
+
+bfd_vma
+bfd_emul_get_maxpagesize (const char *emul)
+{
+  const bfd_target *target;
+
+  target = bfd_find_target (emul, NULL);
+  if (target != NULL
+      && target->flavour == bfd_target_elf_flavour)
+    return xvec_get_elf_backend_data (target)->maxpagesize;
+
+  abort ();
+  return 0;
+}
+
+static void
+bfd_elf_set_pagesize (const bfd_target *target, bfd_vma size,
+		      int offset, const bfd_target *orig_target)
+{
+  if (target->flavour == bfd_target_elf_flavour)
+    {
+      const struct elf_backend_data *bed;
+
+      bed = xvec_get_elf_backend_data (target);
+      *((bfd_vma *) ((char *) bed + offset)) = size;
+    }
+
+  if (target->alternative_target
+      && target->alternative_target != orig_target)
+    bfd_elf_set_pagesize (target->alternative_target, size, offset,
+			  orig_target);
+}
+
+/*
+FUNCTION
+	bfd_emul_set_maxpagesize
+
+SYNOPSIS
+ 	void bfd_emul_set_maxpagesize (const char *, bfd_vma);
+
+DESCRIPTION
+	For ELF, set the maximum page size for the emulation.  It is
+	a no-op for other formats.
+
+*/
+
+void
+bfd_emul_set_maxpagesize (const char *emul, bfd_vma size)
+{
+  const bfd_target *target;
+
+  target = bfd_find_target (emul, NULL);
+  if (target)
+    bfd_elf_set_pagesize (target, size,
+			  offsetof (struct elf_backend_data,
+				    maxpagesize), target);
+}
+
+/*
+FUNCTION
+	bfd_emul_get_commonpagesize
+
+SYNOPSIS
+ 	bfd_vma bfd_emul_get_commonpagesize (const char *);
+
+DESCRIPTION
+	Returns the common page size, in bytes, as determined by
+	emulation.
+
+RETURNS
+	Returns the common page size in bytes for ELF, abort otherwise.
+*/
+
+bfd_vma
+bfd_emul_get_commonpagesize (const char *emul)
+{
+  const bfd_target *target;
+
+  target = bfd_find_target (emul, NULL);
+  if (target != NULL
+      && target->flavour == bfd_target_elf_flavour)
+    return xvec_get_elf_backend_data (target)->commonpagesize;
+
+  abort ();
+  return 0;
+}
+
+/*
+FUNCTION
+	bfd_emul_set_commonpagesize
+
+SYNOPSIS
+ 	void bfd_emul_set_commonpagesize (const char *, bfd_vma);
+
+DESCRIPTION
+	For ELF, set the common page size for the emulation.  It is
+	a no-op for other formats.
+
+*/
+
+void
+bfd_emul_set_commonpagesize (const char *emul, bfd_vma size)
+{
+  const bfd_target *target;
+
+  target = bfd_find_target (emul, NULL);
+  if (target)
+    bfd_elf_set_pagesize (target, size,
+			  offsetof (struct elf_backend_data,
+				    commonpagesize), target);
 }

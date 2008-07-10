@@ -81,7 +81,7 @@
  **/
 
 
-#if defined(__FreeBSD__)
+#if defined(__FreeBSD__) 
 static ssize_t sys_sendfile(int ofd, int ifd, off_t *offset, size_t size)
 {
     off_t sent_bytes;
@@ -111,6 +111,36 @@ static ssize_t sys_sendfile(int ofd, int ifd, off_t *offset, size_t size)
         return size;
     } else {
         rs_log_error("don't know how to handle return %d from BSD sendfile",
+                     ret);
+        return -1;
+    }
+}
+#elif defined(__APPLE__)
+static ssize_t sys_sendfile(int ofd, int ifd, off_t *offset, size_t size) 
+{ 
+    off_t sent_bytes = size;
+
+    int ret = sendfile(ifd, ofd, *offset, &sent_bytes, NULL, 0);
+    if (ret == -1) { 
+        if (errno == EAGAIN) { 
+            if (sent_bytes == 0) { 
+                return -1;
+            }
+            else { 
+                *offset += sent_bytes;
+                return sent_bytes;
+            }
+        }
+        else { 
+            return -1;
+        }
+    }
+    else if (ret == 0) { 
+        *offset += size;
+        return size;
+    }
+    else { 
+        rs_log_error("don't know how to handle return %d from Darwin sendfile",
                      ret);
         return -1;
     }

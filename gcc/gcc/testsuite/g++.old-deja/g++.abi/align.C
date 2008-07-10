@@ -1,8 +1,5 @@
 // APPLE LOCAL why is this local?
 // { dg-do run { target i?86-*-linux* i?86-*-freebsd* i?86-*-darwin* } }
-// APPLE LOCAL begin 4646337
-// { dg-skip-if "-malign-double makes no sense in the 64bit mode" { i?86-*-darwin* } { "-m64" } { "" } }
-// APPLE LOCAL end 4646337
 // APPLE LOCAL mainline
 // { dg-require-effective-target ilp32 }
 // { dg-options "-malign-double" }

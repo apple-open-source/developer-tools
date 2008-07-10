@@ -1,9 +1,9 @@
-# APPLE LOCAL file mainline candidate 2006-06-22 4512244
+# APPLE LOCAL file mainline
 # Build a shared libgcc library with the darwin linker.
 SHLIB_SOVERSION = 1
 SHLIB_VERSTRING = -compatibility_version $(SHLIB_SOVERSION) -current_version $(SHLIB_SOVERSION).0
 SHLIB_EXT = .dylib
-SHLIB_SUFFIX = `if test @multilib_dir@ == ppc64 ; then echo _@multilib_dir@ ; fi`
+SHLIB_SUFFIX = `if test @multilib_dir@ = ppc64 ; then echo _@multilib_dir@ ; fi`
 SHLIB_INSTALL_NAME = @shlib_base_name@$(SHLIB_SUFFIX).$(SHLIB_SOVERSION)$(SHLIB_EXT)
 SHLIB_SONAME = @shlib_base_name@.$(SHLIB_SOVERSION)$(SHLIB_EXT)
 SHLIB_SOLINK = @shlib_base_name@.so
@@ -16,15 +16,17 @@ SHLIB_LC = -lc
 # so the libgcc variants have different names not different locations.
 # Note that this version is used for the loader, not the linker; the linker
 # uses the stub versions named by $(LIBGCC).
+# APPLE LOCAL begin no-libtool
+# APPLE LOCAL begin ARM dead strip libgcc_s
 SHLIB_LINK = $(GCC_FOR_TARGET) $(LIBGCC2_CFLAGS) -dynamiclib -nodefaultlibs \
-	-Wl,-install_name,$(slibdir)/$(SHLIB_INSTALL_NAME) \
-	-Wl,-flat_namespace -o $(SHLIB_DIR)/$(SHLIB_SONAME).tmp \
+	-Wl,-dead_strip \
+	-install_name $(slibdir)/$(SHLIB_INSTALL_NAME) \
+	-single_module -o $(SHLIB_DIR)/$(SHLIB_SONAME).tmp \
 	-Wl,-exported_symbols_list,$(SHLIB_MAP) \
 	$(SHLIB_VERSTRING) \
-	@multilib_flags@ $(SHLIB_OBJS) $(SHLIB_LC) && \
-	if [ -f stmp-lipo ]; then \
-	  rm -f stmp-lipo; \
-	else true; fi
+	@multilib_flags@ $(SHLIB_OBJS) $(SHLIB_LC)
+# APPLE LOCAL end ARM dead strip libgcc_s
+# APPLE LOCAL end no-libtool
 
 # $(slibdir) double quoted to protect it from expansion while building
 # libgcc.mk.  We want this delayed until actual install time.
@@ -45,7 +47,7 @@ ASM_HIDDEN_OP = .private_extern
 # each system version supported.  They are 'stub' libraries that
 # contain no code, just a list of exported symbols.
 # The actual use of the libraries is controlled by REAL_LIBGCC_SPEC.
-# 
+#
 # This assumes each multilib corresponds to a different architecture.
 libgcc_s.%.dylib : $(SHLIB_VERPFX).%.ver stmp-multilib
 	# When building multilibbed target libraries, all the required
@@ -91,5 +93,17 @@ install-darwin-libgcc-stubs : $(INSTALL_FILES) installdirs
 	for d in $(INSTALL_FILES) ; do \
 	  $(INSTALL_DATA) $$d $(DESTDIR)$(slibdir)/$$d || exit 1 ; \
 	done
+	if [ -f $(DESTDIR)$(slibdir)/libgcc_s_ppc64.1.dylib ]; then \
+	  rm -f $(DESTDIR)$(slibdir)/libgcc_s_ppc64.1.dylib; \
+	else true; fi
+	$(LN_S) libgcc_s.1.dylib \
+		$(DESTDIR)$(slibdir)/libgcc_s_ppc64.1.dylib
+# APPLE LOCAL begin x86_64
+	if [ -f $(DESTDIR)$(slibdir)/libgcc_s_x86_64.1.dylib ]; then \
+	  rm -f $(DESTDIR)$(slibdir)/libgcc_s_x86_64.1.dylib; \
+	else true; fi
+	$(LN_S) libgcc_s.1.dylib \
+		$(DESTDIR)$(slibdir)/libgcc_s_x86_64.1.dylib
+# APPLE LOCAL end x86_64
 
 INSTALL_LIBGCC = install-darwin-libgcc-stubs install-multilib

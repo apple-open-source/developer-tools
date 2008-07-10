@@ -3,6 +3,7 @@
 
 /* { dg-do run { target powerpc*-*-darwin* } } */
 /* { dg-options "-fasm-blocks -O2" } */
+/* { dg-require-effective-target ilp32 } */
 
 void function_with_asm_stmts () {
   asm ("nop");

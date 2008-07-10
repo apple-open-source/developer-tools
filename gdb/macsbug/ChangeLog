@@ -1,3 +1,12 @@
+2008-04-17  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile: Don't stop the build if the FIXUP commands fail for
+	whatever reason.
+
+2007-11-06  Jim Ingham  <jingham@apple.com>
+
+	* Makefile: Pass "-arch ppc" to the final link stage.
+	
 2007-03-02  Jim Ingham  <jingham@apple.com>
 
 	* Makefile: Use install rather than "cp -p" since the latter

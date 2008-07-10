@@ -67,7 +67,8 @@ static void create_literal (cpp_reader *, cpp_token *, const uchar *,
 			    unsigned int, enum cpp_ttype);
 static bool warn_in_comment (cpp_reader *, _cpp_line_note *);
 static int name_p (cpp_reader *, const cpp_string *);
-static tokenrun *next_tokenrun (tokenrun *);
+/* APPLE LOCAL 4137741 */
+/* 'next_tokenrun' made extern and renamed to '_cpp_next_tokenrun'.  */
 
 static _cpp_buff *new_buff (size_t);
 
@@ -733,8 +734,10 @@ _cpp_init_tokenrun (tokenrun *run, unsigned int count)
 }
 
 /* Returns the next tokenrun, or creates one if there is none.  */
-static tokenrun *
-next_tokenrun (tokenrun *run)
+/* APPLE LOCAL begin 4137741 */
+tokenrun *
+_cpp_next_tokenrun (tokenrun *run)
+/* APPLE LOCAL end 4137741 */
 {
   if (run->next == NULL)
     {
@@ -805,9 +808,10 @@ _cpp_temp_token (cpp_reader *pfile)
   /* Any pre-existing lookaheads must not be clobbered.  */
   if (la)
     {
+         /* APPLE LOCAL begin 4137741 */
       if (sz <= la)
         {
-          tokenrun *next = next_tokenrun (pfile->cur_run);
+          tokenrun *next = _cpp_next_tokenrun (pfile->cur_run);
 
           if (sz < la)
             memmove (next->base + 1, next->base,
@@ -824,7 +828,8 @@ _cpp_temp_token (cpp_reader *pfile)
   if (!sz)
   /* APPLE LOCAL end AltiVec */
     {
-      pfile->cur_run = next_tokenrun (pfile->cur_run);
+      pfile->cur_run = _cpp_next_tokenrun (pfile->cur_run);
+      /* APPLE LOCAL end 4137741 */
       pfile->cur_token = pfile->cur_run->base;
     }
 
@@ -845,7 +850,8 @@ _cpp_lex_token (cpp_reader *pfile)
     {
       if (pfile->cur_token == pfile->cur_run->limit)
 	{
-	  pfile->cur_run = next_tokenrun (pfile->cur_run);
+          /* APPLE LOCAL 4137741 */
+          pfile->cur_run = _cpp_next_tokenrun (pfile->cur_run);
 	  pfile->cur_token = pfile->cur_run->base;
 	}
 
@@ -859,6 +865,35 @@ _cpp_lex_token (cpp_reader *pfile)
 
       if (result->flags & BOL)
 	{
+          /* APPLE LOCAL begin 4137741 */
+          /* If we have squirreled away a CPP_EINCL token, return it now.  */
+          if (pfile->have_eincl)
+            {
+              result = pfile->beg_eincl++;
+ 
+              if (pfile->beg_eincl == pfile->end_eincl)
+                {
+                  pfile->beg_eincl = pfile->end_eincl = pfile->base_eincl.base;
+                  pfile->have_eincl = false;
+                }
+              else if (pfile->beg_eincl == pfile->cur_eincl->limit)
+                {
+                  /* NB: This point will be reached only if there are more
+                         than 250 nested headers that are _simultaneously_
+                         ending; a rare occurrence indeed.  */
+                  pfile->cur_eincl = _cpp_next_tokenrun (pfile->cur_eincl);
+                  pfile->beg_eincl = pfile->cur_eincl->base;
+                }
+ 
+              /* Push back original return value;
+                 we will retrieve it later.  */
+              pfile->lookaheads++;
+              pfile->cur_token--;
+ 
+              return result;
+            }
+ 
+          /* APPLE LOCAL end 4137741 */
 	  /* Is this a directive.  If _cpp_handle_directive returns
 	     false, it is an assembler #.  */
 	  if (result->type == CPP_HASH

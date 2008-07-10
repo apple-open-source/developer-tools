@@ -680,12 +680,20 @@ expand_asm_operands (tree string, tree outputs, tree inputs,
       if (i >= 0)
         {
 	  /* Clobbering the PIC register is an error.  */
+	  /* APPLE LOCAL begin 5695218 */
 	  /* APPLE LOCAL begin CW asm blocks. */
 	  /* Clobbering of PIC register is allowed in CW asm block.
 	     We check this condition by checking value of 'uses'.
 	     'uses' is non-null for a CW asm expression only. */
-	  if (uses == NULL && i == (int) PIC_OFFSET_TABLE_REGNUM)
+	  if (uses == NULL && flag_pic
+#ifdef REAL_PIC_OFFSET_TABLE_REGNUM
+	      && i == REAL_PIC_OFFSET_TABLE_REGNUM
+#else
+	      && i == (int)PIC_OFFSET_TABLE_REGNUM
+#endif
+	      )
 	  /* APPLE LOCAL end CW asm blocks. */
+	  /* APPLE LOCAL end 5695218 */
 	    {
 	      error ("PIC register %qs clobbered in %<asm%>", regname);
 	      return;
@@ -2483,9 +2491,11 @@ expand_case (tree exp)
 	       /* RANGE may be signed, and really large ranges will show up
 		  as negative numbers.  */
 	       || compare_tree_int (range, 0) < 0
-#ifndef ASM_OUTPUT_ADDR_DIFF_ELT
+/* APPLE LOCAL begin ARM 4790140 compact switch tables */
+#if !defined(ASM_OUTPUT_ADDR_DIFF_ELT) && (!defined(TARGET_ARM) || !defined(ASM_OUTPUT_ADDR_DIFF_VEC))
 	       || flag_pic
 #endif
+/* APPLE LOCAL end ARM 4790140 compact switch tables */
 	       || TREE_CONSTANT (index_expr)
 	       /* If neither casesi or tablejump is available, we can
 		  only go this way.  */
@@ -2533,6 +2543,37 @@ expand_case (tree exp)
 	    = (TREE_CODE (orig_type) != ENUMERAL_TYPE
 	       && estimate_case_costs (case_list));
 	  balance_case_nodes (&case_list, NULL);
+/* APPLE LOCAL begin ARM DImode switches */
+#ifdef TARGET_ARM
+	  /* In the common (in our code) case where the index is DImode,
+	     but all case constants fit in SImode, we can do better.
+	     This doesn't have to be ARM specific. */
+	  {
+	    struct case_node *n;
+	    int unsignedp = TYPE_UNSIGNED (index_type);
+	    if (TYPE_MODE (index_type) == DImode)
+	      {
+		for (n = case_list; n; n = n->right)
+		  {
+		    if (TREE_INT_CST_HIGH (n->low) != 0
+			|| (n->high && TREE_INT_CST_HIGH (n->high) != 0))
+		      goto failed;
+		  }
+		/* Jump to default case if high part of index != 0. */
+		emit_cmp_and_jump_insns (gen_rtx_SUBREG (SImode, index, 
+							subreg_highpart_offset (SImode, DImode)),
+		      const0_rtx, NE, NULL_RTX, SImode, unsignedp, default_label);
+
+		if (unsignedp)
+		  index_type = unsigned_intSI_type_node;
+		else
+		  index_type = intSI_type_node;
+		index = convert_to_mode (SImode, index, unsignedp);
+failed:;
+	      }
+	  }
+#endif
+/* APPLE LOCAL end ARM DImode switches */
 	  emit_case_nodes (index, case_list, default_label, index_type);
 	  emit_jump (default_label);
 	}
@@ -2563,6 +2604,13 @@ expand_case (tree exp)
 	  /* Get table of labels to jump to, in order of case index.  */
 
 	  ncases = tree_low_cst (range, 0) + 1;
+/* APPLE LOCAL begin ARM 4790140 compact switch tables */
+#ifdef TARGET_ARM
+	  if (TARGET_THUMB)
+	    /* Default label goes in at the end also. */
+	    ncases++;
+#endif
+/* APPLE LOCAL end ARM 4790140 compact switch tables */
 	  labelvec = alloca (ncases * sizeof (rtx));
 	  memset (labelvec, 0, ncases * sizeof (rtx));
 

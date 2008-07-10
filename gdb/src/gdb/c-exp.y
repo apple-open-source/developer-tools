@@ -109,6 +109,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
 #define YYFPRINTF parser_fprintf
 
+/* APPLE LOCAL - Avoid calling lookup_objc_class unnecessarily.  */
+static int square_bracket_seen = 0;
+
 int yyparse (void);
 
 static int yylex (void);
@@ -1641,8 +1644,10 @@ yylex ()
     case '!':
     case '<':
     case '>':
-    case '[':
-    case ']':
+      /* APPLE LOCAL begin avoid calling lookup_objc_class unnecessarily.  */
+      /* case '[':  moved down below */
+      /* case ']':  moved down below */
+      /* APPLE LOCAL end avoid calling lookup_objc_class unnecessarily.  */
     case '?':
     case ':':
     case '=':
@@ -1652,6 +1657,18 @@ yylex ()
       lexptr++;
       return c;
 
+    /* APPLE LOCAL begin avoid calling lookup_objc_class unnecessarily.  */
+    case '[':
+      square_bracket_seen = 1;
+      lexptr++;
+      return c;
+
+    case ']':
+      square_bracket_seen = 0;
+      lexptr++;
+      return c;
+
+    /* APPLE LOCAL end  avoid calling lookup_objc_class unnecessarily.  */
     case '@':
       if (strncmp (tokstart, "@selector", 9) == 0)
 	{
@@ -1952,10 +1969,14 @@ yylex ()
        results in unfortunate side-effect that gdb is calling into the
        ObjC runtime a lot to see if various no-debug-info symbols are
        classes.  */
-    if (!sym && should_lookup_objc_class ())  
+    /* APPLE LOCAL begin avoid calling lookup_objc_class unnecessarily.  */
+    if (!sym && should_lookup_objc_class ()
+	&& square_bracket_seen)  
       {
 	extern struct symbol *lookup_struct_typedef ();
         CORE_ADDR Class = lookup_objc_class (tmp);
+	square_bracket_seen = 0;
+	/* APPLE LOCAL end avoid calling lookup_objc_class unnecessarily.  */
         if (Class)
 	  {
 	    sym = lookup_struct_typedef (tmp, expression_context_block, 1);

@@ -116,9 +116,6 @@ dummy_frame_push (struct regcache *caller_regcache,
   inlined_subroutine_save_before_dummy_call ();
   /* APPLE LOCAL end subroutine inlining  */
 
-  dummy_frame = xmalloc (sizeof (struct dummy_frame));
-  dummy_frame->regcache = regcache_xmalloc (current_gdbarch);
-
   dummy_frame = XZALLOC (struct dummy_frame);
   dummy_frame->regcache = caller_regcache;
   dummy_frame->id = (*dummy_id);

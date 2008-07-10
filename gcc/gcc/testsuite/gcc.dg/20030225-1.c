@@ -5,6 +5,8 @@
    and Benjamin Herrenschmidt <benh@kernel.crashing.org>.  */
 /* { dg-do run } */
 /* { dg-options "-O2 -fPIC" } */
+/* APPLE LOCAL -mdynamic-no-pic incompatible with -fPIC */
+/* { dg-skip-if "Not valid with -mdynamic-no-pic" { *-*-darwin* } { "-mdynamic-no-pic" } { "" } } */
 /* { dg-warning "not supported" "PIC unsupported" { target cris-*-elf* mmix-*-* } 0 } */
 /* { dg-bogus "\[Uu\]nresolved symbol .(_GLOBAL_OFFSET_TABLE_|\[_.A-Za-z\]\[_.0-9A-Za-z\]*@(PLT|GOT|GOTOFF))" "PIC unsupported" { xfail *-*-netware* } 0 } */
 

@@ -200,6 +200,8 @@ enum dwarf_tag
     DW_TAG_class_template = 0x4103,	/* For C++.  */
     DW_TAG_GNU_BINCL = 0x4104,
     DW_TAG_GNU_EINCL = 0x4105,
+    /* APPLE LOCAL opt diary */
+    DW_TAG_GNU_OD_entry = 0x5001,       /* For optimization diary.  */
     /* Extensions for UPC.  See: http://upc.gwu.edu/~upc.  */
     DW_TAG_upc_shared_type = 0x8765,
     DW_TAG_upc_strict_type = 0x8766,
@@ -372,12 +374,24 @@ enum dwarf_attribute
     DW_AT_GNU_vector = 0x2107,
     /* VMS extensions.  */
     DW_AT_VMS_rtnbeg_pd_address = 0x2201,
+    /* APPLE LOCAL begin opt diary */
+    /* Optimization Diary extensions.  */
+    DW_AT_GNU_OD_msg = 0x2401,
+    DW_AT_GNU_OD_category = 0x2402,
+    DW_AT_GNU_OD_version = 0x2403,
+    /* APPLE LOCAL end opt diary */
     /* UPC extension.  */
     DW_AT_upc_threads_scaled = 0x3210,
     /* PGI (STMicroelectronics) extensions.  */
     DW_AT_PGI_lbase    = 0x3a00,
     DW_AT_PGI_soffset  = 0x3a01,
-    DW_AT_PGI_lstride  = 0x3a02
+    /* APPLE LOCAL begin option verifier 4957887 */
+    DW_AT_PGI_lstride  = 0x3a02,
+    /* Apple extensions.  */
+    DW_AT_APPLE_flags = 0x3fe2,
+    /* APPLE LOCAL end option verifier 4957887 */
+    /* APPLE LOCAL differentiate between arm & thumb.  */
+    DW_AT_APPLE_isa   = 0x3fe3
   };
 
 #define DW_AT_lo_user	0x2000	/* Implementation-defined range start.  */

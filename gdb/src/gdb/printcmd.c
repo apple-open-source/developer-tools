@@ -1108,6 +1108,7 @@ static void
 address_info (char *exp, int from_tty)
 {
   struct symbol *sym;
+  struct block *bl;
   struct minimal_symbol *msymbol;
   long val;
   long basereg;
@@ -1119,8 +1120,19 @@ address_info (char *exp, int from_tty)
   if (exp == 0)
     error (_("Argument required."));
 
-  sym = lookup_symbol (exp, get_selected_block (0), VAR_DOMAIN,
-		       &is_a_field_of_this, (struct symtab **) NULL);
+  /* APPLE LOCAL: Walk the chain of blocks until we get to the function
+     block before we pass that to lookup_symbol as the scope.  Else the
+     block argument is ignored and we'll mistakenly do an unscoped search.  */
+
+  bl = get_selected_block (NULL);
+  if (bl != NULL)
+    {
+      while (BLOCK_FUNCTION (bl) == 0 && BLOCK_SUPERBLOCK (bl) != 0)
+	bl = BLOCK_SUPERBLOCK (bl);
+    }
+
+  sym = lookup_symbol (exp, bl, VAR_DOMAIN, &is_a_field_of_this, 
+                       (struct symtab **) NULL);
   if (sym == NULL)
     {
       if (is_a_field_of_this)

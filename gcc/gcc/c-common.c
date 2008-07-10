@@ -270,6 +270,10 @@ int flag_short_wchar;
 int flag_lvalue_cast_assign = 1;
 /* APPLE LOCAL end lvalue cast */
 
+/* APPLE LOCAL begin mainline rewrite c.opt */
+int flag_gnu89_inline = -1;
+/* APPLE LOCAL end mainline rewrite c.opt */
+
 /* Nonzero means allow Microsoft extensions without warnings or errors.  */
 int flag_ms_extensions;
 
@@ -384,7 +388,8 @@ int flag_next_runtime = 0;
 /* Generate special '- .cxx_construct' and '- .cxx_destruct' methods
    to initialize any non-POD ivars in ObjC++ classes.  */
 
-int flag_objc_call_cxx_cdtors = 0;
+/* APPLE LOCAL radar 4949034 */
+/* declaration removed. */
 /* APPLE LOCAL end mainline */
 
 /* Tells the compiler that this is a special run.  Do not perform any
@@ -393,6 +398,8 @@ int flag_objc_call_cxx_cdtors = 0;
 
 int print_struct_values;
 
+/* APPLE LOCAL radar 5082000 */
+int print_objc_ivar_layout;
 /* ???.  Undocumented.  */
 
 const char *constant_string_class_name;
@@ -517,13 +524,6 @@ int flag_enforce_eh_specs = 1;
 int flag_preprocessed = 0;
 /* APPLE LOCAL end private extern  Radar 2872481 --ilr */
 
-/* APPLE LOCAL begin structor thunks */
-/* Nonzero if we prefer to clone con/de/structors.  Alternative is to
-   gen multiple tiny thunk-esque things that call/jump to a unified
-   con/de/structor.  This is a classic size/speed tradeoff.  */
-int flag_clone_structors = 0;
-/* APPLE LOCAL end structor thunks */
-
 /* Nonzero means to generate thread-safe code for initializing local
    statics.  */
 
@@ -586,6 +586,10 @@ bool iasm_in_decl;
 /* This is true exactly within the interior of an asm block.  It is
    not quite the same as any of the states of iasm_state.  */
 bool inside_iasm_block;
+
+/* This is true if we should kill the registers at the front of the
+   next block.  */
+bool iasm_kill_regs;
 
 /* An additional state variable, true when the next token returned
    should be a BOL, false otherwise.  */
@@ -1071,6 +1075,44 @@ unsigned_conversion_warning (tree result, tree operand)
     }
 }
 
+/* APPLE LOCAL begin ARM 4683958 mainline (arguments of 'warning' modified for backport) */
+/* Print a warning about casts that might indicate violation
+   of strict aliasing rules if -Wstrict-aliasing is used and
+   strict aliasing mode is in effect. otype is the original
+   TREE_TYPE of expr, and type the type we're casting to. */
+
+void
+strict_aliasing_warning(tree otype, tree type, tree expr)
+{
+  if (flag_strict_aliasing && warn_strict_aliasing
+      && POINTER_TYPE_P (type) && POINTER_TYPE_P (otype)
+      && TREE_CODE (expr) == ADDR_EXPR
+      && (DECL_P (TREE_OPERAND (expr, 0))
+          || handled_component_p (TREE_OPERAND (expr, 0)))
+      && !VOID_TYPE_P (TREE_TYPE (type)))
+    {
+      /* Casting the address of an object to non void pointer. Warn
+         if the cast breaks type based aliasing.  */
+      if (!COMPLETE_TYPE_P (TREE_TYPE (type)))
+        warning ("type-punning to incomplete type "
+                 "might break strict-aliasing rules");
+      else
+        {
+          HOST_WIDE_INT set1 = get_alias_set (TREE_TYPE (TREE_OPERAND (expr, 0)));
+          HOST_WIDE_INT set2 = get_alias_set (TREE_TYPE (type));
+
+          if (!alias_sets_conflict_p (set1, set2))
+            warning ("dereferencing type-punned "
+                     "pointer will break strict-aliasing rules");
+          else if (warn_strict_aliasing > 1
+                  && !alias_sets_might_conflict_p (set1, set2))
+            warning ("dereferencing type-punned "
+                     "pointer might break strict-aliasing rules");
+        }
+    }
+}
+/* APPLE LOCAL end ARM 4683958 mainline */
+
 /* Nonzero if constant C has a value that is permissible
    for type TYPE (an INTEGER_TYPE).  */
 
@@ -1100,6 +1142,22 @@ vector_types_convertible_p (tree t1, tree t2)
 		== INTEGRAL_TYPE_P (TREE_TYPE (t2)));
 }
 
+/* APPLE LOCAL begin mainline */
+/* Produce warnings after a conversion. RESULT is the result of
+   converting EXPR to TYPE.  This is a helper function for
+   convert_and_check and cp_convert_and_check.  */
+
+void
+warnings_for_convert_and_check (tree type, tree expr, tree result ATTRIBUTE_UNUSED)
+{
+  if (warn_shorten_64_to_32
+      && TYPE_PRECISION (TREE_TYPE (expr)) == 64
+      && TYPE_PRECISION (type) == 32)
+    {
+      warning ("implicit conversion shortens 64-bit value into a 32-bit value");
+    }
+}
+
 /* Convert EXPR to TYPE, warning about conversion problems with constants.
    Invoke this function on every expression that is converted implicitly,
    i.e. because of language rules and not because of an explicit cast.  */
@@ -1107,15 +1165,13 @@ vector_types_convertible_p (tree t1, tree t2)
 tree
 convert_and_check (tree type, tree expr)
 {
-  tree t = convert (type, expr);
-  /* APPLE LOCAL begin 64bit shorten warning 3865314 */
-  if (warn_shorten_64_to_32
-      && TYPE_PRECISION (TREE_TYPE (expr)) == 64
-      && TYPE_PRECISION (type) == 32)
-    {
-      warning ("implicit conversion shortens 64-bit value into a 32-bit value");
-    }
-  /* APPLE LOCAL end 64bit shorten warning 3865314 */
+  tree t;
+
+  if (TREE_TYPE (expr) == type)
+    return expr;
+
+  t = convert (type, expr);
+
   if (TREE_CODE (t) == INTEGER_CST)
     {
       if (TREE_OVERFLOW (t))
@@ -1124,7 +1180,8 @@ convert_and_check (tree type, tree expr)
 
 	  /* Do not diagnose overflow in a constant expression merely
 	     because a conversion overflowed.  */
-	  TREE_CONSTANT_OVERFLOW (t) = TREE_CONSTANT_OVERFLOW (expr);
+          TREE_CONSTANT_OVERFLOW (t) = CONSTANT_CLASS_P (expr)
+	    && TREE_CONSTANT_OVERFLOW (expr);
 
 	  /* No warning for converting 0x80000000 to int.  */
 	  if (!(TYPE_UNSIGNED (type) < TYPE_UNSIGNED (TREE_TYPE (expr))
@@ -1142,8 +1199,12 @@ convert_and_check (tree type, tree expr)
       else
 	unsigned_conversion_warning (t, expr);
     }
+  if (!skip_evaluation && !TREE_OVERFLOW_P (expr) && t != error_mark_node)
+    warnings_for_convert_and_check (type, expr, t);
+
   return t;
 }
+/* APPLE LOCAL end mainline */
 
 /* A node in a list that describes references to variables (EXPR), which are
    either read accesses if WRITER is zero, or write accesses, in which case
@@ -3111,6 +3172,7 @@ static void c_init_attributes (void);
 void
 c_common_nodes_and_builtins (void)
 {
+  /* APPLE LOCAL begin mainline */
   enum builtin_type
   {
 #define DEF_PRIMITIVE_TYPE(NAME, VALUE) NAME,
@@ -3119,10 +3181,16 @@ c_common_nodes_and_builtins (void)
 #define DEF_FUNCTION_TYPE_2(NAME, RETURN, ARG1, ARG2) NAME,
 #define DEF_FUNCTION_TYPE_3(NAME, RETURN, ARG1, ARG2, ARG3) NAME,
 #define DEF_FUNCTION_TYPE_4(NAME, RETURN, ARG1, ARG2, ARG3, ARG4) NAME,
+#define DEF_FUNCTION_TYPE_5(NAME, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5) NAME,
+#define DEF_FUNCTION_TYPE_6(NAME, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, ARG6) \
+    NAME,
 #define DEF_FUNCTION_TYPE_VAR_0(NAME, RETURN) NAME,
 #define DEF_FUNCTION_TYPE_VAR_1(NAME, RETURN, ARG1) NAME,
 #define DEF_FUNCTION_TYPE_VAR_2(NAME, RETURN, ARG1, ARG2) NAME,
 #define DEF_FUNCTION_TYPE_VAR_3(NAME, RETURN, ARG1, ARG2, ARG3) NAME,
+#define DEF_FUNCTION_TYPE_VAR_4(NAME, RETURN, ARG1, ARG2, ARG3, ARG4) NAME,
+#define DEF_FUNCTION_TYPE_VAR_5(NAME, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5) \
+    NAME,
 #define DEF_POINTER_TYPE(NAME, TYPE) NAME,
 #include "builtin-types.def"
 #undef DEF_PRIMITIVE_TYPE
@@ -3131,14 +3199,18 @@ c_common_nodes_and_builtins (void)
 #undef DEF_FUNCTION_TYPE_2
 #undef DEF_FUNCTION_TYPE_3
 #undef DEF_FUNCTION_TYPE_4
+#undef DEF_FUNCTION_TYPE_5
+#undef DEF_FUNCTION_TYPE_6
 #undef DEF_FUNCTION_TYPE_VAR_0
 #undef DEF_FUNCTION_TYPE_VAR_1
 #undef DEF_FUNCTION_TYPE_VAR_2
 #undef DEF_FUNCTION_TYPE_VAR_3
+#undef DEF_FUNCTION_TYPE_VAR_4
+#undef DEF_FUNCTION_TYPE_VAR_5
 #undef DEF_POINTER_TYPE
     BT_LAST
   };
-
+  /* APPLE LOCAL end mainline */
   typedef enum builtin_type builtin_type;
 
   tree builtin_types[(int) BT_LAST];
@@ -3387,6 +3459,44 @@ c_common_nodes_and_builtins (void)
 			      tree_cons (NULL_TREE,			\
 					 builtin_types[(int) ARG4],	\
 					 void_list_node)))));
+  /* APPLE LOCAL begin mainline */
+#define DEF_FUNCTION_TYPE_5(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5) \
+  builtin_types[(int) ENUM]                                             \
+    = build_function_type                                               \
+      (builtin_types[(int) RETURN],                                     \
+       tree_cons (NULL_TREE,                                            \
+                  builtin_types[(int) ARG1],                            \
+                  tree_cons (NULL_TREE,                                 \
+                             builtin_types[(int) ARG2],                 \
+                             tree_cons                                  \
+                             (NULL_TREE,                                \
+                              builtin_types[(int) ARG3],                \
+                              tree_cons (NULL_TREE,                     \
+                                         builtin_types[(int) ARG4],     \
+                                         tree_cons (NULL_TREE,          \
+                                              builtin_types[(int) ARG5],\
+                                              void_list_node))))));
+#define DEF_FUNCTION_TYPE_6(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, \
+                            ARG6)                                       \
+  builtin_types[(int) ENUM]                                             \
+    = build_function_type                                               \
+      (builtin_types[(int) RETURN],                                     \
+       tree_cons (NULL_TREE,                                            \
+                  builtin_types[(int) ARG1],                            \
+                  tree_cons (NULL_TREE,                                 \
+                             builtin_types[(int) ARG2],                 \
+                             tree_cons                                  \
+                             (NULL_TREE,                                \
+                              builtin_types[(int) ARG3],                \
+                              tree_cons                                 \
+                              (NULL_TREE,                               \
+                               builtin_types[(int) ARG4],               \
+                               tree_cons (NULL_TREE,                    \
+                                         builtin_types[(int) ARG5],     \
+                                         tree_cons (NULL_TREE,          \
+                                              builtin_types[(int) ARG6],\
+                                              void_list_node)))))));
+  /* APPLE LOCAL end mainline */
 #define DEF_FUNCTION_TYPE_VAR_0(ENUM, RETURN)				\
   builtin_types[(int) ENUM]						\
     = build_function_type (builtin_types[(int) RETURN], NULL_TREE);
@@ -3418,6 +3528,38 @@ c_common_nodes_and_builtins (void)
 			     tree_cons (NULL_TREE,			\
 					builtin_types[(int) ARG3],	\
 					NULL_TREE))));
+  /* APPLE LOCAL begin mainline */
+#define DEF_FUNCTION_TYPE_VAR_4(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4)   \
+   builtin_types[(int) ENUM]                                            \
+    = build_function_type                                               \
+      (builtin_types[(int) RETURN],                                     \
+       tree_cons (NULL_TREE,                                            \
+                  builtin_types[(int) ARG1],                            \
+                  tree_cons (NULL_TREE,                                 \
+                             builtin_types[(int) ARG2],                 \
+                             tree_cons (NULL_TREE,                      \
+                                        builtin_types[(int) ARG3],      \
+                                        tree_cons (NULL_TREE,           \
+                                              builtin_types[(int) ARG4],\
+                                              NULL_TREE)))));
+
+#define DEF_FUNCTION_TYPE_VAR_5(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4,   \
+                                ARG5)                                   \
+   builtin_types[(int) ENUM]                                            \
+    = build_function_type                                               \
+      (builtin_types[(int) RETURN],                                     \
+       tree_cons (NULL_TREE,                                            \
+                  builtin_types[(int) ARG1],                            \
+                  tree_cons (NULL_TREE,                                 \
+                             builtin_types[(int) ARG2],                 \
+                             tree_cons                                  \
+                             (NULL_TREE,                                \
+                              builtin_types[(int) ARG3],                \
+                              tree_cons (NULL_TREE,                     \
+                                        builtin_types[(int) ARG4],      \
+                                        tree_cons (NULL_TREE,           \
+                                              builtin_types[(int) ARG5],\
+                                              NULL_TREE))))));
 
 #define DEF_POINTER_TYPE(ENUM, TYPE)			\
   builtin_types[(int) ENUM]				\
@@ -3428,11 +3570,16 @@ c_common_nodes_and_builtins (void)
 #undef DEF_FUNCTION_TYPE_2
 #undef DEF_FUNCTION_TYPE_3
 #undef DEF_FUNCTION_TYPE_4
+#undef DEF_FUNCTION_TYPE_5
+#undef DEF_FUNCTION_TYPE_6
 #undef DEF_FUNCTION_TYPE_VAR_0
 #undef DEF_FUNCTION_TYPE_VAR_1
 #undef DEF_FUNCTION_TYPE_VAR_2
 #undef DEF_FUNCTION_TYPE_VAR_3
+#undef DEF_FUNCTION_TYPE_VAR_4
+#undef DEF_FUNCTION_TYPE_VAR_5
 #undef DEF_POINTER_TYPE
+  /* APPLE LOCAL end mainline */
 
   c_init_attributes ();
 
@@ -4226,7 +4373,10 @@ handle_noreturn_attribute (tree *node, tree name, tree ARG_UNUSED (args),
   tree type = TREE_TYPE (*node);
 
   /* See FIXME comment in c_common_attribute_table.  */
-  if (TREE_CODE (*node) == FUNCTION_DECL)
+  /* APPLE LOCAL begin radar 4727659 */
+  if (TREE_CODE (*node) == FUNCTION_DECL
+      || objc_method_decl (TREE_CODE (*node)))
+  /* APPLE LOCAL end radar 4727659 */
     TREE_THIS_VOLATILE (*node) = 1;
   else if (TREE_CODE (type) == POINTER_TYPE
 	   && TREE_CODE (TREE_TYPE (type)) == FUNCTION_TYPE)
@@ -5098,7 +5248,10 @@ handle_deprecated_attribute (tree *node, tree name,
 	  || TREE_CODE (decl) == PARM_DECL
 	  || TREE_CODE (decl) == VAR_DECL
 	  || TREE_CODE (decl) == FUNCTION_DECL
-	  || TREE_CODE (decl) == FIELD_DECL)
+	  /* APPLE LOCAL begin radar 3803157 - objc attribute */
+	  || TREE_CODE (decl) == FIELD_DECL
+	  || objc_method_decl (TREE_CODE (decl)))
+	  /* APPLE LOCAL end radar 3803157 - objc attribute */
 	TREE_DEPRECATED (decl) = 1;
       else
 	warn = 1;
@@ -5158,7 +5311,10 @@ handle_unavailable_attribute (tree *node, tree name,
       	  || TREE_CODE (decl) == PARM_DECL
 	  || TREE_CODE (decl) == VAR_DECL
 	  || TREE_CODE (decl) == FUNCTION_DECL
-	  || TREE_CODE (decl) == FIELD_DECL)
+	  /* APPLE LOCAL begin radar 3803157 - objc attribute */
+	  || TREE_CODE (decl) == FIELD_DECL
+	  || objc_method_decl (TREE_CODE (decl)))
+	  /* APPLE LOCAL end radar 3803157 - objc attribute */
 	{
 	  TREE_DEPRECATED (decl) = 1;
 	  TREE_UNAVAILABLE (decl) = 1;
@@ -6047,7 +6203,8 @@ lvalue_or_else (tree *ref, enum lvalue_use use)
       /* (1) Assignment to casts of lvalues, as long as both the lvalue and
 	     the cast are POD types with identical size and alignment.  */
       if ((TREE_CODE (r) == NOP_EXPR || TREE_CODE (r) == CONVERT_EXPR
-	   || TREE_CODE (r) == NON_LVALUE_EXPR)
+	   /* APPLE LOCAL 4253848 */
+	   || TREE_CODE (r) == VIEW_CONVERT_EXPR || TREE_CODE (r) == NON_LVALUE_EXPR)
 	  && (use == lv_assign || use == lv_increment || use == lv_decrement
 	      || use == lv_addressof)
 	  /* APPLE LOCAL non lvalue assign */
@@ -6614,7 +6771,8 @@ iasm_process_arg (const char *opcodename, int op_num,
       /* This is the default constraint used for all instructions.  */
 #if defined(TARGET_TOC)
       s = "+b";
-#elif defined(TARGET_386)
+/* APPLE LOCAL ARM cw_asm */
+#elif defined(TARGET_386) || defined(TARGET_ARM)
       s = "+r";
 #endif
     }
@@ -6623,7 +6781,8 @@ iasm_process_arg (const char *opcodename, int op_num,
 
   if (TREE_CODE (var) == FUNCTION_DECL)
     {
-#if defined(TARGET_TOC)
+/* APPLE LOCAL ARM cw_asm */
+#if defined(TARGET_TOC) || defined(TARGET_ARM)
       str = build_string (1, "s");
 #elif defined (TARGET_386)
       str = build_string (strlen (s), s);
@@ -6648,7 +6807,8 @@ iasm_process_arg (const char *opcodename, int op_num,
 	    /* This is the default constraint used for all instructions.  */
 #if defined(TARGET_TOC)
 	    str = build_string (2, "+b");
-#elif defined(TARGET_386)
+/* APPLE LOCAL ARM cw_asm */
+#elif defined(TARGET_386) || defined(TARGET_ARM)
 	    str = build_string (2, "+r");
 #endif
 	  }
@@ -7034,6 +7194,46 @@ iasm_stmt (tree expr, tree args, int lineno)
   if (iasm_buffer == NULL)
     iasm_buffer = xmalloc (4000);
 
+#ifdef TARGET_386
+  if (iasm_kill_regs)
+    {
+      iasm_kill_regs = false;
+      /* One cannot use these registers across inline asm blocks per
+	 MS docs.  We explicitly kill them to ensure that the register
+	 allocator can use them as it sees fit.  We really only have
+	 to kill the registers used in the block, but, until we
+	 understand the entire block perfectly, this is conservatively
+	 correct.  The down side, we can't enregister variables into
+	 any of these registers across an asm block and we use 3 words
+	 more stack space to save ebx/esi/edi.  */
+      clobbers = tree_cons (NULL_TREE,
+			    build_string (3, "eax"),
+			    clobbers);
+      if (!flag_pic)
+	clobbers = tree_cons (NULL_TREE,
+			      build_string (3, "ebx"),
+			      clobbers);
+      clobbers = tree_cons (NULL_TREE,
+			    build_string (3, "ecx"),
+			    clobbers);
+      clobbers = tree_cons (NULL_TREE,
+			    build_string (3, "edx"),
+			    clobbers);
+      clobbers = tree_cons (NULL_TREE,
+			    build_string (3, "esi"),
+			    clobbers);
+      clobbers = tree_cons (NULL_TREE,
+			    build_string (3, "edi"),
+			    clobbers);
+      sprintf(iasm_buffer, "%s top of block", ASM_COMMENT_START);
+      sexpr = build_string (strlen (iasm_buffer), iasm_buffer);
+      stmt = build_stmt (ASM_EXPR, sexpr, NULL_TREE, NULL_TREE, clobbers, NULL_TREE);
+      clobbers = NULL_TREE;
+      ASM_VOLATILE_P (stmt) = 1;
+      (void)add_stmt (stmt);
+    }
+#endif
+
   /* Build .file "file-name" directive. */
   sprintf(iasm_buffer, "%s \"%s\"", ".file", input_filename);
   sexpr = build_string (strlen (iasm_buffer), iasm_buffer);
@@ -7145,6 +7345,7 @@ iasm_stmt (tree expr, tree args, int lineno)
   sexpr = build_string (strlen (iasm_buffer), iasm_buffer);
 
   clobbers = uses;
+#ifdef TARGET_MACHO
   if (iasm_memory_clobber (opcodename))
     {
       /* To not clobber all of memory, we would need to know what
@@ -7153,6 +7354,7 @@ iasm_stmt (tree expr, tree args, int lineno)
 			    build_string (6, "memory"),
 			    clobbers);
     }
+#endif
 
   /* Perform default conversions on function inputs.
      Don't do this for other types as it would screw up operands
@@ -7473,7 +7675,23 @@ iasm_print_operand (char *buf, tree arg, unsigned argnum,
 	  mark_decl_referenced (arg);
 	}
       else
-	iasm_maybe_force_mem (arg, buf, argnum, must_be_reg, e);
+	{
+#ifdef TARGET_386
+	  if (TREE_CODE (arg) == VAR_DECL && flag_pic)
+	    {
+	      /* The backend can promote decls like this to be static
+		 duration variables, and if we're generation PIC code,
+		 these references require extra registers to form the
+		 address and these extra registers would run the
+		 register allocator out of registers which would be
+		 bad.  By keeping them as automaic variables, we wind
+		 up with addresses like (sp+20) which don't require
+		 any extra registers. */
+	      DECL_IASM_DONT_PROMOTE_TO_STATIC (arg) = 1;
+	    }
+#endif
+	  iasm_maybe_force_mem (arg, buf, argnum, must_be_reg, e);
+	}
       break;
 
     case FUNCTION_DECL:
@@ -7760,6 +7978,10 @@ iasm_clear_labels (void)
 static GTY(()) tree iasm_ha16;
 static GTY(()) tree iasm_hi16;
 static GTY(()) tree iasm_lo16;
+/* APPLE LOCAL begin ARM cw_asm */
+static GTY(()) tree cw_cpsr;
+static GTY(()) tree cw_cpsr_c;
+/* APPLE LOCAL end ARM cw_asm */
 
 /* Given an identifier not otherwise found in the high level language, create up
    a meaning for it.  */
@@ -7820,6 +8042,12 @@ iasm_get_label (tree labid)
       iasm_ha16 = get_identifier ("ha16");
       iasm_hi16 = get_identifier ("hi16");
       iasm_lo16 = get_identifier ("lo16");
+/* APPLE LOCAL begin ARM cw_asm */
+#ifdef TARGET_ARM
+      cw_cpsr = get_identifier ("cpsr");
+      cw_cpsr_c = get_identifier ("cpsr_c");
+#endif
+/* APPLE LOCAL end ARM cw_asm */
     }
 
   /* lo16(), ha16() and hi16() should be left unmolested.  */
@@ -7829,6 +8057,15 @@ iasm_get_label (tree labid)
     return iasm_ha16;
   else if (labid == iasm_hi16)
     return iasm_hi16;
+
+/* APPLE LOCAL begin ARM cw_asm */
+#ifdef TARGET_ARM
+  if (labid == cw_cpsr)
+    return cw_cpsr;
+  else if (labid == cw_cpsr_c)
+    return cw_cpsr_c;
+#endif
+/* APPLE LOCAL end ARM cw_asm */
 
   for (n = 0; n < VARRAY_ACTIVE_SIZE (iasm_labels); ++n)
     {

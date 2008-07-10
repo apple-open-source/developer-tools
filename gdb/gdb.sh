@@ -1,7 +1,7 @@
 #! /bin/sh
 
 host_architecture=""
-requested_architecture=""
+requested_architecture="UNSET"
 architecture_to_use=""
 
 # classic-inferior-support
@@ -76,6 +76,13 @@ case "$1" in
     shift;;
 esac
 
+if [ -z "$requested_architecture" ]
+then
+  echo ERROR: No architecture specified with -arch argument. >&2
+  exit 1
+fi
+[ "$requested_architecture" = "UNSET" ] && requested_architecture=""
+
 if [ $translate_mode -eq 1 ]
 then
   if [ "$host_architecture" = i386 -a -x /usr/libexec/oah/translate ]
@@ -90,7 +97,7 @@ fi
 if [ -n "$requested_architecture" ]
 then
   case $requested_architecture in
-    ppc* | i386 | x86_64)
+    ppc* | i386 | x86_64 | arm*)
      ;;
     *)
       echo Unrecognized architecture \'$requested_architecture\', using host arch. >&2
@@ -133,6 +140,13 @@ case "$architecture_to_use" in
     i386 | x86_64)
         gdb="${GDB_ROOT}/usr/libexec/gdb/gdb-i386-apple-darwin"
         ;;
+    arm)
+        gdb="${GDB_ROOT}/usr/libexec/gdb/gdb-arm-apple-darwin"
+        ;;
+    armv6)
+        gdb="${GDB_ROOT}/usr/libexec/gdb/gdb-arm-apple-darwin"
+        osabiopts="--osabi DarwinV6"
+        ;;
     *)
         echo "Unknown architecture '$architecture_to_use'; using 'ppc' instead.";
         gdb="${GDB_ROOT}/usr/libexec/gdb/gdb-powerpc-apple-darwin"
@@ -166,5 +180,5 @@ if [ -n "$requested_architecture" -a $translate_mode -eq 0 ]
 then
   exec $translate_binary "$gdb" --arch "$requested_architecture" "$@"
 else
-  exec $translate_binary "$gdb" "$@"
+  exec $translate_binary "$gdb" $osabiopts "$@"
 fi

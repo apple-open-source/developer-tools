@@ -33,6 +33,14 @@
 #undef KDP_TARGET_POWERPC
 #endif
 
+#if TARGET_ARM
+#define KDP_TARGET_ARM 1
+#else
+#undef KDP_TARGET_ARM
+#endif
+
+#include "defs.h"
+
 #if KDP_TARGET_POWERPC
 #include "ppc-macosx-thread-status.h"
 #include "ppc-macosx-regs.h"
@@ -44,7 +52,12 @@
 #include "i386-macosx-tdep.h"
 #endif
 
-#include "defs.h"
+#ifdef KDP_TARGET_ARM
+#include "arm-macosx-thread-status.h"
+#include "arm-macosx-tdep.h"
+#include "arm-tdep.h"
+#endif
+
 #include "inferior.h"
 #include "gdbcmd.h"
 #include "event-loop.h"
@@ -64,6 +77,10 @@
 #define CPU_TYPE_POWERPC (18)
 #endif
 
+#ifndef CPU_TYPE_ARM
+#define CPU_TYPE_ARM (12)
+#endif
+
 #ifndef KDP_REMOTE_ID
 #define KDP_REMOTE_ID 3
 #endif
@@ -73,6 +90,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <ctype.h>
+#include <mach/mach.h>
 
 extern int standard_is_async_p (void);
 extern int standard_can_async_p (void);
@@ -125,6 +143,14 @@ parse_host_type (const char *host)
       return -2;
 #endif
     }
+  else if (strcasecmp (host, "arm") == 0)
+    {
+#if KDP_TARGET_ARM
+      return CPU_TYPE_ARM;
+#else
+      return -2;
+#endif
+    }
   else
     {
       return -1;
@@ -166,6 +192,10 @@ convert_host_type (unsigned int mach_type)
       return bfd_arch_powerpc;
     case CPU_TYPE_I386:
       return bfd_arch_i386;
+#if defined(CPU_TYPE_ARM)
+    case CPU_TYPE_ARM:
+      return bfd_arch_arm;
+#endif
     default:
       return -1;
     }
@@ -309,6 +339,8 @@ kdp_attach (char *args, int from_tty)
 #if KDP_TARGET_POWERPC
   kdp_set_little_endian (&c);
 #elif KDP_TARGET_I386
+  kdp_set_big_endian (&c);
+#elif KDP_TARGET_ARM
   kdp_set_big_endian (&c);
 #else
 #error "unsupported architecture"
@@ -499,6 +531,8 @@ kdp_reattach_command (char *args, int from_tty)
   kdp_set_little_endian (&c);
 #elif KDP_TARGET_I386
   kdp_set_big_endian (&c);
+#elif KDP_TARGET_ARM
+  kdp_set_big_endian (&c);
 #else
 #error "unsupported architecture"
 #endif
@@ -551,6 +585,8 @@ kdp_reboot_command (char *args, int from_tty)
 #if KDP_TARGET_POWERPC
   kdp_set_little_endian (&c);
 #elif KDP_TARGET_I386
+  kdp_set_big_endian (&c);
+#elif KDP_TARGET_ARM
   kdp_set_big_endian (&c);
 #else
 #error "unsupported architecture"
@@ -686,7 +722,10 @@ kdp_set_trace_bit (int step)
 #endif
       }
       break;
-
+    case bfd_arch_arm:
+      /* We just ignore requests to set the trace bit on ARM.
+	 For now, we are always using software single stepping.  */
+      break;
     default:
       error ("kdp_set_trace_bit: unknown host type 0x%lx",
              (unsigned long) kdp_host_type);
@@ -1101,6 +1140,170 @@ kdp_store_registers_i386 (int regno)
 }
 #endif /* KDP_TARGET_I386 */
 
+#if KDP_TARGET_ARM
+static void
+kdp_fetch_registers_arm (int regno)
+{
+  unsigned int i;
+
+  if (!kdp_is_connected (&c))
+    {
+      error ("kdp: unable to fetch registers (not connected)");
+    }
+
+  if ((regno == -1) || ARM_MACOSX_IS_GP_RELATED_REGNUM (regno))
+    {
+      kdp_return_t kdpret;
+      gdb_arm_thread_state_t gp_regs;
+
+      c.request->readregs_req.hdr.request = KDP_READREGS;
+      c.request->readregs_req.cpu = 0;
+      c.request->readregs_req.flavor = GDB_ARM_THREAD_STATE;
+
+      kdpret =
+        kdp_transaction (&c, c.request, c.response,
+                         "kdp_fetch_registers_arm");
+      if (kdpret != RR_SUCCESS)
+        {
+          error
+            ("kdp_fetch_registers_arm: unable to fetch ARM_THREAD_STATE: %s",
+             kdp_return_string (kdpret));
+        }
+      if (c.response->readregs_reply.nbytes !=
+          (GDB_ARM_THREAD_STATE_COUNT * 4))
+        {
+          error
+            ("kdp_fetch_registers_arm: kdp returned %lu bytes of register data (expected %lu)",
+             c.response->readregs_reply.nbytes,
+             (GDB_ARM_THREAD_STATE_COUNT * 4));
+        }
+
+      memcpy (&gp_regs, c.response->readregs_reply.data,
+              (GDB_ARM_THREAD_STATE_COUNT * 4));
+      arm_macosx_fetch_gp_registers (&gp_regs);
+    }
+
+#if KDP_TARGET_SUPPORTS_FP
+  if ((regno == -1) || ARM_MACOSX_IS_VFP_RELATED_REGNUM (regno))
+    {
+      kdp_return_t kdpret;
+      gdb_arm_thread_fpstate_t fp_regs;
+
+      c.request->readregs_req.hdr.request = KDP_READREGS;
+      c.request->readregs_req.cpu = 0;
+      c.request->readregs_req.flavor = GDB_ARM_THREAD_FPSTATE;
+
+      kdpret =
+        kdp_transaction (&c, c.request, c.response,
+                         "kdp_fetch_registers_arm");
+      if (kdpret != RR_SUCCESS)
+        {
+          error
+            ("kdp_fetch_registers_arm: unable to fetch ARM_THREAD_FPSTATE: %s",
+             kdp_return_string (kdpret));
+        }
+      if (c.response->readregs_reply.nbytes !=
+          (GDB_ARM_THREAD_FPSTATE_COUNT * 4))
+        {
+          error
+            ("kdp_fetch_registers_arm: kdp returned %lu bytes of register data (expected %lu)",
+             c.response->readregs_reply.nbytes,
+             (GDB_ARM_THREAD_FPSTATE_COUNT * 4));
+        }
+
+      memcpy (&fp_regs, c.response->readregs_reply.data,
+              (GDB_ARM_THREAD_FPSTATE_COUNT * 4));
+      arm_macosx_fetch_vfp_registers (&fp_regs);
+    }
+#else
+  if ((regno == -1) || ARM_MACOSX_IS_VFP_RELATED_REGNUM (regno))
+    {
+      /* Accesses to the fp registers aren't currently supported in
+         the kernel. */
+      if (gdbarch_tdep (current_gdbarch)->fp_model == ARM_FLOAT_VFP)
+	{
+	  for (i = ARM_FIRST_VFP_REGNUM; i <= ARM_LAST_VFP_REGNUM; i++)
+	    set_register_cached (i, 1);
+	  set_register_cached (ARM_FPSCR_REGNUM, 1);
+	}
+    }
+#endif
+  /* All other modes always include the F0-F7 and its FPS. */
+  if ((regno == -1) || ARM_MACOSX_IS_FP_RELATED_REGNUM (regno))
+    {
+      for (i = ARM_F0_REGNUM; i <= ARM_F7_REGNUM; i++)
+	set_register_cached (i, 1);
+      set_register_cached (ARM_FPS_REGNUM, 1);
+    }
+}
+#endif /* KDP_TARGET_ARM */
+
+#if KDP_TARGET_ARM
+static void
+kdp_store_registers_arm (int regno)
+{
+  if (!kdp_is_connected (&c))
+    {
+      error ("kdp: unable to store registers (not connected)");
+    }
+
+  if ((regno == -1) || ARM_MACOSX_IS_GP_RELATED_REGNUM (regno))
+    {
+
+      gdb_arm_thread_state_t gp_regs;
+      kdp_return_t kdpret;
+
+      arm_macosx_store_gp_registers (&gp_regs);
+
+      memcpy (c.request->writeregs_req.data, &gp_regs,
+              (GDB_ARM_THREAD_STATE_COUNT * 4));
+
+      c.request->writeregs_req.hdr.request = KDP_WRITEREGS;
+      c.request->writeregs_req.cpu = 0;
+      c.request->writeregs_req.flavor = GDB_ARM_THREAD_STATE;
+      c.request->writeregs_req.nbytes = GDB_ARM_THREAD_STATE_COUNT * 4;
+
+      kdpret =
+        kdp_transaction (&c, c.request, c.response,
+                         "kdp_store_registers_arm");
+      if (kdpret != RR_SUCCESS)
+        {
+          error
+            ("kdp_store_registers_arm: unable to store ARM_THREAD_STATE: %s",
+             kdp_return_string (kdpret));
+        }
+    }
+#if KDP_TARGET_SUPPORTS_FP
+  if ((regno == -1) || ARM_MACOSX_IS_VFP_RELATED_REGNUM (regno))
+    {
+
+      gdb_arm_thread_fpstate_t fp_regs;
+      kdp_return_t kdpret;
+
+      arm_macosx_store_vfp_registers (&fp_regs);
+
+      memcpy (c.response->readregs_reply.data, &fp_regs,
+              (GDB_ARM_THREAD_FPSTATE_COUNT * 4));
+
+      c.request->writeregs_req.hdr.request = KDP_WRITEREGS;
+      c.request->writeregs_req.cpu = 0;
+      c.request->writeregs_req.flavor = GDB_ARM_THREAD_FPSTATE;
+      c.request->writeregs_req.nbytes = GDB_ARM_THREAD_FPSTATE_COUNT * 4;
+
+      kdpret =
+        kdp_transaction (&c, c.request, c.response,
+                         "kdp_store_registers_arm");
+      if (kdpret != RR_SUCCESS)
+        {
+          error
+            ("kdp_store_registers_arm: unable to store ARM_THREAD_FPSTATE: %s",
+             kdp_return_string (kdpret));
+        }
+    }
+#endif
+}
+#endif /* KDP_TARGET_ARM */
+
 static void
 kdp_store_registers (int regno)
 {
@@ -1128,6 +1331,13 @@ kdp_store_registers (int regno)
 #endif
       break;
 
+    case bfd_arch_arm:
+#if KDP_TARGET_ARM
+      kdp_store_registers_arm (regno);
+#else
+      error ("kdp_store_registers: not configured to support arm");
+#endif
+      break;
     default:
       error ("kdp_store_registers: unknown host type 0x%lx",
              (unsigned long) kdp_host_type);
@@ -1158,6 +1368,14 @@ kdp_fetch_registers (int regno)
       kdp_fetch_registers_i386 (regno);
 #else
       error ("kdp_fetch_registers: not configured to support i386");
+#endif
+      break;
+
+    case bfd_arch_arm:
+#if KDP_TARGET_ARM
+      kdp_fetch_registers_arm (regno);
+#else
+      error ("kdp_fetch_registers: not configured to support arm");
 #endif
       break;
 

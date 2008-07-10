@@ -1097,6 +1097,7 @@ ppc_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_frame_red_zone_size (gdbarch, 224);
   
   set_gdbarch_stab_reg_to_regnum (gdbarch, ppc_macosx_stab_reg_to_regnum);
+  set_gdbarch_dwarf2_reg_to_regnum (gdbarch, rs6000_dwarf2_reg_to_regnum);
 
   set_gdbarch_return_value (gdbarch, ppc_darwin_abi_return_value);
 

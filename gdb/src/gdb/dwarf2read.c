@@ -65,6 +65,8 @@
 #include "gdbcore.h"
 /* APPLE LOCAL - .o file translation data structure  */
 #include "dwarf2read.h"
+/* APPLE LOCAL psym equivalences  */
+#include <ctype.h>
 
 /* A note on memory usage for this file.
    
@@ -230,21 +232,15 @@ struct dwarf2_per_objfile
   struct dwarf2_per_cu_data *read_in_chain;
 };
 
+
+
+/* APPLE LOCAL debug map  */
+static CORE_ADDR translate_debug_map_address_with_tuple (
+					    struct oso_to_final_addr_map *map,
+					    struct oso_final_addr_tuple* match,
+					    CORE_ADDR oso_addr, int highpc);
+
 /* APPLE LOCAL begin subroutine inlining  */
-struct inlined_call_record {
-  unsigned file_index;
-  unsigned line;
-  unsigned column;
-  unsigned decl_file_index;
-  unsigned decl_line;
-  char *name;
-  char *parent_name;
-  CORE_ADDR lowpc;
-  CORE_ADDR highpc;
-  /* APPLE LOCAL - address ranges  */
-  struct address_range_list *ranges;
-  struct inlined_call_record *next;
-};
 
 /* APPLE LOCAL begin  red-black trees, part 1. */
 /* The following data structures and function declarations are for the
@@ -287,13 +283,6 @@ static int num_nodes_in_tree (struct rb_tree_node *);
 static void rb_print_tree (struct rb_tree_node *, int);
 
 /* APPLE LOCAL end  red-black trees, part 1. */
-
-/* Store information read about all the inlined call sites from all the files,
-   until the line tables for the files are generated, at which time the 
-   information is read from this data structure and written to the appropriate
-   line tables.  */
-
-struct rb_tree_node *inlined_call_sites = NULL;
 
 /* Flag controlling whether to use the code for maneuvering through inlined
    function calls or not.  */
@@ -531,6 +520,15 @@ struct dwarf2_per_cu_data
   struct partial_symtab *psymtab;
 };
 
+/* APPLE LOCAL begin psym equivalences */
+
+/* This is a global flag indicating that we found partial dies with
+   'equivalence' function names, e.g. 'putenv' and '*_putenv$UNIX2003'.  */
+
+int psym_equivalences = 0;
+
+/* APPLE LOCAL end psym equivalences  */
+
 /* The line number information for a compilation unit (found in the
    .debug_line section) begins with a "statement program header",
    which contains the following information.  */
@@ -652,6 +650,11 @@ struct partial_die_info
     /* Pointers to this DIE's parent, first child, and next sibling,
        if any.  */
     struct partial_die_info *die_parent, *die_child, *die_sibling;
+
+   /* APPLE LOCAL begin psym equivalences  */
+   /* The psym equivalence name this die contains, if any.  */
+    char *equiv_name;		     
+  /* APPLE LOCAL end psym equivalences  */
   };
 
 /* This data structure holds the information of an abbrev. */
@@ -746,6 +749,10 @@ struct dwarf_block
 /* A zeroed version of a partial die for initialization purposes.  */
 /* APPLE LOCAL avoid unused var warning.  */
 /* static struct partial_die_info zeroed_partial_die; */
+
+/* APPLE LOCAL: Track the current common block symbol so we can properly 
+   offset addresses within that common block.  */
+static char *decode_locdesc_common = NULL;
 
 /* FIXME: decode_locdesc sets these variables to describe the location
    to the caller.  These ought to be a structure or something.   If
@@ -909,9 +916,12 @@ static void dwarf2_build_include_psymtabs (struct dwarf2_cu *,
 
 static void dwarf2_build_psymtabs_hard (struct objfile *, int);
 
+/* APPLE LOCAL begin psym equivalences  */
 static void scan_partial_symbols (struct partial_die_info *,
 				  CORE_ADDR *, CORE_ADDR *,
-				  struct dwarf2_cu *);
+				  struct dwarf2_cu *,
+				  struct equiv_psym_list **);
+/* APPLE LOCAL end psym equivalences  */
 
 static void add_partial_symbol (struct partial_die_info *,
 				struct dwarf2_cu *);
@@ -1266,6 +1276,8 @@ static void dwarf2_add_dependence (struct dwarf2_cu *,
 static void dwarf2_mark (struct dwarf2_cu *);
 
 static void dwarf2_clear_marks (struct dwarf2_per_cu_data *);
+
+static void read_set_type (struct die_info *, struct dwarf2_cu *);
 
 /* Try to locate the sections we need for DWARF 2 debugging
    information and return true if we have enough to do something.  */
@@ -1762,6 +1774,8 @@ dwarf2_create_include_psymtab (char *name, struct partial_symtab *pst,
      can be used to differentiate between such include psymtabs and
      the regular ones.  */
   subpst->read_symtab_private = NULL;
+  /* APPLE LOCAL psym equivalences - Initialize field.   */
+  subpst->equiv_psyms = NULL;
 }
 
 /* Read the Line Number Program data and extract the list of files
@@ -1970,13 +1984,20 @@ dwarf2_build_psymtabs_hard (struct objfile *objfile, int mainline)
       if (comp_unit_die.has_children)
 	{
 	  struct partial_die_info *first_die;
+	  /* APPLE LOCAL psym equivalences  */
+	  struct equiv_psym_list *equiv_psyms = NULL;
 
 	  lowpc = ((CORE_ADDR) -1);
 	  highpc = ((CORE_ADDR) 0);
 
 	  first_die = load_partial_dies (abfd, info_ptr, 1, &cu);
 
-	  scan_partial_symbols (first_die, &lowpc, &highpc, &cu);
+	  /* APPLE LOCAL begin psym equivalences  */
+	  scan_partial_symbols (first_die, &lowpc, &highpc, &cu,
+				&equiv_psyms);
+
+	  pst->equiv_psyms = equiv_psyms;
+	  /* APPLE LOCAL end psym equivalences  */
 
 	  /* If we didn't find a lowpc, set it to highpc to avoid
 	     complaints from `maint check'.  */
@@ -2138,13 +2159,63 @@ create_all_comp_units (struct objfile *objfile)
   dwarf2_per_objfile->n_comp_units = n_comp_units;
 }
 
+/* APPLE LOCAL begin psym equivalences  */
+/* EQUIV_PSYMS is an array of equivalence psym names found in the
+   current compile unit so far, along with some book-keeping
+   information (size of the array, etc).  NAME is a new equivalence
+   name to be added to the list.  This function makes sure the array
+   is big enough, allocating memory and updating the book-keeping if
+   necessary, and adds the new name to the array.  */
+
+static void
+add_equiv_psym (struct equiv_psym_list **equiv_psyms,
+		char *name)
+{
+  int i;
+
+  /* If the array has never been allocated, malloc it and start it out
+     with 10 elements.  */
+
+  if (*equiv_psyms == NULL)
+    {
+      *equiv_psyms = (struct equiv_psym_list *) xmalloc 
+                                            (sizeof (struct equiv_psym_list));
+      (*equiv_psyms)->sym_list = (char **) xmalloc (10 * sizeof (char *));
+      (*equiv_psyms)->list_size = 10;
+      (*equiv_psyms)->num_syms = 0;
+      for (i = 0; i < 10; i++)
+	(*equiv_psyms)->sym_list[i] = NULL;
+    }
+
+  /* If the array is full, double its size (using realloc).  */
+
+  if ((*equiv_psyms)->num_syms == (*equiv_psyms)->list_size)
+    {
+      int new_size;
+      new_size = (*equiv_psyms)->list_size * 2;
+      (*equiv_psyms)->sym_list = (char **) xrealloc ((*equiv_psyms)->sym_list,
+						     new_size * sizeof (char *));
+      for (i = (*equiv_psyms)->list_size; i < new_size; i++)
+	(*equiv_psyms)->sym_list[i] = NULL;
+      (*equiv_psyms)->list_size = new_size;
+    }
+
+  /* Insert NAME into the list.  */
+
+  (*equiv_psyms)->sym_list[(*equiv_psyms)->num_syms++] = name;
+}
+/* APPLE LOCAL end psym equivalences  */
+
 /* Process all loaded DIEs for compilation unit CU, starting at FIRST_DIE.
    Also set *LOWPC and *HIGHPC to the lowest and highest PC values found
    in CU.  */
 
+/* APPLE LOCAL begin psym equivalences  */
 static void
 scan_partial_symbols (struct partial_die_info *first_die, CORE_ADDR *lowpc,
-		      CORE_ADDR *highpc, struct dwarf2_cu *cu)
+		      CORE_ADDR *highpc, struct dwarf2_cu *cu,
+		      struct equiv_psym_list **equiv_psyms)
+/* APPLE LOCAL end psym equivalences  */
 {
   /* APPLE LOCAL avoid unused var warnings.  */
   /* struct objfile *objfile = cu->objfile; */
@@ -2171,6 +2242,12 @@ scan_partial_symbols (struct partial_die_info *first_die, CORE_ADDR *lowpc,
 	  switch (pdi->tag)
 	    {
 	    case DW_TAG_subprogram:
+	      /* APPLE LOCAL begin psym equivalences  */
+	      /* If the partial die has an equivalence name, add it to
+		 the list for this compile unit.  */
+	      if (pdi->equiv_name)
+		add_equiv_psym (equiv_psyms, pdi->equiv_name);
+	      /* APPLE LOCAL end psym equivalences  */
 	      if (pdi->has_pc_info)
 		{
 		  if (pdi->lowpc < *lowpc)
@@ -2518,6 +2595,8 @@ add_partial_namespace (struct partial_die_info *pdi,
 {
   /* APPLE LOCAL avoid unused var warning.  */
   /* struct objfile *objfile = cu->objfile; */
+  /* APPLE LOCAL psym equivalences  */
+  struct equiv_psym_list *equiv_psyms = NULL;
 
   /* Add a symbol for the namespace.  */
 
@@ -2525,8 +2604,10 @@ add_partial_namespace (struct partial_die_info *pdi,
 
   /* Now scan partial symbols in that namespace.  */
 
+  /* APPLE LOCAL begin psym equivalences  */
   if (pdi->has_children)
-    scan_partial_symbols (pdi->die_child, lowpc, highpc, cu);
+    scan_partial_symbols (pdi->die_child, lowpc, highpc, cu, &equiv_psyms);
+  /* APPLE LOCAL end psym_equivalences  */
 }
 
 /* See if we can figure out if the class lives in a namespace.  We do
@@ -2854,6 +2935,15 @@ compare_map_entries_final_addr_index (void *thunk, const void *a, const void *b)
   CORE_ADDR addr_a = tuples[idx_a].final_addr;
   CORE_ADDR addr_b = tuples[idx_b].final_addr;
 
+  /* Fall back and sort on OSO low addrs when final addrs are the same (which
+     should only happen for stuff that didn't make it into the final 
+     executable).  */
+  if (addr_a == addr_b)
+    {
+      addr_a = tuples[idx_a].oso_low_addr;
+      addr_b = tuples[idx_b].oso_low_addr;
+    }
+
   if (addr_a == addr_b)
     return 0;
   else if (addr_a < addr_b)
@@ -2987,6 +3077,7 @@ convert_oso_map_to_final_map (struct nlist_rec *nlists,
         {
           map->tuples[j].name = nlists[i].name;
           map->tuples[j].oso_low_addr = nlists[i].addr;
+          map->tuples[j].final_addr = (CORE_ADDR) -1;
           map->tuples[j].present_in_final = 0;
           j++;
         }
@@ -3023,8 +3114,13 @@ convert_oso_map_to_final_map (struct nlist_rec *nlists,
 	  int idx = map->final_addr_index[i];
 	  final_addr = map->tuples[idx].final_addr;
 	  fprintf_unfiltered (gdb_stdlog, 
-		      "map->final_addr_index[%3d] = map->tuples[%3d] (%s)\n", 
-			      i, idx, paddr_nz (map->tuples[idx].final_addr));
+			      "map->final_addr_index[%3i] = %3i (map->tuples[%3i] oso_addr [%s - %s) final_addr = %s for %s\n", 
+			      i, idx, idx, 
+			      paddr (map->tuples[idx].oso_low_addr),
+			      paddr (map->tuples[idx].oso_high_addr),
+			      map->tuples[idx].present_in_final ?
+			      paddr (map->tuples[idx].final_addr) : "stripped",
+			      map->tuples[idx].name);
 	}
     }
 
@@ -3085,7 +3181,7 @@ convert_oso_map_to_final_map (struct nlist_rec *nlists,
   /* I can't imagine xstrdup()'ing the pst filename is actually necessary;
      if the pst goes away I'd expect all traces of this objfile's symbols
      (and therefore any pointers to the translation map) to also go away..  */
-  map->pst_filename = xstrdup (pst->filename);
+  map->pst = pst;
   return (map);
 }
 
@@ -3197,6 +3293,7 @@ create_kext_addr_map (struct nlist_rec *nlists,
         {
           map->tuples[j].name = xstrdup (nlists[i].name);
           map->tuples[j].oso_low_addr = nlists[i].addr;
+          map->tuples[j].final_addr = (CORE_ADDR) -1;
           map->tuples[j].present_in_final = 0;
           j++;
         }
@@ -3304,11 +3401,7 @@ create_kext_addr_map (struct nlist_rec *nlists,
 
   map->common_entries = 0;
   map->common_pairs = NULL;
-
-  /* I can't imagine xstrdup()'ing the pst filename is actually necessary;
-     if the pst goes away I'd expect all traces of this objfile's symbols
-     (and therefore any pointers to the translation map) to also go away..  */
-  map->pst_filename = xstrdup (pst->filename);
+  map->pst = pst;
 
   return (map);
 }
@@ -3351,6 +3444,28 @@ compare_translation_tuples_nothighpc (const void *key, const void *arrmem)
   if (oso_addr < tuple_oso_low_addr)
     return -1;
 
+  return 1;
+}
+
+/* APPLE LOCAL debug map: Callback function for bsearch() */
+/* This function compares if an address *KEY is contained in a tuple including
+   if the address is equal to the high or low oso address:
+   oso_low_addr <= address <= oso_high_addr. This is used when parsing line
+   tables.
+ */
+static int 
+compare_translation_tuples_inclusive (const void *key, const void *arrmem)
+{
+  CORE_ADDR oso_addr = *((CORE_ADDR *) key);
+  CORE_ADDR tuple_oso_low_addr = 
+                 ((struct oso_final_addr_tuple *) arrmem)->oso_low_addr;
+  CORE_ADDR tuple_oso_high_addr = 
+                 ((struct oso_final_addr_tuple *) arrmem)->oso_high_addr;
+
+  if (oso_addr < tuple_oso_low_addr)
+    return -1;
+  if (oso_addr >= tuple_oso_low_addr && oso_addr <= tuple_oso_high_addr)
+    return 0;
   return 1;
 }
 
@@ -3444,7 +3559,7 @@ translate_debug_map_address (struct oso_to_final_addr_map *map,
         fprintf_unfiltered (gdb_stdlog, 
                             "debugmap: translated 0x%s to 0x%s sym '%s' in %s\n",
                             paddr_nz (oso_addr), paddr_nz (*addr), 
-                            map->tuples[0].name, map->pst_filename);
+                            map->tuples[0].name, map->pst->filename);
       return 1;
     }
 
@@ -3465,68 +3580,27 @@ translate_debug_map_address (struct oso_to_final_addr_map *map,
 
   if (match == NULL || !match->present_in_final)
     {
-      if (debug_debugmap)
-        fprintf_unfiltered (gdb_stdlog, 
-                            "debugmap: did not translate 0x%s in %s "
-                            "highpc == %d\n",
-                            paddr_nz (oso_addr), map->pst_filename,
-                            highpc);
+      if (debug_debugmap)      
+	{
+	  if (match == NULL)
+	    fprintf_unfiltered (gdb_stdlog, 
+				"debugmap: did not translate 0x%s in %s "
+				"highpc == %d\n",
+				paddr_nz (oso_addr), map->pst->filename,
+				highpc);
+	  else
+	    fprintf_unfiltered (gdb_stdlog, 
+				"debugmap: did not translate 0x%s "
+				"(dead-stripped %s) in %s highpc == %d\n",
+				paddr_nz (oso_addr), 
+				match->name,
+				map->pst->filename,
+				highpc);
+	}
       return 0;
     }
 
-  int delta = oso_addr - match->oso_low_addr;
-  *addr = match->final_addr + delta;
-
-  /* For the high pc address, find the next final address and make sure it
-     doesn't overlap into that next address range. If it does, trim the 
-     current address range down. See comments in definition of the 
-     'oso_to_final_addr_map' structure for full details.  */
-  if (highpc && map->final_addr_index)
-    {
-      /* Create a search key and search for the final address index for
-	 our match.  */
-      struct final_addr_key final_addr_key = { match->final_addr, map };
-
-      int *match_fa_idx_ptr = bsearch (&final_addr_key, 
-				       map->final_addr_index, 
-				       map->entries, sizeof (int),
-				       compare_translation_final_addr);
-
-      if (match_fa_idx_ptr != NULL
-          && *match_fa_idx_ptr >= 0 
-          && *match_fa_idx_ptr <= map->entries)
-	{
-	  /* We found a matching final address, now we can check the next
-	     entry (if there is one) to see if we need to shrink the address
-	     range for this function.  */
-	  int *next_fa_idx_ptr = match_fa_idx_ptr + 1;
-	  if (next_fa_idx_ptr - map->final_addr_index < map->entries 
-	      && *next_fa_idx_ptr < map->entries)
-	    {
-	      int new_delta = map->tuples[*next_fa_idx_ptr].final_addr - 
-			      match->final_addr;
-	      if (new_delta < delta)
-		{
-		  /* The next final address was less than our current end
-		     address, we need to shrink it to match the debug map
-		     entry.  */
-		  *addr = match->final_addr + new_delta;
-		  if (debug_debugmap)
-		    fprintf_unfiltered (gdb_stdlog, 
-					"debugmap: decreasing end address for "
-					"'%s' in %s by %d bytes.\n",
-					match->name, map->pst_filename, 
-					delta - new_delta);
-		}
-	    }
-	}
-    }
-
-  if (debug_debugmap)
-    fprintf_unfiltered (gdb_stdlog, 
-                        "debugmap: translated 0x%s to 0x%s sym '%s' in %s\n",
-                        paddr_nz (oso_addr), paddr_nz (*addr), match->name,
-                        map->pst_filename);
+  *addr = translate_debug_map_address_with_tuple (map, match, oso_addr, highpc);
   return 1;
 }
 
@@ -3560,14 +3634,14 @@ translate_common_symbol_debug_map_address (struct oso_to_final_addr_map *map,
           fprintf_unfiltered (gdb_stdlog, 
                               "debugmap: translated common symbol '%s' to 0x%s in %s\n",
                               name, paddr_nz (*addr), 
-                              map->pst_filename);
+                              map->pst->filename);
         return 1;
       }
 
   if (debug_debugmap)
     fprintf_unfiltered (gdb_stdlog, 
                         "debugmap: failed to translate common symbol '%s' in %s\n", 
-                        name, map->pst_filename);
+                        name, map->pst->filename);
   return 0;
 }
 
@@ -4186,6 +4260,9 @@ process_die (struct die_info *die, struct dwarf2_cu *cu)
     case DW_TAG_subroutine_type:
       read_subroutine_type (die, cu);
       break;
+    case DW_TAG_set_type:
+      read_set_type (die, cu);
+      break;
     case DW_TAG_array_type:
       read_array_type (die, cu);
       break;
@@ -4420,7 +4497,8 @@ add_to_cu_func_list (const char *name, CORE_ADDR lowpc, CORE_ADDR highpc,
 
 /* APPLE LOCAL begin subroutine inlining  */
 static void
-dwarf2_add_to_list_of_inlined_calls (struct attribute *file_attr, 
+dwarf2_add_to_list_of_inlined_calls (struct objfile *objfile,
+				     struct attribute *file_attr, 
 				     struct attribute *line_attr, 
 				     struct attribute *column_attr,
 				     CORE_ADDR lowpc, CORE_ADDR highpc,
@@ -4430,11 +4508,11 @@ dwarf2_add_to_list_of_inlined_calls (struct attribute *file_attr,
 				     struct attribute *decl_file,
 				     struct attribute *decl_line)
 {
-  struct inlined_call_record *new;
+  struct dwarf_inlined_call_record *new;
   struct rb_tree_node *new_call_site;
 
-  new = (struct inlined_call_record *) xmalloc 
-                                          (sizeof (struct inlined_call_record));
+  new = (struct dwarf_inlined_call_record *) xmalloc 
+                                          (sizeof (struct dwarf_inlined_call_record));
   new->file_index = DW_UNSND (file_attr);
   new->line = DW_UNSND (line_attr);
   if (column_attr)
@@ -4448,7 +4526,6 @@ dwarf2_add_to_list_of_inlined_calls (struct attribute *file_attr,
   new->ranges = ranges;
   /* APPLE LOCAL end address ranges  */
   new->parent_name = parent_name;
-  new->next = NULL;
 
   if (decl_file)
     new->decl_file_index = DW_UNSND (decl_file);
@@ -4482,7 +4559,8 @@ dwarf2_add_to_list_of_inlined_calls (struct attribute *file_attr,
      check_inlined_function_calls to put the appropriate information in
      the appropriate files' line tables.  */
 
-  rb_tree_insert (&inlined_call_sites, inlined_call_sites, new_call_site);
+  rb_tree_insert (&(objfile->inlined_call_sites), objfile->inlined_call_sites, 
+		  new_call_site);
 }
 
 
@@ -4491,9 +4569,6 @@ read_inlined_subroutine_scope (struct die_info *die, struct dwarf2_cu *cu)
 {
   struct die_info *parent_die;
   struct die_info *abstract_origin;
-  /* APPLE LOCAL begin address ranges  */
-  struct die_info *c;
-  /* APPLE LOCAL end address ranges  */
   struct objfile *objfile = cu->objfile;
   CORE_ADDR lowpc;
   CORE_ADDR highpc;
@@ -4518,13 +4593,6 @@ read_inlined_subroutine_scope (struct die_info *die, struct dwarf2_cu *cu)
   /* APPLE LOCAL begin address ranges  */
   if (!dwarf2_get_pc_bounds (die, &lowpc, &highpc, &ranges, cu))
     return;
-
-  for (c = die->child; c; c = sibling_die (c))
-    if (c->tag == DW_TAG_lexical_block)
-      break;
-
-  if (c && c->tag == DW_TAG_lexical_block)
-    dwarf2_get_pc_bounds (c, &lowpc, &highpc, &ranges, cu);
 
   lowpc += baseaddr;
   highpc += baseaddr;
@@ -4576,14 +4644,18 @@ read_inlined_subroutine_scope (struct die_info *die, struct dwarf2_cu *cu)
   /* APPLE LOCAL end address ranges  */
 
   /* Check to make sure the compiler found the call site information before
-     we try to make use of it.  */
+     we try to make use of it.  Also make sure we have names for the caller
+     and callee functions.  */
 
   if (file_attr 
-      && line_attr)
+      && line_attr
+      && name
+      && parent_name)
     /* APPLE LOCAL begin address ranges  */
-    dwarf2_add_to_list_of_inlined_calls (file_attr, line_attr, column_attr, 
-					 lowpc, highpc, ranges, name, 
-					 parent_name, decl_file, decl_line);
+    dwarf2_add_to_list_of_inlined_calls (objfile, file_attr, line_attr, 
+					 column_attr, lowpc, highpc, ranges, 
+					 name, parent_name, decl_file, 
+					 decl_line);
     /* APPLE LOCAL end address ranges  */
 
   push_context (0, lowpc);
@@ -5708,6 +5780,42 @@ read_structure_type (struct die_info *die, struct dwarf2_cu *cu)
       do_cleanups (back_to);
     }
 
+  /* APPLE LOCAL: Figure out which runtime this type belongs to...  
+     Only do this for ObjC & ObjC++.  Otherwise we default to the
+     C++ runtime.  We could add defines for ADA etc, but we don't
+     use that, and it's really only important when you can mix runtimes
+     in a single CU.  */
+  if (cu->language == language_objc
+      || cu->language == language_objcplus
+      || cu->language == language_unknown)
+    {
+      if (TYPE_N_BASECLASSES (type) == 0)
+	{
+	  /* If there are no baseclasses, see if this is the 
+	     base of the ObjC Hierarchy.  */
+	  if (TYPE_TAG_NAME (type) 
+	      && (strcmp(TYPE_TAG_NAME (type), "NSObject") == 0
+		  || strcmp (TYPE_TAG_NAME (type), "objc_object") == 0))
+	    TYPE_RUNTIME (type) = OBJC_RUNTIME;
+	  else
+	    TYPE_RUNTIME (type) = CPLUS_RUNTIME;
+	}
+      else if (TYPE_N_BASECLASSES (type) > 1)
+	{
+	  /* ObjC is single inheritance only, so is there's more than one
+	     baseclass it can't be ObjC.  */
+	  TYPE_RUNTIME (type) = CPLUS_RUNTIME;
+	}
+      else
+	{
+	  /* The type inherits its runtime from its parent.  */
+	  TYPE_RUNTIME (type)
+	    = TYPE_RUNTIME(TYPE_FIELD_TYPE (type, 0));
+	}
+    }
+  else
+    TYPE_RUNTIME (type) = CPLUS_RUNTIME;
+
   processing_current_prefix = previous_prefix;
   if (back_to != NULL)
     do_cleanups (back_to);
@@ -6063,6 +6171,15 @@ read_array_order (struct die_info *die, struct dwarf2_cu *cu)
     };
 }
 
+/* Extract all information from a DW_TAG_set_type DIE and put it in
+   the DIE's type field. */
+
+static void
+read_set_type (struct die_info *die, struct dwarf2_cu *cu)
+{
+  if (die->type == NULL)
+    die->type = create_set_type ((struct type *) NULL, die_type (die, cu));
+}
 
 /* First cut: install each common block member as a global variable.  */
 
@@ -6073,6 +6190,16 @@ read_common_block (struct die_info *die, struct dwarf2_cu *cu)
   struct attribute *attr;
   struct symbol *sym;
   CORE_ADDR base = (CORE_ADDR) 0;
+
+  /* APPLE LOCAL: Keep track of the current common block name so we can
+     offset symbols within that block that we find while processing this
+     DIE or its children.  */
+  struct attribute *nattr;
+  nattr = dwarf2_attr (die, DW_AT_MIPS_linkage_name, cu);
+  if (!nattr)
+    nattr = dwarf2_attr (die, DW_AT_name, cu);
+  if (nattr)
+    decode_locdesc_common = DW_STRING (nattr);
 
   attr = dwarf2_attr (die, DW_AT_location, cu);
   if (attr)
@@ -6108,6 +6235,9 @@ read_common_block (struct die_info *die, struct dwarf2_cu *cu)
 	  child_die = sibling_die (child_die);
 	}
     }
+  /* APPLE LOCAL:  Finished processing addresses that may be relative to
+     this common block.  */
+  decode_locdesc_common = NULL;
 }
 
 /* Read a C++ namespace.  */
@@ -7287,6 +7417,58 @@ read_partial_die (struct partial_die_info *part_die,
 		part_die->name = DW_STRING (get_repository_name (&attr, cu));
 	      else
 		part_die->name = DW_STRING (&attr);
+	      /* APPLE LOCAL begin psym equivalences  */
+	      /* Check the linkage name to see if it is a psym equivalence
+		 name.  If so, fill in the equiv_name field for the part die,
+		 and set the global variable, psym_equivalences to 1.  */
+
+	      /* To be a psym equivalence name, the name must begin with
+		 '*_', must contain at least one  '$', and everything after
+		 the '$' must be uppercase, a digit or a '$'.  For
+	         example '*_putenv$UNIX2003' is a psym equivalence name for
+	         'putenv'.  */
+
+	      if (strlen (part_die->name) >=  5
+		  && part_die->name[0] == '*'
+		  && part_die->name[1] == '_')
+		{
+		  char *short_name;
+		  char *extension;
+		  char *short_end;
+		  char *end = part_die->name + strlen(part_die->name);
+		  int is_equivalence_name = 1;
+		  
+		  short_name = part_die->name + 2;
+		  extension = strchr (short_name, '$');
+		  if (extension)
+		    {
+		      short_end = extension;
+		      while (extension[0] != '\0'
+			     && extension < end
+			     && is_equivalence_name)
+			{
+			  if (!isdigit(extension[0])
+			      && !isupper(extension[0])
+			      && extension[0] != '$')
+			    is_equivalence_name = 0;
+			  extension++;
+			}
+		      
+		    }
+		  else
+		    is_equivalence_name = 0;
+		  
+		  if (is_equivalence_name)
+		    {
+		      psym_equivalences = 1;
+		      short_end[0] = '\0';
+		      part_die->name = xstrdup (short_name);
+		      part_die->equiv_name = part_die->name;
+		      short_end[0] = '$';
+		    }
+		  
+		}
+	      /* APPLE LOCAL end psym equivalences  */
 	    }
 	  break;
 	/* APPLE LOCAL end dwarf repository  */
@@ -8419,27 +8601,30 @@ check_cu_functions (CORE_ADDR address, struct dwarf2_cu *cu)
 }
 
 /* APPLE LOCAL begin subroutine inlining  */
-/* Given a pc ADDRESS and FILE_INDEX, search through the inlined_call_sites
-   data (a Red-Black tree), finding ALL inlined function calls that start
-   at the given ADDRESS.  Remove each such call site from the data structure,
-   writing the appropriate corresponding information into the appropriate
-   file(s) line tables.  */
+/* Given a pc ADDRESS and FILE_INDEX, search through the objfile's
+   inlined_call_sites data (a Red-Black tree), finding ALL inlined
+   function calls that start at the given ADDRESS.  Remove each such
+   call site from the data structure, writing the appropriate
+   corresponding information into the appropriate file(s) line
+   tables.  */
 
 static void
 check_inlined_function_calls (struct subfile *subfile, int file_index, int line,
 			      CORE_ADDR address, struct line_header *lh,
 			      struct dwarf2_cu *cu, char *comp_dir)
 {
-  struct inlined_call_record *current = NULL;
+  struct dwarf_inlined_call_record *current = NULL;
+  struct objfile *objfile = cu->objfile;
   struct subfile *tmp_subfile = NULL;
   struct rb_tree_node *rb_node;
   int done = 0;
 
-  if (!inlined_call_sites)
+  if (!objfile->inlined_call_sites)
     return;
 
   /* Loop until we've found ALL inlining instances for the current ADDRESS.
-     Each time we find an instance, we remove it from inlined_call_sites.  */
+     Each time we find an instance, we remove it from objfile's
+     inlined_call_sites.  */
 
   while (!done)
     {
@@ -8448,15 +8633,15 @@ check_inlined_function_calls (struct subfile *subfile, int file_index, int line,
       /* Look for an inlining instance with the address and file_index passed
 	 in.  */
 
-      rb_node = rb_tree_find_and_remove_node (&inlined_call_sites, 
-					      inlined_call_sites, 
+      rb_node = rb_tree_find_and_remove_node (&(objfile->inlined_call_sites), 
+					      objfile->inlined_call_sites, 
 					      address, file_index);
 
       if (rb_node 
 	  && rb_node->secondary_key == file_index)
 	{
 	  tmp_subfile = subfile;
-	  current = (struct inlined_call_record *) rb_node->data;
+	  current = (struct dwarf_inlined_call_record *) rb_node->data;
 	}
       else
 	{
@@ -8465,8 +8650,8 @@ check_inlined_function_calls (struct subfile *subfile, int file_index, int line,
 	     differnt file_index than was passed in.  */
 
 	  if (!rb_node)
-	    rb_node = rb_tree_find_and_remove_node (&inlined_call_sites, 
-						    inlined_call_sites, 
+	    rb_node = rb_tree_find_and_remove_node (&(objfile->inlined_call_sites), 
+						    objfile->inlined_call_sites, 
 						    address, -1);
 
 	  /* We found an inlining instance, but it has a different 
@@ -8475,7 +8660,7 @@ check_inlined_function_calls (struct subfile *subfile, int file_index, int line,
 
 	  if (rb_node)
 	    {
-	      current = (struct inlined_call_record *) rb_node->data;
+	      current = (struct dwarf_inlined_call_record *) rb_node->data;
 	      
 	      for (tmp_subfile = subfiles; tmp_subfile; 
 		   tmp_subfile = tmp_subfile->next)
@@ -8548,6 +8733,10 @@ check_inlined_function_calls (struct subfile *subfile, int file_index, int line,
 	  if (tmp_subfile != subfile)
 	    record_line (tmp_subfile, current->line, address, 0, 
 			 NORMAL_LT_ENTRY);
+
+	  if (dwarf2_debug_inlined_stepping)
+	    fprintf_unfiltered (gdb_stdout, "%s inlined into %s:\n", 
+				current->name, current->parent_name);
 	  
 	  record_line (tmp_subfile, current->line, current->lowpc, 
 		       current->highpc,
@@ -8556,7 +8745,8 @@ check_inlined_function_calls (struct subfile *subfile, int file_index, int line,
 		       current->highpc,
 		       INLINED_SUBROUTINE_LT_ENTRY);
 	  /* APPLE LOCAL begin address ranges  */
-	  inlined_function_add_function_names (current->lowpc, 
+	  inlined_function_add_function_names (objfile,
+					       current->lowpc, 
 					       current->highpc,
 					       current->line, current->column,
 					       current->name,
@@ -8571,7 +8761,378 @@ check_inlined_function_calls (struct subfile *subfile, int file_index, int line,
 
   return;
 }
+
 /* APPLE LOCAL end subroutine inlining  */
+
+/* APPLE LOCAL begin: debug map line table support. 
+
+  Line tables have their addresses fixed up on the fly as object files are 
+  read in. Function re-ordering and dead code stripping can seriously affect
+  the DWARF line tables. This function will take care of properly mapping line
+  table rows to what they should be in the internal gdb representation. If
+  function re-ordering happens, we may have a single line table in the object
+  file that looks something like:
+
+  Address    File Line Function
+  ---------- ---- ---- --------
+  0x00000000    1   12 func_1
+  0x00000014    1   13 func_1
+  0x0000001c    1   14 func_1
+
+  0x00000034    1   22 func_2
+  0x00000050    1   23 func_2
+  0x0000005c    1   24 func_2
+
+  0x00000070    1   32 func_3
+  0x00000090    1   33 func_3
+  0x000000b0    1   34 func_3
+
+  0x000000c8    1   42 func_4
+  0x000000e4    1   43 func_4
+  0x000000f0    1   44 func_4
+
+  0x00000104    1   52 func_5
+  0x00000120    1   53 func_5
+  0x0000013c    1   54 func_5
+  
+  0x00000154    1   62 func_6
+  0x00000178    1   64 func_6
+  0x00000184    1   65 func_6
+  0x0000019c    1   66 func_6
+  0x000001dc    1   67 func_6
+  0x000001f4    1   68 func_6
+  0x00000200    1   69 func_6
+  0x00000218    1   69 func_6   end_sequence
+
+After function re-ordering and dead code stripping the map could look like:
+lowpc        highpc	function
+----------   ---------- -------
+0x00001c3c - 0x00001d00 main
+0x00001d00 - 0x00001d50 func_5
+0x00001d50 - 0x00001d84 func_1
+
+  When building the line table, we will try and translate each address. If the
+  address is in the middle of a line table (isn't a end of sequence 
+  (LNE_end_sequence)), we need to check each address to see if it is in mapped
+  in the output both as a low and high pc address.
+ */
+
+static CORE_ADDR
+translate_debug_map_address_with_tuple (struct oso_to_final_addr_map *map,
+					struct oso_final_addr_tuple* match,
+					CORE_ADDR oso_addr, int highpc)
+{
+  gdb_assert (map != NULL);
+  gdb_assert (match != NULL && match->present_in_final);
+  int delta = oso_addr - match->oso_low_addr;
+  CORE_ADDR final_addr = match->final_addr + delta;
+
+  /* For the high pc address, find the next final address and make sure it
+     doesn't overlap into that next address range. If it does, trim the 
+     current address range down. See comments in definition of the 
+     'oso_to_final_addr_map' structure for full details.  */
+  if (highpc && map->final_addr_index)
+    {
+      /* Create a search key and search for the final address index for
+	 our match.  */
+      struct final_addr_key final_addr_key = { match->final_addr, map };
+
+      int *match_fa_idx_ptr = bsearch (&final_addr_key, 
+				       map->final_addr_index, 
+				       map->entries, sizeof (int),
+				       compare_translation_final_addr);
+
+      if (match_fa_idx_ptr != NULL
+          && *match_fa_idx_ptr >= 0 
+          && *match_fa_idx_ptr <= map->entries)
+	{
+	  /* We found a matching final address, now we can check the next
+	     entry (if there is one) to see if we need to shrink the address
+	     range for this function.  */
+	  int *next_fa_idx_ptr = match_fa_idx_ptr + 1;
+	  if (next_fa_idx_ptr - map->final_addr_index < map->entries 
+	      && *next_fa_idx_ptr < map->entries)
+	    {
+	      if (map->tuples[*next_fa_idx_ptr].present_in_final)
+		{
+		  int new_delta = map->tuples[*next_fa_idx_ptr].final_addr - 
+				  match->final_addr;
+		  if (new_delta < delta)
+		    {
+		      /* The next final address was less than our current end
+			 address, we need to shrink it to match the debug map
+			 entry.  */
+		      final_addr = match->final_addr + new_delta;
+		      if (debug_debugmap > 5)
+			fprintf_unfiltered (gdb_stdlog, 
+					    "debugmap: decreasing end address"
+					    " for '%s' in %s by %d bytes.\n",
+					    match->name, map->pst->filename, 
+					    delta - new_delta);
+		    }
+		}
+	    }
+	}
+    }
+
+  /*  FIXME: The code below is not quite right; if the thing being
+      translated is not in the text section (e.g. it is in the data
+      section) this capping stuff does the wrong thing.  ctice/2007-11-15
+
+      Yeah I had some patches a while back that recorded the minsym's
+      type (mst_text, etc) in the struct oso_final_addr_tuple.  I think
+      that's necessary here.  molenda/2007-11-15 */
+
+#if 0
+  if (final_addr > map->pst->texthigh)
+    {
+      if (debug_debugmap > 5)
+	fprintf_unfiltered (gdb_stdlog, 
+			    "debugmap: address 0x%s beyond high text address "
+			    "0x%s for %s, capping to 0x%s\n",
+			    paddr_nz (final_addr), paddr_nz (map->pst->texthigh), 
+			    match->name, paddr_nz (map->pst->texthigh));
+      final_addr = map->pst->texthigh;
+    }
+#endif
+
+  if (debug_debugmap)
+    fprintf_unfiltered (gdb_stdlog, 
+                        "debugmap: (highpc = %i) translated 0x%s to 0x%s "
+			"for '%s' in %s\n", highpc, paddr (oso_addr), 
+			paddr (final_addr), match->name, map->pst->filename);
+  return final_addr;
+}
+
+/* 
+  Properly records line table entries for executables with debug maps, or for
+  executables with linked DWARF.
+  
+  There are many cases to watch out for when we have a debug map that can
+  cause problems:
+    - When function a b c were contiguous in the object file and:
+      - a is dead stripped and b and c are in the linked image
+      - b is dead stripped and a and c are in the linked image
+      - c is dead srtipped and a and b are in the linked image
+      - functions from other compile units get inserted between a b and c
+        (order files)
+      - function a b and c are reordered
+	
+  There are many variations, but the safest thing to do is to detect when we
+  are translating ADDRESS that the same as OSO_HIGH_ADDR member of a
+  tuple and take extra care when translating these entries. 
+ */
+
+static int
+dwarf2_record_line (struct line_header *lh, char *comp_dir, struct dwarf2_cu *cu, 
+		    CORE_ADDR address, CORE_ADDR baseaddr, int file, int line, 
+		    int end_sequence)
+{
+  CORE_ADDR final_addr = (CORE_ADDR) -1;
+  int record_final_addr = 0;
+  int num_lines_recorded = 0;
+  struct oso_to_final_addr_map *map = cu->addr_map;
+  int fake_end_sequence = 0;
+  if (map == NULL || map->tuples == NULL)
+    {
+      /* No debug map, just use the address we have.  */
+      final_addr = address;
+      record_final_addr = 1;
+    }
+  else
+    {
+      /* We have a debug map and we need to translate the address.  */
+      struct oso_final_addr_tuple *match = NULL;
+      if (map->entries == 1)
+	{
+	  /* Check the case where we just have one entry and only match
+	     if our address is in the range.  */
+	  if (compare_translation_tuples_inclusive (&address, &(map->tuples[0])) == 0)
+	    match = map->tuples;
+	}
+      else
+	{
+	  /* Find a matching entry. Note that we can end up pickup up either
+	     the correct entry for an normal or end address, but this can save
+	     us from having to do two searches.  */
+	  match = bsearch (&address, map->tuples, map->entries, 
+			   sizeof (struct oso_final_addr_tuple), 
+			   compare_translation_tuples_inclusive);
+	}
+
+      if (match != NULL)
+	{
+	  struct oso_final_addr_tuple *next = NULL;
+	  /* Our binary search may kick up the next entry due to it including
+	     both the start and end OSO address, so set MATCH to the previous 
+	     entry if needed.  */
+	  if (address == match->oso_low_addr)
+	    {
+	      if (match > map->tuples && match[-1].oso_high_addr == address)
+		{
+		  next = match;
+		  match--;
+		}
+	    }
+
+	  /* We now have MATCH that contains ADDRESS where ADDRESS may be 
+	     equal to the end address in that range. We _might_ have NEXT
+	     which is the next oso address range in our tuples, but it may
+	     be NULL if MATCH is the last or only entry.  */
+	  if (address < match->oso_high_addr)
+	    {
+	      /* ADDRESS is less than the OSO_HIGH_ADDR of MATCH, 
+	         we have found the correct MATCH and don't need to do
+		 anything special.  */
+	      if (match->present_in_final)
+		{
+		  final_addr = translate_debug_map_address_with_tuple (map, 
+							     	       match, 
+							     	       address, 
+    							           end_sequence);
+		  record_final_addr = 1;
+		}
+	    }
+	  else if (address == match->oso_high_addr)
+	    {
+	      /* ADDRESS matches the OSO_HIGH_ADDR of MATCH which means that
+	         ADDRESS is at the highpc of a function (func_a), and possibly 
+		 at the start address of another function (func_b). If this 
+		 isn't an end_sequence line table row, we need to make sure the
+		 func_a and func_b appear contiguously in the final executable. 
+		 If they don't, we need to translate the address once as a high
+		 PC for func_a, and again as a normal address for func_b and 
+		 potentially add a line table entry for the end of func_a if 
+		 they aren't contiguous in the final output.  */
+	      if (next == NULL)
+		{
+		  /* Set NEXT correctly if it already isn't is there is a next
+		     tuple.  */
+		  int match_index = match - map->tuples;
+		  if (match_index + 1 < map->entries)
+		    next = match + 1;
+		}
+	      
+	      if (match->present_in_final)
+		{
+		  /* Translate ADDRESS as a highpc address for the function
+		     described by MATCH (func_a).  */
+		  final_addr = translate_debug_map_address_with_tuple (map, 
+								       match, 
+								       address, 
+								       1);
+		  record_final_addr = 1; 
+		}
+
+	      if (next)
+		{
+		  /* Make sure the next entry is in the linked executable.  */
+		  if (next->present_in_final)
+		    {
+		      /* NEXT is in the linked executable, so translate this
+			 address as normal address and store the result 
+			 in NEXT_FINAL_ADDR.  */
+		      CORE_ADDR next_final_addr;
+		      next_final_addr = translate_debug_map_address_with_tuple (
+							map, next, address, 0);
+		      /* Check if the two functions are still congituous in the
+		         final executable?  */
+		      if (final_addr != next_final_addr)
+			{
+			  /* They are NOT contiguous, or MATCH was not in
+			     the linked exectuable.  */
+			  if (match->present_in_final)
+			    {
+			      /* We need to fabricate a fake end sequence since
+			         both MATCH and NEXT are in the final executable
+				 but are not contiguous. We already translated
+				 ADDRESS as a highpc address above so we need 
+				 to add this address to our line table.  */
+			      final_addr += baseaddr;
+			      final_addr = check_cu_functions (final_addr, cu);
+			      if (debug_debugmap > 7)
+				fprintf_unfiltered (gdb_stdlog, 
+ "dwarf2_record_line: record_line (%s:%i, 0x%s) for %s (create end sequence)\n",
+						current_subfile->name, 0, 
+						paddr_nz (final_addr), 
+						map->pst->filename);
+			      record_line (current_subfile, 0, final_addr, 0, 
+					   NORMAL_LT_ENTRY);
+							
+			      num_lines_recorded++;
+			    }
+			    
+			  /* Change our current line's address to the next
+			     entry's final address.  */
+			  final_addr = next_final_addr;
+			  record_final_addr = 1;
+			}
+		    }
+		  else if (match->present_in_final)
+		    {
+		      if (end_sequence == 0)
+			{
+			  /* MATCH is in the final executable and NEXT is NOT
+			     and we are in the middle of a line table, so make
+			     this line table entry a end sequence so we can cap
+			     off the current line entry correctly so it doesn't
+			     end up with a larger address range that it actually
+			     has.  */
+			  fake_end_sequence = 1;
+			  if (debug_debugmap > 7)
+			    fprintf_unfiltered (gdb_stdlog, 
+                   "dwarf2_record_line: turning row (0x%s) into end sequence.\n",
+						paddr_nz (final_addr));
+			}
+		    }
+		}
+	    }
+	}
+      else
+	{
+	  /* Address doesn't exist in tuples.  */
+	  if (debug_debugmap > 7)
+	    fprintf_unfiltered (gdb_stdlog, 
+                       "dwarf2_record_line: translate failed for 0x%s in %s\n",
+				paddr_nz (final_addr), map->pst->filename);
+	}
+    }
+
+  if (record_final_addr)
+    {
+      /* Now record our line table entry by adding BASEADDR and doing some 
+	 other final checks.  */
+      final_addr += baseaddr;
+      final_addr = check_cu_functions (final_addr, cu);
+      /* Set our FINAL_LINE correctly (zero means the end address range for
+         the previous line table entry).  */
+      int final_line = (end_sequence || fake_end_sequence) ? 0 : line;
+      
+      if (debug_debugmap > 7)
+	fprintf_unfiltered (gdb_stdlog, 
+                      "dwarf2_record_line: record_line (%s:%i, 0x%s) for %s\n",
+			    current_subfile->name, final_line, 
+			    paddr_nz (final_addr), map->pst->filename);
+
+      record_line (current_subfile, final_line, final_addr, 0, NORMAL_LT_ENTRY);
+      /* APPLE LOCAL begin subroutine inlining  */
+      if (end_sequence == 0)
+	{
+	  /* Only generate the inlined function calls when we are in the middle
+	     of a line table (not at a real end_sequence) otherwise we may try
+	     and generate the inline function calls using the wrong subfile.  */
+	  check_inlined_function_calls (current_subfile, file, final_line, 
+					final_addr, lh, cu, comp_dir);
+	}
+      /* APPLE LOCAL end subroutine inlining  */
+      num_lines_recorded++;
+    }
+  return num_lines_recorded;
+}
+
+/* APPLE LOCAL end: debug map line table support.  */
+
+
 
 /* Decode the Line Number Program (LNP) for the given line_header
    structure and CU.  The actual information extracted and the type
@@ -8602,10 +9163,6 @@ dwarf_decode_lines (struct line_header *lh, char *comp_dir, bfd *abfd,
   CORE_ADDR baseaddr;
   struct objfile *objfile = cu->objfile;
   const int decode_for_pst_p = (pst != NULL);
-
-  /* APPLE LOCAL: We'll need to skip linetable entries in functions that
-     were coalesced out.  */
-  int record_linetable_entry = 1;
 
   /* APPLE LOCAL */
   if (debug_debugmap)
@@ -8672,19 +9229,9 @@ dwarf_decode_lines (struct line_header *lh, char *comp_dir, bfd *abfd,
 		* lh->minimum_instruction_length;
 	      line += lh->line_base + (adj_opcode % lh->line_range);
               lh->file_names[file - 1].included_p = 1;
-              /* APPLE LOCAL: Skip linetable entries coalesced out */
-              if (!decode_for_pst_p && record_linetable_entry)
-                {
-		  /* APPLE LOCAL begin subroutine inlining  */
-	          /* Append row to matrix using current values.  */
-	          record_line (current_subfile, line, 
-	                       check_cu_functions (address, cu), 0, 
-			       NORMAL_LT_ENTRY);
-		  check_inlined_function_calls (current_subfile, file, line,
-						check_cu_functions (address, cu),
-						lh, cu, comp_dir);
-		  /* APPLE LOCAL end subroutine inlining  */
-                }
+              if (!decode_for_pst_p)
+		dwarf2_record_line (lh, comp_dir, cu, address, baseaddr, file, 
+				    line, end_sequence);
 	      basic_block = 1;
 	    }
 	  else switch (op_code)
@@ -8709,34 +9256,15 @@ dwarf_decode_lines (struct line_header *lh, char *comp_dir, bfd *abfd,
 		case DW_LNE_end_sequence:
 		  end_sequence = 1;
                   lh->file_names[file - 1].included_p = 1;
-                  /* APPLE LOCAL: Skip linetable entries coalesced out */
-                  if (!decode_for_pst_p && record_linetable_entry)
-		    /* APPLE LOCAL begin subroutine inlining  */
-		    {
-		      record_line (current_subfile, 0, address, 0, 
-				   NORMAL_LT_ENTRY);
-		      check_inlined_function_calls (current_subfile, file, 0,
-						    address, lh, cu, comp_dir);
-		    }
-		    /* APPLE LOCAL end subroutine inlining  */
+		  if (!decode_for_pst_p)
+		    dwarf2_record_line (lh, comp_dir, cu, address, baseaddr, 
+					file, line, end_sequence);
 		  break;
 		case DW_LNE_set_address:
                   /* APPLE LOCAL Add cast to avoid type mismatch in arg4 warn.*/
 		  address = read_address (abfd, line_ptr, cu, 
 					  (int *) &bytes_read);
-                  /* APPLE LOCAL: debug map */
-                  {
-                    CORE_ADDR addr;
-                    if (translate_debug_map_address (cu->addr_map, address, &addr, 0))
-                      {
-                        address = addr;
-                        record_linetable_entry = 1;
-                      }
-                    else
-                      record_linetable_entry = 0;
-                  }
 		  line_ptr += bytes_read;
-		  address += baseaddr;
 		  break;
 		case DW_LNE_define_file:
                   {
@@ -8765,18 +9293,9 @@ dwarf_decode_lines (struct line_header *lh, char *comp_dir, bfd *abfd,
 	      break;
 	    case DW_LNS_copy:
               lh->file_names[file - 1].included_p = 1;
-              /* APPLE LOCAL: Skip linetable entries coalesced out */
-              if (!decode_for_pst_p && record_linetable_entry)
-		/* APPLE LOCAL begin subroutine inlining  */
-		{
-		  record_line (current_subfile, line, 
-			       check_cu_functions (address, cu), 0, 
-			       NORMAL_LT_ENTRY);
-		  check_inlined_function_calls (current_subfile, file, line,
-						check_cu_functions (address, cu),
-						lh, cu, comp_dir);
-		}
-	        /* APPLE LOCAL subroutine inlining  */
+              if (!decode_for_pst_p)
+		dwarf2_record_line (lh, comp_dir, cu, address, baseaddr, file, 
+				    line, end_sequence);
 	      basic_block = 0;
 	      break;
 	    case DW_LNS_advance_pc:
@@ -9219,6 +9738,7 @@ new_symbol (struct die_info *die, struct type *type, struct dwarf2_cu *cu)
 	case DW_TAG_class_type:
 	case DW_TAG_structure_type:
 	case DW_TAG_union_type:
+	case DW_TAG_set_type:
 	case DW_TAG_enumeration_type:
 	  SYMBOL_CLASS (sym) = LOC_TYPEDEF;
 	  SYMBOL_DOMAIN (sym) = STRUCT_DOMAIN;
@@ -9579,6 +10099,9 @@ read_type_die (struct die_info *die, struct dwarf2_cu *cu)
       break;
     case DW_TAG_array_type:
       read_array_type (die, cu);
+      break;
+    case DW_TAG_set_type:
+      read_set_type (die, cu);
       break;
     case DW_TAG_pointer_type:
       read_tag_pointer_type (die, cu);
@@ -11088,7 +11611,18 @@ decode_locdesc (struct dwarf_block *blk, struct dwarf2_cu *cu)
           /* APPLE LOCAL: debug map */
           {
             CORE_ADDR addr;
-            if (translate_debug_map_address (cu->addr_map, 
+            /* APPLE LOCAL: If we're in the middle of processing a 
+               DW_TAG_common_block, DW_OP_addr refers to an offset within 
+               that common block, I guess. */
+            if (decode_locdesc_common &&
+                translate_common_symbol_debug_map_address (cu->addr_map, 
+                                           decode_locdesc_common, &addr))
+             {
+                CORE_ADDR off = read_address (objfile->obfd, &data[i], cu,
+                                            (int *) &bytes_read);
+                stack[++stacki] = addr + off;
+             }
+            else if (translate_debug_map_address (cu->addr_map, 
                                           read_address (objfile->obfd, &data[i],
 					  cu, (int *) &bytes_read), &addr, 0))
               stack[++stacki] = addr;
@@ -14022,7 +14556,7 @@ rb_print_node (struct rb_tree_node *tree)
 	fprintf (stdout, "(Black");
       else
 	fprintf (stdout, "(Unknown");
-      fprintf (stdout, ", %d, %d, %d)\n", tree->key, tree->secondary_key,
+      fprintf (stdout, ", %Ld, %d, %Ld)\n", tree->key, tree->secondary_key,
 	       tree->third_key);
     }
 }

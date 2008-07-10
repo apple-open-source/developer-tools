@@ -45,6 +45,7 @@
 #include "stuff/reloc.h"
 #include "stuff/symbol_list.h"
 #include "stuff/unix_standard_mode.h"
+#include "stuff/execute.h"
 
 /* These are set from the command line arguments */
 __private_extern__
@@ -68,6 +69,7 @@ static long Xflag;	/* -X strip local symbols with 'L' names */
 static long cflag;	/* -c strip section contents from dynamic libraries
 			   files to create stub libraries */
 static long no_uuid;	/* -no_uuid strip LC_UUID load commands */
+static long vflag;	/* -v for verbose debugging ld -r executions */
 static long strip_all = 1;
 /*
  * This is set on an object by object basis if the strip_all flag is still set
@@ -101,6 +103,19 @@ static long *ref_saves = NULL;
 #else
 static enum bool *nmedits = NULL;
 #endif
+
+/*
+ * These hold pointers to the symbol, string and indirect tables being worked on
+ * by strip_object and strip_symtab() from an input object file or possiblity
+ * changed to an ld -r (-S or -x) file by make_ld_r_object().
+ */
+static struct nlist *symbols = NULL;
+static struct nlist_64 *symbols64 = NULL;
+static unsigned long nsyms = 0;
+static char *strings = NULL;
+static unsigned long strsize = 0;
+static uint32_t *indirectsyms = NULL;
+static unsigned long nindirectsyms = 0;
 
 /*
  * These hold the new symbol and string table created by strip_symtab()
@@ -169,6 +184,9 @@ static void strip_object(
     struct member *member,
     struct object *object);
 
+static unsigned long get_starting_syminfo_offset(
+    struct object *object);
+
 static void check_object_relocs(
     struct arch *arch,
     struct member *member,
@@ -206,25 +224,30 @@ static enum bool strip_symtab(
     struct arch *arch,
     struct member *member,
     struct object *object,
-    struct nlist *symbols,
-    struct nlist_64 *symbols64,
-    unsigned long nsyms,
-    char *strings,
-    unsigned long strsize,
     struct dylib_table_of_contents *tocs,
     unsigned long ntoc,
     struct dylib_module *mods,
     struct dylib_module_64 *mods64,
     unsigned long nmodtab,
     struct dylib_reference *refs,
-    unsigned long nextrefsyms,
-    unsigned long *indirectsyms,
-    unsigned long nindirectsyms);
+    unsigned long nextrefsyms);
+
+static void make_ld_r_object(
+    struct arch *arch,
+    struct member *member,
+    struct object *object);
 
 static void strip_LC_UUID_commands(
     struct arch *arch,
     struct member *member,
     struct object *object);
+
+#ifndef NMEDIT
+static void strip_LC_CODE_SIGNATURE_commands(
+    struct arch *arch,
+    struct member *member,
+    struct object *object);
+#endif /* !(NMEDIT) */
 
 static enum bool private_extern_reference_by_module(
     unsigned long symbol_index,
@@ -233,7 +256,7 @@ static enum bool private_extern_reference_by_module(
 
 static enum bool symbol_pointer_used(
     unsigned long symbol_index,
-    unsigned long *indirectsyms,
+    uint32_t *indirectsyms,
     unsigned long nindirectsyms);
 
 static int cmp_qsort_undef_map(
@@ -393,8 +416,9 @@ char *envp[])
 			for(j = 0; j < narch_flags; j++){
 			    if(arch_flags[j].cputype ==
 				    arch_flags[narch_flags].cputype &&
-			       arch_flags[j].cpusubtype ==
-				    arch_flags[narch_flags].cpusubtype &&
+			       (arch_flags[j].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+				    (arch_flags[narch_flags].cpusubtype &
+				    ~CPU_SUBTYPE_MASK) &&
 			       strcmp(arch_flags[j].name,
 				    arch_flags[narch_flags].name) == 0)
 				break;
@@ -450,6 +474,9 @@ char *envp[])
 			case 'c':
 			    cflag = 1;
 			    strip_all = 0;
+			    break;
+			case 'v':
+			    vflag = 1;
 			    break;
 #endif /* NMEDIT */
 			default:
@@ -570,6 +597,7 @@ struct arch_flag *arch_flags,
 unsigned long narch_flags,
 enum bool all_archs)
 {
+    struct ofile *ofile;
     struct arch *archs;
     unsigned long narchs;
     struct stat stat_buf;
@@ -587,7 +615,7 @@ enum bool all_archs)
 	errors = 0;
 
 	/* breakout the file for processing */
-	breakout(input_file, &archs, &narchs, FALSE);
+	ofile = breakout(input_file, &archs, &narchs, FALSE);
 	if(errors)
 	    return;
 
@@ -596,8 +624,11 @@ enum bool all_archs)
 
 	/* process the symbols in the input file */
 	strip_arch(archs, narchs, arch_flags, narch_flags, all_archs);
-	if(errors)
+	if(errors){
+	    free_archs(archs, narchs);
+	    ofile_unmap(ofile);
 	    return;
+	}
 
 	/* create the output file */
 	if(stat(input_file, &stat_buf) == -1)
@@ -689,6 +720,7 @@ strip_file_return:
 #endif /* !defined(NMEDIT) */
 	/* clean-up data structures */
 	free_archs(archs, narchs);
+	ofile_unmap(ofile);
 
 	errors += previous_errors;
 }
@@ -751,12 +783,14 @@ enum bool all_archs)
 		    family_arch_flag =
 			get_arch_family_from_cputype(arch_flags[0].cputype);
 		    if(family_arch_flag != NULL)
-			family = (enum bool)(family_arch_flag->cpusubtype ==
-					     arch_flags[0].cpusubtype);
+			family = (enum bool)
+			  ((family_arch_flag->cpusubtype & ~CPU_SUBTYPE_MASK) ==
+			   (arch_flags[0].cpusubtype & ~CPU_SUBTYPE_MASK));
 		}
 		for(j = 0; j < narch_flags; j++){
 		    if(arch_flags[j].cputype == cputype &&
-		       (arch_flags[j].cpusubtype == cpusubtype ||
+		       ((arch_flags[j].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+			(cpusubtype & ~CPU_SUBTYPE_MASK) ||
 			family == TRUE)){
 			arch_process = TRUE;
 			arch_flag_processed[j] = TRUE;
@@ -767,7 +801,8 @@ enum bool all_archs)
 	    else{
 		(void)get_arch_from_host(&host_arch_flag, NULL);
 		if(host_arch_flag.cputype == cputype &&
-		   host_arch_flag.cpusubtype == cpusubtype)
+		   (host_arch_flag.cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		   (cpusubtype & ~CPU_SUBTYPE_MASK))
 		    arch_process = TRUE;
 	    }
 	    if(narchs != 1 && arch_process == FALSE)
@@ -884,11 +919,6 @@ struct member *member,
 struct object *object)
 {
     enum byte_sex host_byte_sex;
-    struct nlist *symbols;
-    struct nlist_64 *symbols64;
-    unsigned long nsyms;
-    char *strings;
-    unsigned long strsize;
     unsigned long offset;
     struct dylib_table_of_contents *tocs;
     unsigned long ntoc;
@@ -897,8 +927,6 @@ struct object *object)
     unsigned long nmodtab;
     struct dylib_reference *refs;
     unsigned long nextrefsyms;
-    unsigned long *indirectsyms;
-    unsigned long nindirectsyms;
     unsigned long i, j;
     struct load_command *lc;
     struct segment_command *sg;
@@ -918,6 +946,13 @@ struct object *object)
 
 	host_byte_sex = get_host_byte_sex();
 
+	/* Don't do anything to stub dylibs which have no load commands. */
+	if(object->mh_filetype == MH_DYLIB_STUB){
+	    if((object->mh != NULL && object->mh->ncmds == 0) ||
+	       (object->mh64 != NULL && object->mh64->ncmds == 0)){
+		return;
+	    }
+	}
 	if(object->st == NULL || object->st->nsyms == 0){
 	    warning_arch(arch, member, "input object file stripped: ");
 	    return;
@@ -942,6 +977,14 @@ struct object *object)
 	strsize = object->st->strsize;
 
 #ifndef NMEDIT
+	if(object->mh != NULL)
+	    flags = object->mh->flags;
+	else
+	    flags = object->mh64->flags;
+	if(object->mh_filetype == MH_DYLIB &&
+	   (flags & MH_PREBOUND) != MH_PREBOUND){
+	    arch->dont_update_LC_ID_DYLIB_timestamp = TRUE;
+	}
 	if(object->mh_filetype != MH_DYLIB && cflag)
 	    fatal_arch(arch, member, "-c can't be used on non-dynamic "
 		       "library: ");
@@ -1019,6 +1062,7 @@ struct object *object)
 				section_type = s[j].flags & SECTION_TYPE;
 				if(section_type != S_SYMBOL_STUBS &&
 				   section_type != S_LAZY_SYMBOL_POINTERS &&
+				   section_type != S_LAZY_DYLIB_SYMBOL_POINTERS &&
 				   section_type != S_NON_LAZY_SYMBOL_POINTERS){
 				    s[j].size = 0;
 				}
@@ -1054,6 +1098,7 @@ struct object *object)
 				section_type = s64[j].flags & SECTION_TYPE;
 				if(section_type != S_SYMBOL_STUBS &&
 				   section_type != S_LAZY_SYMBOL_POINTERS &&
+				   section_type != S_LAZY_DYLIB_SYMBOL_POINTERS &&
 				   section_type != S_NON_LAZY_SYMBOL_POINTERS){
 				    s64[j].size = 0;
 				}
@@ -1120,7 +1165,7 @@ struct object *object)
 	 */
 	if(object->dyst != NULL && object->dyst->nindirectsyms != 0){
 	    nindirectsyms = object->dyst->nindirectsyms;
-	    indirectsyms = (unsigned long *)
+	    indirectsyms = (uint32_t *)
 		(object->object_addr + object->dyst->indirectsymoff);
 	    if(object->object_byte_sex != host_byte_sex)
 		swap_indirect_symbols(indirectsyms, nindirectsyms,
@@ -1165,9 +1210,8 @@ struct object *object)
 		nextrefsyms) == FALSE)
 		return;
 #else /* !defined(NMEDIT) */
-	    if(strip_symtab(arch, member, object, symbols, symbols64, nsyms,
-		strings, strsize, tocs, ntoc, mods, mods64, nmodtab, refs,
-		nextrefsyms, indirectsyms, nindirectsyms) == FALSE)
+	    if(strip_symtab(arch, member, object, tocs, ntoc, mods, mods64,
+			    nmodtab, refs, nextrefsyms) == FALSE)
 		return;
 	    if(no_uuid == TRUE)
 		strip_LC_UUID_commands(arch, member, object);
@@ -1191,6 +1235,24 @@ struct object *object)
 	    object->output_nsymbols = new_nsyms;
 	    object->output_strings = new_strings;
 	    object->output_strings_size = new_strsize;
+
+	    if(object->split_info_cmd != NULL){
+		object->output_split_info_data = object->object_addr +
+		    object->split_info_cmd->dataoff;
+		object->output_split_info_data_size = 
+		    object->split_info_cmd->datasize;
+	    }
+	    if(object->code_sig_cmd != NULL){
+#ifndef NMEDIT
+		if(!cflag)
+#endif /* !(NMEDIT) */
+		{
+		    object->output_code_sig_data = object->object_addr +
+			object->code_sig_cmd->dataoff;
+		    object->output_code_sig_data_size = 
+			object->code_sig_cmd->datasize;
+		}
+	    }
 
 	    if(object->dyst != NULL){
 		object->dyst->ilocalsym = 0;
@@ -1252,14 +1314,18 @@ struct object *object)
 		    object->dyst->nlocrel * sizeof(struct relocation_info) +
 		    object->dyst->nextrel * sizeof(struct relocation_info) +
 		    object->dyst->ntoc * sizeof(struct dylib_table_of_contents)+
-		    object->dyst->nextrefsyms * sizeof(struct dylib_reference) +
-		    object->dyst->nindirectsyms * sizeof(uint32_t);
-		if(object->mh != NULL)
+		    object->dyst->nextrefsyms * sizeof(struct dylib_reference);
+		if(object->mh != NULL){
 		    object->input_sym_info_size +=
-			object->dyst->nmodtab * sizeof(struct dylib_module);
-		else
+			object->dyst->nmodtab * sizeof(struct dylib_module) +
+			object->dyst->nindirectsyms * sizeof(uint32_t);
+		}
+		else{
 		    object->input_sym_info_size +=
-			object->dyst->nmodtab * sizeof(struct dylib_module_64);
+			object->dyst->nmodtab * sizeof(struct dylib_module_64) +
+			object->dyst->nindirectsyms * sizeof(uint32_t) +
+			object->input_indirectsym_pad;
+		}
 #ifndef NMEDIT
 		/*
 		 * When stripping out the section contents to create a
@@ -1276,13 +1342,16 @@ struct object *object)
 		object->output_sym_info_size +=
 		    new_ntoc * sizeof(struct dylib_table_of_contents)+
 		    new_nextrefsyms * sizeof(struct dylib_reference) +
-		    object->dyst->nindirectsyms * sizeof(uint32_t);
-		if(object->mh != NULL)
+		    object->dyst->nindirectsyms * sizeof(uint32_t) +
+		    object->input_indirectsym_pad;
+		if(object->mh != NULL){
 		    object->output_sym_info_size +=
 			object->dyst->nmodtab * sizeof(struct dylib_module);
-		else
+		}
+		else{
 		    object->output_sym_info_size +=
 			object->dyst->nmodtab * sizeof(struct dylib_module_64);
+		}
 		if(object->hints_cmd != NULL){
 		    object->input_sym_info_size +=
 			object->hints_cmd->nhints *
@@ -1291,43 +1360,35 @@ struct object *object)
 			object->hints_cmd->nhints *
 			sizeof(struct twolevel_hint);
 		}
+		if(object->split_info_cmd != NULL){
+		    object->input_sym_info_size +=
+			object->split_info_cmd->datasize;
+		    object->output_sym_info_size +=
+			object->split_info_cmd->datasize;
+		}
+		if(object->code_sig_cmd != NULL){
+		    object->input_sym_info_size =
+			round(object->input_sym_info_size, 16);
+		    object->input_sym_info_size +=
+			object->code_sig_cmd->datasize;
+#ifndef NMEDIT
+		    if(cflag){
+			strip_LC_CODE_SIGNATURE_commands(arch, member, object);
+		    }
+		    else
+#endif /* !(NMEDIT) */
+		    {
+			object->output_sym_info_size =
+			    round(object->output_sym_info_size, 16);
+			object->output_sym_info_size +=
+			    object->code_sig_cmd->datasize;
+		    }
+		}
+
 		object->dyst->ntoc = new_ntoc;
 		object->dyst->nextrefsyms = new_nextrefsyms;
 
-		if(object->seg_linkedit != NULL ||
-		   object->seg_linkedit64 != NULL){
-		    if(object->mh != NULL)
-			offset = object->seg_linkedit->fileoff;
-		    else
-			offset = object->seg_linkedit64->fileoff;
-		}
-		else{
-		    offset = ULONG_MAX;
-		    if(object->dyst->nlocrel != 0 &&
-		       object->dyst->locreloff < offset)
-			offset = object->dyst->locreloff;
-		    if(object->st->nsyms != 0 &&
-		       object->st->symoff < offset)
-			offset = object->st->symoff;
-		    if(object->dyst->nextrel != 0 &&
-		       object->dyst->extreloff < offset)
-			offset = object->dyst->extreloff;
-		    if(object->dyst->nindirectsyms != 0 &&
-		       object->dyst->indirectsymoff < offset)
-			offset = object->dyst->indirectsymoff;
-		    if(object->dyst->ntoc != 0 &&
-		       object->dyst->tocoff < offset)
-			offset = object->dyst->tocoff;
-		    if(object->dyst->nmodtab != 0 &&
-		       object->dyst->modtaboff < offset)
-			offset = object->dyst->modtaboff;
-		    if(object->dyst->nextrefsyms != 0 &&
-		       object->dyst->extrefsymoff < offset)
-			offset = object->dyst->extrefsymoff;
-		    if(object->st->strsize != 0 &&
-		       object->st->stroff < offset)
-			offset = object->st->stroff;
-		} 
+		offset = get_starting_syminfo_offset(object);
 
 		if(object->dyst->nlocrel != 0){
 		    object->output_loc_relocs = (struct relocation_info *)
@@ -1352,6 +1413,11 @@ struct object *object)
 		}
 		else
 		    object->dyst->locreloff = 0;
+
+		if(object->split_info_cmd != NULL){
+		    object->split_info_cmd->dataoff = offset;
+		    offset += object->split_info_cmd->datasize;
+		}
 
 		if(object->st->nsyms != 0){
 		    object->st->symoff = offset;
@@ -1401,8 +1467,8 @@ struct object *object)
 
 		if(object->dyst->nindirectsyms != 0){
 		    object->dyst->indirectsymoff = offset;
-		    offset += object->dyst->nindirectsyms *
-			      sizeof(unsigned long);
+		    offset += object->dyst->nindirectsyms * sizeof(uint32_t) +
+			      object->input_indirectsym_pad;
 		}
 		else
 		    object->dyst->indirectsymoff = 0;;
@@ -1472,6 +1538,11 @@ struct object *object)
 		else
 		    object->st->stroff = 0;
 
+		if(object->code_sig_cmd != NULL){
+		    offset = round(offset, 16);
+		    object->code_sig_cmd->dataoff = offset;
+		    offset += object->code_sig_cmd->datasize;
+		}
 	    }
 	    else{
 		if(new_strsize != 0){
@@ -1490,12 +1561,48 @@ struct object *object)
 	}
 #ifndef NMEDIT
 	else{
+	    /*
+	     * Here we are doing a full symbol strip.  In some cases it may
+	     * leave the local relocation entries as well as LOCAL indirect
+	     * symbol table entries.
+	     */
 	    if(saves != NULL)
 		free(saves);
 	    saves = (long *)allocate(object->st->nsyms * sizeof(long));
 	    bzero(saves, object->st->nsyms * sizeof(long));
 
-	    object->output_sym_info_size = 0;
+	    /*
+	     * Account for the symbolic info in the input file.
+	     */
+	    if(object->dyst != NULL){
+		object->input_sym_info_size +=
+		    object->dyst->nlocrel * sizeof(struct relocation_info) +
+		    object->dyst->nextrel * sizeof(struct relocation_info) +
+		    object->dyst->ntoc * sizeof(struct dylib_table_of_contents)+
+		    object->dyst->nextrefsyms * sizeof(struct dylib_reference);
+		if(object->mh != NULL){
+		    object->input_sym_info_size +=
+			object->dyst->nmodtab * sizeof(struct dylib_module) +
+			object->dyst->nindirectsyms * sizeof(uint32_t);
+		}
+		else{
+		    object->input_sym_info_size +=
+			object->dyst->nmodtab * sizeof(struct dylib_module_64) +
+			object->dyst->nindirectsyms * sizeof(uint32_t) +
+			object->input_indirectsym_pad;
+		}
+	    }
+
+	    /*
+	     * Determine the offset where the remaining symbolic info will start
+	     * in the output file (if any).
+	     */
+	    offset = get_starting_syminfo_offset(object);
+
+	    /*
+	     * For a full symbol strip all these values in the output file are
+	     * set to zero.
+	     */
 	    object->st->symoff = 0;
 	    object->st->nsyms = 0;
 	    object->st->stroff = 0;
@@ -1508,27 +1615,25 @@ struct object *object)
 		object->dyst->iundefsym = 0;
 		object->dyst->nundefsym = 0;
 	    }
+
+	    /*
+	     * This will accumulate any remaining symbolic info size in the
+	     * output file.
+	     */
+	    object->output_sym_info_size = 0;
+
 	    /*
 	     * We set these so that checking can be done below to report the
 	     * symbols that can't be stripped because of relocation entries
-	     * or indirect symbol table entries.  If these table are non-zero
-	     * number of entries it will be an error as we are trying to
-	     * strip everything.
+	     * or indirect symbol table entries.  Normally if these table have a
+	     * non-zero number of entries it will be an error as we are trying
+	     * to strip everything.  But it maybe that there are only LOCAL
+	     * indirect entries which is odd but will be OK.
 	     */
 	    if(object->dyst != NULL){
 		if(object->dyst->nextrel != 0){
 		    object->output_ext_relocs = (struct relocation_info *)
 			(object->object_addr + object->dyst->extreloff);
-		}
-		if(object->dyst->nindirectsyms != 0){
-		    object->output_indirect_symtab = (unsigned long *)
-			(object->object_addr +
-			 object->dyst->indirectsymoff);
-		    if(object->object_byte_sex != host_byte_sex)
-			swap_indirect_symbols(
-			    object->output_indirect_symtab,
-			    object->dyst->nindirectsyms,
-			    object->object_byte_sex);
 		}
 		/*
 		 * Since this file has a dynamic symbol table and if this file
@@ -1542,6 +1647,29 @@ struct object *object)
 			(object->object_addr + object->dyst->locreloff);
 		    object->output_sym_info_size +=
 			object->dyst->nlocrel * sizeof(struct relocation_info);
+
+		    object->dyst->locreloff = offset;
+		    offset += object->dyst->nlocrel *
+			      sizeof(struct relocation_info);
+		}
+
+		if(object->dyst->nindirectsyms != 0){
+		    object->output_indirect_symtab = (uint32_t *)
+			(object->object_addr +
+			 object->dyst->indirectsymoff);
+		    if(object->object_byte_sex != host_byte_sex)
+			swap_indirect_symbols(
+			    object->output_indirect_symtab,
+			    object->dyst->nindirectsyms,
+			    object->object_byte_sex);
+
+		    object->output_sym_info_size +=
+		    	object->dyst->nindirectsyms * sizeof(uint32_t) +
+			object->input_indirectsym_pad;
+
+		    object->dyst->indirectsymoff = offset;
+		    offset += object->dyst->nindirectsyms * sizeof(uint32_t) +
+			      object->input_indirectsym_pad;
 		}
 	    }
 	}
@@ -1735,6 +1863,7 @@ struct object *object)
 		    for(j = 0; j < sg->nsects; j++){
 			section_type = s->flags & SECTION_TYPE;
 			if(section_type == S_LAZY_SYMBOL_POINTERS ||
+			   section_type == S_LAZY_DYLIB_SYMBOL_POINTERS ||
 			   section_type == S_NON_LAZY_SYMBOL_POINTERS)
 			  stride = 4;
 			else if(section_type == S_SYMBOL_STUBS)
@@ -1760,6 +1889,7 @@ struct object *object)
 		    for(j = 0; j < sg64->nsects; j++){
 			section_type = s64->flags & SECTION_TYPE;
 			if(section_type == S_LAZY_SYMBOL_POINTERS ||
+			   section_type == S_LAZY_DYLIB_SYMBOL_POINTERS ||
 			   section_type == S_NON_LAZY_SYMBOL_POINTERS)
 			  stride = 8;
 			else if(section_type == S_SYMBOL_STUBS)
@@ -1784,6 +1914,68 @@ struct object *object)
 		swap_indirect_symbols(object->output_indirect_symtab,
 		    object->dyst->nindirectsyms, object->object_byte_sex);
 	}
+
+	/*
+	 * Issue a warning if object file has a code signature that the
+	 * operation will invalidate it.
+	 */
+	if(object->code_sig_cmd != NULL)
+	    warning_arch(arch, member, "changes being made to the file will "
+		"invalidate the code signature in: ");
+}
+
+/*
+ * get_starting_syminfo_offset() returns the starting offset of the symbolic
+ * info in the object file.
+ */
+static
+unsigned long
+get_starting_syminfo_offset(
+struct object *object)
+{
+    unsigned long offset;
+
+	if(object->seg_linkedit != NULL ||
+	   object->seg_linkedit64 != NULL){
+	    if(object->mh != NULL)
+		offset = object->seg_linkedit->fileoff;
+	    else
+		offset = object->seg_linkedit64->fileoff;
+	}
+	else{
+	    offset = ULONG_MAX;
+	    if(object->dyst != NULL &&
+	       object->dyst->nlocrel != 0 &&
+	       object->dyst->locreloff < offset)
+		offset = object->dyst->locreloff;
+	    if(object->st->nsyms != 0 &&
+	       object->st->symoff < offset)
+		offset = object->st->symoff;
+	    if(object->dyst != NULL &&
+	       object->dyst->nextrel != 0 &&
+	       object->dyst->extreloff < offset)
+		offset = object->dyst->extreloff;
+	    if(object->dyst != NULL &&
+	       object->dyst->nindirectsyms != 0 &&
+	       object->dyst->indirectsymoff < offset)
+		offset = object->dyst->indirectsymoff;
+	    if(object->dyst != NULL &&
+	       object->dyst->ntoc != 0 &&
+	       object->dyst->tocoff < offset)
+		offset = object->dyst->tocoff;
+	    if(object->dyst != NULL &&
+	       object->dyst->nmodtab != 0 &&
+	       object->dyst->modtaboff < offset)
+		offset = object->dyst->modtaboff;
+	    if(object->dyst != NULL &&
+	       object->dyst->nextrefsyms != 0 &&
+	       object->dyst->extrefsymoff < offset)
+		offset = object->dyst->extrefsymoff;
+	    if(object->st->strsize != 0 &&
+	       object->st->stroff < offset)
+		offset = object->st->stroff;
+	} 
+	return(offset);
 }
 
 /*
@@ -2012,17 +2204,25 @@ enum byte_sex host_byte_sex)
 			object->output_indirect_symtab[reserved1 + k] |=
 				INDIRECT_SYMBOL_ABS;
 		    made_local = TRUE;
-		    if(object->mh != NULL){
-			value = symbols[index].n_value;
-			if(object->object_byte_sex != host_byte_sex)
-			    value = SWAP_LONG(value);
-			*(uint32_t *)(contents + k * 4) = value;
-		    }
-		    else{
-			value64 = symbols64[index].n_value;
-			if(object->object_byte_sex != host_byte_sex)
-			    value64 = SWAP_LONG_LONG(value64);
-			*(uint64_t *)(contents + k * 8) = value64;
+		    /*
+		     * When creating a stub shared library the section contents
+		     * are not updated since they will be stripped.
+		     */
+		    if(object->mh_filetype != MH_DYLIB_STUB){
+			if(object->mh != NULL){
+			    value = symbols[index].n_value;
+			    if (symbols[index].n_desc & N_ARM_THUMB_DEF)
+				value |= 1;
+			    if(object->object_byte_sex != host_byte_sex)
+				value = SWAP_LONG(value);
+			    *(uint32_t *)(contents + k * 4) = value;
+			}
+			else{
+			    value64 = symbols64[index].n_value;
+				if(object->object_byte_sex != host_byte_sex)
+				value64 = SWAP_LONG_LONG(value64);
+			    *(uint64_t *)(contents + k * 8) = value64;
+			}
 		    }
 		}
 #ifdef NMEDIT
@@ -2125,20 +2325,13 @@ strip_symtab(
 struct arch *arch,
 struct member *member,
 struct object *object,
-struct nlist *symbols,
-struct nlist_64 *symbols64,
-unsigned long nsyms,
-char *strings,
-unsigned long strsize,
 struct dylib_table_of_contents *tocs,
 unsigned long ntoc,
 struct dylib_module *mods,
 struct dylib_module_64 *mods64,
 unsigned long nmodtab,
 struct dylib_reference *refs,
-unsigned long nextrefsyms,
-unsigned long *indirectsyms,
-unsigned long nindirectsyms)
+unsigned long nextrefsyms)
 {
     unsigned long i, j, k, n, inew_syms, save_debug, missing_syms;
     unsigned long missing_symbols;
@@ -2160,12 +2353,11 @@ unsigned long nindirectsyms)
     uint64_t n_value;
     uint32_t module_name, iextdefsym, nextdefsym, ilocalsym, nlocalsym;
     uint32_t irefsym, nrefsym;
+    enum bool has_dwarf;
 
 	save_debug = 0;
 	if(saves != NULL)
 	    free(saves);
-	saves = (long *)allocate(nsyms * sizeof(long));
-	bzero(saves, nsyms * sizeof(long));
 	changes = NULL;
 	for(i = 0; i < nsave_symbols; i++)
 	    save_symbols[i].sym = NULL;
@@ -2184,6 +2376,66 @@ unsigned long nindirectsyms)
 	new_nextdefsym = 0;
 	new_nundefsym = 0;
 	new_ext_strsize = 0;
+
+	/*
+	 * If this an object file that has DWARF debugging sections to strip
+	 * then we have to run ld -r on it.
+	 */
+	if(object->mh_filetype == MH_OBJECT && (Sflag || xflag)){
+	    has_dwarf = FALSE;
+	    lc = object->load_commands;
+	    if(object->mh != NULL)
+		ncmds = object->mh->ncmds;
+	    else
+		ncmds = object->mh64->ncmds;
+	    for(i = 0; i < ncmds && has_dwarf == FALSE; i++){
+		if(lc->cmd == LC_SEGMENT){
+		    sg = (struct segment_command *)lc;
+		    s = (struct section *)((char *)sg +
+					    sizeof(struct segment_command));
+		    for(j = 0; j < sg->nsects; j++){
+			if(s->flags & S_ATTR_DEBUG){
+			    has_dwarf = TRUE;
+			    break;
+			}
+			s++;
+		    }
+		}
+		else if(lc->cmd == LC_SEGMENT_64){
+		    sg64 = (struct segment_command_64 *)lc;
+		    s64 = (struct section_64 *)((char *)sg64 +
+					    sizeof(struct segment_command_64));
+		    for(j = 0; j < sg64->nsects; j++){
+			if(s64->flags & S_ATTR_DEBUG){
+			    has_dwarf = TRUE;
+			    break;
+			}
+			s64++;
+		    }
+		}
+		lc = (struct load_command *)((char *)lc + lc->cmdsize);
+	    }
+#ifdef NOTDEF
+	    /*
+	     * Because of the bugs in ld(1) for:
+	     * radr://5675774 ld64 should preserve JBSR relocations without
+	     *		      -static
+	     * radr://5658046 cctools-679 creates scattered relocations in
+	     *                __TEXT,__const section in kexts, which breaks
+	     *		      kexts built for older systems
+	     * we can't use ld -r to strip dwarf info until these are fixed.
+	     */
+	    if(has_dwarf == TRUE)
+		make_ld_r_object(arch, member, object);
+#endif
+	}
+
+	/*
+	 * Since make_ld_r_object() may create an object with more symbols
+	 * this has to be done after make_ld_r_object() and nsyms is updated.
+	 */
+	saves = (long *)allocate(nsyms * sizeof(long));
+	bzero(saves, nsyms * sizeof(long));
 
 	/*
 	 * Gather an array of section struct pointers so we can later determine
@@ -2288,12 +2540,12 @@ unsigned long nindirectsyms)
 	    }
 	    if((n_type & N_EXT) == 0){ /* local symbol */
 		/*
-		 * strip -x on an x86_64 .o file should do nothing.
+		 * strip -x or -X on an x86_64 .o file should do nothing.
 		 */
 		if(object->mh == NULL && 
 		   object->mh64->cputype == CPU_TYPE_X86_64 &&
 		   object->mh64->filetype == MH_OBJECT &&
-		   xflag == 1){
+		   (xflag == 1 || Xflag == 1)){
 		    if(n_strx != 0)
 			new_strsize += strlen(strings + n_strx) + 1;
 		    new_nlocalsym++;
@@ -2465,7 +2717,13 @@ unsigned long nindirectsyms)
 		}
 	    }
 	    else{ /* global symbol */
-		if(Rfile){
+		/*
+		 * strip -R on an x86_64 .o file should do nothing.
+		 */
+		if(Rfile &&
+		   (object->mh != NULL ||
+		    object->mh64->cputype != CPU_TYPE_X86_64 ||
+		    object->mh64->filetype != MH_OBJECT)){
 		    sp = bsearch(strings + n_strx,
 				 remove_symbols, nremove_symbols,
 				 sizeof(struct symbol_list),
@@ -2596,8 +2854,7 @@ unsigned long nindirectsyms)
 		    new_nsyms++;
 		    saves[i] = new_nsyms;
 		}
-		if(object->mh64 != NULL &&
-		   saves[i] == 0 &&
+		if(saves[i] == 0 &&
 		   (n_type & N_TYPE) == N_SECT &&
 		   (n_desc & N_WEAK_DEF) != 0){
 		    if(n_strx != 0){
@@ -2732,7 +2989,13 @@ unsigned long nindirectsyms)
 		}
 	    }
 	    missing_syms = 0;
-	    if(iflag == 0){
+	    /*
+	     * strip -R on an x86_64 .o file should do nothing.
+	     */
+	    if(iflag == 0 &&
+	       (object->mh != NULL ||
+		object->mh64->cputype != CPU_TYPE_X86_64 ||
+		object->mh64->filetype != MH_OBJECT)){
 		for(i = 0; i < nremove_symbols; i++){
 		    if(remove_symbols[i].sym == NULL){
 			if(missing_syms == 0){
@@ -3176,6 +3439,186 @@ unsigned long nindirectsyms)
 }
 
 /*
+ * make_ld_r_object() takes the object file contents referenced by the passed
+ * data structures, writes that to a temporary file, runs "ld -r" plus the
+ * specified stripping option creating a second temporary file, reads that file
+ * in and replaces the object file contents with that and resets the variables
+ * pointing to the symbol, string and indirect tables.
+ */
+static
+void
+make_ld_r_object(
+struct arch *arch,
+struct member *member,
+struct object *object)
+{
+    enum byte_sex host_byte_sex;
+    char *input_file, *output_file;
+    int fd;
+    struct ofile *ld_r_ofile;
+    struct arch *ld_r_archs;
+    unsigned long ld_r_narchs, save_errors;
+
+	host_byte_sex = get_host_byte_sex();
+
+	/*
+	 * Swap the object file back into its bytesex before writing it to the
+	 * temporary file if needed.
+	 */
+	if(object->object_byte_sex != host_byte_sex){
+	    if(object->mh != NULL){
+		if(swap_object_headers(object->mh, object->load_commands) ==
+		   FALSE)
+		    fatal("internal error: swap_object_headers() failed");
+		swap_nlist(symbols, nsyms, object->object_byte_sex);
+	    }
+	    else{
+		if(swap_object_headers(object->mh64, object->load_commands) ==
+		   FALSE)
+		    fatal("internal error: swap_object_headers() failed");
+		swap_nlist_64(symbols64, nsyms, object->object_byte_sex);
+	    }
+	    swap_indirect_symbols(indirectsyms, nindirectsyms, 
+				  object->object_byte_sex);
+	}
+
+	/*
+	 * Create an input object file for the ld -r command from the bytes
+	 * of this arch's object file.
+	 */
+	input_file = makestr("/tmp/strip.XXXXXX", NULL);
+	input_file = mktemp(input_file);
+
+	if((fd = open(input_file, O_WRONLY|O_CREAT, 0600)) < 0)
+	    system_fatal("can't open temporary file: %s", input_file);
+
+	if(write(fd, object->object_addr, object->object_size) !=
+	        object->object_size)
+	    system_fatal("can't write temporary file: %s", input_file);
+
+	if(close(fd) == -1)
+	    system_fatal("can't close temporary file: %s", input_file);
+
+	/*
+	 * Create a temporary name for the output file of the ld -r
+	 */
+	output_file = makestr("/tmp/strip.XXXXXX", NULL);
+	output_file = mktemp(output_file);
+
+	/*
+	 * Create the ld -r command line and execute it.
+	 */
+	reset_execute_list();
+	add_execute_list("ld");
+	add_execute_list("-keep_private_externs");
+	add_execute_list("-r");
+	if(Sflag)
+	    add_execute_list("-S");
+	if(xflag)
+	    add_execute_list("-x");
+	add_execute_list(input_file);
+	add_execute_list("-o");
+	add_execute_list(output_file);
+	if(execute_list(vflag) == 0)
+	    fatal("internal link edit command failed");
+
+	save_errors = errors;
+	errors = 0;
+	/* breakout the output file of the ld -f for processing */
+	ld_r_ofile = breakout(output_file, &ld_r_archs, &ld_r_narchs, FALSE);
+	if(errors)
+	    goto make_ld_r_object_cleanup;
+
+	/* checkout the file for symbol table replacement processing */
+	checkout(ld_r_archs, ld_r_narchs);
+
+	/*
+	 * Make sure the output of the ld -r is an object file with one arch.
+	 */
+	if(ld_r_narchs != 1 ||
+	   ld_r_archs->type != OFILE_Mach_O ||
+	   ld_r_archs->object == NULL ||
+	   ld_r_archs->object->mh_filetype != MH_OBJECT)
+	    fatal("internal link edit command failed to produce a thin Mach-O "
+		  "object file");
+
+	/*
+	 * Now reset all the data of the input object with the ld -r output
+	 * object file.
+	 */
+	nsyms = ld_r_archs->object->st->nsyms;
+	if(ld_r_archs->object->mh != NULL){
+	    symbols = (struct nlist *)
+		       (ld_r_archs->object->object_addr +
+			ld_r_archs->object->st->symoff);
+	    if(ld_r_archs->object->object_byte_sex != host_byte_sex)
+		swap_nlist(symbols, nsyms, host_byte_sex);
+	    symbols64 = NULL;
+	}
+	else{
+	    symbols = NULL;
+	    symbols64 = (struct nlist_64 *)
+		         (ld_r_archs->object->object_addr +
+			  ld_r_archs->object->st->symoff);
+	    if(ld_r_archs->object->object_byte_sex != host_byte_sex)
+		swap_nlist_64(symbols64, nsyms, host_byte_sex);
+	}
+	strings = ld_r_archs->object->object_addr +
+		  ld_r_archs->object->st->stroff;
+	strsize = ld_r_archs->object->st->strsize;
+
+	if(ld_r_archs->object->dyst != NULL &&
+	   ld_r_archs->object->dyst->nindirectsyms != 0){
+	    nindirectsyms = ld_r_archs->object->dyst->nindirectsyms;
+	    indirectsyms = (uint32_t *)
+		(ld_r_archs->object->object_addr +
+		 ld_r_archs->object->dyst->indirectsymoff);
+	    if(ld_r_archs->object->object_byte_sex != host_byte_sex)
+		swap_indirect_symbols(indirectsyms, nindirectsyms,
+				      host_byte_sex);
+	}
+	else{
+	    indirectsyms = NULL;
+	    nindirectsyms = 0;
+	}
+
+	if(ld_r_archs->object->mh != NULL)
+	    ld_r_archs->object->input_sym_info_size =
+		nsyms * sizeof(struct nlist) +
+		strsize;
+	else
+	    ld_r_archs->object->input_sym_info_size =
+		nsyms * sizeof(struct nlist_64) +
+		strsize;
+
+	/*
+	 * Copy over the object struct from the ld -r object file onto the
+	 * input object file.
+	 */
+	*object = *ld_r_archs->object;
+
+	/*
+	 * Save the ofile struct for the ld -r output so it can be umapped when
+	 * we are done.  And free up the ld_r_archs now that we are done with
+	 * them.
+	 */
+	object->ld_r_ofile = ld_r_ofile;
+	free_archs(ld_r_archs, ld_r_narchs);
+
+make_ld_r_object_cleanup:
+	errors += save_errors;
+	/*
+	 * Remove the input and output files and clean up.
+	 */
+	if(unlink(input_file) == -1)
+	    system_fatal("can't remove temporary file: %s", input_file);
+	if(unlink(output_file) == -1)
+	    system_fatal("can't remove temporary file: %s", output_file);
+	free(input_file);
+	free(output_file);
+}
+
+/*
  * strip_LC_UUID_commands() is called when -no_uuid is specified to remove any
  * LC_UUID load commands from the object's load commands.
  */
@@ -3275,10 +3718,148 @@ struct object *object)
 		sg = (struct segment_command *)lc1;
 		if(strcmp(sg->segname, SEG_LINKEDIT) == 0)
 		    arch->object->seg_linkedit = sg;
+		break;
+	    case LC_SEGMENT_SPLIT_INFO:
+		object->split_info_cmd = (struct linkedit_data_command *)lc1;
+		break;
+	    case LC_CODE_SIGNATURE:
+		object->code_sig_cmd = (struct linkedit_data_command *)lc1;
+		break;
 	    }
 	    lc1 = (struct load_command *)((char *)lc1 + lc1->cmdsize);
 	}
 }
+
+#ifndef NMEDIT
+/*
+ * strip_LC_CODE_SIGNATURE_commands() is called when -c is specified to remove
+ * any LC_CODE_SIGNATURE load commands from the object's load commands.
+ */
+static
+void
+strip_LC_CODE_SIGNATURE_commands(
+struct arch *arch,
+struct member *member,
+struct object *object)
+{
+    uint32_t i, ncmds, mh_sizeofcmds, sizeofcmds;
+    struct load_command *lc1, *lc2, *new_load_commands;
+    struct segment_command *sg;
+
+	/*
+	 * See if there is an LC_CODE_SIGNATURE load command and if no command
+	 * just return.
+	 */
+	if(object->code_sig_cmd == NULL)
+	    return;
+
+	/*
+	 * Allocate space for the new load commands and zero it out so any holes
+	 * will be zero bytes.
+	 */
+        if(arch->object->mh != NULL){
+            ncmds = arch->object->mh->ncmds;
+	    mh_sizeofcmds = arch->object->mh->sizeofcmds;
+	}
+	else{
+            ncmds = arch->object->mh64->ncmds;
+	    mh_sizeofcmds = arch->object->mh64->sizeofcmds;
+	}
+	new_load_commands = allocate(mh_sizeofcmds);
+	memset(new_load_commands, '\0', mh_sizeofcmds);
+
+	/*
+	 * Copy all the load commands except the LC_CODE_SIGNATURE load commands
+	 * into the allocated space for the new load commands.
+	 */
+	lc1 = arch->object->load_commands;
+	lc2 = new_load_commands;
+	sizeofcmds = 0;
+	for(i = 0; i < ncmds; i++){
+	    if(lc1->cmd != LC_CODE_SIGNATURE){
+		memcpy(lc2, lc1, lc1->cmdsize);
+		sizeofcmds += lc2->cmdsize;
+		lc2 = (struct load_command *)((char *)lc2 + lc2->cmdsize);
+	    }
+	    lc1 = (struct load_command *)((char *)lc1 + lc1->cmdsize);
+	}
+
+	/*
+	 * Finally copy the updated load commands over the existing load
+	 * commands.
+	 */
+	memcpy(arch->object->load_commands, new_load_commands, sizeofcmds);
+	if(mh_sizeofcmds > sizeofcmds){
+		memset((char *)arch->object->load_commands + sizeofcmds, '\0', 
+			   (mh_sizeofcmds - sizeofcmds));
+	}
+	ncmds -= 1;
+        if(arch->object->mh != NULL) {
+            arch->object->mh->sizeofcmds = sizeofcmds;
+            arch->object->mh->ncmds = ncmds;
+        } else {
+            arch->object->mh64->sizeofcmds = sizeofcmds;
+            arch->object->mh64->ncmds = ncmds;
+        }
+	free(new_load_commands);
+
+	/* reset the pointers into the load commands */
+	object->code_sig_cmd = NULL;
+	lc1 = arch->object->load_commands;
+	for(i = 0; i < ncmds; i++){
+	    switch(lc1->cmd){
+	    case LC_SYMTAB:
+		arch->object->st = (struct symtab_command *)lc1;
+	        break;
+	    case LC_DYSYMTAB:
+		arch->object->dyst = (struct dysymtab_command *)lc1;
+		break;
+	    case LC_TWOLEVEL_HINTS:
+		arch->object->hints_cmd = (struct twolevel_hints_command *)lc1;
+		break;
+	    case LC_PREBIND_CKSUM:
+		arch->object->cs = (struct prebind_cksum_command *)lc1;
+		break;
+	    case LC_SEGMENT:
+		sg = (struct segment_command *)lc1;
+		if(strcmp(sg->segname, SEG_LINKEDIT) == 0)
+		    arch->object->seg_linkedit = sg;
+		break;
+	    case LC_SEGMENT_SPLIT_INFO:
+		object->split_info_cmd = (struct linkedit_data_command *)lc1;
+		break;
+	    }
+	    lc1 = (struct load_command *)((char *)lc1 + lc1->cmdsize);
+	}
+
+	/*
+	 * To get the right amount of the file copied out by writeout() for the
+	 * case when we are stripping out the section contents we already reduce
+	 * the object size by the size of the section contents including the
+	 * padding after the load commands.  So here we need to further reduce
+	 * it by the load command for the LC_CODE_SIGNATURE (a struct
+	 * linkedit_data_command) we are removing.
+	 */
+	object->object_size -= sizeof(struct linkedit_data_command);
+	/*
+ 	 * Then this size minus the size of the input symbolic information is
+	 * what is copied out from the file by writeout().  Which in this case
+	 * is just the new headers.
+	 */
+
+	/*
+	 * Finally for -c the file offset to the link edit information is to be
+	 * right after the load commands.  So reset this for the updated size
+	 * of the load commands without the LC_CODE_SIGNATURE.
+	 */
+	if(object->mh != NULL)
+	    object->seg_linkedit->fileoff = sizeof(struct mach_header) +
+					    sizeofcmds;
+	else
+	    object->seg_linkedit64->fileoff = sizeof(struct mach_header_64) +
+					    sizeofcmds;
+}
+#endif /* !(NMEDIT) */
 
 /*
  * private_extern_reference_by_module() is passed a symbol_index of a private
@@ -3314,7 +3895,7 @@ static
 enum bool
 symbol_pointer_used(
 unsigned long symbol_index,
-unsigned long *indirectsyms,
+uint32_t *indirectsyms,
 unsigned long nindirectsyms)
 {
     unsigned long i;

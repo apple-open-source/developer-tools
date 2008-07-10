@@ -118,6 +118,22 @@ bfd_mach_o_version (abfd)
   return mdata->header.version;
 }
 
+/* APPLE LOCAL shared cache begin
+   If a mach image is in the shared cache is being read straight from memory
+   or from the shared cache file itself, the msbit of FLAGS will be set to
+   1.  */
+bfd_boolean
+bfd_mach_o_in_shared_cached_memory (bfd *abfd)
+{
+  bfd_mach_o_data_struct *mdata = NULL;
+  BFD_ASSERT (bfd_mach_o_valid (abfd));
+  mdata = abfd->tdata.mach_o_data;
+  if (mdata->header.flags & 0x80000000)
+    return 1;
+  return 0;
+}
+/* APPLE LOCAL shared cache end  */
+
 bfd_boolean
 bfd_mach_o_valid (bfd *abfd)
 {
@@ -459,7 +475,14 @@ bfd_mach_o_convert_architecture (bfd_mach_o_cpu_type mtype,
     case BFD_MACH_O_CPU_TYPE_MIPS: *type = bfd_arch_mips; break;
     case BFD_MACH_O_CPU_TYPE_MC98000: *type = bfd_arch_m98k; break;
     case BFD_MACH_O_CPU_TYPE_HPPA: *type = bfd_arch_hppa; break;
-    case BFD_MACH_O_CPU_TYPE_ARM: *type = bfd_arch_arm; break;
+    case BFD_MACH_O_CPU_TYPE_ARM: 
+      *type = bfd_arch_arm;
+      if (msubtype == BFD_MACH_O_CPU_SUBTYPE_ARM_4T)
+	*subtype = bfd_mach_arm_4T;
+      else if (msubtype == BFD_MACH_O_CPU_SUBTYPE_ARM_6)
+	*subtype = bfd_mach_arm_6;
+
+      break;
     case BFD_MACH_O_CPU_TYPE_MC88000: *type = bfd_arch_m88k; break;
     case BFD_MACH_O_CPU_TYPE_SPARC:
       *type = bfd_arch_sparc; 
@@ -887,6 +910,8 @@ bfd_mach_o_write_contents (bfd *abfd)
 	case BFD_MACH_O_LC_PREBOUND_DYLIB:
 	case BFD_MACH_O_LC_ROUTINES:
 	case BFD_MACH_O_LC_SUB_FRAMEWORK:
+	case BFD_MACH_O_LC_LAZY_LOAD_DYLIB:
+	case BFD_MACH_O_LC_ENCRYPTION_INFO:
 	  break;
 	default:
 	  fprintf (stderr,
@@ -1021,6 +1046,11 @@ bfd_mach_o_make_bfd_section (bfd *abfd, bfd_mach_o_section *section)
   else
     bfdsec->flags = SEC_HAS_CONTENTS | SEC_LOAD | SEC_ALLOC | SEC_CODE;
 
+  /* The __TEXT.__text segment is always readonly. */
+  if (strcmp (section->segname, "__TEXT") == 0
+      && (section->sectname[0] == '\0' || strcmp (section->sectname, "__text") == 0))
+    bfdsec->flags |= SEC_READONLY;
+
   return bfdsec;
 }
 
@@ -1089,6 +1119,35 @@ bfd_mach_o_scan_read_section_64 (bfd *abfd,
 
   return 0;
 }
+
+#define ARM_THREAD_STATE_STR	"ARM_THREAD_STATE"
+#define ARM_VFP_STATE_STR	"ARM_VFP_STATE"
+#define ARM_EXCEPTION_STATE_STR	"ARM_EXCEPTION_STATE"
+
+static const char *
+bfd_mach_o_arm_flavour_string (unsigned int flavour)
+{
+  switch ((int) flavour)
+    {
+    case BFD_MACH_O_ARM_THREAD_STATE: return ARM_THREAD_STATE_STR;
+    case BFD_MACH_O_ARM_VFP_STATE: return ARM_VFP_STATE_STR;
+    case BFD_MACH_O_ARM_EXCEPTION_STATE: return ARM_EXCEPTION_STATE_STR;
+    default: return "UNKNOWN";
+    }
+}
+
+static unsigned int
+bfd_mach_o_arm_flavour_from_string(const char* s)
+{
+  if (strcmp(s, ARM_THREAD_STATE_STR) == 0)
+    return BFD_MACH_O_ARM_THREAD_STATE;
+  else if (strcmp(s, ARM_VFP_STATE_STR) == 0)
+    return BFD_MACH_O_ARM_VFP_STATE;
+  else if (strcmp(s, ARM_EXCEPTION_STATE_STR) == 0)
+    return BFD_MACH_O_ARM_EXCEPTION_STATE;
+  return 0;
+}
+
 
 static int
 bfd_mach_o_scan_read_section (bfd *abfd,
@@ -1416,6 +1475,9 @@ bfd_mach_o_flavour_from_string(unsigned long cputype, const char* s)
 	case BFD_MACH_O_CPU_TYPE_X86_64:
 	  flavour = bfd_mach_o_i386_flavour_from_string (s);
 	  break;
+	case BFD_MACH_O_CPU_TYPE_ARM:
+	  flavour = bfd_mach_o_arm_flavour_from_string (s);
+	  break;
 	default:
 	  break;
 	}
@@ -1624,6 +1686,9 @@ bfd_mach_o_scan_read_thread (bfd *abfd, bfd_mach_o_load_command *command)
 	case BFD_MACH_O_CPU_TYPE_X86_64:
 	  flavourstr = bfd_mach_o_i386_flavour_string (cmd->flavours[i].flavour);
 	  break;
+	case BFD_MACH_O_CPU_TYPE_ARM:
+	  flavourstr = bfd_mach_o_arm_flavour_string (cmd->flavours[i].flavour);
+	  break;
 	default:
 	  flavourstr = "UNKNOWN_ARCHITECTURE";
 	  break;
@@ -1667,6 +1732,9 @@ bfd_mach_o_scan_read_dysymtab (bfd *abfd, bfd_mach_o_load_command *command)
   struct bfd_section *stabs_pseudo_section;
   asection *bfdsec;
   int nlist_size;
+  bfd_boolean in_mem_shared_cache;
+  
+  in_mem_shared_cache = bfd_mach_o_in_shared_cached_memory (abfd);
 
   BFD_ASSERT (command->type == BFD_MACH_O_LC_DYSYMTAB);
 
@@ -1706,19 +1774,35 @@ bfd_mach_o_scan_read_dysymtab (bfd *abfd, bfd_mach_o_load_command *command)
      This is especially useful if we want to minimize the amount of
      minsyms we create initially.  */
 
-  /* First, check that our assumption about the ordering is correct.
-     ilocalsym should always be less than (come before) 
-     iextdefsym and iundefsym.  */
+  /* APPLE LOCAL shared cache
+     If we are parsing an in memory mach image that is in the shared
+     cache, we need not check for continuity in the dysymtab load commands
+     since we know they aren't contiguous. These kinds of mach images all 
+     share one big symbol and string table, and the dysymtab load command 
+     tells which symbols belong to each image. We create a 
+     "LC_DYSYMTAB.localstabs" for these files that won't get used,
+     will contain no entries, or one bogus entry created by dyld. We also
+     create a "LC_DYSYMTAB.nonlocalstabs" section that contains all of the 
+     extdef symbols. If we need to parse the undef symbols, we may need to
+     create a "LC_DYSYMTAB.undefstabs" section that we can check for since
+     items in the shared cache do not have contiguous EXTDEF and UNDEF 
+     symbols.  */
+     
+  if (in_mem_shared_cache == 0)
+    {
+      /* First, check that our assumption about the ordering is correct.
+	 ilocalsym should always be less than (come before) 
+	 iextdefsym and iundefsym.  */
+      if (seg->ilocalsym >= seg->iextdefsym || seg->ilocalsym >= seg->iundefsym)
+	return 0;
 
-  if (seg->ilocalsym >= seg->iextdefsym || seg->ilocalsym >= seg->iundefsym)
-    return 0;
+      /* Check that the three types - local, external, undefined - are contiguous
+	 and start at offset 0 like they're supposed to. */
 
-  /* Check that the three types - local, external, undefined - are contiguous
-     and start at offset 0 like they're supposed to. */
-
-  if (seg->ilocalsym != 0 || seg->nlocalsym != seg->iextdefsym ||
-      seg->nlocalsym + seg->nextdefsym != seg->iundefsym)
-    return 0;
+      if (seg->ilocalsym != 0 || seg->nlocalsym != seg->iextdefsym ||
+	  seg->nlocalsym + seg->nextdefsym != seg->iundefsym)
+	return 0;
+    }
 
   /* nlist's are different sizes for 32 bit & 64 bit PPC...  */
 
@@ -1729,42 +1813,69 @@ bfd_mach_o_scan_read_dysymtab (bfd *abfd, bfd_mach_o_load_command *command)
   if (stabs_pseudo_section == NULL)
     return 0;
 
-  prefix = "LC_DYSYMTAB.localstabs";
+  /* APPLE LOCAL shared cache - only create the fake localstabs section if
+     we have some local symbols.  */
+  if (seg->nlocalsym > 0)
+    {
+      prefix = "LC_DYSYMTAB.localstabs";
+      
+      sname = (char *) bfd_alloc (abfd, strlen (prefix) + 1);
+      if (sname == NULL)
+	return -1;
+      strcpy (sname, prefix);
+
+      bfdsec = bfd_make_section_anyway (abfd, sname);
+      if (bfdsec == NULL)
+	return -1;
+
+      bfdsec->vma = 0;
+      bfdsec->lma = 0;
+      bfdsec->size = seg->nlocalsym * nlist_size;
+      bfdsec->filepos = stabs_pseudo_section->filepos + (seg->ilocalsym * nlist_size);
+      bfdsec->alignment_power = 0;
+      bfdsec->flags = SEC_HAS_CONTENTS;
+    }
   
-  sname = (char *) bfd_alloc (abfd, strlen (prefix) + 1);
-  if (sname == NULL)
-    return -1;
-  strcpy (sname, prefix);
+  /* APPLE LOCAL shared cache - only create the fake localstabs section if
+     we have some local symbols.  */
+  if (seg->nextdefsym > 0 || seg->nundefsym > 0)
+    {
+      unsigned long num_nonlocalstabs;
+      if (in_mem_shared_cache)
+	{
+	  /* In the memory based shared cache mach-o images we just want
+	     the EXT symbols since the UNDEF symbols do not immediately 
+	     follow the EXT symbols.  */
+	  num_nonlocalstabs = seg->nextdefsym;
+	}
+      else
+	{
+	  /* For all others the EXT and UNDEF symbols are contiguous.  */
+	  num_nonlocalstabs = seg->nextdefsym + seg->nundefsym;
+	}
 
-  bfdsec = bfd_make_section_anyway (abfd, sname);
-  if (bfdsec == NULL)
-    return -1;
+      if (num_nonlocalstabs > 0)
+	{
+	  prefix = "LC_DYSYMTAB.nonlocalstabs";
+	  
+	  sname = (char *) bfd_alloc (abfd, strlen (prefix) + 1);
+	  if (sname == NULL)
+	    return -1;
+	  strcpy (sname, prefix);
 
-  bfdsec->vma = 0;
-  bfdsec->lma = 0;
-  bfdsec->size = seg->nlocalsym * nlist_size;
-  bfdsec->filepos = stabs_pseudo_section->filepos + (seg->ilocalsym * nlist_size);
-  bfdsec->alignment_power = 0;
-  bfdsec->flags = SEC_HAS_CONTENTS;
+	  bfdsec = bfd_make_section_anyway (abfd, sname);
+	  if (bfdsec == NULL)
+	    return -1;
 
-  prefix = "LC_DYSYMTAB.nonlocalstabs";
-  
-  sname = (char *) bfd_alloc (abfd, strlen (prefix) + 1);
-  if (sname == NULL)
-    return -1;
-  strcpy (sname, prefix);
-
-  bfdsec = bfd_make_section_anyway (abfd, sname);
-  if (bfdsec == NULL)
-    return -1;
-
-  bfdsec->vma = 0;
-  bfdsec->lma = 0;
-  bfdsec->size = (seg->nextdefsym * nlist_size) + (seg->nundefsym * nlist_size);
-  bfdsec->filepos =  stabs_pseudo_section->filepos + (seg->iextdefsym * nlist_size);
-  bfdsec->alignment_power = 0;
-  bfdsec->flags = SEC_HAS_CONTENTS;
-
+	  bfdsec->vma = 0;
+	  bfdsec->lma = 0;
+	  bfdsec->size = (num_nonlocalstabs * nlist_size);
+	  bfdsec->filepos =  stabs_pseudo_section->filepos + 
+			     (seg->iextdefsym * nlist_size);
+	  bfdsec->alignment_power = 0;
+	  bfdsec->flags = SEC_HAS_CONTENTS;
+	}
+    }
   return 0;
 }
 
@@ -2021,6 +2132,18 @@ bfd_mach_o_scan_read_command (bfd *abfd, bfd_mach_o_load_command *command)
     case BFD_MACH_O_LC_RPATH:
     case BFD_MACH_O_LC_CODE_SIGNATURE:
     case BFD_MACH_O_LC_SEGMENT_SPLIT_INFO:
+    case BFD_MACH_O_LC_LAZY_LOAD_DYLIB:
+      break;
+    case BFD_MACH_O_LC_ENCRYPTION_INFO:
+      {
+	char cryptid_buf[4];
+
+	bfd_seek (abfd, command->offset + 16, SEEK_SET);
+	if (bfd_bread ((PTR) cryptid_buf, 4, abfd) != 4)
+	  return -1;
+	
+	abfd->tdata.mach_o_data->encrypted = (bfd_h_get_32 (abfd, cryptid_buf));
+      }
       break;
     default:
       fprintf (stderr, "unable to read unknown load command 0x%lx\n",
@@ -2133,6 +2256,19 @@ bfd_mach_o_scan_start_address (bfd *abfd)
 
           abfd->start_address = bfd_h_get_64 (abfd, buf);
         }
+      else if ((mdata->header.cputype == BFD_MACH_O_CPU_TYPE_ARM)
+               && (cmd->flavours[i].flavour == BFD_MACH_O_ARM_THREAD_STATE))
+        {
+          unsigned char buf[8];
+	  
+          bfd_seek (abfd, cmd->flavours[i].offset + 60, SEEK_SET);
+	  
+          if (bfd_bread (buf, 4, abfd) != 4)
+            return -1;
+	  
+          abfd->start_address = bfd_h_get_32 (abfd, buf);
+        }
+      
       /* APPLE LOCAL begin x86_64 */
       else if ((mdata->header.cputype == BFD_MACH_O_CPU_TYPE_X86_64)
                && (cmd->flavours[i].flavour == BFD_MACH_O_x86_THREAD_STATE64))
@@ -2168,6 +2304,7 @@ bfd_mach_o_scan (bfd *abfd,
 
   mdata->header = *header;
   mdata->symbols = NULL;
+  mdata->scanning_load_cmds = 1;
 
   abfd->flags = (abfd->xvec->object_flags
 		 | (abfd->flags & (BFD_IN_MEMORY | BFD_IO_FUNCS)));
@@ -2188,9 +2325,12 @@ bfd_mach_o_scan (bfd *abfd,
 
   if (header->ncmds != 0)
     {
+      /* Use zalloc so we set all the "type" fields to 0 - we use that
+        to indicate that we have not read the command data for that
+        command in yet.  */
       mdata->commands =
 	((bfd_mach_o_load_command *)
-	 bfd_alloc (abfd, header->ncmds * sizeof (bfd_mach_o_load_command)));
+	 bfd_zalloc (abfd, header->ncmds * sizeof (bfd_mach_o_load_command)));
       if (mdata->commands == NULL)
 	return -1;
 
@@ -2222,6 +2362,7 @@ bfd_mach_o_scan (bfd *abfd,
     }
 
   bfd_mach_o_flatten_sections (abfd);
+  mdata->scanning_load_cmds = 0;
 
   return 0;
 }
@@ -2251,6 +2392,7 @@ bfd_mach_o_mkobject (bfd *abfd)
   mdata->nsects = 0;
   mdata->sections = NULL;
   mdata->ibfd = NULL;
+  mdata->encrypted = 0;
 
   return TRUE;
 }
@@ -2350,6 +2492,23 @@ bfd_mach_o_core_p (bfd *abfd)
   if (preserve.marker != NULL)
     bfd_preserve_restore (abfd, &preserve);
   return NULL;
+}
+
+/* APPLE LOCAL: Return 1 if the bfd is a stub library -- that is, it has had
+   its text stripped away and will cause gdb all sorts of problems if it tries
+   to read it.  */
+
+int
+bfd_mach_o_stub_library (bfd *abfd)
+{
+  bfd_mach_o_header header;
+  if (bfd_mach_o_read_header (abfd, &header) != 0)
+    return 0;
+
+  if (header.filetype == BFD_MACH_O_MH_DYLIB_STUB)
+    return 1;
+
+  return 0;
 }
 
 typedef struct mach_o_fat_archentry
@@ -2586,6 +2745,8 @@ bfd_mach_o_stack_addr (enum bfd_mach_o_cpu_type type)
       return 0xc0000000;
     case BFD_MACH_O_CPU_TYPE_I386:
       return 0xc0000000;
+    case BFD_MACH_O_CPU_TYPE_ARM:
+      return 0x40000000;
     case BFD_MACH_O_CPU_TYPE_SPARC:
       return 0xf0000000;
     case BFD_MACH_O_CPU_TYPE_I860:
@@ -2771,6 +2932,19 @@ bfd_mach_o_get_uuid (bfd *abfd, unsigned char *buf, unsigned long buf_len)
 	}
     }
   return FALSE;
+}
+
+/* Return TRUE if ABFD is an encrypted binary.  In this case, gdb
+   won't want to look at the contents of the binary on disk, but 
+   rather read it from memory.  */
+
+bfd_boolean
+bfd_mach_o_encrypted_binary (bfd *abfd)
+{
+  if (abfd->tdata.mach_o_data->encrypted == 0)
+    return FALSE;
+  else
+    return TRUE;
 }
 
 /* Add free_cached_info functions so we can actually close the

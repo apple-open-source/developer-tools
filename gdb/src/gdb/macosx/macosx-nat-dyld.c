@@ -29,6 +29,7 @@
 #include <mach/vm_region.h>
 #include <mach/machine/vm_param.h>
 #include <mach-o/loader.h>
+#include <sys/time.h>
 
 #include "defs.h"
 #include "inferior.h"
@@ -47,6 +48,8 @@
 #include "objc-lang.h"
 #include "gdbarch.h"
 #include "arch-utils.h"
+#include "ui-out.h"
+#include "osabi.h"
 
 #ifdef USE_MMALLOC
 #include <mmalloc.h>
@@ -75,6 +78,8 @@
 #elif defined (TARGET_I386)
 #include "amd64-tdep.h"
 #include "i386-tdep.h"
+#elif defined (TARGET_ARM)
+#include "arm-tdep.h"
 #else
 #error "Unrecognized target architecture."
 #endif
@@ -89,6 +94,9 @@
 /* MACOSX_STATUS is only defined for native builds, not cross builds.  */
 extern macosx_inferior_status *macosx_status;
 #endif
+
+extern struct target_ops exec_ops;
+
 /* The dyld status is now in a separate structure to support remote
    debugging using gdbserver.  */
 macosx_dyld_thread_status macosx_dyld_status;
@@ -102,7 +110,7 @@ int dyld_load_dyld_shlib_symbols_flag = 1;
 int dyld_load_cfm_shlib_symbols_flag = 1;
 int dyld_print_basenames_flag = 0;
 int dyld_reload_on_downgrade_flag = 0;
-static int pre_slide_libraries_flag = 0;
+static int pre_slide_libraries_flag = 1;
 char *dyld_load_rules = NULL;
 char *dyld_minimal_load_rules = NULL;
 static char *shlib_path_subst_cmd_args = NULL;
@@ -122,13 +130,23 @@ int dyld_stop_on_shlibs_added = 1;
 int dyld_stop_on_shlibs_updated = 1;
 int dyld_combine_shlibs_added = 1;
 
+/* This is the function that libSystem calls to tell dyld that 
+   the malloc system has been initialized.  
+   This function name can be mangled in one of two ways.  We must check
+   for both.  */
+
+char *malloc_inited_callback = "_Z21registerThreadHelpersPKN4dyld16LibSystemHelpersE";
+char *malloc_inited_callback_alt = "_ZL21registerThreadHelpersPKN4dyld16LibSystemHelpersE";
+
 /* A structure filled in by dyld in the inferior process.
-   There is only one of these in the inferior.  */
+   There is only one of these in the inferior.  
+   This is an internal representation of the 'struct dyld_all_image_infos' 
+   defined in <mach-o/dyld_images.h> */
 
 struct dyld_raw_infos
 {
-  uint32_t version;             /* MacOS X 10.4 == 1 */
-  uint32_t num_info;            /* Number of elements in the following array */
+  uint32_t version;          /* MacOS X 10.4 == 1; 2 == after Mac OS X 10.5 */
+  uint32_t num_info;         /* Number of elements in the following array */
 
   /* Array of images (struct dyld_raw_info here in gdb) that are loaded
      in the inferior process.
@@ -152,6 +170,16 @@ struct dyld_raw_infos
      This is either 4 or 8 bytes in the inferior, depending on wordsize. */
 
   CORE_ADDR dyld_notify;
+
+  int process_detached_from_shared_region;
+
+  /* The following fields are only present when version is higher than 1.  */
+
+  /* This field indicates that the malloc library in libSystem is ready
+     to use.  It is set by dyld.  */
+  int libsystem_initialized;
+
+  CORE_ADDR dyld_image_load_address;
 };
 
 /* A structure filled in by dyld in the inferior process.
@@ -193,15 +221,9 @@ static int dyld_info_process_raw (struct macosx_dyld_thread_status *status,
 static void macosx_set_auto_start_dyld (char *args, int from_tty,
                                         struct cmd_list_element *c);
 
-static int target_read_mach_header (CORE_ADDR addr, 
-				    struct mach_header *mh);
-				    
 static int target_read_dylib_command (CORE_ADDR addr, 
 				      struct dylib_command *dcmd);
 				      
-static int target_read_load_command (CORE_ADDR addr, 
-				     struct load_command *load_cmd);
-				     
 static int target_read_segment_command (CORE_ADDR addr, 
 					struct segment_command *segcmd);
 					
@@ -259,6 +281,30 @@ macosx_clear_start_breakpoint (void)
   remove_solib_event_breakpoints ();
 }
 
+/* Check if we're debugging via gdb remote protocol (Rosetta debugging,
+   gdbserver debugging, remote nub debugging) - in which case we can't
+   do simple mach vm mapping calls on the inferior process.  */
+
+int
+target_is_remote ()
+{
+  if (strstr (current_target.to_shortname, "remote") == NULL
+      && strstr (current_target.to_shortname, "async") == NULL)
+    return 0;
+  if (strcmp (current_target.to_shortname, "remote"))
+    return 1;
+  if (strcmp (current_target.to_shortname, "remote-mobile"))
+    return 1;
+  if (strcmp (current_target.to_shortname, "extended-remote"))
+    return 1;
+  if (strcmp (current_target.to_shortname, "extended-async"))
+    return 1;
+  if (strcmp (current_target.to_shortname, "async"))
+    return 1;
+
+  return 0;
+}
+
 static CORE_ADDR
 lookup_dyld_address (macosx_dyld_thread_status *status, const char *s)
 {
@@ -297,6 +343,12 @@ macosx_init_addresses (macosx_dyld_thread_status *s)
   dyld_read_raw_infos (s->dyld_image_infos, &infos);
 
   s->dyld_version = infos.version;
+  if (infos.version >= 2)
+    {
+      s->libsystem_initialized = infos.libsystem_initialized;
+      macosx_set_malloc_inited (s->libsystem_initialized);
+    }
+
   if (s->dyld_slide != INVALID_ADDRESS)
     s->dyld_notify = infos.dyld_notify + s->dyld_slide;
   else
@@ -398,6 +450,21 @@ target_read_load_command (CORE_ADDR addr, struct load_command *s)
     {
       EXTRACT_INT_MEMBER (struct load_command, s, cmd);
       EXTRACT_INT_MEMBER (struct load_command, s, cmdsize);
+    }
+  return error;
+}
+
+int 
+target_read_uuid (CORE_ADDR addr, unsigned char *uuid)
+{
+  int error;
+  struct uuid_command s;
+  gdb_assert (addr != INVALID_ADDRESS);
+  error = target_read_memory (addr, (gdb_byte *)&s, sizeof (s));
+  
+  if (error == 0)
+    {
+      memcpy (uuid, s.uuid, 16);
     }
   return error;
 }
@@ -516,6 +583,13 @@ dyld_starts_here_in_memory (CORE_ADDR addr)
 static int
 dyld_starts_here_p (mach_vm_address_t addr)
 {
+
+  /* If we're using the remote protocol, we won't be able to do
+      mach vm region calls unless we add something special to gdbserver. 
+      We will try just reading memory  */
+  if (target_is_remote ())
+    return dyld_starts_here_in_memory (addr);
+
 #if defined (NM_NEXTSTEP)
   mach_vm_address_t address = addr;
   mach_vm_size_t size = 0;
@@ -595,15 +669,35 @@ dyld_starts_here_p (mach_vm_address_t addr)
     }
 #endif
 
+  /* This is pretty crude, but here's where we first figure out the
+     architecture of the dyld we are attaching to.  So if we have been
+     given an executable file, and it's of the wrong architecture,
+     then we just bag out.  */
+
+  if (mh->magic == MH_MAGIC_64)
+    {
+      if (exec_bfd 
+	  && gdbarch_lookup_osabi_from_bfd (exec_bfd) != GDB_OSABI_DARWIN64)
+	  {
+	    error ("The exec file is 32 bits but the attach target is 64 bits.\n"
+	      "Quit gdb & restart, using \"--arch\" to select the 64 bit fork of the executable.");
+	      }
+    }
+  else if (mh->magic == MH_MAGIC)
+    {
+      if (exec_bfd 
+	  && gdbarch_lookup_osabi_from_bfd (exec_bfd) != GDB_OSABI_DARWIN
+	  && gdbarch_lookup_osabi_from_bfd (exec_bfd) != GDB_OSABI_DARWINV6)
+	  {
+	    error ("The exec file is 64 bits but the attach target is 32 bits.\n"
+	      "Quit gdb & restart, using \"--arch\" to select the 32 bit fork of the executable.");
+	  }
+    }
+
   ret = vm_deallocate (mach_task_self (), data, data_count);
 
   return 1;
-#else
-  /* We have a cross GDB which means we will be using gdbserver and we
-     won't be able to do mach vm region calls unless we add something
-     special to gdbserver. We will try just reading memory  */
-  return dyld_starts_here_in_memory (addr);
-#endif
+#endif /* NM_NEXTSTEP */
 }
 
 /* Tries to find the name string for the dynamic linker passed as
@@ -684,6 +778,21 @@ macosx_lookup_dyld_name (bfd *abfd, const char **rname)
 static int
 macosx_locate_dyld (CORE_ADDR *value, CORE_ADDR hint)
 {
+  /* If we have remote Mac OS X target, we don't support alternate 
+     dyld versions when remote debugging. If we ever need to
+     support alternate dyld versions remotely, we will need to
+     add the region-searching functionality to gdbserver and
+     create a custom command to access the results.  */
+  if (target_is_remote ())
+    {
+      if (hint != INVALID_ADDRESS && dyld_starts_here_p (hint))
+        {
+          *value = hint;
+          return 1;
+        }
+      return 0;
+    }
+
 #if defined (NM_NEXTSTEP)
   /* We have a native Mac OS X target so we can use vm tricks to locate
      dyld.  */
@@ -730,20 +839,8 @@ macosx_locate_dyld (CORE_ADDR *value, CORE_ADDR hint)
       while (size != 0);
     }
 
+#endif /* NM_NEXTSTEP */
   return 0;
-#else /* #if defined (NM_NEXTSTEP)  */
-  /* We have a remote Mac OS X target and we don't support alternate 
-     dyld versions when remote debugging. If we ever need to support
-     alternate dyld versions remotely, we will need at add the above
-     native functionality to gdbserver and create a custom command
-     to access the results.  */
-  if (hint != INVALID_ADDRESS && dyld_starts_here_p (hint))
-    {
-      *value = hint;
-      return 1;
-    }
-  return 0;
-#endif /* #if defined (NM_NEXTSTEP)  */
 }
 
 /* Determine the address where the current target expected dyld to be
@@ -871,6 +968,18 @@ macosx_dyld_init (macosx_dyld_thread_status *s, bfd *exec_bfd)
   else
     ret = macosx_locate_dyld (&dyld_address, INVALID_ADDRESS);
 
+  if (ret != 1 && target_is_remote ())
+    {
+      /* On an iPhone we can find dyld at 0x2fe00000.
+         On a PPC app running under Rosetta, we'll find dyld at 0x8fc00000.
+         We need to add a remote protocol packet which will iterate over
+         allocated memory regions and look for a dyld on the remote side
+         instead of hardcoding these.  */
+      ret = macosx_locate_dyld (&dyld_address, 0x2fe00000ull);
+      if (ret != 1)
+        ret = macosx_locate_dyld (&dyld_address, 0x8fc00000ull);
+    }
+
   if (ret != 1)
     {
       /* If we have a core file we should get our information from what is
@@ -933,10 +1042,22 @@ macosx_dyld_init (macosx_dyld_thread_status *s, bfd *exec_bfd)
          we need to use this over in the tdep.c file where we don't always
          have access to the macosx_dyld_thread_status or macosx_status
          structures.  */
-      if (header.cputype == CPU_TYPE_POWERPC || header.cputype == CPU_TYPE_I386)
+      if (header.cputype == BFD_MACH_O_CPU_TYPE_POWERPC || 
+	  header.cputype == BFD_MACH_O_CPU_TYPE_I386)
         osabi_seen_in_attached_dyld = GDB_OSABI_DARWIN;
-      else if (header.cputype == CPU_TYPE_POWERPC64 || header.cputype == GDB_CPU_TYPE_X86_64)
+      else if (header.cputype == BFD_MACH_O_CPU_TYPE_POWERPC_64 || 
+	       header.cputype == BFD_MACH_O_CPU_TYPE_X86_64)
         osabi_seen_in_attached_dyld = GDB_OSABI_DARWIN64;
+#if defined (TARGET_ARM)
+      else if (header.cputype ==  BFD_MACH_O_CPU_TYPE_ARM)
+	{
+	  if (header.cpusubtype == BFD_MACH_O_CPU_SUBTYPE_ARM_6)
+	    osabi_seen_in_attached_dyld = GDB_OSABI_DARWINV6;
+	  else
+	    osabi_seen_in_attached_dyld = GDB_OSABI_DARWIN;
+	}
+#endif
+      
     }
 
   /* Once we know the address at which dyld was loaded, we can try to
@@ -983,13 +1104,68 @@ void
 macosx_set_start_breakpoint (macosx_dyld_thread_status *s, bfd *exec_bfd)
 {
   struct macosx_dyld_thread_status *status = &macosx_dyld_status;
+  struct minimal_symbol *malloc_inited;
+  int changed_breakpoints = 0;
 
   if (status->dyld_breakpoint == NULL)
     {
       status->dyld_breakpoint = create_solib_event_breakpoint 
                                          (status->dyld_notify);
-      breakpoints_changed ();
+      changed_breakpoints = 1;
     }
+
+  /* We only have to bother with the malloc initialized breakpoint in
+     version 1 dyld.  With version 2 there is an explicit field in the
+     dyld_all_image_infos structure telling us whether it is
+     initialized or not.  */
+  if (s->dyld_version == 1)
+    {
+      if (status->malloc_inited_breakpoint == NULL)
+	{
+	  struct cleanup *free_adorned;
+	  
+          /* The malloc_inited_callback function has two possible mangled
+             forms.  We have to check for both.  */
+
+	  char *adorned_name = xmalloc (strlen (malloc_inited_callback) + 
+                                        strlen (dyld_symbols_prefix) + 1);
+	  free_adorned = make_cleanup (xfree, adorned_name);
+	  strcpy (adorned_name, dyld_symbols_prefix);
+	  strcat (adorned_name, malloc_inited_callback);
+	  
+	  char *adorned_name_alt = xmalloc (strlen (malloc_inited_callback_alt)
+                                        + strlen (dyld_symbols_prefix) + 1);
+	  make_cleanup (xfree, adorned_name_alt);
+	  strcpy (adorned_name_alt, dyld_symbols_prefix);
+	  strcat (adorned_name_alt, malloc_inited_callback_alt);
+
+	  malloc_inited = lookup_minimal_symbol (adorned_name, NULL, NULL);
+          if (malloc_inited == NULL)
+	    malloc_inited = lookup_minimal_symbol (adorned_name_alt, NULL, NULL);
+  
+	  do_cleanups (free_adorned);
+	  if (malloc_inited != NULL)
+	    {
+	      status->malloc_inited_breakpoint = create_solib_event_breakpoint
+		(SYMBOL_VALUE_ADDRESS (malloc_inited));
+	      changed_breakpoints = 1;
+	    }
+	  else
+	    {
+	      /* If I don't find the malloc symbol I'd better turn on 
+		 malloc inited now, since there won't be another good 
+		 chance to do so.  This could happen with a totally static
+		 binary, or if somebody set the dyld load state to container.  */
+	      warning ("Could not find malloc init callback function.  "
+		       "\nMake sure malloc is initialized before calling functions.");
+	      macosx_set_malloc_inited (1);
+	    }
+	}
+    }
+
+  if (changed_breakpoints)
+    breakpoints_changed ();
+
 }
 
 #if defined (TARGET_POWERPC)
@@ -1025,8 +1201,14 @@ FETCH_ARGUMENT (int i)
       return read_memory_unsigned_integer (stack + (4 * (i + 1)), 4);
     }
 }
+#elif defined (TARGET_ARM) // NGK XXX hack
+static ULONGEST
+FETCH_ARGUMENT (int i)
+{
+  return read_register (i);
+}
 #else
-#error unknown architecture
+#error "unknown architecture"
 #endif
 
 /* Remove NUM dyld_objfile_entries listed in ENTRIES from DYLD_STATUS.  */
@@ -1049,7 +1231,7 @@ macosx_dyld_remove_libraries (struct macosx_dyld_thread_status *dyld_status,
 	    {
 	      if (e->objfile)
 		{
-		  tell_breakpoints_objfile_changed (e->objfile);
+		  tell_breakpoints_objfile_removed (e->objfile);
 		  tell_objc_msgsend_cacher_objfile_changed (e->objfile);
 		}
 	      if (ui_out_is_mi_like_p (uiout))
@@ -1129,6 +1311,14 @@ macosx_dyld_add_libraries (struct macosx_dyld_thread_status *dyld_status,
             notify_cleanup = make_cleanup_ui_out_notify_begin_end (uiout,
                                                               "shlibs-added");
             dyld_print_entry_info (entry, shlibnum, 0);
+            if (ui_out_is_mi_like_p (uiout))
+              {
+                struct timeval t;
+                make_cleanup_ui_out_tuple_begin_end (uiout, "time");
+                gettimeofday (&t, NULL);
+                ui_out_field_fmt (uiout, "now", "%u.%06u", 
+                             (unsigned int) t.tv_sec, (unsigned int) t.tv_usec);
+              }
             do_cleanups (notify_cleanup);
 	    /* We have to add objfiles to the list of objfiles which
 	       should be scanned for new breakpoints when we see them
@@ -1200,6 +1390,19 @@ macosx_solib_add (const char *filename, int from_tty,
   if (dyld_status->dyld_num_shared_cache_ranges == -1)
     macosx_init_dyld_cache_ranges (dyld_status);
 
+  /* If we have version 2 of the dyld_all_image_infos structure,
+     and we haven't seen the libsystem_initialized set yet, check
+     again here.  */
+  if (dyld_status->dyld_version >= 2 
+      && macosx_get_malloc_inited () != 1 
+      && dyld_status->dyld_image_infos != INVALID_ADDRESS)
+    {
+      struct dyld_raw_infos info;
+      dyld_read_raw_infos (dyld_status->dyld_image_infos, &info);
+      dyld_status->libsystem_initialized = info.libsystem_initialized;
+      macosx_set_malloc_inited (dyld_status->libsystem_initialized);
+    }
+
   /* If the inferior stopped at the dyld notification function,
      some file images have been loaded or removed.  */
 
@@ -1223,6 +1426,11 @@ macosx_solib_add (const char *filename, int from_tty,
       notify = libraries_changed && dyld_stop_on_shlibs_updated;
     }
 #endif
+  else if (dyld_status->malloc_inited_breakpoint != NULL
+	   && dyld_status->malloc_inited_breakpoint->loc->address == read_pc ())
+    {
+      macosx_set_malloc_inited (1);
+    }
   else if (dyld_status->dyld_breakpoint != NULL
 	   && dyld_status->dyld_breakpoint->loc->address == read_pc ())
     {
@@ -1292,6 +1500,7 @@ macosx_solib_add (const char *filename, int from_tty,
 	 breakpoints here after we've added all the libraries.  */
 
       breakpoint_update ();
+      objc_clear_caches ();
 
       if (maint_use_timers)
 	do_cleanups (timer_cleanup);
@@ -1325,6 +1534,7 @@ macosx_dyld_thread_init (macosx_dyld_thread_status *s)
   s->dyld_num_shared_cache_ranges = -1;
   s->dyld_version = 0;
   s->dyld_breakpoint = NULL;
+  s->malloc_inited_breakpoint = NULL;
   s->dyld_shared_cache_array = NULL;
   dyld_zero_path_info (&s->path_info);
 }
@@ -1367,9 +1577,13 @@ macosx_init_dyld_from_core (void)
      files can be transfered to a different computer with completely 
      different binaries, we also could be cross debugging, so we need to 
      take everything we can from the core image.  */
-  struct dyld_objfile_info *info = &macosx_dyld_status.current_info;
+  struct dyld_objfile_info *info;
   struct dyld_objfile_entry *e;
+  struct target_ops *target;
   int i;
+
+  info = &macosx_dyld_status.current_info;
+  target = &exec_ops;
 
   DYLD_ALL_OBJFILE_INFO_ENTRIES (info, e, i)
     {
@@ -1383,6 +1597,21 @@ macosx_init_dyld_from_core (void)
   macosx_dyld_mourn_inferior ();
 
   macosx_dyld_thread_clear (&macosx_dyld_status);
+  
+  /* The macosx-exec target keeps a list of address ranges and which
+     bfd and bfd_sections they correspond to, so we need to blow away
+     this cache. 
+     TODO: We really need a better way to track when a bfd_close is
+     going to happen and call "remove_target_sections (bfd *abfd)". We
+     aren't going to make this change just before we ship, but this is
+     something we need to keep an eye one. Perhaps a target_bfd_close
+     would be a good way to control these things.  */
+  if (target->to_sections != NULL)
+    {
+      xfree (target->to_sections);
+      target->to_sections = target->to_sections_end = NULL;
+    }
+  
   macosx_solib_add (NULL, 0, NULL, 0);
 }
 
@@ -1474,6 +1703,135 @@ dyld_cache_purge_command (char *exp, int from_tty)
   dyld_purge_cached_libraries (&macosx_dyld_status.current_info);
 }
 
+/* This function returns an xmalloc'ed array of section offsets (slides)
+   for a dylib in the shared cache.
+   Dylibs included in the shared cache will have different offsets
+   (slides) for different sections -- the only way to determine what those
+   offsets are is to step through the in-memory section addresses and
+   the on-disk section addresses and compute them individually.
+
+   It is the caller's responsbility to xfree the returned offsets once
+   they are done being used.  */ 
+
+struct section_offsets *
+get_sectoffs_for_shared_cache_dylib (struct dyld_objfile_entry *entry,
+                                     CORE_ADDR header_addr)
+{
+  struct bfd_section *mem_sect;
+  gdb_byte *buf;
+  struct cleanup *bfd_cleanups;
+  struct mach_header header;
+  int cur_section;
+  int section_mismatch;
+  bfd *this_bfd = entry->abfd;
+  struct section_offsets *sect_offsets;
+  struct bfd_section *this_sect;
+  bfd *mem_bfd = NULL;
+
+  target_read_mach_header (header_addr, &header);
+  buf = (gdb_byte *) xmalloc 
+                      (header.sizeofcmds + sizeof (struct mach_header));
+  bfd_cleanups = make_cleanup (xfree, buf);
+  if (target_read_memory (header_addr, buf, 
+      header.sizeofcmds + sizeof (struct mach_header)) != 0)
+    {
+      error ("Couldn't read load commands in memory for %s\n", 
+             entry->dyld_name);
+    }
+  mem_bfd = bfd_memopenr (entry->dyld_name, NULL, buf, 
+                          header.sizeofcmds + sizeof (struct mach_header));
+  if (mem_bfd == NULL)
+    {
+       internal_error (__FILE__, __LINE__, 
+                       "Unable to bfd_memopenr on '%s' at 0x%s", 
+                       entry->dyld_name, paddr_nz (header_addr));
+    }
+  make_cleanup_bfd_close (mem_bfd);
+  if (!bfd_check_format (mem_bfd, bfd_object)) {
+       error ("Wrong format for in memory dylib %s\n", 
+              entry->dyld_name);
+     }
+
+  if (this_bfd->section_count != mem_bfd->section_count)
+    {
+      /* See note where section_mismatch is processed below.  */
+      if (this_bfd->section_count > mem_bfd->section_count)
+        section_mismatch = 1;
+      else
+        section_mismatch = -1;
+    }
+  
+  sect_offsets = (struct section_offsets *)
+    xmalloc (SIZEOF_N_SECTION_OFFSETS (this_bfd->section_count));
+  memset (sect_offsets, 0,
+          SIZEOF_N_SECTION_OFFSETS (this_bfd->section_count));
+  
+  cur_section = 0;
+  for (this_sect = this_bfd->sections, mem_sect = mem_bfd->sections; 
+       this_sect != NULL && mem_sect != NULL;
+       this_sect = this_sect->next, mem_sect = mem_sect->next)
+    {
+      /* The offsets map to the sections that get added to the
+         bfd, so don't add bfd sections that aren't going to get
+         added to the objfile later on.  */
+
+      if (!objfile_keeps_section (this_bfd, this_sect))
+          continue;
+      if (section_mismatch != 0)
+        {
+          int got_to_end = 0;
+          while (strcmp (this_sect->name, mem_sect->name) != 0)
+            {
+              /* This is the case where we have some extra sections
+                 in the on disk version.  The instances I know about 
+                 are the localstabs & nonlocalstabs, which are
+                 synthetic sections that the bfd macho reader makes,
+                 but which in newer versions of the shared cache it
+                 doesn't make.  
+                 In this case, we increment the cur_section, and 
+                 set the offset for this section to 0.  
+                 FIXME: Is it worthwhile validating that the
+                 sections we are skipping really are the LC_DYSYMTAB
+                 ones I am expecting, or should we let this float
+                 so if we don't have to change it later?  */
+              if (section_mismatch == 1)
+                {
+                  this_sect = this_sect->next;
+                  sect_offsets->offsets[cur_section++] = 0;
+                  if (this_sect == NULL)
+                    {
+                      got_to_end = 1;
+                      break;
+                    }
+                }
+              else
+                {
+                  /* We have some extra sections in the memory
+                     version. This can happen for in memory mach 
+                     images that are in the shared cache since
+                     we may create localstabs & nonlocalstabs 
+                     sections from the LC_DYSYMTAB load command
+                     so we can properly read the symbol table
+                     for the image since all entries in the shared
+                     cache share one large symbol and string 
+                     table. */
+                  mem_sect = mem_sect->next;
+                  if (mem_sect == NULL)
+                    {
+                      got_to_end = 1;
+                      break;
+                    }
+                }
+            }
+          if (got_to_end)
+            break;
+        }
+      sect_offsets->offsets[cur_section++] = mem_sect->vma - this_sect->vma;
+    }
+  do_cleanups (bfd_cleanups);
+  return sect_offsets;
+}
+
 /* Process the information about a just-discovered file image from dyld
    and fill in a dyld_objfile_entry with the preliminary information.  */
 
@@ -1491,6 +1849,14 @@ dyld_info_process_raw (struct macosx_dyld_thread_status *s,
   struct dylib_command dcmd;
   bfd *this_bfd = NULL;
   entry->in_shared_cache = 0;
+  struct cleanup *override_trust_readonly;
+  int old_trust_readonly;
+
+  /* Even if the library is loading in the same place as a directly linked
+     shared library that we've read in already, we still want to read the raw
+     information from memory.  */
+  old_trust_readonly = set_trust_readonly (0);
+  override_trust_readonly = make_cleanup (set_trust_readonly, old_trust_readonly);
 
   /* Determine whether the image is in the new "shared cache" region.  */
   if (s->dyld_num_shared_cache_ranges != -1)
@@ -1524,6 +1890,7 @@ dyld_info_process_raw (struct macosx_dyld_thread_status *s,
       warning
         ("Ignored unknown object module at 0x%s with type 0x%x\n",
          paddr_nz (header_addr), header.filetype);
+      do_cleanups (override_trust_readonly);
       return 0;
     }
 
@@ -1535,22 +1902,15 @@ dyld_info_process_raw (struct macosx_dyld_thread_status *s,
       namebuf = NULL;
     }
 
-  if (namebuf != NULL)
-    {
-      char *s = strchr (namebuf, ':');
-      if (s != NULL)
-        {
-          *s = '\0';
-        }
-    }
-
-  /* Look through the load commands for the image filename.  */
+  /* Look through the load commands for the image filename.  
+     Also read out the UUID if we are going to check it later.  */
 
   if (namebuf == NULL)
     {
       namebuf = xmalloc (256);
+      
       curpos = header_addr + sizeof (struct mach_header);
-
+      
       for (i = 0; i < header.ncmds; i++)
         {
 	  if (target_read_load_command (curpos, &cmd) != 0)
@@ -1566,10 +1926,10 @@ dyld_info_process_raw (struct macosx_dyld_thread_status *s,
           curpos += cmd.cmdsize;
         }
     }
-
+  
   /* realpath the image name -- we can get many different paths to the
      same file handed to us, so try to canonicalize them via realpath.  */
-
+  
   if (namebuf != NULL)
     {
       char buf[PATH_MAX];
@@ -1666,114 +2026,8 @@ dyld_info_process_raw (struct macosx_dyld_thread_status *s,
 	    }
 	  else
 	    {
-	      struct bfd_section *mem_sect = NULL;
-	      struct cleanup *bfd_cleanups;
-	      int cur_section;
-	      int section_mismatch = 0;
-
-	      buf = (gdb_byte *) xmalloc 
-                           (header.sizeofcmds + sizeof (struct mach_header));
-	      bfd_cleanups = make_cleanup (xfree, buf);
-	      if (target_read_memory (header_addr, buf, 
-		         header.sizeofcmds + sizeof (struct mach_header)) != 0)
-		{
-		  error ("Couldn't read load commands in memory for %s\n", 
-                         entry->dyld_name);
-		}
-	      mem_bfd = bfd_memopenr (entry->dyld_name, NULL, buf, 
-			      header.sizeofcmds + sizeof (struct mach_header));
-              if (mem_bfd == NULL)
-                {
-                  internal_error (__FILE__, __LINE__, 
-                               "Unable to bfd_memopenr on '%s' at 0x%s", 
-                               entry->dyld_name, paddr_nz (header_addr));
-                }
-	      make_cleanup_bfd_close (mem_bfd);
-	      if (!bfd_check_format (mem_bfd, bfd_object)) {
-		error ("Wrong format for in memory dylib %s\n", 
-                       entry->dyld_name);
-	      }
-
-	      if (this_bfd->section_count != mem_bfd->section_count)
-		{
-		  /* See note where section_mismatch is processed below.  */
-		  if (this_bfd->section_count > mem_bfd->section_count)
-		    section_mismatch = 1;
-		  else
-		    {
-		      warning ("Section count for in memory and on disk versions of "
-			       "%s don't match", entry->dyld_name);
-		      section_mismatch = -1;
-		    }
-		}
-	      
-	      sect_offsets = (struct section_offsets *)
-		xmalloc (SIZEOF_N_SECTION_OFFSETS (this_bfd->section_count));
-	      memset (sect_offsets, 0,
-		      SIZEOF_N_SECTION_OFFSETS (this_bfd->section_count));
-	      
-	      cur_section = 0;
-	      for (this_sect = this_bfd->sections, mem_sect = mem_bfd->sections; 
-		   this_sect != NULL && mem_sect != NULL;
-		   this_sect = this_sect->next, mem_sect = mem_sect->next)
-		{
-		  /* The offsets map to the sections that get added to the
-		     bfd, so don't add bfd sections that aren't going to get
-		     added to the objfile later on.  */
-
-		  if (!objfile_keeps_section (this_bfd, this_sect))
-		      continue;
-		  if (section_mismatch != 0)
-		    {
-		      int got_to_end = 0;
-		      while (strcmp (this_sect->name, mem_sect->name) != 0)
-			{
-			  /* This is the case where we have some extra sections
-			     in the on disk version.  The instances I know about 
-			     are the localstabs & nonlocalstabs, which are
-			     synthetic sections that the bfd macho reader makes,
-			     but which in newer versions of the shared cache it
-			     doesn't make.  
-			     In this case, we increment the cur_section, and 
-			     set the offset for this section to 0.  
-			     FIXME: Is it worthwhile validating that the
-			     sections we are skipping really are the LC_DYSYMTAB
-			     ones I am expecting, or should we let this float
-			     so if we don't have to change it later?  */
-			  if (section_mismatch == 1)
-			    {
-			      this_sect = this_sect->next;
-			      sect_offsets->offsets[cur_section++] = 0;
-			      if (this_sect == NULL)
-				{
-				  got_to_end = 1;
-				  break;
-				}
-			    }
-			  else
-			    {
-			      /* I don't know why this would happen, but in case
-				 Nick does something crazy with the shared cache
-				 I'm putting this in here.  Since the sect_offsets
-				 we are building up will match the on disk objfile
-				 we should just be able to skip these sections for
-				 now, I don't know what I would recover from them...  */
-			      mem_sect = mem_sect->next;
-			      if (mem_sect == NULL)
-				{
-				  got_to_end = 1;
-				  break;
-				}
-			    }
-			}
-		      if (got_to_end)
-			break;
-		    }
-		  sect_offsets->offsets[cur_section++] = 
-                                             mem_sect->vma - this_sect->vma;
-		}
-	      entry->dyld_section_offsets = sect_offsets;
-	      do_cleanups (bfd_cleanups);
+               entry->dyld_section_offsets = 
+                      get_sectoffs_for_shared_cache_dylib (entry, header_addr);
 	    }
  
 
@@ -1815,10 +2069,14 @@ dyld_info_process_raw (struct macosx_dyld_thread_status *s,
       struct bfd_section *this_sect;
       struct section_offsets *sect_offsets;
       int cur_section;
-      
-      /* See the comments above about reusing the bfd.  */
-      dyld_load_library (&(s->path_info), entry);
 
+      /* See the comments above about reusing the bfd.  */
+      /* We don't know what the slide is until we read the load commands for
+	 the binary.  Don't pretend we do or it will fool layers below us.  */
+      entry->dyld_slide = INVALID_ADDRESS;
+      dyld_load_library (&(s->path_info), entry);
+      
+      
       /* A bundle that only exists in memory (e.g. was loaded with
          mmap + NSCreateObjectFileImageFromMemory + NSLinkModule)
          may not have an on-disk file that we can find.  We should
@@ -1827,29 +2085,43 @@ dyld_info_process_raw (struct macosx_dyld_thread_status *s,
 	 done above.  But at the very least, don't try to dereference
 	 the bfd struct if we failed to open the file.  */
 
+      /* It's a little tricky trying to calculate the slide of each
+	 segment independently.  Since at present all libraries that are
+	 NOT in the shared cache just get slid rigidly, we will figure out
+	 the rigid slide using the slide of the text segment, then apply
+	 that to all the sections.  */
+
       if (!entry->loaded_error && entry->abfd)
         {
-	  CORE_ADDR segment_offset = 0;
-          this_bfd = entry->abfd;
-          sect_offsets = (struct section_offsets *)
-	    xmalloc (SIZEOF_N_SECTION_OFFSETS (this_bfd->section_count));
-          memset (sect_offsets, 0,
-	          SIZEOF_N_SECTION_OFFSETS (this_bfd->section_count));
-
+	  CORE_ADDR rigid_slide;
+	  this_bfd = entry->abfd;
+	  sect_offsets = (struct section_offsets *)
+            xmalloc (SIZEOF_N_SECTION_OFFSETS (this_bfd->section_count));
+	  memset (sect_offsets, 0,
+                  SIZEOF_N_SECTION_OFFSETS (this_bfd->section_count));
+	  
+	  for (this_sect = this_bfd->sections;
+               this_sect != NULL;
+               this_sect = this_sect->next)
+            {
+              if (!objfile_keeps_section (this_bfd, this_sect))
+                continue;
+              if (strcmp (this_sect->name, TEXT_SEGMENT_NAME) == 0)
+		{
+		  intended_loadaddr = this_sect->vma;     
+		  break;
+		}
+	    }
+	  
+	  rigid_slide = header_addr - intended_loadaddr;
           cur_section = 0;
-          for (this_sect = this_bfd->sections; 
-	       this_sect != NULL; 
+          for (this_sect = this_bfd->sections;
+	       this_sect != NULL;
 	       this_sect = this_sect->next)
 	    {
 	      if (!objfile_keeps_section (this_bfd, this_sect))
-	        continue;
-	      if (this_sect->segment_mark)
-		segment_offset = header_addr + this_sect->filepos - this_sect->vma;
-
-	      if (strcmp (this_sect->name, TEXT_SEGMENT_NAME) == 0)
-	        intended_loadaddr = this_sect->vma;
-      
-	      sect_offsets->offsets[cur_section++] = segment_offset;
+		continue;
+	      sect_offsets->offsets[cur_section++] = rigid_slide;
 	    }
           entry->dyld_section_offsets = sect_offsets;
         }
@@ -1868,7 +2140,10 @@ dyld_info_process_raw (struct macosx_dyld_thread_status *s,
      "negative slide".
      e.g  0x2f00 + 0xfffffffffffff000 == 0x1f00 in 64-bit unsigned math.  */
 
-  entry->dyld_slide = header_addr - intended_loadaddr;
+  if (intended_loadaddr == INVALID_ADDRESS)
+    entry->dyld_slide = 0;
+  else
+    entry->dyld_slide = header_addr - intended_loadaddr;
   entry->dyld_valid = 1;
 
   switch (header.filetype)
@@ -1904,6 +2179,7 @@ dyld_info_process_raw (struct macosx_dyld_thread_status *s,
                       header.filetype);
     }
 
+  do_cleanups (override_trust_readonly);
   return 1;
 }
 
@@ -1918,19 +2194,41 @@ dyld_info_process_raw (struct macosx_dyld_thread_status *s,
 static void
 dyld_read_raw_infos (CORE_ADDR addr, struct dyld_raw_infos *info)
 {
-  gdb_byte *buf = (gdb_byte *) alloca (sizeof (struct dyld_raw_infos));
   int wordsize = gdbarch_tdep (current_gdbarch)->wordsize;
+
+  /* Version 1 of struct dyld_all_image_infos is
+       8 + (2 * wordsize) + 1 == 17, struct size is 20 bytes
+     Version 2 of struct dyld_all_image_infos is currently
+       8 + (2 * wordsize) + 1 + 1 + wordsize == 22, struct size is 24 bytes
+      (2 bytes of padding come after the two bool members)  
+     (struct sizes with the assumption that wordisze == 4)
+  */
+
+  int dyld_all_image_infos_size_v1 = 8 + (2 * wordsize) + 4;
+  int dyld_all_image_infos_size_v2 = 8 + (2 * wordsize) + 4 + wordsize;
+  gdb_byte *buf = (gdb_byte *) alloca (dyld_all_image_infos_size_v2);
 
   gdb_assert (addr != INVALID_ADDRESS);
 
-  /* The struct dyld_raw_infos in the inferior consists of two 4-byte
-     words and two (inferior) wordsize words.  */
-  target_read_memory (addr, buf, 8 + wordsize * 2);
+  /* Only read the "v1" size out of memory in this one read -- we'll fetch
+     post-v1 fields out of memory individually if this is a post-v1 dyld.  */
+  target_read_memory (addr, buf, dyld_all_image_infos_size_v1);
 
   info->version = extract_unsigned_integer (buf, 4);
   info->num_info = extract_unsigned_integer (buf + 4, 4);
   info->info_array = extract_unsigned_integer (buf + 8, wordsize);
   info->dyld_notify = extract_unsigned_integer (buf + 8 + wordsize, wordsize);
+  info->process_detached_from_shared_region = 
+                      extract_unsigned_integer (buf + 8 + wordsize * 2, 1);
+
+  /* Read the 'libSystemInitialized' bool.  */
+  if (info->version >= 2)
+    {
+      target_read_memory (addr + 8 + wordsize * 2 + 1, buf, 1);
+      info->libsystem_initialized = extract_unsigned_integer (buf, 1);
+    }
+  else
+    info->libsystem_initialized = -1;
 }
 
 /* Read an array of NUM dyld_raw_info structures out of the inferior's
@@ -1982,6 +2280,14 @@ dyld_info_read_raw (struct macosx_dyld_thread_status *status,
   struct dyld_raw_info *ninfo;
 
   dyld_read_raw_infos (status->dyld_image_infos, &info);
+  /* For version 2 of the all_image_infos structure we should check
+     to see if libsystem is initialized...  In truth, we only need to
+     do this if it is not already initialized, but this doesn't hurt.  */
+  if (info.version >= 2)
+    {
+      status->libsystem_initialized = info.libsystem_initialized;
+      macosx_set_malloc_inited (status->libsystem_initialized);
+    }
 
   ninfo = xmalloc (info.num_info * sizeof (struct dyld_raw_info));
 
@@ -2374,22 +2680,6 @@ dyld_remove_symbol_file_command (char *args, int from_tty)
   dyld_generic_command_with_helper (args, from_tty, remove_helper);
 }
 
-static void
-specify_symfile_helper (struct dyld_path_info *d,
-                        struct dyld_objfile_entry *e,
-                        struct objfile *o, int index,
-                      const char *arg)
-{
-  e->user_name = xstrdup (arg);
-  e->loaded_error = 0;
-}
-
-static void
-dyld_specify_symbol_file_command (char *args, int from_tty)
-{
-  dyld_generic_command_with_helper (args, from_tty, specify_symfile_helper);
-}
-
 /* objfile_set_load_state
 
    Given objfile O, this changes the load state to LOAD_STATE.  This
@@ -2407,7 +2697,7 @@ dyld_objfile_set_load_state (struct objfile *o, int load_state)
   DYLD_ALL_OBJFILE_INFO_ENTRIES (&macosx_dyld_status.current_info, e, i)
     if (e->objfile == o)
       {
-      found_it = e->load_flag;
+	found_it = e->load_flag;
         set_load_state_1 (e, &macosx_dyld_status.path_info, i + 1, load_state);
         break;
       }
@@ -2795,7 +3085,6 @@ dyld_cache_symfile_command (char *args, int from_tty)
   error ("Cached symfiles are not supported on this configuration of GDB.");
 }
 
-extern struct target_ops exec_ops;
 
 void
 update_section_tables ()
@@ -2933,6 +3222,27 @@ dyld_fix_path (char *path)
 	}
     }
     return path;
+}
+
+/* APPLE LOCAL: This boolean tells us whether the malloc library is
+   initialized.  Turns out on Leopard we get the first dyld notification 
+   before this has happened, and calling malloc at this point will
+   cause the target to fall over.
+   We'll use this value in macosx_check_safe_call to override any of
+   the other checks we might do.  */
+
+static int malloc_inited_p;
+
+void
+macosx_set_malloc_inited (int new_val)
+{
+  malloc_inited_p = new_val;
+}
+
+int
+macosx_get_malloc_inited (void)
+{
+  return malloc_inited_p;
 }
 
 struct cmd_list_element *dyldlist = NULL;
@@ -3077,7 +3387,7 @@ _initialize_macosx_nat_dyld ()
 {
   macosx_dyld_thread_init (&macosx_dyld_status);
 
-  dyld_stderr = fdopen (fileno (stderr), "w+");
+  dyld_stderr = fdopen (fileno (stderr), "w");
 
   add_prefix_cmd ("sharedlibrary", class_run, sharedlibrary_command,
                   "Commands for shared library manipulation.",
@@ -3098,9 +3408,6 @@ _initialize_macosx_nat_dyld ()
 
   add_cmd ("remove-symbol-file", class_run, dyld_remove_symbol_file_command,
            "Remove a symbol file.", &shliblist);
-
-  add_cmd ("specify-symbol-file", class_run, dyld_specify_symbol_file_command,
-           "Specify the symbol file for a sharedlibrary entry.", &shliblist);
 
   add_cmd ("set-load-state", class_run, dyld_set_load_state_command,
            "Set the load level of a library (given by the index from \"info sharedlibrary\").",

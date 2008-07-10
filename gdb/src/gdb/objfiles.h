@@ -25,6 +25,8 @@
 
 #include "gdb_obstack.h"	/* For obstack internals.  */
 #include "symfile.h"		/* For struct psymbol_allocation_list */
+/* APPLE LOCAL subroutine inlining  */
+#include "inlining.h"           /* For information about inlined subroutines  */
 #include <sqlite3.h>
 
 struct bcache;
@@ -504,6 +506,11 @@ struct objfile
     /* APPLE LOCAL begin dwarf repository  */
     int uses_sql_repository;
     /* APPLE LOCAL end dwarf repository  */
+
+    /* APPLE LOCAL begin subroutine inlining  */
+    struct rb_tree_node *inlined_subroutine_data;
+    struct rb_tree_node *inlined_call_sites;
+    /* APPLE LOCAL end subroutine inlining  */
   };
 
 /* Defines for the objfile flag word. */
@@ -565,6 +572,11 @@ struct objfile
 #define OBJF_SYM_LOCAL (1 << 3)
 #define OBJF_SYM_DEBUG (1 << 4)
 #define OBJF_SYM_ALL (0xff)
+
+#define OBJF_SYM_LEVELS_MASK (0xff)
+#define OBJF_SYM_FLAGS_MASK (0xff00)
+
+#define OBJF_SYM_DONT_CHANGE (1 << 8)
 
 /* The object file that the main symbol table was loaded from (e.g. the
    argument to the "symbol-file" or "file" command).  */
@@ -715,6 +727,9 @@ int objfile_name_set_load_state (char *, int, int);
 extern unsigned get_objfile_registry_num_registrations (void);
 /* APPLE LOCAL end dwarf repository  */
 
+/* APPLE LOCAL */
+struct objfile *find_objfile_by_name (const char *name, int exact);
+
 /* APPLE LOCAL begin fix-and-continue */
 struct symtab *symtab_get_first (struct objfile *, int );
 struct symtab *symtab_get_next (struct symtab *, int );
@@ -781,11 +796,6 @@ struct partial_symtab *psymtab_get_next (struct partial_symtab *, int );
 #define	ALL_PSYMTABS(objfile, p) \
   ALL_OBJFILES (objfile)	 \
     ALL_OBJFILE_PSYMTABS (objfile, p)
-
-/* APPLE LOCAL fix-and-continue */
-#define	ALL_PSYMTABS_INCL_OBSOLETED(objfile, p) \
-  ALL_OBJFILES (objfile)	 \
-    ALL_OBJFILE_PSYMTABS_INCL_OBSOLETED (objfile, p)
 
 /* Traverse all minimal symbols in all objfiles.  */
 

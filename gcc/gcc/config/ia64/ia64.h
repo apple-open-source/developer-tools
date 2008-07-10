@@ -2060,7 +2060,7 @@ do {									\
 /* Use section-relative relocations for debugging offsets.  Unlike other
    targets that fake this by putting the section VMA at 0, IA-64 has
    proper relocations for them.  */
-/* APPLE LOCAL begin dwarf 4383509 */
+/* APPLE LOCAL begin mainline 2006-03-16 dwarf 4383509 */
 #define ASM_OUTPUT_DWARF_OFFSET(FILE, SIZE, LABEL, SECTION)	\
   do {								\
     fputs (integer_asm_op (SIZE, FALSE), FILE);			\
@@ -2068,7 +2068,7 @@ do {									\
     assemble_name (FILE, LABEL);				\
     fputc (')', FILE);						\
   } while (0)
-/* APPLE LOCAL end dwarf 4383509 */
+/* APPLE LOCAL end mainline 2006-03-16 dwarf 4383509 */
 
 /* Emit a PC-relative relocation.  */
 #define ASM_OUTPUT_DWARF_PCREL(FILE, SIZE, LABEL)	\

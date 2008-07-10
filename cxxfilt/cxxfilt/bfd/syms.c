@@ -18,7 +18,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 /*
 SECTION
@@ -287,6 +287,14 @@ CODE_FRAGMENT
 .
 .  {* This symbol is thread local.  Used in ELF.  *}
 .#define BSF_THREAD_LOCAL  0x40000
+.
+.  {* This symbol represents a complex relocation expression,
+.     with the expression tree serialized in the symbol name.  *}
+.#define BSF_RELC 0x80000
+.
+.  {* This symbol represents a signed complex relocation expression,
+.     with the expression tree serialized in the symbol name.  *}
+.#define BSF_SRELC 0x100000
 .
 .  flagword flags;
 .

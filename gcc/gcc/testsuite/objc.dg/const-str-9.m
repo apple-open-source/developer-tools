@@ -1,9 +1,11 @@
 /* Test if ObjC constant strings get placed in the correct section.  */
 /* Contributed by Ziemowit Laski <zlaski@apple.com>  */
 
-/* { dg-options "-fnext-runtime" } */
 /* APPLE LOCAL constant cfstrings */
-/* { dg-do compile { target powerpc-*-darwin* } } */
+/* { dg-options "-fnext-runtime -fno-constant-cfstrings" } */
+/* { dg-do compile { target *-*-darwin* } } */
+/* APPLE LOCAL radar 4492976 */
+/* { dg-require-effective-target ilp32 } */
 
 #include <objc/Object.h>
 
@@ -13,7 +15,13 @@
 }
 @end
 
+/* APPLE LOCAL begin objc2 */
+#if OBJC_API_VERSION >= 2
+extern Class _NSConstantStringClassReference;
+#else
 extern struct objc_class _NSConstantStringClassReference;
+#endif
+/* APPLE LOCAL end objc2 */
 
 static const NSConstantString *appKey = @"MyApp";
 

@@ -1044,6 +1044,18 @@ free_objfile_internal (struct objfile *objfile)
     close_dwarf_repositories (objfile);
   /* APPLE LOCAL end dwarf repository  */
 
+  /* APPLE LOCAL begin subroutine inlining  */
+  if (objfile->inlined_subroutine_data)
+    inlined_subroutine_free_objfile_data (objfile->inlined_subroutine_data);
+  if (objfile->inlined_call_sites)
+    inlined_subroutine_free_objfile_call_sites (objfile->inlined_call_sites);
+  /* APPLE LOCAL end subroutine inlining  */
+
+  /* Can't tell whether one of the sections in this objfile is
+     one of the one's we've cached over in symfile.c, so let's clear
+     it here to be safe.  */
+  symtab_clear_cached_lookup_values ();
+
 }
 
 /* APPLE LOCAL: clear_objfile deletes all the data
@@ -1174,6 +1186,13 @@ objfile_relocate (struct objfile *objfile, struct section_offsets *new_offsets)
       return;
   }
 
+  /* APPLE LOCAL begin subroutine inlining  */
+  /* Update all the inlined subroutine data for this objfile.  */
+  inlined_subroutine_objfile_relocate (objfile,
+				       objfile->inlined_subroutine_data,
+				       delta);
+  /* APPLE LOCAL end subroutine inlining  */
+
   /* OK, get all the symtabs.  */
   {
     struct symtab *s;
@@ -1192,7 +1211,11 @@ objfile_relocate (struct objfile *objfile, struct section_offsets *new_offsets)
 	  int discontinuity_index = -1;
 
 	  for (i = 0; i < l->nitems; ++i)
-	    l->item[i].pc += ANOFFSET (delta, s->block_line_section);
+	    {
+	      l->item[i].pc += ANOFFSET (delta, s->block_line_section);
+	      if (l->item[i].end_pc != 0)
+		l->item[i].end_pc += ANOFFSET (delta, s->block_line_section);
+	    }
 
 	  /* Re-sort the line-table.  The table should have started
 	     off sorted, so we should be able to re-sort it by
@@ -1463,18 +1486,38 @@ find_pc_sect_section (CORE_ADDR pc, struct bfd_section *section)
   struct obj_section *s;
   struct objfile *objfile;
 
+  /* APPLE LOCAL begin cache lookup values for improved performance  */
+  if (pc == last_sect_section_lookup_pc
+      && pc == last_mapped_section_lookup_pc
+      && section == cached_mapped_section)
+    return cached_sect_section;
+
+  last_sect_section_lookup_pc = pc;
+  /* APPLE LOCAL end cache lookup values for improved performance  */
+
   /* APPLE LOCAL begin search in ordered sections */
   s = find_pc_sect_in_ordered_sections (pc, section);
   if (s != NULL)
-    return (s);
+  /* APPLE LOCAL begin cache lookup values for improved performance  */
+    {
+      cached_sect_section = s;
+      return (s);
+    }
+  /* APPLE LOCAL end cache lookup values for improved performance  */
   /* APPLE LOCAL end search in ordered sections */
   
   ALL_OBJSECTIONS (objfile, s)
     if (objfile->separate_debug_objfile_backlink == NULL
         && (section == 0 || section == s->the_bfd_section) 
 	&& s->addr <= pc && pc < s->endaddr)
-      return (s);
+      /* APPLE LOCAL begin cache lookup values for improved performance  */
+      {
+	cached_sect_section = s;
+	return (s);
+      }
 
+  cached_sect_section = NULL;
+  /* APPLE LOCAL end cache lookup values for improved performance  */
   return (NULL);
 }
 
@@ -1659,25 +1702,37 @@ make_cleanup_restrict_to_objfile (struct objfile *objfile)
   return make_cleanup (do_cleanup_restrict_to_objfile, (void *) data);
 }
 
-/* APPLE LOCAL begin radar  5273932  */
-
-/* Given the name of an objfile, return the objfile that has that name
-   (if any).  */
+/* APPLE LOCAL: Find an objfile called NAME.
+   If EXACT, NAME must be a fully qualified, realpathed filename.
+   Else we're looking for a end-of-string match, e.g.
+    Jabber.FireBundle/Contents/MacOS/Jabber
+   or just "Jabber".  */
 
 struct objfile *
-find_objfile_by_name (char *name)
+find_objfile_by_name (const char *name, int exact)
 {
   struct objfile *o, *temp;
-  struct objfile *retval = NULL;
-  
+  if (name == NULL || *name == '\0')
+    return NULL;
+  int namelen = strlen (name);
+
   ALL_OBJFILES_SAFE (o, temp)
-    if (strcmp (o->name, name) == 0)
+    if (exact)
       {
-	retval = o;
-	break;
+        if (!strcmp (name, o->name))
+          return o;
+      }
+    else
+      {
+        int fnlen = strlen (o->name);
+        if (fnlen < namelen)
+          continue;
+        const char *c = o->name + fnlen - namelen;
+        if (!strcmp (name, c))
+          return o;
       }
 
-  return retval;
+  return NULL;
 }
 
 /* Same as make_cleanup_restrict_to_objfile, except that instead of
@@ -1691,7 +1746,7 @@ make_cleanup_restrict_to_objfile_by_name (char *objfile_name)
     = (struct swap_objfile_list_cleanup *) xmalloc (sizeof (struct swap_objfile_list_cleanup));
   data->old_list = objfile_list;
   objfile_list = NULL;
-  objfile = find_objfile_by_name (objfile_name);
+  objfile = find_objfile_by_name (objfile_name, 1);
   if (objfile)
     {
       objfile_add_to_restrict_list (objfile);
@@ -1932,6 +1987,9 @@ objfile_set_load_state (struct objfile *o, int load_state, int force)
   if (!force && !should_auto_raise_load_state)
     return -2;
 
+  if (o->symflags & OBJF_SYM_DONT_CHANGE)
+    return -2;
+
   /* FIXME: For now, we are not going to REDUCE the load state.  That is
      because we can't track which varobj's would need to get reconstructed
      if we were to change the state.  The only other option would be to
@@ -1997,88 +2055,11 @@ objfile_name_set_load_state (char *name, int load_state, int force)
 
 /* END APPLE LOCAL set_load_state  */
 
-/* APPLE LOCAL begin fix-and-continue */
-
-/* Originally these two functions were a temporary measure to ensure
-   I hadn't missed any symtab/psymtab creation paths, but they are a
-   generally useful diagnostic to make sure future merges don't hose
-   Fix and Continue, so I'm leaving them in.  */
-
-static void 
-sanity_check_symtab_obsoleted_flag (struct symtab *s)
-{
-  if (s != NULL && 
-      SYMTAB_OBSOLETED (s) != 51 &&
-      SYMTAB_OBSOLETED (s) != 50)
-    {
-      struct objfile *objfile;
-      struct symtab *symtab;
-      const char *objfile_name = "(not found)";
-      const char *symtab_name = "(null)";
-
-      /* Use _INCL_OBSOLETED variant as a tricky/secret way of telling
-	symtab_get_first(), symtab_get_next() that this sanity_check
-        function should not be called (which would cause an inf. loop).  */
-
-      ALL_SYMTABS_INCL_OBSOLETED (objfile, symtab)
-        if (symtab == s)
-          {
-            objfile_name = objfile->name;
-            break;
-          }
-
-      if (s->filename)
-        symtab_name = s->filename;
-
-      error ("Symtab with invalid OBSOLETED flag setting.  "
-             "Value is %d, symtab name is %s objfile name is %s", 
-             SYMTAB_OBSOLETED (s), symtab_name, objfile_name);
-    }
-}
-
-static void sanity_check_psymtab_obsoleted_flag (struct partial_symtab *ps)
-{
-  if (ps != NULL && 
-      PSYMTAB_OBSOLETED (ps) != 51 &&
-      PSYMTAB_OBSOLETED (ps) != 50)
-    {
-      struct objfile *objfile;
-      struct partial_symtab *psymtab;
-      const char *objfile_name = "(not found)";
-      const char *psymtab_name = "(null)";
-
-      /* Use _INCL_OBSOLETED variant as a tricky/secret way of telling
-	psymtab_get_first(), psymtab_get_next() that this sanity_check
-        function should not be called (which would cause an inf. loop).  */
-
-      ALL_PSYMTABS_INCL_OBSOLETED (objfile, psymtab)
-        if (psymtab == ps)
-          {
-            objfile_name = objfile->name;
-            break;
-          }
-
-      if (ps->filename)
-        psymtab_name = ps->filename;
-
-      error ("Psymtab with invalid OBSOLETED flag setting.  "
-             "Value is %d, psymtab name is %s, objfile name is %s", 
-             PSYMTAB_OBSOLETED (ps), psymtab_name, objfile_name);
-    }
-}
-
 /* Return the first objfile that isn't marked as 'obsolete' (i.e. has been
    replaced by a newer version in a fix-and-continue operation.  */
 
 /* APPLE LOCAL: The SKIP_OBSOLETE flag is used to skip over obsoleted
-   symtabs.  When we're doing that -- skipping over obsoleted symtabs --
-   we also perform the sanity_check_symtab_obsoleted_flag ().  
-
-   We DON'T run the sanity check tests when SKIP_OBSOLETED is 0
-   because sanity_check_symtab_obsoleted_flag () can potentially
-   recurse into this function so it sets SKIP_OBSOLETED to 0 to
-   avoid that.  (other parts of the code set SKIP_OBSOLETED to 0
-   just to indicate that they don't want to skip obsoleted symtabs. */
+   symtabs.  */
 
 struct symtab *
 symtab_get_first (struct objfile *objfile, int skip_obsolete)
@@ -2086,28 +2067,17 @@ symtab_get_first (struct objfile *objfile, int skip_obsolete)
   struct symtab *s;
 
   s = objfile->symtabs;
-  if (skip_obsolete)
-    sanity_check_symtab_obsoleted_flag (s);
 
   while (s != NULL && skip_obsolete && SYMTAB_OBSOLETED (s) == 51)
     {
       s = s->next;
-      if (skip_obsolete)
-        sanity_check_symtab_obsoleted_flag (s);
     }
 
   return (s);
 }
 
 /* APPLE LOCAL: The SKIP_OBSOLETE flag is used to skip over obsoleted
-   symtabs.  When we're doing that -- skipping over obsoleted symtabs --
-   we also perform the sanity_check_symtab_obsoleted_flag ().  
-
-   We DON'T run the sanity check tests when SKIP_OBSOLETED is 0
-   because sanity_check_symtab_obsoleted_flag () can potentially
-   recurse into this function so it sets SKIP_OBSOLETED to 0 to
-   avoid that.  (other parts of the code set SKIP_OBSOLETED to 0
-   just to indicate that they don't want to skip obsoleted symtabs. */
+   symtabs.  */
 
 struct symtab *
 symtab_get_next (struct symtab *s, int skip_obsolete)
@@ -2116,28 +2086,17 @@ symtab_get_next (struct symtab *s, int skip_obsolete)
     return NULL;
 
   s = s->next;
-  if (skip_obsolete)
-    sanity_check_symtab_obsoleted_flag (s);
 
   while (s != NULL && skip_obsolete && SYMTAB_OBSOLETED (s) == 51)
     {
       s = s->next;
-      if (skip_obsolete)
-        sanity_check_symtab_obsoleted_flag (s);
     }
 
   return s;
 }
 
 /* APPLE LOCAL: The SKIP_OBSOLETE flag is used to skip over obsoleted
-   psymtabs.  When we're doing that -- skipping over obsoleted psymtabs --
-   we also perform the sanity_check_psymtab_obsoleted_flag ().  
-
-   We DON'T run the sanity check tests when SKIP_OBSOLETED is 0
-   because sanity_check_psymtab_obsoleted_flag () can potentially
-   recurse into this function so it sets SKIP_OBSOLETED to 0 to
-   avoid that.  (other parts of the code set SKIP_OBSOLETED to 0
-   just to indicate that they don't want to skip obsoleted psymtabs. */
+   psymtabs. */
 
 struct partial_symtab *
 psymtab_get_first (struct objfile *objfile, int skip_obsolete)
@@ -2145,12 +2104,8 @@ psymtab_get_first (struct objfile *objfile, int skip_obsolete)
   struct partial_symtab *ps;
 
   ps = objfile->psymtabs;
-  if (skip_obsolete)
-    sanity_check_psymtab_obsoleted_flag (ps);
   while (ps != NULL && skip_obsolete && PSYMTAB_OBSOLETED (ps) == 51)
     {
-      if (skip_obsolete)
-        sanity_check_psymtab_obsoleted_flag (ps);
       ps = ps->next;
     }
 
@@ -2158,14 +2113,8 @@ psymtab_get_first (struct objfile *objfile, int skip_obsolete)
 }
 
 /* APPLE LOCAL: The SKIP_OBSOLETE flag is used to skip over obsoleted
-   psymtabs.  When we're doing that -- skipping over obsoleted psymtabs --
-   we also perform the sanity_check_psymtab_obsoleted_flag ().  
+   psymtabs.  */
 
-   We DON'T run the sanity check tests when SKIP_OBSOLETED is 0
-   because sanity_check_psymtab_obsoleted_flag () can potentially
-   recurse into this function so it sets SKIP_OBSOLETED to 0 to
-   avoid that.  (other parts of the code set SKIP_OBSOLETED to 0
-   just to indicate that they don't want to skip obsoleted psymtabs. */
 
 struct partial_symtab *
 psymtab_get_next (struct partial_symtab *ps, int skip_obsolete)
@@ -2174,19 +2123,14 @@ psymtab_get_next (struct partial_symtab *ps, int skip_obsolete)
     return NULL;
 
   ps = ps->next;
-  if (skip_obsolete)
-    sanity_check_psymtab_obsoleted_flag (ps);
 
   while (ps != NULL && skip_obsolete && PSYMTAB_OBSOLETED (ps) == 51)
     {
       ps = ps->next;
-      if (skip_obsolete)
-        sanity_check_psymtab_obsoleted_flag (ps);
     }
 
   return ps;
 }
-/* APPLE LOCAL end fix-and-continue */
 
 
 
@@ -2317,6 +2261,22 @@ objfile_section_offset (struct objfile *objfile, int sect_idx)
       return (CORE_ADDR) -1;
     }
 
+  /* APPLE LOCAL shared cache begin.  */
+  if (exec_objfile != objfile && 
+      bfd_mach_o_in_shared_cached_memory (exec_objfile->obfd))
+    {
+      /* If we are reading from a memory based mach executable image that 
+	 has a dSYM file, all executable image sections have zero offsets.
+	 The dSYM file will be based at the original executable link 
+	 addresses and will need offsets to make symbols in dSYM match the
+	 shared cache loaded addresses. Core files currently run into this
+	 issue, and if we decide to load images from memory in the future, 
+	 those will as well.  */
+      gdb_assert (exec_objfile->num_sections <= objfile->num_sections);
+      gdb_assert (sect_idx < objfile->num_sections);
+      return objfile->section_offsets->offsets[sect_idx];
+    }
+  /* APPLE LOCAL shared cache end.  */
   return exec_objfile->section_offsets->offsets[sect_idx];
 }
 

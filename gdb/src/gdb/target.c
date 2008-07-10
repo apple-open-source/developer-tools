@@ -40,6 +40,7 @@
 #include "event-loop.h"
 #include "memattr.h"
 #include "gdbcore.h"
+#include "objc-lang.h"  /* for objc_clear_selector_to_implementation_cache */
 #include "checkpoint.h" /* for checkpoint_clear_inferior */
 static void target_info (char *, int);
 
@@ -77,14 +78,17 @@ static LONGEST default_xfer_partial (struct target_ops *ops,
 				     const gdb_byte *writebuf,
 				     ULONGEST offset, LONGEST len);
 
-/* Transfer LEN bytes between target address MEMADDR and GDB address
-   MYADDR.  Returns 0 for success, errno code for failure (which
-   includes partial transfers -- if you want a more useful response to
-   partial transfers, try either target_read_memory_partial or
-   target_write_memory_partial).  */
+static LONGEST current_xfer_partial (struct target_ops *ops,
+				     enum target_object object,
+				     const char *annex, gdb_byte *readbuf,
+				     const gdb_byte *writebuf,
+				     ULONGEST offset, LONGEST len);
 
-static int target_xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len,
-			       int write);
+static LONGEST target_xfer_partial (struct target_ops *ops,
+				    enum target_object object,
+				    const char *annex,
+				    void *readbuf, const void *writebuf,
+				    ULONGEST offset, LONGEST len);
 
 static void init_dummy_target (void);
 
@@ -169,7 +173,7 @@ static void debug_to_stop (void);
 struct target_ops deprecated_child_ops;
 
 /* Pointer to array of target architecture structures; the size of the
-   array; the current index into the array; the allocated size of the 
+   array; the current index into the array; the allocated size of the
    array.  */
 struct target_ops **target_structs;
 unsigned target_struct_size;
@@ -199,6 +203,17 @@ static struct cmd_list_element *targetlist = NULL;
    rather than an inferior.  */
 
 int attach_flag;
+
+/* Nonzero if we should trust readonly sections from the
+   executable when reading memory.  */
+
+static int trust_readonly = 0;
+int set_trust_readonly (int newval)
+{
+  int oldval = trust_readonly;
+  trust_readonly = newval;
+  return oldval;
+}
 
 /* Non-zero if we want to see trace of target level stuff.  */
 
@@ -759,7 +774,7 @@ push_target (struct target_ops *t)
   return (t != target_stack);
 }
 
-/* Remove a target_ops vector from the stack, wherever it may be. 
+/* Remove a target_ops vector from the stack, wherever it may be.
    Return how many times it was removed (0 or 1).  */
 
 int
@@ -902,13 +917,117 @@ target_section_by_addr (struct target_ops *target, CORE_ADDR addr)
   return NULL;
 }
 
-/* Return non-zero when the target vector has supplied an xfer_partial
-   method and it, rather than xfer_memory, should be used.  */
-static int
-target_xfer_partial_p (void)
+/* Perform a partial memory transfer.  The arguments and return
+   value are just as for target_xfer_partial.  */
+
+static LONGEST
+memory_xfer_partial (struct target_ops *ops, void *readbuf, 
+                     const void *writebuf, ULONGEST memaddr, LONGEST len)
 {
-  return (target_stack != NULL
-	  && target_stack->to_xfer_partial != default_xfer_partial);
+  LONGEST res;
+  int reg_len;
+  struct mem_region *region;
+
+  /* Zero length requests are ok and require no work.  */
+  if (len == 0)
+    return 0;
+
+  /* Try the executable file, if "trust-readonly-sections" is set.  */
+  if (readbuf != NULL && trust_readonly)
+    {
+      struct obj_section *osect;
+      struct section_table *secp;
+      LONGEST retval;
+
+      /* APPLE LOCAL: This used to search through the target's
+	 sections.  That is quite slow when you have lots of sections.
+	 This violates the target stack abstraction, since this is
+	 looking through ALL the sections, not just the ones claimed
+	 by THIS strata.  I compensate for this by checking the return
+	 value and if we couldn't read anything, I let the generic
+	 code have a try.  */
+
+      osect = find_pc_sect_in_ordered_sections (memaddr, NULL);
+      if (osect != NULL
+	  && (bfd_get_section_flags (osect->the_bfd_section->owner, osect->the_bfd_section)
+	      & SEC_READONLY))
+	{
+	  retval = xfer_memory (memaddr, readbuf, len, 0, NULL, ops);
+	  if (retval > 0)
+	    return retval;
+	}
+    }
+
+  /* Try GDB's internal data cache.  */
+  region = lookup_mem_region (memaddr);
+  if (memaddr + len < region->hi)
+    reg_len = len;
+  else
+    reg_len = region->hi - memaddr;
+
+  switch (region->attrib.mode)
+    {
+    case MEM_RO:
+      if (writebuf != NULL)
+	return -1;
+      break;
+
+    case MEM_WO:
+      if (readbuf != NULL)
+	return -1;
+      break;
+
+      /* APPLE LOCAL: Don't touch memory regions.  */
+    case MEM_NONE:
+      return -1;
+      break;
+    }
+
+  /* APPLE LOCAL: We use -1 to mean "caching temporarily disabled.  */
+  if (region->attrib.cache == 1)
+    {
+      /* FIXME drow/2006-08-09: This call discards OPS, so the raw
+	 memory request will start back at current_target.  */
+      if (readbuf != NULL)
+	res = dcache_xfer_memory (target_dcache, memaddr, readbuf,
+				  reg_len, 0);
+      else
+	/* FIXME drow/2006-08-09: If we're going to preserve const
+	   correctness dcache_xfer_memory should take readbuf and
+	   writebuf.  */
+	res = dcache_xfer_memory (target_dcache, memaddr,
+				  (void *) writebuf,
+				  reg_len, 1);
+      if (res <= 0)
+	return -1;
+      else
+	return res;
+    }
+
+  /* If none of those methods found the memory we wanted, fall back
+     to a target partial transfer.  Normally a single call to
+     to_xfer_partial is enough; if it doesn't recognize an object
+     it will call the to_xfer_partial of the next target down.
+     But for memory this won't do.  Memory is the only target
+     object which can be read from more than one valid target.
+     A core file, for instance, could have some of memory but
+     delegate other bits to the target below it.  So, we must
+     manually try all targets.  */
+
+  do
+    {
+      res = ops->to_xfer_partial (ops, TARGET_OBJECT_MEMORY, NULL,
+				  readbuf, writebuf, memaddr, len);
+      if (res > 0)
+	return res;
+
+      ops = ops->beneath;
+    }
+  while (ops != NULL);
+
+  /* If we still haven't got anything, return the last error.  We
+     give up.  */
+  return res;
 }
 
 static LONGEST
@@ -920,8 +1039,25 @@ target_xfer_partial (struct target_ops *ops,
   LONGEST retval;
 
   gdb_assert (ops->to_xfer_partial != NULL);
-  retval = ops->to_xfer_partial (ops, object, annex, readbuf, writebuf,
-				 offset, len);
+
+  /* If this is a memory transfer, let the memory-specific code
+     have a look at it instead.  Memory transfers are more
+     complicated.  */
+  if (object == TARGET_OBJECT_MEMORY)
+    retval = memory_xfer_partial (ops, readbuf, writebuf, offset, len);
+  else
+    {
+      enum target_object raw_object = object;
+
+      /* If this is a raw memory transfer, request the normal
+	 memory object from other layers.  */
+      if (raw_object == TARGET_OBJECT_RAW_MEMORY)
+	raw_object = TARGET_OBJECT_MEMORY;
+
+      retval = ops->to_xfer_partial (ops, raw_object, annex, readbuf,
+				     writebuf, offset, len);
+    }
+
   if (targetdebug)
     {
       const unsigned char *myaddr = NULL;
@@ -941,7 +1077,7 @@ target_xfer_partial (struct target_ops *ops,
       if (retval > 0 && myaddr != NULL)
 	{
 	  int i;
-	  
+
 	  fputs_unfiltered (", bytes =", gdb_stdlog);
 	  for (i = 0; i < retval; i++)
 	    {
@@ -954,93 +1090,14 @@ target_xfer_partial (struct target_ops *ops,
 		    }
 		  fprintf_unfiltered (gdb_stdlog, "\n");
 		}
-	      
+
 	      fprintf_unfiltered (gdb_stdlog, " %02x", myaddr[i] & 0xff);
 	    }
 	}
-      
+
       fputc_unfiltered ('\n', gdb_stdlog);
     }
   return retval;
-}
-
-/* Attempt a transfer all LEN bytes starting at OFFSET between the
-   inferior's KIND:ANNEX space and GDB's READBUF/WRITEBUF buffer.  If
-   the transfer succeeds, return zero, otherwize the host ERRNO is
-   returned.
-
-   The inferior is formed from several layers.  In the case of
-   corefiles, inf-corefile is layered above inf-exec and a request for
-   text (corefiles do not include text pages) will be first sent to
-   the core-stratum, fail, and then sent to the object-file where it
-   will succeed.
-
-   NOTE: cagney/2004-09-30:
-
-   The old code tried to use four separate mechanisms for mapping an
-   object:offset:len tuple onto an inferior and its address space: the
-   target stack; the inferior's TO_SECTIONS; solib's SO_LIST;
-   overlays.
-
-   This is stupid.
-
-   The code below is instead using a single mechanism (currently
-   strata).  If that mechanism proves insufficient then re-factor it
-   implementing another singluar mechanism (for instance, a generic
-   object:annex onto inferior:object:annex say).  */
-
-static LONGEST
-xfer_using_stratum (enum target_object object, const char *annex,
-		    ULONGEST offset, LONGEST len, void *readbuf,
-		    const void *writebuf)
-{
-  LONGEST xfered;
-  struct target_ops *target;
-
-  /* Always successful.  */
-  if (len == 0)
-    return 0;
-  /* Never successful.  */
-  if (target_stack == NULL)
-    return EIO;
-
-  target = target_stack;
-  while (1)
-    {
-      xfered = target_xfer_partial (target, object, annex,
-				    readbuf, writebuf, offset, len);
-      if (xfered > 0)
-	{
-	  /* The partial xfer succeeded, update the counts, check that
-	     the xfer hasn't finished and if it hasn't set things up
-	     for the next round.  */
-	  len -= xfered;
-	  if (len <= 0)
-	    return 0;
-	  offset += xfered;
-	  if (readbuf != NULL)
-	    readbuf = (gdb_byte *) readbuf + xfered;
-	  if (writebuf != NULL)
-	    writebuf = (gdb_byte *) writebuf + xfered;
-	  target = target_stack;
-	}
-      else if (xfered < 0)
-	{
-	  /* Something totally screwed up, abandon the attempt to
-	     xfer.  */
-	  if (errno)
-	    return errno;
-	  else
-	    return EIO;
-	}
-      else
-	{
-	  /* This "stratum" didn't work, try the next one down.  */
-	  target = target->beneath;
-	  if (target == NULL)
-	    return EIO;
-	}
-    }
 }
 
 /* Read LEN bytes of target memory at address MEMADDR, placing the results in
@@ -1051,28 +1108,27 @@ xfer_using_stratum (enum target_object object, const char *annex,
    MYADDR.  In particular, the caller should not depend upon partial reads
    filling the buffer with good data.  There is no way for the caller to know
    how much good data might have been transfered anyway.  Callers that can
-   deal with partial reads should call target_read_memory_partial. */
+   deal with partial reads should call target_read (which will retry until
+   it makes no progress, and then return how much was transferred). */
 
 int
 target_read_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len)
 {
-  if (target_xfer_partial_p ())
-    return xfer_using_stratum (TARGET_OBJECT_MEMORY, NULL,
-			       memaddr, len, myaddr, NULL);
+  if (target_read (&current_target, TARGET_OBJECT_MEMORY, NULL,
+		   myaddr, memaddr, len) == len)
+    return 0;
   else
-    return target_xfer_memory (memaddr, myaddr, len, 0);
+    return EIO;
 }
 
 int
 target_write_memory (CORE_ADDR memaddr, const gdb_byte *myaddr, int len)
 {
-  gdb_byte *bytes = alloca (len);
-  memcpy (bytes, myaddr, len);
-  if (target_xfer_partial_p ())
-    return xfer_using_stratum (TARGET_OBJECT_MEMORY, NULL,
-			       memaddr, len, NULL, bytes);
+  if (target_write (&current_target, TARGET_OBJECT_MEMORY, NULL,
+		    myaddr, memaddr, len) == len)
+    return 0;
   else
-    return target_xfer_memory (memaddr, bytes, len, 1);
+    return EIO;
 }
 
 #ifndef target_stopped_data_address_p
@@ -1090,7 +1146,6 @@ target_stopped_data_address_p (struct target_ops *target)
 }
 #endif
 
-static int trust_readonly = 0;
 static void
 show_trust_readonly (struct ui_file *file, int from_tty,
 		     struct cmd_list_element *c, const char *value)
@@ -1098,260 +1153,6 @@ show_trust_readonly (struct ui_file *file, int from_tty,
   fprintf_filtered (file, _("\
 Mode for reading from readonly sections is %s.\n"),
 		    value);
-}
-
-/* Move memory to or from the targets.  The top target gets priority;
-   if it cannot handle it, it is offered to the next one down, etc.
-
-   Result is -1 on error, or the number of bytes transfered.  */
-
-int
-do_xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len, int write,
-		struct mem_attrib *attrib)
-{
-  int res;
-  int done = 0;
-  struct target_ops *t;
-
-  /* Zero length requests are ok and require no work.  */
-  if (len == 0)
-    return 0;
-
-  /* deprecated_xfer_memory is not guaranteed to set errno, even when
-     it returns 0.  */
-  errno = 0;
-
-  if (!write && trust_readonly)
-    {
-      struct section_table *secp;
-      /* User-settable option, "trust-readonly-sections".  If true,
-         then memory from any SEC_READONLY bfd section may be read
-         directly from the bfd file.  */
-      secp = target_section_by_addr (&current_target, memaddr);
-      if (secp != NULL
-	  && (bfd_get_section_flags (secp->bfd, secp->the_bfd_section)
-	      & SEC_READONLY))
-	return xfer_memory (memaddr, myaddr, len, 0, attrib, &current_target);
-    }
-
-  /* The quick case is that the top target can handle the transfer.  */
-  res = current_target.deprecated_xfer_memory
-    (memaddr, myaddr, len, write, attrib, &current_target);
-
-  /* If res <= 0 then we call it again in the loop.  Ah well. */
-  if (res <= 0)
-    {
-      for (t = target_stack; t != NULL; t = t->beneath)
-	{
-	  if (!t->to_has_memory)
-	    continue;
-
-	  res = t->deprecated_xfer_memory (memaddr, myaddr, len, write, attrib, t);
-	  if (res > 0)
-	    break;		/* Handled all or part of xfer */
-	  if (t->to_has_all_memory)
-	    break;
-	}
-
-      if (res <= 0)
-	return -1;
-    }
-
-  return res;
-}
-
-
-/* Perform a memory transfer.  Iterate until the entire region has
-   been transfered.
-
-   Result is 0 or errno value.  */
-
-static int
-target_xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len, int write)
-{
-  int res;
-  int reg_len;
-  struct mem_region *region;
-
-  /* Zero length requests are ok and require no work.  */
-  if (len == 0)
-    {
-      return 0;
-    }
-
-  while (len > 0)
-    {
-      region = lookup_mem_region(memaddr);
-      if (memaddr + len < region->hi)
-	reg_len = len;
-      else
-	reg_len = region->hi - memaddr;
-
-      switch (region->attrib.mode)
-	{
-	case MEM_RO:
-	  if (write)
-	    return EIO;
-	  break;
-	  
-	case MEM_WO:
-	  if (!write)
-	    return EIO;
-	  break;
-	}
-
-      while (reg_len > 0)
-	{
-	  if (region->attrib.cache)
-	    res = dcache_xfer_memory (target_dcache, memaddr, myaddr,
-				      reg_len, write);
-	  else
-	    res = do_xfer_memory (memaddr, myaddr, reg_len, write,
-				 &region->attrib);
-	      
-	  if (res <= 0)
-	    {
-	      /* If this address is for nonexistent memory, read zeros
-		 if reading, or do nothing if writing.  Return
-		 error. */
-	      if (!write)
-		memset (myaddr, 0, len);
-	      if (errno == 0)
-		return EIO;
-	      else
-		return errno;
-	    }
-
-	  memaddr += res;
-	  myaddr  += res;
-	  len     -= res;
-	  reg_len -= res;
-	}
-    }
-  
-  return 0;			/* We managed to cover it all somehow. */
-}
-
-
-/* Perform a partial memory transfer.
-
-   Result is -1 on error, or the number of bytes transfered.  */
-
-static int
-target_xfer_memory_partial (CORE_ADDR memaddr, char *myaddr, int len,
-			    int write_p, int *err)
-{
-  int res;
-  int reg_len;
-  struct mem_region *region;
-
-  /* Zero length requests are ok and require no work.  */
-  if (len == 0)
-    {
-      *err = 0;
-      return 0;
-    }
-
-  region = lookup_mem_region(memaddr);
-  if (memaddr + len < region->hi)
-    reg_len = len;
-  else
-    reg_len = region->hi - memaddr;
-
-  switch (region->attrib.mode)
-    {
-    case MEM_RO:
-      if (write_p)
-	{
-	  *err = EIO;
-	  return -1;
-	}
-      break;
-
-    case MEM_WO:
-      if (write_p)
-	{
-	  *err = EIO;
-	  return -1;
-	}
-      break;
-    }
-
-  if (region->attrib.cache)
-    res = dcache_xfer_memory (target_dcache, memaddr, myaddr,
-			      reg_len, write_p);
-  else
-    res = do_xfer_memory (memaddr, myaddr, reg_len, write_p,
-			  &region->attrib);
-      
-  if (res <= 0)
-    {
-      if (errno != 0)
-	*err = errno;
-      else
-	*err = EIO;
-
-        return -1;
-    }
-
-  *err = 0;
-  return res;
-}
-
-int
-target_read_memory_partial (CORE_ADDR memaddr, char *buf, int len, int *err)
-{
-  if (target_xfer_partial_p ())
-    {
-      int retval;
-
-      retval = target_xfer_partial (target_stack, TARGET_OBJECT_MEMORY,
-				    NULL, buf, NULL, memaddr, len);
-
-      if (retval <= 0)
-	{
-	  if (errno)
-	    *err = errno;
-	  else
-	    *err = EIO;
-	  return -1;
-	}
-      else
-	{
-	  *err = 0;
-	  return retval;
-	}
-    }
-  else
-    return target_xfer_memory_partial (memaddr, buf, len, 0, err);
-}
-
-int
-target_write_memory_partial (CORE_ADDR memaddr, char *buf, int len, int *err)
-{
-  if (target_xfer_partial_p ())
-    {
-      int retval;
-
-      retval = target_xfer_partial (target_stack, TARGET_OBJECT_MEMORY,
-				    NULL, NULL, buf, memaddr, len);
-
-      if (retval <= 0)
-	{
-	  if (errno)
-	    *err = errno;
-	  else
-	    *err = EIO;
-	  return -1;
-	}
-      else
-	{
-	  *err = 0;
-	  return retval;
-	}
-    }
-  else
-    return target_xfer_memory_partial (memaddr, buf, len, 1, err);
 }
 
 /* More generic transfers.  */
@@ -1390,8 +1191,24 @@ default_xfer_partial (struct target_ops *ops, enum target_object object,
 	return -1;
     }
   else if (ops->beneath != NULL)
-    return target_xfer_partial (ops->beneath, object, annex,
-				readbuf, writebuf, offset, len);
+    return ops->beneath->to_xfer_partial (ops->beneath, object, annex,
+					  readbuf, writebuf, offset, len);
+  else
+    return -1;
+}
+
+/* The xfer_partial handler for the topmost target.  Unlike the default,
+   it does not need to handle memory specially; it just passes all
+   requests down the stack.  */
+
+static LONGEST
+current_xfer_partial (struct target_ops *ops, enum target_object object,
+		      const char *annex, gdb_byte *readbuf,
+		      const gdb_byte *writebuf, ULONGEST offset, LONGEST len)
+{
+  if (ops->beneath != NULL)
+    return ops->beneath->to_xfer_partial (ops->beneath, object, annex,
+					  readbuf, writebuf, offset, len);
   else
     return -1;
 }
@@ -1434,9 +1251,18 @@ target_read (struct target_ops *ops,
 					  (gdb_byte *) buf + xfered,
 					  offset + xfered, len - xfered);
       /* Call an observer, notifying them of the xfer progress?  */
-      if (xfer <= 0)
-	/* Call memory_error?  */
-	return -1;
+      if (xfer == 0)
+ 	return xfered;
+      /* APPLE LOCAL: Don't return -1 here if we managed to get some
+        bytes.  Return the number of bytes we got.  */
+      if (xfer < 0)
+        {
+          if (xfered == 0)
+            return -1;
+          else
+            return xfered;
+        }
+      /* END APPLE LOCAL  */
       xfered += xfer;
       QUIT;
     }
@@ -1445,9 +1271,22 @@ target_read (struct target_ops *ops,
 
 LONGEST
 target_write (struct target_ops *ops,
-	      enum target_object object,
-	      const char *annex, const gdb_byte *buf,
-	      ULONGEST offset, LONGEST len)
+ 	      enum target_object object,
+ 	      const char *annex, const gdb_byte *buf,
+ 	      ULONGEST offset, LONGEST len)
+{
+  return target_write_with_progress (ops, object, annex, buf, offset, len,
+ 				     NULL, NULL);
+}
+
+/* An alternative to target_write with progress callbacks.  */
+
+LONGEST
+target_write_with_progress (struct target_ops *ops,
+			    enum target_object object,
+			    const char *annex, const gdb_byte *buf,
+			    ULONGEST offset, LONGEST len,
+			    void (*progress) (ULONGEST, void *), void *baton)
 {
   LONGEST xfered = 0;
   while (xfered < len)
@@ -1688,7 +1527,7 @@ target_resize_to_sections (struct target_ops *target, int num_added)
 
   /* Check to see if anyone else was pointing to this structure.
      If old_value was null, then no one was. */
-     
+
   if (old_value)
     {
       for (t = target_structs; t < target_structs + target_struct_size;
@@ -1708,7 +1547,7 @@ target_resize_to_sections (struct target_ops *target, int num_added)
 	  current_target.to_sections_end = target->to_sections_end;
 	}
     }
-  
+
   return old_count;
 
 }
@@ -1830,6 +1669,8 @@ generic_mourn_inferior (void)
      using hit counts.  So don't clear them if we're counting hits.  */
   if (!show_breakpoint_hit_counts)
     breakpoint_clear_ignore_counts ();
+
+  objc_clear_caches ();
 
   if (deprecated_detach_hook)
     deprecated_detach_hook ();
@@ -2117,7 +1958,7 @@ deprecated_debug_xfer_memory (CORE_ADDR memaddr, bfd_byte *myaddr, int len,
 		}
 	      fprintf_unfiltered (gdb_stdlog, "\n");
 	    }
-	  
+
 	  fprintf_unfiltered (gdb_stdlog, " %02x", myaddr[i] & 0xff);
 	}
     }
@@ -2737,7 +2578,7 @@ command."),
 			    show_targetdebug,
 			    &setdebuglist, &showdebuglist);
 
-  add_setshow_boolean_cmd ("trust-readonly-sections", class_support, 
+  add_setshow_boolean_cmd ("trust-readonly-sections", class_support,
 			   &trust_readonly, _("\
 Set mode for reading from readonly sections."), _("\
 Show mode for reading from readonly sections."), _("\

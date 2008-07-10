@@ -525,6 +525,23 @@ struct gcc_target
      to let the backend emit the call frame instructions.  */
   void (* dwarf_handle_frame_unspec) (const char *, rtx, int);
 
+/* APPLE LOCAL begin ARM strings in code */
+  /* True if constant strings are emitted inline in the code,
+     when possible, instead of in their own section. */
+  bool (*strings_in_code_p) (void);
+/* APPLE LOCAL end ARM strings in code */
+
+  /* APPLE LOCAL begin mainline */
+  /* This target hook allows the operating system to override the DECL
+     that represents the external variable that contains the stack
+     protection guard variable.  The type of this DECL is ptr_type_node.  */
+  tree (* stack_protect_guard) (void);
+
+  /* This target hook allows the operating system to override the CALL_EXPR
+     that is invoked when a check vs the guard variable fails.  */
+  tree (* stack_protect_fail) (void);
+  /* APPLE LOCAL end mainline */
+
   /* Functions relating to calls - argument passing, returns, etc.  */
   struct calls {
     bool (*promote_function_args) (tree fntype);
@@ -533,6 +550,8 @@ struct gcc_target
     rtx (*struct_value_rtx) (tree fndecl, int incoming);
     bool (*return_in_memory) (tree type, tree fndecl);
     bool (*return_in_msb) (tree type);
+    /* APPLE LOCAL radar 4781080 */
+    bool (*objc_fpreturn_msgcall) (tree type, bool no_long_double);
 
     /* Return true if a parameter must be passed by reference.  TYPE may
        be null if this is a libcall.  CA may be null if this query is
@@ -610,10 +629,28 @@ struct gcc_target
        itself.  Returning true is the behavior required by the Itanium
        C++ ABI.  */
     bool (*key_method_may_be_inline) (void);
-    /* Returns true if all class data (virtual tables, type info,
-       etc.) should be exported from the current DLL, even when the
-       associated class is not exported.  */
-    bool (*export_class_data) (void);
+/* APPLE LOCAL begin mainline 4.2 2006-03-01 4311680 */
+    /* DECL is a virtual table, virtual table table, typeinfo object,
+       or other similar implicit class data object that will be
+       emitted with external linkage in this translation unit.  No ELF
+       visibility has been explicitly specified.  If the target needs
+       to specify a visibility other than that of the containing class,
+       use this hook to set DECL_VISIBILITY and
+       DECL_VISIBILITY_SPECIFIED.  */ 
+    void (*determine_class_data_visibility) (tree decl);
+    /* Returns true (the default) if virtual tables and other
+       similar implicit class data objects are always COMDAT if they
+       have external linkage.  If this hook returns false, then
+       class data for classes whose virtual table will be emitted in
+       only one translation unit will not be COMDAT.  */
+    bool (*class_data_always_comdat) (void);
+/* APPLE LOCAL end mainline 4.2 2006-03-01 4311680 */
+/* APPLE LOCAL begin mainline 4.3 2006-01-10 4871915 */
+    /* Returns true (the default) if the RTTI for the basic types,
+       which is always defined in the C++ runtime, should be COMDAT;
+       false if it should not be COMDAT.  */
+    bool (*library_rtti_comdat) (void);
+/* APPLE LOCAL end mainline 4.3 2006-01-10 4871915 */
   } cxx;
 
   /* Leave the boolean fields at the end.  */

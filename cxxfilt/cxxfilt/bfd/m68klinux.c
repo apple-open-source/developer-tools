@@ -1,6 +1,6 @@
 /* BFD back-end for linux flavored m68k a.out binaries.
    Copyright 1992, 1993, 1994, 1995, 1996, 1997, 1999, 2000, 2001, 2002,
-   2003, 2004 Free Software Foundation, Inc.
+   2003, 2004, 2006 Free Software Foundation, Inc.
 
 This file is part of BFD, the Binary File Descriptor library.
 
@@ -16,7 +16,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #define	TARGET_PAGE_SIZE 4096
 #define ZMAGIC_DISK_BLOCK_SIZE 1024
@@ -94,8 +94,7 @@ m68klinux_write_object_contents (abfd)
 #define	GOT_REF_PREFIX	"__GOT_"
 #endif
 
-#define IS_GOT_SYM(name) \
-  (strncmp (name, GOT_REF_PREFIX, sizeof GOT_REF_PREFIX - 1) == 0)
+#define IS_GOT_SYM(name)  (CONST_STRNEQ (name, GOT_REF_PREFIX))
 
 /* See if a symbol name is a reference to the procedure linkage table.  */
 
@@ -103,8 +102,7 @@ m68klinux_write_object_contents (abfd)
 #define	PLT_REF_PREFIX	"__PLT_"
 #endif
 
-#define IS_PLT_SYM(name) \
-  (strncmp (name, PLT_REF_PREFIX, sizeof PLT_REF_PREFIX - 1) == 0)
+#define IS_PLT_SYM(name)  (CONST_STRNEQ (name, PLT_REF_PREFIX))
 
 /* This string is used to generate specialized error messages.  */
 
@@ -235,8 +233,9 @@ linux_link_hash_table_create (abfd)
       bfd_set_error (bfd_error_no_memory);
       return (struct bfd_link_hash_table *) NULL;
     }
-  if (! NAME(aout,link_hash_table_init) (&ret->root, abfd,
-					 linux_link_hash_newfunc))
+  if (!NAME(aout,link_hash_table_init) (&ret->root, abfd,
+					linux_link_hash_newfunc,
+					sizeof (struct linux_link_hash_entry)))
     {
       free (ret);
       return (struct bfd_link_hash_table *) NULL;
@@ -315,9 +314,8 @@ linux_link_create_dynamic_sections (abfd, info)
 
   /* We choose to use the name ".linux-dynamic" for the fixup table.
      Why not? */
-  s = bfd_make_section (abfd, ".linux-dynamic");
+  s = bfd_make_section_with_flags (abfd, ".linux-dynamic", flags);
   if (s == NULL
-      || ! bfd_set_section_flags (abfd, s, flags)
       || ! bfd_set_section_alignment (abfd, s, 2))
     return FALSE;
   s->size = 0;
@@ -445,8 +443,7 @@ linux_tally_symbols (h, data)
     h = (struct linux_link_hash_entry *) h->root.root.u.i.link;
 
   if (h->root.root.type == bfd_link_hash_undefined
-      && strncmp (h->root.root.root.string, NEEDS_SHRLIB,
-		  sizeof NEEDS_SHRLIB - 1) == 0)
+      && CONST_STRNEQ (h->root.root.root.string, NEEDS_SHRLIB))
     {
       const char *name;
       char *p;

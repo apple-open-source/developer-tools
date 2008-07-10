@@ -35,6 +35,10 @@
 
 #define XMALLOC(TYPE) ((TYPE*) xmalloc (sizeof (TYPE)))
 
+/* APPLE LOCAL: segment binary file downloads
+ * default the binary file chunk size to the max value.  */
+#define DEFAULT_MAX_BINARY_FILE_CHUNK LONG_MAX
+static long  g_max_binary_file_chunk = DEFAULT_MAX_BINARY_FILE_CHUNK;
 
 char *
 skip_spaces (char *chp)
@@ -520,17 +524,24 @@ restore_section_callback (bfd *ibfd, asection *isec, void *args)
   return;
 }
 
+/* APPLE LOCAL BEGIN: segment binary file downloads  */
+
 static void
 restore_binary_file (char *filename, struct callback_data *data)
 {
   FILE *file = fopen_with_cleanup (filename, FOPEN_RB);
   int status;
   gdb_byte *buf;
-  long len;
+  long len, total_file_bytes;
+  int max_errors;
 
   /* Get the file size for reading.  */
-  if (fseek (file, 0, SEEK_END) == 0)
-    len = ftell (file);
+  if (fseek (file, 0, SEEK_END) == 0) 
+    {
+      total_file_bytes = len = ftell (file);
+      if (len > g_max_binary_file_chunk)
+        len = g_max_binary_file_chunk;
+    }
   else
     perror_with_name (filename);
 
@@ -549,7 +560,7 @@ restore_binary_file (char *filename, struct callback_data *data)
     ("Restoring binary file %s into memory (0x%lx to 0x%lx)\n", 
      filename, 
      (unsigned long) data->load_start + data->load_offset, 
-     (unsigned long) data->load_start + data->load_offset + len);
+     (unsigned long) data->load_start + data->load_offset + total_file_bytes);
 
   /* Now set the file pos to the requested load start pos.  */
   if (fseek (file, data->load_start, SEEK_SET) != 0)
@@ -558,15 +569,45 @@ restore_binary_file (char *filename, struct callback_data *data)
   /* Now allocate a buffer and read the file contents.  */
   buf = xmalloc (len);
   make_cleanup (xfree, buf);
-  if (fread (buf, 1, len, file) != len)
-    perror_with_name (filename);
 
-  /* Now write the buffer into target memory. */
-  len = target_write_memory (data->load_start + data->load_offset, buf, len);
-  if (len != 0)
-    warning (_("restore: memory write failed (%s)."), safe_strerror (len));
-  return;
+  status = 0;
+  max_errors = 3;
+  while (total_file_bytes > 0) 
+    {
+      if (fread (buf, 1, len, file) != len)
+	perror_with_name (filename);
+    
+      /* Now write the buffer into target memory. */
+       printf_unfiltered ("\rWriting 0x%x bytes to 0x%x", len, 
+			  data->load_start + data->load_offset );
+       gdb_flush (gdb_stdout);
+       status = target_write_memory (data->load_start + data->load_offset, 
+				     buf, len);
+    
+       if (status == 0) 
+	{
+	  data->load_offset += len;
+	  total_file_bytes -= len;
+	  if (total_file_bytes < g_max_binary_file_chunk)
+	    len = total_file_bytes;
+	  else
+	    len = g_max_binary_file_chunk;
+	}
+      else 
+	{
+	  if (--max_errors > 0) 
+	    warning (_("\nrestore: memory write failed - retrying."));
+	  else 
+            break;
+	}
+    }
+  printf_unfiltered ("\n");
+    
+  if (status != 0)
+    warning (_("restore: memory write failed (%s)."), safe_strerror (status));
 }
+
+/* APPLE LOCAL END: segment binary file downloads  */
 
 static void
 restore_command (char *args, int from_tty)
@@ -673,10 +714,90 @@ binary_append_command (char *cmd, int from_tty)
 
 extern initialize_file_ftype _initialize_cli_dump; /* -Wmissing-prototypes */
 
+/* APPLE LOCAL BEGIN: segment binary file downloads  */
+
+static void
+show_binary_buffer_size (char *args, int from_tty)
+{
+    printf_filtered (_("The restore binary buffer size is %ld (0x%lx).\n"), 
+		     g_max_binary_file_chunk, g_max_binary_file_chunk );
+}
+
+static void
+set_binary_buffer_size (char *args, int from_tty)
+{
+  if (args == NULL) 
+    {
+      printf_filtered (_("Reverting the restore binary buffer size to the default value.\n")); 
+      g_max_binary_file_chunk = DEFAULT_MAX_BINARY_FILE_CHUNK;
+    }
+  else
+    {
+      char *end;
+      long binary_file_chunk = strtol (args, &end, 0);
+      /* Make sure that the new value is larger than the the 
+         minimum max remote packet size so we all remote
+         command packets can still function properly.  */
+      if (end == NULL || *end != '\0')
+        {
+          error (_("Invalid binary buffer size argument '%s'."), args);
+        }
+      else
+	{
+          g_max_binary_file_chunk = binary_file_chunk;
+        }
+    }
+  show_binary_buffer_size (NULL, from_tty);
+}
+
+static void
+set_restore_cmd (char *args, int from_tty)
+{
+}
+
+static void
+show_restore_cmd (char *args, int from_tty)
+{
+  show_binary_buffer_size (args, from_tty);
+}
+
+/* APPLE LOCAL END: segment binary file downloads  */
+
+
 void
 _initialize_cli_dump (void)
 {
   struct cmd_list_element *c;
+
+/* APPLE LOCAL BEGIN: segment binary file downloads  */
+  static struct cmd_list_element *restore_set_cmdlist;
+  static struct cmd_list_element *restore_show_cmdlist;
+
+  add_prefix_cmd ("restore", no_class, set_restore_cmd, 
+		  _("Set restore specific command settings\n"),
+		  &restore_set_cmdlist, "set restore ",
+		  0 /* allow-unknown */, &setlist);
+  add_prefix_cmd ("restore", no_class, show_restore_cmd, 
+		  _("\Show current restore specific command settings"),
+		  &restore_show_cmdlist, "show restore ",
+		  0 /* allow-unknown */, &showlist);
+
+  add_cmd ("binary-buffer-size", 
+           no_class, set_binary_buffer_size, _("\
+Set the max binary buffer size to use with the 'restore' command.\n\
+The single optional argument SIZE can be given to specify the size of the\n\
+buffer in bytes. When no argument is given, the default value is restored.\n\
+When a binary file is restored to memory, SIZE bytes will be read from the\n\
+current file position and then written to appropriate target memory address.\n\
+This allows large files to be downloaded to target memory without the risk of\n\
+large allocation failures in gdb."), 
+	   &restore_set_cmdlist);
+  add_cmd ("binary-buffer-size", 
+           no_class, show_binary_buffer_size, 
+	   _("Show the max binary buffer size to use with the 'restore' command."),
+	   &restore_show_cmdlist);
+  /* APPLE LOCAL END: segment binary file downloads  */
+
   add_prefix_cmd ("dump", class_vars, dump_command, _("\
 Dump target code/data to a local file."),
 		  &dump_cmdlist, "dump ",

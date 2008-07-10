@@ -234,6 +234,12 @@ default_coff_make_msymbol_special (int val, struct minimal_symbol *msym)
   return;
 }
 
+void
+default_dbx_make_msymbol_special (int16_t val, struct minimal_symbol *msym)
+{
+  return;
+}
+
 int
 cannot_register_not (int regnum)
 {

@@ -38,6 +38,8 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "opts.h"
 #include "options.h"
 #include "mkdeps.h"
+/* APPLE LOCAL iframework for 4.3 4094959 */
+#include "tm_p.h"
 
 #ifndef DOLLARS_IN_IDENTIFIERS
 # define DOLLARS_IN_IDENTIFIERS true
@@ -159,6 +161,8 @@ c_common_missing_argument (const char *opt, size_t code)
     case OPT_isysroot:
     case OPT_isystem:
     case OPT_iquote:
+    /* APPLE LOCAL ARM iwithsysroot 4917039 */
+    case OPT_iwithsysroot:
       error ("missing path after %qs", opt);
       break;
 
@@ -264,7 +268,16 @@ c_common_handle_option (size_t scode, const char *arg, int value)
     {
     default:
       if (cl_options[code].flags & (CL_C | CL_CXX | CL_ObjC | CL_ObjCXX))
-	break;
+	/* APPLE LOCAL begin iframework for 4.3 4094959 */
+	{
+#ifdef TARGET_HANDLE_C_OPTION
+	  if ((option->flags & CL_TARGET))
+	    if (! TARGET_HANDLE_C_OPTION (scode, arg, value))
+	      result = 0;
+#endif
+	  break;
+	}
+      /* APPLE LOCAL end iframework for 4.3 4094959 */
       result = 0;
       break;
 
@@ -685,12 +698,6 @@ c_common_handle_option (size_t scode, const char *arg, int value)
       flag_signed_char = !value;
       break;
 
-      /* APPLE LOCAL begin structor decloning */
-    case OPT_fclone_structors:
-      flag_clone_structors = value;
-      break;
-      /* APPLE LOCAL end structor decloning */
-
     case OPT_fcheck_new:
       flag_check_new = value;
       break;
@@ -772,9 +779,8 @@ c_common_handle_option (size_t scode, const char *arg, int value)
       break;
 
     /* APPLE LOCAL begin mainline */
-    case OPT_fobjc_call_cxx_cdtors:
-      flag_objc_call_cxx_cdtors = value;
-      break;
+    /* APPLE LOCAL radar 4949034 */
+    /* code removed */
     /* APPLE LOCAL end mainline */
 
     case OPT_fobjc_exceptions:
@@ -906,6 +912,15 @@ c_common_handle_option (size_t scode, const char *arg, int value)
       sysroot = arg;
       break;
 
+    /* APPLE LOCAL begin ARM iwithsysroot 4917039 */
+    case OPT_iwithsysroot:
+      if (arg[0] != '/' || !sysroot)
+	add_path (xstrdup (arg), SYSTEM, 0, true);
+      else
+	add_path (concat (sysroot, arg, NULL), SYSTEM, 0, true);
+      break;
+    /* APPLE LOCAL end ARM iwithsysroot 4917039 */
+
     case OPT_isystem:
       add_path (xstrdup (arg), SYSTEM, 0, true);
       break;
@@ -956,6 +971,12 @@ c_common_handle_option (size_t scode, const char *arg, int value)
     case OPT_print_objc_runtime_info:
       print_struct_values = 1;
       break;
+
+    /* APPLE LOCAL begin radar 5082000 */
+    case OPT_print_objc_ivar_layout:
+      print_objc_ivar_layout = 1;
+      break;
+    /* APPLE LOCAL end radar 5082000 */
 
 /* APPLE LOCAL begin mainline 4.1 2005-06-17 3988498 */
     case OPT_print_pch_checksum:
@@ -1075,6 +1096,12 @@ c_common_post_options (const char **pfilename)
     flag_no_inline = 1;
   if (flag_inline_functions)
     flag_inline_trees = 2;
+
+  /* APPLE LOCAL begin mainline */
+  /* By default we use C99 inline semantics in GNU99 or C99 mode.  C99
+     inline semantics are not supported in GNU89 or C89 mode.  */
+  flag_gnu89_inline = !flag_isoc99;
+  /* APPLE LOCAL end mainline */
 
   /* If we are given more than one input file, we must use
      unit-at-a-time mode.  */

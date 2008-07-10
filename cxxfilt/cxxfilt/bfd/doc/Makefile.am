@@ -51,18 +51,23 @@ SRCIPROT = $(srcdir)/../cache.c $(srcdir)/../libbfd.c \
 TEXIDIR = $(srcdir)/../../texinfo/fsf
 
 info_TEXINFOS = bfd.texinfo
+bfd_TEXINFOS = $(DOCFILES) bfdsumm.texi
 
 MKDOC = chew$(EXEEXT_FOR_BUILD)
 
-$(MKDOC): chew.o
-	$(CC_FOR_BUILD) -o $(MKDOC) chew.o $(CFLAGS_FOR_BUILD) $(LDFLAGS_FOR_BUILD)
+INCLUDES = -I.. -I$(srcdir)/.. -I$(srcdir)/../../include \
+	-I$(srcdir)/../../intl -I../../intl
+
+$(MKDOC): $(srcdir)/chew.c
+	$(CC_FOR_BUILD) -o chew.$$$$ $(srcdir)/chew.c \
+	  $(CFLAGS_FOR_BUILD) $(LDFLAGS_FOR_BUILD) $(H_CFLAGS) \
+	  $(INCLUDES); \
+	$(SHELL) $(srcdir)/../../move-if-change chew.$$$$ $(MKDOC)
 
 chew.o: chew.c
-	$(CC_FOR_BUILD) -c -I.. -I$(srcdir)/.. -I$(srcdir)/../../include -I$(srcdir)/../../intl -I../../intl $(H_CFLAGS) $(CFLAGS_FOR_BUILD) $(srcdir)/chew.c
+	$(CC_FOR_BUILD) -c $(INCLUDES) $(H_CFLAGS) $(CFLAGS_FOR_BUILD) $(srcdir)/chew.c
 
 protos: libbfd.h libcoff.h bfd.h
-
-$(srcdir)/bfd.info bfd.dvi: $(DOCFILES) bfdsumm.texi bfd.texinfo
 
 # We can't replace these rules with an implicit rule, because
 # makes without VPATH support couldn't find the .h files in `..'.
@@ -281,3 +286,33 @@ MAINTAINERCLEANFILES = $(DOCFILES)
 # We want install to imply install-info as per GNU standards, despite the
 # cygnus option.
 install: install-info
+
+html__strip_dir = `echo $$p | sed -e 's|^.*/||'`;
+
+install-html: install-html-am
+
+install-html-am: $(HTMLS)
+	@$(NORMAL_INSTALL)
+	test -z "$(htmldir)" || $(mkdir_p) "$(DESTDIR)$(htmldir)"
+	@list='$(HTMLS)'; for p in $$list; do \
+	  if test -f "$$p" || test -d "$$p"; then d=""; else d="$(srcdir)/"; fi; \
+	  f=$(html__strip_dir) \
+	  if test -d "$$d$$p"; then \
+	    echo " $(mkdir_p) '$(DESTDIR)$(htmldir)/$$f'"; \
+	    $(mkdir_p) "$(DESTDIR)$(htmldir)/$$f" || exit 1; \
+	    echo " $(INSTALL_DATA) '$$d$$p'/* '$(DESTDIR)$(htmldir)/$$f'"; \
+	    $(INSTALL_DATA) "$$d$$p"/* "$(DESTDIR)$(htmldir)/$$f"; \
+	  else \
+	    echo " $(INSTALL_DATA) '$$d$$p' '$(DESTDIR)$(htmldir)/$$f'"; \
+	    $(INSTALL_DATA) "$$d$$p" "$(DESTDIR)$(htmldir)/$$f"; \
+	  fi; \
+	done
+
+MAINTAINERCLEANFILES += bfd.info
+
+# Automake 1.9 will only build info files in the objdir if they are
+# mentioned in DISTCLEANFILES.  It doesn't have to be unconditional,
+# though, so we use a bogus condition.
+if GENINSRC_NEVER
+DISTCLEANFILES += bfd.info
+endif

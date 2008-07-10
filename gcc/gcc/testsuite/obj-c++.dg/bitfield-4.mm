@@ -4,8 +4,11 @@
 /* Contributed by Ziemowit Laski <zlaski@apple.com>.  */
 /* { dg-options "-lobjc -Wpadded" } */
 /* { dg-do run } */
+/* APPLE LOCAL radar 4894756 */
+/* { dg-skip-if "" { *-*-darwin* } { "-m64" } { "" } } */ 
 
-#include <objc/Object.h>
+/* APPLE LOCAL radar 4894756 */
+#include "../objc/execute/Object2.h"
 
 extern "C" {
   extern void abort(void);

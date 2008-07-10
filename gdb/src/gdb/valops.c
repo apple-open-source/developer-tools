@@ -415,7 +415,11 @@ value_cast_1 (struct type *type, struct value *arg2)
     }
   else if (TYPE_LENGTH (type) == TYPE_LENGTH (type2))
     {
-      if (code1 == TYPE_CODE_PTR && code2 == TYPE_CODE_PTR)
+      if ((code1 == TYPE_CODE_PTR && code2 == TYPE_CODE_PTR)
+      /* APPLE LOCAL - handle the case where we're casting up or
+	 down the class hierarchy with reference types.  */
+	  || (code1 == TYPE_CODE_REF && code2 == TYPE_CODE_REF))
+	/* END APPLE LOCAL */
 	{
 	  struct type *t1 = check_typedef (TYPE_TARGET_TYPE (type));
 	  struct type *t2 = check_typedef (TYPE_TARGET_TYPE (type2));
@@ -424,14 +428,22 @@ value_cast_1 (struct type *type, struct value *arg2)
 	      && !value_logical_not (arg2))
 	    {
 	      struct value *v;
-
+	      struct value *tmparg2;
+	      /* APPLE LOCAL - reference types */
+	      if (code2 == TYPE_CODE_REF)
+		tmparg2 = value_addr (arg2);
+	      else
+		tmparg2 = arg2;
+	      /* END APPLE LOCAL */
 	      /* Look in the type of the source to see if it contains the
 	         type of the target as a superclass.  If so, we'll need to
 	         offset the pointer rather than just change its type.  */
 	      if (TYPE_NAME (t1) != NULL)
 		{
+		  /* APPLE LOCAL - reference types */
 		  v = search_struct_field (type_name_no_tag (t1),
-					   value_ind (arg2), 0, t2, 1);
+					   value_ind (tmparg2), 0, t2, 1);
+		  /* END APPLE LOCAL */
 		  if (v)
 		    {
 		      v = value_addr (v);
@@ -450,7 +462,9 @@ value_cast_1 (struct type *type, struct value *arg2)
 				       value_zero (t1, not_lval), 0, t1, 1);
 		  if (v)
 		    {
-                      CORE_ADDR addr2 = value_as_address (arg2);
+		      /* APPLE LOCAL - reference types */
+                      CORE_ADDR addr2 = value_as_address (tmparg2);
+		      /* END APPLE LOCAL */
                       addr2 -= (VALUE_ADDRESS (v)
                                 + value_offset (v)
                                 + value_embedded_offset (v));
@@ -3159,6 +3173,7 @@ check_safe_call (regex_t unsafe_functions[],
   args.unsafe_p = 0;
   args.unsafe_functions = unsafe_functions;
   args.npatterns = npatterns;
+  args.stack_depth = stack_depth;
 
   if (which_threads == CHECK_CURRENT_THREAD
       || (which_threads == CHECK_SCHEDULER_VALUE && !scheduler_lock_on_p ()))

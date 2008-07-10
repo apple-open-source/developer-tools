@@ -63,6 +63,7 @@ extern char *varobj_language_string[];
 enum varobj_type_change {
   VAROBJ_TYPE_UNCHANGED,
   VAROBJ_TYPE_CHANGED,
+  VAROBJ_SCOPE_CHANGED,
   VAROBJ_DYNAMIC_TYPE_CHANGED
 };
 

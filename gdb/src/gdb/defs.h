@@ -437,7 +437,7 @@ extern void set_demangling_style (char *);
 
 extern CORE_ADDR decode_fix_and_continue_trampoline (CORE_ADDR);
 extern void update_picbase_register (struct symbol *);
-extern void fix_command_1 (const char *, const char *, const char *, const char *);
+extern void fix_command_1 (const char *, const char *, const char *);
 int fix_and_continue_supported (void);
 int file_exists_p (const char *);
 
@@ -1043,6 +1043,7 @@ enum gdb_osabi
   /* APPLE LOCAL begin Darwin */
   GDB_OSABI_DARWIN,
   GDB_OSABI_DARWIN64,
+  GDB_OSABI_DARWINV6,
   /* APPLE LOCAL end Darwin */
 
   GDB_OSABI_QNXNTO,
@@ -1377,6 +1378,10 @@ extern int use_windows;
 
 extern ULONGEST align_up (ULONGEST v, int n);
 extern ULONGEST align_down (ULONGEST v, int n);
+
+/* APPLE LOCAL: Make this public since both fork-child.c and remote.c
+   now use it.  */
+void breakup_args (char *scratch, int *argc, char **argv);
 
 /* APPLE LOCAL begin CHECK macro */
 #define __CHECK_FUNCTION __PRETTY_FUNCTION__

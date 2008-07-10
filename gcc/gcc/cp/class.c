@@ -1496,8 +1496,8 @@ finish_struct_bits (tree t)
       TYPE_VFIELD (variants) = TYPE_VFIELD (t);
       TYPE_METHODS (variants) = TYPE_METHODS (t);
       TYPE_FIELDS (variants) = TYPE_FIELDS (t);
-      TYPE_SIZE (variants) = TYPE_SIZE (t);
-      TYPE_SIZE_UNIT (variants) = TYPE_SIZE_UNIT (t);
+      /* APPLE LOCAL begin mainline 4121962 */
+      /* APPLE LOCAL end mainline 4121962 */
     }
 
   if (BINFO_N_BASE_BINFOS (TYPE_BINFO (t)) && TYPE_POLYMORPHIC_P (t))
@@ -1803,7 +1803,7 @@ layout_vtable_decl (tree binfo, int n)
   /* Enlarge suggested vtable size by one entry; it will be filled
      with a zero word.  Darwin kernel dynamic-driver loader looks
      for this value to find vtable ends for patching.  */
-  if (flag_apple_kext)
+  if (TARGET_KEXTABI)
     n_entries += 1;
   /* APPLE LOCAL end KEXT terminated-vtables */
 
@@ -2891,13 +2891,19 @@ check_field_decls (tree t, tree *access_decls,
 
       if (TREE_CODE (x) == FIELD_DECL)
 	{
+	  /* APPLE LOCAL begin mainline 4121962 */
+          type = strip_array_types (type);
+	  /* APPLE LOCAL end mainline 4121962 */
+
 	  if (TYPE_PACKED (t))
 	    {
-	      if (!pod_type_p (TREE_TYPE (x)) && !TYPE_PACKED (TREE_TYPE (x)))
-		cp_warning_at
-		  ("ignoring packed attribute on unpacked non-POD field %q#D",
+	      /* APPLE LOCAL begin mainline 4121962 */
+	      if (!pod_type_p (type) && !TYPE_PACKED (type))
+		warning
+		   ("ignoring packed attribute on unpacked non-POD field %q+#D",
 		   x);
-	      else
+	      else if (TYPE_ALIGN (TREE_TYPE (x)) > BITS_PER_UNIT)
+	      /* APPLE LOCAL end mainline 4121962 */
 		DECL_PACKED (x) = 1;
 	    }
 
@@ -2907,17 +2913,18 @@ check_field_decls (tree t, tree *access_decls,
 	    ;
 	  else
 	    {
-	      tree element_type;
-
+	      /* APPLE LOCAL begin mainline 4121962 */
+	      /* APPLE LOCAL end mainline 4121962 */
 	      /* The class is non-empty.  */
 	      CLASSTYPE_EMPTY_P (t) = 0;
 	      /* The class is not even nearly empty.  */
 	      CLASSTYPE_NEARLY_EMPTY_P (t) = 0;
 	      /* If one of the data members contains an empty class,
 		 so does T.  */
-	      element_type = strip_array_types (type);
-	      if (CLASS_TYPE_P (element_type) 
-		  && CLASSTYPE_CONTAINS_EMPTY_CLASS_P (element_type))
+	      /* APPLE LOCAL begin mainline 4121962 */
+	      if (CLASS_TYPE_P (type) 
+		  && CLASSTYPE_CONTAINS_EMPTY_CLASS_P (type))
+	      /* APPLE LOCAL end mainline 4121962 */
 		CLASSTYPE_CONTAINS_EMPTY_CLASS_P (t) = 1;
 	    }
 	}
@@ -3928,7 +3935,7 @@ clone_function_decl (tree fn, int update_method_vec_p)
 
       /* APPLE LOCAL begin KEXT double destructor */
       /* Don't use the complete dtor.  */
-      if (! flag_apple_kext
+      if (TARGET_KEXTABI != 1
 	  || ! has_apple_kext_compatibility_attr_p (DECL_CONTEXT (fn)))
 	{
 	  clone = build_clone (fn, complete_dtor_identifier);
@@ -4670,6 +4677,10 @@ layout_class_type (tree t, tree *virtuals_p)
 	    }
 	  continue;
 	}
+      /* APPLE LOCAL begin radar 4592503 */
+      if (c_dialect_objc ())
+        objc_checkon_weak_attribute (field);
+      /* APPLE LOCAL end radar 4592503 */
 
       type = TREE_TYPE (field);
       
@@ -7193,7 +7204,7 @@ dfs_accumulate_vtbl_inits (tree binfo,
       /* APPLE LOCAL begin KEXT double destructor */
 #ifdef VPTR_INITIALIZER_ADJUSTMENT
       /* Subtract VPTR_INITIALIZER_ADJUSTMENT from INDEX.  */
-      if (flag_apple_kext && !ctor_vtbl_p && ! BINFO_PRIMARY_P (binfo)
+      if (TARGET_KEXTABI == 1 && !ctor_vtbl_p && ! BINFO_PRIMARY_P (binfo)
 	  && TREE_CODE (index) == INTEGER_CST
 	  && TREE_INT_CST_LOW (index) >= VPTR_INITIALIZER_ADJUSTMENT
 	  && TREE_INT_CST_HIGH (index) == 0)
@@ -7852,6 +7863,9 @@ cp_fold_obj_type_ref (tree ref, tree known_type)
 }
 
 /* APPLE LOCAL begin KEXT double destructor */
+#ifndef TARGET_SUPPORTS_KEXTABI1
+#define TARGET_SUPPORTS_KEXTABI1 0
+#endif
 /* Return whether CLASS or any of its primary ancestors have the
    "apple_kext_compatibility" attribute, in which case the
    non-deleting destructor is not emitted.  Only single
@@ -7859,6 +7873,9 @@ cp_fold_obj_type_ref (tree ref, tree known_type)
 int
 has_apple_kext_compatibility_attr_p (tree class)
 {
+  if (! TARGET_SUPPORTS_KEXTABI1)
+    return 0;
+
   while (class != NULL)
     {
       tree base_binfo;

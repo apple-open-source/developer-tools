@@ -349,7 +349,7 @@ rule ProcessHeaders
                     # use flag for picking up PFE
                     PREFIX_HEADER_CFLAGS_BASE default = --load-pch ;
                 }
-                if $(GCC_VERSION) = 3.3 || $(GCC_VERSION) = 3.5 || $(GCC_VERSION) = 4.0 {
+                if $(GCC_VERSION) >= 3.3 {
                     # prefix file precompiled with PCH support
                     # precompile by dialect
                     for ARCH in $(ARCHS) {
@@ -588,7 +588,7 @@ rule PrecompileHeader
     if $(PROFILING_CODE) = YES {
         FLAGS on $(1) += -pg ;
     }
-    if $(GCC_VERSION) != 3.3 && $(GCC_VERSION) != 3.5 && $(GCC_VERSION) != 4.0 && $(OS) in MACOS DARWIN {
+    if $(GCC_VERSION) = 2.95.2 && $(OS) in MACOS DARWIN {
         FLAGS on $(1) += -precomp-trustfile $(PRECOMP_TRUSTFILE) ;
     }
     # Pass headermap and/or header symlinks directory.
@@ -1666,7 +1666,7 @@ rule ProcessFrameworksAndLibraries
             if $(KERNEL_MODULE) = YES {
                 MODULE_OBJECT_PATH = $(OBJECT_FILE_DIR_$(VARIANT))$(/)$(MODULE_OBJECT_FILE_$(VARIANT)) ;
                 FLAGS.o on $(INNER_PRODUCT_$(VARIANT)) += -static -nostdlib -r -lkmodc++ "$(MODULE_OBJECT_PATH)" -lkmod -lcc_kext ;
-                if $(GCC_VERSION) = 4.0 {
+                if $(GCC_VERSION) >= 4.0 {
                     FLAGS.o on $(INNER_PRODUCT_$(VARIANT)) += -lcpp_kext ;
                 }
             }
@@ -1786,6 +1786,7 @@ rule ProcessFrameworksAndLibraries
                 if ! $(INNER_PRODUCT_SUBDIR) in $(PRODUCT_FILES) {
                     Mkdir $(INNER_PRODUCT_SUBDIR) ;
                     ProductFile $(INNER_PRODUCT_SUBDIR) ;
+                    DEPENDS $(INNER_PRODUCT_$(VARIANT)) : $(INNER_PRODUCT_SUBDIR) ;
                 }
                 Cp $(INNER_PRODUCT_$(VARIANT)) : $(JAVA_APP_STUB) ;
                 ProductFile $(INNER_PRODUCT_$(VARIANT)) ;
@@ -2697,7 +2698,7 @@ rule CompileC
     }
     # Pass the trusted-precomp file name to the compiler to keep track
     # of which precompiled headers it has already sanity checked.
-    if $(GCC_VERSION) != 3.3 && $(GCC_VERSION) != 3.5 && $(GCC_VERSION) != 4.0 && $(OS) in MACOS DARWIN  &&  $(EFFECTIVE_PFE_FILE_$(ARCH)) = "" {
+    if $(GCC_VERSION) = 2.95.2 && $(OS) in MACOS DARWIN  &&  $(EFFECTIVE_PFE_FILE_$(ARCH)) = "" {
         FLAGS on $(1) += -precomp-trustfile $(PRECOMP_TRUSTFILE) ;
     }
     # Pass headermap and/or header symlinks directory.
@@ -2838,7 +2839,7 @@ rule CompileCplusplus
     }
     # Pass the trusted-precomp file name to the compiler to keep track
     # of which precompiled headers it has already sanity checked.
-    if $(GCC_VERSION) != 3.3 && $(GCC_VERSION) != 3.5 && $(GCC_VERSION) != 4.0 && $(OS) in MACOS DARWIN  &&  $(EFFECTIVE_PFE_FILE_$(ARCH)) = "" {
+    if $(GCC_VERSION) = 2.95.2 && $(OS) in MACOS DARWIN  &&  $(EFFECTIVE_PFE_FILE_$(ARCH)) = "" {
         FLAGS on $(1) += -precomp-trustfile $(PRECOMP_TRUSTFILE) ;
     }
     # Pass headermap and/or header symlinks directory.
@@ -3012,7 +3013,7 @@ rule CompileAssembly
     }
     # Pass the trusted-precomp file name to the compiler to keep track
     # of which precompiled headers it has already sanity checked.
-    if $(GCC_VERSION) != 3.3 && $(GCC_VERSION) != 3.5 && $(GCC_VERSION) != 4.0 && $(OS) in MACOS DARWIN  &&  $(EFFECTIVE_PFE_FILE_$(ARCH)) = "" {
+    if $(GCC_VERSION) = 2.95.2 && $(OS) in MACOS DARWIN  &&  $(EFFECTIVE_PFE_FILE_$(ARCH)) = "" {
         FLAGS on $(1) += -precomp-trustfile $(PRECOMP_TRUSTFILE) ;
     }
     # Pass headermap and/or header symlinks directory.
@@ -3184,7 +3185,7 @@ rule CompileFortran
     }
     # Pass the trusted-precomp file name to the compiler to keep track
     # of which precompiled headers it has already sanity checked.
-    if $(GCC_VERSION) != 3.3 && $(GCC_VERSION) != 3.5 && $(GCC_VERSION) != 4.0 && $(OS) in MACOS DARWIN  &&  $(EFFECTIVE_PFE_FILE_$(ARCH)) = "" {
+    if $(GCC_VERSION) = 2.95.2 && $(OS) in MACOS DARWIN  &&  $(EFFECTIVE_PFE_FILE_$(ARCH)) = "" {
         FLAGS on $(1) += -precomp-trustfile $(PRECOMP_TRUSTFILE) ;
     }
     # Pass headermap and/or header symlinks directory.

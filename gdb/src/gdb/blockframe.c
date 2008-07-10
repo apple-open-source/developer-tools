@@ -238,10 +238,26 @@ get_frame_function (struct frame_info *frame)
 struct symbol *
 find_pc_sect_function (CORE_ADDR pc, struct bfd_section *section)
 {
-  struct block *b = block_for_pc_sect (pc, section);
+  /* APPLE LOCAL begin cache lookup values for improved performance  */
+  struct block *b;
+  if (pc == last_function_lookup_pc
+      && pc == last_mapped_section_lookup_pc
+      && section == cached_mapped_section
+      && cached_pc_function)
+    return cached_pc_function;
+  
+  last_function_lookup_pc = pc;
+
+  b = block_for_pc_sect (pc, section);
   if (b == 0)
-    return 0;
+    {
+      cached_pc_function = NULL;
+      return 0;
+    }
+  
+  cached_pc_function = block_function (b);
   return block_function (b);
+  /* APPLE LOCAL end cache lookup values for improved performance  */
 }
 
 /* Return the function containing pc value PC.

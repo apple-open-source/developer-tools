@@ -3320,7 +3320,8 @@ find_reloads (rtx insn, int replace, int ind_levels, int live_known,
 		  break;
 	      case 'i':
 		if (CONSTANT_P (operand)
-		    && (! flag_pic || LEGITIMATE_PIC_OPERAND_P (operand)))
+		    /* APPLE LOCAL ARM -mdynamic-no-pic support */
+		    && LEGITIMATE_INDIRECT_OPERAND_P (operand))
 		  win = 1;
 		break;
 
@@ -3356,8 +3357,8 @@ find_reloads (rtx insn, int replace, int ind_levels, int live_known,
 		    /* A SCRATCH is not a valid operand.  */
 		    && GET_CODE (operand) != SCRATCH
 		    && (! CONSTANT_P (operand)
-			|| ! flag_pic
-			|| LEGITIMATE_PIC_OPERAND_P (operand))
+			/* APPLE LOCAL ARM -mdynamic-no-pic support */
+			|| LEGITIMATE_INDIRECT_OPERAND_P (operand))
 		    && (GENERAL_REGS == ALL_REGS
 			|| !REG_P (operand)
 			|| (REGNO (operand) >= FIRST_PSEUDO_REGISTER
@@ -5007,6 +5008,27 @@ find_reloads_address (enum machine_mode mode, rtx *memrefloc, rtx ad,
 	}
       return ! removed_and;
     }
+  /* APPLE LOCAL begin radar 4534621 */
+  /* Please remove this patch when merging with gcc 4.2 which avoids the entire spill
+     mode changes for vector negate operation, and this bug won't happen. */
+  /* Indexed ([reg+reg]) memory address for TImode is not supported on powerpc.
+     Need to load [reg+reg] to a register first before addressing the memory. */
+#if defined (TARGET_POWERPC)
+  else if (mode == TImode
+           && memrefloc
+           && GET_CODE (ad) == PLUS
+	   && REG_P (XEXP (ad, 0))
+	   && REGNO (XEXP (ad, 0)) < FIRST_PSEUDO_REGISTER
+	   && REG_MODE_OK_FOR_BASE_P (XEXP (ad, 0), mode)
+	   && REG_P (XEXP (ad, 1))
+	   && REGNO (XEXP (ad, 1)) < FIRST_PSEUDO_REGISTER)
+    {
+      find_reloads_address_part (ad, loc, MODE_BASE_REG_CLASS (mode),
+                                 Pmode, opnum, type, ind_levels);
+      return 0;
+    }
+#endif
+  /* APPLE LOCAL end radar 4534621 */
 
   /* If we have an indexed stack slot, there are three possible reasons why
      it might be invalid: The index might need to be reloaded, the address

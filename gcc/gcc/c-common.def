@@ -51,7 +51,8 @@ DEFTREECODE (WHILE_STMT, "while_stmt", tcc_expression, 2)
 
 /* Used to represent a 'do' statement. The operands are DO_BODY and
    DO_COND, respectively.  */
-DEFTREECODE (DO_STMT, "do_stmt", tcc_expression, 2)
+/* APPLE LOCAL radar 4445586 */
+DEFTREECODE (DO_STMT, "do_stmt", tcc_expression, 3)
 
 /* Used to represent a 'break' statement.  */
 DEFTREECODE (BREAK_STMT, "break_stmt", tcc_expression, 0)

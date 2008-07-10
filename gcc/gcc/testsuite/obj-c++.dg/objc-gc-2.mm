@@ -1,7 +1,7 @@
 /* APPLE LOCAL file ObjC GC */
 /* A compile-only test for insertion of write barriers. */
 /* Developed by Ziemowit Laski  <zlaski@apple.com>  */
-/* { dg-do compile } */
+/* { dg-do compile { target powerpc*-*-darwin* i?86*-*-darwin* } } */
 /* { dg-options "-fnext-runtime -fobjc-gc -Wassign-intercept" } */
 
 #include <objc/objc.h>

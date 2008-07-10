@@ -275,7 +275,9 @@ proc check_profiling_available { test_what } {
     if {![info exists profiling_available_saved]} {
 	# Some targets don't have any implementation of __bb_init_func or are
 	# missing other needed machinery.
+	# APPLE LOCAL begin ARM no profiling support
 	if { [istarget mmix-*-*]
+	     || [istarget arm*-*-darwin*]
 	     || [istarget arm*-*-eabi*]
 	     || [istarget arm*-*-elf]
 	     || [istarget arm*-*-symbianelf*]
@@ -290,6 +292,7 @@ proc check_profiling_available { test_what } {
 	} else {
 	    set profiling_available_saved 1
 	}
+	# APPLE LOCAL end ARM no profiling support
     }
 
     return $profiling_available_saved
@@ -845,6 +848,26 @@ proc check_effective_target_vect_int_mult { } {
     return $et_vect_int_mult_saved
 }
 # APPLE LOCAL end mainline 2005-04-18 3972875
+
+# APPLE LOCAL begin 5660282
+# Return 1 if the target supports the -fobjc-gc option.
+
+proc check_effective_target_objc_gc { } {
+    global et_objc_gc_saved
+
+    if [info exists et_objc_gc_saved] {
+	verbose "check_effective_target_objc_gc: using cached result" 2
+    } else {
+	set et_objc_gc_saved 0
+	if { [istarget powerpc*-*-darwin*]
+	     || [istarget i?86*-*-darwin*] } {
+	    set et_objc_gc_saved 1
+	}
+    }
+    verbose "check_effective_target_objc_gc: returning $et_objc_gc_saved" 2
+    return $et_objc_gc_saved
+}
+# APPLE LOCAL end 5660282
   
 # Return 1 if the target matches the effective target 'arg', 0 otherwise.
 # This can be used with any check_* proc that takes no argument and

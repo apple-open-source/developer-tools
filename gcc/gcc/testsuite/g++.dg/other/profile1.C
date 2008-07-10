@@ -1,6 +1,8 @@
 // PR 11767
 // { dg-do run }
 // { dg-options "-fnon-call-exceptions -fprofile-arcs" }
+/* APPLE LOCAL ARM no profiling support */
+/* { dg-skip-if "" { arm*-apple-darwin* } { "*" } { "" } } */
 
 #include <string>
 

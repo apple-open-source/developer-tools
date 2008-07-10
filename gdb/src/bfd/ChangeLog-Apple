@@ -1,20 +1,102 @@
+2008-04-28  Jim Ingham  <jingham@apple.com>
+
+	* mach-o.c (bfd_mach_o_encrypted_binary): Changed to just return
+	the "encrypted" bit in the mach_o_data.
+	(bfd_mach_o_scan_read_command): Read the cryptid field out of the
+	encryption load command.  This is what tells us if the binary is 
+	actually encrypted or not.
+	(bfd_mach_o_mkobject): Initialize the encrypted field.
+	* mach-o.h (struct mach_o_data): Added encrypted field.
+	
+2008-04-28  Jason Molenda  (jmolenda@apple.com)
+
+	* mach-o.c (bfd_mach_o_encrypted_binary): New function to detect
+	the presence of the LC_ENCRYPTION_INFO load command for a given bfd.
+	* mach-o.h: Prototype.
+
+2008-03-31  Jason Molenda  (jmolenda@apple.com)
+
+	* tekhex.c (first_phase): Allocate space for a new symbol name
+	in a char* buf and point the symbol.name record to point to it
+	instead of allocating it in the symbol.name const char* record
+	and casting away the constness.
+
+2008-03-27  Jason Molenda  (jmolenda@apple.com)
+
+	* mach-o.h: Add LC_LAZY_LOAD_DYLIB, LC_ENCRYPTION_INFO.
+	* mach-o.c (bfd_mach_o_write_contents): Ignore them for now.
+	(bfd_mach_o_scan_read_command): Ditto.
+
+2007-07-30  Greg Clayton  <gclayton@apple.com>
+
+        * mach-o.c (bfd_mach_o_in_shared_cached_memory): New function.
+        (bfd_mach_o_scan_read_dysymtab): Check for memory bfd objects
+        in the shared cache and create a LC_DYSYMTAB.nonlocalstabs section
+        for them.
+        * mach-o.h (bfd_mach_o_in_shared_cached_memory): New prototype.
+
+2007-07-05  Greg Clayton  (gclayton@apple.com)
+ 
+        * archures.c (bfd_mach_arm_6): New value.
+        * bfd-in2.h: Regenerate.
+        * config.bfd (targ_underscore): Add support for arm darwin targets.
+        * cpu-arm.c: (arch_info_struct): Add bfd_mach_arm_6.
+        (architectures): Added armv6 architecture.
+        * mach-o.c (bfd_mach_o_convert_architecture): Support 
+        BFD_MACH_O_CPU_TYPE_ARM as a valid mach cpu type.
+        (bfd_mach_o_flavour_from_string): Ditto.
+        (bfd_mach_o_scan_read_thread): Ditto.
+        (bfd_mach_o_scan_start_address): Ditto.
+        (bfd_mach_o_stack_addr): Ditto.
+        (bfd_mach_o_arm_flavour_string): New function.
+        (bfd_mach_o_arm_flavour_from_string): New function.
+        * mach-o.h (bfd_mach_o_arm_thread_flavour): New enum.
+        (bfd_mach_o_cpu_subtype): Added arm v4 and v6 cpu subtypes.
+
+2006-04-18  Greg Clayton  (gclayton@apple.com)
+
+        * mach-o.c (bfd_mach_o_make_bfd_section): Make any mach-o debug 
+        sections have the SEC_HAS_CONTENTS as the only flag.
+        * mach-o.h (typedef enum bfd_mach_o_section_type): Add the 
+        BFD_MACH_O_S_ATTR_DEBUG definition for debug sections.
+
+2008-01-24  Jason Molenda  (jmolenda@apple.com)
+
+	* mach-o.c (bfd_mach_o_stub_library): Indicate whether a given bfd
+	is a stub library or not (has had its text/data stripped).
+	* mach-o.h (enum bfd_mach_o_filetype): Add MH_DYLIB_STUB.  Add
+	bfd_mach_o_stub_library prototype.
+
+2008-01-18  Jim Ingham  <jingham@apple.com>
+
+	mach-o.c (bfd_mach_o_make_bfd_section): Mark the __TEXT.__text
+	segment readonly.
+	
 2007-08-30  Jason Molenda  (jmolenda@apple.com)
         Apply Kaz Kojima's patch for CVE-2006-2362:
 
-        2006-04-27  Kaz Kojima  <kkojima@rr.iij4u.or.jp>
+	2006-04-27  Kaz Kojima  <kkojima@rr.iij4u.or.jp>
 
-                PR binutils/2584
-                * tekhex.c (getvalue): Change return type to bfd_boolean and
-                add the new parameter.  Return false if the unexpected character
-                is found.
-                (getsym): Likewise.
-                (first_phase): Change return type to bfd_boolean and return
-                false if the unexpected character is found.  Replace abort
-                with returning false.
-                (pass_over): Change return type to bfd_boolean and the type of
-                the second argument to bfd_boolean (*) (bfd *, int, char *).
-                Return false if FUNC returns false.
-                (tekhex_object_p): Return NULL if pass_over fails.
+	        PR binutils/2584
+        	* tekhex.c (getvalue): Change return type to bfd_boolean and
+        	add the new parameter.  Return false if the unexpected character
+        	is found.
+        	(getsym): Likewise.
+        	(first_phase): Change return type to bfd_boolean and return
+        	false if the unexpected character is found.  Replace abort
+        	with returning false.
+        	(pass_over): Change return type to bfd_boolean and the type of
+        	the second argument to bfd_boolean (*) (bfd *, int, char *).
+        	Return false if FUNC returns false.
+        	(tekhex_object_p): Return NULL if pass_over fails.
+
+2007-07-30  Greg Clayton  <gclayton@apple.com>
+
+	* mach-o.c (bfd_mach_o_in_shared_cached_memory): New function.
+	(bfd_mach_o_scan_read_dysymtab): Check for memory bfd objects
+	in the shared cache and create a LC_DYSYMTAB.nonlocalstabs section
+	for them.
+	* mach-o.h (bfd_mach_o_in_shared_cached_memory): New prototype.
 
 2006-04-18  Greg Clayton  (gclayton@apple.com)
 

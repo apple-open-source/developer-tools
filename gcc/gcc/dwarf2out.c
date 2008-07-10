@@ -1,7 +1,9 @@
 /* APPLE LOCAL file mainline 4.2 2006-04-26 4498201 */
 /* Output Dwarf2 format symbol table information from GCC.
+   APPLE LOCAL begin mainline 2006-03-16 dwarf 4383509
    Copyright (C) 1992, 1993, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
    2003, 2004, 2005, 2006 Free Software Foundation, Inc.
+   APPLE LOCAL end mainline 2006-03-16 dwarf 4383509
    Contributed by Gary Funck (gary@intrepid.com).
    Derived from DWARF 1 implementation of Ron Guilmette (rfg@monkeys.com).
    Extensively modified by Jason Merrill (jason@cygnus.com).
@@ -443,6 +445,13 @@ static void def_cfa_1 (const char *, dw_cfa_location *);
 #ifndef INCOMING_FRAME_SP_OFFSET
 #define INCOMING_FRAME_SP_OFFSET 0
 #endif
+
+/* APPLE LOCAL begin differentiate between arm & thumb.  */
+#define DW_ISA_UNKNOWN         0
+#define DW_ISA_ARM_thumb       1
+#define DW_ISA_ARM_arm         2
+#define DW_ISA_USE_STMT_LIST  -1
+/* APPLE LOCAL end differentiate between arm & thumb.  */
 
 /* Hook used by __throw.  */
 
@@ -2403,7 +2412,7 @@ output_call_frame_info (int for_eh)
 	dw2_asm_output_delta (4, l1, section_start_label, "FDE CIE offset");
       else
 	dw2_asm_output_offset (DWARF_OFFSET_SIZE, section_start_label,
-			       /* APPLE LOCAL dwarf 4383509 */
+			       /* APPLE LOCAL mainline 2006-03-16 dwarf 4383509 */
 			       DEBUG_FRAME_SECTION, "FDE CIE offset");
 
       if (for_eh)
@@ -2665,14 +2674,14 @@ enum dw_val_class
   dw_val_class_die_ref,
   dw_val_class_fde_ref,
   dw_val_class_lbl_id,
-/* APPLE LOCAL begin dwarf 4383509 */
+/* APPLE LOCAL begin mainline 2006-03-16 dwarf 4383509 */
   dw_val_class_lineptr,
   dw_val_class_str,
 /* APPLE LOCAL begin dwarf-file-hash 4587142 */
   dw_val_class_macptr,
   dw_val_class_file
 /* APPLE LOCAL end dwarf-file-hash 4587142 */
-/* APPLE LOCAL end dwarf 4383509 */
+/* APPLE LOCAL end mainline 2006-03-16 dwarf 4383509 */
 };
 
 /* Describe a double word constant value.  */
@@ -3585,9 +3594,13 @@ static bool dwarf2out_ignore_block (tree);
 static void dwarf2out_global_decl (tree);
 static void dwarf2out_type_decl (tree, int);
 static void dwarf2out_imported_module_or_decl (tree, tree);
-static void dwarf2out_abstract_function (tree);
+/* APPLE LOCAL begin mainline 2006-05-15 rewrite 4548482  */
+static void dwarf2out_abstract_function (tree, source_locus);
+/* APPLE LOCAL end mainline 2006-05-15 rewrite 4548482  */
 static void dwarf2out_var_location (rtx);
 static void dwarf2out_begin_function (tree);
+/* APPLE LOCAL opt diary */
+static void dwarf2out_od_entry (enum debug_od_msg, expanded_location);
 
 /* The debug hooks structure.  */
 
@@ -3620,6 +3633,8 @@ const struct gcc_debug_hooks dwarf2_debug_hooks =
   debug_nothing_rtx,		/* label */
   debug_nothing_int,		/* handle_pch */
   dwarf2out_var_location,
+  /* APPLE LOCAL opt diary */
+  dwarf2out_od_entry,           /* Optimization Diary Entry */
   1                             /* start_end_main_source_file */
 };
 #endif
@@ -3680,6 +3695,21 @@ typedef struct dw_attr_struct GTY(())
 }
 dw_attr_node;
 
+/* APPLE LOCAL begin mainline 2006-05-15 rewrite 4548482  */
+
+/* The following struct is for creating a linked list of call sites for
+   an inlined function.  This gets attached to the abstract origin die for 
+   the inlined subroutine.  The entries in the list indicate all the places 
+   where the subprogram was inlined.  */
+
+struct source_loc_list GTY(())
+{
+  struct location_s location;      /* Location of the inlined call site.  */
+  const char *calling_fn_name;     /* Name of the calling function. */
+  struct source_loc_list *next;
+};
+/* APPLE LOCAL end mainline 2006-05-15 rewrite 4548482  */
+
 DEF_VEC_GC_O(dw_attr_node);
 
 /* The Debugging Information Entry (DIE) structure.  DIEs form a tree.
@@ -3699,8 +3729,36 @@ typedef struct die_struct GTY(())
   unsigned long die_abbrev;
   int die_mark;
   unsigned int decl_id;
+  /* APPLE LOCAL begin mainline 2006-05-15 rewrite 4548482  */
+  /* The following field contains a linked list of all the call sites at 
+     which the current die (must be DW_TAG_subprogram) was inlined.  NULL if
+     it does not apply.  */
+  struct source_loc_list *inlined_call_sites;
+  /* APPLE LOCAL end mainline 2006-05-15 rewrite 4548482  */
 }
 die_node;
+
+/* APPLE LOCAL begin mainline 2006-05-15 rewrite 4548482  */
+/* The following struct is used to maintain a global list of iinlined
+   function call locaitons.  It contains die refs for both the caller and
+   callee.  */
+struct inlined_calls GTY(())
+{
+  dw_die_ref caller;    /* Die for subroutine containing call site.      */
+  dw_die_ref callee;    /* Abstract origin die for inlined subroutine.   */
+  /* Dwarf file index for file containing caller.  */
+  struct dwarf_file_data * file_index;
+  int line;             /* Line number for inlined call site.            */
+  int column;           /* Column position for inlined call site.        */
+  struct inlined_calls *next;
+};
+
+/* The following global data structure is a linked list containing 
+   information about all the inlined call sites.  It is used to help locate
+   in the presence of nested levels of inlining.   */
+
+static GTY(()) struct inlined_calls *inlined_calls_list = NULL;
+/* APPLE LOCAL end mainline 2006-05-15 rewrite 4548482  */
 
 /* Evaluate 'expr' while 'c' is set to each child of DIE in order.  */
 #define FOR_EACH_CHILD(die, c, expr) do {	\
@@ -3720,6 +3778,10 @@ typedef struct pubname_struct GTY(())
 }
 pubname_entry;
 
+/* APPLE LOCAL begin pubtypes, approved for 4.3 4535968  */
+DEF_VEC_GC_O(pubname_entry);
+
+/* APPLE LOCAL end pubtypes, approved for 4.3 4535968  */
 struct dw_ranges_struct GTY(())
 {
   int block_num;
@@ -3904,18 +3966,14 @@ static GTY(()) unsigned separate_line_info_table_in_use;
 
 /* A pointer to the base of a table that contains a list of publicly
    accessible names.  */
-static GTY ((length ("pubname_table_allocated"))) pubname_ref pubname_table;
+/* APPLE LOCAL begin pubtypes, approved for 4.3 4535968  */
+static GTY (()) VEC (pubname_entry) * pubname_table;
 
-/* Number of elements currently allocated for pubname_table.  */
-static GTY(()) unsigned pubname_table_allocated;
+/* A pointer to the base of a table that contains a list of publicy
+   accessible types.  */
 
-/* Number of elements in pubname_table currently in use.  */
-static GTY(()) unsigned pubname_table_in_use;
-
-/* Size (in elements) of increments by which we may expand the
-   pubname_table.  */
-#define PUBNAME_TABLE_INCREMENT 64
-
+static GTY (()) VEC (pubname_entry) * pubtype_table;
+/* APPLE LOCAL end pubtypes, approved for 4.3 4535968  */
 /* Array of dies for which we should generate .debug_arange info.  */
 static GTY((length ("arange_table_allocated"))) dw_die_ref *arange_table;
 
@@ -3965,6 +4023,10 @@ static GTY(()) struct dwarf_file_data * last_emitted_file;
 /* Number of internal labels generated by gen_internal_sym().  */
 static GTY(()) int label_num;
 
+/* APPLE LOCAL begin mainline 4587142 */
+static GTY(()) struct dwarf_file_data * file_table_last_lookup;
+/* APPLE LOCAL end mainline 4587142 */
+
 #ifdef DWARF2_DEBUGGING_INFO
 
 /* Forward declarations for functions defined in this file.  */
@@ -4012,10 +4074,10 @@ static inline dw_loc_list_ref AT_loc_list (dw_attr_ref);
 static void add_AT_addr (dw_die_ref, enum dwarf_attribute, rtx);
 static inline rtx AT_addr (dw_attr_ref);
 static void add_AT_lbl_id (dw_die_ref, enum dwarf_attribute, const char *);
-/* APPLE LOCAL begin dwarf 4383509 */
+/* APPLE LOCAL begin mainline 2006-03-16 dwarf 4383509 */
 static void add_AT_lineptr (dw_die_ref, enum dwarf_attribute, const char *);
 static void add_AT_macptr (dw_die_ref, enum dwarf_attribute, const char *);
-/* APPLE LOCAL end dwarf 4383509 */
+/* APPLE LOCAL end mainline 2006-03-16 dwarf 4383509 */
 static void add_AT_offset (dw_die_ref, enum dwarf_attribute,
 			   unsigned HOST_WIDE_INT);
 static void add_AT_range_list (dw_die_ref, enum dwarf_attribute,
@@ -4081,7 +4143,9 @@ static void calc_die_sizes (dw_die_ref);
 static void mark_dies (dw_die_ref);
 static void unmark_dies (dw_die_ref);
 static void unmark_all_dies (dw_die_ref);
-static unsigned long size_of_pubnames (void);
+/* APPLE LOCAL begin pubtypes, approved for 4.3 4535968  */
+static unsigned long size_of_pubnames (VEC (pubname_entry) *);
+/* APPLE LOCAL end pubtypes, approved for 4.3 4535968  */
 static unsigned long size_of_aranges (void);
 static enum dwarf_form value_format (dw_attr_ref);
 static void output_value_format (dw_attr_ref);
@@ -4092,7 +4156,10 @@ static void output_compilation_unit_header (void);
 static void output_comp_unit (dw_die_ref, int);
 static const char *dwarf2_name (tree, int);
 static void add_pubname (tree, dw_die_ref);
-static void output_pubnames (void);
+/* APPLE LOCAL begin pubtypes, approved for 4.3 4535968  */
+static void add_pubtype (tree, dw_die_ref);
+static void output_pubnames (VEC (pubname_entry) *);
+/* APPLE LOCAL end pubtypes, approved for 4.3 4535968  */
 static void add_arange (tree, dw_die_ref);
 static void output_aranges (void);
 static unsigned int add_ranges (tree);
@@ -4487,6 +4554,10 @@ dwarf_tag_name (unsigned int tag)
       return "DW_TAG_GNU_BINCL";
     case DW_TAG_GNU_EINCL:
       return "DW_TAG_GNU_EINCL";
+      /* APPLE LOCAL begin opt diary */
+    case DW_TAG_GNU_OD_entry:
+      return "DW_TAG_GNU_OD_entry";
+      /* APPLE LOCAL end opt diary */
     default:
       return "DW_TAG_<unknown>";
     }
@@ -4686,9 +4757,22 @@ dwarf_attr_name (unsigned int attr)
       return "DW_AT_body_end";
     case DW_AT_GNU_vector:
       return "DW_AT_GNU_vector";
+      /* APPLE LOCAL begin opt diary */
+    case DW_AT_GNU_OD_msg:
+      return "DW_AT_GNU_OD_msg";
+    case DW_AT_GNU_OD_category:
+      return "DW_AT_GNU_OD_category";
+    case DW_AT_GNU_OD_version:
+      return "DW_AT_GNU_OD_version";
+      /* APPLE LOCAL end opt diary */
 
     case DW_AT_VMS_rtnbeg_pd_address:
       return "DW_AT_VMS_rtnbeg_pd_address";
+
+    /* APPLE LOCAL begin differentiate between arm & thumb.  */
+    case DW_AT_APPLE_isa:
+      return "DW_AT_APPLE_isa";
+    /* APPLE LOCAL end differentiate between arm & thumb.  */
 
     default:
       return "DW_AT_<unknown>";
@@ -5228,7 +5312,7 @@ add_AT_lbl_id (dw_die_ref die, enum dwarf_attribute attr_kind, const char *lbl_i
   add_dwarf_attr (die, &attr);
 }
 
-/* APPLE LOCAL begin dwarf 4383509 */
+/* APPLE LOCAL begin mainline 2006-03-16 dwarf 4383509 */
 /* Add a section offset attribute value to a DIE, an offset into the
    debug_line section.  */
 
@@ -5259,7 +5343,7 @@ add_AT_macptr (dw_die_ref die, enum dwarf_attribute attr_kind,
   add_dwarf_attr (die, &attr);
 }
 
-/* APPLE LOCAL end dwarf 4383509 */
+/* APPLE LOCAL end mainline 2006-03-16 dwarf 4383509 */
 /* Add an offset attribute value to a DIE.  */
 
 static inline void
@@ -5292,10 +5376,10 @@ static inline const char *
 AT_lbl (dw_attr_ref a)
 {
   gcc_assert (a && (AT_class (a) == dw_val_class_lbl_id
-/* APPLE LOCAL begin dwarf 4383509 */
+/* APPLE LOCAL begin mainline 2006-03-16 dwarf 4383509 */
 		    || AT_class (a) == dw_val_class_lineptr
 		    || AT_class (a) == dw_val_class_macptr));
-/* APPLE LOCAL end dwarf 4383509 */
+/* APPLE LOCAL end mainline 2006-03-16 dwarf 4383509 */
   return a->dw_attr_val.v.val_lbl_id;
 }
 
@@ -5803,10 +5887,10 @@ print_die (dw_die_ref die, FILE *outfile)
 	    fprintf (outfile, "die -> <null>");
 	  break;
 	case dw_val_class_lbl_id:
-/* APPLE LOCAL begin dwarf 4383509 */
+/* APPLE LOCAL begin mainline 2006-03-16 dwarf 4383509 */
 	case dw_val_class_lineptr:
 	case dw_val_class_macptr:
-/* APPLE LOCAL end dwarf 4383509 */
+/* APPLE LOCAL end mainline 2006-03-16 dwarf 4383509 */
 	  fprintf (outfile, "label: %s", AT_lbl (a));
 	  break;
 	case dw_val_class_str:
@@ -5978,10 +6062,10 @@ attr_checksum (dw_attr_ref at, struct md5_ctx *ctx, int *mark)
 
     case dw_val_class_fde_ref:
     case dw_val_class_lbl_id:
-/* APPLE LOCAL begin dwarf 4383509 */
+/* APPLE LOCAL begin mainline 2006-03-16 dwarf 4383509 */
     case dw_val_class_lineptr:
     case dw_val_class_macptr:
-/* APPLE LOCAL end dwarf 4383509 */
+/* APPLE LOCAL end mainline 2006-03-16 dwarf 4383509 */
       break;
 
 /* APPLE LOCAL begin dwarf-file-hash 4587142 */
@@ -6088,10 +6172,10 @@ same_dw_val_p (dw_val_node *v1, dw_val_node *v2, int *mark)
 
     case dw_val_class_fde_ref:
     case dw_val_class_lbl_id:
-/* APPLE LOCAL begin dwarf 4383509 */
+/* APPLE LOCAL begin mainline 2006-03-16 dwarf 4383509 */
     case dw_val_class_lineptr:
     case dw_val_class_macptr:
-/* APPLE LOCAL end dwarf 4383509 */
+/* APPLE LOCAL end mainline 2006-03-16 dwarf 4383509 */
       return 1;
 
 /* APPLE LOCAL begin dwarf-file-hash 4587142 */
@@ -6681,10 +6765,10 @@ size_of_die (dw_die_ref die)
 	case dw_val_class_lbl_id:
 	  size += DWARF2_ADDR_SIZE;
 	  break;
-/* APPLE LOCAL begin dwarf 4383509 */
+/* APPLE LOCAL begin mainline 2006-03-16 dwarf 4383509 */
 	case dw_val_class_lineptr:
 	case dw_val_class_macptr:
-/* APPLE LOCAL end dwarf 4383509 */
+/* APPLE LOCAL end mainline 2006-03-16 dwarf 4383509 */
 	  size += DWARF_OFFSET_SIZE;
 	  break;
 	case dw_val_class_str:
@@ -6775,21 +6859,24 @@ unmark_all_dies (dw_die_ref die)
       unmark_all_dies (AT_ref (a));
 }
 
-/* Return the size of the .debug_pubnames table  generated for the
-   compilation unit.  */
+/* APPLE LOCAL begin pubtypes, approved for 4.3 4535968  */
+/* Return the size of the .debug_pubnames or .debug_pubtypes table
+   generated for the compilation unit.  */
 
 static unsigned long
-size_of_pubnames (void)
+size_of_pubnames (VEC (pubname_entry) * names)
 {
   unsigned long size;
   unsigned i;
+  pubname_ref p;
 
   size = DWARF_PUBNAMES_HEADER_SIZE;
-  for (i = 0; i < pubname_table_in_use; i++)
-    {
-      pubname_ref p = &pubname_table[i];
-      size += DWARF_OFFSET_SIZE + strlen (p->name) + 1;
-    }
+  for (i = 0; VEC_iterate (pubname_entry, names, i, p); i++)
+    if (names != pubtype_table
+	|| p->die->die_offset != 0
+	|| !flag_eliminate_unused_debug_types)
+      size += strlen (p->name) + DWARF_OFFSET_SIZE + 1; 
+/* APPLE LOCAL end pubtypes, approved for 4.3 4535968  */
 
   size += DWARF_OFFSET_SIZE;
   return size;
@@ -6878,10 +6965,10 @@ value_format (dw_attr_ref a)
       return DW_FORM_data;
     case dw_val_class_lbl_id:
       return DW_FORM_addr;
-/* APPLE LOCAL begin dwarf 4383509 */
+/* APPLE LOCAL begin mainline 2006-03-16 dwarf 4383509 */
     case dw_val_class_lineptr:
     case dw_val_class_macptr:
-/* APPLE LOCAL end dwarf 4383509 */
+/* APPLE LOCAL end mainline 2006-03-16 dwarf 4383509 */
       return DW_FORM_data;
     case dw_val_class_str:
       return AT_string_form (a);
@@ -7100,7 +7187,7 @@ output_die (dw_die_ref die)
 	    sprintf (p, "+" HOST_WIDE_INT_PRINT_HEX,
 		     a->dw_attr_val.v.val_offset);
 	    dw2_asm_output_offset (DWARF_OFFSET_SIZE, ranges_section_label,
-				   /* APPLE LOCAL dwarf 4383509 */
+				   /* APPLE LOCAL mainline 2006-03-16 dwarf 4383509 */
 				   DEBUG_RANGES_SECTION, "%s", name);
 	    *p = '\0';
 	  }
@@ -7183,10 +7270,10 @@ output_die (dw_die_ref die)
 	    char *sym = AT_loc_list (a)->ll_symbol;
 
 	    gcc_assert (sym);
-/* APPLE LOCAL begin dwarf 4383509 */
+/* APPLE LOCAL begin mainline 2006-03-16 dwarf 4383509 */
 	    dw2_asm_output_offset (DWARF_OFFSET_SIZE, sym, DEBUG_LOC_SECTION,
 				   "%s", name);
-/* APPLE LOCAL end dwarf 4383509 */
+/* APPLE LOCAL end mainline 2006-03-16 dwarf 4383509 */
 	  }
 	  break;
 
@@ -7196,10 +7283,10 @@ output_die (dw_die_ref die)
 	      char *sym = AT_ref (a)->die_symbol;
 
 	      gcc_assert (sym);
-/* APPLE LOCAL begin dwarf 4383509 */
+/* APPLE LOCAL begin mainline 2006-03-16 dwarf 4383509 */
 	      dw2_asm_output_offset (DWARF2_ADDR_SIZE, sym, DEBUG_INFO_SECTION,
 				     "%s", name);
-/* APPLE LOCAL end dwarf 4383509 */
+/* APPLE LOCAL end mainline 2006-03-16 dwarf 4383509 */
 	    }
 	  else
 	    {
@@ -7215,10 +7302,10 @@ output_die (dw_die_ref die)
 
 	    ASM_GENERATE_INTERNAL_LABEL (l1, FDE_LABEL,
 					 a->dw_attr_val.v.val_fde_index * 2);
-/* APPLE LOCAL begin dwarf 4383509 */
+/* APPLE LOCAL begin mainline 2006-03-16 dwarf 4383509 */
 	    dw2_asm_output_offset (DWARF_OFFSET_SIZE, l1, DEBUG_FRAME_SECTION,
 				   "%s", name);
-/* APPLE LOCAL end dwarf 4383509 */
+/* APPLE LOCAL end mainline 2006-03-16 dwarf 4383509 */
 	  }
 	  break;
 
@@ -7226,7 +7313,7 @@ output_die (dw_die_ref die)
 	  dw2_asm_output_addr (DWARF2_ADDR_SIZE, AT_lbl (a), "%s", name);
 	  break;
 
-/* APPLE LOCAL begin dwarf 4383509 */
+/* APPLE LOCAL begin mainline 2006-03-16 dwarf 4383509 */
 	case dw_val_class_lineptr:
 	  dw2_asm_output_offset (DWARF_OFFSET_SIZE, AT_lbl (a),
 				 DEBUG_LINE_SECTION, "%s", name);
@@ -7237,14 +7324,14 @@ output_die (dw_die_ref die)
 				 DEBUG_MACINFO_SECTION, "%s", name);
 	  break;
 
-/* APPLE LOCAL end dwarf 4383509 */
+/* APPLE LOCAL end mainline 2006-03-16 dwarf 4383509 */
 	case dw_val_class_str:
 	  if (AT_string_form (a) == DW_FORM_strp)
 	    dw2_asm_output_offset (DWARF_OFFSET_SIZE,
 				   a->dw_attr_val.v.val_str->label,
-/* APPLE LOCAL begin dwarf 4383509 */
+/* APPLE LOCAL begin mainline 2006-03-16 dwarf 4383509 */
 				   DEBUG_STR_SECTION,
-/* APPLE LOCAL end dwarf 4383509 */
+/* APPLE LOCAL end mainline 2006-03-16 dwarf 4383509 */
 				   "%s: \"%s\"", name, AT_string (a));
 	  else
 	    dw2_asm_output_nstring (AT_string (a), -1, "%s", name);
@@ -7288,7 +7375,7 @@ output_compilation_unit_header (void)
 		       "Length of Compilation Unit Info");
   dw2_asm_output_data (2, DWARF_VERSION, "DWARF version number");
   dw2_asm_output_offset (DWARF_OFFSET_SIZE, abbrev_section_label,
-			 /* APPLE LOCAL dwarf 4383509 */
+			 /* APPLE LOCAL mainline 2006-03-16 dwarf 4383509 */
 			 DEBUG_ABBREV_SECTION,
 			 "Offset Into Abbrev. Section");
   dw2_asm_output_data (1, DWARF2_ADDR_SIZE, "Pointer Size (in bytes)");
@@ -7360,61 +7447,107 @@ dwarf2_name (tree decl, int scope)
 static void
 add_pubname (tree decl, dw_die_ref die)
 {
-  pubname_ref p;
+  /* APPLE LOCAL begin pubtypes, approved for 4.3 4535968  */
+  pubname_entry e;
 
   if (! TREE_PUBLIC (decl))
     return;
 
-  if (pubname_table_in_use == pubname_table_allocated)
-    {
-      pubname_table_allocated += PUBNAME_TABLE_INCREMENT;
-      pubname_table
-	= ggc_realloc (pubname_table,
-		       (pubname_table_allocated * sizeof (pubname_entry)));
-      memset (pubname_table + pubname_table_in_use, 0,
-	      PUBNAME_TABLE_INCREMENT * sizeof (pubname_entry));
-    }
+  e.die = die;
+  e.name = xstrdup (dwarf2_name (decl, 1));
+  VEC_safe_push (pubname_entry, pubname_table, &e);
+  /* APPLE LOCAL end pubtypes, approved for 4.3 4535968  */
+}
 
-  p = &pubname_table[pubname_table_in_use++];
-  p->die = die;
-  p->name = xstrdup (dwarf2_name (decl, 1));
+/* APPLE LOCAL begin pubtypes, approved for 4.3 4535968  */
+/* Add a new entry to .debug_pubtypes if appropriate.  */
+
+static void
+add_pubtype (tree decl, dw_die_ref die)
+{
+  pubname_entry e;
+
+  e.name = NULL;
+  if ((TREE_PUBLIC (decl)
+       || die->die_parent == comp_unit_die)
+      && (die->die_tag == DW_TAG_typedef || COMPLETE_TYPE_P (decl)))
+    {
+      e.die = die;
+      if (TYPE_P (decl))
+	{
+	  if (TYPE_NAME (decl))
+	    {
+	      if (TREE_CODE (TYPE_NAME (decl)) == IDENTIFIER_NODE)
+		e.name = 
+		  xstrdup ((const char *) IDENTIFIER_POINTER (TYPE_NAME (decl)));
+	      else if (TREE_CODE (TYPE_NAME (decl)) == TYPE_DECL
+		       && DECL_NAME (TYPE_NAME (decl)))
+		e.name = 
+		  xstrdup ((const char *) IDENTIFIER_POINTER (DECL_NAME (TYPE_NAME (decl))));
+	      else
+                e.name = xstrdup ((const char *) get_AT_string (die, DW_AT_name));
+	    }
+	}
+      else
+	e.name = xstrdup (dwarf2_name (decl, 1));
+
+      /* If we don't have a name for the type, there's no point in adding
+	 it to the table. */
+      if (e.name && e.name[0] != '\0')
+	VEC_safe_push (pubname_entry, pubtype_table, &e);
+    }
 }
 
 /* Output the public names table used to speed up access to externally
-   visible names.  For now, only generate entries for externally
-   visible procedures.  */
+   visible names; or the public types table used to find type
+   definitions.  For now, only generate entries for externally
+   visible procedures (in pubnames table).  */
 
 static void
-output_pubnames (void)
+output_pubnames (VEC (pubname_entry) * names)
 {
   unsigned i;
-  unsigned long pubnames_length = size_of_pubnames ();
+  unsigned long pubnames_length = size_of_pubnames (names);
+  pubname_ref pub;
+/* APPLE LOCAL end pubtypes, approved for 4.3 4535968  */
 
   if (DWARF_INITIAL_LENGTH_SIZE - DWARF_OFFSET_SIZE == 4)
     dw2_asm_output_data (4, 0xffffffff,
       "Initial length escape value indicating 64-bit DWARF extension");
-  dw2_asm_output_data (DWARF_OFFSET_SIZE, pubnames_length,
-		       "Length of Public Names Info");
+  /* APPLE LOCAL begin pubtypes, approved for 4.3 4535968  */
+  if (names == pubname_table)
+    dw2_asm_output_data (DWARF_OFFSET_SIZE, pubnames_length,
+			 "Length of Public Names Info");
+  else
+    dw2_asm_output_data (DWARF_OFFSET_SIZE, pubnames_length,
+			 "Length of Public Type Names Info");
+  /* APPLE LOCAL end pubtypes, approved for 4.3 4535968  */
   dw2_asm_output_data (2, DWARF_VERSION, "DWARF Version");
   dw2_asm_output_offset (DWARF_OFFSET_SIZE, debug_info_section_label,
-			 /* APPLE LOCAL dwarf 4383509 */
+			 /* APPLE LOCAL mainline 2006-03-16 dwarf 4383509 */
 			 DEBUG_INFO_SECTION,
 			 "Offset of Compilation Unit Info");
   dw2_asm_output_data (DWARF_OFFSET_SIZE, next_die_offset,
 		       "Compilation Unit Length");
 
-  for (i = 0; i < pubname_table_in_use; i++)
+  /* APPLE LOCAL begin pubtypes, approved for 4.3 4535968  */
+  for (i = 0; VEC_iterate (pubname_entry, names, i, pub); i++)
     {
-      pubname_ref pub = &pubname_table[i];
-
       /* We shouldn't see pubnames for DIEs outside of the main CU.  */
-      gcc_assert (pub->die->die_mark);
+      if (names == pubname_table)
+	gcc_assert (pub->die->die_mark);
 
-      dw2_asm_output_data (DWARF_OFFSET_SIZE, pub->die->die_offset,
-			   "DIE offset");
+      if (names != pubtype_table
+	  || pub->die->die_offset != 0
+	  || !flag_eliminate_unused_debug_types)
+	{
+	  dw2_asm_output_data (DWARF_OFFSET_SIZE, pub->die->die_offset,
+			       "DIE offset");
 
-      dw2_asm_output_nstring (pub->name, -1, "external name");
+	  dw2_asm_output_nstring (pub->name, -1, "external name");
+	}
     }
+  /* APPLE LOCAL end pubtypes, approved for 4.3 4535968  */
 
   dw2_asm_output_data (DWARF_OFFSET_SIZE, 0, NULL);
 }
@@ -7457,7 +7590,7 @@ output_aranges (void)
 		       "Length of Address Ranges Info");
   dw2_asm_output_data (2, DWARF_VERSION, "DWARF Version");
   dw2_asm_output_offset (DWARF_OFFSET_SIZE, debug_info_section_label,
-			 /* APPLE LOCAL dwarf 4383509 */
+			 /* APPLE LOCAL mainline 2006-03-16 dwarf 4383509 */
 			 DEBUG_INFO_SECTION,
 			 "Offset of Compilation Unit Info");
   dw2_asm_output_data (1, DWARF2_ADDR_SIZE, "Size of Address");
@@ -10497,9 +10630,11 @@ tree_add_const_value_attribute (dw_die_ref var_die, tree decl)
   if (TREE_CODE (init) != INTEGER_CST)
     return;
   
-  if (host_integerp (init, 0))
+  /* APPLE LOCAL begin ARM 5603458 */
+  if (host_integerp (init, 1))
     add_AT_unsigned (var_die, DW_AT_const_value,
-		     tree_low_cst (init, 0));
+		     tree_low_cst (init, 1));
+  /* APPLE LOCAL end ARM 5603458 */
   else
     add_AT_long_long (var_die, DW_AT_const_value,
 		      TREE_INT_CST_HIGH (init),
@@ -10828,7 +10963,9 @@ add_abstract_origin_attribute (dw_die_ref die, tree origin)
 
       fn = decl_function_context (fn);
       if (fn)
-	dwarf2out_abstract_function (fn);
+	/* APPLE LOCAL begin mainline 2006-05-15 rewrite 4548482  */
+	dwarf2out_abstract_function (fn, NULL);
+        /* APPLE LOCAL end mainline 2006-05-15 rewrite 4548482  */
     }
 
   if (DECL_P (origin))
@@ -10871,12 +11008,15 @@ add_pure_or_virtual_attribute (dw_die_ref die, tree func_decl)
     }
 }
 
-/* Add source coordinate attributes for the given decl.  */
+/* APPLE LOCAL opt diary */
+/* Add source coordinate attributes for the given location.  */
 
 static void
-add_src_coords_attributes (dw_die_ref die, tree decl)
+/* APPLE LOCAL opt diary */
+add_src_coords_attributes_locus (dw_die_ref die, expanded_location s)
 {
-  expanded_location s = expand_location (DECL_SOURCE_LOCATION (decl));
+  /* APPLE LOCAL opt diary */
+  /* Remove expand_location call.  */
 /* APPLE LOCAL begin dwarf-file-hash 4587142 */
 
   add_AT_file (die, DW_AT_decl_file, lookup_filename (s.file));
@@ -10884,6 +11024,16 @@ add_src_coords_attributes (dw_die_ref die, tree decl)
   add_AT_unsigned (die, DW_AT_decl_line, s.line);
 }
 
+/* APPLE LOCAL begin opt diary */
+/* Add source coordinate attributes for the given decl.  */
+
+static void
+add_src_coords_attributes (dw_die_ref die, tree decl)
+{
+  expanded_location s = expand_location (DECL_SOURCE_LOCATION (decl));
+  add_src_coords_attributes_locus (die, s);
+}
+/* APPLE LOCAL end opt diary */
 /* Add a DW_AT_name attribute and source coordinate attribute for the
    given decl, but only if it actually has a name.  */
 
@@ -11201,6 +11351,10 @@ gen_array_type_die (tree type, dw_die_ref context_die)
 #endif
 
   add_type_attribute (array_die, element_type, 0, 0, context_die);
+  /* APPLE LOCAL begin pubtypes, approved for 4.3 4535968  */
+  if (get_AT (array_die, DW_AT_name))
+    add_pubtype (type, array_die);
+  /* APPLE LOCAL end pubtypes, approved for 4.3 4535968  */
 }
 
 #if 0
@@ -11335,6 +11489,11 @@ gen_enumeration_type_die (tree type, dw_die_ref context_die)
     }
   else
     add_AT_flag (type_die, DW_AT_declaration, 1);
+
+  /* APPLE LOCAL begin pubtypes, approved for 4.3 4535968  */
+  if (get_AT (type_die, DW_AT_name))
+    add_pubtype (type, type_die);
+  /* APPLE LOCAL end pubtypes, approved for 4.3 4535968  */
 
   return type_die;
 }
@@ -11507,41 +11666,79 @@ gen_type_die_for_member (tree type, tree member, dw_die_ref context_die)
    may later generate inlined and/or out-of-line instances of.  */
 
 static void
-dwarf2out_abstract_function (tree decl)
+/* APPLE LOCAL begin mainline 2006-05-15 rewrite 4548482  */
+dwarf2out_abstract_function (tree decl, source_locus call_site)
+/* APPLE LOCAL end mainline 2006-05-15 rewrite 4548482  */
 {
   dw_die_ref old_die;
   tree save_fn;
   tree context;
   int was_abstract = DECL_ABSTRACT (decl);
+  /* APPLE LOCAL begin mainline 2006-05-15 rewrite 4548482  */
+  struct source_loc_list *temp_loc; 
+  /* APPLE LOCAL end mainline 2006-05-15 rewrite 4548482  */
 
   /* Make sure we have the actual abstract inline, not a clone.  */
   decl = DECL_ORIGIN (decl);
 
   old_die = lookup_decl_die (decl);
-  if (old_die && get_AT (old_die, DW_AT_inline))
-    /* We've already generated the abstract instance.  */
-    return;
-
-  /* Be sure we've emitted the in-class declaration DIE (if any) first, so
-     we don't get confused by DECL_ABSTRACT.  */
-  if (debug_info_level > DINFO_LEVEL_TERSE)
+  /* APPLE LOCAL begin mainline 2006-05-15 rewrite 4548482  */
+  /* Make sure an abstract origin die exists; create one if necessary.  */
+  if (!old_die
+      || (get_AT (old_die, DW_AT_inline) == NULL))
     {
-      context = decl_class_context (decl);
-      if (context)
-	gen_type_die_for_member
-	  (context, decl, decl_function_context (decl) ? NULL : comp_unit_die);
+      /* Be sure we've emitted the in-class declaration DIE (if any) first, so
+	 we don't get confused by DECL_ABSTRACT.  */
+      if (debug_info_level > DINFO_LEVEL_TERSE)
+	{
+	  context = decl_class_context (decl);
+	  if (context)
+	    gen_type_die_for_member
+	      (context, decl, 
+	       decl_function_context (decl) ? NULL : comp_unit_die);
+	}
+      
+      /* Pretend we've just finished compiling this function.  */
+      save_fn = current_function_decl;
+      current_function_decl = decl;
+      
+      set_decl_abstract_flags (decl, 1);
+      dwarf2out_decl (decl);
+      if (! was_abstract)
+	set_decl_abstract_flags (decl, 0);
+      
+      current_function_decl = save_fn;
     }
+  
+  old_die = lookup_decl_die (decl);
 
-  /* Pretend we've just finished compiling this function.  */
-  save_fn = current_function_decl;
-  current_function_decl = decl;
+  /* Test to see if the abstract origin is for an inlined function.  */
+  if (old_die 
+      && get_AT (old_die, DW_AT_inline)
+      && call_site)
+    {
+      /* If so, create a new location node and append it to the end of the
+	 list of inlined call site locations for the abstract origin die.  */
+      
+      struct source_loc_list *current;
+      temp_loc = (struct source_loc_list *)
+	ggc_alloc (sizeof (struct source_loc_list));
+      temp_loc->location.file = call_site->file;
+      temp_loc->location.line = call_site->line;
+      temp_loc->calling_fn_name = ggc_strdup (current_function_name ());
+      temp_loc->next = NULL;
+      if (!old_die->inlined_call_sites)
+	old_die->inlined_call_sites = temp_loc;
+      else
+	{
+	  for (current = old_die->inlined_call_sites;
+	       current && current->next;
+	       current = current->next);
+	  current->next = temp_loc;
+	}
+    }
+    /* APPLE LOCAL end mainline 2006-05-15 rewrite 4548482  */
 
-  set_decl_abstract_flags (decl, 1);
-  dwarf2out_decl (decl);
-  if (! was_abstract)
-    set_decl_abstract_flags (decl, 0);
-
-  current_function_decl = save_fn;
 }
 
 /* Generate a DIE to represent a declared function (either file-scope or
@@ -11842,6 +12039,14 @@ gen_subprogram_die (tree decl, dw_die_ref context_die)
   /* Add the calling convention attribute if requested.  */
   add_calling_convention_attribute (subr_die, TREE_TYPE (decl));
 
+  /* APPLE LOCAL begin differentiate between arm & thumb.  */
+#ifdef TARGET_ARM
+  if (TARGET_THUMB)
+    add_AT_int (subr_die, DW_AT_APPLE_isa, DW_ISA_ARM_thumb);
+  else if (TARGET_ARM)
+    add_AT_int  (subr_die, DW_AT_APPLE_isa, DW_ISA_ARM_arm);
+#endif
+  /* APPLE LOCAL end differentiate between arm & thumb.  */
 }
 
 /* Generate a DIE to represent a declared data object.  */
@@ -12006,6 +12211,47 @@ gen_lexical_block_die (tree stmt, dw_die_ref context_die, int depth)
   decls_for_scope (stmt, stmt_die, depth);
 }
 
+/* APPLE LOCAL begin mainline 2006-05-15 rewrite 4548482  */
+/* The following function takes information about the call site of an
+   inlined function call and adds the information for the call site to
+   the global data structure, inlined_calls_list.  */
+
+static void
+add_to_global_inlined_calls_list (dw_die_ref callee, dw_die_ref caller,
+				  struct dwarf_file_data * call_file,
+				  int call_line, int call_column)
+{
+  struct inlined_calls *tmp_node;
+  struct inlined_calls *prev;
+  struct inlined_calls *current;
+
+  tmp_node = (struct inlined_calls *) 
+    ggc_alloc (sizeof (struct inlined_calls));
+  tmp_node->caller = caller;
+  tmp_node->callee = callee;
+  tmp_node->file_index = call_file;
+  tmp_node->line = call_line;
+  tmp_node->column = call_column;
+  tmp_node->next = NULL;
+
+  for (prev = NULL, current = inlined_calls_list;
+       current && current->caller < caller;
+       prev = current, current = current->next);
+
+  if (!prev)
+    {
+      tmp_node->next = inlined_calls_list;
+      inlined_calls_list = tmp_node;
+    }
+  else
+    {
+      tmp_node->next = current;
+      prev->next = tmp_node;
+    }
+}
+
+/* APPLE LOCAL end mainline 2006-05-15 rewrite 4548482  */
+
 /* Generate a DIE for an inlined subprogram.  */
 
 static void
@@ -12017,10 +12263,15 @@ gen_inlined_subroutine_die (tree stmt, dw_die_ref context_die, int depth)
      must emit this even if the block is abstract, otherwise when we
      emit the block below (or elsewhere), we may end up trying to emit
      a die whose origin die hasn't been emitted, and crashing.  */
-  dwarf2out_abstract_function (decl);
+  /* APPLE LOCAL begin mainline 2006-05-15 rewrite 4548482  */
+  dwarf2out_abstract_function (decl, NULL);
+  /* APPLE LOCAL end mainline 2006-05-15 rewrite 4548482  */
 
   if (! BLOCK_ABSTRACT (stmt))
     {
+      /* APPLE LOCAL begin mainline 2006-05-15 rewrite 4548482  */
+      dw_die_ref abs_orig_die;
+      /* APPLE LOCAL end mainline 2006-05-15 rewrite 4548482  */
       dw_die_ref subr_die
 	= new_die (DW_TAG_inlined_subroutine, context_die, stmt);
       char label[MAX_ARTIFICIAL_LABEL_BYTES];
@@ -12032,6 +12283,117 @@ gen_inlined_subroutine_die (tree stmt, dw_die_ref context_die, int depth)
       ASM_GENERATE_INTERNAL_LABEL (label, BLOCK_END_LABEL,
 				   BLOCK_NUMBER (stmt));
       add_AT_lbl_id (subr_die, DW_AT_high_pc, label);
+      /* APPLE LOCAL begin mainline 2006-05-15 rewrite 4548482  */
+      /* Find the abstract_origin die and see if it has any inlined call sites
+	 attached to it.  */
+      abs_orig_die = get_AT_ref (subr_die, DW_AT_abstract_origin);
+      if (abs_orig_die 
+	  && abs_orig_die->inlined_call_sites)
+	{
+	  struct source_loc_list *current;
+	  struct source_loc_list *call_site = NULL;
+	  dw_die_ref parent_die;
+	  const char *parent_name = NULL;
+
+	  /* Search upwards through the scope for the next subprogram die
+	     (i.e. the calling die).  */
+
+	  parent_die = context_die;
+	  while (parent_die 
+		 && (parent_die->die_tag == DW_TAG_lexical_block
+		     || parent_die->die_tag == DW_TAG_inlined_subroutine))
+	    parent_die = parent_die->die_parent;
+
+	  gcc_assert (parent_die != NULL);
+	  gcc_assert (parent_die->die_tag == DW_TAG_subprogram);
+
+	  /* Get the name of the calling function.  */
+
+	  if (parent_die->die_tag == DW_TAG_subprogram)
+	    parent_name = get_AT_string (parent_die, DW_AT_name);
+
+
+	  if (parent_name)
+	    {
+	      /* Find the corresponding call site location in the list of
+		 call sites attached to the abstract origin die of the
+		 subroutine that is inlined.  */
+	      
+	      for (current = abs_orig_die->inlined_call_sites; current;
+		   current = current->next)
+		if (strcmp (current->calling_fn_name, parent_name) == 0)
+		  {
+		    call_site = current;
+		    break;
+		  }
+
+	      if (!call_site
+		  && abs_orig_die->inlined_call_sites)
+		call_site = abs_orig_die->inlined_call_sites;
+	      
+	      if (call_site)
+		{
+		  struct dwarf_file_data * file_index;
+
+		  /* Remove "call_site" from the list.  */
+
+		  if (abs_orig_die->inlined_call_sites == call_site)
+		    abs_orig_die->inlined_call_sites = call_site->next;
+		  else
+		    {
+		      for (current = abs_orig_die->inlined_call_sites;
+			   current && current->next != call_site;
+			   current = current->next);
+                      if (current->next == call_site)
+			current->next = call_site->next;
+		    }
+
+		  /* Add the DW_AT_call_file and DW_AT_call_line attributes
+		     to the inlined subroutine die.  */
+
+		  file_index = lookup_filename (call_site->location.file);
+		  add_AT_file (subr_die, DW_AT_call_file, file_index);
+		  add_AT_unsigned (subr_die, DW_AT_call_line,
+				   call_site->location.line);
+
+		  /* Add the call site information to the global list.  */
+
+		  add_to_global_inlined_calls_list (abs_orig_die, context_die,
+						    file_index,
+						    call_site->location.line,
+						    0 /* for now */);
+		}
+	      else if (parent_die->die_tag == DW_TAG_inlined_subroutine)
+		{
+		  struct inlined_calls *tmp;
+		  int call_line = 0;
+		  struct dwarf_file_data * call_file = NULL;
+		  char *parent_name;
+		 
+		  /* We're dealing with nested inlines here...  */
+		   
+		  parent_die = get_AT_ref (parent_die, DW_AT_abstract_origin);
+		  parent_name = (char *) get_AT_string (parent_die, DW_AT_name);
+
+		  /* Search through global inlining list to find the appropriate
+		     call site information.  */
+		  
+		  for (tmp = inlined_calls_list; tmp && call_line == 0;
+		       tmp = tmp->next)
+		    if (parent_die == tmp->caller
+			&& abs_orig_die == tmp->callee)
+		      {
+			call_file = tmp->file_index;
+			call_line = tmp->line;
+		      }
+
+		  gcc_assert (call_file != NULL);
+		  add_AT_file (subr_die, DW_AT_call_file, call_file);
+		  add_AT_unsigned (subr_die, DW_AT_call_line , call_line);
+		}
+	    }
+	}
+      /* APPLE LOCAL end mainline 2006-05-15 rewrite 4548482  */
       decls_for_scope (stmt, subr_die, depth);
       current_function_has_inlines = 1;
     }
@@ -12380,6 +12742,11 @@ gen_struct_or_union_type_die (tree type, dw_die_ref context_die)
 	  && ! decl_function_context (TYPE_STUB_DECL (type)))
 	VARRAY_PUSH_TREE (incomplete_types, type);
     }
+
+  /* APPLE LOCAL begin pubtypes, approved for 4.3 4535968  */
+  if (get_AT (type_die, DW_AT_name))
+    add_pubtype (type, type_die);
+  /* APPLE LOCAL end pubtypes, approved for 4.3 4535968  */
 }
 
 /* Generate a DIE for a subroutine _type_.  */
@@ -12396,6 +12763,11 @@ gen_subroutine_type_die (tree type, dw_die_ref context_die)
   add_prototyped_attribute (subr_die, type);
   add_type_attribute (subr_die, return_type, 0, 0, context_die);
   gen_formal_types_die (type, subr_die);
+
+  /* APPLE LOCAL begin pubtypes, approved for 4.3 4535968  */
+  if (get_AT (subr_die, DW_AT_name))
+    add_pubtype (type, subr_die);
+  /* APPLE LOCAL end pubtypes, approved for 4.3 4535968  */
 }
 
 /* Generate a DIE for a type definition.  */
@@ -12435,6 +12807,11 @@ gen_typedef_die (tree decl, dw_die_ref context_die)
 
   if (DECL_ABSTRACT (decl))
     equate_decl_number_to_die (decl, type_die);
+
+  /* APPLE LOCAL begin pubtypes, approved for 4.3 4535968  */
+  if (get_AT (type_die, DW_AT_name))
+    add_pubtype (decl, type_die);
+  /* APPLE LOCAL end pubtypes, approved for 4.3 4535968  */
 }
 
 /* Generate a type description DIE.  */
@@ -13006,7 +13383,9 @@ gen_decl_die (tree decl, dw_die_ref context_die)
 
       /* If we're emitting a clone, emit info for the abstract instance.  */
       if (DECL_ORIGIN (decl) != decl)
-	dwarf2out_abstract_function (DECL_ABSTRACT_ORIGIN (decl));
+	/* APPLE LOCAL begin mainline 2006-05-15 rewrite 4548482  */
+	dwarf2out_abstract_function (DECL_ABSTRACT_ORIGIN (decl), NULL);
+      /* APPLE LOCAL end mainline 2006-05-15 rewrite 4548482  */
 
       /* If we're emitting an out-of-line copy of an inline function,
 	 emit info for the abstract instance and set up to refer to it.  */
@@ -13018,7 +13397,9 @@ gen_decl_die (tree decl, dw_die_ref context_die)
 		  that case, because that works only if we have a die.  */
 	       && DECL_INITIAL (decl) != NULL_TREE)
 	{
-	  dwarf2out_abstract_function (decl);
+	  /* APPLE LOCAL begin mainline 2006-05-15 rewrite 4548482  */
+	  dwarf2out_abstract_function (decl, NULL);
+	  /* APPLE LOCAL end mainline 2006-05-15 rewrite 4548482  */
 	  set_decl_origin_self (decl);
 	}
 
@@ -13439,8 +13820,6 @@ file_table_hash (const void *p_p)
    all searches.  */
 
 /* APPLE LOCAL begin dwarf-file-hash 4587142 */
-static GTY(()) struct dwarf_file_data * file_table_last_lookup;
-
 static struct dwarf_file_data *
 /* APPLE LOCAL end dwarf-file-hash 4587142 */
 lookup_filename (const char *file_name)
@@ -13673,6 +14052,77 @@ dwarf2out_source_line (unsigned int line, const char *filename)
     }
 }
 
+/* APPLE LOCAL begin opt diary */
+/* Emit od_msg.  */
+static void
+dwarf2out_od_msg (dw_die_ref die, HOST_WIDE_INT value)
+{
+  add_AT_int (die, DW_AT_GNU_OD_msg, value); 
+}
+
+
+/* Emit od_category.  */
+static void
+dwarf2out_od_category (dw_die_ref die, HOST_WIDE_INT value)
+{
+  add_AT_int (die, DW_AT_GNU_OD_category, value); 
+}
+
+/* Record optimization diary version number.  */
+
+static void
+dwarf2out_od_version (void)
+{
+  if (flag_opt_diary)
+    add_AT_unsigned (comp_unit_die, DW_AT_GNU_OD_version, 1);
+}
+
+/* Generate od_entry */
+static dw_die_ref 
+gen_new_od_entry_die (dw_die_ref parent)
+{
+  return new_die (DW_TAG_GNU_OD_entry, parent ? parent : comp_unit_die, NULL);
+}
+
+static void
+dwarf2out_od_entry (enum debug_od_msg msg, expanded_location l)
+{
+  dw_die_ref entry_die = gen_new_od_entry_die (NULL);
+
+  dwarf2out_od_msg (entry_die, msg);
+  add_src_coords_attributes_locus (entry_die, l);
+
+  switch (msg)
+    {
+    case OD_msg_loop_vectorized:
+      dwarf2out_od_category (entry_die, OD_report | OD_action);
+      break;
+    case OD_msg_loop_not_vectorized:
+      dwarf2out_od_category (entry_die, OD_report);
+      break;
+    case OD_msg_loop_vectorized_using_versioning:
+      dwarf2out_od_category (entry_die, OD_report | OD_action);
+      break;
+    case OD_msg_loop_vectorized_using_peeling:
+      dwarf2out_od_category (entry_die, OD_report | OD_action);
+      break;
+    case OD_msg_loop_not_vectorized_multiple_exits:
+      dwarf2out_od_category (entry_die, OD_report);
+      break;
+    case OD_msg_loop_not_vectorized_bad_data_ref:
+      dwarf2out_od_category (entry_die, OD_report | OD_hint);
+      break;
+    case OD_msg_loop_not_vectorized_unsupported_ops:
+      dwarf2out_od_category (entry_die, OD_report | OD_limit);
+      break;
+    case OD_msg_loop_not_vectorized_data_dep:
+      dwarf2out_od_category (entry_die, OD_report | OD_hint);
+      break;
+    default:
+      break;
+    }
+}
+/* APPLE LOCAL end opt diary */
 /* Record the beginning of a new source file.  */
 
 static void
@@ -13789,6 +14239,13 @@ dwarf2out_init (const char *filename ATTRIBUTE_UNUSED)
   /* Zero-th entry is allocated, but unused.  */
   line_info_table_in_use = 1;
 
+  /* APPLE LOCAL begin pubtypes, approved for 4.3 4535968  */
+  /* Allocate the pubtypes and pubnames vectors.  */
+
+  pubname_table = VEC_alloc (pubname_entry, 32);
+  pubtype_table = VEC_alloc (pubname_entry, 32);
+  /* APPLE LOCAL end pubtypes, approved for 4.3 4535968  */
+
   /* Generate the initial DIE for the .debug section.  Note that the (string)
      value given in the DW_AT_name attribute of the DW_TAG_compile_unit DIE
      will (typically) be a relative pathname and that this pathname should be
@@ -13829,6 +14286,8 @@ dwarf2out_init (const char *filename ATTRIBUTE_UNUSED)
 
   text_section ();
   ASM_OUTPUT_LABEL (asm_out_file, text_section_label);
+  /* APPLE LOCAL opt diary */
+  dwarf2out_od_version ();
 }
 
 /* A helper function for dwarf2out_finish called through
@@ -14067,6 +14526,9 @@ prune_unused_types (void)
 {
   unsigned int i;
   limbo_die_node *node;
+  /* APPLE LOCAL begin pubtypes, approved for 4.3 4535968  */
+  pubname_ref pub;
+  /* APPLE LOCAL end pubtypes, approved for 4.3 4535968  */
 
 #if ENABLE_ASSERT_CHECKING
   /* All the marks should already be clear.  */
@@ -14082,8 +14544,10 @@ prune_unused_types (void)
 
   /* Also set the mark on nodes referenced from the
      pubname_table or arange_table.  */
-  for (i = 0; i < pubname_table_in_use; i++)
-    prune_unused_types_mark (pubname_table[i].die, 1);
+  /* APPLE LOCAL begin pubtypes, approved for 4.3 4535968  */
+  for (i = 0; VEC_iterate (pubname_entry, pubname_table, i, pub); i++)
+    prune_unused_types_mark (pub->die, 1);
+  /* APPLE LOCAL end pubtypes, approved for 4.3 4535968  */
   for (i = 0; i < arange_table_in_use; i++)
     prune_unused_types_mark (arange_table[i], 1);
 
@@ -14140,6 +14604,19 @@ dwarf2out_finish (const char *filename)
 	add_comp_dir_attribute (comp_unit_die);
 /* APPLE LOCAL end dwarf-file-hash 4587142 */
     }
+
+  /* APPLE LOCAL begin option verifier 4957887 */
+  /* Add the options for this compilation now, so that the options
+     are from the final compilation not the PCH.
+     Do this only when the undocumented RC_DEBUG_OPTIONS
+     environment variable is set to a nonempty string.
+     This is intended only for internal Apple use.  */
+  {
+    char * debugopt = getenv("RC_DEBUG_OPTIONS");
+    if (debugopt && debugopt[0])
+      add_AT_string (comp_unit_die, DW_AT_APPLE_flags, get_arguments());
+  }
+  /* APPLE LOCAL end option verifier 4957887 */
 
   /* Traverse the limbo die list, and add parent/child links.  The only
      dies without parents that should be here are concrete instances of
@@ -14251,13 +14728,13 @@ dwarf2out_finish (const char *filename)
 
 /* APPLE LOCAL end mainline 4.2 2006-01-02 4386366 */
   if (debug_info_level >= DINFO_LEVEL_NORMAL)
-/* APPLE LOCAL begin dwarf 4383509 */
+/* APPLE LOCAL begin mainline 2006-03-16 dwarf 4383509 */
     add_AT_lineptr (comp_unit_die, DW_AT_stmt_list,
 		    debug_line_section_label);
-/* APPLE LOCAL end dwarf 4383509 */
+/* APPLE LOCAL end mainline 2006-03-16 dwarf 4383509 */
 
   if (debug_info_level >= DINFO_LEVEL_VERBOSE)
-/* APPLE LOCAL dwarf 4383509 */
+/* APPLE LOCAL mainline 2006-03-16 dwarf 4383509 */
     add_AT_macptr (comp_unit_die, DW_AT_macro_info, macinfo_section_label);
 
   /* Output all of the compilation units.  We put the main one last so that
@@ -14272,11 +14749,22 @@ dwarf2out_finish (const char *filename)
   output_abbrev_section ();
 
   /* Output public names table if necessary.  */
-  if (pubname_table_in_use)
+  /* APPLE LOCAL begin pubtypes, approved for 4.3 4535968  */
+  if (! VEC_empty (pubname_entry, pubname_table))
     {
       named_section_flags (DEBUG_PUBNAMES_SECTION, SECTION_DEBUG);
-      output_pubnames ();
+      output_pubnames (pubname_table);
     }
+
+#ifdef DEBUG_PUBTYPES_SECTION
+  /* Output public types table if necessary.  */
+  if (! VEC_empty (pubname_entry, pubtype_table))
+    {
+      named_section_flags (DEBUG_PUBTYPES_SECTION, SECTION_DEBUG);
+      output_pubnames (pubtype_table);
+    }
+#endif
+  /* APPLE LOCAL end pubtypes, approved for 4.3 4535968  */
 
   /* Output the address range information.  We only put functions in the arange
      table, so don't write it out if we don't have any.  */

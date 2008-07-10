@@ -1,4 +1,4 @@
-/WXWIN_OS_DESCRIPTION/s/\(Darwin [^ ]*\) .*/\1 Power Macintosh"/
+/WXWIN_OS_DESCRIPTION/s/\(Darwin [^ ]*\) .*/\1 Macintosh"/
 /WORDS_BIGENDIAN/c
 #ifdef __BIG_ENDIAN__
 #define WORDS_BIGENDIAN 1
@@ -9,7 +9,7 @@
 /__POWERPC__/c
 #if defined(__ppc__) || defined(__ppc64__)
 #define __POWERPC__ 1
-#elif defined(__i386__)
+#elif defined(__i386__) || defined(__x86_64__)
 #define __INTEL__ 1
 #else
 #error architecture not supported */

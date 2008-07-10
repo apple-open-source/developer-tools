@@ -267,6 +267,12 @@ case "${targ}" in
     targ_defvec=bfd_elf32_littlearm_vec
     targ_selvecs=bfd_elf32_bigarm_vec
     ;;
+  arm-*-darwin* | arm-*-macos10*)
+    targ_defvec=mach_o_le_vec
+    targ_selvecs="mach_o_be_vec mach_o_le_vec mach_o_fat_vec "
+    targ_archs="bfd_arm_arch"
+    targ_underscore=yes
+    ;;
 
   thumb-*-coff)
     targ_defvec=armcoff_little_vec

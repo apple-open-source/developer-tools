@@ -1,8 +1,65 @@
-2007-07-10  Jim Ingham  <jingham@apple.com>  
+2008-04-24  Jason Molenda  (jmolenda@apple.com)
 
-	* Makefile: Hard-code the Salt path to the Developer documentation, 
-	since we can't seem to get useful values from the system.
+	* Makefile: Unset MACOSX_DEPLOYMENT_TARGET when building
+	an arm-native gdb on an i386/ppc system.
+
+2008-04-23  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.sh: Issue error message if -arch command line option isn't
+	followed by an architecture.
+
+2008-03-26  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile (CDEBUGFLAGS): Add -Os back by default.
+
+2008-03-25  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile: Don't make the native-arm or cross-arm gdbs
+	setgid procmod.
+
+2008-03-24  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.sh: Set OSABIOPTS when the user specifies armv6; use it when
+	invoking gdb.
+
+2007-11-07  Greg Clayton  <gclayton@apple.com>
+
+        *Makefile: Changed CROSS_ROOT to SDKROOT for cross and crossarm
+        targets.
+
+2007-07-24  Greg Clayton  <gclayton@apple.com>
+
+        *Makefile: CROSS_ROOT is now used to specify the SDK location
+        for cross builds.
+
+2007-06-27  Greg Clayton  <gclayton@apple.com>
+
+        * gdb.sh: Handle arm and armv6 arch variants.
+        * Makefile: Ditto.
+        (CDEBUGFLAGS): Define default value only if not already defined.
+        (crossarm): New target.
+        (cross): New target.
+        (stamp-build-gdb): Configure and build gdbserver when target 
+        is arm darwin.
+        (install-gdbserver): New target.
+        (check-args): Add arm/armv6 darwin support.
+        (install-macosx): Install gdbserver when target is arm darwin.
+        
+2007-12-05  Jim Ingham  <jingham@apple.com>
+
+	* Makefile: Remove -Wno-long-double from Makefile, it is not supported
+	by gcc-4.2.
 	
+2007-10-12  Greg Clayton  (gclayton@apple.com)
+
+	* Makefile (GDB_RC_VERSION): Bump Leopard gdb version up to gdb-900
+	to leave a hole for other gdb builds.
+
+2007-07-10  Jason Molenda  (jmolenda@apple.com)
+
+	* Makefile (GDB_RC_VERSION): Bump Leopard gdb version up to gdb-750
+	to leave a hole for Xcode 2.5 gdb submissions on the branch.
+
 2007-05-22  Jason Molenda  (jmolenda@apple.com)
 
 	* gdb.sh: If the gdb shell script being run is a soft link to the

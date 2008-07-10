@@ -1,5 +1,6 @@
 /*  MSP430-specific support for 32-bit ELF
-    Copyright (C) 2002, 2003, 2004 Free Software Foundation, Inc.
+    Copyright (C) 2002, 2003, 2004, 2005, 2006
+    Free Software Foundation, Inc.
     Contributed by Dmitry Diky <diwil@mail.ru>
 
     This file is part of BFD, the Binary File Descriptor library.
@@ -16,7 +17,7 @@
 
     You should have received a copy of the GNU General Public License
     along with this program; if not, write to the Free Software
-    Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #include "bfd.h"
 #include "sysdep.h"
@@ -213,48 +214,6 @@ msp430_info_to_howto_rela (bfd * abfd ATTRIBUTE_UNUSED,
   cache_ptr->howto = &elf_msp430_howto_table[r_type];
 }
 
-static asection *
-elf32_msp430_gc_mark_hook (asection * sec,
-			   struct bfd_link_info * info ATTRIBUTE_UNUSED,
-			   Elf_Internal_Rela * rel,
-			   struct elf_link_hash_entry * h,
-			   Elf_Internal_Sym * sym)
-{
-  if (h != NULL)
-    {
-      switch (ELF32_R_TYPE (rel->r_info))
-	{
-	default:
-	  switch (h->root.type)
-	    {
-	    case bfd_link_hash_defined:
-	    case bfd_link_hash_defweak:
-	      return h->root.u.def.section;
-
-	    case bfd_link_hash_common:
-	      return h->root.u.c.p->section;
-
-	    default:
-	      break;
-	    }
-	}
-    }
-  else
-    return bfd_section_from_elf_index (sec->owner, sym->st_shndx);
-
-  return NULL;
-}
-
-static bfd_boolean
-elf32_msp430_gc_sweep_hook (bfd * abfd ATTRIBUTE_UNUSED,
-			    struct bfd_link_info * info ATTRIBUTE_UNUSED,
-			    asection * sec ATTRIBUTE_UNUSED,
-			    const Elf_Internal_Rela * relocs ATTRIBUTE_UNUSED)
-{
-  /* We don't use got and plt entries for msp430.  */
-  return TRUE;
-}
-
 /* Look through the relocs for a section during the first phase.
    Since we don't do .gots or .plts, we just need to consider the
    virtual table relocs for gc.  */
@@ -288,7 +247,12 @@ elf32_msp430_check_relocs (bfd * abfd, struct bfd_link_info * info,
       if (r_symndx < symtab_hdr->sh_info)
 	h = NULL;
       else
-	h = sym_hashes[r_symndx - symtab_hdr->sh_info];
+	{
+	  h = sym_hashes[r_symndx - symtab_hdr->sh_info];
+	  while (h->root.type == bfd_link_hash_indirect
+		 || h->root.type == bfd_link_hash_warning)
+	    h = (struct elf_link_hash_entry *) h->root.u.i.link;
+	}
     }
 
   return TRUE;
@@ -825,6 +789,36 @@ msp430_elf_symbol_address_p (bfd * abfd,
   return FALSE;
 }
 
+/* Adjust all local symbols defined as '.section + 0xXXXX' (.section has sec_shndx)
+    referenced from current and other sections */
+static bfd_boolean
+msp430_elf_relax_adjust_locals(bfd * abfd, asection * sec, bfd_vma addr,
+    int count, unsigned int sec_shndx, bfd_vma toaddr)
+{
+  Elf_Internal_Shdr *symtab_hdr;
+  Elf_Internal_Rela *irel;
+  Elf_Internal_Rela *irelend;
+  Elf_Internal_Sym *isym;
+
+  irel = elf_section_data (sec)->relocs;
+  irelend = irel + sec->reloc_count;
+  symtab_hdr = & elf_tdata (abfd)->symtab_hdr;
+  isym = (Elf_Internal_Sym *) symtab_hdr->contents;
+  
+  for (irel = elf_section_data (sec)->relocs; irel < irelend; irel++)
+    {
+      int sidx = ELF32_R_SYM(irel->r_info);
+      Elf_Internal_Sym *lsym = isym + sidx;
+      
+      /* Adjust symbols referenced by .sec+0xXX */
+      if (irel->r_addend > addr && irel->r_addend < toaddr 
+	  && lsym->st_shndx == sec_shndx)
+	irel->r_addend -= count;
+    }
+  
+  return TRUE;
+}
+
 /* Delete some bytes from a section while relaxing.  */
 
 static bfd_boolean
@@ -843,6 +837,7 @@ msp430_elf_relax_delete_bytes (bfd * abfd, asection * sec, bfd_vma addr,
   struct elf_link_hash_entry **sym_hashes;
   struct elf_link_hash_entry **end_hashes;
   unsigned int symcount;
+  asection *p;
 
   sec_shndx = _bfd_elf_section_from_bfd_section (abfd, sec);
 
@@ -863,11 +858,18 @@ msp430_elf_relax_delete_bytes (bfd * abfd, asection * sec, bfd_vma addr,
   sec->size -= count;
 
   /* Adjust all the relocs.  */
+  symtab_hdr = & elf_tdata (abfd)->symtab_hdr;
+  isym = (Elf_Internal_Sym *) symtab_hdr->contents;
   for (irel = elf_section_data (sec)->relocs; irel < irelend; irel++)
-    /* Get the new reloc address.  */
-    if ((irel->r_offset > addr && irel->r_offset < toaddr))
-      irel->r_offset -= count;
+    {
+      /* Get the new reloc address.  */
+      if ((irel->r_offset > addr && irel->r_offset < toaddr))
+	irel->r_offset -= count;
+    }
 
+  for (p = abfd->sections; p != NULL; p = p->next)
+    msp430_elf_relax_adjust_locals(abfd,p,addr,count,sec_shndx,toaddr);
+  
   /* Adjust the local symbols defined in this section.  */
   symtab_hdr = & elf_tdata (abfd)->symtab_hdr;
   isym = (Elf_Internal_Sym *) symtab_hdr->contents;
@@ -1167,8 +1169,6 @@ error_return:
 #define elf_info_to_howto	             msp430_info_to_howto_rela
 #define elf_info_to_howto_rel	             NULL
 #define elf_backend_relocate_section         elf32_msp430_relocate_section
-#define elf_backend_gc_mark_hook             elf32_msp430_gc_mark_hook
-#define elf_backend_gc_sweep_hook            elf32_msp430_gc_sweep_hook
 #define elf_backend_check_relocs             elf32_msp430_check_relocs
 #define elf_backend_can_gc_sections          1
 #define elf_backend_final_write_processing   bfd_elf_msp430_final_write_processing

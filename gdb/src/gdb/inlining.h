@@ -130,6 +130,25 @@ struct inlined_call_stack_record
   int stepped_into;
 };
 
+/* APPLE LOCAL begin subroutine inlining  */
+/* Stores inlining information from DWARF dies, to write into line
+   table entries, and (eventually) to be translated and stored into
+   the main inlining records in the per-objfile trees.  */
+
+struct dwarf_inlined_call_record {
+  unsigned file_index;
+  unsigned line;
+  unsigned column;
+  unsigned decl_file_index;
+  unsigned decl_line;
+  char *name;
+  char *parent_name;
+  CORE_ADDR lowpc;
+  CORE_ADDR highpc;
+  /* APPLE LOCAL - address ranges  */
+  struct address_range_list *ranges;
+};
+
 /* Ranges of address for current subroutine, being stepped over or through;
    at this time the assumption is that this is only needed for inlined
    subroutines.  */
@@ -165,6 +184,8 @@ extern const struct frame_unwind *const inlined_frame_unwind;
 /* Externally visible functions for accessing/manipulating the
    global_inlined_call_stack.  */
 
+extern void inlined_function_reset_frame_stack (void);
+
 extern void inlined_function_initialize_call_stack (void);
 
 extern void inlined_function_reinitialize_call_stack (void);
@@ -173,11 +194,10 @@ extern int inlined_function_call_stack_initialized_p (void);
 
 extern void inlined_function_update_call_stack (CORE_ADDR);
 
-extern void inlined_function_add_function_names (CORE_ADDR, CORE_ADDR, int, int,
-						 char *, char *, 
+extern void inlined_function_add_function_names (struct objfile *,
+						 CORE_ADDR, CORE_ADDR, int, 
+						 int, char *, char *, 
 						 struct address_range_list *);
-
-extern void fix_up_inlined_function_line_table_entries (void);
 
 extern int at_inlined_call_site_p (char **, int *, int *);
 
@@ -206,8 +226,6 @@ extern int current_inlined_subroutine_call_site_line (void);
 extern int inlined_function_end_of_inlined_code_p (CORE_ADDR);
 
 extern struct frame_info * get_current_inlined_frame (void);
-
-extern CORE_ADDR get_inlined_call_stack_record_pc (int);
 
 extern void inlined_frame_prev_register (struct frame_info *, void **, int, 
 					 int *, enum lval_type *, CORE_ADDR *, 
@@ -261,9 +279,9 @@ enum rb_tree_colors { RED, BLACK, UNINIT };
    all three keys.  */
 
 struct rb_tree_node {
-  long long  key;             /* Primary sorting key                       */
+  CORE_ADDR  key;             /* Primary sorting key                       */
   int secondary_key;          /* Secondary sorting key                     */
-  long long third_key;        /* Third sorting key                         */
+  CORE_ADDR third_key;        /* Third sorting key                         */
   void *data;                 /* Main data; varies between different apps  */
   enum rb_tree_colors color;  /* Color of the tree node (for balancing)    */
   struct rb_tree_node *parent; /* Parent in the red-black tree             */
@@ -281,5 +299,13 @@ extern struct rb_tree_node *rb_tree_find_node_all_keys (struct rb_tree_node *,
 extern void rb_tree_insert (struct rb_tree_node **, struct rb_tree_node *, 
 			    struct rb_tree_node *);
 
+extern void inlined_subroutine_free_objfile_data (struct rb_tree_node *);
+extern void inlined_subroutine_free_objfile_call_sites (struct rb_tree_node *);
+
+extern void inlined_subroutine_objfile_relocate (struct objfile *,
+						 struct rb_tree_node *,
+						 struct section_offsets *);
+
+extern int inlined_function_find_first_line (struct symtab_and_line);
 #endif /* !defined(INLINE_H) */
 /* APPLE LOCAL end subroutine inlining (entire file) */

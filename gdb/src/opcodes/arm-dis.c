@@ -1081,12 +1081,18 @@ static const char *const iwmmxt_cregnames[] =
 };
 
 /* Default to GCC register name set.  */
+/* APPLE LOCAL: Default to darwin register names for our new FP being r7.  */
+#if defined (TM_NEXTSTEP)
+static unsigned int regname_selected = 2;
+#else
 static unsigned int regname_selected = 1;
+#endif
 
 #define NUM_ARM_REGNAMES  NUM_ELEM (regnames)
 #define arm_regnames      regnames[regname_selected].reg_names
 
 static bfd_boolean force_thumb = FALSE;
+static bfd_boolean show_opcode_bytes = FALSE;
 
 
 /* Functions.  */
@@ -1101,6 +1107,14 @@ set_arm_regname_option (int option)
 {
   int old = regname_selected;
   regname_selected = option;
+  return old;
+}
+
+bfd_boolean
+set_arm_show_opcode_bytes_option (bfd_boolean option)
+{
+  int old = show_opcode_bytes;
+  show_opcode_bytes = option;
   return old;
 }
 
@@ -1154,6 +1168,8 @@ print_insn_arm (bfd_vma pc, struct disassemble_info *info, long given)
   void *stream = info->stream;
   fprintf_ftype func = info->fprintf_func;
 
+  if (show_opcode_bytes)
+    func (stream, "%8.8x ", given);
   for (insn = arm_opcodes; insn->assembler; insn++)
     {
       if (insn->value == FIRST_IWMMXT_INSN
@@ -1884,6 +1900,8 @@ print_insn_thumb16 (bfd_vma pc, struct disassemble_info *info, long given)
   void *stream = info->stream;
   fprintf_ftype func = info->fprintf_func;
 
+  if (show_opcode_bytes)
+    func (stream, "%4.4x     ", given);
   for (insn = thumb_opcodes; insn->assembler; insn++)
     if ((given & insn->mask) == insn->value)
       {
@@ -2109,6 +2127,8 @@ print_insn_thumb32 (bfd_vma pc, struct disassemble_info *info, long given)
   void *stream = info->stream;
   fprintf_ftype func = info->fprintf_func;
 
+  if (show_opcode_bytes)
+    func (stream, "%8.8x ", given);
   for (insn = thumb32_opcodes; insn->assembler; insn++)
     if ((given & insn->mask) == insn->value)
       {
@@ -2412,8 +2432,13 @@ print_insn_thumb32 (bfd_vma pc, struct disassemble_info *info, long given)
 		  offset |= (given & 0x03ff0000u) >> 4;
 		  offset |= (given & 0x000007ffu) << 1;
 		  offset -= (1 << 24);
+		  offset += pc + 4;
 
-		  info->print_address_func (pc + 4 + offset, info);
+		  /* BLX target addresses are always word aligned.  */
+		  if ((given & 0x00001000u) == 0)
+		      offset &= ~2u;
+
+		  info->print_address_func (offset, info);
 		}
 		break;
 
@@ -2554,6 +2579,10 @@ parse_arm_disassembler_option (char *option)
     force_thumb = 1;
   else if (strneq (option, "no-force-thumb", 14))
     force_thumb = 0;
+  else if (strneq (option, "show-opcode-bytes", 17))
+    show_opcode_bytes = 1;
+  else if (strneq (option, "no-show-opcode-bytes", 20))
+    show_opcode_bytes = 0;
   else
     /* XXX - should break 'option' at following delimiter.  */
     fprintf (stderr, _("Unrecognised disassembler option: %s\n"), option);
@@ -2729,5 +2758,7 @@ the -M switch:\n"));
 	     regnames[i].description);
 
   fprintf (stream, "  force-thumb              Assume all insns are Thumb insns\n");
-  fprintf (stream, "  no-force-thumb           Examine preceeding label to determine an insn's type\n\n");
+  fprintf (stream, "  no-force-thumb           Examine preceeding label to determine an insn's type\n");
+  fprintf (stream, "  show-opcode-bytes        Show opcode bytes along with disassembly\n");
+  fprintf (stream, "  no-show-opcode-bytes     Do not show opcode bytes along with disassembly\n\n");
 }

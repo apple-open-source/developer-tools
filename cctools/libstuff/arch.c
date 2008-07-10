@@ -62,6 +62,7 @@ static const struct arch_flag arch_flags[] = {
     { "m88k",   CPU_TYPE_MC88000, CPU_SUBTYPE_MC88000_ALL },
     { "i860",   CPU_TYPE_I860,    CPU_SUBTYPE_I860_ALL },
     { "veo",    CPU_TYPE_VEO,     CPU_SUBTYPE_VEO_ALL },
+    { "arm",    CPU_TYPE_ARM,     CPU_SUBTYPE_ARM_ALL },
     /* specific architecture implementations */
     { "ppc601", CPU_TYPE_POWERPC, CPU_SUBTYPE_POWERPC_601 },
     { "ppc603", CPU_TYPE_POWERPC, CPU_SUBTYPE_POWERPC_603 },
@@ -87,6 +88,12 @@ static const struct arch_flag arch_flags[] = {
     { "hppa7100LC", CPU_TYPE_HPPA,  CPU_SUBTYPE_HPPA_7100LC },
     { "veo1",   CPU_TYPE_VEO,     CPU_SUBTYPE_VEO_1 },
     { "veo2",   CPU_TYPE_VEO,     CPU_SUBTYPE_VEO_2 },
+    { "veo3",   CPU_TYPE_VEO,     CPU_SUBTYPE_VEO_3 },
+    { "veo4",   CPU_TYPE_VEO,     CPU_SUBTYPE_VEO_4 },
+    { "armv4t", CPU_TYPE_ARM,     CPU_SUBTYPE_ARM_V4T},
+    { "armv5",  CPU_TYPE_ARM,     CPU_SUBTYPE_ARM_V5TEJ},
+    { "xscale", CPU_TYPE_ARM,     CPU_SUBTYPE_ARM_XSCALE},
+    { "armv6",  CPU_TYPE_ARM,     CPU_SUBTYPE_ARM_V6 },
     { NULL,	0,		  0 }
 };
 
@@ -147,13 +154,15 @@ cpu_subtype_t cpusubtype)
 
 	for(i = 0; arch_flags[i].name != NULL; i++){
 	    if(arch_flags[i].cputype == cputype &&
-	       arch_flags[i].cpusubtype == cpusubtype)
+	       (arch_flags[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+	       (cpusubtype & ~CPU_SUBTYPE_MASK))
 		return(arch_flags[i].name);
 	}
 #ifndef RLD
 	p = savestr("cputype 1234567890 cpusubtype 1234567890");
 	if(p != NULL)
-	    sprintf(p, "cputype %u cpusubtype %u", cputype, cpusubtype);
+	    sprintf(p, "cputype %u cpusubtype %u", cputype,
+		    cpusubtype & ~CPU_SUBTYPE_MASK);
 #else
 	/* there is no sprintf() in the rld kernel API's */
 	p = savestr("cputype ?? cpusubtype ??");
@@ -200,7 +209,8 @@ const struct arch_flag *flag)
       flag->cputype == CPU_TYPE_I860 ||
       flag->cputype == CPU_TYPE_VEO)
         return BIG_ENDIAN_BYTE_SEX;
-    else if(flag->cputype == CPU_TYPE_I386)
+    else if(flag->cputype == CPU_TYPE_I386 ||
+	    flag->cputype == CPU_TYPE_ARM)
         return LITTLE_ENDIAN_BYTE_SEX;
     else
         return UNKNOWN_BYTE_SEX;
@@ -223,7 +233,8 @@ const struct arch_flag *flag)
       flag->cputype == CPU_TYPE_I386 ||
       flag->cputype == CPU_TYPE_SPARC ||
       flag->cputype == CPU_TYPE_I860 ||
-      flag->cputype == CPU_TYPE_VEO)
+      flag->cputype == CPU_TYPE_VEO ||
+      flag->cputype == CPU_TYPE_ARM)
         return(-1);
     else if(flag->cputype == CPU_TYPE_HPPA)
         return(+1);
@@ -239,7 +250,7 @@ const struct arch_flag *flag)
  * copied here.
  */
 __private_extern__
-unsigned long
+uint64_t
 get_stack_addr_from_flag(
 const struct arch_flag *flag)
 {
@@ -250,15 +261,20 @@ const struct arch_flag *flag)
 	return(0xffffe000);
     case CPU_TYPE_POWERPC:
     case CPU_TYPE_VEO:
-	return(0xc0000000);
     case CPU_TYPE_I386:
 	return(0xc0000000);
+    case CPU_TYPE_ARM:
+	return(0x30000000);
     case CPU_TYPE_SPARC:
 	return(0xf0000000);
     case CPU_TYPE_I860:
 	return(0);
     case CPU_TYPE_HPPA:
 	return(0xc0000000-0x04000000);
+    case CPU_TYPE_POWERPC64:
+	return(0x7ffff00000000LL);
+    case CPU_TYPE_X86_64:
+	return(0x7fff5fc00000LL);
     default:
 	return(0);
     }
@@ -294,8 +310,11 @@ get_segalign_from_flag(
 const struct arch_flag *flag)
 {
 	if(flag->cputype == CPU_TYPE_POWERPC ||
+	   flag->cputype == CPU_TYPE_POWERPC64 ||
 	   flag->cputype == CPU_TYPE_VEO ||
-	   flag->cputype == CPU_TYPE_I386)
+	   flag->cputype == CPU_TYPE_I386 ||
+	   flag->cputype == CPU_TYPE_X86_64 ||
+	   flag->cputype == CPU_TYPE_ARM)
 	    return(0x1000); /* 4K */
 	else
 	    return(0x2000); /* 8K */
@@ -313,6 +332,21 @@ const struct arch_flag *flag)
 	    return(VM_PROT_READ | VM_PROT_WRITE);
 	else
 	    return(VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE);
+}
+
+/*
+ * get_shared_region_size_from_flag() returns the default shared
+ * region size.
+ */
+__private_extern__
+unsigned long
+get_shared_region_size_from_flag(
+const struct arch_flag *flag)
+{
+	if(flag->cputype == CPU_TYPE_ARM)
+	   return (0x08000000);
+	else
+	   return (0x10000000);
 }
 
 /*
