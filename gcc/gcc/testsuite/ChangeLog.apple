@@ -1,3 +1,8 @@
+2008-05-15  Josh Conner  <jconner@apple.com>
+
+	Radar 5920116
+	* g++.apple/thunks[1-4].C: New tests.
+
 2008-04-01  Jon Ziegler <jonz@apple.com>
 
 	Radar 5706927

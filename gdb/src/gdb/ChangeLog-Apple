@@ -1,3 +1,12 @@
+2008-06-26  Greg Clayton  <gclayton@apple.com>
+
+	* valops.c (value_full_object): Add try/catch around 
+	value_rtti_type function call.
+
+2008-06-18  Jim Ingham  <jingham@apple.com>
+
+	* config/arm/macosx.mh: Remove -Wno-long-double.
+
 2008-05-09  Greg Clayton  <gclayton@apple.com>
 
 	* remote.c (remote_create_inferior): Increase timeout for the launch

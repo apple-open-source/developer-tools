@@ -19025,7 +19025,7 @@ objc_build_incr_decr_setter_call (enum tree_code code, tree lhs, tree inc)
 {
   tree expr;
 
-  if (flag_objc_abi == 2)
+  if (flag_objc_abi == 2 && !flag_objc_legacy_dispatch)
     return objc_v2_build_incr_decl_setter_call (code, lhs, inc);
   
   expr = lhs;

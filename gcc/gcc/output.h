@@ -94,6 +94,12 @@ extern int insn_current_reference_address (rtx);
    Defined in final.c.  */
 extern int label_to_alignment (rtx);
 
+/* APPLE LOCAL begin ARM 6008578 */
+/* Maximum number of bytes to skip to achieve label alignment.
+   Defined in final.c.  */
+extern int label_to_max_skip (rtx);
+/* APPLE LOCAL end ARM 6008578 */
+
 /* Output a LABEL_REF, or a bare CODE_LABEL, as an assembler symbol.  */
 extern void output_asm_label (rtx);
 

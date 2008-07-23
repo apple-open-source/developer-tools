@@ -42,6 +42,7 @@
 #include "checkpoint.h"
 #include "value.h"
 #include "gdb_regex.h"
+#include "osabi.h"
 
 #include "bfd.h"
 
@@ -57,6 +58,7 @@
 #include <sys/sysctl.h>
 #include <sys/proc.h>
 #include <mach/mach_error.h>
+#include <spawn.h>
 
 #include "macosx-nat-dyld.h"
 #include "macosx-nat-inferior.h"
@@ -132,6 +134,8 @@ extern void init_exec_ops (void);
 extern int inferior_auto_start_dyld_flag;
 
 int macosx_fake_resume = 0;
+
+static int announce_attach = 1;
 
 enum macosx_source_type
 {
@@ -1637,12 +1641,15 @@ macosx_child_attach (char *args, int from_tty)
   macosx_inferior_destroy (macosx_status);
 
   exec_file = get_exec_file (0);
-  if (exec_file)
-    printf_filtered ("Attaching to program: `%s', %s.\n",
-                     exec_file, target_pid_to_str (pid_to_ptid (pid)));
-  else
-    printf_filtered ("Attaching to %s.\n",
-                     target_pid_to_str (pid_to_ptid (pid)));
+  if (announce_attach)
+    {
+      if (exec_file)
+	printf_filtered ("Attaching to program: `%s', %s.\n",
+			 exec_file, target_pid_to_str (pid_to_ptid (pid)));
+      else
+	printf_filtered ("Attaching to %s.\n",
+			 target_pid_to_str (pid_to_ptid (pid)));
+    }
 
   /* classic-inferior-support
      A bit of a hack:  Despite being in the middle of macosx_child_attach(), 
@@ -2072,6 +2079,140 @@ macosx_ptrace_him (int pid)
     }
 }
 
+#ifdef TARGET_ARM
+/* This version of macosx_child_create_inferior is needed to work
+   around the fact that the task port doesn't persist across a
+   fork/exec.  It would be nice if we could just switch to the new
+   task after the exec, but that is currently buggy, and the
+   PT_THUPDATE stops working.  So instead, this code just lets
+   posix_spawn launch the app (with the POSIX_SPAWN_START_SUSPENDED
+   argument telling the target to stop on the first instruction.)
+   Then we attach, and continue.
+   This version silently ignores the "start-with-shell" setting.  */
+
+static void
+macosx_child_create_inferior (char *exec_file, char *allargs, char **env,
+			      int from_tty)
+{  
+  pid_t new_pid;
+  char pid_str[32];
+  static int debug_setpgrp = 657473;
+  unsigned int i;
+  char **argt = NULL;
+  static char **argv;
+  char *fileptr;
+  posix_spawnattr_t attr;
+  int retval;
+  size_t copied;
+  cpu_type_t cpu = 0;
+  int count = 0;
+  const char *osabi_name = gdbarch_osabi_name (gdbarch_osabi (current_gdbarch));
+  struct gdb_exception e;
+
+  /* These comes from fork_child.c:  */
+  extern char *exec_pathname;
+  extern char *exec_argv0;
+
+  /* If no exec file handed to us, get it from the exec-file command
+     -- with a good, common error message if none is specified.  */
+  if (exec_file == 0)
+    exec_file = get_exec_file (1);
+  
+  if (exec_pathname[0] != '\0')
+    fileptr = exec_pathname;
+  else
+    fileptr = exec_file;
+  
+  argt = buildargv (allargs);
+  if (argt == NULL)
+    {
+      error ("unable to build argument vector for inferior process (out of memory)");
+    }
+
+  if ((allargs == NULL) || (allargs[0] == '\0'))
+    argt[0] = NULL;
+  for (i = 0; argt[i] != NULL; i++);
+  argv = (char **) xmalloc ((i + 1 + 1) * (sizeof *argt));
+  argv[0] = exec_file;
+  if (exec_argv0[0] != '\0')
+    argv[0] = exec_argv0;
+  memcpy (&argv[1], argt, (i + 1) * sizeof (*argt));
+  /* freeargv (argt); */
+  
+#if defined (TARGET_POWERPC)
+  if (strcmp (osabi_name, "Darwin") == 0)
+    {
+      cpu = CPU_TYPE_POWERPC;
+      count = 1;
+    }
+  else if (strcmp (osabi_name, "Darwin64") == 0)
+    {
+      cpu = CPU_TYPE_POWERPC64;
+      count = 1;
+    }
+#elif defined (TARGET_I386)
+  if (strcmp (osabi_name, "Darwin") == 0)
+    {
+      cpu = CPU_TYPE_I386;
+      count = 1;
+    }
+  else if (strcmp (osabi_name, "Darwin64") == 0)
+    {
+      cpu = CPU_TYPE_X86_64;
+      count = 1;
+    }
+#elif defined (TARGET_ARM)
+  if (strcmp (osabi_name, "Darwin") == 0)
+    {
+      cpu = CPU_TYPE_ARM;
+      count = 1;
+    }
+  else if (strcmp (osabi_name, "DarwinV6") == 0)
+    {
+      cpu = CPU_TYPE_ARM;
+      count = 1;
+    }
+#endif
+
+  retval = posix_spawnattr_init (&attr);
+  if (retval != 0)
+    error ("Couldn't initialize attributes for posix_spawn, error: %d", retval);
+
+  retval = posix_spawnattr_setflags(&attr, POSIX_SPAWN_START_SUSPENDED);
+  if (retval != 0)
+    error ("Couldn't add POSIX_SPAWN_SETEXEC to attributes, error: %d", retval);
+
+  if (count == 1)
+    {
+      retval = posix_spawnattr_setbinpref_np(&attr, 1, &cpu, &copied);
+      if (retval != 0 || copied != 1)
+	  error ("Couldn't set the binary preferences, error: %d", retval);
+    }
+  retval = posix_spawnattr_setpgroup (&attr, debug_setpgrp);
+  if (retval != 0 || copied != 1)
+    error ("Couldn't set the process group, error: %d", retval);
+
+  retval = posix_spawnp (&new_pid, fileptr, NULL,  &attr, argv, env);
+
+  snprintf (pid_str, 31, "%d", new_pid);
+
+  announce_attach = 0;
+  TRY_CATCH (e, RETURN_MASK_ERROR)
+    {
+      macosx_child_attach (pid_str, from_tty);
+    }
+  announce_attach = 1;
+  if (e.reason != NO_ERROR)
+    throw_exception (e);
+
+  if (target_can_async_p ())
+    target_async (inferior_event_handler, 0);
+
+  clear_proceed_status ();
+  proceed ((CORE_ADDR) - 1, TARGET_SIGNAL_0, 0);
+
+}
+#else
 static void
 macosx_child_create_inferior (char *exec_file, char *allargs, char **env,
 			      int from_tty)
@@ -2103,6 +2244,7 @@ macosx_child_create_inferior (char *exec_file, char *allargs, char **env,
   clear_proceed_status ();
   proceed ((CORE_ADDR) - 1, TARGET_SIGNAL_0, 0);
 }
+#endif
 
 static void
 macosx_child_files_info (struct target_ops *ops)

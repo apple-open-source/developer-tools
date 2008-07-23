@@ -1,3 +1,16 @@
+2008-07-18  Greg Clayton  <gclayton@apple.com>
+
+	* macosx-tdep.c (create_dsym_uuids_for_path): Create CFURL with
+    CFURLCreateWithFileSystemPath instead of CFURLCreateWithBytes
+	or special URL characters will not allow a correct path to be
+	extracted with CFURLGetFileSystemRepresentation.
+
+2008-05-29  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-inferior.c (macosx_child_create_inferior): New 
+	version for ARM.
+	(macosx_child_attach): Allow suppression of the "Attach" message.
+	
 2008-05-12  Jason Molenda  (jmolenda@apple.com)
 
 	* macosx-nat-dyld-process.c (mark_buckets_as_used): Fix boundary

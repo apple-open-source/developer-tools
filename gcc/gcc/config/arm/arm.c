@@ -237,6 +237,8 @@ static unsigned HOST_WIDE_INT arm_shift_truncation_mask (enum machine_mode);
 static bool arm_cannot_force_const_mem (rtx x);
 /* APPLE LOCAL ARM 5602348 */
 static rtx arm_delegitimize_address (rtx);
+/* APPLE LOCAL ARM 6008578 */
+static HOST_WIDE_INT get_label_pad (rtx, HOST_WIDE_INT);
 
 /* Initialize the GCC target structure.  */
 #if TARGET_DLLIMPORT_DECL_ATTRIBUTES
@@ -8522,6 +8524,11 @@ create_fix_barrier (Mfix *fix, HOST_WIDE_INT max_address)
       /* Count the length of this insn.  */
       count += get_attr_length (from);
 
+      /* APPLE LOCAL begin ARM 6008578 */
+      if (LABEL_P (from))
+	count += get_label_pad (from, fix->address + count);
+      /* APPLE LOCAL end ARM 6008578 */
+
       /* If there is a jump table, add its length.  */
       tmp = is_jump_table (from);
       if (tmp != NULL)
@@ -8967,6 +8974,37 @@ static int clear_npools (void **slot, void *info ATTRIBUTE_UNUSED)
 /* APPLE LOCAL end ARM strings in code */
 /* APPLE LOCAL end ARM 20060306 merge these from mainline */
 
+/* APPLE LOCAL begin ARM 6008578 */
+/* Return the bytes of padding that will be inserted to align
+   the label INSN given the current pc ADDRESS.  */
+static HOST_WIDE_INT
+get_label_pad (rtx insn, HOST_WIDE_INT address)
+{
+  int label_align, max_skip;
+  unsigned HOST_WIDE_INT align_mask;
+  int pad_needed;
+
+  gcc_assert (LABEL_P (insn));
+
+  label_align = label_to_alignment (insn);
+  max_skip = label_to_max_skip (insn);
+  align_mask = ((unsigned int) 1 << label_align) - 1;
+
+  /* Already aligned.  */
+  if ((address & align_mask) == 0)
+    return 0;
+
+  pad_needed = ((address | align_mask) + 1) - address;
+
+  /* We would have to insert more than max_skip bytes to
+     align this label.  */
+  if (max_skip && (pad_needed > max_skip))
+    return 0;
+
+  return pad_needed;
+}
+/* APPLE LOCAL end ARM 6008578 */
+
 /* Gcc puts the pool in the wrong place for ARM, since we can only
    load addresses a limited distance around the pc.  We do some
    special munging to move the constant pool values to the correct
@@ -9008,6 +9046,10 @@ arm_reorg (void)
 
       if (GET_CODE (insn) == BARRIER)
 	push_minipool_barrier (insn, address);
+      /* APPLE LOCAL begin ARM 6008578 */
+      else if (LABEL_P (insn))
+	address += get_label_pad (insn, address);
+      /* APPLE LOCAL end ARM 6008578 */
       else if (INSN_P (insn))
 	{
 	  rtx table;
@@ -15992,41 +16034,44 @@ arm_output_mi_thunk (FILE *file, tree thunk ATTRIBUTE_UNUSED,
 		     HOST_WIDE_INT vcall_offset ATTRIBUTE_UNUSED,
 		     tree function)
 {
+  /* APPLE LOCAL begin ARM 4620953 4745175 5920116 */
   static int thunk_label = 0;
   char label[256];
-  /* APPLE LOCAL ARM mainline 2006-07-25 4620953 */
   char labelpc[256];
   int mi_delta = delta;
   const char *const mi_op = mi_delta < 0 ? "sub" : "add";
   int shift = 0;
   int this_regno = (aggregate_value_p (TREE_TYPE (TREE_TYPE (function)), function)
                     ? 1 : 0);
-  /* APPLE LOCAL begin ARM 4745175 */
   rtx function_rtx = XEXP (DECL_RTL (function), 0);
   const char *function_name;
+  bool is_longcall = arm_is_longcall_p (function_rtx,
+					SYMBOL_REF_FLAGS (function_rtx),
+					1);
+  bool is_indirected = false;
 
   /* Darwin/mach-o: use a stub for dynamic references.  */
 #if TARGET_MACHO
   if (TARGET_MACHO
-      && (flag_pic || MACHO_DYNAMIC_NO_PIC_P)
-      && ! machopic_data_defined_p (function_rtx))
-    function_name =
-       machopic_indirection_name (function_rtx, true);
+      && MACHOPIC_INDIRECT
+      && (! machopic_data_defined_p (function_rtx)))
+    {
+      function_name = machopic_indirection_name (function_rtx, !is_longcall);
+      is_indirected = true;
+    }
   else
 #endif
     function_name = XSTR (function_rtx, 0);
-/* APPLE LOCAL end ARM 4745175 */
 
   if (mi_delta < 0)
     mi_delta = - mi_delta;
-  if (TARGET_THUMB)
+  if (TARGET_THUMB || is_longcall)
     {
       int labelno = thunk_label++;
       ASM_GENERATE_INTERNAL_LABEL (label, "LTHUMBFUNC", labelno);
       fputs ("\tldr\tr12, ", file);
       assemble_name (file, label);
       fputc ('\n', file);
-/* APPLE LOCAL begin ARM mainline 2006-07-25 4620953 */
       if (flag_pic)
 	{
 	  /* If we are generating PIC, the ldr instruction below loads
@@ -16044,7 +16089,8 @@ arm_output_mi_thunk (FILE *file, tree thunk ATTRIBUTE_UNUSED,
 	  fputs (":\n", file);
 	  fputs ("\tadd\tr12, pc, r12\n", file);
 	}
-/* APPLE LOCAL end ARM mainline 2006-07-25 4620953 */
+      if (is_indirected)
+	fputs ("\tldr\tr12, [r12]\n", file);
     }
   while (mi_delta != 0)
     {
@@ -16059,29 +16105,25 @@ arm_output_mi_thunk (FILE *file, tree thunk ATTRIBUTE_UNUSED,
           shift += 8;
         }
     }
-  if (TARGET_THUMB)
+  if (TARGET_THUMB || is_longcall)
     {
       fprintf (file, "\tbx\tr12\n");
       ASM_OUTPUT_ALIGN (file, 2);
       assemble_name (file, label);
       fputs (":\n", file);
-/* APPLE LOCAL begin ARM mainline 2006-07-25 4620953 */
       if (flag_pic)
 	{
-	  /* APPLE LOCAL begin ARM 4745175 */
-	  /* If we're branching to a local routine, output:
+	  /* If we're branching to a local Thumb routine, output:
 	       ".word .LTHUNKn-7-.LTHUNKPCn".
 	     Otherwise, output:
 	       ".word .LTHUNKn-8-.LTHUNKPCn".
 	     (inter-module thumbness is fixed up by the linker).  */
 	  rtx tem = gen_rtx_SYMBOL_REF (Pmode, function_name);
 
-	  if (TARGET_MACHO
-	      && ! machopic_data_defined_p (function_rtx))
+	  if (TARGET_MACHO && (TARGET_ARM || is_indirected))
 	    tem = gen_rtx_PLUS (GET_MODE (tem), tem, GEN_INT (-8));
 	  else
 	    tem = gen_rtx_PLUS (GET_MODE (tem), tem, GEN_INT (-7));
-	  /* APPLE LOCAL end ARM 4745175 */
 
 	  tem = gen_rtx_MINUS (GET_MODE (tem),
 			       tem,
@@ -16091,21 +16133,18 @@ arm_output_mi_thunk (FILE *file, tree thunk ATTRIBUTE_UNUSED,
 	}
       else
 	/* Output ".word .LTHUNKn".  */
-	/* APPLE LOCAL begin ARM 4745175 */
 	assemble_integer (gen_rtx_SYMBOL_REF (Pmode, function_name),
 			  4, BITS_PER_WORD, 1);
-	/* APPLE LOCAL end ARM 4745175 */
-/* APPLE LOCAL end ARM mainline 2006-07-25 4620953 */
     }
   else
     {
       fputs ("\tb\t", file);
-      /* APPLE LOCAL ARM 4745175 */
       assemble_name (file, function_name);
       if (NEED_PLT_RELOC)
         fputs ("(PLT)", file);
       fputc ('\n', file);
     }
+  /* APPLE LOCAL end ARM 4620953 4745175 5920116 */
 }
 
 int
@@ -17471,3 +17510,30 @@ arm_delegitimize_address (rtx addr)
   return addr;
 }
 /* APPLE LOCAL end ARM 5602348 */
+/* APPLE LOCAL begin ARM 6008578 */
+/* Minimum alignment of a function entry point, in bits.  */
+int
+arm_function_boundary (void)
+{
+  int min_align = TARGET_ARM ? 32 : 16;
+
+  /* Even in Thumb mode, thunks are output as ARM functions.  */
+  if (cfun && current_function_is_thunk)
+    min_align = MAX (min_align, 32);
+
+  /* e.g., Thumb functions with jump tables.  */
+  if (cfun && cfun->needs_4byte_alignment)
+    min_align = MAX (min_align, 32);
+
+  /* If -falign-loops was specified, use that alignment.  This is _not_
+     needed to guarantee that loop alignments within the function are
+     honored -- that's handled by the assembler and linker.  However,
+     if we don't align the function, then our address calculations (in
+     arm_reorg) are incorrect, potentially wreaking havoc on the
+     constant pool calculations.  */
+  min_align = MAX (min_align, align_loops * BITS_PER_UNIT);
+
+  return min_align;
+}
+/* APPLE LOCAL end ARM 6008578 */
+

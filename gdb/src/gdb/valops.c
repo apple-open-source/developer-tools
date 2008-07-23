@@ -2806,7 +2806,14 @@ value_full_object (struct value *argp, struct type *rtype, int xfull, int xtop,
       using_enc = xusing_enc;
     }
   else
-    real_type = value_rtti_type (argp, &full, &top, &using_enc);
+    {
+      volatile struct gdb_exception e;
+      real_type = NULL;
+      TRY_CATCH (e, RETURN_MASK_ERROR)
+	{
+	  real_type = value_rtti_type (argp, &full, &top, &using_enc);
+	}	
+    }
 
   /* If no RTTI data, or if object is already complete, do nothing */
   if (!real_type || real_type == value_enclosing_type (argp))

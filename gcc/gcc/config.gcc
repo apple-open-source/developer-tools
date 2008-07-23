@@ -1615,8 +1615,14 @@ powerpc-*-darwin*)
 	extra_parts="${extra_parts} crt2.o"
  # APPLE LOCAL end mainline candidate 2006-06-22 4512244
 	case ${target} in
+ # APPLE LOCAL begin 5901604
+	  *-darwin1[0-9]*)
+	    tmake_file="${tmake_file} rs6000/t-darwin8 rs6000/t-darwin10"
+	    tm_file="${tm_file} rs6000/darwin8.h"
+	    ;;
+ # APPLE LOCAL end 5901604
  # APPLE LOCAL begin mainline 2005-09-01 3449986
-	  *-darwin1[0-9]* | *-darwin[8-9]*)
+	  *-darwin[8-9]*)
 	    tmake_file="${tmake_file} rs6000/t-darwin8" 
 	    tm_file="${tm_file} rs6000/darwin8.h"
 	    ;;

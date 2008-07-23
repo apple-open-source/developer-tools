@@ -1,3 +1,10 @@
+2008-05-15  Josh Conner  <jconner@apple.com>
+
+	Radar 5926171
+	* objc-act.c (objc_build_incr_decr_setter_call): Don't call
+	objc_v2_build_incr_decl_setter_call if flag_objc_legacy_dispatch
+	is set.
+
 2008-02-14  Josh Conner  <jconner@apple.com>
 
 	Radar 5694615

@@ -547,6 +547,16 @@ label_to_alignment (rtx label)
   return LABEL_TO_ALIGNMENT (label);
 }
 
+/* APPLE LOCAL begin ARM 6008578 */
+/* For the benefit of port specific code do this also as a function.  */
+
+int
+label_to_max_skip (rtx label)
+{
+  return LABEL_TO_MAX_SKIP (label);
+}
+/* APPLE LOCAL end ARM 6008578 */
+
 #ifdef HAVE_ATTR_length
 /* The differences in addresses
    between a branch and its target might grow or shrink depending on

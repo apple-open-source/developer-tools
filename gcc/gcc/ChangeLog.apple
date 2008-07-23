@@ -1,3 +1,47 @@
+2008-07-15  Josh Conner  <jconner@apple.com>
+
+	Radar 6067743
+	* config/arm/arm.c (arm_reorg): Move label pad logic into...
+	(get_label_pad): ...here...
+	(create_fix_barrier): ...and call it here, too.
+
+2008-06-30  Josh Conner  <jconner@apple.com>
+
+	Radar 6040239
+	* config.gcc: Split powerpc-darwin logic into <=9 and >=10
+	cases.
+	* config/rs6000/t-darwin (MULTILIB_EXTRA_OPTS): Move to...
+	* config/rs6000/t-darwin10 (MULTILIB_EXTRA_OPTS): ...here.
+
+2008-06-23  Josh Conner  <jconner@apple.com>
+
+	Radar 6008578
+	* final.c (label_to_max_skip): New function.
+	* output.h (label_to_max_skip): New proto.
+	* config/arm/arm.c (arm_reorg): Consider alignment of labels.
+	(arm_function_boundary): New function...
+	* config/arm/arm.h (FUNCTION_BOUNDARY): ...use it.
+
+2008-05-15  Josh Conner  <jconner@apple.com>
+
+	Radar 5920116
+	* config/arm/arm.c (arm_output_mi_thunk): Add longcall
+	handling.  When indirecting, use a non-lazy ptr for weak
+	calls.
+
+2008-05-08  Josh Conner  <jconner@apple.com>
+
+	Radar 5901604
+	* config/rs6000/t-darwin (MULTILIB_EXTRA_OPTS): Define.
+
+2008-05-08  Josh Conner  <jconner@apple.com>
+
+	Radar 5914860
+	* config/arm/t-darwin (MULTILIB_OPTIONS, MULTILIB_DIRNAMES):
+	Add armv6.
+	(TARGET_LIBGCC2_CFLAGS): Remove armv6.
+	(DARWIN_EXTRA_CRT_BUILD_FLAGS): Remove.
+
 2008-05-02  Josh Conner  <jconner@apple.com>
 
 	Radar 5905142

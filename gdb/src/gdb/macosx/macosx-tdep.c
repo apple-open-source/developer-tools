@@ -872,13 +872,17 @@ create_dsym_uuids_for_path (char *dsym_bundle_path)
 	{
 	  CFURLRef path_url = NULL;
 	  CFArrayRef uuid_array = NULL;
+	  CFStringRef path_cfstr = NULL;
 	  /* Re-use the path each time and only copy the 
 	     directory entry name just past the 
 	     ".../Contents/Resources/DWARF/" part of PATH.  */
 	  strcpy(&path[path_len], dp->d_name);
-	  path_url = CFURLCreateWithBytes (NULL, (UInt8 *) path, full_path_len, 
-					   kCFStringEncodingUTF8, NULL);
+	  path_cfstr = CFStringCreateWithCString (NULL, path,  
+						  kCFStringEncodingUTF8);
+	  path_url = CFURLCreateWithFileSystemPath (NULL, path_cfstr,
+                                                    kCFURLPOSIXPathStyle, 0);
 	  
+	  CFRelease (path_cfstr), path_cfstr = NULL;
 	  if (path_url == NULL)
 	    continue;
 	  

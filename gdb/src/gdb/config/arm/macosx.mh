@@ -43,7 +43,7 @@ NATDEPFILES = \
 
 MH_CFLAGS = -I$(srcdir)/macosx
 
-MH_CFLAGS += -DUSE_PTHREADS=1 -Wall -Wimplicit -Wno-long-double
+MH_CFLAGS += -DUSE_PTHREADS=1 -Wall -Wimplicit
 
 CFM_CFLAGS = -DWITH_CFM=0
 

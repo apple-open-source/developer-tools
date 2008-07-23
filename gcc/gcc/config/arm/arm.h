@@ -708,11 +708,10 @@ extern int arm_cpp_interwork;
 #define PREFERRED_STACK_BOUNDARY \
     (arm_abi == ARM_ABI_ATPCS ? 64 : STACK_BOUNDARY)
 
-/* APPLE LOCAL begin ARM 20060428 adjust function alignment for Thumb */
-#define FUNCTION_BOUNDARY \
-     ((TARGET_ARM || (cfun && current_function_is_thunk) \
-	|| (cfun && cfun->needs_4byte_alignment)) ? 32 : 16)
-/* APPLE LOCAL end ARM 20060428 adjust function alignment for Thumb */
+/* APPLE LOCAL begin ARM 6008578 */
+#define FUNCTION_BOUNDARY  arm_function_boundary ()
+extern int arm_function_boundary (void);
+/* APPLE LOCAL end ARM 6008578 */
 
 /* The lowest bit is used to indicate Thumb-mode functions, so the
    vbit must go into the delta field of pointers to member

@@ -1,4 +1,4 @@
-# Developer Tools 3.1 Opal9M2199
+# Developer Tools 3.1.1 FireOpal9M2517
 adv_cmds	118	Other
 amavisd	110	Other
 apache	729	Other
@@ -78,7 +78,7 @@ BootX	81	Other
 bsdmake	23	Other
 bsm	13	Other
 bzip2	16	Other
-cctools	698	Other
+cctools	698.1	Other
 cddafs	230.0.5	Other
 CF	476	Other
 ChatServer	260	Other
@@ -113,7 +113,7 @@ drvAppleCMD646Root	104.2.2	Other
 DSPasswordServerPlugin	206	Other
 DSTools	109	Other
 dtrace	48	Other
-dyld	96.2	Other
+dyld	96.1	Other
 DynamicPowerStep	1.6.0	Other
 eap8021x	49	Other
 efax	28	Other
@@ -128,12 +128,12 @@ file_cmds	184	Other
 files	520.1	Other
 flex	20.3	Other
 freeradius	11	Other
-gcc	5484	Other
+gcc	5488	Other
 gcc_42	5564	Other
 gcc_os	1823	Other
 gcc_select	66	Other
 gccfast	1626	Other
-gdb	960	Other
+gdb	962	Other
 gdbforcw	6	Other
 glibtool	12	Other
 gm4	12	Other
@@ -193,7 +193,7 @@ KeyLargoATA	111.3.1	Other
 keymgr	18	Other
 ksh	13	Other
 launchd	257	Other
-ld64	85	Other
+ld64	85.2.1	Other
 less	20	Other
 Libc	498	Other
 Libcpp_kext	5	Other
