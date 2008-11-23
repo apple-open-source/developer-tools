@@ -35,7 +35,8 @@
 %{!fbuiltin-strcat:-fno-builtin-strcat} \
 %{!fbuiltin-strcpy:-fno-builtin-strcpy} \
 %<fbuiltin-strcat \
-%<fbuiltin-strcpy"
+%<fbuiltin-strcpy \
+%<pg"
 
 #undef LIB_SPEC
 #define LIB_SPEC "%{!static:-lSystem}"

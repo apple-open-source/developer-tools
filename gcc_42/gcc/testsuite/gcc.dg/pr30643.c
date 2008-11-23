@@ -1,5 +1,6 @@
 /* { dg-do compile } */
-/* { dg-options "-O2" } */
+/* APPLE LOCAL strict alias off */
+/* { dg-options "-O2 -fstrict-aliasing" } */
 /* { dg-final { scan-assembler-not "undefined" } } */
 
 /* Make sure we optimize all calls away.  */

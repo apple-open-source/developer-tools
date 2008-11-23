@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 5                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2007 The PHP Group                                |
+   | Copyright (c) 1997-2008 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -20,7 +20,7 @@
    +----------------------------------------------------------------------+
  */
  
-/* $Id: pgsql.c,v 1.331.2.13.2.22 2007/08/22 22:40:29 iliaa Exp $ */
+/* $Id: pgsql.c,v 1.331.2.13.2.27 2007/12/31 07:20:10 sebastian Exp $ */
 
 #include <stdlib.h>
 
@@ -82,7 +82,7 @@
 #define CHECK_DEFAULT_LINK(x) if ((x) == -1) { php_error_docref(NULL TSRMLS_CC, E_WARNING, "No PostgreSQL link opened yet"); }
 
 #ifndef HAVE_PQFREEMEM
-#define PGfreemem free
+#define PQfreemem free
 #endif
 
 ZEND_DECLARE_MODULE_GLOBALS(pgsql)
@@ -4083,6 +4083,7 @@ PHP_FUNCTION(pg_send_query_params)
 		php_error_docref(NULL TSRMLS_CC, E_NOTICE, "There are results on this connection. Call pg_get_result() until it returns FALSE");
 	}
 
+	SEPARATE_ZVAL(pv_param_arr);
 	zend_hash_internal_pointer_reset(Z_ARRVAL_PP(pv_param_arr));
 	num_params = zend_hash_num_elements(Z_ARRVAL_PP(pv_param_arr));
 	if (num_params > 0) {
@@ -4097,7 +4098,8 @@ PHP_FUNCTION(pg_send_query_params)
 			}
 
 			otype = (*tmp)->type;
-			convert_to_string(*tmp);
+			SEPARATE_ZVAL(tmp);
+			convert_to_string_ex(tmp);
 			if (Z_TYPE_PP(tmp) != IS_STRING) {
 				php_error_docref(NULL TSRMLS_CC, E_WARNING,"Error converting parameter");
 				_php_pgsql_free_params(params, num_params);
@@ -5001,7 +5003,7 @@ PHP_PGSQL_API int php_pgsql_convert(PGconn *pg_link, const char *table_name, con
 							ZVAL_STRINGL(new_val, "NOW()", sizeof("NOW()")-1, 1);
 						} else {
 							/* FIXME: better regex must be used */
-							if (php_pgsql_convert_match(Z_STRVAL_PP(val), "^([0-9]{4}[/-][0-9]{1,2}[/-][0-9]{1,2})([ \\t]+(([0-9]{1,2}:[0-9]{1,2}){1}(:[0-9]{1,2}){0,1}(\\.[0-9]+){0,1}([ \\t]*([+-][0-9]{1,2}(:[0-9]{1,2}){0,1}|[a-zA-Z]{1,5})){0,1})){0,1}$", 1 TSRMLS_CC) == FAILURE) {
+							if (php_pgsql_convert_match(Z_STRVAL_PP(val), "^([0-9]{4}[/-][0-9]{1,2}[/-][0-9]{1,2})([ \\t]+(([0-9]{1,2}:[0-9]{1,2}){1}(:[0-9]{1,2}){0,1}(\\.[0-9]+){0,1}([ \\t]*([+-][0-9]{1,2}(:[0-9]{1,2}){0,1}|[-a-zA-Z_/+]{1,50})){0,1})){0,1}$", 1 TSRMLS_CC) == FAILURE) {
 								err = 1;
 							} else {
 								ZVAL_STRING(new_val, Z_STRVAL_PP(val), 1);
@@ -5366,7 +5368,11 @@ PHP_PGSQL_API int php_pgsql_insert(PGconn *pg_link, const char *table, zval *var
 	assert(Z_TYPE_P(var_array) == IS_ARRAY);
 
 	if (zend_hash_num_elements(Z_ARRVAL_P(var_array)) == 0) {
-		return FAILURE;
+		smart_str_appends(&querystr, "INSERT INTO ");
+		smart_str_appends(&querystr, table);
+		smart_str_appends(&querystr, " DEFAULT VALUES");
+
+		goto no_values;
 	}
 
 	/* convert input array if needed */
@@ -5424,6 +5430,9 @@ PHP_PGSQL_API int php_pgsql_insert(PGconn *pg_link, const char *table, zval *var
 	/* Remove the trailing "," */
 	querystr.len--;
 	smart_str_appends(&querystr, ");");
+
+no_values:
+
 	smart_str_0(&querystr);
 
 	if ((opt & (PGSQL_DML_EXEC|PGSQL_DML_ASYNC)) &&
@@ -5435,7 +5444,7 @@ PHP_PGSQL_API int php_pgsql_insert(PGconn *pg_link, const char *table, zval *var
 	}
 	
 cleanup:
-	if (!(opt & PGSQL_DML_NO_CONV)) {
+	if (!(opt & PGSQL_DML_NO_CONV) && converted) {
 		zval_dtor(converted);			
 		FREE_ZVAL(converted);
 	}

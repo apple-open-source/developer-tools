@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 5                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2007 The PHP Group                                |
+   | Copyright (c) 1997-2008 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -18,11 +18,12 @@
    |          Sara Golemon <pollita@php.net>                              |
    +----------------------------------------------------------------------+
  */
-/* $Id: ftp_fopen_wrapper.c,v 1.85.2.4.2.2 2007/06/07 08:59:00 tony2001 Exp $ */
+/* $Id: ftp_fopen_wrapper.c,v 1.85.2.4.2.9 2008/01/08 19:10:16 iliaa Exp $ */
 
 #include "php.h"
 #include "php_globals.h"
 #include "php_network.h"
+#include "php_ini.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -68,7 +69,11 @@
 
 #include "php_fopen_wrappers.h"
 
+#define FTPS_ENCRYPT_DATA 1
+#define GET_FTP_RESULT(stream)	get_ftp_result((stream), tmp_line, sizeof(tmp_line) TSRMLS_CC)
 
+/* {{{ get_ftp_result
+ */
 static inline int get_ftp_result(php_stream *stream, char *buffer, size_t buffer_size TSRMLS_DC)
 {
 	while (php_stream_gets(stream, buffer, buffer_size-1) &&
@@ -76,24 +81,21 @@ static inline int get_ftp_result(php_stream *stream, char *buffer, size_t buffer
 			 isdigit((int) buffer[2]) && buffer[3] == ' '));
 	return strtol(buffer, NULL, 10);
 }
-#define GET_FTP_RESULT(stream)	get_ftp_result((stream), tmp_line, sizeof(tmp_line) TSRMLS_CC)
+/* }}} */
 
-#define FTPS_ENCRYPT_DATA 1
-
-static int php_stream_ftp_stream_stat(php_stream_wrapper *wrapper,
-		php_stream *stream,
-		php_stream_statbuf *ssb
-		TSRMLS_DC)
+/* {{{ php_stream_ftp_stream_stat
+ */
+static int php_stream_ftp_stream_stat(php_stream_wrapper *wrapper, php_stream *stream, php_stream_statbuf *ssb TSRMLS_DC)
 {
 	/* For now, we return with a failure code to prevent the underlying
 	 * file's details from being used instead. */
 	return -1;
 }
+/* }}} */
 
-
-static int php_stream_ftp_stream_close(php_stream_wrapper *wrapper,
-		php_stream *stream
-		TSRMLS_DC)
+/* {{{ php_stream_ftp_stream_close
+ */
+static int php_stream_ftp_stream_close(php_stream_wrapper *wrapper, php_stream *stream TSRMLS_DC)
 {
 	php_stream *controlstream = (php_stream *)stream->wrapperdata;
 	
@@ -104,6 +106,7 @@ static int php_stream_ftp_stream_close(php_stream_wrapper *wrapper,
 	}
 	return 0;
 }
+/* }}} */
 
 /* {{{ php_ftp_fopen_connect
  */
@@ -297,19 +300,21 @@ connect_errexit:
 
 /* {{{ php_fopen_do_pasv
  */
-static unsigned short php_fopen_do_pasv(php_stream *stream, char *ip, int ip_size, char **phoststart TSRMLS_DC)
+static unsigned short php_fopen_do_pasv(php_stream *stream, char *ip, size_t ip_size, char **phoststart TSRMLS_DC)
 {
 	char tmp_line[512];
 	int result, i;
 	unsigned short portno;
 	char *tpath, *ttpath, *hoststart=NULL;
 
+#ifdef HAVE_IPV6
 	/* We try EPSV first, needed for IPv6 and works on some IPv4 servers */
 	php_stream_write_string(stream, "EPSV\r\n");
 	result = GET_FTP_RESULT(stream);
 
 	/* check if we got a 229 response */
 	if (result != 229) {
+#endif
 		/* EPSV failed, let's try PASV */
 		php_stream_write_string(stream, "PASV\r\n");
 		result = GET_FTP_RESULT(stream);
@@ -354,6 +359,8 @@ static unsigned short php_fopen_do_pasv(php_stream *stream, char *ip, int ip_siz
 		tpath++;
 		/* pull out the LSB of the port */
 		portno += (unsigned short) strtoul(tpath, &ttpath, 10);
+
+#ifdef HAVE_IPV6
 	} else {
 		/* parse epsv command (|||6446|) */
 		for (i = 0, tpath = tmp_line + 4; *tpath; tpath++) {
@@ -369,7 +376,8 @@ static unsigned short php_fopen_do_pasv(php_stream *stream, char *ip, int ip_siz
 		/* pull out the port */
 		portno = (unsigned short) strtoul(tpath + 1, &ttpath, 10);
 	}
-	
+#endif
+
 	if (ttpath == NULL) {
 		/* didn't get correct response from EPSV/PASV */
 		return 0;
@@ -409,7 +417,7 @@ php_stream * php_stream_url_wrap_ftp(php_stream_wrapper *wrapper, char *path, ch
 	}
 	if (strpbrk(mode, "wa+")) {
 		if (read_write) {
-			php_stream_wrapper_log_error(wrapper, options TSRMLS_CC, "FTP does not support simultaneous read/write connections.");
+			php_stream_wrapper_log_error(wrapper, options TSRMLS_CC, "FTP does not support simultaneous read/write connections");
 			return NULL;
 		}
 		if (strchr(mode, 'a')) {
@@ -420,7 +428,7 @@ php_stream * php_stream_url_wrap_ftp(php_stream_wrapper *wrapper, char *path, ch
 	}
 	if (!read_write) {
 		/* No mode specified? */
-		php_stream_wrapper_log_error(wrapper, options TSRMLS_CC, "Unknown file open mode.");
+		php_stream_wrapper_log_error(wrapper, options TSRMLS_CC, "Unknown file open mode");
 		return NULL;
 	}
 
@@ -483,7 +491,7 @@ php_stream * php_stream_url_wrap_ftp(php_stream_wrapper *wrapper, char *path, ch
 					goto errexit;
 				}
 			} else {
-				php_stream_wrapper_log_error(wrapper, options TSRMLS_CC, "Remote file already exists and overwrite context option not specified.");
+				php_stream_wrapper_log_error(wrapper, options TSRMLS_CC, "Remote file already exists and overwrite context option not specified");
 				errno = EEXIST;
 				goto errexit;
 			}
@@ -563,7 +571,7 @@ php_stream * php_stream_url_wrap_ftp(php_stream_wrapper *wrapper, char *path, ch
 	php_url_free(resource);
 	return datastream;
 
- errexit:
+errexit:
 	if (resource) {
 		php_url_free(resource);
 	}
@@ -668,6 +676,8 @@ php_stream * php_stream_ftp_opendir(php_stream_wrapper *wrapper, char *path, cha
 	char ip[sizeof("123.123.123.123")];
 	unsigned short portno;
 
+	tmp_line[0] = '\0';
+
 	stream = php_ftp_fopen_connect(wrapper, path, mode, options, opened_path, context, &reuseid, &resource, &use_ssl, &use_ssl_on_data TSRMLS_CC);
 	if (!stream) {
 		goto opendir_errexit;	
@@ -725,7 +735,7 @@ php_stream * php_stream_ftp_opendir(php_stream_wrapper *wrapper, char *path, cha
 	php_url_free(resource);
 	return php_stream_alloc(&php_ftp_dirstream_ops, datastream, 0, mode);
 
- opendir_errexit:
+opendir_errexit:
 	if (resource) {
 		php_url_free(resource);
 	}
@@ -733,8 +743,9 @@ php_stream * php_stream_ftp_opendir(php_stream_wrapper *wrapper, char *path, cha
 		php_stream_notify_error(context, PHP_STREAM_NOTIFY_FAILURE, tmp_line, result);
 		php_stream_close(stream);
 	}
-	if (tmp_line[0] != '\0')
+	if (tmp_line[0] != '\0') {
 		php_stream_wrapper_log_error(wrapper, options TSRMLS_CC, "FTP server reports %s", tmp_line);
+	}
 	return NULL;
 }
 /* }}} */
@@ -765,6 +776,7 @@ static int php_stream_ftp_url_stat(php_stream_wrapper *wrapper, char *url, int f
 		ssb->sb.st_mode |= S_IFDIR;
 	}
 
+	php_stream_write_string(stream, "TYPE I\r\n"); /* we need this since some servers refuse to accept SIZE command in ASCII mode */
 	php_stream_printf(stream TSRMLS_CC, "SIZE %s\r\n", (resource->path != NULL ? resource->path : "/"));
 	result = GET_FTP_RESULT(stream);
 	if (result < 200 || result > 299) {
@@ -824,7 +836,7 @@ static int php_stream_ftp_url_stat(php_stream_wrapper *wrapper, char *url, int f
 #endif
 	} else {
 		/* error or unsupported command */
- mdtm_error:
+mdtm_error:
 #ifdef NETWARE
 		ssb->sb.st_mtime.tv_sec = -1;
 #else
@@ -856,7 +868,7 @@ static int php_stream_ftp_url_stat(php_stream_wrapper *wrapper, char *url, int f
 	php_url_free(resource);
 	return 0;
 
- stat_errexit:
+stat_errexit:
 	if (resource) {
 		php_url_free(resource);
 	}
@@ -906,7 +918,7 @@ static int php_stream_ftp_unlink(php_stream_wrapper *wrapper, char *url, int opt
 	php_stream_close(stream);
 	return 1;
 
- unlink_errexit:
+unlink_errexit:
 	if (resource) {
 		php_url_free(resource);
 	}
@@ -982,7 +994,7 @@ static int php_stream_ftp_rename(php_stream_wrapper *wrapper, char *url_from, ch
 	php_stream_close(stream);
 	return 1;
 
- rename_errexit:
+rename_errexit:
 	if (resource_from) {
 		php_url_free(resource_from);
 	}
@@ -1079,7 +1091,7 @@ static int php_stream_ftp_mkdir(php_stream_wrapper *wrapper, char *url, int mode
 
 	return 1;
 
- mkdir_errexit:
+mkdir_errexit:
 	if (resource) {
 		php_url_free(resource);
 	}
@@ -1129,7 +1141,7 @@ static int php_stream_ftp_rmdir(php_stream_wrapper *wrapper, char *url, int opti
 
 	return 1;
 
- rmdir_errexit:
+rmdir_errexit:
 	if (resource) {
 		php_url_free(resource);
 	}

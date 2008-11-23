@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 5                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2007 The PHP Group                                |
+   | Copyright (c) 1997-2008 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -16,7 +16,7 @@
    +----------------------------------------------------------------------+
 */
 
-/* $Id: fastcgi.c,v 1.4.2.13.2.27 2007/07/09 11:48:39 dmitry Exp $ */
+/* $Id: fastcgi.c,v 1.4.2.13.2.30 2008/04/03 10:24:44 dmitry Exp $ */
 
 #include "php.h"
 #include "fastcgi.h"
@@ -593,6 +593,9 @@ static inline int fcgi_make_header(fcgi_header *hdr, fcgi_request_type type, int
 	hdr->reserved = 0;
 	hdr->type = type;
 	hdr->version = FCGI_VERSION_1;
+	if (pad) {
+		memset(((unsigned char*)hdr) + sizeof(fcgi_header) + len, 0, pad);
+	}
 	return pad;
 }
 
@@ -620,7 +623,8 @@ static int fcgi_get_params(fcgi_request *req, unsigned char *p, unsigned char *e
 			val_len |= (*p++ << 8);
 			val_len |= *p++;
 		}
-		if (p + name_len + val_len > end) {
+		if (name_len + val_len < 0 ||
+		    name_len + val_len > end - p) {
 			/* Malformated request */
 			ret = 0;
 			break;
@@ -676,6 +680,10 @@ static int fcgi_read_request(fcgi_request *req)
 		padding = hdr.paddingLength;
 	}
 
+	if (len + padding > FCGI_MAX_LENGTH) {
+		return 0;
+	}
+
 	req->id = (hdr.requestIdB1 << 8) + hdr.requestIdB0;
 
 	if (hdr.type == FCGI_BEGIN_REQUEST && len == sizeof(fcgi_begin_request)) {
@@ -712,6 +720,10 @@ static int fcgi_read_request(fcgi_request *req)
 		padding = hdr.paddingLength;
 
 		while (hdr.type == FCGI_PARAMS && len > 0) {
+			if (len + padding > FCGI_MAX_LENGTH) {
+				return 0;
+			}
+
 			if (safe_read(req, buf, len+padding) != len+padding) {
 				req->keep = 0;
 				return 0;
@@ -768,7 +780,7 @@ int fcgi_read(fcgi_request *req, char *str, int len)
 {
 	int ret, n, rest;
 	fcgi_header hdr;
-	unsigned char buf[8];
+	unsigned char buf[255];
 
 	n = 0;
 	rest = len;

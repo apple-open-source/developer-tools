@@ -1,3 +1,49 @@
+2008-09-22  Stuart Hastings  <stuart@apple.com>
+
+	Radar 6185789
+	* gcc/cp/decl.c (cp_finish_decl): Backport 4.2 code to clear
+	  readonly bit on runtime-initialized variables.
+
+2008-09-17  Josh Conner  <jconner@apple.com>
+
+	Radar 6204451
+	* global.c (global_alloc): Remove code that ignores conflicts
+	on single-set tied pseudos.
+
+2008-08-19  Josh Conner  <jconner@apple.com>
+
+	Radar 6061427
+	* Change section type for objc_v2_selector_refs_section
+	to literal_pointers.
+
+2008-08-19  Josh Conner  <jconner@apple.com>
+
+	Radar 6158246
+
+	Revert:
+	2008-08-18  Josh Conner  <jconner@apple.com>
+	* config/rs6000/t-darwin (MULTILIB_EXTRA_OPTS): Define.
+
+	Add:
+	* config/rs6000/t-darwin10: New file.
+
+2008-08-18  Josh Conner  <jconner@apple.com>
+
+	Radar 6158246
+	* config/rs6000/t-darwin (MULTILIB_EXTRA_OPTS): Define.
+
+2008-08-18  Josh Conner  <jconner@apple.com>
+
+	Radar 6132019
+	* config/rs6000/rs6000.c (machopic_output_stub): Fix alloca
+	size.
+
+2008-07-22  Josh Conner  <jconner@apple.com>
+
+	Radar 6034515
+	* config/darwin.c (machopic_symbol_defined_p): Return false
+	for a weak function declaration.
+
 2008-07-15  Josh Conner  <jconner@apple.com>
 
 	Radar 6067743

@@ -1,3 +1,24 @@
+2008-09-22  Stuart Hastings  <stuart@apple.com>
+
+	Radar 6185789
+	* g++.apple/6185789.C: New.
+
+2008-09-22  Josh Conner  <jconner@apple.com>
+
+	Radar 6204451
+	* objc.dg/6204451.m: New test.
+
+2008-08-04  Jon Ziegler <jonz@apple.com>
+
+	Radar 6112293
+	* gcc.c-torture/execute/builtins/lib/sprintf.c
+	* gcc.dg/cpp/trad/include.c
+
+2008-07-22  Josh Conner  <jconner@apple.com>
+
+	Radar 6034515
+	* g++.apple/rtti-1.C: New test.
+
 2008-05-15  Josh Conner  <jconner@apple.com>
 
 	Radar 5920116

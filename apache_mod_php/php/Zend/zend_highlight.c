@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | Zend Engine                                                          |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1998-2007 Zend Technologies Ltd. (http://www.zend.com) |
+   | Copyright (c) 1998-2008 Zend Technologies Ltd. (http://www.zend.com) |
    +----------------------------------------------------------------------+
    | This source file is subject to version 2.00 of the Zend license,     |
    | that is bundled with this package in the file LICENSE, and is        | 
@@ -17,7 +17,7 @@
    +----------------------------------------------------------------------+
 */
 
-/* $Id: zend_highlight.c,v 1.49.2.3.2.1 2007/01/01 09:35:46 sebastian Exp $ */
+/* $Id: zend_highlight.c,v 1.49.2.3.2.3 2007/12/31 07:20:03 sebastian Exp $ */
 
 #include "zend.h"
 #include <zend_language_parser.h>
@@ -177,6 +177,19 @@ ZEND_API void zend_highlight(zend_syntax_highlighter_ini *syntax_highlighter_ini
 		}
 		token.type = 0;
 	}
+
+	/* handler for trailing comments, see bug #42767 */
+	if (LANG_SCNG(yy_leng) && LANG_SCNG(_yy_more_len)) {
+		if (last_color != syntax_highlighter_ini->highlight_comment) {
+			if (last_color != syntax_highlighter_ini->highlight_html) {
+				zend_printf("</span>");
+			}
+			if (syntax_highlighter_ini->highlight_comment != syntax_highlighter_ini->highlight_html) {
+				zend_printf("<span style=\"color: %s\">", syntax_highlighter_ini->highlight_comment);
+			}
+		}
+		zend_html_puts(LANG_SCNG(yy_text), LANG_SCNG(_yy_more_len) TSRMLS_CC);
+	}
 done:
 	if (last_color != syntax_highlighter_ini->highlight_html) {
 		zend_printf("</span>\n");
@@ -184,8 +197,6 @@ done:
 	zend_printf("</span>\n");
 	zend_printf("</code>");
 }
-
-
 
 ZEND_API void zend_strip(TSRMLS_D)
 {

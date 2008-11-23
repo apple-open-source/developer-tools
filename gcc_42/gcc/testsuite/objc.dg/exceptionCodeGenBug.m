@@ -59,4 +59,3 @@ int main(int argc, char *argv[])
   exit(0);
   return 0;
 }
-/* { dg-xfail-if "" { powerpc*-*-darwin* } { "-m64" } { "" } } */

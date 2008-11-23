@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 5                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2007 The PHP Group                                |
+   | Copyright (c) 1997-2008 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -17,7 +17,7 @@
    |          David Sklar <sklar@student.net>                             |
    +----------------------------------------------------------------------+
  */
-/* $Id: php_apache.c,v 1.89.2.4.2.5 2007/02/24 02:17:28 helly Exp $ */
+/* $Id: php_apache.c,v 1.89.2.4.2.7 2007/12/31 07:20:15 sebastian Exp $ */
 
 #include "php_apache_http.h"
 
@@ -64,8 +64,9 @@ zend_function_entry apache_functions[] = {
 	PHP_FE(apache_child_terminate,					NULL)
 	PHP_FE(apache_setenv,							NULL)
 	PHP_FE(apache_response_headers,					NULL)
-	PHP_FE(apache_get_version,					NULL)
-	PHP_FE(apache_get_modules,					NULL)
+	PHP_FE(apache_get_version,						NULL)
+	PHP_FE(apache_get_modules,						NULL)
+	PHP_FE(apache_reset_timeout,					NULL)
 	PHP_FALIAS(getallheaders, apache_request_headers, NULL)
 	{NULL, NULL, NULL}
 };

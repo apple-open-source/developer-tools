@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 5                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2007 The PHP Group                                |
+   | Copyright (c) 1997-2008 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -18,7 +18,7 @@
    +----------------------------------------------------------------------+
  */
 
-/* $Id: string.c,v 1.445.2.14.2.67 2007/08/05 14:47:42 iliaa Exp $ */
+/* $Id: string.c,v 1.445.2.14.2.73 2008/01/16 08:35:59 tony2001 Exp $ */
 
 /* Synced with php 3.0 revision 1.193 1999-06-16 [ssb] */
 
@@ -452,15 +452,182 @@ PHP_MINIT_FUNCTION(nl_langinfo)
    Query language and locale information */
 PHP_FUNCTION(nl_langinfo)
 {
-	zval **item;
+	long item;
 	char *value;
 	
-	if (ZEND_NUM_ARGS() != 1 || zend_get_parameters_ex(1, &item) == FAILURE) {
-		WRONG_PARAM_COUNT;
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "l", &item) == FAILURE) {
+		return;
 	}
-	convert_to_long_ex(item);
 
-	value = nl_langinfo(Z_LVAL_PP(item));
+	switch(item) { /* {{{ */
+#ifdef ABDAY_1
+		case ABDAY_1:
+		case ABDAY_2:
+		case ABDAY_3:
+		case ABDAY_4:
+		case ABDAY_5:
+		case ABDAY_6:
+		case ABDAY_7:
+#endif
+#ifdef DAY_1
+		case DAY_1:
+		case DAY_2:
+		case DAY_3:
+		case DAY_4:
+		case DAY_5:
+		case DAY_6:
+		case DAY_7:
+#endif
+#ifdef ABMON_1
+		case ABMON_1:
+		case ABMON_2:
+		case ABMON_3:
+		case ABMON_4:
+		case ABMON_5:
+		case ABMON_6:
+		case ABMON_7:
+		case ABMON_8:
+		case ABMON_9:
+		case ABMON_10:
+		case ABMON_11:
+		case ABMON_12:
+#endif
+#ifdef MON_1
+		case MON_1:
+		case MON_2:
+		case MON_3:
+		case MON_4:
+		case MON_5:
+		case MON_6:
+		case MON_7:
+		case MON_8:
+		case MON_9:
+		case MON_10:
+		case MON_11:
+		case MON_12:
+#endif
+#ifdef AM_STR
+		case AM_STR:
+#endif
+#ifdef PM_STR
+		case PM_STR:
+#endif
+#ifdef D_T_FMT
+		case D_T_FMT:
+#endif
+#ifdef D_FMT
+		case D_FMT:
+#endif
+#ifdef T_FMT
+		case T_FMT:
+#endif
+#ifdef T_FMT_AMPM
+		case T_FMT_AMPM:
+#endif
+#ifdef ERA
+		case ERA:
+#endif
+#ifdef ERA_YEAR
+		case ERA_YEAR:
+#endif
+#ifdef ERA_D_T_FMT
+		case ERA_D_T_FMT:
+#endif
+#ifdef ERA_D_FMT
+		case ERA_D_FMT:
+#endif
+#ifdef ERA_T_FMT
+		case ERA_T_FMT:
+#endif
+#ifdef ALT_DIGITS
+		case ALT_DIGITS:
+#endif
+#ifdef INT_CURR_SYMBOL
+		case INT_CURR_SYMBOL:
+#endif
+#ifdef CURRENCY_SYMBOL
+		case CURRENCY_SYMBOL:
+#endif
+#ifdef CRNCYSTR
+		case CRNCYSTR:
+#endif
+#ifdef MON_DECIMAL_POINT
+		case MON_DECIMAL_POINT:
+#endif
+#ifdef MON_THOUSANDS_SEP
+		case MON_THOUSANDS_SEP:
+#endif
+#ifdef MON_GROUPING
+		case MON_GROUPING:
+#endif
+#ifdef POSITIVE_SIGN
+		case POSITIVE_SIGN:
+#endif
+#ifdef NEGATIVE_SIGN
+		case NEGATIVE_SIGN:
+#endif
+#ifdef INT_FRAC_DIGITS
+		case INT_FRAC_DIGITS:
+#endif
+#ifdef FRAC_DIGITS
+		case FRAC_DIGITS:
+#endif
+#ifdef P_CS_PRECEDES
+		case P_CS_PRECEDES:
+#endif
+#ifdef P_SEP_BY_SPACE
+		case P_SEP_BY_SPACE:
+#endif
+#ifdef N_CS_PRECEDES
+		case N_CS_PRECEDES:
+#endif
+#ifdef N_SEP_BY_SPACE
+		case N_SEP_BY_SPACE:
+#endif
+#ifdef P_SIGN_POSN
+		case P_SIGN_POSN:
+#endif
+#ifdef N_SIGN_POSN
+		case N_SIGN_POSN:
+#endif
+#ifdef DECIMAL_POINT
+		case DECIMAL_POINT:
+#endif
+#ifdef RADIXCHAR
+		case RADIXCHAR:
+#endif
+#ifdef THOUSANDS_SEP
+		case THOUSANDS_SEP:
+#endif
+#ifdef THOUSEP
+		case THOUSEP:
+#endif
+#ifdef GROUPING
+		case GROUPING:
+#endif
+#ifdef YESEXPR
+		case YESEXPR:
+#endif
+#ifdef NOEXPR
+		case NOEXPR:
+#endif
+#ifdef YESSTR
+		case YESSTR:
+#endif
+#ifdef NOSTR
+		case NOSTR:
+#endif
+#ifdef CODESET
+		case CODESET:
+#endif
+			break;
+		default:
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Item '%ld' is not valid", item);
+			RETURN_FALSE;
+	}
+	/* }}} */
+
+	value = nl_langinfo(item);
 	if (value == NULL) {
 		RETURN_FALSE;
 	} else {
@@ -511,22 +678,22 @@ static inline int php_charmask(unsigned char *input, int len, char *mask TSRMLS_
 			/* Error, try to be as helpful as possible:
 			   (a range ending/starting with '.' won't be captured here) */
 			if (end-len >= input) { /* there was no 'left' char */
-				php_error_docref(NULL TSRMLS_CC, E_WARNING, "Invalid '..'-range, no character to the left of '..'.");
+				php_error_docref(NULL TSRMLS_CC, E_WARNING, "Invalid '..'-range, no character to the left of '..'");
 				result = FAILURE;
 				continue;
 			}
 			if (input+2 >= end) { /* there is no 'right' char */
-				php_error_docref(NULL TSRMLS_CC, E_WARNING, "Invalid '..'-range, no character to the right of '..'.");
+				php_error_docref(NULL TSRMLS_CC, E_WARNING, "Invalid '..'-range, no character to the right of '..'");
 				result = FAILURE;
 				continue;
 			}
 			if (input[-1] > input[2]) { /* wrong order */
-				php_error_docref(NULL TSRMLS_CC, E_WARNING, "Invalid '..'-range, '..'-range needs to be incrementing.");
+				php_error_docref(NULL TSRMLS_CC, E_WARNING, "Invalid '..'-range, '..'-range needs to be incrementing");
 				result = FAILURE;
 				continue;
 			} 
 			/* FIXME: better error (a..b..c is the only left possibility?) */
-			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Invalid '..'-range.");
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Invalid '..'-range");
 			result = FAILURE;
 			continue;
 		} else {
@@ -659,7 +826,7 @@ PHP_FUNCTION(wordwrap)
 	}
 
 	if (linelength == 0 && docut) {
-		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Can't force cut when width is zero.");
+		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Can't force cut when width is zero");
 		RETURN_FALSE;
 	}
 
@@ -861,7 +1028,7 @@ PHP_FUNCTION(explode)
 	}
 
 	if (! Z_STRLEN_PP(delim)) {
-		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Empty delimiter.");
+		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Empty delimiter");
 		RETURN_FALSE;
 	}
 
@@ -988,7 +1155,7 @@ PHP_FUNCTION(implode)
 
 	if (argc == 1) {
 		if (Z_TYPE_PP(arg1) != IS_ARRAY) {
-			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Argument to implode must be an array.");
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Argument must be an array");
 			return;
 		}
 
@@ -1008,7 +1175,7 @@ PHP_FUNCTION(implode)
 			convert_to_string_ex(arg1);
 			delim = *arg1;
 		} else {
-			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Bad arguments.");
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Invalid arguments passed");
 			return;
 		}
 	}
@@ -1544,7 +1711,7 @@ PHP_FUNCTION(stristr)
 
 	if (Z_TYPE_PP(needle) == IS_STRING) {
 		if (!Z_STRLEN_PP(needle)) {
-			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Empty delimiter.");
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Empty delimiter");
 			efree(haystack_orig);
 			RETURN_FALSE;
 		}
@@ -1592,7 +1759,7 @@ PHP_FUNCTION(strstr)
 
 	if (Z_TYPE_PP(needle) == IS_STRING) {
 		if (!Z_STRLEN_PP(needle)) {
-			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Empty delimiter.");
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Empty delimiter");
 			RETURN_FALSE;
 		}
 
@@ -1645,13 +1812,13 @@ PHP_FUNCTION(strpos)
 	}
 
 	if (offset < 0 || offset > Z_STRLEN_PP(haystack)) {
-		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Offset not contained in string.");
+		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Offset not contained in string");
 		RETURN_FALSE;
 	}
 
 	if (Z_TYPE_PP(needle) == IS_STRING) {
 		if (!Z_STRLEN_PP(needle)) {
-			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Empty delimiter.");
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Empty delimiter");
 			RETURN_FALSE;
 		}
 
@@ -1695,7 +1862,7 @@ PHP_FUNCTION(stripos)
 	}
 
 	if (offset < 0 || offset > haystack_len) {
-		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Offset not contained in string.");
+		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Offset not contained in string");
 		RETURN_FALSE;
 	}
 
@@ -1725,7 +1892,7 @@ PHP_FUNCTION(stripos)
 				needle_char[0] = tolower((char) Z_DVAL_P(needle));
 				break;
 			default:
-				php_error_docref(NULL TSRMLS_CC, E_WARNING, "needle is not a string or an integer.");
+				php_error_docref(NULL TSRMLS_CC, E_WARNING, "needle is not a string or an integer");
 				efree(haystack_dup);
 				RETURN_FALSE;
 				break;
@@ -2038,7 +2205,7 @@ PHP_FUNCTION(chunk_split)
 	}
 
 	if (chunklen <= 0) {
-		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Chunk length should be greater than zero.");
+		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Chunk length should be greater than zero");
 		RETURN_FALSE;
 	}
 
@@ -2181,8 +2348,7 @@ PHP_FUNCTION(substr_replace)
 
 	if (Z_TYPE_PP(str) == IS_STRING) {
 		if (
-			(argc == 3 && Z_TYPE_PP(from) == IS_ARRAY) 
-			|| 
+			(argc == 3 && Z_TYPE_PP(from) == IS_ARRAY) || 
 			(argc == 4 && Z_TYPE_PP(from) != Z_TYPE_PP(len))
 		) {
 			php_error_docref(NULL TSRMLS_CC, E_WARNING, "'from' and 'len' should be of same type - numerical or array ");
@@ -2195,7 +2361,6 @@ PHP_FUNCTION(substr_replace)
 			}
 		}
 	}
-
 	
 	if (Z_TYPE_PP(str) != IS_ARRAY) {
 		if (Z_TYPE_PP(from) != IS_ARRAY) {
@@ -2253,7 +2418,7 @@ PHP_FUNCTION(substr_replace)
 			result[result_len] = '\0';
 			RETURN_STRINGL(result, result_len, 0);
 		} else {
-			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Functionality of 'from' and 'len' as arrays is not implemented.");
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Functionality of 'from' and 'len' as arrays is not implemented");
 			RETURN_STRINGL(Z_STRVAL_PP(str), Z_STRLEN_PP(str), 1);	
 		}
 	} else { /* str is array of strings */
@@ -2646,7 +2811,7 @@ PHP_FUNCTION(strtr)
 	}
 	
 	if (ac == 2 && Z_TYPE_PP(from) != IS_ARRAY) {
-		php_error_docref(NULL TSRMLS_CC, E_WARNING, "The second argument is not an array.");
+		php_error_docref(NULL TSRMLS_CC, E_WARNING, "The second argument is not an array");
 		RETURN_FALSE;
 	}
 
@@ -3951,7 +4116,7 @@ PHP_FUNCTION(setlocale)
 		cat = Z_LVAL_PP(pcategory);
 	} else { /* FIXME: The following behaviour should be removed. */
 		char *category;
-		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Passing locale category name as string is deprecated. Use the LC_* -constants instead.");
+		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Passing locale category name as string is deprecated. Use the LC_* -constants instead");
 		convert_to_string_ex(pcategory);
 		category = Z_STRVAL_P(*pcategory);
 
@@ -3972,7 +4137,7 @@ PHP_FUNCTION(setlocale)
 		else if (!strcasecmp ("LC_TIME", category))
 			cat = LC_TIME;
 		else {
-			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Invalid locale category name %s, must be one of LC_ALL, LC_COLLATE, LC_CTYPE, LC_MONETARY, LC_NUMERIC, or LC_TIME.", category);
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Invalid locale category name %s, must be one of LC_ALL, LC_COLLATE, LC_CTYPE, LC_MONETARY, LC_NUMERIC, or LC_TIME", category);
 			efree(args);
 			RETURN_FALSE;
 		}
@@ -4000,8 +4165,12 @@ PHP_FUNCTION(setlocale)
 			loc = NULL;
 		} else {
 			loc = Z_STRVAL_PP(plocale);
+			if (Z_STRLEN_PP(plocale) >= 255) {
+				php_error_docref(NULL TSRMLS_CC, E_WARNING, "Specified locale name is too long");
+				break;
+			}
 		}
-		
+
 		retval = setlocale (cat, loc);
 		zend_update_current_locale();
 		if (retval) {
@@ -4407,7 +4576,7 @@ PHP_FUNCTION(str_repeat)
 	convert_to_long_ex(mult);
 	
 	if (Z_LVAL_PP(mult) < 0) {
-		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Second argument has to be greater than or equal to 0.");
+		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Second argument has to be greater than or equal to 0");
 		return;
 	}
 
@@ -4471,7 +4640,7 @@ PHP_FUNCTION(count_chars)
 		mymode = Z_LVAL_PP(mode);
 		
 		if (mymode < 0 || mymode > 4) {
-			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Unknown mode.");
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Unknown mode");
 			RETURN_FALSE;
 		}
 	}
@@ -4662,7 +4831,7 @@ PHP_FUNCTION(substr_count)
 	convert_to_string_ex(needle);
 
 	if (Z_STRLEN_PP(needle) == 0) {
-		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Empty substring.");
+		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Empty substring");
 		RETURN_FALSE;
 	}
 	
@@ -4672,12 +4841,12 @@ PHP_FUNCTION(substr_count)
 	if (ac > 2) {
 		convert_to_long_ex(offset);
 		if (Z_LVAL_PP(offset) < 0) {
-			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Offset should be greater than or equal to 0.");
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Offset should be greater than or equal to 0");
 			RETURN_FALSE;		
 		}
 
 		if (Z_LVAL_PP(offset) > Z_STRLEN_PP(haystack)) {
-			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Offset value %ld exceeds string length.", Z_LVAL_PP(offset));
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Offset value %ld exceeds string length", Z_LVAL_PP(offset));
 			RETURN_FALSE;		
 		}
 		p += Z_LVAL_PP(offset);
@@ -4685,11 +4854,11 @@ PHP_FUNCTION(substr_count)
 		if (ac == 4) {
 			convert_to_long_ex(length);
 			if (Z_LVAL_PP(length) <= 0) {
-				php_error_docref(NULL TSRMLS_CC, E_WARNING, "Length should be greater than 0.");
+				php_error_docref(NULL TSRMLS_CC, E_WARNING, "Length should be greater than 0");
 				RETURN_FALSE;		
 			}
 			if (Z_LVAL_PP(length) > (Z_STRLEN_PP(haystack) - Z_LVAL_PP(offset))) {
-				php_error_docref(NULL TSRMLS_CC, E_WARNING, "Length value %ld exceeds string length.", Z_LVAL_PP(length));
+				php_error_docref(NULL TSRMLS_CC, E_WARNING, "Length value %ld exceeds string length", Z_LVAL_PP(length));
 				RETURN_FALSE;
 			}
 			endp = p + Z_LVAL_PP(length);
@@ -4755,7 +4924,7 @@ PHP_FUNCTION(str_pad)
 	if (ZEND_NUM_ARGS() > 2) {
 		convert_to_string_ex(pad_string);
 		if (Z_STRLEN_PP(pad_string) == 0) {
-			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Padding string cannot be empty.");
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Padding string cannot be empty");
 			return;
 		}
 		pad_str_val = Z_STRVAL_PP(pad_string);
@@ -4765,7 +4934,7 @@ PHP_FUNCTION(str_pad)
 			convert_to_long_ex(pad_type);
 			pad_type_val = Z_LVAL_PP(pad_type);
 			if (pad_type_val < STR_PAD_LEFT || pad_type_val > STR_PAD_BOTH) {
-				php_error_docref(NULL TSRMLS_CC, E_WARNING, "Padding type has to be STR_PAD_LEFT, STR_PAD_RIGHT, or STR_PAD_BOTH.");
+				php_error_docref(NULL TSRMLS_CC, E_WARNING, "Padding type has to be STR_PAD_LEFT, STR_PAD_RIGHT, or STR_PAD_BOTH");
 				return;
 			}
 		}
@@ -4964,7 +5133,7 @@ PHP_FUNCTION(str_word_count)
 
 	while (p < e) {
 		s = p;
-		while (p < e && (isalpha(*p) || (char_list && ch[(unsigned char)*p]) || *p == '\'' || *p == '-')) {
+		while (p < e && (isalpha((unsigned char)*p) || (char_list && ch[(unsigned char)*p]) || *p == '\'' || *p == '-')) {
 			p++;
 		}
 		if (p > s) {
@@ -5049,7 +5218,7 @@ PHP_FUNCTION(str_split)
 	}
 
 	if (split_length <= 0) {
-		php_error_docref(NULL TSRMLS_CC, E_WARNING, "The length of each segment must be greater than zero.");
+		php_error_docref(NULL TSRMLS_CC, E_WARNING, "The length of each segment must be greater than zero");
 		RETURN_FALSE;
 	}
 
@@ -5087,7 +5256,7 @@ PHP_FUNCTION(strpbrk)
 	}
 
 	if (!char_list_len) {
-		php_error_docref(NULL TSRMLS_CC, E_WARNING, "The character list cannot be empty.");
+		php_error_docref(NULL TSRMLS_CC, E_WARNING, "The character list cannot be empty");
 		RETURN_FALSE;	
 	}
 
@@ -5123,12 +5292,12 @@ PHP_FUNCTION(substr_compare)
 		offset = (offset < 0) ? 0 : offset;
 	}
 
-	if(offset > s1_len) {
+	if (offset > s1_len) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "The start position cannot exceed initial string length");
 		RETURN_FALSE;
 	}
 
-	if(len > s1_len - offset) {
+	if (len > s1_len - offset) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "The length cannot exceed initial string length");
 		RETURN_FALSE;
 	}

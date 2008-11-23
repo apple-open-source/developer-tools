@@ -1382,7 +1382,7 @@ main (int argc, const char **argv)
       else if (!strcmp (argv[i], "-o"))
 	{
 	  if (i + 1 >= argc)
-	    abort ();
+	    fatal ("argument to '-o' is missing");
 
 	  output_filename = argv[i+1];
 	  i++;

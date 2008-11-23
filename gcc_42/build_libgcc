@@ -26,6 +26,12 @@ HOSTS=`echo $1 | $TRANSLATE_ARCH `
 # installed.
 TARGETS=`echo $2 | $TRANSLATE_ARCH`
 
+# The GNU makefile target ('bootstrap' by default).
+BOOTSTRAP=${BOOTSTRAP-bootstrap}
+if [ "$BOOTSTRAP" != bootstrap ]; then
+    bootstrap=--disable-bootstrap
+fi
+
 # The B&I build srcript (~rc/bin/buildit) accepts an '-othercflags'
 # command-line flag, and captures the argument to that flag in
 # $RC_NONARCH_CFLAGS (and mysteriously prepends '-pipe' thereto).
@@ -231,6 +237,9 @@ for l in $SHARED_LIBS ; do
       ln -s `readlink ${CANDIDATES[0]}` .$DEST_ROOT/lib/$l || exit 1
     else
       lipo -output .$DEST_ROOT/lib/$l -create "${CANDIDATES[@]}" || exit 1
+    fi
+    if ! file .$DEST_ROOT/lib/$l | grep stub > /dev/null ; then
+      strip -x .$DEST_ROOT/lib/$l || exit 1
     fi
   fi
 done

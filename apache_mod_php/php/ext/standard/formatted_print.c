@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 5                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2007 The PHP Group                                |
+   | Copyright (c) 1997-2008 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -16,7 +16,7 @@
    +----------------------------------------------------------------------+
  */
 
-/* $Id: formatted_print.c,v 1.82.2.1.2.16 2007/06/03 09:12:04 shire Exp $ */
+/* $Id: formatted_print.c,v 1.82.2.1.2.19 2008/03/17 23:00:41 stas Exp $ */
 
 #include <math.h>				/* modf() */
 #include "php.h"
@@ -76,6 +76,7 @@ php_sprintf_appendstring(char **buffer, int *pos, int *size, char *add,
 	register int npad;
 	int req_size;
 	int copy_len;
+	int m_width;
 
 	copy_len = (expprec ? MIN(max_width, len) : len);
 	npad = min_width - copy_len;
@@ -86,11 +87,19 @@ php_sprintf_appendstring(char **buffer, int *pos, int *size, char *add,
 	
 	PRINTF_DEBUG(("sprintf: appendstring(%x, %d, %d, \"%s\", %d, '%c', %d)\n",
 				  *buffer, *pos, *size, add, min_width, padding, alignment));
+	m_width = MAX(min_width, copy_len);
 
-	req_size = *pos + MAX(min_width, copy_len) + 1;
+	if(m_width > INT_MAX - *pos - 1) {
+		zend_error_noreturn(E_ERROR, "Field width %d is too long", m_width);
+	}
+
+	req_size = *pos + m_width + 1;
 
 	if (req_size > *size) {
 		while (req_size > *size) {
+			if(*size > INT_MAX/2) {
+				zend_error_noreturn(E_ERROR, "Field width %d is too long", req_size); 
+			}
 			*size <<= 1;
 		}
 		PRINTF_DEBUG(("sprintf ereallocing buffer to %d bytes\n", *size));
@@ -445,7 +454,7 @@ php_formatted_print(int ht, int *len, int use_array, int format_offset TSRMLS_DC
 					if (argnum <= 0) {
 						efree(result);
 						efree(args);
-						php_error_docref(NULL TSRMLS_CC, E_WARNING, "Argument number must be greater than zero.");
+						php_error_docref(NULL TSRMLS_CC, E_WARNING, "Argument number must be greater than zero");
 						return NULL;
 					}
 
@@ -487,7 +496,7 @@ php_formatted_print(int ht, int *len, int use_array, int format_offset TSRMLS_DC
 					if ((width = php_sprintf_getnumber(format, &inpos)) < 0) {
 						efree(result);
 						efree(args);
-						php_error_docref(NULL TSRMLS_CC, E_WARNING, "Width must be greater than zero and less than %d.", INT_MAX);
+						php_error_docref(NULL TSRMLS_CC, E_WARNING, "Width must be greater than zero and less than %d", INT_MAX);
 						return NULL;
 					}
 					adjusting |= ADJ_WIDTH;
@@ -504,7 +513,7 @@ php_formatted_print(int ht, int *len, int use_array, int format_offset TSRMLS_DC
 						if ((precision = php_sprintf_getnumber(format, &inpos)) < 0) {
 							efree(result);
 							efree(args);
-							php_error_docref(NULL TSRMLS_CC, E_WARNING, "Precision must be greater than zero and less than %d.", INT_MAX);
+							php_error_docref(NULL TSRMLS_CC, E_WARNING, "Precision must be greater than zero and less than %d", INT_MAX);
 							return NULL;
 						}
 						adjusting |= ADJ_PRECISION;

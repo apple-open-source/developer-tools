@@ -77,7 +77,9 @@ MAJ_VERS=`echo $VERS | sed 's/\([0-9]*\.[0-9]*\)[.-].*/\1/'`
 # APPLE LOCAL begin ARM ARM_CONFIGFLAGS
 # For ARM, grab all system files from an SDK.
 ARM_SYSROOT="/Developer/SDKs/Extra"
-ARM_CONFIGFLAGS="--with-sysroot=\"$ARM_SYSROOT\""
+ARM_LIBSTDCXX_VERSION=4.2.1
+ARM_CONFIGFLAGS="--with-sysroot=\"$ARM_SYSROOT\" \
+                 --with-gxx-include-dir=\${prefix}/include/c++/$ARM_LIBSTDCXX_VERSION"
 # APPLE LOCAL end ARM ARM_CONFIGFLAGS
 
 # This is the libstdc++ version to use.
@@ -85,6 +87,7 @@ LIBSTDCXX_VERSION=4.2.1
 if [ ! -d "$DEST_ROOT/include/c++/$LIBSTDCXX_VERSION" ]; then
   LIBSTDCXX_VERSION=4.0.0
 fi
+NON_ARM_CONFIGFLAGS="--with-gxx-include-dir=\${prefix}/include/c++/$LIBSTDCXX_VERSION"
 
 DARWIN_VERS=`uname -r | sed 's/\..*//'`
 echo DARWIN_VERS = $DARWIN_VERS
@@ -114,7 +117,6 @@ CONFIGFLAGS="--disable-checking --enable-werror \
   --mandir=\${prefix}/share/man \
   --enable-languages=c,objc,c++,obj-c++ \
   --program-transform-name=/^[cg][^.-]*$/s/$/-$MAJ_VERS/ \
-  --with-gxx-include-dir=\${prefix}/include/c++/$LIBSTDCXX_VERSION \
   --with-slibdir=/usr/lib \
   --build=$BUILD-apple-darwin$DARWIN_VERS"
 
@@ -142,6 +144,7 @@ mkdir -p $DIR/obj-$BUILD-$BUILD $DIR/dst-$BUILD-$BUILD || exit 1
 cd $DIR/obj-$BUILD-$BUILD || exit 1
 if [ \! -f Makefile ]; then
  $SRC_DIR/configure $bootstrap $CONFIGFLAGS \
+   $NON_ARM_CONFIGFLAGS \
    --host=$BUILD-apple-darwin$DARWIN_VERS --target=$BUILD-apple-darwin$DARWIN_VERS || exit 1
 fi
 # Unset RC_DEBUG_OPTIONS because it causes the bootstrap to fail.
@@ -201,7 +204,7 @@ for t in $CROSS_TARGETS ; do
    if [ \! -f Makefile ]; then
     # APPLE LOCAL begin ARM ARM_CONFIGFLAGS
     $SRC_DIR/configure $CONFIGFLAGS --enable-werror-always \
-     `if [ $t = 'arm' ] ; then echo $ARM_CONFIGFLAGS ; fi` \
+     `if [ $t = 'arm' ] ; then echo $ARM_CONFIGFLAGS ; else echo $NON_ARM_CONFIGFLAGS ; fi` \
       --program-prefix=$t-apple-darwin$DARWIN_VERS- \
       --host=$BUILD-apple-darwin$DARWIN_VERS --target=$t-apple-darwin$DARWIN_VERS || exit 1
     # APPLE LOCAL end ARM ARM_CONFIGFLAGS
@@ -245,7 +248,7 @@ for h in $HOSTS ; do
       if [ \! -f Makefile ]; then
 	# APPLE LOCAL begin ARM ARM_CONFIGFLAGS
         $SRC_DIR/configure $CONFIGFLAGS \
-	  `if [ $t = 'arm' ] && [ $h != 'arm' ] ; then echo $ARM_CONFIGFLAGS ; fi` \
+	  `if [ $t = 'arm' ] && [ $h != 'arm' ] ; then echo $ARM_CONFIGFLAGS ; else echo $NON_ARM_CONFIGFLAGS ; fi` \
           --program-prefix=$pp \
           --host=$h-apple-darwin$DARWIN_VERS --target=$t-apple-darwin$DARWIN_VERS || exit 1
 	# APPLE LOCAL end ARM ARM_CONFIGFLAGS

@@ -1,6 +1,8 @@
 /* { dg-do compile { target powerpc*-*-darwin* } } */
 /* { dg-require-effective-target ilp32 } */
-/* { dg-xfail-if "" { powerpc*-*-darwin* } } */
+/* APPLE LOCAL begin 5431747 */
+/* Removed xfail.  */
+/* APPLE LOCAL end 5431747 */
 /* { dg-options "-Wno-long-long" } */
 
 struct a

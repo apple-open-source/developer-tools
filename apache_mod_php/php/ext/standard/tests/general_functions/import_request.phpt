@@ -4,6 +4,8 @@ import_request_variables() tests
 a=1&b=heh&c=3&d[]=5&GLOBALS=test&1=hm
 --POST--
 ap=25&bp=test&cp=blah3&dp[]=ar
+--INI--
+register_globals=off
 --FILE--
 <?php
 
@@ -39,7 +41,7 @@ Notice: import_request_variables(): No prefix specified - possible security haza
 
 Warning: import_request_variables(): Attempted GLOBALS variable overwrite in %s on line %d
 
-Warning: import_request_variables(): Numeric key detected - possible security hazard. in %s on line %d
+Warning: import_request_variables(): Numeric key detected - possible security hazard in %s on line %d
 NULL
 
 Notice: Undefined variable: ap in %s on line %d

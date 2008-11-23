@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | Zend Engine                                                          |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1998-2007 Zend Technologies Ltd. (http://www.zend.com) |
+   | Copyright (c) 1998-2008 Zend Technologies Ltd. (http://www.zend.com) |
    +----------------------------------------------------------------------+
    | This source file is subject to version 2.00 of the Zend license,     |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -17,7 +17,7 @@
    +----------------------------------------------------------------------+
 */
 
-/* $Id: zend_builtin_functions.c,v 1.277.2.12.2.24 2007/08/22 13:19:47 dmitry Exp $ */
+/* $Id: zend_builtin_functions.c,v 1.277.2.12.2.29 2008/02/21 15:14:12 dmitry Exp $ */
 
 #include "zend.h"
 #include "zend_API.h"
@@ -867,7 +867,7 @@ ZEND_FUNCTION(get_class_methods)
 		if ((mptr->common.fn_flags & ZEND_ACC_PUBLIC) 
 		 || (EG(scope) &&
 		     (((mptr->common.fn_flags & ZEND_ACC_PROTECTED) &&
-		       instanceof_function(EG(scope), mptr->common.scope TSRMLS_CC))
+		       zend_check_protected(mptr->common.scope, EG(scope)))
 		   || ((mptr->common.fn_flags & ZEND_ACC_PRIVATE) &&
 		       EG(scope) == mptr->common.scope)))) {
 			char *key;
@@ -1013,19 +1013,20 @@ ZEND_FUNCTION(class_exists)
 	char *class_name, *lc_name;
 	zend_class_entry **ce;
 	int class_name_len;
-	zend_bool autoload = 1;
 	int found;
+	zend_bool autoload = 1;
+	ALLOCA_FLAG(use_heap)
 
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s|b", &class_name, &class_name_len, &autoload) == FAILURE) {
 		return;
 	}
 
 	if (!autoload) {
-		lc_name = do_alloca(class_name_len + 1);
+		lc_name = do_alloca_with_limit(class_name_len + 1, use_heap);
 		zend_str_tolower_copy(lc_name, class_name, class_name_len);
 	
 		found = zend_hash_find(EG(class_table), lc_name, class_name_len+1, (void **) &ce);
-		free_alloca(lc_name);
+		free_alloca_with_limit(lc_name, use_heap);
 		RETURN_BOOL(found == SUCCESS && !((*ce)->ce_flags & ZEND_ACC_INTERFACE));
 	}
 
@@ -1044,19 +1045,20 @@ ZEND_FUNCTION(interface_exists)
 	char *iface_name, *lc_name;
 	zend_class_entry **ce;
 	int iface_name_len;
-	zend_bool autoload = 1;
 	int found;
+	zend_bool autoload = 1;
+	ALLOCA_FLAG(use_heap)
 
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s|b", &iface_name, &iface_name_len, &autoload) == FAILURE) {
 		return;
 	}
 
 	if (!autoload) {
-		lc_name = do_alloca(iface_name_len + 1);
+		lc_name = do_alloca_with_limit(iface_name_len + 1, use_heap);
 		zend_str_tolower_copy(lc_name, iface_name, iface_name_len);
 	
 		found = zend_hash_find(EG(class_table), lc_name, iface_name_len+1, (void **) &ce);
-		free_alloca(lc_name);
+		free_alloca_with_limit(lc_name, use_heap);
 		RETURN_BOOL(found == SUCCESS && (*ce)->ce_flags & ZEND_ACC_INTERFACE);
 	}
 
@@ -1216,6 +1218,7 @@ ZEND_FUNCTION(set_error_handler)
 		had_orig_error_handler = 1;
 		*return_value = *EG(user_error_handler);
 		zval_copy_ctor(return_value);
+		INIT_PZVAL(return_value);
 		zend_stack_push(&EG(user_error_handlers_error_reporting), &EG(user_error_handler_error_reporting), sizeof(EG(user_error_handler_error_reporting)));
 		zend_ptr_stack_push(&EG(user_error_handlers), EG(user_error_handler));
 	}
@@ -1230,6 +1233,7 @@ ZEND_FUNCTION(set_error_handler)
 	EG(user_error_handler_error_reporting) = (int)error_type;
 	*EG(user_error_handler) = *error_handler;
 	zval_copy_ctor(EG(user_error_handler));
+	INIT_PZVAL(EG(user_error_handler));
 
 	if (!had_orig_error_handler) {
 		RETURN_NULL();
@@ -2093,15 +2097,17 @@ ZEND_API void zend_fetch_debug_backtrace(zval *return_value, int skip_last, int 
 /* }}} */
 
 
-/* {{{ proto array debug_backtrace(void)
+/* {{{ proto array debug_backtrace([bool provide_object])
    Return backtrace as array */
 ZEND_FUNCTION(debug_backtrace)
 {
-	if (ZEND_NUM_ARGS()) {
-		ZEND_WRONG_PARAM_COUNT();
+	zend_bool provide_object = 1;
+	
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "|b", &provide_object) == FAILURE) {
+		return;
 	}
 
-	zend_fetch_debug_backtrace(return_value, 1, 1 TSRMLS_CC);
+	zend_fetch_debug_backtrace(return_value, 1, provide_object TSRMLS_CC);
 }
 /* }}} */
 

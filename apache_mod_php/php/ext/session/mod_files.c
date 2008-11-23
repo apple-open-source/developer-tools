@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 5                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2007 The PHP Group                                |
+   | Copyright (c) 1997-2008 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -16,7 +16,7 @@
    +----------------------------------------------------------------------+
  */
 
-/* $Id: mod_files.c,v 1.100.2.3.2.9 2007/08/23 12:23:59 jani Exp $ */
+/* $Id: mod_files.c,v 1.100.2.3.2.11 2007/12/31 07:20:10 sebastian Exp $ */
 
 #include "php.h"
 
@@ -295,7 +295,7 @@ PS_OPEN_FUNC(files)
 		argv[argc++] = last;
 		last = ++p;
 		p = strchr(p, ';');
-		if (argc > 1) break;
+		if (argc > 2) break;
 	}
 	argv[argc++] = last;
 

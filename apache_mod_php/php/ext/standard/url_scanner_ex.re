@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 
-/* $Id: url_scanner_ex.re,v 1.76.2.2.2.1 2007/06/06 00:00:27 iliaa Exp $ */
+/* $Id: url_scanner_ex.re,v 1.76.2.2.2.3 2008/03/12 19:33:46 felipe Exp $ */
 
 #include "php.h"
 
@@ -205,24 +205,35 @@ static void handle_form(STD_PARA)
 
 	if (ctx->form_app.len > 0) {
 		switch (ctx->tag.len) {
+			case sizeof("form") - 1:
+				if (!strncasecmp(ctx->tag.c, "form", sizeof("form") - 1)) {
+					doit = 1;		
+				}
+				if (doit && ctx->val.c && ctx->lookup_data && *ctx->lookup_data) {
+					char *e, *p = zend_memnstr(ctx->val.c, "://", sizeof("://") - 1, ctx->val.c + ctx->val.len);
+					if (p) {
+						e = memchr(p, '/', (ctx->val.c + ctx->val.len) - p);
+						if (!e) {
+							e = ctx->val.c + ctx->val.len;
+						}
+						if ((e - p) && strncasecmp(p, ctx->lookup_data, (e - p))) {
+							doit = 0;
+						}
+					}
+				}
+				break;
 
-#define RECOGNIZE(x) do { 	\
-	case sizeof(x)-1: \
-		if (strncasecmp(ctx->tag.c, x, sizeof(x)-1) == 0) \
-			doit = 1; \
-		break; \
-} while (0)
-		
-			RECOGNIZE("form");
-			RECOGNIZE("fieldset");
+			case sizeof("fieldset") - 1:
+				if (!strncasecmp(ctx->tag.c, "fieldset", sizeof("fieldset") - 1)) {
+					doit = 1;		
+				}
+				break;
 		}
 
 		if (doit)
 			smart_str_append(&ctx->result, &ctx->form_app);
 	}
 }
-
-
 
 /*
  *  HANDLE_TAG copies the HTML Tag and checks whether we 
@@ -420,7 +431,7 @@ static void php_url_scanner_output_handler(char *output, uint output_len, char *
 	size_t len;
 
 	if (BG(url_adapt_state_ex).url_app.len != 0) {
-		*handled_output = url_adapt_ext(output, output_len, &len, (zend_bool) (mode & PHP_OUTPUT_HANDLER_END ? 1 : 0) TSRMLS_CC);
+		*handled_output = url_adapt_ext(output, output_len, &len, (zend_bool) (mode & (PHP_OUTPUT_HANDLER_END | PHP_OUTPUT_HANDLER_CONT) ? 1 : 0) TSRMLS_CC);
 		if (sizeof(uint) < sizeof(size_t)) {
 			if (len > UINT_MAX)
 				len = UINT_MAX;

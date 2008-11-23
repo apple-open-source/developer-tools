@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 5                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2007 The PHP Group                                |
+   | Copyright (c) 1997-2008 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -16,7 +16,7 @@
    +----------------------------------------------------------------------+
  */
 
-/* $Id: mail.c,v 1.87.2.1.2.7 2007/07/11 17:36:56 johannes Exp $ */
+/* $Id: mail.c,v 1.87.2.1.2.9 2007/12/31 07:20:12 sebastian Exp $ */
 
 #include <stdlib.h>
 #include <ctype.h>
@@ -98,7 +98,7 @@ PHP_FUNCTION(mail)
 	char *p, *e;
 
 	if (PG(safe_mode) && (ZEND_NUM_ARGS() == 5)) {
-		php_error_docref(NULL TSRMLS_CC, E_WARNING, "SAFE MODE Restriction in effect.  The fifth parameter is disabled in SAFE MODE.");
+		php_error_docref(NULL TSRMLS_CC, E_WARNING, "SAFE MODE Restriction in effect.  The fifth parameter is disabled in SAFE MODE");
 		RETURN_FALSE;
 	}	
 	

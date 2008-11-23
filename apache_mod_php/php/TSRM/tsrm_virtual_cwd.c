@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 5                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2007 The PHP Group                                |
+   | Copyright (c) 1997-2008 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -17,7 +17,7 @@
    +----------------------------------------------------------------------+
 */
 
-/* $Id: tsrm_virtual_cwd.c,v 1.74.2.9.2.35 2007/08/10 09:09:46 tony2001 Exp $ */
+/* $Id: tsrm_virtual_cwd.c,v 1.74.2.9.2.38 2007/12/31 07:20:02 sebastian Exp $ */
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -489,6 +489,9 @@ CWD_API int virtual_file_ex(cwd_state *state, const char *path, verify_path_func
 	int ret;
 	int use_cache;
 	int use_relative_path = 0;
+#ifdef TSRM_WIN32
+	int is_unc;
+#endif
 	TSRMLS_FETCH();
 
 	use_cache = ((use_realpath != CWD_EXPAND) && CWDG(realpath_cache_size_limit));
@@ -573,9 +576,6 @@ CWD_API int virtual_file_ex(cwd_state *state, const char *path, verify_path_func
 		char *ptr, *path_copy, *free_path;
 		char *tok;
 		int ptr_length;
-#ifdef TSRM_WIN32
-		int is_unc;
-#endif
 no_realpath:
 
 #ifdef TSRM_WIN32
@@ -712,22 +712,24 @@ no_realpath:
 			}
 			ptr = tsrm_strtok_r(NULL, TOKENIZER_STRING, &tok);
 		}
-#if defined(TSRM_WIN32) || defined(NETWARE)
-		if (path[path_length-1] == '\\' || path[path_length-1] == '/') {
-#else 
-		if (path[path_length-1] == '/') {
-#endif
-			state->cwd = (char*)realloc(state->cwd, state->cwd_length + 2);
-			state->cwd[state->cwd_length++] = DEFAULT_SLASH;
-			state->cwd[state->cwd_length] = 0;
-		}
-
 		free(free_path);
 
-		if ((use_realpath == CWD_REALPATH) && ret) {
-			CWD_STATE_FREE(state);
-			*state = old_state;					
-			return 1;
+		if (use_realpath == CWD_REALPATH) {
+			if (ret) {
+				CWD_STATE_FREE(state);
+				*state = old_state;					
+				return 1;
+			}
+		} else {
+#if defined(TSRM_WIN32) || defined(NETWARE)
+			if (path[path_length-1] == '\\' || path[path_length-1] == '/') {
+#else 
+			if (path[path_length-1] == '/') {
+#endif
+				state->cwd = (char*)realloc(state->cwd, state->cwd_length + 2);
+				state->cwd[state->cwd_length++] = DEFAULT_SLASH;
+				state->cwd[state->cwd_length] = 0;
+			}
 		}
 
 		if (state->cwd_length == COPY_WHEN_ABSOLUTE(state->cwd)) {
@@ -738,7 +740,12 @@ no_realpath:
 		}
 	}
 
+	/* Store existent file in realpath cache. */
+#ifdef TSRM_WIN32
+	if (use_cache && !is_unc) {
+#else
 	if (use_cache && (use_realpath == CWD_REALPATH)) {
+#endif
 		realpath_cache_add(path, path_length, state->cwd, state->cwd_length, t TSRMLS_CC);
 	}
 

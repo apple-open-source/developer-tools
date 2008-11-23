@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 5                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2007 The PHP Group                                |
+   | Copyright (c) 1997-2008 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -16,7 +16,7 @@
    +----------------------------------------------------------------------+
  */
 
-/* $Id: uuencode.c,v 1.5.2.1.2.4 2007/03/12 20:55:15 tony2001 Exp $ */
+/* $Id: uuencode.c,v 1.5.2.1.2.6 2007/12/31 07:20:13 sebastian Exp $ */
 
 /*
  * Portions of this code are based on Berkeley's uuencode/uudecode
@@ -215,7 +215,7 @@ PHP_FUNCTION(convert_uudecode)
 
 	dst_len = php_uudecode(src, src_len, &dst);
 	if (dst_len < 0) {
-		php_error_docref(NULL TSRMLS_CC, E_WARNING, "The given parameter is not a valid uuencoded string.");
+		php_error_docref(NULL TSRMLS_CC, E_WARNING, "The given parameter is not a valid uuencoded string");
 		RETURN_FALSE;
 	}
 

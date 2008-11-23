@@ -11,6 +11,3 @@
 ###
 ###------------------------------------------------------------------
 4531667: g++.dg/bitreverse-23.C execution test
-#
-# The following tests fail only when the c++ suite is run with -mcpu=G5
-5822514: g++.dg/altivec-8.C execution test

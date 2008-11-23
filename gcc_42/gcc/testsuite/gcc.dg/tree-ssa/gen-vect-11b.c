@@ -29,5 +29,6 @@ int main ()
 }
 
 
-/* { dg-final { scan-tree-dump-times "vectorized 0 loops" 1 "vect" } } */
+/* APPLE LOCAL 4874504 */
+/* { dg-final { scan-tree-dump-times "vectorized 0 loops" 1 "vect" { xfail *-*-darwin* } } } */
 /* { dg-final { cleanup-tree-dump "vect" } } */

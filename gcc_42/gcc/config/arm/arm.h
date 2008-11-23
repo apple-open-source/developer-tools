@@ -466,12 +466,10 @@ extern int arm_cpp_interwork;
 #define PREFERRED_STACK_BOUNDARY \
     (arm_abi == ARM_ABI_ATPCS ? 64 : STACK_BOUNDARY)
 
-/* APPLE LOCAL begin ARM adjust function alignment for Thumb */
-#define FUNCTION_BOUNDARY \
-     ((TARGET_ARM \
-        || (cfun && current_function_is_thunk) \
-        || (cfun && cfun->needs_4byte_alignment)) ? 32 : 16)
-/* APPLE LOCAL end ARM adjust function alignment for Thumb */
+/* APPLE LOCAL begin ARM 6008578 */
+#define FUNCTION_BOUNDARY arm_function_boundary ()
+extern int arm_function_boundary (void);
+/* APPLE LOCAL end ARM 6008578 */
 
 /* The lowest bit is used to indicate Thumb-mode functions, so the
    vbit must go into the delta field of pointers to member
@@ -2679,6 +2677,14 @@ extern int making_const_table;
   (TARGET_THUMB ? (MAX (BASIC_ALIGN, 4 * BITS_PER_UNIT)) : BASIC_ALIGN)
 #endif
 /* APPLE LOCAL end ARM 4-byte align stack objects */
+
+/* APPLE LOCAL begin ARM 6148015 */
+/* Tells us how to find the CFA == dwarf frame_base == address of stack
+   on entry to the function given the (virtual) arg-pointer.  */
+#define ARG_POINTER_CFA_OFFSET(FNDECL) 				\
+		((FIRST_PARM_OFFSET (FNDECL)) 			\
+		 + (DECL_STRUCT_FUNCTION (FNDECL))->pretend_args_size)
+/* APPLE LOCAL end ARM 6148015 */
 
 enum arm_builtins
 {

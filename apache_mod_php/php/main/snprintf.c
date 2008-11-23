@@ -2,7 +2,7 @@
   +----------------------------------------------------------------------+
   | PHP Version 5                                                        |
   +----------------------------------------------------------------------+
-  | Copyright (c) 1997-2007 The PHP Group                                |
+  | Copyright (c) 1997-2008 The PHP Group                                |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 
-/* $Id: snprintf.c,v 1.37.2.4.2.14 2007/08/03 14:31:27 tony2001 Exp $ */
+/* $Id: snprintf.c,v 1.37.2.4.2.16 2007/12/31 07:20:15 sebastian Exp $ */
 
 
 #include "php.h"
@@ -1004,6 +1004,7 @@ static int format_converter(register buffy * odp, const char *fmt, va_list ap) /
 
 
 				case 'g':
+				case 'k':
 				case 'G':
 				case 'H':
 					switch(modifier) {
@@ -1045,7 +1046,7 @@ static int format_converter(register buffy * odp, const char *fmt, va_list ap) /
 						lconv = localeconv();
 					}
 #endif
-					s = php_gcvt(fp_num, precision, *fmt=='H' ? '.' : LCONV_DECIMAL_POINT, (*fmt == 'G' || *fmt == 'H')?'E':'e', &num_buf[1]);
+					s = php_gcvt(fp_num, precision, (*fmt=='H' || *fmt == 'k') ? '.' : LCONV_DECIMAL_POINT, (*fmt == 'G' || *fmt == 'H')?'E':'e', &num_buf[1]);
 					if (*s == '-') {
 						prefix_char = *s++;
 					} else if (print_sign) {

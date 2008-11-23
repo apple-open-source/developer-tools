@@ -8865,7 +8865,8 @@ fold_builtin_classify (tree fndecl, tree arglist, int builtin_index)
       /* APPLE LOCAL begin mainline 5675014 */
       if (!HONOR_NANS (TYPE_MODE (TREE_TYPE (arg)))
 	  && !HONOR_INFINITIES (TYPE_MODE (TREE_TYPE (arg))))
-	return omit_one_operand (type, integer_zero_node, arg);
+	/* APPLE LOCAL 6119849 */
+	return omit_one_operand (type, integer_one_node, arg);
       /* APPLE LOCAL end mainline 5675014 */
 
       if (TREE_CODE (arg) == REAL_CST)

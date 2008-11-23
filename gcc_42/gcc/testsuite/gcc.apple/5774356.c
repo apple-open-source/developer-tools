@@ -1,5 +1,6 @@
 /* APPLE LOCAL file 5774356 */
-/* { dg-do run } */
+/* { dg-do run { target powerpc*-*-* } } */
+/* { dg-require-effective-target powerpc_altivec_ok } */
 
 #include <stdlib.h>
 #include <altivec.h>

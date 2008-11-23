@@ -1,3 +1,24 @@
+2008-09-22  Jon Ziegler  <jonz@apple.com>
+
+	Bring in Eugene's fix from the SnowLeopard compiler.
+	2008-08-06  Eugene Marinelli  <marinelli@apple.com>
+        Radar 6123671
+        * driverdriver.c (main): Instead of aborting, print a fatal error when
+        there is no argument after -o.
+
+2008-08-26  Josh Conner  <jconner@apple.com>
+
+        Radar 6162685
+        * build_libgcc: Strip libgcc.
+
+        Radar 6175043
+        * build_libgcc: Disable bootstrap if BOOTSTRAP is empty.
+
+2008-06-04  Josh Conner  <jconner@apple.com>
+
+	Radar 5961147
+	* build_gcc: Use 4.2.1 libstdcxx headers for ARM.
+
 2008-05-09  Josh Conner  <jconner@apple.com>
 
 	Radar 5925341

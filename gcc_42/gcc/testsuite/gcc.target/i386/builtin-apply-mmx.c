@@ -8,8 +8,9 @@
    instruction is issued.  */
 
 /* This test case is adapted from gcc.dg/builtin-apply4.c.  */
- 
-/* { dg-do run { xfail "*-*-*" } } */
+
+/* APPLE LOCAL 5431747 - remove xfail */ 
+/* { dg-do run } */
 /* { dg-options "-O2 -mmmx" } */
 /* { dg-require-effective-target ilp32 } */
 

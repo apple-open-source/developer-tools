@@ -22,10 +22,9 @@ LIB2FUNCS_EXTRA = $(srcdir)/config/arm/_fixdfdi.c \
 	$(srcdir)/config/arm/_fixunssfdi.c 
 # APPLE LOCAL end 5316398 improved float/double -> int64 functions
 
-MULTILIB_OPTIONS     =
-MULTILIB_DIRNAMES    =
+MULTILIB_OPTIONS     = march=armv6k
+MULTILIB_DIRNAMES    = v6
 MULTILIB_EXCEPTIONS  = 
 MULTILIB_MATCHES     =
-TARGET_LIBGCC2_CFLAGS = -fno-inline -march=armv6k
-DARWIN_EXTRA_CRT_BUILD_CFLAGS = -march=armv6k
+TARGET_LIBGCC2_CFLAGS = -fno-inline
 

@@ -1301,7 +1301,7 @@ SECTION_FUNCTION (objc_v2_nonlazy_category_section,				\
 		  ".section __DATA, __objc_nlcatlist, regular, no_dead_strip", 1) 	\
 SECTION_FUNCTION (objc_v2_selector_refs_section,				\
 		  in_objc_v2_selector_refs_section,				\
-		  ".section __DATA, __objc_selrefs, regular, no_dead_strip", 1) 	\
+		  ".section __DATA, __objc_selrefs, literal_pointers, no_dead_strip", 1) 	\
 SECTION_FUNCTION (objc_v2_image_info_section,				\
                   in_objc_v2_image_info_section,					\
                   ".section __DATA, __objc_imageinfo, regular, "		\

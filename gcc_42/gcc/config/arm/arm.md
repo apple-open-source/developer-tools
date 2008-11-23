@@ -1440,6 +1440,8 @@
             (mult:SI (match_dup 3) (subreg:SI (match_dup 2) 4))
             (subreg:SI (match_dup 0) 4)))]
   ""
+  ;; APPLE LOCAL 6110622 constant pool reference out of range
+  [(set_attr "length" "20")]
 )
 ;; APPLE LOCAL end DImode multiply enhancement 
 

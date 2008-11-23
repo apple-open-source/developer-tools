@@ -1,4 +1,4 @@
-# Developer Tools 3.1.1 FireOpal9M2517
+# Developer Tools 3.1.2 BlackOpal9M2621
 adv_cmds	118	Other
 amavisd	110	Other
 apache	729	Other
@@ -8,7 +8,7 @@ apache_mod_fastcgi	3	Other
 apache_mod_hfs_apple	7	Other
 apache_mod_perl	101	Other
 apache_mod_perl1	16	Other
-apache_mod_php	43	Other
+apache_mod_php	44.1	Other
 apache_mod_php4	30	Other
 apache_mod_ssl	689	Other
 Apple16X50Serial	19.2	Other
@@ -128,8 +128,8 @@ file_cmds	184	Other
 files	520.1	Other
 flex	20.3	Other
 freeradius	11	Other
-gcc	5488	Other
-gcc_42	5564	Other
+gcc	5490	Other
+gcc_42	5566	Other
 gcc_os	1823	Other
 gcc_select	66	Other
 gccfast	1626	Other
@@ -365,9 +365,9 @@ webdavfs	252	Other
 wxWidgets	11	Other
 X11apps	22	Other
 X11fonts	8	Other
-X11libs	21	Other
+X11libs	21.0.1	Other
 X11misc	6	Other
-X11proto	20	Other
+X11proto	20.0.1	Other
 X11server	53	Other
 xar	28	Other
 xelf	1	Other

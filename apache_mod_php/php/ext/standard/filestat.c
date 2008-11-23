@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 5                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2007 The PHP Group                                |
+   | Copyright (c) 1997-2008 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -16,7 +16,7 @@
    +----------------------------------------------------------------------+
  */
 
-/* $Id: filestat.c,v 1.136.2.8.2.13 2007/07/23 23:03:09 iliaa Exp $ */
+/* $Id: filestat.c,v 1.136.2.8.2.16 2007/12/31 07:20:12 sebastian Exp $ */
 
 #include "php.h"
 #include "safe_mode.h"
@@ -698,14 +698,10 @@ PHP_FUNCTION(touch)
 /* }}} */
 #endif
 
-/* {{{ proto void clearstatcache(void)
-   Clear file stat cache */
-PHP_FUNCTION(clearstatcache)
+/* {{{ php_clear_stat_cache()
+*/
+PHPAPI void php_clear_stat_cache(TSRMLS_D)
 {
-	if (ZEND_NUM_ARGS()) {
-		WRONG_PARAM_COUNT;
-	}
-
 	if (BG(CurrentStatFile)) {
 		efree(BG(CurrentStatFile));
 		BG(CurrentStatFile) = NULL;
@@ -715,6 +711,17 @@ PHP_FUNCTION(clearstatcache)
 		BG(CurrentLStatFile) = NULL;
 	}
 	realpath_cache_clean(TSRMLS_C);
+}
+/* }}} */
+
+/* {{{ proto void clearstatcache(void)
+   Clear file stat cache */
+PHP_FUNCTION(clearstatcache)
+{
+	if (ZEND_NUM_ARGS()) {
+		WRONG_PARAM_COUNT;
+	}
+	php_clear_stat_cache(TSRMLS_C);
 }
 /* }}} */
 
@@ -821,7 +828,7 @@ PHPAPI void php_stat(const char *filename, php_stat_len filename_length, int typ
 			gid_t *gids;
 
 			groups = getgroups(0, NULL);
-			if(groups) {
+			if(groups > 0) {
 				gids=(gid_t *)safe_emalloc(groups, sizeof(gid_t), 0);
 				n=getgroups(groups, gids);
 				for(i=0;i<n;i++){

@@ -2,7 +2,7 @@
   +----------------------------------------------------------------------+
   | PHP Version 5                                                        |
   +----------------------------------------------------------------------+
-  | Copyright (c) 1997-2007 The PHP Group                                |
+  | Copyright (c) 1997-2008 The PHP Group                                |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 
-/* $Id: oci_statement.c,v 1.16.2.10.2.6 2007/06/30 02:30:34 sixd Exp $ */
+/* $Id: oci_statement.c,v 1.16.2.10.2.8 2007/12/31 07:20:10 sebastian Exp $ */
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -31,8 +31,8 @@
 #include "php_pdo_oci_int.h"
 #include "Zend/zend_extensions.h"
 
-#define STMT_CALL(name, params)	\
-	do { \
+#define STMT_CALL(name, params)											\
+	do {																\
 		S->last_err = name params;										\
 		S->last_err = _oci_error(S->err, stmt->dbh, stmt, #name, S->last_err, FALSE, __FILE__, __LINE__ TSRMLS_CC); \
 		if (S->last_err) {												\
@@ -40,8 +40,8 @@
 		}																\
 	} while(0)
 
-#define STMT_CALL_MSG(name, msg, params)	\
-	do { \
+#define STMT_CALL_MSG(name, msg, params)								\
+	do { 																\
 		S->last_err = name params;										\
 		S->last_err = _oci_error(S->err, stmt->dbh, stmt, #name ": " #msg, S->last_err, FALSE, __FILE__, __LINE__ TSRMLS_CC); \
 		if (S->last_err) {												\
@@ -529,7 +529,7 @@ static int oci_stmt_describe(pdo_stmt_t *stmt, int colno TSRMLS_DC) /* {{{ */
 	col->precision = scale;
 	col->maxlen = data_size;
 	col->namelen = namelen;
-	col->name = estrndup(colname, namelen);
+	col->name = estrndup((char *)colname, namelen);
 
 	S->cols[colno].dtype = dtype;
 

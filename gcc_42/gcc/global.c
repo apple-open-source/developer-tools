@@ -686,33 +686,6 @@ global_alloc (void)
 
       mirror_conflicts ();
 
-      /* APPLE LOCAL begin 4321079 */
-      /* If two regs are tied by pseudo_preferences, and each is assigned to
-	 only once, they can share the same register even if their lifetimes
-	 overlap, as one must be a copy of the other. */
-      {
-	int i, j;
-	for (i = max_allocno - 1; i >= 0; i--)
-	  {
-	    EXECUTE_IF_SET_IN_ALLOCNO_SET (pseudo_preferences 
-					      + i * allocno_row_words,
-					   j,
-	      {
-		if (REG_N_SETS (allocno[i].reg) == 1
-		    && REG_N_SETS (allocno[j].reg) == 1)
-		  {
-		    conflicts[(i) * allocno_row_words 
-				+ (unsigned) (j) / INT_BITS]
-		      &= ~((INT_TYPE) 1 << ((unsigned) (j) % INT_BITS));
-		    conflicts[(j) * allocno_row_words 
-				+ (unsigned) (i) / INT_BITS]
-		      &= ~((INT_TYPE) 1 << ((unsigned) (i) % INT_BITS));
-		  }
-	      });
-	  }
-      }
-      /* APPLE LOCAL end 4321079 */
-
       /* Eliminate conflicts between pseudos and eliminable registers.  If
 	 the register is not eliminated, the pseudo won't really be able to
 	 live in the eliminable register, so the conflict doesn't matter.
@@ -2269,6 +2242,8 @@ set_preference (rtx dest, rtx src)
      then give the other a preference.  */
 
   if (dest_regno < FIRST_PSEUDO_REGISTER && src_regno >= FIRST_PSEUDO_REGISTER
+      /* APPLE LOCAL 6090616 avoid regno underflow */
+      && (offset <= 0 || dest_regno >= (unsigned)offset)
       && reg_allocno[src_regno] >= 0)
     {
       dest_regno -= offset;
@@ -2288,6 +2263,8 @@ set_preference (rtx dest, rtx src)
     }
 
   if (src_regno < FIRST_PSEUDO_REGISTER && dest_regno >= FIRST_PSEUDO_REGISTER
+      /* APPLE LOCAL 6090616 avoid regno underflow */
+      && (offset >= 0 || src_regno >= (unsigned)-offset)
       && reg_allocno[dest_regno] >= 0)
     {
       src_regno += offset;

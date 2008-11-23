@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 5                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2007 The PHP Group                                |
+   | Copyright (c) 1997-2008 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -16,7 +16,7 @@
    +----------------------------------------------------------------------+
  */
 
-/* $Id: plain_wrapper.c,v 1.52.2.6.2.23 2007/07/25 16:34:05 dmitry Exp $ */
+/* $Id: plain_wrapper.c,v 1.52.2.6.2.27 2007/12/31 07:20:15 sebastian Exp $ */
 
 #include "php.h"
 #include "php_globals.h"
@@ -24,6 +24,7 @@
 #include "php_open_temporary_file.h"
 #include "ext/standard/file.h"
 #include "ext/standard/flock_compat.h"
+#include "ext/standard/php_filestat.h"
 #include <stddef.h>
 #include <fcntl.h>
 #if HAVE_SYS_WAIT_H
@@ -61,6 +62,9 @@ PHPAPI int php_stream_parse_fopen_modes(const char *mode, int *open_flags)
 			break;
 		case 'x':
 			flags = O_CREAT|O_EXCL;
+			break;
+		case 'c':
+			flags = O_CREAT;
 			break;
 		default:
 			/* unknown mode */
@@ -1008,8 +1012,6 @@ static int php_plain_files_unlink(php_stream_wrapper *wrapper, char *url, int op
 {
 	char *p;
 	int ret;
-	zval funcname;
-	zval *retval = NULL;
 
 	if ((p = strstr(url, "://")) != NULL) {
 		url = p + 3;
@@ -1032,12 +1034,10 @@ static int php_plain_files_unlink(php_stream_wrapper *wrapper, char *url, int op
 		}
 		return 0;
 	}
+
 	/* Clear stat cache */
-	ZVAL_STRINGL(&funcname, "clearstatcache", sizeof("clearstatcache")-1, 0);
-	call_user_function_ex(CG(function_table), NULL, &funcname, &retval, 0, NULL, 0, NULL TSRMLS_CC);
-	if (retval) {
-		zval_ptr_dtor(&retval);
-	}
+	php_clear_stat_cache(TSRMLS_C);
+
 	return 1;
 }
 
@@ -1107,6 +1107,9 @@ static int php_plain_files_rename(php_stream_wrapper *wrapper, char *url_from, c
         return 0;
 	}
 
+	/* Clear stat cache */
+	php_clear_stat_cache(TSRMLS_C);
+
 	return 1;
 }
 
@@ -1151,7 +1154,7 @@ static int php_plain_files_mkdir(php_stream_wrapper *wrapper, char *dir, int mod
 		}
 		else {
 			/* find a top level directory we need to create */
-			while ( (p = strrchr(buf + offset, DEFAULT_SLASH)) || ( offset !=1 && (p = strrchr(buf, DEFAULT_SLASH))) ) {
+			while ( (p = strrchr(buf + offset, DEFAULT_SLASH)) || (offset != 1 && (p = strrchr(buf, DEFAULT_SLASH))) ) {
 				int n = 0;
 
 				*p = '\0';
@@ -1217,6 +1220,9 @@ static int php_plain_files_rmdir(php_stream_wrapper *wrapper, char *url, int opt
 		php_error_docref1(NULL TSRMLS_CC, url, E_WARNING, "%s", strerror(errno));
 		return 0;
 	}
+
+	/* Clear stat cache */
+	php_clear_stat_cache(TSRMLS_C);
 
 	return 1;
 }
@@ -1411,9 +1417,6 @@ stream_skip:
 
 }
 /* }}} */
-
-
-
 
 /*
  * Local variables:

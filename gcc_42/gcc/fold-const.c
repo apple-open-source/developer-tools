@@ -10567,7 +10567,13 @@ fold_binary (enum tree_code code, tree type, tree op0, tree op1)
 	  && ! DECL_WEAK (TREE_OPERAND (arg1, 0))
 	  && ! lookup_attribute ("alias",
 				 DECL_ATTRIBUTES (TREE_OPERAND (arg1, 0)))
-	  && ! DECL_EXTERNAL (TREE_OPERAND (arg1, 0)))
+	  /* APPLE LOCAL begin folding of anon union 6120295 */
+	  && ! DECL_EXTERNAL (TREE_OPERAND (arg1, 0))
+	  && ! (TREE_CODE (TREE_OPERAND (arg0, 0)) == VAR_DECL
+		&& DECL_HAS_VALUE_EXPR_P (TREE_OPERAND (arg0, 0))
+		&& TREE_CODE (TREE_OPERAND (arg0, 0)) == VAR_DECL
+		&& DECL_HAS_VALUE_EXPR_P (TREE_OPERAND (arg0, 0))))
+	  /* APPLE LOCAL end folding of anon union 6120295 */
 	{
 	  /* We know that we're looking at the address of two
 	     non-weak, unaliased, static _DECL nodes.

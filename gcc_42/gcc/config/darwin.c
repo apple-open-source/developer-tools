@@ -229,6 +229,15 @@ machopic_symbol_defined_p (rtx sym_ref)
 	  if (DECL_COMMON (decl))
 	    return false;
 	}
+      /* APPLE LOCAL begin 6077274 */
+      /* Weak functions should always be indirected.  */
+      else if (SYMBOL_REF_FLAGS (sym_ref) & SYMBOL_FLAG_FUNCTION)
+	{
+	  tree decl = SYMBOL_REF_DECL (sym_ref);
+	  if (decl && DECL_WEAK (decl))
+	    return false;
+	}
+      /* APPLE LOCAL end 6077274 */
       return true;
     }
   return false;

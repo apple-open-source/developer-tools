@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | Zend Engine                                                          |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1998-2007 Zend Technologies Ltd. (http://www.zend.com) |
+   | Copyright (c) 1998-2008 Zend Technologies Ltd. (http://www.zend.com) |
    +----------------------------------------------------------------------+
    | This source file is subject to version 2.00 of the Zend license,     |
    | that is bundled with this package in the file LICENSE, and is        | 
@@ -17,7 +17,7 @@
    +----------------------------------------------------------------------+
 */
 
-/* $Id: zend_extensions.c,v 1.48.2.1.2.2 2007/01/01 09:35:46 sebastian Exp $ */
+/* $Id: zend_extensions.c,v 1.48.2.1.2.4 2007/12/31 07:20:02 sebastian Exp $ */
 
 #include "zend_extensions.h"
 
@@ -243,7 +243,7 @@ void *zend_mh_bundle_load(char* bundle_path)
 		return NULL;
 	}
 
-	bundle_handle = NSLinkModule(bundle_image, bundle_path, NSLINKMODULE_OPTION_PRIVATE);
+	bundle_handle = NSLinkModule(bundle_image, bundle_path, NSLINKMODULE_OPTION_NONE);
 	NSDestroyObjectFileImage(bundle_image);
 
 	/* call the init function of the bundle */

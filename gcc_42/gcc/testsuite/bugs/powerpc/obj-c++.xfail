@@ -11,11 +11,3 @@
 ###
 ###------------------------------------------------------------------
 5405050: obj-c++.dg/gnu-runtime-3.mm (test for excess errors)
-#
-# the following fail with -m64 only 
-#
-# the following fail for x86
-#
-# the following fail for x86 with -m64 only
-#
-# the following fail for -mmacosx-version-min=10.5 only

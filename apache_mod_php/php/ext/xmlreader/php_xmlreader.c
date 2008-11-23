@@ -2,7 +2,7 @@
   +----------------------------------------------------------------------+
   | PHP Version 5                                                        |
   +----------------------------------------------------------------------+
-  | Copyright (c) 1997-2007 The PHP Group                                |
+  | Copyright (c) 1997-2008 The PHP Group                                |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 
-/* $Id: php_xmlreader.c,v 1.13.2.14.2.8 2007/07/26 13:20:21 bjori Exp $ */
+/* $Id: php_xmlreader.c,v 1.13.2.14.2.10 2007/12/31 07:20:14 sebastian Exp $ */
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -1060,7 +1060,7 @@ PHP_METHOD(xmlreader, XML)
 	long options = 0;
 	xmlreader_object *intern = NULL;
 	char *source, *uri = NULL, *encoding = NULL;
-	int resolved_path_len;
+	int resolved_path_len, ret = 0;
 	char *directory=NULL, resolved_path[MAXPATHLEN];
 	xmlParserInputBufferPtr inputbfr;
 	xmlTextReaderPtr reader;
@@ -1105,15 +1105,20 @@ PHP_METHOD(xmlreader, XML)
 			xmlFree(uri);
 		}
 		if (reader != NULL) {
-			if (id == NULL) {
-				object_init_ex(return_value, xmlreader_class_entry);
-				intern = (xmlreader_object *)zend_objects_get_address(return_value TSRMLS_CC);
-			} else {
-				RETVAL_TRUE;
+#if LIBXML_VERSION >= 20628
+			ret = xmlTextReaderSetup(reader, NULL, uri, encoding, options);
+#endif
+			if (ret == 0) {
+				if (id == NULL) {
+					object_init_ex(return_value, xmlreader_class_entry);
+					intern = (xmlreader_object *)zend_objects_get_address(return_value TSRMLS_CC);
+				} else {
+					RETVAL_TRUE;
+				}
+				intern->input = inputbfr;
+				intern->ptr = reader;
+				return;
 			}
-			intern->input = inputbfr;
-			intern->ptr = reader;
-			return;
 		}
 	}
 

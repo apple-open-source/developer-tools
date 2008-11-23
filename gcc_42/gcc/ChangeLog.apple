@@ -1,3 +1,116 @@
+2008-09-25  Stuart Hastings  <stuart@apple.com>
+
+	Radar 6025404
+	* config/i386/sse.md (ssse3_pmaddubswv8hi3,
+	  ssse3_pmaddubswv4hi3): Not commutative.
+
+2008-09-23  Stuart Hastings  <stuart@apple.com>
+
+       Radar 6119849
+       * gcc/builtins.c (fold_builtin_classify): Under -ffast-math,
+          finite() should return 1.
+
+2008-09-17  Josh Conner  <jconner@apple.com>
+
+	Radar 6204451
+	* global.c (global_alloc): Remove code that ignores conflicts
+	on single-set tied pseudos.
+
+2008-09-13  Josh Conner  <jconner@apple.com>
+
+	Radar 6214296
+	* config/darwin.h (STARTFILE_SPEC): Don't add crt3.o to the link line
+	if -miphoneos-version-min was specified.
+
+2008-08-27  Josh Conner  <jconner@apple.com>
+
+	Radar 6148015
+	* config/arm/arm.h (ARG_POINTER_CFA_OFFSET): Define.
+	* config/arm/arm.c (arm_expand_prologue): Mark pushes as
+	RTX_FRAME_RELATED_P.
+
+2008-08-25  Josh Conner  <jconner@apple.com>
+
+	Radar 6162387
+	* config/darwin-sections.def (objc_v2_selector_refs_section):
+	Change section type to literal_pointers.
+
+2008-08-11  Jim Grosbach <grosbach@apple.com>
+
+	Radar 6141565
+	* gcc/c-common.c (iasm_constraint_for): fix compiler warning
+
+2008-08-04  Jim Grosbach <grosbach@apple.com>
+
+	Radar 6110622
+	* config/arm/arm.md (soft_muldi3): Missing length attribute
+
+2008-08-4   Jim Grosbach <grosbach@apple.com>
+	Radar 6090616
+	* global.c (set_preference): Add checks to prevent integer
+	underflow of register numbers.
+
+2008-07-22  Josh Conner  <jconner@apple.com>
+
+        Radar 6077274
+        * config/darwin.c (machopic_symbol_defined_p): Return false
+        for a weak function declaration.
+
+2008-07-22  Josh Conner  <jconner@apple.com>
+
+	Radar 6083621
+	* config/arm/arm.c (arm_adjust_insn_length): Add 2 bytes for
+	alignment to 32-bit thumb switch tables.
+
+2008-07-22  Josh Conner  <jconner@apple.com>
+
+        Radar 6067743
+        * config/arm/arm.c (arm_reorg): Move label pad logic into...
+        (get_label_pad): ...here...
+        (create_fix_barrier): ...and call it here, too.
+
+2008-07-15  Josh Conner  <jconner@apple.com>
+
+	Radar 6062215
+	* config/arm/arm.c (arm_encode_call_attribute): Check visibility
+	too.
+	(arm_darwin_encode_section_info): Likewise.
+
+2008-06-25  Josh Conner  <jconner@apple.com>
+
+	Radar 6008578
+	* config/arm/arm.c (arm_reorg): Consider alignment of labels.
+	(arm_function_boundary): New function...
+	* config/arm/arm.h (FUNCTION_BOUNDARY): ...use it.
+
+2008-06-18  Josh Conner  <jconner@apple.com>
+
+	Radar 6013984
+	* config/arm/darwin.h (CC1_SPEC): Ignore -pg.
+
+2008-06-06  Josh Conner  <jconner@apple.com>
+
+	Radar 5920116
+	* config/arm/arm.c (arm_output_mi_thunk): Add longcall
+	handling.  When indirecting, use a non-lazy ptr for weak
+	calls.
+
+2008-06-05  Josh Conner  <jconner@apple.com>
+
+	Radar 5914860
+	* t-darwin (MULTILIB_OPTIONS, MULTILIB_DIRNAMES): Add armv6.
+	(TARGET_LIBGCC2_CFLAGS): Remove armv6.
+	(DARWIN_EXTRA_CRT_BUILD_FLAGS): Remove.
+
+2008-05-27  Josh Conner  <jconner@apple.com>
+
+	Radar 5960553
+	* c.opt (iwithsysroot): Add -iwithsysroot.
+	* c-opts.c (c_common_missing_argument): Likewise.
+	(c_common_handle_option): Likewise.
+	* gcc.h (DEFAULT_WORD_SWITCH_TAKES_ARG): Likewise.
+	* doc/invoke.texi: Describe -iwithsysroot option.
+
 2008-05-15  Josh Conner  <jconner@apple.com>
 
 	Radar 5938756

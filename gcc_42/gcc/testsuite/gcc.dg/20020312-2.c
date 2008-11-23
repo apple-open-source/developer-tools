@@ -7,6 +7,8 @@
    when !flag_pic for most targets.  */
 
 /* { dg-do run } */
+/* APPLE LOCAL 5645908 - don't try to execute on darwin */
+/* { dg-do compile { target *-*-darwin* } } */
 /* { dg-options "-O -fno-pic" } */
 
 extern void abort (void);

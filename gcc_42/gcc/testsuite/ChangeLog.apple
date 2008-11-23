@@ -1,3 +1,85 @@
+2008-09-25  Stuart Hastings  <stuart@apple.com>
+
+	Radar 6025404
+	* gcc.apple/6025404.c: New.
+
+2008-09-23  Stuart Hastings  <stuart@apple.com>
+
+	Radar 6119849
+	* gcc.apple/6119849.c: New.
+
+2008-09-22  Josh Conner  <jconner@apple.com>
+
+	Radar 6204451
+	* objc.dg/6204451.m: New test.
+
+2008-08-28  Stuart Hastings  <stuart@apple.com>
+
+	Radar 4874504
+	* gcc.dg/tree-ssa/gen-vect-11b.c: XFAIL.
+	* gcc.dg/tree-ssa/gen-vect-11c.c: XFAIL.
+
+2008-08-28  Josh Conner  <jconner@apple.com>
+ 
+	Radar 5431739
+	* objc.dg/exceptionCodeGenBug.m: Remove xfail for -m64.
+
+2008-08-28  Josh Conner  <jconner@apple.com>
+
+	Radar 5431747
+	* gcc.c-torture/execute/mayalias-2.x: Remove file.
+	* gcc.target/powerpc/darwin-abi-3.c: Remove xfail.
+	* gcc.target/powerpc/darwin-abi-6.c: Likewise.
+	* gcc.target/powerpc/darwin-abi-7.c: Likewise.
+	* gcc.target/powerpc/darwin-abi-8.c: Likewise.
+	* gcc.target/powerpc/darwin-abi-9.c: Likewise.
+	* gcc.target/powerpc/darwin-abi-10.c: Likewise.
+	* gcc.target/powerpc/darwin-abi-11.c: Likewise.
+	* gcc.target/i386/builtin-apply-mmx.c: Likewise.
+	* gcc.dg/20020103-1.c: Likewise.
+	* gcc.dg/tree-ssa/20040308-1.c: Likewise.
+	* g++.dg/tree-ssa/ivopts-1.C: Likewise.
+	* gcc.dg/vect/vect-ifcvt-1.c: Likewise.
+	* gcc.dg/vect/vect-98.c: Likewise.
+	* gcc.apple/altivec-maltivec-1.c: Remove xfail for -m64.
+	* gcc.apple/altivec-faltivec-1.c: Likewise.
+	* gcc.apple/altivec-faltivec-2.c: Likewise.
+
+2008-08-27  Josh Conner  <jconner@apple.com>
+
+	Radar 5645908
+	* gcc.dg/20020312-2.c: Don't execute on darwin.
+
+2008-08-27  Josh Conner  <jconner@apple.com>
+ 
+	Radar 4874933
+	* gcc.dg/vect/vect-ifcvt-8.c: xfail for darwin.
+
+2008-07-22  Josh Conner  <jconner@apple.com>
+
+        Radar 6077274
+        * gcc.apple/visibility-1.c: New test.
+
+2008-07-15  Josh Conner  <jconner@apple.com>
+
+	Radar 6062215
+	* g++.apple/visibility-3.C: New test.
+
+2008-06-06  Josh Conner  <jconner@apple.com>
+
+	Radar 5920116
+	* g++.apple/thunks[1-4].C: New tests.
+
+2008-05-20  Stuart Hastings  <stuart@apple.com>
+
+	Radar 5774356
+	* testsuite/gcc.apple/5774356.c: Mark as altivec-specific.
+
+2008-05-16  Josh Conner  <jconner@apple.com>
+
+	Radar 5938756
+	* objc.dg/5938756.m: New test.
+
 2008-05-09  Caroline Tice  <ctice@apple.com>
 
 	Radar 5839812

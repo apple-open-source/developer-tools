@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 5                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2007 The PHP Group                                |
+   | Copyright (c) 1997-2008 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -16,7 +16,7 @@
    +----------------------------------------------------------------------+
  */
 
-/* $Id: dir.c,v 1.147.2.3.2.10 2007/08/22 14:59:44 jani Exp $ */
+/* $Id: dir.c,v 1.147.2.3.2.16 2008/03/05 12:10:18 tony2001 Exp $ */
 
 /* {{{ includes/startup/misc */
 
@@ -256,14 +256,16 @@ PHP_FUNCTION(closedir)
 {
 	zval **id, **tmp, *myself;
 	php_stream *dirp;
+	int rsrc_id;
 
 	FETCH_DIRP();
 
-	if (dirp->rsrc_id == DIRG(default_dir)) {
+	rsrc_id = dirp->rsrc_id;
+	zend_list_delete(dirp->rsrc_id);
+
+	if (rsrc_id == DIRG(default_dir)) {
 		php_set_default_dir(-1 TSRMLS_CC);
 	}
-
-	zend_list_delete(dirp->rsrc_id);
 }
 /* }}} */
 
@@ -396,9 +398,15 @@ PHP_FUNCTION(glob)
 	glob_t globbuf;
 	int n;
 	int ret;
+	zend_bool basedir_limit = 0;
 
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s|l", &pattern, &pattern_len, &flags) == FAILURE) {
 		return;
+	}
+
+	if (pattern_len >= MAXPATHLEN) {
+		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Pattern exceeds the maximum allowed length of %d characters", MAXPATHLEN);
+		RETURN_FALSE;
 	}
 
 	if ((GLOB_AVAILABLE_FLAGS & flags) != flags) {
@@ -424,22 +432,7 @@ PHP_FUNCTION(glob)
 	} 
 #endif
 
-	if (PG(safe_mode) || (PG(open_basedir) && *PG(open_basedir))) {
-		int pattern_len = strlen(pattern);
-		char *basename = estrndup(pattern, pattern_len);
-		
-		php_dirname(basename, pattern_len);
-		if (PG(safe_mode) && (!php_checkuid(basename, NULL, CHECKUID_CHECK_FILE_AND_DIR))) {
-			efree(basename);
-			RETURN_FALSE;
-		}
-		if (php_check_open_basedir(basename TSRMLS_CC)) {
-			efree(basename);
-			RETURN_FALSE;
-		}
-		efree(basename);
-	}
-
+	
 	memset(&globbuf, 0, sizeof(glob_t));
 	globbuf.gl_offs = 0;
 	if (0 != (ret = glob(pattern, flags & GLOB_FLAGMASK, NULL, &globbuf))) {
@@ -453,8 +446,7 @@ PHP_FUNCTION(glob)
 			   can be used for simple glob() calls without further error
 			   checking.
 			*/
-			array_init(return_value);
-			return;
+			goto no_results;
 		}
 #endif
 		RETURN_FALSE;
@@ -462,12 +454,29 @@ PHP_FUNCTION(glob)
 
 	/* now catch the FreeBSD style of "no matches" */
 	if (!globbuf.gl_pathc || !globbuf.gl_pathv) {
+no_results:
+		if (PG(safe_mode) || (PG(open_basedir) && *PG(open_basedir))) {
+			struct stat s;
+
+			if (0 != VCWD_STAT(pattern, &s) || S_IFDIR != (s.st_mode & S_IFMT)) {
+				RETURN_FALSE;
+			}
+		}
 		array_init(return_value);
 		return;
 	}
 
 	array_init(return_value);
 	for (n = 0; n < globbuf.gl_pathc; n++) {
+		if (PG(safe_mode) || (PG(open_basedir) && *PG(open_basedir))) {
+			if (PG(safe_mode) && (!php_checkuid_ex(globbuf.gl_pathv[n], NULL, CHECKUID_CHECK_FILE_AND_DIR, CHECKUID_NO_ERRORS))) {
+				basedir_limit = 1;
+				continue;
+			} else if (php_check_open_basedir_ex(globbuf.gl_pathv[n], 0 TSRMLS_CC)) {
+				basedir_limit = 1;
+				continue;
+			}
+		}
 		/* we need to do this everytime since GLOB_ONLYDIR does not guarantee that
 		 * all directories will be filtered. GNU libc documentation states the
 		 * following: 
@@ -491,6 +500,11 @@ PHP_FUNCTION(glob)
 	}
 
 	globfree(&globbuf);
+
+	if (basedir_limit && !zend_hash_num_elements(Z_ARRVAL_P(return_value))) {
+		zval_dtor(return_value);
+		RETURN_FALSE;
+	}
 }
 /* }}} */
 #endif 

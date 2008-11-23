@@ -21,18 +21,13 @@
 3906375: gcc.dg/debug/debug-2.c -gstabs3 -fast scan-assembler xyzzy
 3906375: gcc.dg/debug/debug-2.c -gstabs+ -fast scan-assembler xyzzy
 3906375: gcc.dg/debug/debug-2.c -gstabs+3 -fast scan-assembler xyzzy
-4874933: gcc.dg/vect/vect-ifcvt-8.c scan-tree-dump-times vectorized 1 loops 1
 4875164: gcc.dg/vect/section-anchors-pr27770.c (test for excess errors)
 4875164: gcc.dg/vect/section-anchors-vect-69.c (test for excess errors)
 4875164: gcc.dg/vect/section-anchors-vect-69.c scan-tree-dump-times Alignment of access forced using peeling 4
 4875176: gcc.target/powerpc/stabs-attrib-vect-darwin.c scan-assembler .stabs.*vi:\\(0,[0-9]+\\)=@V
 #
 # x86 only
-4874504: gcc.dg/tree-ssa/gen-vect-11b.c scan-tree-dump-times vectorized 0 loops 1
-4874504: gcc.dg/tree-ssa/gen-vect-11c.c scan-tree-dump-times vectorized 0 loops 1
-4875094: gcc.target/i386/cmov4.c scan-assembler cmov
 4874970: gcc.target/i386/pr21291.c (test for excess errors)
-5066234: gcc.c-torture/execute/builtin-return-address-1.c execution,  -fast
 #
 # -m64 only
 #
@@ -115,20 +110,3 @@
 #
 # -mcpu=G5 only
 4929147: gcc.target/powerpc/20050603-3.c scan-assembler-not inm
-5822514: gcc.apple/4874471.c execution test
-5822514: gcc.apple/apple-altivec-abi-test.c scan-assembler vspltisw v2,1
-5822514: gcc.apple/apple-altivec-abi-test.c scan-assembler vspltisw v3,2
-5822514: gcc.apple/apple-altivec-abi-test.c scan-assembler vspltisw v4,3
-5822514: gcc.apple/apple-altivec-abi-test.c scan-assembler vspltisw v5,4
-5822514: gcc.apple/apple-altivec-abi-test.c scan-assembler vspltisw v6,5
-5822514: gcc.apple/apple-altivec-abi-test.c scan-assembler vspltisw v7,6
-5822514: gcc.apple/apple-altivec-abi-test.c scan-assembler vspltisw v8,7
-5822514: gcc.apple/apple-altivec-abi-test.c scan-assembler vspltisw v9,8
-5822514: gcc.apple/apple-altivec-abi-test.c scan-assembler vspltisw v10,9
-5822514: gcc.apple/apple-altivec-abi-test.c scan-assembler vspltisw v11,10
-5822514: gcc.apple/apple-altivec-abi-test.c scan-assembler vspltisw v12,11
-5822514: gcc.apple/apple-altivec-abi-test.c scan-assembler vspltisw v13,12
-5822514: gcc.apple/cw-altivec-asm-block.c execution test
-5822514: gcc.apple/default-cpu-1.c scan-assembler machine ppc7400
-5822514: gcc.dg/vec_merge_opt_test.c execution test
-5822514: gcc.dg/vec_mergel_opt_test.c execution test

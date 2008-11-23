@@ -3896,6 +3896,22 @@ and caught in another, the class must have default visibility.
 Otherwise the two shared objects will be unable to use the same
 typeinfo node and exception handling will break.
 
+@c APPLE LOCAL begin weak types 5954418
+@item weak
+In C++, attribute weak can be applied to a class to ensure that all
+non-hidden instances of the type are treated as the same type across
+shared library boundaries on platforms (such as darwin and arm aapcs)
+that can emit vtables and the type info meta data as non-comdat
+symbols.  This is useful when the class has a key method and the
+translation unit that contains the key method is used in more than one
+shared library or in a shared library and the application.  Doing this
+results in more expensive startup times.  This attribute is inherited
+by subclasses, so it is only necessary to mark a base type.  The
+typical use would be to mark any types used for throwing across shared
+library boundaries or those used in dynamic_cast operations across a
+shared library boundary.
+@c APPLE LOCAL end weak types 5954418
+
 @subsection ARM Type Attributes
 
 On those ARM targets that support @code{dllimport} (such as Symbian

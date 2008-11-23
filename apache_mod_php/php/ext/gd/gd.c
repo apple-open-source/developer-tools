@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 5                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2007 The PHP Group                                |
+   | Copyright (c) 1997-2008 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -18,7 +18,7 @@
    +----------------------------------------------------------------------+
  */
 
-/* $Id: gd.c,v 1.312.2.20.2.31 2007/08/29 06:26:30 pajoye Exp $ */
+/* $Id: gd.c,v 1.312.2.20.2.34 2008/04/04 17:39:52 felipe Exp $ */
 
 /* gd 1.2 is copyright 1994, 1995, Quest Protein Database Center,
    Cold Spring Harbor Labs. */
@@ -2813,7 +2813,7 @@ static void _php_image_output(INTERNAL_FUNCTION_PARAMETERS, int image_type, char
 		}
 	}
 
-	if ((argc == 2) || (argc > 2 && Z_STRLEN_PP(file))) {
+	if (argc >= 2 && Z_STRLEN_PP(file)) {
 		PHP_GD_CHECK_OPEN_BASEDIR(fn, "Invalid filename");
 
 		fp = VCWD_FOPEN(fn, "wb");
@@ -5178,8 +5178,9 @@ static void php_image_filter_colorize(INTERNAL_FUNCTION_PARAMETERS)
 	zval *SIM;
 	gdImagePtr im_src;
 	long r,g,b,tmp;
+	long a = 0;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "rllll", &SIM, &tmp, &r, &g, &b) == FAILURE) {
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "rllll|l", &SIM, &tmp, &r, &g, &b, &a) == FAILURE) {
 		RETURN_FALSE;
 	}
 
@@ -5189,7 +5190,7 @@ static void php_image_filter_colorize(INTERNAL_FUNCTION_PARAMETERS)
 		RETURN_FALSE;
 	}
 
-	if (gdImageColor(im_src, (int) r, (int) g, (int) b) == 1) {
+	if (gdImageColor(im_src, (int) r, (int) g, (int) b, (int) a) == 1) {
 		RETURN_TRUE;
 	}
 
@@ -5298,7 +5299,7 @@ PHP_FUNCTION(imagefilter)
 		php_image_filter_smooth
 	};
 
-	if (ZEND_NUM_ARGS() < 2 || ZEND_NUM_ARGS() > 5) {
+	if (ZEND_NUM_ARGS() < 2 || ZEND_NUM_ARGS() > 6) {
 		WRONG_PARAM_COUNT;
 	} else if (zend_parse_parameters(2 TSRMLS_CC, "rl", &tmp, &filtertype) == FAILURE) {
 		return;

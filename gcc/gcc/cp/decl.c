@@ -5128,7 +5128,20 @@ cp_finish_decl (tree decl, tree init, tree asmspec_tree, int flags)
 	     initializer.  It is not legal to redeclare a static data
 	     member, so this issue does not arise in that case.  */
 	  if (var_definition_p && TREE_STATIC (decl))
-	    expand_static_init (decl, init); 
+	    /* APPLE LOCAL begin 4.2 backport 6185789 */
+	    {
+              /* If a TREE_READONLY variable needs initialization
+		 at runtime, it is no longer readonly and we need to
+		 avoid MEM_READONLY_P being set on RTL created for it.  */
+	      if (init)
+		{
+		  if (TREE_READONLY (decl))
+		    TREE_READONLY (decl) = 0;
+		  was_readonly = 0;
+		}
+	      expand_static_init (decl, init);
+	    }
+	  /* APPLE LOCAL end 4.2 backport 6185789 */
 	} 
     }
 

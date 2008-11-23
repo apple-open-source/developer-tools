@@ -2,7 +2,7 @@
   +----------------------------------------------------------------------+
   | PHP Version 5                                                        |
   +----------------------------------------------------------------------+
-  | Copyright (c) 1997-2007 The PHP Group                                |
+  | Copyright (c) 1997-2008 The PHP Group                                |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -16,7 +16,7 @@
   +----------------------------------------------------------------------+
 */
 
-/* $Id: php_bz2.h,v 1.7.2.1.2.3 2007/01/01 09:35:48 sebastian Exp $ */
+/* $Id: php_bz2.h,v 1.7.2.1.2.5 2007/12/31 07:20:04 sebastian Exp $ */
 
 #ifndef PHP_BZ2_H
 #define PHP_BZ2_H
@@ -51,7 +51,7 @@ PHP_BZ2_API php_stream *_php_stream_bz2open_from_BZFILE(BZFILE *bz, char *mode, 
 #define php_stream_bz2open_from_BZFILE(bz, mode, innerstream)	_php_stream_bz2open_from_BZFILE((bz), (mode), (innerstream) STREAMS_CC TSRMLS_CC)
 #define php_stream_bz2open(wrapper, path, mode, options, opened_path)	_php_stream_bz2open((wrapper), (path), (mode), (options), (opened_path), NULL STREAMS_CC TSRMLS_CC)
 
-php_stream_filter_factory php_bz2_filter_factory;
+extern php_stream_filter_factory php_bz2_filter_factory;
 extern php_stream_ops php_stream_bz2io_ops;
 #define PHP_STREAM_IS_BZIP2	&php_stream_bz2io_ops
 

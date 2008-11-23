@@ -1,5 +1,6 @@
 /* { dg-do compile { target i?86-*-* x86_64-*-* } } */
-/* { dg-options "-O2 -march=k8" } */
+/* APPLE LOCAL strict alaising off 4875094 */
+/* { dg-options "-O2 -march=k8 -fstrict-aliasing" } */
 /* { dg-final { scan-assembler "cmov" } } */
 
 /* Verify that if conversion happends for memory references.  */
