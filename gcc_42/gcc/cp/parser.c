@@ -442,7 +442,8 @@ cp_lexer_get_preprocessor_token (cp_lexer *lexer ATTRIBUTE_UNUSED ,
 
    /* Get a new token from the preprocessor.  */
   token->type
-    = c_lex_with_flags (&token->u.value, &token->location, &token->flags);
+    /* APPLE LOCAL CW asm blocks C++ comments 6338079 */
+    = c_lex_with_flags (&token->u.value, &token->location, &token->flags, 1);
   token->input_file_stack_index = input_file_stack_tick;
   token->keyword = RID_MAX;
   token->pragma_kind = PRAGMA_NONE;
@@ -542,12 +543,15 @@ cp_lexer_peek_token (cp_lexer *lexer)
   /* APPLE LOCAL begin CW asm blocks */
  top:
   if (flag_ms_asms)
-    while (lexer->next_token->type == CPP_NUMBER
-	   && lexer->next_token->u.value == error_mark_node)
+    if (lexer->next_token->type == CPP_NUMBER
+	&& lexer->next_token->u.value == error_mark_node
+	&& (lexer->next_token->flags & ERROR_DEFERRED))
       {
+	cp_lexer_set_source_position_from_token (lexer->next_token);
+
 	/* This was previously deferred.  */
+      	lexer->next_token->flags ^=  ERROR_DEFERRED;
 	error ("invalid suffix on integer constant");
-	cp_lexer_consume_token (lexer);
       }
   if (!inside_iasm_block)
     {

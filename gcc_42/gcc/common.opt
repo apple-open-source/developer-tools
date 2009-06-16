@@ -535,6 +535,13 @@ ffunction-sections
 Common Report Var(flag_function_sections)
 Place each function into its own section
 
+;; APPLE LOCAL begin 5695218
+fglobal-alloc-prefer-bytes
+Common Report Var(flag_global_alloc_prefer_bytes) Init(1) PerFunc
+Prefer to allocate byte and short candidates before word candidates (x86_32 only)
+
+;; APPLE LOCAL end 5695218
+
 ;; APPLE LOCAL begin ARM conditionally disable local RA
 flocal-alloc
 Common Report Var(flag_local_alloc) Init(1) PerFunc

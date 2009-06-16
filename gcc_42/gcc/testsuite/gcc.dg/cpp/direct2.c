@@ -4,8 +4,8 @@
 /* Test of prohibition on directives which result from macro expansion.
    See also direct2s.c */
 
-/* { dg-do compile } */
-
+/* { dg-do compile } */ /* APPLE LOCAL CW asm blocks 6338079 */
+/* { dg-options "-ansi -pedantic-errors -fno-asm-blocks" } */
 #define HASH #
 #define HASHDEFINE #define
 #define HASHINCLUDE #include

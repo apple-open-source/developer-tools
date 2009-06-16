@@ -49,12 +49,7 @@ RC_ARCHS   = $(shell for i in `file /usr/lib/libSystem.B.dylib | grep 'shared li
 RC_RELEASE = unknown
 RC_VERSION = unknown
 
-ifeq ($(COPY_SOURCES),YES)
 SRCROOT = /tmp/$(ProjectName)/Sources
-else
-SRCROOT = $(shell pwd)
-endif
-
 OBJROOT = /tmp/$(ProjectName)/Build
 SYMROOT = /tmp/$(ProjectName)/Debug
 DSTROOT = /tmp/$(ProjectName)/Release
@@ -87,8 +82,6 @@ BuildDirectory = $(OBJROOT)
 CC_Archs      = $(RC_ARCHS:%=-arch %)
 #CPP_Defines += -DPROJECT_VERSION=\"$(Project)-$(Version)\"
 
-Extra_CC_Flags += $(RC_CFLAGS)
-
 ifneq "$(strip $(CFLAGS))" ""
 Environment += CFLAGS="$(CFLAGS)"
 endif
@@ -111,13 +104,19 @@ ManPageDirectories = /usr/share/man
 # Targets
 ##
 
-.PHONY: all install installhdrs install_headers lazy_installsrc lazy_install_source installsrc install_source build clean recurse
+.PHONY: all install installhdrs install_headers lazy_installsrc lazy_install_source installsrc install_source build clean recurse _targetconfig
 
 all: build
 
 $(DSTROOT): install
 
-install:: install_headers build
+install:: _targetconfig install_headers build
+
+_targetconfig::
+	@PRODUCT="`tconf --product 2>/dev/null`" ; \
+	if [ -z "$$PRODUCT" ]; then \
+	echo "Error: TargetConfig not defined" ; exit 1 ; \
+	else echo "TargetConfig: $$PRODUCT" ; fi
 
 # For RC
 installhdrs:: install_headers
@@ -162,7 +161,7 @@ build:: lazy_install_source
 
 clean::
 	@echo "Cleaning $(Project)..."
-	$(_v) $(RMDIR) -f "$(BuildDirectory)"
+	$(_v) $(RMDIR) -f "$(BuildDirectory)" || true
 
 $(Passed_Targets) $(Extra_Passed_Targets):
 	$(_v) umask $(Install_Mask) ; $(MAKE) -C $(BuildDirectory) $(Environment) $@
@@ -171,9 +170,12 @@ recurse:
 ifdef SubProjects
 	$(_v) for SubProject in $(SubProjects); do				\
 		$(MAKE) -C $$SubProject $(TARGET)				\
+			OBJROOT=$(OBJROOT)					\
+			SYMROOT=$(SYMROOT)					\
+			DSTROOT=$(DSTROOT)					\
 		        BuildDirectory=$(BuildDirectory)/$${SubProject}		\
 		               Sources=$(Sources)/$${SubProject}		\
-		       CoreOSMakefiles=$(CoreOSMakefiles);			\
+		       CoreOSMakefiles=$(CoreOSMakefiles) || exit 1 ;		\
 	      done
 endif
 

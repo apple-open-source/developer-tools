@@ -1,3 +1,14 @@
+2008-09-23  Greg Clayton  <gclayton@apple.com>
+
+	* mi-cmd-stack.c (mi_cmd_stack_list_args): Store the frame id for a
+	given frame before calling list_args_or_locals() in case that function
+	calls a function in the inferior and flushes the cached frames.
+	
+2008-09-10  Greg Clayton  <gclayton@apple.com>
+
+	* mi-cmd-stack.c (mi_cmd_file_list_globals): Use the separate debug
+	file when a full path to a shared library is provided.
+
 2008-05-12  Jim Ingham  <jingham@apple.com>
 
 	* mi-main.c (mi_execute_async_cli_command): In the synchronous

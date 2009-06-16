@@ -3026,7 +3026,8 @@ arm_float_words_big_endian (void)
 void
 arm_init_cumulative_args (CUMULATIVE_ARGS *pcum, tree fntype,
 			  rtx libname  ATTRIBUTE_UNUSED,
-			  tree fndecl ATTRIBUTE_UNUSED)
+/* APPLE LOCAL 6738583 -mlong-calls PIC static functions */
+			  tree fndecl)
 {
   /* On the ARM, the offset starts at 0.  */
   pcum->nregs = 0;
@@ -3046,6 +3047,10 @@ arm_init_cumulative_args (CUMULATIVE_ARGS *pcum, tree fntype,
 	pcum->call_cookie = CALL_SHORT;
       else if (lookup_attribute ("long_call", TYPE_ATTRIBUTES (fntype)))
 	pcum->call_cookie = CALL_LONG;
+      /* APPLE LOCAL begin 6738583 -mlong-calls PIC static functions */
+      else if (fndecl && ! TREE_PUBLIC (fndecl))
+	pcum->call_cookie = CALL_SHORT;
+      /* APPLE LOCAL end 6738583 -mlong-calls PIC static functions */
     }
 
   /* Varargs vectors are treated the same as long long.
@@ -3812,6 +3817,10 @@ legitimize_pic_address (rtx orig, enum machine_mode mode, rtx reg)
       offset = legitimize_pic_address (XEXP (XEXP (orig, 0), 1), Pmode,
 				       base == reg ? 0 : reg);
 
+      /* APPLE LOCAL begin 6327222 */
+      /* #if 0 for now so it's here for reference since this is a tricky
+         bit. */
+#if 0
       if (GET_CODE (offset) == CONST_INT)
 	{
 	  /* The base register doesn't really matter, we only want to
@@ -3825,7 +3834,8 @@ legitimize_pic_address (rtx orig, enum machine_mode mode, rtx reg)
 	  if (GET_CODE (offset) == CONST_INT)
 	    return plus_constant (base, INTVAL (offset));
 	}
-
+#endif
+      /* APPLE LOCAL end 6327222 */
       if (GET_MODE_SIZE (mode) > 4
 	  && (GET_MODE_CLASS (mode) == MODE_INT
 	      || TARGET_SOFT_FLOAT))
@@ -11839,6 +11849,12 @@ arm_get_frame_offsets (void)
       saved = bit_count (thumb_compute_save_reg_mask ()) * 4;
       if (TARGET_BACKTRACE)
 	saved += 16;
+      /* APPLE LOCAL begin 6465387 exception handling interworking VFP save */
+      /* Saved VFP registers in thumb mode aren't accounted for by
+         thumb1_compute_save_reg_mask() */
+      if (current_function_has_nonlocal_label && arm_arch6)
+        saved += 64;
+      /* APPLE LOCAL end 6465387 exception handling interworking VFP save */
     }
 
   /* Saved registers include the stack frame.  */
@@ -14849,6 +14865,15 @@ handle_thumb_unexpanded_epilogue (bool emit)
   if (IS_NAKED (arm_current_func_type ()))
     return bytes;
 
+  /* APPLE LOCAL begin 6465387 exception handling interworking VFP save */
+  if (current_function_has_nonlocal_label && arm_arch6)
+    {
+      bytes += 4;
+      if (emit)
+        asm_fprintf (asm_out_file, "\tblx ___restore_vfp_d8_d15_regs\n");
+    }
+  /* APPLE LOCAL end 6465387 exception handling interworking VFP save */
+
   live_regs_mask = thumb_compute_save_reg_mask ();
   high_regs_pushed = bit_count (live_regs_mask & 0x0f00);
 
@@ -15622,6 +15647,14 @@ handle_thumb_unexpanded_prologue (FILE *f, bool emit)
 	    bytes += handle_thumb_pushpop (f, pushable_regs, 1, &cfa_offset, real_regs_mask, emit);
 	}
     }
+  /* APPLE LOCAL begin 6465387 exception handling interworking VFP save */
+  if (current_function_has_nonlocal_label && arm_arch6)
+    {
+      bytes += 4;
+      if (emit)
+        asm_fprintf (f, "\tblx ___save_vfp_d8_d15_regs\n");
+    }
+  /* APPLE LOCAL end 6465387 exception handling interworking VFP save */
   return bytes;
 }
 

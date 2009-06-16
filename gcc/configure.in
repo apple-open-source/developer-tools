@@ -952,6 +952,8 @@ case "${host}" in
   # APPLE LOCAL begin dynamic-no-pic
   i[[3456789]]86-*-darwin*)
     host_makefile_frag="config/mh-x86-darwin"
+    # APPLE LOCAL 6310626
+    CC="gcc -m32"
     ;;
   # APPLE LOCAL end dynamic-no-pic
   *-*-lynxos*)

@@ -657,6 +657,11 @@ init_optimization_passes (void)
   NEXT_PASS (pass_sms);
   NEXT_PASS (pass_sched);
   NEXT_PASS (pass_local_alloc);
+  /* APPLE LOCAL begin 5695218 */
+#ifdef TARGET_386
+  NEXT_PASS (pass_life3);
+#endif
+  /* APPLE LOCAL end 5695218 */
   NEXT_PASS (pass_global_alloc);
   NEXT_PASS (pass_postreload);
   *p = NULL;

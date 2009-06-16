@@ -386,7 +386,7 @@ c_lex_one_token (c_token *token, c_parser *parser)
   timevar_push (TV_LEX);
 
   /* APPLE LOCAL CW asm blocks */
-  token->type = c_lex_with_flags (&token->value, &token->location, &token->flags);
+  token->type = c_lex_with_flags (&token->value, &token->location, &token->flags, 0);
   token->id_kind = C_ID_NONE;
   token->keyword = RID_MAX;
   token->pragma_kind = PRAGMA_NONE;
@@ -5461,15 +5461,6 @@ c_parser_postfix_expression (c_parser *parser)
   switch (c_parser_peek_token (parser)->type)
     {
     case CPP_NUMBER:
-      /* APPLE LOCAL begin CW asm blocks (in 4.2 ak) */
-      if (cpp_get_options (parse_in)->h_suffix
-	  && c_parser_peek_token (parser)->value == error_mark_node)
-	{
-	  /* This was previously deferred.  */
-	  cpp_error (parse_in, CPP_DL_ERROR, "invalid suffix on integer constant");
-	  c_parser_consume_token (parser);
-	}
-      /* APPLE LOCAL end CW asm blocks (in 4.2 ak) */
     case CPP_CHAR:
     case CPP_WCHAR:
       expr.value = c_parser_peek_token (parser)->value;
@@ -6426,7 +6417,11 @@ c_parser_objc_property_declaration (c_parser *parser)
   objc_set_property_attr (0, NULL_TREE);
   c_parser_objc_property_attr_decl (parser);
   objc_property_attr_context = 0;
+  /* APPLE LOCAL weak_import on property 6676828 */
+  note_objc_property_decl_context ();
   prop = c_parser_component_decl (parser);
+  /* APPLE LOCAL weak_import on property 6676828 */
+  note_end_objc_property_decl_context ();
   /* Comma-separated properties are chained together in
      reverse order; add them one by one.  */
   prop = nreverse (prop);
@@ -9214,7 +9209,9 @@ c_parser_iasm_statement (c_parser* parser)
 	{
 	  /* (in 4.2 an) */
 	  aname = c_parser_iasm_identifier (parser);
-	  if (c_parser_next_token_is (parser, CPP_COLON))
+	  if (aname == error_mark_node)
+	    c_parser_consume_token (parser);
+	  else if (c_parser_next_token_is (parser, CPP_COLON))
 	    {
 	      c_parser_consume_token (parser);
 	      iasm_label (aname, false);

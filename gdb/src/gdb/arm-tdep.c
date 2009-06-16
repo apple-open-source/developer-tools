@@ -3207,19 +3207,19 @@ condition_true (uint32_t cond, uint32_t status_reg)
     case INST_VC:
       return ((status_reg & FLAG_V) == 0);
     case INST_HI:
-      return ((status_reg & (FLAG_C | FLAG_Z)) == FLAG_C);
+      return  ((status_reg & FLAG_C) != 0 && (status_reg & FLAG_Z) == 0)
     case INST_LS:
-      return ((status_reg & (FLAG_C | FLAG_Z)) != FLAG_C);
+      return !((status_reg & FLAG_C) != 0 && (status_reg & FLAG_Z) == 0);
     case INST_GE:
-      return (((status_reg & FLAG_N) == 0) == ((status_reg & FLAG_V) == 0));
+      return  (((status_reg & FLAG_N) == 0) == ((status_reg & FLAG_V) == 0));
     case INST_LT:
-      return (((status_reg & FLAG_N) == 0) != ((status_reg & FLAG_V) == 0));
+      return !(((status_reg & FLAG_N) == 0) == ((status_reg & FLAG_V) == 0));
     case INST_GT:
-      return (((status_reg & FLAG_Z) == 0) &&
+      return  (((status_reg & FLAG_Z) == 0) &&
 	      (((status_reg & FLAG_N) == 0) == ((status_reg & FLAG_V) == 0)));
     case INST_LE:
-      return (((status_reg & FLAG_Z) != 0) ||
-	      (((status_reg & FLAG_N) == 0) != ((status_reg & FLAG_V) == 0)));
+      return !(((status_reg & FLAG_Z) == 0) &&
+	      (((status_reg & FLAG_N) == 0) == ((status_reg & FLAG_V) == 0)));
     }
   return 1;
 }

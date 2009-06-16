@@ -1839,7 +1839,8 @@ objc_build_compound_setter_call (tree receiver, tree prop_ident, tree rhs)
          and in accordance with C99 rules we generate: type temp;
          (temp = rhs, [lhs Setter:temp], temp) */
       /* APPLE LOCAL begin radar 5279122 */
-      rhs = default_conversion (rhs);
+      /* APPLE LOCAL radar 6264448 */
+      /* rhs = default_conversion (rhs);  removed */
       temp = objc_create_named_tmp_var (TREE_TYPE (rhs), "prop");
       /* APPLE LOCAL end radar 5279122 */
       bind = build3 (BIND_EXPR, void_type_node, temp, NULL, NULL);
@@ -1848,6 +1849,12 @@ objc_build_compound_setter_call (tree receiver, tree prop_ident, tree rhs)
       comma_exp = build_modify_expr (temp, NOP_EXPR, rhs);
       comma_exp = build_compound_expr (comma_exp,
 		    objc_setter_func_call (receiver, prop_ident, temp));
+      /* APPLE LOCAL begin radar 6264448 */
+      /* conversion of 'temp' moved *after* it is passed ar argument to build
+         setter call. This is because its type must match the setter's argument
+         type. */
+      temp = default_conversion (temp);
+      /* APPLE LOCAL end radar 6264448 */
     }
   else
     {
@@ -12306,7 +12313,10 @@ objc_delta_format_args (tree format)
   if (first_arg_num_expr && TREE_CODE (first_arg_num_expr) == INTEGER_CST)
     {
       val = TREE_INT_CST_LOW (first_arg_num_expr);
-      TREE_VALUE (TREE_CHAIN (TREE_CHAIN (args))) = build_int_cst (NULL_TREE, val+2);
+      /* APPLE LOCAL begin radar 6157135 */
+      if (val != 0)
+        TREE_VALUE (TREE_CHAIN (TREE_CHAIN (args))) = build_int_cst (NULL_TREE, val+2);
+      /* APPLE LOCAL end radar 6157135 */
     }
   return format;
 }
@@ -18234,6 +18244,10 @@ generate_objc_image_info (void)
   if (flag_objc_gc_only)
     flags |= 6;
   /* APPLE LOCAL end radar 4810609 */
+  /* APPLE LOCAL begin radar 6806369 */
+  if (flag_objc_abi == 2)
+    flags |= 16;
+  /* APPLE LOCAL end radar 6806369 */
 
   /* APPLE LOCAL begin radar 4810587 */
   decl = build_decl (VAR_DECL, get_identifier ("_OBJC_IMAGE_INFO"), 
@@ -19015,6 +19029,20 @@ void objc_declare_property_impl (int impl_code, tree tree_list)
 		      tree ivar_type = DECL_BIT_FIELD_TYPE (ivar_decl) 
 					 ? DECL_BIT_FIELD_TYPE (ivar_decl) 
 					 : TREE_TYPE (ivar_decl);
+		      /* APPLE LOCAL begin radar 5435299 - radar 6825962 */
+                      if (flag_objc_abi == 2) {
+                        /* In ObjC2 abi, it is illegal when a @synthesize with no named ivar
+                           does not have a matching ivar in its class but some superclass ivar
+                           already has the desired name */
+                        tree record = CLASS_STATIC_TEMPLATE (class);
+                        if (record && record != DECL_CONTEXT (ivar_decl))
+                          error ("property %qs attempting to use ivar %qs declared in super class of %qs",
+                                 IDENTIFIER_POINTER (property_name),
+                                 IDENTIFIER_POINTER (ivar_name),
+                                 IDENTIFIER_POINTER (OBJC_TYPE_NAME (record)));
+                      }
+                      /* APPLE LOCAL end radar 5435299 - radar 6825962 */
+
 		      if (comptypes (ivar_type, TREE_TYPE (property_decl)) != 1
 			  && !objc_compare_types (TREE_TYPE (property_decl), ivar_type, -5, NULL_TREE))
 		      /* APPLE LOCAL end radar 5389292 */

@@ -5045,6 +5045,16 @@ handle_weak_attribute (tree *node, tree name,
       || TREE_CODE (*node) == VAR_DECL)
     declare_weak (*node);
   /* APPLE LOCAL begin weak types 5954418 */
+  else if (!DECL_P (*node)
+	   /* If the weak flag can be associated with something else,
+	      prefer that. */
+	   && (flags & (ATTR_FLAG_FUNCTION_NEXT
+			|ATTR_FLAG_DECL_NEXT
+			|ATTR_FLAG_ARRAY_NEXT)))
+    {
+      *no_add_attrs = true;
+      return tree_cons (name, args, NULL_TREE);
+    }
   else if (! targetm.cxx.class_data_always_comdat ()
 	   && TREE_CODE (*node) == RECORD_TYPE)
     {

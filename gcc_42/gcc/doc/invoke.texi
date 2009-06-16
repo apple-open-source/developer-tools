@@ -216,6 +216,10 @@ in the following sections.
 -Wnewline-eof (APPLE ONLY) @gol
 @c APPLE LOCAL -Wno-altivec-long-deprecated --ilr **
 -Wno-altivec-long-deprecated (APPLE ONLY)
+@c APPLE LOCAL begin 5695218
+-fglobal-alloc-prefer-bytes (APPLE ONLY)
+-fno-global-alloc-prefer-bytes (APPLE ONLY)
+@c APPLE LOCAL end 5695218
 @c APPLE LOCAL fwritable strings
 -funsigned-bitfields  -funsigned-char  -fwritable-strings}
 
@@ -281,6 +285,8 @@ Objective-C and Objective-C++ Dialects}.
 -Wfatal-errors  -Wfloat-equal  -Wformat  -Wformat=2 @gol
 -Wno-format-extra-args -Wformat-nonliteral @gol
 -Wformat-security  -Wformat-y2k @gol
+@c APPLE LOCAL Wglobal-constructors 6324584
+-Wglobal-constructors @gol
 -Wimplicit  -Wimplicit-function-declaration  -Wimplicit-int @gol
 -Wimport  -Wno-import  -Winit-self  -Winline @gol
 -Wno-int-to-pointer-cast @gol
@@ -1643,6 +1649,18 @@ Warn if constant CFString objects contain non-portable characters
 (default behavior)
 @c APPLE LOCAL end radar 3506309
 
+@c APPLE LOCAL begin 5695218
+@item -fglobal-alloc-prefer-bytes
+@item -fno-global-alloc-prefer-bytes
+@opindex fglobal-alloc-prefer-bytes
+For the x86_32 architecture, prefer byte or short values to word
+values during global register allocation.  Some of the registers on
+this target can't be used with values smaller than a 32-bit word;
+allocating these values earlier increases the chance they will get a
+byte-capable (or short-capable) register.  Ignored for other targets.
+Defaults on with global register allocation (@code{-Os}, @code{-O2},
+or @code{-O3}).  (APPLE ONLY)
+@c APPLE LOCAL end 5695218
 @c APPLE LOCAL begin fwritable strings. 
 @item -fwritable-strings
 @opindex fwritable-strings
@@ -2813,6 +2831,15 @@ requiring a non-null value by the @code{nonnull} function attribute.
 
 @option{-Wnonnull} is included in @option{-Wall} and @option{-Wformat}.  It
 can be disabled with the @option{-Wno-nonnull} option.
+
+@c APPLE LOCAL begin Wglobal-constructors 6324584
+@item -Wglobal-constructors
+@opindex Wglobal-constructors
+Warn about namespace scope data that requires construction or
+destruction, or functions that use the constructor attribute or the
+destructor attribute.  Additionally warn if the Objective-C GNU
+runtime is used to initialize various metadata.
+@c APPLE LOCAL end Wglobal-constructors 6324584
 
 @item -Winit-self @r{(C, C++, Objective-C and Objective-C++ only)}
 @opindex Winit-self

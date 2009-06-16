@@ -1,4 +1,4 @@
-# Developer Tools 3.1.2 BlackOpal9M2621
+# Developer Tools 3.1.3 WhiteOpal9M2736
 adv_cmds	118	Other
 amavisd	110	Other
 apache	729	Other
@@ -73,9 +73,9 @@ bison1	1	Other
 bless	60	Other
 BootCache	40	Other
 bootp	170	Other
-bootstrap_cmds	60	Other
+bootstrap_cmds	68	Other
 BootX	81	Other
-bsdmake	23	Other
+bsdmake	24	Other
 bsm	13	Other
 bzip2	16	Other
 cctools	698.1	Other
@@ -87,7 +87,7 @@ clamav	116	Other
 CommonCrypto	32207	Other
 configd	204	Other
 copyfile	41	Other
-CoreOSMakefiles	40	Other
+CoreOSMakefiles	61	Other
 CPAN	20	Other
 CPANInternal	32	Other
 CrackLib	30889	Other
@@ -107,7 +107,7 @@ DirectoryService	514	Other
 DiskArbitration	182	Other
 diskdev_cmds	419	Other
 disklabel	2	Other
-distcc	1088	Other
+distcc	1160	Other
 doc_cmds	47	Other
 drvAppleCMD646Root	104.2.2	Other
 DSPasswordServerPlugin	206	Other
@@ -128,12 +128,12 @@ file_cmds	184	Other
 files	520.1	Other
 flex	20.3	Other
 freeradius	11	Other
-gcc	5490	Other
-gcc_42	5566	Other
+gcc	5493	Other
+gcc_42	5574	Other
 gcc_os	1823	Other
 gcc_select	66	Other
 gccfast	1626	Other
-gdb	962	Other
+gdb	966	Other
 gdbforcw	6	Other
 glibtool	12	Other
 gm4	12	Other
@@ -183,7 +183,7 @@ IOUSBMassStorageClass	200.0.3	Other
 ipsec	34	Other
 ipv6configuration	27	Other
 isoutil	34	Other
-jam	1056	Other
+jam	1160	Other
 JavaScriptCore	5523.10.3	Other
 JavaScriptGlue	5523.5	Other
 Kerberos	75.9	Other
@@ -365,10 +365,10 @@ webdavfs	252	Other
 wxWidgets	11	Other
 X11apps	22	Other
 X11fonts	8	Other
-X11libs	21.0.1	Other
+X11libs	21.0.3	Other
 X11misc	6	Other
-X11proto	20.0.1	Other
-X11server	53	Other
+X11proto	20.0.2	Other
+X11server	48.1	Other
 xar	28	Other
 xelf	1	Other
 xnu	1228.0.90	Other

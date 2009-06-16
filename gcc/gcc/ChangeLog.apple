@@ -1,3 +1,23 @@
+2009-01-30  Bob Wilson  <bob.wilson@apple.com>
+
+	Backport from 4_2:
+	2009-01-29  Josh Conner  <jconner@apple.com>
+	Radar 6186914, 6541440
+	* dwarf2out.c (dwarf_stack_op_name): Handle DW_OP_bit_piece.
+	(size_of_loc_descr, output_loc_operands): Likewise.
+	(reg_loc_descriptor): Call TARGET_DWARF2_REG_HANDLER if it is defined.
+	* config/arm/arm.h (TARGET_DWARF2_REG_HANDLER): Define.
+
+2008-10-21  Josh Conner  <jconner@apple.com>
+
+	Radar 6071851
+	Backport from 4_2:
+	2007-12-14  Josh Conner  <jconner@apple.com>
+        Radar 5635246
+        * final.c (calculate_alignments): New function.
+        (shorten_branches): Move calculations of uid_align into
+        calculate_alignments.  Invoke when alignments change.
+
 2008-09-22  Stuart Hastings  <stuart@apple.com>
 
 	Radar 6185789

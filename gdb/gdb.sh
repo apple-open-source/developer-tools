@@ -54,15 +54,15 @@ unset DYLD_INSERT_LIBRARIES
 host_architecture=`/usr/bin/arch 2>/dev/null` || host_architecture=""
 
 if [ -z "$host_architecture" ]; then
-    echo "There was an error executing 'arch(1)'; assuming 'ppc'.";
-    host_architecture="ppc";
+    echo "There was an error executing 'arch(1)'; assuming 'i386'.";
+    host_architecture="i386";
 fi
 
 
 case "$1" in
-  --help)
-    echo "  --translate        Debug applications running under translate." >&2
-    echo "  -arch i386|ppc     Specify a gdb targetting either ppc or i386" >&2
+ --help)
+    echo "  --translate        Debug applications running under translation." >&2
+    echo "  -arch i386|armv6|x86_64|ppc     Specify a gdb targetting a specific architecture" >&2
     ;;
   -arch=* | -a=* | --arch=*)
     requested_architecture=`echo "$1" | sed 's,^[^=]*=,,'`
@@ -110,7 +110,79 @@ if [ -n "$requested_architecture" ]
 then
   architecture_to_use="$requested_architecture"
 else
-  architecture_to_use="$host_architecture"
+  # No architecture was specified. We will try to find the executable
+  # or a core file in the list of arguments, and launch the correct
+  # gdb for the job. If there are multiple architectures in the executable,
+  # we will search for the architecture that matches the host architecture.
+  # If all this searching doesn't produce a match, we will use a gdb that
+  # matches the host architecture by default.
+  best_arch=
+  exec_file=
+  core_file=
+  for arg in "$@"
+  do
+    case "$arg" in
+      -*)
+        # Skip all option arguments
+        ;;
+      *)
+        # Call file to determine the file type of the argument
+        file_result=`file "$arg"`;
+        case "$file_result" in
+          *Mach-O*core*)
+            core_file=$arg
+            ;;
+          *Mach-O*)
+            exec_file=$arg
+            ;;
+          *)
+            if [ -x "$arg" ]; then
+              exec_file="$arg"
+            fi
+            ;;
+        esac
+        ;;
+    esac
+  done
+
+  # Get a list of possible architectures in FILE_ARCHS.
+  # If we have a core file, we must use it to determine the architecture,
+  # else we use the architectures in the executable file.
+  file_archs=
+  if [ -n "$core_file" ]; then
+    file_archs=`file "$core_file" | awk '{ print $NF }'`
+  else
+    if [ -n "$exec_file" ]; then
+      file_archs=`file "$exec_file" | grep -v universal | awk '{ print $NF }'`
+    fi
+  fi
+
+  # Iterate through the architectures and try and find the best match.
+  for file_arch in $file_archs 
+  do
+    # If we don't have any best architecture set yet, use this in case
+    # none of them match the host architecture.
+    if [ -z "$best_arch" ]; then
+      best_arch="$file_arch"
+    fi
+
+    # See if the file architecture matches the host, and if so set the
+    # best architecture to that.
+    if [ "$file_arch" = "$host_architecture" ]; then
+      best_arch="$file_arch"
+    fi
+  done
+
+  case "$best_arch" in
+    ppc* | i386 | x86_64 | arm*)
+      # We found a plausible architecture and we will use it
+      architecture_to_use="$best_arch"
+      ;;
+    *)
+      # We did not find a plausible architecture, use the host architecture
+      architecture_to_use="$host_architecture"
+      ;;
+  esac
 fi
 
 # If GDB_ROOT is not set, then figure it out
@@ -127,49 +199,47 @@ then
   fi
   gdb_bin_dirname=`dirname "$gdb_bin"`
   GDB_ROOT=`cd "$gdb_bin_dirname"/../.. ; pwd`
-  if [ $"GDB_ROOT" = "/" ]
+  if [ "$GDB_ROOT" = "/" ]
       then
         GDB_ROOT=
   fi
 fi
 
 case "$architecture_to_use" in
-    ppc*)
-        gdb="${GDB_ROOT}/usr/libexec/gdb/gdb-powerpc-apple-darwin"
-        ;;
-    i386 | x86_64)
-        gdb="${GDB_ROOT}/usr/libexec/gdb/gdb-i386-apple-darwin"
-        ;;
-    arm)
-        gdb="${GDB_ROOT}/usr/libexec/gdb/gdb-arm-apple-darwin"
-        ;;
-    armv6)
-        gdb="${GDB_ROOT}/usr/libexec/gdb/gdb-arm-apple-darwin"
-        osabiopts="--osabi DarwinV6"
-        ;;
-    *)
-        echo "Unknown architecture '$architecture_to_use'; using 'ppc' instead.";
-        gdb="${GDB_ROOT}/usr/libexec/gdb/gdb-powerpc-apple-darwin"
-        ;;
-esac
-
-# When running under CodeWarrior we want to invoke a gdb binary
-# specifically intended/qualified for its use.
-
-parent=`ps -Awwwo pid,command | 
-          awk -v ppid=$PPID '{if ($1 == ppid ) {print}}' |
-          sed -e 's,^ *,,' -e 's,[^ ]* *,,'`
-if [ -n "$parent" ]
-then
-  case "$parent" in
-    *CodeWarrior*)
-      if [ -x "${GDB_ROOT}/usr/libexec/gdb/gdb-for-codewarrior" ]
-      then
-        gdb="${GDB_ROOT}/usr/libexec/gdb/gdb-for-codewarrior"
-      fi
+  ppc*)
+    # Make sure we specify the architecture to gdb when launching if the
+    # gdb can handle both 32 and 64 bit variants.
+    if [ -z "$requested_architecture" ]; then
+      requested_architecture=$architecture_to_use;
+    fi
+    gdb="${GDB_ROOT}/usr/libexec/gdb/gdb-powerpc-apple-darwin"
     ;;
-  esac
-fi
+  i386 | x86_64)
+    # Make sure we specify the architecture to gdb when launching if the
+    # gdb can handle both 32 and 64 bit variants.
+    if [ -z "$requested_architecture" ]; then
+      requested_architecture=$architecture_to_use;
+    fi
+    gdb="${GDB_ROOT}/usr/libexec/gdb/gdb-i386-apple-darwin"
+    ;;
+  arm*)
+    gdb="${GDB_ROOT}/usr/libexec/gdb/gdb-arm-apple-darwin"
+      case "$architecture_to_use" in
+        armv6) 
+          osabiopts="--osabi DarwinV6" 
+          ;;
+        *)
+          # Make the REQUESTED_ARCHITECTURE the empty string so
+          # we can let gdb auto-detect the cpu type and subtype
+          requested_architecture=""
+          ;;
+      esac
+      ;;
+  *)
+    echo "Unknown architecture '$architecture_to_use'; using 'ppc' instead.";
+    gdb="${GDB_ROOT}/usr/libexec/gdb/gdb-powerpc-apple-darwin"
+    ;;
+esac
 
 if [ ! -x "$gdb" ]; then
     echo "Unable to start GDB: cannot find binary in '$gdb'"

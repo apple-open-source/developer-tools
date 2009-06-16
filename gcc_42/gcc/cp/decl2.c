@@ -2759,6 +2759,20 @@ does_nothing_p (tree exp)
 }
 /* APPLE LOCAL end elide global inits 3814991 */
 
+/* APPLE LOCAL begin Wglobal-constructors 6324584 */
+static void
+warn_init (tree decl)
+{
+  warning (OPT_Wglobal_constructors, "%J%qD requires global construction", decl, decl);
+}
+
+static void
+warn_deinit (tree decl)
+{
+  warning (OPT_Wglobal_constructors, "%J%qD requires global destruction", decl, decl);
+}
+/* APPLE LOCAL end Wglobal-constructors 6324584 */
+
 /* Set up to handle the initialization or destruction of DECL.  If
    INITP is nonzero, we are initializing the variable.  Otherwise, we
    are destroying it.  */
@@ -2817,9 +2831,17 @@ one_static_initialization_or_destruction (tree decl, tree init, bool initp,
       /* APPLE LOCAL begin elide global inits 5642351 */
       /* We can't avoid running the guard code.  */
       if (initp)
-	pi->initializations_p = 1;
+	{
+	  pi->initializations_p = 1;
+	  /* APPLE LOCAL Wglobal-constructors 6324584 */
+	  warn_init (decl);
+	}
       else
-	pi->destructions_p = 1;
+	{
+	  pi->destructions_p = 1;
+	  /* APPLE LOCAL Wglobal-constructors 6324584 */
+	  warn_deinit (decl);
+	}
       /* APPLE LOCAL end elide global inits 5642351 */
 
       /* When using __cxa_atexit, we just check the GUARD as we would
@@ -2872,6 +2894,8 @@ one_static_initialization_or_destruction (tree decl, tree init, bool initp,
 	  if (!does_nothing_p (init))
 	    {
 	      pi->initializations_p = 1;
+	      /* APPLE LOCAL Wglobal-constructors 6324584 */
+	      if (!guard) warn_init (decl);
 	      finish_expr_stmt (init);
 	    }
 	}
@@ -2883,6 +2907,11 @@ one_static_initialization_or_destruction (tree decl, tree init, bool initp,
 	/* APPLE LOCAL begin elide global inits 5642351 */
 	{
 	  pi->initializations_p = 1;
+	  /* APPLE LOCAL begin Wglobal-constructors 6324584 */
+	  if (!guard
+	      && !TYPE_HAS_TRIVIAL_DESTRUCTOR (TREE_TYPE (decl)))
+	    warn_deinit (decl);
+	  /* APPLE LOCAL end Wglobal-constructors 6324584 */
 	  finish_expr_stmt (register_dtor_fn (decl));
 	}
       /* APPLE LOCAL end global inits 5642351 */
@@ -2891,6 +2920,8 @@ one_static_initialization_or_destruction (tree decl, tree init, bool initp,
     /* APPLE LOCAL begin elide global inits 5642351 */
     {
       pi->destructions_p = 1;
+      /* APPLE LOCAL Wglobal-constructors 6324584 */
+      if (!guard) warn_deinit (decl);
       finish_expr_stmt (build_cleanup (decl));
     }
   /* APPLE LOCAL end global inits 5642351 */
@@ -3102,6 +3133,10 @@ generate_ctor_or_dtor_function (bool constructor_p, int priority,
     {
       body = start_objects (function_key, priority);
       static_ctors = objc_generate_static_init_call (static_ctors);
+      /* APPLE LOCAL begin Wglobal-constructors 6324584 */
+      warning (OPT_Wglobal_constructors,
+	       "GNU Objective-C runtime requires global initialization");
+      /* APPLE LOCAL end Wglobal-constructors 6324584 */
     }
 
   /* Call the static storage duration function with appropriate
@@ -3136,6 +3171,13 @@ generate_ctor_or_dtor_function (bool constructor_p, int priority,
 	   fns = TREE_CHAIN (fns))
 	{
 	  fndecl = TREE_VALUE (fns);
+
+	  /* APPLE LOCAL begin Wglobal-constructors 6324584 */
+	  if (constructor_p)
+	    warn_init (fndecl);
+	  else
+	    warn_deinit (fndecl);
+	  /* APPLE LOCAL end Wglobal-constructors 6324584 */
 
 	  /* Calls to pure/const functions will expand to nothing.  */
 	  if (! (flags_from_decl_or_type (fndecl) & (ECF_CONST | ECF_PURE)))

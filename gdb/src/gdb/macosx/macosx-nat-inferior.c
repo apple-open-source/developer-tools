@@ -2079,7 +2079,7 @@ macosx_ptrace_him (int pid)
     }
 }
 
-#ifdef TARGET_ARM
+#if defined (TARGET_ARM)
 /* This version of macosx_child_create_inferior is needed to work
    around the fact that the task port doesn't persist across a
    fork/exec.  It would be nice if we could just switch to the new
@@ -2475,7 +2475,8 @@ static char *macosx_unsafe_functions[] = {
   "free",
   "szone_malloc",
   "szone_free",
-  "_class_lookupMethodAndLoadCache"
+  "_class_lookupMethodAndLoadCache",
+  "look_up_class"
 };
 
 static regex_t *macosx_unsafe_patterns = NULL;

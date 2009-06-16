@@ -10,7 +10,6 @@
 ### file and make sure the Radar is closed.
 ###
 ###------------------------------------------------------------------
-5066141: gcc.dg/pr30643.c scan-assembler-not undefined
 #
 # ppc only
 3906375: gcc.dg/debug/debug-1.c -gstabs -fast scan-assembler xyzzy
@@ -68,45 +67,6 @@
 3904235: gcc.dg/wtr-unary-plus-1.c unary plus operator (test for warnings, line 13)
 5275911: gcc.dg/invalid-call-1.c non-compatible type (test for warnings, line 18)
 0000000: compiler driver --coverage option(s) (compiler options)
-#
-# -fasm-blocks only
-5087183: gcc.dg/cpp/19951227-1.c  (test for errors, line 2)
-5087183: gcc.dg/cpp/direct2.c non-include (test for errors, line 13)
-5087183: gcc.dg/cpp/direct2s.c non-include (test for errors, line 15)
-5087183: gcc.dg/cpp/if-1.c invalid number (test for errors, line 12)
-5087183: gcc.dg/cpp/if-1.c invalid number (test for errors, line 15)
-5087183: gcc.dg/cpp/if-1.c invalid number (test for errors, line 18)
-5087183: gcc.dg/cpp/if-1.c too many suffixes (test for errors, line 28)
-5087183: gcc.dg/cpp/if-1.c too many suffixes (test for errors, line 31)
-5087183: gcc.dg/cpp/if-1.c u between ls (test for errors, line 34)
-5087183: gcc.dg/cpp/multiline-2.c (test for excess errors)
-5087183: gcc.dg/cpp/paste4.c (test for excess errors)
-5087183: gcc.dg/c90-hexfloat-1.c (test for excess errors)
-5087183: gcc.dg/dollar.c  (test for errors, line 9)
-5087183: gcc.dg/dollar.c (test for excess errors)
-5087183: gcc.dg/fold-nonneg-1.c (test for excess errors)
-5087183: gcc.dg/pr27428-1.c (test for excess errors)
-5087183: gcc.dg/noncompile/const-ll-1.c  -O0  error for LUL suffix (test for errors, line 23)
-5087183: gcc.dg/noncompile/const-ll-1.c  -O0  error for Ll suffix (test for errors, line 24)
-5087183: gcc.dg/noncompile/const-ll-1.c  -O0  (test for excess errors)
-5087183: gcc.dg/noncompile/const-ll-1.c  -O1  error for LUL suffix (test for errors, line 23)
-5087183: gcc.dg/noncompile/const-ll-1.c  -O1  error for Ll suffix (test for errors, line 24)
-5087183: gcc.dg/noncompile/const-ll-1.c  -O1  (test for excess errors)
-5087183: gcc.dg/noncompile/const-ll-1.c  -O2  error for LUL suffix (test for errors, line 23)
-5087183: gcc.dg/noncompile/const-ll-1.c  -O2  error for Ll suffix (test for errors, line 24)
-5087183: gcc.dg/noncompile/const-ll-1.c  -O2  (test for excess errors)
-5087183: gcc.dg/noncompile/const-ll-1.c  -O3 -fomit-frame-pointer  error for LUL suffix (test for errors, line 23)
-5087183: gcc.dg/noncompile/const-ll-1.c  -O3 -fomit-frame-pointer  error for Ll suffix (test for errors, line 24)
-5087183: gcc.dg/noncompile/const-ll-1.c  -O3 -fomit-frame-pointer  (test for excess errors)
-5087183: gcc.dg/noncompile/const-ll-1.c  -O3 -g  error for LUL suffix (test for errors, line 23)
-5087183: gcc.dg/noncompile/const-ll-1.c  -O3 -g  error for Ll suffix (test for errors, line 24)
-5087183: gcc.dg/noncompile/const-ll-1.c  -O3 -g  (test for excess errors)
-5087183: gcc.dg/noncompile/const-ll-1.c  -Os  error for LUL suffix (test for errors, line 23)
-5087183: gcc.dg/noncompile/const-ll-1.c  -Os  error for Ll suffix (test for errors, line 24)
-5087183: gcc.dg/noncompile/const-ll-1.c  -Os  (test for excess errors)
-5087183: gcc.dg/noncompile/const-ll-1.c  -fast  error for LUL suffix (test for errors, line 23)
-5087183: gcc.dg/noncompile/const-ll-1.c  -fast  error for Ll suffix (test for errors, line 24)
-5087183: gcc.dg/noncompile/const-ll-1.c  -fast  (test for excess errors)
 #
 # -mcpu=G5 only
 4929147: gcc.target/powerpc/20050603-3.c scan-assembler-not inm

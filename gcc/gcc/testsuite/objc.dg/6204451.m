@@ -1,4 +1,4 @@
-/* APPLE LOCAL 6204451 */
+/* APPLE LOCAL file 6204451 */
 /* { dg-options "-O1 -framework Foundation" } */
 /* { dg-do run } */
 

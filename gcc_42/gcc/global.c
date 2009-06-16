@@ -463,17 +463,17 @@ global_alloc (void)
     {
       bool cannot_elim
 	= (! CAN_ELIMINATE (eliminables[i].from, eliminables[i].to)
-/* APPLE LOCAL begin ARM prefer SP to FP */
+	   /* APPLE LOCAL begin ARM prefer SP to FP */
 #ifdef ALLOW_ELIMINATION_TO_SP
 	   /* There are certain performance benefits for some targets
 	      in using SP instead of FP.  CAN_ELIMINATE must prevent us
 	      from using SP when we can't so there's no need for us to
 	      prevent elimination to the SP.  */
-	   );
 #else
-	   || (eliminables[i].to == STACK_POINTER_REGNUM && need_fp));
+	   || (eliminables[i].to == STACK_POINTER_REGNUM && need_fp)
 #endif
-/* APPLE LOCAL end ARM prefer SP to FP */
+	   );
+      /* APPLE LOCAL end ARM prefer SP to FP */
 
       if (!regs_asm_clobbered[eliminables[i].from])
 	{
@@ -502,7 +502,7 @@ global_alloc (void)
     error ("%s cannot be used in asm here",
 	   reg_names[HARD_FRAME_POINTER_REGNUM]);
     }
-    /* APPLE LOCAL end CW asm blocks 4443946 */
+  /* APPLE LOCAL end CW asm blocks 4443946 */
   else
     regs_ever_live[HARD_FRAME_POINTER_REGNUM] = 1;
 #endif
@@ -763,6 +763,18 @@ global_alloc (void)
       free (allocno_order);
     }
 
+  /* APPLE LOCAL begin 5695218 */
+#ifdef TARGET_386
+  if ((flag_pic && !TARGET_64BIT) || PIC_OFFSET_TABLE_REGNUM != INVALID_REGNUM)
+    {
+      fixed_regs[REAL_PIC_OFFSET_TABLE_REGNUM] = call_used_regs[REAL_PIC_OFFSET_TABLE_REGNUM] = 1;
+      SET_HARD_REG_BIT (call_fixed_reg_set, REAL_PIC_OFFSET_TABLE_REGNUM);
+      SET_HARD_REG_BIT (fixed_reg_set, REAL_PIC_OFFSET_TABLE_REGNUM);
+      SET_HARD_REG_BIT (call_used_reg_set, REAL_PIC_OFFSET_TABLE_REGNUM);
+    }
+#endif
+  /* APPLE LOCAL end 5695218 */
+
   /* Do the reloads now while the allocno data still exists, so that we can
      try to assign new hard regs to any pseudo regs that are spilled.  */
 
@@ -807,6 +819,22 @@ allocno_compare (const void *v1p, const void *v2p)
     = (((double) (floor_log2 (allocno[v2].n_refs) * allocno[v2].freq)
 	/ allocno[v2].live_length)
        * (10000 / REG_FREQ_MAX) * allocno[v2].size);
+  /* APPLE LOCAL begin 5695218 */
+  /* DImode pseudos get 2x the priority of SImode pseudos because
+     their size (2x sizeof(SImode)) is factored in above.  Since
+     HImode and QImode pseudoes are restricted to a subset of integer
+     registers on x86_32, give them more priority than SImode pseudos,
+     but less than DImode pseudos.  */
+#if defined(TARGET_386)
+  if (flag_global_alloc_prefer_bytes && !TARGET_64BIT)
+    {
+      if (reg_preferred_class (allocno[v1].reg) == Q_REGS)
+	pri1 = (double)pri1 * 1.9;
+      if (reg_preferred_class (allocno[v2].reg) == Q_REGS)
+	pri2 = (double)pri2 * 1.9;
+    }
+#endif
+  /* APPLE LOCAL end 5695218 */
   if (pri2 - pri1)
     return pri2 - pri1;
 
@@ -2366,9 +2394,15 @@ void remove_invalidated_death_notes (rtx first)
 		orig_regno = ORIGINAL_REGNO (r);
 	        if (orig_regno < FIRST_PSEUDO_REGISTER || regno >= FIRST_PSEUDO_REGISTER)
 		  continue;
+		/* APPLE LOCAL begin 5695218 */
 		if (regno == orig_regno)
 		  continue;
+		if (orig_regno >= max_regno)
+		  continue;
 		i = reg_allocno[orig_regno];
+		if (i < 0)
+		  continue;
+		/* APPLE LOCAL end 5695218 */
 		EXECUTE_IF_SET_IN_ALLOCNO_SET(pseudo_preferences + i * allocno_row_words, j,
 		  {
 		    if (i != j
@@ -2671,20 +2705,54 @@ dump_global_regs (FILE *file)
   int i, j;
 
   fprintf (file, ";; Register dispositions:\n");
+  /* APPLE LOCAL begin 5695218 */
   for (i = FIRST_PSEUDO_REGISTER, j = 0; i < max_regno; i++)
-    if (reg_renumber[i] >= 0)
-      {
-	fprintf (file, "%d in %d  ", i, reg_renumber[i]);
-	if (++j % 6 == 0)
-	  fprintf (file, "\n");
-      }
+    {
+      if (!REG_P (regno_reg_rtx[i]))
+	fprintf (file, "pseudo %d: ", i);
+      print_inline_rtx (file, regno_reg_rtx[i], 0);
+      if (reg_renumber[i] > -1)
+	fprintf (file, " w=" HOST_WIDE_INT_PRINT_DEC, local_reg_weight[reg_renumber[i]]);
+      fprintf (file, "\n");
+    }
+  /* APPLE LOCAL end 5695218 */
 
   fprintf (file, "\n\n;; Hard regs used: ");
   for (i = 0; i < FIRST_PSEUDO_REGISTER; i++)
     if (regs_ever_live[i])
-      fprintf (file, " %d", i);
+      /* APPLE LOCAL 5695218 */
+      fprintf (file, " %d/%s", i, reg_names[i]);
   fprintf (file, "\n\n");
 }
+
+/* APPLE LOCAL begin 5695218 */
+/* Print out the current global register assignments.  Invoked from the debugger.  */
+void debug_global_regs (void);
+void
+debug_global_regs (void)
+{
+  dump_global_regs (stdout);
+}
+void dump_hard_regset (FILE *, HARD_REG_SET);
+void dump_hard_regset (FILE *file, HARD_REG_SET regset)
+{
+  int i;
+  long long unsigned int ulli;
+  for (i = 0; i < FIRST_PSEUDO_REGISTER; i++)
+    {
+      ulli = (1LL << i);
+      if (TEST_HARD_REG_BIT (regset, i) && *reg_names[i])
+	fprintf (file, "  %d=0x%llx/%s", i, ulli, reg_names[i]);
+    }
+  fprintf (file, "\n");
+}
+/* Print out the registers in a hard REGSET.  Invoked from the debugger.  */
+void debug_hard_regset (HARD_REG_SET);
+void debug_hard_regset (HARD_REG_SET regset)
+{
+  dump_hard_regset (stdout, regset);
+}
+/* APPLE LOCAL end 5695218 */
 
 
 

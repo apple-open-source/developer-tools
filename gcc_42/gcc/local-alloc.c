@@ -284,6 +284,19 @@ static struct equivalence *reg_equiv;
 /* Nonzero if we recorded an equivalence for a LABEL_REF.  */
 static int recorded_label_ref;
 
+/* APPLE LOCAL begin 5695218 */
+/* Pseudo registers that inherit from the PIC_OFFSET_TABLE_RTX have
+   their bit set here.  Used to predict when a not-yet-allocated
+   pseudo-register might turn into a pic reference during reload.  */
+GTY(()) sbitmap pic_rtx_inheritance;
+/* max_allocno by max_allocno array of bits, recording inheritance;
+   bits j and k set in row m mean that allocno m was set by a
+   computation involving j and k.  */
+static GTY(()) sbitmap *reg_inheritance_matrix;
+static int reg_inheritance_1 (rtx *, void *);
+static void reg_inheritance (void);
+/* APPLE LOCAL end 5695218 */
+
 static void alloc_qty (int, enum machine_mode, int, int);
 static void validate_equiv_mem_from_store (rtx, rtx, void *);
 static int validate_equiv_mem (rtx, rtx, rtx);
@@ -357,9 +370,27 @@ local_alloc (void)
   ORDER_REGS_FOR_LOCAL_ALLOC;
 #endif
 
+  /* APPLE LOCAL begin 5695218 */
+  gcc_assert (!reg_inheritance_matrix);
+  if (PIC_OFFSET_TABLE_REGNUM != INVALID_REGNUM)
+    {
+      reg_inheritance_matrix = sbitmap_vector_alloc (max_regno, max_regno);
+      sbitmap_vector_zero (reg_inheritance_matrix, max_regno);
+    }
+  /* APPLE LOCAL end 5695218 */
+
   /* Promote REG_EQUAL notes to REG_EQUIV notes and adjust status of affected
      registers.  */
   update_equiv_regs ();
+
+  /* APPLE LOCAL begin 5695218 */
+  if (PIC_OFFSET_TABLE_REGNUM != INVALID_REGNUM)
+    {
+      reg_inheritance ();
+      sbitmap_vector_free (reg_inheritance_matrix);
+      reg_inheritance_matrix = (sbitmap *)0;
+    }
+  /* APPLE LOCAL end 5695218 */
 
   /* This sets the maximum number of quantities we can have.  Quantity
      numbers start at zero and we can have one for each pseudo.  */
@@ -852,6 +883,18 @@ update_equiv_regs (void)
 
 	  dest = SET_DEST (set);
 	  src = SET_SRC (set);
+
+	  /* APPLE LOCAL begin 5695218 */
+	  if (PIC_OFFSET_TABLE_REGNUM != INVALID_REGNUM)
+	    {
+	      int dstregno;
+		if (REG_P (dest))
+		{
+		  dstregno = REGNO (dest);
+		  for_each_rtx (&src, reg_inheritance_1, (void*)dstregno);
+		}
+	    }
+	  /* APPLE LOCAL end 5695218 */
 
 	  /* See if this is setting up the equivalence between an argument
 	     register and its stack slot.  */
@@ -2575,6 +2618,123 @@ LargestAlignmentOfVariables (void)
 }
 #endif
 /* APPLE LOCAL end radar 4216496, 4229407, 4120689, 4095567 */
+
+/* APPLE LOCAL begin 5695218 */
+static void dump_inheritance (FILE *);
+static void
+dump_inheritance (FILE *dumpfile)
+{
+  sbitmap_iterator sbiter;
+  unsigned int ui;
+  int emitted, width;
+  fprintf (dumpfile, ";; FIRST_PSEUDO_REGISTER = %d, max_regno = %d\n", FIRST_PSEUDO_REGISTER, max_regno);
+  dump_sbitmap_vector (dumpfile, ";; register inheritance matrix:", ";; register", reg_inheritance_matrix, max_regno);
+  if (pic_rtx_inheritance)
+    {
+      fprintf (dumpfile, "\n;; pic_rtx_inheritance bitmap:\n");
+      dump_sbitmap (dumpfile, pic_rtx_inheritance);
+      fprintf (dumpfile, "\n;; pseudo-regs that inherit PIC_OFFSET_TABLE_REGNUM (=%d):\n",
+	       PIC_OFFSET_TABLE_REGNUM);
+      width = 0;
+      EXECUTE_IF_SET_IN_SBITMAP (pic_rtx_inheritance, FIRST_PSEUDO_REGISTER, ui, sbiter)
+	{
+	  emitted = fprintf (dumpfile, " %d,", ui);
+	  gcc_assert (emitted >= 0);
+	  width += emitted;
+	  if (width > 75)
+	    {
+	      width = 0;
+	      fprintf (dumpfile, "\n");
+	    }
+	}
+      fprintf (dumpfile, "\n\n");
+    }
+  else
+    fprintf (dumpfile, ";; pic_rtx_inheritance=0\n");
+}
+void debug_inheritance (void);
+void
+debug_inheritance (void)
+{
+  dump_inheritance (stdout);
+}
+/* If we've walked into a SUBREG or REG, record it as inherited.  See
+   reg_inheritance() below.  */
+static int
+reg_inheritance_1 (rtx *px, void *data)
+{
+  rtx x = *px;
+  unsigned int srcregno, dstregno;
+
+  dstregno = (int)data;
+  if (GET_CODE (x) == SUBREG)
+    x = SUBREG_REG (x);
+  if (REG_P (x))
+    {
+      srcregno = REGNO (x);
+      SET_BIT (reg_inheritance_matrix[dstregno], srcregno);
+    }
+  if (GET_CODE (x) == CONST_VECTOR)
+    {
+      SET_BIT (reg_inheritance_matrix[dstregno], PIC_OFFSET_TABLE_REGNUM);
+    }
+  return 0;	/* Keep walking the RTX; visit all the REGs.  */
+}
+/* Walk all the insns and set the reg_inheritance_matrix[].  */
+void
+reg_inheritance (void)
+{
+  unsigned int /* dstregno, */ pic_rtx_regno, ui;
+  /* int i; */
+  /* rtx dst, insn, set, src; */
+  bool changing;
+
+  if (!optimize)
+    return;
+
+  if (pic_rtx_inheritance)
+    sbitmap_free (pic_rtx_inheritance);
+  pic_rtx_inheritance = sbitmap_alloc (max_regno);
+  sbitmap_zero (pic_rtx_inheritance);
+  pic_rtx_regno = PIC_OFFSET_TABLE_REGNUM;
+  /* Now loop over reg_inheritance_matrix[], computing pic_rtx_inheritance.  */
+  for (ui = FIRST_PSEUDO_REGISTER; ui < (unsigned)max_regno; ui++)
+    {
+      /* This row of the matrix represents the regnos (pseudo and
+	 hard) that are inherited by pseudo regno ui.  If regno ui
+	 inherits from the PIC_OFFSET_TABLE_REGNUM, set the ui bit in
+	 pic_rtx_inheritance.  */
+      if (TEST_BIT (reg_inheritance_matrix[ui], pic_rtx_regno))
+	SET_BIT (pic_rtx_inheritance, ui);
+      /* else AND pic_rtx_inheritance with reg_inheritance_matrix[ui *
+	 max_regno_row_words + (PIC_OFFSET_TABLE_REGNUM / INT_BITS)],
+	 if nonzero, set the same bit  */
+    }
+  /* pic_rtx_inheritance has a bit set for every pseudo that inherits
+     the PIC_OFFSET_TABLE_REGNUM directly.  Now compute all the pseudo
+     registers that inherit PIC_OFFSET_TABLE_REGNUM indirectly.  */
+  /* now, indefinite loop over reg_inheritance_matrix[], ANDing with each entry;
+     when non-zero, OR in bit as above.
+     continue until no more change observed  */
+  /* FIXME: obvious candidate for sbitmap.h:EXECUTE_IF_SET_IN_SBITMAP() */
+  do {
+    changing = false;
+    for (ui = FIRST_PSEUDO_REGISTER; ui < (unsigned)max_regno; ui++)
+      if (!TEST_BIT (pic_rtx_inheritance, ui)
+	  && sbitmap_any_common_bits (reg_inheritance_matrix[ui], pic_rtx_inheritance))
+	{
+	  SET_BIT (pic_rtx_inheritance, ui);
+	  changing = true;
+	}
+  } while (changing);  
+  if (dump_file)
+    {
+      timevar_push (TV_DUMP);
+      dump_inheritance (dump_file);
+      timevar_pop (TV_DUMP);
+    }
+}
+/* APPLE LOCAL end 5695218 */
 
 /* Run old register allocator.  Return TRUE if we must exit
    rest_of_compilation upon return.  */

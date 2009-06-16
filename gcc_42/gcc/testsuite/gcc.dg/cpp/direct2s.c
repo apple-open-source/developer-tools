@@ -5,8 +5,8 @@
    expansion.  Same as direct2.c, with -save-temps applied; results
    should be identical.  */
 
-/* { dg-do compile } */
-/* { dg-options "-save-temps -ansi -pedantic-errors" } */
+/* { dg-do compile } */ /* APPLE LOCAL CW asm blocks 6338079 */
+/* { dg-options "-save-temps -ansi -pedantic-errors -fno-asm-blocks" } */
 
 #define HASH #
 #define HASHDEFINE #define

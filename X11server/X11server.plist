@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<array>
+	<dict>
+		<key>OpenSourceImportDate</key>
+		<string>2007-12-01</string>
+		<key>OpenSourceLicense</key>
+		<string>MIT</string>
+		<key>OpenSourceProject</key>
+		<string>MesaLib</string>
+		<key>OpenSourceSHA1</key>
+		<string>ba860bb6ee57c02202342dfd5927464a068ea18f</string>
+		<key>OpenSourceURL</key>
+		<string>http://downloads.sourceforge.net/mesa3d/MesaLib-6.5.2.tar.bz2</string>
+		<key>OpenSourceVersion</key>
+		<string>6.5.2</string>
+		<key>OpenSourceWebsiteURL</key>
+		<string>http://www.mesa3d.org</string>
+	</dict>
+	<dict>
+		<key>OpenSourceImportDate</key>
+		<string>2007-12-01</string>
+		<key>OpenSourceLicense</key>
+		<string>MIT</string>
+		<key>OpenSourceProject</key>
+		<string>xorg-server</string>
+		<key>OpenSourceSHA1</key>
+		<string>a342805b556e32c831c700f8b24f94110fd2d957</string>
+		<key>OpenSourceURL</key>
+		<string>http://xquartz.macosforge.org/downloads/xorg-server-1.3.0-apple5.tar.bz2</string>
+		<key>OpenSourceVersion</key>
+		<string>1.3.0-apple5</string>
+		<key>OpenSourceWebsiteURL</key>
+		<string>http://www.x.org</string>
+	</dict>
+</array>
+</plist>

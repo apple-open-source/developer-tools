@@ -1065,10 +1065,12 @@ do {									\
 #define REAL_PIC_OFFSET_TABLE_REGNUM  3
 
 #define PIC_OFFSET_TABLE_REGNUM				\
+  /* APPLE LOCAL begin 5695218 */			\
   ((TARGET_64BIT && ix86_cmodel == CM_SMALL_PIC)	\
-   || !flag_pic ? INVALID_REGNUM			\
-   : reload_completed ? REGNO (pic_offset_table_rtx)	\
-   : REAL_PIC_OFFSET_TABLE_REGNUM)
+  || !flag_pic ? INVALID_REGNUM				\
+   : reload_completed && pic_offset_table_rtx ? REGNO (pic_offset_table_rtx) \
+   : REAL_PIC_OFFSET_TABLE_REGNUM)					\
+  /* APPLE LOCAL end 5695218 */
 
 #define GOT_SYMBOL_NAME "_GLOBAL_OFFSET_TABLE_"
 

@@ -459,6 +459,7 @@ mi_cmd_stack_list_args (char *command, char **argv, int argc)
   int i;
   enum print_values values;
   struct frame_info *fi;
+  struct frame_id stack_frame_id;
   struct cleanup *cleanup_stack_args;
 
   if (argc < 1 || argc > 3 || argc == 2)
@@ -495,16 +496,33 @@ mi_cmd_stack_list_args (char *command, char **argv, int argc)
 
   /* Now let's print the frames up to frame_high, or until there are
      frames in the stack. */
-  for (;
-       fi && (i <= frame_high || frame_high == -1);
-       i++, fi = get_prev_frame (fi))
+  while (fi != NULL)
     {
       struct cleanup *cleanup_frame;
       QUIT;
+      /* APPLE LOCAL: We need to store the frame id and then look the frame 
+         info back up after our call to list_args_or_locals() in case that 
+	 function calls any functions in the inferior in order to determine 
+	 the dynamic type of a variable (which will cause flush_cached_frames() 
+	 to be called resulting in our frame info chain being destroyed, 
+	 leaving FI pointing to invalid memory.  */
+      stack_frame_id = get_frame_id (fi);
+
       cleanup_frame = make_cleanup_ui_out_tuple_begin_end (uiout, "frame");
       ui_out_field_int (uiout, "level", i); 
       list_args_or_locals (0, values, fi, 0);
       do_cleanups (cleanup_frame);
+
+      i++;
+      if (i <= frame_high || frame_high == -1)
+        {
+	  /* APPLE LOCAL: Get our frame info again from the frame id.  */
+	  fi = frame_find_by_id (stack_frame_id);
+	  if (fi != NULL)
+	    fi = get_prev_frame (fi);
+	}
+      else
+	fi = NULL;
     }
 
   do_cleanups (cleanup_stack_args);
@@ -942,6 +960,9 @@ mi_cmd_file_list_globals (char *command, char **argv, int argc)
 	    error ("mi_file_list_globals: "
 		   "Couldn't find shared library \"%s\"\n", 
 		   shlibname);
+
+	  /* APPLE LOCAL: grab the dSYM file there is one.  */
+	  requested_ofile = separate_debug_objfile (requested_ofile);
 
 	  ALL_OBJFILE_PSYMTABS (requested_ofile, ps)
 	    {

@@ -1352,6 +1352,24 @@ L10:	cmp	ip, #0
 #endif
 /* APPLE LOCAL end ARM 4790140 compact switch tables */
 
+/* APPLE LOCAL begin 6465387 exception handling interworking VFP save */
+#if (__ARM_ARCH__ == 6)
+#ifdef L_save_vfp_d8_d15_regs 
+        ARM_FUNC_START save_vfp_d8_d15_regs
+        vpush {d8-d15}
+        RET
+        FUNC_END save_vfp_d8_d15_regs
+#endif
+
+#ifdef L_restore_vfp_d8_d15__regs
+        ARM_FUNC_START restore_vfp_d8_d15_regs
+        vpop {d8-d15}
+        RET
+        FUNC_END restore_vfp_d8_d15_regs
+#endif
+#endif
+/* APPLE LOCAL end 6465387 exception handling interworking VFP save */
+
 #endif /* __symbian__ */
 
 /* ------------------------------------------------------------------------ */

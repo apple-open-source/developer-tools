@@ -1,3 +1,27 @@
+2008-07-31  Greg Clayton  <gclayton@apple.com>
+
+   	* Makefile (CANONICAL_ARCHS): Sort the items in this variable
+   	so check-args can have fewer permutations.
+   	(check-args): Recognize arm, i386 and ppc as a plausible variant and
+   	rely on sorted CANONICAL_ARCHS.
+   	(CONFIGURE_OPTIONS): Added a "filter-out" make command to remove
+   	extra whitespace when some settings don't have any value.
+   	(EFLAGS): Ditto.
+   	(cross): Cleaned up redundant defintions for cross_arch_full shell
+   	variable.
+
+2008-08-20  Greg Clayton  <gclayton@apple.com>
+
+	* gdb.sh: Always specify an arch to gdb when the gdb binary can
+	handle 32 and 64 bit variants. And fixed the code that detected
+	that $GDB_ROOT was "/".
+
+2008-08-20  Greg Clayton  <gclayton@apple.com>
+
+	* gdb.sh: Modified the startup script to ignore all options when
+	auto-detecting and launching the correct gdb, and preferring the
+	core file over the executable.
+
 2008-04-24  Jason Molenda  (jmolenda@apple.com)
 
 	* Makefile: Unset MACOSX_DEPLOYMENT_TARGET when building

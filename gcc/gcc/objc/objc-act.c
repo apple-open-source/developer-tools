@@ -12434,7 +12434,10 @@ objc_delta_format_args (tree format)
   if (first_arg_num_expr && TREE_CODE (first_arg_num_expr) == INTEGER_CST)
     {
       val = TREE_INT_CST_LOW (first_arg_num_expr);
-      TREE_VALUE (TREE_CHAIN (TREE_CHAIN (args))) = build_int_cst (NULL_TREE, val+2);
+      /* APPLE LOCAL begin radar 6157135 */
+      if (val != 0)
+        TREE_VALUE (TREE_CHAIN (TREE_CHAIN (args))) = build_int_cst (NULL_TREE, val+2);
+      /* APPLE LOCAL end radar 6157135 */
     }
   return format;
 }

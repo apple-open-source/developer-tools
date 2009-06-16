@@ -1,5 +1,7 @@
 /* PR opt/6722 */
 /* { dg-do run { target i?86-*-* x86_64-*-* } } */
+/* APPLE LOCAL 5951276 */
+/* { dg-skip-if "<rdar://problem/5951276>" { i?86-apple-darwin* } {"*"} {""} } */
 /* { dg-options "-O2" } */
 
 register int k asm("%ebx");

@@ -1,3 +1,36 @@
+2009-04-24  Fariborz Jahanian <fjahanian@apple.com>
+
+       Radar 6825962
+       * objc-act.c (objc_declare_property_impl): Issue property in
+       super class diagnostic even if explicitly asked for.
+
+
+2009-04-20 Fariborz Jahanian <fjahanian@apple.com> 
+	Radar 6806369
+	* objc-act.c (generate_objc_image_info): Set the imfo_info
+	flag to 16 (1<<4) when in objc2, setter/getter issues error
+        on use of super class synthsized ivar.
+
+2009-04-13 Fariborz Jahanian <fjahanian@apple.com> 
+
+	Radar 5435299
+	* objc-act.c (objc_declare_property_impl): Reject use of 'ivar'
+	in super class.
+
+2008-11-25 Fariborz Jahanian <fjahanian@apple.com> 
+        Radar 6157135
+	* objc-act.c (objc_delta_format_args): Ignore positional argument
+	of 0.
+
+2008-10-03  Josh Conner  <jconner@apple.com>
+
+	Backport from 4_2:
+	Fariborz Jahanian <fjahanian@apple.com>
+
+        Radar 6264448
+        * objc-act.c (objc_build_compound_setter_call): Do the default conversion
+        on temporary after it is passed to the setter call.
+
 2008-04-29  Fariborz Jahanian <fjahanian@apple.com>
 
 	Radar 5893391

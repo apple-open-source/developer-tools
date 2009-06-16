@@ -1,3 +1,47 @@
+2009-04-24  Fariborz Jahanian <fjahanian@apple.com>
+
+       Radar 6825962
+       * property-synthesize-ivar-6.m : Add.
+       * optional-property.m: Modified.
+
+2009-04-20  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 6806369
+	*  image-info-1.m: Add
+
+2009-04-13  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 5435299
+	* objc.dg/ivar-sem-check.m: Add
+
+2009-03-24  Stuart Hastings  <stuart@apple.com>
+
+	gcc.apple/5774346.c: Add -maltivec.
+
+2009-01-22  Stuart Hastings  <stuart@apple.com>
+
+	Radar 6515001
+	* gcc.apple/6515001.c: New.
+
+2008-12-09  Stuart Hastings  <stuart@apple.com>
+
+	Radar 6414738
+	* g++.apple/6414738.C: New.
+
+2008-10-30  Stuart Hastings  <stuart@apple.com>
+
+	Radar 5951276
+	* gcc.target/i386/20020616-1.c: Skip for Darwin.
+
+2008-10-03  Josh Conner  <jconner@apple.com>
+
+	Backport from 4_2:
+	Fariborz Jahanian <fjahanian@apple.com>
+
+        Radar 6264448
+        * objc.dg/objc-property-enumtype.m: Add
+        * obj-c++.dg/objc-property-enumtype.mm: Add
+
 2008-09-25  Stuart Hastings  <stuart@apple.com>
 
 	Radar 6025404

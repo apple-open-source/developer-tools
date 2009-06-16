@@ -7846,4 +7846,18 @@ note_alternative_entry_points (void)
 }
 /* APPLE LOCAL end CW asm blocks */
 
+/* APPLE LOCAL begin weak_import on property 6676828 */
+static GTY(()) int objc_property_decl_context;
+
+void note_objc_property_decl_context (void) {
+  objc_property_decl_context = 1;
+}
+void note_end_objc_property_decl_context (void) {
+  objc_property_decl_context = 0;
+}
+bool in_objc_property_decl_context (void) {
+  return objc_property_decl_context;
+}
+/* APPLE LOCAL end weak_import on property 6676828 */
+
 #include "gt-tree.h"

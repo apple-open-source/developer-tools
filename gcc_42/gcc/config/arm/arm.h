@@ -2685,6 +2685,36 @@ extern int making_const_table;
 		((FIRST_PARM_OFFSET (FNDECL)) 			\
 		 + (DECL_STRUCT_FUNCTION (FNDECL))->pretend_args_size)
 /* APPLE LOCAL end ARM 6148015 */
+
+/* APPLE LOCAL begin 6186914 */
+/* As per the ARM ABI, for double-width VFP regs:
+     Dx = DW_OP_regx(256+x)
+   For single-width VFP regs:
+     S[2x] = DW_OP_regx(256 + (x >> 1)) DW_OP_bit piece(32, 0)
+     S[2x+1] = DW_OP_regx(256 + (x >> 1)) DW_OP_bit_piece (32, 32)
+   It's unfortunate that we have to put this into inline code, but the
+   interfaces we need from dwarf2out.c aren't exposed.  */
+#define TARGET_DWARF2_REG_HANDLER(reg)					\
+  do {									\
+    if (IS_VFP_REGNUM (REGNO (reg))					\
+	&& (GET_MODE (reg) == SFmode || GET_MODE (reg) == DFmode))	\
+      {									\
+	dw_loc_descr_ref loc_result = NULL;				\
+	dw_loc_descr_ref temp;						\
+	unsigned int relative_regno = REGNO (reg) - FIRST_VFP_REGNUM;	\
+	unsigned int base_reg = 256 + (relative_regno >> 1);		\
+	temp = one_reg_loc_descriptor (base_reg, initialized);		\
+	add_loc_descr (&loc_result, temp);				\
+	if (GET_MODE (reg) == SFmode)					\
+	  {								\
+	    int offset = relative_regno & 0x1 ? 32 : 0;			\
+	    temp = new_loc_descr (DW_OP_bit_piece, 32, offset);		\
+	    add_loc_descr (&loc_result, temp);				\
+	  }								\
+	return loc_result;						\
+      }									\
+  } while (0)
+/* APPLE LOCAL end 6186914 */
 
 enum arm_builtins
 {

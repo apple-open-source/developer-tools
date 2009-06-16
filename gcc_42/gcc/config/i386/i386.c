@@ -5175,7 +5175,8 @@ ix86_setup_frame_addresses (void)
 # define USE_HIDDEN_LINKONCE 0
 #endif
 
-static int pic_labels_used;
+/* APPLE LOCAL 5695218 */
+static GTY(()) int pic_labels_used;
 
 /* Fills in the label name that should be used for a pc thunk for
    the given register.  */
@@ -5366,6 +5367,49 @@ ix86_select_alt_pic_regnum (void)
   return INVALID_REGNUM;
 }
 
+/* APPLE LOCAL begin 5695218 */
+/* Reload may introduce references to the PIC base register
+   that do not directly reference pic_offset_table_rtx.
+   In the rare event we choose an alternate PIC register,
+   walk all the insns and rewrite every reference.  */
+/* Run through the insns, changing references to the original
+   PIC_OFFSET_TABLE_REGNUM to our new one.  */
+static void
+ix86_globally_replace_pic_reg (unsigned int new_pic_regno)
+{
+  rtx insn;
+  const int nregs = PIC_OFFSET_TABLE_REGNUM + 1;
+  rtx reg_map[FIRST_PSEUDO_REGISTER];
+  memset (reg_map, 0, nregs * sizeof (rtx));
+  pic_offset_table_rtx = gen_rtx_REG (SImode, new_pic_regno);
+  reg_map[REAL_PIC_OFFSET_TABLE_REGNUM] = pic_offset_table_rtx;
+
+  push_topmost_sequence ();
+  for (insn = get_insns (); insn != NULL; insn = NEXT_INSN (insn))
+    {
+      if (GET_CODE (insn) == INSN || GET_CODE (insn) == JUMP_INSN)
+	{
+	  replace_regs (PATTERN (insn), reg_map, nregs, 1);
+	  replace_regs (REG_NOTES (insn), reg_map, nregs, 1);
+	}
+#if defined (TARGET_TOC)
+      else if (GET_CODE (insn) == CALL_INSN)
+	{
+	  if ( !SIBLING_CALL_P (insn))
+	    abort ();
+	}
+#endif
+    }
+  pop_topmost_sequence ();
+
+  regs_ever_live[new_pic_regno] = 1;
+  regs_ever_live[PIC_OFFSET_TABLE_REGNUM] = 0;
+#if defined (TARGET_TOC)
+  cfun->machine->substitute_pic_base_reg = new_pic_regno;
+#endif
+}
+/* APPLE LOCAL end 5695218 */
+
 /* Return 1 if we need to save REGNO.  */
 static int
 ix86_save_reg (unsigned int regno, int maybe_eh_return)
@@ -5379,10 +5423,12 @@ ix86_save_reg (unsigned int regno, int maybe_eh_return)
 
   if (pic_offset_table_rtx
       && regno == REAL_PIC_OFFSET_TABLE_REGNUM
-      && (regs_ever_live[REAL_PIC_OFFSET_TABLE_REGNUM]
+      /* APPLE LOCAL begin 5695218 */
+      && (current_function_uses_pic_offset_table
 	  || current_function_profile
 	  || current_function_calls_eh_return
 	  || current_function_uses_const_pool))
+    /* APPLE LOCAL end 5695218 */
     {
       if (ix86_select_alt_pic_regnum () != INVALID_REGNUM)
 	return 0;
@@ -5405,6 +5451,16 @@ ix86_save_reg (unsigned int regno, int maybe_eh_return)
   if (cfun->machine->force_align_arg_pointer
       && regno == REGNO (cfun->machine->force_align_arg_pointer))
     return 1;
+
+  /* APPLE LOCAL begin 5695218 */
+  /* In order to get accurate usage info for the PIC register, we've
+     been forced to break and un-break the call_used_regs and
+     fixed_regs vectors.  Ignore them when considering the PIC
+     register.  */
+  if (regno == REAL_PIC_OFFSET_TABLE_REGNUM
+      && regs_ever_live[regno])
+    return 1;
+  /* APPLE LOCAL end 5695218 */
 
   return (regs_ever_live[regno]
 	  && !call_used_regs[regno]
@@ -5950,14 +6006,20 @@ ix86_expand_prologue (void)
     }
 
   pic_reg_used = false;
-  if (pic_offset_table_rtx
-      && (regs_ever_live[REAL_PIC_OFFSET_TABLE_REGNUM]
-	  || current_function_profile))
+  /* APPLE LOCAL begin 5695218 */
+  if (pic_offset_table_rtx && regs_ever_live[REAL_PIC_OFFSET_TABLE_REGNUM]
+      && !TARGET_64BIT)
     {
-      unsigned int alt_pic_reg_used = ix86_select_alt_pic_regnum ();
+      unsigned int alt_pic_reg_used;
+
+      alt_pic_reg_used = ix86_select_alt_pic_regnum ();
+      /* APPLE LOCAL end 5695218 */
 
       if (alt_pic_reg_used != INVALID_REGNUM)
-	REGNO (pic_offset_table_rtx) = alt_pic_reg_used;
+	/* APPLE LOCAL begin 5695218 */
+	/* REGNO (pic_offset_table_rtx) = alt_pic_reg_used; */
+	ix86_globally_replace_pic_reg (alt_pic_reg_used);
+	/* APPLE LOCAL end 5695218 */
 
       pic_reg_used = true;
     }
@@ -19396,7 +19458,8 @@ ix86_tieable_integer_mode_p (enum machine_mode mode)
       return TARGET_64BIT || !TARGET_PARTIAL_REG_STALL;
 
     case DImode:
-      return TARGET_64BIT;
+      /* APPLE LOCAL 5695218 convert int to logical bool */
+      return !!TARGET_64BIT;
 
     default:
       return false;

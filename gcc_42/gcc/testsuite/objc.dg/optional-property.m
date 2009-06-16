@@ -1,4 +1,4 @@
-/* APPLE LOCAL file radar 5777307 */
+/* APPLE LOCAL file radar 5777307 - radar 6825962 */
 /* This program tests that when a property is @optional, with @synthesize, we still synthesize
    setter/getters. Program should compile and run with no errors. */
 /* { dg-options "-mmacosx-version-min=10.5 -framework Foundation" } */
@@ -20,7 +20,7 @@
 @end
 
 @interface SubClass : BaseClass <MyProtocol> {
-
+    id _Subdelegate;
 }
 
 @end
@@ -28,7 +28,7 @@
 @implementation BaseClass @end 
 
 @implementation SubClass
-@synthesize delegate = _delegate;
+@synthesize delegate = _Subdelegate;
 @end
 
 int main (int argc, const char * argv[]) {

@@ -622,6 +622,14 @@ dbx_symfile_read (struct objfile *objfile, int mainline)
   static int timer = -1;
   struct cleanup *timer_cleanup;
 
+  /* APPLE LOCAL: If this is a dSYM that has minimal symbols, don't read the
+     minsyms or we'll end up with duplicated minsyms.  */
+  if (objfile->separate_debug_objfile_backlink || 
+      objfile->flags & OBJF_SEPARATE_DEBUG_FILE)
+    {
+      return;
+    }
+
   if (maint_use_timers)
     timer_cleanup = start_timer (&timer, "dbx_symfile_read", 
 				 objfile->name ? objfile->name : "<unknown>");

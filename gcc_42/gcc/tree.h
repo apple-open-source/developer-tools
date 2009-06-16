@@ -4446,6 +4446,12 @@ extern tree build_addr (tree, tree);
 extern bool fields_compatible_p (tree, tree);
 extern tree find_compatible_field (tree, tree);
 
+/* APPLE LOCAL begin weak_import on property 6676828 */
+extern void note_objc_property_decl_context (void);
+extern void note_end_objc_property_decl_context (void);
+extern bool in_objc_property_decl_context (void);
+/* APPLE LOCAL end weak_import on property 6676828 */
+
 /* In function.c */
 extern void expand_main_function (void);
 extern void init_dummy_function_start (void);

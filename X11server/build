@@ -1,0 +1,154 @@
+#!/usr/bin/perl
+
+$target=shift @ARGV;
+
+if($target eq 'installsrc') {
+    sys_print("mkdir $ENV{SRCROOT}") unless -e $ENV{SRCROOT};
+    sys_print("ditto . $ENV{SRCROOT}");
+    sys_print("ditto mesa $ENV{SRCROOT}/mesa");
+    exit();
+}
+
+if($target eq 'clean') {
+    print "Cleaning out directory $ENV{SRCROOT}\n";
+    chdir($ENV{SRCROOT});
+    sys_print("find . -name .svn | xargs rm -rf");
+    sys_print("find . -name \"*.gz\" | xargs rm");
+    sys_print("find . -name \"*.bz2\" | xargs rm");
+    exit();
+}
+
+if($target eq 'install') {
+    print "Install phase: \n";
+    $prefix="/usr/X11";
+    sys_print("mkdir $ENV{DSTROOT}") unless -e $ENV{DSTROOT};
+    sys_print("mkdir $ENV{OBJROOT}") unless -e $ENV{OBJROOT};
+    $ENV{DESTDIR}=$ENV{DSTROOT};
+
+    $ACLOCAL_LOCALDIR="$prefix/share/aclocal";
+    system "mkdir -p $ACLOCAL_LOCALDIR";
+    
+# The following is required to make aclocal find our .m4 macros
+    $ENV{ACLOCAL}="aclocal -I $ACLOCAL_LOCALDIR";
+    $ENV{LIBTOOLIZE}="/usr/bin/glibtoolize";
+    
+# The following is required to make pkg-config find our .pc metadata files
+    $ENV{PKG_CONFIG_PATH}="$prefix/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}";
+    
+# Set the library path so that locally built libs will be found by apps
+    $ENV{LD_LIBRARY_PATH}="$prefix/lib:$ENV{LD_LIBRARY_PATH}";
+    
+    $ENV{PATH}="$prefix/bin:$ENV{PATH}";
+    
+# Set the default font path for xserver/xorg unless it's already set
+    $ENV{FONTPATH}="/usr/X11/lib/X11/fonts/misc/,/usr/X11/lib/X11/fonts/Type1/,".
+	"/usr/X11/lib/X11/fonts/75dpi/,/usr/X11/lib/X11/fonts/100dpi/,".
+	"/usr/X11/lib/X11/fonts/cyrillic/,/usr/X11/lib/X11/fonts/TTF/";
+    
+    foreach $arch (split(/ /,$ENV{RC_ARCHS})) {
+	$arch_flags .= "-arch $arch ";
+	$arch_flags_32 .= " -arch $arch " unless $arch =~ /64/;
+    }
+    
+    $ENV{CFLAGS}="-I$ENV{DSTROOT}$prefix/include -I$prefix/include -DNO_ALLOCA -D__DEBUG__ -g3 -pipe $arch_flags";
+    $ENV{LDFLAGS}="-L$ENV{DSTROOT}$prefix/lib -L$prefix/lib -pipe $arch_flags";
+    
+    $ENV{RC_Project_Source_Version}=0 unless exists $ENV{RC_Project_Source_Version};
+    sys_print("ditto $ENV{SRCROOT}/ $ENV{OBJROOT}");
+
+    print "Building MesaGL\n";
+
+    chdir("$ENV{OBJROOT}/mesa/Mesa-6.5.2");
+    sys_print("make");
+    sys_print("mkdir -p $ENV{DSTROOT}$prefix/lib");
+    sys_print("mkdir -p $ENV{DSTROOT}$prefix/include/GL");
+    sys_print("ditto lib $ENV{DSTROOT}$prefix/lib");
+    sys_print("ditto include/GL $ENV{DSTROOT}$prefix/include/GL");
+    sys_print("rm -rf $ENV{DSTROOT}$prefix/include/GL/internal");
+    sys_print("chown -R root:wheel $ENV{DSTROOT}$prefix/include/GL/*");
+    sys_print("ln -s libGLU.1.dylib $ENV{DSTROOT}$prefix/lib/libGLU.1.3.dylib");
+    sys_print("ln -s libGL.1.dylib $ENV{DSTROOT}$prefix/lib/libGL.1.2.dylib");
+    sys_print("chown -R root:wheel $ENV{DSTROOT}$prefix/lib");
+
+    chdir("$ENV{OBJROOT}/libGL");
+    sys_print("make");
+    sys_print("cp GL/libGL.1.2.dylib $ENV{DSTROOT}$prefix/lib/libGL.1.dylib");
+    sys_print("cp mesa/OSmesa/libOSMesa.4.dylib $ENV{DSTROOT}$prefix/lib/");
+    sys_print("ln -s libOSMesa.4.dylib $ENV{DSTROOT}$prefix/lib/libOSMesa.4.0.dylib");
+    sys_print("ln -s libOSMesa.4.dylib $ENV{DSTROOT}$prefix/lib/libOSMesa.dylib");
+
+    $ENV{CFLAGS}="-I$ENV{DSTROOT}$prefix/include -I$prefix/include -DNO_ALLOCA -D__DEBUG__ -g3 -pipe $arch_flags_32";
+    $ENV{LDFLAGS}="-L$ENV{DSTROOT}$prefix/lib -L$prefix/lib -pipe $arch_flags_32";
+
+    chdir("$ENV{OBJROOT}/xorg-server-1.3.0-apple5");
+    print "Building Xserver\n";
+
+    $conf_flags="--with-mesa-source=$ENV{OBJROOT}/mesa/Mesa-6.5.2 --enable-debug --disable-dependency-tracking --disable-nls --datarootdir=/usr/X11/lib/X11 --with-fontdir=/usr/X11/lib/X11/fonts --prefix=$prefix --with-launchagents-dir=/System/Library/LaunchAgents";
+    sys_print( "./configure $conf_flags");
+    print "building\n";
+    sys_print("make -j2");
+    sys_print("make install");
+    sys_print("make clean");
+    $conf_flags="--with-mesa-source=$ENV{OBJROOT}/mesa/Mesa-6.5.2 --enable-debug --disable-dependency-tracking --disable-nls --datarootdir=/usr/X11/lib/X11 --with-fontdir=/usr/X11/lib/X11/fonts --prefix=$prefix --disable-xquartz --enable-kdrive --enable-xfake --enable-xephyr";
+    sys_print( "./configure $conf_flags");
+    print "building\n";
+    sys_print("make -j2");
+    sys_print("make install");
+    
+    chdir("../..");
+
+# move X11.app into place
+    $x11_file = "$ENV{DSTROOT}/usr/X11/X11.app/Contents/MacOS/X11";
+    system("lipo -remove ppc64 -output $x11_file $x11_file") if($ENV{RC_ppc64});
+    system("lipo -remove x86_64 -output $x11_file $x11_file") if($ENV{RC_x86_64});
+    sys_print_nodie("rm $ENV{DSTROOT}/usr/X11/X11.app/Contents/Resources/Info.plist");
+    sys_print_nodie("rm $ENV{DSTROOT}/Application/Utilities/X11.app/Contents/Resources/Info.plist");
+    $x11_file = "$ENV{DSTROOT}/Applications/Utilities/X11.app/Contents/MacOS/X11";
+    system("lipo -remove ppc64 -output $x11_file $x11_file") if($ENV{RC_ppc64});
+    system("lipo -remove x86_64 -output $x11_file $x11_file") if($ENV{RC_x86_64});
+
+    sys_print_nodie("ln -s Xquartz $ENV{DSTROOT}/usr/X11/bin/X");
+# fix man pages
+    sys_print_nodie("mkdir -p $ENV{DSTROOT}/usr/X11/man");
+    sys_print_nodie("mv $ENV{DSTROOT}/usr/X11/lib/X11/man/man1 $ENV{DSTROOT}/usr/X11/man/man1");
+    sys_print_nodie("ln -s Xquartz.1 $ENV{DSTROOT}/usr/X11/man/man1/X.1");
+    make_dsyms();
+}
+
+sub get_workdir {
+    foreach (glob('*')) {
+	return $_ if(-e "$_/configure");
+    }
+    die "Unable to determine workdir";
+}
+
+sub make_dsyms {
+    open(FIND,"find $ENV{DSTROOT} -type f -exec file {} +|");
+    while(<FIND>) {
+	if(/(.*): .*Mach-O/) {
+	    $basename=$1;
+	    $fullname=$1;
+	    $basename =~ s/\/.*\///;
+	    sys_print_nodie("dsymutil --out=$ENV{SYMROOT}/$basename.dSYM $fullname");
+	    sys_print_nodie("strip -S $fullname");
+	}
+    }
+    close FIND;
+}
+
+sub sys_print {
+    $command=shift;
+    print "$command\n";
+    system $command;
+    $retval=$? >> 8;
+    die "returned code $retval" if $retval;
+}
+
+sub sys_print_nodie {
+    $command=shift;
+    print "$command\n";
+    system $command;
+    $retval=$? >> 8;
+    print "returned code $retval\n" if $retval;
+}
+

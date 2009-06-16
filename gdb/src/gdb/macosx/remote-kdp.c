@@ -21,19 +21,19 @@
    Foundation, Inc., 59 Temple Place - Suite 330,
    Boston, MA 02111-1307, USA.  */
 
-#if TARGET_I386
+#if defined (TARGET_I386)
 #define KDP_TARGET_I386 1
 #else
 #undef KDP_TARGET_I386
 #endif
 
-#if TARGET_POWERPC
+#if defined (TARGET_POWERPC)
 #define KDP_TARGET_POWERPC 1
 #else
 #undef KDP_TARGET_POWERPC
 #endif
 
-#if TARGET_ARM
+#if defined (TARGET_ARM)
 #define KDP_TARGET_ARM 1
 #else
 #undef KDP_TARGET_ARM
@@ -202,7 +202,7 @@ convert_host_type (unsigned int mach_type)
 }
 
 static int
-kdp_insert_breakpoint (CORE_ADDR addr, char *contents_cache)
+kdp_insert_breakpoint (CORE_ADDR addr, gdb_byte *contents_cache)
 {
   kdp_return_t kdpret;
 
@@ -242,7 +242,7 @@ kdp_insert_breakpoint (CORE_ADDR addr, char *contents_cache)
 }
 
 static int
-kdp_remove_breakpoint (CORE_ADDR addr, char *contents_cache)
+kdp_remove_breakpoint (CORE_ADDR addr, gdb_byte *contents_cache)
 {
   kdp_return_t kdpret;
 
@@ -1026,7 +1026,7 @@ kdp_fetch_registers_i386 (int regno)
           (GDB_i386_THREAD_STATE_COUNT * 4))
         {
           error
-            ("kdp_fetch_registers_i386: kdp returned %lu bytes of register data (expected %lu)",
+            ("kdp_fetch_registers_i386: kdp returned %lu bytes of register data (expected %u)",
              c.response->readregs_reply.nbytes,
              (GDB_i386_THREAD_STATE_COUNT * 4));
         }
@@ -1392,7 +1392,7 @@ kdp_prepare_to_store (void)
 }
 
 static int
-kdp_xfer_memory (CORE_ADDR memaddr, char *myaddr, int len, int write,
+kdp_xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len, int write,
                  struct mem_attrib *attrib, struct target_ops *target)
 {
   kdp_return_t kdpret;
@@ -1479,7 +1479,7 @@ kdp_load (char *args, int from_tty)
 }
 
 static void
-kdp_create_inferior (char *execfile, char *args, char **env)
+kdp_create_inferior (char *execfile, char *args, char **env, int from_tty)
 {
   error ("unsupported operation kdp_create_inferior");
 }
@@ -1564,7 +1564,48 @@ async_remote_interrupt_twice (gdb_client_data arg)
 static void
 async_remote_interrupt (gdb_client_data arg)
 {
-  target_stop ();
+  if (remote_debug)
+    fprintf_unfiltered (gdb_stdlog, "%s called\n", __FUNCTION__);
+
+  if (current_target.to_stop == target_ignore)
+    {
+      target_terminal_ours ();
+
+      if (yquery ("remote-kdp cannot stop a running kernel.\n\
+Would you like to disconnect? "))
+	{
+	  kdp_return_t kdpret;
+	  kdp_ops.to_has_all_memory = 0;
+	  kdp_ops.to_has_memory = 0;
+	  kdp_ops.to_has_stack = 0;
+	  kdp_ops.to_has_registers = 0;
+	  kdp_ops.to_has_execution = 0;
+
+	  update_current_target ();
+
+	  if (kdp_is_bound (&c))
+	    {
+	      kdpret = kdp_destroy (&c);
+	      if (kdpret != RR_SUCCESS)
+		{
+		  error ("unable to deallocate KDP connection: %s",
+			 kdp_return_string (kdpret));
+		}
+	    }
+	  target_mourn_inferior ();
+	  target_executing = 0; 
+	  printf_unfiltered ("Disconnected.\n");
+	  deprecated_throw_reason (RETURN_QUIT);
+	}
+      else
+	{
+	  target_terminal_inferior ();
+	}
+    }
+  else
+    {
+      target_stop ();
+    }
 }
 
 static void

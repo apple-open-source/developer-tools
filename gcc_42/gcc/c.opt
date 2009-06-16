@@ -257,6 +257,15 @@ C ObjC C++ ObjC++
 Warn about multicharacter constants containing exactly four characters
 ; APPLE LOCAL end -Wfour-char-constants
 
+; APPLE LOCAL begin Wglobal-constructors 6324584
+Wglobal-constructors
+C ObjC C++ ObjC++ Var(warn_global_constructors)
+Warn when global (namespace scope) objects require runtime
+construction or destruction or when functions that use attribute
+constructor or destructor are used.  This is useful to help maintain
+fast program startup and end times.
+; APPLE LOCAL end Wglobal-constructors 6324584
+
 Winit-self
 C ObjC C++ ObjC++ Var(warn_init_self)
 Warn about variables which are initialized to themselves

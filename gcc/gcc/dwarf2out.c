@@ -3067,6 +3067,10 @@ dwarf_stack_op_name (unsigned int op)
       return "DW_OP_bregx";
     case DW_OP_piece:
       return "DW_OP_piece";
+    /* APPLE LOCAL begin 6186914 */
+    case DW_OP_bit_piece:
+      return "DW_OP_bit_piece";
+    /* APPLE LOCAL end 6186914 */
     case DW_OP_deref_size:
       return "DW_OP_deref_size";
     case DW_OP_xderef_size:
@@ -3214,6 +3218,12 @@ size_of_loc_descr (dw_loc_descr_ref loc)
     case DW_OP_piece:
       size += size_of_uleb128 (loc->dw_loc_oprnd1.v.val_unsigned);
       break;
+    /* APPLE LOCAL begin 6186914 */
+    case DW_OP_bit_piece:
+      size += size_of_uleb128 (loc->dw_loc_oprnd1.v.val_unsigned);
+      size += size_of_uleb128 (loc->dw_loc_oprnd2.v.val_unsigned);
+      break;
+    /* APPLE LOCAL end 6186914 */
     case DW_OP_deref_size:
     case DW_OP_xderef_size:
       size += 1;
@@ -3379,6 +3389,12 @@ output_loc_operands (dw_loc_descr_ref loc)
     case DW_OP_piece:
       dw2_asm_output_data_uleb128 (val1->v.val_unsigned, NULL);
       break;
+    /* APPLE LOCAL begin 6186914 */
+    case DW_OP_bit_piece:
+      dw2_asm_output_data_uleb128 (val1->v.val_unsigned, NULL);
+      dw2_asm_output_data_uleb128 (val2->v.val_unsigned, NULL);
+      break;
+    /* APPLE LOCAL end 6186914 */
     case DW_OP_deref_size:
     case DW_OP_xderef_size:
       dw2_asm_output_data (1, val1->v.val_int, NULL);
@@ -8819,6 +8835,16 @@ reg_loc_descriptor (rtx rtl)
 
   reg = dbx_reg_number (rtl);
   regs = targetm.dwarf_register_span (rtl);
+
+/* APPLE LOCAL begin 6186914 */
+#ifdef TARGET_DWARF2_REG_HANDLER
+  /* If this macro is defined, it should provide any target-specific
+     register debug info handling.  The macro should return the
+     dw_loc_descr_ref if it performs any alternative handling, and
+     fall through otherwise.  */
+  TARGET_DWARF2_REG_HANDLER (rtl);
+#endif
+/* APPLE LOCAL end 6186914 */
 
   if (hard_regno_nregs[REGNO (rtl)][GET_MODE (rtl)] > 1
       || regs)

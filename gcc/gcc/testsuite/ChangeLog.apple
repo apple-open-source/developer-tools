@@ -1,3 +1,8 @@
+2008-11-25  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 6157135
+	* objc.dg/method-attribute-format-5.: New
+
 2008-09-22  Stuart Hastings  <stuart@apple.com>
 
 	Radar 6185789

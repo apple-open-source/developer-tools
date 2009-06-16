@@ -1,3 +1,9 @@
+2008-11-25  Fariborz Jahanian <fjahanian@apple.com>
+
+        Radar 6157135
+	* objc-act.c (objc_delta_format_args): Ignore
+	0 for the 2nd argument.
+
 2008-05-15  Josh Conner  <jconner@apple.com>
 
 	Radar 5926171

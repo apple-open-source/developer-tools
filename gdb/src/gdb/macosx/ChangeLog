@@ -1,7 +1,25 @@
+2008-09-26  Greg Clayton  <gclayton@apple.com>
+
+	* remote-kdp.c (async_remote_interrupt): Changed the default 
+	query to yes.
+
+2008-09-26  Greg Clayton  <gclayton@apple.com>
+
+	* kdp-udp.c (kdp_destroy): Make sure that the file descriptors for
+	the kdp connection get deleted from gdb's event loop.
+	* macosx-nat-inferior.c (macosx_unsafe_functions): Added "look_up_class"
+	to the array of unsafe function.
+	* remote-kdp.c (kdp_insert_breakpoint): Fixed type for 2nd parameter.
+	(kdp_remove_breakpoint): Ditto.
+	(kdp_xfer_memory): Ditto.
+	(kdp_create_inferior): Added 4th argument that was missing.
+	(async_remote_interrupt): If target_stop is a nop, then query the
+	user if they would like the cleanly disconnect.
+
 2008-07-18  Greg Clayton  <gclayton@apple.com>
 
 	* macosx-tdep.c (create_dsym_uuids_for_path): Create CFURL with
-    CFURLCreateWithFileSystemPath instead of CFURLCreateWithBytes
+	CFURLCreateWithFileSystemPath instead of CFURLCreateWithBytes
 	or special URL characters will not allow a correct path to be
 	extracted with CFURLGetFileSystemRepresentation.
 
