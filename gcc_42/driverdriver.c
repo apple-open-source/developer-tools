@@ -125,6 +125,7 @@ struct arch_config_guess_map arch_config_map [] =
   {"armv5", "arm"},
   {"xscale", "arm"},
   {"armv6", "arm"},
+  {"armv7", "arm"},
   {NULL, NULL}
 };
 
@@ -769,6 +770,8 @@ add_arch_options (int index, const char **current_argv, int arch_index)
     current_argv[arch_index] = "-march=xscale";
   else if (!strcmp (arches[index], "armv6"))
     current_argv[arch_index] = "-march=armv6k";
+  else if (!strcmp (arches[index], "armv7"))
+    current_argv[arch_index] = "-march=armv7a";
   else
     count = 0;
 

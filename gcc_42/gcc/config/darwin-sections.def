@@ -96,6 +96,14 @@ DEF_SECTION (darwin_eh_frame_section, 0,
 /* APPLE LOCAL begin ObjC new abi - radar 4792158 */
 DEF_SECTION (objc_v2_message_refs_section, 0,
 	     ".section __DATA, __objc_msgrefs, regular, no_dead_strip", 1)
+/* APPLE LOCAL begin radar 6255595 */
+#ifdef TARGET_ARM
+DEF_SECTION (objc_v2_classdefs_section, 0,
+	     ".section __DATA, __objc_data", 0)
+DEF_SECTION (objc_v2_metadata_section, 0,
+	     ".section __DATA, __objc_const", 0)
+/* APPLE LOCAL end radar 6255595 */
+#endif /* TARGET_ARM */
 DEF_SECTION (objc_v2_classrefs_section, 0, 
              ".section __DATA, __objc_classrefs, regular, no_dead_strip", 1)
 DEF_SECTION (objc_v2_classlist_section, 0,
@@ -108,10 +116,19 @@ DEF_SECTION (objc_v2_nonlazy_class_section, 0,
 	     ".section __DATA, __objc_nlclslist, regular, no_dead_strip", 1)
 DEF_SECTION (objc_v2_nonlazy_category_section, 0,
 	     ".section __DATA, __objc_nlcatlist, regular, no_dead_strip", 1)
+/* APPLE LOCAL begin radar 6351990 */
+#ifndef TARGET_ARM
 DEF_SECTION (objc_v2_protocollist_section, 0,
 	     ".section __DATA, __objc_protolist, regular, no_dead_strip", 1)
 DEF_SECTION (objc_v2_protocolrefs_section, 0,
 	     ".section __DATA, __objc_protorefs, regular, no_dead_strip", 1)
+#else /* TARGET_ARM */
+DEF_SECTION (objc_v2_protocollist_section, 0,
+	     ".section __DATA, __objc_protolist, coalesced, no_dead_strip", 1)
+DEF_SECTION (objc_v2_protocolrefs_section, 0,
+	     ".section __DATA, __objc_protorefs, coalesced, no_dead_strip", 1)
+#endif /* TARGET_ARM */
+/* APPLE LOCAL end radar 6351990 */
 DEF_SECTION (objc_v2_super_classrefs_section, 0,
 	     ".section __DATA, __objc_superrefs, regular, no_dead_strip", 1)
 DEF_SECTION (objc_v2_image_info_section, 0,

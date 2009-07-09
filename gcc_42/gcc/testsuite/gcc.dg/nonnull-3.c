@@ -66,16 +66,12 @@ foo (void *p, char *s)
   __builtin_nansf (NULL);  /* { dg-warning "null" "null pointer check" } */
   __builtin_nansl (NULL);  /* { dg-warning "null" "null pointer check" } */
 
-  __builtin_puts (NULL);  /* { dg-warning "null" "null pointer check" } */
+  /* APPLE LOCAL begin 6821124 puts string arg is not non-null */
   __builtin_fputc (*s, NULL);  /* { dg-warning "null" "null pointer check" } */
-  __builtin_fputs (s, NULL);  /* { dg-warning "null" "null pointer check" } */
-  __builtin_fputs (NULL, p);  /* { dg-warning "null" "null pointer check" } */
   __builtin_fwrite (s, 16, 16, NULL);  /* { dg-warning "null" "null pointer check" } */
   __builtin_fwrite (NULL, 16, 16, p);  /* { dg-warning "null" "null pointer check" } */
-  __builtin_puts_unlocked (NULL);  /* { dg-warning "null" "null pointer check" } */
   __builtin_fputc_unlocked (*s, NULL);  /* { dg-warning "null" "null pointer check" } */
-  __builtin_fputs_unlocked (s, NULL);  /* { dg-warning "null" "null pointer check" } */
-  __builtin_fputs_unlocked (NULL, p);  /* { dg-warning "null" "null pointer check" } */
+  /* APPLE LOCAL end 6821124 puts string arg is not non-null */
   __builtin_fwrite_unlocked (s, 16, 16, NULL);  /* { dg-warning "null" "null pointer check" } */
   __builtin_fwrite_unlocked (NULL, 16, 16, p);  /* { dg-warning "null" "null pointer check" } */
 

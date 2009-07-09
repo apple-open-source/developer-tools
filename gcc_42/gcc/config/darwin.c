@@ -148,6 +148,12 @@ output_objc_section_asm_op (const void *directive)
       static const enum darwin_section_enum tomarkv2[] =
 	{
 	  objc_v2_message_refs_section,
+#ifdef TARGET_ARM
+	  /* APPLE LOCAL begin radar 6255595 */
+	  objc_v2_classdefs_section,
+	  objc_v2_metadata_section,
+	  /* APPLE LOCAL end radar 6255595 */
+#endif /* TARGET_ARM */
 	  objc_v2_classrefs_section,
 	  objc_v2_classlist_section,
 	  objc_v2_categorylist_section,
@@ -1325,6 +1331,32 @@ machopic_reloc_rw_mask (void)
   return MACHOPIC_INDIRECT ? 3 : 0;
 }
 
+#ifdef TARGET_ARM
+/* APPLE LOCAL begin radar 5575115, 6255595 */
+/* This routine returns TRUE if EXP is a variable representing
+   on objective C meta data. */
+static inline bool
+objc_internal_variable_name (tree exp)
+{
+  if (TREE_CODE (exp) == VAR_DECL)
+    {
+      tree decl_name = DECL_NAME (exp);
+      if (decl_name && TREE_CODE (decl_name) == IDENTIFIER_NODE
+	  && IDENTIFIER_POINTER (decl_name))
+	{
+	  const char* name = IDENTIFIER_POINTER (decl_name);
+	  return 
+	   (!strncmp (name, "_OBJC_", 6)
+	    || !strncmp (name, "OBJC_", 5)
+	    || !strncmp (name, "l_OBJC_", 7)
+            || !strncmp (name, "l_objc_", 7));
+	}
+    }
+  return false;
+}
+/* APPLE LOCAL end radar 5575115, 6255595 */
+
+#endif /* TARGET_ARM */
 section *
 machopic_select_section (tree exp, int reloc,
 			 unsigned HOST_WIDE_INT align ATTRIBUTE_UNUSED)
@@ -1423,11 +1455,17 @@ machopic_select_section (tree exp, int reloc,
       else
 	return base_section;
     }
+#ifndef TARGET_ARM
   else if (TREE_CODE (exp) == VAR_DECL &&
 	   DECL_NAME (exp) &&
 	   TREE_CODE (DECL_NAME (exp)) == IDENTIFIER_NODE &&
 	   IDENTIFIER_POINTER (DECL_NAME (exp)) &&
 	   !strncmp (IDENTIFIER_POINTER (DECL_NAME (exp)), "_OBJC_", 6))
+#else /* TARGET_ARM */
+  /* APPLE LOCAL begin radar 5575115, 6255595 */
+  else if (objc_internal_variable_name (exp))
+  /* APPLE LOCAL end radar 5575115, 6255595 */
+#endif /* TARGET_ARM */
     {
       const char *name = IDENTIFIER_POINTER (DECL_NAME (exp));
       /* APPLE LOCAL begin radar 4792158 */
@@ -1506,7 +1544,12 @@ machopic_select_section (tree exp, int reloc,
             return darwin_sections[objc_v2_message_refs_section];
           else if (!strncmp (name, "_OBJC_LABEL_CLASS_", 18))
             return darwin_sections[objc_v2_classlist_section];
+#ifndef TARGET_ARM
           else if (!strncmp (name, "_OBJC_LABEL_PROTOCOL_", 21))
+#else /* TARGET_ARM */
+          /* APPLE LOCAL radar 6351990 */
+          else if (!strncmp (name, "l_OBJC_LABEL_PROTOCOL_", 22))
+#endif /* TARGET_ARM */
             return darwin_sections[objc_v2_protocollist_section];
           else if (!strncmp (name, "_OBJC_LABEL_CATEGORY_", 21))
             return darwin_sections[objc_v2_categorylist_section];
@@ -1514,14 +1557,31 @@ machopic_select_section (tree exp, int reloc,
             return darwin_sections[objc_v2_nonlazy_class_section];
           else if (!strncmp (name, "_OBJC_LABEL_NONLAZY_CATEGORY_", 29))
             return darwin_sections[objc_v2_nonlazy_category_section];
+#ifndef TARGET_ARM
           else if (!strncmp (name, "_OBJC_PROTOCOL_REFERENCE_", 25))
+#else /* TARGET_ARM */
+          /* APPLE LOCAL radar 6351990 */
+          else if (!strncmp (name, "l_OBJC_PROTOCOL_REFERENCE_", 26))
+#endif /* TARGET_ARM */
             return darwin_sections[objc_v2_protocolrefs_section];
           else if (!strncmp (name, "_OBJC_SELECTOR_REFERENCES", 25))
             return darwin_sections[objc_v2_selector_refs_section];
           else if (!strncmp (name, "_OBJC_IMAGE_INFO", 16))
             return darwin_sections[objc_v2_image_info_section];
+#ifdef TARGET_ARM
+	    /* APPLE LOCAL begin radar 6255595 */
+	  else if (!strncmp (name, "OBJC_CLASS_$_", 13)
+		   || !strncmp (name, "OBJC_METACLASS_$_", 17))
+	    return darwin_sections[objc_v2_classdefs_section];
+#endif /* TARGET_ARM */
           else
+#ifndef TARGET_ARM
             return base_section;
+#else /* TARGET_ARM */
+            return  (base_section == data_section) ? 
+		      darwin_sections[objc_v2_metadata_section] : base_section;
+    	  /* APPLE LOCAL end radar 6255595 */
+#endif /* TARGET_ARM */
 	}
       /* APPLE LOCAL end radar 4792158 */
     }

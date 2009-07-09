@@ -19,33 +19,49 @@
 ;; the Free Software Foundation, 51 Franklin Street, Fifth Floor,
 ;; Boston, MA 02110-1301, USA.
 
+;; APPLE LOCAL begin v7 support. Merge from mainline
 ;; The following register constraints have been used:
-;; - in ARM state: f, v, w, y, z
+;; - in ARM/Thumb-2 state: f, t, v, w, x, y, z
 ;; - in Thumb state: h, k, b
 ;; - in both states: l, c
 ;; In ARM state, 'l' is an alias for 'r'
 
 ;; The following normal constraints have been used:
-;; in ARM state: G, H, I, J, K, L, M
-;; in Thumb state: I, J, K, L, M, N, O
+;; in ARM/Thumb-2 state: G, H, I, J, K, L, M
+;; in Thumb-1 state: I, J, K, L, M, N, O
+;; APPLE LOCAL end v7 support. Merge from mainline
 
+;; APPLE LOCAL begin v7 support. Merge from Codesourcery
 ;; The following multi-letter normal constraints have been used:
 ;; APPLE LOCAL 5831562 long long constants
-;; in ARM state: Da, Db, Dc, Dd
+;; in ARM/Thumb-2 state: Da, Db, Dc, Dd, Dn, Dl, DL, Dv
 
 ;; The following memory constraints have been used:
-;; in ARM state: Q, Uq, Uv, Uy
+;; in ARM/Thumb-2 state: Q, Ut, Uv, Uy, Un, Us
+;; in ARM state: Uq
+;; APPLE LOCAL end v7 support. Merge from Codesourcery
 
 
 (define_register_constraint "f" "TARGET_ARM ? FPA_REGS : NO_REGS"
  "Legacy FPA registers @code{f0}-@code{f7}.")
 
+;; APPLE LOCAL begin v7 support. Merge from mainline
+(define_register_constraint "t" "TARGET_32BIT ? VFP_LO_REGS : NO_REGS"
+ "The VFP registers @code{s0}-@code{s31}.")
+
+;; APPLE LOCAL end v7 support. Merge from mainline
 (define_register_constraint "v" "TARGET_ARM ? CIRRUS_REGS : NO_REGS"
  "The Cirrus Maverick co-processor registers.")
 
-(define_register_constraint "w" "TARGET_ARM ? VFP_REGS : NO_REGS"
- "The VFP registers @code{s0}-@code{s31}.")
+;; APPLE LOCAL begin v7 support. Merge from mainline
+(define_register_constraint "w"
+  "TARGET_32BIT ? (TARGET_VFP3 ? VFP_REGS : VFP_LO_REGS) : NO_REGS"
+ "The VFP registers @code{d0}-@code{d15}, or @code{d0}-@code{d31} for VFPv3.")
 
+(define_register_constraint "x" "TARGET_32BIT ? VFP_D0_D7_REGS : NO_REGS"
+ "The VFP registers @code{d0}-@code{d7}.")
+
+;; APPLE LOCAL end v7 support. Merge from mainline
 (define_register_constraint "y" "TARGET_REALLY_IWMMXT ? IWMMXT_REGS : NO_REGS"
  "The Intel iWMMX co-processor registers.")
 
@@ -70,109 +86,176 @@
 (define_register_constraint "c" "CC_REG"
  "@internal The condition code register.")
 
+;; APPLE LOCAL begin v7 support. Merge from mainline
 (define_constraint "I"
- "In ARM state a constant that can be used as an immediate value in a Data
-  Processing instruction.  In Thumb state a constant in the range 0-255."
+ "In ARM/Thumb-2 state a constant that can be used as an immediate value in a
+  Data Processing instruction.  In Thumb-1 state a constant in the range
+  0-255."
  (and (match_code "const_int")
-      (match_test "TARGET_ARM ? const_ok_for_arm (ival)
+      (match_test "TARGET_32BIT ? const_ok_for_arm (ival)
 		   : ival >= 0 && ival <= 255")))
 
 (define_constraint "J"
- "In ARM state a constant in the range @minus{}4095-4095.  In Thumb state
-  a constant in the range @minus{}255-@minus{}1."
+ "In ARM/Thumb-2 state a constant in the range @minus{}4095-4095.  In Thumb-1
+  state a constant in the range @minus{}255-@minus{}1."
  (and (match_code "const_int")
-      (match_test "TARGET_ARM ? (ival >= -4095 && ival <= 4095)
+      (match_test "TARGET_32BIT ? (ival >= -4095 && ival <= 4095)
 		   : (ival >= -255 && ival <= -1)")))
 
 (define_constraint "K"
- "In ARM state a constant that satisfies the @code{I} constraint if inverted.
-  In Thumb state a constant that satisfies the @code{I} constraint multiplied 
-  by any power of 2."
+ "In ARM/Thumb-2 state a constant that satisfies the @code{I} constraint if
+  inverted.  In Thumb-1 state a constant that satisfies the @code{I}
+  constraint multiplied by any power of 2."
  (and (match_code "const_int")
-      (match_test "TARGET_ARM ? const_ok_for_arm (~ival)
+      (match_test "TARGET_32BIT ? const_ok_for_arm (~ival)
 		   : thumb_shiftable_const (ival)")))
 
 (define_constraint "L"
- "In ARM state a constant that satisfies the @code{I} constraint if negated.
-  In Thumb state a constant in the range @minus{}7-7."
+ "In ARM/Thumb-2 state a constant that satisfies the @code{I} constraint if
+  negated.  In Thumb-1 state a constant in the range @minus{}7-7."
  (and (match_code "const_int")
-      (match_test "TARGET_ARM ? const_ok_for_arm (-ival)
+      (match_test "TARGET_32BIT ? const_ok_for_arm (-ival)
 		   : (ival >= -7 && ival <= 7)")))
 
 ;; The ARM state version is internal...
-;; @internal In ARM state a constant in the range 0-32 or any power of 2.
+;; @internal In ARM/Thumb-2 state a constant in the range 0-32 or any
+;; power of 2.
 (define_constraint "M"
- "In Thumb state a constant that is a multiple of 4 in the range 0-1020."
+ "In Thumb-1 state a constant that is a multiple of 4 in the range 0-1020."
  (and (match_code "const_int")
-      (match_test "TARGET_ARM ? ((ival >= 0 && ival <= 32)
+      (match_test "TARGET_32BIT ? ((ival >= 0 && ival <= 32)
 				 || ((ival & (ival - 1)) == 0))
 		   : ((ival >= 0 && ival <= 1020) && ((ival & 3) == 0))")))
 
 (define_constraint "N"
- "In Thumb state a constant in the range 0-31."
+ "In ARM/Thumb-2 state a constant suitable for a MOVW instruction.
+  In Thumb-1 state a constant in the range 0-31."
  (and (match_code "const_int")
-      (match_test "TARGET_THUMB && ival >= 0 && ival <= 31")))
+      (match_test "TARGET_32BIT ? arm_arch_thumb2 && ((ival & 0xffff0000) == 0)
+				: (ival >= 0 && ival <= 31)")))
 
 (define_constraint "O"
- "In Thumb state a constant that is a multiple of 4 in the range
+ "In Thumb-1 state a constant that is a multiple of 4 in the range
   @minus{}508-508."
  (and (match_code "const_int")
-      (match_test "TARGET_THUMB && ival >= -508 && ival <= 508
+      (match_test "TARGET_THUMB1 && ival >= -508 && ival <= 508
 		   && ((ival & 3) == 0)")))
 
 (define_constraint "G"
- "In ARM state a valid FPA immediate constant."
+ "In ARM/Thumb-2 state a valid FPA immediate constant."
  (and (match_code "const_double")
-      (match_test "TARGET_ARM && arm_const_double_rtx (op)")))
+      (match_test "TARGET_32BIT && arm_const_double_rtx (op)")))
 
 (define_constraint "H"
- "In ARM state a valid FPA immediate constant when negated."
+ "In ARM/Thumb-2 state a valid FPA immediate constant when negated."
  (and (match_code "const_double")
-      (match_test "TARGET_ARM && neg_const_double_rtx_ok_for_fpa (op)")))
+      (match_test "TARGET_32BIT && neg_const_double_rtx_ok_for_fpa (op)")))
 
 (define_constraint "Da"
  "@internal
-  In ARM state a const_int, const_double or const_vector that can
+  In ARM/Thumb-2 state a const_int, const_double or const_vector that can
   be generated with two Data Processing insns."
  (and (match_code "const_double,const_int,const_vector")
-      (match_test "TARGET_ARM && arm_const_double_inline_cost (op) == 2")))
+      (match_test "TARGET_32BIT && arm_const_double_inline_cost (op) == 2")))
 
 (define_constraint "Db"
  "@internal
-  In ARM state a const_int, const_double or const_vector that can
+  In ARM/Thumb-2 state a const_int, const_double or const_vector that can
   be generated with three Data Processing insns."
  (and (match_code "const_double,const_int,const_vector")
-      (match_test "TARGET_ARM && arm_const_double_inline_cost (op) == 3")))
+      (match_test "TARGET_32BIT && arm_const_double_inline_cost (op) == 3")))
 
 (define_constraint "Dc"
  "@internal
-  In ARM state a const_int, const_double or const_vector that can
+  In ARM/Thumb-2 state a const_int, const_double or const_vector that can
   be generated with four Data Processing insns.  This pattern is disabled
   if optimizing for space or when we have load-delay slots to fill."
  (and (match_code "const_double,const_int,const_vector")
-      (match_test "TARGET_ARM && arm_const_double_inline_cost (op) == 4
+      (match_test "TARGET_32BIT && arm_const_double_inline_cost (op) == 4
 		   && !(optimize_size || arm_ld_sched)")))
-
 ;; APPLE LOCAL begin 5831562 long long constants
 (define_constraint "Dd"
  "@internal
   In ARM state a const_int, const_double or const_vector that can
   used directly in arithmetic instructions as two 32-bit immediates."
  (and (match_code "const_double,const_int,const_vector")
-      (match_test "TARGET_ARM && const64_ok_for_arm_immediate (op)")))
+      (match_test "TARGET_32BIT && const64_ok_for_arm_immediate (op)")))
 ;; APPLE LOCAL end 5831562 long long constants
+;; APPLE LOCAL end v7 support. Merge from mainline
 
+;; APPLE LOCAL begin v7 support. Merge from Codesourcery
+(define_constraint "Dn"
+ "@internal
+  In ARM/Thumb-2 state a const_vector which can be loaded with a Neon vmov
+  immediate instruction."
+ (and (match_code "const_vector")
+      (match_test "TARGET_32BIT
+		   && imm_for_neon_mov_operand (op, GET_MODE (op))")))
+
+(define_constraint "Dl"
+ "@internal
+  In ARM/Thumb-2 state a const_vector which can be used with a Neon vorr or
+  vbic instruction."
+ (and (match_code "const_vector")
+      (match_test "TARGET_32BIT
+		   && imm_for_neon_logic_operand (op, GET_MODE (op))")))
+
+(define_constraint "DL"
+ "@internal
+  In ARM/Thumb-2 state a const_vector which can be used with a Neon vorn or
+  vand instruction."
+ (and (match_code "const_vector")
+      (match_test "TARGET_32BIT
+		   && imm_for_neon_inv_logic_operand (op, GET_MODE (op))")))
+;; APPLE LOCAL end v7 support. Merge from Codesourcery
+;; APPLE LOCAL begin v7 support. Merge from mainline
+
+(define_constraint "Dv"
+ "@internal
+  In ARM/Thumb-2 state a const_double which can be used with a VFP fconsts
+  or fconstd instruction."
+ (and (match_code "const_double")
+      (match_test "TARGET_32BIT && vfp3_const_double_rtx (op)")))
+;; APPLE LOCAL end v7 support. Merge from mainline
+;; APPLE LOCAL begin v7 support. Merge from Codesourcery
+
+(define_memory_constraint "Ut"
+ "@internal
+  In ARM/Thumb-2 state an address valid for loading/storing opaque structure
+  types wider than TImode."
+ (and (match_code "mem")
+      (match_test "TARGET_32BIT && neon_struct_mem_operand (op)")))
+;; APPLE LOCAL end v7 support. Merge from Codesourcery
+
+;; APPLE LOCAL begin v7 support. Merge from mainline
 (define_memory_constraint "Uv"
  "@internal
-  In ARM state a valid VFP load/store address."
+  In ARM/Thumb-2 state a valid VFP load/store address."
  (and (match_code "mem")
-      (match_test "TARGET_ARM && arm_coproc_mem_operand (op, FALSE)")))
+      (match_test "TARGET_32BIT && arm_coproc_mem_operand (op, FALSE)")))
 
 (define_memory_constraint "Uy"
  "@internal
-  In ARM state a valid iWMMX load/store address."
+  In ARM/Thumb-2 state a valid iWMMX load/store address."
  (and (match_code "mem")
-      (match_test "TARGET_ARM && arm_coproc_mem_operand (op, TRUE)")))
+      (match_test "TARGET_32BIT && arm_coproc_mem_operand (op, TRUE)")))
+;; APPLE LOCAL end v7 support. Merge from mainline
+
+;; APPLE LOCAL begin v7 support. Merge from Codesourcery
+(define_memory_constraint "Un"
+ "@internal
+  In ARM/Thumb-2 state a valid address for Neon element and structure
+  load/store instructions."
+ (and (match_code "mem")
+      (match_test "TARGET_32BIT && neon_vector_mem_operand (op, FALSE)")))
+
+(define_memory_constraint "Us"
+ "@internal
+  In ARM/Thumb-2 state a valid address for non-offset loads/stores of
+  quad-word values in four ARM registers."
+ (and (match_code "mem")
+      (match_test "TARGET_32BIT && neon_vector_mem_operand (op, TRUE)")))
+;; APPLE LOCAL end v7 support. Merge from Codesourcery
 
 (define_memory_constraint "Uq"
  "@internal
@@ -182,11 +265,13 @@
 		   && arm_legitimate_address_p (GET_MODE (op), XEXP (op, 0),
 						SIGN_EXTEND, 0)")))
 
+;; APPLE LOCAL begin v7 support. Merge from mainline
 (define_memory_constraint "Q"
  "@internal
-  In ARM state an address that is a single base register."
+  In ARM/Thumb-2 state an address that is a single base register."
  (and (match_code "mem")
       (match_test "REG_P (XEXP (op, 0))")))
+;; APPLE LOCAL end v7 support. Merge from mainline
 
 ;; We used to have constraint letters for S and R in ARM state, but
 ;; all uses of these now appear to have been removed.

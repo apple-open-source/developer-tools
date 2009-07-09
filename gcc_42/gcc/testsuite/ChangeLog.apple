@@ -1,8 +1,13 @@
+2009-05-06  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 6083666
+	* objc.dg/property-15.m: Modified
+	* objc.dg/property-16.m: New
+
 2009-04-24  Fariborz Jahanian <fjahanian@apple.com>
 
-       Radar 6825962
-       * property-synthesize-ivar-6.m : Add.
-       * optional-property.m: Modified.
+	Radar 6825962
+	* optional-property.m: Modified.
 
 2009-04-20  Fariborz Jahanian <fjahanian@apple.com>
 
@@ -14,10 +19,6 @@
 	Radar 5435299
 	* objc.dg/ivar-sem-check.m: Add
 
-2009-03-24  Stuart Hastings  <stuart@apple.com>
-
-	gcc.apple/5774346.c: Add -maltivec.
-
 2009-01-22  Stuart Hastings  <stuart@apple.com>
 
 	Radar 6515001
@@ -28,10 +29,45 @@
 	Radar 6414738
 	* g++.apple/6414738.C: New.
 
+2008-11-11  Fariborz Jahanian <fjahanian@apple.com>
+
+        Radar 6351990
+	* objc.dg/objc2-objc2-protocol-3.m: New
+	* obj-c++.dg/objc2-objc2-protocol-3.mm: New
+	
 2008-10-30  Stuart Hastings  <stuart@apple.com>
 
 	Radar 5951276
 	* gcc.target/i386/20020616-1.c: Skip for Darwin.
+
+2008-10-24  Josh Conner  <jconner@apple.com>
+
+	Radar 6305331
+	* gcc.apple/longcall-2.c: New test.
+
+2008-10-20  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 6255595
+	* objc.dg/objc2-newmetadata-sections.m: New
+
+2008-10-13  Fariborz Jahanian <fjahanian@apple.com>
+
+        Radar 6255913
+	* objc.dg/objc2-protocol-1.m: Modifed
+	* objc.dg/objc2-protocol-9.m: Modifed
+	* objc.dg/objc2-protocol-2.m: Modifed
+	* objc.dg/objc2-protocol-4.m: Modifed
+	* objc.dg/objc2-protocol-5.m: Modifed
+	* obj-c++.dg/objc2-protocol-9.mm: Modifed
+	* obj-c++.dg/objc2-protocol-4.mm: Modifed
+	* obj-c++.dg/objc2-protocol-5.mm: Modifed
+	* obj-c++.dg/objc2-protocol-1.mm: Modifed
+	* obj-c++.dg/objc2-protocol-2.mm: Modifed
+
+2008-10-13  Josh Conner  <jconner@apple.com>
+
+	Radar 6280380
+	* gcc.apple/condexec-2.c: New test.
 
 2008-10-03  Josh Conner  <jconner@apple.com>
 
@@ -41,6 +77,11 @@
         Radar 6264448
         * objc.dg/objc-property-enumtype.m: Add
         * obj-c++.dg/objc-property-enumtype.mm: Add
+
+2008-09-30  Josh Conner  <jconner@apple.com>
+
+	Radar 6251664
+	* gcc.apple/6251664.c: New test.
 
 2008-09-25  Stuart Hastings  <stuart@apple.com>
 

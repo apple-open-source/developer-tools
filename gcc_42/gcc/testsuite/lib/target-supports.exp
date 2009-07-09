@@ -1256,12 +1256,15 @@ proc check_effective_target_vect_int { } {
 	verbose "check_effective_target_vect_int: using cached result" 2
     } else {
 	set et_vect_int_saved 0
+# APPLE LOCAL begin v7 merge
 	if { [istarget i?86-*-*]
 	      || [istarget powerpc*-*-*]
 	      || [istarget x86_64-*-*]
 	      || [istarget sparc*-*-*]
 	      || [istarget alpha*-*-*]
-	      || [istarget ia64-*-*] } {
+	      || [istarget ia64-*-*] 
+	      || [check_effective_target_arm32] } {
+# APPLE LOCAL end v7 merge
 	   set et_vect_int_saved 1
 	}
     }
@@ -1295,7 +1298,8 @@ proc check_effective_target_arm32 { } {
 	verbose "check-effective_target_arm32: using cached result" 2
     } else {
 	set et_arm32_saved 0
-	if { [istarget arm-*-*]
+# APPLE LOCAL v7 merge
+	if { [istarget arm*-*-*]
 	      || [istarget strongarm*-*-*]
 	      || [istarget xscale-*-*] } {
 	    if ![string match "*-mthumb *" $compiler_flags] {
@@ -1310,17 +1314,97 @@ proc check_effective_target_arm32 { } {
 # Return 1 if this is an ARM target supporting -mfpu=vfp
 # -mfloat-abi=softfp.  Some multilibs may be incompatible with these
 # options.
-
+# APPLE LOCAL begin check for FP needs to be sensitive to thumb vs thumb2
 proc check_effective_target_arm_vfp_ok { } {
-    if { [check_effective_target_arm32] } {
-	return [check_no_compiler_messages arm_vfp_ok object {
-	    int dummy;
-	} "-mfpu=vfp -mfloat-abi=softfp"]
-    } else {
-	return 0
-    }
+    global compiler_flags
+    global TOOL_OPTIONS
+    set compiler_flags ""
+    # If running a subset of the test suite, $TOOL_OPTIONS may not exist.
+    catch {append compiler_flags " $TOOL_OPTIONS "}
+    return [check_no_messages_and_pattern arm_vfp_ok \
+		"ARM_VFP_OK" assembly " 
+		   #if __VFP_FP__ && (!__thumb__ || __thumb2__)
+		   #define ARM_VFP_OK 1
+		   #endif 
+		" "$compiler_flags -mfpu=vfp -mfloat-abi=softfp -E -Wp,-dD,-dM"]
 }
 
+# Return 1 if this is an ARM target supporting -mfpu=neon
+# -mfloat-abi=softfp.  Some multilibs may be incompatible with these
+# options.
+
+proc check_effective_target_arm_neon_ok { } {
+    global compiler_flags
+    global TOOL_OPTIONS
+    set compiler_flags ""
+    if { [istarget arm*-*-*] } {
+      # If running a subset of the test suite, $TOOL_OPTIONS may not exist.
+      catch {append compiler_flags " $TOOL_OPTIONS "}
+      return [check_no_messages_and_pattern arm_neon_ok \
+		  "ARM_NEON_OK" assembly " 
+		     #if __ARM_NEON__ && (!__thumb__ || __thumb2__)
+		     #define ARM_NEON_OK 1
+		     #endif 
+		  " "$compiler_flags -mfpu=neon -mfloat-abi=softfp -E -Wp,-dD,-dM"]
+    }
+  return 0;
+}
+# APPLE LOCAL end check for FP needs to be sensitive to thumb vs thumb2
+
+# APPLE LOCAL begin v7 merge
+# Return 1 if the target supports executing NEON instructions, 0
+# otherwise.  Cache the result.
+
+proc check_effective_target_arm_neon_hw { } {
+    global arm_neon_hw_available_saved
+    global tool
+
+    if [info exists arm_neon_hw_available_saved] {
+	verbose "check_arm_neon_hw_available  returning saved $arn_neon_hw_available_saved" 2
+    } else {
+	set arm_neon_hw_available_saved 0
+
+	# Set up, compile, and execute a test program containing NEON
+	# instructions.  Include the current process ID in the file
+	# names to prevent conflicts with invocations for multiple
+	# testsuites.
+	set src neon[pid].c
+	set exe neon[pid].x
+
+	set f [open $src "w"]
+	puts $f "int main() {"
+	puts $f "  long long a = 0, b = 1;"
+	puts $f "  asm (\"vorr %P0, %P1, %P2\""
+	puts $f "       : \"=w\" (a)"
+	puts $f "       : \"0\" (a), \"w\" (b));"
+	puts $f "  return (a != 1);"
+	puts $f "}"
+	close $f
+
+	set opts "additional_flags=-mfpu=neon additional_flags=-mfloat-abi=softfp"
+
+	verbose "check_arm_neon_hw_available  compiling testfile $src" 2
+	set lines [${tool}_target_compile $src $exe executable "$opts"]
+	file delete $src
+
+	if [string match "" $lines] then {
+	    # No error message, compilation succeeded.
+	    set result [${tool}_load "./$exe" "" ""]
+	    set status [lindex $result 0]
+	    remote_file build delete $exe
+	    verbose "check_arm_neon_hw_available testfile status is <$status>" 2
+
+	    if { $status == "pass" } then {
+		set arm_neon_hw_available_saved 1
+	    }
+	} else {
+	    verbose "check_arm_neon_hw_availalble testfile compilation failed" 2
+	}
+    }
+
+    return $arm_neon_hw_available_saved
+}
+# APPLE LOCAL end v7 merge
 # Return 1 if this is a PowerPC target with floating-point registers.
 
 proc check_effective_target_powerpc_fprs { } {
@@ -1396,10 +1480,13 @@ proc check_effective_target_vect_shift { } {
 	verbose "check_effective_target_vect_shift: using cached result" 2
     } else {
 	set et_vect_shift_saved 0
+# APPLE LOCAL begin v7 merge
 	if { [istarget powerpc*-*-*]
 	     || [istarget ia64-*-*]
 	     || [istarget i?86-*-*]
-	     || [istarget x86_64-*-*] } {
+	     || [istarget x86_64-*-*]
+	     || [check_effective_target_arm32] } {
+# APPLE LOCAL end v7 merge
 	   set et_vect_shift_saved 1
 	}
     }
@@ -1413,9 +1500,11 @@ proc check_effective_target_vect_shift { } {
 # This can change for different subtargets so do not cache the result.
 
 proc check_effective_target_vect_long { } {
+# APPLE LOCAL v7 merge
     if { [istarget i?86-*-*]
 	 || ([istarget powerpc*-*-*] && [check_effective_target_ilp32])
 	 || [istarget x86_64-*-*]
+	 || [check_effective_target_arm32]
 	 || ([istarget sparc*-*-*] && [check_effective_target_ilp32]) } {
 	set answer 1
     } else {
@@ -1437,11 +1526,14 @@ proc check_effective_target_vect_float { } {
 	verbose "check_effective_target_vect_float: using cached result" 2
     } else {
 	set et_vect_float_saved 0
+# APPLE LOCAL begin v7 merge
 	if { [istarget i?86-*-*]
 	      || [istarget powerpc*-*-*]
 	      || [istarget mipsisa64*-*-*]
 	      || [istarget x86_64-*-*]
-	      || [istarget ia64-*-*] } {
+	      || [istarget ia64-*-*]
+	      || [check_effective_target_arm32] } {
+# APPLE LOCAL end v7 merge
 	   set et_vect_float_saved 1
 	}
     }
@@ -1709,9 +1801,12 @@ proc check_effective_target_vect_no_align { } {
 	verbose "check_effective_target_vect_no_align: using cached result" 2
     } else {
 	set et_vect_no_align_saved 0
+# APPLE LOCAL begin v7 merge
 	if { [istarget mipsisa64*-*-*]
 	     || [istarget sparc*-*-*]
-	     || [istarget ia64-*-*] } {
+	     || [istarget ia64-*-*]
+	     || [check_effective_target_arm32] } {
+# APPLE LOCAL end v7 merge
 	    set et_vect_no_align_saved 1
 	}
     }
@@ -1812,9 +1907,12 @@ proc check_effective_target_vect_int_mult { } {
 	verbose "check_effective_target_vect_int_mult: using cached result" 2
     } else {
 	set et_vect_int_mult_saved 0
+# APPLE LOCAL begin v7 merge
 	if { [istarget powerpc*-*-*]
 	     || [istarget i?86-*-*]
-	     || [istarget x86_64-*-*] } {
+	     || [istarget x86_64-*-*]
+	     || [check_effective_target_arm32] } {
+# APPLE LOCAL end v7 merge
 	   set et_vect_int_mult_saved 1
 	}
     }

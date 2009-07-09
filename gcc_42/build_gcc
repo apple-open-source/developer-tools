@@ -74,14 +74,6 @@ fi
 # to be built.  It's VERS but only up to the second '.' (if there is one).
 MAJ_VERS=`echo $VERS | sed 's/\([0-9]*\.[0-9]*\)[.-].*/\1/'`
 
-# APPLE LOCAL begin ARM ARM_CONFIGFLAGS
-# For ARM, grab all system files from an SDK.
-ARM_SYSROOT="/Developer/SDKs/Extra"
-ARM_LIBSTDCXX_VERSION=4.2.1
-ARM_CONFIGFLAGS="--with-sysroot=\"$ARM_SYSROOT\" \
-                 --with-gxx-include-dir=\${prefix}/include/c++/$ARM_LIBSTDCXX_VERSION"
-# APPLE LOCAL end ARM ARM_CONFIGFLAGS
-
 # This is the libstdc++ version to use.
 LIBSTDCXX_VERSION=4.2.1
 if [ ! -d "$DEST_ROOT/include/c++/$LIBSTDCXX_VERSION" ]; then
@@ -91,6 +83,59 @@ NON_ARM_CONFIGFLAGS="--with-gxx-include-dir=\${prefix}/include/c++/$LIBSTDCXX_VE
 
 DARWIN_VERS=`uname -r | sed 's/\..*//'`
 echo DARWIN_VERS = $DARWIN_VERS
+
+# APPLE LOCAL begin ARM
+ARM_LIBSTDCXX_VERSION=4.2.1
+ARM_CONFIGFLAGS="--with-gxx-include-dir=/usr/include/c++/$ARM_LIBSTDCXX_VERSION"
+
+ARM_PLATFORM=/Developer/Platforms/iPhoneOS.platform
+ARM_IPHONE_SDK=iPhoneOS${IPHONEOS_DEPLOYMENT_TARGET}.Internal.sdk
+ARM_EXTRA_SDK=/Developer/SDKs/Extra
+
+# Check if the build system is running Leopard or earlier.  If the Legacy PDK
+# is not installed, the toolchain in / will not support ARM.  Use the iPhone
+# platform directory instead.
+if [ $DARWIN_VERS -le 9 -a ! -d $ARM_EXTRA_SDK ]; then
+  ARM_TOOLROOT=$ARM_PLATFORM
+else
+  ARM_TOOLROOT=/
+fi
+
+# ARM may require a sysroot option.
+ARM_SYSROOT=$ARM_EXTRA_SDK
+# If the default sysroot does not exist, try a different location.
+if [ ! -d $ARM_SYSROOT ]; then
+  ARM_SYSROOT=$ARM_PLATFORM/Developer/SDKs/$ARM_IPHONE_SDK
+fi
+
+# Split the MACOSX_DEPLOYMENT_TARGET into major/minor versions.
+if [ -z "$MACOSX_DEPLOYMENT_TARGET" ]; then
+  # Anything 10.5 or earlier is treated the same below.
+  MACOSX_DEPLOYMENT_MAJOR=10
+  MACOSX_DEPLOYMENT_MINOR=5
+else
+  MACOSX_DEPLOYMENT_MAJOR=`echo $MACOSX_DEPLOYMENT_TARGET | sed 's/\..*//'`
+  MACOSX_DEPLOYMENT_MINOR=`echo $MACOSX_DEPLOYMENT_TARGET | sed 's/[0-9]*\.\([0-9]*\).*/\1/'`
+fi
+if [ $MACOSX_DEPLOYMENT_MAJOR -eq 10 -a \
+     $MACOSX_DEPLOYMENT_MINOR -le 5 ]; then
+  ARM_CONFIGFLAGS="$ARM_CONFIGFLAGS --with-sysroot=\"$ARM_SYSROOT\""
+else
+  ARM_SYSROOT=/
+fi
+
+# If building an ARM target, check that the required directories exist.
+if echo $TARGETS | grep arm; then
+  if [ ! -d $ARM_SYSROOT ]; then
+    echo "Error: cannot find ARM SDK to build ARM target"
+    exit 1
+  fi
+  if [ ! -d $ARM_TOOLROOT ]; then
+    echo "Error: $ARM_TOOLROOT directory is not installed"
+    exit 1
+  fi
+fi
+# APPLE LOCAL end ARM
 
 # If the user has CC set in their environment unset it now
 unset CC
@@ -171,18 +216,34 @@ mkdir $DIR/bin || exit 1
 for prog in ar nm ranlib strip lipo ld ; do
   for t in `echo $TARGETS $HOSTS | sort -u`; do
     P=$DIR/bin/${t}-apple-darwin$DARWIN_VERS-${prog}
+    # APPLE LOCAL begin toolroot
+    if [ $t = "arm" ]; then
+      toolroot=$ARM_TOOLROOT
+    else
+      toolroot=
+    fi
+    # APPLE LOCAL end toolroot
     echo '#!/bin/sh' > $P || exit 1
-    echo 'exec /usr/bin/'${prog}' "$@"' >> $P || exit 1
+    # APPLE LOCAL insert toolroot below
+    echo 'exec '${toolroot}'/usr/bin/'${prog}' "$@"' >> $P || exit 1
     chmod a+x $P || exit 1
   done
 done
 for t in `echo $1 $2 | sort -u`; do
   gt=`echo $t | $TRANSLATE_ARCH`
   P=$DIR/bin/${gt}-apple-darwin$DARWIN_VERS-as
+  # APPLE LOCAL begin toolroot
+  if [ $gt = "arm" ]; then
+    toolroot=$ARM_TOOLROOT
+  else
+    toolroot=
+  fi
+  # APPLE LOCAL end toolroot
   echo '#!/bin/sh' > $P || exit 1
 
-  echo 'for a; do case $a in -arch) exec /usr/bin/as "$@";;  esac; done' >> $P || exit 1
-  echo 'exec /usr/bin/as -arch '${t}' "$@"' >> $P || exit 1
+  # APPLE LOCAL insert toolroot below
+  echo 'for a; do case $a in -arch) exec '${toolroot}'/usr/bin/as "$@";;  esac; done' >> $P || exit 1
+  echo 'exec '${toolroot}'/usr/bin/as -arch '${t}' "$@"' >> $P || exit 1
   chmod a+x $P || exit 1
 done
 PATH=$DIR/bin:$PATH
@@ -203,8 +264,9 @@ for t in $CROSS_TARGETS ; do
    cd $DIR/obj-$BUILD-$t || exit 1
    if [ \! -f Makefile ]; then
     # APPLE LOCAL begin ARM ARM_CONFIGFLAGS
-    $SRC_DIR/configure $CONFIGFLAGS --enable-werror-always \
-     `if [ $t = 'arm' ] ; then echo $ARM_CONFIGFLAGS ; else echo $NON_ARM_CONFIGFLAGS ; fi` \
+    # APPLE LOCAL don't use --enable-werror for ARM builds
+    $SRC_DIR/configure `echo $CONFIGFLAGS | sed -e "s/--enable-werror//"`  \
+    `if [ $t = 'arm' ] ; then echo $ARM_CONFIGFLAGS ; else echo $NON_ARM_CONFIGFLAGS ; fi` \
       --program-prefix=$t-apple-darwin$DARWIN_VERS- \
       --host=$BUILD-apple-darwin$DARWIN_VERS --target=$t-apple-darwin$DARWIN_VERS || exit 1
     # APPLE LOCAL end ARM ARM_CONFIGFLAGS
@@ -213,7 +275,7 @@ for t in $CROSS_TARGETS ; do
    make $MAKEFLAGS DESTDIR=$DIR/dst-$BUILD-$t install-gcc install-target \
      CFLAGS="$CFLAGS" CXXFLAGS="$CFLAGS" || exit 1
 
-    # Add the compiler we just built to the path.
+   # Add the compiler we just built to the path.
    PATH=$DIR/dst-$BUILD-$t/usr/bin:$PATH
  fi
 done
@@ -247,7 +309,8 @@ for h in $HOSTS ; do
 
       if [ \! -f Makefile ]; then
 	# APPLE LOCAL begin ARM ARM_CONFIGFLAGS
-        $SRC_DIR/configure $CONFIGFLAGS \
+        # APPLE LOCAL don't use --enable-werror for ARM builds
+        $SRC_DIR/configure `echo $CONFIGFLAGS | sed -e "s/--enable-werror//"`  \
 	  `if [ $t = 'arm' ] && [ $h != 'arm' ] ; then echo $ARM_CONFIGFLAGS ; else echo $NON_ARM_CONFIGFLAGS ; fi` \
           --program-prefix=$pp \
           --host=$h-apple-darwin$DARWIN_VERS --target=$t-apple-darwin$DARWIN_VERS || exit 1

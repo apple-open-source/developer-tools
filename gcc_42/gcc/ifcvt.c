@@ -522,13 +522,16 @@ cond_exec_process_if_block (ce_if_block_t * ce_info,
     {
       basic_block bb = test_bb;
       basic_block last_test_bb = ce_info->last_test_bb;
-      int mod_ok = 0;
+      /* APPLE LOCAL 6370037 over-aggressive if conversion */
+      /* Line deleted */
 
       if (! false_expr)
 	goto fail;
 
       do
 	{
+          /* APPLE LOCAL 6370037 over-aggressive if conversion */
+          int mod_ok = 0;
 	  rtx start, end;
 	  rtx t, f;
 	  enum rtx_code f_code;

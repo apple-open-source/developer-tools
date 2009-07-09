@@ -22,6 +22,6 @@ foo (long l, int nfoo)
   printf ((nfoo > 1) ? "%ld foos" : ((nfoo > 0) ? "%d foo" : "%d foos"), nfoo); /* { dg-warning "long int" "wrong type" } */
   printf ((nfoo > 1) ? "%d foos" : ((nfoo > 0) ? "%ld foo" : "%d foos"), nfoo); /* { dg-warning "long int" "wrong type" } */
   /* Extra arguments to NULL should be complained about.  */
-  printf (NULL, "foo"); /* { dg-warning "too many" "NULL extra args" } */
-  /* { dg-warning "null" "null format arg" { target *-*-* } 25 } */
+  /* APPLE LOCAL 6821124 string arg is not non-null */
+  /* removed lines */
 }

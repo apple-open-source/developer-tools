@@ -47,6 +47,6 @@ SSyncSet *slocal;
 @implementation SPeer_iDisk_remote1 (protected)
 - (void) preferredSource1
 {
-  self.syncSet.localPeer;	/* { dg-error "type of accessor does not match the type of property" } */
+  self.syncSet.localPeer;	/* { dg-warning "type of accessor does not match the type of property" } */
 }
 @end

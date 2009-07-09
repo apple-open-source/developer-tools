@@ -41,6 +41,8 @@ void __attribute__((weak)) __cxa_call_unexpected(_Unwind_Control_Block *ucbp);
 bool __attribute__((weak)) __cxa_begin_cleanup(_Unwind_Control_Block *ucbp);
 bool __attribute__((weak)) __cxa_type_match(_Unwind_Control_Block *ucbp,
 					    const type_info *rttip,
+/* APPLE LOCAL v7 support. Merge from Codesourcery */
+					    bool is_reference,
 					    void **matched_object);
 
 _Unwind_Ptr __attribute__((weak))
@@ -73,6 +75,15 @@ struct vfp_regs
   _uw pad;
 };
 
+/* APPLE LOCAL begin v7 support. Merge from mainline */
+struct vfpv3_regs
+{
+  /* Always populated via VSTM, so no need for the "pad" field from
+     vfp_regs (which is used to store the format word for FSTMX).  */
+  _uw64 d[16];
+};
+
+/* APPLE LOCAL end v7 support. Merge from mainline */
 struct fpa_reg
 {
   _uw w[3];
@@ -83,6 +94,18 @@ struct fpa_regs
   struct fpa_reg f[8];
 };
 
+/* APPLE LOCAL begin v7 support. Merge from Codesourcery */
+struct wmmxd_regs
+{
+  _uw64 wd[16];
+};
+
+struct wmmxc_regs
+{
+  _uw wc[4];
+};
+
+/* APPLE LOCAL end v7 support. Merge from Codesourcery */
 /* Unwind descriptors.  */
 
 typedef struct
@@ -113,10 +136,27 @@ typedef struct
   struct core_regs core;
   _uw prev_sp; /* Only valid during forced unwinding.  */
   struct vfp_regs vfp;
+  /* APPLE LOCAL v7 support. Merge from mainline */
+  struct vfpv3_regs vfp_regs_16_to_31;
   struct fpa_regs fpa;
+  /* APPLE LOCAL begin v7 support. Merge from Codesourcery */
+  struct wmmxd_regs wmmxd;
+  struct wmmxc_regs wmmxc;
+  /* APPLE LOCAL end v7 support. Merge from Codesourcery */
 } phase1_vrs;
 
-#define DEMAND_SAVE_VFP 1
+/* APPLE LOCAL begin v7 support. Merge from mainline */
+#define DEMAND_SAVE_VFP 1	/* VFP state has been saved if not set */
+#define DEMAND_SAVE_VFP_D 2	/* VFP state is for FLDMD/FSTMD if set */
+#define DEMAND_SAVE_VFP_V3 4    /* VFPv3 state for regs 16 .. 31 has
+                                   been saved if not set */
+/* APPLE LOCAL end v7 support. Merge from mainline */
+/* APPLE LOCAL begin v7 support. Merge from Codesourcery */
+#define DEMAND_SAVE_WMMXD 8	/* iWMMXt data registers have been
+				   saved if not set.  */
+#define DEMAND_SAVE_WMMXC 16	/* iWMMXt control registers have been
+				   saved if not set.  */
+/* APPLE LOCAL end v7 support. Merge from Codesourcery */
 
 /* This must match the structure created by the assembly wrappers.  */
 typedef struct
@@ -142,15 +182,51 @@ void __attribute__((noreturn)) restore_core_regs (struct core_regs *);
 
 /* Coprocessor register state manipulation functions.  */
 
+/* APPLE LOCAL v7 support. Merge from mainline */
+/* Routines for FLDMX/FSTMX format...  */
 void __gnu_Unwind_Save_VFP (struct vfp_regs * p);
 void __gnu_Unwind_Restore_VFP (struct vfp_regs * p);
+/* APPLE LOCAL begin v7 support. Merge from Codesourcery */
+void __gnu_Unwind_Save_WMMXD (struct wmmxd_regs * p);
+void __gnu_Unwind_Restore_WMMXD (struct wmmxd_regs * p);
+void __gnu_Unwind_Save_WMMXC (struct wmmxc_regs * p);
+void __gnu_Unwind_Restore_WMMXC (struct wmmxc_regs * p);
+/* APPLE LOCAL end v7 support. Merge from Codesourcery */
 
+/* APPLE LOCAL begin v7 support. Merge from mainline */
+/* ...and those for FLDMD/FSTMD format...  */
+void __gnu_Unwind_Save_VFP_D (struct vfp_regs * p);
+void __gnu_Unwind_Restore_VFP_D (struct vfp_regs * p);
+
+/* ...and those for VLDM/VSTM format, saving/restoring only registers
+   16 through 31.  */
+void __gnu_Unwind_Save_VFP_D_16_to_31 (struct vfpv3_regs * p);
+void __gnu_Unwind_Restore_VFP_D_16_to_31 (struct vfpv3_regs * p);
+
+/* APPLE LOCAL end v7 support. Merge from mainline */
 /* Restore coprocessor state after phase1 unwinding.  */
 static void
 restore_non_core_regs (phase1_vrs * vrs)
 {
+/* APPLE LOCAL begin v7 support. Merge from mainline */
   if ((vrs->demand_save_flags & DEMAND_SAVE_VFP) == 0)
-    __gnu_Unwind_Restore_VFP (&vrs->vfp);
+    {
+      if (vrs->demand_save_flags & DEMAND_SAVE_VFP_D)
+        __gnu_Unwind_Restore_VFP_D (&vrs->vfp);
+      else
+        __gnu_Unwind_Restore_VFP (&vrs->vfp);
+    }
+
+  if ((vrs->demand_save_flags & DEMAND_SAVE_VFP_V3) == 0)
+    __gnu_Unwind_Restore_VFP_D_16_to_31 (&vrs->vfp_regs_16_to_31);
+/* APPLE LOCAL end v7 support. Merge from mainline */
+/* APPLE LOCAL begin v7 support. Merge from Codesourcery */
+
+  if ((vrs->demand_save_flags & DEMAND_SAVE_WMMXD) == 0)
+    __gnu_Unwind_Restore_WMMXD (&vrs->wmmxd);
+  if ((vrs->demand_save_flags & DEMAND_SAVE_WMMXC) == 0)
+    __gnu_Unwind_Restore_WMMXC (&vrs->wmmxc);
+/* APPLE LOCAL end v7 support. Merge from Codesourcery */
 }
 
 /* A better way to do this would probably be to compare the absolute address
@@ -273,35 +349,102 @@ _Unwind_VRS_Result _Unwind_VRS_Pop (_Unwind_Context *context,
 	_uw start = discriminator >> 16;
 	_uw count = discriminator & 0xffff;
 	struct vfp_regs tmp;
+/* APPLE LOCAL begin v7 support. Merge from mainline */
+	struct vfpv3_regs tmp_16_to_31;
+	int tmp_count;
 	_uw *sp;
 	_uw *dest;
+        int num_vfpv3_regs = 0;
 
+        /* We use an approximation here by bounding _UVRSD_DOUBLE
+           register numbers at 32 always, since we can't detect if
+           VFPv3 isn't present (in such a case the upper limit is 16).  */
 	if ((representation != _UVRSD_VFPX && representation != _UVRSD_DOUBLE)
-	    || start + count > 16)
+            || start + count > (representation == _UVRSD_VFPX ? 16 : 32)
+            || (representation == _UVRSD_VFPX && start >= 16))
 	  return _UVRSR_FAILED;
 
-	if (vrs->demand_save_flags & DEMAND_SAVE_VFP)
+        /* Check if we're being asked to pop VFPv3-only registers
+           (numbers 16 through 31).  */
+	if (start >= 16)
+          num_vfpv3_regs = count;
+        else if (start + count > 16)
+          num_vfpv3_regs = start + count - 16;
+
+        if (num_vfpv3_regs && representation != _UVRSD_DOUBLE)
+          return _UVRSR_FAILED;
+
+	/* Demand-save coprocessor registers for stage1.  */
+	if (start < 16 && (vrs->demand_save_flags & DEMAND_SAVE_VFP))
 	  {
-	    /* Demand-save resisters for stage1.  */
 	    vrs->demand_save_flags &= ~DEMAND_SAVE_VFP;
-	    __gnu_Unwind_Save_VFP (&vrs->vfp);
+
+            if (representation == _UVRSD_DOUBLE)
+              {
+                /* Save in FLDMD/FSTMD format.  */
+	        vrs->demand_save_flags |= DEMAND_SAVE_VFP_D;
+	        __gnu_Unwind_Save_VFP_D (&vrs->vfp);
+              }
+            else
+              {
+                /* Save in FLDMX/FSTMX format.  */
+	        vrs->demand_save_flags &= ~DEMAND_SAVE_VFP_D;
+	        __gnu_Unwind_Save_VFP (&vrs->vfp);
+              }
+	  }
+
+        if (num_vfpv3_regs > 0
+            && (vrs->demand_save_flags & DEMAND_SAVE_VFP_V3))
+	  {
+	    vrs->demand_save_flags &= ~DEMAND_SAVE_VFP_V3;
+            __gnu_Unwind_Save_VFP_D_16_to_31 (&vrs->vfp_regs_16_to_31);
 	  }
 
 	/* Restore the registers from the stack.  Do this by saving the
 	   current VFP registers to a memory area, moving the in-memory
 	   values into that area, and restoring from the whole area.
 	   For _UVRSD_VFPX we assume FSTMX standard format 1.  */
-	__gnu_Unwind_Save_VFP (&tmp);
+        if (representation == _UVRSD_VFPX)
+  	  __gnu_Unwind_Save_VFP (&tmp);
+        else
+          {
+	    /* Save registers 0 .. 15 if required.  */
+            if (start < 16)
+              __gnu_Unwind_Save_VFP_D (&tmp);
 
-	/* The stack address is only guaranteed to be word aligned, so
+	    /* Save VFPv3 registers 16 .. 31 if required.  */
+            if (num_vfpv3_regs)
+  	      __gnu_Unwind_Save_VFP_D_16_to_31 (&tmp_16_to_31);
+          }
+
+	/* Work out how many registers below register 16 need popping.  */
+	tmp_count = num_vfpv3_regs > 0 ? 16 - start : count;
+
+	/* Copy registers below 16, if needed.
+	   The stack address is only guaranteed to be word aligned, so
 	   we can't use doubleword copies.  */
 	sp = (_uw *) vrs->core.r[R_SP];
-	dest = (_uw *) &tmp.d[start];
-	count *= 2;
-	while (count--)
-	  *(dest++) = *(sp++);
+        if (tmp_count > 0)
+          {
+	    tmp_count *= 2;
+	    dest = (_uw *) &tmp.d[start];
+	    while (tmp_count--)
+	      *(dest++) = *(sp++);
+          }
 
-	/* Skip the pad word */
+	/* Copy VFPv3 registers numbered >= 16, if needed.  */
+        if (num_vfpv3_regs > 0)
+          {
+            /* num_vfpv3_regs is needed below, so copy it.  */
+            int tmp_count_2 = num_vfpv3_regs * 2;
+            int vfpv3_start = start < 16 ? 16 : start;
+
+	    dest = (_uw *) &tmp_16_to_31.d[vfpv3_start - 16];
+	    while (tmp_count_2--)
+	      *(dest++) = *(sp++);
+          }
+
+	/* Skip the format word space if using FLDMX/FSTMX format.  */
 	if (representation == _UVRSD_VFPX)
 	  sp++;
 
@@ -309,15 +452,100 @@ _Unwind_VRS_Result _Unwind_VRS_Pop (_Unwind_Context *context,
 	vrs->core.r[R_SP] = (_uw) sp;
 
 	/* Reload the registers.  */
-	__gnu_Unwind_Restore_VFP (&tmp);
+        if (representation == _UVRSD_VFPX)
+  	  __gnu_Unwind_Restore_VFP (&tmp);
+        else
+          {
+	    /* Restore registers 0 .. 15 if required.  */
+            if (start < 16)
+              __gnu_Unwind_Restore_VFP_D (&tmp);
+
+	    /* Restore VFPv3 registers 16 .. 31 if required.  */
+            if (num_vfpv3_regs > 0)
+  	      __gnu_Unwind_Restore_VFP_D_16_to_31 (&tmp_16_to_31);
+          }
+/* APPLE LOCAL end v7 support. Merge from mainline */
       }
       return _UVRSR_OK;
 
     case _UVRSC_FPA:
-    case _UVRSC_WMMXD:
-    case _UVRSC_WMMXC:
+/* APPLE LOCAL begin v7 support. Merge from Codesourcery */
       return _UVRSR_NOT_IMPLEMENTED;
 
+    case _UVRSC_WMMXD:
+      {
+	_uw start = discriminator >> 16;
+	_uw count = discriminator & 0xffff;
+	struct wmmxd_regs tmp;
+	_uw *sp;
+	_uw *dest;
+
+	if ((representation != _UVRSD_UINT64) || start + count > 16)
+	  return _UVRSR_FAILED;
+
+	if (vrs->demand_save_flags & DEMAND_SAVE_WMMXD)
+	  {
+	    /* Demand-save resisters for stage1.  */
+	    vrs->demand_save_flags &= ~DEMAND_SAVE_WMMXD;
+	    __gnu_Unwind_Save_WMMXD (&vrs->wmmxd);
+	  }
+
+	/* Restore the registers from the stack.  Do this by saving the
+	   current WMMXD registers to a memory area, moving the in-memory
+	   values into that area, and restoring from the whole area.  */
+	__gnu_Unwind_Save_WMMXD (&tmp);
+
+	/* The stack address is only guaranteed to be word aligned, so
+	   we can't use doubleword copies.  */
+	sp = (_uw *) vrs->core.r[R_SP];
+	dest = (_uw *) &tmp.wd[start];
+	count *= 2;
+	while (count--)
+	  *(dest++) = *(sp++);
+
+	/* Set the new stack pointer.  */
+	vrs->core.r[R_SP] = (_uw) sp;
+
+	/* Reload the registers.  */
+	__gnu_Unwind_Restore_WMMXD (&tmp);
+      }
+      return _UVRSR_OK;
+
+    case _UVRSC_WMMXC:
+      {
+	int i;
+	struct wmmxc_regs tmp;
+	_uw *sp;
+
+	if ((representation != _UVRSD_UINT32) || discriminator > 16)
+	  return _UVRSR_FAILED;
+
+	if (vrs->demand_save_flags & DEMAND_SAVE_WMMXC)
+	  {
+	    /* Demand-save resisters for stage1.  */
+	    vrs->demand_save_flags &= ~DEMAND_SAVE_WMMXC;
+	    __gnu_Unwind_Save_WMMXC (&vrs->wmmxc);
+	  }
+
+	/* Restore the registers from the stack.  Do this by saving the
+	   current WMMXC registers to a memory area, moving the in-memory
+	   values into that area, and restoring from the whole area.  */
+	__gnu_Unwind_Save_WMMXC (&tmp);
+
+	sp = (_uw *) vrs->core.r[R_SP];
+	for (i = 0; i < 4; i++)
+	  if (discriminator & (1 << i))
+	    tmp.wc[i] = *(sp++);
+
+	/* Set the new stack pointer.  */
+	vrs->core.r[R_SP] = (_uw) sp;
+
+	/* Reload the registers.  */
+	__gnu_Unwind_Restore_WMMXC (&tmp);
+      }
+      return _UVRSR_OK;
+
+/* APPLE LOCAL end v7 support. Merge from Codesourcery */
     default:
       return _UVRSR_FAILED;
     }
@@ -847,6 +1075,8 @@ __gnu_unwind_pr_common (_Unwind_State state,
 		    {
 		      /* Check for a barrier.  */
 		      _uw rtti;
+/* APPLE LOCAL v7 support. Merge from Codesourcery */
+		      bool is_reference = (data[0] & uint32_highbit) != 0;
 		      void *matched;
 
 		      /* Check for no-throw areas.  */
@@ -860,6 +1090,8 @@ __gnu_unwind_pr_common (_Unwind_State state,
 			  /* Match a catch specification.  */
 			  rtti = _Unwind_decode_target2 ((_uw) &data[1]);
 			  if (!__cxa_type_match (ucbp, (type_info *) rtti,
+/* APPLE LOCAL v7 support. Merge from Codesourcery */
+						 is_reference,
 						 &matched))
 			    matched = (void *)0;
 			}
@@ -907,7 +1139,8 @@ __gnu_unwind_pr_common (_Unwind_State state,
 			{
 			  matched = (void *)(ucbp + 1);
 			  rtti = _Unwind_decode_target2 ((_uw) &data[i + 1]);
-			  if (__cxa_type_match (ucbp, (type_info *) rtti,
+/* APPLE LOCAL v7 support. Merge from Codesourcery */
+			  if (__cxa_type_match (ucbp, (type_info *) rtti, 0,
 						&matched))
 			    break;
 			}
@@ -1001,16 +1234,5 @@ __aeabi_unwind_cpp_pr2 (_Unwind_State state,
 {
   return __gnu_unwind_pr_common (state, ucbp, context, 2);
 }
-
-/* These two should never be used.  */
-_Unwind_Ptr
-_Unwind_GetDataRelBase (_Unwind_Context *context __attribute__ ((unused)))
-{
-  abort ();
-}
-
-_Unwind_Ptr
-_Unwind_GetTextRelBase (_Unwind_Context *context __attribute__ ((unused)))
-{
-  abort ();
-}
+/* APPLE LOCAL v7 support. Merge from Codesourcery */
+/* Removed lines */

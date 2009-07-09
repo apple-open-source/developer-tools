@@ -1,9 +1,19 @@
+2009-05-06  Fariborz Jahanian <fjahanian@apple.com>
+
+        Radar 6083666
+	* objc-act.c (objc_build_property_reference_expr): Never
+	issue diagnostics on use of an 'ivar' with property type
+        mismatch. Issue warning in all other cases and only in 
+        legitimate property/user declared type mismatches.
+        (objc_build_property_reference_expr): Do not issue any
+	warning or error when property is more specialized than
+        its user declared accessor. 
+
 2009-04-24  Fariborz Jahanian <fjahanian@apple.com>
 
-       Radar 6825962
-       * objc-act.c (objc_declare_property_impl): Issue property in
-       super class diagnostic even if explicitly asked for.
-
+        Radar 6825962
+	* objc-act.c (objc_declare_property_impl): Issue property in
+	super class diagnostic even if explicitly asked for.
 
 2009-04-20 Fariborz Jahanian <fjahanian@apple.com> 
 	Radar 6806369
@@ -21,6 +31,31 @@
         Radar 6157135
 	* objc-act.c (objc_delta_format_args): Ignore positional argument
 	of 0.
+
+2008-11-13  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 6351990 (minor tweak).
+	* objc-act.c (build_protocol_list_address_table): Move couple
+	of variables out of the loop.
+
+2008-11-11  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 6351990
+	* objc-act.c (build_protocollist_reference_decl): Builds
+	a weak visibility hidder symbol for protocol reference
+	meta-data symbols.
+	(objc_add_to_protocol_list_chain): Takes addition argument
+	and builds a tree using this argument.
+	(build_protocol_list_address_table): Now builds a list
+	of protocol label and address of generated protocol symbol.
+
+2008-10-13  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 6255913
+	* objc-act.c (build_protocollist_translation_table): Generate a
+	coalessable name for protocol meta-data reference with "l_OBJC" prefix.
+	(build_v2_protocol_reference): declare a 'weak' 'extern hidden'
+	symbol for protocol meta-data.
 
 2008-10-03  Josh Conner  <jconner@apple.com>
 

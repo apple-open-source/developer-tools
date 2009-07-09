@@ -2880,7 +2880,8 @@ symbols_found (int funfirstline, char ***canonical, char *copy,
 
   canonical_arr = (char **) xmalloc (num_syms * sizeof (char *));
   memset (canonical_arr, 0, num_syms * sizeof (char *));
-  *canonical = canonical_arr;
+  if (canonical != NULL)
+    *canonical = canonical_arr;
 
   for (current = sym_list, i = 0; current; current = current->next, i++)
     {

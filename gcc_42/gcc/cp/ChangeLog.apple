@@ -1,3 +1,9 @@
+2009-06-15  Fariborz Jahanian <fjahanian@apple.com>
+
+        Radar 6936421
+        * cvt.c (force_rvalue): Convert property reference 
+        expression to its getter call before converting to rvalue.
+
 2008-05-01  Josh Conner  <jconner@apple.com>
 
 	* optimize.c: Rewrite of structor shrinkage.

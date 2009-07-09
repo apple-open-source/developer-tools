@@ -1,5 +1,5 @@
 /* APPLE LOCAL file 4209014 4210936 */
-/* { dg-do compile } */
+/* { dg-do compile { target { powerpc*-*-darwin* i?86*-*-darwin* } } } */
 /* { dg-options "-Os" } */
 /* Call to inlinex25 should be inlined.  */
 /* { dg-final { scan-assembler-not "(\tbl|\tcall)\[ 	\]*_?inlinex25" } } */

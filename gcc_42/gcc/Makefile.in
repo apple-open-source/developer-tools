@@ -3427,7 +3427,7 @@ TEXI_GCC_FILES = gcc.texi gcc-common.texi gcc-vers.texi frontends.texi	\
 	 gcov.texi trouble.texi bugreport.texi service.texi		\
 	 contribute.texi compat.texi funding.texi gnu.texi gpl.texi	\
 	 fdl.texi contrib.texi cppenv.texi cppopts.texi			\
-	 implement-c.texi sourcecode.texi
+	 implement-c.texi arm-neon-intrinsics.texi sourcecode.texi
 # APPLE LOCAL end GPL compliance
 
 TEXI_GCCINT_FILES = gccint.texi gcc-common.texi gcc-vers.texi		\
@@ -3496,21 +3496,25 @@ dvi:: doc/gcc.dvi doc/gccint.dvi doc/gccinstall.dvi doc/cpp.dvi \
       doc/cppinternals.dvi lang.dvi
 
 doc/%.dvi: %.texi
-	$(TEXI2DVI) -I . -I $(abs_docdir) -I $(abs_docdir)/include -o $@ $<
+	# ALQAHIRA LOCAL use makeinfo to expand macros
+	$(TEXI2DVI) -e -I . -I $(abs_docdir) -I $(abs_docdir)/include -o $@ $<
 
 # Duplicate entry to handle renaming of gccinstall.dvi
 doc/gccinstall.dvi: $(TEXI_GCCINSTALL_FILES)
-	$(TEXI2DVI) -I . -I $(abs_docdir) -I $(abs_docdir)/include -o $@ $<
+	# ALQAHIRA LOCAL use makeinfo to expand macros
+	$(TEXI2DVI) -e -I . -I $(abs_docdir) -I $(abs_docdir)/include -o $@ $<
 
 pdf:: doc/gcc.pdf doc/gccint.pdf doc/gccinstall.pdf doc/cpp.pdf \
       doc/cppinternals.pdf lang.pdf
 
 doc/%.pdf: %.texi
-	$(TEXI2PDF) -I . -I $(abs_docdir) -I $(abs_docdir)/include -o $@ $<
+	# ALQAHIRA LOCAL use makeinfo to expand macros
+	$(TEXI2PDF) -e -I . -I $(abs_docdir) -I $(abs_docdir)/include -o $@ $<
 
 # Duplicate entry to handle renaming of gccinstall.pdf
 doc/gccinstall.pdf: $(TEXI_GCCINSTALL_FILES)
-	$(TEXI2PDF) -I . -I $(abs_docdir) -I $(abs_docdir)/include -o $@ $<
+	# ALQAHIRA LOCAL use makeinfo to expand macros
+	$(TEXI2PDF) -e -I . -I $(abs_docdir) -I $(abs_docdir)/include -o $@ $<
 
 # List the directories or single hmtl files which are installed by
 # install-html. The lang.html file triggers language fragments to build

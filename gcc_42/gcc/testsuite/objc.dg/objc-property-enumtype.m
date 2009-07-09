@@ -2,7 +2,9 @@
 /* Test that property of enum types don't cause error
    when setter call is generated. */
 /* { dg-do run { target *-*-darwin* } } */ 
-/* { dg-options "-mmacosx-version-min=10.5 -framework Foundation -Werror" } */
+/* { dg-options "-framework Foundation -Werror" { target arm*-*-darwin* } } */
+/* { dg-options "-mmacosx-version-min=10.5 -framework Foundation -Werror" { target i?86-*-darwin* } } */
+/* { dg-options "-mmacosx-version-min=10.5 -framework Foundation -Werror" { target powerpc*-*-darwin* } } */
 
 #import <Foundation/Foundation.h>
 

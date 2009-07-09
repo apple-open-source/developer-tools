@@ -48,7 +48,9 @@
 
 #define REGISTER_PREFIX 	""
 
-/* The assembler's names for the registers.  */
+/* The assembler's names for the registers.  Note that the ?xx registers are * there so that VFPv3/NEON registers D16-D31 have the same spacing as D0-D15
+ * (each of which is overlaid on two S registers), although there are no
+ * actual single-precision registers which correspond to D16-D31.  */
 #ifndef REGISTER_NAMES
 #define REGISTER_NAMES				   \
 {				                   \
@@ -69,6 +71,10 @@
   "s8",  "s9",  "s10", "s11", "s12", "s13", "s14", "s15", \
   "s16", "s17", "s18", "s19", "s20", "s21", "s22", "s23", \
   "s24", "s25", "s26", "s27", "s28", "s29", "s30", "s31", \
+  "d16", "?16", "d17", "?17", "d18", "?18", "d19", "?19", \
+  "d20", "?20", "d21", "?21", "d22", "?22", "d23", "?23", \
+  "d24", "?24", "d25", "?25", "d26", "?26", "d27", "?27", \
+  "d28", "?28", "d29", "?29", "d30", "?30", "d31", "?31", \
   "vfpcc"					   \
 }
 #endif
@@ -158,22 +164,30 @@
   {"mvdx13", 40},				\
   {"mvdx14", 41},				\
   {"mvdx15", 42},				\
-  {"d0", 63},					\
-  {"d1", 65},					\
-  {"d2", 67},					\
-  {"d3", 69},					\
-  {"d4", 71},					\
-  {"d5", 73},					\
-  {"d6", 75},					\
-  {"d7", 77},					\
-  {"d8", 79},					\
-  {"d9", 81},					\
-  {"d10", 83},					\
-  {"d11", 85},					\
-  {"d12", 87},					\
-  {"d13", 89},					\
-  {"d14", 91},					\
-  {"d15", 93},					\
+  {"d0", 63}, {"q0", 63},                       \
+  {"d1", 65},                                   \
+  {"d2", 67}, {"q1", 67},                       \
+  {"d3", 69},                                   \
+  {"d4", 71}, {"q2", 71},                       \
+  {"d5", 73},                                   \
+  {"d6", 75}, {"q3", 75},                       \
+  {"d7", 77},                                   \
+  {"d8", 79}, {"q4", 79},                       \
+  {"d9", 81},                                   \
+  {"d10", 83}, {"q5", 83},                      \
+  {"d11", 85},                                  \
+  {"d12", 87}, {"q6", 87},                      \
+  {"d13", 89},                                  \
+  {"d14", 91}, {"q7", 91},                      \
+  {"d15", 93},                                  \
+  {"q8", 95},                                   \
+  {"q9", 99},                                   \
+  {"q10", 103},                                 \
+  {"q11", 107},                                 \
+  {"q12", 111},                                 \
+  {"q13", 115},                                 \
+  {"q14", 119},                                 \
+  {"q15", 123}                                  \
 }
 #endif
 
@@ -196,6 +210,13 @@
    march=armv5tej:armv5;			\
    march=xscale:xscale;				\
    march=armv4t:armv4t;				\
+   march=armv7:armv7;                           \
+   march=armv7-a:armv7;                         \
+   march=armv7-r:armv7;                         \
+   march=armv7-m:armv7;                         \
+   march=armv7a:armv7;                          \
+   march=armv7r:armv7;                          \
+   march=armv7m:armv7;                          \
    mcpu=arm10tdmi:armv5;			\
    mcpu=arm1020t:armv5;				\
    mcpu=arm9e:armv5;				\
@@ -212,9 +233,12 @@
    mcpu=arm1136jf-s:armv6;			\
    mcpu=arm1176jz-s:armv6;			\
    mcpu=arm1176jzf-s:armv6;			\
+   mcpu=cortex-a8:armv7;			\
+   mcpu=cortex-r4:armv7;			\
+   mcpu=cortex-m3:armv7;			\
    :arm -force_cpusubtype_ALL}"
 
-#define DARWIN_MINVERSION_SPEC "2.0"
+#define DARWIN_MINVERSION_SPEC "3.0"
 
 /* Default cc1 option for specifying minimum version number.  */
 #define DARWIN_CC1_MINVERSION_SPEC "-miphoneos-version-min=%(darwin_minversion)"
@@ -231,7 +255,7 @@
 #define SUBTARGET_EXTRA_SPECS			\
   DARWIN_EXTRA_SPECS				\
   { "darwin_arch", DARWIN_SUBARCH_SPEC },	\
-  { "darwin_subarch", DARWIN_SUBARCH_SPEC },
+  { "darwin_subarch", DARWIN_SUBARCH_SPEC }
 
 /* This can go away once we can feature test the assembler correctly.  */
 #define ASM_DEBUG_SPEC ""
@@ -241,7 +265,7 @@ do {									\
   if (1)								\
   {									\
     if (!darwin_macosx_version_min && !darwin_iphoneos_version_min)	\
-      darwin_iphoneos_version_min = "2.0";				\
+      darwin_iphoneos_version_min = "3.0";				\
     if (MACHO_DYNAMIC_NO_PIC_P)						\
       {									\
         if (flag_pic)							\
@@ -258,23 +282,21 @@ do {									\
     darwin_stubs = true;						\
     if (profile_flag)							\
       error ("function profiling not supported on this target");	\
+    /* Use -mlongcalls for kexts */					\
+    if (flag_mkernel || flag_apple_kext)				\
+      target_flags |= MASK_LONG_CALLS;					\
+    /* GCC 4.2+ only works with SDK 3.0+ */				\
+    if (darwin_iphoneos_version_min &&					\
+        strverscmp (darwin_iphoneos_version_min, "3.0") < 0)		\
+      darwin_reserve_r9_on_v6 = 1;					\
   }									\
 } while(0)
 
-/* We reserve r9 on darwin for thread local data.  */
+/* APPLE LOCAL begin 5571707 Allow R9 as caller-saved register */
 #undef SUBTARGET_CONDITIONAL_REGISTER_USAGE
 #define SUBTARGET_CONDITIONAL_REGISTER_USAGE			\
-  if (1)							\
-    {								\
-      fixed_regs[9]     = 1;					\
-      call_used_regs[9] = 1;					\
-    }								\
-  if (TARGET_THUMB)						\
-    {								\
-      fixed_regs[THUMB_HARD_FRAME_POINTER_REGNUM] = 1;		\
-      call_used_regs[THUMB_HARD_FRAME_POINTER_REGNUM] = 1;	\
-      global_regs[THUMB_HARD_FRAME_POINTER_REGNUM] = 1;		\
-    }
+  arm_darwin_subtarget_conditional_register_usage();
+/* APPLE LOCAL end 5571707 Allow R9 as caller-saved register */
 
 #undef TARGET_MACHO
 #define TARGET_MACHO 1
@@ -301,12 +323,13 @@ do {									\
 #undef SUBTARGET_ASM_DECLARE_FUNCTION_NAME
 #define SUBTARGET_ASM_DECLARE_FUNCTION_NAME ARM_DECLARE_FUNCTION_NAME
 
-/* We default to VFP */
-#define FPUTYPE_DEFAULT FPUTYPE_VFP
+/* APPLE LOCAL begin 6093388 -mfpu=neon default for v7a */
+/* We default to VFP for v6, NEON for v7 */
+#define FPUTYPE_DEFAULT (arm_arch7a ? FPUTYPE_NEON : FPUTYPE_VFP)
 
 #undef TARGET_DEFAULT_FLOAT_ABI
-#define TARGET_DEFAULT_FLOAT_ABI (arm_arch6 ? ARM_FLOAT_ABI_SOFTFP : ARM_FLOAT_ABI_SOFT)
-
+#define TARGET_DEFAULT_FLOAT_ABI ((arm_arch6 || arm_arch7a) ? ARM_FLOAT_ABI_SOFTFP : ARM_FLOAT_ABI_SOFT)
+/* APPLE LOCAL end 6093388 -mfpu=neon default for v7a */
 #undef REGISTER_TARGET_PRAGMAS
 #define REGISTER_TARGET_PRAGMAS DARWIN_REGISTER_TARGET_PRAGMAS
 

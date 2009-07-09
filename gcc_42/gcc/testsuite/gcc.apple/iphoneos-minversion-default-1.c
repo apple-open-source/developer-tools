@@ -6,7 +6,7 @@
 /* { dg-do compile { target arm*-*-darwin* } } */
 /* { dg-skip-if "Not valid with -mmacosx-version-min" { *-*-darwin* } { "-mmacosx-version-min=*" } { "" } } */
 
-#if (__ENVIRONMENT_IPHONE_OS_VERSION_MIN_REQUIRED__ != 20000)
+#if (__ENVIRONMENT_IPHONE_OS_VERSION_MIN_REQUIRED__ != 30000)
 #error TEST FAILS
 #endif
 

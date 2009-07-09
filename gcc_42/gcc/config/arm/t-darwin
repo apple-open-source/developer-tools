@@ -24,9 +24,19 @@ LIB2FUNCS_EXTRA = $(srcdir)/config/arm/_fixdfdi.c \
 	$(srcdir)/config/arm/_fixunssfdi.c 
 # APPLE LOCAL end 5316398 improved float/double -> int64 functions
 
-MULTILIB_OPTIONS     = march=armv6k
-MULTILIB_DIRNAMES    = v6
-MULTILIB_EXCEPTIONS  = 
+# APPLE LOCAL begin 6611402 configurable multilib architectures
+ifndef ARM_MULTILIB_ARCHS
+ARM_MULTILIB_ARCHS:=armv5 armv6 armv7
+endif
+
+MULTILIB_OPTIONS:=$(shell echo $(ARM_MULTILIB_ARCHS) | \
+  sed -e s/armv5/march=armv5tej/ \
+      -e s/armv6/march=armv6k/ \
+      -e s/armv7/march=armv7a/)
+MULTILIB_DIRNAMES:=$(shell echo $(ARM_MULTILIB_ARCHS) | sed -e s/arm//g)
+MULTILIB_EXCEPTIONS:=$(shell $(srcdir)/config/arm/gen-darwin-multilib-exceptions.sh $(ARM_MULTILIB_ARCHS))
+# APPLE LOCAL end 6611402 configurable multilib architectures
+
 MULTILIB_MATCHES     =
 TARGET_LIBGCC2_CFLAGS = -fno-inline
 

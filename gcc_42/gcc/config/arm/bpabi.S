@@ -44,7 +44,10 @@
 ARM_FUNC_START aeabi_lcmp
 	subs	ip, xxl, yyl
 	sbcs	ip, xxh, yyh
-	subeqs  ip, xxl, yyl
+/* APPLE LOCAL begin v7 support. Merge from mainline */
+	do_it	eq
+	COND(sub,s,eq)  ip, xxl, yyl
+/* APPLE LOCAL end v7 support. Merge from mainline */
 	mov	r0, ip
 	RET
 	FUNC_END aeabi_lcmp
@@ -55,12 +58,20 @@ ARM_FUNC_START aeabi_lcmp
 
 ARM_FUNC_START aeabi_ulcmp
 	cmp	xxh, yyh
+/* APPLE LOCAL begin v7 support. Merge from mainline */
+	do_it	lo
 	movlo	r0, #-1
+	do_it	hi
 	movhi	r0, #1
+	do_it	ne
 	RETc(ne)
 	cmp	xxl, yyl
+	do_it	lo
 	movlo	r0, #-1
+	do_it	hi
 	movhi	r0, #1
+	do_it	eq
+/* APPLE LOCAL end v7 support. Merge from mainline */
 	moveq	r0, #0
 	RET
 	FUNC_END aeabi_ulcmp
@@ -71,11 +82,18 @@ ARM_FUNC_START aeabi_ulcmp
 
 ARM_FUNC_START aeabi_ldivmod
 	sub sp, sp, #8
-	stmfd sp!, {sp, lr}
+/* APPLE LOCAL begin v7 support. Merge from mainline */
+#if defined(__thumb2__)
+	mov ip, sp
+	push {ip, lr}
+#else
+	do_push {sp, lr}
+#endif
 	bl SYM(__gnu_ldivmod_helper) __PLT__
 	ldr lr, [sp, #4]
 	add sp, sp, #8
-	ldmfd sp!, {r2, r3}
+	do_pop {r2, r3}
+/* APPLE LOCAL end v7 support. Merge from mainline */
 	RET
 	
 #endif /* L_aeabi_ldivmod */
@@ -84,11 +102,18 @@ ARM_FUNC_START aeabi_ldivmod
 
 ARM_FUNC_START aeabi_uldivmod
 	sub sp, sp, #8
-	stmfd sp!, {sp, lr}
+/* APPLE LOCAL begin v7 support. Merge from mainline */
+#if defined(__thumb2__)
+	mov ip, sp
+	push {ip, lr}
+#else
+	do_push {sp, lr}
+#endif
 	bl SYM(__gnu_uldivmod_helper) __PLT__
 	ldr lr, [sp, #4]
 	add sp, sp, #8
-	ldmfd sp!, {r2, r3}
+	do_pop {r2, r3}
+/* APPLE LOCAL end v7 support. Merge from mainline */
 	RET
 	
 #endif /* L_aeabi_divmod */

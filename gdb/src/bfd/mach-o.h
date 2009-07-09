@@ -112,7 +112,9 @@ typedef enum bfd_mach_o_load_command_type
   BFD_MACH_O_LC_SEGMENT_SPLIT_INFO = 0x1e, 
   BFD_MACH_O_LC_REEXPORT_DYLIB = 0x1f | BFD_MACH_O_LC_REQ_DYLD,
   BFD_MACH_O_LC_LAZY_LOAD_DYLIB = 0x20,  /* delay load of dylib until first use */
-  BFD_MACH_O_LC_ENCRYPTION_INFO = 0x21   /* encrypted segment information */
+  BFD_MACH_O_LC_ENCRYPTION_INFO = 0x21,  /* encrypted segment information */
+  BFD_MACH_O_LC_DYLD_INFO = 0x22,        /* compressed dyld information */
+  BFD_MACH_O_LC_DYLD_INFO_ONLY = 0x22 | BFD_MACH_O_LC_REQ_DYLD  /* compressed dyld information only */
 }
 bfd_mach_o_load_command_type;
 
@@ -158,7 +160,9 @@ typedef enum bfd_mach_o_filetype
   BFD_MACH_O_MH_DYLIB = 6,
   BFD_MACH_O_MH_DYLINKER = 7,
   BFD_MACH_O_MH_BUNDLE = 8,
-  BFD_MACH_O_MH_DYLIB_STUB = 9
+  BFD_MACH_O_MH_DYLIB_STUB = 9,
+  BFD_MACH_O_MH_DSYM = 10,
+  BFD_MACH_O_MH_BUNDLE_KEXT = 11
 }
 bfd_mach_o_filetype;
 

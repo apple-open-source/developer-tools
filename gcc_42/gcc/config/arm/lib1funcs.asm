@@ -1,7 +1,8 @@
 @ libgcc routines for ARM cpu.
 @ Division routines, written by Richard Earnshaw, (rearnsha@armltd.co.uk)
 
-/* Copyright 1995, 1996, 1998, 1999, 2000, 2003, 2004, 2005
+/* APPLE LOCAL v7 support. Merge from mainline */
+/* Copyright 1995, 1996, 1998, 1999, 2000, 2003, 2004, 2005, 2007
    Free Software Foundation, Inc.
 
 This file is free software; you can redistribute it and/or modify it
@@ -62,31 +63,32 @@ Boston, MA 02110-1301, USA.  */
 
 /* Function end macros.  Variants for interworking.  */
 
-@ This selects the minimum architecture level required.
-#define __ARM_ARCH__ 3
-
+/* APPLE LOCAL begin v7 support. Merge from mainline */
 #if defined(__ARM_ARCH_3M__) || defined(__ARM_ARCH_4__) \
 	|| defined(__ARM_ARCH_4T__)
 /* We use __ARM_ARCH__ set to 4 here, but in reality it's any processor with
    long multiply instructions.  That includes v3M.  */
-# undef __ARM_ARCH__
 # define __ARM_ARCH__ 4
 #endif
 	
 #if defined(__ARM_ARCH_5__) || defined(__ARM_ARCH_5T__) \
 	|| defined(__ARM_ARCH_5E__) || defined(__ARM_ARCH_5TE__) \
 	|| defined(__ARM_ARCH_5TEJ__)
-# undef __ARM_ARCH__
 # define __ARM_ARCH__ 5
 #endif
 
 #if defined(__ARM_ARCH_6__) || defined(__ARM_ARCH_6J__) \
 	|| defined(__ARM_ARCH_6K__) || defined(__ARM_ARCH_6Z__) \
-	|| defined(__ARM_ARCH_6ZK__)
-# undef __ARM_ARCH__
+	|| defined(__ARM_ARCH_6ZK__) || defined(__ARM_ARCH_6T2__)
 # define __ARM_ARCH__ 6
 #endif
 
+#if defined(__ARM_ARCH_7__) || defined(__ARM_ARCH_7A__) \
+	|| defined(__ARM_ARCH_7R__) || defined(__ARM_ARCH_7M__)
+# define __ARM_ARCH__ 7
+#endif
+
+/* APPLE LOCAL end v7 support. Merge from mainline */
 #ifndef __ARM_ARCH__
 #error Unable to determine architecture.
 #endif
@@ -184,12 +186,24 @@ LSYM(Lend_fde):
 #define RETLDM \
 	ldr     lr, [sp], #8 ; \
 	bx      lr
+/* APPLE LOCAL begin v7 support. Merge from mainline */
+#if definded (__thumb2__)
+#define RETLDM1(...) \
+	pop     {__VA_ARGS__, lr} ; \
+	bx      lr
+#define RETLDM2(cond,...) \
+	pop##cond       {__VA_ARGS__, lr} ; \
+	bx##cond        lr
+#else
 #define RETLDM1(...) \
 	ldmia   sp!, {__VA_ARGS__, lr} ; \
 	bx      lr
 #define RETLDM2(cond,...) \
 	ldm##cond##ia   sp!, {__VA_ARGS__, lr} ; \
 	bx##cond        lr
+#endif
+
+/* APPLE LOCAL end v7 support. Merge from mainline */
 #define RETLDM_unwind(addr) \
 	ldr	lr, [sp], #8 ; \
 9:	cfi_pop	9b - addr, 0xe, 0x0 ; \
@@ -197,14 +211,82 @@ LSYM(Lend_fde):
 #else
 #define RETLDM \
 	ldr     pc, [sp], #8
+/* APPLE LOCAL begin v7 support. Merge from mainline */
+#if defined (__thumb2__)
+#define RETLDM1(...) \
+	pop   {__VA_ARGS__, pc}
+#define RETLDM2(cond,...) \
+	pop##cond   {__VA_ARGS__, pc}
+#else
 #define RETLDM1(...) \
 	ldmia   sp!, {__VA_ARGS__, pc}
 #define RETLDM2(cond,...) \
 	ldm##cond##ia   sp!, {__VA_ARGS__, pc}
+#endif
+/* APPLE LOCAL end v7 support. Merge from mainline */
 #define RETLDM_unwind(addr) \
 	ldr	pc, [sp], #8
 #endif
 
+/* APPLE LOCAL begin v7 support. Merge from mainline */
+
+/* The Unified assembly syntax allows the same code to be assembled for both
+   ARM and Thumb-2.  However this is only supported by recent gas, so define
+   a set of macros to allow ARM code on older assemblers.  */
+#if defined(__thumb2__)
+.macro do_it cond, suffix=""
+#if defined (__MACH__)
+	it$1	$0
+#else
+        it\suffix       \cond
+#endif
+.endm
+.macro shift1 op, arg0, arg1, arg2
+#if defined (__MACH__)
+        $0      $1, $2, $3
+#else
+        \op     \arg0, \arg1, \arg2
+#endif
+.endm   
+#define do_push push
+#define do_pop  pop
+#define COND(op1, op2, cond) op1 ## op2 ## cond
+/* Perform an arithmetic operation with a variable shift operand.  This
+   requires two instructions and a scratch register on Thumb-2.  */
+.macro shiftop name, dest, src1, src2, shiftop, shiftreg, tmp
+#if defined (__MACH__)
+        $4  $6, $3, $5
+        $0  $1, $2, $6
+#else
+        \shiftop \tmp, \src2, \shiftreg
+        \name \dest, \src1, \tmp
+#endif
+.endm   
+#else
+.macro do_it cond, suffix=""
+.endm   
+.macro shift1 op, arg0, arg1, arg2
+#if defined (__MACH__)
+        mov     $1, $2, $0 $3
+#else
+        mov     \arg0, \arg1, \op \arg2
+#endif
+.endm
+#define do_push stmfd sp!,
+#define do_pop  ldmfd sp!,
+#define COND(op1, op2, cond) op1 ## cond ## op2
+.macro shiftop name, dest, src1, src2, shiftop, shiftreg, tmp
+#if defined (__MACH__)
+        $0 $1, $2, $3, $4 $5
+#else
+        \name \dest, \src1, \src2, \shiftop \shiftreg
+#endif
+.endm
+#endif
+
+
+
+/* APPLE LOCAL end v7 support. Merge from mainline */
 .macro ARM_LDIV0 name
 	str	lr, [sp, #-8]!
 #if !defined(__MACH__)
@@ -277,6 +359,13 @@ SYM (\name):
 #ifdef __thumb__
 #define THUMB_FUNC .thumb_func
 #define THUMB_CODE .force_thumb
+/* APPLE LOCAL begin v7 support. Merge from mainline */
+# if defined(__thumb2__)
+#define THUMB_SYNTAX .syntax divided
+# else
+#define THUMB_SYNTAX
+# endif
+/* APPLE LOCAL end v7 support. Merge from mainline */
 /* APPLE LOCAL ARM function alignment */
 #define FUNC_ALIGN .align 1
 #else
@@ -284,6 +373,8 @@ SYM (\name):
 #define THUMB_CODE
 /* APPLE LOCAL ARM function alignment */
 #define FUNC_ALIGN .align 2
+/* APPLE LOCAL v7 support. Merge from mainline */
+#define THUMB_SYNTAX
 #endif
 	
 /* APPLE LOCAL begin ARM MACH assembler */
@@ -310,10 +401,33 @@ SYM (__\name):
 /* Special function that will always be coded in ARM assembly, even if
    in Thumb-only compilation.  */
 
-#if defined(__INTERWORKING_STUBS__)
+/* APPLE LOCAL begin v7 support. Merge from mainline */
+#if defined(__thumb2__)
+
+/* For Thumb-2 we build everything in thumb mode.  */
+.macro ARM_FUNC_START name
+#if defined(__MACH__)
+	FUNC_START $0
+#else
+       FUNC_START \name
+#endif
+       .syntax unified
+.endm
+#define EQUIV .thumb_set
+.macro  ARM_CALL name
+#if defined(__MACH__)
+  bl ___$0
+#else
+  bl  ___\name
+#endif
+.endm
+
+#elif defined(__INTERWORKING_STUBS__)
+
+/* APPLE LOCAL end v7 support. Merge from mainline */
 .macro	ARM_FUNC_START name
 
-#if defined(__MACH)
+#if defined(__MACH__)
 	FUNC_START $0
 #else
 	FUNC_START \name
@@ -339,7 +453,11 @@ _L__\name:
 	bl	_L__\name
 #endif
 .endm
-#else
+/* APPLE LOCAL begin v7 support. Merge from mainline */
+
+#else /* !(__INTERWORKING_STUBS__ || __thumb2__) */
+
+/* APPLE LOCAL end v7 support. Merge from mainline */
 .macro	ARM_FUNC_START name
 #if defined(__MACH__)
 	.text
@@ -845,7 +963,8 @@ LSYM(Lgot_result):
 	cmp	dividend, divisor
 	blo	LSYM(Lgot_result)
 
-	THUMB_DIV_MOD_BODY 0
+	/* APPLE LOCAL v7 support */
+	THUMB_DIV_MOD_BODY(0)
 	
 	mov	r0, result
 	pop	{ work }
@@ -888,7 +1007,8 @@ FUNC_START aeabi_uidivmod
 #ifdef __thumb__
 	push	{r0, r1, lr}
 	bl	SYM(__udivsi3)
-	POP	{r1, r2, r3}
+	/* APPLE LOCAL v7 support */
+	pop	{r1, r2, r3}
 	mul	r2, r0
 	sub	r1, r1, r2
 	bx	r3
@@ -920,7 +1040,8 @@ FUNC_START aeabi_uidivmod
 LSYM(Lover10):
 	push	{ work }
 
-	THUMB_DIV_MOD_BODY 1
+	/* APPLE LOCAL v7 support */
+	THUMB_DIV_MOD_BODY(1)
 	
 	pop	{ work }
 	RET
@@ -973,7 +1094,8 @@ LSYM(Lover11):
 	cmp	dividend, divisor
 	blo	LSYM(Lgot_result)
 
-	THUMB_DIV_MOD_BODY 0
+	/* APPLE LOCAL v7 support */
+	THUMB_DIV_MOD_BODY(0)
 	
 	mov	r0, result
 	mov	work, ip
@@ -1036,7 +1158,8 @@ FUNC_START aeabi_idivmod
 #ifdef __thumb__
 	push	{r0, r1, lr}
 	bl	SYM(__divsi3)
-	POP	{r1, r2, r3}
+	/* APPLE LOCAL v7 support */
+	pop	{r1, r2, r3}
 	mul	r2, r0
 	sub	r1, r1, r2
 	bx	r3
@@ -1076,7 +1199,8 @@ LSYM(Lover11):
 	cmp	dividend, divisor
 	blo	LSYM(Lgot_result)
 
-	THUMB_DIV_MOD_BODY 1
+	/* APPLE LOCAL v7 support */
+	THUMB_DIV_MOD_BODY(1)
 		
 	pop	{ work }
 	cmp	work, #0
@@ -1275,6 +1399,10 @@ L10:	cmp	ip, #0
 
 /* APPLE LOCAL begin ARM 4790140 compact switch tables */
 /* ----------------------------------------------------------------------- */
+/* These aren't needed for Thumb2 since then we have actual instructions
+   to do what these functions do. */
+#ifndef __thumb2__
+
 /* Thumb switch table implementation.  Arm code, although must be called 
    from Thumb (the low bit of LR is expected to be 1).
    Expects the call site to be followed by 1-byte count, then <count>
@@ -1350,7 +1478,6 @@ L10:	cmp	ip, #0
 
 	FUNC_END switch32
 #endif
-/* APPLE LOCAL end ARM 4790140 compact switch tables */
 
 /* APPLE LOCAL begin 6465387 exception handling interworking VFP save */
 #if (__ARM_ARCH__ == 6)
@@ -1369,6 +1496,9 @@ L10:	cmp	ip, #0
 #endif
 #endif
 /* APPLE LOCAL end 6465387 exception handling interworking VFP save */
+
+#endif /* !defined (__thumb2__) */
+/* APPLE LOCAL end ARM 4790140 compact switch tables */
 
 #endif /* __symbian__ */
 
@@ -1423,6 +1553,12 @@ L10:	cmp	ip, #0
 
 #endif /* L_call_via_rX */
 
+/* APPLE LOCAL begin v7 support. Merge from mainline */
+/* Don't bother with the old interworking routines for Thumb-2.  */
+/* ??? Maybe only omit these on v7m.  */
+#ifndef __thumb2__
+
+/* APPLE LOCAL end v7 support. Merge from mainline */
 #if defined L_interwork_call_via_rX
 
 /* These labels & instructions are used by the Arm/Thumb interworking code,
@@ -1548,6 +1684,8 @@ LSYM(Lchange_\register):
 	SIZE	(_interwork_call_via_lr)
 	
 #endif /* L_interwork_call_via_rX */
+/* APPLE LOCAL v7 support. Merge from mainline */
+#endif /* !__thumb2__ */
 #endif /* Arch supports thumb.  */
 
 #ifndef __symbian__

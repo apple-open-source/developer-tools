@@ -1,3 +1,7 @@
+2009-05-14  Greg Clayton  <gclayton@apple.com>
+
+	* linespec.c (symbols_found): Check canonical arg for NULL.
+
 2009-03-09  Greg Clayton  <gclayton@apple.com>
 
 	* dbxread.c (dbx_symfile_read): Don't read minsyms from dSYM files.

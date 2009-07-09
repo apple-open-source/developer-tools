@@ -10,7 +10,7 @@ set -x
 # -arch arguments are different than configure arguments. We need to
 # translate them.
 
-TRANSLATE_ARCH="sed -e s/ppc/powerpc/ -e s/i386/i686/ -e s/armv6/arm/"
+TRANSLATE_ARCH="sed -e s/ppc/powerpc/ -e s/i386/i686/ -e s/armv[67]/arm/"
 
 # Build GCC the "Apple way".
 # Parameters:
@@ -77,6 +77,9 @@ MAJ_VERS=`echo $VERS | sed 's/\([0-9]*\.[0-9]*\)[.-].*/\1/'`
 ARM_SYSROOT="/Developer/SDKs/Extra"
 ARM_CONFIGFLAGS="--with-sysroot=\"$ARM_SYSROOT\""
 
+# APPLE LOCAL 6611402 configurable multilib architectures
+ARM_MAKEFLAGS=ARM_MULTILIB_ARCHS=$ARM_MULTILIB_ARCHS
+
 # This is the libstdc++ version to use.
 LIBSTDCXX_VERSION=4.0.0
 
@@ -103,7 +106,7 @@ rm -rf $SRC_DIR/libstdc++-v3 || exit 1
 rm -f /usr/lib/gcc/*/4.0.0/specs
 
 # These are the configure and build flags that are used.
-CONFIGFLAGS="--disable-checking -enable-werror \
+CONFIGFLAGS="--disable-checking --enable-werror \
   --prefix=$DEST_ROOT \
   --mandir=\${prefix}/share/man \
   --enable-languages=c,objc,c++,obj-c++ \
@@ -129,6 +132,11 @@ fi
 
 # The $LOCAL_MAKEFLAGS variable can be used to override $MAKEFLAGS.
 MAKEFLAGS=${LOCAL_MAKEFLAGS-"-j $SYSCTL"}
+# APPLE LOCAL begin 6611402 configurable multilib architectures
+if [ $t = 'arm' ] ; then
+  MAKEFLAGS+=ARM_MAKEFLAGS
+fi
+# APPLE LOCAL end 6611402 configurable multilib architectures
 
 # Build the native GCC.  Do this even if the user didn't ask for it
 # because it'll be needed for the bootstrap.
@@ -192,7 +200,8 @@ for t in $CROSS_TARGETS ; do
   mkdir -p $DIR/obj-$BUILD-$t $DIR/dst-$BUILD-$t || exit 1
    cd $DIR/obj-$BUILD-$t || exit 1
    if [ \! -f Makefile ]; then
-    $SRC_DIR/configure $CONFIGFLAGS --enable-werror-always \
+    # APPLE LOCAL don't use --enable-werror for ARM builds
+    $SRC_DIR/configure `echo $CONFIGFLAGS | sed -e "s/--enable-werror//"` \
      `if [ $t = 'arm' ] ; then echo $ARM_CONFIGFLAGS ; fi` \
       --program-prefix=$t-apple-darwin$DARWIN_VERS- \
       --host=$BUILD-apple-darwin$DARWIN_VERS --target=$t-apple-darwin$DARWIN_VERS || exit 1
@@ -216,7 +225,7 @@ cd $DEST_DIR || exit 1
 rm -rf * || exit 1
 
 # libgcc
-SHARED_LIBS="libgcc_s.1.dylib libgcc_s_v6.1.dylib libgcc_s.10.4.dylib libgcc_s.10.5.dylib"
+SHARED_LIBS="libgcc_s.1.dylib libgcc_s_v6.1.dylib libgcc_s_v7.1.dylib libgcc_s.10.4.dylib libgcc_s.10.5.dylib"
 
 cd $DEST_DIR || exit 1
 mkdir -p .$DEST_ROOT/lib

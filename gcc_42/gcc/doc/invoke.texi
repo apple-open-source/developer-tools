@@ -8455,10 +8455,14 @@ location @code{pc - 12} and the top 8 bits are set, then we know that
 there is a function name embedded immediately preceding this location
 and has length @code{((pc[-3]) & 0xff000000)}.
 
+@c APPLE LOCAL begin v7 thumb is default
 @item -mthumb
 @opindex mthumb
-Generate code for the 16-bit Thumb instruction set.  The default is to
-use the 32-bit ARM instruction set.
+Generate code for the 16-bit Thumb instruction set.  For ARMv7, the default
+is to use the THUMB2 instruction set. For all other architectures, the default
+is to use the 32-bit ARM instruction set. The ARM instruction set may be
+explicitly selected via @option{-mno-thumb} or @option{-marm}.
+@c APPLE LOCAL end v7 thumb is default
 
 @item -mtpcs-frame
 @opindex mtpcs-frame
@@ -8929,12 +8933,12 @@ Enable kernel development mode.  The @option{-mkernel} option sets
 @option{-fno-exceptions}, @option{-fno-non-call-exceptions}, @option{-fno-asynchronous-unwind-tables},
 @option{-fapple-kext}, @option{-fno-weak} and @option{-fno-rtti} where
 applicable.  This mode also sets @option{-mno-altivec},
-@c APPLE LOCAL begin 5731065
-@option{-msoft-float} and @option{-mlong-branch} for PowerPC targets
-and @option{-mno-red-zone} on x86_64.  Of these, only -msoft-float can
-be changed which is useful in a kext that wishes to use the hardware
-floating point unit.
-@c APPLE LOCAL end 5731065
+@c APPLE LOCAL begin 5731065 6268204
+@option{-msoft-float} and @option{-mlong-branch} for PowerPC targets,
+@option{-mno-red-zone} on x86_64, and @option{-mlong-branch} for ARM
+targets.  Of these, only -msoft-float can be changed which is useful in
+a kext that wishes to use the hardware floating point unit.
+@c APPLE LOCAL end 5731065 6268204
 
 @item -mone-byte-bool
 @opindex mone-byte-bool

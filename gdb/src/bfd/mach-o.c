@@ -912,6 +912,8 @@ bfd_mach_o_write_contents (bfd *abfd)
 	case BFD_MACH_O_LC_SUB_FRAMEWORK:
 	case BFD_MACH_O_LC_LAZY_LOAD_DYLIB:
 	case BFD_MACH_O_LC_ENCRYPTION_INFO:
+	case BFD_MACH_O_LC_DYLD_INFO:
+	case BFD_MACH_O_LC_DYLD_INFO_ONLY:
 	  break;
 	default:
 	  fprintf (stderr,
@@ -1039,12 +1041,20 @@ bfd_mach_o_make_bfd_section (bfd *abfd, bfd_mach_o_section *section)
   bfdsec->alignment_power = section->align;
   bfdsec->segment_mark = 0;
 
-  if (section->flags & (BFD_MACH_O_S_ZEROFILL | BFD_MACH_O_S_GB_ZEROFILL))
+  if ((section->flags & BFD_MACH_O_SECTION_TYPE_MASK) == BFD_MACH_O_S_ZEROFILL 
+      || (section->flags & BFD_MACH_O_SECTION_TYPE_MASK) == BFD_MACH_O_S_GB_ZEROFILL)
+    {
     bfdsec->flags = SEC_ALLOC;
-  else if (section->flags & BFD_MACH_O_S_ATTR_DEBUG || strcmp (section->segname, "__DWARF") == 0)
+    }
+  else if ((section->flags & BFD_MACH_O_SECTION_TYPE_MASK) == BFD_MACH_O_S_ATTR_DEBUG 
+           || strcmp (section->segname, "__DWARF") == 0)
+    {
     bfdsec->flags = SEC_HAS_CONTENTS;
+    }
   else
+    {
     bfdsec->flags = SEC_HAS_CONTENTS | SEC_LOAD | SEC_ALLOC | SEC_CODE;
+    }
 
   /* The __TEXT.__text segment is always readonly. */
   if (strcmp (section->segname, "__TEXT") == 0
@@ -1366,6 +1376,11 @@ bfd_mach_o_scan_read_dysymtab_symbol (bfd *abfd,
       return -1;
     }
   symindex = bfd_h_get_32 (abfd, buf);
+  /* Strip off the INDIRECT_SYMBOL_LOCAL and INDIRECT_SYMBOL_ABS flags, if
+     they were present.  */
+  symindex = symindex & 
+               ((unsigned long) ~(INDIRECT_SYMBOL_LOCAL | INDIRECT_SYMBOL_ABS));
+
 
   return bfd_mach_o_scan_read_symtab_symbol (abfd, sym, s, symindex);
 }
@@ -2133,6 +2148,8 @@ bfd_mach_o_scan_read_command (bfd *abfd, bfd_mach_o_load_command *command)
     case BFD_MACH_O_LC_CODE_SIGNATURE:
     case BFD_MACH_O_LC_SEGMENT_SPLIT_INFO:
     case BFD_MACH_O_LC_LAZY_LOAD_DYLIB:
+    case BFD_MACH_O_LC_DYLD_INFO:
+    case BFD_MACH_O_LC_DYLD_INFO_ONLY:
       break;
     case BFD_MACH_O_LC_ENCRYPTION_INFO:
       {
@@ -2201,6 +2218,14 @@ bfd_mach_o_scan_start_address (bfd *abfd)
   bfd_mach_o_data_struct *mdata = abfd->tdata.mach_o_data;
   bfd_mach_o_thread_command *cmd = NULL;
   unsigned long i;
+
+  /* dyld for instance DOES have LC_UNIXTHREAD commands - the kernel
+     needs this to load dyld and let it go - which in turn loads the
+     binary...  But this isn't what we mean by the start address.  
+     You can't have a start address if you aren't an executable...  */
+
+  if (mdata->header.filetype != BFD_MACH_O_MH_EXECUTE)
+    return 0;
 
   for (i = 0; i < mdata->header.ncmds; i++)
     {
@@ -2905,10 +2930,12 @@ bfd_mach_o_core_file_failing_signal (bfd *abfd ATTRIBUTE_UNUSED)
 }
 
 bfd_boolean
-bfd_mach_o_core_file_matches_executable_p (bfd *core_bfd ATTRIBUTE_UNUSED,
-					   bfd *exec_bfd ATTRIBUTE_UNUSED)
+bfd_mach_o_core_file_matches_executable_p (bfd *core_bfd, bfd *exec_bfd)
 {
+  if (core_bfd->tdata.mach_o_data->header.cputype == exec_bfd->tdata.mach_o_data->header.cputype)
   return TRUE;
+  else
+    return FALSE;
 }
 
 bfd_boolean        

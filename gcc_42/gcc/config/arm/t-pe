@@ -29,4 +29,5 @@ MULTILIB_DIRNAMES = fpu thumb
 
 LIBGCC = stmp-multilib
 INSTALL_LIBGCC = install-multilib
-TARGET_LIBGCC2_CFLAGS = 
+# APPLE LOCAL v7 support
+TARGET_LIBGCC2_CFLAGS =

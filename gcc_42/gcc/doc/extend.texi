@@ -6514,9 +6514,11 @@ On some target machines, GCC supports many built-in functions specific
 to those machines.  Generally these generate calls to specific machine
 instructions, but allow the compiler to schedule those calls.
 
+@c APPLE LOCAL begin ARM NEON support. Merge from Codesourcery
 @menu
 * Alpha Built-in Functions::
 * ARM Built-in Functions::
+* ARM NEON Intrinsics::
 * Blackfin Built-in Functions::
 * FR-V Built-in Functions::
 * X86 Built-in Functions::
@@ -6525,6 +6527,7 @@ instructions, but allow the compiler to schedule those calls.
 * PowerPC AltiVec Built-in Functions::
 * SPARC VIS Built-in Functions::
 @end menu
+@c APPLE LOCAL end ARM NEON support. Merge from Codesourcery
 
 @node Alpha Built-in Functions
 @subsection Alpha Built-in Functions
@@ -6754,6 +6757,16 @@ v2si __builtin_arm_wunpckilw (v2si, v2si)
 long long __builtin_arm_wxor (long long, long long)
 long long __builtin_arm_wzero ()
 @end smallexample
+
+@c APPLE LOCAL begin ARM NEON support
+@node ARM NEON Intrinsics
+@subsection ARM NEON Intrinsics
+
+These built-in intrinsics for the ARM Advanced SIMD extension are available
+when the @option{-mfpu=neon} switch is used:
+
+@include arm-neon-intrinsics.texi
+@c APPLE LOCAL end ARM NEON support. Merge from Codesourcery.
 
 @node Blackfin Built-in Functions
 @subsection Blackfin Built-in Functions

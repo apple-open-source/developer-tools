@@ -252,8 +252,15 @@ static void build_v2_protocol_reference (tree);
 static void init_UOBJC2_EHTYPE_decls (void);
 static void create_ivar_offset_name (char *, tree, tree);
 static void build_v2_category_template (void);
+/* APPLE LOCAL begin 7004970 v7 merge from puzzlebox repository */
+#ifndef TARGET_ARM
 /* APPLE LOCAL radar 4533974 - ObjC new protocol */
 static tree build_protocollist_reference_decl (void);
+#else /* TARGET_ARM */
+/* APPLE LOCAL radar 4533974 - ObjC new protocol - radar 6351990 */
+static tree build_protocollist_reference_decl (tree);
+#endif /* TARGET_ARM */
+/* APPLE LOCAL end 7004970 v7 merge from puzzlebox repository */
 static void objc_add_to_category_list_chain (tree);
 static void objc_add_to_nonlazy_category_list_chain (tree);
 /* APPLE LOCAL begin radar 4441049 */
@@ -1579,6 +1586,8 @@ objc_build_property_reference_expr (tree receiver, tree component)
   tree rtype;
   tree prop, prop_type, res;
   bool receiver_is_class;
+  /* APPLE LOCAL radar 6083666 */
+  tree ivar;
 
   if (component == error_mark_node || component == NULL_TREE
       || TREE_CODE (component) != IDENTIFIER_NODE)
@@ -1593,14 +1602,16 @@ objc_build_property_reference_expr (tree receiver, tree component)
   if (res == NULL_TREE || res == error_mark_node)
     return res;
 
-  prop_type = NULL_TREE;
+  /* APPLE LOCAL radar 6083666 */
+  prop_type = ivar = NULL_TREE;
   /* APPLE LOCAL begin objc2 5512183 */
   if (interface_type && !receiver_is_class)
   /* APPLE LOCAL end objc2 5512183 */
     {
       /* type of the expression is either the property type or, if no property declared,
 	 then ivar type used in receiver.ivar expression. */
-      tree ivar = nested_ivar_lookup (interface_type, component);
+      /* APPLE LOCAL radar 6083666 */
+      ivar = nested_ivar_lookup (interface_type, component);
       if (ivar)
 	prop_type = TREE_TYPE (ivar);
       else
@@ -1637,12 +1648,15 @@ objc_build_property_reference_expr (tree receiver, tree component)
   /* APPLE LOCAL begin objc2 5512183 */
   if (prop)
     {
-      if (prop_type
-	  && comptypes (prop_type, TREE_TYPE (prop)) != 1)
-	error ("type of accessor does not match the type of property %qs",
-	       IDENTIFIER_POINTER (PROPERTY_NAME (prop)));
+      /* APPLE LOCAL begin radar 6083666 */
+      if (!ivar && prop_type
+	  && comptypes (prop_type, TREE_TYPE (prop)) != 1
+          && !objc_compare_types (TREE_TYPE (prop), prop_type, -6, NULL_TREE))
+	warning (0, "type of accessor does not match the type of property %qs",
+	        IDENTIFIER_POINTER (PROPERTY_NAME (prop)));
       else
 	prop_type = TREE_TYPE (prop);
+      /* APPLE LOCAL end radar 6083666 */
     }
   /* APPLE LOCAL end objc2 5512183 */
 
@@ -11610,13 +11624,23 @@ build_class_ro_t_initializer (tree type, tree name,
 /* Add the local protocol meta-data declaration to the list which later on ends up 
    in the __protocol_list section. */
 
+/* APPLE LOCAL begin 7004970 v7 merge from puzzlebox repository */
 static void
+#ifndef TARGET_ARM
 objc_add_to_protocol_list_chain (tree protocol_decl)
+#else /* TARGET_ARM */
+/* APPLE LOCAL begin radar 6351990 */
+objc_add_to_protocol_list_chain (tree protocol_interface_decl, tree protocol_decl)
+#endif /* TARGET_ARM */
 {
   tree *chain;
   for (chain = &protocol_list_chain; *chain; chain = &TREE_CHAIN (*chain))
     ;
+#ifndef TARGET_ARM
   *chain = tree_cons (NULL_TREE, protocol_decl, NULL_TREE);
+#else /* TARGET_ARM */
+  *chain = tree_cons (protocol_interface_decl, protocol_decl, NULL_TREE);
+#endif /* TARGET_ARM */
 }
 
 /* Build the __protocol_list section table containing address of all generate protocol_t 
@@ -11626,25 +11650,57 @@ static void
 build_protocol_list_address_table (void)
 {
   tree chain;
+#ifndef TARGET_ARM
   int count=0;
   tree type;
   tree initlist = NULL_TREE;
   tree decl;
   tree expr;
+#endif /* ! TARGET_ARM */
   tree list_chain = protocol_list_chain;
+#ifndef TARGET_ARM
   const char *label_name = "_OBJC_LABEL_PROTOCOL_$";
+#else /* TARGET_ARM */
+  char *string = NULL;
+  unsigned int  buf_size = 0;
+#endif /* TARGET_ARM */
 
   for (chain = list_chain; chain; chain = TREE_CHAIN (chain))
     {
+#ifndef TARGET_ARM
       tree purpose = NULL_TREE;
       expr = TREE_VALUE (chain);
+#else /* TARGET_ARM */
+      tree decl = TREE_PURPOSE (chain);
+      tree expr = TREE_VALUE (chain);
+      gcc_assert (decl && TREE_CODE (decl) == PROTOCOL_INTERFACE_TYPE);
+      if ((strlen ("l_OBJC_LABEL_PROTOCOL_$_") + strlen (IDENTIFIER_POINTER (PROTOCOL_NAME (decl))) + 1) > buf_size)
+        {
+	  if (!buf_size)
+	    buf_size = BUFSIZE;
+	  else
+	    buf_size = strlen ("l_OBJC_LABEL_PROTOCOL_$_") + strlen (IDENTIFIER_POINTER (PROTOCOL_NAME (decl))) + 1;
+	  string = (char *)alloca (buf_size);
+	} 
+      sprintf (string,  "l_OBJC_LABEL_PROTOCOL_$_%s", IDENTIFIER_POINTER (PROTOCOL_NAME (decl)));
+      decl = create_hidden_decl (objc_protocol_type, string);
+      DECL_WEAK (decl) = 1;
+      set_user_assembler_name (decl, string);
+#endif /* TARGET_ARM */
       expr = convert (objc_protocol_type, build_fold_addr_expr (expr));
+#ifndef TARGET_ARM
 #ifndef OBJCPLUS
       purpose = build_int_cst (NULL_TREE, count);
 #endif
       ++count;
       initlist = tree_cons (purpose, expr, initlist);
+#else /* TARGET_ARM */
+      /* APPLE LOCAL radar 4561192 */
+      objc_set_alignment_attribute (decl, objc_protocol_type);
+      finish_var_decl (decl, expr);
+#endif /* TARGET_ARM */
     }
+#ifndef TARGET_ARM
   gcc_assert (count > 0);
   type = build_array_type (objc_protocol_type, 
 			   build_index_type (build_int_cst (NULL_TREE, count - 1)));
@@ -11653,7 +11709,10 @@ build_protocol_list_address_table (void)
   /* APPLE LOCAL radar 4561192 */
   objc_set_alignment_attribute (decl, objc_protocol_type);
   finish_var_decl (decl, expr);
+#endif /* ! TARGET_ARM */
 }
+/* APPLE LOCAL end radar 6351990 */
+/* APPLE LOCAL end 7004970 v7 merge from puzzlebox repository */
 
 /* Build decl = initializer; for each protocol referenced in @protocol(MyProtole) expression. */
 
@@ -11669,9 +11728,29 @@ build_protocollist_translation_table (void)
       tree decl = TREE_PURPOSE (chain);
       gcc_assert (TREE_CODE (expr) == PROTOCOL_INTERFACE_TYPE);
       /* APPLE LOCAL begin radar 4695109 */
+/* APPLE LOCAL begin 7004970 v7 merge from puzzlebox repository */
+#ifndef TARGET_ARM
       sprintf (string, "_OBJC_PROTOCOL_$_%s", 
 	       IDENTIFIER_POINTER (PROTOCOL_NAME (expr)));
       expr = start_var_decl (objc_v2_protocol_template, string);
+#else /* TARGET_ARM */
+      /* APPLE LOCAL begin radar 6255913 */
+      if (flag_objc_abi == 2)
+      {
+        sprintf (string, "l_OBJC_PROTOCOL_$_%s", 
+	         IDENTIFIER_POINTER (PROTOCOL_NAME (expr)));
+        expr = start_var_decl (objc_v2_protocol_template, string);
+	set_user_assembler_name (expr, string);
+      }
+      /* APPLE LOCAL end radar 6255913 */
+      else
+      {
+        sprintf (string, "_OBJC_PROTOCOL_$_%s", 
+	         IDENTIFIER_POINTER (PROTOCOL_NAME (expr)));
+        expr = start_var_decl (objc_v2_protocol_template, string);
+      }
+#endif /* TARGET_ARM */
+/* APPLE LOCAL end 7004970 v7 merge from puzzlebox repository */
       /* APPLE LOCAL end radar 4695109 */
       expr = convert (objc_protocol_type, build_fold_addr_expr (expr));
       finish_var_decl (decl, expr);
@@ -11691,12 +11770,24 @@ objc_v2_get_protocol_reference (tree ident)
     if (TREE_VALUE (*chain) == ident)
       {
         if (! TREE_PURPOSE (*chain))
+/* APPLE LOCAL begin 7004970 v7 merge from puzzlebox repository */
+#ifndef TARGET_ARM
           TREE_PURPOSE (*chain) = build_protocollist_reference_decl ();
+#else /* TARGET_ARM */
+	  /* APPLE LOCAL radar 6351990 */
+          TREE_PURPOSE (*chain) = build_protocollist_reference_decl (ident);
+#endif /* TARGET_ARM */
 
         return TREE_PURPOSE (*chain);
       }
 
+#ifndef TARGET_ARM
   decl = build_protocollist_reference_decl ();
+#else /* TARGET_ARM */
+  /* APPLE LOCAL radar 6351990 */
+  decl = build_protocollist_reference_decl (ident);
+#endif /* TARGET_ARM */
+/* APPLE LOCAL end 7004970 v7 merge from puzzlebox repository */
   *chain = tree_cons (decl, ident, NULL_TREE);
   return decl;
 }
@@ -11707,17 +11798,36 @@ static GTY(()) int protocollist_reference_idx;
    expression. This variable will be initialized to global protocol_t meta-data
    pointer. */
 
+/* APPLE LOCAL begin 7004970 v7 merge from puzzlebox repository */
+/* APPLE LOCAL begin radar 6351990 */
 static tree
+#ifndef TARGET_ARM
 build_protocollist_reference_decl (void)
+#else /* TARGET_ARM */
+build_protocollist_reference_decl (tree protocol)
+#endif /* TARGET_ARM */
 {
   tree decl;
+#ifndef TARGET_ARM
   char buf[BUFSIZE];
 
   sprintf (buf, "_OBJC_PROTOCOL_REFERENCE_$_%d", protocollist_reference_idx++);
   decl = start_var_decl (objc_protocol_type, buf);
+#else /* TARGET_ARM */
+  tree protocol_ident = PROTOCOL_NAME (protocol);
+  char *buf = (char *)alloca (strlen ("l_OBJC_PROTOCOL_REFERENCE_$_") + 
+	       		      IDENTIFIER_LENGTH (protocol_ident) + 1);
+
+  sprintf (buf, "l_OBJC_PROTOCOL_REFERENCE_$_%s", IDENTIFIER_POINTER (protocol_ident));
+  decl = create_hidden_decl (objc_protocol_type, buf);
+  DECL_WEAK (decl) = 1;
+  set_user_assembler_name (decl, buf);
+#endif /* TARGET_ARM */
 
   return decl;
 }
+/* APPLE LOCAL end radar 6351990 */
+/* APPLE LOCAL end 7004970 v7 merge from puzzlebox repository */
 /* APPLE LOCAL end radar 4533974 - ObjC new protocol */
 
 /* Add the global class meta-data declaration to the list which later on ends up 
@@ -13239,8 +13349,19 @@ build_v2_protocol_reference (tree p)
 
   /* static struct protocol_t  _OBJC_PROTOCOL_$<mumble>; */
 
+/* APPLE LOCAL begin 7004970 v7 merge from puzzlebox repository */
+#ifndef TARGET_ARM
   proto_name = synth_id_with_class_suffix ("_OBJC_PROTOCOL_$", p);
   decl = start_var_decl (objc_v2_protocol_template, proto_name);
+#else /* TARGET_ARM */
+  /* APPLE LOCAL begin radar 6255913 */
+  proto_name = synth_id_with_class_suffix ("l_OBJC_PROTOCOL_$", p);
+  decl = create_hidden_decl (objc_v2_protocol_template, proto_name);
+  DECL_WEAK (decl) = 1;
+  set_user_assembler_name (decl, proto_name);
+  /* APPLE LOCAL end radar 6255913 */
+#endif /* TARGET_ARM */
+/* APPLE LOCAL end 7004970 v7 merge from puzzlebox repository */
   PROTOCOL_V2_FORWARD_DECL (p) = decl;
 }
 /* APPLE LOCAL end radar 4695109 */
@@ -13360,8 +13481,15 @@ generate_v2_protocols (void)
 					     UOBJC_PROTOCOL_OPT_CLS_METHODS_decl);
 					     /* APPLE LOCAL end radar 4695109 */
       finish_var_decl (decl, initlist);
+/* APPLE LOCAL begin 7004970 v7 merge from puzzlebox repository */
+#ifndef TARGET_ARM
       /* APPLE LOCAL radar 4533974 - ObjC new protocol */
       objc_add_to_protocol_list_chain (decl);
+#else /* TARGET_ARM */
+      /* APPLE LOCAL radar 4533974 - ObjC new protocol - radar 6351990 */
+      objc_add_to_protocol_list_chain (p, decl);
+#endif /* TARGET_ARM */
+/* APPLE LOCAL end 7004970 v7 merge from puzzlebox repository */
     }
 }
 
@@ -16015,10 +16143,14 @@ finish_class (tree class)
 	      getter_decl = lookup_method (CLASS_NST_METHODS (class), prop_name);
 	      if (getter_decl)
 	    	{
-	          if (comptypes (type, TREE_VALUE (TREE_TYPE (getter_decl))) != 1)
+                  /* APPLE LOCAL begin radar 6083666 */
+                  tree getter_type = TREE_VALUE (TREE_TYPE (getter_decl));
+	          if ((comptypes (type, getter_type) != 1)
+                      && !objc_compare_types (type, getter_type, -6, NULL_TREE))
 		    /* APPLE LOCAL radar 4815054 */
-	            error ("type of accessor does not match the type of property %qs",
-		           IDENTIFIER_POINTER (prop_name));
+	            warning (0, "type of accessor does not match the type of property %qs",
+		             IDENTIFIER_POINTER (prop_name));
+                  /* APPLE LOCAL end radar 6083666 */
 		  if (METHOD_SEL_ARGS (getter_decl) != NULL_TREE)
 		    error ("accessor %<%c%s%> cannot have any argument", 
 		           '-', IDENTIFIER_POINTER (prop_name));	

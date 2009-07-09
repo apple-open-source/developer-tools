@@ -1,8 +1,77 @@
+2009-07-03  Jon Ziegler  <jonz@apple.com>
+
+	Back out Bob's patch for 6879229 since it causes problems for the
+	Northstar build.
+
+2009-06-25  Bob Wilson  <bob.wilson@apple.com>
+
+	Radar 6879229
+	* config/arm/arm.c (arm_override_options): Disallow -fasm-blocks.
+	* doc/invoke.texi (-fasm-blocks): Document this restriction.
+
+2009-06-17  Jim Grosbach <grosbach@apple.com>
+
+	Radar 6821124
+	* builtin-attrs.def (DEF_FORMAT_ATTRIBUTE): For Darwin, don't claim
+	the format argument to be nonnull.
+	* builtins.def (BUILT_IN_FPUTS, BUILT_IN_FPUTS_UNLOCKED,
+	BUILT_IN_PUTS, BUILT_IN_PUTS_UNLOCKED): Likewise.
+
+2009-06-17  Jim Grosbach <grosbach@apple.com>
+
+	Radar 6858124
+	* config/arm/arm.c (arm_output_mi_thunk): Stub calls aren't indirect
+	in MI thumb thunks.
+
+2009-06-15  Fariborz Jahanian <fjahanian@apple.com>
+
+	Radar 6936421
+	* cvt.c (force_rvalue): Convert property reference
+	expression to its getter call before converting to
+	rvalue.
+	* obj-c++.dg/property-as-initializer.mm: New
+
+2009-06-12  Jim Grosbach <grosbach@apple.com>
+
+	Radar 6868127
+	* doc/invoke.texi (-mthumb): Specify that thumb is the default for
+	armv7.
+
+2009-05-20  Jim Grosbach <grosbach@apple.com>
+
+	Radar 6902937
+	* config/arm/arm.c (arm_output_epilogue_vfp_restore): New function.
+	(arm_output_epilogue): Factor out common code to
+	arm_output_epilogue_vfp_restore.
+
+2009-05-19  Jim Grosbach <grosbach@apple.com>
+
+        Radar 6902792
+	* config/arm/arm.c: Add includes for stdlib.h and ctype.h.
+	(TARGET_MD_ASM_CLOBBERS): New.
+	(arm_md_asm_clobbers): New function. Add a clobber of the upper
+	half D register when a Q register clobber is used.
+
 2009-04-08  Jim Grosbach <grosbach@apple.com>
 
 	Radar 6738583
 	* config/arm/arm.c (arm_init_cumulative_args): Always short call local
 	functions.
+
+2009-03-18  Jim Grosbach <grosbach@apple.com
+
+        Radar 6676111 (from Mike's fix to SnowLeopard gcc 4.2 6486153)
+	* fold-const.c (extract_muldiv_1): Copy TYPE_OVERFLOW_UNDEFINED from 
+	other uses in extract_muldiv_1 to avoid optimization when overflow 
+	is defined.
+
+2009-03-18  Bob Wilson  <bob.wilson@apple.com>
+
+	Radar 6545322
+	* gcc/config/arm/ieee754-sf.S (floatundisf): Replace undefined do_itt
+	macro call by do_it with an extra "t" argument.
+	* gcc/config/arm/ieee754-df.S (floatdidf): Likewise.
+	(muldf3): Revert inexplicable change that replaced a BIC with an AND.
 
 2009-02-25  Jim Grosbach <grosbach@apple.com>
 
@@ -16,6 +85,31 @@
 	* gcc/config/arm/lib1funcs.asm (save_vfp_d8_d15_regs,
 	restore_vfp_d8_d15_regs): New functions, built only for v6 ARM.
 
+2009-02-25  Jim Grosbach <grosbach@apple.com>
+
+	Radar 6611402
+	* gcc/config/arm/t-darwin (ARM_MULTILIB_ARCHS): New.
+	* (MULTILIB_OPTIONS, MULTILIB_DIRNAMES, MULTILIB_EXCEPTIONS): 
+	Derive values from list in ARM_MULTILIB_ARCHS.
+	* gcc/config/arm/gen-darwin-multilib-exceptions.sh: New.
+	Helper function to calculate the list for MULTILIB_EXCEPTIONS.
+
+2009-02-02   Jim Grosbach <grosbach@apple.com>
+
+	Radar 5571707
+	* gcc/config/arm/darwin.h (SUBTARGET_OVERRIDE_OPTIONS): Set
+	flag to reserve R9 on v6 if target iPhone SDK is less than 3.0.
+	* gcc/config/arm/arm.c (darwin_reserve_r9_on_v6): New flag.
+	(arm_darwin_subtarget_conditional_register_usage): Conditionalize
+	making R9 available on darwin_reserve_r9_on_v6 when targeting v6.
+
+2009-01-30   Jim Grosbach <grosbach@apple.com>
+
+	Radar 6370037
+	* ifcvt.c (cond_exec_process_if_block): Move loop-local variable
+	initialization inside loop so that further iterations don't
+	incorrectly use a value of the variable from a previous iteration.
+
 2009-01-29  Josh Conner  <jconner@apple.com>
 
 	Radar 6186914, 6541440
@@ -23,6 +117,22 @@
 	(size_of_loc_descr, output_loc_operands): Likewise.
 	(reg_loc_descriptor): Call TARGET_DWARF2_REG_HANDLER if it is defined.
 	* config/arm/arm.h (TARGET_DWARF2_REG_HANDLER): Define.
+
+2009-01-27   Jim Grosbach <grosbach@apple.com>
+
+	Radar 6483528
+	* config/arm/arm.c (arm_output_epilogue): Pop VFP registers in
+	correct order when multiple pop instructions are necessary.
+
+2009-01-22   Jim Grosbach <grosbach@apple.com>
+
+	Radar 5571707
+	* config/arm/darwin.h (SUBTARGET_CONDITIONAL_REGISTER_USAGE):
+	Allow use of R9 on v6 and v7.
+	* config/arm/arm.c (arm_darwin_subtarget_conditional_register_usage):
+	New function.
+	* config/arm/arm-protos.h 
+	(arm_darwin_subtarget_conditional_register_usage): Ditto.
 
 2009-01-22  Stuart Hastings  <stuart@apple.com>
 
@@ -42,6 +152,39 @@
 	Radar 6414738
 	* var-tracking.c (clobber_variable_part): Update anextp for
           next iteration.
+
+2008-11-18   Jim Grosbach <grosbach@apple.com>
+	Radar 6361608
+	* config/arm/arm.c (arm_output_mi_thunk): C++ thunks for multiple
+	inheritance need to account for the different PC-relative offset
+	bias of the add instruction in Thumb-2 vs. ARM mode (4 vs. 8).
+
+2008-11-13   Jim Grosbach <grosbach@apple.com>
+
+	Radar 6357106
+	* config/arm/arm.c (arm_function_boundary): Thumb2 functions
+	should be 32-bit aligned.
+
+2008-11-13   Jim Grosbach <grosbach@apple.com>
+	Radar 6333007
+	* config/darwin-driver.c (darwin_default_min_version): Bump default
+	iPhoneos-version-min to 3.0.
+	* config/arm/darwin.h (DARWIN_MINVERSION_SPEC,
+	SUBTARGET_OVERRIDE_OPTIONS): Ditto.
+
+2008-11-13   Jim Grosbach <grosbach@apple.com>
+
+	Radar 6345234
+	* config/arm/arm.c (arm_file_start): Emit section directives
+	for text sections at the start of file, as for PPC.
+
+2008-11-11  Fariborz Jahanian <fjahanian@apple.com>
+
+        Radar 6351990
+	* config/darwin.c (machopic_select_section): Accomodate change
+	for meta-data prefix name.
+	* config/darwin-sections.def (__objc_protorefs, __objc_protolist):
+	These sections are now coalesced.
 
 2008-11-4   Jim Grosbach <grosbach@apple.com>
 
@@ -87,6 +230,111 @@
 	  (ix86_tieable_integer_mode_p): Convert integral return
 	  expression into bool.
 
+2008-10-30  Josh Conner  <jconner@apple.com>
+
+	Radar 6297258
+	* config/arm/arm.c (arm_output_mi_thunk): Emit 32-bit branch
+	for thumb2 target.
+
+2008-10-24  Josh Conner  <jconner@apple.com>
+
+	Radar 6305331
+	* config/arm/arm.c (arm_asm_output_addr_diff_vec): Disable support
+	for compact switch tables with -mlongcall.
+	* config/arm/arm.h (TARGET_COMPACT_SWITCH_TABLES): New definition...
+	(CASE_VECTOR_SHORTEN_MODE): ...use it.
+	* config/arm/arm.md (casesi): ...use it.
+	(thumb_casesi_internal): ...use it.
+
+2008-10-20  Fariborz Jahanian <fjahanian@apple.com>
+
+        Radar 6255595
+	* config/darwin.c (output_objc_section_asm_op): Add two new section names.
+	(objc_internal_variable_name): New routine.
+	(machopic_select_section): Call objc_internal_variable_name.
+	* config/darwin-sections.def: Define two new kinds of
+	__DATA section.
+
+2008-10-16  Josh Conner  <jconner@apple.com>
+
+	Radar 6293989
+	* arm.c (arm_legitimate_address_p): Don't allow pre-inc/dec or
+	post-dec addressing for NEON vector operations.
+	(thumb2_legitimate_address_p): Likewise.
+
+2008-10-16  Josh Conner  <jconner@apple.com>
+
+        Radar 6288519
+        * config/arm/arm.md (casesi): Disallow for TARGET_THUMB &&
+        TARGET_LONG_CALLS.
+        (thumb_casesi_internal): Likewise.
+
+2008-10-13  Josh Conner  <jconner@apple.com>
+
+	Radar 6280380
+	* config/arm/arm.c (arm_final_prescan_insn): Check predicability
+	of insns before allowing them to be predicated.
+
+2008-10-09  Josh Conner  <jconner@apple.com>
+
+	Radar 6279481
+	* config/arm/arm.c (arm_adjust_insn_length): Don't adjust thumb-2
+	epilogue lengths.
+
+2008-10-09  Josh Conner  <jconner@apple.com>
+
+	Radar 6267907
+	* config/arm/thumb2.md (thumb2_casesi_internal): Mark scratch reg as
+	early-clobber.
+	(thumb2_casesi_internal_pic): Remove this define_insn.
+	* config/arm/arm.md (casesi): Don't use thumb2_casesi_internal_pic.
+
+2008-10-03  Josh Conner  <jconner@apple.com>
+
+	Radar 6268204
+	* doc/invoke.texi (-mkernel): Document that -mlong-branch
+	is set for ARM.
+	* config/arm/darwin.h (SUBTARGET_OVERRIDE_OPTIONS): Have -mkernel
+	and -fapple-kext imply -mlong-branch.
+
+2008-10-03  Josh Conner  <jconner@apple.com>
+
+	Radar 6261739
+	* config/arm/thumb2.md (thumb2_cbz): Check for low-register
+	use when calculating cost.
+	(thumb2_cbnz): Likewise.
+
+2008-10-02  Josh Conner  <jconner@apple.com>
+
+	Radar 6134442
+	* config/arm/t-darwin: Re-enable multi-libs for v5.
+
+2008-09-30  Josh Conner  <jconner@apple.com>
+
+	Radar 6197406
+	* config/arm/neon.md (mulsf3addsf_neon, mulsf3subsf_neon):
+	Remove.
+
+2008-09-30  Josh Conner  <jconner@apple.com>
+
+	Radar 6251664
+	* config/arm/neon.md (mulsf3subsf_neon): Reverse operands to
+	minus.
+
+2008-09-30  Josh Conner  <jconner@apple.com>
+
+	Radar 6160917
+	* config/arm/arm.c (neon_vector_mem_operand): Call
+	arm_legitimate_index_p.
+	(neon_reload_in): New function.
+	(neon_reload_out): New function.
+	* config/arm/arm-protos.h (neon_reload_in): New proto.
+	(neon_reload_out): New proto.
+	* config/arm/neon.md (reload_in<mode>): New expand pattern.
+	(reload_out<mode>): New expand pattern.
+	* config/arm/predicates.md (neon_reload_mem_operand): New
+	predicate.
+
 2008-10-10  Stuart Hastings  <stuart@apple.com>
 
 	Radar 6107012
@@ -105,6 +353,18 @@
        * gcc/builtins.c (fold_builtin_classify): Under -ffast-math,
           finite() should return 1.
 
+2008-09-19  Josh Conner  <jconner@apple.com>
+
+	Radar 6216388
+	* config/arm/arm.c (TARGET_DEFAULT_TARGET_FLAGS): Remove
+	MASK_SCHED_PROLOG.
+
+2008-09-19  Josh Conner  <jconner@apple.com>
+
+	Radar 6196857
+	* config/arm/arm.c (arm_output_epilogue): Use pop instead of ldmfd
+	on Thumb-2.
+
 2008-09-17  Josh Conner  <jconner@apple.com>
 
 	Radar 6204451
@@ -116,6 +376,54 @@
 	Radar 6214296
 	* config/darwin.h (STARTFILE_SPEC): Don't add crt3.o to the link line
 	if -miphoneos-version-min was specified.
+
+2008-09-11  Josh Conner  <jconner@apple.com>
+
+	Radar 6150882
+	* config/arm/ieee754-df.S: Add do_it macros to allow building
+	thumb-2.
+	* config/arm/ieee754-sf.S: Likewise.
+	* config/arm/lib1funcs.asm: Redefine macros to allow building
+	thumb-2.  Disable compact switch table code for thumb-2.
+	* config/arm/arm.c (arm_override_options): armv7a implies thumb-2.
+	(arm_legitimate_index_p): Require VECTOR_MODE_P to use NEON
+	instruction ranges.
+	(thumb2_legitimate_index_p): Likewise.
+	* config/arm/arm.h (TARGET_THUMB): Define.
+	* config/arm/arm.opt (thumb_option): New option.
+
+2008-09-09  Josh Conner  <jconner@apple.com>
+
+	Radar 6195983
+	* config/arm/arm.c (thumb2_output_casesi): Fix table invocation
+	instructions.
+	(arm_asm_output_addr_diff_vec): Emit b.w instead of b for
+	Thumb-2.
+
+2008-09-03  Jim Grosbach <grosbach@apple.com>
+
+	* Radar 6150859
+	* config/arm/arm.c (arm_print_operand): Add 'p' output code to
+	print a d{0-15} reference to a 32 bit register.
+	* config/arm/arm.h (VFP_REGNO_OK_FOR_SINGLE): Restrict SF mode
+	values to even numbered float registers so they can be referenced
+	by the 32x2 NEON instructions.
+	* config/arm/vfp.md (*addsf3_vfp, *subsf3_vfp, *mulsf3_vfp,
+	*mulsf3addsf_vfp, *mulsf3subsf_vfp): Disable for TARGET_NEON
+	since we'll be using the NEON instructions instead.
+	* config/arm/neon.md (*addsf3_neon, *subsf3_neon, *mulsf3_neon,
+	*mulsf3addsf_neon, *mulsf3subsf_neon): New productions.
+
+2008-08-26  Jim Grosbach <grosbach@apple.com>
+
+	Radar 6152801
+	* config/arm/arm.c (thumb2_output_casesi, 
+	arm_asm_output_addr_diff_vec): For thumb2, use direct
+	braches for SImode switch tables (like we do for ARM mode).
+
+2008-08-25  Josh Conner  <jconner@apple.com>
+
+	* config/arm/t-darwin: Disable multi-libs for v5.
 
 2008-08-27  Josh Conner  <jconner@apple.com>
 
@@ -135,6 +443,24 @@
 	Radar 6141565
 	* gcc/c-common.c (iasm_constraint_for): fix compiler warning
 
+2008-08-11  Josh Conner  <jconner@apple.com>
+
+	Radar 6134442
+	* config/arm/t-darwin: Enable multi-libs for v5.
+
+2008-08-06  Jim Grosbach <grosbach@apple.com>
+
+	Radar 6093696
+	* config/arm/t-darwin (t-darwin): Enable multi-libs for v7
+
+2008-08-06  Jim Grosbach <grosbach@apple.com>
+
+	Radar 6129445
+	* config/arm/arm.md (mulsidi3, umulsidi3, smulsi3_highpart,
+	umulsi3_highpart): Remove conditionalization on non-v6
+	(mulsidi3_v6, umulsidi3_v6, smulsi3_highpart_v6,
+	umulsi3_highpart_v6): Remove production.
+
 2008-08-04  Jim Grosbach <grosbach@apple.com>
 
 	Radar 6110622
@@ -144,6 +470,22 @@
 	Radar 6090616
 	* global.c (set_preference): Add checks to prevent integer
 	underflow of register numbers.
+			
+2008-08-04  Jim Grosbach <grosbach@apple.com>
+
+	Radar 6093388
+	* config/arm/arm.c (FL_FOR_ARCH7A): Add FL_NEON.
+	(arm_arch7a): New global flag.
+	(arm_override_options): Set arm_arch7a flag.
+	* config/arm/darwin.h (FPUTYPE_DEFAULT): Default to Neon for v7.
+	(TARGET_DEFAULT_FLOAT_ABI): Default to ARM_FLOAT_ABI_SOFTFP for v7,
+	like we do for v6.
+
+2008-07-23  Josh Conner  <jconner@apple.com>
+
+	Radar 6090740
+	* config/arm/arm.c (arm_output_epilogue): Use SP not IP
+	as scratch when restoring VFP registers.
 
 2008-07-22  Josh Conner  <jconner@apple.com>
 
@@ -170,6 +512,11 @@
 	* config/arm/arm.c (arm_encode_call_attribute): Check visibility
 	too.
 	(arm_darwin_encode_section_info): Likewise.
+
+2008-07-01  Jim Grosbach <grosbach@apple.com>
+	Radar 6040923
+	* config/arm/arm.md (*mulsi3_compare0_v6, 
+	*mulsi_compare0_scratch_v6): Remove "&& optimize_size" conditional.
 
 2008-06-25  Josh Conner  <jconner@apple.com>
 
@@ -656,6 +1003,33 @@ e008-04-15  Josh Conner  <jconner@apple.com>
 
 	* config/i386/i386.c (ix86_builtins): Need APPLE LOCAL markers
 	  around deletion.
+
+2008-03-07  Jim Grosbach <grosbach@apple.com>
+
+	* global.c (set_preference): The apple local change to not
+	punt on subregs breaks under ARM. Go back to mainline behaviour
+	for that case.
+
+2008-03-07  Jim Grosbach <grosbach@apple.com>
+
+	* config/arm/arm.h (CASE_VECTOR_SHORTEN_MODE): Do not shorten
+	VECTOR_DIFF tables in Thumb2 mode. The length calculations for 
+	many variable length instructions are only approximate, but the
+	shorter tables require them to be exact and are thus often
+	incorrect.
+
+2008-03-07  Jim Grosbach <grosbach@apple.com>
+
+	* config/arm/arm.md: Split out a separate thumb2_jump pattern
+	to enable accurate length attribute calculation.
+
+2008-03-07  Jim Grosbach <grosbach@apple.com>
+
+	* config/arm/arm.h: Functionalize ASM_OUTPUT_ADDR_DIFF_VEC
+	* config/arm/arm-protos.h: Ditto
+	* config/arm/arm.c (arm_asm_output_addr_diff_vec): New function.
+	Adjust offset calculations for Thumb2 as the table layout does
+	not need the Apple specific compact switch table bits.
 
 2008-03-07  Josh Conner  <jconner@apple.com>
 

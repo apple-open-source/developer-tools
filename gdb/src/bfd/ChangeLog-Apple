@@ -1,3 +1,21 @@
+2008-10-17  Jason Molenda  (jmolenda@apple.com)
+
+	* mach-o.h (bfd_mach_o_load_command_type): Add BFD_MACH_O_LC_DYLD_INFO
+	and BFD_MACH_O_LC_DYLD_INFO_ONLY.
+	* mach-o.c (bfd_mach_o_write_contents): Ignore them.
+	(bfd_mach_o_scan_read_command): Ignore them.
+
+2008-08-20  Jason Molenda  (jmolenda@apple.com)
+
+	* mach-o.c (bfd_mach_o_core_file_matches_executable_p): Remove
+	ATTRIBUTE_UNUSED parameters to function; the compiler would choose to
+	do no comparison sometimes and just return 'true'.
+
+2008-08-13  Jim Ingham <jingham@apple.com>
+
+	* mach-o.c (bfd_mach_o_core_file_matches_executable_p): compare the
+	cputypes of the core files & return false if they don't match.
+
 2008-04-28  Jim Ingham  <jingham@apple.com>
 
 	* mach-o.c (bfd_mach_o_encrypted_binary): Changed to just return
