@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2006 Apple Computer, Inc.  All rights reserved.
+ * Copyright (C) 2006, 2007 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -28,29 +28,22 @@
 
 #include <windows.h>
 
+#if COMPILER(MINGW) || (PLATFORM(QT) && COMPILER(MSVC))
+#include <float.h>
+#define FLOAT_MAX FLT_MAX
+#endif
+
 namespace WebCore {
 
-double currentTime()
+float userIdleTime()
 {
-    FILETIME ft;
-    GetSystemTimeAsFileTime(&ft);
-
-    // As per Windows documentation for FILETIME, copy the resulting FILETIME structure to a
-    // ULARGE_INTEGER structure using memcpy (using memcpy instead of direct assignment can
-    // prevent alignment faults on 64-bit Windows).
-
-    ULARGE_INTEGER t;
-    memcpy(&t, &ft, sizeof(t));
-
-    // Windows file times are in 100s of nanoseconds.
-    // To convert to seconds, we have to divide by 10,000,000, which is more quickly
-    // done by multiplying by 0.0000001.
-    
-    // Between January 1, 1601 and January 1, 1970, there were 369 complete years,
-    // of which 89 were leap years (1700, 1800, and 1900 were not leap years).
-    // That is a total of 134774 days, which is 11644473600 seconds.
-
-    return t.QuadPart * 0.0000001 - 11644473600.0;
+#if !PLATFORM(WINCE)
+    LASTINPUTINFO lastInputInfo = {0};
+    lastInputInfo.cbSize = sizeof(LASTINPUTINFO);
+    if (::GetLastInputInfo(&lastInputInfo))
+        return (GetTickCount() - lastInputInfo.dwTime) * 0.001; // ::GetTickCount returns ms of uptime valid for up to 49.7 days.
+#endif
+    return FLT_MAX; // return an arbitrarily high userIdleTime so that releasing pages from the page cache isn't postponed. 
 }
 
 }

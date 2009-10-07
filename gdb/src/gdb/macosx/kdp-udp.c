@@ -39,6 +39,7 @@
 #include "kdp-udp.h"
 
 #include "defs.h"
+#include "event-loop.h"
 
 #define assert CHECK_FATAL
 

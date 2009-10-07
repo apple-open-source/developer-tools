@@ -1,3 +1,26 @@
+/*
+ * Copyright (c) 2007-2009 Apple Inc. All rights reserved.
+ *
+ * @APPLE_LICENSE_HEADER_START@
+ * 
+ * This file contains Original Code and/or Modifications of Original Code
+ * as defined in and that are subject to the Apple Public Source License
+ * Version 2.0 (the 'License'). You may not use this file except in
+ * compliance with the License. Please obtain a copy of the License at
+ * http://www.opensource.apple.com/apsl/ and read it before using this
+ * file.
+ * 
+ * The Original Code and all software distributed under the License are
+ * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+ * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
+ * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+ * Please see the License for the specific language governing rights and
+ * limitations under the License.
+ * 
+ * @APPLE_LICENSE_HEADER_END@
+ */
+
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <stdio.h>
@@ -9,8 +32,10 @@
 #include <sys/mman.h>
 #include <sys/fcntl.h>
 #include <sys/signal.h>
+#include <sys/errno.h>
 #include <mach/mach.h>
 #include <mach/mach_error.h>
+#include <bsm/libbsm.h>
 #include <errno.h>
 #include <netinet/in.h>
 #include <sys/event.h>
@@ -20,14 +45,13 @@
 #include <sys/time.h>
 #include <asl.h>
 #include <asl_ipc.h>
-#include <asl_store.h>
+#include <asl_ipc_server.h>
+#include <asl_core.h>
 #include "daemon.h"
 
 #define forever for(;;)
 
 #define LIST_SIZE_DELTA 256
-#define MAX_PRE_DISASTER_COUNT 64
-#define MAX_DISASTER_COUNT LIST_SIZE_DELTA
 
 #define SEND_NOTIFICATION 0xfadefade
 
@@ -35,31 +59,15 @@
 #define SEARCH_FORWARD 1
 #define SEARCH_BACKWARD -1
 
-static asl_store_t *store = NULL;
-static int disaster_occurred = 0;
-
-extern mach_port_t server_port;
-extern int archive_enable;
-extern uint64_t db_curr_size;
-extern uint64_t db_curr_empty;
-
 static pthread_mutex_t db_lock = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t queue_lock = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t queue_cond = PTHREAD_COND_INITIALIZER;
 
 extern char *asl_list_to_string(asl_search_result_t *list, uint32_t *outlen);
 extern asl_search_result_t *asl_list_from_string(const char *buf);
+extern boolean_t asl_ipc_server(mach_msg_header_t *InHeadP, mach_msg_header_t *OutHeadP);
+extern uint32_t bb_convert(const char *name);
 
-static time_t last_archive_sod = 0;
-
-static asl_search_result_t work_queue = {0, 0, NULL};
-static asl_search_result_t disaster_log = {0, 0, NULL};
-
-extern boolean_t asl_ipc_server
-(
-	mach_msg_header_t *InHeadP,
-	mach_msg_header_t *OutHeadP
-);
+static task_name_t *client_tasks = NULL;
+static uint32_t client_tasks_count = 0;
 
 typedef union
 {
@@ -74,227 +82,262 @@ typedef union
 } asl_reply_msg;
 
 void
-list_append_msg(asl_search_result_t *list, asl_msg_t *msg, uint32_t retain)
+db_ping_store(void)
 {
-	if (list == NULL) return;
-	if (msg == NULL) return;
-
-	/*
-	 * NB: curr is the list size
-	 * grow list if necessary
-	 */
-	if (list->count == list->curr)
+	if ((global.dbtype & DB_TYPE_FILE) && (global.file_db != NULL))
 	{
-		if (list->curr == 0)
+		global.store_flags |= STORE_FLAGS_FILE_CACHE_SWEEP_REQUESTED;
+
+		/* wake up the output worker thread */
+		pthread_cond_signal(&global.work_queue_cond);
+	}
+}
+
+void
+db_asl_open()
+{
+	uint32_t status;
+	struct stat sb;
+
+	if ((global.dbtype & DB_TYPE_FILE) && (global.file_db == NULL))
+	{
+		memset(&sb, 0, sizeof(struct stat));
+		if (stat(PATH_ASL_STORE, &sb) == 0)
 		{
-			list->msg = (asl_msg_t **)calloc(LIST_SIZE_DELTA, sizeof(asl_msg_t *));
+			/* must be a directory */
+			if ((sb.st_mode & S_IFDIR) == 0)
+			{
+				asldebug("error: %s is not a directory", PATH_ASL_STORE);
+				return;
+			}
 		}
 		else
 		{
-			list->msg = (asl_msg_t **)reallocf(list->msg, (list->curr + LIST_SIZE_DELTA) * sizeof(asl_msg_t *));
+			if (errno == ENOENT)
+			{
+				/* /var/log/asl doesn't exist - create it */
+				if (mkdir(PATH_ASL_STORE, 0755) != 0)
+				{
+					asldebug("error: can't create data store %s: %s\n", PATH_ASL_STORE, strerror(errno));
+					return;
+				}
+			}
+			else
+			{
+				/* stat failed for some other reason */
+				asldebug("error: can't stat data store %s: %s\n", PATH_ASL_STORE, strerror(errno));
+				return;
+			}
 		}
 
-		if (list->msg == NULL)
+		/*
+		 * One-time store conversion from the old "LongTTL" style to the new "Best Before" style.
+		 * bb_convert returns quickly if the store has already been converted.
+		 */
+		status = bb_convert(PATH_ASL_STORE);
+		if (status != ASL_STATUS_OK)
 		{
-			list->curr = 0;
-			list->count = 0;
-			return;
+			asldebug("ASL data store conversion failed!: %s\n", asl_core_error(status));
 		}
 
-		list->curr += LIST_SIZE_DELTA;
-	}
-
-	if (retain != 0) asl_msg_retain(msg);
-	list->msg[list->count] = msg;
-	list->count++;
-}
-
-void
-disaster_message(asl_msg_t *m)
-{
-	uint32_t i;
-
-	if (disaster_occurred == 0)
-	{
-		/* retain last MAX_PRE_DISASTER_COUNT messages */
-		while (disaster_log.count >= MAX_PRE_DISASTER_COUNT)
+		status = asl_store_open_write(NULL, &(global.file_db));
+		if (status != ASL_STATUS_OK)
 		{
-			asl_msg_release(disaster_log.msg[0]);
-			for (i = 1; i < disaster_log.count; i++) disaster_log.msg[i - 1] = disaster_log.msg[i];
-			disaster_log.count--;
+			asldebug("asl_store_open_write: %s\n", asl_core_error(status));
+		}
+		else
+		{
+			if (global.db_file_max != 0) asl_store_max_file_size(global.file_db, global.db_file_max);
+			asl_store_signal_sweep(global.file_db);
 		}
 	}
 
-	if (disaster_log.count < MAX_DISASTER_COUNT) list_append_msg(&disaster_log, m, 1);
-}
-
-void
-db_enqueue(asl_msg_t *m)
-{
-	if (m == NULL) return;
-
-	pthread_mutex_lock(&queue_lock);
-	list_append_msg(&work_queue, m, 1);
-	pthread_mutex_unlock(&queue_lock);
-	pthread_cond_signal(&queue_cond);
-}
-
-asl_msg_t **
-db_dequeue(uint32_t *count)
-{
-	asl_msg_t **work;
-
-	pthread_mutex_lock(&queue_lock);
-	pthread_cond_wait(&queue_cond, &queue_lock);
-
-	work = NULL;
-	*count = 0;
-
-	if (work_queue.count == 0)
+	if ((global.dbtype & DB_TYPE_MEMORY) && (global.memory_db == NULL))
 	{
-		pthread_mutex_unlock(&queue_lock);
-		return NULL;
+		status = asl_memory_open(global.db_memory_max, &(global.memory_db));
+		if (status != ASL_STATUS_OK)
+		{
+			asldebug("asl_memory_open: %s\n", asl_core_error(status));
+		}
 	}
 
-	work = work_queue.msg;
-	*count = work_queue.count;
-
-	work_queue.count = 0;
-	work_queue.curr = 0;
-	work_queue.msg = NULL;
-
-	pthread_mutex_unlock(&queue_lock);
-	return work;
+	if ((global.dbtype & DB_TYPE_MINI) && (global.mini_db == NULL))
+	{
+		status = asl_mini_memory_open(global.db_mini_max, &(global.mini_db));
+		if (status != ASL_STATUS_OK)
+		{
+			asldebug("asl_mini_memory_open: %s\n", asl_core_error(status));
+		}
+	}
 }
 
 /*
- * Takes messages off the work queue and saves them in the database.
+ * Takes messages off the work queue and saves them.
  * Runs in it's own thread.
  */
 void
-db_worker()
+output_worker()
 {
 	asl_msg_t **work;
-	uint64_t msgid;
-	uint32_t i, count, status;
-	mach_msg_empty_send_t *msg;
+	uint32_t i, count;
+	mach_msg_empty_send_t *empty;
 	kern_return_t kstatus;
 
-	msg = (mach_msg_empty_send_t *)calloc(1, sizeof(mach_msg_empty_send_t));
-	if (msg == NULL) return;
-
-	msg->header.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, MACH_MSGH_BITS_ZERO);
-	msg->header.msgh_remote_port = server_port;
-	msg->header.msgh_local_port = MACH_PORT_NULL;
-	msg->header.msgh_size = sizeof(mach_msg_empty_send_t);
-	msg->header.msgh_id = SEND_NOTIFICATION;
+	empty = (mach_msg_empty_send_t *)calloc(1, sizeof(mach_msg_empty_send_t));
+	if (empty == NULL) return;
 
 	forever
 	{
 		count = 0;
-		work = db_dequeue(&count);
 
-		if (work == NULL) continue;
+		/* blocks until work is available */
+		work = asl_work_dequeue(&count);
 
-		pthread_mutex_lock(&db_lock);
-
-		if (store == NULL)
+		if (work == NULL)
 		{
-			status = asl_store_open(_PATH_ASL_DB, 0, &store);
-			if (status != ASL_STATUS_OK)
+			if ((global.dbtype & DB_TYPE_FILE) && (global.store_flags & STORE_FLAGS_FILE_CACHE_SWEEP_REQUESTED))
 			{
-				disaster_occurred = 1;
-				store = NULL;
-			}
-		}
-
-		for (i = 0; (i < count) && (store != NULL); i++)
-		{
-			msgid = 0;
-			status = ASL_STATUS_OK;
-
-			status = asl_store_save(store, work[i], -1, -1, &msgid);
-			if (status != ASL_STATUS_OK)
-			{
-				/* write failed - reopen store */
-				asl_store_close(store);
-				store = NULL;
-
-				status = asl_store_open(_PATH_ASL_DB, 0, &store);
-				if (status != ASL_STATUS_OK)
-				{
-					disaster_occurred = 1;
-					store = NULL;
-				}
-
-				/* if the store re-opened, retry the save */
-				if (store != NULL)
-				{
-					status = asl_store_save(store, work[i], -1, -1, &msgid);
-					if (status != ASL_STATUS_OK)
-					{
-						disaster_occurred = 1;
-						store = NULL;
-					}
-				}
+				asl_store_sweep_file_cache(global.file_db);
+				global.store_flags &= ~STORE_FLAGS_FILE_CACHE_SWEEP_REQUESTED;
 			}
 
-			if ((i % 500) == 499)
-			{
-				pthread_mutex_unlock(&db_lock);
-				pthread_mutex_lock(&db_lock);
-			}
+			continue;
 		}
 
-		db_curr_size = 0;
-		db_curr_empty = 0;
-
-		if (store != NULL)
+		for (i = 0; i < count; i++)
 		{
-			db_curr_size = (store->record_count + 1) * DB_RECORD_LEN;
-			db_curr_empty = store->empty_count * DB_RECORD_LEN;
+			asl_message_match_and_log(work[i]);
+			asl_msg_release(work[i]);
 		}
 
-		pthread_mutex_unlock(&db_lock);
-
-		for (i = 0; i < count; i++) asl_msg_release(work[i]);
 		free(work);
 
-		kstatus = mach_msg(&(msg->header), MACH_SEND_MSG, msg->header.msgh_size, 0, MACH_PORT_NULL, MACH_MSG_TIMEOUT_NONE, MACH_PORT_NULL);
+		if (global.store_flags & STORE_FLAGS_FILE_CACHE_SWEEP_REQUESTED)
+		{
+			asl_store_sweep_file_cache(global.file_db);
+			global.store_flags &= ~STORE_FLAGS_FILE_CACHE_SWEEP_REQUESTED;
+		}
+
+		empty->header.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, MACH_MSGH_BITS_ZERO);
+		empty->header.msgh_remote_port = global.self_port;
+		empty->header.msgh_local_port = MACH_PORT_NULL;
+		empty->header.msgh_size = sizeof(mach_msg_empty_send_t);
+		empty->header.msgh_id = SEND_NOTIFICATION;
+
+		kstatus = mach_msg(&(empty->header), MACH_SEND_MSG | MACH_SEND_TIMEOUT, empty->header.msgh_size, 0, MACH_PORT_NULL, 2, MACH_PORT_NULL);
 	}
 }
 
-static char *
-disaster_query(aslresponse query, uint32_t *outlen)
+/*
+ * Called from asl_action.c to save messgaes to the ASL data store
+ */
+void
+db_save_message(asl_msg_t *msg)
 {
-	asl_search_result_t res;
-	uint32_t i, j, match;
-	char *out;
+	uint64_t msgid;
+	uint32_t status;
 
-	if (outlen == NULL) return NULL;
-	*outlen = 0;
+	pthread_mutex_lock(&db_lock);
 
-	if ((query == NULL) || ((query != NULL) && (query->count == 0))) return asl_list_to_string(&disaster_log, outlen);
+	db_asl_open();
 
-	memset(&res, 0, sizeof(asl_search_result_t));
-
-	for (i = 0; i < disaster_log.count; i++)
+	if (global.dbtype & DB_TYPE_FILE)
 	{
-		match = 1;
-
-		for (j = 0; (j < query->count) && (match == 1); j++)
+		status = asl_store_save(global.file_db, msg);
+		if (status != ASL_STATUS_OK)
 		{
-			match = asl_msg_cmp(query->msg[j], disaster_log.msg[i]);
-		}
+			/* write failed - reopen & retry */
+			asldebug("asl_store_save: %s\n", asl_core_error(status));
+			asl_store_close(global.file_db);
+			global.file_db = NULL;
 
-		if (match == 1) list_append_msg(&res, disaster_log.msg[i], 0);
+			db_asl_open();
+			status = asl_store_save(global.file_db, msg);
+			if (status != ASL_STATUS_OK)
+			{
+				asldebug("(retry) asl_store_save: %s\n", asl_core_error(status));
+				asl_store_close(global.file_db);
+				global.file_db = NULL;
+
+				global.dbtype |= DB_TYPE_MEMORY;
+				if (global.memory_db == NULL)
+				{
+					status = asl_memory_open(global.db_memory_max, &(global.memory_db));
+					if (status != ASL_STATUS_OK)
+					{
+						asldebug("asl_memory_open: %s\n", asl_core_error(status));
+					}
+				}
+			}
+		}
 	}
 
-	if (res.count == 0) return NULL;
+	if (global.dbtype & DB_TYPE_MEMORY)
+	{
+		msgid = 0;
+		status = asl_memory_save(global.memory_db, msg, &msgid);
+		if (status != ASL_STATUS_OK)
+		{
+			/* save failed - reopen & retry*/
+			asldebug("asl_memory_save: %s\n", asl_core_error(status));
+			asl_memory_close(global.memory_db);
+			global.memory_db = NULL;
 
-	out = asl_list_to_string((aslresponse)&res, outlen);
-	free(res.msg);
-	return out;
+			db_asl_open();
+			msgid = 0;
+			status = asl_memory_save(global.memory_db, msg, &msgid);
+			if (status != ASL_STATUS_OK)
+			{
+				asldebug("(retry) asl_memory_save: %s\n", asl_core_error(status));
+				asl_memory_close(global.memory_db);
+				global.memory_db = NULL;
+			}
+		}
+	}
+
+	if (global.dbtype & DB_TYPE_MINI)
+	{
+		status = asl_mini_memory_save(global.mini_db, msg, &msgid);
+		if (status != ASL_STATUS_OK)
+		{
+			/* save failed - reopen & retry*/
+			asldebug("asl_mini_memory_save: %s\n", asl_core_error(status));
+			asl_mini_memory_close(global.mini_db);
+			global.mini_db = NULL;
+
+			db_asl_open();
+			status = asl_mini_memory_save(global.mini_db, msg, &msgid);
+			if (status != ASL_STATUS_OK)
+			{
+				asldebug("(retry) asl_memory_save: %s\n", asl_core_error(status));
+				asl_mini_memory_close(global.mini_db);
+				global.mini_db = NULL;
+			}
+		}
+	}
+
+
+	pthread_mutex_unlock(&db_lock);
+
+}
+
+void
+disaster_message(asl_msg_t *msg)
+{
+	uint64_t msgid;
+	uint32_t status;
+
+	msgid = 0;
+
+	if ((global.dbtype & DB_TYPE_MINI) == 0)
+	{
+		if (global.mini_db == NULL)
+		{
+			status = asl_mini_memory_open(global.db_mini_max, &(global.mini_db));
+			if (status != ASL_STATUS_OK) asldebug("asl_mini_memory_open: %s\n", asl_core_error(status));
+			else asl_mini_memory_save(global.mini_db, msg, &msgid);
+		}
+	}
 }
 
 /*
@@ -312,138 +355,73 @@ db_query(aslresponse query, aslresponse *res, uint64_t startid, int count, int f
 
 	pthread_mutex_lock(&db_lock);
 
-	if (store == NULL)
-	{
-		status = asl_store_open(_PATH_ASL_DB, 0, &store);
-		if (status != ASL_STATUS_OK) store = NULL;
-	}
+	status = ASL_STATUS_FAILED;
 
-	status = asl_store_match(store, query, res, lastid, startid, ucount, dir, ruid, rgid);
+	if (global.dbtype & DB_TYPE_MEMORY) status = asl_memory_match(global.memory_db, query, res, lastid, startid, ucount, dir, ruid, rgid);
+	else status = asl_mini_memory_match(global.mini_db, query, res, lastid, startid, ucount, dir);
 
 	pthread_mutex_unlock(&db_lock);
 
 	return status;
 }
 
-/*
- * Prune the database.
- */
-uint32_t
-db_prune(aslresponse query)
+static void
+register_session(task_name_t task_name, pid_t pid)
 {
-	uint32_t status;
+	mach_port_t previous;
+	uint32_t i;
 
-	if (disaster_occurred == 1) return ASL_STATUS_FAILED;
+	if (task_name == MACH_PORT_NULL) return;
+	if (global.dead_session_port == MACH_PORT_NULL) return;
 
-	pthread_mutex_lock(&db_lock);
+	for (i = 0; i < client_tasks_count; i++) if (task_name == client_tasks[i]) return;
 
-	if (store == NULL)
-	{
-		status = asl_store_open(_PATH_ASL_DB, 0, &store);
-		if (status != ASL_STATUS_OK) store = NULL;
-	}
-	
-	status = asl_store_prune(store, query);
+	if (client_tasks_count == 0) client_tasks = (task_name_t *)calloc(1, sizeof(task_name_t));
+	else client_tasks = (task_name_t *)reallocf(client_tasks, (client_tasks_count + 1) * sizeof(task_name_t));
 
-	pthread_mutex_unlock(&db_lock);
+	if (client_tasks == NULL) return;
+	client_tasks[client_tasks_count] = task_name;
+	client_tasks_count++;
 
-	return status;
+	asldebug("register_session: %u   PID %d\n", (unsigned int)task_name, (int)pid);
+
+	/* register for port death notification */
+	mach_port_request_notification(mach_task_self(), task_name, MACH_NOTIFY_DEAD_NAME, 0, global.dead_session_port, MACH_MSG_TYPE_MAKE_SEND_ONCE, &previous);
+	mach_port_deallocate(mach_task_self(), previous);
+
+	asl_client_count_increment();
 }
 
-/*
- * Database archiver
- */
-uint32_t
-db_archive(time_t cut, uint64_t max_size)
+static void
+cancel_session(task_name_t task_name)
 {
-	time_t sod;
-	struct tm ctm;
-	char *archive_file_name;
-	uint32_t status;
+	uint32_t i;
 
-	archive_file_name = NULL;
-	memset(&ctm, 0, sizeof(struct tm));
+	for (i = 0; (i < client_tasks_count) && (task_name != client_tasks[i]); i++);
 
-	if (localtime_r((const time_t *)&cut, &ctm) == NULL) return ASL_STATUS_FAILED;
+	if (i >= client_tasks_count) return;
 
-	if (archive_enable != 0)
+	if (client_tasks_count == 1)
 	{
-		asprintf(&archive_file_name, "%s/asl.%d.%02d.%02d.archive", _PATH_ASL_DIR, ctm.tm_year + 1900, ctm.tm_mon + 1, ctm.tm_mday);
-		if (archive_file_name == NULL) return ASL_STATUS_NO_MEMORY;
+		free(client_tasks);
+		client_tasks = NULL;
+		client_tasks_count = 0;
+	}
+	else
+	{
+		for (i++; i < client_tasks_count; i++) client_tasks[i-1] = client_tasks[i];
+		client_tasks_count--;
+		client_tasks = (task_name_t *)reallocf(client_tasks, client_tasks_count * sizeof(task_name_t));
 	}
 
-	ctm.tm_sec = 0;
-	ctm.tm_min = 0;
-	ctm.tm_hour = 0;
-
-	sod = mktime(&ctm);
-
-	/* if the day changed, archive message received before the start of the day */
-	if (sod > last_archive_sod)
-	{
-		last_archive_sod = sod;
-		status = db_archive(sod - 1, 0);
-		/* NB return status not checked */
-	}
-
-	pthread_mutex_lock(&db_lock);
-
-	if (store == NULL)
-	{
-		status = asl_store_open(_PATH_ASL_DB, 0, &store);
-		if (status != ASL_STATUS_OK) store = NULL;
-	}
-
-	status = asl_store_archive(store, cut, archive_file_name);
-	if (status == ASL_STATUS_OK) status = asl_store_compact(store);
-	if ((status == ASL_STATUS_OK) && (max_size > 0)) status = asl_store_truncate(store, max_size, archive_file_name);
-
-	db_curr_size = 0;
-	db_curr_empty = 0;
-
-	if (store != NULL)
-	{
-		db_curr_size = (store->record_count + 1) * DB_RECORD_LEN;
-		db_curr_empty = store->empty_count * DB_RECORD_LEN;
-	}
-	
-	pthread_mutex_unlock(&db_lock);
-
-	if (archive_file_name != NULL) free(archive_file_name);
-
-	return status;
-}
-
-uint32_t
-db_compact(void)
-{
-	uint32_t status;
-
-	pthread_mutex_lock(&db_lock);
-	
-	if (store == NULL)
-	{
-		status = asl_store_open(_PATH_ASL_DB, 0, &store);
-		if (status != ASL_STATUS_OK)
-		{
-			pthread_mutex_unlock(&db_lock);
-			return status;
-		}
-	}
-	
-	status = asl_store_compact(store);
-	
-	db_curr_size = (store->record_count + 1) * DB_RECORD_LEN;
-	db_curr_empty = store->empty_count * DB_RECORD_LEN;
-	
-	pthread_mutex_unlock(&db_lock);
-
-	return status;
+	asldebug("cancel_session: %u\n", (unsigned int)task_name);
+	mach_port_destroy(mach_task_self(), task_name);
+	asl_client_count_decrement();
 }
 
 /*
  * Receives messages on the "com.apple.system.logger" mach port.
- * Services database search and pruning requests.
+ * Services database search requests.
  * Runs in it's own thread.
  */
 void
@@ -456,6 +434,7 @@ database_server()
 	uint32_t rbits, sbits;
 	uint32_t flags, snooze;
 	struct timeval now, send_time;
+	mach_dead_name_notification_t *deadname;
 
 	send_time.tv_sec = 0;
 	send_time.tv_usec = 0;
@@ -465,7 +444,7 @@ database_server()
 	reply = (asl_reply_msg *)calloc(1, rps);
 	if (reply == NULL) return;
 
-	rbits = MACH_RCV_MSG | MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_SENDER) | MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0);
+	rbits = MACH_RCV_MSG | MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_AUDIT) | MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0);
 	sbits = MACH_SEND_MSG | MACH_SEND_TIMEOUT;
 
 	forever
@@ -481,6 +460,7 @@ database_server()
 			if ((now.tv_sec > send_time.tv_sec) || ((now.tv_sec == send_time.tv_sec) && (now.tv_usec > send_time.tv_usec)))
 			{
 				notify_post(ASL_DB_NOTIFICATION);
+				notify_post(SELF_DB_NOTIFICATION);
 				send_time.tv_sec = 0;
 				send_time.tv_usec = 0;
 				snooze = 0;
@@ -495,7 +475,7 @@ database_server()
 		request = (asl_request_msg *)calloc(1, rqs);
 		if (request == NULL) continue;
 
-		request->head.msgh_local_port = server_port;
+		request->head.msgh_local_port = global.server_port;
 		request->head.msgh_size = rqs;
 
 		memset(reply, 0, rps);
@@ -503,7 +483,7 @@ database_server()
 		flags = rbits;
 		if (snooze != 0) flags |= MACH_RCV_TIMEOUT;
 
-		kstatus = mach_msg(&(request->head), flags, 0, rqs, server_port, snooze, MACH_PORT_NULL);
+		kstatus = mach_msg(&(request->head), flags, 0, rqs, global.listen_set, snooze, MACH_PORT_NULL);
 		if (request->head.msgh_id == SEND_NOTIFICATION)
 		{
 			if (send_time.tv_sec == 0)
@@ -512,6 +492,14 @@ database_server()
 				send_time.tv_sec += 1;
 			}
 
+			free(request);
+			continue;
+		}
+
+		if (request->head.msgh_id == MACH_NOTIFY_DEAD_NAME)
+		{
+			deadname = (mach_dead_name_notification_t *)request;
+			cancel_session(deadname->not_port);
 			free(request);
 			continue;
 		}
@@ -554,33 +542,19 @@ __asl_server_query
 	vm_deallocate(mach_task_self(), (vm_address_t)request, requestCnt);
 	res = NULL;
 
-	/*
-	 * If the database went offline (i.e. the filesystem died),
-	 * just search the disaster_log messages.
-	 */
-	if (disaster_occurred == 1)
-	{
-		out = NULL;
-		outlen = 0;
-		out = disaster_query(query, &outlen);
-		aslresponse_free(query);
-	}
-	else
-	{
-		*status = db_query(query, &res, startid, count, flags, lastid, token->val[0], token->val[1]);
+	*status = db_query(query, &res, startid, count, flags, lastid, token->val[0], token->val[1]);
 
-		aslresponse_free(query);
-		if (*status != ASL_STATUS_OK)
-		{
-			if (res != NULL) aslresponse_free(res);
-			return KERN_SUCCESS;
-		}
-
-		out = NULL;
-		outlen = 0;
-		out = asl_list_to_string((asl_search_result_t *)res, &outlen);
-		aslresponse_free(res);
+	aslresponse_free(query);
+	if (*status != ASL_STATUS_OK)
+	{
+		if (res != NULL) aslresponse_free(res);
+		return KERN_SUCCESS;
 	}
+
+	out = NULL;
+	outlen = 0;
+	out = asl_list_to_string((asl_search_result_t *)res, &outlen);
+	aslresponse_free(res);
 
 	if ((out == NULL) || (outlen == 0)) return KERN_SUCCESS;
 
@@ -630,25 +604,53 @@ __asl_server_prune
 	security_token_t *token
 )
 {
-	aslresponse query;
+	return KERN_SUCCESS;
+}
 
-	*status = ASL_STATUS_OK;
+kern_return_t
+__asl_server_message
+(
+	mach_port_t server,
+	caddr_t message,
+	mach_msg_type_number_t messageCnt,
+	audit_token_t token
+)
+{
+	asl_msg_t *m;
+	char tmp[64];
+	uid_t uid;
+	gid_t gid;
+	pid_t pid;
+	kern_return_t kstatus;
+	mach_port_name_t client;
 
-	if (request == NULL) return KERN_SUCCESS;
+	asldebug("__asl_server_message: %s\n", (message == NULL) ? "NULL" : message);
 
-	query = asl_list_from_string(request);
+	m = asl_msg_from_string(message);
+	vm_deallocate(mach_task_self(), (vm_address_t)message, messageCnt);
 
-	vm_deallocate(mach_task_self(), (vm_address_t)request, requestCnt);
+	uid = (uid_t)-1;
+	gid = (gid_t)-1;
+	pid = (gid_t)-1;
+	audit_token_to_au32(token, NULL, &uid, &gid, NULL, NULL, &pid, NULL, NULL);
 
-	/* only root may prune the database */
-	if (token->val[0] != 0)
-	{
-		*status = ASL_STATUS_FAILED;
-		return KERN_SUCCESS;
-	}
+	client = MACH_PORT_NULL;
+	kstatus = task_name_for_pid(mach_task_self(), pid, &client);
+	if (kstatus == KERN_SUCCESS) register_session(client, pid);
 
-	*status = db_prune(query);
-	aslresponse_free(query);
+	if (m == NULL) return KERN_SUCCESS;
+
+	snprintf(tmp, sizeof(tmp), "%d", uid);
+	asl_set(m, ASL_KEY_UID, tmp);
+
+	snprintf(tmp, sizeof(tmp), "%d", gid);
+	asl_set(m, ASL_KEY_GID, tmp);
+
+	snprintf(tmp, sizeof(tmp), "%d", pid);
+	asl_set(m, ASL_KEY_PID, tmp);
+
+	/* verify and enqueue for processing */
+	asl_enqueue_message(SOURCE_ASL_MESSAGE, NULL, m);
 
 	return KERN_SUCCESS;
 }

@@ -1,9 +1,9 @@
 /*
- * "$Id: auth.c 6949 2007-09-12 21:33:23Z mike $"
+ * "$Id: auth.c 8160 2008-12-06 00:13:31Z mike $"
  *
  *   Authorization routines for the Common UNIX Printing System (CUPS).
  *
- *   Copyright 2007 by Apple Inc.
+ *   Copyright 2007-2009 by Apple Inc.
  *   Copyright 1997-2007 by Easy Software Products, all rights reserved.
  *
  *   This file contains Kerberos support code, copyright 2006 by
@@ -21,11 +21,14 @@
  *   cupsdAddName()            - Add a name to a location...
  *   cupsdAllowHost()          - Add a host name that is allowed to access the
  *                               location.
- *   cupsdAllowIP()            - Add an IP address or network that is allowed
- *                               to access the location.
+ *   cupsdAllowIP()            - Add an IP address or network that is allowed to
+ *                               access the location.
  *   cupsdAuthorize()          - Validate any authorization credentials.
+ *   cupsdCheckAccess()        - Check whether the given address is allowed to
+ *                               access a location.
  *   cupsdCheckAuth()          - Check authorization masks.
  *   cupsdCheckGroup()         - Check for a user's group membership.
+ *   cupsdCopyKrb5Creds()      - Get a copy of the Kerberos credentials.
  *   cupsdCopyLocation()       - Make a copy of a location...
  *   cupsdDeleteAllLocations() - Free all memory used for location
  *                               authorization.
@@ -40,14 +43,14 @@
  *   cupsdIsAuthorized()       - Check to see if the user is authorized...
  *   add_allow()               - Add an allow mask to the location.
  *   add_deny()                - Add a deny mask to the location.
+ *   check_authref()           - Check if an authorization services reference
+ *                               has the supplied right.
  *   compare_locations()       - Compare two locations.
  *   cups_crypt()              - Encrypt the password using the DES or MD5
  *                               algorithms, as needed.
- *   get_gss_creds()           - Obtain GSS credentials.
  *   get_md5_password()        - Get an MD5 password.
  *   pam_func()                - PAM conversation function.
  *   to64()                    - Base64-encode an integer value...
- *   check_authref()           - Check an authorization services reference.
  */
 
 /*
@@ -94,6 +97,11 @@ typedef struct xucred cupsd_ucred_t;
 typedef struct ucred cupsd_ucred_t;
 #  define CUPSD_UCRED_UID(c) (c).uid
 #endif /* HAVE_SYS_UCRED_H */
+#ifdef HAVE_KRB5_IPC_CLIENT_SET_TARGET_UID
+/* Not in public headers... */
+extern void	krb5_ipc_client_set_target_uid(uid_t);
+extern void	krb5_ipc_client_clear_target(void);
+#endif /* HAVE_KRB5_IPC_CLIENT_SET_TARGET_UID */
 
 
 /*
@@ -110,9 +118,6 @@ static int		compare_locations(cupsd_location_t *a,
 #if !HAVE_LIBPAM && !defined(HAVE_USERSEC_H)
 static char		*cups_crypt(const char *pw, const char *salt);
 #endif /* !HAVE_LIBPAM && !HAVE_USERSEC_H */
-#ifdef HAVE_GSSAPI
-static gss_cred_id_t	get_gss_creds(const char *service_name);
-#endif /* HAVE_GSSAPI */
 static char		*get_md5_password(const char *username,
 			                  const char *group, char passwd[33]);
 #if HAVE_LIBPAM
@@ -176,8 +181,13 @@ cupsdAddLocation(const char *location)	/* I - Location path */
   * Initialize the record and copy the name over...
   */
 
-  temp->location = strdup(location);
-  temp->length   = strlen(temp->location);
+  if ((temp->location = strdup(location)) == NULL)
+  {
+    free(temp);
+    return (NULL);
+  }
+
+  temp->length = strlen(temp->location);
 
   cupsArrayAdd(Locations, temp);
 
@@ -257,7 +267,7 @@ cupsdAllowHost(cupsd_location_t *loc,	/* I - Location to add to */
     * Allow *interface*...
     */
 
-    temp->type             = AUTH_INTERFACE;
+    temp->type             = CUPSD_AUTH_INTERFACE;
     temp->mask.name.name   = strdup("*");
     temp->mask.name.length = 1;
   }
@@ -277,7 +287,7 @@ cupsdAllowHost(cupsd_location_t *loc,	/* I - Location to add to */
       *ifptr = '\0';
     }
 
-    temp->type             = AUTH_INTERFACE;
+    temp->type             = CUPSD_AUTH_INTERFACE;
     temp->mask.name.name   = strdup(ifname);
     temp->mask.name.length = ifptr - ifname;
   }
@@ -287,7 +297,7 @@ cupsdAllowHost(cupsd_location_t *loc,	/* I - Location to add to */
     * Allow name...
     */
 
-    temp->type             = AUTH_NAME;
+    temp->type             = CUPSD_AUTH_NAME;
     temp->mask.name.name   = strdup(name);
     temp->mask.name.length = strlen(name);
   }
@@ -300,9 +310,10 @@ cupsdAllowHost(cupsd_location_t *loc,	/* I - Location to add to */
  */
 
 void
-cupsdAllowIP(cupsd_location_t *loc,	/* I - Location to add to */
-             unsigned   address[4],	/* I - IP address to add */
-             unsigned   netmask[4])	/* I - Netmask of address */
+cupsdAllowIP(
+    cupsd_location_t *loc,		/* I - Location to add to */
+    const unsigned   address[4],	/* I - IP address to add */
+    const unsigned   netmask[4])	/* I - Netmask of address */
 {
   cupsd_authmask_t	*temp;		/* New host/domain mask */
 
@@ -316,7 +327,7 @@ cupsdAllowIP(cupsd_location_t *loc,	/* I - Location to add to */
   if ((temp = add_allow(loc)) == NULL)
     return;
 
-  temp->type = AUTH_IP;
+  temp->type = CUPSD_AUTH_IP;
   memcpy(temp->mask.ip.address, address, sizeof(temp->mask.ip.address));
   memcpy(temp->mask.ip.netmask, netmask, sizeof(temp->mask.ip.netmask));
 }
@@ -334,7 +345,7 @@ cupsdAuthorize(cupsd_client_t *con)	/* I - Client connection */
   char		*ptr,			/* Pointer into string */
 		username[256],		/* Username string */
 		password[33];		/* Password string */
-  const char	*localuser;		/* Certificate username */
+  cupsd_cert_t	*localuser;		/* Certificate username */
   char		nonce[HTTP_MAX_VALUE],	/* Nonce value from client */
 		md5[33],		/* MD5 password */
 		basicmd5[33];		/* MD5 of Basic password */
@@ -363,14 +374,15 @@ cupsdAuthorize(cupsd_client_t *con)	/* I - Client connection */
   */
 
   con->best = cupsdFindBest(con->uri, con->http.state);
+  con->type = CUPSD_AUTH_NONE;
 
   cupsdLogMessage(CUPSD_LOG_DEBUG2,
                   "cupsdAuthorize: con->uri=\"%s\", con->best=%p(%s)",
                   con->uri, con->best, con->best ? con->best->location : "");
 
-  if (con->best && con->best->type != AUTH_NONE)
+  if (con->best && con->best->type != CUPSD_AUTH_NONE)
   {
-    if (con->best->type == AUTH_DEFAULT)
+    if (con->best->type == CUPSD_AUTH_DEFAULT)
       type = DefaultAuthType;
     else
       type = con->best->type;
@@ -398,17 +410,7 @@ cupsdAuthorize(cupsd_client_t *con)	/* I - Client connection */
   }
 #endif /* HAVE_AUTHORIZATION_H */
 
-  if (type == AUTH_NONE)
-  {
-   /*
-    * No authorization required, return early...
-    */
-
-    cupsdLogMessage(CUPSD_LOG_DEBUG,
-                    "cupsdAuthorize: No authentication required.");
-    return;
-  }
-  else if (!*authorization)
+  if (!*authorization)
   {
    /*
     * No authorization data provided, return early...
@@ -453,24 +455,22 @@ cupsdAuthorize(cupsd_client_t *con)	/* I - Client connection */
       return;
     }
 
-    if ((status = AuthorizationCopyInfo(con->authref, 
-					kAuthorizationEnvironmentUsername, 
-					&authinfo)) != 0)
+    strlcpy(username, "_AUTHREF_", sizeof(username));
+
+    if (!AuthorizationCopyInfo(con->authref, kAuthorizationEnvironmentUsername, 
+			       &authinfo))
     {
-      cupsdLogMessage(CUPSD_LOG_ERROR,
-		      "AuthorizationCopyInfo returned %d (%s)",
-		      (int)status, cssmErrorString(status));
-      return;
+      if (authinfo->count == 1 && authinfo->items[0].value &&
+          authinfo->items[0].valueLength >= 2)
+        strlcpy(username, authinfo->items[0].value, sizeof(username));
+
+      AuthorizationFreeItemSet(authinfo);
     }
-  
-    if (authinfo->count == 1)
-      strlcpy(username, authinfo->items[0].value, sizeof(username));
 
     cupsdLogMessage(CUPSD_LOG_DEBUG,
-                    "cupsdAuthorize: Authorized as %s using AuthRef",
+		    "cupsdAuthorize: Authorized as \"%s\" using AuthRef",
 		    username);
-
-    AuthorizationFreeItemSet(authinfo);
+    con->type = CUPSD_AUTH_BASIC;
   }
 #endif /* HAVE_AUTHORIZATION_H */
 #if defined(SO_PEERCRED) && defined(AF_LOCAL)
@@ -495,7 +495,11 @@ cupsdAuthorize(cupsd_client_t *con)	/* I - Client connection */
 
     peersize = sizeof(peercred);
 
+#  ifdef __APPLE__
+    if (getsockopt(con->http.fd, 0, LOCAL_PEERCRED, &peercred, &peersize))
+#  else
     if (getsockopt(con->http.fd, SOL_SOCKET, SO_PEERCRED, &peercred, &peersize))
+#  endif /* __APPLE__ */
     {
       cupsdLogMessage(CUPSD_LOG_ERROR, "Unable to get peer credentials - %s",
                       strerror(errno));
@@ -526,6 +530,8 @@ cupsdAuthorize(cupsd_client_t *con)	/* I - Client connection */
     cupsdLogMessage(CUPSD_LOG_DEBUG,
                     "cupsdAuthorize: Authorized as %s using PeerCred",
 		    username);
+
+    con->type = CUPSD_AUTH_BASIC;
   }
 #endif /* SO_PEERCRED && AF_LOCAL */
   else if (!strncmp(authorization, "Local", 5) &&
@@ -541,7 +547,7 @@ cupsdAuthorize(cupsd_client_t *con)	/* I - Client connection */
 
     if ((localuser = cupsdFindCert(authorization)) != NULL)
     {
-      strlcpy(username, localuser, sizeof(username));
+      strlcpy(username, localuser->username, sizeof(username));
 
       cupsdLogMessage(CUPSD_LOG_DEBUG,
 		      "cupsdAuthorize: Authorized as %s using Local",
@@ -554,9 +560,15 @@ cupsdAuthorize(cupsd_client_t *con)	/* I - Client connection */
 		      "found!");
       return;
     }
+
+#ifdef HAVE_GSSAPI
+    if (localuser->ccache)
+      con->type = CUPSD_AUTH_NEGOTIATE;
+    else
+#endif /* HAVE_GSSAPI */
+      con->type = CUPSD_AUTH_BASIC;
   }
-  else if (!strncmp(authorization, "Basic", 5) &&
-           (type == AUTH_BASIC || type == AUTH_BASICDIGEST))
+  else if (!strncmp(authorization, "Basic", 5))
   {
    /*
     * Get the Basic authentication data...
@@ -615,7 +627,8 @@ cupsdAuthorize(cupsd_client_t *con)	/* I - Client connection */
 
     switch (type)
     {
-      case AUTH_BASIC :
+      default :
+      case CUPSD_AUTH_BASIC :
           {
 #if HAVE_LIBPAM
 	   /*
@@ -654,29 +667,57 @@ cupsdAuthorize(cupsd_client_t *con)	/* I - Client connection */
 	    if (pamerr != PAM_SUCCESS)
 	    {
 	      cupsdLogMessage(CUPSD_LOG_ERROR,
-	                      "cupsdAuthorize: pam_start() returned %d (%s)!\n",
+	                      "cupsdAuthorize: pam_start() returned %d (%s)!",
         	              pamerr, pam_strerror(pamh, pamerr));
-	      pam_end(pamh, 0);
 	      return;
 	    }
+
+#  ifdef HAVE_PAM_SET_ITEM
+#    ifdef PAM_RHOST
+	    pamerr = pam_set_item(pamh, PAM_RHOST, con->http.hostname);
+	    if (pamerr != PAM_SUCCESS)
+	      cupsdLogMessage(CUPSD_LOG_WARN,
+	                      "cupsdAuthorize: pam_set_item(PAM_RHOST) "
+			      "returned %d (%s)!", pamerr,
+			      pam_strerror(pamh, pamerr));
+#    endif /* PAM_RHOST */
+
+#    ifdef PAM_TTY
+	    pamerr = pam_set_item(pamh, PAM_TTY, "cups");
+	    if (pamerr != PAM_SUCCESS)
+	      cupsdLogMessage(CUPSD_LOG_WARN,
+	                      "cupsdAuthorize: pam_set_item(PAM_TTY) "
+			      "returned %d (%s)!", pamerr,
+			      pam_strerror(pamh, pamerr));
+#    endif /* PAM_TTY */
+#  endif /* HAVE_PAM_SET_ITEM */
 
 	    pamerr = pam_authenticate(pamh, PAM_SILENT);
 	    if (pamerr != PAM_SUCCESS)
 	    {
 	      cupsdLogMessage(CUPSD_LOG_ERROR,
 	                      "cupsdAuthorize: pam_authenticate() returned %d "
-			      "(%s)!\n",
+			      "(%s)!",
         	              pamerr, pam_strerror(pamh, pamerr));
 	      pam_end(pamh, 0);
 	      return;
 	    }
+
+#  ifdef HAVE_PAM_SETCRED
+            pamerr = pam_setcred(pamh, PAM_ESTABLISH_CRED | PAM_SILENT);
+	    if (pamerr != PAM_SUCCESS)
+	      cupsdLogMessage(CUPSD_LOG_WARN,
+	                      "cupsdAuthorize: pam_setcred() "
+			      "returned %d (%s)!", pamerr,
+			      pam_strerror(pamh, pamerr));
+#  endif /* HAVE_PAM_SETCRED */
 
 	    pamerr = pam_acct_mgmt(pamh, PAM_SILENT);
 	    if (pamerr != PAM_SUCCESS)
 	    {
 	      cupsdLogMessage(CUPSD_LOG_ERROR,
 	                      "cupsdAuthorize: pam_acct_mgmt() returned %d "
-			      "(%s)!\n",
+			      "(%s)!",
         	              pamerr, pam_strerror(pamh, pamerr));
 	      pam_end(pamh, 0);
 	      return;
@@ -694,8 +735,8 @@ cupsdAuthorize(cupsd_client_t *con)	/* I - Client connection */
 
 
 	    cupsdLogMessage(CUPSD_LOG_DEBUG,
-	                    "cupsdAuthorize: AIX authenticate of username \"%s\"",
-                            username);
+	                    "cupsdAuthorize: AIX authenticate of username "
+			    "\"%s\"", username);
 
 	    reenter = 1;
 	    if (authenticate(username, password, &reenter, &authmsg) != 0)
@@ -814,7 +855,7 @@ cupsdAuthorize(cupsd_client_t *con)	/* I - Client connection */
 			  username);
           break;
 
-      case AUTH_BASICDIGEST :
+      case CUPSD_AUTH_BASICDIGEST :
          /*
 	  * Do Basic authentication with the Digest password file...
 	  */
@@ -842,8 +883,10 @@ cupsdAuthorize(cupsd_client_t *con)	/* I - Client connection */
 			  username);
 	  break;
     }
+
+    con->type = type;
   }
-  else if (!strncmp(authorization, "Digest", 6) && type == AUTH_DIGEST)
+  else if (!strncmp(authorization, "Digest", 6))
   {
    /*
     * Get the username, password, and nonce from the Digest attributes...
@@ -915,12 +958,13 @@ cupsdAuthorize(cupsd_client_t *con)	/* I - Client connection */
     cupsdLogMessage(CUPSD_LOG_DEBUG,
                     "cupsdAuthorize: Authorized as %s using Digest",
 		    username);
+
+    con->type = CUPSD_AUTH_DIGEST;
   }
 #ifdef HAVE_GSSAPI
   else if (!strncmp(authorization, "Negotiate", 9)) 
   {
     int			len;		/* Length of authorization string */
-    gss_cred_id_t	server_creds;	/* Server credentials */
     gss_ctx_id_t	context;	/* Authorization context */
     OM_uint32		major_status,	/* Major status code */
 			minor_status;	/* Minor status code */
@@ -929,7 +973,6 @@ cupsdAuthorize(cupsd_client_t *con)	/* I - Client connection */
 			output_token = GSS_C_EMPTY_BUFFER;
 					/* Output token for username */
     gss_name_t		client_name;	/* Client name */
-    unsigned int	ret_flags;	/* Credential flags */
 
 
 #  ifdef __APPLE__
@@ -965,13 +1008,6 @@ cupsdAuthorize(cupsd_client_t *con)	/* I - Client connection */
     }
 
    /*
-    * Get the server credentials...
-    */
-
-    if ((server_creds = get_gss_creds(GSSServiceName)) == NULL)
-      return;	
-
-   /*
     * Decode the authorization string to get the input token...
     */
 
@@ -989,15 +1025,15 @@ cupsdAuthorize(cupsd_client_t *con)	/* I - Client connection */
     client_name  = GSS_C_NO_NAME;
     major_status = gss_accept_sec_context(&minor_status,
 					  &context,
-					  server_creds, 
+					  GSS_C_NO_CREDENTIAL, 
 					  &input_token,
 					  GSS_C_NO_CHANNEL_BINDINGS,
 					  &client_name,
 					  NULL,
 					  &con->gss_output_token,
-					  &ret_flags,
+					  &con->gss_flags,
 					  NULL,
-					  &con->gss_delegated_cred);
+					  &con->gss_creds);
 
     if (GSS_ERROR(major_status))
     {
@@ -1007,28 +1043,22 @@ cupsdAuthorize(cupsd_client_t *con)	/* I - Client connection */
 
       if (context != GSS_C_NO_CONTEXT)
 	gss_delete_sec_context(&minor_status, &context, GSS_C_NO_BUFFER);
-
-      gss_release_cred(&minor_status, &server_creds);
       return;
     }
 
-   /*
-    * Release our credentials...
-    */
-
-    gss_release_cred(&minor_status, &server_creds);
+    con->have_gss = 1;
 
    /*
     * Get the username associated with the client's credentials...
     */
 
-    if (!con->gss_delegated_cred)
+    if (!con->gss_creds)
       cupsdLogMessage(CUPSD_LOG_DEBUG,
                       "cupsdAuthorize: No delegated credentials!");
 
     if (major_status == GSS_S_CONTINUE_NEEDED)
       cupsdLogGSSMessage(CUPSD_LOG_DEBUG, major_status, minor_status,
-                         "cupsdAuthorize: Credentials not complete");
+			 "cupsdAuthorize: Credentials not complete");
     else if (major_status == GSS_S_COMPLETE)
     {
       major_status = gss_display_name(&minor_status, client_name, 
@@ -1038,46 +1068,39 @@ cupsdAuthorize(cupsd_client_t *con)	/* I - Client connection */
       {
 	cupsdLogGSSMessage(CUPSD_LOG_DEBUG, major_status, minor_status,
                            "cupsdAuthorize: Error getting username");
+	gss_release_cred(&minor_status, &con->gss_creds);
 	gss_release_name(&minor_status, &client_name);
 	gss_delete_sec_context(&minor_status, &context, GSS_C_NO_BUFFER);
 	return;
       }
 
-      gss_release_name(&minor_status, &client_name);
       strlcpy(username, output_token.value, sizeof(username));
 
       cupsdLogMessage(CUPSD_LOG_DEBUG,
 		      "cupsdAuthorize: Authorized as %s using Negotiate",
 		      username);
 
+      gss_release_name(&minor_status, &client_name);
       gss_release_buffer(&minor_status, &output_token);
-      gss_delete_sec_context(&minor_status, &context, GSS_C_NO_BUFFER);
 
-      con->gss_have_creds = 1;
+      con->type = CUPSD_AUTH_NEGOTIATE;
     }
     else
-      gss_release_name(&minor_status, &client_name);
+      gss_release_cred(&minor_status, &con->gss_creds);
+
+    gss_delete_sec_context(&minor_status, &context, GSS_C_NO_BUFFER);
   }
 #endif /* HAVE_GSSAPI */
-  else if (type != AUTH_NONE)
+  else
   {
     char	scheme[256];		/* Auth scheme... */
-    static const char * const types[] =	/* Auth types */
-    {
-      "None",
-      "Basic",
-      "Digest",
-      "BasicDigest",
-      "Negotiate"
-    };
 
 
     if (sscanf(authorization, "%255s", scheme) != 1)
       strcpy(scheme, "UNKNOWN");
 
-    cupsdLogMessage(CUPSD_LOG_ERROR,
-                    "Bad authentication data \"%s ...\", expected \"%s ...\"",
-                    scheme, types[type]);
+    cupsdLogMessage(CUPSD_LOG_ERROR, "Bad authentication data \"%s ...\"",
+                    scheme);
     return;
   }
 
@@ -1089,6 +1112,67 @@ cupsdAuthorize(cupsd_client_t *con)	/* I - Client connection */
 
   strlcpy(con->username, username, sizeof(con->username));
   strlcpy(con->password, password, sizeof(con->password));
+}
+
+
+/*
+ * 'cupsdCheckAccess()' - Check whether the given address is allowed to
+ *                        access a location.
+ */
+
+int					/* O - 1 if allowed, 0 otherwise */
+cupsdCheckAccess(
+    unsigned         ip[4],		/* I - Client address */
+    char             *name,		/* I - Client hostname */
+    int              namelen,		/* I - Length of hostname */
+    cupsd_location_t *loc)		/* I - Location to check */
+{
+  int	allow;				/* 1 if allowed, 0 otherwise */
+
+
+  if (!strcasecmp(name, "localhost"))
+  {
+   /*
+    * Access from localhost (127.0.0.1 or ::1) is always allowed...
+    */
+
+    return (1);
+  }
+  else
+  {
+   /*
+    * Do authorization checks on the domain/address...
+    */
+
+    switch (loc->order_type)
+    {
+      default :
+	  allow = 0;	/* anti-compiler-warning-code */
+	  break;
+
+      case CUPSD_AUTH_ALLOW : /* Order Deny,Allow */
+          allow = 1;
+
+          if (cupsdCheckAuth(ip, name, namelen, loc->num_deny, loc->deny))
+	    allow = 0;
+
+          if (cupsdCheckAuth(ip, name, namelen, loc->num_allow, loc->allow))
+	    allow = 1;
+	  break;
+
+      case CUPSD_AUTH_DENY : /* Order Allow,Deny */
+          allow = 0;
+
+          if (cupsdCheckAuth(ip, name, namelen, loc->num_allow, loc->allow))
+	    allow = 1;
+
+          if (cupsdCheckAuth(ip, name, namelen, loc->num_deny, loc->deny))
+	    allow = 0;
+	  break;
+    }
+  }
+
+  return (allow);
 }
 
 
@@ -1111,11 +1195,12 @@ cupsdCheckAuth(
   unsigned	netip6[4];		/* IPv6 network address */
 #endif /* AF_INET6 */
 
+
   while (num_masks > 0)
   {
     switch (masks->type)
     {
-      case AUTH_INTERFACE :
+      case CUPSD_AUTH_INTERFACE :
          /*
 	  * Check for a match with a network interface...
 	  */
@@ -1131,6 +1216,15 @@ cupsdCheckAuth(
 
           if (!strcmp(masks->mask.name.name, "*"))
 	  {
+#ifdef __APPLE__
+           /*
+	    * Allow Back-to-My-Mac addresses...
+	    */
+
+	    if ((ip[0] & 0xff000000) == 0xfd000000)
+	      return (1);
+#endif /* __APPLE__ */
+
 	   /*
 	    * Check against all local interfaces...
 	    */
@@ -1223,7 +1317,7 @@ cupsdCheckAuth(
 	  }
 	  break;
 
-      case AUTH_NAME :
+      case CUPSD_AUTH_NAME :
          /*
 	  * Check for exact name match...
 	  */
@@ -1242,7 +1336,7 @@ cupsdCheckAuth(
 	    return (1);
           break;
 
-      case AUTH_IP :
+      case CUPSD_AUTH_IP :
          /*
 	  * Check for IP/network address match...
 	  */
@@ -1275,13 +1369,13 @@ cupsdCheckGroup(
     struct passwd *user,		/* I - System user info */
     const char    *groupname)		/* I - Group name */
 {
-  int			i;		/* Looping var */
-  struct group		*group;		/* System group info */
-  char			junk[33];	/* MD5 password (not used) */
+  int		i;			/* Looping var */
+  struct group	*group;			/* System group info */
+  char		junk[33];		/* MD5 password (not used) */
 #ifdef HAVE_MBR_UID_TO_UUID
-  uuid_t		useruuid,	/* UUID for username */
-			groupuuid;	/* UUID for groupname */
-  int			is_member;	/* True if user is a member of group */
+  uuid_t	useruuid,		/* UUID for username */
+		groupuuid;		/* UUID for groupname */
+  int		is_member;		/* True if user is a member of group */
 #endif /* HAVE_MBR_UID_TO_UUID */
 
 
@@ -1327,12 +1421,40 @@ cupsdCheckGroup(
   * Check group membership through MacOS X membership API...
   */
 
-  if (user && group)
-    if (!mbr_uid_to_uuid(user->pw_uid, useruuid))
+  if (user && !mbr_uid_to_uuid(user->pw_uid, useruuid))
+  {
+    if (group)
+    {
+     /*
+      * Map group name to UUID and check membership...
+      */
+
       if (!mbr_gid_to_uuid(group->gr_gid, groupuuid))
-	if (!mbr_check_membership(useruuid, groupuuid, &is_member))
+        if (!mbr_check_membership(useruuid, groupuuid, &is_member))
 	  if (is_member)
 	    return (1);
+    }
+    else if (groupname[0] == '#')
+    {
+     /*
+      * Use UUID directly and check for equality (user UUID) and
+      * membership (group UUID)...
+      */
+
+      if (!uuid_parse((char *)groupname + 1, groupuuid))
+      {
+        if (!uuid_compare(useruuid, groupuuid))
+	  return (1);
+	else if (!mbr_check_membership(useruuid, groupuuid, &is_member))
+	  if (is_member)
+	    return (1);
+      }
+
+      return (0);
+    }
+  }
+  else if (groupname[0] == '#')
+    return (0);
 #endif /* HAVE_MBR_UID_TO_UUID */
 
  /*
@@ -1350,6 +1472,178 @@ cupsdCheckGroup(
 
   return (0);
 }
+
+
+#ifdef HAVE_GSSAPI
+/*
+ * 'cupsdCopyKrb5Creds()' - Get a copy of the Kerberos credentials.
+ */
+
+krb5_ccache				/* O - Credentials or NULL */
+cupsdCopyKrb5Creds(cupsd_client_t *con)	/* I - Client connection */
+{
+#  if !defined(HAVE_KRB5_CC_NEW_UNIQUE) && !defined(HAVE_HEIMDAL)
+  cupsdLogMessage(CUPSD_LOG_INFO,
+                  "Sorry, your version of Kerberos does not support delegated "
+		  "credentials!");
+  return (NULL);
+
+#  else
+  krb5_ccache		ccache = NULL;	/* Credentials */
+  krb5_error_code	error;		/* Kerberos error code */
+  OM_uint32		major_status,	/* Major status code */
+			minor_status;	/* Minor status code */
+  krb5_principal	principal;	/* Kerberos principal */
+
+
+#    ifdef __APPLE__
+ /*
+  * If the weak-linked GSSAPI/Kerberos library is not present, don't try
+  * to use it...
+  */
+
+  if (krb5_init_context == NULL)
+    return (NULL);
+#    endif /* __APPLE__ */
+
+  if (!KerberosInitialized)
+  {
+   /*
+    * Setup a Kerberos context for the scheduler to use...
+    */
+
+    KerberosInitialized = 1;
+
+    if (krb5_init_context(&KerberosContext))
+    {
+      KerberosContext = NULL;
+
+      cupsdLogMessage(CUPSD_LOG_ERROR, "Unable to initialize Kerberos context");
+      return (NULL);
+    }
+  }
+
+ /*
+  * We MUST create a file-based cache because memory-based caches are
+  * only valid for the current process/address space.
+  *
+  * Due to various bugs/features in different versions of Kerberos, we
+  * need either the krb5_cc_new_unique() function or Heimdal's version
+  * of krb5_cc_gen_new() to create a new FILE: credential cache that
+  * can be passed to the backend.  These functions create a temporary
+  * file (typically in /tmp) containing the cached credentials, which
+  * are removed when we have successfully printed a job.
+  */
+
+#    ifdef HAVE_KRB5_CC_NEW_UNIQUE
+  if ((error = krb5_cc_new_unique(KerberosContext, "FILE", NULL, &ccache)) != 0)
+#    else /* HAVE_HEIMDAL */
+  if ((error = krb5_cc_gen_new(KerberosContext, &krb5_fcc_ops, &ccache)) != 0)
+#    endif /* HAVE_KRB5_CC_NEW_UNIQUE */
+  {
+    cupsdLogMessage(CUPSD_LOG_ERROR,
+                    "Unable to create new credentials cache (%d/%s)",
+                    error, strerror(errno));
+    return (NULL);
+  }
+
+  if ((error = krb5_parse_name(KerberosContext, con->username, &principal)) != 0)
+  {
+    cupsdLogMessage(CUPSD_LOG_ERROR,
+                    "Unable to parse kerberos username (%d/%s)", error,
+                    strerror(errno));
+    krb5_cc_destroy(KerberosContext, ccache);
+    return (NULL);
+  }
+
+  if ((error = krb5_cc_initialize(KerberosContext, ccache, principal)))
+  {
+    cupsdLogMessage(CUPSD_LOG_ERROR,
+                    "Unable to initialize credentials cache (%d/%s)", error,
+		    strerror(errno));
+    krb5_cc_destroy(KerberosContext, ccache);
+    krb5_free_principal(KerberosContext, principal);
+    return (NULL);
+  }
+
+  krb5_free_principal(KerberosContext, principal);
+
+ /*
+  * Copy the user's credentials to the new cache file...
+  */
+
+#    ifdef HAVE_KRB5_IPC_CLIENT_SET_TARGET_UID
+  if (con->http.hostaddr->addr.sa_family == AF_LOCAL &&
+      !(con->gss_flags & GSS_C_DELEG_FLAG))
+  {
+   /*
+    * Pull the credentials directly from the user...
+    */
+
+    cupsd_ucred_t	peercred;	/* Peer credentials */
+    socklen_t		peersize;	/* Size of peer credentials */
+    krb5_ccache		peerccache;	/* Peer Kerberos credentials */
+
+    peersize = sizeof(peercred);
+
+#      ifdef __APPLE__
+    if (getsockopt(con->http.fd, 0, LOCAL_PEERCRED, &peercred, &peersize))
+#      else
+    if (getsockopt(con->http.fd, SOL_SOCKET, SO_PEERCRED, &peercred, &peersize))
+#      endif /* __APPLE__ */
+    {
+      cupsdLogMessage(CUPSD_LOG_ERROR, "Unable to get peer credentials - %s",
+                      strerror(errno));
+      krb5_cc_destroy(KerberosContext, ccache);
+      return (NULL);
+    }
+
+    cupsdLogMessage(CUPSD_LOG_DEBUG,
+                    "cupsdCopyKrb5Creds: Copying credentials for UID %d...",
+		    CUPSD_UCRED_UID(peercred));
+
+    krb5_ipc_client_set_target_uid(CUPSD_UCRED_UID(peercred));
+
+    if ((error = krb5_cc_default(KerberosContext, &peerccache)) != 0)
+    {
+      cupsdLogMessage(CUPSD_LOG_ERROR,
+		      "Unable to get credentials cache for UID %d (%d/%s)",
+		      (int)CUPSD_UCRED_UID(peercred), error, strerror(errno));
+      krb5_cc_destroy(KerberosContext, ccache);
+      return (NULL);
+    }
+
+    error = krb5_cc_copy_creds(KerberosContext, peerccache, ccache);
+    krb5_cc_close(KerberosContext, peerccache);
+    krb5_ipc_client_clear_target();
+
+    if (error)
+    {
+      cupsdLogMessage(CUPSD_LOG_ERROR,
+		      "Unable to copy credentials cache for UID %d (%d/%s)",
+		      (int)CUPSD_UCRED_UID(peercred), error, strerror(errno));
+      krb5_cc_destroy(KerberosContext, ccache);
+      return (NULL);
+    }
+  }
+  else
+#    endif /* HAVE_KRB5_IPC_CLIENT_SET_TARGET_UID */
+  {
+    major_status = gss_krb5_copy_ccache(&minor_status, con->gss_creds, ccache);
+
+    if (GSS_ERROR(major_status))
+    {
+      cupsdLogGSSMessage(CUPSD_LOG_ERROR, major_status, minor_status,
+			 "Unable to copy client credentials cache");
+      krb5_cc_destroy(KerberosContext, ccache);
+      return (NULL);
+    }
+  }
+
+  return (ccache);
+#  endif /* !HAVE_KRB5_CC_NEW_UNIQUE && !HAVE_HEIMDAL */
+}
+#endif /* HAVE_GSSAPI */
 
 
 /*
@@ -1433,7 +1727,7 @@ cupsdCopyLocation(
     for (i = 0; i < temp->num_allow; i ++)
       switch (temp->allow[i].type = (*loc)->allow[i].type)
       {
-        case AUTH_NAME :
+        case CUPSD_AUTH_NAME :
 	    temp->allow[i].mask.name.length = (*loc)->allow[i].mask.name.length;
 	    temp->allow[i].mask.name.name   = strdup((*loc)->allow[i].mask.name.name);
 
@@ -1446,7 +1740,7 @@ cupsdCopyLocation(
 	      return (NULL);
 	    }
 	    break;
-	case AUTH_IP :
+	case CUPSD_AUTH_IP :
 	    memcpy(&(temp->allow[i].mask.ip), &((*loc)->allow[i].mask.ip),
 	           sizeof(cupsd_ipmask_t));
 	    break;
@@ -1471,7 +1765,7 @@ cupsdCopyLocation(
     for (i = 0; i < temp->num_deny; i ++)
       switch (temp->deny[i].type = (*loc)->deny[i].type)
       {
-        case AUTH_NAME :
+        case CUPSD_AUTH_NAME :
 	    temp->deny[i].mask.name.length = (*loc)->deny[i].mask.name.length;
 	    temp->deny[i].mask.name.name   = strdup((*loc)->deny[i].mask.name.name);
 
@@ -1484,7 +1778,7 @@ cupsdCopyLocation(
 	      return (NULL);
 	    }
 	    break;
-	case AUTH_IP :
+	case CUPSD_AUTH_IP :
 	    memcpy(&(temp->deny[i].mask.ip), &((*loc)->deny[i].mask.ip),
 	           sizeof(cupsd_ipmask_t));
 	    break;
@@ -1544,14 +1838,14 @@ cupsdDeleteLocation(
     free(loc->names);
 
   for (i = loc->num_allow, mask = loc->allow; i > 0; i --, mask ++)
-    if (mask->type == AUTH_NAME || mask->type == AUTH_INTERFACE)
+    if (mask->type == CUPSD_AUTH_NAME || mask->type == CUPSD_AUTH_INTERFACE)
       free(mask->mask.name.name);
 
   if (loc->num_allow > 0)
     free(loc->allow);
 
   for (i = loc->num_deny, mask = loc->deny; i > 0; i --, mask ++)
-    if (mask->type == AUTH_NAME || mask->type == AUTH_INTERFACE)
+    if (mask->type == CUPSD_AUTH_NAME || mask->type == CUPSD_AUTH_INTERFACE)
       free(mask->mask.name.name);
 
   if (loc->num_deny > 0)
@@ -1588,7 +1882,7 @@ cupsdDenyHost(cupsd_location_t *loc,	/* I - Location to add to */
     * Deny *interface*...
     */
 
-    temp->type             = AUTH_INTERFACE;
+    temp->type             = CUPSD_AUTH_INTERFACE;
     temp->mask.name.name   = strdup("*");
     temp->mask.name.length = 1;
   }
@@ -1608,7 +1902,7 @@ cupsdDenyHost(cupsd_location_t *loc,	/* I - Location to add to */
       *ifptr = '\0';
     }
 
-    temp->type             = AUTH_INTERFACE;
+    temp->type             = CUPSD_AUTH_INTERFACE;
     temp->mask.name.name   = strdup(ifname);
     temp->mask.name.length = ifptr - ifname;
   }
@@ -1618,7 +1912,7 @@ cupsdDenyHost(cupsd_location_t *loc,	/* I - Location to add to */
     * Deny name...
     */
 
-    temp->type             = AUTH_NAME;
+    temp->type             = CUPSD_AUTH_NAME;
     temp->mask.name.name   = strdup(name);
     temp->mask.name.length = strlen(name);
   }
@@ -1632,8 +1926,8 @@ cupsdDenyHost(cupsd_location_t *loc,	/* I - Location to add to */
 
 void
 cupsdDenyIP(cupsd_location_t *loc,	/* I - Location to add to */
-	    unsigned         address[4],/* I - IP address to add */
-	    unsigned         netmask[4])/* I - Netmask of address */
+	    const unsigned   address[4],/* I - IP address to add */
+	    const unsigned   netmask[4])/* I - Netmask of address */
 {
   cupsd_authmask_t	*temp;		/* New host/domain mask */
 
@@ -1647,7 +1941,7 @@ cupsdDenyIP(cupsd_location_t *loc,	/* I - Location to add to */
   if ((temp = add_deny(loc)) == NULL)
     return;
 
-  temp->type = AUTH_IP;
+  temp->type = CUPSD_AUTH_IP;
   memcpy(temp->mask.ip.address, address, sizeof(temp->mask.ip.address));
   memcpy(temp->mask.ip.netmask, netmask, sizeof(temp->mask.ip.netmask));
 }
@@ -1668,22 +1962,22 @@ cupsdFindBest(const char   *path,	/* I - Resource path */
 			*best;		/* Best match for location so far */
   int			bestlen;	/* Length of best match */
   int			limit;		/* Limit field */
-  static const int	limits[] =	/* Map http_status_t to AUTH_LIMIT_xyz */
+  static const int	limits[] =	/* Map http_status_t to CUPSD_AUTH_LIMIT_xyz */
 		{
-		  AUTH_LIMIT_ALL,
-		  AUTH_LIMIT_OPTIONS,
-		  AUTH_LIMIT_GET,
-		  AUTH_LIMIT_GET,
-		  AUTH_LIMIT_HEAD,
-		  AUTH_LIMIT_POST,
-		  AUTH_LIMIT_POST,
-		  AUTH_LIMIT_POST,
-		  AUTH_LIMIT_PUT,
-		  AUTH_LIMIT_PUT,
-		  AUTH_LIMIT_DELETE,
-		  AUTH_LIMIT_TRACE,
-		  AUTH_LIMIT_ALL,
-		  AUTH_LIMIT_ALL
+		  CUPSD_AUTH_LIMIT_ALL,
+		  CUPSD_AUTH_LIMIT_OPTIONS,
+		  CUPSD_AUTH_LIMIT_GET,
+		  CUPSD_AUTH_LIMIT_GET,
+		  CUPSD_AUTH_LIMIT_HEAD,
+		  CUPSD_AUTH_LIMIT_POST,
+		  CUPSD_AUTH_LIMIT_POST,
+		  CUPSD_AUTH_LIMIT_POST,
+		  CUPSD_AUTH_LIMIT_PUT,
+		  CUPSD_AUTH_LIMIT_PUT,
+		  CUPSD_AUTH_LIMIT_DELETE,
+		  CUPSD_AUTH_LIMIT_TRACE,
+		  CUPSD_AUTH_LIMIT_ALL,
+		  CUPSD_AUTH_LIMIT_ALL
 		};
 
 
@@ -1793,7 +2087,8 @@ cupsdIsAuthorized(cupsd_client_t *con,	/* I - Connection */
                   const char     *owner)/* I - Owner of object */
 {
   int			i, j,		/* Looping vars */
-			auth;		/* Authorization status */
+			auth,		/* Authorization status */
+			type;		/* Type of authentication */
   unsigned		address[4];	/* Authorization address */
   cupsd_location_t	*best;		/* Best match for location so far */
   int			hostlen;	/* Length of hostname */
@@ -1809,11 +2104,11 @@ cupsdIsAuthorized(cupsd_client_t *con,	/* I - Connection */
 		};
   static const char * const types[] =	/* Auth types */
 		{
-		  "NONE",
-		  "BASIC",
-		  "DIGEST",
-		  "BASICDIGEST",
-		  "KERBEROS"
+		  "None",
+		  "Basic",
+		  "Digest",
+		  "BasicDigest",
+		  "Negotiate"
 		};
 
 
@@ -1842,13 +2137,16 @@ cupsdIsAuthorized(cupsd_client_t *con,	/* I - Connection */
 
   best = con->best;
 
+  if ((type = best->type) == CUPSD_AUTH_DEFAULT)
+    type = DefaultAuthType;
+
   cupsdLogMessage(CUPSD_LOG_DEBUG2,
-                  "cupsdIsAuthorized: level=AUTH_%s, type=AUTH_%s, "
-		  "satisfy=AUTH_SATISFY_%s, num_names=%d",
-                  levels[best->level], types[best->type],
+                  "cupsdIsAuthorized: level=CUPSD_AUTH_%s, type=%s, "
+		  "satisfy=CUPSD_AUTH_SATISFY_%s, num_names=%d",
+                  levels[best->level], types[type],
 	          best->satisfy ? "ANY" : "ALL", best->num_names);
 
-  if (best->limit == AUTH_LIMIT_IPP)
+  if (best->limit == CUPSD_AUTH_LIMIT_IPP)
     cupsdLogMessage(CUPSD_LOG_DEBUG2, "cupsdIsAuthorized: op=%x(%s)",
                     best->op, ippOpString(best->op));
 
@@ -1886,56 +2184,13 @@ cupsdIsAuthorized(cupsd_client_t *con,	/* I - Connection */
 
   hostlen = strlen(con->http.hostname);
 
-  if (!strcasecmp(con->http.hostname, "localhost"))
-  {
-   /*
-    * Access from localhost (127.0.0.1 or ::1) is always allowed...
-    */
+  auth = cupsdCheckAccess(address, con->http.hostname, hostlen, best)
+             ? CUPSD_AUTH_ALLOW : CUPSD_AUTH_DENY;
 
-    auth = AUTH_ALLOW;
-  }
-  else
-  {
-   /*
-    * Do authorization checks on the domain/address...
-    */
-
-    switch (best->order_type)
-    {
-      default :
-	  auth = AUTH_DENY;	/* anti-compiler-warning-code */
-	  break;
-
-      case AUTH_ALLOW : /* Order Deny,Allow */
-          auth = AUTH_ALLOW;
-
-          if (cupsdCheckAuth(address, con->http.hostname, hostlen,
-	          	best->num_deny, best->deny))
-	    auth = AUTH_DENY;
-
-          if (cupsdCheckAuth(address, con->http.hostname, hostlen,
-	        	best->num_allow, best->allow))
-	    auth = AUTH_ALLOW;
-	  break;
-
-      case AUTH_DENY : /* Order Allow,Deny */
-          auth = AUTH_DENY;
-
-          if (cupsdCheckAuth(address, con->http.hostname, hostlen,
-	        	best->num_allow, best->allow))
-	    auth = AUTH_ALLOW;
-
-          if (cupsdCheckAuth(address, con->http.hostname, hostlen,
-	        	best->num_deny, best->deny))
-	    auth = AUTH_DENY;
-	  break;
-    }
-  }
-
-  cupsdLogMessage(CUPSD_LOG_DEBUG2, "cupsdIsAuthorized: auth=AUTH_%s...",
+  cupsdLogMessage(CUPSD_LOG_DEBUG2, "cupsdIsAuthorized: auth=CUPSD_AUTH_%s...",
                   auth ? "DENY" : "ALLOW");
 
-  if (auth == AUTH_DENY && best->satisfy == AUTH_SATISFY_ALL)
+  if (auth == CUPSD_AUTH_DENY && best->satisfy == CUPSD_AUTH_SATISFY_ALL)
     return (HTTP_FORBIDDEN);
 
 #ifdef HAVE_SSL
@@ -1945,9 +2200,9 @@ cupsdIsAuthorized(cupsd_client_t *con,	/* I - Connection */
 
   if ((best->encryption >= HTTP_ENCRYPT_REQUIRED && !con->http.tls &&
       strcasecmp(con->http.hostname, "localhost") &&
-      best->satisfy == AUTH_SATISFY_ALL) &&
-      !(best->type == AUTH_NEGOTIATE || 
-        (best->type == AUTH_NONE && DefaultAuthType == AUTH_NEGOTIATE)))
+      best->satisfy == CUPSD_AUTH_SATISFY_ALL) &&
+      !(type == CUPSD_AUTH_NEGOTIATE || 
+        (type == CUPSD_AUTH_NONE && DefaultAuthType == CUPSD_AUTH_NEGOTIATE)))
   {
     cupsdLogMessage(CUPSD_LOG_DEBUG,
                     "cupsdIsAuthorized: Need upgrade to TLS...");
@@ -1959,12 +2214,12 @@ cupsdIsAuthorized(cupsd_client_t *con,	/* I - Connection */
   * Now see what access level is required...
   */
 
-  if (best->level == AUTH_ANON ||	/* Anonymous access - allow it */
-      (best->type == AUTH_NONE && best->num_names == 0))
+  if (best->level == CUPSD_AUTH_ANON ||	/* Anonymous access - allow it */
+      (type == CUPSD_AUTH_NONE && best->num_names == 0))
     return (HTTP_OK);
 
-  if (!con->username[0] && best->type == AUTH_NONE &&
-      best->limit == AUTH_LIMIT_IPP)
+  if (!con->username[0] && type == CUPSD_AUTH_NONE &&
+      best->limit == CUPSD_AUTH_LIMIT_IPP)
   {
    /*
     * Check for unauthenticated username...
@@ -1981,7 +2236,7 @@ cupsdIsAuthorized(cupsd_client_t *con,	/* I - Connection */
                       attr->values[0].string.text);
       strlcpy(username, attr->values[0].string.text, sizeof(username));
     }
-    else if (best->satisfy == AUTH_SATISFY_ALL || auth == AUTH_DENY)
+    else if (best->satisfy == CUPSD_AUTH_SATISFY_ALL || auth == CUPSD_AUTH_DENY)
       return (HTTP_UNAUTHORIZED);	/* Non-anonymous needs user/pass */
     else
       return (HTTP_OK);			/* unless overridden with Satisfy */
@@ -1997,10 +2252,19 @@ cupsdIsAuthorized(cupsd_client_t *con,	/* I - Connection */
     if (!con->username[0])
 #endif /* HAVE_AUTHORIZATION_H */
     {
-      if (best->satisfy == AUTH_SATISFY_ALL || auth == AUTH_DENY)
+      if (best->satisfy == CUPSD_AUTH_SATISFY_ALL || auth == CUPSD_AUTH_DENY)
 	return (HTTP_UNAUTHORIZED);	/* Non-anonymous needs user/pass */
       else
 	return (HTTP_OK);		/* unless overridden with Satisfy */
+    }
+
+    if (con->type != type && type != CUPSD_AUTH_NONE &&
+        (con->type != CUPSD_AUTH_BASIC || type != CUPSD_AUTH_BASICDIGEST))
+    {
+      cupsdLogMessage(CUPSD_LOG_ERROR, "Authorized using %s, expected %s!",
+                      types[con->type], types[type]);
+
+      return (HTTP_UNAUTHORIZED);
     }
 
     strlcpy(username, con->username, sizeof(username));
@@ -2043,7 +2307,7 @@ cupsdIsAuthorized(cupsd_client_t *con,	/* I - Connection */
   else
     pw = NULL;
 
-  if (best->level == AUTH_USER)
+  if (best->level == CUPSD_AUTH_USER)
   {
    /*
     * If there are no names associated with this location, then
@@ -2079,7 +2343,7 @@ cupsdIsAuthorized(cupsd_client_t *con,	/* I - Connection */
 	  return (HTTP_OK);
       }
 
-      return (HTTP_UNAUTHORIZED);
+      return (HTTP_FORBIDDEN);
     }
 #endif /* HAVE_AUTHORIZATION_H */
 
@@ -2103,7 +2367,7 @@ cupsdIsAuthorized(cupsd_client_t *con,	/* I - Connection */
         return (HTTP_OK);
     }
 
-    return (HTTP_UNAUTHORIZED);
+    return (HTTP_FORBIDDEN);
   }
 
  /*
@@ -2140,7 +2404,7 @@ cupsdIsAuthorized(cupsd_client_t *con,	/* I - Connection */
   cupsdLogMessage(CUPSD_LOG_DEBUG,
                   "cupsdIsAuthorized: User not in group(s)!");
 
-  return (HTTP_UNAUTHORIZED);
+  return (HTTP_FORBIDDEN);
 }
 
 
@@ -2416,81 +2680,6 @@ cups_crypt(const char *pw,		/* I - Password string */
 #endif /* !HAVE_LIBPAM && !HAVE_USERSEC_H */
 
 
-#ifdef HAVE_GSSAPI
-/*
- * 'get_gss_creds()' - Obtain GSS credentials.
- */
-
-static gss_cred_id_t			/* O - Server credentials */
-get_gss_creds(const char *service_name)	/* I - Service name */
-{
-  OM_uint32	major_status,		/* Major status code */
-		minor_status;		/* Minor status code */
-  gss_name_t	server_name;		/* Server name */
-  gss_cred_id_t	server_creds;		/* Server credentials */
-  gss_buffer_desc token = GSS_C_EMPTY_BUFFER;
-					/* Service name token */
-  char		buf[1024],		/* Service name buffer */
-		fqdn[HTTP_MAX_URI];	/* Hostname of server */
-
-
-  snprintf(buf, sizeof(buf), "%s@%s", service_name,
-	   httpGetHostname(NULL, fqdn, sizeof(fqdn)));
-
-  token.value  = buf;
-  token.length = strlen(buf);
-  server_name  = GSS_C_NO_NAME;
-  major_status = gss_import_name(&minor_status, &token,
-	 			 GSS_C_NT_HOSTBASED_SERVICE,
-				 &server_name);
-
-  memset(&token, 0, sizeof(token));
-
-  if (GSS_ERROR(major_status))
-  {
-    cupsdLogGSSMessage(CUPSD_LOG_WARN, major_status, minor_status, 
-		       "gss_import_name() failed");
-    return (NULL);
-  }
-
-  major_status = gss_display_name(&minor_status, server_name, &token, NULL);
-
-  if (GSS_ERROR(major_status))
-  {
-    cupsdLogGSSMessage(CUPSD_LOG_WARN, major_status, minor_status,
-                       "gss_display_name() failed"); 
-    return (NULL);
-  }
-
-  cupsdLogMessage(CUPSD_LOG_DEBUG,
-                  "get_gss_creds: Attempting to acquire credentials for %s...", 
-                  (char *)token.value);
-
-  server_creds = GSS_C_NO_CREDENTIAL;
-  major_status = gss_acquire_cred(&minor_status, server_name, GSS_C_INDEFINITE,
-			          GSS_C_NO_OID_SET, GSS_C_ACCEPT,
-				  &server_creds, NULL, NULL);
-  if (GSS_ERROR(major_status))
-  {
-    cupsdLogGSSMessage(CUPSD_LOG_WARN, major_status, minor_status,
-                       "gss_acquire_cred() failed"); 
-    gss_release_name(&minor_status, &server_name);
-    gss_release_buffer(&minor_status, &token);
-    return (NULL);
-  }
-
-  cupsdLogMessage(CUPSD_LOG_DEBUG,
-                  "get_gss_creds: Credentials acquired successfully for %s.", 
-                  (char *)token.value);
-
-  gss_release_name(&minor_status, &server_name);
-  gss_release_buffer(&minor_status, &token);
-
-  return (server_creds);
-}
-#endif /* HAVE_GSSAPI */
-
-
 /*
  * 'get_md5_password()' - Get an MD5 password.
  */
@@ -2668,5 +2857,5 @@ to64(char          *s,			/* O - Output string */
 
 
 /*
- * End of "$Id: auth.c 6949 2007-09-12 21:33:23Z mike $".
+ * End of "$Id: auth.c 8160 2008-12-06 00:13:31Z mike $".
  */

@@ -1,5 +1,5 @@
 /* Parser header
-   Copyright (C) 2003 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2005, 2006 Free Software Foundation, Inc.
    Contributed by Steven Bosscher
 
 This file is part of GCC.
@@ -16,8 +16,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 
 #ifndef GFC_PARSE_H
@@ -30,7 +30,8 @@ typedef enum
 {
   COMP_NONE, COMP_PROGRAM, COMP_MODULE, COMP_SUBROUTINE, COMP_FUNCTION,
   COMP_BLOCK_DATA, COMP_INTERFACE, COMP_DERIVED, COMP_IF, COMP_DO,
-  COMP_SELECT, COMP_FORALL, COMP_WHERE, COMP_CONTAINS
+  COMP_SELECT, COMP_FORALL, COMP_WHERE, COMP_CONTAINS, COMP_ENUM,
+  COMP_OMP_STRUCTURED_BLOCK
 }
 gfc_compile_state;
 
@@ -63,6 +64,8 @@ int gfc_check_do_variable (gfc_symtree *);
 try gfc_find_state (gfc_compile_state);
 gfc_state_data *gfc_enclosing_unit (gfc_compile_state *);
 const char *gfc_ascii_statement (gfc_statement);
-const char *gfc_state_name (gfc_compile_state);
+match gfc_match_enum (void);
+match gfc_match_enumerator_def (void);
+void gfc_free_enum_history (void);
 
 #endif  /* GFC_PARSE_H  */

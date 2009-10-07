@@ -2,11 +2,11 @@
 --                                                                          --
 --                         GNAT LIBRARY COMPONENTS                          --
 --                                                                          --
---                             ADA.STRINGS.HASH                             --
+--                     A D A . S T R I N G S . H A S H                      --
 --                                                                          --
---                                 B o d y                                  --
+--                                B o d y                                   --
 --                                                                          --
---             Copyright (C) 2004 Free Software Foundation, Inc.            --
+--          Copyright (C) 2004-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -20,8 +20,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -48,16 +48,8 @@ function Ada.Strings.Hash (Key : String) return Containers.Hash_Type is
 begin
    Tmp := 0;
    for J in Key'Range loop
-      Tmp := Rotate_Left (Tmp, 1) + Character'Pos (Key (J));
+      Tmp := Rotate_Left (Tmp, 3) + Character'Pos (Key (J));
    end loop;
 
    return Tmp;
 end Ada.Strings.Hash;
-
-
-
-
-
-
-
-

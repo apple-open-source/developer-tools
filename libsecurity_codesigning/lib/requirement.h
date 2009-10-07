@@ -60,7 +60,7 @@ public:
 
 	// different forms of Requirements. Right now, we only support exprForm ("opExprs")
 	enum Kind {
-		exprForm = 1			// postfix expr form
+		exprForm = 1			// prefix expr form
 	};
 	
 	void kind(Kind k) { mKind = k; }
@@ -98,11 +98,12 @@ private:
 // An interpretation context
 //
 struct Requirement::Context {
-	Context(CFArrayRef certChain, CFDictionaryRef infoDict, const CodeDirectory *dir)
-		: certs(certChain), info(infoDict), directory(dir) { }
+	Context(CFArrayRef certChain, CFDictionaryRef infoDict, CFDictionaryRef entitlementDict, const CodeDirectory *dir)
+		: certs(certChain), info(infoDict), entitlements(entitlementDict), directory(dir) { }
 	
 	const CFArrayRef certs;
 	const CFDictionaryRef info;
+	const CFDictionaryRef entitlements;
 	const CodeDirectory * const directory;
 
 	SecCertificateRef cert(int ix) const;		// get a cert from the cert chain
@@ -135,17 +136,20 @@ enum ExprOp {
 	opFalse,						// unconditionally false
 	opTrue,							// unconditionally true
 	opIdent,						// match canonical code [string]
-	opAppleAnchor,					// match apple anchor
+	opAppleAnchor,					// signed by Apple as Apple's product
 	opAnchorHash,					// match anchor [cert hash]
-	opInfoKeyValue,					// *legacy* match Info.plist field [key; value]
-	opAnd,							// binary prefix expr AND expr
-	opOr,							// binary prefix expr OR expr
-	opCDHash,						// match hash of CodeDirectory directly
-	opNot,							// logical inverse
+	opInfoKeyValue,					// *legacy* - use opInfoKeyField [key; value]
+	opAnd,							// binary prefix expr AND expr [expr; expr]
+	opOr,							// binary prefix expr OR expr [expr; expr]
+	opCDHash,						// match hash of CodeDirectory directly [cd hash]
+	opNot,							// logical inverse [expr]
 	opInfoKeyField,					// Info.plist key field [string; match suffix]
 	opCertField,					// Certificate field [cert index; field name; match suffix]
 	opTrustedCert,					// require trust settings to approve one particular cert [cert index]
 	opTrustedCerts,					// require trust settings to approve the cert chain
+	opCertGeneric,					// Certificate component by OID [cert index; oid; match suffix]
+	opAppleGenericAnchor,			// signed by Apple in any capacity
+	opEntitlementField,				// entitlement dictionary field [string; match suffix]
 	exprOpCount						// (total opcode count in use)
 };
 
@@ -154,6 +158,12 @@ enum MatchOperation {
 	matchExists,					// anything but explicit "false" - no value stored
 	matchEqual,						// equal (CFEqual)
 	matchContains,					// partial match (substring)
+	matchBeginsWith,				// partial match (initial substring)
+	matchEndsWith,					// partial match (terminal substring)
+	matchLessThan,					// less than (string with numeric comparison)
+	matchGreaterThan,				// greater than (string with numeric comparison)
+	matchLessEqual,					// less or equal (string with numeric comparison)
+	matchGreaterEqual,				// greater or equal (string with numeric comparison)
 };
 
 
@@ -161,6 +171,21 @@ enum MatchOperation {
 // We keep Requirement groups in SuperBlobs, indexed by SecRequirementType
 //
 typedef SuperBlob<0xfade0c01> Requirements;
+
+
+//
+// A helper to deal with the magic merger logic of internal requirements
+//
+class InternalRequirements : public Requirements::Maker {
+public:
+	InternalRequirements() : mReqs(NULL) { }
+	~InternalRequirements() { ::free((void *)mReqs); }
+	void operator () (const Requirements *given, const Requirements *defaulted);
+	operator const Requirements * () const { return mReqs; }
+
+private:
+	const Requirements *mReqs;
+};
 
 
 }	// CodeSigning

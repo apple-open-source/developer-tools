@@ -1,12 +1,12 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                         GNAT RUNTIME COMPONENTS                          --
+--                         GNAT RUN-TIME COMPONENTS                         --
 --                                                                          --
 --                         G N A T . S I G N A L S                          --
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---             Copyright (C) 2003 Free Software Foundation, Inc.            --
+--          Copyright (C) 2003-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -50,10 +50,7 @@ package body GNAT.Signals is
    -- Is_Blocked --
    ----------------
 
-   function Is_Blocked
-     (Signal : Ada.Interrupts.Interrupt_ID)
-      return Boolean
-   is
+   function Is_Blocked (Signal : Ada.Interrupts.Interrupt_ID) return Boolean is
    begin
       return SI.Is_Blocked (SI.Interrupt_ID (Signal));
    end Is_Blocked;
@@ -68,4 +65,3 @@ package body GNAT.Signals is
    end Unblock_Signal;
 
 end GNAT.Signals;
-

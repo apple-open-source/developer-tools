@@ -1,34 +1,17 @@
-/* APPLE LOCAL file 4154928 */
-/* Test if ObjC types play nice in conditional expressions.  */
-/* Author: Ziemowit Laski  */
+/* { dg-options "-Wall -funit-at-a-time -fgnu-runtime" } */
+/* { dg-do compile }  */
+/* APPLE LOCAL objc2 */
+/* { dg-require-effective-target ilp32 } */
+/* PR objc/27438, make sure that the decl produced by the front-end
+   does not cause a warning to be produced. */
 
-/* { dg-options "-fno-constant-cfstrings -fconstant-string-class=Foo" } */
-/* { dg-do compile { target *-*-darwin* } } */
-/* { dg-skip-if "" { *-*-darwin* } { "-m64" } { "" } } */
-
-#include <objc/Object.h>
-
-@interface Foo: Object {
-  char *cString;
-  unsigned int len;
-}
-+ (id)description;
-@end
-
-@interface Bar: Object
-+ (Foo *) getString: (int) which;
-@end
-
-/* APPLE LOCAL begin objc2 */
-#if OBJC_API_VERSION >= 2
-Class _FooClassReference;
-#else
-struct objc_class _FooClassReference;
-#endif
-/* APPLE LOCAL end objc2 */
-
-@implementation Bar
-+ (Foo *) getString: (int) which {
-  return which? [Foo description]: @"Hello";
+@interface NXConstantString
+{
+  void *isa;
+  const char * const nxcsptr;
+  const unsigned int nxcslen;
 }
 @end
+NXConstantString *a =   @"NSInconsistentArchiveException"; /* { dg-bogus "defined but not used" } */
+
+

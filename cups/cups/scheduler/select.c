@@ -1,9 +1,9 @@
 /*
- * "$Id: select.c 6649 2007-07-11 21:46:42Z mike $"
+ * "$Id: select.c 7720 2008-07-11 22:46:21Z mike $"
  *
  *   Select abstraction functions for the Common UNIX Printing System (CUPS).
  *
- *   Copyright 2007 by Apple Inc.
+ *   Copyright 2007-2009 by Apple Inc.
  *   Copyright 2006-2007 by Easy Software Products.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -33,6 +33,7 @@
 
 #ifdef HAVE_EPOLL
 #  include <sys/epoll.h>
+#  include <sys/poll.h>
 #elif defined(HAVE_KQUEUE)
 #  include <sys/event.h>
 #  include <sys/time.h>
@@ -167,8 +168,8 @@
  *
  *   In tests using the "make test" target with option 0 (keep cupsd
  *   running) and the "testspeed" program with "-c 50 -r 1000", epoll()
- *   performed 5.5% slower select(), followed by kqueue() at 16% slower
- *   than select() and poll() at 18% slower than select().  Similar
+ *   performed 5.5% slower than select(), followed by kqueue() at 16%
+ *   slower than select() and poll() at 18% slower than select().  Similar
  *   results were seen with twice the number of client connections.
  *
  *   The epoll() and kqueue() performance is likely limited by the
@@ -214,10 +215,7 @@ static cups_array_t	*cupsd_inactive_fds = NULL;
 static int		cupsd_in_select = 0;
 #endif /* HAVE_EPOLL || HAVE_KQUEUE */
 
-#ifdef HAVE_EPOLL
-static int		cupsd_epoll_fd = -1;
-static struct epoll_event *cupsd_epoll_events = NULL;
-#elif defined(HAVE_KQUEUE)
+#ifdef HAVE_KQUEUE
 static int		cupsd_kqueue_fd = -1,
 			cupsd_kqueue_changes = 0;
 static struct kevent	*cupsd_kqueue_events = NULL;
@@ -225,12 +223,16 @@ static struct kevent	*cupsd_kqueue_events = NULL;
 static int		cupsd_alloc_pollfds = 0,
 			cupsd_update_pollfds = 0;
 static struct pollfd	*cupsd_pollfds = NULL;
+#  ifdef HAVE_EPOLL
+static int		cupsd_epoll_fd = -1;
+static struct epoll_event *cupsd_epoll_events = NULL;
+#  endif /* HAVE_EPOLL */
 #else /* select() */
 static fd_set		cupsd_global_input,
 			cupsd_global_output,
 			cupsd_current_input,
 			cupsd_current_output;
-#endif /* HAVE_EPOLL */
+#endif /* HAVE_KQUEUE */
 
 
 /*
@@ -257,7 +259,9 @@ cupsdAddSelect(int             fd,	/* I - File descriptor */
 	       void            *data)	/* I - Data to pass to callback */
 {
   _cupsd_fd_t	*fdptr;			/* File descriptor record */
+#ifdef HAVE_EPOLL
   int		added;			/* 1 if added, 0 if modified */
+#endif /* HAVE_EPOLL */
 
 
  /*
@@ -265,7 +269,7 @@ cupsdAddSelect(int             fd,	/* I - File descriptor */
   */
 
   cupsdLogMessage(CUPSD_LOG_DEBUG2,
-                  "cupsdAddSelect: fd=%d, read_cb=%p, write_cb=%p, data=%p",
+                  "cupsdAddSelect(fd=%d, read_cb=%p, write_cb=%p, data=%p)",
 		  fd, read_cb, write_cb, data);
 
   if (fd < 0)
@@ -294,31 +298,16 @@ cupsdAddSelect(int             fd,	/* I - File descriptor */
       return (0);
     }
 
+#ifdef HAVE_EPOLL
     added = 1;
   }
   else
     added = 0;
-
-#ifdef HAVE_EPOLL
-  {
-    struct epoll_event event;		/* Event data */
-
-
-    event.events = 0;
-
-    if (read_cb)
-      event.events |= EPOLLIN;
-
-    if (write_cb)
-      event.events |= EPOLLOUT;
-
-    event.data.ptr = fdptr;
-
-    epoll_ctl(cupsd_epoll_fd, added ? EPOLL_CTL_ADD : EPOLL_CTL_MOD, fd,
-              &event);
+#else
   }
+#endif /* HAVE_EPOLL */
 
-#elif defined(HAVE_KQUEUE)
+#ifdef HAVE_KQUEUE
   {
     struct kevent	event;		/* Event data */
     struct timespec	timeout;	/* Timeout value */
@@ -336,8 +325,7 @@ cupsdAddSelect(int             fd,	/* I - File descriptor */
 
       if (kevent(cupsd_kqueue_fd, &event, 1, NULL, 0, &timeout))
       {
-	cupsdLogMessage(CUPSD_LOG_DEBUG2,
-			"cupsdAddSelect: kevent() returned %s",
+	cupsdLogMessage(CUPSD_LOG_EMERG, "kevent() returned %s",
 			strerror(errno));
 	return (0);
       }
@@ -352,8 +340,7 @@ cupsdAddSelect(int             fd,	/* I - File descriptor */
 
       if (kevent(cupsd_kqueue_fd, &event, 1, NULL, 0, &timeout))
       {
-	cupsdLogMessage(CUPSD_LOG_DEBUG2,
-			"cupsdAddSelect: kevent() returned %s",
+	cupsdLogMessage(CUPSD_LOG_EMERG, "kevent() returned %s",
 			strerror(errno));
 	return (0);
       }
@@ -361,6 +348,33 @@ cupsdAddSelect(int             fd,	/* I - File descriptor */
   }
 
 #elif defined(HAVE_POLL)
+#  ifdef HAVE_EPOLL
+  if (cupsd_epoll_fd >= 0)
+  {
+    struct epoll_event event;		/* Event data */
+
+
+    event.events = 0;
+
+    if (read_cb)
+      event.events |= EPOLLIN;
+
+    if (write_cb)
+      event.events |= EPOLLOUT;
+
+    event.data.ptr = fdptr;
+
+    if (epoll_ctl(cupsd_epoll_fd, added ? EPOLL_CTL_ADD : EPOLL_CTL_MOD, fd,
+                  &event))
+    {
+      close(cupsd_epoll_fd);
+      cupsd_epoll_fd       = -1;
+      cupsd_update_pollfds = 1;
+    }
+  }
+  else
+#  endif /* HAVE_EPOLL */
+
   cupsd_update_pollfds = 1;
 
 #else /* select() */
@@ -370,33 +384,21 @@ cupsdAddSelect(int             fd,	/* I - File descriptor */
   */
 
   if (read_cb)
-  {
-    cupsdLogMessage(CUPSD_LOG_DEBUG2,
-                    "cupsdAddSelect: Adding fd %d to input set...", fd);
     FD_SET(fd, &cupsd_global_input);
-  }
   else
   {
-    cupsdLogMessage(CUPSD_LOG_DEBUG2,
-                    "cupsdAddSelect: Removing fd %d from input set...", fd);
     FD_CLR(fd, &cupsd_global_input);
     FD_CLR(fd, &cupsd_current_input);
   }
 
   if (write_cb)
-  {
-    cupsdLogMessage(CUPSD_LOG_DEBUG2,
-                    "cupsdAddSelect: Adding fd %d to output set...", fd);
     FD_SET(fd, &cupsd_global_output);
-  }
   else
   {
-    cupsdLogMessage(CUPSD_LOG_DEBUG2,
-                    "cupsdAddSelect: Removing fd %d from output set...", fd);
     FD_CLR(fd, &cupsd_global_output);
     FD_CLR(fd, &cupsd_current_output);
   }
-#endif /* HAVE_EPOLL */
+#endif /* HAVE_KQUEUE */
 
  /*
   * Save the (new) read and write callbacks...
@@ -419,61 +421,11 @@ cupsdDoSelect(long timeout)		/* I - Timeout in seconds */
 {
   int			nfds;		/* Number of file descriptors */
   _cupsd_fd_t		*fdptr;		/* Current file descriptor */
-#ifdef HAVE_EPOLL
-  int			i;		/* Looping var */
-  struct epoll_event	*event;		/* Current event */
-
-
-  cupsdLogMessage(CUPSD_LOG_DEBUG2,
-                  "cupsdDoSelect: polling %d fds for %ld seconds...",
-		  cupsArrayCount(cupsd_fds), timeout);
-
-  cupsd_in_select = 1;
-
-  if (timeout >= 0 && timeout < 86400)
-    nfds = epoll_wait(cupsd_epoll_fd, cupsd_epoll_events, MaxFDs,
-                      timeout * 1000);
-  else
-    nfds = epoll_wait(cupsd_epoll_fd, cupsd_epoll_events, MaxFDs, -1);
-
-  cupsdLogMessage(CUPSD_LOG_DEBUG2, "cupsdDoSelect: epoll() returned %d...",
-                  nfds);
-
-  for (i = nfds, event = cupsd_epoll_events; i > 0; i --, event ++)
-  {
-    fdptr = (_cupsd_fd_t *)event->data.ptr;
-
-    if (cupsArrayFind(cupsd_inactive_fds, fdptr))
-      continue;
-
-    retain_fd(fdptr);
-
-    if (fdptr->read_cb && (event->events & (EPOLLIN | EPOLLERR | EPOLLHUP)))
-    {
-      cupsdLogMessage(CUPSD_LOG_DEBUG2, "cupsdDoSelect: Read on fd %d...",
-	              fdptr->fd);
-      (*(fdptr->read_cb))(fdptr->data);
-    }
-
-    if (fdptr->write_cb && (event->events & (EPOLLOUT | EPOLLERR | EPOLLHUP)))
-    {
-      cupsdLogMessage(CUPSD_LOG_DEBUG2, "cupsdDoSelect: Write on fd %d...",
-	              fdptr->fd);
-      (*(fdptr->write_cb))(fdptr->data);
-    }
-
-    release_fd(fdptr);
-  }
-
-#elif defined(HAVE_KQUEUE)
+#ifdef HAVE_KQUEUE
   int			i;		/* Looping var */
   struct kevent		*event;		/* Current event */
   struct timespec	ktimeout;	/* kevent() timeout */
 
-
-  cupsdLogMessage(CUPSD_LOG_DEBUG2,
-                  "cupsdDoSelect: polling %d fds for %ld seconds...",
-		  cupsArrayCount(cupsd_fds), timeout);
 
   cupsd_in_select = 1;
 
@@ -488,10 +440,6 @@ cupsdDoSelect(long timeout)		/* I - Timeout in seconds */
   else
     nfds = kevent(cupsd_kqueue_fd, NULL, 0, cupsd_kqueue_events, MaxFDs, NULL);
 
-  cupsdLogMessage(CUPSD_LOG_DEBUG2,
-                  "cupsdDoSelect: kevent(%d, ..., %d, ...) returned %d...",
-                  cupsd_kqueue_fd, MaxFDs, nfds);
-
   cupsd_kqueue_changes = 0;
 
   for (i = nfds, event = cupsd_kqueue_events; i > 0; i --, event ++)
@@ -501,24 +449,13 @@ cupsdDoSelect(long timeout)		/* I - Timeout in seconds */
     if (cupsArrayFind(cupsd_inactive_fds, fdptr))
       continue;
 
-    cupsdLogMessage(CUPSD_LOG_DEBUG2, "event->filter=%d, event->ident=%d",
-                    event->filter, (int)event->ident);
-
     retain_fd(fdptr);
 
     if (fdptr->read_cb && event->filter == EVFILT_READ)
-    {
-      cupsdLogMessage(CUPSD_LOG_DEBUG2, "cupsdDoSelect: Read on fd %d...",
-	              fdptr->fd);
       (*(fdptr->read_cb))(fdptr->data);
-    }
 
     if (fdptr->write_cb && event->filter == EVFILT_WRITE)
-    {
-      cupsdLogMessage(CUPSD_LOG_DEBUG2, "cupsdDoSelect: Write on fd %d...",
-	              fdptr->fd);
       (*(fdptr->write_cb))(fdptr->data);
-    }
 
     release_fd(fdptr);
   }
@@ -527,6 +464,51 @@ cupsdDoSelect(long timeout)		/* I - Timeout in seconds */
   struct pollfd		*pfd;		/* Current pollfd structure */
   int			count;		/* Number of file descriptors */
 
+
+#  ifdef HAVE_EPOLL
+  cupsd_in_select = 1;
+
+  if (cupsd_epoll_fd >= 0)
+  {
+    int			i;		/* Looping var */
+    struct epoll_event	*event;		/* Current event */
+
+
+    if (timeout >= 0 && timeout < 86400)
+      nfds = epoll_wait(cupsd_epoll_fd, cupsd_epoll_events, MaxFDs,
+                	timeout * 1000);
+    else
+      nfds = epoll_wait(cupsd_epoll_fd, cupsd_epoll_events, MaxFDs, -1);
+
+    if (nfds < 0 && errno != EINTR)
+    {
+      close(cupsd_epoll_fd);
+      cupsd_epoll_fd = -1;
+    }
+    else
+    {
+      for (i = nfds, event = cupsd_epoll_events; i > 0; i --, event ++)
+      {
+	fdptr = (_cupsd_fd_t *)event->data.ptr;
+
+	if (cupsArrayFind(cupsd_inactive_fds, fdptr))
+	  continue;
+
+	retain_fd(fdptr);
+
+	if (fdptr->read_cb && (event->events & (EPOLLIN | EPOLLERR | EPOLLHUP)))
+	  (*(fdptr->read_cb))(fdptr->data);
+
+	if (fdptr->write_cb && (event->events & (EPOLLOUT | EPOLLERR | EPOLLHUP)))
+	  (*(fdptr->write_cb))(fdptr->data);
+
+	release_fd(fdptr);
+      }
+
+      goto release_inactive;
+    }
+  }
+#  endif /* HAVE_EPOLL */
 
   count = cupsArrayCount(cupsd_fds);
 
@@ -537,8 +519,6 @@ cupsdDoSelect(long timeout)		/* I - Timeout in seconds */
     */
 
     cupsd_update_pollfds = 0;
-
-    cupsdLogMessage(CUPSD_LOG_DEBUG2, "cupsdDoSelect: Updating pollfd array...");
 
    /*
     * (Re)allocate memory as needed...
@@ -586,17 +566,10 @@ cupsdDoSelect(long timeout)		/* I - Timeout in seconds */
     }
   }
 
-  cupsdLogMessage(CUPSD_LOG_DEBUG2,
-                  "cupsdDoSelect: polling %d fds for %ld seconds...",
-		  count, timeout);
-
   if (timeout >= 0 && timeout < 86400)
     nfds = poll(cupsd_pollfds, count, timeout * 1000);
   else
     nfds = poll(cupsd_pollfds, count, -1);
-
-  cupsdLogMessage(CUPSD_LOG_DEBUG2, "cupsdDoSelect: poll() returned %d...",
-                  nfds);
 
   if (nfds > 0)
   {
@@ -606,10 +579,6 @@ cupsdDoSelect(long timeout)		/* I - Timeout in seconds */
 
     for (pfd = cupsd_pollfds; count > 0; pfd ++, count --)
     {
-      cupsdLogMessage(CUPSD_LOG_DEBUG2,
-                      "cupsdDoSelect: pollfds[%d]={fd=%d, revents=%x}",
-		      pfd - cupsd_pollfds, pfd->fd, pfd->revents);
-
       if (!pfd->revents)
         continue;
 
@@ -619,18 +588,10 @@ cupsdDoSelect(long timeout)		/* I - Timeout in seconds */
       retain_fd(fdptr);
 
       if (fdptr->read_cb && (pfd->revents & (POLLIN | POLLERR | POLLHUP)))
-      {
-        cupsdLogMessage(CUPSD_LOG_DEBUG2, "cupsdDoSelect: Read on fd %d...",
-	                fdptr->fd);
         (*(fdptr->read_cb))(fdptr->data);
-      }
 
       if (fdptr->write_cb && (pfd->revents & (POLLOUT | POLLERR | POLLHUP)))
-      {
-        cupsdLogMessage(CUPSD_LOG_DEBUG2, "cupsdDoSelect: Write on fd %d...",
-	                fdptr->fd);
         (*(fdptr->write_cb))(fdptr->data);
-      }
 
       release_fd(fdptr);
     }
@@ -657,10 +618,6 @@ cupsdDoSelect(long timeout)		/* I - Timeout in seconds */
   cupsd_current_input  = cupsd_global_input;
   cupsd_current_output = cupsd_global_output;
 
-  cupsdLogMessage(CUPSD_LOG_DEBUG2,
-                  "cupsdDoSelect: selecting %d fds for %ld seconds...",
-		  maxfd, timeout);
-
   if (timeout >= 0 && timeout < 86400)
   {
     stimeout.tv_sec  = timeout;
@@ -672,9 +629,6 @@ cupsdDoSelect(long timeout)		/* I - Timeout in seconds */
   else
     nfds = select(maxfd, &cupsd_current_input, &cupsd_current_output, NULL,
                   NULL);
-
-  cupsdLogMessage(CUPSD_LOG_DEBUG2, "cupsdDoSelect: select() returned %d...",
-                  nfds);
 
   if (nfds > 0)
   {
@@ -689,29 +643,25 @@ cupsdDoSelect(long timeout)		/* I - Timeout in seconds */
       retain_fd(fdptr);
 
       if (fdptr->read_cb && FD_ISSET(fdptr->fd, &cupsd_current_input))
-      {
-        cupsdLogMessage(CUPSD_LOG_DEBUG2, "cupsdDoSelect: Read on fd %d...",
-	                fdptr->fd);
         (*(fdptr->read_cb))(fdptr->data);
-      }
 
       if (fdptr->write_cb && FD_ISSET(fdptr->fd, &cupsd_current_output))
-      {
-        cupsdLogMessage(CUPSD_LOG_DEBUG2, "cupsdDoSelect: Write on fd %d...",
-	                fdptr->fd);
         (*(fdptr->write_cb))(fdptr->data);
-      }
 
       release_fd(fdptr);
     }
   }
 
-#endif /* HAVE_EPOLL */
+#endif /* HAVE_KQUEUE */
 
 #if defined(HAVE_EPOLL) || defined(HAVE_KQUEUE)
  /*
   * Release all inactive file descriptors...
   */
+
+#  ifndef HAVE_KQUEUE
+  release_inactive:
+#  endif /* !HAVE_KQUEUE */
 
   cupsd_in_select = 0;
 
@@ -768,7 +718,7 @@ cupsdRemoveSelect(int fd)		/* I - File descriptor */
   * Range check input...
   */
 
-  cupsdLogMessage(CUPSD_LOG_DEBUG2, "cupsdRemoveSelect: fd=%d", fd);
+  cupsdLogMessage(CUPSD_LOG_DEBUG2, "cupsdRemoveSelect(fd=%d)", fd);
 
   if (fd < 0)
     return;
@@ -781,7 +731,12 @@ cupsdRemoveSelect(int fd)		/* I - File descriptor */
     return;
 
 #ifdef HAVE_EPOLL
-  epoll_ctl(cupsd_epoll_fd, EPOLL_CTL_DEL, fd, &event);
+  if (epoll_ctl(cupsd_epoll_fd, EPOLL_CTL_DEL, fd, &event))
+  {
+    close(cupsd_epoll_fd);
+    cupsd_epoll_fd       = -1;
+    cupsd_update_pollfds = 1;
+  }
 
 #elif defined(HAVE_KQUEUE)
   timeout.tv_sec  = 0;
@@ -793,8 +748,7 @@ cupsdRemoveSelect(int fd)		/* I - File descriptor */
 
     if (kevent(cupsd_kqueue_fd, &event, 1, NULL, 0, &timeout))
     {
-      cupsdLogMessage(CUPSD_LOG_DEBUG2,
-		      "cupsdRemoveSelect: kevent() returned %s",
+      cupsdLogMessage(CUPSD_LOG_EMERG, "kevent() returned %s",
 		      strerror(errno));
       return;
     }
@@ -806,8 +760,7 @@ cupsdRemoveSelect(int fd)		/* I - File descriptor */
 
     if (kevent(cupsd_kqueue_fd, &event, 1, NULL, 0, &timeout))
     {
-      cupsdLogMessage(CUPSD_LOG_DEBUG2,
-		      "cupsdRemoveSelect: kevent() returned %s",
+      cupsdLogMessage(CUPSD_LOG_EMERG, "kevent() returned %s",
 		      strerror(errno));
       return;
     }
@@ -822,9 +775,6 @@ cupsdRemoveSelect(int fd)		/* I - File descriptor */
   cupsd_update_pollfds = 1;
 
 #else /* select() */
-  cupsdLogMessage(CUPSD_LOG_DEBUG2,
-                  "cupsdRemoveSelect: Removing fd %d from input and output "
-		  "sets...", fd);
   FD_CLR(fd, &cupsd_global_input);
   FD_CLR(fd, &cupsd_global_output);
   FD_CLR(fd, &cupsd_current_input);
@@ -855,6 +805,8 @@ cupsdRemoveSelect(int fd)		/* I - File descriptor */
 void
 cupsdStartSelect(void)
 {
+  cupsdLogMessage(CUPSD_LOG_DEBUG2, "cupsdStartSelect()");
+
   cupsd_fds = cupsArrayNew((cups_array_func_t)compare_fds, NULL);
 
 #if defined(HAVE_EPOLL) || defined(HAVE_KQUEUE)
@@ -862,8 +814,9 @@ cupsdStartSelect(void)
 #endif /* HAVE_EPOLL || HAVE_KQUEUE */
 
 #ifdef HAVE_EPOLL
-  cupsd_epoll_fd     = epoll_create(MaxFDs);
-  cupsd_epoll_events = calloc(MaxFDs, sizeof(struct epoll_event));
+  cupsd_epoll_fd       = epoll_create(MaxFDs);
+  cupsd_epoll_events   = calloc(MaxFDs, sizeof(struct epoll_event));
+  cupsd_update_pollfds = 0;
 
 #elif defined(HAVE_KQUEUE)
   cupsd_kqueue_fd      = kqueue();
@@ -890,6 +843,8 @@ cupsdStopSelect(void)
   _cupsd_fd_t	*fdptr;			/* Current file descriptor */
 
 
+  cupsdLogMessage(CUPSD_LOG_DEBUG2, "cupsdStopSelect()");
+
   for (fdptr = (_cupsd_fd_t *)cupsArrayFirst(cupsd_fds);
        fdptr;
        fdptr = (_cupsd_fd_t *)cupsArrayNext(cupsd_fds))
@@ -903,20 +858,7 @@ cupsdStopSelect(void)
   cupsd_inactive_fds = NULL;
 #endif /* HAVE_EPOLL || HAVE_KQUEUE */
 
-#ifdef HAVE_EPOLL
-  if (cupsd_epoll_events)
-  {
-    free(cupsd_epoll_events);
-    cupsd_epoll_events = NULL;
-  }
-
-  if (cupsd_epoll_fd >= 0)
-  {
-    close(cupsd_epoll_fd);
-    cupsd_epoll_fd = -1;
-  }
-
-#elif defined(HAVE_KQUEUE)
+#ifdef HAVE_KQUEUE
   if (cupsd_kqueue_events)
   {
     free(cupsd_kqueue_events);
@@ -932,6 +874,20 @@ cupsdStopSelect(void)
   cupsd_kqueue_changes = 0;
 
 #elif defined(HAVE_POLL)
+#  ifdef HAVE_EPOLL
+  if (cupsd_epoll_events)
+  {
+    free(cupsd_epoll_events);
+    cupsd_epoll_events = NULL;
+  }
+
+  if (cupsd_epoll_fd >= 0)
+  {
+    close(cupsd_epoll_fd);
+    cupsd_epoll_fd = -1;
+  }
+#  endif /* HAVE_EPOLL */
+
   if (cupsd_pollfds)
   {
     free(cupsd_pollfds);
@@ -983,5 +939,5 @@ find_fd(int fd)				/* I - File descriptor */
 
 
 /*
- * End of "$Id: select.c 6649 2007-07-11 21:46:42Z mike $".
+ * End of "$Id: select.c 7720 2008-07-11 22:46:21Z mike $".
  */

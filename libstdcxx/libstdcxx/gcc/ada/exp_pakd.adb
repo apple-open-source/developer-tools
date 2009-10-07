@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2004 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -27,6 +27,7 @@
 with Atree;    use Atree;
 with Checks;   use Checks;
 with Einfo;    use Einfo;
+with Errout;   use Errout;
 with Exp_Dbug; use Exp_Dbug;
 with Exp_Util; use Exp_Util;
 with Nlists;   use Nlists;
@@ -673,7 +674,7 @@ package body Exp_Pakd is
 
    --  The PAT is always obtained from the actual subtype
 
-   procedure Convert_To_PAT_Type (Aexp : Entity_Id) is
+   procedure Convert_To_PAT_Type (Aexp : Node_Id) is
       Act_ST : Entity_Id;
 
    begin
@@ -681,18 +682,18 @@ package body Exp_Pakd is
       Act_ST := Underlying_Type (Etype (Aexp));
       Create_Packed_Array_Type (Act_ST);
 
-      --  Just replace the etype with the packed array type. This works
-      --  because the expression will not be further analyzed, and Gigi
-      --  considers the two types equivalent in any case.
+      --  Just replace the etype with the packed array type. This works because
+      --  the expression will not be further analyzed, and Gigi considers the
+      --  two types equivalent in any case.
 
-      --  This is not strictly the case ??? If the reference is an actual
-      --  in a call, the expansion of the prefix is delayed, and must be
-      --  reanalyzed, see Reset_Packed_Prefix. On the other hand, if the
-      --  prefix is a simple array reference, reanalysis can produce spurious
-      --  type errors when the PAT type is replaced again with the original
-      --  type of the array. The following is correct and minimal, but the
-      --  handling of more complex packed expressions in actuals is confused.
-      --  It is likely that the problem only remains for actuals in calls.
+      --  This is not strictly the case ??? If the reference is an actual in
+      --  call, the expansion of the prefix is delayed, and must be reanalyzed,
+      --  see Reset_Packed_Prefix. On the other hand, if the prefix is a simple
+      --  array reference, reanalysis can produce spurious type errors when the
+      --  PAT type is replaced again with the original type of the array. Same
+      --  for the case of a dereference. The following is correct and minimal,
+      --  but the handling of more complex packed expressions in actuals is
+      --  confused. Probably the problem only remains for actuals in calls.
 
       Set_Etype (Aexp, Packed_Array_Type (Act_ST));
 
@@ -700,6 +701,7 @@ package body Exp_Pakd is
         or else
            (Nkind (Aexp) = N_Indexed_Component
              and then Is_Entity_Name (Prefix (Aexp)))
+        or else Nkind (Aexp) = N_Explicit_Dereference
       then
          Set_Analyzed (Aexp);
       end if;
@@ -1084,7 +1086,7 @@ package body Exp_Pakd is
          --  discriminants, so we treat it as a default/per-object expression.
 
          Set_Parent (Len_Expr, Typ);
-         Analyze_Per_Use_Expression (Len_Expr, Standard_Integer);
+         Analyze_Per_Use_Expression (Len_Expr, Standard_Long_Long_Integer);
 
          --  Use a modular type if possible. We can do this if we have
          --  static bounds, and the length is small enough, and the length
@@ -1094,6 +1096,27 @@ package body Exp_Pakd is
 
          if Compile_Time_Known_Value (Len_Expr) then
             Len_Bits := Expr_Value (Len_Expr) * Csize;
+
+            --  Check for size known to be too large
+
+            if Len_Bits >
+              Uint_2 ** (Standard_Integer_Size - 1) * System_Storage_Unit
+            then
+               if System_Storage_Unit = 8 then
+                  Error_Msg_N
+                    ("packed array size cannot exceed " &
+                     "Integer''Last bytes", Typ);
+               else
+                  Error_Msg_N
+                    ("packed array size cannot exceed " &
+                     "Integer''Last storage units", Typ);
+               end if;
+
+               --  Reset length to arbitrary not too high value to continue
+
+               Len_Expr := Make_Integer_Literal (Loc, 65535);
+               Analyze_And_Resolve (Len_Expr, Standard_Long_Long_Integer);
+            end if;
 
             --  We normally consider small enough to mean no larger than the
             --  value of System_Max_Binary_Modulus_Power, checking that in the
@@ -1207,21 +1230,25 @@ package body Exp_Pakd is
                  Make_Subtype_Indication (Loc,
                    Subtype_Mark => New_Occurrence_Of (PB_Type, Loc),
                    Constraint =>
-
                      Make_Index_Or_Discriminant_Constraint (Loc,
                        Constraints => New_List (
                          Make_Range (Loc,
                            Low_Bound =>
                              Make_Integer_Literal (Loc, 0),
-                           High_Bound => PAT_High)))));
+                           High_Bound =>
+                             Convert_To (Standard_Integer, PAT_High))))));
 
          Install_PAT;
 
          --  Currently the code in this unit requires that packed arrays
          --  represented by non-modular arrays of bytes be on a byte
-         --  boundary.
+         --  boundary for bit sizes handled by System.Pack_nn units.
+         --  That's because these units assume the array being accessed
+         --  starts on a byte boundary.
 
-         Set_Must_Be_On_Byte_Boundary (Typ);
+         if Get_Id (UI_To_Int (Csize)) /= RE_Null then
+            Set_Must_Be_On_Byte_Boundary (Typ);
+         end if;
       end if;
    end Create_Packed_Array_Type;
 
@@ -2558,7 +2585,7 @@ package body Exp_Pakd is
       Csiz := Component_Size (Atyp);
 
       Convert_To_PAT_Type (Obj);
-      PAT  := Etype (Obj);
+      PAT := Etype (Obj);
 
       Cmask := 2 ** Csiz - 1;
 

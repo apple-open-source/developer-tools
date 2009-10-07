@@ -36,6 +36,7 @@
 #include <spawn.h>
 #include <grp.h>
 #include <CommonCrypto/CommonDigest.h>
+#include <uuid/uuid.h>
 
 #include <Security/Authorization.h>
 #include <SystemConfiguration/SCDynamicStoreCopyDHCPInfo.h>
@@ -53,7 +54,7 @@
 #include "LDAPv3SupportFunctions.h"
 
 extern "C" {
-	#include "saslutil.h"
+	#include <sasl/saslutil.h>
 };
 
 #include "CLDAPv3Plugin.h"
@@ -87,6 +88,7 @@ using namespace std;
 #pragma mark -
 #pragma mark Globals and Structures
 
+extern int					krb5_use_broken_arcfour_string2key;
 extern bool					gServerOS;
 extern DSMutexSemaphore		*gKerberosMutex;
 
@@ -94,7 +96,7 @@ extern DSMutexSemaphore		*gKerberosMutex;
 #pragma mark Prototypes
 
 static void RemoveKeytabEntry( const char *inPrinc );
-static krb5_error_code DetermineKVNO( const char *inPrinc, char *inPass, krb5_kvno *outKVNO );
+static krb5_error_code DetermineKVNO( const char *inPrinc, char *inPass, krb5_kvno *outKVNO, bool *legacy );
 static krb5_error_code AddKeytabEntry( const char *inPrinc, char *inPass );
 
 // service table
@@ -138,6 +140,10 @@ static Service gServiceTable[] = {
 
 krb5_error_code AddKeytabEntry( const char *inPrinc, char *inPass )
 {
+	static krb5_enctype		oldTypes[]	= { ENCTYPE_ARCFOUR_HMAC, ENCTYPE_DES3_CBC_SHA1, ENCTYPE_DES_CBC_CRC, 0 };
+	static krb5_enctype		newTypes[]	= { ENCTYPE_AES256_CTS_HMAC_SHA1_96, ENCTYPE_AES128_CTS_HMAC_SHA1_96, 
+											ENCTYPE_ARCFOUR_HMAC, ENCTYPE_DES3_CBC_SHA1, ENCTYPE_DES_CBC_CRC, 0 };
+	
 	const size_t		ktPrefixSize = sizeof("WRFILE:") - 1;
 	char				ktname[MAXPATHLEN + ktPrefixSize + 2];
 	krb5_keytab			kt			= NULL;
@@ -146,8 +152,9 @@ krb5_error_code AddKeytabEntry( const char *inPrinc, char *inPass )
 	krb5_keytab_entry   entry;
 	krb5_data			password;
 	krb5_data			salt;
-	SInt32				types[]		= { ENCTYPE_ARCFOUR_HMAC, ENCTYPE_DES_CBC_CRC, ENCTYPE_DES3_CBC_SHA1, 0 };
-	SInt32				*keyType	= types;
+	krb5_enctype		*keyType	= oldTypes;
+	bool				legacyType	= true;
+	int 				sav_string2key;
 	
 	// let's clear variable contents
 	bzero( &entry, sizeof(entry) );
@@ -166,6 +173,8 @@ krb5_error_code AddKeytabEntry( const char *inPrinc, char *inPass )
 	RemoveKeytabEntry( inPrinc );
 	
 	gKerberosMutex->WaitLock();
+	sav_string2key = krb5_use_broken_arcfour_string2key;
+	krb5_use_broken_arcfour_string2key = 1;
 	
 	retval = krb5_init_context( &kContext );
 	if ( retval == 0 )
@@ -193,9 +202,13 @@ krb5_error_code AddKeytabEntry( const char *inPrinc, char *inPass )
 	if ( retval == 0 )
 	{
 		// determine the vno for this key
-		retval = DetermineKVNO( inPrinc, inPass, &entry.vno );
+		retval = DetermineKVNO( inPrinc, inPass, &entry.vno, &legacyType );
 		if ( retval == 0 && entry.vno != 0 )
 		{
+			if ( legacyType == false ) {
+				keyType = newTypes;
+			}
+			
 			// now let's put it in the keytab accordingly
 			// let's save each key type..
 			do
@@ -264,6 +277,7 @@ krb5_error_code AddKeytabEntry( const char *inPrinc, char *inPass )
 		kContext = NULL;
 	}
 	
+	krb5_use_broken_arcfour_string2key = sav_string2key;
 	gKerberosMutex->SignalLock();
 	
 	return retval;
@@ -298,33 +312,33 @@ void RemoveKeytabEntry( const char *inPrinc )
 	}
 	
 	retval = krb5_kt_start_seq_get( kContext, kt, &cursor );
-	if ( retval == 0 )
+	while( retval == 0 && cursor != NULL )
 	{
-		while( retval != KRB5_KT_END && retval != ENOENT )
+		if ( (retval = krb5_kt_next_entry(kContext, kt, &entry, &cursor)) )
 		{
-			if ( (retval = krb5_kt_next_entry(kContext, kt, &entry, &cursor)) )
-			{
-				break;
-			}
-			
-			if ( krb5_principal_compare(kContext, entry.principal, host_princ) )
-			{
-				// we have to end the sequence here and start over because MIT kerberos doesn't allow
-				// removal while cursoring through
-				krb5_kt_end_seq_get( kContext, kt, &cursor );
-				
-				krb5_kt_remove_entry( kContext, kt, &entry );
-				
-				retval = krb5_kt_start_seq_get( kContext, kt, &cursor );
-			}
-			
-			// need to free the contents so we don't leak
-			krb5_free_keytab_entry_contents( kContext, &entry );
+			break;
 		}
-		if ( cursor != NULL )
+		
+		if ( krb5_principal_compare(kContext, entry.principal, host_princ) )
 		{
+			// we have to end the sequence here and start over because MIT kerberos doesn't allow
+			// removal while cursoring through
 			krb5_kt_end_seq_get( kContext, kt, &cursor );
+			cursor = NULL;
+			
+			retval = krb5_kt_remove_entry( kContext, kt, &entry );
+			if ( retval != 0 )
+				break;
+			
+			retval = krb5_kt_start_seq_get( kContext, kt, &cursor );
 		}
+		
+		// need to free the contents so we don't leak
+		krb5_free_keytab_entry_contents( kContext, &entry );
+	}
+	if ( cursor != NULL )
+	{
+		krb5_kt_end_seq_get( kContext, kt, &cursor );
 	}
 	
 	if ( host_princ )
@@ -352,7 +366,7 @@ void RemoveKeytabEntry( const char *inPrinc )
 #define log_on_krb5_error(A)	\
 if ((A) != 0) DbgLog(kLogDebug, "DetermineKVNO error: File: %s. Line: %d", __FILE__, __LINE__)
 
-static krb5_error_code DetermineKVNO( const char *inPrinc, char *inPass, krb5_kvno *outKVNO )
+static krb5_error_code DetermineKVNO( const char *inPrinc, char *inPass, krb5_kvno *outKVNO, bool *legacy )
 {
     krb5_ticket		*ticket		= NULL;
 	krb5_creds		my_creds;
@@ -417,14 +431,10 @@ static krb5_error_code DetermineKVNO( const char *inPrinc, char *inPass, krb5_kv
 	
 	if ( retval == 0 )
 	{
-		krb5_int32				startTime   = 0;
-		krb5_get_init_creds_opt  options;
+		krb5_int32				startTime	= 0;
+		krb5_get_init_creds_opt options;
 		
 		krb5_get_init_creds_opt_init( &options );
-		krb5_get_init_creds_opt_set_forwardable( &options, 1 );
-		krb5_get_init_creds_opt_set_proxiable( &options, 1 );
-		krb5_get_init_creds_opt_set_address_list( &options, NULL );
-
 		krb5_get_init_creds_opt_set_tkt_life( &options, 300 ); // minimum is 5 minutes
 
 		retval = krb5_get_init_creds_password( krbContext, &my_creds, principal, inPass, NULL, 0, startTime, NULL, &options );
@@ -433,6 +443,25 @@ static krb5_error_code DetermineKVNO( const char *inPrinc, char *inPass, krb5_kv
 	
 	if ( retval == 0 )
 	{
+		if ( legacy != NULL ) 
+		{
+			switch ( my_creds.keyblock.enctype )
+			{
+				// check for legacy key types so we don't try newer key types
+				case ENCTYPE_ARCFOUR_HMAC:
+				case ENCTYPE_DES3_CBC_SHA1:
+				case ENCTYPE_DES_CBC_CRC:
+					(*legacy) = true;
+					DbgLog( kLogInfo, "CLDAPv3PluginNewServerSetup - DetermineKVNO - legacy encryption mode" );
+					break;
+					
+				default:
+					DbgLog( kLogInfo, "CLDAPv3PluginNewServerSetup - DetermineKVNO - using new encryptions" );
+					(*legacy) = false;
+					break;
+			}
+		}
+		
 		retval = krb5_cc_store_cred( krbContext, krbCache, &my_creds );
 		log_on_krb5_error( retval );
 	}
@@ -628,7 +657,7 @@ static int GetHostFromAnywhere( char *inOutHostStr, size_t maxHostStrLen )
 	if ( result != 0 )
 	{
 		// try DNS
-		unsigned long *ipList = NULL;
+		in_addr_t *ipList = NULL;
 		struct hostent *hostEnt = NULL;
 		struct sockaddr_in addr = { sizeof(struct sockaddr_in), AF_INET, 0 };
 		int error_num = 0;
@@ -740,11 +769,16 @@ static tDataListPtr NodeNameWithHost( const char *inHost, int inNodeNameMax, cha
 {
 	char pNodeName[256] = {0,};
 	
-	strcpy( pNodeName, "/LDAPv3/" );
-	strlcat( pNodeName, inHost, sizeof(pNodeName) );
-	if ( outNodeName != NULL && inNodeNameMax > 0 )
-		strlcpy( outNodeName, pNodeName, inNodeNameMax );
-	return dsBuildFromPathPriv( pNodeName, "/" );
+	if ( inHost != NULL )
+	{
+		strcpy( pNodeName, "/LDAPv3/" );
+		strlcat( pNodeName, inHost, sizeof(pNodeName) );
+		if ( outNodeName != NULL && inNodeNameMax > 0 )
+			strlcpy( outNodeName, pNodeName, inNodeNameMax );
+		return dsBuildFromPathPriv( pNodeName, "/" );
+	}
+	
+	return NULL;
 }
 
 
@@ -794,7 +828,7 @@ static char *NewUUID( void )
 //	* DoSimpleLDAPBind
 // ---------------------------------------------------------------------------
 
-LDAP *CLDAPv3Plugin::DoSimpleLDAPBind( char *pServer, bool bSSL, bool bLDAPv2ReadOnly, char *pUsername, char *pPassword, bool bNoCleartext, 
+LDAP *CLDAPv3Plugin::DoSimpleLDAPBind( const char *pServer, bool bSSL, bool bLDAPv2ReadOnly, char *pUsername, char *pPassword, bool bNoCleartext, 
 									   SInt32 *outFailureCode )
 {
 	LDAP				*pLD			= NULL;
@@ -802,12 +836,13 @@ LDAP *CLDAPv3Plugin::DoSimpleLDAPBind( char *pServer, bool bSSL, bool bLDAPv2Rea
 	char				ldapURL[256];
 	tDirStatus			dsStatus;
 	
+	if ( DSIsStringEmpty(pServer) == true ) return NULL;
+		
 	// create a URL and create a config and let it do the work
 	snprintf( ldapURL, sizeof(ldapURL), "%s://%s", (bSSL ? "ldaps" : "ldap"), pServer );
 	
 	CLDAPNodeConfig *tempConfig = new CLDAPNodeConfig( fConfigFromXML, ldapURL, false );
 	
-	tempConfig->fLDAPv2ReadOnly = bLDAPv2ReadOnly;
 	tempConfig->fIsSSL = bSSL;
 	
 	pLD = tempConfig->EstablishConnection( &replica, false, NULL, NULL, &dsStatus );
@@ -852,18 +887,19 @@ LDAP *CLDAPv3Plugin::DoSimpleLDAPBind( char *pServer, bool bSSL, bool bLDAPv2Rea
 	return pLD;
 } // DoSimpleLDAPBind
 
+
 // ---------------------------------------------------------------------------
 //	* GetSASLMethods
 // ---------------------------------------------------------------------------
 
 CFArrayRef CLDAPv3Plugin::GetSASLMethods( LDAP *pLD )
 {
-	char		*pAttributes[]  = { "supportedSASLMechanisms", NULL };
+	const char		*pAttributes[]  = { "supportedSASLMechanisms", NULL };
 	timeval		stTimeout		= { 30, 0 }; // default 30 seconds
 	CFArrayRef  cfSASLMechs		= NULL;
 	LDAPMessage *pLDAPResult	= NULL;
 	
-	if ( ldap_search_ext_s( pLD, LDAP_ROOT_DSE, LDAP_SCOPE_BASE, "(objectclass=*)", pAttributes, false, NULL, NULL, &stTimeout, 0, &pLDAPResult ) == LDAP_SUCCESS )
+	if ( ldap_search_ext_s( pLD, LDAP_ROOT_DSE, LDAP_SCOPE_BASE, "(objectclass=*)", (char **) pAttributes, false, NULL, NULL, &stTimeout, 0, &pLDAPResult ) == LDAP_SUCCESS )
 	{
 		cfSASLMechs = GetLDAPAttributeFromResult( pLD, pLDAPResult, "supportedSASLMechanisms" );
 	}
@@ -877,11 +913,60 @@ CFArrayRef CLDAPv3Plugin::GetSASLMethods( LDAP *pLD )
 	return cfSASLMechs;
 }
 
+
+// ---------------------------------------------------------------------------
+//	* GetOverlayCapabilities
+// ---------------------------------------------------------------------------
+
+bool CLDAPv3Plugin::OverlaySupportsUniqueNameEnforcement( const char *inServer, bool inSSL )
+{
+	bool		result					= false;
+	char		*pOverlayAttributes[]	= { "olcOverlay", NULL };
+	timeval		stTimeout				= { 30, 0 }; // default 30 seconds
+	LDAPMessage *pLDAPResult			= NULL;
+	int			ldapResult				= 0;
+	CFArrayRef  overlay					= NULL;
+	LDAP		*pLD					= NULL;
+	SInt32		bindResult				= eDSNoErr;
+	
+	// let's do a bind... if we can't bind anonymous to get the root DSE, then we error back
+	if ( (pLD = DoSimpleLDAPBind(inServer, inSSL, false, NULL, NULL, false, &bindResult)) == NULL )
+	{
+		// double-check if SSL required
+		if ( !inSSL )
+			pLD = DoSimpleLDAPBind( inServer, true, false, NULL, NULL );
+	}
+	
+	if ( pLD != NULL )
+	{
+		ldapResult = ldap_search_ext_s( pLD, "cn=config", LDAP_SCOPE_SUB, "(objectclass=olcUniqueConfig)", pOverlayAttributes,
+										false, NULL, NULL, &stTimeout, 0, &pLDAPResult );
+		if ( ldapResult == LDAP_SUCCESS )
+		{
+			overlay = GetLDAPAttributeFromResult( pLD, pLDAPResult, "olcOverlay" );
+			result = (overlay != NULL && CFArrayGetCount(overlay) > 0);
+			DSCFRelease( overlay );
+		}
+		
+		if ( pLDAPResult )
+		{
+			ldap_msgfree( pLDAPResult );
+			pLDAPResult = NULL;
+		}
+		
+		ldap_unbind_ext_s( pLD, NULL, NULL );
+		pLD = NULL;
+	}
+	
+	return result;
+}
+
+
 // ---------------------------------------------------------------------------
 //	* GetLDAPAttributeFromResult
 // ---------------------------------------------------------------------------
 
-CFMutableArrayRef CLDAPv3Plugin::GetLDAPAttributeFromResult( LDAP *pLD, LDAPMessage *pMessage, char *pAttribute )
+CFMutableArrayRef CLDAPv3Plugin::GetLDAPAttributeFromResult( LDAP *pLD, LDAPMessage *pMessage, const char *pAttribute )
 {
 	berval				**pBValues  = NULL;
 	CFMutableArrayRef   cfResult	= CFArrayCreateMutable( kCFAllocatorDefault, 0, &kCFTypeArrayCallBacks );
@@ -1216,15 +1301,6 @@ CFStringRef CLDAPv3Plugin::GetServerInfoFromConfig( CFDictionaryRef inDict, char
 		}
 	}
 
-	if ( outLDAPv2ReadOnly )
-	{
-		CFBooleanRef cfBool = (CFBooleanRef) CFDictionaryGetValue( inDict, CFSTR(kXMLLDAPv2ReadOnlyKey) );
-		if ( cfBool != NULL && CFGetTypeID(cfBool) == CFBooleanGetTypeID() )
-		{
-			*outLDAPv2ReadOnly = CFBooleanGetValue( cfBool );
-		}
-	}
-
 	if ( pUsername )
 	{
 		CFStringRef cfUsername = (CFStringRef) CFDictionaryGetValue( inDict, CFSTR(kXMLServerAccountKey) );
@@ -1292,7 +1368,7 @@ SInt32 CLDAPv3Plugin::DoNewServerDiscovery( sDoPlugInCustomCall *inData )
 		// this is an attempt to determine the server, see if we can contact it, and get some basic information
 
 		// first let's get the root DSE and see what we can figure out..
-		char			*pAttributes[]  = { "namingContexts", "defaultNamingContext", NULL };
+		const char		*pAttributes[]  = { "namingContexts", "defaultNamingContext", "isGlobalCatalogReady", NULL };
 		timeval			stTimeout		= { kLDAPDefaultOpenCloseTimeoutInSeconds, 0 }; // default kLDAPDefaultOpenCloseTimeoutInSeconds seconds
 		LDAPMessage		*pLDAPResult	= NULL;
 		SInt32			bindResult		= eDSNoErr;
@@ -1334,7 +1410,7 @@ SInt32 CLDAPv3Plugin::DoNewServerDiscovery( sDoPlugInCustomCall *inData )
 		}
 		
 		// now let's continue our discovery process
-		int iLDAPRetCode = ldap_search_ext_s( pLD, LDAP_ROOT_DSE, LDAP_SCOPE_BASE, "(objectclass=*)", pAttributes, false, NULL, NULL, &stTimeout, 0, &pLDAPResult );
+		int iLDAPRetCode = ldap_search_ext_s( pLD, LDAP_ROOT_DSE, LDAP_SCOPE_BASE, "(objectclass=*)", (char **) pAttributes, false, NULL, NULL, &stTimeout, 0, &pLDAPResult );
 		
 		// This should never fail, unless we aren't really talking to an LDAP server
 		if ( iLDAPRetCode != LDAP_SUCCESS && !bLDAPv2ReadOnly )
@@ -1351,6 +1427,28 @@ SInt32 CLDAPv3Plugin::DoNewServerDiscovery( sDoPlugInCustomCall *inData )
 			cfNameContext = GetLDAPAttributeFromResult( pLD, pLDAPResult, "namingContexts" );
 		}
 		
+		// let's see if this is AD server, if so set a flag so clients can do the right thing
+		CFArrayRef cfGCReady = GetLDAPAttributeFromResult( pLD, pLDAPResult, "isGlobalCatalogReady" );
+		if ( cfGCReady != NULL )
+		{
+			CFDictionarySetValue( cfXMLDict, CFSTR("Active Directory"), kCFBooleanTrue );
+			DbgLog( kLogInfo, "CLDAPv3Plugin::DoNewServerDiscovery - Setting flag that server is Active Directory" );
+			
+			if ( cfNameContext != NULL && CFArrayGetCount(cfNameContext) != 0 ) {
+				CFMutableStringRef domainName = CFStringCreateMutableCopy(kCFAllocatorDefault, 0, 
+																		  (CFStringRef) CFArrayGetValueAtIndex(cfNameContext, 0));
+				
+				CFStringFindAndReplace( domainName, CFSTR(",DC="), CFSTR("."), CFRangeMake(0, CFStringGetLength(domainName)),
+									    kCFCompareCaseInsensitive );
+				CFStringFindAndReplace( domainName, CFSTR("DC="), CFSTR(""), CFRangeMake(0, CFStringGetLength(domainName)),
+									    kCFCompareCaseInsensitive );
+				CFDictionarySetValue( cfXMLDict, CFSTR("Active Directory Domain"), domainName );
+				DSCFRelease( domainName );
+			}
+			
+			DSCFRelease( cfGCReady );
+		}
+		
 		if ( pLDAPResult )
 		{
 			ldap_msgfree( pLDAPResult );
@@ -1365,7 +1463,7 @@ SInt32 CLDAPv3Plugin::DoNewServerDiscovery( sDoPlugInCustomCall *inData )
 		{
 			CFIndex iNumContexts = CFArrayGetCount( cfNameContext );
 			bool	bFound = false;
-			char	*pAttributes2[]  = { "description", NULL };
+			const char	*pAttributes2[]  = { "description", NULL };
 			berval  **pBValues  = NULL;
 			
 			for( CFIndex ii = 0; ii < iNumContexts && !bFound; ii++ )
@@ -1382,7 +1480,7 @@ SInt32 CLDAPv3Plugin::DoNewServerDiscovery( sDoPlugInCustomCall *inData )
 				char *pSearchbase = (char *) calloc( sizeof(char), iLength );
 				CFStringGetCString( cfSearchbase, pSearchbase, iLength, kCFStringEncodingUTF8 );
 				
-				iLDAPRetCode = ldap_search_ext_s( pLD, pSearchbase, LDAP_SCOPE_SUBTREE, "(&(objectclass=organizationalUnit)(ou=macosxodconfig))", pAttributes2, false, NULL, NULL, &stTimeout, 0, &pLDAPResult );
+				iLDAPRetCode = ldap_search_ext_s( pLD, pSearchbase, LDAP_SCOPE_SUBTREE, "(&(objectclass=organizationalUnit)(ou=macosxodconfig))", (char **) pAttributes2, false, NULL, NULL, &stTimeout, 0, &pLDAPResult );
 				
 				if ( iLDAPRetCode == LDAP_SUCCESS )
 				{
@@ -1446,7 +1544,6 @@ SInt32 CLDAPv3Plugin::DoNewServerDiscovery( sDoPlugInCustomCall *inData )
 		
 		CFDictionarySetValue( cfXMLDict, CFSTR(kXMLPortNumberKey), cfPortNumber );
 		CFDictionarySetValue( cfXMLDict, CFSTR(kXMLIsSSLFlagKey), (bSSL ? kCFBooleanTrue : kCFBooleanFalse) );
-		CFDictionarySetValue( cfXMLDict, CFSTR(kXMLLDAPv2ReadOnlyKey), (bLDAPv2ReadOnly ? kCFBooleanTrue : kCFBooleanFalse) );
 		
 		DSCFRelease( cfPortNumber );
 		
@@ -2066,134 +2163,94 @@ SInt32 CLDAPv3Plugin::DoNewServerBind( sDoPlugInCustomCall *inData )
 
 SInt32 CLDAPv3Plugin::DoNewServerBind2( sDoPlugInCustomCall *inData )
 {
-	tDirStatus				siResult				= eDSInvalidNativeMapping;
-	tDirStatus				siResultHost			= eDSRecordNotFound;
-	tDirStatus				siResultLKDC			= eDSRecordNotFound;
-	tDirStatus				siResultFromGetHost		= eDSNoErr;
-	CFMutableDictionaryRef  cfXMLDict				= NULL;
-	char					*pServer				= NULL;
-	char					*pUsername				= NULL;
-	char					*pPassword				= NULL;
-	char					*pComputerID			= NULL;
-	char					*localKDCRealmStr		= NULL;
-	CFDictionaryRef			cfComputerMap			= NULL;
-	tDirReference			dsRef					= 0;
-	tDirNodeReference		dsNodeRef				= 0;
-	tDataNodePtr			pRecType				= dsDataNodeAllocateString( dsRef, kDSStdRecordTypeComputers );
-	tRecordReference		recRef					= 0;
-	tRecordReference		recRefHost				= 0;
-	tRecordReference		recRefLKDC				= 0;
-	tDataBufferPtr			responseDataBufPtr		= dsDataBufferAllocatePriv( 1024 );
-	tDataBufferPtr			sendDataBufPtr			= dsDataBufferAllocatePriv( 1024 );
-	tDataNodePtr			pAuthType				= NULL;
-	tDataNodePtr			pRecName				= NULL;
-	tDataNodePtr			pRecNameHost			= NULL;
-	tDataNodePtr			pRecNameLKDC			= NULL;
-	tDataNodePtr			pAttrName				= NULL;
-	tAttributeEntryPtr		pAttrEntry				= NULL;
-	CFStringRef				cfComputerNameDollar	= NULL;
-	bool					bOverwriteAllowed		= false;
-	tDataList				dataList				= { 0 };
-	char					*kerbIDStr				= NULL;
-	char					pNodeName[255]			= { 0 };
-	char					hostname[512]			= { 0 };
-	char					hostnameList[512]		= { 0 };
+	tDirStatus				siResult					= eDSInvalidNativeMapping;
+	tDirStatus				siResultHost				= eDSRecordNotFound;
+	tDirStatus				siResultLKDC				= eDSRecordNotFound;
+	tDirStatus				siResultFromGetHost			= eDSNoErr;
+	CFMutableDictionaryRef  cfXMLDict					= NULL;
+	char					*pComputerID				= NULL;
+	char					*localKDCRealmStr			= NULL;
+	tDirReference			dsRef						= 0;
+	tDirNodeReference		dsNodeRef					= 0;
+	tRecordReference		recRef						= 0;
+	tRecordReference		recRefHost					= 0;
+	tRecordReference		recRefLKDC					= 0;
+	tDataBufferPtr			responseDataBufPtr			= dsDataBufferAllocatePriv( 1024 );
+	tDataBufferPtr			sendDataBufPtr				= dsDataBufferAllocatePriv( 1024 );
+	bool					bOverwriteAllowed			= false;
+	char					*kerbIDStr					= NULL;
+	char					*pCompPassword				= NULL;
+	char					pNodeName[255]				= { 0 };
+	char					hostname[512]				= { 0 };
+	char					hostnameList[512]			= { 0 };
 	char					hostnameDollar[sizeof(hostname) + 1] = { 0 };
 	char					localKDCRealmDollarStr[256]	= { 0 };
-		
+	DSAPIWrapper			dsWrapper;
+	
+	CLDAPBindData serverInfo( inData->fInRequestData, &cfXMLDict );
+	if ( (siResult = serverInfo.DataValidForBind()) != eDSNoErr )
+		return siResult;
+	
 	try
 	{
-		// we should always have XML data for this process, if we don't, throw an error
-		cfXMLDict = GetXMLFromBuffer( inData->fInRequestData );
-		if ( cfXMLDict == NULL )
-			throw( eDSInvalidBuffFormat );
-		
-		// automatically released, just a Get.
-		CFStringRef cfServer = GetServerInfoFromConfig( cfXMLDict, &pServer, NULL, NULL, &pUsername, &pPassword );
-		if ( cfServer == NULL )
-			throw( eDSInvalidBuffFormat );
-		
 		// we need credentials at this point, if we don't have them throw an error
-		if ( pUsername == NULL || pPassword == NULL )
+		if ( serverInfo.UserName() == NULL || serverInfo.Password() == NULL )
 			throw( eDSAuthParameterError );
 		
 		// let's be sure the Auth flag is not set otherwise we will use the credentials instead of dsDoDirNodeAuth
 		CFDictionarySetValue( cfXMLDict, CFSTR(kXMLSecureUseFlagKey), kCFBooleanFalse );
 		
-		// first let's verify we have a Computer Record mapping, if not thow eDSInvalidNativeMapping error
-		cfComputerMap = CreateMappingFromConfig( cfXMLDict, CFSTR(kDSStdRecordTypeComputers) );
-		if ( cfComputerMap == NULL )
-			throw( eDSNoStdMappingAvailable );
-		
-		// let's grab the computer name cause we'll need it..
-		CFStringRef cfComputerName = (CFStringRef) CFDictionaryGetValue( cfXMLDict, CFSTR(kXMLUserDefinedNameKey) );
-		if ( cfComputerName != NULL && CFGetTypeID(cfComputerName) == CFStringGetTypeID() )
+		// let's grab the computer name because we'll need it..
+		const char *pComputerIDNoDollar = serverInfo.ComputerName();
+		if ( pComputerIDNoDollar != NULL )
 		{
-			cfComputerNameDollar = (CFStringHasSuffix(cfComputerName, CFSTR("$")))
-				? (CFStringRef)CFRetain( cfComputerName ) : CFStringCreateWithFormat( NULL, NULL, CFSTR("%@$"), cfComputerName );
-			UInt32 iLength = (UInt32) CFStringGetMaximumSizeForEncoding( CFStringGetLength(cfComputerNameDollar), kCFStringEncodingUTF8) + 1;
-			pComputerID = (char *) calloc( sizeof(char), iLength );
-			CFStringGetCString( cfComputerNameDollar, pComputerID, iLength, kCFStringEncodingUTF8 );
+			size_t pComputerIDLen = strlen(pComputerIDNoDollar) + 2;
+			pComputerID = (char *) calloc( sizeof(char), pComputerIDLen );
+			if ( pComputerID == NULL )
+				throw( eMemoryError );
+			
+			EnsureDollarSuffix( pComputerIDNoDollar, pComputerIDLen, pComputerID );
 		}
 		else
 		{
-			throw( eDSInvalidRecordName );
+			throw( eDSInvalidBuffFormat );
 		}
 		
-		// let's build our path....
-		siResult = dsOpenDirService( &dsRef );
-		if ( siResult != eDSNoErr )
-			throw( siResult );
+		tDataListPtr nodeString = NodeNameWithHost( serverInfo.Server(), sizeof(pNodeName), pNodeName );
+		if ( nodeString == NULL )
+			throw( eDSInvalidBuffFormat );
 		
-		tDataListPtr nodeString = NodeNameWithHost( pServer, sizeof(pNodeName), pNodeName );
-		siResult = dsOpenDirNode( dsRef, nodeString, &dsNodeRef );
+		siResult = dsWrapper.OpenNodeByName( nodeString, serverInfo.UserName(), serverInfo.Password() );
+		
 		dsDataListDeallocatePriv( nodeString );
 		free( nodeString );
 		
+		dsRef = dsWrapper.GetDSRef();
+		dsNodeRef = dsWrapper.GetCurrentNodeRef();
+		
 		if ( siResult != eDSNoErr )
 		{
-			DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Unable to open Directory Node %s", pNodeName );
-			throw( siResult );
-		}
-		
-		UInt32			iNameLen		= strlen( pUsername );
-		UInt32			iPassLen		= strlen( pPassword );
-		UInt32			authDataSize	= iNameLen + iPassLen + (2 * sizeof(UInt32));
-		
-		pAuthType = dsDataNodeAllocateString( dsRef, kDSStdAuthNodeNativeNoClearText );
-		
-		sendDataBufPtr->fBufferLength = authDataSize;
-		
-		/* store user name and password into the auth buffer in the correct format */
-		siResult = dsFillAuthBuffer( sendDataBufPtr, 2, iNameLen, pUsername, iPassLen, pPassword );
-		if ( siResult != eDSNoErr )
-			throw( siResult );
-		
-		DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Attempting to authenticate as provided user - %s", pUsername );
-		
-		if ( (siResult = dsDoDirNodeAuth( dsNodeRef, pAuthType, false, sendDataBufPtr, responseDataBufPtr, 0)) != eDSNoErr )
-		{
-			// if the user is an imported user on a different node, skip auth bind.
-			if ( siResult == eNotHandledByThisNode ) {
-				siResult = eDSNoErr;
-				throw( eDSNoErr );
+			if ( dsNodeRef == 0 )
+			{
+				DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Unable to open Directory Node %s", pNodeName );
 			}
-			DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Credentials for %s failed", pUsername );
+			else
+			{
+				if ( siResult == eNotHandledByThisNode ) {
+					siResult = eDSNoErr;
+					throw( eDSNoErr );
+				}
+				DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Unable to authenticate as provided user - %s", serverInfo.UserName() );
+			}
+			
 			throw( siResult );
-		}
-		
-		if ( pAuthType != NULL )
-		{
-			dsDataNodeDeAllocate( dsRef, pAuthType );
-			pAuthType = NULL;
 		}
 		
 		// let's try to open the 3 Computer Records
 		bOverwriteAllowed = (inData->fInRequestCode != eDSCustomCallLDAPv3NewServerBind &&
 							 inData->fInRequestCode != eDSCustomCallLDAPv3NewServerBindOther);
 		
-		pRecName = dsDataNodeAllocateString( dsRef, pComputerID );
-		siResult = dsOpenRecord( dsNodeRef, pRecType, pRecName, &recRef );
+		siResult = dsWrapper.OpenRecord( kDSStdRecordTypeComputers, pComputerID, &recRef, false );
 		if ( siResult == eDSNoErr && !bOverwriteAllowed ) {
 			DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Existing computer record %s", pComputerID );
 			throw( eDSRecordAlreadyExists );
@@ -2208,8 +2265,7 @@ SInt32 CLDAPv3Plugin::DoNewServerBind2( sDoPlugInCustomCall *inData )
 		if ( siResultFromGetHost != eDSUnknownHost )
 		{
 			EnsureDollarSuffix( hostname, sizeof(hostnameDollar), hostnameDollar );
-			pRecNameHost = dsDataNodeAllocateString( dsRef, hostnameDollar );
-			siResultHost = dsOpenRecord( dsNodeRef, pRecType, pRecNameHost, &recRefHost );
+			siResultHost = dsWrapper.OpenRecord( kDSStdRecordTypeComputers, hostnameDollar, &recRefHost, false );
 			if ( siResultHost == eDSNoErr && !bOverwriteAllowed ) {
 				DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Existing computer record %s", hostnameDollar );
 				throw( eDSRecordAlreadyExists );
@@ -2220,66 +2276,334 @@ SInt32 CLDAPv3Plugin::DoNewServerBind2( sDoPlugInCustomCall *inData )
 		if ( localKDCRealmStr != NULL )
 		{
 			EnsureDollarSuffix( localKDCRealmStr, sizeof(localKDCRealmDollarStr), localKDCRealmDollarStr );
-			pRecNameLKDC = dsDataNodeAllocateString( dsRef, localKDCRealmDollarStr );
-			siResultLKDC = dsOpenRecord( dsNodeRef, pRecType, pRecNameLKDC, &recRefLKDC );
+			siResultLKDC = dsWrapper.OpenRecord( kDSStdRecordTypeComputers, localKDCRealmDollarStr, &recRefLKDC, false );
 			if ( siResultLKDC == eDSNoErr && !bOverwriteAllowed ) {
 				DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Existing computer record %s", localKDCRealmDollarStr );
 				throw( eDSRecordAlreadyExists );
 			}
 		}
 		
-		// before any computer records are created, make sure the existing ones
-		// have the same owner.
-		if ( !OwnerGUIDsMatch( dsRef, recRef, recRefHost, recRefLKDC ) )
+		// Set the Password for the record - 20 characters long.. will be complex..
+		pCompPassword = GenerateRandomComputerPassword();
+		
+		bool bNeedsMultipleComputerRecords = !OverlaySupportsUniqueNameEnforcement( serverInfo.Server(), serverInfo.SSL() );
+		DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - LDAP Server supports single computer record: %s", 
+				bNeedsMultipleComputerRecords ? "FALSE" : "TRUE" );
+		if ( bNeedsMultipleComputerRecords )
 		{
-			DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Owner GUIDs in Computer records don't match" );
-			throw( eDSPermissionError );
+			siResult = DoNewServerBind2a( inData, dsWrapper, serverInfo, recRef, recRefHost, recRefLKDC, pComputerID,
+							pCompPassword, hostnameDollar, localKDCRealmDollarStr );
+		}
+		else
+		{
+			siResult = DoNewServerBind2b( inData, dsWrapper, serverInfo, recRef, recRefHost, recRefLKDC, pComputerID,
+							pCompPassword, hostnameDollar, localKDCRealmDollarStr );
 		}
 		
+		if ( inData->fInRequestCode == eDSCustomCallLDAPv3NewServerBindOther ||
+			 inData->fInRequestCode == eDSCustomCallLDAPv3NewServerForceBindOther )
+		{
+			if ( serverInfo.EnetAddress() != NULL )
+			{
+				// remove it from the dictionary cause this isn't normally in the config...
+				CFDictionaryRemoveValue( cfXMLDict, CFSTR(kDS1AttrENetAddress) );
+			}
+		}
+		
+		// let's just error out here with a permission error as the server may have denied adding the additional names
+		// due to lack of permissions on the record that already has them
+		if ( siResult == eDSSchemaError ) {
+			siResult = eDSPermissionError;
+		}
+		
+		// Kerberosv5 Authentication Authority
+		if ( siResult == eDSNoErr )
+		{
+			// make password CFDataRef from the beginning
+			CFDataRef   cfPassword = CFDataCreate( kCFAllocatorDefault, (UInt8*)pCompPassword, strlen(pCompPassword) );
+			CFStringRef cfQualifier = NULL;
+			
+			CFStringRef cfMapBase = (CFStringRef) CFDictionaryGetValue( serverInfo.ComputerMap(), CFSTR(kXMLSearchBase) );
+			
+			// let's get the record name qualifier..
+			GetAttribFromRecordDict( serverInfo.ComputerMap(), CFSTR(kDSNAttrRecordName), NULL, &cfQualifier );
+			
+			// let's compose the fully qualified DN for the computerAccount
+			CFStringRef cfDN = NULL;
+			CFStringRef computerID = CFStringCreateWithCString( kCFAllocatorDefault, pComputerID, kCFStringEncodingUTF8 );
+			if ( computerID != NULL ) {
+				cfDN = CFStringCreateWithFormat( kCFAllocatorDefault, NULL, CFSTR("%@=%@,%@"), cfQualifier, computerID, cfMapBase );
+				CFRelease( computerID );
+			}
+			
+			if ( cfDN != NULL )
+			{
+				// success.. let's store the password in the configuration now..
+				CFDictionarySetValue( cfXMLDict, CFSTR(kXMLSecureUseFlagKey), kCFBooleanTrue );
+				CFDictionarySetValue( cfXMLDict, CFSTR(kXMLServerAccountKey), cfDN );
+				CFDictionarySetValue( cfXMLDict, CFSTR(kXMLServerPasswordKey), cfPassword );
+				CFDictionarySetValue( cfXMLDict, CFSTR(kXMLBoundDirectoryKey), kCFBooleanTrue );
+				
+				SetComputerRecordKerberosAuthority( dsWrapper, pCompPassword, kDSStdRecordTypeComputers, pComputerID, cfXMLDict, &kerbIDStr );
+				
+				if ( bNeedsMultipleComputerRecords )
+				{
+					SetComputerRecordKerberosAuthority( dsWrapper, pCompPassword, kDSStdRecordTypeComputers, hostnameDollar, NULL, NULL );
+					SetComputerRecordKerberosAuthority( dsWrapper, pCompPassword, kDSStdRecordTypeComputers, localKDCRealmDollarStr, NULL, NULL );
+				}
+				
+				CFRelease( cfDN );
+				cfDN = NULL;
+			}
+			
+			CFRelease( cfPassword );
+			cfPassword = NULL;
+			
+			// Create our service principals in our directory's KDC
+			CLDAPPlugInPrefs prefsFile;
+			DSPrefs prefs = {0};
+			prefsFile.GetPrefs( &prefs );
+			
+			char *realm = kerbIDStr ? rindex(kerbIDStr, '@') : NULL;
+			if ( siResultFromGetHost != eDSUnknownHost && realm != NULL )
+			{
+				realm++;
+				
+				VerifyKerberosForRealm( realm, realm );
+				
+				strlcpy( hostnameList, hostname, sizeof(hostnameList) );
+				
+				// Create Desktop KDC service principals if there is a KDC
+				if ( localKDCRealmStr != NULL )
+				{
+					strlcat( hostnameList, ",", sizeof(hostnameList) );
+					strlcat( hostnameList, localKDCRealmStr, sizeof(hostnameList) );
+				}
+				
+				siResult = dsFillAuthBuffer(
+								sendDataBufPtr, 5,
+								strlen(hostnameDollar), hostnameDollar,
+								strlen(pCompPassword), pCompPassword,
+								strlen(prefs.services), prefs.services,
+								strlen(hostnameList), hostnameList,
+								strlen(realm), realm );
+				
+				responseDataBufPtr->fBufferLength = 0;
+				
+				siResult = dsWrapper.DoDirNodeAuthOnRecordType( kDSStdAuthSetComputerAcctPasswdAsRoot, true,
+											sendDataBufPtr, responseDataBufPtr, 0, kDSStdRecordTypeComputers );
+				if ( siResult == eDSNoErr )
+				{
+					AddServicePrincipalListToKeytab(
+							prefs.services,
+							hostname, realm, pCompPassword,
+							kKerberosConfigureServices,
+							serverInfo.UserName(), serverInfo.Password() );
+					
+					if ( localKDCRealmStr != NULL )
+					{
+						AddServicePrincipalListToKeytab(
+								prefs.services,
+								localKDCRealmStr, realm, pCompPassword,
+								kKerberosDoNotConfigureServices,
+								NULL, NULL );
+						
+						// xgrid can handle more than one service principal
+						if ( strstr(prefs.services, "xgrid") != NULL )
+						{
+							CFMutableStringRef princString = CFStringCreateMutable( kCFAllocatorDefault, 0 );
+							if ( princString != NULL ) {
+								CFStringAppend( princString, CFSTR("xgrid/") );
+								CFStringAppendCString( princString, localKDCRealmStr, kCFStringEncodingUTF8 );
+								CFStringAppend( princString, CFSTR("@") );
+								CFStringAppendCString( princString, realm, kCFStringEncodingUTF8 );
+								
+								AddXGridPrincipal( princString );
+								CFRelease( princString );
+							}
+						}
+					}
+				}
+				else
+				{
+					DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Error %d attempting to create service principals for Computer account - %s", siResult, pComputerID );
+				}
+			}
+			else
+			{
+				DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - could not create service principals due to missing data. Hostname = %s, realm = %s",
+						hostname[0] ? hostname : "<empty>", realm ? realm : "<empty>" );
+			}
+			
+			// now if we have a realm, let's spawn slapconfig
+			struct stat sb;
+			if ( realm != NULL && lstat("/usr/sbin/slapconfig", &sb) == 0 && sb.st_uid == 0 && (sb.st_mode & S_IFREG) == S_IFREG )
+			{
+				register pid_t childPID = -1;
+				char *argv[] = { "/usr/sbin/slapconfig", "-enableproxyusers", realm, NULL };
+
+				// we don't care about status
+				if ( posix_spawn(&childPID, argv[0], NULL, NULL, argv, NULL) == 0 && childPID != -1 )
+				{
+					int nStatus;
+
+					while ( waitpid(childPID, &nStatus, 0) == -1 && errno != ECHILD );
+				}
+			}
+			
+			siResult = eDSNoErr;
+		}
+		else
+		{
+			DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Error %d attempting to set Password for Computer account - %s",
+					siResult, pComputerID );
+		}
+	}
+	catch( tDirStatus iError ) {
+		siResult = iError;
+	}
+	catch( ... ) {
+		// catch all for miss throws...
+		siResult = eUndefinedError;
+	}
+	
+	DSFreePassword( pCompPassword );
+	
+	if ( recRef != 0 )
+	{
+		dsCloseRecord( recRef );
+		recRef = 0;
+	}
+	if ( recRefHost != 0 )
+	{
+		dsCloseRecord( recRefHost );
+		recRefHost = 0;
+	}
+	if ( recRefLKDC != 0 )
+	{
+		dsCloseRecord( recRefLKDC );
+		recRefLKDC = 0;
+	}
+	
+	DSFreeString( kerbIDStr );
+				
+	if ( sendDataBufPtr != NULL )
+	{
+		dsDataBufferDeallocatePriv( sendDataBufPtr );
+		sendDataBufPtr = NULL;
+	}
+	
+	if ( responseDataBufPtr != NULL )
+	{
+		dsDataBufferDeallocatePriv( responseDataBufPtr );
+		responseDataBufPtr = NULL;
+	}
+	
+	DSFreeString( pComputerID );
+	DSFreeString( localKDCRealmStr );
+	
+	if ( cfXMLDict != NULL )
+	{
+		if ( siResult == eDSNoErr )
+		{
+			tDirStatus iError = (tDirStatus)PutXMLInBuffer( cfXMLDict, inData->fOutRequestResponse );
+			if ( iError != eDSNoErr ) {
+				siResult = iError;
+			}
+		}
+		
+		CFRelease( cfXMLDict );
+		cfXMLDict = NULL;
+	}
+	
+	return (SInt32)siResult;
+} // DoNewServerBind2
+
+
+// ---------------------------------------------------------------------------
+//	* DoNewServerBind2a
+//
+//	Returns: tDirStatus
+//
+//	Performs the original binding style with three computer records to
+//	protect the Kerberos service principal namespace.
+// ---------------------------------------------------------------------------
+
+tDirStatus
+CLDAPv3Plugin::DoNewServerBind2a(
+	sDoPlugInCustomCall *inData,
+	DSAPIWrapper &dsWrapper,
+	CLDAPBindData &serverInfo,
+	tRecordReference recRef,
+	tRecordReference recRefHost,
+	tRecordReference recRefLKDC,
+	const char *pComputerID,
+	const char *pCompPassword,
+	const char *hostnameDollar,
+	const char *localKDCRealmDollarStr )
+{
+	tDirStatus				siResult					= eDSInvalidNativeMapping;
+	tDirReference			dsRef						= dsWrapper.GetDSRef();
+	tDataBufferPtr			responseDataBufPtr			= dsDataBufferAllocatePriv( 1024 );
+	tDataBufferPtr			sendDataBufPtr				= dsDataBufferAllocatePriv( 1024 );
+	tDataNodePtr			pAttrName					= NULL;
+	tAttributeEntryPtr		pAttrEntry					= NULL;
+	tDataList				dataList					= { 0 };
+	
+	try
+	{		
 		if ( recRef == 0 )
 		{
 			// create the computer record
-			DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Attempting to Create computer record and open - %s", pComputerID );
+			DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Attempting to Create computer record and open - %s",
+					pComputerID );
 			
-			siResult = dsCreateRecordAndOpen( dsNodeRef, pRecType, pRecName, &recRef );
+			siResult = dsWrapper.OpenRecord( kDSStdRecordTypeComputers, pComputerID, &recRef, true );
 			if ( siResult != eDSNoErr )
 			{
-				DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Error %d attempting to Create computer record and open - %s",
+				DbgLog( kLogPlugin,
+						"CLDAPv3Plugin: Bind Request - Error %d attempting to Create computer record and open - %s",
 						siResult, pComputerID );
 				throw( siResult );
 			}
 		}
 		
-		if ( siResultFromGetHost != eDSUnknownHost && recRefHost == 0 &&
-			 strcmp(pComputerID, hostnameDollar) != 0 )
+		if ( !DSIsStringEmpty(hostnameDollar) )
 		{
-			// create the computer record
-			DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Attempting to Create computer record and open - %s", hostnameDollar );
-			
-			siResult = dsCreateRecordAndOpen( dsNodeRef, pRecType, pRecNameHost, &recRefHost );
-			if ( siResult != eDSNoErr )
+			if ( recRefHost == 0 && strcmp(pComputerID, hostnameDollar) != 0 )
 			{
-				DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Error %d attempting to Create computer record and open - %s",
-						siResult, hostnameDollar );
-				throw( siResult );
+				// create the computer record
+				DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Attempting to Create computer record and open - %s",
+						hostnameDollar );
+				
+				siResult = dsWrapper.OpenRecord( kDSStdRecordTypeComputers, hostnameDollar, &recRefHost, true );
+				if ( siResult != eDSNoErr )
+				{
+					DbgLog( kLogPlugin,
+							"CLDAPv3Plugin: Bind Request - Error %d attempting to Create computer record and open - %s",
+							siResult, hostnameDollar );
+					throw( siResult );
+				}
+			}
+			else if ( recRefHost != 0 && strcmp(pComputerID, hostnameDollar) == 0 )
+			{
+				dsCloseRecord( recRefHost );
+				recRefHost = 0;
 			}
 		}
-		else if ( recRefHost != 0 && strcmp(pComputerID, hostnameDollar) == 0 )
-		{
-			dsCloseRecord( recRefHost );
-			recRefHost = 0;
-		}
 		
-		if ( localKDCRealmStr != NULL && recRefLKDC == 0 &&
+		if ( !DSIsStringEmpty(localKDCRealmDollarStr) && recRefLKDC == 0 &&
 			 strcmp(pComputerID, localKDCRealmDollarStr) != 0 )
 		{
 			// create the computer record
-			DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Attempting to Create computer record and open - %s", localKDCRealmDollarStr );
+			DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Attempting to Create computer record and open - %s",
+					localKDCRealmDollarStr );
 			
-			siResult = dsCreateRecordAndOpen( dsNodeRef, pRecType, pRecNameLKDC, &recRefLKDC );
+			siResult = dsWrapper.OpenRecord( kDSStdRecordTypeComputers, localKDCRealmDollarStr, &recRefLKDC, true );
 			if ( siResult != eDSNoErr )
 			{
-				DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Error %d attempting to Create computer record and open - %s",
+				DbgLog( kLogPlugin,
+						"CLDAPv3Plugin: Bind Request - Error %d attempting to Create computer record and open - %s",
 						siResult, localKDCRealmDollarStr );
 				throw( siResult );
 			}
@@ -2382,36 +2706,40 @@ SInt32 CLDAPv3Plugin::DoNewServerBind2( sDoPlugInCustomCall *inData )
 			pAttrEntry = NULL;
 		}
 		
-		CFStringRef cfEnetAddr = NULL;
-		if ( inData->fInRequestCode == eDSCustomCallLDAPv3NewServerBindOther || inData->fInRequestCode == eDSCustomCallLDAPv3NewServerForceBindOther )
+		char *pLinkAddr = NULL;
+		
+		if ( inData->fInRequestCode == eDSCustomCallLDAPv3NewServerBindOther ||
+			 inData->fInRequestCode == eDSCustomCallLDAPv3NewServerForceBindOther )
 		{
-			CFStringRef cfTempAddr = (CFStringRef) CFDictionaryGetValue( cfXMLDict, CFSTR(kDS1AttrENetAddress) );
-			if ( cfTempAddr != NULL && CFGetTypeID(cfTempAddr) == CFStringGetTypeID() )
+			if ( serverInfo.EnetAddress() != NULL )
 			{
-				CFRetain( cfTempAddr ); // need to retain cause we release it in a little while
-				cfEnetAddr = cfTempAddr;
+				pLinkAddr = strdup( serverInfo.EnetAddress() );
 				DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Received MAC Address for bind other request" );
 			}
 			else
 			{
 				DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Did not receive MAC Address for bind other request" );
 			}
-			// remove it from the dictionary cause this isn't normally in the config...
-			CFDictionaryRemoveValue( cfXMLDict, CFSTR(kDS1AttrENetAddress) );
 		}
 		else
 		{
+			CFStringRef cfEnetAddr = NULL;
 			GetMACAddress( &cfEnetAddr, NULL, true );
+			if ( cfEnetAddr != NULL )
+			{
+				UInt32 iLength = (UInt32) CFStringGetMaximumSizeForEncoding( CFStringGetLength(cfEnetAddr), kCFStringEncodingUTF8 ) + 1;
+				pLinkAddr = (char *) calloc( sizeof(char), iLength );
+				if ( pLinkAddr != NULL )
+					CFStringGetCString( cfEnetAddr, pLinkAddr, iLength, kCFStringEncodingUTF8 );
+				DSCFRelease( cfEnetAddr );
+			}
+			
 			DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Determined MAC Address from local host information" );
 		}
-
+		
 		// Set the macAddress - CFSTR(kDS1AttrENetAddress) -- needs to be en0 - for Managed Client Settings
-		if ( cfEnetAddr )
+		if ( pLinkAddr != NULL )
 		{
-			UInt32 iLength = (UInt32) CFStringGetMaximumSizeForEncoding( CFStringGetLength(cfEnetAddr), kCFStringEncodingUTF8) + 1;
-			char *pLinkAddr = (char *) calloc( sizeof(char), iLength );
-			CFStringGetCString( cfEnetAddr, pLinkAddr, iLength, kCFStringEncodingUTF8 );
-
 			pAttrName = dsDataNodeAllocateString( dsRef, kDS1AttrENetAddress );
 
 			dsBuildListFromStringsAlloc( dsRef, &dataList, pLinkAddr, NULL );
@@ -2440,7 +2768,6 @@ SInt32 CLDAPv3Plugin::DoNewServerBind2( sDoPlugInCustomCall *inData )
 			dsDataListDeallocatePriv( &dataList );
 
 			DSFreeString( pLinkAddr );
-			DSCFRelease( cfEnetAddr );
 			
 			if ( siResult != eDSNoErr && siResult != eDSNoStdMappingAvailable )
 			{
@@ -2448,11 +2775,6 @@ SInt32 CLDAPv3Plugin::DoNewServerBind2( sDoPlugInCustomCall *inData )
 				throw( siResult );
 			}
 		}
-		
-		// Set the Password for the record - 20 characters long.. will be complex..
-		char *pCompPassword = GenerateRandomComputerPassword();
-		
-		pAuthType = dsDataNodeAllocateString( dsRef, kDSStdAuthSetPasswdAsRoot );
 		
 		siResult = dsFillAuthBuffer(
 						sendDataBufPtr, 2,
@@ -2463,7 +2785,8 @@ SInt32 CLDAPv3Plugin::DoNewServerBind2( sDoPlugInCustomCall *inData )
 			throw( siResult );
 		
 		DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Attempting to set Password for Computer account - %s", pComputerID );
-		siResult = dsDoDirNodeAuthOnRecordType( dsNodeRef, pAuthType, true, sendDataBufPtr, responseDataBufPtr, 0, pRecType );
+		siResult = dsWrapper.DoDirNodeAuthOnRecordType( kDSStdAuthSetPasswdAsRoot, true, sendDataBufPtr, responseDataBufPtr, 0,
+						kDSStdRecordTypeComputers );	
 		if ( siResult == eDSNoErr )
 		{
 			// Set again for the Host record
@@ -2476,10 +2799,11 @@ SInt32 CLDAPv3Plugin::DoNewServerBind2( sDoPlugInCustomCall *inData )
 				throw( siResult );
 			
 			DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Attempting to set Password for Computer account - %s", hostnameDollar );
-			siResult = dsDoDirNodeAuthOnRecordType( dsNodeRef, pAuthType, true, sendDataBufPtr, responseDataBufPtr, 0, pRecType );
+			siResult = dsWrapper.DoDirNodeAuthOnRecordType( kDSStdAuthSetPasswdAsRoot, true, sendDataBufPtr, responseDataBufPtr, 0,
+						kDSStdRecordTypeComputers );
 			
 			// Set again for the LKDC record
-			if ( localKDCRealmStr != NULL )
+			if ( !DSIsStringEmpty(localKDCRealmDollarStr) )
 			{
 				siResult = dsFillAuthBuffer(
 								sendDataBufPtr, 2,
@@ -2489,144 +2813,11 @@ SInt32 CLDAPv3Plugin::DoNewServerBind2( sDoPlugInCustomCall *inData )
 				if ( siResult == eDSNoErr )
 				{
 					DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Attempting to set Password for Computer account - %s", localKDCRealmDollarStr );
-					siResult = dsDoDirNodeAuthOnRecordType( dsNodeRef, pAuthType, true, sendDataBufPtr, responseDataBufPtr, 0, pRecType );
+					siResult = dsWrapper.DoDirNodeAuthOnRecordType( kDSStdAuthSetPasswdAsRoot, true, sendDataBufPtr, responseDataBufPtr, 0,
+						kDSStdRecordTypeComputers );
 				}
 			}
 		}
-		
-		// Kerberosv5 Authentication Authority
-		if ( siResult == eDSNoErr )
-		{
-			// make password CFDataRef from the beginning
-			CFDataRef   cfPassword = CFDataCreate( kCFAllocatorDefault, (UInt8*)pCompPassword, strlen(pCompPassword) );
-			CFStringRef cfQualifier = NULL;
-			
-			CFStringRef cfMapBase = (CFStringRef) CFDictionaryGetValue( cfComputerMap, CFSTR(kXMLSearchBase) );
-			
-			// let's get the record name qualifier..
-			GetAttribFromRecordDict( cfComputerMap, CFSTR(kDSNAttrRecordName), NULL, &cfQualifier );
-			
-			// let's compose the fully qualified DN for the computerAccount
-			CFStringRef cfDN = CFStringCreateWithFormat( kCFAllocatorDefault, NULL, CFSTR("%@=%@,%@"), cfQualifier,
-									cfComputerNameDollar, cfMapBase );
-			
-			if ( cfDN != NULL )
-			{
-				// success.. let's store the password in the configuration now..
-				CFDictionarySetValue( cfXMLDict, CFSTR(kXMLSecureUseFlagKey), kCFBooleanTrue );
-				CFDictionarySetValue( cfXMLDict, CFSTR(kXMLServerAccountKey), cfDN );
-				CFDictionarySetValue( cfXMLDict, CFSTR(kXMLServerPasswordKey), cfPassword );
-				CFDictionarySetValue( cfXMLDict, CFSTR(kXMLBoundDirectoryKey), kCFBooleanTrue );
-				
-				SetComputerRecordKerberosAuthority( dsRef, dsNodeRef, pCompPassword, pRecType, pRecName, cfXMLDict, &kerbIDStr );
-				SetComputerRecordKerberosAuthority( dsRef, dsNodeRef, pCompPassword, pRecType, pRecNameHost, NULL, NULL );
-				SetComputerRecordKerberosAuthority( dsRef, dsNodeRef, pCompPassword, pRecType, pRecNameLKDC, NULL, NULL );
-				
-				CFRelease( cfDN );
-				cfDN = NULL;
-			}
-			
-			CFRelease( cfPassword );
-			cfPassword = NULL;
-			
-			// Create our service principals in our directory's KDC
-			if ( pAuthType != NULL )
-				dsDataNodeDeAllocate( dsRef, pAuthType );
-			pAuthType = dsDataNodeAllocateString( dsRef, kDSStdAuthSetComputerAcctPasswdAsRoot );
-			CLDAPPlugInPrefs prefsFile;
-			DSPrefs prefs = {0};
-			prefsFile.GetPrefs( &prefs );
-			
-			char *realm = kerbIDStr ? rindex(kerbIDStr, '@') : NULL;
-			if ( siResultFromGetHost != eDSUnknownHost && realm != NULL )
-			{
-				realm++;
-				
-				VerifyKerberosForRealm( realm, realm );
-				
-				strlcpy( hostnameList, hostname, sizeof(hostnameList) );
-				
-				// Create Desktop KDC service principals if there is a KDC
-				if ( localKDCRealmStr != NULL )
-				{
-					strlcat( hostnameList, ",", sizeof(hostnameList) );
-					strlcat( hostnameList, localKDCRealmStr, sizeof(hostnameList) );
-				}
-				
-				siResult = dsFillAuthBuffer(
-								sendDataBufPtr, 5,
-								strlen(hostnameDollar), hostnameDollar,
-								strlen(pCompPassword), pCompPassword,
-								strlen(prefs.services), prefs.services,
-								strlen(hostnameList), hostnameList,
-								strlen(realm), realm );
-				
-				responseDataBufPtr->fBufferLength = 0;
-				
-				siResult = dsDoDirNodeAuthOnRecordType( dsNodeRef, pAuthType, true, sendDataBufPtr, responseDataBufPtr, 0, pRecType );
-				if ( siResult == eDSNoErr )
-				{
-					AddServicePrincipalListToKeytab(
-							prefs.services,
-							hostname, realm, pCompPassword,
-							kKerberosConfigureServices,
-							pUsername, pPassword );
-					
-					if ( localKDCRealmStr != NULL )
-					{
-						AddServicePrincipalListToKeytab(
-								prefs.services,
-								localKDCRealmStr, realm, pCompPassword,
-								kKerberosDoNotConfigureServices,
-								NULL, NULL );
-						
-						// xgrid can handle more than one service principal
-						if ( strstr(prefs.services, "xgrid") != NULL )
-						{
-							CFStringRef princString = CFStringCreateWithFormat(NULL, NULL, CFSTR("xgrid/%s@%s"), localKDCRealmStr, realm );
-							AddXGridPrincipal( princString );
-							CFRelease( princString );
-						}
-					}
-				}
-				else
-				{
-					DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Error %d attempting to create service principals for Computer account - %s", siResult, pComputerID );
-				}
-			}
-			else
-			{
-				DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - could not create service principals due to missing data. Hostname = %s, realm = %s",
-						hostname[0] ? hostname : "<empty>", realm ? realm : "<empty>" );
-			}
-			
-			// now if we have a realm, let's spawn slapconfig
-			struct stat sb;
-			if ( realm != NULL && lstat("/usr/sbin/slapconfig", &sb) == 0 && sb.st_uid == 0 && (sb.st_mode & S_IFREG) == S_IFREG )
-			{
-				register pid_t childPID = -1;
-				char *argv[] = { "/usr/sbin/slapconfig", "-enableproxyusers", realm, NULL };
-
-				// we don't care about status
-				if ( posix_spawn(&childPID, argv[0], NULL, NULL, argv, NULL) == 0 && childPID != -1 )
-				{
-					int nStatus;
-
-					while ( waitpid(childPID, &nStatus, 0) == -1 && errno != ECHILD );
-				}
-			}
-			
-			siResult = eDSNoErr;
-		}
-		else
-		{
-			DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Error %d attempting to set Password for Computer account - %s",
-					siResult, pComputerID );
-		}
-		
-		DSFreePassword( pCompPassword );
-		
-		dsCloseRecord( recRef );
 	}
 	catch( tDirStatus iError ) {
 		siResult = iError;
@@ -2636,44 +2827,12 @@ SInt32 CLDAPv3Plugin::DoNewServerBind2( sDoPlugInCustomCall *inData )
 		siResult = eUndefinedError;
 	}
 	
-	if ( recRefHost != 0 )
+	if ( pAttrName != NULL )
 	{
-		dsCloseRecord( recRefHost );
-		recRefHost = 0;
-	}
-	if ( recRefLKDC != 0 )
-	{
-		dsCloseRecord( recRefLKDC );
-		recRefLKDC = 0;
+		dsDataNodeDeAllocate( dsRef, pAttrName );
+		pAttrName = NULL;
 	}
 	
-	DSCFRelease( cfComputerNameDollar );
-	DSFreeString( kerbIDStr );
-	
-	if ( pRecName != NULL )
-	{
-		dsDataNodeDeAllocate( dsRef, pRecName );
-		pRecName = NULL;
-	}
-		
-	if ( pRecNameHost != NULL )
-	{
-		dsDataNodeDeAllocate( dsRef, pRecNameHost );
-		pRecNameHost = NULL;
-	}
-	
-	if ( pRecNameLKDC != NULL )
-	{
-		dsDataNodeDeAllocate( dsRef, pRecNameLKDC );
-		pRecNameLKDC = NULL;
-	}
-	
-	if ( pAuthType != NULL )
-	{
-		dsDataNodeDeAllocate( dsRef, pAuthType );
-		pAuthType = NULL;
-	}
-		
 	if ( sendDataBufPtr != NULL )
 	{
 		dsDataBufferDeallocatePriv( sendDataBufPtr );
@@ -2686,47 +2845,406 @@ SInt32 CLDAPv3Plugin::DoNewServerBind2( sDoPlugInCustomCall *inData )
 		responseDataBufPtr = NULL;
 	}
 	
-	DSCFRelease( cfComputerMap );
-	DSFreeString( pServer );
-	DSFreeString( pUsername );
-	DSFreePassword( pPassword );
-	DSFreeString( pComputerID );
-	DSFreeString( localKDCRealmStr );
-	
-	if ( pRecType != NULL )
-	{
-		dsDataNodeDeAllocate( dsRef, pRecType );
-		pRecType = NULL;
-	}
+	return siResult;
+} // DoNewServerBind2a
 
-	if ( dsNodeRef )
-	{
-		dsCloseDirNode( dsNodeRef );
-		dsNodeRef = 0;
-	}
-	
-	if ( dsRef )
-	{
-		dsCloseDirService( dsRef );
-		dsRef = 0;
-	}
 
-	if ( cfXMLDict != NULL )
-	{
-		if ( siResult == eDSNoErr )
+// ---------------------------------------------------------------------------
+//	* DoNewServerBind2b
+//
+//	Returns: tDirStatus
+//
+//	Performs the updated binding style with three record names in a single
+//	record to protect the Kerberos service principal namespace.
+// ---------------------------------------------------------------------------
+
+tDirStatus
+CLDAPv3Plugin::DoNewServerBind2b(
+	sDoPlugInCustomCall *inData,
+	DSAPIWrapper &dsWrapper,
+	CLDAPBindData &serverInfo,
+	tRecordReference recRef,
+	tRecordReference recRefHost,
+	tRecordReference recRefLKDC,
+	const char *pComputerID,
+	const char *pCompPassword,
+	const char *hostnameDollar,
+	const char *localKDCRealmDollarStr )
+{
+	tDirStatus				siResult					= eDSInvalidNativeMapping;
+	tDirReference			dsRef						= 0;
+	tDataBufferPtr			responseDataBufPtr			= dsDataBufferAllocatePriv( 1024 );
+	tDataBufferPtr			sendDataBufPtr				= dsDataBufferAllocatePriv( 1024 );
+	tDataNodePtr			pAttrName					= NULL;
+	tAttributeEntryPtr		pAttrEntry					= NULL;
+	tDataList				dataList					= { 0 };
+
+	try
+	{		
+		if ( recRef == 0 )
 		{
-			tDirStatus iError = (tDirStatus)PutXMLInBuffer( cfXMLDict, inData->fOutRequestResponse );
-			if ( iError != eDSNoErr ) {
-				siResult = iError;
+			// create the computer record
+			DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Attempting to Create computer record and open - %s", pComputerID );
+			
+			siResult = dsWrapper.OpenRecord( kDSStdRecordTypeComputers, pComputerID, &recRef, true );
+			if ( siResult != eDSNoErr )
+			{
+				DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Error %d attempting to Create computer record and open - %s",
+						siResult, pComputerID );
+				throw( siResult );
 			}
 		}
 		
-		CFRelease( cfXMLDict );
-		cfXMLDict = NULL;
+		if ( recRef != 0 && recRefHost != 0 )
+		{
+			char *recName1 = dsWrapper.CopyRecordName( recRef );
+			char *recName2 = dsWrapper.CopyRecordName( recRefHost );
+			
+			if ( recName1 != NULL && recName2 != NULL && strcmp(recName1, recName2) == 0 )
+			{
+				dsCloseRecord( recRefHost );
+				recRefHost = 0;
+				hostnameDollar = NULL;
+				DbgLog( kLogInfo, "CLDAPv3Plugin: Bind Request - Main Record and Host record are same record closing Host record" );
+			}
+			
+			DSFree( recName1 );
+			DSFree( recName2 );
+		}
+		
+		if ( !DSIsStringEmpty(hostnameDollar) )
+		{
+			if ( strcmp(pComputerID, hostnameDollar) != 0 )
+			{
+				// add hostnameDollar as a short-name to the computer record
+				DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Attempting to add secondary name - %s",
+						hostnameDollar );
+				
+				siResult = dsWrapper.AddShortName( recRef, hostnameDollar );
+				if ( siResult == eDSNoErr || siResult == eDSSchemaError )
+				{
+					if ( recRefHost != 0 )
+					{
+						tDirStatus deleteResult = dsDeleteRecord( recRefHost );
+						if ( deleteResult == eDSNoErr )
+						{
+							recRefHost = 0;
+						}
+						else
+						{
+							DbgLog( kLogPlugin,
+								"CLDAPv3Plugin: Bind Request - Warning %d attempting to remove secondary computer record - %s",
+								deleteResult, hostnameDollar );
+						}
+					}
+				}
+				else
+				{
+					DbgLog( kLogPlugin,
+							"CLDAPv3Plugin: Bind Request - Error %d attempting to add secondary name - %s",
+							siResult, hostnameDollar );
+					throw( siResult );
+				}
+			}
+			else if ( recRefHost != 0 )
+			{
+				dsCloseRecord( recRefHost );
+				recRefHost = 0;
+			}
+		}
+		
+		if ( recRef != 0 && recRefLKDC != 0 )
+		{
+			char *recName1 = dsWrapper.CopyRecordName( recRef );
+			char *recName2 = dsWrapper.CopyRecordName( recRefLKDC );
+			
+			if ( recName1 != NULL && recName2 != NULL && strcmp(recName1, recName2) == 0 )
+			{
+				dsCloseRecord( recRefLKDC );
+				recRefLKDC = 0;
+				localKDCRealmDollarStr = NULL;
+				DbgLog( kLogInfo, "CLDAPv3Plugin: Bind Request - Main Record and Local KDC record are same record closing Local KDC one" );
+			}
+			
+			DSFree( recName1 );
+			DSFree( recName2 );
+		}
+
+		if ( !DSIsStringEmpty(localKDCRealmDollarStr) )
+		{
+			if ( strcmp(pComputerID, localKDCRealmDollarStr) != 0 )
+			{
+				// create the computer record
+				DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Attempting to add secondary name - %s", localKDCRealmDollarStr );
+				
+				siResult = dsWrapper.AddShortName( recRef, localKDCRealmDollarStr );
+				if ( siResult == eDSNoErr )
+				{
+					if ( recRefLKDC != 0 )
+					{
+						tDirStatus deleteResult = dsDeleteRecord( recRefLKDC );
+						if ( deleteResult == eDSNoErr )
+						{
+							recRefLKDC = 0;
+						}
+						else
+						{
+							DbgLog( kLogPlugin,
+								   "CLDAPv3Plugin: Bind Request - Warning %d attempting to remove secondary computer record - %s",
+								   deleteResult, localKDCRealmDollarStr );
+						}
+					}
+				}
+				else
+				{
+					DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Error %d attempting to add secondary name - %s",
+						   siResult, localKDCRealmDollarStr );
+					throw( siResult );
+				}
+			}
+			else if ( recRefLKDC != 0 )
+			{
+				dsCloseRecord( recRefLKDC );
+				recRefLKDC = 0;
+			}
+		}
+		
+		// if we have individual records, we need to add comment
+		if ( recRefLKDC != 0 || recRefHost != 0 )
+		{
+			DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Attempting to set a comment in %s with other record names", pComputerID );
+			
+			// put other record names in the pComputerID record so we can
+			// clean up if the server is unbound
+			pAttrName = dsDataNodeAllocateString( dsRef, kDS1AttrComment );
+			
+			char otherRecNames[1024] = {0,};
+			if ( DSIsStringEmpty(hostnameDollar) == false )
+				strlcpy( otherRecNames, hostnameDollar, sizeof(otherRecNames) );
+			if ( DSIsStringEmpty(localKDCRealmDollarStr) == false )
+			{
+				if ( otherRecNames[0] != '\0' )
+					strlcat( otherRecNames, ",", sizeof(otherRecNames) );
+				strlcat( otherRecNames, localKDCRealmDollarStr, sizeof(otherRecNames) );
+			}
+			
+			dsBuildListFromStringsAlloc( dsRef, &dataList, otherRecNames, NULL );
+		
+			siResult = dsSetAttributeValues( recRef, pAttrName, &dataList );
+			
+			dsDataListDeallocatePriv( &dataList );
+			dsDataNodeDeAllocate( dsRef, pAttrName );
+			pAttrName = NULL;
+			
+			if ( siResult != eDSNoErr && siResult != eDSNoStdMappingAvailable )
+			{
+				DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Error %d attempting to set Comment value - %s", siResult, otherRecNames );
+				throw( siResult );
+			}
+		}
+		
+		// Now let's set the OSVersion in the record... TBD
+//		CFStringRef cfVersion = CFCopySystemVersionString();
+//		if ( cfVersion != NULL )
+//		{
+//			UInt32 iLength = (UInt32) CFStringGetMaximumSizeForEncoding( CFStringGetLength(cfVersion), kCFStringEncodingUTF8) + 1;
+//			char *pVersion = (char *) calloc( sizeof(char), iLength );
+//			CFStringGetCString( cfVersion, pVersion, iLength, kCFStringEncodingUTF8 );
+
+//			CFRelease( cfVersion );
+//			cfVersion = NULL;
+						
+//			pAttrValue = dsDataNodeAllocateString( dsRef, pVersion );
+//			pAttrName = dsDataNodeAllocateString( dsRef, TBD );
+			
+//			siResult = dsAddAttributeValue( recRef, pAttrName, pAttrValue );
+			
+//			free( pVersion );
+//			pVersion = NULL;
+
+//			dsDataNodeDeAllocate( dsRef, pAttrName );
+//			pAttrName = NULL;
+			
+//			dsDataNodeDeAllocate( dsRef, pAttrValue );
+//			pAttrValue = NULL;
+			
+//			if ( siResult != eDSNoErr && siResult != eDSNoStdMappingAvailable )
+//			{
+//				throw( siResult );
+//			}			
+//		}
+		
+		// now let's add a UUID to the record if there isn't one (Tiger)
+		pAttrName = dsDataNodeAllocateString( dsRef, kDS1AttrGeneratedUID );
+		siResult = dsGetRecordAttributeInfo( recRef, pAttrName, &pAttrEntry );
+		if ( siResult != eDSNoErr || pAttrEntry->fAttributeValueCount == 0 )
+		{
+			char *pUUID = NewUUID();
+			if ( pUUID )
+			{
+				dsBuildListFromStringsAlloc( dsRef, &dataList, pUUID, NULL );
+				
+				DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Attempting to set GeneratedUID value - %s", pUUID );
+				
+				siResult = dsSetAttributeValues( recRef, pAttrName, &dataList );
+				
+				dsDataListDeallocatePriv( &dataList );
+				
+				DSFreeString( pUUID );
+
+				if ( siResult != eDSNoErr && siResult != eDSNoStdMappingAvailable )
+				{
+					DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Error %d attempting to set GeneratedUID", siResult );
+					throw( siResult );
+				}
+			}
+		}
+		
+		dsDataNodeDeAllocate( dsRef, pAttrName );
+		pAttrName = NULL;
+		
+		if ( pAttrEntry != NULL ) {
+			dsDeallocAttributeEntry( dsRef, pAttrEntry );
+			pAttrEntry = NULL;
+		}
+		
+		char *pLinkAddr = NULL;
+		
+		if ( inData->fInRequestCode == eDSCustomCallLDAPv3NewServerBindOther ||
+			 inData->fInRequestCode == eDSCustomCallLDAPv3NewServerForceBindOther )
+		{
+			if ( serverInfo.EnetAddress() != NULL )
+			{
+				pLinkAddr = strdup( serverInfo.EnetAddress() );
+				DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Received MAC Address for bind other request" );
+			}
+			else
+			{
+				DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Did not receive MAC Address for bind other request" );
+			}
+		}
+		else
+		{
+			CFStringRef cfEnetAddr = NULL;
+			GetMACAddress( &cfEnetAddr, NULL, true );
+			if ( cfEnetAddr != NULL )
+			{
+				UInt32 iLength = (UInt32) CFStringGetMaximumSizeForEncoding( CFStringGetLength(cfEnetAddr), kCFStringEncodingUTF8 ) + 1;
+				pLinkAddr = (char *) calloc( sizeof(char), iLength );
+				if ( pLinkAddr != NULL )
+					CFStringGetCString( cfEnetAddr, pLinkAddr, iLength, kCFStringEncodingUTF8 );
+				DSCFRelease( cfEnetAddr );
+			}
+			
+			DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Determined MAC Address from local host information" );
+		}
+		
+		// Set the macAddress - CFSTR(kDS1AttrENetAddress) -- needs to be en0 - for Managed Client Settings
+		if ( pLinkAddr != NULL )
+		{
+			pAttrName = dsDataNodeAllocateString( dsRef, kDS1AttrENetAddress );
+
+			dsBuildListFromStringsAlloc( dsRef, &dataList, pLinkAddr, NULL );
+			
+			// remove potential ENetAddr conflicts
+			tDirStatus remove_result;
+			if ( recRefHost != 0 )
+			{
+				remove_result = dsRemoveAttribute( recRefHost, pAttrName );
+				if ( remove_result != eDSNoErr )
+					DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Error %d while removing ENetAddr from FQDN record", remove_result );
+			}
+			if ( recRefLKDC != 0 )
+			{
+				remove_result = dsRemoveAttribute( recRefLKDC, pAttrName );
+				if ( remove_result != eDSNoErr )
+					DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Error %d while removing ENetAddr from LKDC record", remove_result );
+			}
+			
+			DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Attempting to set MAC Address - %s", pLinkAddr );
+			
+			siResult = dsSetAttributeValues( recRef, pAttrName, &dataList );			
+			dsDataNodeDeAllocate( dsRef, pAttrName );
+			pAttrName = NULL;
+			
+			dsDataListDeallocatePriv( &dataList );
+
+			DSFreeString( pLinkAddr );
+						
+			if ( siResult != eDSNoErr && siResult != eDSNoStdMappingAvailable )
+			{
+				DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Error %d attempting to set MAC Address", siResult );
+				throw( siResult );
+			}
+		}
+		
+		uuid_t compUUID;
+		struct timespec waitTime = { 0 };
+		
+		if ( gethostuuid(compUUID, &waitTime) == 0 )
+		{
+			uuid_string_t uuidStr = { 0 };
+			
+			pAttrName = dsDataNodeAllocateString( dsRef, kDS1AttrHardwareUUID );
+			
+			uuid_unparse_upper( compUUID, uuidStr );
+			dsBuildListFromStringsAlloc( dsRef, &dataList, uuidStr, NULL );
+			
+			DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Attempting to set Hardware UUID - %s", uuidStr );
+			
+			siResult = dsSetAttributeValues( recRef, pAttrName, &dataList );			
+			dsDataNodeDeAllocate( dsRef, pAttrName );
+			pAttrName = NULL;
+			
+			dsDataListDeallocatePriv( &dataList );
+			
+			// we silently fail setting the HW UUID
+			if ( siResult != eDSNoErr && siResult != eDSNoStdMappingAvailable ) {
+				DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Error %d attempting to set Hardware UUID", siResult );
+			}
+		}
+			
+		siResult = dsFillAuthBuffer(
+						sendDataBufPtr, 2,
+						strlen(pComputerID), pComputerID,
+						strlen(pCompPassword), pCompPassword );
+		
+		if ( siResult != eDSNoErr )
+			throw( siResult );
+		
+		DbgLog( kLogPlugin, "CLDAPv3Plugin: Bind Request - Attempting to set Password for Computer account - %s", pComputerID );
+		siResult = dsWrapper.DoDirNodeAuthOnRecordType( kDSStdAuthSetPasswdAsRoot, true, sendDataBufPtr, responseDataBufPtr, 0,
+						kDSStdRecordTypeComputers );	
+	}
+	catch( tDirStatus iError ) {
+		siResult = iError;
+	}
+	catch( ... ) {
+		// catch all for miss throws...
+		siResult = eUndefinedError;
 	}
 	
-	return (SInt32)siResult;
-} // DoNewServerBind2
+	if ( pAttrName != NULL )
+	{
+		dsDataNodeDeAllocate( dsRef, pAttrName );
+		pAttrName = NULL;
+	}
+	
+	if ( sendDataBufPtr != NULL )
+	{
+		dsDataBufferDeallocatePriv( sendDataBufPtr );
+		sendDataBufPtr = NULL;
+	}
+	
+	if ( responseDataBufPtr != NULL )
+	{
+		dsDataBufferDeallocatePriv( responseDataBufPtr );
+		responseDataBufPtr = NULL;
+	}
+		
+	return siResult;
+} // DoNewServerBind2b
+
 
 // ---------------------------------------------------------------------------
 //	* DoNewServerSetup
@@ -2847,14 +3365,11 @@ SInt32 CLDAPv3Plugin::DoNewServerSetup( sDoPlugInCustomCall *inData )
 
 SInt32 CLDAPv3Plugin::DoRemoveServer( sDoPlugInCustomCall *inData )
 {
-	SInt32					siResult				= eDSNoErr;
-	CFDictionaryRef			cfXMLDict				= NULL; // this is the inbound XML dictionary
+	tDirStatus				siResult				= eDSNoErr;
+	CFMutableDictionaryRef	cfXMLDict				= NULL; // this is the inbound XML dictionary
 	CFDictionaryRef			cfConfigDict			= NULL; // this is our current configuration XML data
 	CFMutableDictionaryRef  cfServerDict			= NULL; // this is the actual server we're trying to unconfigure
 	CFIndex					iConfigIndex			= 0;
-	char					*pServer				= NULL;
-	char					*pUsername				= NULL;
-	char					*pPassword				= NULL;
 	char					*pComputerID			= NULL;
 	tDirReference			dsRef					= 0;
 	tDirNodeReference		dsNodeRef				= 0;
@@ -2865,22 +3380,17 @@ SInt32 CLDAPv3Plugin::DoRemoveServer( sDoPlugInCustomCall *inData )
 	tDataNodePtr			pRecName				= NULL;
 	tDataNodePtr			pRecName2				= NULL;
 	CFMutableArrayRef		cfConfigList			= NULL; // no need to release, temporary variable
+	DSAPIWrapper			dsWrapper;
+	
+	CLDAPBindData serverInfo( inData->fInRequestData, &cfXMLDict );
+	if ( (siResult = serverInfo.DataValidForRemove()) != eDSNoErr )
+	{
+		DbgLog( kLogPlugin, "CLDAPv3Plugin::DoRemoveServer: Error reading server information = %d", siResult );
+		return siResult;
+	}
 	
 	try
 	{
-		// we should always have XML data for this process, if we don't, throw an error
-		cfXMLDict = GetXMLFromBuffer( inData->fInRequestData );
-		if ( cfXMLDict == NULL ) {
-			throw( (SInt32) eDSInvalidBuffFormat );
-		}
-		
-		// automatically released with cfXMLDict release, just a Get.
-		CFStringRef cfServer = GetServerInfoFromConfig( cfXMLDict, &pServer, NULL, NULL, &pUsername, &pPassword );
-		if ( cfServer == NULL )
-		{
-			throw( (SInt32) eDSInvalidBuffFormat );
-		}
-
 		// now let's find the server we're trying to unbind from in the config
 		CFDataRef cfTempData = fConfigFromXML->CopyLiveXMLConfig();
 		
@@ -2892,11 +3402,12 @@ SInt32 CLDAPv3Plugin::DoRemoveServer( sDoPlugInCustomCall *inData )
 		CFRelease( cfTempData );
 		cfTempData = NULL;
 		
-		if ( IsServerInConfig( cfConfigDict, cfServer, &iConfigIndex, &cfServerDict ) == false )
+		if ( IsServerInConfig( cfConfigDict, serverInfo.ServerCFString(), &iConfigIndex, &cfServerDict ) == false )
 		{
-			throw( (SInt32) eDSBogusServer );
+			DbgLog( kLogPlugin, "CLDAPv3Plugin::DoRemoveServer: the server is not in the configuration." );
+			throw( eDSBogusServer );
 		}
-
+		
 		CFBooleanRef	cfBound = (CFBooleanRef) CFDictionaryGetValue( cfServerDict, CFSTR(kXMLBoundDirectoryKey) );
 		bool			bBound = false;
 		
@@ -2909,16 +3420,23 @@ SInt32 CLDAPv3Plugin::DoRemoveServer( sDoPlugInCustomCall *inData )
 		if ( bBound )
 		{
 			// well, if we don't have credentials, we won't be able to continue here..
-			if ( pUsername == NULL || pPassword == NULL )
-				throw( (SInt32) eDSAuthParameterError );
+			if ( serverInfo.UserName() == NULL || serverInfo.Password() == NULL )
+			{
+				DbgLog( kLogPlugin, "CLDAPv3Plugin::DoRemoveServer: No credentials for username = %s.",
+					serverInfo.UserName() ? serverInfo.UserName() : "(null)" );
+				throw( eDSAuthParameterError );
+			}
 			
 			char *pComputerDN = NULL;
 			GetServerInfoFromConfig( cfServerDict, NULL, NULL, NULL, &pComputerDN, NULL );
 			
 			// shouldn't happen but a safety
 			if ( pComputerDN == NULL )
-				throw( (SInt32) eDSBogusServer );
-
+			{
+				DbgLog( kLogPlugin, "CLDAPv3Plugin::DoRemoveServer: unable to retrieve the computer name." );
+				throw( eDSBogusServer );
+			}
+			
 			char **pDN = ldap_explode_dn( pComputerDN, 1 );
 			
 			if ( pDN != NULL )
@@ -2932,47 +3450,27 @@ SInt32 CLDAPv3Plugin::DoRemoveServer( sDoPlugInCustomCall *inData )
 			pComputerDN = NULL;
 			
 			// let's build our path....
-			siResult = dsOpenDirService( &dsRef );
-			if ( siResult != eDSNoErr )
-				throw( siResult );
+			tDataListPtr nodeString = NodeNameWithHost( serverInfo.Server(), 0, NULL );
+			if ( nodeString == NULL )
+				throw( eMemoryError );
 			
-			tDataListPtr nodeString = NodeNameWithHost( pServer, 0, NULL );
-			siResult = dsOpenDirNode( dsRef, nodeString, &dsNodeRef );
+			siResult = dsWrapper.OpenNodeByName( nodeString, serverInfo.UserName(), serverInfo.Password() );
 			dsDataListDeallocatePriv( nodeString );
 			free( nodeString );
 			nodeString = NULL;
 			
+			dsRef = dsWrapper.GetDSRef();
+			dsNodeRef = dsWrapper.GetCurrentNodeRef();
+			
 			if ( siResult != eDSNoErr )
-				throw( siResult );
-			
-			UInt32			iNameLen		= strlen( pUsername );
-			UInt32			iPassLen		= strlen( pPassword );
-			UInt32			authDataSize	= iNameLen + iPassLen + (2 * sizeof(UInt32));
-			
-			pAuthType   = dsDataNodeAllocateString( dsRef, kDSStdAuthNodeNativeNoClearText );
-			
-			sendDataBufPtr->fBufferLength = authDataSize;
-			
-			/* store user name and password into the auth buffer in the correct format */
-			siResult = dsFillAuthBuffer( sendDataBufPtr, 2, iNameLen, pUsername, iPassLen, pPassword );
-			if ( siResult != eDSNoErr )
-				throw( (SInt32)siResult );
-			
-			if ( (siResult = dsDoDirNodeAuth( dsNodeRef, pAuthType, false, sendDataBufPtr, responseDataBufPtr, 0)) != eDSNoErr )
-				throw( (SInt32)siResult );
-			
-			if ( pAuthType != NULL )
 			{
-				dsDataNodeDeAllocate( dsRef, pAuthType );
-				pAuthType = NULL;
+				DbgLog( kLogPlugin, "CLDAPv3Plugin::DoRemoveServer: Error opening node = %d", serverInfo.Server(), siResult );
+				throw( siResult );
 			}
 			
 			// let's try to open the Record
-			tRecordReference	recRef = 0;
-			
-			pRecName = dsDataNodeAllocateString( dsRef, pComputerID );
-			
-			siResult = dsOpenRecord( dsNodeRef, pRecType, pRecName, &recRef );
+			tRecordReference recRef = 0;
+			siResult = dsWrapper.OpenRecord( kDSStdRecordTypeComputers, pComputerID, &recRef, false );
 			
 			// if we didn't get an error, then we were able to open the record
 			if ( siResult == eDSNoErr )
@@ -2981,13 +3479,14 @@ SInt32 CLDAPv3Plugin::DoRemoveServer( sDoPlugInCustomCall *inData )
 				// deleted along with this one.
 				tDataNodePtr pAttrType = dsDataNodeAllocateString( dsRef, kDS1AttrComment );
 				tAttributeValueEntryPtr valueEntryPtr = NULL;
+				tDirStatus siResult2 = eDSNoErr;
 				tRecordReference recRef2 = 0;
 				char *otherRecNamesHeadPtr = NULL;
 				char *otherRecNames = NULL;
 				char *recName = NULL;
 				
-				siResult = dsGetRecordAttributeValueByIndex( recRef, pAttrType, 1, &valueEntryPtr );
-				if ( siResult == eDSNoErr && valueEntryPtr != NULL )
+				siResult2 = dsGetRecordAttributeValueByIndex( recRef, pAttrType, 1, &valueEntryPtr );
+				if ( siResult2 == eDSNoErr && valueEntryPtr != NULL )
 				{
 					otherRecNamesHeadPtr = otherRecNames = dsCStrFromCharacters(
 										valueEntryPtr->fAttributeValueData.fBufferData,
@@ -2995,9 +3494,8 @@ SInt32 CLDAPv3Plugin::DoRemoveServer( sDoPlugInCustomCall *inData )
 					
 					while ( (recName = strsep(&otherRecNames, ",")) != NULL )
 					{
-						pRecName2 = dsDataNodeAllocateString( dsRef, recName );
-						siResult = dsOpenRecord( dsNodeRef, pRecType, pRecName2, &recRef2 );
-						if ( siResult == eDSNoErr )
+						siResult2 = dsWrapper.OpenRecord( kDSStdRecordTypeComputers, recName, &recRef2, false );
+						if ( siResult2 == eDSNoErr )
 						{
 							sendDataBufPtr->fBufferLength = sizeof( recRef2 );
 							bcopy( &recRef2, sendDataBufPtr->fBufferData, sizeof(recRef2) );
@@ -3005,9 +3503,8 @@ SInt32 CLDAPv3Plugin::DoRemoveServer( sDoPlugInCustomCall *inData )
 							// we use a custom call instead of doing a normal delete to ensure
 							// any PWS information is deleted as well
 							DbgLog( kLogPlugin, "CLDAPv3Plugin::DoRemoveServer: deleting computer record - %s", recName );
-							siResult = dsDoPlugInCustomCall(
-											dsNodeRef, eDSCustomCallDeleteRecordAndCredentials,
-											sendDataBufPtr, responseDataBufPtr );
+							dsDoPlugInCustomCall( dsNodeRef, eDSCustomCallDeleteRecordAndCredentials, sendDataBufPtr,
+													responseDataBufPtr );
 						}
 						if ( pRecName2 != NULL ) {
 							dsDataNodeDeAllocate( dsRef, pRecName2 );
@@ -3030,9 +3527,7 @@ SInt32 CLDAPv3Plugin::DoRemoveServer( sDoPlugInCustomCall *inData )
 
 				// we use a custom call instead of doing a normal delete to ensure any PWS information is deleted as well
 				DbgLog( kLogPlugin, "CLDAPv3Plugin::DoRemoveServer: deleting computer record - %s", pComputerID );
-				siResult = dsDoPlugInCustomCall(
-								dsNodeRef, eDSCustomCallDeleteRecordAndCredentials,
-								sendDataBufPtr, responseDataBufPtr );
+				dsDoPlugInCustomCall( dsNodeRef, eDSCustomCallDeleteRecordAndCredentials, sendDataBufPtr, responseDataBufPtr );
 			}
 		}
 		else
@@ -3040,7 +3535,7 @@ SInt32 CLDAPv3Plugin::DoRemoveServer( sDoPlugInCustomCall *inData )
 			siResult = eDSNoErr;
 		}
 		
-	} catch( SInt32 iError ) {
+	} catch( tDirStatus iError ) {
 		siResult = iError;
 	} catch( ... ) {
 		// catch all for miss throws...
@@ -3124,10 +3619,10 @@ SInt32 CLDAPv3Plugin::DoRemoveServer( sDoPlugInCustomCall *inData )
 			{
 				pid_t childPID;
 				int nStatus;
-				char *argv[] = { "/usr/sbin/slapconfig", "-disableproxyusers", realm, NULL };
+				const char *argv[] = { "/usr/sbin/slapconfig", "-disableproxyusers", realm, NULL };
 				
 				// we don't care about status, but we need to reap the child
-				if ( posix_spawn( &childPID, argv[0], NULL, NULL, argv, NULL ) == 0 )
+				if ( posix_spawn( &childPID, argv[0], NULL, NULL, (char **)argv, NULL ) == 0 )
 					while ( waitpid(childPID, &nStatus, 0) == -1 && errno != ECHILD );
 			}
 
@@ -3154,7 +3649,7 @@ SInt32 CLDAPv3Plugin::DoRemoveServer( sDoPlugInCustomCall *inData )
 		CFDataRef cfTempData = (CFDataRef) CFPropertyListCreateXMLData( kCFAllocatorDefault, cfConfigDict );
 		
 		// Technically the username already has a password, even though it is admin, no one else knows about this temporary node
-		siResult = fConfigFromXML->NewXMLConfig( cfTempData );
+		siResult = (tDirStatus)fConfigFromXML->NewXMLConfig( cfTempData );
 		
 		// we're done with cfTempData
 		CFRelease( cfTempData );
@@ -3188,16 +3683,6 @@ SInt32 CLDAPv3Plugin::DoRemoveServer( sDoPlugInCustomCall *inData )
 		responseDataBufPtr = NULL;
 	}
 	
-	DSFreeString( pServer );
-	DSFreeString( pUsername );
-	
-	if ( pPassword != NULL )
-	{
-		memset( pPassword, 0, strlen(pPassword) );
-		free( pPassword );
-		pPassword = NULL;
-	}
-	
 	DSFreeString( pComputerID );
 	
 	if ( pRecType != NULL )
@@ -3225,7 +3710,7 @@ SInt32 CLDAPv3Plugin::DoRemoveServer( sDoPlugInCustomCall *inData )
 		{
 			SInt32 iError = PutXMLInBuffer( cfServerDict, inData->fOutRequestResponse );
 			if ( iError != eDSNoErr ) {
-				siResult = iError;
+				siResult = (tDirStatus)iError;
 			}
 		}
 
@@ -3344,11 +3829,10 @@ bool CLDAPv3Plugin::OwnerGUIDsMatch( tDirReference		inDSRef,
 // ---------------------------------------------------------------------------
 
 tDirStatus CLDAPv3Plugin::SetComputerRecordKerberosAuthority(
-	tDirReference inDSRef,
-	tDirNodeReference inDSNodeRef,
+	DSAPIWrapper &dsWrapper,
 	char *inComputerPassword,
-	tDataNodePtr inRecType,
-	tDataNodePtr inRecName,
+	const char *inRecType,
+	const char *inRecName,
 	CFMutableDictionaryRef inCFDict,
 	char **outKerbIDStr )
 {
@@ -3356,7 +3840,8 @@ tDirStatus CLDAPv3Plugin::SetComputerRecordKerberosAuthority(
 	tRecordReference		recRef					= 0;
 	tAttributeEntryPtr		attribInfo				= NULL;
 	tAttributeValueEntryPtr	authEntry				= NULL;
-	tDataNodePtr			pAuthAuthority			= dsDataNodeAllocateString( inDSRef, kDSNAttrAuthenticationAuthority );
+	tDirReference			dsRef					= dsWrapper.GetDSRef();
+	tDataNodePtr			pAuthAuthority			= dsDataNodeAllocateString( dsRef, kDSNAttrAuthenticationAuthority );
 	
 	if ( outKerbIDStr != NULL )
 		*outKerbIDStr = NULL;
@@ -3364,7 +3849,7 @@ tDirStatus CLDAPv3Plugin::SetComputerRecordKerberosAuthority(
 	if ( inRecName == NULL )
 		return eDSNoErr;
 	
-	if ( dsOpenRecord(inDSNodeRef, inRecType, inRecName, &recRef) == eDSNoErr )
+	if ( (siResult = dsWrapper.OpenRecord(inRecType, inRecName, &recRef)) == eDSNoErr )
 	{
 		// let's get the KerberosID if one is present and set that as well
 		if ( dsGetRecordAttributeInfo(recRef, pAuthAuthority, &attribInfo) == eDSNoErr )
@@ -3401,18 +3886,17 @@ tDirStatus CLDAPv3Plugin::SetComputerRecordKerberosAuthority(
 						}
 					}
 					
-					dsDeallocAttributeValueEntry( inDSRef, authEntry );
+					dsDeallocAttributeValueEntry( dsRef, authEntry );
 				}
 			}
-			dsDeallocAttributeEntry( inDSRef, attribInfo );
+			dsDeallocAttributeEntry( dsRef, attribInfo );
 		}
 		
 		dsCloseRecord( recRef );
 	}
 	
-	dsDataNodeDeAllocate( inDSRef, pAuthAuthority );
+	dsDataNodeDeAllocate( dsRef, pAuthAuthority );
 	
 	return siResult;			
 }
-
 

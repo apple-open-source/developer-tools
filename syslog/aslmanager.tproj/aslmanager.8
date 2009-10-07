@@ -1,0 +1,100 @@
+.\"Copyright (c) 2004-2009 Apple Inc. All rights reserved.
+.\"
+.\"@APPLE_LICENSE_HEADER_START@
+.\"
+.\"This file contains Original Code and/or Modifications of Original Code
+.\"as defined in and that are subject to the Apple Public Source License
+.\"Version 2.0 (the 'License'). You may not use this file except in
+.\"compliance with the License. Please obtain a copy of the License at
+.\"http://www.opensource.apple.com/apsl/ and read it before using this
+.\"file.
+.\"
+.\"The Original Code and all software distributed under the License are
+.\"distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+.\"EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
+.\"INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
+.\"FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+.\"Please see the License for the specific language governing rights and
+.\"limitations under the License.
+.\"
+.\"@APPLE_LICENSE_HEADER_END@
+.\"
+.Dd December 7, 2007
+.Dt ASLMANAGER 8
+.Os "Mac OS X"
+.Sh NAME
+.Nm aslmanager
+.Nd Apple System Log data store file manager
+.Sh SYNOPSIS
+.Nm
+.Op Fl s Ar store_dir
+.Op Fl a Op Ar archive_dir
+.Op Fl ttl Ar days
+.Op Fl size Ar max_size
+.Sh DESCRIPTION
+.Nm
+manages files in the ASL data store written by the
+.Nm syslogd
+server.
+.Pp
+.Nm
+is started automatically at various times.
+It runs shortly after the
+.Nm syslogd
+server starts, upon receipt of the first message after midnight (local time),
+and any time a file in the ASL data store directory (/var/log/asl) reaches a maximum size limit as specified to the
+.Nm syslogd
+server.
+.Pp
+Command-line options may be specified in the aslmanager launch plist file.
+However,
+.Nm
+reads the /etc/asl.conf file which may also contain parameter settings.
+Settings in the asl.conf file will override those given on the command line.
+.Pp
+.Nm
+scans through the files in the ASL data store directory /var/log/asl, or some other directory specified following the
+.Fl s
+flag, or by the setting of the store_path parameter in asl.conf.
+Data files that are older than the default 7 day time-to-live are either archived or removed.
+Files that contain messages with explicit expire times are removed or archived monthly after all thier contents expire.
+The default 7 day time-to-live value may be overridden by supplying a value following the
+.Fl ttl
+flag, or by the setting of the store_ttl parameter in asl.conf.
+A value of zero allows files to remain in the store with no time limit.
+.Pp
+A maximum size for the entire data store may be provided as a value following the
+.Fl size
+flag, or by the setting of the max_store_size parameter in asl.conf.
+This will cause
+.Nm
+to archive (if enabled) and remove files until the total size of the data store is
+.Ar max_size
+bytes or less.
+The default value is 150000000 bytes.
+A value of zero means the size is unlimited.
+An unlimited size specification should be used with great caution,
+since a runaway process could quickly fill all available disk space.
+Files are removed in order starting from oldest to newest.
+Files with the same date are removed in standard lexigraphic sort order by file name.
+.Pp
+Files are either removed entirely or copied to an archive directory.
+If the
+.Fl a
+flag is specified with no argument, files are copied to the /var/log/asl.archive directory.
+An alternate directory path may be specified following the
+.Fl a
+flag.
+The archive parameter setting in asl.conf enables or disables archiving.
+The archive parameter requires a value of "1" to enable archiving, or a value of "0" to disable it.
+An option archive directory path may follow the "0" or "1".
+.Sh SEE ALSO
+.Xr syslogd 8 ,
+.Xr syslog 1 ,
+.Xr asl 3 ,
+.Xr asl.conf 5 ,
+.Xr syslog 3 .
+.Sh HISTORY
+The
+.Nm
+utility appeared in Mac OS X 10.6.

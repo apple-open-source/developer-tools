@@ -1469,6 +1469,12 @@ typedef const struct regset * (gdbarch_regset_from_core_section_ftype) (struct g
 extern const struct regset * gdbarch_regset_from_core_section (struct gdbarch *gdbarch, const char *sect_name, size_t sect_size);
 extern void set_gdbarch_regset_from_core_section (struct gdbarch *gdbarch, gdbarch_regset_from_core_section_ftype *regset_from_core_section);
 
+/* APPLE LOCAL: Translate eh frame regnums into dwarf regnums */
+
+typedef int (gdbarch_adjust_ehframe_regnum_ftype) (struct gdbarch *gdbarch, int regnum, int eh_frame_p);
+extern int gdbarch_adjust_ehframe_regnum (struct gdbarch *gdbarch, int regnum, int eh_frame_p);
+extern void set_gdbarch_adjust_ehframe_regnum (struct gdbarch *gdbarch, gdbarch_adjust_ehframe_regnum_ftype *adjust_ehframe_regnum);
+
 extern struct gdbarch_tdep *gdbarch_tdep (struct gdbarch *gdbarch);
 
 

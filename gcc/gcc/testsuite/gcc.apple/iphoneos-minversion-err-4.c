@@ -12,4 +12,4 @@ int main(void)
   return 0;
 }
 
-/* { dg-error "Unknown value '1.2.' of -miphoneos-version-min" "" {target *-*-* } 1 } */
+/* { dg-error "Unknown value '1.2.' of -miphoneos-version-min" "" {target *-*-* } 0 } */

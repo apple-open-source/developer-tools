@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2002 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -79,6 +79,14 @@ package Sem_Disp is
    --  An expression is tag-indeterminate if it is a call that dispatches
    --  on result, and all controlling operands are also indeterminate.
    --  Such a function call may inherit a tag from an enclosing call.
+
+   procedure Override_Dispatching_Operation
+     (Tagged_Type : Entity_Id;
+      Prev_Op     : Entity_Id;
+      New_Op      : Entity_Id);
+   --  Replace an implicit dispatching operation with an explicit one.
+   --  Prev_Op is an inherited primitive operation which is overridden
+   --  by the explicit declaration of New_Op.
 
    procedure Propagate_Tag (Control : Node_Id; Actual : Node_Id);
    --  If a function call is tag-indeterminate,  its controlling argument is

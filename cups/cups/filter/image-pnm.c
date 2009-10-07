@@ -1,9 +1,9 @@
 /*
- * "$Id: image-pnm.c 6649 2007-07-11 21:46:42Z mike $"
+ * "$Id: image-pnm.c 7374 2008-03-08 01:13:26Z mike $"
  *
  *   Portable Any Map file routines for the Common UNIX Printing System (CUPS).
  *
- *   Copyright 2007 by Apple Inc.
+ *   Copyright 2007-2008 by Apple Inc.
  *   Copyright 1993-2007 by Easy Software Products.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -67,7 +67,13 @@ _cupsImageReadPNM(
   *   max sample
   */
 
-  lineptr = fgets(line, sizeof(line), fp);
+  if ((lineptr = fgets(line, sizeof(line), fp)) == NULL)
+  {
+    fputs("DEBUG: Bad PNM header!\n", stderr);
+    fclose(fp);
+    return (1);
+  }
+
   lineptr ++;
 
   format = atoi(lineptr);
@@ -147,8 +153,21 @@ _cupsImageReadPNM(
   cupsImageSetMaxTiles(img, 0);
 
   bpp = cupsImageGetDepth(img);
-  in  = malloc(img->xsize * 3);
-  out = malloc(img->xsize * bpp);
+
+  if ((in = malloc(img->xsize * 3)) == NULL)
+  {
+    fputs("DEBUG: Unable to allocate memory!\n", stderr);
+    fclose(fp);
+    return (1);
+  }
+
+  if ((out = malloc(img->xsize * bpp)) == NULL)
+  {
+    fputs("DEBUG: Unable to allocate memory!\n", stderr);
+    fclose(fp);
+    free(in);
+    return (1);
+  }
 
  /*
   * Read the image file...
@@ -159,6 +178,11 @@ _cupsImageReadPNM(
     switch (format)
     {
       case 1 :
+          for (x = img->xsize, inptr = in; x > 0; x --, inptr ++)
+            if (fscanf(fp, "%d", &val) == 1)
+              *inptr = val ? 0 : 255;
+          break;
+
       case 2 :
           for (x = img->xsize, inptr = in; x > 0; x --, inptr ++)
             if (fscanf(fp, "%d", &val) == 1)
@@ -184,9 +208,9 @@ _cupsImageReadPNM(
                x --, inptr ++)
           {
             if (*outptr & bit)
-              *inptr = 255;
-            else
               *inptr = 0;
+            else
+              *inptr = 255;
 
             if (bit > 1)
               bit >>= 1;
@@ -292,5 +316,5 @@ _cupsImageReadPNM(
 
 
 /*
- * End of "$Id: image-pnm.c 6649 2007-07-11 21:46:42Z mike $".
+ * End of "$Id: image-pnm.c 7374 2008-03-08 01:13:26Z mike $".
  */

@@ -2,6 +2,7 @@
    -Wformat.  -Wformat-extra-args.  */
 /* Origin: Joseph Myers <joseph@codesourcery.com> */
 /* { dg-do compile } */
-/* { dg-options "-Wformat-extra-args" } */
+/* APPLE LOCAL default to Wformat-security 5764921 */
+/* { dg-options "-Wno-format -Wformat-extra-args" } */
 
 /* { dg-warning "warning: -Wformat-extra-args ignored without -Wformat" "ignored" { target *-*-* } 0 } */

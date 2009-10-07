@@ -17,8 +17,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.
 
 Java and all Java-based marks are trademarks or registered trademarks
 of Sun Microsystems, Inc. in the United States and other countries.
@@ -105,7 +105,7 @@ struct method_declarator {
 };
 #define NEW_METHOD_DECLARATOR(D,N,A)					     \
 {									     \
-  (D) = xmalloc (sizeof (struct method_declarator));			     \
+  (D) = XNEW (struct method_declarator);				     \
   (D)->method_name = (N);						     \
   (D)->args = (A);							     \
 }
@@ -498,7 +498,7 @@ formal_parameter:
 		  if (bracket_count)
 		    {
 		      int i;
-		      char *n = xmalloc (bracket_count + 1 + strlen ($$));
+		      char *n = XNEWVEC (char, bracket_count + 1 + strlen ($$));
 		      for (i = 0; i < bracket_count; ++i)
 			n[i] = '[';
 		      strcpy (n + bracket_count, $$);
@@ -512,7 +512,7 @@ formal_parameter:
 		  if (bracket_count)
 		    {
 		      int i;
-		      char *n = xmalloc (bracket_count + 1 + strlen ($2));
+		      char *n = XNEWVEC (char, bracket_count + 1 + strlen ($2));
 		      for (i = 0; i < bracket_count; ++i)
 			n[i] = '[';
 		      strcpy (n + bracket_count, $2);
@@ -637,6 +637,7 @@ interface_member_declaration:
 |	abstract_method_declaration
 |	class_declaration	/* Added, JDK1.1 inner classes */
 |	interface_declaration	/* Added, JDK1.1 inner classes */
+|	empty_statement
 ;
 
 constant_declaration:
@@ -1174,10 +1175,10 @@ constant_expression:
 void
 java_push_parser_context (void)
 {
-  struct parser_ctxt *new = xcalloc (1, sizeof (struct parser_ctxt));
+  struct parser_ctxt *tmp = XCNEW (struct parser_ctxt);
 
-  new->next = ctxp;
-  ctxp = new;
+  tmp->next = ctxp;
+  ctxp = tmp;
 }  
 
 static void
@@ -1185,7 +1186,7 @@ push_class_context (const char *name)
 {
   struct class_context *ctx;
 
-  ctx = xmalloc (sizeof (struct class_context));
+  ctx = XNEW (struct class_context);
   ctx->name = (char *) name;
   ctx->next = current_class_context;
   current_class_context = ctx;

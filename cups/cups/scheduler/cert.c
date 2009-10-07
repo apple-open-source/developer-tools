@@ -1,10 +1,10 @@
 /*
- * "$Id: cert.c 6649 2007-07-11 21:46:42Z mike $"
+ * "$Id: cert.c 7673 2008-06-18 22:31:26Z mike $"
  *
  *   Authentication certificate routines for the Common UNIX
  *   Printing System (CUPS).
  *
- *   Copyright 2007 by Apple Inc.
+ *   Copyright 2007-2009 by Apple Inc.
  *   Copyright 1997-2006 by Easy Software Products.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -42,7 +42,8 @@
 
 void
 cupsdAddCert(int        pid,		/* I - Process ID */
-             const char *username)	/* I - Username */
+             const char *username,	/* I - Username */
+             void       *ccache)	/* I - Kerberos credentials or NULL */
 {
   int		i;			/* Looping var */
   cupsd_cert_t	*cert;			/* Current certificate */
@@ -53,7 +54,7 @@ cupsdAddCert(int        pid,		/* I - Process ID */
 
 
   cupsdLogMessage(CUPSD_LOG_DEBUG2,
-                  "cupsdAddCert: adding certificate for pid %d", pid);
+                  "cupsdAddCert: Adding certificate for PID %d", pid);
 
  /*
   * Allocate memory for the certificate...
@@ -83,7 +84,7 @@ cupsdAddCert(int        pid,		/* I - Process ID */
   if ((fd = open(filename, O_WRONLY | O_CREAT | O_EXCL, 0400)) < 0)
   {
     cupsdLogMessage(CUPSD_LOG_ERROR,
-                    "cupsdAddCert: Unable to create certificate file %s - %s",
+                    "Unable to create certificate file %s - %s",
                     filename, strerror(errno));
     free(cert);
     return;
@@ -244,6 +245,16 @@ cupsdAddCert(int        pid,		/* I - Process ID */
   close(fd);
 
  /*
+  * Add Kerberos credentials as needed...
+  */
+
+#ifdef HAVE_GSSAPI
+  cert->ccache = (krb5_ccache)ccache;
+#else
+  (void)ccache;
+#endif /* HAVE_GSSAPI */
+
+ /*
   * Insert the certificate at the front of the list...
   */
 
@@ -272,7 +283,7 @@ cupsdDeleteCert(int pid)		/* I - Process ID */
       */
 
       cupsdLogMessage(CUPSD_LOG_DEBUG2,
-                      "cupsdDeleteCert: removing certificate for pid %d", pid);
+                      "cupsdDeleteCert: Removing certificate for PID %d", pid);
 
       DEBUG_printf(("DELETE pid=%d, username=%s, cert=%s\n", cert->pid,
                     cert->username, cert->certificate));
@@ -282,6 +293,15 @@ cupsdDeleteCert(int pid)		/* I - Process ID */
       else
         prev->next = cert->next;
 
+#ifdef HAVE_GSSAPI
+     /*
+      * Release Kerberos credentials as needed...
+      */
+
+      if (cert->ccache)
+	krb5_cc_destroy(KerberosContext, cert->ccache);
+#endif /* HAVE_GSSAPI */
+
       free(cert);
 
      /*
@@ -290,8 +310,7 @@ cupsdDeleteCert(int pid)		/* I - Process ID */
 
       snprintf(filename, sizeof(filename), "%s/certs/%d", StateDir, pid);
       if (unlink(filename))
-	cupsdLogMessage(CUPSD_LOG_ERROR,
-	                "cupsdDeleteCert: Unable to remove %s!\n", filename);
+	cupsdLogMessage(CUPSD_LOG_ERROR, "Unable to remove %s!", filename);
 
       return;
     }
@@ -322,8 +341,7 @@ cupsdDeleteAllCerts(void)
 
     snprintf(filename, sizeof(filename), "%s/certs/%d", StateDir, cert->pid);
     if (unlink(filename))
-      cupsdLogMessage(CUPSD_LOG_ERROR,
-                      "cupsdDeleteAllCerts: Unable to remove %s!\n", filename);
+      cupsdLogMessage(CUPSD_LOG_ERROR, "Unable to remove %s!", filename);
 
    /*
     * Free memory...
@@ -342,21 +360,23 @@ cupsdDeleteAllCerts(void)
  * 'cupsdFindCert()' - Find a certificate.
  */
 
-const char *				/* O - Matching username or NULL */
+cupsd_cert_t *				/* O - Matching certificate or NULL */
 cupsdFindCert(const char *certificate)	/* I - Certificate */
 {
   cupsd_cert_t	*cert;			/* Current certificate */
 
 
-  DEBUG_printf(("cupsdFindCert(certificate=%s)\n", certificate));
+  cupsdLogMessage(CUPSD_LOG_DEBUG2, "cupsdFindCert(certificate=%s)",
+                  certificate);
   for (cert = Certs; cert != NULL; cert = cert->next)
     if (!strcasecmp(certificate, cert->certificate))
     {
-      DEBUG_printf(("    returning %s...\n", cert->username));
-      return (cert->username);
+      cupsdLogMessage(CUPSD_LOG_DEBUG2, "cupsdFindCert: Returning %s...",
+                      cert->username);
+      return (cert);
     }
 
-  DEBUG_puts("    certificate not found!");
+  cupsdLogMessage(CUPSD_LOG_DEBUG2, "cupsdFindCert: Certificate not found!");
 
   return (NULL);
 }
@@ -412,10 +432,10 @@ cupsdInitCerts(void)
   */
 
   if (!RunUser)
-    cupsdAddCert(0, "root");
+    cupsdAddCert(0, "root", NULL);
 }
 
 
 /*
- * End of "$Id: cert.c 6649 2007-07-11 21:46:42Z mike $".
+ * End of "$Id: cert.c 7673 2008-06-18 22:31:26Z mike $".
  */

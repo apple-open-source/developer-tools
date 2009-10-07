@@ -1,4 +1,3 @@
-/* APPLE LOCAL begin radar 4187916 */
 template <class T> struct PCVector2
 { // { dg-error "" }
     template <class T2> PCVector2(const PCVector2<T> &cv) ;
@@ -18,4 +17,3 @@ void findIntersection( PCVector2<double>& p0, PCVector2<double>& p1)
 {
     PCVector2<double> e = p1 - p0;	// { dg-error "" }
 }
-/* APPLE LOCAL end radar 4187916 */

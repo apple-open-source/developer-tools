@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2004, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -291,7 +291,7 @@ package body Exp_Ch7 is
    --      controller but this would not tackle view conversions properly.
    --    - A classwide type can always potentially have controlled components
    --      but the record controller of the corresponding actual type may not
-   --      be nown at compile time so the dispatch table contains a special
+   --      be known at compile time so the dispatch table contains a special
    --      field that allows to compute the offset of the record controller
    --      dynamically. See s-finimp.Deep_Tag_Attach and a-tags.RC_Offset
 
@@ -984,7 +984,9 @@ package body Exp_Ch7 is
         and then Present (Atyp)
         and then
           (Is_Private_Type (Ftyp) or else Is_Private_Type (Atyp))
-        and then Underlying_Type (Atyp) = Underlying_Type (Ftyp)
+        and then
+           Base_Type (Underlying_Type (Atyp)) =
+             Base_Type (Underlying_Type (Ftyp))
       then
          return Unchecked_Convert_To (Ftyp, Arg);
 
@@ -1245,6 +1247,12 @@ package body Exp_Ch7 is
            Make_Handled_Sequence_Of_Statements (Loc, New_List (Blok)));
          Set_End_Label (Handled_Statement_Sequence (N), End_Lab);
          Wrapped := True;
+
+         --  Comment needed here, see RH for 1.306 ???
+
+         if Nkind (N) = N_Subprogram_Body then
+            Set_Has_Nested_Block_With_Handler (Current_Scope);
+         end if;
 
       --  Otherwise we do not wrap
 
@@ -1558,19 +1566,6 @@ package body Exp_Ch7 is
       end if;
 
       Set_Elaboration_Flag (N, Corresponding_Spec (N));
-
-      --  Generate a subprogram descriptor for the elaboration routine of
-      --  a package body if the package body has no pending instantiations
-      --  and it has generated at least one exception handler
-
-      if Present (Handler_Records (Body_Entity (Ent)))
-        and then Is_Compilation_Unit (Ent)
-        and then not Delay_Subprogram_Descriptors (Body_Entity (Ent))
-      then
-         Generate_Subprogram_Descriptor_For_Package
-           (N, Body_Entity (Ent));
-      end if;
-
       Set_In_Package_Body (Ent, False);
 
       --  Set to encode entity names in package body before gigi is called
@@ -1756,7 +1751,11 @@ package body Exp_Ch7 is
                  N_Procedure_Call_Statement =>
                if Nkind (Parent (The_Parent)) = N_Entry_Call_Alternative
                  and then
-                   Nkind (Parent (Parent (The_Parent))) = N_Timed_Entry_Call
+                   (Nkind (Parent (Parent (The_Parent)))
+                     = N_Timed_Entry_Call
+                   or else
+                     Nkind (Parent (Parent (The_Parent)))
+                       = N_Conditional_Entry_Call)
                then
                   return Parent (Parent (The_Parent));
                else
@@ -1799,6 +1798,13 @@ package body Exp_Ch7 is
                then
                   return The_Parent;
                end if;
+
+            --  A raise statement can be wrapped. This will arise when the
+            --  expression in a raise_with_expression uses the secondary
+            --  stack, for example.
+
+            when N_Raise_Statement  =>
+               return The_Parent;
 
             --  If the expression is within the iteration scheme of a loop,
             --  we must create a declaration for it, followed by an assignment
@@ -1957,10 +1963,11 @@ package body Exp_Ch7 is
    -----------------------
 
    function Make_Adjust_Call
-     (Ref          : Node_Id;
-      Typ          : Entity_Id;
-      Flist_Ref    : Node_Id;
-      With_Attach  : Node_Id) return List_Id
+     (Ref         : Node_Id;
+      Typ         : Entity_Id;
+      Flist_Ref   : Node_Id;
+      With_Attach : Node_Id;
+      Allocator   : Boolean := False) return List_Id
    is
       Loc    : constant Source_Ptr := Sloc (Ref);
       Res    : constant List_Id    := New_List;
@@ -2018,8 +2025,19 @@ package body Exp_Ch7 is
          Attach := Make_Integer_Literal (Loc, 0);
       end if;
 
+      --  Special case for allocators: need initialization of the chain
+      --  pointers. For the 0 case, reset them to null.
+
+      if Allocator then
+         pragma Assert (Nkind (Attach) = N_Integer_Literal);
+
+         if Intval (Attach) = 0 then
+            Set_Intval (Attach, Uint_4);
+         end if;
+      end if;
+
       --  Generate:
-      --    Deep_Adjust (Flist_Ref, Ref, With_Attach);
+      --    Deep_Adjust (Flist_Ref, Ref, Attach);
 
       if Has_Controlled_Component (Utyp)
         or else Is_Class_Wide_Type (Typ)
@@ -2139,7 +2157,7 @@ package body Exp_Ch7 is
 
          --  Add statements to the cleanup handler of the (ordinary)
          --  subprogram expanded to implement a protected subprogram,
-         --  unlocking the protected object parameter and undeferring abortion.
+         --  unlocking the protected object parameter and undeferring abort.
          --  If this is a protected procedure, and the object contains
          --  entries, this also calls the entry service routine.
 
@@ -2158,7 +2176,7 @@ package body Exp_Ch7 is
                Pid := Corresponding_Concurrent_Type (Param_Type);
             end if;
 
-            exit when not Present (Param) or else Present (Pid);
+            exit when No (Param) or else Present (Pid);
             Next (Param);
          end loop;
 
@@ -2214,6 +2232,8 @@ package body Exp_Ch7 is
               or else Has_Interrupt_Handler (Pid)
               or else (Has_Attach_Handler (Pid)
                          and then not Restricted_Profile)
+              or else (Ada_Version >= Ada_05
+                         and then Present (Interface_List (Parent (Pid))))
             then
                if Abort_Allowed
                  or else Restriction_Active (No_Entry_Queue) = False
@@ -2733,13 +2753,27 @@ package body Exp_Ch7 is
       Utyp := Underlying_Type (Base_Type (Utyp));
       Set_Assignment_OK (Cref);
 
-      --  Deal with non-tagged derivation of private views
+      --  Deal with non-tagged derivation of private views. If the parent is
+      --  now known to be protected, the finalization routine is the one
+      --  defined on the corresponding record of the ancestor (corresponding
+      --  records do not automatically inherit operations, but maybe they
+      --  should???)
 
       if Is_Untagged_Derivation (Typ) then
-         Utyp := Underlying_Type (Root_Type (Base_Type (Typ)));
+         if Is_Protected_Type (Typ) then
+            Utyp := Corresponding_Record_Type (Root_Type (Base_Type (Typ)));
+         else
+            Utyp := Underlying_Type (Root_Type (Base_Type (Typ)));
+         end if;
+
          Cref := Unchecked_Convert_To (Utyp, Cref);
+
+         --  We need to set Assignment_OK to prevent problems with unchecked
+         --  conversions, where we do not want them to be converted back in the
+         --  case of untagged record derivation (see code in Make_*_Call
+         --  procedures for similar situations).
+
          Set_Assignment_OK (Cref);
-         --  To prevent problems with UC see 1.156 RH ???
       end if;
 
       --  If the underlying_type is a subtype, we are dealing with

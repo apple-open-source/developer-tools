@@ -1,4 +1,3 @@
-// APPLE LOCAL file mainline 2006-02-24 4086777
 // { dg-do compile { target powerpc*-*-darwin* } }
 // { dg-final { scan-assembler-not "__cxa_get_exception" } }
 // { dg-options "-mmacosx-version-min=10.4" }

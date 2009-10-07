@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-1997 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -20,8 +20,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -42,44 +42,42 @@ generic
 
 package Ada.Text_IO.Complex_IO is
 
-   use Complex_Types;
-
    Default_Fore : Field := 2;
-   Default_Aft  : Field := Real'Digits - 1;
+   Default_Aft  : Field := Complex_Types.Real'Digits - 1;
    Default_Exp  : Field := 3;
 
    procedure Get
-     (File  : in  File_Type;
-      Item  : out Complex;
-      Width : in  Field := 0);
+     (File  : File_Type;
+      Item  : out Complex_Types.Complex;
+      Width : Field := 0);
 
    procedure Get
-     (Item  : out Complex;
-      Width : in  Field := 0);
+     (Item  : out Complex_Types.Complex;
+      Width : Field := 0);
 
    procedure Put
-     (File : in File_Type;
-      Item : in Complex;
-      Fore : in Field := Default_Fore;
-      Aft  : in Field := Default_Aft;
-      Exp  : in Field := Default_Exp);
+     (File : File_Type;
+      Item : Complex_Types.Complex;
+      Fore : Field := Default_Fore;
+      Aft  : Field := Default_Aft;
+      Exp  : Field := Default_Exp);
 
    procedure Put
-     (Item : in Complex;
-      Fore : in Field := Default_Fore;
-      Aft  : in Field := Default_Aft;
-      Exp  : in Field := Default_Exp);
+     (Item : Complex_Types.Complex;
+      Fore : Field := Default_Fore;
+      Aft  : Field := Default_Aft;
+      Exp  : Field := Default_Exp);
 
    procedure Get
-     (From : in  String;
-      Item : out Complex;
+     (From : String;
+      Item : out Complex_Types.Complex;
       Last : out Positive);
 
    procedure Put
      (To   : out String;
-      Item : in  Complex;
-      Aft  : in  Field := Default_Aft;
-      Exp  : in  Field := Default_Exp);
+      Item : Complex_Types.Complex;
+      Aft  : Field := Default_Aft;
+      Exp  : Field := Default_Exp);
 
 private
    pragma Inline (Get);

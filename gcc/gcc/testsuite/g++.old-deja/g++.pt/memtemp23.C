@@ -13,7 +13,8 @@ struct S
 
   template <class U>
   void f(U u)
-  { printf ("In S::f(U)\nsizeof(U) == %d\n", sizeof(u)); }
+  /* APPLE LOCAL default to Wformat-security 5764921 */
+  { printf ("In S::f(U)\nsizeof(U) == %d\n", (int)sizeof(u)); }
 
   int c[16];
 };

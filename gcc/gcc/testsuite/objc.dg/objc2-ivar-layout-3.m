@@ -21,7 +21,7 @@
 @implementation X_NSKeyValueObservance
 @end
 
-const char expected_strong [] = {0x01, 0x20, 0x01, 0x30, 0};
+const char expected_strong [] = {0x01, 0x21, 0x30, 0};
 const char expected_weak [] = {0x21, 0x40, 0x00};
 
 int main()

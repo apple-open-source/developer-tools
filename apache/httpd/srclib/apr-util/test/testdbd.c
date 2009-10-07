@@ -1,9 +1,9 @@
-/* Copyright 2000-2005 The Apache Software Foundation or its licensors, as
- * applicable.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+/* Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -183,7 +183,7 @@ static void test_dbd_sqlite2(abts_case *tc, void *data)
     ABTS_ASSERT(tc, "failed to fetch driver", rv == APR_SUCCESS);
     ABTS_PTR_NOTNULL(tc, driver);
 
-    ABTS_STR_EQUAL(tc, apr_dbd_name(driver), "sqlite2");
+    ABTS_STR_EQUAL(tc, "sqlite2", apr_dbd_name(driver));
 
     rv = apr_dbd_open(driver, pool, "data/sqlite2.db:600", &handle);
     ABTS_ASSERT(tc, "failed to open database", rv == APR_SUCCESS);
@@ -205,7 +205,7 @@ static void test_dbd_sqlite3(abts_case *tc, void *data)
     ABTS_ASSERT(tc, "failed to fetch driver", rv == APR_SUCCESS);
     ABTS_PTR_NOTNULL(tc, driver);
 
-    ABTS_STR_EQUAL(tc, apr_dbd_name(driver), "sqlite3");
+    ABTS_STR_EQUAL(tc, "sqlite3", apr_dbd_name(driver));
 
     rv = apr_dbd_open(driver, pool, "data/sqlite3.db", &handle);
     ABTS_ASSERT(tc, "failed to open database", rv == APR_SUCCESS);

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---       Copyright (C) 1998-2002 Free Software Foundation, Inc.             --
+--          Copyright (C) 1998-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -80,11 +80,11 @@ package Xref_Lib is
    -----------------------
 
    procedure Print_Gnatfind
-     (References     : in Boolean;
-      Full_Path_Name : in Boolean);
-   procedure Print_Unused (Full_Path_Name : in Boolean);
-   procedure Print_Vi (Full_Path_Name : in Boolean);
-   procedure Print_Xref (Full_Path_Name : in Boolean);
+     (References     : Boolean;
+      Full_Path_Name : Boolean);
+   procedure Print_Unused (Full_Path_Name : Boolean);
+   procedure Print_Vi     (Full_Path_Name : Boolean);
+   procedure Print_Xref   (Full_Path_Name : Boolean);
    --  The actual print procedures. These functions step through the symbol
    --  table and print all the symbols if they match the files given on the
    --  command line (they already match the entities if they are in the
@@ -94,8 +94,8 @@ package Xref_Lib is
    -- General Algorithms --
    ------------------------
 
-   function Default_Project_File (Dir_Name : in String) return String;
-   --  Returns the default Project file name for the directory Dir_Name.
+   function Default_Project_File (Dir_Name : String) return String;
+   --  Returns the default Project file name for the directory Dir_Name
 
    procedure Search
      (Pattern       : Search_Pattern;
@@ -144,16 +144,16 @@ private
    type Dependencies is new Dependencies_Tables.Instance;
 
    type ALI_File is limited record
-      Buffer         : String_Access := null;
+      Buffer : String_Access := null;
       --  Buffer used to read the whole file at once
 
-      Current_Line   : Positive;
+      Current_Line : Positive;
       --  Start of the current line in Buffer
 
-      Xref_Line      : Positive;
+      Xref_Line : Positive;
       --  Start of the xref lines in Buffer
 
-      X_File         : Xr_Tabls.File_Reference;
+      X_File : Xr_Tabls.File_Reference;
       --  Stores the cross-referencing file-name ("X..." lines), as an
       --  index into the dependencies table
 
@@ -171,10 +171,10 @@ private
       --  line, it is stored as "Entity_Name Declaration_File:line:column"
 
       File_Ref : Xr_Tabls.File_Reference;
-      --  A reference to the source file, if any.
+      --  A reference to the source file, if any
 
       Initialized : Boolean := False;
-      --  Set to True when Entity has been initialized.
+      --  Set to True when Entity has been initialized
    end record;
-   --  Stores all the pattern that are search for.
+
 end Xref_Lib;

@@ -1,6 +1,6 @@
 /* APPLE LOCAL file 4231773 */
 /* { dg-do compile { target i?86-*-darwin* } } */
-/* { dg-skip-if "" { i?86-*-darwin* } { "-m64" } { "" } } */
+/* { dg-require-effective-target ilp32 } */
 /* { dg-options "-Oz -static" } */
 /* { dg-final { scan-assembler "\tincl?\[ 	\]*_?global_x" } } */
 

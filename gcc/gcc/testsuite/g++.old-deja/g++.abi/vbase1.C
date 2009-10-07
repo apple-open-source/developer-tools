@@ -33,7 +33,8 @@ struct VBase
   void Offset () const
   {
     printf ("VBase\n");
-    printf ("  VBase::member %d\n", &this->VBase::member - (int *)this);
+    /* APPLE LOCAL default to Wformat-security 5764921 */
+    printf ("  VBase::member %d\n", int(&this->VBase::member - (int *)this));
   }
 };
 
@@ -55,8 +56,10 @@ struct VDerived : virtual VBase
   void Offset () const
   {
     printf ("VDerived\n");
-    printf ("  VBase::member %d\n", &this->VBase::member - (int *)this);
-    printf ("  VDerived::member %d\n", &this->VDerived::member - (int *)this);
+    /* APPLE LOCAL begin default to Wformat-security 5764921 */
+    printf ("  VBase::member %d\n", int(&this->VBase::member - (int *)this));
+    printf ("  VDerived::member %d\n", int(&this->VDerived::member - (int *)this));
+    /* APPLE LOCAL end default to Wformat-security 5764921 */
   }
 };
 struct B : virtual VBase
@@ -65,8 +68,10 @@ struct B : virtual VBase
   void Offset () const
   {
     printf ("B\n");
-    printf ("  VBase::member %d\n", &this->VBase::member - (int *)this);
-    printf ("  B::member %d\n", &this->B::member - (int *)this);
+    /* APPLE LOCAL begin default to Wformat-security 5764921 */
+    printf ("  VBase::member %d\n", int(&this->VBase::member - (int *)this));
+    printf ("  B::member %d\n", int(&this->B::member - (int *)this));
+    /* APPLE LOCAL end default to Wformat-security 5764921 */
   }
 };
 struct MostDerived : B, virtual VDerived
@@ -75,10 +80,12 @@ struct MostDerived : B, virtual VDerived
   void Offset () const
   {
     printf ("MostDerived\n");
-    printf ("  VBase::member %d\n", &this->VBase::member - (int *)this);
-    printf ("  B::member %d\n", &this->B::member - (int *)this);
-    printf ("  VDerived::member %d\n", &this->VDerived::member - (int *)this);
-    printf ("  MostDerived::member %d\n", &this->MostDerived::member - (int *)this);
+    /* APPLE LOCAL begin default to Wformat-security 5764921 */
+    printf ("  VBase::member %d\n", int(&this->VBase::member - (int *)this));
+    printf ("  B::member %d\n", int(&this->B::member - (int *)this));
+    printf ("  VDerived::member %d\n", int(&this->VDerived::member - (int *)this));
+    printf ("  MostDerived::member %d\n", int(&this->MostDerived::member - (int *)this));
+    /* APPLE LOCAL end default to Wformat-security 5764921 */
   }
 };
 
@@ -95,10 +102,12 @@ int main ()
     if (ctorVDerived != &dum.VDerived::member)
       return 24;
     
-    printf ("  VBase::member %d\n", &dum.VBase::member - this_);
-    printf ("  B::member %d\n", &dum.B::member - this_);
-    printf ("  VDerived::member %d\n", &dum.VDerived::member - this_);
-    printf ("  MostDerived::member %d\n", &dum.MostDerived::member - this_);
+    /* APPLE LOCAL begin default to Wformat-security 5764921 */
+    printf ("  VBase::member %d\n", int(&dum.VBase::member - this_));
+    printf ("  B::member %d\n", int(&dum.B::member - this_));
+    printf ("  VDerived::member %d\n", int(&dum.VDerived::member - this_));
+    printf ("  MostDerived::member %d\n", int(&dum.MostDerived::member - this_));
+    /* APPLE LOCAL end default to Wformat-security 5764921 */
     dum.MostDerived::Offset ();
     dum.B::Offset ();
     dum.VDerived::Offset ();

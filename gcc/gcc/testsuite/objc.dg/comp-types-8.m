@@ -1,4 +1,3 @@
-/* APPLE LOCAL file mainline */
 /* { dg-do compile } */
 /* Another gimplifier ICE... */
 

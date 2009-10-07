@@ -1,6 +1,7 @@
 /* APPLE LOCAL file mainline 2007-02-20 5005743 */
 /* Basic test for -mmacosx-version-min switch on Darwin.  */
-/* { dg-options "-mmacosx-version-min=10.1" } */
+/* APPLE LOCAL 64-bit default */
+/* { dg-options "-mmacosx-version-min=10.1 -m32" } */
 /* { dg-do run { target powerpc*-*-darwin* i?86*-*-darwin* } } */
 
 int main(void)

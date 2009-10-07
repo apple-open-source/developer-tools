@@ -119,9 +119,19 @@ enum {
 ** Does this platform support an executable flag?
 **
 ** ### need a way to portably abstract this query
+**
+** DAV_FINFO_MASK gives the appropriate mask to use for the stat call
+** used to get file attributes.
 */
 #ifndef WIN32
 #define DAV_FS_HAS_EXECUTABLE
+#define DAV_FINFO_MASK (APR_FINFO_LINK | APR_FINFO_TYPE | APR_FINFO_INODE | \
+                        APR_FINFO_SIZE | APR_FINFO_CTIME | APR_FINFO_MTIME | \
+                        APR_FINFO_PROT)
+#else
+/* as above, but without APR_FINFO_PROT */
+#define DAV_FINFO_MASK (APR_FINFO_LINK | APR_FINFO_TYPE | APR_FINFO_INODE | \
+                        APR_FINFO_SIZE | APR_FINFO_CTIME | APR_FINFO_MTIME)
 #endif
 
 /*
@@ -1479,10 +1489,8 @@ static dav_error * dav_fs_walker(dav_fs_walker_context *fsctx, int depth)
         /* append this file onto the path buffer (copy null term) */
         dav_buffer_place_mem(pool, &fsctx->path1, dirent.name, len + 1, 0);
 
-
-        /* ### Optimize me, dirent can give us what we need! */
         status = apr_stat(&fsctx->info1.finfo, fsctx->path1.buf,
-                          APR_FINFO_NORM | APR_FINFO_LINK, pool);
+                          DAV_FINFO_MASK, pool);
         if (status != APR_SUCCESS && status != APR_INCOMPLETE) {
             /* woah! where'd it go? */
             /* ### should have a better error here */
@@ -1777,13 +1785,15 @@ static const char *dav_fs_getetag(const dav_resource *resource)
         return apr_pstrdup(ctx->pool, "");
 
     if (ctx->finfo.filetype != 0) {
-        return apr_psprintf(ctx->pool, "\"%lx-%lx-%lx\"",
-                           (unsigned long) ctx->finfo.inode,
-                           (unsigned long) ctx->finfo.size,
-                           (unsigned long) ctx->finfo.mtime);
+        return apr_psprintf(ctx->pool, "\"%" APR_UINT64_T_HEX_FMT "-%"
+                            APR_UINT64_T_HEX_FMT "-%" APR_UINT64_T_HEX_FMT "\"",
+                            (apr_uint64_t) ctx->finfo.inode,
+                            (apr_uint64_t) ctx->finfo.size,
+                            (apr_uint64_t) ctx->finfo.mtime);
     }
 
-    return apr_psprintf(ctx->pool, "\"%lx\"", (unsigned long) ctx->finfo.mtime);
+    return apr_psprintf(ctx->pool, "\"%" APR_UINT64_T_HEX_FMT "\"",
+                       (apr_uint64_t) ctx->finfo.mtime);
 }
 
 static const dav_hooks_repository dav_hooks_repository_fs =

@@ -3,7 +3,7 @@
 /* { dg-options "-O0 -gdwarf-2 -dA -fno-eliminate-unused-debug-types" } */
 /* { dg-final { scan-assembler "__debug_pubtypes" } } */
 /* APPLE LOCAL begin ARM assembler uses @ for comments */
-/* { dg-final { scan-assembler "long+\[ \t\]+\(0x2a|42\)+\[ \t\n\]+\[#;@]+\[ \t\]+Length of Public Type Names Info" } } */
+/* { dg-final { scan-assembler "long+\[ \t\]+\(0x\)?\[0-9a-f]+\[ \t\n\]+\[#;@]+\[ \t\]+Length of Public Type Names Info" } } */
 /* { dg-final { scan-assembler "\"empty\\\\0\"+\[ \t\]+\[#;@]+\[ \t\]+external name" } } */
 /* { dg-final { scan-assembler "\"A\\\\0\"+\[ \t\]+\[#;@]+\[ \t\]+external name" } } */
 /* { dg-final { scan-assembler "\"B\\\\0\"+\[ \t\]+\[#;@]+\[ \t\]+external name" } } */

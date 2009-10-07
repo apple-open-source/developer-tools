@@ -1,4 +1,4 @@
-/* APPLE LOCAL file mainline */
+
 /* Make sure that bitfield types are printed correctly, and that ivar redeclaration
   (@interface vs. @implementation) checks take the bitfield width into account.  */
 /* Author: Ziemowit Laski   <zlaski@apple.com>  */

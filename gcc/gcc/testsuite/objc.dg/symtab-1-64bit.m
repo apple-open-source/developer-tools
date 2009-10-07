@@ -22,4 +22,4 @@
 @end
 
 /* APPLE LOCAL testing */
-/* { dg-final { scan-assembler "L_OBJC_SYMBOLS.*:\n\t.quad\t0\n\t.long\t0\n\t.space 4\n\t.(short|word)\t2\n\t.(short|word)\t0\n\t.space 4\n\t.quad\tL_OBJC_CLASS_Derived.*\n\t.quad\tL_OBJC_CLASS_Base.*\n" } } */
+/* { dg-final { scan-assembler "L_OBJC_SYMBOLS.*:\n\t.quad\t0\n\t.quad\t0\n\t.(short|word)\t2\n\t.(short|word)\t0\n\t.space 4\n\t.quad\tL_OBJC_CLASS_Derived.*\n\t.quad\tL_OBJC_CLASS_Base.*\n" } } */

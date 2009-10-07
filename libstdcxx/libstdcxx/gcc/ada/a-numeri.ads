@@ -1,6 +1,6 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                         GNAT RUNTIME COMPONENTS                          --
+--                         GNAT RUN-TIME COMPONENTS                         --
 --                                                                          --
 --                         A D A . N U M E R I C S                          --
 --                                                                          --
@@ -13,9 +13,8 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
-
 package Ada.Numerics is
-pragma Pure (Numerics);
+   pragma Pure;
 
    Argument_Error : exception;
 

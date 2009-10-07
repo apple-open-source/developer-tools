@@ -16,8 +16,6 @@
 .Op womp Ar 1/0
 .Op ring Ar 1/0
 .Op autorestart Ar 1/0
-.Op dps Ar 1/0
-.Op reduce Ar 1/0
 .Op powerbutton Ar 1/0
 .Op lidwake Ar 1/0
 .Op acwake Ar 1/0
@@ -32,7 +30,7 @@
 .Op haltremain Ar minutes
 .Nm
 .Fl g
-.Op disk | live | cap | sched | ups | ps | pslog | rawlog
+.Op custom | live | cap | sched | ups | ps | pslog | rawlog
 .Nm
 schedule
 .Op cancel 
@@ -53,8 +51,6 @@ repeat type weekdays time
 .\.Op ring
 .\.Op autorestart
 .\.Op acwake
-.\.Op dps
-.\.Op reduce
 .Sh DESCRIPTION
 .Nm
 changes and reads power management settings such as idle sleep timing, wake on administrative access, automatic restart on power loss, etc.
@@ -90,8 +86,9 @@ The boot argument tells power management that system bootup is complete. Loginwi
 will also display the settings currently in use.
 .br
 .Fl g
-.Ar disk
-will display settings for all power sources, including those not currently in use.
+.Ar custom
+will display custom settings for all power sources, although these settings may not currently be in use;
+a pre-set settings profile may be active instead.
 .br
 .Fl g
 .Ar cap
@@ -138,12 +135,6 @@ will display the settings associated with each Energy Saver profile.
 .br
 .Ar autorestart
 - automatic restart on power loss (value = 0/1)
-.br
-.Ar dps
-- dynamically change processor speed based on load (value = 0/1)
-.br
-.Ar reduce
-- reduce processor speed (value = 0/1)
 .br
 .Ar powerbutton
 - sleep the machine when power button is pressed (value = 0/1)

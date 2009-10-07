@@ -1,5 +1,5 @@
 /* Perform optimizations on tree structure.
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2004
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2004, 2005
    Free Software Foundation, Inc.
    Written by Mark Michell (mark@codesourcery.com).
 
@@ -17,8 +17,8 @@ General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 #include "config.h"
 #include "system.h"
@@ -88,7 +88,7 @@ struct clone_info
 
 /* Prototypes.  */
 
-static void update_cloned_parm (tree, tree);
+static void update_cloned_parm (tree, tree, bool);
 /* APPLE LOCAL begin ARM structor thunks */
 static void thunk_body (tree, tree, tree);
 static tree examine_tree_for_in_charge_use (tree *, int *, void *);
@@ -102,7 +102,7 @@ static tree find_earlier_clone (struct clone_info *);
    debugging generation code will be able to find the original PARM.  */
 
 static void
-update_cloned_parm (tree parm, tree cloned_parm)
+update_cloned_parm (tree parm, tree cloned_parm, bool first)
 {
   DECL_ABSTRACT_ORIGIN (cloned_parm) = parm;
 
@@ -111,12 +111,15 @@ update_cloned_parm (tree parm, tree cloned_parm)
 
   /* The definition might have different constness.  */
   TREE_READONLY (cloned_parm) = TREE_READONLY (parm);
-  
-  TREE_USED (cloned_parm) = TREE_USED (parm);
-  
+
+  TREE_USED (cloned_parm) = !first || TREE_USED (parm);
+
   /* The name may have changed from the declaration.  */
   DECL_NAME (cloned_parm) = DECL_NAME (parm);
   DECL_SOURCE_LOCATION (cloned_parm) = DECL_SOURCE_LOCATION (parm);
+  TREE_TYPE (cloned_parm) = TREE_TYPE (parm);
+
+  DECL_COMPLEX_GIMPLE_REG_P (cloned_parm) = DECL_COMPLEX_GIMPLE_REG_P (parm);
 }
 
 /* APPLE LOCAL begin ARM structor thunks */
@@ -125,7 +128,7 @@ update_cloned_parm (tree parm, tree cloned_parm)
 static tree
 examine_tree_for_in_charge_use (tree *tp, int *walk_subtrees, void *vdata)
 {
-  struct thunk_tree_walk_data* data = vdata;
+  struct thunk_tree_walk_data *data = (struct thunk_tree_walk_data *) vdata;
   switch (TREE_CODE (*tp))
     {
       case PARM_DECL:
@@ -359,6 +362,7 @@ bool
 maybe_clone_body (tree fn)
 {
   tree clone;
+  bool first = true;
 /* APPLE LOCAL begin ARM structor thunks */
   tree clone_to_call;
   struct clone_info info;
@@ -409,7 +413,7 @@ maybe_clone_body (tree fn)
       parm = DECL_ARGUMENTS (fn);
       clone_parm = DECL_ARGUMENTS (clone);
       /* Update the `this' parameter, which is always first.  */
-      update_cloned_parm (parm, clone_parm);
+      update_cloned_parm (parm, clone_parm, first);
       parm = TREE_CHAIN (parm);
       clone_parm = TREE_CHAIN (clone_parm);
       if (DECL_HAS_IN_CHARGE_PARM_P (fn))
@@ -421,7 +425,7 @@ maybe_clone_body (tree fn)
       for (; parm;
 	   parm = TREE_CHAIN (parm), clone_parm = TREE_CHAIN (clone_parm))
 	/* Update this parameter.  */
-	update_cloned_parm (parm, clone_parm);
+	update_cloned_parm (parm, clone_parm, first);
 
       /* Start processing the function.  */
       start_preparsed_function (clone, NULL_TREE, SF_PRE_PARSED);
@@ -486,7 +490,6 @@ maybe_clone_body (tree fn)
 	  splay_tree_insert (decl_map, (splay_tree_key) parm,
 			     (splay_tree_value) clone_parm);
 	}
-
       /* APPLE LOCAL begin ARM structor thunks */
       clone_to_call = find_earlier_clone (&info);
       if (clone_to_call)
@@ -498,9 +501,6 @@ maybe_clone_body (tree fn)
 	clone_body (clone, fn, decl_map);
       /* APPLE LOCAL end ARM structor thunks */
 
-      /* Clean up.  */
-      splay_tree_delete (decl_map);
-
       /* The clone can throw iff the original function can throw.  */
       cp_function_chain->can_throw = !TREE_NOTHROW (fn);
 
@@ -508,6 +508,7 @@ maybe_clone_body (tree fn)
       finish_function (0);
       BLOCK_ABSTRACT_ORIGIN (DECL_INITIAL (clone)) = DECL_INITIAL (fn);
       expand_or_defer_fn (clone);
+      first = false;
       /* APPLE LOCAL begin ARM structor thunks */
       info.clones [info.next_clone] = clone;
       info.next_clone++;

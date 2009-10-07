@@ -272,13 +272,13 @@ memory_error (int status, CORE_ADDR memaddr)
     {
       /* Actually, address between memaddr and memaddr + len
          was out of bounds. */
-      fprintf_unfiltered (tmp_stream, "Cannot access memory at address ");
-      deprecated_print_address_numeric (memaddr, 1, tmp_stream);
+      fprintf_unfiltered (tmp_stream, "Cannot access memory at address 0x%s",
+                          phex_nz (memaddr, sizeof (CORE_ADDR)));
     }
   else
     {
-      fprintf_filtered (tmp_stream, "Error accessing memory address ");
-      deprecated_print_address_numeric (memaddr, 1, tmp_stream);
+      fprintf_filtered (tmp_stream, "Error accessing memory address 0x%s",
+                          phex_nz (memaddr, sizeof (CORE_ADDR)));
       fprintf_filtered (tmp_stream, ": %s.",
 		       safe_strerror (status));
     }

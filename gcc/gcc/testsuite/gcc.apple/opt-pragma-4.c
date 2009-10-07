@@ -21,5 +21,5 @@ void f5(int x) {
 void f6(int x) {
   printf("%d\n", x);
 }
-/* { dg-final { scan-assembler-times "b L_printf" 2 } } */
-/* { dg-final { scan-assembler-times "bl L_printf" 2 } } */
+/* { dg-final { scan-assembler-times "b L?_printf" 2 } } */
+/* { dg-final { scan-assembler-times "bl L?_printf" 2 } } */

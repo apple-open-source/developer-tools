@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---               Copyright (C) 2002 Ada Core Technologies, Inc.             --
+--                      Copyright (C) 2002-2006, AdaCore                    --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -34,9 +34,9 @@
 --  This package may be used to intercept the interruption of a running
 --  program by the operator typing Control-C, without having to use an Ada
 --  interrupt handler protected object.
---
---  This package is currently implemented under Windows and Unix platforms.
---
+
+--  This package is currently implemented under Windows and Unix platforms
+
 --  Note concerning Unix systems:
 
 --  The behavior of this package when using tasking depends on the interaction
@@ -55,7 +55,8 @@ package GNAT.Ctrl_C is
    --  Handler_Type should not propagate exceptions.
 
    procedure Install_Handler (Handler : Handler_Type);
-   --  Set up Handler to be called if the operator hits Ctrl-C.
+   --  Set up Handler to be called if the operator hits Ctrl-C, instead of the
+   --  standard Control-C handler.
 
    procedure Uninstall_Handler;
    --  Reinstall the standard Control-C handler.

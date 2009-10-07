@@ -27,7 +27,7 @@
 <table class="module"><tr><th><a href="module-dict.html#Description">Description:</a></th><td><code class="module"><a href="../mod/mod_proxy.html">mod_proxy</a></code> extension for load balancing </td></tr>
 <tr><th><a href="module-dict.html#Status">Status:</a></th><td>Extension</td></tr>
 <tr><th><a href="module-dict.html#ModuleIdentifier">Module Identifier:</a></th><td>proxy_balancer_module</td></tr>
-<tr><th><a href="module-dict.html#SourceFile">Source File:</a></th><td>proxy_balancer.c</td></tr>
+<tr><th><a href="module-dict.html#SourceFile">Source File:</a></th><td>mod_proxy_balancer.c</td></tr>
 <tr><th><a href="module-dict.html#Compatibility">Compatibility:</a></th><td>Available in version 2.1 and later</td></tr></table>
 <h3>Summary</h3>
 
@@ -51,8 +51,10 @@
 <h3>Topics</h3>
 <ul id="topics">
 <li><img alt="" src="../images/down.gif" /> <a href="#scheduler">Load balancer scheduler algorithm</a></li>
+<li><img alt="" src="../images/down.gif" /> <a href="#example">Example of a balancer configuration</a></li>
 <li><img alt="" src="../images/down.gif" /> <a href="#requests">Request Counting Algorithm</a></li>
 <li><img alt="" src="../images/down.gif" /> <a href="#traffic">Weighted Traffic Counting Algorithm</a></li>
+<li><img alt="" src="../images/down.gif" /> <a href="#busyness">Pending Request Counting Algorithm</a></li>
 <li><img alt="" src="../images/down.gif" /> <a href="#environment">Exported Environment Variables</a></li>
 <li><img alt="" src="../images/down.gif" /> <a href="#enable">Enabling Balancer Manager Support</a></li>
 </ul><h3>See also</h3>
@@ -63,12 +65,28 @@
 <div class="section">
 <h2><a name="scheduler" id="scheduler">Load balancer scheduler algorithm</a></h2>
     
-    <p>At present, there are 2 load balancer scheduler algorithms available
-    for use: Request Counting and Weighted Traffic Counting. These are controlled
-    via the <code>lbmethod</code> value of the Balancer definition. See
-    the <code class="directive"><a href="../mod/mod_proxy.html#proxy">Proxy</a></code> directive for
-    more information.</p>
+    <p>At present, there are 3 load balancer scheduler algorithms available
+    for use: Request Counting, Weighted Traffic Counting and Pending Request 
+    Counting. These are controlled via the <code>lbmethod</code> value of
+    the Balancer definition. See the <code class="directive"><a href="../mod/mod_proxy.html#proxypass">ProxyPass</a></code> 
+    directive for more information.</p>
 
+</div><div class="top"><a href="#page-header"><img alt="top" src="../images/up.gif" /></a></div>
+<div class="section">
+<h2><a name="example" id="example">Example of a balancer configuration</a></h2>
+	
+	<p>Before we dive into the technical details, here's an example of
+	how you might use <code class="module"><a href="../mod/mod_proxy_balancer.html">mod_proxy_balancer</a></code> to provide
+	load balancing between two back-end servers:
+	</p>
+
+	<div class="example"><p><code>
+	&lt;Proxy balancer://mycluster&gt;<br />
+		BalancerMember http://192.168.1.50:80<br />
+		BalancerMember http://192.168.1.51:80<br />
+	&lt;/Proxy&gt;<br />
+	ProxyPass /test balancer://mycluster/
+	</code></p></div>
 </div><div class="top"><a href="#page-header"><img alt="top" src="../images/up.gif" /></a></div>
 <div class="section">
 <h2><a name="requests" id="requests">Request Counting Algorithm</a></h2>
@@ -276,6 +294,25 @@ candidate lbstatus -= total factor</code></pre></div>
 
 </div><div class="top"><a href="#page-header"><img alt="top" src="../images/up.gif" /></a></div>
 <div class="section">
+<h2><a name="busyness" id="busyness">Pending Request Counting Algorithm</a></h2>
+
+    
+
+    <p>Enabled via <code>lbmethod=bybusyness</code>, this scheduler keeps
+    track of how many requests each worker is assigned at present. A new
+    request is automatically assigned to the worker with the lowest
+    number of active requests. This is useful in the case of workers
+    that queue incoming requests independently of Apache, to ensure that
+    queue length stays even and a request is always given to the worker
+    most likely to service it fastest.</p>
+
+    <p>In the case of multiple least-busy workers, the statistics (and
+    weightings) used by the Request Counting method are used to break the
+    tie. Over time, the distribution of work will come to resemble that
+    characteristic of <code>byrequests</code>.</p>
+
+</div><div class="top"><a href="#page-header"><img alt="top" src="../images/up.gif" /></a></div>
+<div class="section">
 <h2><a name="environment" id="environment">Exported Environment Variables</a></h2>
     
     <p>At present there are 6 environment variables exported:</p>
@@ -343,7 +380,7 @@ candidate lbstatus -= total factor</code></pre></div>
     <code class="module"><a href="../mod/mod_status.html">mod_status</a></code> and <code class="module"><a href="../mod/mod_proxy_balancer.html">mod_proxy_balancer</a></code>
     have to be present in the server.</p>
 
-    <p>To enable load balancer management for browsers from the foo.com
+    <p>To enable load balancer management for browsers from the example.com
     domain add this code to your <code>httpd.conf</code>
     configuration file</p>
 <div class="example"><p><code>
@@ -352,7 +389,7 @@ candidate lbstatus -= total factor</code></pre></div>
 <br />
     Order Deny,Allow<br />
     Deny from all<br />
-    Allow from .foo.com<br />
+    Allow from .example.com<br />
     &lt;/Location&gt;
 </code></p></div>
 
@@ -365,6 +402,6 @@ candidate lbstatus -= total factor</code></pre></div>
 <p><span>Available Languages: </span><a href="../en/mod/mod_proxy_balancer.html" title="English">&nbsp;en&nbsp;</a> |
 <a href="../ja/mod/mod_proxy_balancer.html" hreflang="ja" rel="alternate" title="Japanese">&nbsp;ja&nbsp;</a></p>
 </div><div id="footer">
-<p class="apache">Copyright 2007 The Apache Software Foundation.<br />Licensed under the <a href="http://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a>.</p>
+<p class="apache">Copyright 2008 The Apache Software Foundation.<br />Licensed under the <a href="http://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a>.</p>
 <p class="menu"><a href="../mod/">Modules</a> | <a href="../mod/directives.html">Directives</a> | <a href="../faq/">FAQ</a> | <a href="../glossary.html">Glossary</a> | <a href="../sitemap.html">Sitemap</a></p></div>
 </body></html>

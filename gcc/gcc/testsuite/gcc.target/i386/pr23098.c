@@ -1,4 +1,3 @@
-/* APPLE LOCAL begin mainline 2005-09-07 */
 /* PR rtl-optimization/23098 */
 /* { dg-do compile } */
 /* { dg-options "-O2 -fPIC" } */
@@ -24,4 +23,3 @@ f3 (float *x, float t)
 {
   *x = 0.0 + t;
 }
-/* APPLE LOCAL end mainline 2005-09-07 */

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---              Copyright (C) 2001-2004 Ada Core Technologies, Inc.         --
+--                     Copyright (C) 2001-2005, AdaCore                     --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -31,7 +31,7 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
---  Temporary version for Alpha/VMS.
+--  Temporary version for Alpha/VMS
 
 with GNAT.OS_Lib; use GNAT.OS_Lib;
 with GNAT.Task_Lock;
@@ -40,8 +40,8 @@ with Interfaces.C; use Interfaces.C;
 
 package body GNAT.Sockets.Thin is
 
-   Non_Blocking_Sockets : constant Fd_Set_Access
-     := New_Socket_Set (No_Socket_Set);
+   Non_Blocking_Sockets : constant Fd_Set_Access :=
+                            New_Socket_Set (No_Socket_Set);
    --  When this package is initialized with Process_Blocking_IO set
    --  to True, sockets are set in non-blocking mode to avoid blocking
    --  the whole process when a thread wants to perform a blocking IO
@@ -59,7 +59,7 @@ package body GNAT.Sockets.Thin is
    Thread_Blocking_IO : Boolean := True;
 
    Unknown_System_Error : constant C.Strings.chars_ptr :=
-     C.Strings.New_String ("Unknown system error");
+                            C.Strings.New_String ("Unknown system error");
 
    function Syscall_Accept
      (S       : C.int;
@@ -99,8 +99,7 @@ package body GNAT.Sockets.Thin is
      (S     : C.int;
       Msg   : System.Address;
       Len   : C.int;
-      Flags : C.int)
-      return  C.int;
+      Flags : C.int) return C.int;
    pragma Import (C, Syscall_Send, "send");
 
    function Syscall_Sendto
@@ -109,8 +108,7 @@ package body GNAT.Sockets.Thin is
       Len   : C.int;
       Flags : C.int;
       To    : Sockaddr_In_Access;
-      Tolen : C.int)
-      return  C.int;
+      Tolen : C.int) return C.int;
    pragma Import (C, Syscall_Sendto, "sendto");
 
    function Syscall_Socket

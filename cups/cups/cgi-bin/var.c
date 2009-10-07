@@ -1,9 +1,9 @@
 /*
- * "$Id: var.c 6649 2007-07-11 21:46:42Z mike $"
+ * "$Id: var.c 7460 2008-04-16 02:19:54Z mike $"
  *
  *   CGI form variable and array functions.
  *
- *   Copyright 2007 by Apple Inc.
+ *   Copyright 2007-2009 by Apple Inc.
  *   Copyright 1997-2005 by Easy Software Products.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -148,9 +148,6 @@ cgiGetArray(const char *name,		/* I - Name of array variable */
   if ((var = cgi_find_variable(name)) == NULL)
     return (NULL);
 
-  if (var->nvalues == 1)
-    return (var->values[0]);
-
   if (element < 0 || element >= var->nvalues)
     return (NULL);
 
@@ -203,10 +200,10 @@ cgiGetVariable(const char *name)	/* I - Name of variable */
 
 #ifdef DEBUG
   if (var == NULL)
-    printf("cgiGetVariable(\"%s\") is returning NULL...\n", name);
+    DEBUG_printf(("cgiGetVariable(\"%s\") is returning NULL...\n", name));
   else
-    printf("cgiGetVariable(\"%s\") is returning \"%s\"...\n", name,
-           var->values[var->nvalues - 1]);
+    DEBUG_printf(("cgiGetVariable(\"%s\") is returning \"%s\"...\n", name,
+		  var->values[var->nvalues - 1]));
 #endif /* DEBUG */
 
   return ((var == NULL) ? NULL : var->values[var->nvalues - 1]);
@@ -242,7 +239,6 @@ cgiInitialize(void)
   */
 
   setbuf(stdout, NULL);
-  puts("Content-type: text/plain\n");
 #endif /* DEBUG */
 
  /*
@@ -322,9 +318,15 @@ cgiSetArray(const char *name,		/* I - Name of variable */
   {
     if (element >= var->avalues)
     {
+      const char **temp;		/* Temporary pointer */
+
+      temp = (const char **)realloc((void *)(var->values),
+                                    sizeof(char *) * (element + 16));
+      if (!temp)
+        return;
+
       var->avalues = element + 16;
-      var->values  = (const char **)realloc((void *)(var->values),
-                                            sizeof(char *) * var->avalues);
+      var->values  = temp;
     }
 
     if (element >= var->nvalues)
@@ -362,9 +364,15 @@ cgiSetSize(const char *name,		/* I - Name of variable */
 
   if (size >= var->avalues)
   {
+    const char **temp;			/* Temporary pointer */
+
+    temp = (const char **)realloc((void *)(var->values),
+				  sizeof(char *) * (size + 16));
+    if (!temp)
+      return;
+
     var->avalues = size + 16;
-    var->values  = (const char **)realloc((void *)(var->values),
-                                          sizeof(char *) * var->avalues);
+    var->values  = temp;
   }
 
   if (size > var->nvalues)
@@ -426,31 +434,40 @@ cgi_add_variable(const char *name,	/* I - Variable name */
 		 int        element,	/* I - Array element number */
                  const char *value)	/* I - Variable value */
 {
-  _cgi_var_t	*var;				/* New variable */
+  _cgi_var_t	*var;			/* New variable */
 
 
   if (name == NULL || value == NULL || element < 0 || element > 100000)
     return;
 
-#ifdef DEBUG
-  printf("Adding variable \'%s\' with value \'%s\'...\n", name, value);
-#endif /* DEBUG */
+  DEBUG_printf(("cgi_add_variable: Adding variable \'%s\' with value "
+                "\'%s\'...\n", name, value));
 
   if (form_count >= form_alloc)
   {
-    if (form_alloc == 0)
-      form_vars = malloc(sizeof(_cgi_var_t) * 16);
-    else
-      form_vars = realloc(form_vars, (form_alloc + 16) * sizeof(_cgi_var_t));
+    _cgi_var_t	*temp_vars;		/* Temporary form pointer */
 
+
+    if (form_alloc == 0)
+      temp_vars = malloc(sizeof(_cgi_var_t) * 16);
+    else
+      temp_vars = realloc(form_vars, (form_alloc + 16) * sizeof(_cgi_var_t));
+
+    if (!temp_vars)
+      return;
+
+    form_vars  = temp_vars;
     form_alloc += 16;
   }
 
-  var                  = form_vars + form_count;
+  var = form_vars + form_count;
+
+  if ((var->values = calloc(element + 1, sizeof(char *))) == NULL)
+    return;
+
   var->name            = strdup(name);
   var->nvalues         = element + 1;
   var->avalues         = element + 1;
-  var->values          = calloc(element + 1, sizeof(char *));
   var->values[element] = strdup(value);
 
   form_count ++;
@@ -500,9 +517,7 @@ cgi_initialize_get(void)
   char	*data;				/* Pointer to form data string */
 
 
-#ifdef DEBUG
-  puts("Initializing variables using GET method...");
-#endif /* DEBUG */
+  DEBUG_puts("cgi_initialize_get: Initializing variables using GET method...");
 
  /*
   * Check to see if there is anything for us to read...
@@ -756,9 +771,7 @@ cgi_initialize_post(void)
 	status;				/* Return status */
 
 
-#ifdef DEBUG
-  puts("Initializing variables using POST method...");
-#endif /* DEBUG */
+  DEBUG_puts("cgi_initialize_post: Initializing variables using POST method...");
 
  /*
   * Check to see if there is anything for us to read...
@@ -784,11 +797,27 @@ cgi_initialize_post(void)
 
   for (tbytes = 0; tbytes < length; tbytes += nbytes)
     if ((nbytes = read(0, data + tbytes, length - tbytes)) < 0)
+    {
       if (errno != EAGAIN)
       {
         free(data);
         return (0);
       }
+      else
+        nbytes = 0;
+    }
+    else if (nbytes == 0)
+    {
+     /*
+      * CUPS STR #3176: OpenBSD: Early end-of-file on POST data causes 100% CPU
+      *
+      * This should never happen, but does on OpenBSD.  If we see early end-of-
+      * file, treat this as an error and process no data.
+      */
+
+      free(data);
+      return (0);
+    }
 
   data[length] = '\0';
 
@@ -905,7 +934,7 @@ cgi_initialize_string(const char *data)	/* I - Form data string */
     if (s > value)
       s --;
 
-    while (s >= value && *s == ' ')
+    while (s >= value && isspace(*s & 255))
       *s-- = '\0';
 
    /*
@@ -970,7 +999,7 @@ cgi_sort_variables(void)
   int	i;
 
 
-  puts("Sorting variables...");
+  DEBUG_puts("cgi_sort_variables: Sorting variables...");
 #endif /* DEBUG */
 
   if (form_count < 2)
@@ -980,10 +1009,11 @@ cgi_sort_variables(void)
         (int (*)(const void *, const void *))cgi_compare_variables);
 
 #ifdef DEBUG
-  puts("Sorted variable list is:");
+  DEBUG_puts("cgi_sort_variables: Sorted variable list is:");
   for (i = 0; i < form_count; i ++)
-    printf("%d: %s (%d) = \"%s\" ...\n", i, form_vars[i].name,
-           form_vars[i].nvalues, form_vars[i].values[0]);
+    DEBUG_printf(("cgi_sort_variables: %d: %s (%d) = \"%s\" ...\n", i,
+                  form_vars[i].name, form_vars[i].nvalues,
+		  form_vars[i].values[0]));
 #endif /* DEBUG */
 }
 
@@ -1018,5 +1048,5 @@ cgi_unlink_file(void)
 
 
 /*
- * End of "$Id: var.c 6649 2007-07-11 21:46:42Z mike $".
+ * End of "$Id: var.c 7460 2008-04-16 02:19:54Z mike $".
  */

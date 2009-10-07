@@ -1,9 +1,7 @@
-require 'test/unit'
-require 'test/gemutilities'
-require 'rubygems/installer'
+require File.join(File.expand_path(File.dirname(__FILE__)), 'gemutilities')
+require 'rubygems/ext'
 
 class TestGemExtRakeBuilder < RubyGemTestCase
-
   def setup
     super
 
@@ -15,46 +13,68 @@ class TestGemExtRakeBuilder < RubyGemTestCase
   end
 
   def test_class_build
-    File.open File.join(@ext, 'Rakefile'), 'w' do |configure|
-      configure.puts "task :extension"
+    File.open File.join(@ext, 'mkrf_conf.rb'), 'w' do |mkrf_conf|
+      mkrf_conf.puts <<-EO_MKRF
+        File.open("Rakefile","w") do |f|
+          f.puts "task :default"
+        end
+      EO_MKRF
     end
 
     output = []
     realdir = nil # HACK /tmp vs. /private/tmp
 
-    Dir.chdir @ext do
-      realdir = Dir.pwd
-      Gem::ExtRakeBuilder.build nil, nil, @dest_path, output
+    build_rake_in do
+      Dir.chdir @ext do
+        realdir = Dir.pwd
+        Gem::Ext::RakeBuilder.build 'mkrf_conf.rb', nil, @dest_path, output
+      end
     end
 
+    output = output.join "\n"
+
     expected = [
-      "rake RUBYARCHDIR=#{@dest_path} RUBYLIBDIR=#{@dest_path} extension",
+      "#{@@ruby} mkrf_conf.rb",
+      "",
+      "#{@@rake} RUBYARCHDIR=#{@dest_path} RUBYLIBDIR=#{@dest_path}",
       "(in #{realdir})\n"
     ]
 
-    assert_equal expected, output
+    refute_match %r%^rake failed:%, output
+    assert_match %r%^#{Regexp.escape @@ruby} mkrf_conf\.rb%, output
+    assert_match %r%^#{Regexp.escape @@rake} RUBYARCHDIR=#{Regexp.escape @dest_path} RUBYLIBDIR=#{Regexp.escape @dest_path}%, output
   end
 
   def test_class_build_fail
-    File.open File.join(@ext, 'rakefile'), 'w' do |rakefile|
-      rakefile.puts "task :extension do abort 'fail' end"
+    File.open File.join(@ext, 'mkrf_conf.rb'), 'w' do |mkrf_conf|
+      mkrf_conf.puts <<-EO_MKRF
+        File.open("Rakefile","w") do |f|
+          f.puts "task :default do abort 'fail' end"
+        end
+        EO_MKRF
     end
 
     output = []
 
-    error = assert_raise Gem::InstallError do
-      Dir.chdir @ext do
-        Gem::ExtRakeBuilder.build nil, nil, @dest_path, output
+    error = assert_raises Gem::InstallError do
+      build_rake_in do
+        Dir.chdir @ext do
+          Gem::Ext::RakeBuilder.build "mkrf_conf.rb", nil, @dest_path, output
+        end
       end
     end
 
     expected = <<-EOF.strip
 rake failed:
 
-rake RUBYARCHDIR=#{@dest_path} RUBYLIBDIR=#{@dest_path} extension
+#{@@ruby} mkrf_conf.rb
+
+#{@@rake} RUBYARCHDIR=#{@dest_path} RUBYLIBDIR=#{@dest_path}
     EOF
 
-    assert_equal expected, error.message.split("\n")[0..2].join("\n")
+    assert_match %r%^rake failed:%, error.message
+    assert_match %r%^#{Regexp.escape @@ruby} mkrf_conf\.rb%, error.message
+    assert_match %r%^#{Regexp.escape @@rake} RUBYARCHDIR=#{Regexp.escape @dest_path} RUBYLIBDIR=#{Regexp.escape @dest_path}%, error.message
   end
 
 end

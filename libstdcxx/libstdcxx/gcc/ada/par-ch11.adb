@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2004 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -188,6 +188,16 @@ package body Ch11 is
 
       if Token /= Tok_Semicolon then
          Set_Name (Raise_Node, P_Name);
+      end if;
+
+      if Token = Tok_With then
+         if Ada_Version < Ada_05 then
+            Error_Msg_SC ("string expression in raise is Ada 2005 extension");
+            Error_Msg_SC ("\unit must be compiled with -gnat05 switch");
+         end if;
+
+         Scan; -- past WITH
+         Set_Expression (Raise_Node, P_Expression);
       end if;
 
       TF_Semicolon;

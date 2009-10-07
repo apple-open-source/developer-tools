@@ -1,6 +1,6 @@
 /* APPLE LOCAL file 4299630 */
 /* { dg-do compile { target powerpc*-*-darwin* } } */
-/* { dg-skip-if "Not valid on 64-bit" { powerpc*-*-darwin* } { "-m64" } { "" } } */
+/* { dg-require-effective-target ilp32 } */
 /* { dg-options "-mlongcall" } */
 /* { dg-final { scan-assembler "\tjmp[ 	]" } } */
 /* Radar 4299630: insure C++ thunks get long jmps.  */

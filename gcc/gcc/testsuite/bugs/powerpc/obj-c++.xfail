@@ -10,15 +10,12 @@
 ### file and make sure the Radar is closed.
 ###
 ###------------------------------------------------------------------
+5405050: obj-c++.dg/gnu-runtime-3.mm (test for excess errors)
 #
-# the following failures are for -fstack-protector-all only
-# (G5 only)
-4990353: obj-c++.dg/stubify-1.mm scan-assembler-not \\$non_lazy_ptr
+# the following fail with -m64 only 
 #
-# (SnowLeopard only)
-5814854: obj-c++.dg/property-13.mm (test for excess errors)
+# the following fail for x86
 #
-# (SnowLeopard x86 only)
-5706927: obj-c++.dg/cxx-ivars-3.mm (test for excess errors)
-5706927: obj-c++.dg/objc-gc-4.mm (test for excess errors)
-5706927: obj-c++.dg/template-4.mm (test for excess errors)
+# the following fail for x86 with -m64 only
+#
+# the following fail for -mmacosx-version-min=10.5 only

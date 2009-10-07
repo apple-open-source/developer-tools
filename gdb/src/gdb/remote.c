@@ -61,7 +61,7 @@
 #ifdef MACOSX_DYLD
 #include "macosx-nat-dyld.h"
 #endif
-#include "macosx-self-backtrace.h"
+#include <execinfo.h>
 
 /* Prototypes for local functions.  */
 static void cleanup_sigint_signal_handler (void *dummy);
@@ -484,9 +484,9 @@ static void
 remote_backtrace_self ()
 {
   void *bt_buffer[10];
-  int count = gdb_self_backtrace (bt_buffer, 10);
+  int count = backtrace (bt_buffer, 10);
   fprintf_filtered (gdb_stderr, "gdb stack crawl at point of invalid hex digit:\n");
-  gdb_self_backtrace_symbols_fd (bt_buffer, count, STDERR_FILENO, 2, 9);
+  backtrace_symbols_fd (bt_buffer, count, STDERR_FILENO);
 }
 
 static void
@@ -2910,14 +2910,12 @@ remote_create_inferior (char *exec_file, char *allargs, char **env, int from_tty
      So I'm sending a "how about that startup" packet to retrieve that if 
      there is an error code.  */
 
+  putpkt ("qLaunchSuccess");
   /* Increase the timeout for qLaunchSuccess to 30 seconds to match how long
      the debugserver will wait for the inferior to give us its process ID.  */
   int old_remote_timeout = remote_timeout;
   remote_timeout = 30;	
-
-  putpkt ("qLaunchSuccess");
   timed_out = getpkt_sane(buf, rs->remote_packet_size, 0);
-
   remote_timeout = old_remote_timeout;
   
   if (timed_out)

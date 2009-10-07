@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2003, 2006 Apple Computer, Inc.  All rights reserved.
- *                     2006 Rob Buis <buis@kde.org>
+ *                     2006, 2008 Rob Buis <buis@kde.org>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,15 +29,42 @@
 
 #if PLATFORM(CG)
 
-#include "AffineTransform.h"
+#include "TransformationMatrix.h"
 #include <ApplicationServices/ApplicationServices.h>
 #include "FloatRect.h"
+#include "GraphicsContext.h"
 #include "IntRect.h"
 #include "PlatformString.h"
+#include "StrokeStyleApplier.h"
 
 #include <wtf/MathExtras.h>
 
 namespace WebCore {
+
+static size_t putBytesNowhere(void*, const void*, size_t count)
+{
+    return count;
+}
+
+static CGContextRef createScratchContext()
+{
+    CGDataConsumerCallbacks callbacks = { putBytesNowhere, 0 };
+    CGDataConsumerRef consumer = CGDataConsumerCreate(0, &callbacks);
+    CGContextRef context = CGPDFContextCreate(consumer, 0, 0);
+    CGDataConsumerRelease(consumer);
+
+    CGFloat black[4] = { 0, 0, 0, 1 };
+    CGContextSetFillColor(context, black);
+    CGContextSetStrokeColor(context, black);
+
+    return context;
+}
+
+static inline CGContextRef scratchContext()
+{
+    static CGContextRef context = createScratchContext();
+    return context;
+}
 
 Path::Path()
     : m_path(CGPathCreateMutable())
@@ -62,17 +89,69 @@ Path& Path::operator=(const Path& other)
     return *this;
 }
 
+static void copyClosingSubpathsApplierFunction(void* info, const CGPathElement* element)
+{
+    CGMutablePathRef path = static_cast<CGMutablePathRef>(info);
+    CGPoint* points = element->points;
+    
+    switch (element->type) {
+    case kCGPathElementMoveToPoint:
+        if (!CGPathIsEmpty(path)) // to silence a warning when trying to close an empty path
+            CGPathCloseSubpath(path); // This is the only change from CGPathCreateMutableCopy
+        CGPathMoveToPoint(path, 0, points[0].x, points[0].y);
+        break;
+    case kCGPathElementAddLineToPoint:
+        CGPathAddLineToPoint(path, 0, points[0].x, points[0].y);
+        break;
+    case kCGPathElementAddQuadCurveToPoint:
+        CGPathAddQuadCurveToPoint(path, 0, points[0].x, points[0].y, points[1].x, points[1].y);
+        break;
+    case kCGPathElementAddCurveToPoint:
+        CGPathAddCurveToPoint(path, 0, points[0].x, points[0].y, points[1].x, points[1].y, points[2].x, points[2].y);
+        break;
+    case kCGPathElementCloseSubpath:
+        CGPathCloseSubpath(path);
+        break;
+    }
+}
+
+static CGMutablePathRef copyCGPathClosingSubpaths(CGPathRef originalPath)
+{
+    CGMutablePathRef path = CGPathCreateMutable();
+    CGPathApply(originalPath, path, copyClosingSubpathsApplierFunction);
+    CGPathCloseSubpath(path);
+    return path;
+}
+
 bool Path::contains(const FloatPoint &point, WindRule rule) const
 {
-    // CGPathContainsPoint returns false for non-closed paths, as a work-around, we copy and close the path first.  Radar 4758998 asks for a better CG API to use
     if (!boundingRect().contains(point))
         return false;
 
-    CGMutablePathRef path = CGPathCreateMutableCopy(m_path);
-    CGPathCloseSubpath(path);
+    // CGPathContainsPoint returns false for non-closed paths, as a work-around, we copy and close the path first.  Radar 4758998 asks for a better CG API to use
+    CGMutablePathRef path = copyCGPathClosingSubpaths(m_path);
     bool ret = CGPathContainsPoint(path, 0, point, rule == RULE_EVENODD ? true : false);
     CGPathRelease(path);
     return ret;
+}
+
+bool Path::strokeContains(StrokeStyleApplier* applier, const FloatPoint& point) const
+{
+    ASSERT(applier);
+
+    CGContextRef context = scratchContext();
+
+    CGContextSaveGState(context);
+    CGContextBeginPath(context);
+    CGContextAddPath(context, platformPath());
+
+    GraphicsContext gc(context);
+    applier->strokeStyle(&gc);
+
+    bool hitSuccess = CGContextPathContainsPoint(context, point, kCGPathStroke);
+    CGContextRestoreGState(context);
+    
+    return hitSuccess;
 }
 
 void Path::translate(const FloatSize& size)
@@ -87,6 +166,26 @@ void Path::translate(const FloatSize& size)
 FloatRect Path::boundingRect() const
 {
     return CGPathGetBoundingBox(m_path);
+}
+
+FloatRect Path::strokeBoundingRect(StrokeStyleApplier* applier)
+{
+    CGContextRef context = scratchContext();
+
+    CGContextSaveGState(context);
+    CGContextBeginPath(context);
+    CGContextAddPath(context, platformPath());
+
+    if (applier) {
+        GraphicsContext graphicsContext(context);
+        applier->strokeStyle(&graphicsContext);
+    }
+
+    CGContextReplacePathWithStrokedPath(context);
+    CGRect box = CGContextIsPathEmpty(context) ? CGRectZero : CGContextGetPathBoundingBox(context);
+    CGContextRestoreGState(context);
+
+    return box;
 }
 
 void Path::moveTo(const FloatPoint& point)
@@ -116,7 +215,8 @@ void Path::addArcTo(const FloatPoint& p1, const FloatPoint& p2, float radius)
 
 void Path::closeSubpath()
 {
-    CGPathCloseSubpath(m_path);
+    if (!CGPathIsEmpty(m_path)) // to silence a warning when trying to close an empty path
+        CGPathCloseSubpath(m_path);
 }
 
 void Path::addArc(const FloatPoint& p, float r, float sa, float ea, bool clockwise)
@@ -149,27 +249,28 @@ bool Path::isEmpty() const
 
 static void CGPathToCFStringApplierFunction(void* info, const CGPathElement *element)
 {
-    CFMutableStringRef string = (CFMutableStringRef)info;
-    CFStringRef typeString = CFSTR("");
+    CFMutableStringRef string = static_cast<CFMutableStringRef>(info);
+
     CGPoint* points = element->points;
     switch (element->type) {
     case kCGPathElementMoveToPoint:
-        CFStringAppendFormat(string, 0, CFSTR("M%.2f,%.2f"), points[0].x, points[0].y);
+        CFStringAppendFormat(string, 0, CFSTR("M%.2f,%.2f "), points[0].x, points[0].y);
         break;
     case kCGPathElementAddLineToPoint:
-        CFStringAppendFormat(string, 0, CFSTR("L%.2f,%.2f"), points[0].x, points[0].y);
+        CFStringAppendFormat(string, 0, CFSTR("L%.2f,%.2f "), points[0].x, points[0].y);
         break;
     case kCGPathElementAddQuadCurveToPoint:
-        CFStringAppendFormat(string, 0, CFSTR("Q%.2f,%.2f,%.2f,%.2f"),
+        CFStringAppendFormat(string, 0, CFSTR("Q%.2f,%.2f,%.2f,%.2f "),
                 points[0].x, points[0].y, points[1].x, points[1].y);
         break;
     case kCGPathElementAddCurveToPoint:
-        CFStringAppendFormat(string, 0, CFSTR("C%.2f,%.2f,%.2f,%.2f,%.2f,%.2f"),
+        CFStringAppendFormat(string, 0, CFSTR("C%.2f,%.2f,%.2f,%.2f,%.2f,%.2f "),
                 points[0].x, points[0].y, points[1].x, points[1].y,
                 points[2].x, points[2].y);
         break;
     case kCGPathElementCloseSubpath:
-        typeString = CFSTR("X"); break;
+        CFStringAppendFormat(string, 0, CFSTR("Z "));
+        break;
     }
 }
 
@@ -180,6 +281,8 @@ static CFStringRef CFStringFromCGPath(CGPathRef path)
 
     CFMutableStringRef string = CFStringCreateMutable(NULL, 0);
     CGPathApply(path, string, CGPathToCFStringApplierFunction);
+    CFStringTrimWhitespace(string);
+
 
     return string;
 }
@@ -204,7 +307,7 @@ struct PathApplierInfo {
     PathApplierFunction function;
 };
 
-void CGPathApplierToPathApplier(void *info, const CGPathElement *element)
+static void CGPathApplierToPathApplier(void *info, const CGPathElement *element)
 {
     PathApplierInfo* pinfo = (PathApplierInfo*)info;
     FloatPoint points[3];
@@ -240,7 +343,7 @@ void Path::apply(void* info, PathApplierFunction function) const
     CGPathApply(m_path, &pinfo, CGPathApplierToPathApplier);
 }
 
-void Path::transform(const AffineTransform& transform)
+void Path::transform(const TransformationMatrix& transform)
 {
     CGMutablePathRef path = CGPathCreateMutable();
     CGAffineTransform transformCG = transform;

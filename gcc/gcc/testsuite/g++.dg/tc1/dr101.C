@@ -1,7 +1,7 @@
 // { dg-do compile }
 // Origin: Giovanni Bajo <giovannibajo at gcc dot gnu dot org>
 // DR101: Redeclaration of extern "C" names via using-declarations 
-
+// APPLE LOCAL file C++ using lookup 4329536
 namespace Test1 {
 
   typedef unsigned int X;
@@ -17,15 +17,14 @@ namespace Test1 {
 
 namespace Test2 {
 
-  typedef unsigned int X;
+  typedef unsigned int X;   // { dg-bogus "X" "" }
   extern "C" int f2();
   namespace N {
-    typedef unsigned int X;
+    typedef unsigned int X; // { dg-bogus "X" "" }
     extern "C" int f2();
   }
   using namespace N;
   int i = f2(); // { dg-bogus "" "redeclaration through 'using' should not be ambiguous" }
-  X x;          // { dg-bogus "" "redeclaration through 'using' should not be ambiguous" { xfail *-*-* } }
+  X x;          // { dg-bogus "" "redeclaration through 'using' should not be ambiguous" }
 
 }
-

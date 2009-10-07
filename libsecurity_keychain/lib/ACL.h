@@ -64,7 +64,7 @@ public:
 	// create from "standard form" arguments (with empty application list)
 	ACL(Access &acc, string description, const CSSM_ACL_KEYCHAIN_PROMPT_SELECTOR &promptSelector,
 		Allocator &alloc = Allocator::standard());
-    virtual ~ACL() throw();
+    virtual ~ACL();
 	
 	Allocator &allocator;
 	
@@ -89,7 +89,7 @@ public:
 	
 public:
 	AclAuthorizationSet &authorizations()	{ return mAuthorizations; }
-	bool authorizes(AclAuthorization right) const;
+	bool authorizes(AclAuthorization right);
 	void setAuthorization(CSSM_ACL_AUTHORIZATION_TAG auth)
 	{ mAuthorizations.clear(); mAuthorizations.insert(auth); }
 	
@@ -147,6 +147,7 @@ private:
 	ApplicationList mAppList;		// list of trusted applications
 	CSSM_ACL_KEYCHAIN_PROMPT_SELECTOR mPromptSelector; // selector field of PROMPT subject
 	string mPromptDescription;		// description field of PROMPT subject
+	Mutex mMutex;
 };
 
 

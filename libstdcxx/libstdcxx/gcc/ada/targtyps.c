@@ -16,8 +16,8 @@
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License *
  * for  more details.  You should have  received  a copy of the GNU General *
  * Public License  distributed with GNAT;  see file COPYING.  If not, write *
- * to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, *
- * MA 02111-1307, USA.                                                      *
+ * to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, *
+ * Boston, MA 02110-1301, USA.                                              *
  *                                                                          *
  * As a  special  exception,  if you  link  this file  with other  files to *
  * produce an executable,  this file does not by itself cause the resulting *
@@ -89,7 +89,7 @@ get_target_char_size (void)
 Pos
 get_target_wchar_t_size (void)
 {
-  /* We never want wide chacters less than "short" in Ada.  */
+  /* We never want wide characters less than "short" in Ada.  */
   return MAX (SHORT_TYPE_SIZE, WCHAR_TYPE_SIZE);
 }
 

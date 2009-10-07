@@ -144,7 +144,7 @@ static void rebuild_tearoff(vimmenu_T *menu);
 static HBITMAP	s_htearbitmap;	    /* bitmap used to indicate tearoff */
 #endif
 
-/* Flag that is set while processing a message that must not be interupted by
+/* Flag that is set while processing a message that must not be interrupted by
  * processing another message. */
 static int		s_busy_processing = FALSE;
 
@@ -153,6 +153,9 @@ static int		destroying = FALSE;	/* call DestroyWindow() ourselves */
 #ifdef MSWIN_FIND_REPLACE
 static UINT		s_findrep_msg = 0;	/* set in gui_w[16/32].c */
 static FINDREPLACE	s_findrep_struct;
+# if defined(FEAT_MBYTE) && defined(WIN3264)
+static FINDREPLACEW	s_findrep_struct_w;
+# endif
 static HWND		s_findrep_hwnd = NULL;
 static int		s_findrep_is_find;	/* TRUE for find dialog, FALSE
 						   for find/replace dialog */
@@ -290,6 +293,11 @@ static struct
 
 /* Local variables */
 static int		s_button_pending = -1;
+
+/* s_getting_focus is set when we got focus but didn't see mouse-up event yet,
+ * so don't reset s_button_pending. */
+static int		s_getting_focus = FALSE;
+
 static int		s_x_pending;
 static int		s_y_pending;
 static UINT		s_kFlags_pending;
@@ -486,10 +494,11 @@ _OnDeadChar(
 
 /*
  * Convert Unicode character "ch" to bytes in "string[slen]".
+ * When "had_alt" is TRUE the ALT key was included in "ch".
  * Return the length.
  */
     static int
-char_to_string(int ch, char_u *string, int slen)
+char_to_string(int ch, char_u *string, int slen, int had_alt)
 {
     int		len;
     int		i;
@@ -522,12 +531,26 @@ char_to_string(int ch, char_u *string, int slen)
 	 * "enc_codepage" is non-zero use the standard Win32 function,
 	 * otherwise use our own conversion function (e.g., for UTF-8). */
 	if (enc_codepage > 0)
+	{
 	    len = WideCharToMultiByte(enc_codepage, 0, wstring, len,
 						       string, slen, 0, NULL);
+	    /* If we had included the ALT key into the character but now the
+	     * upper bit is no longer set, that probably means the conversion
+	     * failed.  Convert the original character and set the upper bit
+	     * afterwards. */
+	    if (had_alt && len == 1 && ch >= 0x80 && string[0] < 0x80)
+	    {
+		wstring[0] = ch & 0x7f;
+		len = WideCharToMultiByte(enc_codepage, 0, wstring, len,
+						       string, slen, 0, NULL);
+		if (len == 1) /* safety check */
+		    string[0] |= 0x80;
+	    }
+	}
 	else
 	{
 	    len = 1;
-	    ws = ucs2_to_enc(wstring, &len);
+	    ws = utf16_to_enc(wstring, &len);
 	    if (ws == NULL)
 		len = 0;
 	    else
@@ -573,7 +596,7 @@ _OnChar(
     char_u	string[40];
     int		len = 0;
 
-    len = char_to_string(ch, string, 40);
+    len = char_to_string(ch, string, 40, FALSE);
     if (len == 1 && string[0] == Ctrl_C && ctrl_c_interrupts)
     {
 	trash_input_buf();
@@ -640,7 +663,7 @@ _OnSysChar(
     {
 	/* Although the documentation isn't clear about it, we assume "ch" is
 	 * a Unicode character. */
-	len += char_to_string(ch, string + len, 40 - len);
+	len += char_to_string(ch, string + len, 40 - len, TRUE);
     }
 
     add_to_input_buf(string, len);
@@ -655,6 +678,8 @@ _OnMouseEvent(
     UINT keyFlags)
 {
     int vim_modifiers = 0x0;
+
+    s_getting_focus = FALSE;
 
     if (keyFlags & MK_SHIFT)
 	vim_modifiers |= MOUSE_SHIFT;
@@ -777,6 +802,7 @@ _OnMouseMoveOrRelease(
 {
     int button;
 
+    s_getting_focus = FALSE;
     if (s_button_pending > -1)
     {
 	/* Delayed action for mouse down event */
@@ -861,6 +887,45 @@ _OnMenu(
 #endif
 
 #ifdef MSWIN_FIND_REPLACE
+# if defined(FEAT_MBYTE) && defined(WIN3264)
+/*
+ * copy useful data from structure LPFINDREPLACE to structure LPFINDREPLACEW
+ */
+    static void
+findrep_atow(LPFINDREPLACEW lpfrw, LPFINDREPLACE lpfr)
+{
+    WCHAR *wp;
+
+    lpfrw->hwndOwner = lpfr->hwndOwner;
+    lpfrw->Flags = lpfr->Flags;
+
+    wp = enc_to_utf16(lpfr->lpstrFindWhat, NULL);
+    wcsncpy(lpfrw->lpstrFindWhat, wp, lpfrw->wFindWhatLen - 1);
+    vim_free(wp);
+
+    /* the field "lpstrReplaceWith" doesn't need to be copied */
+}
+
+/*
+ * copy useful data from structure LPFINDREPLACEW to structure LPFINDREPLACE
+ */
+    static void
+findrep_wtoa(LPFINDREPLACE lpfr, LPFINDREPLACEW lpfrw)
+{
+    char_u *p;
+
+    lpfr->Flags = lpfrw->Flags;
+
+    p = utf16_to_enc(lpfrw->lpstrFindWhat, NULL);
+    vim_strncpy(lpfr->lpstrFindWhat, p, lpfr->wFindWhatLen - 1);
+    vim_free(p);
+
+    p = utf16_to_enc(lpfrw->lpstrReplaceWith, NULL);
+    vim_strncpy(lpfr->lpstrReplaceWith, p, lpfr->wReplaceWithLen - 1);
+    vim_free(p);
+}
+# endif
+
 /*
  * Handle a Find/Replace window message.
  */
@@ -869,6 +934,16 @@ _OnFindRepl(void)
 {
     int	    flags = 0;
     int	    down;
+
+# if defined(FEAT_MBYTE) && defined(WIN3264)
+    /* If the OS is Windows NT, and 'encoding' differs from active codepage:
+     * convert text from wide string. */
+    if (os_version.dwPlatformId == VER_PLATFORM_WIN32_NT
+			&& enc_codepage >= 0 && (int)GetACP() != enc_codepage)
+    {
+        findrep_wtoa(&s_findrep_struct, &s_findrep_struct_w);
+    }
+# endif
 
     if (s_findrep_struct.Flags & FR_DIALOGTERM)
 	/* Give main window the focus back. */
@@ -1640,8 +1715,17 @@ process_message(void)
     if (msg.message == WM_OLE)
     {
 	char_u *str = (char_u *)msg.lParam;
-	add_to_input_buf(str, (int)STRLEN(str));
-	vim_free(str);
+	if (str == NULL || *str == NUL)
+	{
+	    /* Message can't be ours, forward it.  Fixes problem with Ultramon
+	     * 3.0.4 */
+	    DispatchMessage(&msg);
+	}
+	else
+	{
+	    add_to_input_buf(str, (int)STRLEN(str));
+	    vim_free(str);  /* was allocated in CVim::SendKeys() */
+	}
 	return;
     }
 #endif
@@ -1664,7 +1748,11 @@ process_message(void)
 	/* request is handled in normal.c */
     }
     if (msg.message == WM_USER)
+    {
+	MyTranslateMessage(&msg);
+	DispatchMessage(&msg);
 	return;
+    }
 #endif
 
 #ifdef MSWIN_FIND_REPLACE
@@ -1771,7 +1859,7 @@ process_message(void)
 		    int	len;
 
 		    /* Handle "key" as a Unicode character. */
-		    len = char_to_string(key, string, 40);
+		    len = char_to_string(key, string, 40, FALSE);
 		    add_to_input_buf(string, len);
 		}
 		break;
@@ -1910,6 +1998,11 @@ gui_mch_wait_for_chars(int wtime)
 	    s_need_activate = FALSE;
 	}
 
+#ifdef FEAT_NETBEANS_INTG
+	/* Process the queued netbeans messages. */
+	netbeans_parse_messages();
+#endif
+
 	/*
 	 * Don't use gui_mch_update() because then we will spin-lock until a
 	 * char arrives, instead we use GetMessage() to hang until an
@@ -1932,8 +2025,10 @@ gui_mch_wait_for_chars(int wtime)
 	    allow_scrollbar = FALSE;
 
 	    /* Clear pending mouse button, the release event may have been
-	     * taken by the dialog window. */
-	    s_button_pending = -1;
+	     * taken by the dialog window.  But don't do this when getting
+	     * focus, we need the mouse-up event then. */
+	    if (!s_getting_focus)
+		s_button_pending = -1;
 
 	    return OK;
 	}
@@ -2099,7 +2194,7 @@ GetTextWidthEnc(HDC hdc, char_u *str, int len)
     {
 	/* 'encoding' differs from active codepage: convert text and use wide
 	 * function */
-	wstr = enc_to_ucs2(str, &wlen);
+	wstr = enc_to_utf16(str, &wlen);
 	if (wstr != NULL)
 	{
 	    n = GetTextExtentPointW(hdc, wstr, wlen, &size);
@@ -2190,7 +2285,18 @@ gui_mch_show_toolbar(int showit)
 	return;
 
     if (showit)
+    {
+# ifdef FEAT_MBYTE
+#  ifndef TB_SETUNICODEFORMAT
+    /* For older compilers.  We assume this never changes. */
+#   define TB_SETUNICODEFORMAT 0x2005
+#  endif
+	/* Enable/disable unicode support */
+	int uu = (enc_codepage >= 0 && (int)GetACP() != enc_codepage);
+	SendMessage(s_toolbarhwnd, TB_SETUNICODEFORMAT, (WPARAM)uu, (LPARAM)0);
+# endif
 	ShowWindow(s_toolbarhwnd, SW_SHOW);
+    }
     else
 	ShowWindow(s_toolbarhwnd, SW_HIDE);
 }
@@ -2202,10 +2308,54 @@ gui_mch_show_toolbar(int showit)
 
 #if defined(FEAT_GUI_TABLINE) || defined(PROTO)
     static void
+add_tabline_popup_menu_entry(HMENU pmenu, UINT item_id, char_u *item_text)
+{
+#ifdef FEAT_MBYTE
+    WCHAR	*wn = NULL;
+    int		n;
+
+    if (enc_codepage >= 0 && (int)GetACP() != enc_codepage)
+    {
+	/* 'encoding' differs from active codepage: convert menu name
+	 * and use wide function */
+	wn = enc_to_utf16(item_text, NULL);
+	if (wn != NULL)
+	{
+	    MENUITEMINFOW	infow;
+
+	    infow.cbSize = sizeof(infow);
+	    infow.fMask = MIIM_TYPE | MIIM_ID;
+	    infow.wID = item_id;
+	    infow.fType = MFT_STRING;
+	    infow.dwTypeData = wn;
+	    infow.cch = (UINT)wcslen(wn);
+	    n = InsertMenuItemW(pmenu, item_id, FALSE, &infow);
+	    vim_free(wn);
+	    if (n == 0 && GetLastError() == ERROR_CALL_NOT_IMPLEMENTED)
+		/* Failed, try using non-wide function. */
+		wn = NULL;
+	}
+    }
+
+    if (wn == NULL)
+#endif
+    {
+	MENUITEMINFO	info;
+
+	info.cbSize = sizeof(info);
+	info.fMask = MIIM_TYPE | MIIM_ID;
+	info.wID = item_id;
+	info.fType = MFT_STRING;
+	info.dwTypeData = item_text;
+	info.cch = (UINT)STRLEN(item_text);
+	InsertMenuItem(pmenu, item_id, FALSE, &info);
+    }
+}
+
+    static void
 show_tabline_popup_menu(void)
 {
     HMENU	    tab_pmenu;
-    MENUITEMINFO    minfo;
     long	    rval;
     POINT	    pt;
 
@@ -2221,21 +2371,10 @@ show_tabline_popup_menu(void)
     if (tab_pmenu == NULL)
 	return;
 
-    minfo.cbSize = sizeof(MENUITEMINFO);
-    minfo.fMask = MIIM_TYPE|MIIM_ID;
-    minfo.fType = MFT_STRING;
-
-    minfo.dwTypeData = _("Close tab");
-    minfo.wID = TABLINE_MENU_CLOSE;
-    InsertMenuItem(tab_pmenu, TABLINE_MENU_CLOSE, FALSE, &minfo);
-
-    minfo.dwTypeData = _("New tab");
-    minfo.wID = TABLINE_MENU_NEW;
-    InsertMenuItem(tab_pmenu, TABLINE_MENU_NEW, FALSE, &minfo);
-
-    minfo.dwTypeData = _("Open tab...");
-    minfo.wID = TABLINE_MENU_OPEN;
-    InsertMenuItem(tab_pmenu, TABLINE_MENU_OPEN, FALSE, &minfo);
+    add_tabline_popup_menu_entry(tab_pmenu, TABLINE_MENU_CLOSE, _("Close tab"));
+    add_tabline_popup_menu_entry(tab_pmenu, TABLINE_MENU_NEW, _("New tab"));
+    add_tabline_popup_menu_entry(tab_pmenu, TABLINE_MENU_OPEN,
+				 _("Open tab..."));
 
     GetCursorPos(&pt);
     rval = TrackPopupMenuEx(tab_pmenu, TPM_RETURNCMD, pt.x, pt.y, s_tabhwnd,
@@ -2349,7 +2488,7 @@ gui_mch_update_tabline(void)
 	if (use_unicode)
 	{
 	    /* Need to go through Unicode. */
-	    wstr = enc_to_ucs2(NameBuff, NULL);
+	    wstr = enc_to_utf16(NameBuff, NULL);
 	    if (wstr != NULL)
 	    {
 		TCITEMW		tiw;
@@ -2357,8 +2496,7 @@ gui_mch_update_tabline(void)
 		tiw.mask = TCIF_TEXT;
 		tiw.iImage = -1;
 		tiw.pszText = wstr;
-		SendMessage(s_tabhwnd, TCM_INSERTITEMW, (WPARAM)nr,
-								(LPARAM)&tiw);
+		SendMessage(s_tabhwnd, TCM_SETITEMW, (WPARAM)nr, (LPARAM)&tiw);
 		vim_free(wstr);
 	    }
 	}
@@ -2440,6 +2578,30 @@ initialise_findrep(char_u *initial_string)
 }
 #endif
 
+    static void
+set_window_title(HWND hwnd, char *title)
+{
+#ifdef FEAT_MBYTE
+    if (title != NULL && enc_codepage >= 0 && enc_codepage != (int)GetACP())
+    {
+	WCHAR	*wbuf;
+	int	n;
+
+	/* Convert the title from 'encoding' to UTF-16. */
+	wbuf = (WCHAR *)enc_to_utf16((char_u *)title, NULL);
+	if (wbuf != NULL)
+	{
+	    n = SetWindowTextW(hwnd, wbuf);
+	    vim_free(wbuf);
+	    if (n != 0 || GetLastError() != ERROR_CALL_NOT_IMPLEMENTED)
+		return;
+	    /* Retry with non-wide function (for Windows 98). */
+	}
+    }
+#endif
+    (void)SetWindowText(hwnd, (LPCSTR)title);
+}
+
     void
 gui_mch_find_dialog(exarg_T *eap)
 {
@@ -2452,11 +2614,23 @@ gui_mch_find_dialog(exarg_T *eap)
 	if (!IsWindow(s_findrep_hwnd))
 	{
 	    initialise_findrep(eap->arg);
-	    s_findrep_hwnd = FindText((LPFINDREPLACE) &s_findrep_struct);
+# if defined(FEAT_MBYTE) && defined(WIN3264)
+	    /* If the OS is Windows NT, and 'encoding' differs from active
+	     * codepage: convert text and use wide function. */
+	    if (os_version.dwPlatformId == VER_PLATFORM_WIN32_NT
+		    && enc_codepage >= 0 && (int)GetACP() != enc_codepage)
+	    {
+	        findrep_atow(&s_findrep_struct_w, &s_findrep_struct);
+		s_findrep_hwnd = FindTextW(
+					(LPFINDREPLACEW) &s_findrep_struct_w);
+	    }
+	    else
+# endif
+		s_findrep_hwnd = FindText((LPFINDREPLACE) &s_findrep_struct);
 	}
 
-	(void)SetWindowText(s_findrep_hwnd,
-		       (LPCSTR)_("Find string (use '\\\\' to find  a '\\')"));
+	set_window_title(s_findrep_hwnd,
+			       _("Find string (use '\\\\' to find  a '\\')"));
 	(void)SetFocus(s_findrep_hwnd);
 
 	s_findrep_is_find = TRUE;
@@ -2477,11 +2651,22 @@ gui_mch_replace_dialog(exarg_T *eap)
 	if (!IsWindow(s_findrep_hwnd))
 	{
 	    initialise_findrep(eap->arg);
-	    s_findrep_hwnd = ReplaceText((LPFINDREPLACE) &s_findrep_struct);
+# if defined(FEAT_MBYTE) && defined(WIN3264)
+	    if (os_version.dwPlatformId == VER_PLATFORM_WIN32_NT
+		    && enc_codepage >= 0 && (int)GetACP() != enc_codepage)
+	    {
+		findrep_atow(&s_findrep_struct_w, &s_findrep_struct);
+		s_findrep_hwnd = ReplaceTextW(
+					(LPFINDREPLACEW) &s_findrep_struct_w);
+	    }
+	    else
+# endif
+		s_findrep_hwnd = ReplaceText(
+					   (LPFINDREPLACE) &s_findrep_struct);
 	}
 
-	(void)SetWindowText(s_findrep_hwnd,
-		    (LPCSTR)_("Find & Replace (use '\\\\' to find  a '\\')"));
+	set_window_title(s_findrep_hwnd,
+			    _("Find & Replace (use '\\\\' to find  a '\\')"));
 	(void)SetFocus(s_findrep_hwnd);
 
 	s_findrep_is_find = FALSE;
@@ -2616,6 +2801,7 @@ _OnSetFocus(
     HWND hwndOldFocus)
 {
     gui_focus_change(TRUE);
+    s_getting_focus = TRUE;
     (void)MyWindowProc(hwnd, WM_SETFOCUS, (WPARAM)hwndOldFocus, 0);
 }
 
@@ -2625,6 +2811,7 @@ _OnKillFocus(
     HWND hwndNewFocus)
 {
     gui_focus_change(FALSE);
+    s_getting_focus = FALSE;
     (void)MyWindowProc(hwnd, WM_KILLFOCUS, (WPARAM)hwndNewFocus, 0);
 }
 
@@ -2961,13 +3148,25 @@ gui_mch_init_font(char_u *font_name, int fontset)
     return OK;
 }
 
+#ifndef WPF_RESTORETOMAXIMIZED
+# define WPF_RESTORETOMAXIMIZED 2   /* just in case someone doesn't have it */
+#endif
+
 /*
  * Return TRUE if the GUI window is maximized, filling the whole screen.
  */
     int
 gui_mch_maximized()
 {
-    return IsZoomed(s_hwnd);
+    WINDOWPLACEMENT wp;
+
+    wp.length = sizeof(WINDOWPLACEMENT);
+    if (GetWindowPlacement(s_hwnd, &wp))
+	return wp.showCmd == SW_SHOWMAXIMIZED
+	    || (wp.showCmd == SW_SHOWMINIMIZED
+		    && wp.flags == WPF_RESTORETOMAXIMIZED);
+
+    return 0;
 }
 
 /*
@@ -3000,25 +3199,7 @@ gui_mch_settitle(
     char_u  *title,
     char_u  *icon)
 {
-#ifdef FEAT_MBYTE
-    if (title != NULL && enc_codepage >= 0 && enc_codepage != (int)GetACP())
-    {
-	WCHAR	*wbuf;
-	int	n;
-
-	/* Convert the title from 'encoding' to ucs2. */
-	wbuf = (WCHAR *)enc_to_ucs2(title, NULL);
-	if (wbuf != NULL)
-	{
-	    n = SetWindowTextW(s_hwnd, wbuf);
-	    vim_free(wbuf);
-	    if (n != 0 || GetLastError() != ERROR_CALL_NOT_IMPLEMENTED)
-		return;
-	    /* Retry with non-wide function (for Windows 98). */
-	}
-    }
-#endif
-    SetWindowText(s_hwnd, (LPCSTR)(title == NULL ? "VIM" : (char *)title));
+    set_window_title(s_hwnd, (title == NULL ? "VIM" : (char *)title));
 }
 
 #ifdef FEAT_MOUSESHAPE
@@ -3062,12 +3243,12 @@ mch_set_mouse_shape(int shape)
 	    idc = MAKEINTRESOURCE(IDC_ARROW);
 	else
 	    idc = mshape_idcs[shape];
-#ifdef _WIN64
-	SetClassLongPtr(s_textArea, GCLP_HCURSOR, (LONG_PTR)LoadCursor(NULL, idc));
+#ifdef SetClassLongPtr
+	SetClassLongPtr(s_textArea, GCLP_HCURSOR, (__int3264)(LONG_PTR)LoadCursor(NULL, idc));
 #else
 # ifdef WIN32
-	SetClassLong(s_textArea, GCL_HCURSOR, (LONG)LoadCursor(NULL, idc));
-# else
+	SetClassLong(s_textArea, GCL_HCURSOR, (long_u)LoadCursor(NULL, idc));
+# else /* Win16 */
 	SetClassWord(s_textArea, GCW_HCURSOR, (WORD)LoadCursor(NULL, idc));
 # endif
 #endif
@@ -3130,7 +3311,7 @@ gui_mch_browseW(
 	char_u *initdir,
 	char_u *filter)
 {
-    /* We always use the wide function.  This means enc_to_ucs2() must work,
+    /* We always use the wide function.  This means enc_to_utf16() must work,
      * otherwise it fails miserably! */
     OPENFILENAMEW	fileStruct;
     WCHAR		fileBuf[MAXPATHL];
@@ -3146,7 +3327,7 @@ gui_mch_browseW(
 	fileBuf[0] = NUL;
     else
     {
-	wp = enc_to_ucs2(dflt, NULL);
+	wp = enc_to_utf16(dflt, NULL);
 	if (wp == NULL)
 	    fileBuf[0] = NUL;
 	else
@@ -3171,11 +3352,11 @@ gui_mch_browseW(
 #endif
 
     if (title != NULL)
-	titlep = enc_to_ucs2(title, NULL);
+	titlep = enc_to_utf16(title, NULL);
     fileStruct.lpstrTitle = titlep;
 
     if (ext != NULL)
-	extp = enc_to_ucs2(ext, NULL);
+	extp = enc_to_utf16(ext, NULL);
     fileStruct.lpstrDefExt = extp;
 
     fileStruct.lpstrFile = fileBuf;
@@ -3186,7 +3367,7 @@ gui_mch_browseW(
     if (initdir != NULL && *initdir != NUL)
     {
 	/* Must have backslashes here, no matter what 'shellslash' says */
-	initdirp = enc_to_ucs2(initdir, NULL);
+	initdirp = enc_to_utf16(initdir, NULL);
 	if (initdirp != NULL)
 	{
 	    for (wp = initdirp; *wp != NUL; ++wp)
@@ -3226,7 +3407,7 @@ gui_mch_browseW(
     vim_free(extp);
 
     /* Convert from UCS2 to 'encoding'. */
-    p = ucs2_to_enc(fileBuf, NULL);
+    p = utf16_to_enc(fileBuf, NULL);
     if (p != NULL)
 	/* when out of memory we get garbage for non-ASCII chars */
 	STRCPY(fileBuf, p);
@@ -3236,18 +3417,14 @@ gui_mch_browseW(
     SetFocus(s_hwnd);
 
     /* Shorten the file name if possible */
-    mch_dirname(IObuff, IOSIZE);
-    p = shorten_fname((char_u *)fileBuf, IObuff);
-    if (p == NULL)
-	p = (char_u *)fileBuf;
-    return vim_strsave(p);
+    return vim_strsave(shorten_fname1((char_u *)fileBuf));
 }
 # endif /* FEAT_MBYTE */
 
 
 /*
  * Convert the string s to the proper format for a filter string by replacing
- * the \t and \n delimeters with \0.
+ * the \t and \n delimiters with \0.
  * Returns the converted string in allocated memory.
  *
  * Keep in sync with convert_filterW() above!
@@ -3385,11 +3562,7 @@ gui_mch_browse(
     SetFocus(s_hwnd);
 
     /* Shorten the file name if possible */
-    mch_dirname(IObuff, IOSIZE);
-    p = shorten_fname((char_u *)fileBuf, IObuff);
-    if (p == NULL)
-	p = (char_u *)fileBuf;
-    return vim_strsave(p);
+    return vim_strsave(shorten_fname1((char_u *)fileBuf));
 }
 #endif /* FEAT_BROWSE */
 
@@ -3434,7 +3607,7 @@ _OnDropFiles(
 	{
 #ifdef FEAT_MBYTE
 	    if (DragQueryFileW(hDrop, i, wszFile, BUFPATHLEN) > 0)
-		fnames[i] = ucs2_to_enc(wszFile, NULL);
+		fnames[i] = utf16_to_enc(wszFile, NULL);
 	    else
 #endif
 	    {
@@ -3590,7 +3763,8 @@ _OnScroll(
  * Use "prog" as the name of the program and "cmdline" as the arguments.
  * Copy the arguments to allocated memory.
  * Return the number of arguments (including program name).
- * Return pointers to the arguments in "argvp".
+ * Return pointers to the arguments in "argvp".  Memory is allocated with
+ * malloc(), use free() instead of vim_free().
  * Return pointer to buffer in "tofree".
  * Returns zero when out of memory.
  */
@@ -3607,6 +3781,8 @@ get_cmd_args(char *prog, char *cmdline, char ***argvp, char **tofree)
     int		argc;
     char	**argv = NULL;
     int		round;
+
+    *tofree = NULL;
 
 #ifdef FEAT_MBYTE
     /* Try using the Unicode version first, it takes care of conversion when
@@ -3718,15 +3894,15 @@ get_cmd_args(char *prog, char *cmdline, char ***argvp, char **tofree)
 	    argv = (char **)malloc((argc + 1) * sizeof(char *));
 	    if (argv == NULL )
 	    {
-		vim_free(newcmdline);
+		free(newcmdline);
 		return 0;		   /* malloc error */
 	    }
 	    pnew = newcmdline;
+	    *tofree = newcmdline;
 	}
     }
 
 done:
-
     argv[argc] = NULL;		/* NULL-terminated list */
     *argvp = argv;
     return argc;

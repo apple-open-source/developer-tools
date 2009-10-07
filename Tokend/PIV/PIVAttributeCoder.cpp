@@ -36,14 +36,9 @@
 
 #include "PIVAttributeCoder.h"
 
-#include "Adornment.h"
 #include "MetaAttribute.h"
 #include "MetaRecord.h"
 #include "PIVRecord.h"
-#include "PIVToken.h"
-
-#include <Security/SecKeychainItem.h>
-#include <security_cdsa_utilities/cssmkey.h>
 
 using namespace Tokend;
 
@@ -60,4 +55,16 @@ void PIVDataAttributeCoder::decode(TokenContext *tokenContext,
 	PIVRecord &pivRecord = dynamic_cast<PIVRecord &>(record);
 	record.attributeAtIndex(metaAttribute.attributeIndex(),
 		pivRecord.getDataAttribute(tokenContext));
+}
+
+//
+// PIVKeySizeAttributeCoder
+//
+PIVKeySizeAttributeCoder::~PIVKeySizeAttributeCoder() {}
+
+void PIVKeySizeAttributeCoder::decode(Tokend::TokenContext *tokenContext,
+								   const Tokend::MetaAttribute &metaAttribute, Tokend::Record &record)
+{
+	uint32 keySize = dynamic_cast<PIVKeyRecord &>(record).sizeInBits();
+	record.attributeAtIndex(metaAttribute.attributeIndex(), new Attribute(keySize));
 }

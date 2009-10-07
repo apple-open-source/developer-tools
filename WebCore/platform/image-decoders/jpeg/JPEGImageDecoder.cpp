@@ -38,8 +38,7 @@
 #include "config.h"
 #include "JPEGImageDecoder.h"
 #include <assert.h>
-
-#if PLATFORM(CAIRO) || PLATFORM(QT)
+#include <stdio.h>  // Needed by jpeglib.h for FILE.
 
 extern "C" {
 #include "jpeglib.h"
@@ -100,7 +99,7 @@ public:
         /* Allocate and initialize JPEG decompression object */
         jpeg_create_decompress(&m_info);
   
-        decoder_source_mgr* src;
+        decoder_source_mgr* src = 0;
         if (!m_info.src) {
             src = (decoder_source_mgr*)fastCalloc(sizeof(decoder_source_mgr), 1);
             if (!src) {
@@ -215,7 +214,10 @@ public:
                 m_state = JPEG_START_DECOMPRESS;
 
                 // We can fill in the size now that the header is available.
-                m_decoder->setSize(m_info.image_width, m_info.image_height);
+                if (!m_decoder->setSize(m_info.image_width, m_info.image_height)) {
+                    m_state = JPEG_ERROR;
+                    return false;
+                }
 
                 if (m_decodingSizeOnly) {
                     // We can stop here.
@@ -407,19 +409,12 @@ void JPEGImageDecoder::setData(SharedBuffer* data, bool allDataReceived)
 }
 
 // Whether or not the size information has been decoded yet.
-bool JPEGImageDecoder::isSizeAvailable() const
+bool JPEGImageDecoder::isSizeAvailable()
 {
-    // If we have pending data to decode, send it to the JPEG reader now.
-    if (!m_sizeAvailable && m_reader) {
-        if (m_failed)
-            return false;
+    if (!ImageDecoder::isSizeAvailable() && !failed() && m_reader)
+         decode(true);
 
-        // The decoder will go ahead and aggressively consume everything up until the
-        // size is encountered.
-        decode(true);
-    }
-
-    return m_sizeAvailable;
+    return ImageDecoder::isSizeAvailable();
 }
 
 RGBA32Buffer* JPEGImageDecoder::frameBufferAtIndex(size_t index)
@@ -438,7 +433,7 @@ RGBA32Buffer* JPEGImageDecoder::frameBufferAtIndex(size_t index)
 }
 
 // Feed data to the JPEG reader.
-void JPEGImageDecoder::decode(bool sizeOnly) const
+void JPEGImageDecoder::decode(bool sizeOnly)
 {
     if (m_failed)
         return;
@@ -456,40 +451,36 @@ bool JPEGImageDecoder::outputScanlines()
     if (m_frameBufferCache.isEmpty())
         return false;
 
-    // Resize to the width and height of the image.
+    // Initialize the framebuffer if needed.
     RGBA32Buffer& buffer = m_frameBufferCache[0];
     if (buffer.status() == RGBA32Buffer::FrameEmpty) {
-        // Let's resize our buffer now to the correct width/height.
-        RGBA32Array& bytes = buffer.bytes();
-        bytes.resize(m_size.width() * m_size.height());
-
-        // Update our status to be partially complete.
+        if (!buffer.setSize(size().width(), size().height())) {
+            m_failed = true;
+            return false;
+        }
         buffer.setStatus(RGBA32Buffer::FramePartial);
+        buffer.setHasAlpha(false);
 
         // For JPEGs, the frame always fills the entire image.
-        buffer.setRect(IntRect(0, 0, m_size.width(), m_size.height()));
-
-        // We don't have alpha (this is the default when the buffer is constructed).
+        buffer.setRect(IntRect(IntPoint(), size()));
     }
 
     jpeg_decompress_struct* info = m_reader->info();
     JSAMPARRAY samples = m_reader->samples();
 
-    unsigned* dst = buffer.bytes().data() + info->output_scanline * m_size.width();
-   
     while (info->output_scanline < info->output_height) {
         /* Request one scanline.  Returns 0 or 1 scanlines. */
         if (jpeg_read_scanlines(info, samples, 1) != 1)
             return false;
         JSAMPLE *j1 = samples[0];
-        for (unsigned i = 0; i < info->output_width; ++i) {
+        for (unsigned x = 0; x < info->output_width; ++x) {
             unsigned r = *j1++;
             unsigned g = *j1++;
             unsigned b = *j1++;
-            RGBA32Buffer::setRGBA(*dst++, r, g, b, 0xFF);
+            // read_scanlines has increased the scanline counter, so we
+            // actually mean the previous one.
+            buffer.setRGBA(x, info->output_scanline - 1, r, g, b, 0xFF);
         }
-
-        buffer.ensureHeight(info->output_scanline);
     }
 
     return true;
@@ -506,5 +497,3 @@ void JPEGImageDecoder::jpegComplete()
 }
 
 }
-
-#endif // PLATFORM(CAIRO)

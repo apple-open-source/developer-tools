@@ -1,6 +1,6 @@
-// -*- c-basic-offset: 4 -*-
 /*
- * Copyright (C) 2006 Apple Computer, Inc.
+ * Copyright (C) 2006, 2007, 2008 Apple Inc. All Rights Reserved.
+ * Copyright (C) 2008 Torch Mobile Inc. All rights reserved. (http://www.torchmobile.com/)
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -21,51 +21,78 @@
 #include "config.h"
 #include "Page.h"
 
+#include "CSSStyleSelector.h"
 #include "Chrome.h"
 #include "ChromeClient.h"
 #include "ContextMenuClient.h"
 #include "ContextMenuController.h"
-#include "EditorClient.h"
+#include "DOMWindow.h"
 #include "DragController.h"
+#include "EditorClient.h"
+#include "EventNames.h"
+#include "FileSystem.h"
 #include "FocusController.h"
 #include "Frame.h"
 #include "FrameLoader.h"
 #include "FrameTree.h"
 #include "FrameView.h"
+#include "HTMLElement.h"
 #include "HistoryItem.h"
 #include "InspectorController.h"
 #include "Logging.h"
+#include "Navigator.h"
+#include "NetworkStateNotifier.h"
+#include "PageGroup.h"
+#include "PluginData.h"
 #include "ProgressTracker.h"
 #include "RenderWidget.h"
+#include "RenderTheme.h"
+#include "ScriptController.h"
 #include "SelectionController.h"
 #include "Settings.h"
 #include "StringHash.h"
+#include "TextResourceDecoder.h"
 #include "Widget.h"
-#include <kjs/collector.h>
-#include <kjs/JSLock.h>
 #include <wtf/HashMap.h>
+#include <wtf/RefCountedLeakCounter.h>
+#include <wtf/StdLibExtras.h>
 
-using namespace KJS;
+#if ENABLE(DOM_STORAGE)
+#include "StorageArea.h"
+#include "StorageNamespace.h"
+#endif
+
+#if ENABLE(JAVASCRIPT_DEBUGGER)
+#include "JavaScriptDebugServer.h"
+#endif
+
+#if ENABLE(WML)
+#include "WMLPageState.h"
+#endif
 
 namespace WebCore {
 
 static HashSet<Page*>* allPages;
-static HashMap<String, HashSet<Page*>*>* frameNamespaces;
 
 #ifndef NDEBUG
-WTFLogChannel LogWebCorePageLeaks =  { 0x00000000, "", WTFLogChannelOn };
-
-struct PageCounter { 
-    static int count; 
-    ~PageCounter() 
-    { 
-        if (count)
-            LOG(WebCorePageLeaks, "LEAK: %d Page\n", count);
-    }
-};
-int PageCounter::count = 0;
-static PageCounter pageCounter;
+static WTF::RefCountedLeakCounter pageCounter("Page");
 #endif
+
+static void networkStateChanged()
+{
+    Vector<RefPtr<Frame> > frames;
+    
+    // Get all the frames of all the pages in all the page groups
+    HashSet<Page*>::iterator end = allPages->end();
+    for (HashSet<Page*>::iterator it = allPages->begin(); it != end; ++it) {
+        for (Frame* frame = (*it)->mainFrame(); frame; frame = frame->tree()->traverseNext())
+            frames.append(frame);
+    }
+
+    AtomicString eventName = networkStateNotifier().onLine() ? eventNames().onlineEvent : eventNames().offlineEvent;
+    for (unsigned i = 0; i < frames.size(); i++)
+        frames[i]->document()->dispatchWindowEvent(eventName, false, false);
+}
 
 Page::Page(ChromeClient* chromeClient, ContextMenuClient* contextMenuClient, EditorClient* editorClient, DragClient* dragClient, InspectorClient* inspectorClient)
     : m_chrome(new Chrome(this, chromeClient))
@@ -73,27 +100,43 @@ Page::Page(ChromeClient* chromeClient, ContextMenuClient* contextMenuClient, Edi
     , m_dragController(new DragController(this, dragClient))
     , m_focusController(new FocusController(this))
     , m_contextMenuController(new ContextMenuController(this, contextMenuClient))
-    , m_inspectorController(new InspectorController(this, inspectorClient))
+    , m_inspectorController(InspectorController::create(this, inspectorClient))
     , m_settings(new Settings(this))
     , m_progress(new ProgressTracker)
-    , m_backForwardList(new BackForwardList(this))
+    , m_backForwardList(BackForwardList::create(this))
+    , m_theme(RenderTheme::themeForPage(this))
     , m_editorClient(editorClient)
     , m_frameCount(0)
     , m_tabKeyCyclesThroughElements(true)
     , m_defersLoading(false)
     , m_inLowQualityInterpolationMode(false)
+    , m_cookieEnabled(true)
+    , m_areMemoryCacheClientCallsEnabled(true)
+    , m_mediaVolume(1)
+    , m_javaScriptURLsAreAllowed(true)
     , m_parentInspectorController(0)
+    , m_didLoadUserStyleSheet(false)
+    , m_userStyleSheetModificationTime(0)
+    , m_group(0)
+    , m_debugger(0)
+    , m_customHTMLTokenizerTimeDelay(-1)
+    , m_customHTMLTokenizerChunkSize(-1)
 {
     if (!allPages) {
         allPages = new HashSet<Page*>;
-        setFocusRingColorChangeFunction(setNeedsReapplyStyles);
+        
+        networkStateNotifier().setNetworkStateChangedFunction(networkStateChanged);
     }
 
     ASSERT(!allPages->contains(this));
     allPages->add(this);
 
+#if ENABLE(JAVASCRIPT_DEBUGGER)
+    JavaScriptDebugServer::shared().pageCreated(this);
+#endif
+
 #ifndef NDEBUG
-    ++PageCounter::count;
+    pageCounter.increment();
 #endif
 }
 
@@ -105,13 +148,16 @@ Page::~Page()
     
     for (Frame* frame = mainFrame(); frame; frame = frame->tree()->traverseNext())
         frame->pageDestroyed();
+
     m_editorClient->pageDestroyed();
-    m_inspectorController->pageDestroyed();
+    if (m_parentInspectorController)
+        m_parentInspectorController->pageDestroyed();
+    m_inspectorController->inspectedPageDestroyed();
 
     m_backForwardList->close();
 
 #ifndef NDEBUG
-    --PageCounter::count;
+    pageCounter.decrement();
 
     // Cancel keepAlive timers, to ensure we release all Frames before exiting.
     // It's safe to do this because we prohibit closing a Page while JavaScript
@@ -156,43 +202,56 @@ bool Page::goForward()
 void Page::goToItem(HistoryItem* item, FrameLoadType type)
 {
     // Abort any current load if we're going to a history item
-    m_mainFrame->loader()->stopAllLoaders();
+
+    // Define what to do with any open database connections. By default we stop them and terminate the database thread.
+    DatabasePolicy databasePolicy = DatabasePolicyStop;
+
+#if ENABLE(DATABASE)
+    // If we're navigating the history via a fragment on the same document, then we do not want to stop databases.
+    const KURL& currentURL = m_mainFrame->loader()->url();
+    const KURL& newURL = item->url();
+
+    if (newURL.hasRef() && equalIgnoringRef(currentURL, newURL))
+        databasePolicy = DatabasePolicyContinue;
+#endif
+    m_mainFrame->loader()->stopAllLoaders(databasePolicy);
     m_mainFrame->loader()->goToItem(item, type);
+}
+
+void Page::setGlobalHistoryItem(HistoryItem* item)
+{
+    m_globalHistoryItem = item;
 }
 
 void Page::setGroupName(const String& name)
 {
-    if (frameNamespaces && !m_groupName.isEmpty()) {
-        HashSet<Page*>* oldNamespace = frameNamespaces->get(m_groupName);
-        if (oldNamespace) {
-            oldNamespace->remove(this);
-            if (oldNamespace->isEmpty()) {
-                frameNamespaces->remove(m_groupName);
-                delete oldNamespace;
-            }
-        }
+    if (m_group && !m_group->name().isEmpty()) {
+        ASSERT(m_group != m_singlePageGroup.get());
+        ASSERT(!m_singlePageGroup);
+        m_group->removePage(this);
     }
-    m_groupName = name;
-    if (!name.isEmpty()) {
-        if (!frameNamespaces)
-            frameNamespaces = new HashMap<String, HashSet<Page*>*>;
-        HashSet<Page*>* newNamespace = frameNamespaces->get(name);
-        if (!newNamespace) {
-            newNamespace = new HashSet<Page*>;
-            frameNamespaces->add(name, newNamespace);
-        }
-        newNamespace->add(this);
+
+    if (name.isEmpty())
+        m_group = m_singlePageGroup.get();
+    else {
+        m_singlePageGroup.clear();
+        m_group = PageGroup::pageGroup(name);
+        m_group->addPage(this);
     }
 }
 
-const HashSet<Page*>* Page::frameNamespace() const
+const String& Page::groupName() const
 {
-    return (frameNamespaces && !m_groupName.isEmpty()) ? frameNamespaces->get(m_groupName) : 0;
+    DEFINE_STATIC_LOCAL(String, nullString, ());
+    return m_group ? m_group->name() : nullString;
 }
 
-const HashSet<Page*>* Page::frameNamespace(const String& groupName)
+void Page::initGroup()
 {
-    return (frameNamespaces && !groupName.isEmpty()) ? frameNamespaces->get(groupName) : 0;
+    ASSERT(!m_singlePageGroup);
+    ASSERT(!m_group);
+    m_singlePageGroup.set(new PageGroup(this));
+    m_group = m_singlePageGroup.get();
 }
 
 void Page::setNeedsReapplyStyles()
@@ -205,9 +264,107 @@ void Page::setNeedsReapplyStyles()
             frame->setNeedsReapplyStyles();
 }
 
-const Selection& Page::selection() const
+void Page::refreshPlugins(bool reload)
 {
-    return focusController()->focusedOrMainFrame()->selectionController()->selection();
+    if (!allPages)
+        return;
+
+    PluginData::refresh();
+
+    Vector<RefPtr<Frame> > framesNeedingReload;
+
+    HashSet<Page*>::iterator end = allPages->end();
+    for (HashSet<Page*>::iterator it = allPages->begin(); it != end; ++it) {
+        (*it)->m_pluginData = 0;
+
+        if (reload) {
+            for (Frame* frame = (*it)->mainFrame(); frame; frame = frame->tree()->traverseNext()) {
+                if (frame->loader()->containsPlugins())
+                    framesNeedingReload.append(frame);
+            }
+        }
+    }
+
+    for (size_t i = 0; i < framesNeedingReload.size(); ++i)
+        framesNeedingReload[i]->loader()->reload();
+}
+
+PluginData* Page::pluginData() const
+{
+    if (!settings()->arePluginsEnabled())
+        return 0;
+    if (!m_pluginData)
+        m_pluginData = PluginData::create(this);
+    return m_pluginData.get();
+}
+
+static Frame* incrementFrame(Frame* curr, bool forward, bool wrapFlag)
+{
+    return forward
+        ? curr->tree()->traverseNextWithWrap(wrapFlag)
+        : curr->tree()->traversePreviousWithWrap(wrapFlag);
+}
+
+bool Page::findString(const String& target, TextCaseSensitivity caseSensitivity, FindDirection direction, bool shouldWrap)
+{
+    if (target.isEmpty() || !mainFrame())
+        return false;
+
+    Frame* frame = focusController()->focusedOrMainFrame();
+    Frame* startFrame = frame;
+    do {
+        if (frame->findString(target, direction == FindDirectionForward, caseSensitivity == TextCaseSensitive, false, true)) {
+            if (frame != startFrame)
+                startFrame->selection()->clear();
+            focusController()->setFocusedFrame(frame);
+            return true;
+        }
+        frame = incrementFrame(frame, direction == FindDirectionForward, shouldWrap);
+    } while (frame && frame != startFrame);
+
+    // Search contents of startFrame, on the other side of the selection that we did earlier.
+    // We cheat a bit and just research with wrap on
+    if (shouldWrap && !startFrame->selection()->isNone()) {
+        bool found = startFrame->findString(target, direction == FindDirectionForward, caseSensitivity == TextCaseSensitive, true, true);
+        focusController()->setFocusedFrame(frame);
+        return found;
+    }
+
+    return false;
+}
+
+unsigned int Page::markAllMatchesForText(const String& target, TextCaseSensitivity caseSensitivity, bool shouldHighlight, unsigned limit)
+{
+    if (target.isEmpty() || !mainFrame())
+        return 0;
+
+    unsigned matches = 0;
+
+    Frame* frame = mainFrame();
+    do {
+        frame->setMarkedTextMatchesAreHighlighted(shouldHighlight);
+        matches += frame->markAllMatchesForText(target, caseSensitivity == TextCaseSensitive, (limit == 0) ? 0 : (limit - matches));
+        frame = incrementFrame(frame, true, false);
+    } while (frame);
+
+    return matches;
+}
+
+void Page::unmarkAllTextMatches()
+{
+    if (!mainFrame())
+        return;
+
+    Frame* frame = mainFrame();
+    do {
+        frame->document()->removeMarkers(DocumentMarker::TextMatch);
+        frame = incrementFrame(frame, true, false);
+    } while (frame);
+}
+
+const VisibleSelection& Page::selection() const
+{
+    return focusController()->focusedOrMainFrame()->selection()->selection();
 }
 
 void Page::setDefersLoading(bool defers)
@@ -233,6 +390,227 @@ bool Page::inLowQualityImageInterpolationMode() const
 void Page::setInLowQualityImageInterpolationMode(bool mode)
 {
     m_inLowQualityInterpolationMode = mode;
+}
+
+void Page::setMediaVolume(float volume)
+{
+    if (volume < 0 || volume > 1)
+        return;
+
+    if (m_mediaVolume == volume)
+        return;
+
+    m_mediaVolume = volume;
+    for (Frame* frame = mainFrame(); frame; frame = frame->tree()->traverseNext()) {
+        frame->document()->mediaVolumeDidChange();
+    }
+}
+
+void Page::didMoveOnscreen()
+{
+    for (Frame* frame = mainFrame(); frame; frame = frame->tree()->traverseNext()) {
+        if (frame->view())
+            frame->view()->didMoveOnscreen();
+    }
+}
+
+void Page::willMoveOffscreen()
+{
+    for (Frame* frame = mainFrame(); frame; frame = frame->tree()->traverseNext()) {
+        if (frame->view())
+            frame->view()->willMoveOffscreen();
+    }
+}
+
+void Page::userStyleSheetLocationChanged()
+{
+#if !FRAME_LOADS_USER_STYLESHEET
+    // FIXME: We should provide a way to load other types of URLs than just
+    // file: (e.g., http:, data:).
+    if (m_settings->userStyleSheetLocation().isLocalFile())
+        m_userStyleSheetPath = m_settings->userStyleSheetLocation().fileSystemPath();
+    else
+        m_userStyleSheetPath = String();
+
+    m_didLoadUserStyleSheet = false;
+    m_userStyleSheet = String();
+    m_userStyleSheetModificationTime = 0;
+#endif
+}
+
+const String& Page::userStyleSheet() const
+{
+    if (m_userStyleSheetPath.isEmpty()) {
+        ASSERT(m_userStyleSheet.isEmpty());
+        return m_userStyleSheet;
+    }
+
+    time_t modTime;
+    if (!getFileModificationTime(m_userStyleSheetPath, modTime)) {
+        // The stylesheet either doesn't exist, was just deleted, or is
+        // otherwise unreadable. If we've read the stylesheet before, we should
+        // throw away that data now as it no longer represents what's on disk.
+        m_userStyleSheet = String();
+        return m_userStyleSheet;
+    }
+
+    // If the stylesheet hasn't changed since the last time we read it, we can
+    // just return the old data.
+    if (m_didLoadUserStyleSheet && modTime <= m_userStyleSheetModificationTime)
+        return m_userStyleSheet;
+
+    m_didLoadUserStyleSheet = true;
+    m_userStyleSheet = String();
+    m_userStyleSheetModificationTime = modTime;
+
+    // FIXME: It would be better to load this asynchronously to avoid blocking
+    // the process, but we will first need to create an asynchronous loading
+    // mechanism that is not tied to a particular Frame. We will also have to
+    // determine what our behavior should be before the stylesheet is loaded
+    // and what should happen when it finishes loading, especially with respect
+    // to when the load event fires, when Document::close is called, and when
+    // layout/paint are allowed to happen.
+    RefPtr<SharedBuffer> data = SharedBuffer::createWithContentsOfFile(m_userStyleSheetPath);
+    if (!data)
+        return m_userStyleSheet;
+
+    RefPtr<TextResourceDecoder> decoder = TextResourceDecoder::create("text/css");
+    m_userStyleSheet = decoder->decode(data->data(), data->size());
+    m_userStyleSheet += decoder->flush();
+
+    return m_userStyleSheet;
+}
+
+void Page::removeAllVisitedLinks()
+{
+    if (!allPages)
+        return;
+    HashSet<PageGroup*> groups;
+    HashSet<Page*>::iterator pagesEnd = allPages->end();
+    for (HashSet<Page*>::iterator it = allPages->begin(); it != pagesEnd; ++it) {
+        if (PageGroup* group = (*it)->groupPtr())
+            groups.add(group);
+    }
+    HashSet<PageGroup*>::iterator groupsEnd = groups.end();
+    for (HashSet<PageGroup*>::iterator it = groups.begin(); it != groupsEnd; ++it)
+        (*it)->removeVisitedLinks();
+}
+
+void Page::allVisitedStateChanged(PageGroup* group)
+{
+    ASSERT(group);
+    ASSERT(allPages);
+    HashSet<Page*>::iterator pagesEnd = allPages->end();
+    for (HashSet<Page*>::iterator it = allPages->begin(); it != pagesEnd; ++it) {
+        Page* page = *it;
+        if (page->m_group != group)
+            continue;
+        for (Frame* frame = page->m_mainFrame.get(); frame; frame = frame->tree()->traverseNext()) {
+            if (CSSStyleSelector* styleSelector = frame->document()->styleSelector())
+                styleSelector->allVisitedStateChanged();
+        }
+    }
+}
+
+void Page::visitedStateChanged(PageGroup* group, LinkHash visitedLinkHash)
+{
+    ASSERT(group);
+    ASSERT(allPages);
+    HashSet<Page*>::iterator pagesEnd = allPages->end();
+    for (HashSet<Page*>::iterator it = allPages->begin(); it != pagesEnd; ++it) {
+        Page* page = *it;
+        if (page->m_group != group)
+            continue;
+        for (Frame* frame = page->m_mainFrame.get(); frame; frame = frame->tree()->traverseNext()) {
+            if (CSSStyleSelector* styleSelector = frame->document()->styleSelector())
+                styleSelector->visitedStateChanged(visitedLinkHash);
+        }
+    }
+}
+
+void Page::setDebuggerForAllPages(JSC::Debugger* debugger)
+{
+    ASSERT(allPages);
+
+    HashSet<Page*>::iterator end = allPages->end();
+    for (HashSet<Page*>::iterator it = allPages->begin(); it != end; ++it)
+        (*it)->setDebugger(debugger);
+}
+
+void Page::setDebugger(JSC::Debugger* debugger)
+{
+    if (m_debugger == debugger)
+        return;
+
+    m_debugger = debugger;
+
+    for (Frame* frame = m_mainFrame.get(); frame; frame = frame->tree()->traverseNext())
+        frame->script()->attachDebugger(m_debugger);
+}
+
+#if ENABLE(DOM_STORAGE)
+StorageNamespace* Page::sessionStorage(bool optionalCreate)
+{
+    if (!m_sessionStorage && optionalCreate)
+        m_sessionStorage = StorageNamespace::sessionStorageNamespace();
+
+    return m_sessionStorage.get();
+}
+
+void Page::setSessionStorage(PassRefPtr<StorageNamespace> newStorage)
+{
+    m_sessionStorage = newStorage;
+}
+#endif
+
+#if ENABLE(WML)
+WMLPageState* Page::wmlPageState()
+{
+    if (!m_wmlPageState)    
+        m_wmlPageState.set(new WMLPageState(this));
+    return m_wmlPageState.get(); 
+}
+#endif
+
+void Page::setCustomHTMLTokenizerTimeDelay(double customHTMLTokenizerTimeDelay)
+{
+    if (customHTMLTokenizerTimeDelay < 0) {
+        m_customHTMLTokenizerTimeDelay = -1;
+        return;
+    }
+    m_customHTMLTokenizerTimeDelay = customHTMLTokenizerTimeDelay;
+}
+
+void Page::setCustomHTMLTokenizerChunkSize(int customHTMLTokenizerChunkSize)
+{
+    if (customHTMLTokenizerChunkSize < 0) {
+        m_customHTMLTokenizerChunkSize = -1;
+        return;
+    }
+    m_customHTMLTokenizerChunkSize = customHTMLTokenizerChunkSize;
+}
+
+void Page::setMemoryCacheClientCallsEnabled(bool enabled)
+{
+    if (m_areMemoryCacheClientCallsEnabled == enabled)
+        return;
+
+    m_areMemoryCacheClientCallsEnabled = enabled;
+    if (!enabled)
+        return;
+
+    for (RefPtr<Frame> frame = mainFrame(); frame; frame = frame->tree()->traverseNext())
+        frame->loader()->tellClientAboutPastMemoryCacheLoads();
+}
+
+void Page::setJavaScriptURLsAreAllowed(bool areAllowed)
+{
+    m_javaScriptURLsAreAllowed = areAllowed;
+}
+
+bool Page::javaScriptURLsAreAllowed() const
+{
+    return m_javaScriptURLsAreAllowed;
 }
 
 } // namespace WebCore

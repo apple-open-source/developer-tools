@@ -1,7 +1,7 @@
-/* APPLE LOCAL file 4540451 */
+/* APPLE LOCAL file 4540451  & 6386976 */
 /* Test that the new-ABI ivar symbols look like OBJC_IVAR_$_ClassName.IvarName
    not like .objc_ivar.ClassName.IvarName */
-/* { dg-options "-mmacosx-version-min=10.5 -fobjc-abi-version=2" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
+/* { dg-options "-g -dA -mmacosx-version-min=10.5 -fobjc-abi-version=2" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
 /* { dg-do compile { target *-*-darwin* } } */
 
 @interface Rootclass { 
@@ -40,3 +40,6 @@ int main()
 }
 /* { dg-final { scan-assembler "OBJC_IVAR_\\\$_" } } */
 /* { dg-final { scan-assembler-not "\\\.objc_ivar\\\." } } */
+/* APPLE LOCAL radar 6386976 - Add the following two checks.  */
+/* { dg-final { scan-assembler "DW_AT_APPLE_major_runtime_vers" } } */
+/* { dg-final { scan-assembler "DW_AT_APPLE_runtime_class" } } */

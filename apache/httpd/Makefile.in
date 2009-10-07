@@ -47,12 +47,14 @@ install-conf:
 	    		if test $$n_lm -eq 0 -o "x$(DSO_MODULES)" = "x"; then \
 	    			sed -e 's#@@ServerRoot@@#$(prefix)#g' \
 	    				-e 's#@@Port@@#$(PORT)#g' \
+	    				-e 's#@@SSLPort@@#$(SSLPORT)#g' \
 	    				-e '/@@LoadModule@@/d' \
 	    				< $$i; \
 	    		else \
 	    			sed -n -e '/@@LoadModule@@/q' \
 	    				-e 's#@@ServerRoot@@#$(prefix)#g' \
 	    				-e 's#@@Port@@#$(PORT)#g' \
+	    				-e 's#@@SSLPort@@#$(SSLPORT)#g' \
 	    				-e 'p' \
 	    				< $$i; \
 	    			for j in $(DSO_MODULES) "^EOL^"; do \
@@ -64,6 +66,7 @@ install-conf:
 	    				-e '/@@LoadModule@@/d' \
 	    				-e 's#@@ServerRoot@@#$(prefix)#g' \
 	    				-e 's#@@Port@@#$(PORT)#g' \
+	    				-e 's#@@SSLPort@@#$(SSLPORT)#g' \
 	    				< $$i; \
 	    		fi \
 	    	) > $(DESTDIR)$(sysconfdir)/original/$$i; \
@@ -187,6 +190,7 @@ INSTALL_HEADERS = \
 	$(srcdir)/modules/generators/mod_status.h \
 	$(srcdir)/modules/loggers/mod_log_config.h \
 	$(srcdir)/modules/http/mod_core.h \
+	$(srcdir)/modules/mappers/mod_rewrite.h \
 	$(srcdir)/modules/proxy/mod_proxy.h \
 	$(srcdir)/modules/ssl/mod_ssl.h \
 	$(srcdir)/os/$(OS_DIR)/*.h

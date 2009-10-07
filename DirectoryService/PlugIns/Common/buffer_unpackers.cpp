@@ -148,6 +148,48 @@ tDirStatus GetNameAndDataFromBuffer(
 	return siResult;
 }
 
+//------------------------------------------------------------------------------------
+//	* GetDataFromAuthBuffer
+//------------------------------------------------------------------------------------
+tDirStatus GetDataFromAuthBuffer(tDataBufferPtr inAuthData, int nodeNum, unsigned char **outData, UInt32 *outLen)
+{
+	tDataNodePtr pDataNode;
+	tDirStatus status = eDSInvalidBuffFormat;
+	*outData = NULL;
+	*outLen = 0;
+
+	tDataListPtr dataList = dsAuthBufferGetDataListAllocPriv(inAuthData);
+	if (dataList != NULL)
+	{
+		status = dsDataListGetNodePriv(dataList, nodeNum, &pDataNode);
+		if ( status != eDSNoErr )
+		{
+			status = eDSInvalidBuffFormat;
+			goto getdataerr;
+		}
+
+		if ( pDataNode->fBufferLength > 0 )
+		{
+			*outData = (unsigned char *) calloc(pDataNode->fBufferLength + 1, 1);
+			if ( ! (*outData) )
+			{
+				status = eMemoryAllocError;
+				goto getdataerr;
+			}
+			memcpy(*outData, ((tDataBufferPriv*)pDataNode)->fBufferData, pDataNode->fBufferLength);
+			*outLen = pDataNode->fBufferLength;
+		}
+	}
+
+getdataerr:
+	if ( dataList )
+	{
+		dsDataListDeallocatePriv(dataList);
+		free(dataList);
+		dataList = NULL;
+	}
+	return status;
+}
 
 //------------------------------------------------------------------------------------
 //	UnpackSambaBufferFirstThreeItems
@@ -444,14 +486,21 @@ SInt32 UnpackDigestBuffer( tDataBufferPtr inAuthData, char **outUserName, digest
 
 		// this allocates a copy of the string
 		method = dsDataListGetNodeStringPriv( dataList, 4 );
-		if ( method == nil ) throw( (SInt32)eDSInvalidBuffFormat );
-		if ( strlen(method) < 1 ) throw( (SInt32)eDSInvalidBuffFormat );
+		if ( method != NULL )
+		{
+			if ( strlen(method) < 1 )
+				throw( (SInt32)eDSInvalidBuffFormat );
 
-		challengePlus = (char *) malloc( strlen(challenge) + sizeof(kMethodStr) + strlen(method) + 1 );
-		strcpy( challengePlus, challenge );
-		strcat( challengePlus, kMethodStr );
-		strcat( challengePlus, method );
-		strcat( challengePlus, "\"" );
+			challengePlus = (char *) malloc( strlen(challenge) + sizeof(kMethodStr) + strlen(method) + 1 );
+			strcpy( challengePlus, challenge );
+			strcat( challengePlus, kMethodStr );
+			strcat( challengePlus, method );
+			strcat( challengePlus, "\"" );
+		}
+		else
+		{
+			challengePlus = strdup( challenge );
+		}
 		
 		// these are not copies
 		siResult = dsDataListGetNodePriv( dataList, 3, &pResponseNode );
@@ -683,7 +732,7 @@ SInt32 RepackBufferForPWServer ( tDataBufferPtr inBuff, const char *inUserID, UI
 //    additional data after. Buffer length must be at least 5 (length + 1 character name)
 // ---------------------------------------------------------------------------
 
-SInt32 GetUserNameFromAuthBuffer ( tDataBufferPtr inAuthData, unsigned long inUserNameIndex, 
+SInt32 GetUserNameFromAuthBuffer ( tDataBufferPtr inAuthData, UInt32 inUserNameIndex, 
 											  char  **outUserName, int *outUserNameBufferLength )
 {
 	tDirStatus status = eDSNoErr;

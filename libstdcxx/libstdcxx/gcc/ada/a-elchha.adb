@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---           Copyright (C) 2003-2004 Free Software Foundation, Inc.         --
+--          Copyright (C) 2003-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -20,8 +20,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -36,6 +36,13 @@
 ------------------------------------------------------------------------------
 
 --  Default version for most targets
+
+with System.Standard_Library; use System.Standard_Library;
+--  Used for Adafinal
+
+with System.Soft_Links;
+--  Used for Task_Termination_Handler
+--           Task_Termination_NT
 
 procedure Ada.Exceptions.Last_Chance_Handler
   (Except : Exception_Occurrence)
@@ -70,6 +77,14 @@ is
    --  Convenient shortcut
 
 begin
+   --  Do not execute any task termination code when shutting down the system.
+   --  The Adafinal procedure would execute the task termination routine for
+   --  normal termination, but we have already executed the task termination
+   --  procedure because of an unhandled exception.
+
+   System.Soft_Links.Task_Termination_Handler :=
+     System.Soft_Links.Task_Termination_NT'Access;
+
    --  Let's shutdown the runtime now. The rest of the procedure needs to be
    --  careful not to use anything that would require runtime support. In
    --  particular, functions returning strings are banned since the sec stack
@@ -88,7 +103,7 @@ begin
    --  really an exception at all. We recognize this by the fact that
    --  it is the only exception whose name starts with underscore.
 
-   if Except.Id.Full_Name.all (1) = '_' then
+   if To_Ptr (Except.Id.Full_Name) (1) = '_' then
       To_Stderr (Nline);
       To_Stderr ("Execution terminated by abort of environment task");
       To_Stderr (Nline);
@@ -100,7 +115,8 @@ begin
    elsif Except.Num_Tracebacks = 0 then
       To_Stderr (Nline);
       To_Stderr ("raised ");
-      To_Stderr (Except.Id.Full_Name.all (1 .. Except.Id.Name_Length - 1));
+      To_Stderr
+        (To_Ptr (Except.Id.Full_Name) (1 .. Except.Id.Name_Length - 1));
 
       if Exception_Message_Length (Except) /= 0 then
          To_Stderr (" : ");

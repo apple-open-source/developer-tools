@@ -1,6 +1,6 @@
 /* APPLE LOCAL file Macintosh alignment */
 
-/* { dg-do run { target { powerpc*-*-darwin* i?86*-*-darwin* } } } */
+/* { dg-do run } */
 /* { dg-options "-Wno-long-long" } */
 
 /*

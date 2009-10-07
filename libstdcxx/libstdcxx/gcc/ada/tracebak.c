@@ -6,7 +6,7 @@
  *                                                                          *
  *                          C Implementation File                           *
  *                                                                          *
- *           Copyright (C) 2000-2004 Ada Core Technologies, Inc.            *
+ *                     Copyright (C) 2000-2006, AdaCore                     *
  *                                                                          *
  * GNAT is free software;  you can  redistribute it  and/or modify it under *
  * terms of the  GNU General Public License as published  by the Free Soft- *
@@ -16,8 +16,8 @@
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License *
  * for  more details.  You should have  received  a copy of the GNU General *
  * Public License  distributed with GNAT;  see file COPYING.  If not, write *
- * to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, *
- * MA 02111-1307, USA.                                                      *
+ * to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, *
+ * Boston, MA 02110-1301, USA.                                              *
  *                                                                          *
  * As a  special  exception,  if you  link  this file  with other  files to *
  * produce an executable,  this file does not by itself cause the resulting *
@@ -35,7 +35,7 @@
    It has been tested on the following configurations:
    PowerPC/AiX
    PowerPC/VxWorks
-   Sparc/Solaris
+   SPARC/Solaris
    i386/GNU/Linux
    i386/Solaris
    i386/NT
@@ -187,13 +187,14 @@ extern void (*Unlock_Task) (void);
 
    o FETCH_UP_FRAME, to force an invocation of __builtin_frame_address with a
      positive argument right after a possibly forced call even if FRAME_LEVEL
-     is 0. See the Sparc Solaris case for an example where this is useful.
+     is 0. See the SPARC Solaris case for an example where this is useful.
 
   */
 
-/*------------------------------ PPC AIX -------------------------------*/
+/*--------------------------- PPC AIX/Darwin ----------------------------*/
 
-#if defined (_AIX)
+#if ((defined (_POWER) && defined (_AIX)) || \
+(defined (__ppc__) && defined (__APPLE__)))
 
 #define USE_GENERIC_UNWINDER
 
@@ -212,10 +213,10 @@ struct layout
    function is located in it's caller's frame, and the save operation only
    takes place if the function performs a call.
 
-   To have __gnat_backtrace retrieve it's own return address, we then
+   To have __gnat_backtrace retrieve its own return address, we then
    define ... */
 
-#define FORCE_CALL
+#define FORCE_CALL 1
 #define FRAME_LEVEL 1
 
 #define BASE_SKIP 1
@@ -232,7 +233,7 @@ struct layout
   void *return_address;
 };
 
-#define FORCE_CALL
+#define FORCE_CALL 1
 #define FRAME_LEVEL 1
 /* See the PPC AIX case for an explanation of these values.  */
 
@@ -242,7 +243,7 @@ struct layout
 
 #define BASE_SKIP 1
 
-/*-------------------------- Sparc Solaris -----------------------------*/
+/*-------------------------- SPARC Solaris -----------------------------*/
 
 #elif defined (sun) && defined (sparc)
 
@@ -257,8 +258,14 @@ struct layout
   void *return_address;
 };
 
+#ifdef __arch64__
+#define STACK_BIAS 2047 /* V9 ABI */
+#else
+#define STACK_BIAS 0    /* V8 ABI */
+#endif
+
 #define FRAME_LEVEL 0
-#define FRAME_OFFSET (14 * (sizeof (void*)))
+#define FRAME_OFFSET (14 * sizeof (void*) + STACK_BIAS)
 #define PC_ADJUST 0
 #define STOP_FRAME(CURRENT, TOP_STACK) \
   ((CURRENT)->return_address == 0|| (CURRENT)->next == 0 \
@@ -294,7 +301,11 @@ struct layout
 };
 
 #define LOWEST_ADDR 0
-#define FRAME_LEVEL 0
+#define FRAME_LEVEL 1
+/* builtin_frame_address (1) is expected to work on this target, and (0) might
+   return the soft stack pointer, which does not designate a location where a
+   backchain and a return address might be found.  */
+
 #define FRAME_OFFSET 0
 #define PC_ADJUST -2
 #define STOP_FRAME(CURRENT, TOP_STACK) \
@@ -303,7 +314,7 @@ struct layout
    || (CURRENT)->return_address == 0|| (CURRENT)->next == 0  \
    || (void *) (CURRENT) < (TOP_STACK))
 
-#define BASE_SKIP 1
+#define BASE_SKIP (1+FRAME_LEVEL)
 
 /* On i386 architecture we check that at the call point we really have a call
    insn. Possible call instructions are:
@@ -324,12 +335,37 @@ struct layout
         || ((*((ptr) - 1) & 0xff) == 0xff) \
         || (((*(ptr) & 0xd0ff) == 0xd0ff))))
 
-/*------------------------------- mips-irix -------------------------------*/
+/*----------------------------- x86_64 ---------------------------------*/
 
-#elif defined (__mips) && defined (__sgi)
+#elif defined (__x86_64__)
 
 #define USE_GCC_UNWINDER
-#define PC_ADJUST -8
+/* The generic unwinder is not used for this target because it is based
+   on frame layout assumptions that are not reliable on this target (the
+   rbp register is very likely used for something else than storing the
+   frame pointer in optimized code). Hence, we use the GCC unwinder
+   based on DWARF 2 call frame information, although it has the drawback
+   of not being able to unwind through frames compiled without DWARF 2
+   information.
+*/
+
+#define PC_ADJUST -2
+/* The minimum size of call instructions on this architecture is 2 bytes */
+
+/*----------------------------- ia64 ---------------------------------*/
+
+#elif defined (__ia64__) && (defined (linux) || defined (__hpux__))
+
+#define USE_GCC_UNWINDER
+/* Use _Unwind_Backtrace driven exceptions on ia64 HP-UX and ia64
+   GNU/Linux, where _Unwind_Backtrace is provided by the system unwind
+   library. On HP-UX 11.23 this requires patch PHSS_33352, which adds
+   _Unwind_Backtrace to the system unwind library. */
+
+#define PC_ADJUST -16
+/* Every call on ia64 is part of a 128 bit bundle, so an adjustment of
+   minus 16 bytes from the point of return finds the address of the
+   previous bundle. */
 
 #endif
 
@@ -344,7 +380,7 @@ struct layout
    libgcc, and the stage1 compiler is unlikely to be linked against a post 3.3
    library.  It actually disables the support for backtraces in this compiler
    for targets defining USE_GCC_UNWINDER, which is OK since we don't use the
-   traceback capablity in the compiler anyway.
+   traceback capability in the compiler anyway.
 
    The condition is expressed the way above because we cannot reliably rely on
    any other macro from the base compiler when compiling stage1.  */
@@ -369,12 +405,18 @@ struct layout
 #define MAX(x,y) ((x) > (y) ? (x) : (y))
 #endif
 
-/* Define a dummy function to call if FORCE_CALL is defined.  Don't
-   define it otherwise, as this could lead to "defined but not used"
-   warnings.  */
-#if defined (FORCE_CALL)
-static void forced_callee () {}
+#ifndef FORCE_CALL
+#define FORCE_CALL 0
 #endif
+
+/* Make sure the function is not inlined.  */
+static void forced_callee (void) __attribute__ ((noinline));
+
+static void forced_callee (void)
+{
+  /* Make sure the function is not pure.  */
+  volatile int i __attribute__ ((unused)) = 0;
+}
 
 int
 __gnat_backtrace (void **array,
@@ -388,10 +430,8 @@ __gnat_backtrace (void **array,
   void *top_stack;
   int cnt = 0;
 
-  /* Honor FORCE_CALL when defined.  */
-#if defined (FORCE_CALL)
-  forced_callee ();
-#endif
+  if (FORCE_CALL)
+    forced_callee ();
 
   /* Force a call to builtin_frame_address with a positive argument
      if required. This is necessary e.g. on sparc to have the register

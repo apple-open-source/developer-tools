@@ -76,7 +76,6 @@ scan_expression_with_cleanup (char **cmd, const char *def)
 static void
 do_fclose_cleanup (void *arg)
 {
-  FILE *file = arg;
   fclose (arg);
 }
 
@@ -240,7 +239,6 @@ dump_memory_to_file (char *cmd, char *mode, char *file_format)
   void *buf;
   char *lo_exp;
   char *hi_exp;
-  int len;
 
   /* Open the file.  */
   filename = scan_filename_with_cleanup (&cmd, NULL);
@@ -530,81 +528,83 @@ static void
 restore_binary_file (char *filename, struct callback_data *data)
 {
   FILE *file = fopen_with_cleanup (filename, FOPEN_RB);
-  int status;
   gdb_byte *buf;
-  long len, total_file_bytes;
-  int max_errors;
+  int len, total_file_bytes;
+  int bytes_to_read_from_file;
 
   /* Get the file size for reading.  */
   if (fseek (file, 0, SEEK_END) == 0) 
-    {
-      total_file_bytes = len = ftell (file);
-      if (len > g_max_binary_file_chunk)
-        len = g_max_binary_file_chunk;
-    }
+    total_file_bytes = ftell (file);
   else
     perror_with_name (filename);
 
-  if (len <= data->load_start)
+  if (total_file_bytes <= data->load_start)
     error (_("Start address is greater than length of binary file %s."), 
 	   filename);
 
-  /* Chop off "len" if it exceeds the requested load_end addr. */
-  if (data->load_end != 0 && data->load_end < len)
-    len = data->load_end;
-  /* Chop off "len" if the requested load_start addr skips some bytes. */
+  bytes_to_read_from_file = data->load_end;
+  if (bytes_to_read_from_file == 0)
+    bytes_to_read_from_file = total_file_bytes;
   if (data->load_start > 0)
-    len -= data->load_start;
+    bytes_to_read_from_file -= data->load_start;
+
+  if (bytes_to_read_from_file > total_file_bytes)
+    bytes_to_read_from_file = total_file_bytes;
 
   printf_filtered 
-    ("Restoring binary file %s into memory (0x%lx to 0x%lx)\n", 
+    ("Restoring binary file %s into memory (0x%s to 0x%s)\n", 
      filename, 
-     (unsigned long) data->load_start + data->load_offset, 
-     (unsigned long) data->load_start + data->load_offset + total_file_bytes);
+     paddr_nz (data->load_start + data->load_offset),
+     paddr_nz (data->load_start + data->load_offset + bytes_to_read_from_file));
 
   /* Now set the file pos to the requested load start pos.  */
   if (fseek (file, data->load_start, SEEK_SET) != 0)
     perror_with_name (filename);
 
-  /* Now allocate a buffer and read the file contents.  */
+  if (bytes_to_read_from_file > g_max_binary_file_chunk)
+    len = g_max_binary_file_chunk;
+  else
+    len = bytes_to_read_from_file;
+
   buf = xmalloc (len);
   make_cleanup (xfree, buf);
 
-  status = 0;
-  max_errors = 3;
-  while (total_file_bytes > 0) 
+  CORE_ADDR addrp = data->load_start + data->load_offset;
+  /* BYTES_TO_READ_FROM_FILE decreases each time through this loop;
+     we read g_max_binary_file_chunk or less bytes at each iteration.  */
+  while (bytes_to_read_from_file > 0)
     {
+      /* The last chunk we'll be reading -- at this point our LEN buffer
+         is larger than the remaining number of bytes to be read; cap it
+         so we don't read off the end of the file. */
+      if (len > bytes_to_read_from_file)
+        len = bytes_to_read_from_file;
+
       if (fread (buf, 1, len, file) != len)
 	perror_with_name (filename);
     
-      /* Now write the buffer into target memory. */
-       printf_unfiltered ("\rWriting 0x%x bytes to 0x%x", len, 
-			  data->load_start + data->load_offset );
-       gdb_flush (gdb_stdout);
-       status = target_write_memory (data->load_start + data->load_offset, 
-				     buf, len);
-    
-       if (status == 0) 
-	{
-	  data->load_offset += len;
-	  total_file_bytes -= len;
-	  if (total_file_bytes < g_max_binary_file_chunk)
-	    len = total_file_bytes;
-	  else
-	    len = g_max_binary_file_chunk;
-	}
-      else 
-	{
-	  if (--max_errors > 0) 
-	    warning (_("\nrestore: memory write failed - retrying."));
-	  else 
-            break;
-	}
+      int max_errors = 2;
+      while (max_errors > 0)
+        {
+           printf_unfiltered ("Writing 0x%s bytes to 0x%s\n", paddr_nz (len),
+			      paddr_nz (addrp));
+           gdb_flush (gdb_stdout);
+           if (target_write_memory (addrp, buf, len) == 0)
+             {
+               addrp += len;
+               break;
+             }
+           else
+             {
+	       warning ("restore: memory write failed - retrying.");
+               max_errors--;
+             }
+        }
+      if (max_errors == 0)
+        error ("restore: memory write failed.");
+
+      bytes_to_read_from_file -= len;
     }
-  printf_unfiltered ("\n");
-    
-  if (status != 0)
-    warning (_("restore: memory write failed (%s)."), safe_strerror (status));
 }
 
 /* APPLE LOCAL END: segment binary file downloads  */
@@ -778,7 +778,7 @@ _initialize_cli_dump (void)
 		  &restore_set_cmdlist, "set restore ",
 		  0 /* allow-unknown */, &setlist);
   add_prefix_cmd ("restore", no_class, show_restore_cmd, 
-		  _("\Show current restore specific command settings"),
+		  _("Show current restore specific command settings"),
 		  &restore_show_cmdlist, "show restore ",
 		  0 /* allow-unknown */, &showlist);
 

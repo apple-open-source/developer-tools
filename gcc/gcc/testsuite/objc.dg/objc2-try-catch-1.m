@@ -1,8 +1,9 @@
 /* APPLE LOCAL file radar 4951324 */
 /* Test that in new objc2 eh, existing declaration of objc_ehtype_vtable
    and OBJC_EHTYPE_id will be used. */
-/* { dg-options "-mmacosx-version-min=10.5 -m64 -fobjc-zerocost-exceptions" } */
-/* { dg-do compile { target powerpc*-*-darwin* i?86*-*-darwin* } } */
+/* { dg-options "-mmacosx-version-min=10.5 -m64 -fobjc-zerocost-exceptions" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
+/* { dg-options "-fobjc-zerocost-exceptions" { target arm*-*-darwin* } } */
+/* { dg-do compile } */
 
 /* APPLE LOCAL radar 4894756 */
 #include "../objc/execute/Object2.h"

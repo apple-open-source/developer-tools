@@ -76,6 +76,15 @@ struct macosx_dyld_thread_status
   CORE_ADDR dyld_slide;
   const char *dyld_name;
 
+  /* When we're attaching to a process and dyld has slid (e.g. when attaching
+     to something running under Rosetta translation, there is a native dyld
+     which we don't see and a ppc dyld that we do see, the ppc dyld has been
+     slid to a new address range), at the very early startup the minsyms have
+     their unslid addresses and we need to apply dyld_slide to them.  But once
+     we slide the dyld objfile to its actual load address, we need to stop that
+     by-hand address translation in lookup_dyld_address() */
+  int dyld_minsyms_have_been_relocated;
+
   enum macosx_dyld_thread_state state;
 
   struct dyld_objfile_info current_info;
@@ -128,6 +137,7 @@ int macosx_get_malloc_inited (void);
 struct section_offsets *get_sectoffs_for_shared_cache_dylib (struct dyld_objfile_entry *, CORE_ADDR);
 int target_read_mach_header (CORE_ADDR addr,
                             struct mach_header *mh);
+int target_get_mach_header_size (struct mach_header *mh);
 int target_read_load_command (CORE_ADDR addr,
                                     struct load_command *load_cmd);
 int target_read_uuid (CORE_ADDR addr, unsigned char *uuid);

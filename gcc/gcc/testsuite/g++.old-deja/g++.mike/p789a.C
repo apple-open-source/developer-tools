@@ -13,10 +13,12 @@ struct foo
   int x;
   foo () {
     x = count++;
-    printf("this %d = %x\n", x, (void *)this);
+    /* APPLE LOCAL default to Wformat-security 5764921 */
+    printf("this %d = %p\n", x, (void *)this);
   }
   virtual ~foo () {
-    printf("this %d = %x\n", x, (void *)this);
+    /* APPLE LOCAL default to Wformat-security 5764921 */
+    printf("this %d = %p\n", x, (void *)this);
     --count;
   }
 };
@@ -31,7 +33,8 @@ int main ()
       {
 	for (int j = 0; j < 3; j++)
 	  {
-	    printf("&a[%d][%d] = %x\n", i, j, (void *)&array[i][j]);
+	    /* APPLE LOCAL default to Wformat-security 5764921 */
+	    printf("&a[%d][%d] = %p\n", i, j, (void *)&array[i][j]);
 	  }
       }
       // The count should be nine, if not, fail the test.

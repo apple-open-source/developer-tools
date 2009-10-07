@@ -1,8 +1,8 @@
 /* APPLE LOCAL file radar 4897159 */
 /* Test that a redundant user declaration of a setter which is later to be synthesize 
    does not ICE. */
-/* { dg-options "-mmacosx-version-min=10.5 -fobjc-new-property -framework Foundation -framework CoreFoundation" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
-/* { dg-options "-fobjc-new-property -framework Foundation -framework CoreFoundation" { target arm*-*-darwin* } } */
+/* { dg-options "-mmacosx-version-min=10.5 -fobjc-new-property -framework Foundation" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
+/* { dg-options "-fobjc-new-property -framework Foundation" { target arm*-*-darwin* } } */
 /* { dg-do run } */
 #include <Foundation/Foundation.h>
 

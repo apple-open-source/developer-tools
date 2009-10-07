@@ -6,7 +6,7 @@
 --                                                                          --
 --                                B o d y                                   --
 --                                                                          --
---          Copyright (C) 1992-2005 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -51,6 +51,11 @@ begin
    Write_Str ("  -aIdir    Specify source files search path");
    Write_Eol;
 
+   --  Line for a switch
+
+   Write_Str ("  -a        Automatically initialize elaboration procedure");
+   Write_Eol;
+
    --  Line for A switch
 
    Write_Str ("  -A        Generate binder program in Ada (default)");
@@ -73,9 +78,16 @@ begin
    Write_Str ("  -C        Generate binder program in C");
    Write_Eol;
 
+   --  Line for -d switch
+
+   Write_Str ("  -dnn[k|m] Default primary stack size = nn [kilo|mega] ");
+   Write_Str ("bytes ");
+   Write_Eol;
+
    --  Line for D switch
 
-   Write_Str ("  -Dnnn     Default secondary stack size = nnn bytes");
+   Write_Str ("  -Dnn[k|m] Default secondary stack size = nnn [kilo|mega] ");
+   Write_Str ("bytes");
    Write_Eol;
 
    --  Line for -e switch
@@ -127,15 +139,15 @@ begin
    Write_Str ("renamed to xyzinit/final, implies -n");
    Write_Eol;
 
-   --  Line for -M switch
-
-   Write_Str ("  -Mxyz     Rename generated main program from main to xyz");
-   Write_Eol;
-
    --  Line for -m switch
 
    Write_Str ("  -mnnn     Limit number of detected error");
    Write_Str ("s to nnn (1-999999)");
+   Write_Eol;
+
+   --  Line for -M switch
+
+   Write_Str ("  -Mxyz     Rename generated main program from main to xyz");
    Write_Eol;
 
    --  Line for -n switch
@@ -207,6 +219,12 @@ begin
    --  Line for -T switch
 
    Write_Str ("  -Tn       Set time slice value to n milliseconds (n >= 0)");
+   Write_Eol;
+
+   --  Line for -u switch
+
+   Write_Str ("  -un       Enable dynamic stack analysis, with n results ");
+   Write_Str ("stored");
    Write_Eol;
 
    --  Line for -v switch

@@ -4,7 +4,8 @@ extern "C" int printf (const char*, ...);
 struct A
 {
   virtual void f () {
-    printf ("%x\n", this);
+    /* APPLE LOCAL default to Wformat-security 5764921 */
+    printf ("%p\n", (void*)this);
   }
 };
 

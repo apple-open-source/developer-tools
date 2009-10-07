@@ -31,8 +31,15 @@ install-files:
 	@echo "Installing $(Destination) for $(Product)"
 	$(_v) $(INSTALL_FILE) -m 0644 -c afpovertcp.cfg	 "$(Destination)/afpovertcp.cfg"
 	$(_v) $(INSTALL_FILE) -m 0644 -c asl.conf	 "$(Destination)/asl.conf"
+ifeq "$(Product)" "MacOSX"
+	$(_v) $(INSTALL_FILE) -m 0644 -c asl.conf "$(Destination)/asl.conf.install"
+	$(_v) cat asl.conf.install >> "$(Destination)/asl.conf.install"
+endif
 	$(_v) $(INSTALL_FILE) -m 0644 -c /dev/null	 "$(Destination)/find.codes"
 	$(_v) $(INSTALL_FILE) -m 0644 -c ftpusers	 "$(Destination)/ftpusers"
+ifeq "$(Product)" "iPhone"
+	$(_v) $(INSTALL_FILE) -m 0644 -c fstab		 "$(Destination)/fstab"
+endif
 	$(_v) $(INSTALL_FILE) -m 0644 -c fstab.hd	 "$(Destination)/fstab.hd"
 	$(_v) $(INSTALL_FILE) -m 0644 -c gettytab	 "$(Destination)/gettytab"
 	$(_v) $(INSTALL_FILE) -m 0644 -c /dev/null	 "$(Destination)/hosts.equiv"

@@ -1,8 +1,6 @@
 /*
- * This file is part of the DOM implementation for KDE.
- *
  * (C) 1999-2003 Lars Knoll (knoll@kde.org)
- * Copyright (C) 2004, 2005, 2006 Apple Computer, Inc.
+ * Copyright (C) 2004, 2005, 2006, 2008 Apple Inc. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -24,11 +22,12 @@
 #define CSSStyleDeclaration_h
 
 #include "StyleBase.h"
-#include <wtf/PassRefPtr.h>
+#include <wtf/Forward.h>
 
 namespace WebCore {
 
 class CSSMutableStyleDeclaration;
+class CSSProperty;
 class CSSRule;
 class CSSValue;
 
@@ -36,8 +35,6 @@ typedef int ExceptionCode;
 
 class CSSStyleDeclaration : public StyleBase {
 public:
-    virtual bool isStyleDeclaration();
-
     static bool isPropertyName(const String&);
 
     CSSRule* parentRule() const;
@@ -46,6 +43,7 @@ public:
     virtual void setCssText(const String&, ExceptionCode&) = 0;
 
     virtual unsigned length() const = 0;
+    bool isEmpty() const { return !length(); }
     virtual String item(unsigned index) const = 0;
 
     PassRefPtr<CSSValue> getPropertyCSSValue(const String& propertyName);
@@ -76,9 +74,8 @@ public:
 protected:
     CSSStyleDeclaration(CSSRule* parentRule = 0);
 
-private:
-    CSSStyleDeclaration(const CSSStyleDeclaration&);
-    CSSStyleDeclaration& operator=(const CSSStyleDeclaration&);
+    virtual bool cssPropertyMatches(const CSSProperty*) const;
+
 };
 
 } // namespace WebCore

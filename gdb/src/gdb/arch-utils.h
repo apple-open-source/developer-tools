@@ -72,6 +72,8 @@ extern gdbarch_convert_from_func_ptr_addr_ftype convert_from_func_ptr_addr_ident
 
 extern int no_op_reg_to_regnum (int reg);
 
+int default_adjust_ehframe_regnum (struct gdbarch *gdbarch, int regnum, int eh_frame_p);
+
 /* Do nothing version of elf_make_msymbol_special. */
 
 void default_elf_make_msymbol_special (asymbol *sym, struct minimal_symbol *msym);

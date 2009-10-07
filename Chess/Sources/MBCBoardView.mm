@@ -2,7 +2,7 @@
 	File:		MBCBoardView.mm
 	Contains:	General view handling infrastructure
 	Version:	1.0
-	Copyright:	© 2002-2007 by Apple Computer, Inc., all rights reserved.
+	Copyright:	© 2002-2008 by Apple Computer, Inc., all rights reserved.
 
 	File Ownership:
 
@@ -15,6 +15,15 @@
 	Change History (most recent first):
 
 		$Log: MBCBoardView.mm,v $
+		Revision 1.35  2008/10/24 21:39:06  neerache
+		Insist on acceleration for fancy graphics
+		
+		Revision 1.34  2008/10/24 20:06:17  neerache
+		<rdar://problem/3710028> ER: Chessboard anti-aliasing
+		
+		Revision 1.33  2008/06/03 17:29:49  neerache
+		<rdar://problem/5793568> - Chess needs to add NSOpenGLPFAAllowOfflineDisplays pixel format attribute to OpenGL contexts
+		
 		Revision 1.32  2007/03/02 23:06:00  neerache
 		<rdar://problem/4038207> Allow the user to type in a move in Chess
 		
@@ -128,6 +137,8 @@
 #import "MBCController.h"
 #import "MBCPlayer.h"
 
+#include <algorithm>
+
 NSColor * MBCColor::GetColor() const
 {
 	return [NSColor 
@@ -148,29 +159,31 @@ void MBCColor::SetColor(NSColor * newColor)
 {
 	float	light_ambient		= 0.125f;
 	GLfloat light_pos[4] 		= { -60.0, 200.0, 0.0, 0.0};
+	
 	//
 	// We first try to enable Full Scene Anti Aliasing if our graphics
 	// hardware lets use get away with it.
 	//
     NSOpenGLPixelFormatAttribute fsaa_attr[] = 
     {
+		NSOpenGLPFAAllowOfflineRenderers,
         NSOpenGLPFADoubleBuffer,
-		NSOpenGLPFANoRecovery,
-		NSOpenGLPFAAccelerated,
 		NSOpenGLPFAWindow,
+		NSOpenGLPFAAccelerated,
+		NSOpenGLPFANoRecovery,
 		NSOpenGLPFAColorSize, 		(NSOpenGLPixelFormatAttribute)24,
 		NSOpenGLPFAAlphaSize, 		(NSOpenGLPixelFormatAttribute)8,
    		NSOpenGLPFADepthSize, 		(NSOpenGLPixelFormatAttribute)16,
         NSOpenGLPFAStencilSize, 	(NSOpenGLPixelFormatAttribute)1,
+		NSOpenGLPFAMultisample,		
 		NSOpenGLPFASampleBuffers, 	(NSOpenGLPixelFormatAttribute)1, 
-		NSOpenGLPFASamples, 		(NSOpenGLPixelFormatAttribute)2,
+		NSOpenGLPFASamples, 		(NSOpenGLPixelFormatAttribute)4,
         (NSOpenGLPixelFormatAttribute)0 
 	};
     NSOpenGLPixelFormatAttribute jaggy_attr[] = 
     {
+		NSOpenGLPFAAllowOfflineRenderers,
 		NSOpenGLPFADoubleBuffer,
-		NSOpenGLPFANoRecovery,
-		NSOpenGLPFAAccelerated,
 		NSOpenGLPFAWindow,
 		NSOpenGLPFAColorSize, 		(NSOpenGLPixelFormatAttribute)24,
 		NSOpenGLPFAAlphaSize, 		(NSOpenGLPixelFormatAttribute)8,
@@ -185,7 +198,18 @@ void MBCColor::SetColor(NSColor * newColor)
 			[[NSOpenGLPixelFormat alloc] initWithAttributes:jaggy_attr];
     [super initWithFrame:rect pixelFormat:pixelFormat];
     [[self openGLContext] makeCurrentContext];
-
+	glEnable(GL_MULTISAMPLE);
+	
+	//
+	// Determine some of our graphics limit
+	//
+	if (strstr((const char *)glGetString(GL_EXTENSIONS), "GL_EXT_texture_filter_anisotropic")) {
+		glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &fAnisotropy);
+		fAnisotropy = std::min(fAnisotropy, 4.0f);
+	} else
+		fAnisotropy	= 0.0f;
+	
+	
 	fBoardReflectivity	= 0.3f;
 	fBoardDrawStyle[0]	= [[MBCDrawStyle alloc] init];
 	fBoardDrawStyle[1]	= [[MBCDrawStyle alloc] init];

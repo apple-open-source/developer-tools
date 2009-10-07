@@ -1,11 +1,10 @@
-/* APPLE LOCAL file radar 4436866 */
-/* getter/setter cannot be specified in an interface. */
+/* APPLE LOCAL file 4724822 */
+/* Attempt to access property of a forward decl. class. */
 /* APPLE LOCAL radar 4899595 */
-/* { dg-options "-fno-objc-new-property -mmacosx-version-min=10.5" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
-/* { dg-options "-fno-objc-new-property" { target arm*-*-darwin* } } */
-/* { dg-do compile { target *-*-darwin* } } */
+/* { dg-options "-mmacosx-version-min=10.5" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
 
-@interface Foo
-@property ( readonly, getter = HELLO, setter = THERE : ) int value;
-@end	/* { dg-warning "getter = \\'HELLO\\' may not be specified in an interface" } */ 
-	/* { dg-warning "setter = \\'THERE\\:\\' may not be specified in an interface" "" { target *-*-* } 10 } */
+@class NSString;
+void foo(NSString *param_0) {
+        param_0.val; /* { dg-error "request for member \\'val\\' in something not a structure or union" } */
+}
+

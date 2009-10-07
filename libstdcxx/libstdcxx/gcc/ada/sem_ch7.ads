@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2003 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -25,7 +25,8 @@
 ------------------------------------------------------------------------------
 
 with Types; use Types;
-package Sem_Ch7  is
+
+package Sem_Ch7 is
 
    procedure Analyze_Package_Body                       (N : Node_Id);
    procedure Analyze_Package_Declaration                (N : Node_Id);
@@ -33,7 +34,7 @@ package Sem_Ch7  is
    procedure Analyze_Private_Type_Declaration           (N : Node_Id);
 
    procedure End_Package_Scope (P : Entity_Id);
-   --  Calls Uninstall_Declarations, and then pops the scope stack.
+   --  Calls Uninstall_Declarations, and then pops the scope stack
 
    procedure Exchange_Declarations (Id : Entity_Id);
    --  Exchange private and full declaration on entry/exit from a package
@@ -74,4 +75,5 @@ package Sem_Ch7  is
    --  visible entities at the end of their homonym chains. For compilation
    --  units, make all entities invisible. In both cases, exchange private
    --  and visible declarations to restore order of elaboration.
+
 end Sem_Ch7;

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1996-2005 Free Software Foundation, Inc.          --
+--          Copyright (C) 1996-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,18 +16,19 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
 --                                                                          --
 ------------------------------------------------------------------------------
 
-with Gnatvsn;
+with Gnatvsn;  use Gnatvsn;
 with Hostparm;
 with Opt;
-with Osint; use Osint;
+with Osint;    use Osint;
+with Targparm; use Targparm;
 
 with Ada.Characters.Handling; use Ada.Characters.Handling;
 with Ada.Command_Line;        use Ada.Command_Line;
@@ -185,7 +186,7 @@ package body VMS_Conv is
       Object_Dirs := Object_Dirs + 1;
       Object_Dir (Object_Dirs) := new String'("-lgnat");
 
-      if Hostparm.OpenVMS then
+      if OpenVMS_On_Target then
          Object_Dirs := Object_Dirs + 1;
          Object_Dir (Object_Dirs) := new String'("-ldecgnat");
       end if;
@@ -207,7 +208,7 @@ package body VMS_Conv is
             Unixcmd  => new S'("gnatbind"),
             Unixsws  => null,
             Switches => Bind_Switches'Access,
-            Params   => new Parameter_Array'(1 => File),
+            Params   => new Parameter_Array'(1 => Unlimited_Files),
             Defext   => "ali"),
 
          Chop =>
@@ -242,6 +243,16 @@ package body VMS_Conv is
             Params   => new Parameter_Array'(1 => Files_Or_Wildcard),
             Defext   => "   "),
 
+         Check =>
+           (Cname    => new S'("CHECK"),
+            Usage    => new S'("GNAT CHECK name /qualifiers"),
+            VMS_Only => False,
+            Unixcmd  => new S'("gnatcheck"),
+            Unixsws  => null,
+            Switches => Check_Switches'Access,
+            Params   => new Parameter_Array'(1 => Unlimited_Files),
+            Defext   => "   "),
+
          Elim =>
            (Cname    => new S'("ELIM"),
             Usage    => new S'("GNAT ELIM name /qualifiers"),
@@ -272,17 +283,6 @@ package body VMS_Conv is
             Unixsws  => null,
             Switches => Krunch_Switches'Access,
             Params   => new Parameter_Array'(1 => File),
-            Defext   => "   "),
-
-         Library =>
-           (Cname    => new S'("LIBRARY"),
-            Usage    => new S'("GNAT LIBRARY /[CREATE | SET | DELETE]"
-                               & "=directory [/CONFIG=file]"),
-            VMS_Only => True,
-            Unixcmd  => new S'("gnatlbr"),
-            Unixsws  => null,
-            Switches => Lbr_Switches'Access,
-            Params   => new Parameter_Array'(1 .. 0 => File),
             Defext   => "   "),
 
          Link =>
@@ -662,7 +662,9 @@ package body VMS_Conv is
    begin
       Put ("GNAT ");
       Put_Line (Gnatvsn.Gnat_Version_String);
-      Put_Line ("Copyright 1996-2005 Free Software Foundation, Inc.");
+      Put_Line ("Copyright 1996-" &
+                Current_Year &
+                ", Free Software Foundation, Inc.");
    end Output_Version;
 
    -----------

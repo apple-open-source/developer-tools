@@ -1,9 +1,9 @@
 /*
- * "$Id: lpadmin.c 6649 2007-07-11 21:46:42Z mike $"
+ * "$Id: lpadmin.c 7720 2008-07-11 22:46:21Z mike $"
  *
  *   "lpadmin" command for the Common UNIX Printing System (CUPS).
  *
- *   Copyright 2007 by Apple Inc.
+ *   Copyright 2007-2009 by Apple Inc.
  *   Copyright 1997-2006 by Easy Software Products.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -914,12 +914,13 @@ add_printer_to_class(http_t *http,	/* I - Server connection */
     attr = ippAddStrings(request, IPP_TAG_PRINTER, IPP_TAG_URI,
                          "member-uris", members->num_values + 1, NULL, NULL);
     for (i = 0; i < members->num_values; i ++)
-      attr->values[i].string.text = strdup(members->values[i].string.text);
+      attr->values[i].string.text = _cupsStrAlloc(members->values[i].string.text);
 
-    attr->values[i].string.text = strdup(uri);
+    attr->values[i].string.text = _cupsStrAlloc(uri);
   }
   else
-    attr = ippAddString(request, IPP_TAG_PRINTER, IPP_TAG_URI, "member-uris", NULL, uri);
+    ippAddString(request, IPP_TAG_PRINTER, IPP_TAG_URI, "member-uris", NULL,
+                 uri);
 
  /*
   * Then send the request...
@@ -1189,7 +1190,8 @@ delete_printer_from_class(
 
     for (j = 0, k = 0; j < members->num_values; j ++)
       if (j != i)
-        attr->values[k ++].string.text = strdup(members->values[j].string.text);
+        attr->values[k ++].string.text =
+	    _cupsStrAlloc(members->values[j].string.text);
   }
 
  /*
@@ -1448,9 +1450,7 @@ set_printer_file(http_t *http,		/* I - Server connection */
 
     if ((fd = cupsTempFd(tempfile, sizeof(tempfile))) < 0)
     {
-      _cupsLangPrintf(stderr,
-                      _("lpadmin: Unable to create temporary file: %s\n"),
-		      strerror(errno));
+      _cupsLangPrintError(_("ERROR: Unable to create temporary file"));
       return (1);
     }
 
@@ -1815,10 +1815,10 @@ set_printer_options(
   if ((protocol = cupsGetOption("protocol", num_options, options)) != NULL)
   {
     if (!strcasecmp(protocol, "bcp"))
-      ippAddString(request, IPP_TAG_OPERATION, IPP_TAG_NAME, "port-monitor",
+      ippAddString(request, IPP_TAG_PRINTER, IPP_TAG_NAME, "port-monitor",
                    NULL, "bcp");
     else if (!strcasecmp(protocol, "tbcp"))
-      ippAddString(request, IPP_TAG_OPERATION, IPP_TAG_NAME, "port-monitor",
+      ippAddString(request, IPP_TAG_PRINTER, IPP_TAG_NAME, "port-monitor",
                    NULL, "tbcp");
   }
 
@@ -1839,9 +1839,7 @@ set_printer_options(
 
     if ((outfd = cupsTempFd(tempfile, sizeof(tempfile))) < 0)
     {
-      _cupsLangPrintf(stderr,
-                      _("lpadmin: Unable to create temporary file - %s\n"),
-        	      strerror(errno));
+      _cupsLangPrintError(_("ERROR: Unable to create temporary file"));
       ippDelete(request);
       unlink(ppdfile);
       return (1);
@@ -1977,5 +1975,5 @@ validate_name(const char *name)		/* I - Name to check */
 
 
 /*
- * End of "$Id: lpadmin.c 6649 2007-07-11 21:46:42Z mike $".
+ * End of "$Id: lpadmin.c 7720 2008-07-11 22:46:21Z mike $".
  */

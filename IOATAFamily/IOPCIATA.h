@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2001 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 1998-2008 Apple Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -27,20 +27,21 @@
 #include <IOKit/IOTypes.h>
 #include "IOATAController.h"
 #include <IOKit/IOMemoryCursor.h>
+#include <IOKit/IOBufferMemoryDescriptor.h>
 
 #include <IOKit/IOInterruptEventSource.h>
 
-/*! @class IOPCIATA : public IOATAController
+/*! @class IOPCIATA
     @abstract The base class for  PCI-IDE ata controller family.
     @discussion class defining the common elements of bus-mastering PCI ATA controllers which meet or at least loosely follow the pci bus mastering pci-ide controller spec. Header doc is incomplete, but source is heavily commented.
 
-*/    
+*/
 
 
 
 class IOPCIATA : public IOATAController
 {
-    OSDeclareDefaultStructors(IOPCIATA)
+    OSDeclareDefaultStructors(IOPCIATA);
 
 public:
 
@@ -101,9 +102,9 @@ protected:
 	// the physical region descriptor used for the dma engine.
 	struct PRD
 	{
-		UInt8	*bufferPtr;  // address
-		UInt16	byteCount;   // 16 bit byte count where 0x0000 = 64K
-		UInt16	flags;    // 0 in flags means contine, 0x80 means stop
+		UInt32	bufferPtr;		// address
+		UInt16	byteCount;		// 16 bit byte count where 0x0000 = 64K
+		UInt16	flags;			// 0 in flags means contine, 0x80 means stop
 	};	
 
 
@@ -161,9 +162,12 @@ protected:
 	virtual void free();
 protected:
 /*! @struct ExpansionData
-    @discussion This structure will be used to expand the capablilties of the IOWorkLoop in the future.
-    */    
-    struct ExpansionData { };
+    @discussion This structure will be used to expand the capablilties of the IOPCIATA class in the future.
+    */
+    typedef struct ExpansionData
+    {
+    	IOBufferMemoryDescriptor*	_prdBuffer;
+    } ExpansionData;
 
 /*! @var reserved
     Reserved for future use.  (Internal use only)  */

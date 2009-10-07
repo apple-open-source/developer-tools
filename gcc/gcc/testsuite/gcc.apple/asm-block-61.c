@@ -4,11 +4,11 @@
 /* Radar 4739936 */
 
 int i = 9h;
-int j = 1st 0;			/* { dg-error "invalid suffix on integer constant" } */
+int j = 1st;			/* { dg-error "invalid suffix \"st\" on integer constant" } */
 
 void foo() {
   asm {
-    mov eax, 1st 0		/* { dg-error "invalid suffix on integer constant" } */
+    mov eax, 1st		/* { dg-error "invalid suffix \"st\" on integer constant" } */
     mov eax, 1h
     ; foo 1st
     ; bye bye

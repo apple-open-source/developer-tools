@@ -3,7 +3,7 @@
    that is memory bound, we still generate objc_msgSend_stret for all platforms. */
 /* { dg-do compile { target *-*-darwin* } } */
 /* APPLE LOCAL radar 4492976 */
-/* { dg-skip-if "" { *-*-darwin* } { "-m64" } { "" } } */
+/* { dg-require-effective-target ilp32 } */
 
 @interface Joiner {
 }

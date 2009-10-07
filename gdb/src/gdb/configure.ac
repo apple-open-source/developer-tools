@@ -159,6 +159,28 @@ case "$host" in
 ;;
 esac
 
+dnl APPLE LOCAL check for task_get_state.
+case "$host" in
+  *-apple-darwin* | *-apple-macosx*)
+    AC_MSG_CHECKING([whether task_set_state is available])
+    AC_LINK_IFELSE([AC_LANG_PROGRAM(
+[[#include <mach/mach.h>]
+ [#include <mach/task.h>]],
+[[task_t task;]
+ [thread_state_flavor_t flavor;]
+ [thread_state_t new_state;]
+ [mach_msg_type_number_t new_stateCnt;]
+ [task_set_state (task, flavor, new_state, new_stateCnt);]])],
+      gdb_cv_task_set_state=yes,
+      gdb_cv_task_set_state=no)
+    if test $gdb_cv_task_set_state = yes; then
+      AC_DEFINE(HAVE_TASK_SET_STATE,1,[Define to 1 to use task_set_state.])
+    fi
+    AC_MSG_RESULT($gdb_cv_task_set_state)
+
+;;
+esac
+
 dnl Set up for gettext.  PACKAGE is used when we call bindtextdomain.
 
 CY_GNU_GETTEXT
@@ -895,15 +917,9 @@ esac
 
 AC_SUBST(DEBUG_SYMBOLS_LIBS)
 
-# APPLE LOCAL: Use the pre-conformant headers/functions so we stand a 
-# better chance of running on older systems.
-UNIX03_UGH_CFLAGS=-D__DARWIN_UNIX03=0
-AC_SUBST(UNIX03_UGH_CFLAGS)
-
 # APPLE LOCAL: Enable MIG checking for macosx/macosx.defs.
 MIG_CHECKING=-D__MigTypeCheck=1
 AC_SUBST(MIG_CHECKING)
-
 # APPLE LOCAL end
 
 # APPLE LOCAL: See if we have the i386 debug register structs, i.e.
@@ -912,6 +928,11 @@ AC_SUBST(MIG_CHECKING)
 
 AC_CHECK_TYPES(x86_debug_state32_t, [], [],
                [#include <mach/mach_types.h>])
+
+AC_CHECK_TYPES(thread_identifier_info_data_t, [], [],
+               [#include <mach/thread_info.h>])
+
+AC_CHECK_FUNCS(pthread_setname_np)
 
 if test "$ac_cv_header_sys_procfs_h" = yes; then
   BFD_HAVE_SYS_PROCFS_TYPE(pstatus_t)

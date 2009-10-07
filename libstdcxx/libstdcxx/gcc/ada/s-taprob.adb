@@ -1,13 +1,13 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                GNU ADA RUN-TIME LIBRARY (GNARL) COMPONENTS               --
+--                 GNAT RUN-TIME LIBRARY (GNARL) COMPONENTS                 --
 --                                                                          --
 --      S Y S T E M . T A S K I N G . P R O T E C T E D _ O B J E C T S     --
 --                                                                          --
 --                                  B o d y                                 --
 --                                                                          --
 --             Copyright (C) 1991-1994, Florida State University            --
---             Copyright (C) 1995-2004, Ada Core Technologies               --
+--                     Copyright (C) 1995-2005, AdaCore                     --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -17,8 +17,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNARL; see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -73,6 +73,7 @@ package body System.Tasking.Protected_Objects is
       Ceiling_Priority : Integer)
    is
       Init_Priority : Integer := Ceiling_Priority;
+
    begin
       if Init_Priority = Unspecified_Priority then
          Init_Priority  := System.Priority'Last;
@@ -80,6 +81,7 @@ package body System.Tasking.Protected_Objects is
 
       Initialize_Lock (Init_Priority, Object.L'Access);
       Object.Ceiling := System.Any_Priority (Init_Priority);
+      Object.Owner := Null_Task;
    end Initialize_Protection;
 
    ----------
@@ -90,15 +92,26 @@ package body System.Tasking.Protected_Objects is
       Ceiling_Violation : Boolean;
 
    begin
-      --  The lock is made without defering abortion.
+      --  The lock is made without defering abort
 
-      --  Therefore the abortion has to be deferred before calling this
-      --  routine. This means that the compiler has to generate a Defer_Abort
-      --  call before the call to Lock.
+      --  Therefore the abort has to be deferred before calling this routine.
+      --  This means that the compiler has to generate a Defer_Abort call
+      --  before the call to Lock.
 
-      --  The caller is responsible for undeferring abortion, and compiler
+      --  The caller is responsible for undeferring abort, and compiler
       --  generated calls must be protected with cleanup handlers to ensure
-      --  that abortion is undeferred in all cases.
+      --  that abort is undeferred in all cases.
+
+      --  If pragma Detect_Blocking is active then, as described in the ARM
+      --  9.5.1, par. 15, we must check whether this is an external call on a
+      --  protected subprogram with the same target object as that of the
+      --  protected action that is currently in progress (i.e., if the caller
+      --  is already the protected object's owner). If this is the case hence
+      --  Program_Error must be raised.
+
+      if Detect_Blocking and then Object.Owner = Self then
+         raise Program_Error;
+      end if;
 
       Write_Lock (Object.L'Access, Ceiling_Violation);
 
@@ -112,12 +125,18 @@ package body System.Tasking.Protected_Objects is
 
       --  We are entering in a protected action, so that we increase the
       --  protected object nesting level (if pragma Detect_Blocking is
-      --  active).
+      --  active), and update the protected object's owner.
 
       if Detect_Blocking then
          declare
             Self_Id : constant Task_Id := Self;
          begin
+            --  Update the protected object's owner
+
+            Object.Owner := Self_Id;
+
+            --  Increase protected object nesting level
+
             Self_Id.Common.Protected_Action_Nesting :=
               Self_Id.Common.Protected_Action_Nesting + 1;
          end;
@@ -132,6 +151,25 @@ package body System.Tasking.Protected_Objects is
       Ceiling_Violation : Boolean;
 
    begin
+      --  If pragma Detect_Blocking is active then, as described in the ARM
+      --  9.5.1, par. 15, we must check whether this is an external call on
+      --  protected subprogram with the same target object as that of the
+      --  protected action that is currently in progress (i.e., if the caller
+      --  is already the protected object's owner). If this is the case hence
+      --  Program_Error must be raised.
+      --
+      --  Note that in this case (getting read access), several tasks may have
+      --  read ownership of the protected object, so that this method of
+      --  storing the (single) protected object's owner does not work reliably
+      --  for read locks. However, this is the approach taken for two major
+      --  reasosn: first, this function is not currently being used (it is
+      --  provided for possible future use), and second, it largely simplifies
+      --  the implementation.
+
+      if Detect_Blocking and then Object.Owner = Self then
+         raise Program_Error;
+      end if;
+
       Read_Lock (Object.L'Access, Ceiling_Violation);
 
       if Parameters.Runtime_Traces then
@@ -142,14 +180,19 @@ package body System.Tasking.Protected_Objects is
          raise Program_Error;
       end if;
 
-      --  We are entering in a protected action, so that we increase the
-      --  protected object nesting level (if pragma Detect_Blocking is
-      --  active).
+      --  We are entering in a protected action, so we increase the protected
+      --  object nesting level (if pragma Detect_Blocking is active).
 
       if Detect_Blocking then
          declare
             Self_Id : constant Task_Id := Self;
          begin
+            --  Update the protected object's owner
+
+            Object.Owner := Self_Id;
+
+            --  Increase protected object nesting level
+
             Self_Id.Common.Protected_Action_Nesting :=
               Self_Id.Common.Protected_Action_Nesting + 1;
          end;
@@ -164,17 +207,26 @@ package body System.Tasking.Protected_Objects is
    begin
       --  We are exiting from a protected action, so that we decrease the
       --  protected object nesting level (if pragma Detect_Blocking is
-      --  active).
+      --  active), and remove ownership of the protected object.
 
       if Detect_Blocking then
          declare
             Self_Id : constant Task_Id := Self;
 
          begin
-            --  Cannot call this procedure without being within a protected
-            --  action.
+            --  Calls to this procedure can only take place when being within
+            --  a protected action and when the caller is the protected
+            --  object's owner.
 
-            pragma Assert (Self_Id.Common.Protected_Action_Nesting > 0);
+            pragma Assert (Self_Id.Common.Protected_Action_Nesting > 0
+                             and then Object.Owner = Self_Id);
+
+            --  Remove ownership of the protected object
+
+            Object.Owner := Null_Task;
+
+            --  We are exiting from a protected action, so we decrease the
+            --  protected object nesting level.
 
             Self_Id.Common.Protected_Action_Nesting :=
               Self_Id.Common.Protected_Action_Nesting - 1;
@@ -189,7 +241,9 @@ package body System.Tasking.Protected_Objects is
    end Unlock;
 
 begin
-   --  Ensure that tasking soft links are set when using protected objects
+   --  Ensure that tasking is initialized, as well as tasking soft links
+   --  when using protected objects.
 
+   Tasking.Initialize;
    System.Soft_Links.Tasking.Init_Tasking_Soft_Links;
 end System.Tasking.Protected_Objects;

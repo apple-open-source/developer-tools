@@ -2,11 +2,12 @@
 --                                                                          --
 --                         GNAT LIBRARY COMPONENTS                          --
 --                                                                          --
---                  ADA.CONTAINERS.INDEFINITE_ORDERED_MAPS                  --
+--                      A D A . C O N T A I N E R S .                       --
+--             I N D E F I N I T E _ O R D E R E D _ M A P S                --
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---             Copyright (C) 2004 Free Software Foundation, Inc.            --
+--          Copyright (C) 2004-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -20,8 +21,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -38,17 +39,16 @@ with Ada.Finalization;
 with Ada.Streams;
 
 generic
-
    type Key_Type (<>) is private;
-
    type Element_Type (<>) is private;
 
    with function "<" (Left, Right : Key_Type) return Boolean is <>;
-
    with function "=" (Left, Right : Element_Type) return Boolean is <>;
 
 package Ada.Containers.Indefinite_Ordered_Maps is
-pragma Preelaborate (Indefinite_Ordered_Maps);
+   pragma Preelaborate;
+
+   function Equivalent_Keys (Left, Right : Key_Type) return Boolean;
 
    type Map is tagged private;
 
@@ -70,17 +70,21 @@ pragma Preelaborate (Indefinite_Ordered_Maps);
 
    function Element (Position : Cursor) return Element_Type;
 
+   procedure Replace_Element
+     (Container : in out Map;
+      Position  : Cursor;
+      New_Item  : Element_Type);
+
    procedure Query_Element
      (Position : Cursor;
       Process  : not null access procedure (Key     : Key_Type;
                                             Element : Element_Type));
 
    procedure Update_Element
-     (Position : Cursor;
-      Process  : not null access procedure (Key     : Key_Type;
-                                            Element : in out Element_Type));
-
-   procedure Replace_Element (Position : Cursor; By : Element_Type);
+     (Container : in out Map;
+      Position  : Cursor;
+      Process   : not null access procedure (Key     : Key_Type;
+                                             Element : in out Element_Type));
 
    procedure Move (Target : in out Map; Source : in out Map);
 
@@ -106,61 +110,45 @@ pragma Preelaborate (Indefinite_Ordered_Maps);
       Key       : Key_Type;
       New_Item  : Element_Type);
 
-   procedure Delete
-     (Container : in out Map;
-      Key       : Key_Type);
+   procedure Exclude (Container : in out Map; Key : Key_Type);
 
-   procedure Exclude
-     (Container : in out Map;
-      Key       : Key_Type);
+   procedure Delete (Container : in out Map; Key : Key_Type);
 
-   procedure Delete
-     (Container : in out Map;
-      Position  : in out Cursor);
+   procedure Delete (Container : in out Map; Position : in out Cursor);
 
    procedure Delete_First (Container : in out Map);
 
    procedure Delete_Last (Container : in out Map);
 
-   function Contains
-     (Container : Map;
-      Key       : Key_Type) return Boolean;
-
-   function Find
-     (Container : Map;
-      Key       : Key_Type) return Cursor;
-
-   function Element
-     (Container : Map;
-      Key       : Key_Type) return Element_Type;
-
-   function Floor
-     (Container : Map;
-      Key       : Key_Type) return Cursor;
-
-   function Ceiling
-     (Container : Map;
-      Key       : Key_Type) return Cursor;
-
    function First (Container : Map) return Cursor;
-
-   function First_Key (Container : Map) return Key_Type;
 
    function First_Element (Container : Map) return Element_Type;
 
-   function Last (Container : Map) return Cursor;
+   function First_Key (Container : Map) return Key_Type;
 
-   function Last_Key (Container : Map) return Key_Type;
+   function Last (Container : Map) return Cursor;
 
    function Last_Element (Container : Map) return Element_Type;
 
-   function Next (Position : Cursor) return Cursor;
+   function Last_Key (Container : Map) return Key_Type;
 
-   function Previous (Position : Cursor) return Cursor;
+   function Next (Position : Cursor) return Cursor;
 
    procedure Next (Position : in out Cursor);
 
+   function Previous (Position : Cursor) return Cursor;
+
    procedure Previous (Position : in out Cursor);
+
+   function Find (Container : Map; Key : Key_Type) return Cursor;
+
+   function Element (Container : Map; Key : Key_Type) return Element_Type;
+
+   function Floor (Container : Map; Key : Key_Type) return Cursor;
+
+   function Ceiling (Container : Map; Key : Key_Type) return Cursor;
+
+   function Contains (Container : Map; Key : Key_Type) return Boolean;
 
    function Has_Element (Position : Cursor) return Boolean;
 
@@ -189,21 +177,36 @@ private
    type Node_Type;
    type Node_Access is access Node_Type;
 
-   package Tree_Types is
-     new Red_Black_Trees.Generic_Tree_Types (Node_Access);
+   type Key_Access is access Key_Type;
+   type Element_Access is access Element_Type;
 
-   use Tree_Types;
-   use Ada.Finalization;
+   type Node_Type is limited record
+      Parent  : Node_Access;
+      Left    : Node_Access;
+      Right   : Node_Access;
+      Color   : Red_Black_Trees.Color_Type := Red_Black_Trees.Red;
+      Key     : Key_Access;
+      Element : Element_Access;
+   end record;
 
-   type Map is new Controlled with record
-      Tree : Tree_Type := (Length => 0, others => null);
+   package Tree_Types is new Red_Black_Trees.Generic_Tree_Types
+     (Node_Type,
+      Node_Access);
+
+   type Map is new Ada.Finalization.Controlled with record
+      Tree : Tree_Types.Tree_Type;
    end record;
 
    procedure Adjust (Container : in out Map);
 
    procedure Finalize (Container : in out Map) renames Clear;
 
-   type Map_Access is access constant Map;
+   use Red_Black_Trees;
+   use Tree_Types;
+   use Ada.Finalization;
+   use Ada.Streams;
+
+   type Map_Access is access all Map;
    for Map_Access'Storage_Size use 0;
 
    type Cursor is record
@@ -211,24 +214,38 @@ private
       Node      : Node_Access;
    end record;
 
+   procedure Write
+     (Stream : not null access Root_Stream_Type'Class;
+      Item   : Cursor);
+
+   for Cursor'Write use Write;
+
+   procedure Read
+     (Stream : not null access Root_Stream_Type'Class;
+      Item   : out Cursor);
+
+   for Cursor'Read use Read;
+
    No_Element : constant Cursor := Cursor'(null, null);
 
-   use Ada.Streams;
-
    procedure Write
-     (Stream    : access Root_Stream_Type'Class;
+     (Stream    : not null access Root_Stream_Type'Class;
       Container : Map);
 
    for Map'Write use Write;
 
    procedure Read
-     (Stream    : access Root_Stream_Type'Class;
+     (Stream    : not null access Root_Stream_Type'Class;
       Container : out Map);
 
    for Map'Read use Read;
 
    Empty_Map : constant Map :=
-     (Controlled with Tree => (Length => 0, others => null));
+                 (Controlled with Tree => (First  => null,
+                                           Last   => null,
+                                           Root   => null,
+                                           Length => 0,
+                                           Busy   => 0,
+                                           Lock   => 0));
 
 end Ada.Containers.Indefinite_Ordered_Maps;
-

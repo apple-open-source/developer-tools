@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2000 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 1998-2008 Apple Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -20,8 +20,6 @@
  * @APPLE_LICENSE_HEADER_END@
  */
 /*
- * Copyright (c) 1999 Apple Computer, Inc.  All rights reserved. 
- *
  * IOKernelDebugger.cpp
  *
  * HISTORY
@@ -92,7 +90,7 @@ IOKDPGlobals::IOKDPGlobals()
 {
     gIOKDPLock = IOLockAlloc();
 
-    PE_parse_boot_arg( "debug", &gDebugBootArg );
+    PE_parse_boot_argn( "debug", &gDebugBootArg, sizeof (gDebugBootArg) );
 }
 
 IOKDPGlobals::~IOKDPGlobals()
@@ -141,7 +139,7 @@ IOService *IOKDP::probe(IOService *provider, SInt32 *score)
 		
 	do
 	{
-		if(PE_parse_boot_arg( kMatchNameArg, textBuffer))
+		if(PE_parse_boot_argn( kMatchNameArg, textBuffer, sizeof(textBuffer)))
 		{
 			if(!interface) //user wants name match but we're not on a controller with an interface
 			{
@@ -162,7 +160,7 @@ IOService *IOKDP::probe(IOService *provider, SInt32 *score)
 			break; 
 		}
 		
-		if(PE_parse_boot_arg( kMatchMacArg, textBuffer))
+		if(PE_parse_boot_argn( kMatchMacArg, textBuffer, sizeof(textBuffer)))
 		{
 			char ctrMac[13];
 			if(!controller) //looking for mac match, but the debugger isn't on a controller (!?)
@@ -183,7 +181,7 @@ IOService *IOKDP::probe(IOService *provider, SInt32 *score)
 
 			// now convert the controller mac property to a string
 			unsigned char *macData = (unsigned char *)macAddr->getBytesNoCopy();
-			sprintf(ctrMac, "%02X%02X%02X%02X%02X%02X", macData[0], macData[1], macData[2], macData[3], macData[4], macData[5]);
+			snprintf(ctrMac, sizeof(ctrMac), "%02X%02X%02X%02X%02X%02X", macData[0], macData[1], macData[2], macData[3], macData[4], macData[5]);
 			
 			//now see if they match...
 			if(strncmp(ctrMac, textBuffer, 12))
@@ -307,8 +305,8 @@ enum {
     kIODebuggerFlagWarnNullHandler  = 0x02
 };
 
-#define _enableDebuggerThreadCall   _reserved->enableDebuggerThreadCall
-#define _disableDebuggerThreadCall  _reserved->disableDebuggerThreadCall
+// Expansion variables.
+//
 #define _state                      _reserved->stateVars[0]
 #define _activationChangeThreadCall _reserved->activationChangeThreadCall
 #define _interfaceNotifier			_reserved->interfaceNotifier
@@ -428,14 +426,6 @@ bool IOKernelDebugger::init( IOService *          target,
         return false;
     }
 
-    _enableDebuggerThreadCall = thread_call_allocate( 
-                                (thread_call_func_t)  pmEnableDebugger,
-                                (thread_call_param_t) this );
-    
-    _disableDebuggerThreadCall = thread_call_allocate( 
-                                (thread_call_func_t)  pmDisableDebugger,
-                                (thread_call_param_t) this );
-
     _activationChangeThreadCall = thread_call_allocate( 
                                 (thread_call_func_t)  handleActivationChange,
                                 (thread_call_param_t) this );
@@ -445,7 +435,7 @@ bool IOKernelDebugger::init( IOService *          target,
 	// reregisters the interface service when it gets named, so we can add a notifier
 	// and reregister ourselves at that time in order to try matching IOKDP again.
 	char textBuffer[64];
-	if(PE_parse_boot_arg( kMatchNameArg, textBuffer))
+	if(PE_parse_boot_argn( kMatchNameArg, textBuffer, sizeof(textBuffer)))
 	{
 		
 		_interfaceNotifier = addNotification(
@@ -455,9 +445,8 @@ bool IOKernelDebugger::init( IOService *          target,
 									   /* param  */    this );
 	}
 	else _interfaceNotifier = 0;
-	
-    if ( !_enableDebuggerThreadCall || !_disableDebuggerThreadCall ||
-         !_activationChangeThreadCall )
+
+    if ( !_activationChangeThreadCall )
     {
         return false;
     }
@@ -737,12 +726,6 @@ void IOKernelDebugger::free()
 {
     if ( _reserved )
     {
-        if ( _enableDebuggerThreadCall )
-            thread_call_free( _enableDebuggerThreadCall );
-
-        if ( _disableDebuggerThreadCall )
-            thread_call_free( _disableDebuggerThreadCall );
-
         if ( _activationChangeThreadCall )
             thread_call_free( _activationChangeThreadCall );
 
@@ -756,8 +739,6 @@ void IOKernelDebugger::free()
     super::free();
 }
 
-#define PM_SECS(x)    ((x) * 1000 * 1000)
-
 //---------------------------------------------------------------------------
 // Handle controller's power state change notitifications.
 
@@ -766,24 +747,24 @@ IOKernelDebugger::powerStateWillChangeTo( IOPMPowerFlags  flags,
                                           unsigned long   stateNumber,
                                           IOService *     policyMaker )
 {
-    IOReturn ret = IOPMAckImplied;
-
-    if ( ( flags & IOPMDeviceUsable ) == 0 )
+    if ((flags & IOPMDeviceUsable) == 0)
     {
         // Controller is about to transition to an un-usable state.
         // The debugger nub should be disabled.
 
-        retain();
-        if ( thread_call_enter( _disableDebuggerThreadCall ) == TRUE )
-        {
-            // Remove the extra retain if callout is pending.
-            release();
-        }
+        lockForArbitration();
 
-        ret = PM_SECS(3);  /* Must ACK within 3 seconds */
+        // Keep an open on the controller, but inhibit access to the
+        // controller's debugger handlers, and disable controller's
+        // hardware support for the debugger.
+
+        if ( _client ) registerHandler( 0 );
+        disableTarget( this, _target, &_state, kEventTargetUsable );
+
+        unlockForArbitration();
     }
 
-    return ret;
+    return IOPMAckImplied;
 }
 
 IOReturn
@@ -791,81 +772,21 @@ IOKernelDebugger::powerStateDidChangeTo( IOPMPowerFlags  flags,
                                          unsigned long   stateNumber,
                                          IOService *     policyMaker )
 {
-    IOReturn ret = IOPMAckImplied;
-
     if ( flags & IOPMDeviceUsable )
     {
         // Controller has transitioned to an usable state.
         // The debugger nub should be enabled if necessary.
         
-        retain();
-        if ( thread_call_enter( _enableDebuggerThreadCall ) == TRUE )
-        {
-            // Remove the extra retain if callout is pending.
-            release();
-        }
+        lockForArbitration();
 
-        ret = PM_SECS(3);  /* Must ACK within 3 seconds */
+        enableTarget( this, _target, &_state, kEventTargetUsable );
+        if ( _state & kTargetWasEnabled )
+            registerHandler( _target, _txHandler, _rxHandler );
+
+        unlockForArbitration();
     }
 
-    return ret;
-}
-
-//---------------------------------------------------------------------------
-// Static member function: Enable the debugger nub after the controller
-// transitions into an usable state.
-
-void IOKernelDebugger::pmEnableDebugger( IOKernelDebugger * debugger )
-{
-    assert( debugger );
-    assert( debugger->_target );
-
-    debugger->lockForArbitration();
-
-    enableTarget( debugger, debugger->_target, &debugger->_state,
-                  kEventTargetUsable );
-
-    if ( debugger->_state & kTargetWasEnabled )
-    {
-        registerHandler( debugger->_target,
-                         debugger->_txHandler, 
-                         debugger->_rxHandler );
-    }
-
-    debugger->unlockForArbitration();
-
-    // Ack the target's power state change.
-    debugger->_target->acknowledgePowerChange( debugger );
-
-    debugger->release();
-}
-
-//---------------------------------------------------------------------------
-// Static member function: Disable the debugger nub before the controller
-// transitions into an unusable state.
-
-void IOKernelDebugger::pmDisableDebugger( IOKernelDebugger * debugger )
-{
-    assert( debugger );
-    assert( debugger->_target );
-
-    debugger->lockForArbitration();
-
-    // Keep an open on the controller, but inhibit access to the
-    // controller's debugger handlers, and disable controller's
-    // hardware support for the debugger.
-
-    if ( debugger->_client ) registerHandler( 0 );
-
-    disableTarget( debugger, debugger->_target, &debugger->_state,
-                   kEventTargetUsable );
-
-    debugger->unlockForArbitration();
-
-    // Ack the target's power state change.
-    debugger->_target->acknowledgePowerChange( debugger );
-
-    debugger->release();
+    return IOPMAckImplied;
 }
 
 //---------------------------------------------------------------------------
@@ -906,6 +827,10 @@ IOReturn IOKernelDebugger::message( UInt32 type, IOService * provider,
                 release();
 
             break;
+
+        case kMessageControllerWillShutdown:
+            // Disable controller before system shutdown and restart.
+            // Intentional fall-through to next case.
 
         case kMessageDebuggerActivationChange:
             lockForArbitration();

@@ -106,6 +106,7 @@ enum type_code
     TYPE_CODE_STRUCT,		/* C struct or Pascal record */
     TYPE_CODE_UNION,		/* C union or Pascal variant part */
     TYPE_CODE_ENUM,		/* Enumeration type */
+    TYPE_CODE_FLAGS,            /* Bit flags type */
     TYPE_CODE_FUNC,		/* Function type */
     TYPE_CODE_INT,		/* Integer type */
 
@@ -141,6 +142,19 @@ enum type_code
     /* C++ */
     TYPE_CODE_MEMBER,		/* Member type */
     TYPE_CODE_METHOD,		/* Method type */
+
+    /* Pointer-to-member-function type.  This describes how to access a
+       particular member function of a class (possibly a virtual
+       member function).  The representation may vary between different
+       C++ ABIs.  */
+    TYPE_CODE_METHODPTR,
+
+    /* Pointer-to-member type.  This is the offset within a class to some
+       particular data member.  The only currently supported representation
+       uses an unbiased offset, with -1 representing NULL; this is used
+       by the Itanium C++ ABI (used by GCC on all platforms).  */
+    TYPE_CODE_MEMBERPTR,
+
     TYPE_CODE_REF,		/* C++ Reference types */
 
     TYPE_CODE_CHAR,		/* *real* character type */
@@ -303,6 +317,15 @@ enum type_code
    interpretation. Optionally marks ordinary, fixed-size GDB type. */
 
 #define TYPE_FLAG_FIXED_INSTANCE (1 << 15)
+
+/* APPLE LOCAL: This type is a "Closure struct".  It's both a structure,
+   AND it is treated by the compiler as a "function pointer".  */
+#define TYPE_FLAG_APPLE_CLOSURE (1 << 16)
+
+/* APPLE LOCAL: This is a restrict qualifier on the type, similar to 
+   const or volatile.  */
+#define TYPE_FLAG_RESTRICT (1 << 17)
+#define TYPE_RESTRICT(t)	(TYPE_INSTANCE_FLAGS (t) & TYPE_FLAG_RESTRICT)
 
 /*  Array bound type.  */
 enum array_bound_type
@@ -544,7 +567,14 @@ struct type
      HOST_CHAR_BIT.  However, this would still fail to address
      machines based on a ternary or decimal representation.  */
   
-  unsigned length;
+  /* APPLE LOCAL: I changed length from an unsigned int to an int.
+     I need to be able to mark the length as "uncertain", which I do
+     by reversing the sign.  See the comments in front of 
+     objc_invalidate_class in objc-lang.c for more details.
+     I doubt we'll ever get a struct whose length overflows 
+     a signed integer so for all practical purposes this should
+     be fine.  */
+  int length;
 
   /* Core type, shared by a group of qualified types.  */
   struct main_type *main_type;
@@ -812,6 +842,13 @@ struct gdbtypes_bitfield_info
 /* APPLE LOCAL END.  */
 
 
+/* APPLE LOCAL: I need these two objc fixup functions for TYPE_LENGTH
+   and TYPE_FIELD_BITPOS.  */
+int objc_fixup_ivar_offset (struct type *type, int ivar);
+int objc_fixup_class_length (struct type *type);
+/* END APPLE LOCAL */
+
+
 /* The default value of TYPE_CPLUS_SPECIFIC(T) points to the
    this shared static structure. */
 
@@ -837,7 +874,16 @@ extern void allocate_cplus_struct_type (struct type *);
    But check_typedef does set the TYPE_LENGTH of the TYPEDEF type,
    so you only have to call check_typedef once.  Since allocate_value
    calls check_typedef, TYPE_LENGTH (VALUE_TYPE (X)) is safe.  */
-#define TYPE_LENGTH(thistype) (thistype)->length
+/* APPLE LOCAL: Like with TYPE_FIELD_BITPOS for an ObjC class you can't
+   actually trust the debug info for ivar offsets OR type lengths for
+   objc classes.  I set the length to -1, and then test it here,
+   and return the actual value if not -1, or I fix it up and
+   return the fixed up value.  I also need an ASSIGN version.  */
+#define TYPE_LENGTH_ASSIGN(thistype) (thistype)->length
+#define TYPE_LENGTH(thistype) (TYPE_LENGTH_ASSIGN(thistype) < 0 \
+			       ? objc_fixup_class_length(thistype)  \
+			       : TYPE_LENGTH_ASSIGN(thistype))
+
 #define TYPE_OBJFILE(thistype) TYPE_MAIN_TYPE(thistype)->objfile
 #define TYPE_FLAGS(thistype) TYPE_MAIN_TYPE(thistype)->flags
 /* Note that TYPE_CODE can be TYPE_CODE_TYPEDEF, so if you want the real
@@ -852,10 +898,10 @@ extern void allocate_cplus_struct_type (struct type *);
 #define TYPE_RUNTIME(thistype) (TYPE_CPLUS_SPECIFIC_NONULL(thistype)->runtime_type)
 
 #define TYPE_INDEX_TYPE(type) TYPE_FIELD_TYPE (type, 0)
-#define TYPE_LOW_BOUND(range_type) TYPE_FIELD_BITPOS (range_type, 0)
-#define TYPE_HIGH_BOUND(range_type) TYPE_FIELD_BITPOS (range_type, 1)
+#define TYPE_LOW_BOUND(range_type) TYPE_FIELD_BITPOS_ASSIGN (range_type, 0)
+#define TYPE_HIGH_BOUND(range_type) TYPE_FIELD_BITPOS_ASSIGN (range_type, 1)
 /* APPLE LOCAL: Used to store the stride of vector types, to prevent reverse-order indexing. */
-#define TYPE_STRIDE(range_type) TYPE_FIELD_BITPOS (range_type, 2)
+#define TYPE_STRIDE(range_type) TYPE_FIELD_BITPOS_ASSIGN (range_type, 2)
 
 /* Moto-specific stuff for FORTRAN arrays */
 
@@ -865,10 +911,10 @@ extern void allocate_cplus_struct_type (struct type *);
 	TYPE_MAIN_TYPE(thistype)->lower_bound_type
 
 #define TYPE_ARRAY_UPPER_BOUND_VALUE(arraytype) \
-   (TYPE_FIELD_BITPOS((TYPE_FIELD_TYPE((arraytype),0)),1))
+   (TYPE_FIELD_BITPOS_ASSIGN((TYPE_FIELD_TYPE((arraytype),0)),1))
 
 #define TYPE_ARRAY_LOWER_BOUND_VALUE(arraytype) \
-   (TYPE_FIELD_BITPOS((TYPE_FIELD_TYPE((arraytype),0)),0))
+   (TYPE_FIELD_BITPOS_ASSIGN((TYPE_FIELD_TYPE((arraytype),0)),0))
 
 /* C++ */
 
@@ -912,7 +958,18 @@ extern void allocate_cplus_struct_type (struct type *);
 #define TYPE_FIELD(thistype, n) TYPE_MAIN_TYPE(thistype)->fields[n]
 #define TYPE_FIELD_TYPE(thistype, n) FIELD_TYPE(TYPE_FIELD(thistype, n))
 #define TYPE_FIELD_NAME(thistype, n) FIELD_NAME(TYPE_FIELD(thistype, n))
-#define TYPE_FIELD_BITPOS(thistype, n) FIELD_BITPOS(TYPE_FIELD(thistype,n))
+
+/* APPLE LOCAL: The debug info for ObjC classes is not trustworthy.  I could
+   go fix it on readin, but that would be slow.  Instead I want to intercept
+   reading the bitpos & just fix it up on demand.  To do that I need to separate
+   assigning the BITPOS from reading it.  */
+#define TYPE_FIELD_BITPOS_ASSIGN(thistype, n) FIELD_BITPOS(TYPE_FIELD(thistype,n)) 
+#define TYPE_FIELD_BITPOS(thistype, n) \
+  (FIELD_BITPOS(TYPE_FIELD(thistype,n)) < 0 \
+   ? objc_fixup_ivar_offset(thistype,n) \
+   : FIELD_BITPOS(TYPE_FIELD(thistype,n)))
+/* END APPLE LOCAL */
+
 #define TYPE_FIELD_ARTIFICIAL(thistype, n) FIELD_ARTIFICIAL(TYPE_FIELD(thistype,n))
 #define TYPE_FIELD_BITSIZE(thistype, n) FIELD_BITSIZE(TYPE_FIELD(thistype,n))
 #define TYPE_FIELD_PACKED(thistype, n) (FIELD_BITSIZE(TYPE_FIELD(thistype,n))!=0)
@@ -1238,7 +1295,7 @@ extern struct type *lookup_reference_type (struct type *);
 
 extern struct type *make_reference_type (struct type *, struct type **);
 
-extern struct type *make_cv_type (int, int, struct type *, struct type **);
+extern struct type *make_cvr_type (int, int, int, struct type *, struct type **);
 
 extern void replace_type (struct type *, struct type *);
 
@@ -1428,6 +1485,14 @@ extern struct type *build_builtin_enum (const char *name, uint32_t size,
 extern struct type *build_builtin_bitfield (const char *name, uint32_t size, 
 					    struct gdbtypes_bitfield_info *, 
 					    uint32_t n);
+extern struct type *get_closure_dynamic_type (struct value *in_value);
+extern struct value *get_closure_implementation_fn (struct value *);
 /* APPLE LOCAL END.  */
+
+/* APPLE LOCAL: from parse.c - does this function type have debug info.  */
+int ftype_has_debug_info_p (struct type *type);
+
+/* APPLE LOCAL: needed for the MI resolved types.  */
+struct type *remove_all_typedefs (struct type *type);
 
 #endif /* GDBTYPES_H */

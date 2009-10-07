@@ -26,8 +26,8 @@ AMAVIS_DIR=/private/var/amavis
 AMAVIS_TMP_DIR=/private/var/amavis/tmp
 AMAVIS_DB_DIR=/private/var/amavis/db
 SETUP_EXTRAS_SRC_DIR=amavisd.SetupExtras
-SETUP_EXTRAS_DST_DIR=/System/Library/ServerSetup/SetupExtras
-UPGRADE_EXTRAS_DST_DIR=/System/Library/ServerSetup/MigrationExtras
+CLEAN_INSTALL_EXTRAS_DST_DIR=/System/Library/ServerSetup/CleanInstallExtras
+MIGRATION_EXTRAS_DST_DIR=/System/Library/ServerSetup/MigrationExtras
 VIRUS_MAILS_DIR=/private/var/virusmails
 USR_BIN=/usr/bin
 LAUNCHD_SRC_DIR=/amavisd.LaunchDaemons
@@ -68,6 +68,7 @@ make_amavisd_install : $(DSTROOT)$(ETC_DIR) $(DSTROOT)$(USR_BIN)
 	# install launchd plist
 	install -d -m 0755 "$(DSTROOT)$(LAUNCHD_DIR)"
 	install -m 0644 "$(SRCROOT)$(LAUNCHD_SRC_DIR)/org.amavis.amavisd.plist" "$(DSTROOT)/$(LAUNCHD_DIR)/org.amavis.amavisd.plist"
+	install -m 0644 "$(SRCROOT)$(LAUNCHD_SRC_DIR)/org.amavis.amavisd_cleanup.plist" "$(DSTROOT)/$(LAUNCHD_DIR)/org.amavis.amavisd_cleanup.plist"
 
 	# install amavis config and scripts
 	install -m 0644 "$(SRCROOT)/$(AMAVIS_CONF_DIR)/amavisd.conf" "$(DSTROOT)/$(ETC_DIR)/amavisd.conf"
@@ -90,10 +91,11 @@ make_amavisd_install : $(DSTROOT)$(ETC_DIR) $(DSTROOT)$(USR_BIN)
 	$(SILENT) (/bin/chmod 644 "$(DSTROOT)$(AMAVIS_DIR)/whitelist_sender")
 
 	# Setup & migration extras
-	install -d -m 0755 "$(DSTROOT)$(SETUP_EXTRAS_DST_DIR)"
-	install -d -m 0755 "$(DSTROOT)$(UPGRADE_EXTRAS_DST_DIR)"
-	install -m 0755 "$(SRCROOT)$)/$(SETUP_EXTRAS_SRC_DIR)/amavisd_new_setup" "$(DSTROOT)/$(SETUP_EXTRAS_DST_DIR)/amavisd_new_setup"
-	install -m 0755 "$(SRCROOT)$)/$(SETUP_EXTRAS_SRC_DIR)/amavisd_new_upgrade" "$(DSTROOT)/$(UPGRADE_EXTRAS_DST_DIR)/amavisd_new_upgrade"
+	install -d -m 0755 "$(DSTROOT)$(CLEAN_INSTALL_EXTRAS_DST_DIR)"
+	install -d -m 0755 "$(DSTROOT)$(MIGRATION_EXTRAS_DST_DIR)"
+	install -m 0755 "$(SRCROOT)$)/$(SETUP_EXTRAS_SRC_DIR)/amavisd_new_setup" "$(DSTROOT)/$(CLEAN_INSTALL_EXTRAS_DST_DIR)/SetupAMaViS.sh"
+	install -m 0755 "$(SRCROOT)$)/$(SETUP_EXTRAS_SRC_DIR)/amavisd_new_upgrade" "$(DSTROOT)/$(MIGRATION_EXTRAS_DST_DIR)/66_amavisd_migrator"
+	install -o _amavisd -m 0755 "$(SRCROOT)$)/$(SETUP_EXTRAS_SRC_DIR)/amavisd_cleanup" "$(DSTROOT)/$(AMAVIS_DIR)/amavisd_cleanup"
 
 	install -d -m 0755 "$(DSTROOT)$(USR_OS_VERSION)"
 	install -d -m 0755 "$(DSTROOT)$(USR_OS_LICENSE)"

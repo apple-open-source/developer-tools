@@ -1,12 +1,12 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                GNU ADA RUN-TIME LIBRARY (GNARL) COMPONENTS               --
+--                 GNAT RUN-TIME LIBRARY (GNARL) COMPONENTS                 --
 --                                                                          --
 --                   A D A . I N T E R R U P T S . N A M E S                --
 --                                                                          --
 --                                  S p e c                                 --
 --                                                                          --
---          Copyright (C) 1991-2002 Free Software Foundation, Inc.          --
+--          Copyright (C) 1991-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNARL; see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -31,15 +31,15 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
---  This is a LynxOS version of this package.
---
+--  This is a LynxOS version of this package
+
 --  The following signals are reserved by the run time:
---
+
 --  SIGFPE, SIGILL, SIGSEGV, SIGBUS, SIGTRAP, SIGABRT, SIGINT,
 --  SIGWAITING, SIGLWP, SIGTTIN, SIGTTOU, SIGTSTP, SIGPROF, SIGSTOP, SIGKILL
---
+
 --  The pragma Unreserve_All_Interrupts affects the following signal(s):
---
+
 --  SIGINT: made available for Ada handler
 
 with System.OS_Interface;
@@ -47,8 +47,8 @@ with System.OS_Interface;
 
 package Ada.Interrupts.Names is
 
-   --  Beware that the mapping of names to signals may be
-   --  many-to-one. There may be aliases.
+   --  Beware that the mapping of names to signals may be many-to-one. There
+   --  may be aliases.
 
    SIGHUP : constant Interrupt_ID :=
      System.OS_Interface.SIGHUP;      --  hangup

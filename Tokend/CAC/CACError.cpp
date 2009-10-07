@@ -35,7 +35,15 @@
 //
 CACError::CACError(uint16_t sw) : SCardError(sw)
 {
+#if MAX_OS_X_VERSION_MIN_REQUIRED <= MAX_OS_X_VERSION_10_5
 	IFDEBUG(debugDiagnose(this));
+#else
+	SECURITY_EXCEPTION_THROW_OTHER(this, sw, (char *)"CAC");
+#endif
+}
+
+CACError::~CACError() throw ()
+{
 }
 
 const char *CACError::what() const throw ()
@@ -60,11 +68,15 @@ void CACError::throwMe(uint16_t sw)
 
 #if !defined(NDEBUG)
 
+#if MAX_OS_X_VERSION_MIN_REQUIRED <= MAX_OS_X_VERSION_10_5
+
 void CACError::debugDiagnose(const void *id) const
 {
     secdebug("exception", "%p CACError %s (%04hX)",
              id, errorstr(statusWord), statusWord);
 }
+
+#endif // MAX_OS_X_VERSION_MIN_REQUIRED <= MAX_OS_X_VERSION_10_5
 
 const char *CACError::errorstr(uint16_t sw) const
 {

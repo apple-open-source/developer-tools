@@ -3,19 +3,20 @@
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * The contents of this file constitute Original Code as defined in and
- * are subject to the Apple Public Source License Version 1.1 (the
- * "License").  You may not use this file except in compliance with the
- * License.  Please obtain a copy of the License at
- * http://www.apple.com/publicsource and read it before using this file.
+ * This file contains Original Code and/or Modifications of Original Code
+ * as defined in and that are subject to the Apple Public Source License
+ * Version 2.0 (the 'License'). You may not use this file except in
+ * compliance with the License. Please obtain a copy of the License at
+ * http://www.opensource.apple.com/apsl/ and read it before using this
+ * file.
  * 
- * This Original Code and all software distributed under the License are
- * distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+ * The Original Code and all software distributed under the License are
+ * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
  * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE OR NON-INFRINGEMENT.  Please see the
- * License for the specific language governing rights and limitations
- * under the License.
+ * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+ * Please see the License for the specific language governing rights and
+ * limitations under the License.
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
@@ -28,24 +29,12 @@
  *
  */
 
-#include <syslog.h>
-#include <CoreFoundation/CoreFoundation.h>
-#include <SystemConfiguration/SystemConfiguration.h>
-#include <SystemConfiguration/SCValidation.h>
-#include <SystemConfiguration/SCDPlugin.h>
-#include <IOKit/pwr_mgt/IOPMLib.h>
-#include <IOKit/pwr_mgt/IOPMLibPrivate.h>
-#include <IOKit/pwr_mgt/IOPMUPSPrivate.h>
-#include <IOKit/pwr_mgt/IOPM.h>
-#include <IOKit/ps/IOPSKeys.h>
-#include <IOKit/ps/IOPowerSources.h>
-#include <IOKit/ps/IOPowerSourcesPrivate.h>
-#include <IOKit/IOMessage.h>
 #include <sys/syslog.h>
+#include <syslog.h>
 
+#include "PrivateLib.h"
 #include "PSLowPower.h"
 #include "PMSettings.h"
-#include "PrivateLib.h"
 
 // Data structure to track UPS shutdown thresholds
 #define     kHaltEnabled        0
@@ -60,6 +49,14 @@ typedef struct  {
     int     haltremain[2];
     int     haltpercent[2];
 } threshold_struct;
+
+// Externally defined UPS SPI
+#ifndef _IOKIT_PM_IOUPSPRIVATE_H_
+Boolean IOUPSMIGServerIsRunning(mach_port_t * bootstrap_port_ref, mach_port_t * upsd_port_ref);
+IOReturn IOUPSSendCommand(mach_port_t connect, int upsID, CFDictionaryRef command);
+IOReturn IOUPSGetEvent(mach_port_t connect, int upsID, CFDictionaryRef *event);
+IOReturn IOUPSGetCapabilities(mach_port_t connect, int upsID, CFSetRef *capabilities);
+#endif
 
 // Globals
 static const int                _delayedRemovePowerMinutes = 3;
@@ -320,7 +317,7 @@ _doPowerEmergencyShutdown(CFNumberRef ups_id)
     pid_t           shutdown_pid;
     CFNumberRef     auto_restart;
     IOReturn        error;
-    bool            upsRestart;
+    bool            upsRestart = false;
     int             restart_setting;
     
     if(_alreadyShuttingDown) return;
@@ -332,7 +329,6 @@ _doPowerEmergencyShutdown(CFNumberRef ups_id)
     if(!_ESSettings) goto shutdown;
     
     auto_restart = isA_CFNumber(CFDictionaryGetValue(_ESSettings, CFSTR(kIOPMRestartOnPowerLossKey)));
-    CFRelease(_ESSettings);
     if(auto_restart) {
         CFNumberGetValue(auto_restart, kCFNumberIntType, &restart_setting);
     } else { 
@@ -376,7 +372,12 @@ _doPowerEmergencyShutdown(CFNumberRef ups_id)
         }
     }
     
-shutdown:    
+shutdown:
+
+    if (_ESSettings) {
+        CFRelease(_ESSettings);
+    }
+    
     shutdown_argv[0] = (char *)"/usr/libexec/upsshutdown";
 
     if(upsRestart) {
@@ -489,7 +490,7 @@ static bool
 _weManageUPSPower(void)
 {
     static CFStringRef                  ups_claimed = NULL;
-    static SCDynamicStoreRef            ds_ref = NULL;
+    SCDynamicStoreRef                   ds_ref = NULL;
     CFTypeRef		                    temp;
     bool                                ret_val = true;
 
@@ -497,9 +498,7 @@ _weManageUPSPower(void)
         ups_claimed = SCDynamicStoreKeyCreate(kCFAllocatorDefault, CFSTR("%@%@"), kSCDynamicStoreDomainState, CFSTR(kIOPSUPSManagementClaimed));
     }
     
-    if(!ds_ref) {
-        ds_ref = SCDynamicStoreCreate(kCFAllocatorDefault, CFSTR("PM configd plugin"), NULL, NULL);
-    }
+    ds_ref = _getSharedPMDynamicStore();
 
     // Check for existence of "UPS Management claimed" key in SCDynamicStore
     if( ups_claimed && ds_ref &&

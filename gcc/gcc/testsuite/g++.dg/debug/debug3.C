@@ -1,11 +1,8 @@
 // PR optimization/5547
 // This testcase caused ICE on IA-32, since DWARF-2 was unable
 // to emit location expression for parameter a of operator+.
-// { dg-do compile }
+// { dg-do compile { target fpic } }
 // { dg-options "-fpic" }
-// APPLE LOCAL -mdynamic-no-pic incompatible with -fpic
-// { dg-skip-if "Not valid with -mdynamic-no-pic" { *-*-darwin* } { "-mdynamic-no-pic" } { "" } }
-// { dg-warning "not supported" "PIC unsupported" { target cris-*-elf* cris-*-aout* mmix-*-* } 0 }
 
 struct A { char *s; };
 

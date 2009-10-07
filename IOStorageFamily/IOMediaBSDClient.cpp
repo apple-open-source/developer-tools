@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2007 Apple Inc.  All Rights Reserved.
+ * Copyright (c) 1998-2009 Apple Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -25,13 +25,11 @@
 
 #include <miscfs/devfs/devfs.h>              // (devfs_make_node, ...)
 #include <sys/buf.h>                         // (buf_t, ...)
-#include <sys/conf.h>                        // (bdevsw_add, ...)
 #include <sys/fcntl.h>                       // (FWRITE, ...)
 #include <sys/ioccom.h>                      // (IOCGROUP, ...)
 #include <sys/proc.h>                        // (proc_is64bit, ...)
 #include <sys/stat.h>                        // (S_ISBLK, ...)
 #include <sys/systm.h>                       // (DEV_BSIZE, ...)
-#include <sys/uio_internal.h>                // (uio_t, ...)
 #include <IOKit/assert.h>
 #include <IOKit/IOBSD.h>
 #include <IOKit/IODeviceTreeSupport.h>
@@ -39,6 +37,7 @@
 #include <IOKit/IOKitKeys.h>
 #include <IOKit/IOMemoryDescriptor.h>
 #include <IOKit/IOMessage.h>
+#include <IOKit/IOSubMemoryDescriptor.h>
 #include <IOKit/storage/IOBlockStorageDevice.h>
 #include <IOKit/storage/IOBlockStorageDriver.h>
 #include <IOKit/storage/IOMedia.h>
@@ -46,8 +45,6 @@
 
 #define super IOService
 OSDefineMetaClassAndStructors(IOMediaBSDClient, IOService)
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 const SInt32 kMajor              = 14;
 const UInt32 kMinorsAddCountBits = 6;
@@ -63,14 +60,12 @@ const UInt32 kAnchorsMaxCount    = kMinorsMaxCount;
 #define kMsgNoWhole    "%s: No whole media found for media \"%s\".\n", getName()
 #define kMsgNoLocation "%s: No location is found for media \"%s\".\n", getName()
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 extern "C"
 {
-    int  dkclose(dev_t dev, int flags, int devtype, proc_t);
-    int  dkioctl(dev_t dev, u_long cmd, caddr_t data, int flags, proc_t);
-    int  dkioctl_bdev(dev_t dev, u_long cmd, caddr_t data, int flags, proc_t);
-    int  dkopen(dev_t dev, int flags, int devtype, proc_t);
+    int  dkclose(dev_t dev, int flags, int devtype, proc_t proc);
+    int  dkioctl(dev_t dev, u_long cmd, caddr_t data, int flags, proc_t proc);
+    int  dkioctl_bdev(dev_t dev, u_long cmd, caddr_t data, int flags, proc_t proc);
+    int  dkopen(dev_t dev, int flags, int devtype, proc_t proc);
     int  dkread(dev_t dev, uio_t uio, int flags);
     int  dksize(dev_t dev);    
     void dkstrategy(buf_t bp);
@@ -106,8 +101,6 @@ struct cdevsw cdevswFunctions =
     /* d_type     */ D_DISK
 };
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 struct dio { dev_t dev; uio_t uio; void * drvdata; };
 
 typedef struct dio *                      dio_t;
@@ -121,8 +114,6 @@ inline int32_t getminor(dev_t dev)
 {
     return minor(dev);
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 const UInt32 kInvalidAnchorID = (UInt32) (-1);
 
@@ -162,8 +153,6 @@ public:
 
     bool   isObsolete(UInt32 anchorID);
 };
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 const UInt32 kInvalidMinorID = (UInt32) (-1);
 
@@ -230,8 +219,6 @@ public:
     bool        hasReferencesToAnchorID(UInt32 anchorID, bool excludeOrphans);
 };
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 class IOMediaBSDClientGlobals
 {
 protected:
@@ -263,8 +250,6 @@ public:
 
 static IOMediaBSDClientGlobals gIOMediaBSDClientGlobals;
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 bool IOMediaBSDClient::init(OSDictionary * properties)
 {
     //
@@ -287,8 +272,6 @@ bool IOMediaBSDClient::init(OSDictionary * properties)
     return true;
 }
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 void IOMediaBSDClient::free()
 {
     //
@@ -297,8 +280,6 @@ void IOMediaBSDClient::free()
 
     super::free();
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 bool IOMediaBSDClient::start(IOService * provider)
 {
@@ -333,8 +314,6 @@ bool IOMediaBSDClient::start(IOService * provider)
 
     return true;
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 bool IOMediaBSDClient::terminate(IOOptionBits options)
 {
@@ -382,8 +361,6 @@ bool IOMediaBSDClient::terminate(IOOptionBits options)
 
     return true;
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 IOMedia * IOMediaBSDClient::getWholeMedia( IOMedia * media,
                                            UInt32 *  slicePathSize,
@@ -476,8 +453,6 @@ IOMedia * IOMediaBSDClient::getWholeMedia( IOMedia * media,
 
     return 0;
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 bool IOMediaBSDClient::createNodes(IOMedia * media)
 {
@@ -588,8 +563,7 @@ createNodesErr:
     return false; // (failure)
 }
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
+#ifndef __LP64__
 AnchorTable * IOMediaBSDClient::getAnchors()
 {
     //
@@ -598,8 +572,6 @@ AnchorTable * IOMediaBSDClient::getAnchors()
  
     return _anchors;
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 MinorTable * IOMediaBSDClient::getMinors()
 {
@@ -610,8 +582,6 @@ MinorTable * IOMediaBSDClient::getMinors()
     return _minors;
 }
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 MinorSlot * IOMediaBSDClient::getMinor(UInt32 minorID)
 {
     //
@@ -620,8 +590,7 @@ MinorSlot * IOMediaBSDClient::getMinor(UInt32 minorID)
 
     return _minors->getMinor(minorID);
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#endif /* !__LP64__ */
 
 IOMedia * IOMediaBSDClient::getProvider() const
 {
@@ -634,13 +603,11 @@ IOMedia * IOMediaBSDClient::getProvider() const
     return (IOMedia *) IOService::getProvider();
 }
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 int IOMediaBSDClient::ioctl( dev_t   dev,
                              u_long  cmd,
-                             caddr_t /* data */,
-                             int     /* flags */,
-                             proc_t  /* proc */ )
+                             caddr_t data,
+                             int     flags,
+                             proc_t  proc )
 {
     //
     // Process a foreign ioctl.
@@ -674,70 +641,45 @@ int IOMediaBSDClient::ioctl( dev_t   dev,
     return error;                                       // (return error status)
 }
 
-OSMetaClassDefineReservedUsed(IOMediaBSDClient, 0);
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-OSMetaClassDefineReservedUnused(IOMediaBSDClient, 1);
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-OSMetaClassDefineReservedUnused(IOMediaBSDClient, 2);
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-OSMetaClassDefineReservedUnused(IOMediaBSDClient, 3);
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-OSMetaClassDefineReservedUnused(IOMediaBSDClient, 4);
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-OSMetaClassDefineReservedUnused(IOMediaBSDClient, 5);
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-OSMetaClassDefineReservedUnused(IOMediaBSDClient, 6);
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-OSMetaClassDefineReservedUnused(IOMediaBSDClient, 7);
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-OSMetaClassDefineReservedUnused(IOMediaBSDClient, 8);
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-OSMetaClassDefineReservedUnused(IOMediaBSDClient, 9);
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
+#ifdef __LP64__
+OSMetaClassDefineReservedUnused(IOMediaBSDClient,  0);
+#else /* !__LP64__ */
+OSMetaClassDefineReservedUsed(IOMediaBSDClient,  0);
+#endif /* !__LP64__ */
+OSMetaClassDefineReservedUnused(IOMediaBSDClient,  1);
+OSMetaClassDefineReservedUnused(IOMediaBSDClient,  2);
+OSMetaClassDefineReservedUnused(IOMediaBSDClient,  3);
+OSMetaClassDefineReservedUnused(IOMediaBSDClient,  4);
+OSMetaClassDefineReservedUnused(IOMediaBSDClient,  5);
+OSMetaClassDefineReservedUnused(IOMediaBSDClient,  6);
+OSMetaClassDefineReservedUnused(IOMediaBSDClient,  7);
+OSMetaClassDefineReservedUnused(IOMediaBSDClient,  8);
+OSMetaClassDefineReservedUnused(IOMediaBSDClient,  9);
 OSMetaClassDefineReservedUnused(IOMediaBSDClient, 10);
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 OSMetaClassDefineReservedUnused(IOMediaBSDClient, 11);
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 OSMetaClassDefineReservedUnused(IOMediaBSDClient, 12);
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 OSMetaClassDefineReservedUnused(IOMediaBSDClient, 13);
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 OSMetaClassDefineReservedUnused(IOMediaBSDClient, 14);
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 OSMetaClassDefineReservedUnused(IOMediaBSDClient, 15);
 
 // =============================================================================
 // BSD Functions
+
+typedef struct
+{
+    user32_addr_t capacities;
+    uint32_t      capacitiesCount;
+
+    uint8_t       reserved0064[8];
+} dk_format_capacities_32_t;
+
+typedef struct
+{
+    user64_addr_t capacities;
+    uint32_t      capacitiesCount;
+
+    uint8_t       reserved0096[4];
+} dk_format_capacities_64_t;
 
 static IOStorageAccess DK_ADD_ACCESS(IOStorageAccess a1, IOStorageAccess a2)
 {
@@ -761,8 +703,6 @@ static IOStorageAccess DK_ADD_ACCESS(IOStorageAccess a1, IOStorageAccess a2)
     return (table[a1][a2] << 1) + 1;
 }
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 static bool DKIOC_IS_RESERVED(caddr_t data, uint32_t reserved)
 {
     UInt32 index;
@@ -777,8 +717,6 @@ static bool DKIOC_IS_RESERVED(caddr_t data, uint32_t reserved)
 
     return false;
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 int dkopen(dev_t dev, int flags, int devtype, proc_t /* proc */)
 {
@@ -821,6 +759,21 @@ int dkopen(dev_t dev, int flags, int devtype, proc_t /* proc */)
     }
     else
     {
+///w:start
+#ifdef __LP64__
+        static int root = 0;
+
+        if ( root == 0 )
+        {
+            root = 1;
+
+            if ( minor->media->isWritable() )
+            {
+                access |= kIOStorageAccessReaderWriter;
+            }
+        }
+#endif /* __LP64__ */
+///w:stop
         level    = DK_ADD_ACCESS(minor->bdevOpenLevel, minor->cdevOpenLevel);
         levelOut = DK_ADD_ACCESS(level, access);
 
@@ -915,8 +868,6 @@ int dkopen(dev_t dev, int flags, int devtype, proc_t /* proc */)
 
     return error;
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 int dkclose(dev_t dev, int /* flags */, int devtype, proc_t /* proc */)
 {
@@ -1043,8 +994,6 @@ int dkclose(dev_t dev, int /* flags */, int devtype, proc_t /* proc */)
     return 0;
 }
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 int dkread(dev_t dev, uio_t uio, int /* flags */)
 {
     //
@@ -1055,8 +1004,6 @@ int dkread(dev_t dev, uio_t uio, int /* flags */)
 
     return dkreadwrite(&dio, DKRTYPE_DIO);
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 int dkwrite(dev_t dev, uio_t uio, int /* flags */)
 {
@@ -1069,8 +1016,6 @@ int dkwrite(dev_t dev, uio_t uio, int /* flags */)
     return dkreadwrite(&dio, DKRTYPE_DIO);
 }
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 void dkstrategy(buf_t bp)
 {
     //
@@ -1081,8 +1026,6 @@ void dkstrategy(buf_t bp)
 
     dkreadwrite(bp, DKRTYPE_BUF);
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 int dkioctl(dev_t dev, u_long cmd, caddr_t data, int flags, proc_t proc)
 {
@@ -1111,6 +1054,7 @@ int dkioctl(dev_t dev, u_long cmd, caddr_t data, int flags, proc_t proc)
 
         } break;
 
+#ifndef __LP64__
         case DKIOCGETBLOCKCOUNT32:                               // (uint32_t *)
         {
             //
@@ -1125,6 +1069,7 @@ int dkioctl(dev_t dev, u_long cmd, caddr_t data, int flags, proc_t proc)
                 *(uint32_t *)data = 0;
 
         } break;
+#endif /* !__LP64__ */
 
         case DKIOCGETBLOCKCOUNT:                                 // (uint64_t *)
         {
@@ -1318,6 +1263,42 @@ int dkioctl(dev_t dev, u_long cmd, caddr_t data, int flags, proc_t proc)
                 *(uint64_t *)data = number->unsigned64BitValue();
             else
                 *(uint64_t *)data = 0;
+
+        } break;
+
+        case DKIOCGETPHYSICALBLOCKSIZE:                          // (uint32_t *)
+        {
+            //
+            // This ioctl returns the preferred block size of the device.
+            //
+
+            OSNumber * number = OSDynamicCast(
+                         /* class  */ OSNumber,
+                         /* object */ minor->media->getProperty(
+                                 /* key   */ kIOPropertyPhysicalBlockSizeKey,
+                                 /* plane */ gIOServicePlane ) );
+            if ( number )
+                *(uint32_t *)data = number->unsigned32BitValue();
+            else
+                *(uint32_t *)data = minor->media->getPreferredBlockSize();
+
+        } break;
+
+        case DKIOCGETCOMMANDPOOLSIZE:                            // (uint32_t *)
+        {
+            //
+            // This ioctl returns the maximum queue depth of the device.
+            //
+
+            OSNumber * number = OSDynamicCast(
+                         /* class  */ OSNumber,
+                         /* object */ minor->media->getProperty(
+                                 /* key   */ kIOCommandPoolSizeKey,
+                                 /* plane */ gIOServicePlane ) );
+            if ( number )
+                *(uint32_t *)data = number->unsigned32BitValue();
+            else
+                *(uint32_t *)data = 0;
 
         } break;
 
@@ -1523,37 +1504,34 @@ int dkioctl(dev_t dev, u_long cmd, caddr_t data, int flags, proc_t proc)
             // object.
             //
 
-            typedef struct
-            {
-                user_addr_t capacities;
-                uint32_t    capacitiesCount;
-
-                uint8_t     reserved0096[4];
-            } dk_format_capacities_64_t;
-
             UInt64                      blockSize;
             UInt64 *                    capacities;
             UInt32                      capacitiesCount;
             UInt32                      capacitiesMaxCount;
             IOBlockStorageDriver *      driver;
-            dk_format_capacities_64_t * request;
-            dk_format_capacities_t *    request32;
-            dk_format_capacities_64_t   request64 = { 0 };
+            dk_format_capacities_64_t   request;
+            dk_format_capacities_32_t * request32;
+            dk_format_capacities_64_t * request64;
 
             driver    = (IOBlockStorageDriver *) minor->media->getProvider();
             driver    = OSDynamicCast(IOBlockStorageDriver, driver);
-            request   = (dk_format_capacities_64_t *) data;
-            request32 = (dk_format_capacities_t *) data;
+            request32 = (dk_format_capacities_32_t *) data;
+            request64 = (dk_format_capacities_64_t *) data;
 
-            if ( proc_is64bit(proc) == 0 )
+            if ( proc_is64bit(proc) )
             {
-                request64.capacities      = CAST_USER_ADDR_T(request32->capacities);
-                request64.capacitiesCount = request32->capacitiesCount;
+                if ( DKIOC_IS_RESERVED(data, 0xF000) )  { error = EINVAL;  break; }
 
-                request = &request64;
+                request.capacities      = request64->capacities;
+                request.capacitiesCount = request64->capacitiesCount;
             }
+            else
+            {
+                if ( DKIOC_IS_RESERVED(data, 0xFF00) )  { error = EINVAL;  break; }
 
-            if ( DKIOC_IS_RESERVED(data, 0xF000) )  { error = EINVAL;  break; }
+                request.capacities      = request32->capacities;
+                request.capacitiesCount = request32->capacitiesCount;
+            }
 
             // Determine whether this media has an IOBlockStorageDriver parent.
 
@@ -1561,12 +1539,12 @@ int dkioctl(dev_t dev, u_long cmd, caddr_t data, int flags, proc_t proc)
 
             // Obtain the format capacities list from the block storage driver.
 
-            capacitiesCount    = request->capacitiesCount;
+            capacitiesCount    = request.capacitiesCount;
             capacitiesMaxCount = driver->getFormatCapacities(0, 0);
 
             if ( capacitiesCount )
             {
-                if ( request->capacities == 0 )  { error = EINVAL;  break; }
+                if ( request.capacities == 0 )  { error = EINVAL;  break; }
 
                 capacitiesCount = min(capacitiesCount, capacitiesMaxCount);
                 capacities      = IONew(UInt64, capacitiesCount);
@@ -1589,7 +1567,7 @@ int dkioctl(dev_t dev, u_long cmd, caddr_t data, int flags, proc_t proc)
 
                     error = copyout(
                       /* kaddr */ &capacity,
-                      /* uaddr */ request->capacities + index * sizeof(dk_format_capacity_t),
+                      /* uaddr */ request.capacities + index * sizeof(dk_format_capacity_t),
                       /* len   */ sizeof(dk_format_capacity_t) );
                     if ( error )  break; 
                 }
@@ -1599,11 +1577,13 @@ int dkioctl(dev_t dev, u_long cmd, caddr_t data, int flags, proc_t proc)
                 if ( capacitiesCount < capacitiesMaxCount )  { error = E2BIG; }
             }
 
-            request->capacitiesCount = capacitiesMaxCount;
-
-            if ( proc_is64bit(proc) == 0 )
+            if ( proc_is64bit(proc) )
             {
-                request32->capacitiesCount = request64.capacitiesCount;
+                request64->capacitiesCount = request.capacitiesCount;
+            }
+            else
+            {
+                request32->capacitiesCount = request.capacitiesCount;
             }
 
         } break;
@@ -1619,6 +1599,52 @@ int dkioctl(dev_t dev, u_long cmd, caddr_t data, int flags, proc_t proc)
             // Flush the media onto the drive.
 
             status = minor->media->synchronizeCache(minor->client);
+            error  = minor->media->errnoFromReturn(status);
+
+        } break;
+
+        case DKIOCDISCARD:                                     // (dk_discard_t)
+        {
+            //
+            // This ioctl asks that the media object delete unused data.
+            //
+
+            dk_discard_t * request;
+            IOReturn       status;
+
+            request = (dk_discard_t *) data;
+
+            if ( DKIOC_IS_RESERVED(data, 0xFFFF0000) )  { error = EINVAL;  break; }
+
+            // Delete unused data from the media.
+
+            status = minor->media->discard( /* client    */ minor->client,
+                                            /* byteStart */ request->offset,
+                                            /* byteCount */ request->length );
+
+            error = minor->media->errnoFromReturn(status);
+
+        } break;
+
+        case DKIOCREQUESTIDLE:                                         // (void)
+        {
+            //
+            // This ioctl asks that the device enter an idle state.
+            //
+
+            IOBlockStorageDriver * driver;
+            IOReturn               status;
+
+            driver = (IOBlockStorageDriver *) minor->media->getProvider();
+            driver = OSDynamicCast(IOBlockStorageDriver, driver);
+
+            // Determine whether this media has an IOBlockStorageDriver parent.
+
+            if ( driver == 0 )  { error = ENOTTY;  break; }
+
+            // Request that the drive enter an idle state.
+
+            status = driver->requestIdle();
             error  = minor->media->errnoFromReturn(status);
 
         } break;
@@ -1709,7 +1735,17 @@ int dkioctl(dev_t dev, u_long cmd, caddr_t data, int flags, proc_t proc)
 
             if ( dictionary )
             {
-                OSBoolean * boolean = OSDynamicCast( 
+                OSBoolean * boolean;
+
+                boolean = OSDynamicCast( 
+                         /* class  */ OSBoolean,
+                         /* object */ dictionary->getObject(
+                                 /* key   */ kIOStorageFeatureDiscard ) );
+
+                if ( boolean == kOSBooleanTrue )
+                    *(uint32_t *)data |= DK_FEATURE_DISCARD;
+
+                boolean = OSDynamicCast( 
                          /* class  */ OSBoolean,
                          /* object */ dictionary->getObject(
                                  /* key   */ kIOStorageFeatureForceUnitAccess ) );
@@ -1733,8 +1769,6 @@ int dkioctl(dev_t dev, u_long cmd, caddr_t data, int flags, proc_t proc)
 
     return error;                                       // (return error status)
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 int dkioctl_bdev(dev_t dev, u_long cmd, caddr_t data, int flags, proc_t proc)
 {
@@ -1779,6 +1813,7 @@ int dkioctl_bdev(dev_t dev, u_long cmd, caddr_t data, int flags, proc_t proc)
 
         } break;
 
+#ifndef __LP64__
         case DKIOCGETBLOCKCOUNT32:                               // (uint32_t *)
         {
             //
@@ -1793,6 +1828,7 @@ int dkioctl_bdev(dev_t dev, u_long cmd, caddr_t data, int flags, proc_t proc)
                 *(uint32_t *)data = 0;
 
         } break;
+#endif /* !__LP64__ */
 
         case DKIOCGETBLOCKCOUNT:                                 // (uint64_t *)
         {
@@ -1823,8 +1859,6 @@ int dkioctl_bdev(dev_t dev, u_long cmd, caddr_t data, int flags, proc_t proc)
     return error;                                       // (return error status)
 }
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 int dksize(dev_t dev)
 {
     //
@@ -1847,14 +1881,10 @@ int dksize(dev_t dev)
 
 extern "C" task_t get_aiotask();
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 inline task_t get_kernel_task()
 {
     return kernel_task;
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 inline task_t get_user_task()
 {
@@ -1867,8 +1897,6 @@ inline task_t get_user_task()
     return task;
 }
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 inline dev_t DKR_GET_DEV(dkr_t dkr, dkrtype_t dkrtype)
 {
     return (dkrtype == DKRTYPE_BUF)
@@ -1876,16 +1904,12 @@ inline dev_t DKR_GET_DEV(dkr_t dkr, dkrtype_t dkrtype)
            : ((dio_t)dkr)->dev;
 }
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 inline UInt64 DKR_GET_BYTE_COUNT(dkr_t dkr, dkrtype_t dkrtype)
 {
     return (dkrtype == DKRTYPE_BUF)
            ? buf_count((buf_t)dkr)
            : uio_resid(((dio_t)dkr)->uio);
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 inline UInt64 DKR_GET_BYTE_START(dkr_t dkr, dkrtype_t dkrtype)
 {
@@ -1902,16 +1926,12 @@ inline UInt64 DKR_GET_BYTE_START(dkr_t dkr, dkrtype_t dkrtype)
     return uio_offset(((dio_t)dkr)->uio);
 }
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 inline bool DKR_IS_READ(dkr_t dkr, dkrtype_t dkrtype)
 {
     return (dkrtype == DKRTYPE_BUF)
            ? ((buf_flags((buf_t)dkr) & B_READ) == B_READ)
            : ((uio_rw(((dio_t)dkr)->uio)) == UIO_READ);
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 inline bool DKR_IS_ASYNCHRONOUS(dkr_t dkr, dkrtype_t dkrtype)
 {
@@ -1920,16 +1940,12 @@ inline bool DKR_IS_ASYNCHRONOUS(dkr_t dkr, dkrtype_t dkrtype)
            : false;
 }
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 inline bool DKR_IS_RAW(dkr_t dkr, dkrtype_t dkrtype)
 {
     return (dkrtype == DKRTYPE_BUF)
            ? false
            : true;
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 inline void DKR_SET_BYTE_COUNT(dkr_t dkr, dkrtype_t dkrtype, UInt64 bcount)
 {
@@ -1938,8 +1954,6 @@ inline void DKR_SET_BYTE_COUNT(dkr_t dkr, dkrtype_t dkrtype, UInt64 bcount)
     else
         uio_setresid(((dio_t)dkr)->uio, uio_resid(((dio_t)dkr)->uio) - bcount);
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 inline void DKR_RUN_COMPLETION(dkr_t dkr, dkrtype_t dkrtype, IOReturn status)
 {
@@ -1954,8 +1968,6 @@ inline void DKR_RUN_COMPLETION(dkr_t dkr, dkrtype_t dkrtype, IOReturn status)
         buf_biodone(bp);                                   // (complete request)
     }
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 inline IOMemoryDescriptor * DKR_GET_BUFFER(dkr_t dkr, dkrtype_t dkrtype)
 {
@@ -1981,7 +1993,7 @@ inline IOMemoryDescriptor * DKR_GET_BUFFER(dkr_t dkr, dkrtype_t dkrtype)
         }
         else
         {
-            return IOMemoryDescriptor::withAddress(            // (single-range)
+            return IOMemoryDescriptor::withAddressRange(       // (single-range)
                 buf_dataptr(bp),
                 buf_count(bp),
                 (flags & B_READ) ? kIODirectionIn : kIODirectionOut,
@@ -2004,16 +2016,12 @@ inline IOMemoryDescriptor * DKR_GET_BUFFER(dkr_t dkr, dkrtype_t dkrtype)
     }
 }
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 inline void * DKR_GET_DRIVER_DATA(dkr_t dkr, dkrtype_t dkrtype)
 {
     return (dkrtype == DKRTYPE_BUF)
            ? buf_drvdata((buf_t)dkr)
            : ((dio_t)dkr)->drvdata;
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 inline void DKR_SET_DRIVER_DATA(dkr_t dkr, dkrtype_t dkrtype, void * drvdata)
 {
@@ -2022,8 +2030,6 @@ inline void DKR_SET_DRIVER_DATA(dkr_t dkr, dkrtype_t dkrtype, void * drvdata)
     else
         ((dio_t)dkr)->drvdata = drvdata;
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 inline IOStorageAttributes DKR_GET_ATTRIBUTES(dkr_t dkr, dkrtype_t dkrtype)
 {
@@ -2042,14 +2048,13 @@ inline IOStorageAttributes DKR_GET_ATTRIBUTES(dkr_t dkr, dkrtype_t dkrtype)
     return attributes;
 }
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 int dkreadwrite(dkr_t dkr, dkrtype_t dkrtype)
 {
     //
     // dkreadwrite performs a read or write operation.
     //
 
+    IOStorageAttributes  attributes;
     IOMemoryDescriptor * buffer;
     register UInt64      byteCount;
     register UInt64      byteStart;
@@ -2132,7 +2137,7 @@ int dkreadwrite(dkr_t dkr, dkrtype_t dkrtype)
     {
         IOMemoryDescriptor * originalBuffer = buffer;
 
-        buffer = IOMemoryDescriptor::withSubRange(
+        buffer = IOSubMemoryDescriptor::withSubRange(
                            /* descriptor    */ originalBuffer,
                            /* withOffset    */ 0,
                            /* withLength    */ mediaSize - byteStart,
@@ -2162,14 +2167,13 @@ int dkreadwrite(dkr_t dkr, dkrtype_t dkrtype)
     // Execute the transfer.
     //
 
+    attributes = DKR_GET_ATTRIBUTES(dkr, dkrtype);
+
     DKR_SET_DRIVER_DATA(dkr, dkrtype, buffer);
 
     if ( DKR_IS_ASYNCHRONOUS(dkr, dkrtype) )       // (an asynchronous request?)
     {
-        IOStorageAttributes attributes;
         IOStorageCompletion completion;
-
-        attributes           = DKR_GET_ATTRIBUTES(dkr, dkrtype);
 
         completion.target    = dkr;
         completion.action    = dkreadwritecompletion;
@@ -2202,6 +2206,9 @@ int dkreadwrite(dkr_t dkr, dkrtype_t dkrtype)
                                  /* client          */ minor->client,
                                  /* byteStart       */ byteStart,
                                  /* buffer          */ buffer,
+#ifdef __LP64__
+                                 /* attributes      */ &attributes,
+#endif /* __LP64__ */
                                  /* actualByteCount */ &byteCount );     // (go)
         }
         else                                                       // (a write?)
@@ -2210,6 +2217,9 @@ int dkreadwrite(dkr_t dkr, dkrtype_t dkrtype)
                                  /* client          */ minor->client,
                                  /* byteStart       */ byteStart,
                                  /* buffer          */ buffer,
+#ifdef __LP64__
+                                 /* attributes      */ &attributes,
+#endif /* __LP64__ */
                                  /* actualByteCount */ &byteCount );     // (go)
         }
 
@@ -2225,8 +2235,6 @@ dkreadwriteErr:
     return minor->media->errnoFromReturn(status);       // (return error status)
 }
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 void dkreadwritecompletion( void *   target,
                             void *   parameter,
                             IOReturn status,
@@ -2237,7 +2245,7 @@ void dkreadwritecompletion( void *   target,
     //
 
     dkr_t       dkr     = (dkr_t) target;
-    dkrtype_t   dkrtype = (dkrtype_t) (int) parameter;
+    dkrtype_t   dkrtype = (dkrtype_t) (uintptr_t) parameter;
     dev_t       dev     = DKR_GET_DEV(dkr, dkrtype);
     void *      drvdata = DKR_GET_DRIVER_DATA(dkr, dkrtype);
     MinorSlot * minor   = gIOMediaBSDClientGlobals.getMinor(getminor(dev));
@@ -2279,8 +2287,6 @@ AnchorTable::AnchorTable()
     _tableCount = 0;
 }
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 AnchorTable::~AnchorTable()
 {
     //
@@ -2292,8 +2298,6 @@ AnchorTable::~AnchorTable()
 
     if ( _table )  IODelete(_table, AnchorSlot, _tableCount);
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 UInt32 AnchorTable::insert(IOService * anchor, void * key)
 {
@@ -2377,8 +2381,6 @@ UInt32 AnchorTable::insert(IOService * anchor, void * key)
     return anchorID;
 }
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 void AnchorTable::remove(UInt32 anchorID)
 {
     //
@@ -2395,8 +2397,6 @@ void AnchorTable::remove(UInt32 anchorID)
 
     bzero(&_table[anchorID], sizeof(AnchorSlot)); // (zero slot)
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 void AnchorTable::obsolete(UInt32 anchorID)
 {
@@ -2417,8 +2417,6 @@ void AnchorTable::obsolete(UInt32 anchorID)
     _table[anchorID].isObsolete = true;
 }
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 UInt32 AnchorTable::locate(IOService * anchor)
 {
     //
@@ -2438,8 +2436,6 @@ UInt32 AnchorTable::locate(IOService * anchor)
     return kInvalidAnchorID;
 }
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 UInt32 AnchorTable::locate(IOService * anchor, void * key)
 {
     //
@@ -2458,8 +2454,6 @@ UInt32 AnchorTable::locate(IOService * anchor, void * key)
 
     return kInvalidAnchorID;
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 UInt32 AnchorTable::update(IOService * anchor, void * key)
 {
@@ -2490,8 +2484,6 @@ UInt32 AnchorTable::update(IOService * anchor, void * key)
     return kInvalidAnchorID;
 }
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 bool AnchorTable::isObsolete(UInt32 anchorID)
 {
     //
@@ -2503,8 +2495,6 @@ bool AnchorTable::isObsolete(UInt32 anchorID)
 
     return _table[anchorID].isObsolete ? true : false;
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 IOReturn AnchorTable::anchorWasNotified( void *      /* target */,
                                          void *      /* parameter */,
@@ -2570,8 +2560,6 @@ MinorTable::MinorTable()
         bzero(_table.buckets, kMinorsBucketCount * sizeof(MinorSlot *));
 }
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 MinorTable::~MinorTable()
 {
     //
@@ -2589,8 +2577,6 @@ MinorTable::~MinorTable()
         IODelete(_table.buckets, MinorSlot *, kMinorsBucketCount);
     }
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 UInt32 MinorTable::insert( IOMedia *          media,
                            UInt32             anchorID,
@@ -2677,7 +2663,7 @@ UInt32 MinorTable::insert( IOMedia *          media,
 
     // Construct a name for the node.
 
-    snprintf(minorName, minorNameSize, "disk%ld%s", anchorID, slicePath);
+    snprintf(minorName, minorNameSize, "disk%d%s", (int) anchorID, slicePath);
     assert(strlen(minorName) + 1 == minorNameSize);
 
     // Zero the new slot, fill it in, and retain the appropriate objects.
@@ -2704,8 +2690,6 @@ UInt32 MinorTable::insert( IOMedia *          media,
 
     return minorID;
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 void MinorTable::remove(UInt32 minorID)
 {
@@ -2745,8 +2729,6 @@ void MinorTable::remove(UInt32 minorID)
     }
 }
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 UInt32 MinorTable::update( IOMedia *          media,
                            UInt32             anchorID,
                            IOMediaBSDClient * client,
@@ -2784,7 +2766,7 @@ UInt32 MinorTable::update( IOMedia *          media,
 
     // Construct a name for the node.
 
-    snprintf(minorName, minorNameSize, "disk%ld%s", anchorID, slicePath);
+    snprintf(minorName, minorNameSize, "disk%d%s", (int) anchorID, slicePath);
     assert(strlen(minorName) + 1 == minorNameSize);
 
     // Search for an orphaned slot in the minor table with our minor name.
@@ -2818,8 +2800,6 @@ UInt32 MinorTable::update( IOMedia *          media,
     return minorID;
 }
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 UInt32 MinorTable::locate(IOMedia * media)
 {
     //
@@ -2837,8 +2817,6 @@ UInt32 MinorTable::locate(IOMedia * media)
 
     return kInvalidMinorID;
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 UInt32 MinorTable::getOpenCountForAnchorID(UInt32 anchorID)
 {
@@ -2863,8 +2841,6 @@ UInt32 MinorTable::getOpenCountForAnchorID(UInt32 anchorID)
     return opens;
 }
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 bool MinorTable::hasReferencesToAnchorID(UInt32 anchorID, bool excludeOrphans)
 {
     //
@@ -2887,8 +2863,6 @@ bool MinorTable::hasReferencesToAnchorID(UInt32 anchorID, bool excludeOrphans)
     return false;
 }
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 MinorSlot * MinorTable::getMinor(UInt32 minorID)
 {
     //
@@ -2900,8 +2874,6 @@ MinorSlot * MinorTable::getMinor(UInt32 minorID)
     else
         return 0;
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 void MinorTable::obsolete(UInt32 minorID)
 {
@@ -2920,8 +2892,6 @@ void MinorTable::obsolete(UInt32 minorID)
 
     _table[minorID].isObsolete = true;
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 bool MinorTable::isObsolete(UInt32 minorID)
 {
@@ -2954,8 +2924,6 @@ IOMediaBSDClientGlobals::IOMediaBSDClientGlobals()
     _stateLock       = IOLockAlloc();
 }
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 IOMediaBSDClientGlobals::~IOMediaBSDClientGlobals()
 {
     //
@@ -2972,8 +2940,6 @@ IOMediaBSDClientGlobals::~IOMediaBSDClientGlobals()
     if ( _anchors )          delete _anchors;
 }
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 AnchorTable * IOMediaBSDClientGlobals::getAnchors()
 {
     //
@@ -2982,8 +2948,6 @@ AnchorTable * IOMediaBSDClientGlobals::getAnchors()
 
     return _anchors;
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 MinorTable * IOMediaBSDClientGlobals::getMinors()
 {
@@ -2994,8 +2958,6 @@ MinorTable * IOMediaBSDClientGlobals::getMinors()
     return _minors;
 }
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 MinorSlot * IOMediaBSDClientGlobals::getMinor(UInt32 minorID)
 {
     //
@@ -3004,8 +2966,6 @@ MinorSlot * IOMediaBSDClientGlobals::getMinor(UInt32 minorID)
 
     return _minors->getMinor(minorID);
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 bool IOMediaBSDClientGlobals::isValid()
 {
@@ -3021,8 +2981,6 @@ bool IOMediaBSDClientGlobals::isValid()
            ( _stateLock       );
 }
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 void IOMediaBSDClientGlobals::lockOpen()
 {
     //
@@ -3031,8 +2989,6 @@ void IOMediaBSDClientGlobals::lockOpen()
 
     IOLockLock(_openLock);
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 void IOMediaBSDClientGlobals::unlockOpen()
 {
@@ -3043,8 +2999,6 @@ void IOMediaBSDClientGlobals::unlockOpen()
     IOLockUnlock(_openLock);
 }
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 void IOMediaBSDClientGlobals::lockState()
 {
     //
@@ -3053,8 +3007,6 @@ void IOMediaBSDClientGlobals::lockState()
 
     IOLockLock(_stateLock);
 }
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 void IOMediaBSDClientGlobals::unlockState()
 {

@@ -1,4 +1,3 @@
-/* APPLE LOCAL begin mainline 2005-04-06 4071679 */
 /* Darwin host-specific hook definitions.
    Copyright (C) 2003, 2004, 2005 Free Software Foundation, Inc.
 
@@ -16,8 +15,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GCC; see the file COPYING.  If not, write to the
-   Free Software Foundation, 59 Temple Place - Suite 330, Boston,
-   MA 02111-1307, USA.  */
+   Free Software Foundation, 51 Franklin Street, Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
 
 #include "config.h"
 #include "system.h"
@@ -29,8 +28,7 @@
 /* Yes, this is really supposed to work.  */
 /* APPLE LOCAL begin ARM native compiler support */
 /* Not all Darwins are created equal.  */
-static char pch_address_space[DARWIN_PCH_ADDR_SPACE_SIZE]
-  __attribute__((aligned (4096)));
+static char pch_address_space[DARWIN_PCH_ADDR_SPACE_SIZE] __attribute__((aligned (4096)));
 /* APPLE LOCAL end ARM native compiler support */
 
 /* Return the address of the PCH address space, if the PCH will fit in it.  */
@@ -54,9 +52,8 @@ darwin_gt_pch_use_address (void *addr, size_t sz, int fd, size_t off)
   void *mmap_result;
   int ret;
 
-  if ((size_t)pch_address_space % pagesize != 0
-      || sizeof (pch_address_space) % pagesize != 0)
-    abort ();
+  gcc_assert ((size_t)pch_address_space % pagesize == 0
+	      && sizeof (pch_address_space) % pagesize == 0);
   
   ret = (addr == pch_address_space && sz <= sizeof (pch_address_space));
   if (! ret)
@@ -66,7 +63,7 @@ darwin_gt_pch_use_address (void *addr, size_t sz, int fd, size_t off)
   sz = (sz + pagesize - 1) / pagesize * pagesize;
 
   if (munmap (pch_address_space + sz, sizeof (pch_address_space) - sz) != 0)
-    fatal_error ("couldn't unmap pch_address_space: %m\n");
+    fatal_error ("couldn't unmap pch_address_space: %m");
 
   if (ret)
     {
@@ -78,10 +75,8 @@ darwin_gt_pch_use_address (void *addr, size_t sz, int fd, size_t off)
       ret = mmap_result != (void *) MAP_FAILED;
 
       /* Sanity check for broken MAP_FIXED.  */
-      if (ret && mmap_result != addr)
-	abort ();
+      gcc_assert (!ret || mmap_result == addr);
     }
 
   return ret;
 }
-/* APPLE LOCAL end mainline 2005-04-06 4071679 */

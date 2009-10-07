@@ -16,8 +16,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 #include "config.h"
 #include "system.h"
@@ -89,17 +89,17 @@ cp_expr_size (tree exp)
 		  /* And, the gimplifier will sometimes make a copy of
 		     an aggregate.  In particular, for a case like:
 
-		        struct S { S(); };
-                        struct X { int a; S s; };
-                        X x = { 0 };
+			struct S { S(); };
+			struct X { int a; S s; };
+			X x = { 0 };
 
-                     the gimplifier will create a temporary with
-                     static storage duration, perform static
-                     initialization of the temporary, and then copy
-                     the result.  Since the "s" subobject is never
-                     constructed, this is a valid transformation.  */
+		     the gimplifier will create a temporary with
+		     static storage duration, perform static
+		     initialization of the temporary, and then copy
+		     the result.  Since the "s" subobject is never
+		     constructed, this is a valid transformation.  */
 		  || CP_AGGREGATE_TYPE_P (type));
-      
+
       /* This would be wrong for a type with virtual bases, but they are
 	 caught by the assert above.  */
       return (is_empty_class (type)
@@ -118,9 +118,9 @@ cp_tree_size (enum tree_code code)
   switch (code)
     {
     case TINST_LEVEL:		return sizeof (struct tinst_level_s);
-    case PTRMEM_CST: 		return sizeof (struct ptrmem_cst);
+    case PTRMEM_CST:		return sizeof (struct ptrmem_cst);
     case BASELINK:		return sizeof (struct tree_baselink);
-    case TEMPLATE_PARM_INDEX: 	return sizeof (template_parm_index);
+    case TEMPLATE_PARM_INDEX:	return sizeof (template_parm_index);
     case DEFAULT_ARG:		return sizeof (struct tree_default_arg);
     case OVERLOAD:		return sizeof (struct tree_overload);
     default:
@@ -154,7 +154,7 @@ void
 cxx_initialize_diagnostics (diagnostic_context *context)
 {
   pretty_printer *base = context->printer;
-  cxx_pretty_printer *pp = xmalloc (sizeof (cxx_pretty_printer));
+  cxx_pretty_printer *pp = XNEW (cxx_pretty_printer);
   memcpy (pp_base (pp), base, sizeof (pretty_printer));
   pp_cxx_pretty_printer_init (pp);
   context->printer = (pretty_printer *) pp;
@@ -183,6 +183,21 @@ cxx_types_compatible_p (tree x, tree y)
     return 1;
 
   return 0;
+}
+
+tree
+cxx_staticp (tree arg)
+{
+  switch (TREE_CODE (arg))
+    {
+    case BASELINK:
+      return staticp (BASELINK_FUNCTIONS (arg));
+
+    default:
+      break;
+    }
+  
+  return NULL_TREE;
 }
 
 /* Stubs to keep c-opts.c happy.  */
@@ -217,3 +232,79 @@ cp_vtable_p (tree t)
   return 0;
 }
 /* APPLE LOCAL end kext identify vtables */
+
+static GTY ((if_marked ("tree_map_marked_p"), param_is (struct tree_map)))
+     htab_t shadowed_var_for_decl;
+
+/* Lookup a shadowed var for FROM, and return it if we find one.  */
+
+tree
+decl_shadowed_for_var_lookup (tree from)
+{
+  struct tree_map *h, in;
+  in.from = from;
+
+  h = (struct tree_map *) htab_find_with_hash (shadowed_var_for_decl, &in,
+					       htab_hash_pointer (from));
+  if (h)
+    return h->to;
+  return NULL_TREE;
+}
+
+/* Insert a mapping FROM->TO in the shadowed var hashtable.  */
+
+void
+decl_shadowed_for_var_insert (tree from, tree to)
+{
+  struct tree_map *h;
+  void **loc;
+
+  h = GGC_NEW (struct tree_map);
+  h->hash = htab_hash_pointer (from);
+  h->from = from;
+  h->to = to;
+  loc = htab_find_slot_with_hash (shadowed_var_for_decl, h, h->hash, INSERT);
+  *(struct tree_map **) loc = h;
+}
+
+void
+init_shadowed_var_for_decl (void)
+{
+  shadowed_var_for_decl = htab_create_ggc (512, tree_map_hash,
+					   tree_map_eq, 0);
+}
+
+/* APPLE LOCAL begin radar 5741070  */
+/* Given an IDENTIFIER tree for a class interface, find (if possible) and
+   return the record type for the class interface.  */
+
+tree
+c_return_interface_record_type (tree typename)
+{
+  enum tree_code_class class;
+  enum tree_code code;
+  tree retval = NULL;
+
+  if (typename == NULL)
+    return retval;
+
+  code = TREE_CODE (typename);
+  class = TREE_CODE_CLASS (code);
+
+  if (code != IDENTIFIER_NODE
+      || class != tcc_exceptional)
+    return retval;
+
+  if (TREE_TYPE (typename)
+      && TREE_CODE (TREE_TYPE (typename)) == RECORD_TYPE)
+    retval = TREE_TYPE (typename);
+
+  if (retval
+      && TREE_CODE (retval) != RECORD_TYPE)
+    retval = NULL;
+
+  return retval;
+}
+/* APPLE LOCAL end radar 5741070  */
+
+#include "gt-cp-cp-objcp-common.h"

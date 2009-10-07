@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---              Copyright (C) 2002-2004, Ada Core Technologies, Inc.        --
+--                     Copyright (C) 2002-2006, AdaCore                     --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -38,7 +38,7 @@ package body MLib.Utl is
 
    Initialized : Boolean := False;
 
-   Gcc_Name : constant String := "gcc";
+   Gcc_Name : constant String := Osint.Program_Name ("gcc").all;
    Gcc_Exec : OS_Lib.String_Access;
 
    Ar_Name    : OS_Lib.String_Access;
@@ -60,10 +60,8 @@ package body MLib.Utl is
       Full_Output_File : constant String :=
                              Ext_To (Output_File, Archive_Ext);
 
-      Arguments : OS_Lib.Argument_List_Access;
-
-      Success   : Boolean;
-
+      Arguments   : OS_Lib.Argument_List_Access;
+      Success     : Boolean;
       Line_Length : Natural := 0;
 
    begin
@@ -85,9 +83,7 @@ package body MLib.Utl is
 
             --  Make sure the Output buffer does not overflow
 
-            if Line_Length + 1 + Arguments (J)'Length >
-                 Integer (Opt.Max_Line_Length)
-            then
+            if Line_Length + 1 + Arguments (J)'Length > Buffer_Max then
                Write_Eol;
                Line_Length := 0;
             end if;
@@ -130,8 +126,8 @@ package body MLib.Utl is
    -- Delete_File --
    -----------------
 
-   procedure Delete_File (Filename : in String) is
-      File   : constant String := Filename & ASCII.Nul;
+   procedure Delete_File (Filename : String) is
+      File    : constant String := Filename & ASCII.Nul;
       Success : Boolean;
 
    begin
@@ -176,7 +172,8 @@ package body MLib.Utl is
       Lib_Opt : constant OS_Lib.String_Access :=
                   new String'(Dynamic_Option);
 
-      Driver  : String_Access;
+      Driver    : String_Access;
+
    begin
       Utl.Initialize;
 
@@ -260,7 +257,7 @@ package body MLib.Utl is
 
          --  ar
 
-         Ar_Name := new String'(Archive_Builder);
+         Ar_Name := Osint.Program_Name (Archive_Builder);
          Ar_Exec := OS_Lib.Locate_Exec_On_Path (Ar_Name.all);
 
          if Ar_Exec = null then
@@ -275,7 +272,7 @@ package body MLib.Utl is
 
          --  ranlib
 
-         Ranlib_Name := new String'(Archive_Indexer);
+         Ranlib_Name := Osint.Program_Name (Archive_Indexer);
 
          if Ranlib_Name'Length > 0 then
             Ranlib_Exec := OS_Lib.Locate_Exec_On_Path (Ranlib_Name.all);

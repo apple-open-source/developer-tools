@@ -55,7 +55,7 @@ public:
 	SECCFFUNCTIONS(Trust, SecTrustRef, errSecInvalidItemRef, gTypes().Trust)
 
     Trust(CFTypeRef certificates, CFTypeRef policies);
-    virtual ~Trust() throw();
+    virtual ~Trust();
 
 	// set (or reset) more input parameters
 	void policies(CFTypeRef policies)			{ mPolicies.take(cfArrayize(policies)); }
@@ -72,12 +72,14 @@ public:
 	// get at evaluation results
     void buildEvidence(CFArrayRef &certChain, TPEvidenceInfo * &statusChain);
     CSSM_TP_VERIFY_CONTEXT_RESULT_PTR cssmResult();
+	void extendedResult(CFDictionaryRef &extendedResult);
     
     SecTrustResultType result() const			{ return mResult; }
 	OSStatus cssmResultCode() const				{ return mTpReturn; }
     TP getTPHandle() const						{ return mTP; }
-    CFRef<CFArrayRef> policies() const          { return mPolicies; }
-    CFRef<CFArrayRef> anchors() const           { return mAnchors; }
+    CFArrayRef policies() const					{ return mPolicies; }
+    CFArrayRef anchors() const					{ return mAnchors; }
+	CFDateRef time() const						{ return mVerifyTime; }
 
 	// an independent release function for TP evidence results
 	// (yes, we could hand this out to the C layer if desired)
@@ -90,7 +92,7 @@ private:
 		CFCopyRef<CFArrayRef> anchors);
 	void clearResults();
 	
-	Keychain keychainByDLDb(const CSSM_DL_DB_HANDLE &handle) const;
+	Keychain keychainByDLDb(const CSSM_DL_DB_HANDLE &handle);
 
 	/* revocation policy support */
 	CFMutableArrayRef	addSpecifiedRevocationPolicies(uint32 &numAdded, 
@@ -104,6 +106,8 @@ private:
 							uint32 numAdded, 
 							Allocator &alloc);
 	bool				revocationPolicySpecified(CFArrayRef policies);
+	CFMutableArrayRef	forceOCSPRevocationPolicy(uint32 &numAdded, 
+							Allocator &alloc);
 	
 private:
     TP mTP;							// our TP
@@ -127,12 +131,18 @@ private:
     vector< SecPointer<Certificate> > mCertChain; // distilled certificate chain
 
     // information returned to caller but owned by us
-    CFRef<CFArrayRef> mEvidenceReturned; // evidence chain returned
+    CFRef<CFArrayRef> mEvidenceReturned;	// evidence chain returned
+	CFRef<CFArrayRef> mAllowedAnchors;		// array of permitted anchor certificates
+	CFRef<CFArrayRef> mFilteredCerts;		// array of certificates to verify, post-filtering
+    CFRef<CFDictionaryRef> mExtendedResult;	// dictionary of extended results
 
 	bool mUsingTrustSettings;
 
 public:
-    static ModuleNexus<TrustStore> Trust::gStore;
+    static ModuleNexus<TrustStore> gStore;
+
+private:
+	Mutex mMutex;
 };
 
 } // end namespace KeychainCore

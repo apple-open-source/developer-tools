@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2005 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -31,11 +31,6 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
-with Unchecked_Deallocation;
-
-package Types is
-pragma Preelaborate (Types);
-
 --  This package contains host independent type definitions which are used
 --  in more than one unit in the compiler. They are gathered here for easy
 --  reference, though in some cases the full description is found in the
@@ -45,12 +40,17 @@ pragma Preelaborate (Types);
 --  dependencies would have to be dealt with.
 
 --  WARNING: There is a C version of this package. Any changes to this
---  source file must be properly reflected in the C header file a-types.h
+--  source file must be properly reflected in the C header file types.h
 
 --  Note: the declarations in this package reflect an expectation that the
 --  host machine has an efficient integer base type with a range at least
 --  32 bits 2s-complement. If there are any machines for which this is not
 --  a correct assumption, a significant number of changes will be required!
+
+with Unchecked_Deallocation;
+
+package Types is
+   pragma Preelaborate;
 
    -------------------------------
    -- General Use Integer Types --
@@ -172,8 +172,9 @@ pragma Preelaborate (Types);
 
    type Column_Number is range 0 .. 32767;
    for Column_Number'Size use 16;
-   --  Column number (assume that 2**15 is large enough, see declaration of
-   --  Hostparm.Max_Line_Length, and also processing for -gnatyM in Stylesw)
+   --  Column number (assume that 2**15 - 1 is large enough). The range for
+   --  this type is used to compute Hostparm.Max_Line_Length. See also the
+   --  processing for -gnatyM in Stylesw).
 
    No_Column_Number : constant Column_Number := 0;
    --  Special value used to indicate no column number
@@ -311,14 +312,14 @@ pragma Preelaborate (Types);
    --  is in practice infinite and there is no need to check the range.
 
    Ureal_Low_Bound : constant := 500_000_000;
-   --  Low bound for Ureal values.
+   --  Low bound for Ureal values
 
    Ureal_High_Bound : constant := 599_999_999;
    --  Maximum number of Ureal values stored is 100_000_000 which is in
    --  practice infinite so that no check is required.
 
    Uint_Low_Bound : constant := 600_000_000;
-   --  Low bound for Uint values.
+   --  Low bound for Uint values
 
    Uint_Table_Start : constant := 2_000_000_000;
    --  Location where table entries for universal integers start (see
@@ -479,7 +480,7 @@ pragma Preelaborate (Types);
    --  are not valid.
 
    First_Elist_Id : constant Elist_Id := No_Elist + 1;
-   --  Subscript of first allocated Elist header.
+   --  Subscript of first allocated Elist header
 
    --  Element Id values are used to identify individual elements of an
    --  element list (see package Elists for further details).
@@ -696,12 +697,19 @@ pragma Preelaborate (Types);
       Tag_Check,
       All_Checks);
 
-   --  The following record contains an entry for each recognized check name
+   --  The following array contains an entry for each recognized check name
    --  for pragma Suppress. It is used to represent current settings of scope
    --  based suppress actions from pragma Suppress or command line settings.
 
-   type Suppress_Array is
-     array (Check_Id range Access_Check .. Tag_Check) of Boolean;
+   --  Note: when Suppress_Array (All_Checks) is True, then generally all other
+   --  specific check entries are set True, except for the Elaboration_Check
+   --  entry which is set only if an explicit Suppress for this check is given.
+   --  The reason for this non-uniformity is that we do not want All_Checks to
+   --  suppress elaboration checking when using the static elaboration model.
+   --  We recognize only an explicit suppress of Elaboration_Check as a signal
+   --  that the static elaboration checking should skip a compile time check.
+
+   type Suppress_Array is array (Check_Id) of Boolean;
    pragma Pack (Suppress_Array);
 
    --  To add a new check type to GNAT, the following steps are required:
@@ -717,7 +725,7 @@ pragma Preelaborate (Types);
    -----------------------------------
 
    --  This section contains declarations of exceptions that are used
-   --  throughout the compiler.
+   --  throughout the compiler or in other GNAT tools.
 
    Unrecoverable_Error : exception;
    --  This exception is raised to immediately terminate the compilation
@@ -725,6 +733,14 @@ pragma Preelaborate (Types);
    --  bad enough that it doesn't seem worth continuing (e.g. max errors
    --  reached, or a required file is not found). Also raised when the
    --  compiler finds itself in trouble after an error (see Comperr).
+
+   Terminate_Program : exception;
+   --  This exception is raised to immediately terminate the tool being
+   --  executed. Each tool where this exception may be raised must have
+   --  a single exception handler that contains only a null statement and
+   --  that is the last statement of the program. If needed, procedure
+   --  Set_Exit_Status is called with the appropriate exit status before
+   --  raising Terminate_Program.
 
    ---------------------------------
    -- Parameter Mechanism Control --
@@ -766,42 +782,45 @@ pragma Preelaborate (Types);
    --       the definition of last_reason_code.
 
    --    3. Add a new routine in Ada.Exceptions with the appropriate call
-   --       and static string constant
+   --       and static string constant. Note that there is more than one
+   --       version of a-except.adb which must be modified.
 
-   type RT_Exception_Code is (
-     CE_Access_Check_Failed,
-     CE_Access_Parameter_Is_Null,
-     CE_Discriminant_Check_Failed,
-     CE_Divide_By_Zero,
-     CE_Explicit_Raise,
-     CE_Index_Check_Failed,
-     CE_Invalid_Data,
-     CE_Length_Check_Failed,
-     CE_Null_Not_Allowed,
-     CE_Overflow_Check_Failed,
-     CE_Partition_Check_Failed,
-     CE_Range_Check_Failed,
-     CE_Tag_Check_Failed,
+   type RT_Exception_Code is
+     (CE_Access_Check_Failed,            -- 00
+      CE_Access_Parameter_Is_Null,       -- 01
+      CE_Discriminant_Check_Failed,      -- 02
+      CE_Divide_By_Zero,                 -- 03
+      CE_Explicit_Raise,                 -- 04
+      CE_Index_Check_Failed,             -- 05
+      CE_Invalid_Data,                   -- 06
+      CE_Length_Check_Failed,            -- 07
+      CE_Null_Exception_Id,              -- 08
+      CE_Null_Not_Allowed,               -- 09
+      CE_Overflow_Check_Failed,          -- 10
+      CE_Partition_Check_Failed,         -- 11
+      CE_Range_Check_Failed,             -- 12
+      CE_Tag_Check_Failed,               -- 13
 
-     PE_Access_Before_Elaboration,
-     PE_Accessibility_Check_Failed,
-     PE_All_Guards_Closed,
-     PE_Duplicated_Entry_Address,
-     PE_Explicit_Raise,
-     PE_Finalize_Raised_Exception,
-     PE_Misaligned_Address_Value,
-     PE_Missing_Return,
-     PE_Overlaid_Controlled_Object,
-     PE_Potentially_Blocking_Operation,
-     PE_Stubbed_Subprogram_Called,
-     PE_Unchecked_Union_Restriction,
-     PE_Illegal_RACW_E_4_18,
+      PE_Access_Before_Elaboration,      -- 14
+      PE_Accessibility_Check_Failed,     -- 15
+      PE_All_Guards_Closed,              -- 16
+      PE_Duplicated_Entry_Address,       -- 17
+      PE_Explicit_Raise,                 -- 18
+      PE_Finalize_Raised_Exception,      -- 19
+      PE_Implicit_Return,                -- 20
+      PE_Misaligned_Address_Value,       -- 21
+      PE_Missing_Return,                 -- 22
+      PE_Overlaid_Controlled_Object,     -- 23
+      PE_Potentially_Blocking_Operation, -- 24
+      PE_Stubbed_Subprogram_Called,      -- 25
+      PE_Unchecked_Union_Restriction,    -- 26
+      PE_Illegal_RACW_E_4_18,            -- 27
 
-     SE_Empty_Storage_Pool,
-     SE_Explicit_Raise,
-     SE_Infinite_Recursion,
-     SE_Object_Too_Large,
-     SE_Restriction_Violation);
+      SE_Empty_Storage_Pool,             -- 28
+      SE_Explicit_Raise,                 -- 29
+      SE_Infinite_Recursion,             -- 30
+      SE_Object_Too_Large,               -- 31
+      SE_Restriction_Violation);         -- 32
 
    subtype RT_CE_Exceptions is RT_Exception_Code range
      CE_Access_Check_Failed ..

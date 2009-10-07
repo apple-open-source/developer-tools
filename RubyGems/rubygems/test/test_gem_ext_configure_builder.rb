@@ -1,7 +1,5 @@
-require 'test/unit'
-require 'test/gemutilities'
-
-require 'rubygems/installer'
+require File.join(File.expand_path(File.dirname(__FILE__)), 'gemutilities')
+require 'rubygems/ext'
 
 class TestGemExtConfigureBuilder < RubyGemTestCase
 
@@ -27,41 +25,41 @@ class TestGemExtConfigureBuilder < RubyGemTestCase
     output = []
 
     Dir.chdir @ext do
-      Gem::ExtConfigureBuilder.build nil, nil, @dest_path, output
+      Gem::Ext::ConfigureBuilder.build nil, nil, @dest_path, output
     end
 
-    expected = [
-      "sh ./configure --prefix=#{@dest_path}",
-      "", "make", "ok\n", "make install", "ok\n"
-    ]
-
-    assert_equal expected, output
+    assert_equal "sh ./configure --prefix=#{@dest_path}", output.shift
+    assert_equal "", output.shift
+    assert_equal "make", output.shift
+    assert_match(/^ok$/m, output.shift)
+    assert_equal "make install", output.shift
+    assert_match(/^ok$/m, output.shift)
   end
 
   def test_self_build_fail
     return if RUBY_PLATFORM =~ /mswin/ # HACK
     output = []
 
-    error = assert_raise Gem::InstallError do
+    error = assert_raises Gem::InstallError do
       Dir.chdir @ext do
-        Gem::ExtConfigureBuilder.build nil, nil, @dest_path, output
+        Gem::Ext::ConfigureBuilder.build nil, nil, @dest_path, output
       end
     end
 
-    expected = "configure failed:
+    shell_error_msg = %r{(\./configure: .*)|(Can't open \./configure)}
+    sh_prefix_configure = "sh ./configure --prefix="
 
-sh ./configure --prefix=#{@dest_path}
-./configure: ./configure: No such file or directory
-"
+    expected = %r(configure failed:
 
-    assert_equal expected, error.message
+#{Regexp.escape sh_prefix_configure}#{Regexp.escape @dest_path}
+.*?: #{shell_error_msg}
+)
 
-    expected = [
-      "sh ./configure --prefix=#{@dest_path}",
-      "./configure: ./configure: No such file or directory\n"
-    ]
+    assert_match expected, error.message
 
-    assert_equal expected, output
+    assert_equal "#{sh_prefix_configure}#{@dest_path}", output.shift
+    assert_match %r(#{shell_error_msg}), output.shift
+    assert_equal true, output.empty?
   end
 
   def test_self_build_has_makefile
@@ -71,7 +69,7 @@ sh ./configure --prefix=#{@dest_path}
 
     output = []
     Dir.chdir @ext do
-      Gem::ExtConfigureBuilder.build nil, nil, @dest_path, output
+      Gem::Ext::ConfigureBuilder.build nil, nil, @dest_path, output
     end
 
     case RUBY_PLATFORM

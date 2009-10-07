@@ -1,6 +1,6 @@
 /* Specific flags and argument handling of the Fortran front-end.
-   Copyright (C) 1997, 1999, 2000, 2001, 2002, 2003, 2004, 2005 Free
-   Software Foundation, Inc.
+   Copyright (C) 1997, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -16,8 +16,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GNU CC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 /* This file is copied more or less verbatim from g77.  */
 /* This file contains a filter for the main `gcc' driver, which is
    replicated for the `gfortran' driver by adding this filter.  The purpose
@@ -51,6 +51,7 @@ Boston, MA 02111-1307, USA.  */
 
 #include "coretypes.h"
 #include "tm.h"
+#include "intl.h"
 
 #ifndef MATH_LIBRARY
 #define MATH_LIBRARY "-lm"
@@ -98,8 +99,6 @@ static void append_arg (const char *);
 /* The new argument list will be built here.  */
 static int g77_newargc;
 static const char **g77_newargv;
-
-const struct spec_function lang_specific_spec_functions[] = {{0,0}};
 
 /* --- This comes from gcc.c (2.8.1) verbatim: */
 
@@ -345,15 +344,13 @@ lang_specific_driver (int *in_argc, const char *const **in_argv,
 	  break;
 
 	case OPTION_version:
-	  printf ("\
-GNU Fortran 95 (GCC %s)\n\
-Copyright (C) 2005 Free Software Foundation, Inc.\n\
-\n\
-GNU Fortran comes with NO WARRANTY, to the extent permitted by law.\n\
+	  printf ("GNU Fortran (GCC) %s\n", version_string);
+	  printf ("Copyright %s 2007 Free Software Foundation, Inc.\n\n",
+	          _("(C)"));
+	  printf (_("GNU Fortran comes with NO WARRANTY, to the extent permitted by law.\n\
 You may redistribute copies of GNU Fortran\n\
 under the terms of the GNU General Public License.\n\
-For more information about these matters, see the file named COPYING\n\
-", version_string);
+For more information about these matters, see the file named COPYING\n\n"));
 	  exit (0);
 	  break;
 
@@ -400,7 +397,7 @@ For more information about these matters, see the file named COPYING\n\
 
           if (argv[i][2] == '\0')
             {
-              p = xmalloc (strlen (argv[i + 1]) + 2);
+              p = XNEWVEC (char, strlen (argv[i + 1]) + 2);
               p[0] = '-';
               p[1] = 'J';
               strcpy (&p[2], argv[i + 1]);
@@ -408,7 +405,7 @@ For more information about these matters, see the file named COPYING\n\
             }
           else
             {
-              p = xmalloc (strlen (argv[i]) + 1);
+              p = XNEWVEC (char, strlen (argv[i]) + 1);
               strcpy (p, argv[i]);
             }
           append_arg (p);
@@ -528,7 +525,7 @@ For more information about these matters, see the file named COPYING\n\
 
   if (verbose && g77_newargv != g77_xargv)
     {
-      fprintf (stderr, "Driving:");
+      fprintf (stderr, _("Driving:"));
       for (i = 0; i < g77_newargc; i++)
 	fprintf (stderr, " %s", g77_newargv[i]);
       fprintf (stderr, "\n");

@@ -5,6 +5,16 @@ require 'test/unit'
 class TCBoxed < Test::Unit::TestCase
   include OSX
   
+  def test_rect_assign
+    a = NSRect.new(13,42,49,52)
+    assert_nothing_raised {
+      a.x = 0
+      a.y = 1
+      a.width = 2
+      a.height = 3
+    }
+  end
+  
   def test_rect_center
     a = NSRect.new(100,100,200,200)
     b = NSPoint.new(200,200)
@@ -63,6 +73,30 @@ class TCBoxed < Test::Unit::TestCase
     assert_equal(false, c.in?(a))
   end
   
+  def test_point_plus
+    assert_equal(NSPoint.new(20,42), NSPoint.new(0,0) + NSSize.new(20,42))
+  end
+  
+  def test_point_minus
+    assert_equal(NSPoint.new(80,158), NSPoint.new(100,200) - NSSize.new(20,42))
+  end
+  
+  def test_size_plus
+    assert_equal(NSSize.new(10,15), NSSize.new(5,10) + 5)
+  end
+  
+  def test_size_minus
+    assert_equal(NSSize.new(0,5), NSSize.new(5,10) - 5)
+  end
+  
+  def test_size_mul
+    assert_equal(NSSize.new(35,70), NSSize.new(5,10) * 7)
+  end
+  
+  def test_size_div
+    assert_equal(NSSize.new(10,21), NSSize.new(20,42) / 2)
+  end
+  
   def test_range_contain
     a = NSRange.new(10,20)
     b = NSRange.new(10,20)
@@ -98,6 +132,13 @@ class TCBoxed < Test::Unit::TestCase
   def test_range_empty
     a = NSRange.new(10,0)
     assert_equal(true, a.empty?)
+    s = 'abc'.to_ns
+    r = s.rangeOfString('z')
+    assert(r.not_found?)
+    assert(r.empty?)
+    r = s.rangeOfString('b')
+    assert(!r.not_found?)
+    assert(!r.empty?)
   end
 
   def test_range_max
@@ -107,5 +148,22 @@ class TCBoxed < Test::Unit::TestCase
     ].each do |r|
       assert_equal(r.max, OSX::NSMaxRange(r))
     end
+  end
+  
+  def test_range_size
+    a = NSRange.new(0,10)
+    assert_equal(10, a.size)
+    a.size = 42
+    assert_equal(10, a.length)
+  end
+  
+  def test_range_not_found
+    assert(NSRange.new(OSX::NSNotFound, 0).not_found?)
+    assert(!NSRange.new(0, 0).not_found?)
+    assert(!NSRange.new(1, 0).not_found?)
+    assert(!NSRange.new(0, 1).not_found?)
+    cs = OSX::NSCharacterSet.characterSetWithCharactersInString("abc")
+    r = OSX::NSString.stringWithString('xyz').rangeOfCharacterFromSet(cs)
+    assert(r.not_found?)
   end
 end

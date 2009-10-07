@@ -44,6 +44,12 @@ Target makefile fragments can set these Makefile variables.
 @item LIBGCC2_CFLAGS
 Compiler flags to use when compiling @file{libgcc2.c}.
 
+@c APPLE LOCAL begin gcov 5573505
+@findex LIBGCC2_STATIC_CFLAGS
+@item LIBGCC2_STATIC_CFLAGS
+Compiler flags to use when compiling @file{libgcc2.c} for a non-shared library.
+@c APPLE LOCAL end gcov 5573505
+
 @findex LIB2FUNCS_EXTRA
 @item LIB2FUNCS_EXTRA
 A list of source file names to be compiled or assembled and inserted
@@ -150,6 +156,12 @@ Sometimes it is desirable that when building multiple versions of
 compiler.  In that case, set @code{MULTILIB_EXTRA_OPTS} to be the list
 of options to be used for all builds.  If you set this, you should
 probably set @code{CRTSTUFF_T_CFLAGS} to a dash followed by it.
+
+@findex NATIVE_SYSTEM_HEADER_DIR
+@item NATIVE_SYSTEM_HEADER_DIR
+If the default location for system headers is not @file{/usr/include},
+you must set this to the directory containing the headers.  This value
+should match the value of the @code{SYSTEM_INCLUDE_DIR} macro.
 
 @findex SPECS
 @item SPECS

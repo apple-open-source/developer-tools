@@ -1,4 +1,3 @@
-/* APPLE LOCAL file mainline */
 /* Bail out gracefully if attempting to derive from a class that has only been
    forward-declared (via @class).  Conversely, @compatibility_alias declarations
    should be traversed to find the @interface.  */

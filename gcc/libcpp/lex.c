@@ -1,5 +1,5 @@
 /* CPP Library - lexical analysis.
-   Copyright (C) 2000, 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
    Contributed by Per Bothner, 1994-95.
    Based on CCCP program by Paul Rubin, June 1986
    Adapted to ANSI C, Richard Stallman, Jan 1987
@@ -17,7 +17,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #include "config.h"
 #include "system.h"
@@ -27,7 +27,7 @@ Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 /* APPLE LOCAL begin CW asm blocks */
 /* A hack that would be better done with a callback or some such.  */
 extern enum iasm_states { iasm_none, iasm_decls, iasm_asm } iasm_state;
-extern int iasm_in_operands;
+extern bool iasm_in_operands;
 /* APPLE LOCAL end CW asm blocks */
 
 enum spell_type
@@ -59,8 +59,6 @@ static const struct token_spelling token_spellings[N_TTYPES] = { TTYPE_TABLE };
 static void add_line_note (cpp_buffer *, const uchar *, unsigned int);
 static int skip_line_comment (cpp_reader *);
 static void skip_whitespace (cpp_reader *, cppchar_t);
-/* APPLE LOCAL mainline UCNs 2005-04-17 3892809 */
-/* Delete prototypes for lex_identifier, lex_number, forms_identifier_p */
 static void lex_string (cpp_reader *, cpp_token *, const uchar *);
 static void save_comment (cpp_reader *, cpp_token *, const uchar *, cppchar_t);
 static void create_literal (cpp_reader *, cpp_token *, const uchar *,
@@ -94,8 +92,8 @@ add_line_note (cpp_buffer *buffer, const uchar *pos, unsigned int type)
   if (buffer->notes_used == buffer->notes_cap)
     {
       buffer->notes_cap = buffer->notes_cap * 2 + 200;
-      buffer->notes = xrealloc (buffer->notes,
-				buffer->notes_cap * sizeof (_cpp_line_note));
+      buffer->notes = XRESIZEVEC (_cpp_line_note, buffer->notes,
+                                  buffer->notes_cap);
     }
 
   buffer->notes[buffer->notes_used].pos = pos;
@@ -436,7 +434,6 @@ name_p (cpp_reader *pfile, const cpp_string *string)
   return 1;
 }
 
-/* APPLE LOCAL begin mainline UCNs 2005-04-17 3892809 */
 /* After parsing an identifier or other sequence, produce a warning about
    sequences not in NFC/NFKC.  */
 static void
@@ -449,7 +446,7 @@ warn_about_normalization (cpp_reader *pfile,
     {
       /* Make sure that the token is printed using UCNs, even
 	 if we'd otherwise happily print UTF-8.  */
-      unsigned char *buf = xmalloc (cpp_token_len (token));
+      unsigned char *buf = XNEWVEC (unsigned char, cpp_token_len (token));
       size_t sz;
 
       sz = cpp_spell_token (pfile, token, buf, false) - buf;
@@ -461,15 +458,12 @@ warn_about_normalization (cpp_reader *pfile,
 			     "`%.*s' is not in NFC", (int) sz, buf);
     }
 }
-/* APPLE LOCAL end mainline UCNs 2005-04-17 3892809 */
 
 /* Returns TRUE if the sequence starting at buffer->cur is invalid in
    an identifier.  FIRST is TRUE if this starts an identifier.  */
 static bool
-/* APPLE LOCAL begin mainline UCNs 2005-04-17 3892809 */
 forms_identifier_p (cpp_reader *pfile, int first,
 		    struct normalize_state *state)
-/* APPLE LOCAL end mainline UCNs 2005-04-17 3892809 */
 {
   cpp_buffer *buffer = pfile->buffer;
 
@@ -489,8 +483,7 @@ forms_identifier_p (cpp_reader *pfile, int first,
     }
 
   /* Is this a syntactically valid UCN?  */
-  /* APPLE LOCAL begin mainline UCNs 2005-04-17 3892809 */
-  if ((CPP_OPTION (pfile, cplusplus) || CPP_OPTION (pfile, c99))
+  if (CPP_OPTION (pfile, extended_identifiers)
       && *buffer->cur == '\\'
       && (buffer->cur[1] == 'u' || buffer->cur[1] == 'U'))
     {
@@ -500,7 +493,6 @@ forms_identifier_p (cpp_reader *pfile, int first,
 	return true;
       buffer->cur -= 2;
     }
-  /* APPLE LOCAL end mainline UCNs 2005-04-17 3892809 */
 
   /* APPLE LOCAL begin CW asm blocks */
   /* Allow [.+-] in CW asm opcodes (PowerPC specific).  Do this here
@@ -518,7 +510,6 @@ forms_identifier_p (cpp_reader *pfile, int first,
 }
 
 /* Lex an identifier starting at BUFFER->CUR - 1.  */
-/* APPLE LOCAL begin mainline UCNs 2005-04-17 3892809 */
 static cpp_hashnode *
 lex_identifier (cpp_reader *pfile, const uchar *base, bool starts_ucn,
 		struct normalize_state *nst)
@@ -558,7 +549,6 @@ lex_identifier (cpp_reader *pfile, const uchar *base, bool starts_ucn,
 	ht_lookup_with_hash (pfile->hash_table, base, len, hash, HT_ALLOC);
     }
 
-/* APPLE LOCAL end mainline UCNs 2005-04-17 3892809 */
   /* Rarely, identifiers require diagnostics when lexed.  */
   if (__builtin_expect ((result->flags & NODE_DIAGNOSTIC)
 			&& !pfile->state.skipping, 0))
@@ -582,17 +572,14 @@ lex_identifier (cpp_reader *pfile, const uchar *base, bool starts_ucn,
 
 /* Lex a number to NUMBER starting at BUFFER->CUR - 1.  */
 static void
-/* APPLE LOCAL begin mainline UCNs 2005-04-17 3892809 */
 lex_number (cpp_reader *pfile, cpp_string *number,
 	    struct normalize_state *nst)
-/* APPLE LOCAL end mainline UCNs 2005-04-17 3892809 */
 {
   const uchar *cur;
   const uchar *base;
   uchar *dest;
 
   base = pfile->buffer->cur - 1;
-/* APPLE LOCAL begin mainline UCNs 2005-04-17 3892809 */
   do
     {
       cur = pfile->buffer->cur;
@@ -607,7 +594,6 @@ lex_number (cpp_reader *pfile, cpp_string *number,
       pfile->buffer->cur = cur;
     }
   while (forms_identifier_p (pfile, false, nst));
-/* APPLE LOCAL end mainline UCNs 2005-04-17 3892809 */
 
   number->len = cur - base;
   dest = _cpp_unaligned_alloc (pfile, number->len + 1);
@@ -678,6 +664,15 @@ lex_string (cpp_reader *pfile, cpp_token *token, const uchar *base)
   if (saw_NUL && !pfile->state.skipping)
     cpp_error (pfile, CPP_DL_WARNING,
 	       "null character(s) preserved in literal");
+
+  /* APPLE LOCAL begin #error with unmatched quotes 5607574 */
+  if (type == CPP_OTHER
+      && CPP_OPTION (pfile, lang) != CLK_ASM
+      && !pfile->state.in_diagnostic
+      && !pfile->state.skipping)
+  /* APPLE LOCAL end #error with unmatched quotes 5607574 */
+    cpp_error (pfile, CPP_DL_PEDWARN, "missing terminating %c character",
+	       (int) terminator);
 
   pfile->buffer->cur = cur;
   create_literal (pfile, token, base, cur - base, type);
@@ -900,29 +895,28 @@ _cpp_lex_token (cpp_reader *pfile)
 	      /* 6.10.3 p 11: Directives in a list of macro arguments
 		 gives undefined behavior.  This implementation
 		 handles the directive as normal.  */
-	      && pfile->state.parsing_args != 1
-	      && _cpp_handle_directive (pfile, result->flags & PREV_WHITE))
+	      && pfile->state.parsing_args != 1)
 	    {
-	      if (pfile->directive_result.type == CPP_PADDING)
-		continue;
-	      else
+	      if (_cpp_handle_directive (pfile, result->flags & PREV_WHITE))
 		{
+		  if (pfile->directive_result.type == CPP_PADDING)
+		    continue;
 		  result = &pfile->directive_result;
-
 		  /* APPLE LOCAL begin CW asm blocks C++ */
 		  /* We put this back on the result.  */
 		  result->flags |= BOL;
 		  /* APPLE LOCAL end CW asm blocks C++ */
-		  break;
 		}
 	    }
+	  else if (pfile->state.in_deferred_pragma)
+	    result = &pfile->directive_result;
 
 	  if (pfile->cb.line_change && !pfile->state.skipping)
 	    pfile->cb.line_change (pfile, result, pfile->state.parsing_args);
 	}
 
       /* We don't skip tokens in directives.  */
-      if (pfile->state.in_directive)
+      if (pfile->state.in_directive || pfile->state.in_deferred_pragma)
 	break;
 
       /* Outside a directive, invalidate controlling macros.  At file
@@ -1031,6 +1025,14 @@ _cpp_lex_direct (cpp_reader *pfile)
   buffer = pfile->buffer;
   if (buffer->need_line)
     {
+      if (pfile->state.in_deferred_pragma)
+	{
+	  result->type = CPP_PRAGMA_EOL;
+	  pfile->state.in_deferred_pragma = false;
+	  if (!pfile->state.pragma_allow_expansion)
+	    pfile->state.prevent_expansion--;
+	  return result;
+	}
       if (!_cpp_get_fresh_line (pfile))
 	{
 	  result->type = CPP_EOF;
@@ -1089,7 +1091,6 @@ _cpp_lex_direct (cpp_reader *pfile)
       if (iasm_label_follows)
 	goto start_ident;
       /* APPLE LOCAL end CW asm blocks */
-      /* APPLE LOCAL begin mainline UCNs 2005-04-17 3892809 */
       {
 	struct normalize_state nst = INITIAL_NORMALIZE_STATE;
 	result->type = CPP_NUMBER;
@@ -1097,7 +1098,6 @@ _cpp_lex_direct (cpp_reader *pfile)
 	warn_about_normalization (pfile, result, &nst);
 	break;
       }
-      /* APPLE LOCAL end mainline UCNs 2005-04-17 3892809 */
 
     case 'L':
       /* 'L' may introduce wide characters or strings.  */
@@ -1122,20 +1122,18 @@ _cpp_lex_direct (cpp_reader *pfile)
     case 'S': case 'T': case 'U': case 'V': case 'W': case 'X':
     case 'Y': case 'Z':
       result->type = CPP_NAME;
-      /* APPLE LOCAL begin mainline UCNs 2005-04-17 3892809 */
       {
 	struct normalize_state nst = INITIAL_NORMALIZE_STATE;
 	result->val.node = lex_identifier (pfile, buffer->cur - 1, false,
 					   &nst);
 	warn_about_normalization (pfile, result, &nst);
       }
-      /* APPLE LOCAL end mainline UCNs 2005-04-17 3892809 */
 
       /* Convert named operators to their proper types.  */
       if (result->val.node->flags & NODE_OPERATOR)
 	{
 	  result->flags |= NAMED_OP;
-	  result->type = result->val.node->directive_index;
+	  result->type = (enum cpp_ttype) result->val.node->directive_index;
 	}
       /* APPLE LOCAL begin CW asm blocks */
       /* Got an identifier, reset the CW asm label hack flag.  */
@@ -1213,11 +1211,6 @@ _cpp_lex_direct (cpp_reader *pfile)
 	  buffer->cur++;
 	  IF_NEXT_IS ('=', CPP_LSHIFT_EQ, CPP_LSHIFT);
 	}
-      else if (*buffer->cur == '?' && CPP_OPTION (pfile, cplusplus))
-	{
-	  buffer->cur++;
-	  IF_NEXT_IS ('=', CPP_MIN_EQ, CPP_MIN);
-	}
       else if (CPP_OPTION (pfile, digraphs))
 	{
 	  if (*buffer->cur == ':')
@@ -1243,11 +1236,6 @@ _cpp_lex_direct (cpp_reader *pfile)
 	{
 	  buffer->cur++;
 	  IF_NEXT_IS ('=', CPP_RSHIFT_EQ, CPP_RSHIFT);
-	}
-      else if (*buffer->cur == '?' && CPP_OPTION (pfile, cplusplus))
-	{
-	  buffer->cur++;
-	  IF_NEXT_IS ('=', CPP_MAX_EQ, CPP_MAX);
 	}
       break;
 
@@ -1278,12 +1266,10 @@ _cpp_lex_direct (cpp_reader *pfile)
       result->type = CPP_DOT;
       if (ISDIGIT (*buffer->cur))
 	{
-	  /* APPLE LOCAL begin mainline UCNs 2005-04-17 3892809 */
 	  struct normalize_state nst = INITIAL_NORMALIZE_STATE;
 	  result->type = CPP_NUMBER;
 	  lex_number (pfile, &result->val.str, &nst);
 	  warn_about_normalization (pfile, result, &nst);
-	  /* APPLE LOCAL end mainline UCNs 2005-04-17 3892809 */
 	}
       else if (*buffer->cur == '.' && buffer->cur[1] == '.')
 	buffer->cur += 2, result->type = CPP_ELLIPSIS;
@@ -1380,7 +1366,6 @@ _cpp_lex_direct (cpp_reader *pfile)
     case '\\':
       {
 	const uchar *base = --buffer->cur;
-	/* APPLE LOCAL begin mainline UCNs 2005-04-17 3892809 */
 	struct normalize_state nst = INITIAL_NORMALIZE_STATE;
 
 	if (forms_identifier_p (pfile, true, &nst))
@@ -1390,7 +1375,6 @@ _cpp_lex_direct (cpp_reader *pfile)
 	    warn_about_normalization (pfile, result, &nst);
 	    break;
 	  }
-	/* APPLE LOCAL end mainline UCNs 2005-04-17 3892809 */
 	buffer->cur++;
       }
 
@@ -1413,14 +1397,12 @@ cpp_token_len (const cpp_token *token)
     {
     default:		len = 4;				break;
     case SPELL_LITERAL:	len = token->val.str.len;		break;
-      /* APPLE LOCAL mainline UCNs 2005-04-17 3892809 */
     case SPELL_IDENT:	len = NODE_LEN (token->val.node) * 10;	break;
     }
 
   return len;
 }
 
-/* APPLE LOCAL begin mainline UCNs 2005-04-17 3892809 */
 /* Parse UTF-8 out of NAMEP and place a \U escape in BUFFER.
    Return the number of bytes read out of NAME.  (There are always
    10 bytes written to BUFFER.)  */
@@ -1465,7 +1447,6 @@ utf8_to_ucn (unsigned char *buffer, const unsigned char *name)
 unsigned char *
 cpp_spell_token (cpp_reader *pfile, const cpp_token *token,
 		 unsigned char *buffer, bool forstring)
-/* APPLE LOCAL end mainline UCNs 2005-04-17 3892809 */
 {
   switch (TOKEN_SPELL (token))
     {
@@ -1489,7 +1470,6 @@ cpp_spell_token (cpp_reader *pfile, const cpp_token *token,
 
     spell_ident:
     case SPELL_IDENT:
-/* APPLE LOCAL begin mainline UCNs 2005-04-17 3892809 */
       if (forstring)
 	{
 	  memcpy (buffer, NODE_NAME (token->val.node),
@@ -1510,7 +1490,6 @@ cpp_spell_token (cpp_reader *pfile, const cpp_token *token,
 	    else
 	      *buffer++ = NODE_NAME (token->val.node)[i];
 	}
-/* APPLE LOCAL end mainline UCNs 2005-04-17 3892809 */
       break;
 
     case SPELL_LITERAL:
@@ -1535,7 +1514,6 @@ cpp_token_as_text (cpp_reader *pfile, const cpp_token *token)
   unsigned int len = cpp_token_len (token) + 1;
   unsigned char *start = _cpp_unaligned_alloc (pfile, len), *end;
 
-/* APPLE LOCAL mainline UCNs 2005-04-17 3892809 */
   end = cpp_spell_token (pfile, token, start, false);
   end[0] = '\0';
 
@@ -1580,7 +1558,6 @@ cpp_output_token (const cpp_token *token, FILE *fp)
 
     spell_ident:
     case SPELL_IDENT:
-/* APPLE LOCAL begin mainline UCNs 2005-04-17 3892809 */
       {
 	size_t i;
 	const unsigned char * name = NODE_NAME (token->val.node);
@@ -1597,7 +1574,6 @@ cpp_output_token (const cpp_token *token, FILE *fp)
       }
       break;
 
-/* APPLE LOCAL end mainline UCNs 2005-04-17 3892809 */
     case SPELL_LITERAL:
       fwrite (token->val.str.text, 1, token->val.str.len, fp);
       break;
@@ -1659,8 +1635,8 @@ cpp_avoid_paste (cpp_reader *pfile, const cpp_token *token1,
 
   switch (a)
     {
-    case CPP_GREATER:	return c == '>' || c == '?';
-    case CPP_LESS:	return c == '<' || c == '?' || c == '%' || c == ':';
+    case CPP_GREATER:	return c == '>';
+    case CPP_LESS:	return c == '<' || c == '%' || c == ':';
     case CPP_PLUS:	return c == '+';
     case CPP_MINUS:	return c == '-' || c == '>';
     case CPP_DIV:	return c == '/' || c == '*'; /* Comments.  */
@@ -1736,7 +1712,7 @@ new_buff (size_t len)
     len = MIN_BUFF_SIZE;
   len = CPP_ALIGN (len);
 
-  base = xmalloc (len + sizeof (_cpp_buff));
+  base = XNEWVEC (unsigned char, len + sizeof (_cpp_buff));
   result = (_cpp_buff *) (base + len);
   result->base = base;
   result->cur = base;
@@ -1892,7 +1868,7 @@ cpp_token_val_index (cpp_token *tok)
       else if (tok->type == CPP_PADDING)
 	return CPP_TOKEN_FLD_SOURCE;
       else if (tok->type == CPP_PRAGMA)
-	return CPP_TOKEN_FLD_STR;
+	return CPP_TOKEN_FLD_PRAGMA;
       /* else fall through */
     default:
       return CPP_TOKEN_FLD_NONE;

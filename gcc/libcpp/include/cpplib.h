@@ -16,7 +16,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
  In other words, you are welcome to use, share and improve this program.
  You are forbidden to forbid anyone else to use, share and improve
@@ -51,7 +51,10 @@ struct _cpp_file;
 
    The first group, to CPP_LAST_EQ, can be immediately followed by an
    '='.  The lexer needs operators ending in '=', like ">>=", to be in
-   the same order as their counterparts without the '=', like ">>".  */
+   the same order as their counterparts without the '=', like ">>".
+
+   See the cpp_operator table optab in expr.c if you change the order or
+   add or remove anything in the first group.  */
 
 #define TTYPE_TABLE							\
   OP(EQ,		"=")						\
@@ -68,8 +71,6 @@ struct _cpp_file;
   OP(XOR,		"^")						\
   OP(RSHIFT,		">>")						\
   OP(LSHIFT,		"<<")						\
-  OP(MIN,		"<?")	/* extension */				\
-  OP(MAX,		">?")						\
 									\
   OP(COMPL,		"~")						\
   OP(AND_AND,		"&&")	/* logical */				\
@@ -97,8 +98,6 @@ struct _cpp_file;
   OP(XOR_EQ,		"^=")						\
   OP(RSHIFT_EQ,		">>=")						\
   OP(LSHIFT_EQ,		"<<=")						\
-  OP(MIN_EQ,		"<?=")	/* extension */				\
-  OP(MAX_EQ,		">?=")						\
   /* Digraphs together, beginning with CPP_FIRST_DIGRAPH.  */		\
   OP(HASH,		"#")	/* digraphs */				\
   OP(PASTE,		"##")						\
@@ -140,7 +139,8 @@ struct _cpp_file;
   TK(COMMENT,		LITERAL) /* Only if output comments.  */	\
 				 /* SPELL_LITERAL happens to DTRT.  */	\
   TK(MACRO_ARG,		NONE)	 /* Macro argument.  */			\
-  TK(PRAGMA,		NONE)	 /* Only if deferring pragmas */	\
+  TK(PRAGMA,		NONE)	 /* Only for deferred pragmas.  */	\
+  TK(PRAGMA_EOL,	NONE)	 /* End-of-line for deferred pragmas.  */ \
   /* APPLE LOCAL begin 4137741 */                                       \
   TK(BINCL,            NONE)    /* File begin */                        \
   TK(EINCL,            NONE)    /* File end */                          \
@@ -155,9 +155,9 @@ enum cpp_ttype
   N_TTYPES,
 
   /* Positions in the table.  */
-  CPP_LAST_EQ        = CPP_MAX,
+  CPP_LAST_EQ        = CPP_LSHIFT,
   CPP_FIRST_DIGRAPH  = CPP_HASH,
-  CPP_LAST_PUNCTUATOR= CPP_DOT_STAR,
+  CPP_LAST_PUNCTUATOR= CPP_ATSIGN,
   CPP_LAST_CPP_OP    = CPP_LESS_EQ
 };
 #undef OP
@@ -182,6 +182,12 @@ struct cpp_string GTY(())
 #define NAMED_OP	(1 << 4) /* C++ named operators.  */
 #define NO_EXPAND	(1 << 5) /* Do not macro-expand this token.  */
 #define BOL		(1 << 6) /* Token at beginning of line.  */
+#define PURE_ZERO	(1 << 7) /* Single 0 digit, used by the C++ frontend,
+				    set in c-lex.c.  */
+/* APPLE LOCAL begin CW asm blocks C++ comments 6338079 */
+#define ERROR_DEFERRED  PURE_ZERO/* Set when an invalid suffix error is
+				    deferred out of cpp.  */
+/* APPLE LOCAL end CW asm blocks C++ comments 6338079 */
 
 /* Specify which field, if any, of the cpp_token union is used.  */
 
@@ -190,6 +196,7 @@ enum cpp_token_fld_kind {
   CPP_TOKEN_FLD_SOURCE,
   CPP_TOKEN_FLD_STR,
   CPP_TOKEN_FLD_ARG_NO,
+  CPP_TOKEN_FLD_PRAGMA,
   CPP_TOKEN_FLD_NONE
 };
 
@@ -219,6 +226,9 @@ struct cpp_token GTY(())
 
     /* Argument no. for a CPP_MACRO_ARG.  */
     unsigned int GTY ((tag ("CPP_TOKEN_FLD_ARG_NO"))) arg_no;
+
+    /* Caller-supplied identifier for a CPP_PRAGMA.  */
+    unsigned int GTY ((tag ("CPP_TOKEN_FLD_PRAGMA"))) pragma;
   } GTY ((desc ("cpp_token_val_index (&%1)"))) val;
 };
 
@@ -246,7 +256,6 @@ typedef CPPCHAR_SIGNED_T cppchar_signed_t;
 /* Style of header dependencies to generate.  */
 enum cpp_deps_style { DEPS_NONE = 0, DEPS_USER, DEPS_SYSTEM };
 
-/* APPLE LOCAL begin mainline UCNs 2005-04-17 3892809 */
 /* The possible normalization levels, from most restrictive to least.  */
 enum cpp_normalize_level {
   /* In NFKC.  */
@@ -259,7 +268,6 @@ enum cpp_normalize_level {
   /* Not normalized at all.  */
   normalized_none
 };
-/* APPLE LOCAL end mainline UCNs 2005-04-17 3892809 */
 
 /* This structure is nested inside struct cpp_reader, and
    carries all the options visible to the command line.  */
@@ -389,6 +397,9 @@ struct cpp_options
   /* Zero means dollar signs are punctuation.  */
   unsigned char dollars_in_ident;
 
+  /* Nonzero means UCNs are accepted in identifiers.  */
+  unsigned char extended_identifiers;
+
   /* True if we should warn about dollars in identifiers or numbers
      for this translation unit.  */
   unsigned char warn_dollars;
@@ -435,11 +446,9 @@ struct cpp_options
   /* Holds the name of the input character set.  */
   const char *input_charset;
 
-/* APPLE LOCAL begin mainline UCNs 2005-04-17 3892809 */
   /* The minimum permitted level of normalization before a warning
      is generated.  */
   enum cpp_normalize_level warn_normalize;
-/* APPLE LOCAL end mainline UCNs 2005-04-17 3892809 */
 
   /* True to warn about precompiled header files we couldn't use.  */
   bool warn_invalid_pch;
@@ -494,9 +503,8 @@ struct cpp_options
   /* Nonzero means __STDC__ should have the value 0 in system headers.  */
   unsigned char stdc_0_in_system_headers;
 
-  /* True means return pragmas as tokens rather than processing
-     them directly. */
-  bool defer_pragmas;
+  /* True means error callback should be used for diagnostics.  */
+  bool client_diagnostic;
   /* APPLE LOCAL begin 4137741 */
 
   /* True means return special CPP_BINCL and CPP_EINCL tokens instead
@@ -527,7 +535,7 @@ struct cpp_callbacks
 
   void (*dir_change) (cpp_reader *, const char *);
   void (*include) (cpp_reader *, unsigned int, const unsigned char *,
-		   const char *, int);
+		   const char *, int, const cpp_token **);
   void (*define) (cpp_reader *, unsigned int, cpp_hashnode *);
   void (*undef) (cpp_reader *, unsigned int, cpp_hashnode *);
   void (*ident) (cpp_reader *, unsigned int, const cpp_string *);
@@ -550,6 +558,11 @@ struct cpp_callbacks
      be expanded.  */
   cpp_hashnode * (*macro_to_expand) (cpp_reader *, const cpp_token *);
   /* APPLE LOCAL end AltiVec */
+
+  /* Called to emit a diagnostic if client_diagnostic option is true.
+     This callback receives the translated message.  */
+  void (*error) (cpp_reader *, int, const char *, va_list *)
+       ATTRIBUTE_FPTR_PRINTF(3,0);
 };
 
 /* Chain of directories to look for include files in.  */
@@ -636,7 +649,8 @@ enum builtin_type
   BT_INCLUDE_LEVEL,		/* `__INCLUDE_LEVEL__' */
   BT_TIME,			/* `__TIME__' */
   BT_STDC,			/* `__STDC__' */
-  BT_PRAGMA			/* `_Pragma' operator */
+  BT_PRAGMA,			/* `_Pragma' operator */
+  BT_TIMESTAMP			/* `__TIMESTAMP__' */
 };
 
 #define CPP_HASHNODE(HNODE)	((cpp_hashnode *) (HNODE))
@@ -664,6 +678,19 @@ enum {
 /* The common part of an identifier node shared amongst all 3 C front
    ends.  Also used to store CPP identifiers, which are a superset of
    identifiers in the grammatical sense.  */
+
+union _cpp_hashnode_value GTY(())
+{
+  /* If a macro.  */
+  cpp_macro * GTY((tag ("NTV_MACRO"))) macro;
+  /* Answers to an assertion.  */
+  struct answer * GTY ((tag ("NTV_ANSWER"))) answers;
+  /* Code for a builtin macro.  */
+  enum builtin_type GTY ((tag ("NTV_BUILTIN"))) builtin;
+  /* Macro argument index.  */
+  unsigned short GTY ((tag ("NTV_ARGUMENT"))) arg_index;
+};
+
 struct cpp_hashnode GTY(())
 {
   struct ht_identifier ident;
@@ -675,17 +702,7 @@ struct cpp_hashnode GTY(())
   ENUM_BITFIELD(node_type) type : 8;	/* CPP node type.  */
   unsigned char flags;			/* CPP flags.  */
 
-  union _cpp_hashnode_value
-  {
-    /* If a macro.  */
-    cpp_macro * GTY((tag ("NTV_MACRO"))) macro;
-    /* Answers to an assertion.  */
-    struct answer * GTY ((tag ("NTV_ANSWER"))) answers;
-    /* Code for a builtin macro.  */
-    enum builtin_type GTY ((tag ("NTV_BUILTIN"))) builtin;
-    /* Macro argument index.  */
-    unsigned short GTY ((tag ("NTV_ARGUMENT"))) arg_index;
-  } GTY ((desc ("CPP_HASHNODE_VALUE_IDX (%1)"))) value;
+  union _cpp_hashnode_value GTY ((desc ("CPP_HASHNODE_VALUE_IDX (%1)"))) value;
 };
 
 /* APPLE LOCAL begin Symbol Separation */
@@ -763,11 +780,11 @@ extern unsigned int cpp_errors (cpp_reader *);
 extern unsigned int cpp_token_len (const cpp_token *);
 extern unsigned char *cpp_token_as_text (cpp_reader *, const cpp_token *);
 extern unsigned char *cpp_spell_token (cpp_reader *, const cpp_token *,
-  /* APPLE LOCAL mainline UCNs 2005-04-17 3892809 */
 				       unsigned char *, bool);
 extern void cpp_register_pragma (cpp_reader *, const char *, const char *,
 				 void (*) (cpp_reader *), bool);
-extern void cpp_handle_deferred_pragma (cpp_reader *, const cpp_string *);
+extern void cpp_register_deferred_pragma (cpp_reader *, const char *,
+					  const char *, unsigned, bool, bool);
 extern int cpp_avoid_paste (cpp_reader *, const cpp_token *,
 			    const cpp_token *);
 extern const cpp_token *cpp_get_token (cpp_reader *);
@@ -845,10 +862,14 @@ struct cpp_num
 
 #define CPP_N_UNSIGNED	0x1000	/* Properties.  */
 #define CPP_N_IMAGINARY	0x2000
+#define CPP_N_DFLOAT	0x4000
+/* APPLE LOCAL CW asm blocks C++ comments 6338079 */
+#define CPP_N_DEFER	0x8000
 
 /* Classify a CPP_NUMBER token.  The return value is a combination of
    the flags from the above sets.  */
-extern unsigned cpp_classify_number (cpp_reader *, const cpp_token *);
+/* APPLE LOCAL CW asm blocks C++ comments 6338079 */
+extern unsigned cpp_classify_number (cpp_reader *, const cpp_token *, int);
 
 /* Evaluate a token classified as category CPP_N_INTEGER.  */
 extern cpp_num cpp_interpret_integer (cpp_reader *, const cpp_token *,
@@ -894,34 +915,31 @@ extern void cpp_error_with_line (cpp_reader *, int, source_location, unsigned,
 				 const char *msgid, ...) ATTRIBUTE_PRINTF_5;
 
 /* APPLE LOCAL begin headermaps 3871393 */
+#include <stdint.h>
+
 #define HMAP_SAME_ENDIANNESS_MAGIC      (((((('h' << 8) | 'm') << 8) | 'a') << 8) | 'p')
 #define HMAP_OPPOSITE_ENDIANNESS_MAGIC  (((((('p' << 8) | 'a') << 8) | 'm') << 8) | 'h')
 
 #define HMAP_NOT_A_KEY   0x00000000
 
-#if !defined(uint32)
-typedef unsigned short  uint16;
-typedef unsigned long   uint32;
-#endif
-
 struct hmap_bucket
 {
-  uint32 key;          /* Offset (into strings) of key                */
+  uint32_t key;        /* Offset (into strings) of key                */
   struct {
-    uint32 prefix;     /* Offset (into strings) of value prefix   */
-    uint32 suffix;     /* Offset (into strings) of value suffix   */
+    uint32_t prefix;   /* Offset (into strings) of value prefix   */
+    uint32_t suffix;   /* Offset (into strings) of value suffix   */
   } value;             /* Value (prefix- and suffix-strings)          */
 };
 
 struct hmap_header_map
 {
-  uint32 magic;             /* Magic word, also indicates byte order       */
-  uint16 version;           /* Version number -- currently 1               */
-  uint16 _reserved;         /* Reserved for future use -- zero for now     */
-  uint32 strings_offset;    /* Offset to start of string pool              */
-  uint32 count;             /* Number of entries in the string table       */
-  uint32 capacity;          /* Number of buckets (always a power of 2)     */
-  uint32 max_value_length;  /* Length of longest result path (excl. '\0')  */
+  uint32_t magic;                /* Magic word, also indicates byte order       */
+  uint16_t version;              /* Version number -- currently 1               */
+  uint16_t _reserved;            /* Reserved for future use -- zero for now     */
+  uint32_t strings_offset;       /* Offset to start of string pool              */
+  uint32_t count;                /* Number of entries in the string table       */
+  uint32_t capacity;             /* Number of buckets (always a power of 2)     */
+  uint32_t max_value_length;     /* Length of longest result path (excl. '\0')  */
   struct hmap_bucket buckets[1]; /* Inline array of 'capacity' maptable buckets */
   /* Strings follow the buckets, at strings_offset.  */
 };

@@ -6,7 +6,7 @@
    posted to GCC-patches
    http://gcc.gnu.org/ml/gcc-patches/2000-08/msg00577.html */
 
-/* { dg-do run { target *-*-interix* *-*-mingw* *-*-cygwin* i?86-*-darwin } } */
+/* { dg-do run { target *-*-interix* *-*-mingw* *-*-cygwin* i?86-*-darwin arm*-*-darwin*} } */
 /* { dg-options "-mno-ms-bitfields" } */
 
 #include <stddef.h>
@@ -178,6 +178,29 @@ int main(){
 
 #else /* testing -mno-ms-bitfields */
 
+#ifdef __arm__
+  size_t exp_sizeof_one = 8;
+  size_t exp_sizeof_two = 8;
+  size_t exp_sizeof_three = 6;
+  size_t exp_sizeof_four = 8;
+  size_t exp_sizeof_five = 8;
+  size_t exp_sizeof_six = 8;
+  size_t exp_sizeof_seven = 8;
+  size_t exp_sizeof_eight = 2;
+  size_t exp_sizeof_nine = 1;
+  size_t exp_sizeof_ten = 2;
+
+  unsigned short exp_one_c = 6;
+  unsigned int exp_two_c  = 6;
+  unsigned char exp_three_c = 64;
+  unsigned char exp_four_c = 4;
+  char exp_five_c = 5;
+  char exp_six_c = 5;
+  char exp_seven_c = 5;
+  char exp_eight_c = 1;
+  char exp_nine_c = 0;
+  char exp_ten_c = 1;
+#else
   size_t exp_sizeof_one = 8;
   size_t exp_sizeof_two = 8;
   size_t exp_sizeof_three = 6;
@@ -199,7 +222,7 @@ int main(){
   char exp_eight_c = 1;
   char exp_nine_c = 0;
   char exp_ten_c = 1;
-
+#endif
 #endif
 
   unsigned char i;

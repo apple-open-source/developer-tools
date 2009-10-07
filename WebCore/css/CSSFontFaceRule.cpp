@@ -1,9 +1,7 @@
-/**
- * This file is part of the DOM implementation for KDE.
- *
+/*
  * (C) 1999-2003 Lars Knoll (knoll@kde.org)
  * (C) 2002-2003 Dirk Mueller (mueller@kde.org)
- * Copyright (C) 2002, 2005, 2006 Apple Computer, Inc.
+ * Copyright (C) 2002, 2005, 2006, 2008 Apple Inc. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -28,7 +26,7 @@
 
 namespace WebCore {
 
-CSSFontFaceRule::CSSFontFaceRule(StyleBase* parent)
+CSSFontFaceRule::CSSFontFaceRule(CSSStyleSheet* parent)
     : CSSRule(parent)
 {
 }
@@ -37,10 +35,24 @@ CSSFontFaceRule::~CSSFontFaceRule()
 {
 }
 
+void CSSFontFaceRule::setDeclaration(PassRefPtr<CSSMutableStyleDeclaration> style)
+{
+    m_style = style;
+}
+
 String CSSFontFaceRule::cssText() const
 {
-    // FIXME: Implement!
-    return String();
+    String result("@font-face");
+    result += " { ";
+    result += m_style->cssText();
+    result += "}";
+    return result;
+}
+
+void CSSFontFaceRule::addSubresourceStyleURLs(ListHashSet<KURL>& urls)
+{
+    if (m_style)
+        m_style->addSubresourceStyleURLs(urls);
 }
 
 } // namespace WebCore

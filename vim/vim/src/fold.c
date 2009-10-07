@@ -48,7 +48,7 @@ static int checkCloseRec __ARGS((garray_T *gap, linenr_T lnum, int level));
 static int foldFind __ARGS((garray_T *gap, linenr_T lnum, fold_T **fpp));
 static int foldLevelWin __ARGS((win_T *wp, linenr_T lnum));
 static void checkupdate __ARGS((win_T *wp));
-static void setFoldRepeat __ARGS((linenr_T lnum, long count, int open));
+static void setFoldRepeat __ARGS((linenr_T lnum, long count, int do_open));
 static linenr_T setManualFold __ARGS((linenr_T lnum, int opening, int recurse, int *donep));
 static linenr_T setManualFoldWin __ARGS((win_T *wp, linenr_T lnum, int opening, int recurse, int *donep));
 static void foldOpenNested __ARGS((fold_T *fpr));
@@ -740,7 +740,7 @@ deleteFold(start, end, recursive, had_visual)
     garray_T	*found_ga;
     fold_T	*found_fp = NULL;
     linenr_T	found_off = 0;
-    int		use_level = FALSE;
+    int		use_level;
     int		maybe_small = FALSE;
     int		level = 0;
     linenr_T	lnum = start;
@@ -757,6 +757,7 @@ deleteFold(start, end, recursive, had_visual)
 	gap = &curwin->w_folds;
 	found_ga = NULL;
 	lnum_off = 0;
+	use_level = FALSE;
 	for (;;)
 	{
 	    if (!foldFind(gap, lnum - lnum_off, &fp))
@@ -783,20 +784,21 @@ deleteFold(start, end, recursive, had_visual)
 	else
 	{
 	    lnum = found_fp->fd_top + found_fp->fd_len + found_off;
-	    did_one = TRUE;
 
 	    if (foldmethodIsManual(curwin))
 		deleteFoldEntry(found_ga,
 		    (int)(found_fp - (fold_T *)found_ga->ga_data), recursive);
 	    else
 	    {
-		if (found_fp->fd_top + found_off < first_lnum)
-		    first_lnum = found_fp->fd_top;
-		if (lnum > last_lnum)
+		if (first_lnum > found_fp->fd_top + found_off)
+		    first_lnum = found_fp->fd_top + found_off;
+		if (last_lnum < lnum)
 		    last_lnum = lnum;
-		parseMarker(curwin);
+		if (!did_one)
+		    parseMarker(curwin);
 		deleteFoldMarkers(found_fp, recursive, found_off);
 	    }
+	    did_one = TRUE;
 
 	    /* redraw window */
 	    changed_window_setting();
@@ -811,6 +813,10 @@ deleteFold(start, end, recursive, had_visual)
 	    redraw_curbuf_later(INVERTED);
 #endif
     }
+    else
+	/* Deleting markers may make cursor column invalid. */
+	check_cursor_col();
+
     if (last_lnum > 0)
 	changed_lines(first_lnum, (colnr_T)0, last_lnum, 0L);
 }
@@ -858,7 +864,14 @@ foldUpdate(wp, top, bot)
 	    || foldmethodIsDiff(wp)
 #endif
 	    || foldmethodIsSyntax(wp))
+    {
+	int save_got_int = got_int;
+
+	/* reset got_int here, otherwise it won't work */
+	got_int = FALSE;
 	foldUpdateIEMS(wp, top, bot);
+	got_int |= save_got_int;
+    }
 }
 
 /* foldUpdateAll() {{{2 */
@@ -1234,10 +1247,10 @@ checkupdate(wp)
  * Repeat "count" times.
  */
     static void
-setFoldRepeat(lnum, count, open)
+setFoldRepeat(lnum, count, do_open)
     linenr_T	lnum;
     long	count;
-    int		open;
+    int		do_open;
 {
     int		done;
     long	n;
@@ -1245,7 +1258,7 @@ setFoldRepeat(lnum, count, open)
     for (n = 0; n < count; ++n)
     {
 	done = DONE_NOTHING;
-	(void)setManualFold(lnum, open, FALSE, &done);
+	(void)setManualFold(lnum, do_open, FALSE, &done);
 	if (!(done & DONE_ACTION))
 	{
 	    /* Only give an error message when no fold could be opened. */
@@ -2069,7 +2082,7 @@ foldtext_cleanup(str)
 	{
 	    while (vim_iswhite(s[len]))
 		++len;
-	    mch_memmove(s, s + len, STRLEN(s + len) + 1);
+	    STRMOVE(s, s + len);
 	}
 	else
 	{
@@ -2300,7 +2313,7 @@ foldUpdateIEMS(wp, top, bot)
 
     /* If some fold changed, need to redraw and position cursor. */
     if (fold_changed && wp->w_p_fen)
-	changed_window_setting();
+	changed_window_setting_win(wp);
 
     /* If we updated folds past "bot", need to redraw more lines.  Don't do
      * this in other situations, the changed lines will be redrawn anyway and
@@ -2334,7 +2347,7 @@ foldUpdateIEMS(wp, top, bot)
  * "flp->off" is the offset to the real line number in the buffer.
  *
  * All this would be a lot simpler if all folds in the range would be deleted
- * and then created again.  But we would loose all information about the
+ * and then created again.  But we would lose all information about the
  * folds, even when making changes that don't affect the folding (e.g. "vj~").
  *
  * Returns bot, which may have been increased for lines that also need to be
@@ -2669,6 +2682,7 @@ foldUpdateIEMSRecurse(gap, level, startlnum, flp, getlevel, bot, topflags)
     if (fp->fd_len < flp->lnum - fp->fd_top)
     {
 	fp->fd_len = flp->lnum - fp->fd_top;
+	fp->fd_small = MAYBE;
 	fold_changed = TRUE;
     }
 
@@ -2684,7 +2698,7 @@ foldUpdateIEMSRecurse(gap, level, startlnum, flp, getlevel, bot, topflags)
 	{
 	    if (fp->fd_top + fp->fd_len > bot + 1)
 	    {
-		/* fold coninued below bot */
+		/* fold continued below bot */
 		if (getlevel == foldlevelMarker
 			|| getlevel == foldlevelExpr
 			|| getlevel == foldlevelSyntax)
@@ -2834,7 +2848,7 @@ foldSplit(gap, i, top, bot)
  *	      3     5  6
  *
  * 1: not changed
- * 2: trunate to stop above "top"
+ * 2: truncate to stop above "top"
  * 3: split in two parts, one stops above "top", other starts below "bot".
  * 4: deleted
  * 5: made to start below "bot".
@@ -2900,8 +2914,8 @@ foldRemove(gap, top, bot)
 
 /* foldMerge() {{{2 */
 /*
- * Merge two adjecent folds (and the nested ones in them).
- * This only works correctly when the folds are really adjecent!  Thus "fp1"
+ * Merge two adjacent folds (and the nested ones in them).
+ * This only works correctly when the folds are really adjacent!  Thus "fp1"
  * must end just above "fp2".
  * The resulting fold is "fp1", nested folds are moved from "fp2" to "fp1".
  * Fold entry "fp2" in "gap" is deleted.
@@ -2971,7 +2985,11 @@ foldlevelIndent(flp)
     else
 	flp->lvl = get_indent_buf(buf, lnum) / buf->b_p_sw;
     if (flp->lvl > flp->wp->w_p_fdn)
+    {
 	flp->lvl = flp->wp->w_p_fdn;
+	if (flp->lvl < 0)
+	    flp->lvl = 0;
+    }
 }
 
 /* foldlevelDiff() {{{2 */

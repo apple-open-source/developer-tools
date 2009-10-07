@@ -19,13 +19,21 @@
 
 module core {
 
-    interface [GenerateConstructor] Text : CharacterData {
+    interface [
+        GenerateConstructor,
+        InterfaceUUID=4EA6B89C-F8E5-462a-A807-519446123184,
+        ImplementationUUID=CB5D61CB-D30D-486e-9BD7-F42B7611C2E5
+    ] Text : CharacterData {
 
         // DOM Level 1
 
         Text splitText(in [IsIndex] unsigned long offset)
             raises (DOMException);
 
+        // Introduced in DOM Level 3:
+        readonly attribute DOMString       wholeText;
+        Text               replaceWholeText(in DOMString content)
+                                            raises(DOMException);
     };
 
 }

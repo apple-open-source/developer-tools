@@ -618,22 +618,24 @@ static int create_process(apr_pool_t *p, HANDLE *child_proc, HANDLE *child_exit_
     /* These NEVER change for the lifetime of this parent
      */
     static char **args = NULL;
-    static char **env = NULL;
     static char pidbuf[28];
 
     apr_status_t rv;
     apr_pool_t *ptemp;
     apr_procattr_t *attr;
     apr_proc_t new_child;
+    apr_file_t *child_out, *child_err;
     HANDLE hExitEvent;
     HANDLE waitlist[2];  /* see waitlist_e */
     char *cmd;
     char *cwd;
+    char **env;
+    int envc;
 
     apr_pool_create_ex(&ptemp, p, NULL, NULL);
 
     /* Build the command line. Should look something like this:
-     * C:/apache/bin/apache.exe -f ap_server_confname
+     * C:/apache/bin/httpd.exe -f ap_server_confname
      * First, get the path to the executable...
      */
     apr_procattr_create(&attr, ptemp);
@@ -678,6 +680,23 @@ static int create_process(apr_pool_t *p, HANDLE *child_proc, HANDLE *child_exit_
         return -1;
     }
 
+    /* httpd-2.0/2.2 specific to work around apr_proc_create bugs */
+    /* set "NUL" as sysout for the child */
+    if (((rv = apr_file_open(&child_out, "NUL", APR_WRITE | APR_READ, APR_OS_DEFAULT,p)) 
+            != APR_SUCCESS) ||
+        ((rv = apr_procattr_child_out_set(attr, child_out, NULL))
+            != APR_SUCCESS)) {
+        ap_log_error(APLOG_MARK, APLOG_ERR, rv, ap_server_conf,
+                     "Parent: Could not set child process stdout");
+    }
+    if (((rv = apr_file_open_stderr(&child_err, p))
+            != APR_SUCCESS) ||
+        ((rv = apr_procattr_child_err_set(attr, child_err, NULL))
+            != APR_SUCCESS)) {
+        ap_log_error(APLOG_MARK, APLOG_ERR, rv, ap_server_conf,
+                     "Parent: Could not set child process stderr");
+    }
+
     /* Create the child_ready_event */
     waitlist[waitlist_ready] = CreateEvent(NULL, TRUE, FALSE, NULL);
     if (!waitlist[waitlist_ready]) {
@@ -697,21 +716,15 @@ static int create_process(apr_pool_t *p, HANDLE *child_proc, HANDLE *child_exit_
         return -1;
     }
 
-    if (!env)
-    {
-        /* Build the env array, only once since it won't change
-         * for the lifetime of this parent process.
-         */
-        int envc;
-        for (envc = 0; _environ[envc]; ++envc) {
-            ;
-        }
-        env = malloc((envc + 2) * sizeof (char*));
-        memcpy(env, _environ, envc * sizeof (char*));
-        apr_snprintf(pidbuf, sizeof(pidbuf), "AP_PARENT_PID=%i", parent_pid);
-        env[envc] = pidbuf;
-        env[envc + 1] = NULL;
+    /* Build the env array */
+    for (envc = 0; _environ[envc]; ++envc) {
+        ;
     }
+    env = apr_palloc(ptemp, (envc + 2) * sizeof (char*));  
+    memcpy(env, _environ, envc * sizeof (char*));
+    apr_snprintf(pidbuf, sizeof(pidbuf), "AP_PARENT_PID=%i", parent_pid);
+    env[envc] = pidbuf;
+    env[envc + 1] = NULL;
 
     rv = apr_proc_create(&new_child, cmd, args, env, attr, ptemp);
     if (rv != APR_SUCCESS) {
@@ -723,7 +736,7 @@ static int create_process(apr_pool_t *p, HANDLE *child_proc, HANDLE *child_exit_
         CloseHandle(new_child.hproc);
         return -1;
     }
-
+    apr_file_close(child_out);
     ap_log_error(APLOG_MARK, APLOG_NOTICE, APR_SUCCESS, ap_server_conf,
                  "Parent: Created child process %d", new_child.pid);
 
@@ -975,9 +988,11 @@ die_now:
                 event_handles[CHILD_HANDLE] = NULL;
             }
         }
+        CloseHandle(child_exit_event);
         return 0;  /* Tell the caller we do not want to restart */
     }
     winnt_mpm_state = AP_MPMQ_STARTING;
+    CloseHandle(child_exit_event);
     return 1;      /* Tell the caller we want a restart */
 }
 
@@ -1081,7 +1096,7 @@ void winnt_rewrite_args(process_rec *process)
     pid = getenv("AP_PARENT_PID");
     if (pid)
     {
-        HANDLE filehand, newhand;
+        HANDLE filehand;
         HANDLE hproc = GetCurrentProcess();
 
         /* This is the child */
@@ -1094,17 +1109,12 @@ void winnt_rewrite_args(process_rec *process)
         /* The parent gave us stdin, we need to remember this
          * handle, and no longer inherit it at our children
          * (we can't slurp it up now, we just aren't ready yet).
+         * The original handle is closed below, at apr_file_dup2()
          */
         pipe = GetStdHandle(STD_INPUT_HANDLE);
-
-        if (osver.dwPlatformId == VER_PLATFORM_WIN32_NT) {
-            /* This doesn't work for 9x, but it's cleaner. */
-            SetHandleInformation(pipe, HANDLE_FLAG_INHERIT, 0);
-        }
-        else if (DuplicateHandle(hproc, pipe,
-                                 hproc, &filehand, 0, FALSE,
-                                 DUPLICATE_SAME_ACCESS)) {
-            CloseHandle(pipe);
+        if (DuplicateHandle(hproc, pipe,
+                            hproc, &filehand, 0, FALSE,
+                            DUPLICATE_SAME_ACCESS)) {
             pipe = filehand;
         }
 
@@ -1114,12 +1124,16 @@ void winnt_rewrite_args(process_rec *process)
          * Don't infect child processes with our stdin
          * handle, use another handle to NUL!
          */
-        if ((filehand = GetStdHandle(STD_OUTPUT_HANDLE))
-            && DuplicateHandle(hproc, filehand, 
-                               hproc, &newhand, 0,
-                               TRUE, DUPLICATE_SAME_ACCESS)) {
-            SetStdHandle(STD_INPUT_HANDLE, newhand);
+        {
+            apr_file_t *infile, *outfile;
+            if ((apr_file_open_stdout(&outfile, process->pool) == APR_SUCCESS)
+             && (apr_file_open_stdin(&infile, process->pool) == APR_SUCCESS))
+                apr_file_dup2(infile, outfile, process->pool);
         }
+
+        /* This child needs the existing stderr opened for logging,
+         * already 
+         */
 
         /* The parent is responsible for providing the
          * COMPLETE ARGUMENTS REQUIRED to the child.
@@ -1286,19 +1300,10 @@ void winnt_rewrite_args(process_rec *process)
             if ((rv = apr_file_open(&nullfile, "NUL",
                                     APR_READ | APR_WRITE, APR_OS_DEFAULT,
                                     process->pool)) == APR_SUCCESS) {
-                HANDLE hproc = GetCurrentProcess();
-                HANDLE nullstdout = NULL;
-                HANDLE nullhandle;
-
-                /* Duplicate the handle to be inherited by children */
-                if ((apr_os_file_get(&nullhandle, nullfile) == APR_SUCCESS)
-                    && DuplicateHandle(hproc, nullhandle,
-                                       hproc, &nullstdout,
-                                       0, TRUE, DUPLICATE_SAME_ACCESS)) {
-                    SetStdHandle(STD_OUTPUT_HANDLE, nullstdout);
-                }
-
-                /* Close the original handle, we used the duplicate */
+                apr_file_t *nullstdout;
+                if (apr_file_open_stdout(&nullstdout, process->pool)
+                        == APR_SUCCESS)
+                    apr_file_dup2(nullstdout, nullfile, process->pool);
                 apr_file_close(nullfile);
             }
         }
@@ -1565,10 +1570,6 @@ static int winnt_post_config(apr_pool_t *pconf, apr_pool_t *plog, apr_pool_t *pt
                     }
                 }
             }
-            else /* ! -k runservice */
-            {
-                mpm_start_console_handler();
-            }
 
             /* Create the start mutex, as an unnamed object for security.
              * Ths start mutex is used during a restart to prevent more than
@@ -1584,6 +1585,12 @@ static int winnt_post_config(apr_pool_t *pconf, apr_pool_t *plog, apr_pool_t *pt
                 return HTTP_INTERNAL_SERVER_ERROR;
             }
         }
+        /* Always reset our console handler to be the first, even on a restart
+        *  because some modules (e.g. mod_perl) might have set a console 
+        *  handler to terminate the process.
+        */
+        if (strcasecmp(signal_arg, "runservice"))
+            mpm_start_console_handler();
     }
     else /* parent_pid != my_pid */
     {

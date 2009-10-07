@@ -82,14 +82,14 @@ gdb_expect -re "$gdb_prompt $"
 
 gdb_test "break r5414488-libfile.m:18" "Breakpoint 1 at $hex: file.*, line.*\\." "Set breakpoint on inlined subroutine call at line 18"
 
-gdb_test "run" "Starting program: $binfile *\r\n\Reading symbols for shared libraries \(\[.+\]\)+ done.*Breakpoint 1 at .*" "continue to breakpoint"
+gdb_test "run" "Starting program: $binfile *\r\n\Reading symbols for shared libraries \(\[.+\]\)+ done.*Breakpoint 1, -\\\[TestLoop init\\\].*" "continue to breakpoint"
 
-gdb_test "step" "95.*"  "Step into inlined subroutine"
+gdb_test "step" "NSMakeRect \\\[inlined\\\].*"  "Step into inlined subroutine"
 
-gdb_test "step" ".*NSMakeRect .*"  "First step inside inlined subroutine"
-gdb_test "step" ".*NSMakeRect .*"  "Second step inside inlined subroutine"
-gdb_test "step" ".*NSMakeRect .*"  "Third step inside inlined subroutine"
-gdb_test "step" ".*NSMakeRect .*"  "Fourth step inside inlined subroutine"
+gdb_test "step" ".*r.origin.y = y.*"  "First step inside inlined subroutine"
+gdb_test "step" ".*r.size.width = w.*"  "Second step inside inlined subroutine"
+gdb_test "step" ".*r.size.height = h.*"  "Third step inside inlined subroutine"
+gdb_test "step" ".*return r.*"  "Fourth step inside inlined subroutine"
 
 gdb_exit
 return 0

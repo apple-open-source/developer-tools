@@ -1,3 +1,4 @@
+/* APPLE LOCAL file radar 5839123 */
 /* Check Class <protocol> types */
 /* Author: David Ayers <d.ayers@inode.at> */
 /* { dg-do compile } */
@@ -187,9 +188,9 @@ testForwardeDeclared1(void)
   [cls doItInstance7];      /* { dg-warning "no .\\+doItInstance7. method found" } */
 
   [clsP7 doItClass7];       /* { dg-warning "not found in protocol" } */
-  /* { dg-warning "no .\\+doItClass7. method found" "" { target *-*-* } 189 } */
+  /* { dg-warning "no .\\+doItClass7. method found" "" { target *-*-* } 190 } */
   [clsP7 doItInstance7];    /* { dg-warning "not found in protocol" } */
-  /* { dg-warning "no .\\+doItInstance7. method found" "" { target *-*-* } 191 } */
+  /* { dg-warning "no .\\+doItInstance7. method found" "" { target *-*-* } 192 } */
 
   [MyClass1 doItClass7];    /* { dg-warning "may not respond" } */
   [MyClass1 doItInstance7]; /* { dg-warning "may not respond" } */
@@ -314,10 +315,8 @@ testComptypes(void)
     mc1 == objP1;
     objP1 == mc1;
 
-    /* APPLE LOCAL begin mainline */
     mc1 == objP2; /* { dg-warning "lacks a cast" } */
     objP2 == mc1; /* { dg-warning "lacks a cast" } */
-    /* APPLE LOCAL end mainline */
   }
   { /* id <protocol>, id  */
     obj == objP1;
@@ -373,11 +372,9 @@ testComptypes(void)
     objP5 = objP1; /* { dg-warning "does not conform" } */
   }
   { /* id <protocol>, SomeClass *  */
-    /* APPLE LOCAL mainline */
     mc1 = objP1;
     objP1 = mc1;
-    
-    /* APPLE LOCAL mainline */
+
     mc1 = objP2; /* { dg-warning "does not conform" } */
     objP2 = mc1; /* { dg-warning "does not implement" } */
   }
@@ -386,10 +383,8 @@ testComptypes(void)
     objP1 = obj;
   }
   { /* id <protocol>, Class  */
-    /* APPLE LOCAL begin mainline */
-    cls = objP1; /* { dg-warning "distinct Objective\\-C type" } */
-    objP1 = cls; /* { dg-warning "distinct Objective\\-C type" } */
-    /* APPLE LOCAL end mainline */
+    cls = objP1; /* { dg-warning "incompatible Objective-C types assigning \\'id\\', expected \\'Class\\'" } */
+    objP1 = cls; /* { dg-warning "incompatible Objective-C types assigning \\'Class\\', expected \\'id\\'" } */
   }
   { /* id <protocol>, non-ObjC  */
     num = objP1; /* { dg-warning "makes integer" } */
@@ -407,13 +402,11 @@ testComptypes(void)
   }
   { /* Class <protocol>, SomeClass * */
     /* These combinations should always elicit a warning.  */
-    /* APPLE LOCAL begin mainline */
-    mc1 = clsP1; /* { dg-warning "distinct Objective\\-C type" } */
-    clsP1 = mc1; /* { dg-warning "distinct Objective\\-C type" } */
+    mc1 = clsP1; /* { dg-warning "incompatible Objective-C types assigning \\'Class\\', expected \\'struct MyClass1 \\*\\'" } */
+    clsP1 = mc1; /* { dg-warning "incompatible Objective-C types assigning \\'struct MyClass1 \\*\\', expected \\'Class\\'" } */
     
-    mc1 = clsP2; /* { dg-warning "distinct Objective\\-C type" } */
-    clsP2 = mc1; /* { dg-warning "distinct Objective\\-C type" } */
-    /* APPLE LOCAL end mainline */
+    mc1 = clsP2; /* { dg-warning "incompatible Objective-C types assigning \\'Class\\', expected \\'struct MyClass1 \\*\\'" } */
+    clsP2 = mc1; /* { dg-warning "incompatible Objective-C types assigning \\'struct MyClass1 \\*\\', expected \\'Class\\'" } */
   }
   { /* Class <protocol>, id */
     obj = clsP1;
@@ -431,10 +424,8 @@ testComptypes(void)
     clsP1 = ptr;
   }
   { /* Class <protocol>, id <protocol> */
-    /* APPLE LOCAL begin mainline */
-    clsP1 = objP1; /* { dg-warning "distinct Objective\\-C type" } */
-    objP1 = clsP1; /* { dg-warning "distinct Objective\\-C type" } */
-    /* APPLE LOCAL end mainline */
+    clsP1 = objP1; /* { dg-warning "incompatible Objective-C types assigning \\'id\\', expected \\'Class\\'" } */
+    objP1 = clsP1; /* { dg-warning "incompatible Objective-C types assigning \\'Class\\', expected \\'id\\'" } */
   }
 }
 

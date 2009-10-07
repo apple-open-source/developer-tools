@@ -23,7 +23,7 @@ typedef struct _NSAttributeDictionaryElement {
 @implementation NSTableOptions
 @end
 
-const char expected_strong [] = {0x01, 0x30, 0x02, 0};
+const char expected_strong [] = {0x01, 0x32, 0};
 
 const char expected_weak [] = {0x21, 0x30, 0};
 

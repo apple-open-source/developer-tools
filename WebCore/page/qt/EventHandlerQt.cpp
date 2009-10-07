@@ -1,5 +1,7 @@
 /*
  * Copyright (C) 2006 Zack Rusin <zack@kde.org>
+ * Copyright (C) 2006, 2007 Apple Inc. All rights reserved.
+ * Copyright (C) 2008 Nokia Corporation and/or its subsidiary(-ies)
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -43,19 +45,23 @@
 #include "MouseEventWithHitTestResults.h"
 #include "Page.h"
 #include "PlatformKeyboardEvent.h"
-#include "PlatformScrollBar.h"
 #include "PlatformWheelEvent.h"
 #include "RenderWidget.h"
+#include "Scrollbar.h"
 #include "NotImplemented.h"
+
+QT_BEGIN_NAMESPACE
+extern Q_GUI_EXPORT bool qt_tab_all_widgets; // from qapplication.cpp
+QT_END_NAMESPACE
 
 namespace WebCore {
 
-using namespace EventNames;
+const double EventHandler::TextDragDelay = 0.0;
 
 static bool isKeyboardOptionTab(KeyboardEvent* event)
 {
     return event
-        && (event->type() == keydownEvent || event->type() == keypressEvent)
+        && (event->type() == eventNames().keydownEvent || event->type() == eventNames().keypressEvent)
         && event->altKey()
         && event->keyIdentifier() == "U+0009";
 }
@@ -67,34 +73,18 @@ bool EventHandler::invertSenseOfTabsToLinks(KeyboardEvent* event) const
 
 bool EventHandler::tabsToAllControls(KeyboardEvent* event) const
 {
-    bool handlingOptionTab = isKeyboardOptionTab(event);
-    
-    return handlingOptionTab;
+    return (isKeyboardOptionTab(event) ? !qt_tab_all_widgets : qt_tab_all_widgets);
 }
 
 void EventHandler::focusDocumentView()
 {
     Page* page = m_frame->page();
-    if (page)
-        page->focusController()->setFocusedFrame(m_frame);
+    if (!page)
+        return;
+    page->focusController()->setFocusedFrame(m_frame);
 }
 
-bool EventHandler::passWidgetMouseDownEventToWidget(const MouseEventWithHitTestResults& event)
-{
-    // Figure out which view to send the event to.
-    RenderObject* target = event.targetNode() ? event.targetNode()->renderer() : 0;
-    if (!target || !target->isWidget())
-        return false;
-
-    return passMouseDownEventToWidget(static_cast<RenderWidget*>(target)->widget());
-}
-
-bool EventHandler::passWidgetMouseDownEventToWidget(RenderWidget* renderWidget)
-{
-    return passMouseDownEventToWidget(renderWidget->widget());
-}
-
-bool EventHandler::passMouseDownEventToWidget(Widget* widget)
+bool EventHandler::passWidgetMouseDownEventToWidget(const MouseEventWithHitTestResults&)
 {
     notImplemented();
     return false;
@@ -108,24 +98,6 @@ bool EventHandler::eventActivatedView(const PlatformMouseEvent&) const
     return false;
 }
 
-bool EventHandler::passSubframeEventToSubframe(MouseEventWithHitTestResults& event, Frame* subframe, HitTestResult*)
-{
-    Q_ASSERT(subframe);
-    PlatformMouseEvent ev = event.event();
-    switch(ev.eventType()) {
-    case MouseEventMoved:
-        return subframe->eventHandler()->handleMouseMoveEvent(ev);
-    case MouseEventPressed:
-        return subframe->eventHandler()->handleMousePressEvent(ev);
-    case MouseEventReleased:
-        return subframe->eventHandler()->handleMouseReleaseEvent(ev);
-    case MouseEventScroll:
-        return subframe->eventHandler()->handleMouseMoveEvent(ev);
-    default:
-      return false;
-    }
-}
-
 bool EventHandler::passWheelEventToWidget(PlatformWheelEvent& event, Widget* widget)
 {
     Q_ASSERT(widget);
@@ -135,30 +107,32 @@ bool EventHandler::passWheelEventToWidget(PlatformWheelEvent& event, Widget* wid
     return static_cast<FrameView*>(widget)->frame()->eventHandler()->handleWheelEvent(event);
 }
 
-Clipboard* EventHandler::createDraggingClipboard() const
+PassRefPtr<Clipboard> EventHandler::createDraggingClipboard() const
 {
-    return new ClipboardQt(ClipboardWritable, true);
+    return ClipboardQt::create(ClipboardWritable, true);
 }
 
 bool EventHandler::passMousePressEventToSubframe(MouseEventWithHitTestResults& mev, Frame* subframe)
 {
-    return passSubframeEventToSubframe(mev, subframe);
+    subframe->eventHandler()->handleMousePressEvent(mev.event());
+    return true;
 }
 
 bool EventHandler::passMouseMoveEventToSubframe(MouseEventWithHitTestResults& mev, Frame* subframe, HitTestResult* hoveredNode)
 {
-    return passSubframeEventToSubframe(mev, subframe, hoveredNode);
+    subframe->eventHandler()->handleMouseMoveEvent(mev.event(), hoveredNode);
+    return true;
 }
 
 bool EventHandler::passMouseReleaseEventToSubframe(MouseEventWithHitTestResults& mev, Frame* subframe)
 {
-    return passSubframeEventToSubframe(mev, subframe);
+    subframe->eventHandler()->handleMouseReleaseEvent(mev.event());
+    return true;
 }
 
-bool EventHandler::passMousePressEventToScrollbar(MouseEventWithHitTestResults& event, PlatformScrollbar* scrollbar)
+unsigned EventHandler::accessKeyModifiers()
 {
-    Q_ASSERT(scrollbar);
-    return scrollbar->handleMousePressEvent(event.event());
+    return PlatformKeyboardEvent::CtrlKey;
 }
 
 }

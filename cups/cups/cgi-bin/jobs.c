@@ -1,9 +1,9 @@
 /*
- * "$Id: jobs.c 6649 2007-07-11 21:46:42Z mike $"
+ * "$Id: jobs.c 7237 2008-01-22 01:38:39Z mike $"
  *
  *   Job status CGI for the Common UNIX Printing System (CUPS).
  *
- *   Copyright 2007 by Apple Inc.
+ *   Copyright 2007-2008 by Apple Inc.
  *   Copyright 1997-2006 by Easy Software Products.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -77,7 +77,7 @@ main(int  argc,				/* I - Number of command-line arguments */
   * Do the operation...
   */
 
-  if ((op = cgiGetVariable("OP")) != NULL && job_id > 0)
+  if ((op = cgiGetVariable("OP")) != NULL && job_id > 0 && cgiIsPOST())
   {
    /*
     * Do the operation...
@@ -185,6 +185,11 @@ do_job_op(http_t      *http,		/* I - HTTP connection */
     cgiFormEncode(url + 6, getenv("HTTP_REFERER"), sizeof(url) - 6);
     cgiSetVariable("refresh_page", url);
   }
+  else if (cupsLastError() == IPP_NOT_AUTHORIZED)
+  {
+    puts("Status: 401\n");
+    exit(0);
+  }
 
   cgiStartHTML(cgiText(_("Jobs")));
 
@@ -204,5 +209,5 @@ do_job_op(http_t      *http,		/* I - HTTP connection */
 
 
 /*
- * End of "$Id: jobs.c 6649 2007-07-11 21:46:42Z mike $".
+ * End of "$Id: jobs.c 7237 2008-01-22 01:38:39Z mike $".
  */

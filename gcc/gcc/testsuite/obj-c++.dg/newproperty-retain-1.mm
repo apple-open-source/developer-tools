@@ -1,7 +1,7 @@
 /* APPLE LOCAL file radar 4805321 */
 /* This program tests use of properties . */
-/* { dg-options "-mmacosx-version-min=10.5 -fobjc-new-property -framework Foundation -fobjc-exceptions -framework CoreFoundation" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
-/* { dg-options "-fobjc-new-property -framework Foundation -fobjc-exceptions -framework CoreFoundation" { target arm*-*-darwin* } } */
+/* { dg-options "-mmacosx-version-min=10.5 -fobjc-new-property -framework Foundation -fobjc-exceptions" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
+/* { dg-options "-fobjc-new-property -framework Foundation -fobjc-exceptions" { target arm*-*-darwin* } } */
 /* { dg-do run { target *-*-darwin* } } */
 
 #include <Foundation/Foundation.h>

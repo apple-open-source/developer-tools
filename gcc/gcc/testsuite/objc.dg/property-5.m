@@ -3,15 +3,14 @@
 /* Program should compile with no error or warning. */
 /* { dg-do compile { target *-*-darwin* } } */
 /* APPLE LOCAL radar 4899595 */
-/* { dg-options "-fno-objc-new-property -mmacosx-version-min=10.5 -fobjc-abi-version=2" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
-/* { dg-options "-fno-objc-new-property" { target arm*-*-darwin* } } */
+/* { dg-options "-mmacosx-version-min=10.5" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
 
 #import <Foundation/Foundation.h>
 
 @interface test : NSObject
 {
 }
-@property NSString *foo;
+@property (copy) NSString *foo;
 @end
 
 @interface test_sub : test

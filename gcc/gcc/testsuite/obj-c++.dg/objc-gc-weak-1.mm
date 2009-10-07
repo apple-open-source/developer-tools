@@ -2,7 +2,8 @@
 /* A run-time test for insertion of write barriers for __weak objects. */
 
 /* { dg-do run { target powerpc*-*-darwin* i?86*-*-darwin* } } */
-/* { dg-options "-fnext-runtime -fobjc-gc" } */
+/* { dg-options "-fnext-runtime -fobjc-gc -Wno-non-lvalue-assign" } */
+/* { dg-require-effective-target objc_gc } */
 
 #include <objc/objc.h>
 #include <stdio.h>

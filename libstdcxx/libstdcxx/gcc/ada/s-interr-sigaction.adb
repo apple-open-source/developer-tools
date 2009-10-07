@@ -1,12 +1,12 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                GNU ADA RUN-TIME LIBRARY (GNARL) COMPONENTS               --
+--                 GNAT RUN-TIME LIBRARY (GNARL) COMPONENTS                 --
 --                                                                          --
 --                     S Y S T E M . I N T E R R U P T S                    --
 --                                                                          --
 --                                  B o d y                                 --
 --                                                                          --
---              Copyright (C) 1998-2004 Free Software Fundation             --
+--             Copyright (C) 1998-2006, Free Software Fundation             --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNARL; see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -31,16 +31,13 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
---  This is the IRIX & NT version of this package.
+--  This is the IRIX & NT version of this package
 
 with Ada.Task_Identification;
 --  used for Task_Id
 
 with Ada.Exceptions;
 --  used for Raise_Exception
-
-with System.OS_Interface;
---  used for intr_attach
 
 with System.Storage_Elements;
 --  used for To_Address
@@ -120,15 +117,15 @@ package body System.Interrupts is
    --  that contain interrupt handlers.
 
    procedure Signal_Handler (Sig : Interrupt_ID);
-   --  This procedure is used to handle all the signals.
+   --  This procedure is used to handle all the signals
 
    --  Type and Head, Tail of the list containing Registered Interrupt
    --  Handlers. These definitions are used to register the handlers
    --  specified by the pragma Interrupt_Handler.
 
-   --
-   --  Handler Registration:
-   --
+   --------------------------
+   -- Handler Registration --
+   --------------------------
 
    type Registered_Handler;
    type R_Link is access all Registered_Handler;
@@ -362,15 +359,14 @@ package body System.Interrupts is
 
       if not Restoration and then not Static
 
-         --  Tries to overwrite a static Interrupt Handler with a
-         --  dynamic Handler
+         --  Tries to overwrite a static Interrupt Handler with dynamic handle
 
-        and then (Descriptors (Interrupt).Static
+        and then
+          (Descriptors (Interrupt).Static
 
-                     --  The new handler is not specified as an
-                     --  Interrupt Handler by a pragma.
+            --  New handler not specified as an Interrupt Handler by a pragma
 
-                     or else not Is_Registered (New_Handler))
+             or else not Is_Registered (New_Handler))
       then
          Raise_Exception (Program_Error'Identity,
            "Trying to overwrite a static Interrupt Handler with a " &
@@ -569,10 +565,10 @@ package body System.Interrupts is
       Descriptors (Interrupt).T := T;
       Descriptors (Interrupt).E := E;
 
-      --  Indicate the attachment of Interrupt Entry in ATCB.
-      --  This is need so that when an Interrupt Entry task terminates
-      --  the binding can be cleaned. The call to unbinding must be
-      --  make by the task before it terminates.
+      --  Indicate the attachment of Interrupt Entry in ATCB. This is needed so
+      --  that when an Interrupt Entry task terminates the binding can be
+      --  cleaned up. The call to unbinding must be make by the task before it
+      --  terminates.
 
       T.Interrupt_Entry := True;
    end Bind_Interrupt_To_Entry;
@@ -597,7 +593,7 @@ package body System.Interrupts is
          end if;
       end loop;
 
-      --  Indicate in ATCB that no Interrupt Entries are attached.
+      --  Indicate in ATCB that no Interrupt Entries are attached
 
       T.Interrupt_Entry := True;
    end Detach_Interrupt_Entries;
@@ -674,8 +670,8 @@ package body System.Interrupts is
 
          Initialization.Undefer_Abort (Self_Id);
 
-         --  Undefer abort here to allow a window for this task
-         --  to be aborted  at the time of system shutdown.
+         --  Undefer abort here to allow a window for this task to be aborted
+         --  at the time of system shutdown.
 
       end loop;
    end Server_Task;

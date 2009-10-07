@@ -1,6 +1,5 @@
-/* APPLE LOCAL begin mainline UCNs 2005-04-17 3892809 */
 /* { dg-do preprocess } */
-/* { dg-options "-std=c99 -Wnormalized=none" } */
+/* { dg-options "-std=c99 -fextended-identifiers -Wnormalized=none" } */
 
 \u00AA
 \u00B7
@@ -33,4 +32,3 @@ K
 \uAC01
 \u1100\u1161\u11A8
 \uAC00\u11A8
-/* APPLE LOCAL end mainline UCNs 2005-04-17 3892809 */

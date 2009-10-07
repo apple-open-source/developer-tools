@@ -176,10 +176,12 @@ IOHIDEvent * IOHIDEvent::withEventData (
             
         case NX_KEYDOWN:
         case NX_KEYUP:
+            {
             uint32_t usage = hid_adb_2_usb_keymap[data->key.keyCode];
             
             if ( usage < kHIDUsage_KeyboardLeftControl || usage > kHIDUsage_KeyboardRightGUI || !data->key.repeat )
                 me = IOHIDEvent::keyboardEvent(timeStamp, kHIDPage_KeyboardOrKeypad, hid_adb_2_usb_keymap[data->key.keyCode], type==NX_KEYDOWN, options | (data->key.repeat ? kIOHIDKeyboardIsRepeat : 0));
+            }
             break;
         case NX_SCROLLWHEELMOVED:
             me = IOHIDEvent::scrollEvent(timeStamp, data->scrollWheel.pointDeltaAxis2<<16, data->scrollWheel.pointDeltaAxis1<<16, data->scrollWheel.pointDeltaAxis3<<16, options);
@@ -193,8 +195,6 @@ IOHIDEvent * IOHIDEvent::withEventData (
                     me = IOHIDEvent::buttonEvent(timeStamp, data->compound.misc.L[1], options);
                     break;
                 case NX_SUBTYPE_AUX_CONTROL_BUTTONS:
-                    uint32_t usagePage = 0;
-                    uint32_t usage = 0;
                     uint16_t flavor = data->compound.misc.L[0] >> 16;
                     switch ( flavor ) {
                         case NX_KEYTYPE_SOUND_UP:
@@ -339,14 +339,25 @@ IOHIDEvent * IOHIDEvent::accelerometerEvent(
                                         IOFixed                 x,
                                         IOFixed                 y,
                                         IOFixed                 z,
+                                        IOHIDAccelerometerType  type,
                                         IOOptionBits            options)
 {
-    return IOHIDEvent::_axisEvent(      kIOHIDEventTypeAccelerometer, 
-                                        timeStamp, 
-                                        x,
-                                        y,
-                                        z,
-                                        options);
+    IOHIDEvent *                    event;
+    IOHIDAccelerometerEventData *   data;    
+    
+    event = IOHIDEvent::_axisEvent( kIOHIDEventTypeAccelerometer, 
+                                    timeStamp, 
+                                    x,
+                                    y,
+                                    z,
+                                    options);
+
+    if ( event ) {
+        data = (IOHIDAccelerometerEventData *)event->_data;
+        data->acclType = type;
+    }
+    
+    return event;
 }
 
 //==============================================================================
@@ -423,8 +434,8 @@ IOHIDEvent * IOHIDEvent::buttonEvent(
     }
     
     IOHIDButtonEventData * event = (IOHIDButtonEventData *)me->_data;
-    event->buttonMask = buttonMask;
-    event->pressure   = pressure;
+    event->button.buttonMask = buttonMask;
+    event->button.pressure   = pressure;
     
     return me;
 }

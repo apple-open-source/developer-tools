@@ -785,7 +785,7 @@ gdb_DBGCopyMatchingUUIDsForURL (const char *path)
               CFRelease (nbfd_uuid);
             }
         }
-
+      bfd_free_cached_info (abfd);
     }
   else
    {
@@ -1585,8 +1585,9 @@ fast_show_stack_trace_prologue (unsigned int count_limit,
       else
         {
           pc = SYMBOL_VALUE_ADDRESS (msymbol);
-          if (find_pc_partial_function (pc, &name,
-                                        sigtramp_start_ptr, sigtramp_end_ptr) == 0)
+          if (find_pc_partial_function_no_inlined (pc, &name,
+						   sigtramp_start_ptr, 
+						   sigtramp_end_ptr) == 0)
             {
               warning
 		("Couldn't find minimal bounds for \"_sigtramp\" - "

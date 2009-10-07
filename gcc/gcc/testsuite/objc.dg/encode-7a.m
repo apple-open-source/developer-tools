@@ -4,7 +4,7 @@
 
 /* { dg-do run { target *-*-darwin* } } */
 /* { dg-options "-fnext-runtime" } */
-/* { dg-skip-if "" { *-*-darwin* } { "-m64" } { "" } } */
+/* { dg-require-effective-target ilp32 } */
 
 /* APPLE LOCAL radar 4894756 */
 #include "../objc/execute/Object2.h"

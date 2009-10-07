@@ -23,6 +23,7 @@
 
 package IDLParser;
 
+use IPC::Open2;
 use IDLStructure;
 
 use constant MODE_UNDEF    => 0; # Default mode.
@@ -40,6 +41,7 @@ my $preservedParseMode = MODE_UNDEF;
 
 my $beQuiet; # Should not display anything on STDOUT?
 my $document = 0; # Will hold the resulting 'idlDocument'
+my $parentsOnly = 0; # If 1, parse only enough to populate parents list
 
 # Default Constructor
 sub new
@@ -61,6 +63,7 @@ sub Parse
     my $fileName = shift;
     my $defines = shift;
     my $preprocessor = shift;
+    $parentsOnly = shift;
 
     if (!$preprocessor) {
         $preprocessor = "/usr/bin/gcc -E -P -x c++";
@@ -72,9 +75,10 @@ sub Parse
 
     print " | *** Starting to parse $fileName...\n |\n" unless $beQuiet;
 
-    open FILE, $preprocessor . " " . join(" ", (map { "-D$_" } split(/ /, $defines))) . " ". $fileName . "|" or die "Could not open $fileName";
-    my @documentContent = <FILE>;
-    close FILE;
+    open2(\*PP_OUT, \*PP_IN, split(' ', $preprocessor), (map { "-D$_" } split(' ', $defines)), $fileName);
+    close PP_IN;
+    my @documentContent = <PP_OUT>;
+    close PP_OUT;
 
     my $dataAvailable = 0;
 
@@ -146,7 +150,7 @@ sub dumpExtendedAttributes
 sub parseExtendedAttributes
 {
     my $str = shift;
-    $str =~ s/\[\s*(.*)\]/$1/g;
+    $str =~ s/\[\s*(.*?)\s*\]/$1/g;
 
     my %attrs = ();
 
@@ -237,6 +241,8 @@ sub ParseInterface
             my $arrayRef = $dataNode->parents;
             push(@$arrayRef, $line);
         }
+
+        return if $parentsOnly;
 
         $interfaceData =~ s/[\n\r]/ /g;
         my @interfaceMethods = split(/;/, $interfaceData);

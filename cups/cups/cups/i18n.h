@@ -1,9 +1,9 @@
 /*
- * "$Id: i18n.h 6649 2007-07-11 21:46:42Z mike $"
+ * "$Id: i18n.h 7363 2008-03-03 22:19:24Z mike $"
  *
  *   (Private) localization support for the Common UNIX Printing System (CUPS).
  *
- *   Copyright 2007 by Apple Inc.
+ *   Copyright 2007-2008 by Apple Inc.
  *   Copyright 1997-2006 by Easy Software Products.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -82,10 +82,15 @@ typedef struct _cups_vmap_s		/**** VBCS Charmap Struct ****/
  * Prototypes...
  */
 
+#ifdef __APPLE__
+extern const char	*_cupsAppleLanguage(const char *locale, char *language,
+			                    size_t langsize);
+#endif /* __APPLE__ */
 extern void		_cupsCharmapFlush(void);
 extern void		_cupsCharmapFree(const cups_encoding_t encoding);
 extern void		*_cupsCharmapGet(const cups_encoding_t encoding);
 extern const char	*_cupsEncodingName(cups_encoding_t encoding);
+extern void		_cupsLangPrintError(const char *message);
 extern int		_cupsLangPrintf(FILE *fp, const char *message, ...)
 #    ifdef __GNUC__
 __attribute__ ((__format__ (__printf__, 2, 3)))
@@ -94,9 +99,10 @@ __attribute__ ((__format__ (__printf__, 2, 3)))
 extern int		_cupsLangPuts(FILE *fp, const char *message);
 extern const char	*_cupsLangString(cups_lang_t *lang, const char *message);
 extern void		_cupsMessageFree(cups_array_t *a);
-extern cups_array_t	*_cupsMessageLoad(const char *filename);
+extern cups_array_t	*_cupsMessageLoad(const char *filename, int unquote);
 extern const char	*_cupsMessageLookup(cups_array_t *a, const char *m);
 extern void		_cupsSetLocale(char *argv[]);
+
 
 #  ifdef __cplusplus
 }
@@ -105,5 +111,5 @@ extern void		_cupsSetLocale(char *argv[]);
 #endif /* !_CUPS_I18N_H_ */
 
 /*
- * End of "$Id: i18n.h 6649 2007-07-11 21:46:42Z mike $".
+ * End of "$Id: i18n.h 7363 2008-03-03 22:19:24Z mike $".
  */

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2007 Apple Inc.  All Rights Reserved.
+ * Copyright (c) 1998-2009 Apple Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -154,12 +154,14 @@ public:
 
     /* --- A subclass must implement the the following methods: --- */
 
+#ifndef __LP64__
     virtual IOReturn	doAsyncReadWrite(IOMemoryDescriptor *buffer,
                                             UInt32 block, UInt32 nblks,
                                             IOStorageCompletion completion) __attribute__ ((deprecated));
 
     virtual IOReturn	doSyncReadWrite(IOMemoryDescriptor *buffer,
                                     UInt32 block,UInt32 nblks) __attribute__ ((deprecated));
+#endif /* !__LP64__ */
 
     /*!
      * @function doEjectMedia
@@ -284,36 +286,12 @@ public:
      */
     virtual IOReturn	reportLockability(bool *isLockable)	= 0;
 
-    /*!
-     * @function reportMaxReadTransfer
-     * @abstract
-     * Report the maximum allowed byte transfer for read operations.
-     * @discussion
-     * Some devices impose a maximum data transfer size. Because this limit
-     * may be determined by the size of a block-count field in a command, the limit may
-     * depend on the block size of the transfer.
-     * @param blockSize
-     * The block size desired for the transfer.
-     * @param max
-     * Pointer to returned result.
-     */
-    virtual IOReturn	reportMaxReadTransfer (UInt64 blockSize, UInt64 *max)	= 0;
+#ifndef __LP64__
+    virtual IOReturn	reportMaxReadTransfer(UInt64 blockSize,UInt64 *max) __attribute__ ((deprecated));
 
-    /*!
-     * @function reportMaxWriteTransfer
-     * @abstract
-     * Report the maximum allowed byte transfer for write operations.
-     * @discussion
-     * Some devices impose a maximum data transfer size. Because this limit
-     * may be determined by the size of a block-count field in a command, the limit may
-     * depend on the block size of the transfer.
-     * @param blockSize
-     * The block size desired for the transfer.
-     * @param max
-     * Pointer to returned result.
-     */
-    virtual IOReturn	reportMaxWriteTransfer(UInt64 blockSize,UInt64 *max)	= 0;
-    
+    virtual IOReturn	reportMaxWriteTransfer(UInt64 blockSize,UInt64 *max) __attribute__ ((deprecated));
+#endif /* !__LP64__ */
+
     /*!
      * @function reportMaxValidBlock
      * @abstract
@@ -387,11 +365,11 @@ public:
      */
     virtual IOReturn	reportWriteProtection(bool *isWriteProtected)	= 0;
 
+#ifndef __LP64__
     virtual IOReturn	doAsyncReadWrite(IOMemoryDescriptor *buffer,
                                             UInt64 block, UInt64 nblks,
-                                            IOStorageCompletion completion); /* DEPRECATED */
-
-    OSMetaClassDeclareReservedUsed(IOBlockStorageDevice, 0); /* 10.2.0 */
+                                            IOStorageCompletion completion) __attribute__ ((deprecated));
+#endif /* !__LP64__ */
 
     /*!
      * @function getWriteCacheState
@@ -404,9 +382,11 @@ public:
      * Pointer to returned result. True indicates the write cache is enabled;
      * False indicates the write cache is disabled.
      */
-    virtual IOReturn	getWriteCacheState(bool *enabled);
-
-    OSMetaClassDeclareReservedUsed(IOBlockStorageDevice, 1); /* 10.3.0 */
+#ifdef __LP64__
+    virtual IOReturn	getWriteCacheState(bool *enabled)	= 0;
+#else /* !__LP64__ */
+    virtual IOReturn	getWriteCacheState(bool *enabled); /* 10.3.0 */
+#endif /* !__LP64__ */
 
     /*!
      * @function setWriteCacheState
@@ -418,9 +398,11 @@ public:
      * @param enabled
      * True to enable the write cache; False to disable the write cache.
      */
-    virtual IOReturn	setWriteCacheState(bool enabled);
-
-    OSMetaClassDeclareReservedUsed(IOBlockStorageDevice, 2); /* 10.3.0 */
+#ifdef __LP64__
+    virtual IOReturn	setWriteCacheState(bool enabled)	= 0;
+#else /* !__LP64__ */
+    virtual IOReturn	setWriteCacheState(bool enabled); /* 10.3.0 */
+#endif /* !__LP64__ */
 
     /*!
      * @function doAsyncReadWrite
@@ -439,15 +421,56 @@ public:
      * @param completion
      * The completion routine to call once the data transfer is complete.
      */
+#ifdef __LP64__
     virtual IOReturn	doAsyncReadWrite(IOMemoryDescriptor *buffer,
                                             UInt64 block, UInt64 nblks,
                                             IOStorageAttributes *attributes,
-                                            IOStorageCompletion *completion); /* ABSTRACT */
+                                            IOStorageCompletion *completion)	= 0;
+#else /* !__LP64__ */
+    virtual IOReturn	doAsyncReadWrite(IOMemoryDescriptor *buffer,
+                                            UInt64 block, UInt64 nblks,
+                                            IOStorageAttributes *attributes,
+                                            IOStorageCompletion *completion); /* 10.5.0 */
+#endif /* !__LP64__ */
 
-    OSMetaClassDeclareReservedUsed(IOBlockStorageDevice, 3); /* 10.5.0 */
+    /*!
+     * @function requestIdle
+     * @abstract
+     * Request that the device enter an idle state.
+     * @discussion
+     * Request that the device enter an idle state.  The device will exit this state on the
+     * next read or write request, or as it sees necessary.  One example is for a DVD drive
+     * to spin down when it enters such an idle state, and spin up on the next read request
+     * from the system.
+     */
+    virtual IOReturn	requestIdle(void); /* 10.6.0 */
 
+    /*!
+     * @function doDiscard
+     * @abstract
+     * Delete unused data blocks from the media.
+     * @param block
+     * The starting block number of the operation.
+     * @param nblks
+     * The integral number of blocks to be deleted.
+     */
+    virtual IOReturn doDiscard(UInt64 block, UInt64 nblks); /* 10.6.0 */
+
+#ifdef __LP64__
+    OSMetaClassDeclareReservedUnused(IOBlockStorageDevice,  0);
+    OSMetaClassDeclareReservedUnused(IOBlockStorageDevice,  1);
+    OSMetaClassDeclareReservedUnused(IOBlockStorageDevice,  2);
+    OSMetaClassDeclareReservedUnused(IOBlockStorageDevice,  3);
     OSMetaClassDeclareReservedUnused(IOBlockStorageDevice,  4);
     OSMetaClassDeclareReservedUnused(IOBlockStorageDevice,  5);
+#else /* !__LP64__ */
+    OSMetaClassDeclareReservedUsed(IOBlockStorageDevice,  0);
+    OSMetaClassDeclareReservedUsed(IOBlockStorageDevice,  1);
+    OSMetaClassDeclareReservedUsed(IOBlockStorageDevice,  2);
+    OSMetaClassDeclareReservedUsed(IOBlockStorageDevice,  3);
+    OSMetaClassDeclareReservedUsed(IOBlockStorageDevice,  4);
+    OSMetaClassDeclareReservedUsed(IOBlockStorageDevice,  5);
+#endif /* !__LP64__ */
     OSMetaClassDeclareReservedUnused(IOBlockStorageDevice,  6);
     OSMetaClassDeclareReservedUnused(IOBlockStorageDevice,  7);
     OSMetaClassDeclareReservedUnused(IOBlockStorageDevice,  8);

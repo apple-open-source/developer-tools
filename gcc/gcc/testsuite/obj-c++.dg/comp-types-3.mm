@@ -1,7 +1,7 @@
-/* APPLE LOCAL file mainline */
 /* Test simple ObjC types casts.  */
 /* Author: Nicola Pero <nicola@brainstorm.co.uk>.  */
 /* { dg-do compile } */
+
 #include <objc/objc.h>
 
 @protocol MyProtocol

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---            Copyright (C) 2000-2003 Ada Core Technologies, Inc.           --
+--                     Copyright (C) 2000-2006, AdaCore                     --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -101,11 +101,10 @@ package GNAT.Dynamic_Tables is
    --  safety is not compromised by this approach.
 
    type Table_Ptr is access all Big_Table_Type;
-   --  The table is actually represented as a pointer to allow
-   --  reallocation.
+   --  The table is actually represented as a pointer to allow reallocation
 
    type Table_Private is private;
-   --  table private data that is not exported in Instance.
+   --  Table private data that is not exported in Instance
 
    type Instance is record
       Table : aliased Table_Ptr := null;
@@ -123,7 +122,7 @@ package GNAT.Dynamic_Tables is
    --  previously allocated larger table). Init must be called before using
    --  the table. Init is convenient in reestablishing a table for new use.
 
-   function Last (T : in Instance) return Table_Index_Type;
+   function Last (T : Instance) return Table_Index_Type;
    pragma Inline (Last);
    --  Returns the current value of the last used entry in the table,
    --  which can then be used as a subscript for Table. Note that the
@@ -203,9 +202,7 @@ package GNAT.Dynamic_Tables is
    --  to return False). The sort is not stable (the order of equal items
    --  in the table is not preserved).
 
-
 private
-
    type Table_Private is record
       Max : Integer;
       --  Subscript of the maximum entry in the currently allocated table
@@ -215,7 +212,7 @@ private
       --  ensures that we initially allocate the table.
 
       Last_Val : Integer;
-      --  Current value of Last.
+      --  Current value of Last
    end record;
 
 end GNAT.Dynamic_Tables;

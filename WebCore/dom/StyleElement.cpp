@@ -1,7 +1,6 @@
-/**
- * This file is part of the DOM implementation for KDE.
- *
+/*
  * Copyright (C) 2006, 2007 Rob Buis
+ * Copyright (C) 2008 Apple, Inc. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -18,6 +17,7 @@
  * the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
  * Boston, MA 02110-1301, USA.
  */
+
 #include "config.h"
 #include "StyleElement.h"
 
@@ -40,13 +40,18 @@ StyleSheet* StyleElement::sheet(Element* e)
     return m_sheet.get();
 }
 
-void StyleElement::insertedIntoDocument(Document* document, Element* element)
+void StyleElement::insertedIntoDocument(Document*, Element* element)
 {
     process(element);
 }
 
 void StyleElement::removedFromDocument(Document* document)
 {
+    // If we're in document teardown, then we don't need to do any notification of our sheet's removal.
+    if (!document->renderer())
+        return;
+
+    // FIXME: It's terrible to do a synchronous update of the style selector just because a <style> or <link> element got removed.
     if (m_sheet)
         document->updateStyleSelector();
 }
@@ -56,13 +61,28 @@ void StyleElement::process(Element* e)
     if (!e || !e->inDocument())
         return;
 
-    String text = "";
+    unsigned resultLength = 0;
+    for (Node* c = e->firstChild(); c; c = c->nextSibling()) {
+        Node::NodeType nodeType = c->nodeType();
+        if (nodeType == Node::TEXT_NODE || nodeType == Node::CDATA_SECTION_NODE || nodeType == Node::COMMENT_NODE)
+            resultLength += c->nodeValue().length();
+    }
+    UChar* text;
+    String sheetText = String::createUninitialized(resultLength, text);
 
-    for (Node* c = e->firstChild(); c; c = c->nextSibling())
-        if (c->nodeType() == Node::TEXT_NODE || c->nodeType() == Node::CDATA_SECTION_NODE || c->nodeType() == Node::COMMENT_NODE)
-            text += c->nodeValue();
+    UChar* p = text;
+    for (Node* c = e->firstChild(); c; c = c->nextSibling()) {
+        Node::NodeType nodeType = c->nodeType();
+        if (nodeType == Node::TEXT_NODE || nodeType == Node::CDATA_SECTION_NODE || nodeType == Node::COMMENT_NODE) {
+            String nodeValue = c->nodeValue();
+            unsigned nodeLength = nodeValue.length();
+            memcpy(p, nodeValue.characters(), nodeLength * sizeof(UChar));
+            p += nodeLength;
+        }
+    }
+    ASSERT(p == text + resultLength);
 
-    createSheet(e, text);
+    createSheet(e, sheetText);
 }
 
 void StyleElement::createSheet(Element* e, const String& text)
@@ -74,15 +94,16 @@ void StyleElement::createSheet(Element* e, const String& text)
         m_sheet = 0;
     }
 
-    String typeValue = e->isHTMLElement() ? type().deprecatedString().lower() : type();
-    if (typeValue.isEmpty() || typeValue == "text/css") { // Type must be empty or CSS
-        RefPtr<MediaList> mediaList = new MediaList((CSSStyleSheet*)0, media(), e->isHTMLElement());
+    // If type is empty or CSS, this is a CSS style sheet.
+    const AtomicString& type = this->type();
+    if (type.isEmpty() || (e->isHTMLElement() ? equalIgnoringCase(type, "text/css") : (type == "text/css"))) {
+        RefPtr<MediaList> mediaList = MediaList::create(media(), e->isHTMLElement());
         MediaQueryEvaluator screenEval("screen", true);
         MediaQueryEvaluator printEval("print", true);
         if (screenEval.eval(mediaList.get()) || printEval.eval(mediaList.get())) {
             document->addPendingSheet();
             setLoading(true);
-            m_sheet = new CSSStyleSheet(e, String(), document->inputEncoding());
+            m_sheet = CSSStyleSheet::create(e, String(), document->inputEncoding());
             m_sheet->parseString(text, !document->inCompatMode());
             m_sheet->setMedia(mediaList.get());
             m_sheet->setTitle(e->title());

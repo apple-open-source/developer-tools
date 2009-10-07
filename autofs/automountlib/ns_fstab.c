@@ -25,13 +25,13 @@
  */
 
 /*
- * Portions Copyright 2007 Apple Inc.
- *
- * $Id$
+ * Portions Copyright 2007-2009 Apple Inc.
  */
 
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
+#include <unistd.h>
 #include <stdlib.h>
 #include <sys/param.h>
 #include <pthread.h>
@@ -265,6 +265,7 @@ clean_hashtables(void)
 			free(static_ent->vfstype);
 			free(static_ent->mntops);
 			free(static_ent->host);
+			free(static_ent->localpath);
 			free(static_ent->spec);
 			free(static_ent);
 		}
@@ -337,7 +338,7 @@ readfstab(void)
 	mntoptparse_t mop;
 	int flags;
 	int altflags;
-	char *mntops, *url;
+	char *mntops, *url, *host, *localpath;
 
 	if (trace  > 1)
 		trace_prt(1, "readfstab called\n");
@@ -409,14 +410,33 @@ readfstab(void)
 		 */
 		p = strchr(fs->fs_spec, ':');
 		if (p == NULL) {
-			pr_msg("Mount for %s has no host name", fs->fs_spec);
-			continue;	/* no host name - ignore this */
+			/*
+			 * No colon; one could consider that a path with
+			 * no host name, or a host name with no path;
+			 * in at least one case, the problem was that
+			 * the path was missing, so report it as that.
+			 */
+			pr_msg("Mount for %s has no path for the directory to mount", fs->fs_spec);
+			continue;	/* no path - ignore this */
 		}
 		if (p == fs->fs_spec) {
 			pr_msg("Mount for %s has an empty host name", fs->fs_spec);
 			continue;	/* empty host name - ignore this */
 		}
-		*p++ = '\0';		/* split into host name and the rest */
+		*p = '\0';		/* split into host name and the rest */
+		host = strdup(fs->fs_spec);
+		if (host == NULL)
+			goto outofmem;
+		localpath = strdup(p+1);
+		if (localpath == NULL) {
+			free(host);
+			goto outofmem;
+		}
+		/*
+		 * Put fs->fs_spec back the way it was, so we can use it
+		 * in error messages.
+		 */
+		*p = ':';
 
 		/*
 		 * Massage the mount options.
@@ -425,10 +445,15 @@ readfstab(void)
 		if (err == ENAMETOOLONG) {
 			pr_msg("Mount options for %s are too long",
 			    fs->fs_spec);
+			free(localpath);
+			free(host);
 			continue;	/* give up on this */
 		}
-		if (err == ENOMEM)
+		if (err == ENOMEM) {
+			free(localpath);
+			free(host);
 			goto outofmem;
+		}
 
 		/*
 		 * If the VFS type is empty, we treat it as "nfs", for
@@ -443,6 +468,8 @@ readfstab(void)
 				pr_msg("Mount for %s has type url but no URL",
 				    fs->fs_spec);
 				free(mntops);
+				free(localpath);
+				free(host);
 				continue;
 			}
 		} else {
@@ -452,6 +479,8 @@ readfstab(void)
 				    fs->fs_spec, vfstype);
 				free(mntops);
 				free(url);
+				free(localpath);
+				free(host);
 				continue;
 			}
 		}
@@ -470,22 +499,19 @@ readfstab(void)
 			if (fst == NULL) {
 				free(url);
 				free(mntops);
+				free(localpath);
+				free(host);
 				goto outofmem;
 			}
 
-			fst->fst_dir = strdup(p);
-			if (fst->fst_dir == NULL) {
-				free(fst);
-				free(url);
-				free(mntops);
-				goto outofmem;
-			}
+			fst->fst_dir = localpath;
 			fst->fst_vfstype = strdup(vfstype);
 			if (fst->fst_vfstype == NULL) {
 				free(fst->fst_dir);
 				free(fst);
 				free(url);
 				free(mntops);
+				free(host);
 				goto outofmem;
 			}
 			fst->fst_mntops = mntops;	/* this is mallocated */
@@ -495,7 +521,7 @@ readfstab(void)
 			 * Now add an entry for the host if we haven't already
 			 * done so.
 			 */
-			host_entry = find_host_entry(fs->fs_spec, &fstab_bucket);
+			host_entry = find_host_entry(host, &fstab_bucket);
 			if (host_entry == NULL) {
 				/*
 				 * We found no entry for the host; allocate
@@ -508,18 +534,10 @@ readfstab(void)
 					free(fst);
 					free(url);
 					free(mntops);
+					free(host);
 					goto outofmem;
 				}
-				host_entry->name = strdup(fs->fs_spec);
-				if (host_entry->name == NULL) {
-					free(host_entry);
-					free(fst->fst_vfstype);
-					free(fst->fst_dir);
-					free(fst);
-					free(url);
-					free(mntops);
-					goto outofmem;
-				}
+				host_entry->name = host;
 				host_entry->fstab_ents = fst;
 				host_entry->next = *fstab_bucket;
 				*fstab_bucket = host_entry;
@@ -530,6 +548,12 @@ readfstab(void)
 				 */
 				fst->fst_next = host_entry->fstab_ents;
 				host_entry->fstab_ents = fst;
+
+				/*
+				 * We don't need the host - we already
+				 * have it in the host entry.
+				 */
+				free(host);
 			}
 		} else {
 			/*
@@ -555,6 +579,8 @@ readfstab(void)
 				if (static_ent == NULL) {
 					free(url);
 					free(mntops);
+					free(localpath);
+					free(host);
 					goto outofmem;
 				}
 				static_ent->dir = strdup(fs->fs_file);
@@ -562,6 +588,8 @@ readfstab(void)
 					free(static_ent);
 					free(url);
 					free(mntops);
+					free(localpath);
+					free(host);
 					goto outofmem;
 				}
 				static_ent->vfstype = strdup(vfstype);
@@ -570,23 +598,20 @@ readfstab(void)
 					free(static_ent);
 					free(url);
 					free(mntops);
+					free(localpath);
+					free(host);
 					goto outofmem;
 				}
 				static_ent->mntops = mntops;
-				static_ent->host = strdup(fs->fs_spec);
-				if (static_ent->host == NULL) {
-					free(static_ent->vfstype);
-					free(static_ent->dir);
-					free(static_ent);
-					free(url);
-					free(mntops);
-					goto outofmem;
-				}
-				if (url != NULL)
+				static_ent->host = host;
+				if (url != NULL) {
+					static_ent->localpath = localpath;
 					static_ent->spec = url;
-				else {
-					static_ent->spec = strdup(p);
+				} else {
+					static_ent->localpath = localpath;
+					static_ent->spec = strdup(localpath);
 					if (static_ent->spec == NULL) {
+						free(static_ent->localpath);
 						free(static_ent->host);
 						free(static_ent->vfstype);
 						free(static_ent->dir);
@@ -604,6 +629,8 @@ readfstab(void)
 				/* Yes - leave it. */
 				free(mntops);
 				free(url);
+				free(localpath);
+				free(host);
 			}
 		}
 	}
@@ -771,6 +798,7 @@ int
 getfstabkeys(struct dir_entry **list, int *error, int *cache_time)
 {
 	int err;
+	time_t timediff;
 
 	/*
 	 * Get a read lock, so the cache doesn't get modified out
@@ -785,9 +813,12 @@ getfstabkeys(struct dir_entry **list, int *error, int *cache_time)
 	/*
 	 * Return the time until the current cache data times out.
 	 */
-	*cache_time = max_cachetime - time(NULL);
-	if (*cache_time < 0)
-		*cache_time = 0;
+	timediff = max_cachetime - time(NULL);
+	if (timediff < 0)
+		timediff = 0;
+	else if (timediff > INT_MAX)
+		timediff = INT_MAX;
+	*cache_time = (int)timediff;
 	*error = 0;
 	if (trace  > 1)
 		trace_prt(1, "getfstabkeys called\n");
@@ -985,6 +1016,11 @@ loaddirect_static(local_map, opts, stack, stkptr)
 
 /*
  * Find the -static map entry corresponding to a given mount point.
+ *
+ * We return with the read lock held, so that the cache doesn't
+ * get cleared, and all the entries freed, while somebody's holding
+ * onto an entry.  The holder must call release_staticmap_entry()
+ * with the entry; for now, all that will do is release the rwlock.
  */
 struct staticmap *
 get_staticmap_entry(const char *dir)
@@ -1015,6 +1051,7 @@ get_staticmap_entry(const char *dir)
 			/*
 			 * That failed; give up.
 			 */
+			pthread_rwlock_unlock(&fstab_cache_lock);
 			return (NULL);
 		}
 
@@ -1022,10 +1059,27 @@ get_staticmap_entry(const char *dir)
 		 * Check what we now have cached.
 		 */
 		static_ent = find_staticmap_entry(dir, NULL);
+
+		/*
+		 * If we still have nothing, release the read lock,
+		 * as we're not returning a pointer to something
+		 * in the cache.
+		 */
+		if (static_ent == NULL)
+			pthread_rwlock_unlock(&fstab_cache_lock);
 	}
 
-	pthread_rwlock_unlock(&fstab_cache_lock);
 	return (static_ent);
+}
+
+/*
+ * Indicate that we're done with a -static map entry returned by
+ * get_staticmap_entry().
+ */
+void
+release_staticmap_entry(__unused struct staticmap *static_ent)
+{
+	pthread_rwlock_unlock(&fstab_cache_lock);
 }
 
 /*

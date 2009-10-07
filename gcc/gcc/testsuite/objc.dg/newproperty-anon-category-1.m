@@ -1,8 +1,8 @@
 /* APPLE LOCAL file radar 4965989 */
 /* Test for checking out property execution with anonymous category adding setter to
    primary category. */
-/* { dg-options "-fobjc-new-property -mmacosx-version-min=10.5 -framework Foundation -framework CoreFoundation" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
-/* { dg-options "-fobjc-new-property -framework Foundation -framework CoreFoundation" { target arm*-*-darwin* } } */
+/* { dg-options "-fobjc-new-property -mmacosx-version-min=10.5 -framework Foundation" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
+/* { dg-options "-fobjc-new-property -framework Foundation" { target arm*-*-darwin* } } */
 /* { dg-do run { target *-*-darwin* } } */
 
 #include <Foundation/Foundation.h>

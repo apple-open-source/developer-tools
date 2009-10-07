@@ -33,6 +33,7 @@
 #include <pwd.h>
 #include <grp.h>
 #include <dns_util.h>
+#include <SystemConfiguration/SCDynamicStore.h>
 
 #include "DirServicesTypes.h"
 #include "DirServicesConst.h"
@@ -40,8 +41,7 @@
 #include "SharedConsts.h"
 #include "PluginData.h"
 #include "CServerPlugin.h"
-#include "CInternalDispatchThread.h"
-#include "cache.h"
+#include "CCache.h"
 #include "DSMutexSemaphore.h"
 #include "DSEventSemaphore.h"
 #include "DSSemaphore.h"
@@ -50,6 +50,9 @@
 #include <set>
 #include <libkern/OSAtomic.h>
 #include <mach/clock_types.h>
+#include <pthread.h>
+#include "CCache.h"
+#include <dispatch/dispatch.h>
 
 #include <CoreFoundation/CoreFoundation.h>
 
@@ -71,28 +74,30 @@ typedef struct {
 	UInt32				offset;					// offset for data extraction out of the buffers
 } sCacheContextData;
 
+#ifdef HANDLE_DNS_LOOKUPS
+
 #define kMaxDNSQueries          32
 
 struct sDNSLookup
 {
-    pthread_mutex_t     fMutex;
-    pthread_cond_t      fCondition;
-    int32_t             fOutstanding;   // number of pending queries (expected)
+    volatile int32_t    fOutstanding;   // number of pending queries (expected)
     int                 fTotal;         // number of total actual queries initiated
-    bool                fDeleteEntry;   // request already should be deleted if fOutanding = 0
     uint16_t            fQueryTypes[10];
     uint16_t            fQueryClasses[10];
     char                *fQueryStrings[10];
     dns_reply_t         *fAnswers[10];  // up to 10 active queries
     uint16_t            fAdditionalInfo[10];
-    int                 fMinimumTTL[10];
+    int32_t             fMinimumTTL[10];
     double              fAnswerTime[10];
     int32_t             fQueryFinished[10];
     pthread_t           fThreadID[10];
-    
-    sDNSLookup( void )
+	pthread_t           fAllocatedByThread;
+    dispatch_source_t   fTimerSource;
+	pthread_mutex_t		fMutex;
+    dispatch_semaphore_t    fSemaphore;
+
+    sDNSLookup( const char *inName = NULL )
     {
-        fDeleteEntry = false;
         fOutstanding = 0;
         fTotal = 0;
         bzero( fQueryTypes, sizeof(fQueryTypes) );
@@ -104,12 +109,32 @@ struct sDNSLookup
         bzero( fAnswerTime, sizeof(fAnswerTime) );
         bzero( fQueryFinished, sizeof(fQueryFinished) );
         bzero( fThreadID, sizeof(fThreadID) );
-        pthread_mutex_init( &fMutex, NULL );
-        pthread_cond_init( &fCondition, NULL );
+        fTimerSource = NULL;
+	    fAllocatedByThread = pthread_self();
+        
+        pthread_mutexattr_t attr;
+        pthread_mutexattr_init( &attr );
+        pthread_mutexattr_settype( &attr, PTHREAD_MUTEX_ERRORCHECK );
+        pthread_mutex_init( &fMutex, &attr );
+        pthread_mutexattr_destroy( &attr );
+        
+        fSemaphore = NULL;
     }
     
     ~sDNSLookup( void )
     {
+		// if there are still outstanding queries and we're being deleted,
+		// that's a bad thing.  Log and abort rather than risk using a freed
+		// pointer.
+		if ( fOutstanding > 0 )
+		{
+			DbgLog( kLogDebug,
+					"CCachePlugin::~sDNSLookup - destructor called by thread %X with %d outstanding queries.  Allocated by thread %X.  Aborting",
+					pthread_self(), fOutstanding, fAllocatedByThread );
+
+			abort();
+		}
+
         for( int ii = 0; ii < fTotal; ii++ )
         {
             if( fAnswers[ii] != NULL )
@@ -118,138 +143,38 @@ struct sDNSLookup
                 fAnswers[ii] = NULL;
             }
             
-            if( fQueryStrings[ii] != NULL )
-            {
-                free( fQueryStrings[ii] );
-                fQueryStrings[ii] = NULL;
-            }
+            DSFree( fQueryStrings[ii] );
         }
+        
+        if ( fTimerSource != NULL ) {
+            dispatch_cancel( fTimerSource );
+            dispatch_release( fTimerSource );
+            fTimerSource = NULL;
+        }
+        if ( fSemaphore != NULL ) {
+            dispatch_release( fSemaphore );
+            fSemaphore = NULL;
+        }
+        
+        pthread_mutex_destroy( &fMutex );
     }
     
     void AddQuery( uint16_t inQueryClass, uint16_t inQueryType, char *inQueryString, uint16_t inAdditionalInfo = 0 )
     {
-        pthread_mutex_lock( &fMutex );
         fQueryClasses[fTotal] = inQueryClass;
         fQueryTypes[fTotal] = inQueryType;
         fQueryStrings[fTotal] = strdup( inQueryString );
         fAdditionalInfo[fTotal] = inAdditionalInfo;
         fTotal++;
-        pthread_mutex_unlock( &fMutex );
-    }
-    
-    void WaitUntilDone( int inIndexOfAReq )
-    {
-        int             milliSecs   = 0;
-        double          maxTime     = 0.0;
-        struct timeval	tvNow;
-        struct timespec	tsTimeout   = { 0 };
-        bool            bTimedOut   = false;
-        
-        pthread_mutex_lock( &fMutex );
-
-        if ( inIndexOfAReq >= 0 )
-            DbgLog( kLogDebug, "CCachePlugin::WaitUntilDone - Waiting (60 sec max) for first A response, Outstanding = %d, Total = %d", 
-                    fOutstanding, fTotal );
-        else
-            DbgLog( kLogDebug, "CCachePlugin::WaitUntilDone - Waiting (60 sec max), Outstanding = %d, Total = %d", fOutstanding, 
-                    fTotal );
-
-        gettimeofday( &tvNow, NULL );
-        TIMEVAL_TO_TIMESPEC ( &tvNow, &tsTimeout );
-        tsTimeout.tv_sec += 60; // only wait 60 seconds
-        
-        while ( fOutstanding > 0 )
-        {
-            if ( pthread_cond_timedwait( &fCondition, &fMutex, &tsTimeout ) == ETIMEDOUT ) {
-                // we'll only wait 60 seconds
-                DbgLog( kLogDebug, "CCachePlugin::WaitUntilDone - Giving up after 60 sec - Outstanding = %d, Total = %d", fOutstanding, 
-                        fTotal );
-                bTimedOut = true;
-                break;
-            }
-            
-            // if our IPv4 query finished we'll break out of this 60 second wait
-            if ( inIndexOfAReq >= 0 ) {
-                if ( fQueryFinished[inIndexOfAReq] == true )
-                    break;
-            } else if ( fOutstanding != fTotal ) {
-                // if any queries finished we'll break too
-                break;
-            }
-        } 
-        
-        // if we didn't timeout from the 60 seconds and we still have queries left
-        if ( bTimedOut == false && fOutstanding > 0 )
-        {
-            // if we are looking for an A request and got an answer, use that time as our calculation
-            if ( inIndexOfAReq >= 0 && fAnswers[inIndexOfAReq] != NULL )
-                maxTime = fAnswerTime[inIndexOfAReq]; // use the time of that request directly
-            
-            // if we still don't have a maxTime, see if we have answers and get the max time
-            if ( maxTime == 0.0 ) {
-                // find response with highest time and use that as our further delay
-                for ( int ii = 0; ii < fTotal; ii++ ) 
-                {
-                    // if the query is finished and we got an answer
-                    if ( fQueryFinished[ii] == true && fAnswers[ii] != NULL && fAnswerTime[ii] > maxTime )
-                        maxTime = fAnswerTime[ii];
-                }
-            }
-            
-            // only if we have a maxTime do we actually set a timeout
-            if ( maxTime > 0.0 ) {
-                if ( fOutstanding > 0 ) {
-                    milliSecs = (maxTime / 1000) * fTotal;
-                    DbgLog( kLogDebug, "CCachePlugin::WaitUntilDone - total timeout will be %d ms", milliSecs );
-                } else {
-                    DbgLog( kLogDebug, "CCachePlugin::WaitUntilDone - queries complete" );
-                    milliSecs = 0;
-                }
-            }
-            
-            if ( milliSecs > 0 )
-            {
-                struct timespec	tsWaitTime  = { 0 };
-                
-                DbgLog( kLogDebug, "CCachePlugin::WaitUntilDone - Waiting %d ms for remaining, Outstanding = %d, Total = %d", milliSecs, fOutstanding, 
-                        fTotal );
-                
-                gettimeofday( &tvNow, NULL );
-                TIMEVAL_TO_TIMESPEC ( &tvNow, &tsTimeout );
-                tsWaitTime.tv_sec = (milliSecs / 1000);
-                tsWaitTime.tv_nsec = ((milliSecs % 1000) * 1000000);
-                ADD_MACH_TIMESPEC( &tsTimeout, &tsWaitTime );
-                
-                while ( fOutstanding > 0 )
-                {
-                    if ( pthread_cond_timedwait(&fCondition, &fMutex, &tsTimeout) == ETIMEDOUT )
-                    {
-                        DbgLog( kLogDebug, "CCachePlugin::WaitUntilDone - Condition timeout, Outstanding = %d, Total = %d", fOutstanding, 
-                                fTotal );
-                        break;
-                    }
-                }
-            }
-        }
-        
-        pthread_mutex_unlock( &fMutex );
-    }
-    
-    void AbandonLookups( void );
-    
-    void SignalCondition( void )
-    {
-        pthread_mutex_lock( &fMutex );
-        DbgLog(  kLogDebug, "CCachePlugin::WaitUntilDone - Signalling, Outstanding = %d, Total = %d", fOutstanding, 
-                 fTotal );
-        pthread_cond_signal( &fCondition );
-        pthread_mutex_unlock( &fMutex );
     }
 };
+#else
+	typedef void *sDNSLookup;
+#endif
 
 typedef sCacheValidation* (*ProcessEntryCallback)( tDirReference inDirRef, tDirNodeReference inNodeRef, kvbuf_t *inBuffer, 
-                                                     tDataBufferPtr inDataBuffer, tRecordEntryPtr inRecEntry, tAttributeListRef inAttrListRef, 
-                                                     void *additionalInfo, CCache *inCache, char **inKeys );
+                                                   tDataBufferPtr inDataBuffer, tRecordEntryPtr inRecEntry, tAttributeListRef inAttrListRef, 
+                                                   void *additionalInfo, CCache *inCache, const char **inKeys );
 
 class CCachePlugin : public CServerPlugin
 {
@@ -274,7 +199,7 @@ public:
                                                   kvbuf_t *inEntry, 
                                                   uint32_t flags,
                                                   uint32_t ttl,
-                                                  char **inKeys );
+                                                  const char **inKeys );
     static void         AddEntryToCacheWithMultiKey
                                                 ( CCache *inCache, 
                                                   sCacheValidation *inValidation, 
@@ -292,9 +217,11 @@ public:
     static void         RemoveEntryWithMultiKey( CCache *inCache, ... );
                                                   
     void                EmptyCacheEntryType     ( uint32_t inEntryType );
-    void                UpdateNodeReachability  ( char *inNodeName, 
+    int                 UpdateNodeReachability  ( char *inNodeName, 
                                                   bool inReachable );
+#ifdef HANDLE_DNS_LOOKUPS
     void                DNSConfigurationChanged ( void );
+#endif
 
     kvbuf_t*            DSgetnetgrent           ( kvbuf_t *inBuffer );  // need public access
 
@@ -304,6 +231,7 @@ protected:
     static SInt32	CleanContextData			(	sCacheContextData *inContext );
 
 private:
+    friend struct UserGroup **Mbrd_FindItemsAndRetain( tDirNodeReference dirNode, tDataListPtr recType, int idType, const char *value, uint32_t flags, UInt32 *recCount );
 	SInt32			OpenDirNode					( sOpenDirNode *inData );
 	SInt32			CloseDirNode				( sCloseDirNode *inData );
 	SInt32			GetDirNodeInfo				( sGetDirNodeInfo *inData );
@@ -317,9 +245,15 @@ private:
 	SInt32			CloseAttributeValueList		( sCloseAttributeValueList *inData );
 	SInt32			ReleaseContinueData			( sReleaseContinueData *inData );
 	SInt32			DoPlugInCustomCall			( sDoPlugInCustomCall *inData );
+    
+    static void     SearchPolicyChange          ( SCDynamicStoreRef	store,
+                                                  CFArrayRef		changedKeys,
+                                                  void              *info );
+    void            CheckSearchPolicyForNIS     ( void );
 	
 	kvbuf_t*		FetchFromCache				( CCache *inCache, 
-                                                  uint32_t *outTTL,
+                                                  uint32_t reqFlags, 
+                                                  int32_t *outTTL,
 												  ... );
 	kvbuf_t*		GetRecordListLibInfo		( tDirNodeReference inNodeRef,
 												  const char* inSearchValue, 
@@ -330,7 +264,7 @@ private:
 												  kvbuf_t* inBuffer,
 												  void *additionalInfo,
                                                   CCache *inCache,
-                                                  char **inKeys,
+                                                  const char **inKeys,
                                                   sCacheValidation **outValidation = NULL );
 	
 	kvbuf_t*		ValueSearchLibInfo			( tDirNodeReference inNodeRef, 
@@ -346,11 +280,17 @@ private:
                                                   tDirPatternMatch inSearchType = eDSiExact );
 	
 	kvbuf_t*		DSgetpwnam					( kvbuf_t *inBuffer, pid_t inPID );
+    void            DSgetpwnam_initext          ( kvbuf_t *inBuffer, pid_t inPID );
+    kvbuf_t*        DSgetpwnam_ext              ( kvbuf_t *inBuffer, pid_t inPID );
+	kvbuf_t*		DSgetpwnam_int              ( kvbuf_t *inBuffer, pid_t inPID, uint32_t reqFlags, const tDataListPtr attrTypes );
     kvbuf_t*        DSgetpwuuid                 ( kvbuf_t *inBuffer, pid_t inPID );
 	kvbuf_t*		DSgetpwuid					( kvbuf_t *inBuffer, pid_t inPID );
 	kvbuf_t*		DSgetpwent					( void );
 
 	kvbuf_t*		DSgetgrnam					( kvbuf_t *inBuffer, pid_t inPID );
+    void            DSgetgrnam_initext          ( kvbuf_t *inBuffer, pid_t inPID );
+    kvbuf_t*        DSgetgrnam_ext              ( kvbuf_t *inBuffer, pid_t inPID );
+    kvbuf_t*        DSgetgrnam_int              ( kvbuf_t *inBuffer, pid_t inPID, uint32_t reqFlags, const tDataListPtr attrTypes );
     kvbuf_t*        DSgetgruuid                 ( kvbuf_t *inBuffer, pid_t inPID );
 	kvbuf_t*		DSgetgrgid					( kvbuf_t *inBuffer, pid_t inPID );
 	kvbuf_t*		DSgetgrent					( void );
@@ -361,6 +301,7 @@ private:
 	kvbuf_t*		DSgetaliasbyname			( kvbuf_t *inBuffer );
 	kvbuf_t*		DSgetaliasent				( void );
 	
+	kvbuf_t*        DSgetservbyname_int         ( const char *service, const char *proto, pid_t inPID );
 	kvbuf_t*		DSgetservbyname				( kvbuf_t *inBuffer, pid_t inPID );
 	kvbuf_t*		DSgetservbyport				( kvbuf_t *inBuffer, pid_t inPID );
 	kvbuf_t*		DSgetservent				( void );
@@ -385,7 +326,9 @@ private:
                                                   const char *inIPv4, 
                                                   const char *inIPv6, 
                                                   pid_t inPID, 
-                                                  uint32_t *outTTL );
+                                                  int32_t *outTTL );
+    
+#ifdef HANDLE_DNS_LOOKUPS
     int             SortPartitionAdditional     ( dns_resource_record_t **inRecords, 
                                                   int inFirst, 
                                                   int inLast );
@@ -393,13 +336,17 @@ private:
                                                   int inFirst, 
                                                   int inLast );
     sDNSLookup *    CreateAdditionalDNSQueries  ( sDNSLookup *inDNSLookup, 
-                                                  char *inService, 
-                                                  char *inProtocol, 
-                                                  char *inName, 
-                                                  char *inSearchDomain,
+                                                  const char *inService, 
+                                                  const char *inProtocol, 
+                                                  const char *inName, 
+                                                  const char *inSearchDomain,
                                                   uint16_t inAdditionalInfo );
     void            InitiateDNSQuery            ( sDNSLookup *inLookup, 
                                                   bool inParallel );
+	void            IssueParallelDNSQueries     ( sDNSLookup      *inLookup );
+	static void     AbandonDNSQueries           ( sDNSLookup      *inLookup );
+#endif
+    
     kvbuf_t*        DSgethostbyname             ( kvbuf_t *inBuffer, 
                                                   pid_t inPID, 
                                                   bool inParallelQuery = false,
@@ -410,28 +357,39 @@ private:
                                                   int inPID, 
                                                   bool inParallelQuery, 
                                                   sDNSLookup *inLookup, 
-                                                  uint32_t *outTTL = NULL );
+                                                  int32_t *outTTL = NULL );
+    kvbuf_t*        DSgethostbyname_service     ( kvbuf_t *inBuffer, pid_t inPID );
     kvbuf_t*        DSgethostbyaddr             ( kvbuf_t *inBuffer, pid_t inPID );
     kvbuf_t*        DSgethostent                ( kvbuf_t *inBuffer, pid_t inPID );
+    
+#ifdef HANDLE_DNS_LOOKUPS
     kvbuf_t*        DSgetnameinfo               ( kvbuf_t *inBuffer, pid_t inPID );
+#endif
 
     kvbuf_t*        DSgetmacbyname              ( kvbuf_t *inBuffer, pid_t inPID );
     kvbuf_t*        DSgethostbymac              ( kvbuf_t *inBuffer, pid_t inPID );
+#ifdef HANDLE_DNS_LOOKUPS
     kvbuf_t*        DSgetaddrinfo               ( kvbuf_t *inBuffer, pid_t inPID );
+#endif
     kvbuf_t*        DSdns_proxy                 ( kvbuf_t *inBuffer, pid_t inPID );
     kvbuf_t*        DSgetbootpbyhw              ( kvbuf_t *inBuffer, pid_t inPID );
     kvbuf_t*        DSgetbootpbyaddr            ( kvbuf_t *inBuffer, pid_t inPID );
     
     bool            IsLocalOnlyPID              ( pid_t inPID );
     
+#ifdef HANDLE_DNS_LOOKUPS
     void            checkAAAAstatus             ( void );
+#endif
 
 	sCacheContextData*	MakeContextData			( void );
 	
 	tDirReference		fDirRef;				// DS session reference
 	tDirNodeReference	fSearchNodeRef;			// search node reference
     tDirNodeReference   fFlatFileNodeRef;       // flat file node reference
+    tDirNodeReference   fNISNodeRef;
     tDirNodeReference   fLocalNodeRef;
+    dispatch_queue_t    fNISQueue;
+    dispatch_queue_t    fCheckNISQueue;
 	UInt32				fState;
 	bool				fPluginInitialized;
 	CCache				*fLibinfoCache;
@@ -447,6 +405,7 @@ private:
     int64_t             fCallsByFunction[ 128 ];
     int64_t             fCacheHitsByFunction[ 128 ];
     int64_t             fCacheMissByFunction[ 128 ];
+#ifdef HANDLE_DNS_LOOKUPS
     uint16_t            fTypeCNAME;
     uint16_t            fTypeA;
     uint16_t            fTypeAAAA;
@@ -457,6 +416,7 @@ private:
     int                 fGetAddrStateEngine[10];
     bool                fUnqualifiedSRVAllowed;
     bool                fAlwaysDoAAAA;
+#endif
 };
 
 #endif	// __CCachePlugin_H__

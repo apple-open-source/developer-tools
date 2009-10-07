@@ -1,5 +1,5 @@
 /* Header for code translation functions
-   Copyright (C) 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005, 2006 Free Software Foundation, Inc.
    Contributed by Paul Brook
 
 This file is part of GCC.
@@ -16,8 +16,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 #ifndef GFC_TRANS_H
 #define GFC_TRANS_H
@@ -67,6 +67,10 @@ typedef struct gfc_se
   /* Ignore absent optional arguments.  Used for some intrinsics.  */
   unsigned ignore_optional:1;
 
+  /* When this is set the data and offset fields of the returned descriptor
+     are NULL.  Used by intrinsic size.  */
+  unsigned data_not_needed:1;
+
   /* Scalarization parameters.  */
   struct gfc_se *parent;
   struct gfc_ss *ss;
@@ -103,6 +107,7 @@ typedef struct gfc_ss_info
      start is used in the calculation of these.  Indexed by scalarizer
      dimension.  */
   tree start[GFC_MAX_DIMENSIONS];
+  tree end[GFC_MAX_DIMENSIONS];
   tree stride[GFC_MAX_DIMENSIONS];
   tree delta[GFC_MAX_DIMENSIONS];
 
@@ -138,8 +143,8 @@ typedef enum
      uses this temporary inside the scalarization loop.  */
   GFC_SS_CONSTRUCTOR,
 
-  /* A vector subscript.  Only used as the SS chain for a subscript.
-     Similar int format to a GFC_SS_SECTION.  */
+  /* A vector subscript.  The vector's descriptor is cached in the
+     "descriptor" field of the associated gfc_ss_info.  */
   GFC_SS_VECTOR,
 
   /* A temporary array allocated by the scalarizer.  Its rank can be less
@@ -251,8 +256,8 @@ gfc_saved_var;
 /* Advance the SS chain to the next term.  */
 void gfc_advance_se_ss_chain (gfc_se *);
 
-/* Call this to initialise a gfc_se structure before use
-   first parameter is structure to initialise, second is
+/* Call this to initialize a gfc_se structure before use
+   first parameter is structure to initialize, second is
    parent to get scalarization data from, or NULL.  */
 void gfc_init_se (gfc_se *, gfc_se *);
 
@@ -268,27 +273,25 @@ void gfc_make_safe_expr (gfc_se * se);
 /* Makes sure se is suitable for passing as a function string parameter.  */
 void gfc_conv_string_parameter (gfc_se * se);
 
+/* Compare two strings.  */
+tree gfc_build_compare_string (tree, tree, tree, tree);
+
 /* Add an item to the end of TREE_LIST.  */
 tree gfc_chainon_list (tree, tree);
 
 /* When using the gfc_conv_* make sure you understand what they do, i.e.
-   when a POST chain may be created, and what the retured expression may be
+   when a POST chain may be created, and what the returned expression may be
    used for.  Note that character strings have special handling.  This
    should not be a problem as most statements/operations only deal with
-   numeric/logical types.  */
+   numeric/logical types.  See the implementations in trans-expr.c
+   for details of the individual functions.  */
 
-/* Entry point for expression translation.  */
 void gfc_conv_expr (gfc_se * se, gfc_expr * expr);
-/* Like gfc_conv_expr, but the POST block is guaranteed to be empty for
-   numeric expressions.  */
 void gfc_conv_expr_val (gfc_se * se, gfc_expr * expr);
-/* Like gfc_conv_expr_val, but the value is also suitable for use in the lhs of
-   an assignment.  */
 void gfc_conv_expr_lhs (gfc_se * se, gfc_expr * expr);
-/* Converts an expression so that it can be passed be reference.  */
 void gfc_conv_expr_reference (gfc_se * se, gfc_expr *);
-/* Equivalent to convert(type, gfc_conv_expr_val(se, expr)).  */
 void gfc_conv_expr_type (gfc_se * se, gfc_expr *, tree);
+
 /* Find the decl containing the auxiliary variables for assigned variables.  */
 void gfc_conv_label_variable (gfc_se * se, gfc_expr * expr);
 /* If the value is not constant, Create a temporary and copy the value.  */
@@ -300,12 +303,19 @@ void gfc_conv_intrinsic_function (gfc_se *, gfc_expr *);
 /* Does an intrinsic map directly to an external library call.  */
 int gfc_is_intrinsic_libcall (gfc_expr *);
 
+/* Used to call the elemental subroutines used in operator assignments.  */
+tree gfc_conv_operator_assign (gfc_se *, gfc_se *, gfc_symbol *);
+
 /* Also used to CALL subroutines.  */
-void gfc_conv_function_call (gfc_se *, gfc_symbol *, gfc_actual_arglist *);
+int gfc_conv_function_call (gfc_se *, gfc_symbol *, gfc_actual_arglist *);
+
+void gfc_conv_aliased_arg (gfc_se *, gfc_expr *, int, sym_intent);
+bool is_aliased_array (gfc_expr *);
+
 /* gfc_trans_* shouldn't call push/poplevel, use gfc_push/pop_scope */
 
 /* Generate code for a scalar assignment.  */
-tree gfc_trans_scalar_assign (gfc_se *, gfc_se *, bt);
+tree gfc_trans_scalar_assign (gfc_se *, gfc_se *, gfc_typespec, bool, bool);
 
 /* Translate COMMON blocks.  */
 void gfc_trans_common (gfc_namespace *);
@@ -315,6 +325,8 @@ void gfc_conv_structure (gfc_se *, gfc_expr *, int);
 
 /* Return an expression which determines if a dummy parameter is present.  */
 tree gfc_conv_expr_present (gfc_symbol *);
+/* Convert a missing, dummy argument into a null or zero.  */
+void gfc_conv_missing_dummy (gfc_se *, gfc_expr *, gfc_typespec);
 
 /* Generate code to allocate a string temporary.  */
 tree gfc_conv_string_tmp (gfc_se *, tree, tree);
@@ -322,6 +334,8 @@ tree gfc_conv_string_tmp (gfc_se *, tree, tree);
 tree gfc_get_expr_charlen (gfc_expr *);
 /* Initialize a string length variable.  */
 void gfc_trans_init_string_length (gfc_charlen *, stmtblock_t *);
+/* Ensure type sizes can be gimplified.  */
+void gfc_trans_vla_type_sizes (gfc_symbol *, stmtblock_t *);
 
 /* Add an expression to the end of a block.  */
 void gfc_add_expr_to_block (stmtblock_t *, tree);
@@ -332,7 +346,7 @@ void gfc_add_modify_expr (stmtblock_t *, tree, tree);
 
 /* Initialize a statement block.  */
 void gfc_init_block (stmtblock_t *);
-/* Start a new satement block.  Like gfc_init_block but also starts a new
+/* Start a new statement block.  Like gfc_init_block but also starts a new
    variable scope.  */
 void gfc_start_block (stmtblock_t *);
 /* Finish a statement block.  Also closes the scope if the block was created
@@ -350,24 +364,18 @@ tree gfc_get_extern_function_decl (gfc_symbol *);
 /* Return the decl for a function.  */
 tree gfc_get_function_decl (gfc_symbol *);
 
-/* Build a CALL_EXPR.  */
-tree gfc_build_function_call (tree, tree);
-
 /* Build an ADDR_EXPR.  */
 tree gfc_build_addr_expr (tree, tree);
-
-/* Build an INDIRECT_REF.  */
-tree gfc_build_indirect_ref (tree);
 
 /* Build an ARRAY_REF.  */
 tree gfc_build_array_ref (tree, tree);
 
-/* Creates an label.  Decl is artificial if label_id == NULL_TREE.  */
+/* Creates a label.  Decl is artificial if label_id == NULL_TREE.  */
 tree gfc_build_label_decl (tree);
 
 /* Return the decl used to hold the function return value.
    Do not use if the function has an explicit result variable.  */
-tree gfc_get_fake_result_decl (gfc_symbol *);
+tree gfc_get_fake_result_decl (gfc_symbol *, int);
 
 /* Get the return label for the current function.  */
 tree gfc_get_return_label (void);
@@ -396,7 +404,7 @@ void gfc_restore_sym (gfc_symbol *, gfc_saved_var *);
 /* Returns true if a variable of specified size should go on the stack.  */
 int gfc_can_put_var_on_stack (tree);
 
-/* Allocate the lang-spcific part of a decl node.  */
+/* Allocate the lang-specific part of a decl node.  */
 void gfc_allocate_lang_decl (tree);
 
 /* Advance along a TREE_CHAIN.  */
@@ -419,13 +427,16 @@ void gfc_get_backend_locus (locus *);
 extern GTY(()) tree gfc_static_ctors;
 void gfc_generate_constructors (void);
 
+/* Get the string length of an array constructor.  */
+bool get_array_ctor_strlen (gfc_constructor *, tree *);
+
 /* Generate a runtime error check.  */
-void gfc_trans_runtime_check (tree, tree, stmtblock_t *);
+void gfc_trans_runtime_check (tree, const char *, stmtblock_t *, locus *);
 
 /* Generate code for an assignment, includes scalarization.  */
-tree gfc_trans_assignment (gfc_expr *, gfc_expr *);
+tree gfc_trans_assignment (gfc_expr *, gfc_expr *, bool);
 
-/* Generate code for an pointer assignment.  */
+/* Generate code for a pointer assignment.  */
 tree gfc_trans_pointer_assignment (gfc_expr *, gfc_expr *);
 
 /* Initialize function decls for library functions.  */
@@ -445,12 +456,25 @@ tree gfc_truthvalue_conversion (tree);
 tree builtin_function (const char *, tree, int, enum built_in_class,
 		       const char *, tree);
 
+/* In trans-openmp.c */
+bool gfc_omp_privatize_by_reference (tree);
+enum omp_clause_default_kind gfc_omp_predetermined_sharing (tree);
+tree gfc_omp_clause_default_ctor (tree, tree);
+bool gfc_omp_disregard_value_expr (tree, bool);
+bool gfc_omp_private_debug_clause (tree, bool);
+struct gimplify_omp_ctx;
+void gfc_omp_firstprivatize_type_sizes (struct gimplify_omp_ctx *, tree);
+
 /* Runtime library function decls.  */
 extern GTY(()) tree gfor_fndecl_internal_malloc;
 extern GTY(()) tree gfor_fndecl_internal_malloc64;
+extern GTY(()) tree gfor_fndecl_internal_realloc;
+extern GTY(()) tree gfor_fndecl_internal_realloc64;
 extern GTY(()) tree gfor_fndecl_internal_free;
 extern GTY(()) tree gfor_fndecl_allocate;
 extern GTY(()) tree gfor_fndecl_allocate64;
+extern GTY(()) tree gfor_fndecl_allocate_array;
+extern GTY(()) tree gfor_fndecl_allocate64_array;
 extern GTY(()) tree gfor_fndecl_deallocate;
 extern GTY(()) tree gfor_fndecl_pause_numeric;
 extern GTY(()) tree gfor_fndecl_pause_string;
@@ -458,6 +482,11 @@ extern GTY(()) tree gfor_fndecl_stop_numeric;
 extern GTY(()) tree gfor_fndecl_stop_string;
 extern GTY(()) tree gfor_fndecl_select_string;
 extern GTY(()) tree gfor_fndecl_runtime_error;
+extern GTY(()) tree gfor_fndecl_set_fpe;
+extern GTY(()) tree gfor_fndecl_set_std;
+extern GTY(()) tree gfor_fndecl_ttynam;
+extern GTY(()) tree gfor_fndecl_ctime;
+extern GTY(()) tree gfor_fndecl_fdate;
 extern GTY(()) tree gfor_fndecl_in_pack;
 extern GTY(()) tree gfor_fndecl_in_unpack;
 extern GTY(()) tree gfor_fndecl_associated;
@@ -473,16 +502,20 @@ typedef struct gfc_powdecl_list GTY(())
 }
 gfc_powdecl_list;
 
-extern GTY(()) gfc_powdecl_list gfor_fndecl_math_powi[3][2];
+extern GTY(()) gfc_powdecl_list gfor_fndecl_math_powi[4][3];
 extern GTY(()) tree gfor_fndecl_math_cpowf;
 extern GTY(()) tree gfor_fndecl_math_cpow;
+extern GTY(()) tree gfor_fndecl_math_cpowl10;
+extern GTY(()) tree gfor_fndecl_math_cpowl16;
 extern GTY(()) tree gfor_fndecl_math_ishftc4;
 extern GTY(()) tree gfor_fndecl_math_ishftc8;
+extern GTY(()) tree gfor_fndecl_math_ishftc16;
 extern GTY(()) tree gfor_fndecl_math_exponent4;
 extern GTY(()) tree gfor_fndecl_math_exponent8;
+extern GTY(()) tree gfor_fndecl_math_exponent10;
+extern GTY(()) tree gfor_fndecl_math_exponent16;
 
 /* String functions.  */
-extern GTY(()) tree gfor_fndecl_copy_string;
 extern GTY(()) tree gfor_fndecl_compare_string;
 extern GTY(()) tree gfor_fndecl_concat_string;
 extern GTY(()) tree gfor_fndecl_string_len_trim;
@@ -542,6 +575,9 @@ struct lang_decl		GTY(())
 #define GFC_DECL_PACKED_ARRAY(node) DECL_LANG_FLAG_0(node)
 #define GFC_DECL_PARTIAL_PACKED_ARRAY(node) DECL_LANG_FLAG_1(node)
 #define GFC_DECL_ASSIGN(node) DECL_LANG_FLAG_2(node)
+#define GFC_DECL_COMMON_OR_EQUIV(node) DECL_LANG_FLAG_3(node)
+#define GFC_DECL_CRAY_POINTEE(node) DECL_LANG_FLAG_4(node)
+#define GFC_DECL_RESULT(node) DECL_LANG_FLAG_5(node)
 
 /* An array descriptor.  */
 #define GFC_DESCRIPTOR_TYPE_P(node) TYPE_LANG_FLAG_1(node)
@@ -569,12 +605,88 @@ struct lang_decl		GTY(())
 #define gfc_todo_error(args...) fatal_error("gfc_todo: Not Implemented: " args)
 
 /* Build an expression with void type.  */
-#define build1_v(code, arg) build(code, void_type_node, arg)
+#define build1_v(code, arg) build1(code, void_type_node, arg)
 #define build2_v(code, arg1, arg2) build2(code, void_type_node, \
                                           arg1, arg2)
 #define build3_v(code, arg1, arg2, arg3) build3(code, void_type_node, \
                                                 arg1, arg2, arg3)
+#define build4_v(code, arg1, arg2, arg3, arg4) build4(code, void_type_node, \
+						      arg1, arg2, arg3, arg4)
 
-/* flag for alternative return labels.  */
-extern int has_alternate_specifier;  /* for caller */
+/* This group of functions allows a caller to evaluate an expression from
+   the callee's interface.  It establishes a mapping between the interface's
+   dummy arguments and the caller's actual arguments, then applies that
+   mapping to a given gfc_expr.
+
+   You can initialize a mapping structure like so:
+
+       gfc_interface_mapping mapping;
+       ...
+       gfc_init_interface_mapping (&mapping);
+
+   You should then evaluate each actual argument into a temporary
+   gfc_se structure, here called "se", and map the result to the
+   dummy argument's symbol, here called "sym":
+
+       gfc_add_interface_mapping (&mapping, sym, &se);
+
+   After adding all mappings, you should call:
+
+       gfc_finish_interface_mapping (&mapping, pre, post);
+
+   where "pre" and "post" are statement blocks for initialization
+   and finalization code respectively.  You can then evaluate an
+   interface expression "expr" as follows:
+
+       gfc_apply_interface_mapping (&mapping, se, expr);
+
+   Once you've evaluated all expressions, you should free
+   the mapping structure with:
+
+       gfc_free_interface_mapping (&mapping); */
+
+
+/* This structure represents a mapping from OLD to NEW, where OLD is a
+   dummy argument symbol and NEW is a symbol that represents the value
+   of an actual argument.  Mappings are linked together using NEXT
+   (in no particular order).  */
+typedef struct gfc_interface_sym_mapping
+{
+  struct gfc_interface_sym_mapping *next;
+  gfc_symbol *old;
+  gfc_symtree *new;
+}
+gfc_interface_sym_mapping;
+
+
+/* This structure is used by callers to evaluate an expression from
+   a callee's interface.  */
+typedef struct gfc_interface_mapping
+{
+  /* Maps the interface's dummy arguments to the values that the caller
+     is passing.  The whole list is owned by this gfc_interface_mapping.  */
+  gfc_interface_sym_mapping *syms;
+
+  /* A list of gfc_charlens that were needed when creating copies of
+     expressions.  The whole list is owned by this gfc_interface_mapping.  */
+  gfc_charlen *charlens;
+}
+gfc_interface_mapping;
+
+void gfc_init_interface_mapping (gfc_interface_mapping *);
+void gfc_free_interface_mapping (gfc_interface_mapping *);
+void gfc_add_interface_mapping (gfc_interface_mapping *,
+				gfc_symbol *, gfc_se *);
+void gfc_finish_interface_mapping (gfc_interface_mapping *,
+				   stmtblock_t *, stmtblock_t *);
+void gfc_apply_interface_mapping (gfc_interface_mapping *,
+				  gfc_se *, gfc_expr *);
+
+
+/* Standard error messages used in all the trans-*.c files.  */
+extern char gfc_msg_bounds[];
+extern char gfc_msg_fault[];
+extern char gfc_msg_wrong_return[];
+
+
 #endif /* GFC_TRANS_H */

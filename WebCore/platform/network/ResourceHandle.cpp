@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2004, 2006, 2007 Apple Inc. All rights reserved.
+ * Copyright (C) 2004, 2006, 2007, 2008 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,6 +34,10 @@
 
 namespace WebCore {
 
+static bool shouldForceContentSniffing;
+
+static bool portAllowed(const ResourceRequest&);
+
 ResourceHandle::ResourceHandle(const ResourceRequest& request, ResourceHandleClient* client, bool defersLoading,
          bool shouldContentSniff, bool mightDownloadFromHandle)
     : d(new ResourceHandleInternal(this, request, client, defersLoading, shouldContentSniff, mightDownloadFromHandle))
@@ -43,10 +47,18 @@ ResourceHandle::ResourceHandle(const ResourceRequest& request, ResourceHandleCli
 PassRefPtr<ResourceHandle> ResourceHandle::create(const ResourceRequest& request, ResourceHandleClient* client,
     Frame* frame, bool defersLoading, bool shouldContentSniff, bool mightDownloadFromHandle)
 {
-    RefPtr<ResourceHandle> newHandle(new ResourceHandle(request, client, defersLoading, shouldContentSniff, mightDownloadFromHandle));
+    if (shouldContentSniff)
+        shouldContentSniff = shouldContentSniffURL(request.url());
+
+    RefPtr<ResourceHandle> newHandle(adoptRef(new ResourceHandle(request, client, defersLoading, shouldContentSniff, mightDownloadFromHandle)));
+
+    if (!request.url().isValid()) {
+        newHandle->scheduleFailure(InvalidURLFailure);
+        return newHandle.release();
+    }
 
     if (!portAllowed(request)) {
-        newHandle->scheduleBlockedFailure();
+        newHandle->scheduleFailure(BlockedFailure);
         return newHandle.release();
     }
         
@@ -56,17 +68,27 @@ PassRefPtr<ResourceHandle> ResourceHandle::create(const ResourceRequest& request
     return 0;
 }
 
-void ResourceHandle::scheduleBlockedFailure()
+void ResourceHandle::scheduleFailure(FailureType type)
 {
-    Timer<ResourceHandle>* blockedTimer = new Timer<ResourceHandle>(this, &ResourceHandle::fireBlockedFailure);
-    blockedTimer->startOneShot(0);
+    d->m_failureType = type;
+    d->m_failureTimer.startOneShot(0);
 }
 
-void ResourceHandle::fireBlockedFailure(Timer<ResourceHandle>* timer)
+void ResourceHandle::fireFailure(Timer<ResourceHandle>*)
 {
-    if (client())
-        client()->wasBlocked(this);
-    delete timer;
+    if (!client())
+        return;
+
+    switch (d->m_failureType) {
+        case BlockedFailure:
+            client()->wasBlocked(this);
+            return;
+        case InvalidURLFailure:
+            client()->cannotShowURL(this);
+            return;
+    }
+
+    ASSERT_NOT_REACHED();
 }
 
 ResourceHandleClient* ResourceHandle::client() const
@@ -88,13 +110,13 @@ void ResourceHandle::clearAuthentication()
 {
 #if PLATFORM(MAC)
     d->m_currentMacChallenge = nil;
-#elif PLATFORM(CF)
+#elif USE(CFNETWORK)
     d->m_currentCFChallenge = 0;
 #endif
     d->m_currentWebChallenge.nullify();
 }
 
-bool ResourceHandle::portAllowed(const ResourceRequest& request)
+static bool portAllowed(const ResourceRequest& request)
 {
     unsigned short port = request.url().port();
 
@@ -161,6 +183,7 @@ bool ResourceHandle::portAllowed(const ResourceRequest& request)
         993,  // IMAP+SSL
         995,  // POP3+SSL
         2049, // NFS
+        3659, // apple-sasl / PasswordServer [Apple addition]
         4045, // lockd
         6000, // X11
     };
@@ -172,14 +195,34 @@ bool ResourceHandle::portAllowed(const ResourceRequest& request)
         return true;
 
     // Allow ports 21 and 22 for FTP URLs, as Mozilla does.
-    if ((port == 21 || port == 22) && request.url().url().startsWith("ftp:", false))
+    if ((port == 21 || port == 22) && request.url().protocolIs("ftp"))
         return true;
 
     // Allow any port number in a file URL, since the port number is ignored.
-    if (request.url().url().startsWith("file:", false))
+    if (request.url().protocolIs("file"))
         return true;
 
     return false;
 }
   
+bool ResourceHandle::shouldContentSniff() const
+{
+    return d->m_shouldContentSniff;
+}
+
+bool ResourceHandle::shouldContentSniffURL(const KURL& url)
+{
+#if PLATFORM(MAC)
+    if (shouldForceContentSniffing)
+        return true;
+#endif
+    // We shouldn't content sniff file URLs as their MIME type should be established via their extension.
+    return !url.protocolIs("file");
+}
+
+void ResourceHandle::forceContentSniffing()
+{
+    shouldForceContentSniffing = true;
+}
+
 } // namespace WebCore

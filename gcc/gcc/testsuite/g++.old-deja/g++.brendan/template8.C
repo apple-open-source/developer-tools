@@ -15,6 +15,7 @@ int main(){
 	
 	Double_alignt<20000> heap;
 
-	printf(" &heap.array[0] = %d, &heap.for_alignt = %d\n", &heap.array[0], &heap.for_alignt);
+	/* APPLE LOCAL default to Wformat-security 5764921 */
+	printf(" &heap.array[0] = %p, &heap.for_alignt = %p\n", (void*)&heap.array[0], (void*)&heap.for_alignt);
 
 }

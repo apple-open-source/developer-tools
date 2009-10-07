@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2006, 2007 Apple Inc. All rights reserved.
+ * Copyright (C) 2006, 2007, 2008 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,57 +26,68 @@
 #import "config.h"
 #import "Editor.h"
 
-#import "ClipboardAccessPolicy.h"
-#import "Clipboard.h"
 #import "ClipboardMac.h"
-#import "Document.h"
-#import "EditorClient.h"
-#import "Element.h"
-#import "ExceptionHandlers.h"
+#import "DocLoader.h"
 #import "Frame.h"
-#import "PlatformString.h"
-#import "Selection.h"
-#import "SelectionController.h"
-#import "TypingCommand.h"
-#import "TextIterator.h"
-#import "htmlediting.h"
-#import "visible_units.h"
+#import "FrameView.h"
 
 namespace WebCore {
 
 extern "C" {
 
-// Kill ring calls. Would be better to use NSKillRing.h, but that's not available in SPI.
+// Kill ring calls. Would be better to use NSKillRing.h, but that's not available as API or SPI.
 
+void _NSInitializeKillRing();
 void _NSAppendToKillRing(NSString *);
 void _NSPrependToKillRing(NSString *);
-void _NSNewKillRingSequence(void);
+NSString *_NSYankFromKillRing();
+void _NSNewKillRingSequence();
+void _NSSetKillRingToYankedState();
+
 }
 
 PassRefPtr<Clipboard> Editor::newGeneralClipboard(ClipboardAccessPolicy policy)
 {
-    return new ClipboardMac(false, [NSPasteboard generalPasteboard], policy);
+    return ClipboardMac::create(false, [NSPasteboard generalPasteboard], policy, 0);
 }
 
-NSString* Editor::userVisibleString(NSURL* nsURL)
+static void initializeKillRingIfNeeded()
 {
-    if (client())
-        return client()->userVisibleString(nsURL);
-    return nil;
+    static bool initializedKillRing = false;
+    if (!initializedKillRing) {
+        initializedKillRing = true;
+        _NSInitializeKillRing();
+    }
 }
 
-void Editor::addToKillRing(Range* range, bool prepend)
+void Editor::appendToKillRing(const String& string)
 {
-    if (m_startNewKillRingSequence)
-        _NSNewKillRingSequence();
+    initializeKillRingIfNeeded();
+    _NSAppendToKillRing(string);
+}
 
-    String text = plainText(range);
-    text.replace('\\', m_frame->backslashAsCurrencySymbol());
-    if (prepend)
-        _NSPrependToKillRing((NSString*)text);
-    else
-        _NSAppendToKillRing((NSString*)text);
-    m_startNewKillRingSequence = false;
+void Editor::prependToKillRing(const String& string)
+{
+    initializeKillRingIfNeeded();
+    _NSPrependToKillRing(string);
+}
+
+String Editor::yankFromKillRing()
+{
+    initializeKillRingIfNeeded();
+    return _NSYankFromKillRing();
+}
+
+void Editor::startNewKillRingSequence()
+{
+    initializeKillRingIfNeeded();
+    _NSNewKillRingSequence();
+}
+
+void Editor::setKillRingToYankedState()
+{
+    initializeKillRingIfNeeded();
+    _NSSetKillRingToYankedState();
 }
 
 void Editor::showFontPanel()
@@ -92,6 +103,22 @@ void Editor::showStylesPanel()
 void Editor::showColorPanel()
 {
     [[NSApplication sharedApplication] orderFrontColorPanel:nil];
+}
+
+// FIXME: We want to use the platform-independent code instead. But when we last
+// tried to do so it seemed that we first need to move more of the logic from
+// -[WebHTMLView.cpp _documentFragmentFromPasteboard] into PasteboardMac.
+
+void Editor::paste()
+{
+    ASSERT(m_frame->document());
+    FrameView* view = m_frame->view();
+    if (!view)
+        return;
+    DocLoader* loader = m_frame->document()->docLoader();
+    loader->setAllowStaleResources(true);
+    [view->documentView() tryToPerform:@selector(paste:) with:nil];
+    loader->setAllowStaleResources(false);
 }
 
 } // namespace WebCore

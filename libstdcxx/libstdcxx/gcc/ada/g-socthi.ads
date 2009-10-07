@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---              Copyright (C) 2001-2004 Ada Core Technologies, Inc.         --
+--                     Copyright (C) 2001-2005, AdaCore                     --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -59,21 +59,34 @@ package GNAT.Sockets.Thin is
    Failure : constant C.int := -1;
 
    function Socket_Errno return Integer renames GNAT.OS_Lib.Errno;
-   --  Returns last socket error number.
+   --  Returns last socket error number
 
    function Socket_Error_Message (Errno : Integer) return C.Strings.chars_ptr;
-   --  Returns the error message string for the error number Errno. If
-   --  Errno is not known it returns "Unknown system error".
+   --  Returns the error message string for the error number Errno. If Errno is
+   --  not known it returns "Unknown system error".
+
+   function Host_Errno return Integer;
+   pragma Import (C, Host_Errno, "__gnat_get_h_errno");
+   --  Returns last host error number
 
    subtype Fd_Set_Access is System.Address;
    No_Fd_Set : constant Fd_Set_Access := System.Null_Address;
 
-   type Timeval_Unit is new C.int;
-   pragma Convention (C, Timeval_Unit);
+   type time_t is
+     range -2 ** (8 * Constants.SIZEOF_tv_sec - 1)
+         .. 2 ** (8 * Constants.SIZEOF_tv_sec - 1) - 1;
+   for time_t'Size use 8 * Constants.SIZEOF_tv_sec;
+   pragma Convention (C, time_t);
+
+   type suseconds_t is
+     range -2 ** (8 * Constants.SIZEOF_tv_usec - 1)
+         .. 2 ** (8 * Constants.SIZEOF_tv_usec - 1) - 1;
+   for suseconds_t'Size use 8 * Constants.SIZEOF_tv_usec;
+   pragma Convention (C, suseconds_t);
 
    type Timeval is record
-      Tv_Sec  : Timeval_Unit;
-      Tv_Usec : Timeval_Unit;
+      Tv_Sec  : time_t;
+      Tv_Usec : suseconds_t;
    end record;
    pragma Convention (C, Timeval);
 
@@ -357,17 +370,17 @@ package GNAT.Sockets.Thin is
    procedure Last_Socket_In_Set
      (Set    : Fd_Set_Access;
       Last   : Int_Access);
-   --  Find the largest socket in the socket set. This is needed for
-   --  select(). When Last_Socket_In_Set is called, parameter Last is
-   --  a maximum value of the largest socket. This hint is used to
-   --  avoid scanning very large socket sets. After the call, Last is
-   --  set back to the real largest socket in the socket set.
+   --  Find the largest socket in the socket set. This is needed for select().
+   --  When Last_Socket_In_Set is called, parameter Last is a maximum value of
+   --  the largest socket. This hint is used to avoid scanning very large
+   --  socket sets. After the call, Last is set back to the real largest socket
+   --  in the socket set.
 
    function  New_Socket_Set
      (Set : Fd_Set_Access) return Fd_Set_Access;
-   --  Allocate a new socket set which is a system-dependent structure
-   --  and initialize by copying Set if it is non-null, by making it
-   --  empty otherwise.
+   --  Allocate a new socket set which is a system-dependent structure and
+   --  initialize by copying Set if it is non-null, by making it empty
+   --  otherwise.
 
    procedure Remove_Socket_From_Set
      (Set    : Fd_Set_Access;

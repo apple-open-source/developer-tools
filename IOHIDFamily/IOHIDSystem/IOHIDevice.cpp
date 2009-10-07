@@ -27,6 +27,7 @@
 #include <IOKit/hidsystem/IOHIDevice.h>
 #include <IOKit/hidsystem/IOHIDParameter.h>
 #include "IOHIDevicePrivateKeys.h"
+#include "IOHIDEventService.h"
 
 #define super IOService
 OSDefineMetaClassAndStructors(IOHIDevice, IOService);
@@ -127,17 +128,25 @@ bool IOHIDevice::updateProperties( void )
     return( ok );
 }
 
-// RY: Override IORegistryEntry::setProperties().  This will allow properties 
+// RY: Override IORegistryEntry::setProperties().  This will allow properties
 // to be set per device, instead of globally via setParamProperties.
 IOReturn IOHIDevice::setProperties( OSObject * properties )
 {
     OSDictionary * propertyDict = OSDynamicCast(OSDictionary, properties);
     IOReturn       ret          = kIOReturnBadArgument;
-    
+
     if ( propertyDict ) {
+        if (propertyDict->setOptions(0, 0) & OSDictionary::kImmutable) {
+            OSDictionary * temp = propertyDict;
+            propertyDict = OSDynamicCast(OSDictionary, temp->copyCollection());
+        }
+        else {
+            propertyDict->retain();
+        }
         propertyDict->setObject(kIOHIDDeviceParametersKey, kOSBooleanTrue);
         ret = setParamProperties( propertyDict );
         propertyDict->removeObject(kIOHIDDeviceParametersKey);
+        propertyDict->release();
     }
 
     return ret;
@@ -146,62 +155,73 @@ IOReturn IOHIDevice::setProperties( OSObject * properties )
 
 IOReturn IOHIDevice::setParamProperties( OSDictionary * dict )
 {
-    IOService *    eventService             = NULL;
-    OSDictionary * eventServiceProperties   = NULL;
+    IOHIDEventService * eventService = NULL;
     
     if ( dict->getObject(kIOHIDEventServicePropertiesKey) == NULL ) {
-        IOService * eventService = getProvider();            
-        if ( eventService && eventService->metaCast("IOHIDEventService"))
-            eventServiceProperties = OSDynamicCast(OSDictionary, eventService->copyProperty(kIOHIDEventServicePropertiesKey));
+        IOService * service = getProvider();
+        if ( service )
+            eventService = OSDynamicCast(IOHIDEventService, service);
     }
 
     if ( dict->getObject(kIOHIDDeviceParametersKey) == kOSBooleanTrue ) {
         OSDictionary * deviceParameters = OSDynamicCast(OSDictionary, copyProperty(kIOHIDParametersKey));
-        
-        if ( !deviceParameters )
+
+        if ( !deviceParameters ) {
             deviceParameters = OSDictionary::withCapacity(4);
-    
+        }
+        else {
+            if (deviceParameters->setOptions(0, 0) & OSDictionary::kImmutable) {
+                OSDictionary * temp = deviceParameters;
+                deviceParameters = OSDynamicCast(OSDictionary, temp->copyCollection());
+                temp->release();
+            }
+            else {
+                // do nothing
+            }
+        }
+
         if ( deviceParameters ) {
             // RY: Because K&M Prefs and Admin still expect device props to be
             // top level, let's continue to set them via setProperty. When we get
             // Max to migrate over, we can remove the interator code and use:
-            // deviceParameters->merge(dict);    
+            // deviceParameters->merge(dict);
             // deviceParameters->removeObject(kIOHIDResetKeyboardKey);
             // deviceParameters->removeObject(kIOHIDResetPointerKey);
             // setProperty(kIOHIDParametersKey, deviceParameters);
             // deviceParameters->release();
- 
+
             OSCollectionIterator * iterator = OSCollectionIterator::withCollection(dict);
             if ( iterator ) {
                 OSSymbol * key;
-                
+
                 while ( key = (OSSymbol *)iterator->getNextObject() )
-                    if ( !key->isEqualTo(kIOHIDResetKeyboardKey) && !key->isEqualTo(kIOHIDResetPointerKey) && !key->isEqualTo(kIOHIDDeviceParametersKey)) {
+                    if (    !key->isEqualTo(kIOHIDResetKeyboardKey) && 
+                            !key->isEqualTo(kIOHIDResetPointerKey) && 
+                            !key->isEqualTo(kIOHIDScrollResetKey) && 
+                            !key->isEqualTo(kIOHIDDeviceParametersKey) && 
+                            !key->isEqualTo(kIOHIDResetLEDsKey)) {
                         OSObject * value = dict->getObject(key);
-                        
+
                         deviceParameters->setObject(key, value);
-                        setProperty(key, value);                        
+                        setProperty(key, value);
                     }
 
                 iterator->release();
             }
-            
+
             setProperty(kIOHIDParametersKey, deviceParameters);
             deviceParameters->release();
-            
+
             // RY: Propogate up to IOHIDEventService level
-            if ( eventServiceProperties ) {
-                eventServiceProperties->merge(dict);
-                eventServiceProperties->removeObject(kIOHIDResetKeyboardKey);
-                eventServiceProperties->removeObject(kIOHIDResetPointerKey);
-                eventServiceProperties->removeObject(kIOHIDEventServicePropertiesKey);
-                eventService->setProperty(kIOHIDEventServicePropertiesKey, eventServiceProperties);
-                eventServiceProperties->release();
-            }
-            
+            if ( eventService )
+                eventService->setSystemProperties(dict);
+
+        }
+        else {
+            return kIOReturnNoMemory;
         }
     }
-    
+
     return( kIOReturnSuccess );
 }
 

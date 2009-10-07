@@ -1,9 +1,9 @@
 #
-# "$Id: Makefile 6649 2007-07-11 21:46:42Z mike $"
+# "$Id: Makefile 7920 2008-09-10 01:04:10Z mike $"
 #
 #   Notifier makefile for the Common UNIX Printing System (CUPS).
 #
-#   Copyright 2007 by Apple Inc.
+#   Copyright 2007-2008 by Apple Inc.
 #   Copyright 1997-2007 by Easy Software Products, all rights reserved.
 #
 #   These coded instructions, statements, and computer programs are the
@@ -16,8 +16,9 @@
 include ../Makedefs
 
 
-TARGETS =	mailto rss testnotify
-OBJS	=	mailto.o rss.o testnotify.o
+NOTIFIERS =	$(DBUS_NOTIFIER) mailto rss
+TARGETS =	$(NOTIFIERS) testnotify
+OBJS	=	dbus.o mailto.o rss.o testnotify.o
 
 
 #
@@ -28,30 +29,70 @@ all:	$(TARGETS)
 
 
 #
+# Make library targets...
+#
+
+libs:
+
+
+#
+# Make unit tests...
+#
+
+unittests:
+
+
+#
 # Clean all object files...
 #
 
 clean:
-	$(RM) $(OBJS) $(TARGETS)
+	$(RM) $(OBJS) $(TARGETS) dbus.h
 
 
 #
 # Install all targets...
 #
 
-install:	all
+install:	all install-data install-headers install-libs install-exec
+
+
+#
+# Install data files...
+#
+
+install-data:
+	$(INSTALL_DIR) -m 775 -g $(CUPS_GROUP) $(CACHEDIR)/rss
+
+
+#
+# Install programs...
+#
+
+install-exec:
+	echo Installing notifiers in $(SERVERBIN)/notifier...
 	$(INSTALL_DIR) -m 755 $(SERVERBIN)/notifier
-	for file in $(TARGETS); do \
+	for file in $(NOTIFIERS); do \
 		$(INSTALL_BIN) $$file $(SERVERBIN)/notifier; \
 	done
-	$(INSTALL_DIR) -m 755 $(CACHEDIR)/rss
-	-chgrp $(CUPS_GROUP) $(CACHEDIR)/rss
 	if test "x$(SYMROOT)" != "x"; then \
 		$(INSTALL_DIR) $(SYMROOT); \
-		for file in $(TARGETS); do \
-			cp $$file $(SYMROOT); \
-		done \
+		cp $(NOTIFIERS) $(SYMROOT); \
 	fi
+
+
+#
+# Install headers...
+#
+
+install-headers:
+
+
+#
+# Install libraries...
+#
+
+install-libs:
 
 
 #
@@ -59,7 +100,7 @@ install:	all
 #
 
 uninstall:
-	for file in $(TARGETS); do \
+	for file in $(NOTIFIERS); do \
 		$(RM) $(SERVERBIN)/notifier/$$file; \
 	done
 	-$(RMDIR) $(SERVERBIN)/notifier
@@ -73,6 +114,15 @@ uninstall:
 
 depend:
 	makedepend -Y -I.. -fDependencies $(OBJS:.o=.c) >/dev/null 2>&1
+
+
+#
+# dbus
+#
+
+dbus:	dbus.o ../cups/$(LIBCUPS)
+	echo Linking $@...
+	$(CC) $(LDFLAGS) -o dbus dbus.o $(DBUS_NOTIFIERLIBS) $(LIBS)
 
 
 #
@@ -108,5 +158,5 @@ include Dependencies
 
 
 #
-# End of "$Id: Makefile 6649 2007-07-11 21:46:42Z mike $".
+# End of "$Id: Makefile 7920 2008-09-10 01:04:10Z mike $".
 #

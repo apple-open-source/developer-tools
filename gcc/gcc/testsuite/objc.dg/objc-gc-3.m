@@ -5,6 +5,7 @@
 /* { dg-options "-fnext-runtime -fobjc-gc" } */
 /* { dg-options "-fnext-runtime -fobjc-gc -mmacosx-version-min=10.3" { target powerpc*-*-darwin* } } */
 /* { dg-skip-if "" { powerpc*-*-darwin* } { "-m64" } { "" } } */
+/* { dg-require-effective-target objc_gc } */
 
 #include <objc/objc.h>
 #include <stdio.h>

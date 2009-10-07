@@ -1,8 +1,7 @@
 /* APPLE LOCAL file radar 4757423 */
 /* Check for warnings about missing [super finalize] calls.  */
 
-/* { dg-do compile { target powerpc*-*-darwin* i?86*-*-darwin* } } */
-/* { dg-options "-fobjc-gc" } */
+/* { dg-do compile } */
 
 @interface Foo {
   void *isa;

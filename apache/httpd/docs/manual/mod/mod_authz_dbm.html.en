@@ -122,7 +122,7 @@ modules</td></tr>
     directive explicitly to <code>Off</code> allows group authorization
     to be passed on to lower level modules (as defined in the
     <code>modules.c</code> file) if there is no group found
-    for the the supplied userID. If there are any groups
+    for the supplied userID. If there are any groups
     specified, the usual checks will be applied and a failure will
     give an Authentication Required reply.</p>
 
@@ -180,6 +180,6 @@ store list of user groups</td></tr>
 <p><span>Available Languages: </span><a href="../en/mod/mod_authz_dbm.html" title="English">&nbsp;en&nbsp;</a> |
 <a href="../ko/mod/mod_authz_dbm.html" hreflang="ko" rel="alternate" title="Korean">&nbsp;ko&nbsp;</a></p>
 </div><div id="footer">
-<p class="apache">Copyright 2007 The Apache Software Foundation.<br />Licensed under the <a href="http://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a>.</p>
+<p class="apache">Copyright 2008 The Apache Software Foundation.<br />Licensed under the <a href="http://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a>.</p>
 <p class="menu"><a href="../mod/">Modules</a> | <a href="../mod/directives.html">Directives</a> | <a href="../faq/">FAQ</a> | <a href="../glossary.html">Glossary</a> | <a href="../sitemap.html">Sitemap</a></p></div>
 </body></html>

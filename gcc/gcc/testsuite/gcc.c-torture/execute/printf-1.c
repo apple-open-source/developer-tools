@@ -1,4 +1,3 @@
-/* APPLE LOCAL file mainline */
 #include <stdio.h>
 #include <stdlib.h>
 

@@ -4,9 +4,9 @@
 --                                                                          --
 --                      S Y S T E M . V A L _ R E A L                       --
 --                                                                          --
---                                 S p e c                                  --
+--                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2003 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -41,10 +41,9 @@ package body System.Val_Real is
    ---------------
 
    function Scan_Real
-     (Str  : String;
-      Ptr  : access Integer;
-      Max  : Integer)
-      return Long_Long_Float
+     (Str : String;
+      Ptr : access Integer;
+      Max : Integer) return Long_Long_Float
    is
       procedure Reset;
       pragma Import (C, Reset, "__gnat_init_float");
@@ -100,6 +99,10 @@ package body System.Val_Real is
       --  longest possible syntactically valid numeral is scanned out, and on
       --  return P points past the last character. On entry, the current
       --  character is known to be a digit, so a numeral is definitely present.
+
+      -----------
+      -- Scanf --
+      -----------
 
       procedure Scanf is
          Digit : Natural;
@@ -331,7 +334,7 @@ package body System.Val_Real is
       if Base /= 10.0 then
          Uval := Uval * Base ** Scale;
 
-      --  For base 10, use power of ten table, repeatedly if necessary.
+      --  For base 10, use power of ten table, repeatedly if necessary
 
       elsif Scale > 0 then
          while Scale > Maxpow loop
@@ -369,7 +372,6 @@ package body System.Val_Real is
             return Uval;
          end if;
       end if;
-
    end Scan_Real;
 
    ----------------
@@ -379,12 +381,10 @@ package body System.Val_Real is
    function Value_Real (Str : String) return Long_Long_Float is
       V : Long_Long_Float;
       P : aliased Integer := Str'First;
-
    begin
       V := Scan_Real (Str, P'Access, Str'Last);
       Scan_Trailing_Blanks (Str, P);
       return V;
-
    end Value_Real;
 
 end System.Val_Real;

@@ -107,7 +107,6 @@
 #include "system/locale.h"
 #include "system/network.h"
 #include "system/passwd.h"
-#include "system/printing.h"
 #include "system/readline.h"
 #include "system/select.h"
 #include "system/shmem.h"
@@ -223,6 +222,10 @@ typedef int ber_int_t;
 
 #if HAVE_SYS_ATTRIBUTES_H
 #include <sys/attributes.h>
+#endif
+
+#ifndef ENOATTR
+#define ENOATTR ENODATA
 #endif
 
 /* mutually exclusive (SuSE 8.2) */
@@ -757,8 +760,6 @@ struct functable2 {
 
 struct printjob;
 
-struct smb_ldap_privates;
-
 /* forward declarations from smbldap.c */
 
 #include "smbldap.h"
@@ -1168,9 +1169,8 @@ krb5_error_code smb_krb5_get_keyinfo_from_ap_req(krb5_context context,
 krb5_error_code krb5_rd_req_return_keyblock_from_keytab(krb5_context context,
 							krb5_auth_context *auth_context,
 							const krb5_data *inbuf,
-							krb5_const_principal server,
+							const krb5_keytab_entry *kt_entry,
 							krb5_keytab keytab,
-							krb5_flags *ap_req_options,
 							krb5_ticket **ticket, 
 							krb5_keyblock **keyblock);
 krb5_error_code smb_krb5_parse_name_norealm(krb5_context context, 

@@ -2,7 +2,7 @@
  * Copyright (c) 2000, Boris Popov
  * All rights reserved.
  *
- * Portions Copyright (C) 2001 - 2007 Apple Inc. All rights reserved.
+ * Portions Copyright (C) 2001 - 2008 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -78,7 +78,7 @@ static int SocketUtilsIncrementIfReqIter(UInt8** inIfReqIter, struct ifreq* ifr)
  * for AF_INET6, but since we don't support AF_INET6 yet no need to do that
  * work.
  */
-static int isLocalNetworkAddress(struct hostent* h)
+int isLocalNetworkAddress(u_int32_t addr)
 {
     UInt32		kMaxAddrBufferSize = 2048;
     UInt8 		buffer[kMaxAddrBufferSize];
@@ -92,7 +92,7 @@ static int isLocalNetworkAddress(struct hostent* h)
 		smb_log_info("%s: socket failed!", -1, ASL_LEVEL_ERR, __FUNCTION__);
 		return foundit;
 	}
-	ifc.ifc_len = sizeof (buffer);
+	ifc.ifc_len = (int)sizeof (buffer);
     ifc.ifc_buf = (char*) buffer;
 	if (ioctl(so, SIOCGIFCONF, (char *)&ifc) < 0) {
 		smb_log_info("%s: ioctl (get interface configuration)!", -1, ASL_LEVEL_ERR, __FUNCTION__);
@@ -114,7 +114,7 @@ static int isLocalNetworkAddress(struct hostent* h)
 		}
 		if (ifreq.ifr_flags & IFF_UP) {
 			struct sockaddr_in *laddr = (struct sockaddr_in *)&(ifreq.ifr_addr);
-			if ((u_int32_t)laddr->sin_addr.s_addr == *(u_int32_t *)h->h_addr) {
+			if ((u_int32_t)laddr->sin_addr.s_addr == addr) {
 				foundit = TRUE;
 				break;
 			}
@@ -180,14 +180,14 @@ int nb_resolvehost_in(const char *name, struct sockaddr **dest, u_int16_t port, 
 			return ELOOP;		
 		}
 		
-		if (isLocalNetworkAddress(h) == TRUE) {
+		if (isLocalNetworkAddress(*(u_int32_t *)h->h_addr) == TRUE) {
 			smb_log_info("The address for `%s' is a local address, not allowed!\n", 0, ASL_LEVEL_ERR, name);			
 			/* AFP now returns ELOOP, so we will do the same */
 			return ELOOP;		
 		}		
 	}
 
-	len = sizeof(struct sockaddr_in);
+	len = (int)sizeof(struct sockaddr_in);
 	sinp = malloc(len);
 	*dest = (struct sockaddr*)sinp;
 	if (sinp == NULL)
@@ -216,7 +216,7 @@ nb_enum_if(struct nb_ifdesc **iflist, int maxif)
 	if (s == -1)
 		return errno;
 
-	rdlen = maxif * sizeof(struct ifreq);
+	rdlen = (int)(maxif * sizeof(struct ifreq));
 	ifrdata = malloc(rdlen);
 	if (ifrdata == NULL) {
 		error = ENOMEM;
@@ -229,12 +229,12 @@ nb_enum_if(struct nb_ifdesc **iflist, int maxif)
 		goto bad;
 	} 
 	ifrqp = ifc.ifc_req;
-	ifcnt = ifc.ifc_len / sizeof(struct ifreq);
+	ifcnt = ifc.ifc_len / (int)sizeof(struct ifreq);
 	error = 0;
 	/* freebsd bug: ifreq size is variable - must use _SIZEOF_ADDR_IFREQ */
 	for (i = 0; i < ifc.ifc_len;
 	     i += len, ifrqp = (struct ifreq *)((caddr_t)ifrqp + len)) {
-		len = _SIZEOF_ADDR_IFREQ(*ifrqp);
+		len = (int)_SIZEOF_ADDR_IFREQ(*ifrqp);
 		/* XXX for now, avoid IP6 broadcast performance costs */
 		if (ifrqp->ifr_addr.sa_family != AF_INET)
 			continue;
@@ -260,7 +260,7 @@ nb_enum_if(struct nb_ifdesc **iflist, int maxif)
 		if (ifd == NULL)
 			return ENOMEM;
 		bzero(ifd, sizeof(struct nb_ifdesc));
-		strcpy(ifd->id_name, iname);
+		strlcpy(ifd->id_name, iname, sizeof(ifd->id_name));
 		ifd->id_flags = iflags;
 		ifd->id_addr = iaddr;
 		ifd->id_mask = imask;

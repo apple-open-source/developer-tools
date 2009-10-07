@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---              Copyright (C) 2000 Ada Core Technologies, Inc.              --
+--                     Copyright (C) 2000-2005, AdaCore                     --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -45,9 +45,9 @@ package GNAT.Most_Recent_Exception is
 
    function Occurrence
      return Ada.Exceptions.Exception_Occurrence;
-   --  Returns the Exception_Occurrence for the most recently raised
-   --  exception in the current task. If no exception has been raised
-   --  in the current task prior to the call, returns Null_Occurrence.
+   --  Returns the Exception_Occurrence for the most recently raised exception
+   --  in the current task. If no exception has been raised in the current task
+   --  prior to the call, returns Null_Occurrence.
 
    function Occurrence_Access
      return Ada.Exceptions.Exception_Occurrence_Access;
@@ -72,6 +72,5 @@ package GNAT.Most_Recent_Exception is
    --          --  return information about this Tasking_Error exception,
    --          --  not about the Constraint_Error exception being handled
    --          --  by the current handler code.
-
 
 end GNAT.Most_Recent_Exception;

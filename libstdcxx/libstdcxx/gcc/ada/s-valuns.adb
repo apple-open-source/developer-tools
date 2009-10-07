@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-1997 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -36,15 +36,14 @@ with System.Val_Util;       use System.Val_Util;
 
 package body System.Val_Uns is
 
-   -------------------
-   -- Scan_Unsigned --
-   -------------------
+   -----------------------
+   -- Scan_Raw_Unsigned --
+   -----------------------
 
-   function Scan_Unsigned
-     (Str  : String;
-      Ptr  : access Integer;
-      Max  : Integer)
-      return Unsigned
+   function Scan_Raw_Unsigned
+     (Str : String;
+      Ptr : access Integer;
+      Max : Integer) return Unsigned
    is
       P : Integer;
       --  Local copy of the pointer
@@ -55,16 +54,8 @@ package body System.Val_Uns is
       Expon : Integer;
       --  Exponent value
 
-      Minus : Boolean := False;
-      --  Set to True if minus sign is present, otherwise to False. Note that
-      --  a minus sign is permissible for the singular case of -0, and in any
-      --  case the pointer is left pointing past a negative integer literal.
-
       Overflow : Boolean := False;
       --  Set True if overflow is detected at any point
-
-      Start : Positive;
-      --  Save location of first non-blank character
 
       Base_Char : Character;
       --  Base character (# or :) in based case
@@ -76,13 +67,6 @@ package body System.Val_Uns is
       --  Digit value
 
    begin
-      Scan_Sign (Str, Ptr, Max, Minus, Start);
-
-      if Str (Ptr.all) not in '0' .. '9' then
-         Ptr.all := Start;
-         raise Constraint_Error;
-      end if;
-
       P := Ptr.all;
       Uval := Character'Pos (Str (P)) - Character'Pos ('0');
       P := P + 1;
@@ -271,11 +255,34 @@ package body System.Val_Uns is
 
       --  Return result, dealing with sign and overflow
 
-      if Overflow or else (Minus and then Uval /= 0) then
+      if Overflow then
          raise Constraint_Error;
       else
          return Uval;
       end if;
+   end Scan_Raw_Unsigned;
+
+   -------------------
+   -- Scan_Unsigned --
+   -------------------
+
+   function Scan_Unsigned
+     (Str : String;
+      Ptr : access Integer;
+      Max : Integer) return Unsigned
+   is
+      Start : Positive;
+      --  Save location of first non-blank character
+
+   begin
+      Scan_Plus_Sign (Str, Ptr, Max, Start);
+
+      if Str (Ptr.all) not in '0' .. '9' then
+         Ptr.all := Start;
+         raise Constraint_Error;
+      end if;
+
+      return Scan_Raw_Unsigned (Str, Ptr, Max);
    end Scan_Unsigned;
 
    --------------------
@@ -285,12 +292,10 @@ package body System.Val_Uns is
    function Value_Unsigned (Str : String) return Unsigned is
       V : Unsigned;
       P : aliased Integer := Str'First;
-
    begin
       V := Scan_Unsigned (Str, P'Access, Str'Last);
       Scan_Trailing_Blanks (Str, P);
       return V;
-
    end Value_Unsigned;
 
 end System.Val_Uns;

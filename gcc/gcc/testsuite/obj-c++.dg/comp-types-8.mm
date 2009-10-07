@@ -1,5 +1,5 @@
-/* APPLE LOCAL file mainline */
 /* { dg-do compile } */
+
 /* We used to ICE because we removed the cast to List_linked*
    in -[ListIndex_linked next]. */
 

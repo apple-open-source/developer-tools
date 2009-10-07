@@ -1,4 +1,3 @@
-/* APPLE LOCAL file mainline */
 extern struct bar_t bar;
 void *a;
 void

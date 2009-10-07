@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -201,16 +201,6 @@ package body Bindgen is
    procedure Gen_Elab_Defs_C;
    --  Generate sequence of definitions for elaboration routines (C code case)
 
-   procedure Gen_Exception_Table_Ada;
-   --  Generate binder exception table (Ada code case). This consists of
-   --  declarations followed by a begin followed by a call. If zero cost
-   --  exceptions are not active, then only the begin is generated.
-
-   procedure Gen_Exception_Table_C;
-   --  Generate binder exception table (C code case). This has no effect
-   --  if zero cost exceptions are not active, otherwise it generates a
-   --  set of declarations followed by a call.
-
    procedure Gen_Main_Ada;
    --  Generate procedure main (Ada code case)
 
@@ -279,9 +269,6 @@ package body Bindgen is
    --  Set given character in Statement_Buffer at the Last + 1 position
    --  and increment Last by one to reflect the stored character.
 
-   procedure Set_EA_Last;
-   --  Output the number of elements in array EA
-
    procedure Set_Int (N : Int);
    --  Set given value in decimal in Statement_Buffer with no spaces
    --  starting at the Last + 1 position, and updating Last past the value.
@@ -296,7 +283,7 @@ package body Bindgen is
    --  is generated starting at Last + 1, and Last is updated past it.
 
    procedure Set_Name_Buffer;
-   --  Set the value stored in positions 1 .. Name_Len of the Name_Buffer.
+   --  Set the value stored in positions 1 .. Name_Len of the Name_Buffer
 
    procedure Set_String (S : String);
    --  Sets characters of given string in Statement_Buffer, starting at the
@@ -360,7 +347,7 @@ package body Bindgen is
 
    procedure Gen_Adafinal_C is
    begin
-      WBI ("void " & Ada_Final_Name.all & " () {");
+      WBI ("void " & Ada_Final_Name.all & " (void) {");
       WBI ("   system__standard_library__adafinal ();");
       WBI ("}");
       WBI ("");
@@ -536,7 +523,8 @@ package body Bindgen is
          WBI ("         Unreserve_All_Interrupts : Integer;");
          WBI ("         Exception_Tracebacks     : Integer;");
          WBI ("         Zero_Cost_Exceptions     : Integer;");
-         WBI ("         Detect_Blocking          : Integer);");
+         WBI ("         Detect_Blocking          : Integer;");
+         WBI ("         Default_Stack_Size       : Integer);");
          WBI ("      pragma Import (C, Set_Globals, ""__gnat_set_globals"");");
 
          --  Import entry point for elaboration time signal handler
@@ -550,10 +538,7 @@ package body Bindgen is
          WBI ("      Handler_Installed : Integer;");
          WBI ("      pragma Import (C, Handler_Installed, " &
               """__gnat_handler_installed"");");
-
-         --  Generate exception table
-
-         Gen_Exception_Table_Ada;
+         WBI ("   begin");
 
          --  Generate the call to Set_Globals
 
@@ -647,6 +632,12 @@ package body Bindgen is
          else
             Set_Int (0);
          end if;
+
+         Set_String (",");
+         Write_Statement_Buffer;
+
+         Set_String ("         Default_Stack_Size       => ");
+         Set_Int (Default_Stack_Size);
 
          Set_String (");");
          Write_Statement_Buffer;
@@ -782,10 +773,8 @@ package body Bindgen is
 
          --  Code for normal case (standard library not suppressed)
 
-         Gen_Exception_Table_C;
-
          --  Generate call to set the runtime global variables defined in
-         --  a-init.c. We define the varables in a-init.c, rather than in
+         --  init.c. We define the varables in init.c, rather than in
          --  the binder generated file itself to avoid undefined externals
          --  when the runtime is linked as a shareable image library.
 
@@ -894,10 +883,18 @@ package body Bindgen is
             Set_Int (0);
          end if;
 
-         Set_String (");");
+         Set_String (",");
          Tab_To (24);
          Set_String ("/* Detect_Blocking            */");
          Write_Statement_Buffer;
+
+         Set_String ("      ");
+         Set_Int    (Default_Stack_Size);
+         Set_String (");");
+         Tab_To (24);
+         Set_String ("/* Default_Stack_Size     */");
+         Write_Statement_Buffer;
+
          WBI ("");
 
          --  Install elaboration time signal handler
@@ -1228,324 +1225,6 @@ package body Bindgen is
       WBI ("   END ELABORATION ORDER */");
    end Gen_Elab_Order_C;
 
-   -----------------------------
-   -- Gen_Exception_Table_Ada --
-   -----------------------------
-
-   procedure Gen_Exception_Table_Ada is
-      Num  : Nat;
-      Last : ALI_Id := No_ALI_Id;
-
-   begin
-      if not Zero_Cost_Exceptions_Specified then
-         WBI ("   begin");
-         return;
-      end if;
-
-      --  The code we generate looks like
-
-      --        procedure SDP_Table_Build
-      --          (SDP_Addresses   : System.Address;
-      --           SDP_Count       : Natural;
-      --           Elab_Addresses  : System.Address;
-      --           Elab_Addr_Count : Natural);
-      --        pragma Import (C, SDP_Table_Build, "__gnat_SDP_Table_Build");
-      --
-      --        ST : aliased constant array (1 .. nnn) of System.Address := (
-      --               unit_name_1'UET_Address,
-      --               unit_name_2'UET_Address,
-      --               ...
-      --               unit_name_3'UET_Address,
-      --
-      --        EA : aliased constant array (1 .. eee) of System.Address := (
-      --               adainit'Code_Address,
-      --               adafinal'Code_Address,
-      --               unit_name'elab[spec|body]'Code_Address,
-      --               unit_name'elab[spec|body]'Code_Address,
-      --               unit_name'elab[spec|body]'Code_Address,
-      --               unit_name'elab[spec|body]'Code_Address);
-      --
-      --     begin
-      --        SDP_Table_Build (ST'Address, nnn, EA'Address, eee);
-
-      Num := 0;
-      for A in ALIs.First .. ALIs.Last loop
-         if not ALIs.Table (A).SAL_Interface
-           and then ALIs.Table (A).Unit_Exception_Table
-         then
-            Num := Num + 1;
-            Last := A;
-         end if;
-      end loop;
-
-      if Num = 0 then
-
-         --  Happens with "gnatmake -a -f -gnatL ..."
-
-         WBI (" ");
-         WBI ("   begin");
-         return;
-      end if;
-
-      WBI ("      procedure SDP_Table_Build");
-      WBI ("        (SDP_Addresses   : System.Address;");
-      WBI ("         SDP_Count       : Natural;");
-      WBI ("         Elab_Addresses  : System.Address;");
-      WBI ("         Elab_Addr_Count : Natural);");
-      WBI ("      " &
-           "pragma Import (C, SDP_Table_Build, ""__gnat_SDP_Table_Build"");");
-
-      WBI (" ");
-      Set_String ("      ST : aliased constant array (1 .. ");
-      Set_Int (Num);
-      Set_String (") of System.Address := (");
-
-      if Num = 1 then
-         Set_String ("1 => ");
-
-      else
-         Write_Statement_Buffer;
-      end if;
-
-      for A in ALIs.First .. ALIs.Last loop
-         if not ALIs.Table (A).SAL_Interface
-           and then ALIs.Table (A).Unit_Exception_Table
-         then
-            Get_Decoded_Name_String_With_Brackets
-              (Units.Table (ALIs.Table (A).First_Unit).Uname);
-            Set_Casing (Mixed_Case);
-
-            if Num /= 1 then
-               Set_String ("        ");
-            end if;
-
-            Set_String (Name_Buffer (1 .. Name_Len - 2));
-            Set_String ("'UET_Address");
-
-            if A = Last then
-               Set_String (");");
-            else
-               Set_Char (',');
-            end if;
-
-            Write_Statement_Buffer;
-         end if;
-      end loop;
-
-      WBI (" ");
-      Set_String ("      EA : aliased constant array (1 .. ");
-      Set_EA_Last;
-      Set_String (") of System.Address := (");
-      Write_Statement_Buffer;
-      Set_String ("        " & Ada_Init_Name.all & "'Code_Address");
-
-      --  If compiling for the JVM, we directly reference Adafinal because
-      --  we don't import it via Do_Finalize (see Gen_Output_File_Ada).
-
-      if not Cumulative_Restrictions.Set (No_Finalization) then
-         Set_Char (',');
-         Write_Statement_Buffer;
-
-         if Hostparm.Java_VM then
-            Set_String
-              ("        System.Standard_Library.Adafinal'Code_Address");
-         else
-            Set_String
-              ("        Do_Finalize'Code_Address");
-         end if;
-      end if;
-
-      for E in Elab_Order.First .. Elab_Order.Last loop
-         Get_Decoded_Name_String_With_Brackets
-           (Units.Table (Elab_Order.Table (E)).Uname);
-
-         if Units.Table (Elab_Order.Table (E)).No_Elab then
-            null;
-
-         else
-            Set_Char (',');
-            Write_Statement_Buffer;
-            Set_String ("        ");
-
-            if Name_Buffer (Name_Len) = 's' then
-               Name_Buffer (Name_Len - 1 .. Name_Len + 21) :=
-                                        "'elab_spec'code_address";
-            else
-               Name_Buffer (Name_Len - 1 .. Name_Len + 21) :=
-                                        "'elab_body'code_address";
-            end if;
-
-            Name_Len := Name_Len + 21;
-            Set_Casing (Units.Table (Elab_Order.Table (E)).Icasing);
-            Set_Name_Buffer;
-         end if;
-      end loop;
-
-      Set_String (");");
-      Write_Statement_Buffer;
-
-      WBI (" ");
-      WBI ("   begin");
-
-      Set_String ("      SDP_Table_Build (ST'Address, ");
-      Set_Int (Num);
-      Set_String (", EA'Address, ");
-      Set_EA_Last;
-      Set_String (");");
-      Write_Statement_Buffer;
-   end Gen_Exception_Table_Ada;
-
-   ---------------------------
-   -- Gen_Exception_Table_C --
-   ---------------------------
-
-   procedure Gen_Exception_Table_C is
-      Num  : Nat;
-      Num2 : Nat;
-
-   begin
-      if not Zero_Cost_Exceptions_Specified then
-         return;
-      end if;
-
-      --  The code we generate looks like
-
-      --     extern void *__gnat_unitname1__SDP;
-      --     extern void *__gnat_unitname2__SDP;
-      --     ...
-      --
-      --     void **st[nnn] = {
-      --       &__gnat_unitname1__SDP,
-      --       &__gnat_unitname2__SDP,
-      --       ...
-      --       &__gnat_unitnamen__SDP};
-      --
-      --     extern void unitname1__elabb ();
-      --     extern void unitname2__elabb ();
-      --     ...
-      --
-      --     void (*ea[eee]) () = {
-      --       adainit,
-      --       adafinal,
-      --       unitname1___elab[b,s],
-      --       unitname2___elab[b,s],
-      --       ...
-      --       unitnamen___elab[b,s]};
-      --
-      --     __gnat_SDP_Table_Build (&st, nnn, &ea, eee);
-
-      Num := 0;
-      for A in ALIs.First .. ALIs.Last loop
-         if not ALIs.Table (A).SAL_Interface
-           and then ALIs.Table (A).Unit_Exception_Table
-         then
-            Num := Num + 1;
-
-            Set_String ("   extern void *__gnat_");
-            Get_Name_String (Units.Table (ALIs.Table (A).First_Unit).Uname);
-            Set_Unit_Name;
-            Set_String ("__SDP");
-            Set_Char (';');
-            Write_Statement_Buffer;
-         end if;
-      end loop;
-
-      if Num = 0 then
-
-         --  Happens with "gnatmake -a -f -gnatL ..."
-
-         return;
-      end if;
-
-      WBI (" ");
-
-      Set_String ("   void **st[");
-      Set_Int (Num);
-      Set_String ("] = {");
-      Write_Statement_Buffer;
-
-      Num2 := 0;
-      for A in ALIs.First .. ALIs.Last loop
-         if not ALIs.Table (A).SAL_Interface
-           and then ALIs.Table (A).Unit_Exception_Table
-         then
-            Num2 := Num2 + 1;
-
-            Set_String ("     &__gnat_");
-            Get_Name_String (Units.Table (ALIs.Table (A).First_Unit).Uname);
-            Set_Unit_Name;
-            Set_String ("__SDP");
-
-            if Num = Num2 then
-               Set_String ("};");
-            else
-               Set_Char (',');
-            end if;
-
-            Write_Statement_Buffer;
-         end if;
-      end loop;
-
-      WBI ("");
-      for E in Elab_Order.First .. Elab_Order.Last loop
-         Get_Name_String (Units.Table (Elab_Order.Table (E)).Uname);
-
-         if Units.Table (Elab_Order.Table (E)).No_Elab then
-            null;
-
-         else
-            Set_String ("   extern void ");
-            Set_Unit_Name;
-            Set_String ("___elab");
-            Set_Char (Name_Buffer (Name_Len)); -- 's' or 'b' for spec/body
-            Set_String (" ();");
-            Write_Statement_Buffer;
-         end if;
-      end loop;
-
-      WBI ("");
-      Set_String ("   void (*ea[");
-      Set_EA_Last;
-      Set_String ("]) () = {");
-      Write_Statement_Buffer;
-
-      Set_String ("     " & Ada_Init_Name.all);
-
-      if not Cumulative_Restrictions.Set (No_Finalization) then
-         Set_Char (',');
-         Write_Statement_Buffer;
-         Set_String ("     system__standard_library__adafinal");
-      end if;
-
-      for E in Elab_Order.First .. Elab_Order.Last loop
-         Get_Name_String (Units.Table (Elab_Order.Table (E)).Uname);
-
-         if Units.Table (Elab_Order.Table (E)).No_Elab then
-            null;
-
-         else
-            Set_Char (',');
-            Write_Statement_Buffer;
-            Set_String ("     ");
-            Set_Unit_Name;
-            Set_String ("___elab");
-            Set_Char (Name_Buffer (Name_Len)); -- 's' or 'b' for spec/body
-         end if;
-      end loop;
-
-      Set_String ("};");
-      Write_Statement_Buffer;
-
-      WBI (" ");
-
-      Set_String ("   __gnat_SDP_Table_Build (&st, ");
-      Set_Int (Num);
-      Set_String (", ea, ");
-      Set_EA_Last;
-      Set_String (");");
-      Write_Statement_Buffer;
-   end Gen_Exception_Table_C;
-
    ------------------
    -- Gen_Main_Ada --
    ------------------
@@ -1604,6 +1283,22 @@ package body Bindgen is
          WBI ("      pragma Import (C, finalize, ""__gnat_finalize"");");
       end if;
 
+      --  If we want to analyze the stack, we have to import corresponding
+      --  symbols
+
+      if Dynamic_Stack_Measurement then
+         WBI ("");
+         WBI ("      procedure Output_Results;");
+         WBI ("      pragma Import (C, Output_Results, " &
+              """__gnat_stack_usage_output_results"");");
+
+         WBI ("");
+         WBI ("      " &
+              "procedure Initialize_Stack_Analysis (Buffer_Size : Natural);");
+         WBI ("      pragma Import (C, Initialize_Stack_Analysis, " &
+              """__gnat_stack_usage_initialize"");");
+      end if;
+
       --  Deal with declarations for main program case
 
       if not No_Main_Subprogram then
@@ -1654,10 +1349,15 @@ package body Bindgen is
       --  The reference stops Ada_Main_Program_Name from being optimized
       --  away by smart linkers, such as the AiX linker.
 
+      --  Because this variable is unused, we make this variable "aliased"
+      --  with a pragma Volatile in order to tell the compiler to preserve
+      --  this variable at any level of optimization.
+
       if Bind_Main_Program then
          WBI
-           ("      Ensure_Reference : System.Address := " &
+           ("      Ensure_Reference : aliased System.Address := " &
             "Ada_Main_Program_Name'Address;");
+         WBI ("      pragma Volatile (Ensure_Reference);");
          WBI ("");
       end if;
 
@@ -1692,6 +1392,13 @@ package body Bindgen is
       then
          Set_String ("      Set_Exit_Status (");
          Set_Int (Opt.Default_Exit_Status);
+         Set_String (");");
+         Write_Statement_Buffer;
+      end if;
+
+      if Dynamic_Stack_Measurement then
+         Set_String ("      Initialize_Stack_Analysis (");
+         Set_Int (Dynamic_Stack_Measurement_Array_Size);
          Set_String (");");
          Write_Statement_Buffer;
       end if;
@@ -1734,6 +1441,12 @@ package body Bindgen is
          end if;
       end if;
 
+      --  Prints the result of static stack analysis
+
+      if Dynamic_Stack_Measurement then
+         WBI ("      Output_Results;");
+      end if;
+
       --  Finalize is only called if we have a run time
 
       if not Cumulative_Restrictions.Set (No_Finalization) then
@@ -1762,6 +1475,7 @@ package body Bindgen is
    procedure Gen_Main_C is
    begin
       if Exit_Status_Supported_On_Target then
+         WBI ("#include <stdlib.h>");
          Set_String ("int ");
       else
          Set_String ("void ");
@@ -1777,7 +1491,7 @@ package body Bindgen is
       --  Case of no command line arguments on target
 
       else
-         Write_Statement_Buffer (" ()");
+         Write_Statement_Buffer (" (void)");
       end if;
 
       WBI ("{");
@@ -1788,8 +1502,13 @@ package body Bindgen is
       --  place). The reference stops Ada_Main_Program_Name from being
       --  optimized away by smart linkers, such as the AiX linker.
 
+      --  Because this variable is unused, we declare this variable as
+      --  volatile in order to tell the compiler to preserve it at any
+      --  level of optimization.
+
       if Bind_Main_Program then
-         WBI ("   char *ensure_reference __attribute__ ((__unused__)) = " &
+         WBI ("   char * volatile ensure_reference " &
+              "__attribute__ ((__unused__)) = " &
               "__gnat_ada_main_program_name;");
          WBI ("");
 
@@ -1841,6 +1560,15 @@ package body Bindgen is
          Write_Statement_Buffer;
       end if;
 
+      --  Initializes dynamic stack measurement if needed
+
+      if Dynamic_Stack_Measurement then
+         Set_String ("   __gnat_stack_usage_initialize (");
+         Set_Int (Dynamic_Stack_Measurement_Array_Size);
+         Set_String (");");
+         Write_Statement_Buffer;
+      end if;
+
       --  The __gnat_initialize routine is used only if we have a run-time
 
       if not Suppress_Standard_Library_On_Target then
@@ -1887,6 +1615,12 @@ package body Bindgen is
          WBI ("   system__standard_library__adafinal ();");
       end if;
 
+      --  Outputs the dynamic stack measurement if needed
+
+      if Dynamic_Stack_Measurement then
+         WBI ("   __gnat_stack_usage_output_results ();");
+      end if;
+
       --  The finalize routine is used only if we have a run-time
 
       if not Suppress_Standard_Library_On_Target then
@@ -1904,7 +1638,7 @@ package body Bindgen is
             --  For all other systems, we use the standard exit routine.
 
             if OpenVMS_On_Target then
-               WBI ("   __posix_exit (result);");
+               WBI ("   decc$__posix_exit (result);");
             else
                WBI ("   exit (result);");
             end if;
@@ -1921,7 +1655,7 @@ package body Bindgen is
             --  For all other systems, we use the standard exit routine.
 
             if OpenVMS_On_Target then
-               WBI ("   __posix_exit (gnat_exit_status);");
+               WBI ("   decc$__posix_exit (gnat_exit_status);");
             else
                WBI ("   exit (gnat_exit_status);");
             end if;
@@ -1942,7 +1676,7 @@ package body Bindgen is
       --  internal file appears.
 
       procedure Write_Linker_Option;
-      --  Write binder info linker option.
+      --  Write binder info linker option
 
       -------------------------
       -- Write_Linker_Option --
@@ -2016,7 +1750,7 @@ package body Bindgen is
                --  filename object is seen. Multiply defined symbols will
                --  result.
 
-               if Hostparm.OpenVMS
+               if OpenVMS_On_Target
                  and then Is_Internal_File_Name
                   (ALIs.Table
                    (Units.Table (Elab_Order.Table (E)).My_ALI).Sfile)
@@ -2117,7 +1851,13 @@ package body Bindgen is
 
          if With_DECGNAT then
             Name_Len := 0;
-            Add_Str_To_Name_Buffer ("-ldecgnat");
+
+            if Opt.Shared_Libgnat then
+               Add_Str_To_Name_Buffer (Shared_Lib ("decgnat"));
+            else
+               Add_Str_To_Name_Buffer ("-ldecgnat");
+            end if;
+
             Write_Linker_Option;
          end if;
 
@@ -2350,10 +2090,18 @@ package body Bindgen is
       WBI ("   pragma Export (C, " & Ada_Final_Name.all & ", """ &
            Ada_Final_Name.all & """);");
 
+      if Use_Pragma_Linker_Constructor then
+         WBI ("   pragma Linker_Destructor (" & Ada_Final_Name.all & ");");
+      end if;
+
       WBI ("");
       WBI ("   procedure " & Ada_Init_Name.all & ";");
       WBI ("   pragma Export (C, " & Ada_Init_Name.all & ", """ &
            Ada_Init_Name.all & """);");
+
+      if Use_Pragma_Linker_Constructor then
+         WBI ("   pragma Linker_Constructor (" & Ada_Init_Name.all & ");");
+      end if;
 
       if Bind_Main_Program then
 
@@ -2512,9 +2260,19 @@ package body Bindgen is
       WBI ("extern void __gnat_set_globals");
       WBI ("  (int, int, char, char, char, char,");
       WBI ("   const char *, const char *,");
-      WBI ("   int, int, int, int, int);");
-      WBI ("extern void " & Ada_Final_Name.all & " (void);");
-      WBI ("extern void " & Ada_Init_Name.all & " (void);");
+      WBI ("   int, int, int, int, int, int);");
+
+      if Use_Pragma_Linker_Constructor then
+         WBI ("extern void " & Ada_Final_Name.all &
+              " (void) __attribute__((destructor));");
+         WBI ("extern void " & Ada_Init_Name.all &
+              " (void) __attribute__((constructor));");
+
+      else
+         WBI ("extern void " & Ada_Final_Name.all & " (void);");
+         WBI ("extern void " & Ada_Init_Name.all & " (void);");
+      end if;
+
       WBI ("extern void system__standard_library__adafinal (void);");
 
       if not No_Main_Subprogram then
@@ -2535,7 +2293,7 @@ package body Bindgen is
          end if;
 
          if OpenVMS_On_Target then
-            WBI ("extern void __posix_exit (int);");
+            WBI ("extern void decc$__posix_exit (int);");
          else
             WBI ("extern void exit (int);");
          end if;
@@ -2559,6 +2317,12 @@ package body Bindgen is
          WBI ("extern void __gnat_initialize (void *);");
          WBI ("extern void __gnat_finalize (void);");
          WBI ("extern void __gnat_install_handler (void);");
+      end if;
+
+      if Dynamic_Stack_Measurement then
+         WBI ("");
+         WBI ("extern void __gnat_stack_usage_output_results (void);");
+         WBI ("extern void __gnat_stack_usage_initialize (int size);");
       end if;
 
       WBI ("");
@@ -2628,7 +2392,7 @@ package body Bindgen is
 
       if Suppress_Standard_Library_On_Target then
          WBI ("");
-         WBI ("void __gnat_break_start () {}");
+         WBI ("void __gnat_break_start (void) {}");
       end if;
 
       --  Generate the __gnat_version and __gnat_ada_main_program_name info
@@ -2759,7 +2523,7 @@ package body Bindgen is
          --  When building libraries, the version number of each unit can
          --  not be computed, since the binder does not know the full list
          --  of units. Therefore, the 'Version and 'Body_Version
-         --  attributes can not supported in this case.
+         --  attributes cannot supported in this case.
 
          return;
       end if;
@@ -2827,7 +2591,7 @@ package body Bindgen is
          --  When building libraries, the version number of each unit can
          --  not be computed, since the binder does not know the full list
          --  of units. Therefore, the 'Version and 'Body_Version
-         --  attributes can not supported.
+         --  attributes cannot supported.
 
          return;
       end if;
@@ -3097,7 +2861,7 @@ package body Bindgen is
             With_GNARL := True;
          end if;
 
-         if Hostparm.OpenVMS and then Name_Buffer (1 .. 5) = "dec%s" then
+         if OpenVMS_On_Target and then Name_Buffer (1 .. 5) = "dec%s" then
             With_DECGNAT := True;
          end if;
       end loop;
@@ -3112,24 +2876,6 @@ package body Bindgen is
       Last := Last + 1;
       Statement_Buffer (Last) := C;
    end Set_Char;
-
-   -----------------
-   -- Set_EA_Last --
-   -----------------
-
-   procedure Set_EA_Last is
-   begin
-      --  When there is no finalization, only adainit is added
-
-      if Cumulative_Restrictions.Set (No_Finalization) then
-         Set_Int (Num_Elab_Calls + 1);
-
-      --  When there is finalization, both adainit and adafinal are added
-
-      else
-         Set_Int (Num_Elab_Calls + 2);
-      end if;
-   end Set_EA_Last;
 
    -------------
    -- Set_Int --

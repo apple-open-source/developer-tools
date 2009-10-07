@@ -5,7 +5,7 @@
 /* { dg-options "-malign-natural -DSIZE=12" } */
 
 /* This is for Intel only. */
-/* { dg-skip-if "" { *-*-darwin* } { "-m64" } { "" } } */
+/* { dg-require-effective-target ilp32 } */
 
 /*
  * GCC alignment test for command line options for setting alignment modes.

@@ -1,5 +1,4 @@
 /*
- *  This file is part of the KDE libraries
  *  Copyright (C) 2003, 2006 Apple Computer, Inc.
  *
  *  This library is free software; you can redistribute it and/or
@@ -20,16 +19,23 @@
 #ifndef DOMParser_h
 #define DOMParser_h
 
-#include "Shared.h"
+#include <wtf/RefCounted.h>
 #include "Document.h"
 
 namespace WebCore {
+
     class String;
     
-    class DOMParser : public Shared<DOMParser> {
+    class DOMParser : public RefCounted<DOMParser> {
     public:
+        static PassRefPtr<DOMParser> create() { return adoptRef(new DOMParser); }
+        
         PassRefPtr<Document> parseFromString(const String& str, const String& contentType);
+        
+    private:
+        DOMParser() { }        
     };
+
 }
 
 #endif // XMLSerializer.h

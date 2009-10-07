@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---        Copyright (C) 1992,1993,1994 Free Software Foundation, Inc.       --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -39,14 +39,14 @@ package body Interfaces.Fortran is
 
    --  Single character case
 
-   function To_Ada (Item : in Character_Set) return Character is
+   function To_Ada (Item : Character_Set) return Character is
    begin
       return Character (Item);
    end To_Ada;
 
    --  String case (function returning converted result)
 
-   function To_Ada (Item : in Fortran_Character) return String is
+   function To_Ada (Item : Fortran_Character) return String is
       T : String (1 .. Item'Length);
 
    begin
@@ -60,7 +60,7 @@ package body Interfaces.Fortran is
    --  String case (procedure copying converted string to given buffer)
 
    procedure To_Ada
-     (Item   : in Fortran_Character;
+     (Item   : Fortran_Character;
       Target : out String;
       Last   : out Natural)
    is
@@ -93,14 +93,14 @@ package body Interfaces.Fortran is
 
    --  Character case
 
-   function To_Fortran (Item : in Character) return Character_Set is
+   function To_Fortran (Item : Character) return Character_Set is
    begin
       return Character_Set (Item);
    end To_Fortran;
 
    --  String case (function returning converted result)
 
-   function To_Fortran (Item : in String) return Fortran_Character is
+   function To_Fortran (Item : String) return Fortran_Character is
       T : Fortran_Character (1 .. Item'Length);
 
    begin
@@ -114,7 +114,7 @@ package body Interfaces.Fortran is
    --  String case (procedure copying converted string to given buffer)
 
    procedure To_Fortran
-     (Item   : in String;
+     (Item   : String;
       Target : out Fortran_Character;
       Last   : out Natural)
    is

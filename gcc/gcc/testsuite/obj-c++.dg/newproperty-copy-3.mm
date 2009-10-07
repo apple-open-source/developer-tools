@@ -1,9 +1,9 @@
 /* APPLE LOCAL file radar 4805321 */
 /* { dg-options "-mmacosx-version-min=10.5 -fobjc-new-property" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
 /* { dg-options "-fobjc-new-property" { target arm*-*-darwin* } } */
-/* { dg-do compile { target powerpc*-*-darwin* i?86*-*-darwin* } } */
+/* { dg-do compile { target *-*-darwin* } } */
 
-#include <Cocoa/Cocoa.h>
+#include <Foundation/Foundation.h>
 
 @interface NamedObject : NSObject
 @property(copy) NSString *name;

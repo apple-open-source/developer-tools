@@ -1,7 +1,7 @@
 /* APPLE LOCAL file radar 4582997 */
 /* Test that property need not be declared in @implementation for it to be used. */
 /* APPLE LOCAL radar 4899595 */
-/* { dg-options "-fno-objc-new-property -mmacosx-version-min=10.5 -framework Cocoa" } */
+/* { dg-options "-mmacosx-version-min=10.5 -framework Cocoa" } */
 /* { dg-do run { target powerpc*-*-darwin* i?86*-*-darwin* } } */
 #include <Foundation/Foundation.h>
 
@@ -9,13 +9,14 @@
 {
 @private
   int _userDefined;
+  int ibar;
 }
-@property (ivar) int bar;
+@property int bar;
 @property int userDefined;
 @end
 
 @implementation Foo
-@property int bar;
+@synthesize bar = ibar;
 
 - (void)setUserDefined:(int)f
 {

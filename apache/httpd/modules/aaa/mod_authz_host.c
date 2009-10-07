@@ -42,6 +42,7 @@
 
 enum allowdeny_type {
     T_ENV,
+    T_NENV,
     T_ALL,
     T_IP,
     T_HOST,
@@ -123,7 +124,12 @@ static const char *allow_cmd(cmd_parms *cmd, void *dv, const char *from,
     a->x.from = where;
     a->limited = cmd->limited;
 
-    if (!strncasecmp(where, "env=", 4)) {
+    if (!strncasecmp(where, "env=!", 5)) {
+        a->type = T_NENV;
+        a->x.from += 5;
+
+    }
+    else if (!strncasecmp(where, "env=", 4)) {
         a->type = T_ENV;
         a->x.from += 4;
 
@@ -220,6 +226,12 @@ static int find_allowdeny(request_rec *r, apr_array_header_t *a, int method)
             }
             break;
 
+        case T_NENV:
+            if (!apr_table_get(r->subprocess_env, ap[i].x.from)) {
+                return 1;
+            }
+            break;
+
         case T_ALL:
             return 1;
 
@@ -297,8 +309,9 @@ static int check_dir_access(request_rec *r)
     if (ret == HTTP_FORBIDDEN
         && (ap_satisfies(r) != SATISFY_ANY || !ap_some_auth_required(r))) {
         ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-            "client denied by server configuration: %s",
-            r->filename);
+            "client denied by server configuration: %s%s",
+            r->filename ? "" : "uri ",
+            r->filename ? r->filename : r->uri);
     }
 
     return ret;

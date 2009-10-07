@@ -1,5 +1,5 @@
 /*
- * "$Id: lpmove.c 6649 2007-07-11 21:46:42Z mike $"
+ * "$Id: lpmove.c 7219 2008-01-14 22:00:02Z mike $"
  *
  *   "lpmove" command for the Common UNIX Printing System (CUPS).
  *
@@ -61,7 +61,6 @@ main(int  argc,				/* I - Number of command-line arguments */
 
   dest      = NULL;
   dests     = NULL;
-  http      = NULL;
   job       = NULL;
   jobid     = 0;
   num_dests = 0;
@@ -75,8 +74,6 @@ main(int  argc,				/* I - Number of command-line arguments */
 #ifdef HAVE_SSL
 	    cupsSetEncryption(HTTP_ENCRYPT_REQUIRED);
 
-	    if (http)
-	      httpEncryption(http, HTTP_ENCRYPT_REQUIRED);
 #else
             _cupsLangPrintf(stderr,
 	                    _("%s: Sorry, no encryption support compiled in!\n"),
@@ -85,12 +82,6 @@ main(int  argc,				/* I - Number of command-line arguments */
 	    break;
 
         case 'h' : /* Connect to host */
-	    if (http)
-	    {
-	      httpClose(http);
-	      http = NULL;
-	    }
-
 	    if (argv[i][2] != '\0')
 	      cupsSetServer(argv[i] + 2);
 	    else
@@ -121,6 +112,9 @@ main(int  argc,				/* I - Number of command-line arguments */
       if ((job = strrchr(argv[i], '-')) != NULL &&
           cupsGetDest(argv[i], NULL, num_dests, dests) == NULL)
         jobid = atoi(job + 1);
+      else if (isdigit(argv[i][0] & 255) &&
+               !cupsGetDest(argv[i], NULL, num_dests, dests))
+        jobid = atoi(argv[i]);
       else
         src = argv[i];
     }
@@ -139,17 +133,14 @@ main(int  argc,				/* I - Number of command-line arguments */
     return (1);
   }
 
-  if (!http)
-  {
-    http = httpConnectEncrypt(cupsServer(), ippPort(), cupsEncryption());
+  http = httpConnectEncrypt(cupsServer(), ippPort(), cupsEncryption());
 
-    if (http == NULL)
-    {
-      _cupsLangPrintf(stderr,
-                      _("lpmove: Unable to connect to server: %s\n"),
-		      strerror(errno));
-      return (1);
-    }
+  if (http == NULL)
+  {
+    _cupsLangPrintf(stderr,
+		    _("lpmove: Unable to connect to server: %s\n"),
+		    strerror(errno));
+    return (1);
   }
 
   return (move_job(http, src, jobid, dest));
@@ -226,5 +217,5 @@ move_job(http_t     *http,		/* I - HTTP connection to server */
 
 
 /*
- * End of "$Id: lpmove.c 6649 2007-07-11 21:46:42Z mike $".
+ * End of "$Id: lpmove.c 7219 2008-01-14 22:00:02Z mike $".
  */

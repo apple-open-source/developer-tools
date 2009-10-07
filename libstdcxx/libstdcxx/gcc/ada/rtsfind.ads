@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2005 Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -108,7 +108,7 @@ package Rtsfind is
       --  package see declarations in the runtime entity table below.
 
       RTU_Null,
-      --  Used as a null entry. Will cause an error if referenced.
+      --  Used as a null entry. Will cause an error if referenced
 
       --  Children of Ada
 
@@ -120,6 +120,7 @@ package Rtsfind is
       Ada_Streams,
       Ada_Tags,
       Ada_Task_Identification,
+      Ada_Task_Termination,
 
       --  Children of Ada.Calendar
 
@@ -199,7 +200,6 @@ package Rtsfind is
       System_Compare_Array_Unsigned_64,
       System_Compare_Array_Unsigned_8,
       System_Exception_Table,
-      System_Exceptions,
       System_Exn_Int,
       System_Exn_LLF,
       System_Exn_LLI,
@@ -210,9 +210,14 @@ package Rtsfind is
       System_Exp_Mod,
       System_Exp_Uns,
       System_Fat_Flt,
+      System_Fat_IEEE_Long_Float,
+      System_Fat_IEEE_Short_Float,
       System_Fat_LFlt,
       System_Fat_LLF,
       System_Fat_SFlt,
+      System_Fat_VAX_D_Float,
+      System_Fat_VAX_F_Float,
+      System_Fat_VAX_G_Float,
       System_Finalization_Implementation,
       System_Finalization_Root,
       System_Fore,
@@ -484,31 +489,78 @@ package Rtsfind is
 
      RE_Stream_Access,                   -- Ada.Streams.Stream_IO
 
+     RE_Abstract_Interface,              -- Ada.Tags
+     RE_Addr_Ptr,                        -- Ada.Tags
+     RE_Address_Array,                   -- Ada.Tags
      RE_CW_Membership,                   -- Ada.Tags
+     RE_Descendant_Tag,                  -- Ada.Tags
+     RE_Displace,                        -- Ada.Tags
      RE_DT_Entry_Size,                   -- Ada.Tags
      RE_DT_Prologue_Size,                -- Ada.Tags
      RE_External_Tag,                    -- Ada.Tags
-     RE_Get_Expanded_Name,               -- Ada.Tags
+     RE_Get_Access_Level,                -- Ada.Tags
+     RE_Get_Entry_Index,                 -- Ada.Tags
      RE_Get_External_Tag,                -- Ada.Tags
+     RE_Get_Offset_Index,                -- Ada.Tags
+     RE_Get_Predefined_Prim_Op_Address,  -- Ada.Tags
      RE_Get_Prim_Op_Address,             -- Ada.Tags
+     RE_Get_Prim_Op_Kind,                -- Ada.Tags
      RE_Get_RC_Offset,                   -- Ada.Tags
      RE_Get_Remotely_Callable,           -- Ada.Tags
-     RE_Get_TSD,                         -- Ada.Tags
+     RE_Get_Tagged_Kind,                 -- Ada.Tags
      RE_Inherit_DT,                      -- Ada.Tags
      RE_Inherit_TSD,                     -- Ada.Tags
+     RE_Interface_Data,                  -- Ada.Tags
+     RE_Interface_Tag,                   -- Ada.Tags
      RE_Internal_Tag,                    -- Ada.Tags
+     RE_Is_Descendant_At_Same_Level,     -- Ada.Tags
+     RE_IW_Membership,                   -- Ada.Tags
+     RE_Object_Specific_Data,            -- Ada.Tags
+     RE_Offset_To_Top,                   -- Ada.Tags
+     RE_POK_Function,                    -- Ada.Tags
+     RE_POK_Procedure,                   -- Ada.Tags
+     RE_POK_Protected_Entry,             -- Ada.Tags
+     RE_POK_Protected_Function,          -- Ada.Tags
+     RE_POK_Protected_Procedure,         -- Ada.Tags
+     RE_POK_Task_Entry,                  -- Ada.Tags
+     RE_POK_Task_Function,               -- Ada.Tags
+     RE_POK_Task_Procedure,              -- Ada.Tags
+     RE_Prim_Op_Kind,                    -- Ada.Tags
+     RE_Primary_DT,                      -- Ada.Tags
+     RE_Register_Interface_Tag,          -- Ada.Tags
      RE_Register_Tag,                    -- Ada.Tags
+     RE_Secondary_DT,                    -- Ada.Tags
+     RE_Select_Specific_Data,            -- Ada.Tags
+     RE_Set_Access_Level,                -- Ada.Tags
+     RE_Set_Entry_Index,                 -- Ada.Tags
      RE_Set_Expanded_Name,               -- Ada.Tags
      RE_Set_External_Tag,                -- Ada.Tags
+     RE_Set_Interface_Table,             -- Ada.Tags
+     RE_Set_Num_Prim_Ops,                -- Ada.Tags
+     RE_Set_Offset_Index,                -- Ada.Tags
+     RE_Set_Offset_To_Top,               -- Ada.Tags
+     RE_Set_OSD,                         -- Ada.Tags
+     RE_Set_Predefined_Prim_Op_Address,  -- Ada.Tags
      RE_Set_Prim_Op_Address,             -- Ada.Tags
+     RE_Set_Prim_Op_Kind,                -- Ada.Tags
      RE_Set_RC_Offset,                   -- Ada.Tags
      RE_Set_Remotely_Callable,           -- Ada.Tags
+     RE_Set_SSD,                         -- Ada.Tags
+     RE_Set_Signature,                   -- Ada.Tags
+     RE_Set_Tagged_Kind,                 -- Ada.Tags
      RE_Set_TSD,                         -- Ada.Tags
+     RE_Tag,                             -- Ada.Tags
      RE_Tag_Error,                       -- Ada.Tags
+     RE_Tagged_Kind,                     -- Ada.Tags
      RE_TSD_Entry_Size,                  -- Ada.Tags
      RE_TSD_Prologue_Size,               -- Ada.Tags
-     RE_Tag,                             -- Ada.Tags
-     RE_Address_Array,                   -- Ada.Tags
+     RE_TK_Abstract_Limited_Tagged,      -- Ada.Tags
+     RE_TK_Abstract_Tagged,              -- Ada.Tags
+     RE_TK_Limited_Tagged,               -- Ada.Tags
+     RE_TK_Protected,                    -- Ada.Tags
+     RE_TK_Tagged,                       -- Ada.Tags
+     RE_TK_Task,                         -- Ada.Tags
+     RE_Valid_Signature,                 -- Ada.Tags
 
      RE_Abort_Task,                      -- Ada.Task_Identification
      RE_Current_Task,                    -- Ada.Task_Identification
@@ -536,12 +588,10 @@ package Rtsfind is
      RE_CPP_CW_Membership,               -- Interfaces.CPP
      RE_CPP_DT_Entry_Size,               -- Interfaces.CPP
      RE_CPP_DT_Prologue_Size,            -- Interfaces.CPP
-     RE_CPP_Get_Expanded_Name,           -- Interfaces.CPP
      RE_CPP_Get_External_Tag,            -- Interfaces.CPP
      RE_CPP_Get_Prim_Op_Address,         -- Interfaces.CPP
      RE_CPP_Get_RC_Offset,               -- Interfaces.CPP
      RE_CPP_Get_Remotely_Callable,       -- Interfaces.CPP
-     RE_CPP_Get_TSD,                     -- Interfaces.CPP
      RE_CPP_Inherit_DT,                  -- Interfaces.CPP
      RE_CPP_Inherit_TSD,                 -- Interfaces.CPP
      RE_CPP_Register_Tag,                -- Interfaces.CPP
@@ -634,20 +684,6 @@ package Rtsfind is
 
      RE_Register_Exception,              -- System.Exception_Table
 
-     RE_All_Others_Id,                   -- System.Exceptions
-     RE_Handler_Record,                  -- System.Exceptions
-     RE_Handler_Record_Ptr,              -- System.Exceptions
-     RE_Others_Id,                       -- System.Exceptions
-     RE_Subprogram_Descriptor,           -- System.Exceptions
-     RE_Subprogram_Descriptor_0,         -- System.Exceptions
-     RE_Subprogram_Descriptor_1,         -- System.Exceptions
-     RE_Subprogram_Descriptor_2,         -- System.Exceptions
-     RE_Subprogram_Descriptor_3,         -- System.Exceptions
-     RE_Subprogram_Descriptor_List,      -- System.Exceptions
-     RE_Subprogram_Descriptor_Ptr,       -- System.Exceptions
-     RE_Subprogram_Descriptors_Record,   -- System.Exceptions
-     RE_Subprogram_Descriptors_Ptr,      -- System.Exceptions
-
      RE_Exn_Integer,                     -- System.Exn_Int
 
      RE_Exn_Long_Long_Float,             -- System.Exn_LLF
@@ -664,13 +700,28 @@ package Rtsfind is
 
      RE_Exp_Unsigned,                    -- System.Exp_Uns
 
-     RE_Fat_Float,                       -- System.Fat_Flt
+     RE_Attr_Float,                      -- System.Fat_Flt
 
-     RE_Fat_Long_Float,                  -- System.Fat_LFlt
+     RE_Attr_IEEE_Long,                  -- System.Fat_IEEE_Long_Float
+     RE_Fat_IEEE_Long,                   -- System.Fat_IEEE_Long_Float
 
-     RE_Fat_Long_Long_Float,             -- System.Fat_LLF
+     RE_Attr_IEEE_Short,                 -- System.Fat_IEEE_Short_Float
+     RE_Fat_IEEE_Short,                  -- System.Fat_IEEE_Short_Float
 
-     RE_Fat_Short_Float,                 -- System.Fat_SFlt
+     RE_Attr_Long_Float,                 -- System.Fat_LFlt
+
+     RE_Attr_Long_Long_Float,            -- System.Fat_LLF
+
+     RE_Attr_Short_Float,                -- System.Fat_SFlt
+
+     RE_Attr_VAX_D_Float,                -- System.Fat_VAX_D_Float
+     RE_Fat_VAX_D,                       -- System.Fat_VAX_D_Float
+
+     RE_Attr_VAX_F_Float,                -- System.Fat_VAX_F_Float
+     RE_Fat_VAX_F,                       -- System.Fat_VAX_F_Float
+
+     RE_Attr_VAX_G_Float,                -- System.Fat_VAX_G_Float
+     RE_Fat_VAX_G,                       -- System.Fat_VAX_G_Float
 
      RE_Attach_To_Final_List,            -- System.Finalization_Implementation
      RE_Finalize_List,                   -- System.Finalization_Implementation
@@ -1149,6 +1200,7 @@ package Rtsfind is
 
      RE_TC_Alias,                        -- System.PolyORB_Interface
      RE_TC_Build,                        -- System.PolyORB_Interface
+     RE_Get_TC,                          -- System.PolyORB_Interface
      RE_Set_TC,                          -- System.PolyORB_Interface
      RE_TC_Any,                          -- System.PolyORB_Interface
      RE_TC_AD,                           -- System.PolyORB_Interface
@@ -1217,6 +1269,7 @@ package Rtsfind is
      RE_Integer_Address,                 -- System.Storage_Elements
      RE_Storage_Offset,                  -- System.Storage_Elements
      RE_Storage_Array,                   -- System.Storage_Elements
+     RE_Storage_Element,                 -- System.Storage_Elements
      RE_To_Address,                      -- System.Storage_Elements
 
      RE_Root_Storage_Pool,               -- System.Storage_Pools
@@ -1289,6 +1342,7 @@ package Rtsfind is
      RE_Task_Procedure_Access,           -- System.Tasking
 
      RO_ST_Task_Id,                      -- System.Tasking
+     RO_ST_Null_Task,                    -- System.Tasking
 
      RE_Call_Modes,                      -- System.Tasking
      RE_Simple_Call,                     -- System.Tasking
@@ -1415,6 +1469,12 @@ package Rtsfind is
      RE_Le_G,                            -- System.Vax_Float_Operations
      RE_Lt_F,                            -- System.Vax_Float_Operations
      RE_Lt_G,                            -- System.Vax_Float_Operations
+     RE_Ne_F,                            -- System.Vax_Float_Operations
+     RE_Ne_G,                            -- System.Vax_Float_Operations
+
+     RE_Valid_D,                         -- System.Vax_Float_Operations
+     RE_Valid_F,                         -- System.Vax_Float_Operations
+     RE_Valid_G,                         -- System.Vax_Float_Operations
 
      RE_Version_String,                  -- System.Version_Control
      RE_Get_Version_String,              -- System.Version_Control
@@ -1586,31 +1646,78 @@ package Rtsfind is
 
      RE_Stream_Access                    => Ada_Streams_Stream_IO,
 
+     RE_Abstract_Interface               => Ada_Tags,
+     RE_Addr_Ptr                         => Ada_Tags,
+     RE_Address_Array                    => Ada_Tags,
      RE_CW_Membership                    => Ada_Tags,
+     RE_Descendant_Tag                   => Ada_Tags,
+     RE_Displace                         => Ada_Tags,
      RE_DT_Entry_Size                    => Ada_Tags,
      RE_DT_Prologue_Size                 => Ada_Tags,
      RE_External_Tag                     => Ada_Tags,
-     RE_Get_Expanded_Name                => Ada_Tags,
+     RE_Get_Access_Level                 => Ada_Tags,
+     RE_Get_Entry_Index                  => Ada_Tags,
      RE_Get_External_Tag                 => Ada_Tags,
+     RE_Get_Offset_Index                 => Ada_Tags,
+     RE_Get_Predefined_Prim_Op_Address   => Ada_Tags,
      RE_Get_Prim_Op_Address              => Ada_Tags,
+     RE_Get_Prim_Op_Kind                 => Ada_Tags,
      RE_Get_RC_Offset                    => Ada_Tags,
      RE_Get_Remotely_Callable            => Ada_Tags,
-     RE_Get_TSD                          => Ada_Tags,
+     RE_Get_Tagged_Kind                  => Ada_Tags,
      RE_Inherit_DT                       => Ada_Tags,
      RE_Inherit_TSD                      => Ada_Tags,
+     RE_Interface_Data                   => Ada_Tags,
+     RE_Interface_Tag                    => Ada_Tags,
      RE_Internal_Tag                     => Ada_Tags,
+     RE_Is_Descendant_At_Same_Level      => Ada_Tags,
+     RE_IW_Membership                    => Ada_Tags,
+     RE_Object_Specific_Data             => Ada_Tags,
+     RE_Offset_To_Top                    => Ada_Tags,
+     RE_POK_Function                     => Ada_Tags,
+     RE_POK_Procedure                    => Ada_Tags,
+     RE_POK_Protected_Entry              => Ada_Tags,
+     RE_POK_Protected_Function           => Ada_Tags,
+     RE_POK_Protected_Procedure          => Ada_Tags,
+     RE_POK_Task_Entry                   => Ada_Tags,
+     RE_POK_Task_Function                => Ada_Tags,
+     RE_POK_Task_Procedure               => Ada_Tags,
+     RE_Prim_Op_Kind                     => Ada_Tags,
+     RE_Primary_DT                       => Ada_Tags,
+     RE_Register_Interface_Tag           => Ada_Tags,
      RE_Register_Tag                     => Ada_Tags,
+     RE_Secondary_DT                     => Ada_Tags,
+     RE_Select_Specific_Data             => Ada_Tags,
+     RE_Set_Access_Level                 => Ada_Tags,
+     RE_Set_Entry_Index                  => Ada_Tags,
      RE_Set_Expanded_Name                => Ada_Tags,
      RE_Set_External_Tag                 => Ada_Tags,
+     RE_Set_Interface_Table              => Ada_Tags,
+     RE_Set_Num_Prim_Ops                 => Ada_Tags,
+     RE_Set_Offset_Index                 => Ada_Tags,
+     RE_Set_Offset_To_Top                => Ada_Tags,
+     RE_Set_OSD                          => Ada_Tags,
+     RE_Set_Predefined_Prim_Op_Address   => Ada_Tags,
      RE_Set_Prim_Op_Address              => Ada_Tags,
+     RE_Set_Prim_Op_Kind                 => Ada_Tags,
      RE_Set_RC_Offset                    => Ada_Tags,
      RE_Set_Remotely_Callable            => Ada_Tags,
+     RE_Set_SSD                          => Ada_Tags,
+     RE_Set_Signature                    => Ada_Tags,
+     RE_Set_Tagged_Kind                  => Ada_Tags,
      RE_Set_TSD                          => Ada_Tags,
+     RE_Tag                              => Ada_Tags,
      RE_Tag_Error                        => Ada_Tags,
+     RE_Tagged_Kind                      => Ada_Tags,
      RE_TSD_Entry_Size                   => Ada_Tags,
      RE_TSD_Prologue_Size                => Ada_Tags,
-     RE_Tag                              => Ada_Tags,
-     RE_Address_Array                    => Ada_Tags,
+     RE_TK_Abstract_Limited_Tagged       => Ada_Tags,
+     RE_TK_Abstract_Tagged               => Ada_Tags,
+     RE_TK_Limited_Tagged                => Ada_Tags,
+     RE_TK_Protected                     => Ada_Tags,
+     RE_TK_Tagged                        => Ada_Tags,
+     RE_TK_Task                          => Ada_Tags,
+     RE_Valid_Signature                  => Ada_Tags,
 
      RE_Abort_Task                       => Ada_Task_Identification,
      RE_Current_Task                     => Ada_Task_Identification,
@@ -1636,12 +1743,10 @@ package Rtsfind is
      RE_CPP_CW_Membership                => Interfaces_CPP,
      RE_CPP_DT_Entry_Size                => Interfaces_CPP,
      RE_CPP_DT_Prologue_Size             => Interfaces_CPP,
-     RE_CPP_Get_Expanded_Name            => Interfaces_CPP,
      RE_CPP_Get_External_Tag             => Interfaces_CPP,
      RE_CPP_Get_Prim_Op_Address          => Interfaces_CPP,
      RE_CPP_Get_RC_Offset                => Interfaces_CPP,
      RE_CPP_Get_Remotely_Callable        => Interfaces_CPP,
-     RE_CPP_Get_TSD                      => Interfaces_CPP,
      RE_CPP_Inherit_DT                   => Interfaces_CPP,
      RE_CPP_Inherit_TSD                  => Interfaces_CPP,
      RE_CPP_Register_Tag                 => Interfaces_CPP,
@@ -1734,20 +1839,6 @@ package Rtsfind is
 
      RE_Register_Exception               => System_Exception_Table,
 
-     RE_All_Others_Id                    => System_Exceptions,
-     RE_Handler_Record                   => System_Exceptions,
-     RE_Handler_Record_Ptr               => System_Exceptions,
-     RE_Others_Id                        => System_Exceptions,
-     RE_Subprogram_Descriptor            => System_Exceptions,
-     RE_Subprogram_Descriptor_0          => System_Exceptions,
-     RE_Subprogram_Descriptor_1          => System_Exceptions,
-     RE_Subprogram_Descriptor_2          => System_Exceptions,
-     RE_Subprogram_Descriptor_3          => System_Exceptions,
-     RE_Subprogram_Descriptor_List       => System_Exceptions,
-     RE_Subprogram_Descriptor_Ptr        => System_Exceptions,
-     RE_Subprogram_Descriptors_Record    => System_Exceptions,
-     RE_Subprogram_Descriptors_Ptr       => System_Exceptions,
-
      RE_Exn_Integer                      => System_Exn_Int,
 
      RE_Exn_Long_Long_Float              => System_Exn_LLF,
@@ -1764,13 +1855,28 @@ package Rtsfind is
 
      RE_Exp_Unsigned                     => System_Exp_Uns,
 
-     RE_Fat_Float                        => System_Fat_Flt,
+     RE_Attr_Float                       => System_Fat_Flt,
 
-     RE_Fat_Long_Float                   => System_Fat_LFlt,
+     RE_Attr_IEEE_Long                   => System_Fat_IEEE_Long_Float,
+     RE_Fat_IEEE_Long                    => System_Fat_IEEE_Long_Float,
 
-     RE_Fat_Long_Long_Float              => System_Fat_LLF,
+     RE_Attr_IEEE_Short                  => System_Fat_IEEE_Short_Float,
+     RE_Fat_IEEE_Short                   => System_Fat_IEEE_Short_Float,
 
-     RE_Fat_Short_Float                  => System_Fat_SFlt,
+     RE_Attr_Long_Float                  => System_Fat_LFlt,
+
+     RE_Attr_Long_Long_Float             => System_Fat_LLF,
+
+     RE_Attr_Short_Float                 => System_Fat_SFlt,
+
+     RE_Attr_VAX_D_Float                 => System_Fat_VAX_D_Float,
+     RE_Fat_VAX_D                        => System_Fat_VAX_D_Float,
+
+     RE_Attr_VAX_F_Float                 => System_Fat_VAX_F_Float,
+     RE_Fat_VAX_F                        => System_Fat_VAX_F_Float,
+
+     RE_Attr_VAX_G_Float                 => System_Fat_VAX_G_Float,
+     RE_Fat_VAX_G                        => System_Fat_VAX_G_Float,
 
      RE_Attach_To_Final_List             => System_Finalization_Implementation,
      RE_Finalize_List                    => System_Finalization_Implementation,
@@ -2240,6 +2346,7 @@ package Rtsfind is
 
      RE_TC_Alias                         => System_PolyORB_Interface,
      RE_TC_Build                         => System_PolyORB_Interface,
+     RE_Get_TC                           => System_PolyORB_Interface,
      RE_Set_TC                           => System_PolyORB_Interface,
      RE_TC_Any                           => System_PolyORB_Interface,
      RE_TC_AD                            => System_PolyORB_Interface,
@@ -2317,6 +2424,7 @@ package Rtsfind is
      RE_Integer_Address                  => System_Storage_Elements,
      RE_Storage_Offset                   => System_Storage_Elements,
      RE_Storage_Array                    => System_Storage_Elements,
+     RE_Storage_Element                  => System_Storage_Elements,
      RE_To_Address                       => System_Storage_Elements,
 
      RE_Root_Storage_Pool                => System_Storage_Pools,
@@ -2388,6 +2496,7 @@ package Rtsfind is
      RE_Task_Procedure_Access            => System_Tasking,
 
      RO_ST_Task_Id                       => System_Tasking,
+     RO_ST_Null_Task                     => System_Tasking,
 
      RE_Call_Modes                       => System_Tasking,
      RE_Simple_Call                      => System_Tasking,
@@ -2514,6 +2623,12 @@ package Rtsfind is
      RE_Le_G                             => System_Vax_Float_Operations,
      RE_Lt_F                             => System_Vax_Float_Operations,
      RE_Lt_G                             => System_Vax_Float_Operations,
+     RE_Ne_F                             => System_Vax_Float_Operations,
+     RE_Ne_G                             => System_Vax_Float_Operations,
+
+     RE_Valid_D                          => System_Vax_Float_Operations,
+     RE_Valid_F                          => System_Vax_Float_Operations,
+     RE_Valid_G                          => System_Vax_Float_Operations,
 
      RE_Version_String                   => System_Version_Control,
      RE_Get_Version_String               => System_Version_Control,
@@ -2795,7 +2910,7 @@ package Rtsfind is
    --  not mean that an attempt to load it subsequently would fail.
 
    procedure Set_RTU_Loaded (N : Node_Id);
-   --  Register the predefined unit N as already loaded.
+   --  Register the predefined unit N as already loaded
 
    procedure Text_IO_Kludge (Nam : Node_Id);
    --  In Ada 83, and hence for compatibility in Ada 9X, package Text_IO has

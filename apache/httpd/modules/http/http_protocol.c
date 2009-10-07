@@ -48,6 +48,7 @@
 #include "util_charset.h"
 #include "util_ebcdic.h"
 #include "util_time.h"
+#include "ap_mpm.h"
 
 #include "mod_core.h"
 
@@ -161,6 +162,7 @@ AP_IMPLEMENT_HOOK_VOID(insert_error_filter, (request_rec *r), (r))
 AP_DECLARE(int) ap_set_keepalive(request_rec *r)
 {
     int ka_sent = 0;
+    int left = r->server->keep_alive_max - r->connection->keepalives;
     int wimpy = ap_find_token(r->pool,
                               apr_table_get(r->headers_out, "Connection"),
                               "close");
@@ -187,6 +189,7 @@ AP_DECLARE(int) ap_set_keepalive(request_rec *r)
      *       or they're a buggy twit coming through a HTTP/1.1 proxy
      *   and    the client is requesting an HTTP/1.0-style keep-alive
      *       or the client claims to be HTTP/1.1 compliant (perhaps a proxy);
+     *   and this MPM process is not already exiting
      *   THEN we can be persistent, which requires more headers be output.
      *
      * Note that the condition evaluation order is extremely important.
@@ -205,15 +208,15 @@ AP_DECLARE(int) ap_set_keepalive(request_rec *r)
         && r->server->keep_alive
         && (r->server->keep_alive_timeout > 0)
         && ((r->server->keep_alive_max == 0)
-            || (r->server->keep_alive_max > r->connection->keepalives))
+            || (left > 0))
         && !ap_status_drops_connection(r->status)
         && !wimpy
         && !ap_find_token(r->pool, conn, "close")
         && (!apr_table_get(r->subprocess_env, "nokeepalive")
             || apr_table_get(r->headers_in, "Via"))
         && ((ka_sent = ap_find_token(r->pool, conn, "keep-alive"))
-            || (r->proto_num >= HTTP_VERSION(1,1)))) {
-        int left = r->server->keep_alive_max - r->connection->keepalives;
+            || (r->proto_num >= HTTP_VERSION(1,1)))
+        && !ap_graceful_stop_signalled()) {
 
         r->connection->keepalive = AP_CONN_KEEPALIVE;
         r->connection->keepalives++;
@@ -249,6 +252,16 @@ AP_DECLARE(int) ap_set_keepalive(request_rec *r)
         apr_table_mergen(r->headers_out, "Connection", "close");
     }
 
+    /*
+     * If we had previously been a keepalive connection and this
+     * is the last one, then bump up the number of keepalives
+     * we've had
+     */
+    if ((r->connection->keepalive != AP_CONN_CLOSE)
+        && r->server->keep_alive_max
+        && !left) {
+        r->connection->keepalives++;
+    }
     r->connection->keepalive = AP_CONN_CLOSE;
 
     return 0;
@@ -910,7 +923,8 @@ static const char *get_canned_error_string(int status,
                            NULL));
     case HTTP_METHOD_NOT_ALLOWED:
         return(apr_pstrcat(p,
-                           "<p>The requested method ", r->method,
+                           "<p>The requested method ",
+                           ap_escape_html(r->pool, r->method),
                            " is not allowed for the URL ",
                            ap_escape_html(r->pool, r->uri),
                            ".</p>\n",
@@ -928,7 +942,7 @@ static const char *get_canned_error_string(int status,
     case HTTP_LENGTH_REQUIRED:
         s1 = apr_pstrcat(p,
                          "<p>A request of the requested method ",
-                         r->method,
+                         ap_escape_html(r->pool, r->method),
                          " requires a valid Content-length.<br />\n",
                          NULL);
         return(add_optional_notes(r, s1, "error-notes", "</p>\n"));
@@ -975,7 +989,7 @@ static const char *get_canned_error_string(int status,
                            "The requested resource<br />",
                            ap_escape_html(r->pool, r->uri), "<br />\n",
                            "does not allow request data with ",
-                           r->method,
+                           ap_escape_html(r->pool, r->method),
                            " requests, or the amount of data provided in\n"
                            "the request exceeds the capacity limit.\n",
                            NULL));

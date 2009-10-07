@@ -91,6 +91,7 @@ protected:
 	IOService				*fIOPMon;
 	IOPMrootDomain			*pmRootDomain;
 	IOService				*powerPolicyMaker;
+	IOService				*powerPolicyChanger;
 	volatile bool			sleeping;
 	volatile bool			busy;
     // Flag reflecting restart state
@@ -105,6 +106,13 @@ public:
     virtual bool start(IOService *provider);
     
     // get sleep/wake messages
+#if !defined( __ppc__ )
+	virtual IOReturn powerStateWillChangeTo (IOPMPowerFlags capabilities, 
+                    unsigned long stateNumber, IOService* whatDevice);
+	virtual IOReturn powerStateDidChangeTo (IOPMPowerFlags  capabilities, 
+                    unsigned long stateNumber, IOService* whatDevice);
+	virtual IOReturn changePowerState(unsigned long whatState, IOService *powerChanger);
+#endif
 	virtual IOReturn setPowerState(unsigned long, IOService *);
     static IOReturn sysPowerDownHandler(void *, void *, UInt32, IOService *, void *, vm_size_t);
 };

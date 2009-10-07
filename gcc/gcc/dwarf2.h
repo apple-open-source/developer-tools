@@ -1,4 +1,3 @@
-/* APPLE LOCAL file mainline 2006-03-24 4485597 */
 /* Declarations and definitions of codes relating to the DWARF2 and
    DWARF3 symbolic debugging information formats.
    Copyright (C) 1992, 1993, 1995, 1996, 1997, 1999, 2000, 2001, 2002,
@@ -388,10 +387,20 @@ enum dwarf_attribute
     /* APPLE LOCAL begin option verifier 4957887 */
     DW_AT_PGI_lstride  = 0x3a02,
     /* Apple extensions.  */
-    DW_AT_APPLE_flags = 0x3fe2,
+    /* APPLE LOCAL begin radar 2338865 optimization notification  */
+    DW_AT_APPLE_optimized = 0x3fe1,
+    DW_AT_APPLE_flags     = 0x3fe2,
+    /* APPLE LOCAL end radar 2338865 optimization notification  */
     /* APPLE LOCAL end option verifier 4957887 */
     /* APPLE LOCAL differentiate between arm & thumb.  */
-    DW_AT_APPLE_isa   = 0x3fe3
+    /* APPLE LOCAL begin radar 5811943 - Fix type of pointers to blocks  */
+    DW_AT_APPLE_isa      = 0x3fe3,
+    /* APPLE LOCAL begin radar 6386976  */
+    DW_AT_APPLE_block    = 0x3fe4,
+    /* APPLE LOCAL end radar 5811943 - Fix type of pointers to blocks  */
+    DW_AT_APPLE_major_runtime_vers = 0x3fe5,
+    DW_AT_APPLE_runtime_class = 0x3fe6
+    /* APPLE LOCAL end radar 6386976  */
   };
 
 #define DW_AT_lo_user	0x2000	/* Implementation-defined range start.  */
@@ -562,7 +571,12 @@ enum dwarf_location_atom
     DW_OP_HP_fltconst8   = 0xe3,
     DW_OP_HP_mod_range   = 0xe4,
     DW_OP_HP_unmod_range = 0xe5,
-    DW_OP_HP_tls         = 0xe6
+    /* APPLE LOCAL begin track initialization status 4964532  */
+    DW_OP_HP_tls         = 0xe6,
+    /* APPLE extensions.  */
+    /* The following is for marking uninitialized variables.  */
+    DW_OP_APPLE_uninit   = 0xf0
+    /* APPLE LOCAL end track initialization status 4964532  */
   };
 
 #define DW_OP_lo_user	0xe0	/* Implementation-defined range start.  */
@@ -772,6 +786,7 @@ enum dwarf_call_frame_info
   };
 
 #define DW_CIE_ID	  0xffffffff
+#define DW64_CIE_ID	  0xffffffffffffffffULL
 #define DW_CIE_VERSION	  1
 
 #define DW_CFA_extended   0

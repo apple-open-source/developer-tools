@@ -30,15 +30,15 @@
 
 namespace WebCore {
 
-Attr::Attr(Element* element, Document* docPtr, Attribute* a)
-    : ContainerNode(docPtr),
-      m_element(element),
-      m_attribute(a),
-      m_ignoreChildrenChanged(0)
+Attr::Attr(Element* element, Document* docPtr, PassRefPtr<Attribute> a)
+    : ContainerNode(docPtr)
+    , m_element(element)
+    , m_attribute(a)
+    , m_ignoreChildrenChanged(0)
+    , m_specified(true)  
 {
     ASSERT(!m_attribute->attr());
     m_attribute->m_impl = this;
-    m_attrWasSpecifiedOrElementHasRareData = true;
 }
 
 Attr::~Attr()
@@ -51,7 +51,7 @@ void Attr::createTextChild()
 {
     ASSERT(refCount());
     if (!m_attribute->value().isEmpty()) {
-        RefPtr<Text> textNode = document()->createTextNode(m_attribute->value().impl());
+        RefPtr<Text> textNode = document()->createTextNode(m_attribute->value().string());
 
         // This does everything appendChild() would do in this situation (assuming m_ignoreChildrenChanged was set),
         // but much more efficiently.
@@ -88,6 +88,7 @@ const AtomicString& Attr::prefix() const
 
 void Attr::setPrefix(const AtomicString &_prefix, ExceptionCode& ec)
 {
+    ec = 0;
     checkSetPrefix(_prefix, ec);
     if (ec)
         return;
@@ -100,32 +101,20 @@ String Attr::nodeValue() const
     return value();
 }
 
-void Attr::setValue( const String& v, ExceptionCode& ec)
+void Attr::setValue(const String& v, ExceptionCode&)
 {
-    ec = 0;
-
-    // do not interprete entities in the string, its literal!
-
-    // NO_MODIFICATION_ALLOWED_ERR: Raised when the node is readonly
-    if (isReadOnlyNode()) {
-        ec = NO_MODIFICATION_ALLOWED_ERR;
-        return;
-    }
-
-    int e = 0;
     m_ignoreChildrenChanged++;
     removeChildren();
-    appendChild(document()->createTextNode(v.impl()), e);
-    m_ignoreChildrenChanged--;
-    
     m_attribute->setValue(v.impl());
+    createTextChild();
+    m_ignoreChildrenChanged--;
+
     if (m_element)
         m_element->attributeChanged(m_attribute.get());
 }
 
 void Attr::setNodeValue(const String& v, ExceptionCode& ec)
 {
-    // NO_MODIFICATION_ALLOWED_ERR: taken care of by setValue()
     setValue(v, ec);
 }
 
@@ -148,13 +137,13 @@ bool Attr::childTypeAllowed(NodeType type)
     }
 }
 
-void Attr::childrenChanged()
+void Attr::childrenChanged(bool changedByParser, Node* beforeChange, Node* afterChange, int childCountDelta)
 {
-    Node::childrenChanged();
-    
     if (m_ignoreChildrenChanged > 0)
         return;
-    
+ 
+    Node::childrenChanged(changedByParser, beforeChange, afterChange, childCountDelta);
+
     // FIXME: We should include entity references in the value
     
     String val = "";
@@ -166,29 +155,6 @@ void Attr::childrenChanged()
     m_attribute->setValue(val.impl());
     if (m_element)
         m_element->attributeChanged(m_attribute.get());
-}
-
-String Attr::toString() const
-{
-    String result;
-
-    result += nodeName();
-
-    // FIXME: substitute entities for any instances of " or ' --
-    // maybe easier to just use text value and ignore existing
-    // entity refs?
-
-    if (firstChild() != NULL) {
-        result += "=\"";
-
-        for (Node *child = firstChild(); child != NULL; child = child->nextSibling()) {
-            result += child->toString();
-        }
-        
-        result += "\"";
-    }
-
-    return result;
 }
 
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 2000-2008 Apple Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -21,7 +21,6 @@
  */
 
 
-
 #ifndef _IOATABUSINFO_H
 #define _IOATABUSINFO_H
 
@@ -36,7 +35,7 @@
 
 class IOATABusInfo : public OSObject
 {
-	OSDeclareDefaultStructors( IOATABusInfo )
+	OSDeclareDefaultStructors( IOATABusInfo );
 	
 	public:
 	
@@ -64,22 +63,23 @@ class IOATABusInfo : public OSObject
 	Used by clients of ATAControllers to find out about the bus.
 	*/
 	UInt8 getPIOModes( void );
+	
 	/*!@function getDMAModes
 	@abstract bit-significant map of DMA mode(s) supported on the bus. 
 	Used by clients of ATAControllers to find out about the bus.
 	*/
 	UInt8 getDMAModes( void );
+	
 	/*!@function getUltraModes
 	@abstract bit-significant map of Ultra mode(s) supported on the bus. 
 	Used by clients of ATAControllers to find out about the bus.
 	*/
-	
 	UInt8 getUltraModes( void );
 	
 	/*!@function getUnits
 	@abstract How many devices are present on bus. 
 	Used by clients of ATAControllers to find out about the bus.
-	*/	
+	*/
 	UInt8 getUnits( void );	 
 
 	/*!@function supportsDMA
@@ -98,7 +98,7 @@ class IOATABusInfo : public OSObject
 	@abstract The maximum number of 512-byte blocks this controller supports
 	in a single Extended LBA transfer. Some controllers may be limited to less than 
 	the maximum sector count allowed under extended LBA protocol. 
-	*/  
+	*/
 	UInt16 maxBlocksExtended(void);
 	
 	/*!@function supportsOverlapped
@@ -146,7 +146,7 @@ class IOATABusInfo : public OSObject
 	// Optional bus protocols some busses may support
 	/*!@function setExtendedLBA
 	@abstract Set true for supports 48-bit LBA. Set by ATAControllers.
-	*/	
+	*/
 	void setExtendedLBA( bool	inState ); 	
 	
 	/*!function setMaxBlocksExtended 
@@ -182,7 +182,7 @@ class IOATABusInfo : public OSObject
 	protected:
 /*! @struct ExpansionData
     @discussion This structure will be used to expand the capablilties of the IOWorkLoop in the future.
-    */    
+    */
     struct ExpansionData { };
 
 /*! @var reserved
@@ -214,10 +214,6 @@ private:
     OSMetaClassDeclareReservedUnused(IOATABusInfo, 19);
     OSMetaClassDeclareReservedUnused(IOATABusInfo, 20);
 };
-
-
-
-
 
 
 #endif /* !_IOATABUSINFO_H */

@@ -1,9 +1,9 @@
 /*
- * "$Id: ipptest.c 6649 2007-07-11 21:46:42Z mike $"
+ * "$Id: ipptest.c 7847 2008-08-19 04:22:14Z mike $"
  *
  *   IPP test command for the Common UNIX Printing System (CUPS).
  *
- *   Copyright 2007 by Apple Inc.
+ *   Copyright 2007-2009 by Apple Inc.
  *   Copyright 1997-2007 by Easy Software Products.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -16,7 +16,6 @@
  *
  *   main()       - Parse options and do tests.
  *   do_tests()   - Do tests as specified in the test file.
- *   get_tag()    - Get an IPP value or group tag from a name...
  *   get_token()  - Get a token from a file.
  *   print_attr() - Print an attribute on the screen.
  *   usage()      - Show program usage.
@@ -41,50 +40,6 @@
  */
 
 int		Verbosity = 0;		/* Show all attributes? */
-const char	* const TagNames[] =
-		{			/* Value/group tag names */
-		  "zero",		/* 0x00 */
-		  "operation",		/* 0x01 */
-		  "job",		/* 0x02 */
-		  "end",		/* 0x03 */
-		  "printer",		/* 0x04 */
-		  "unsupported-group",	/* 0x05 */
-		  "subscription",	/* 0x06 */
-		  "event-notification",	/* 0x07 */
-		  "", "", "", "", "", "", "", "",
-		  "unsupported-value",	/* 0x10 */
-		  "default",		/* 0x11 */
-		  "unknown",		/* 0x12 */
-		  "novalue",		/* 0x13 */
-		  "",
-		  "notsettable",	/* 0x15 */
-		  "deleteattr",		/* 0x16 */
-		  "anyvalue",		/* 0x17 */
-		  "", "", "", "", "", "", "", "", "",
-		  "integer",		/* 0x21 */
-		  "boolean",		/* 0x22 */
-		  "enum",		/* 0x23 */
-		  "", "", "", "", "", "", "", "", "", "", "", "",
-		  "string",		/* 0x30 */
-		  "date",		/* 0x31 */
-		  "resolution",		/* 0x32 */
-		  "range",		/* 0x33 */
-		  "collection",		/* 0x34 */
-		  "textlang",		/* 0x35 */
-		  "namelang",		/* 0x36 */
-		  "", "", "", "", "", "", "", "", "", "",
-		  "text",		/* 0x41 */
-		  "name",		/* 0x42 */
-		  "",
-		  "keyword",		/* 0x44 */
-		  "uri",		/* 0x45 */
-		  "urischeme",		/* 0x46 */
-		  "charset",		/* 0x47 */
-		  "language",		/* 0x48 */
-		  "mimetype"		/* 0x49 */
-		};
-
-
 
 
 /*
@@ -94,10 +49,9 @@ const char	* const TagNames[] =
 int		do_tests(const char *, const char *);
 ipp_op_t	ippOpValue(const char *);
 ipp_status_t	ippErrorValue(const char *);
-ipp_tag_t	get_tag(const char *);
-const char	*get_tag_string(ipp_tag_t tag);
 char		*get_token(FILE *, char *, int, int *linenum);
 void		print_attr(ipp_attribute_t *);
+void		print_col(ipp_t *col);
 void		usage(const char *option);
 
 
@@ -217,7 +171,7 @@ do_tests(const char *uri,		/* I - URI to connect on */
   int		linenum;		/* Current line number */
   int		version;		/* IPP version number to use */
   http_t	*http;			/* HTTP connection to server */
-  char		method[HTTP_MAX_URI],	/* URI method */
+  char		scheme[HTTP_MAX_URI],	/* URI scheme */
 		userpass[HTTP_MAX_URI],	/* username:password */
 		server[HTTP_MAX_URI],	/* Server */
 		resource[HTTP_MAX_URI];	/* Resource path */
@@ -261,13 +215,14 @@ do_tests(const char *uri,		/* I - URI to connect on */
   * Connect to the server...
   */
 
-  httpSeparateURI(HTTP_URI_CODING_ALL, uri, method, sizeof(method), userpass,
+  httpSeparateURI(HTTP_URI_CODING_ALL, uri, scheme, sizeof(scheme), userpass,
                   sizeof(userpass), server, sizeof(server), &port, resource,
 		  sizeof(resource));
   if ((http = httpConnect(server, port)) == NULL)
   {
     printf("Unable to connect to %s on port %d - %s\n", server, port,
            strerror(errno));
+    fclose(fp);
     return (0);
   }
 
@@ -279,7 +234,7 @@ do_tests(const char *uri,		/* I - URI to connect on */
   pass            = 1;
   job_id          = 0;
   subscription_id = 0;
-  version         = 1;
+  version         = 11;
   linenum         = 1;
 
   while (get_token(fp, token, sizeof(token), &linenum) != NULL)
@@ -300,14 +255,13 @@ do_tests(const char *uri,		/* I - URI to connect on */
     * Initialize things...
     */
 
-    httpSeparateURI(HTTP_URI_CODING_ALL, uri, method, sizeof(method), userpass,
+    httpSeparateURI(HTTP_URI_CODING_ALL, uri, scheme, sizeof(scheme), userpass,
                     sizeof(userpass), server, sizeof(server), &port, resource,
 		    sizeof(resource));
 
     request       = ippNew();
     op            = (ipp_op_t)0;
     group         = IPP_TAG_ZERO;
-    value         = IPP_TAG_ZERO;
     num_statuses  = 0;
     num_expects   = 0;
     num_displayed = 0;
@@ -339,8 +293,21 @@ do_tests(const char *uri,		/* I - URI to connect on */
         * IPP version number for test...
 	*/
 
+        int major, minor;		/* Major/minor IPP version */
+
+
 	get_token(fp, temp, sizeof(temp), &linenum);
-	sscanf(temp, "%*d.%d", &version);
+	if (sscanf(temp, "%d.%d", &major, &minor) == 2 &&
+	    major >= 0 && minor >= 0 && minor < 10)
+	  version = major * 10 + minor;
+	else
+	{
+	  printf("Bad version %s seen on line %d - aborting test!\n", token,
+		 linenum);
+	  httpClose(http);
+	  ippDelete(request);
+	  return (0);
+	}
       }
       else if (!strcasecmp(token, "RESOURCE"))
       {
@@ -366,7 +333,7 @@ do_tests(const char *uri,		/* I - URI to connect on */
 	*/
 
 	get_token(fp, token, sizeof(token), &linenum);
-	value = get_tag(token);
+	value = ippTagValue(token);
 
 	if (value == group)
 	  ippAddSeparator(request);
@@ -392,7 +359,7 @@ do_tests(const char *uri,		/* I - URI to connect on */
 	*/
 
 	get_token(fp, token, sizeof(token), &linenum);
-	value = get_tag(token);
+	value = ippTagValue(token);
 	get_token(fp, attr, sizeof(attr), &linenum);
 	get_token(fp, temp, sizeof(temp), &linenum);
 
@@ -411,9 +378,10 @@ do_tests(const char *uri,		/* I - URI to connect on */
 	      strlcpy(tokenptr, uri, sizeof(token) - (tokenptr - token));
 	      tempptr += 4;
 	    }
-	    else if (!strncasecmp(tempptr + 1, "method", 6))
+	    else if (!strncasecmp(tempptr + 1, "scheme", 6) ||
+	             !strncasecmp(tempptr + 1, "method", 6))
 	    {
-	      strlcpy(tokenptr, method, sizeof(token) - (tokenptr - token));
+	      strlcpy(tokenptr, scheme, sizeof(token) - (tokenptr - token));
 	      tempptr += 7;
 	    }
 	    else if (!strncasecmp(tempptr + 1, "username", 8))
@@ -594,7 +562,8 @@ do_tests(const char *uri,		/* I - URI to connect on */
     * Submit the IPP request...
     */
 
-    request->request.op.version[1]   = version;
+    request->request.op.version[0]   = version / 10;
+    request->request.op.version[1]   = version % 10;
     request->request.op.operation_id = op;
     request->request.op.request_id   = 1;
 
@@ -719,38 +688,6 @@ do_tests(const char *uri,		/* I - URI to connect on */
 
 
 /*
- * 'get_tag()' - Get an IPP value or group tag from a name...
- */
-
-ipp_tag_t				/* O - Value/group tag */
-get_tag(const char *name)		/* I - Name of value/group tag */
-{
-  int			i;		/* Looping var */
-
-
-  for (i = 0; i < (sizeof(TagNames) / sizeof(TagNames[0])); i ++)
-    if (!strcasecmp(name, TagNames[i]))
-      return ((ipp_tag_t)i);
-
-  return (IPP_TAG_ZERO);
-}
-
-
-/*
- * 'get_tag_string()' - Get the string associated with a tag.
- */
-
-const char *				/* O - Tag name string */
-get_tag_string(ipp_tag_t tag)		/* I - IPP tag */
-{
-  if (tag < (ipp_tag_t)(sizeof(TagNames) / sizeof(TagNames[0])))
-    return (TagNames[tag]);
-  else
-    return ("UNKNOWN");
-}
-
-
-/*
  * 'get_token()' - Get a token from a file.
  */
 
@@ -860,7 +797,7 @@ print_attr(ipp_attribute_t *attr)	/* I - Attribute to print */
 
   printf("        %s (%s%s) = ", attr->name,
          attr->num_values > 1 ? "1setOf " : "",
-	 get_tag_string(attr->value_tag));
+	 ippTagString(attr->value_tag));
 
   switch (attr->value_tag)
   {
@@ -915,11 +852,108 @@ print_attr(ipp_attribute_t *attr)	/* I - Attribute to print */
 		 attr->values[i].string.charset);
 	break;
 
+    case IPP_TAG_BEGIN_COLLECTION :
+	for (i = 0; i < attr->num_values; i ++)
+	{
+	  if (i)
+	    putchar(' ');
+
+	  print_col(attr->values[i].collection);
+	}
+	break;
+        
     default :
 	break; /* anti-compiler-warning-code */
   }
 
   putchar('\n');
+}
+
+
+/*
+ * 'print_col()' - Print a collection attribute on the screen.
+ */
+
+void
+print_col(ipp_t *col)			/* I - Collection attribute to print */
+{
+  int			i;		/* Looping var */
+  ipp_attribute_t	*attr;		/* Current attribute in collection */
+
+
+  putchar('{');
+  for (attr = col->attrs; attr; attr = attr->next)
+  {
+    printf("%s(%s%s)=", attr->name, attr->num_values > 1 ? "1setOf " : "",
+	   ippTagString(attr->value_tag));
+
+    switch (attr->value_tag)
+    {
+      case IPP_TAG_INTEGER :
+      case IPP_TAG_ENUM :
+	  for (i = 0; i < attr->num_values; i ++)
+	    printf("%d ", attr->values[i].integer);
+	  break;
+
+      case IPP_TAG_BOOLEAN :
+	  for (i = 0; i < attr->num_values; i ++)
+	    if (attr->values[i].boolean)
+	      printf("true ");
+	    else
+	      printf("false ");
+	  break;
+
+      case IPP_TAG_NOVALUE :
+	  printf("novalue");
+	  break;
+
+      case IPP_TAG_RANGE :
+	  for (i = 0; i < attr->num_values; i ++)
+	    printf("%d-%d ", attr->values[i].range.lower,
+		   attr->values[i].range.upper);
+	  break;
+
+      case IPP_TAG_RESOLUTION :
+	  for (i = 0; i < attr->num_values; i ++)
+	    printf("%dx%d%s ", attr->values[i].resolution.xres,
+		   attr->values[i].resolution.yres,
+		   attr->values[i].resolution.units == IPP_RES_PER_INCH ?
+		       "dpi" : "dpc");
+	  break;
+
+      case IPP_TAG_STRING :
+      case IPP_TAG_TEXT :
+      case IPP_TAG_NAME :
+      case IPP_TAG_KEYWORD :
+      case IPP_TAG_CHARSET :
+      case IPP_TAG_URI :
+      case IPP_TAG_MIMETYPE :
+      case IPP_TAG_LANGUAGE :
+	  for (i = 0; i < attr->num_values; i ++)
+	    printf("\"%s\" ", attr->values[i].string.text);
+	  break;
+
+      case IPP_TAG_TEXTLANG :
+      case IPP_TAG_NAMELANG :
+	  for (i = 0; i < attr->num_values; i ++)
+	    printf("\"%s\",%s ", attr->values[i].string.text,
+		   attr->values[i].string.charset);
+	  break;
+
+      case IPP_TAG_BEGIN_COLLECTION :
+	  for (i = 0; i < attr->num_values; i ++)
+	  {
+	    print_col(attr->values[i].collection);
+	    putchar(' ');
+	  }
+	  break;
+	  
+      default :
+	  break; /* anti-compiler-warning-code */
+    }
+  }
+
+  putchar('}');
 }
 
 
@@ -944,5 +978,5 @@ usage(const char *option)		/* I - Option string or NULL */
 
 
 /*
- * End of "$Id: ipptest.c 6649 2007-07-11 21:46:42Z mike $".
+ * End of "$Id: ipptest.c 7847 2008-08-19 04:22:14Z mike $".
  */

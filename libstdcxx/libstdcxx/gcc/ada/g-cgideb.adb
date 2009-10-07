@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---            Copyright (C) 2000-2001 Ada Core Technologies, Inc.           --
+--                     Copyright (C) 2000-2006, AdaCore                     --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -37,80 +37,66 @@ package body GNAT.CGI.Debug is
 
    use Ada.Strings.Unbounded;
 
-   --
-   --  Define the abstract type which act as a template for all debug IO mode.
+   --  Define the abstract type which act as a template for all debug IO modes.
    --  To create a new IO mode you must:
    --     1. create a new package spec
    --     2. create a new type derived from IO.Format
    --     3. implement all the abstract rountines in IO
-   --
 
    package IO is
 
       type Format is abstract tagged null record;
 
-      function Output (Mode : in Format'Class) return String;
+      function Output (Mode : Format'Class) return String;
 
       function Variable
         (Mode  : Format;
          Name  : String;
-         Value : String)
-         return  String
-      is abstract;
-      --  Returns variable Name and its associated value.
+         Value : String) return String is abstract;
+      --  Returns variable Name and its associated value
 
-      function New_Line
-        (Mode : Format)
-         return String
-      is abstract;
+      function New_Line (Mode : Format) return String is abstract;
       --  Returns a new line such as this concatenated between two strings
       --  will display the strings on two lines.
 
-      function Title
-        (Mode : Format;
-         Str  : String)
-         return String
-      is abstract;
+      function Title (Mode : Format; Str : String) return String is abstract;
       --  Returns Str as a Title. A title must be alone and centered on a
       --  line. Next output will be on the following line.
 
       function Header
         (Mode : Format;
-         Str  : String)
-         return String
-      is abstract;
+         Str  : String) return String is abstract;
       --  Returns Str as an Header. An header must be alone on its line. Next
       --  output will be on the following line.
 
    end IO;
 
-   --
-   --  IO for HTML mode
-   --
+   ----------------------
+   -- IO for HTML Mode --
+   ----------------------
 
    package HTML_IO is
 
-      --  see IO for comments about these routines.
+      --  See IO for comments about these routines
 
       type Format is new IO.Format with null record;
 
       function Variable
         (IO    : Format;
          Name  : String;
-         Value : String)
-         return  String;
+         Value : String) return String;
 
-      function New_Line (IO : in Format) return String;
+      function New_Line (IO : Format) return String;
 
-      function Title (IO : in Format; Str : in String) return String;
+      function Title (IO : Format; Str : String) return String;
 
-      function Header (IO : in Format; Str : in String) return String;
+      function Header (IO : Format; Str : String) return String;
 
    end HTML_IO;
 
-   --
-   --  IO for plain text mode
-   --
+   ----------------------------
+   -- IO for Plain Text Mode --
+   ----------------------------
 
    package Text_IO is
 
@@ -121,14 +107,13 @@ package body GNAT.CGI.Debug is
       function Variable
         (IO    : Format;
          Name  : String;
-         Value : String)
-         return  String;
+         Value : String) return String;
 
-      function New_Line (IO : in Format) return String;
+      function New_Line (IO : Format) return String;
 
-      function Title (IO : in Format; Str : in String) return String;
+      function Title (IO : Format; Str : String) return String;
 
-      function Header (IO : in Format; Str : in String) return String;
+      function Header (IO : Format; Str : String) return String;
 
    end Text_IO;
 
@@ -142,7 +127,7 @@ package body GNAT.CGI.Debug is
       -- Output --
       ------------
 
-      function Output (Mode : in Format'Class) return String is
+      function Output (Mode : Format'Class) return String is
          Result : Unbounded_String;
 
       begin
@@ -187,17 +172,17 @@ package body GNAT.CGI.Debug is
 
       NL : constant String := (1 => ASCII.LF);
 
-      function Bold (S : in String) return String;
-      --  Returns S as an HTML bold string.
+      function Bold (S : String) return String;
+      --  Returns S as an HTML bold string
 
-      function Italic (S : in String) return String;
-      --  Returns S as an HTML italic string.
+      function Italic (S : String) return String;
+      --  Returns S as an HTML italic string
 
       ----------
       -- Bold --
       ----------
 
-      function Bold (S : in String) return String is
+      function Bold (S : String) return String is
       begin
          return "<b>" & S & "</b>";
       end Bold;
@@ -206,9 +191,8 @@ package body GNAT.CGI.Debug is
       -- Header --
       ------------
 
-      function Header (IO : in Format; Str : in String) return String is
-         pragma Warnings (Off, IO);
-
+      function Header (IO : Format; Str : String) return String is
+         pragma Unreferenced (IO);
       begin
          return "<h2>" & Str & "</h2>" & NL;
       end Header;
@@ -217,7 +201,7 @@ package body GNAT.CGI.Debug is
       -- Italic --
       ------------
 
-      function Italic (S : in String) return String is
+      function Italic (S : String) return String is
       begin
          return "<i>" & S & "</i>";
       end Italic;
@@ -226,9 +210,8 @@ package body GNAT.CGI.Debug is
       -- New_Line --
       --------------
 
-      function New_Line (IO : in Format) return String is
-         pragma Warnings (Off, IO);
-
+      function New_Line (IO : Format) return String is
+         pragma Unreferenced (IO);
       begin
          return "<br>" & NL;
       end New_Line;
@@ -237,9 +220,8 @@ package body GNAT.CGI.Debug is
       -- Title --
       -----------
 
-      function Title (IO : in Format; Str : in String) return String is
-         pragma Warnings (Off, IO);
-
+      function Title (IO : Format; Str : String) return String is
+         pragma Unreferenced (IO);
       begin
          return "<p align=center><font size=+2>" & Str & "</font></p>" & NL;
       end Title;
@@ -251,11 +233,9 @@ package body GNAT.CGI.Debug is
       function Variable
         (IO    : Format;
          Name  : String;
-         Value : String)
-         return  String
+         Value : String) return String
       is
-         pragma Warnings (Off, IO);
-
+         pragma Unreferenced (IO);
       begin
          return Bold (Name) & " = " & Italic (Value);
       end Variable;
@@ -272,7 +252,7 @@ package body GNAT.CGI.Debug is
       -- Header --
       ------------
 
-      function Header (IO : in Format; Str : in String) return String is
+      function Header (IO : Format; Str : String) return String is
       begin
          return "*** " & Str & New_Line (IO);
       end Header;
@@ -281,9 +261,8 @@ package body GNAT.CGI.Debug is
       -- New_Line --
       --------------
 
-      function New_Line (IO : in Format) return String is
-         pragma Warnings (Off, IO);
-
+      function New_Line (IO : Format) return String is
+         pragma Unreferenced (IO);
       begin
          return String'(1 => ASCII.LF);
       end New_Line;
@@ -292,10 +271,9 @@ package body GNAT.CGI.Debug is
       -- Title --
       -----------
 
-      function Title (IO : in Format; Str : in String) return String is
+      function Title (IO : Format; Str : String) return String is
          Spaces : constant Natural := (80 - Str'Length) / 2;
          Indent : constant String (1 .. Spaces) := (others => ' ');
-
       begin
          return Indent & Str & New_Line (IO);
       end Title;
@@ -307,11 +285,9 @@ package body GNAT.CGI.Debug is
       function Variable
         (IO    : Format;
          Name  : String;
-         Value : String)
-         return  String
+         Value : String) return String
       is
-         pragma Warnings (Off, IO);
-
+         pragma Unreferenced (IO);
       begin
          return "   " & Name & " = " & Value;
       end Variable;
@@ -324,7 +300,6 @@ package body GNAT.CGI.Debug is
 
    function HTML_Output return String is
       HTML : HTML_IO.Format;
-
    begin
       return IO.Output (Mode => HTML);
    end HTML_Output;
@@ -335,7 +310,6 @@ package body GNAT.CGI.Debug is
 
    function Text_Output return String is
       Text : Text_IO.Format;
-
    begin
       return IO.Output (Mode => Text);
    end Text_Output;

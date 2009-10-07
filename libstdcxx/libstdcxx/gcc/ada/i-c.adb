@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2005 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -504,7 +504,8 @@ package body Interfaces.C is
          --  char_array. The lower bound of this array is required to be zero
          --  (RM B.3(50)) but that is of course impossible given that size_t
          --  is unsigned. According to Ada 2005 AI-258, the result is to raise
-         --  Constraint_Error.
+         --  Constraint_Error. This is also the appropriate behavior in Ada 95,
+         --  since nothing else makes sense.
 
          if Item'Length = 0 then
             raise Constraint_Error;
@@ -593,7 +594,8 @@ package body Interfaces.C is
          --  wchar_array. The lower bound of this array is required to be zero
          --  (RM B.3(50)) but that is of course impossible given that size_t
          --  is unsigned. According to Ada 2005 AI-258, the result is to raise
-         --  Constraint_Error.
+         --  Constraint_Error. This is also the appropriate behavior in Ada 95,
+         --  since nothing else makes sense.
 
          if Item'Length = 0 then
             raise Constraint_Error;
@@ -680,7 +682,8 @@ package body Interfaces.C is
          --  char16_array. The lower bound of this array is required to be zero
          --  (RM B.3(50)) but that is of course impossible given that size_t
          --  is unsigned. According to Ada 2005 AI-258, the result is to raise
-         --  Constraint_Error.
+         --  Constraint_Error. This is also the appropriate behavior in Ada 95,
+         --  since nothing else makes sense.
 
          if Item'Length = 0 then
             raise Constraint_Error;

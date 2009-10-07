@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1998-2004 Free Software Foundation, Inc.          --
+--          Copyright (C) 1998-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -131,7 +131,7 @@ package body Xr_Tabls is
    --  Column. This key should be used for lookup in Entity_HTable
 
    function Is_Less_Than (Decl1, Decl2 : Declaration_Reference) return Boolean;
-   --  Compare two declarations. The comparison is case-insensitive.
+   --  Compare two declarations (the comparison is case-insensitive)
 
    function Is_Less_Than (Ref1, Ref2 : Reference) return Boolean;
    --  Compare two references
@@ -144,14 +144,12 @@ package body Xr_Tabls is
       Get_Declaration : Boolean := False;
       Arr             : in out Reference_Array;
       Index           : in out Natural);
-   --  Store in Arr, starting at Index, all the references to Decl.
-   --  The Get_* parameters can be used to indicate which references should be
-   --  stored.
+   --  Store in Arr, starting at Index, all the references to Decl. The Get_*
+   --  parameters can be used to indicate which references should be stored.
    --  Constraint_Error will be raised if Arr is not big enough.
 
    procedure Sort (Arr : in out Reference_Array);
-   --  Sort an array of references.
-   --  Arr'First must be 1.
+   --  Sort an array of references (Arr'First must be 1)
 
    --------------
    -- Set_Next --
@@ -556,8 +554,6 @@ package body Xr_Tabls is
    -------------------------
 
    procedure Create_Project_File (Name : String) is
-      use Ada.Strings.Unbounded;
-
       Obj_Dir     : Unbounded_String := Null_Unbounded_String;
       Src_Dir     : Unbounded_String := Null_Unbounded_String;
       Build_Dir   : GNAT.OS_Lib.String_Access := new String'("");
@@ -765,7 +761,7 @@ package body Xr_Tabls is
 
    function Get_File
      (File     : File_Reference;
-      With_Dir : in Boolean := False;
+      With_Dir : Boolean := False;
       Strip    : Natural    := 0) return String
    is
       Tmp : GNAT.OS_Lib.String_Access;

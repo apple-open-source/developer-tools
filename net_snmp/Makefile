@@ -7,10 +7,17 @@ Project		= net-snmp
 ProjectName	= net_snmp
 UserType	= Administration
 ToolType	= Commands
-Submission	= 113
+Submission	= 127
 
 #
 # Settings for the net-snmp project.
+#
+########################
+#
+# NOTE: when shipping library updates instead of the full package, you must also ship the updated
+#       /usr/include/net-snmp/net-snmp-config.h
+#
+########################
 #
 # Justification for #defines:
 # CONFORMANCE is to avoid confusing configure
@@ -27,6 +34,13 @@ INCLUDES		= -F/System/Library/PrivateFrameworks/ -F/System/Library/Frameworks/
 # must be properly defined.
 Extra_CC_Flags		= $(DEFINES) $(INCLUDES)
 Extra_Cxx_Flags		= $(Extra_CC_Flags)
+# also need ARCHFLAGS
+Default_AARCHFLAGS = -arch ppc -arch i386  -arch x86_64
+ifneq "$(RC_CFLAGS)" ""
+	ARCHFLAGS=$(RC_CLFLAGS)
+else
+	ARCHFLAGS=$(Default_AARCHFLAGS)
+endif
 
 Extra_Configure_Flags	= --sysconfdir=/etc \
 			--with-install-prefix=$(DSTROOT) \
@@ -35,9 +49,11 @@ Extra_Configure_Flags	= --sysconfdir=/etc \
 			--with-defaults \
 			--without-rpm \
 			--with-sys-contact="postmaster@example.com" \
-			--with-mib-modules="host ucd-snmp/diskio ucd-snmp/loadave" \
+			--with-mib-modules="host ucd-snmp/diskio ucd-snmp/loadave ucd-snmp/lmSensorsTables" \
 			--disable-static \
-			--disable-embedded-perl \
+			--enable-ipv6 \
+			--with-perl-modules \
+			--disable-embedded-perl  \
 			--without-kmem-usage
 
 # Old / unused configure flags
@@ -47,6 +63,8 @@ Extra_Configure_Flags	= --sysconfdir=/etc \
 #			--enable-ipv6 \
 #			--enable-developer
 #			--with-libwrap=/usr/lib/libwrap.dylib
+#			--disable-embedded-perl  \
+
 
 # The following are sometimes necessary if DESTDIR or --with-install-prefix
 # are not respected.
@@ -88,12 +106,12 @@ MIBDIR		= $(SHAREDIR)/snmp/mibs
 
 # Automatic Extract & Patch
 AEP		= YES
-AEP_Version	= 5.4.1
+AEP_Version	= 5.4.2.1
 AEP_Patches    = diskio.patch IPv6.patch universal_builds.patch \
 			cache.patch container.patch darwin-header.patch \
-			dir_utils.patch disk.patch host.patch \
-			swinst.patch swrun.patch copying.patch \
-			system.patch table.patch
+			dir_utils.patch disk.patch host.patch 6581429.patch \
+			lmsensors.patch darwin-sensors.patch swinst.patch swrun.patch \
+			system.patch table.patch darwin64.patch perl-cc.patch
 AEP_LaunchdConfigs	= org.net-snmp.snmpd.plist
 AEP_ConfigDir	= $(ETCDIR)/snmp
 AEP_ConfigFiles	= snmpd.conf
@@ -197,12 +215,16 @@ install-macosx:
 		$(CP) $(DSTROOT)$(USRLIBDIR)/$${file}*.dylib $(SYMROOT); \
 		$(STRIP) -x $(DSTROOT)$(USRLIBDIR)/$${file}.dylib; \
 	done
-	$(_v) $(FIND) $(DSTROOT)$(NSLIBRARYSUBDIR)/Perl -type f -name '*.bundle' -print -exec strip -S {} \;
+	$(_v)- $(FIND) $(DSTROOT)$(NSLIBRARYSUBDIR)/Perl -type f -name '*.bundle' -print -exec strip -S {} \;
+	@echo "Copying sensor data"
+	$(_v) $(INSTALL_FILE) $(SRCROOT)/SensorDat.xml $(DSTROOT)$(SHAREDIR)/snmp
 	@echo "Fixing permissions..."
 	$(_v) $(FIND) $(DSTROOT)$(USRINCLUDEDIR)/net-snmp -type f -exec chmod 644 {} \;
 	$(_v) $(FIND) $(DSTROOT)$(SHAREDIR)/snmp -type f -exec chmod 644 {} \;
 	$(_v) $(RM) $(DSTROOT)$(USRLIBDIR)/*.a $(DSTROOT)$(USRLIBDIR)/*.la
 	$(_v) $(FIND) $(DSTROOT)$(MANDIR) -type f -exec chmod 644 {} \;
+	@echo "Removing perllocal.pod..."
+	$(_v) $(RM) -rf "$(DSTROOT)/System/Library/Perl"
 	@echo "Eliminating architecture flags from $(CONFIGTOOL)..."
 	$(MV) $(DSTROOT)$(CONFIGTOOL) $(DSTROOT)$(CONFIGTOOL).old
 	$(SED) -Ee 's/-arch [-_a-z0-9]{3,10}//g' \
@@ -219,3 +241,5 @@ install-mibs:
 
 install-compat:
 	$(_v) $(TAR) -C $(DSTROOT)$(USRLIBDIR) -xzf $(SRCROOT)/libs-5.2.1.tar.gz
+	@echo "Fixing privs on libnetsnmp.5.dylib ref bug# 6877106"
+	$(_v) $(CHMOD) -h 755 $(DSTROOT)$(USRLIBDIR)/libnetsnmp.5.dylib

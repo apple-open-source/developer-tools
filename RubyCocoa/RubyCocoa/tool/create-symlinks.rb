@@ -6,6 +6,7 @@
 
 require 'fileutils'
 include FileUtils
+require 'rbconfig'
 
 unless File.exist?('tool/create-symlinks.rb')
   $stderr.puts 'This tool should be used in the RubyCocoa project root directory'
@@ -24,10 +25,10 @@ Dir.chdir('/System/Library/Frameworks') {
   ln_s(File.join(pwd, 'framework/build/Default/RubyCocoa.framework'), 'RubyCocoa.framework')  
 }
 
-Dir.chdir('/usr/lib/ruby/site_ruby/1.8') {
+Dir.chdir('/usr/lib/ruby/1.8') {
   mv('osx', 'osx.old')
   ln_s(File.join(pwd, 'lib/osx'), 'osx')
-  Dir.chdir('universal-darwin9.0') {
+  Dir.chdir(Config::CONFIG['arch']) {
     mv('rubycocoa.bundle', 'rubycocoa.bundle.old')
     ln_s(File.join(pwd, 'ext/rubycocoa/rubycocoa.bundle'), 'rubycocoa.bundle')
   }

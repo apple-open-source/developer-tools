@@ -19,7 +19,7 @@ void f6(int x) {
 void f4(int  x) {
   f4a(x);
 }
-/* { dg-final { scan-assembler "bl L_f1a" } } */
-/* { dg-final { scan-assembler "bl L_f4a" } } */
-/* { dg-final { scan-assembler "b L_f5a" } } */
-/* { dg-final { scan-assembler "b L_f6a" } } */
+/* { dg-final { scan-assembler "bl L?_f1a" } } */
+/* { dg-final { scan-assembler "bl L?_f4a" } } */
+/* { dg-final { scan-assembler "b L?_f5a" } } */
+/* { dg-final { scan-assembler "b L?_f6a" } } */

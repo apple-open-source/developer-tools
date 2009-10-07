@@ -1,5 +1,5 @@
 /* 
- * Copyright (c) 2006-2007, The RubyCocoa Project.
+ * Copyright (c) 2006-2008, The RubyCocoa Project.
  * Copyright (c) 2001-2006, FUJIMOTO Hisakuni.
  * All Rights Reserved.
  *
@@ -20,7 +20,12 @@
 #import "ocexception.h"
 #import "objc_compat.h"
 
-#define OCM_AUTO_REGISTER 1
+#if __LP64__
+/* FIXME */
+# define OCM_AUTO_REGISTER 0
+#else
+# define OCM_AUTO_REGISTER 1
+#endif
 
 static VALUE _mObjWrapper = Qnil;
 static VALUE _mClsWrapper = Qnil;
@@ -37,7 +42,7 @@ struct _ocm_retain_context {
 static void
 ocm_retain_arg_if_necessary (VALUE result, BOOL is_result, void *context)
 {
-  VALUE rcv = ((struct _ocm_retain_context *)context)->rcv;
+  volatile VALUE rcv = ((struct _ocm_retain_context *)context)->rcv;
   SEL selector = ((struct _ocm_retain_context *)context)->selector;
 
   // Retain if necessary the returned ObjC value unless it was generated 
@@ -65,8 +70,22 @@ ocm_retain_arg_if_necessary (VALUE result, BOOL is_result, void *context)
     }
     // We assume that the object is retained at that point.
     OBJCID_DATA_PTR(result)->retained = YES; 
-    if (selector != @selector(alloc) && selector != @selector(allocWithZone:))
+    if (selector != @selector(alloc) && selector != @selector(allocWithZone:)) {
       OBJCID_DATA_PTR(result)->can_be_released = YES;
+    }
+    // Objects that come from an NSObject-based class defined in Ruby have a
+    // slave object as an instance variable that serves as the message proxy.
+    // However, this RBObject retains the Ruby instance by default, which isn't
+    // what we want, because this is a retain circle, and both objects will
+    // leak. So we manually release the Ruby object from the slave, so that
+    // when the Ruby object will be collected by the Ruby GC, the ObjC object
+    // will be properly auto-released.
+    //
+    // We only do this magic for objects that are explicitely allocated from
+    // Ruby.
+    if ([OBJCID_ID(result) respondsToSelector:@selector(__trackSlaveRubyObject)]) {
+      [OBJCID_ID(result) performSelector:@selector(__trackSlaveRubyObject)];
+    }
   }
 }
 
@@ -79,7 +98,8 @@ struct ocm_closure_userdata
 static void
 ocm_closure_handler(ffi_cif *cif, void *resp, void **args, void *userdata)
 {
-  VALUE rcv, argv, mname, is_predicate;
+  VALUE rcv, mname, is_predicate;
+  volatile VALUE argv;
 
   OBJWRP_LOG("ocm_closure_handler ...");
 
@@ -146,6 +166,14 @@ wrapper_ignore_ns_override (VALUE rcv)
   return ignore_ns_override ? Qtrue : Qfalse;
 }
 
+static VALUE
+wrapper_ignore_ns_override_set (VALUE rcv, VALUE val)
+{
+  ignore_ns_override = RTEST(val);
+  return val;
+}
+
+#if OCM_AUTO_REGISTER
 static void
 ocm_register(Class klass, VALUE oc_mname, VALUE rb_mname, VALUE is_predicate,
   SEL selector, BOOL is_class_method)
@@ -212,6 +240,7 @@ ocm_register(Class klass, VALUE oc_mname, VALUE rb_mname, VALUE is_predicate,
     is_class_method ? "class" : "instance", rb_mname_str, 
     rb_class2name(rclass));
 }
+#endif
 
 static VALUE
 ocm_send(int argc, VALUE* argv, VALUE rcv, VALUE* result)
@@ -244,8 +273,7 @@ ocm_send(int argc, VALUE* argv, VALUE rcv, VALUE* result)
   methodReturnType = NULL;
   argumentsTypes = NULL;
 
-  oc_rcv = rbobj_get_ocid(rcv);
-  if (oc_rcv == nil) {
+  if (!rbobj_to_nsobj(rcv, &oc_rcv) || oc_rcv == nil) {
     exception = rb_err_new(ocmsgsend_err_class(), "Can't get Objective-C object in %s", RSTRING(rb_inspect(rcv))->ptr);
     goto bails;
   }
@@ -317,6 +345,12 @@ ocm_send(int argc, VALUE* argv, VALUE rcv, VALUE* result)
 
     if (NIL_P(exception)) {
       if (*methodReturnType != _C_VOID) {
+        /* Theoretically, ObjC objects should be removed from the oc2rb
+           cache upon dealloc, but it is possible to lose some of them when
+           they are allocated within a thread that is directly killed. */
+        if (selector == @selector(alloc))
+          remove_from_oc2rb_cache(val);
+          
         OBJWRP_LOG("got return value %p", val);
         if (!ocdata_to_rbobj(rcv, methodReturnType, (const void *)&val, result, NO)) {
           exception = rb_err_new(ocdataconv_err_class(), "Cannot convert the result as '%s' to Ruby", methodReturnType);
@@ -367,7 +401,7 @@ ocm_send(int argc, VALUE* argv, VALUE rcv, VALUE* result)
       }
       else {
         set_octypes_for_format_str(&argumentsTypes[numberOfArguments],
-          argc - numberOfArguments, STR2CSTR(format_str));
+          argc - numberOfArguments, StringValuePtr(format_str));
       }
     }
   }
@@ -423,10 +457,24 @@ bails:
 static VALUE
 wrapper_ocm_responds_p(VALUE rcv, VALUE sel)
 {
-  id oc_rcv = rbobj_get_ocid(rcv);
+  id oc_rcv;
   SEL oc_sel = rbobj_to_nssel(sel);
+  rbobj_to_nsobj(rcv, &oc_rcv);
   return [oc_rcv respondsToSelector: oc_sel] ? Qtrue : Qfalse;
 }
+
+#if 0
+// Disabled, because we don't have a working implementation for systems
+// equal or below than Tiger.
+static VALUE
+wrapper_ocm_conforms_p(VALUE rcv, VALUE name)
+{
+  Protocol *protocol = objc_getProtocol(StringValuePtr(name));
+  if (protocol == NULL)
+    rb_raise(rb_eArgError, "Invalid protocol name `%s'", StringValuePtr(name));
+  return class_conformsToProtocol(rbobj_get_ocid(rcv), protocol) ? Qtrue : Qfalse;
+}
+#endif
 
 static VALUE
 wrapper_ocm_send(int argc, VALUE* argv, VALUE rcv)
@@ -449,7 +497,7 @@ wrapper_to_s (VALUE rcv)
   id oc_rcv;
   id pool;
 
-  oc_rcv = rbobj_get_ocid(rcv);
+  rbobj_to_nsobj(rcv, &oc_rcv);
   pool = [[NSAutoreleasePool alloc] init];
   oc_rcv = [oc_rcv description];
   ret = ocstr_to_rbstr(oc_rcv);
@@ -494,7 +542,7 @@ wrapper_objc_methods (VALUE rcv)
   id oc_rcv;
 
   ary = rb_ary_new();
-  oc_rcv = rbobj_get_ocid (rcv);
+  rbobj_to_nsobj(rcv, &oc_rcv);
   _ary_push_objc_methods (ary, oc_rcv->isa, 1);
   return ary;
 }
@@ -508,7 +556,7 @@ wrapper_objc_instance_methods (int argc, VALUE* argv, VALUE rcv)
 
   recur = (argc == 0) ? 1 : RTEST(argv[0]);
   ary = rb_ary_new();
-  oc_rcv = rbobj_get_ocid (rcv);
+  rbobj_to_nsobj(rcv, &oc_rcv);
   _ary_push_objc_methods (ary, oc_rcv, recur);
   return ary;
 }
@@ -522,7 +570,7 @@ wrapper_objc_class_methods (int argc, VALUE* argv, VALUE rcv)
 
   recur = (argc == 0) ? 1 : RTEST(argv[0]);
   ary = rb_ary_new();
-  oc_rcv = rbobj_get_ocid (rcv);
+  rbobj_to_nsobj(rcv, &oc_rcv);
   _ary_push_objc_methods (ary, oc_rcv->isa, recur);
   return ary;
 }
@@ -557,9 +605,9 @@ wrapper_objc_method_type (VALUE rcv, VALUE name)
   id oc_rcv;
   const char* str;
 
-  oc_rcv = rbobj_get_ocid (rcv);
+  rbobj_to_nsobj(rcv, &oc_rcv);
   name = _name_to_selstr (name);
-  str = _objc_method_type (oc_rcv->isa, STR2CSTR(name));
+  str = _objc_method_type (oc_rcv->isa, StringValuePtr(name));
   if (str == NULL) return Qnil;
   return rb_str_new2(str);
 }
@@ -570,9 +618,9 @@ wrapper_objc_instance_method_type (VALUE rcv, VALUE name)
   id oc_rcv;
   const char* str;
 
-  oc_rcv = rbobj_get_ocid (rcv);
+  rbobj_to_nsobj(rcv, &oc_rcv);
   name = _name_to_selstr (name);
-  str = _objc_method_type (oc_rcv, STR2CSTR(name));
+  str = _objc_method_type (oc_rcv, StringValuePtr(name));
   if (str == NULL) return Qnil;
   return rb_str_new2(str);
 }
@@ -583,9 +631,9 @@ wrapper_objc_class_method_type (VALUE rcv, VALUE name)
   id oc_rcv;
   const char* str;
 
-  oc_rcv = rbobj_get_ocid (rcv);
+  rbobj_to_nsobj(rcv, &oc_rcv);
   name = _name_to_selstr (name);
-  str = _objc_method_type (oc_rcv->isa, STR2CSTR(name));
+  str = _objc_method_type (oc_rcv->isa, StringValuePtr(name));
   if (str == NULL) return Qnil;
   return rb_str_new2(str);
 }
@@ -614,16 +662,18 @@ _objc_alias_method (Class klass, VALUE new, VALUE old)
 static VALUE
 wrapper_objc_alias_method (VALUE rcv, VALUE new, VALUE old)
 {
-  Class klass = rbobj_get_ocid (rcv);
-  _objc_alias_method(klass, new, old);
+  id oc_rcv;
+  rbobj_to_nsobj(rcv, &oc_rcv);
+  _objc_alias_method((Class)oc_rcv, new, old);
   return rcv;
 }
 
 static VALUE
 wrapper_objc_alias_class_method (VALUE rcv, VALUE new, VALUE old)
 {
-  Class klass = (rbobj_get_ocid (rcv))->isa;
-  _objc_alias_method(klass, new, old);
+  id oc_rcv;
+  rbobj_to_nsobj(rcv, &oc_rcv);
+  _objc_alias_method((Class)(oc_rcv->isa), new, old);
   return rcv;
 }
 
@@ -635,6 +685,7 @@ init_mdl_OCObjWrapper(VALUE outer)
   _mObjWrapper = rb_define_module_under(outer, "OCObjWrapper");
 
   rb_define_method(_mObjWrapper, "ocm_responds?", wrapper_ocm_responds_p, 1);
+	//rb_define_method(_mObjWrapper, "ocm_conforms?", wrapper_ocm_conforms_p, 1);
   rb_define_method(_mObjWrapper, "ocm_send", wrapper_ocm_send, -1);
   rb_define_method(_mObjWrapper, "to_s", wrapper_to_s, 0);
 
@@ -651,6 +702,7 @@ init_mdl_OCObjWrapper(VALUE outer)
   rb_define_method(_mClsWrapper, "_objc_alias_class_method", wrapper_objc_alias_class_method, 2);
 
   rb_define_module_function(outer, "_ignore_ns_override", wrapper_ignore_ns_override, 0);
+  rb_define_module_function(outer, "_ignore_ns_override=", wrapper_ignore_ns_override_set, 1);
 
   return Qnil;
 }

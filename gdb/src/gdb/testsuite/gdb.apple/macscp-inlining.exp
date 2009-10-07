@@ -29,8 +29,8 @@ set testfile "macscp"
 set binfile ${objdir}/${subdir}/${testfile}
 set additional_flags "additional_flags=-O3"
 
-if [istarget "i\[3-6\]86-apple-darwin*"] {
-    verbose "Skipping ppc inlining tests."
+if ![istarget "powerpc-apple-darwin*"] {
+    verbose "Skipping PPC-specific inline test."
     return
 }
 

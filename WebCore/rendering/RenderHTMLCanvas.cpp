@@ -31,6 +31,7 @@
 #include "HTMLCanvasElement.h"
 #include "HTMLNames.h"
 #include "RenderView.h"
+#include "FrameView.h"
 
 namespace WebCore {
 
@@ -39,77 +40,33 @@ using namespace HTMLNames;
 RenderHTMLCanvas::RenderHTMLCanvas(HTMLCanvasElement* element)
     : RenderReplaced(element, element->size())
 {
+    view()->frameView()->setIsVisuallyNonEmpty();
 }
 
-void RenderHTMLCanvas::paint(PaintInfo& paintInfo, int tx, int ty)
+void RenderHTMLCanvas::paintReplaced(PaintInfo& paintInfo, int tx, int ty)
 {
-    if (!shouldPaint(paintInfo, tx, ty))
-        return;
-
-    int x = tx + m_x;
-    int y = ty + m_y;
-
-    if (hasBoxDecorations() && (paintInfo.phase == PaintPhaseForeground || paintInfo.phase == PaintPhaseSelection)) 
-        paintBoxDecorations(paintInfo, x, y);
-
-    if ((paintInfo.phase == PaintPhaseOutline || paintInfo.phase == PaintPhaseSelfOutline) && style()->outlineWidth() && style()->visibility() == VISIBLE)
-        paintOutline(paintInfo.context, x, y, width(), height(), style());
-
-    if (paintInfo.phase != PaintPhaseForeground && paintInfo.phase != PaintPhaseSelection)
-        return;
-
-    if (!shouldPaintWithinRoot(paintInfo))
-        return;
-
-    bool drawSelectionTint = selectionState() != SelectionNone && !document()->printing();
-    if (paintInfo.phase == PaintPhaseSelection) {
-        if (selectionState() == SelectionNone)
-            return;
-        drawSelectionTint = false;
-    }
-
-    static_cast<HTMLCanvasElement*>(node())->paint(paintInfo.context,
-        IntRect(x + borderLeft() + paddingLeft(), y + borderTop() + paddingTop(), contentWidth(), contentHeight()));
-
-    if (drawSelectionTint)
-        paintInfo.context->fillRect(selectionRect(), selectionBackgroundColor());
-}
-
-void RenderHTMLCanvas::layout()
-{
-    ASSERT(needsLayout());
-
-    IntRect oldBounds;
-    IntRect oldOutlineBox;
-    bool checkForRepaint = checkForRepaintDuringLayout();
-    if (checkForRepaint) {
-        oldBounds = absoluteClippedOverflowRect();
-        oldOutlineBox = absoluteOutlineBox();
-    }
-    calcWidth();
-    calcHeight();
-    adjustOverflowForBoxShadow();
-    if (checkForRepaint)
-        repaintAfterLayoutIfNeeded(oldBounds, oldOutlineBox);
-
-    setNeedsLayout(false);
+    IntRect rect = contentBoxRect();
+    rect.move(tx, ty);
+    static_cast<HTMLCanvasElement*>(node())->paint(paintInfo.context, rect);
 }
 
 void RenderHTMLCanvas::canvasSizeChanged()
 {
-    IntSize size = static_cast<HTMLCanvasElement*>(node())->size();
-    if (size == intrinsicSize())
+    IntSize canvasSize = static_cast<HTMLCanvasElement*>(node())->size();
+    IntSize zoomedSize(canvasSize.width() * style()->effectiveZoom(), canvasSize.height() * style()->effectiveZoom());
+
+    if (canvasSize == intrinsicSize())
         return;
 
-    setIntrinsicSize(size);
+    setIntrinsicSize(canvasSize);
 
     if (!prefWidthsDirty())
         setPrefWidthsDirty(true);
 
-    IntSize oldSize = IntSize(m_width, m_height);
+    IntSize oldSize = size();
     calcWidth();
     calcHeight();
-    if (oldSize == IntSize(m_width, m_height))
+    if (oldSize == size())
         return;
 
     if (!selfNeedsLayout())

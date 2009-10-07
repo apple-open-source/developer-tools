@@ -85,18 +85,20 @@ struct pci_dev
 {
     struct pci_dev *    child;
     struct pci_dev *    peer;
-    UInt32              classCode;
+    uint32_t            classCode;
     IOPCIAddressSpace   space;
-    IOPCIRange		ranges[kIOPCIRangeCount];
-    UInt8               headerType;
-    UInt8		isBridge;
-    UInt8		isHostBridge;
-    UInt8		supportsHotPlug;
-    UInt8               deviceState;
-    UInt8               secBusNum;  // bridge only
-    UInt8               subBusNum;  // bridge only
+    IOPCIRange          ranges[kIOPCIRangeCount];
+    uint8_t             headerType;
+    uint8_t             isBridge;
+    uint8_t             isHostBridge;
+    uint8_t             supportsHotPlug;
+    uint8_t             deviceState;
+    uint8_t             secBusNum;  // bridge only
+    uint8_t             subBusNum;  // bridge only
     IORegistryEntry *   dtNub;
+#if ACPI_SUPPORT
     IORegistryEntry *   acpiDevice;
+#endif
 };
 
 typedef struct pci_dev * pci_dev_t;
@@ -135,8 +137,8 @@ class IOPCIConfigurator : public IOService
 {
     OSDeclareDefaultStructors( IOPCIConfigurator );
 
-    IOOptionBits	    fFlags;
-    IOPCIBridge *	    fRootBridge;
+    IOOptionBits            fFlags;
+    IOPCIBridge *           fRootBridge;
     UInt8                   fCacheLineSize;
     pci_dev_t               fPCIBridgeList[kPCIBridgeMaxCount];
     int                     fPCIBridgeIndex;
@@ -151,11 +153,12 @@ protected:
     static void configProbeCallback( void * refcon );
 
     static void matchDTEntry( IORegistryEntry * dtEntry, void * _context );
+#if ACPI_SUPPORT
     static void matchACPIEntry( IORegistryEntry * dtEntry, void * _context );
-
+#endif
     void    checkPCIConfiguration( void );
     void    pciBridgeScanBus( pci_dev_t bridge, 
-			                  UInt8 busNum, UInt8 * nextBusNum, UInt8 lastBusNum );
+                                          UInt8 busNum, UInt8 * nextBusNum, UInt8 lastBusNum );
     void    pciRangeAppendSubRange( IOPCIRange * headRange, IOPCIRange * newRange );
     void    pciBridgeCheckConfiguration( pci_dev_t bridge );
     void    pciBridgeClipRanges( IOPCIRange * rangeList, 

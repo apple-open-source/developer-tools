@@ -1,6 +1,6 @@
-/* APPLE LOCAL file 4697325 5683689 */
+/* APPLE LOCAL file 5235474 5683689 */
 /* Additional functions for the GCC driver on Darwin native.
-   Copyright (C) 2006 Free Software Foundation, Inc.
+   Copyright (C) 2006, 2007 Free Software Foundation, Inc.
    Contributed by Apple Computer Inc.
 
 This file is part of GCC.
@@ -56,14 +56,10 @@ darwin_default_min_version (int * argc_p, char *** argv_p,
   size_t osversion_len = sizeof (osversion) - 1;
   static int osversion_name[2] = { CTL_KERN, KERN_OSRELEASE };
   char * version_p;
-  /* APPLE LOCAL begin radar 5145050 */
   char * version_pend;
-  /* APPLE LOCAL end radar 5145050 */
   int major_vers;
-  /* APPLE LOCAL begin radar 5145050 */
   char minor_vers[6];
   static char new_flag[sizeof ("-mxxxxxx-version-min=99.99.99") + 6];
-  /* APPLE LOCAL end radar 5145050 */
 
   /* If the command-line is empty, just return.  */
   if (argc <= 1)
@@ -76,7 +72,7 @@ darwin_default_min_version (int * argc_p, char *** argv_p,
     return;
   
   /* Don't do this if the user specified -mmacosx-version-min=,
-     -miphoneos-version-min=, -mno-macosx-version-min, or
+     -miphoneos-version-min, -mno-macosx-version-min, or
      -mno-iphoneos-version-min.  */
   for (i = 1; i < argc; i++)
     if (argv[i][0] == '-')
@@ -95,7 +91,6 @@ darwin_default_min_version (int * argc_p, char *** argv_p,
 	  i++;
       }
 
-  /* APPLE LOCAL begin deployment target */
   /* Retrieve the deployment target from the environment and insert
      it as a flag.  */
   {
@@ -145,18 +140,17 @@ darwin_default_min_version (int * argc_p, char *** argv_p,
 	memcpy (*argv_p + 2, argv + 1, (argc - 1) * sizeof (char *));
 	return;
       }
-
   }
-  /* APPLE LOCAL end deployment target */
 
-  /* For iPhone OS, if no version number is specified, we default to 2.0.  */
+  /* For iPhone OS, if no version number is specified, we default to
+     2.0.  */
   if (vers_type == DARWIN_VERSION_IPHONEOS)
     {
       ++*argc_p;
       *argv_p = xmalloc (sizeof (char *) * *argc_p);
       (*argv_p)[0] = argv[0];
       (*argv_p)[1] = xstrdup ("-miphoneos-version-min=2.0");
-      memcpy (*argv_p + 2, argv + 1, (argc - 1) * sizeof (char *));  
+      memcpy (*argv_p + 2, argv + 1, (argc - 1) * sizeof (char *));
       return;
     }
 
@@ -184,17 +178,13 @@ darwin_default_min_version (int * argc_p, char *** argv_p,
     goto parse_failed;
   if (*version_p++ != '.')
     goto parse_failed;
-  /* APPLE LOCAL begin radar 5145050 */
   version_pend = strchr(version_p, '.');
   if (!version_pend)
     goto parse_failed;
-  /* APPLE LOCAL end radar 5145050 */
   if (! ISDIGIT (*version_p))
     goto parse_failed;
-  /* APPLE LOCAL begin radar 5145050 */
   strncpy(minor_vers, version_p, version_pend - version_p);
   minor_vers[version_pend - version_p] = '\0';
-  /* APPLE LOCAL end radar 5145050 */
   
   /* The major kernel version number is 4 plus the second OS version
      component.  */
@@ -203,9 +193,7 @@ darwin_default_min_version (int * argc_p, char *** argv_p,
        support three-component system versions.  */
     sprintf (new_flag, "-mmacosx-version-min=10.%d", major_vers - 4);
   else
-  /* APPLE LOCAL begin radar 5145050 */
     sprintf (new_flag, "-mmacosx-version-min=10.%d.%s", major_vers - 4,
-  /* APPLE LOCAL end radar 5145050 */
 	     minor_vers);
 
   /* Add the new flag.  */
@@ -221,6 +209,5 @@ darwin_default_min_version (int * argc_p, char *** argv_p,
 	   (int) osversion_len, osversion);
   return;
 }
-
 
 #endif /* CROSS_DIRECTORY_STRUCTURE */

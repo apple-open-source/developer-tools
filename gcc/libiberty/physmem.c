@@ -1,5 +1,5 @@
 /* Calculate the size of physical memory.
-   Copyright 2000, 2001, 2003 Free Software Foundation, Inc.
+   Copyright 2000, 2001, 2003, 2004, 2005 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,7 +13,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software Foundation,
-   Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 /* Written by Paul Eggert.  */
 
@@ -80,7 +80,7 @@ typedef WINBOOL (WINAPI *PFN_MS_EX) (lMEMORYSTATUSEX*);
 
 /* Return the total amount of physical memory.  */
 double
-physmem_total ()
+physmem_total (void)
 {
 #if defined _SC_PHYS_PAGES && defined _SC_PAGESIZE
   { /* This works on linux-gnu, solaris2 and cygwin.  */
@@ -182,9 +182,39 @@ physmem_total ()
   return 0;
 }
 
+/* APPLE LOCAL begin retune gc params 6124839 */
+unsigned int
+ncpu_available (void)
+{
+#if HAVE_SYSCTL && defined HW_AVAILCPU
+  { /* This works on *bsd and darwin.  */
+    unsigned int ncpu;
+    size_t len = sizeof ncpu;
+    static int mib[2] = { CTL_HW, HW_AVAILCPU };
+
+    if (sysctl (mib, ARRAY_SIZE (mib), &ncpu, &len, NULL, 0) == 0
+	&& len == sizeof (ncpu))
+      return ncpu;
+  }
+#endif
+#if HAVE_SYSCTL && defined HW_NCPU
+  { /* This works on *bsd and darwin.  */
+    unsigned int ncpu;
+    size_t len = sizeof ncpu;
+    static int mib[2] = { CTL_HW, HW_NCPU };
+
+    if (sysctl (mib, ARRAY_SIZE (mib), &ncpu, &len, NULL, 0) == 0
+	&& len == sizeof (ncpu))
+      return ncpu;
+  }
+#endif
+  return 1;
+}
+/* APPLE LOCAL end retune gc params 6124839 */
+
 /* Return the amount of physical memory available.  */
 double
-physmem_available ()
+physmem_available (void)
 {
 #if defined _SC_AVPHYS_PAGES && defined _SC_PAGESIZE
   { /* This works on linux-gnu, solaris2 and cygwin.  */
@@ -290,7 +320,7 @@ physmem_available ()
 # include <stdlib.h>
 
 int
-main ()
+main (void)
 {
   printf ("%12.f %12.f\n", physmem_total (), physmem_available ());
   exit (0);

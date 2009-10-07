@@ -4,13 +4,13 @@
         <key>OpenSourceProject</key>
         <string>libxml-ruby</string>
         <key>OpenSourceVersion</key>
-        <string>0.3.8.4</string>
+        <string>1.1.2</string>
         <key>OpenSourceWebsiteURL</key>
         <string>http://libxml.rubyforge.org</string>
         <key>OpenSourceSHA1</key>
-        <string>7d2ec4c424363d7cde6b48dbbd23d5c5ddd1ade2</string>
+        <string>db3a309983314f6c0f61183c9f4c2fa55d175d26</string>
         <key>OpenSourceImportDate</key>
-        <string>2007-03-04</string>
+        <string>2009-03-16</string>
         <key>OpenSourceLicense</key>
         <string>MIT</string>
         <key>OpenSourceLicenseFile</key>

@@ -1,10 +1,10 @@
 /*
- * "$Id: ipp.c 6649 2007-07-11 21:46:42Z mike $"
+ * "$Id: ipp.c 7847 2008-08-19 04:22:14Z mike $"
  *
  *   Internet Printing Protocol support functions for the Common UNIX
  *   Printing System (CUPS).
  *
- *   Copyright 2007 by Apple Inc.
+ *   Copyright 2007-2009 by Apple Inc.
  *   Copyright 1997-2007 by Easy Software Products, all rights reserved.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -75,6 +75,8 @@
  * Local functions...
  */
 
+static unsigned char	*ipp_buffer_get(void);
+static void		ipp_buffer_release(unsigned char *b);
 static size_t		ipp_length(ipp_t *ipp, int collection);
 static ssize_t		ipp_read_http(http_t *http, ipp_uchar_t *buffer,
 			              size_t length);
@@ -97,9 +99,10 @@ ippAddBoolean(ipp_t      *ipp,		/* I - IPP message */
   ipp_attribute_t	*attr;		/* New attribute */
 
 
-  DEBUG_printf(("ippAddBoolean(%p, %02x, \'%s\', %d)\n", ipp, group, name, value));
+  DEBUG_printf(("ippAddBoolean(ipp=%p, group=%02x(%s), name=\"%s\", value=%d)",
+                ipp, group, ippTagString(group), name, value));
 
-  if (ipp == NULL || name == NULL)
+  if (!ipp || !name)
     return (NULL);
 
   if ((attr = _ippAddAttr(ipp, 1)) == NULL)
@@ -130,10 +133,11 @@ ippAddBooleans(ipp_t      *ipp,		/* I - IPP message */
   ipp_value_t		*value;		/* Current value */
 
 
-  DEBUG_printf(("ippAddBooleans(%p, %02x, \'%s\', %d, %p)\n", ipp,
-                group, name, num_values, values));
+  DEBUG_printf(("ippAddBooleans(ipp=%p, group=%02x(%s), name=\"%s\", "
+                "num_values=%d, values=%p)", ipp, group, ippTagString(group),
+                name, num_values, values));
 
-  if (ipp == NULL || name == NULL || num_values < 1)
+  if (!ipp || !name || num_values < 1)
     return (NULL);
 
   if ((attr = _ippAddAttr(ipp, num_values)) == NULL)
@@ -156,7 +160,7 @@ ippAddBooleans(ipp_t      *ipp,		/* I - IPP message */
 /*
  * 'ippAddCollection()' - Add a collection value.
  *
- * @since CUPS 1.1.19@
+ * @since CUPS 1.1.19/Mac OS X 10.3@
  */
 
 ipp_attribute_t *			/* O - New attribute */
@@ -168,10 +172,10 @@ ippAddCollection(ipp_t      *ipp,	/* I - IPP message */
   ipp_attribute_t	*attr;		/* New attribute */
 
 
-  DEBUG_printf(("ippAddCollection(%p, %02x, \'%s\', %p)\n", ipp, group, name,
-                value));
+  DEBUG_printf(("ippAddCollection(ipp=%p, group=%02x(%s), name=\"%s\", "
+                "value=%p)", ipp, group, ippTagString(group), name, value));
 
-  if (ipp == NULL || name == NULL)
+  if (!ipp || !name)
     return (NULL);
 
   if ((attr = _ippAddAttr(ipp, 1)) == NULL)
@@ -189,7 +193,7 @@ ippAddCollection(ipp_t      *ipp,	/* I - IPP message */
 /*
  * 'ippAddCollections()' - Add an array of collection values.
  *
- * @since CUPS 1.1.19@
+ * @since CUPS 1.1.19/Mac OS X 10.3@
  */
 
 ipp_attribute_t *			/* O - New attribute */
@@ -205,10 +209,11 @@ ippAddCollections(
   ipp_value_t		*value;		/* Current value */
 
 
-  DEBUG_printf(("ippAddCollections(%p, %02x, \'%s\', %d, %p)\n", ipp,
-                group, name, num_values, values));
+  DEBUG_printf(("ippAddCollections(ipp=%p, group=%02x(%s), name=\"%s\", "
+                "num_values=%d, values=%p)", ipp, group, ippTagString(group),
+                name, num_values, values));
 
-  if (ipp == NULL || name == NULL || num_values < 1)
+  if (!ipp || !name || num_values < 1)
     return (NULL);
 
   if ((attr = _ippAddAttr(ipp, num_values)) == NULL)
@@ -241,10 +246,10 @@ ippAddDate(ipp_t             *ipp,	/* I - IPP message */
   ipp_attribute_t	*attr;		/* New attribute */
 
 
-  DEBUG_printf(("ippAddDate(%p, %02x, \'%s\', %p)\n", ipp, group, name,
-                value));
+  DEBUG_printf(("ippAddDate(ipp=%p, group=%02x(%s), name=\"%s\", value=%p)",
+                ipp, group, ippTagString(group), name, value));
 
-  if (ipp == NULL || name == NULL || value == NULL)
+  if (!ipp || !name || !value)
     return (NULL);
 
   if ((attr = _ippAddAttr(ipp, 1)) == NULL)
@@ -273,10 +278,11 @@ ippAddInteger(ipp_t      *ipp,		/* I - IPP message */
   ipp_attribute_t	*attr;		/* New attribute */
 
 
-  DEBUG_printf(("ippAddInteger(%p, %d, \'%s\', %d)\n", ipp, group, name,
-                value));
+  DEBUG_printf(("ippAddInteger(ipp=%p, group=%02x(%s), type=%02x(%s), "
+                "name=\"%s\", value=%d)", ipp, group, ippTagString(group),
+		type, ippTagString(type), name, value));
 
-  if (ipp == NULL || name == NULL)
+  if (!ipp || !name)
     return (NULL);
 
   if ((attr = _ippAddAttr(ipp, 1)) == NULL)
@@ -308,7 +314,12 @@ ippAddIntegers(ipp_t      *ipp,		/* I - IPP message */
   ipp_value_t		*value;		/* Current value */
 
 
-  if (ipp == NULL || name == NULL || num_values < 1)
+  DEBUG_printf(("ippAddIntegers(ipp=%p, group=%02x(%s), type=%02x(%s), "
+                "name=\"%s\", num_values=%d, values=%p)", ipp,
+		group, ippTagString(group), type, ippTagString(type), name,
+		num_values, values));
+
+  if (!ipp || !name || num_values < 1)
     return (NULL);
 
   if ((attr = _ippAddAttr(ipp, num_values)) == NULL)
@@ -331,7 +342,7 @@ ippAddIntegers(ipp_t      *ipp,		/* I - IPP message */
 /*
  * 'ippAddOctetString()' - Add an octetString value to an IPP message.
  *
- * @since CUPS 1.2@
+ * @since CUPS 1.2/Mac OS X 10.5@
  */
 
 ipp_attribute_t	*			/* O - New attribute */
@@ -361,7 +372,12 @@ ippAddOctetString(ipp_t      *ipp,	/* I - IPP message */
 
   if (data)
   {
-    attr->values[0].unknown.data = malloc(datalen);
+    if ((attr->values[0].unknown.data = malloc(datalen)) == NULL)
+    {
+      ippDeleteAttribute(ipp, attr);
+      return (NULL);
+    }
+
     memcpy(attr->values[0].unknown.data, data, datalen);
   }
 
@@ -390,7 +406,12 @@ ippAddString(ipp_t      *ipp,		/* I - IPP message */
 			*bufptr;	/* Pointer into buffer */
 
 
-  if (ipp == NULL || name == NULL)
+  DEBUG_printf(("ippAddString(ipp=%p, group=%02x(%s), type=%02x(%s), "
+                "name=\"%s\", charset=\"%s\", value=\"%s\")", ipp,
+		group, ippTagString(group), type, ippTagString(type), name,
+		charset, value));
+
+  if (!ipp || !name)
     return (NULL);
 
   if ((attr = _ippAddAttr(ipp, 1)) == NULL)
@@ -454,7 +475,12 @@ ippAddStrings(
   ipp_value_t		*value;		/* Current value */
 
 
-  if (ipp == NULL || name == NULL || num_values < 1)
+  DEBUG_printf(("ippAddStrings(ipp=%p, group=%02x(%s), type=%02x(%s), "
+                "name=\"%s\", num_values=%d, charset=\"%s\", values=%p)", ipp,
+		group, ippTagString(group), type, ippTagString(type), name,
+		num_values, charset, values));
+
+  if (!ipp || !name || num_values < 1)
     return (NULL);
 
   if ((attr = _ippAddAttr(ipp, num_values)) == NULL)
@@ -511,7 +537,11 @@ ippAddRange(ipp_t      *ipp,		/* I - IPP message */
   ipp_attribute_t	*attr;		/* New attribute */
 
 
-  if (ipp == NULL || name == NULL)
+  DEBUG_printf(("ippAddRange(ipp=%p, group=%02x(%s), name=\"%s\", lower=%d, "
+                "upper=%d)", ipp, group, ippTagString(group), name, lower,
+		upper));
+
+  if (!ipp || !name)
     return (NULL);
 
   if ((attr = _ippAddAttr(ipp, 1)) == NULL)
@@ -544,7 +574,11 @@ ippAddRanges(ipp_t      *ipp,		/* I - IPP message */
   ipp_value_t		*value;		/* Current value */
 
 
-  if (ipp == NULL || name == NULL || num_values < 1)
+  DEBUG_printf(("ippAddRanges(ipp=%p, group=%02x(%s), name=\"%s\", "
+                "num_values=%d, lower=%p, upper=%p)", ipp, group,
+		ippTagString(group), name, num_values, lower, upper));
+
+  if (!ipp || !name || num_values < 1)
     return (NULL);
 
   if ((attr = _ippAddAttr(ipp, num_values)) == NULL)
@@ -582,7 +616,11 @@ ippAddResolution(ipp_t      *ipp,	/* I - IPP message */
   ipp_attribute_t	*attr;		/* New attribute */
 
 
-  if (ipp == NULL || name == NULL)
+  DEBUG_printf(("ippAddResolution(ipp=%p, group=%02x(%s), name=\"%s\", "
+                "units=%d, xres=%d, yres=%d)", ipp, group,
+		ippTagString(group), name, units, xres, yres));
+
+  if (!ipp || !name)
     return (NULL);
 
   if ((attr = _ippAddAttr(ipp, 1)) == NULL)
@@ -617,7 +655,11 @@ ippAddResolutions(ipp_t      *ipp,	/* I - IPP message */
   ipp_value_t		*value;		/* Current value */
 
 
-  if (ipp == NULL || name == NULL || num_values < 1)
+  DEBUG_printf(("ippAddResolutions(ipp=%p, group=%02x(%s), name=\"%s\", "
+                "num_value=%d, units=%d, xres=%p, yres=%p)", ipp, group,
+		ippTagString(group), name, num_values, units, xres, yres));
+
+  if (!ipp || !name || num_values < 1)
     return (NULL);
 
   if ((attr = _ippAddAttr(ipp, num_values)) == NULL)
@@ -651,9 +693,9 @@ ippAddSeparator(ipp_t *ipp)		/* I - IPP message */
   ipp_attribute_t	*attr;		/* New attribute */
 
 
-  DEBUG_printf(("ippAddSeparator(%p)\n", ipp));
+  DEBUG_printf(("ippAddSeparator(ipp=%p)", ipp));
 
-  if (ipp == NULL)
+  if (!ipp)
     return (NULL);
 
   if ((attr = _ippAddAttr(ipp, 0)) == NULL)
@@ -677,6 +719,9 @@ ippDateToTime(const ipp_uchar_t *date)	/* I - RFC 1903 date info */
   struct tm	unixdate;		/* UNIX date/time info */
   time_t	t;			/* Computed time */
 
+
+  if (!date)
+    return (0);
 
   memset(&unixdate, 0, sizeof(unixdate));
 
@@ -726,9 +771,9 @@ ippDelete(ipp_t *ipp)			/* I - IPP message */
 			*next;		/* Next attribute */
 
 
-  DEBUG_printf(("ippDelete(): %p\n", ipp));
+  DEBUG_printf(("ippDelete(ipp=%p)", ipp));
 
-  if (ipp == NULL)
+  if (!ipp)
     return;
 
   for (attr = ipp->attrs; attr != NULL; attr = next)
@@ -744,7 +789,7 @@ ippDelete(ipp_t *ipp)			/* I - IPP message */
 /*
  * 'ippDeleteAttribute()' - Delete a single attribute in an IPP message.
  *
- * @since CUPS 1.1.19@
+ * @since CUPS 1.1.19/Mac OS X 10.3@
  */
 
 void
@@ -755,6 +800,9 @@ ippDeleteAttribute(
   ipp_attribute_t	*current,	/* Current attribute */
 			*prev;		/* Previous attribute */
 
+
+  DEBUG_printf(("ippDeleteAttribute(ipp=%p, attr=%p(%s))", ipp, attr,
+                attr ? attr->name : "(null)"));
 
  /*
   * Find the attribute in the list...
@@ -796,9 +844,10 @@ ippFindAttribute(ipp_t      *ipp,	/* I - IPP message */
                  const char *name,	/* I - Name of attribute */
 		 ipp_tag_t  type)	/* I - Type of attribute */
 {
-  DEBUG_printf(("ippFindAttribute(%p, \'%s\')\n", ipp, name));
+  DEBUG_printf(("2ippFindAttribute(ipp=%p, name=\"%s\", type=%02x(%s))", ipp,
+                name, type, ippTagString(type)));
 
-  if (ipp == NULL || name == NULL)
+  if (!ipp || !name)
     return (NULL);
 
  /*
@@ -828,9 +877,10 @@ ippFindNextAttribute(ipp_t      *ipp,	/* I - IPP message */
   ipp_tag_t		value_tag;	/* Value tag */
 
 
-  DEBUG_printf(("ippFindNextAttribute(%p, \'%s\')\n", ipp, name));
+  DEBUG_printf(("2ippFindNextAttribute(ipp=%p, name=\"%s\", type=%02x(%s))",
+                ipp, name, type, ippTagString(type)));
 
-  if (ipp == NULL || name == NULL)
+  if (!ipp || !name)
     return (NULL);
 
   if (ipp->current)
@@ -846,7 +896,7 @@ ippFindNextAttribute(ipp_t      *ipp,	/* I - IPP message */
 
   for (; attr != NULL; ipp->prev = attr, attr = attr->next)
   {
-    DEBUG_printf(("ippFindAttribute: attr = %p, name = \'%s\'\n", attr,
+    DEBUG_printf(("4ippFindAttribute: attr=%p, name=\"%s\"", attr,
                   attr->name));
 
     value_tag = (ipp_tag_t)(attr->value_tag & IPP_TAG_MASK);
@@ -902,7 +952,7 @@ ippNew(void)
     temp->request.any.version[1] = 1;
   }
 
-  DEBUG_printf(("ippNew: %p\n", temp));
+  DEBUG_printf(("1ippNew: Returning %p", temp));
 
   return (temp);
 }
@@ -915,7 +965,7 @@ ippNew(void)
  * attributes-natural-language attributes added. The
  * attributes-natural-language value is derived from the current locale.
  *
- * @since CUPS 1.2@
+ * @since CUPS 1.2/Mac OS X 10.5@
  */
 
 ipp_t *					/* O - IPP request message */
@@ -924,6 +974,8 @@ ippNewRequest(ipp_op_t op)		/* I - Operation code */
   ipp_t		*request;		/* IPP request message */
   cups_lang_t	*language;		/* Current language localization */
 
+
+  DEBUG_printf(("ippNewRequest(op=%02x(%s))", op, ippOpString(op)));
 
  /*
   * Create a new IPP message...
@@ -971,30 +1023,31 @@ ipp_state_t				/* O - Current state */
 ippRead(http_t *http,			/* I - HTTP connection */
         ipp_t  *ipp)			/* I - IPP data */
 {
-  DEBUG_printf(("ippRead(http=%p, ipp=%p), data_remaining=" CUPS_LLFMT "\n",
+  DEBUG_printf(("ippRead(http=%p, ipp=%p), data_remaining=" CUPS_LLFMT,
                 http, ipp, CUPS_LLCAST (http ? http->data_remaining : -1)));
 
-  if (http == NULL)
+  if (!http)
     return (IPP_ERROR);
 
-  DEBUG_printf(("http->state = %d\n", http->state));
+  DEBUG_printf(("2ippRead: http->state=%d, http->used=%d", http->state,
+                http->used));
 
-  return (ippReadIO(http, (ipp_iocb_t)ipp_read_http,
-                    http->blocking || http->used != 0, NULL, ipp));
+  return (ippReadIO(http, (ipp_iocb_t)ipp_read_http, http->blocking, NULL,
+                    ipp));
 }
 
 
 /*
  * 'ippReadFile()' - Read data for an IPP message from a file.
  *
- * @since CUPS 1.1.19@
+ * @since CUPS 1.1.19/Mac OS X 10.3@
  */
 
 ipp_state_t				/* O - Current state */
 ippReadFile(int   fd,			/* I - HTTP data */
             ipp_t *ipp)			/* I - IPP data */
 {
-  DEBUG_printf(("ippReadFile(%d, %p)\n", fd, ipp));
+  DEBUG_printf(("ippReadFile(fd=%d, ipp=%p)", fd, ipp));
 
   return (ippReadIO(&fd, (ipp_iocb_t)ipp_read_file, 1, NULL, ipp));
 }
@@ -1003,7 +1056,7 @@ ippReadFile(int   fd,			/* I - HTTP data */
 /*
  * 'ippReadIO()' - Read data for an IPP message.
  *
- * @since CUPS 1.2@
+ * @since CUPS 1.2/Mac OS X 10.5@
  */
 
 ipp_state_t				/* O - Current state */
@@ -1014,8 +1067,9 @@ ippReadIO(void       *src,		/* I - Data source */
           ipp_t      *ipp)		/* I - IPP data */
 {
   int			n;		/* Length of data */
-  unsigned char		buffer[32768],	/* Data buffer */
-			string[255],	/* Small string buffer */
+  unsigned char		*buffer,	/* Data buffer */
+			string[IPP_MAX_NAME],
+					/* Small string buffer */
 			*bufptr;	/* Pointer into buffer */
   ipp_attribute_t	*attr;		/* Current attribute */
   ipp_tag_t		tag;		/* Current tag */
@@ -1023,12 +1077,18 @@ ippReadIO(void       *src,		/* I - Data source */
   ipp_value_t		*value;		/* Current value */
 
 
-  DEBUG_printf(("ippReadIO(%p, %p, %d, %p, %p)\n", src, cb, blocking,
-                parent, ipp));
-  DEBUG_printf(("ippReadIO: ipp->state=%d\n", ipp->state));
+  DEBUG_printf(("ippReadIO(src=%p, cb=%p, blocking=%d, parent=%p, ipp=%p)",
+                src, cb, blocking, parent, ipp));
+  DEBUG_printf(("2ippReadIO: ipp->state=%d", ipp->state));
 
-  if (src == NULL || ipp == NULL)
+  if (!src || !ipp)
     return (IPP_ERROR);
+
+  if ((buffer = ipp_buffer_get()) == NULL)
+  {
+    DEBUG_puts("1ippReadIO: Unable to get read buffer!");
+    return (IPP_ERROR);
+  }
 
   switch (ipp->state)
   {
@@ -1042,20 +1102,10 @@ ippReadIO(void       *src,		/* I - Data source */
           * Get the request header...
 	  */
 
-          if ((n = (*cb)(src, buffer, 8)) < 8)
+          if ((*cb)(src, buffer, 8) < 8)
 	  {
-	    DEBUG_printf(("ippReadIO: Unable to read header (%d bytes read)!\n", n));
-	    return (IPP_ERROR);
-	  }
-
-	 /*
-          * Verify the major version number...
-	  */
-
-	  if (buffer[0] != 1)
-	  {
-	    DEBUG_printf(("ippReadIO: version number (%d.%d) is bad.\n", buffer[0],
-	                  buffer[1]));
+	    DEBUG_puts("1ippReadIO: Unable to read header!");
+	    ipp_buffer_release(buffer);
 	    return (IPP_ERROR);
 	  }
 
@@ -1069,10 +1119,10 @@ ippReadIO(void       *src,		/* I - Data source */
           ipp->request.any.request_id  = (((((buffer[4] << 8) | buffer[5]) << 8) |
 	                        	 buffer[6]) << 8) | buffer[7];
 
-          DEBUG_printf(("ippReadIO: version=%d.%d\n", buffer[0], buffer[1]));
-	  DEBUG_printf(("ippReadIO: op_status=%04x\n",
+          DEBUG_printf(("2ippReadIO: version=%d.%d", buffer[0], buffer[1]));
+	  DEBUG_printf(("2ippReadIO: op_status=%04x",
 	                ipp->request.any.op_status));
-	  DEBUG_printf(("ippReadIO: request_id=%d\n",
+	  DEBUG_printf(("2ippReadIO: request_id=%d",
 	                ipp->request.any.request_id));
         }
 
@@ -1092,9 +1142,13 @@ ippReadIO(void       *src,		/* I - Data source */
         for (;;)
 	{
 	  if ((*cb)(src, buffer, 1) < 1)
+	  {
+	    DEBUG_puts("1ippReadIO: Callback returned EOF/error");
+	    ipp_buffer_release(buffer);
 	    return (IPP_ERROR);
+	  }
 
-	  DEBUG_printf(("ippReadIO: ipp->current=%p, ipp->prev=%p\n",
+	  DEBUG_printf(("2ippReadIO: ipp->current=%p, ipp->prev=%p",
 	                ipp->current, ipp->prev));
 
 	 /*
@@ -1109,7 +1163,7 @@ ippReadIO(void       *src,		/* I - Data source */
 	    * No more attributes left...
 	    */
 
-            DEBUG_puts("ippReadIO: IPP_TAG_END!");
+            DEBUG_puts("2ippReadIO: IPP_TAG_END!");
 
 	    ipp->state = IPP_DATA;
 	    break;
@@ -1127,12 +1181,13 @@ ippReadIO(void       *src,		/* I - Data source */
 
 	    ipp->curtag  = tag;
 	    ipp->current = NULL;
-	    DEBUG_printf(("ippReadIO: group tag = %x, ipp->prev=%p\n", tag,
-	                  ipp->prev));
+	    DEBUG_printf(("2ippReadIO: group tag=%x(%s), ipp->prev=%p", tag,
+	                  ippTagString(tag), ipp->prev));
 	    continue;
 	  }
 
-          DEBUG_printf(("ippReadIO: value tag = %x\n", tag));
+          DEBUG_printf(("2ippReadIO: value tag=%x(%s)", tag,
+	                ippTagString(tag)));
 
          /*
 	  * Get the name...
@@ -1140,19 +1195,21 @@ ippReadIO(void       *src,		/* I - Data source */
 
           if ((*cb)(src, buffer, 2) < 2)
 	  {
-	    DEBUG_puts("ippReadIO: unable to read name length!");
+	    DEBUG_puts("1ippReadIO: unable to read name length!");
+	    ipp_buffer_release(buffer);
 	    return (IPP_ERROR);
 	  }
 
           n = (buffer[0] << 8) | buffer[1];
 
-          if (n > (sizeof(buffer) - 1))
+          if (n >= IPP_BUF_SIZE)
 	  {
-	    DEBUG_printf(("ippReadIO: bad name length %d!\n", n));
+	    DEBUG_printf(("1ippReadIO: bad name length %d!", n));
+	    ipp_buffer_release(buffer);
 	    return (IPP_ERROR);
 	  }
 
-          DEBUG_printf(("ippReadIO: name length = %d\n", n));
+          DEBUG_printf(("2ippReadIO: name length=%d", n));
 
           if (n == 0 && tag != IPP_TAG_MEMBERNAME &&
 	      tag != IPP_TAG_END_COLLECTION)
@@ -1162,7 +1219,11 @@ ippReadIO(void       *src,		/* I - Data source */
 	    */
 
             if (ipp->current == NULL)
+	    {
+	      DEBUG_puts("1ippReadIO: Attribute without name and no current");
+	      ipp_buffer_release(buffer);
 	      return (IPP_ERROR);
+	    }
 
             attr      = ipp->current;
 	    value_tag = (ipp_tag_t)(attr->value_tag & IPP_TAG_MASK);
@@ -1180,8 +1241,7 @@ ippReadIO(void       *src,		/* I - Data source */
 
 	      attr->value_tag = tag;
 	    }
-	    else if (value_tag == IPP_TAG_STRING ||
-    		     (value_tag >= IPP_TAG_TEXTLANG &&
+	    else if ((value_tag >= IPP_TAG_TEXTLANG &&
 		      value_tag <= IPP_TAG_MIMETYPE))
             {
 	     /*
@@ -1189,12 +1249,24 @@ ippReadIO(void       *src,		/* I - Data source */
 	      * forms; accept sets of differing values...
 	      */
 
-	      if (tag != IPP_TAG_STRING &&
-    		  (tag < IPP_TAG_TEXTLANG || tag > IPP_TAG_MIMETYPE))
+	      if ((tag < IPP_TAG_TEXTLANG || tag > IPP_TAG_MIMETYPE) &&
+	          tag != IPP_TAG_NOVALUE)
+	      {
+		DEBUG_printf(("1ippReadIO: 1setOf value tag %x(%s) != %x(%s)",
+			      value_tag, ippTagString(value_tag), tag,
+			      ippTagString(tag)));
+		ipp_buffer_release(buffer);
 	        return (IPP_ERROR);
+	      }
             }
 	    else if (value_tag != tag)
+	    {
+	      DEBUG_printf(("1ippReadIO: value tag %x(%s) != %x(%s)",
+	                    value_tag, ippTagString(value_tag), tag,
+			    ippTagString(tag)));
+	      ipp_buffer_release(buffer);
 	      return (IPP_ERROR);
+            }
 
            /*
 	    * Finally, reallocate the attribute array as needed...
@@ -1207,7 +1279,7 @@ ippReadIO(void       *src,		/* I - Data source */
 	      ipp_attribute_t	*temp;	/* Pointer to new buffer */
 
 
-              DEBUG_printf(("ippReadIO: reallocating for up to %d values...\n",
+              DEBUG_printf(("2ippReadIO: reallocating for up to %d values...",
 	                    attr->num_values + IPP_MAX_VALUES));
 
              /*
@@ -1217,7 +1289,11 @@ ippReadIO(void       *src,		/* I - Data source */
               if ((temp = realloc(attr, sizeof(ipp_attribute_t) +
 	                                (attr->num_values + IPP_MAX_VALUES - 1) *
 					sizeof(ipp_value_t))) == NULL)
+	      {
+	        DEBUG_puts("1ippReadIO: Unable to resize attribute");
+		ipp_buffer_release(buffer);
 	        return (IPP_ERROR);
+	      }
 
               if (temp != attr)
 	      {
@@ -1242,7 +1318,8 @@ ippReadIO(void       *src,		/* I - Data source */
 
 	    if (n)
 	    {
-	      DEBUG_puts("ippReadIO: member name not empty!");
+	      DEBUG_puts("1ippReadIO: member name not empty!");
+	      ipp_buffer_release(buffer);
 	      return (IPP_ERROR);
 	    }
 
@@ -1251,8 +1328,8 @@ ippReadIO(void       *src,		/* I - Data source */
 
 	    attr = ipp->current = _ippAddAttr(ipp, 1);
 
-	    DEBUG_printf(("ippReadIO: membername, ipp->current=%p, ipp->prev=%p\n",
-	                  ipp->current, ipp->prev));
+	    DEBUG_printf(("2ippReadIO: membername, ipp->current=%p, "
+	                  "ipp->prev=%p", ipp->current, ipp->prev));
 
 	    attr->group_tag  = ipp->curtag;
 	    attr->value_tag  = IPP_TAG_ZERO;
@@ -1266,7 +1343,8 @@ ippReadIO(void       *src,		/* I - Data source */
 
 	    if ((*cb)(src, buffer, n) < n)
 	    {
-	      DEBUG_puts("ippReadIO: unable to read name!");
+	      DEBUG_puts("1ippReadIO: unable to read name!");
+	      ipp_buffer_release(buffer);
 	      return (IPP_ERROR);
 	    }
 
@@ -1275,10 +1353,15 @@ ippReadIO(void       *src,		/* I - Data source */
             if (ipp->current)
 	      ipp->prev = ipp->current;
 
-	    attr = ipp->current = _ippAddAttr(ipp, 1);
+	    if ((attr = ipp->current = _ippAddAttr(ipp, 1)) == NULL)
+	    {
+	      DEBUG_puts("1ippReadIO: unable to allocate attribute!");
+	      ipp_buffer_release(buffer);
+	      return (IPP_ERROR);
+	    }
 
-	    DEBUG_printf(("ippReadIO: name=\'%s\', ipp->current=%p, ipp->prev=%p\n",
-	                  buffer, ipp->current, ipp->prev));
+	    DEBUG_printf(("2ippReadIO: name=\"%s\", ipp->current=%p, "
+	                  "ipp->prev=%p", buffer, ipp->current, ipp->prev));
 
 	    attr->group_tag  = ipp->curtag;
 	    attr->value_tag  = tag;
@@ -1295,20 +1378,29 @@ ippReadIO(void       *src,		/* I - Data source */
 
 	  if ((*cb)(src, buffer, 2) < 2)
 	  {
-	    DEBUG_puts("ippReadIO: unable to read value length!");
+	    DEBUG_puts("1ippReadIO: unable to read value length!");
+	    ipp_buffer_release(buffer);
 	    return (IPP_ERROR);
 	  }
 
 	  n = (buffer[0] << 8) | buffer[1];
-          DEBUG_printf(("ippReadIO: value length = %d\n", n));
+          DEBUG_printf(("2ippReadIO: value length=%d", n));
 
 	  switch (tag)
 	  {
 	    case IPP_TAG_INTEGER :
 	    case IPP_TAG_ENUM :
+		if (n != 4)
+		{
+		  DEBUG_printf(("1ippReadIO: bad value length %d!", n));
+		  ipp_buffer_release(buffer);
+		  return (IPP_ERROR);
+		}
+
 	        if ((*cb)(src, buffer, 4) < 4)
 		{
-	          DEBUG_puts("ippReadIO: Unable to read integer value!");
+	          DEBUG_puts("1ippReadIO: Unable to read integer value!");
+		  ipp_buffer_release(buffer);
 		  return (IPP_ERROR);
 		}
 
@@ -1317,46 +1409,98 @@ ippReadIO(void       *src,		/* I - Data source */
 
                 value->integer = n;
 	        break;
+
 	    case IPP_TAG_BOOLEAN :
+		if (n != 1)
+		{
+		  DEBUG_printf(("1ippReadIO: bad value length %d!", n));
+		  ipp_buffer_release(buffer);
+		  return (IPP_ERROR);
+		}
+
 	        if ((*cb)(src, buffer, 1) < 1)
 		{
-	          DEBUG_puts("ippReadIO: Unable to read boolean value!");
+	          DEBUG_puts("1ippReadIO: Unable to read boolean value!");
+		  ipp_buffer_release(buffer);
 		  return (IPP_ERROR);
 		}
 
                 value->boolean = buffer[0];
 	        break;
+
+            case IPP_TAG_NOVALUE :
+	    case IPP_TAG_NOTSETTABLE :
+	    case IPP_TAG_DELETEATTR :
+	    case IPP_TAG_ADMINDEFINE :
+	       /*
+	        * These value types are not supposed to have values, however
+		* some vendors (Brother) do not implement IPP correctly and so
+		* we need to map non-empty values to text...
+		*/
+
+	        if (attr->value_tag == tag)
+		{
+		  if (n == 0)
+		    break;
+
+		  attr->value_tag = IPP_TAG_TEXT;
+		}
+
 	    case IPP_TAG_TEXT :
 	    case IPP_TAG_NAME :
 	    case IPP_TAG_KEYWORD :
-	    case IPP_TAG_STRING :
 	    case IPP_TAG_URI :
 	    case IPP_TAG_URISCHEME :
 	    case IPP_TAG_CHARSET :
 	    case IPP_TAG_LANGUAGE :
 	    case IPP_TAG_MIMETYPE :
+		if (n >= IPP_BUF_SIZE)
+		{
+		  DEBUG_printf(("1ippReadIO: bad value length %d!", n));
+		  ipp_buffer_release(buffer);
+		  return (IPP_ERROR);
+		}
+
 		if ((*cb)(src, buffer, n) < n)
 		{
-		  DEBUG_puts("ippReadIO: unable to read name!");
+		  DEBUG_puts("1ippReadIO: unable to read name!");
+		  ipp_buffer_release(buffer);
 		  return (IPP_ERROR);
 		}
 
 		buffer[n] = '\0';
 		value->string.text = _cupsStrAlloc((char *)buffer);
-		DEBUG_printf(("ippReadIO: value = \'%s\'\n",
-		              value->string.text));
+		DEBUG_printf(("2ippReadIO: value=\"%s\"", value->string.text));
 	        break;
+
 	    case IPP_TAG_DATE :
+		if (n != 11)
+		{
+		  DEBUG_printf(("1ippReadIO: bad value length %d!", n));
+		  ipp_buffer_release(buffer);
+		  return (IPP_ERROR);
+		}
+
 	        if ((*cb)(src, value->date, 11) < 11)
 		{
-	          DEBUG_puts("ippReadIO: Unable to date integer value!");
+	          DEBUG_puts("1ippReadIO: Unable to read date value!");
+		  ipp_buffer_release(buffer);
 		  return (IPP_ERROR);
 		}
 	        break;
+
 	    case IPP_TAG_RESOLUTION :
+		if (n != 9)
+		{
+		  DEBUG_printf(("1ippReadIO: bad value length %d!", n));
+		  ipp_buffer_release(buffer);
+		  return (IPP_ERROR);
+		}
+
 	        if ((*cb)(src, buffer, 9) < 9)
 		{
-	          DEBUG_puts("ippReadIO: Unable to read resolution value!");
+	          DEBUG_puts("1ippReadIO: Unable to read resolution value!");
+		  ipp_buffer_release(buffer);
 		  return (IPP_ERROR);
 		}
 
@@ -1369,10 +1513,19 @@ ippReadIO(void       *src,		/* I - Data source */
                 value->resolution.units =
 		    (ipp_res_t)buffer[8];
 	        break;
+
 	    case IPP_TAG_RANGE :
+		if (n != 8)
+		{
+		  DEBUG_printf(("1ippReadIO: bad value length %d!", n));
+		  ipp_buffer_release(buffer);
+		  return (IPP_ERROR);
+		}
+
 	        if ((*cb)(src, buffer, 8) < 8)
 		{
-	          DEBUG_puts("ippReadIO: Unable to read range value!");
+	          DEBUG_puts("1ippReadIO: Unable to read range value!");
+		  ipp_buffer_release(buffer);
 		  return (IPP_ERROR);
 		}
 
@@ -1383,17 +1536,21 @@ ippReadIO(void       *src,		/* I - Data source */
 		    (((((buffer[4] << 8) | buffer[5]) << 8) | buffer[6]) << 8) |
 		    buffer[7];
 	        break;
+
 	    case IPP_TAG_TEXTLANG :
 	    case IPP_TAG_NAMELANG :
-	        if (n > sizeof(buffer) || n < 4)
+	        if (n >= IPP_BUF_SIZE || n < 4)
 		{
-		  DEBUG_printf(("ippReadIO: bad value length %d!\n", n));
+		  DEBUG_printf(("1ippReadIO: bad value length %d!", n));
+		  ipp_buffer_release(buffer);
 		  return (IPP_ERROR);
 		}
 
 	        if ((*cb)(src, buffer, n) < n)
 		{
-	          DEBUG_puts("ippReadIO: Unable to read string w/language value!");
+	          DEBUG_puts("1ippReadIO: Unable to read string w/language "
+		             "value!");
+		  ipp_buffer_release(buffer);
 		  return (IPP_ERROR);
 		}
 
@@ -1411,21 +1568,28 @@ ippReadIO(void       *src,		/* I - Data source */
 
 		n = (bufptr[0] << 8) | bufptr[1];
 
-                if (n >= sizeof(string))
+		if ((bufptr + 2 + n) >= (buffer + IPP_BUF_SIZE) ||
+		    n >= sizeof(string))
 		{
-		  memcpy(string, bufptr + 2, sizeof(string) - 1);
-		  string[sizeof(string) - 1] = '\0';
+		  DEBUG_printf(("1ippReadIO: bad value length %d!", n));
+		  ipp_buffer_release(buffer);
+		  return (IPP_ERROR);
 		}
-		else
-		{
-		  memcpy(string, bufptr + 2, n);
-		  string[n] = '\0';
-                }
+
+		memcpy(string, bufptr + 2, n);
+		string[n] = '\0';
 
 		value->string.charset = _cupsStrAlloc((char *)string);
 
                 bufptr += 2 + n;
 		n = (bufptr[0] << 8) | bufptr[1];
+
+		if ((bufptr + 2 + n) >= (buffer + IPP_BUF_SIZE))
+		{
+		  DEBUG_printf(("1ippReadIO: bad value length %d!", n));
+		  ipp_buffer_release(buffer);
+		  return (IPP_ERROR);
+		}
 
 		bufptr[2 + n] = '\0';
                 value->string.text = _cupsStrAlloc((char *)bufptr + 2);
@@ -1440,26 +1604,31 @@ ippReadIO(void       *src,		/* I - Data source */
 
                 if (n > 0)
 		{
-	          DEBUG_puts("ippReadIO: begCollection tag with value length > 0!");
+	          DEBUG_puts("1ippReadIO: begCollection tag with value length "
+		             "> 0!");
+		  ipp_buffer_release(buffer);
 		  return (IPP_ERROR);
 		}
 
 		if (ippReadIO(src, cb, 1, ipp, value->collection) == IPP_ERROR)
 		{
-	          DEBUG_puts("ippReadIO: Unable to read collection value!");
+	          DEBUG_puts("1ippReadIO: Unable to read collection value!");
+		  ipp_buffer_release(buffer);
 		  return (IPP_ERROR);
 		}
                 break;
 
             case IPP_TAG_END_COLLECTION :
+		ipp_buffer_release(buffer);
+
                 if (n > 0)
 		{
-	          DEBUG_puts("ippReadIO: endCollection tag with value length > 0!");
+	          DEBUG_puts("1ippReadIO: endCollection tag with value length "
+		             "> 0!");
 		  return (IPP_ERROR);
 		}
 
-	        DEBUG_puts("ippReadIO: endCollection tag...");
-
+	        DEBUG_puts("1ippReadIO: endCollection tag...");
 		return (ipp->state = IPP_DATA);
 
             case IPP_TAG_MEMBERNAME :
@@ -1468,9 +1637,17 @@ ippReadIO(void       *src,		/* I - Data source */
 		* we need to carry over...
 		*/
 
+		if (n >= IPP_BUF_SIZE)
+		{
+		  DEBUG_printf(("1ippReadIO: bad value length %d!", n));
+		  ipp_buffer_release(buffer);
+		  return (IPP_ERROR);
+		}
+
 	        if ((*cb)(src, buffer, n) < n)
 		{
-	          DEBUG_puts("ippReadIO: Unable to read member name value!");
+	          DEBUG_puts("1ippReadIO: Unable to read member name value!");
+		  ipp_buffer_release(buffer);
 		  return (IPP_ERROR);
 		}
 
@@ -1485,17 +1662,38 @@ ippReadIO(void       *src,		/* I - Data source */
 
                 attr->num_values --;
 
-		DEBUG_printf(("ippReadIO: member name = \"%s\"\n", attr->name));
+		DEBUG_printf(("2ippReadIO: member name=\"%s\"", attr->name));
 		break;
 
             default : /* Other unsupported values */
+		if (n > IPP_MAX_LENGTH)
+		{
+		  DEBUG_printf(("1ippReadIO: bad value length %d!", n));
+		  ipp_buffer_release(buffer);
+		  return (IPP_ERROR);
+		}
+
+		if (!value)
+		{
+		  DEBUG_puts("1ippReadIO: NULL value!");
+		  ipp_buffer_release(buffer);
+		  return (IPP_ERROR);
+		}
+
                 value->unknown.length = n;
 	        if (n > 0)
 		{
-		  value->unknown.data = malloc(n);
+		  if ((value->unknown.data = malloc(n)) == NULL)
+		  {
+		    DEBUG_puts("1ippReadIO: Unable to allocate value");
+		    ipp_buffer_release(buffer);
+		    return (IPP_ERROR);
+		  }
+
 	          if ((*cb)(src, value->unknown.data, n) < n)
 		  {
-	            DEBUG_puts("ippReadIO: Unable to read unsupported value!");
+	            DEBUG_puts("1ippReadIO: Unable to read unsupported value!");
+		    ipp_buffer_release(buffer);
 		    return (IPP_ERROR);
 		  }
 		}
@@ -1522,7 +1720,8 @@ ippReadIO(void       *src,		/* I - Data source */
         break; /* anti-compiler-warning-code */
   }
 
-  DEBUG_printf(("ippReadIO: returning ipp->state=%d!\n", ipp->state));
+  DEBUG_printf(("1ippReadIO: returning ipp->state=%d!", ipp->state));
+  ipp_buffer_release(buffer);
 
   return (ipp->state);
 }
@@ -1584,27 +1783,26 @@ ipp_state_t				/* O - Current state */
 ippWrite(http_t *http,			/* I - HTTP connection */
          ipp_t  *ipp)			/* I - IPP data */
 {
-  DEBUG_printf(("ippWrite(%p, %p)\n", http, ipp));
+  DEBUG_printf(("ippWrite(http=%p, ipp=%p)", http, ipp));
 
-  if (http == NULL)
+  if (!http)
     return (IPP_ERROR);
 
-  return (ippWriteIO(http, (ipp_iocb_t)httpWrite2,
-                     http->blocking, NULL, ipp));
+  return (ippWriteIO(http, (ipp_iocb_t)httpWrite2, http->blocking, NULL, ipp));
 }
 
 
 /*
  * 'ippWriteFile()' - Write data for an IPP message to a file.
  *
- * @since CUPS 1.1.19@
+ * @since CUPS 1.1.19/Mac OS X 10.3@
  */
 
 ipp_state_t				/* O - Current state */
 ippWriteFile(int   fd,			/* I - HTTP data */
              ipp_t *ipp)		/* I - IPP data */
 {
-  DEBUG_printf(("ippWriteFile(%d, %p)\n", fd, ipp));
+  DEBUG_printf(("ippWriteFile(fd=%d, ipp=%p)", fd, ipp));
 
   ipp->state = IPP_IDLE;
 
@@ -1615,7 +1813,7 @@ ippWriteFile(int   fd,			/* I - HTTP data */
 /*
  * 'ippWriteIO()' - Write data for an IPP message.
  *
- * @since CUPS 1.2@
+ * @since CUPS 1.2/Mac OS X 10.5@
  */
 
 ipp_state_t				/* O - Current state */
@@ -1627,17 +1825,23 @@ ippWriteIO(void       *dst,		/* I - Destination */
 {
   int			i;		/* Looping var */
   int			n;		/* Length of data */
-  unsigned char		buffer[32768],	/* Data buffer */
+  unsigned char		*buffer,	/* Data buffer */
 			*bufptr;	/* Pointer into buffer */
   ipp_attribute_t	*attr;		/* Current attribute */
   ipp_value_t		*value;		/* Current value */
 
 
-  DEBUG_printf(("ippWriteIO(%p, %p, %d, %p, %p)\n", dst, cb, blocking,
-                parent, ipp));
+  DEBUG_printf(("ippWriteIO(dst=%p, cb=%p, blocking=%d, parent=%p, ipp=%p)",
+                dst, cb, blocking, parent, ipp));
 
-  if (dst == NULL || ipp == NULL)
+  if (!dst || !ipp)
     return (IPP_ERROR);
+
+  if ((buffer = ipp_buffer_get()) == NULL)
+  {
+    DEBUG_puts("1ippWriteIO: Unable to get write buffer");
+    return (IPP_ERROR);
+  }
 
   switch (ipp->state)
   {
@@ -1669,7 +1873,8 @@ ippWriteIO(void       *dst,		/* I - Destination */
 
           if ((*cb)(dst, buffer, (int)(bufptr - buffer)) < 0)
 	  {
-	    DEBUG_puts("ippWriteIO: Could not write IPP header...");
+	    DEBUG_puts("1ippWriteIO: Could not write IPP header...");
+	    ipp_buffer_release(buffer);
 	    return (IPP_ERROR);
 	  }
 	}
@@ -1683,9 +1888,11 @@ ippWriteIO(void       *dst,		/* I - Destination */
 	ipp->current = ipp->attrs;
 	ipp->curtag  = IPP_TAG_ZERO;
 
-        DEBUG_printf(("ippWriteIO: version=%d.%d\n", buffer[0], buffer[1]));
-	DEBUG_printf(("ippWriteIO: op_status=%04x\n", ipp->request.any.op_status));
-	DEBUG_printf(("ippWriteIO: request_id=%d\n", ipp->request.any.request_id));
+        DEBUG_printf(("2ippWriteIO: version=%d.%d", buffer[0], buffer[1]));
+	DEBUG_printf(("2ippWriteIO: op_status=%04x",
+	              ipp->request.any.op_status));
+	DEBUG_printf(("2ippWriteIO: request_id=%d",
+	              ipp->request.any.request_id));
 
        /*
         * If blocking is disabled, stop here...
@@ -1717,7 +1924,8 @@ ippWriteIO(void       *dst,		/* I - Destination */
             if (attr->group_tag == IPP_TAG_ZERO)
 	      continue;
 
-            DEBUG_printf(("ippWriteIO: wrote group tag = %x\n", attr->group_tag));
+            DEBUG_printf(("2ippWriteIO: wrote group tag=%x(%s)",
+	                  attr->group_tag, ippTagString(attr->group_tag)));
 	    *bufptr++ = attr->group_tag;
 	  }
 	  else if (attr->group_tag == IPP_TAG_ZERO)
@@ -1741,15 +1949,21 @@ ippWriteIO(void       *dst,		/* I - Destination */
 	    * overflow the buffer...
 	    */
 
-            if ((n = (int)strlen(attr->name)) > (sizeof(buffer) - 4))
+            if ((n = (int)strlen(attr->name)) > (IPP_BUF_SIZE - 4))
+	    {
+	      DEBUG_printf(("1ippWriteIO: Attribute name too long (%d)", n));
+	      ipp_buffer_release(buffer);
 	      return (IPP_ERROR);
+	    }
 
            /*
 	    * Write the value tag, name length, and name string...
 	    */
 
-            DEBUG_printf(("ippWriteIO: writing value tag = %x\n", attr->value_tag));
-            DEBUG_printf(("ippWriteIO: writing name = %d, \'%s\'\n", n, attr->name));
+            DEBUG_printf(("2ippWriteIO: writing value tag=%x(%s)",
+	                  attr->value_tag, ippTagString(attr->value_tag)));
+            DEBUG_printf(("2ippWriteIO: writing name=%d,\"%s\"", n,
+	                  attr->name));
 
             *bufptr++ = attr->value_tag;
 	    *bufptr++ = n >> 8;
@@ -1764,19 +1978,25 @@ ippWriteIO(void       *dst,		/* I - Destination */
 	    * overflow the buffer...
 	    */
 
-            if ((n = (int)strlen(attr->name)) > (sizeof(buffer) - 7))
+            if ((n = (int)strlen(attr->name)) > (IPP_BUF_SIZE - 7))
+	    {
+	      DEBUG_printf(("1ippWriteIO: Attribute name too long (%d)", n));
+	      ipp_buffer_release(buffer);
 	      return (IPP_ERROR);
+	    }
 
            /*
 	    * Write the member name tag, name length, name string, value tag,
 	    * and empty name for the collection member attribute...
 	    */
 
-            DEBUG_printf(("ippWriteIO: writing value tag = %x\n",
+            DEBUG_printf(("2ippWriteIO: writing value tag=%x(memberName)",
 	                  IPP_TAG_MEMBERNAME));
-            DEBUG_printf(("ippWriteIO: writing name = %d, \'%s\'\n", n, attr->name));
-            DEBUG_printf(("ippWriteIO: writing value tag = %x\n", attr->value_tag));
-            DEBUG_puts("ippWriteIO: writing name = 0, \'\'\n");
+            DEBUG_printf(("2ippWriteIO: writing name=%d,\"%s\"", n,
+	                  attr->name));
+            DEBUG_printf(("2ippWriteIO: writing value tag=%x(%s)",
+	                  attr->value_tag, ippTagString(attr->value_tag)));
+            DEBUG_puts("2ippWriteIO: writing name=0,\"\"");
 
             *bufptr++ = IPP_TAG_MEMBERNAME;
 	    *bufptr++ = 0;
@@ -1803,11 +2023,13 @@ ippWriteIO(void       *dst,		/* I - Destination */
 		     i < attr->num_values;
 		     i ++, value ++)
 		{
-                  if ((sizeof(buffer) - (bufptr - buffer)) < 9)
+                  if ((IPP_BUF_SIZE - (bufptr - buffer)) < 9)
 		  {
                     if ((*cb)(dst, buffer, (int)(bufptr - buffer)) < 0)
 	            {
-	              DEBUG_puts("ippWriteIO: Could not write IPP attribute...");
+	              DEBUG_puts("1ippWriteIO: Could not write IPP "
+		                 "attribute...");
+		      ipp_buffer_release(buffer);
 	              return (IPP_ERROR);
 	            }
 
@@ -1847,11 +2069,13 @@ ippWriteIO(void       *dst,		/* I - Destination */
 		     i < attr->num_values;
 		     i ++, value ++)
 		{
-                  if ((sizeof(buffer) - (bufptr - buffer)) < 6)
+                  if ((IPP_BUF_SIZE - (bufptr - buffer)) < 6)
 		  {
                     if ((*cb)(dst, buffer, (int)(bufptr - buffer)) < 0)
 	            {
-	              DEBUG_puts("ippWriteIO: Could not write IPP attribute...");
+	              DEBUG_puts("1ippWriteIO: Could not write IPP "
+		                 "attribute...");
+		      ipp_buffer_release(buffer);
 	              return (IPP_ERROR);
 	            }
 
@@ -1885,7 +2109,6 @@ ippWriteIO(void       *dst,		/* I - Destination */
 	    case IPP_TAG_TEXT :
 	    case IPP_TAG_NAME :
 	    case IPP_TAG_KEYWORD :
-	    case IPP_TAG_STRING :
 	    case IPP_TAG_URI :
 	    case IPP_TAG_URISCHEME :
 	    case IPP_TAG_CHARSET :
@@ -1902,15 +2125,18 @@ ippWriteIO(void       *dst,		/* I - Destination */
 		    * values with a zero-length name...
 		    */
 
-        	    DEBUG_printf(("ippWriteIO: writing value tag = %x\n",
-		                  attr->value_tag));
-        	    DEBUG_printf(("ippWriteIO: writing name = 0, \'\'\n"));
+        	    DEBUG_printf(("2ippWriteIO: writing value tag=%x(%s)",
+		                  attr->value_tag,
+				  ippTagString(attr->value_tag)));
+        	    DEBUG_printf(("2ippWriteIO: writing name=0,\"\""));
 
-                    if ((sizeof(buffer) - (bufptr - buffer)) < 3)
+                    if ((IPP_BUF_SIZE - (bufptr - buffer)) < 3)
 		    {
                       if ((*cb)(dst, buffer, (int)(bufptr - buffer)) < 0)
 	              {
-	        	DEBUG_puts("ippWriteIO: Could not write IPP attribute...");
+	        	DEBUG_puts("1ippWriteIO: Could not write IPP "
+			           "attribute...");
+			ipp_buffer_release(buffer);
 	        	return (IPP_ERROR);
 	              }
 
@@ -1927,17 +2153,23 @@ ippWriteIO(void       *dst,		/* I - Destination */
 		  else
 		    n = 0;
 
-                  if (n > (sizeof(buffer) - 2))
+                  if (n > (IPP_BUF_SIZE - 2))
+		  {
+		    DEBUG_printf(("1ippWriteIO: String too long (%d)", n));
+		    ipp_buffer_release(buffer);
 		    return (IPP_ERROR);
+		  }
 
-                  DEBUG_printf(("ippWriteIO: writing string = %d, \'%s\'\n", n,
+                  DEBUG_printf(("2ippWriteIO: writing string=%d,\"%s\"", n,
 		                value->string.text));
 
-                  if ((int)(sizeof(buffer) - (bufptr - buffer)) < (n + 2))
+                  if ((int)(IPP_BUF_SIZE - (bufptr - buffer)) < (n + 2))
 		  {
                     if ((*cb)(dst, buffer, (int)(bufptr - buffer)) < 0)
 	            {
-	              DEBUG_puts("ippWriteIO: Could not write IPP attribute...");
+	              DEBUG_puts("1ippWriteIO: Could not write IPP "
+		                 "attribute...");
+		      ipp_buffer_release(buffer);
 	              return (IPP_ERROR);
 	            }
 
@@ -1947,7 +2179,7 @@ ippWriteIO(void       *dst,		/* I - Destination */
 		 /*
 		  * All simple strings consist of the 2-byte length and
 		  * character data without the trailing nul normally found
-		  * in C strings.  Also, strings cannot be longer than 32767
+		  * in C strings.  Also, strings cannot be longer than IPP_MAX_LENGTH
 		  * bytes since the 2-byte length is a signed (twos-complement)
 		  * value.
 		  *
@@ -1970,11 +2202,13 @@ ippWriteIO(void       *dst,		/* I - Destination */
 		     i < attr->num_values;
 		     i ++, value ++)
 		{
-                  if ((sizeof(buffer) - (bufptr - buffer)) < 16)
+                  if ((IPP_BUF_SIZE - (bufptr - buffer)) < 16)
 		  {
                     if ((*cb)(dst, buffer, (int)(bufptr - buffer)) < 0)
 	            {
-	              DEBUG_puts("ippWriteIO: Could not write IPP attribute...");
+	              DEBUG_puts("1ippWriteIO: Could not write IPP "
+		                 "attribute...");
+		      ipp_buffer_release(buffer);
 	              return (IPP_ERROR);
 	            }
 
@@ -2013,12 +2247,14 @@ ippWriteIO(void       *dst,		/* I - Destination */
 		     i < attr->num_values;
 		     i ++, value ++)
 		{
-                  if ((sizeof(buffer) - (bufptr - buffer)) < 14)
+                  if ((IPP_BUF_SIZE - (bufptr - buffer)) < 14)
 		  {
                     if ((*cb)(dst, buffer, (int)(bufptr - buffer)) < 0)
 	            {
-	              DEBUG_puts("ippWriteIO: Could not write IPP attribute...");
-	              return (IPP_ERROR);
+	              DEBUG_puts("1ippWriteIO: Could not write IPP "
+		                 "attribute...");
+		      ipp_buffer_release(buffer);
+		      return (IPP_ERROR);
 	            }
 
 		    bufptr = buffer;
@@ -2064,11 +2300,13 @@ ippWriteIO(void       *dst,		/* I - Destination */
 		     i < attr->num_values;
 		     i ++, value ++)
 		{
-                  if ((sizeof(buffer) - (bufptr - buffer)) < 13)
+                  if ((IPP_BUF_SIZE - (bufptr - buffer)) < 13)
 		  {
                     if ((*cb)(dst, buffer, (int)(bufptr - buffer)) < 0)
 	            {
-	              DEBUG_puts("ippWriteIO: Could not write IPP attribute...");
+	              DEBUG_puts("1ippWriteIO: Could not write IPP "
+		                 "attribute...");
+		      ipp_buffer_release(buffer);
 	              return (IPP_ERROR);
 	            }
 
@@ -2121,11 +2359,13 @@ ippWriteIO(void       *dst,		/* I - Destination */
 		    * values with a zero-length name...
 		    */
 
-                    if ((sizeof(buffer) - (bufptr - buffer)) < 3)
+                    if ((IPP_BUF_SIZE - (bufptr - buffer)) < 3)
 		    {
                       if ((*cb)(dst, buffer, (int)(bufptr - buffer)) < 0)
 	              {
-	        	DEBUG_puts("ippWriteIO: Could not write IPP attribute...");
+	        	DEBUG_puts("1ippWriteIO: Could not write IPP "
+		                   "attribute...");
+			ipp_buffer_release(buffer);
 	        	return (IPP_ERROR);
 	              }
 
@@ -2155,14 +2395,21 @@ ippWriteIO(void       *dst,		/* I - Destination */
 		  if (value->string.text != NULL)
                     n += (int)strlen(value->string.text);
 
-                  if (n > (sizeof(buffer) - 2))
+                  if (n > (IPP_BUF_SIZE - 2))
+		  {
+		    DEBUG_printf(("1ippWriteIO: text/nameWithLanguage value "
+		                  "too long (%d)", n));
+		    ipp_buffer_release(buffer);
 		    return (IPP_ERROR);
+                  }
 
-                  if ((int)(sizeof(buffer) - (bufptr - buffer)) < (n + 2))
+                  if ((int)(IPP_BUF_SIZE - (bufptr - buffer)) < (n + 2))
 		  {
                     if ((*cb)(dst, buffer, (int)(bufptr - buffer)) < 0)
 	            {
-	              DEBUG_puts("ippWriteIO: Could not write IPP attribute...");
+	              DEBUG_puts("1ippWriteIO: Could not write IPP "
+		                 "attribute...");
+		      ipp_buffer_release(buffer);
 	              return (IPP_ERROR);
 	            }
 
@@ -2219,11 +2466,13 @@ ippWriteIO(void       *dst,		/* I - Destination */
 		  * value...
 		  */
 
-                  if ((sizeof(buffer) - (bufptr - buffer)) < 5)
+                  if ((IPP_BUF_SIZE - (bufptr - buffer)) < 5)
 		  {
                     if ((*cb)(dst, buffer, (int)(bufptr - buffer)) < 0)
 	            {
-	              DEBUG_puts("ippWriteIO: Could not write IPP attribute...");
+	              DEBUG_puts("1ippWriteIO: Could not write IPP "
+		                 "attribute...");
+		      ipp_buffer_release(buffer);
 	              return (IPP_ERROR);
 	            }
 
@@ -2251,7 +2500,9 @@ ippWriteIO(void       *dst,		/* I - Destination */
 
                   if ((*cb)(dst, buffer, (int)(bufptr - buffer)) < 0)
 	          {
-	            DEBUG_puts("ippWriteIO: Could not write IPP attribute...");
+	            DEBUG_puts("1ippWriteIO: Could not write IPP "
+		               "attribute...");
+		    ipp_buffer_release(buffer);
 	            return (IPP_ERROR);
 	          }
 
@@ -2263,8 +2514,13 @@ ippWriteIO(void       *dst,		/* I - Destination */
 
                   value->collection->state = IPP_IDLE;
 
-		  if (ippWriteIO(dst, cb, 1, ipp, value->collection) == IPP_ERROR)
+		  if (ippWriteIO(dst, cb, 1, ipp,
+		                 value->collection) == IPP_ERROR)
+		  {
+		    DEBUG_puts("1ippWriteIO: Unable to write collection value");
+		    ipp_buffer_release(buffer);
 		    return (IPP_ERROR);
+		  }
 		}
 		break;
 
@@ -2280,11 +2536,13 @@ ippWriteIO(void       *dst,		/* I - Destination */
 		    * values with a zero-length name...
 		    */
 
-                    if ((sizeof(buffer) - (bufptr - buffer)) < 3)
+                    if ((IPP_BUF_SIZE - (bufptr - buffer)) < 3)
 		    {
                       if ((*cb)(dst, buffer, (int)(bufptr - buffer)) < 0)
 	              {
-	        	DEBUG_puts("ippWriteIO: Could not write IPP attribute...");
+	        	DEBUG_puts("1ippWriteIO: Could not write IPP "
+		                   "attribute...");
+			ipp_buffer_release(buffer);
 	        	return (IPP_ERROR);
 	              }
 
@@ -2305,14 +2563,21 @@ ippWriteIO(void       *dst,		/* I - Destination */
 
                   n = value->unknown.length;
 
-                  if (n > (sizeof(buffer) - 2))
+                  if (n > (IPP_BUF_SIZE - 2))
+		  {
+		    DEBUG_printf(("1ippWriteIO: Data length too long (%d)",
+		                  n));
+		    ipp_buffer_release(buffer);
 		    return (IPP_ERROR);
+		  }
 
-                  if ((int)(sizeof(buffer) - (bufptr - buffer)) < (n + 2))
+                  if ((int)(IPP_BUF_SIZE - (bufptr - buffer)) < (n + 2))
 		  {
                     if ((*cb)(dst, buffer, (int)(bufptr - buffer)) < 0)
 	            {
-	              DEBUG_puts("ippWriteIO: Could not write IPP attribute...");
+	              DEBUG_puts("1ippWriteIO: Could not write IPP "
+		                 "attribute...");
+		      ipp_buffer_release(buffer);
 	              return (IPP_ERROR);
 	            }
 
@@ -2339,11 +2604,13 @@ ippWriteIO(void       *dst,		/* I - Destination */
 
           if ((*cb)(dst, buffer, (int)(bufptr - buffer)) < 0)
 	  {
-	    DEBUG_puts("ippWriteIO: Could not write IPP attribute...");
+	    DEBUG_puts("1ippWriteIO: Could not write IPP attribute...");
+	    ipp_buffer_release(buffer);
 	    return (IPP_ERROR);
 	  }
 
-          DEBUG_printf(("ippWriteIO: wrote %d bytes\n", bufptr - buffer));
+          DEBUG_printf(("2ippWriteIO: wrote %d bytes",
+	                (int)(bufptr - buffer)));
 
 	 /*
           * If blocking is disabled, stop here...
@@ -2377,7 +2644,8 @@ ippWriteIO(void       *dst,		/* I - Destination */
 
 	  if ((*cb)(dst, buffer, n) < 0)
 	  {
-	    DEBUG_puts("ippWriteIO: Could not write IPP end-tag...");
+	    DEBUG_puts("1ippWriteIO: Could not write IPP end-tag...");
+	    ipp_buffer_release(buffer);
 	    return (IPP_ERROR);
 	  }
 
@@ -2391,6 +2659,8 @@ ippWriteIO(void       *dst,		/* I - Destination */
     default :
         break; /* anti-compiler-warning-code */
   }
+
+  ipp_buffer_release(buffer);
 
   return (ipp->state);
 }
@@ -2407,9 +2677,9 @@ _ippAddAttr(ipp_t *ipp,			/* I - IPP message */
   ipp_attribute_t	*attr;		/* New attribute */
 
 
-  DEBUG_printf(("_ippAddAttr(%p, %d)\n", ipp, num_values));
+  DEBUG_printf(("4_ippAddAttr(ipp=%p, num_values=%d)", ipp, num_values));
 
-  if (ipp == NULL || num_values < 0)
+  if (!ipp || num_values < 0)
     return (NULL);
 
   attr = calloc(sizeof(ipp_attribute_t) +
@@ -2427,7 +2697,7 @@ _ippAddAttr(ipp_t *ipp,			/* I - IPP message */
     ipp->last = attr;
   }
 
-  DEBUG_printf(("_ippAddAttr(): %p\n", attr));
+  DEBUG_printf(("5_ippAddAttr: Returning %p", attr));
 
   return (attr);
 }
@@ -2444,14 +2714,13 @@ _ippFreeAttr(ipp_attribute_t *attr)	/* I - Attribute to free */
   ipp_value_t	*value;			/* Current value */
 
 
-  DEBUG_printf(("_ippFreeAttr(): %p\n", attr));
+  DEBUG_printf(("4_ippFreeAttr(attr=%p)", attr));
 
   switch (attr->value_tag)
   {
     case IPP_TAG_TEXT :
     case IPP_TAG_NAME :
     case IPP_TAG_KEYWORD :
-    case IPP_TAG_STRING :
     case IPP_TAG_URI :
     case IPP_TAG_URISCHEME :
     case IPP_TAG_CHARSET :
@@ -2490,6 +2759,13 @@ _ippFreeAttr(ipp_attribute_t *attr)	/* I - Attribute to free */
           ippDelete(value->collection);
 	break;
 
+    case IPP_TAG_STRING :
+	for (i = 0, value = attr->values;
+	     i < attr->num_values;
+	     i ++, value ++)
+	  free(value->unknown.data);
+        break;
+
     default :
         if (!((int)attr->value_tag & IPP_TAG_COPY))
 	{
@@ -2506,6 +2782,47 @@ _ippFreeAttr(ipp_attribute_t *attr)	/* I - Attribute to free */
     _cupsStrFree(attr->name);
 
   free(attr);
+}
+
+
+/*
+ * 'ipp_buffer_get()' - Get a read/write buffer.
+ */
+
+static unsigned char *			/* O - Buffer */
+ipp_buffer_get(void)
+{
+  _ipp_buffer_t		*buffer;	/* Current buffer */
+  _cups_globals_t	*cg = _cupsGlobals();
+					/* Global data */
+
+
+  for (buffer = cg->ipp_buffers; buffer; buffer = buffer->next)
+    if (!buffer->used)
+    {
+      buffer->used = 1;
+      return (buffer->d);
+    }
+
+  if ((buffer = malloc(sizeof(_ipp_buffer_t))) == NULL)
+    return (NULL);
+
+  buffer->used    = 1;
+  buffer->next    = cg->ipp_buffers;
+  cg->ipp_buffers = buffer;
+
+  return (buffer->d);
+}
+
+
+/*
+ * 'ipp_buffer_release()' - Release a read/write buffer.
+ */
+
+static void
+ipp_buffer_release(unsigned char *b)	/* I - Buffer to release */
+{
+  ((_ipp_buffer_t *)b)->used = 0;
 }
 
 
@@ -2553,8 +2870,8 @@ ipp_length(ipp_t *ipp,			/* I - IPP message or collection */
     if (!attr->name)
       continue;
 
-    DEBUG_printf(("attr->name = %s, attr->num_values = %d, bytes = %d\n",
-                  attr->name, attr->num_values, bytes));
+    DEBUG_printf(("9ipp_length: attr->name=\"%s\", attr->num_values=%d, "
+                  "bytes=%d", attr->name, attr->num_values, bytes));
 
     bytes += (int)strlen(attr->name);	/* Name */
     bytes += attr->num_values;		/* Value tag for each value */
@@ -2578,7 +2895,6 @@ ipp_length(ipp_t *ipp,			/* I - IPP message or collection */
       case IPP_TAG_TEXT :
       case IPP_TAG_NAME :
       case IPP_TAG_KEYWORD :
-      case IPP_TAG_STRING :
       case IPP_TAG_URI :
       case IPP_TAG_URISCHEME :
       case IPP_TAG_CHARSET :
@@ -2645,7 +2961,7 @@ ipp_length(ipp_t *ipp,			/* I - IPP message or collection */
   else
     bytes ++;
 
-  DEBUG_printf(("bytes = %d\n", bytes));
+  DEBUG_printf(("8ipp_length: Returning %d bytes", bytes));
 
   return (bytes);
 }
@@ -2665,16 +2981,19 @@ ipp_read_http(http_t      *http,	/* I - Client connection */
   char		len[32];		/* Length string */
   
 
-  DEBUG_printf(("ipp_read_http(http=%p, buffer=%p, length=%d)\n",
-                http, buffer, length));
+  DEBUG_printf(("7ipp_read_http(http=%p, buffer=%p, length=%d)",
+                http, buffer, (int)length));
 
  /*
   * Loop until all bytes are read...
   */
 
-  for (tbytes = 0, bytes = 0; tbytes < (int)length; tbytes += bytes, buffer += bytes)
+  for (tbytes = 0, bytes = 0;
+       tbytes < (int)length;
+       tbytes += bytes, buffer += bytes)
   {
-    DEBUG_printf(("tbytes = %d, http->state = %d\n", tbytes, http->state));
+    DEBUG_printf(("9ipp_read_http: tbytes=%d, http->state=%d", tbytes,
+                  http->state));
 
     if (http->state == HTTP_WAITING)
       break;
@@ -2750,7 +3069,18 @@ ipp_read_http(http_t      *http,	/* I - Client connection */
 	}
       }
 
-      if ((bytes = httpRead2(http, (char *)buffer, length - tbytes)) <= 0)
+      if ((bytes = httpRead2(http, (char *)buffer, length - tbytes)) < 0)
+      {
+#ifdef WIN32
+        break;
+#else
+        if (errno != EAGAIN && errno != EINTR)
+	  break;
+
+	bytes = 0;
+#endif /* WIN32 */
+      }
+      else if (bytes == 0)
         break;
     }
   }
@@ -2762,7 +3092,7 @@ ipp_read_http(http_t      *http,	/* I - Client connection */
   if (tbytes == 0 && bytes < 0)
     tbytes = -1;
 
-  DEBUG_printf(("returning %d bytes...\n", tbytes));
+  DEBUG_printf(("8ipp_read_http: Returning %d bytes", tbytes));
 
   return (tbytes);
 }
@@ -2826,5 +3156,5 @@ _ipp_free_attr(ipp_attribute_t *attr)	/* I - Attribute to free */
 
 
 /*
- * End of "$Id: ipp.c 6649 2007-07-11 21:46:42Z mike $".
+ * End of "$Id: ipp.c 7847 2008-08-19 04:22:14Z mike $".
  */

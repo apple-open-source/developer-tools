@@ -23,6 +23,7 @@
  * the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
  * Boston, MA 02110-1301, USA.
  */
+
 #include "config.h"
 #include "HTMLTableCellElement.h"
 
@@ -30,6 +31,7 @@
 #include "CSSValueKeywords.h"
 #include "HTMLNames.h"
 #include "HTMLTableElement.h"
+#include "MappedAttribute.h"
 #include "RenderTableCell.h"
 
 using std::max;
@@ -98,30 +100,32 @@ void HTMLTableCellElement::parseMappedAttribute(MappedAttribute *attr)
             static_cast<RenderTableCell*>(renderer())->updateFromElement();
     } else if (attr->name() == nowrapAttr) {
         if (!attr->isNull())
-            addCSSProperty(attr, CSS_PROP_WHITE_SPACE, CSS_VAL__WEBKIT_NOWRAP);
+            addCSSProperty(attr, CSSPropertyWhiteSpace, CSSValueWebkitNowrap);
     } else if (attr->name() == widthAttr) {
         if (!attr->value().isEmpty()) {
             int widthInt = attr->value().toInt();
             if (widthInt > 0) // width="0" is ignored for compatibility with WinIE.
-                addCSSLength(attr, CSS_PROP_WIDTH, attr->value());
+                addCSSLength(attr, CSSPropertyWidth, attr->value());
         }
     } else if (attr->name() == heightAttr) {
         if (!attr->value().isEmpty()) {
             int heightInt = attr->value().toInt();
             if (heightInt > 0) // height="0" is ignored for compatibility with WinIE.
-                addCSSLength(attr, CSS_PROP_HEIGHT, attr->value());
+                addCSSLength(attr, CSSPropertyHeight, attr->value());
         }
     } else
         HTMLTablePartElement::parseMappedAttribute(attr);
 }
 
 // used by table cells to share style decls created by the enclosing table.
-CSSMutableStyleDeclaration* HTMLTableCellElement::additionalAttributeStyleDecl()
+void HTMLTableCellElement::additionalAttributeStyleDecls(Vector<CSSMutableStyleDeclaration*>& results)
 {
     Node* p = parentNode();
     while (p && !p->hasTagName(tableTag))
         p = p->parentNode();
-    return p ? static_cast<HTMLTableElement*>(p)->getSharedCellDecl() : 0;
+    if (!p)
+        return;
+    static_cast<HTMLTableElement*>(p)->addSharedCellDecls(results);
 }
 
 bool HTMLTableCellElement::isURLAttribute(Attribute *attr) const
@@ -257,6 +261,13 @@ String HTMLTableCellElement::width() const
 void HTMLTableCellElement::setWidth(const String &value)
 {
     setAttribute(widthAttr, value);
+}
+
+void HTMLTableCellElement::addSubresourceAttributeURLs(ListHashSet<KURL>& urls) const
+{
+    HTMLTablePartElement::addSubresourceAttributeURLs(urls);
+
+    addSubresourceURL(urls, document()->completeURL(getAttribute(backgroundAttr)));
 }
 
 }

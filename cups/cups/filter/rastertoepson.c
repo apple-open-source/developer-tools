@@ -1,10 +1,10 @@
 /*
- * "$Id: rastertoepson.c 6649 2007-07-11 21:46:42Z mike $"
+ * "$Id: rastertoepson.c 7450 2008-04-14 19:39:02Z mike $"
  *
  *   EPSON ESC/P and ESC/P2 filter for the Common UNIX Printing System
  *   (CUPS).
  *
- *   Copyright 2007 by Apple Inc.
+ *   Copyright 2007-2009 by Apple Inc.
  *   Copyright 1993-2007 by Easy Software Products.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -34,11 +34,12 @@
 #include <cups/ppd.h>
 #include <cups/string.h>
 #include <cups/i18n.h>
-#include "raster.h"
+#include <cups/raster.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <errno.h>
 
 
 /*
@@ -77,7 +78,8 @@ int		DotBit,			/* Bit in buffers */
 		LineCount,		/* # of lines processed */
 		EvenOffset,		/* Offset into 'even' buffers */
 		OddOffset,		/* Offset into 'odd' buffers */
-		Shingling;		/* Shingle output? */
+		Shingling,		/* Shingle output? */
+		Canceled;		/* Has the current job been canceled? */
 
 
 /*
@@ -85,15 +87,15 @@ int		DotBit,			/* Bit in buffers */
  */
 
 void	Setup(void);
-void	StartPage(const ppd_file_t *ppd, const cups_page_header_t *header);
-void	EndPage(const cups_page_header_t *header);
+void	StartPage(const ppd_file_t *ppd, const cups_page_header2_t *header);
+void	EndPage(const cups_page_header2_t *header);
 void	Shutdown(void);
 
 void	CancelJob(int sig);
 void	CompressData(const unsigned char *line, int length, int plane,
 	             int type, int xstep, int ystep);
-void	OutputLine(const cups_page_header_t *header);
-void	OutputRows(const cups_page_header_t *header, int row);
+void	OutputLine(const cups_page_header2_t *header);
+void	OutputRows(const cups_page_header2_t *header, int row);
 
 
 /*
@@ -103,7 +105,7 @@ void	OutputRows(const cups_page_header_t *header, int row);
 void
 Setup(void)
 {
-  const char	*device_uri;	/* The device for the printer... */
+  const char	*device_uri;		/* The device for the printer... */
 
 
  /*
@@ -122,38 +124,19 @@ Setup(void)
  */
 
 void
-StartPage(const ppd_file_t         *ppd,	/* I - PPD file */
-          const cups_page_header_t *header)	/* I - Page header */
+StartPage(
+    const ppd_file_t         *ppd,	/* I - PPD file */
+    const cups_page_header2_t *header)	/* I - Page header */
 {
-  int	n, t;					/* Numbers */
-  int	plane;					/* Looping var */
-#if defined(HAVE_SIGACTION) && !defined(HAVE_SIGSET)
-  struct sigaction action;			/* Actions for POSIX signals */
-#endif /* HAVE_SIGACTION && !HAVE_SIGSET */
+  int	n, t;				/* Numbers */
+  int	plane;				/* Looping var */
 
-
- /*
-  * Register a signal handler to eject the current page if the
-  * job is cancelled.
-  */
-
-#ifdef HAVE_SIGSET /* Use System V signals over POSIX to avoid bugs */
-  sigset(SIGTERM, CancelJob);
-#elif defined(HAVE_SIGACTION)
-  memset(&action, 0, sizeof(action));
-
-  sigemptyset(&action.sa_mask);
-  action.sa_handler = CancelJob;
-  sigaction(SIGTERM, &action, NULL);
-#else
-  signal(SIGTERM, CancelJob);
-#endif /* HAVE_SIGSET */
 
  /*
   * Send a reset sequence.
   */
 
-  if (ppd->nickname && strstr(ppd->nickname, "OKIDATA") != NULL)
+  if (ppd && ppd->nickname && strstr(ppd->nickname, "OKIDATA") != NULL)
     printf("\033{A");	/* Set EPSON emulation mode */
 
   printf("\033@");
@@ -162,9 +145,7 @@ StartPage(const ppd_file_t         *ppd,	/* I - PPD file */
   * See which type of printer we are using...
   */
 
-  EjectPage = header->Margins[0] || header->Margins[1];
-    
-  switch (ppd->model_number)
+  switch (Model)
   {
     case EPSON_9PIN :
     case EPSON_24PIN :
@@ -183,8 +164,8 @@ StartPage(const ppd_file_t         *ppd,	/* I - PPD file */
 
 	printf("\033l%c\033Q%c", 0,	/* Side margins */
                       (int)(10.0 * header->PageSize[0] / 72.0 + 0.5));
-	printf("\033C%c%c", 0,		/* Page length */
-                      (int)(header->PageSize[1] / 72.0 + 0.5));
+	printf("\033\062\033C%c",	/* Page length in 1/6th inches */
+		      (int)(header->PageSize[1] / 12.0 + 0.5));
 	printf("\033N%c", 0);		/* Bottom margin */
         printf("\033O");		/* No perforation skip */
 
@@ -196,7 +177,7 @@ StartPage(const ppd_file_t         *ppd,	/* I - PPD file */
 	DotColumns = header->HWResolution[0] / 60;
         Shingling  = 0;
 
-        if (ppd->model_number == EPSON_9PIN)
+        if (Model == EPSON_9PIN)
 	  printf("\033\063\030");	/* Set line feed */
 	else
 	  switch (header->HWResolution[0])
@@ -251,8 +232,11 @@ StartPage(const ppd_file_t         *ppd,	/* I - PPD file */
 	putchar(n);
 	putchar(n >> 8);
 
-	t = (ppd->sizes[1].length - ppd->sizes[1].top) *
-	    header->HWResolution[1] / 72.0;
+        if (ppd)
+	  t = (ppd->sizes[1].length - ppd->sizes[1].top) *
+	      header->HWResolution[1] / 72.0;
+        else
+	  t = 0;
 
 	pwrite("\033(c\004\000", 5);		/* Top & bottom margins */
 	putchar(t);
@@ -293,18 +277,35 @@ StartPage(const ppd_file_t         *ppd,	/* I - PPD file */
   * Allocate memory for a line/row of graphics...
   */
 
-  Planes[0] = malloc(header->cupsBytesPerLine);
+  if ((Planes[0] = malloc(header->cupsBytesPerLine)) == NULL)
+  {
+    fputs("ERROR: Unable to allocate memory!\n", stderr);
+    exit(1);
+  }
+
   for (plane = 1; plane < NumPlanes; plane ++)
     Planes[plane] = Planes[0] + plane * header->cupsBytesPerLine / NumPlanes;
 
   if (header->cupsCompression || DotBytes)
-    CompBuffer = calloc(2, header->cupsWidth);
+  {
+    if ((CompBuffer = calloc(2, header->cupsWidth)) == NULL)
+    {
+      fputs("ERROR: Unable to allocate memory!\n", stderr);
+      exit(1);
+    }
+  }
   else
     CompBuffer = NULL;
 
   if (DotBytes)
   {
-    LineBuffers[0] = calloc(DotBytes, header->cupsWidth * (Shingling + 1));
+    if ((LineBuffers[0] = calloc(DotBytes,
+                                 header->cupsWidth * (Shingling + 1))) == NULL)
+    {
+      fputs("ERROR: Unable to allocate memory!\n", stderr);
+      exit(1);
+    }
+
     LineBuffers[1] = LineBuffers[0] + DotBytes * header->cupsWidth;
     DotBit         = 128;
     LineCount      = 0;
@@ -319,13 +320,9 @@ StartPage(const ppd_file_t         *ppd,	/* I - PPD file */
  */
 
 void
-EndPage(const cups_page_header_t *header)	/* I - Page header */
+EndPage(
+    const cups_page_header2_t *header)	/* I - Page header */
 {
-#if defined(HAVE_SIGACTION) && !defined(HAVE_SIGSET)
-  struct sigaction action;			/* Actions for POSIX signals */
-#endif /* HAVE_SIGACTION && !HAVE_SIGSET */
-
-
   if (DotBytes && header)
   {
    /*
@@ -353,25 +350,8 @@ EndPage(const cups_page_header_t *header)	/* I - Page header */
   * Eject the current page...
   */
 
-  if (EjectPage)
-    putchar(12);		/* Form feed */
+  putchar(12);				/* Form feed */
   fflush(stdout);
-
- /*
-  * Unregister the signal handler...
-  */
-
-#ifdef HAVE_SIGSET /* Use System V signals over POSIX to avoid bugs */
-  sigset(SIGTERM, SIG_IGN);
-#elif defined(HAVE_SIGACTION)
-  memset(&action, 0, sizeof(action));
-
-  sigemptyset(&action.sa_mask);
-  action.sa_handler = SIG_IGN;
-  sigaction(SIGTERM, &action, NULL);
-#else
-  signal(SIGTERM, SIG_IGN);
-#endif /* HAVE_SIGSET */
 
  /*
   * Free memory...
@@ -409,31 +389,9 @@ Shutdown(void)
 void
 CancelJob(int sig)			/* I - Signal */
 {
-  int	i;				/* Looping var */
-
-
   (void)sig;
 
- /*
-  * Send out lots of NUL bytes to clear out any pending raster data...
-  */
-
-  if (DotBytes)
-    i = DotBytes * 360 * 8;
-  else
-    i = 720;
-
-  for (; i > 0; i --)
-    putchar(0);
-
- /*
-  * End the current page and exit...
-  */
-
-  EndPage(NULL);
-  Shutdown();
-
-  exit(0);
+  Canceled = 1;
 }
 
 
@@ -650,7 +608,8 @@ CompressData(const unsigned char *line,	/* I - Data to compress */
  */
 
 void
-OutputLine(const cups_page_header_t *header)	/* I - Page header */
+OutputLine(
+    const cups_page_header2_t *header)	/* I - Page header */
 {
   if (header->cupsRowCount)
   {
@@ -818,14 +777,15 @@ OutputLine(const cups_page_header_t *header)	/* I - Page header */
  */
 
 void
-OutputRows(const cups_page_header_t *header,	/* I - Page image header */
-           int                      row)	/* I - Row number (0 or 1) */
+OutputRows(
+    const cups_page_header2_t *header,	/* I - Page image header */
+    int                      row)	/* I - Row number (0 or 1) */
 {
-  unsigned	i, n;				/* Looping vars */
-  int		dot_count,			/* Number of bytes to print */
-                dot_min;			/* Minimum number of bytes */
-  unsigned char *dot_ptr,			/* Pointer to print data */
-		*ptr;				/* Current data */
+  unsigned	i, n;			/* Looping vars */
+  int		dot_count,		/* Number of bytes to print */
+                dot_min;		/* Minimum number of bytes */
+  unsigned char *dot_ptr,		/* Pointer to print data */
+		*ptr;			/* Current data */
 
 
   dot_min = DotBytes * DotColumns;
@@ -992,16 +952,19 @@ OutputRows(const cups_page_header_t *header,	/* I - Page image header */
  * 'main()' - Main entry and processing of driver.
  */
 
-int				/* O - Exit status */
-main(int  argc,			/* I - Number of command-line arguments */
-     char *argv[])		/* I - Command-line arguments */
+int					/* O - Exit status */
+main(int  argc,				/* I - Number of command-line arguments */
+     char *argv[])			/* I - Command-line arguments */
 {
-  int			fd;	/* File descriptor */
-  cups_raster_t		*ras;	/* Raster stream for printing */
-  cups_page_header_t	header;	/* Page header from file */
-  ppd_file_t		*ppd;	/* PPD file */
-  int			page;	/* Current page */
-  int			y;	/* Current line */
+  int			fd;		/* File descriptor */
+  cups_raster_t		*ras;		/* Raster stream for printing */
+  cups_page_header2_t	header;		/* Page header from file */
+  ppd_file_t		*ppd;		/* PPD file */
+  int			page;		/* Current page */
+  int			y;		/* Current line */
+#if defined(HAVE_SIGACTION) && !defined(HAVE_SIGSET)
+  struct sigaction action;		/* Actions for POSIX signals */
+#endif /* HAVE_SIGACTION && !HAVE_SIGSET */
 
 
  /*
@@ -1021,8 +984,9 @@ main(int  argc,			/* I - Number of command-line arguments */
     * and return.
     */
 
-    fprintf(stderr, _("Usage: %s job-id user title copies options [file]\n"),
-            argv[0]);
+    _cupsLangPrintf(stderr,
+                    _("Usage: %s job-id user title copies options [file]\n"),
+                    "rastertoepson");
     return (1);
   }
 
@@ -1034,7 +998,8 @@ main(int  argc,			/* I - Number of command-line arguments */
   {
     if ((fd = open(argv[6], O_RDONLY)) == -1)
     {
-      perror("ERROR: Unable to open raster file - ");
+      _cupsLangPrintf(stderr, _("ERROR: Unable to open raster file - %s\n"),
+                      strerror(errno));
       sleep(1);
       return (1);
     }
@@ -1043,6 +1008,25 @@ main(int  argc,			/* I - Number of command-line arguments */
     fd = 0;
 
   ras = cupsRasterOpen(fd, CUPS_RASTER_READ);
+
+ /*
+  * Register a signal handler to eject the current page if the
+  * job is cancelled.
+  */
+
+  Canceled = 0;
+
+#ifdef HAVE_SIGSET /* Use System V signals over POSIX to avoid bugs */
+  sigset(SIGTERM, CancelJob);
+#elif defined(HAVE_SIGACTION)
+  memset(&action, 0, sizeof(action));
+
+  sigemptyset(&action.sa_mask);
+  action.sa_handler = CancelJob;
+  sigaction(SIGTERM, &action, NULL);
+#else
+  signal(SIGTERM, CancelJob);
+#endif /* HAVE_SIGSET */
 
  /*
   * Initialize the print device...
@@ -1060,11 +1044,14 @@ main(int  argc,			/* I - Number of command-line arguments */
 
   page = 0;
 
-  while (cupsRasterReadHeader(ras, &header))
+  while (cupsRasterReadHeader2(ras, &header))
   {
    /*
     * Write a status message with the page number and number of copies.
     */
+
+    if (Canceled)
+      break;
 
     page ++;
 
@@ -1086,9 +1073,12 @@ main(int  argc,			/* I - Number of command-line arguments */
       * Let the user know how far we have progressed...
       */
 
+      if (Canceled)
+	break;
+
       if ((y & 127) == 0)
-        fprintf(stderr, _("INFO: Printing page %d, %d%% complete...\n"), page,
-	        100 * y / header.cupsHeight);
+        _cupsLangPrintf(stderr, _("INFO: Printing page %d, %d%% complete...\n"),
+                        page, 100 * y / header.cupsHeight);
 
      /*
       * Read a line of graphics...
@@ -1109,6 +1099,9 @@ main(int  argc,			/* I - Number of command-line arguments */
     */
 
     EndPage(&header);
+
+    if (Canceled)
+      break;
   }
 
  /*
@@ -1132,14 +1125,18 @@ main(int  argc,			/* I - Number of command-line arguments */
   */
 
   if (page == 0)
-    fputs(_("ERROR: No pages found!\n"), stderr);
+  {
+    _cupsLangPuts(stderr, _("ERROR: No pages found!\n"));
+    return (1);
+  }
   else
-    fputs(_("INFO: Ready to print.\n"), stderr);
-
-  return (page == 0);
+  {
+    _cupsLangPuts(stderr, _("INFO: Ready to print.\n"));
+    return (0);
+  }
 }
 
 
 /*
- * End of "$Id: rastertoepson.c 6649 2007-07-11 21:46:42Z mike $".
+ * End of "$Id: rastertoepson.c 7450 2008-04-14 19:39:02Z mike $".
  */

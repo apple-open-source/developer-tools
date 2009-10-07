@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -389,8 +389,9 @@ package body Exp_Ch13 is
          end loop;
       end if;
 
-      --  If we are to delete this N_Freeze_Entity, do so by rewriting
-      --  so that a loop on all nodes being inserted will work propertly.
+      --  If we are to delete this N_Freeze_Entity, do so by rewriting so that
+      --  a loop on all nodes being inserted will work propertly.
+
       if Delete then
          Rewrite (N, Make_Null_Statement (Sloc (N)));
       end if;

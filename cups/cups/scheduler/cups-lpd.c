@@ -1,9 +1,9 @@
 /*
- * "$Id: cups-lpd.c 6781 2007-08-08 21:09:31Z mike $"
+ * "$Id: cups-lpd.c 7899 2008-09-03 12:57:17Z mike $"
  *
  *   Line Printer Daemon interface for the Common UNIX Printing System (CUPS).
  *
- *   Copyright 2007 by Apple Inc.
+ *   Copyright 2007-2008 by Apple Inc.
  *   Copyright 1997-2006 by Easy Software Products, all rights reserved.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -81,8 +81,8 @@
  */
 
 static int	create_job(http_t *http, const char *dest, const char *title,
-		           const char *user, int num_options,
-			   cups_option_t *options);
+                           const char *docname, const char *user,
+			   int num_options, cups_option_t *options);
 static int	get_printer(http_t *http, const char *name, char *dest,
 		            int destsize, cups_option_t **options,
 			    int *accepting, int *shared, ipp_pstate_t *state);
@@ -148,6 +148,19 @@ main(int  argc,				/* I - Number of command-line arguments */
     {
       switch (argv[i][1])
       {
+        case 'h' : /* -h hostname[:port] */
+            if (argv[i][2])
+	      cupsSetServer(argv[i] + 2);
+	    else
+	    {
+	      i ++;
+	      if (i < argc)
+	        cupsSetServer(argv[i]);
+	      else
+	        syslog(LOG_WARNING, "Expected hostname string after -h option!");
+	    }
+	    break;
+
 	case 'o' : /* Option */
 	    if (argv[i][2])
 	      num_defaults = cupsParseOptions(argv[i] + 2, num_defaults,
@@ -287,19 +300,24 @@ main(int  argc,				/* I - Number of command-line arguments */
 	break;
 
     case 0x05 : /* Remove jobs */
-       /*
-        * Grab the agent and skip to the list of users and/or jobs.
-	*/
+        if (list)
+	{
+	 /*
+	  * Grab the agent and skip to the list of users and/or jobs.
+	  */
 
-        agent = list;
+	  agent = list;
 
-	for (; *list && !isspace(*list & 255); list ++);
-	while (isspace(*list & 255))
-	  *list++ = '\0';
+	  for (; *list && !isspace(*list & 255); list ++);
+	  while (isspace(*list & 255))
+	    *list++ = '\0';
 
-        syslog(LOG_INFO, "Remove jobs %s on %s by %s", list, dest, agent);
+	  syslog(LOG_INFO, "Remove jobs %s on %s by %s", list, dest, agent);
 
-        status = remove_jobs(dest, agent, list);
+	  status = remove_jobs(dest, agent, list);
+        }
+	else
+	  status = 1;
 
 	putchar(status);
 	break;
@@ -320,6 +338,7 @@ static int				/* O - Job ID or -1 on error */
 create_job(http_t        *http,		/* I - HTTP connection */
            const char    *dest,		/* I - Destination name */
 	   const char    *title,	/* I - job-name */
+	   const char    *docname,	/* I - Name of job file */
            const char    *user,		/* I - requesting-user-name */
 	   int           num_options,	/* I - Number of options for job */
 	   cups_option_t *options)	/* I - Options for job */
@@ -346,9 +365,13 @@ create_job(http_t        *http,		/* I - HTTP connection */
   ippAddString(request, IPP_TAG_OPERATION, IPP_TAG_NAME,
                "requesting-user-name", NULL, user);
 
-  if (title)
+  if (title[0])
     ippAddString(request, IPP_TAG_OPERATION, IPP_TAG_NAME, "job-name",
                  NULL, title);
+
+  if (docname[0])
+    ippAddString(request, IPP_TAG_OPERATION, IPP_TAG_NAME, "document-name", 
+                 NULL, docname);
 
   cupsEncodeOptions(request, num_options, options);
 
@@ -1125,9 +1148,10 @@ recv_print_job(
       * Grab the job information...
       */
 
-      title[0] = '\0';
-      user[0]  = '\0';
-      doccount = 0;
+      title[0]   = '\0';
+      user[0]    = '\0';
+      docname[0] = '\0';
+      doccount   = 0;
 
       while (smart_gets(line, sizeof(line), fp) != NULL)
       {
@@ -1140,6 +1164,10 @@ recv_print_job(
 	  case 'J' : /* Job name */
 	      strlcpy(title, line + 1, sizeof(title));
 	      break;
+
+          case 'N' : /* Document name */
+              strlcpy(docname, line + 1, sizeof(docname));
+              break;
 
 	  case 'P' : /* User identification */
 	      strlcpy(user, line + 1, sizeof(user));
@@ -1204,7 +1232,8 @@ recv_print_job(
       * Create the job...
       */
 
-      if ((id = create_job(http, dest, title, user, num_options, options)) < 0)
+      if ((id = create_job(http, dest, title, docname, user, num_options,
+                           options)) < 0)
         status = 1;
       else
       {
@@ -1274,9 +1303,9 @@ recv_print_job(
 	  if (status)
 	    break;
 	}
-
-	fclose(fp);
       }
+
+      fclose(fp);
     }
   }
 
@@ -1702,5 +1731,5 @@ smart_gets(char *s,			/* I - Pointer to line buffer */
 
 
 /*
- * End of "$Id: cups-lpd.c 6781 2007-08-08 21:09:31Z mike $".
+ * End of "$Id: cups-lpd.c 7899 2008-09-03 12:57:17Z mike $".
  */

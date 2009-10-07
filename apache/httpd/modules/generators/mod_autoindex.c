@@ -119,6 +119,7 @@ typedef struct autoindex_config_struct {
 
     char *default_icon;
     char *style_sheet;
+    char *head_insert;
     apr_int32_t opts;
     apr_int32_t incremented_opts;
     apr_int32_t decremented_opts;
@@ -160,12 +161,24 @@ static void emit_preamble(request_rec *r, int xhtml, const char *title)
     d = (autoindex_config_rec *) ap_get_module_config(r->per_dir_config,
                                                       &autoindex_module);
 
-    ap_rvputs(r, xhtml ? DOCTYPE_XHTML_1_0T : DOCTYPE_HTML_3_2,
-              "<html>\n <head>\n  <title>Index of ", title,
-              "</title>\n", NULL);
+    if (xhtml) {
+        ap_rvputs(r, DOCTYPE_XHTML_1_0T,
+                  "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n"
+                  " <head>\n  <title>Index of ", title,
+                  "</title>\n", NULL);
+    } else {
+        ap_rvputs(r, DOCTYPE_HTML_3_2,
+                  "<html>\n <head>\n"
+                  "  <title>Index of ", title,
+                  "</title>\n", NULL);
+    }
+
     if (d->style_sheet != NULL) {
         ap_rvputs(r, "  <link rel=\"stylesheet\" href=\"", d->style_sheet,
                 "\" type=\"text/css\"", xhtml ? " />\n" : ">\n", NULL);
+    }
+    if (d->head_insert != NULL) {
+        ap_rputs(d->head_insert, r);
     }
     ap_rvputs(r, " </head>\n <body>\n", NULL);
 }
@@ -585,6 +598,9 @@ static const command_rec autoindex_cmds[] =
     AP_INIT_TAKE1("IndexStyleSheet", ap_set_string_slot,
                   (void *)APR_OFFSETOF(autoindex_config_rec, style_sheet),
                   DIR_CMD_PERMS, "URL to style sheet"),
+    AP_INIT_TAKE1("IndexHeadInsert", ap_set_string_slot,
+                  (void *)APR_OFFSETOF(autoindex_config_rec, head_insert),
+                  DIR_CMD_PERMS, "String to insert in HTML HEAD section"),
     {NULL}
 };
 
@@ -625,6 +641,8 @@ static void *merge_autoindex_configs(apr_pool_t *p, void *basev, void *addv)
                                           : base->default_icon;
     new->style_sheet = add->style_sheet ? add->style_sheet
                                           : base->style_sheet;
+    new->head_insert = add->head_insert ? add->head_insert
+                                          : base->head_insert;
     new->icon_height = add->icon_height ? add->icon_height : base->icon_height;
     new->icon_width = add->icon_width ? add->icon_width : base->icon_width;
 

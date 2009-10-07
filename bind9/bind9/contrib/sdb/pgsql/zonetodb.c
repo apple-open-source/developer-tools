@@ -1,8 +1,8 @@
 /*
- * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007, 2008  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000-2002  Internet Software Consortium.
  *
- * Permission to use, copy, modify, and distribute this software for any
+ * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
  *
@@ -15,7 +15,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* $Id: zonetodb.c,v 1.13.18.4 2007/01/18 00:06:11 marka Exp $ */
+/* $Id: zonetodb.c,v 1.20 2008/09/25 04:02:38 tbox Exp $ */
 
 #include <stdlib.h>
 #include <string.h>
@@ -102,7 +102,7 @@ addrdata(dns_name_t *name, dns_ttl_t ttl, dns_rdata_t *rdata) {
 	check_result(result, "dns_name_totext");
 	namearray[isc_buffer_usedlength(&b)] = 0;
 	quotestring(namearray, canonnamearray);
-	
+
 	isc_buffer_init(&b, typearray, sizeof(typearray) - 1);
 	result = dns_rdatatype_totext(rdata->type, &b);
 	check_result(result, "dns_rdatatype_totext");
@@ -114,7 +114,7 @@ addrdata(dns_name_t *name, dns_ttl_t ttl, dns_rdata_t *rdata) {
 	check_result(result, "dns_rdata_totext");
 	dataarray[isc_buffer_usedlength(&b)] = 0;
 	quotestring(dataarray, canondataarray);
-	
+
 	snprintf(str, sizeof(str),
 		 "INSERT INTO %s (NAME, TTL, RDTYPE, RDATA)"
 		 " VALUES ('%s', %d, '%s', '%s')",
@@ -230,7 +230,7 @@ main(int argc, char **argv) {
 	PQclear(res);
 
 	dbiter = NULL;
-	result = dns_db_createiterator(db, ISC_FALSE, &dbiter);
+	result = dns_db_createiterator(db, 0, &dbiter);
 	check_result(result, "dns_db_createiterator()");
 
 	result = dns_dbiterator_first(dbiter);

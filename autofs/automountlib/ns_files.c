@@ -27,9 +27,7 @@
  */
 
 /*
- * Portions Copyright 2007 Apple Inc.
- *
- * $Id$
+ * Portions Copyright 2007-2009 Apple Inc.
  */
 
 #pragma ident	"@(#)ns_files.c	1.49	05/06/08 SMI"
@@ -320,7 +318,13 @@ getmapkeys_files(mapname, list, error, cache_time, stack, stkptr)
 		}
 
 		if (add_dir_entry(word, list, &last) != 0) {
+			/*
+			 * XXX - if we've gotten any entries, *error
+			 * will be zeroed out.  In addition, nobody
+			 * checks our return value in any case.
+			 */
 			*error = ENOMEM;
+			nserr = __NSW_UNAVAIL;
 			goto done;
 		}
 		assert(last != NULL);
@@ -362,10 +366,21 @@ loadmaster_files(mastermap, defopts, stack, stkptr)
 	while ((line = get_line(fp, fname, linebuf,
 				sizeof (linebuf))) != NULL) {
 		unquote(line, lineq);
-		if (macro_expand("", line, lineq, LINESZ)) {
+		switch (macro_expand("", line, lineq, LINESZ)) {
+
+		case MEXPAND_OK:
+			break;
+
+		case MEXPAND_LINE_TOO_LONG:
 			syslog(LOG_ERR,
 				"map %s: line too long (max %d chars)",
 				mastermap, LINESZ - 1);
+			continue;
+
+		case MEXPAND_VARNAME_TOO_LONG:
+			syslog(LOG_ERR,
+				"map %s: variable name too long",
+				mastermap);
 			continue;
 		}
 		dir = line;

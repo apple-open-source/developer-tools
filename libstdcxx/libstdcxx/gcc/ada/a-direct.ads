@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 2004 Free Software Foundation, Inc.               --
+--          Copyright (C) 2004-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- This specification is derived for use with GNAT from AI-00248,  which is --
 -- expected to be a part of a future expected revised Ada Reference Manual. --
@@ -21,8 +21,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -178,8 +178,9 @@ package Ada.Directories is
    --  and form given by Form, or copying of the file with the name given by
    --  Source_Name (in the absence of Name_Error).
 
-
-   --  File and directory name operations:
+   ----------------------------------------
+   -- File and directory name operations --
+   ----------------------------------------
 
    function Full_Name (Name : String) return String;
    --  Returns the full name corresponding to the file name specified by Name.
@@ -231,15 +232,16 @@ package Ada.Directories is
    --  Name is not a possible simple name (if Extension is null) or base name
    --  (if Extension is non-null).
 
-
-   --  File and directory queries:
+   --------------------------------
+   -- File and directory queries --
+   --------------------------------
 
    type File_Kind is (Directory, Ordinary_File, Special_File);
    --  The type File_Kind represents the kind of file represented by an
    --  external file or directory.
 
    type File_Size is range 0 .. Long_Long_Integer'Last;
-   --  The type File_Size represents the size of an external file.
+   --  The type File_Size represents the size of an external file
 
    function Exists (Name : String) return Boolean;
    --  Returns True if external file represented by Name exists, and False
@@ -304,10 +306,10 @@ package Ada.Directories is
    --  Starts a search in the directory entry in the directory named by
    --  Directory for entries matching Pattern. Pattern represents a file name
    --  matching pattern. If Pattern is null, all items in the directory are
-   --  matched; otherwise, the interpretation of Pattern is
-   --  implementation-defined. Only items which match Filter will be returned.
-   --  After a successful call on Start_Search, the object Search may have
-   --  entries available, but it may have no entries available if no files or
+   --  matched; otherwise, the interpretation of Pattern is implementation-
+   --  defined. Only items which match Filter will be returned. After a
+   --  successful call on Start_Search, the object Search may have entries
+   --  available, but it may have no entries available if no files or
    --  directories match Pattern and Filter. The exception Name_Error is
    --  propagated if the string given by Directory does not identify an
    --  existing directory, or if Pattern does not allow the identification of
@@ -317,7 +319,10 @@ package Ada.Directories is
 
    procedure End_Search (Search : in out Search_Type);
    --  Ends the search represented by Search. After a successful call on
-   --  End_Search, the object Search will have no entries available.
+   --  End_Search, the object Search will have no entries available. Note
+   --  that is is not necessary to call End_Search if the call to Start_Search
+   --  was unsuccessful and raised an exception (but it is harmless to make
+   --  the call in this case)>
 
    function More_Entries (Search : Search_Type) return Boolean;
    --  Returns True if more entries are available to be returned by a call
@@ -400,19 +405,16 @@ private
 
    --  Search_Type need to be a controlled type, because it includes component
    --  of type Dir_Type (in GNAT.Directory_Operations) that need to be closed
-   --  (if opened) during finalization.
-   --  The component need to be an access value, because Search_Data is not
-   --  fully defined in the spec.
+   --  (if opened) during finalization. The component need to be an access
+   --  value, because Search_Data is not fully defined in the spec.
 
    type Search_Type is new Ada.Finalization.Controlled with record
       Value : Search_Ptr;
    end record;
 
    procedure Finalize (Search : in out Search_Type);
-   --  Close the directory, if opened, and deallocate Value.
+   --  Close the directory, if opened, and deallocate Value
 
    procedure End_Search (Search : in out Search_Type) renames Finalize;
 
 end Ada.Directories;
-
-

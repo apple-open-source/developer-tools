@@ -1,9 +1,35 @@
+2009-06-16  Caroline Tice  <ctice@apple.com>
+
+        * configure.host (HDEFINES):   Add -D_DARWIN_UNLIMITED_STREAMS to
+        HDEFINES apple-darwin systems.
+
+2009-01-26  Jim Ingham  <jingham@apple.com>
+
+	* mach-o.c (bfd_mach_o_scan_start_address): Don't return a start
+	address for something that's not an executable.  You can't set the
+	start to be something outside the main executable.
+	
+2008-10-20  Jason Molenda  (jmolenda@apple.com)
+
+	* opncls.c (bfd_fopen): Mark bfd files as close-on-exec so we don't
+	leak them into the inferior process.
+
 2008-10-17  Jason Molenda  (jmolenda@apple.com)
 
 	* mach-o.h (bfd_mach_o_load_command_type): Add BFD_MACH_O_LC_DYLD_INFO
 	and BFD_MACH_O_LC_DYLD_INFO_ONLY.
 	* mach-o.c (bfd_mach_o_write_contents): Ignore them.
 	(bfd_mach_o_scan_read_command): Ignore them.
+
+2008-10-07  Jason Molenda  (jmolenda@apple.com)
+
+	* mach-o.h (bfd_mach_o_filetype): Add entries for MH_DSYM and
+	MH_BUNDLE_KEXT.
+
+2008-10-03  Jason Molenda  (jmolenda@apple.com)
+
+	* cache.c (bfd_cache_lookup_worker): Print the name of the file
+	that has gone away before aborting.
 
 2008-08-20  Jason Molenda  (jmolenda@apple.com)
 
@@ -15,6 +41,39 @@
 
 	* mach-o.c (bfd_mach_o_core_file_matches_executable_p): compare the
 	cputypes of the core files & return false if they don't match.
+	
+2008-07-22  Jason Molenda  (jmolenda@apple.com)
+
+	* config.bfd: Put x86_64 support patch back in.
+
+2008-06-27  Jason Molenda  (jmolenda@apple.com)
+
+	* archures.c: Update to FSF gdb sources from 2007-07-02.
+	* bfd-in2.h: Ditto.
+	* bfd-in.h: Regenerated.
+	* cpu-arm.c: Ditto.
+
+2008-06-26  Jason Molenda  (jmolenda@apple.com)
+
+	* config.bfd: Remove recognition of x86_64 so we don't build for this
+	until it is fully working.
+
+2008-06-26  Jason Molenda  (jmolenda@apple.com)
+
+	* mach-o.c (bfd_mach_o_scan_read_dysymtab_symbol): Correct expression
+	to mask off flag bits from the indirect symbol name index.
+
+2008-06-16  Jason Molenda  (jmolenda@apple.com)
+
+	* config.bfd: Recognize x86_64 arch.
+	* mach-o.c (bfd_mach_o_scan_read_dysymtab_symbol): Strip off the
+	indirect symbol bit flags before treating this as an index.
+	* po/Make-in: Fix shell typeo.
+
+2008-05-20  Jason Molenda  (jmolenda@apple.com)
+
+	* mach-o.c (bfd_mach_o_make_bfd_section): The section types are
+	constants, not bitfield values.
 
 2008-04-28  Jim Ingham  <jingham@apple.com>
 

@@ -22,6 +22,13 @@
 <a href="../ko/misc/rewriteguide.html" hreflang="ko" rel="alternate" title="Korean">&nbsp;ko&nbsp;</a></p>
 </div>
 
+
+    <div class="warning">
+     <p>This document is obsolete. It has been replaced with a
+     new <a href="../rewrite/">Rewrite Guide</a>.</p>
+    </div>
+
+
     <div class="note">
       <p>Originally written by<br />
       <cite>Ralf S. Engelschall &lt;rse@apache.org&gt;</cite><br />
@@ -121,7 +128,7 @@
 
 <div class="example"><pre>
 RewriteRule   ^/<strong>~</strong>([^/]+)/?(.*)    /<strong>u</strong>/$1/$2  [<strong>R</strong>]
-RewriteRule   ^/([uge])/(<strong>[^/]+</strong>)$  /$1/$2<strong>/</strong>   [<strong>R</strong>]
+RewriteRule   ^/u/(<strong>[^/]+</strong>)$  /$1/$2<strong>/</strong>   [<strong>R</strong>]
 </pre></div>
         </dd>
       </dl>
@@ -135,19 +142,23 @@ RewriteRule   ^/([uge])/(<strong>[^/]+</strong>)$  /$1/$2<strong>/</strong>   [<
       <dl>
         <dt>Description:</dt>
 
-        <dd>...</dd>
+        <dd>The goal of this rule is to force the use of a particular
+        hostname, in preference to other hostnames which may be used to
+        reach the same site. For example, if you wish to force the use
+        of <strong>www.example.com</strong> instead of
+        <strong>example.com</strong>, you might use a variant of the
+        following recipe.</dd>
+
 
         <dt>Solution:</dt>
 
         <dd>
 <div class="example"><pre>
-RewriteCond %{HTTP_HOST}   !^fully\.qualified\.domain\.name [NC]
+# To force the use of 
+RewriteEngine On
+RewriteCond %{HTTP_HOST}   !^www\.example\.com [NC]
 RewriteCond %{HTTP_HOST}   !^$
-RewriteCond %{SERVER_PORT} !^80$
-RewriteRule ^/(.*)         http://fully.qualified.domain.name:%{SERVER_PORT}/$1 [L,R]
-RewriteCond %{HTTP_HOST}   !^fully\.qualified\.domain\.name [NC]
-RewriteCond %{HTTP_HOST}   !^$
-RewriteRule ^/(.*)         http://fully.qualified.domain.name/$1 [L,R]
+RewriteRule ^/(.*)         http://www.example.com/$1 [L,R]
 </pre></div>
         </dd>
       </dl>
@@ -2093,6 +2104,6 @@ while (&lt;&gt;) {
 <p><span>Available Languages: </span><a href="../en/misc/rewriteguide.html" title="English">&nbsp;en&nbsp;</a> |
 <a href="../ko/misc/rewriteguide.html" hreflang="ko" rel="alternate" title="Korean">&nbsp;ko&nbsp;</a></p>
 </div><div id="footer">
-<p class="apache">Copyright 2007 The Apache Software Foundation.<br />Licensed under the <a href="http://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a>.</p>
+<p class="apache">Copyright 2008 The Apache Software Foundation.<br />Licensed under the <a href="http://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a>.</p>
 <p class="menu"><a href="../mod/">Modules</a> | <a href="../mod/directives.html">Directives</a> | <a href="../faq/">FAQ</a> | <a href="../glossary.html">Glossary</a> | <a href="../sitemap.html">Sitemap</a></p></div>
 </body></html>

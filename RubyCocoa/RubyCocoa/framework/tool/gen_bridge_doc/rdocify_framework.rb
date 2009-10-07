@@ -30,6 +30,7 @@ def get_reference_files(framework_path)
     class_path = File.join(classes_dir, f)
     if File.directory?(class_path) and not f == '.' and not f == '..'
       ref_dir_path = File.join(class_path, 'Reference/')
+      ref_dir_path = File.join(class_path, 'Introduction/') unless File.exists?(ref_dir_path)
       Dir.entries(ref_dir_path).each do |rf|
         if File.extname(rf) == '.html'
           ref_path = File.join(ref_dir_path, rf)
@@ -169,17 +170,22 @@ success = 0
 skipped = 0
 reference_files.each do |ref|
   puts "Processing reference file: #{ref[:name]}"
-  cocoa_ref_parser = CocoaRef::Parser.new(ref[:path], framework_name)
-  if cocoa_ref_parser.empty?
+  begin
+    cocoa_ref_parser = CocoaRef::Parser.new(ref[:path], framework_name)
+    if cocoa_ref_parser.empty?
+      skipped = skipped.next
+      puts 'Skipping because there was no info found of our interest in the reference file...'
+    elsif not cocoa_ref_parser.errors? or output_files_with_errors
+      success = success.next
+      puts "      Writing output file: #{cocoa_ref_parser.class_def.output_filename}"
+      cocoa_ref_parser.to_rb_file(output_dir)
+    else
+      skipped = skipped.next
+      puts 'Skipping because there were errors while parsing...'
+    end
+  rescue CocoaRef::HpricotProxy::DeprecatedError
     skipped = skipped.next
-    puts 'Skipping because there was no info found of our interest in the reference file...'
-  elsif not cocoa_ref_parser.errors? or output_files_with_errors
-    success = success.next
-    puts "      Writing output file: #{cocoa_ref_parser.class_def.output_filename}"
-    cocoa_ref_parser.to_rb_file(output_dir)
-  else
-    skipped = skipped.next
-    puts 'Skipping because there were errors while parsing...'
+    puts 'Skipping because this is a deprecated class...'
   end
 end
 

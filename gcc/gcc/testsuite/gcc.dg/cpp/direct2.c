@@ -4,15 +4,15 @@
 /* Test of prohibition on directives which result from macro expansion.
    See also direct2s.c */
 
-/* { dg-do compile } */
-
+/* { dg-do compile } */ /* APPLE LOCAL CW asm blocks 6338079 */
+/* { dg-options "-ansi -pedantic-errors -fno-asm-blocks" } */
 #define HASH #
 #define HASHDEFINE #define
 #define HASHINCLUDE #include
 
 HASH include "somerandomfile" /*{ dg-error "stray" "non-include" }*/
 /*{ dg-bogus "No such" "don't execute non-include" { target *-*-* } 13 }*/
-int resync_parser_1; /*{ dg-error "parse|syntax|expected" "" }*/
+int resync_parser_1; /*{ dg-error "parse|syntax|expected" "" { target *-*-* } 13 }*/
 
 HASHINCLUDE <somerandomfile> /*{ dg-error "stray|expected" "non-include 2" }*/
 /*{ dg-bogus "No such" "don't execute non-include 2" { target *-*-* } 17 }*/

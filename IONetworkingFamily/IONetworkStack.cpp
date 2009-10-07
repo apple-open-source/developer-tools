@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2000 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 1998-2008 Apple Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -20,8 +20,6 @@
  * @APPLE_LICENSE_HEADER_END@
  */
 /*
- * Copyright (c) 1999 Apple Computer, Inc.  All rights reserved. 
- *
  * IONetworkStack.cpp - An IOKit proxy for the BSD network stack.
  *
  * HISTORY
@@ -801,7 +799,7 @@ void IONetworkStack::registerBSDInterface( IONetworkInterface * netif )
     // Add a kIOBSDNameKey property to the interface AFTER the interface
     // has registered with DLIL. The order is very important to avoid
     // rooting from an interface which is not yet known by BSD.
-    sprintf(ifname, "%s%d", netif->getNamePrefix(), netif->getUnitNumber());
+    snprintf(ifname, sizeof(ifname), "%s%d", netif->getNamePrefix(), netif->getUnitNumber());
     netif->setProperty(kIOBSDNameKey, ifname);
 
     // Update state bits and detect for untimely interface termination.
@@ -1161,6 +1159,12 @@ IOReturn IONetworkStackUserClient::clientDied()
 
 IOReturn IONetworkStackUserClient::setProperties( OSObject * properties )
 {
+    if (kIOReturnSuccess != IOUserClient::clientHasPrivilege(
+        current_task(), kIOClientPrivilegeAdministrator))
+    {
+        return kIOReturnNotPrivileged;
+    }
+
     return ( _provider ) ? _provider->setProperties( properties )
                          : kIOReturnNotReady;
 }

@@ -2,11 +2,12 @@
 --                                                                          --
 --                         GNAT LIBRARY COMPONENTS                          --
 --                                                                          --
---            ADA.CONTAINERS.RED_BLACK_TREES.GENERIC_OPERATIONS             --
+--        A D A . C O N T A I N E R S . R E D _ B L A C K _ T R E E S .     --
+--                    G E N E R I C _ O P E R A T I O N S                   --
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---             Copyright (C) 2004 Free Software Foundation, Inc.            --
+--          Copyright (C) 2004-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -20,8 +21,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -32,6 +33,8 @@
 --                                                                          --
 -- This unit was originally developed by Matthew J Heaney.                  --
 ------------------------------------------------------------------------------
+
+with System;  use type System.Address;
 
 package body Ada.Containers.Red_Black_Trees.Generic_Operations is
 
@@ -46,91 +49,91 @@ package body Ada.Containers.Red_Black_Trees.Generic_Operations is
    procedure Left_Rotate  (Tree : in out Tree_Type; X : Node_Access);
    procedure Right_Rotate (Tree : in out Tree_Type; Y : Node_Access);
 
-   ---------------------
-   -- Check_Invariant --
-   ---------------------
+--     ---------------------
+--     -- Check_Invariant --
+--     ---------------------
 
-   procedure Check_Invariant (Tree : Tree_Type) is
-      Root : constant Node_Access := Tree.Root;
-
-      function Check (Node : Node_Access) return Natural;
-
-      -----------
-      -- Check --
-      -----------
-
-      function Check (Node : Node_Access) return Natural is
-      begin
-         if Node = Null_Node then
-            return 0;
-         end if;
-
-         if Color (Node) = Red then
-            declare
-               L : constant Node_Access := Left (Node);
-            begin
-               pragma Assert (L = Null_Node or else Color (L) = Black);
-               null;
-            end;
-
-            declare
-               R : constant Node_Access := Right (Node);
-            begin
-               pragma Assert (R = Null_Node or else Color (R) = Black);
-               null;
-            end;
-
-            declare
-               NL : constant Natural := Check (Left (Node));
-               NR : constant Natural := Check (Right (Node));
-            begin
-               pragma Assert (NL = NR);
-               return NL;
-            end;
-         end if;
-
-         declare
-            NL : constant Natural := Check (Left (Node));
-            NR : constant Natural := Check (Right (Node));
-         begin
-            pragma Assert (NL = NR);
-            return NL + 1;
-         end;
-      end Check;
-
-   --  Start of processing for Check_Invariant
-
-   begin
-      if Root = Null_Node then
-         pragma Assert (Tree.First = Null_Node);
-         pragma Assert (Tree.Last = Null_Node);
-         pragma Assert (Tree.Length = 0);
-         null;
-
-      else
-         pragma Assert (Color (Root) = Black);
-         pragma Assert (Tree.Length > 0);
-         pragma Assert (Tree.Root /= Null_Node);
-         pragma Assert (Tree.First /= Null_Node);
-         pragma Assert (Tree.Last /= Null_Node);
-         pragma Assert (Parent (Tree.Root) = Null_Node);
-         pragma Assert ((Tree.Length > 1)
-                           or else (Tree.First = Tree.Last
-                                      and Tree.First = Tree.Root));
-         pragma Assert (Left (Tree.First) = Null_Node);
-         pragma Assert (Right (Tree.Last) = Null_Node);
-
-         declare
-            L  : constant Node_Access := Left (Root);
-            R  : constant Node_Access := Right (Root);
-            NL : constant Natural := Check (L);
-            NR : constant Natural := Check (R);
-         begin
-            pragma Assert (NL = NR);
-            null;
-         end;
-      end if;
-   end Check_Invariant;
+--     procedure Check_Invariant (Tree : Tree_Type) is
+--        Root : constant Node_Access := Tree.Root;
+--
+--        function Check (Node : Node_Access) return Natural;
+--
+--        -----------
+--        -- Check --
+--        -----------
+--
+--        function Check (Node : Node_Access) return Natural is
+--        begin
+--           if Node = null then
+--              return 0;
+--           end if;
+--
+--           if Color (Node) = Red then
+--              declare
+--                 L : constant Node_Access := Left (Node);
+--              begin
+--                 pragma Assert (L = null or else Color (L) = Black);
+--                 null;
+--              end;
+--
+--              declare
+--                 R : constant Node_Access := Right (Node);
+--              begin
+--                 pragma Assert (R = null or else Color (R) = Black);
+--                 null;
+--              end;
+--
+--              declare
+--                 NL : constant Natural := Check (Left (Node));
+--                 NR : constant Natural := Check (Right (Node));
+--              begin
+--                 pragma Assert (NL = NR);
+--                 return NL;
+--              end;
+--           end if;
+--
+--           declare
+--              NL : constant Natural := Check (Left (Node));
+--              NR : constant Natural := Check (Right (Node));
+--           begin
+--              pragma Assert (NL = NR);
+--              return NL + 1;
+--           end;
+--        end Check;
+--
+--     --  Start of processing for Check_Invariant
+--
+--     begin
+--        if Root = null then
+--           pragma Assert (Tree.First = null);
+--           pragma Assert (Tree.Last = null);
+--           pragma Assert (Tree.Length = 0);
+--           null;
+--
+--        else
+--           pragma Assert (Color (Root) = Black);
+--           pragma Assert (Tree.Length > 0);
+--           pragma Assert (Tree.Root /= null);
+--           pragma Assert (Tree.First /= null);
+--           pragma Assert (Tree.Last /= null);
+--           pragma Assert (Parent (Tree.Root) = null);
+--           pragma Assert ((Tree.Length > 1)
+--                             or else (Tree.First = Tree.Last
+--                                        and Tree.First = Tree.Root));
+--           pragma Assert (Left (Tree.First) = null);
+--           pragma Assert (Right (Tree.Last) = null);
+--
+--           declare
+--              L  : constant Node_Access := Left (Root);
+--              R  : constant Node_Access := Right (Root);
+--              NL : constant Natural := Check (L);
+--              NR : constant Natural := Check (R);
+--           begin
+--              pragma Assert (NL = NR);
+--              null;
+--           end;
+--        end if;
+--     end Check_Invariant;
 
    ------------------
    -- Delete_Fixup --
@@ -157,18 +160,18 @@ package body Ada.Containers.Red_Black_Trees.Generic_Operations is
                W := Right (Parent (X));
             end if;
 
-            if (Left (W)  = Null_Node or else Color (Left (W)) = Black)
+            if (Left (W)  = null or else Color (Left (W)) = Black)
               and then
-               (Right (W) = Null_Node or else Color (Right (W)) = Black)
+               (Right (W) = null or else Color (Right (W)) = Black)
             then
                Set_Color (W, Red);
                X := Parent (X);
 
             else
-               if Right (W) = Null_Node
+               if Right (W) = null
                  or else Color (Right (W)) = Black
                then
-                  if Left (W) /= Null_Node then
+                  if Left (W) /= null then
                      Set_Color (Left (W), Black);
                   end if;
 
@@ -196,16 +199,16 @@ package body Ada.Containers.Red_Black_Trees.Generic_Operations is
                W := Left (Parent (X));
             end if;
 
-            if (Left (W)  = Null_Node or else Color (Left (W)) = Black)
+            if (Left (W)  = null or else Color (Left (W)) = Black)
                   and then
-               (Right (W) = Null_Node or else Color (Right (W)) = Black)
+               (Right (W) = null or else Color (Right (W)) = Black)
             then
                Set_Color (W, Red);
                X := Parent (X);
 
             else
-               if Left (W) = Null_Node or else Color (Left (W)) = Black then
-                  if Right (W) /= Null_Node then
+               if Left (W) = null or else Color (Left (W)) = Black then
+                  if Right (W) /= null then
                      Set_Color (Right (W), Black);
                   end if;
 
@@ -239,28 +242,33 @@ package body Ada.Containers.Red_Black_Trees.Generic_Operations is
       X, Y : Node_Access;
 
       Z : constant Node_Access := Node;
-      pragma Assert (Z /= Null_Node);
+      pragma Assert (Z /= null);
 
    begin
-      pragma Assert (Tree.Length > 0);
-      pragma Assert (Tree.Root /= Null_Node);
-      pragma Assert (Tree.First /= Null_Node);
-      pragma Assert (Tree.Last /= Null_Node);
-      pragma Assert (Parent (Tree.Root) = Null_Node);
-      pragma Assert ((Tree.Length > 1)
-                        or else (Tree.First = Tree.Last
-                                   and then Tree.First = Tree.Root));
-      pragma Assert ((Left (Node) = Null_Node)
-                        or else (Parent (Left (Node)) = Node));
-      pragma Assert ((Right (Node) = Null_Node)
-                        or else (Parent (Right (Node)) = Node));
-      pragma Assert (((Parent (Node) = Null_Node) and then (Tree.Root = Node))
-                        or else ((Parent (Node) /= Null_Node) and then
-                                  ((Left (Parent (Node)) = Node)
-                                     or else (Right (Parent (Node)) = Node))));
+      if Tree.Busy > 0 then
+         raise Program_Error with
+           "attempt to tamper with cursors (container is busy)";
+      end if;
 
-      if Left (Z) = Null_Node then
-         if Right (Z) = Null_Node then
+--    pragma Assert (Tree.Length > 0);
+--    pragma Assert (Tree.Root /= null);
+--    pragma Assert (Tree.First /= null);
+--    pragma Assert (Tree.Last /= null);
+--    pragma Assert (Parent (Tree.Root) = null);
+--    pragma Assert ((Tree.Length > 1)
+--                      or else (Tree.First = Tree.Last
+--                                 and then Tree.First = Tree.Root));
+--    pragma Assert ((Left (Node) = null)
+--                      or else (Parent (Left (Node)) = Node));
+--    pragma Assert ((Right (Node) = null)
+--                      or else (Parent (Right (Node)) = Node));
+--    pragma Assert (((Parent (Node) = null) and then (Tree.Root = Node))
+--                      or else ((Parent (Node) /= null) and then
+--                                ((Left (Parent (Node)) = Node)
+--                                   or else (Right (Parent (Node)) = Node))));
+
+      if Left (Z) = null then
+         if Right (Z) = null then
             if Z = Tree.First then
                Tree.First := Parent (Z);
             end if;
@@ -273,18 +281,18 @@ package body Ada.Containers.Red_Black_Trees.Generic_Operations is
                Delete_Fixup (Tree, Z);
             end if;
 
-            pragma Assert (Left (Z) = Null_Node);
-            pragma Assert (Right (Z) = Null_Node);
+            pragma Assert (Left (Z) = null);
+            pragma Assert (Right (Z) = null);
 
             if Z = Tree.Root then
                pragma Assert (Tree.Length = 1);
-               pragma Assert (Parent (Z) = Null_Node);
-               Tree.Root := Null_Node;
+               pragma Assert (Parent (Z) = null);
+               Tree.Root := null;
             elsif Z = Left (Parent (Z)) then
-               Set_Left (Parent (Z), Null_Node);
+               Set_Left (Parent (Z), null);
             else
                pragma Assert (Z = Right (Parent (Z)));
-               Set_Right (Parent (Z), Null_Node);
+               Set_Right (Parent (Z), null);
             end if;
 
          else
@@ -312,7 +320,7 @@ package body Ada.Containers.Red_Black_Trees.Generic_Operations is
             end if;
          end if;
 
-      elsif Right (Z) = Null_Node then
+      elsif Right (Z) = null then
          pragma Assert (Z /= Tree.First);
 
          X := Left (Z);
@@ -341,11 +349,11 @@ package body Ada.Containers.Red_Black_Trees.Generic_Operations is
          pragma Assert (Z /= Tree.Last);
 
          Y := Next (Z);
-         pragma Assert (Left (Y) = Null_Node);
+         pragma Assert (Left (Y) = null);
 
          X := Right (Y);
 
-         if X = Null_Node then
+         if X = null then
             if Y = Left (Parent (Y)) then
                pragma Assert (Parent (Y) /= Z);
                Delete_Swap (Tree, Z, Y);
@@ -369,8 +377,8 @@ package body Ada.Containers.Red_Black_Trees.Generic_Operations is
                Set_Parent (Left (Y), Y);
                Set_Right (Y, Z);
                Set_Parent (Z, Y);
-               Set_Left (Z, Null_Node);
-               Set_Right (Z, Null_Node);
+               Set_Left (Z, null);
+               Set_Right (Z, null);
 
                declare
                   Y_Color : constant Color_Type := Color (Y);
@@ -384,14 +392,14 @@ package body Ada.Containers.Red_Black_Trees.Generic_Operations is
                Delete_Fixup (Tree, Z);
             end if;
 
-            pragma Assert (Left (Z) = Null_Node);
-            pragma Assert (Right (Z) = Null_Node);
+            pragma Assert (Left (Z) = null);
+            pragma Assert (Right (Z) = null);
 
             if Z = Right (Parent (Z)) then
-               Set_Right (Parent (Z), Null_Node);
+               Set_Right (Parent (Z), null);
             else
                pragma Assert (Z = Left (Parent (Z)));
-               Set_Left (Parent (Z), Null_Node);
+               Set_Left (Parent (Z), null);
             end if;
 
          else
@@ -467,19 +475,135 @@ package body Ada.Containers.Red_Black_Trees.Generic_Operations is
          Set_Left (Parent (Y), Y);
       end if;
 
-      if Right (Y) /= Null_Node then
+      if Right (Y) /= null then
          Set_Parent (Right (Y), Y);
       end if;
 
-      if Left (Y) /= Null_Node then
+      if Left (Y) /= null then
          Set_Parent (Left (Y), Y);
       end if;
 
       Set_Parent (Z, Y_Parent);
       Set_Color (Z, Y_Color);
-      Set_Left (Z, Null_Node);
-      Set_Right (Z, Null_Node);
+      Set_Left (Z, null);
+      Set_Right (Z, null);
    end Delete_Swap;
+
+   --------------------
+   -- Generic_Adjust --
+   --------------------
+
+   procedure Generic_Adjust (Tree : in out Tree_Type) is
+      N    : constant Count_Type := Tree.Length;
+      Root : constant Node_Access := Tree.Root;
+
+   begin
+      if N = 0 then
+         pragma Assert (Root = null);
+         pragma Assert (Tree.Busy = 0);
+         pragma Assert (Tree.Lock = 0);
+         return;
+      end if;
+
+      Tree.Root := null;
+      Tree.First := null;
+      Tree.Last := null;
+      Tree.Length := 0;
+
+      Tree.Root := Copy_Tree (Root);
+      Tree.First := Min (Tree.Root);
+      Tree.Last := Max (Tree.Root);
+      Tree.Length := N;
+   end Generic_Adjust;
+
+   -------------------
+   -- Generic_Clear --
+   -------------------
+
+   procedure Generic_Clear (Tree : in out Tree_Type) is
+      Root : Node_Access := Tree.Root;
+   begin
+      if Tree.Busy > 0 then
+         raise Program_Error with
+           "attempt to tamper with cursors (container is busy)";
+      end if;
+
+      Tree := (First  => null,
+               Last   => null,
+               Root   => null,
+               Length => 0,
+               Busy   => 0,
+               Lock   => 0);
+
+      Delete_Tree (Root);
+   end Generic_Clear;
+
+   -----------------------
+   -- Generic_Copy_Tree --
+   -----------------------
+
+   function Generic_Copy_Tree (Source_Root : Node_Access) return Node_Access is
+      Target_Root : Node_Access := Copy_Node (Source_Root);
+      P, X        : Node_Access;
+
+   begin
+      if Right (Source_Root) /= null then
+         Set_Right
+           (Node  => Target_Root,
+            Right => Generic_Copy_Tree (Right (Source_Root)));
+
+         Set_Parent
+           (Node   => Right (Target_Root),
+            Parent => Target_Root);
+      end if;
+
+      P := Target_Root;
+
+      X := Left (Source_Root);
+      while X /= null loop
+         declare
+            Y : constant Node_Access := Copy_Node (X);
+         begin
+            Set_Left (Node => P, Left => Y);
+            Set_Parent (Node => Y, Parent => P);
+
+            if Right (X) /= null then
+               Set_Right
+                 (Node  => Y,
+                  Right => Generic_Copy_Tree (Right (X)));
+
+               Set_Parent
+                 (Node   => Right (Y),
+                  Parent => Y);
+            end if;
+
+            P := Y;
+            X := Left (X);
+         end;
+      end loop;
+
+      return Target_Root;
+   exception
+      when others =>
+         Delete_Tree (Target_Root);
+         raise;
+   end Generic_Copy_Tree;
+
+   -------------------------
+   -- Generic_Delete_Tree --
+   -------------------------
+
+   procedure Generic_Delete_Tree (X : in out Node_Access) is
+      Y : Node_Access;
+   begin
+      while X /= null loop
+         Y := Right (X);
+         Generic_Delete_Tree (Y);
+         Y := Left (X);
+         Free (X);
+         X := Y;
+      end loop;
+   end Generic_Delete_Tree;
 
    -------------------
    -- Generic_Equal --
@@ -490,13 +614,17 @@ package body Ada.Containers.Red_Black_Trees.Generic_Operations is
       R_Node : Node_Access;
 
    begin
+      if Left'Address = Right'Address then
+         return True;
+      end if;
+
       if Left.Length /= Right.Length then
          return False;
       end if;
 
       L_Node := Left.First;
       R_Node := Right.First;
-      while L_Node /= Null_Node loop
+      while L_Node /= null loop
          if not Is_Equal (L_Node, R_Node) then
             return False;
          end if;
@@ -522,7 +650,7 @@ package body Ada.Containers.Red_Black_Trees.Generic_Operations is
       procedure Iterate (P : Node_Access) is
          X : Node_Access := P;
       begin
-         while X /= Null_Node loop
+         while X /= null loop
             Iterate (Left (X));
             Process (X);
             X := Right (X);
@@ -536,23 +664,56 @@ package body Ada.Containers.Red_Black_Trees.Generic_Operations is
    end Generic_Iteration;
 
    ------------------
+   -- Generic_Move --
+   ------------------
+
+   procedure Generic_Move (Target, Source : in out Tree_Type) is
+   begin
+      if Target'Address = Source'Address then
+         return;
+      end if;
+
+      if Source.Busy > 0 then
+         raise Program_Error with
+           "attempt to tamper with cursors (container is busy)";
+      end if;
+
+      Clear (Target);
+
+      Target := Source;
+
+      Source := (First  => null,
+                 Last   => null,
+                 Root   => null,
+                 Length => 0,
+                 Busy   => 0,
+                 Lock   => 0);
+   end Generic_Move;
+
+   ------------------
    -- Generic_Read --
    ------------------
 
-   procedure Generic_Read (Tree : in out Tree_Type; N : Count_Type) is
-
-      pragma Assert (Tree.Length = 0);
-      --  Clear and back node reinit was done by caller
+   procedure Generic_Read
+     (Stream : access Root_Stream_Type'Class;
+      Tree   : in out Tree_Type)
+   is
+      N : Count_Type'Base;
 
       Node, Last_Node : Node_Access;
 
    begin
+      Clear (Tree);
+
+      Count_Type'Base'Read (Stream, N);
+      pragma Assert (N >= 0);
+
       if N = 0 then
          return;
       end if;
 
-      Node := New_Node;
-      pragma Assert (Node /= Null_Node);
+      Node := Read_Node (Stream);
+      pragma Assert (Node /= null);
       pragma Assert (Color (Node) = Red);
 
       Set_Color (Node, Black);
@@ -567,8 +728,8 @@ package body Ada.Containers.Red_Black_Trees.Generic_Operations is
          Last_Node := Node;
          pragma Assert (Last_Node = Tree.Last);
 
-         Node := New_Node;
-         pragma Assert (Node /= Null_Node);
+         Node := Read_Node (Stream);
+         pragma Assert (Node /= null);
          pragma Assert (Color (Node) = Red);
 
          Set_Right (Node => Last_Node, Right => Node);
@@ -594,7 +755,7 @@ package body Ada.Containers.Red_Black_Trees.Generic_Operations is
       procedure Iterate (P : Node_Access) is
          X : Node_Access := P;
       begin
-         while X /= Null_Node loop
+         while X /= null loop
             Iterate (Right (X));
             Process (X);
             X := Left (X);
@@ -607,6 +768,36 @@ package body Ada.Containers.Red_Black_Trees.Generic_Operations is
       Iterate (Tree.Root);
    end Generic_Reverse_Iteration;
 
+   -------------------
+   -- Generic_Write --
+   -------------------
+
+   procedure Generic_Write
+     (Stream : access Root_Stream_Type'Class;
+      Tree   : Tree_Type)
+   is
+      procedure Process (Node : Node_Access);
+      pragma Inline (Process);
+
+      procedure Iterate is
+         new Generic_Iteration (Process);
+
+      -------------
+      -- Process --
+      -------------
+
+      procedure Process (Node : Node_Access) is
+      begin
+         Write_Node (Stream, Node);
+      end Process;
+
+   --  Start of processing for Generic_Write
+
+   begin
+      Count_Type'Base'Write (Stream, Tree.Length);
+      Iterate (Tree);
+   end Generic_Write;
+
    -----------------
    -- Left_Rotate --
    -----------------
@@ -616,12 +807,12 @@ package body Ada.Containers.Red_Black_Trees.Generic_Operations is
       --  CLR p266 ???
 
       Y : constant Node_Access := Right (X);
-      pragma Assert (Y /= Null_Node);
+      pragma Assert (Y /= null);
 
    begin
       Set_Right (X, Left (Y));
 
-      if Left (Y) /= Null_Node then
+      if Left (Y) /= null then
          Set_Parent (Left (Y), X);
       end if;
 
@@ -655,7 +846,7 @@ package body Ada.Containers.Red_Black_Trees.Generic_Operations is
       loop
          Y := Right (X);
 
-         if Y = Null_Node then
+         if Y = null then
             return X;
          end if;
 
@@ -678,30 +869,13 @@ package body Ada.Containers.Red_Black_Trees.Generic_Operations is
       loop
          Y := Left (X);
 
-         if Y = Null_Node then
+         if Y = null then
             return X;
          end if;
 
          X := Y;
       end loop;
    end Min;
-
-   ----------
-   -- Move --
-   ----------
-
-   procedure Move (Target, Source : in out Tree_Type) is
-   begin
-      if Target.Length > 0 then
-         raise Constraint_Error;
-      end if;
-
-      Target := Source;
-      Source := (First => Null_Node,
-                 Last  => Null_Node,
-                 Root  => Null_Node,
-                 Length => 0);
-   end Move;
 
    ----------
    -- Next --
@@ -711,11 +885,11 @@ package body Ada.Containers.Red_Black_Trees.Generic_Operations is
    begin
       --  CLR p249 ???
 
-      if Node = Null_Node then
-         return Null_Node;
+      if Node = null then
+         return null;
       end if;
 
-      if Right (Node) /= Null_Node then
+      if Right (Node) /= null then
          return Min (Right (Node));
       end if;
 
@@ -724,7 +898,7 @@ package body Ada.Containers.Red_Black_Trees.Generic_Operations is
          Y : Node_Access := Parent (Node);
 
       begin
-         while Y /= Null_Node
+         while Y /= null
            and then X = Right (Y)
          loop
             X := Y;
@@ -749,11 +923,11 @@ package body Ada.Containers.Red_Black_Trees.Generic_Operations is
 
    function Previous (Node : Node_Access) return Node_Access is
    begin
-      if Node = Null_Node then
-         return Null_Node;
+      if Node = null then
+         return null;
       end if;
 
-      if Left (Node) /= Null_Node then
+      if Left (Node) /= null then
          return Max (Left (Node));
       end if;
 
@@ -762,7 +936,7 @@ package body Ada.Containers.Red_Black_Trees.Generic_Operations is
          Y : Node_Access := Parent (Node);
 
       begin
-         while Y /= Null_Node
+         while Y /= null
            and then X = Left (Y)
          loop
             X := Y;
@@ -792,7 +966,7 @@ package body Ada.Containers.Red_Black_Trees.Generic_Operations is
       --  CLR p.268 ???
 
       X : Node_Access := Node;
-      pragma Assert (X /= Null_Node);
+      pragma Assert (X /= null);
       pragma Assert (Color (X) = Red);
 
       Y : Node_Access;
@@ -802,7 +976,7 @@ package body Ada.Containers.Red_Black_Trees.Generic_Operations is
          if Parent (X) = Left (Parent (Parent (X))) then
             Y := Right (Parent (Parent (X)));
 
-            if Y /= Null_Node and then Color (Y) = Red then
+            if Y /= null and then Color (Y) = Red then
                Set_Color (Parent (X), Black);
                Set_Color (Y, Black);
                Set_Color (Parent (Parent (X)), Red);
@@ -824,7 +998,7 @@ package body Ada.Containers.Red_Black_Trees.Generic_Operations is
 
             Y := Left (Parent (Parent (X)));
 
-            if Y /= Null_Node and then Color (Y) = Red then
+            if Y /= null and then Color (Y) = Red then
                Set_Color (Parent (X), Black);
                Set_Color (Y, Black);
                Set_Color (Parent (Parent (X)), Red);
@@ -852,12 +1026,12 @@ package body Ada.Containers.Red_Black_Trees.Generic_Operations is
 
    procedure Right_Rotate (Tree : in out Tree_Type; Y : Node_Access) is
       X : constant Node_Access := Left (Y);
-      pragma Assert (X /= Null_Node);
+      pragma Assert (X /= null);
 
    begin
       Set_Left (Y, Right (X));
 
-      if Right (X) /= Null_Node then
+      if Right (X) /= null then
          Set_Parent (Right (X), Y);
       end if;
 
@@ -875,5 +1049,107 @@ package body Ada.Containers.Red_Black_Trees.Generic_Operations is
       Set_Right (X, Y);
       Set_Parent (Y, X);
    end Right_Rotate;
+
+   ---------
+   -- Vet --
+   ---------
+
+   function Vet (Tree : Tree_Type; Node : Node_Access) return Boolean is
+   begin
+      if Node = null then
+         return True;
+      end if;
+
+      if Parent (Node) = Node
+        or else Left (Node) = Node
+        or else Right (Node) = Node
+      then
+         return False;
+      end if;
+
+      if Tree.Length = 0
+        or else Tree.Root = null
+        or else Tree.First = null
+        or else Tree.Last = null
+      then
+         return False;
+      end if;
+
+      if Parent (Tree.Root) /= null then
+         return False;
+      end if;
+
+      if Left (Tree.First) /= null then
+         return False;
+      end if;
+
+      if Right (Tree.Last) /= null then
+         return False;
+      end if;
+
+      if Tree.Length = 1 then
+         if Tree.First /= Tree.Last
+           or else Tree.First /= Tree.Root
+         then
+            return False;
+         end if;
+
+         if Node /= Tree.First then
+            return False;
+         end if;
+
+         if Parent (Node) /= null
+           or else Left (Node) /= null
+           or else Right (Node) /= null
+         then
+            return False;
+         end if;
+
+         return True;
+      end if;
+
+      if Tree.First = Tree.Last then
+         return False;
+      end if;
+
+      if Tree.Length = 2 then
+         if Tree.First /= Tree.Root
+           and then Tree.Last /= Tree.Root
+         then
+            return False;
+         end if;
+
+         if Tree.First /= Node
+           and then Tree.Last /= Node
+         then
+            return False;
+         end if;
+      end if;
+
+      if Left (Node) /= null
+        and then Parent (Left (Node)) /= Node
+      then
+         return False;
+      end if;
+
+      if Right (Node) /= null
+        and then Parent (Right (Node)) /= Node
+      then
+         return False;
+      end if;
+
+      if Parent (Node) = null then
+         if Tree.Root /= Node then
+            return False;
+         end if;
+
+      elsif Left (Parent (Node)) /= Node
+        and then Right (Parent (Node)) /= Node
+      then
+         return False;
+      end if;
+
+      return True;
+   end Vet;
 
 end Ada.Containers.Red_Black_Trees.Generic_Operations;

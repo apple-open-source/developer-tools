@@ -225,7 +225,7 @@ dyld_lazy_dylib_stub_binding_helper:
  * The caller has pushed the address of the a lazy pointer to be filled in with
  * the value for the defined symbol
  *
- * sp+0        address of lazy pointer
+ * ip        address of lazy pointer
  * 
  * After the symbol has been resolved and the pointer filled in this is to pop
  * these arguments off the stack and jump to the address of the defined symbol.
@@ -238,13 +238,12 @@ dyld_lazy_dylib_stub_binding_helper:
 	stmfd	sp!, {r0,r1,r2,r3,r7,lr}	// save registers
 	add	r7, sp, #16			// point FP to previous FP
 
-	ldr	r0, [sp, #24]			// move address of lazy pointer to 1st parameter
+	mov	r0, ip				// move address of lazy pointer to 1st parameter
 						// call lazy_load_dylib(lazy_ptr)
 	bl	_lazy_load_dylib
 	mov	ip, r0				// move the symbol`s address into ip
 
 	ldmfd	sp!, {r0,r1,r2,r3,r7,lr}	// restore registers
-	add	sp, sp, #4			// remove meta-parameters
 
 	bx	ip				// jump to the symbol`s address that was bound
 
@@ -253,7 +252,8 @@ dyld_lazy_dylib_stub_binding_helper:
 
 
 
-
+// This code has be written to allow dead code stripping
+	.subsections_via_symbols
 
 
 

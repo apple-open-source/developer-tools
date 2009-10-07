@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1997-1998 Free Software Foundation, Inc.          --
+--          Copyright (C) 1997-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -139,6 +139,19 @@ package System.Vax_Float_Operations is
    function Lt_G (X, Y : G) return Boolean;
    --  Compares for X < Y
 
+   function Ne_F (X, Y : F) return Boolean;
+   function Ne_G (X, Y : G) return Boolean;
+   --  Compares for X /= Y
+
+   ----------------------------------
+   -- Routines for Valid Attribute --
+   ----------------------------------
+
+   function Valid_D (Arg : D) return Boolean;
+   function Valid_F (Arg : F) return Boolean;
+   function Valid_G (Arg : G) return Boolean;
+   --  Test whether Arg has a valid representation
+
    ----------------------
    -- Debug Procedures --
    ----------------------
@@ -209,5 +222,11 @@ private
    pragma Inline (Le_G);
    pragma Inline (Lt_F);
    pragma Inline (Lt_G);
+   pragma Inline (Ne_F);
+   pragma Inline (Ne_G);
+
+   pragma Inline (Valid_D);
+   pragma Inline (Valid_F);
+   pragma Inline (Valid_G);
 
 end System.Vax_Float_Operations;

@@ -1,4 +1,3 @@
-/* APPLE LOCAL file mainline 4.0.2 */
 // { dg-do run }
 // PR c++/22132
 

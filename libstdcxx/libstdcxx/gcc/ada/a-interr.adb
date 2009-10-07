@@ -1,13 +1,13 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                GNU ADA RUN-TIME LIBRARY (GNARL) COMPONENTS               --
+--                 GNAT RUN-TIME LIBRARY (GNARL) COMPONENTS                 --
 --                                                                          --
 --                         A D A . I N T E R R U P T S                      --
 --                                                                          --
 --                                  B o d y                                 --
 --                                                                          --
 --             Copyright (C) 1991-1994, Florida State University            --
---             Copyright (C) 1995-2003, Ada Core Technologies               --
+--                     Copyright (C) 1995-2006, AdaCore                     --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -17,8 +17,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNARL; see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -31,17 +31,6 @@
 -- Extensive contributions were provided by Ada Core Technologies, Inc.     --
 --                                                                          --
 ------------------------------------------------------------------------------
-
-with System.Interrupts;
---  used for Interrupt_ID
---           Parameterless_Handler
---           Is_Reserved
---           Is_Handler_Attached
---           Current_Handler
---           Attach_Handler
---           Exchange_Handler
---           Detach_Handler
---           Reference
 
 with Unchecked_Conversion;
 
@@ -73,8 +62,7 @@ package body Ada.Interrupts is
    ---------------------
 
    function Current_Handler
-     (Interrupt : Interrupt_ID)
-      return      Parameterless_Handler
+     (Interrupt : Interrupt_ID) return Parameterless_Handler
    is
    begin
       return To_Ada (SI.Current_Handler (SI.Interrupt_ID (Interrupt)));
@@ -84,7 +72,7 @@ package body Ada.Interrupts is
    -- Detach_Handler --
    --------------------
 
-   procedure Detach_Handler (Interrupt : in Interrupt_ID) is
+   procedure Detach_Handler (Interrupt : Interrupt_ID) is
    begin
       SI.Detach_Handler (SI.Interrupt_ID (Interrupt), False);
    end Detach_Handler;

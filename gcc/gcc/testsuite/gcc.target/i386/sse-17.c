@@ -1,4 +1,3 @@
-/* APPLE LOCAL file 4332318 mainline candidate */
 /* { dg-do run { target i?86-*-* x86_64-*-* } } */
 /* { dg-options "-O2 -msse2" } */
 #include <xmmintrin.h>

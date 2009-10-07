@@ -1,4 +1,3 @@
-/* APPLE LOCAL file mainline 2007-01-03 4908494 */
 /* { dg-do run } */
 /* { dg-options "-Os -fno-inline-functions" } */
 

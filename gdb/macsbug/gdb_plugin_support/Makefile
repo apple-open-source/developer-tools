@@ -104,10 +104,9 @@ INCLUDES 			= 	\
 					-I$(GDB_FRAMEWORKS)/gdb.framework/Headers/machine \
 					-I.
 
-OPT				=	-O2
+OPT				=	-Os
 
 CFLAGS 				= 	-gdwarf-2		\
-					-D__DARWIN_UNIX03=0     \
 					-DTARGET_POWERPC        \
 					$(OPT)			\
 					-c			\

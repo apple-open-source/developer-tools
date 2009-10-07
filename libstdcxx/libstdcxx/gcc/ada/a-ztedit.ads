@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2005 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -20,8 +20,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -47,8 +47,8 @@ package Ada.Wide_Wide_Text_IO.Editing is
      (Pic_String      : String;
       Blank_When_Zero : Boolean := False) return Picture;
 
-   function Pic_String      (Pic : in Picture) return String;
-   function Blank_When_Zero (Pic : in Picture) return Boolean;
+   function Pic_String      (Pic : Picture) return String;
+   function Blank_When_Zero (Pic : Picture) return Boolean;
 
    Max_Picture_Length : constant := 64;
 
@@ -195,6 +195,6 @@ private
       Radix_Point         : Wide_Wide_Character) return Wide_Wide_String;
    --  Formats number according to Pic
 
-   function Expand (Picture : in String) return String;
+   function Expand (Picture : String) return String;
 
 end Ada.Wide_Wide_Text_IO.Editing;

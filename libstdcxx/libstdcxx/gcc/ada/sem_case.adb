@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1996-2005 Free Software Foundation, Inc.          --
+--          Copyright (C) 1996-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -99,11 +99,11 @@ package body Sem_Case is
       Msg_Sloc       : Source_Ptr)
    is
       function Lt_Choice (C1, C2 : Natural) return Boolean;
-      --  Comparison routine for comparing Choice_Table entries.
-      --  Use the lower bound of each Choice as the key.
+      --  Comparison routine for comparing Choice_Table entries. Use the lower
+      --  bound of each Choice as the key.
 
       procedure Move_Choice (From : Natural; To : Natural);
-      --  Move routine for sorting the Choice_Table.
+      --  Move routine for sorting the Choice_Table
 
       procedure Issue_Msg (Value1 : Node_Id; Value2 : Node_Id);
       procedure Issue_Msg (Value1 : Node_Id; Value2 : Uint);
@@ -524,7 +524,8 @@ package body Sem_Case is
         and then Comes_From_Source (Others_Choice)
         and then Is_Empty_List (Choice_List)
       then
-         Error_Msg_N ("?others choice is empty", Others_Choice);
+         Error_Msg_N ("?OTHERS choice is redundant", Others_Choice);
+         Error_Msg_N ("\previous choices cover all values", Others_Choice);
       end if;
    end Expand_Others_Choice;
 
@@ -577,7 +578,7 @@ package body Sem_Case is
 
          Bounds_Lo : Uint;
          Bounds_Hi : Uint;
-         --  The actual bounds of the above type.
+         --  The actual bounds of the above type
 
          Expected_Type : Entity_Id;
          --  The expected type of each choice. Equal to Choice_Type, except
@@ -903,7 +904,7 @@ package body Sem_Case is
          Count  : Nat := 0;
 
       begin
-         if not Present (Get_Alternatives (N)) then
+         if No (Get_Alternatives (N)) then
             return 0;
          end if;
 

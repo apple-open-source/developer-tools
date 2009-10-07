@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2001-2004 Free Software Foundation, Inc.          --
+--          Copyright (C) 2001-2005 Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -404,6 +404,50 @@ package body Switch.M is
                         end if;
                      end loop;
 
+                  --  -gnat95 -gnat05
+
+                  when '0' | '9' =>
+                     Last_Stored := First_Stored;
+                     Storing (Last_Stored) := C;
+                     Ptr := Ptr + 1;
+
+                     if Ptr /= Max or else Switch_Chars (Ptr) /= '5' then
+
+                        --  Invalid switch
+
+                        Last := 0;
+                        return;
+
+                     else
+                        Last_Stored := Last_Stored + 1;
+                        Storing (Last_Stored) := '5';
+                        Add_Switch_Component
+                          (Storing (Storing'First .. Last_Stored));
+                        Ptr := Ptr + 1;
+                     end if;
+
+                  --  -gnat83
+
+                  when '8' =>
+                     Last_Stored := First_Stored;
+                     Storing (Last_Stored) := '8';
+                     Ptr := Ptr + 1;
+
+                     if Ptr /= Max or else Switch_Chars (Ptr) /= '3' then
+
+                        --  Invalid switch
+
+                        Last := 0;
+                        return;
+
+                     else
+                        Last_Stored := Last_Stored + 1;
+                        Storing (Last_Stored) := '3';
+                        Add_Switch_Component
+                          (Storing (Storing'First .. Last_Stored));
+                        Ptr := Ptr + 1;
+                     end if;
+
                   --  Not a valid switch
 
                   when others =>
@@ -447,7 +491,7 @@ package body Switch.M is
       --  Skip past the initial character (must be the switch character)
 
       if Ptr = Max then
-         raise Bad_Switch;
+         Bad_Switch (Switch_Chars);
 
       else
          Ptr := Ptr + 1;
@@ -529,25 +573,13 @@ package body Switch.M is
             while Ptr < Max loop
                Ptr := Ptr + 1;
                C := Switch_Chars (Ptr);
-               exit when C = ASCII.NUL or else C = '/' or else C = '-';
 
-               if C in '1' .. '9' or else
-                  C in 'a' .. 'z' or else
-                  C in 'A' .. 'Z'
-               then
+               if C in 'a' .. 'z' or else C in 'A' .. 'Z' then
                   Set_Debug_Flag (C);
                else
-                  raise Bad_Switch;
+                  Bad_Switch (Switch_Chars);
                end if;
             end loop;
-
-            --  Make sure Zero_Cost_Exceptions is set if gnatdX set. This
-            --  is for backwards compatibility with old versions and usage.
-
-            if Debug_Flag_XX then
-               Zero_Cost_Exceptions_Set := True;
-               Zero_Cost_Exceptions_Val := True;
-            end if;
 
             return;
 
@@ -557,7 +589,7 @@ package body Switch.M is
             Ptr := Ptr + 1;
 
             if Ptr > Max then
-               raise Bad_Switch;
+               Bad_Switch (Switch_Chars);
             end if;
 
             case Switch_Chars (Ptr) is
@@ -566,7 +598,7 @@ package body Switch.M is
 
                when 'I' =>
                   Ptr := Ptr + 1;
-                  Scan_Pos (Switch_Chars, Max, Ptr, Main_Index);
+                  Scan_Pos (Switch_Chars, Max, Ptr, Main_Index, C);
 
                --  processing for eL switch
 
@@ -575,7 +607,7 @@ package body Switch.M is
                   Follow_Links := True;
 
                when others =>
-                  raise Bad_Switch;
+                  Bad_Switch (Switch_Chars);
             end case;
 
          --  Processing for f switch
@@ -605,12 +637,16 @@ package body Switch.M is
          --  Processing for j switch
 
          when 'j' =>
+            if Ptr = Max then
+               Bad_Switch (Switch_Chars);
+            end if;
+
             Ptr := Ptr + 1;
 
             declare
                Max_Proc : Pos;
             begin
-               Scan_Pos (Switch_Chars, Max, Ptr, Max_Proc);
+               Scan_Pos (Switch_Chars, Max, Ptr, Max_Proc, C);
                Maximum_Processes := Positive (Max_Proc);
             end;
 
@@ -643,7 +679,7 @@ package body Switch.M is
             Ptr := Ptr + 1;
 
             if Output_File_Name_Present then
-               raise Too_Many_Output_Files;
+               Osint.Fail ("duplicate -o switch");
             else
                Output_File_Name_Present := True;
             end if;
@@ -671,6 +707,25 @@ package body Switch.M is
          when 'v' =>
             Ptr := Ptr + 1;
             Verbose_Mode := True;
+            Verbosity_Level := Opt.High;
+
+            if Ptr <= Max then
+               case Switch_Chars (Ptr) is
+                  when 'l' =>
+                     Verbosity_Level := Opt.Low;
+
+                  when 'm' =>
+                     Verbosity_Level := Opt.Medium;
+
+                  when 'h' =>
+                     Verbosity_Level := Opt.High;
+
+                  when others =>
+                     Bad_Switch (Switch_Chars);
+               end case;
+
+               Ptr := Ptr + 1;
+            end if;
 
          --  Processing for x switch
 
@@ -684,36 +739,18 @@ package body Switch.M is
             Ptr := Ptr + 1;
             No_Main_Subprogram := True;
 
-         --  Ignore extra switch character
-
-         when '/' | '-' =>
-            Ptr := Ptr + 1;
-
          --  Anything else is an error (illegal switch character)
 
          when others =>
-            raise Bad_Switch;
+            Bad_Switch (Switch_Chars);
 
          end case;
 
          if Ptr <= Max then
-            Osint.Fail ("invalid switch: ", Switch_Chars);
+            Bad_Switch (Switch_Chars);
          end if;
 
       end Check_Switch;
-
-   exception
-      when Bad_Switch =>
-         Osint.Fail ("invalid switch: ", (1 => C));
-
-      when Bad_Switch_Value =>
-         Osint.Fail ("numeric value out of range for switch: ", (1 => C));
-
-      when Missing_Switch_Value =>
-         Osint.Fail ("missing numeric value for switch: ", (1 => C));
-
-      when Too_Many_Output_Files =>
-         Osint.Fail ("duplicate -o switch");
 
    end Scan_Make_Switches;
 

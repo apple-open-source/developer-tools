@@ -61,9 +61,14 @@ void InitializeLoggingChannelsIfNecessary()
     initializeWithUserDefault(LogBackForward);
     initializeWithUserDefault(LogHistory);
     initializeWithUserDefault(LogPageCache);
+    initializeWithUserDefault(LogPlatformLeaks);
     initializeWithUserDefault(LogNetwork);
     initializeWithUserDefault(LogFTP);
     initializeWithUserDefault(LogThreading);
+    initializeWithUserDefault(LogStorageAPI);
+    initializeWithUserDefault(LogMedia);
+    initializeWithUserDefault(LogPlugins);
+    initializeWithUserDefault(LogArchives);
 }
 
 }

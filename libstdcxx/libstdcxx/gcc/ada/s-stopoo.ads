@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2002 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -20,8 +20,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -39,7 +39,7 @@ with Ada.Finalization;
 with System.Storage_Elements;
 
 package System.Storage_Pools is
-   pragma Preelaborate (System.Storage_Pools);
+   pragma Preelaborate;
 
    type Root_Storage_Pool is abstract
      new Ada.Finalization.Limited_Controlled with private;
@@ -47,15 +47,15 @@ package System.Storage_Pools is
    procedure Allocate
      (Pool                     : in out Root_Storage_Pool;
       Storage_Address          : out Address;
-      Size_In_Storage_Elements : in System.Storage_Elements.Storage_Count;
-      Alignment                : in System.Storage_Elements.Storage_Count)
+      Size_In_Storage_Elements : System.Storage_Elements.Storage_Count;
+      Alignment                : System.Storage_Elements.Storage_Count)
    is abstract;
 
    procedure Deallocate
      (Pool                     : in out Root_Storage_Pool;
-      Storage_Address          : in Address;
-      Size_In_Storage_Elements : in System.Storage_Elements.Storage_Count;
-      Alignment                : in System.Storage_Elements.Storage_Count)
+      Storage_Address          : Address;
+      Size_In_Storage_Elements : System.Storage_Elements.Storage_Count;
+      Alignment                : System.Storage_Elements.Storage_Count)
    is abstract;
 
    function Storage_Size

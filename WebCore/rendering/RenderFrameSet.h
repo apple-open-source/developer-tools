@@ -1,9 +1,7 @@
 /*
- * This file is part of the KDE project.
- *
  * Copyright (C) 1999 Lars Knoll (knoll@kde.org)
  *           (C) 2000 Simon Hausmann <hausmann@kde.org>
- * Copyright (C) 2006 Apple Computer, Inc.
+ * Copyright (C) 2006, 2008 Apple Inc. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -25,7 +23,7 @@
 #ifndef RenderFrameSet_h
 #define RenderFrameSet_h
 
-#include "RenderContainer.h"
+#include "RenderBox.h"
 
 namespace WebCore {
 
@@ -34,13 +32,12 @@ class MouseEvent;
 
 enum FrameEdge { LeftFrameEdge, RightFrameEdge, TopFrameEdge, BottomFrameEdge };
 
-struct FrameEdgeInfo
-{
+struct FrameEdgeInfo {
     FrameEdgeInfo(bool preventResize = false, bool allowBorder = true)
+        : m_preventResize(4)
+        , m_allowBorder(4)
     {
-        m_preventResize.resize(4);
         m_preventResize.fill(preventResize);
-        m_allowBorder.resize(4);
         m_allowBorder.fill(allowBorder);
     }
 
@@ -55,10 +52,15 @@ private:
     Vector<bool> m_allowBorder;
 };
 
-class RenderFrameSet : public RenderContainer {
+class RenderFrameSet : public RenderBox {
 public:
     RenderFrameSet(HTMLFrameSetElement*);
     virtual ~RenderFrameSet();
+
+    virtual RenderObjectChildList* virtualChildren() { return children(); }
+    virtual const RenderObjectChildList* virtualChildren() const { return children(); }
+    const RenderObjectChildList* children() const { return &m_children; }
+    RenderObjectChildList* children() { return &m_children; }
 
     virtual const char* renderName() const { return "RenderFrameSet"; }
     virtual bool isFrameSet() const { return true; }
@@ -78,10 +80,6 @@ public:
     bool canResizeRow(const IntPoint&) const;
     bool canResizeColumn(const IntPoint&) const;
 
-#ifndef NDEBUG
-    virtual void dump(TextStream*, DeprecatedString ind = "") const;
-#endif
-
 private:
     static const int noSplit = -1;
 
@@ -99,7 +97,6 @@ private:
 
     inline HTMLFrameSetElement* frameSet() const;
 
-    bool canResize(const IntPoint&) const;
     void setIsResizing(bool);
 
     void layOutAxis(GridAxis&, const Length*, int availableSpace);
@@ -115,6 +112,8 @@ private:
 
     void paintRowBorder(const PaintInfo& paintInfo, const IntRect& rect);
     void paintColumnBorder(const PaintInfo& paintInfo, const IntRect& rect);
+
+    RenderObjectChildList m_children;
 
     GridAxis m_rows;
     GridAxis m_cols;

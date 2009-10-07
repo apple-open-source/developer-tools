@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2003 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -43,9 +43,9 @@ package body Ada.Wide_Text_IO.Float_Aux is
    ---------
 
    procedure Get
-     (File  : in File_Type;
+     (File  : File_Type;
       Item  : out Long_Long_Float;
-      Width : in Field)
+      Width : Field)
    is
       Buf  : String (1 .. Field'Last);
       Stop : Integer := 0;
@@ -69,7 +69,7 @@ package body Ada.Wide_Text_IO.Float_Aux is
    ----------
 
    procedure Gets
-     (From : in String;
+     (From : String;
       Item : out Long_Long_Float;
       Last : out Positive)
    is
@@ -90,7 +90,7 @@ package body Ada.Wide_Text_IO.Float_Aux is
    ---------------
 
    procedure Load_Real
-     (File : in File_Type;
+     (File : File_Type;
       Buf  : out String;
       Ptr  : in out Natural)
    is
@@ -181,11 +181,11 @@ package body Ada.Wide_Text_IO.Float_Aux is
    ---------
 
    procedure Put
-     (File : in File_Type;
-      Item : in Long_Long_Float;
-      Fore : in Field;
-      Aft  : in Field;
-      Exp  : in Field)
+     (File : File_Type;
+      Item : Long_Long_Float;
+      Fore : Field;
+      Aft  : Field;
+      Exp  : Field)
    is
       Buf : String (1 .. Field'Last);
       Ptr : Natural := 0;
@@ -201,12 +201,12 @@ package body Ada.Wide_Text_IO.Float_Aux is
 
    procedure Puts
      (To   : out String;
-      Item : in Long_Long_Float;
-      Aft  : in Field;
-      Exp  : in Field)
+      Item : Long_Long_Float;
+      Aft  : Field;
+      Exp  : Field)
    is
-      Buf    : String (1 .. Field'Last);
-      Ptr    : Natural := 0;
+      Buf : String (1 .. Field'Last);
+      Ptr : Natural := 0;
 
    begin
       Set_Image_Real (Item, Buf, Ptr, Fore => 1, Aft => Aft, Exp => Exp);

@@ -24,6 +24,10 @@
 #define INLINE_H
 #include <block.h>
 #include "frame.h"
+#include "bfd.h"
+
+/* APPLE LOCAL inlined function symbols & blocks  */
+struct pending;
 
 /* The foilowing structure is used to keep track of the current state for
    inlined subroutines in the inferior.  */
@@ -113,6 +117,12 @@ struct inlined_call_stack_record
 
   char *call_site_filename;
 
+  /* APPLE LOCAL begin radar 6545149  */
+  /* The function symbol gdb generates for the inlined subroutine instance.  */
+  
+  struct symbol *func_sym;
+  /* APPLE LOCAL end radar 6545149  */
+
   /* Flag indicating an INLINED_FRAME has been created for this
      record.  */
 
@@ -143,6 +153,8 @@ struct dwarf_inlined_call_record {
   unsigned decl_line;
   char *name;
   char *parent_name;
+  /* APPLE LOCAL radar 6545149  */
+  struct symbol *func_sym;
   CORE_ADDR lowpc;
   CORE_ADDR highpc;
   /* APPLE LOCAL - address ranges  */
@@ -166,6 +178,12 @@ extern struct inlined_function_data global_inlined_call_stack;
    PC will not change).  */
 
 extern int stepping_into_inlined_subroutine;
+
+/* Global variable used to contain the start address of an inlined
+   subroutine the user is stepping into, if there are intervening
+   function calls.  */
+
+extern CORE_ADDR inlined_step_range_end;
 
 /* Global flag used to communicate between various functions that the
    user is stepping over an inlined subroutine call.  */
@@ -196,8 +214,11 @@ extern void inlined_function_update_call_stack (CORE_ADDR);
 
 extern void inlined_function_add_function_names (struct objfile *,
 						 CORE_ADDR, CORE_ADDR, int, 
-						 int, char *, char *, 
-						 struct address_range_list *);
+						 int, const char *, 
+                                                 const char *, 
+						 struct address_range_list *,
+						 /* APPLE LOCAL radar 6545149 */
+						 struct symbol *);
 
 extern int at_inlined_call_site_p (char **, int *, int *);
 
@@ -228,8 +249,13 @@ extern int inlined_function_end_of_inlined_code_p (CORE_ADDR);
 extern struct frame_info * get_current_inlined_frame (void);
 
 extern void inlined_frame_prev_register (struct frame_info *, void **, int, 
-					 int *, enum lval_type *, CORE_ADDR *, 
+					 enum opt_state *, enum lval_type *, 
+                                         CORE_ADDR *, 
 					 int *, gdb_byte *);
+
+void restore_thread_inlined_call_stack (ptid_t ptid);
+
+void save_thread_inlined_call_stack (ptid_t ptid);
 
 extern void flush_inlined_subroutine_frames (void);
 
@@ -255,8 +281,11 @@ extern void inlined_subroutine_restore_after_dummy_call (void);
 
 extern int rest_of_line_contains_inlined_subroutine (CORE_ADDR *);
 
-extern void find_next_inlined_subroutine (CORE_ADDR, CORE_ADDR *);
+void inlined_update_frame_sal (struct frame_info *fi, struct symtab_and_line *sal);
 
+extern void find_next_inlined_subroutine (CORE_ADDR, CORE_ADDR *, CORE_ADDR);
+
+void set_current_sal_from_inlined_frame (struct frame_info *fi, int center);
 
 extern void print_inlined_frame (struct frame_info *, int, enum print_what,
 				 int, struct symtab_and_line, int);
@@ -307,5 +336,15 @@ extern void inlined_subroutine_objfile_relocate (struct objfile *,
 						 struct section_offsets *);
 
 extern int inlined_function_find_first_line (struct symtab_and_line);
+extern char *last_inlined_call_site_filename (struct frame_info *);
+/* APPLE LOCAL begin inlined function symbols & blocks  */
+extern void add_symbol_to_inlined_subroutine_list (struct symbol *, 
+						   struct pending **);
+/* APPLE LOCAL radar 6381384  add section to symtab lookups  */
+extern struct symbol *block_inlined_function (struct block *, 
+					      struct bfd_section *);
+/* APPLE LOCAL end inlined function symbols & blocks  */
+
+extern int func_sym_has_inlining (struct symbol *, struct frame_info *);
 #endif /* !defined(INLINE_H) */
 /* APPLE LOCAL end subroutine inlining (entire file) */

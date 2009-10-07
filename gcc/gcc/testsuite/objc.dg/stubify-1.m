@@ -1,9 +1,11 @@
-/* APPLE LOCAL file mainline */
 /* All calls must be properly stubified.  Complain about any "call
    _objc_msgSend<end-of-line>" without the $stub suffix.  */
 
 /* { dg-do compile { target *-*-darwin* } } */
-/* { dg-options "-Os -mdynamic-no-pic" } */
+/* APPLE LOCAL axe stubs 5571540 */
+/* { dg-options "-Os -mdynamic-no-pic -mmacosx-version-min=10.4" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
+/* APPLE LOCAL ARM */
+/* { dg-options "-Os -mdynamic-no-pic" { target arm*-*-darwin* } } */
 /* APPLE LOCAL radar 5297325 */
 /* { dg-require-effective-target ilp32 } */
 
@@ -29,10 +31,8 @@ extern int bogonic (int, int, int) ;
 }
 @end
 
-/* APPLE LOCAL begin ARM blx == call */
-/* { dg-final { scan-assembler-not "\(bl|blx|call\)\[ \t\]+_objc_msgSend\n" } } */
-/* { dg-final { scan-assembler     "\(bl|blx|call\)\[ \t\]+L_objc_msgSend\\\$stub\n" } } */
-/* { dg-final { scan-assembler-not "\(bl|blx|call\)\[ \t\]+_bogonic\n" } } */
-/* { dg-final { scan-assembler     "\(bl|blx|call\)\[ \t\]+L_bogonic\\\$stub\n" } } */
+/* { dg-final { scan-assembler-not "\(bl|call\)\[ \t\]+_objc_msgSend\n" } } */
+/* { dg-final { scan-assembler     "\(bl|call\)\[ \t\]+L_objc_msgSend\\\$stub\n" } } */
+/* { dg-final { scan-assembler-not "\(bl|call\)\[ \t\]+_bogonic\n" } } */
+/* { dg-final { scan-assembler     "\(bl|call\)\[ \t\]+L_bogonic\\\$stub\n" } } */
 /* { dg-final { scan-assembler-not "\\\$non_lazy_ptr" } } */
-/* APPLE LOCAL end ARM blx == call */

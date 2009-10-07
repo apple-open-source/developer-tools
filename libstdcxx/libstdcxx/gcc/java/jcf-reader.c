@@ -1,7 +1,7 @@
 /* This file read a Java(TM) .class file.
    It is not stand-alone:  It depends on tons of macros, and the
    intent is you #include this file after you've defined the macros.
-   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003
+   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2005
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -18,8 +18,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  
 
 Java and all Java-based marks are trademarks or registered trademarks
 of Sun Microsystems, Inc. in the United States and other countries.
@@ -225,6 +225,13 @@ get_attribute (JCF *jcf)
   if (MATCH_ATTRIBUTE ("Deprecated"))
     {
       HANDLE_DEPRECATED_ATTRIBUTE ();
+    }
+  else
+#endif
+#ifdef HANDLE_SOURCEDEBUGEXTENSION_ATTRIBUTE
+  if (MATCH_ATTRIBUTE ("SourceDebugExtension")) /* JSR 45 */
+    {
+      HANDLE_SOURCEDEBUGEXTENSION_ATTRIBUTE (attribute_length);
     }
   else
 #endif

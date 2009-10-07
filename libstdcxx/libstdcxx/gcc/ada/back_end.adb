@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2004 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -30,7 +30,6 @@ with Elists;    use Elists;
 with Lib;       use Lib;
 with Osint;     use Osint;
 with Opt;       use Opt;
-with Osint;     use Osint;
 with Osint.C;   use Osint.C;
 with Namet;     use Namet;
 with Nlists;    use Nlists;
@@ -142,7 +141,7 @@ package body Back_End is
       type Arg_Array is array (Nat) of BSP;
       type Arg_Array_Ptr is access Arg_Array;
 
-      --  Import flag_stack_check from toplev.c.
+      --  Import flag_stack_check from toplev.c
 
       flag_stack_check : Int;
       pragma Import (C, flag_stack_check); -- Import from toplev.c
@@ -239,11 +238,10 @@ package body Back_End is
       --  Loop through command line arguments, storing them for later access
 
       while Next_Arg < save_argc loop
-
          Look_At_Arg : declare
-            Argv_Ptr  : constant BSP    := save_argv (Next_Arg);
-            Argv_Len  : constant Nat    := Len_Arg (Next_Arg);
-            Argv      : constant String := Argv_Ptr (1 .. Natural (Argv_Len));
+            Argv_Ptr : constant BSP    := save_argv (Next_Arg);
+            Argv_Len : constant Nat    := Len_Arg (Next_Arg);
+            Argv     : constant String := Argv_Ptr (1 .. Natural (Argv_Len));
 
          begin
             --  If the previous switch has set the Output_File_Name_Present
@@ -259,6 +257,18 @@ package body Back_End is
                else
                   Set_Output_Object_File_Name (Argv);
                   Output_File_Name_Seen := True;
+               end if;
+
+               --  If the previous switch has set the Search_Directory_Present
+               --  flag (that is if we have just seen -I), then the next
+               --  argument is a search directory path.
+
+            elsif Search_Directory_Present then
+               if Is_Switch (Argv) then
+                  Fail ("search directory missing after -I");
+               else
+                  Add_Src_Search_Dir (Argv);
+                  Search_Directory_Present := False;
                end if;
 
             elsif not Is_Switch (Argv) then -- must be a file name

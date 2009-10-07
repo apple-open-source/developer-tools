@@ -849,4 +849,12 @@ CORE_ADDR objfile_bss_section_offset (struct objfile *objfile);
 
 /* APPLE LOCAL END: Use EXECUTABLE_OBJFILE.  */
 
+struct objfile *find_libobjc_objfile ();
+
+/* APPLE LOCAL: recording which objfiles get hit in symbol lookup.  */
+struct objfile_hitlist;
+struct objfile_hitlist *objfile_detach_hitlist(void);
+int objfile_on_hitlist_p (struct objfile_hitlist *, struct objfile *);
+struct cleanup *make_cleanup_objfile_init_clear_hitlist ();
+void objfile_add_to_hitlist (struct objfile *);
 #endif /* !defined (OBJFILES_H) */

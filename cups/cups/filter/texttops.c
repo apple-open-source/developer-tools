@@ -1,9 +1,9 @@
 /*
- * "$Id: texttops.c 6649 2007-07-11 21:46:42Z mike $"
+ * "$Id: texttops.c 7720 2008-07-11 22:46:21Z mike $"
  *
  *   Text to PostScript filter for the Common UNIX Printing System (CUPS).
  *
- *   Copyright 2007 by Apple Inc.
+ *   Copyright 2007-2008 by Apple Inc.
  *   Copyright 1993-2007 by Easy Software Products.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -173,6 +173,14 @@ WriteProlog(const char *title,		/* I - Title of job */
   SizeColumns = (PageRight - PageLeft) / 72.0 * CharsPerInch;
   SizeLines   = (PageTop - PageBottom) / 72.0 * LinesPerInch;
 
+  if (SizeColumns <= 0 || SizeColumns > 32767 ||
+      SizeLines <= 0 || SizeLines > 32767)
+  {
+    _cupsLangPrintf(stderr, _("ERROR: Unable to print %dx%d text page!\n"),
+                    SizeColumns, SizeLines);
+    exit(1);
+  }
+
   Page    = calloc(sizeof(lchar_t *), SizeLines);
   Page[0] = calloc(sizeof(lchar_t), SizeColumns * SizeLines);
   for (i = 1; i < SizeLines; i ++)
@@ -186,6 +194,13 @@ WriteProlog(const char *title,		/* I - Title of job */
   }
   else
     ColumnWidth = SizeColumns;
+
+  if (ColumnWidth <= 0)
+  {
+    _cupsLangPrintf(stderr, _("ERROR: Unable to print %d text columns!\n"),
+                    PageColumns);
+    exit(1);
+  }
 
  /*
   * Output the DSC header...
@@ -288,182 +303,10 @@ WriteProlog(const char *title,		/* I - Title of job */
     line[strlen(line) - 1] = '\0'; /* Drop \n */
     for (lineptr = line + 7; isspace(*lineptr & 255); lineptr ++); /* Skip whitespace */
 
-    if (strcmp(lineptr, "8bit") == 0)
-    {
-     /*
-      * 8-bit text...
-      */
-
-      UTF8     = 0;
-      NumFonts = 0;
-
-     /*
-      * Read the font description(s)...
-      */
-
-      while (fgets(line, sizeof(line), fp) != NULL)
-      {
-       /*
-        * Skip comment and blank lines...
-	*/
-
-        if (line[0] == '#' || line[0] == '\n')
-	  continue;
-
-       /*
-	* Read the font descriptions that should look like:
-	*
-	*   first last direction width normal [bold italic bold-italic]
-	*/
-
-	lineptr = line;
-
-        start = strtol(lineptr, &lineptr, 16);
-	end   = strtol(lineptr, &lineptr, 16);
-
-	while (isspace(*lineptr & 255))
-	  lineptr ++;
-
-        if (!*lineptr)
-	  break;	/* Must be a font mapping */
-
-	valptr = lineptr;
-
-	while (!isspace(*lineptr & 255) && *lineptr)
-	  lineptr ++;
-
-	if (!*lineptr)
-	{
-	 /*
-	  * Can't have a font without all required values...
-	  */
-
-	  fprintf(stderr, _("ERROR: Bad font description line: %s\n"), valptr);
-	  fclose(fp);
-	  exit(1);
-	}
-
-	*lineptr++ = '\0';
-
-	if (strcmp(valptr, "ltor") == 0)
-	  Directions[NumFonts] = 1;
-	else if (strcmp(valptr, "rtol") == 0)
-	  Directions[NumFonts] = -1;
-	else
-	{
-	  fprintf(stderr, _("ERROR: Bad text direction %s\n"), valptr);
-	  fclose(fp);
-	  exit(1);
-	}
-
-       /*
-	* Got the direction, now get the width...
-	*/
-
-	while (isspace(*lineptr & 255))
-	  lineptr ++;
-
-	valptr = lineptr;
-
-	while (!isspace(*lineptr & 255) && *lineptr)
-	  lineptr ++;
-
-	if (!*lineptr)
-	{
-	 /*
-	  * Can't have a font without all required values...
-	  */
-
-	  fprintf(stderr, _("ERROR: Bad font description line: %s\n"), valptr);
-	  fclose(fp);
-	  exit(1);
-	}
-
-	*lineptr++ = '\0';
-
-	if (strcmp(valptr, "single") == 0)
-          Widths[NumFonts] = 1;
-	else if (strcmp(valptr, "double") == 0)
-          Widths[NumFonts] = 2;
-	else 
-	{
-	  fprintf(stderr, _("ERROR: Bad text width %s\n"), valptr);
-	  fclose(fp);
-	  exit(1);
-	}
-
-       /*
-	* Get the fonts...
-	*/
-
-	for (i = 0; *lineptr && i < 4; i ++)
-	{
-	  while (isspace(*lineptr & 255))
-	    lineptr ++;
-
-	  valptr = lineptr;
-
-	  while (!isspace(*lineptr & 255) && *lineptr)
-	    lineptr ++;
-
-          if (*lineptr)
-	    *lineptr++ = '\0';
-
-          if (lineptr > valptr)
-	    Fonts[NumFonts][i] = strdup(valptr);
-	}
-
-       /*
-	* Fill in remaining fonts as needed...
-	*/
-
-	for (j = i; j < 4; j ++)
-	  Fonts[NumFonts][j] = strdup(Fonts[NumFonts][0]);
-
-       /*
-        * Define the character mappings...
-	*/
-
-	for (i = start, j = NumFonts * 256; i <= end; i ++, j ++)
-	  Chars[i] = j;
-
-        NumFonts ++;
-      }
-
-     /*
-      * Read encoding lines...
-      */
-
-      do
-      {
-       /*
-        * Skip comment and blank lines...
-	*/
-
-        if (line[0] == '#' || line[0] == '\n')
-	  continue;
-
-       /*
-        * Grab the character and unicode glyph number.
-	*/
-
-	if (sscanf(line, "%x%x", &ch, &unicode) == 2 && ch < 256)
-          Codes[Chars[ch]] = unicode;
-      }
-      while (fgets(line, sizeof(line), fp) != NULL);
-
-      fclose(fp);
-    }
-    else if (strcmp(lineptr, "utf8") == 0)
+    if (strcmp(lineptr, "utf8") == 0)
     {
      /*
       * UTF-8 (Unicode) text...
-      */
-
-      UTF8 = 1;
-
-     /*
-      * Read the font descriptions...
       */
 
       NumFonts = 0;
@@ -1005,7 +848,7 @@ write_line(int     row,		/* I - Row number (0 to N) */
   lchar_t	*start;		/* First character in sequence */
 
 
-  for (col = 0, start = line; col < SizeColumns;)
+  for (col = 0; col < SizeColumns;)
   {
     while (col < SizeColumns && (line->ch == ' ' || line->ch == 0))
     {
@@ -1243,7 +1086,7 @@ write_text(const char *s)	/* I - String to write */
 
     while (*utf8)
     {
-      if (*utf8 < 0xc0 || !UTF8)
+      if (*utf8 < 0xc0)
         ch = *utf8 ++;
       else if ((*utf8 & 0xe0) == 0xc0)
       {
@@ -1299,5 +1142,5 @@ write_text(const char *s)	/* I - String to write */
 
 
 /*
- * End of "$Id: texttops.c 6649 2007-07-11 21:46:42Z mike $".
+ * End of "$Id: texttops.c 7720 2008-07-11 22:46:21Z mike $".
  */

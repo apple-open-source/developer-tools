@@ -1,9 +1,9 @@
 /*
- * "$Id: http-addr.c 6816 2007-08-20 20:16:00Z mike $"
+ * "$Id: http-addr.c 7910 2008-09-06 00:25:17Z mike $"
  *
  *   HTTP address routines for the Common UNIX Printing System (CUPS).
  *
- *   Copyright 2007 by Apple Inc.
+ *   Copyright 2007-2009 by Apple Inc.
  *   Copyright 1997-2006 by Easy Software Products, all rights reserved.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -18,6 +18,7 @@
  *   httpAddrEqual()     - Compare two addresses.
  *   httpAddrLocalhost() - Check for the local loopback address.
  *   httpAddrLookup()    - Lookup the hostname associated with the address.
+ *   _httpAddrPort()     - Get the port number associated with an address.
  *   httpAddrString()    - Convert an IP address to a dotted string.
  *   httpGetHostByName() - Lookup a hostname or IP address, and return
  *                         address records for the specified name.
@@ -28,16 +29,20 @@
  * Include necessary headers...
  */
 
+#include "http-private.h"
 #include "globals.h"
 #include "debug.h"
 #include <stdlib.h>
 #include <stddef.h>
+#ifdef HAVE_RESOLV_H
+#  include <resolv.h>
+#endif /* HAVE_RESOLV_H */
 
 
 /*
  * 'httpAddrAny()' - Check for the "any" address.
  *
- * @since CUPS 1.2@
+ * @since CUPS 1.2/Mac OS X 10.5@
  */
 
 int					/* O - 1 if "any", 0 otherwise */
@@ -63,7 +68,7 @@ httpAddrAny(const http_addr_t *addr)	/* I - Address to check */
 /*
  * 'httpAddrEqual()' - Compare two addresses.
  *
- * @since CUPS 1.2@
+ * @since CUPS 1.2/Mac OS X 10.5@
  */
 
 int						/* O - 1 if equal, 0 if not */
@@ -96,7 +101,7 @@ httpAddrEqual(const http_addr_t *addr1,		/* I - First address */
 /*
  * 'httpAddrLength()' - Return the length of the address in bytes.
  *
- * @since CUPS 1.2@
+ * @since CUPS 1.2/Mac OS X 10.5@
  */
 
 int					/* O - Length in bytes */
@@ -127,7 +132,7 @@ httpAddrLength(const http_addr_t *addr)	/* I - Address */
 /*
  * 'httpAddrLocalhost()' - Check for the local loopback address.
  *
- * @since CUPS 1.2@
+ * @since CUPS 1.2/Mac OS X 10.5@
  */
 
 int					/* O - 1 if local host, 0 otherwise */
@@ -149,7 +154,7 @@ httpAddrLocalhost(
 #endif /* AF_LOCAL */
 
   if (addr->addr.sa_family == AF_INET &&
-      ntohl(addr->ipv4.sin_addr.s_addr) == 0x7f000001)
+      (ntohl(addr->ipv4.sin_addr.s_addr) & 0xff000000) == 0x7f000000)
     return (1);
 
   return (0);
@@ -166,7 +171,7 @@ httpAddrLocalhost(
 /*
  * 'httpAddrLookup()' - Lookup the hostname associated with the address.
  *
- * @since CUPS 1.2@
+ * @since CUPS 1.2/Mac OS X 10.5@
  */
 
 char *					/* O - Host name */
@@ -175,8 +180,12 @@ httpAddrLookup(
     char              *name,		/* I - Host name buffer */
     int               namelen)		/* I - Size of name buffer */
 {
-  DEBUG_printf(("httpAddrLookup(addr=%p, name=%p, namelen=%d)\n",
-                addr, name, namelen));
+  _cups_globals_t	*cg = _cupsGlobals();
+					/* Global data */
+
+
+  DEBUG_printf(("httpAddrLookup(addr=%p, name=%p, namelen=%d)", addr, name,
+		namelen));
 
  /*
   * Range check input...
@@ -192,9 +201,43 @@ httpAddrLookup(
 
 #ifdef AF_LOCAL
   if (addr->addr.sa_family == AF_LOCAL)
+  {
     strlcpy(name, addr->un.sun_path, namelen);
-  else
+    return (name);
+  }
 #endif /* AF_LOCAL */
+
+ /*
+  * Optimize lookups for localhost/loopback addresses...
+  */
+
+  if (httpAddrLocalhost(addr))
+  {
+    strlcpy(name, "localhost", namelen);
+    return (name);
+  }
+
+#ifdef HAVE_RES_INIT
+ /*
+  * STR #2920: Initialize resolver after failure in cups-polld
+  *
+  * If the previous lookup failed, re-initialize the resolver to prevent
+  * temporary network errors from persisting.  This *should* be handled by
+  * the resolver libraries, but apparently the glibc folks do not agree.
+  *
+  * We set a flag at the end of this function if we encounter an error that
+  * requires reinitialization of the resolver functions.  We then call
+  * res_init() if the flag is set on the next call here or in httpAddrLookup().
+  */
+
+  if (cg->need_res_init)
+  {
+    res_init();
+
+    cg->need_res_init = 0;
+  }
+#endif /* HAVE_RES_INIT */
+
 #ifdef HAVE_GETNAMEINFO
   {
    /*
@@ -205,9 +248,16 @@ httpAddrLookup(
     * do...
     */
 
-    if (getnameinfo(&addr->addr, httpAddrLength(addr), name, namelen,
-		    NULL, 0, 0))
+    int error = getnameinfo(&addr->addr, httpAddrLength(addr), name, namelen,
+		            NULL, 0, 0);
+
+    if (error)
+    {
+      if (error == EAI_FAIL)
+        cg->need_res_init = 1;
+
       return (httpAddrString(addr, name, namelen));
+    }
   }
 #else
   {
@@ -229,22 +279,46 @@ httpAddrLookup(
       * No hostname, so return the raw address...
       */
 
-      httpAddrString(addr, name, namelen);
-      return (NULL);
+      if (h_errno == NO_RECOVERY)
+        cg->need_res_init = 1;
+
+      return (httpAddrString(addr, name, namelen));
     }
 
     strlcpy(name, host->h_name, namelen);
   }
 #endif /* HAVE_GETNAMEINFO */
 
+  DEBUG_printf(("1httpAddrLookup: returning \"%s\"...", name));
+
   return (name);
+}
+
+
+/*
+ * '_httpAddrPort()' - Get the port number associated with an address.
+ */
+
+int					/* O - Port number */
+_httpAddrPort(http_addr_t *addr)	/* I - Address */
+{
+  if (!addr)
+    return (ippPort());
+#ifdef AF_INET6
+  else if (addr->addr.sa_family == AF_INET6)
+    return (ntohs(addr->ipv6.sin6_port));
+#endif /* AF_INET6 */
+  else if (addr->addr.sa_family == AF_INET)
+    return (ntohs(addr->ipv4.sin_port));
+  else
+    return (ippPort());
 }
 
 
 /*
  * 'httpAddrString()' - Convert an address to a numeric string.
  *
- * @since CUPS 1.2@
+ * @since CUPS 1.2/Mac OS X 10.5@
  */
 
 char *					/* O - Numeric address string */
@@ -252,8 +326,7 @@ httpAddrString(const http_addr_t *addr,	/* I - Address to convert */
                char              *s,	/* I - String buffer */
 	       int               slen)	/* I - Length of string */
 {
-  DEBUG_printf(("httpAddrString(addr=%p, s=%p, slen=%d)\n",
-                addr, s, slen));
+  DEBUG_printf(("httpAddrString(addr=%p, s=%p, slen=%d)", addr, s, slen));
 
  /*
   * Range check input...
@@ -380,7 +453,7 @@ httpAddrString(const http_addr_t *addr,	/* I - Address to convert */
   else
     strlcpy(s, "UNKNOWN", slen);
 
-  DEBUG_printf(("httpAddrString: returning \"%s\"...\n", s));
+  DEBUG_printf(("1httpAddrString: returning \"%s\"...", s));
 
   return (s);
 }
@@ -402,7 +475,7 @@ httpGetHostByName(const char *name)	/* I - Hostname or IP address */
   					/* Pointer to library globals */
 
 
-  DEBUG_printf(("httpGetHostByName(name=\"%s\")\n", name));
+  DEBUG_printf(("httpGetHostByName(name=\"%s\")", name));
 
  /*
   * Avoid lookup delays and configuration problems when connecting
@@ -440,7 +513,7 @@ httpGetHostByName(const char *name)	/* I - Hostname or IP address */
     cg->ip_ptrs[0]          = (char *)name;
     cg->ip_ptrs[1]          = NULL;
 
-    DEBUG_puts("httpGetHostByName: returning domain socket address...");
+    DEBUG_puts("1httpGetHostByName: returning domain socket address...");
 
     return (&cg->hostent);
   }
@@ -476,7 +549,7 @@ httpGetHostByName(const char *name)	/* I - Hostname or IP address */
     cg->ip_ptrs[0]          = (char *)&(cg->ip_addr);
     cg->ip_ptrs[1]          = NULL;
 
-    DEBUG_puts("httpGetHostByName: returning IPv4 address...");
+    DEBUG_puts("1httpGetHostByName: returning IPv4 address...");
 
     return (&cg->hostent);
   }
@@ -487,7 +560,7 @@ httpGetHostByName(const char *name)	/* I - Hostname or IP address */
     * the name...
     */
 
-    DEBUG_puts("httpGetHostByName: returning domain lookup address(es)...");
+    DEBUG_puts("1httpGetHostByName: returning domain lookup address(es)...");
 
     return (gethostbyname(name));
   }
@@ -502,7 +575,7 @@ httpGetHostByName(const char *name)	/* I - Hostname or IP address */
  * Otherwise, return the FQDN for the local system using both gethostname()
  * and gethostbyname() to get the local hostname with domain.
  *
- * @since CUPS 1.2@
+ * @since CUPS 1.2/Mac OS X 10.5@
  */
 
 const char *				/* O - FQDN for connection or system */
@@ -552,5 +625,5 @@ httpGetHostname(http_t *http,		/* I - HTTP connection or NULL */
 
 
 /*
- * End of "$Id: http-addr.c 6816 2007-08-20 20:16:00Z mike $".
+ * End of "$Id: http-addr.c 7910 2008-09-06 00:25:17Z mike $".
  */

@@ -1,9 +1,6 @@
 /* APPLE LOCAL file coalescing */
 /* Make sure that non-weak '::new' and '::delete' operators do not wind
-   up in a coalesced section.  Whether or not they get called via a stub
-   from within the same translation unit is an issue we defer for later
-   (i.e., Positron); when called from other translation units, they do
-   need a stub.  */
+   up in a coalesced section.  */
 /* Author: Ziemowit Laski <zlaski@apple.com>  */
 /* { dg-do compile { target powerpc*-*-darwin* } } */
 
@@ -25,4 +22,3 @@ int *foo(void) {
 }
 
 /* { dg-final { scan-assembler-not "coal" } } */
-/* { dg-final { scan-assembler "bl L__ZdlPvi.stub" } } */

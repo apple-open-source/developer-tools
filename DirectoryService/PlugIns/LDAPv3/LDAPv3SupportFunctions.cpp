@@ -30,6 +30,7 @@
 #include "CLDAPNodeConfig.h"
 #include "DSLDAPUtils.h"
 #include "DSUtils.h"
+#include <sys/time.h>
 
 #define kKerberosPrefsFilePath			"/Library/Preferences/edu.mit.Kerberos"
 
@@ -54,30 +55,75 @@
 //	* DSCheckForLDAPResult
 //------------------------------------------------------------------------------------
 
-static tDirStatus DSCheckForLDAPResult( LDAP			*inHost,
-									    int32_t			inSearchTimeout, 
-									    int				inHowMany,
-									    int				inLDAPMsgId,
-									    LDAPMessage		**outResult )
+static tDirStatus DSCheckForLDAPResult( LDAP				*inHost,
+									    sLDAPContextData	*inContext, 
+									    int					inHowMany,
+									    int					inLDAPMsgId,
+									    LDAPMessage			**outResult )
 {
 	tDirStatus	siResult	= eDSCannotAccessSession;
 	
 	if ( inHost != NULL )
 	{
-		struct	timeval	tv = { inSearchTimeout, 0 };
+		struct	timeval	tv = { 0, 100000 }; // we wait 100 ms at a time until we reach total timeout
 		
 		int rc = ldap_result( inHost, inLDAPMsgId, inHowMany, &tv, outResult );
 		switch ( rc )
 		{
 			case LDAP_RES_SEARCH_ENTRY:
 				// we have an entry, let's just break out because means we have something
+				inContext->fAccruedTimeout.tv_sec = 0;
+				inContext->fAccruedTimeout.tv_usec = 0;
 				siResult = eDSNoErr;
 				break;
 			case LDAP_RES_SEARCH_RESULT:
-				// we don't care about the final result, it's just a status block
-				siResult = eDSRecordNotFound;
+            {
+                int     ldapErr       = LDAP_SUCCESS;
+                char*   ldapErrMsg    = NULL;
+
+                // check the final result block to see if there are any server errors.
+                rc = ldap_parse_result( inHost, *outResult, &ldapErr, NULL, &ldapErrMsg, NULL, NULL, 0);
+                if ( rc == LDAP_SUCCESS )
+                {
+					switch( ldapErr )
+					{
+						case LDAP_ADMINLIMIT_EXCEEDED:
+						case LDAP_SIZELIMIT_EXCEEDED:
+							DbgLog( kLogNotice, "CLDAPv3::DSCheckForLDAPResult - LDAP request limit exceeded" );
+						case LDAP_SUCCESS:
+						case LDAP_NO_SUCH_OBJECT:
+							siResult = eDSRecordNotFound;  // normal successful return code
+							break;
+						case LDAP_TIMEOUT:
+						case LDAP_TIMELIMIT_EXCEEDED:
+							siResult = eDSOperationTimeout;
+							DbgLog( kLogNotice, "CLDAPv3::DSCheckForLDAPResult - LDAP request timed out" );
+							break;
+						default:
+							siResult = eDSOperationFailed;
+							DbgLog( kLogPlugin, "CLDAPv3::DSCheckForLDAPResult - LDAP server search result error %d: %s",
+								    ldapErr, (ldapErrMsg == NULL || ldapErrMsg[0] == '\0') ? "Unknown error" : ldapErrMsg );
+							break;
+					}
+                }
+                else
+                {
+                    siResult = eDSOperationFailed;
+                    DbgLog( kLogPlugin, "CLDAPv3::DSCheckForLDAPResult - ldap_parse_result() failed, return code = %d", rc );
+                }
+				
+				DSFree( ldapErrMsg );
 				break;
+            }
 			case 0:
+				timeradd( &inContext->fAccruedTimeout, &tv, &inContext->fAccruedTimeout );
+				// see if we've reached our total search timeout
+				if ( inContext->fAccruedTimeout.tv_sec < inContext->fLDAPConnection->fNodeConfig->fSearchTimeout ) {
+					// by breaking for X seconds at a time we allow other searches to be issued
+					// possibly allowing SO_NOADDRERR to kick in if someone else issues a request
+					siResult = eDSNoErr;
+					break;
+				}
 				// we timed out during the search we'll assume the server is bad
 			case -1:
 				siResult = eDSCannotAccessSession;
@@ -136,11 +182,13 @@ tDirStatus DSInitiateOrContinueSearch( sLDAPContextData		*inContext,
 					case LDAP_SUCCESS:
 						siResult = eDSNoErr;
 						break;
+					case LDAP_TIMEOUT:
+						siResult = eDSOperationTimeout;
+						break;
 					case LDAP_UNAVAILABLE:
 					case LDAP_SERVER_DOWN:
 					case LDAP_BUSY:
 					case LDAP_LOCAL_ERROR:
-					case LDAP_TIMEOUT:
 						siResult = eDSCannotAccessSession;
 						break;
 					default:
@@ -152,8 +200,7 @@ tDirStatus DSInitiateOrContinueSearch( sLDAPContextData		*inContext,
 				if ( siResult == eDSNoErr )
 				{
 					inContinue->fRefLD = aHost;
-					siResult = DSCheckForLDAPResult( aHost, inContext->fLDAPConnection->fNodeConfig->fSearchTimeout, LDAP_MSG_ONE,
-													 inContinue->fLDAPMsgId, outResult );
+					siResult = DSCheckForLDAPResult( aHost, inContext, LDAP_MSG_ONE, inContinue->fLDAPMsgId, outResult );
 				}
 				
 				if ( siResult != eDSNoErr && inContinue->fLDAPMsgId > 0 )
@@ -207,8 +254,7 @@ tDirStatus DSInitiateOrContinueSearch( sLDAPContextData		*inContext,
 			}
 			else
 			{
-				siResult = DSCheckForLDAPResult( aHost, inContext->fLDAPConnection->fNodeConfig->fSearchTimeout, LDAP_MSG_ONE,
-												 inContinue->fLDAPMsgId, outResult );
+				siResult = DSCheckForLDAPResult( aHost, inContext, LDAP_MSG_ONE, inContinue->fLDAPMsgId, outResult );
 			}
 		}
 		

@@ -15,8 +15,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 #include "config.h"
 #include "system.h"
@@ -66,8 +66,8 @@ static unsigned int interpret_int_suffix (cpp_reader *, const uchar *, size_t);
 static void check_promotion (cpp_reader *, const struct op *);
 
 /* Token type abuse to create unary plus and minus operators.  */
-#define CPP_UPLUS (CPP_LAST_CPP_OP + 1)
-#define CPP_UMINUS (CPP_LAST_CPP_OP + 2)
+#define CPP_UPLUS ((enum cpp_ttype) (CPP_LAST_CPP_OP + 1))
+#define CPP_UMINUS ((enum cpp_ttype) (CPP_LAST_CPP_OP + 2))
 
 /* With -O2, gcc appears to produce nice code, moving the error
    message load and subsequent jump completely out of the main path.  */
@@ -83,7 +83,7 @@ static void check_promotion (cpp_reader *, const struct op *);
 static unsigned int
 interpret_float_suffix (const uchar *s, size_t len)
 {
-  size_t f = 0, l = 0, i = 0;
+  size_t f = 0, l = 0, i = 0, d = 0;
 
   while (len--)
     switch (s[len])
@@ -92,6 +92,12 @@ interpret_float_suffix (const uchar *s, size_t len)
       case 'l': case 'L': l++; break;
       case 'i': case 'I':
       case 'j': case 'J': i++; break;
+      case 'd': case 'D': 
+	/* Disallow fd, ld suffixes.  */
+	if (d && (f || l))
+	  return 0;
+	d++;
+	break;
       default:
 	return 0;
       }
@@ -99,9 +105,14 @@ interpret_float_suffix (const uchar *s, size_t len)
   if (f + l > 1 || i > 1)
     return 0;
 
+  /* Allow dd, df, dl suffixes for decimal float constants.  */
+  if (d && ((d + f + l != 2) || i))
+    return 0;
+
   return ((i ? CPP_N_IMAGINARY : 0)
 	  | (f ? CPP_N_SMALL :
-	     l ? CPP_N_LARGE : CPP_N_MEDIUM));
+	     l ? CPP_N_LARGE : CPP_N_MEDIUM)
+	  | (d ? CPP_N_DFLOAT : 0));
 }
 
 /* Subroutine of cpp_classify_number.  S points to an integer suffix
@@ -149,7 +160,8 @@ interpret_int_suffix (cpp_reader *pfile, const uchar *s, size_t len)
    floating point, or invalid), radix (decimal, octal, hexadecimal),
    and type suffixes.  */
 unsigned int
-cpp_classify_number (cpp_reader *pfile, const cpp_token *token)
+/* APPLE LOCAL CW asm blocks C++ comments 6338079 */
+cpp_classify_number (cpp_reader *pfile, const cpp_token *token, int defer)
 {
   const uchar *str = token->val.str.text;
   const uchar *limit;
@@ -262,6 +274,15 @@ cpp_classify_number (cpp_reader *pfile, const cpp_token *token)
 		   "traditional C rejects the \"%.*s\" suffix",
 		   (int) (limit - str), str);
 
+      /* Radix must be 10 for decimal floats.  */
+      if ((result & CPP_N_DFLOAT) && radix != 10)
+        {
+          cpp_error (pfile, CPP_DL_ERROR,
+                     "invalid suffix \"%.*s\" with hexadecimal floating constant",
+                     (int) (limit - str), str);
+          return CPP_N_INVALID;
+        }
+
       result |= CPP_N_FLOATING;
     }
   else
@@ -273,8 +294,8 @@ cpp_classify_number (cpp_reader *pfile, const cpp_token *token)
 	  /* APPLE LOCAL begin CW asm blocks C++ comments 4248139 */
 	  /* Because we don't regonize inline asm comments during
 	     lexing, we have to avoid erroring out now.  */
-	  if (cpp_get_options (pfile)->h_suffix)
-	    return CPP_N_INVALID;
+	  if (defer && cpp_get_options (pfile)->h_suffix)
+	    return CPP_N_INVALID | CPP_N_DEFER;
 	  /* APPLE LOCAL end CW asm blocks C++ comments 4248139 */
 
 	  cpp_error (pfile, CPP_DL_ERROR,
@@ -549,7 +570,8 @@ eval_token (cpp_reader *pfile, const cpp_token *token)
   switch (token->type)
     {
     case CPP_NUMBER:
-      temp = cpp_classify_number (pfile, token);
+      /* APPLE LOCAL CW asm blocks C++ comments 6338079 */
+      temp = cpp_classify_number (pfile, token, 0);
       switch (temp & CPP_N_CATEGORY)
 	{
 	case CPP_N_FLOATING:
@@ -650,7 +672,7 @@ extra semantics need to be handled with operator-specific code.  */
 
 /* Operator to priority map.  Must be in the same order as the first
    N entries of enum cpp_ttype.  */
-static const struct operator
+static const struct cpp_operator
 {
   uchar prio;
   uchar flags;
@@ -670,9 +692,6 @@ static const struct operator
   /* XOR */		{8, LEFT_ASSOC | CHECK_PROMOTION},
   /* RSHIFT */		{13, LEFT_ASSOC},
   /* LSHIFT */		{13, LEFT_ASSOC},
-
-  /* MIN */		{10, LEFT_ASSOC | CHECK_PROMOTION},
-  /* MAX */		{10, LEFT_ASSOC | CHECK_PROMOTION},
 
   /* COMPL */		{16, NO_L_OPERAND},
   /* AND_AND */		{6, LEFT_ASSOC},
@@ -885,8 +904,6 @@ reduce (cpp_reader *pfile, struct op *top, enum cpp_ttype op)
 	case CPP_MINUS:
 	case CPP_RSHIFT:
 	case CPP_LSHIFT:
-	case CPP_MIN:
-	case CPP_MAX:
 	case CPP_COMMA:
 	  top[-1].value = num_binary_op (pfile, top[-1].value,
 					 top->value, top->op);
@@ -998,7 +1015,7 @@ _cpp_expand_op_stack (cpp_reader *pfile)
   size_t old_size = (size_t) (pfile->op_limit - pfile->op_stack);
   size_t new_size = old_size * 2 + 20;
 
-  pfile->op_stack = xrealloc (pfile->op_stack, new_size * sizeof (struct op));
+  pfile->op_stack = XRESIZEVEC (struct op, pfile->op_stack, new_size);
   pfile->op_limit = pfile->op_stack + new_size;
 
   return pfile->op_stack + old_size;
@@ -1312,7 +1329,6 @@ num_binary_op (cpp_reader *pfile, cpp_num lhs, cpp_num rhs, enum cpp_ttype op)
 {
   cpp_num result;
   size_t precision = CPP_OPTION (pfile, precision);
-  bool gte;
   size_t n;
 
   switch (op)
@@ -1337,21 +1353,6 @@ num_binary_op (cpp_reader *pfile, cpp_num lhs, cpp_num rhs, enum cpp_ttype op)
 	lhs = num_lshift (lhs, precision, n);
       else
 	lhs = num_rshift (lhs, precision, n);
-      break;
-
-      /* Min / Max.  */
-    case CPP_MIN:
-    case CPP_MAX:
-      {
-	bool unsignedp = lhs.unsignedp || rhs.unsignedp;
-
-	gte = num_greater_eq (lhs, rhs, precision);
-	if (op == CPP_MIN)
-	  gte = !gte;
-	if (!gte)
-	  lhs = rhs;
-	lhs.unsignedp = unsignedp;
-      }
       break;
 
       /* Arithmetic.  */
@@ -1551,7 +1552,10 @@ num_div_op (cpp_reader *pfile, cpp_num lhs, cpp_num rhs, enum cpp_ttype op)
 	{
 	  if (negate)
 	    result = num_negate (result, precision);
-	  result.overflow = num_positive (result, precision) ^ !negate;
+	  /* APPLE LOCAL begin mainline */
+	  result.overflow = (num_positive (result, precision) ^ !negate
+			     && !num_zerop (result));
+	  /* APPLE LOCAL end mainline */
 	}
 
       return result;

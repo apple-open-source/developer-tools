@@ -1,5 +1,6 @@
 /*
- * Copyright (C) 2006 Apple Computer, Inc.  All rights reserved.
+ * Copyright (C) 2006, 2007, 2008, 2009 Apple Inc. All rights reserved.
+ * Copyright (C) 2007 Justin Haygood (jhaygood@reaktix.com)
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,18 +27,17 @@
 #ifndef IconDatabase_h
 #define IconDatabase_h
 
-#if ENABLE(ICONDATABASE)
-#include "SQLDatabase.h"
-#endif
-
 #include "StringHash.h"
-#if ENABLE(ICONDATABASE)
-#include "Threading.h"
-#endif
 #include "Timer.h"
+#include <wtf/HashMap.h>
 #include <wtf/HashSet.h>
 #include <wtf/Noncopyable.h>
 #include <wtf/OwnPtr.h>
+
+#if ENABLE(ICONDATABASE)
+#include "SQLiteDatabase.h"
+#include <wtf/Threading.h>
+#endif
 
 namespace WebCore { 
 
@@ -73,7 +73,7 @@ public:
             
     void removeAllIcons();
 
-    Image* iconForPageURL(const String&, const IntSize&, bool cache = true);
+    Image* iconForPageURL(const String&, const IntSize&);
     void readIconForPageURLFromDisk(const String&);
     String iconURLForPageURL(const String&);
     Image* defaultIcon(const IntSize&);
@@ -109,23 +109,20 @@ private:
     friend IconDatabase* iconDatabase();
 
 #if ENABLE(ICONDATABASE)
-    // This is called on the main thread via the callOnMainThread() function which currently
-    // doesn't have any way to allow it to be an instance method, which it should be
-    static void notifyPendingLoadDecisions();
-    
-    void notifyPendingLoadDecisionsInternal();
+    static void notifyPendingLoadDecisionsOnMainThread(void*);
+    void notifyPendingLoadDecisions();
 
     void wakeSyncThread();
     void scheduleOrDeferSyncTimer();
-    OwnPtr<Timer<IconDatabase> > m_syncTimer;
     void syncTimerFired(Timer<IconDatabase>*);
     
-    pthread_t m_syncThread;
+    Timer<IconDatabase> m_syncTimer;
+    ThreadIdentifier m_syncThread;
     bool m_syncThreadRunning;
     
     HashSet<RefPtr<DocumentLoader> > m_loadersPendingDecision;
 
-    IconRecord* m_defaultIconRecord;
+    RefPtr<IconRecord> m_defaultIconRecord;
 #endif // ENABLE(ICONDATABASE)
 
 // *** Any Thread ***
@@ -134,9 +131,9 @@ public:
     String databasePath() const;
     static String defaultDatabaseFilename();
 
-private:
 #if ENABLE(ICONDATABASE)
-    IconRecord* getOrCreateIconRecord(const String& iconURL);
+private:
+    PassRefPtr<IconRecord> getOrCreateIconRecord(const String& iconURL);
     PageURLRecord* getOrCreatePageURLRecord(const String& pageURL);
     
     bool m_isEnabled;
@@ -213,26 +210,26 @@ private:
     // The client is set by the main thread before the thread starts, and from then on is only used by the sync thread
     IconDatabaseClient* m_client;
     
-    SQLDatabase m_syncDB;
+    SQLiteDatabase m_syncDB;
     
     // Track whether the "Safari 2" import is complete and/or set in the database
     bool m_imported;
     bool m_isImportedSet;
     
-    OwnPtr<SQLStatement> m_setIconIDForPageURLStatement;
-    OwnPtr<SQLStatement> m_removePageURLStatement;
-    OwnPtr<SQLStatement> m_getIconIDForIconURLStatement;
-    OwnPtr<SQLStatement> m_getImageDataForIconURLStatement;
-    OwnPtr<SQLStatement> m_addIconToIconInfoStatement;
-    OwnPtr<SQLStatement> m_addIconToIconDataStatement;
-    OwnPtr<SQLStatement> m_getImageDataStatement;
-    OwnPtr<SQLStatement> m_deletePageURLsForIconURLStatement;
-    OwnPtr<SQLStatement> m_deleteIconFromIconInfoStatement;
-    OwnPtr<SQLStatement> m_deleteIconFromIconDataStatement;
-    OwnPtr<SQLStatement> m_updateIconInfoStatement;
-    OwnPtr<SQLStatement> m_updateIconDataStatement;
-    OwnPtr<SQLStatement> m_setIconInfoStatement;
-    OwnPtr<SQLStatement> m_setIconDataStatement;
+    OwnPtr<SQLiteStatement> m_setIconIDForPageURLStatement;
+    OwnPtr<SQLiteStatement> m_removePageURLStatement;
+    OwnPtr<SQLiteStatement> m_getIconIDForIconURLStatement;
+    OwnPtr<SQLiteStatement> m_getImageDataForIconURLStatement;
+    OwnPtr<SQLiteStatement> m_addIconToIconInfoStatement;
+    OwnPtr<SQLiteStatement> m_addIconToIconDataStatement;
+    OwnPtr<SQLiteStatement> m_getImageDataStatement;
+    OwnPtr<SQLiteStatement> m_deletePageURLsForIconURLStatement;
+    OwnPtr<SQLiteStatement> m_deleteIconFromIconInfoStatement;
+    OwnPtr<SQLiteStatement> m_deleteIconFromIconDataStatement;
+    OwnPtr<SQLiteStatement> m_updateIconInfoStatement;
+    OwnPtr<SQLiteStatement> m_updateIconDataStatement;
+    OwnPtr<SQLiteStatement> m_setIconInfoStatement;
+    OwnPtr<SQLiteStatement> m_setIconDataStatement;
 #endif // ENABLE(ICONDATABASE)
 };
 

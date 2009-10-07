@@ -55,12 +55,19 @@ class SecStaticCode : public SecCFObject {
 	NOCOPY(SecStaticCode)
 	
 protected:
+	//
+	// A context for resource validation operations, to tailor error response.
+	// The base class throws an exception immediately and ignores detail data.
+	// 
 	class ValidationContext {
 	public:
 		virtual ~ValidationContext();
 		virtual void reportProblem(OSStatus rc, CFStringRef type, CFTypeRef value);
 	};
 	
+	//
+	// A CollectingContext collects all error details and throws an annotated final error.
+	//
 	class CollectingContext : public ValidationContext {
 	public:
 		CollectingContext(SecStaticCode &c) : code(c), mStatus(noErr) { }
@@ -87,9 +94,14 @@ public:
 	SecStaticCode(DiskRep *rep);
     virtual ~SecStaticCode() throw();
 	
-	void detachedSignature(CFDataRef sig);
+    bool equal(SecCFObject &other);
+    CFHashCode hash();
+	
+	void detachedSignature(CFDataRef sig);		// attach an explicitly given detached signature
+	void checkForSystemSignature();				// check for and attach system-supplied detached signature
 
 	const CodeDirectory *codeDirectory(bool check = true);
+	CFDataRef cdHash();
 	CFDataRef signature();
 	CFAbsoluteTime signingTime();
 	bool isSigned() { return codeDirectory(false) != NULL; }
@@ -98,13 +110,16 @@ public:
 	CFURLRef canonicalPath() const { return mRep->canonicalPath(); }
 	std::string identifier() { return codeDirectory()->identifier(); }
 	std::string format() const { return mRep->format(); }
+	std::string signatureSource();
 	CFDataRef component(CodeDirectory::SpecialSlot slot);
 	CFDictionaryRef infoDictionary();
+	CFDictionaryRef entitlements();
 
 	CFDictionaryRef resourceDictionary();
 	CFURLRef resourceBase();
 	CFDataRef resource(std::string path);
 	CFDataRef resource(std::string path, ValidationContext &ctx);
+	void validateResource(string path, ValidationContext &ctx);
 	
 	bool flag(uint32_t tested);
 	
@@ -122,7 +137,7 @@ public:
 	const Requirements *internalRequirements();
 	const Requirement *internalRequirement(SecRequirementType type);
 	const Requirement *designatedRequirement();
-	const Requirement *defaultDesignatedRequirement();
+	const Requirement *defaultDesignatedRequirement();		// newly allocated (caller owns)
 	
 	void validateRequirements(SecRequirementType type, SecStaticCode *target,
 		OSStatus nullError = noErr);
@@ -137,6 +152,10 @@ protected:
 	CFDictionaryRef getDictionary(CodeDirectory::SpecialSlot slot);
 	bool verifySignature();
 	SecPolicyRef verificationPolicy();
+
+	void defaultDesignatedAppleAnchor(Requirement::Maker &maker);
+	void defaultDesignatedNonAppleAnchor(Requirement::Maker &maker);
+	bool isAppleSDKSignature();
 
 	static void checkOptionalResource(CFTypeRef key, CFTypeRef value, void *context);
 
@@ -160,8 +179,10 @@ private:
 	
 	// alternative cache forms (storage may depend on cached contents above)
 	CFRef<CFDictionaryRef> mInfoDict;	// derived from mCache slot
+	CFRef<CFDictionaryRef> mEntitlements; // derived from mCache slot
 	CFRef<CFDictionaryRef> mResourceDict; // derived from mCache slot
 	const Requirement *mDesignatedReq;	// cached designated req if we made one up
+	CFRef<CFDataRef> mCDHash;			// hash of CodeDirectory
 	
 	bool mGotResourceBase;				// asked mRep for resourceBasePath
 	CFRef<CFURLRef> mResourceBase;		// URL form of resource base directory

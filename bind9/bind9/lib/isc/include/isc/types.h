@@ -1,8 +1,8 @@
 /*
- * Copyright (C) 2004, 2005  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2008  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2003  Internet Software Consortium.
  *
- * Permission to use, copy, modify, and distribute this software for any
+ * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
  *
@@ -15,12 +15,12 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* $Id: types.h,v 1.35.18.2 2005/04/29 00:17:04 marka Exp $ */
+/* $Id: types.h,v 1.46 2008/06/23 19:41:19 jinmei Exp $ */
 
 #ifndef ISC_TYPES_H
 #define ISC_TYPES_H 1
 
-/*! \file
+/*! \file isc/types.h
  * \brief
  * OS-specific types, from the OS-specific include directories.
  */
@@ -52,6 +52,11 @@ typedef ISC_LIST(isc_event_t)		isc_eventlist_t;	/*%< Event List */
 typedef unsigned int			isc_eventtype_t;	/*%< Event Type */
 typedef isc_uint32_t			isc_fsaccess_t;		/*%< FS Access */
 typedef struct isc_hash			isc_hash_t;		/*%< Hash */
+typedef struct isc_httpd		isc_httpd_t;		/*%< HTTP client */
+typedef void (isc_httpdfree_t)(isc_buffer_t *, void *);		/*%< HTTP free function */
+typedef struct isc_httpdmgr		isc_httpdmgr_t;		/*%< HTTP manager */
+typedef struct isc_httpdurl		isc_httpdurl_t;		/*%< HTTP URL */
+typedef void (isc_httpdondestroy_t)(void *);			/*%< Callback on destroying httpd */
 typedef struct isc_interface		isc_interface_t;	/*%< Interface */
 typedef struct isc_interfaceiter	isc_interfaceiter_t;	/*%< Interface Iterator */
 typedef struct isc_interval		isc_interval_t;		/*%< Interval */
@@ -65,6 +70,7 @@ typedef struct isc_mempool		isc_mempool_t;		/*%< Memory Pool */
 typedef struct isc_msgcat		isc_msgcat_t;		/*%< Message Catalog */
 typedef struct isc_ondestroy		isc_ondestroy_t;	/*%< On Destroy */
 typedef struct isc_netaddr		isc_netaddr_t;		/*%< Net Address */
+typedef struct isc_portset		isc_portset_t;		/*%< Port Set */
 typedef struct isc_quota		isc_quota_t;		/*%< Quota */
 typedef struct isc_random		isc_random_t;		/*%< Random */
 typedef struct isc_ratelimiter		isc_ratelimiter_t;	/*%< Rate Limiter */
@@ -86,6 +92,19 @@ typedef struct isc_timer		isc_timer_t;		/*%< Timer */
 typedef struct isc_timermgr		isc_timermgr_t;		/*%< Timer Manager */
 
 typedef void (*isc_taskaction_t)(isc_task_t *, isc_event_t *);
+typedef int (*isc_sockfdwatch_t)(isc_task_t *, isc_socket_t *, void *);
+
+/* The following cannot be listed alphabetically due to forward reference */
+typedef isc_result_t (isc_httpdaction_t)(const char *url,
+					 const char *querystring,
+					 void *arg,
+					 unsigned int *retcode,
+					 const char **retmsg,
+					 const char **mimetype,
+					 isc_buffer_t *body,
+					 isc_httpdfree_t **freecb,
+					 void **freecb_args);
+typedef isc_boolean_t (isc_httpdclientok_t)(const isc_sockaddr_t *, void *);
 
 /*% Resource */
 typedef enum {

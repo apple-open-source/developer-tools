@@ -35,20 +35,23 @@ int foo::si = 0;
 foo::foo ()
 {
   si++;
-  printf ("new foo @ 0x%x; now %d foos\n", this, si);
+  /* APPLE LOCAL default to Wformat-security 5764921 */
+  printf ("new foo @ 0x%p; now %d foos\n", (void*)this, si);
 }
 
 foo::foo (const foo &other)
 {
   si++;
-  printf ("another foo @ 0x%x; now %d foos\n", this, si);
+  /* APPLE LOCAL default to Wformat-security 5764921 */
+  printf ("another foo @ 0x%p; now %d foos\n", (void*)this, si);
   *this = other;
 }
 
 foo::~foo ()
 {
   si--;
-  printf ("deleted foo @ 0x%x; now %d foos\n", this, si);
+  /* APPLE LOCAL default to Wformat-security 5764921 */
+  printf ("deleted foo @ 0x%p; now %d foos\n", (void*)this, si);
 }
 
 int
@@ -90,7 +93,7 @@ foo_parm_returns_foo (foo f)
 }
 
 void
-abort_because (char *str)
+abort_because (const char *str)
 {
   printf ("aborting because %s\n", str);
   abort ();

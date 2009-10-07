@@ -29,15 +29,15 @@
 #include "FontDescription.h"
 #include "GraphicsContext.h"
 #include "StringTruncator.h"
-#include "TextStyle.h"
 #include <wtf/unicode/Unicode.h>
 
 namespace WebCore {
 
+static bool shouldUseFontSmoothing = true;
+
 static bool isOneLeftToRightRun(const TextRun& run)
 {
-    unsigned i;
-    for (i = 0; i < run.length(); i++) {
+    for (int i = 0; i < run.length(); i++) {
         WTF::Unicode::Direction direction = WTF::Unicode::direction(run[i]);
         if (direction == WTF::Unicode::RightToLeft || direction > WTF::Unicode::OtherNeutral)
             return false;
@@ -48,15 +48,12 @@ static bool isOneLeftToRightRun(const TextRun& run)
 static void doDrawTextAtPoint(GraphicsContext& context, const String& text, const IntPoint& point, const Font& font, const Color& color, int underlinedIndex)
 {
     TextRun run(text.characters(), text.length());
-    TextStyle style;
 
     context.setFillColor(color);
     if (isOneLeftToRightRun(run))
-        font.drawText(&context, run, style, point);
-    else {
-        context.setFont(font);
-        context.drawBidiText(run, point, style);
-    }
+        font.drawText(&context, run, point);
+    else
+        context.drawBidiText(font, run, point);
 
     if (underlinedIndex >= 0) {
         ASSERT(underlinedIndex < static_cast<int>(text.length()));
@@ -64,12 +61,12 @@ static void doDrawTextAtPoint(GraphicsContext& context, const String& text, cons
         int beforeWidth;
         if (underlinedIndex > 0) {
             TextRun beforeRun(text.characters(), underlinedIndex);
-            beforeWidth = font.width(beforeRun, style);
+            beforeWidth = font.width(beforeRun);
         } else
             beforeWidth = 0;
 
         TextRun underlinedRun(text.characters() + underlinedIndex, 1);
-        int underlinedWidth = font.width(underlinedRun, style);
+        int underlinedWidth = font.width(underlinedRun);
 
         IntPoint underlinePoint(point);
         underlinePoint.move(beforeWidth, 1);
@@ -104,6 +101,26 @@ void WebCoreDrawDoubledTextAtPoint(GraphicsContext& context, const String& text,
 float WebCoreTextFloatWidth(const String& text, const Font& font)
 {
     return StringTruncator::width(text, font, false);
+}
+
+void WebCoreSetShouldUseFontSmoothing(bool smooth)
+{
+    shouldUseFontSmoothing = smooth;
+}
+
+bool WebCoreShouldUseFontSmoothing()
+{
+    return shouldUseFontSmoothing;
+}
+
+void WebCoreSetAlwaysUsesComplexTextCodePath(bool complex)
+{
+    Font::setCodePath(complex ? Font::Complex : Font::Auto);
+}
+
+bool WebCoreAlwaysUsesComplexTextCodePath()
+{
+    return Font::codePath() == Font::Complex;
 }
 
 } // namespace WebCore

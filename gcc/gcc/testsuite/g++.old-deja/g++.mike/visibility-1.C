@@ -1,4 +1,3 @@
-/* APPLE LOCAL file mainline 4.1 4182971 */
 /* Test visibility attribute on template member function
    instantiations. */
 

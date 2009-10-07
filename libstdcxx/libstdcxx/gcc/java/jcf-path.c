@@ -16,8 +16,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  
 
 Java and all Java-based marks are trademarks or registered trademarks
 of Sun Microsystems, Inc. in the United States and other countries.
@@ -132,7 +132,7 @@ add_entry (struct entry **entp, const char *filename, int is_system)
   int len;
   struct entry *n;
 
-  n = ALLOC (sizeof (struct entry));
+  n = XNEW (struct entry);
   n->flags = is_system ? FLAG_SYSTEM : 0;
   n->next = NULL;
 

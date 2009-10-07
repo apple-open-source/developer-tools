@@ -7,7 +7,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---           Copyright (C) 2003-2004 Free Software Foundation, Inc.         --
+--           Copyright (C) 2003-2005 Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -17,8 +17,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -125,6 +125,15 @@ package body MLib.Tgt is
       return "";
    end DLL_Ext;
 
+   ----------------
+   -- DLL_Prefix --
+   ----------------
+
+   function DLL_Prefix return String is
+   begin
+      return "lib";
+   end DLL_Prefix;
+
    --------------------
    -- Dynamic_Option --
    --------------------
@@ -174,9 +183,11 @@ package body MLib.Tgt is
    -- Library_Exists_For --
    ------------------------
 
-   function Library_Exists_For (Project : Project_Id) return Boolean is
+   function Library_Exists_For
+     (Project : Project_Id; In_Tree : Project_Tree_Ref) return Boolean
+   is
    begin
-      if not Projects.Table (Project).Library then
+      if not In_Tree.Projects.Table (Project).Library then
          Prj.Com.Fail ("INTERNAL ERROR: Library_Exists_For called " &
                        "for non library project");
          return False;
@@ -184,12 +195,16 @@ package body MLib.Tgt is
       else
          declare
             Lib_Dir : constant String :=
-              Get_Name_String (Projects.Table (Project).Library_Dir);
+              Get_Name_String
+                (In_Tree.Projects.Table (Project).Library_Dir);
             Lib_Name : constant String :=
-              Get_Name_String (Projects.Table (Project).Library_Name);
+              Get_Name_String
+                (In_Tree.Projects.Table (Project).Library_Name);
 
          begin
-            if Projects.Table (Project).Library_Kind = Static then
+            if In_Tree.Projects.Table (Project).Library_Kind =
+              Static
+            then
                return Is_Regular_File
                  (Lib_Dir & Directory_Separator & "lib" &
                   Fil.Ext_To (Lib_Name, Archive_Ext));
@@ -207,9 +222,12 @@ package body MLib.Tgt is
    -- Library_File_Name_For --
    ---------------------------
 
-   function Library_File_Name_For (Project : Project_Id) return Name_Id is
+   function Library_File_Name_For
+     (Project : Project_Id;
+      In_Tree : Project_Tree_Ref) return Name_Id
+   is
    begin
-      if not Projects.Table (Project).Library then
+      if not In_Tree.Projects.Table (Project).Library then
          Prj.Com.Fail ("INTERNAL ERROR: Library_File_Name_For called " &
                        "for non library project");
          return No_Name;
@@ -217,13 +235,16 @@ package body MLib.Tgt is
       else
          declare
             Lib_Name : constant String :=
-              Get_Name_String (Projects.Table (Project).Library_Name);
+              Get_Name_String
+                (In_Tree.Projects.Table (Project).Library_Name);
 
          begin
             Name_Len := 3;
             Name_Buffer (1 .. Name_Len) := "lib";
 
-            if Projects.Table (Project).Library_Kind = Static then
+            if In_Tree.Projects.Table (Project).Library_Kind =
+              Static
+            then
                Add_Str_To_Name_Buffer (Fil.Ext_To (Lib_Name, Archive_Ext));
 
             else

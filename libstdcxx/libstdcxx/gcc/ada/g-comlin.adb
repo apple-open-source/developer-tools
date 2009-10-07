@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1999-2004 Free Software Foundation, Inc.          --
+--          Copyright (C) 1999-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -49,23 +49,22 @@ package body GNAT.Command_Line is
    The_Parameter : Parameter_Type;
    The_Switch    : Parameter_Type;
    --  This type and this variable are provided to store the current switch
-   --  and parameter
+   --  and parameter.
 
    type Is_Switch_Type is array (1 .. CL.Argument_Count) of Boolean;
    pragma Pack (Is_Switch_Type);
 
    Is_Switch : Is_Switch_Type := (others => False);
    --  Indicates wich arguments on the command line are considered not be
-   --  switches or parameters to switches (this leaves e.g. the filenames...)
+   --  switches or parameters to switches (this leaves e.g. the filenames...).
 
    type Section_Type is array (1 .. CL.Argument_Count + 1) of Section_Number;
    pragma Pack (Section_Type);
    Section : Section_Type := (others => 1);
-   --  Contains the number of the section associated with the current
-   --  switch.  If this number is 0, then it is a section delimiter, which
-   --  is never returns by GetOpt.
-   --  The last element of this array is set to 0 to avoid the need to test for
-   --  if we have reached the end of the command line in loops.
+   --  Contains the number of the section associated with the current switch.
+   --  If this number is 0, then it is a section delimiter, which is never
+   --  returns by GetOpt. The last element of this array is set to 0 to avoid
+   --  the need to test for reaching the end of the command line in loops.
 
    Current_Argument : Natural := 1;
    --  Number of the current argument parsed on the command line
@@ -82,8 +81,8 @@ package body GNAT.Command_Line is
    --  True if we are expanding a file
 
    Switch_Character : Character := '-';
-   --  The character at the beginning of the command line arguments,
-   --  indicating the beginning of a switch
+   --  The character at the beginning of the command line arguments, indicating
+   --  the beginning of a switch.
 
    Stop_At_First : Boolean := False;
    --  If it is True then Getopt stops at the first non-switch argument
@@ -97,24 +96,25 @@ package body GNAT.Command_Line is
    --  Set the parameter that will be returned by Parameter below
 
    function Goto_Next_Argument_In_Section return Boolean;
-   --  Go to the next argument on the command line. If we are at the end
-   --  of the current section, we want to make sure there is no other
-   --  identical section on the command line (there might be multiple
-   --  instances of -largs). Returns True iff there is another argument.
+   --  Go to the next argument on the command line. If we are at the end of the
+   --  current section, we want to make sure there is no other identical
+   --  section on the command line (there might be multiple instances of
+   --  -largs). Returns True iff there is another argument.
 
    function Get_File_Names_Case_Sensitive return Integer;
    pragma Import (C, Get_File_Names_Case_Sensitive,
                   "__gnat_get_file_names_case_sensitive");
+
    File_Names_Case_Sensitive : constant Boolean :=
                                  Get_File_Names_Case_Sensitive /= 0;
 
    procedure Canonical_Case_File_Name (S : in out String);
-   --  Given a file name, converts it to canonical case form. For systems
-   --  where file names are case sensitive, this procedure has no effect.
-   --  If file names are not case sensitive (i.e. for example if you have
-   --  the file "xyz.adb", you can refer to it as XYZ.adb or XyZ.AdB), then
-   --  this call converts the given string to canonical all lower case form,
-   --  so that two file names compare equal if they refer to the same file.
+   --  Given a file name, converts it to canonical case form. For systems where
+   --  file names are case sensitive, this procedure has no effect. If file
+   --  names are not case sensitive (i.e. for example if you have the file
+   --  "xyz.adb", you can refer to it as XYZ.adb or XyZ.AdB), then this call
+   --  converts the given string to canonical all lower case form, so that two
+   --  file names compare equal if they refer to the same file.
 
    ------------------------------
    -- Canonical_Case_File_Name --
@@ -150,8 +150,8 @@ package body GNAT.Command_Line is
       NL      : Positive;
 
    begin
-      --  It is assumed that a directory is opened at the current level;
-      --  otherwise, GNAT.Directory_Operations.Directory_Error will be raised
+      --  It is assumed that a directory is opened at the current level.
+      --  Otherwise GNAT.Directory_Operations.Directory_Error will be raised
       --  at the first call to Read.
 
       loop
@@ -162,7 +162,7 @@ package body GNAT.Command_Line is
          if Last = 0 then
             Close (It.Levels (Current).Dir);
 
-            --  If we are at level 1, we are finished; return an empty string.
+            --  If we are at level 1, we are finished; return an empty string
 
             if Current = 1 then
                return String'(1 .. 0 => ' ');
@@ -384,11 +384,19 @@ package body GNAT.Command_Line is
          Arg            : String renames CL.Argument (Current_Argument);
          Index_Switches : Natural := 0;
          Max_Length     : Natural := 0;
-         Index          : Natural := Switches'First;
+         Index          : Natural;
          Length         : Natural := 1;
          End_Index      : Natural;
 
       begin
+         --  Remove all leading spaces first to make sure that Index points
+         --  at the start of the first switch.
+
+         Index := Switches'First;
+         while Index <= Switches'Last and then Switches (Index) = ' ' loop
+            Index := Index + 1;
+         end loop;
+
          while Index <= Switches'Last loop
 
             --  Search the length of the parameter at this position in Switches

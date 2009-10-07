@@ -23,13 +23,15 @@
  * the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
  * Boston, MA 02110-1301, USA.
  */
+
 #include "config.h"
 #include "HTMLTableColElement.h"
 
 #include "CSSPropertyNames.h"
 #include "HTMLNames.h"
-#include "RenderTableCol.h"
 #include "HTMLTableElement.h"
+#include "MappedAttribute.h"
+#include "RenderTableCol.h"
 #include "Text.h"
 
 namespace WebCore {
@@ -79,19 +81,30 @@ void HTMLTableColElement::parseMappedAttribute(MappedAttribute *attr)
         if (renderer() && renderer()->isTableCol())
             static_cast<RenderTableCol*>(renderer())->updateFromElement();
     } else if (attr->name() == widthAttr) {
-        if (!attr->value().isEmpty())
-            addCSSLength(attr, CSS_PROP_WIDTH, attr->value());
+        if (!attr->value().isEmpty()) {
+            addCSSLength(attr, CSSPropertyWidth, attr->value());
+            if (renderer() && renderer()->isTableCol()) {
+                RenderTableCol* col = static_cast<RenderTableCol*>(renderer());
+                int newWidth = width().toInt();
+                if (newWidth != col->width())
+                    col->setNeedsLayoutAndPrefWidthsRecalc();
+            }
+        }
     } else
         HTMLTablePartElement::parseMappedAttribute(attr);
 }
 
 // used by table columns and column groups to share style decls created by the enclosing table.
-CSSMutableStyleDeclaration* HTMLTableColElement::additionalAttributeStyleDecl()
+void HTMLTableColElement::additionalAttributeStyleDecls(Vector<CSSMutableStyleDeclaration*>& results)
 {
+    if (!hasLocalName(colgroupTag))
+        return;
     Node* p = parentNode();
     while (p && !p->hasTagName(tableTag))
         p = p->parentNode();
-    return hasLocalName(colgroupTag) && p ? static_cast<HTMLTableElement*>(p)->getSharedGroupDecl(false) : 0;
+    if (!p)
+        return;
+    static_cast<HTMLTableElement*>(p)->addSharedGroupDecls(false, results);
 }
 
 String HTMLTableColElement::align() const

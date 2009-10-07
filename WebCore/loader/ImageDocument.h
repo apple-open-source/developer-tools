@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2006 Apple Computer, Inc.  All rights reserved.
+ * Copyright (C) 2006, 2007, 2008 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -21,6 +21,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  */
+
 #ifndef ImageDocument_h
 #define ImageDocument_h
 
@@ -28,26 +29,29 @@
 
 namespace WebCore {
     
-class DOMImplementation;
-class FrameView;
-class HTMLImageElement;
+class ImageDocumentElement;
 
-class ImageDocument : public HTMLDocument
-{
+class ImageDocument : public HTMLDocument {
 public:
-    ImageDocument(DOMImplementation*, Frame*);
+    static PassRefPtr<ImageDocument> create(Frame* frame)
+    {
+        return new ImageDocument(frame);
+    }
 
-    virtual bool isImageDocument() const { return true; }
-    
-    virtual Tokenizer* createTokenizer();
-    
     CachedImage* cachedImage();
-    HTMLImageElement* imageElement() const { return m_imageElement; }
+    ImageDocumentElement* imageElement() const { return m_imageElement; }
+    void disconnectImageElement() { m_imageElement = 0; }
     
     void windowSizeChanged();
     void imageChanged();
     void imageClicked(int x, int y);
+
 private:
+    ImageDocument(Frame*);
+
+    virtual Tokenizer* createTokenizer();
+    virtual bool isImageDocument() const { return true; }
+    
     void createDocumentStructure();
     void resizeImageToFit();
     void restoreImageSize();
@@ -55,7 +59,7 @@ private:
     bool shouldShrinkToFit() const;
     float scale() const;
     
-    HTMLImageElement* m_imageElement;
+    ImageDocumentElement* m_imageElement;
     
     // Whether enough of the image has been loaded to determine its size
     bool m_imageSizeIsKnown;

@@ -1,10 +1,9 @@
-# 
-# KDOM IDL parser
 #
+# WebKit IDL parser
+# 
 # Copyright (C) 2005 Nikolas Zimmermann <wildfox@kde.org>
 # Copyright (C) 2006 Samuel Weinig <sam.weinig@gmail.com>
-# 
-# This file is part of the KDE project
+# Copyright (C) 2007 Apple Inc. All rights reserved.
 # 
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Library General Public
@@ -35,13 +34,14 @@ my $codeGenerator = 0;
 
 my $verbose = 0;
 
-my %primitiveTypeHash = ("int" => 1, "short" => 1, "long" => 1, 
+my %primitiveTypeHash = ("int" => 1, "short" => 1, "long" => 1, "long long" => 1, 
                          "unsigned int" => 1, "unsigned short" => 1,
-                         "unsigned long" => 1, "float" => 1,
-                         "double" => 1, "boolean" => 1, "void" => 1);
+                         "unsigned long" => 1, "unsigned long long" => 1, 
+                         "float" => 1, "double" => 1, 
+                         "boolean" => 1, "void" => 1);
 
-my %podTypeHash = ("RGBColor" => 1, "SVGLength" => 1, "SVGPoint" => 1, "SVGRect" => 1, "SVGNumber" => 1, "SVGMatrix" => 1, "SVGTransform" => 1);
- 
+my %podTypeHash = ("RGBColor" => 1, "SVGNumber" => 1, "SVGTransform" => 1);
+my %podTypesWithWritablePropertiesHash = ("SVGLength" => 1, "SVGMatrix" => 1, "SVGPoint" => 1, "SVGRect" => 1);
 my %stringTypeHash = ("DOMString" => 1, "AtomicString" => 1);
 
 my %nonPointerTypeHash = ("DOMTimeStamp" => 1, "CompareHow" => 1, "SVGPaintType" => 1);
@@ -116,6 +116,41 @@ sub ProcessDocument
     $codeGenerator->finish();
 }
 
+# Necessary for V8 bindings to determine whether an interface is descendant from Node.
+# Node descendants are treated differently by DOMMap and this allows inferring the
+# type statically. See more at the original change: http://codereview.chromium.org/3195.
+# FIXME: Figure out a way to eliminate this JS bindings dichotomy.
+sub FindParentsRecursively
+{
+    my $object = shift;
+    my $dataNode = shift;
+    my @parents = ($dataNode->name);
+    foreach (@{$dataNode->parents}) {
+        my $interface = $object->StripModule($_);
+
+        $endCondition = 0;
+        $foundFilename = "";
+        foreach (@{$useDirectories}) {
+            $object->ScanDirectory("$interface.idl", $_, $_, 0) if ($foundFilename eq "");
+        }
+
+        if ($foundFilename ne "") {
+            print "  |  |>  Parsing parent IDL \"$foundFilename\" for interface \"$interface\"\n" if $verbose;
+
+           # Step #2: Parse the found IDL file (in quiet mode).
+            my $parser = IDLParser->new(1);
+            my $document = $parser->Parse($foundFilename, $defines, $preprocessor, 1);
+
+            foreach my $class (@{$document->classes}) {
+                @parents = (@parents, FindParentsRecursively($object, $class));
+            }
+        } else {
+            die("Could NOT find specified parent interface \"$interface\"!\n")
+        }
+    }
+    return @parents;
+}
+
 sub AddMethodsConstantsAndAttributesFromParentClasses
 {
     # For the passed interface, recursively parse all parent
@@ -130,9 +165,6 @@ sub AddMethodsConstantsAndAttributesFromParentClasses
     my $constantsRef = $dataNode->constants;
     my $functionsRef = $dataNode->functions;
     my $attributesRef = $dataNode->attributes;
-
-    # Exception: For the DOM 'Node' is our topmost baseclass, not EventTargetNode.
-    return if $parentsMax eq 1 and $parents[0] eq "EventTargetNode";
 
     foreach (@{$dataNode->parents}) {
         if ($ignoreParent) {
@@ -180,6 +212,86 @@ sub AddMethodsConstantsAndAttributesFromParentClasses
     }
 }
 
+sub GetMethodsAndAttributesFromParentClasses
+{
+    # For the passed interface, recursively parse all parent
+    # IDLs in order to find out all inherited properties/methods.
+
+    my $object = shift;
+    my $dataNode = shift;
+
+    my @parents = @{$dataNode->parents};
+
+    return if @{$dataNode->parents} == 0;
+
+    my @parentList = ();
+
+    foreach (@{$dataNode->parents}) {
+        my $interface = $object->StripModule($_);
+
+        # Step #1: Find the IDL file associated with 'interface'
+        $endCondition = 0;
+        $foundFilename = "";
+
+        foreach (@{$useDirectories}) {
+            $object->ScanDirectory("${interface}.idl", $_, $_, 0) if $foundFilename eq "";
+        }
+
+        die("Could NOT find specified parent interface \"$interface\"!\n") if $foundFilename eq "";
+
+        print "  |  |>  Parsing parent IDL \"$foundFilename\" for interface \"$interface\"\n" if $verbose;
+
+        # Step #2: Parse the found IDL file (in quiet mode).
+        my $parser = IDLParser->new(1);
+        my $document = $parser->Parse($foundFilename, $defines);
+
+        foreach my $class (@{$document->classes}) {
+            # Step #3: Enter recursive parent search
+            push(@parentList, GetMethodsAndAttributesFromParentClasses($object, $class));
+
+            # Step #4: Collect constants & functions & attributes of this parent-class
+
+            # print "  |  |>  -> Inheriting $functionsMax functions amd $attributesMax attributes...\n  |  |>\n" if $verbose;
+            my $hash = {
+                "name" => $class->name,
+                "functions" => $class->functions,
+                "attributes" => $class->attributes
+            };
+
+            # Step #5: Concatenate data
+            unshift(@parentList, $hash);
+        }
+    }
+
+    return @parentList;
+}
+
+sub ParseInterface
+{
+    my ($object, $interfaceName) = @_;
+
+    # Step #1: Find the IDL file associated with 'interface'
+    $endCondition = 0;
+    $foundFilename = "";
+
+    foreach (@{$useDirectories}) {
+        $object->ScanDirectory("${interfaceName}.idl", $_, $_, 0) if $foundFilename eq "";
+    }
+    die "Could NOT find specified parent interface \"$interfaceName\"!\n" if $foundFilename eq "";
+
+    print "  |  |>  Parsing parent IDL \"$foundFilename\" for interface \"$interfaceName\"\n" if $verbose;
+
+    # Step #2: Parse the found IDL file (in quiet mode).
+    my $parser = IDLParser->new(1);
+    my $document = $parser->Parse($foundFilename, $defines);
+
+    foreach my $interface (@{$document->classes}) {
+        return $interface if $interface->name eq $interfaceName;
+    }
+
+    die "Interface definition not found";
+}
+
 # Helpers for all CodeGenerator***.pm modules
 sub IsPodType
 {
@@ -187,6 +299,16 @@ sub IsPodType
     my $type = shift;
 
     return 1 if $podTypeHash{$type};
+    return 1 if $podTypesWithWritablePropertiesHash{$type};
+    return 0;
+}
+
+sub IsPodTypeWithWriteableProperties
+{
+    my $object = shift;
+    my $type = shift;
+
+    return 1 if $podTypesWithWritablePropertiesHash{$type};
     return 0;
 }
 
@@ -239,13 +361,12 @@ sub ScanDirectory
     return if ($endCondition eq 1) and ($reportAllFiles eq 0);
 
     my $sourceRoot = $ENV{SOURCE_ROOT};
-    if ($sourceRoot) {
-        $thisDir = "$sourceRoot/$directory";
-    } else {
-        $thisDir = "$directory";
-    }
+    my $thisDir = $sourceRoot ? "$sourceRoot/$directory" : $directory;
 
-    opendir(DIR, $thisDir) or die "[ERROR] Can't open directory $thisDir: \"$!\"\n";
+    if (!opendir(DIR, $thisDir)) {
+        opendir(DIR, $directory) or die "[ERROR] Can't open directory $thisDir or $directory: \"$!\"\n";
+        $thisDir = $directory;
+    }
 
     my @names = readdir(DIR) or die "[ERROR] Cant't read directory $thisDir \"$!\"\n";
     closedir(DIR);
@@ -275,6 +396,29 @@ sub ScanDirectory
             }
         }
     }
+}
+
+# Uppercase the first letter while respecting WebKit style guidelines. 
+# E.g., xmlEncoding becomes XMLEncoding, but xmlllang becomes Xmllang.
+sub WK_ucfirst
+{
+    my ($object, $param) = @_;
+    my $ret = ucfirst($param);
+    $ret =~ s/Xml/XML/ if $ret =~ /^Xml[^a-z]/;
+    return $ret;
+}
+
+# Lowercase the first letter while respecting WebKit style guidelines. 
+# URL becomes url, but SetURL becomes setURL.
+sub WK_lcfirst
+{
+    my ($object, $param) = @_;
+    my $ret = lcfirst($param);
+    $ret =~ s/uRL/url/ if $ret =~ /^uRL/;
+    $ret =~ s/jS/js/ if $ret =~ /^jS/;
+    $ret =~ s/xML/xml/ if $ret =~ /^xML/;
+    $ret =~ s/xSLT/xslt/ if $ret =~ /^xSLT/;
+    return $ret;
 }
 
 1;

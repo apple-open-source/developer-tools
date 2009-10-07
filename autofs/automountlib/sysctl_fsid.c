@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2006 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 2000-2009 Apple Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  *
@@ -46,5 +46,6 @@ sysctl_fsid(int op, fsid_t *fsid, void *oldp, size_t *oldlenp, void *newp,
 	vc.vc_fsid = *fsid;
 	vc.vc_ptr = newp;
 	vc.vc_len = newlen;
-	return (sysctl(ctlname, ctllen + 1, oldp, oldlenp, &vc, sizeof(vc)));
+	return (sysctl(ctlname, (u_int)ctllen + 1, oldp, oldlenp, &vc,
+	    sizeof(vc)));
 }

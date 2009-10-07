@@ -1,9 +1,9 @@
 #
-# "$Id: Makefile 6649 2007-07-11 21:46:42Z mike $"
+# "$Id: Makefile 7871 2008-08-27 21:12:43Z mike $"
 #
 #   Datafile makefile for the Common UNIX Printing System (CUPS).
 #
-#   Copyright 2007 by Apple Inc.
+#   Copyright 2007-2008 by Apple Inc.
 #   Copyright 1993-2006 by Easy Software Products.
 #
 #   These coded instructions, statements, and computer programs are the
@@ -47,6 +47,7 @@ CHARMAPS =	\
 		iso-8859-7.txt \
 		iso-8859-8.txt \
 		iso-8859-9.txt \
+		jis-x0213.txt \
 		koi8-r.txt \
 		koi8-u.txt \
 		mac-roman.txt \
@@ -67,37 +68,22 @@ CHARMAPS =	\
 		windows-950.txt
 
 CHARSETS =	\
-		windows-874 \
-		windows-1250 \
-		windows-1251 \
-		windows-1252 \
-		windows-1253 \
-		windows-1254 \
-		windows-1255 \
-		windows-1256 \
-		windows-1257 \
-		windows-1258 \
-		koi8-r \
-		koi8-u \
-		iso-8859-1 \
-		iso-8859-2 \
-		iso-8859-3 \
-		iso-8859-4 \
-		iso-8859-5 \
-		iso-8859-6 \
-		iso-8859-7 \
-		iso-8859-8 \
-		iso-8859-9 \
-		iso-8859-10 \
-		iso-8859-13 \
-		iso-8859-14 \
-		iso-8859-15 \
 		utf-8
 
 DATAFILES =	\
 		HPGLprolog \
 		psglyphs \
-		testprint.ps
+		testprint
+
+PPDCFILES =	\
+		epson.h \
+		escp.h \
+		font.defs \
+		hp.h \
+		label.h \
+		media.defs \
+		pcl.h \
+		raster.defs
 
 
 #
@@ -105,6 +91,20 @@ DATAFILES =	\
 #
 
 all:
+
+
+#
+# Make library targets...
+#
+
+libs:
+
+
+#
+# Make unit tests...
+#
+
+unittests:
 
 
 #
@@ -122,10 +122,17 @@ depend:
 
 
 #
-# Install files...
+# Install all targets...
 #
 
-install:	all
+install:	all install-data install-headers install-libs install-exec
+
+
+#
+# Install data files...
+#
+
+install-data:
 	$(INSTALL_DIR) -m 755 $(DATADIR)/banners
 	for file in $(BANNERS); do \
 		$(INSTALL_DATA) $$file $(DATADIR)/banners; \
@@ -135,14 +142,42 @@ install:	all
 		$(INSTALL_DATA) $$file $(DATADIR)/charmaps; \
 	done
 	$(INSTALL_DIR) -m 755 $(DATADIR)/charsets
-	for file in $(CHARSETS); do \
-		$(INSTALL_DATA) $$file $(DATADIR)/charsets; \
-	done
+	if test "x$(BANNERTOPS)" != x -o "x$(TEXTTOPS)" != x; then \
+		for file in $(CHARSETS); do \
+			$(INSTALL_DATA) $$file $(DATADIR)/charsets; \
+		done; \
+	fi
 	$(INSTALL_DIR) -m 755 $(DATADIR)/data
 	for file in $(DATAFILES); do \
 		$(INSTALL_DATA) $$file $(DATADIR)/data; \
 	done
+	$(INSTALL_DIR) -m 755 $(DATADIR)/model
+	$(INSTALL_DIR) -m 755 $(DATADIR)/ppdc
+	for file in $(PPDCFILES); do \
+		$(INSTALL_DATA) $$file $(DATADIR)/ppdc; \
+	done
 	$(INSTALL_DIR) -m 755 $(DATADIR)/profiles
+
+
+#
+# Install programs...
+#
+
+install-exec:
+
+
+#
+# Install headers...
+#
+
+install-headers:
+
+
+#
+# Install libraries...
+#
+
+install-libs:
 
 
 #
@@ -162,7 +197,12 @@ uninstall:
 	for file in $(DATAFILES); do \
 		$(RM) $(DATADIR)/data/$$file; \
 	done
+	for file in $(PPDCFILES); do \
+		$(RM) $(DATADIR)/ppdc/$$file; \
+	done
 	-$(RMDIR) $(DATADIR)/profiles
+	-$(RMDIR) $(DATADIR)/ppdc
+	-$(RMDIR) $(DATADIR)/model
 	-$(RMDIR) $(DATADIR)/data
 	-$(RMDIR) $(DATADIR)/charsets
 	-$(RMDIR) $(DATADIR)/charmaps
@@ -171,5 +211,5 @@ uninstall:
 
 
 #
-# End of "$Id: Makefile 6649 2007-07-11 21:46:42Z mike $".
+# End of "$Id: Makefile 7871 2008-08-27 21:12:43Z mike $".
 #

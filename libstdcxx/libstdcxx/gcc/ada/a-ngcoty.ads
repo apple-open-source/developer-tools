@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-1997 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -20,8 +20,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -39,8 +39,7 @@ generic
    type Real is digits <>;
 
 package Ada.Numerics.Generic_Complex_Types is
-
-pragma Pure (Generic_Complex_Types);
+   pragma Pure;
 
    type Complex is record
       Re, Im : Real'Base;
@@ -57,9 +56,9 @@ pragma Pure (Generic_Complex_Types);
    function Im (X : Complex)   return Real'Base;
    function Im (X : Imaginary) return Real'Base;
 
-   procedure Set_Re (X  : in out Complex;   Re : in Real'Base);
-   procedure Set_Im (X  : in out Complex;   Im : in Real'Base);
-   procedure Set_Im (X  :    out Imaginary; Im : in Real'Base);
+   procedure Set_Re (X : in out Complex; Re : Real'Base);
+   procedure Set_Im (X : in out Complex; Im : Real'Base);
+   procedure Set_Im (X : out Imaginary;  Im : Real'Base);
 
    function Compose_From_Cartesian (Re, Im : Real'Base) return Complex;
    function Compose_From_Cartesian (Re     : Real'Base) return Complex;

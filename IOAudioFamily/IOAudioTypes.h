@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2000 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 1998-2009 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  *
@@ -26,7 +26,8 @@
 #include <libkern/OSTypes.h>
 #include <mach/message.h>
 #include <device/device_types.h>
-#include <IOKit/ndrvsupport/IOMacOSTypes.h>
+
+
 /*!
  * @enum IOAudioEngineMemory
  * @abstract Used to identify the type of memory requested by a client process to be mapped into its process space
@@ -105,7 +106,7 @@ typedef enum _IOAudioEngineState {
 typedef struct _IOAudioEngineStatus {
     UInt32					fVersion;
     volatile UInt32			fCurrentLoopCount;
-    volatile AbsoluteTime	fLastLoopTime;
+    volatile AbsoluteTime                    fLastLoopTime;
     volatile UInt32			fEraseHeadSampleFrame;
 } IOAudioEngineStatus;
 
@@ -138,7 +139,7 @@ typedef struct _IOAudioBufferDataDescriptor {
 	UInt32	fActualNumSampleFrames;
 	UInt32	fTotalDataByteSize;
 	UInt32	fNominalDataByteSize;
-	Byte	fData[kVariableLengthArray];
+	UInt8	fData[1];
 } IOAudioBufferDataDescriptor;
 
 #define kStreamDataDescriptorInvalidVersion				0
@@ -368,14 +369,19 @@ enum {
 };
 
 enum {
-    kIOAudioControlChannelNumberInactive		= -1,
-    kIOAudioControlChannelIDAll					= 0,
-    kIOAudioControlChannelIDDefaultLeft			= 1,
-    kIOAudioControlChannelIDDefaultRight		= 2,
-    kIOAudioControlChannelIDDefaultCenter		= 3,
-    kIOAudioControlChannelIDDefaultLeftRear		= 4,
-    kIOAudioControlChannelIDDefaultRightRear	= 5,
-    kIOAudioControlChannelIDDefaultSub			= 6
+    kIOAudioControlChannelNumberInactive				= -1,
+    kIOAudioControlChannelIDAll							= 0,
+    kIOAudioControlChannelIDDefaultLeft					= 1,
+    kIOAudioControlChannelIDDefaultRight				= 2,
+    kIOAudioControlChannelIDDefaultCenter				= 3,
+    kIOAudioControlChannelIDDefaultLeftRear				= 4,
+    kIOAudioControlChannelIDDefaultRightRear			= 5,
+    kIOAudioControlChannelIDDefaultSub					= 6,
+    kIOAudioControlChannelIDDefaultFrontLeftCenter		= 7,
+    kIOAudioControlChannelIDDefaultFrontRightCenter		= 8,
+    kIOAudioControlChannelIDDefaultRearCenter			= 9,
+    kIOAudioControlChannelIDDefaultSurroundLeft			= 10,
+    kIOAudioControlChannelIDDefaultSurroundRight		= 11
 };
 
 enum {

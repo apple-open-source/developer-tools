@@ -1,9 +1,9 @@
-/* Copyright 2000-2005 The Apache Software Foundation or its licensors, as
- * applicable.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+/* Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -137,18 +137,20 @@ static apr_status_t destroy_resource(apr_reslist_t *reslist, apr_res_t *res)
 
 static apr_status_t reslist_cleanup(void *data_)
 {
-    apr_status_t rv;
+    apr_status_t rv = APR_SUCCESS;
     apr_reslist_t *rl = data_;
     apr_res_t *res;
 
     apr_thread_mutex_lock(rl->listlock);
 
     while (rl->nidle > 0) {
+        apr_status_t rv1;
         res = pop_resource(rl);
         rl->ntotal--;
-        rv = destroy_resource(rl, res);
-        if (rv != APR_SUCCESS) {
-            return rv;
+        rv1 = destroy_resource(rl, res);
+        if (rv1 != APR_SUCCESS) {
+            rv = rv1;  /* loses info in the unlikely event of
+                        * multiple *different* failures */
         }
         free_container(rl, res);
     }
@@ -156,10 +158,11 @@ static apr_status_t reslist_cleanup(void *data_)
     assert(rl->nidle == 0);
     assert(rl->ntotal == 0);
 
+    apr_thread_mutex_unlock(rl->listlock);
     apr_thread_mutex_destroy(rl->listlock);
     apr_thread_cond_destroy(rl->avail);
 
-    return APR_SUCCESS;
+    return rv;
 }
 
 /**
@@ -242,7 +245,8 @@ APU_DECLARE(apr_status_t) apr_reslist_create(apr_reslist_t **reslist,
 
     /* Do some sanity checks so we don't thrash around in the
      * maintenance routine later. */
-    if (min > smax || min > hmax || smax > hmax || ttl < 0) {
+    if (min < 0 || min > smax || min > hmax || smax > hmax || hmax == 0 ||
+        ttl < 0) {
         return APR_EINVAL;
     }
 
@@ -271,6 +275,9 @@ APU_DECLARE(apr_status_t) apr_reslist_create(apr_reslist_t **reslist,
 
     rv = reslist_maint(rl);
     if (rv != APR_SUCCESS) {
+        /* Destroy what we've created so far.
+         */
+        reslist_cleanup(rl);
         return rv;
     }
 
@@ -292,13 +299,26 @@ APU_DECLARE(apr_status_t) apr_reslist_acquire(apr_reslist_t *reslist,
 {
     apr_status_t rv;
     apr_res_t *res;
+    apr_time_t now;
 
     apr_thread_mutex_lock(reslist->listlock);
     /* If there are idle resources on the available list, use
      * them right away. */
-    if (reslist->nidle > 0) {
+    now = apr_time_now();
+    while (reslist->nidle > 0) {
         /* Pop off the first resource */
         res = pop_resource(reslist);
+        if (reslist->ttl && (now - res->freed >= reslist->ttl)) {
+            /* this res is expired - kill it */
+            reslist->ntotal--;
+            rv = destroy_resource(reslist, res);
+            free_container(reslist, res);
+            if (rv != APR_SUCCESS) {
+                apr_thread_mutex_unlock(reslist->listlock);
+                return rv;  /* FIXME: this might cause unnecessary fails */
+            }
+            continue;
+        }
         *resource = res->opaque;
         free_container(reslist, res);
         apr_thread_mutex_unlock(reslist->listlock);
@@ -306,8 +326,7 @@ APU_DECLARE(apr_status_t) apr_reslist_acquire(apr_reslist_t *reslist,
     }
     /* If we've hit our max, block until we're allowed to create
      * a new one, or something becomes free. */
-    else while (reslist->ntotal >= reslist->hmax
-                && reslist->nidle <= 0) {
+    while (reslist->ntotal >= reslist->hmax && reslist->nidle <= 0) {
         if (reslist->timeout) {
             if ((rv = apr_thread_cond_timedwait(reslist->avail, 
                 reslist->listlock, reslist->timeout)) != APR_SUCCESS) {
@@ -315,8 +334,9 @@ APU_DECLARE(apr_status_t) apr_reslist_acquire(apr_reslist_t *reslist,
                 return rv;
             }
         }
-        else
+        else {
             apr_thread_cond_wait(reslist->avail, reslist->listlock);
+        }
     }
     /* If we popped out of the loop, first try to see if there
      * are new resources available for immediate use. */
@@ -363,6 +383,17 @@ APU_DECLARE(void) apr_reslist_timeout_set(apr_reslist_t *reslist,
     reslist->timeout = timeout;
 }
 
+APU_DECLARE(apr_uint32_t) apr_reslist_acquired_count(apr_reslist_t *reslist)
+{
+    apr_uint32_t count;
+
+    apr_thread_mutex_lock(reslist->listlock);
+    count = reslist->ntotal - reslist->nidle;
+    apr_thread_mutex_unlock(reslist->listlock);
+
+    return count;
+}
+
 APU_DECLARE(apr_status_t) apr_reslist_invalidate(apr_reslist_t *reslist,
                                                  void *resource)
 {
@@ -370,6 +401,7 @@ APU_DECLARE(apr_status_t) apr_reslist_invalidate(apr_reslist_t *reslist,
     apr_thread_mutex_lock(reslist->listlock);
     ret = reslist->destructor(resource, reslist->params, reslist->pool);
     reslist->ntotal--;
+    apr_thread_cond_signal(reslist->avail);
     apr_thread_mutex_unlock(reslist->listlock);
     return ret;
 }

@@ -20,8 +20,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 
 /* Build tables of static constructors and destructors and run ld.  */
@@ -34,19 +34,6 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #if ! defined( SIGCHLD ) && defined( SIGCLD )
 #  define SIGCHLD SIGCLD
 #endif
-
-#ifdef vfork /* Autoconf may define this to fork for us.  */
-# define VFORK_STRING "fork"
-#else
-# define VFORK_STRING "vfork"
-#endif
-#ifdef HAVE_VFORK_H
-#include <vfork.h>
-#endif
-#ifdef VMS
-#define vfork() (decc$$alloc_vfork_blocks() >= 0 ? \
-               lib$get_current_invo_context(decc$$get_vfork_jmpbuf()) : -1)
-#endif /* VMS */
 
 #ifndef LIBRARY_PATH_ENV
 #define LIBRARY_PATH_ENV "LIBRARY_PATH"
@@ -176,7 +163,7 @@ struct head
 enum pass {
   PASS_FIRST,				/* without constructors */
   PASS_OBJ,				/* individual objects */
-  PASS_LIB,			        /* looking for shared libraries */
+  PASS_LIB,				/* looking for shared libraries */
   PASS_SECOND				/* with constructors linked in */
 };
 
@@ -192,21 +179,22 @@ static int aixrtl_flag;			/* true if -brtl */
 
 int debug;				/* true if -debug */
 
-static int shared_obj;		        /* true if -shared */
+static int shared_obj;			/* true if -shared */
 
 static const char *c_file;		/* <xxx>.c for constructor/destructor list.  */
 static const char *o_file;		/* <xxx>.o for constructor/destructor list.  */
 #ifdef COLLECT_EXPORT_LIST
-static const char *export_file;	        /* <xxx>.x for AIX export list.  */
+static const char *export_file;		/* <xxx>.x for AIX export list.  */
 #endif
-const char *ldout;			/* File for ld errors.  */
+const char *ldout;			/* File for ld stdout.  */
+const char *lderrout;			/* File for ld stderr.  */
 static const char *output_file;		/* Output file for ld.  */
 static const char *nm_file_name;	/* pathname of nm */
 #ifdef LDD_SUFFIX
 static const char *ldd_file_name;	/* pathname of ldd (or equivalent) */
 #endif
 static const char *strip_file_name;		/* pathname of strip */
-const char *c_file_name;	        /* pathname of gcc */
+const char *c_file_name;		/* pathname of gcc */
 static char *initname, *fininame;	/* names of init and fini funcs */
 
 static struct head constructors;	/* list of constructors found */
@@ -218,9 +206,6 @@ static struct head frame_tables;	/* list of frame unwind info tables */
 
 struct obstack temporary_obstack;
 char * temporary_firstobj;
-
-/* Holds the return value of pexecute and fork.  */
-int pid;
 
 /* Structure to hold all the directories in which to search for files to
    execute.  */
@@ -253,7 +238,7 @@ static char *find_a_file (struct path_prefix *, const char *);
 static void add_prefix (struct path_prefix *, const char *);
 static void prefix_from_env (const char *, struct path_prefix *);
 static void prefix_from_string (const char *, struct path_prefix *);
-static void do_wait (const char *);
+static void do_wait (const char *, struct pex_obj *);
 static void fork_execute (const char *, char **);
 static void maybe_unlink (const char *);
 static void add_to_list (struct head *, const char *);
@@ -288,26 +273,6 @@ static char *resolve_lib_name (const char *);
 #endif
 static char *extract_string (const char **);
 
-#ifndef HAVE_DUP2
-static int
-dup2 (int oldfd, int newfd)
-{
-  int fdtmp[256];
-  int fdx = 0;
-  int fd;
-
-  if (oldfd == newfd)
-    return oldfd;
-  close (newfd);
-  while ((fd = dup (oldfd)) != newfd && fd >= 0) /* good enough for low fd's */
-    fdtmp[fdx++] = fd;
-  while (fdx > 0)
-    close (fdtmp[--fdx]);
-
-  return fd;
-}
-#endif /* ! HAVE_DUP2 */
-
 /* Delete tempfiles and exit function.  */
 
 void
@@ -326,8 +291,14 @@ collect_exit (int status)
 
   if (ldout != 0 && ldout[0])
     {
-      dump_file (ldout);
+      dump_file (ldout, stdout);
       maybe_unlink (ldout);
+    }
+
+  if (lderrout != 0 && lderrout[0])
+    {
+      dump_file (lderrout, stderr);
+      maybe_unlink (lderrout);
     }
 
   if (status != 0 && output_file != 0 && output_file[0])
@@ -416,13 +387,16 @@ handler (int signo)
   if (ldout != 0 && ldout[0])
     maybe_unlink (ldout);
 
+  if (lderrout != 0 && lderrout[0])
+    maybe_unlink (lderrout);
+
 #ifdef COLLECT_EXPORT_LIST
   if (export_file != 0 && export_file[0])
     maybe_unlink (export_file);
 #endif
 
   signal (signo, SIG_DFL);
-  kill (getpid (), signo);
+  raise (signo);
 }
 
 
@@ -461,11 +435,11 @@ extract_string (const char **pp)
 
   obstack_1grow (&temporary_obstack, '\0');
   *pp = p;
-  return obstack_finish (&temporary_obstack);
+  return XOBFINISH (&temporary_obstack, char *);
 }
 
 void
-dump_file (const char *name)
+dump_file (const char *name, FILE *to)
 {
   FILE *stream = fopen (name, "r");
 
@@ -482,10 +456,10 @@ dump_file (const char *name)
 	  const char *word, *p;
 	  char *result;
 	  obstack_1grow (&temporary_obstack, '\0');
-	  word = obstack_finish (&temporary_obstack);
+	  word = XOBFINISH (&temporary_obstack, const char *);
 
 	  if (*word == '.')
-	    ++word, putc ('.', stderr);
+	    ++word, putc ('.', to);
 	  p = word;
 	  if (!strncmp (p, USER_LABEL_PREFIX, strlen (USER_LABEL_PREFIX)))
 	    p += strlen (USER_LABEL_PREFIX);
@@ -502,25 +476,25 @@ dump_file (const char *name)
 	  if (result)
 	    {
 	      int diff;
-	      fputs (result, stderr);
+	      fputs (result, to);
 
 	      diff = strlen (word) - strlen (result);
 	      while (diff > 0 && c == ' ')
-		--diff, putc (' ', stderr);
+		--diff, putc (' ', to);
 	      while (diff < 0 && c == ' ')
 		++diff, c = getc (stream);
 
 	      free (result);
 	    }
 	  else
-	    fputs (word, stderr);
+	    fputs (word, to);
 
-	  fflush (stderr);
+	  fflush (to);
 	  obstack_free (&temporary_obstack, temporary_firstobj);
 	}
       if (c == EOF)
 	break;
-      putc (c, stderr);
+      putc (c, to);
     }
   fclose (stream);
 }
@@ -609,7 +583,7 @@ find_a_file (struct path_prefix *pprefix, const char *name)
   len += strlen (HOST_EXECUTABLE_SUFFIX);
 #endif
 
-  temp = xmalloc (len);
+  temp = XNEWVEC (char, len);
 
   /* Determine the filename to execute (special case for absolute paths).  */
 
@@ -697,7 +671,7 @@ add_prefix (struct path_prefix *pprefix, const char *prefix)
   if (len > pprefix->max_len)
     pprefix->max_len = len;
 
-  pl = xmalloc (sizeof (struct prefix_list));
+  pl = XNEW (struct prefix_list);
   pl->prefix = xstrdup (prefix);
 
   if (*prev)
@@ -724,7 +698,7 @@ static void
 prefix_from_string (const char *p, struct path_prefix *pprefix)
 {
   const char *startp, *endp;
-  char *nstore = xmalloc (strlen (p) + 3);
+  char *nstore = XNEWVEC (char, strlen (p) + 3);
 
   if (debug)
     fprintf (stderr, "Convert string '%s' into prefixes, separator = '%c'\n", p, PATH_SEPARATOR);
@@ -1019,6 +993,7 @@ main (int argc, char **argv)
   export_file = make_temp_file (".x");
 #endif
   ldout = make_temp_file (".ld");
+  lderrout = make_temp_file (".le");
   *c_ptr++ = c_file_name;
   *c_ptr++ = "-x";
   *c_ptr++ = "c";
@@ -1097,7 +1072,7 @@ main (int argc, char **argv)
 	       explicitly puts an export list in command line */
 	    case 'b':
 	      if (arg[2] == 'E' || strncmp (&arg[2], "export", 6) == 0)
-                export_flag = 1;
+		export_flag = 1;
 	      else if (arg[2] == '6' && arg[3] == '4')
 		aix64_flag = 1;
 	      else if (arg[2] == 'r' && arg[3] == 't' && arg[4] == 'l')
@@ -1113,7 +1088,7 @@ main (int argc, char **argv)
 		  ld2--;
 		}
 	      if (!strcmp (arg, "-dynamic-linker") && argv[1])
-	        {
+		{
 		  ++argv;
 		  *ld1++ = *ld2++ = *argv;
 		}
@@ -1130,7 +1105,7 @@ main (int argc, char **argv)
 		}
 #ifdef COLLECT_EXPORT_LIST
 	      {
-	        /* Resolving full library name.  */
+		/* Resolving full library name.  */
 		const char *s = resolve_lib_name (arg+2);
 
 		/* Saving a full library name.  */
@@ -1240,8 +1215,8 @@ main (int argc, char **argv)
 	  else
 	    {
 	      /* Saving a full library name.  */
-              add_to_list (&libs, arg);
-            }
+	      add_to_list (&libs, arg);
+	    }
 #endif
 	}
     }
@@ -1402,7 +1377,7 @@ main (int argc, char **argv)
       /* Strip now if it was requested on the command line.  */
       if (strip_flag)
 	{
-	  char **real_strip_argv = xcalloc (sizeof (char *), 3);
+	  char **real_strip_argv = XCNEWVEC (char *, 3);
 	  const char ** strip_argv = (const char **) real_strip_argv;
 
 	  strip_argv[0] = strip_file_name;
@@ -1514,11 +1489,14 @@ main (int argc, char **argv)
 /* Wait for a process to finish, and exit if a nonzero status is found.  */
 
 int
-collect_wait (const char *prog)
+collect_wait (const char *prog, struct pex_obj *pex)
 {
   int status;
 
-  pwait (pid, &status, 0);
+  if (!pex_get_status (pex, 1, &status))
+    fatal_perror ("can't get program status");
+  pex_free (pex);
+
   if (status)
     {
       if (WIFSIGNALED (status))
@@ -1537,9 +1515,9 @@ collect_wait (const char *prog)
 }
 
 static void
-do_wait (const char *prog)
+do_wait (const char *prog, struct pex_obj *pex)
 {
-  int ret = collect_wait (prog);
+  int ret = collect_wait (prog, pex);
   if (ret != 0)
     {
       error ("%s returned %d exit status", prog, ret);
@@ -1550,14 +1528,13 @@ do_wait (const char *prog)
 
 /* Execute a program, and wait for the reply.  */
 
-void
-collect_execute (const char *prog, char **argv, const char *redir)
+struct pex_obj *
+collect_execute (const char *prog, char **argv, const char *outname,
+		 const char *errname)
 {
-  char *errmsg_fmt;
-  char *errmsg_arg;
-  int redir_handle = -1;
-  int stdout_save = -1;
-  int stderr_save = -1;
+  struct pex_obj *pex;
+  const char *errmsg;
+  int err;
 
   if (vflag || debug)
     {
@@ -1584,47 +1561,35 @@ collect_execute (const char *prog, char **argv, const char *redir)
   if (argv[0] == 0)
     fatal ("cannot find '%s'", prog);
 
-  if (redir)
+  pex = pex_init (0, "collect2", NULL);
+  if (pex == NULL)
+    fatal_perror ("pex_init failed");
+
+  errmsg = pex_run (pex, PEX_LAST | PEX_SEARCH, argv[0], argv, outname,
+		    errname, &err);
+  if (errmsg != NULL)
     {
-      /* Open response file.  */
-      redir_handle = open (redir, O_WRONLY | O_TRUNC | O_CREAT);
-
-      /* Duplicate the stdout and stderr file handles
-	 so they can be restored later.  */
-      stdout_save = dup (STDOUT_FILENO);
-      if (stdout_save == -1)
-	fatal_perror ("redirecting stdout: %s", redir);
-      stderr_save = dup (STDERR_FILENO);
-      if (stderr_save == -1)
-	fatal_perror ("redirecting stdout: %s", redir);
-
-      /* Redirect stdout & stderr to our response file.  */
-      dup2 (redir_handle, STDOUT_FILENO);
-      dup2 (redir_handle, STDERR_FILENO);
+      if (err != 0)
+	{
+	  errno = err;
+	  /* APPLE LOCAL default to Wformat-security 5764921 */
+	  fatal_perror ("%s", errmsg);
+	}
+      else
+	/* APPLE LOCAL default to Wformat-security 5764921 */
+	fatal ("%s", errmsg);
     }
 
-  pid = pexecute (argv[0], argv, argv[0], NULL, &errmsg_fmt, &errmsg_arg,
-		  (PEXECUTE_FIRST | PEXECUTE_LAST | PEXECUTE_SEARCH));
-
-  if (redir)
-    {
-      /* Restore stdout and stderr to their previous settings.  */
-      dup2 (stdout_save, STDOUT_FILENO);
-      dup2 (stderr_save, STDERR_FILENO);
-
-      /* Close response file.  */
-      close (redir_handle);
-    }
-
- if (pid == -1)
-   fatal_perror (errmsg_fmt, errmsg_arg);
+  return pex;
 }
 
 static void
 fork_execute (const char *prog, char **argv)
 {
-  collect_execute (prog, argv, NULL);
-  do_wait (prog);
+  struct pex_obj *pex;
+
+  pex = collect_execute (prog, argv, NULL, NULL);
+  do_wait (prog, pex);
 }
 
 /* Unlink a file unless we are debugging.  */
@@ -1633,7 +1598,7 @@ static void
 maybe_unlink (const char *file)
 {
   if (!debug)
-    unlink (file);
+    unlink_if_ordinary (file);
   else
     notice ("[Leaving %s]\n", file);
 }
@@ -1717,7 +1682,7 @@ sort_ids (struct head *head_ptr)
 	    || id->sequence > (*id_ptr)->sequence
 	    /* Hack: do lexical compare, too.
 	    || (id->sequence == (*id_ptr)->sequence
-	        && strcmp (id->name, (*id_ptr)->name) > 0) */
+		&& strcmp (id->name, (*id_ptr)->name) > 0) */
 	    )
 	  {
 	    id->next = *id_ptr;
@@ -1848,7 +1813,7 @@ write_c_file_stat (FILE *stream, const char *name ATTRIBUTE_UNUSED)
 	}
     }
   /* q points to null at end of the string (or . of the .so version) */
-  prefix = xmalloc (q - p + 1);
+  prefix = XNEWVEC (char, q - p + 1);
   strncpy (prefix, p, q - p);
   prefix[q - p] = 0;
   for (r = prefix; *r; r++)
@@ -2046,11 +2011,15 @@ static void
 scan_prog_file (const char *prog_name, enum pass which_pass)
 {
   void (*int_handler) (int);
+#ifdef SIGQUIT
   void (*quit_handler) (int);
+#endif
   char *real_nm_argv[4];
   const char **nm_argv = (const char **) real_nm_argv;
   int argc = 0;
-  int pipe_fd[2];
+  struct pex_obj *pex;
+  const char *errmsg;
+  int err;
   char *p, buf[1024];
   FILE *inf;
 
@@ -2068,13 +2037,6 @@ scan_prog_file (const char *prog_name, enum pass which_pass)
   nm_argv[argc++] = prog_name;
   nm_argv[argc++] = (char *) 0;
 
-  if (pipe (pipe_fd) < 0)
-    fatal_perror ("pipe");
-
-  inf = fdopen (pipe_fd[0], "r");
-  if (inf == (FILE *) 0)
-    fatal_perror ("fdopen");
-
   /* Trace if needed.  */
   if (vflag)
     {
@@ -2090,35 +2052,32 @@ scan_prog_file (const char *prog_name, enum pass which_pass)
   fflush (stdout);
   fflush (stderr);
 
-  /* Spawn child nm on pipe.  */
-  pid = vfork ();
-  if (pid == -1)
-    fatal_perror (VFORK_STRING);
+  pex = pex_init (PEX_USE_PIPES, "collect2", NULL);
+  if (pex == NULL)
+    fatal_perror ("pex_init failed");
 
-  if (pid == 0)			/* child context */
+  errmsg = pex_run (pex, 0, nm_file_name, real_nm_argv, NULL, NULL, &err);
+  if (errmsg != NULL)
     {
-      /* setup stdout */
-      if (dup2 (pipe_fd[1], 1) < 0)
-	fatal_perror ("dup2 %d 1", pipe_fd[1]);
-
-      if (close (pipe_fd[0]) < 0)
-	fatal_perror ("close %d", pipe_fd[0]);
-
-      if (close (pipe_fd[1]) < 0)
-	fatal_perror ("close %d", pipe_fd[1]);
-
-      execv (nm_file_name, real_nm_argv);
-      fatal_perror ("execv %s", nm_file_name);
+      if (err != 0)
+	{
+	  errno = err;
+	  /* APPLE LOCAL default to Wformat-security 5764921 */
+	  fatal_perror ("%s", errmsg);
+	}
+      else
+	/* APPLE LOCAL default to Wformat-security 5764921 */
+	fatal ("%s", errmsg);
     }
 
-  /* Parent context from here on.  */
   int_handler  = (void (*) (int)) signal (SIGINT,  SIG_IGN);
 #ifdef SIGQUIT
   quit_handler = (void (*) (int)) signal (SIGQUIT, SIG_IGN);
 #endif
 
-  if (close (pipe_fd[1]) < 0)
-    fatal_perror ("close %d", pipe_fd[1]);
+  inf = pex_read_output (pex, 0);
+  if (inf == NULL)
+    fatal_perror ("can't open nm output");
 
   if (debug)
     fprintf (stderr, "\nnm output with constructors/destructors.\n");
@@ -2192,10 +2151,7 @@ scan_prog_file (const char *prog_name, enum pass which_pass)
   if (debug)
     fprintf (stderr, "\n");
 
-  if (fclose (inf) != 0)
-    fatal_perror ("fclose");
-
-  do_wait (nm_file_name);
+  do_wait (nm_file_name, pex);
 
   signal (SIGINT,  int_handler);
 #ifdef SIGQUIT
@@ -2215,11 +2171,15 @@ scan_libraries (const char *prog_name)
   static struct head libraries;		/* list of shared libraries found */
   struct id *list;
   void (*int_handler) (int);
+#ifdef SIGQUIT
   void (*quit_handler) (int);
+#endif
   char *real_ldd_argv[4];
   const char **ldd_argv = (const char **) real_ldd_argv;
   int argc = 0;
-  int pipe_fd[2];
+  struct pex_obj *pex;
+  const char *errmsg;
+  int err;
   char buf[1024];
   FILE *inf;
 
@@ -2233,13 +2193,6 @@ scan_libraries (const char *prog_name)
   ldd_argv[argc++] = ldd_file_name;
   ldd_argv[argc++] = prog_name;
   ldd_argv[argc++] = (char *) 0;
-
-  if (pipe (pipe_fd) < 0)
-    fatal_perror ("pipe");
-
-  inf = fdopen (pipe_fd[0], "r");
-  if (inf == (FILE *) 0)
-    fatal_perror ("fdopen");
 
   /* Trace if needed.  */
   if (vflag)
@@ -2256,35 +2209,30 @@ scan_libraries (const char *prog_name)
   fflush (stdout);
   fflush (stderr);
 
-  /* Spawn child ldd on pipe.  */
-  pid = vfork ();
-  if (pid == -1)
-    fatal_perror (VFORK_STRING);
+  pex = pex_init (PEX_USE_PIPES, "collect2", NULL);
+  if (pex == NULL)
+    fatal_perror ("pex_init failed");
 
-  if (pid == 0)			/* child context */
+  errmsg = pex_run (pex, 0, ldd_file_name, real_ldd_argv, NULL, NULL, &err);
+  if (errmsg != NULL)
     {
-      /* setup stdout */
-      if (dup2 (pipe_fd[1], 1) < 0)
-	fatal_perror ("dup2 %d 1", pipe_fd[1]);
-
-      if (close (pipe_fd[0]) < 0)
-	fatal_perror ("close %d", pipe_fd[0]);
-
-      if (close (pipe_fd[1]) < 0)
-	fatal_perror ("close %d", pipe_fd[1]);
-
-      execv (ldd_file_name, real_ldd_argv);
-      fatal_perror ("execv %s", ldd_file_name);
+      if (err != 0)
+	{
+	  errno = err;
+	  fatal_perror (errmsg);
+	}
+      else
+	fatal (errmsg);
     }
 
-  /* Parent context from here on.  */
   int_handler  = (void (*) (int)) signal (SIGINT,  SIG_IGN);
 #ifdef SIGQUIT
   quit_handler = (void (*) (int)) signal (SIGQUIT, SIG_IGN);
 #endif
 
-  if (close (pipe_fd[1]) < 0)
-    fatal_perror ("close %d", pipe_fd[1]);
+  inf = pex_read_output (pex, 0);
+  if (inf == NULL)
+    fatal_perror ("can't open ldd output");
 
   if (debug)
     notice ("\nldd output with constructors/destructors.\n");
@@ -2312,7 +2260,7 @@ scan_libraries (const char *prog_name)
       *end = '\0';
 
       if (access (name, R_OK) == 0)
-        add_to_list (&libraries, name);
+	add_to_list (&libraries, name);
       else
 	fatal ("unable to open dynamic dependency '%s'", buf);
 
@@ -2322,10 +2270,7 @@ scan_libraries (const char *prog_name)
   if (debug)
     fprintf (stderr, "\n");
 
-  if (fclose (inf) != 0)
-    fatal_perror ("fclose");
-
-  do_wait (ldd_file_name);
+  do_wait (ldd_file_name, pex);
 
   signal (SIGINT,  int_handler);
 #ifdef SIGQUIT
@@ -2365,20 +2310,20 @@ scan_libraries (const char *prog_name)
 #   if defined (C_WEAKEXT)
 #     define GCC_OK_SYMBOL(X) \
        (((X).n_sclass == C_EXT || (X).n_sclass == C_WEAKEXT) && \
-        ((X).n_scnum > N_UNDEF) && \
-        (aix64_flag \
-         || (((X).n_type & N_TMASK) == (DT_NON << N_BTSHFT) \
-             || ((X).n_type & N_TMASK) == (DT_FCN << N_BTSHFT))))
+	((X).n_scnum > N_UNDEF) && \
+	(aix64_flag \
+	 || (((X).n_type & N_TMASK) == (DT_NON << N_BTSHFT) \
+	     || ((X).n_type & N_TMASK) == (DT_FCN << N_BTSHFT))))
 #     define GCC_UNDEF_SYMBOL(X) \
        (((X).n_sclass == C_EXT || (X).n_sclass == C_WEAKEXT) && \
-        ((X).n_scnum == N_UNDEF))
+	((X).n_scnum == N_UNDEF))
 #   else
 #     define GCC_OK_SYMBOL(X) \
        (((X).n_sclass == C_EXT) && \
-        ((X).n_scnum > N_UNDEF) && \
-        (aix64_flag \
-         || (((X).n_type & N_TMASK) == (DT_NON << N_BTSHFT) \
-             || ((X).n_type & N_TMASK) == (DT_FCN << N_BTSHFT))))
+	((X).n_scnum > N_UNDEF) && \
+	(aix64_flag \
+	 || (((X).n_type & N_TMASK) == (DT_NON << N_BTSHFT) \
+	     || ((X).n_type & N_TMASK) == (DT_FCN << N_BTSHFT))))
 #     define GCC_UNDEF_SYMBOL(X) \
        (((X).n_sclass == C_EXT) && ((X).n_scnum == N_UNDEF))
 #   endif
@@ -2467,9 +2412,9 @@ scan_prog_file (const char *prog_name, enum pass which_pass)
     {
 #endif
       /* Some platforms (e.g. OSF4) declare ldopen as taking a
-         non-const char * filename parameter, even though it will not
-         modify that string.  So we must cast away const-ness here,
-         which will cause -Wcast-qual to burp.  */
+	 non-const char * filename parameter, even though it will not
+	 modify that string.  So we must cast away const-ness here,
+	 which will cause -Wcast-qual to burp.  */
       if ((ldptr = ldopen ((char *)prog_name, ldptr)) != NULL)
 	{
 	  if (! MY_ISCOFF (HEADER (ldptr).f_magic))

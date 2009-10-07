@@ -16,7 +16,7 @@ program namelist_14
   integer          ::  i(2) = (/101,201/)
   type(mt)         ::  dt(2)
   type(mt)         ::  cdt
-  real*8           ::  pi = 3.14159_8
+  real(kind=8)           ::  pi = 3.14159_8
   character*10     ::  chs="singleton"
   character*10     ::  cha(2)=(/"first     ","second    "/)
 
@@ -37,7 +37,7 @@ contains
   subroutine foo (i, dt, pi, chs, cha)
     use global
     common /myc/ cdt
-    real *8        :: pi                   !local real scalar
+    real(kind=8)        :: pi                   !local real scalar
     integer        :: i(2)                 !dummy arg. array
     integer        :: j(2) = (/21, 21/)    !equivalenced array
     integer        :: jj                   !    -||-     scalar
@@ -55,7 +55,7 @@ contains
     dts = mt ((/1, 2, 3, 4/))
     dtl = mt ((/41, 42, 43, 44/))
 
-    open (10, status = "scratch")
+    open (10, status = "scratch", delim='apostrophe')
     write (10, nml = z, iostat = ier)
     if (ier /= 0 ) call abort()
     rewind (10)
@@ -77,18 +77,20 @@ contains
     close (10)
 
     if (.not.(dttest (dt(1),  mt ((/99,999,9999,99999/))) .and.  &
-	      dttest (dt(2),  mt ((/99,999,9999,99999/))) .and.  &
-	      dttest (dtl(1), mt ((/41, 42, 43, 44/))) .and.     &
-	      dttest (dtl(2), mt ((/41, 42, 43, 44/))) .and.     &
-	      dttest (dts, mt ((/1, 2, 3, 4/))) .and.            &
-	      dttest (cdt, mt ((/-99,-999,-9999,-99999/))) .and. &
-	      all (j ==(/21, 21/)) .and.                         &
-	      all (i ==(/101, 201/)) .and.                       &
-	      (pi == 3.14159_8) .and.                            &
-	      (chs == "singleton") .and.                         &
-	      (chl == "abcdefg") .and.                           &
-	      (cha(1)(1:10) == "first    ") .and.                &
-	      (cha(2)(1:10) == "second    "))) call abort ()
+          dttest (dt(2),  mt ((/99,999,9999,99999/))) .and.  &
+          dttest (dtl(1), mt ((/41, 42, 43, 44/))) .and.     &
+          dttest (dtl(2), mt ((/41, 42, 43, 44/))) .and.     &
+          dttest (dts, mt ((/1, 2, 3, 4/))) .and.            &
+          dttest (cdt, mt ((/-99,-999,-9999,-99999/))) .and. &
+          all (j ==(/21, 21/)) .and.                         &
+          all (i ==(/101, 201/)) .and.                       &
+          (pi == 3.14159_8) .and.                            &
+          (chs == "singleton") .and.                         &
+          (chl == "abcdefg") .and.                           &
+          (cha(1)(1:10) == "first    ") .and.                &
+          (cha(2)(1:10) == "second    "))) call abort ()
 
     end subroutine foo
 end program namelist_14 
+
+! { dg-final { cleanup-modules "global" } }

@@ -1,6 +1,6 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                         GNAT RUNTIME COMPONENTS                          --
+--                         GNAT RUN-TIME COMPONENTS                         --
 --                                                                          --
 --               A D A . C H A R A C T E R S . L A T I N _ 1                --
 --                                                                          --
@@ -14,7 +14,7 @@
 ------------------------------------------------------------------------------
 
 package Ada.Characters.Latin_1 is
-pragma Pure (Latin_1);
+   pragma Pure;
 
    ------------------------
    -- Control Characters --

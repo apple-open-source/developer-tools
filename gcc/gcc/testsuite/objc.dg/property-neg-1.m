@@ -1,18 +1,23 @@
-/* APPLE LOCAL file radar 4436866 */
-/* This program checks for proper use of 'readonly' attribute. */
+/* APPLE LOCAL file radar 4725660 */
+/* Check that a bad use of property assignment does not cause an internal error. */
 /* APPLE LOCAL radar 4899595 */
-/* { dg-options "-fno-objc-new-property -mmacosx-version-min=10.5" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
-/* { dg-options "-fno-objc-new-property" { target arm*-*-darwin* } } */
-/* { dg-do compile { target *-*-darwin* } } */
+/* { dg-options "-mmacosx-version-min=10.5" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
 
-@interface Bar
+@class QZFile;
+
+@interface QZImage
 {
-  int iVar;
 }
-@property (ivar) int FooBar;
+@property (copy) QZFile *imageFile;
+
+- (void) addFile :(QZImage *)qzimage;
 @end
 
-@implementation Bar
-@property (readonly) int FooBar; /* { dg-error "property \\'FooBar\\' is \\'readonly\\' in implementation but not in interface" } */
+@implementation QZImage
+@dynamic imageFile;
 
+- (void) addFile : (QZImage *)qzimage
+  {
+	qzimage.imageFile.data = 0; /* { dg-error "accessing unknown \\'data\\' component of a property" } */
+  }
 @end

@@ -1,8 +1,8 @@
 /*
- * Copyright (C) 2004-2006  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2008  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000-2003  Internet Software Consortium.
  *
- * Permission to use, copy, modify, and distribute this software for any
+ * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
  *
@@ -15,7 +15,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* $Id: rndc.c,v 1.96.18.17 2006/08/04 03:03:41 marka Exp $ */
+/* $Id: rndc.c,v 1.122 2008/10/15 03:01:59 marka Exp $ */
 
 /*! \file */
 
@@ -61,7 +61,7 @@
 
 #define SERVERADDRS 10
 
-char *progname;
+const char *progname;
 isc_boolean_t verbose;
 
 static const char *admin_conffile;
@@ -93,7 +93,7 @@ static void
 usage(int status) {
 	fprintf(stderr, "\
 Usage: %s [-c config] [-s server] [-p port]\n\
-        [-k key-file ] [-y key] [-V] command\n\
+	[-k key-file ] [-y key] [-V] command\n\
 \n\
 command is one of the following:\n\
 \n\
@@ -106,10 +106,10 @@ command is one of the following:\n\
 		Retransfer a single zone without checking serial number.\n\
   freeze	Suspend updates to all dynamic zones.\n\
   freeze zone [class [view]]\n\
-  		Suspend updates to a dynamic zone.\n\
+		Suspend updates to a dynamic zone.\n\
   thaw		Enable updates to all dynamic zones and reload them.\n\
   thaw zone [class [view]]\n\
-  		Enable updates to a frozen dynamic zone and reload it.\n\
+		Enable updates to a frozen dynamic zone and reload it.\n\
   notify zone [class [view]]\n\
 		Resend NOTIFY messages for the zone.\n\
   reconfig	Reload configuration file and new zones only.\n\
@@ -152,7 +152,7 @@ get_addresses(const char *host, in_port_t port) {
 		result = isc_sockaddr_frompath(&serveraddrs[nserveraddrs],
 					       host);
 		if (result == ISC_R_SUCCESS)
-			nserveraddrs++; 
+			nserveraddrs++;
 	} else {
 		count = SERVERADDRS - nserveraddrs;
 		result = bind9_getaddresses(host, port,
@@ -369,7 +369,7 @@ rndc_connected(isc_task_t *task, isc_event_t *event) {
 	r.base = databuf;
 
 	isccc_ccmsg_init(mctx, sock, &ccmsg);
-	isccc_ccmsg_setmaxsize(&ccmsg, 1024);
+	isccc_ccmsg_setmaxsize(&ccmsg, 1024 * 1024);
 
 	DO("schedule recv", isccc_ccmsg_readmessage(&ccmsg, task,
 						    rndc_recvnonce, NULL));
@@ -400,10 +400,10 @@ rndc_startconnect(isc_sockaddr_t *addr, isc_task_t *task) {
 	DO("create socket", isc_socket_create(socketmgr, pf, type, &sock));
 	switch (isc_sockaddr_pf(addr)) {
 	case AF_INET:
-		DO("bind socket", isc_socket_bind(sock, &local4));
+		DO("bind socket", isc_socket_bind(sock, &local4, 0));
 		break;
 	case AF_INET6:
-		DO("bind socket", isc_socket_bind(sock, &local6));
+		DO("bind socket", isc_socket_bind(sock, &local6, 0));
 		break;
 	default:
 		break;
@@ -485,7 +485,7 @@ parse_config(isc_mem_t *mctx, isc_log_t *log, const char *keyname,
 		(void)cfg_map_get(config, "server", &servers);
 		if (servers != NULL) {
 			for (elt = cfg_list_first(servers);
-			     elt != NULL; 
+			     elt != NULL;
 			     elt = cfg_list_next(elt))
 			{
 				const char *name;
@@ -521,7 +521,7 @@ parse_config(isc_mem_t *mctx, isc_log_t *log, const char *keyname,
 	else {
 		DO("get config key list", cfg_map_get(config, "key", &keys));
 		for (elt = cfg_list_first(keys);
-		     elt != NULL; 
+		     elt != NULL;
 		     elt = cfg_list_next(elt))
 		{
 			key = cfg_listelt_value(elt);
@@ -599,7 +599,7 @@ parse_config(isc_mem_t *mctx, isc_log_t *log, const char *keyname,
 					get_addresses(name, (in_port_t) myport);
 				else
 					fprintf(stderr, "too many address: "
-					        "%s: dropped\n", name);
+						"%s: dropped\n", name);
 				continue;
 			}
 			sa = *cfg_obj_assockaddr(address);
@@ -690,7 +690,9 @@ main(int argc, char **argv) {
 	if (result != ISC_R_SUCCESS)
 		fatal("isc_app_start() failed: %s", isc_result_totext(result));
 
-	while ((ch = isc_commandline_parse(argc, argv, "b:c:k:Mmp:s:Vy:"))
+	isc_commandline_errprint = ISC_FALSE;
+
+	while ((ch = isc_commandline_parse(argc, argv, "b:c:hk:Mmp:s:Vy:"))
 	       != -1) {
 		switch (ch) {
 		case 'b':
@@ -739,15 +741,20 @@ main(int argc, char **argv) {
 		case 'y':
 			keyname = isc_commandline_argument;
 			break;
- 
+
 		case '?':
+			if (isc_commandline_option != '?') {
+				fprintf(stderr, "%s: invalid argument -%c\n",
+					program, isc_commandline_option);
+				usage(1);
+			}
+		case 'h':
 			usage(0);
 			break;
-
 		default:
-			fatal("unexpected error parsing command arguments: "
-			      "got %c\n", ch);
-			break;
+			fprintf(stderr, "%s: unhandled option -%c\n",
+				program, isc_commandline_option);
+			exit(1);
 		}
 	}
 
@@ -773,7 +780,7 @@ main(int argc, char **argv) {
 	logdest.file.maximum_size = 0;
 	DO("creating log channel",
 	   isc_log_createchannel(logconfig, "stderr",
-		   		 ISC_LOG_TOFILEDESC, ISC_LOG_INFO, &logdest,
+				 ISC_LOG_TOFILEDESC, ISC_LOG_INFO, &logdest,
 				 ISC_LOG_PRINTTAG|ISC_LOG_PRINTLEVEL));
 	DO("enabling log channel", isc_log_usechannel(logconfig, "stderr",
 						      NULL, NULL));

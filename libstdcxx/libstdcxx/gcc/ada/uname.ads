@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-1998, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -74,7 +74,7 @@ package Uname is
    --  corresponding body, i.e. characters %s replaced by %b
 
    function Get_Parent_Body_Name (N : Unit_Name_Type) return Unit_Name_Type;
-   --  Given the name of a subunit, returns the name of the parent body.
+   --  Given the name of a subunit, returns the name of the parent body
 
    function Get_Parent_Spec_Name (N : Unit_Name_Type) return Unit_Name_Type;
    --  Given the name of a child unit spec or body, returns the unit name
@@ -140,8 +140,7 @@ package Uname is
 
    function New_Child
      (Old  : Unit_Name_Type;
-      Newp : Unit_Name_Type)
-      return Unit_Name_Type;
+      Newp : Unit_Name_Type) return Unit_Name_Type;
    --   Old is a child unit name (for either a body or spec). Newp is the
    --   unit name of the actual parent (this may be different from the
    --   parent in old). The returned unit name is formed by taking the

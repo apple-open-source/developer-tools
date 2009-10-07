@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1996-2005 Free Software Foundation, Inc.          --
+--          Copyright (C) 1996-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -31,7 +31,7 @@ with Einfo;    use Einfo;
 with Namet;    use Namet;
 with Nlists;   use Nlists;
 with Nmake;    use Nmake;
-with Opt;
+with Opt;      use Opt;
 with Output;   use Output;
 with Sem_Eval; use Sem_Eval;
 with Sem_Util; use Sem_Util;
@@ -134,7 +134,7 @@ package body Exp_Dbug is
    --  used to determine whether encoding is required for a discrete type.
 
    procedure Output_Homonym_Numbers_Suffix;
-   --  If homonym numbers are stored, then output them into Name_Buffer.
+   --  If homonym numbers are stored, then output them into Name_Buffer
 
    procedure Prepend_String_To_Buffer (S : String);
    --  Prepend given string to the contents of the string buffer, updating
@@ -250,9 +250,9 @@ package body Exp_Dbug is
       then
          return True;
 
-      --  Here we check if the static bounds match the natural size, which
-      --  is the size passed through with the debugging information. This
-      --  is the Esize rounded up to 8, 16, 32 or 64 as appropriate.
+      --  Here we check if the static bounds match the natural size, which is
+      --  the size passed through with the debugging information. This is the
+      --  Esize rounded up to 8, 16, 32 or 64 as appropriate.
 
       else
          declare
@@ -305,12 +305,12 @@ package body Exp_Dbug is
       Def : Entity_Id;
 
       function Output_Subscript (N : Node_Id; S : String) return Boolean;
-      --  Outputs a single subscript value as ?nnn (subscript is compile
-      --  time known value with value nnn) or as ?e (subscript is local
-      --  constant with name e), where S supplies the proper string to
-      --  use for ?. Returns False if the subscript is not of an appropriate
-      --  type to output in one of these two forms. The result is prepended
-      --  to the name stored in Name_Buffer.
+      --  Outputs a single subscript value as ?nnn (subscript is compile time
+      --  known value with value nnn) or as ?e (subscript is local constant
+      --  with name e), where S supplies the proper string to use for ?.
+      --  Returns False if the subscript is not of an appropriate type to
+      --  output in one of these two forms. The result is prepended to the
+      --  name stored in Name_Buffer.
 
       ----------------------
       -- Output_Subscript --
@@ -358,9 +358,9 @@ package body Exp_Dbug is
          when N_Package_Renaming_Declaration =>
             Add_Str_To_Name_Buffer ("___XRP");
 
-            --  If it is a child unit create a fully qualified name,
-            --  to disambiguate multiple child units with the same
-            --  name and different parents.
+            --  If it is a child unit create a fully qualified name, to
+            --  disambiguate multiple child units with the same name and
+            --  different parents.
 
             if Is_Child_Unit (Ent) then
                Prepend_String_To_Buffer ("__");
@@ -386,8 +386,8 @@ package body Exp_Dbug is
 
             when N_Expanded_Name =>
 
-               --  The entity field for an N_Expanded_Name is on the
-               --  expanded name node itself, so we are done here too.
+               --  The entity field for an N_Expanded_Name is on the expanded
+               --  name node itself, so we are done here too.
 
                exit;
 
@@ -431,6 +431,7 @@ package body Exp_Dbug is
                Ren := Prefix (Ren);
 
             when N_Explicit_Dereference =>
+               Set_Materialize_Entity (Ent);
                Prepend_String_To_Buffer ("XA");
                Ren := Prefix (Ren);
 
@@ -492,6 +493,15 @@ package body Exp_Dbug is
       Has_Suffix : Boolean;
 
    begin
+      --  If not generating code, there is no need to create encoded
+      --  names, and problems when the back-end is called to annotate
+      --  types without full code generation. See comments at beginning
+      --  of Get_External_Name_With_Suffix for additional details.
+
+      if Operating_Mode /= Generate_Code then
+         return;
+      end if;
+
       Get_Name_String (Chars (E));
 
       --  Nothing to do if we do not have a type
@@ -553,12 +563,6 @@ package body Exp_Dbug is
       elsif Is_Discrete_Type (E)
         and then not Bounds_Match_Size (E)
       then
-         if Has_Biased_Representation (E) then
-            Get_External_Name_With_Suffix (E, "XB");
-         else
-            Get_External_Name_With_Suffix (E, "XD");
-         end if;
-
          declare
             Lo : constant Node_Id := Type_Low_Bound (E);
             Hi : constant Node_Id := Type_High_Bound (E);
@@ -579,16 +583,28 @@ package body Exp_Dbug is
             Lo_Encode : constant Boolean := Lo_Con or Lo_Discr;
             Hi_Encode : constant Boolean := Hi_Con or Hi_Discr;
 
+            Biased : constant Boolean := Has_Biased_Representation (E);
+
          begin
+            if Biased then
+               Get_External_Name_With_Suffix (E, "XB");
+            else
+               Get_External_Name_With_Suffix (E, "XD");
+            end if;
+
             if Lo_Encode or Hi_Encode then
-               if Lo_Encode then
-                  if Hi_Encode then
-                     Add_Str_To_Name_Buffer ("LU_");
-                  else
-                     Add_Str_To_Name_Buffer ("L_");
-                  end if;
+               if Biased then
+                  Add_Str_To_Name_Buffer ("_");
                else
-                  Add_Str_To_Name_Buffer ("U_");
+                  if Lo_Encode then
+                     if Hi_Encode then
+                        Add_Str_To_Name_Buffer ("LU_");
+                     else
+                        Add_Str_To_Name_Buffer ("L_");
+                     end if;
+                  else
+                     Add_Str_To_Name_Buffer ("U_");
+                  end if;
                end if;
 
                if Lo_Con then
@@ -698,6 +714,7 @@ package body Exp_Dbug is
          --  If this is a library level subprogram (i.e. a subprogram that is a
          --  compilation unit other than a subunit), then we prepend _ada_ to
          --  ensure distinctions required as described in the spec.
+
          --  Check explicitly for child units, because those are not flagged
          --  as Compilation_Units by lib. Should they be ???
 
@@ -738,20 +755,19 @@ package body Exp_Dbug is
       Suffix : String)
    is
       Has_Suffix : constant Boolean := (Suffix /= "");
-      use type Opt.Operating_Mode_Type;
 
    begin
-      if Opt.Operating_Mode /= Opt.Generate_Code then
+      --  If we are not in code generation mode, this procedure may still be
+      --  called from Back_End (more specifically - from gigi for doing type
+      --  representation annotation or some representation-specific checks).
+      --  But in this mode there is no need to mess with external names.
 
-         --  If we are not in code generation mode, we still may call this
-         --  procedure from Back_End (more specifically - from gigi for doing
-         --  type representation annotation or some representation-specific
-         --  checks). But in this mode there is no need to mess with external
-         --  names. Furthermore, the call causes difficulties in this case
-         --  because the string representing the homonym number is not
-         --  correctly reset as a part of the call to
-         --  Output_Homonym_Numbers_Suffix (which is not called in gigi)
+      --  Furthermore, the call causes difficulties in this case because the
+      --  string representing the homonym number is not correctly reset as a
+      --  part of the call to Output_Homonym_Numbers_Suffix (which is not
+      --  called in gigi).
 
+      if Operating_Mode /= Generate_Code then
          return;
       end if;
 
@@ -760,7 +776,6 @@ package body Exp_Dbug is
       if Has_Suffix then
          Add_Str_To_Name_Buffer ("___");
          Add_Str_To_Name_Buffer (Suffix);
-
          Name_Buffer (Name_Len + 1) := ASCII.Nul;
       end if;
    end Get_External_Name_With_Suffix;
@@ -782,9 +797,8 @@ package body Exp_Dbug is
 
       procedure Choice_Val (Typ : Character; Choice : Node_Id) is
       begin
-         Add_Char_To_Name_Buffer (Typ);
-
          if Nkind (Choice) = N_Integer_Literal then
+            Add_Char_To_Name_Buffer (Typ);
             Add_Uint_To_Buffer (Intval (Choice));
 
          --  Character literal with no entity present (this is the case
@@ -793,6 +807,7 @@ package body Exp_Dbug is
          elsif Nkind (Choice) = N_Character_Literal
            and then No (Entity (Choice))
          then
+            Add_Char_To_Name_Buffer (Typ);
             Add_Uint_To_Buffer (Char_Literal_Value (Choice));
 
          else
@@ -801,6 +816,7 @@ package body Exp_Dbug is
 
             begin
                if Ekind (Ent) = E_Enumeration_Literal then
+                  Add_Char_To_Name_Buffer (Typ);
                   Add_Uint_To_Buffer (Enumeration_Rep (Ent));
 
                else
@@ -865,6 +881,39 @@ package body Exp_Dbug is
          end;
       end if;
    end Get_Variant_Encoding;
+
+   ------------------------------------
+   -- Get_Secondary_DT_External_Name --
+   ------------------------------------
+
+   procedure Get_Secondary_DT_External_Name
+     (Typ             : Entity_Id;
+      Ancestor_Typ    : Entity_Id;
+      Suffix_Index    : Int) is
+   begin
+      Get_External_Name (Typ, Has_Suffix => False);
+
+      if Ancestor_Typ /= Typ then
+         declare
+            Len      : constant Natural := Name_Len;
+            Save_Str : constant String (1 .. Name_Len)
+                         := Name_Buffer (1 .. Name_Len);
+         begin
+            Get_External_Name (Ancestor_Typ, Has_Suffix => False);
+
+            --  Append the extended name of the ancestor to the
+            --  extended name of Typ
+
+            Name_Buffer (Len + 2 .. Len + Name_Len + 1) :=
+              Name_Buffer (1 .. Name_Len);
+            Name_Buffer (1 .. Len) := Save_Str;
+            Name_Buffer (Len + 1) := '_';
+            Name_Len := Len + Name_Len + 1;
+         end;
+      end if;
+
+      Add_Nat_To_Name_Buffer (Suffix_Index);
+   end Get_Secondary_DT_External_Name;
 
    ---------------------------------
    -- Make_Packed_Array_Type_Name --
@@ -1152,7 +1201,6 @@ package body Exp_Dbug is
          else
             Add_Char_To_Name_Buffer ('X');
          end if;
-
       end Set_BNPE_Suffix;
 
       ---------------------
@@ -1324,7 +1372,6 @@ package body Exp_Dbug is
             exit;
          end if;
       end loop;
-
    end Strip_Suffixes;
 
 end Exp_Dbug;

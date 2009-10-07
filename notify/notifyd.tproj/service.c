@@ -3,21 +3,20 @@
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * "Portions Copyright (c) 2003 Apple Computer, Inc.  All Rights
- * Reserved.  This file contains Original Code and/or Modifications of
- * Original Code as defined in and that are subject to the Apple Public
- * Source License Version 1.0 (the 'License').  You may not use this file
- * except in compliance with the License.  Please obtain a copy of the
- * License at http://www.apple.com/publicsource and read it before using
- * this file.
+ * This file contains Original Code and/or Modifications of Original Code
+ * as defined in and that are subject to the Apple Public Source License
+ * Version 2.0 (the 'License'). You may not use this file except in
+ * compliance with the License. Please obtain a copy of the License at
+ * http://www.opensource.apple.com/apsl/ and read it before using this
+ * file.
  * 
  * The Original Code and all software distributed under the License are
  * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
  * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE OR NON-INFRINGEMENT.  Please see the
- * License for the specific language governing rights and limitations
- * under the License."
+ * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+ * Please see the License for the specific language governing rights and
+ * limitations under the License.
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
@@ -146,7 +145,7 @@ service_check_access(const char *path, int ftype, uid_t uid, gid_t gid)
 	if (path[0] != '/') return NOTIFY_STATUS_INVALID_REQUEST;
 
 	memset(rpath, 0, sizeof(rpath));
-	if (realpath(path, rpath) == NULL) return 0;
+	if (realpath(path, rpath) == NULL) return NOTIFY_STATUS_INVALID_REQUEST;
 	if (!strncasecmp(rpath, ZONEINFO_DIR, sizeof(ZONEINFO_DIR) - 1)) return 0;
 
 	/* Root dir is readable */
@@ -157,20 +156,7 @@ service_check_access(const char *path, int ftype, uid_t uid, gid_t gid)
 		memset(&sb, 0, sizeof(struct stat));
 
 		status = lstat(path, &sb);
-		if (status != 0)
-		{
-			str = strdup(path);
-			p = strrchr(str, '/');
-			if (p == NULL)
-			{
-				free(str);
-				return NOTIFY_STATUS_INVALID_REQUEST;
-			}
-			*p = '\0';
-			status = service_check_access(str, FS_TYPE_DIR, uid, gid);
-			free(str);
-			return status;
-		}
+		if (status != 0) return NOTIFY_STATUS_INVALID_REQUEST;
 		else if ((sb.st_mode & S_IFMT) == S_IFDIR) ftype = FS_TYPE_DIR;
 		else if ((sb.st_mode & S_IFMT) == S_IFREG) ftype = FS_TYPE_FILE;
 		else if ((sb.st_mode & S_IFMT) == S_IFLNK) ftype = FS_TYPE_LINK;
@@ -204,6 +190,7 @@ service_check_access(const char *path, int ftype, uid_t uid, gid_t gid)
 			free(str);
 			return NOTIFY_STATUS_INVALID_REQUEST;
 		}
+
 		*p = '\0';
 		status = service_check_access(str, FS_TYPE_DIR, uid, gid);
 		free(str);

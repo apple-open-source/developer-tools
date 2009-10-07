@@ -5,9 +5,9 @@
 --                               S Y S T E M                                --
 --                                                                          --
 --                                 S p e c                                  --
---                               (NT Version)                               --
+--                            (Windows Version)                             --
 --                                                                          --
---          Copyright (C) 1992-2004 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -21,8 +21,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -37,9 +37,10 @@
 ------------------------------------------------------------------------------
 
 package System is
-pragma Pure (System);
---  Note that we take advantage of the implementation permission to
---  make this unit Pure instead of Preelaborable, see RM 13.7(36)
+   pragma Pure;
+   --  Note that we take advantage of the implementation permission to make
+   --  this unit Pure instead of Preelaborable; see RM 13.7.1(15). In Ada
+   --  2005, this is Pure in any case (AI-362).
 
    type Name is (SYSTEM_NAME_GNAT);
    System_Name : constant Name := SYSTEM_NAME_GNAT;
@@ -118,6 +119,7 @@ private
    Backend_Divide_Checks     : constant Boolean := False;
    Backend_Overflow_Checks   : constant Boolean := False;
    Command_Line_Args         : constant Boolean := True;
+   Compiler_System_Version   : constant Boolean := False;
    Configurable_Run_Time     : constant Boolean := False;
    Denorm                    : constant Boolean := True;
    Duration_32_Bits          : constant Boolean := False;
@@ -131,7 +133,7 @@ private
    Preallocated_Stacks       : constant Boolean := False;
    Signed_Zeros              : constant Boolean := True;
    Stack_Check_Default       : constant Boolean := False;
-   Stack_Check_Probes        : constant Boolean := False;
+   Stack_Check_Probes        : constant Boolean := True;
    Support_64_Bit_Divides    : constant Boolean := True;
    Support_Aggregates        : constant Boolean := True;
    Support_Composite_Assign  : constant Boolean := True;
@@ -165,39 +167,33 @@ private
    pragma Suppress_Initialization (Priorities_Mapping);
    --  Suppress initialization in case gnat.adc specifies Normalize_Scalars
 
-   --  On NT, the default mapping preserves the standard 31 priorities
-   --  of the Ada model, but maps them using compression onto the 7
-   --  priority levels available in NT.
+   Underlying_Priorities : constant Priorities_Mapping :=
+     (Priority'First ..
+      Default_Priority - 8    => -15,
+      Default_Priority - 7    => -7,
+      Default_Priority - 6    => -6,
+      Default_Priority - 5    => -5,
+      Default_Priority - 4    => -4,
+      Default_Priority - 3    => -3,
+      Default_Priority - 2    => -2,
+      Default_Priority - 1    => -1,
+      Default_Priority        => 0,
+      Default_Priority + 1    => 1,
+      Default_Priority + 2    => 2,
+      Default_Priority + 3    => 3,
+      Default_Priority + 4    => 4,
+      Default_Priority + 5    => 5,
+      Default_Priority + 6 ..
+      Priority'Last           => 6,
+      Interrupt_Priority      => 15);
+   --  The default mapping preserves the standard 31 priorities of the Ada
+   --  model, but maps them using compression onto the 7 priority levels
+   --  available in NT and on the 16 priority levels available in 2000/XP.
 
    --  To replace the default values of the Underlying_Priorities mapping,
    --  copy this source file into your build directory, edit the file to
-   --  reflect your desired behavior, and recompile with the command:
-
-   --     $ gcc -c -O3 -gnatpgn system.ads
-
-   --  then recompile the run-time parts that depend on this package:
-
-   --     $ gnatmake -a -gnatn -O3 <your application>
-
-   --  then force rebuilding your application if you need different options:
-
-   --     $ gnatmake -f <your options> <your application>
-
-   Underlying_Priorities : constant Priorities_Mapping :=
-
-     (Priority'First .. 1        => -15,
-
-      2 .. Default_Priority - 2  => -2,
-
-      Default_Priority - 1       => -1,
-
-      Default_Priority           => 0,
-
-      Default_Priority + 1 .. 19 => 1,
-
-      20 .. Priority'Last        => 2,
-
-      Interrupt_Priority         => 15);
+   --  reflect your desired behavior, and recompile using Makefile.adalib
+   --  which can be found under the adalib directory of your gnat installation
 
    pragma Linker_Options ("-Wl,--stack=0x2000000");
    --  This is used to change the default stack (32 MB) size for non tasking

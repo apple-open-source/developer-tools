@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2006 Friedemann Kleint <fkleint@trolltech.com>
- * Copyright (C) 2006 Trolltech ASA
+ * Copyright (C) 2008 Nokia Corporation and/or its subsidiary(-ies)
  *
  * All rights reserved.
  *
@@ -35,10 +35,6 @@
 #include <QtGui/QImageReader>
 #include <qdebug.h>
 
-#if !defined(Q_OS_WIN)
-Q_IMPORT_PLUGIN(qtwebico) //For ico format...
-#endif
-
 namespace {
     const  QImage::Format DesiredFormat = QImage::Format_ARGB32;
     const  bool debugImageDecoderQt = false;
@@ -72,6 +68,8 @@ public:
     // a few images might have been read.
     ReadResult read(bool allDataReceived);
 
+    QImageReader *reader() { return &m_reader; }
+
 private:
     enum IncrementalReadResult { IncrementalReadFailed, IncrementalReadPartial, IncrementalReadComplete };
     // Incrementally read an image
@@ -91,13 +89,13 @@ private:
 
 };
 
-ImageDecoderQt::ReadContext::ReadContext(const IncomingData & data, LoadMode loadMode, ImageList &target) :
-    m_loadMode(loadMode),
-    m_data(data.data(), data.size()),
-    m_buffer(&m_data),
-    m_reader(&m_buffer),
-    m_target(target),
-    m_dataFormat(QImage::Format_Invalid)
+ImageDecoderQt::ReadContext::ReadContext(const IncomingData & data, LoadMode loadMode, ImageList &target)
+    : m_loadMode(loadMode)
+    , m_data(data.data(), data.size())
+    , m_buffer(&m_data)
+    , m_reader(&m_buffer)
+    , m_target(target)
+    , m_dataFormat(QImage::Format_Invalid)
 {
     m_buffer.open(QIODevice::ReadOnly);
 }
@@ -180,9 +178,27 @@ ImageDecoderQt::ReadContext::IncrementalReadResult
     return IncrementalReadComplete;
 }
 
+ImageDecoderQt* ImageDecoderQt::create(const SharedBuffer& data)
+{
+    // We need at least 4 bytes to figure out what kind of image we're dealing with.
+    if (data.size() < 4)
+        return 0;
 
-// ImageDecoderQt
-ImageDecoderQt::ImageDecoderQt( )
+    QByteArray bytes = QByteArray::fromRawData(data.data(), data.size());
+    QBuffer buffer(&bytes);
+    if (!buffer.open(QBuffer::ReadOnly))
+        return 0;
+
+    QString imageFormat = QString::fromLatin1(QImageReader::imageFormat(&buffer).toLower());
+    if (imageFormat.isEmpty())
+        return 0; // Image format not supported
+
+    return new ImageDecoderQt(imageFormat);
+}
+
+ImageDecoderQt::ImageDecoderQt(const QString &imageFormat)
+    : m_hasAlphaChannel(false)
+    , m_imageFormat(imageFormat)
 {
 }
 
@@ -197,11 +213,11 @@ bool ImageDecoderQt::hasFirstImageHeader() const
 
 void ImageDecoderQt::reset()
 {
+    m_hasAlphaChannel = false;
     m_failed = false;
     m_imageList.clear();
     m_pixmapCache.clear();
-    m_sizeAvailable = false;
-    m_size = IntSize(-1, -1);
+    m_loopCount = cAnimationNone;
 }
 
 void ImageDecoderQt::setData(const IncomingData &data, bool allDataReceived)
@@ -213,6 +229,9 @@ void ImageDecoderQt::setData(const IncomingData &data, bool allDataReceived)
         qDebug() << " setData " << data.size() << " image bytes, complete=" << allDataReceived;
 
     const  ReadContext::ReadResult readResult =  readContext.read(allDataReceived);
+
+    if (hasFirstImageHeader())
+        m_hasAlphaChannel = m_imageList[0].m_image.hasAlphaChannel();
 
     if (debugImageDecoderQt)
         qDebug()  << " read returns " << readResult;
@@ -226,37 +245,45 @@ void ImageDecoderQt::setData(const IncomingData &data, bool allDataReceived)
     case ReadContext::ReadComplete:
         // Did we read anything - try to set the size.
         if (hasFirstImageHeader()) {
-            m_sizeAvailable = true;
-            m_size = m_imageList[0].m_image.size();
+            QSize imgSize = m_imageList[0].m_image.size();
+            setSize(imgSize.width(), imgSize.height());
+
+            if (readContext.reader()->supportsAnimation()) {
+                if (readContext.reader()->loopCount() != -1)
+                    m_loopCount = readContext.reader()->loopCount();
+                else
+                    m_loopCount = 0; //loop forever
+            }
         }
         break;
     }
 }
 
 
-bool ImageDecoderQt::isSizeAvailable() const
+bool ImageDecoderQt::isSizeAvailable()
 {
     if (debugImageDecoderQt)
-        qDebug() << " ImageDecoderQt::isSizeAvailable() returns" << m_sizeAvailable;
-    return m_sizeAvailable;
+        qDebug() << " ImageDecoderQt::isSizeAvailable() returns" << ImageDecoder::isSizeAvailable();
+    return ImageDecoder::isSizeAvailable();
 }
 
 int ImageDecoderQt::frameCount() const
 {
+    if (debugImageDecoderQt)
+        qDebug() << " ImageDecoderQt::frameCount() returns" << m_imageList.size();
     return m_imageList.size();
 }
 
-
 int ImageDecoderQt::repetitionCount() const
 {
-    // TODO: Am I Moses?!
-    return cAnimationNone;
+    if (debugImageDecoderQt)
+        qDebug() << " ImageDecoderQt::repetitionCount() returns" << m_loopCount;
+    return m_loopCount;
 }
-
 
 bool ImageDecoderQt::supportsAlpha() const
 {
-    return hasFirstImageHeader() && m_imageList[0].m_image.hasAlphaChannel();
+    return m_hasAlphaChannel;
 }
 
 int ImageDecoderQt::duration(size_t index) const
@@ -266,13 +293,20 @@ int ImageDecoderQt::duration(size_t index) const
     return  m_imageList[index].m_duration;
 }
 
+String ImageDecoderQt::filenameExtension() const
+{
+    if (debugImageDecoderQt)
+           qDebug() << " ImageDecoderQt::filenameExtension() returns" << m_imageFormat;
+    return m_imageFormat;
+};
+
 RGBA32Buffer* ImageDecoderQt::frameBufferAtIndex(size_t index)
 {
     Q_ASSERT("use imageAtIndex instead");
     return 0;
 }
 
-const QPixmap* ImageDecoderQt::imageAtIndex(size_t index) const
+QPixmap* ImageDecoderQt::imageAtIndex(size_t index) const
 {
     if (debugImageDecoderQt)
         qDebug() << "ImageDecoderQt::imageAtIndex(" << index << ')';
@@ -283,6 +317,10 @@ const QPixmap* ImageDecoderQt::imageAtIndex(size_t index) const
     if (!m_pixmapCache.contains(index)) {
         m_pixmapCache.insert(index,
                              QPixmap::fromImage(m_imageList[index].m_image));
+
+        // store null image since the converted pixmap is already in pixmap cache
+        Q_ASSERT(m_imageList[index].m_imageState == ImageComplete);
+        m_imageList[index].m_image = QImage();
     }
     return  &m_pixmapCache[index];
 }

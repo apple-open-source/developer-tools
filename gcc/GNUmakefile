@@ -24,9 +24,8 @@ targets = echo $(RC_ARCHS)
 TARGETS := $(shell $(targets))
 
 SRCROOT = .
-OPENSRCROOT = $(SRCROOT)
 
-SRC = `cd $(SRCROOT) && pwd | sed s,/private,,`
+SRC = $(shell cd $(SRCROOT) && pwd | sed s,/private,,)
 OBJROOT = $(SRC)/obj
 SYMROOT = $(OBJROOT)/../sym
 DSTROOT = $(OBJROOT)/../dst
@@ -66,16 +65,6 @@ installsrc:
 				-name \*~ -o -name .\#\* \) \
 	  -exec rm -rf {} \;
 
-installopensource: $(OPENSRCROOT)
-	if [ $(OPENSRCROOT) != . ]; then \
-	  $(PAX) -rw . $(OPENSRCROOT); \
-	fi
-	find -d "$(OPENSRCROOT)" \( -type d -a -name CVS -o \
-				    -type f -a -name .DS_Store -o \
-				    -name \*~ -o -name .\#\* \) \
-	  -exec rm -rf {} \;
-	rm -rf $(OPENSRCROOT)/gcc/config/arm
-
 #######################################################################
 
 clean:
@@ -99,7 +88,7 @@ clean:
 
 #######################################################################
 
-$(OBJROOT) $(SYMROOT) $(DSTROOT) $(OPENSRCROOT):
+$(OBJROOT) $(SYMROOT) $(DSTROOT):
 	mkdir -p $@
 
 .PHONY: install installsrc clean

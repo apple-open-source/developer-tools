@@ -39,7 +39,7 @@
 
      /* The following warning is a consequence of picking the "wrong" method signature.  */
      /* APPLE LOCAL mainline */
-     /* { dg-warning "passing argument 1 of .initWithData:. from distinct Objective\\-C type" "" { target *-*-* } 34 } */
+     /* { dg-warning "incompatible Objective-C types \\'id\\', expected \\'struct Object \\*\\' when passing argument 1 of \\'initWithData:\\' from distinct" "" { target *-*-* } 34 } */
     return result;
 }
 @end

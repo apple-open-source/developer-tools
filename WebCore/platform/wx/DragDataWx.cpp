@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2007 Apple Inc.  All rights reserved.
+ * Copyright (C) 2007, 2008 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,6 +26,7 @@
 #include "config.h"
 #include "DragData.h"
 
+#include "Clipboard.h"
 #include "Document.h"
 #include "DocumentFragment.h"
 
@@ -39,6 +40,15 @@ bool DragData::canSmartReplace() const
 bool DragData::containsColor() const
 {
     return false;
+}
+
+bool DragData::containsFiles() const
+{
+    return false;
+}
+
+void DragData::asFilenames(Vector<String>& result) const
+{
 }
 
 bool DragData::containsPlainText() const
@@ -56,7 +66,7 @@ Color DragData::asColor() const
     return Color();
 }
 
-Clipboard* DragData::createClipboard(ClipboardAccessPolicy) const
+PassRefPtr<Clipboard> DragData::createClipboard(ClipboardAccessPolicy) const
 {
     return 0;
 }

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1999-2002 Free Software Foundation, Inc.          --
+--          Copyright (C) 1999-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -37,7 +37,7 @@
 package System.Global_Locks is
 
    Lock_Error : exception;
-   --  Exception raised if a request cannot be executed on a lock.
+   --  Exception raised if a request cannot be executed on a lock
 
    type Lock_Type is private;
    --  Such a lock is a global lock between partitions. This lock is
@@ -46,7 +46,7 @@ package System.Global_Locks is
    Null_Lock : constant Lock_Type;
    --  This needs comments ???
 
-   procedure Create_Lock (Lock : out Lock_Type; Name : in String);
+   procedure Create_Lock (Lock : out Lock_Type; Name : String);
    --  Create or retrieve a global lock for the current partition using
    --  its Name.
 

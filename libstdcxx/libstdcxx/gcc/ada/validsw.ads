@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 2001-2003 Free Software Foundation, Inc.          --
+--          Copyright (C) 2001-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -48,11 +48,12 @@ package Validsw is
    --  expressions in object declarations are checked for validity.
 
    Validity_Check_Default : Boolean := True;
-   --  Controls default (reference manual) validity checking. If this switch
-   --  is set to True using -gnatVd or a 'd' in the argument of a Validity_
-   --  Checks pragma then left side subscripts and case statement arguments
-   --  are checked for validity. This switch is also set by default if no
-   --  -gnatV switch is used and no Validity_Checks pragma is processed.
+   --  Controls default (reference manual) validity checking. If this switch is
+   --  set to True using -gnatVd or a 'd' in the argument of a Validity_ Checks
+   --  pragma (or the initial default value is used, set True), then left side
+   --  subscripts and case statement arguments are checked for validity. This
+   --  switch is also set by default if no -gnatV switch is used and no
+   --  Validity_Checks pragma is processed.
 
    Validity_Check_Floating_Point : Boolean := False;
    --  Normally validity checking applies only to discrete values (integer

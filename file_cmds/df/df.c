@@ -480,7 +480,7 @@ prtstat(struct statfs *sfsp, struct maxwidths *mwp)
 	if (hflag) {
 		prthuman(sfsp, used);
 	} else {
-		(void)printf(" %*lld %*lld %*lld", mwp->total,
+		(void)printf(" %*jd %*jd %*jd", mwp->total,
 			     fsbtoblk(sfsp->f_blocks, sfsp->f_bsize, blocksize, sfsp->f_mntonname),
 			     mwp->used, fsbtoblk(used, sfsp->f_bsize, blocksize, sfsp->f_mntonname),
 			     mwp->avail, fsbtoblk(sfsp->f_bavail, sfsp->f_bsize, blocksize, sfsp->f_mntonname));
@@ -562,7 +562,7 @@ usage(void)
 
 	char *t_flag = COMPAT_MODE("bin/df", "unix2003") ? "[-t]" : "[-t type]";
 	(void)fprintf(stderr,
-	    "usage: df [-b | -H | -h | -k | -m | -P] [-ailn] [-T type] %s [filesystem ...]\n", t_flag);
+	    "usage: df [-b | -H | -h | -k | -m | -g | -P] [-ailn] [-T type] %s [filesystem ...]\n", t_flag);
 	exit(EX_USAGE);
 }
 

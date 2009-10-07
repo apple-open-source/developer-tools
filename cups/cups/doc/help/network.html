@@ -2,8 +2,11 @@
 <!-- SECTION: Getting Started -->
 <HEAD>
 	<TITLE>Using Network Printers</TITLE>
+	<LINK REL="STYLESHEET" TYPE="text/css" HREF="../cups-printable.css">
 </HEAD>
 <BODY>
+
+<H1 CLASS="title">Using Network Printers</H1>
 
 <P>This help document describes how to discover, configure, and use TCP/IP network printers with CUPS.</P>
 
@@ -99,7 +102,7 @@ socket://<i>ip-address-or-hostname</i>:<i>port-number</i>?waiteof=false
 
 <H3><A NAME="IPP">Internet Printing Protocol (IPP)</A></H3>
 
-<P>IPP is the only protocol that CUPS supports natively, and is also supported by many network printers. We recommend using this protocol over others whenever the printer or server supports it. IPP printing normally happens over port 631 and uses the <tt>http</tt> and <tt>ipp</tt> URI schemes:</P>
+<P>IPP is the only protocol that CUPS supports natively and is supported by some network printers and print servers. However, since many printers do not implement IPP properly, only use IPP when the vendor actually documents official support for it. IPP printing normally happens over port 631 and uses the <tt>http</tt> and <tt>ipp</tt> URI schemes:</P>
 
 <PRE>
 http://<i>ip-address-or-hostname</i>:<i>port-number</i>/<i>resource</i>
@@ -149,6 +152,14 @@ ipp://<i>ip-address-or-hostname</i>:<i>port-number</i>/<i>resource</i>?<i>option
 	<TD>Specifies that version 1.0 of the IPP protocol should be used instead of the default version 1.1.</TD>
 </TR>
 <TR>
+	<TD><TT>version=2.0</TT></TD>
+	<TD>Specifies that version 2.0 of the IPP protocol should be used instead of the default version 1.1.</TD>
+</TR>
+<TR>
+	<TD><TT>version=2.1</TT></TD>
+	<TD>Specifies that version 2.1 of the IPP protocol should be used instead of the default version 1.1.</TD>
+</TR>
+<TR>
 	<TD><TT>waitjob=false</TT></TD>
 	<TD>Specifies that the IPP backend should not wait for the job to complete.</TD>
 </TR>
@@ -165,8 +176,11 @@ ipp://<i>ip-address-or-hostname</i>:<i>port-number</i>/<i>resource</i>?<i>option
 
 <PRE>
 lpd://<i>ip-address-or-hostname</i>/<i>queue</i>
+lpd://<i>username@ip-address-or-hostname</i>/<i>queue</i>
 lpd://<i>ip-address-or-hostname</i>/<i>queue</i>?<i>option=value</i>
+lpd://<i>username@ip-address-or-hostname</i>/<i>queue</i>?<i>option=value</i>
 lpd://<i>ip-address-or-hostname</i>/<i>queue</i>?<i>option=value&option=value</i>
+lpd://<i>username@ip-address-or-hostname</i>/<i>queue</i>?<i>option=value&option=value</i>
 </PRE>
 
 <P><A HREF="#TABLE3">Table 3</A> summarizes the options supported by the <tt>lpd</tt> backend.</P>
@@ -322,17 +336,10 @@ lpd://<i>ip-address-or-hostname</i>/<i>queue</i>?<i>option=value&option=value</i
 	lpd://<I>address</I>/pr3</TD>
 </TR>
 <TR>
-	<TD>Hewlett Packard JetDirect w/o IPP</TD>
+	<TD>Hewlett Packard JetDirect</TD>
 	<TD>socket://<I>address</I>:9100<BR>
 	socket://<I>address</I>:9101<BR>
 	socket://<I>address</I>:9102</TD>
-</TR>
-<TR>
-	<TD>Hewlett Packard JetDirect w/IPP</TD>
-	<TD>ipp://<I>address</I>/ipp<BR>
-	ipp://<I>address</I>/ipp/port1<BR>
-	ipp://<I>address</I>/ipp/port2<BR>
-	ipp://<I>address</I>/ipp/port3</TD>
 </TR>
 <TR>
 	<TD>Intel&reg; NetportExpress XL, PRO/100</TD>
@@ -358,6 +365,11 @@ lpd://<i>ip-address-or-hostname</i>/<i>queue</i>?<i>option=value&option=value</i
 <TR>
 	<TD>Kodak&reg;</TD>
 	<TD>lpd://<I>address</I>/ps</TD>
+</TR>
+<TR>
+	<TD>Netgear WGPS606</TD>
+	<TD>lpd://<I>address</I>/L1<BR>
+	lpd://<I>address</I>/L2</TD>
 </TR>
 <TR>
 	<TD>QMS&reg; CrownNet<SUP>TM</SUP></TD>

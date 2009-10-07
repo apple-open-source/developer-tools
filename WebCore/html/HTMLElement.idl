@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2006, 2007 Apple Inc. All rights reserved.
+ * Copyright (C) 2006, 2007, 2009 Apple Inc. All rights reserved.
  * Copyright (C) 2006 Samuel Weinig <sam.weinig@gmail.com>
  *
  * This library is free software; you can redistribute it and/or
@@ -20,14 +20,22 @@
 
 module html {
 
-    interface [GenerateConstructor, GenerateNativeConverter, CustomPushEventHandlerScope] HTMLElement : Element {
+    interface [
+        GenerateConstructor,
+        GenerateNativeConverter,
+        CustomPushEventHandlerScope,
+        InterfaceUUID=b2f172f1-d209-446f-8143-5f21de678f95,
+        ImplementationUUID=c81b0e16-a2b9-448b-ad0a-81c9346d6f8a
+    ] HTMLElement : Element {
                  // iht.com relies on id returning the empty string when no id is present. 
                  // Other browsers do this as well. So we don't convert null to JS null.
-                 attribute [ConvertNullToNullString] DOMString id;
-                 attribute [ConvertNullToNullString] DOMString title;
-                 attribute [ConvertNullToNullString] DOMString lang;
-                 attribute [ConvertNullToNullString] DOMString dir;
-                 attribute [ConvertNullToNullString] DOMString className;
+                 attribute [ConvertNullToNullString, Reflect] DOMString id;
+                 attribute [ConvertNullToNullString, Reflect] DOMString title;
+                 attribute [ConvertNullToNullString, Reflect] DOMString lang;
+                 attribute [ConvertNullToNullString, Reflect] DOMString dir;
+                 attribute [ConvertNullToNullString, Reflect=class] DOMString className;
+
+                 attribute long            tabIndex;
 
         // Extensions
                  attribute [ConvertNullToNullString] DOMString innerHTML
@@ -39,12 +47,22 @@ module html {
                  attribute [ConvertNullToNullString] DOMString outerText
                      setter raises(DOMException);
 
+        Element insertAdjacentElement(in DOMString where,
+                                      in Element element)
+            raises(DOMException);
+        void insertAdjacentHTML(in DOMString where,
+                                in DOMString html)
+            raises(DOMException);
+        void insertAdjacentText(in DOMString where,
+                                in DOMString text)
+            raises(DOMException);
+
         readonly attribute HTMLCollection children;
 
                  attribute [ConvertNullToNullString] DOMString contentEditable;
         readonly attribute boolean isContentEditable;
 
-#if defined(LANGUAGE_OBJECTIVE_C)
+#if defined(LANGUAGE_OBJECTIVE_C) && LANGUAGE_OBJECTIVE_C
         readonly attribute DOMString titleDisplayString;
 #endif
     };

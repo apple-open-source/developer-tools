@@ -1,5 +1,5 @@
 /* Glue to interface gcj with bytecode verifier.
-   Copyright (C) 2003, 2004, 2005 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2006 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -15,8 +15,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.
 
 Java and all Java-based marks are trademarks or registered trademarks
 of Sun Microsystems, Inc. in the United States and other countries.
@@ -30,12 +30,12 @@ The Free Software Foundation is independent of Sun Microsystems, Inc.  */
 #include "coretypes.h"
 #include "tm.h"
 #include "tree.h"
-#include "errors.h"
 #include "parse.h"
 
 #include "verify.h"
 #include "java-tree.h"
 #include "java-except.h"
+#include "toplev.h"
 
 void *
 vfy_alloc (size_t bytes)
@@ -252,8 +252,7 @@ char
 vfy_get_primitive_char (vfy_jclass klass)
 {
   tree sig;
-  if (! vfy_is_primitive (klass))
-    abort ();
+  gcc_assert (vfy_is_primitive (klass));
   sig = build_java_signature (klass);
   return (IDENTIFIER_POINTER (sig))[0];
 }
@@ -296,8 +295,7 @@ vfy_jclass
 vfy_get_component_type (vfy_jclass klass)
 {
   vfy_jclass k;
-  if (! vfy_is_array (klass))
-    abort ();
+  gcc_assert (vfy_is_array (klass));
   k = TYPE_ARRAY_ELEMENT (klass);
   if (TREE_CODE (k) == POINTER_TYPE)
     k = TREE_TYPE (k);
@@ -328,6 +326,12 @@ vfy_object_type (void)
   vfy_jclass k;
   k = object_type_node;
   return k;
+}
+
+vfy_jclass
+vfy_class_type (void)
+{
+  return class_type_node;
 }
 
 vfy_jclass
@@ -487,7 +491,7 @@ verify_jvm_instructions_new (JCF *jcf, const unsigned char *byte_ops,
       instruction_bits[handler_pc] |= BCODE_EXCEPTION_TARGET;
     }
 
-  handle_nested_ranges ();
+  gcc_assert (sanity_check_exception_range (&whole_range));
 
   method.method = current_function_decl;
   method.signature = build_java_signature (TREE_TYPE (current_function_decl));

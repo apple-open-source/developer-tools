@@ -1,12 +1,12 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                 GNU ADA RUN-TIME LIBRARY (GNARL) COMPONENTS              --
+--                  GNAT RUN-TIME LIBRARY (GNARL) COMPONENTS                --
 --                                                                          --
 --              S Y S T E M . T A S K I N G . U T I L I T I E S             --
 --                                                                          --
 --                                  S p e c                                 --
 --                                                                          --
---         Copyright (C) 1992-2004, Free Software Foundation, Inc.          --
+--         Copyright (C) 1992-2005, Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNARL; see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -72,9 +72,9 @@ package System.Tasking.Utilities is
    --  the environment task (because every independent task depends on it),
    --  this counter is protected by the environment task's lock.
 
-   ------------------------------------
-   -- Task Abortion related routines --
-   ------------------------------------
+   ---------------------------------
+   -- Task Abort Related Routines --
+   ---------------------------------
 
    procedure Cancel_Queued_Entry_Calls (T : Task_Id);
    --  Cancel any entry calls queued on target task.
@@ -93,13 +93,13 @@ package System.Tasking.Utilities is
    --    (3) always aborts whole task
 
    procedure Abort_Tasks (Tasks : Task_List);
-   --  Abort_Tasks is called to initiate abortion, however, the actual
-   --  abortion is done by abortee by means of Abort_Handler
+   --  Abort_Tasks is called to initiate abort, however, the actual
+   --  aborti is done by aborted task by means of Abort_Handler
 
    procedure Make_Passive (Self_ID : Task_Id; Task_Completed : Boolean);
-   --  Update counts to indicate current task is either terminated
-   --  or accepting on a terminate alternative.
-   --  Call holding no locks except Global_Task_Lock when calling from
-   --  Terminate_Task, and RTS_Lock when Single_Lock is True.
+   --  Update counts to indicate current task is either terminated or
+   --  accepting on a terminate alternative. Call holding no locks except
+   --  Global_Task_Lock when calling from Terminate_Task, and RTS_Lock when
+   --  Single_Lock is True.
 
 end System.Tasking.Utilities;

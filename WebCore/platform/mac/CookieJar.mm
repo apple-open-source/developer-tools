@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003, 2006 Apple Computer, Inc.  All rights reserved.
+ * Copyright (C) 2003, 2006, 2008 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,42 +26,86 @@
 #import "config.h"
 #import "CookieJar.h"
 
-#import "KURL.h"
 #import "BlockExceptions.h"
-#import "PlatformString.h"
+#import "Document.h"
+#import "KURL.h"
+#import <wtf/RetainPtr.h>
+
+#ifdef BUILDING_ON_TIGER
+typedef unsigned NSUInteger;
+#endif
+
+@interface NSHTTPCookie (WebCoreHTTPOnlyCookies)
+- (BOOL)isHTTPOnly;
+@end
 
 namespace WebCore {
 
-String cookies(const KURL& url)
+static bool isHTTPOnly(NSHTTPCookie *cookie)
+{
+    // Once we require a newer version of Foundation with the isHTTPOnly method,
+    // we can eliminate the instancesRespondToSelector: check.
+    static bool supportsHTTPOnlyCookies = [NSHTTPCookie instancesRespondToSelector:@selector(isHTTPOnly)];
+    return supportsHTTPOnlyCookies && [cookie isHTTPOnly];
+}
+
+static RetainPtr<NSArray> filterCookies(NSArray *unfilteredCookies)
+{
+    NSUInteger count = [unfilteredCookies count];
+    RetainPtr<NSMutableArray> filteredCookies(AdoptNS, [[NSMutableArray alloc] initWithCapacity:count]);
+
+    for (NSUInteger i = 0; i < count; ++i) {
+        NSHTTPCookie *cookie = (NSHTTPCookie *)[unfilteredCookies objectAtIndex:i];
+
+        // <rdar://problem/5632883> On 10.5, NSHTTPCookieStorage would store an empty cookie,
+        // which would be sent as "Cookie: =". We have a workaround in setCookies() to prevent
+        // that, but we also need to avoid sending cookies that were previously stored, and
+        // there's no harm to doing this check because such a cookie is never valid.
+        if (![[cookie name] length])
+            continue;
+
+        if (isHTTPOnly(cookie))
+            continue;
+
+        [filteredCookies.get() addObject:cookie];
+    }
+
+    return filteredCookies;
+}
+
+String cookies(const Document*, const KURL& url)
 {
     BEGIN_BLOCK_OBJC_EXCEPTIONS;
 
-    NSURL *URL = url.getNSURL();
-    NSArray *cookiesForURL = [[NSHTTPCookieStorage sharedHTTPCookieStorage] cookiesForURL:URL];
-    NSDictionary *header = [NSHTTPCookie requestHeaderFieldsWithCookies:cookiesForURL];
-    return [header objectForKey:@"Cookie"];
+    NSURL *cookieURL = url;
+    NSArray *cookies = [[NSHTTPCookieStorage sharedHTTPCookieStorage] cookiesForURL:cookieURL];
+    return [[NSHTTPCookie requestHeaderFieldsWithCookies:filterCookies(cookies).get()] objectForKey:@"Cookie"];
 
     END_BLOCK_OBJC_EXCEPTIONS;
     return String();
 }
 
-void setCookies(const KURL& url, const KURL& policyBaseURL, const String& cookieStr)
+void setCookies(Document* document, const KURL& url, const String& cookieStr)
 {
     BEGIN_BLOCK_OBJC_EXCEPTIONS;
 
-    NSURL *URL = url.getNSURL();
-    
+    // <rdar://problem/5632883> On 10.5, NSHTTPCookieStorage would store an empty cookie,
+    // which would be sent as "Cookie: =".
+    if (cookieStr.isEmpty())
+        return;
+
     // <http://bugs.webkit.org/show_bug.cgi?id=6531>, <rdar://4409034>
     // cookiesWithResponseHeaderFields doesn't parse cookies without a value
     String cookieString = cookieStr.contains('=') ? cookieStr : cookieStr + "=";
-    
-    NSArray *cookies = [NSHTTPCookie cookiesWithResponseHeaderFields:[NSDictionary dictionaryWithObject:cookieString forKey:@"Set-Cookie"] forURL:URL];
-    [[NSHTTPCookieStorage sharedHTTPCookieStorage] setCookies:cookies forURL:URL mainDocumentURL:policyBaseURL.getNSURL()];    
+
+    NSURL *cookieURL = url;    
+    NSArray *cookies = [NSHTTPCookie cookiesWithResponseHeaderFields:[NSDictionary dictionaryWithObject:cookieString forKey:@"Set-Cookie"] forURL:cookieURL];
+    [[NSHTTPCookieStorage sharedHTTPCookieStorage] setCookies:filterCookies(cookies).get() forURL:cookieURL mainDocumentURL:document->firstPartyForCookies()];
 
     END_BLOCK_OBJC_EXCEPTIONS;
 }
 
-bool cookiesEnabled()
+bool cookiesEnabled(const Document*)
 {
     BEGIN_BLOCK_OBJC_EXCEPTIONS;
 

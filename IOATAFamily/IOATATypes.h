@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2001 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 2000-2008 Apple, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -26,9 +26,7 @@
 
 #include <IOKit/IOTypes.h>
 
-//#ifdef DEBUG
-//#define ATA_DEBUG 1
-//#endif
+
 /*!
 
 @header IOATAtypes.h
@@ -67,7 +65,7 @@
 #define IOATARegPtr16 volatile UInt16*
 #define IOATARegPtr32 volatile UInt32*
 #define IOATARegPtr8Cast(x) ((IOATARegPtr8)(x))
-#elif defined( __i386__ )
+#elif defined( __i386__ ) || defined( __x86_64__ )
 #include <IOKit/ata/IOATARegI386.h>
 #else
 #error Unknown machine architecture
@@ -121,7 +119,7 @@ enum {
 	kATADefaultSectorSize = 512
 };
 
-/* Task file definition еее Error Register еее*/
+/* Task file definition *** Error Register *** */
 enum {
 	bATABadBlock				= 7,							/* bit number of bad block error bit*/
 	bATAUncorrectable			= 6,							/* bit number of uncorrectable error bit*/
@@ -141,13 +139,13 @@ enum {
 	mATAAddressNotFound			= 1 << bATAAddressNotFound		/* Address Mark Not Found*/
 };
 
-/* Task file definition еее Features register еее*/
+/* Task file definition *** Features register *** */
 enum {
 	bATAPIuseDMA				= 0,							/* bit number of useDMA bit (ATAPI)*/
 	mATAPIuseDMA				= 1 << bATAPIuseDMA
 };
 
-/* Task file definition еее ataTFSDH Register еее*/
+/* Task file definition *** ataTFSDH Register *** */
 enum {
 	mATAHeadNumber				= 0x0F,							/* Head Number (bits 0-3) */
 	mATASectorSize				= 0xA0,							/* bit 7=1; bit 5 = 01 (512 sector size) <DP4>*/
@@ -155,7 +153,7 @@ enum {
 	mATALBASelect				= 0x40							/* LBA mode bit (0 = chs, 1 = LBA)*/
 };
 
-/* Task file definition еее Status Register еее*/
+/* Task file definition *** Status Register *** */
 enum {
 	bATABusy					= 7,							/* bit number of BSY bit*/
 	bATADriveReady				= 6,							/* bit number of drive ready bit*/
@@ -175,7 +173,7 @@ enum {
 	mATAError					= 1 << bATAError				/* Error condition - see error register*/
 };
 
-/* Task file definition еее Device Control Register еее*/
+/* Task file definition *** Device Control Register *** */
 enum {
 	bATADCROne					= 3,							/* bit number of always one bit*/
 	bATADCRReset				= 2,							/* bit number of reset bit*/
@@ -258,7 +256,7 @@ enum ataOpcode {
 } ;
 
 
-/* The ATA Event codes╔*/
+/* The ATA Event codes */
 /* sent when calling the device driver's event handler*/
 enum ataEventCode {
 	kATANullEvent				= 0x00,							/* Just kidding -- nothing happened*/
@@ -269,6 +267,7 @@ enum ataEventCode {
 	kATAOfflineRequest			= 0x05,							/* Someone requesting to offline the drive*/
 	kATAEjectRequest			= 0x06,							/* Someone requesting to eject the drive*/
 	kATAPIResetEvent			= 0x07,							/* Someone gave a ATAPI reset to the drive*/
+	kATAReservedEvent			= 0x80							/* RESERVED*/
 };
 
 

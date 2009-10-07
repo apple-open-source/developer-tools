@@ -1,6 +1,6 @@
 /* APPLE LOCAL file 4099020 */
 /* { dg-do compile { target i?86-*-* } } */
-/* { dg-skip-if "" { i?86-*-* } { "-m64" } { "" } } */
+/* { dg-require-effective-target ilp32 } */
 /* { dg-options "-O2 -msse2 -march=pentium4" } */
 /* { dg-final { scan-assembler-times "movq\[^\\n\]*" 3} } */
 

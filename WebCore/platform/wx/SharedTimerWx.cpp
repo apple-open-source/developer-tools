@@ -24,11 +24,12 @@
  */
 
 #include "config.h"
+
 #include "SharedTimer.h"
-#include "NotImplemented.h"
-#include "SystemTime.h"
 #include "Widget.h"
+
 #include <wtf/Assertions.h>
+#include <wtf/CurrentTime.h>
 #include <stdio.h>
 
 #include "wx/defs.h"
@@ -76,31 +77,19 @@ void setSharedTimerFireTime(double fireTime)
     if (!wkTimer)
         wkTimer = new WebKitTimer();
         
-    unsigned int intervalInMS = interval * 1000;
-    if (interval < 0)
-    {
-#ifndef NDEBUG
-        // TODO: We may eventually want to assert here, to track 
-        // what calls are leading to this condition. It seems to happen
-        // mostly with repeating timers.
-        fprintf(stderr, "WARNING: setSharedTimerFireTime: fire time is < 0 ms\n");
-#endif
-        intervalInMS = 0;
-    }
-    
-    fprintf(stderr, "Interval is %d\n", intervalInMS);
+    int intervalInMS = interval * 1000;
 
-    if (intervalInMS == 0)
-        wkTimer->Notify();
-    else
-        wkTimer->Start(intervalInMS+100, wxTIMER_ONE_SHOT);
+    // sanity check
+    if (intervalInMS < 1)
+        intervalInMS = 1;
+
+    wkTimer->Start(intervalInMS, wxTIMER_ONE_SHOT);
 }
 
 void stopSharedTimer()
 {
     if (wkTimer)
         wkTimer->Stop();
-    // NYI
 }
 
 }

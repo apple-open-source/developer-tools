@@ -9,7 +9,7 @@
 extern Object* foo(void);
 static Derived *test(void)
 {
-   Derived *m = foo();   /* { dg-warning "initialization from distinct Objective\\-C type" } */
+   Derived *m = foo();   /* { dg-warning "incompatible Objective-C types initializing \\'Object\\*\\', expected \\'Derived\\*\\'" } */
 
    return m;
 }

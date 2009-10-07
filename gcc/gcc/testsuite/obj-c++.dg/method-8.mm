@@ -1,4 +1,3 @@
-/* APPLE LOCAL file mainline */
 /* Tests of duplication.  */
 /* { dg-do compile } */
 

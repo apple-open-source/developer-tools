@@ -21,7 +21,8 @@
  * @APPLE_LICENSE_HEADER_END@
  */
 
-#import <objc/Object.h>
+
+#import <Foundation/Foundation.h>
 #import <PasswordServer/ReplicaFileDefs.h>
 
 /*
@@ -30,7 +31,7 @@ static void AddOrReplaceValueStatic( CFMutableDictionaryRef inDict, CFStringRef 
 static int SaveXMLData( CFPropertyListRef inListToWrite, const char *inSaveFile );
 */
 
-@interface ReplicaFile : Object {
+@interface ReplicaFile : NSObject {
 	CFMutableDictionaryRef mReplicaDict;
 	CFMutableArrayRef mFlatReplicaArray;
 	BOOL mDirty;
@@ -44,18 +45,27 @@ static int SaveXMLData( CFPropertyListRef inListToWrite, const char *inSaveFile 
 -(id)initWithContentsOfFile:(const char *)filePath;
 -(id)initWithXMLStr:(const char *)xmlStr;
 -(void)initCommon;
--free;
+-(void)dealloc;
+
+// backwards compatibility methods
+-free DEPRECATED_ATTRIBUTE;
 
 // traps for overrides
 -(void)lock;
 -(void)unlock;
 
+// merging
+-(ReplicaChangeStatus)mergeReplicaList:(ReplicaFile *)inOtherList;
+-(void)mergeReplicaListDecommissionedList:(ReplicaFile *)inOtherList changeStatus:(ReplicaChangeStatus *)inOutChangeStatus;
+-(void)mergeReplicaListParentRecords:(ReplicaFile *)inOtherList changeStatus:(ReplicaChangeStatus *)inOutChangeStatus;
+-(void)mergeReplicaListReplicas:(ReplicaFile *)inOtherList changeStatus:(ReplicaChangeStatus *)inOutChangeStatus;
+-(void)mergeReplicaListLegacyTigerReplicaList:(ReplicaFile *)inOtherList changeStatus:(ReplicaChangeStatus *)inOutChangeStatus;
+-(BOOL)mergeReplicaValuesFrom:(CFMutableDictionaryRef)dict1 to:(CFMutableDictionaryRef)dict2 parent:(BOOL)isParent;
+-(BOOL)needsMergeFrom:(CFMutableDictionaryRef)dict1 to:(CFMutableDictionaryRef)dict2;
+
 // top level
 -(PWSReplicaEntry *)snapshotOfReplicasForServer:(CFDictionaryRef)serverDict;
 -(void)serverStruct:(PWSReplicaEntry *)sEnt forServerDict:(CFDictionaryRef)serverDict;
--(ReplicaChangeStatus)mergeReplicaList:(ReplicaFile *)inOtherList;
--(BOOL)mergeReplicaValuesFrom:(CFMutableDictionaryRef)dict1 to:(CFMutableDictionaryRef)dict2 parent:(BOOL)isParent;
--(BOOL)needsMergeFrom:(CFMutableDictionaryRef)dict1 to:(CFMutableDictionaryRef)dict2;
 -(CFMutableDictionaryRef)getParentOfReplica:(CFDictionaryRef)replicaDict;
 -(BOOL)array:(CFArrayRef)replicaArray containsReplicaWithName:(CFStringRef)targetNameString;
 
@@ -78,6 +88,7 @@ static int SaveXMLData( CFPropertyListRef inListToWrite, const char *inSaveFile 
 -(void)setParentWithDict:(CFDictionaryRef)inParentData;
 -(CFMutableDictionaryRef)addReplicaWithIP:(const char *)inIPStr andDNS:(const char *)inDNSStr withParent:(CFMutableDictionaryRef)inParentDict;
 -(CFMutableDictionaryRef)addReplica:(CFMutableDictionaryRef)inReplicaData withParent:(CFMutableDictionaryRef)inParentDict;
+-(void)addReplicaToLegacyTigerList:(CFMutableDictionaryRef)inReplicaData;
 -(BOOL)addIPAddress:(const char *)inIPStr toReplica:(CFMutableDictionaryRef)inReplicaDict;
 -(void)addIPAddress:(const char *)inNewIPStr orReplaceIP:(const char *)inOldIPStr inReplica:(CFMutableDictionaryRef)inReplicaDict;
 -(CFMutableArrayRef)getIPAddressesFromDict:(CFDictionaryRef)inReplicaDict;
@@ -96,11 +107,12 @@ static int SaveXMLData( CFPropertyListRef inListToWrite, const char *inSaveFile 
 -(void)recommisionReplica:(const char *)replicaName;
 -(BOOL)replicaHasBeenPromotedToMaster:(CFMutableDictionaryRef)inRepDict;
 -(void)stripDecommissionedArray;
+-(void)divorceAllReplicas;
 
 // per replica
--(void)allocateIDRangeOfSize:(unsigned long)count forReplica:(CFStringRef)inReplicaName minID:(unsigned long)inMinID;
--(void)getIDRangeForReplica:(CFStringRef)inReplicaName start:(unsigned long *)outStart end:(unsigned long *)outEnd;
--(void)getIDRangeStart:(unsigned long *)outStart end:(unsigned long *)outEnd forReplica:(CFDictionaryRef)inReplicaDict;
+-(void)allocateIDRangeOfSize:(UInt32)count forReplica:(CFStringRef)inReplicaName minID:(UInt32)inMinID;
+-(void)getIDRangeForReplica:(CFStringRef)inReplicaName start:(UInt32 *)outStart end:(UInt32 *)outEnd;
+-(void)getIDRangeStart:(UInt32 *)outStart end:(UInt32 *)outEnd forReplica:(CFDictionaryRef)inReplicaDict;
 -(void)setSyncDate:(CFDateRef)date forReplica:(CFStringRef)inReplicaName;
 -(void)setSyncDate:(CFDateRef)date andHighTID:(SInt64)tid forReplica:(CFStringRef)inReplicaName;
 -(void)setEntryModDateForReplica:(CFMutableDictionaryRef)inReplicaDict;
@@ -134,7 +146,7 @@ static int SaveXMLData( CFPropertyListRef inListToWrite, const char *inSaveFile 
 -(int)statReplicaFile:(const char *)inFilePath andGetModDate:(struct timespec *)outModDate;
 -(int)loadXMLData:(const char *)inFilePath;
 -(CFMutableArrayRef)getArrayForKey:(CFStringRef)key;
--(void)getIDRangeOfSize:(unsigned long)count after:(const char *)inMyLastID start:(char *)outFirstID end:(char *)outLastID;
+-(void)getIDRangeOfSize:(UInt32)count after:(const char *)inMyLastID start:(char *)outFirstID end:(char *)outLastID;
 -(int)setIDRangeStart:(const char *)inFirstID end:(const char *)inLastID forReplica:(CFMutableDictionaryRef)inServerDict;
 -(CFMutableDictionaryRef)findMatchToKey:(CFStringRef)inKey withValue:(CFStringRef)inValue;
 -(CFMutableDictionaryRef)replicaDict;

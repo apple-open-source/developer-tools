@@ -32,22 +32,19 @@
 #define RenderListBox_h
 
 #include "RenderBlock.h"
-#include "ScrollBar.h"
+#include "ScrollbarClient.h"
 
 namespace WebCore {
 
-class HTMLSelectElement;
-
 class RenderListBox : public RenderBlock, private ScrollbarClient {
 public:
-    RenderListBox(HTMLSelectElement*);
+    RenderListBox(Element*);
     ~RenderListBox();
 
     virtual const char* renderName() const { return "RenderListBox"; }
 
     virtual bool isListBox() const { return true; }
 
-    virtual void setStyle(RenderStyle*);
     virtual void updateFromElement();
 
     virtual bool canHaveChildren() const { return false; }
@@ -59,10 +56,9 @@ public:
     virtual bool isPointInOverflowControl(HitTestResult&, int x, int y, int tx, int ty);
 
     virtual bool scroll(ScrollDirection, ScrollGranularity, float multiplier = 1.0f);
-    virtual bool isScrollable() const;
 
     virtual void calcPrefWidths();
-    virtual short baselinePosition(bool firstLine, bool isRootLineBox) const;
+    virtual int baselinePosition(bool firstLine, bool isRootLineBox) const;
     virtual void calcHeight();
 
     virtual void layout();
@@ -72,12 +68,19 @@ public:
     void setOptionsChanged(bool changed) { m_optionsChanged = changed; }
 
     int listIndexAtOffset(int x, int y);
+    IntRect itemBoundingBoxRect(int tx, int ty, int index);
 
     bool scrollToRevealElementAtListIndex(int index);
+    bool listIndexIsVisible(int index);
 
-    virtual bool shouldAutoscroll() const { return true; }
+    virtual bool canBeProgramaticallyScrolled(bool) const { return true; }
     virtual void autoscroll();
     virtual void stopAutoscroll();
+
+    virtual bool shouldPanScroll() const { return true; }
+    virtual void panScroll(const IntPoint&);
+
+    int scrollToward(const IntPoint&); // Returns the new index or -1 if no scroll occurred
 
     virtual int verticalScrollbarWidth() const;
     virtual int scrollLeft() const;
@@ -87,22 +90,35 @@ public:
     virtual void setScrollLeft(int);
     virtual void setScrollTop(int);
 
+    virtual bool nodeAtPoint(const HitTestRequest&, HitTestResult&, int x, int y, int tx, int ty, HitTestAction);
+
+protected:
+    virtual void styleDidChange(StyleDifference, const RenderStyle* oldStyle);
+
 private:
     // ScrollbarClient interface.
     virtual void valueChanged(Scrollbar*);
-    virtual IntRect windowClipRect() const;
+    virtual void invalidateScrollbarRect(Scrollbar*, const IntRect&);
+    virtual bool isActive() const;
+    virtual bool scrollbarCornerPresent() const { return false; } // We don't support resize on list boxes yet.  If we did this would have to change.
+    virtual IntRect convertFromScrollbarToContainingView(const Scrollbar*, const IntRect&) const;
+    virtual IntRect convertFromContainingViewToScrollbar(const Scrollbar*, const IntRect&) const;
+    virtual IntPoint convertFromScrollbarToContainingView(const Scrollbar*, const IntPoint&) const;
+    virtual IntPoint convertFromContainingViewToScrollbar(const Scrollbar*, const IntPoint&) const;
 
+    void setHasVerticalScrollbar(bool hasScrollbar);
+    PassRefPtr<Scrollbar> createScrollbar();
+    void destroyScrollbar();
+    
     int itemHeight() const;
     void valueChanged(unsigned listIndex);
     int size() const;
     int numVisibleItems() const;
     int numItems() const;
     int listHeight() const;
-    IntRect itemBoundingBoxRect(int tx, int ty, int index);
-    void paintScrollbar(PaintInfo&);
+    void paintScrollbar(PaintInfo&, int tx, int ty);
     void paintItemForeground(PaintInfo&, int tx, int ty, int listIndex);
     void paintItemBackground(PaintInfo&, int tx, int ty, int listIndex);
-    bool listIndexIsVisible(int index);
     void scrollToRevealSelection();
 
     bool m_optionsChanged;

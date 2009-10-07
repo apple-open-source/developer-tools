@@ -10,6 +10,8 @@ gnat1           ^ GNAT1
 Gnat1           ^ GNAT1
 gnatbind        ^ GNAT BIND
 Gnatbind        ^ GNAT BIND
+gnatcheck       ^ GNAT CHECK
+Gnatcheck       ^ GNAT CHECK
 gnatchop        ^ GNAT CHOP
 Gnatchop        ^ GNAT CHOP
 gnatclean       ^ GNAT CLEAN
@@ -105,6 +107,8 @@ gcc -c          ^ GNAT COMPILE
 -gnatw          ^ /WARNINGS
 -gnatwa         ^ /WARNINGS=OPTIONAL
 -gnatwA         ^ /WARNINGS=NOOPTIONAL
+-gnatwb         ^ /WARNINGS=BAD_FIXED_VALUES
+-gnatwB         ^ /WARNINGS=NO_BAD_FIXED_VALUES
 -gnatwc         ^ /WARNINGS=CONDITIONALS
 -gnatwC         ^ /WARNINGS=NOCONDITIONALS
 -gnatwd         ^ /WARNINGS=IMPLICIT_DEREFERENCE
@@ -140,6 +144,8 @@ gcc -c          ^ GNAT COMPILE
 -gnatwV         ^ /WARNINGS=NOVARIABLES_UNINITIALIZED
 -gnatwx         ^ /WARNINGS=IMPORT_EXPORT_PRAGMAS
 -gnatwX         ^ /WARNINGS=NOIMPORT_EXPORT_PRAGMAS
+-gnatwy         ^ /WARNINGS=ADA_2005_COMPATIBILITY
+-gnatwY         ^ /WARNINGS=NOADA_2005_COMPATIBILITY
 -gnatwz         ^ /WARNINGS=UNCHECKED_CONVERSIONS
 -gnatwZ         ^ /WARNINGS=NOUNCHECKED_CONVERSIONS
 -gnatW8         ^ /WIDE_CHARACTER_ENCODING=UTF8
@@ -149,6 +155,8 @@ gcc -c          ^ GNAT COMPILE
 -gnatzc         ^ /DISTRIBUTION_STUBS=CALLER
 -gnatzr         ^ /DISTRIBUTION_STUBS=RECEIVER
 -gnat83         ^ /83
+-gnat95         ^ /95
+-gnat05         ^ /05
 -gnatx          ^ /XREF=SUPPRESS
 -gnatX          ^ /EXTENSIONS_ALLOWED
 --RTS           ^ /RUNTIME_SYSTEM

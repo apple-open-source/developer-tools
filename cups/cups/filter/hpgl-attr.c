@@ -3,7 +3,7 @@
  *
  *   HP-GL/2 attribute processing for the Common UNIX Printing System (CUPS).
  *
- *   Copyright 2007 by Apple Inc.
+ *   Copyright 2007-2008 by Apple Inc.
  *   Copyright 1993-2007 by Easy Software Products.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -197,14 +197,24 @@ NP_number_pens(int     num_params,	/* I - Number of parameters */
 
   if (num_params == 0)
     PenCount = 8;
-  else if (num_params == 1 && params[0].value.number <= 1024)
-    PenCount = (int)params[0].value.number;
+  else if (num_params == 1)
+  {
+    if (params[0].value.number < 1 || params[0].value.number > MAX_PENS)
+    {
+      fprintf(stderr,
+	      "DEBUG: HP-GL/2 \'NP\' command with invalid number of "
+	      "pens (%d)!\n", (int)params[0].value.number);
+      PenCount = 8;
+    }
+    else
+      PenCount = (int)params[0].value.number;
+  }
   else
     fprintf(stderr,
             "DEBUG: HP-GL/2 \'NP\' command with invalid number of "
 	    "parameters (%d)!\n", num_params);
 
-  for (i = 0; i <= PenCount; i ++)
+  for (i = 0; i < PenCount; i ++)
     Pens[i].width = PenWidth;
 
   PC_pen_color(0, NULL);
@@ -222,20 +232,20 @@ PC_pen_color(int     num_params,	/* I - Number of parameters */
   int		i;			/* Looping var */
   static float	standard_colors[8][3] =	/* Standard colors for first 8 pens */
 		{
-		  { 1.0, 1.0, 1.0 },	/* White */
 		  { 0.0, 0.0, 0.0 },	/* Black */
 		  { 1.0, 0.0, 0.0 },	/* Red */
 		  { 0.0, 1.0, 0.0 },	/* Green */
 		  { 1.0, 1.0, 0.0 },	/* Yellow */
 		  { 0.0, 0.0, 1.0 },	/* Blue */
 		  { 1.0, 0.0, 1.0 },	/* Magenta */
-		  { 0.0, 1.0, 1.0 }	/* Cyan */
+		  { 0.0, 1.0, 1.0 },	/* Cyan */
+		  { 1.0, 1.0, 1.0 }	/* White */
 		};
 
 
   if (num_params == 0)
   {
-    for (i = 0; i <= PenCount; i ++)
+    for (i = 0; i < PenCount; i ++)
       if (i < 8)
       {
         Pens[i].rgb[0] = standard_colors[i][0];
@@ -256,7 +266,14 @@ PC_pen_color(int     num_params,	/* I - Number of parameters */
   }
   else if (num_params == 1 || num_params == 4)
   {
-    i = (int)params[0].value.number;
+    i = (int)params[0].value.number - 1;
+
+    if (i < 0 || i >= PenCount)
+    {
+      fprintf(stderr,
+              "DEBUG: HP-GL/2 \'PC\' command with invalid pen (%d)!\n", i + 1);
+      return;
+    }
 
     if (num_params == 1)
     {
@@ -330,7 +347,15 @@ PW_pen_width(int     num_params,	/* I - Number of parameters */
 
   if (num_params == 2)
   {
-    pen = (int)params[1].value.number;
+    pen = (int)params[1].value.number - 1;
+
+    if (pen < 0 || pen >= PenCount)
+    {
+      fprintf(stderr,
+              "DEBUG: HP-GL/2 \'PW\' command with invalid pen (%d)!\n",
+	      pen + 1);
+      return;
+    }
 
     Pens[pen].width = w;
 
@@ -345,7 +370,7 @@ PW_pen_width(int     num_params,	/* I - Number of parameters */
     * Set width for all pens...
     */
 
-    for (pen = 0; pen <= PenCount; pen ++)
+    for (pen = 0; pen < PenCount; pen ++)
       Pens[pen].width = w;
 
     if (PageDirty)
@@ -399,14 +424,16 @@ SP_select_pen(int     num_params,	/* I - Number of parameters */
               param_t *params)		/* I - Parameters */
 {
   if (num_params == 0)
-    PenNumber = 1;
-  else if (params[0].value.number <= PenCount)
-    PenNumber = (int)params[0].value.number;
-  else
+    PenNumber = 0;
+  else if (num_params > 1)
     fprintf(stderr,
-            "DEBUG: HP-GL/2 \'SP\' command with invalid number or value "
-	    "of parameters (%d, %d)!\n", num_params,
+            "DEBUG: HP-GL/2 \'SP\' command with invalid number of parameters "
+	    "(%d)!\n", num_params);
+  else if (params[0].value.number <= 0 || params[0].value.number >= PenCount)
+    fprintf(stderr, "DEBUG: HP-GL/2 \'SP\' command with invalid pen (%d)!\n",
 	    (int)params[0].value.number);
+  else
+    PenNumber = (int)params[0].value.number - 1;
 
   if (PageDirty)
     printf("%.3f %.3f %.3f %.2f SP\n", Pens[PenNumber].rgb[0],

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 2007-2009 Apple Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -28,6 +28,7 @@
 #include <time.h>
 #include <string.h>
 #include <errno.h>
+#include <dirent.h>
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <sys/sysctl.h>
@@ -40,7 +41,9 @@
 #include <asl.h>
 #include <asl_private.h>
 #include <asl_ipc.h>
+#include <asl_core.h>
 #include <asl_store.h>
+#include <asl_file.h>
 
 #define MOD_CASE_FOLD 'C'
 #define MOD_REGEX     'R'
@@ -58,7 +61,12 @@
 
 #define ASL_QUERY_OP_NOT	0x1000
 
+#define QUERY_FLAG_SEARCH_REVERSE 0x00000001
+
 #define FACILITY_CONSOLE "com.apple.console"
+
+/* Shared with Libc */
+#define NOTIFY_RC "com.apple.asl.remote"
 
 #define SEARCH_EOF -1
 #define SEARCH_NULL 0
@@ -76,14 +84,14 @@
 #define SEND_FORMAT_LEGACY 0
 #define SEND_FORMAT_ASL 1
 
-#define TIME_SEC		0x00000001
-#define TIME_UTC		0x00000002
-#define TIME_LCL		0x00000004
+#define TIME_SEC		0x00000010
+#define TIME_UTC		0x00000020
+#define TIME_LCL		0x00000040
 
-#define FORMAT_RAW		0x00000010
-#define FORMAT_LEGACY	0x00000020
-#define FORMAT_STD		0x00000040
-#define FORMAT_XML		0x00000080
+#define FORMAT_RAW		0x00000100
+#define FORMAT_LEGACY	0x00000200
+#define FORMAT_STD		0x00000400
+#define FORMAT_XML		0x00000800
 
 #define EXPORT			0x00000100
 
@@ -94,14 +102,18 @@
 #define ASL_FILTER_MASK_PACE     0x0f
 #define ASL_FILTER_MASK_PAC      0x07
 
-#define FETCH_BATCH	256
+#define FETCH_BATCH	1024
 
-#define _PATH_ASL_STORE "/var/log/asl.db"
-static asl_store_t **dbstore = NULL;
-static uint32_t store_count = 0;
-static uint32_t store_raw = 1;
+#define DB_SELECT_STORE   0
+#define DB_SELECT_FILES   1
+#define DB_SELECT_SYSLOGD 2
+#define DB_SELECT_LEGACY  3
 
-static asl_store_t *export = NULL;
+static asl_file_list_t *db_files = NULL;
+static asl_store_t *store = NULL;
+static asl_file_t *legacy = NULL;
+static uint32_t dbselect = DB_SELECT_STORE;
+static asl_file_t *export = NULL;
 
 /* notify SPI */
 uint32_t notify_register_plain(const char *name, int *out_token);
@@ -114,10 +126,10 @@ extern int asl_msg_cmp(asl_msg_t *a, asl_msg_t *b);
 extern time_t asl_parse_time(const char *in);
 /* END PRIVATE API */
 
-static const char *myname = "syslog";
-
 #define ASL_SERVICE_NAME "com.apple.system.logger"
 static mach_port_t asl_server_port = MACH_PORT_NULL;
+
+static const char *myname = "syslog";
 
 void
 usage()
@@ -142,21 +154,18 @@ usage()
 	fprintf(stderr, "   d = Debug\n");
 	fprintf(stderr, "   a minus sign preceeding a single letter means \"up to\" that level\n");
 	fprintf(stderr, "\n");
-	fprintf(stderr, "%s -p [-db [file]...] [-k key [[op] val]]... [-o -k key [[op] val]] ...]...\n", myname);
-	fprintf(stderr, "   -db   prune /var/log/asl.db or named file, rather than sending a prune command to syslogd.\n");
-	fprintf(stderr, "   -p    prune datastore according to input expression (see below)\n");
-	fprintf(stderr, "\n");
-	fprintf(stderr, "%s [-db [file]...] [-x file] [-w [N]] [-F format] [-u] [-k key [[op] val]]... [-o -k key [[op] val]] ...]...\n", myname);
-	fprintf(stderr, "   -db   read /var/log/asl.db or named file, rather than querying syslogd.\n");
-	fprintf(stderr, "         use \"-\" to explicitly include a connection to syslogd.\n");
-	fprintf(stderr, "   -x    export to named database, rather than printing\n");
-	fprintf(stderr, "   -w    watch database (^C to quit)\n");
+	fprintf(stderr, "%s [-f file...] [-d path...] [-x file] [-w [N]] [-F format] [-u] [-k key [[op] val]]... [-o -k key [[op] val]] ...]...\n", myname);
+	fprintf(stderr, "   -f    read named file[s], rather than standard log message store.\n");
+	fprintf(stderr, "   -d    read all file in named directory path, rather than standard log message store.\n");
+	fprintf(stderr, "   -x    export to named ASL format file, rather than printing\n");
+	fprintf(stderr, "   -w    watch data store (^C to quit)\n");
 	fprintf(stderr, "         prints the last N matching lines (default 10) before waiting\n");
 	fprintf(stderr, "         \"-w 0\" prints all matching lines before waiting\n");
 	fprintf(stderr, "   -F    output format may be \"std\", \"raw\", \"bsd\", or \"xml\"\n");
 	fprintf(stderr, "         format may also be a string containing variables of the form\n");
 	fprintf(stderr, "         $Key or $(Key) - use the latter for non-whitespace delimited variables\n");
 	fprintf(stderr, "   -T    timestamp format may be \"sec\" (seconds), \"utc\" (UTC), or \"local\" (local timezone)\n");
+	fprintf(stderr, "   -E    text encoding may be \"vis\", \"safe\", or \"none\"\n");
 	fprintf(stderr, "   -u    print timestamps using UTC (equivalent to \"-T utc\")\n");
 	fprintf(stderr, "   -k    key/value match\n");
 	fprintf(stderr, "         if no operator or value is given, checks for the existance of the key\n");
@@ -290,32 +299,12 @@ procinfo(char *pname, int *pid, int *uid)
 }
 
 int
-rcontrol_get_string(const char *prefix, int pid, int *val)
+rcontrol_get_string(const char *name, int *val)
 {
 	int t, status;
-	char *name;
 	uint64_t x;
 
-	status = NOTIFY_STATUS_OK;
-
-	if (pid == RC_SYSLOGD)
-	{
-		status = notify_register_plain(NOTIFY_SYSTEM_ASL_FILTER, &t);
-	}
-	else if (pid == RC_MASTER)
-	{
-		status = notify_register_plain(NOTIFY_SYSTEM_MASTER, &t);
-	}
-	else
-	{
-		name = NULL;
-		asprintf(&name, "%s.%d", prefix, pid);
-		if (name == NULL) return NOTIFY_STATUS_FAILED;
-
-		status = notify_register_plain(name, &t);
-		free(name);
-	}
-
+	status = notify_register_plain(name, &t);
 	if (status != NOTIFY_STATUS_OK) return status;
 
 	x = 0;
@@ -328,37 +317,17 @@ rcontrol_get_string(const char *prefix, int pid, int *val)
 }
 
 int
-rcontrol_set_string(const char *prefix, int pid, int filter)
+rcontrol_set_string(const char *name, int filter)
 {
 	int t, status;
-	char *name;
 	uint64_t x;
 
-	status = NOTIFY_STATUS_OK;
-
-	if (pid == RC_SYSLOGD)
-	{
-		status = notify_register_plain(NOTIFY_SYSTEM_ASL_FILTER, &t);
-	}
-	else if (pid == RC_MASTER)
-	{
-		status = notify_register_plain(NOTIFY_SYSTEM_MASTER, &t);
-	}
-	else
-	{
-		name = NULL;
-		asprintf(&name, "%s.%d", prefix, pid);
-		if (name == NULL) return NOTIFY_STATUS_FAILED;
-
-		status = notify_register_plain(name, &t);
-		free(name);
-	}
-
+	status = notify_register_plain(name, &t);
 	if (status != NOTIFY_STATUS_OK) return status;
 
 	x = filter;
 	status = notify_set_state(t, x);
-	if ((pid == RC_SYSLOGD) && (status == NOTIFY_STATUS_OK)) status = notify_post(NOTIFY_SYSTEM_ASL_FILTER);
+	notify_post(NOTIFY_RC);
 	notify_cancel(t);
 	return status;
 }
@@ -511,8 +480,22 @@ asl_filter_string(int f)
 	return str;
 }
 
+const char *
+rcontrol_name(pid_t pid, uid_t uid)
+{
+	static char str[1024];
+
+	if (pid == RC_SYSLOGD) return NOTIFY_SYSTEM_ASL_FILTER;
+	if (pid == RC_MASTER) return NOTIFY_SYSTEM_MASTER;
+
+	memset(str, 0, sizeof(str));
+	if (uid == 0) snprintf(str, sizeof(str) - 1, "%s.%d", NOTIFY_PREFIX_SYSTEM, pid);
+	else snprintf(str, sizeof(str) - 1, "user.uid.%d.syslog.%d", uid, pid);
+	return str;
+}
+
 int
-rcontrol_get(const char *prefix, int pid)
+rcontrol_get(pid_t pid, uid_t uid)
 {
 	int filter, status;
 	const char *name;
@@ -524,7 +507,7 @@ rcontrol_get(const char *prefix, int pid)
 		name = "Master";
 		if (pid == RC_SYSLOGD) name = "ASL Data Store";
 
-		status = rcontrol_get_string(NULL, pid, &filter);
+		status = rcontrol_get_string(rcontrol_name(pid, uid), &filter);
 		if (status == NOTIFY_STATUS_OK)
 		{
 			printf("%s filter mask: %s\n", name, asl_filter_string(filter));
@@ -535,7 +518,7 @@ rcontrol_get(const char *prefix, int pid)
 		return -1;
 	}
 
-	status = rcontrol_get_string(prefix, pid, &filter);
+	status = rcontrol_get_string(rcontrol_name(pid, uid), &filter);
 	if (status == NOTIFY_STATUS_OK)
 	{
 		printf("Process %d syslog filter mask: %s\n", pid, asl_filter_string(filter));
@@ -547,7 +530,7 @@ rcontrol_get(const char *prefix, int pid)
 }
 
 int
-rcontrol_set(const char *prefix, int pid, int filter)
+rcontrol_set(pid_t pid, uid_t uid, int filter)
 {
 	int status;
 	const char *name;
@@ -556,7 +539,7 @@ rcontrol_set(const char *prefix, int pid, int filter)
 	{
 		name = "Master";
 		if (pid == RC_SYSLOGD) name = "ASL Data Store";
-		status = rcontrol_set_string(NULL, pid, filter);
+		status = rcontrol_set_string(rcontrol_name(pid, uid), filter);
 
 		if (status == NOTIFY_STATUS_OK)
 		{
@@ -568,9 +551,10 @@ rcontrol_set(const char *prefix, int pid, int filter)
 		return -1;
 	}
 
-	status = rcontrol_set_string(prefix, pid, filter);
+	status = rcontrol_set_string(rcontrol_name(pid, uid), filter);
 	if (status == NOTIFY_STATUS_OK)
 	{
+		if (pid == RC_SYSLOGD) status = notify_post(NOTIFY_SYSTEM_ASL_FILTER);
 		printf("Set process %d syslog filter mask set: %s\n", pid, asl_filter_string(filter));
 		return 0;
 	}
@@ -726,11 +710,31 @@ asl_string_to_level(const char *s)
 	return -1;
 }
 
+const char *
+asl_string_to_char_level(const char *s)
+{
+	if (s == NULL) return NULL;
+
+	if ((s[0] >= '0') && (s[0] <= '7') && (s[1] == '\0')) return s;
+
+	if (!strncasecmp(s, "em", 2)) return "0";
+	else if (!strncasecmp(s, "p",  1)) return "0";
+	else if (!strncasecmp(s, "a",  1)) return "1";
+	else if (!strncasecmp(s, "c",  1)) return "2";
+	else if (!strncasecmp(s, "er", 2)) return "3";
+	else if (!strncasecmp(s, "x",  1)) return "3";
+	else if (!strncasecmp(s, "w",  1)) return "4";
+	else if (!strncasecmp(s, "n",  1)) return "5";
+	else if (!strncasecmp(s, "i",  1)) return "6";
+	else if (!strncasecmp(s, "d",  1)) return "7";
+
+	return NULL;
+}
+
 int
 syslog_remote_control(int argc, char *argv[])
 {
 	int pid, uid, status, mask;
-	const char *prefix;
 
 	if ((argc < 3) || (argc > 4))
 	{
@@ -780,9 +784,6 @@ syslog_remote_control(int argc, char *argv[])
 
 	if (pid == 0) pid = RC_MASTER;
 
-	prefix = NOTIFY_PREFIX_USER;
-	if (uid == 0) prefix = NOTIFY_PREFIX_SYSTEM;
-
 	if (argc == 4)
 	{
 		if ((pid == RC_MASTER) && (!strcasecmp(argv[3], "off"))) mask = 0;
@@ -797,11 +798,11 @@ syslog_remote_control(int argc, char *argv[])
 			}
 		}
 
-		rcontrol_set(prefix, pid, mask);
+		rcontrol_set(pid, uid, mask);
 	}
 	else
 	{
-		rcontrol_get(prefix, pid);
+		rcontrol_get(pid, uid);
 	}
 
 	return 0;
@@ -810,7 +811,7 @@ syslog_remote_control(int argc, char *argv[])
 int
 syslog_send(int argc, char *argv[])
 {
-	int i, start, kv, len, rfmt, rlevel;
+	int i, start, kv, len, rfmt, rlevel, filter, status;
 	aslclient asl;
 	aslmsg m;
 	char tmp[64], *str, *rhost;
@@ -873,11 +874,28 @@ syslog_send(int argc, char *argv[])
 	}
 	else
 	{
-		for (i = start + 1; i < argc; i += 2) asl_set(m, argv[i], argv[i + 1]);
+		for (i = start + 1; i < argc; i += 2)
+		{
+			if (!strcmp(argv[i], "-k")) i++;
+			asl_set(m, argv[i], argv[i + 1]);
+			if (!strcmp(argv[i], ASL_KEY_LEVEL)) rlevel = atoi(argv[i + 1]);
+		}
 	}
 
 	if (rhost == NULL)
 	{
+		filter = 0;
+		status = rcontrol_get_string(rcontrol_name(RC_SYSLOGD, 0), &filter);
+		if (status != 0)
+		{
+			fprintf(stderr, "Warning: Can't get current syslogd ASL filter value\n");
+		}
+		else if ((ASL_FILTER_MASK(rlevel) & filter) == 0)
+		{
+			fprintf(stderr, "Warning: The current syslogd ASL filter value (%s)\n", asl_filter_string(filter));
+			fprintf(stderr, "         will exclude this message from the ASL database\n");
+		}
+
 		asl_send(asl, m);
 	}
 	else if (rfmt == SEND_FORMAT_ASL)
@@ -919,70 +937,31 @@ print_xml_trailer(FILE *f)
 }
 
 static void
-print_xml_str(FILE *f, const char *str)
-{
-	uint32_t i;
-
-	if (f == NULL) return;
-	if (str == NULL) return;
-
-	for (i = 0; str[i] != '\0'; i++)
-	{
-		if (str[i] == '&') fprintf(f, "&amp;");
-		else if (str[i] == '<') fprintf(f, "&lt;");
-		else if (str[i] == '>') fprintf(f, "&gt;");
-		else if (str[i] == '"') fprintf(f, "&quot;");
-		else if (str[i] == '\'') fprintf(f, "&apos;");
-		else fprintf(f, "%c", str[i]);
-	}
-}
-
-static void
-printsafe(FILE *f, const char *str)
-{
-	uint8_t c;
-	uint32_t i;
-
-	if (f == NULL) return;
-	if (str == NULL) return;
-
-	for (i = 0; str[i] != '\0'; i++)
-	{
-		c = str[i];
-
-		if (isascii(c) && iscntrl(c))
-		{
-			if (c == '\n') printf("\\n");
-			else if (c == '\t') printf("\t");
-			else printf("^%c", c ^ 0100);
-		}
-		else printf("%c", c);
-	}
-}
-
-static void
 printmsg(FILE *f, asl_msg_t *msg, char *fmt, int pflags)
 {
 	char *str;
 	const char *mf, *tf;
-	uint32_t len, status;
-	uint64_t msgid;
+	uint32_t encode, len, status;
+	uint64_t xid;
 
 	if (f == NULL)
 	{
 		if (export != NULL)
 		{
-			status = asl_store_save(export, msg, -1, -1, &msgid);
+			xid = 0;
+			status = asl_file_save(export, msg, &xid);
 			if (status != ASL_STATUS_OK)
 			{
-				fprintf(stderr, "export database write failed: %s\n", asl_store_error(status));
-				asl_store_close(export);
+				fprintf(stderr, "export file write failed: %s\n", asl_core_error(status));
+				asl_file_close(export);
 				export = NULL;
 			}
 		}
 
 		return;
 	}
+
+	encode = pflags & 0x0000000f;
 
 	mf = ASL_MSG_FMT_RAW;
 	if (fmt != NULL) mf = (const char *)fmt;
@@ -995,7 +974,7 @@ printmsg(FILE *f, asl_msg_t *msg, char *fmt, int pflags)
 	if (pflags & TIME_LCL) tf = ASL_TIME_FMT_LCL;
 
 	len = 0;
-	str = asl_format_message(msg, mf, tf, &len);
+	str = asl_format_message(msg, mf, tf, encode, &len);
 	if (str != NULL)
 	{
 		fprintf(f, "%s", str);
@@ -1003,51 +982,71 @@ printmsg(FILE *f, asl_msg_t *msg, char *fmt, int pflags)
 	}
 }
 
-uint32_t
-send_prune(asl_search_result_t *pl)
+asl_search_result_t *
+store_query(asl_search_result_t *q, uint64_t start, int count, int dir, uint64_t *last)
 {
-	char *str;
-	caddr_t vmstr;
-	uint32_t len, status;
-	kern_return_t kstatus;
-	security_token_t sec;
+	uint32_t status;
+	asl_search_result_t *res;
 
-	if (asl_server_port == MACH_PORT_NULL) return 1;
-
-	len = 0;
-	str = asl_list_to_string(pl, &len);
-
-	kstatus = vm_allocate(mach_task_self(), (vm_address_t *)&vmstr, len, TRUE);
-	if (kstatus != KERN_SUCCESS)
+	if (store == NULL)
 	{
-		free(str);
-		return 1;
+		status = asl_store_open_read(NULL, &store);
+		if (status != 0) return NULL;
 	}
 
-	memmove(vmstr, str, len);
-	free(str);
+	res = NULL;
+	status = asl_store_match(store, q, &res, last, start, count, dir);
+	if (status != 0) return NULL;
 
-	sec.val[0] = -1;
-	sec.val[1] = -1;
-	status = 0;
-
-	kstatus = _asl_server_prune(asl_server_port, (caddr_t)vmstr, len, (int *)&status, &sec);
-	if (kstatus != KERN_SUCCESS) status = 1;
-
-	return status;
+	return res;
 }
 
 asl_search_result_t *
-send_query(asl_search_result_t *q, uint64_t start, int count, int dir, uint64_t *last)
+file_query(asl_search_result_t *q, uint64_t start, int count, int dir, uint64_t *last)
+{
+	uint32_t status;
+	asl_search_result_t *res;
+
+	res = NULL;
+	status = asl_file_list_match(db_files, q, &res, last, start, count, dir);
+	if (status != 0) return NULL;
+
+	return res;
+}
+
+asl_search_result_t *
+legacy_query(asl_search_result_t *q, uint64_t start, int count, int dir, uint64_t *last)
+{
+	uint32_t status;
+	asl_search_result_t *res;
+
+	res = NULL;
+	status = asl_file_match(legacy, q, &res, last, start, count, dir);
+	if (status != 0) return NULL;
+
+	return res;
+}
+
+asl_search_result_t *
+syslogd_query(asl_search_result_t *q, uint64_t start, int count, int dir, uint64_t *last)
 {
 	char *str, *res;
 	caddr_t vmstr;
 	uint32_t len, reslen, status;
+	int flags;
 	kern_return_t kstatus;
 	security_token_t sec;
 	asl_search_result_t *l;
 
-	if (asl_server_port == MACH_PORT_NULL) return NULL;
+	if (asl_server_port == MACH_PORT_NULL)
+	{
+		kstatus = bootstrap_look_up(bootstrap_port, ASL_SERVICE_NAME, &asl_server_port);
+		if (kstatus != KERN_SUCCESS)
+		{
+			fprintf(stderr, "query failed: can't contact syslogd\n");
+			return NULL;
+		}
+	}
 
 	len = 0;
 	str = asl_list_to_string(q, &len);
@@ -1067,8 +1066,10 @@ send_query(asl_search_result_t *q, uint64_t start, int count, int dir, uint64_t 
 	sec.val[0] = -1;
 	sec.val[1] = -1;
 	status = 0;
+	flags = 0;
+	if (dir < 0) flags = QUERY_FLAG_SEARCH_REVERSE;
 
-	kstatus = _asl_server_query(asl_server_port, (caddr_t)vmstr, len, start, count, dir, (caddr_t *)&res, &reslen, last, (int *)&status, &sec);
+	kstatus = _asl_server_query(asl_server_port, (caddr_t)vmstr, len, start, count, flags, (caddr_t *)&res, &reslen, last, (int *)&status, &sec);
 
 	if (res == NULL) return NULL;
 	l = asl_list_from_string(res);
@@ -1076,63 +1077,50 @@ send_query(asl_search_result_t *q, uint64_t start, int count, int dir, uint64_t 
 	return l;
 }
 
-asl_search_result_t *
-db_query(asl_store_t *s, asl_search_result_t *q, uint64_t qmin, uint64_t *cmax)
-{
-	uint32_t status;
-	asl_search_result_t *res;
-
-	res = NULL;
-	status = asl_store_match(s, q, &res, cmax, qmin, 0, 1, 0, 0);
-	if (status != 0) return NULL;
-
-	return res;
-}
-
 void
-search_once(FILE *f, char *pfmt, int pflags, asl_search_result_t *ql, uint64_t qmin, uint64_t *cmax, uint32_t count, uint32_t tail)
+search_once(FILE *f, char *pfmt, int pflags, asl_search_result_t *ql, uint64_t qmin, uint64_t *cmax, uint32_t count, uint32_t batch, int dir, uint32_t tail)
 {
 	asl_search_result_t *res;
-	int i, j;
+	int i, more, total;
 
 	if (pflags & FORMAT_XML) print_xml_header(f);
 
-	i = 0;
-	while (i < store_count)
+	res = NULL;
+	more = 1;
+	total = 0;
+
+	while (more == 1)
 	{
-		res = NULL;
-		if ((dbstore[i] == NULL) && (store_raw == 0))
+		if (dbselect == DB_SELECT_STORE) res = store_query(ql, qmin, batch, dir, cmax);
+		else if (dbselect == DB_SELECT_FILES) res = file_query(ql, qmin, batch, dir, cmax);
+		else if (dbselect == DB_SELECT_SYSLOGD) res = syslogd_query(ql, qmin, batch, dir, cmax);
+		else if (dbselect == DB_SELECT_LEGACY) res = legacy_query(ql, qmin, batch, dir, cmax);
+
+		if ((dir >= 0) && (*cmax > qmin)) qmin = *cmax;
+		else if ((dir < 0) && (*cmax < qmin)) qmin = *cmax;
+
+		if (res == NULL)
 		{
-			if (count == 0)
-			{
-				res = send_query(ql, qmin, 0, 0, cmax);
-				i++;
-			}
-			else
-			{
-				res = send_query(ql, qmin, count, 0, cmax);
-				if (*cmax > qmin) qmin = *cmax;
-				if (res == NULL) i++;
-				else if (res->count < count) i++;
-			}
+			more = 0;
 		}
 		else
 		{
-			res = db_query(dbstore[i], ql, qmin, cmax);
-			i++;
-		}
+			if ((batch > 0) && (res->count < batch)) more = 0;
+			total += res->count;
+			if ((count > 0) && (total >= count)) more = 0;
 
-		if (res != NULL)
-		{
-			j = 0;
+			i = 0;
 			if (tail != 0)
 			{
-				j = res->count - tail;
+				i = res->count - tail;
 				tail = 0;
-				if (j < 0) j = 0;
+				if (i < 0) i = 0;
 			}
 
-			for (; j < res->count; j++) printmsg(f, res->msg[j], pfmt, pflags);
+			if ((f != NULL) || (export != NULL))
+			{
+				for (; i < res->count; i++) printmsg(f, res->msg[i], pfmt, pflags);
+			}
 
 			aslresponse_free((aslresponse)res);
 		}
@@ -1258,11 +1246,30 @@ int
 add_op(asl_msg_t *q, char *key, char *op, char *val, uint32_t flags)
 {
 	uint32_t o;
+	const char *qval;
 
 	if (key == NULL) return -1;
 	if (q == NULL) return -1;
 
+	qval = NULL;
+	if (strcmp(key, ASL_KEY_TIME) == 0)
+	{
+		qval = (const char *)val;
+	}
+	else if ((strcmp(key, ASL_KEY_LEVEL) == 0) && (_isanumber(val) == 0))
+	{
+		/* Convert level strings to numeric values */
+		qval = asl_string_to_char_level(val);
+		if (qval == NULL)
+		{
+			fprintf(stderr, "invalid value for \"Level\"key: %s\n", val);
+			return -1;
+		}
+	}
+
 	o = ASL_QUERY_OP_NULL;
+	if (val == NULL) o = ASL_QUERY_OP_TRUE;
+
 	if (op != NULL)
 	{
 		o = optype(op);
@@ -1273,89 +1280,135 @@ add_op(asl_msg_t *q, char *key, char *op, char *val, uint32_t flags)
 			return -1;
 		}
 
-		if ((o & ASL_QUERY_OP_NUMERIC) && (strcmp(key, ASL_KEY_TIME) != 0) && (_isanumber(val) == 0))
+		if ((qval == NULL) && (o & ASL_QUERY_OP_NUMERIC) && (_isanumber(val) == 0))
 		{
 			fprintf(stderr, "non-numeric value supplied for numeric operator %s %s %s\n", key, op, val);
 			return -1;
 		}
-
 	}
 
 	o |= flags;
-	asl_set_query(q, key, val, o);
+	if (qval != NULL) asl_set_query(q, key, qval, o);
+	else asl_set_query(q, key, val, o);
 
 	return 0;
 }
 
-static void
-add_store(const char *name, uint32_t flags)
+static uint32_t
+add_db_file(const char *name)
 {
-	asl_store_t *s;
+	asl_file_t *s;
 	uint32_t status;
 
-	s = NULL;
-
-	if (name != NULL)
+	if (dbselect == DB_SELECT_LEGACY)
 	{
-		status = asl_store_open(name, flags, &s);
-		if (status != ASL_STATUS_OK)
-		{
-			fprintf(stderr, "database %s open failed: %s \n", name, asl_store_error(status));
-			exit(1);
-		}
-
-		if (s == NULL)
-		{
-			fprintf(stderr, "database %s open failed\n", name);
-			exit(1);
-		}
-	}
-	else
-	{
-		store_raw = 0;
-	}
-
-	if (store_count == 0) dbstore = (asl_store_t **)calloc(1, sizeof(asl_store_t *));
-	else dbstore = (asl_store_t **)reallocf(dbstore, (store_count + 1) * sizeof(asl_store_t *));
-
-	if (dbstore == NULL)
-	{
-		fprintf(stderr, "Can't allocate memory!\n");
+		fprintf(stderr, "syslog can only read one legacy format database\n");
+		fprintf(stderr, "can't combine legacy and non-legacy databases in a single search\n");
 		exit(1);
 	}
 
-	dbstore[store_count] = s;
-	store_count++;
+	/* shouldn't happen */
+	if (name == NULL) return DB_SELECT_STORE;
+
+	s = NULL;
+	status = asl_file_open_read(name, &s);
+	if (status != ASL_STATUS_OK)
+	{
+		fprintf(stderr, "data store file %s open failed: %s \n", name, asl_core_error(status));
+		exit(1);
+	}
+
+	if (s == NULL)
+	{
+		fprintf(stderr, "data store file %s open failed\n", name);
+		exit(1);
+	}
+
+	if (s->flags & ASL_FILE_FLAG_LEGACY_STORE)
+	{
+		if (db_files != NULL)
+		{
+			fprintf(stderr, "syslog can only read a single legacy format database\n");
+			fprintf(stderr, "can't combine legacy and non-legacy databases in a single search\n");
+			exit(1);
+		}
+
+		legacy = s;
+		return DB_SELECT_LEGACY;
+	}
+
+	db_files = asl_file_list_add(db_files, s);
+	return DB_SELECT_FILES;
+}
+
+static uint32_t
+add_db_dir(const char *name)
+{
+	DIR *dp;
+	struct dirent *dent;
+	uint32_t status;
+	asl_file_t *s;
+	char *path;
+
+	/*
+	 * Open all readable files
+	 */
+	dp = opendir(name);
+	if (dp == NULL)
+	{
+		fprintf(stderr, "%s: %s\n", name, strerror(errno));
+		exit(1);
+	}
+
+	while ((dent = readdir(dp)) != NULL)
+	{
+		if (dent->d_name[0] == '.') continue;
+
+		path = NULL;
+		asprintf(&path, "%s/%s", name, dent->d_name);
+
+		/* 
+		 * asl_file_open_read will fail if path is NULL,
+		 * if the file is not an ASL store file,
+		 * or if it isn't readable.
+		 */
+		s = NULL;
+		status = asl_file_open_read(path, &s);
+		if (path != NULL) free(path);
+		if ((status != ASL_STATUS_OK) || (s == NULL)) continue;
+
+		db_files = asl_file_list_add(db_files, s);
+	}
+
+	closedir(dp);
+
+	return DB_SELECT_FILES;
 }
 
 int
 main(int argc, char *argv[])
 {
 	FILE *outfile;
-	int i, j, n, watch, prune, status, pflags, tflags, sflags, iamroot, user_tflag;
+	int i, j, n, watch, status, pflags, tflags, iamroot, user_tflag;
 	int notify_file, notify_token;
-	asl_search_result_t *qlist, *lx, *res;
+	asl_search_result_t *qlist;
 	asl_msg_t *cq;
-	char *logname, *pfmt;
-	const char *dbname, *exportname;
-	uint32_t flags, tail_count, batch;
+	char *pfmt;
+	const char *exportname;
+	uint32_t flags, tail_count, batch, encode;
 	uint64_t qmin, cmax;
-	kern_return_t kstatus;
 
 	watch = 0;
-	prune = 0;
 	iamroot = 0;
 	user_tflag = 0;
-	logname = NULL;
 	pfmt = NULL;
 	flags = 0;
 	tail_count = 0;
 	batch = FETCH_BATCH;
-	sflags = ASL_STORE_FLAG_READ_ONLY;
 	pflags = FORMAT_STD;
 	tflags = TIME_LCL;
+	encode = ASL_ENCODE_ASL;
 	cq = NULL;
-	dbname = _PATH_ASL_STORE;
 	exportname = NULL;
 
 	if (getuid() == 0) iamroot = 1;
@@ -1365,6 +1418,13 @@ main(int argc, char *argv[])
 		if ((!strcmp(argv[i], "-help")) || (!strcmp(argv[i], "--help")))
 		{
 			usage();
+			exit(0);
+		}
+
+		if (!strcmp(argv[i], "-time"))
+		{
+			qmin = time(NULL);
+			printf("%llu\n", qmin);
 			exit(0);
 		}
 
@@ -1379,12 +1439,6 @@ main(int argc, char *argv[])
 			syslog_remote_control(argc, argv);
 			exit(0);
 		}
-
-		if (!strcmp(argv[i], "-p"))
-		{
-			prune = 1;
-			sflags = 0;
-		}
 	}
 
 	qlist = (asl_search_result_t *)calloc(1, sizeof(asl_search_result_t));
@@ -1392,7 +1446,7 @@ main(int argc, char *argv[])
 
 	for (i = 1; i < argc; i++)
 	{
-		if (!strcmp(argv[i], "-db"))
+		if (!strcmp(argv[i], "-f"))
 		{
 			if ((i + 1) < argc)
 			{
@@ -1400,30 +1454,43 @@ main(int argc, char *argv[])
 				{
 					if (!strcmp(argv[j], "-"))
 					{
-						/* -db - means add syslogd search (dbstore is NULL) */
-						add_store(NULL, sflags);
+						dbselect = DB_SELECT_SYSLOGD;
+						break;
 					}
-					else if (argv[j][0] == '-') 
+					else if (argv[j][0] == '-')
 					{
-						if (j == (i + 1))
-						{
-							/* No databases: add /var/log/asl.db */
-							add_store(_PATH_ASL_STORE, sflags);
-							i = j - 1;
-						}
-
 						break;
 					}
 					else
 					{
-						add_store(argv[j], sflags);
+						dbselect = add_db_file(argv[j]);
 					}
 				}
 			}
-			else
+		}
+		if (!strcmp(argv[i], "-d"))
+		{
+			if ((i + 1) < argc)
 			{
-				/* No databases: add /var/log/asl.db */
-				add_store(_PATH_ASL_STORE, sflags);
+				for (j = i + 1; j < argc; j++)
+				{
+					if (!strcmp(argv[j], "store"))
+					{
+						dbselect = add_db_dir(PATH_ASL_STORE);
+					}
+					else if (!strcmp(argv[j], "archive"))
+					{
+						dbselect = add_db_dir(PATH_ASL_ARCHIVE);
+					}
+					else if (argv[j][0] == '-')
+					{
+						break;
+					}
+					else
+					{
+						dbselect = add_db_dir(argv[j]);
+					}
+				}
 			}
 		}
 		else if (!strcmp(argv[i], "-w"))
@@ -1452,7 +1519,7 @@ main(int argc, char *argv[])
 
 			exportname = argv[++i];
 		}
-		else if (!strcmp(argv[i], "-f"))
+		else if (!strcmp(argv[i], "-E"))
 		{
 			if ((i + 1) >= argc)
 			{
@@ -1461,7 +1528,12 @@ main(int argc, char *argv[])
 				exit(1);
 			}
 
-			logname = argv[++i];
+			i++;
+
+			if (!strcmp(argv[i], "vis")) encode = ASL_ENCODE_ASL;
+			else if (!strcmp(argv[i], "safe")) encode = ASL_ENCODE_SAFE;
+			else if (!strcmp(argv[i], "none")) encode = ASL_ENCODE_NONE;
+			else if ((argv[i][0] >= '0') && (argv[i][0] <= '9') && (argv[i][1] == '\0')) encode = atoi(argv[i]);
 		}
 		else if (!strcmp(argv[i], "-F"))
 		{
@@ -1609,92 +1681,7 @@ main(int argc, char *argv[])
 	}
 
 	pflags |= tflags;
-
-	if (store_count == 0) add_store(NULL, sflags);
-
-	kstatus = bootstrap_look_up(bootstrap_port, ASL_SERVICE_NAME, &asl_server_port);
-	if (kstatus != KERN_SUCCESS)
-	{
-		if (prune == 1)
-		{
-			fprintf(stderr, "prune operation failed: can't contact syslogd server\n");
-			exit(1);
-		}
-
-		if (iamroot == 0)
-		{
-			fprintf(stderr, "operation failed: can't contact syslogd server\n");
-			exit(1);
-		}
-
-		/* force raw access (for single-user mode when syslogd is not running) */
-		if (store_raw == 0)
-		{
-			fprintf(stderr, "*** can't contact syslogd server - using read-only database access ***\n");
-			add_store(_PATH_ASL_STORE, ASL_STORE_FLAG_READ_ONLY);
-			store_raw = 1;
-		}
-	}
-
-	if (prune == 1)
-	{
-		if (watch == 1)
-		{
-			fprintf(stderr, "Warning: -w flag has no effect when pruning\n");
-			watch = 0;
-		}
-
-		if (qlist->count == 0)
-		{
-			fprintf(stderr, "no queries for pruning\n");
-
-			aslresponse_free(qlist);
-			for (j = 0; j < store_count; j++) asl_store_close(dbstore[j]);
-			if (dbstore != NULL) free(dbstore);
-
-			exit(0);
-		}
-
-		for (i = 0; i < store_count; i++)
-		{
-			status = ASL_STATUS_OK;
-
-			if ((dbstore[i] == NULL) && (store_raw == 0))
-			{
-				if (iamroot == 0)
-				{
-					fprintf(stderr, "you must be root to prune the log database\n");
-
-					aslresponse_free(qlist);
-					for (j = 0; j < store_count; j++) asl_store_close(dbstore[j]);
-					if (dbstore != NULL) free(dbstore);
-
-					exit(1);
-				}
-
-				status = send_prune(qlist);
-			}
-			else
-			{
-				status = asl_store_prune(dbstore[i], qlist);
-			}
-
-			if (status != ASL_STATUS_OK) 
-			{
-				fprintf(stderr, "database prune failed: %s\n", asl_store_error(status));
-
-				aslresponse_free(qlist);
-				for (j = 0; j < store_count; j++) asl_store_close(dbstore[j]);
-				if (dbstore != NULL) free(dbstore);
-
-				exit(1);
-			}
-		}
-
-		aslresponse_free(qlist);
-
-		exit(0);
-	}
+	pflags |= encode;
 
 	outfile = stdout;
 
@@ -1706,13 +1693,19 @@ main(int argc, char *argv[])
 			watch = 0;
 		}
 
-		status = asl_store_open(exportname, 0, &export);
+		status = asl_file_open_write(exportname, 0644, -1, -1, &export);
 		if (status != ASL_STATUS_OK) 
 		{
 			aslresponse_free(qlist);
-			fprintf(stderr, "export database open failed: %s\n", asl_store_error(status));
+			fprintf(stderr, "export file open failed: %s\n", asl_core_error(status));
 			exit(1);
 		}
+
+		/*
+		 * allow the string cache to be unlimited to maximize string dup compression
+		 * preserve message IDs
+		 */
+		export->flags = ASL_FILE_FLAG_UNLIMITED_CACHE | ASL_FILE_FLAG_PRESERVE_MSG_ID;
 
 		outfile = NULL;
 		pflags = EXPORT;
@@ -1725,63 +1718,25 @@ main(int argc, char *argv[])
 
 	if (watch == 1)
 	{
-		if (store_raw == 1)
-		{
-			fprintf(stderr, "Warning: -w flag can only be used to watch syslogd's active database\n");
-			watch = 0;
-		}
-		else if (store_count > 1)
-		{
-			fprintf(stderr, "Warning: -w flag has no effect with multiple databases\n");
-			watch = 0;
-		}
-		else
+		if ((dbselect == DB_SELECT_STORE) || (dbselect == DB_SELECT_SYSLOGD))
 		{
 			status = notify_register_file_descriptor("com.apple.system.logger.message", &notify_file, 0, &notify_token);
 			if (status != NOTIFY_STATUS_OK) notify_token = -1;
 		}
 	}
 
-	if ((qlist->count == 0) && (watch == 1) && (store_raw == 0))
+	if ((qlist->count == 0) && (watch == 1))
 	{
-		lx = (asl_search_result_t *)calloc(1, sizeof(asl_search_result_t));
-		if (lx == NULL) exit(1);
-
-		lx->count = 1;
-		lx->msg = (asl_msg_t **)calloc(1, sizeof(asl_msg_t *));
-		if (lx->msg == NULL)
-		{
-			aslresponse_free(lx);
-			exit(1);
-		}
-
-		lx->msg[0] = asl_new(ASL_TYPE_QUERY);
-		if (lx->msg[0] == NULL)
-		{
-			aslresponse_free(lx);
-			exit(1);
-		}
-
-		asl_set_query(lx->msg[0], "Level", "0", ASL_QUERY_OP_NUMERIC | ASL_QUERY_OP_GREATER_EQUAL);
 		qmin = -1;
-		res = send_query(lx, qmin, 1, 1, &cmax);
-		aslresponse_free(lx);
-		aslresponse_free(res);
-		qmin = cmax - tail_count;
+		search_once(NULL, NULL, 0, NULL, qmin, &cmax, 1, 1, -1, 0);
+		qmin = (cmax + 1) - tail_count;
 		tail_count = 0;
 	}
 
-	if (qlist->count == 0)
-	{
-		qlist->msg = (asl_msg_t **)calloc(1, sizeof(asl_msg_t *));
-		if (qlist->msg == NULL) exit(1);
+	/* output should be line buffered */
+	if (outfile != NULL) setlinebuf(outfile);
 
-		cq = asl_new(ASL_TYPE_QUERY);
-		qlist->msg[qlist->count] = cq;
-		qlist->count++;
-	}
-
-	search_once(outfile, pfmt, pflags, qlist, qmin, &cmax, batch, tail_count);
+	search_once(outfile, pfmt, pflags, qlist, qmin, &cmax, 0, batch, 1, tail_count);
 
 	if (watch == 1)
 	{
@@ -1791,7 +1746,7 @@ main(int argc, char *argv[])
 			{
 				usleep(500000);
 				if (cmax > qmin) qmin = cmax;
-				search_once(outfile, pfmt, pflags, qlist, qmin, &cmax, 0, 0);
+				search_once(outfile, pfmt, pflags, qlist, qmin + 1, &cmax, 0, batch, 1, 0);
 			}
 		}
 		else
@@ -1799,14 +1754,14 @@ main(int argc, char *argv[])
 			while (read(notify_file, &i, 4) == 4)
 			{
 				if (cmax > qmin) qmin = cmax;
-				search_once(outfile, pfmt, pflags, qlist, qmin, &cmax, 0, 0);
+				search_once(outfile, pfmt, pflags, qlist, qmin + 1, &cmax, 0, batch, 1, 0);
 			}
 		}
 	}
 
-	for (i = 0; i < store_count; i++) asl_store_close(dbstore[i]);
-	if (dbstore != NULL) free(dbstore);
-	if (export != NULL) asl_store_close(export);
+	if (db_files != NULL) asl_file_list_close(db_files);
+	if (store != NULL) asl_store_close(store);
+	if (export != NULL) asl_file_close(export);
 
 	aslresponse_free(qlist);
 

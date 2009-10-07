@@ -105,6 +105,7 @@ charsetoptions	mod/mod_charset_lite.html#charsetoptions
 charsetsourceenc	mod/mod_charset_lite.html#charsetsourceenc
 checkcaseonly	mod/mod_speling.html#checkcaseonly
 checkspelling	mod/mod_speling.html#checkspelling
+chrootdir	mod/mpm_common.html#chrootdir
 contentdigest	mod/core.html#contentdigest
 cookiedomain	mod/mod_usertrack.html#cookiedomain
 cookieexpires	mod/mod_usertrack.html#cookieexpires
@@ -259,10 +260,12 @@ proxybadheader	mod/mod_proxy.html#proxybadheader
 proxyblock	mod/mod_proxy.html#proxyblock
 proxydomain	mod/mod_proxy.html#proxydomain
 proxyerroroverride	mod/mod_proxy.html#proxyerroroverride
+proxyftpdircharset	mod/mod_proxy.html#proxyftpdircharset
 proxyiobuffersize	mod/mod_proxy.html#proxyiobuffersize
 proxymatch	mod/mod_proxy.html#proxymatch
 proxymaxforwards	mod/mod_proxy.html#proxymaxforwards
 proxypass	mod/mod_proxy.html#proxypass
+proxypassinterpolateenv	mod/mod_proxy.html#proxypassinterpolateenv
 proxypassmatch	mod/mod_proxy.html#proxypassmatch
 proxypassreverse	mod/mod_proxy.html#proxypassreverse
 proxypassreversecookiedomain	mod/mod_proxy.html#proxypassreversecookiedomain
@@ -314,6 +317,7 @@ scriptlogbuffer	mod/mod_cgi.html#scriptlogbuffer
 scriptloglength	mod/mod_cgi.html#scriptloglength
 scriptsock	mod/mod_cgid.html#scriptsock
 securelisten	mod/mod_nw_ssl.html#securelisten
+seerequesttail	mod/mod_status.html#seerequesttail
 sendbuffersize	mod/mpm_common.html#sendbuffersize
 serveradmin	mod/core.html#serveradmin
 serveralias	mod/core.html#serveralias
@@ -329,6 +333,7 @@ setenvifnocase	mod/mod_setenvif.html#setenvifnocase
 sethandler	mod/core.html#sethandler
 setinputfilter	mod/core.html#setinputfilter
 setoutputfilter	mod/core.html#setoutputfilter
+ssienableaccess	mod/mod_include.html#ssienableaccess
 ssiendtag	mod/mod_include.html#ssiendtag
 ssierrormsg	mod/mod_include.html#ssierrormsg
 ssistarttag	mod/mod_include.html#ssistarttag
@@ -372,6 +377,7 @@ sslverifyclient	mod/mod_ssl.html#sslverifyclient
 sslverifydepth	mod/mod_ssl.html#sslverifydepth
 startservers	mod/mpm_common.html#startservers
 startthreads	mod/mpm_common.html#startthreads
+substitute	mod/mod_substitute.html#substitute
 suexecusergroup	mod/mod_suexec.html#suexecusergroup
 threadlimit	mod/mpm_common.html#threadlimit
 threadsperchild	mod/mpm_common.html#threadsperchild

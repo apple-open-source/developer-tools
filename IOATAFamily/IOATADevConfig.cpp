@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 2000-2008 Apple Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -571,7 +571,7 @@ IOATADevConfig::bitSigToNumeric(UInt16 binary)
 {
 	UInt16  i, integer;
 
-	/* Test all bits from left to right, terminating at the first non-zero bit. */	
+	/* Test all bits from left to right, terminating at the first non-zero bit. */
 	for (i = 0x0080, integer = 7; ((i & binary) == 0 && i != 0) ; i >>= 1, integer-- )
 	{;}
 	return (integer);

@@ -4,7 +4,7 @@
 #include <objc/objc-api.h>
 #include <objc/Object.h>
 /* APPLE LOCAL radar file 4894756 */
-/* { dg-skip-if "" { *-*-darwin* } { "-m64" } { "" } } */
+/* { dg-require-effective-target ilp32 } */
 
 extern void abort (void);
 

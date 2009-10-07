@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2004 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -25,8 +25,8 @@
 ------------------------------------------------------------------------------
 
 pragma Style_Checks (All_Checks);
---  Turn off subprogram body ordering check. Subprograms are in order
---  by RM section rather than alphabetical
+--  Turn off subprogram body ordering check. Subprograms are in order by RM
+--  section rather than alphabetical.
 
 separate (Par)
 package body Ch9 is
@@ -53,10 +53,11 @@ package body Ch9 is
 
    --  TASK_TYPE_DECLARATION ::=
    --    task type DEFINING_IDENTIFIER [KNOWN_DISCRIMINANT_PART]
-   --      [is TASK_DEFINITION];
+   --      [is [new INTERFACE_LIST with] TASK_DEFINITION];
 
    --  SINGLE_TASK_DECLARATION ::=
-   --    task DEFINING_IDENTIFIER [is TASK_DEFINITION];
+   --    task DEFINING_IDENTIFIER
+   --      [is [new INTERFACE_LIST with] TASK_DEFINITION];
 
    --  TASK_BODY ::=
    --    task body DEFINING_IDENTIFIER is
@@ -161,6 +162,37 @@ package body Ch9 is
             end if;
          else
             TF_Is; -- must have IS if no semicolon
+
+            --  Ada 2005 (AI-345)
+
+            if Token = Tok_New then
+               Scan; --  past NEW
+
+               if Ada_Version < Ada_05 then
+                  Error_Msg_SP ("task interface is an Ada 2005 extension");
+                  Error_Msg_SP ("\unit must be compiled with -gnat05 switch");
+               end if;
+
+               Set_Interface_List (Task_Node, New_List);
+
+               loop
+                  Append (P_Qualified_Simple_Name, Interface_List (Task_Node));
+                  exit when Token /= Tok_And;
+                  Scan; --  past AND
+               end loop;
+
+               if Token /= Tok_With then
+                  Error_Msg_SC ("WITH expected");
+               end if;
+
+               Scan; -- past WITH
+
+               if Token = Tok_Private then
+                  Error_Msg_SP
+                    ("PRIVATE not allowed in task type declaration");
+               end if;
+            end if;
+
             Set_Task_Definition (Task_Node, P_Task_Definition);
          end if;
 
@@ -214,7 +246,7 @@ package body Ch9 is
          --  Deal gracefully with multiple PRIVATE parts
 
          while Token = Tok_Private loop
-            Error_Msg_SC ("Only one private part allowed per task");
+            Error_Msg_SC ("only one private part allowed per task");
             Scan; -- past PRIVATE
             Append_List (P_Task_Items, Private_Declarations (Def_Node));
          end loop;
@@ -258,7 +290,13 @@ package body Ch9 is
          if Token = Tok_Pragma then
             Append (P_Pragma, Items);
 
-         elsif Token = Tok_Entry then
+         --  Ada 2005 (AI-397): Reserved words NOT and OVERRIDING
+         --  may begin an entry declaration.
+
+         elsif Token = Tok_Entry
+           or else Token = Tok_Not
+           or else Token = Tok_Overriding
+         then
             Append (P_Entry_Declaration, Items);
 
          elsif Token = Tok_For then
@@ -285,7 +323,7 @@ package body Ch9 is
          elsif Token = Tok_Identifier
            or else Token in Token_Class_Declk
          then
-            Error_Msg_SC ("Illegal declaration in task definition");
+            Error_Msg_SC ("illegal declaration in task definition");
             Resync_Past_Semicolon;
 
          else
@@ -308,10 +346,11 @@ package body Ch9 is
 
    --  PROTECTED_TYPE_DECLARATION ::=
    --    protected type DEFINING_IDENTIFIER [KNOWN_DISCRIMINANT_PART]
-   --      is PROTECTED_DEFINITION;
+   --      is [new INTERFACE_LIST with] PROTECTED_DEFINITION;
 
    --  SINGLE_PROTECTED_DECLARATION ::=
-   --    protected DEFINING_IDENTIFIER is PROTECTED_DEFINITION;
+   --    protected DEFINING_IDENTIFIER
+   --    is [new INTERFACE_LIST with] PROTECTED_DEFINITION;
 
    --  PROTECTED_BODY ::=
    --    protected body DEFINING_IDENTIFIER is
@@ -402,6 +441,39 @@ package body Ch9 is
          end if;
 
          T_Is;
+
+         --  Ada 2005 (AI-345)
+
+         if Token = Tok_New then
+            Scan; --  past NEW
+
+            if Ada_Version < Ada_05 then
+               Error_Msg_SP ("task interface is an Ada 2005 extension");
+               Error_Msg_SP ("\unit must be compiled with -gnat05 switch");
+            end if;
+
+            Set_Interface_List (Protected_Node, New_List);
+
+            loop
+               Append (P_Qualified_Simple_Name,
+                 Interface_List (Protected_Node));
+
+               exit when Token /= Tok_And;
+               Scan; --  past AND
+            end loop;
+
+            if Token /= Tok_With then
+               Error_Msg_SC ("WITH expected");
+            end if;
+
+            Scan; -- past WITH
+
+            if Token = Tok_Private then
+               Error_Msg_SP
+                 ("PRIVATE not allowed in protected type declaration");
+            end if;
+         end if;
+
          Set_Protected_Definition (Protected_Node, P_Protected_Definition);
          return Protected_Node;
       end if;
@@ -507,6 +579,63 @@ package body Ch9 is
       L : List_Id;
       P : Source_Ptr;
 
+      function P_Entry_Or_Subprogram_With_Indicator return Node_Id;
+      --  Ada 2005 (AI-397): Parse an entry or a subprogram with an overriding
+      --  indicator. The caller has checked that the initial token is NOT or
+      --  OVERRIDING.
+
+      ------------------------------------------
+      -- P_Entry_Or_Subprogram_With_Indicator --
+      ------------------------------------------
+
+      function P_Entry_Or_Subprogram_With_Indicator return Node_Id is
+         Decl           : Node_Id := Error;
+         Is_Overriding  : Boolean := False;
+         Not_Overriding : Boolean := False;
+
+      begin
+         if Token = Tok_Not then
+            Scan;  -- past NOT
+
+            if Token = Tok_Overriding then
+               Scan;  -- past OVERRIDING
+               Not_Overriding := True;
+            else
+               Error_Msg_SC ("OVERRIDING expected!");
+            end if;
+
+         else
+            Scan;  -- past OVERRIDING
+            Is_Overriding := True;
+         end if;
+
+         if (Is_Overriding or else Not_Overriding) then
+            if Ada_Version < Ada_05 then
+               Error_Msg_SP (" overriding indicator is an Ada 2005 extension");
+               Error_Msg_SP ("\unit must be compiled with -gnat05 switch");
+
+            elsif Token = Tok_Entry then
+               Decl := P_Entry_Declaration;
+
+               Set_Must_Override     (Decl, Is_Overriding);
+               Set_Must_Not_Override (Decl, Not_Overriding);
+
+            elsif Token = Tok_Function or else Token = Tok_Procedure then
+               Decl := P_Subprogram (Pf_Decl);
+
+               Set_Must_Override     (Specification (Decl), Is_Overriding);
+               Set_Must_Not_Override (Specification (Decl), Not_Overriding);
+
+            else
+               Error_Msg_SC ("ENTRY, FUNCTION or PROCEDURE expected!");
+            end if;
+         end if;
+
+         return Decl;
+      end P_Entry_Or_Subprogram_With_Indicator;
+
+   --  Start of processing for P_Protected_Operation_Declaration_Opt
+
    begin
       --  This loop runs more than once only when a junk declaration
       --  is skipped.
@@ -514,6 +643,9 @@ package body Ch9 is
       loop
          if Token = Tok_Pragma then
             return P_Pragma;
+
+         elsif Token = Tok_Not or else Token = Tok_Overriding then
+            return P_Entry_Or_Subprogram_With_Indicator;
 
          elsif Token = Tok_Entry then
             return P_Entry_Declaration;
@@ -615,10 +747,12 @@ package body Ch9 is
    ------------------------------
 
    --  ENTRY_DECLARATION ::=
+   --    [OVERRIDING_INDICATOR]
    --    entry DEFINING_IDENTIFIER [(DISCRETE_SUBTYPE_DEFINITION)]
    --      PARAMETER_PROFILE;
 
-   --  The caller has checked that the initial token is ENTRY
+   --  The caller has checked that the initial token is ENTRY, NOT or
+   --  OVERRIDING.
 
    --  Error recovery: cannot raise Error_Resync
 
@@ -626,7 +760,41 @@ package body Ch9 is
       Decl_Node  : Node_Id;
       Scan_State : Saved_Scan_State;
 
+      --  Flags for optional overriding indication. Two flags are needed,
+      --  to distinguish positive and negative overriding indicators from
+      --  the absence of any indicator.
+
+      Is_Overriding  : Boolean := False;
+      Not_Overriding : Boolean := False;
+
    begin
+      --  Ada 2005 (AI-397): Scan leading overriding indicator
+
+      if Token = Tok_Not then
+         Scan;  -- past NOT
+
+         if Token = Tok_Overriding then
+            Scan;  -- part OVERRIDING
+            Not_Overriding := True;
+         else
+            Error_Msg_SC ("OVERRIDING expected!");
+         end if;
+
+      elsif Token = Tok_Overriding then
+         Scan;  -- part OVERRIDING
+         Is_Overriding := True;
+      end if;
+
+      if (Is_Overriding or else Not_Overriding) then
+         if Ada_Version < Ada_05 then
+            Error_Msg_SP (" overriding indicator is an Ada 2005 extension");
+            Error_Msg_SP ("\unit must be compiled with -gnat05 switch");
+
+         elsif Token /= Tok_Entry then
+            Error_Msg_SC ("ENTRY expected!");
+         end if;
+      end if;
+
       Decl_Node := New_Node (N_Entry_Declaration, Token_Ptr);
       Scan; -- past ENTRY
 
@@ -670,6 +838,12 @@ package body Ch9 is
          end if;
       end if;
 
+      if Is_Overriding then
+         Set_Must_Override (Decl_Node);
+      elsif Not_Overriding then
+         Set_Must_Not_Override (Decl_Node);
+      end if;
+
       --  Error recovery check for illegal return
 
       if Token = Tok_Return then
@@ -688,6 +862,11 @@ package body Ch9 is
 
       TF_Semicolon;
       return Decl_Node;
+
+   exception
+      when Error_Resync =>
+         Resync_Past_Semicolon;
+         return Error;
    end P_Entry_Declaration;
 
    -----------------------------
@@ -1178,7 +1357,7 @@ package body Ch9 is
             elsif Nkind (Ecall_Node) = N_Identifier
               or else Nkind (Ecall_Node) = N_Selected_Component
             then
-               --  Case of a call to a parameterless entry.
+               --  Case of a call to a parameterless entry
 
                declare
                   C_Node : constant Node_Id :=

@@ -6,7 +6,8 @@ int fail = 0;
 class Foo {
 public:
    virtual void setName() {
-     printf("Foo at %x\n", this);
+     /* APPLE LOCAL default to Wformat-security 5764921 */
+     printf("Foo at %p\n", (void*)this);
      if (vp != (void*)this)
        fail = 1;
    }
@@ -15,7 +16,8 @@ public:
 class Bar : public Foo {
 public:
   virtual void init(int argc, char **argv) {
-    printf("Bar's Foo at %x\n", (Foo*)this);
+    /* APPLE LOCAL default to Wformat-security 5764921 */
+    printf("Bar's Foo at %p\n", (void*)(Foo*)this);
     vp = (void*)(Foo*)this;
     setName();
   }

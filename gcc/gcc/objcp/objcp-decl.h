@@ -1,7 +1,6 @@
-/* APPLE LOCAL file mainline */
 /* Process the ObjC-specific declarations and variables for 
    the Objective-C++ compiler.
-   Copyright (C) 2001, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2005 Free Software Foundation, Inc.
    Contributed by Ziemowit Laski  <zlaski@apple.com>
 
 This file is part of GCC.
@@ -18,8 +17,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 #ifndef GCC_OBJCP_DECL_H
 #define GCC_OBJCP_DECL_H
@@ -27,7 +26,6 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 extern tree objcp_start_struct (enum tree_code, tree);
 extern tree objcp_finish_struct (tree, tree, tree);
 extern void objcp_finish_function (void);
-extern tree objcp_lookup_name (tree);
 extern tree objcp_build_function_call (tree, tree);
 extern tree objcp_xref_tag (enum tree_code, tree);
 extern int objcp_comptypes (tree, tree);
@@ -47,8 +45,6 @@ extern tree objcp_end_compound_stmt (tree, int);
 	objcp_finish_struct (t, fieldlist, attributes)
 #define finish_function() \
 	objcp_finish_function ()
-#define lookup_name(name) \
-	objcp_lookup_name (name)
 #define xref_tag(code, name) \
 	objcp_xref_tag (code, name)
 #define comptypes(type1, type2) \
@@ -83,6 +79,11 @@ extern tree objcp_end_compound_stmt (tree, int);
   } while (0)
 
 #define OBJCP_ORIGINAL_FUNCTION(name, args) 	(name)args
+
+/* APPLE LOCAL begin radar 6386976  */
+#define TYPE_HAS_OBJCXX_INFO(TYPE)			\
+  (TYPE_LANG_SPECIFIC (TYPE) && TYPE_OBJC_INFO (TYPE))
+/* APPLE LOCAL end radar 6386976  */
 
 /* C++ marks ellipsis-free function parameters differently from C.  */
 #undef OBJC_VOID_AT_END

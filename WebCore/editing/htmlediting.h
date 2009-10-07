@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2004, 2006 Apple Computer, Inc.  All rights reserved.
+ * Copyright (C) 2004, 2006, 2008 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,16 +33,17 @@ namespace WebCore {
 
 class Document;
 class Element;
+class HTMLElement;
 class Node;
 class Position;
 class Range;
-class Selection;
 class String;
 class VisiblePosition;
+class VisibleSelection;
 
 Position rangeCompliantEquivalent(const Position&);
 Position rangeCompliantEquivalent(const VisiblePosition&);
-int maxDeepOffset(const Node*);
+int lastOffsetForEditing(const Node*);
 bool isAtomicNode(const Node*);
 bool editingIgnoresContent(const Node*);
 bool canHaveChildrenForEditing(const Node*);
@@ -50,8 +51,9 @@ Node* highestEditableRoot(const Position&);
 VisiblePosition firstEditablePositionAfterPositionInRoot(const Position&, Node*);
 VisiblePosition lastEditablePositionBeforePositionInRoot(const Position&, Node*);
 int comparePositions(const Position&, const Position&);
+int comparePositions(const VisiblePosition&, const VisiblePosition&);
 Node* lowestEditableAncestor(Node*);
-bool isContentEditable(Node*);
+bool isContentEditable(const Node*);
 Position nextCandidate(const Position&);
 Position nextVisuallyDistinctCandidate(const Position&);
 Position previousCandidate(const Position&);
@@ -59,7 +61,7 @@ Position previousVisuallyDistinctCandidate(const Position&);
 bool isEditablePosition(const Position&);
 bool isRichlyEditablePosition(const Position&);
 Element* editableRootForPosition(const Position&);
-bool isBlock(Node*);
+bool isBlock(const Node*);
 Node* enclosingBlock(Node*);
 
 String stringWithRebalancedWhitespace(const String&, bool, bool);
@@ -71,17 +73,18 @@ Position positionBeforeNode(const Node*);
 Position positionAfterNode(const Node*);
 
 PassRefPtr<Range> avoidIntersectionWithNode(const Range*, Node*);
-Selection avoidIntersectionWithNode(const Selection&, Node*);
+VisibleSelection avoidIntersectionWithNode(const VisibleSelection&, Node*);
 
 bool isSpecialElement(const Node*);
 bool validBlockTag(const String&);
 
-PassRefPtr<Element> createDefaultParagraphElement(Document*);
-PassRefPtr<Element> createBreakElement(Document*);
-PassRefPtr<Element> createOrderedListElement(Document*);
-PassRefPtr<Element> createUnorderedListElement(Document*);
-PassRefPtr<Element> createListItemElement(Document*);
-PassRefPtr<Element> createElement(Document*, const String&);
+PassRefPtr<HTMLElement> createDefaultParagraphElement(Document*);
+PassRefPtr<HTMLElement> createBreakElement(Document*);
+PassRefPtr<HTMLElement> createOrderedListElement(Document*);
+PassRefPtr<HTMLElement> createUnorderedListElement(Document*);
+PassRefPtr<HTMLElement> createListItemElement(Document*);
+PassRefPtr<HTMLElement> createHTMLElement(Document*, const QualifiedName&);
+PassRefPtr<HTMLElement> createHTMLElement(Document*, const AtomicString&);
 
 bool isTabSpanNode(const Node*);
 bool isTabSpanTextNode(const Node*);
@@ -94,6 +97,9 @@ PassRefPtr<Element> createTabSpanElement(Document*, const String& tabText);
 bool isNodeRendered(const Node*);
 bool isMailBlockquote(const Node*);
 Node* nearestMailBlockquote(const Node*);
+unsigned numEnclosingMailBlockquotes(const Position&);
+int caretMinOffset(const Node*);
+int caretMaxOffset(const Node*);
 
 //------------------------------------------------------------------------------------------
 
@@ -108,20 +114,28 @@ Position positionOutsideContainingSpecialElement(const Position&, Node** contain
 Node* isLastPositionBeforeTable(const VisiblePosition&);
 Node* isFirstPositionAfterTable(const VisiblePosition&);
 
-Node* enclosingNodeWithTag(Node*, const QualifiedName&);
-Node* enclosingNodeOfType(Node*, bool (*nodeIsOfType)(Node*));
+Node* enclosingNodeWithTag(const Position&, const QualifiedName&);
+Node* enclosingNodeOfType(const Position&, bool (*nodeIsOfType)(const Node*), bool onlyReturnEditableNodes = true);
+Node* highestEnclosingNodeOfType(const Position&, bool (*nodeIsOfType)(const Node*));
 Node* enclosingTableCell(const Position&);
 Node* enclosingEmptyListItem(const VisiblePosition&);
 Node* enclosingAnchorElement(const Position&);
 bool isListElement(Node*);
-Node* enclosingList(Node*);
-Node* outermostEnclosingList(Node*);
-Node* enclosingListChild(Node*);
+HTMLElement* enclosingList(Node*);
+HTMLElement* outermostEnclosingList(Node*);
+HTMLElement* enclosingListChild(Node*);
+bool canMergeLists(Element* firstList, Element* secondList);
 Node* highestAncestor(Node*);
 bool isTableElement(Node*);
+bool isTableCell(const Node*);
 
-bool lineBreakExistsAtPosition(const VisiblePosition&);
+bool lineBreakExistsAtPosition(const Position&);
+bool lineBreakExistsAtVisiblePosition(const VisiblePosition&);
 
+VisibleSelection selectionForParagraphIteration(const VisibleSelection&);
+
+int indexForVisiblePosition(VisiblePosition&);
+bool isVisibilyAdjacent(const Position& first, const Position& second);
 }
 
 #endif

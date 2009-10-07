@@ -1,4 +1,3 @@
-/* APPLE LOCAL file mainline */
 /* Target definitions for x86_64 running Darwin.
    Copyright (C) 2006 Free Software Foundation, Inc.
    Contributed by Apple Computer Inc.
@@ -24,14 +23,21 @@ Boston, MA 02110-1301, USA.  */
 #define TARGET_VERSION fprintf (stderr, " (x86_64 Darwin)");
 
 #undef  DARWIN_ARCH_SPEC
-#define DARWIN_ARCH_SPEC "x86_64"
+#define DARWIN_ARCH_SPEC "%{m32:i386;:x86_64}"
 
 #undef  DARWIN_SUBARCH_SPEC
 #define DARWIN_SUBARCH_SPEC DARWIN_ARCH_SPEC
 
+/* APPLE LOCAL begin kext 6400713 */
+#undef ASM_SPEC
+#define ASM_SPEC "-arch %(darwin_arch) -force_cpusubtype_ALL \
+  %{mkernel|static|fapple-kext:%{m32:-static}}"
+/* APPLE LOCAL end kext 6400713 */
+
 #undef SUBTARGET_EXTRA_SPECS
 #define SUBTARGET_EXTRA_SPECS                                   \
-  DARWIN_EXTRA_SPECS						\
+  /* APPLE LOCAL 6015949 */					\
+  DARWIN_EXTRA_SPECS                                            \
   { "darwin_arch", DARWIN_ARCH_SPEC },                          \
   { "darwin_crt2", "" },                                        \
   { "darwin_subarch", DARWIN_SUBARCH_SPEC },

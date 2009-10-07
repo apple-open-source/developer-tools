@@ -1,7 +1,7 @@
 /* Program to write C++-suitable header files from a Java(TM) .class
    file.  This is similar to SUN's javah.
 
-Copyright (C) 1996, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
+Copyright (C) 1996, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006
 Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -18,8 +18,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  
 
 Java and all Java-based marks are trademarks or registered trademarks
 of Sun Microsystems, Inc. in the United States and other countries.
@@ -53,8 +53,16 @@ FILE *out = NULL;
 /* Nonzero on failure.  */
 static int found_error = 0;
 
+#ifdef JNI_DEFAULT
+#define TOOLNAME "gjnih"
+
 /* Nonzero if we're generating JNI output.  */
+int flag_jni = 1;
+#else
+#define TOOLNAME "gcjh"
+
 int flag_jni = 0;
+#endif
 
 /* When nonzero, warn when source file is newer than matching class
    file.  */
@@ -137,7 +145,7 @@ static void print_method_info (FILE*, JCF*, int, int, JCF_u2);
 static void print_c_decl (FILE*, JCF*, int, int, int, const char *, int);
 static void print_stub_or_jni (FILE*, JCF*, int, int, int, const char *, int);
 static void print_full_cxx_name (FILE*, JCF*, int, int, int, const char *, int);
-static void decompile_method (FILE*, JCF*, int);
+static void decompile_method (FILE*, JCF*, int) ATTRIBUTE_UNUSED;
 static void add_class_decl (FILE*, JCF*, JCF_u2);
 
 static void print_name (FILE *, JCF *, int);
@@ -156,7 +164,7 @@ static const unsigned char *
   decode_signature_piece (FILE *, const unsigned char *,
 			  const unsigned char *, int *);
 static void print_class_decls (FILE *, JCF *, int);
-static void error (const char *msgid, ...);
+static void error (const char *gmsgid, ...) ATTRIBUTE_PRINTF_1;
 static void usage (void) ATTRIBUTE_NORETURN;
 static void help (void) ATTRIBUTE_NORETURN;
 static void version (void) ATTRIBUTE_NORETURN;
@@ -242,8 +250,14 @@ static int is_first_data_member = 0;
       }									\
   }
 
+/* Only include byte-code decompilation optimizations for ELF targets
+   since the generated headers are only known to work with ELF weak
+   symbol semantics. Specifically, these optimizations are known to
+   not work on PE-COFF and possibly others.  */
+#ifdef OBJECT_FORMAT_ELF
 #define HANDLE_CODE_ATTRIBUTE(MAX_STACK, MAX_LOCALS, CODE_LENGTH)	\
   if (out && method_declared) decompile_method (out, jcf, CODE_LENGTH);
+#endif
 
 static int decompiled = 0;
 #define HANDLE_END_METHOD()				\
@@ -258,16 +272,19 @@ static int decompiled = 0;
 
 #include "jcf-reader.c"
 
-/* Print an error message and set found_error.  */
+/* Print an error message and set found_error.
+   Not really gcc-internal-format message, but as error elsewhere
+   uses it, assume all users will use intersection between
+   c-format and gcc-internal-format.  */
 static void
-error (const char *msgid, ...)
+error (const char *gmsgid, ...)
 {
   va_list ap;
 
-  va_start (ap, msgid);
+  va_start (ap, gmsgid);
 
-  fprintf (stderr, "gcjh: ");
-  vfprintf (stderr, _(msgid), ap);
+  fprintf (stderr, TOOLNAME ": ");
+  vfprintf (stderr, _(gmsgid), ap);
   va_end (ap);
   fprintf (stderr, "\n");
   found_error = 1;
@@ -583,7 +600,7 @@ cxx_keyword_subst (const unsigned char *str, int length)
 	     are `$'.  */
 	  if (i == length)
 	    {
-	      char *dup = xmalloc (2 + length - min_length + kwl);
+	      char *dup = XNEWVEC (char, 2 + length - min_length + kwl);
 	      strcpy (dup, cxx_keywords[mid]);
 	      for (i = kwl; i < length + 1; ++i)
 		dup[i] = '$';
@@ -702,7 +719,7 @@ get_field_name (JCF *jcf, int name_index, JCF_u2 flags)
 	  return NULL;
 	}
 
-      override = xmalloc (length + 3);
+      override = XNEWVEC (char, length + 3);
       memcpy (override, name, length);
       strcpy (override + length, "__");
     }
@@ -912,13 +929,13 @@ print_method_info (FILE *stream, JCF* jcf, int name_index, int sig_index,
     {
       struct method_name *nn;
 
-      nn = xmalloc (sizeof (struct method_name));
-      nn->name = xmalloc (length);
+      nn = XNEW (struct method_name);
+      nn->name = XNEWVEC (unsigned char, length);
       memcpy (nn->name, str, length);
       nn->length = length;
       nn->next = method_name_list;
       nn->sig_length = JPOOL_UTF_LENGTH (jcf, sig_index);
-      nn->signature = xmalloc (nn->sig_length);
+      nn->signature = XNEWVEC (unsigned char, nn->sig_length);
       nn->is_native = METHOD_IS_NATIVE (flags);
       memcpy (nn->signature, JPOOL_UTF_DATA (jcf, sig_index),
 	      nn->sig_length);
@@ -1223,7 +1240,7 @@ throwable_p (const unsigned char *clname)
 
   for (length = 0; clname[length] != ';' && clname[length] != '\0'; ++length)
     ;
-  current = ALLOC (length + 1);
+  current = XNEWVEC (unsigned char, length + 1);
   for (i = 0; i < length; ++i)
     current[i] = clname[i] == '/' ? '.' : clname[i];
   current[length] = '\0';
@@ -1259,7 +1276,7 @@ throwable_p (const unsigned char *clname)
       jcf_parse_class (&jcf);
 
       tmp = (unsigned char *) super_class_name (&jcf, &super_length);
-      super = ALLOC (super_length + 1);
+      super = XNEWVEC (unsigned char, super_length + 1);
       memcpy (super, tmp, super_length);      
       super[super_length] = '\0';
 
@@ -1819,8 +1836,8 @@ print_include (FILE *out, const unsigned char *utf8, int len)
 	return;
     }
 
-  incl = xmalloc (sizeof (struct include));
-  incl->name = xmalloc (len + 1);
+  incl = XNEW (struct include);
+  incl->name = XNEWVEC (char, len + 1);
   strncpy (incl->name, (const char *) utf8, len);
   incl->name[len] = '\0';
   incl->next = all_includes;
@@ -1905,8 +1922,8 @@ add_namelet (const unsigned char *name, const unsigned char *name_limit,
 
   if (n == NULL)
     {
-      n = xmalloc (sizeof (struct namelet));
-      n->name = xmalloc (p - name + 1);
+      n = XNEW (struct namelet);
+      n->name = XNEWVEC (char, p - name + 1);
       strncpy (n->name, (const char *) name, p - name);
       n->name[p - name] = '\0';
       n->is_class = (p == name_limit);
@@ -2093,11 +2110,11 @@ process_file (JCF *jcf, FILE *out)
 		 cstart, mode, cend);
       else
 	{
-	  fprintf (out, "%s This file was created by `gcjh -stubs%s'.%s\n\
+	  fprintf (out, "%s This file was created by `" TOOLNAME " -stubs%s'.%s\n\
 %s\n\
 %s This file is intended to give you a head start on implementing native\n\
 %s methods using %s.\n\
-%s Be aware: running `gcjh -stubs %s' once more for this class may\n\
+%s Be aware: running `" TOOLNAME " -stubs %s' once more for this class may\n\
 %s overwrite any edits you have made to this file.%s\n\n",
 		   cstart, jflag, mode,
 		   cstart2,
@@ -2156,7 +2173,7 @@ process_file (JCF *jcf, FILE *out)
 	  if (len > 6 && ! strcmp (&jcf->classname[len - 6], ".class"))
 	    len -= 6;
 	  /* Turn the class name into a file name.  */
-	  name = xmalloc (len + 1);
+	  name = XNEWVEC (char, len + 1);
 	  for (i = 0; i < len; ++i)
 	    name[i] = jcf->classname[i] == '.' ? '/' : jcf->classname[i];
 	  name[i] = '\0';
@@ -2299,6 +2316,9 @@ process_file (JCF *jcf, FILE *out)
 #define OPT_MG            LONG_OPT (12)
 #define OPT_MD            LONG_OPT (13)
 #define OPT_MMD           LONG_OPT (14)
+#define OPT_FORCE         LONG_OPT (15)
+#define OPT_OLD           LONG_OPT (16)
+#define OPT_TRACE         LONG_OPT (17)
 
 static const struct option options[] =
 {
@@ -2321,23 +2341,33 @@ static const struct option options[] =
   { "MD",            no_argument,       NULL, OPT_MD  },
   { "MMD",           no_argument,       NULL, OPT_MMD },
   { "jni",           no_argument,       &flag_jni, 1 },
+  { "force",         no_argument,       NULL, OPT_FORCE },
+  /* If the output file should be named "ld" then a space is needed
+     between -o and its argument, ld. */
+  { "old",           no_argument,       NULL, OPT_OLD },
+  { "trace",         no_argument,       NULL, OPT_TRACE },
+  { NULL,            required_argument, NULL, 'J' },
   { NULL,            no_argument,       NULL, 0 }
 };
 
 static void
 usage (void)
 {
-  fprintf (stderr, _("Try 'gcjh --help' for more information.\n"));
+  fprintf (stderr, _("Try '" TOOLNAME " --help' for more information.\n"));
   exit (1);
 }
 
 static void
 help (void)
 {
-  printf (_("Usage: gcjh [OPTION]... CLASS...\n\n"));
-  printf (_("Generate C++ header files from .class files\n\n"));
+  printf (_("Usage: " TOOLNAME " [OPTION]... CLASS...\n\n"));
+  printf (_("Generate C or C++ header files from .class files\n\n"));
   printf (_("  -stubs                  Generate an implementation stub file\n"));
   printf (_("  -jni                    Generate a JNI header or stub\n"));
+  printf (_("  -force                  Always overwrite output files\n"));
+  printf (_("  -old                    Unused compatibility option\n"));
+  printf (_("  -trace                  Unused compatibility option\n"));
+  printf (_("  -J OPTION               Unused compatibility option\n"));
   printf ("\n");
   printf (_("  -add TEXT               Insert TEXT into class body\n"));
   printf (_("  -append TEXT            Insert TEXT after class declaration\n"));
@@ -2372,8 +2402,8 @@ help (void)
 static void
 version (void)
 {
-  printf ("gcjh (GCC) %s\n\n", version_string);
-  printf ("Copyright %s 2004 Free Software Foundation, Inc.\n", _("(C)"));
+  printf (TOOLNAME " (GCC) %s\n\n", version_string);
+  printf ("Copyright %s 2006 Free Software Foundation, Inc.\n", _("(C)"));
   printf (_("This is free software; see the source for copying conditions.  There is NO\n"
 	    "warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n"));
   exit (0);
@@ -2387,6 +2417,10 @@ main (int argc, char** argv)
   char *output_file = NULL;
   int emit_dependencies = 0, suppress_output = 0;
   int opt;
+  int local_found_error;
+
+  /* Unlock the stdio streams.  */
+  unlock_std_streams ();
 
   gcc_init_libintl ();
 
@@ -2400,7 +2434,7 @@ main (int argc, char** argv)
 
   /* We use getopt_long_only to allow single `-' long options.  For
      some of our options this is more natural.  */
-  while ((opt = getopt_long_only (argc, argv, "I:d:o:v", options, NULL)) != -1)
+  while ((opt = getopt_long_only (argc, argv, "J:I:d:o:v", options, NULL)) != -1)
     {
       switch (opt)
 	{
@@ -2450,25 +2484,25 @@ main (int argc, char** argv)
 
 	case OPT_PREPEND:
 	  if (prepend_count == 0)
-	    prepend_specs = ALLOC (argc * sizeof (char*));
+	    prepend_specs = XNEWVEC (char *, argc);
 	  prepend_specs[prepend_count++] = optarg;
 	  break;
 
 	case OPT_FRIEND:
 	  if (friend_count == 0)
-	    friend_specs = ALLOC (argc * sizeof (char*));
+	    friend_specs = XNEWVEC (char *, argc);
 	  friend_specs[friend_count++] = optarg;
 	  break;
 
 	case OPT_ADD:
 	  if (add_count == 0)
-	    add_specs = ALLOC (argc * sizeof (char*));
+	    add_specs = XNEWVEC (char *, argc);
 	  add_specs[add_count++] = optarg;
 	  break;
 
 	case OPT_APPEND:
 	  if (append_count == 0)
-	    append_specs = ALLOC (argc * sizeof (char*));
+	    append_specs = XNEWVEC (char *, argc);
 	  append_specs[append_count++] = optarg;
 	  break;
 
@@ -2498,6 +2532,19 @@ main (int argc, char** argv)
 	  jcf_dependency_init (0);
 	  break;
 
+	case OPT_FORCE:
+	  break;
+
+	case OPT_OLD:
+	  break;
+
+	case OPT_TRACE:
+	  break;
+
+	case 'J':
+          /* Ignore -J options. */
+	  break;
+
 	default:
 	  usage ();
 	  break;
@@ -2518,11 +2565,17 @@ main (int argc, char** argv)
       exit (1);
     }
 
+  local_found_error = 0;
   for (argi = optind; argi < argc; argi++)
     {
       char *classname = argv[argi];
-      char *current_output_file;
+      char *current_output_file = NULL;
       const char *classfile_name;
+
+      /* We reset the error state here so that we can detect errors
+	 that occur when processing this file, so the output can be
+	 unlinked if need be.  */
+      found_error = 0;
 
       if (verbose)
 	printf (_("Processing %s\n"), classname);
@@ -2555,7 +2608,7 @@ main (int argc, char** argv)
 	{
 	  int dir_len = strlen (output_directory);
 	  int i, classname_length = strlen (classname);
-	  current_output_file = ALLOC (dir_len + classname_length + 5);
+	  current_output_file = XNEWVEC (char, dir_len + classname_length + 5);
 	  strcpy (current_output_file, output_directory);
 	  if (dir_len > 0 && output_directory[dir_len-1] != '/')
 	    current_output_file[dir_len++] = '/';
@@ -2599,13 +2652,22 @@ main (int argc, char** argv)
       free_method_name_list ();
       process_file (&jcf, out);
       JCF_FINISH (&jcf);
+
+      /* If we found an error and we're writing to a real file,
+	 delete it.  */
+      if (found_error && ! suppress_output && current_output_file != NULL
+	  && strcmp (current_output_file, "-"))
+	unlink (current_output_file);
+
       if (current_output_file != output_file)
 	free (current_output_file);
       jcf_dependency_write ();
+
+      local_found_error |= found_error;
     }
 
   if (out != NULL && out != stdout)
     fclose (out);
 
-  return found_error;
+  return local_found_error;
 }

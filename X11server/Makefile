@@ -10,12 +10,9 @@ INSTALL = /usr/bin/install -c -m 0644
 install::
 	@echo "Building $(Project)..."
 	./build install
-	mkdir -p $(DSTROOT)/System/Library/LaunchAgents
-	$(MKDIR) $(OSV) $(DSTROOT)/usr/X11/lib/X11/xinit $(DSTROOT)/usr/X11/lib/X11/xserver
+	$(MKDIR) $(OSV)
 	$(INSTALL) $(SRCROOT)/$(Project).plist $(OSV)/$(Project).plist
-	$(INSTALL) $(SRCROOT)/Xquartz.plist $(DSTROOT)/usr/X11/lib/X11/xserver/Xquartz.plist
-	$(INSTALL) $(SRCROOT)/xinitrc $(DSTROOT)/usr/X11/lib/X11/xinit/xinitrc
-
+	/Developer/Makefiles/bin/compress-man-pages.pl -d $(DSTROOT)/usr/X11/share/man/ man1 man2 man3 man4 man5 man6 man7 man8 man9
 
 clean::
 	@echo "Cleaning $(Project)..."
@@ -27,7 +24,7 @@ Install_Flags   = DESTDIR=$(DSTROOT)
 installsrc:
 	@echo calling make $@
 	find . -name ".#*" | xargs rm
-	cp Makefile build X11server.plist Xquartz.plist xinitrc $(SRCROOT)
+	cp Makefile build X11server.plist $(SRCROOT)
 	./build $@
 
 installhdrs:

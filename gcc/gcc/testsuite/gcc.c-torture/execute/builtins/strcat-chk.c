@@ -1,4 +1,3 @@
-/* APPLE LOCAL file mainline */
 /* Copyright (C) 2004, 2005  Free Software Foundation.
 
    Ensure builtin __strcat_chk performs correctly.  */
@@ -35,7 +34,7 @@ test1 (void)
 
   chk_calls = 0;
   strcat_disallowed = 1;
-  /* Following strcat calls should be optimized out at compile time.  */
+  /* Following strcat calls should be optimized out at compile time.  */  
   RESET_DST_WITH (x1);
   if (strcat (dst, "") != dst || strcmp (dst, x1))
     abort ();
@@ -59,17 +58,17 @@ test1 (void)
   if (strcat (dst, " 1111") != dst
       || memcmp (dst, "hello world 1111\0XXX", 20))
     abort ();
-
+  
   RESET_DST_WITH (x1);
   if (strcat (dst+5, " 2222") != dst+5
       || memcmp (dst, "hello world 2222\0XXX", 20))
     abort ();
-
+  
   RESET_DST_WITH (x1); d2 = dst;
   if (strcat (++d2+5, " 3333") != dst+6 || d2 != dst+1
       || memcmp (dst, "hello world 3333\0XXX", 20))
     abort ();
-
+  
   RESET_DST_WITH (x1);
   strcat (strcat (strcat (strcat (strcat (strcat (dst, ": this "), ""),
 				  "is "), "a "), "test"), ".");

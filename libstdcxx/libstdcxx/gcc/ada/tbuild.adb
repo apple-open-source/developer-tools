@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2004, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.        --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -26,6 +26,7 @@
 
 with Atree;    use Atree;
 with Einfo;    use Einfo;
+with Elists;   use Elists;
 with Lib;      use Lib;
 with Namet;    use Namet;
 with Nlists;   use Nlists;
@@ -169,39 +170,13 @@ package body Tbuild is
 
       return
         Unchecked_Convert_To (
-          New_Occurrence_Of (Etype (Access_Disp_Table (Full_Type)), Loc),
+          New_Occurrence_Of
+            (Etype (Node (First_Elmt (Access_Disp_Table (Full_Type)))), Loc),
           Make_Selected_Component (Loc,
             Prefix => New_Copy (Rec),
             Selector_Name =>
-              New_Reference_To (Tag_Component (Full_Type), Loc)));
+              New_Reference_To (First_Tag_Component (Full_Type), Loc)));
    end Make_DT_Access;
-
-   -----------------------
-   -- Make_DT_Component --
-   -----------------------
-
-   function Make_DT_Component
-     (Loc : Source_Ptr;
-      Typ : Entity_Id;
-      I   : Positive) return Node_Id
-   is
-      X : Node_Id;
-      Full_Type : Entity_Id := Typ;
-
-   begin
-      if Is_Private_Type (Typ) then
-         Full_Type := Underlying_Type (Typ);
-      end if;
-
-      X := First_Component (
-             Designated_Type (Etype (Access_Disp_Table (Full_Type))));
-
-      for J in 2 .. I loop
-         X := Next_Component (X);
-      end loop;
-
-      return New_Reference_To (X, Loc);
-   end Make_DT_Component;
 
    --------------------------------
    -- Make_Implicit_If_Statement --
@@ -216,6 +191,7 @@ package body Tbuild is
    is
    begin
       Check_Restriction (No_Implicit_Conditionals, Node);
+
       return Make_If_Statement (Sloc (Node),
         Condition,
         Then_Statements,
@@ -234,7 +210,6 @@ package body Tbuild is
    is
       N : constant Node_Id :=
             Make_Implicit_Label_Declaration (Loc, Defining_Identifier);
-
    begin
       Set_Label_Construct (N, Label_Construct);
       return N;
@@ -280,6 +255,37 @@ package body Tbuild is
    begin
       return Make_Integer_Literal (Loc, UI_From_Int (Intval));
    end Make_Integer_Literal;
+
+   --------------------------------
+   -- Make_Linker_Section_Pragma --
+   --------------------------------
+
+   function Make_Linker_Section_Pragma
+     (Ent : Entity_Id;
+      Loc : Source_Ptr;
+      Sec : String) return Node_Id
+   is
+      LS : Node_Id;
+
+   begin
+      LS :=
+        Make_Pragma
+          (Loc,
+           Name_Linker_Section,
+           New_List
+             (Make_Pragma_Argument_Association
+                (Sloc => Loc,
+                 Expression => New_Occurrence_Of (Ent, Loc)),
+              Make_Pragma_Argument_Association
+                (Sloc => Loc,
+                 Expression =>
+                   Make_String_Literal
+                     (Sloc => Loc,
+                      Strval => Sec))));
+
+      Set_Has_Gigi_Rep_Item (Ent);
+      return LS;
+   end Make_Linker_Section_Pragma;
 
    ---------------------------------
    -- Make_Raise_Constraint_Error --

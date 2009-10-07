@@ -24,8 +24,7 @@ TDEPFILES = \
 	macosx-nat-dyld-info.o \
 	macosx-nat-dyld-process.o \
 	macosx-nat-dyld-io.o \
-	macosx-nat-utils.o \
-	macosx-self-backtrace.o
+	macosx-nat-utils.o
 
 DEPRECATED_TM_FILE = tm-arm-macosx.h
 

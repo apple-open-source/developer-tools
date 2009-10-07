@@ -1,4 +1,3 @@
-/* APPLE LOCAL file mainline */
 /* Test whether buffer overflow warnings for __*_chk builtins
    are emitted properly.  */
 /* { dg-do compile } */

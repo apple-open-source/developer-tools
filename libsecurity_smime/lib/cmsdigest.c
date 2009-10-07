@@ -186,9 +186,11 @@ SecCmsDigestContextFinishMultiple(SecCmsDigestContextRef cmsdigcx, PLArenaPool *
     }
 
     for (i = 0; i < cmsdigcx->digcnt; i++, digest++) {
-	int diglength = 20; // @@@ How do we figure this out?!?
 	digobj = cmsdigcx->digobjs[i];
-
+	CSSM_QUERY_SIZE_DATA dataSize;
+	CSSM_QuerySize(digobj, CSSM_FALSE, 1, &dataSize);
+	int diglength = dataSize.SizeOutputBlock;
+	
 	if (digobj)
 	{
 	    digest->Data = (unsigned char*)PORT_ArenaAlloc(poolp, diglength);
@@ -196,7 +198,6 @@ SecCmsDigestContextFinishMultiple(SecCmsDigestContextRef cmsdigcx, PLArenaPool *
 		goto loser;
 	    digest->Length = diglength;
 	    CSSM_DigestDataFinal(digobj, digest);
-	    digests[i] = digest;
 	    CSSM_DeleteContext(digobj);
 	}
 	else
@@ -204,7 +205,9 @@ SecCmsDigestContextFinishMultiple(SecCmsDigestContextRef cmsdigcx, PLArenaPool *
 	    digest->Data = NULL;
 	    digest->Length = 0;
 	}
-    }
+	
+	digests[i] = digest;
+   }
     digests[i] = NULL;
     *digestsp = digests;
 

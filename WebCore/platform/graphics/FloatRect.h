@@ -42,7 +42,17 @@ typedef struct _NSRect NSRect;
 #endif
 
 #if PLATFORM(QT)
+QT_BEGIN_NAMESPACE
 class QRectF;
+QT_END_NAMESPACE
+#endif
+
+#if PLATFORM(WX) && USE(WXGC)
+class wxRect2DDouble;
+#endif
+
+#if PLATFORM(SKIA)
+struct SkRect;
 #endif
 
 namespace WebCore {
@@ -122,10 +132,15 @@ public:
     FloatRect(const QRectF&);
     operator QRectF() const;
 #endif
-#if PLATFORM(SYMBIAN)
-    FloatRect(const TRect&);
-    operator TRect() const;
-    TRect rect() const;
+
+#if PLATFORM(WX) && USE(WXGC)
+    FloatRect(const wxRect2DDouble&);
+    operator wxRect2DDouble() const;
+#endif
+
+#if PLATFORM(SKIA)
+    FloatRect(const SkRect&);
+    operator SkRect() const;
 #endif
 
 private:
@@ -147,6 +162,7 @@ inline FloatRect unionRect(const FloatRect& a, const FloatRect& b)
     return c;
 }
 
+
 inline bool operator==(const FloatRect& a, const FloatRect& b)
 {
     return a.location() == b.location() && a.size() == b.size();
@@ -158,6 +174,9 @@ inline bool operator!=(const FloatRect& a, const FloatRect& b)
 }
 
 IntRect enclosingIntRect(const FloatRect&);
+
+// Map rect r from srcRect to an equivalent rect in destRect.
+FloatRect mapRect(const FloatRect& r, const FloatRect& srcRect, const FloatRect& destRect);
 
 }
 

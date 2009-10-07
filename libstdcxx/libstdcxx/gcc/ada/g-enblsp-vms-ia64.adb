@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---              Copyright (C) 2005 Ada Core Technologies, Inc.              --
+--                       Copyright (C) 2005, AdaCore                        --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -35,7 +35,7 @@
 --  for use by the VMS GNAT.Expect package (g-expect-vms.adb). This package
 --  should not be directly with'ed by an application program.
 
---  This version is for IA64/VMS.
+--  This version is for IA64/VMS
 
 separate (GNAT.Expect)
 procedure Non_Blocking_Spawn
@@ -73,7 +73,7 @@ begin
       raise Invalid_Process;
    end if;
 
-   --  Fork a new process. It's not possible to do this in a subprogram.
+   --  Fork a new process (it is not possible to do this in a subprogram)
 
    if Alloc_Vfork_Blocks >= 0 then
       Descriptor.Pid := Setjmp1 (Get_Vfork_Jmpbuf);
@@ -81,10 +81,10 @@ begin
       Descriptor.Pid := -1;
    end if;
 
-   --  Are we now in the child (or, for Windows, still in the common
-   --  process).
+   --  Are we now in the child
 
    if Descriptor.Pid = Null_Pid then
+
       --  Prepare an array of arguments to pass to C
 
       Arg   := new String (1 .. Command_With_Path'Length + 1);

@@ -7,7 +7,7 @@
 --                                 S p e c                                  --
 --                                                                          --
 --               Copyright (C) 1986 by University of Toronto.               --
---           Copyright (C) 1996-2004 Ada Core Technologies, Inc.            --
+--                     Copyright (C) 1996-2005, AdaCore                     --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -17,8 +17,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -68,7 +68,7 @@
 --       extensions that provide full (type 0) computational capabilities.
 
 package GNAT.Regpat is
-pragma Preelaborate (Regpat);
+   pragma Preelaborate;
 
    --  The grammar is the following:
 
@@ -206,7 +206,7 @@ pragma Preelaborate (Regpat);
    --  first version the regular expression has in fact to be compiled twice
    --  (first to compute the size, then to generate the byte code).
 
-   --  Note also that you can not use the function version of Compile if you
+   --  Note also that you cannot use the function version of Compile if you
    --  specify the size of the Pattern_Matcher, since the discriminants will
    --  most probably be different and you will get a Constraint_Error
 
@@ -219,7 +219,7 @@ pragma Preelaborate (Regpat);
    --  Several versions of the Match subprogram are provided, with different
    --  parameters and return results.
 
-   --  See the description under each of these subprograms.
+   --  See the description under each of these subprograms
 
    --  Here is a short example showing how to get the substring matched by
    --  the first parenthesis pair.
@@ -291,20 +291,20 @@ pragma Preelaborate (Regpat);
    ---------------
 
    Expression_Error : exception;
-   --  This exception is raised when trying to compile an invalid
-   --  regular expression. All subprograms taking an expression
-   --  as parameter may raise Expression_Error.
+   --  This exception is raised when trying to compile an invalid regular
+   --  expression. All subprograms taking an expression as parameter may raise
+   --  Expression_Error.
 
    Max_Paren_Count : constant := 255;
-   --  Maximum number of parenthesis in a regular expression.
-   --  This is limited by the size of a Character, as found in the
-   --  byte-compiled version of regular expressions.
+   --  Maximum number of parenthesis in a regular expression. This is limited
+   --  by the size of a Character, as found in the byte-compiled version of
+   --  regular expressions.
 
    Max_Curly_Repeat : constant := 32767;
-   --  Maximum number of repetition for the curly operator.
-   --  The digits in the {n}, {n,} and {n,m } operators can not be higher
-   --  than this constant, since they have to fit on two characters in the
-   --  byte-compiled version of regular expressions.
+   --  Maximum number of repetition for the curly operator. The digits in the
+   --  {n}, {n,} and {n,m } operators cannot be higher than this constant,
+   --  since they have to fit on two characters in the byte-compiled version of
+   --  regular expressions.
 
    Max_Program_Size : constant := 2**15 - 1;
    --  Maximum size that can be allocated for a program
@@ -318,10 +318,10 @@ pragma Preelaborate (Regpat);
    --  and the programmer need not be concerned about it. There are two
    --  exceptions to this. First in the calls to Match, it is possible to
    --  specify a non-zero size that is known to be large enough. This can
-   --  slightly increase the efficiency by avoiding a copy. Second, in the
-   --  case of calling compile, it is possible using the procedural form
-   --  of Compile to use a single Pattern_Matcher variable for several
-   --  different expressions by setting its size sufficiently large.
+   --  slightly increase the efficiency by avoiding a copy. Second, in the case
+   --  of calling compile, it is possible using the procedural form of Compile
+   --  to use a single Pattern_Matcher variable for several different
+   --  expressions by setting its size sufficiently large.
 
    Auto_Size : constant := 0;
    --  Used in calls to Match to indicate that the Size should be set to
@@ -362,33 +362,28 @@ pragma Preelaborate (Regpat);
    end record;
 
    type Match_Array is array (Match_Count range <>) of Match_Location;
-   --  The substring matching a given pair of parenthesis.
-   --  Index 0 is the whole substring that matched the full regular
-   --  expression.
+   --  The substring matching a given pair of parenthesis. Index 0 is the whole
+   --  substring that matched the full regular expression.
    --
-   --  For instance, if your regular expression is something like:
-   --  "a(b*)(c+)", then Match_Array(1) will be the indexes of the
-   --  substring that matched "b*" and Match_Array(2) will be the substring
-   --  that matched "c+".
+   --  For instance, if your regular expression is something like: "a(b*)(c+)",
+   --  then Match_Array(1) will be the indexes of the substring that matched
+   --  "b*" and Match_Array(2) will be the substring that matched "c+".
    --
-   --  The number of parenthesis groups that can be retrieved is unlimited,
-   --  and all the Match subprograms below can use a Match_Array of any size.
-   --  Indexes that do not have any matching parenthesis are set to
-   --  No_Match.
+   --  The number of parenthesis groups that can be retrieved is unlimited, and
+   --  all the Match subprograms below can use a Match_Array of any size.
+   --  Indexes that do not have any matching parenthesis are set to No_Match.
 
    No_Match : constant Match_Location := (First => 0, Last => 0);
-   --  The No_Match constant is (0, 0) to differentiate between
-   --  matching a null string at position 1, which uses (1, 0)
-   --  and no match at all.
+   --  The No_Match constant is (0, 0) to differentiate between matching a null
+   --  string at position 1, which uses (1, 0) and no match at all.
 
    ---------------------------------
    -- Pattern_Matcher Compilation --
    ---------------------------------
 
-   --  The subprograms here are used to precompile regular expressions
-   --  for use in subsequent Match calls. Precompilation improves
-   --  efficiency if the same regular expression is to be used in
-   --  more than one Match call.
+   --  The subprograms here are used to precompile regular expressions for use
+   --  in subsequent Match calls. Precompilation improves efficiency if the
+   --  same regular expression is to be used in more than one Match call.
 
    type Pattern_Matcher (Size : Program_Size) is private;
    --  Type used to represent a regular expression compiled into byte code
@@ -419,21 +414,21 @@ pragma Preelaborate (Regpat);
       Flags           : Regexp_Flags := No_Flags);
    --  Compile a regular expression into into internal code
 
-   --  This procedure is significantly faster than the Compile function
-   --  since it avoids the extra step of precomputing the required size.
+   --  This procedure is significantly faster than the Compile function since
+   --  it avoids the extra step of precomputing the required size.
    --
    --  However, it requires the user to provide a Pattern_Matcher variable
    --  whose size is preset to a large enough value. One advantage of this
    --  approach, in addition to the improved efficiency, is that the same
    --  Pattern_Matcher variable can be used to hold the compiled code for
-   --  several different regular expressions by setting a size that is
-   --  large enough to accomodate all possibilities.
+   --  several different regular expressions by setting a size that is large
+   --  enough to accomodate all possibilities.
    --
-   --  In this version of the procedure call, the actual required code
-   --  size is returned. Also if Matcher.Size is zero on entry, then the
-   --  resulting code is not stored. A call with Matcher.Size set to Auto_Size
-   --  can thus be used to determine the space required for compiling the
-   --  given regular expression.
+   --  In this version of the procedure call, the actual required code size is
+   --  returned. Also if Matcher.Size is zero on entry, then the resulting code
+   --  is not stored. A call with Matcher.Size set to Auto_Size can thus be
+   --  used to determine the space required for compiling the given regular
+   --  expression.
    --
    --  This function raises Storage_Error if Matcher is too small to hold
    --  the resulting code (i.e. Matcher.Size has too small a value).
@@ -448,8 +443,8 @@ pragma Preelaborate (Regpat);
      (Matcher    : out Pattern_Matcher;
       Expression : String;
       Flags      : Regexp_Flags := No_Flags);
-   --  Same procedure as above, expect it does not return the final
-   --  program size, and Matcher.Size cannot be Auto_Size.
+--     --  Same procedure as above, expect it does not return the final
+--     --  program size, and Matcher.Size cannot be Auto_Size.
 
    function Paren_Count (Regexp : Pattern_Matcher) return Match_Count;
    pragma Inline (Paren_Count);
@@ -524,7 +519,6 @@ pragma Preelaborate (Regpat);
    --    Expression_Error is raised if the given expression is not a legal
    --    regular expression.
 
-
    procedure Match
      (Expression : String;
       Data       : String;
@@ -577,7 +571,7 @@ pragma Preelaborate (Regpat);
       Data       : String;
       Data_First : Integer  := -1;
       Data_Last  : Positive := Positive'Last) return Boolean;
-   --  Return True if Data matches using the given pattern matcher.
+   --  Return True if Data matches using the given pattern matcher
 
    pragma Inline (Match);
    --  All except the last one below
@@ -591,7 +585,7 @@ pragma Preelaborate (Regpat);
    --  Match Data using the given pattern matcher and store result in Matches.
    --  The expression matches if Matches (0) /= No_Match.
    --
-   --  At most Matches'Length parenthesis are returned.
+   --  At most Matches'Length parenthesis are returned
 
    -----------
    -- Debug --
@@ -616,26 +610,24 @@ private
 
    Program_First : constant := 1;
 
-   --  The "internal use only" fields in regexp are present to pass
-   --  info from compile to execute that permits the execute phase
-   --  to run lots faster on simple cases.  They are:
+   --  The "internal use only" fields in regexp are present to pass info from
+   --  compile to execute that permits the execute phase to run lots faster on
+   --  simple cases. They are:
 
    --     First              character that must begin a match or ASCII.Nul
    --     Anchored           true iff match must start at beginning of line
    --     Must_Have          pointer to string that match must include or null
    --     Must_Have_Length   length of Must_Have string
 
-   --  First and Anchored permit very fast decisions on suitable
-   --  starting points for a match, cutting down the work a lot.
-   --  Must_Have permits fast rejection of lines that cannot possibly
-   --  match.
+   --  First and Anchored permit very fast decisions on suitable starting
+   --  points for a match, cutting down the work a lot. Must_Have permits fast
+   --  rejection of lines that cannot possibly match.
 
-   --  The Must_Have tests are costly enough that Optimize
-   --  supplies a Must_Have only if the r.e. contains something potentially
-   --  expensive (at present, the only such thing detected is * or +
-   --  at the start of the r.e., which can involve a lot of backup).
-   --  The length is supplied because the test in Execute needs it
-   --  and Optimize is computing it anyway.
+   --  The Must_Have tests are costly enough that Optimize supplies a Must_Have
+   --  only if the r.e. contains something potentially expensive (at present,
+   --  the only such thing detected is * or at the start of the r.e., which can
+   --  involve a lot of backup). The length is supplied because the test in
+   --  Execute needs it and Optimize is computing it anyway.
 
    --  The initialization is meant to fail-safe in case the user of this
    --  package tries to use an uninitialized matcher. This takes advantage

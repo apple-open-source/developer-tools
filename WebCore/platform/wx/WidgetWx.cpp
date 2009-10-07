@@ -28,148 +28,72 @@
 #include "Cursor.h"
 #include "GraphicsContext.h"
 #include "IntRect.h"
-#include "Font.h"
 
 #include <wx/defs.h>
 #include <wx/scrolwin.h>
 
 namespace WebCore {
 
-class WidgetPrivate
+Widget::Widget(PlatformWidget widget)
 {
-public:
-    wxScrolledWindow* nativeWindow;
-    Font font;
-    WidgetClient* client;
-};
-
-Widget::Widget()
-    : data(new WidgetPrivate)
-{
-    data->nativeWindow = 0;
-    data->client = 0;
+    init(widget);
 }
 
-Widget::Widget(wxScrolledWindow* win)
-    : data(new WidgetPrivate)
+Widget::~Widget()
 {
-    data->nativeWindow = win;
-}
-
-Widget::~Widget() 
-{
-    delete data;
-}
-
-wxScrolledWindow* Widget::nativeWindow() const
-{
-    return data->nativeWindow;
-}
-
-void Widget::setNativeWindow(wxScrolledWindow* win)
-{
-    data->nativeWindow = win;
-}
-
-void Widget::setClient(WidgetClient* c)
-{
-    data->client = c;
-}
-
-WidgetClient* Widget::client() const
-{
-    return data->client;
-}
-
-IntRect Widget::frameGeometry() const
-{   
-    if (data->nativeWindow)
-        return IntRect(data->nativeWindow->GetRect());
-
-    return IntRect();
-}
-
-bool Widget::hasFocus() const
-{
-    wxWindow* focus = wxWindow::FindFocus();
-    return (data->nativeWindow == focus);
 }
 
 void Widget::setFocus()
 {
-    if (data->nativeWindow)
-        data->nativeWindow->SetFocus();
-}
-
-void Widget::clearFocus()
-{
-}
-
-const Font& Widget::font() const
-{
-    return data->font;
-}
-
-void Widget::setFont(const Font& font)
-{
-    data->font = font;
+    if (PlatformWidget widget = platformWidget())
+        widget->SetFocus();
 }
 
 void Widget::setCursor(const Cursor& cursor)
 {
-    if (data->nativeWindow)
-        data->nativeWindow->SetCursor(*cursor.impl());
+    if (platformWidget() && cursor.impl())
+        platformWidget()->SetCursor(*cursor.impl());
 }
 
 void Widget::show()
 {
-    if (data->nativeWindow)
-        data->nativeWindow->Show();
+    if (PlatformWidget widget = platformWidget())
+        widget->Show();
 }
 
 void Widget::hide()
 {
-    if (data->nativeWindow)
-        data->nativeWindow->Hide();
+    if (PlatformWidget widget = platformWidget())
+        widget->Hide();
 }
 
-void Widget::setFrameGeometry(const IntRect &rect)
+IntRect Widget::frameRect() const
 {
-    if (data->nativeWindow)
-        data->nativeWindow->SetSize(rect);
+    if (PlatformWidget widget = platformWidget())
+        return widget->GetRect();
+    
+    return m_frame;
 }
 
-void Widget::setEnabled(bool enabled)
+void Widget::setFrameRect(const IntRect& rect)
 {
-    if (data->nativeWindow)
-        data->nativeWindow->Enable(enabled);
-}
-
-bool Widget::isEnabled() const
-{
-    if (data->nativeWindow)
-        return data->nativeWindow->IsEnabled();
-        
-    return false;
-}
-
-void Widget::invalidate()
-{
-    if (data->nativeWindow)
-        data->nativeWindow->Refresh();
+    if (PlatformWidget widget = platformWidget())
+        widget->SetSize(rect);
+    
+    m_frame = rect;
 }
 
 void Widget::invalidateRect(const IntRect& r)
 {
-    if (data->nativeWindow)
-        data->nativeWindow->RefreshRect(r);
+    if (PlatformWidget widget = platformWidget())
+        widget->RefreshRect(r);
 }
 
 void Widget::paint(GraphicsContext*,const IntRect& r)
 {
     invalidateRect(r);
-    if (data->nativeWindow)
-        data->nativeWindow->Refresh();
+    if (PlatformWidget widget = platformWidget())
+        widget->Update();
 }
 
 }

@@ -18,7 +18,8 @@ public:
     if (ptr2 != &(*this).slist)
       fail = 6;
 
-    if (0) printf("at %x %x\n", (RWSlistIterator*)this, &(*this).slist);
+    /* APPLE LOCAL default to Wformat-security 5764921 */
+    if (0) printf("at %p %p\n", (void*)(RWSlistIterator*)this, (void*)&(*this).slist);
   }
 };
 
@@ -54,14 +55,18 @@ Sim_Event_Manager::Sim_Event_Manager ()
 void Sim_Event_Manager::post_event () {
   ptr1 = (RWSlistIterator*)&last_posted_event_position_;
   ptr2 = &((RWSlistIterator*)&last_posted_event_position_)->slist;
-  if (0) printf("at %x %x\n", (RWSlistIterator*)&last_posted_event_position_,
-		&((RWSlistIterator*)&last_posted_event_position_)->slist);
+  /* APPLE LOCAL default to Wformat-security 5764921 */
+  if (0) printf("at %p %p\n", (void*)(RWSlistIterator*)&last_posted_event_position_,
+  /* APPLE LOCAL default to Wformat-security 5764921 */
+		(void*)&((RWSlistIterator*)&last_posted_event_position_)->slist);
   if (ptr1 != (RWSlistIterator*)&last_posted_event_position_)
     fail = 1;
   if (ptr2 != &((RWSlistIterator&)last_posted_event_position_).slist)
     fail = 2;
-  if (0) printf("at %x ?%x\n", (RWSlistIterator*)&last_posted_event_position_,
-		&((RWSlistIterator&)last_posted_event_position_).slist);
+  /* APPLE LOCAL default to Wformat-security 5764921 */
+  if (0) printf("at %p ?%p\n", (void*)(RWSlistIterator*)&last_posted_event_position_,
+  /* APPLE LOCAL default to Wformat-security 5764921 */
+		(void*)&((RWSlistIterator&)last_posted_event_position_).slist);
   if (ptr1 != (RWSlistIterator*)&last_posted_event_position_)
     fail = 3;
   if (ptr2 != &((RWSlistIterator&)last_posted_event_position_).slist)

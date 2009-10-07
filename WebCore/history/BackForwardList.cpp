@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2005, 2006 Apple Computer, Inc.  All rights reserved.
+ * Copyright (C) 2008 Torch Mobile Inc. All rights reserved. (http://www.torchmobile.com/)
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -242,10 +243,19 @@ void BackForwardList::removeItem(HistoryItem* item)
     if (!item)
         return;
     
-    for (int i = 0; i < (int)m_entries.size(); ++i)
+    for (unsigned i = 0; i < m_entries.size(); ++i)
         if (m_entries[i] == item) {
             m_entries.remove(i);
             m_entryHash.remove(item);
+            if (m_current == NoCurrentItemIndex || m_current < i)
+                break;
+            if (m_current > i)
+                m_current--;
+            else {
+                size_t count = m_entries.size();
+                if (m_current >= count)
+                    m_current = count ? count-1 : NoCurrentItemIndex;
+            }
             break;
         }
 }
@@ -254,5 +264,19 @@ bool BackForwardList::containsItem(HistoryItem* entry)
 {
     return m_entryHash.contains(entry);
 }
+
+#if ENABLE(WML)
+void BackForwardList::clearWmlPageHistory()
+{
+    PassRefPtr<HistoryItem> cur = currentItem();
+
+    for (unsigned i = 0; i < m_entries.size(); ++i)
+        pageCache()->remove(m_entries[i].get());
+
+    m_entries.clear();
+    m_entryHash.clear();
+    m_current = NoCurrentItemIndex;
+}
+#endif
 
 }; // namespace WebCore

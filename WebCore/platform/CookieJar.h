@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003, 2006 Apple Computer, Inc.  All rights reserved.
+ * Copyright (C) 2003, 2006, 2008 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,10 +30,11 @@ namespace WebCore {
 
     class KURL;
     class String;
+    class Document;
 
-    String cookies(const KURL&);
-    void setCookies(const KURL&, const KURL& policyBaseURL, const String&);
-    bool cookiesEnabled();
+    String cookies(const Document*, const KURL&);
+    void setCookies(Document*, const KURL&, const String&);
+    bool cookiesEnabled(const Document*);
 
 }
 

@@ -17,7 +17,6 @@ bool IOUPSMIGServerIsRunning(
     mach_port_t * bootstrap_port_ref, 
     mach_port_t * upsd_port_ref)
 {
-    boolean_t active = FALSE;
     Boolean result = false;
     kern_return_t kern_result = KERN_SUCCESS;
     mach_port_t   bootstrap_port;
@@ -37,26 +36,15 @@ bool IOUPSMIGServerIsRunning(
         }
     }
 
-    /* Check server status */
-    kern_result = bootstrap_status( bootstrap_port, 
-                        kUPSBootstrapServerName, &active);
+    kern_result = bootstrap_look_up( 
+                                bootstrap_port, 
+                                kUPSBootstrapServerName, 
+                                upsd_port_ref);
 
-    if (BOOTSTRAP_SUCCESS == kern_result)
-    {
-        if (active) {
-            result = true;
-
-            if (upsd_port_ref)
-            {
-                bootstrap_look_up( bootstrap_port, 
-                            kUPSBootstrapServerName, upsd_port_ref);
-            }
-            goto finish;
-        }
-    } else if (BOOTSTRAP_UNKNOWN_SERVICE == kern_result)
-    {
+    if (KERN_SUCCESS == kern_result) {
+        result = true;
+    } else {
         result = false;
-        goto finish;
     }
 
 finish:

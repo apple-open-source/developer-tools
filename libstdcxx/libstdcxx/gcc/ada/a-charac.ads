@@ -1,6 +1,6 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                         GNAT RUNTIME COMPONENTS                          --
+--                         GNAT RUN-TIME COMPONENTS                         --
 --                                                                          --
 --                       A D A . C H A R A C T E R S                        --
 --                                                                          --
@@ -14,6 +14,6 @@
 ------------------------------------------------------------------------------
 
 package Ada.Characters is
-pragma Pure (Characters);
+   pragma Pure;
 
 end Ada.Characters;

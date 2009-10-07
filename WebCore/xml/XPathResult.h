@@ -1,6 +1,6 @@
 /*
- * Copyright 2005 Frerich Raabe <raabe@kde.org>
- * Copyright (C) 2006 Apple Computer, Inc.
+ * Copyright (C) 2005 Frerich Raabe <raabe@kde.org>
+ * Copyright (C) 2006, 2009 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,19 +29,18 @@
 
 #if ENABLE(XPATH)
 
-#include "Shared.h"
 #include "XPathValue.h"
+#include <wtf/RefCounted.h>
 
 namespace WebCore {
 
     typedef int ExceptionCode;
 
-    class EventListener;
-    class EventTargetNode;
+    class Document;
     class Node;
     class String;
 
-    class XPathResult : public Shared<XPathResult> {
+    class XPathResult : public RefCounted<XPathResult> {
     public:
         enum XPathResultType {
             ANY_TYPE = 0,
@@ -56,7 +55,7 @@ namespace WebCore {
             FIRST_ORDERED_NODE_TYPE = 9
         };
         
-        XPathResult(EventTargetNode*, const XPath::Value&);
+        static PassRefPtr<XPathResult> create(Document* document, const XPath::Value& value) { return adoptRef(new XPathResult(document, value)); }
         ~XPathResult();
         
         void convertTo(unsigned short type, ExceptionCode&);
@@ -73,19 +72,18 @@ namespace WebCore {
         Node* iterateNext(ExceptionCode&);
         Node* snapshotItem(unsigned long index, ExceptionCode&);
 
-        void invalidateIteratorState();
-
     private:
+        XPathResult(Document*, const XPath::Value&);
+        
         XPath::Value m_value;
         unsigned m_nodeSetPosition;
         XPath::NodeSet m_nodeSet; // FIXME: why duplicate the node set stored in m_value?
         unsigned short m_resultType;
-        bool m_invalidIteratorState;
-        RefPtr<EventTargetNode> m_eventTarget;
-        RefPtr<EventListener> m_eventListener;
+        RefPtr<Document> m_document;
+        unsigned m_domTreeVersion;
     };
 
-}
+} // namespace WebCore
 
 #endif // ENABLE(XPATH)
 

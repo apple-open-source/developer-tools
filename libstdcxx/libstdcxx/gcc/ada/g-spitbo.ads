@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---           Copyright (C) 1997-1999 Ada Core Technologies, Inc.            --
+--                     Copyright (C) 1997-2006, AdaCore                     --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -44,7 +44,7 @@ with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
 with Interfaces;            use Interfaces;
 
 package GNAT.Spitbol is
-pragma Preelaborate (Spitbol);
+   pragma Preelaborate;
 
    --  The Spitbol package relies heavily on the Unbounded_String package,
    --  using the synonym VString for variable length string. The following
@@ -120,15 +120,13 @@ pragma Preelaborate (Spitbol);
    --  Equivalent to Character'Val (Num)
 
    function Lpad
-     (Str  : VString;
-      Len  : Natural;
-      Pad  : Character := ' ')
-      return VString;
+     (Str : VString;
+      Len : Natural;
+      Pad : Character := ' ') return VString;
    function Lpad
-     (Str  : String;
-      Len  : Natural;
-      Pad  : Character := ' ')
-      return VString;
+     (Str : String;
+      Len : Natural;
+      Pad : Character := ' ') return VString;
    --  If the length of Str is greater than or equal to Len, then Str is
    --  returned unchanged. Otherwise, The value returned is obtained by
    --  concatenating Length (Str) - Len instances of the Pad character to
@@ -151,15 +149,13 @@ pragma Preelaborate (Spitbol);
    --  result overwrites the input argument Str.
 
    function Rpad
-     (Str  : VString;
-      Len  : Natural;
-      Pad  : Character := ' ')
-      return VString;
+     (Str : VString;
+      Len : Natural;
+      Pad : Character := ' ') return VString;
    function Rpad
-     (Str  : String;
-      Len  : Natural;
-      Pad  : Character := ' ')
-      return VString;
+     (Str : String;
+      Len : Natural;
+      Pad : Character := ' ') return VString;
    --  If the length of Str is greater than or equal to Len, then Str is
    --  returned unchanged. Otherwise, The value returned is obtained by
    --  concatenating Length (Str) - Len instances of the Pad character to
@@ -178,13 +174,11 @@ pragma Preelaborate (Spitbol);
    function Substr
      (Str   : VString;
       Start : Positive;
-      Len   : Natural)
-      return  VString;
+      Len   : Natural) return  VString;
    function Substr
      (Str   : String;
       Start : Positive;
-      Len   : Natural)
-      return  VString;
+      Len   : Natural) return  VString;
    --  Returns the substring starting at the given character position (which
    --  is always counted from the start of the string, regardless of bounds,
    --  e.g. 2 means starting with the second character of the string), and
@@ -237,7 +231,7 @@ pragma Preelaborate (Spitbol);
       --  Any non-limited type can be used as the value type in the table
 
       Null_Value : Value_Type;
-      --  Value used to represent a value that is not present in the table.
+      --  Value used to represent a value that is not present in the table
 
       with function Img (A : Value_Type) return String;
       --  Used to provide image of value in Dump procedure
@@ -316,7 +310,7 @@ pragma Preelaborate (Spitbol);
       --  Clears all the elements of the given table, freeing associated
       --  storage. On return T is an empty table with no elements.
 
-      procedure Copy (From : in Table; To : in out Table);
+      procedure Copy (From : Table; To : in out Table);
       --  First all the elements of table To are cleared (as described for
       --  the Clear procedure above), then all the elements of table From
       --  are copied into To. In the case where the tables From and To have

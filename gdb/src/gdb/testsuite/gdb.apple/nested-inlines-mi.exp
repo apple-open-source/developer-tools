@@ -30,8 +30,8 @@ set testfile "nested-inlines"
 set srcfile ${testfile}.c
 set binfile ${objdir}/${subdir}/${testfile}
 
-if [istarget "i\[3-6\]86-apple-darwin*"] {
-    verbose "Skipping ppc inlining tests."
+if ![istarget "powerpc-apple-darwin*"] {
+    verbose "Skipping PPC-specific inline test."
     return
 }
 

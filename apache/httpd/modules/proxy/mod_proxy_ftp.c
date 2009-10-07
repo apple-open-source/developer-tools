@@ -314,9 +314,17 @@ static apr_status_t proxy_send_dir_filter(ap_filter_t *f,
         /* basedir is either "", or "/%2f" for the "squid %2f hack" */
         const char *basedir = "";  /* By default, path is relative to the $HOME dir */
         char *wildcard = NULL;
+        const char *escpath;
 
         /* Save "scheme://site" prefix without password */
         site = apr_uri_unparse(p, &f->r->parsed_uri, APR_URI_UNP_OMITPASSWORD | APR_URI_UNP_OMITPATHINFO);
+        /*
+         * In the reverse proxy case we usually have no site. So contruct
+         * one.
+         */
+        if ((*site == '\0') && (r->proxyreq == PROXYREQ_REVERSE)) {
+            site = ap_construct_url(p, "", r);
+        }
         /* ... and path without query args */
         path = apr_uri_unparse(p, &f->r->parsed_uri, APR_URI_UNP_OMITSITEPART | APR_URI_UNP_OMITQUERY);
 
@@ -350,13 +358,14 @@ static apr_status_t proxy_send_dir_filter(ap_filter_t *f,
         str = (basedir[0] != '\0') ? "<a href=\"/%2f/\">%2f</a>/" : "";
 
         /* print "ftp://host/" */
+        escpath = ap_escape_html(p, path);
         str = apr_psprintf(p, DOCTYPE_HTML_3_2
                 "<html>\n <head>\n  <title>%s%s%s</title>\n"
+                "<base href=\"%s%s%s\">\n"
                 " </head>\n"
                 " <body>\n  <h2>Directory of "
                 "<a href=\"/\">%s</a>/%s",
-                site, basedir, ap_escape_html(p, path),
-                site, str);
+                site, basedir, escpath, site, basedir, escpath, site, str);
 
         APR_BRIGADE_INSERT_TAIL(out, apr_bucket_pool_create(str, strlen(str),
                                                           p, c->bucket_alloc));
@@ -381,6 +390,7 @@ static apr_status_t proxy_send_dir_filter(ap_filter_t *f,
                                                            c->bucket_alloc));
         }
         if (wildcard != NULL) {
+            wildcard = ap_escape_html(p, wildcard);
             APR_BRIGADE_INSERT_TAIL(out, apr_bucket_pool_create(wildcard,
                                                            strlen(wildcard), p,
                                                            c->bucket_alloc));
@@ -517,6 +527,14 @@ static apr_status_t proxy_send_dir_filter(ap_filter_t *f,
             }
 
             filename = strrchr(ctx->buffer, ' ');
+            if (filename == NULL) {
+                /* Line is broken.  Ignore it. */
+                ap_log_error(APLOG_MARK, APLOG_WARNING, 0, r->server,
+                             "proxy_ftp: could not parse line %s", ctx->buffer);
+                /* erase buffer for next time around */
+                ctx->buffer[0] = 0;
+                continue;  /* while state is BODY */
+            }
             *(filename++) = '\0';
 
             /* handle filenames with spaces in 'em */
@@ -1682,7 +1700,13 @@ static int proxy_ftp_handler(request_rec *r, proxy_worker *worker,
 
     /* set content-type */
     if (dirlisting) {
-        ap_set_content_type(r, "text/html");
+        proxy_dir_conf *dconf = ap_get_module_config(r->per_dir_config,
+                                                     &proxy_module);
+
+        ap_set_content_type(r, apr_pstrcat(p, "text/html;charset=",
+                                           dconf->ftp_directory_charset ?
+                                           dconf->ftp_directory_charset :
+                                           "ISO-8859-1",  NULL));
     }
     else {
         if (r->content_type) {
@@ -1760,6 +1784,11 @@ static int proxy_ftp_handler(request_rec *r, proxy_worker *worker,
         return HTTP_INTERNAL_SERVER_ERROR;
     }
 
+    /*
+     * We do not do SSL over the data connection, even if the virtual host we
+     * are in might have SSL enabled
+     */
+    ap_proxy_ssl_disable(data);
     /* set up the connection filters */
     rc = ap_run_pre_connection(data, data_sock);
     if (rc != OK && rc != DONE) {

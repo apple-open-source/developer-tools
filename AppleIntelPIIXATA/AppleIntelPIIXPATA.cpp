@@ -26,6 +26,7 @@
 #include <IOKit/IOKitKeys.h>
 #include "AppleIntelPIIXPATA.h"
 #include <IOKit/IOLocksPrivate.h>
+#include <IOKit/storage/ata/IOATAFamilyPriv.h>
 
 #define super IOPCIATA
 OSDefineMetaClassAndStructors( AppleIntelPIIXPATA, IOPCIATA )
@@ -133,6 +134,8 @@ bool AppleIntelPIIXPATA::start( IOService * provider )
     bool superStarted = false;
 	IOACPIPlatformDevice* myACPINode;
 	_drivePowerOn =  true;
+	bool safeSleep = false;
+	polledPATAAdapter = NULL;
 
     DLOG("%s::%s( %p )\n", getName(), __FUNCTION__, provider);
 
@@ -163,7 +166,7 @@ bool AppleIntelPIIXPATA::start( IOService * provider )
 
     if ( _channel > kPIIX_CHANNEL_SECONDARY )
     {
-        IOLog("%s: invalid ATA channel number %ld\n", getName(), _channel);
+        IOLog("%s: invalid ATA channel number %d\n", getName(), (int)_channel);
         goto fail;
     }
 
@@ -267,6 +270,22 @@ bool AppleIntelPIIXPATA::start( IOService * provider )
 	
 	}
 
+	if( _pciACPIDevice == NULL )
+	{
+		// check for safe-sleep
+		
+		if( _provider->getProperty( "safe-sleep" ) )
+		{
+			safeSleep = true;
+			IOLog("Intel PATA has safe-sleep\n");
+		}
+		
+		// TODO undo this
+		//safeSleep = true;
+	}
+
+	 
+
     // For each device discovered on the ATA bus (by super),
     // create a nub for that device and call registerService() to
     // trigger matching against that device.
@@ -304,7 +323,20 @@ bool AppleIntelPIIXPATA::start( IOService * provider )
 					
 					}
 									  				  
-                }
+                } else if (  _devInfo[i].type == kATADeviceType 
+							&& safeSleep == true )
+				{
+						
+					polledPATAAdapter = new AppleIntelICHxPATAPolledAdapter;
+    
+					if( polledPATAAdapter)
+					{
+						polledPATAAdapter->setOwner( this );
+						setProperty ( kIOPolledInterfaceSupportKey, polledPATAAdapter );
+						polledPATAAdapter->release();
+					}						
+						
+				}	
 
                 if ( nub->attach( this ) )
                 {
@@ -384,17 +416,17 @@ void AppleIntelPIIXPATA::free( void )
     RELEASE( _tfStatusCmdReg );
     RELEASE( _tfAltSDevCReg  );
 
-    // IOATAController should release this.
+	if( _DMACursor != NULL )
+	{
+		_DMACursor->release();
+		_DMACursor = NULL;
+	}
 
-    if ( _doubleBuffer.logicalBuffer )
-    {
-        IOFree( (void *) _doubleBuffer.logicalBuffer,
-                         _doubleBuffer.bufferSize );
-        _doubleBuffer.bufferSize     = 0;
-        _doubleBuffer.logicalBuffer  = 0;
-        _doubleBuffer.physicalBuffer = 0;
-    }
-
+	if( _workLoop != NULL )
+	{
+		_workLoop->release();
+	}
+	
     // What about _workloop, _cmdGate, and _timer in the superclass?
 
     super::free();
@@ -512,8 +544,8 @@ bool AppleIntelPIIXPATA::getBMBaseAddress( IOPCIDevice * provider,
 
     if ( (bmiba & kPIIX_PCI_BMIBA_RTE) == 0 )
     {
-        IOLog("%s: PCI memory range 0x%02x (0x%08lx) is not an I/O range\n",
-              getName(), kPIIX_PCI_BMIBA, bmiba);
+        IOLog("%s: PCI memory range 0x%02x (0x%08x) is not an I/O range\n",
+              getName(), (int)kPIIX_PCI_BMIBA, (int)bmiba);
         return false;
     }
 
@@ -602,7 +634,11 @@ bool AppleIntelPIIXPATA::interruptFilter( OSObject * owner,
     AppleIntelPIIXPATA * self = (AppleIntelPIIXPATA *) owner;
 
     if ( *(self->_bmStatusReg) & kPIIX_IO_BMISX_IDEINTS )
-        return true;   // wakeup the work loop
+	{
+    	// Clear interrupt latch
+		*(self->_bmStatusReg) = kPIIX_IO_BMISX_IDEINTS;
+		return true;   // wakeup the work loop
+	}
     else
         return false;  // ignore this interrupt
 }
@@ -620,9 +656,6 @@ void AppleIntelPIIXPATA::interruptOccurred( OSObject *               owner,
 {
     AppleIntelPIIXPATA * self = (AppleIntelPIIXPATA *) owner;
 
-    // Clear interrupt latch
-
-    *(self->_bmStatusReg) = kPIIX_IO_BMISX_IDEINTS;
 
     // Let our superclass handle the interrupt to advance to the next state
     // in its internal state machine.
@@ -1252,7 +1285,7 @@ bool AppleIntelPIIXPATA::setDriveProperty( UInt32       driveUnit,
 {
     char keyString[40];
     
-    snprintf(keyString, 40, "Drive %ld %s", driveUnit, key);
+    snprintf(keyString, 40, "Drive %d %s", (int)driveUnit, key);
     
     return super::setProperty( keyString, value, numberOfBits );
 }
@@ -1282,9 +1315,9 @@ IOReturn AppleIntelPIIXPATA::createChannelCommands( void )
     // This form of DMA engine can only do 1 pass.
     // It cannot execute multiple chains.
 
-    IOByteCount bytesRemaining = _currentCommand->getByteCount() ;
-    IOByteCount xfrPosition    = _currentCommand->getPosition() ;
-    UInt64  transferSize  = 0; 
+    IOByteCount	bytesRemaining	= _currentCommand->getByteCount() ;
+    IOByteCount	xfrPosition		= _currentCommand->getPosition() ;
+    UInt64		transferSize	= xfrPosition; 
 
     // There's a unique problem with pci-style controllers, in that each
     // dma transaction is not allowed to cross a 64K boundary. This leaves
@@ -1317,7 +1350,7 @@ IOReturn AppleIntelPIIXPATA::createChannelCommands( void )
 		xferDataPtr = (UInt8 *) physSegment32.fIOVMAddr;
         xferCount   = physSegment32.fLength;
 
-        if ( (UInt32) xferDataPtr & 0x01 )
+        if ( (uintptr_t) xferDataPtr & 0x01 )
         {
             IOLog("%s: DMA buffer %p not 2 byte aligned\n",
                   getName(), xferDataPtr);
@@ -1326,16 +1359,21 @@ IOReturn AppleIntelPIIXPATA::createChannelCommands( void )
 
         if ( xferCount & 0x01 )
         {
-            IOLog("%s: DMA buffer length %ld is odd\n",
-                  getName(), xferCount);
+            IOLog("%s: DMA buffer length %d is odd\n",
+                  getName(), (int)xferCount);
         }
-
+		
+		if( xferCount > bytesRemaining )
+		{
+			xferCount = bytesRemaining;
+		}
+		
         // Update bytes remaining count after this pass.
         bytesRemaining -= xferCount;
         xfrPosition += xferCount;
             
         // Examine the segment to see whether it crosses (a) 64k boundary(s)
-        starting64KBlock = (UInt8*) ( (UInt32) xferDataPtr & 0xffff0000);
+        starting64KBlock = (UInt8*) ( (uintptr_t) xferDataPtr & 0xffff0000);
         ptr2EndData  = xferDataPtr + xferCount;
         next64KBlock = starting64KBlock + 0x10000;
 
@@ -1387,8 +1425,8 @@ IOReturn AppleIntelPIIXPATA::createChannelCommands( void )
 
     if (index == 0)
     {
-        IOLog("%s: rejected command with zero PRD count (0x%lx bytes)\n",
-              getName(), _currentCommand->getByteCount());
+        IOLog("%s: rejected command with zero PRD count (0x%x bytes)\n",
+              getName(), (uint32_t)_currentCommand->getByteCount());
         return kATADeviceError;
     }
 
@@ -1403,17 +1441,24 @@ IOReturn AppleIntelPIIXPATA::createChannelCommands( void )
 
 bool AppleIntelPIIXPATA::allocDMAChannel( void )
 {
-    _prdTable = (PRD *) IOMallocContiguous(
-                        /* size  */ sizeof(PRD) * kATAMaxDMADesc, 
-                        /* align */ 0x10000, 
-                        /* phys  */ &_prdTablePhysical );
-
-    if ( !_prdTable )
+	
+	_prdBuffer = IOBufferMemoryDescriptor::inTaskWithPhysicalMask(
+		kernel_task,
+		kIODirectionInOut | kIOMemoryPhysicallyContiguous,
+		sizeof(PRD) * kATAMaxDMADesc,
+		0xFFFF0000UL );
+    
+    if ( !_prdBuffer )
     {
-        IOLog("%s: PRD table allocation failed\n", getName());
+        IOLog("%s: PRD buffer allocation failed\n", getName());
         return false;
     }
-
+ 	
+	_prdBuffer->prepare ( );
+	
+	_prdTable			= (PRD *) _prdBuffer->getBytesNoCopy();
+	_prdTablePhysical	= _prdBuffer->getPhysicalAddress();
+	
     _DMACursor = IONaturalMemoryCursor::withSpecification(
                           /* max segment size  */ 0x10000,
                           /* max transfer size */ kMaxATAXfer );
@@ -1435,13 +1480,18 @@ bool AppleIntelPIIXPATA::allocDMAChannel( void )
 
 bool AppleIntelPIIXPATA::freeDMAChannel( void )
 {
-    if ( _prdTable )
+    if ( _prdBuffer )
     {
         // make sure the engine is stopped.
         stopDMA();
 
         // free the descriptor table.
-        IOFreeContiguous(_prdTable, sizeof(PRD) * kATAMaxDMADesc);
+        _prdBuffer->complete();
+        _prdBuffer->release();
+        _prdBuffer = NULL;
+        _prdTable = NULL;
+        _prdTablePhysical = 0;
+        
     }
 
     return true;
@@ -1558,6 +1608,7 @@ AppleIntelPIIXPATA::getACPIParent( void )
 bool
 AppleIntelPIIXPATA::hasMediaNotify(IOACPIPlatformDevice* acpi_device)
 {
+	
 	OSData *compatibleEntry;
 	bool result = false;
 	
@@ -1728,12 +1779,11 @@ AppleIntelPIIXPATA::completeIO( IOReturn commandResult)
 IOReturn 
 AppleIntelPIIXPATA::dispatchNext( void )
 {
+	
 	if( ! _drivePowerOn ) 
 	{
 		turnOnDrive();
 	}
-
-	
 
 	return super::dispatchNext();
 
@@ -1742,6 +1792,7 @@ AppleIntelPIIXPATA::dispatchNext( void )
 IOReturn
 AppleIntelPIIXPATA::handleInsert( void )
 {
+	
 	DLOG("AppleIntelPIIXPATA handling Insertion\n");
 
 	if( ! _drivePowerOn )
@@ -1751,7 +1802,15 @@ AppleIntelPIIXPATA::handleInsert( void )
 	
 	}
 
+	else
+	{
+		
+		executeEventCallouts( ( ataEventCode ) kATANewMediaEvent, kATAInvalidDeviceID);
+		
+	}
+	
 	return kIOReturnSuccess;
+	
 }
 
 
@@ -1779,4 +1838,178 @@ AppleIntelPIIXPATA::selectDevice( ataUnitID unit )
 	
 }
 
+
+void
+AppleIntelPIIXPATA::executeEventCallouts( ataEventCode event, ataUnitID unit )
+{
+    if( polledPATAAdapter && polledPATAAdapter->isPolling())
+    {
+		return;
+    }
+    super::executeEventCallouts(event, unit);
+}
+
+IOReturn 
+AppleIntelPIIXPATA::startTimer( UInt32 inMS)
+{
+    if( polledPATAAdapter && polledPATAAdapter->isPolling())
+    {
+		return kIOReturnSuccess;
+    }
+    return super::startTimer( inMS);
+}
+
+void
+AppleIntelPIIXPATA::stopTimer(void)
+{
+    if( polledPATAAdapter && polledPATAAdapter->isPolling())
+    {
+		return;
+    }
+    return super::stopTimer( );
+}
+
+
+
+void 
+AppleIntelPIIXPATA::pollEntry( void )
+{
+	//kprintf( "+ PIIXPata pollEntry\n");
+	
+	// make sure there is a current command before processing further.
+    if( 0 == _currentCommand )
+		return;
+
+    if ( *(_bmStatusReg) & kPIIX_IO_BMISX_IDEINTS )
+    {
+		// Clear interrupt latch
+		*(_bmStatusReg) = kPIIX_IO_BMISX_IDEINTS;
+
+		// Let our superclass handle the interrupt to advance to the next state
+		// in its internal state machine.
+		//kprintf( "PIIXPata pollEntry INTRQ is set, completing request\n");
+
+		handleDeviceInterrupt();
+    }
+	
+	//kprintf( "- PIIXPata pollEntry\n");
+	
+}
+
+void 
+AppleIntelPIIXPATA::transitionFixup( void )
+{
+    // ivars working up the chain of inheritance:
+    
+    // from IOATAController		
+    _queueState = IOATAController::kQueueOpen;
+    _busState = IOATAController::kBusFree;
+    _currentCommand = 0L;
+    _selectedUnit = kATAInvalidDeviceID;
+    _queueState = IOATAController::kQueueOpen;
+    _immediateGate = IOATAController::kImmediateOK;
+
+    // make sure the hardware is running
+    _pciDevice->restoreDeviceState();
+}
+
+
+//---------------------------------------------------------------------------
+// begin implementation AppleIntelICHxPATAPolledAdapter
+// --------------------------------------------------------------------------
+#undef super
+#define super IOPolledInterface
+
+OSDefineMetaClassAndStructors(  AppleIntelICHxPATAPolledAdapter, IOPolledInterface )
+
+IOReturn 
+AppleIntelICHxPATAPolledAdapter::probe(IOService * target)
+{
+    pollingActive = false;
+    return kIOReturnSuccess;
+}
+
+IOReturn 
+AppleIntelICHxPATAPolledAdapter::open( IOOptionBits state, IOMemoryDescriptor * buffer)
+{
+   // kprintf( "Opening PATAPolledAdapter state= 0x%lx\n", state);
+	
+	switch( state )
+    {
+	case kIOPolledPreflightState:
+	    // nothing to do here for this controller
+	    break;
+	
+	case kIOPolledBeforeSleepState:
+	    pollingActive = true;
+	    break;
+	
+	case kIOPolledAfterSleepState:
+	    // ivars may be inconsistent at this time. Kernel space is restored by bootx, then executed. 
+	    // ivars may be stale depending on the when the image snapshot took place during image write
+	    // call the controller to return the ivars to a queiscent state and restore the pci device state.
+	    owner->transitionFixup();
+	    pollingActive = true;
+	    break;	
+
+	case kIOPolledPostflightState:
+	    // illegal value should not happen. 
+	default:	
+	    break;
+    }
+    return kIOReturnSuccess;
+}
+
+IOReturn 
+AppleIntelICHxPATAPolledAdapter::close(IOOptionBits state)
+{
+    switch( state )
+    {
+	case kIOPolledPreflightState:
+	case kIOPolledBeforeSleepState:
+	case kIOPolledAfterSleepState:
+	case kIOPolledPostflightState:
+	default:
+	    pollingActive = false;	
+	break;
+    }
+
+    return kIOReturnSuccess;
+}
+
+IOReturn 
+AppleIntelICHxPATAPolledAdapter::startIO(uint32_t 	        operation,
+					 uint32_t		bufferOffset,
+					 uint64_t	        deviceOffset,
+					 uint64_t	        length,
+					 IOPolledCompletion	completion)
+{
+    return kIOReturnUnsupported;
+}
+
+IOReturn 
+AppleIntelICHxPATAPolledAdapter::checkForWork(void)
+{
+
+    if( owner )
+    {
+		owner->pollEntry();
+    }
+
+    return kIOReturnSuccess;
+}
+
+
+bool 
+AppleIntelICHxPATAPolledAdapter::isPolling( void )
+{
+    return pollingActive;
+}
+
+void
+AppleIntelICHxPATAPolledAdapter::setOwner( AppleIntelPIIXPATA* myOwner )
+{
+    owner = myOwner;
+    pollingActive = false;
+}
 

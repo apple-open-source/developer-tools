@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---           Copyright (C) 1999-2001 Ada Core Technologies, Inc.            --
+--                     Copyright (C) 1999-2005, AdaCore                     --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -96,8 +96,7 @@ package body GNAT.Calendar is
    function Julian_Day
      (Year  : Year_Number;
       Month : Month_Number;
-      Day   : Day_Number)
-      return  Integer
+      Day   : Day_Number) return Integer
    is
       Internal_Year  : Integer;
       Internal_Month : Integer;
@@ -227,8 +226,7 @@ package body GNAT.Calendar is
       Hour       : Hour_Number;
       Minute     : Minute_Number;
       Second     : Second_Number;
-      Sub_Second : Second_Duration := 0.0)
-      return Time
+      Sub_Second : Second_Duration := 0.0) return Time
    is
       Dsecs : constant Day_Duration :=
                 Day_Duration (Hour * 3600 + Minute * 60 + Second) +
@@ -252,7 +250,6 @@ package body GNAT.Calendar is
       Micro : constant := 10**6;
       sec   : aliased C.long;
       usec  : aliased C.long;
-
 
    begin
       timeval_to_duration (T, sec'Access, usec'Access);
@@ -292,8 +289,7 @@ package body GNAT.Calendar is
    ------------------
 
    function Week_In_Year
-     (Date : Ada.Calendar.Time)
-      return Week_In_Year_Number
+     (Date : Ada.Calendar.Time) return Week_In_Year_Number
    is
       Year       : Year_Number;
       Month      : Month_Number;
@@ -307,7 +303,7 @@ package body GNAT.Calendar is
    begin
       Split (Date, Year, Month, Day, Hour, Minute, Second, Sub_Second);
 
-      --  Day offset number for the first week of the year.
+      --  Day offset number for the first week of the year
 
       Offset := Julian_Day (Year, 1, 1) mod 7;
 

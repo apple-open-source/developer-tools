@@ -32,6 +32,8 @@
 #ifndef _PFKEY_H
 #define _PFKEY_H
 
+#include "ike_session.h"
+
 struct pfkey_satype {
 	u_int8_t	ps_satype;
 	const char	*ps_name;
@@ -41,6 +43,7 @@ extern const struct pfkey_satype pfkey_satypes[];
 extern const int pfkey_nsatypes;
 
 extern int pfkey_handler __P((void));
+extern void pfkey_post_handler __P((void));
 extern vchar_t *pfkey_dump_sadb __P((int));
 extern void pfkey_flush_sadb __P((u_int));
 extern int pfkey_init __P((void));
@@ -57,6 +60,8 @@ extern int pk_sendeacquire __P((struct ph2handle *));
 extern int pk_sendspdupdate2 __P((struct ph2handle *));
 extern int pk_sendspdadd2 __P((struct ph2handle *));
 extern int pk_sendspddelete __P((struct ph2handle *));
+extern int pk_sendget_inbound_sastats __P((ike_session_t *));
+extern int pk_sendget_outbound_sastats __P((ike_session_t *));
 
 extern void pfkey_timeover_stub __P((void *));
 extern void pfkey_timeover __P((struct ph2handle *));

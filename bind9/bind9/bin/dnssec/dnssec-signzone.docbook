@@ -2,10 +2,10 @@
                "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd"
 	       [<!ENTITY mdash "&#8212;">]>
 <!--
- - Copyright (C) 2004-2007  Internet Systems Consortium, Inc. ("ISC")
+ - Copyright (C) 2004-2008  Internet Systems Consortium, Inc. ("ISC")
  - Copyright (C) 2000-2003  Internet Software Consortium.
  -
- - Permission to use, copy, modify, and distribute this software for any
+ - Permission to use, copy, modify, and/or distribute this software for any
  - purpose with or without fee is hereby granted, provided that the above
  - copyright notice and this permission notice appear in all copies.
  -
@@ -18,7 +18,7 @@
  - PERFORMANCE OF THIS SOFTWARE.
 -->
 
-<!-- $Id: dnssec-signzone.docbook,v 1.10.18.15 2007/01/29 23:57:20 marka Exp $ -->
+<!-- $Id: dnssec-signzone.docbook,v 1.31 2008/10/14 14:28:25 jreed Exp $ -->
 <refentry id="man.dnssec-signzone">
   <refentryinfo>
     <date>June 30, 2000</date>
@@ -41,6 +41,7 @@
       <year>2005</year>
       <year>2006</year>
       <year>2007</year>
+      <year>2008</year>
       <holder>Internet Systems Consortium, Inc. ("ISC")</holder>
     </copyright>
     <copyright>
@@ -76,6 +77,9 @@
       <arg><option>-t</option></arg>
       <arg><option>-v <replaceable class="parameter">level</replaceable></option></arg>
       <arg><option>-z</option></arg>
+      <arg><option>-3 <replaceable class="parameter">salt</replaceable></option></arg>
+      <arg><option>-H <replaceable class="parameter">iterations</replaceable></option></arg>
+      <arg><option>-A</option></arg>
       <arg choice="req">zonefile</arg>
       <arg rep="repeat">key</arg>
     </cmdsynopsis>
@@ -193,7 +197,7 @@
             The name of the output file containing the signed zone.  The
             default is to append <filename>.signed</filename> to
             the
-            input file.
+            input filename.
           </para>
         </listitem>
       </varlistentry>
@@ -212,7 +216,7 @@
         <term>-i <replaceable class="parameter">interval</replaceable></term>
         <listitem>
           <para>
-            When a previously signed zone is passed as input, records
+            When a previously-signed zone is passed as input, records
             may be resigned.  The <option>interval</option> option
             specifies the cycle interval as an offset from the current
             time (in seconds).  If a RRSIG record expires after the
@@ -256,8 +260,8 @@
             When signing a zone with a fixed signature lifetime, all
             RRSIG records issued at the time of signing expires
             simultaneously.  If the zone is incrementally signed, i.e.
-            a previously signed zone is passed as input to the signer,
-            all expired signatures has to be regenerated at about the
+            a previously-signed zone is passed as input to the signer,
+            all expired signatures have to be regenerated at about the
             same time.  The <option>jitter</option> option specifies a
             jitter window that will be used to randomize the signature
             expire time, thus spreading incremental signature
@@ -399,6 +403,38 @@
       </varlistentry>
 
       <varlistentry>
+        <term>-3 <replaceable class="parameter">salt</replaceable></term>
+        <listitem>
+          <para>
+            Generate a NSEC3 chain with the given hex encoded salt.
+	    A dash (<replaceable class="parameter">salt</replaceable>) can
+	    be used to indicate that no salt is to be used when generating		    the NSEC3 chain.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term>-H <replaceable class="parameter">iterations</replaceable></term>
+        <listitem>
+          <para>
+	    When generating a NSEC3 chain use this many interations.  The
+	    default is 100.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term>-A</term>
+        <listitem>
+          <para>
+	    When generating a NSEC3 chain set the OPTOUT flag on all
+	    NSEC3 records and do not generate NSEC3 records for insecure
+	    delegations.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
         <term>zonefile</term>
         <listitem>
           <para>
@@ -411,9 +447,11 @@
         <term>key</term>
         <listitem>
           <para>
-            The keys used to sign the zone.  If no keys are specified, the
-            default all zone keys that have private key files in the
-            current directory.
+	    Specify which keys should be used to sign the zone.  If
+	    no keys are specified, then the zone will be examined
+	    for DNSKEY records at the zone apex.  If these are found and
+	    there are matching private keys, in the current directory,
+	    then these will be used for signing.
           </para>
         </listitem>
       </varlistentry>
@@ -425,27 +463,30 @@
     <title>EXAMPLE</title>
     <para>
       The following command signs the <userinput>example.com</userinput>
-      zone with the DSA key generated in the <command>dnssec-keygen</command>
-      man page.  The zone's keys must be in the zone.  If there are
-      <filename>keyset</filename> files associated with child
-      zones,
-      they must be in the current directory.
-      <userinput>example.com</userinput>, the following command would be
-      issued:
+      zone with the DSA key generated by <command>dnssec-keygen</command>
+      (Kexample.com.+003+17247).  The zone's keys must be in the master
+      file (<filename>db.example.com</filename>).  This invocation looks
+      for <filename>keyset</filename> files, in the current directory,
+      so that DS records can be generated from them (<command>-g</command>).
     </para>
-    <para><userinput>dnssec-signzone -o example.com db.example.com
-        Kexample.com.+003+26160</userinput>
-    </para>
+<programlisting>% dnssec-signzone -g -o example.com db.example.com \
+Kexample.com.+003+17247
+db.example.com.signed
+%</programlisting>
     <para>
-      The command would print a string of the form:
-    </para>
-    <para>
-      In this example, <command>dnssec-signzone</command> creates
+      In the above example, <command>dnssec-signzone</command> creates
       the file <filename>db.example.com.signed</filename>.  This
-      file
-      should be referenced in a zone statement in a
+      file should be referenced in a zone statement in a
       <filename>named.conf</filename> file.
     </para>
+    <para>
+      This example re-signs a previously signed zone with default parameters.
+      The private keys are assumed to be in the current directory.
+    </para>
+<programlisting>% cp db.example.com.signed db.example.com
+% dnssec-signzone -o example.com db.example.com
+db.example.com.signed
+%</programlisting>
   </refsect1>
 
   <refsect1>
@@ -454,7 +495,7 @@
         <refentrytitle>dnssec-keygen</refentrytitle><manvolnum>8</manvolnum>
       </citerefentry>,
       <citetitle>BIND 9 Administrator Reference Manual</citetitle>,
-      <citetitle>RFC 2535</citetitle>.
+      <citetitle>RFC 4033</citetitle>.
     </para>
   </refsect1>
 

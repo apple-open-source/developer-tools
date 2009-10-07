@@ -16,8 +16,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 /* Returns an INT_CST.  */
 tree gfc_conv_mpz_to_tree (mpz_t, int);
@@ -48,12 +48,6 @@ void gfc_init_constants (void);
 
 /* Build a constant with given type from an int_cst.  */
 tree gfc_build_const (tree, tree);
-
-/* String constants.  */
-extern GTY(()) tree gfc_strconst_current_filename;
-extern GTY(()) tree gfc_strconst_bounds;
-extern GTY(()) tree gfc_strconst_fault;
-extern GTY(()) tree gfc_strconst_wrong_return;
 
 /* Integer constants 0..GFC_MAX_DIMENSIONS.  */
 extern GTY(()) tree gfc_rank_cst[GFC_MAX_DIMENSIONS + 1];

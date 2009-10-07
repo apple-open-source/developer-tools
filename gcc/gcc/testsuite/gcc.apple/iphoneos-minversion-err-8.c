@@ -12,4 +12,4 @@ int main(void)
   return 0;
 }
 
-/* { dg-error "Unknown value '' of -miphoneos-version-min" "" {target *-*-* } 1 } */
+/* { dg-error "missing argument" "" {target *-*-* } 0 } */

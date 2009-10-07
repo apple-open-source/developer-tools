@@ -30,10 +30,11 @@
 #if ENABLE(XPATH)
 
 #include "Node.h"
+#include "XPathExpressionNode.h"
 #include "XPathUtil.h"
-
-#include <wtf/MathExtras.h>
 #include <limits>
+#include <wtf/MathExtras.h>
+#include <wtf/StdLibExtras.h>
 
 using std::numeric_limits;
 
@@ -44,8 +45,11 @@ const Value::AdoptTag Value::adopt = {};
 
 const NodeSet& Value::toNodeSet() const
 {
+    if (!isNodeSet())
+        Expression::evaluationContext().hadTypeConversionError = true;
+
     if (!m_data) {
-        static NodeSet emptyNodeSet;
+        DEFINE_STATIC_LOCAL(NodeSet, emptyNodeSet, ());
         return emptyNodeSet;
     }
 
@@ -54,8 +58,11 @@ const NodeSet& Value::toNodeSet() const
 
 NodeSet& Value::modifiableNodeSet()
 {
+    if (!isNodeSet())
+        Expression::evaluationContext().hadTypeConversionError = true;
+
     if (!m_data)
-        m_data = new ValueData;
+        m_data = ValueData::create();
     
     m_type = NodeSetValue;
     return m_data->m_nodeSet;
@@ -85,8 +92,18 @@ double Value::toNumber() const
         case NumberValue:
             return m_number;
         case StringValue: {
+            const String& str = m_data->m_string.simplifyWhiteSpace();
+
+            // String::toDouble() supports exponential notation, which is not allowed in XPath.
+            unsigned len = str.length();
+            for (unsigned i = 0; i < len; ++i) {
+                UChar c = str[i];
+                if (!isASCIIDigit(c) && c != '.'  && c != '-')
+                    return numeric_limits<double>::quiet_NaN();
+            }
+
             bool canConvert;
-            double value = m_data->m_string.simplifyWhiteSpace().toDouble(&canConvert);
+            double value = str.toDouble(&canConvert);
             if (canConvert)
                 return value;
             return numeric_limits<double>::quiet_NaN();

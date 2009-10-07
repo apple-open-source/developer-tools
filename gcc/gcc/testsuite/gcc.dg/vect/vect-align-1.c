@@ -1,9 +1,12 @@
-/* APPLE LOCAL file 4333194 */
+/* APPLE LOCAL file mainline 4.2 5569774 */
 /* { dg-require-effective-target vect_int } */
 
 #include <stdlib.h>
 #include <stdarg.h>
 #include "tree-vect.h"
+
+/* Compile time known misalignment. Cannot use loop peeling to align
+   the store.  */
 
 #define N 16
 
@@ -12,11 +15,11 @@ struct foo {
   int y[N];
 } __attribute__((packed));
 
-int x[N] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15};
 int
-main1 (struct foo *p)
+main1 (struct foo * __restrict__ p)
 {
   int i;
+  int x[N] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15};
 
   for (i = 0; i < N; i++)
     {
@@ -43,4 +46,6 @@ int main (void)
   return 0;
 }
 
-/* { dg-final { scan-tree-dump-times "vectorized 0 loops" 1 "vect" } } */
+/* { dg-final { scan-tree-dump-times "Alignment of access forced using versioning" 1 "vect" } } */
+/* { dg-final { scan-tree-dump-times "vectorized 1 loops" 1 "vect" } } */
+/* { dg-final { cleanup-tree-dump "vect" } } */

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 2001-2003 Free Software Foundation, Inc.          --
+--          Copyright (C) 2001-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -57,7 +57,7 @@ package GNAT.Registry is
    HKEY_PERFORMANCE_DATA : constant HKEY;
 
    type Key_Mode is (Read_Only, Read_Write);
-   --  Access mode for the registry key.
+   --  Access mode for the registry key
 
    Registry_Error : exception;
    --  Registry_Error is raises by all routines below if a problem occurs
@@ -66,8 +66,7 @@ package GNAT.Registry is
    function Create_Key
      (From_Key : HKEY;
       Sub_Key  : String;
-      Mode     : Key_Mode := Read_Write)
-      return     HKEY;
+      Mode     : Key_Mode := Read_Write) return HKEY;
    --  Open or create a key (named Sub_Key) in the Windows registry database.
    --  The key will be created under key From_Key. It returns the key handle.
    --  From_Key must be a valid handle to an already opened key or one of
@@ -76,36 +75,34 @@ package GNAT.Registry is
    function Open_Key
      (From_Key : HKEY;
       Sub_Key  : String;
-      Mode     : Key_Mode := Read_Only)
-      return     HKEY;
+      Mode     : Key_Mode := Read_Only) return HKEY;
    --  Return a registry key handle for key named Sub_Key opened under key
    --  From_Key. It is possible to open a key at any level in the registry
    --  tree in a single call to Open_Key.
 
    procedure Close_Key (Key : HKEY);
-   --  Close registry key handle. All resources used by Key are released.
+   --  Close registry key handle. All resources used by Key are released
 
    function Key_Exists (From_Key : HKEY; Sub_Key : String) return Boolean;
-   --  Returns True if Sub_Key is defined under From_Key in the registry.
+   --  Returns True if Sub_Key is defined under From_Key in the registry
 
    function Query_Value
      (From_Key : HKEY;
       Sub_Key  : String;
-      Expand   : Boolean := False)
-      return     String;
+      Expand   : Boolean := False) return String;
    --  Returns the registry key's value associated with Sub_Key in From_Key
    --  registry key. If Expand is set to True and the Sub_Key is a
    --  REG_EXPAND_SZ the returned value will have the %name% variables
    --  replaced by the corresponding environment variable value.
 
    procedure Set_Value (From_Key : HKEY; Sub_Key : String; Value : String);
-   --  Add the pair (Sub_Key, Value) into From_Key registry key.
+   --  Add the pair (Sub_Key, Value) into From_Key registry key
 
    procedure Delete_Key (From_Key : HKEY; Sub_Key : String);
-   --  Remove Sub_Key from the registry key From_Key.
+   --  Remove Sub_Key from the registry key From_Key
 
    procedure Delete_Value (From_Key : HKEY; Sub_Key : String);
-   --  Remove the named value Sub_Key from the registry key From_Key.
+   --  Remove the named value Sub_Key from the registry key From_Key
 
    generic
       with procedure Action

@@ -105,7 +105,6 @@ typedef enum bfd_mach_o_load_command_type
                                            mapped.  */
   BFD_MACH_O_LC_ROUTINES_64 = 0x1a,      /* Address of the dyld init routine 
                                             in a dylib.  */
-  /* APPLE LOCAL entries */
   BFD_MACH_O_LC_UUID = 0x1b,             /* 128-bit UUID of the executable.  */
   BFD_MACH_O_LC_RPATH = 0x1c | BFD_MACH_O_LC_REQ_DYLD,  
   BFD_MACH_O_LC_CODE_SIGNATURE = 0x1d,   

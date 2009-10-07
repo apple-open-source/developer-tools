@@ -1044,16 +1044,16 @@ bfd_mach_o_make_bfd_section (bfd *abfd, bfd_mach_o_section *section)
   if ((section->flags & BFD_MACH_O_SECTION_TYPE_MASK) == BFD_MACH_O_S_ZEROFILL 
       || (section->flags & BFD_MACH_O_SECTION_TYPE_MASK) == BFD_MACH_O_S_GB_ZEROFILL)
     {
-    bfdsec->flags = SEC_ALLOC;
+      bfdsec->flags = SEC_ALLOC;
     }
   else if ((section->flags & BFD_MACH_O_SECTION_TYPE_MASK) == BFD_MACH_O_S_ATTR_DEBUG 
            || strcmp (section->segname, "__DWARF") == 0)
     {
-    bfdsec->flags = SEC_HAS_CONTENTS;
+      bfdsec->flags = SEC_HAS_CONTENTS;
     }
   else
     {
-    bfdsec->flags = SEC_HAS_CONTENTS | SEC_LOAD | SEC_ALLOC | SEC_CODE;
+      bfdsec->flags = SEC_HAS_CONTENTS | SEC_LOAD | SEC_ALLOC | SEC_CODE;
     }
 
   /* The __TEXT.__text segment is always readonly. */
@@ -2933,7 +2933,7 @@ bfd_boolean
 bfd_mach_o_core_file_matches_executable_p (bfd *core_bfd, bfd *exec_bfd)
 {
   if (core_bfd->tdata.mach_o_data->header.cputype == exec_bfd->tdata.mach_o_data->header.cputype)
-  return TRUE;
+    return TRUE;
   else
     return FALSE;
 }

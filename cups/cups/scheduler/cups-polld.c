@@ -1,5 +1,5 @@
 /*
- * "$Id: cups-polld.c 6649 2007-07-11 21:46:42Z mike $"
+ * "$Id: cups-polld.c 7198 2008-01-08 00:12:17Z mike $"
  *
  *   Polling daemon for the Common UNIX Printing System (CUPS).
  *
@@ -144,7 +144,7 @@ main(int  argc,				/* I - Number of command-line args */
   * Loop forever, asking for available printers and classes...
   */
 
-  for (http = NULL;;)
+  for (http = NULL; !ferror(stderr);)
   {
    /*
     * Open a connection to the server...
@@ -180,6 +180,8 @@ main(int  argc,				/* I - Number of command-line args */
     if (remain > 0 && !restart_polling)
       sleep(remain);
   }
+
+  return (1);
 }
 
 
@@ -469,5 +471,5 @@ sighup_handler(int sig)			/* I - Signal number */
 
 
 /*
- * End of "$Id: cups-polld.c 6649 2007-07-11 21:46:42Z mike $".
+ * End of "$Id: cups-polld.c 7198 2008-01-08 00:12:17Z mike $".
  */

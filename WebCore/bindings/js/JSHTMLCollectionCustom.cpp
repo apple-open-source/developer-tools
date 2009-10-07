@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2007 Apple Inc. All rights reserved.
+ * Copyright (C) 2007, 2008 Apple Inc. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -28,54 +28,55 @@
 #include "JSNamedNodesCollection.h"
 #include "JSNode.h"
 #include "Node.h"
-#include "kjs_binding.h"
-#include "kjs_html.h"
+#include "JSDOMBinding.h"
 #include <wtf/Vector.h>
+
+using namespace JSC;
 
 namespace WebCore {
 
-static KJS::JSValue* getNamedItems(KJS::ExecState* exec, HTMLCollection* impl, const KJS::Identifier& propertyName)
+static JSValue getNamedItems(ExecState* exec, HTMLCollection* impl, const Identifier& propertyName)
 {
     Vector<RefPtr<Node> > namedItems;
     impl->namedItems(propertyName, namedItems);
 
     if (namedItems.isEmpty())
-        return KJS::jsUndefined();
+        return jsUndefined();
 
     if (namedItems.size() == 1)
         return toJS(exec, namedItems[0].get());
 
-    return new JSNamedNodesCollection(exec, namedItems);
+    return new (exec) JSNamedNodesCollection(exec, namedItems);
 }
 
 // HTMLCollections are strange objects, they support both get and call,
 // so that document.forms.item(0) and document.forms(0) both work.
-KJS::JSValue* JSHTMLCollection::callAsFunction(KJS::ExecState* exec, KJS::JSObject*, const KJS::List& args)
+static JSValue JSC_HOST_CALL callHTMLCollection(ExecState* exec, JSObject* function, JSValue, const ArgList& args)
 {
     if (args.size() < 1)
-        return KJS::jsUndefined();
+        return jsUndefined();
 
     // Do not use thisObj here. It can be the JSHTMLDocument, in the document.forms(i) case.
-    HTMLCollection* collection = impl();
+    HTMLCollection* collection = static_cast<JSHTMLCollection*>(function)->impl();
 
     // Also, do we need the TypeError test here ?
 
     if (args.size() == 1) {
         // Support for document.all(<index>) etc.
         bool ok;
-        KJS::UString string = args[0]->toString(exec);
+        UString string = args.at(0).toString(exec);
         unsigned index = string.toUInt32(&ok, false);
         if (ok)
             return toJS(exec, collection->item(index));
 
         // Support for document.images('<name>') etc.
-        return getNamedItems(exec, collection, KJS::Identifier(string));
+        return getNamedItems(exec, collection, Identifier(exec, string));
     }
 
     // The second arg, if set, is the index of the item we want
     bool ok;
-    KJS::UString string = args[0]->toString(exec);
-    unsigned index = args[1]->toString(exec).toUInt32(&ok, false);
+    UString string = args.at(0).toString(exec);
+    unsigned index = args.at(1).toString(exec).toUInt32(&ok, false);
     if (ok) {
         String pstr = string;
         Node* node = collection->namedItem(pstr);
@@ -87,64 +88,64 @@ KJS::JSValue* JSHTMLCollection::callAsFunction(KJS::ExecState* exec, KJS::JSObje
         }
     }
 
-    return KJS::jsUndefined();
+    return jsUndefined();
 }
 
-bool JSHTMLCollection::implementsCall() const
+CallType JSHTMLCollection::getCallData(CallData& callData)
 {
-    return true;
+    callData.native.function = callHTMLCollection;
+    return CallTypeHost;
 }
 
-bool JSHTMLCollection::canGetItemsForName(KJS::ExecState* exec, HTMLCollection* thisObj, const KJS::Identifier& propertyName)
+bool JSHTMLCollection::canGetItemsForName(ExecState* exec, HTMLCollection* thisObj, const Identifier& propertyName)
 {
-    return !getNamedItems(exec, thisObj, propertyName)->isUndefined();
+    return !getNamedItems(exec, thisObj, propertyName).isUndefined();
 }
 
-KJS::JSValue* JSHTMLCollection::nameGetter(KJS::ExecState* exec, KJS::JSObject* originalObject, const KJS::Identifier& propertyName, const KJS::PropertySlot& slot)
+JSValue JSHTMLCollection::nameGetter(ExecState* exec, const Identifier& propertyName, const PropertySlot& slot)
 {
-    JSHTMLCollection* thisObj = static_cast<JSHTMLCollection*>(slot.slotBase());
+    JSHTMLCollection* thisObj = static_cast<JSHTMLCollection*>(asObject(slot.slotBase()));
     return getNamedItems(exec, thisObj->impl(), propertyName);
 }
 
-KJS::JSValue* JSHTMLCollection::item(KJS::ExecState* exec, const KJS::List& args)
+JSValue JSHTMLCollection::item(ExecState* exec, const ArgList& args)
 {
     bool ok;
-    uint32_t index = args[0]->toString(exec).toUInt32(&ok, false);
+    uint32_t index = args.at(0).toString(exec).toUInt32(&ok, false);
     if (ok)
         return toJS(exec, impl()->item(index));
-    return getNamedItems(exec, impl(), KJS::Identifier(args[0]->toString(exec)));
+    return getNamedItems(exec, impl(), Identifier(exec, args.at(0).toString(exec)));
 }
 
-KJS::JSValue* JSHTMLCollection::namedItem(KJS::ExecState* exec, const KJS::List& args)
+JSValue JSHTMLCollection::namedItem(ExecState* exec, const ArgList& args)
 {
-    return getNamedItems(exec, impl(), KJS::Identifier(args[0]->toString(exec)));
+    return getNamedItems(exec, impl(), Identifier(exec, args.at(0).toString(exec)));
 }
 
-KJS::JSValue* toJS(KJS::ExecState* exec, HTMLCollection* collection)
+JSValue toJS(ExecState* exec, HTMLCollection* collection)
 {
     if (!collection)
-        return KJS::jsNull();
+        return jsNull();
 
-    KJS::ScriptInterpreter* interp = static_cast<KJS::ScriptInterpreter*>(exec->dynamicInterpreter());
-    KJS::DOMObject* ret = interp->getDOMObject(collection);
+    DOMObject* wrapper = getCachedDOMObjectWrapper(exec->globalData(), collection);
 
-    if (ret)
-        return ret;
+    if (wrapper)
+        return wrapper;
 
-    switch (collection->collectionType()) {
-        case HTMLCollection::SelectOptions:
-            ret = new JSHTMLOptionsCollection(exec, static_cast<HTMLOptionsCollection*>(collection));
+    switch (collection->type()) {
+        case SelectOptions:
+            wrapper = CREATE_DOM_OBJECT_WRAPPER(exec, HTMLOptionsCollection, collection);
             break;
-        case HTMLCollection::DocAll:
-            ret = new JSHTMLAllCollection(exec, static_cast<HTMLCollection*>(collection));
+        case DocAll:
+            typedef HTMLCollection HTMLAllCollection;
+            wrapper = CREATE_DOM_OBJECT_WRAPPER(exec, HTMLAllCollection, collection);
             break;
         default:
-            ret = new JSHTMLCollection(exec, static_cast<HTMLCollection*>(collection));
+            wrapper = CREATE_DOM_OBJECT_WRAPPER(exec, HTMLCollection, collection);
             break;
     }
 
-    interp->putDOMObject(collection, ret);
-    return ret;
+    return wrapper;
 }
 
 } // namespace WebCore

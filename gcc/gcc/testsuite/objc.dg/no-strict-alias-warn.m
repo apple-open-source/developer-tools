@@ -2,7 +2,7 @@
 /* Test that no strict aliasing warning is issued with CFStrings and 
    -fstrict-aliasing. */
 /* { dg-do compile { target *-*-darwin* } } */
-/* { dg-options "-Wall -fconstant-cfstrings -fstrict-aliasing" } */
+/* { dg-options "-Wall -fconstant-cfstrings -fstrict-aliasing -Wno-format" } */
 #import <Foundation/Foundation.h>
 
 int main (int argc, const char * argv[]) {

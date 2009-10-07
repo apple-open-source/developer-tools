@@ -1,8 +1,8 @@
 /*
- * Copyright (C) 2004, 2005  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007, 2008  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2001, 2003  Internet Software Consortium.
  *
- * Permission to use, copy, modify, and distribute this software for any
+ * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
  *
@@ -15,7 +15,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* $Id: rndc-confgen.c,v 1.18.18.3 2005/04/29 00:15:40 marka Exp $ */
+/* $Id: rndc-confgen.c,v 1.26 2008/10/15 23:47:31 tbox Exp $ */
 
 /*! \file */
 
@@ -62,7 +62,7 @@
 #define DEFAULT_PORT		953
 
 static char program[256];
-char *progname;
+const char *progname;
 
 isc_boolean_t verbose = ISC_FALSE;
 
@@ -148,7 +148,7 @@ main(int argc, char **argv) {
 	isc_boolean_t keyonly = ISC_FALSE;
 	int len;
 
- 	keydef = keyfile = RNDC_KEYFILE;
+	keydef = keyfile = RNDC_KEYFILE;
 
 	result = isc_file_progname(*argv, program, sizeof(program));
 	if (result != ISC_R_SUCCESS)
@@ -159,6 +159,8 @@ main(int argc, char **argv) {
 	keysize = DEFAULT_KEYLENGTH;
 	serveraddr = DEFAULT_SERVER;
 	port = DEFAULT_PORT;
+
+	isc_commandline_errprint = ISC_FALSE;
 
 	while ((ch = isc_commandline_parse(argc, argv,
 					   "ab:c:hk:Mmp:r:s:t:u:Vy")) != -1) {
@@ -214,12 +216,17 @@ main(int argc, char **argv) {
 			verbose = ISC_TRUE;
 			break;
 		case '?':
-			usage(1);
+			if (isc_commandline_option != '?') {
+				fprintf(stderr, "%s: invalid argument -%c\n",
+					program, isc_commandline_option);
+				usage(1);
+			} else
+				usage(0);
 			break;
 		default:
-			fatal("unexpected error parsing command arguments: "
-			      "got %c\n", ch);
-			break;
+			fprintf(stderr, "%s: unhandled option -%c\n",
+				program, isc_commandline_option);
+			exit(1);
 		}
 	}
 
@@ -286,7 +293,7 @@ main(int argc, char **argv) {
 				fatal("isc_mem_get(%d) failed\n", len);
 			snprintf(buf, len, "%s%s%s", chrootdir,
 				 (*keyfile != '/') ? "/" : "", keyfile);
-			
+
 			write_key_file(buf, user, keyname, &key_txtbuffer);
 			isc_mem_put(mctx, buf, len);
 		}

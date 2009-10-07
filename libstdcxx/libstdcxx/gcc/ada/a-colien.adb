@@ -1,12 +1,12 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                         GNAT RUNTIME COMPONENTS                          --
+--                         GNAT RUN-TIME COMPONENTS                         --
 --                                                                          --
 --         A D A . C O M M A N D _ L I N E . E N V I R O N M E N T          --
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1996-2001 Free Software Foundation, Inc.          --
+--          Copyright (C) 1996-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -32,6 +32,7 @@
 ------------------------------------------------------------------------------
 
 with System;
+
 package body Ada.Command_Line.Environment is
 
    -----------------------
@@ -50,7 +51,7 @@ package body Ada.Command_Line.Environment is
    -- Environment_Value --
    -----------------------
 
-   function Environment_Value (Number : in Positive) return String is
+   function Environment_Value (Number : Positive) return String is
       procedure Fill_Env (E : System.Address; Env_Num : Integer);
       pragma Import (C, Fill_Env, "__gnat_fill_env");
 

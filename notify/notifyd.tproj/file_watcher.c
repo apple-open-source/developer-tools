@@ -3,21 +3,20 @@
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * "Portions Copyright (c) 2003 Apple Computer, Inc.  All Rights
- * Reserved.  This file contains Original Code and/or Modifications of
- * Original Code as defined in and that are subject to the Apple Public
- * Source License Version 1.0 (the 'License').  You may not use this file
- * except in compliance with the License.  Please obtain a copy of the
- * License at http://www.apple.com/publicsource and read it before using
- * this file.
+ * This file contains Original Code and/or Modifications of Original Code
+ * as defined in and that are subject to the Apple Public Source License
+ * Version 2.0 (the 'License'). You may not use this file except in
+ * compliance with the License. Please obtain a copy of the License at
+ * http://www.opensource.apple.com/apsl/ and read it before using this
+ * file.
  * 
  * The Original Code and all software distributed under the License are
  * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
  * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE OR NON-INFRINGEMENT.  Please see the
- * License for the specific language governing rights and limitations
- * under the License."
+ * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+ * Please see the License for the specific language governing rights and
+ * limitations under the License.
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
@@ -51,7 +50,7 @@ file_watcher_printf(watcher_t *w, FILE *fp)
 	f = (file_watcher_t *)w->sub;
 	if (f == NULL) return;
 
-	fprintf(fp, "File Watcher 0x%08x\n", (uint32_t)f);
+	fprintf(fp, "File Watcher 0x%lx\n", (unsigned long)f);
 	if (f->ftype == FS_TYPE_FILE) fprintf(fp, "File: ");
 	else if (f->ftype == FS_TYPE_DIR) fprintf(fp, "Dir: ");
 	else if (f->ftype == FS_TYPE_LINK) fprintf(fp, "Link: ");
@@ -75,10 +74,10 @@ file_watcher_printf(watcher_t *w, FILE *fp)
 	}
 
 	if (f->parent != NULL)
-		fprintf(fp, "Parent: %u 0x%08x\n", f->parent->wid, (uint32_t)f->parent);
+		fprintf(fp, "Parent: %u 0x%lx\n", f->parent->wid, (unsigned long)f->parent);
 
 	if (f->linktarget != NULL)
-		fprintf(fp, "Link Target: %u 0x%08x\n", f->linktarget->wid, (uint32_t)f->linktarget);
+		fprintf(fp, "Link Target: %u 0x%lx\n", f->linktarget->wid, (unsigned long)f->linktarget);
 }
 
 static void
@@ -86,12 +85,13 @@ file_watcher_add_kq(file_watcher_t *f)
 {
 	kern_return_t status;
 	struct kevent event;
+	unsigned long x;
 
 	if (f == NULL) return;
 	if (f->kqident != IDENT_INVAL) return;
 
 #ifdef DEBUG
-	log_message(ASL_LEVEL_DEBUG, "file_watcher_add_kq(%u, %s)", f->w->wid, f->path);
+	log_message(ASL_LEVEL_DEBUG, "file_watcher_add_kq(%u, %s)\n", f->w->wid, f->path);
 #endif
 
 	event.ident = open(f->path, O_EVTONLY, 0);
@@ -100,8 +100,9 @@ file_watcher_add_kq(file_watcher_t *f)
 	event.filter = EVFILT_VNODE;
 	event.flags = EV_ADD | EV_CLEAR;
 	event.fflags = NOTE_DELETE | NOTE_WRITE | NOTE_EXTEND | NOTE_ATTRIB | NOTE_LINK | NOTE_RENAME;
-	event.data = NULL;
-	event.udata = (void *)f->w->wid;
+	event.data = (intptr_t)0;
+	x = f->w->wid;
+	event.udata = (void *)x;
 
 	f->kqident = event.ident;
 
@@ -123,20 +124,20 @@ file_watcher_remove_kq(file_watcher_t *f)
 	if (f->kqident == IDENT_INVAL) return;
 
 #ifdef DEBUG
-	log_message(ASL_LEVEL_DEBUG, "file_watcher_remove_kq(%u, %s)", f->w->wid, f->path);
+	log_message(ASL_LEVEL_DEBUG, "file_watcher_remove_kq(%u, %s)\n", f->w->wid, f->path);
 #endif
 
 	event.ident = f->kqident;
 	event.filter = EVFILT_VNODE;
 	event.flags = EV_DELETE;
 	event.fflags = 0;
-	event.data = NULL;
+	event.data = (intptr_t)0;
 	event.udata = NULL;
 
 	status = kevent(kq, &event, 1, NULL, 0, NULL);
 	if (status != 0)
 	{
-		log_message(ASL_LEVEL_ERR, "EV_DELETE failed for file watcher %u", f->w->wid);
+		log_message(ASL_LEVEL_ERR, "EV_DELETE failed for file watcher %u\n", f->w->wid);
 	}
 
 	close(f->kqident);
@@ -287,7 +288,7 @@ file_watcher_update_dir(file_watcher_t *f, w_event_t **delta)
 	uint32_t do_notify;
 
 #ifdef DEBUG
-	log_message(ASL_LEVEL_DEBUG, "file_watcher_update_dir(%u, %s)", f->w->wid, f->path);
+	log_message(ASL_LEVEL_DEBUG, "file_watcher_update_dir(%u, %s)\n", f->w->wid, f->path);
 #endif
 
 	dp = opendir(f->path);
@@ -409,7 +410,7 @@ file_watcher_remove(file_watcher_t *f)
 	char *pdir, *p;
 
 #ifdef DEBUG
-	log_message(ASL_LEVEL_DEBUG, "file_watcher_remove(%u, %s)", f->w->wid, f->path);
+	log_message(ASL_LEVEL_DEBUG, "file_watcher_remove(%u, %s)\n", f->w->wid, f->path);
 #endif
 
 	if (f == NULL) return 0;
@@ -485,7 +486,7 @@ file_watcher_remove(file_watcher_t *f)
 	}
 
 #ifdef DEBUG
-	log_message(ASL_LEVEL_DEBUG, "file_watcher_remove %s - removed", f->path);
+	log_message(ASL_LEVEL_DEBUG, "file_watcher_remove %s - removed\n", f->path);
 #endif
 
 	f->ftype = FS_TYPE_NONE;
@@ -503,7 +504,7 @@ file_watcher_update_link(file_watcher_t *f, w_event_t **delta)
 	file_watcher_t *t;
 
 #ifdef DEBUG
-	log_message(ASL_LEVEL_DEBUG, "file_watcher_update_link(%u, %s)", f->w->wid, f->path);
+	log_message(ASL_LEVEL_DEBUG, "file_watcher_update_link(%u, %s)\n", f->w->wid, f->path);
 #endif
 
 	n = readlink(f->path, lpath, MAXPATHLEN + 1);
@@ -547,6 +548,7 @@ file_watcher_update_link(file_watcher_t *f, w_event_t **delta)
 			/* Link changed */
 			watcher_release_deferred(f->linktarget);
 			f->linktarget = file_watcher_new(lpath);
+			free(f->targetsb);
 			f->targetsb = malloc(sizeof(struct stat));
 			memcpy(f->targetsb, ((file_watcher_t *)(f->linktarget->sub))->sb, sizeof(struct stat));
 			watcher_add_forward(f->linktarget, f->w->wid);
@@ -613,6 +615,7 @@ file_watcher_update_link(file_watcher_t *f, w_event_t **delta)
 		else asprintf(&p, "%s", lpath);
 	
 		f->linktarget = file_watcher_new(p);
+		free(f->targetsb);
 		f->targetsb = malloc(sizeof(struct stat));
 		memcpy(f->targetsb, ((file_watcher_t *)(f->linktarget->sub))->sb, sizeof(struct stat));
 		if (p != NULL) free(p);
@@ -668,7 +671,7 @@ file_watcher_update(file_watcher_t *f, uint32_t flags, uint32_t level)
 	int32_t status, do_notify, did_remove;
 
 #ifdef DEBUG
-	log_message(ASL_LEVEL_DEBUG, "file_watcher_update(%u, 0x%08x, %s)", f->w->wid, flags, f->path);
+	log_message(ASL_LEVEL_DEBUG, "file_watcher_update(%u, 0x%08x, %s)\n", f->w->wid, flags, f->path);
 #endif
 
 	if (f == NULL) return 0;
@@ -803,7 +806,7 @@ file_watcher_new(const char *p)
 	if (w == NULL) return NULL;
 
 #ifdef DEBUG
-	log_message(ASL_LEVEL_DEBUG, "file_watcher_new(%u, %s)", w->wid, p);
+	log_message(ASL_LEVEL_DEBUG, "file_watcher_new(%u, %s)\n", w->wid, p);
 #endif
 
 	f = (file_watcher_t *)calloc(1, sizeof(file_watcher_t));
@@ -838,7 +841,7 @@ file_watcher_new(const char *p)
 	file_watcher_update(f, 0, 0);
 
 #ifdef DEBUG
-	log_message(ASL_LEVEL_DEBUG, "file_watcher_new: %s type %u trigger %u", p, f->ftype, w->wid);
+	log_message(ASL_LEVEL_DEBUG, "file_watcher_new: %s type %u trigger %u\n", p, f->ftype, w->wid);
 #endif
 
 	return w;
@@ -854,7 +857,7 @@ file_watcher_trigger(watcher_t *w, uint32_t flags, uint32_t level)
 	f = (file_watcher_t *)w->sub;
 
 #ifdef DEBUG
-	log_message(ASL_LEVEL_DEBUG, "file_watcher_trigger: %s type %u wid %u flags 0x%08x", f->path, f->ftype, w->wid, flags);
+	log_message(ASL_LEVEL_DEBUG, "file_watcher_trigger: %s type %u wid %u flags 0x%08x\n", f->path, f->ftype, w->wid, flags);
 #endif
 
 	return file_watcher_update(f, flags, level);
@@ -872,7 +875,7 @@ file_watcher_free(watcher_t *w)
 	f = (file_watcher_t *)w->sub;
 
 #ifdef DEBUG
-	log_message(ASL_LEVEL_DEBUG, "file_watcher_free(%u, %s)", f->w->wid, f->path);
+	log_message(ASL_LEVEL_DEBUG, "file_watcher_free(%u, %s)\n", f->w->wid, f->path);
 #endif
 
 	if (f->path != NULL) free(f->path);

@@ -2435,7 +2435,7 @@ case "${target}" in
     enable_shared=no
     enable_64_bit_bfd=yes
     enable_softfloat=no
-    host_configargs=" $host_configargs --disable-shared --enable-64-bit-bfd --disable-softfloat "
+    host_configargs=" $host_configargs --disable-shared --enable-64-bit-bfd --disable-softfloat --disable-werror "
 
     # Check whether --enable-carbon-framework was given.
 if test "${enable_carbon_framework+set}" = set; then

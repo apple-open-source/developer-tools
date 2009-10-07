@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2003 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -97,6 +97,41 @@ package body Exp_Tss is
       Prepend_Elmt (TSS, TSS_Elist (FN));
    end Copy_TSS;
 
+   ------------------------
+   -- Find_Inherited_TSS --
+   ------------------------
+
+   function Find_Inherited_TSS
+     (Typ : Entity_Id;
+      Nam : TSS_Name_Type) return Entity_Id
+   is
+      Btyp : Entity_Id := Typ;
+      Proc : Entity_Id;
+
+   begin
+      loop
+         Btyp := Base_Type (Btyp);
+         Proc :=  TSS (Btyp, Nam);
+
+         exit when Present (Proc)
+           or else not Is_Derived_Type (Btyp);
+
+         --  If Typ is a derived type, it may inherit attributes from some
+         --  ancestor.
+
+         Btyp := Etype (Btyp);
+      end loop;
+
+      if No (Proc) then
+
+         --  If nothing else, use the TSS of the root type
+
+         Proc := TSS (Base_Type (Underlying_Type (Typ)), Nam);
+      end if;
+
+      return Proc;
+   end Find_Inherited_TSS;
+
    -----------------------
    -- Get_TSS_Name_Type --
    -----------------------
@@ -112,8 +147,8 @@ package body Exp_Tss is
       if C1 in 'A' .. 'Z' and then C2 in 'A' .. 'Z' then
          Nm := (C1, C2);
 
-         for J in OK_TSS_Names'Range loop
-            if Nm = OK_TSS_Names (J) then
+         for J in TSS_Names'Range loop
+            if Nm = TSS_Names (J) then
                return Nm;
             end if;
          end loop;
@@ -200,11 +235,7 @@ package body Exp_Tss is
 
    function Make_Init_Proc_Name (Typ : Entity_Id) return Name_Id is
    begin
-      Get_Name_String (Chars (Typ));
-      Name_Len := Name_Len + 2;
-      Name_Buffer (Name_Len - 1) := TSS_Init_Proc (1);
-      Name_Buffer (Name_Len)     := TSS_Init_Proc (2);
-      return Name_Find;
+      return Make_TSS_Name (Typ, TSS_Init_Proc);
    end Make_Init_Proc_Name;
 
    -------------------------
@@ -217,10 +248,10 @@ package body Exp_Tss is
    is
    begin
       Get_Name_String (Chars (Typ));
-      Add_Char_To_Name_Buffer (Nam (1));
-      Add_Char_To_Name_Buffer (Nam (2));
       Add_Char_To_Name_Buffer ('_');
       Add_Nat_To_Name_Buffer (Increment_Serial_Number);
+      Add_Char_To_Name_Buffer (Nam (1));
+      Add_Char_To_Name_Buffer (Nam (2));
       return Name_Find;
    end Make_TSS_Name_Local;
 

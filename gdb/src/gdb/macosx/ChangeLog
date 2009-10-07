@@ -1,5 +1,488 @@
-2008-09-26  Greg Clayton  <gclayton@apple.com>
+2009-08-24  Jason Molenda  (jmolenda@apple.com)
 
+        * macosx-nat-dyld-process.c (hole_at_p):  Guard against running off
+        the end of the memory map array.
+
+2009-06-24  Jason Molenda  (jmolenda@apple.com)
+
+        * macosx-nat-inferior.c (macosx_unsafe_regexes): Look for __spin_lock,
+        pthread_mutex_lock, pthread_mutex_unlock, and __spin_unlock when 
+	testing for a spinlock being held - we don't have a more accurate 
+	way of telling when pthread_mutex_lock is in its critical section.
+
+2009-05-22  Caroline Tice  <ctice@apple.com>
+
+	* macosx-nat-mutils.c (malloc_history_info_command):  Make
+	"-exact" be the default, since "-range" has the potential to
+	return vast amounts of data with no possible interrupt mechanism.
+	
+2009-05-11  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-mutils.c (do_over_unique_frames): Filter events to
+	those containing the requested_address.  Also print out the 
+	alloc address
+	(malloc_history_info_command): Added -exact & -range, and implement
+	the range option.  Also error out if arg is NULL.
+	(_initialize_macosx_nat_inferior): Fix the documentation for info
+	malloc-history to include the -exact & -range options.
+	
+2009-05-05  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-inferior.c (macosx_load_dylib): Wrong valence in
+	the "found dlerror" test.
+	(macosx_load_dylib): If the debugger mode api is not available
+	fall back on target_check_safe_call.
+	
+2009-04-22  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-inferior.c (macosx_check_safe_call): If we are 
+	only checking the current thread, don't call the malloc_unsafe
+	or debugger mode functions, which assume you are only running
+	one thread.
+
+2009-04-23  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-inferior.c (macosx_check_malloc_is_unsafe): Update call to
+        make_cleanup_set_restore_debugger_mode to handle new return codes.
+	(macosx_check_safe_call): If we can't enter objc's debugger mode,
+	fall back to the old objective-c function name checks.
+	(macosx_load_dylib): Update use of 
+	make_cleanup_set_restore_debugger_mode.
+	* macosx-nat-mutils.c (macosx_allocate_space_in_inferior): Ditto.
+	(gc_free_data): Ditto.
+	(gc_root_tracing_command): Ditto.
+	(gc_reference_tracing_command): Ditto.
+
+2009-04-21  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-dyld-info.c (dyld_objfile_entry_clear): Set in_shared_cache
+	to a default value so we don't accidentally end up with an 
+	uninitialized value in any objfile entry.
+
+2009-04-21  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-dyld.c (macosx_dyld_thread_init): Move call
+	to macosx_clear_start_breakpoint here so we always clear
+	the breakpoint before NULL'ing out the pointer to it.
+	(macosx_dyld_create_inferior_hook): Remove the call to
+	macosx_clear_start_breakpoint from here, it's redundant.
+	(macosx_dyld_thread_clear): Ditto.
+	
+2009-04-17  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-dyld.c (macosx_clear_start_breakpoint): Just clear
+	out the breakpoints we set here.
+	
+2009-04-14  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-inferior.c (macosx_load_dylib): Check for not
+	finding the dlopen & dlerror symbols.
+	
+2009-04-13  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-dyld-process.c (dyld_add_image_libraries): If multiple
+	dylib paths resolve to the same actual dylib, only add it once.
+
+2009-04-10  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-dyld.c (macosx_locate_dyld): Use the TASK_DYLD_INFO
+	variant of task_info to find the dyld location.
+	
+2009-03-30  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-inferior-utils.c (macosx_inferior_destroy): Add 
+	and extra waitpid call to make sure we reap the dying child.
+	
+2009-03-26  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-mutils.c (gc_free_data, gc_root_tracing_command,
+	gc_reference_tracing_command): Set the scheduler locking on.
+	
+	* macosx-nat-infthread.c (prepare_threads_before_run): Don't 
+	internal_error if we discover a new thread here, just add it
+	and set it suspended.
+	* macosx-nat-infthread.h: Remove print_thread_info declaration,
+	it's not used outside of macosx-nat-infthread.c.
+	
+2009-03-19  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-inferior.h: Declare macosx_get_task_for_pid_rights.
+	* macosx-nat-inferior.c: Un-static macosx_get_task_for_pid_rights.
+	(macosx_child_attach): Fix error string to match testsuite.
+	* macosx-nat.c (macosx_classic_create_inferior): Call 
+	macosx_get_task_for_pid_rights if the first task_for_pid fails.
+	
+2009-03-18  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-inferior.c (macosx_check_safe_call): "reason" -> "problem".
+	(macosx_lookup_task_local): When attaching by pid, authorize.
+	
+2009-03-16  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-infthread.c (get_dispatch_queue_name): Update to get
+	the work queue name directly out of the queue structure instead of
+	getting the address of the name in the queue structure.
+
+2009-03-13 Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-mutils.c (do_over_unique_frames): Catch errors locally
+	rather than breaking out of the frame iteration.
+	(info_malloc_history_command): Print the exception message before
+	throwing again.
+	
+2009-03-11 Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-dyld.c (set_load_state_1): Retain the value of the
+	pre_load_slide_addr info if we haven't run yet.
+	
+2009-03-10  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-inferior.c (macosx_get_thread_name): Check the return
+	value from proc_pidinfo before returning a thread name.
+	* macosx-nat-infthread.c (print_thread_info): Same.
+	(macosx_print_thread_details): Same.
+
+2009-03-04  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-infthread.c (print_thread_info): Don't print the workqueue
+	name and flags if the pthread ID hasn't been set yet; we're too early
+	in the thread setup to have meaningful values here.
+	(macosx_print_thread_details): Ditto.
+
+2009-03-03  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-excthread.h: Add shutting_down field.
+	* macosx-nat-excthread.c (macosx_exception_thread_init): Initialize
+	shutting_down.
+	(macosx_exception_thread_create): Set shutting down to 0;
+	(macosx_exception_thread_destroy): Close the exception port here
+	so that we can ensure the exception thread doesn't get stuck.
+	
+2009-03-02  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-infothread.c (print_thread_info): Pull out the code to
+	get the work queue name/flags.
+	(get_dispatch_queue_name): New function.
+	(get_dispatch_queue_flags): New function.
+	(macosx_print_thread_details): Report the thread's work queue name, if
+	any.
+
+2009-03-02  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-infthread.c (print_thread_info): Add English description of
+	dispatch work queue flags.
+
+2009-03-02  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-infthread.c (read_dispatch_offsets):  New function to
+	read the dispatch offsets struct out of libdispatch.
+	(print_thread_info): Print the 0th frame info in "t a a i thread" output
+	so it's a little easier to tell which thread is which.  Try to 
+	retrieve the dispatch queue name and flags and print them if available.
+
+2009-02-25  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-infthread.c (print_thread_info): Small whitespace fix.
+
+2009-02-24  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-inferior.c (macosx_pid_to_str): Removed.
+	(macosx_get_thread_name): New function.
+	(macosx_get_thread_id_str): New function.
+	(_initialize_macosx_inferior): Register them in the target.
+	* macosx-nat-infthread.c (print_thread_info): Print additional
+	information about the thread that we got from the proc_pidinfo 
+	PROC_PIDTHREADINFO call.
+
+2009-02-24  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-inferior.c (macosx_load_dylib): Be sure to
+	copy the nul byte at the end of the dylib pathname.
+
+2009-02-20  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-infthread.c (macosx_print_thread_details): Print uiout
+	values about a given thread.
+	* macosx-nat-infthread.h: Prototype.
+
+2009-02-20  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-inferior.c (do_reset_malloc_unsafe_flag): New function.
+	(macosx_check_malloc_is_unsafe): New function.
+	(macosx_check_safe_call): Use macosx_check_malloc_is_unsafe.
+
+2009-02-20  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-inferior.c (macosx_pid_to_str): Pad the port # to 4
+	digits for better layout.
+
+2009-02-19  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-excthread.c (macosx_exception_thread): Set the thread name.
+	* macosx-nat-sigthread.c (macosx_signal_thread): Set the thread name.
+	* macosx-nat-inferior.c (macosx_pid_to_str): Retrieve the thread name;
+	return the Mach port # and the thread name as the str.
+	* macosx-nat-infthread.c (print_thread_info): Accept an optional
+	gdb "thread id" (ordinal thread number) parameter, print as the primary
+        thread identification if supplied.  Print the thread_identifier_info
+	data.  Print the thread name, if supplied.
+	(info_task_command): Updated to pass NULL to print_thread_info.
+	(parse_thread): Accept a second argument, set it to the gdb "thread id"
+	that we decoded.
+	(info_thread_command): Updated for the above.
+	(thread_suspend_command): Pass NULL to parse_thread's new 2nd param.
+	(thread_resume_command): Ditto.
+
+2009-02-17  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-dyld-process.c (dyld_slide_objfile): Don't call
+	tell_breakpoints_objfile_changed, objfile_relocate will take
+	care of the breakpoints in this objfile.
+	(dyld_objfile_move_load_data): Add a comment.
+	
+	* macosx-nat-inferior.c (macosx_get_task_for_pid_rights): Change
+	the privilege we are asking for as instructed...
+	
+2009-02-12  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-mutils.c (do_over_unique_frames): Make only one version
+	of this function.
+	
+2009-02-02  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-inferior.c (macosx_check_safe_call): Look for the 
+	_dyld_global_lock_held variable and if present use it to determine
+	if it is safe to call into the loader.
+	(macosx_load_dylib): Check that the loader is safe.
+	
+2009-01-30  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-inferior.c (macosx_check_safe_call): Add "SPINLOCK
+	SUBSYSTEM" as one of the options you can choose.
+	Also switch to make_cleanup_set_restore_debugger_mode for the
+	ObjC subsystem.
+	(macosx_load_dylib): New function, implements to_load_solib for
+	Mac OS X.
+	(initialize_macosx_inferior): Add "to_load_solib".
+	* macosx-nat-mutils.c (macosx_allocate_space_in_inferior): Suspend
+	debugger mode, we're pretty sure malloc won't call into ObjC
+	runtime.
+	(gc_free_data): Ditto
+	(gc_root_tracing_command): Ditto.
+	(gc_reference_tracing_command): Ditto.
+	
+2009-01-26  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-mutils.c (do_over_unique_frames): Raise the load level
+	on a frame pc before symbolication.
+	
+2009-01-20  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-dyld.c (target_get_mach_header_size): New function.
+	(get_sectoffs_for_shared_cache_dylib): Use target_get_mach_header_size.
+	Also, if we have somehow misparsed a mach header in memory, just pass
+	over it rather than erroring out - which leaves the debug session toasted.
+	(dyld_info_process_raw): Use target_get_mach_header_size.
+	* macosx-nat-dyld.h: Declare target_get_mach_header_size.
+	* macosx-nat-dyld-process.c (dyld_load_library): Use target_get_mach_header_size.
+	
+2009-10-15  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-dyld-process.c (dyld_add_image_libraries): Ignore libraries
+	with @loader_path.
+	
+2009-01-13  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-info.c (info_mach_thread_command): Use new UNIX03 names
+	for ppc_thread_state, ppc_exception_state, and their members.
+
+2009-01-13  Jason Molenda  (jmolenda@apple.com)
+
+	* i386-macosx-nat-exec.c (i386_macosx_dr_set): Use __DARWIN_UNIX03's 
+	"__dr0" field names instead of the old "dr0" names.
+	(i386_macosx_dr_get): Ditto.
+
+2009-01-07  Jim Ingham  <jingham@apple.com>
+
+	* machoread.c (macho_symfile_init): Don't call init_entry_point_info
+	here, that should be done in the symfile read functions.
+	* pefread.c (pef_symfile_init): Ditto.
+	* symread.c (sym_symfile_init): Ditto.
+
+	* macosx-nat-excthread.c (mach_catch_exception_raise_state): If
+	you get an exception from a task other than the one we are debugging
+	return KERN_FAILURE, not KERN_SUCCESS, since we haven't handled the 
+	event.
+	
+2008-12-12  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-inferior-util.c (macosx_inferior_resume_ptrace):
+	Too many arguments passed to debug printout.
+	
+2008-12-05  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-threads.c  (gdb_pthread_kill): Don't use
+	thread_abort or thread_terminate, they are too extreme,
+	and not necessary.
+	
+2008-12-04  Jim Ingham  <jingham@apple.com>
+
+	* symread.c (sym_parse_type, sym_read_functions): Use the
+	ASSIGN versions of TYPE_LENGTH & TYPE_FIELD_BITPOS where
+	appropriate.
+	
+2008-11-25  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-inferior.c (get_exception_type): Rename 
+	get_event type to this.
+	(get_event_type): New function.
+	(macosx_service_one_event): get_event_type -> get_exception_type.
+	(macosx_backup_this_event): Ditto.
+	(macosx_process_events): Ditto.  Plus raise debug level on one
+	message.
+	(macosx_backup_before_break): Make sure the ignore count matches
+	the number in the set of BREAKPOINTS, not the set of all events.
+	
+2008-11-24  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-inferior.c (macosx_backup_this_event): New function.
+	(macosx_backup_before_break): Use macosx_backup_this_event.
+	(macosx_process_events): Handle exception events from threads which
+	are currently suspended.
+	(macosx_wait): If we get a spurious event, we have to resume the
+	target before falling back into macosx_process_events.
+	
+	* macosx-tdep.c (gdb_DBGCopyMatchingUUIDsForURL): If we've opened
+	a Universal file, clean up the sub-bfd's before closing the container.
+	* macosx-nat-dyld-io.c (inferior_bfd_generic): Close the containing
+	archive if we've opened a Universal file.
+	* macosx-nat-dyld-process.c (dyld_objfile_move_load_data): Ditto.
+	
+2008-11-14  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat.c (_initialize_macosx_nat): rlim_max on SnowLeopard
+	and Leopard is set to RLIM_INFINITY, and getrlimit fails with
+	that.  Work around that.
+	
+2008-11-13  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-dyld.h (struct macosx_dyld_thread_status): Add a field
+	to track whether the dyld minsyms we have are at their actual, possibly
+	slid address, or if they've been fixed to have correct addresses.
+	* macosx-nat-dyld.c (lookup_dyld_address): Only apply dyld_slide if
+	we haven't reloaded the dyld minsyms at their actual addresses.
+	(macosx_dyld_thread_init): Initialize dyld_minsyms_have_been_relocated.
+	* macosx-nat.c (macosx_classic_create_inferior): Set 
+	dyld_minsyms_have_been_relocated once we've removed the old, pre-slid
+	dyld and are loading dyld minsyms at their actual addresses.
+
+2008-11-06  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-inferior.c (macosx_lookup_task_local): Also need
+	to try to acquire task_for_pid rights here.  This is used for
+	attach.
+	
+	* i386-macosx-nat-exec.c (i386_macosx_dr_set): Conditionalize
+	call to task_set_state on HAVE_TASK_SET_STATE.
+	
+2008-11-06  Caroline Tice  <ctice@apple.com>
+
+	* macosx-nat-inferior.c (macosx_child_attach):  Call
+	find_pc_partial_function_no_inlined instead of find_pc_partial_function
+	* macosx-nat-mutils.c (do_over_unique_frames):  Likewise.
+	* macosx-tdep.c (fast_show_stack_trace_prologue):  Likewise.
+	* ppc-macosx-tdep.c (ppc_sigtramp_frame_sniffer):  Likewise.
+
+2008-11-05  Jason Molenda  (jmolenda@apple.com)
+
+	* i386-macosx-nat-exec.c (i386_macosx_dr_set): Call task_set_state
+	so newly created threads will get the same watchpoints as all the
+	extant threads.
+
+2008-11-04  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-inferior.c (macosx_process_completer_quoted): Don't
+	offer the current gdb process as a possible completer name.
+
+2008-11-03  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-mutils.c (gc_print_references): Add the ASSOCIATION
+	reference type - patch from Patrick Beard.
+	
+2008-10-28  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-mutils.c (gc_print_references): Redirect stderr to null 
+	while seeing if we can get the dynamic type of an object.
+
+2008-10-24  Jason Molenda  (jmolenda@apple.com)
+
+	* i386-macosx-tdep.c (amd64_macosx_thread_state_addr): The pointer
+	to the saved context is in reg rbx, not rdx.
+
+2008-10-16  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-mutils.c (gc_print_references): Remember that the
+	compiler aligns zero length array part of a struct on a word size
+	boundary.
+	(gc_root_tracing_command) Ditto.
+	
+2008-10-15  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-inferior.c (macosx_ptrace_me): Check for the case
+	where sem_wait was interrupted by a signal.
+	* macosx-nat-excthread.c (macosx_exception_thread_create): Use 
+	a cond variable to ensure that the exception thread gets a chance
+	to start up before we exit this function.
+	(macosx_exception_thread): Ditto.
+	* macosx-nat-sigthread.c (macosx_signal_thread_create): Ditto for
+	signal thread.
+	(macosx_signal_thread): Ditto.
+
+2008-10-09  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-inferior.c (post_to_semaphore): Convert a printf
+	to an inferior_debug so we don't spam users.  Also add a little
+	sleep if we're cycling waiting for the child to open the semaphore.
+	
+2008-10-10  Jason Molenda  (jmolenda@apple.com)
+
+        * machoread.c (macho_read_indirect_symbols): Fix printf formatter
+        specifier for a CORE_ADDR.
+
+2008-10-09  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-inferior.c (macosx_ptrace_him): If task_for_pid
+	fails, call macosx_get_task_for_pid and then try again.
+	(macosx_get_task_for_pid): New function.
+	
+2008-10-07  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-dyld-process.c (dyld_resolve_filename_image): Treat
+	MH_BUNDLE_KEXT like a MH_BUNDLE.
+	* macosx-nat-dyld.c (dyld_info_process_raw): Same.
+
+2008-10-07  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-inferior.c (macosx_ptrace_me): Add semaphore to
+	syncronize exception thread startup and first exec.
+	(macosx_ptrace_him): Ditto.
+	
+2008-10-02  Greg Clayton  <gclayton@apple.com>
+
+	* kdp-udp.c: Include needed header for delete_file_handler.
+
+2008-10-02  Jason Molenda  (jmolenda@apple.com)
+
+	* machoread.c (macho_read_indirect_symbols): Use CORE_ADDR for the
+	reserved1 address.
+
+2008-09-30  Jim Ingham  <jingham@apple.com>
+
+	* machoread.c (macho_calculate_offsets_for_dsym): Handle the addr
+	that we get passed when somebody does: "add-symbol-file <bin> <addr>".
+	
+2008-09-26  Greg Clayton  <gclayton@apple.com>
+  
 	* remote-kdp.c (async_remote_interrupt): Changed the default 
 	query to yes.
 
@@ -7,8 +490,6 @@
 
 	* kdp-udp.c (kdp_destroy): Make sure that the file descriptors for
 	the kdp connection get deleted from gdb's event loop.
-	* macosx-nat-inferior.c (macosx_unsafe_functions): Added "look_up_class"
-	to the array of unsafe function.
 	* remote-kdp.c (kdp_insert_breakpoint): Fixed type for 2nd parameter.
 	(kdp_remove_breakpoint): Ditto.
 	(kdp_xfer_memory): Ditto.
@@ -16,19 +497,215 @@
 	(async_remote_interrupt): If target_stop is a nop, then query the
 	user if they would like the cleanly disconnect.
 
+2008-09-24  Jim Ingham  <jingham@apple.com>
+
+	* dbxread.c (open_bfd_from_oso): Print out objfile name in
+	warning message.
+
+	* objfiles.c (free_objfile_internal): Call varobj_delete_objfiles_vars.
+	(objfile_init_hitlist): New function.
+	(objfile_add_to_hitlist): New function.
+	(objfile_detach_hitlist): New function.
+	(objfile_clear_hitlist): New function.
+	(make_cleanup_objfile_init_clear_hitlist): New function.
+	(objfile_on_hitlist_p): New function.
+	* objfiles.h: Declare new functions.
+	* symtab.c (lookup_symbol_aux): Return found symbol from a 
+	single location, and add the found objfile to the hitlist there.
+	* varobj.c: Add hitlist to struct varobj.
+	(varobj_create): Init & detach the hitlist when making varobj.
+	(free_variable): Free hitlist.
+	(varobj_delete_objfiles_vars): New function.
+	*varobj.h: Declare varobj_delete_objfiles_vars.
+	
+2008-09-18  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-dyld-process.c (dyld_symfile_loaded_hook): Don't
+	call objc_init_trampoline_observer if we are updating some
+	library other than libobjc.
+	
+2008-09-17  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat.c (_initialize_macosx_nat): Store away the old
+	value of max open file descriptors.
+	(restore_orig_rlimit): New function.
+	* macosx-nat.h: Declare restore_orig_rlimit.
+	* macosx-nat-inferior.c (macosx_ptrace_him): Call 
+	restore_orig_rlimit.
+	
+2008-09-16  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-inferior.c (macosx_check_new_threads): If we
+	don't get the remote port name the first time, keep trying.
+	* macosx-nat-inferior.h: Move gdb_suspend_count to the private
+	info and add gdb_dont_suspend_stepping.
+	* macosx-nat-infthread.c (prepare_threads_after_stop): Mutatis
+	mutandi for moving gdb_suspend_count plus some debug output changes.
+	(prepare_threads_before_run): Ditto.  Also don't suspend thread
+	if it is marked dont_suspend.
+	(print_thread_info): Find the private_thread_info and use that
+	if available.
+	(thread_match_callback): New function.
+	(thread_dont_suspend_while_stepping_command): New function.
+	(_initalize_threads): Add dont-suspend-while-stepping command.
+
+	* macosx-nat.c: Include sys/socket.h explicitly.
+	
+2008-09-12  Jim Ingham (jingham@apple.com)
+
+	* macosx-nat-dyld.c (macosx_solib_add): Handle objc trampoline
+	updates.
+	(macosx_dyld_update): Update the objc trampoline stuff.
+	
+2008-09-03  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-self-backtrace.c: Removed.
+	* macosx-self-backtrace.h: Removed.
+
+2008-09-03  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-inferior.c (macosx_check_safe_call): Change to use the
+	notion of "subsystems" to check for safety.
+	
+2008-08-25  Jason Molenda  (jmolenda@apple.com)
+
+	* i386-macosx-nat-exec.c (i386_macosx_dr_set): Behave correctly for
+	both i386 and x86_64 inferiors.
+	(i386_macosx_dr_get): Ditto.
+	* machoread.c (macho_symfile_read): Read the DWARF CFI sections if
+	available.
+	(macho_read_indirect_symbols): Remove some unnecessary 'long's.
+	* kdp-protocol.c (read64u): Use uint64_t instead of long long.
+	* kdp-protocol.h (struct regions): ADDRESS Should be either
+	uint32_t or uint64_t.  Leave as uint32_t for now.
+	(kdp_readmem64_req_t): Use uint64_t instead of long long.
+	(kdp_writemem64_req_t): Ditto.
+	(kdp_breakpoint_req_t): Use uint32_t instead of long.
+	(kdp_breakpoint64_req_t): Use uint64_t/uint32_t as appropriate.
+
+2008-08-21  Jason Molenda  (jmolenda@apple.com)
+
+	* kdp-protocol.c (read16u, read32u, read64u, write16u, write32u,
+	write64u): Accept/return stdint types instead of 'long' etc types.
+	(kdp_marshal): Fix casts of the read/write funcs to use the appropriate
+	stdint types instead of 'long' etc.
+
+2008-07-29  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-cfm.h: Add prototype for cfm_init.
+	* macosx-nat-cfmthread.c: Include macosx-nat-cfm.h.
+
 2008-07-18  Greg Clayton  <gclayton@apple.com>
 
 	* macosx-tdep.c (create_dsym_uuids_for_path): Create CFURL with
-	CFURLCreateWithFileSystemPath instead of CFURLCreateWithBytes
+    CFURLCreateWithFileSystemPath instead of CFURLCreateWithBytes
 	or special URL characters will not allow a correct path to be
 	extracted with CFURLGetFileSystemRepresentation.
 
-2008-05-29  Jim Ingham  <jingham@apple.com>
+2008-07-21  Jason Molenda  (jmolenda@apple.com)
 
-	* macosx-nat-inferior.c (macosx_child_create_inferior): New 
-	version for ARM.
-	(macosx_child_attach): Allow suppression of the "Attach" message.
+	* darwin-kernel.c (darwin_kernel_xfer_memory, 
+	darwin_kernel_insert_breakpoint, darwin_kernel_create_inferior): Correct
+	function parameters to match their exepcted types.
+	* macosx-nat-mutils.c (gc_root_tracing_command): Put 
+	set_unwind_on_signal_cleanup on the cleanup chain, not 
+	set_unwind_on_signal.
+	* remote-kdp.c (kdp_insert_breakpoint, kdp_xfer_memory,
+	kdp_create_inferior): Correct function arguments.
+
+2008-07-21  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-dyld.c (dyld_starts_here_p): Correct some variables
+	to match mach_vm_read's expected arguments.
+
+2008-07-08  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-dyld-process.c (_initialize_macosx_nat_dyld_process):
+	Correct show description for check-uuids.
+
+2008-06-20  Jim Ingham  <jingham@apple.com>
+
+	* macosx-nat-inferior-util.c (macosx_inferior_resume_ptrace):
+	Another inferior_debug printout.
+	* macosx-nat-inferior.c: Add look_up_class.  This is just a 
+	bandaid till we get the "will objc runtime lock" function.
+	* macosx-nat-mutils.c (macosx_allocate_space_in_inferior):
+	Convert to using make_cleanup_ui_out_suppress_output.
 	
+2008-06-17  Jason Molenda  (jmolenda@apple.com)
+
+	* core-macho.c (core_cache_section_registers): Remove unused variables.
+	* macosx-nat-dyld-io.c (inferior_read_memory_partial): Same.
+	* macosx-nat-dyld.c (dyld_info_process_raw): Same.
+	* remote-kdp.c (kdp_fetch_registers_i386): Same.
+
+	* macosx-nat-dyld.c (target_read_segment_command, 
+	target_extract_segment_command, target_extract_segment_command_64, 
+	target_read_segment_command_64): Removed.
+
+2008-06-16  Jason Molenda  (jmolenda@apple.com)
+
+	* i386-macosx-tdep.c (i386_macosx_fetch_fp_registers,
+	x86_64_macosx_fetch_fp_registers, i386_macosx_store_fp_registers,
+	x86_64_macosx_store_fp_registers): Cast fxsave arg to i387_swap_fxsave.
+	* macosx-nat-dyld.c (dyld_info_process_raw): Use 
+	set_trust_readonly_cleanup.
+	* macosx-nat-inferior.c (cpfork_info, fork_memcache_put): Print addrs
+	correctly.
+
+2008-06-03  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-dyld-process.c (dyld_load_symfile_internal): Don't adjust
+	the commpage addresses when adding it as a symbol file.
+
+2008-05-30  Jason Molenda  (jmolenda@apple.com)
+
+	* i386-macosx-tdep.c (amd64_macosx_thread_state_addr): New function
+	to find saved context for x86_64 _sigtramp.
+	(x86_macosx_init_abi_64): Register it.
+
+2008-05-23  Jason Molenda  (jmolenda@apple.com)
+
+	* macosx-nat-dyld.c (macosx_get_malloc_inited): Double check to see
+	if libsystem has been sufficiently set up to start making malloc calls,
+        instead of checking just when we see shlib loads.
+
+2008-05-20  Jason Molenda  (jmolenda@apple.com)
+
+	* machoread.c (macho_symfile_read): Read the eh_frames unwind tables
+	if present and if the user has set 'use-eh-frame-info'.
+
+2008-04-24  Derek Kumar <drk@apple.com>
+
+        * remote-kdp.c (kdp_fetch_registers_x86_64): Correctly test for
+        x86_64 general purpose regnums.
+        (kdp_store_registers_x86_64): Ditto.  Don't do anything for
+        floating point registers; they are unused in kernel code.
+
+2008-01-25  Shantonu Sen  <ssen@apple.com>
+
+       * kdp-protocol.c (read64u, write64u): New primitives for
+       marshalling/unmarshalling 64-bit fields in KDP protocol
+       (kdp_req_string): Add KDP_READMEM64, KDP_WRITEMEM64,
+       KDP_BREAKPOINT64_SET, KDP_BREAKPOINT64_REMOVE, KDP_KERNELVERSION.
+       (kdp_log_packet, kdp_marshal, kdp_unmarshal): Ditto.
+       * kdp-protocol.h: Add KDP_READMEM64, KDP_WRITEMEM64,
+       KDP_BREAKPOINT64_SET, KDP_BREAKPOINT64_REMOVE, KDP_KERNELVERSION.
+       Add kdp_readmem64_req_t, kdp_writemem64_req_t, kdp_breakpoint64_req_t,
+       kdp_kernelversion_req_t.
+       * remote-kdp.c (convert_host_type, kdp_set_trace_bit,
+       kdp_fetch_registers_x86_64, kdp_store_registers_x86_64): Add
+       support for fetching state from a remote x86_64 kernel.
+       (_initialize_remote_kdp, kdp_kernelversion_command): Add
+       "kdp-kernelversion" command to bootstrap identification of
+       remote kernel binary.
+       (kdp_insert_breakpoint, kdp_xfer_memory): Use new 64-bit
+       wide requests when the remote target supports version 11
+       of the KDP protocol or higher
+       (kdp_attach): Set $kdp_protocol_version and
+       $gdb_kdp_support_level so that kernel macros can
+       gracefully support new debugger/KDP functionality.
+
 2008-05-12  Jason Molenda  (jmolenda@apple.com)
 
 	* macosx-nat-dyld-process.c (mark_buckets_as_used): Fix boundary

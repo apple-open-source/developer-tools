@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2003, 2006 Apple Computer, Inc.  All rights reserved.
- *                     2006 Rob Buis <buis@kde.org>
+ * Copyright (C) 2003, 2006, 2009 Apple Inc. All rights reserved.
+ *               2006 Rob Buis <buis@kde.org>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -27,27 +27,40 @@
 #ifndef Path_h
 #define Path_h
 
+#include <algorithm>
+
 #if PLATFORM(CG)
 typedef struct CGPath PlatformPath;
 #elif PLATFORM(QT)
+#include <qglobal.h>
+QT_BEGIN_NAMESPACE
 class QPainterPath;
+QT_END_NAMESPACE
 typedef QPainterPath PlatformPath;
+#elif PLATFORM(WX) && USE(WXGC)
+class wxGraphicsPath;
+typedef wxGraphicsPath PlatformPath;
 #elif PLATFORM(CAIRO)
 namespace WebCore {
     struct CairoPath;
 }
 typedef WebCore::CairoPath PlatformPath;
+#elif PLATFORM(SKIA)
+class SkPath;
+typedef SkPath PlatformPath;
 #else
 typedef void PlatformPath;
 #endif
 
 namespace WebCore {
 
-    class AffineTransform;
     class FloatPoint;
-    class FloatSize;
     class FloatRect;
+    class FloatSize;
+    class GraphicsContext;
     class String;
+    class StrokeStyleApplier;
+    class TransformationMatrix;
 
     enum WindRule {
         RULE_NONZERO = 0,
@@ -67,7 +80,7 @@ namespace WebCore {
         FloatPoint* points;
     };
 
-    typedef void (*PathApplierFunction) (void* info, const PathElement*);
+    typedef void (*PathApplierFunction)(void* info, const PathElement*);
 
     class Path {
     public:
@@ -77,8 +90,12 @@ namespace WebCore {
         Path(const Path&);
         Path& operator=(const Path&);
 
+        void swap(Path& other) { std::swap(m_path, other.m_path); }
+
         bool contains(const FloatPoint&, WindRule rule = RULE_NONZERO) const;
+        bool strokeContains(StrokeStyleApplier*, const FloatPoint&) const;
         FloatRect boundingRect() const;
+        FloatRect strokeBoundingRect(StrokeStyleApplier* = 0);
         
         float length();
         FloatPoint pointAtLength(float length, bool& ok);
@@ -89,19 +106,16 @@ namespace WebCore {
 
         void moveTo(const FloatPoint&);
         void addLineTo(const FloatPoint&);
-        void addQuadCurveTo(const FloatPoint& controlPoint, const FloatPoint& point);
-        void addBezierCurveTo(const FloatPoint& controlPoint1, const FloatPoint& controlPoint2, const FloatPoint&);
+        void addQuadCurveTo(const FloatPoint& controlPoint, const FloatPoint& endPoint);
+        void addBezierCurveTo(const FloatPoint& controlPoint1, const FloatPoint& controlPoint2, const FloatPoint& endPoint);
         void addArcTo(const FloatPoint&, const FloatPoint&, float radius);
         void closeSubpath();
 
-        void addArc(const FloatPoint&, float radius, float startAngle, float endAngle, bool clockwise);
+        void addArc(const FloatPoint&, float radius, float startAngle, float endAngle, bool anticlockwise);
         void addRect(const FloatRect&);
         void addEllipse(const FloatRect&);
 
         void translate(const FloatSize&);
-
-        void setWindingRule(WindRule rule) { m_rule = rule; }
-        WindRule windingRule() const { return m_rule; }
 
         String debugString() const;
 
@@ -115,11 +129,10 @@ namespace WebCore {
         static Path createLine(const FloatPoint&, const FloatPoint&);
 
         void apply(void* info, PathApplierFunction) const;
-        void transform(const AffineTransform&);
+        void transform(const TransformationMatrix&);
 
     private:
         PlatformPath* m_path;
-        WindRule m_rule;
     };
 
 }

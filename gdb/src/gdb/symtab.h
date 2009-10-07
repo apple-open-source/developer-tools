@@ -103,10 +103,10 @@ struct general_symbol_info
 
   union
   {
-    /* The fact that this is a long not a LONGEST mainly limits the
+    /* The fact that this is an int not a LONGEST mainly limits the
        range of a LOC_CONST.  Since LOC_CONST_BYTES exists, I'm not
        sure that is a big deal.  */
-    long ivalue;
+    int ivalue;
 
     struct block *block;
 
@@ -882,6 +882,10 @@ struct symtab
 
   char *debugformat;
 
+  /* String of producer version information.  May be zero.  */
+
+  char *producer;
+
   /* String of version information.  May be zero.  */
 
   char *version;
@@ -1259,15 +1263,23 @@ int addr_inside_main_func (CORE_ADDR pc);
 /* lookup the function symbol corresponding to the address */
 
 extern struct symbol *find_pc_function (CORE_ADDR);
+/* APPLE LOCAL inlined function symbols & blocks  */
+extern struct symbol *find_pc_function_no_inlined (CORE_ADDR);
 
 /* lookup the function corresponding to the address and section */
 
 extern struct symbol *find_pc_sect_function (CORE_ADDR, asection *);
+/* APPLE LOCAL inlined function symbols & blocks  */
+extern struct symbol *find_pc_sect_function_no_inlined (CORE_ADDR, asection *);
 
 /* lookup function from address, return name, start addr and end addr */
 
 extern int find_pc_partial_function (CORE_ADDR, char **, CORE_ADDR *,
 				     CORE_ADDR *);
+
+extern int find_pc_partial_function_no_inlined (CORE_ADDR, char **, 
+						CORE_ADDR *,
+						CORE_ADDR *);
 
 extern void clear_pc_function_cache (void);
 
@@ -1646,7 +1658,7 @@ extern void update_inlined_function_line_table_entry (CORE_ADDR, CORE_ADDR,
    names were found and recorded when processing the partial dies.  */
 extern int psym_equivalences;
 
-extern int psym_name_match (char *, char *);
+extern int psym_name_match (const char *, const char *);
 
 /* APPLE LOCAL end psym equivalences  */
 

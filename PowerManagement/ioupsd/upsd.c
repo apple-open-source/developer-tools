@@ -137,9 +137,8 @@ Boolean SetupMIGServer()
 {
     Boolean 			result 		= true;
     kern_return_t 		kern_result	= KERN_SUCCESS;
-    CFRunLoopSourceContext 	sourceContext;
-    unsigned int 		sourcePriority 	= 1;
     CFMachPortRef 		upsdMachPort 	= NULL;  // must release
+    mach_port_t         ups_port = MACH_PORT_NULL;
 
     /*if (IOUPSMIGServerIsRunning(&bootstrap_port, NULL)) {
         result = false;
@@ -159,48 +158,29 @@ Boolean SetupMIGServer()
         goto finish;
     }
 
-    bzero(&sourceContext, sizeof(CFRunLoopSourceContext));
-    sourceContext.version = 0;
 
-   /*****
-    * Add the runloop sources in decreasing priority. Signals are handled
-    * first, followed by kernel requests, and then by client requests.
-    * It's important that each source have a distinct priority; sharing
-    * them causes unpredictable behavior with the runloop.
-    */
-    upsdMachPort = CFMachPortCreate(kCFAllocatorDefault,
-        upsd_mach_port_callback, NULL, NULL);
-    gClientRequestRunLoopSource = CFMachPortCreateRunLoopSource(
-        kCFAllocatorDefault, upsdMachPort, sourcePriority++);
-    if (!gClientRequestRunLoopSource) {
-        result = false;
-        goto finish;
+    kern_result = bootstrap_check_in(
+                        bootstrap_port,
+                        kIOUPSPlugInServerName, 
+                        &ups_port);
+                        
+    if (BOOTSTRAP_SUCCESS != kern_result) 
+    {
+        syslog(LOG_ERR, "ioupsd: bootstrap_check_in \"%s\" error = %d\n",
+                        kIOUPSPlugInServerName, kern_result);
+    } else {
+    
+        upsdMachPort = CFMachPortCreateWithPort(kCFAllocatorDefault, ups_port,
+                                        upsd_mach_port_callback, NULL, NULL);
+        gClientRequestRunLoopSource = CFMachPortCreateRunLoopSource(
+            kCFAllocatorDefault, upsdMachPort, 0);
+        if (!gClientRequestRunLoopSource) {
+            result = false;
+            goto finish;
+        }
+        CFRunLoopAddSource(gMainRunLoop, gClientRequestRunLoopSource,
+            kCFRunLoopDefaultMode);
     }
-    CFRunLoopAddSource(gMainRunLoop, gClientRequestRunLoopSource,
-        kCFRunLoopDefaultMode);
-
-    kern_result = bootstrap_register(bootstrap_port,
-        kIOUPSPlugInServerName, CFMachPortGetPort(upsdMachPort));
-
-    switch (kern_result) {
-      case BOOTSTRAP_SUCCESS:
-        /* service not currently registered, "a good thing" (tm) */
-        break;
-
-      case BOOTSTRAP_NOT_PRIVILEGED:
-        syslog(LOG_INFO, "upsd exit: BOOTSTRAP_NOT_PRIVILIGED");
-
-        exit(EX_OSERR);
-
-      case BOOTSTRAP_SERVICE_ACTIVE:
-        syslog(LOG_INFO, "upsd exit: BOOTSTRAP_SERVICE_ACTIVE");
-        exit(EX_OSERR);
-
-      default:
-        syslog(LOG_INFO, "upsd exit: undefined mig error");
-        exit(EX_OSERR);
-    }
-
 finish:
     if (gClientRequestRunLoopSource)  CFRelease(gClientRequestRunLoopSource);
     if (upsdMachPort)                CFRelease(upsdMachPort);
@@ -219,19 +199,12 @@ void InitUPSNotifications()
 {
     CFMutableDictionaryRef 	matchingDict;
     CFMutableDictionaryRef	propertyDict;
-    mach_port_t 		masterPort;
     kern_return_t		kr;
-    
-    // first create a master_port for my task
-    //
-    kr = IOMasterPort(bootstrap_port, &masterPort);
-    if (kr || !masterPort)
-        return;
 
     // Create a notification port and add its run loop event source to our run loop
     // This is how async notifications get set up.
     //
-    gNotifyPort = IONotificationPortCreate(masterPort);
+    gNotifyPort = IONotificationPortCreate(kIOMasterPortDefault);
     CFRunLoopAddSource(	CFRunLoopGetCurrent(), 
                         IONotificationPortGetRunLoopSource(gNotifyPort), 
                         kCFRunLoopDefaultMode);
@@ -308,7 +281,7 @@ void UPSDeviceAdded(void *refCon, io_iterator_t iterator)
     IOReturn                kr;
     SInt32                  score;
         
-    while ( upsDevice = IOIteratorNext(iterator) )
+    while ( (upsDevice = IOIteratorNext(iterator)) )
     {        
         // Create the CF plugin for this device
         kr = IOCreatePlugInInterfaceForService(upsDevice, kIOUPSPlugInTypeID, 
@@ -517,7 +490,7 @@ void ProcessUPSEvent(UPSDataRef upsDataRef, CFDictionaryRef event)
     if ( !upsDataRef || !event)
         return;
       
-    if ( count = CFDictionaryGetCount(event) )
+    if ( (count = CFDictionaryGetCount(event)) )
     {	
         CFTypeRef * keys	= (CFTypeRef *) malloc(sizeof(CFTypeRef) * count);
         CFTypeRef * values	= (CFTypeRef *) malloc(sizeof(CFTypeRef) * count);
@@ -610,6 +583,8 @@ UPSDataRef GetPrivateData( CFDictionaryRef properties )
 // CreatePowerManagerUPSEntry
 //
 //---------------------------------------------------------------------------
+#define kInternalUPSLabelLength     20
+
 IOReturn CreatePowerManagerUPSEntry(UPSDataRef upsDataRef, CFDictionaryRef properties, CFSetRef capabilities)
 {
     CFMutableDictionaryRef	upsStoreDict 	= NULL;
@@ -620,7 +595,7 @@ IOReturn CreatePowerManagerUPSEntry(UPSDataRef upsDataRef, CFDictionaryRef prope
     SCDynamicStoreRef		upsStore 	= NULL;
     IOReturn	 		status 		= kIOReturnSuccess;
     int 			elementValue 	= 0;
-    char			upsLabelString[255];
+    char			upsLabelString[kInternalUPSLabelLength];
 
     if ( !upsDataRef || !properties || !capabilities)
         return kIOReturnError;
@@ -715,7 +690,7 @@ IOReturn CreatePowerManagerUPSEntry(UPSDataRef upsDataRef, CFDictionaryRef prope
 
     // Uniquely name each Sys Config key
     //
-    sprintf(upsLabelString,"/UPS%d", upsDataRef->upsID);
+    snprintf(upsLabelString, kInternalUPSLabelLength, "/UPS%d", upsDataRef->upsID);
 
     #if 0
     SCLog(TRUE, LOG_NOTICE, CFSTR("What does CreatePowerManagerUPSEntry think our key name is?"));

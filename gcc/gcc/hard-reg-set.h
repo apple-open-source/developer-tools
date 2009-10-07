@@ -16,8 +16,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 #ifndef GCC_HARD_REG_SET_H
 #define GCC_HARD_REG_SET_H 
@@ -456,7 +456,7 @@ extern int reg_alloc_order[FIRST_PSEUDO_REGISTER];
 extern int inv_reg_alloc_order[FIRST_PSEUDO_REGISTER];
 #endif
 
-/* APPLE LOCAL begin ARM add DIMODE_REG_ALLOC_ORDER */
+/* APPLE LOCAL begin 5831562 add DIMODE_REG_ALLOC_ORDER */
 #ifdef DIMODE_REG_ALLOC_ORDER
 /* Table of register numbers in the order in which to try to use them.  */
 
@@ -466,7 +466,7 @@ extern int dimode_reg_alloc_order[FIRST_PSEUDO_REGISTER];
 
 extern int dimode_inv_reg_alloc_order[FIRST_PSEUDO_REGISTER];
 #endif
-/* APPLE LOCAL end ARM add DIMODE_REG_ALLOC_ORDER */
+/* APPLE LOCAL end 5831562 add DIMODE_REG_ALLOC_ORDER */
 
 /* For each reg class, a HARD_REG_SET saying which registers are in it.  */
 
@@ -475,14 +475,6 @@ extern HARD_REG_SET reg_class_contents[N_REG_CLASSES];
 /* For each reg class, number of regs it contains.  */
 
 extern unsigned int reg_class_size[N_REG_CLASSES];
-
-/* For each reg class, table listing all the containing classes.  */
-
-extern enum reg_class reg_class_superclasses[N_REG_CLASSES][N_REG_CLASSES];
-
-/* For each reg class, table listing all the classes contained in it.  */
-
-extern enum reg_class reg_class_subclasses[N_REG_CLASSES][N_REG_CLASSES];
 
 /* For each pair of reg classes,
    a largest reg class contained in their union.  */
@@ -493,10 +485,6 @@ extern enum reg_class reg_class_subunion[N_REG_CLASSES][N_REG_CLASSES];
    the smallest reg class that contains their union.  */
 
 extern enum reg_class reg_class_superunion[N_REG_CLASSES][N_REG_CLASSES];
-
-/* Number of non-fixed registers.  */
-
-extern int n_non_fixed_regs;
 
 /* Vector indexed by hardware reg giving its name.  */
 

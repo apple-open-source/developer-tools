@@ -268,8 +268,10 @@ dyld_add_image_libraries (struct dyld_objfile_info *info, bfd *abfd)
                      know how to resolve them correctly yet.  This means
                      people who want to put breakpoints in one of these
                      dylibs will have to use a future-breakpoint instead;
-                     not the end of the world.  */
-                  if (strncmp (name, "@rpath", 6) == 0)
+                     not the end of the world.  Ditto for @loader_path.  */
+                  if (name[0] == '@' 
+		      && (strncmp (name, "@rpath", 6) == 0 
+			  || strncmp (name, "@loader_path", 12) == 0))
                     {
                       xfree (name);
                       name = NULL;
@@ -301,8 +303,6 @@ dyld_add_image_libraries (struct dyld_objfile_info *info, bfd *abfd)
                 name = NULL;
               }
 
-            e = dyld_objfile_entry_alloc (info);
-
             /* We have to run realpath on the text name here because
                some makefiles build the library with one name, then
                copy it to another.  For instance, they will build
@@ -322,6 +322,31 @@ dyld_add_image_libraries (struct dyld_objfile_info *info, bfd *abfd)
                   name = xstrdup (buf);
                 }
             }
+
+            /* If a dylib is mentioned more than once, only read it once.
+               This can come up if we have a soft-link where a dylib used
+               to be.  e.g. if libgcc_s is incorporated into libsystem and
+               an executable links against libgcc_s and libsystem, we realpath
+               these and end up with two entries for libsystem.  Which means
+               double the breakpoints double the fun for any breakpoints on
+               libsystem functions.  */
+            if (name)
+              {
+                int j, skip_this_dylib = 0;
+                DYLD_ALL_OBJFILE_INFO_ENTRIES (info, e, j)
+                  {
+                    if (e->reason == dyld_reason_init && e->text_name_valid == 1
+                        && e->text_name && strcmp (e->text_name, name) == 0)
+                      skip_this_dylib = 1;
+                  }
+                if (skip_this_dylib)
+                  {
+                    xfree (name);
+                    continue;
+                  }
+              }
+
+            e = dyld_objfile_entry_alloc (info);
             e->text_name = name;
             e->text_name_valid = 1;
             e->reason = dyld_reason_init;
@@ -372,6 +397,7 @@ dyld_resolve_filename_image (const struct macosx_dyld_thread_status *s,
     case MH_DYLIB:
       break;
     case MH_BUNDLE:
+    case BFD_MACH_O_MH_BUNDLE_KEXT:  /* Use until MH_BUNDLE_KEXT in headers */
       break;
     default:
       return;
@@ -938,8 +964,16 @@ hole_at_p (struct pre_run_memory_map *map,
            int buckets)
 {
   int i = starting_bucket;
-  while (i - starting_bucket < buckets && map->buckets[i] == 0)
-    i++;
+
+  if (starting_bucket >= map->number_of_buckets)
+    return 0;
+
+  while (i - starting_bucket < buckets 
+         && i < map->number_of_buckets
+         && map->buckets[i] == 0)
+    {
+      i++;
+    }
 
   if (i - starting_bucket == buckets)
     return 1;
@@ -1164,7 +1198,13 @@ dyld_load_library_from_memory (const struct dyld_path_info *d,
       length = INVALID_ADDRESS;
     }
   e->abfd = inferior_bfd (name, e->dyld_addr, slide, length);
-  CHECK_FATAL (e->abfd != NULL);
+  if (e->abfd == NULL)
+    {
+      warning ("Could not read dyld entry: %s from inferior memory at 0x%s "
+	       "with slide 0x%s and length %lu.", name, paddr_nz (e->dyld_addr),
+	       paddr_nz (slide), length);
+      return;
+    }
 
   e->loaded_memaddr = e->dyld_addr;
   e->loaded_from_memory = 1;
@@ -1294,9 +1334,10 @@ dyld_load_library (const struct dyld_path_info *d,
 	      if (!matches)
 		{
 		  struct mach_header header;
-		  bfd_vma curpos = e->dyld_addr + sizeof (struct mach_header);
+		  bfd_vma curpos;
 		  struct load_command cmd;
 		  target_read_mach_header (e->dyld_addr, &header);
+		  curpos = e->dyld_addr + target_get_mach_header_size (&header);
 
 		  for (i = 0; i < header.ncmds; i++)
 		    {
@@ -1394,6 +1435,12 @@ dyld_load_libraries (const struct dyld_path_info *d,
 void
 dyld_symfile_loaded_hook (struct objfile *o)
 {
+
+  /* I have to do this here as well as in macosx_dyld_update or 
+     this won't get re-initialized if you originally saw /usr/lib/libobjc.A.dylib,
+     THEN set DYLD_LIBRARY_PATH to point to an independent copy, and THEN reran...  */
+  if (o == find_libobjc_objfile ())
+    objc_init_trampoline_observer ();
 }
 
 /* dyld_slide_objfile applies the slide in NEW_OFFSETS, or in
@@ -1422,12 +1469,16 @@ dyld_slide_objfile (struct objfile *objfile, CORE_ADDR dyld_slide,
       else
 	offset_cleanup = make_cleanup (null_cleanup, NULL);
 
-      tell_breakpoints_objfile_changed (objfile);
+      /* Note, I'm not calling tell_breakpoints_objfile_changed here, but
+	 instead relying on objfile_relocate to relocate the breakpoints 
+	 in this objfile.  */
+
+      objfile_relocate (objfile, new_offsets);
+
       tell_objc_msgsend_cacher_objfile_changed (objfile);
       if (info_verbose)
         printf_filtered ("Relocating symbols from %s...", objfile->name);
       gdb_flush (gdb_stdout);
-      objfile_relocate (objfile, new_offsets);
       if (objfile->separate_debug_objfile != NULL)
 	{
 	  struct section_offsets *dsym_offsets;
@@ -1642,10 +1693,13 @@ dyld_load_symfile_internal (struct dyld_objfile_entry *e,
 	    {
 	      if (!using_orig_objfile)
 		{
+                  /* Pass a NULL value instead of ADDRS -- we don't want to
+                     adjust/slide any of the comm page symbols.  Their 
+                     addresses are absolute and are already correct.  */
 		  e->commpage_objfile =
 		    symbol_file_add_bfd_safe (e->commpage_bfd, 
 					      0, 
-					      addrs,
+					      NULL,
 					      0,
 					      0, 0, 
 					      e->load_flag, 
@@ -1656,11 +1710,14 @@ dyld_load_symfile_internal (struct dyld_objfile_entry *e,
 		{
 		  TRY_CATCH (exc, RETURN_MASK_ALL)
 		    {
+                      /* Pass a NULL value instead of ADDRS -- we don't want to
+                         adjust/slide any of the comm page symbols.  Their 
+                         addresses are absolute and are already correct.  */
 		      e->commpage_objfile =
 			symbol_file_add_bfd_using_objfile (e->commpage_objfile,
 							   e->commpage_bfd, 
 							   0, 
-							   addrs, 
+							   NULL, 
 							   0,
 							   0, 0, 
 							   e->load_flag, 
@@ -2217,7 +2274,7 @@ dyld_objfile_move_load_data (struct dyld_objfile_entry *src,
      and close the dest one.  */
 
   if (dest->abfd != NULL && src->abfd != dest->abfd)
-    bfd_close (dest->abfd);
+    close_bfd_or_archive (dest->abfd);
 
   gdb_assert (src->objfile == dest->objfile || dest->objfile == NULL);
   gdb_assert (dest->commpage_objfile == NULL);
@@ -2230,6 +2287,10 @@ dyld_objfile_move_load_data (struct dyld_objfile_entry *src,
       && src->pre_run_slide_addr_valid == 1
       && src->pre_run_slide_addr != 0)
     {
+      /* FIXME: Why do we have to relocate differently if we're
+	 using the pre_run_slide_addr?  This should just be another
+	 step in the relocating process.  */
+
       dyld_slide_objfile (dest->objfile, dest->dyld_slide, 0);
     }
 
@@ -2463,9 +2524,10 @@ void
 _initialize_macosx_nat_dyld_process ()
 {
   add_setshow_boolean_cmd ("check-uuids", class_obscure,
-			   &dyld_check_uuids_flag, _("\
-Set if GDB should check the binary UUID between the file on disk and the one loaded in memory."), _("\
-Set if GDB should check the binary UUID between the file on disk and the one loaded in memory."), NULL,
+			   &dyld_check_uuids_flag,
+"Set if GDB should check the binary UUID between the file on disk and the one loaded in memory.",
+"Show if GDB should check the binary UUID between the file on disk and the one loaded in memory.", 
+                           NULL,
 			   NULL, NULL,
 			   &setshliblist, &showshliblist);
 }

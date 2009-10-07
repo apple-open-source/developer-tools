@@ -38,12 +38,17 @@
 #include "xmalloc.h"
 #include "key.h"
 #include "authfd.h"
+#include "authfile.h"
 
 #if defined(__APPLE_KEYCHAIN__)
 
 #include <CoreFoundation/CoreFoundation.h>
 #include <Security/Security.h>
-#include <Security/SecPassword.h>
+
+/* Our Security/SecPassword.h is not yet API, so I will define the constants that I am using here. */
+kSecPasswordGet     = 1<<0;  // Get password from keychain or user
+kSecPasswordSet     = 1<<1;  // Set password (passed in if kSecPasswordGet not set, otherwise from user)
+kSecPasswordFail    = 1<<2;  // Wrong password (ignore item in keychain and flag error)
 
 #endif
 
@@ -96,7 +101,7 @@ store_in_keychain(const char *filename, const char *passphrase)
 
 	CFStringRef cfstr_relative_filename = NULL;
 	CFURLRef cfurl_relative_filename = NULL, cfurl_filename = NULL;
-	CFStringRef cfstr_filename;
+	CFStringRef cfstr_filename = NULL;
 	CFDataRef cfdata_filename = NULL;
 	CFIndex filename_len;
 	UInt8 *label = NULL;
@@ -132,7 +137,7 @@ store_in_keychain(const char *filename, const char *passphrase)
 	}
 	if ((cfstr_filename = CFURLCopyFileSystemPath(cfurl_filename,
 	    kCFURLPOSIXPathStyle)) == NULL) {
-		fprintf(stderr, "CFURLGetString failed\n");
+		fprintf(stderr, "CFURLCopyFileSystemPath failed\n");
 		goto err;
 	}
 	if ((cfdata_filename = CFStringCreateExternalRepresentation(NULL,
@@ -205,6 +210,8 @@ err:	/* Clean up. */
 		CFRelease(cfurl_relative_filename);
 	if (cfurl_filename)
 		CFRelease(cfurl_filename);
+	if (cfstr_filename)
+		CFRelease(cfstr_filename);
 	if (cfdata_filename)
 		CFRelease(cfdata_filename);
 	if (label)
@@ -251,7 +258,7 @@ remove_from_keychain(const char *filename)
 
 	CFStringRef cfstr_relative_filename = NULL;
 	CFURLRef cfurl_relative_filename = NULL, cfurl_filename = NULL;
-	CFStringRef cfstr_filename;
+	CFStringRef cfstr_filename = NULL;
 	CFDataRef cfdata_filename = NULL;
 	CFIndex filename_len;
 	const UInt8 *utf8_filename;
@@ -283,7 +290,7 @@ remove_from_keychain(const char *filename)
 	}
 	if ((cfstr_filename = CFURLCopyFileSystemPath(cfurl_filename,
 	    kCFURLPOSIXPathStyle)) == NULL) {
-		fprintf(stderr, "CFURLGetString failed\n");
+		fprintf(stderr, "CFURLCopyFileSystemPath failed\n");
 		goto err;
 	}
 	if ((cfdata_filename = CFStringCreateExternalRepresentation(NULL,
@@ -313,6 +320,8 @@ err:	/* Clean up. */
 		CFRelease(cfurl_relative_filename);
 	if (cfurl_filename)
 		CFRelease(cfurl_filename);
+	if (cfstr_filename)
+		CFRelease(cfstr_filename);
 	if (cfdata_filename)
 		CFRelease(cfdata_filename);
 	if (itemRef)
@@ -444,7 +453,7 @@ err:		/* Clean up. */
  * to use ssh-add -K to add their keys to the keychain.
  */
 char *
-keychain_read_passphrase(const char *filename)
+keychain_read_passphrase(const char *filename, int oAskPassGUI)
 {
 
 #if defined(__APPLE_KEYCHAIN__)
@@ -456,7 +465,7 @@ keychain_read_passphrase(const char *filename)
 
 	CFStringRef cfstr_relative_filename = NULL;
 	CFURLRef cfurl_relative_filename = NULL, cfurl_filename = NULL;
-	CFStringRef cfstr_filename;
+	CFStringRef cfstr_filename = NULL;
 	CFDataRef cfdata_filename = NULL;
 	CFIndex filename_len;
 	UInt8 *label = NULL;
@@ -480,7 +489,7 @@ keychain_read_passphrase(const char *filename)
 		goto err;
 
 	/* Bail out if the user set AskPassGUI preference to -bool NO */
-	if (get_boolean_preference("AskPassGUI", 1, 1) == 0)
+	if (get_boolean_preference("AskPassGUI", 1, 1) == 0 || oAskPassGUI == 0)
 		goto err;
 
 	/* Bail out if we can't communicate with ssh-agent */
@@ -506,7 +515,7 @@ keychain_read_passphrase(const char *filename)
 	}
 	if ((cfstr_filename = CFURLCopyFileSystemPath(cfurl_filename,
 	    kCFURLPOSIXPathStyle)) == NULL) {
-		fprintf(stderr, "CFURLGetString failed\n");
+		fprintf(stderr, "CFURLCopyFileSystemPath failed\n");
 		goto err;
 	}
 	if ((cfdata_filename = CFStringCreateExternalRepresentation(NULL,
@@ -568,9 +577,15 @@ keychain_read_passphrase(const char *filename)
 	}
 
 	/* Request the passphrase from the user. */
-	path = CFURLCreateFromFileSystemRepresentation(NULL, (UInt8 *)filename,
-	    strlen(filename), false);
-	pathFinal = CFURLCopyLastPathComponent(path);
+	if ((path = CFURLCreateFromFileSystemRepresentation(NULL,
+	    (UInt8 *)filename, strlen(filename), false)) == NULL) {
+		fprintf(stderr, "CFURLCreateFromFileSystemRepresentation failed\n");
+		goto err;
+	}
+	if ((pathFinal = CFURLCopyLastPathComponent(path)) == NULL) {
+		fprintf(stderr, "CFURLCopyLastPathComponent failed\n");
+		goto err;
+	}
 	if (!((bundle_url = CFURLCreateWithFileSystemPath(NULL,
 	    CFSTR("/System/Library/CoreServices/"), kCFURLPOSIXPathStyle, true))
 	    != NULL && (bundle = CFBundleCreate(NULL, bundle_url)) != NULL &&
@@ -584,8 +599,11 @@ keychain_read_passphrase(const char *filename)
 		fprintf(stderr, "CFStringCreateCopy failed\n");
 		goto err;
 	}
-	prompt = CFStringCreateWithFormat(NULL, NULL, promptTemplate,
-	    pathFinal);
+	if ((prompt = CFStringCreateWithFormat(NULL, NULL, promptTemplate,
+	    pathFinal)) == NULL) {
+		fprintf(stderr, "CFStringCreateWithFormat failed\n");
+		goto err;
+	}
 	switch (SecPasswordAction(passRef, prompt,
 	    kSecPasswordGet|kSecPasswordFail, &length, &data)) {
 	case noErr:
@@ -594,9 +612,20 @@ keychain_read_passphrase(const char *filename)
 		result[length] = '\0';
 
 		/* Save password in keychain if requested. */
-		if (SecPasswordAction(passRef, CFSTR(""), kSecPasswordSet,
-		    &length, &data) == noErr)
-			ssh_add_from_keychain(ac);
+		if (noErr != SecPasswordAction(passRef, CFSTR(""), kSecPasswordSet, &length, &data))
+			fprintf(stderr, "Saving password to keychain failed\n");
+
+		/* Add password to agent. */
+		char *comment = NULL;
+		Key *private = key_load_private(filename, result, &comment);
+		if (NULL == private)
+			break;
+		if (ssh_add_identity(ac, private, comment))
+			fprintf(stderr, "Identity added: %s (%s)\n", filename, comment);
+		else
+			fprintf(stderr, "Could not add identity: %s\n", filename);
+		xfree(comment);
+		key_free(private);
 		break;
 	case errAuthorizationCanceled:
 		result = xmalloc(1);
@@ -613,6 +642,8 @@ err:	/* Clean up. */
 		CFRelease(cfurl_relative_filename);
 	if (cfurl_filename)
 		CFRelease(cfurl_filename);
+	if (cfstr_filename)
+		CFRelease(cfstr_filename);
 	if (cfdata_filename)
 		CFRelease(cfdata_filename);
 	if (label)

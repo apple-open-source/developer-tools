@@ -139,10 +139,12 @@ private:
 	CssmAutoData					mUserName;
 	CssmAutoData					mPassword;	/* optional (lookup doesn't use it) */
 	CssmAutoData					mHostName;	/* optional */
+	CssmAutoData					mDomain;	/* optional */
 	bool							mDoRenew;
 	bool							mIsAsync;	/* true means no persistent state
 												 * stored in user prefs; default 
 												 * is false */
+	Mutex							mMutex;
 };
 
 } // end namespace KeychainCore

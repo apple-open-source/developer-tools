@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---             Copyright (C) 2001-2003 Free Software Foundation, Inc.       --
+--          Copyright (C) 2001-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -31,9 +31,27 @@ with Prj.Tree;
 private package Prj.Dect is
 
    procedure Parse
-     (Declarations    : out Prj.Tree.Project_Node_Id;
-      Current_Project : Prj.Tree.Project_Node_Id;
-      Extends         : Prj.Tree.Project_Node_Id);
-   --  Parse project declarative items. What are parameters ???
+     (In_Tree           : Prj.Tree.Project_Node_Tree_Ref;
+      Declarations      : out Prj.Tree.Project_Node_Id;
+      Current_Project   : Prj.Tree.Project_Node_Id;
+      Extends           : Prj.Tree.Project_Node_Id;
+      Packages_To_Check : String_List_Access);
+   --  Parse project declarative items
+   --
+   --  In_Tree is the project node tree
+   --
+   --  Declarations is the resulting project node
+   --
+   --  Current_Project is the project node of the project for which the
+   --  declarative items are parsed.
+   --
+   --  Extends is the project node of the project that project Current_Project
+   --  extends. If project Current-Project does not extend any project,
+   --  Extends has the value Empty_Node.
+   --
+   --  Packages_To_Check is the list of packages that needs to be checked.
+   --  For legal packages declared in project Current_Project that are not in
+   --  Packages_To_Check, only the syntax of the declarations are checked, not
+   --  the attribute names and kinds.
 
 end Prj.Dect;

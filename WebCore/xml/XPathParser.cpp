@@ -33,8 +33,10 @@
 #include "ExceptionCode.h"
 #include "StringHash.h"
 #include "XPathEvaluator.h"
+#include "XPathException.h"
 #include "XPathNSResolver.h"
 #include "XPathStep.h"
+#include <wtf/StdLibExtras.h>
 
 int xpathyyparse(void*);
 
@@ -51,6 +53,8 @@ class LocationPath;
 Parser* Parser::currentParser = 0;
     
 enum XMLCat { NameStart, NameCont, NotPartOfName };
+
+typedef HashMap<String, Step::Axis> AxisNamesMap;
 
 static XMLCat charCat(UChar aChar)
 {
@@ -69,7 +73,7 @@ static XMLCat charCat(UChar aChar)
     return NotPartOfName;
 }
 
-static void setUpAxisNamesMap(HashMap<String, Step::Axis>& axisNames)
+static void setUpAxisNamesMap(AxisNamesMap& axisNames)
 {
     struct AxisName {
         const char* name;
@@ -96,12 +100,12 @@ static void setUpAxisNamesMap(HashMap<String, Step::Axis>& axisNames)
 
 static bool isAxisName(const String& name, Step::Axis& type)
 {
-    static HashMap<String, Step::Axis> axisNames;
+    DEFINE_STATIC_LOCAL(AxisNamesMap, axisNames, ());
 
     if (axisNames.isEmpty())
         setUpAxisNamesMap(axisNames);
 
-    HashMap<String, Step::Axis>::iterator it = axisNames.find(name);
+    AxisNamesMap::iterator it = axisNames.find(name);
     if (it == axisNames.end())
         return false;
     type = it->second;
@@ -110,7 +114,7 @@ static bool isAxisName(const String& name, Step::Axis& type)
 
 static bool isNodeTypeName(const String& name)
 {
-    static HashSet<String> nodeTypeNames;
+    DEFINE_STATIC_LOCAL(HashSet<String>, nodeTypeNames, ());
     if (nodeTypeNames.isEmpty()) {
         nodeTypeNames.add("comment");
         nodeTypeNames.add("text");
@@ -142,7 +146,7 @@ bool Parser::isOperatorContext() const
 
 void Parser::skipWS()
 {
-    while (m_nextPos < m_data.length() && DeprecatedChar(m_data[m_nextPos]).isSpace())
+    while (m_nextPos < m_data.length() && isSpaceOrNewline(m_data[m_nextPos]))
         ++m_nextPos;
 }
 
@@ -201,7 +205,7 @@ Token Parser::lexString()
     }
 
     // Ouch, went off the end -- report error.
-    return Token(ERROR);
+    return Token(XPATH_ERROR);
 }
 
 Token Parser::lexNumber()
@@ -305,7 +309,7 @@ Token Parser::nextTokenInternal()
         case '!':
             if (peekAheadHelper() == '=')
                 return makeTokenAndAdvance(EQOP, EqTestOp::OP_NE, 2);
-            return Token(ERROR);
+            return Token(XPATH_ERROR);
         case '<':
             if (peekAheadHelper() == '=')
                 return makeTokenAndAdvance(RELOP, EqTestOp::OP_LE, 2);
@@ -323,14 +327,14 @@ Token Parser::nextTokenInternal()
             m_nextPos++;
             String name;
             if (!lexQName(name))
-                return Token(ERROR);
+                return Token(XPATH_ERROR);
             return Token(VARIABLEREFERENCE, name);
         }
     }
 
     String name;
     if (!lexNCName(name))
-        return Token(ERROR);
+        return Token(XPATH_ERROR);
 
     skipWS();
     // If we're in an operator context, check for any operator names
@@ -357,7 +361,7 @@ Token Parser::nextTokenInternal()
             if (isAxisName(name, axis))
                 return Token(AXISNAME, axis);
             // Ugh, :: is only valid in axis names -> error
-            return Token(ERROR);
+            return Token(XPATH_ERROR);
         }
 
         // Seems like this is a fully qualified qname, or perhaps the * modified one from NameTest
@@ -370,7 +374,7 @@ Token Parser::nextTokenInternal()
         // Make a full qname.
         String n2;
         if (!lexNCName(n2))
-            return Token(ERROR);
+            return Token(XPATH_ERROR);
         
         name = name + ":" + n2;
     }
@@ -503,7 +507,7 @@ Expression* Parser::parseStatement(const String& statement, PassRefPtr<XPathNSRe
         if (m_gotNamespaceError)
             ec = NAMESPACE_ERR;
         else
-            ec = INVALID_EXPRESSION_ERR;
+            ec = XPathException::INVALID_EXPRESSION_ERR;
         return 0;
     }
 

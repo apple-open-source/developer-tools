@@ -2,11 +2,12 @@
 --                                                                          --
 --                         GNAT LIBRARY COMPONENTS                          --
 --                                                                          --
---              ADA.CONTAINERS.INDEFINITE_DOUBLY_LINKED_LISTS               --
+--                      A D A . C O N T A I N E R S .                       --
+--        I N D E F I N I T E _ D O U B L Y _ L I N K E D _ L I S T S       --
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---             Copyright (C) 2004 Free Software Foundation, Inc.            --
+--          Copyright (C) 2004-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -20,8 +21,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -37,14 +38,13 @@ with Ada.Finalization;
 with Ada.Streams;
 
 generic
-
    type Element_Type (<>) is private;
 
    with function "=" (Left, Right : Element_Type)
       return Boolean is <>;
 
 package Ada.Containers.Indefinite_Doubly_Linked_Lists is
-   pragma Preelaborate (Indefinite_Doubly_Linked_Lists);
+   pragma Preelaborate;
 
    type List is tagged private;
 
@@ -62,34 +62,25 @@ package Ada.Containers.Indefinite_Doubly_Linked_Lists is
 
    procedure Clear (Container : in out List);
 
-   function Element (Position : Cursor)
-      return Element_Type;
+   function Element (Position : Cursor) return Element_Type;
+
+   procedure Replace_Element
+     (Container : in out List;
+      Position  : Cursor;
+      New_Item  : Element_Type);
 
    procedure Query_Element
      (Position : Cursor;
       Process  : not null access procedure (Element : Element_Type));
 
    procedure Update_Element
-     (Position : Cursor;
-      Process  : not null access procedure (Element : in out Element_Type));
-
-   procedure Replace_Element
-     (Position : Cursor;
-      By       : Element_Type);
+     (Container : in out List;
+      Position  : Cursor;
+      Process   : not null access procedure (Element : in out Element_Type));
 
    procedure Move
      (Target : in out List;
       Source : in out List);
-
-   procedure Prepend
-     (Container : in out List;
-      New_Item  : Element_Type;
-      Count     : Count_Type := 1);
-
-   procedure Append
-     (Container : in out List;
-      New_Item  : Element_Type;
-      Count     : Count_Type := 1);
 
    procedure Insert
      (Container : in out List;
@@ -102,6 +93,16 @@ package Ada.Containers.Indefinite_Doubly_Linked_Lists is
       Before    : Cursor;
       New_Item  : Element_Type;
       Position  : out Cursor;
+      Count     : Count_Type := 1);
+
+   procedure Prepend
+     (Container : in out List;
+      New_Item  : Element_Type;
+      Count     : Count_Type := 1);
+
+   procedure Append
+     (Container : in out List;
+      New_Item  : Element_Type;
       Count     : Count_Type := 1);
 
    procedure Delete
@@ -117,21 +118,9 @@ package Ada.Containers.Indefinite_Doubly_Linked_Lists is
      (Container : in out List;
       Count     : Count_Type := 1);
 
-   generic
-      with function "<" (Left, Right : Element_Type)
-         return Boolean is <>;
-   procedure Generic_Sort (Container : in out List);
+   procedure Reverse_Elements (Container : in out List);
 
-   generic
-      with function "<" (Left, Right : Element_Type)
-         return Boolean is <>;
-   procedure Generic_Merge
-     (Target : in out List;
-      Source : in out List);
-
-   procedure Reverse_List (Container : in out List);
-
-   procedure Swap (I, J : Cursor);
+   procedure Swap (Container : in out List; I, J : Cursor);
 
    procedure Swap_Links (Container : in out List; I, J : Cursor);
 
@@ -143,13 +132,13 @@ package Ada.Containers.Indefinite_Doubly_Linked_Lists is
    procedure Splice
      (Target   : in out List;
       Before   : Cursor;
-      Position : Cursor);
+      Source   : in out List;
+      Position : in out Cursor);
 
    procedure Splice
-     (Target   : in out List;
-      Before   : Cursor;
-      Source   : in out List;
-      Position : Cursor);
+     (Container : in out List;
+      Before    : Cursor;
+      Position  : in out Cursor);
 
    function First (Container : List) return Cursor;
 
@@ -159,9 +148,13 @@ package Ada.Containers.Indefinite_Doubly_Linked_Lists is
 
    function Last_Element (Container : List) return Element_Type;
 
-   function Contains
-     (Container : List;
-      Item      : Element_Type) return Boolean;
+   function Next (Position : Cursor) return Cursor;
+
+   procedure Next (Position : in out Cursor);
+
+   function Previous (Position : Cursor) return Cursor;
+
+   procedure Previous (Position : in out Cursor);
 
    function Find
      (Container : List;
@@ -173,13 +166,9 @@ package Ada.Containers.Indefinite_Doubly_Linked_Lists is
       Item      : Element_Type;
       Position  : Cursor := No_Element) return Cursor;
 
-   function Next (Position : Cursor) return Cursor;
-
-   function Previous (Position : Cursor) return Cursor;
-
-   procedure Next (Position : in out Cursor);
-
-   procedure Previous (Position : in out Cursor);
+   function Contains
+     (Container : List;
+      Item      : Element_Type) return Boolean;
 
    function Has_Element (Position : Cursor) return Boolean;
 
@@ -191,6 +180,18 @@ package Ada.Containers.Indefinite_Doubly_Linked_Lists is
      (Container : List;
       Process   : not null access procedure (Position : Cursor));
 
+   generic
+      with function "<" (Left, Right : Element_Type) return Boolean is <>;
+   package Generic_Sorting is
+
+      function Is_Sorted (Container : List) return Boolean;
+
+      procedure Sort (Container : in out List);
+
+      procedure Merge (Target, Source : in out List);
+
+   end Generic_Sorting;
+
 private
    type Node_Type;
    type Node_Access is access Node_Type;
@@ -198,13 +199,11 @@ private
    type Element_Access is access Element_Type;
 
    type Node_Type is
-      record
+      limited record
          Element : Element_Access;
          Next    : Node_Access;
          Prev    : Node_Access;
       end record;
-
-   function "=" (L, R : Node_Type) return Boolean is abstract;
 
    use Ada.Finalization;
 
@@ -213,6 +212,8 @@ private
         First  : Node_Access;
         Last   : Node_Access;
         Length : Count_Type := 0;
+        Busy   : Natural := 0;
+        Lock   : Natural := 0;
      end record;
 
    procedure Adjust (Container : in out List);
@@ -233,7 +234,7 @@ private
 
    for List'Write use Write;
 
-   Empty_List : constant List := List'(Controlled with null, null, 0);
+   Empty_List : constant List := List'(Controlled with null, null, 0, 0, 0);
 
    type List_Access is access constant List;
    for List_Access'Storage_Size use 0;
@@ -244,8 +245,18 @@ private
          Node      : Node_Access;
       end record;
 
+   procedure Read
+     (Stream : access Root_Stream_Type'Class;
+      Item   : out Cursor);
+
+   for Cursor'Read use Read;
+
+   procedure Write
+     (Stream : access Root_Stream_Type'Class;
+      Item   : Cursor);
+
+   for Cursor'Write use Write;
+
    No_Element : constant Cursor := Cursor'(null, null);
 
 end Ada.Containers.Indefinite_Doubly_Linked_Lists;
-
-

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2004, 2005, 2006 Apple Computer, Inc.  All rights reserved.
+ * Copyright (C) 2004, 2005, 2006, 2008 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,26 +26,23 @@
 #import "config.h"
 #import "ClipboardMac.h"
 
-#import "CachedImage.h"
-#import "Document.h"
 #import "DOMElementInternal.h"
 #import "DragClient.h"
 #import "DragController.h"
 #import "Editor.h"
-#import "EventHandler.h"
-#import "FloatRect.h"
 #import "FoundationExtras.h"
+#import "FileList.h"
 #import "Frame.h"
-#import "HTMLImageElement.h"
 #import "Image.h"
 #import "Page.h"
 #import "Pasteboard.h"
-#import "Range.h"
 #import "RenderImage.h"
-#import "WebCoreFrameBridge.h"
+#import "SecurityOrigin.h"
 #import "WebCoreSystemInterface.h"
 
-@class WebArchive;
+#ifdef BUILDING_ON_TIGER
+typedef unsigned NSUInteger;
+#endif
 
 namespace WebCore {
 
@@ -129,9 +126,8 @@ void ClipboardMac::clearData(const String& type)
     // note NSPasteboard enforces changeCount itself on writing - can't write if not the owner
 
     NSString *cocoaType = cocoaTypeFromMIMEType(type);
-    if (cocoaType) {
+    if (cocoaType)
         [m_pasteboard.get() setString:@"" forType:cocoaType];
-    }
 }
 
 void ClipboardMac::clearAllData()
@@ -144,63 +140,77 @@ void ClipboardMac::clearAllData()
     [m_pasteboard.get() declareTypes:[NSArray array] owner:nil];
 }
 
+static NSArray *absoluteURLsFromPasteboardFilenames(NSPasteboard* pasteboard, bool onlyFirstURL = false)
+{
+    NSArray *fileList = [pasteboard propertyListForType:NSFilenamesPboardType];
+
+    // FIXME: Why does this code need to guard against bad values on the pasteboard?
+    ASSERT(!fileList || [fileList isKindOfClass:[NSArray class]]);
+    if (!fileList || ![fileList isKindOfClass:[NSArray class]] || ![fileList count])
+        return nil;
+
+    NSUInteger count = onlyFirstURL ? 1 : [fileList count];
+    NSMutableArray *urls = [NSMutableArray array];
+    for (NSUInteger i = 0; i < count; i++) {
+        NSString *string = [fileList objectAtIndex:i];
+
+        ASSERT([string isKindOfClass:[NSString class]]);  // Added to understand why this if code is here
+        if (![string isKindOfClass:[NSString class]])
+            return nil; // Non-string object in the list, bail out!  FIXME: When can this happen?
+
+        NSURL *url = [NSURL fileURLWithPath:string];
+        [urls addObject:[url absoluteString]];
+    }
+    return urls;
+}
+
+static NSArray *absoluteURLsFromPasteboard(NSPasteboard* pasteboard, bool onlyFirstURL = false)
+{
+    // NOTE: We must always check [availableTypes containsObject:] before accessing pasteboard data
+    // or CoreFoundation will printf when there is not data of the corresponding type.
+    NSArray *availableTypes = [pasteboard types];
+
+    // Try NSFilenamesPboardType because it contains a list
+    if ([availableTypes containsObject:NSFilenamesPboardType]) {
+        if (NSArray* absoluteURLs = absoluteURLsFromPasteboardFilenames(pasteboard, onlyFirstURL))
+            return absoluteURLs;
+    }
+
+    // Fallback to NSURLPboardType (which is a single URL)
+    if ([availableTypes containsObject:NSURLPboardType]) {
+        if (NSURL *url = [NSURL URLFromPasteboard:pasteboard])
+            return [NSArray arrayWithObject:[url absoluteString]];
+    }
+
+    // No file paths on the pasteboard, return nil
+    return nil;
+}
+
 String ClipboardMac::getData(const String& type, bool& success) const
 {
     success = false;
     if (policy() != ClipboardReadable)
         return String();
-    
+
     NSString *cocoaType = cocoaTypeFromMIMEType(type);
     NSString *cocoaValue = nil;
-    NSArray *availableTypes = [m_pasteboard.get() types];
 
-    // Fetch the data in different ways for the different Cocoa types
-
+    // Grab the value off the pasteboard corresponding to the cocoaType
     if ([cocoaType isEqualToString:NSURLPboardType]) {
-        // When both URL and filenames are present, filenames is superior since it can contain a list.
-        // must check this or we get a printf from CF when there's no data of this type
-        if ([availableTypes containsObject:NSFilenamesPboardType]) {
-            NSArray *fileList = [m_pasteboard.get() propertyListForType:NSFilenamesPboardType];
-            if (fileList && [fileList isKindOfClass:[NSArray class]]) {
-                unsigned count = [fileList count];
-                if (count > 0) {
-                    if (type != "text/uri-list")
-                        count = 1;
-                    NSMutableString *URLs = [NSMutableString string];
-                    unsigned i;
-                    for (i = 0; i < count; i++) {
-                        if (i > 0) {
-                            [URLs appendString:@"\n"];
-                        }
-                        NSString *string = [fileList objectAtIndex:i];
-                        if (![string isKindOfClass:[NSString class]])
-                            break;
-                        NSURL *URL = [NSURL fileURLWithPath:string];
-                        [URLs appendString:[URL absoluteString]];
-                    }
-                    if (i == count)
-                        cocoaValue = URLs;
-                }
-            }
-        }
-        if (!cocoaValue) {
-            // must check this or we get a printf from CF when there's no data of this type
-            if ([availableTypes containsObject:NSURLPboardType]) {
-                NSURL *url = [NSURL URLFromPasteboard:m_pasteboard.get()];
-                if (url) {
-                    cocoaValue = [url absoluteString];
-                }
-            }
-        }
-    } else if (cocoaType) {        
+        // "URL" and "text/url-list" both map to NSURLPboardType in cocoaTypeFromMIMEType(), "URL" only wants the first URL
+        bool onlyFirstURL = (type == "URL");
+        NSArray *absoluteURLs = absoluteURLsFromPasteboard(m_pasteboard.get(), onlyFirstURL);
+        cocoaValue = [absoluteURLs componentsJoinedByString:@"\n"];
+    } else if ([cocoaType isEqualToString:NSStringPboardType]) {
+        cocoaValue = [[m_pasteboard.get() stringForType:cocoaType] precomposedStringWithCanonicalMapping];
+    } else if (cocoaType)
         cocoaValue = [m_pasteboard.get() stringForType:cocoaType];
-    }
 
     // Enforce changeCount ourselves for security.  We check after reading instead of before to be
     // sure it doesn't change between our testing the change count and accessing the data.
     if (cocoaValue && m_changeCount == [m_pasteboard.get() changeCount]) {
         success = true;
-        return String(DeprecatedString::fromNSString(cocoaValue));
+        return cocoaValue;
     }
 
     return String();
@@ -220,7 +230,7 @@ bool ClipboardMac::setData(const String &type, const String &data)
         NSURL *url = [[NSURL alloc] initWithString:cocoaData];
         [url writeToPasteboard:m_pasteboard.get()];
 
-        if ([url isFileURL]) {
+        if ([url isFileURL] && m_frame->document()->securityOrigin()->canLoadLocalResources()) {
             [m_pasteboard.get() addTypes:[NSArray arrayWithObject:NSFilenamesPboardType] owner:nil];
             NSArray *fileList = [NSArray arrayWithObject:[url path]];
             [m_pasteboard.get() setPropertyList:fileList forType:NSFilenamesPboardType];
@@ -252,20 +262,37 @@ HashSet<String> ClipboardMac::types() const
         return HashSet<String>();
 
     HashSet<String> result;
-    if (types) {
-        unsigned count = [types count];
-        unsigned i;
-        for (i = 0; i < count; i++) {
-            NSString *pbType = [types objectAtIndex:i];
-            if ([pbType isEqualToString:@"NeXT plain ascii pasteboard type"])
-                continue;   // skip this ancient type that gets auto-supplied by some system conversion
+    NSUInteger count = [types count];
+    for (NSUInteger i = 0; i < count; i++) {
+        NSString *pbType = [types objectAtIndex:i];
+        if ([pbType isEqualToString:@"NeXT plain ascii pasteboard type"])
+            continue;   // skip this ancient type that gets auto-supplied by some system conversion
 
-            String str = MIMETypeFromCocoaType(pbType);
-            if (!result.contains(str))
-                result.add(str);
-        }
+        String str = MIMETypeFromCocoaType(pbType);
+        if (!result.contains(str))
+            result.add(str);
     }
     return result;
+}
+
+// FIXME: We could cache the computed fileList if necessary
+// Currently each access gets a new copy, setData() modifications to the
+// clipboard are not reflected in any FileList objects the page has accessed and stored
+PassRefPtr<FileList> ClipboardMac::files() const
+{
+    if (policy() != ClipboardReadable)
+        return FileList::create();
+
+    NSArray *absoluteURLs = absoluteURLsFromPasteboard(m_pasteboard.get());
+    NSUInteger count = [absoluteURLs count];
+
+    RefPtr<FileList> fileList = FileList::create();
+    for (NSUInteger x = 0; x < count; x++) {
+        NSURL *absoluteURL = [NSURL URLWithString:[absoluteURLs objectAtIndex:x]];
+        ASSERT([absoluteURL isFileURL]);
+        fileList->append(File::create([absoluteURL path]));
+    }
+    return fileList.release(); // We will always return a FileList, sometimes empty
 }
 
 // The rest of these getters don't really have any impact on security, so for now make no checks
@@ -284,10 +311,10 @@ void ClipboardMac::setDragImage(CachedImage* image, Node *node, const IntPoint &
 {
     if (policy() == ClipboardImageWritable || policy() == ClipboardWritable) {
         if (m_dragImage)
-            m_dragImage->deref(this);
+            m_dragImage->removeClient(this);
         m_dragImage = image;
         if (m_dragImage)
-            m_dragImage->ref(this);
+            m_dragImage->addClient(this);
 
         m_dragLoc = loc;
         m_dragImageElement = node;
@@ -332,7 +359,7 @@ void ClipboardMac::declareAndWriteDragImage(Element* element, const KURL& url, c
 {
     ASSERT(frame);
     if (Page* page = frame->page())
-        page->dragController()->client()->declareAndWriteDragImage(m_pasteboard.get(), [DOMElement _wrapElement:element], url.getNSURL(), title, frame);
+        page->dragController()->client()->declareAndWriteDragImage(m_pasteboard.get(), kit(element), url, title, frame);
 }
     
 DragImageRef ClipboardMac::createDragImage(IntPoint& loc) const

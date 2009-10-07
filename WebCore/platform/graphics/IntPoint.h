@@ -29,9 +29,14 @@
 #include "IntSize.h"
 #include <wtf/Platform.h>
 
+#if PLATFORM(QT)
+#include <QDataStream>
+#endif
+
 #if PLATFORM(CG)
 typedef struct CGPoint CGPoint;
 #endif
+
 
 #if PLATFORM(MAC)
 #ifdef NSGEOMETRY_TYPES_SAME_AS_CGGEOMETRY_TYPES
@@ -45,10 +50,20 @@ typedef struct _NSPoint NSPoint;
 typedef struct tagPOINT POINT;
 typedef struct tagPOINTS POINTS;
 #elif PLATFORM(QT)
+QT_BEGIN_NAMESPACE
 class QPoint;
+QT_END_NAMESPACE
+#elif PLATFORM(GTK)
+typedef struct _GdkPoint GdkPoint;
 #endif
-#if PLATFORM(SYMBIAN)
-class TPoint;
+
+#if PLATFORM(WX)
+class wxPoint;
+#endif
+
+#if PLATFORM(SKIA)
+struct SkPoint;
+struct SkIPoint;
 #endif
 
 namespace WebCore {
@@ -57,6 +72,7 @@ class IntPoint {
 public:
     IntPoint() : m_x(0), m_y(0) { }
     IntPoint(int x, int y) : m_x(x), m_y(y) { }
+    explicit IntPoint(const IntSize& size) : m_x(size.width()), m_y(size.height()) { }
 
     int x() const { return m_x; }
     int y() const { return m_y; }
@@ -64,8 +80,26 @@ public:
     void setX(int x) { m_x = x; }
     void setY(int y) { m_y = y; }
 
+    void move(const IntSize& s) { move(s.width(), s.height()); } 
     void move(int dx, int dy) { m_x += dx; m_y += dy; }
     
+    IntPoint expandedTo(const IntPoint& other) const
+    {
+        return IntPoint(m_x > other.m_x ? m_x : other.m_x,
+            m_y > other.m_y ? m_y : other.m_y);
+    }
+
+    IntPoint shrunkTo(const IntPoint& other) const
+    {
+        return IntPoint(m_x < other.m_x ? m_x : other.m_x,
+            m_y < other.m_y ? m_y : other.m_y);
+    }
+
+    void clampNegativeToZero()
+    {
+        *this = expandedTo(IntPoint());
+    }
+
 #if PLATFORM(CG)
     explicit IntPoint(const CGPoint&); // don't do this implicitly since it's lossy
     operator CGPoint() const;
@@ -84,10 +118,20 @@ public:
 #elif PLATFORM(QT)
     IntPoint(const QPoint&);
     operator QPoint() const;
+#elif PLATFORM(GTK)
+    IntPoint(const GdkPoint&);
+    operator GdkPoint() const;
 #endif
-#if PLATFORM(SYMBIAN)
-    IntPoint(const TPoint&);
-    operator TPoint() const;
+
+#if PLATFORM(WX)
+    IntPoint(const wxPoint&);
+    operator wxPoint() const;
+#endif
+
+#if PLATFORM(SKIA)
+    IntPoint(const SkIPoint&);
+    operator SkIPoint() const;
+    operator SkPoint() const;
 #endif
 
 private:
@@ -130,6 +174,23 @@ inline bool operator!=(const IntPoint& a, const IntPoint& b)
 {
     return a.x() != b.x() || a.y() != b.y();
 }
+
+#if PLATFORM(QT)
+inline QDataStream& operator<<(QDataStream& stream, const IntPoint& point)
+{
+    stream << point.x() << point.y();
+    return stream;
+}
+
+inline QDataStream& operator>>(QDataStream& stream, IntPoint& point)
+{
+    int x, y;
+    stream >> x >> y;
+    point.setX(x);
+    point.setY(y);
+    return stream;
+}
+#endif
 
 } // namespace WebCore
 

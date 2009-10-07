@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2006, 2007 Apple Inc. All rights reserved.
+ * Copyright (C) 2006, 2007, 2008 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,13 +26,7 @@
 #include "config.h"
 #include "FileChooser.h"
 
-#include "Document.h"
-#include "FrameView.h"
-#include "Icon.h"
 #include "LocalizedStrings.h"
-#include "RenderObject.h"
-#include "RenderThemeWin.h"
-#include "RenderView.h"
 #include "StringTruncator.h"
 #include <shlwapi.h>
 #include <tchar.h>
@@ -40,62 +34,22 @@
 
 namespace WebCore {
 
-FileChooser::FileChooser(FileChooserClient* client, const String& filename)
-    : m_client(client)
-    , m_filename(filename)
-    , m_icon(chooseIcon(filename))
-{
-}
-
-FileChooser::~FileChooser()
-{
-}
-
-void FileChooser::openFileChooser(Document* document)
-{
-    FrameView* view = document->view();
-    if (!view)
-        return;
-
-    TCHAR fileBuf[MAX_PATH];
-    OPENFILENAME ofn;
-
-    memset(&ofn, 0, sizeof(ofn));
-    
-    // Need to zero out the first char of fileBuf so GetOpenFileName doesn't think it's an initialization string
-    fileBuf[0] = '\0';
-
-    ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner = view->containingWindow();
-    ofn.lpstrFilter = _T("All Files\0*.*\0\0");
-    ofn.lpstrFile = fileBuf;
-    ofn.nMaxFile = sizeof(fileBuf);
-    ofn.lpstrTitle = _T("Upload file");
-    ofn.Flags = OFN_ENABLESIZING | OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
-
-    // We need this protector because otherwise we can be deleted if the file upload control is detached while
-    // we're within the GetOpenFileName call.
-    RefPtr<FileChooser> protector(this);
-
-    if (GetOpenFileName(&ofn))
-        chooseFile(String(fileBuf));
-}
-
 String FileChooser::basenameForWidth(const Font& font, int width) const
 {
     if (width <= 0)
         return String();
 
     String string;
-    if (m_filename.isEmpty())
+    if (m_filenames.isEmpty())
         string = fileButtonNoFileSelectedLabel();
-    else {
-        String tmpFilename = m_filename;
+    else if (m_filenames.size() == 1) {
+        String tmpFilename = m_filenames[0];
         LPTSTR basename = PathFindFileName(tmpFilename.charactersWithNullTermination());
         string = String(basename);
-    }
+    } else
+        return StringTruncator::rightTruncate(String::number(m_filenames.size()) + " files", width, font, false);
 
     return StringTruncator::centerTruncate(string, width, font, false);
 }
 
-}
+} // namespace WebCore

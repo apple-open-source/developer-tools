@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2006, 2007 Apple Inc.  All rights reserved.
+ * Copyright (C) 2006, 2007, 2008 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,73 +26,43 @@
 #ifndef CachedPage_h
 #define CachedPage_h
 
-#include "DocumentLoader.h"
-#include "Shared.h"
-#include <wtf/Forward.h>
-#include <wtf/RefPtr.h>
-#include <wtf/OwnPtr.h>
-
-#if PLATFORM(MAC)
-#include <wtf/RetainPtr.h>
-typedef struct objc_object* id;
-#endif
-
-namespace KJS {
-    
-    class PausedTimeouts;
-    class SavedBuiltins;
-    class SavedProperties;
-}
+#include "CachedFrame.h"
 
 namespace WebCore {
-
+    
+    class CachedFramePlatformData;
+    class DOMWindow;
     class Document;
+    class DocumentLoader;
     class FrameView;
+    class KURL;
     class Node;
     class Page;
 
-class CachedPage : public Shared<CachedPage> {
+class CachedPage : public RefCounted<CachedPage> {
 public:
     static PassRefPtr<CachedPage> create(Page*);
     ~CachedPage();
-    
-    void clear();
-    Document* document() const { return m_document.get(); }
-    FrameView* view() const { return m_view.get(); }
-    Node* mousePressNode() const { return m_mousePressNode.get(); }
-    const KURL& URL() const { return m_URL; }
+
     void restore(Page*);
+    void clear();
+
+    Document* document() const { return m_cachedMainFrame->document(); }
+    DocumentLoader* documentLoader() const { return m_cachedMainFrame->documentLoader(); }
+    FrameView* mainFrameView() const { return m_cachedMainFrame->view(); }
+    const KURL& url() const { return m_cachedMainFrame->url(); }
+    DOMWindow* domWindow() const { return m_cachedMainFrame->domWindow(); }
+
+    double timeStamp() const { return m_timeStamp; }
     
-    void close();
-    
-    void setTimeStamp(double);
-    void setTimeStampToNow();
-    double timeStamp() const;
-    void setDocumentLoader(PassRefPtr<DocumentLoader>);
-    DocumentLoader* documentLoader();
-#if PLATFORM(MAC)
-    void setDocumentView(id);
-    id documentView();
-#endif
+    CachedFrame* cachedMainFrame() { return m_cachedMainFrame.get(); }
 
 private:
     CachedPage(Page*);
-    RefPtr<DocumentLoader> m_documentLoader;
-    double m_timeStamp;
 
-    RefPtr<Document> m_document;
-    RefPtr<FrameView> m_view;
-    RefPtr<Node> m_mousePressNode;
-    KURL m_URL;
-    OwnPtr<KJS::SavedProperties> m_windowProperties;
-    OwnPtr<KJS::SavedProperties> m_locationProperties;
-    OwnPtr<KJS::SavedBuiltins> m_interpreterBuiltins;
-    OwnPtr<KJS::PausedTimeouts> m_pausedTimeouts;
-        
-#if PLATFORM(MAC)
-    RetainPtr<id> m_documentView;
-#endif
-}; // class CachedPage
+    double m_timeStamp;
+    RefPtr<CachedFrame> m_cachedMainFrame;
+};
 
 } // namespace WebCore
 

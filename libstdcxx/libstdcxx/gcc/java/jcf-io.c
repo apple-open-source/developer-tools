@@ -1,5 +1,5 @@
 /* Utility routines for finding and reading Java(TM) .class files.
-   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2002, 2003, 2004
+   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2002, 2003, 2004, 2005
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -16,8 +16,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  
 
 Java and all Java-based marks are trademarks or registered trademarks
 of Sun Microsystems, Inc. in the United States and other countries.
@@ -188,11 +188,11 @@ int
 read_zip_member (JCF *jcf,  ZipDirectory *zipd, ZipFile *zipf)
 {
   jcf->filbuf = jcf_unexpected_eof;
-  jcf->zipd = (void *)zipd;
+  jcf->zipd = zipd;
 
   if (zipd->compression_method == Z_NO_COMPRESSION)
     {
-      jcf->buffer = ALLOC (zipd->size);
+      jcf->buffer = XNEWVEC (unsigned char, zipd->size);
       jcf->buffer_end = jcf->buffer + zipd->size;
       jcf->read_ptr = jcf->buffer;
       jcf->read_end = jcf->buffer_end;
@@ -208,13 +208,13 @@ read_zip_member (JCF *jcf,  ZipDirectory *zipd, ZipFile *zipf)
       d_stream.zfree = (free_func) 0;
       d_stream.opaque = (voidpf) 0;
 
-      jcf->buffer = ALLOC (zipd->uncompressed_size);
+      jcf->buffer = XNEWVEC (unsigned char, zipd->uncompressed_size);
       d_stream.next_out = jcf->buffer;
       d_stream.avail_out = zipd->uncompressed_size;
       jcf->buffer_end = jcf->buffer + zipd->uncompressed_size;
       jcf->read_ptr = jcf->buffer;
       jcf->read_end = jcf->buffer_end;
-      buffer = ALLOC (zipd->size);
+      buffer = XNEWVEC (char, zipd->size);
       d_stream.next_in = (unsigned char *) buffer;
       d_stream.avail_in = zipd->size;
       if (lseek (zipf->fd, zipd->filestart, 0) < 0
@@ -225,7 +225,7 @@ read_zip_member (JCF *jcf,  ZipDirectory *zipd, ZipFile *zipf)
       inflateInit2 (&d_stream, -MAX_WBITS);
       inflate (&d_stream, Z_NO_FLUSH);
       inflateEnd (&d_stream);
-      FREE (buffer);
+      free (buffer);
     }
 
   return 0;
@@ -246,7 +246,7 @@ open_class (const char *filename, JCF *jcf, int fd, const char *dep_name)
       if (dep_name != NULL)
 	jcf_dependency_add_file (dep_name, 0);
       JCF_ZERO (jcf);
-      jcf->buffer = ALLOC (stat_buf.st_size);
+      jcf->buffer = XNEWVEC (unsigned char, stat_buf.st_size);
       jcf->buffer_end = jcf->buffer + stat_buf.st_size;
       jcf->read_ptr = jcf->buffer;
       jcf->read_end = jcf->buffer_end;
@@ -311,6 +311,14 @@ typedef struct memoized_dirlist_entry
   struct dirent **files;
 } memoized_dirlist_entry;
 
+/* A hash function for a memoized_dirlist_entry.  */
+static hashval_t
+memoized_dirlist_hash (const void *entry)
+{
+  const memoized_dirlist_entry *mde = (const memoized_dirlist_entry *) entry;
+  return htab_hash_string (mde->dir);
+}
+
 /* Returns true if ENTRY (a memoized_dirlist_entry *) corresponds to
    the directory given by KEY (a char *) giving the directory 
    name.  */
@@ -341,11 +349,12 @@ caching_stat (char *filename, struct stat *buf)
   char *base;
   memoized_dirlist_entry *dent;
   void **slot;
+  struct memoized_dirlist_entry temp;
   
   /* If the hashtable has not already been created, create it now.  */
   if (!memoized_dirlists)
     memoized_dirlists = htab_create (37,
-				     htab_hash_string,
+				     memoized_dirlist_hash,
 				     memoized_dirlist_lookup_eq,
 				     NULL);
 
@@ -364,13 +373,17 @@ caching_stat (char *filename, struct stat *buf)
   else
     base = filename;
 
-  /* Obtain the entry for this directory from the hash table.  */
-  slot = htab_find_slot (memoized_dirlists, filename, INSERT);
+  /* Obtain the entry for this directory from the hash table.  This
+     approach is ok since we know that the hash function only looks at
+     the directory name.  */
+  temp.dir = filename;
+  temp.num_files = 0;
+  temp.files = NULL;
+  slot = htab_find_slot (memoized_dirlists, &temp, INSERT);
   if (!*slot)
     {
       /* We have not already scanned this directory; scan it now.  */
-      dent = ((memoized_dirlist_entry *) 
-	      ALLOC (sizeof (memoized_dirlist_entry)));
+      dent = XNEW (memoized_dirlist_entry);
       dent->dir = xstrdup (filename);
       /* Unfortunately, scandir is not fully standardized.  In
 	 particular, the type of the function pointer passed as the
@@ -533,7 +546,7 @@ find_class (const char *classname, int classname_length, JCF *jcf,
   if (! java && ! class && java_buf.st_mtime > class_buf.st_mtime)
     {
       if (flag_newer)
-	warning ("source file for class %qs is newer than its matching class file.  Source file %qs used instead", classname, java_buffer);
+	warning (0, "source file for class %qs is newer than its matching class file.  Source file %qs used instead", classname, java_buffer);
       class = -1;
     }
 

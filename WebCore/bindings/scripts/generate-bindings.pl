@@ -21,7 +21,7 @@
 # Boston, MA 02110-1301, USA.
 # 
 
-# This script is a temporary hack.
+# This script is a temporary hack. 
 # Files are generated in the source directory, when they really should go
 # to the DerivedSources directory.
 # This should also eventually be a build rule driven off of .idl files
@@ -44,7 +44,7 @@ my $defines;
 my $preprocessor;
 
 GetOptions('include=s@' => \@idlDirectories,
-           'outputdir=s' => \$outputDirectory,
+           'outputDir=s' => \$outputDirectory,
            'generator=s' => \$generator,
            'defines=s' => \$defines,
            'preprocessor=s' => \$preprocessor);

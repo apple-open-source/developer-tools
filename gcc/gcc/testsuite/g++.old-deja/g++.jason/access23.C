@@ -42,14 +42,18 @@ public:
   void DoSomething() {
     PUB_A = 0;
     Foo::A = 0;
-    printf("%x\n",pX);  
+  /* APPLE LOCAL default to Wformat-security 5764921 */
+    printf("%p\n",pX);  
     Foo::PUB.A = 0;
-    printf("%x\n",PUB.pX);  
+  /* APPLE LOCAL default to Wformat-security 5764921 */
+    printf("%p\n",PUB.pX);  
     B = 0;			
-    printf("%x\n",Foo::pY);  
+  /* APPLE LOCAL default to Wformat-security 5764921 */
+    printf("%p\n",Foo::pY);  
     PRT_A = 0;
     PRT.B = 0;		
-    printf("%x\n",Foo::PRT.pY);	
+  /* APPLE LOCAL default to Wformat-security 5764921 */
+    printf("%p\n",Foo::PRT.pY);	
     PRV_A = 0;			// { dg-error "" } 
     Foo::C = 0;			// { dg-error "" } 
     printf("%x\n",pZ);  	// { dg-error "" } 
@@ -64,7 +68,8 @@ int main()
 
   a.PUB_A = 0;
   a.A = 0;
-  printf("%x\n",a.pX);  
+  /* APPLE LOCAL default to Wformat-security 5764921 */
+  printf("%p\n",a.pX);  
   a.PRT_A = 0;			// { dg-error "" } 
   a.B = 0;			// { dg-error "" } 
   printf("%x\n",a.pY);  	// { dg-error "" } 
@@ -72,7 +77,8 @@ int main()
   a.C = 0;			// { dg-error "" } 
   printf("%x\n",a.pZ);  	// { dg-error "" } 
   a.PUB.A = 0;
-  printf("%x\n",a.PUB.pX);  
+  /* APPLE LOCAL default to Wformat-security 5764921 */
+  printf("%p\n",a.PUB.pX);  
   a.PRT.B = 0;			// { dg-error "" } 
   printf("%x\n",a.PRT.pY);  	// { dg-error "" } 
   a.PRV.C = 0;			// { dg-error "" } 

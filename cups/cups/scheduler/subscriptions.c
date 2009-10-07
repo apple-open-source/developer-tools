@@ -1,9 +1,9 @@
 /*
- * "$Id: subscriptions.c 6649 2007-07-11 21:46:42Z mike $"
+ * "$Id: subscriptions.c 7824 2008-08-01 21:11:55Z mike $"
  *
  *   Subscription routines for the Common UNIX Printing System (CUPS) scheduler.
  *
- *   Copyright 2007 by Apple Inc.
+ *   Copyright 2007-2009 by Apple Inc.
  *   Copyright 1997-2007 by Easy Software Products, all rights reserved.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -297,7 +297,7 @@ cupsdAddEvent(
   }
 
   if (temp)
-    cupsdSaveAllSubscriptions();
+    cupsdMarkDirty(CUPSD_DIRTY_SUBSCRIPTIONS);
   else
     cupsdLogMessage(CUPSD_LOG_DEBUG, "Discarding unused %s event...",
                     cupsdEventName(event));
@@ -323,7 +323,7 @@ cupsdAddSubscription(
                   "cupsdAddSubscription(mask=%x, dest=%p(%s), job=%p(%d), "
 		  "uri=\"%s\")",
                   mask, dest, dest ? dest->name : "", job, job ? job->id : 0,
-		  uri);
+		  uri ? uri : "(null)");
 
   if (!Subscriptions)
     Subscriptions = cupsArrayNew((cups_array_func_t)cupsd_compare_subscriptions,
@@ -341,8 +341,56 @@ cupsdAddSubscription(
   * Limit the number of subscriptions...
   */
 
-  if (cupsArrayCount(Subscriptions) >= MaxSubscriptions)
+  if (MaxSubscriptions > 0 && cupsArrayCount(Subscriptions) >= MaxSubscriptions)
+  {
+    cupsdLogMessage(CUPSD_LOG_DEBUG,
+                    "cupsdAddSubscription: Reached MaxSubscriptions %d "
+		    "(count=%d)", MaxSubscriptions,
+		    cupsArrayCount(Subscriptions));
     return (NULL);
+  }
+
+  if (MaxSubscriptionsPerJob > 0 && job)
+  {
+    int	count;				/* Number of job subscriptions */
+
+    for (temp = (cupsd_subscription_t *)cupsArrayFirst(Subscriptions),
+             count = 0;
+         temp;
+	 temp = (cupsd_subscription_t *)cupsArrayNext(Subscriptions))
+      if (temp->job == job)
+        count ++;
+
+    if (count >= MaxSubscriptionsPerJob)
+    {
+      cupsdLogMessage(CUPSD_LOG_DEBUG,
+		      "cupsdAddSubscription: Reached MaxSubscriptionsPerJob %d "
+		      "for job #%d (count=%d)", MaxSubscriptionsPerJob,
+		      job->id, count);
+      return (NULL);
+    }
+  }
+
+  if (MaxSubscriptionsPerPrinter > 0 && dest)
+  {
+    int	count;				/* Number of printer subscriptions */
+
+    for (temp = (cupsd_subscription_t *)cupsArrayFirst(Subscriptions),
+             count = 0;
+         temp;
+	 temp = (cupsd_subscription_t *)cupsArrayNext(Subscriptions))
+      if (temp->dest == dest)
+        count ++;
+
+    if (count >= MaxSubscriptionsPerPrinter)
+    {
+      cupsdLogMessage(CUPSD_LOG_DEBUG,
+		      "cupsdAddSubscription: Reached "
+		      "MaxSubscriptionsPerPrinter %d for %s (count=%d)",
+		      MaxSubscriptionsPerPrinter, dest->name, count);
+      return (NULL);
+    }
+  }
 
  /*
   * Allocate memory for this subscription...
@@ -388,6 +436,13 @@ cupsdAddSubscription(
   */
 
   cupsArrayAdd(Subscriptions, temp);
+
+ /*
+  * For RSS subscriptions, run the notifier immediately...
+  */
+
+  if (uri && !strncmp(uri, "rss:", 4))
+    cupsd_start_notifier(temp);
 
   return (temp);
 }
@@ -463,7 +518,7 @@ cupsdDeleteSubscription(
   */
 
   if (update)
-    cupsdSaveAllSubscriptions();
+    cupsdMarkDirty(CUPSD_DIRTY_SUBSCRIPTIONS);
 }
 
 
@@ -504,9 +559,14 @@ cupsdEventName(
     case CUPSD_EVENT_PRINTER_MODIFIED :
         return ("printer-modified");
 
+    case CUPSD_EVENT_PRINTER_QUEUE_ORDER_CHANGED :
+        return ("printer-queue-order-changed");
+
+    case CUPSD_EVENT_PRINTER_STATE :
     case CUPSD_EVENT_PRINTER_STATE_CHANGED :
         return ("printer-state-changed");
 
+    case CUPSD_EVENT_PRINTER_CONFIG :
     case CUPSD_EVENT_PRINTER_CONFIG_CHANGED :
         return ("printer-config-changed");
 
@@ -529,8 +589,6 @@ cupsdEventName(
         return ("job-progress");
 
     case CUPSD_EVENT_JOB_STATE :
-        return ("job-state");
-
     case CUPSD_EVENT_JOB_STATE_CHANGED :
         return ("job-state-changed");
 
@@ -577,14 +635,14 @@ cupsdEventValue(const char *name)	/* I - Name of event */
     return (CUPSD_EVENT_PRINTER_DELETED);
   else if (!strcmp(name, "printer-modified"))
     return (CUPSD_EVENT_PRINTER_MODIFIED);
+  else if (!strcmp(name, "printer-queue-order-changed"))
+    return (CUPSD_EVENT_PRINTER_QUEUE_ORDER_CHANGED);
   else if (!strcmp(name, "printer-state-changed"))
     return (CUPSD_EVENT_PRINTER_STATE_CHANGED);
   else if (!strcmp(name, "printer-config-changed"))
     return (CUPSD_EVENT_PRINTER_CONFIG_CHANGED);
   else if (!strcmp(name, "printer-changed"))
     return (CUPSD_EVENT_PRINTER_CHANGED);
-  else if (!strcmp(name, "job-state"))
-    return (CUPSD_EVENT_JOB_STATE);
   else if (!strcmp(name, "job-created"))
     return (CUPSD_EVENT_JOB_CREATED);
   else if (!strcmp(name, "job-completed"))
@@ -643,7 +701,7 @@ cupsdExpireSubscriptions(
     }
 
   if (update)
-    cupsdSaveAllSubscriptions();
+    cupsdMarkDirty(CUPSD_DIRTY_SUBSCRIPTIONS);
 }
 
 
@@ -731,7 +789,7 @@ cupsdLoadAllSubscriptions(void)
         cupsdLogMessage(CUPSD_LOG_ERROR,
 	                "Syntax error on line %d of subscriptions.conf.",
 	                linenum);
-        return;
+        break;
       }
     }
     else if (!strcasecmp(line, "</Subscription>"))
@@ -741,7 +799,7 @@ cupsdLoadAllSubscriptions(void)
         cupsdLogMessage(CUPSD_LOG_ERROR,
 	                "Syntax error on line %d of subscriptions.conf.",
 	                linenum);
-        return;
+        break;
       }
 
       if (delete_sub)
@@ -755,7 +813,6 @@ cupsdLoadAllSubscriptions(void)
       cupsdLogMessage(CUPSD_LOG_ERROR,
                       "Syntax error on line %d of subscriptions.conf.",
 	              linenum);
-      return;
     }
     else if (!strcasecmp(line, "Events"))
     {
@@ -769,7 +826,7 @@ cupsdLoadAllSubscriptions(void)
 	cupsdLogMessage(CUPSD_LOG_ERROR,
 	                "Syntax error on line %d of subscriptions.conf.",
 	                linenum);
-	return;
+	break;
       }
 
       while (*value)
@@ -792,7 +849,7 @@ cupsdLoadAllSubscriptions(void)
 	  cupsdLogMessage(CUPSD_LOG_ERROR,
 	                  "Unknown event name \'%s\' on line %d of subscriptions.conf.",
 	                  value, linenum);
-	  return;
+	  break;
 	}
 
 	value = valueptr;
@@ -811,7 +868,7 @@ cupsdLoadAllSubscriptions(void)
 	cupsdLogMessage(CUPSD_LOG_ERROR,
 	                "Syntax error on line %d of subscriptions.conf.",
 	                linenum);
-	return;
+	break;
       }
     }
     else if (!strcasecmp(line, "Recipient"))
@@ -827,7 +884,7 @@ cupsdLoadAllSubscriptions(void)
 	cupsdLogMessage(CUPSD_LOG_ERROR,
 	                "Syntax error on line %d of subscriptions.conf.",
 	                linenum);
-	return;
+	break;
       }
     }
     else if (!strcasecmp(line, "JobId"))
@@ -851,7 +908,7 @@ cupsdLoadAllSubscriptions(void)
 	cupsdLogMessage(CUPSD_LOG_ERROR,
 	                "Syntax error on line %d of subscriptions.conf.",
 	                linenum);
-	return;
+	break;
       }
     }
     else if (!strcasecmp(line, "PrinterName"))
@@ -875,7 +932,7 @@ cupsdLoadAllSubscriptions(void)
 	cupsdLogMessage(CUPSD_LOG_ERROR,
 	                "Syntax error on line %d of subscriptions.conf.",
 	                linenum);
-	return;
+	break;
       }
     }
     else if (!strcasecmp(line, "UserData"))
@@ -937,7 +994,7 @@ cupsdLoadAllSubscriptions(void)
 	cupsdLogMessage(CUPSD_LOG_ERROR,
 	                "Syntax error on line %d of subscriptions.conf.",
 	                linenum);
-	return;
+	break;
       }
     }
     else if (!strcasecmp(line, "LeaseDuration"))
@@ -956,7 +1013,7 @@ cupsdLoadAllSubscriptions(void)
 	cupsdLogMessage(CUPSD_LOG_ERROR,
 	                "Syntax error on line %d of subscriptions.conf.",
 	                linenum);
-	return;
+	break;
       }
     }
     else if (!strcasecmp(line, "Interval"))
@@ -972,7 +1029,7 @@ cupsdLoadAllSubscriptions(void)
 	cupsdLogMessage(CUPSD_LOG_ERROR,
 	                "Syntax error on line %d of subscriptions.conf.",
 	                linenum);
-	return;
+	break;
       }
     }
     else if (!strcasecmp(line, "ExpirationTime"))
@@ -988,7 +1045,7 @@ cupsdLoadAllSubscriptions(void)
 	cupsdLogMessage(CUPSD_LOG_ERROR,
 	                "Syntax error on line %d of subscriptions.conf.",
 	                linenum);
-	return;
+	break;
       }
     }
     else if (!strcasecmp(line, "NextEventId"))
@@ -1004,7 +1061,7 @@ cupsdLoadAllSubscriptions(void)
 	cupsdLogMessage(CUPSD_LOG_ERROR,
 	                "Syntax error on line %d of subscriptions.conf.",
 	                linenum);
-	return;
+	break;
       }
     }
     else
@@ -1360,7 +1417,7 @@ cupsd_send_notification(
 
 
   cupsdLogMessage(CUPSD_LOG_DEBUG2,
-                  "cupsd_send_notification(sub=%p(%d), event=%p(%s))\n",
+                  "cupsd_send_notification(sub=%p(%d), event=%p(%s))",
                   sub, sub->id, event, cupsdEventName(event->event));
 
  /*
@@ -1565,7 +1622,7 @@ cupsd_start_notifier(
   */
 
   if (cupsdStartProcess(command, argv, envp, fds[0], -1, NotifierPipes[1],
-			-1, -1, 0, &pid) < 0)
+			-1, -1, 0, DefaultProfile, NULL, &pid) < 0)
   {
    /*
     * Error - can't fork!
@@ -1607,11 +1664,16 @@ cupsd_update_notifier(void)
 
   while (cupsdStatBufUpdate(NotifierStatusBuffer, &loglevel,
                             message, sizeof(message)))
+  {
+    if (loglevel == CUPSD_LOG_INFO)
+      cupsdLogMessage(CUPSD_LOG_INFO, "%s", message);
+
     if (!strchr(NotifierStatusBuffer->buffer, '\n'))
       break;
+  }
 }
 
 
 /*
- * End of "$Id: subscriptions.c 6649 2007-07-11 21:46:42Z mike $".
+ * End of "$Id: subscriptions.c 7824 2008-08-01 21:11:55Z mike $".
  */

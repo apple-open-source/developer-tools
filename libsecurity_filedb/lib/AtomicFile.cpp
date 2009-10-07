@@ -19,6 +19,7 @@
 #include <security_filedb/AtomicFile.h>
 
 #include <security_utilities/devrandom.h>
+#include <CommonCrypto/CommonDigest.h>
 #include <security_cdsa_utilities/cssmerrors.h>
 #include <Security/cssm.h>
 #include <errno.h>
@@ -27,8 +28,10 @@
 #include <syslog.h>
 #include <sys/param.h>
 #include <sys/types.h>
-#include <unistd.h>
-
+#include <sys/mount.h>
+#include <sys/file.h>
+#include <sys/stat.h>
+#include <sys/mman.h>
 
 #define kAtomicFileMaxBlockSize INT_MAX
 
@@ -40,6 +43,33 @@ AtomicFile::AtomicFile(const std::string &inPath) :
 	mPath(inPath)
 {
 	pathSplit(inPath, mDir, mFile);
+	
+	// determine if the path is on a local or a networked volume
+	struct statfs info;
+	int result = statfs(mDir.c_str(), &info);
+	if (result == -1) // error on opening?
+	{
+		mIsLocalFileSystem = false; // revert to the old ways if we can't tell what kind of system we have
+	}
+	else
+	{
+		mIsLocalFileSystem = (info.f_flags & MNT_LOCAL) != 0;
+		if (mIsLocalFileSystem)
+		{
+			// compute the name of the lock file for this file
+			CC_SHA1_CTX ctx;
+			CC_SHA1_Init(&ctx);
+			CC_SHA1_Update(&ctx, (const void*) mFile.c_str(), mFile.length());
+			u_int8_t digest[CC_SHA1_DIGEST_LENGTH];
+			CC_SHA1_Final(digest, &ctx);
+
+			u_int32_t hash = (digest[0] << 24) | (digest[1] << 16) | (digest[2] << 8) | digest[3];
+			
+			char buffer[256];
+			sprintf(buffer, "%08X", hash);
+			mLockFilePath = mDir + ".fl" + buffer;
+		}
+	}
 }
 
 AtomicFile::~AtomicFile()
@@ -60,6 +90,9 @@ AtomicFile::performDelete()
 		else
 			UnixError::throwMe(error);
 	}
+
+	// unlink our lock file
+	::unlink(mLockFilePath.c_str());
 }
 
 // Aquire the write lock and rename the file (and bump the version and stuff).
@@ -126,21 +159,16 @@ AtomicFile::create(mode_t mode)
 }
 
 // Lock the database file for writing and return a newly created AtomicTempFile.
+// If the parent directory allows the write we're going to allow this.  Previous
+// versions checked for writability of the db file and that caused problems when
+// setuid programs had made entries.  As long as the db (keychain) file is readable
+// this function can make the newer keychain file with the correct owner just by virtue
+// of the copy that takes place.
+
 RefPointer<AtomicTempFile>
 AtomicFile::write()
 {
-	// check and see if we can write before doing so.  We have to open it (access is not sufficient
-	// due to acl support
-	int fileNo = open (path().c_str(), O_WRONLY, 0);
-	if (fileNo == -1)
-	{
-		CssmError::throwMe(CSSM_ERRCODE_OS_ACCESS_DENIED);
-	}
-	else
-	{
-		close (fileNo);
-	}
-	
+
 	RefPointer<AtomicLockedFile> lock(new AtomicLockedFile(*this));
 	return new AtomicTempFile(*this, lock);
 }
@@ -149,7 +177,7 @@ AtomicFile::write()
 RefPointer<AtomicBufferedFile>
 AtomicFile::read()
 {
-	return new AtomicBufferedFile(mPath);
+	return new AtomicBufferedFile(mPath, mIsLocalFileSystem);
 }
 
 mode_t
@@ -189,6 +217,24 @@ AtomicFile::pathSplit(const std::string &inFull, std::string &outDir, std::strin
 	}
 }
 
+static std::string RemoveDoubleSlashes(const std::string &path)
+{
+	std::string result;
+	unsigned i;
+	for (i = 0; i < path.length(); ++i)
+	{
+		result += path[i];
+		if ((i < path.length() - 2) && path[i] == '/' && path[i + 1] == '/')
+		{
+			i += 1; // skip a second '/'
+		}
+	}
+	
+	return result;
+}
+
+
+
 //
 // Make sure the directory up to inDir exists inDir *must* end in a slash.
 //
@@ -202,6 +248,17 @@ AtomicFile::mkpath(const std::string &inDir, mode_t mode)
 		struct stat sb;
 		if (::stat(cpath, &sb))
 		{
+			// if we are creating a path in the user's home directory, override the user's mode
+			std::string homedir = getenv("HOME");
+			
+			// canonicalize the path (remove double slashes)
+			string canonPath = RemoveDoubleSlashes(cpath);
+			
+			if (canonPath.find(homedir, 0) == 0)
+			{
+				mode = 0700;
+			}
+			
 			if (errno != ENOENT || ::mkdir(cpath, mode))
 				UnixError::throwMe(errno);
 		}
@@ -239,11 +296,12 @@ AtomicFile::rclose(int fd)
 // The file is read into memory and closed after this is done.
 // The memory is released when this object is destroyed.
 //
-AtomicBufferedFile::AtomicBufferedFile(const std::string &inPath) :
+AtomicBufferedFile::AtomicBufferedFile(const std::string &inPath, bool isLocal) :
 	mPath(inPath),
 	mFileRef(-1),
 	mBuffer(NULL),
-	mLength(0)
+	mLength(0),
+	mIsMapped(isLocal)
 {
 }
 
@@ -258,7 +316,7 @@ AtomicBufferedFile::~AtomicBufferedFile()
 	if (mBuffer)
 	{
 		secdebug("atomicfile", "%p free %s buffer %p", this, mPath.c_str(), mBuffer);
-		free(mBuffer);
+		unloadBuffer();
 	}
 }
 
@@ -291,8 +349,13 @@ AtomicBufferedFile::open()
 			UnixError::throwMe(error);
     }
 
-	mLength = ::lseek(mFileRef, 0, SEEK_END);
-	if (mLength == -1)
+	struct stat st;
+	int result = fstat(mFileRef, &st);
+	if (result == 0)
+	{
+		mLength = st.st_size;
+	}
+	else
 	{
 		int error = errno;
 		secdebug("atomicfile", "lseek(%s, END): %s", path, strerror(error));
@@ -304,6 +367,73 @@ AtomicBufferedFile::open()
 
 	return mLength;
 }
+
+//
+// Unload the contents of the file.
+//
+void
+AtomicBufferedFile::unloadBuffer()
+{
+	if (!mIsMapped)
+	{
+		delete [] mBuffer;
+	}
+	else
+	{
+		munmap(mBuffer, mLength);
+	}
+}
+
+//
+// Load the contents of the file into memory.
+// If we are on a local file system, we mmap the file.  Otherwise, we
+// read it all into memory
+void
+AtomicBufferedFile::loadBuffer()
+{
+	if (!mIsMapped)
+	{
+		// make a buffer big enough to hold the entire file
+		mBuffer = new uint8[mLength];
+		lseek(mFileRef, 0, SEEK_SET);
+		ssize_t pos = 0;
+		
+		ssize_t bytesToRead = mLength;
+		while (bytesToRead > 0)
+		{
+			ssize_t bytesRead = ::read(mFileRef, mBuffer + pos, bytesToRead);
+			if (bytesRead == -1)
+			{
+				if (errno != EINTR)
+				{
+					int error = errno;
+					secdebug("atomicfile", "lseek(%s, END): %s", mPath.c_str(), strerror(error));
+					AtomicFile::rclose(mFileRef);
+					UnixError::throwMe(error);
+				}
+			}
+			else
+			{
+				bytesToRead -= bytesRead;
+				pos += bytesRead;
+			}
+		}
+	}
+	else
+	{
+		// mmap the buffer into place
+		mBuffer = (uint8*) mmap(NULL, mLength, PROT_READ, MAP_PRIVATE, mFileRef, 0);
+		if (mBuffer == (uint8*) -1)
+		{
+			int error = errno;
+			secdebug("atomicfile", "lseek(%s, END): %s", mPath.c_str(), strerror(error));
+			AtomicFile::rclose(mFileRef);
+			UnixError::throwMe(error);
+		}
+	}
+}
+
+
 
 //
 // Read the file starting at inOffset for inLength bytes into the buffer and return
@@ -321,51 +451,25 @@ AtomicBufferedFile::read(off_t inOffset, off_t inLength, off_t &outLength)
 	}
 
 	off_t bytesLeft = inLength;
-	uint8 *ptr;
 	if (mBuffer)
 	{
 		secdebug("atomicfile", "%p free %s buffer %p", this, mPath.c_str(), mBuffer);
-		free(mBuffer);
+		unloadBuffer();
 	}
 
-	mBuffer = ptr = reinterpret_cast<uint8 *>(malloc(bytesLeft));
+	loadBuffer();
+	
 	secdebug("atomicfile", "%p allocated %s buffer %p size %qd", this, mPath.c_str(), mBuffer, bytesLeft);
-	off_t pos = inOffset;
-	while (bytesLeft)
+	
+	ssize_t maxEnd = inOffset + inLength;
+	if (maxEnd > mLength)
 	{
-		size_t toRead = bytesLeft > kAtomicFileMaxBlockSize ? kAtomicFileMaxBlockSize : size_t(bytesLeft);
-		ssize_t bytesRead = ::pread(mFileRef, ptr, toRead, pos);
-		if (bytesRead == -1)
-		{
-			int error = errno;
-			if (error == EINTR)
-			{
-				// We got interrupted by a signal, so try again.
-				secdebug("atomicfile", "pread %s: interrupted, retrying", mPath.c_str());
-				continue;
-			}
-
-			secdebug("atomicfile", "pread %s: %s", mPath.c_str(), strerror(error));
-			free(mBuffer);
-			mBuffer = NULL;
-			UnixError::throwMe(error);
-		}
-
-		// Read returning 0 means EOF was reached so we're done.
-		if (bytesRead == 0)
-			break;
-
-		secdebug("atomicfile", "%p read %s: %ld bytes to %p", this, mPath.c_str(), bytesRead, ptr);
-
-		bytesLeft -= bytesRead;
-		ptr += bytesRead;
-		pos += bytesRead;
+		maxEnd = mLength;
 	}
-
-	// Compute length
-	outLength = ptr - mBuffer;
-
-	return mBuffer;
+	
+	outLength = maxEnd - inOffset;
+	
+	return mBuffer + inOffset;
 }
 
 void
@@ -646,20 +750,104 @@ AtomicTempFile::rollback() throw()
 //
 // An advisory write lock for inFile.
 //
-AtomicLockedFile::AtomicLockedFile(AtomicFile &inFile) :
+FileLocker::~FileLocker()
+{
+}
+
+
+
+LocalFileLocker::LocalFileLocker(AtomicFile &inFile) :
+	mPath(inFile.lockFileName())
+{
+}
+
+
+LocalFileLocker::~LocalFileLocker()
+{
+}
+
+
+
+#ifndef NDEBUG
+static double GetTime()
+{
+	struct timeval t;
+	gettimeofday(&t, NULL);
+	return ((double) t.tv_sec) + ((double) t.tv_usec) / 1000000.0;
+}
+#endif
+
+
+
+void
+LocalFileLocker::lock(mode_t mode)
+{
+	struct stat st;
+
+	do
+	{
+		// if the lock file doesn't exist, create it
+		mLockFile = open(mPath.c_str(), O_RDONLY | O_CREAT, mode);
+		
+		// if we can't open or create the file, something is wrong
+		if (mLockFile == -1)
+		{
+			UnixError::throwMe(errno);
+		}
+		
+		// try to get exclusive access to the file
+		IFDEBUG(double startTime = GetTime());
+		int result = flock(mLockFile, LOCK_EX);
+		IFDEBUG(double endTime = GetTime());
+		
+		IFDEBUG(secdebug("atomictime", "Waited %.4f milliseconds for file lock", (endTime - startTime) * 1000.0));
+		
+		// errors at this point are bad
+		if (result == -1)
+		{
+			UnixError::throwMe(errno);
+		}
+		
+		// check and see if the file we have access to still exists.  If not, another file shared our file lock
+		// due to a hash collision and has thrown our lock away -- that, or a user blew the lock file away himself.
+		
+		result = fstat(mLockFile, &st);
+		
+		// errors at this point are bad
+		if (result == -1)
+		{
+			UnixError::throwMe(errno);
+		}
+		
+		if (st.st_nlink == 0) // we've been unlinked!
+		{
+			close(mLockFile);
+		}
+	} while (st.st_nlink == 0);
+}
+
+
+void
+LocalFileLocker::unlock()
+{
+	flock(mLockFile, LOCK_UN);
+	close(mLockFile);
+}
+
+
+	
+NetworkFileLocker::NetworkFileLocker(AtomicFile &inFile) :
 	mDir(inFile.dir()),
 	mPath(inFile.dir() + "lck~" + inFile.file())
 {
-	lock();
 }
 
-AtomicLockedFile::~AtomicLockedFile()
+NetworkFileLocker::~NetworkFileLocker()
 {
-	unlock();
 }
 
 std::string
-AtomicLockedFile::unique(mode_t mode)
+NetworkFileLocker::unique(mode_t mode)
 {
 	static const int randomPart = 16;
 	DevRandomGenerator randomGen;
@@ -720,7 +908,7 @@ AtomicLockedFile::unique(mode_t mode)
 
 /* Return 0 on success and 1 on failure if st is set to the result of stat(old) and -1 on failure if the stat(old) failed. */
 int
-AtomicLockedFile::rlink(const char *const old, const char *const newn, struct stat &sto)
+NetworkFileLocker::rlink(const char *const old, const char *const newn, struct stat &sto)
 {
 	int result = ::link(old,newn);
 	if (result)
@@ -752,7 +940,7 @@ AtomicLockedFile::rlink(const char *const old, const char *const newn, struct st
  * rename with fallback for systems that don't support it
  * Note that this does not preserve the contents of the file. */
 int
-AtomicLockedFile::myrename(const char *const old, const char *const newn)
+NetworkFileLocker::myrename(const char *const old, const char *const newn)
 {
 	struct stat stbuf;
 	int fd = -1;
@@ -784,7 +972,7 @@ AtomicLockedFile::myrename(const char *const old, const char *const newn)
 }
 
 int
-AtomicLockedFile::xcreat(const char *const name, mode_t mode, time_t &tim)
+NetworkFileLocker::xcreat(const char *const name, mode_t mode, time_t &tim)
 {
 	std::string uniqueName = unique(mode);
 	const char *uniquePath = uniqueName.c_str();
@@ -795,7 +983,7 @@ AtomicLockedFile::xcreat(const char *const name, mode_t mode, time_t &tim)
 }
 
 void
-AtomicLockedFile::lock(mode_t mode)
+NetworkFileLocker::lock(mode_t mode)
 {
 	const char *path = mPath.c_str();
 	bool triedforce = false;
@@ -897,7 +1085,7 @@ AtomicLockedFile::lock(mode_t mode)
 }
 
 void
-AtomicLockedFile::unlock() throw()
+NetworkFileLocker::unlock()
 {
 	const char *path = mPath.c_str();
 	if (::unlink(path) == -1)
@@ -906,6 +1094,46 @@ AtomicLockedFile::unlock() throw()
 		// unlock can't throw
 	}
 }
+
+
+
+AtomicLockedFile::AtomicLockedFile(AtomicFile &inFile)
+{
+	if (inFile.isOnLocalFileSystem())
+	{
+		mFileLocker = new LocalFileLocker(inFile);
+	}
+	else
+	{
+		mFileLocker = new NetworkFileLocker(inFile);
+	}
+	
+	lock();
+}
+
+
+
+AtomicLockedFile::~AtomicLockedFile()
+{
+	unlock();
+	delete mFileLocker;
+}
+
+
+
+void
+AtomicLockedFile::lock(mode_t mode)
+{
+	mFileLocker->lock(mode);
+}
+
+
+
+void AtomicLockedFile::unlock() throw()
+{
+	mFileLocker->unlock();
+}
+
 
 
 #undef kAtomicFileMaxBlockSize

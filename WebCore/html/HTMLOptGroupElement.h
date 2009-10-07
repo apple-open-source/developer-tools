@@ -1,10 +1,8 @@
 /*
- * This file is part of the DOM implementation for KDE.
- *
  * Copyright (C) 1999 Lars Knoll (knoll@kde.org)
  *           (C) 1999 Antti Koivisto (koivisto@kde.org)
  *           (C) 2000 Dirk Mueller (mueller@kde.org)
- * Copyright (C) 2004, 2005, 2006 Apple Computer, Inc.
+ * Copyright (C) 2004, 2005, 2006, 2007 Apple Inc. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -26,38 +24,46 @@
 #ifndef HTMLOptGroupElement_h
 #define HTMLOptGroupElement_h
 
-#include "HTMLGenericFormElement.h"
+#include "HTMLFormControlElement.h"
+#include "OptionGroupElement.h"
 
 namespace WebCore {
+    
+class HTMLSelectElement;
 
-class HTMLOptGroupElement : public HTMLGenericFormElement {
+class HTMLOptGroupElement : public HTMLFormControlElement, public OptionGroupElement {
 public:
-    HTMLOptGroupElement(Document*, HTMLFormElement* = 0);
+    HTMLOptGroupElement(const QualifiedName&, Document*, HTMLFormElement* = 0);
 
     virtual bool checkDTD(const Node*);
-    virtual const AtomicString& type() const;
+    virtual const AtomicString& formControlType() const;
     virtual bool isFocusable() const;
-    virtual bool insertBefore(PassRefPtr<Node> newChild, Node* refChild, ExceptionCode&);
-    virtual bool replaceChild(PassRefPtr<Node> newChild, Node* oldChild, ExceptionCode&);
-    virtual bool removeChild(Node* child, ExceptionCode&);
-    virtual bool appendChild(PassRefPtr<Node> newChild, ExceptionCode&);
-    virtual ContainerNode* addChild(PassRefPtr<Node>);
     virtual void parseMappedAttribute(MappedAttribute*);
     virtual bool rendererIsNeeded(RenderStyle*) { return false; }
     virtual void attach();
     virtual void detach();
-    virtual RenderStyle* renderStyle() const { return m_style; }
-    virtual void setRenderStyle(RenderStyle* s);
+    virtual void setRenderStyle(PassRefPtr<RenderStyle>);
 
-    void recalcSelectOptions();
+    virtual bool insertBefore(PassRefPtr<Node> newChild, Node* refChild, ExceptionCode&, bool shouldLazyAttach = false);
+    virtual bool replaceChild(PassRefPtr<Node> newChild, Node* oldChild, ExceptionCode&, bool shouldLazyAttach = false);
+    virtual bool removeChild(Node* child, ExceptionCode&);
+    virtual bool appendChild(PassRefPtr<Node> newChild, ExceptionCode&, bool shouldLazyAttach = false);
+    virtual bool removeChildren();
+    virtual void childrenChanged(bool changedByParser = false, Node* beforeChange = 0, Node* afterChange = 0, int childCountDelta = 0);
 
     String label() const;
     void setLabel(const String&);
     
-    String groupLabelText();
+    virtual String groupLabelText() const;
+    HTMLSelectElement* ownerSelectElement() const;
+    virtual void accessKeyAction(bool sendToAnyElement);
     
 private:
-    RenderStyle* m_style;
+    virtual RenderStyle* nonRendererRenderStyle() const;
+    
+    void recalcSelectOptions();
+
+    RefPtr<RenderStyle> m_style;
 };
 
 } //namespace

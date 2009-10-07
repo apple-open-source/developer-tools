@@ -25,9 +25,7 @@
  */
 
 /*
- * Portions Copyright 2007 Apple Inc.  All rights reserved.
- *
- * $Id$
+ * Portions Copyright 2007-2009 Apple Inc.
  */
 
 #ifndef	_AUTOMOUNT_H
@@ -118,7 +116,6 @@ struct mapline {
 typedef unsigned char uchar_t;
 typedef unsigned short ushort_t;
 typedef unsigned int uint_t;
-typedef unsigned long ulong_t;
 typedef uint32_t rpcvers_t;
 
 /*
@@ -183,6 +180,7 @@ struct autodir {
 	char	*dir_map;		/* name of map for dir */
 	char	*dir_opts;		/* default mount options */
 	int 	dir_direct;		/* direct mountpoint ? */
+	char	*dir_realpath;		/* realpath() of mount point - not always set */
 	struct autodir *dir_next;	/* next entry */
 	struct autodir *dir_prev;	/* prev entry */
 };
@@ -226,7 +224,7 @@ struct off_tbl {
 struct rddir_cache {
 	char			*map;
 	struct off_tbl		*offtp;
-	ulong_t			bucket_size;
+	uint_t			bucket_size;
 	time_t			ttl;
 	struct dir_entry	*entp;
 	pthread_mutex_t		lock;		/* protects 'in_use' field */
@@ -288,7 +286,12 @@ extern void free_mapent(struct mapent *);
  */
 extern struct mapent *parse_entry(char *, char *, char *, char *, uint_t,
 				bool_t *, bool_t, bool_t, int *);
-extern int macro_expand(char *, char *, char *, int);
+typedef enum {
+	MEXPAND_OK,			/* expansion worked */
+	MEXPAND_LINE_TOO_LONG,		/* line too long */
+	MEXPAND_VARNAME_TOO_LONG	/* variable name too long */
+} macro_expand_status;
+extern macro_expand_status macro_expand(char *, char *, char *, int);
 extern void unquote(char *, char *);
 extern void trim(char *);
 extern char *get_line(FILE *, char *, char *, int);
@@ -296,8 +299,8 @@ extern int getword(char *, char *, char **, char **, char, int);
 extern int get_retry(char *);
 extern int str_opt(struct mnttab *, char *, char **);
 extern void dirinit(char *, char *, char *, int, char **, char ***);
-extern void pr_msg(const char *, ...);
-extern void trace_prt(int, char *, ...);
+extern void pr_msg(const char *, ...) __printflike(1, 2);
+extern void trace_prt(int, char *, ...) __printflike(2, 3);
 extern void free_action_list_fields(action_list *);
 
 extern int nopt(struct mnttab *, char *, int *);
@@ -307,6 +310,7 @@ extern enum clnt_stat pingnfs(char *, rpcvers_t *, rpcvers_t,
 
 extern int self_check(char *);
 extern int host_is_us(const char *, size_t);
+extern void flush_host_name_cache(void);
 extern int we_are_a_server(void);
 extern int do_mount1(autofs_pathname, char *, autofs_pathname,
 	autofs_opts, autofs_pathname, boolean_t, uid_t, mach_port_t,
@@ -316,10 +320,10 @@ do_check_trigger(autofs_pathname mapname, char *key, autofs_pathname subdir,
 	autofs_opts mapopts, autofs_pathname path, boolean_t isdirect,
 	boolean_t *istrigger);
 extern int do_lookup1(autofs_pathname, char *, autofs_pathname, autofs_opts,
-	boolean_t, uid_t, boolean_t *);
+	boolean_t, uid_t, int *);
 extern int do_unmount1(int32_t, int32_t, autofs_pathname, autofs_pathname,
 	autofs_component, autofs_opts);
-extern int do_readdir(autofs_pathname, uint64_t, uint32_t, uint64_t *,
+extern int do_readdir(autofs_pathname, off_t, uint32_t, off_t *,
 	boolean_t *, byte_buffer *, mach_msg_type_number_t *);
 extern int nfsunmount(fsid_t *, struct mnttab *);
 extern int loopbackmount(char *, char *, char *);
@@ -406,6 +410,7 @@ struct staticmap {
 	char	*vfstype;		/* fs_vfstype */
 	char	*mntops;		/* fs_mntops plus fs_type */
 	char	*host;			/* host from which to mount */
+	char	*localpath;		/* full path, on the server, for that item */
 	char	*spec;			/* item to mount */
 	struct staticmap *next;		/* next entry in hash table bucket */
 };
@@ -442,6 +447,12 @@ extern int loaddirect_static(char *local_map, char *opts, char **stack,
  * Find the -static map entry corresponding to a given mount point.
  */
 extern struct staticmap *get_staticmap_entry(const char *dir);
+
+/*
+ * Indicate that we're done with a -static map entry returned by
+ * get_staticmap_entry().
+ */
+extern void release_staticmap_entry(struct staticmap *static_ent);
 
 /*
  * Purge the fstab cache; if scheduled is true, do so only if it's

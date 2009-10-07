@@ -24,6 +24,7 @@
    Foundation, Inc., 59 Temple Place - Suite 330,
    Boston, MA 02111-1307, USA.  */
 
+#include <ctype.h>
 #include "defs.h"
 #include "symtab.h"
 #include "frame.h"
@@ -40,10 +41,23 @@
 #include "objfiles.h"
 #include "gdbthread.h"
 #include "complaints.h"
+#include "buildsym.h"
 
 extern int addressprint;
 
 int stepping_into_inlined_subroutine = 0;
+
+
+/* APPLE LOCAL begin remember stepping into inlined subroutine
+   across intervening function calls.  */
+/* Contains the start address inlined subroutine being stepped into.  This
+   is used if the user is not at the start address of the inlined subroutine
+   and chooses to do a step-in.  */
+
+CORE_ADDR inlined_step_range_end = (CORE_ADDR) 0;
+
+/* APPLE LOCAL end remember stepping into inlined subroutine
+   across intervening function calls.  */
 
 struct rb_tree_node_list
 {
@@ -108,6 +122,15 @@ void inlined_frame_this_id (struct frame_info *, void **, struct frame_id *);
 
 static void reset_temp_frame_stack (void);
 static void insert_pending_node (struct pending_node *, struct pending_node **);
+
+/* APPLE LOCAL begin inlined function symbols & blocks  */
+static void rb_tree_find_all_nodes_in_between (struct rb_tree_node *, CORE_ADDR,
+					       CORE_ADDR, 
+					       struct rb_tree_node_list **);
+static void rb_tree_find_all_exact_matches (struct rb_tree_node *, CORE_ADDR,
+					    CORE_ADDR, 
+					    struct rb_tree_node_list **);
+/* APPLE LOCAL end inlined funciton symbols & blocks  */
 
 /* Given a set of non-contiguous address ranges (presumably for a function), 
    find the ending address for the function.  Do this by finding the source
@@ -216,6 +239,10 @@ copy_temp_frame_stack_record (int from, int to)
                            temp_frame_stack.records[from].stack_frame_created;
   temp_frame_stack.records[to].stack_frame_printed = 
                            temp_frame_stack.records[from].stack_frame_printed;
+  /* APPLE LOCAL begin radar 6545149  */
+  temp_frame_stack.records[to].func_sym = 
+                           temp_frame_stack.records[from].func_sym;
+  /* APPLE LOCAL end radar 6545149  */
   temp_frame_stack.records[to].stepped_into = 1;
 
   memset (&(temp_frame_stack.records[from]), 0,
@@ -480,7 +507,7 @@ update_tmp_frame_stack (CORE_ADDR pc)
     }
 
   temp_frame_stack.current_pos = temp_frame_stack.nelts;
-  
+
   if (temp_frame_stack.nelts > 0)
     temp_frame_stack.last_inlined_pc = pc;
   temp_frame_stack.last_pc = pc;
@@ -775,8 +802,8 @@ inlined_function_address_ranges_properly_contained (int outer, int inner)
 	      inner_end   = inner_record->ranges->ranges[i].endaddr;
 	      for (j = 0; j < outer_record->ranges->nelts && !fits_some; j++)
 		{
-		  outer_start = outer_record->ranges->ranges[i].startaddr;
-		  outer_end   = outer_record->ranges->ranges[i].endaddr;
+		  outer_start = outer_record->ranges->ranges[j].startaddr;
+		  outer_end   = outer_record->ranges->ranges[j].endaddr;
 		  if (outer_start <= inner_start
 		      && inner_start < outer_end)
 		    {
@@ -883,6 +910,83 @@ verify_stack (void)
 			  _("Inconsistent inlined call stack."));
     }
 }
+
+
+/* Given a red-black tree (ROOT) containing inlined subroutine
+   records, find all records whose inlining start address (main key)
+   is greater than or equal to START, and whose inlining end address
+   (third_key) is less than or equal to END.  Return all such records
+   in the list MATCHES.  */
+
+static void
+rb_tree_find_all_nodes_in_between (struct rb_tree_node *root, CORE_ADDR start,
+				   CORE_ADDR end, 
+				   struct rb_tree_node_list **matches)
+{
+  struct rb_tree_node_list *tmp_node;
+
+  if (!root)
+    return;
+
+    if (start <= root->key
+        && root->key < end
+	&& root->third_key < end)
+      {
+	tmp_node = (struct rb_tree_node_list *) xmalloc (sizeof (struct rb_tree_node_list));
+	tmp_node->node = root;
+	tmp_node->next = *matches;
+	*matches = tmp_node;
+      }
+
+    if (start <= root->key)
+      {
+	rb_tree_find_all_nodes_in_between (root->left, start, end, matches);
+	rb_tree_find_all_nodes_in_between (root->right, start, end, matches);
+      }
+    else if (start > root->key)
+      rb_tree_find_all_nodes_in_between (root->right, start, end, matches);
+}
+
+/* APPLE LOCAL begin inlined function symbols & blocks  */
+
+/* Given a red-black tree (ROOT) containing inlined subroutine records, find
+   all records whose inlining start address (main key) equals KEY and whose
+   inlining end address (third key) equals THIRD_KEY.  Return all such records
+   in the list MATCHES.  */
+
+static void
+rb_tree_find_all_exact_matches (struct rb_tree_node *root, CORE_ADDR key,
+				CORE_ADDR third_key, 
+				struct rb_tree_node_list **matches)
+{
+  struct rb_tree_node_list *tmp_node;
+  
+  if (!root)
+    return;
+  
+  if (key == root->key)
+    {
+      if (third_key == root->third_key)
+	{
+	  tmp_node = (struct rb_tree_node_list *) xmalloc (sizeof (struct rb_tree_node_list));
+	  tmp_node->node = root;
+	  tmp_node->next = *matches;
+	  *matches = tmp_node;
+	  
+	  rb_tree_find_all_exact_matches (root->left, key, third_key, matches);
+	  rb_tree_find_all_exact_matches (root->right, key, third_key, matches);
+	}
+      else if (third_key < root->third_key)
+	rb_tree_find_all_exact_matches (root->left, key, third_key, matches);
+      else
+	rb_tree_find_all_exact_matches (root->right, key, third_key, matches);
+    }
+  else if (key < root->key)
+    rb_tree_find_all_exact_matches (root->left, key, third_key, matches);
+  else
+    rb_tree_find_all_exact_matches (root->right, key, third_key, matches);
+}
+/* APPLE LOCAL end inlined function symbols & blocks  */
 
 static void
 rb_tree_find_all_matching_nodes (struct rb_tree_node *root, CORE_ADDR key,
@@ -1036,6 +1140,8 @@ find_function_names_and_address_ranges (struct objfile *objfile,
 	      record->fn_name = tmp_record->fn_name;
 	      record->calling_fn_name = tmp_record->calling_fn_name;
 	      record->ranges = tmp_record->ranges;
+	      /* APPLE LOCAL radar 6545149  */
+	      record->func_sym = tmp_record->func_sym;
 	      match_found = 1;
 	    }
 	}
@@ -1085,6 +1191,11 @@ copy_inlined_call_stack_record (int from, int to)
   global_inlined_call_stack.records[to].stepped_into = 
                             global_inlined_call_stack.records[from].stepped_into;
 
+  /* APPLE LOCAL begin radar 6545149  */
+  global_inlined_call_stack.records[to].func_sym = 
+                            global_inlined_call_stack.records[from].func_sym;
+  /* APPLE LOCAL end radar 6545149  */
+
   /* Blank out the old record so that we don't end up with stale data mixing with
      new data.  */
 
@@ -1124,9 +1235,10 @@ add_item_to_inlined_subroutine_stack (struct linetable_entry *item,
 
   if (i > nelts)
     {
-      /* An existing entry was not found; we need to make a new entry on the
-	 top of the stack.  First we need to make sure we have enough space
-	 in the array for a new entry; otherwise we need to resize the array.  */
+      /* An existing entry was not found; we need to make a new entry
+	 on the top of the stack.  First we need to make sure we have
+	 enough space in the array for a new entry; otherwise we need
+	 to resize the array.  */
       if (nelts >= max_size - 1)
 	{
 	  if (max_size == 0)
@@ -1134,7 +1246,7 @@ add_item_to_inlined_subroutine_stack (struct linetable_entry *item,
 	      max_size = 10;
 	      global_inlined_call_stack.records = 
 		(struct inlined_call_stack_record *) xmalloc 
-	                   (max_size * sizeof (struct inlined_call_stack_record));
+	               (max_size * sizeof (struct inlined_call_stack_record));
 	      memset (global_inlined_call_stack.records, 0,
 		      max_size * sizeof (struct inlined_call_stack_record));
 
@@ -1227,7 +1339,8 @@ add_item_to_inlined_subroutine_stack (struct linetable_entry *item,
     {
       global_inlined_call_stack.records[i].start_pc = item->pc;
       global_inlined_call_stack.records[i].end_pc = item->end_pc;
-      global_inlined_call_stack.records[i].s = s;
+      if (global_inlined_call_stack.records[i].s == NULL)
+	global_inlined_call_stack.records[i].s = s;
     }
   else if (item->entry_type == INLINED_CALL_SITE_LT_ENTRY)
     {
@@ -1556,13 +1669,22 @@ inlined_function_update_call_stack (CORE_ADDR pc)
     {
       int i = find_correct_current_position ();
       adjust_current_inlined_subroutine_stack_position (i);
-      if (stepping_into_inlined_subroutine)
+      /* APPLE LOCAL begin remember stepping into inlined subroutine
+	 across intervening function calls.  */
+      if (stepping_into_inlined_subroutine
+	  || (inlined_step_range_end == 
+	      global_inlined_call_stack.records[i].start_pc))
+      /* APPLE LOCAL end remember stepping into inlined subroutine
+	 across intervening function calls.  */
 	{
 	  step_into_current_inlined_subroutine ();
 	  stepping_into_inlined_subroutine = 0;
+	  /* APPLE LOCAL radar 6534195  */
+	  inlined_step_range_end = (CORE_ADDR) 0;
 	}
       else if (step_range_start && step_range_end
 	       && step_range_start != step_range_end
+	       && global_inlined_call_stack.last_inlined_pc
 	       && ((global_inlined_call_stack.last_inlined_pc <
 		        global_inlined_call_stack.records[i].start_pc)
 		   || (global_inlined_call_stack.last_inlined_pc >=
@@ -1608,9 +1730,11 @@ inlined_function_update_call_stack (CORE_ADDR pc)
 void
 inlined_function_add_function_names (struct objfile *objfile,
 				     CORE_ADDR low_pc, CORE_ADDR high_pc,
-				     int line, int column, char *fn_name, 
-				     char *calling_fn_name,
-				     struct address_range_list *ranges)
+				     int line, int column, const char *fn_name, 
+				     const char *calling_fn_name,
+				     struct address_range_list *ranges,
+				     /* APPLE LOCAL radar 6545149  */
+				     struct symbol *func_sym)
 {
   struct rb_tree_node *tmp_rb_node;
   struct inlined_call_stack_record *tmp_record;
@@ -1619,20 +1743,22 @@ inlined_function_add_function_names (struct objfile *objfile,
   struct rb_tree_node_list *next;
   int found = 0;
 
-  if (! fn_name)
-    fn_name = xstrdup ("<unknown function>");
+  if (!fn_name)
+    fn_name = "<unknown function>";
   if (!calling_fn_name)
-    calling_fn_name = xstrdup ("<unknown function>");
+    calling_fn_name = "<unknown function>";
 
-  if ((strcmp (fn_name, "<unknown function>") == 0)
-      || (strcmp (calling_fn_name, "<unknown function>") == 0))
-    complaint (&symfile_complaints, 
- _("Missing inlined function names:  %s calling %s, at line %d (address %Ld)"), 
-	       calling_fn_name, fn_name, line, low_pc);
+  if (strcmp (fn_name, "<unknown function>") == 0
+      || strcmp (calling_fn_name, "<unknown function>") == 0)
+    {
+      complaint (&symfile_complaints, 
+                 "Missing inlined function names: "
+                 "%s calling %s, at line %d (address 0x%s)",
+                 calling_fn_name, fn_name, line, paddr_nz (low_pc));
+    }
 
   rb_tree_find_all_matching_nodes (objfile->inlined_subroutine_data,
-				   low_pc, 0, high_pc,
-				   &matches);
+				   low_pc, 0, high_pc, &matches);
 
   for (current = matches; current && !found; current = current->next)
     {
@@ -1679,6 +1805,9 @@ inlined_function_add_function_names (struct objfile *objfile,
       tmp_record->call_site_filename = NULL;
       tmp_record->call_site_line = line;
       tmp_record->call_site_column = column;
+
+      /* APPLE LOCAL radar 6545149  */
+      tmp_record->func_sym = func_sym;
 
       tmp_rb_node = (struct rb_tree_node *) xmalloc 
 	                                        (sizeof (struct rb_tree_node));
@@ -1882,6 +2011,8 @@ at_inlined_call_site_p (char **file_name, int *line_num, int *column)
       else if (low <= current_inlined_subroutine_stack_position ()
 	       && current_inlined_subroutine_stack_position() <= high)
 	i = current_inlined_subroutine_stack_position ();
+      else
+	i = low;
 
       if (i > 0)
 	{
@@ -2189,7 +2320,11 @@ print_inlined_frame (struct frame_info *fi, int print_level,
   if (get_frame_pc (fi) != stop_pc)
     update_tmp_frame_stack (get_frame_pc (fi));
 
-  if (global_inlined_call_stack.nelts > 0)
+  /* APPLE LOCAL begin radar 6131694  */
+  if (global_inlined_call_stack.nelts > 0
+      && global_inlined_call_stack.records[1].stepped_into
+      && frame_relative_level (fi) <= global_inlined_call_stack.nelts)
+  /* APPLE LOCAL end radar 6131694  */
     stack_ptr = &global_inlined_call_stack;
   else
     stack_ptr = &temp_frame_stack;
@@ -2311,7 +2446,7 @@ print_inlined_frame (struct frame_info *fi, int print_level,
     {
       if (stack_ptr->records[i].s)
 	ui_out_field_string (uiout, "file", 
-			     stack_ptr->records[i].s->filename);
+			     symtab_to_fullname (stack_ptr->records[i].s));
       else if (sal.symtab)
 	ui_out_field_string (uiout, "file", sal.symtab->filename);
       else 
@@ -2346,6 +2481,8 @@ print_inlined_frame (struct frame_info *fi, int print_level,
     print_frame_more_info_hook (uiout, &sal, fi);
 
   stack_ptr->records[i].stack_frame_printed = 1;
+  /* APPLE LOCAL radar 6131694  */
+  stack_ptr->records[i].stack_frame_created = 1;
 
   do_cleanups (list_chain);
   ui_out_text (uiout, "\n");
@@ -2373,6 +2510,15 @@ flush_inlined_subroutine_frames (void)
       temp_frame_stack.records[i].stack_frame_created = 0;
       temp_frame_stack.records[i].stack_frame_printed = 0;
     }
+
+  /* APPLE LOCAL begin radar 6131694  */
+  if (i > 0
+      && i == temp_frame_stack.nelts)
+    {
+      temp_frame_stack.records[i].stack_frame_created = 0;
+      temp_frame_stack.records[i].stack_frame_printed = 0;
+    }
+  /* APPLE LOCAL end radar 6131694  */
 }
 
 /* We've finished printing all the INLINED_FRAMEs for all the records in
@@ -2416,8 +2562,6 @@ step_into_current_inlined_subroutine (void)
       if (cur_pos < global_inlined_call_stack.nelts)
 	adjust_current_inlined_subroutine_stack_position (1);
     }
-
-  gdb_assert (current_inlined_subroutine_call_stack_start_pc() == stop_pc);
 }
 
 /* Return the source position of the outermost call site (the bottom of
@@ -2568,14 +2712,33 @@ inlined_subroutine_adjust_position_for_breakpoint (struct breakpoint *b)
 {
   int i;
   int j;
-  int cur_pos;
+  int cur_pos = 0;
 
   gdb_assert (b->addr_string != NULL);
 
   for (i = 1; i <= global_inlined_call_stack.nelts; i++)
     {
-      if ((strcmp (global_inlined_call_stack.records[i].fn_name, b->addr_string)
-	   == 0)
+      /* APPLE LOCAL begin radar 6366048 search both minsyms & syms for bps  */
+      char *long_name = NULL;
+      int len = 0;
+
+      len += strlen (global_inlined_call_stack.records[i].fn_name) + 4;
+
+      if (global_inlined_call_stack.records[i].s
+	  && global_inlined_call_stack.records[i].s->filename)
+	{
+	  len += strlen (global_inlined_call_stack.records[i].s->filename);
+          long_name = (char *) xmalloc (len);
+	  sprintf (long_name, "%s:'%s'", 
+		   global_inlined_call_stack.records[i].s->filename,
+		   global_inlined_call_stack.records[i].fn_name);
+	}
+
+      if (((strcmp (global_inlined_call_stack.records[i].fn_name, 
+		    b->addr_string) == 0)
+	   || (long_name != NULL
+	       && (strcmp (long_name, b->addr_string) == 0)))
+      /* APPLE LOCAL end radar 6366048 search both minsyms & syms for bps  */
 	  && (global_inlined_call_stack.records[i].start_pc == b->loc->address))
 	{
 	  global_inlined_call_stack.current_pos = i;
@@ -2585,6 +2748,72 @@ inlined_subroutine_adjust_position_for_breakpoint (struct breakpoint *b)
 	    global_inlined_call_stack.records[j].stepped_into = 1;
 	  break;
 	}
+      /* APPLE LOCAL begin radar 6366048 search both minsyms & syms for bps  */
+      if (long_name != NULL)
+	xfree (long_name);
+      /* APPLE LOCAL end radar 6366048 search both minsyms & syms for bps  */
+    }
+
+  if (i > global_inlined_call_stack.nelts)
+    {
+      char *cptr;
+      char *filename = NULL;
+      int line_found;
+
+      /* Couldn't figure out the breakpoint record based on function name;
+	 let's try pc & filename.  */
+      i = global_inlined_call_stack.nelts;
+      while (global_inlined_call_stack.records[i].start_pc != b->loc->address
+	     && i > 0)
+	{
+	  global_inlined_call_stack.records[i].stepped_into = 0;
+	  i--;
+	}
+	
+      /* Does the breakpoint possibly consist of filename:line?  */
+
+      line_found = 0;
+      cptr = strrchr (b->addr_string, ':');
+      if (cptr)
+	{
+	  cptr++;
+	  if (isdigit (*cptr))
+	    {
+	      while (isdigit (*cptr))
+		cptr++;
+	      if (*cptr == '\0')
+		line_found = 1;
+	    }
+	}
+      if (line_found)
+	{
+	  filename = xstrdup (b->addr_string);
+	  cptr = strrchr (filename, ':');
+	  *cptr = '\0';
+	}
+
+
+      while (i > 0
+	     && ((!global_inlined_call_stack.records[i].s)
+		 || ((strstr (global_inlined_call_stack.records[i].s->filename, 
+			      filename) ==  0)
+		     && (strstr (filename, 
+			  global_inlined_call_stack.records[i].s->filename) == 0))))
+	{
+	  global_inlined_call_stack.records[i].stepped_into = 0;
+	  i --;
+	}
+
+      if (i == 0)
+	i = 1;
+
+      global_inlined_call_stack.current_pos = i;
+      global_inlined_call_stack.records[i].stepped_into = 1;
+      for (j = i; j > 0; j--)
+	global_inlined_call_stack.records[j].stepped_into = 1;
+
+      if (filename != NULL)
+	xfree (filename);
     }
 
   gdb_assert ( 1 <= i
@@ -2653,6 +2882,10 @@ inlined_subroutine_restore_after_dummy_call (void)
 	                          saved_call_stack.records[i].stack_frame_printed;
 	  global_inlined_call_stack.records[i].stepped_into = 
 	                            saved_call_stack.records[i].stepped_into;
+	  /* APPLE LOCAL begin radar 6545149  */
+	  global_inlined_call_stack.records[i].func_sym = 
+	                            saved_call_stack.records[i].func_sym;
+	  /* APPLE LOCAL end radar 6545149  */
 	}
 
       reset_saved_call_stack ();
@@ -2696,6 +2929,10 @@ inlined_subroutine_save_before_dummy_call (void)
                          global_inlined_call_stack.records[i].stack_frame_printed;
 	  saved_call_stack.records[i].stepped_into = 
                                 global_inlined_call_stack.records[i].stepped_into;
+	  /* APPLE LOCAL begin radar 6545149  */
+	  saved_call_stack.records[i].func_sym = 
+                                global_inlined_call_stack.records[i].func_sym;
+	  /* APPLE LOCAL end radar 6545149  */
 	}
     }
 }
@@ -2711,6 +2948,7 @@ rest_of_line_contains_inlined_subroutine (CORE_ADDR *end_of_line)
   CORE_ADDR line_start_pc = 0;
   CORE_ADDR inline_start_pc = 0;
   int inlined_subroutine_found = 0;
+  int inlined_subroutine_record_found = 0;
 
   if (!dwarf2_allow_inlined_stepping)
     return 0;
@@ -2787,35 +3025,72 @@ rest_of_line_contains_inlined_subroutine (CORE_ADDR *end_of_line)
 	}
     }
 
+  /*  If we haven't discovered any inlined subroutines beyond the current end
+      pc (but on the same line) heck to see if the current start & end 
+      addresses encompass one or more inlined subroutines.  */
+
+  if (sal.symtab
+      && (!inlined_subroutine_found
+	  || inline_start_pc == stop_pc))
+
+    {
+      struct rb_tree_node_list *matches = NULL;
+      struct rb_tree_node_list *current;
+      struct rb_tree_node *tmp_node;
+      struct inlined_call_stack_record *tmp_record;
+      
+      rb_tree_find_all_nodes_in_between 
+	                         (sal.symtab->objfile->inlined_subroutine_data,
+				  stop_pc, current_end, &matches);
+      
+      for (current = matches; current; current = current->next)
+	{
+	  tmp_node = current->node;
+	  if (tmp_node != NULL)
+	    {
+	      tmp_record = (struct inlined_call_stack_record *) tmp_node->data;
+	      inlined_subroutine_record_found = 1;
+	      if (tmp_record->start_pc >= stop_pc
+		  && tmp_record->start_pc < inline_start_pc)
+		inline_start_pc = tmp_record->start_pc;
+	    }
+	}
+    }
+
   /* This function is looking for inlined subroutines BEYOND the
      current pc, but within the same source line.  If we find an
      inlined subroutine AT the current pc, we do NOT want to count
      that; it will be dealt with properly elsewhere.  */
 
-  if ((inline_start_pc != 0
-       && inline_start_pc == stop_pc)
-      || (current_end <= stop_pc))
+  if (inlined_subroutine_record_found)
+    inlined_subroutine_found = 1;
+  else if ((inline_start_pc != 0
+	    && inline_start_pc == stop_pc)
+	   || (current_end <= stop_pc))
     {
       inlined_subroutine_found = 0;
       current_end = 0;
     }
-
+  
   *end_of_line = current_end;
 
   return inlined_subroutine_found;
 }
 
 void
-find_next_inlined_subroutine (CORE_ADDR pc, CORE_ADDR *inline_start_pc)
+find_next_inlined_subroutine (CORE_ADDR pc, CORE_ADDR *inline_start_pc, 
+			      CORE_ADDR end_of_line)
 {
   struct symtab_and_line sal;
   int current_line;
   CORE_ADDR current_end;
+  struct symtab *sal_symtab = NULL;;
 
   *inline_start_pc = 0;
   sal = find_pc_line (pc, 0);
   current_line = sal.line;
   current_end = sal.end;
+  sal_symtab = sal.symtab;
 
   while (sal.line == current_line
 	 && !sal.next)
@@ -2827,6 +3102,30 @@ find_next_inlined_subroutine (CORE_ADDR pc, CORE_ADDR *inline_start_pc)
 	  && (sal.next->entry_type == INLINED_SUBROUTINE_LT_ENTRY
 	      || sal.next->entry_type == INLINED_CALL_SITE_LT_ENTRY))
 	*inline_start_pc = sal.pc;
+    }
+
+  if (*inline_start_pc == 0 && sal_symtab)
+    {
+      struct rb_tree_node_list *matches = NULL;
+      struct rb_tree_node_list *current;
+      struct rb_tree_node *tmp_node;
+      struct inlined_call_stack_record *tmp_record;
+
+      rb_tree_find_all_nodes_in_between 
+	                         (sal_symtab->objfile->inlined_subroutine_data,
+				  stop_pc, end_of_line, &matches);
+
+      for (current = matches; current; current = current->next)
+	{
+	  tmp_node = current->node;
+	  if (tmp_node != NULL)
+	    {
+	      tmp_record = (struct inlined_call_stack_record *) tmp_node->data;
+	      if (*inline_start_pc == 0
+		  || tmp_record->start_pc < *inline_start_pc)
+		*inline_start_pc = tmp_record->start_pc;
+	    }
+	}
     }
 }
 
@@ -3003,6 +3302,10 @@ save_thread_inlined_call_stack (ptid_t ptid)
       return;
     }
 
+  /* APPLE LOCAL begin remember stepping into inlined subroutine.  */
+  tp->inlined_step_range_end = inlined_step_range_end;
+  inlined_step_range_end = 0;
+  /* APPLE LOCAL end remember stepping into inlined subroutine.  */
 
   tp->thread_inlined_call_stack = (struct inlined_function_data *) 
                             xmalloc (sizeof (struct inlined_function_data));
@@ -3033,15 +3336,19 @@ restore_thread_inlined_call_stack (ptid_t ptid)
   struct thread_info *tp;
   int num_bytes;
   int i;
+  CORE_ADDR current_pc;
 
   tp = find_thread_id (pid_to_thread_id (ptid));
   if (tp == NULL)
     return;
 
+  current_pc = read_pc_pid (ptid);
+
   if (tp->thread_inlined_call_stack == NULL
       || tp->thread_inlined_call_stack->nelts == 0)
     {
       inlined_function_reinitialize_call_stack ();
+      inlined_function_update_call_stack (current_pc);
       return;
     }
 
@@ -3067,6 +3374,16 @@ restore_thread_inlined_call_stack (ptid_t ptid)
       memcpy (&(global_inlined_call_stack.records[i]), 
 	      &(tp->thread_inlined_call_stack->records[i]), 
 	      sizeof (struct inlined_call_stack_record));
+
+  /* Check to see if the thread's pc has changed since we last updated the
+     inlined call stack.  */
+
+  if (current_pc != global_inlined_call_stack.last_pc)
+    inlined_function_update_call_stack (current_pc);
+
+
+  /* APPLE LOCAL remember stepping into inlined subroutine.  */
+  inlined_step_range_end = tp->inlined_step_range_end;
 
   /* I believe that on switching threads, gdb's stack is thrown away
      and recreated, so the stack_frame_created fields need to be reset.  */
@@ -3097,4 +3414,157 @@ inlined_function_reset_frame_stack (void)
     }
 }
 
+char *
+last_inlined_call_site_filename (struct frame_info *fi)
+{
+  char *file_name;
+  if (global_inlined_call_stack.nelts > 0
+      && frame_relative_level (fi) <= global_inlined_call_stack.nelts)
+    file_name = global_inlined_call_stack.records[1].call_site_filename;
+  else if (temp_frame_stack.nelts > 0)
+    file_name = temp_frame_stack.records[1].call_site_filename;
+  else
+    file_name = NULL;
+  return file_name;
+}
+
+/* APPLE LOCAL begin inlined function symbols & blocks  */
+/* APPLE LOCAL begin radar 6545149  */
+/* Given a block that does not have a function symbol (which means it
+   *might* be a block for an inlined subroutine, this function tries to
+   determine if it is the block for an inlined subroutine, which inlined
+   subroutine it is the block for (if there are multiple candidates), and
+   returns the symbol for the inlined subroutine (or NULL if it's not the
+   block for an inlined subroutine.  */
+
+struct symbol *
+block_inlined_function (struct block *bl, struct bfd_section *section)
+{
+  int syms_found = 0;
+  struct symtab_and_line sal;
+  struct rb_tree_node_list *matches = NULL;
+  struct rb_tree_node_list *current;
+  struct inlined_call_stack_record *tmp_record;
+  struct symbol *func_sym = NULL;
+  struct objfile *objfile = NULL;
+  struct objfile *objf;
+
+  /* Find the objfile, to check its inlined subroutine data.  */
+
+  if (section != NULL)
+    {
+      ALL_OBJFILES (objf)
+      {
+	if (objf->obfd == section->owner)
+	  objfile = objf;
+      }
+    }
+  else
+    {
+      sal = find_pc_sect_line (bl->startaddr, section, 0);
+      if (sal.symtab)
+	objfile = sal.symtab->objfile;
+    }
+
+  if (objfile == NULL)
+    return NULL;
+
+  /* Find all inlined subroutines (if any) with the same starting and
+     ending addresses as the block.  */
+  
+  rb_tree_find_all_exact_matches (objfile->inlined_subroutine_data,
+				  bl->startaddr, bl->endaddr, &matches);
+  /* APPLE LOCAL end radar 6381384  add section to symtab lookups  */
+
+  if (!matches)
+    return NULL;
+
+  if (matches->next == NULL)
+    {
+      tmp_record = (struct inlined_call_stack_record *) matches->node->data;
+
+      /* Exactly one match was found.  Verify that the record has
+	 a valid function name.  */
+      func_sym = tmp_record->func_sym;
+    }
+  else
+    {
+      int found = 0;
+      struct inlined_call_stack_record *tmp_record;
+      
+      for (current = matches; current && !found; current = current->next)
+	{
+	  tmp_record = (struct inlined_call_stack_record *) current->node->data;
+	  if (tmp_record->func_sym
+	      && tmp_record->func_sym->ginfo.value.block == bl)
+	    {
+	      func_sym = tmp_record->func_sym;
+	      found = 1;
+	    }
+	}
+    }
+  
+  return func_sym;
+}
+/* APPLE LOCAL begin radar 6545149  */
+
+/* Add SYM, the symbol for an inlined subroutine, to LIST, the list
+   of inlined subroutine symbols.  */
+
+void
+add_symbol_to_inlined_subroutine_list (struct symbol *sym,
+				       struct pending **list)
+{
+  struct pending *tmp;
+
+  if (!sym || !sym->ginfo.name)
+    return;
+
+  if ((*list == NULL) || (*list)->nsyms == PENDINGSIZE)
+    {
+      tmp = (struct pending *) xmalloc (sizeof (struct pending));
+      tmp->next = *list;
+      tmp->nsyms = 1;
+      tmp->symbol[0] = sym;
+      *list = tmp;
+    }
+  else
+    (*list)->symbol[(*list)->nsyms++] = sym;
+}
+/* APPLE LOCAL end inlined function symbols & blocks */
+
+
+/* APPLE LOCAL begin radar 6534195  */
+int
+func_sym_has_inlining (struct symbol *func_sym, struct frame_info *fi)
+{
+  struct inlined_function_data *stack_ptr;
+  CORE_ADDR pc = get_frame_pc (fi);
+  int level = frame_relative_level (fi);
+  int i;
+  int found = 0;
+
+  if (global_inlined_call_stack.nelts > 0
+      && global_inlined_call_stack.records[1].stepped_into
+      && level <= global_inlined_call_stack.nelts)
+    stack_ptr = &global_inlined_call_stack;
+  else
+    stack_ptr = &temp_frame_stack;
+
+  /* Look for an inlining record where the inlined function contains
+     the pc for the frame, and the calling function name matches
+     the name of the function symbol parameter.   */
+
+  for (i = 1; i <= stack_ptr->nelts && !found; i++)
+    {
+      if (stack_ptr->records[i].start_pc <= pc
+	  && pc <= stack_ptr->records[i].end_pc 
+	  && (strcmp (stack_ptr->records[i].calling_fn_name, 
+		      func_sym->ginfo.name) == 0))
+	found = 1;
+    }
+
+  return found;
+}
+/* APPLE LOCAL end radar 6534195  */
 /* APPLE LOCAL end subroutine inlining  (entire file) */

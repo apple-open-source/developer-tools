@@ -7,7 +7,7 @@
 --                                 S p e c                                  --
 --                (OpenVMS 64bit GCC_ZCX DEC Threads Version)               --
 --                                                                          --
---             Copyright (C) 2004 Free Software Foundation, Inc.            --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -21,8 +21,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -37,9 +37,10 @@
 ------------------------------------------------------------------------------
 
 package System is
-pragma Pure (System);
---  Note that we take advantage of the implementation permission to
---  make this unit Pure instead of Preelaborable, see RM 13.7(36)
+   pragma Pure;
+   --  Note that we take advantage of the implementation permission to make
+   --  this unit Pure instead of Preelaborable; see RM 13.7.1(15). In Ada
+   --  2005, this is Pure in any case (AI-362).
 
    type Name is (SYSTEM_NAME_GNAT);
    System_Name : constant Name := SYSTEM_NAME_GNAT;
@@ -137,6 +138,7 @@ private
    Backend_Divide_Checks     : constant Boolean := False;
    Backend_Overflow_Checks   : constant Boolean := False;
    Command_Line_Args         : constant Boolean := True;
+   Compiler_System_Version   : constant Boolean := False;
    Configurable_Run_Time     : constant Boolean := False;
    Denorm                    : constant Boolean := False;
    Duration_32_Bits          : constant Boolean := False;
@@ -246,11 +248,16 @@ private
    -- Special VMS Interfaces --
    ----------------------------
 
-   procedure Lib_Stop (I : in Integer);
+   procedure Lib_Stop (I : Integer);
    pragma Interface (C, Lib_Stop);
    pragma Import_Procedure (Lib_Stop, "LIB$STOP", Mechanism => (Value));
    --  Interface to VMS condition handling. Used by RTSfind and pragma
    --  {Import,Export}_Exception. Put here because this is the only
    --  VMS specific package that doesn't drag in tasking.
+
+   ADA_GNAT : constant Boolean := True;
+   pragma Export_Object (ADA_GNAT, "ADA$GNAT");
+   --  Uniquitous global symbol identifing a GNAT compiled image to VMS Debug.
+   --  Do not remove!
 
 end System;

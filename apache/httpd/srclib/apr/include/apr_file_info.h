@@ -125,16 +125,10 @@ typedef struct apr_dir_t          apr_dir_t;
 typedef apr_int32_t               apr_fileperms_t;
 #if (defined WIN32) || (defined NETWARE)
 /**
- * Structure for determining the inode of the file.
- */
-typedef apr_uint64_t              apr_ino_t;
-/**
  * Structure for determining the device the file is on.
  */
 typedef apr_uint32_t              apr_dev_t;
 #else
-/** The inode of the file. */
-typedef ino_t                     apr_ino_t;
 /**
  * Structure for determining the device the file is on.
  */
@@ -284,7 +278,11 @@ APR_DECLARE(apr_status_t) apr_dir_rewind(apr_dir_t *thedir);
  * @{
  */
 
-/** Cause apr_filepath_merge to fail if addpath is above rootpath */
+/** Cause apr_filepath_merge to fail if addpath is above rootpath 
+ * @bug in APR 0.9 and 1.x, this flag's behavior is undefined
+ * if the rootpath is NULL or empty.  In APR 2.0 this should be
+ * changed to imply NOTABSOLUTE if the rootpath is NULL or empty.
+ */
 #define APR_FILEPATH_NOTABOVEROOT   0x01
 
 /** internal: Only meaningful with APR_FILEPATH_NOTABOVEROOT */

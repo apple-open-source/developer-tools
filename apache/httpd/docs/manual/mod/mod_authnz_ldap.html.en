@@ -78,6 +78,7 @@ for HTTP Basic authentication.</td></tr>
 <li><img alt="" src="../images/down.gif" /> <a href="#examples">Examples</a></li>
 <li><img alt="" src="../images/down.gif" /> <a href="#usingtls">Using TLS</a></li>
 <li><img alt="" src="../images/down.gif" /> <a href="#usingssl">Using SSL</a></li>
+<li><img alt="" src="../images/down.gif" /> <a href="#exposed">Exposing Login Information</a></li>
 <li><img alt="" src="../images/down.gif" /> <a href="#frontpage">Using Microsoft
     FrontPage with mod_authnz_ldap</a></li>
 </ul><h3>See also</h3>
@@ -120,7 +121,7 @@ for HTTP Basic authentication.</td></tr>
       <li><a href="#examples">Examples</a></li>
       <li><a href="#usingtls">Using TLS</a></li>
       <li><a href="#usingssl">Using SSL</a></li>
-
+      <li><a href="#exposed">Exposing Login Information</a></li>
       <li>
         <a href="#frontpage">Using Microsoft FrontPage with
         <code class="module"><a href="../mod/mod_authnz_ldap.html">mod_authnz_ldap</a></code></a> 
@@ -253,7 +254,11 @@ for HTTP Basic authentication.</td></tr>
     <code class="directive"><a href="#authzldapauthoritative">AuthzLDAPAuthoritative</a></code>
     is set to <code>off</code> to allow the authorization phase to fall
     back to the module providing the alternate
-    <code class="directive"><a href="../mod/core.html#require">Require</a></code> value.</p>
+    <code class="directive"><a href="../mod/core.html#require">Require</a></code> value. When no 
+    LDAP-specific <code class="directive"><a href="../mod/core.html#require">Require</a></code>  directives
+    are used, authorization is allowed to fall back to other modules
+    as if <code class="directive"><a href="#authzldapauthoritative">AuthzLDAPAuthoritative</a></code>
+    was set to <code>off</code>. </p>
 
     <ul>
         <li>Grant access if there is a <a href="#requser"><code>Require
@@ -323,9 +328,7 @@ for HTTP Basic authentication.</td></tr>
     <p>If this directive exists, <code class="module"><a href="../mod/mod_authnz_ldap.html">mod_authnz_ldap</a></code> grants
     access to any user that has successfully authenticated during the
     search/bind phase.  Requires that <code class="module"><a href="../mod/mod_authz_user.html">mod_authz_user</a></code> be 
-    loaded and that the 
-    <code class="directive"><a href="#authzldapauthoritative">AuthzLDAPAuthoritative</a></code>
-    directive be set to off.</p>
+    loaded.</p>
 
 
 <h3><a name="requser" id="requser">Require ldap-user</a></h3>
@@ -462,7 +465,7 @@ uniqueMember: cn=Fred User, o=Airius<br />
         Grant access to anyone who exists in the LDAP directory,
         using their UID for searches. 
 <div class="example"><p><code>
-AuthLDAPURL ldap://ldap1.airius.com:389/ou=People, o=Airius?uid?sub?(objectClass=*)<br />
+AuthLDAPURL "ldap://ldap1.airius.com:389/ou=People, o=Airius?uid?sub?(objectClass=*)"<br />
 Require valid-user
 </code></p></div>
       </li>
@@ -471,7 +474,7 @@ Require valid-user
         The next example is the same as above; but with the fields
         that have useful defaults omitted. Also, note the use of a
         redundant LDAP server. 
-<div class="example"><p><code>AuthLDAPURL ldap://ldap1.airius.com ldap2.airius.com/ou=People, o=Airius<br />
+<div class="example"><p><code>AuthLDAPURL "ldap://ldap1.airius.com ldap2.airius.com/ou=People, o=Airius"<br />
 Require valid-user
 </code></p></div>
       </li>
@@ -486,7 +489,7 @@ Require valid-user
         choose an attribute that is guaranteed unique in your
         directory, such as <code>uid</code>. 
 <div class="example"><p><code>
-AuthLDAPURL ldap://ldap.airius.com/ou=People, o=Airius?cn<br />
+AuthLDAPURL "ldap://ldap.airius.com/ou=People, o=Airius?cn"<br />
 Require valid-user
 </code></p></div>
       </li>
@@ -567,6 +570,22 @@ Require valid-user
     directive, instead of <em>ldap://</em>.</p>
 </div><div class="top"><a href="#page-header"><img alt="top" src="../images/up.gif" /></a></div>
 <div class="section">
+<h2><a name="exposed" id="exposed">Exposing Login Information</a></h2>
+
+    <p>When this module performs authentication, LDAP attributes specified
+    in the <code class="directive"><a href="#authldapurl">AuthLDAPUrl</a></code> 
+    directive are placed in environment variables with the prefix "AUTHENTICATE_".</p>
+
+    <p>If the attribute field contains the username, common name
+    and telephone number of a user, a CGI program will have access to
+    this information without the need to make a second independent LDAP
+    query to gather this additional information.</p>
+
+    <p>This has the potential to dramatically simplify the coding and
+    configuration required in some web applications.</p>
+
+</div><div class="top"><a href="#page-header"><img alt="top" src="../images/up.gif" /></a></div>
+<div class="section">
 <h2><a name="frontpage" id="frontpage">Using Microsoft
     FrontPage with mod_authnz_ldap</a></h2>
 
@@ -585,16 +604,9 @@ Require valid-user
     that gets created in the web</p>
 <div class="example"><pre>
 AuthLDAPURL            "the url"
-AuthzLDAPAuthoritative off
 AuthGroupFile <em>mygroupfile</em>
 Require group <em>mygroupfile</em>
 </pre></div>
-
-    <p><code class="directive"><a href="#authzldapauthoritative">AuthzLDAPAuthoritative</a></code> 
-    must be off to allow <code class="module"><a href="../mod/mod_authnz_ldap.html">mod_authnz_ldap</a></code> to decline group
-    authentication so that Apache will fall back to file
-    authentication for checking group membership. This allows the
-    FrontPage-managed group file to be used.</p>
 
 <h3><a name="howitworks" id="howitworks">How It Works</a></h3>
 
@@ -941,6 +953,14 @@ environment variable</td></tr>
 
     <p>See above for examples of <code class="directive"><a href="#authldapurl">AuthLDAPURL</a></code> URLs.</p>
 
+    <p> When <code class="directive"><a href="#authldapurl">AuthLDAPURL</a></code>
+    is enabled in a particular context, but some other module has performed
+    authentication for the request, the server will try to map the username to a DN
+    during authorization regardless of whether or not LDAP-specific requirements
+    are present. To ignore the failures to map a username to a DN during
+    authorization, set <code class="directive"><a href="#&#10;    authzldapautoritative">
+    AuthzLDAPAutoritative</a></code> to "off".</p>
+
 </div>
 <div class="top"><a href="#page-header"><img alt="top" src="../images/up.gif" /></a></div>
 <div class="directive-section"><h2><a name="AuthzLDAPAuthoritative" id="AuthzLDAPAuthoritative">AuthzLDAPAuthoritative</a> <a name="authzldapauthoritative" id="authzldapauthoritative">Directive</a></h2>
@@ -955,16 +975,20 @@ authenticating the user if this one fails</td></tr>
 <tr><th><a href="directive-dict.html#Module">Module:</a></th><td>mod_authnz_ldap</td></tr>
 </table>
     <p>Set to <code>off</code> if this module should let other
-    authentication modules attempt to authenticate the user, should
-    authentication with this module fail. Control is only passed on
+    authorization modules attempt to authorize the user, should
+    authorization with this module fail. Control is only passed on
     to lower modules if there is no DN or rule that matches the
     supplied user name (as passed by the client).</p>
+    <p> When no LDAP-specific <code class="directive"><a href="../mod/core.html#require">Require</a></code>  directives
+    are used, authorization is allowed to fall back to other modules
+    as if <code class="directive"><a href="#authzldapauthoritative">AuthzLDAPAuthoritative</a></code>
+    was set to <code>off</code>. </p>
 
 </div>
 </div>
 <div class="bottomlang">
 <p><span>Available Languages: </span><a href="../en/mod/mod_authnz_ldap.html" title="English">&nbsp;en&nbsp;</a></p>
 </div><div id="footer">
-<p class="apache">Copyright 2007 The Apache Software Foundation.<br />Licensed under the <a href="http://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a>.</p>
+<p class="apache">Copyright 2008 The Apache Software Foundation.<br />Licensed under the <a href="http://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a>.</p>
 <p class="menu"><a href="../mod/">Modules</a> | <a href="../mod/directives.html">Directives</a> | <a href="../faq/">FAQ</a> | <a href="../glossary.html">Glossary</a> | <a href="../sitemap.html">Sitemap</a></p></div>
 </body></html>

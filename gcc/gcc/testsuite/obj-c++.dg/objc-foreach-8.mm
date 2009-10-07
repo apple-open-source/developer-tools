@@ -1,6 +1,6 @@
 /* APPLE LOCAL file radar 4631818 */
-/* { dg-options "-mmacosx-version-min=10.5 -framework Foundation -framework CoreFoundation" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
-/* { dg-options "-framework Foundation -framework CoreFoundation" { target arm*-*-darwin* } } */
+/* { dg-options "-mmacosx-version-min=10.5 -framework Foundation" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
+/* { dg-options "-framework Foundation" { target arm*-*-darwin* } } */
 /* { dg-do run } */
 #import <Foundation/Foundation.h>
 

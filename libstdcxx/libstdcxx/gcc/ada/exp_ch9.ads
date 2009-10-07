@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2004 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -29,6 +29,13 @@
 with Types; use Types;
 
 package Exp_Ch9 is
+
+   type Subprogram_Protection_Mode is
+     (Dispatching_Mode,
+      Protected_Mode,
+      Unprotected_Mode);
+   --  This type is used to distinguish the different protection modes of a
+   --  protected subprogram.
 
    procedure Add_Discriminal_Declarations
      (Decls : List_Id;
@@ -102,10 +109,9 @@ package Exp_Ch9 is
    --  declarative part.
 
    function Build_Protected_Sub_Specification
-     (N           : Node_Id;
-      Prottyp     : Entity_Id;
-      Unprotected : Boolean := False)
-      return        Node_Id;
+     (N       : Node_Id;
+      Prottyp : Entity_Id;
+      Mode    : Subprogram_Protection_Mode) return Node_Id;
    --  Build specification for protected subprogram. This is called when
    --  expanding a protected type, and also when expanding the declaration for
    --  an Access_To_Protected_Subprogram type. In the latter case, Prottyp is
@@ -214,7 +220,7 @@ package Exp_Ch9 is
    --  routine to make sure Complete_Master is called on exit).
 
    procedure Expand_Access_Protected_Subprogram_Type (N : Node_Id);
-   --  Build Equivalent_Type for an Access_to_protected_Subprogram.
+   --  Build Equivalent_Type for an Access_to_protected_Subprogram
 
    procedure Expand_Accept_Declarations (N : Node_Id; Ent : Entity_Id);
    --  Expand declarations required for accept statement. See bodies of
@@ -305,13 +311,21 @@ package Exp_Ch9 is
    --  protected type.
 
    procedure Set_Privals
-      (Dec : Node_Id;
-       Op  : Node_Id;
-       Loc : Source_Ptr);
+      (Dec           : Node_Id;
+       Op            : Node_Id;
+       Loc           : Source_Ptr;
+       After_Barrier : Boolean := False);
    --  Associates a new set of privals (placeholders for later access to
    --  private components of protected objects) with the private object
    --  declarations of a protected object. These will be used to expand
    --  the references to private objects in the next protected
    --  subprogram or entry body to be expanded.
+   --
+   --  The flag After_Barrier indicates whether this is called after building
+   --  the barrier function for an entry body. This flag determines whether
+   --  the privals should have source names (which simplifies debugging) or
+   --  internally generated names. Entry barriers contain no debuggable code,
+   --  and there may be visibility conflicts between an entry index and a
+   --  a prival, so  privals for barrier function have internal names.
 
 end Exp_Ch9;

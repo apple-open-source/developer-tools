@@ -25,6 +25,7 @@
 // sigblob - signature (Super)Blob types
 //
 #include "sigblob.h"
+#include "CSCommon.h"
 
 
 namespace Security {
@@ -36,8 +37,10 @@ CFDataRef EmbeddedSignatureBlob::component(CodeDirectory::SpecialSlot slot) cons
 	if (const BlobCore *blob = this->find(slot))
 		if (CodeDirectory::slotAttributes(slot) & cdComponentIsBlob)
 			return makeCFData(*blob);	// is a native Blob
+		else if (const BlobWrapper *wrap = BlobWrapper::specific(blob))
+			return makeCFData(*wrap);
 		else
-			return makeCFData(*BlobWrapper::specific(blob)); // unwrap payload
+			MacOSError::throwMe(errSecCSSignatureInvalid);
 	return NULL;
 }
 
@@ -48,6 +51,13 @@ void EmbeddedSignatureBlob::Maker::component(CodeDirectory::SpecialSlot slot, CF
 		add(slot, reinterpret_cast<const BlobCore *>(CFDataGetBytePtr(data))->clone());
 	else
 		add(slot, BlobWrapper::alloc(CFDataGetBytePtr(data), CFDataGetLength(data)));
+}
+
+
+CFDictionaryRef EntitlementBlob::entitlements() const
+{
+	return makeCFDictionaryFrom(this->at<const UInt8 *>(sizeof(EntitlementBlob)),
+		this->length() - sizeof(EntitlementBlob));
 }
 
 

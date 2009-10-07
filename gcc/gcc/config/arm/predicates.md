@@ -16,8 +16,8 @@
 
 ;; You should have received a copy of the GNU General Public License
 ;; along with GCC; see the file COPYING.  If not, write to
-;; the Free Software Foundation, 59 Temple Place - Suite 330,
-;; Boston, MA 02111-1307, USA.
+;; the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+;; Boston, MA 02110-1301, USA.
 
 (define_predicate "s_register_operand"
   (match_code "reg,subreg")
@@ -52,7 +52,7 @@
 })
 
 ;; APPLE LOCAL begin ARM add this peephole
-;; Any Thumb low register. 
+;; Any Thumb low register.
 (define_predicate "thumb_low_register_operand"
   (match_code "reg,subreg")
 {
@@ -86,7 +86,7 @@
   (and (match_code "const_int")
        (match_test "const_ok_for_arm (INTVAL (op))")))
 
-;; APPLE LOCAL begin ARM 4468410 long long constants
+;; APPLE LOCAL begin 5831562 long long constants
 (define_predicate "arm_immediate64_operand"
   (and (match_code "const_int,const_double")
        (match_test "const64_ok_for_arm_immediate (op)")))
@@ -94,14 +94,8 @@
 (define_predicate "arm_add_immediate64_operand"
   (and (match_code "const_int,const_double")
        (match_test "const64_ok_for_arm_add (op)")))
-;; APPLE LOCAL end ARM 4468410 long long constants
+;; APPLE LOCAL end 5831562 long long constants
 
-;; APPLE LOCAL begin ARM 5482075 DI mode bitwise constant optimization
-(define_predicate "arm_and_immediate64_operand"
-  (and (match_code "const_int,const_double")
-       (match_test "const64_ok_for_arm_and (op)")))
-
-;; APPLE LOCAL end ARM 5482075 DI mode bitwise constant optimization
 (define_predicate "arm_neg_immediate_operand"
   (and (match_code "const_int")
        (match_test "const_ok_for_arm (-INTVAL (op))")))
@@ -115,7 +109,7 @@
   (ior (match_operand 0 "s_register_operand")
        (match_operand 0 "arm_immediate_operand")))
 
-;; APPLE LOCAL begin ARM 4468410 long long constants
+;; APPLE LOCAL begin 5831562 long long constants
 (define_predicate "arm_rhs64_operand"
   (ior (match_operand 0 "s_register_operand")
        (match_operand 0 "arm_immediate64_operand")))
@@ -123,14 +117,8 @@
 (define_predicate "arm_add64_operand"
   (ior (match_operand 0 "s_register_operand")
        (match_operand 0 "arm_add_immediate64_operand")))
-;; APPLE LOCAL end ARM 4468410 long long constants
+;; APPLE LOCAL end 5831562 long long constants
 
-;; APPLE LOCAL begin ARM 5482075 DI mode bitwise constant optimization
-(define_predicate "arm_and64_operand"
-  (ior (match_operand 0 "s_register_operand")
-       (match_operand 0 "arm_and_immediate64_operand")))
-
-;; APPLE LOCAL end ARM 5482075 DI mode bitwise constant optimization
 (define_predicate "arm_rhsm_operand"
   (ior (match_operand 0 "arm_rhs_operand")
        (match_operand 0 "memory_operand")))
@@ -155,25 +143,13 @@
         "offsettable_address_p (reload_completed | reload_in_progress,
 				mode, XEXP (op, 0))")))
 
-;; True if the operand is a memory reference which is, or can be made,
-;; word aligned by adjusting the offset.
-(define_predicate "alignable_memory_operand"
-  (match_code "mem")
-{
-  rtx reg;
-
-  op = XEXP (op, 0);
-
-  return ((GET_CODE (reg = op) == REG
-	   || (GET_CODE (op) == SUBREG
-	       && GET_CODE (reg = SUBREG_REG (op)) == REG)
-	   || (GET_CODE (op) == PLUS
-	       && GET_CODE (XEXP (op, 1)) == CONST_INT
-	       && (GET_CODE (reg = XEXP (op, 0)) == REG
-		   || (GET_CODE (XEXP (op, 0)) == SUBREG
-		       && GET_CODE (reg = SUBREG_REG (XEXP (op, 0))) == REG))))
-	  && REGNO_POINTER_ALIGN (REGNO (reg)) >= 32);
-})
+;; True if the operand is a memory operand that does not have an
+;; automodified base register (and thus will not generate output reloads).
+(define_predicate "call_memory_operand"
+  (and (match_code "mem")
+       (and (match_test "GET_RTX_CLASS (GET_CODE (XEXP (op, 0)))
+			 != RTX_AUTOINC")
+	    (match_operand 0 "memory_operand"))))
 
 (define_predicate "arm_reload_memory_operand"
   (and (match_code "mem,reg,subreg")
@@ -217,10 +193,10 @@
        (match_test "mode == GET_MODE (op)")))
 
 ;; APPLE LOCAL begin ARM 4382996 improve assignments of NE
-;; True for binary operators that can set the condition codes as a side effect.
-;; Plus also works, but will not currently be matched; see *add_add_ne_0.
-(define_special_predicate "binary_cc_operator"
-  (and (match_code "minus,mult,ior,xor,and,ashift,ashiftrt,lshiftrt")
+;; True for binary operators that can set the condition codes as a side effect,
+;; and that don't have early clobber semantics.
+(define_special_predicate "binary_cc_noclobber_operator"
+  (and (match_code "plus,minus,ior,xor,and,ashift,ashiftrt,lshiftrt")
        (match_test "mode == GET_MODE (op)")))
 ;; APPLE LOCAL end ARM 4382996 improve assignments of NE
 
@@ -527,9 +503,9 @@
 {
 #if TARGET_MACHO
   return GET_CODE (op) == REG
-	 || ! (flag_pic || MACHO_DYNAMIC_NO_PIC_P)
-	 || machopic_data_defined_p (op)
-	 || machopic_lookup_stub_or_non_lazy_ptr (XSTR (op, 0));
+         || ! (flag_pic || MACHO_DYNAMIC_NO_PIC_P)
+         || machopic_data_defined_p (op)
+         || machopic_lookup_stub_or_non_lazy_ptr (XSTR (op, 0));
 #else
   return 1;
 #endif

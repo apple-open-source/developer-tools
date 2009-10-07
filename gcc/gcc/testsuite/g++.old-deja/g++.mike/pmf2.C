@@ -42,7 +42,8 @@ B_table b;
 bar jar;
 
 int main() {
-  printf("ptr to B_table=%x, ptr to A_table=%x\n",&b,(A_table*)&b);
+  /* APPLE LOCAL default to Wformat-security 5764921 */
+  printf("ptr to B_table=%p, ptr to A_table=%p\n",(void*)&b,(void*)(A_table*)&b);
   B_table::B_ti_fn z = &B_table::func1;
   int j = 1;
   jar.call_fn_fn1(j,(void *)&z);

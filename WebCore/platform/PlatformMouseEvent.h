@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2004, 2005, 2006 Apple Computer, Inc.  All rights reserved.
+ * Copyright (C) 2004, 2005, 2006, 2009 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -27,18 +27,16 @@
 #define PlatformMouseEvent_h
 
 #include "IntPoint.h"
-#include <wtf/Platform.h>
 
-#if PLATFORM(MAC)
-#ifdef __OBJC__
-@class NSEvent;
-@class NSScreen;
-@class NSWindow;
-#else
-class NSEvent;
-class NSScreen;
-class NSWindow;
+#if PLATFORM(GTK)
+typedef struct _GdkEventButton GdkEventButton;
+typedef struct _GdkEventMotion GdkEventMotion;
 #endif
+
+#if PLATFORM(QT)
+QT_BEGIN_NAMESPACE
+class QInputEvent;
+QT_END_NAMESPACE
 #endif
 
 #if PLATFORM(WIN)
@@ -48,13 +46,8 @@ typedef unsigned WPARAM;
 typedef long LPARAM;
 #endif
 
-#if PLATFORM(GTK)
-typedef struct _GdkEventButton GdkEventButton;
-typedef struct _GdkEventMotion GdkEventMotion;
-#endif
-
-#if PLATFORM(QT)
-class QMouseEvent;
+#if PLATFORM(WX)
+class wxMouseEvent;
 #endif
 
 namespace WebCore {
@@ -78,9 +71,11 @@ namespace WebCore {
         {
         }
 
-        PlatformMouseEvent(const IntPoint& pos, const IntPoint& globalPos, MouseButton button, MouseEventType eventType,
+        PlatformMouseEvent(const IntPoint& position, const IntPoint& globalPosition, MouseButton button, MouseEventType eventType,
                            int clickCount, bool shift, bool ctrl, bool alt, bool meta, double timestamp)
-            : m_position(pos), m_globalPosition(globalPos), m_button(button)
+            : m_position(position)
+            , m_globalPosition(globalPosition)
+            , m_button(button)
             , m_eventType(eventType)
             , m_clickCount(clickCount)
             , m_shiftKey(shift)
@@ -106,27 +101,34 @@ namespace WebCore {
         bool metaKey() const { return m_metaKey; }
         unsigned modifierFlags() const { return m_modifierFlags; }
         
-        //time in seconds
+        // Time in seconds.
         double timestamp() const { return m_timestamp; }
 
-#if PLATFORM(MAC)
-        PlatformMouseEvent(NSEvent*);
+#if PLATFORM(GTK) 
+        PlatformMouseEvent(GdkEventButton*);
+        PlatformMouseEvent(GdkEventMotion*);
+#endif
+
+#if PLATFORM(MAC) && defined(__OBJC__)
+        PlatformMouseEvent(NSEvent *, NSView *windowView);
         int eventNumber() const { return m_eventNumber; }
 #endif
+
+#if PLATFORM(QT)
+        PlatformMouseEvent(QInputEvent*, int clickCount);
+#endif
+
 #if PLATFORM(WIN)
         PlatformMouseEvent(HWND, UINT, WPARAM, LPARAM, bool activatedWebView = false);
         void setClickCount(int count) { m_clickCount = count; }
         bool activatedWebView() const { return m_activatedWebView; }
 #endif
-#if PLATFORM(GTK) 
-        PlatformMouseEvent(GdkEventButton*);
-        PlatformMouseEvent(GdkEventMotion*);
-#endif
-#if PLATFORM(QT)
-        PlatformMouseEvent(QMouseEvent*, int clickCount);
+
+#if PLATFORM(WX)
+        PlatformMouseEvent(const wxMouseEvent&, const wxPoint& globalPoint, int clickCount);
 #endif
 
-    private:
+    protected:
         IntPoint m_position;
         IntPoint m_globalPosition;
         MouseButton m_button;
@@ -138,18 +140,20 @@ namespace WebCore {
         bool m_metaKey;
         double m_timestamp; // unit: seconds
         unsigned m_modifierFlags;
+
 #if PLATFORM(MAC)
         int m_eventNumber;
 #endif
+
 #if PLATFORM(WIN)
         bool m_activatedWebView;
 #endif
     };
 
-#if PLATFORM(MAC)
-    IntPoint globalPoint(const NSPoint& windowPoint, NSWindow *window);
-    IntPoint pointForEvent(NSEvent *event);
-    IntPoint globalPointForEvent(NSEvent *event);
+#if PLATFORM(MAC) && defined(__OBJC__)
+    IntPoint globalPoint(const NSPoint& windowPoint, NSWindow *);
+    IntPoint pointForEvent(NSEvent *, NSView *windowView);
+    IntPoint globalPointForEvent(NSEvent *);
 #endif
 
 } // namespace WebCore

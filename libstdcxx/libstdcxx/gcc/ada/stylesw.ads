@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2004, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -56,6 +56,11 @@ package Stylesw is
    --  This can be set True by using the -gnatg or -gnatyb switches. If
    --  it is True, then spaces at the end of lines are not permitted.
 
+   Style_Check_Blank_Lines : Boolean := False;
+   --  This can be set True by using the -gnatg or -gnatyu switches. If
+   --  it is True, then multiple blank lines are not permitted, and there
+   --  may not be a blank line at the end of the file.
+
    Style_Check_Comments : Boolean := False;
    --  This can be set True by using the -gnatg or -gnatyc switches. If
    --  it is True, then comments are style checked as follows:
@@ -83,6 +88,11 @@ package Stylesw is
    --
    --  Note: the reason for the last two conditions is to allow "boxed"
    --  comments where only a single space separates the comment characters.
+
+   Style_Check_DOS_Line_Terminator : Boolean := False;
+   --  This can be set true by using the -gnatg or -gnatyd switches. If
+   --  it is True, then the line terminator must be a single LF, without an
+   --  associated CR (e.g. DOS line terminator sequence CR/LF not allowed).
 
    Style_Check_End_Labels : Boolean := False;
    --  This can be set True by using the -gnatg or -gnatye switches. If
@@ -144,6 +154,10 @@ package Stylesw is
    --  This can be set True by using -gnatyLnnn with a value other than
    --  zero (a value of zero resets it to False). If True, it activates
    --  checking the maximum nesting level against Style_Max_Nesting_Level.
+
+   Style_Check_Mode_In : Boolean := False;
+   --  This can be set True by using -gnatyI. If True, it activates checking
+   --  that mode IN is not used on its own (since it is the default).
 
    Style_Check_Order_Subprograms : Boolean := False;
    --  This can be set True by using the -gnatg or -gnatyo switch. If it
@@ -242,26 +256,33 @@ package Stylesw is
 
    procedure Set_Default_Style_Check_Options;
    --  This procedure is called to set the default style checking options
-   --  in response to a -gnatg switch or -gnaty with no suboptions.
+   --  in response to a -gnaty switch with no suboptions.
+
+   Style_Msg_Buf : String (1 .. 80);
+   Style_Msg_Len : Natural;
+   --  Used to return
 
    procedure Set_Style_Check_Options
      (Options  : String;
       OK       : out Boolean;
       Err_Col  : out Natural);
-   --  This procedure is called to set the style check options that
-   --  correspond to the characters in the given Options string. If
-   --  all options are valid, they are set in an additive manner:
-   --  any previous options are retained unless overridden. If any
-   --  invalid character is found, then OK is False on exit, and
-   --  Err_Col is the index in options of the bad character. If all
-   --  options are valid, OK is True on return, and Err_Col is set
-   --  to Options'Last + 1.
+   --  This procedure is called to set the style check options that correspond
+   --  to the characters in the given Options string. If all options are valid,
+   --  they are set in an additive manner: any previous options are retained
+   --  unless overridden.
+   --
+   --  If all options given are valid, then OK is True, Err_Col is set to
+   --  Options'Last + 1, and Style_Msg_Buf/Style_Msg_Len are unchanged.
+   --
+   --  If an invalid character is found, then OK is False on exit, and Err_Col
+   --  is the index in options of the bad character. In this case Style_Msg_Len
+   --  is set and Style_Msg_Buf (1 .. Style_Msg_Len) has a detailed message
+   --  describing the error.
 
    procedure Set_Style_Check_Options (Options : String);
-   --  Like the above procedure, except that the call is simply ignored if
-   --  there are any error conditions, this is for example appopriate for
-   --  calls where the string is known to be valid, e.g. because it was
-   --  obtained by Save_Style_Check_Options.
+   --  Like the above procedure, but used when the Options string is known to
+   --  be valid. This is for example appopriate for calls where the string ==
+   --  was obtained by Save_Style_Check_Options.
 
    procedure Reset_Style_Check_Options;
    --  Sets all style check options to off

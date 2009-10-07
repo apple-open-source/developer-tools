@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-1998 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -20,8 +20,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -35,9 +35,15 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
-with System;
+with System.Task_Primitives;
+--  Used for Suspension_Object
+
+with Ada.Finalization;
+--  Used for Limited_Controlled
 
 package Ada.Synchronous_Task_Control is
+   pragma Preelaborate_05;
+   --  In accordance with Ada 2005 AI-362
 
    type Suspension_Object is limited private;
 
@@ -51,19 +57,26 @@ package Ada.Synchronous_Task_Control is
 
 private
 
-   --  ??? Using a protected object is overkill; suspension could be
-   --      implemented more efficiently.
+   procedure Initialize (S : in out Suspension_Object);
+   --  Initialization for Suspension_Object
 
-   protected type Suspension_Object is
-      entry Wait;
-      procedure Set_False;
-      procedure Set_True;
-      function Get_Open return Boolean;
-      entry Wait_Exception;
+   procedure Finalize (S : in out Suspension_Object);
+   --  Finalization for Suspension_Object
 
-      pragma Priority (System.Any_Priority'Last);
-   private
-      Open : Boolean := False;
-   end Suspension_Object;
+   type Suspension_Object is
+     new Ada.Finalization.Limited_Controlled with
+   record
+      SO : System.Task_Primitives.Suspension_Object;
+      --  Use low-level suspension objects so that the synchronization
+      --  functionality provided by this object can be achieved using
+      --  efficient operating system primitives.
+   end record;
+
+   pragma Inline (Set_True);
+   pragma Inline (Set_False);
+   pragma Inline (Current_State);
+   pragma Inline (Suspend_Until_True);
+   pragma Inline (Initialize);
+   pragma Inline (Finalize);
 
 end Ada.Synchronous_Task_Control;

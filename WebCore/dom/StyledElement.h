@@ -3,7 +3,7 @@
  *           (C) 1999 Antti Koivisto (koivisto@kde.org)
  *           (C) 2001 Peter Kelly (pmk@post.com)
  *           (C) 2001 Dirk Mueller (mueller@kde.org)
- * Copyright (C) 2003, 2004, 2005, 2006, 2007 Apple Inc. All rights reserved.
+ * Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008 Apple Inc. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -25,12 +25,15 @@
 #ifndef StyledElement_h
 #define StyledElement_h
 
+#include "CSSPrimitiveValue.h"
 #include "Element.h"
+#include "MappedAttributeEntry.h"
 #include "NamedMappedAttrMap.h"
 
 namespace WebCore {
 
 class CSSMappedAttributeDeclaration;
+class CSSMutableStyleDeclaration;
 class MappedAttribute;
 
 class StyledElement : public Element {
@@ -49,36 +52,48 @@ public:
     void addCSSProperty(MappedAttribute* attr, int id, const String &value);
     void addCSSProperty(MappedAttribute* attr, int id, int value);
     void addCSSStringProperty(MappedAttribute* attr, int id, const String &value, CSSPrimitiveValue::UnitTypes = CSSPrimitiveValue::CSS_STRING);
-    void addCSSImageProperty(MappedAttribute* attr, int id, const String &URL);
+    void addCSSImageProperty(MappedAttribute*, int propertyID, const String& url);
     void addCSSColor(MappedAttribute* attr, int id, const String &c);
     void createMappedDecl(MappedAttribute* attr);
     
-    static CSSMappedAttributeDeclaration* getMappedAttributeDecl(MappedAttributeEntry type, Attribute* attr);
-    static void setMappedAttributeDecl(MappedAttributeEntry type, Attribute* attr, CSSMappedAttributeDeclaration* decl);
-    static void removeMappedAttributeDecl(MappedAttributeEntry type, const QualifiedName& attrName, const AtomicString& attrValue);
+    static CSSMappedAttributeDeclaration* getMappedAttributeDecl(MappedAttributeEntry type, const QualifiedName& name, const AtomicString& value);
+    static void setMappedAttributeDecl(MappedAttributeEntry, const QualifiedName& name, const AtomicString& value, CSSMappedAttributeDeclaration*);
+    static void removeMappedAttributeDecl(MappedAttributeEntry type, const QualifiedName& name, const AtomicString& value);
+
+    static CSSMappedAttributeDeclaration* getMappedAttributeDecl(MappedAttributeEntry, Attribute*);
+    static void setMappedAttributeDecl(MappedAttributeEntry, Attribute*, CSSMappedAttributeDeclaration*);
     
     CSSMutableStyleDeclaration* inlineStyleDecl() const { return m_inlineStyleDecl.get(); }
-    virtual CSSMutableStyleDeclaration* additionalAttributeStyleDecl();
+    virtual bool canHaveAdditionalAttributeStyleDecls() const { return false; }
+    virtual void additionalAttributeStyleDecls(Vector<CSSMutableStyleDeclaration*>&) {};
     CSSMutableStyleDeclaration* getInlineStyleDecl();
     CSSStyleDeclaration* style();
     void createInlineStyleDecl();
     void destroyInlineStyleDecl();
     void invalidateStyleAttribute();
-    virtual void updateStyleAttributeIfNeeded() const;
+    virtual void updateStyleAttribute() const;
     
-    virtual const AtomicStringList* getClassList() const;
-    virtual void attributeChanged(Attribute* attr, bool preserveDecls = false);
-    virtual void parseMappedAttribute(MappedAttribute* attr);
+    const ClassNames& classNames() const { ASSERT(hasClass()); ASSERT(mappedAttributes()); return mappedAttributes()->classNames(); }
+
+    virtual void attributeChanged(Attribute*, bool preserveDecls = false);
+    virtual void parseMappedAttribute(MappedAttribute*);
     virtual bool mapToEntry(const QualifiedName& attrName, MappedAttributeEntry& result) const;
     virtual void createAttributeMap() const;
-    virtual Attribute* createAttribute(const QualifiedName& name, StringImpl* value);
+    virtual PassRefPtr<Attribute> createAttribute(const QualifiedName&, const AtomicString& value);
 
     virtual void copyNonAttributeProperties(const Element*);
 
+    virtual void addSubresourceAttributeURLs(ListHashSet<KURL>&) const;
+
 protected:
+    // classAttributeChanged() exists to share code between
+    // parseMappedAttribute (called via setAttribute()) and
+    // svgAttributeChanged (called when element.className.baseValue is set)
+    void classAttributeChanged(const AtomicString& newClassString);
+    
+    virtual void didMoveToNewOwnerDocument();
+
     RefPtr<CSSMutableStyleDeclaration> m_inlineStyleDecl;
-    mutable bool m_isStyleAttributeValid : 1;
-    mutable bool m_synchronizingStyleAttribute : 1;
 };
 
 } //namespace

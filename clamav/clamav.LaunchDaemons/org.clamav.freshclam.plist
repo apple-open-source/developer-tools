@@ -2,8 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>Iterations</key>
-	<integer>1</integer>
 	<key>Disabled</key>
 	<true/>
 	<key>Label</key>
@@ -16,7 +14,8 @@
 	<array>
 		<string>freshclam</string>
 		<string>-d</string>
-		<string>-c 4</string>
+		<string>-c</string>
+		<string>4</string>
 	</array>
 	<key>ServiceIPC</key>
 	<false/>

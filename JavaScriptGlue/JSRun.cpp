@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005 Apple Computer, Inc.  All rights reserved.
+ * Copyright (C) 2005, 2008 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,11 +29,21 @@
 #include "config.h"
 #include "JSRun.h"
 
+#include "UserObjectImp.h"
+#include <JavaScriptCore/Completion.h>
+#include <JavaScriptCore/SourceCode.h>
+
+JSGlueGlobalObject::JSGlueGlobalObject(PassRefPtr<Structure> structure, JSFlags flags)
+    : JSGlobalObject(structure, new Data, this)
+{
+    d()->flags = flags;
+    d()->userObjectStructure = UserObjectImp::createStructure(jsNull());
+}
+
 JSRun::JSRun(CFStringRef source, JSFlags inFlags)
     :   JSBase(kJSRunTypeID),
         fSource(CFStringToUString(source)),
-        fGlobalObject(new JSObject()),
-        fInterpreter(new JSInterpreter(fGlobalObject, inFlags)),
+        fGlobalObject(new (&getThreadGlobalExecState()->globalData()) JSGlueGlobalObject(JSGlueGlobalObject::createStructure(jsNull()), inFlags)),
         fFlags(inFlags)
 {
 }
@@ -52,22 +62,17 @@ UString JSRun::GetSource() const
     return fSource;
 }
 
-JSObject *JSRun::GlobalObject() const
+JSGlobalObject* JSRun::GlobalObject() const
 {
     return fGlobalObject;
 }
 
-JSInterpreter* JSRun::GetInterpreter()
-{
-    return fInterpreter.get();
-}
-
 Completion JSRun::Evaluate()
 {
-    return fInterpreter->evaluate(UString(), 0, fSource.data(), fSource.size());
+    return JSC::evaluate(fGlobalObject->globalExec(), fGlobalObject->globalScopeChain(), makeSource(fSource));
 }
 
 bool JSRun::CheckSyntax()
 {
-    return fInterpreter->checkSyntax(UString(), 0, fSource.data(), fSource.size()).complType() != Throw;
+    return JSC::checkSyntax(fGlobalObject->globalExec(), makeSource(fSource)).complType() != Throw;
 }

@@ -25,8 +25,10 @@
 // resource directory construction and verification
 //
 #include "resources.h"
-#include "renum.h"
-#include <security_codesigning/cfmunge.h>
+#include "csutilities.h"
+#include <Security/CSCommon.h>
+#include <security_utilities/unix++.h>
+#include <security_utilities/cfmunge.h>
 
 namespace Security {
 namespace CodeSigning {
@@ -87,9 +89,14 @@ FTSENT *ResourceBuilder::next(string &path, Rule * &rule)
 		Rule *bestRule = NULL;
 		for (Rules::const_iterator it = mRules.begin(); it != mRules.end(); ++it) {
 			Rule *rule = *it;
-			if (rule->match(path.c_str()))
+			if (rule->match(path.c_str())) {
+				if (rule->flags & exclusion) {
+					bestRule = NULL;
+					break;
+				}
 				if (!bestRule || rule->weight > bestRule->weight)
 					bestRule = rule;
+		}
 		}
 		if (!bestRule || (bestRule->flags & omitted))
 			continue;
@@ -106,7 +113,7 @@ FTSENT *ResourceBuilder::next(string &path, Rule * &rule)
 CFDictionaryRef ResourceBuilder::build()
 {
 	secdebug("codesign", "start building resource directory");
-	CFRef<CFMutableDictionaryRef> files = makeCFMutableDictionary(0);
+	CFRef<CFMutableDictionaryRef> files = makeCFMutableDictionary();
 
 	string path;
 	Rule *rule;
@@ -124,11 +131,8 @@ CFDictionaryRef ResourceBuilder::build()
 	}
 	secdebug("codesign", "finished code directory with %d entries",
 		int(CFDictionaryGetCount(files)));
-		
-	return makeCFDictionary(2,
-		CFSTR("rules"), mRawRules.get(),
-		CFSTR("files"), files.get()
-	);
+	
+	return cfmake<CFDictionaryRef>("{rules=%O,files=%O}", mRawRules.get(), files.get());
 }
 
 
@@ -137,11 +141,10 @@ CFDictionaryRef ResourceBuilder::build()
 //
 CFDataRef ResourceBuilder::hashFile(const char *path)
 {
-	CFRef<CFDataRef> data = cfLoadFile(path);
-	secdebug("rdirenum", "  %s (%d bytes)", path, int(CFDataGetLength(data)));
+	UnixPlusPlus::AutoFileDesc fd(path);
 	SHA1 hasher;
-	hasher(CFDataGetBytePtr(data), CFDataGetLength(data));
-	unsigned char digest[CC_SHA1_DIGEST_LENGTH];
+	hashFileData(fd, hasher);
+	SHA1::Digest digest;
 	hasher.finish(digest);
 	return CFDataCreate(NULL, digest, sizeof(digest));
 }
@@ -174,6 +177,19 @@ bool ResourceBuilder::Rule::match(const char *s) const
 	default:
 		MacOSError::throwMe(errSecCSResourceRulesInvalid);
 	}
+}
+
+
+std::string ResourceBuilder::escapeRE(const std::string &s)
+{
+	string r;
+	for (string::const_iterator it = s.begin(); it != s.end(); ++it) {
+		char c = *it;
+		if (strchr("\\[]{}().+*", c))
+			r.push_back('\\');
+		r.push_back(c);
+	}
+	return r;
 }
 
 

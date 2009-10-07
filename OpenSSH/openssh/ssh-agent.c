@@ -1,4 +1,4 @@
-/* $OpenBSD: ssh-agent.c,v 1.153 2006/10/06 02:29:19 djm Exp $ */
+/* $OpenBSD: ssh-agent.c,v 1.159 2008/06/28 14:05:15 djm Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -51,6 +51,7 @@
 
 #include <openssl/evp.h>
 #include <openssl/md5.h>
+#include "openbsd-compat/openssl-compat.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -125,6 +126,7 @@ int max_fd = 0;
 
 /* pid of shell == parent of agent */
 pid_t parent_pid = -1;
+u_int parent_alive_interval = 0;
 
 /* pathname and directory for AUTH_SOCKET */
 char socket_name[MAXPATHLEN];
@@ -315,6 +317,7 @@ process_sign_request2(SocketEntry *e)
 	u_char *blob, *data, *signature = NULL;
 	u_int blen, dlen, slen = 0;
 	extern int datafellows;
+	int odatafellows;
 	int ok = -1, flags;
 	Buffer msg;
 	Key *key;
@@ -325,6 +328,7 @@ process_sign_request2(SocketEntry *e)
 	data = buffer_get_string(&e->request, &dlen);
 
 	flags = buffer_get_int(&e->request);
+	odatafellows = datafellows;
 	if (flags & SSH_AGENT_OLD_SIGNATURE)
 		datafellows = SSH_BUG_SIGBLOB;
 
@@ -350,6 +354,7 @@ process_sign_request2(SocketEntry *e)
 	xfree(blob);
 	if (signature != NULL)
 		xfree(signature);
+	datafellows = odatafellows;
 }
 
 /* shared */
@@ -426,10 +431,11 @@ process_remove_all_identities(SocketEntry *e, int version)
 	buffer_put_char(&e->output, SSH_AGENT_SUCCESS);
 }
 
-static void
+/* removes expired keys and returns number of seconds until the next expiry */
+static u_int
 reaper(void)
 {
-	u_int now = time(NULL);
+	u_int deadline = 0, now = time(NULL);
 	Identity *id, *nxt;
 	int version;
 	Idtab *tab;
@@ -438,19 +444,29 @@ reaper(void)
 		tab = idtab_lookup(version);
 		for (id = TAILQ_FIRST(&tab->idlist); id; id = nxt) {
 			nxt = TAILQ_NEXT(id, next);
-			if (id->death != 0 && now >= id->death) {
+			if (id->death == 0)
+				continue;
+			if (now >= id->death) {
+				debug("expiring key '%s'", id->comment);
 				TAILQ_REMOVE(&tab->idlist, id, next);
 				free_identity(id);
 				tab->nentries--;
-			}
+			} else
+				deadline = (deadline == 0) ? id->death :
+				    MIN(deadline, id->death);
 		}
 	}
+	if (deadline == 0 || deadline <= now)
+		return 0;
+	else
+		return (deadline - now);
 }
 
 static void
 process_add_identity(SocketEntry *e, int version)
 {
 	Idtab *tab = idtab_lookup(version);
+	Identity *id;
 	int type, success = 0, death = 0, confirm = 0;
 	char *type_name, *comment;
 	Key *k = NULL;
@@ -518,9 +534,8 @@ process_add_identity(SocketEntry *e, int version)
 		xfree(comment);
 		goto send;
 	}
-	success = 1;
 	while (buffer_len(&e->request)) {
-		switch (buffer_get_char(&e->request)) {
+		switch ((type = buffer_get_char(&e->request))) {
 		case SSH_AGENT_CONSTRAIN_LIFETIME:
 			death = time(NULL) + buffer_get_int(&e->request);
 			break;
@@ -528,24 +543,29 @@ process_add_identity(SocketEntry *e, int version)
 			confirm = 1;
 			break;
 		default:
-			break;
+			error("process_add_identity: "
+			    "Unknown constraint type %d", type);
+			xfree(comment);
+			key_free(k);
+			goto send;
 		}
 	}
+	success = 1;
 	if (lifetime && !death)
 		death = time(NULL) + lifetime;
-	if (lookup_identity(k, version) == NULL) {
-		Identity *id = xmalloc(sizeof(Identity));
+	if ((id = lookup_identity(k, version)) == NULL) {
+		id = xmalloc(sizeof(Identity));
 		id->key = k;
-		id->comment = comment;
-		id->death = death;
-		id->confirm = confirm;
 		TAILQ_INSERT_TAIL(&tab->idlist, id, next);
 		/* Increment the number of identities. */
 		tab->nentries++;
 	} else {
 		key_free(k);
-		xfree(comment);
+		xfree(id->comment);
 	}
+	id->comment = comment;
+	id->death = death;
+	id->confirm = confirm;
 send:
 	buffer_put_int(&e->output, 1);
 	buffer_put_char(&e->output,
@@ -596,10 +616,10 @@ no_identities(SocketEntry *e, u_int type)
 
 #ifdef SMARTCARD
 static void
-process_add_smartcard_key (SocketEntry *e)
+process_add_smartcard_key(SocketEntry *e)
 {
 	char *sc_reader_id = NULL, *pin;
-	int i, version, success = 0, death = 0, confirm = 0;
+	int i, type, version, success = 0, death = 0, confirm = 0;
 	Key **keys, *k;
 	Identity *id;
 	Idtab *tab;
@@ -608,7 +628,7 @@ process_add_smartcard_key (SocketEntry *e)
 	pin = buffer_get_string(&e->request, NULL);
 
 	while (buffer_len(&e->request)) {
-		switch (buffer_get_char(&e->request)) {
+		switch ((type = buffer_get_char(&e->request))) {
 		case SSH_AGENT_CONSTRAIN_LIFETIME:
 			death = time(NULL) + buffer_get_int(&e->request);
 			break;
@@ -616,7 +636,11 @@ process_add_smartcard_key (SocketEntry *e)
 			confirm = 1;
 			break;
 		default:
-			break;
+			error("process_add_smartcard_key: "
+			    "Unknown constraint type %d", type);
+			xfree(sc_reader_id);
+			xfree(pin);
+			goto send;
 		}
 	}
 	if (lifetime && !death)
@@ -758,9 +782,6 @@ process_message(SocketEntry *e)
 	u_int msg_len, type;
 	u_char *cp;
 
-	/* kill dead keys */
-	reaper();
-
 	if (buffer_len(&e->input) < 5)
 		return;		/* Incomplete message. */
 	cp = buffer_ptr(&e->input);
@@ -891,10 +912,12 @@ new_socket(sock_type type, int fd)
 }
 
 static int
-prepare_select(fd_set **fdrp, fd_set **fdwp, int *fdl, u_int *nallocp)
+prepare_select(fd_set **fdrp, fd_set **fdwp, int *fdl, u_int *nallocp,
+    struct timeval **tvpp)
 {
-	u_int i, sz;
+	u_int i, sz, deadline;
 	int n = 0;
+	static struct timeval tv;
 
 	for (i = 0; i < sockets_alloc; i++) {
 		switch (sockets[i].type) {
@@ -937,6 +960,17 @@ prepare_select(fd_set **fdrp, fd_set **fdwp, int *fdl, u_int *nallocp)
 		default:
 			break;
 		}
+	}
+	deadline = reaper();
+	if (parent_alive_interval != 0)
+		deadline = (deadline == 0) ? parent_alive_interval :
+		    MIN(deadline, parent_alive_interval);
+	if (deadline == 0) {
+		*tvpp = NULL;
+	} else {
+		tv.tv_sec = deadline;
+		tv.tv_usec = 0;
+		*tvpp = &tv;
 	}
 	return (1);
 }
@@ -990,7 +1024,8 @@ after_select(fd_set *readset, fd_set *writeset)
 					    buffer_ptr(&sockets[i].output),
 					    buffer_len(&sockets[i].output));
 					if (len == -1 && (errno == EAGAIN ||
-					    errno == EINTR))
+					    errno == EINTR ||
+					    errno == EWOULDBLOCK))
 						continue;
 					break;
 				} while (1);
@@ -1004,7 +1039,8 @@ after_select(fd_set *readset, fd_set *writeset)
 				do {
 					len = read(sockets[i].fd, buf, sizeof(buf));
 					if (len == -1 && (errno == EAGAIN ||
-					    errno == EINTR))
+					    errno == EINTR ||
+					    errno == EWOULDBLOCK))
 						continue;
 					break;
 				} while (1);
@@ -1045,25 +1081,20 @@ cleanup_handler(int sig)
 	_exit(2);
 }
 
-/*ARGSUSED*/
 static void
-check_parent_exists(int sig)
+check_parent_exists(void)
 {
-	int save_errno = errno;
-
 	if (parent_pid != -1 && kill(parent_pid, 0) < 0) {
 		/* printf("Parent has died - Authentication agent exiting.\n"); */
-		cleanup_handler(sig); /* safe */
+		cleanup_socket();
+		_exit(2);
 	}
-	mysignal(SIGALRM, check_parent_exists);
-	alarm(10);
-	errno = save_errno;
 }
 
 static void
 usage(void)
 {
-	fprintf(stderr, "Usage: %s [options] [command [args ...]]\n",
+	fprintf(stderr, "usage: %s [options] [command [arg ...]]\n",
 	    __progname);
 	fprintf(stderr, "Options:\n");
 	fprintf(stderr, "  -c          Generate C-shell commands on stdout.\n");
@@ -1083,7 +1114,7 @@ main(int ac, char **av)
 #else
 	int c_flag = 0, d_flag = 0, k_flag = 0, s_flag = 0;
 #endif
-	int sock, fd, ch;
+	int sock, fd, ch, result, saved_errno;
 	u_int nalloc;
 	char *shell, *format, *pidstr, *agentsocket = NULL;
 	fd_set *readsetp = NULL, *writesetp = NULL;
@@ -1096,6 +1127,7 @@ main(int ac, char **av)
 	extern char *optarg;
 	pid_t pid;
 	char pidstrbuf[1 + 3 * sizeof pid];
+	struct timeval *tvp = NULL;
 
 	/* Ensure that fds 0, 1 and 2 are open or directed to /dev/null */
 	sanitise_stdfd();
@@ -1292,6 +1324,11 @@ main(int ac, char **av)
 	}
 #endif
 
+#ifdef __APPLE_LAUNCHD__
+	if (l_flag)
+		goto skip2;
+#endif
+
 	/*
 	 * Fork, and have the parent execute the command, if any, or present
 	 * the socket data.  The child continues as the authentication agent.
@@ -1304,12 +1341,6 @@ main(int ac, char **av)
 		printf("echo Agent pid %ld;\n", (long)parent_pid);
 		goto skip;
 	}
-
-#ifdef __APPLE_LAUNCHD__
-	if (l_flag)
-	goto skip2;
-#endif
-
 	pid = fork();
 	if (pid == -1) {
 		perror("fork");
@@ -1366,10 +1397,8 @@ main(int ac, char **av)
 skip:
 	new_socket(AUTH_SOCKET, sock);
 skip2:
-	if (ac > 0) {
-		mysignal(SIGALRM, check_parent_exists);
-		alarm(10);
-	}
+	if (ac > 0)
+		parent_alive_interval = 10;
 	idtab_init();
 	if (!d_flag)
 		signal(SIGINT, SIG_IGN);
@@ -1383,13 +1412,18 @@ skip2:
 #endif
 
 	while (1) {
-		prepare_select(&readsetp, &writesetp, &max_fd, &nalloc);
-		if (select(max_fd + 1, readsetp, writesetp, NULL, NULL) < 0) {
-			if (errno == EINTR)
+		prepare_select(&readsetp, &writesetp, &max_fd, &nalloc, &tvp);
+		result = select(max_fd + 1, readsetp, writesetp, NULL, tvp);
+		saved_errno = errno;
+		if (parent_alive_interval != 0)
+			check_parent_exists();
+		(void) reaper();	/* remove expired keys */
+		if (result < 0) {
+			if (saved_errno == EINTR)
 				continue;
-			fatal("select: %s", strerror(errno));
-		}
-		after_select(readsetp, writesetp);
+			fatal("select: %s", strerror(saved_errno));
+		} else if (result > 0)
+			after_select(readsetp, writesetp);
 	}
 	/* NOTREACHED */
 }

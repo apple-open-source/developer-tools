@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2004 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -38,6 +38,7 @@ with Osint;    use Osint;
 with Osint.C;  use Osint.C;
 with Output;   use Output;
 with Par;
+with Restrict; use Restrict;
 with Scn;      use Scn;
 with Sinfo;    use Sinfo;
 with Sinput;   use Sinput;
@@ -51,6 +52,11 @@ package body Lib.Load is
    -----------------------
    -- Local Subprograms --
    -----------------------
+
+   function From_Limited_With_Chain (Lim : Boolean) return Boolean;
+   --  Check whether a possible circular dependence includes units that
+   --  have been loaded through limited_with clauses, in which case there
+   --  is no real circularity.
 
    function Spec_Is_Irrelevant
      (Spec_Unit : Unit_Number_Type;
@@ -164,6 +170,30 @@ package body Lib.Load is
       return Unum;
    end Create_Dummy_Package_Unit;
 
+   -----------------------------
+   -- From_Limited_With_Chain --
+   -----------------------------
+
+   function From_Limited_With_Chain (Lim : Boolean) return Boolean is
+   begin
+      --  True if the current load operation is through a limited_with clause
+
+      if Lim then
+         return True;
+
+      --  Examine the Load_Stack to locate any previous Limited_with clause
+
+      elsif Load_Stack.Last - 1 > Load_Stack.First then
+         for U in Load_Stack.First .. Load_Stack.Last - 1 loop
+            if Load_Stack.Table (U).From_Limited_With then
+               return True;
+            end if;
+         end loop;
+      end if;
+
+      return False;
+   end From_Limited_With_Chain;
+
    ----------------
    -- Initialize --
    ----------------
@@ -192,7 +222,7 @@ package body Lib.Load is
 
    begin
       Load_Stack.Increment_Last;
-      Load_Stack.Table (Load_Stack.Last) := Main_Unit;
+      Load_Stack.Table (Load_Stack.Last) := (Main_Unit, False);
 
       --  Initialize unit table entry for Main_Unit. Note that we don't know
       --  the unit name yet, that gets filled in when the parser parses the
@@ -236,12 +266,13 @@ package body Lib.Load is
    ---------------
 
    function Load_Unit
-     (Load_Name  : Unit_Name_Type;
-      Required   : Boolean;
-      Error_Node : Node_Id;
-      Subunit    : Boolean;
-      Corr_Body  : Unit_Number_Type := No_Unit;
-      Renamings  : Boolean          := False) return Unit_Number_Type
+     (Load_Name         : Unit_Name_Type;
+      Required          : Boolean;
+      Error_Node        : Node_Id;
+      Subunit           : Boolean;
+      Corr_Body         : Unit_Number_Type := No_Unit;
+      Renamings         : Boolean          := False;
+      From_Limited_With : Boolean          := False) return Unit_Number_Type
    is
       Calling_Unit : Unit_Number_Type;
       Uname_Actual : Unit_Name_Type;
@@ -463,10 +494,11 @@ package body Lib.Load is
          end loop;
       end if;
 
-      --  If we are proceeding with load, then make load stack entry
+      --  If we are proceeding with load, then make load stack entry,
+      --  and indicate the kind of with_clause responsible for the load.
 
       Load_Stack.Increment_Last;
-      Load_Stack.Table (Load_Stack.Last) := Unum;
+      Load_Stack.Table (Load_Stack.Last) := (Unum, From_Limited_With);
 
       --  Case of entry already in table
 
@@ -487,7 +519,7 @@ package body Lib.Load is
                        or else Acts_As_Spec (Units.Table (Unum).Cunit))
            and then (Nkind (Error_Node) /= N_With_Clause
                        or else not Limited_Present (Error_Node))
-
+           and then not From_Limited_With_Chain (From_Limited_With)
          then
             if Debug_Flag_L then
                Write_Str ("  circular dependency encountered");
@@ -561,7 +593,8 @@ package body Lib.Load is
                Multiple_Unit_Index := Get_Unit_Index (Uname_Actual);
                Units.Table (Unum).Munit_Index := Multiple_Unit_Index;
                Initialize_Scanner (Unum, Source_Index (Unum));
-               Discard_List (Par (Configuration_Pragmas => False));
+               Discard_List (Par (Configuration_Pragmas => False,
+                                  From_Limited_With     => From_Limited_With));
                Multiple_Unit_Index := Save_Index;
                Set_Loading (Unum, False);
             end;
@@ -606,8 +639,22 @@ package body Lib.Load is
             --  Generate message if unit required
 
             if Required and then Present (Error_Node) then
-
                if Is_Predefined_File_Name (Fname) then
+
+                  --  This is a predefined library unit which is not present
+                  --  in the run time. If a predefined unit is not available
+                  --  it may very likely be the case that there is also pragma
+                  --  Restriction forbidding its usage. This is typically the
+                  --  case when building a configurable run time, where the
+                  --  usage of certain run-time units units is restricted by
+                  --  means of both the corresponding pragma Restriction (such
+                  --  as No_Calendar), and by not including the unit. Hence,
+                  --  we check whether this predefined unit is forbidden, so
+                  --  that the message about the restriction violation is
+                  --  generated, if needed.
+
+                  Check_Restricted_Unit (Load_Name, Error_Node);
+
                   Error_Msg_Name_1 := Uname_Actual;
                   Error_Msg
                     ("% is not a predefined library unit", Load_Msg_Sloc);
@@ -716,8 +763,10 @@ package body Lib.Load is
 
       if Load_Stack.Last - 1 > Load_Stack.First then
          for U in Load_Stack.First .. Load_Stack.Last - 1 loop
-            Error_Msg_Unit_1 := Unit_Name (Load_Stack.Table (U));
-            Error_Msg_Unit_2 := Unit_Name (Load_Stack.Table (U + 1));
+            Error_Msg_Unit_1 :=
+              Unit_Name (Load_Stack.Table (U).Unit_Number);
+            Error_Msg_Unit_2 :=
+              Unit_Name (Load_Stack.Table (U + 1).Unit_Number);
             Error_Msg ("$ depends on $!", Load_Msg_Sloc);
          end loop;
       end if;

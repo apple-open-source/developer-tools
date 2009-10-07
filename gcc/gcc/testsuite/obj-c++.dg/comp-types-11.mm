@@ -25,7 +25,7 @@ id<Foo> func(void) {
 @implementation Derived2
 + (Derived1 *)new {
   Derived2 *o = [super new];
-  return o;  /* { dg-warning "distinct Objective\\-C type in return" } */
+  return o;  /* { dg-warning "incompatible Objective-C types returning \\'Derived2\\*\\', expected \\'Derived1\\*\\'" } */
 }
 @end
 

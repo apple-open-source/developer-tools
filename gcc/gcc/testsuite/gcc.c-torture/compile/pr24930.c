@@ -1,4 +1,3 @@
-/* APPLE LOCAL file 4347034 PR 24930 mainline */
 /* PR 24930 */
 extern int foo(int u) __attribute__((noinline));
 int foo(int u) {return 0;}

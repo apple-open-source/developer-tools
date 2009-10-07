@@ -1,12 +1,12 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                         GNAT RUNTIME COMPONENTS                          --
+--                         GNAT RUN-TIME COMPONENTS                         --
 --                                                                          --
 --                       G N A T . C A S E _ U T I L                        --
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---           Copyright (C) 1995-2002 Ada Core Technologies, Inc.            --
+--                     Copyright (C) 1995-2005, AdaCore                     --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -43,13 +43,12 @@
 with System.Case_Util;
 
 package GNAT.Case_Util is
-pragma Pure (Case_Util);
-
-pragma Elaborate_Body;
---  The elaborate body is because we have a dummy body to deal with bootstrap
---  path problems (we used to have a real body, and now we don't need it any
---  more, but the bootstrap requires that we have a dummy body, since otherwise
---  the old body gets picked up.
+   pragma Pure;
+   pragma Elaborate_Body;
+   --  The elaborate body is because we have a dummy body to deal with
+   --  bootstrap path problems (we used to have a real body, and now we don't
+   --  need it any more, but the bootstrap requires that we have a dummy body,
+   --  since otherwise the old body gets picked up.
 
    --  Note: all the following functions handle the full Latin-1 set
 

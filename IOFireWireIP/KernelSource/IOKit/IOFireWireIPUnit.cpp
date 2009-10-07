@@ -77,22 +77,26 @@ bool IOFireWireIPUnit::start(IOService *provider)
 
 	fDrb->retain();
 
-	fFWBusInterface->updateARBwithDevice(fDevice, eui64);
-	
+	if ( fFWBusInterface->updateARBwithDevice(fDevice, eui64) == NULL )
+	{
+		IOLog("IOFireWireIPUnit - updateARBwithDevice failed \n");
+        return (false);
+	}
+
 	fFWBusInterface->fwIPUnitAttach();
 
-	fTerminateNotifier = IOService::addNotification(gIOTerminatedNotification, 
+	fTerminateNotifier = IOService::addMatchingNotification(gIOTerminatedNotification, 
 													serviceMatching("IOFWIPBusInterface"), 
 													&busInterfaceTerminate, this, (void*)fFWBusInterface, 0);
 
-    registerService();
-
 	fStarted = true;
+
+    registerService();
 	
     return true;
 }
 
-bool IOFireWireIPUnit::busInterfaceTerminate(void *target, void *refCon, IOService *newService)
+bool IOFireWireIPUnit::busInterfaceTerminate(void *target, void *refCon, IOService *newService, IONotifier * notifier)
 {
 	if(target == NULL || newService == NULL)
 		return false;
@@ -211,7 +215,22 @@ bool IOFireWireIPUnit::configureFWBusInterface(IOFireWireController *controller)
 	if( fIPLocalNode )
 	{
 		fIPLocalNode->retain();
-		fIPLocalNode->closeIPoFWGate();
+		
+		if ( fIPLocalNode->clientStarting() == true )
+		{
+			OSDictionary *matchingTable;
+			
+			matchingTable = serviceMatching("IOFWIPBusInterface");
+			
+			if ( matchingTable )
+			{	
+				OSObject *prop = fIPLocalNode->getProperty(gFireWire_GUID);
+				if( prop )
+					matchingTable->setObject(gFireWire_GUID, prop);
+			}
+
+			waitForService( matchingTable );
+		}
 
 		fFWBusInterface = getIPTransmitInterface(fIPLocalNode) ;
 
@@ -230,7 +249,6 @@ bool IOFireWireIPUnit::configureFWBusInterface(IOFireWireController *controller)
 			fFWBusInterface = 0;
 		}
 
-		fIPLocalNode->openIPoFWGate();
 		fIPLocalNode->release();
 	}
 

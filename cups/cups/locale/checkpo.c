@@ -1,8 +1,17 @@
 /*
- * "$Id: checkpo.c 6926 2007-09-06 14:34:31Z mike $"
+ * "$Id: checkpo.c 7223 2008-01-16 23:41:19Z mike $"
  *
  * Verify that translations in the .po file have the same number and type of
  * printf-style format strings.
+ *
+ * Copyright 2007-2009 by Apple Inc.
+ * Copyright 1997-2007 by Easy Software Products, all rights reserved.
+ *
+ * These coded instructions, statements, and computer programs are the
+ * property of Apple Inc. and are protected by Federal copyright
+ * law.  Distribution and use rights are outlined in the file "LICENSE.txt"
+ * which should have been included with this file.  If this file is
+ * file is missing or damaged, see the license at "http://www.cups.org/".
  *
  * Usage:
  *
@@ -50,8 +59,7 @@ main(int  argc,				/* I - Number of command-line args */
 			*strfmts;	/* Format strings in msgstr */
   char			*idfmt,		/* Current msgid format string */
 			*strfmt;	/* Current msgstr format string */
-  int			fmtidx,		/* Format index */
-			fmtcount;	/* Format count */
+  int			fmtidx;		/* Format index */
   int			status,		/* Exit status */
 			pass,		/* Pass/fail status */
 			untranslated;	/* Untranslated messages */
@@ -75,7 +83,7 @@ main(int  argc,				/* I - Number of command-line args */
     * Use the CUPS .po loader to get the message strings...
     */
 
-    if ((po = _cupsMessageLoad(argv[i])) == NULL)
+    if ((po = _cupsMessageLoad(argv[i], 0)) == NULL)
     {
       perror(argv[i]);
       return (1);
@@ -135,8 +143,6 @@ main(int  argc,				/* I - Number of command-line args */
 
 	  if (!idfmt || strcmp(strfmt, idfmt))
 	    break;
-
-	  fmtcount ++;
 	}
 
         if (cupsArrayCount(strfmts) != cupsArrayCount(idfmts) || strfmt)
@@ -161,11 +167,38 @@ main(int  argc,				/* I - Number of command-line args */
 	       idfmt = (char *)cupsArrayNext(idfmts))
 	    printf(" %s", idfmt);
           putchar('\n');
+          putchar('\n');
 	}
 
 	free_formats(idfmts);
 	free_formats(strfmts);
       }
+
+     /*
+      * Only allow \\, \n, \r, \t, \", and \### character escapes...
+      */
+
+      for (strfmt = msg->str; *strfmt; strfmt ++)
+        if (*strfmt == '\\' &&
+	    strfmt[1] != '\\' && strfmt[1] != 'n' && strfmt[1] != 'r' &&
+	    strfmt[1] != 't' && strfmt[1] != '\"' && !isdigit(strfmt[1] & 255))
+	{
+	  if (pass)
+	  {
+	    pass = 0;
+	    puts("FAIL");
+	  }
+
+	  printf("    Bad escape \\%c in filter message \"%s\"\n"
+	         "      for \"%s\"\n\n", strfmt[1],
+		 abbreviate(msg->str, strbuf, sizeof(strbuf)),
+		 abbreviate(msg->id, idbuf, sizeof(idbuf)));
+          break;
+        }
+
+     /*
+      * Make sure filter message prefixes are preserved...
+      */
 
       if ((!strncmp(msg->id, "ALERT:", 6) && strncmp(msg->str, "ALERT:", 6)) ||
           (!strncmp(msg->id, "CRIT:", 5) && strncmp(msg->str, "CRIT:", 5)) ||
@@ -183,7 +216,7 @@ main(int  argc,				/* I - Number of command-line args */
 	  puts("FAIL");
 	}
 
-	printf("    Bad prefix on filter message \"%s\"\n      for \"%s\"\n",
+	printf("    Bad prefix on filter message \"%s\"\n      for \"%s\"\n\n",
 	       abbreviate(msg->str, strbuf, sizeof(strbuf)),
 	       abbreviate(msg->id, idbuf, sizeof(idbuf)));
       }
@@ -199,14 +232,14 @@ main(int  argc,				/* I - Number of command-line args */
 
         pass = 0;
         puts("FAIL");
-	printf("    Too many untranslated messages (%d of %d)\n", untranslated,
-	       cupsArrayCount(po));
+	printf("    Too many untranslated messages (%d of %d)\n\n",
+	       untranslated, cupsArrayCount(po));
       }
       else if (untranslated > 0)
-        printf("PASS (%d of %d untranslated)\n", untranslated,
+        printf("PASS (%d of %d untranslated)\n\n", untranslated,
 	       cupsArrayCount(po));
       else
-        puts("PASS");
+        puts("PASS\n");
     }
 
     if (!pass)
@@ -339,5 +372,5 @@ free_formats(cups_array_t *fmts)	/* I - Array of format strings */
 
 
 /*
- * End of "$Id: checkpo.c 6926 2007-09-06 14:34:31Z mike $".
+ * End of "$Id: checkpo.c 7223 2008-01-16 23:41:19Z mike $".
  */

@@ -4,15 +4,15 @@
         <key>OpenSourceProject</key>
         <string>RubyGems</string>
         <key>OpenSourceVersion</key>
-        <string>0.9.4</string>
+        <string>1.3.1</string>
         <key>OpenSourceWebsiteURL</key>
-        <string>http://docs.rubygems.org/</string>
+        <string>http://rubyforge.org/projects/rubygems</string>
         <key>OpenSourceURL</key>
-        <string>http://rubyforge.org/frs/download.php/20989/rubygems-0.9.4.tgz</string>
+        <string>http://rubyforge.org/frs/download.php/45905/rubygems-1.3.1.tgz</string>
         <key>OpenSourceSHA1</key>
-        <string>904080d36e34d7a6969c3cef228380eb82688d2a</string>
+        <string>a21ae466146bffb28ece05cddbdced0b908ca74f</string>
         <key>OpenSourceImportDate</key>
-        <string>2007-05-31</string>
+        <string>2008-12-01</string>
         <key>OpenSourceLicense</key>
         <string>Other</string>
         <key>OpenSourceLicenseFile</key>

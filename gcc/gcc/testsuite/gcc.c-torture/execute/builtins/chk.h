@@ -1,4 +1,3 @@
-/* APPLE LOCAL file mainline */
 #ifndef os
 # define os(ptr) __builtin_object_size (ptr, 0)
 #endif

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2003 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -85,8 +85,7 @@ package Itypes is
       Related_Id   : Entity_Id := Empty;
       Suffix       : Character := ' ';
       Suffix_Index : Nat       := 0;
-      Scope_Id     : Entity_Id := Current_Scope)
-      return         Entity_Id;
+      Scope_Id     : Entity_Id := Current_Scope) return Entity_Id;
    --  Used to create a new Itype.
    --
    --   Related_Nod is the node for which this Itype was created.  It is
@@ -109,5 +108,33 @@ package Itypes is
    --
    --  The Scope_Id parameter specifies the scope of the created type, and
    --  is normally the Current_Scope as shown, but can be set otherwise.
+
+   ---------------------------------
+   -- Create_Null_Excluding_Itype --
+   ---------------------------------
+
+   function Create_Null_Excluding_Itype
+      (T           : Entity_Id;
+       Related_Nod : Node_Id;
+       Scope_Id    : Entity_Id := Current_Scope) return Entity_Id;
+   --  Ada 2005 (AI-231): T is an access type and this subprogram creates and
+   --  returns an internal access-subtype declaration of T that has the null
+   --  exclusion attribute set to True.
+   --
+   --  Usage of null-excluding itypes
+   --  ------------------------------
+   --
+   --      type T1 is access ...
+   --      type T2 is not null T1;
+   --
+   --      type Rec is record
+   --         Comp : not null T1;
+   --      end record;
+   --
+   --      type Arr is array (...) of not null T1;
+   --
+   --  Instead of associating the not-null attribute with the defining ids of
+   --  these declarations, we generate an internal subtype declaration of T1
+   --  that has the null exclusion attribute set to true.
 
 end Itypes;

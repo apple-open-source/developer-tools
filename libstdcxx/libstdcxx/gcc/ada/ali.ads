@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2005 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -473,6 +473,9 @@ package ALI is
       --  Indicates presence of EA parameter
 
       Elab_All_Desirable : Boolean;
+      --  Indicates presence of AD parameter
+
+      Elab_Desirable     : Boolean;
       --  Indicates presence of ED parameter
 
       SAL_Interface : Boolean := False;
@@ -590,10 +593,10 @@ package ALI is
 
    type No_Dep_Record is record
       ALI_File : ALI_Id;
-      --  ALI File containing tne entry
+      --  ALI File containing the entry
 
       No_Dep_Unit : Name_Id;
-      --  Id for names table entry including entire name, including periods.
+      --  Id for names table entry including entire name, including periods
    end record;
 
    package No_Deps is new Table.Table (
@@ -731,6 +734,16 @@ package ALI is
       Entity : Name_Id;
       --  Name of entity
 
+      Iref_File_Num : Sdep_Id;
+      --  This field is set to the dependency reference for the file containing
+      --  the generic entity that this one instantiates, or to No_Sdep_Id if
+      --  the current entity is not an instantiation
+
+      Iref_Line : Nat;
+      --  This field is set to the line number in Iref_File_Num of the generic
+      --  entity that this one instantiates, or to zero if the current entity
+      --  is not an instantiation.
+
       Rref_Line : Nat;
       --  This field is set to the line number of a renaming reference if
       --  one is present, or to zero if no renaming reference is present
@@ -771,6 +784,16 @@ package ALI is
       --  package Standard. If there is a typeref that references an
       --  entity in package Standard, then this field is a Name_Id
       --  reference for the entity name.
+
+      Oref_File_Num : Sdep_Id;
+      --  This field is set to No_Sdep_Id is the entity doesn't override any
+      --  other entity, or to the dependency reference for the overriden
+      --  entity.
+
+      Oref_Line : Nat;
+      Oref_Col  : Nat;
+      --  These two fields are set to the line and column of the overriden
+      --  entity.
 
       First_Xref : Nat;
       --  Index into Xref table of first cross-reference
@@ -815,6 +838,11 @@ package ALI is
 
       --  Note: for instantiation references, Rtype is set to ' ', and Col is
       --  set to zero. One or more such entries can follow any other reference.
+      --  When there is more than one such entry, this is to be read as:
+      --     e.g. ref1  ref2  ref3
+      --     ref1 is a reference to an entity that was instantied at ref2.
+      --     ref2 itself is also the result of an instantiation, that took
+      --     place at ref3
    end record;
 
    package Xref is new Table.Table (
@@ -847,8 +875,9 @@ package ALI is
    --  switch description settings.
    --
    --    Ignore_ED is normally False. If set to True, it indicates that
-   --    all ED (elaboration desirable) indications in the ALI file are
-   --    to be ignored.
+   --    all AD/ED (elaboration desirable) indications in the ALI file are
+   --    to be ignored. This parameter is obsolete now that the -f switch
+   --    is removed from gnatbind, and should be removed ???
    --
    --    Err determines the action taken on an incorrectly formatted file.
    --    If Err is False, then an error message is output, and the program

@@ -2,7 +2,8 @@
 /* A compile-only test for insertion of write barriers. */
 /* Developed by Ziemowit Laski  <zlaski@apple.com>  */
 /* { dg-do compile { target powerpc*-*-darwin* i?86*-*-darwin* } } */
-/* { dg-options "-fnext-runtime -fobjc-gc -Wassign-intercept" } */
+/* { dg-options "-fnext-runtime -fobjc-gc -Wno-non-lvalue-assign -Wassign-intercept" } */
+/* { dg-require-effective-target objc_gc } */
 
 #include <objc/objc.h>
 

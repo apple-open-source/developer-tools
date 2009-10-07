@@ -2,8 +2,8 @@
 /* This tests the new spec. for foreach-statement. On exit from foreach loop
    with no match, value of 'elem' is set to nil! */
 #include <Foundation/Foundation.h>
-/* { dg-options "-mmacosx-version-min=10.5 -framework Foundation -fobjc-exceptions -framework CoreFoundation" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
-/* { dg-options "-framework Foundation -fobjc-exceptions -framework CoreFoundation" { target arm*-*-darwin* } } */
+/* { dg-options "-mmacosx-version-min=10.5 -framework Foundation -fobjc-exceptions" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
+/* { dg-options "-framework Foundation -fobjc-exceptions" { target arm*-*-darwin* } } */
 /* { dg-do run { target *-*-darwin* } } */
 
 /* foreach tester */
@@ -11,7 +11,7 @@
 int Verbosity = 0;
 int Errors = 0;
 
-bool testHandwritten(char *style, char *test, char *message, id collection, NSSet *reference) {
+bool testHandwritten(const char *style, const char *test, const char *message, id collection, NSSet *reference) {
     int counter = 0;
     bool result = true;
     if (Verbosity) {
@@ -46,13 +46,13 @@ bool testHandwritten(char *style, char *test, char *message, id collection, NSSe
     }
     else {
         result = false;
-        printf("** failed: %s %s %s (%d vs %d)\n", style, test, message, counter, [reference count]);
+        printf("** failed: %s %s %s (%d vs %ld)\n", style, test, message, counter, (long)[reference count]);
         ++Errors;
     }
     return result;
 }
 
-bool testCompiler(char *style, char *test, char *message, id collection, NSSet *reference) {
+bool testCompiler(const char *style, const char *test, const char *message, id collection, NSSet *reference) {
     int counter = 0;
     bool result = true;
     if (Verbosity) {
@@ -67,7 +67,7 @@ bool testCompiler(char *style, char *test, char *message, id collection, NSSet *
     }
     else {
         result = false;
-        printf("** failed: %s %s %s (%d vs %d)\n", style, test, message, counter, [reference count]);
+        printf("** failed: %s %s %s (%d vs %ld)\n", style, test, message, counter, (long)[reference count]);
         ++Errors;
     }
     return result;
@@ -137,12 +137,12 @@ bool testBreaks(NSArray *array) {
     }
 }
         
-bool testCompleteness(char *test, char *message, id collection, NSSet *reference) {
+bool testCompleteness(const char *test, const char *message, id collection, NSSet *reference) {
     testHandwritten("handwritten", test, message, collection, reference);
     testCompiler("compiler", test, message, collection, reference);
 }
 
-bool testEnumerator(char *test, char *message, id collection, NSSet *reference) {
+bool testEnumerator(const char *test, const char *message, id collection, NSSet *reference) {
     testHandwritten("handwritten", test, message, [collection objectEnumerator], reference);
     testCompiler("compiler", test, message, [collection objectEnumerator], reference);
 }    
@@ -164,7 +164,7 @@ void makeReferences(int n) {
     }
 }
     
-void testCollections(char *test, NSArray *array, NSSet *set) {
+void testCollections(const char *test, NSArray *array, NSSet *set) {
     NSAutoreleasePool *pool = [NSAutoreleasePool new];
     id collection;
     collection = [NSMutableArray arrayWithArray:array];
@@ -182,7 +182,7 @@ void testCollections(char *test, NSArray *array, NSSet *set) {
     [pool drain];
 }
 
-void testInnerDecl(char *test, char *message, id collection) {
+void testInnerDecl(const char *test, const char *message, id collection) {
     int counter = 0;
     for (id x in collection)
         ++counter;
@@ -196,7 +196,7 @@ void testInnerDecl(char *test, char *message, id collection) {
 // use 1 to show that the functions disappear
 #define Radar4550582 1
 
-void testOuterDecl(char *test, char *message, id collection) {
+void testOuterDecl(const char *test, const char *message, id collection) {
 #if Radar4550582
     int counter = 0;
     id x;
@@ -208,7 +208,7 @@ void testOuterDecl(char *test, char *message, id collection) {
     }
 #endif
 }
-void testInnerExpression(char *test, char *message, id collection) {
+void testInnerExpression(const char *test, const char *message, id collection) {
     int counter = 0;
     for (id x in [collection self])
         ++counter;
@@ -217,7 +217,7 @@ void testInnerExpression(char *test, char *message, id collection) {
         ++Errors;
     }
 }
-void testOuterExpression(char *test, char *message, id collection) {
+void testOuterExpression(const char *test, const char *message, id collection) {
 #if Radar4550582
     int counter = 0;
     id x;
@@ -230,7 +230,7 @@ void testOuterExpression(char *test, char *message, id collection) {
 #endif
 }
 
-void testExpressions(char *message, id collection) {
+void testExpressions(const char *message, id collection) {
     testInnerDecl("inner", message, collection);
     testOuterDecl("outer", message, collection);
     testInnerExpression("outer expression", message, collection);

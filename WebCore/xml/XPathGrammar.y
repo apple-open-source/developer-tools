@@ -1,6 +1,6 @@
 /*
  * Copyright 2005 Frerich Raabe <raabe@kde.org>
- * Copyright (C) 2006 Apple Computer, Inc.
+ * Copyright (C) 2006 Apple Inc. All rights reserved.
  * Copyright (C) 2007 Alexey Proskuryakov <ap@webkit.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -68,8 +68,8 @@ using namespace XPath;
 
 %{
 
-int xpathyylex(YYSTYPE *yylval) { return Parser::current()->lex(yylval); }
-void xpathyyerror(const char *str) { }
+static int xpathyylex(YYSTYPE* yylval) { return Parser::current()->lex(yylval); }
+static void xpathyyerror(const char*) { }
     
 %}
 
@@ -82,7 +82,7 @@ void xpathyyerror(const char *str) { }
 %token <str> VARIABLEREFERENCE NUMBER
 %token DOTDOT SLASHSLASH
 %token <str> NAMETEST
-%token ERROR
+%token XPATH_ERROR
 
 %type <locationPath> LocationPath
 %type <locationPath> AbsoluteLocationPath

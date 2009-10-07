@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2004, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -49,7 +49,7 @@ package System.File_IO is
 
    procedure Open
      (File_Ptr  : in out FCB.AFCB_Ptr;
-      Dummy_FCB : in FCB.AFCB'Class;
+      Dummy_FCB : FCB.AFCB'Class;
       Mode      : FCB.File_Mode;
       Name      : String;
       Form      : String;
@@ -110,24 +110,24 @@ package System.File_IO is
    procedure Delete (File : in out FCB.AFCB_Ptr);
    --  The indicated file is unlinked
 
-   procedure Reset (File : in out FCB.AFCB_Ptr; Mode : in FCB.File_Mode);
-   --  The file is reset, and the mode changed as indicated.
+   procedure Reset (File : in out FCB.AFCB_Ptr; Mode : FCB.File_Mode);
+   --  The file is reset, and the mode changed as indicated
 
    procedure Reset (File : in out FCB.AFCB_Ptr);
    --  The files is reset, and the mode is unchanged
 
-   function Mode (File : in FCB.AFCB_Ptr) return FCB.File_Mode;
+   function Mode (File : FCB.AFCB_Ptr) return FCB.File_Mode;
    --  Returns the mode as supplied by create, open or reset
 
-   function Name (File : in FCB.AFCB_Ptr) return String;
+   function Name (File : FCB.AFCB_Ptr) return String;
    --  Returns the file name as supplied by Open or Create. Raises Use_Error
    --  if used with temporary files or standard files.
 
-   function Form (File : in FCB.AFCB_Ptr) return String;
+   function Form (File : FCB.AFCB_Ptr) return String;
    --  Returns the form as supplied by create, open or reset
    --  The string is normalized to all lower case letters.
 
-   function Is_Open (File : in FCB.AFCB_Ptr) return Boolean;
+   function Is_Open (File : FCB.AFCB_Ptr) return Boolean;
    --  Determines if file is open or not
 
    ----------------------
@@ -139,7 +139,7 @@ package System.File_IO is
 
    procedure Chain_File (File : FCB.AFCB_Ptr);
    --  Used to chain the given file into the list of open files. Normally this
-   --  is done implicitly by Open. Chain_File is used for the spcial cases of
+   --  is done implicitly by Open. Chain_File is used for the special cases of
    --  the system files defined by Text_IO (stdin, stdout, stderr) which are
    --  not opened in the normal manner. Note that the caller is responsible
    --  for task lock out to protect the global data structures if this is
@@ -218,7 +218,7 @@ package System.File_IO is
    procedure Read_Buf
      (File  : FCB.AFCB_Ptr;
       Buf   : Address;
-      Siz   : in Interfaces.C_Streams.size_t;
+      Siz   : Interfaces.C_Streams.size_t;
       Count : out Interfaces.C_Streams.size_t);
    --  Reads Siz bytes from File.Stream into Buf. The caller has checked
    --  that the file is open in read mode. Device Error is raised if an error

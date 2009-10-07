@@ -23,44 +23,45 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  */
 
-#ifndef PNG_DECODER_H_
-#define PNG_DECODER_H_
+#ifndef PNGImageDecoder_h
+#define PNGImageDecoder_h
 
 #include "ImageDecoder.h"
 
 namespace WebCore {
 
-class PNGImageReader;
+    class PNGImageReader;
 
-// This class decodes the PNG image format.
-class PNGImageDecoder : public ImageDecoder
-{
-public:
-    PNGImageDecoder();
-    ~PNGImageDecoder();
+    // This class decodes the PNG image format.
+    class PNGImageDecoder : public ImageDecoder {
+    public:
+        PNGImageDecoder();
+        ~PNGImageDecoder();
 
-    // Take the data and store it.
-    virtual void setData(SharedBuffer* data, bool allDataReceived);
+        virtual String filenameExtension() const { return "png"; }
 
-    // Whether or not the size information has been decoded yet.
-    virtual bool isSizeAvailable() const;
+        // Take the data and store it.
+        virtual void setData(SharedBuffer* data, bool allDataReceived);
 
-    virtual RGBA32Buffer* frameBufferAtIndex(size_t index);
+        // Whether or not the size information has been decoded yet.
+        virtual bool isSizeAvailable();
 
-    void decode(bool sizeOnly = false) const;
+        virtual RGBA32Buffer* frameBufferAtIndex(size_t index);
 
-    PNGImageReader* reader() { return m_reader; }
+        void decode(bool sizeOnly = false);
 
-    // Callbacks from libpng
-    void decodingFailed() { m_failed = true; }
-    void headerAvailable();
-    void rowAvailable(unsigned char* rowBuffer, unsigned rowIndex, int interlacePass);
-    void pngComplete();
+        PNGImageReader* reader() { return m_reader; }
 
-private:
-    mutable PNGImageReader* m_reader;
-};
+        // Callbacks from libpng
+        void decodingFailed();
+        void headerAvailable();
+        void rowAvailable(unsigned char* rowBuffer, unsigned rowIndex, int interlacePass);
+        void pngComplete();
 
-}
+    private:
+        PNGImageReader* m_reader;
+    };
+
+} // namespace WebCore
 
 #endif

@@ -1,13 +1,13 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                 GNU ADA RUN-TIME LIBRARY (GNARL) COMPONENTS              --
+--                  GNAT RUN-TIME LIBRARY (GNARL) COMPONENTS                --
 --                                                                          --
 --                     S Y S T E M . I N T E R R U P T S                    --
 --                                                                          --
 --                                  B o d y                                 --
 --                                                                          --
 --             Copyright (C) 1991-1994, Florida State University            --
---             Copyright (C) 1995-2004, Ada Core Technologies               --
+--                     Copyright (C) 1995-2005, AdaCore                     --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -17,8 +17,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNARL; see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -32,10 +32,7 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
---  This is an OS/2 version of this package.
-
---  This version is a stub, for systems that
---  do not support interrupts (or signals).
+--  This version is for systems that do not support interrupts (or signals)
 
 with Ada.Exceptions;
 
@@ -93,8 +90,7 @@ package body System.Interrupts is
    ---------------------
 
    function Current_Handler
-     (Interrupt : Interrupt_ID)
-      return      Parameterless_Handler
+     (Interrupt : Interrupt_ID) return Parameterless_Handler
    is
    begin
       Unimplemented;
@@ -155,7 +151,6 @@ package body System.Interrupts is
       return   Boolean
    is
       pragma Warnings (Off, Object);
-
    begin
       Unimplemented;
       return True;
@@ -166,7 +161,6 @@ package body System.Interrupts is
       return   Boolean
    is
       pragma Warnings (Off, Object);
-
    begin
       Unimplemented;
       return True;

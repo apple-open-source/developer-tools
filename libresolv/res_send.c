@@ -125,12 +125,18 @@ static const char rcsid[] = "$Id: res_send.c,v 1.1 2006/03/01 19:01:38 majka Exp
 
 #include "res_debug.h"
 #include "res_private.h"
+#include <sys/fcntl.h>
 
 #define EXT(res) ((res)->_u._ext)
 
 static const int highestFD = FD_SETSIZE - 1;
 
 #define MAX_HOOK_RETRIES 42
+
+/* port randomization */
+#define RANDOM_BIND_MAX_TRIES 16
+#define RANDOM_BIND_FIRST IPPORT_HIFIRSTAUTO
+#define RANDOM_BIND_LAST IPPORT_HILASTAUTO
 
 /* Forward. */
 
@@ -140,11 +146,117 @@ static int		send_dg(res_state, const u_char *, int, u_char *, int *, int *, int,
 static void		Aerror(const res_state, FILE *, const char *, int, const struct sockaddr *, int);
 static void		Perror(const res_state, FILE *, const char *, int);
 static int		sock_eq(struct sockaddr *, struct sockaddr *);
-#ifdef NEED_PSELECT
-static int		pselect(int, void *, void *, void *, struct timespec *, const sigset_t *);
+#ifdef USE_DNS_PSELECT
+static int		dns_pselect(int, void *, void *, void *, struct timespec *, const sigset_t *);
 #endif
 
 static const int niflags = NI_NUMERICHOST | NI_NUMERICSERV;
+
+/* interrupt mechanism is shared with res_query.c */
+int interrupt_pipe_enabled = 0;
+pthread_key_t interrupt_pipe_key;
+
+static int
+bind_random(int sock)
+{
+	int i, status;
+	uint16_t src_port;
+	struct sockaddr_in local;
+
+	src_port = 0;
+	status = -1;
+
+	for (i = 0; (i < RANDOM_BIND_MAX_TRIES) && (status < 0); i++)
+	{		
+		/* random port in the range RANDOM_BIND_FIRST to RANDOM_BIND_LAST */
+		src_port = (res_randomid() % (RANDOM_BIND_LAST - RANDOM_BIND_FIRST)) + RANDOM_BIND_FIRST;
+		memset(&local, 0, sizeof(struct sockaddr_in));
+		local.sin_port = htons(src_port);
+
+		status = bind(sock, (struct sockaddr *)&local, sizeof(struct sockaddr_in));
+	}
+
+	return status;
+}
+
+void
+res_delete_interrupt_token(void *token)
+{
+	int *interrupt_pipe;
+
+	interrupt_pipe = token;
+	if (interrupt_pipe == NULL) return;
+
+	if (interrupt_pipe[0] >= 0)
+	{
+		close(interrupt_pipe[0]);
+		interrupt_pipe[0] = -1;
+	}
+
+	if (interrupt_pipe[1] >= 0)
+	{
+		close(interrupt_pipe[1]);
+		interrupt_pipe[1] = -1;
+	}
+
+	pthread_setspecific(interrupt_pipe_key, NULL);
+	free(interrupt_pipe);
+}
+
+void *
+res_init_interrupt_token(void)
+{
+	int *interrupt_pipe;
+
+	interrupt_pipe = (int *)malloc(2 * sizeof(int));
+	if (interrupt_pipe == NULL) return NULL;
+
+	if (pipe(interrupt_pipe) < 0)
+	{
+		/* this shouldn't happen */
+		interrupt_pipe[0] = -1;
+		interrupt_pipe[1] = -1;
+	} 
+	else
+	{
+		fcntl(interrupt_pipe[0], F_SETFD, FD_CLOEXEC | O_NONBLOCK);
+		fcntl(interrupt_pipe[1], F_SETFD, FD_CLOEXEC | O_NONBLOCK);
+	}
+
+	pthread_setspecific(interrupt_pipe_key, interrupt_pipe);
+
+	return interrupt_pipe;
+}
+
+void
+res_interrupt_requests_enable(void)
+{
+	interrupt_pipe_enabled = 1;
+	pthread_key_create(&interrupt_pipe_key, NULL);
+}
+
+void
+res_interrupt_requests_disable(void)
+{
+	interrupt_pipe_enabled = 0;
+	pthread_key_delete(interrupt_pipe_key);
+}
+
+void
+res_interrupt_request(void *token)
+{
+	int oldwrite;
+	int *interrupt_pipe;
+
+	interrupt_pipe = token;
+
+	if ((interrupt_pipe == NULL) || (interrupt_pipe_enabled == 0)) return;
+
+	oldwrite = interrupt_pipe[1];
+	interrupt_pipe[1] = -1;
+
+	if (oldwrite >= 0) close(oldwrite);
+}
 
 #ifdef __APPLE__
 static struct iovec
@@ -187,7 +299,7 @@ evNowTime()
 	return (evTimeSpec(now));
 }
 
-#ifdef NEED_PSELECT
+#ifdef USE_DNS_PSELECT
 static struct timeval
 evTimeVal(struct timespec ts)
 {
@@ -359,7 +471,7 @@ res_queriesmatch(const u_char *buf1, const u_char *eom1, const u_char *buf2, con
 	 * dynamic update packets.
 	 */
 	if ((((const HEADER *)buf1)->opcode == ns_o_update) &&
-	    (((const HEADER *)buf2)->opcode == ns_o_update))
+		(((const HEADER *)buf2)->opcode == ns_o_update))
 		return (1);
 
 	if (qdcount != ntohs(((const HEADER*)buf2)->qdcount)) return (0);
@@ -531,7 +643,7 @@ dns_res_send(res_state statp, const u_char *buf, int buflen, u_char *ans, int *a
 	 */
 	for (try = 0; try < statp->retry; try++)
 	{
-	    for (ns = 0; ns < statp->nscount; ns++)
+		for (ns = 0; ns < statp->nscount; ns++)
 		{
 			struct sockaddr *nsap;
 			int nsaplen;
@@ -579,6 +691,7 @@ send_same_ns:
 				status = notify_get_state(notify_token, &exit_requested);
 				if (exit_requested == ThreadStateExitRequested)
 				{
+					Dprint(statp->options & RES_DEBUG, (stdout, ";; cancelled\n"));
 					res_nclose(statp);
 					notify_cancel(notify_token);
 					return DNS_RES_STATUS_CANCELLED;
@@ -775,6 +888,7 @@ vc_same_ns:
 		status = notify_get_state(notify_token, &exit_requested);
 		if (exit_requested == ThreadStateExitRequested)
 		{
+			Dprint(statp->options & RES_DEBUG, (stdout, ";; cancelled\n"));
 			*terrno = EINTR;
 			return DNS_RES_STATUS_CANCELLED;
 		}
@@ -855,11 +969,12 @@ vc_same_ns:
 		status = notify_get_state(notify_token, &exit_requested);
 		if (exit_requested == ThreadStateExitRequested)
 		{
+			Dprint(statp->options & RES_DEBUG, (stdout, ";; cancelled\n"));
 			*terrno = EINTR;
 			return DNS_RES_STATUS_CANCELLED;
 		}
 	}
-	
+
 	cp = ans;
 	len = NS_INT16SZ;
 	while ((n = read(statp->_vcsock, (char *)cp, (int)len)) > 0)
@@ -1035,11 +1150,12 @@ send_dg(res_state statp, const u_char *buf, int buflen, u_char *ans, int *anssiz
 	const HEADER *hp = (const HEADER *) buf;
 	HEADER *anhp = (HEADER *) ans;
 	const struct sockaddr *nsap;
-	int nsaplen;
+	int nsaplen, nfds;
 	struct timespec now, timeout, finish;
 	fd_set dsmask;
 	int iface, rif, status;
 	uint64_t exit_requested;
+	int *interrupt_pipe;
 #ifndef __APPLE__
 	struct sockaddr_storage from;
 	ISC_SOCKLEN_T fromlen;
@@ -1048,6 +1164,8 @@ send_dg(res_state statp, const u_char *buf, int buflen, u_char *ans, int *anssiz
 #ifdef MULTICAST
 	int multicast;
 #endif
+
+	interrupt_pipe = NULL;
 
 	nsap = get_nsaddr(statp, ns);
 	nsaplen = get_salen(nsap);
@@ -1066,6 +1184,8 @@ send_dg(res_state statp, const u_char *buf, int buflen, u_char *ans, int *anssiz
 			Perror(statp, stderr, "socket(dg)", errno);
 			return DNS_RES_STATUS_SYSTEM_ERROR;
 		}
+
+		bind_random(EXT(statp).nssocks[ns]);
 
 #ifndef CANNOT_CONNECT_DGRAM
 		/*
@@ -1195,6 +1315,8 @@ send_dg(res_state statp, const u_char *buf, int buflen, u_char *ans, int *anssiz
 	timeout.tv_nsec *= 1000000;
 	now = evNowTime();
 	finish = evAddTime(now, timeout);
+
+	if (interrupt_pipe_enabled != 0) interrupt_pipe = pthread_getspecific(interrupt_pipe_key);
 #else
 	seconds = (statp->retrans << ns);
 	if (ns > 0) seconds /= statp->nscount;
@@ -1204,25 +1326,44 @@ send_dg(res_state statp, const u_char *buf, int buflen, u_char *ans, int *anssiz
 	finish = evAddTime(now, timeout);
 #endif /* __APPLE__ */
 	goto nonow;
- wait:
 
+wait:
 	now = evNowTime();
 
- nonow:
-	
+nonow:
+
 	if (notify_token != -1)
 	{
 		exit_requested = 0;
 		status = notify_get_state(notify_token, &exit_requested);
-		if (exit_requested == ThreadStateExitRequested) return DNS_RES_STATUS_CANCELLED;
+		if (exit_requested == ThreadStateExitRequested)
+		{
+			Dprint(statp->options & RES_DEBUG, (stdout, ";; cancelled\n"));
+			return DNS_RES_STATUS_CANCELLED;
+		}
 	}
 
 	FD_ZERO(&dsmask);
 	FD_SET(s, &dsmask);
+
+	nfds = s + 1;
+	if ((interrupt_pipe_enabled != 0) && (interrupt_pipe != NULL))
+	{
+		if (interrupt_pipe[0] >= 0)
+		{
+			FD_SET(interrupt_pipe[0], &dsmask);
+			nfds = MAX(s, interrupt_pipe[0]) + 1;
+		}
+	}
+
 	if (evCmpTime(finish, now) > 0) timeout = evSubTime(finish, now);
 	else timeout = evConsTime(0, 0);
 
-	n = pselect(s + 1, &dsmask, NULL, NULL, &timeout, NULL);
+#ifdef USE_DNS_PSELECT
+	n = dns_pselect(nfds, &dsmask, NULL, NULL, &timeout, NULL);
+#else
+	n = pselect(nfds, &dsmask, NULL, NULL, &timeout, NULL);
+#endif
 	if (n == 0)
 	{
 		Dprint(statp->options & RES_DEBUG, (stdout, ";; timeout\n"));
@@ -1236,6 +1377,13 @@ send_dg(res_state statp, const u_char *buf, int buflen, u_char *ans, int *anssiz
 		Perror(statp, stderr, "select", errno);
 		res_nclose(statp);
 		return DNS_RES_STATUS_SYSTEM_ERROR;
+	}
+
+	/* socket s and/or interrupt pipe got data */
+	if ((interrupt_pipe_enabled != 0) && (interrupt_pipe != NULL) && ((interrupt_pipe[0] < 0) || (FD_ISSET(interrupt_pipe[0], &dsmask))))
+	{
+		Dprint(statp->options & RES_DEBUG, (stdout, ";; cancelled\n"));
+		return DNS_RES_STATUS_CANCELLED;
 	}
 
 	errno = 0;
@@ -1391,7 +1539,7 @@ sock_eq(struct sockaddr *a, struct sockaddr *b)
 	struct sockaddr_in6 *a6, *b6;
 
 	if (a->sa_family != b->sa_family) return 0;
-	
+
 	switch (a->sa_family)
 	{
 		case AF_INET:
@@ -1411,10 +1559,9 @@ sock_eq(struct sockaddr *a, struct sockaddr *b)
 	}
 }
 
-#ifdef NEED_PSELECT
-/* XXX needs to move to the porting library. */
+#ifdef USE_DNS_PSELECT
 static int
-pselect(int nfds, void *rfds, void *wfds, void *efds, struct timespec *tsp, const sigset_t *sigmask)
+dns_pselect(int nfds, void *rfds, void *wfds, void *efds, struct timespec *tsp, const sigset_t *sigmask)
 {
 	struct timeval tv, *tvp = NULL;
 	sigset_t sigs;

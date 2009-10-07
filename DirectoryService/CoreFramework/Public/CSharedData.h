@@ -96,6 +96,7 @@ typedef enum {
 	eDSCustomCallSearchReadDHCPLDAPData				= 556,
 	eDSCustomCallSearchWriteDHCPLDAPData			= 557,
 	eDSCustomCallSearchSubNodesUnreachable			= 666,
+	eDSCustomCallSearchCheckForAugmentRecord		= 777,
 
 // Configure Plugin Request Codes
 	eDSCustomCallConfigureGetAuthRef				= 111,
@@ -116,6 +117,8 @@ typedef enum {
 	eDSCustomCallConfigureEnableBSDLocalUsersAndGroups	= 781,
 	eDSCustomCallConfigureDisableBSDLocalUsersAndGroups= 782,
 	eDSCustomCallConfigureLocalMountRecordsChanged	= 888,
+	eDSCustomCallConfigureSuspendCacheFlushes		= 900,
+	eDSCustomCallConfigureEnableCacheFlushes		= 901,
 	eDSCustomCallTogglePlugInStateBase				= 1000,
 	
 // BaseDirectoryPlugin Request Codes

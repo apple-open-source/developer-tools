@@ -1,12 +1,12 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                          GNAT RUNTIME COMPONENTS                         --
+--                         GNAT RUN-TIME COMPONENTS                         --
 --                                                                          --
---                A D A . S T R I N G S . U N B O U N D E D                 --
+--                 A D A . S T R I N G S . U N B O U N D E D                --
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2005 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -38,16 +38,6 @@ with Ada.Unchecked_Deallocation;
 package body Ada.Strings.Unbounded is
 
    use Ada.Finalization;
-
-   procedure Realloc_For_Chunk
-     (Source     : in out Unbounded_String;
-      Chunk_Size : Natural);
-   pragma Inline (Realloc_For_Chunk);
-   --  Adjust the size allocated for the string. Add at least Chunk_Size so it
-   --  is safe to add a string of this size at the end of the current content.
-   --  The real size allocated for the string is Chunk_Size + x of the current
-   --  string size. This buffered handling makes the Append unbounded string
-   --  routines very fast.
 
    ---------
    -- "&" --
@@ -202,7 +192,7 @@ package body Ada.Strings.Unbounded is
       Result.Reference := new String (1 .. Result.Last);
 
       K := 1;
-      for I in 1 .. Left loop
+      for J in 1 .. Left loop
          Result.Reference (K .. K + Len - 1) :=
            Right.Reference (1 .. Right.Last);
          K := K + Len;
@@ -363,7 +353,7 @@ package body Ada.Strings.Unbounded is
    procedure Adjust (Object : in out Unbounded_String) is
    begin
       --  Copy string, except we do not copy the statically allocated null
-      --  string, since it can never be deallocated. Note that we do not copy
+      --  string since it can never be deallocated. Note that we do not copy
       --  extra string room here to avoid dragging unused allocated memory.
 
       if Object.Reference /= Null_String'Access then
@@ -633,7 +623,6 @@ package body Ada.Strings.Unbounded is
         (Source.Reference (1 .. Source.Last), Pattern, From, Going, Mapping);
    end Index;
 
-
    function Index
      (Source  : Unbounded_String;
       Set     : Maps.Character_Set;
@@ -765,17 +754,36 @@ package body Ada.Strings.Unbounded is
      (Source     : in out Unbounded_String;
       Chunk_Size : Natural)
    is
-      Growth_Factor : constant := 50;
-      S_Length      : constant Natural := Source.Reference'Length;
+      Growth_Factor : constant := 32;
+      --  The growth factor controls how much extra space is allocated when
+      --  we have to increase the size of an allocated unbounded string. By
+      --  allocating extra space, we avoid the need to reallocate on every
+      --  append, particularly important when a string is built up by repeated
+      --  append operations of small pieces. This is expressed as a factor so
+      --  32 means add 1/32 of the length of the string as growth space.
+
+      Min_Mul_Alloc : constant := Standard'Maximum_Alignment;
+      --  Allocation will be done by a multiple of Min_Mul_Alloc This causes
+      --  no memory loss as most (all?) malloc implementations are obliged to
+      --  align the returned memory on the maximum alignment as malloc does not
+      --  know the target alignment.
+
+      S_Length : constant Natural := Source.Reference'Length;
 
    begin
       if Chunk_Size > S_Length - Source.Last then
          declare
-            Alloc_Chunk_Size : constant Positive :=
-                                 Chunk_Size + (S_Length / Growth_Factor);
-            Tmp : String_Access;
+            New_Size : constant Positive :=
+                         S_Length + Chunk_Size + (S_Length / Growth_Factor);
+
+            New_Rounded_Up_Size : constant Positive :=
+                                    ((New_Size - 1) / Min_Mul_Alloc + 1) *
+                                       Min_Mul_Alloc;
+
+            Tmp : constant String_Access :=
+                    new String (1 .. New_Rounded_Up_Size);
+
          begin
-            Tmp := new String (1 .. S_Length + Alloc_Chunk_Size);
             Tmp (1 .. Source.Last) := Source.Reference (1 .. Source.Last);
             Free (Source.Reference);
             Source.Reference := Tmp;

@@ -1,7 +1,7 @@
 // { dg-do run }
 // { dg-options "-O2" }
 
-extern "C" int printf (...);
+extern "C" int printf (const char*, ...);
 
 struct _Deque_iterator {
   int _M_cur;
@@ -30,14 +30,16 @@ public:
 
 
 _Deque_base::~_Deque_base() {
-  printf ("bb %x %x\n", this, *_M_start._M_node);
+  /* APPLE LOCAL default to Wformat-security 5764921 */
+  printf ("bb %p %x\n", this, *_M_start._M_node);
 }
 
 void
 _Deque_base::_M_initialize_map()
 {
   yy = 0x123;
-  printf ("aa %x %x\n", this, yy);
+  /* APPLE LOCAL default to Wformat-security 5764921 */
+  printf ("aa %p %x\n", this, yy);
 
   _M_start._M_node = &yy;
   _M_start._M_cur = yy;

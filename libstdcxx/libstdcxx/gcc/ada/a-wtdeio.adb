@@ -1,12 +1,12 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                         GNAT RUNTIME COMPONENTS                          --
+--                         GNAT RUN-TIME COMPONENTS                         --
 --                                                                          --
 --           A D A . W I D E _ T E X T _ I O . D E C I M A L _ I O          --
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2003 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -32,6 +32,7 @@
 ------------------------------------------------------------------------------
 
 with Ada.Wide_Text_IO.Decimal_Aux;
+
 with System.WCh_Con; use System.WCh_Con;
 with System.WCh_WtS; use System.WCh_WtS;
 
@@ -49,9 +50,9 @@ package body Ada.Wide_Text_IO.Decimal_IO is
    ---------
 
    procedure Get
-     (File  : in File_Type;
+     (File  : File_Type;
       Item  : out Num;
-      Width : in Field := 0)
+      Width : Field := 0)
    is
    begin
       if Num'Size > Integer'Size then
@@ -71,14 +72,14 @@ package body Ada.Wide_Text_IO.Decimal_IO is
 
    procedure Get
      (Item  : out Num;
-      Width : in Field := 0)
+      Width : Field := 0)
    is
    begin
       Get (Current_Input, Item, Width);
    end Get;
 
    procedure Get
-     (From : in Wide_String;
+     (From : Wide_String;
       Item : out Num;
       Last : out Positive)
    is
@@ -110,11 +111,11 @@ package body Ada.Wide_Text_IO.Decimal_IO is
    ---------
 
    procedure Put
-     (File : in File_Type;
-      Item : in Num;
-      Fore : in Field := Default_Fore;
-      Aft  : in Field := Default_Aft;
-      Exp  : in Field := Default_Exp)
+     (File : File_Type;
+      Item : Num;
+      Fore : Field := Default_Fore;
+      Aft  : Field := Default_Aft;
+      Exp  : Field := Default_Exp)
    is
    begin
       if Num'Size > Integer'Size then
@@ -133,10 +134,10 @@ package body Ada.Wide_Text_IO.Decimal_IO is
    end Put;
 
    procedure Put
-     (Item : in Num;
-      Fore : in Field := Default_Fore;
-      Aft  : in Field := Default_Aft;
-      Exp  : in Field := Default_Exp)
+     (Item : Num;
+      Fore : Field := Default_Fore;
+      Aft  : Field := Default_Aft;
+      Exp  : Field := Default_Exp)
    is
       pragma Unreferenced (Fore);
       --  ??? how come this is unreferenced, sounds wrong ???
@@ -146,9 +147,9 @@ package body Ada.Wide_Text_IO.Decimal_IO is
 
    procedure Put
      (To   : out Wide_String;
-      Item : in Num;
-      Aft  : in Field := Default_Aft;
-      Exp  : in Field := Default_Exp)
+      Item : Num;
+      Aft  : Field := Default_Aft;
+      Exp  : Field := Default_Exp)
    is
       S : String (To'First .. To'Last);
 

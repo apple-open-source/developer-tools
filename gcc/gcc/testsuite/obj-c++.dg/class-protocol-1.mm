@@ -1,4 +1,4 @@
-/* APPLE LOCAL file mainline */
+/* APPLE LOCAL file radar 5839123 */
 /* Check Class <protocol> types */
 /* Author: David Ayers <d.ayers@inode.at> */
 /* { dg-do compile } */
@@ -176,7 +176,7 @@ testCategoryInherited(void)
 
 @protocol FwProto;
 /* APPLE LOCAL radar 4398221 */
-@interface MyClass1 (Forward) <FwProto>  /* { dg-warning "no definition of protocol \\'FwProto\\' " } */
+@interface MyClass1 (Forward) <FwProto> /* { dg-warning "no definition of protocol \\'FwProto\\' " } */
 @end
 
 Class <FwProto> clsP7 = 0;
@@ -327,8 +327,8 @@ testComptypes(void)
     objP1 == cls; /* { dg-warning "lacks a cast" } */
   }
   { /* id <protocol>, non-ObjC  */
-    num == objP1; /* { dg-warning "between pointer" } */
-    objP1 == num; /* { dg-warning "between pointer" } */
+    num == objP1; /* { dg-error "between pointer" } */
+    objP1 == num; /* { dg-error "between pointer" } */
 
     ptr == objP1;
     objP1 == ptr;
@@ -383,12 +383,12 @@ testComptypes(void)
     objP1 = obj;
   }
   { /* id <protocol>, Class  */
-    cls = objP1; /* { dg-warning "distinct Objective\\-C type" } */
-    objP1 = cls; /* { dg-warning "distinct Objective\\-C type" } */
+    cls = objP1; /* { dg-warning "incompatible Objective-C types assigning \\'objc_object\\*\\', expected \\'objc_class\\*\\'" } */
+    objP1 = cls; /* { dg-warning "incompatible Objective-C types assigning \\'objc_class\\*\\', expected \\'objc_object\\*\\'" } */
   }
   { /* id <protocol>, non-ObjC  */
-    num = objP1; /* { dg-error "invalid conversion" } */
-    objP1 = num; /* { dg-error "invalid conversion" } */
+    num = objP1; /* { dg-warning "invalid conversion" } */
+    objP1 = num; /* { dg-warning "invalid conversion" } */
 
     ptr = objP1;
     objP1 = ptr; /* { dg-error "invalid conversion" } */
@@ -402,11 +402,11 @@ testComptypes(void)
   }
   { /* Class <protocol>, SomeClass * */
     /* These combinations should always elicit a warning.  */
-    mc1 = clsP1; /* { dg-warning "distinct Objective\\-C type" } */
-    clsP1 = mc1; /* { dg-warning "distinct Objective\\-C type" } */
+    mc1 = clsP1; /* { dg-warning "incompatible Objective-C types assigning \\'objc_class\\*\\', expected \\'MyClass1\\*\\'" } */
+    clsP1 = mc1; /* { dg-warning "incompatible Objective-C types assigning \\'MyClass1\\*\\', expected \\'objc_class\\*\\'" } */
     
-    mc1 = clsP2; /* { dg-warning "distinct Objective\\-C type" } */
-    clsP2 = mc1; /* { dg-warning "distinct Objective\\-C type" } */
+    mc1 = clsP2; /* { dg-warning "incompatible Objective-C types assigning \\'objc_class\\*\\', expected \\'MyClass1\\*\\'" } */
+    clsP2 = mc1; /* { dg-warning "incompatible Objective-C types assigning \\'MyClass1\\*\\', expected \\'objc_class\\*\\'" } */
   }
   { /* Class <protocol>, id */
     obj = clsP1;
@@ -424,8 +424,8 @@ testComptypes(void)
     clsP1 = ptr; /* { dg-error "invalid conversion" } */
   }
   { /* Class <protocol>, id <protocol> */
-    clsP1 = objP1; /* { dg-warning "distinct Objective\\-C type" } */
-    objP1 = clsP1; /* { dg-warning "distinct Objective\\-C type" } */
+    clsP1 = objP1; /* { dg-warning "incompatible Objective-C types assigning \\'objc_object\\*\\', expected \\'objc_class\\*\\'" } */
+    objP1 = clsP1; /* { dg-warning "incompatible Objective-C types assigning \\'objc_class\\*\\', expected \\'objc_object\\*\\'" } */
   }
 }
 

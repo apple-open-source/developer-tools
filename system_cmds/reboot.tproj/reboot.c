@@ -58,17 +58,22 @@ static const char rcsid[] =
 #include <unistd.h>
 
 #ifdef __APPLE__
+#include <TargetConditionals.h>
+#if !TARGET_OS_EMBEDDED
 #include "kextmanager.h"
 #include <IOKit/kext/kextmanager_types.h>
+#endif
 #include <mach/mach_port.h>		// allocate
 #include <mach/mach.h>			// task_self, etc
 #include <servers/bootstrap.h>	// bootstrap
 #include <reboot2.h>
+#include <utmpx.h>
+#include <sys/time.h>
 #endif
 
 void usage(void);
 u_int get_pageins(void);
-#ifdef __APPLE__
+#if defined(__APPLE__) && !TARGET_OS_EMBEDDED
 int reserve_reboot(void);
 #endif
 
@@ -128,6 +133,7 @@ main(int argc, char *argv[])
 			break;
 		case 'q':
 			qflag = 1;
+			howto |= RB_QUICK;
 			break;
 		case '?':
 		default:
@@ -145,9 +151,9 @@ main(int argc, char *argv[])
 		err(1, NULL);
 	}
 
-#ifdef __APPLE__
-	if (!lflag) {	// shutdown(8) has already checked w/kextd
-		if ((errno = reserve_reboot()) && !qflag)
+#if defined(__APPLE__) && !TARGET_OS_EMBEDDED
+	if (!qflag && !lflag) {	// shutdown(8) has already checked w/kextd
+		if ((errno = reserve_reboot()))
 			err(1, "couldn't lock for reboot");
 	}
 #endif
@@ -184,7 +190,20 @@ main(int argc, char *argv[])
 			syslog(LOG_CRIT, "rebooted by %s", user);
 		}
 	}
+#if defined(__APPLE__) 
+	{
+		struct utmpx utx;
+		bzero(&utx, sizeof(utx));
+		utx.ut_type = BOOT_TIME;
+		gettimeofday(&utx.ut_tv, NULL);
+		pututxline(&utx);
+
+		int newvalue = 1;
+		sysctlbyname("kern.willshutdown", NULL, NULL, &newvalue, sizeof(newvalue));
+	}
+#else
 	logwtmp("~", "shutdown", "");
+#endif
 
 	/*
 	 * Do a sync early on, so disks start transfers while we're off
@@ -282,7 +301,7 @@ get_pageins()
 	return pageins;
 }
 
-#ifdef __APPLE__
+#if defined(__APPLE__) && !TARGET_OS_EMBEDDED
 // XX this routine is also in shutdown.tproj; it would be nice to share
 
 #define WAITFORLOCK 1

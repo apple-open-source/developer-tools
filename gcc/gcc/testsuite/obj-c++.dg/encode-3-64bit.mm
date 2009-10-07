@@ -18,7 +18,7 @@ const char *enc = @encode(Vec<float>);
 const char *enc2 = @encode(Vec<double>);
 
 int main(void) {
-  char *encode = @encode(long);
+  const char *encode = @encode(long);
 
   if (strcmp (encode, "q"))
     abort();

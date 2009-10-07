@@ -16,31 +16,29 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 #ifndef GCC_OBJC_ACT_H
 #define GCC_OBJC_ACT_H
 
-/* APPLE LOCAL begin mainline */
 /* For enum gimplify_status */
 #include "tree-gimple.h"
 
-/* APPLE LOCAL end mainline */
 /*** Language hooks ***/
 
 bool objc_init (void);
 const char *objc_printable_name (tree, int);
-/* APPLE LOCAL mainline */
 tree objc_get_callee_fndecl (tree);
 void objc_finish_file (void);
 tree objc_fold_obj_type_ref (tree, tree);
-/* APPLE LOCAL mainline */
-/* The 'objc_types_compatible_p' routine has been removed.  */
-/* APPLE LOCAL mainline */
 enum gimplify_status objc_gimplify_expr (tree *, tree *, tree *);
+/* APPLE LOCAL radar 4721858 */
+extern void emit_instantiate_pending_templates (location_t *);
 /* APPLE LOCAL radar 4291785 */
 void objc_detect_field_duplicates (tree);
+/* APPLE LOCAL radar 5355344 */
+bool cp_objc_protocol_id_list (tree);
 
 /* NB: The remaining public functions are prototyped in c-common.h, for the
    benefit of stub-objc.c and objc-act.c.  */
@@ -49,46 +47,45 @@ void objc_detect_field_duplicates (tree);
 
 /* APPLE LOCAL radar 4291785, 4548636 */
 #define CLASS_LANG_SLOT_ELTS		9
-/* APPLE LOCAL ObjC abi v2 */
-#define PROTOCOL_LANG_SLOT_ELTS		8
+/* APPLE LOCAL ObjC abi v2 - radar 4947311 */
+#define PROTOCOL_LANG_SLOT_ELTS		9
 #define OBJC_INFO_SLOT_ELTS		2
 
 /* KEYWORD_DECL */
-#define KEYWORD_KEY_NAME(DECL) ((DECL)->decl.name)
-#define KEYWORD_ARG_NAME(DECL) ((DECL)->decl.arguments)
+#define KEYWORD_KEY_NAME(DECL) ((DECL)->decl_minimal.name)
+#define KEYWORD_ARG_NAME(DECL) ((DECL)->decl_non_common.arguments)
+/* APPLE LOCAL radar 4157812 */
+#define	KEYWORD_ARG_ATTRIBUTE(DECL) DECL_ATTRIBUTES(DECL)
 
 /* INSTANCE_METHOD_DECL, CLASS_METHOD_DECL */
-#define METHOD_SEL_NAME(DECL) ((DECL)->decl.name)
-#define METHOD_SEL_ARGS(DECL) ((DECL)->decl.arguments)
-#define METHOD_ADD_ARGS(DECL) ((DECL)->decl.result)
-#define METHOD_DEFINITION(DECL) ((DECL)->decl.initial)
-#define METHOD_ENCODING(DECL) ((DECL)->decl.context)
+#define METHOD_SEL_NAME(DECL) ((DECL)->decl_minimal.name)
+#define METHOD_SEL_ARGS(DECL) ((DECL)->decl_non_common.arguments)
+#define METHOD_ADD_ARGS(DECL) ((DECL)->decl_non_common.result)
+#define METHOD_ADD_ARGS_ELLIPSIS_P(DECL) ((DECL)->decl_common.lang_flag_0)
+#define METHOD_DEFINITION(DECL) ((DECL)->decl_common.initial)
+#define METHOD_ENCODING(DECL) ((DECL)->decl_minimal.context)
 /* APPLE LOCAL radar 4359757 */
-#define METHOD_CONTEXT(DECL) ((DECL)->decl.assembler_name)
+#define METHOD_CONTEXT(DECL) (DECL_WITH_VIS_CHECK (DECL)->decl_with_vis.assembler_name)
 /* APPLE LOCAL radar 3803157 */
-#define METHOD_TYPE_ATTRIBUTES(DECL) ((DECL)->decl.abstract_origin)
+#define METHOD_TYPE_ATTRIBUTES(DECL) (DECL_COMMON_CHECK (DECL)->decl_common.abstract_origin)
 /* APPLE LOCAL C* property metadata (Radar 4498373) */
-#define METHOD_PROPERTY_CONTEXT(DECL) ((DECL)->decl.size_unit)
+#define METHOD_PROPERTY_CONTEXT(DECL) (DECL_COMMON_CHECK (DECL)->decl_common.size_unit)
 
 /* APPLE LOCAL begin C* property (Radar 4436866, 4591909) */
-#define PROPERTY_NAME(DECL) ((DECL)->decl.name)
-#define PROPERTY_GETTER_NAME(DECL) ((DECL)->decl.arguments)
-#define PROPERTY_SETTER_NAME(DECL) ((DECL)->decl.result)
-#define PROPERTY_IVAR_NAME(DECL) ((DECL)->decl.initial)
-#define PROPERTY_READONLY(DECL) ((DECL)->decl.context)
-#define PROPERTY_BYCOPY(DECL) ((DECL)->decl.size_unit)
-#define PROPERTY_BYREF(DECL)  ((DECL)->decl.assembler_name)
-#define PROPERTY_DYNAMIC(DECL) ((DECL)->decl.abstract_origin)
-/* APPLE LOCAL radar 4621020 */
-#define PROPERTY_WEAK(DECL) ((DECL)->decl.section_name)
+#define PROPERTY_NAME(DECL) ((DECL)->decl_minimal.name)
+#define PROPERTY_GETTER_NAME(DECL) ((DECL)->decl_non_common.arguments)
+#define PROPERTY_SETTER_NAME(DECL) ((DECL)->decl_non_common.result)
+#define PROPERTY_IVAR_NAME(DECL) ((DECL)->decl_common.initial)
+#define PROPERTY_READONLY(DECL) ((DECL)->decl_minimal.context)
+#define PROPERTY_DYNAMIC(DECL) (DECL_COMMON_CHECK (DECL)->decl_common.abstract_origin)
 /* APPLE LOCAL end C* property (Radar 4436866, 4591909) */
 /* APPLE LOCAL begin objc new property */
-#define PROPERTY_COPY(DECL) PROPERTY_BYCOPY(DECL)
-#define PROPERTY_RETAIN(DECL) PROPERTY_BYREF(DECL)
+#define PROPERTY_COPY(DECL) (DECL_COMMON_CHECK (DECL)->decl_common.size_unit) 
+#define PROPERTY_RETAIN(DECL) (DECL_WITH_VIS_CHECK (DECL)->decl_with_vis.assembler_name)
 #define PROPERTY_ASSIGN(DECL) (!property_readonly \
 			       && PROPERTY_RETAIN(DECL) == boolean_false_node \
 			       && PROPERTY_COPY(DECL) == boolean_false_node)
-#define PROPERTY_READWRITE(DECL) PROPERTY_WEAK(DECL)
+#define PROPERTY_READWRITE(DECL) (DECL_WITH_VIS_CHECK (DECL)->decl_with_vis.section_name)
 /* APPLE LOCAL end objc new property */
 
 /* CLASS_INTERFACE_TYPE, CLASS_IMPLEMENTATION_TYPE,
@@ -133,13 +130,15 @@ void objc_detect_field_duplicates (tree);
 /* For CLASS_INTERFACE_TYPE only */
 #define CLASS_ATTRIBUTES(CLASS) TREE_VEC_ELT (TYPE_LANG_SLOT_1 (CLASS), 8)
 /* APPLE LOCAL end radar 4548636 */
+/* APPLE LOCAL begin radar 4947311 - protocol attributes */
+#define PROTOCOL_ATTRIBUTES(PROTO) TREE_VEC_ELT (TYPE_LANG_SLOT_1 (PROTO), 8)
+/* APPLE LOCAL end radar 4947311 - protocol attributes */
 /* APPLE LOCAL radar 4695101 */
 /* declaration of  PROTOCOL_IMPL_OBJ removed. */
 
 /* ObjC-specific information pertaining to RECORD_TYPEs are stored in
    the LANG_SPECIFIC structures, which may itself need allocating first.  */
 
-/* APPLE LOCAL begin mainline */
 /* The following three macros must be overridden (in objcp/objcp-decl.h)
    for Objective-C++.  */
 #define TYPE_OBJC_INFO(TYPE) TYPE_LANG_SPECIFIC (TYPE)->objc_info
@@ -177,11 +176,6 @@ void objc_detect_field_duplicates (tree);
 	      = make_tree_vec (OBJC_INFO_SLOT_ELTS);		\
 	  }							\
 	while (0)
-/* APPLE LOCAL end mainline */
-
-/* APPLE LOCAL begin mainline */
-/* code removed */
-/* APPLE LOCAL end mainline */
 
 #define TYPED_OBJECT(TYPE)					\
 	(TREE_CODE (TYPE) == RECORD_TYPE			\
@@ -189,11 +183,6 @@ void objc_detect_field_duplicates (tree);
 	 && TYPE_OBJC_INTERFACE (TYPE))
 #define OBJC_TYPE_NAME(TYPE) TYPE_NAME(TYPE)
 #define OBJC_SET_TYPE_NAME(TYPE, NAME) (TYPE_NAME (TYPE) = NAME)
-
-/* APPLE LOCAL begin mainline */
-#define IDENTIFIER_INTERFACE_VALUE(NODE) \
-	(((struct lang_identifier *) (NODE))->interface_value)
-/* APPLE LOCAL end mainline */
 
 /* Define the Objective-C or Objective-C++ language-specific tree codes.  */
 
@@ -265,7 +254,6 @@ struct imp_entry GTY(())
   tree class_v2_decl;		/* _OBJC_V2_CLASS_<my_name>; */
   tree meta_v2_decl;		/* _OBJC_V2_METACLASS_<my_name>; */
   /* APPLE LOCAL end ObjC new abi */
-  /* APPLE LOCAL mainline */
   BOOL_BITFIELD has_cxx_cdtors : 1;
 };
 
@@ -284,12 +272,9 @@ enum objc_tree_index
     OCTI_STATIC_NST_DECL,
     OCTI_SELF_ID,
     OCTI_UCMD_ID,
-    /* APPLE LOCAL mainline */
-    /* 'OCTI_UNUSED_LIST' removed.  */
 
     OCTI_SELF_DECL,
     OCTI_UMSG_DECL,
-    /* APPLE LOCAL mainline */
     /* APPLE LOCAL radar 4590221 */
     /* code removed */
     OCTI_UMSG_SUPER_DECL,
@@ -342,11 +327,9 @@ enum objc_tree_index
     OCTI_UUCLS_SUPER_REF,
     OCTI_METH_TEMPL,
     OCTI_IVAR_TEMPL,
-    /* APPLE LOCAL begin mainline */
     OCTI_METH_LIST_TEMPL,
     OCTI_METH_PROTO_LIST_TEMPL,
     OCTI_IVAR_LIST_TEMPL,
-    /* APPLE LOCAL end mainline */
     OCTI_SYMTAB_TEMPL,
     OCTI_MODULE_TEMPL,
     OCTI_SUPER_TEMPL,
@@ -364,7 +347,6 @@ enum objc_tree_index
     OCTI_CNST_STR_TYPE,
     OCTI_CNST_STR_GLOB_ID,
     OCTI_STRING_CLASS_DECL,
-    /* APPLE LOCAL 4149909 */
     OCTI_INTERNAL_CNST_STR_TYPE,
     OCTI_SUPER_DECL,
     OCTI_UMSG_NONNIL_DECL,
@@ -388,13 +370,13 @@ enum objc_tree_index
     /* APPLE LOCAL radar 4280641 */
     OCTI_UMSG_FPRET_DECL,
 
-    /* APPLE LOCAL begin mainline */
     OCTI_ASSIGN_IVAR_DECL,
     /* APPLE LOCAL 4590221 */
      /* removed OCTI_ASSIGN_IVAR_FAST_DECL */
     OCTI_ASSIGN_GLOBAL_DECL,
     OCTI_ASSIGN_STRONGCAST_DECL,
-    /* APPLE LOCAL end mainline */
+    /* APPLE LOCAL radar 3742561 */
+    OCTI_MEMMOVE_DECL,
     /* APPLE LOCAL begin radar 4426814 */
     OCTI_ASSIGN_WEAK_DECL,
     OCTI_READ_WEAK_DECL,
@@ -469,12 +451,6 @@ enum objc_tree_index
     OCTI_PROTOCOL_OPT_NST_METH_DECL,
     OCTI_PROTOCOL_OPT_CLS_METH_DECL,
     /* APPLE LOCAL end radar 4585769 - Objective-C 1.0 extensions */
-    /* APPLE LOCAL begin Radar 4591909 */
-    OCTI_UMSG_GETPROPERTY_BYCOPY,
-    OCTI_UMSG_GETPROPERTY_BYREF,
-    OCTI_UMSG_SETPROPERTY_BYCOPY,
-    OCTI_UMSG_SETPROPERTY_BYREF,
-    /* APPLE LOCAL end Radar 4591909 */
     /* APPLE LOCAL begin radar 2848255 */
     OCTI_EHTYPE,
     OCTI_EHTYPE_VTABLE,
@@ -503,13 +479,11 @@ extern GTY(()) tree objc_global_trees[OCTI_MAX];
 
 #define self_id			objc_global_trees[OCTI_SELF_ID]
 #define ucmd_id			objc_global_trees[OCTI_UCMD_ID]
-/* APPLE LOCAL mainline */
-/* 'unused_list' removed.  */
 
 #define self_decl		objc_global_trees[OCTI_SELF_DECL]
 #define umsg_decl		objc_global_trees[OCTI_UMSG_DECL]
 /* APPLE LOCAL radar 4590221 */
-/* code removed */
+/* umsg_fast_decl removed */
 #define umsg_super_decl		objc_global_trees[OCTI_UMSG_SUPER_DECL]
 #define umsg_stret_decl		objc_global_trees[OCTI_UMSG_STRET_DECL]
 #define umsg_super_stret_decl	objc_global_trees[OCTI_UMSG_SUPER_STRET_DECL]
@@ -541,7 +515,8 @@ extern GTY(()) tree objc_global_trees[OCTI_MAX];
 	 && TYPE_OBJC_PROTOCOL_LIST (TREE_TYPE (TYPE)))
 #define IS_SUPER(TYPE)							\
 	(TREE_CODE (TYPE) == POINTER_TYPE				\
-	 && TREE_TYPE (TYPE) == objc_super_template)
+	 /* APPLE LOCAL radar 6023694 */				\
+	 && TYPE_MAIN_VARIANT (TREE_TYPE (TYPE)) == objc_super_template)
 
 /* APPLE LOCAL radar 4345837 */
 /* class_chain and alias_chain are removed */
@@ -625,12 +600,14 @@ extern GTY(()) tree objc_global_trees[OCTI_MAX];
 /* APPLE LOCAL radar 4280641 */
 #define umsg_fpret_decl		objc_global_trees[OCTI_UMSG_FPRET_DECL]
 
-/* APPLE LOCAL begin mainline */
 #define objc_assign_ivar_decl	objc_global_trees[OCTI_ASSIGN_IVAR_DECL]
+/* APPLE LOCAL mainline */
+/* remove objc_assign_ivar_fast_decl */
 #define objc_assign_global_decl	objc_global_trees[OCTI_ASSIGN_GLOBAL_DECL]
 #define objc_assign_strong_cast_decl		\
 				objc_global_trees[OCTI_ASSIGN_STRONGCAST_DECL]
-/* APPLE LOCAL end mainline */
+/* APPLE LOCAL radar 3742561 */
+#define objc_memmove_collectable_decl objc_global_trees[OCTI_MEMMOVE_DECL]
 
 /* APPLE LOCAL begin radar 4426814 */
 #define objc_assign_weak_decl	objc_global_trees[OCTI_ASSIGN_WEAK_DECL]
@@ -639,12 +616,10 @@ extern GTY(()) tree objc_global_trees[OCTI_MAX];
 
 #define objc_method_template	objc_global_trees[OCTI_METH_TEMPL]
 #define objc_ivar_template	objc_global_trees[OCTI_IVAR_TEMPL]
-/* APPLE LOCAL begin mainline */
 #define objc_method_list_ptr	objc_global_trees[OCTI_METH_LIST_TEMPL]
 #define objc_method_proto_list_ptr		\
 				objc_global_trees[OCTI_METH_PROTO_LIST_TEMPL]
 #define objc_ivar_list_ptr	objc_global_trees[OCTI_IVAR_LIST_TEMPL]
-/* APPLE LOCAL end mainline */
 #define objc_symtab_template	objc_global_trees[OCTI_SYMTAB_TEMPL]
 #define objc_module_template	objc_global_trees[OCTI_MODULE_TEMPL]
 #define objc_super_template	objc_global_trees[OCTI_SUPER_TEMPL]
@@ -664,7 +639,6 @@ extern GTY(()) tree objc_global_trees[OCTI_MAX];
 #define constant_string_global_id		\
 				objc_global_trees[OCTI_CNST_STR_GLOB_ID]
 #define string_class_decl	objc_global_trees[OCTI_STRING_CLASS_DECL]
-/* APPLE LOCAL 4149909 */
 #define internal_const_str_type	objc_global_trees[OCTI_INTERNAL_CNST_STR_TYPE]
 #define UOBJC_SUPER_decl	objc_global_trees[OCTI_SUPER_DECL]
 
@@ -755,12 +729,6 @@ extern GTY(()) tree objc_global_trees[OCTI_MAX];
 #define UOBJC_PROTOCOL_OPT_NST_METHODS_decl objc_global_trees[OCTI_PROTOCOL_OPT_NST_METH_DECL]
 #define UOBJC_PROTOCOL_OPT_CLS_METHODS_decl objc_global_trees[OCTI_PROTOCOL_OPT_CLS_METH_DECL]
 /* APPLE LOCAL end radar 4585769 - Objective-C 1.0 extensions */
-/* APPLE LOCAL begin Radar 4591909 */
-#define umsg_getProperty_bycopy		objc_global_trees[OCTI_UMSG_GETPROPERTY_BYCOPY]
-#define umsg_getProperty_byref		objc_global_trees[OCTI_UMSG_GETPROPERTY_BYREF]
-#define umsg_setProperty_bycopy         objc_global_trees[OCTI_UMSG_SETPROPERTY_BYCOPY]
-#define umsg_setProperty_byref         objc_global_trees[OCTI_UMSG_SETPROPERTY_BYREF]
-/* APPLE LOCAL end Radar 4591909 */
 /* APPLE LOCAL begin radar 4947014 - objc atomic property */
 #define umsg_GetAtomicProperty		objc_global_trees[OCTI_UMSG_GETATOMICPROPERTY]
 #define umsg_SetAtomicProperty		objc_global_trees[OCTI_UMSG_SETATOMICPROPERTY]
@@ -768,20 +736,22 @@ extern GTY(()) tree objc_global_trees[OCTI_MAX];
 #define umsg_NSCopying_Type		objc_global_trees[OCTI_UMSG_NSCOPYING]
 /* APPLE LOCAL end radar 4947014 - objc atomic property */
 /* APPLE LOCAL begin radar 2848255 */
-#define UOBJC2_EHTYPE_VTABLE_decl 	objc_global_trees[OCTI_EHTYPE_VTABLE]
-#define objc2_ehtype_template       	objc_global_trees[OCTI_EHTYPE]
-#define objc2_begin_catch_decl		objc_global_trees[OCTI_BEGIN_CATCH]
-#define objc2_end_catch_decl		objc_global_trees[OCTI_END_CATCH]
-#define UOBJC2_EHTYPE_id_decl		objc_global_trees[OCTI_EHTYPE_ID]
+#define UOBJC2_EHTYPE_VTABLE_decl       objc_global_trees[OCTI_EHTYPE_VTABLE]
+#define objc2_ehtype_template           objc_global_trees[OCTI_EHTYPE]
+#define objc2_begin_catch_decl          objc_global_trees[OCTI_BEGIN_CATCH]
+#define objc2_end_catch_decl            objc_global_trees[OCTI_END_CATCH]
+#define UOBJC2_EHTYPE_id_decl           objc_global_trees[OCTI_EHTYPE_ID]
 /* APPLE LOCAL end radar 2848255 */
 /* APPLE LOCAL radar 4951615 */
 #define IVAR_PUBLIC_OR_PROTECTED(NODE) (DECL_LANG_FLAG_0 (NODE))
 /* APPLE LOCAL begin radar 4965989 */
 #define ANONYMOUS_CATEGORY(X) (TREE_CODE (X) == CATEGORY_INTERFACE_TYPE \
-				&& CLASS_SUPER_NAME (X) == NULL_TREE)
+                                && CLASS_SUPER_NAME (X) == NULL_TREE)
 /* APPLE LOCAL end radar 4965989 */
 /* APPLE LOCAL begin radar 4947014 - objc atomic property */
 #define ATOMIC_PROPERTY(NODE) (TREE_LANG_FLAG_1 (NODE))
 #define IS_ATOMIC(PROPERTY)   (ATOMIC_PROPERTY(PROPERTY))
 /* APPLE LOCAL end radar 4947014 - objc atomic property */
+/* APPLE LOCAL radar 4653422 */
+#define OPTIONAL_PROPERTY(PROPERTY_NODE) (TREE_LANG_FLAG_2 (PROPERTY_NODE))
 #endif /* GCC_OBJC_ACT_H */

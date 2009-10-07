@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2004 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -64,9 +64,13 @@ package Exp_Tss is
    -- TSS Naming --
    ----------------
 
-   --  A TSS is identified by its Chars name. The name has the form typXY,
-   --  where typ is the type name, and XY are two characters that identify
-   --  the particular TSS routine, using the following codes:
+   --  A TSS is identified by its Chars name. The name has the form typXY or
+   --  typ_<serial>XY, where typ is the type name, and XY are two characters
+   --  that identify the particular TSS routine. A unique serial number is
+   --  included for the case where several local instances of the same TSS
+   --  must be generated (see discussion under Make_TSS_Name_Local).
+
+   --  The following codes are used to denote TSSs:
 
    --  Note: When making additions to this list, update the list in snames.adb
 
@@ -77,21 +81,27 @@ package Exp_Tss is
    TSS_Deep_Finalize      : constant TNT := "DF";  -- Deep Finalize
    TSS_Deep_Initialize    : constant TNT := "DI";  -- Deep Initialize
    TSS_Composite_Equality : constant TNT := "EQ";  -- Composite Equality
+   TSS_From_Any           : constant TNT := "FA";  -- PolyORB/DSA From_Any
    TSS_Init_Proc          : constant TNT := "IP";  -- Initialization Procedure
-   TSS_RAS_Access         : constant TNT := "RA";  -- RAs type access
-   TSS_RAS_Dereference    : constant TNT := "RD";  -- RAs type deference
+   TSS_RAS_Access         : constant TNT := "RA";  -- RAS type access
+   TSS_RAS_Dereference    : constant TNT := "RD";  -- RAS type deference
    TSS_Rep_To_Pos         : constant TNT := "RP";  -- Rep to Pos conversion
    TSS_Slice_Assign       : constant TNT := "SA";  -- Slice assignment
    TSS_Stream_Input       : constant TNT := "SI";  -- Stream Input attribute
    TSS_Stream_Output      : constant TNT := "SO";  -- Stream Output attribute
    TSS_Stream_Read        : constant TNT := "SR";  -- Stream Read attribute
    TSS_Stream_Write       : constant TNT := "SW";  -- Stream Write attribute
+   TSS_To_Any             : constant TNT := "TA";  -- PolyORB/DSA To_Any
+   TSS_TypeCode           : constant TNT := "TC";  -- PolyORB/DSA TypeCode
 
-   OK_TSS_Names : constant array (Natural range <>) of TSS_Name_Type :=
+   --  The array below contains all valid TSS names
+
+   TSS_Names : constant array (Natural range <>) of TSS_Name_Type :=
      (TSS_Deep_Adjust,
       TSS_Deep_Finalize,
       TSS_Deep_Initialize,
       TSS_Composite_Equality,
+      TSS_From_Any,
       TSS_Init_Proc,
       TSS_RAS_Access,
       TSS_RAS_Dereference,
@@ -100,7 +110,9 @@ package Exp_Tss is
       TSS_Stream_Input,
       TSS_Stream_Output,
       TSS_Stream_Read,
-      TSS_Stream_Write);
+      TSS_Stream_Write,
+      TSS_To_Any,
+      TSS_TypeCode);
 
    TSS_Null : constant TNT := "  ";
    --  Dummy entry used to indicated that this is not really a TSS
@@ -118,10 +130,11 @@ package Exp_Tss is
    function Make_TSS_Name_Local
      (Typ : Entity_Id;
       Nam : TSS_Name_Type) return Name_Id;
-   --  Similar to the above call, but a string of the form _nnn is appended
-   --  to the name, where nnn is a unique serial number. This is used when
-   --  multiple instances of the same TSS routine may be generated in the
-   --  same scope (see also discussion above of current limitations).
+   --  Similar to the above call, but a string of the form _nnn is inserted
+   --  before the TSS code suffix, where nnn is a unique serial number. This
+   --  is used when multiple instances of the same TSS routine may be
+   --  generated in the same scope (see also discussion above of current
+   --  limitations).
 
    function Make_Init_Proc_Name (Typ : Entity_Id) return Name_Id;
    --  Version for init procs, same as Make_TSS_Name (Typ, TSS_Init_Proc)
@@ -205,5 +218,12 @@ package Exp_Tss is
    --  a result of the processing for Initialize_Scalars. This function
    --  is used to test for the presence of an init proc in cases where
    --  a null init proc is considered equivalent to no init proc.
+
+   function Find_Inherited_TSS
+     (Typ : Entity_Id;
+      Nam : TSS_Name_Type) return Entity_Id;
+   --  Returns the TSS of name Nam of Typ, or of its closest ancestor defining
+   --  such a TSS. Empty is returned is neither Typ nor any of its ancestors
+   --  have such a TSS.
 
 end Exp_Tss;

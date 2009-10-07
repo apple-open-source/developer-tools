@@ -24,13 +24,16 @@
  */
 
 #include "config.h"
-#include "HashTable.h"
 #include "ClipboardWx.h"
+
+#include "FileList.h"
+#include "HashTable.h"
 #include "IntPoint.h"
+#include "NotImplemented.h"
+#include "Pasteboard.h"
 #include "PlatformString.h"
 #include "StringHash.h"
-#include "Pasteboard.h"
-#include "NotImplemented.h"
+
 
 namespace WebCore {
     
@@ -67,6 +70,12 @@ HashSet<String> ClipboardWx::types() const
     notImplemented();
     HashSet<String> result;
     return result;
+}
+
+PassRefPtr<FileList> ClipboardWx::files() const
+{
+    notImplemented();
+    return 0;
 }
 
 IntPoint ClipboardWx::dragLocation() const 

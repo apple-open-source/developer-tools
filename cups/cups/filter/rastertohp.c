@@ -1,10 +1,10 @@
 /*
- * "$Id: rastertohp.c 6649 2007-07-11 21:46:42Z mike $"
+ * "$Id: rastertohp.c 7834 2008-08-04 21:02:09Z mike $"
  *
  *   Hewlett-Packard Page Control Language filter for the Common UNIX
  *   Printing System (CUPS).
  *
- *   Copyright 2007 by Apple Inc.
+ *   Copyright 2007-2009 by Apple Inc.
  *   Copyright 1993-2007 by Easy Software Products.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -34,11 +34,12 @@
 #include <cups/cups.h>
 #include <cups/string.h>
 #include <cups/i18n.h>
-#include "raster.h"
+#include <cups/raster.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <errno.h>
 
 
 /*
@@ -52,7 +53,8 @@ int		NumPlanes,		/* Number of color planes */
 		ColorBits,		/* Number of bits per color */
 		Feed,			/* Number of lines to skip */
 		Duplex,			/* Current duplex mode */
-		Page;			/* Current page number */
+		Page,			/* Current page number */
+		Canceled;		/* Has the current job been canceled? */
 
 
 /*
@@ -60,13 +62,13 @@ int		NumPlanes,		/* Number of color planes */
  */
 
 void	Setup(void);
-void	StartPage(ppd_file_t *ppd, cups_page_header_t *header);
+void	StartPage(ppd_file_t *ppd, cups_page_header2_t *header);
 void	EndPage(void);
 void	Shutdown(void);
 
 void	CancelJob(int sig);
 void	CompressData(unsigned char *line, int length, int plane, int type);
-void	OutputLine(cups_page_header_t *header);
+void	OutputLine(cups_page_header2_t *header);
 
 
 /*
@@ -91,30 +93,10 @@ Setup(void)
 
 void
 StartPage(ppd_file_t         *ppd,	/* I - PPD file */
-          cups_page_header_t *header)	/* I - Page header */
+          cups_page_header2_t *header)	/* I - Page header */
 {
   int	plane;				/* Looping var */
-#if defined(HAVE_SIGACTION) && !defined(HAVE_SIGSET)
-  struct sigaction action;		/* Actions for POSIX signals */
-#endif /* HAVE_SIGACTION && !HAVE_SIGSET */
 
-
- /*
-  * Register a signal handler to eject the current page if the
-  * job is cancelled.
-  */
-
-#ifdef HAVE_SIGSET /* Use System V signals over POSIX to avoid bugs */
-  sigset(SIGTERM, CancelJob);
-#elif defined(HAVE_SIGACTION)
-  memset(&action, 0, sizeof(action));
-
-  sigemptyset(&action.sa_mask);
-  action.sa_handler = CancelJob;
-  sigaction(SIGTERM, &action, NULL);
-#else
-  signal(SIGTERM, CancelJob);
-#endif /* HAVE_SIGSET */
 
  /*
   * Show page device dictionary...
@@ -202,6 +184,10 @@ StartPage(ppd_file_t         *ppd,	/* I - PPD file */
           printf("\033&l80A");			/* Set page size */
 	  break;
 
+      case 595 : /* A5 */
+          printf("\033&l25A");			/* Set page size */
+	  break;
+
       case 624 : /* DL Envelope */
           printf("\033&l90A");			/* Set page size */
 	  break;
@@ -263,10 +249,9 @@ StartPage(ppd_file_t         *ppd,	/* I - PPD file */
 
     if (!ppd || ppd->model_number != 2)
     {
-      if (header->Duplex)
-	printf("\033&l%dS",			/* Set duplex mode */
-               header->Duplex + header->Tumble);
+      int mode = Duplex ? 1 + header->Tumble != 0 : 0;
 
+      printf("\033&l%dS", mode);		/* Set duplex mode */
       printf("\033&l0L");			/* Turn off perforation skip */
     }
   }
@@ -277,7 +262,7 @@ StartPage(ppd_file_t         *ppd,	/* I - PPD file */
   * Set graphics mode...
   */
 
-  if (ppd->model_number == 2)
+  if (ppd && ppd->model_number == 2)
   {
    /*
     * Figure out the number of color planes...
@@ -382,7 +367,12 @@ StartPage(ppd_file_t         *ppd,	/* I - PPD file */
   * Allocate memory for a line of graphics...
   */
 
-  Planes[0] = malloc(header->cupsBytesPerLine);
+  if ((Planes[0] = malloc(header->cupsBytesPerLine)) == NULL)
+  {
+    fputs("ERROR: Unable to allocate memory!\n", stderr);
+    exit(1);
+  }
+
   for (plane = 1; plane < NumPlanes; plane ++)
     Planes[plane] = Planes[0] + plane * header->cupsBytesPerLine / NumPlanes;
 
@@ -405,11 +395,6 @@ StartPage(ppd_file_t         *ppd,	/* I - PPD file */
 void
 EndPage(void)
 {
-#if defined(HAVE_SIGACTION) && !defined(HAVE_SIGSET)
-  struct sigaction action;	/* Actions for POSIX signals */
-#endif /* HAVE_SIGACTION && !HAVE_SIGSET */
-
-
  /*
   * Eject the current page...
   */
@@ -430,22 +415,6 @@ EndPage(void)
   }
 
   fflush(stdout);
-
- /*
-  * Unregister the signal handler...
-  */
-
-#ifdef HAVE_SIGSET /* Use System V signals over POSIX to avoid bugs */
-  sigset(SIGTERM, SIG_IGN);
-#elif defined(HAVE_SIGACTION)
-  memset(&action, 0, sizeof(action));
-
-  sigemptyset(&action.sa_mask);
-  action.sa_handler = SIG_IGN;
-  sigaction(SIGTERM, &action, NULL);
-#else
-  signal(SIGTERM, SIG_IGN);
-#endif /* HAVE_SIGSET */
 
  /*
   * Free memory...
@@ -484,26 +453,9 @@ Shutdown(void)
 void
 CancelJob(int sig)			/* I - Signal */
 {
-  int	i;				/* Looping var */
-
-
   (void)sig;
 
- /*
-  * Send out lots of NUL bytes to clear out any pending raster data...
-  */
-
-  for (i = 0; i < 600; i ++)
-    putchar(0);
-
- /*
-  * End the current page and exit...
-  */
-
-  EndPage();
-  Shutdown();
-
-  exit(0);
+  Canceled = 1;
 }
 
 
@@ -643,7 +595,7 @@ CompressData(unsigned char *line,	/* I - Data to compress */
  */
 
 void
-OutputLine(cups_page_header_t *header)	/* I - Page header */
+OutputLine(cups_page_header2_t *header)	/* I - Page header */
 {
   int		plane,			/* Current plane */
 		bytes,			/* Bytes to write */
@@ -726,15 +678,18 @@ OutputLine(cups_page_header_t *header)	/* I - Page header */
  * 'main()' - Main entry and processing of driver.
  */
 
-int			/* O - Exit status */
-main(int  argc,		/* I - Number of command-line arguments */
-     char *argv[])	/* I - Command-line arguments */
+int					/* O - Exit status */
+main(int  argc,				/* I - Number of command-line arguments */
+     char *argv[])			/* I - Command-line arguments */
 {
-  int			fd;	/* File descriptor */
-  cups_raster_t		*ras;	/* Raster stream for printing */
-  cups_page_header_t	header;	/* Page header from file */
-  int			y;	/* Current line */
-  ppd_file_t		*ppd;	/* PPD file */
+  int			fd;		/* File descriptor */
+  cups_raster_t		*ras;		/* Raster stream for printing */
+  cups_page_header2_t	header;		/* Page header from file */
+  int			y;		/* Current line */
+  ppd_file_t		*ppd;		/* PPD file */
+#if defined(HAVE_SIGACTION) && !defined(HAVE_SIGSET)
+  struct sigaction action;		/* Actions for POSIX signals */
+#endif /* HAVE_SIGACTION && !HAVE_SIGSET */
 
 
  /*
@@ -754,8 +709,9 @@ main(int  argc,		/* I - Number of command-line arguments */
     * and return.
     */
 
-    fprintf(stderr, _("Usage: %s job-id user title copies options [file]\n"),
-            argv[0]);
+    _cupsLangPrintf(stderr,
+                    _("Usage: %s job-id user title copies options [file]\n"),
+                    "rastertohp");
     return (1);
   }
 
@@ -767,7 +723,8 @@ main(int  argc,		/* I - Number of command-line arguments */
   {
     if ((fd = open(argv[6], O_RDONLY)) == -1)
     {
-      perror("ERROR: Unable to open raster file - ");
+      _cupsLangPrintf(stderr, _("ERROR: Unable to open raster file - %s\n"),
+                      strerror(errno));
       sleep(1);
       return (1);
     }
@@ -776,6 +733,25 @@ main(int  argc,		/* I - Number of command-line arguments */
     fd = 0;
 
   ras = cupsRasterOpen(fd, CUPS_RASTER_READ);
+
+ /*
+  * Register a signal handler to eject the current page if the
+  * job is cancelled.
+  */
+
+  Canceled = 0;
+
+#ifdef HAVE_SIGSET /* Use System V signals over POSIX to avoid bugs */
+  sigset(SIGTERM, CancelJob);
+#elif defined(HAVE_SIGACTION)
+  memset(&action, 0, sizeof(action));
+
+  sigemptyset(&action.sa_mask);
+  action.sa_handler = CancelJob;
+  sigaction(SIGTERM, &action, NULL);
+#else
+  signal(SIGTERM, CancelJob);
+#endif /* HAVE_SIGSET */
 
  /*
   * Initialize the print device...
@@ -791,11 +767,14 @@ main(int  argc,		/* I - Number of command-line arguments */
 
   Page = 0;
 
-  while (cupsRasterReadHeader(ras, &header))
+  while (cupsRasterReadHeader2(ras, &header))
   {
    /*
     * Write a status message with the page number and number of copies.
     */
+
+    if (Canceled)
+      break;
 
     Page ++;
 
@@ -817,9 +796,12 @@ main(int  argc,		/* I - Number of command-line arguments */
       * Let the user know how far we have progressed...
       */
 
+      if (Canceled)
+	break;
+
       if ((y & 127) == 0)
-        fprintf(stderr, _("INFO: Printing page %d, %d%% complete...\n"), Page,
-	        100 * y / header.cupsHeight);
+        _cupsLangPrintf(stderr, _("INFO: Printing page %d, %d%% complete...\n"),
+                        Page, 100 * y / header.cupsHeight);
 
      /*
       * Read a line of graphics...
@@ -844,6 +826,9 @@ main(int  argc,		/* I - Number of command-line arguments */
     */
 
     EndPage();
+
+    if (Canceled)
+      break;
   }
 
  /*
@@ -868,14 +853,18 @@ main(int  argc,		/* I - Number of command-line arguments */
   */
 
   if (Page == 0)
-    fputs(_("ERROR: No pages found!\n"), stderr);
+  {
+    _cupsLangPuts(stderr, _("ERROR: No pages found!\n"));
+    return (1);
+  }
   else
-    fputs(_("INFO: Ready to print.\n"), stderr);
-
-  return (Page == 0);
+  {
+    _cupsLangPuts(stderr, _("INFO: Ready to print.\n"));
+    return (0);
+  }
 }
 
 
 /*
- * End of "$Id: rastertohp.c 6649 2007-07-11 21:46:42Z mike $".
+ * End of "$Id: rastertohp.c 7834 2008-08-04 21:02:09Z mike $".
  */

@@ -668,6 +668,9 @@ F:=:CORE_ADDR:fetch_pointer_argument:struct frame_info *frame, int argi, struct 
 # Return the appropriate register set for a core file section with
 # name SECT_NAME and size SECT_SIZE.
 M::const struct regset *:regset_from_core_section:const char *sect_name, size_t sect_size:sect_name, sect_size
+
+# APPLE LOCAL: Translate eh frame regnums into dwarf regnums
+m::int:adjust_ehframe_regnum:int regnum, int eh_frame_p:regnum, eh_frame_p::default_adjust_ehframe_regnum::0
 EOF
 }
 

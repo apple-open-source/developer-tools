@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 1999 Lars Knoll (knoll@kde.org)
  *           (C) 1999 Antti Koivisto (koivisto@kde.org)
- * Copyright (C) 2004, 2006, 2007 Apple Inc. All rights reserved.
+ * Copyright (C) 2004, 2006, 2007, 2008 Apple Inc. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -33,16 +33,11 @@ class HTMLElement;
 
 class HTMLDocument : public Document, public CachedResourceClient {
 public:
-    HTMLDocument(DOMImplementation*, Frame*);
+    static PassRefPtr<HTMLDocument> create(Frame* frame)
+    {
+        return new HTMLDocument(frame);
+    }
     virtual ~HTMLDocument();
-
-    virtual bool isHTMLDocument() const { return true; }
-
-    String lastModified() const;
-    String cookie() const;
-    void setCookie(const String&);
-
-    void setBody(HTMLElement*, ExceptionCode&);
 
     int width();
     int height();
@@ -52,6 +47,11 @@ public:
 
     String designMode() const;
     void setDesignMode(const String&);
+
+    String compatMode() const;
+
+    Element* activeElement();
+    bool hasFocus();
 
     String bgColor();
     void setBgColor(const String&);
@@ -64,31 +64,49 @@ public:
     String vlinkColor();
     void setVlinkColor(const String&);
 
+    void clear();
+
     void captureEvents();
     void releaseEvents();
 
-    virtual Tokenizer* createTokenizer();
-
     virtual bool childAllowed(Node*);
 
-    virtual PassRefPtr<Element> createElement(const String& tagName, ExceptionCode&);
+    virtual PassRefPtr<Element> createElement(const AtomicString& tagName, ExceptionCode&);
 
-    virtual void determineParseMode(const String&);
+    void addNamedItem(const AtomicString& name);
+    void removeNamedItem(const AtomicString& name);
+    bool hasNamedItem(AtomicStringImpl* name);
 
-    void addNamedItem(const String& name);
-    void removeNamedItem(const String& name);
-    bool hasNamedItem(const String& name);
+    void addExtraNamedItem(const AtomicString& name);
+    void removeExtraNamedItem(const AtomicString& name);
+    bool hasExtraNamedItem(AtomicStringImpl* name);
 
-    void addDocExtraNamedItem(const String& name);
-    void removeDocExtraNamedItem(const String& name);
-    bool hasDocExtraNamedItem(const String& name);
+    typedef HashMap<AtomicStringImpl*, int> NameCountMap;
 
-    typedef HashMap<StringImpl*, int> NameCountMap;
+protected:
+    HTMLDocument(Frame*);
 
 private:
-    NameCountMap namedItemCounts;
-    NameCountMap docExtraNamedItemCounts;
+    virtual bool isHTMLDocument() const { return true; }
+    virtual bool isFrameSet() const;
+    virtual Tokenizer* createTokenizer();
+    virtual void determineParseMode();
+
+    NameCountMap m_namedItemCounts;
+    NameCountMap m_extraNamedItemCounts;
 };
+
+inline bool HTMLDocument::hasNamedItem(AtomicStringImpl* name)
+{
+    ASSERT(name);
+    return m_namedItemCounts.contains(name);
+}
+
+inline bool HTMLDocument::hasExtraNamedItem(AtomicStringImpl* name)
+{
+    ASSERT(name);
+    return m_extraNamedItemCounts.contains(name);
+}
 
 } // namespace
 

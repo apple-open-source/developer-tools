@@ -1,7 +1,8 @@
-/* APPLE LOCAL file mainline */
 /* Test warnings for shadowing instance variables.  */
 /* Based on work by: Nicola Pero <nicola@brainstorm.co.uk>.  */
+
 /* { dg-do compile } */
+
 #include <objc/objc.h>
 
 @interface MySuperClass

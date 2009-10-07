@@ -24,7 +24,8 @@
 <a href="./en/sitemap.html" hreflang="en" rel="alternate" title="English">&nbsp;en&nbsp;</a> |
 <a href="./es/sitemap.html" title="Español">&nbsp;es&nbsp;</a> |
 <a href="./ja/sitemap.html" hreflang="ja" rel="alternate" title="Japanese">&nbsp;ja&nbsp;</a> |
-<a href="./ko/sitemap.html" hreflang="ko" rel="alternate" title="Korean">&nbsp;ko&nbsp;</a></p>
+<a href="./ko/sitemap.html" hreflang="ko" rel="alternate" title="Korean">&nbsp;ko&nbsp;</a> |
+<a href="./tr/sitemap.html" hreflang="tr" rel="alternate" title="Türkçe">&nbsp;tr&nbsp;</a></p>
 </div>
 <div class="outofdate">Esta traducción podría estar
             obsoleta. Consulte la versión en inglés de la
@@ -230,6 +231,7 @@ usados para describir las directivas de Apache</a></li>
 <li><a href="mod/mod_speling.html">Módulo Apache mod_speling</a></li>
 <li><a href="mod/mod_ssl.html">Módulo Apache mod_ssl</a></li>
 <li><a href="mod/mod_status.html">Módulo Apache mod_status</a></li>
+<li><a href="mod/mod_substitute.html">Módulo Apache mod_substitute</a></li>
 <li><a href="mod/mod_suexec.html">Módulo Apache mod_suexec</a></li>
 <li><a href="mod/mod_unique_id.html">Módulo Apache mod_unique_id</a></li>
 <li><a href="mod/mod_userdir.html">Módulo Apache mod_userdir</a></li>
@@ -262,8 +264,9 @@ Referencia de Directivas</a></li>
 <a href="./en/sitemap.html" hreflang="en" rel="alternate" title="English">&nbsp;en&nbsp;</a> |
 <a href="./es/sitemap.html" title="Español">&nbsp;es&nbsp;</a> |
 <a href="./ja/sitemap.html" hreflang="ja" rel="alternate" title="Japanese">&nbsp;ja&nbsp;</a> |
-<a href="./ko/sitemap.html" hreflang="ko" rel="alternate" title="Korean">&nbsp;ko&nbsp;</a></p>
+<a href="./ko/sitemap.html" hreflang="ko" rel="alternate" title="Korean">&nbsp;ko&nbsp;</a> |
+<a href="./tr/sitemap.html" hreflang="tr" rel="alternate" title="Türkçe">&nbsp;tr&nbsp;</a></p>
 </div><div id="footer">
-<p class="apache">Copyright 2007 The Apache Software Foundation.<br />Licencia bajo los términos de la <a href="http://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a>.</p>
+<p class="apache">Copyright 2008 The Apache Software Foundation.<br />Licencia bajo los términos de la <a href="http://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a>.</p>
 <p class="menu"><a href="./mod/">Módulos</a> | <a href="./mod/directives.html">Directivas</a> | <a href="./faq/">Preguntas Frecuentes</a> | <a href="./glossary.html">Glosario</a> | <a href="./sitemap.html">Mapa de este sitio web</a></p></div>
 </body></html>

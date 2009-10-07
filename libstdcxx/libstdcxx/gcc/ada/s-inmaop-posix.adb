@@ -1,13 +1,14 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                 GNU ADA RUN-TIME LIBRARY (GNARL) COMPONENTS              --
+--                  GNAT RUN-TIME LIBRARY (GNARL) COMPONENTS                --
 --                                                                          --
---                   SYSTEM.INTERRUPT_MANAGEMENT.OPERATIONS                 --
+--          S Y S T E M . I N T E R R U P T _ M A N A G E M E N T .         --
+--                            O P E R A T I O N S                           --
 --                                                                          --
 --                                  B o d y                                 --
 --                                                                          --
 --             Copyright (C) 1991-1994, Florida State University            --
---             Copyright (C) 1995-2003, Ada Core Technologies               --
+--                     Copyright (C) 1995-2006, AdaCore                     --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -17,8 +18,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNARL; see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -47,17 +48,10 @@ with System.Storage_Elements;
 --  used for To_Address
 --           Integer_Address
 
-with Unchecked_Conversion;
-
 package body System.Interrupt_Management.Operations is
 
    use Interfaces.C;
    use System.OS_Interface;
-
-   type Interrupt_Mask_Ptr is access all Interrupt_Mask;
-
-   function "+" is new
-     Unchecked_Conversion (Interrupt_Mask_Ptr, sigset_t_ptr);
 
    ---------------------
    -- Local Variables --
@@ -78,7 +72,6 @@ package body System.Interrupt_Management.Operations is
    is
       Result : Interfaces.C.int;
       Mask   : aliased sigset_t;
-
    begin
       Result := sigemptyset (Mask'Access);
       pragma Assert (Result = 0);
@@ -97,7 +90,6 @@ package body System.Interrupt_Management.Operations is
    is
       Mask   : aliased sigset_t;
       Result : Interfaces.C.int;
-
    begin
       Result := sigemptyset (Mask'Access);
       pragma Assert (Result = 0);
@@ -112,11 +104,9 @@ package body System.Interrupt_Management.Operations is
    ------------------------
 
    procedure Set_Interrupt_Mask (Mask : access Interrupt_Mask) is
-      Result   : Interfaces.C.int;
-
+      Result : Interfaces.C.int;
    begin
-      Result := pthread_sigmask
-        (SIG_SETMASK, +Interrupt_Mask_Ptr (Mask), null);
+      Result := pthread_sigmask (SIG_SETMASK, Mask, null);
       pragma Assert (Result = 0);
    end Set_Interrupt_Mask;
 
@@ -125,10 +115,8 @@ package body System.Interrupt_Management.Operations is
       OMask : access Interrupt_Mask)
    is
       Result  : Interfaces.C.int;
-
    begin
-      Result := pthread_sigmask
-        (SIG_SETMASK, +Interrupt_Mask_Ptr (Mask), +Interrupt_Mask_Ptr (OMask));
+      Result := pthread_sigmask (SIG_SETMASK, Mask, OMask);
       pragma Assert (Result = 0);
    end Set_Interrupt_Mask;
 
@@ -138,10 +126,8 @@ package body System.Interrupt_Management.Operations is
 
    procedure Get_Interrupt_Mask (Mask : access Interrupt_Mask) is
       Result : Interfaces.C.int;
-
    begin
-      Result := pthread_sigmask
-        (SIG_SETMASK, null, +Interrupt_Mask_Ptr (Mask));
+      Result := pthread_sigmask (SIG_SETMASK, null, Mask);
       pragma Assert (Result = 0);
    end Get_Interrupt_Mask;
 
@@ -155,7 +141,6 @@ package body System.Interrupt_Management.Operations is
    is
       Result : Interfaces.C.int;
       Sig    : aliased Signal;
-
    begin
       Result := sigwait (Mask, Sig'Access);
 
@@ -172,7 +157,6 @@ package body System.Interrupt_Management.Operations is
 
    procedure Install_Default_Action (Interrupt : Interrupt_ID) is
       Result : Interfaces.C.int;
-
    begin
       Result := sigaction
         (Signal (Interrupt),
@@ -186,7 +170,6 @@ package body System.Interrupt_Management.Operations is
 
    procedure Install_Ignore_Action (Interrupt : Interrupt_ID) is
       Result : Interfaces.C.int;
-
    begin
       Result := sigaction (Signal (Interrupt), Ignore_Action'Access, null);
       pragma Assert (Result = 0);
@@ -198,7 +181,6 @@ package body System.Interrupt_Management.Operations is
 
    procedure Fill_Interrupt_Mask (Mask : access Interrupt_Mask) is
       Result : Interfaces.C.int;
-
    begin
       Result := sigfillset (Mask);
       pragma Assert (Result = 0);
@@ -210,7 +192,6 @@ package body System.Interrupt_Management.Operations is
 
    procedure Empty_Interrupt_Mask (Mask : access Interrupt_Mask) is
       Result : Interfaces.C.int;
-
    begin
       Result := sigemptyset (Mask);
       pragma Assert (Result = 0);
@@ -225,7 +206,6 @@ package body System.Interrupt_Management.Operations is
       Interrupt : Interrupt_ID)
    is
       Result : Interfaces.C.int;
-
    begin
       Result := sigaddset (Mask, Signal (Interrupt));
       pragma Assert (Result = 0);
@@ -240,7 +220,6 @@ package body System.Interrupt_Management.Operations is
       Interrupt : Interrupt_ID)
    is
       Result : Interfaces.C.int;
-
    begin
       Result := sigdelset (Mask, Signal (Interrupt));
       pragma Assert (Result = 0);
@@ -255,7 +234,6 @@ package body System.Interrupt_Management.Operations is
       Interrupt : Interrupt_ID) return Boolean
    is
       Result : Interfaces.C.int;
-
    begin
       Result := sigismember (Mask, Signal (Interrupt));
       pragma Assert (Result = 0 or else Result = 1);
@@ -268,8 +246,7 @@ package body System.Interrupt_Management.Operations is
 
    procedure Copy_Interrupt_Mask
      (X : out Interrupt_Mask;
-      Y : Interrupt_Mask)
-   is
+      Y : Interrupt_Mask) is
    begin
       X := Y;
    end Copy_Interrupt_Mask;
@@ -280,20 +257,33 @@ package body System.Interrupt_Management.Operations is
 
    procedure Interrupt_Self_Process (Interrupt : Interrupt_ID) is
       Result : Interfaces.C.int;
-
    begin
       Result := kill (getpid, Signal (Interrupt));
       pragma Assert (Result = 0);
    end Interrupt_Self_Process;
 
-begin
+   --------------------------
+   -- Setup_Interrupt_Mask --
+   --------------------------
 
+   procedure Setup_Interrupt_Mask is
+   begin
+      --  Mask task for all signals. The original mask of the Environment task
+      --  will be recovered by Interrupt_Manager task during the elaboration
+      --  of s-interr.adb.
+
+      Set_Interrupt_Mask (All_Tasks_Mask'Access);
+   end Setup_Interrupt_Mask;
+
+begin
    declare
       mask    : aliased sigset_t;
       allmask : aliased sigset_t;
       Result  : Interfaces.C.int;
 
    begin
+      Interrupt_Management.Initialize;
+
       for Sig in 1 .. Signal'Last loop
          Result := sigaction
            (Sig, null, Initial_Action (Sig)'Unchecked_Access);

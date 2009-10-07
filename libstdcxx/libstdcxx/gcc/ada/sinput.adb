@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2005 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -86,7 +86,7 @@ package body Sinput is
       LL : Physical_Line_Number;
 
    begin
-      --  Reallocate the lines tables if necessary.
+      --  Reallocate the lines tables if necessary
 
       --  Note: the reason we do not use the normal Table package
       --  mechanism is that we have several of these tables. We could
@@ -1155,6 +1155,11 @@ package body Sinput is
       return Source_File.Table (S).Time_Stamp;
    end Time_Stamp;
 
+   function Unit (S : SFI) return Unit_Number_Type is
+   begin
+      return Source_File.Table (S).Unit;
+   end Unit;
+
    ------------------------------------------
    -- Set Procedures for Source File Table --
    ------------------------------------------
@@ -1173,6 +1178,11 @@ package body Sinput is
    begin
       Source_File.Table (S).License := L;
    end Set_License;
+
+   procedure Set_Unit (S : SFI; U : Unit_Number_Type) is
+   begin
+      Source_File.Table (S).Unit := U;
+   end Set_Unit;
 
    ----------------------
    -- Trim_Lines_Table --

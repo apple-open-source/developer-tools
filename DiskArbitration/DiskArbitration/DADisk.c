@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2007 Apple Inc.  All Rights Reserved.
+ * Copyright (c) 1998-2009 Apple Inc. All Rights Reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -202,24 +202,32 @@ __private_extern__ DADiskRef _DADiskCreateFromVolumePath( CFAllocatorRef allocat
 
         if ( _path )
         {
-            char name[MAXPATHLEN];
+            struct statfs fs;
+            int           status;
 
-            if ( realpath( _path, name ) )
+            status = ___statfs( _path, &fs, MNT_NOWAIT );
+
+            if ( status )
             {
-                struct statfs fs;
+                char name[MAXPATHLEN];
 
-                if ( ___statfs( name, &fs, MNT_NOWAIT ) == 0 )
+                if ( realpath( _path, name ) )
                 {
-                    char * id;
+                    status = ___statfs( name, &fs, MNT_NOWAIT );
+                }
+            }
 
-                    id = _DAVolumeCopyID( &fs );
+            if ( status == 0 )
+            {
+                char * id;
 
-                    if ( id )
-                    {
-                        disk = _DADiskCreate( allocator, session, id );
+                id = _DAVolumeCopyID( &fs );
 
-                        free( id );
-                    }
+                if ( id )
+                {
+                    disk = _DADiskCreate( allocator, session, id );
+
+                    free( id );
                 }
             }
 
@@ -235,7 +243,7 @@ __private_extern__ char * _DADiskGetID( DADiskRef disk )
     return disk->_id;
 }
 
-__private_extern__ DASessionRef _DADiskGetSession( DADiskRef disk )
+DASessionRef _DADiskGetSession( DADiskRef disk )
 {
     return disk->_session;
 }

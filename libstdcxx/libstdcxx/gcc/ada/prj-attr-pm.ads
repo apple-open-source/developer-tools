@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---             Copyright (C) 2004 Free Software Foundation, Inc.            --
+--            Copyright (C) 2005, Free Software Foundation, Inc.            --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,19 +16,23 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
 --                                                                          --
 ------------------------------------------------------------------------------
 
-with Types; use Types;
+--  This package contains insecure procedures that are intended to be used
+--  only inside the Prj and MLib hierarchies. It should not be imported by
+--  other tools, such as GPS.
 
 package Prj.Attr.PM is
+
    --  The following procedures are not secure and should only be used by the
    --  Project Manager, that is the packages of the Prj or MLib hierarchies.
+   --  What does "not secure" mean???
 
    procedure Add_Unknown_Package (Name : Name_Id; Id : out Package_Node_Id);
    --  Add a new unknown package. The Name cannot be the name of a predefined

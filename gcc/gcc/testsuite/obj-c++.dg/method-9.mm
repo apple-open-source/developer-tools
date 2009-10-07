@@ -1,4 +1,3 @@
-/* APPLE LOCAL file mainline */
 /* Test for lookup of class (factory) methods.  */
 /* Author: Ziemowit Laski <zlaski@apple.com>.  */
 /* { dg-do compile } */

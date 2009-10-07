@@ -1,12 +1,12 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                         GNAT RUNTIME COMPONENTS                          --
+--                         GNAT RUN-TIME COMPONENTS                         --
 --                                                                          --
 -- A D A . W I D E _ W I D E _ T E X T _ I O . E N U M E R A T I O N _ A U X--
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -32,6 +32,7 @@
 ------------------------------------------------------------------------------
 
 with Ada.Wide_Wide_Text_IO.Generic_Aux; use Ada.Wide_Wide_Text_IO.Generic_Aux;
+with Ada.Characters.Conversions;        use Ada.Characters.Conversions;
 with Ada.Characters.Handling;           use Ada.Characters.Handling;
 with Interfaces.C_Streams;              use Interfaces.C_Streams;
 with System.WCh_Con;                    use System.WCh_Con;
@@ -46,10 +47,10 @@ package body Ada.Wide_Wide_Text_IO.Enumeration_Aux is
    -----------------------
 
    procedure Store_Char
-     (WC   : Wide_Wide_Character;
-      Buf  : out Wide_Wide_String;
-      Ptr  : in out Integer);
-   --  Store a single character in buffer, checking for overflow.
+     (WC  : Wide_Wide_Character;
+      Buf : out Wide_Wide_String;
+      Ptr : in out Integer);
+   --  Store a single character in buffer, checking for overflow
 
    --  These definitions replace the ones in Ada.Characters.Handling, which
    --  do not seem to work for some strange not understood reason ??? at
@@ -191,9 +192,9 @@ package body Ada.Wide_Wide_Text_IO.Enumeration_Aux is
    ----------
 
    procedure Puts
-     (To    : out Wide_Wide_String;
-      Item  : Wide_Wide_String;
-      Set   : Type_Set)
+     (To   : out Wide_Wide_String;
+      Item : Wide_Wide_String;
+      Set  : Type_Set)
    is
       Ptr : Natural;
 
@@ -325,9 +326,9 @@ package body Ada.Wide_Wide_Text_IO.Enumeration_Aux is
    ----------------
 
    procedure Store_Char
-     (WC   : Wide_Wide_Character;
-      Buf  : out Wide_Wide_String;
-      Ptr  : in out Integer)
+     (WC  : Wide_Wide_Character;
+      Buf : out Wide_Wide_String;
+      Ptr : in out Integer)
    is
    begin
       if Ptr = Buf'Last then

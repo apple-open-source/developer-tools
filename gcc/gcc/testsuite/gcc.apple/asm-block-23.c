@@ -13,5 +13,5 @@ void foo() {
     nop	; ## of cols
     nop	;  of cols
   }
-  int i = 1st 0;		/* { dg-error "invalid suffix" } */
+  int i = 1st;		/* { dg-error "invalid suffix" } */
 }

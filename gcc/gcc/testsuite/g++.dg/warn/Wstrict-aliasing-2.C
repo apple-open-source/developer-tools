@@ -1,6 +1,7 @@
-/* APPLE LOCAL file ARM 4683958 (-fstrict-aliasing added explictly) */
-/* { dg-do compile { target arm*-*-darwin* } } */
-/* { dg-options "-fstrict-aliasing -Wstrict-aliasing=2 -O2" } */
+/* { dg-do compile } */
+/* APPLE LOCAL begin radar 4872051 */
+/* { dg-options "-Wstrict-aliasing=2 -O2 -fstrict-aliasing" } */
+/* APPLE LOCAL end radar 4872051 */
 
 double x;
 

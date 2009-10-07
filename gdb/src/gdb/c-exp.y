@@ -1564,9 +1564,11 @@ yylex ()
       return c;
 
     case '.':
-      /* Might be a floating point number.  */
-      if (lexptr[1] < '0' || lexptr[1] > '9')
-	goto symbol;		/* Nope, must be a symbol. */
+      if (input_radix != 16 && !isdigit (lexptr[1]))
+        goto symbol;            /* Nope, must be a symbol.  */
+      /* Might be a floating point num in P format, e.g. 0x1.e84810f5c28fp+19 */
+      if (input_radix == 16 && !ishexnumber (lexptr[1]))
+        goto symbol;            /* Nope, must be a symbol. */
       /* FALL THRU into number case.  */
 
     case '0':
@@ -1581,7 +1583,7 @@ yylex ()
     case '9':
       {
 	/* It's a number.  */
-	int got_dot = 0, got_e = 0, toktype;
+	int got_dot = 0, got_e = 0, got_p = 0, toktype;
 	char *p = tokstart;
 	int hex = input_radix > 10;
 
@@ -1607,7 +1609,13 @@ yylex ()
 	       a decimal floating point number regardless of the radix.  */
 	    else if (!got_dot && *p == '.')
 	      got_dot = 1;
-	    else if (got_e && (p[-1] == 'e' || p[-1] == 'E')
+            /* APPLE LOCAL: Recognize the P formatting of floating point 
+               numbers with two hex components, e.g. 
+                  1000000.53 == 0x1.e84810f5c28f60000p+19 */
+            else if (got_dot && hex && (*p == 'p' || *p == 'P'))
+              got_p = 1;
+	    else if (((got_e && (p[-1] == 'e' || p[-1] == 'E')) ||
+	              (got_p && (p[-1] == 'p' || p[-1] == 'P')))
 		     && (*p == '-' || *p == '+'))
 	      /* This is the sign of the exponent, not the end of the
 		 number.  */
@@ -1619,7 +1627,8 @@ yylex ()
 				  && (*p < 'A' || *p > 'Z')))
 	      break;
 	  }
-	toktype = parse_number (tokstart, p - tokstart, got_dot|got_e, &yylval);
+	toktype = parse_number (tokstart, p - tokstart, got_dot|got_e|got_p, 
+                                &yylval);
         if (toktype == ERROR)
 	  {
 	    char *err_copy = (char *) alloca (p - tokstart + 1);

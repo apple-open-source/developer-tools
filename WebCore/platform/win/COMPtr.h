@@ -26,11 +26,14 @@
 #ifndef COMPtr_h
 #define COMPtr_h
 
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 
 #include <guiddef.h>
 #include <unknwn.h>
 #include <WTF/Assertions.h>
+#include <WTF/HashTraits.h>
 
 typedef long HRESULT;
 
@@ -39,6 +42,7 @@ typedef long HRESULT;
 
 enum AdoptCOMTag { AdoptCOM };
 enum QueryTag { Query };
+enum CreateTag { Create };
 
 template <typename T> class COMPtr {
 public:
@@ -47,12 +51,19 @@ public:
     COMPtr(AdoptCOMTag, T* ptr) : m_ptr(ptr) { }
     COMPtr(const COMPtr& o) : m_ptr(o.m_ptr) { if (T* ptr = m_ptr) ptr->AddRef(); }
 
-    inline COMPtr(QueryTag, IUnknown* ptr) : m_ptr(copyQueryInterfaceRef(ptr)) { }
-    template <typename U> inline COMPtr(QueryTag, const COMPtr<U>& ptr) : m_ptr(copyQueryInterfaceRef(ptr)) { }
+    COMPtr(QueryTag, IUnknown* ptr) : m_ptr(copyQueryInterfaceRef(ptr)) { }
+    template <typename U> COMPtr(QueryTag, const COMPtr<U>& ptr) : m_ptr(copyQueryInterfaceRef(ptr.get())) { }
+
+    COMPtr(CreateTag, const IID& clsid) : m_ptr(createInstance(clsid)) { }
+
+    // Hash table deleted values, which are only constructed and never copied or destroyed.
+    COMPtr(WTF::HashTableDeletedValueType) : m_ptr(hashTableDeletedValue()) { }
+    bool isHashTableDeletedValue() const { return m_ptr == hashTableDeletedValue(); }
 
     ~COMPtr() { if (m_ptr) m_ptr->Release(); }
 
     T* get() const { return m_ptr; }
+    T* releaseRef() { T* tmp = m_ptr; m_ptr = 0; return tmp; }
 
     T& operator*() const { return *m_ptr; }
     T* operator->() const { return m_ptr; }
@@ -68,18 +79,30 @@ public:
     COMPtr& operator=(const COMPtr&);
     COMPtr& operator=(T*);
     template <typename U> COMPtr& operator=(const COMPtr<U>&);
-  
-    void query(IUnknown* ptr) { adoptRef(copyQueryInterfaceRef(ptr)); }
-    template <typename U> inline void query(const COMPtr<U>& ptr) { query(ptr.get()); }
 
-    HRESULT copyRefTo(T**);
+    void query(IUnknown* ptr) { adoptRef(copyQueryInterfaceRef(ptr)); }
+    template <typename U> void query(const COMPtr<U>& ptr) { query(ptr.get()); }
+
+    void create(const IID& clsid) { adoptRef(createInstance(clsid)); }
+
+    template <typename U> HRESULT copyRefTo(U**);
     void adoptRef(T*);
 
 private:
     static T* copyQueryInterfaceRef(IUnknown*);
+    static T* createInstance(const IID& clsid);
+    static T* hashTableDeletedValue() { return reinterpret_cast<T*>(-1); }
 
     T* m_ptr;
 };
+
+template <typename T> inline T* COMPtr<T>::createInstance(const IID& clsid)
+{
+    T* result;
+    if (FAILED(CoCreateInstance(clsid, 0, CLSCTX_ALL, __uuidof(result), reinterpret_cast<void**>(&result))))
+        return 0;
+    return result;
+}
 
 template <typename T> inline T* COMPtr<T>::copyQueryInterfaceRef(IUnknown* ptr)
 {
@@ -91,7 +114,7 @@ template <typename T> inline T* COMPtr<T>::copyQueryInterfaceRef(IUnknown* ptr)
     return result;
 }
 
-template <typename T> inline HRESULT COMPtr<T>::copyRefTo(T** ptr)
+template <typename T> template <typename U> inline HRESULT COMPtr<T>::copyRefTo(U** ptr)
 {
     if (!ptr)
         return E_POINTER;
@@ -171,6 +194,26 @@ template <typename T, typename U> inline bool operator!=(const COMPtr<T>& a, U* 
 template <typename T, typename U> inline bool operator!=(T* a, const COMPtr<U>& b)
 {
     return a != b.get();
+}
+
+namespace WTF {
+
+    template<typename P> struct HashTraits<COMPtr<P> > : GenericHashTraits<COMPtr<P> > {
+        static const bool emptyValueIsZero = true;
+        static void constructDeletedValue(COMPtr<P>& slot) { slot.releaseRef(); *&slot = reinterpret_cast<P*>(-1); }
+        static bool isDeletedValue(const COMPtr<P>& value) { return value == reinterpret_cast<P*>(-1); }
+    };
+
+    template<typename P> struct PtrHash<COMPtr<P> > : PtrHash<P*> {
+        using PtrHash<P*>::hash;
+        static unsigned hash(const COMPtr<P>& key) { return hash(key.get()); }
+        using PtrHash<P*>::equal;
+        static bool equal(const COMPtr<P>& a, const COMPtr<P>& b) { return a == b; }
+        static bool equal(P* a, const COMPtr<P>& b) { return a == b; }
+        static bool equal(const COMPtr<P>& a, P* b) { return a == b; }
+    };
+
+    template<typename P> struct DefaultHash<COMPtr<P> > { typedef PtrHash<COMPtr<P> > Hash; };
 }
 
 #endif

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2003 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -20,8 +20,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -35,15 +35,31 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
+--  This version of Ada.Exceptions is a full Ada 95 version, but lacks the
+--  additional definitions of Exception_Name returning Wide_[Wide_]String.
+--  It is used for building the compiler and the basic tools, since these
+--  builds may be done with bootstrap compilers that cannot handle these
+--  additions. The full version of Ada.Exceptions can be found in the files
+--  a-except-2005.ads/adb, and is used for all other builds where full Ada
+--  2005 functionality is required. in particular, it is used for building
+--  run times on all targets.
+
 pragma Polling (Off);
 --  We must turn polling off for this unit, because otherwise we get
 --  elaboration circularities with ourself.
 
 with System;
+with System.Parameters;
 with System.Standard_Library;
 with System.Traceback_Entries;
 
 package Ada.Exceptions is
+   pragma Warnings (Off);
+   pragma Preelaborate_05;
+   pragma Warnings (On);
+   --  In accordance with Ada 2005 AI-362. The warnings pragmas are so that we
+   --  can compile this using older compiler versions, which will ignore the
+   --  pragma, which is fine for the bootstrap.
 
    type Exception_Id is private;
    Null_Id : constant Exception_Id;
@@ -103,20 +119,20 @@ package Ada.Exceptions is
 
 private
    package SSL renames System.Standard_Library;
+   package SP renames System.Parameters;
 
    subtype EOA is Exception_Occurrence_Access;
 
-   Exception_Msg_Max_Length : constant := 200;
+   Exception_Msg_Max_Length : constant := SP.Default_Exception_Msg_Max_Length;
 
    ------------------
    -- Exception_Id --
    ------------------
 
    subtype Code_Loc is System.Address;
-   --  Code location used in building exception tables and for call
-   --  addresses when propagating an exception.
-   --  Values of this type are created by using Label'Address or
-   --  extracted from machine states using Get_Code_Loc.
+   --  Code location used in building exception tables and for call addresses
+   --  when propagating an exception. Values of this type are created by using
+   --  Label'Address or extracted from machine states using Get_Code_Loc.
 
    Null_Loc : constant Code_Loc := System.Null_Address;
    --  Null code location, used to flag outer level frame
@@ -147,12 +163,12 @@ private
    --  to be in the visible part, since this is set by the reference manual).
 
    function Exception_Name_Simple (X : Exception_Occurrence) return String;
-   --  Like Exception_Name, but returns the simple non-qualified name of
-   --  the exception. This is used to implement the Exception_Name function
-   --  in Current_Exceptions (the DEC compatible unit). It is called from
-   --  the compiler generated code (using Rtsfind, which does not respect
-   --  the private barrier, so we can place this function in the private
-   --  part where the compiler can find it, but the spec is unchanged.)
+   --  Like Exception_Name, but returns the simple non-qualified name of the
+   --  exception. This is used to implement the Exception_Name function in
+   --  Current_Exceptions (the DEC compatible unit). It is called from the
+   --  compiler generated code (using Rtsfind, which does not respect the
+   --  private barrier, so we can place this function in the private part
+   --  where the compiler can find it, but the spec is unchanged.)
 
    procedure Raise_Exception_Always (E : Exception_Id; Message : String := "");
    pragma No_Return (Raise_Exception_Always);
@@ -165,22 +181,21 @@ private
 
    procedure Raise_From_Signal_Handler
      (E : Exception_Id;
-      M : SSL.Big_String_Ptr);
+      M : System.Address);
    pragma Export
      (Ada, Raise_From_Signal_Handler,
            "ada__exceptions__raise_from_signal_handler");
    pragma No_Return (Raise_From_Signal_Handler);
-   --  This routine is used to raise an exception from a signal handler.
-   --  The signal handler has already stored the machine state (i.e. the
-   --  state that corresponds to the location at which the signal was
-   --  raised). E is the Exception_Id specifying what exception is being
-   --  raised, and M is a pointer to a null-terminated string which is the
-   --  message to be raised. Note that this routine never returns, so it is
-   --  permissible to simply jump to this routine, rather than call it. This
-   --  may be appropriate for systems where the right way to get out of a
-   --  signal handler is to alter the PC value in the machine state or in
-   --  some other way ask the operating system to return here rather than
-   --  to the original location.
+   --  This routine is used to raise an exception from a signal handler. The
+   --  signal handler has already stored the machine state (i.e. the state that
+   --  corresponds to the location at which the signal was raised). E is the
+   --  Exception_Id specifying what exception is being raised, and M is a
+   --  pointer to a null-terminated string which is the message to be raised.
+   --  Note that this routine never returns, so it is permissible to simply
+   --  jump to this routine, rather than call it. This may be appropriate for
+   --  systems where the right way to get out of signal handler is to alter the
+   --  PC value in the machine state or in some other way ask the operating
+   --  system to return here rather than to the original location.
 
    procedure Reraise_Occurrence_Always (X : Exception_Occurrence);
    pragma No_Return (Reraise_Occurrence_Always);
@@ -193,8 +208,8 @@ private
    pragma No_Return (Reraise_Occurrence_No_Defer);
    --  Exactly like Reraise_Occurrence, except that abort is not deferred
    --  before the call and the parameter X is known not to be the null
-   --  occurrence. This is used in generated code when it is known
-   --  that abort is already deferred.
+   --  occurrence. This is used in generated code when it is known that
+   --  abort is already deferred.
 
    -----------------------
    -- Polling Interface --
@@ -246,7 +261,7 @@ private
       Msg : String (1 .. Exception_Msg_Max_Length);
       --  Characters of message
 
-      Cleanup_Flag : Boolean;
+      Cleanup_Flag : Boolean := False;
       --  The cleanup flag is normally False, it is set True for an exception
       --  occurrence passed to a cleanup routine, and will still be set True
       --  when the cleanup routine does a Reraise_Occurrence call using this
@@ -262,7 +277,7 @@ private
       --  it is dealing with the reraise case (which is useful to distinguish
       --  for exception tracing purposes).
 
-      Pid : Natural;
+      Pid : Natural := 0;
       --  Partition_Id for partition raising exception
 
       Num_Tracebacks : Natural range 0 .. Max_Tracebacks := 0;
@@ -289,7 +304,7 @@ private
    --  Functions for implementing Exception_Occurrence stream attributes
 
    Null_Occurrence : constant Exception_Occurrence := (
-     Id               => Null_Id,
+     Id               => null,
      Msg_Length       => 0,
      Msg              => (others => ' '),
      Cleanup_Flag     => False,

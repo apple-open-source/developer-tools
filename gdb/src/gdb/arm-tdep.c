@@ -853,7 +853,7 @@ arm_skip_prologue (CORE_ADDR pc)
 
   /* See what the symbol table says.  */
 
-  if (find_pc_partial_function (pc, &func_name, &func_addr, &func_end))
+  if (find_pc_partial_function_no_inlined (pc, &func_name, &func_addr, &func_end))
     {
       struct symbol *sym;
 
@@ -994,7 +994,7 @@ arm_macosx_skip_prologue_addr_ctx (struct address_context *pc_addr_ctx)
       prologue_end =  SYMBOL_BLOCK_VALUE (pc_addr_ctx->symbol)->endaddr;
     }
   else
-  if (!find_pc_partial_function (pc, NULL, &prologue_start, &prologue_end))
+  if (!find_pc_partial_function_no_inlined (pc, NULL, &prologue_start, &prologue_end))
     {
       /* We didn't find any function bounds for the given PC, just use 
 	 the current PC as the prologue start address.  */
@@ -1169,7 +1169,8 @@ thumb_scan_prologue (CORE_ADDR prev_pc, arm_prologue_cache_t *cache)
     fprintf_unfiltered (gdb_stdlog, "thumb_scan_prologue (0x%s, %p)\n", 
 			paddr (prev_pc), cache);
 
-  if (find_pc_partial_function (prev_pc, NULL, &prologue_start, &prologue_end))
+  if (find_pc_partial_function_no_inlined (prev_pc, NULL, &prologue_start, 
+					   &prologue_end))
     {
       struct symtab_and_line sal = find_pc_line (prologue_start, 0);
 
@@ -1297,7 +1298,8 @@ thumb_macosx_scan_prologue (CORE_ADDR prev_pc, arm_prologue_cache_t *cache)
 
   /* Find the function prologue.  If we can't find the function in
      the symbol table, peek in the stack frame to find the PC.  */
-  if (find_pc_partial_function (prev_pc, NULL, &cache->prologue_start, &prologue_end))
+  if (find_pc_partial_function_no_inlined (prev_pc, NULL, &cache->prologue_start, 
+					   &prologue_end))
     {
       /* One way to find the end of the prologue (which works well
          for unoptimized code) is to do the following:
@@ -1598,7 +1600,8 @@ arm_scan_prologue (struct frame_info *next_frame, struct arm_prologue_cache *cac
 
   /* Find the function prologue.  If we can't find the function in
      the symbol table, peek in the stack frame to find the PC.  */
-  if (find_pc_partial_function (prev_pc, NULL, &prologue_start, &prologue_end))
+  if (find_pc_partial_function_no_inlined (prev_pc, NULL, &prologue_start, 
+					   &prologue_end))
     {
       /* One way to find the end of the prologue (which works well
          for unoptimized code) is to do the following:
@@ -1935,7 +1938,9 @@ arm_macosx_scan_prologue (struct frame_info *next_frame, arm_prologue_cache_t *c
 
   /* Find the function prologue.  If we can't find the function in
      the symbol table, peek in the stack frame to find the PC.  */
-  if (find_pc_partial_function (prev_pc, NULL, &cache->prologue_start, &prologue_end))
+  if (find_pc_partial_function_no_inlined (prev_pc, NULL, 
+					   &cache->prologue_start, 
+					   &prologue_end))
     {
       /* One way to find the end of the prologue (which works well
          for unoptimized code) is to do the following:
@@ -2552,7 +2557,7 @@ arm_macosx_sigtramp_unwind_sniffer (struct frame_info *next_frame)
           char *name = NULL;
           CORE_ADDR start = 0;
           CORE_ADDR end = 0;
-          if (find_pc_partial_function (addr, &name, &start, &end))
+          if (find_pc_partial_function_no_inlined (addr, &name, &start, &end))
             {
               /* Make sure nothing went awry in the address to name and
                  function bounds lookup.  */
@@ -3207,19 +3212,19 @@ condition_true (uint32_t cond, uint32_t status_reg)
     case INST_VC:
       return ((status_reg & FLAG_V) == 0);
     case INST_HI:
-      return  ((status_reg & FLAG_C) != 0 && (status_reg & FLAG_Z) == 0)
+      return ((status_reg & (FLAG_C | FLAG_Z)) == FLAG_C);
     case INST_LS:
-      return !((status_reg & FLAG_C) != 0 && (status_reg & FLAG_Z) == 0);
+      return ((status_reg & (FLAG_C | FLAG_Z)) != FLAG_C);
     case INST_GE:
-      return  (((status_reg & FLAG_N) == 0) == ((status_reg & FLAG_V) == 0));
+      return (((status_reg & FLAG_N) == 0) == ((status_reg & FLAG_V) == 0));
     case INST_LT:
-      return !(((status_reg & FLAG_N) == 0) == ((status_reg & FLAG_V) == 0));
+      return (((status_reg & FLAG_N) == 0) != ((status_reg & FLAG_V) == 0));
     case INST_GT:
-      return  (((status_reg & FLAG_Z) == 0) &&
+      return (((status_reg & FLAG_Z) == 0) &&
 	      (((status_reg & FLAG_N) == 0) == ((status_reg & FLAG_V) == 0)));
     case INST_LE:
-      return !(((status_reg & FLAG_Z) == 0) &&
-	      (((status_reg & FLAG_N) == 0) == ((status_reg & FLAG_V) == 0)));
+      return (((status_reg & FLAG_Z) != 0) ||
+	      (((status_reg & FLAG_N) == 0) != ((status_reg & FLAG_V) == 0)));
     }
   return 1;
 }

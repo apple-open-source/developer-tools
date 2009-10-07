@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2004 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -117,6 +117,9 @@ package Errout is
 
    --    5.  If a message attempts to insert an Error node, or a direct
    --        reference to the Any_Type node, then the message is suppressed.
+
+   --    6.  Note that cases 2-5 only apply to error messages, not warning
+   --        messages. Warning messages are only suppressed for case 1.
 
    --  This normal suppression action may be overridden in cases 2-5 (but not
    --  in case 1) by setting All_Errors mode, or by setting the special
@@ -229,19 +232,27 @@ package Errout is
    --      The character ! appearing as the last character of a message makes
    --      the message unconditional which means that it is output even if it
    --      would normally be suppressed. See section above for a description
-   --      of the cases in which messages are normally suppressed.
+   --      of the cases in which messages are normally suppressed. Note that
+   --      warnings are never suppressed, so the use of the ! character in a
+   --      warning message is never useful.
 
    --    Insertion character ? (Question: warning message)
-   --      The character ? appearing anywhere in a message makes the message
-   --      a warning instead of a normal error message, and the text of the
-   --      message will be preceded by "Warning:" instead of "Error:" The
-   --      handling of warnings if further controlled by the Warning_Mode
-   --      option (-w switch), see package Opt for further details, and also
-   --      by the current setting from pragma Warnings. This pragma applies
-   --      only to warnings issued from the semantic phase (not the parser),
-   --      but currently all relevant warnings are posted by the semantic
-   --      phase anyway. Messages starting with (style) are also treated as
-   --      warning messages.
+   --      The character ? appearing anywhere in a message makes the message a
+   --      warning instead of a normal error message, and the text of the
+   --      message will be preceded by "Warning:" instead of "Error:" in the
+   --      normal case. The handling of warnings if further controlled by the
+   --      Warning_Mode option (-w switch), see package Opt for further
+   --      details, and also by the current setting from pragma Warnings. This
+   --      pragma applies only to warnings issued from the semantic phase (not
+   --      the parser), but currently all relevant warnings are posted by the
+   --      semantic phase anyway. Messages starting with (style) are also
+   --      treated as warning messages.
+
+   --    Insertion character < (Less Than: conditional warning message)
+   --      The character < appearing anywhere in a message is used for a
+   --      conditional error message. If Error_Msg_Warn is True, then the
+   --      effect is the same as ? described above. If Error_Msg_Warn is
+   --      False, then there is no effect.
 
    --    Insertion character A-Z (Upper case letter: Ada reserved word)
    --      If two or more upper case letters appear in the message, they are
@@ -327,7 +338,10 @@ package Errout is
    --  passed to the error message routine for insertion sequences described
    --  above. The reason these are passed globally is that the insertion
    --  mechanism is essentially an untyped one in which the appropriate
-   --  variables are set dependingon the specific insertion characters used.
+   --  variables are set depending on the specific insertion characters used.
+
+   --  Note that is mandatory that the caller ensure that global variables
+   --  are set before the Error_Msg call, otherwise the result is undefined.
 
    Error_Msg_Col : Column_Number renames Err_Vars.Error_Msg_Col;
    --  Column for @ insertion character in message
@@ -357,6 +371,10 @@ package Errout is
    --  description of the } insertion character. Note that this value does
    --  note get reset by any Error_Msg call, so the caller is responsible
    --  for resetting it.
+
+   Error_Msg_Warn : Boolean renames Err_Vars.Error_Msg_Warn;
+   --  Used if current message contains a < insertion character to indicate
+   --  if the current message is a warning message.
 
    -----------------------------------------------------
    -- Format of Messages and Manual Quotation Control --
@@ -440,7 +458,7 @@ package Errout is
 
    function Get_Location (E : Error_Msg_Id) return Source_Ptr
      renames Erroutc.Get_Location;
-   --  Returns the flag location of the error message with the given id E.
+   --  Returns the flag location of the error message with the given id E
 
    ------------------------
    -- List Pragmas Table --
@@ -574,7 +592,7 @@ package Errout is
    --  This routine is used for posting a message conditionally. The message
    --  is posted (with the same effect as Error_Msg_N (Msg, N) if and only
    --  if Eflag is True and if the node N is within the main extended source
-   --  unit. Typically this is a warning mode flag.
+   --  unit and comes from source. Typically this is a warning mode flag.
 
    procedure Change_Error_Text (Error_Id : Error_Msg_Id; New_Msg : String);
    --  The error message text of the message identified by Id is replaced by
@@ -601,7 +619,7 @@ package Errout is
    --  of its descendent nodes. No effect if no such warnings.
 
    procedure Remove_Warning_Messages (L : List_Id);
-   --  Remove warnings on all elements of a list.
+   --  Remove warnings on all elements of a list
 
    procedure Set_Ignore_Errors (To : Boolean);
    --  Following a call to this procedure with To=True, all error calls are

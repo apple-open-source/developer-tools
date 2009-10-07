@@ -25,6 +25,7 @@
 #include "CLDAPNodeConfig.h"
 #include "CLDAPReplicaInfo.h"
 #include "CCachePlugin.h"
+#include "CSharedData.h"
 
 #include <DirectoryServiceCore/PrivateTypes.h>
 #include <DirectoryService/DirServicesConst.h>
@@ -138,7 +139,7 @@ CLDAPConnection	*CLDAPConnection::CreateCopy( void )
 }
 
 #if defined(DEBUG_LOCKS) || defined(DEBUG_LOCKS_HISTORY) || defined(DEBUG_LDAPSESSION_LOCKS)
-LDAP *CLDAPConnection::LockLDAPSessionDebug( char *inFile, int inLine )
+LDAP *CLDAPConnection::LockLDAPSessionDebug( const char *inFile, int inLine )
 #else
 LDAP *CLDAPConnection::LockLDAPSession( void )
 #endif
@@ -218,7 +219,7 @@ LDAP *CLDAPConnection::LockLDAPSession( void )
 }
 
 #if defined(DEBUG_LOCKS) || defined(DEBUG_LOCKS_HISTORY) || defined(DEBUG_LDAPSESSION_LOCKS)
-void CLDAPConnection::UnlockLDAPSessionDebug( LDAP * &inLDAP, bool inFailed, char *inFile, int inLine )
+void CLDAPConnection::UnlockLDAPSessionDebug( LDAP * &inLDAP, bool inFailed, const char *inFile, int inLine )
 #else
 void CLDAPConnection::UnlockLDAPSession( LDAP * &inLDAP, bool inFailed )
 #endif
@@ -409,7 +410,7 @@ tDirStatus CLDAPConnection::AuthenticateKerberos( const char *inUsername, const 
 		retval = krb5_cc_initialize( krbContext, krbCache, principal );
 		if ( retval ) break;
 
-		DbgLog( kLogDebug, "CLDAPConnection::AuthenticateKerberos - Initialized cache <%s> for user <%s>", principalString );
+		DbgLog( kLogDebug, "CLDAPConnection::AuthenticateKerberos - Initialized cache <%s> for user <%s>", fKerberosCache, principalString );
 		
 		// GSSAPI's cache name needs to be set to match if we are getting ready to use GSSAPI
 		retval = krb5_cc_store_cred( krbContext, krbCache, inCredsPtr );
@@ -531,6 +532,39 @@ char *CLDAPConnection::CopyReplicaServicePrincipal( void )
 	return returnValue;
 }
 
+void CLDAPConnection::CloseConnectionIfPossible( void )
+{
+	char	nodeName[256];
+
+	if ( fNodeConfig == NULL )
+	{
+		strlcpy( nodeName, "Unknown", sizeof(nodeName) );
+	}
+	else
+	{
+		strlcpy( nodeName, "/LDAPv3/", sizeof(nodeName) );
+		strlcat( nodeName, fNodeConfig->fNodeName, sizeof(nodeName) );
+	}
+
+	// try lock, if we can't grab it, we don't want to block
+	if ( fMutex.WaitTryLock() )
+	{
+		if ( fHost != NULL )
+		{
+			DbgLog( kLogPlugin, "CLDAPConnection::CloseConnectionIfPossible - %s - closed LDAP session - not in use",
+				   nodeName );
+			ldap_unbind_ext_s( fHost, NULL, NULL );
+			fHost = NULL;
+		}
+		fMutex.SignalLock();
+	}	
+	else if ( fHost != NULL ) // we don't care, just informative
+	{
+		DbgLog( kLogPlugin, "CLDAPConnection::CloseConnectionIfPossible - %s - unable to close LDAP session - in use",
+			   nodeName );
+	}
+}
+
 void CLDAPConnection::SetConnectionStatus( int32_t inStatus )
 {
 	int32_t	oldStatus = fConnectionStatus;
@@ -548,8 +582,7 @@ void CLDAPConnection::SetConnectionStatus( int32_t inStatus )
 			strlcpy( nodeName, "/LDAPv3/", sizeof(nodeName) );
 			strlcat( nodeName, fNodeConfig->fNodeName, sizeof(nodeName) );
 			
-			if ( gCacheNode != NULL )
-				gCacheNode->UpdateNodeReachability( nodeName, (inStatus == kConnectionSafe) );
+			dsSetNodeCacheAvailability( nodeName, (inStatus == kConnectionSafe) );
 		}
 	}
 }
@@ -614,23 +647,7 @@ void CLDAPConnection::ReachabilityNotification( SCNetworkReachabilityRef inTarge
 		
 		fReachabilityLock.SignalLock();
 		
-		// try lock, if we can't grab it, we don't want to block
-		if ( fMutex.WaitTryLock() )
-		{
-			if ( fHost != NULL )
-			{
-				DbgLog( kLogPlugin, "CLDAPConnection::ReachabilityNotification - %s - closed LDAP session - not in use",
-					    nodeName );
-				ldap_unbind_ext_s( fHost, NULL, NULL );
-				fHost = NULL;
-			}
-			fMutex.SignalLock();
-		}	
-		else if ( fHost != NULL ) // we don't care, just informative
-		{
-			DbgLog( kLogPlugin, "CLDAPConnection::ReachabilityNotification - %s - unable to close LDAP session - in use",
-				    nodeName );
-		}
+		CloseConnectionIfPossible();
 	}
 }
 

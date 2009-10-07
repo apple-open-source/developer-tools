@@ -1,5 +1,5 @@
 /* APPLE LOCAL file CW asm blocks */
-/* { dg-do assemble { target i?86*-*-darwin* powerpc-*-darwin* } } */
+/* { dg-do assemble { target *-*-darwin* } } */
 /* { dg-options { -fasm-blocks } } */
 /* Radar 4477426 4466768 */
 

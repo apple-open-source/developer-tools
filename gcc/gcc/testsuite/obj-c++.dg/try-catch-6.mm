@@ -1,5 +1,5 @@
-/* APPLE LOCAL file mainline */
 /* A very simple @try-@catch example. */
+
 /* { dg-do compile } */
 /* { dg-options "-fobjc-exceptions" } */
 

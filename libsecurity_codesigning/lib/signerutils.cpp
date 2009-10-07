@@ -30,9 +30,16 @@
 #include <Security/SecIdentity.h>
 #include <Security/CMSEncoder.h>
 #include "renum.h"
+#include "csutilities.h"
 #include <security_utilities/unix++.h>
 #include <security_utilities/unixchild.h>
 #include <vector>
+
+// for helper validation
+#include "Code.h"
+#include <security_utilities/cfmunge.h>
+#include <sys/codesign.h>
+
 
 namespace Security {
 namespace CodeSigning {
@@ -43,22 +50,8 @@ namespace CodeSigning {
 //
 static const char helperName[] = "codesign_allocate";
 static const char helperPath[] = "/usr/bin/codesign_allocate";
+static const char helperOverride[] = "CODESIGN_ALLOCATE";
 static const size_t csAlign = 16;
-
-
-//
-// InternalRequirements
-//
-void InternalRequirements::operator () (const Requirements *given, const Requirements *defaulted)
-{
-	if (defaulted) {
-		this->add(defaulted);
-		::free((void *)defaulted);		// was malloc(3)ed by DiskRep
-	}
-	if (given)
-		this->add(given);
-	mReqs = make();
-}
 
 
 //
@@ -73,8 +66,8 @@ void BlobWriter::component(CodeDirectory::SpecialSlot slot, CFDataRef data)
 void DetachedBlobWriter::flush()
 {
 	EmbeddedSignatureBlob *blob = this->make();
-	signer.code->detachedSignature(CFTempData(*blob));
-	signer.state.returnDetachedSignature(blob);
+	signer.code->detachedSignature(makeCFData(*blob));
+	signer.state.returnDetachedSignature(blob, signer);
 	::free(blob);
 }
 
@@ -121,7 +114,7 @@ void BlobEditor::commit()
 
 	// finish up the superblob and deliver it
 	DetachedSignatureBlob *blob = mMaker.make();
-	signer.state.returnDetachedSignature(blob);
+	signer.state.returnDetachedSignature(blob, signer);
 	::free(blob);
 }
 
@@ -135,6 +128,13 @@ MachOEditor::MachOEditor(DiskRep::Writer *w, Universal &code, std::string srcPat
 	: ArchEditor(code, w->attributes()), writer(w), sourcePath(srcPath), tempPath(srcPath + ".cstemp"),
 	  mNewCode(NULL), mTempMayExist(false)
 {
+	if (const char *path = getenv(helperOverride)) {
+		mHelperPath = path;
+		mHelperOverridden = true;
+	} else {
+		mHelperPath = helperPath;
+		mHelperOverridden = false;
+	}
 }
 
 MachOEditor::~MachOEditor()
@@ -142,6 +142,7 @@ MachOEditor::~MachOEditor()
 	delete mNewCode;
 	if (mTempMayExist)
 		::remove(tempPath.c_str());		// ignore error (can't do anything about it)
+	this->kill();
 }
 
 
@@ -170,6 +171,29 @@ void MachOEditor::allocate()
 	mNewCode = new Universal(mFd);
 }
 
+static const unsigned char appleReq[] = {
+	// anchor apple and info["Application-Group"] = "com.apple.tool.codesign_allocate"
+	0xfa, 0xde, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x58, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x06,
+	0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x0a, 0x00, 0x00, 0x00, 0x11, 0x41, 0x70, 0x70, 0x6c,
+	0x69, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x2d, 0x47, 0x72, 0x6f, 0x75, 0x70, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x20, 0x63, 0x6f, 0x6d, 0x2e, 0x61, 0x70, 0x70, 0x6c,
+	0x65, 0x2e, 0x74, 0x6f, 0x6f, 0x6c, 0x2e, 0x63, 0x6f, 0x64, 0x65, 0x73, 0x69, 0x67, 0x6e, 0x5f,
+	0x61, 0x6c, 0x6c, 0x6f, 0x63, 0x61, 0x74, 0x65,
+};
+
+void MachOEditor::parentAction()
+{
+	if (mHelperOverridden) {
+		CODESIGN_ALLOCATE_VALIDATE((char*)mHelperPath, this->pid());
+		// check code identity of an overridden allocation helper
+		SecPointer<SecStaticCode> code = new SecStaticCode(DiskRep::bestGuess(mHelperPath));
+		code->validateDirectory();
+		code->validateExecutable();
+		code->validateResources();
+		code->validateRequirements((const Requirement *)appleReq, errSecCSReqFailed);
+	}
+}
+
 void MachOEditor::childAction()
 {
 	vector<const char *> arguments;
@@ -180,16 +204,31 @@ void MachOEditor::childAction()
 	arguments.push_back(tempPath.c_str());
 	
 	for (Iterator it = architecture.begin(); it != architecture.end(); ++it) {
-		char *size;				// we'll leak this (execv is coming soon)
-		asprintf(&size, "%d", LowLevelMemoryUtilities::alignUp(it->second->blobSize, csAlign));
-		secdebug("machoedit", "preparing %s size=%s", it->first.name(), size);
-		arguments.push_back("-a");
-		arguments.push_back(it->first.name());
-		arguments.push_back(size);
+		size_t size = LowLevelMemoryUtilities::alignUp(it->second->blobSize, csAlign);
+		char *ssize;			// we'll leak this (execv is coming soon)
+		asprintf(&ssize, "%d", size);
+
+		if (const char *arch = it->first.name()) {
+			CODESIGN_ALLOCATE_ARCH((char*)arch, size);
+			arguments.push_back("-a");
+			arguments.push_back(arch);
+		} else {
+			CODESIGN_ALLOCATE_ARCHN(it->first.cpuType(), it->first.cpuSubtype(), size);
+			arguments.push_back("-A");
+			char *anum;
+			asprintf(&anum, "%d", it->first.cpuType());
+			arguments.push_back(anum);
+			asprintf(&anum, "%d", it->first.cpuSubtype());
+			arguments.push_back(anum);
+		}
+		arguments.push_back(ssize);
 	}
 	arguments.push_back(NULL);
+	
+	if (mHelperOverridden)
+		::csops(0, CS_EXEC_SET_KILL, NULL, 0);		// force code integrity
 	::seteuid(0);	// activate privilege if caller has it; ignore error if not
-	execv(helperPath, (char * const *)&arguments[0]);
+	execv(mHelperPath, (char * const *)&arguments[0]);
 }
 
 void MachOEditor::reset(Arch &arch)
@@ -208,13 +247,9 @@ void MachOEditor::write(Arch &arch, EmbeddedSignatureBlob *blob)
 {
 	if (size_t offset = arch.source->signingOffset()) {
 		size_t signingLength = arch.source->signingLength();
-		secdebug("codesign", "writing architecture %s at 0x%zx (%zd of %zd)",
-			arch.architecture.name(), offset, blob->length(), signingLength);
-		if (signingLength < blob->length()) {
-			secdebug("codesign", "trying to write %zd bytes into %zd area",
-				blob->length(), signingLength);
-			MacOSError::throwMe(errSecCSInternalError);
-		}
+		CODESIGN_ALLOCATE_WRITE((char*)arch.architecture.name(), offset, blob->length(), signingLength);
+		if (signingLength < blob->length())
+			MacOSError::throwMe(errSecCSCMSTooLarge);
 		arch.source->seek(offset);
 		arch.source->writeAll(*blob);
 		::free(blob);		// done with it
@@ -252,37 +287,6 @@ void MachOEditor::commit()
 		UnixError::check(::rename(tempPath.c_str(), sourcePath.c_str()));
 		mTempMayExist = false;		// we renamed it away
 	}
-}
-
-
-//
-// Copyfile
-//
-Copyfile::Copyfile()
-{
-	if (!(mState = copyfile_state_alloc()))
-		UnixError::throwMe();
-}
-	
-void Copyfile::set(uint32_t flag, const void *value)
-{
-	check(::copyfile_state_set(mState, flag, value));
-}
-
-void Copyfile::get(uint32_t flag, void *value)
-{
-	check(::copyfile_state_set(mState, flag, value));
-}
-	
-void Copyfile::operator () (const char *src, const char *dst, copyfile_flags_t flags)
-{
-	check(::copyfile(src, dst, mState, flags));
-}
-
-void Copyfile::check(int rc)
-{
-	if (rc < 0)
-		UnixError::throwMe();
 }
 
 

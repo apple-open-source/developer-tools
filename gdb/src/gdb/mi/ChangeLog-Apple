@@ -1,3 +1,44 @@
+2009-03-23  Jim Ingham  <jingham@apple.com>
+
+	* mi-main.c (mi_cmd_target_attach): Add -waitfor.
+	
+2009-03-18  Jim Ingham  <jingham@apple.com>
+
+	* mi-main.c (mi_cmd_exec_safe_call): "reason" -> "problem".
+	
+2009-01-30  Jim Ingham  <jingham@apple.com>
+
+	* mi-cmd-var.c (mi_cmd_var_evaluate_expression) Switch to 
+	make_cleanup_set_restore_unwind_on_signal.
+	* mi-main.c (mi_cmd_data_evaluate_expression): Ditto.
+	(mi_cmd_target_load_solib): New function.
+	(mi_cmd_target_unload_solib): New function - not yet
+	implemented.
+	* mi-cmds.c (target-load-solib): Add to command set.
+	* mi-cmds.h: Ditto.
+	
+2008-12-15  Caroline Tice  <ctice@apple.com>
+
+	* mi-cmd-stack.c (list_args_or_locals):  Don't print symbols for
+	inlined subroutine blocks contained within the function block.
+
+2008-11-11  Jim Ingham  <jingham@apple.com>
+
+	* mi-cmd-var.c (mi_report_var_creation): Report the resolved type.
+	(varobj_update_one): Report the new resolved type.
+	
+2008-11-06  Caroline Tice  <ctice@apple.com>
+
+	* mi-cmd-disas.c (mi_cmd_disassemble):  Call 
+	find_pc_partial_function_no_inlined instead of find_pc_partial_function
+
+2008-10-22  Jason Molenda  (jmolenda@apple.com)
+
+	* mi-cmd-stack.c (mi_cmd_stack_list_args): Save and restore the
+	frame pointer across possible inferior function calls.
+	(list_args_or_locals): Same.
+	(print_syms_for_block): Same.
+
 2008-09-23  Greg Clayton  <gclayton@apple.com>
 
 	* mi-cmd-stack.c (mi_cmd_stack_list_args): Store the frame id for a
@@ -8,6 +49,35 @@
 
 	* mi-cmd-stack.c (mi_cmd_file_list_globals): Use the separate debug
 	file when a full path to a shared library is provided.
+	
+2008-09-03  Jim Ingham  <jingham@apple.com>
+
+	* mi-main.c (mi_cmd_exec_safe_call): Change to use the notion of
+	subsystems to check for safety.
+
+2008-07-21  Jason Molenda  (jmolenda@apple.com)
+
+	* mi-cmd-break.c (breakpoint_notify): Fix arguments.
+	* mi-main.c (mi_exec_async_cli_cmd_continuation): Cast the
+	continuation arguments appropriately.
+	* mi-out.c (mi_wrap_hint): Correct signature of mi_wrap_hint to match
+	the expected args.
+
+2008-06-17  Jason Molenda  (jmolenda@apple.com)
+
+	* mi-cmd-break.c (mi_cmd_break_catch): Remove unused variables.
+	* mi-cmd-file.c (mi_cmd_file_list_exec_source_file): Same.
+	* mi-interp.c (mi_interpreter_exec): Same.
+	* mi-main.c (captured_mi_execute_command): Same.
+
+2008-06-16  Jason Molenda  (jmolenda@apple.com)
+
+	* mi-cmd-var.c (mi_cmd_var_evaluate_expression): Use 
+	set_unwind_on_signal_cleanup.
+	* mi-main.c (mi_cmd_data_evaluate_expression): Use 
+	set_unwind_on_signal_cleanup.
+	(mi_execute_async_cli_command): Correct cast.
+	(mi_exec_async_cli_cmd_continuation): Correct cast.
 
 2008-05-12  Jim Ingham  <jingham@apple.com>
 

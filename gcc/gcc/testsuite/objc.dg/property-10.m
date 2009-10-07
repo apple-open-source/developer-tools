@@ -1,7 +1,6 @@
 /* APPLE LOCAL file 4564386 */
 /* APPLE LOCAL radar 4899595 */
-/* { dg-options "-fno-objc-new-property -mmacosx-version-min=10.5" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
-/* { dg-options "-fno-objc-new-property" { target arm*-*-darwin* } } */
+/* { dg-options "-mmacosx-version-min=10.5" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
 /* { dg-do run { target *-*-darwin* } } */
 
 #include <objc/objc.h>
@@ -9,23 +8,25 @@
 #include "../objc/execute/Object2.h"
 
 @protocol GCObject
-@property (ivar=ifield) int class;
+@property int class;
 @end
 
 @protocol DerivedGCObject <GCObject>
-@property (ivar) int Dclass;
+@property int Dclass;
 @end
 
 @interface GCObject  : Object <DerivedGCObject> {
     int ifield;
+    int iOwnClass;
+    int iDclass;
 }
-@property (ivar) int OwnClass;
+@property int OwnClass;
 @end
 
 @implementation GCObject : Object
-@property(ivar=ifield) int class;
-@property int Dclass;
-@property int OwnClass;
+@synthesize class=ifield;
+@synthesize Dclass=iDclass;
+@synthesize OwnClass=iOwnClass;
 @end
 
 int main(int argc, char **argv) {

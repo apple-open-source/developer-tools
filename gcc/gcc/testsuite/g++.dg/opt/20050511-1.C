@@ -1,9 +1,6 @@
-/* APPLE LOCAL file 4110735 */
 /* { dg-do run } */
-/* { dg-options "-O3" { target powerpc*-*-* } } */
-/* APPLE LOCAL mainline */
 /* { dg-options "-w" } */
-
+/* { dg-options "-O3 -w" { target powerpc*-*-* } } */
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -49,7 +46,7 @@ UINT32 bar (const C * sPtr)
   a.xy[0] = sPtr->b.mvL[w].xy[0]<<2;
   a.xy[1] = sPtr->b.mvL[w].xy[1]<<2;
 
-  if (a.xy[0] != (SINT16) (0xffff << 2))
+  if (a.xy[0] != ((SINT16) 0xffff << 2))
 	abort ();
 }
 
@@ -65,3 +62,4 @@ int main()
 
 	bar (&c);
 }
+	

@@ -1,6 +1,6 @@
 /* -*- Mode: C; tab-width: 4 -*-
  *
- * Copyright (c) 2002-2006 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 2002-2008 Apple Inc. All rights reserved.
  *
  * Disclaimer: IMPORTANT:  This Apple software is supplied to you by Apple Computer, Inc.
  * ("Apple") in consideration of your agreement to the following terms, and your
@@ -73,7 +73,7 @@ cl dns-sd.c -I../mDNSShared -DNOT_HAVE_GETOPT ws2_32.lib ..\mDNSWindows\DLL\Rele
 #include <ctype.h>
 #include <stdio.h>			// For stdout, stderr
 #include <stdlib.h>			// For exit()
-#include <string.h>			// For strlen(), strcpy(), bzero()
+#include <string.h>			// For strlen(), strcpy()
 #include <errno.h>			// For errno, EINTR
 #include <time.h>
 #include <sys/types.h>		// For u_char
@@ -81,12 +81,69 @@ cl dns-sd.c -I../mDNSShared -DNOT_HAVE_GETOPT ws2_32.lib ..\mDNSWindows\DLL\Rele
 #ifdef _WIN32
 	#include <winsock2.h>
 	#include <ws2tcpip.h>
+	#include <Iphlpapi.h>
 	#include <process.h>
 	typedef int        pid_t;
 	#define getpid     _getpid
 	#define strcasecmp _stricmp
 	#define snprintf   _snprintf
 	static const char kFilePathSep = '\\';
+	#ifndef HeapEnableTerminationOnCorruption
+	#     define HeapEnableTerminationOnCorruption (HEAP_INFORMATION_CLASS)1
+	#endif
+	#if !defined(IFNAMSIZ)
+	 #define IFNAMSIZ 16
+    #endif
+	#define if_nametoindex if_nametoindex_win
+	#define if_indextoname if_indextoname_win
+
+	typedef PCHAR (WINAPI * if_indextoname_funcptr_t)(ULONG index, PCHAR name);
+	typedef ULONG (WINAPI * if_nametoindex_funcptr_t)(PCSTR name);
+
+	unsigned if_nametoindex_win(const char *ifname)
+		{
+		HMODULE library;
+		unsigned index = 0;
+
+		// Try and load the IP helper library dll
+		if ((library = LoadLibrary(TEXT("Iphlpapi")) ) != NULL )
+			{
+			if_nametoindex_funcptr_t if_nametoindex_funcptr;
+
+			// On Vista and above there is a Posix like implementation of if_nametoindex
+			if ((if_nametoindex_funcptr = (if_nametoindex_funcptr_t) GetProcAddress(library, "if_nametoindex")) != NULL )
+				{
+				index = if_nametoindex_funcptr(ifname);
+				}
+
+			FreeLibrary(library);
+			}
+
+		return index;
+		}
+
+	char * if_indextoname_win( unsigned ifindex, char *ifname)
+		{
+		HMODULE library;
+		char * name = NULL;
+
+		// Try and load the IP helper library dll
+		if ((library = LoadLibrary(TEXT("Iphlpapi")) ) != NULL )
+			{
+			if_indextoname_funcptr_t if_indextoname_funcptr;
+
+			// On Vista and above there is a Posix like implementation of if_indextoname
+			if ((if_indextoname_funcptr = (if_indextoname_funcptr_t) GetProcAddress(library, "if_indextoname")) != NULL )
+				{
+				name = if_indextoname_funcptr(ifindex, ifname);
+				}
+
+			FreeLibrary(library);
+			}
+
+		return name;
+		}
+
 #else
 	#include <unistd.h>			// For getopt() and optind
 	#include <netdb.h>			// For getaddrinfo()
@@ -103,6 +160,8 @@ cl dns-sd.c -I../mDNSShared -DNOT_HAVE_GETOPT ws2_32.lib ..\mDNSWindows\DLL\Rele
 #endif
 
 #include "dns_sd.h"
+
+#include "ClientCommon.h"
 
 #if TEST_NEW_CLIENTSTUB
 #include "../mDNSShared/dnssd_ipc.c"
@@ -135,7 +194,7 @@ static DNSRecordRef record = NULL;
 static char myhinfoW[14] = "\002PC\012Windows XP";
 static char myhinfoX[ 9] = "\003Mac\004OS X";
 static char updatetest[3] = "\002AA";
-static char bigNULL[8200];
+static char bigNULL[8192];	// 8K is maximum rdata we support
 
 // Note: the select() implementation on Windows (Winsock2) fails with any timeout much larger than this
 #define LONG_TIME 100000000
@@ -239,31 +298,7 @@ static void printtimestamp(void)
 #define DomainMsg(X) (((X) & kDNSServiceFlagsDefault) ? "(Default)" : \
                       ((X) & kDNSServiceFlagsAdd)     ? "Added"     : "Removed")
 
-static const char *GetNextLabel(const char *cstr, char label[64])
-	{
-	char *ptr = label;
-	while (*cstr && *cstr != '.')								// While we have characters in the label...
-		{
-		char c = *cstr++;
-		if (c == '\\')
-			{
-			c = *cstr++;
-			if (isdigit(cstr[-1]) && isdigit(cstr[0]) && isdigit(cstr[1]))
-				{
-				int v0 = cstr[-1] - '0';						// then interpret as three-digit decimal
-				int v1 = cstr[ 0] - '0';
-				int v2 = cstr[ 1] - '0';
-				int val = v0 * 100 + v1 * 10 + v2;
-				if (val <= 255) { c = (char)val; cstr += 2; }	// If valid three-digit decimal value, use it
-				}
-			}
-		*ptr++ = c;
-		if (ptr >= label+64) return(NULL);
-		}
-	if (*cstr) cstr++;											// Skip over the trailing dot (if present)
-	*ptr++ = 0;
-	return(cstr);
-	}
+#define MAX_LABELS 128
 
 static void DNSSD_API enum_reply(DNSServiceRef sdref, const DNSServiceFlags flags, uint32_t ifIndex,
 	DNSServiceErrorType errorCode, const char *replyDomain, void *context)
@@ -271,7 +306,7 @@ static void DNSSD_API enum_reply(DNSServiceRef sdref, const DNSServiceFlags flag
 	DNSServiceFlags partialflags = flags & ~(kDNSServiceFlagsMoreComing | kDNSServiceFlagsAdd | kDNSServiceFlagsDefault);
 	int labels = 0, depth = 0, i, initial = 0;
 	char text[64];
-	const char *label[128];
+	const char *label[MAX_LABELS];
 	
 	(void)sdref;        // Unused
 	(void)ifIndex;      // Unused
@@ -292,7 +327,7 @@ static void DNSSD_API enum_reply(DNSServiceRef sdref, const DNSServiceFlags flag
 		else printf("             ");
 		
 		// 2. Count the labels
-		while (*replyDomain)
+		while (replyDomain && *replyDomain && labels < MAX_LABELS)
 			{
 			label[labels++] = replyDomain;
 			replyDomain = GetNextLabel(replyDomain, text);
@@ -324,6 +359,97 @@ static void DNSSD_API enum_reply(DNSServiceRef sdref, const DNSServiceFlags flag
 		}
 
 	if (!(flags & kDNSServiceFlagsMoreComing)) fflush(stdout);
+	}
+
+static int CopyLabels(char *dst, const char *lim, const char **srcp, int labels)
+	{
+	const char *src = *srcp;
+	while (*src != '.' || --labels > 0)
+		{
+		if (*src == '\\') *dst++ = *src++;	// Make sure "\." doesn't confuse us
+		if (!*src || dst >= lim) return -1;
+		*dst++ = *src++;
+		if (!*src || dst >= lim) return -1;
+		}
+	*dst++ = 0;
+	*srcp = src + 1;	// skip over final dot
+	return 0;
+	}
+
+static void DNSSD_API zonedata_resolve(DNSServiceRef sdref, const DNSServiceFlags flags, uint32_t ifIndex, DNSServiceErrorType errorCode,
+	const char *fullname, const char *hosttarget, uint16_t opaqueport, uint16_t txtLen, const unsigned char *txt, void *context)
+	{
+	union { uint16_t s; u_char b[2]; } port = { opaqueport };
+	uint16_t PortAsNumber = ((uint16_t)port.b[0]) << 8 | port.b[1];
+
+	const char *p = fullname;
+	char n[kDNSServiceMaxDomainName];
+	char t[kDNSServiceMaxDomainName];
+
+	const unsigned char *max = txt + txtLen;
+
+	(void)sdref;        // Unused
+	(void)ifIndex;      // Unused
+	(void)context;      // Unused
+
+	//if (!(flags & kDNSServiceFlagsAdd)) return;
+	if (errorCode) { printf("Error code %d\n", errorCode); return; }
+
+	if (CopyLabels(n, n + kDNSServiceMaxDomainName, &p, 3)) return;		// Fetch name+type
+	p = fullname;
+	if (CopyLabels(t, t + kDNSServiceMaxDomainName, &p, 1)) return;		// Skip first label
+	if (CopyLabels(t, t + kDNSServiceMaxDomainName, &p, 2)) return;		// Fetch next two labels (service type)
+
+	if (num_printed++ == 0)
+		{
+		printf("\n");
+		printf("; To direct clients to browse a different domain, substitute that domain in place of '@'\n");
+		printf("%-47s PTR     %s\n", "lb._dns-sd._udp", "@");
+		printf("\n");
+		printf("; In the list of services below, the SRV records will typically reference dot-local Multicast DNS names.\n");
+		printf("; When transferring this zone file data to your unicast DNS server, you'll need to replace those dot-local\n");
+		printf("; names with the correct fully-qualified (unicast) domain name of the target host offering the service.\n");
+		}
+
+	printf("\n");
+	printf("%-47s PTR     %s\n", t, n);
+	printf("%-47s SRV     0 0 %d %s ; Replace with unicast FQDN of target host\n", n, PortAsNumber, hosttarget);
+	printf("%-47s TXT    ", n);
+
+	while (txt < max)
+		{
+		const unsigned char *const end = txt + 1 + txt[0];
+		txt++;		// Skip over length byte
+		printf(" \"");
+		while (txt<end)
+			{
+			if (*txt == '\\' || *txt == '\"') printf("\\");
+			printf("%c", *txt++);
+			}
+		printf("\"");
+		}
+	printf("\n");
+
+	DNSServiceRefDeallocate(sdref);
+	free(context);
+
+	if (!(flags & kDNSServiceFlagsMoreComing)) fflush(stdout);
+	}
+
+static void DNSSD_API zonedata_browse(DNSServiceRef sdref, const DNSServiceFlags flags, uint32_t ifIndex, DNSServiceErrorType errorCode,
+	const char *replyName, const char *replyType, const char *replyDomain, void *context)
+	{
+	DNSServiceRef *newref;
+
+	(void)sdref;        // Unused
+	(void)context;      // Unused
+
+	if (!(flags & kDNSServiceFlagsAdd)) return;
+	if (errorCode) { printf("Error code %d\n", errorCode); return; }
+
+	newref = malloc(sizeof(*newref));
+	*newref = client;
+	DNSServiceResolve(newref, kDNSServiceFlagsShareConnection, ifIndex, replyName, replyType, replyDomain, zonedata_resolve, newref);
 	}
 
 static void DNSSD_API browse_reply(DNSServiceRef sdref, const DNSServiceFlags flags, uint32_t ifIndex, DNSServiceErrorType errorCode,
@@ -391,7 +517,7 @@ static void DNSSD_API resolve_reply(DNSServiceRef sdref, const DNSServiceFlags f
 	if (errorCode) printf("Error code %d\n", errorCode);
 	else
 		{
-		printf("%s can be reached at %s:%u", fullname, hosttarget, PortAsNumber);
+		printf("%s can be reached at %s:%u (interface %d)", fullname, hosttarget, PortAsNumber, ifIndex);
 		if (flags) printf(" Flags: %X", flags);
 		// Don't show degenerate TXT records containing nothing but a single empty string
 		if (txtLen > 1) { printf("\n"); ShowTXTRecord(txtLen, txtRecord); }
@@ -433,6 +559,7 @@ static void myTimerCallBack(void)
 			else                      updatetest[1] = 'A';
 			updatetest[0] = 3 - updatetest[0];
 			updatetest[2] = updatetest[1];
+			printtimestamp();
 			printf("Updating Test TXT record to %c\n", updatetest[1]);
 			err = DNSServiceUpdateRecord(client, NULL, 0, 1+updatetest[0], &updatetest[0], 0);
 			}
@@ -573,16 +700,16 @@ static void DNSSD_API port_mapping_create_reply(DNSServiceRef sdref, DNSServiceF
 	(void)context;     // Unused
 	(void)flags;       // Unused
 	
-	if (num_printed++ == 0) printf("Timestamp     if   %-20s %-15s %-15s %-15s %s\n", "External Address", "Protocol", "Internal Port", "External Port", "TTL");
+	if (num_printed++ == 0) printf("Timestamp     if   %-20s %-15s %-15s %-15s %-6s\n", "External Address", "Protocol", "Internal Port", "External Port", "TTL");
 	printtimestamp();
-	if (errorCode) printf("Error code %d\n", errorCode);
+	if (errorCode && errorCode != kDNSServiceErr_DoubleNAT) printf("Error code %d\n", errorCode);
 	else
 		{
 		const unsigned char *digits = (const unsigned char *)&publicAddress;
 		char                 addr[256];
 
 		snprintf(addr, sizeof(addr), "%d.%d.%d.%d", digits[0], digits[1], digits[2], digits[3]);
-		printf("%-4d %-20s %-15d %-15d %-15d %d\n", ifIndex, addr, protocol, ntohs(privatePort), ntohs(publicPort), ttl);
+		printf("%-4d %-20s %-15d %-15d %-15d %-6d%s\n", ifIndex, addr, protocol, ntohs(privatePort), ntohs(publicPort), ttl, errorCode == kDNSServiceErr_DoubleNAT ? " Double NAT" : "");
 		}
 	fflush(stdout);
 	}
@@ -596,23 +723,27 @@ static void DNSSD_API addrinfo_reply(DNSServiceRef sdref, DNSServiceFlags flags,
 	(void) sdref;
 	(void) context;
 	
-	if (num_printed++ == 0) printf("Timestamp     A/R Flags if %-25s %-40s %s\n", "Hostname", "Address", "TTL");
+	if (num_printed++ == 0) printf("Timestamp     A/R Flags if %-25s %-44s %s\n", "Hostname", "Address", "TTL");
 	printtimestamp();
 
 	if (address && address->sa_family == AF_INET)
 		{
-		const unsigned char *digits = (const unsigned char *) &((struct sockaddr_in *)address)->sin_addr;
-		snprintf(addr, sizeof(addr), "%d.%d.%d.%d", digits[0], digits[1], digits[2], digits[3]);
+		const unsigned char *b = (const unsigned char *) &((struct sockaddr_in *)address)->sin_addr;
+		snprintf(addr, sizeof(addr), "%d.%d.%d.%d", b[0], b[1], b[2], b[3]);
 		}
 	else if (address && address->sa_family == AF_INET6)
 		{
-		const unsigned char *digits = (const unsigned char *) &((struct sockaddr_in6 *)address)->sin6_addr;
-		snprintf(addr, sizeof(addr), "%02X%02X:%02X%02X:%02X%02X:%02X%02X:%02X%02X:%02X%02X:%02X%02X:%02X%02X",
-				digits[0x0], digits[0x1], digits[0x2], digits[0x3], digits[0x4], digits[0x5], digits[0x6], digits[0x7],
-				digits[0x8], digits[0x9], digits[0xA], digits[0xB], digits[0xC], digits[0xD], digits[0xE], digits[0xF]);
+		char if_name[IFNAMSIZ];		// Older Linux distributions don't define IF_NAMESIZE
+		const struct sockaddr_in6 *s6 = (const struct sockaddr_in6 *)address;
+		const unsigned char       *b  = (const unsigned char *      )&s6->sin6_addr;
+		if (!if_indextoname(s6->sin6_scope_id, if_name))
+			snprintf(if_name, sizeof(if_name), "<%d>", s6->sin6_scope_id);
+		snprintf(addr, sizeof(addr), "%02X%02X:%02X%02X:%02X%02X:%02X%02X:%02X%02X:%02X%02X:%02X%02X:%02X%02X%%%s",
+				b[0x0], b[0x1], b[0x2], b[0x3], b[0x4], b[0x5], b[0x6], b[0x7],
+				b[0x8], b[0x9], b[0xA], b[0xB], b[0xC], b[0xD], b[0xE], b[0xF], if_name);
 		}
 
-	printf("%s%6X%3d %-25s %-40s %d", op, flags, interfaceIndex, hostname, addr, ttl);
+	printf("%s%6X%3d %-25s %-44s %d", op, flags, interfaceIndex, hostname, addr, ttl);
 	if (errorCode)
 		{
 		if (errorCode == kDNSServiceErr_NoSuchRecord) printf("   No Such Record");
@@ -689,19 +820,19 @@ static int getfirstoption(int argc, char **argv, const char *optstr, int *pOptIn
 	}
 #else
 	{
-	int operation = getopt(argc, (char *const *)argv, optstr);
+	int o = getopt(argc, (char *const *)argv, optstr);
 	*pOptInd = optind;
-	return operation;
+	return o;
 	}
 #endif
 
-static void DNSSD_API MyRegisterRecordCallback(DNSServiceRef service, DNSRecordRef record, const DNSServiceFlags flags,
+static void DNSSD_API MyRegisterRecordCallback(DNSServiceRef service, DNSRecordRef rec, const DNSServiceFlags flags,
     DNSServiceErrorType errorCode, void *context)
 	{
 	char *name = (char *)context;
 	
 	(void)service;	// Unused
-	(void)record;	// Unused
+	(void)rec;	// Unused
 	(void)flags;	// Unused
 	
 	printtimestamp();
@@ -714,7 +845,7 @@ static void DNSSD_API MyRegisterRecordCallback(DNSServiceRef service, DNSRecordR
 		default:                          printf("Error %d\n", errorCode); break;
 		}
 	if (!(flags & kDNSServiceFlagsMoreComing)) fflush(stdout);
-	// DNSServiceRemoveRecord(service, record, 0); to test record removal
+	// DNSServiceRemoveRecord(service, rec, 0); to test record removal
 	}
 
 static unsigned long getip(const char *const name)
@@ -799,11 +930,19 @@ static DNSServiceErrorType RegisterService(DNSServiceRef *sdref,
 	return(DNSServiceRegister(sdref, flags, opinterface, nam, typ, dom, host, registerPort.NotAnInteger, (uint16_t) (ptr-txt), txt, reg_reply, NULL));
 	}
 
+#define TypeBufferSize 80
+static char *gettype(char *buffer, char *typ)
+	{
+	if (!typ || !*typ || (typ[0] == '.' && typ[1] == 0)) typ = "_http._tcp";
+	if (!strchr(typ, '.')) { snprintf(buffer, TypeBufferSize, "%s._tcp", typ); typ = buffer; }
+	return(typ);
+	}
+
 int main(int argc, char **argv)
 	{
 	DNSServiceErrorType err;
-	char *dom;
-	int optind;
+	char buffer[TypeBufferSize], *typ, *dom;
+	int opi;
 
 	// Extract the program name from argv[0], which by convention contains the path to this executable.
 	// Note that this is just a voluntary convention, not enforced by the kernel --
@@ -811,7 +950,14 @@ int main(int argc, char **argv)
 	const char *a0 = strrchr(argv[0], kFilePathSep) + 1;
 	if (a0 == (const char *)1) a0 = argv[0];
 
+#if defined(_WIN32)
+	HeapSetInformation(NULL, HeapEnableTerminationOnCorruption, NULL, 0);
+#endif
+
+#if TEST_NEW_CLIENTSTUB
+	printf("Using embedded copy of dnssd_clientstub instead of system library\n");
 	if (sizeof(argv) == 8) printf("Running in 64-bit mode\n");
+#endif
 
 	// Test code for TXTRecord functions
 	//TXTRecordRef txtRecord;
@@ -837,14 +983,14 @@ int main(int argc, char **argv)
 		}
 
 	if (argc < 2) goto Fail;        // Minimum command line is the command name and one argument
-	operation = getfirstoption(argc, argv, "EFBLRPQCAUNTMISV"
+	operation = getfirstoption(argc, argv, "EFBZLRPQCAUNTMISV"
 								#if HAS_NAT_PMP_API
 									"X"
 								#endif
 								#if HAS_ADDRINFO_API
 									"G"
 								#endif
-								, &optind);
+								, &opi);
 	if (operation == -1) goto Fail;
 
 	if (opinterface) printf("Using interface %d\n", opinterface);
@@ -863,35 +1009,48 @@ int main(int argc, char **argv)
 					//enum_reply(client, kDNSServiceFlagsAdd, 0, 0, "dns-sd.ibm.com.", NULL);
 					break;
 
-		case 'B':	{
-					char buffer[64], *typ;
-					typ = (argc < optind+1) ? "_http" : argv[optind+0]; // If no type argument, browse for advertised web pages
-					dom = (argc < optind+2) ? "" : argv[optind+1];  // Missing domain argument is the same as empty string i.e. use system default(s)
+		case 'B':	typ = (argc < opi+1) ? "" : argv[opi+0];
+					dom = (argc < opi+2) ? "" : argv[opi+1];  // Missing domain argument is the same as empty string i.e. use system default(s)
+					typ = gettype(buffer, typ);
 					if (dom[0] == '.' && dom[1] == 0) dom[0] = 0;   // We allow '.' on the command line as a synonym for empty string
-					if (!strchr(typ, '.')) { snprintf(buffer, sizeof(buffer), "%s._tcp", typ); typ = buffer; }
 					printf("Browsing for %s%s%s\n", typ, dom[0] ? "." : "", dom);
 					err = DNSServiceBrowse(&client, 0, opinterface, typ, dom, browse_reply, NULL);
 					break;
-					}
 
-		case 'L':	if (argc < optind+2) goto Fail;
-					dom = (argc < optind+3) ? "local" : argv[optind+2];
+		case 'Z':	typ = (argc < opi+1) ? "" : argv[opi+0];
+					dom = (argc < opi+2) ? "" : argv[opi+1];  // Missing domain argument is the same as empty string i.e. use system default(s)
+					typ = gettype(buffer, typ);
+					if (dom[0] == '.' && dom[1] == 0) dom[0] = 0;   // We allow '.' on the command line as a synonym for empty string
+					printf("Browsing for %s%s%s\n", typ, dom[0] ? "." : "", dom);
+					err = DNSServiceCreateConnection(&client);
+					sc1 = client;
+					err = DNSServiceBrowse(&sc1, kDNSServiceFlagsShareConnection, opinterface, typ, dom, zonedata_browse, NULL);
+					break;
+
+		case 'L':	if (argc < opi+2) goto Fail;
+					typ = (argc < opi+2) ? ""      : argv[opi+1];
+					dom = (argc < opi+3) ? "local" : argv[opi+2];
+					typ = gettype(buffer, typ);
 					if (dom[0] == '.' && dom[1] == 0) dom = "local";   // We allow '.' on the command line as a synonym for "local"
-					printf("Lookup %s.%s.%s\n", argv[optind+0], argv[optind+1], dom);
-					err = DNSServiceResolve(&client, 0, opinterface, argv[optind+0], argv[optind+1], dom, (DNSServiceResolveReply)resolve_reply, NULL);
+					printf("Lookup %s.%s.%s\n", argv[opi+0], typ, dom);
+					err = DNSServiceResolve(&client, 0, opinterface, argv[opi+0], typ, dom, resolve_reply, NULL);
 					break;
 
-		case 'R':	if (argc < optind+4) goto Fail;
-					err = RegisterService(&client, argv[optind+0], argv[optind+1], argv[optind+2], NULL, argv[optind+3], argc-(optind+4), argv+(optind+4));
+		case 'R':	if (argc < opi+4) goto Fail;
+					typ = (argc < opi+2) ? "" : argv[opi+1];
+					dom = (argc < opi+3) ? "" : argv[opi+2];
+					typ = gettype(buffer, typ);
+					if (dom[0] == '.' && dom[1] == 0) dom[0] = 0;   // We allow '.' on the command line as a synonym for empty string
+					err = RegisterService(&client, argv[opi+0], typ, dom, NULL, argv[opi+3], argc-(opi+4), argv+(opi+4));
 					break;
 
-		case 'P':	if (argc < optind+6) goto Fail;
+		case 'P':	if (argc < opi+6) goto Fail;
 					err = DNSServiceCreateConnection(&client_pa);
 					if (err) { fprintf(stderr, "DNSServiceCreateConnection returned %d\n", err); return(err); }
-					err = RegisterProxyAddressRecord(client_pa, argv[optind+4], argv[optind+5]);
-					//err = RegisterProxyAddressRecord(client_pa, "two", argv[optind+5]);
+					err = RegisterProxyAddressRecord(client_pa, argv[opi+4], argv[opi+5]);
+					//err = RegisterProxyAddressRecord(client_pa, "two", argv[opi+5]);
 					if (err) break;
-					err = RegisterService(&client, argv[optind+0], argv[optind+1], argv[optind+2], argv[optind+4], argv[optind+3], argc-(optind+6), argv+(optind+6));
+					err = RegisterService(&client, argv[opi+0], gettype(buffer, argv[opi+1]), argv[opi+2], argv[opi+4], argv[opi+3], argc-(opi+6), argv+(opi+6));
 					//DNSServiceRemoveRecord(client_pa, record, 0);
 					//DNSServiceRemoveRecord(client_pa, record, 0);
 					break;
@@ -900,11 +1059,11 @@ int main(int argc, char **argv)
 		case 'C':	{
 					uint16_t rrtype, rrclass;
 					DNSServiceFlags flags = kDNSServiceFlagsReturnIntermediates;
-					if (argc < optind+1) goto Fail;
-					rrtype = (argc <= optind+1) ? kDNSServiceType_A  : GetRRType(argv[optind+1]);
-					rrclass = (argc <= optind+2) ? kDNSServiceClass_IN : atoi(argv[optind+2]);
+					if (argc < opi+1) goto Fail;
+					rrtype = (argc <= opi+1) ? kDNSServiceType_A  : GetRRType(argv[opi+1]);
+					rrclass = (argc <= opi+2) ? kDNSServiceClass_IN : atoi(argv[opi+2]);
 					if (rrtype == kDNSServiceType_TXT || rrtype == kDNSServiceType_PTR) flags |= kDNSServiceFlagsLongLivedQuery;
-					err = DNSServiceQueryRecord(&client, flags, opinterface, argv[optind+0], rrtype, rrclass, qr_reply, NULL);
+					err = DNSServiceQueryRecord(&client, flags, opinterface, argv[opi+0], rrtype, rrclass, qr_reply, NULL);
 					break;
 					}
 
@@ -952,14 +1111,14 @@ int main(int argc, char **argv)
 
 #if HAS_NAT_PMP_API
 		case 'X':   {
-					if (argc == optind)	// If no arguments, just fetch IP address
+					if (argc == opi)	// If no arguments, just fetch IP address
 						err = DNSServiceNATPortMappingCreate(&client, 0, 0, 0, 0, 0, 0, port_mapping_create_reply, NULL);
-					else if (argc >= optind+2 && atoi(argv[optind+0]) == 0)
+					else if (argc >= opi+2 && atoi(argv[opi+0]) == 0)
 						{
-						DNSServiceProtocol prot  = GetProtocol(argv[optind+0]);						// Must specify TCP or UDP
-						uint16_t IntPortAsNumber = atoi(argv[optind+1]);							// Must specify internal port
-						uint16_t ExtPortAsNumber = (argc < optind+3) ? 0 : atoi(argv[optind+2]);	// Optional desired external port
-						uint32_t ttl             = (argc < optind+4) ? 0 : atoi(argv[optind+3]);	// Optional desired lease lifetime
+						DNSServiceProtocol prot  = GetProtocol(argv[opi+0]);						// Must specify TCP or UDP
+						uint16_t IntPortAsNumber = atoi(argv[opi+1]);							// Must specify internal port
+						uint16_t ExtPortAsNumber = (argc < opi+3) ? 0 : atoi(argv[opi+2]);	// Optional desired external port
+						uint32_t ttl             = (argc < opi+4) ? 0 : atoi(argv[opi+3]);	// Optional desired lease lifetime
 						Opaque16 intp = { { IntPortAsNumber >> 8, IntPortAsNumber & 0xFF } };
 						Opaque16 extp = { { ExtPortAsNumber >> 8, ExtPortAsNumber & 0xFF } };
 						err = DNSServiceNATPortMappingCreate(&client, 0, 0, prot, intp.NotAnInteger, extp.NotAnInteger, ttl, port_mapping_create_reply, NULL);
@@ -971,14 +1130,18 @@ int main(int argc, char **argv)
 
 #if HAS_ADDRINFO_API
 		case 'G':   {
-					if (argc != optind+2) goto Fail;
-					else err = DNSServiceGetAddrInfo(&client, kDNSServiceFlagsReturnIntermediates, opinterface, GetProtocol(argv[optind+0]), argv[optind+1], addrinfo_reply, NULL);
+					if (argc != opi+2) goto Fail;
+					else err = DNSServiceGetAddrInfo(&client, kDNSServiceFlagsReturnIntermediates, opinterface, GetProtocol(argv[opi+0]), argv[opi+1], addrinfo_reply, NULL);
 					break;
 		            }
 #endif
 
 		case 'S':	{
 					Opaque16 registerPort = { { 0x23, 0x45 } };
+					unsigned char txtrec[16] = "\xF" "/path=test.html";
+					DNSRecordRef rec;
+					unsigned char nulrec[4] = "1234";
+
 					err = DNSServiceCreateConnection(&client);
 					if (err) { fprintf(stderr, "DNSServiceCreateConnection failed %ld\n", (long int)err); return (-1); }
 
@@ -994,6 +1157,15 @@ int main(int argc, char **argv)
 					err = DNSServiceRegister(&sc3, kDNSServiceFlagsShareConnection, opinterface, "kDNSServiceFlagsShareConnection",
 						"_http._tcp", "local", NULL, registerPort.NotAnInteger, 0, NULL, reg_reply, NULL);
 					if (err) { fprintf(stderr, "SharedConnection DNSServiceRegister failed %ld\n", (long int)err); return (-1); }
+
+					err = DNSServiceUpdateRecord(sc3, NULL, 0, sizeof(txtrec), txtrec, 0);
+					if (err) { fprintf(stderr, "SharedConnection DNSServiceUpdateRecord failed %ld\n", (long int)err); return (-1); }
+
+					err = DNSServiceAddRecord(sc3, &rec, 0, kDNSServiceType_NULL, sizeof(nulrec), nulrec, 0);
+					if (err) { fprintf(stderr, "SharedConnection DNSServiceAddRecord failed %ld\n", (long int)err); return (-1); }
+
+					err = DNSServiceRemoveRecord(sc3, rec, 0);
+					if (err) { fprintf(stderr, "SharedConnection DNSServiceRemoveRecord failed %ld\n", (long int)err); return (-1); }
 
 					break;
 					}
@@ -1025,6 +1197,7 @@ Fail:
 	fprintf(stderr, "%s -L <Name> <Type> <Domain>           (Look up a service instance)\n", a0);
 	fprintf(stderr, "%s -R <Name> <Type> <Domain> <Port> [<TXT>...] (Register a service)\n", a0);
 	fprintf(stderr, "%s -P <Name> <Type> <Domain> <Port> <Host> <IP> [<TXT>...]  (Proxy)\n", a0);
+	fprintf(stderr, "%s -Z        <Type> <Domain>   (Output results in Zone File format)\n", a0);
 	fprintf(stderr, "%s -Q <FQDN> <rrtype> <rrclass> (Generic query for any record type)\n", a0);
 	fprintf(stderr, "%s -C <FQDN> <rrtype> <rrclass>   (Query; reconfirming each result)\n", a0);
 #if HAS_NAT_PMP_API
@@ -1033,6 +1206,8 @@ Fail:
 #if HAS_ADDRINFO_API
 	fprintf(stderr, "%s -G v4/v6/v4v6 <Hostname>  (Get address information for hostname)\n", a0);
 #endif
+	fprintf(stderr, "%s -V    (Get version of currently running daemon / system service)\n", a0);
+
 	fprintf(stderr, "%s -A                      (Test Adding/Updating/Deleting a record)\n", a0);
 	fprintf(stderr, "%s -U                                  (Test updating a TXT record)\n", a0);
 	fprintf(stderr, "%s -N                             (Test adding a large NULL record)\n", a0);
@@ -1040,7 +1215,6 @@ Fail:
 	fprintf(stderr, "%s -M      (Test creating a registration with multiple TXT records)\n", a0);
 	fprintf(stderr, "%s -I   (Test registering and then immediately updating TXT record)\n", a0);
 	fprintf(stderr, "%s -S                 (Test multiple operations on a shared socket)\n", a0);
-	fprintf(stderr, "%s -V    (Get version of currently running daemon / system service)\n", a0);
 	return 0;
 	}
 
@@ -1054,6 +1228,8 @@ Fail:
 // The "@(#) " pattern is a special prefix the "what" command looks for
 const char VersionString_SCCS[] = "@(#) dns-sd " STRINGIFY(mDNSResponderVersion) " (" __DATE__ " " __TIME__ ")";
 
+#if _BUILDING_XCODE_PROJECT_
 // If the process crashes, then this string will be magically included in the automatically-generated crash log
 const char *__crashreporter_info__ = VersionString_SCCS + 5;
 asm(".desc ___crashreporter_info__, 0x10");
+#endif

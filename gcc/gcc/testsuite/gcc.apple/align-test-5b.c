@@ -5,7 +5,7 @@
 /* { dg-options "-malign-power -DSIZE=12" } */
 
 /* We have a different test to pick up the warning from 64-bit case.  */
-/* { dg-skip-if "" { powerpc*-*-darwin* } { "-m64" } { "" } } */
+/* { dg-require-effective-target ilp32 } */
 
 /*
  * GCC alignment test for command line options for setting alignment modes.

@@ -27,6 +27,8 @@
 #import "ReplicaFile.h"
 #import "PSUtilitiesDefs.h"
 
+void pwsf_AppendReplicaStatus( ReplicaFile *inReplicaFile, CFDictionaryRef inDict, CFMutableDictionaryRef inOutDict );
+
 void pwsf_CalcServerUniqueID( const char *inRSAPublicKey, char *outHexHash )
 {
 	MD5_CTX ctx;
@@ -66,6 +68,116 @@ char *pwsf_ReplicaFilePath( void )
 	}
 	
 	return NULL;
+}
+
+
+//----------------------------------------------------------------------------------------------------
+//	pwsf_GetStatusForReplicas
+//----------------------------------------------------------------------------------------------------
+
+CFDictionaryRef pwsf_GetStatusForReplicas( void )
+{
+	ReplicaFile *replicaFile = [[ReplicaFile alloc] init];
+	CFDictionaryRef repDict;
+	CFMutableDictionaryRef outputDict;
+	unsigned long repIndex, repCount;
+	
+	repCount = [replicaFile replicaCount];
+	outputDict = CFDictionaryCreateMutable( kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks );
+	if ( outputDict == NULL )
+		return NULL;
+	
+	// parent
+	repDict = (CFMutableDictionaryRef)[replicaFile getParent];
+	if ( repDict == NULL ) {
+		CFRelease( outputDict );
+		return NULL;
+	}
+	pwsf_AppendReplicaStatus( replicaFile, repDict, outputDict );
+	
+	// replicas
+	for ( repIndex = 0; repIndex < repCount; repIndex++ )
+	{
+		repDict = [replicaFile getReplica:repIndex];
+		if ( repDict == NULL ) {
+			CFRelease( outputDict );
+			return NULL;
+		}
+		
+		pwsf_AppendReplicaStatus( replicaFile, repDict, outputDict );
+	}
+	
+	return (CFDictionaryRef)outputDict;
+}
+
+
+//----------------------------------------------------------------------------------------------------
+//	pwsf_AppendReplicaStatus
+//----------------------------------------------------------------------------------------------------
+
+void pwsf_AppendReplicaStatus( ReplicaFile *inReplicaFile, CFDictionaryRef inDict, CFMutableDictionaryRef inOutDict )
+{
+	CFArrayRef ipArray;
+	CFStringRef nameString;
+	CFStringRef valueString = NULL;
+	ReplicaStatus replicaStatus;
+	CFIndex index, count;
+	
+	ipArray = [inReplicaFile getIPAddressesFromDict:inDict];
+	if ( ipArray == NULL )
+		return;
+	
+	replicaStatus = [inReplicaFile getReplicaStatus:inDict];
+	if ( replicaStatus == kReplicaActive )
+	{
+		// not so fast, make sure it's syncing too
+		CFDateRef lastSyncDate = NULL;
+		CFDateRef lastFailedDate = NULL;
+		
+		bool hasLastSyncDate = ( CFDictionaryGetValueIfPresent( inDict, CFSTR(kPWReplicaSyncDateKey), (const void **)&lastSyncDate ) && CFGetTypeID(lastSyncDate) == CFDateGetTypeID() );
+		bool hasFailedSyncDate = ( CFDictionaryGetValueIfPresent( inDict, CFSTR(kPWReplicaSyncAttemptKey), (const void **)&lastFailedDate ) && CFGetTypeID(lastFailedDate) == CFDateGetTypeID() );
+		if ( hasFailedSyncDate && hasLastSyncDate )
+		{
+			if ( CFDateCompare(lastFailedDate, lastSyncDate, NULL) == kCFCompareGreaterThan )
+			{
+				// last sync was not successful but previous sessions were successful
+				valueString = CFStringCreateWithCString( kCFAllocatorDefault, "Warning: The most recent replication failed.", kCFStringEncodingUTF8 );
+			}
+		}
+		else
+		if ( hasFailedSyncDate && (!hasLastSyncDate) )
+		{
+			// has failed all attempts
+			valueString = CFStringCreateWithCString( kCFAllocatorDefault, "Warning: Replication has failed all attempts.", kCFStringEncodingUTF8 );
+		}
+		else if ( (!hasFailedSyncDate) && (!hasLastSyncDate) )
+		{
+			// has not completed a session yet
+			valueString = CFStringCreateWithCString( kCFAllocatorDefault, "Warning: Replication has not completed yet.", kCFStringEncodingUTF8 );
+		}
+	}
+	
+	// if no special string, report status.
+	if ( valueString == NULL )
+		valueString = pwsf_GetReplicaStatusString( replicaStatus );
+	
+	count = CFArrayGetCount( ipArray );
+	for ( index = 0; index < count; index++ )
+	{
+		nameString = (CFStringRef) CFArrayGetValueAtIndex( ipArray, index );
+		if ( nameString == NULL )
+			continue;
+		
+		CFDictionaryAddValue( inOutDict, nameString, valueString );
+	}
+	
+	// add DNS if we have it
+	if ( CFDictionaryGetValueIfPresent( inDict, CFSTR(kPWReplicaDNSKey), (const void **)&nameString ) )
+		CFDictionaryAddValue( inOutDict, nameString, valueString );
+	
+	// clean up
+	CFRelease( valueString );
+	CFRelease( ipArray );
 }
 
 
@@ -166,7 +278,7 @@ char *pwsf_ReplicaFilePath( void )
 }
 
 
--free
+-(void)dealloc
 {
 	[self lock];
 	if ( mReplicaDict != NULL )
@@ -177,7 +289,16 @@ char *pwsf_ReplicaFilePath( void )
 		CFRelease( mFlatReplicaArray );
 	[self unlock];
 	
-	return [super free];
+	[super dealloc];
+}
+
+
+// for backward compatibility
+// should be deprecated
+-free
+{
+    [self release];
+    return 0;
 }
 
 
@@ -317,23 +438,23 @@ char *pwsf_ReplicaFilePath( void )
 	
 	aDateRef = CFDictionaryGetValue( serverDict, CFSTR(kPWReplicaSyncDateKey) );
 	if ( pwsf_ConvertCFDateToBSDTime(aDateRef, &aTimeStruct) )
-		sEnt->lastSyncDate = timegm(&aTimeStruct);
+		sEnt->lastSyncDate = (uint32_t)timegm(&aTimeStruct);
 	
 	aDateRef = CFDictionaryGetValue( serverDict, CFSTR(kPWReplicaSyncAttemptKey) );
 	if ( pwsf_ConvertCFDateToBSDTime(aDateRef, &aTimeStruct) )
-		sEnt->lastSyncFailedAttempt = timegm(&aTimeStruct);
+		sEnt->lastSyncFailedAttempt = (uint32_t)timegm(&aTimeStruct);
 	
 	aDateRef = CFDictionaryGetValue( serverDict, CFSTR(kPWReplicaIncompletePullKey) );
 	if ( pwsf_ConvertCFDateToBSDTime(aDateRef, &aTimeStruct) )
-		sEnt->pullIncompleteDate = timegm(&aTimeStruct);
+		sEnt->pullIncompleteDate = (uint32_t)timegm(&aTimeStruct);
 	
 	aDateRef = CFDictionaryGetValue( serverDict, CFSTR(kPWReplicaPullDeferred) );
 	if ( pwsf_ConvertCFDateToBSDTime(aDateRef, &aTimeStruct) )
-		sEnt->pullDeferredDate = timegm(&aTimeStruct);
+		sEnt->pullDeferredDate = (uint32_t)timegm(&aTimeStruct);
 	
 	aDateRef = CFDictionaryGetValue( serverDict, CFSTR(kPWReplicaEntryModDateKey) );
 	if ( pwsf_ConvertCFDateToBSDTime(aDateRef, &aTimeStruct) )
-		sEnt->entryModDate = timegm(&aTimeStruct);
+		sEnt->entryModDate = (uint32_t)timegm(&aTimeStruct);
 		
 	CFRelease( ipArray );
 }
@@ -343,13 +464,6 @@ char *pwsf_ReplicaFilePath( void )
 {
 	CFStringRef id1 = NULL;
 	CFStringRef id2 = NULL;
-	CFIndex index = 0;
-	CFIndex repCount = 0;
-	CFMutableArrayRef decomArray1 = NULL;
-	CFMutableDictionaryRef otherRepDict = NULL;
-	CFMutableDictionaryRef ourRepDict = NULL;
-	CFStringRef replicaNameString = NULL;
-	char replicaName[256] = {0,};
 	ReplicaChangeStatus changeStatus = kReplicaChangeNone;
 	
 	if ( mReplicaDict == nil || inOtherList == nil || [inOtherList replicaDict] == nil )
@@ -364,6 +478,25 @@ char *pwsf_ReplicaFilePath( void )
 		return NO;
 	}
 	
+	[self mergeReplicaListDecommissionedList:inOtherList changeStatus:&changeStatus];
+	[self mergeReplicaListParentRecords:inOtherList changeStatus:&changeStatus];
+	[self mergeReplicaListReplicas:inOtherList changeStatus:&changeStatus];
+	[self mergeReplicaListLegacyTigerReplicaList:inOtherList changeStatus:&changeStatus];
+	
+	[self unlock];
+	
+	return changeStatus;
+}
+
+
+-(void)mergeReplicaListDecommissionedList:(ReplicaFile *)inOtherList changeStatus:(ReplicaChangeStatus *)inOutChangeStatus
+{
+	CFIndex index = 0;
+	CFIndex repCount = 0;
+	CFMutableArrayRef decomArray1 = NULL;
+	CFStringRef replicaNameString = NULL;
+	char replicaName[256] = {0,};
+	
 	// merge decommissioned lists
 	decomArray1 = [inOtherList getArrayForKey:CFSTR(kPWReplicaDecommissionedListKey)];
 	if ( decomArray1 != NULL )
@@ -375,9 +508,16 @@ char *pwsf_ReplicaFilePath( void )
 			if ( replicaNameString != NULL )
 				if ( CFStringGetCString(replicaNameString, replicaName, sizeof(replicaName), kCFStringEncodingUTF8) )
 					if ( [self decommissionReplica:replicaNameString] )
-						changeStatus |= kReplicaChangeGeneral;
+						*inOutChangeStatus |= kReplicaChangeGeneral;
 		}
 	}
+}
+
+
+-(void)mergeReplicaListParentRecords:(ReplicaFile *)inOtherList changeStatus:(ReplicaChangeStatus *)inOutChangeStatus
+{
+	CFMutableDictionaryRef otherRepDict = NULL;
+	CFMutableDictionaryRef ourRepDict = NULL;
 	
 	// merge parent records
 	otherRepDict = (CFMutableDictionaryRef)[inOtherList getParent];
@@ -387,20 +527,29 @@ char *pwsf_ReplicaFilePath( void )
 		if ( ourRepDict == nil )
 		{
 			[self setParentWithDict:otherRepDict];
-			changeStatus |= kReplicaChangeGeneral;
+			*inOutChangeStatus |= kReplicaChangeGeneral;
 		}
 		else
 		{
 			if ( [self needsMergeFrom:otherRepDict to:ourRepDict] )
 			{
 				if ( [self mergeReplicaValuesFrom:otherRepDict to:ourRepDict parent:YES] )
-					changeStatus |= kReplicaChangeInterface;
-				changeStatus |= kReplicaChangeGeneral;
+					*inOutChangeStatus |= kReplicaChangeInterface;
+				*inOutChangeStatus |= kReplicaChangeGeneral;
 			}
 		}
 	}
-	
-	// merge replicas
+}
+
+
+-(void)mergeReplicaListReplicas:(ReplicaFile *)inOtherList changeStatus:(ReplicaChangeStatus *)inOutChangeStatus
+{
+	CFIndex index = 0;
+	CFIndex repCount = 0;
+	CFMutableDictionaryRef otherRepDict = NULL;
+	CFMutableDictionaryRef ourRepDict = NULL;
+	CFStringRef replicaNameString = NULL;
+
 	repCount = [inOtherList replicaCount];
 	for ( index = 0; index < repCount; index++ )
 	{
@@ -412,6 +561,7 @@ char *pwsf_ReplicaFilePath( void )
 		ourRepDict = [self getReplicaByName:replicaNameString];
 		if ( ourRepDict == NULL )
 		{
+			// add
 			if ( [self replicaIsNotDecommissioned:replicaNameString] && (! [self replicaHasBeenPromotedToMaster:otherRepDict]) )
 			{
 				CFStringRef parentNameString = NULL;
@@ -426,22 +576,81 @@ char *pwsf_ReplicaFilePath( void )
 					ourRelativeParentDict = (CFMutableDictionaryRef)[self getParent];
 				
 				[self addReplica:otherRepDict withParent:ourRelativeParentDict];
-				changeStatus |= kReplicaChangeGeneral;
+				*inOutChangeStatus |= kReplicaChangeGeneral;
 			}
 		}
 		else
 		{
+			// update
 			if ( [self needsMergeFrom:otherRepDict to:ourRepDict] )
 			{
 				if ( [self mergeReplicaValuesFrom:otherRepDict to:ourRepDict parent:NO] )
-					changeStatus |= kReplicaChangeInterface;
-				changeStatus |= kReplicaChangeGeneral;
+					*inOutChangeStatus |= kReplicaChangeInterface;
+				*inOutChangeStatus |= kReplicaChangeGeneral;
 			}
 		}
 	}
-	[self unlock];
-	
-	return changeStatus;
+}
+
+
+-(void)mergeReplicaListLegacyTigerReplicaList:(ReplicaFile *)inOtherList changeStatus:(ReplicaChangeStatus *)inOutChangeStatus
+{
+	CFIndex index = 0;
+	CFIndex index2 = 0;
+	CFIndex repCount = 0;
+	CFIndex repCount2 = 0;
+	CFMutableArrayRef tigerReplicaArrayOurs = NULL;
+	CFMutableArrayRef tigerReplicaArrayTheirs = NULL;
+	CFMutableDictionaryRef otherRepDict = NULL;
+	CFMutableDictionaryRef ourRepDict = NULL;
+	CFStringRef replicaNameString = NULL;
+	CFStringRef replicaNameString2 = NULL;
+
+	// merge legacy Tiger replicas
+	tigerReplicaArrayOurs = [self getArrayForKey:CFSTR(kPWReplicaReplicaKey)];
+	tigerReplicaArrayTheirs = [inOtherList getArrayForKey:CFSTR(kPWReplicaReplicaKey)];
+	if ( tigerReplicaArrayOurs != NULL && tigerReplicaArrayTheirs != NULL )
+	{
+		repCount = CFArrayGetCount( tigerReplicaArrayTheirs );
+		for ( index = 0; index < repCount; index++ )
+		{
+			otherRepDict = (CFMutableDictionaryRef)CFArrayGetValueAtIndex( tigerReplicaArrayTheirs, index );
+			replicaNameString = [inOtherList getNameOfReplica:otherRepDict];
+			
+			// need to get the Tiger copy
+			repCount2 = CFArrayGetCount( tigerReplicaArrayOurs );
+			for ( index2 = 0; index2 < repCount2; index2++ )
+			{
+				ourRepDict = (CFMutableDictionaryRef)CFArrayGetValueAtIndex( tigerReplicaArrayOurs, index2 );
+				if ( ourRepDict != NULL )
+					replicaNameString2 = CFDictionaryGetValue( ourRepDict, CFSTR(kPWReplicaNameKey) );
+				if ( replicaNameString2 != NULL && CFStringCompare(replicaNameString, replicaNameString2, 0) == kCFCompareEqualTo )
+					break;
+				
+				ourRepDict = NULL;
+			}
+			
+			if ( ourRepDict == NULL )
+			{
+				// add
+				if ( [self replicaIsNotDecommissioned:replicaNameString] && (! [self replicaHasBeenPromotedToMaster:otherRepDict]) )
+				{
+					CFArrayAppendValue( tigerReplicaArrayOurs, otherRepDict );
+					*inOutChangeStatus |= kReplicaChangeGeneral;
+				}
+			}
+			else
+			{
+				// update
+				if ( [self needsMergeFrom:otherRepDict to:ourRepDict] )
+				{
+					if ( [self mergeReplicaValuesFrom:otherRepDict to:ourRepDict parent:NO] )
+						*inOutChangeStatus |= kReplicaChangeInterface;
+					*inOutChangeStatus |= kReplicaChangeGeneral;
+				}
+			}
+		}
+	}
 }
 
 
@@ -1053,9 +1262,14 @@ char *pwsf_ReplicaFilePath( void )
 		replicaArray = CFArrayCreateMutable( kCFAllocatorDefault, 0, &kCFTypeArrayCallBacks );
 		if ( replicaArray == NULL )
 			return NULL;
+			
+		CFDictionaryAddValue( inParentDict, CFSTR(kPWReplicaReplicaKey), replicaArray );
+		CFRelease( replicaArray );
 	}
 	CFArrayAppendValue( replicaArray, inReplicaData );
-	CFDictionaryAddValue( inParentDict, CFSTR(kPWReplicaReplicaKey), replicaArray );
+	
+	// add to the old list of replicas for Tiger clients
+	[self addReplicaToLegacyTigerList:inReplicaData];
 	
 	mDirty = YES;
 	
@@ -1063,6 +1277,35 @@ char *pwsf_ReplicaFilePath( void )
 	[self allocateIDRangeOfSize:500 forReplica:nameString minID:0];
 	
 	return inReplicaData;
+}
+
+-(void)addReplicaToLegacyTigerList:(CFMutableDictionaryRef)inReplicaData
+{
+	CFMutableArrayRef tigerReplicaArray = NULL;
+	CFMutableDictionaryRef replicaDataCopy = NULL;
+	
+	tigerReplicaArray = [self getArrayForKey:CFSTR(kPWReplicaReplicaKey)];
+	if ( tigerReplicaArray == NULL )
+	{
+		tigerReplicaArray = CFArrayCreateMutable( kCFAllocatorDefault, 0, &kCFTypeArrayCallBacks );
+		if ( tigerReplicaArray != NULL ) {
+			CFDictionaryAddValue( mReplicaDict, CFSTR(kPWReplicaReplicaKey), tigerReplicaArray );
+			CFRelease( tigerReplicaArray );
+		}
+	}
+	if ( tigerReplicaArray != NULL )
+	{
+		// make a copy and remove the "Replicas" key from the entry
+		replicaDataCopy = (CFMutableDictionaryRef)CFDictionaryCreateMutableCopy( kCFAllocatorDefault, 0, inReplicaData );
+		if ( replicaDataCopy != NULL )
+		{
+			CFDictionaryRemoveValue( replicaDataCopy, CFSTR(kPWReplicaReplicaKey) );
+			CFArrayAppendValue( tigerReplicaArray, replicaDataCopy );
+			CFRelease( replicaDataCopy );
+		}
+	}
+	
+	mDirty = YES;
 }
 
 
@@ -1275,7 +1518,7 @@ char *pwsf_ReplicaFilePath( void )
 		{
 			if ( [onDiskReplicaFile isHappy] )
 				[self mergeReplicaList:onDiskReplicaFile];
-			[onDiskReplicaFile free];
+			[onDiskReplicaFile release];
 		}
 	}
 	
@@ -1700,6 +1943,7 @@ char *pwsf_ReplicaFilePath( void )
 	CFStringRef curReplicaNameString = NULL;
 	CFIndex repIndex = 0;
 	CFIndex repCount = 0;
+	CFIndex subtreeRepCount = 0;
 	
 	if ( replicaNameString == NULL )
 		return NO;
@@ -1729,21 +1973,17 @@ char *pwsf_ReplicaFilePath( void )
 					result = YES;
 				}
 				
+				// remove the replica from the Leopard style list
 				repDict = [self getReplicaByName:replicaNameString];
 				if ( repDict != NULL )
 				{
 					parentOfRepDict = [self getParentOfReplica:repDict];
-				
-					[self emptyFlatReplicaArray];
-					repCount = [self replicaCount:parentOfRepDict];
-					if ( repCount == 1 )
-					{
-						CFDictionaryRemoveValue( parentOfRepDict, CFSTR(kPWReplicaReplicaKey) );
-					}
-					else
 					if ( CFDictionaryGetValueIfPresent(parentOfRepDict, CFSTR(kPWReplicaReplicaKey), (const void **)&replicaArray) )
 					{
+						[self emptyFlatReplicaArray];
+						subtreeRepCount = [self replicaCount:parentOfRepDict];
 						repCount = CFArrayGetCount( replicaArray );
+						
 						for ( repIndex = 0; repIndex < repCount; repIndex++ )
 						{
 							repDict = (CFMutableDictionaryRef) CFArrayGetValueAtIndex( replicaArray, repIndex );
@@ -1753,9 +1993,37 @@ char *pwsf_ReplicaFilePath( void )
 								{
 									if ( CFStringCompare(replicaNameString, curReplicaNameString, 0) == kCFCompareEqualTo )
 									{
-										CFArrayRemoveValueAtIndex( replicaArray, repIndex );
+										if ( subtreeRepCount == 1 )
+											CFDictionaryRemoveValue( parentOfRepDict, CFSTR(kPWReplicaReplicaKey) );
+										else
+											CFArrayRemoveValueAtIndex( replicaArray, repIndex );
 										break;
 									}
+								}
+							}
+						}
+					}
+				}
+				
+				// remove the replica from the Tiger style list
+				replicaArray = [self getArrayForKey:CFSTR(kPWReplicaReplicaKey)];
+				if ( replicaArray != NULL )
+				{
+					repCount = CFArrayGetCount( replicaArray );
+					for ( repIndex = 0; repIndex < repCount; repIndex++ )
+					{
+						repDict = (CFMutableDictionaryRef) CFArrayGetValueAtIndex( replicaArray, repIndex );
+						if ( repDict != nil )
+						{
+							if ( CFDictionaryGetValueIfPresent( repDict, CFSTR(kPWReplicaNameKey), (const void **)&curReplicaNameString ) )
+							{
+								if ( CFStringCompare(replicaNameString, curReplicaNameString, 0) == kCFCompareEqualTo )
+								{
+									if ( repCount == 1 )
+										CFDictionaryRemoveValue( mReplicaDict, CFSTR(kPWReplicaReplicaKey) );
+									else
+										CFArrayRemoveValueAtIndex( replicaArray, repIndex );
+									break;
 								}
 							}
 						}
@@ -1791,7 +2059,7 @@ char *pwsf_ReplicaFilePath( void )
 		if ( CFArrayContainsValue(decomArray, CFRangeMake(0, CFArrayGetCount(decomArray)), replicaNameString) )
 			result = NO;
 	}
-		
+	
 	[self unlock];
 	
 	return result;
@@ -1894,7 +2162,7 @@ char *pwsf_ReplicaFilePath( void )
 
 
 //----------------------------------------------------------------------------------------------------
-//	StripDecommissionedArray
+//	stripDecommissionedArray
 //----------------------------------------------------------------------------------------------------
 
 -(void)stripDecommissionedArray
@@ -1906,6 +2174,29 @@ char *pwsf_ReplicaFilePath( void )
 }
 
 
+//----------------------------------------------------------------------------------------------------
+//	divorceAllReplicas
+//----------------------------------------------------------------------------------------------------
+
+-(void)divorceAllReplicas
+{
+	if ( mReplicaDict == NULL )
+		return;
+	
+	// remove all replicas from the master's entry
+	CFMutableDictionaryRef parentDict = (CFMutableDictionaryRef)[self getParent];
+	if ( parentDict != NULL )
+		CFDictionaryRemoveValue( parentDict, CFSTR(kPWReplicaReplicaKey) );
+	
+	// remove the Tiger legacy list
+	CFDictionaryRemoveValue( mReplicaDict, CFSTR(kPWReplicaReplicaKey) );
+	
+	[self stripDecommissionedArray];
+	
+	mDirty = YES;
+}
+
+
 #pragma mark -
 #pragma mark Per-Replica methods
 #pragma mark -
@@ -1914,7 +2205,7 @@ char *pwsf_ReplicaFilePath( void )
 //	allocateIDRangeOfSize
 //----------------------------------------------------------------------------------------------------
 
--(void)allocateIDRangeOfSize:(unsigned long)count forReplica:(CFStringRef)inReplicaName minID:(unsigned long)inMinID
+-(void)allocateIDRangeOfSize:(UInt32)count forReplica:(CFStringRef)inReplicaName minID:(UInt32)inMinID
 {
 	CFMutableDictionaryRef selfDict;
 	CFStringRef rangeString;
@@ -1953,7 +2244,7 @@ char *pwsf_ReplicaFilePath( void )
 }
 
 
--(void)getIDRangeForReplica:(CFStringRef)inReplicaName start:(unsigned long *)outStart end:(unsigned long *)outEnd
+-(void)getIDRangeForReplica:(CFStringRef)inReplicaName start:(UInt32 *)outStart end:(UInt32 *)outEnd
 {
 	CFMutableDictionaryRef replicaDict = [self getReplicaByName:inReplicaName];
 		
@@ -1965,7 +2256,7 @@ char *pwsf_ReplicaFilePath( void )
 }
 
 
--(void)getIDRangeStart:(unsigned long *)outStart end:(unsigned long *)outEnd forReplica:(CFDictionaryRef)inReplicaDict
+-(void)getIDRangeStart:(UInt32 *)outStart end:(UInt32 *)outEnd forReplica:(CFDictionaryRef)inReplicaDict
 {
 	CFStringRef rangeString;
 	PWFileEntry passRec;
@@ -2347,26 +2638,67 @@ char *pwsf_ReplicaFilePath( void )
 // replica array is at the top level
 -(BOOL)isOldFormat
 {
+	CFDictionaryRef parentDict = [self getParent];
+	
+	// error, no format, old or new
+	if ( parentDict == NULL )
+		return NO;
+	
+	// if there are replica arrays inside of the parent server's entry, it's the Leopard format.
+	// if the Tiger array is missing, call it an old format.
+	CFArrayRef parentDictReplicas = (CFArrayRef)CFDictionaryGetValue( parentDict, CFSTR(kPWReplicaReplicaKey) );
+	if ( parentDictReplicas != NULL )
+		return ( [self getArrayForKey:CFSTR(kPWReplicaReplicaKey)] == NULL );
+	
+	// if there are replicas in the old place (top-level) but not in the new place,
+	// the format is old.
 	return ( [self getArrayForKey:CFSTR(kPWReplicaReplicaKey)] != NULL );
 }
 
 
-// move replica array inside the parent's dictionary
+// copy replica array inside the parent's dictionary, but also
+// leave the original array for Tiger clients.
 -(void)updateFormat
 {
 	CFMutableDictionaryRef parentDict = NULL;
 	CFMutableArrayRef replicaArray = NULL;
+	CFArrayRef parentDictReplicas = NULL;
 	
 	[self lock];
 	replicaArray = [self getArrayForKey:CFSTR(kPWReplicaReplicaKey)];
 	if ( replicaArray != NULL )
 	{
 		CFRetain( replicaArray );
-		CFDictionaryRemoveValue( mReplicaDict, CFSTR(kPWReplicaReplicaKey) );
 		parentDict = (CFMutableDictionaryRef)[self getParent];
-		CFDictionaryAddValue( parentDict, CFSTR(kPWReplicaReplicaKey), replicaArray );
+		if ( parentDict != NULL )
+			CFDictionaryAddValue( parentDict, CFSTR(kPWReplicaReplicaKey), replicaArray );
 		CFRelease( replicaArray );
 	}
+	else
+	{
+		// Check for 10.5.0 GM list with no legacy Tiger replica list
+		parentDict = (CFMutableDictionaryRef)[self getParent];
+		if ( parentDict != NULL )
+		{
+			parentDictReplicas = (CFArrayRef)CFDictionaryGetValue( parentDict, CFSTR(kPWReplicaReplicaKey) );
+			if ( parentDictReplicas != NULL )
+			{
+				unsigned long repIndex;
+				unsigned long repCount = [self replicaCount];
+				CFMutableDictionaryRef curReplica = NULL;
+	
+				// create Tiger legacy list
+				for ( repIndex = 0; repIndex < repCount; repIndex++ )
+				{
+					curReplica = (CFMutableDictionaryRef)[self getReplica:repIndex];
+					if ( curReplica != NULL )
+						[self addReplicaToLegacyTigerList:curReplica];
+				}
+			}
+		}
+	}
+	
+	mDirty = YES;
 	[self unlock];
 }
 
@@ -2386,12 +2718,12 @@ char *pwsf_ReplicaFilePath( void )
 // other
 -(CFStringRef)getNextReplicaName
 {
-	UInt32 repIndex = 0;
-	UInt32 repCount = 0;
+	unsigned long repIndex = 0;
+	unsigned long repCount = 0;
 	CFDictionaryRef curReplica = NULL;
 	CFStringRef curNameString = NULL;
 	CFMutableArrayRef decomArray = NULL;
-	const int replicaNameValuePrefixLen = sizeof(kPWReplicaNameValuePrefix) - 1;
+	const size_t replicaNameValuePrefixLen = sizeof(kPWReplicaNameValuePrefix) - 1;
 	int tempReplicaNumber = 0;
 	int nextReplicaNumber = 1;
 	char replicaNameStr[256];
@@ -2558,12 +2890,13 @@ char *pwsf_ReplicaFilePath( void )
 }
 
 
--(void)getIDRangeOfSize:(unsigned long)count after:(const char *)inMyLastID start:(char *)outFirstID end:(char *)outLastID
+-(void)getIDRangeOfSize:(UInt32)count after:(const char *)inMyLastID start:(char *)outFirstID end:(char *)outLastID
 {
 	PWFileEntry passRec, endPassRec;
 	CFDictionaryRef replicaDict;
 	CFStringRef rangeString;
-	UInt32 repIndex, repCount = [self replicaCount];
+	unsigned long repIndex;
+    unsigned long repCount = [self replicaCount];
 	char rangeStr[35];
 	
 	bzero( &passRec, sizeof(PWFileEntry) );
@@ -2641,7 +2974,7 @@ char *pwsf_ReplicaFilePath( void )
 {
 	CFMutableDictionaryRef theDict = NULL;
 	CFTypeRef evalCFType;
-	UInt32 repIndex, repCount;
+	unsigned long repIndex, repCount;
 	BOOL found = NO;
 		
 	theDict = (CFMutableDictionaryRef)[self getParent];

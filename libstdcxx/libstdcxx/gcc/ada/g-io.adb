@@ -1,12 +1,12 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                         GNAT RUNTIME COMPONENTS                          --
+--                         GNAT RUN-TIME COMPONENTS                         --
 --                                                                          --
 --                              G N A T . I O                               --
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---           Copyright (C) 1995-2002 Ada Core Technologies, Inc.            --
+--                     Copyright (C) 1995-2006, AdaCore                     --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -42,19 +42,15 @@ package body GNAT.IO is
    ---------
 
    procedure Get (X : out Integer) is
-
       function Get_Int return Integer;
       pragma Import (C, Get_Int, "get_int");
-
    begin
       X := Get_Int;
    end Get;
 
    procedure Get (C : out Character) is
-
       function Get_Char return Character;
       pragma Import (C, Get_Char, "get_char");
-
    begin
       C := Get_Char;
    end Get;
@@ -108,7 +104,6 @@ package body GNAT.IO is
    end Put;
 
    procedure Put (File : File_Type; X : Integer) is
-
       procedure Put_Int (X : Integer);
       pragma Import (C, Put_Int, "put_int");
 
@@ -127,8 +122,7 @@ package body GNAT.IO is
       Put (Current_Out, C);
    end Put;
 
-   procedure Put (File : in File_Type; C : Character) is
-
+   procedure Put (File : File_Type; C : Character) is
       procedure Put_Char (C : Character);
       pragma Import (C, Put_Char, "put_char");
 
@@ -173,7 +167,7 @@ package body GNAT.IO is
    -- Set_Output --
    ----------------
 
-   procedure Set_Output (File : in File_Type) is
+   procedure Set_Output (File : File_Type) is
    begin
       Current_Out := File;
    end Set_Output;

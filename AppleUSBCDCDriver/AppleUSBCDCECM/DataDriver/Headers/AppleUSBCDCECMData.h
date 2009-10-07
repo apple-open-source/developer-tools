@@ -44,7 +44,7 @@
     // Default and Maximum buffer pool values
 
 #define kInBufPool		4
-#define kOutBufPool		2
+#define kOutBufPool		8
 
 #define kMaxInBufPool		kInBufPool*16
 #define kMaxOutBufPool		kOutBufPool*16
@@ -59,6 +59,7 @@ typedef struct
 	mbuf_t			m;
     bool			avail;
     IOUSBCompletion		writeCompletionInfo;
+	UInt32			indx;
 } pipeOutBuffers;
 
 typedef struct 
@@ -67,6 +68,7 @@ typedef struct
     UInt8			*pipeInBuffer;
     bool			dead;
     IOUSBCompletion		readCompletionInfo;
+	UInt32			indx;
 } pipeInBuffers;
 
 class AppleUSBCDC;
@@ -82,7 +84,7 @@ private:
     UInt16			fProductID;
         
     IOEthernetInterface		*fNetworkInterface;
-    IOBasicOutputQueue		*fTransmitQueue;
+    IOGatedOutputQueue		*fTransmitQueue;
 
     IOTimerEventSource		*fTimerSource;
     
@@ -91,6 +93,7 @@ private:
     bool			fNetifEnabled;
     bool			fWOL;
     UInt8			fLinkStatus;
+	bool			fSleeping;
     
     IOUSBPipe			*fInPipe;
     IOUSBPipe			*fOutPipe;
@@ -102,6 +105,8 @@ private:
     UInt8			fCommInterfaceNumber;
     UInt32			fCount;
     UInt32			fOutPacketSize;
+	
+	bool			fDeferredClear;
 
     static void			dataReadComplete(void *obj, void *param, IOReturn ior, UInt32 remaining);
     static void			dataWriteComplete(void *obj, void *param, IOReturn ior, UInt32 remaining);
@@ -130,7 +135,6 @@ public:
 	AppleUSBCDCECMControl		*fControlDriver;			// Our Control driver
     IOUSBInterface		*fDataInterface;
     IOWorkLoop			*fWorkLoop;
-    IOLock			*fBufferPoolLock;
     UInt8			fDataInterfaceNumber;
     
     UInt16			fInBufPool;
@@ -161,6 +165,7 @@ public:
     virtual IOReturn		getPacketFilters(const OSSymbol	*group, UInt32 *filters ) const;
     virtual IOReturn		selectMedium(const IONetworkMedium *medium);
     virtual IOReturn		getHardwareAddress(IOEthernetAddress *addr);
+	virtual IOReturn		getMaxPacketSize(UInt32 *maxSize) const;
     virtual IOReturn		setMulticastMode(IOEnetMulticastMode mode);
     virtual IOReturn		setMulticastList(IOEthernetAddress *addrs, UInt32 count);
     virtual IOReturn		setPromiscuousMode(IOEnetPromiscuousMode mode);
@@ -168,7 +173,8 @@ public:
     virtual const OSString	*newVendorString(void) const;
     virtual const OSString	*newModelString(void) const;
     virtual const OSString	*newRevisionString(void) const;
-    virtual bool		configureInterface(IONetworkInterface *netif);
+    virtual bool			configureInterface(IONetworkInterface *netif);
+	virtual IOReturn		registerWithPolicyMaker(IOService *policyMaker);
 												
 }; /* end class AppleUSBCDCECMData */
 #endif

@@ -36,7 +36,8 @@
 #include <security_keychain/KeyItem.h>
 #include <Security/Authorization.h>
 
-#define kKeychainRenamedSuffix "_renamed"
+#define kLegacyKeychainRenamedSuffix    "_renamed"
+#define kKeychainRenamedSuffix          "_renamed_"
 
 namespace Security
 {
@@ -83,8 +84,12 @@ public:
 
 	// Remove a keychain from the cache if it's in it.
 	void removeKeychain(const DLDbIdentifier &dLDbIdentifier, KeychainImpl *keychainImpl);
+	
 	// Be notified a (smart card) keychain was removed.
 	void didRemoveKeychain(const DLDbIdentifier &dLDbIdentifier);
+	
+	// cleanup items for which we hold the final reference
+	void cleanup();
 	
 	// Create KC if it doesn't exist, add it to the search list if it exists and is not already on it.
     Keychain makeKeychain(const DLDbIdentifier &dLDbIdentifier, bool add = true);
@@ -166,6 +171,8 @@ private:
 	DLDbListCFPref mSavedList;
 	DLDbListCFPref mCommonList;
 	SecPreferencesDomain mDomain; // current domain (in mSavedList and cache fields)
+	Mutex mMutex;
+	RecursiveMutex mKeychainMapMutex;
 };
 
 } // end namespace KeychainCore

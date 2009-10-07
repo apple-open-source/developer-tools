@@ -125,12 +125,16 @@ class IOHIDEventSystemUserClient : public IOUserClient
     OSDeclareDefaultStructors(IOHIDEventSystemUserClient)
 
 private:
-
     IOHIDSystem *               owner;
     task_t                      client;
     IOHIDEventServiceQueue *    kernelQueue;
-    OSSet *                     userQueues;
-    
+    OSSet *						userQueues;
+
+	static void initialize(void);
+	static UInt32 createIDForDataQueue(IODataQueue * eventQueue);
+	static void removeIDForDataQueue(IODataQueue * eventQueue);
+	static IODataQueue * copyDataQueueWithID(UInt32 queueID);
+
 public:
     virtual bool initWithTask(task_t owningTask, void * security_id, UInt32 type );
     void free();
@@ -141,6 +145,7 @@ public:
     virtual IOExternalMethod * getTargetAndMethodForIndex(IOService ** targetP, UInt32 index );
     virtual IOReturn createEventQueue(void*,void*,void*,void*,void*,void*);
     virtual IOReturn destroyEventQueue(void*,void*,void*,void*,void*,void*);
+    virtual IOReturn tickle(void*,void*,void*,void*,void*,void*);
 
     virtual IOReturn registerNotificationPort(mach_port_t port, UInt32 type, UInt32 refCon );
     virtual IOReturn clientMemoryForType( UInt32 type, UInt32 * flags, IOMemoryDescriptor ** memory );

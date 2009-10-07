@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2005 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,22 +16,23 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
 --                                                                          --
 ------------------------------------------------------------------------------
 
-with Binderr; use Binderr;
-with Butil;   use Butil;
-with Debug;   use Debug;
-with Fname;   use Fname;
-with Lib;     use Lib;
-with Namet;   use Namet;
-with Opt;     use Opt;
-with Output;  use Output;
+with Binderr;  use Binderr;
+with Butil;    use Butil;
+with Debug;    use Debug;
+with Fname;    use Fname;
+with Lib;      use Lib;
+with Namet;    use Namet;
+with Opt;      use Opt;
+with Output;   use Output;
+with Targparm; use Targparm;
 
 package body Binde is
 
@@ -71,8 +72,13 @@ package body Binde is
       --  elaborated before unit X is elaborated. The Elab_All_Link list
       --  traces the dependencies in the latter case.
 
-      Elab_Desirable,
+      Elab_All_Desirable,
       --  This is just like Elab_All, except that the elaborate all was not
+      --  explicitly present in the source, but rather was created by the
+      --  front end, which decided that it was "desirable".
+
+      Elab_Desirable,
+      --  This is just like Elab, except that the elaborate was not
       --  explicitly present in the source, but rather was created by the
       --  front end, which decided that it was "desirable".
 
@@ -248,7 +254,7 @@ package body Binde is
       Link   : Elab_All_Id);
    --  Used to compute the transitive closure of elaboration links for an
    --  Elaborate_All pragma (Reason = Elab_All) or for an indication of
-   --  Elaborate_All_Desirable (Reason = Elab_Desirable). Unit After has
+   --  Elaborate_All_Desirable (Reason = Elab_All_Desirable). Unit After has
    --  a pragma Elaborate_All or the front end has determined that a reference
    --  probably requires Elaborate_All is required, and unit Before must be
    --  previously elaborated. First a link is built making sure that unit
@@ -267,9 +273,8 @@ package body Binde is
 
    function Make_Elab_Entry
      (Unam : Unit_Name_Type;
-      Link : Elab_All_Id)
-      return Elab_All_Id;
-   --  Make an Elab_All_Entries table entry with the given Unam and Link.
+      Link : Elab_All_Id) return Elab_All_Id;
+   --  Make an Elab_All_Entries table entry with the given Unam and Link
 
    function Unit_Id_Of (Uname : Unit_Name_Type) return Unit_Id;
    --  This function uses the Info field set in the names table to obtain
@@ -480,7 +485,6 @@ package body Binde is
       --  if it becomes zero, then add to no predecessor list.
 
       S := UNR.Table (Chosen).Successors;
-
       while S /= No_Successor loop
          U := Succ.Table (S).After;
          UNR.Table (U).Num_Pred := UNR.Table (U).Num_Pred - 1;
@@ -738,7 +742,6 @@ package body Binde is
       --  and we should have found and eliminated at least one bad path.
 
       raise Program_Error;
-
    end Diagnose_Elaboration_Problem;
 
    --------------------
@@ -801,9 +804,9 @@ package body Binde is
       SL : Successor_Link renames Succ.Table (S);
 
    begin
-      --  Nothing to do if internal unit involved and no -de flag
+      --  Nothing to do if internal unit involved and no -da flag
 
-      if not Debug_Flag_E
+      if not Debug_Flag_A
         and then
           (Is_Internal_File_Name (Units.Table (SL.Before).Sfile)
             or else
@@ -842,9 +845,18 @@ package body Binde is
               ("     reason: pragma Elaborate_All in unit &",
                Info => True);
 
-         when Elab_Desirable =>
+         when Elab_All_Desirable =>
             Error_Msg_Output
               ("     reason: implicit Elaborate_All in unit &",
+               Info => True);
+
+            Error_Msg_Output
+              ("     recompile & with -gnatwl for full details",
+               Info => True);
+
+         when Elab_Desirable =>
+            Error_Msg_Output
+              ("     reason: implicit Elaborate in unit &",
                Info => True);
 
             Error_Msg_Output
@@ -898,6 +910,20 @@ package body Binde is
          UNR.Table (UNR.Last).Elab_Position := 0;
       end loop;
 
+      --  Output warning if -p used with no -gnatE units
+
+      if Pessimistic_Elab_Order
+        and not Dynamic_Elaboration_Checks_Specified
+      then
+         if OpenVMS_On_Target then
+            Error_Msg ("?use of /PESSIMISTIC_ELABORATION questionable");
+         else
+            Error_Msg ("?use of -p switch questionable");
+         end if;
+
+         Error_Msg ("?since all units compiled with static elaboration model");
+      end if;
+
       --  Gather dependencies and output them if option set
 
       Gather_Dependencies;
@@ -924,6 +950,7 @@ package body Binde is
       --  nodes have been chosen.
 
       Outer : loop
+
          --  If there are no nodes with predecessors, then either we are
          --  done, as indicated by Num_Left being set to zero, or we have
          --  a circularity. In the latter case, diagnose the circularity,
@@ -1078,7 +1105,7 @@ package body Binde is
                      --  Now establish all the links we need
 
                      Elab_All_Links
-                       (Withed_Unit, U, Elab_Desirable,
+                       (Withed_Unit, U, Elab_All_Desirable,
                         Make_Elab_Entry
                           (Withs.Table (W).Uname, No_Elab_All_Link));
 
@@ -1102,6 +1129,18 @@ package body Binde is
                           (Corresponding_Body (Withed_Unit), U, Elab);
                      end if;
 
+                     --  Elaborate_Desirable case, for this we establish
+                     --  the same links as above, but with a different reason.
+
+                  elsif Withs.Table (W).Elab_Desirable then
+                     Build_Link (Withed_Unit, U, Withed);
+
+                     if Units.Table (Withed_Unit).Utype = Is_Spec then
+                        Build_Link
+                          (Corresponding_Body (Withed_Unit),
+                           U, Elab_Desirable);
+                     end if;
+
                      --  Case of normal WITH with no elaboration pragmas, just
                      --  build the single link to the directly referenced unit
 
@@ -1123,8 +1162,7 @@ package body Binde is
 
    function Make_Elab_Entry
      (Unam : Unit_Name_Type;
-      Link : Elab_All_Id)
-      return Elab_All_Id
+      Link : Elab_All_Id) return Elab_All_Id
    is
    begin
       Elab_All_Entries.Increment_Last;
@@ -1139,7 +1177,6 @@ package body Binde is
 
    function Unit_Id_Of (Uname : Unit_Name_Type) return Unit_Id is
       Info : constant Int := Get_Name_Table_Info (Uname);
-
    begin
       pragma Assert (Info /= 0 and then Unit_Id (Info) /= No_Unit_Id);
       return Unit_Id (Info);
@@ -1158,11 +1195,19 @@ package body Binde is
       --  Determines if U is a waiting body, defined as a body which has
       --  not been elaborated, but whose spec has been elaborated.
 
+      ---------------
+      -- Body_Unit --
+      ---------------
+
       function Body_Unit (U : Unit_Id) return Boolean is
       begin
          return Units.Table (U).Utype = Is_Body
            or else Units.Table (U).Utype = Is_Body_Only;
       end Body_Unit;
+
+      ------------------
+      -- Waiting_Body --
+      ------------------
 
       function Waiting_Body (U : Unit_Id) return Boolean is
       begin
@@ -1172,10 +1217,10 @@ package body Binde is
 
    --  Start of processing for Worse_Choice
 
-   --  Note: the checks here are applied in sequence, and the ordering is
-   --  significant (i.e. the more important criteria are applied first).
-
    begin
+      --  Note: the checks here are applied in sequence, and the ordering is
+      --  significant (i.e. the more important criteria are applied first).
+
       --  If either unit is internal, then use Better_Choice, since the
       --  language requires that predefined units not mess up in the choice
       --  of elaboration order, and for internal units, any problems are
@@ -1263,7 +1308,7 @@ package body Binde is
       First_Name : Boolean := True;
 
    begin
-      if ST.Reason in Elab_All .. Elab_Desirable then
+      if ST.Reason in Elab_All .. Elab_All_Desirable then
          L := ST.Elab_All_Link;
          while L /= No_Elab_All_Link loop
             Nam := Elab_All_Entries.Table (L).Needed_By;

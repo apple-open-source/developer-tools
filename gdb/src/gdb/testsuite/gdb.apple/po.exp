@@ -105,16 +105,15 @@ gdb_test "po \[\[NSString stringWithCString:\"booga booga\"\] substringToIndex:r
 gdb_test "po \[NSArray arrayWithObjects: \
    (NSString *)\[NSString stringWithCString:\"hi\"\], \
    (NSString *)\[NSString stringWithCString:\"there\"\], \
-   (NSNumber *)\[NSNumber numberWithInt:99\], 0\]" ".*hi,.*there,.*99.*"
+   (NSNumber *)\[NSNumber numberWithInt:99\], (void *) 0\]" ".*hi,.*there,.*99.*"
 
 gdb_test "po \[NSArray arrayWithObjects: \
    (NSString *)\[NSString stringWithCString:\"hi\"\], \
    mystr, \
    (NSString *)\[NSString stringWithCString:\"there\"\], \
    (NSNumber *)\[NSNumber numberWithInt:99\], \
-   return_nsnumber_5(), 0\]" \
+   return_nsnumber_5(), (void *) 0\]" \
    ".*hi,.*Hello, World!,.*there,.*99,.*5.*"
-
 
 
 # The follow 7 tests are from radar 3053944.  That radar concerns the

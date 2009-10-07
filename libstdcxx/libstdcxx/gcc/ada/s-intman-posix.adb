@@ -1,12 +1,12 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                GNU ADA RUN-TIME LIBRARY (GNARL) COMPONENTS               --
+--                 GNAT RUN-TIME LIBRARY (GNARL) COMPONENTS                 --
 --                                                                          --
 --           S Y S T E M . I N T E R R U P T _ M A N A G E M E N T          --
 --                                                                          --
 --                                  B o d y                                 --
 --                                                                          --
---          Copyright (C) 1992-2003, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNARL; see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -32,12 +32,6 @@
 ------------------------------------------------------------------------------
 
 --  This is the POSIX threads version of this package
-
---  PLEASE DO NOT add any dependences on other packages. ??? why not ???
---  This package is designed to work with or without tasking support.
-
---  See the other warnings in the package specification before making
---  any modifications to this file.
 
 --  Make a careful study of all signals available under the OS, to see which
 --  need to be reserved, kept always unmasked, or kept always unmasked. Be on
@@ -65,12 +59,6 @@
 --                default
 --      Reserved: the OS specific set of signals that are reserved.
 
-with Interfaces.C;
---  used for int and other types
-
-with System.OS_Interface;
---  used for various Constants, Signal and types
-
 package body System.Interrupt_Management is
 
    use Interfaces.C;
@@ -88,7 +76,25 @@ package body System.Interrupt_Management is
    -- Local Subprograms --
    -----------------------
 
-   procedure Notify_Exception (signo : Signal);
+   function State (Int : Interrupt_ID) return Character;
+   pragma Import (C, State, "__gnat_get_interrupt_state");
+   --  Get interrupt state. Defined in init.c
+   --  The input argument is the interrupt number,
+   --  and the result is one of the following:
+
+   User    : constant Character := 'u';
+   Runtime : constant Character := 'r';
+   Default : constant Character := 's';
+   --    'n'   this interrupt not set by any Interrupt_State pragma
+   --    'u'   Interrupt_State pragma set state to User
+   --    'r'   Interrupt_State pragma set state to Runtime
+   --    's'   Interrupt_State pragma set state to System (use "default"
+   --           system handler)
+
+   procedure Notify_Exception
+     (signo    : Signal;
+      siginfo  : System.Address;
+      ucontext : System.Address);
    --  This function identifies the Ada exception to be raised using
    --  the information when the system received a synchronous signal.
    --  Since this function is machine and OS dependent, different code
@@ -101,7 +107,24 @@ package body System.Interrupt_Management is
    Signal_Mask : aliased sigset_t;
    --  The set of signals handled by Notify_Exception
 
-   procedure Notify_Exception (signo : Signal) is
+   procedure Notify_Exception
+     (signo    : Signal;
+      siginfo  : System.Address;
+      ucontext : System.Address)
+   is
+      pragma Unreferenced (siginfo);
+
+      --  The GCC unwinder requires adjustments to the signal's machine
+      --  context to be able to properly unwind through the signal handler.
+      --  This is achieved by the target specific subprogram below, provided
+      --  by init.c to be usable by the non-tasking handler also.
+
+      procedure Adjust_Context_For_Raise
+        (signo    : Signal;
+         ucontext : System.Address);
+      pragma Import
+        (C, Adjust_Context_For_Raise, "__gnat_adjust_context_for_raise");
+
       Result  : Interfaces.C.int;
 
    begin
@@ -110,6 +133,11 @@ package body System.Interrupt_Management is
 
       Result := pthread_sigmask (SIG_UNBLOCK, Signal_Mask'Access, null);
       pragma Assert (Result = 0);
+
+      --  Perform the necessary context adjustments required by the GCC/ZCX
+      --  unwinder, harmless in the SJLJ case.
+
+      Adjust_Context_For_Raise (signo, ucontext);
 
       --  Check that treatment of exception propagation here
       --  is consistent with treatment of the abort signal in
@@ -129,43 +157,24 @@ package body System.Interrupt_Management is
       end case;
    end Notify_Exception;
 
-   ---------------------------
-   -- Initialize_Interrupts --
-   ---------------------------
+   ----------------
+   -- Initialize --
+   ----------------
 
-   --  Nothing needs to be done on this platform.
+   Initialized : Boolean := False;
 
-   procedure Initialize_Interrupts is
-   begin
-      null;
-   end Initialize_Interrupts;
-
--------------------------
--- Package Elaboration --
--------------------------
-
-begin
-   declare
+   procedure Initialize is
       act     : aliased struct_sigaction;
       old_act : aliased struct_sigaction;
       Result  : System.OS_Interface.int;
 
-      function State (Int : Interrupt_ID) return Character;
-      pragma Import (C, State, "__gnat_get_interrupt_state");
-      --  Get interrupt state. Defined in a-init.c
-      --  The input argument is the interrupt number,
-      --  and the result is one of the following:
-
-      User    : constant Character := 'u';
-      Runtime : constant Character := 'r';
-      Default : constant Character := 's';
-      --    'n'   this interrupt not set by any Interrupt_State pragma
-      --    'u'   Interrupt_State pragma set state to User
-      --    'r'   Interrupt_State pragma set state to Runtime
-      --    's'   Interrupt_State pragma set state to System (use "default"
-      --           system handler)
-
    begin
+      if Initialized then
+         return;
+      end if;
+
+      Initialized := True;
+
       --  Need to call pthread_init very early because it is doing signal
       --  initializations.
 
@@ -179,12 +188,12 @@ begin
 
       --  Setting SA_SIGINFO asks the kernel to pass more than just the signal
       --  number argument to the handler when it is called. The set of extra
-      --  parameters typically includes a pointer to a structure describing
-      --  the interrupted context. Although the Notify_Exception handler does
-      --  not use this information, it is actually required for the GCC/ZCX
-      --  exception propagation scheme because on some targets (at least
-      --  alpha-tru64), the structure contents are not even filled when this
-      --  flag is not set.
+      --  parameters includes a pointer to the interrupted context, which the
+      --  ZCX propagation scheme needs.
+
+      --  Most man pages for sigaction mention that sa_sigaction should be set
+      --  instead of sa_handler when SA_SIGINFO is on.  In practice, the two
+      --  fields are actually union'ed and located at the same offset.
 
       --  On some targets, we set sa_flags to SA_NODEFER so that during the
       --  handler execution we do not change the Signal_Mask to be masked for
@@ -281,5 +290,6 @@ begin
       --  mark it as reserved.
 
       Reserve (0) := True;
-   end;
+   end Initialize;
+
 end System.Interrupt_Management;

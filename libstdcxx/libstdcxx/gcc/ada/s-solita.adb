@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---             Copyright (C) 2004, Free Software Foundation, Inc.           --
+--          Copyright (C) 2004-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -46,14 +46,24 @@ with System.Task_Primitives.Operations;
 
 with System.Tasking;
 --  Used for Task_Id
+--           Cause_Of_Termination
 
 with Ada.Exceptions;
---  Used for Raise_Exception
+--  Used for Exception_Id
+--           Exception_Occurrence
+--           Save_Occurrence
+
+with Ada.Exceptions.Is_Null_Occurrence;
 
 package body System.Soft_Links.Tasking is
 
    package STPO renames System.Task_Primitives.Operations;
    package SSL  renames System.Soft_Links;
+
+   use Ada.Exceptions;
+
+   use type System.Tasking.Task_Id;
+   use type System.Tasking.Termination_Handler;
 
    ----------------
    -- Local Data --
@@ -75,15 +85,14 @@ package body System.Soft_Links.Tasking is
    procedure Set_Sec_Stack_Addr (Addr : Address);
    --  Get/Set location of current task's secondary stack
 
-   function  Get_Machine_State_Addr return Address;
-   procedure Set_Machine_State_Addr (Addr : Address);
-   --  Get/Set the address for storing the current task's machine state
-
    function Get_Current_Excep return SSL.EOA;
    --  Task-safe version of SSL.Get_Current_Excep
 
    procedure Timed_Delay_T (Time : Duration; Mode : Integer);
    --  Task-safe version of SSL.Timed_Delay
+
+   procedure Task_Termination_Handler_T  (Excep : SSL.EO);
+   --  Task-safe version of the task termination procedure
 
    --------------------------
    -- Soft-Link Get Bodies --
@@ -99,11 +108,6 @@ package body System.Soft_Links.Tasking is
       return STPO.Self.Common.Compiler_Data.Jmpbuf_Address;
    end Get_Jmpbuf_Address;
 
-   function Get_Machine_State_Addr return Address is
-   begin
-      return STPO.Self.Common.Compiler_Data.Machine_State_Addr;
-   end Get_Machine_State_Addr;
-
    function Get_Sec_Stack_Addr return  Address is
    begin
       return STPO.Self.Common.Compiler_Data.Sec_Stack_Addr;
@@ -117,11 +121,6 @@ package body System.Soft_Links.Tasking is
    begin
       STPO.Self.Common.Compiler_Data.Jmpbuf_Address := Addr;
    end Set_Jmpbuf_Address;
-
-   procedure Set_Machine_State_Addr (Addr : Address) is
-   begin
-      STPO.Self.Common.Compiler_Data.Machine_State_Addr := Addr;
-   end Set_Machine_State_Addr;
 
    procedure Set_Sec_Stack_Addr (Addr : Address) is
    begin
@@ -143,13 +142,59 @@ package body System.Soft_Links.Tasking is
       if System.Tasking.Detect_Blocking
         and then Self_Id.Common.Protected_Action_Nesting > 0
       then
-         Ada.Exceptions.Raise_Exception
-           (Program_Error'Identity, "potentially blocking operation");
+         raise Program_Error with "potentially blocking operation";
       else
+         Abort_Defer.all;
          STPO.Timed_Delay (Self_Id, Time, Mode);
+         Abort_Undefer.all;
+      end if;
+   end Timed_Delay_T;
+
+   --------------------------------
+   -- Task_Termination_Handler_T --
+   --------------------------------
+
+   procedure Task_Termination_Handler_T (Excep : SSL.EO) is
+      Self_Id : constant System.Tasking.Task_Id := STPO.Self;
+      Cause   : System.Tasking.Cause_Of_Termination;
+      EO      : Ada.Exceptions.Exception_Occurrence;
+
+   begin
+      --  We can only be here because we are terminating the environment task.
+      --  Task termination for the rest of the tasks is handled in the
+      --  Task_Wrapper.
+
+      pragma Assert (Self_Id = STPO.Environment_Task);
+
+      --  Normal task termination
+
+      if Is_Null_Occurrence (Excep) then
+         Cause := System.Tasking.Normal;
+         Ada.Exceptions.Save_Occurrence (EO, Ada.Exceptions.Null_Occurrence);
+
+      --  Abnormal task termination
+
+      elsif Exception_Identity (Excep) = Standard'Abort_Signal'Identity then
+         Cause := System.Tasking.Abnormal;
+         Ada.Exceptions.Save_Occurrence (EO, Ada.Exceptions.Null_Occurrence);
+
+      --  Termination because of an unhandled exception
+
+      else
+         Cause := System.Tasking.Unhandled_Exception;
+         Ada.Exceptions.Save_Occurrence (EO, Excep);
       end if;
 
-   end Timed_Delay_T;
+      --  There is no need for explicit protection against race conditions
+      --  for this part because it can only be executed by the environment
+      --  task after all the other tasks have been finalized.
+
+      if Self_Id.Common.Specific_Handler /= null then
+         Self_Id.Common.Specific_Handler.all (Cause, Self_Id, EO);
+      elsif Self_Id.Common.Fall_Back_Handler /= null then
+         Self_Id.Common.Fall_Back_Handler.all (Cause, Self_Id, EO);
+      end if;
+   end Task_Termination_Handler_T;
 
    -----------------------------
    -- Init_Tasking_Soft_Links --
@@ -168,21 +213,19 @@ package body System.Soft_Links.Tasking is
          --  The application being executed uses tasking so that the tasking
          --  version of the following soft links need to be used.
 
-         SSL.Get_Jmpbuf_Address     := Get_Jmpbuf_Address'Access;
-         SSL.Set_Jmpbuf_Address     := Set_Jmpbuf_Address'Access;
-         SSL.Get_Sec_Stack_Addr     := Get_Sec_Stack_Addr'Access;
-         SSL.Set_Sec_Stack_Addr     := Set_Sec_Stack_Addr'Access;
-         SSL.Get_Machine_State_Addr := Get_Machine_State_Addr'Access;
-         SSL.Set_Machine_State_Addr := Set_Machine_State_Addr'Access;
-         SSL.Get_Current_Excep      := Get_Current_Excep'Access;
-         SSL.Timed_Delay            := Timed_Delay_T'Access;
+         SSL.Get_Jmpbuf_Address       := Get_Jmpbuf_Address'Access;
+         SSL.Set_Jmpbuf_Address       := Set_Jmpbuf_Address'Access;
+         SSL.Get_Sec_Stack_Addr       := Get_Sec_Stack_Addr'Access;
+         SSL.Set_Sec_Stack_Addr       := Set_Sec_Stack_Addr'Access;
+         SSL.Get_Current_Excep        := Get_Current_Excep'Access;
+         SSL.Timed_Delay              := Timed_Delay_T'Access;
+         SSL.Task_Termination_Handler := Task_Termination_Handler_T'Access;
 
          --  No need to create a new Secondary Stack, since we will use the
          --  default one created in s-secsta.adb
 
          SSL.Set_Sec_Stack_Addr     (SSL.Get_Sec_Stack_Addr_NT);
          SSL.Set_Jmpbuf_Address     (SSL.Get_Jmpbuf_Address_NT);
-         SSL.Set_Machine_State_Addr (SSL.Get_Machine_State_Addr_NT);
       end if;
    end Init_Tasking_Soft_Links;
 

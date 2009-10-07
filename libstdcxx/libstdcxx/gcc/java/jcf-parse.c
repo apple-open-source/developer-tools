@@ -16,8 +16,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.
 
 Java and all Java-based marks are trademarks or registered trademarks
 of Sun Microsystems, Inc. in the United States and other countries.
@@ -120,7 +120,7 @@ handle_deprecated (void)
   else
     {
       /* Shouldn't happen.  */
-      abort ();
+      gcc_unreachable ();
     }
 }
 
@@ -142,7 +142,13 @@ set_source_filename (JCF *jcf, int index)
 	  && strcmp (sfname, old_filename + old_len - new_len) == 0
 	  && (old_filename[old_len - new_len - 1] == '/'
 	      || old_filename[old_len - new_len - 1] == '\\'))
-	return;
+	{
+#ifndef USE_MAPPED_LOCATION
+	  DECL_SOURCE_LOCATION (TYPE_NAME (current_class)) = input_location;
+	  file_start_location = input_location;
+#endif
+	  return;
+	}
     }
   if (strchr (sfname, '/') == NULL && strchr (sfname, '\\') == NULL)
     {
@@ -154,7 +160,7 @@ set_source_filename (JCF *jcf, int index)
 	  /* Length of prefix, not counting final dot. */
 	  int i = dot - class_name;
 	  /* Concatenate current package prefix with new sfname. */
-	  char *buf = xmalloc (i + new_len + 2); /* Space for '.' and '\0'. */
+	  char *buf = XNEWVEC (char, i + new_len + 2); /* Space for '.' and '\0'. */
 	  strcpy (buf + i + 1, sfname);
 	  /* Copy package from class_name, replacing '.' by DIR_SEPARATOR.
 	     Note we start at the end with the final package dot. */
@@ -279,12 +285,12 @@ set_source_filename (JCF *jcf, int index)
 tree
 parse_signature (JCF *jcf, int sig_index)
 {
-  if (sig_index <= 0 || sig_index >= JPOOL_SIZE (jcf)
-      || JPOOL_TAG (jcf, sig_index) != CONSTANT_Utf8)
-    abort ();
-  else
-    return parse_signature_string (JPOOL_UTF_DATA (jcf, sig_index),
-				   JPOOL_UTF_LENGTH (jcf, sig_index));
+  gcc_assert (sig_index > 0
+	      && sig_index < JPOOL_SIZE (jcf)
+	      && JPOOL_TAG (jcf, sig_index) == CONSTANT_Utf8);
+
+  return parse_signature_string (JPOOL_UTF_DATA (jcf, sig_index),
+				 JPOOL_UTF_LENGTH (jcf, sig_index));
 }
 
 tree
@@ -389,10 +395,7 @@ tree
 get_name_constant (JCF *jcf, int index)
 {
   tree name = get_constant (jcf, index);
-
-  if (TREE_CODE (name) != IDENTIFIER_NODE)
-    abort ();
-
+  gcc_assert (TREE_CODE (name) == IDENTIFIER_NODE);
   return name;
 }
 
@@ -439,11 +442,12 @@ handle_innerclass_attribute (int count, JCF *jcf)
 static tree
 give_name_to_class (JCF *jcf, int i)
 {
-  if (i <= 0 || i >= JPOOL_SIZE (jcf)
-      || JPOOL_TAG (jcf, i) != CONSTANT_Class)
-    abort ();
-  else
+  gcc_assert (i > 0
+	      && i < JPOOL_SIZE (jcf)
+	      && JPOOL_TAG (jcf, i) == CONSTANT_Class);
+
     {
+      tree package_name = NULL_TREE, tmp;
       tree this_class;
       int j = JPOOL_USHORT1 (jcf, i);
       /* verify_constant_pool confirmed that j is a CONSTANT_Utf8. */
@@ -469,6 +473,9 @@ give_name_to_class (JCF *jcf, int i)
 
       jcf->cpool.data[i].t = this_class;
       JPOOL_TAG (jcf, i) = CONSTANT_ResolvedClass;
+      split_qualified_name (&package_name, &tmp, 
+      			    DECL_NAME (TYPE_NAME (this_class)));
+      TYPE_PACKAGE (this_class) = package_name;
       return this_class;
     }
 }
@@ -479,9 +486,9 @@ tree
 get_class_constant (JCF *jcf, int i)
 {
   tree type;
-  if (i <= 0 || i >= JPOOL_SIZE (jcf)
-      || (JPOOL_TAG (jcf, i) & ~CONSTANT_ResolvedFlag) != CONSTANT_Class)
-    abort ();
+  gcc_assert (i > 0
+	      && i < JPOOL_SIZE (jcf)
+	      && (JPOOL_TAG (jcf, i) & ~CONSTANT_ResolvedFlag) == CONSTANT_Class);
 
   if (JPOOL_TAG (jcf, i) != CONSTANT_ResolvedClass)
     {
@@ -683,7 +690,7 @@ load_class (tree class_or_name, int verbose)
 	    break;
 
 	  /* We failed loading name. Now consider that we might be looking
-	     for a inner class. */
+	     for an inner class.  */
 	  if ((separator = strrchr (IDENTIFIER_POINTER (name), '$'))
 	      || (separator = strrchr (IDENTIFIER_POINTER (name), '.')))
 	    {
@@ -717,8 +724,8 @@ load_class (tree class_or_name, int verbose)
 	{
 	  /* This is just a diagnostic during testing, not a real problem.  */
 	  if (!quiet_flag)
-	    warning("cannot find file for class %s", 
-		    IDENTIFIER_POINTER (saved));
+	    warning (0, "cannot find file for class %s", 
+		     IDENTIFIER_POINTER (saved));
 	  
 	  /* Fake it.  */
 	  if (TREE_CODE (class_or_name) == RECORD_TYPE)
@@ -823,6 +830,20 @@ load_inner_classes (tree cur_class)
 }
 
 static void
+duplicate_class_warning (const char *filename)
+{
+  location_t warn_loc;
+#ifdef USE_MAPPED_LOCATION
+  linemap_add (&line_table, LC_RENAME, 0, filename, 0);
+  warn_loc = linemap_line_start (&line_table, 0, 1);
+#else
+  warn_loc.file = filename;
+  warn_loc.line = 0;
+#endif
+  warning (0, "%Hduplicate class will only be compiled once", &warn_loc);
+}
+
+static void
 parse_class_file (void)
 {
   tree method;
@@ -877,7 +898,7 @@ parse_class_file (void)
 	  continue;
 	}
 
-      input_location = file_start_location;
+      input_location = DECL_SOURCE_LOCATION (TYPE_NAME (current_class));
       if (DECL_LINENUMBERS_OFFSET (method))
 	{
 	  int i;
@@ -914,6 +935,21 @@ parse_class_file (void)
       note_instructions (jcf, method);
 
       give_name_to_locals (jcf);
+
+      /* Bump up start_label_pc_this_method so we get a unique label number
+	 and reset highest_label_pc_this_method. */
+      if (highest_label_pc_this_method >= 0)
+	{
+	  /* We adjust to the next multiple of 1000.  This is just a frill
+	     so the last 3 digits of the label number match the bytecode
+	     offset, which might make debugging marginally more convenient. */
+	  start_label_pc_this_method
+	    = ((((start_label_pc_this_method + highest_label_pc_this_method)
+		 / 1000)
+		+ 1)
+	       * 1000);
+	  highest_label_pc_this_method = -1;
+	}
 
       /* Convert bytecode to trees.  */
       expand_byte_code (jcf, method);
@@ -1045,7 +1081,7 @@ java_parse_file (int set_yydebug ATTRIBUTE_UNUSED)
       finput = fopen (main_input_filename, "r");
       if (finput == NULL)
 	fatal_error ("can't open %s: %m", input_filename);
-      list = xmalloc(avail);
+      list = XNEWVEC (char, avail);
       next = list;
       for (;;)
 	{
@@ -1124,19 +1160,7 @@ java_parse_file (int set_yydebug ATTRIBUTE_UNUSED)
 	  /* Exclude file that we see twice on the command line. */
 	     
 	  if (IS_A_COMMAND_LINE_FILENAME_P (node))
-	    {
-	      location_t warn_loc;
-#ifdef USE_MAPPED_LOCATION
-	      linemap_add (&line_table, LC_RENAME, 0,
-			   IDENTIFIER_POINTER (node), 0);
-	      warn_loc = linemap_line_start (&line_table, 0, 1);
-#else
-	      warn_loc.file = IDENTIFIER_POINTER (node);
-	      warn_loc.line = 0;
-#endif
-	      warning ("%Hsource file seen twice on command line and "
-		       "will be compiled only once", &warn_loc);
-	    }
+	    duplicate_class_warning (IDENTIFIER_POINTER (node));
 	  else
 	    {
 	      tree file_decl = build_decl (TRANSLATION_UNIT_DECL, node, NULL);
@@ -1152,7 +1176,7 @@ java_parse_file (int set_yydebug ATTRIBUTE_UNUSED)
     free (file_list);
 
   if (filename_count == 0)
-    warning ("no input file specified");
+    warning (0, "no input file specified");
 
   if (resource_name)
     {
@@ -1214,6 +1238,12 @@ java_parse_file (int set_yydebug ATTRIBUTE_UNUSED)
 	  jcf_parse (current_jcf);
 	  DECL_SOURCE_LOCATION (node) = file_start_location;
 	  TYPE_JCF (current_class) = current_jcf;
+	  if (CLASS_FROM_CURRENTLY_COMPILED_P (current_class))
+	    {
+	      /* We've already compiled this class.  */
+	      duplicate_class_warning (filename);
+	      continue;
+	    }
 	  CLASS_FROM_CURRENTLY_COMPILED_P (current_class) = 1;
 	  TREE_TYPE (node) = current_class;
 	}
@@ -1236,10 +1266,6 @@ java_parse_file (int set_yydebug ATTRIBUTE_UNUSED)
 	  linemap_add (&line_table, LC_LEAVE, false, NULL, 0);
 #endif
 	  parse_zip_file_entries ();
-	  /*
-	  for (each entry)
-	    CLASS_FROM_CURRENTLY_COMPILED_P (current_class) = 1;
-	  */
 	}
       else
 	{
@@ -1322,7 +1348,7 @@ compute_class_name (struct ZipDirectory *zdir)
     }
 
   filename_length -= strlen (".class");
-  class_name = ALLOC (filename_length + 1);
+  class_name = XNEWVEC (char, filename_length + 1);
   memcpy (class_name, class_name_in_zip_dir, filename_length);
   class_name [filename_length] = '\0';
 
@@ -1383,12 +1409,18 @@ parse_zip_file_entries (void)
 	    current_jcf = TYPE_JCF (class);
 	    output_class = current_class = class;
 
-	    if (TYPE_DUMMY (class))
+	    if (CLASS_FROM_CURRENTLY_COMPILED_P (current_class))
 	      {
-		/* This is a dummy class, and now we're compiling it
-		   for real.  */
-		abort ();
+	        /* We've already compiled this class.  */
+		duplicate_class_warning (current_jcf->filename);
+		break;
 	      }
+	    
+	    CLASS_FROM_CURRENTLY_COMPILED_P (current_class) = 1;
+
+	    /* This is a dummy class, and now we're compiling it for
+	       real.  */
+	    gcc_assert (! TYPE_DUMMY (class));
 
 	    /* This is for a corner case where we have a superclass
 	       but no superclass fields.  
@@ -1417,7 +1449,7 @@ parse_zip_file_entries (void)
 	    if (TYPE_SIZE (current_class) != error_mark_node)
 	      {
 		parse_class_file ();
-		FREE (current_jcf->buffer); /* No longer necessary */
+		free (current_jcf->buffer); /* No longer necessary */
 		/* Note: there is a way to free this buffer right after a
 		   class seen in a zip file has been parsed. The idea is the
 		   set its jcf in such a way that buffer will be reallocated
@@ -1430,11 +1462,11 @@ parse_zip_file_entries (void)
 	  {
 	    char *file_name, *class_name_in_zip_dir, *buffer;
 	    JCF *jcf;
-	    file_name = ALLOC (zdir->filename_length + 1);
+	    file_name = XNEWVEC (char, zdir->filename_length + 1);
 	    class_name_in_zip_dir = ZIPDIR_FILENAME (zdir);
 	    strncpy (file_name, class_name_in_zip_dir, zdir->filename_length);
 	    file_name[zdir->filename_length] = '\0';
-	    jcf = ALLOC (sizeof (JCF));
+	    jcf = XNEW (JCF);
 	    JCF_ZERO (jcf);
 	    jcf->read_state  = finput;
 	    jcf->filbuf      = jcf_filbuf_from_stdio;
@@ -1446,7 +1478,7 @@ parse_zip_file_entries (void)
 	    if (read_zip_member (jcf, zdir, localToFile) < 0)
 	      fatal_error ("error while reading %s from zip file", file_name);
 
-	    buffer = ALLOC (zdir->filename_length + 1 +
+	    buffer = XNEWVEC (char, zdir->filename_length + 1 +
 			    (jcf->buffer_end - jcf->buffer));
 	    strcpy (buffer, file_name);
 	    /* This is not a typo: we overwrite the trailing \0 of the
@@ -1457,13 +1489,13 @@ parse_zip_file_entries (void)
 	    compile_resource_data (file_name, buffer,
 				   jcf->buffer_end - jcf->buffer);
 	    JCF_FINISH (jcf);
-	    FREE (jcf);
-	    FREE (buffer);
+	    free (jcf);
+	    free (buffer);
 	  }
 	  break;
 
 	default:
-	  abort ();
+	  gcc_unreachable ();
 	}
     }
 }
@@ -1491,7 +1523,7 @@ process_zip_dir (FILE *finput)
 	continue;
 
       class_name = compute_class_name (zdir);
-      file_name  = ALLOC (zdir->filename_length+1);
+      file_name  = XNEWVEC (char, zdir->filename_length+1);
       jcf = ggc_alloc (sizeof (JCF));
       JCF_ZERO (jcf);
 

@@ -1,9 +1,7 @@
-/**
- * This file is part of the DOM implementation for KDE.
- *
+/*
  * Copyright (C) 1999 Lars Knoll (knoll@kde.org)
  *           (C) 1999 Antti Koivisto (koivisto@kde.org)
- * Copyright (C) 2003 Apple Computer, Inc.
+ * Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008 Apple Inc. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -24,28 +22,32 @@
 #include "config.h"
 #include "Text.h"
 
-#include "Document.h"
+#include "CString.h"
 #include "ExceptionCode.h"
 #include "RenderText.h"
 #include "TextBreakIterator.h"
 
 #if ENABLE(SVG)
 #include "RenderSVGInlineText.h"
-#endif // ENABLE(SVG)
+#include "SVGNames.h"
+#endif
+
+#if ENABLE(WML)
+#include "WMLDocument.h"
+#include "WMLVariables.h"
+#endif
 
 namespace WebCore {
 
 // DOM Section 1.1.1
 
-// ### allow having children in text nodes for entities, comments etc.
-
-Text::Text(Document *doc, const String &_text)
-    : CharacterData(doc, _text)
+Text::Text(Document* document, const String& text)
+    : CharacterData(document, text, true)
 {
 }
 
-Text::Text(Document *doc)
-    : CharacterData(doc)
+Text::Text(Document* document)
+    : CharacterData(document, true)
 {
 }
 
@@ -53,53 +55,141 @@ Text::~Text()
 {
 }
 
-Text *Text::splitText(unsigned offset, ExceptionCode& ec)
+PassRefPtr<Text> Text::splitText(unsigned offset, ExceptionCode& ec)
 {
     ec = 0;
 
-    // FIXME: This does not copy markers
-    
     // INDEX_SIZE_ERR: Raised if the specified offset is negative or greater than
     // the number of 16-bit units in data.
-    if (offset > str->length()) {
+    if (offset > m_data->length()) {
         ec = INDEX_SIZE_ERR;
         return 0;
     }
 
-    // NO_MODIFICATION_ALLOWED_ERR: Raised if this node is readonly.
-    if (isReadOnlyNode()) {
-        ec = NO_MODIFICATION_ALLOWED_ERR;
-        return 0;
-    }
+    RefPtr<StringImpl> oldStr = m_data;
+    RefPtr<Text> newText = createNew(oldStr->substring(offset));
+    m_data = oldStr->substring(0, offset);
 
-    StringImpl *oldStr = str;
-    Text *newText = createNew(str->substring(offset, str->length()-offset));
-    str = str->copy();
-    str->ref();
-    str->remove(offset, str->length()-offset);
-
-    dispatchModifiedEvent(oldStr);
-    oldStr->deref();
+    dispatchModifiedEvent(oldStr.get());
 
     if (parentNode())
-        parentNode()->insertBefore(newText,nextSibling(), ec);
+        parentNode()->insertBefore(newText.get(), nextSibling(), ec);
     if (ec)
         return 0;
 
-    if (renderer())
-        static_cast<RenderText*>(renderer())->setText(str);
+    if (parentNode())
+        document()->textNodeSplit(this);
 
-    return newText;
+    if (renderer())
+        toRenderText(renderer())->setText(m_data);
+
+    return newText.release();
 }
 
-const AtomicString& Text::localName() const
+static const Text* earliestLogicallyAdjacentTextNode(const Text* t)
 {
-    return textAtom;
+    const Node* n = t;
+    while ((n = n->previousSibling())) {
+        Node::NodeType type = n->nodeType();
+        if (type == Node::TEXT_NODE || type == Node::CDATA_SECTION_NODE) {
+            t = static_cast<const Text*>(n);
+            continue;
+        }
+
+        // We would need to visit EntityReference child text nodes if they existed
+        ASSERT(type != Node::ENTITY_REFERENCE_NODE || !n->hasChildNodes());
+        break;
+    }
+    return t;
+}
+
+static const Text* latestLogicallyAdjacentTextNode(const Text* t)
+{
+    const Node* n = t;
+    while ((n = n->nextSibling())) {
+        Node::NodeType type = n->nodeType();
+        if (type == Node::TEXT_NODE || type == Node::CDATA_SECTION_NODE) {
+            t = static_cast<const Text*>(n);
+            continue;
+        }
+
+        // We would need to visit EntityReference child text nodes if they existed
+        ASSERT(type != Node::ENTITY_REFERENCE_NODE || !n->hasChildNodes());
+        break;
+    }
+    return t;
+}
+
+String Text::wholeText() const
+{
+    const Text* startText = earliestLogicallyAdjacentTextNode(this);
+    const Text* endText = latestLogicallyAdjacentTextNode(this);
+
+    Node* onePastEndText = endText->nextSibling();
+    unsigned resultLength = 0;
+    for (const Node* n = startText; n != onePastEndText; n = n->nextSibling()) {
+        if (!n->isTextNode())
+            continue;
+        const Text* t = static_cast<const Text*>(n);
+        const String& data = t->data();
+        resultLength += data.length();
+    }
+    UChar* resultData;
+    String result = String::createUninitialized(resultLength, resultData);
+    UChar* p = resultData;
+    for (const Node* n = startText; n != onePastEndText; n = n->nextSibling()) {
+        if (!n->isTextNode())
+            continue;
+        const Text* t = static_cast<const Text*>(n);
+        const String& data = t->data();
+        unsigned dataLength = data.length();
+        memcpy(p, data.characters(), dataLength * sizeof(UChar));
+        p += dataLength;
+    }
+    ASSERT(p == resultData + resultLength);
+
+    return result;
+}
+
+PassRefPtr<Text> Text::replaceWholeText(const String& newText, ExceptionCode&)
+{
+    // Remove all adjacent text nodes, and replace the contents of this one.
+
+    // Protect startText and endText against mutation event handlers removing the last ref
+    RefPtr<Text> startText = const_cast<Text*>(earliestLogicallyAdjacentTextNode(this));
+    RefPtr<Text> endText = const_cast<Text*>(latestLogicallyAdjacentTextNode(this));
+
+    RefPtr<Text> protectedThis(this); // Mutation event handlers could cause our last ref to go away
+    Node* parent = parentNode(); // Protect against mutation handlers moving this node during traversal
+    ExceptionCode ignored = 0;
+    for (RefPtr<Node> n = startText; n && n != this && n->isTextNode() && n->parentNode() == parent;) {
+        RefPtr<Node> nodeToRemove(n.release());
+        n = nodeToRemove->nextSibling();
+        parent->removeChild(nodeToRemove.get(), ignored);
+    }
+
+    if (this != endText) {
+        Node* onePastEndText = endText->nextSibling();
+        for (RefPtr<Node> n = nextSibling(); n && n != onePastEndText && n->isTextNode() && n->parentNode() == parent;) {
+            RefPtr<Node> nodeToRemove(n.release());
+            n = nodeToRemove->nextSibling();
+            parent->removeChild(nodeToRemove.get(), ignored);
+        }
+    }
+
+    if (newText.isEmpty()) {
+        if (parent && parentNode() == parent)
+            parent->removeChild(this, ignored);
+        return 0;
+    }
+
+    setData(newText, ignored);
+    return protectedThis.release();
 }
 
 String Text::nodeName() const
 {
-    return textAtom.domString();
+    return textAtom.string();
 }
 
 Node::NodeType Text::nodeType() const
@@ -109,7 +199,7 @@ Node::NodeType Text::nodeType() const
 
 PassRefPtr<Node> Text::cloneNode(bool /*deep*/)
 {
-    return document()->createTextNode(str);
+    return document()->createTextNode(m_data);
 }
 
 bool Text::rendererIsNeeded(RenderStyle *style)
@@ -133,7 +223,7 @@ bool Text::rendererIsNeeded(RenderStyle *style)
     if (prev && prev->isBR()) // <span><br/> <br/></span>
         return false;
         
-    if (par->isInlineFlow()) {
+    if (par->isRenderInline()) {
         // <span><div/> <div/></span>
         if (prev && !prev->isInline())
             return false;
@@ -154,14 +244,18 @@ bool Text::rendererIsNeeded(RenderStyle *style)
     return true;
 }
 
-RenderObject *Text::createRenderer(RenderArena *arena, RenderStyle *style)
+RenderObject *Text::createRenderer(RenderArena* arena, RenderStyle*)
 {
 #if ENABLE(SVG)
-    if (parentNode()->isSVGElement())
-        return new (arena) RenderSVGInlineText(this, str);
-#endif // ENABLE(SVG)
+    if (parentNode()->isSVGElement()
+#if ENABLE(SVG_FOREIGN_OBJECT)
+        && !parentNode()->hasTagName(SVGNames::foreignObjectTag)
+#endif
+    )
+        return new (arena) RenderSVGInlineText(this, m_data);
+#endif
     
-    return new (arena) RenderText(this, str);
+    return new (arena) RenderText(this, m_data);
 }
 
 void Text::attach()
@@ -170,14 +264,23 @@ void Text::attach()
     CharacterData::attach();
 }
 
-void Text::recalcStyle( StyleChange change )
+void Text::recalcStyle(StyleChange change)
 {
-    if (change != NoChange && parentNode())
+    if (change != NoChange && parentNode()) {
         if (renderer())
             renderer()->setStyle(parentNode()->renderer()->style());
-    if (changed() && renderer() && renderer()->isText())
-        static_cast<RenderText*>(renderer())->setText(str);
-    setChanged(NoStyleChange);
+    }
+    if (needsStyleRecalc()) {
+        if (renderer()) {
+            if (renderer()->isText())
+                toRenderText(renderer())->setText(m_data);
+        } else {
+            if (attached())
+                detach();
+            attach();
+        }
+    }
+    setNeedsStyleRecalc(NoStyleChange);
 }
 
 // DOM Section 1.1.1
@@ -186,15 +289,9 @@ bool Text::childTypeAllowed(NodeType)
     return false;
 }
 
-Text *Text::createNew(StringImpl *_str)
+PassRefPtr<Text> Text::createNew(PassRefPtr<StringImpl> string)
 {
-    return new Text(document(), _str);
-}
-
-String Text::toString() const
-{
-    // FIXME: substitute entity references as needed!
-    return nodeValue();
+    return new Text(document(), string);
 }
 
 PassRefPtr<Text> Text::createWithLengthLimit(Document* doc, const String& text, unsigned& charsLeft, unsigned maxChars)
@@ -222,6 +319,29 @@ PassRefPtr<Text> Text::createWithLengthLimit(Document* doc, const String& text, 
     return new Text(doc, nodeText);
 }
 
+#if ENABLE(WML)
+void Text::insertedIntoDocument()
+{
+    CharacterData::insertedIntoDocument();
+
+    if (!parentNode()->isWMLElement() || !length())
+        return;
+
+    WMLPageState* pageState = wmlPageStateForDocument(document());
+    if (!pageState->hasVariables())
+        return;
+
+    String text = data();
+    if (!text.impl() || text.impl()->containsOnlyWhitespace())
+        return;
+
+    text = substituteVariableReferences(text, document());
+
+    ExceptionCode ec;
+    setData(text, ec);
+}
+#endif
+
 #ifndef NDEBUG
 void Text::formatForDebugger(char *buffer, unsigned length) const
 {
@@ -241,7 +361,7 @@ void Text::formatForDebugger(char *buffer, unsigned length) const
         result += s;
     }
           
-    strncpy(buffer, result.deprecatedString().latin1(), length - 1);
+    strncpy(buffer, result.utf8().data(), length - 1);
 }
 #endif
 

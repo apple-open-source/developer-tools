@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2003 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005 Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -31,9 +31,7 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
---  This is the OpenVMS version for restricted tasking.
-
---  Blank line intentional so that it lines up exactly with default.
+--  This is the OpenVMS version for restricted tasking
 
 --  This package defines some system dependent parameters for GNAT. These
 --  are values that are referenced by the runtime library and are therefore
@@ -51,7 +49,7 @@
 --  otherwise the relinking and rebinding capability would be deactivated.
 
 package System.Parameters is
-pragma Pure (Parameters);
+   pragma Pure;
 
    ---------------------------------------
    -- Task And Stack Allocation Control --
@@ -199,5 +197,15 @@ pragma Pure (Parameters);
    --  This constant indicates whether the runtime outputs traces to a
    --  predefined output or not (True means that traces are output).
    --  See System.Traces for more details.
+
+   ------------------------------
+   -- Exception Message Length --
+   ------------------------------
+
+   Default_Exception_Msg_Max_Length : constant := 512;
+   --  This constant specifies the maximum number of characters to allow in an
+   --  exception message (see RM 11.4.1(18)). The value for VMS exceeds the
+   --  default minimum of 200 to allow for the length of chained VMS condition
+   --  handling messages.
 
 end System.Parameters;

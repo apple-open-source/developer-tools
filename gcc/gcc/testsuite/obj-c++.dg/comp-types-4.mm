@@ -1,7 +1,7 @@
-/* APPLE LOCAL file mainline */
 /* Test assignments and comparisons between protocols (obscure case).  */
 /* Author: Nicola Pero <nicola@brainstorm.co.uk>.  */
 /* { dg-do compile } */
+
 #include <objc/objc.h>
 
 @protocol MyProtocolA

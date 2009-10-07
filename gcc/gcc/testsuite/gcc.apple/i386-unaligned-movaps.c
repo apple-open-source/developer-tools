@@ -1,6 +1,6 @@
 /* APPLE LOCAL begin radar 4614623 */
 /* { dg-do run { target i?86-*-* } } */
-/* { dg-skip-if "" { *-*-darwin* } { "-m64" } { "" } } */
+/* { dg-require-effective-target ilp32 } */
 /* { dg-options "-O -mmmx -fomit-frame-pointer -march=pentium-m" } */
 #include <signal.h>
 extern void abort (void);
@@ -36,7 +36,13 @@ int foo (const int m, const int n, const float *a1, const float *a,
 
 int main ()
 {
-  float a[4], b[4], c[4], d[4], e[4];
+  float a[4], b[4], c[6], d[4], e[5];
+  int i;
+  for (i=0; i<4; i++)
+    a[i] = b[i] = c[i] = d[i] = e[i] = i;
+  c[4] = 4;
+  c[5] = 5;
+  e[4] = 4;
   signal (SIGILL, sig_ill_handler);
   foo (2, 2, a, b, c, d, e);
   return 0;

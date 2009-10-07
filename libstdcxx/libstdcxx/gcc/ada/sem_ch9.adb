@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2004, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -28,8 +28,9 @@ with Atree;    use Atree;
 with Checks;   use Checks;
 with Einfo;    use Einfo;
 with Errout;   use Errout;
-with Exp_Ch9;
+with Exp_Ch9;  use Exp_Ch9;
 with Elists;   use Elists;
+with Freeze;   use Freeze;
 with Itypes;   use Itypes;
 with Lib.Xref; use Lib.Xref;
 with Nlists;   use Nlists;
@@ -67,13 +68,18 @@ package body Sem_Ch9 is
    --  count the entries (checking the static requirement), and compare with
    --  the given maximum.
 
+   procedure Check_Overriding_Indicator (Def : Node_Id);
+   --  Ada 2005 (AI-397): Check the overriding indicator of entries and
+   --  subprograms of protected or task types. Def is the definition of the
+   --  protected or task type.
+
    function Find_Concurrent_Spec (Body_Id : Entity_Id) return Entity_Id;
    --  Find entity in corresponding task or protected declaration. Use full
    --  view if first declaration was for an incomplete type.
 
    procedure Install_Declarations (Spec : Entity_Id);
-   --  Utility to make visible in corresponding body the entities defined
-   --  in task, protected type declaration, or entry declaration.
+   --  Utility to make visible in corresponding body the entities defined in
+   --  task, protected type declaration, or entry declaration.
 
    -----------------------------
    -- Analyze_Abort_Statement --
@@ -88,11 +94,22 @@ package body Sem_Ch9 is
       while Present (T_Name) loop
          Analyze (T_Name);
 
-         if not Is_Task_Type (Etype (T_Name)) then
-            Error_Msg_N ("expect task name for ABORT", T_Name);
-            return;
-         else
+         if Is_Task_Type (Etype (T_Name))
+           or else (Ada_Version >= Ada_05
+                      and then Ekind (Etype (T_Name)) = E_Class_Wide_Type
+                      and then Is_Interface (Etype (T_Name))
+                      and then Is_Task_Interface (Etype (T_Name)))
+         then
             Resolve (T_Name);
+         else
+            if Ada_Version >= Ada_05 then
+               Error_Msg_N ("expect task name or task interface class-wide "
+                          & "object for ABORT", T_Name);
+            else
+               Error_Msg_N ("expect task name for ABORT", T_Name);
+            end if;
+
+            return;
          end if;
 
          Next (T_Name);
@@ -145,9 +162,9 @@ package body Sem_Ch9 is
       -----------------------
 
       function Actual_Index_Type (E : Entity_Id) return Entity_Id;
-      --  If the bounds of an entry family depend on task discriminants,
-      --  create a new index type where a discriminant is replaced by the
-      --  local variable that renames it in the task body.
+      --  If the bounds of an entry family depend on task discriminants, create
+      --  a new index type where a discriminant is replaced by the local
+      --  variable that renames it in the task body.
 
       function Actual_Index_Type (E : Entity_Id) return Entity_Id is
          Typ   : constant Entity_Id := Entry_Index_Type (E);
@@ -166,13 +183,11 @@ package body Sem_Ch9 is
          function Actual_Discriminant_Ref (Bound : Node_Id) return Node_Id is
             Typ : constant Entity_Id := Etype (Bound);
             Ref : Node_Id;
-
          begin
             if not Is_Entity_Name (Bound)
               or else Ekind (Entity (Bound)) /= E_Discriminant
             then
                return Bound;
-
             else
                Ref := Make_Identifier (Sloc (N), Chars (Entity (Bound)));
                Analyze (Ref);
@@ -255,9 +270,9 @@ package body Sem_Ch9 is
          End_Scope;
       end if;
 
-      --  We set the default expressions processed flag because we don't
-      --  need default expression functions. This is really more like a
-      --  body entity than a spec entity anyway.
+      --  We set the default expressions processed flag because we don't need
+      --  default expression functions. This is really more like body entity
+      --  than a spec entity anyway.
 
       Set_Default_Expressions_Processed (Accept_Id);
 
@@ -283,8 +298,8 @@ package body Sem_Ch9 is
          Style.Check_Identifier (Nam, Entry_Nam);
       end if;
 
-      --  Verify that the entry is not hidden by a procedure declared in
-      --  the current block (pathological but possible).
+      --  Verify that the entry is not hidden by a procedure declared in the
+      --  current block (pathological but possible).
 
       if Current_Scope /= Task_Nam then
          declare
@@ -292,9 +307,7 @@ package body Sem_Ch9 is
 
          begin
             E1 := First_Entity (Current_Scope);
-
             while Present (E1) loop
-
                if Ekind (E1) = E_Procedure
                  and then Chars (E1) = Chars (Entry_Nam)
                  and then Type_Conformant (E1, Entry_Nam)
@@ -350,19 +363,17 @@ package body Sem_Ch9 is
          Error_Msg_N ("invalid entry index in accept for simple entry", N);
       end if;
 
-      --  If label declarations present, analyze them. They are declared
-      --  in the enclosing task, but their enclosing scope is the entry itself,
-      --  so that goto's to the label are recognized as local to the accept.
+      --  If label declarations present, analyze them. They are declared in the
+      --  enclosing task, but their enclosing scope is the entry itself, so
+      --  that goto's to the label are recognized as local to the accept.
 
       if Present (Declarations (N)) then
-
          declare
             Decl : Node_Id;
             Id   : Entity_Id;
 
          begin
             Decl := First (Declarations (N));
-
             while Present (Decl) loop
                Analyze (Decl);
 
@@ -376,24 +387,25 @@ package body Sem_Ch9 is
          end;
       end if;
 
-      --  If statements are present, they must be analyzed in the context
-      --  of the entry, so that references to formals are correctly resolved.
-      --  We also have to add the declarations that are required by the
-      --  expansion of the accept statement in this case if expansion active.
+      --  If statements are present, they must be analyzed in the context of
+      --  the entry, so that references to formals are correctly resolved. We
+      --  also have to add the declarations that are required by the expansion
+      --  of the accept statement in this case if expansion active.
 
-      --  In the case of a select alternative of a selective accept,
-      --  the expander references the address declaration even if there
-      --  is no statement list.
+      --  In the case of a select alternative of a selective accept, the
+      --  expander references the address declaration even if there is no
+      --  statement list.
+
       --  We also need to create the renaming declarations for the local
-      --  variables that will replace references to the formals within
-      --  the accept.
+      --  variables that will replace references to the formals within the
+      --  accept statement.
 
       Exp_Ch9.Expand_Accept_Declarations (N, Entry_Nam);
 
       --  Set Never_Set_In_Source and clear Is_True_Constant/Current_Value
       --  fields on all entry formals (this loop ignores all other entities).
-      --  Reset Set_Referenced and Has_Pragma_Unreferenced as well, so that
-      --  we can post accurate warnings on each accept statement for the same
+      --  Reset Set_Referenced and Has_Pragma_Unreferenced as well, so that we
+      --  can post accurate warnings on each accept statement for the same
       --  entry.
 
       E := First_Entity (Entry_Nam);
@@ -434,14 +446,49 @@ package body Sem_Ch9 is
    ---------------------------------
 
    procedure Analyze_Asynchronous_Select (N : Node_Id) is
+      Param   : Node_Id;
+      Trigger : Node_Id;
+
    begin
       Tasking_Used := True;
       Check_Restriction (Max_Asynchronous_Select_Nesting, N);
       Check_Restriction (No_Select_Statements, N);
 
-      --  Analyze the statements. We analyze statements in the abortable part
-      --  first, because this is the section that is executed first, and that
-      --  way our remembering of saved values and checks is accurate.
+      if Ada_Version >= Ada_05 then
+         Trigger := Triggering_Statement (Triggering_Alternative (N));
+
+         Analyze (Trigger);
+
+         --  The trigger is a dispatching procedure. Postpone the analysis of
+         --  the triggering and abortable statements until the expansion of
+         --  this asynchronous select in Expand_N_Asynchronous_Select. This
+         --  action is required since otherwise we would get a gigi abort from
+         --  the code replication in Expand_N_Asynchronous_Select of an already
+         --  analyzed statement list.
+
+         if Expander_Active
+           and then Nkind (Trigger) = N_Procedure_Call_Statement
+           and then Present (Parameter_Associations (Trigger))
+         then
+            Param := First (Parameter_Associations (Trigger));
+
+            if Is_Controlling_Actual (Param)
+              and then Is_Interface (Etype (Param))
+            then
+               if Is_Limited_Record (Etype (Param)) then
+                  return;
+               else
+                  Error_Msg_N
+                   ("dispatching operation of limited or synchronized " &
+                    "interface required ('R'M 9.7.2(3))!", N);
+               end if;
+            end if;
+         end if;
+      end if;
+
+      --  Analyze the statements. We analyze statements in the abortable part,
+      --  because this is the section that is executed first, and that way our
+      --  remembering of saved values and checks is accurate.
 
       Analyze_Statements (Statements (Abortable_Part (N)));
       Analyze (Triggering_Alternative (N));
@@ -456,6 +503,16 @@ package body Sem_Ch9 is
       Check_Restriction (No_Select_Statements, N);
       Tasking_Used := True;
       Analyze (Entry_Call_Alternative (N));
+
+      if List_Length (Else_Statements (N)) = 1
+        and then Nkind (First (Else_Statements (N))) in N_Delay_Statement
+      then
+         Error_Msg_N
+           ("suspicious form of conditional entry call?", N);
+         Error_Msg_N
+           ("\`SELECT OR` may be intended rather than `SELECT ELSE`", N);
+      end if;
+
       Analyze_Statements (Else_Statements (N));
    end Analyze_Conditional_Entry_Call;
 
@@ -465,6 +522,7 @@ package body Sem_Ch9 is
 
    procedure Analyze_Delay_Alternative (N : Node_Id) is
       Expr : Node_Id;
+      Typ  : Entity_Id;
 
    begin
       Tasking_Used := True;
@@ -479,25 +537,27 @@ package body Sem_Ch9 is
       then
          Expr := Expression (Delay_Statement (N));
 
-         --  defer full analysis until the statement is expanded, to insure
+         --  Defer full analysis until the statement is expanded, to insure
          --  that generated code does not move past the guard. The delay
          --  expression is only evaluated if the guard is open.
 
          if Nkind (Delay_Statement (N)) = N_Delay_Relative_Statement then
             Pre_Analyze_And_Resolve (Expr, Standard_Duration);
-
          else
             Pre_Analyze_And_Resolve (Expr);
          end if;
 
-         if Nkind (Delay_Statement (N)) = N_Delay_Until_Statement and then
-            not Is_RTE (Base_Type (Etype (Expr)), RO_CA_Time)     and then
-            not Is_RTE (Base_Type (Etype (Expr)), RO_RT_Time)
+         Typ := First_Subtype (Etype (Expr));
+
+         if Nkind (Delay_Statement (N)) = N_Delay_Until_Statement
+           and then not Is_RTE (Typ, RO_CA_Time)
+           and then not Is_RTE (Typ, RO_RT_Time)
          then
             Error_Msg_N ("expect Time types for `DELAY UNTIL`", Expr);
          end if;
 
          Check_Restriction (No_Fixed_Point, Expr);
+
       else
          Analyze (Delay_Statement (N));
       end if;
@@ -532,16 +592,18 @@ package body Sem_Ch9 is
    -------------------------
 
    procedure Analyze_Delay_Until (N : Node_Id) is
-      E : constant Node_Id := Expression (N);
+      E   : constant Node_Id := Expression (N);
+      Typ : Entity_Id;
 
    begin
       Tasking_Used := True;
       Check_Restriction (No_Delay, N);
       Check_Potentially_Blocking_Operation (N);
       Analyze (E);
+      Typ := First_Subtype (Etype (E));
 
-      if not Is_RTE (Base_Type (Etype (E)), RO_CA_Time) and then
-         not Is_RTE (Base_Type (Etype (E)), RO_RT_Time)
+      if not Is_RTE (Typ, RO_CA_Time) and then
+         not Is_RTE (Typ, RO_RT_Time)
       then
          Error_Msg_N ("expect Time types for `DELAY UNTIL`", E);
       end if;
@@ -603,13 +665,13 @@ package body Sem_Ch9 is
                        (Entry_Index_Specification (Formals)));
 
                else
-                  --  The elaboration of the entry body does not recompute
-                  --  the bounds of the index, which may have side effects.
-                  --  Inherit the bounds from the entry declaration. This
-                  --  is critical if the entry has a per-object constraint.
-                  --  If a bound is given by a discriminant, it must be
-                  --  reanalyzed in order to capture the discriminal of the
-                  --  current entry, rather than that of the protected type.
+                  --  The elaboration of the entry body does not recompute the
+                  --  bounds of the index, which may have side effects. Inherit
+                  --  the bounds from the entry declaration. This is critical
+                  --  if the entry has a per-object constraint. If a bound is
+                  --  given by a discriminant, it must be reanalyzed in order
+                  --  to capture the discriminal of the current entry, rather
+                  --  than that of the protected type.
 
                   declare
                      Index_Spec : constant Node_Id :=
@@ -626,7 +688,13 @@ package body Sem_Ch9 is
                      then
                         Set_Etype (Def, Empty);
                         Set_Analyzed (Def, False);
-                        Set_Discrete_Subtype_Definition (Index_Spec, Def);
+
+                        --  Keep the original subtree to ensure a properly
+                        --  formed tree (e.g. for ASIS use).
+
+                        Rewrite
+                          (Discrete_Subtype_Definition (Index_Spec), Def);
+
                         Set_Analyzed (Low_Bound (Def), False);
                         Set_Analyzed (High_Bound (Def), False);
 
@@ -677,12 +745,16 @@ package body Sem_Ch9 is
       --  The entity for the protected subprogram corresponding to the entry
       --  has been created. We retain the name of this entity in the entry
       --  body, for use when the corresponding subprogram body is created.
-      --  Note that entry bodies have to corresponding_spec, and there is no
+      --  Note that entry bodies have no corresponding_spec, and there is no
       --  easy link back in the tree between the entry body and the entity for
-      --  the entry itself.
+      --  the entry itself, which is why we must propagate some attributes
+      --  explicitly from spec to body.
 
-      Set_Protected_Body_Subprogram (Id,
-        Protected_Body_Subprogram (Entry_Name));
+      Set_Protected_Body_Subprogram
+        (Id, Protected_Body_Subprogram (Entry_Name));
+
+      Set_Entry_Parameters_Type
+        (Id, Entry_Parameters_Type (Entry_Name));
 
       if Present (Decls) then
          Analyze_Declarations (Decls);
@@ -701,10 +773,13 @@ package body Sem_Ch9 is
 
       --  At the same time, we set the flags on the spec entities to suppress
       --  any warnings on the spec formals, since we also scan the spec.
+      --  Finally, we propagate the Entry_Component attribute to the body
+      --  formals, for use in the renaming declarations created later for the
+      --  formals (see exp_ch9.Add_Formal_Renamings).
 
       declare
-         E1  : Entity_Id;
-         E2  : Entity_Id;
+         E1 : Entity_Id;
+         E2 : Entity_Id;
 
       begin
          E1 := First_Entity (Entry_Name);
@@ -715,9 +790,9 @@ package body Sem_Ch9 is
                Next_Entity (E2);
             end loop;
 
-            --  If no matching body entity, then we already had
-            --  a detected error of some kind, so just forget
-            --  about worrying about these warnings.
+            --  If no matching body entity, then we already had a detected
+            --  error of some kind, so just forget about worrying about these
+            --  warnings.
 
             if No (E2) then
                goto Continue;
@@ -730,6 +805,7 @@ package body Sem_Ch9 is
 
             Set_Referenced (E2, Referenced (E1));
             Set_Referenced (E1);
+            Set_Entry_Component (E2, Entry_Component (E1));
 
          <<Continue>>
             Next_Entity (E1);
@@ -757,7 +833,6 @@ package body Sem_Ch9 is
       then
          End_Scope;
       end if;
-
    end Analyze_Entry_Body;
 
    ------------------------------------
@@ -858,15 +933,15 @@ package body Sem_Ch9 is
    -- Analyze_Entry_Index_Specification --
    ---------------------------------------
 
-   --  The defining_Identifier of the entry index specification is local
-   --  to the entry body, but must be available in the entry barrier,
-   --  which is evaluated outside of the entry body. The index is eventually
-   --  renamed as a run-time object, so is visibility is strictly a front-end
-   --  concern. In order to make it available to the barrier, we create
-   --  an additional scope, as for a loop, whose only declaration is the
-   --  index name. This loop is not attached to the tree and does not appear
-   --  as an entity local to the protected type, so its existence need only
-   --  be knwown to routines that process entry families.
+   --  The Defining_Identifier of the entry index specification is local to the
+   --  entry body, but it must be available in the entry barrier which is
+   --  evaluated outside of the entry body. The index is eventually renamed as
+   --  a run-time object, so is visibility is strictly a front-end concern. In
+   --  order to make it available to the barrier, we create an additional
+   --  scope, as for a loop, whose only declaration is the index name. This
+   --  loop is not attached to the tree and does not appear as an entity local
+   --  to the protected type, so its existence need only be knwown to routines
+   --  that process entry families.
 
    procedure Analyze_Entry_Index_Specification (N : Node_Id) is
       Iden    : constant Node_Id   := Defining_Identifier (N);
@@ -901,8 +976,8 @@ package body Sem_Ch9 is
    ----------------------------
 
    procedure Analyze_Protected_Body (N : Node_Id) is
-      Body_Id   : constant Entity_Id := Defining_Identifier (N);
-      Last_E    : Entity_Id;
+      Body_Id : constant Entity_Id := Defining_Identifier (N);
+      Last_E  : Entity_Id;
 
       Spec_Id : Entity_Id;
       --  This is initially the entity of the protected object or protected
@@ -959,9 +1034,9 @@ package body Sem_Ch9 is
 
       Analyze_Declarations (Declarations (N));
 
-      --  For visibility purposes, all entities in the body are private.
-      --  Set First_Private_Entity accordingly, if there was no private
-      --  part in the protected declaration.
+      --  For visibility purposes, all entities in the body are private. Set
+      --  First_Private_Entity accordingly, if there was no private part in the
+      --  protected declaration.
 
       if No (First_Private_Entity (Spec_Id)) then
          if Present (Last_E) then
@@ -997,7 +1072,6 @@ package body Sem_Ch9 is
 
          if Present (L) then
             Set_First_Private_Entity (Current_Scope, Next_Entity (L));
-
          else
             Set_First_Private_Entity (Current_Scope,
               First_Entity (Current_Scope));
@@ -1005,9 +1079,7 @@ package body Sem_Ch9 is
       end if;
 
       E := First_Entity (Current_Scope);
-
       while Present (E) loop
-
          if Ekind (E) = E_Function
            or else Ekind (E) = E_Procedure
          then
@@ -1024,6 +1096,7 @@ package body Sem_Ch9 is
 
       Check_Max_Entries (N, Max_Protected_Entries);
       Process_End_Label (N, 'e', Current_Scope);
+      Check_Overriding_Indicator (N);
    end Analyze_Protected_Definition;
 
    ----------------------------
@@ -1031,9 +1104,12 @@ package body Sem_Ch9 is
    ----------------------------
 
    procedure Analyze_Protected_Type (N : Node_Id) is
-      E      : Entity_Id;
-      T      : Entity_Id;
-      Def_Id : constant Entity_Id := Defining_Identifier (N);
+      E         : Entity_Id;
+      T         : Entity_Id;
+      Def_Id    : constant Entity_Id := Defining_Identifier (N);
+      Iface     : Node_Id;
+      Iface_Def : Node_Id;
+      Iface_Typ : Entity_Id;
 
    begin
       if No_Run_Time_Mode then
@@ -1052,24 +1128,98 @@ package body Sem_Ch9 is
       end if;
 
       Set_Ekind              (T, E_Protected_Type);
+      Set_Is_First_Subtype   (T, True);
       Init_Size_Align        (T);
       Set_Etype              (T, T);
-      Set_Is_First_Subtype   (T, True);
       Set_Has_Delayed_Freeze (T, True);
       Set_Stored_Constraint  (T, No_Elist);
       New_Scope (T);
+
+      --  Ada 2005 (AI-345)
+
+      if Present (Interface_List (N)) then
+         Set_Is_Tagged_Type (T);
+
+         Iface := First (Interface_List (N));
+         while Present (Iface) loop
+            Iface_Typ := Find_Type_Of_Subtype_Indic (Iface);
+            Iface_Def := Type_Definition (Parent (Iface_Typ));
+
+            if not Is_Interface (Iface_Typ) then
+               Error_Msg_NE ("(Ada 2005) & must be an interface",
+                             Iface, Iface_Typ);
+
+            else
+               --  Ada 2005 (AI-251): "The declaration of a specific descendant
+               --  of an interface type freezes the interface type" RM 13.14.
+
+               Freeze_Before (N, Etype (Iface));
+
+               --  Ada 2005 (AI-345): Protected types can only implement
+               --  limited, synchronized or protected interfaces.
+
+               if Limited_Present (Iface_Def)
+                 or else Synchronized_Present (Iface_Def)
+                 or else Protected_Present (Iface_Def)
+               then
+                  null;
+
+               elsif Task_Present (Iface_Def) then
+                  Error_Msg_N ("(Ada 2005) protected type cannot implement a "
+                    & "task interface", Iface);
+
+               else
+                  Error_Msg_N ("(Ada 2005) protected type cannot implement a "
+                    & "non-limited interface", Iface);
+               end if;
+            end if;
+
+            Next (Iface);
+         end loop;
+
+         --  If this is the full-declaration associated with a private
+         --  declaration that implement interfaces, then the private type
+         --  declaration must be limited.
+
+         if Has_Private_Declaration (T) then
+            declare
+               E : Entity_Id;
+
+            begin
+               E := First_Entity (Scope (T));
+               loop
+                  pragma Assert (Present (E));
+
+                  if Is_Type (E) and then Present (Full_View (E)) then
+                     exit when Full_View (E) = T;
+                  end if;
+
+                  Next_Entity (E);
+               end loop;
+
+               if not Is_Limited_Record (E) then
+                  Error_Msg_Sloc := Sloc (E);
+                  Error_Msg_N
+                    ("(Ada 2005) private type declaration # must be limited",
+                     T);
+               end if;
+            end;
+         end if;
+      end if;
 
       if Present (Discriminant_Specifications (N)) then
          if Has_Discriminants (T) then
 
             --  Install discriminants. Also, verify conformance of
-            --  discriminants of previous and current view.  ???
+            --  discriminants of previous and current view. ???
 
             Install_Declarations (T);
          else
             Process_Discriminants (N);
          end if;
       end if;
+
+      Set_Is_Constrained (T, not Has_Discriminants (T));
 
       Analyze (Protected_Definition (N));
 
@@ -1088,11 +1238,10 @@ package body Sem_Ch9 is
          Set_Has_Controlled_Component (T, True);
       end if;
 
-      --  The Ekind of components is E_Void during analysis to detect
-      --  illegal uses. Now it can be set correctly.
+      --  The Ekind of components is E_Void during analysis to detect illegal
+      --  uses. Now it can be set correctly.
 
       E := First_Entity (Current_Scope);
-
       while Present (E) loop
          if Ekind (E) = E_Void then
             Set_Ekind (E, E_Component);
@@ -1119,9 +1268,9 @@ package body Sem_Ch9 is
    ---------------------
 
    procedure Analyze_Requeue (N : Node_Id) is
+      Count      : Natural := 0;
       Entry_Name : Node_Id := Name (N);
       Entry_Id   : Entity_Id;
-      Found      : Boolean;
       I          : Interp_Index;
       It         : Interp;
       Enclosing  : Entity_Id;
@@ -1158,8 +1307,8 @@ package body Sem_Ch9 is
          Entry_Name := Selector_Name (Entry_Name);
       end if;
 
-      --  If an explicit target object is given then we have to check
-      --  the restrictions of 9.5.4(6).
+      --  If an explicit target object is given then we have to check the
+      --  restrictions of 9.5.4(6).
 
       if Present (Target_Obj) then
 
@@ -1180,10 +1329,10 @@ package body Sem_Ch9 is
 
          pragma Assert (Present (Outer_Ent));
 
-         --  Check that the accessibility level of the target object
-         --  is not greater or equal to the outermost enclosing accept
-         --  statement (or entry body) unless it is a parameter of the
-         --  innermost enclosing accept statement (or entry body).
+         --  Check that the accessibility level of the target object is not
+         --  greater or equal to the outermost enclosing accept statement (or
+         --  entry body) unless it is a parameter of the innermost enclosing
+         --  accept statement (or entry body).
 
          if Object_Access_Level (Target_Obj) >= Scope_Depth (Outer_Ent)
            and then
@@ -1199,37 +1348,44 @@ package body Sem_Ch9 is
       --  Overloaded case, find right interpretation
 
       if Is_Overloaded (Entry_Name) then
-         Get_First_Interp (Entry_Name, I, It);
-         Found := False;
          Entry_Id := Empty;
 
+         Get_First_Interp (Entry_Name, I, It);
          while Present (It.Nam) loop
             if No (First_Formal (It.Nam))
               or else Subtype_Conformant (Enclosing, It.Nam)
             then
-               if not Found then
-                  Found := True;
+               --  Ada 2005 (AI-345): Since protected and task types have
+               --  primitive entry wrappers, we only consider source entries.
+
+               if Comes_From_Source (It.Nam) then
+                  Count := Count + 1;
                   Entry_Id := It.Nam;
                else
-                  Error_Msg_N ("ambiguous entry name in requeue", N);
-                  return;
+                  Remove_Interp (I);
                end if;
             end if;
 
             Get_Next_Interp (I, It);
          end loop;
 
-         if not Found then
-            Error_Msg_N ("no entry matches context",  N);
+         if Count = 0 then
+            Error_Msg_N ("no entry matches context", N);
             return;
+
+         elsif Count > 1 then
+            Error_Msg_N ("ambiguous entry name in requeue", N);
+            return;
+
          else
+            Set_Is_Overloaded (Entry_Name, False);
             Set_Entity (Entry_Name, Entry_Id);
          end if;
 
       --  Non-overloaded cases
 
-      --  For the case of a reference to an element of an entry family,
-      --  the Entry_Name is an indexed component.
+      --  For the case of a reference to an element of an entry family, the
+      --  Entry_Name is an indexed component.
 
       elsif Nkind (Entry_Name) = N_Indexed_Component then
 
@@ -1249,9 +1405,9 @@ package body Sem_Ch9 is
          end if;
 
       --  If we had a requeue of the form REQUEUE A (B), then the parser
-      --  accepted it (because it could have been a requeue on an entry
-      --  index. If A turns out not to be an entry family, then the analysis
-      --  of A (B) turned it into a function call.
+      --  accepted it (because it could have been a requeue on an entry index.
+      --  If A turns out not to be an entry family, then the analysis of A (B)
+      --  turned it into a function call.
 
       elsif Nkind (Entry_Name) = N_Function_Call then
          Error_Msg_N
@@ -1285,18 +1441,19 @@ package body Sem_Ch9 is
             --  Processing for parameters accessed by the requeue
 
             declare
-               Ent : Entity_Id := First_Formal (Enclosing);
+               Ent : Entity_Id;
 
             begin
+               Ent := First_Formal (Enclosing);
                while Present (Ent) loop
 
-                  --  For OUT or IN OUT parameter, the effect of the requeue
-                  --  is to assign the parameter a value on exit from the
-                  --  requeued body, so we can set it as source assigned.
-                  --  We also clear the Is_True_Constant indication. We do
-                  --  not need to clear Current_Value, since the effect of
-                  --  the requeue is to perform an unconditional goto so
-                  --  that any further references will not occur anyway.
+                  --  For OUT or IN OUT parameter, the effect of the requeue is
+                  --  to assign the parameter a value on exit from the requeued
+                  --  body, so we can set it as source assigned. We also clear
+                  --  the Is_True_Constant indication. We do not need to clear
+                  --  Current_Value, since the effect of the requeue is to
+                  --  perform an unconditional goto so that any further
+                  --  references will not occur anyway.
 
                   if Ekind (Ent) = E_Out_Parameter
                        or else
@@ -1307,8 +1464,8 @@ package body Sem_Ch9 is
                   end if;
 
                   --  For all parameters, the requeue acts as a reference,
-                  --  since the value of the parameter is passed to the
-                  --  new entry, so we want to suppress unreferenced warnings.
+                  --  since the value of the parameter is passed to the new
+                  --  entry, so we want to suppress unreferenced warnings.
 
                   Set_Referenced (Ent);
                   Next_Formal (Ent);
@@ -1336,6 +1493,8 @@ package body Sem_Ch9 is
       Check_Restriction (No_Select_Statements, N);
       Tasking_Used := True;
 
+      --  Loop to analyze alternatives
+
       Alt := First (Alts);
       while Present (Alt) loop
          Alt_Count := Alt_Count + 1;
@@ -1361,7 +1520,7 @@ package body Sem_Ch9 is
 
          elsif Nkind (Alt) = N_Terminate_Alternative then
             if Terminate_Present then
-               Error_Msg_N ("Only one terminate alternative allowed", N);
+               Error_Msg_N ("only one terminate alternative allowed", N);
             else
                Terminate_Present := True;
                Check_Restriction (No_Terminate_Alternatives, N);
@@ -1452,8 +1611,8 @@ package body Sem_Ch9 is
       Generate_Definition (Id);
       Tasking_Used := True;
 
-      --  The node is rewritten as a protected type declaration,
-      --  in exact analogy with what is done with single tasks.
+      --  The node is rewritten as a protected type declaration, in exact
+      --  analogy with what is done with single tasks.
 
       T :=
         Make_Defining_Identifier (Sloc (Id),
@@ -1462,7 +1621,8 @@ package body Sem_Ch9 is
       T_Decl :=
         Make_Protected_Type_Declaration (Loc,
          Defining_Identifier => T,
-         Protected_Definition => Relocate_Node (Protected_Definition (N)));
+         Protected_Definition => Relocate_Node (Protected_Definition (N)),
+         Interface_List       => Interface_List (N));
 
       O_Decl :=
         Make_Object_Declaration (Loc,
@@ -1473,8 +1633,8 @@ package body Sem_Ch9 is
       Insert_After (N, O_Decl);
       Mark_Rewrite_Insertion (O_Decl);
 
-      --  Enter names of type and object before analysis, because the name
-      --  of the object may be used in its own body.
+      --  Enter names of type and object before analysis, because the name of
+      --  the object may be used in its own body.
 
       Enter_Name (T);
       Set_Ekind (T, E_Protected_Type);
@@ -1484,12 +1644,11 @@ package body Sem_Ch9 is
       Set_Ekind (O_Name, E_Variable);
       Set_Etype (O_Name, T);
 
-      --  Instead of calling Analyze on the new node,  call directly
-      --  the proper analysis procedure. Otherwise the node would be
-      --  expanded twice, with disastrous result.
+      --  Instead of calling Analyze on the new node, call the proper analysis
+      --  procedure directly. Otherwise the node would be expanded twice, with
+      --  disastrous result.
 
       Analyze_Protected_Type (N);
-
    end Analyze_Single_Protected;
 
    -------------------------
@@ -1508,8 +1667,8 @@ package body Sem_Ch9 is
       Generate_Definition (Id);
       Tasking_Used := True;
 
-      --  The node is rewritten as a task type declaration,  followed
-      --  by an object declaration of that anonymous task type.
+      --  The node is rewritten as a task type declaration, followed by an
+      --  object declaration of that anonymous task type.
 
       T :=
         Make_Defining_Identifier (Sloc (Id),
@@ -1518,7 +1677,8 @@ package body Sem_Ch9 is
       T_Decl :=
         Make_Task_Type_Declaration (Loc,
           Defining_Identifier => T,
-          Task_Definition     => Relocate_Node (Task_Definition (N)));
+          Task_Definition     => Relocate_Node (Task_Definition (N)),
+          Interface_List      => Interface_List (N));
 
       O_Decl :=
         Make_Object_Declaration (Loc,
@@ -1529,8 +1689,8 @@ package body Sem_Ch9 is
       Insert_After (N, O_Decl);
       Mark_Rewrite_Insertion (O_Decl);
 
-      --  Enter names of type and object before analysis, because the name
-      --  of the object may be used in its own body.
+      --  Enter names of type and object before analysis, because the name of
+      --  the object may be used in its own body.
 
       Enter_Name (T);
       Set_Ekind (T, E_Task_Type);
@@ -1540,9 +1700,9 @@ package body Sem_Ch9 is
       Set_Ekind (O_Name, E_Variable);
       Set_Etype (O_Name, T);
 
-      --  Instead of calling Analyze on the new node,  call directly
-      --  the proper analysis procedure. Otherwise the node would be
-      --  expanded twice, with disastrous result.
+      --  Instead of calling Analyze on the new node, call the proper analysis
+      --  procedure directly. Otherwise the node would be expanded twice, with
+      --  disastrous result.
 
       Analyze_Task_Type (N);
    end Analyze_Single_Task;
@@ -1556,14 +1716,14 @@ package body Sem_Ch9 is
       Last_E  : Entity_Id;
 
       Spec_Id : Entity_Id;
-      --  This is initially the entity of the task or task type involved,
-      --  but is replaced by the task type always in the case of a single
-      --  task declaration, since this is the proper scope to be used.
+      --  This is initially the entity of the task or task type involved, but
+      --  is replaced by the task type always in the case of a single task
+      --  declaration, since this is the proper scope to be used.
 
       Ref_Id : Entity_Id;
-      --  This is the entity of the task or task type, and is the entity
-      --  used for cross-reference purposes (it differs from Spec_Id in
-      --  the case of a single task, since Spec_Id is set to the task type)
+      --  This is the entity of the task or task type, and is the entity used
+      --  for cross-reference purposes (it differs from Spec_Id in the case of
+      --  a single task, since Spec_Id is set to the task type)
 
    begin
       Tasking_Used := True;
@@ -1620,9 +1780,9 @@ package body Sem_Ch9 is
 
       Analyze_Declarations (Declarations (N));
 
-      --  For visibility purposes, all entities in the body are private.
-      --  Set First_Private_Entity accordingly, if there was no private
-      --  part in the protected declaration.
+      --  For visibility purposes, all entities in the body are private. Set
+      --  First_Private_Entity accordingly, if there was no private part in the
+      --  protected declaration.
 
       if No (First_Private_Entity (Spec_Id)) then
          if Present (Last_E) then
@@ -1644,7 +1804,6 @@ package body Sem_Ch9 is
 
       begin
          Ent := First_Entity (Spec_Id);
-
          while Present (Ent) loop
             if Is_Entry (Ent)
               and then not Entry_Accepted (Ent)
@@ -1690,6 +1849,7 @@ package body Sem_Ch9 is
 
       Check_Max_Entries (N, Max_Task_Entries);
       Process_End_Label (N, 'e', Current_Scope);
+      Check_Overriding_Indicator (N);
    end Analyze_Task_Definition;
 
    -----------------------
@@ -1697,8 +1857,11 @@ package body Sem_Ch9 is
    -----------------------
 
    procedure Analyze_Task_Type (N : Node_Id) is
-      T      : Entity_Id;
-      Def_Id : constant Entity_Id := Defining_Identifier (N);
+      T         : Entity_Id;
+      Def_Id    : constant Entity_Id := Defining_Identifier (N);
+      Iface     : Node_Id;
+      Iface_Def : Node_Id;
+      Iface_Typ : Entity_Id;
 
    begin
       Check_Restriction (No_Tasking, N);
@@ -1720,6 +1883,78 @@ package body Sem_Ch9 is
       Set_Stored_Constraint  (T, No_Elist);
       New_Scope (T);
 
+      --  Ada 2005 (AI-345)
+
+      if Present (Interface_List (N)) then
+         Set_Is_Tagged_Type (T);
+
+         Iface := First (Interface_List (N));
+         while Present (Iface) loop
+            Iface_Typ := Find_Type_Of_Subtype_Indic (Iface);
+            Iface_Def := Type_Definition (Parent (Iface_Typ));
+
+            if not Is_Interface (Iface_Typ) then
+               Error_Msg_NE ("(Ada 2005) & must be an interface",
+                             Iface, Iface_Typ);
+
+            else
+               --  Ada 2005 (AI-251): The declaration of a specific descendant
+               --  of an interface type freezes the interface type (RM 13.14).
+
+               Freeze_Before (N, Etype (Iface));
+
+               --  Ada 2005 (AI-345): Task types can only implement limited,
+               --  synchronized or task interfaces.
+
+               if Limited_Present (Iface_Def)
+                 or else Synchronized_Present (Iface_Def)
+                 or else Task_Present (Iface_Def)
+               then
+                  null;
+
+               elsif Protected_Present (Iface_Def) then
+                  Error_Msg_N ("(Ada 2005) task type cannot implement a " &
+                    "protected interface", Iface);
+
+               else
+                  Error_Msg_N ("(Ada 2005) task type cannot implement a " &
+                    "non-limited interface", Iface);
+               end if;
+            end if;
+
+            Next (Iface);
+         end loop;
+
+         --  If this is the full-declaration associated with a private
+         --  declaration that implement interfaces, then the private
+         --  type declaration must be limited.
+
+         if Has_Private_Declaration (T) then
+            declare
+               E : Entity_Id;
+
+            begin
+               E := First_Entity (Scope (T));
+               loop
+                  pragma Assert (Present (E));
+
+                  if Is_Type (E) and then Present (Full_View (E)) then
+                     exit when Full_View (E) = T;
+                  end if;
+
+                  Next_Entity (E);
+               end loop;
+
+               if not Is_Limited_Record (E) then
+                  Error_Msg_Sloc := Sloc (E);
+                  Error_Msg_N
+                    ("(Ada 2005) private type declaration # must be limited",
+                     T);
+               end if;
+            end;
+         end if;
+      end if;
+
       if Present (Discriminant_Specifications (N)) then
          if Ada_Version = Ada_83 and then Comes_From_Source (N) then
             Error_Msg_N ("(Ada 83) task discriminant not allowed!", N);
@@ -1735,6 +1970,8 @@ package body Sem_Ch9 is
             Process_Discriminants (N);
          end if;
       end if;
+
+      Set_Is_Constrained (T, not Has_Discriminants (T));
 
       if Present (Task_Definition (N)) then
          Analyze_Task_Definition (Task_Definition (N));
@@ -1800,13 +2037,29 @@ package body Sem_Ch9 is
       end if;
 
       Analyze (Trigger);
+
       if Comes_From_Source (Trigger)
-        and then Nkind (Trigger) /= N_Delay_Until_Statement
-        and then Nkind (Trigger) /= N_Delay_Relative_Statement
+        and then Nkind (Trigger) not in N_Delay_Statement
         and then Nkind (Trigger) /= N_Entry_Call_Statement
       then
-         Error_Msg_N
-          ("triggering statement must be delay or entry call", Trigger);
+         if Ada_Version < Ada_05 then
+            Error_Msg_N
+             ("triggering statement must be delay or entry call", Trigger);
+
+         --  Ada 2005 (AI-345): If a procedure_call_statement is used for a
+         --  procedure_or_entry_call, the procedure_name or pro- cedure_prefix
+         --  of the procedure_call_statement shall denote an entry renamed by a
+         --  procedure, or (a view of) a primitive subprogram of a limited
+         --  interface whose first parameter is a controlling parameter.
+
+         elsif Nkind (Trigger) = N_Procedure_Call_Statement
+           and then not Is_Renamed_Entry (Entity (Name (Trigger)))
+           and then not Is_Controlling_Limited_Procedure
+                          (Entity (Name (Trigger)))
+         then
+            Error_Msg_N ("triggering statement must be delay, procedure " &
+                         "or entry call", Trigger);
+         end if;
       end if;
 
       if Is_Non_Empty_List (Statements (N)) then
@@ -1901,6 +2154,259 @@ package body Sem_Ch9 is
       end if;
    end Check_Max_Entries;
 
+   --------------------------------
+   -- Check_Overriding_Indicator --
+   --------------------------------
+
+   procedure Check_Overriding_Indicator (Def : Node_Id) is
+      Aliased_Hom : Entity_Id;
+      Decl        : Node_Id;
+      Def_Id      : Entity_Id;
+      Hom         : Entity_Id;
+      Ifaces      : constant List_Id := Interface_List (Parent (Def));
+      Overrides   : Boolean;
+      Spec        : Node_Id;
+      Vis_Decls   : constant List_Id := Visible_Declarations (Def);
+
+      function Matches_Prefixed_View_Profile
+        (Ifaces       : List_Id;
+         Entry_Params : List_Id;
+         Proc_Params  : List_Id) return Boolean;
+      --  Ada 2005 (AI-397): Determine if an entry parameter profile matches
+      --  the prefixed view profile of an abstract procedure. Also determine
+      --  whether the abstract procedure belongs to an implemented interface.
+
+      -----------------------------------
+      -- Matches_Prefixed_View_Profile --
+      -----------------------------------
+
+      function Matches_Prefixed_View_Profile
+        (Ifaces       : List_Id;
+         Entry_Params : List_Id;
+         Proc_Params  : List_Id) return Boolean
+      is
+         Entry_Param    : Node_Id;
+         Proc_Param     : Node_Id;
+         Proc_Param_Typ : Entity_Id;
+
+         function Includes_Interface
+           (Iface  : Entity_Id;
+            Ifaces : List_Id) return Boolean;
+         --  Determine if an interface is contained in a list of interfaces
+
+         ------------------------
+         -- Includes_Interface --
+         ------------------------
+
+         function Includes_Interface
+           (Iface  : Entity_Id;
+            Ifaces : List_Id) return Boolean
+         is
+            Ent : Entity_Id;
+
+         begin
+            Ent := First (Ifaces);
+            while Present (Ent) loop
+               if Etype (Ent) = Iface then
+                  return True;
+               end if;
+
+               Next (Ent);
+            end loop;
+
+            return False;
+         end Includes_Interface;
+
+      --  Start of processing for Matches_Prefixed_View_Profile
+
+      begin
+         Proc_Param := First (Proc_Params);
+         Proc_Param_Typ := Etype (Parameter_Type (Proc_Param));
+
+         --  The first parameter of the abstract procedure must be of an
+         --  interface type. The task or protected type must also implement
+         --  that interface.
+
+         if not Is_Interface (Proc_Param_Typ)
+           or else not Includes_Interface (Proc_Param_Typ, Ifaces)
+         then
+            return False;
+         end if;
+
+         Entry_Param := First (Entry_Params);
+         Proc_Param  := Next (Proc_Param);
+         while Present (Entry_Param) and then Present (Proc_Param) loop
+
+            --  The two parameters must be mode conformant and have the exact
+            --  same types.
+
+            if Ekind (Defining_Identifier (Entry_Param)) /=
+               Ekind (Defining_Identifier (Proc_Param))
+              or else Etype (Parameter_Type (Entry_Param)) /=
+                      Etype (Parameter_Type (Proc_Param))
+            then
+               return False;
+            end if;
+
+            Next (Entry_Param);
+            Next (Proc_Param);
+         end loop;
+
+         --  One of the lists is longer than the other
+
+         if Present (Entry_Param) or else Present (Proc_Param) then
+            return False;
+         end if;
+
+         return True;
+      end Matches_Prefixed_View_Profile;
+
+   --  Start of processing for Check_Overriding_Indicator
+
+   begin
+      if Present (Ifaces) then
+         Decl := First (Vis_Decls);
+         while Present (Decl) loop
+
+            --  Consider entries with either "overriding" or "not overriding"
+            --  indicator present.
+
+            if Nkind (Decl) = N_Entry_Declaration
+              and then (Must_Override (Decl)
+                          or else
+                        Must_Not_Override (Decl))
+            then
+               Def_Id := Defining_Identifier (Decl);
+
+               Overrides := False;
+
+               Hom := Homonym (Def_Id);
+               while Present (Hom) loop
+
+                  --  The current entry may override a procedure from an
+                  --  implemented interface.
+
+                  if Ekind (Hom) = E_Procedure
+                    and then (Is_Abstract (Hom)
+                                or else
+                              Null_Present (Parent (Hom)))
+                  then
+                     Aliased_Hom := Hom;
+                     while Present (Alias (Aliased_Hom)) loop
+                        Aliased_Hom := Alias (Aliased_Hom);
+                     end loop;
+
+                     if Matches_Prefixed_View_Profile (Ifaces,
+                          Parameter_Specifications (Decl),
+                          Parameter_Specifications (Parent (Aliased_Hom)))
+                     then
+                        Overrides := True;
+                        exit;
+                     end if;
+                  end if;
+
+                  Hom := Homonym (Hom);
+               end loop;
+
+               if Overrides then
+                  if Must_Not_Override (Decl) then
+                     Error_Msg_NE ("entry& is overriding", Def_Id, Def_Id);
+                  end if;
+               else
+                  if Must_Override (Decl) then
+                     Error_Msg_NE ("entry& is not overriding", Def_Id, Def_Id);
+                  end if;
+               end if;
+
+            --  Consider subprograms with either "overriding" or "not
+            --  overriding" indicator present.
+
+            elsif Nkind (Decl) = N_Subprogram_Declaration
+              and then (Must_Override (Specification (Decl))
+                          or else
+                        Must_Not_Override (Specification (Decl)))
+            then
+               Spec := Specification (Decl);
+               Def_Id := Defining_Unit_Name (Spec);
+
+               Overrides := False;
+
+               Hom := Homonym (Def_Id);
+               while Present (Hom) loop
+
+                  --  Function
+
+                  if Ekind (Def_Id) = E_Function
+                    and then Ekind (Hom) = E_Function
+                    and then Is_Abstract (Hom)
+                    and then Matches_Prefixed_View_Profile (Ifaces,
+                               Parameter_Specifications (Spec),
+                               Parameter_Specifications (Parent (Hom)))
+                    and then Etype (Result_Definition (Spec)) =
+                             Etype (Result_Definition (Parent (Hom)))
+                  then
+                     Overrides := True;
+                     exit;
+
+                  --  Procedure
+
+                  elsif Ekind (Def_Id) = E_Procedure
+                    and then Ekind (Hom) = E_Procedure
+                    and then (Is_Abstract (Hom)
+                                or else
+                              Null_Present (Parent (Hom)))
+                    and then Matches_Prefixed_View_Profile (Ifaces,
+                               Parameter_Specifications (Spec),
+                               Parameter_Specifications (Parent (Hom)))
+                  then
+                     Overrides := True;
+                     exit;
+                  end if;
+
+                  Hom := Homonym (Hom);
+               end loop;
+
+               if Overrides then
+                  if Must_Not_Override (Spec) then
+                     Error_Msg_NE
+                       ("subprogram& is overriding", Def_Id, Def_Id);
+                  end if;
+               else
+                  if Must_Override (Spec) then
+                     Error_Msg_NE
+                       ("subprogram& is not overriding", Def_Id, Def_Id);
+                  end if;
+               end if;
+            end if;
+
+            Next (Decl);
+         end loop;
+
+      --  The protected or task type is not implementing an interface, we need
+      --  to check for the presence of "overriding" entries or subprograms and
+      --  flag them as erroneous.
+
+      else
+         Decl := First (Vis_Decls);
+         while Present (Decl) loop
+            if Nkind (Decl) = N_Entry_Declaration
+              and then Must_Override (Decl)
+            then
+               Def_Id := Defining_Identifier (Decl);
+               Error_Msg_NE ("entry& is not overriding", Def_Id, Def_Id);
+
+            elsif Nkind (Decl) = N_Subprogram_Declaration
+              and then Must_Override (Specification (Decl))
+            then
+               Def_Id := Defining_Identifier (Specification (Decl));
+               Error_Msg_NE ("subprogram& is not overriding", Def_Id, Def_Id);
+            end if;
+
+            Next (Decl);
+         end loop;
+      end if;
+   end Check_Overriding_Indicator;
+
    --------------------------
    -- Find_Concurrent_Spec --
    --------------------------
@@ -1926,10 +2432,8 @@ package body Sem_Ch9 is
    procedure Install_Declarations (Spec : Entity_Id) is
       E    : Entity_Id;
       Prev : Entity_Id;
-
    begin
       E := First_Entity (Spec);
-
       while Present (E) loop
          Prev := Current_Entity (E);
          Set_Current_Entity (E);

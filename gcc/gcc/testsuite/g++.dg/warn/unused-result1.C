@@ -1,4 +1,3 @@
-// APPLE LOCAL file mainline 2006-09-08 4658012
 // PR c++/27371
 
 class QByteArray {

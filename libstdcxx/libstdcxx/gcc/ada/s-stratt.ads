@@ -1,12 +1,12 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                         GNAT RUNTIME COMPONENTS                          --
+--                         GNAT RUN-TIME COMPONENTS                         --
 --                                                                          --
 --             S Y S T E M . S T R E A M _ A T T R I B U T E S              --
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2003 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -44,7 +44,7 @@ with System.Unsigned_Types;
 with Ada.Streams;
 
 package System.Stream_Attributes is
-pragma Preelaborate (Stream_Attributes);
+   pragma Preelaborate;
 
    pragma Suppress (Accessibility_Check, Stream_Attributes);
    --  No need to check accessibility on arguments of subprograms
@@ -101,25 +101,26 @@ pragma Preelaborate (Stream_Attributes);
    --  is the same for all elementary types (no bounds or discriminants
    --  are involved).
 
-   function I_AD  (Stream : access RST) return Fat_Pointer;
-   function I_AS  (Stream : access RST) return Thin_Pointer;
-   function I_B   (Stream : access RST) return Boolean;
-   function I_C   (Stream : access RST) return Character;
-   function I_F   (Stream : access RST) return Float;
-   function I_I   (Stream : access RST) return Integer;
-   function I_LF  (Stream : access RST) return Long_Float;
-   function I_LI  (Stream : access RST) return Long_Integer;
-   function I_LLF (Stream : access RST) return Long_Long_Float;
-   function I_LLI (Stream : access RST) return Long_Long_Integer;
-   function I_LLU (Stream : access RST) return UST.Long_Long_Unsigned;
-   function I_LU  (Stream : access RST) return UST.Long_Unsigned;
-   function I_SF  (Stream : access RST) return Short_Float;
-   function I_SI  (Stream : access RST) return Short_Integer;
-   function I_SSI (Stream : access RST) return Short_Short_Integer;
-   function I_SSU (Stream : access RST) return UST.Short_Short_Unsigned;
-   function I_SU  (Stream : access RST) return UST.Short_Unsigned;
-   function I_U   (Stream : access RST) return UST.Unsigned;
-   function I_WC  (Stream : access RST) return Wide_Character;
+   function I_AD  (Stream : not null access RST) return Fat_Pointer;
+   function I_AS  (Stream : not null access RST) return Thin_Pointer;
+   function I_B   (Stream : not null access RST) return Boolean;
+   function I_C   (Stream : not null access RST) return Character;
+   function I_F   (Stream : not null access RST) return Float;
+   function I_I   (Stream : not null access RST) return Integer;
+   function I_LF  (Stream : not null access RST) return Long_Float;
+   function I_LI  (Stream : not null access RST) return Long_Integer;
+   function I_LLF (Stream : not null access RST) return Long_Long_Float;
+   function I_LLI (Stream : not null access RST) return Long_Long_Integer;
+   function I_LLU (Stream : not null access RST) return UST.Long_Long_Unsigned;
+   function I_LU  (Stream : not null access RST) return UST.Long_Unsigned;
+   function I_SF  (Stream : not null access RST) return Short_Float;
+   function I_SI  (Stream : not null access RST) return Short_Integer;
+   function I_SSI (Stream : not null access RST) return Short_Short_Integer;
+   function I_SSU (Stream : not null access RST)
+     return UST.Short_Short_Unsigned;
+   function I_SU  (Stream : not null access RST) return UST.Short_Unsigned;
+   function I_U   (Stream : not null access RST) return UST.Unsigned;
+   function I_WC  (Stream : not null access RST) return Wide_Character;
 
    -----------------------
    -- Output Procedures --
@@ -130,25 +131,29 @@ pragma Preelaborate (Stream_Attributes);
    --  between 'Write and 'Output because there are no discriminants
    --  or bounds to be written.
 
-   procedure W_AD  (Stream : access RST; Item : in Fat_Pointer);
-   procedure W_AS  (Stream : access RST; Item : in Thin_Pointer);
-   procedure W_B   (Stream : access RST; Item : in Boolean);
-   procedure W_C   (Stream : access RST; Item : in Character);
-   procedure W_F   (Stream : access RST; Item : in Float);
-   procedure W_I   (Stream : access RST; Item : in Integer);
-   procedure W_LF  (Stream : access RST; Item : in Long_Float);
-   procedure W_LI  (Stream : access RST; Item : in Long_Integer);
-   procedure W_LLF (Stream : access RST; Item : in Long_Long_Float);
-   procedure W_LLI (Stream : access RST; Item : in Long_Long_Integer);
-   procedure W_LLU (Stream : access RST; Item : in UST.Long_Long_Unsigned);
-   procedure W_LU  (Stream : access RST; Item : in UST.Long_Unsigned);
-   procedure W_SF  (Stream : access RST; Item : in Short_Float);
-   procedure W_SI  (Stream : access RST; Item : in Short_Integer);
-   procedure W_SSI (Stream : access RST; Item : in Short_Short_Integer);
-   procedure W_SSU (Stream : access RST; Item : in UST.Short_Short_Unsigned);
-   procedure W_SU  (Stream : access RST; Item : in UST.Short_Unsigned);
-   procedure W_U   (Stream : access RST; Item : in UST.Unsigned);
-   procedure W_WC  (Stream : access RST; Item : in Wide_Character);
+   procedure W_AD  (Stream : not null access RST; Item : Fat_Pointer);
+   procedure W_AS  (Stream : not null access RST; Item : Thin_Pointer);
+   procedure W_B   (Stream : not null access RST; Item : Boolean);
+   procedure W_C   (Stream : not null access RST; Item : Character);
+   procedure W_F   (Stream : not null access RST; Item : Float);
+   procedure W_I   (Stream : not null access RST; Item : Integer);
+   procedure W_LF  (Stream : not null access RST; Item : Long_Float);
+   procedure W_LI  (Stream : not null access RST; Item : Long_Integer);
+   procedure W_LLF (Stream : not null access RST; Item : Long_Long_Float);
+   procedure W_LLI (Stream : not null access RST; Item : Long_Long_Integer);
+   procedure W_LLU (Stream : not null access RST;
+                    Item   : UST.Long_Long_Unsigned);
+   procedure W_LU  (Stream : not null access RST; Item : UST.Long_Unsigned);
+   procedure W_SF  (Stream : not null access RST; Item : Short_Float);
+   procedure W_SI  (Stream : not null access RST; Item : Short_Integer);
+   procedure W_SSI (Stream : not null access RST;
+                    Item   : Short_Short_Integer);
+   procedure W_SSU (Stream : not null access RST;
+                    Item   : UST.Short_Short_Unsigned);
+   procedure W_SU  (Stream : not null access RST;
+                    Item   : UST.Short_Unsigned);
+   procedure W_U   (Stream : not null access RST; Item : UST.Unsigned);
+   procedure W_WC  (Stream : not null access RST; Item : Wide_Character);
 
    ----------------------------
    -- Composite Input/Output --

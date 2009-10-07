@@ -87,10 +87,16 @@ Package=<4>
     Project_Dep_Name ApacheMonitor
     End Project Dependency
     Begin Project Dependency
-    Project_Dep_Name libapriconv_ccs_modules
+    Project_Dep_Name apr_ldap
     End Project Dependency
     Begin Project Dependency
     Project_Dep_Name libapriconv_ces_modules
+    End Project Dependency
+    Begin Project Dependency
+    Project_Dep_Name libapriconv_ccs_modules
+    End Project Dependency
+    Begin Project Dependency
+    Project_Dep_Name apr_ldap
     End Project Dependency
     Begin Project Dependency
     Project_Dep_Name mod_actions
@@ -255,6 +261,9 @@ Package=<4>
     Project_Dep_Name mod_status
     End Project Dependency
     Begin Project Dependency
+    Project_Dep_Name mod_substitute
+    End Project Dependency
+    Begin Project Dependency
     Project_Dep_Name mod_unique_id
     End Project Dependency
     Begin Project Dependency
@@ -388,6 +397,150 @@ Package=<4>
     End Project Dependency
     Begin Project Dependency
     Project_Dep_Name xml
+    End Project Dependency
+}}}
+
+###############################################################################
+
+Project: "apr_dbd_freetds"=".\srclib\apr-util\dbd\apr_dbd_freetds.dsp" - Package Owner=<4>
+
+Package=<5>
+{{{
+}}}
+
+Package=<4>
+{{{
+    Begin Project Dependency
+    Project_Dep_Name libapr
+    End Project Dependency
+    Begin Project Dependency
+    Project_Dep_Name libaprutil
+    End Project Dependency
+}}}
+
+###############################################################################
+
+Project: "apr_dbd_odbc"=".\srclib\apr-util\dbd\apr_dbd_odbc.dsp" - Package Owner=<4>
+
+Package=<5>
+{{{
+}}}
+
+Package=<4>
+{{{
+    Begin Project Dependency
+    Project_Dep_Name libapr
+    End Project Dependency
+    Begin Project Dependency
+    Project_Dep_Name libaprutil
+    End Project Dependency
+}}}
+
+###############################################################################
+
+Project: "apr_dbd_mysql"=".\srclib\apr-util\dbd\apr_dbd_mysql.dsp" - Package Owner=<4>
+
+Package=<5>
+{{{
+}}}
+
+Package=<4>
+{{{
+    Begin Project Dependency
+    Project_Dep_Name libapr
+    End Project Dependency
+    Begin Project Dependency
+    Project_Dep_Name libaprutil
+    End Project Dependency
+}}}
+
+###############################################################################
+
+Project: "apr_dbd_oracle"=".\srclib\apr-util\dbd\apr_dbd_oracle.dsp" - Package Owner=<4>
+
+Package=<5>
+{{{
+}}}
+
+Package=<4>
+{{{
+    Begin Project Dependency
+    Project_Dep_Name libapr
+    End Project Dependency
+    Begin Project Dependency
+    Project_Dep_Name libaprutil
+    End Project Dependency
+}}}
+
+###############################################################################
+
+Project: "apr_dbd_pgsql"=".\srclib\apr-util\dbd\apr_dbd_pgsql.dsp" - Package Owner=<4>
+
+Package=<5>
+{{{
+}}}
+
+Package=<4>
+{{{
+    Begin Project Dependency
+    Project_Dep_Name libapr
+    End Project Dependency
+    Begin Project Dependency
+    Project_Dep_Name libaprutil
+    End Project Dependency
+}}}
+
+###############################################################################
+
+Project: "apr_dbd_sqlite2"=".\srclib\apr-util\dbd\apr_dbd_sqlite2.dsp" - Package Owner=<4>
+
+Package=<5>
+{{{
+}}}
+
+Package=<4>
+{{{
+    Begin Project Dependency
+    Project_Dep_Name libapr
+    End Project Dependency
+    Begin Project Dependency
+    Project_Dep_Name libaprutil
+    End Project Dependency
+}}}
+
+###############################################################################
+
+Project: "apr_dbd_sqlite3"=".\srclib\apr-util\dbd\apr_dbd_sqlite3.dsp" - Package Owner=<4>
+
+Package=<5>
+{{{
+}}}
+
+Package=<4>
+{{{
+    Begin Project Dependency
+    Project_Dep_Name libapr
+    End Project Dependency
+    Begin Project Dependency
+    Project_Dep_Name libaprutil
+    End Project Dependency
+}}}
+
+###############################################################################
+
+Project: "apr_ldap"=".\srclib\apr-util\ldap\apr_ldap.dsp" - Package Owner=<4>
+
+Package=<5>
+{{{
+}}}
+
+Package=<4>
+{{{
+    Begin Project Dependency
+    Project_Dep_Name libapr
+    End Project Dependency
+    Begin Project Dependency
+    Project_Dep_Name libaprutil
     End Project Dependency
 }}}
 
@@ -550,6 +703,9 @@ Package=<4>
     End Project Dependency
     Begin Project Dependency
     Project_Dep_Name libapriconv
+    End Project Dependency
+    Begin Project Dependency
+    Project_Dep_Name libapriconv_ces_modules
     End Project Dependency
 }}}
 
@@ -744,7 +900,7 @@ Package=<4>
 
 ###############################################################################
 
-Project: "mod_authn_anon"=.\modules\aaa\mod_authn_anon.dsp - Package Owner=<4>
+Project: "mod_authn_alias"=.\modules\aaa\mod_authn_alias.dsp - Package Owner=<4>
 
 Package=<5>
 {{{
@@ -768,7 +924,7 @@ Package=<4>
 
 ###############################################################################
 
-Project: "mod_authn_alias"=.\modules\aaa\mod_authn_alias.dsp - Package Owner=<4>
+Project: "mod_authn_anon"=.\modules\aaa\mod_authn_anon.dsp - Package Owner=<4>
 
 Package=<5>
 {{{
@@ -2074,6 +2230,27 @@ Package=<4>
 ###############################################################################
 
 Project: "mod_status"=.\modules\generators\mod_status.dsp - Package Owner=<4>
+
+Package=<5>
+{{{
+}}}
+
+Package=<4>
+{{{
+    Begin Project Dependency
+    Project_Dep_Name libapr
+    End Project Dependency
+    Begin Project Dependency
+    Project_Dep_Name libaprutil
+    End Project Dependency
+    Begin Project Dependency
+    Project_Dep_Name libhttpd
+    End Project Dependency
+}}}
+
+###############################################################################
+
+Project: "mod_substitute"=.\modules\filters\mod_substitute.dsp - Package Owner=<4>
 
 Package=<5>
 {{{

@@ -1,3 +1,8 @@
+2008-09-05  Jason Molenda  (jmolenda@apple.com)
+
+	* gdb.c (gdb_show_objc_object): Update call to 
+	target_check_safe_call to pass the appropriate arguments.
+
 2008-03-05  Jason Molenda  (jmolenda@apple.com)
 
         * Makefile: Define TARGET_POWERPC so the tdep.h file knows which arch

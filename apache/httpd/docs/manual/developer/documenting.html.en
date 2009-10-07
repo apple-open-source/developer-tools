@@ -22,7 +22,7 @@
 </div>
 
     <p>Apache 2.0 uses <a href="http://www.doxygen.org/">Doxygen</a> to
-    document the APIs and global variables in the the code. This will explain
+    document the APIs and global variables in the code. This will explain
     the basics of how to document using Doxygen.</p>
 </div>
 <div class="top"><a href="#page-header"><img alt="top" src="../images/up.gif" /></a></div>
@@ -79,6 +79,6 @@
 <div class="bottomlang">
 <p><span>Available Languages: </span><a href="../en/developer/documenting.html" title="English">&nbsp;en&nbsp;</a></p>
 </div><div id="footer">
-<p class="apache">Copyright 2007 The Apache Software Foundation.<br />Licensed under the <a href="http://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a>.</p>
+<p class="apache">Copyright 2008 The Apache Software Foundation.<br />Licensed under the <a href="http://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a>.</p>
 <p class="menu"><a href="../mod/">Modules</a> | <a href="../mod/directives.html">Directives</a> | <a href="../faq/">FAQ</a> | <a href="../glossary.html">Glossary</a> | <a href="../sitemap.html">Sitemap</a></p></div>
 </body></html>

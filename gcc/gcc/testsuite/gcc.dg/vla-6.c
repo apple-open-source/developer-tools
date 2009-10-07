@@ -1,4 +1,3 @@
-/* APPLE LOCAL file mainline 2006-05-18 4336222 */
 /* { dg-options "-std=c99 -pedantic-errors" } */
 
 int a[*];			/* { dg-error "not allowed in other than function prototype scope" } */

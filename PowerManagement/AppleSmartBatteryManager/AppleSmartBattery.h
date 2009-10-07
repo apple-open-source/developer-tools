@@ -27,6 +27,7 @@
 #include <IOKit/IOService.h>
 #include <IOKit/pwr_mgt/IOPMPowerSource.h>
 #include <IOKit/smbus/IOSMBusController.h>
+#include <IOKit/acpi/IOACPIPlatformDevice.h>
 
 #include "AppleSmartBatteryCommands.h"
 #include "AppleSmartBatteryManager.h"
@@ -63,10 +64,12 @@ protected:
     bool                        fPermanentFailure;
     bool                        fFullyDischarged;
     bool                        fFullyCharged;
-    bool                        fBatteryPresent;
-    bool                        fACConnected;
+    int                         fBatteryPresent;
+    int                         fACConnected;
     int                         fAvgCurrent;
     OSArray                     *fCellVoltages;
+
+    IOACPIPlatformDevice        *fACPIProvider;
 
     // Accessor for MaxError reading
     // Percent error in MaxCapacity reading
@@ -99,10 +102,18 @@ protected:
     void    setManufactureDate(int date);
     int     manufactureDate(void);
 
+    void    setSerialNumber(uint16_t sernum);
+    uint16_t    serialNumber(void);
+    
+    void    setChargeStatus(const OSSymbol *sym);
+    const OSSymbol    *chargeStatus(void);
+
     // An OSData container of manufacturer specific data
     void    setManufacturerData(uint8_t *buffer, uint32_t bufferSize);
 
     void    oneTimeBatterySetup(void);
+    
+    void    constructAppleSerialNumber(void);
     
 public:
     static AppleSmartBattery *smartBattery(void);
@@ -115,8 +126,6 @@ public:
 
     bool    pollBatteryState(int path = 0);
     
-    IOReturn setPowerState(unsigned long which, IOService *whom);
-
     void    handleBatteryInserted(void);
     
     void    handleBatteryRemoved(void);
@@ -125,7 +134,7 @@ public:
 
     void    handleChargeInhibited(bool charge_state);
     
-    void    handleUCStalled(bool stall);
+    void    handleExclusiveAccess(bool exclusive);
 
 protected:
     void    logReadError( const char *error_type, 
@@ -143,6 +152,8 @@ protected:
     bool    transactionCompletion(void *ref, IOSMBusTransaction *transaction);
 
     IOReturn readWordAsync(uint8_t address, uint8_t cmd);
+
+    IOReturn writeWordAsync(uint8_t address, uint8_t cmd, uint16_t writeWord);
 
     IOReturn readBlockAsync(uint8_t address, uint8_t cmd);
 };

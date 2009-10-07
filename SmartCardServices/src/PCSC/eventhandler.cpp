@@ -204,7 +204,7 @@ LONG EHSpawnEventHandler(PREADER_CONTEXT rContext)
 	UCHAR ucAtr[MAX_ATR_SIZE];
 	DWORD dwAtrLen = 0;
 
-	secdebug("pcscd", "EHSpawnEventHandler: rContext: 0x%08X", rContext);
+	secdebug("pcscd", "EHSpawnEventHandler: rContext: %p", rContext);
 	rv = IFDStatusICC(rContext, &dwStatus, ucAtr, &dwAtrLen);
 	if (rv != SCARD_S_SUCCESS)
 	{
@@ -262,21 +262,19 @@ void EHStatusHandlerThread(PREADER_CONTEXT rContext)
 	dwReaderSharing = 0;
 	dwCurrentState = 0;
 
-	secdebug("pcscd", "EHStatusHandlerThread: rContext: 0x%08X", rContext);
+	secdebug("pcscd", "EHStatusHandlerThread: rContext: %p", rContext);
 	lpcReader = rContext->lpcReader;
 
 	PCSCD::SharedReaderState *rs = PCSCD::SharedReaderState::overlay(rContext->readerState);
 
 	DWORD tmpCardAtrLength = MAX_ATR_SIZE;
 	rv = IFDStatusICC(rContext, &dwStatus, rs->xcardAtr(), &tmpCardAtrLength);
-	rs->xcardAtrLength(tmpCardAtrLength);
 	secdebug("pcscd", "EHStatusHandlerThread: initial call to IFDStatusICC: %d [%04X]", rv, rv);
 
 	if (dwStatus & SCARD_PRESENT)
 	{
 		tmpCardAtrLength = MAX_ATR_SIZE;
 		rv = IFDPowerICC(rContext, IFD_POWER_UP, rs->xcardAtr(), &tmpCardAtrLength);
-		rs->xcardAtrLength(tmpCardAtrLength);
 
 		/* the protocol is unset after a power on */
 		rs->xcardProtocol(SCARD_PROTOCOL_UNSET);
@@ -285,6 +283,8 @@ void EHStatusHandlerThread(PREADER_CONTEXT rContext)
 
 		if (rv == IFD_SUCCESS)
 		{
+			rs->xcardAtrLength(tmpCardAtrLength);
+
 			dwStatus |= SCARD_PRESENT;
 			dwStatus &= ~SCARD_ABSENT;
 			dwStatus |= SCARD_POWERED;
@@ -356,7 +356,6 @@ void EHStatusHandlerThread(PREADER_CONTEXT rContext)
 
 		DWORD tmpCardAtrLength = MAX_ATR_SIZE;
 		rv = IFDStatusICC(rContext, &dwStatus, rs->xcardAtr(), &tmpCardAtrLength);
-		rs->xcardAtrLength(tmpCardAtrLength);
 
 		if (rv != SCARD_S_SUCCESS)
 		{
@@ -445,7 +444,6 @@ void EHStatusHandlerThread(PREADER_CONTEXT rContext)
 				SYS_USleep(PCSCLITE_STATUS_WAIT);
 				DWORD tmpCardAtrLength = MAX_ATR_SIZE;
 				rv = IFDPowerICC(rContext, IFD_POWER_UP, rs->xcardAtr(), &tmpCardAtrLength);
-				rs->xcardAtrLength(tmpCardAtrLength);
 
 				/* the protocol is unset after a power on */
 				rs->xcardProtocol(SCARD_PROTOCOL_UNSET);
@@ -455,6 +453,8 @@ void EHStatusHandlerThread(PREADER_CONTEXT rContext)
 				DWORD readerStateTmp = rs->xreaderState();
 				if (rv == IFD_SUCCESS)
 				{
+					rs->xcardAtrLength(tmpCardAtrLength);
+
 					readerStateTmp |= SCARD_PRESENT;
 					readerStateTmp &= ~SCARD_ABSENT;
 					readerStateTmp |= SCARD_POWERED;

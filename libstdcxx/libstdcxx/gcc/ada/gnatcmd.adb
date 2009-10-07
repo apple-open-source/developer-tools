@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1996-2004 Free Software Foundation, Inc.          --
+--          Copyright (C) 1996-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -34,7 +34,6 @@ with Opt;      use Opt;
 with Osint;    use Osint;
 with Output;
 with Prj;      use Prj;
-with Prj.Com;
 with Prj.Env;
 with Prj.Ext;  use Prj.Ext;
 with Prj.Pars;
@@ -52,11 +51,10 @@ with Ada.Text_IO;             use Ada.Text_IO;
 
 with GNAT.OS_Lib;             use GNAT.OS_Lib;
 
-with Table;
-
-with VMS_Conv; use VMS_Conv;
+with VMS_Conv;                use VMS_Conv;
 
 procedure GNATCmd is
+   Project_Tree      : constant Project_Tree_Ref := new Project_Tree_Data;
    Project_File      : String_Access;
    Project           : Prj.Project_Id;
    Current_Verbosity : Prj.Verbosity := Prj.Default;
@@ -92,6 +90,15 @@ procedure GNATCmd is
       Table_Name           => "Gnatcmd.Carg_Switches");
    --  A table to keep the switches following -cargs for ASIS tools
 
+   package Rules_Switches is new Table.Table
+     (Table_Component_Type => String_Access,
+      Table_Index_Type     => Integer,
+      Table_Low_Bound      => 1,
+      Table_Initial        => 20,
+      Table_Increment      => 100,
+      Table_Name           => "Gnatcmd.Rules_Switches");
+   --  A table to keep the switches following -rules for gnatcheck
+
    package Library_Paths is new Table.Table (
      Table_Component_Type => String_Access,
      Table_Index_Type     => Integer,
@@ -106,6 +113,8 @@ procedure GNATCmd is
 
    Naming_String    : constant String_Access := new String'("naming");
    Binder_String    : constant String_Access := new String'("binder");
+   Compiler_String  : constant String_Access := new String'("compiler");
+   Check_String     : constant String_Access := new String'("check");
    Eliminate_String : constant String_Access := new String'("eliminate");
    Finder_String    : constant String_Access := new String'("finder");
    Linker_String    : constant String_Access := new String'("linker");
@@ -118,8 +127,11 @@ procedure GNATCmd is
    Packages_To_Check_By_Binder   : constant String_List_Access :=
      new String_List'((Naming_String, Binder_String));
 
+   Packages_To_Check_By_Check : constant String_List_Access :=
+     new String_List'((Naming_String, Check_String, Compiler_String));
+
    Packages_To_Check_By_Eliminate : constant String_List_Access :=
-     new String_List'((Naming_String, Eliminate_String));
+     new String_List'((Naming_String, Eliminate_String, Compiler_String));
 
    Packages_To_Check_By_Finder    : constant String_List_Access :=
      new String_List'((Naming_String, Finder_String));
@@ -131,13 +143,13 @@ procedure GNATCmd is
      new String_List'((Naming_String, Gnatls_String));
 
    Packages_To_Check_By_Pretty    : constant String_List_Access :=
-     new String_List'((Naming_String, Pretty_String));
+     new String_List'((Naming_String, Pretty_String, Compiler_String));
 
    Packages_To_Check_By_Gnatstub  : constant String_List_Access :=
-     new String_List'((Naming_String, Gnatstub_String));
+     new String_List'((Naming_String, Gnatstub_String, Compiler_String));
 
    Packages_To_Check_By_Metric  : constant String_List_Access :=
-     new String_List'((Naming_String, Metric_String));
+     new String_List'((Naming_String, Metric_String, Compiler_String));
 
    Packages_To_Check_By_Xref      : constant String_List_Access :=
      new String_List'((Naming_String, Xref_String));
@@ -149,12 +161,22 @@ procedure GNATCmd is
    ----------------------------------
 
    The_Command : Command_Type;
+   --  The command specified in the invocation of the GNAT driver
 
    Command_Arg : Positive := 1;
+   --  The index of the command in the arguments of the GNAT driver
 
    My_Exit_Status : Exit_Status := Success;
+   --  The exit status of the spawned tool. Used to set the correct VMS
+   --  exit status.
 
    Current_Work_Dir : constant String := Get_Current_Dir;
+   --  The path of the working directory
+
+   All_Projects : Boolean := False;
+   --  Flag used for GNAT PRETTY and GNAT METRIC to indicate that
+   --  the underlying tool (gnatcheck, gnatpp or gnatmetric) should be invoked
+   --  for all sources of all projects.
 
    -----------------------
    -- Local Subprograms --
@@ -163,6 +185,10 @@ procedure GNATCmd is
    procedure Add_To_Carg_Switches (Switch : String_Access);
    --  Add a switch to the Carg_Switches table. If it is the first one,
    --  put the switch "-cargs" at the beginning of the table.
+
+   procedure Add_To_Rules_Switches (Switch : String_Access);
+   --  Add a switch to the Rules_Switches table. If it is the first one,
+   --  put the switch "-crules" at the beginning of the table.
 
    procedure Check_Files;
    --  For GNAT LIST, GNAT PRETTY and GNAT METRIC, check if a project
@@ -201,7 +227,7 @@ procedure GNATCmd is
    --  Display usage for platforms other than VMS
 
    procedure Process_Link;
-   --  Process GNAT LINK, when there is a project file specified.
+   --  Process GNAT LINK, when there is a project file specified
 
    procedure Set_Library_For
      (Project             : Project_Id;
@@ -238,13 +264,30 @@ procedure GNATCmd is
       Carg_Switches.Table (Carg_Switches.Last) := Switch;
    end Add_To_Carg_Switches;
 
+   ---------------------------
+   -- Add_To_Rules_Switches --
+   ---------------------------
+
+   procedure Add_To_Rules_Switches (Switch : String_Access) is
+   begin
+      --  If the Rules_Switches table is empty, put "-rules" at the beginning
+
+      if Rules_Switches.Last = 0 then
+         Rules_Switches.Increment_Last;
+         Rules_Switches.Table (Rules_Switches.Last) := new String'("-rules");
+      end if;
+
+      Rules_Switches.Increment_Last;
+      Rules_Switches.Table (Rules_Switches.Last) := Switch;
+   end Add_To_Rules_Switches;
+
    -----------------
    -- Check_Files --
    -----------------
 
    procedure Check_Files is
       Add_Sources : Boolean := True;
-      Unit_Data   : Prj.Com.Unit_Data;
+      Unit_Data   : Prj.Unit_Data;
       Subunit     : Boolean := False;
 
    begin
@@ -263,11 +306,11 @@ procedure GNATCmd is
       if Add_Sources then
          declare
             Current_Last : constant Integer := Last_Switches.Last;
-            use Prj.Com;
-
          begin
-            for Unit in 1 .. Prj.Com.Units.Last loop
-               Unit_Data := Prj.Com.Units.Table (Unit);
+            for Unit in Unit_Table.First ..
+                        Unit_Table.Last (Project_Tree.Units)
+            loop
+               Unit_Data := Project_Tree.Units.Table (Unit);
 
                --  For gnatls, we only need to put the library units,
                --  body or spec, but not the subunits.
@@ -335,10 +378,10 @@ procedure GNATCmd is
                   end if;
 
                else
-                  --  For gnatpp and gnatmetric, put all sources
-                  --  of the project.
+                  --  For gnatcheck, gnatpp and gnatmetric, put all sources
+                  --  of the project, or of all projects if -U was specified.
 
-                  for Kind in Prj.Com.Spec_Or_Body loop
+                  for Kind in Spec_Or_Body loop
 
                      --  Put only sources that belong to the main
                      --  project.
@@ -359,7 +402,7 @@ procedure GNATCmd is
 
             --  If the list of files is too long, create a temporary
             --  text file that lists these files, and pass this temp
-            --  file to gnatpp or gnatmetric using switch -files=.
+            --  file to gnatcheck, gnatpp or gnatmetric using switch -files=.
 
             if Last_Switches.Last - Current_Last >
               Max_Files_On_The_Command_Line
@@ -425,12 +468,16 @@ procedure GNATCmd is
       Root_Project : Project_Id) return Boolean
    is
    begin
-      if Project = Root_Project then
+      if Project = No_Project then
+         return False;
+
+      elsif All_Projects or Project = Root_Project then
          return True;
 
       elsif The_Command = Metric then
          declare
-            Data : Project_Data := Projects.Table (Root_Project);
+            Data : Project_Data :=
+                     Project_Tree.Projects.Table (Root_Project);
 
          begin
             while Data.Extends /= No_Project loop
@@ -438,7 +485,7 @@ procedure GNATCmd is
                   return True;
                end if;
 
-               Data := Projects.Table (Data.Extends);
+               Data := Project_Tree.Projects.Table (Data.Extends);
             end loop;
          end;
       end if;
@@ -464,7 +511,7 @@ procedure GNATCmd is
             end if;
          end loop;
 
-         Get_Name_String (Projects.Table
+         Get_Name_String (Project_Tree.Projects.Table
                             (Project).Exec_Directory);
 
          if Name_Buffer (Name_Len) /= Directory_Separator then
@@ -487,8 +534,8 @@ procedure GNATCmd is
    function Configuration_Pragmas_File return Name_Id is
    begin
       Prj.Env.Create_Config_Pragmas_File
-        (Project, Project, Include_Config_Files => False);
-      return Projects.Table (Project).Config_File_Name;
+        (Project, Project, Project_Tree, Include_Config_Files => False);
+      return Project_Tree.Projects.Table (Project).Config_File_Name;
    end Configuration_Pragmas_File;
 
    ------------------------------
@@ -501,19 +548,25 @@ procedure GNATCmd is
    begin
       if not Keep_Temporary_Files then
          if Project /= No_Project then
-            for Prj in 1 .. Projects.Last loop
-               if Projects.Table (Prj).Config_File_Temp then
+            for Prj in Project_Table.First ..
+                       Project_Table.Last (Project_Tree.Projects)
+            loop
+               if
+                 Project_Tree.Projects.Table (Prj).Config_File_Temp
+               then
                   if Verbose_Mode then
                      Output.Write_Str ("Deleting temp configuration file """);
                      Output.Write_Str
                        (Get_Name_String
-                          (Projects.Table (Prj).Config_File_Name));
+                          (Project_Tree.Projects.Table
+                             (Prj).Config_File_Name));
                      Output.Write_Line ("""");
                   end if;
 
                   Delete_File
                     (Name    => Get_Name_String
-                       (Projects.Table (Prj).Config_File_Name),
+                       (Project_Tree.Projects.Table
+                          (Prj).Config_File_Name),
                      Success => Success);
                end if;
             end loop;
@@ -568,7 +621,7 @@ procedure GNATCmd is
       --  Check if there are library project files
 
       if MLib.Tgt.Support_For_Libraries /= MLib.Tgt.None then
-         Set_Libraries (Project, There_Are_Libraries);
+         Set_Libraries (Project, Project_Tree, There_Are_Libraries);
       end if;
 
       --  If there are, add the necessary additional switches
@@ -729,8 +782,8 @@ procedure GNATCmd is
                         declare
                            Dir : constant String :=
                                    Get_Name_String
-                                     (Projects.Table (Prj).
-                                              Object_Directory);
+                                     (Project_Tree.Projects.Table
+                                        (Prj).Object_Directory);
                         begin
                            if Is_Regular_File
                                 (Dir &
@@ -754,7 +807,8 @@ procedure GNATCmd is
                         --  Go to the project being extended,
                         --  if any.
 
-                        Prj := Projects.Table (Prj).Extends;
+                        Prj :=
+                          Project_Tree.Projects.Table (Prj).Extends;
                         exit Project_Loop when Prj = No_Project;
                      end loop Project_Loop;
                   end if;
@@ -811,7 +865,8 @@ procedure GNATCmd is
                   Last_Switches.Table (Last_Switches.Last) :=
                     new String'("-o");
                   Get_Name_String
-                    (Projects.Table (Project).Exec_Directory);
+                    (Project_Tree.Projects.Table
+                       (Project).Exec_Directory);
                   Last_Switches.Increment_Last;
                   Last_Switches.Table (Last_Switches.Last) :=
                     new String'(Name_Buffer (1 .. Name_Len) &
@@ -839,7 +894,7 @@ procedure GNATCmd is
    begin
       --  Case of library project
 
-      if Projects.Table (Project).Library then
+      if Project_Tree.Projects.Table (Project).Library then
          There_Are_Libraries := True;
 
          --  Add the -L switch
@@ -848,7 +903,8 @@ procedure GNATCmd is
          Last_Switches.Table (Last_Switches.Last) :=
            new String'("-L" &
                        Get_Name_String
-                       (Projects.Table (Project).Library_Dir));
+                         (Project_Tree.Projects.Table
+                            (Project).Library_Dir));
 
          --  Add the -l switch
 
@@ -856,18 +912,21 @@ procedure GNATCmd is
          Last_Switches.Table (Last_Switches.Last) :=
            new String'("-l" &
                        Get_Name_String
-                       (Projects.Table (Project).Library_Name));
+                         (Project_Tree.Projects.Table
+                            (Project).Library_Name));
 
          --  Add the directory to table Library_Paths, to be processed later
          --  if library is not static and if Path_Option is not null.
 
-         if Projects.Table (Project).Library_Kind /= Static
+         if Project_Tree.Projects.Table (Project).Library_Kind /=
+              Static
            and then Path_Option /= null
          then
             Library_Paths.Increment_Last;
             Library_Paths.Table (Library_Paths.Last) :=
               new String'(Get_Name_String
-                            (Projects.Table (Project).Library_Dir));
+                            (Project_Tree.Projects.Table
+                               (Project).Library_Dir));
          end if;
       end if;
    end Set_Library_For;
@@ -988,7 +1047,7 @@ begin
 
    Snames.Initialize;
 
-   Prj.Initialize;
+   Prj.Initialize (Project_Tree);
 
    Last_Switches.Init;
    Last_Switches.Set_Last (0);
@@ -997,6 +1056,8 @@ begin
    First_Switches.Set_Last (0);
    Carg_Switches.Init;
    Carg_Switches.Set_Last (0);
+   Rules_Switches.Init;
+   Rules_Switches.Set_Last (0);
 
    VMS_Conv.Initialize;
 
@@ -1297,6 +1358,7 @@ begin
 
             Prj.Pars.Parse
               (Project           => Project,
+               In_Tree           => Project_Tree,
                Project_File_Name => Project_File.all,
                Packages_To_Check => All_Packages);
 
@@ -1315,7 +1377,7 @@ begin
       Exec_Path := Locate_Exec_On_Path (Program);
 
       if Exec_Path = null then
-         Put_Line (Standard_Error, "Couldn't locate " & Program);
+         Put_Line (Standard_Error, "could not locate " & Program);
          raise Error_Exit;
       end if;
 
@@ -1329,10 +1391,11 @@ begin
          end loop;
       end if;
 
-      --  For BIND, FIND, LINK, LIST, PRETTY ad  XREF, look for project file
-      --  related switches.
+      --  For BIND, CHECK, FIND, LINK, LIST, PRETTY ad  XREF, look for project
+      --  file related switches.
 
       if The_Command = Bind
+        or else The_Command = Check
         or else The_Command = Elim
         or else The_Command = Find
         or else The_Command = Link
@@ -1346,6 +1409,9 @@ begin
             when Bind =>
                Tool_Package_Name := Name_Binder;
                Packages_To_Check := Packages_To_Check_By_Binder;
+            when Check =>
+               Tool_Package_Name := Name_Check;
+               Packages_To_Check := Packages_To_Check_By_Check;
             when Elim =>
                Tool_Package_Name := Name_Eliminate;
                Packages_To_Check := Packages_To_Check_By_Eliminate;
@@ -1512,6 +1578,16 @@ begin
 
                      Remove_Switch (Arg_Num);
 
+                  elsif
+                    (The_Command = Check  or else
+                     The_Command = Pretty or else
+                     The_Command = Metric)
+                    and then Argv'Length = 2
+                    and then Argv (2) = 'U'
+                  then
+                     All_Projects := True;
+                     Remove_Switch (Arg_Num);
+
                   else
                      Arg_Num := Arg_Num + 1;
                   end if;
@@ -1531,6 +1607,7 @@ begin
 
          Prj.Pars.Parse
            (Project           => Project,
+            In_Tree           => Project_Tree,
             Project_File_Name => Project_File.all,
             Packages_To_Check => Packages_To_Check);
 
@@ -1543,12 +1620,13 @@ begin
 
          declare
             Data : constant Prj.Project_Data :=
-                     Prj.Projects.Table (Project);
+                     Project_Tree.Projects.Table (Project);
 
             Pkg : constant Prj.Package_Id :=
                     Prj.Util.Value_Of
                       (Name        => Tool_Package_Name,
-                       In_Packages => Data.Decl.Packages);
+                       In_Packages => Data.Decl.Packages,
+                       In_Tree     => Project_Tree);
 
             Element : Package_Element;
 
@@ -1560,7 +1638,7 @@ begin
 
          begin
             if Pkg /= No_Package then
-               Element := Packages.Table (Pkg);
+               Element := Project_Tree.Packages.Table (Pkg);
 
                --  Packages Gnatls has a single attribute Switches, that is
                --  not an associative array.
@@ -1569,13 +1647,15 @@ begin
                   The_Switches :=
                     Prj.Util.Value_Of
                     (Variable_Name => Snames.Name_Switches,
-                     In_Variables => Element.Decl.Attributes);
+                     In_Variables  => Element.Decl.Attributes,
+                     In_Tree       => Project_Tree);
 
                --  Packages Binder (for gnatbind), Cross_Reference (for
                --  gnatxref), Linker (for gnatlink) Finder (for gnatfind),
-               --  Pretty_Printer (for gnatpp) Eliminate (for gnatelim) and
-               --  Metric (for gnatmetric) have an attributed Switches,
-               --  an associative array, indexed by the name of the file.
+               --  Pretty_Printer (for gnatpp) Eliminate (for gnatelim),
+               --  Check (for gnatcheck) and Metric (for gnatmetric) have
+               --  an attributed Switches, an associative array, indexed
+               --  by the name of the file.
 
                --  They also have an attribute Default_Switches, indexed
                --  by the name of the programming language.
@@ -1584,12 +1664,14 @@ begin
                   if The_Switches.Kind = Prj.Undefined then
                      Default_Switches_Array :=
                        Prj.Util.Value_Of
-                         (Name => Name_Default_Switches,
-                          In_Arrays => Element.Decl.Arrays);
+                         (Name      => Name_Default_Switches,
+                          In_Arrays => Element.Decl.Arrays,
+                          In_Tree   => Project_Tree);
                      The_Switches := Prj.Util.Value_Of
                        (Index     => Name_Ada,
                         Src_Index => 0,
-                        In_Array  => Default_Switches_Array);
+                        In_Array  => Default_Switches_Array,
+                        In_Tree   => Project_Tree);
                   end if;
                end if;
 
@@ -1616,7 +1698,8 @@ begin
                   when Prj.List =>
                      Current := The_Switches.Values;
                      while Current /= Prj.Nil_String loop
-                        The_String := String_Elements.Table (Current);
+                        The_String := Project_Tree.String_Elements.
+                                        Table (Current);
 
                         declare
                            Switch : constant String :=
@@ -1642,23 +1725,101 @@ begin
          then
             Change_Dir
               (Get_Name_String
-                 (Projects.Table (Project).Object_Directory));
+                 (Project_Tree.Projects.Table
+                    (Project).Object_Directory));
          end if;
 
          --  Set up the env vars for project path files
 
-         Prj.Env.Set_Ada_Paths (Project, Including_Libraries => False);
+         Prj.Env.Set_Ada_Paths
+           (Project, Project_Tree, Including_Libraries => False);
 
-         --  For gnatstub, gnatmetric, gnatpp and gnatelim, create
+         --  For gnatcheck, gnatstub, gnatmetric, gnatpp and gnatelim, create
          --  a configuration pragmas file, if necessary.
 
          if The_Command = Pretty
            or else The_Command = Metric
            or else The_Command = Stub
            or else The_Command = Elim
+           or else The_Command = Check
          then
-            --  If -cargs is one of the switches, move the following
-            --  switches to the Carg_Switches table.
+            --  If there are switches in package Compiler, put them in the
+            --  Carg_Switches table.
+
+            declare
+               Data : constant Prj.Project_Data :=
+                        Project_Tree.Projects.Table (Project);
+
+               Pkg  : constant Prj.Package_Id :=
+                        Prj.Util.Value_Of
+                          (Name        => Name_Compiler,
+                           In_Packages => Data.Decl.Packages,
+                           In_Tree     => Project_Tree);
+
+               Element : Package_Element;
+
+               Default_Switches_Array : Array_Element_Id;
+
+               The_Switches : Prj.Variable_Value;
+               Current      : Prj.String_List_Id;
+               The_String   : String_Element;
+
+            begin
+               if Pkg /= No_Package then
+                  Element := Project_Tree.Packages.Table (Pkg);
+
+                  Default_Switches_Array :=
+                    Prj.Util.Value_Of
+                      (Name      => Name_Default_Switches,
+                       In_Arrays => Element.Decl.Arrays,
+                       In_Tree   => Project_Tree);
+                  The_Switches := Prj.Util.Value_Of
+                    (Index     => Name_Ada,
+                     Src_Index => 0,
+                     In_Array  => Default_Switches_Array,
+                     In_Tree   => Project_Tree);
+
+                  --  If there are switches specified in the package of the
+                  --  project file corresponding to the tool, scan them.
+
+                  case The_Switches.Kind is
+                     when Prj.Undefined =>
+                        null;
+
+                     when Prj.Single =>
+                        declare
+                           Switch : constant String :=
+                                      Get_Name_String (The_Switches.Value);
+
+                        begin
+                           if Switch'Length > 0 then
+                              Add_To_Carg_Switches (new String'(Switch));
+                           end if;
+                        end;
+
+                     when Prj.List =>
+                        Current := The_Switches.Values;
+                        while Current /= Prj.Nil_String loop
+                           The_String :=
+                             Project_Tree.String_Elements.Table (Current);
+
+                           declare
+                              Switch : constant String :=
+                                         Get_Name_String (The_String.Value);
+                           begin
+                              if Switch'Length > 0 then
+                                 Add_To_Carg_Switches (new String'(Switch));
+                              end if;
+                           end;
+
+                           Current := The_String.Next;
+                        end loop;
+                  end case;
+               end if;
+            end;
+
+            --  If -cargs is one of the switches, move the following switches
+            --  to the Carg_Switches table.
 
             for J in 1 .. First_Switches.Last loop
                if First_Switches.Table (J).all = "-cargs" then
@@ -1682,12 +1843,14 @@ begin
 
             declare
                CP_File : constant Name_Id := Configuration_Pragmas_File;
+
             begin
                if CP_File /= No_Name then
                   if The_Command = Elim then
                      First_Switches.Increment_Last;
                      First_Switches.Table (First_Switches.Last)  :=
                        new String'("-C" & Get_Name_String (CP_File));
+
                   else
                      Add_To_Carg_Switches
                        (new String'("-gnatec=" & Get_Name_String (CP_File)));
@@ -1714,11 +1877,11 @@ begin
                  (Last_Switches.Table (J), Current_Work_Dir);
             end loop;
 
-            Get_Name_String (Projects.Table (Project).Directory);
+            Get_Name_String
+              (Project_Tree.Projects.Table (Project).Directory);
 
             declare
                Project_Dir : constant String := Name_Buffer (1 .. Name_Len);
-
             begin
                for J in 1 .. First_Switches.Last loop
                   Test_If_Relative_Path
@@ -1729,7 +1892,7 @@ begin
          elsif The_Command = Stub then
             declare
                Data : constant Prj.Project_Data :=
-                        Prj.Projects.Table (Project);
+                        Project_Tree.Projects.Table (Project);
                File_Index : Integer := 0;
                Dir_Index  : Integer := 0;
                Last       : constant Integer := Last_Switches.Last;
@@ -1803,10 +1966,10 @@ begin
             end;
          end if;
 
-         --  For gnatmetric, the generated files should be put in the
-         --  object directory. This must be the first switch, because it may
-         --  be overriden by a switch in package Metrics in the project file
-         --  or by a command line option.
+         --  For gnatmetric, the generated files should be put in the object
+         --  directory. This must be the first switch, because it may be
+         --  overriden by a switch in package Metrics in the project file or by
+         --  a command line option.
 
          if The_Command = Metric then
             First_Switches.Increment_Last;
@@ -1815,14 +1978,65 @@ begin
             First_Switches.Table (1) :=
               new String'("-d=" &
                           Get_Name_String
-                            (Projects.Table (Project).Object_Directory));
+                            (Project_Tree.Projects.Table
+                               (Project).Object_Directory));
          end if;
 
-         --  For gnat pretty and gnat metric, if no file has been put on the
-         --  command line, call the tool with all the sources of the main
-         --  project.
+         --  For gnat check, -rules and the following switches need to be the
+         --  last options. So, we move all these switches to table
+         --  Rules_Switches.
 
-         if The_Command = Pretty or else
+         if The_Command = Check then
+            declare
+               New_Last          : Natural;
+               --  Set to rank of options preceding "-rules"
+
+               In_Rules_Switches : Boolean;
+               --  Set to True when options "-rules" is found
+
+            begin
+               New_Last := First_Switches.Last;
+               In_Rules_Switches := False;
+
+               for J in 1 .. First_Switches.Last loop
+                  if In_Rules_Switches then
+                     Add_To_Rules_Switches (First_Switches.Table (J));
+
+                  elsif First_Switches.Table (J).all = "-rules" then
+                     New_Last := J - 1;
+                     In_Rules_Switches := True;
+                  end if;
+               end loop;
+
+               if In_Rules_Switches then
+                  First_Switches.Set_Last (New_Last);
+               end if;
+
+               New_Last := Last_Switches.Last;
+               In_Rules_Switches := False;
+
+               for J in 1 .. Last_Switches.Last loop
+                  if In_Rules_Switches then
+                     Add_To_Rules_Switches (Last_Switches.Table (J));
+
+                  elsif Last_Switches.Table (J).all = "-rules" then
+                     New_Last := J - 1;
+                     In_Rules_Switches := True;
+                  end if;
+               end loop;
+
+               if In_Rules_Switches then
+                  Last_Switches.Set_Last (New_Last);
+               end if;
+            end;
+         end if;
+
+         --  For gnat check, gnat pretty, gnat metric ands gnat list,
+         --  if no file has been put on the command line, call tool with all
+         --  the sources of the main project.
+
+         if The_Command = Check  or else
+            The_Command = Pretty or else
             The_Command = Metric or else
             The_Command = List
          then
@@ -1836,7 +2050,8 @@ begin
          The_Args : Argument_List
                       (1 .. First_Switches.Last +
                             Last_Switches.Last +
-                            Carg_Switches.Last);
+                            Carg_Switches.Last +
+                            Rules_Switches.Last);
          Arg_Num  : Natural := 0;
 
       begin
@@ -1853,6 +2068,11 @@ begin
          for J in 1 .. Carg_Switches.Last loop
             Arg_Num := Arg_Num + 1;
             The_Args (Arg_Num) := Carg_Switches.Table (J);
+         end loop;
+
+         for J in 1 .. Rules_Switches.Last loop
+            Arg_Num := Arg_Num + 1;
+            The_Args (Arg_Num) := Rules_Switches.Table (J);
          end loop;
 
          --  If Display_Command is on, only display the generated command
@@ -1890,18 +2110,18 @@ begin
 
 exception
    when Error_Exit =>
-      Prj.Env.Delete_All_Path_Files;
+      Prj.Env.Delete_All_Path_Files (Project_Tree);
       Delete_Temp_Config_Files;
       Set_Exit_Status (Failure);
 
    when Normal_Exit =>
-      Prj.Env.Delete_All_Path_Files;
+      Prj.Env.Delete_All_Path_Files (Project_Tree);
       Delete_Temp_Config_Files;
 
-      --  Since GNATCmd is normally called from DCL (the VMS shell),
-      --  it must return an understandable VMS exit status. However
-      --  the exit status returned *to* GNATCmd is a Posix style code,
-      --  so we test it and return just a simple success or failure on VMS.
+      --  Since GNATCmd is normally called from DCL (the VMS shell), it must
+      --  return an understandable VMS exit status. However the exit status
+      --  returned *to* GNATCmd is a Posix style code, so we test it and return
+      --  just a simple success or failure on VMS.
 
       if Hostparm.OpenVMS and then My_Exit_Status /= Success then
          Set_Exit_Status (Failure);

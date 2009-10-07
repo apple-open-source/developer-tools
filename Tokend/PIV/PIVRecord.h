@@ -31,6 +31,8 @@
 
 #include "Record.h"
 
+#include "byte_string.h"
+
 class PIVToken;
 
 class PIVRecord : public Tokend::Record
@@ -38,18 +40,17 @@ class PIVRecord : public Tokend::Record
 	NOCOPY(PIVRecord)
 public:
 	PIVRecord(const unsigned char *application, size_t applicationSize, const char *description) :
-		mApplication(application), mApplicationSize(applicationSize), mDescription(description) {}
-	~PIVRecord();
+		mApplication(application, application + applicationSize), mDescription(description) {}
+	virtual ~PIVRecord();
 
-	virtual const char *description() { return mDescription; }
-
-protected:
-    const unsigned char *application() const { return mApplication; }
+	virtual const char *description() { return mDescription.c_str(); }
 
 protected:
-	const unsigned char *mApplication;
-	size_t mApplicationSize;
-	const char *mDescription;
+    const unsigned char *application() const { return &mApplication[0]; }
+
+protected:
+	const byte_string mApplication;
+	const std::string mDescription;
 };
 
 
@@ -58,18 +59,20 @@ class PIVKeyRecord : public PIVRecord
 	NOCOPY(PIVKeyRecord)
 public:
 	PIVKeyRecord(const unsigned char *application, size_t applicationSize, const char *description,
-                 const Tokend::MetaRecord &metaRecord, bool signOnly);
-    ~PIVKeyRecord();
+                 const Tokend::MetaRecord &metaRecord, unsigned char keyRef, size_t keySize);
+	virtual ~PIVKeyRecord();
 
-	size_t sizeInBits() const { return 1024; }
-	void computeCrypt(PIVToken &pivToken, bool sign, const unsigned char *data,
-		size_t dataLength, unsigned char *result, size_t &resultLength);
+	size_t sizeInBits() const;
+	void computeCrypt(PIVToken &pivToken, bool sign, const AccessCredentials *cred,
+		const byte_string& data_type, byte_string &output);
 
     virtual void getAcl(const char *tag, uint32 &count,
 		AclEntryInfo *&aclList);
 private:
-	bool mSignOnly;
 	AutoAclEntryInfoList mAclEntries;
+	const unsigned char keyRef;
+	bool isUserConsent() const;
+	size_t keySize;
 };
 
 
@@ -87,6 +90,9 @@ protected:
 	
 	bool mIsCertificate;
 	bool mAllowCaching;
+	/* Added to permit caching on-demand as well as keep the string values around long enough to send
+	 * to securityd */
+	auto_ptr<Tokend::Attribute> lastAttribute;
 };
 
 class PIVCertificateRecord : public PIVDataRecord

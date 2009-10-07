@@ -1,7 +1,8 @@
 /* APPLE LOCAL file radar 4783068 */
 /* Don't issue error when objctive-c internally synthesizes dereferencing of a null object. */
-/* { dg-options "-Werror -fobjc-gc -fobjc-call-cxx-cdtors" } */
+/* { dg-options "-Werror -fobjc-gc" } */
 /* { dg-do compile { target powerpc*-*-darwin* i?86*-*-darwin* } } */
+/* { dg-require-effective-target objc_gc } */
 
 #define NULL 0
     template <class R> class Returner;

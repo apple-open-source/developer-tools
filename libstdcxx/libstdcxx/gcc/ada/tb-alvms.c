@@ -6,7 +6,7 @@
  *                                                                          *
  *                          C Implementation File                           *
  *                                                                          *
- *              Copyright (C) 2003 Ada Core Technologies, Inc               *
+ *                     Copyright (C) 2003-2005, AdaCore                     *
  *                                                                          *
  * GNAT is free software;  you can  redistribute it  and/or modify it under *
  * terms of the  GNU General Public License as published  by the Free Soft- *
@@ -16,8 +16,8 @@
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License *
  * for  more details.  You should have  received  a copy of the GNU General *
  * Public License  distributed with GNAT;  see file COPYING.  If not, write *
- * to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, *
- * MA 02111-1307, USA.                                                      *
+ * to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, *
+ * Boston, MA 02110-1301, USA.                                              *
  *                                                                          *
  * As a  special  exception,  if you  link  this file  with other  files to *
  * produce an executable,  this file does not by itself cause the resulting *
@@ -39,10 +39,10 @@
    Most of the contents is directed by the OpenVMS/Alpha Conventions (ABI)
    document, sections of which we will refer to as ABI-<section_number>.  */
 
-#include <pdscdef.h>
-#include <libicb.h>
-#include <chfctxdef.h>
-#include <chfdef.h>
+#include <vms/pdscdef.h>
+#include <vms/libicb.h>
+#include <vms/chfctxdef.h>
+#include <vms/chfdef.h>
 
 /* A couple of items missing from the header file included above.  */
 extern void * SYS$GL_CALL_HANDL;

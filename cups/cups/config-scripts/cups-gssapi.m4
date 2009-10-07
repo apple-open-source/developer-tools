@@ -3,7 +3,7 @@ dnl   "$Id$"
 dnl
 dnl   GSSAPI/Kerberos library detection.
 dnl
-dnl   Copyright 2007 by Apple Inc.
+dnl   Copyright 2007-2009 by Apple Inc.
 dnl   Copyright 2006-2007 by Easy Software Products.
 dnl
 dnl   This file contains Kerberos support code, copyright 2006 by
@@ -16,21 +16,34 @@ dnl   which should have been included with this file.  If this file is
 dnl   file is missing or damaged, see the license at "http://www.cups.org/".
 dnl
 
-AC_ARG_ENABLE(gssapi, [  --enable-gssapi         turn on GSSAPI support, default=yes])
+AC_ARG_ENABLE(gssapi, [  --disable-gssapi        disable GSSAPI support])
 
 LIBGSSAPI=""
+AC_SUBST(LIBGSSAPI)
 
 if test x$enable_gssapi != xno; then
 	AC_PATH_PROG(KRB5CONFIG, krb5-config)
 	if test "x$KRB5CONFIG" != x; then
-		if test "x$uname" = "xDarwin"; then
-			# Mac OS X weak-links to the Kerberos framework...
-			LIBGSSAPI="-weak_framework Kerberos"
-		else
-			CFLAGS="`$KRB5CONFIG --cflags gssapi` $CFLAGS"		
-			CPPFLAGS="`$KRB5CONFIG --cflags gssapi` $CPPFLAGS"		
-			LIBGSSAPI="`$KRB5CONFIG --libs gssapi`"
-		fi
+		case "$uname" in
+			Darwin)
+				# Mac OS X weak-links to the Kerberos framework...
+				LIBGSSAPI="-weak_framework Kerberos"
+				;;
+			SunOS*)
+				# Solaris has a non-standard krb5-config, don't use it!
+				AC_CHECK_LIB(gss, gss_display_status,
+					AC_DEFINE(HAVE_GSSAPI, 1, [Whether GSSAPI is available])
+					CFLAGS="`$KRB5CONFIG --cflags` $CFLAGS"		
+					CPPFLAGS="`$KRB5CONFIG --cflags` $CPPFLAGS"		
+					LIBGSSAPI="-lgss `$KRB5CONFIG --libs`")
+				;;
+			*)
+				# Other platforms just ask for GSSAPI
+				CFLAGS="`$KRB5CONFIG --cflags gssapi` $CFLAGS"		
+				CPPFLAGS="`$KRB5CONFIG --cflags gssapi` $CPPFLAGS"		
+				LIBGSSAPI="`$KRB5CONFIG --libs gssapi`"
+				;;
+		esac
 		AC_DEFINE(HAVE_GSSAPI, 1, [Whether GSSAPI is available])
 	else
 		# Check for vendor-specific implementations...
@@ -61,6 +74,7 @@ if test x$enable_gssapi != xno; then
 		AC_CHECK_FUNC(gsskrb5_register_acceptor_identity, 
 			      AC_DEFINE(HAVE_GSSKRB5_REGISTER_ACCEPTOR_IDENTITY))
 		AC_CHECK_FUNC(krb5_cc_new_unique, AC_DEFINE(HAVE_KRB5_CC_NEW_UNIQUE))
+		AC_CHECK_FUNC(krb5_ipc_client_set_target_uid, AC_DEFINE(HAVE_KRB5_IPC_CLIENT_SET_TARGET_UID))
 
 		AC_MSG_CHECKING(for GSS_C_NT_HOSTBASED_SERVICE)
 		if test $ac_cv_header_gssapi_gssapi_h = yes; then
@@ -95,7 +109,7 @@ AC_ARG_WITH(gssservicename, [  --with-gssservicename   set default gss service n
 
 if test x$default_gssservicename != xno; then
 	if test "x$default_gssservicename" = "xdefault"; then
-		CUPS_DEFAULT_GSSSERVICENAME="ipp"
+		CUPS_DEFAULT_GSSSERVICENAME="host"
 	else
 		CUPS_DEFAULT_GSSSERVICENAME="$default_gssservicename"
 	fi
@@ -103,7 +117,6 @@ else
 	CUPS_DEFAULT_GSSSERVICENAME=""
 fi
 
-AC_SUBST(LIBGSSAPI)
 AC_DEFINE_UNQUOTED(CUPS_DEFAULT_GSSSERVICENAME, "$CUPS_DEFAULT_GSSSERVICENAME")
 
 dnl

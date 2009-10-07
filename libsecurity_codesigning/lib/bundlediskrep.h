@@ -34,6 +34,9 @@ namespace Security {
 namespace CodeSigning {
 
 
+#define BUNDLEDISKREP_DIRECTORY		"_CodeSignature"
+
+
 //
 // A BundleDiskRep represents a standard Mac OS X bundle on disk.
 // The bundle is expected to have an Info.plist, and a "main executable file"
@@ -44,15 +47,17 @@ namespace CodeSigning {
 //
 class BundleDiskRep : public DiskRep {
 public:
-	BundleDiskRep(const char *path);
-	BundleDiskRep(CFBundleRef ref);
+	BundleDiskRep(const char *path, const Context *ctx = NULL);
+	BundleDiskRep(CFBundleRef ref, const Context *ctx = NULL);
 	
 	CFDataRef component(CodeDirectory::SpecialSlot slot);
+	CFDataRef identification();
 	std::string mainExecutablePath();
 	CFURLRef canonicalPath();
 	std::string recommendedIdentifier();
 	std::string resourcesRootPath();
 	CFDictionaryRef defaultResourceRules();
+	void adjustResources(ResourceBuilder &builder);
 	const Requirements *defaultRequirements(const Architecture *arch);
 	Universal *mainExecutableImage();
 	size_t pageSize();
@@ -71,18 +76,18 @@ public:
 	friend class Writer;
 	
 protected:
-	CFDataRef resourceData(CFURLRef url);
-	CFDataRef resourceData(const char *name) { return resourceData(CFTempURL(resourcePath(name))); }
-	
-	std::string resourcePath(const char *name);
+	std::string metaPath(const char *name);
+	CFDataRef metaData(const char *name) { return cfLoadFile(CFTempURL(metaPath(name))); }
+	void createMeta();						// (try to) create the meta-file directory
 	
 private:
 	void checkModifiedFile(CFMutableArrayRef files, CodeDirectory::SpecialSlot slot);
 
 private:
 	CFRef<CFBundleRef> mBundle;
-	std::string mResourcePath;
-	RefPointer<DiskRep> mExecRep;
+	std::string mMetaPath;					// path to directory containing signing files
+	bool mMetaExists;						// separate meta-file directory exists
+	RefPointer<DiskRep> mExecRep;			// DiskRep for main executable file
 };
 
 
@@ -96,14 +101,17 @@ public:
 	Writer(BundleDiskRep *r);
 	
 	void component(CodeDirectory::SpecialSlot slot, CFDataRef data);
+	void remove();
 	void flush();
 	
 protected:
 	DiskRep *execRep() { return rep->mExecRep; }
+	void remove(CodeDirectory::SpecialSlot slot);
 
 protected:
 	RefPointer<BundleDiskRep> rep;
 	RefPointer<DiskRep::Writer> execWriter;
+	bool mMadeMetaDirectory;
 };
 
 

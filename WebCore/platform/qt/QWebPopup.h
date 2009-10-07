@@ -1,6 +1,6 @@
 /*
  *
- * Copyright (C) 2007 Trolltech ASA
+ * Copyright (C) 2008 Nokia Corporation and/or its subsidiary(-ies)
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -25,8 +25,6 @@
 
 #include "PopupMenuClient.h"
 
-class QHideEvent;
-
 namespace WebCore {
 
 class QWebPopup : public QComboBox {
@@ -36,13 +34,14 @@ public:
 
     void exec();
 
-protected:
-    virtual void hideEvent(QHideEvent*);
+    virtual void showPopup();
+    virtual void hidePopup();
 
 private slots:
     void activeChanged(int);
 private:
     PopupMenuClient* m_client;
+    bool m_popupVisible;
 };
 
 }

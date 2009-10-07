@@ -13,14 +13,32 @@
  * See os_mswin.c for the client side.
  */
 
+/*
+ * We have some trouble with order of includes here.  For Borland it needs to
+ * be different from MSVC...
+ */
+#ifndef __BORLANDC__
+extern "C" {
+# include "vim.h"
+}
+#endif
+
 #include <windows.h>
 #include <oleauto.h>
 
 extern "C" {
-#include "vim.h"
+#ifdef __BORLANDC__
+# include "vim.h"
+#endif
 extern HWND s_hwnd;
 extern HWND vim_parent_hwnd;
 }
+
+#if _MSC_VER < 1300
+/* Work around old versions of basetsd.h which wrongly declares
+ * UINT_PTR as unsigned long */
+# define UINT_PTR UINT
+#endif
 
 #include "if_ole.h"	// Interface definitions
 #include "iid_ole.c"	// UUID definitions (compile here)
@@ -95,7 +113,7 @@ public:
     STDMETHOD(SendKeys)(BSTR keys);
     STDMETHOD(Eval)(BSTR expr, BSTR *result);
     STDMETHOD(SetForeground)(void);
-    STDMETHOD(GetHwnd)(UINT *result);
+    STDMETHOD(GetHwnd)(UINT_PTR *result);
 
 private:
     // Constructor is private - create using CVim::Create()
@@ -276,9 +294,9 @@ CVim::Invoke(
 }
 
 STDMETHODIMP
-CVim::GetHwnd(UINT *result)
+CVim::GetHwnd(UINT_PTR *result)
 {
-    *result = (UINT) s_hwnd;
+    *result = (UINT_PTR)s_hwnd;
     return S_OK;
 }
 
@@ -335,9 +353,13 @@ CVim::SendKeys(BSTR keys)
     }
 
     /* Pass the string to the main input loop. The memory will be freed when
-     * the message is processed.
+     * the message is processed.  Except for an empty message, we don't need
+     * to post it then.
      */
-    PostMessage(NULL, WM_OLE, 0, (LPARAM)str);
+    if (*str == NUL)
+	vim_free(str);
+    else
+	PostMessage(NULL, WM_OLE, 0, (LPARAM)str);
 
     return S_OK;
 }

@@ -1,4 +1,3 @@
-// APPLE LOCAL file mainline 2006-02-24 4086777
 // { dg-do compile }
 // { dg-final { scan-assembler-not "__cxa_get_exception" } }
 // { dg-options "-fno-use-cxa-get-exception-ptr" }

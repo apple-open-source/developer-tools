@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---            Copyright (C) 1999-2003 Ada Core Technologies, Inc.           --
+--                     Copyright (C) 1999-2006, AdaCore                     --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -20,8 +20,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -58,35 +58,38 @@ package body GNAT.Calendar.Time_IO is
 
    type Padding_Mode is (None, Zero, Space);
 
+   type Sec_Number is mod 2 ** 64;
+   --  Type used to compute the number of seconds since 01/01/1970. A 32 bit
+   --  number will cover only a period of 136 years. This means that for date
+   --  past 2106 the computation is not possible. A 64 bits number should be
+   --  enough for a very large period of time.
+
    -----------------------
    -- Local Subprograms --
    -----------------------
 
    function Am_Pm (H : Natural) return String;
-   --  return AM or PM depending on the hour H
+   --  Return AM or PM depending on the hour H
 
    function Hour_12 (H : Natural) return Positive;
-   --  Convert a 1-24h format to a 0-12 hour format.
+   --  Convert a 1-24h format to a 0-12 hour format
 
    function Image (Str : String; Length : Natural := 0) return String;
    --  Return Str capitalized and cut to length number of characters. If
    --  length is set to 0 it does not cut it.
 
    function Image
-     (N       : Long_Integer;
+     (N       : Sec_Number;
       Padding : Padding_Mode := Zero;
-      Length  : Natural := 0)
-      return    String;
-   --  Return image of N. This number is eventually padded with zeros or
-   --  spaces depending of the length required. If length is 0 then no padding
-   --  occurs.
+      Length  : Natural := 0) return String;
+   --  Return image of N. This number is eventually padded with zeros or spaces
+   --  depending of the length required. If length is 0 then no padding occurs.
 
    function Image
-     (N       : Integer;
+     (N       : Natural;
       Padding : Padding_Mode := Zero;
-      Length  : Natural := 0)
-      return    String;
-   --  As above with N provided in Integer format.
+      Length  : Natural := 0) return String;
+   --  As above with N provided in Integer format
 
    -----------
    -- Am_Pm --
@@ -122,13 +125,11 @@ package body GNAT.Calendar.Time_IO is
 
    function Image
      (Str    : String;
-      Length : Natural := 0)
-      return   String
+      Length : Natural := 0) return String
    is
       use Ada.Characters.Handling;
       Local : constant String :=
                 To_Upper (Str (1)) & To_Lower (Str (2 .. Str'Last));
-
    begin
       if Length = 0 then
          return Local;
@@ -142,20 +143,18 @@ package body GNAT.Calendar.Time_IO is
    -----------
 
    function Image
-     (N       : Integer;
+     (N       : Natural;
       Padding : Padding_Mode := Zero;
-      Length  : Natural := 0)
-      return    String
+      Length  : Natural := 0) return String
    is
    begin
-      return Image (Long_Integer (N), Padding, Length);
+      return Image (Sec_Number (N), Padding, Length);
    end Image;
 
    function Image
-     (N       : Long_Integer;
+     (N       : Sec_Number;
       Padding : Padding_Mode := Zero;
-      Length  : Natural := 0)
-      return    String
+      Length  : Natural := 0) return String
    is
       function Pad_Char return String;
 
@@ -172,7 +171,7 @@ package body GNAT.Calendar.Time_IO is
          end case;
       end Pad_Char;
 
-      NI  : constant String := Long_Integer'Image (N);
+      NI  : constant String := Sec_Number'Image (N);
       NIP : constant String := Pad_Char & NI (2 .. NI'Last);
 
    --  Start of processing for Image
@@ -180,7 +179,6 @@ package body GNAT.Calendar.Time_IO is
    begin
       if Length = 0 or else Padding = None then
          return NI (2 .. NI'Last);
-
       else
          return NIP (NIP'Last - Length + 1 .. NIP'Last);
       end if;
@@ -192,13 +190,12 @@ package body GNAT.Calendar.Time_IO is
 
    function Image
      (Date    : Ada.Calendar.Time;
-      Picture : Picture_String)
-      return    String
+      Picture : Picture_String) return String
    is
-      Padding    : Padding_Mode := Zero;
+      Padding : Padding_Mode := Zero;
       --  Padding is set for one directive
 
-      Result     : Unbounded_String;
+      Result : Unbounded_String;
 
       Year       : Year_Number;
       Month      : Month_Number;
@@ -299,11 +296,12 @@ package body GNAT.Calendar.Time_IO is
 
                when 's' =>
                   declare
-                     Sec : constant Long_Integer :=
-                             Long_Integer
-                               ((Julian_Day (Year, Month, Day) -
-                                  Julian_Day (1970, 1, 1)) * 86_400 +
-                                Hour * 3_600 + Minute * 60 + Second);
+                     Sec : constant Sec_Number :=
+                             Sec_Number (Julian_Day (Year, Month, Day) -
+                                       Julian_Day (1970, 1, 1)) * 86_400
+                                         + Sec_Number (Hour) * 3_600
+                                         + Sec_Number (Minute) * 60
+                                         + Sec_Number (Second);
 
                   begin
                      Result := Result & Image (Sec, None);

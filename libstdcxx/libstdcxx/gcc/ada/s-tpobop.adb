@@ -1,12 +1,13 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                GNU ADA RUN-TIME LIBRARY (GNARL) COMPONENTS               --
+--                 GNAT RUN-TIME LIBRARY (GNARL) COMPONENTS                 --
 --                                                                          --
---                SYSTEM.TASKING.PROTECTED_OBJECTS.OPERATIONS               --
+--     S Y S T E M . T A S K I N G . P R O T E C T E D _ O B J E C T S .    --
+--                             O P E R A T I O N S                          --
 --                                                                          --
 --                                  B o d y                                 --
 --                                                                          --
---         Copyright (C) 1998-2004, Free Software Foundation, Inc.          --
+--         Copyright (C) 1998-2006, Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +17,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNARL; see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -43,11 +44,6 @@
 
 --  This package contains all primitives related to Protected_Objects.
 --  Note: the compiler generates direct calls to this interface, via Rtsfind.
-
-with Ada.Exceptions;
---  Used for Exception_ID
---           Null_Id
---           Raise_Exception
 
 with System.Task_Primitives.Operations;
 --  used for Initialize_Lock
@@ -93,6 +89,9 @@ with System.Parameters;
 with System.Traces.Tasking;
 --  used for Send_Trace_Info
 
+with System.Restrictions;
+--  used for Run_Time_Restrictions
+
 package body System.Tasking.Protected_Objects.Operations is
 
    package STPO renames System.Task_Primitives.Operations;
@@ -102,6 +101,8 @@ package body System.Tasking.Protected_Objects.Operations is
    use Ada.Exceptions;
    use Entries;
 
+   use System.Restrictions;
+   use System.Restrictions.Rident;
    use System.Traces;
    use System.Traces.Tasking;
 
@@ -265,6 +266,11 @@ package body System.Tasking.Protected_Objects.Operations is
      (Object : Protection_Entries_Access;
       Ex     : Ada.Exceptions.Exception_Id)
    is
+      procedure Transfer_Occurrence
+        (Target : Ada.Exceptions.Exception_Occurrence_Access;
+         Source : Ada.Exceptions.Exception_Occurrence);
+      pragma Import (C, Transfer_Occurrence, "__gnat_transfer_occurrence");
+
       Entry_Call : constant Entry_Call_Link := Object.Call_In_Progress;
    begin
       pragma Debug
@@ -277,6 +283,12 @@ package body System.Tasking.Protected_Objects.Operations is
          --  The call was not requeued.
 
          Entry_Call.Exception_To_Raise := Ex;
+
+         if Ex /= Ada.Exceptions.Null_Id then
+            Transfer_Occurrence
+              (Entry_Call.Self.Common.Compiler_Data.Current_Excep'Access,
+               STPO.Self.Common.Compiler_Data.Current_Excep);
+         end if;
 
          --  Wakeup_Entry_Caller will be called from PO_Do_Or_Queue or
          --  PO_Service_Entries on return.
@@ -352,9 +364,32 @@ package body System.Tasking.Protected_Objects.Operations is
       elsif Entry_Call.Mode /= Conditional_Call
         or else not With_Abort
       then
-         Queuing.Enqueue (Object.Entry_Queues (E), Entry_Call);
-         Update_For_Queue_To_PO (Entry_Call, With_Abort);
 
+         if Run_Time_Restrictions.Set (Max_Entry_Queue_Length)
+              and then
+            Run_Time_Restrictions.Value (Max_Entry_Queue_Length) <=
+              Queuing.Count_Waiting (Object.Entry_Queues (E))
+         then
+            --  This violates the Max_Entry_Queue_Length restriction,
+            --  raise Program_Error.
+
+            Entry_Call.Exception_To_Raise := Program_Error'Identity;
+
+            if Single_Lock then
+               STPO.Lock_RTS;
+            end if;
+
+            STPO.Write_Lock (Entry_Call.Self);
+            Initialization.Wakeup_Entry_Caller (Self_ID, Entry_Call, Done);
+            STPO.Unlock (Entry_Call.Self);
+
+            if Single_Lock then
+               STPO.Unlock_RTS;
+            end if;
+         else
+            Queuing.Enqueue (Object.Entry_Queues (E), Entry_Call);
+            Update_For_Queue_To_PO (Entry_Call, With_Abort);
+         end if;
       else
          --  Conditional_Call and With_Abort
 
@@ -535,6 +570,17 @@ package body System.Tasking.Protected_Objects.Operations is
       if Self_ID.ATC_Nesting_Level = ATC_Level'Last then
          Raise_Exception
            (Storage_Error'Identity, "not enough ATC nesting levels");
+      end if;
+
+      --  If pragma Detect_Blocking is active then Program_Error must be
+      --  raised if this potentially blocking operation is called from a
+      --  protected action.
+
+      if Detect_Blocking
+        and then Self_ID.Common.Protected_Action_Nesting > 0
+      then
+         Ada.Exceptions.Raise_Exception
+           (Program_Error'Identity, "potentially blocking operation");
       end if;
 
       Initialization.Defer_Abort (Self_ID);
@@ -723,9 +769,34 @@ package body System.Tasking.Protected_Objects.Operations is
               or else Entry_Call.Mode /= Conditional_Call
             then
                E := Protected_Entry_Index (Entry_Call.E);
-               Queuing.Enqueue
-                 (New_Object.Entry_Queues (E), Entry_Call);
-               Update_For_Queue_To_PO (Entry_Call, With_Abort);
+
+               if Run_Time_Restrictions.Set (Max_Entry_Queue_Length)
+                    and then
+                  Run_Time_Restrictions.Value (Max_Entry_Queue_Length) <=
+                    Queuing.Count_Waiting (Object.Entry_Queues (E))
+               then
+                  --  This violates the Max_Entry_Queue_Length restriction,
+                  --  raise Program_Error.
+
+                  Entry_Call.Exception_To_Raise := Program_Error'Identity;
+
+                  if Single_Lock then
+                     STPO.Lock_RTS;
+                  end if;
+
+                  STPO.Write_Lock (Entry_Call.Self);
+                  Initialization.Wakeup_Entry_Caller
+                    (Self_Id, Entry_Call, Done);
+                  STPO.Unlock (Entry_Call.Self);
+
+                  if Single_Lock then
+                     STPO.Unlock_RTS;
+                  end if;
+               else
+                  Queuing.Enqueue
+                    (New_Object.Entry_Queues (E), Entry_Call);
+                  Update_For_Queue_To_PO (Entry_Call, With_Abort);
+               end if;
 
             else
                PO_Do_Or_Queue (Self_Id, New_Object, Entry_Call, With_Abort);
@@ -887,6 +958,17 @@ package body System.Tasking.Protected_Objects.Operations is
       if Self_Id.ATC_Nesting_Level = ATC_Level'Last then
          Raise_Exception (Storage_Error'Identity,
            "not enough ATC nesting levels");
+      end if;
+
+      --  If pragma Detect_Blocking is active then Program_Error must be
+      --  raised if this potentially blocking operation is called from a
+      --  protected action.
+
+      if Detect_Blocking
+        and then Self_Id.Common.Protected_Action_Nesting > 0
+      then
+         Ada.Exceptions.Raise_Exception
+           (Program_Error'Identity, "potentially blocking operation");
       end if;
 
       if Runtime_Traces then

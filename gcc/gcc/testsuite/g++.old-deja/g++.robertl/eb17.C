@@ -44,15 +44,18 @@ int main()
     A * a = new B;
     B * b = dynamic_cast<B *>(a);
 
-    printf("%p\n",b);                // (*2*)
+    /* APPLE LOCAL default to Wformat-security 5764921 */
+    printf("%p\n", (void*)b);                // (*2*)
     b->print();
 
     a = b;
-    printf("%p\n",a);
+    /* APPLE LOCAL default to Wformat-security 5764921 */
+    printf("%p\n", (void*)a);
     a->print();
 
     a = a->clone();
-    printf("%p\n",a);
+    /* APPLE LOCAL default to Wformat-security 5764921 */
+    printf("%p\n", (void*)a);
     a->print();                      // (*1*)
 
     return 0;

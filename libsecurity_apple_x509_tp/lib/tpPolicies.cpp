@@ -135,6 +135,29 @@ static CSSM_RETURN iSignFetchExtension(
 }
 
 /*
+ * This function performs a check of an extension marked 'critical'
+ * to see if it's one we understand. Returns CSSM_OK if the extension
+ * is acceptable, CSSMERR_APPLETP_UNKNOWN_CRITICAL_EXTEN if unknown.
+ */
+static CSSM_RETURN iSignVerifyCriticalExtension(
+	CSSM_X509_EXTENSION	*cssmExt)
+{
+	if (!cssmExt || !cssmExt->extnId.Data)
+		return CSSMERR_TP_INVALID_FIELD_POINTER;
+	
+	if (!cssmExt->critical)
+		return CSSM_OK;
+
+	if (cssmExt->extnId.Length > APPLE_EXTENSION_OID_LENGTH &&
+		!memcmp(cssmExt->extnId.Data, CSSMOID_APPLE_EXTENSION.Data, APPLE_EXTENSION_OID_LENGTH)) {
+		/* This extension's OID is under the appleCertificateExtensions arc */
+		return CSSM_OK;
+	
+	}
+	return CSSMERR_APPLETP_UNKNOWN_CRITICAL_EXTEN;
+}
+
+/*
  * Search for all unknown extensions. If we find one which is flagged critical, 
  * flag certInfo->foundUnknownCritical. Only returns error on gross errors.  
  */
@@ -169,7 +192,7 @@ static CSSM_RETURN iSignSearchUnknownExtensions(
 		return CSSMERR_TP_UNKNOWN_FORMAT;
 	}
 	CSSM_X509_EXTENSION *cssmExt = (CSSM_X509_EXTENSION *)fieldValue->Data;
-	if(cssmExt->critical) {
+	if(iSignVerifyCriticalExtension(cssmExt) != CSSM_OK) {
 		/* BRRZAPP! Found an unknown extension marked critical */
 		certInfo->foundUnknownCritical = CSSM_TRUE;
 		goto fini;
@@ -197,7 +220,7 @@ static CSSM_RETURN iSignSearchUnknownExtensions(
 			break;
 		}
 		CSSM_X509_EXTENSION *cssmExt = (CSSM_X509_EXTENSION *)fieldValue->Data;
-		if(cssmExt->critical) {
+		if(iSignVerifyCriticalExtension(cssmExt) != CSSM_OK) {
 			/* BRRZAPP! Found an unknown extension marked critical */
 			certInfo->foundUnknownCritical = CSSM_TRUE;
 			break;
@@ -762,7 +785,7 @@ static bool tpVerifyEKU(
  *   -- implicit '@'
  *   -- domain name from subject name's organizationalUnit
  *
- * Plus we require an Organization component of "Apple Computer, Inc.".
+ * Plus we require an Organization component of "Apple Computer, Inc." or "Apple Inc."
  */
 static bool tpCompareIChatHandleName(
 	TPCertInfo 				&cert,
@@ -781,7 +804,7 @@ static bool tpCompareIChatHandleName(
 	/* search until all of these are true */
 	CSSM_BOOL	commonNameMatch = CSSM_FALSE;		// name before '@'
 	CSSM_BOOL	orgUnitMatch = CSSM_FALSE;			// domain after '@
-	CSSM_BOOL	orgMatch = CSSM_FALSE;				// Apple COmputer, Inc. 
+	CSSM_BOOL	orgMatch = CSSM_FALSE;				// Apple Computer, Inc. (or Apple Inc.)
 	
 	/* 
 	 * incoming UTF8 handle ==> two components.
@@ -870,7 +893,8 @@ static bool tpCompareIChatHandleName(
 			if(!orgMatch && 
 			   tpCompareOids(&ptvp->type, &CSSMOID_OrganizationName) &&
 			   /* this one is case sensitive */
-			   tpCompareTvpToCfString(ptvp, CFSTR("Apple Computer, Inc."), 0)) {
+			   (tpCompareTvpToCfString(ptvp, CFSTR("Apple Computer, Inc."), 0) ||
+			    tpCompareTvpToCfString(ptvp, CFSTR("Apple Inc."), 0))) {
 					orgMatch = CSSM_TRUE;
 			}
 			
@@ -1410,7 +1434,7 @@ static CSSM_RETURN tp_verifySWUpdateSigningOpts(
 	unsigned numCerts = certGroup.numCerts();
 	const iSignCertInfo *isCertInfo;
 	TPCertInfo *tpCert;
-	const CE_BasicConstraints *bc;
+//	const CE_BasicConstraints *bc;		// currently unused
 	CE_ExtendedKeyUsage *eku;
 	CSSM_RETURN crtn = CSSM_OK;	
 
@@ -2188,7 +2212,7 @@ void tp_policyTrustSettingParams(
 			if(smimeKu & (CE_KU_DigitalSignature | CE_KU_KeyCertSign | CE_KU_CRLSign)) {
 				ku |= kSecTrustSettingsKeyUseSignature;
 			}
-			if(smimeKu & (CE_KU_KeyEncipherment & CE_KU_DataEncipherment)) {
+			if(smimeKu & (CE_KU_KeyEncipherment | CE_KU_DataEncipherment)) {
 				ku |= kSecTrustSettingsKeyUseEnDecryptKey;
 			}
 			*keyUse = ku;

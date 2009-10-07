@@ -290,7 +290,7 @@ gdb_test "continue" ".*Program exited normally.*" "Finish program"
 
 gdb_test "disable 1" ".*" "Disable breakpoint at main."
 
-gdb_test "break bar" "Breakpoint 9 at $hex: file.*, line.*Breakpoint 10 \\(inlined bar\\).*Breakpoint 11 \\(inlined bar\\).*" "Set breakpoints at inlined function bar"
+gdb_test "break bar" "Breakpoint 9 .*Breakpoint 10 .*Breakpoint 11 .*" "Set breakpoints at inlined function bar"
 
 gdb_test "run" "Starting program: $binfile *\r\n\.*Breakpoint .*, bar.*inlined.*" "continue to breakpoint in bar"
 

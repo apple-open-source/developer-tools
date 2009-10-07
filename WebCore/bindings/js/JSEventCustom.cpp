@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2007 Apple Inc.  All rights reserved.
+ * Copyright (C) 2007, 2008 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,61 +31,102 @@
 
 #include "Clipboard.h"
 #include "Event.h"
+#include "JSClipboard.h"
 #include "JSKeyboardEvent.h"
+#include "JSMessageEvent.h"
 #include "JSMouseEvent.h"
 #include "JSMutationEvent.h"
 #include "JSOverflowEvent.h"
+#include "JSProgressEvent.h"
 #include "JSTextEvent.h"
 #include "JSUIEvent.h"
+#include "JSWebKitAnimationEvent.h"
+#include "JSWebKitTransitionEvent.h"
 #include "JSWheelEvent.h"
+#include "JSXMLHttpRequestProgressEvent.h"
 #include "KeyboardEvent.h"
+#include "MessageEvent.h"
 #include "MouseEvent.h"
 #include "MutationEvent.h"
 #include "OverflowEvent.h"
+#include "ProgressEvent.h"
 #include "TextEvent.h"
 #include "UIEvent.h"
+#include "WebKitAnimationEvent.h"
+#include "WebKitTransitionEvent.h"
 #include "WheelEvent.h"
-#include "kjs_events.h"
+#include "XMLHttpRequestProgressEvent.h"
+#include <runtime/JSLock.h>
+
+#if ENABLE(DOM_STORAGE)
+#include "JSStorageEvent.h"
+#include "StorageEvent.h"
+#endif
+
+#if ENABLE(SVG)
+#include "JSSVGZoomEvent.h"
+#include "SVGZoomEvent.h"
+#endif
+
+using namespace JSC;
 
 namespace WebCore {
 
-KJS::JSValue* JSEvent::clipboardData(KJS::ExecState* exec) const
+JSValue JSEvent::clipboardData(ExecState* exec) const
 {
-    return impl()->isClipboardEvent() ? toJS(exec, impl()->clipboardData()) : KJS::jsUndefined();
+    return impl()->isClipboardEvent() ? toJS(exec, impl()->clipboardData()) : jsUndefined();
 }
 
-KJS::JSValue* toJS(KJS::ExecState* exec, Event* event)
+JSValue toJS(ExecState* exec, Event* event)
 {
-    KJS::JSLock lock;
+    JSLock lock(false);
 
     if (!event)
-        return KJS::jsNull();
+        return jsNull();
 
-    KJS::ScriptInterpreter* interp = static_cast<KJS::ScriptInterpreter*>(exec->dynamicInterpreter());
+    DOMObject* wrapper = getCachedDOMObjectWrapper(exec->globalData(), event);
+    if (wrapper)
+        return wrapper;
 
-    KJS::DOMObject* ret = interp->getDOMObject(event);
-    if (ret)
-        return ret;
-
-    if (event->isKeyboardEvent())
-        ret = new JSKeyboardEvent(exec, static_cast<KeyboardEvent*>(event));
-    else if (event->isTextEvent())
-        ret = new JSTextEvent(exec, static_cast<TextEvent*>(event));
-    else if (event->isMouseEvent())
-        ret = new JSMouseEvent(exec, static_cast<MouseEvent*>(event));
-    else if (event->isWheelEvent())
-        ret = new JSWheelEvent(exec, static_cast<WheelEvent*>(event));
-    else if (event->isUIEvent())
-        ret = new JSUIEvent(exec, static_cast<UIEvent*>(event));
-    else if (event->isMutationEvent())
-        ret = new JSMutationEvent(exec, static_cast<MutationEvent*>(event));
+    if (event->isUIEvent()) {
+        if (event->isKeyboardEvent())
+            wrapper = CREATE_DOM_OBJECT_WRAPPER(exec, KeyboardEvent, event);
+        else if (event->isTextEvent())
+            wrapper = CREATE_DOM_OBJECT_WRAPPER(exec, TextEvent, event);
+        else if (event->isMouseEvent())
+            wrapper = CREATE_DOM_OBJECT_WRAPPER(exec, MouseEvent, event);
+        else if (event->isWheelEvent())
+            wrapper = CREATE_DOM_OBJECT_WRAPPER(exec, WheelEvent, event);
+#if ENABLE(SVG)
+        else if (event->isSVGZoomEvent())
+            wrapper = CREATE_SVG_OBJECT_WRAPPER(exec, SVGZoomEvent, event, 0);
+#endif
+        else
+            wrapper = CREATE_DOM_OBJECT_WRAPPER(exec, UIEvent, event);
+    } else if (event->isMutationEvent())
+        wrapper = CREATE_DOM_OBJECT_WRAPPER(exec, MutationEvent, event);
     else if (event->isOverflowEvent())
-        ret = new JSOverflowEvent(exec, static_cast<OverflowEvent*>(event));
+        wrapper = CREATE_DOM_OBJECT_WRAPPER(exec, OverflowEvent, event);
+    else if (event->isMessageEvent())
+        wrapper = CREATE_DOM_OBJECT_WRAPPER(exec, MessageEvent, event);
+    else if (event->isProgressEvent()) {
+        if (event->isXMLHttpRequestProgressEvent())
+            wrapper = CREATE_DOM_OBJECT_WRAPPER(exec, XMLHttpRequestProgressEvent, event);
+        else
+            wrapper = CREATE_DOM_OBJECT_WRAPPER(exec, ProgressEvent, event);
+    }
+#if ENABLE(DOM_STORAGE)
+    else if (event->isStorageEvent())
+        wrapper = CREATE_DOM_OBJECT_WRAPPER(exec, StorageEvent, event);
+#endif
+    else if (event->isWebKitAnimationEvent())
+        wrapper = CREATE_DOM_OBJECT_WRAPPER(exec, WebKitAnimationEvent, event);
+    else if (event->isWebKitTransitionEvent())
+        wrapper = CREATE_DOM_OBJECT_WRAPPER(exec, WebKitTransitionEvent, event);
     else
-        ret = new JSEvent(exec, event);
+        wrapper = CREATE_DOM_OBJECT_WRAPPER(exec, Event, event);
 
-    interp->putDOMObject(event, ret);
-    return ret;
+    return wrapper;
 }
 
 } // namespace WebCore

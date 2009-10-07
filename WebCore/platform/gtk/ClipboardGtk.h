@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2006, 2007 Apple Inc.  All rights reserved.
+ * Copyright (C) 2006, 2007, 2008 Apple Inc. All rights reserved.
  * Copyright (C) 2007, Holger Hans Peter Freyther
  *
  * Redistribution and use in source and binary forms, with or without
@@ -21,7 +21,7 @@
  * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
  * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #ifndef ClipboardGdk_h
@@ -36,16 +36,20 @@ namespace WebCore {
     // Created from the EventHandlerGtk to be used by the dom
     class ClipboardGtk : public Clipboard {
     public:
-        ClipboardGtk(ClipboardAccessPolicy, bool);
-        ~ClipboardGtk();
-
+        static PassRefPtr<ClipboardGtk> create(ClipboardAccessPolicy policy, bool isForDragging)
+        {
+            return adoptRef(new ClipboardGtk(policy, isForDragging));
+        }
+        virtual ~ClipboardGtk();
 
         void clearData(const String&);
         void clearAllData();
         String getData(const String&, bool&) const;
         bool setData(const String&, const String&);
 
-        HashSet<String> types() const;
+        virtual HashSet<String> types() const;
+        virtual PassRefPtr<FileList> files() const;
+
         IntPoint dragLocation() const;
         CachedImage* dragImage() const;
         void setDragImage(CachedImage*, const IntPoint&);
@@ -58,7 +62,10 @@ namespace WebCore {
         virtual void writeRange(Range*, Frame*);
 
         virtual bool hasData();
-    };   
+
+    private:
+        ClipboardGtk(ClipboardAccessPolicy, bool);
+    };
 }
 
 #endif

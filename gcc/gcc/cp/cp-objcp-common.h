@@ -16,14 +16,11 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 #ifndef GCC_CP_OBJCP_COMMON
 #define GCC_CP_OBJCP_COMMON
-
-/* APPLE LOCAL mainline */
-/* delete unneeded decls */
 
 /* In cp/cp-lang.c and objcp/objcp-lang.c.  */
 
@@ -62,10 +59,10 @@ extern tree objcp_tsubst_copy_and_build (tree, tree, tsubst_flags_t,
 #define LANG_HOOKS_EXPAND_DECL c_expand_decl
 #undef LANG_HOOKS_PARSE_FILE
 #define LANG_HOOKS_PARSE_FILE c_common_parse_file
+#undef LANG_HOOKS_STATICP
+#define LANG_HOOKS_STATICP cxx_staticp
 #undef LANG_HOOKS_DUP_LANG_SPECIFIC_DECL
 #define LANG_HOOKS_DUP_LANG_SPECIFIC_DECL cxx_dup_lang_specific_decl
-#undef LANG_HOOKS_TRUTHVALUE_CONVERSION
-#define LANG_HOOKS_TRUTHVALUE_CONVERSION c_common_truthvalue_conversion
 #undef LANG_HOOKS_SET_DECL_ASSEMBLER_NAME
 #define LANG_HOOKS_SET_DECL_ASSEMBLER_NAME mangle_decl
 #undef LANG_HOOKS_MARK_ADDRESSABLE
@@ -156,10 +153,28 @@ extern tree objcp_tsubst_copy_and_build (tree, tree, tsubst_flags_t,
 #define LANG_HOOKS_TO_TARGET_CHARSET c_common_to_target_charset
 #undef LANG_HOOKS_GIMPLIFY_EXPR
 #define LANG_HOOKS_GIMPLIFY_EXPR cp_gimplify_expr
+#undef LANG_HOOKS_OMP_PREDETERMINED_SHARING
+#define LANG_HOOKS_OMP_PREDETERMINED_SHARING cxx_omp_predetermined_sharing
+#undef LANG_HOOKS_OMP_CLAUSE_DEFAULT_CTOR
+#define LANG_HOOKS_OMP_CLAUSE_DEFAULT_CTOR cxx_omp_clause_default_ctor
+#undef LANG_HOOKS_OMP_CLAUSE_COPY_CTOR
+#define LANG_HOOKS_OMP_CLAUSE_COPY_CTOR cxx_omp_clause_copy_ctor
+#undef LANG_HOOKS_OMP_CLAUSE_ASSIGN_OP
+#define LANG_HOOKS_OMP_CLAUSE_ASSIGN_OP cxx_omp_clause_assign_op
+#undef LANG_HOOKS_OMP_CLAUSE_DTOR
+#define LANG_HOOKS_OMP_CLAUSE_DTOR cxx_omp_clause_dtor
+#undef LANG_HOOKS_OMP_PRIVATIZE_BY_REFERENCE
+#define LANG_HOOKS_OMP_PRIVATIZE_BY_REFERENCE cxx_omp_privatize_by_reference
 
 /* APPLE LOCAL begin kext identify vtables */
 #undef LANG_HOOKS_VTABLE_P
 #define LANG_HOOKS_VTABLE_P cp_vtable_p
 /* APPLE LOCAL end kext identify vtables */
+
+/* APPLE LOCAL begin radar 6353006  */
+#undef LANG_HOOKS_BUILD_GENERIC_BLOCK_STRUCT_TYPE
+#define LANG_HOOKS_BUILD_GENERIC_BLOCK_STRUCT_TYPE \
+     c_build_generic_block_struct_type
+/* APPLE LOCAL end radar 6353006  */
 
 #endif /* GCC_CP_OBJCP_COMMON */

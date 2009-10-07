@@ -101,6 +101,12 @@ class OSX::DirectOverride
   end
 end
 
+class OSX::DirectOverrideChild
+  def overrideMe
+    'bar'
+  end
+end
+
 class OSX::NSObject
   def self.mySuperClassMethod
     'bar'
@@ -112,6 +118,17 @@ class OSX::NSObject
   objc_method :mySuperMethod, ['id']
 
   objc_method(:mySuperMethodWithBlock, [:id, :int]) { |x| "foo_#{x}" }
+end
+
+class OvmixArgRetainedController < OSX::NSObject
+  def setObject(o)
+    @o = o
+  end
+  objc_method :setObject, ['id', 'id']
+  def getObject
+    @o
+  end
+  objc_method :getObject, ['id']
 end
 
 class TC_OVMIX < Test::Unit::TestCase
@@ -134,6 +151,22 @@ class TC_OVMIX < Test::Unit::TestCase
     OSX::DirectOverride.checkOverridenMethods
   end
 
+  def test_direct_inheritance
+    assert(OSX::DirectOverrideParent.ancestors.include?(OSX::NSObject))
+    p = OSX::DirectOverrideParent.alloc.init
+    assert_kind_of(OSX::NSString, p.performSelector('overrideMe'))
+    assert_equal('foo', p.performSelector('overrideMe').to_s)
+    p.checkOverride('foo')
+    
+    assert(OSX::DirectOverrideChild.ancestors.include?(OSX::NSObject))
+    assert(OSX::DirectOverrideChild.ancestors.include?(
+      OSX::DirectOverrideParent))
+    c = OSX::DirectOverrideChild.alloc.init
+    assert_kind_of(OSX::NSString, c.performSelector('overrideMe'))
+    assert_equal('bar', c.performSelector('overrideMe').to_s)
+    c.checkOverride('bar')
+  end
+
   def test_super_method
     o = OSX::NSString.stringWithCString('blah')
     assert_equal('foo', o.mySuperMethod.to_s)
@@ -148,4 +181,8 @@ class TC_OVMIX < Test::Unit::TestCase
     assert_equal('foo_456', o.objc_send(:mySuperMethodWithBlock, 456).to_s)
   end
 
+  def test_arg_retained
+    c = OvmixArgRetainedController.alloc.init
+    OSX::OvmixArgRetained.test(c)
+  end
 end

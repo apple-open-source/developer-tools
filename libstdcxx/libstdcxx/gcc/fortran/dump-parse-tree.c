@@ -1,5 +1,5 @@
 /* Parse tree dumper
-   Copyright (C) 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2006 Free Software Foundation, Inc.
    Contributed by Steven Bosscher
 
 This file is part of GCC.
@@ -16,8 +16,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 
 /* Actually this is just a collection of routines that used to be
@@ -36,11 +36,6 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 
 /* Keep track of indentation for symbol tree dumps.  */
 static int show_level = 0;
-
-
-/* Forward declaration because this one needs all, and all need
-   this one.  */
-static void gfc_show_expr (gfc_expr *);
 
 /* Do indentation for a specific level.  */
 
@@ -61,6 +56,7 @@ code_indent (int level, gfc_st_label * label)
 
 /* Simple indentation at the current level.  This one
    is used to show symbols.  */
+
 static inline void
 show_indent (void)
 {
@@ -70,7 +66,8 @@ show_indent (void)
 
 
 /* Show type-specific information.  */
-static void
+
+void
 gfc_show_typespec (gfc_typespec * ts)
 {
 
@@ -97,7 +94,7 @@ gfc_show_typespec (gfc_typespec * ts)
 
 /* Show an actual argument list.  */
 
-static void
+void
 gfc_show_actual_arglist (gfc_actual_arglist * a)
 {
 
@@ -122,9 +119,9 @@ gfc_show_actual_arglist (gfc_actual_arglist * a)
 }
 
 
-/* Show an gfc_array_spec array specification structure.  */
+/* Show a gfc_array_spec array specification structure.  */
 
-static void
+void
 gfc_show_array_spec (gfc_array_spec * as)
 {
   const char *c;
@@ -165,9 +162,9 @@ gfc_show_array_spec (gfc_array_spec * as)
 }
 
 
-/* Show an gfc_array_ref array reference structure.  */
+/* Show a gfc_array_ref array reference structure.  */
 
-static void
+void
 gfc_show_array_ref (gfc_array_ref * ar)
 {
   int i;
@@ -235,7 +232,7 @@ gfc_show_array_ref (gfc_array_ref * ar)
 
 /* Show a list of gfc_ref structures.  */
 
-static void
+void
 gfc_show_ref (gfc_ref * p)
 {
 
@@ -266,7 +263,7 @@ gfc_show_ref (gfc_ref * p)
 
 /* Display a constructor.  Works recursively for array constructors.  */
 
-static void
+void
 gfc_show_constructor (gfc_constructor * c)
 {
 
@@ -299,7 +296,7 @@ gfc_show_constructor (gfc_constructor * c)
 
 /* Show an expression.  */
 
-static void
+void
 gfc_show_expr (gfc_expr * p)
 {
   const char *c;
@@ -346,6 +343,16 @@ gfc_show_expr (gfc_expr * p)
       break;
 
     case EXPR_CONSTANT:
+      if (p->from_H || p->ts.type == BT_HOLLERITH)
+	{
+	  gfc_status ("%dH", p->value.character.length);
+	  c = p->value.character.string;
+	  for (i = 0; i < p->value.character.length; i++, c++)
+	    {
+	      gfc_status_char (*c);
+	    }
+	  break;
+	}
       switch (p->ts.type)
 	{
 	case BT_INTEGER:
@@ -476,6 +483,9 @@ gfc_show_expr (gfc_expr * p)
 	case INTRINSIC_NOT:
 	  gfc_status ("NOT ");
 	  break;
+	case INTRINSIC_PARENTHESES:
+	  gfc_status ("parens");
+	  break;
 
 	default:
 	  gfc_internal_error
@@ -519,7 +529,7 @@ gfc_show_expr (gfc_expr * p)
 /* Show symbol attributes.  The flavor and intent are followed by
    whatever single bit attributes are present.  */
 
-static void
+void
 gfc_show_attr (symbol_attribute * attr)
 {
 
@@ -542,6 +552,8 @@ gfc_show_attr (symbol_attribute * attr)
     gfc_status (" POINTER");
   if (attr->save)
     gfc_status (" SAVE");
+  if (attr->threadprivate)
+    gfc_status (" THREADPRIVATE");
   if (attr->target)
     gfc_status (" TARGET");
   if (attr->dummy)
@@ -582,7 +594,7 @@ gfc_show_attr (symbol_attribute * attr)
 
 /* Show components of a derived type.  */
 
-static void
+void
 gfc_show_components (gfc_symbol * sym)
 {
   gfc_component *c;
@@ -609,7 +621,7 @@ gfc_show_components (gfc_symbol * sym)
    specific interfaces associated with a generic symbol is done within
    that symbol.  */
 
-static void
+void
 gfc_show_symbol (gfc_symbol * sym)
 {
   gfc_formal_arglist *formal;
@@ -665,7 +677,12 @@ gfc_show_symbol (gfc_symbol * sym)
       gfc_status ("Formal arglist:");
 
       for (formal = sym->formal; formal; formal = formal->next)
-	gfc_status (" %s", formal->sym->name);
+        {
+          if (formal->sym != NULL)
+            gfc_status (" %s", formal->sym->name);
+          else
+            gfc_status (" [Alt Return]");
+        }
     }
 
   if (sym->formal_ns)
@@ -681,6 +698,7 @@ gfc_show_symbol (gfc_symbol * sym)
 
 /* Show a user-defined operator.  Just prints an operator
    and the name of the associated subroutine, really.  */
+
 static void
 show_uop (gfc_user_op * uop)
 {
@@ -741,6 +759,7 @@ show_common (gfc_symtree * st)
   gfc_status_char ('\n');
 }    
 
+
 /* Worker function to display the symbol tree.  */
 
 static void
@@ -766,7 +785,7 @@ static void gfc_show_code_node (int level, gfc_code * c);
 /* Show a list of code structures.  Mutually recursive with
    gfc_show_code_node().  */
 
-static void
+void
 gfc_show_code (int level, gfc_code * c)
 {
 
@@ -774,6 +793,202 @@ gfc_show_code (int level, gfc_code * c)
     gfc_show_code_node (level, c);
 }
 
+void
+gfc_show_namelist (gfc_namelist *n)
+{
+  for (; n->next; n = n->next)
+    gfc_status ("%s,", n->sym->name);
+  gfc_status ("%s", n->sym->name);
+}
+
+/* Show a single OpenMP directive node and everything underneath it
+   if necessary.  */
+
+static void
+gfc_show_omp_node (int level, gfc_code * c)
+{
+  gfc_omp_clauses *omp_clauses = NULL;
+  const char *name = NULL;
+
+  switch (c->op)
+    {
+    case EXEC_OMP_ATOMIC: name = "ATOMIC"; break;
+    case EXEC_OMP_BARRIER: name = "BARRIER"; break;
+    case EXEC_OMP_CRITICAL: name = "CRITICAL"; break;
+    case EXEC_OMP_FLUSH: name = "FLUSH"; break;
+    case EXEC_OMP_DO: name = "DO"; break;
+    case EXEC_OMP_MASTER: name = "MASTER"; break;
+    case EXEC_OMP_ORDERED: name = "ORDERED"; break;
+    case EXEC_OMP_PARALLEL: name = "PARALLEL"; break;
+    case EXEC_OMP_PARALLEL_DO: name = "PARALLEL DO"; break;
+    case EXEC_OMP_PARALLEL_SECTIONS: name = "PARALLEL SECTIONS"; break;
+    case EXEC_OMP_PARALLEL_WORKSHARE: name = "PARALLEL WORKSHARE"; break;
+    case EXEC_OMP_SECTIONS: name = "SECTIONS"; break;
+    case EXEC_OMP_SINGLE: name = "SINGLE"; break;
+    case EXEC_OMP_WORKSHARE: name = "WORKSHARE"; break;
+    default:
+      gcc_unreachable ();
+    }
+  gfc_status ("!$OMP %s", name);
+  switch (c->op)
+    {
+    case EXEC_OMP_DO:
+    case EXEC_OMP_PARALLEL:
+    case EXEC_OMP_PARALLEL_DO:
+    case EXEC_OMP_PARALLEL_SECTIONS:
+    case EXEC_OMP_SECTIONS:
+    case EXEC_OMP_SINGLE:
+    case EXEC_OMP_WORKSHARE:
+    case EXEC_OMP_PARALLEL_WORKSHARE:
+      omp_clauses = c->ext.omp_clauses;
+      break;
+    case EXEC_OMP_CRITICAL:
+      if (c->ext.omp_name)
+	gfc_status (" (%s)", c->ext.omp_name);
+      break;
+    case EXEC_OMP_FLUSH:
+      if (c->ext.omp_namelist)
+	{
+	  gfc_status (" (");
+	  gfc_show_namelist (c->ext.omp_namelist);
+	  gfc_status_char (')');
+	}
+      return;
+    case EXEC_OMP_BARRIER:
+      return;
+    default:
+      break;
+    }
+  if (omp_clauses)
+    {
+      int list_type;
+
+      if (omp_clauses->if_expr)
+	{
+	  gfc_status (" IF(");
+	  gfc_show_expr (omp_clauses->if_expr);
+	  gfc_status_char (')');
+	}
+      if (omp_clauses->num_threads)
+	{
+	  gfc_status (" NUM_THREADS(");
+	  gfc_show_expr (omp_clauses->num_threads);
+	  gfc_status_char (')');
+	}
+      if (omp_clauses->sched_kind != OMP_SCHED_NONE)
+	{
+	  const char *type;
+	  switch (omp_clauses->sched_kind)
+	    {
+	    case OMP_SCHED_STATIC: type = "STATIC"; break;
+	    case OMP_SCHED_DYNAMIC: type = "DYNAMIC"; break;
+	    case OMP_SCHED_GUIDED: type = "GUIDED"; break;
+	    case OMP_SCHED_RUNTIME: type = "RUNTIME"; break;
+	    default:
+	      gcc_unreachable ();
+	    }
+	  gfc_status (" SCHEDULE (%s", type);
+	  if (omp_clauses->chunk_size)
+	    {
+	      gfc_status_char (',');
+	      gfc_show_expr (omp_clauses->chunk_size);
+	    }
+	  gfc_status_char (')');
+	}
+      if (omp_clauses->default_sharing != OMP_DEFAULT_UNKNOWN)
+	{
+	  const char *type;
+	  switch (omp_clauses->default_sharing)
+	    {
+	    case OMP_DEFAULT_NONE: type = "NONE"; break;
+	    case OMP_DEFAULT_PRIVATE: type = "PRIVATE"; break;
+	    case OMP_DEFAULT_SHARED: type = "SHARED"; break;
+	    case OMP_SCHED_RUNTIME: type = "RUNTIME"; break;
+	    default:
+	      gcc_unreachable ();
+	    }
+	  gfc_status (" DEFAULT(%s)", type);
+	}
+      if (omp_clauses->ordered)
+	gfc_status (" ORDERED");
+      for (list_type = 0; list_type < OMP_LIST_NUM; list_type++)
+	if (omp_clauses->lists[list_type] != NULL
+	    && list_type != OMP_LIST_COPYPRIVATE)
+	  {
+	    const char *type;
+	    if (list_type >= OMP_LIST_REDUCTION_FIRST)
+	      {
+		switch (list_type)
+		  {
+		  case OMP_LIST_PLUS: type = "+"; break;
+		  case OMP_LIST_MULT: type = "*"; break;
+		  case OMP_LIST_SUB: type = "-"; break;
+		  case OMP_LIST_AND: type = ".AND."; break;
+		  case OMP_LIST_OR: type = ".OR."; break;
+		  case OMP_LIST_EQV: type = ".EQV."; break;
+		  case OMP_LIST_NEQV: type = ".NEQV."; break;
+		  case OMP_LIST_MAX: type = "MAX"; break;
+		  case OMP_LIST_MIN: type = "MIN"; break;
+		  case OMP_LIST_IAND: type = "IAND"; break;
+		  case OMP_LIST_IOR: type = "IOR"; break;
+		  case OMP_LIST_IEOR: type = "IEOR"; break;
+		  default:
+		    gcc_unreachable ();
+		  }
+		gfc_status (" REDUCTION(%s:", type);
+	      }
+	    else
+	      {
+		switch (list_type)
+		  {
+		  case OMP_LIST_PRIVATE: type = "PRIVATE"; break;
+		  case OMP_LIST_FIRSTPRIVATE: type = "FIRSTPRIVATE"; break;
+		  case OMP_LIST_LASTPRIVATE: type = "LASTPRIVATE"; break;
+		  case OMP_LIST_SHARED: type = "SHARED"; break;
+		  case OMP_LIST_COPYIN: type = "COPYIN"; break;
+		  default:
+		    gcc_unreachable ();
+		  }
+		gfc_status (" %s(", type);
+	      }
+	    gfc_show_namelist (omp_clauses->lists[list_type]);
+	    gfc_status_char (')');
+	  }
+    }
+  gfc_status_char ('\n');
+  if (c->op == EXEC_OMP_SECTIONS || c->op == EXEC_OMP_PARALLEL_SECTIONS)
+    {
+      gfc_code *d = c->block;
+      while (d != NULL)
+	{
+	  gfc_show_code (level + 1, d->next);
+	  if (d->block == NULL)
+	    break;
+	  code_indent (level, 0);
+	  gfc_status ("!$OMP SECTION\n");
+	  d = d->block;
+	}
+    }
+  else
+    gfc_show_code (level + 1, c->block->next);
+  if (c->op == EXEC_OMP_ATOMIC)
+    return;
+  code_indent (level, 0);
+  gfc_status ("!$OMP END %s", name);
+  if (omp_clauses != NULL)
+    {
+      if (omp_clauses->lists[OMP_LIST_COPYPRIVATE])
+	{
+	  gfc_status (" COPYPRIVATE(");
+	  gfc_show_namelist (omp_clauses->lists[OMP_LIST_COPYPRIVATE]);
+	  gfc_status_char (')');
+	}
+      else if (omp_clauses->nowait)
+	gfc_status (" NOWAIT");
+    }
+  else if (c->op == EXEC_OMP_CRITICAL && c->ext.omp_name)
+    gfc_status (" (%s)", c->ext.omp_name);
+}
 
 /* Show a single code node and everything underneath it if necessary.  */
 
@@ -806,6 +1021,7 @@ gfc_show_code_node (int level, gfc_code * c)
       gfc_status ("ENTRY %s", c->ext.entry->sym->name);
       break;
 
+    case EXEC_INIT_ASSIGN:
     case EXEC_ASSIGN:
       gfc_status ("ASSIGN ");
       gfc_show_expr (c->expr);
@@ -850,7 +1066,13 @@ gfc_show_code_node (int level, gfc_code * c)
       break;
 
     case EXEC_CALL:
-      gfc_status ("CALL %s ", c->resolved_sym->name);
+      if (c->resolved_sym)
+	gfc_status ("CALL %s ", c->resolved_sym->name);
+      else if (c->symtree)
+	gfc_status ("CALL %s ", c->symtree->name);
+      else
+	gfc_status ("CALL ?? ");
+
       gfc_show_actual_arglist (c->ext.actual);
       break;
 
@@ -1079,6 +1301,11 @@ gfc_show_code_node (int level, gfc_code * c)
 	  gfc_status (" UNIT=");
 	  gfc_show_expr (open->unit);
 	}
+      if (open->iomsg)
+	{
+	  gfc_status (" IOMSG=");
+	  gfc_show_expr (open->iomsg);
+	}
       if (open->iostat)
 	{
 	  gfc_status (" IOSTAT=");
@@ -1134,6 +1361,11 @@ gfc_show_code_node (int level, gfc_code * c)
 	  gfc_status (" PAD=");
 	  gfc_show_expr (open->pad);
 	}
+      if (open->convert)
+	{
+	  gfc_status (" CONVERT=");
+	  gfc_show_expr (open->convert);
+	}
       if (open->err != NULL)
 	gfc_status (" ERR=%d", open->err->value);
 
@@ -1147,6 +1379,11 @@ gfc_show_code_node (int level, gfc_code * c)
 	{
 	  gfc_status (" UNIT=");
 	  gfc_show_expr (close->unit);
+	}
+      if (close->iomsg)
+	{
+	  gfc_status (" IOMSG=");
+	  gfc_show_expr (close->iomsg);
 	}
       if (close->iostat)
 	{
@@ -1172,6 +1409,10 @@ gfc_show_code_node (int level, gfc_code * c)
 
     case EXEC_REWIND:
       gfc_status ("REWIND");
+      goto show_filepos;
+
+    case EXEC_FLUSH:
+      gfc_status ("FLUSH");
 
     show_filepos:
       fp = c->ext.filepos;
@@ -1180,6 +1421,11 @@ gfc_show_code_node (int level, gfc_code * c)
 	{
 	  gfc_status (" UNIT=");
 	  gfc_show_expr (fp->unit);
+	}
+      if (fp->iomsg)
+	{
+	  gfc_status (" IOMSG=");
+	  gfc_show_expr (fp->iomsg);
 	}
       if (fp->iostat)
 	{
@@ -1205,6 +1451,11 @@ gfc_show_code_node (int level, gfc_code * c)
 	  gfc_show_expr (i->file);
 	}
 
+      if (i->iomsg)
+	{
+	  gfc_status (" IOMSG=");
+	  gfc_show_expr (i->iomsg);
+	}
       if (i->iostat)
 	{
 	  gfc_status (" IOSTAT=");
@@ -1316,6 +1567,11 @@ gfc_show_code_node (int level, gfc_code * c)
 	  gfc_status (" PAD=");
 	  gfc_show_expr (i->pad);
 	}
+      if (i->convert)
+	{
+	  gfc_status (" CONVERT=");
+	  gfc_show_expr (i->convert);
+	}
 
       if (i->err != NULL)
 	gfc_status (" ERR=%d", i->err->value);
@@ -1324,6 +1580,7 @@ gfc_show_code_node (int level, gfc_code * c)
     case EXEC_IOLENGTH:
       gfc_status ("IOLENGTH ");
       gfc_show_expr (c->expr);
+      goto show_dt_code;
       break;
 
     case EXEC_READ:
@@ -1351,6 +1608,12 @@ gfc_show_code_node (int level, gfc_code * c)
 	gfc_status (" FMT=%d", dt->format_label->value);
       if (dt->namelist)
 	gfc_status (" NML=%s", dt->namelist->name);
+
+      if (dt->iomsg)
+	{
+	  gfc_status (" IOMSG=");
+	  gfc_show_expr (dt->iomsg);
+	}
       if (dt->iostat)
 	{
 	  gfc_status (" IOSTAT=");
@@ -1372,7 +1635,11 @@ gfc_show_code_node (int level, gfc_code * c)
 	  gfc_show_expr (dt->advance);
 	}
 
-      break;
+    show_dt_code:
+      gfc_status_char ('\n');
+      for (c = c->block->next; c; c = c->next)
+	gfc_show_code_node (level + (c->next != NULL), c);
+      return;
 
     case EXEC_TRANSFER:
       gfc_status ("TRANSFER ");
@@ -1391,6 +1658,23 @@ gfc_show_code_node (int level, gfc_code * c)
 	gfc_status (" EOR=%d", dt->eor->value);
       break;
 
+    case EXEC_OMP_ATOMIC:
+    case EXEC_OMP_BARRIER:
+    case EXEC_OMP_CRITICAL:
+    case EXEC_OMP_FLUSH:
+    case EXEC_OMP_DO:
+    case EXEC_OMP_MASTER:
+    case EXEC_OMP_ORDERED:
+    case EXEC_OMP_PARALLEL:
+    case EXEC_OMP_PARALLEL_DO:
+    case EXEC_OMP_PARALLEL_SECTIONS:
+    case EXEC_OMP_PARALLEL_WORKSHARE:
+    case EXEC_OMP_SECTIONS:
+    case EXEC_OMP_SINGLE:
+    case EXEC_OMP_WORKSHARE:
+      gfc_show_omp_node (level, c);
+      break;
+
     default:
       gfc_internal_error ("gfc_show_code_node(): Bad statement code");
     }
@@ -1399,9 +1683,9 @@ gfc_show_code_node (int level, gfc_code * c)
 }
 
 
-/* Show and equivalence chain.  */
+/* Show an equivalence chain.  */
 
-static void
+void
 gfc_show_equiv (gfc_equiv *eq)
 {
   show_indent ();

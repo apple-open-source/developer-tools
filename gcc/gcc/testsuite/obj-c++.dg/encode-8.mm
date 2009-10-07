@@ -1,4 +1,3 @@
-/* APPLE LOCAL file mainline */
 /* Test if the Objective-C @encode machinery distinguishes between
    'BOOL *' (which should be encoded as '^c') and 'char *' (which
    should be encoded as '*').  */

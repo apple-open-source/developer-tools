@@ -2,6 +2,7 @@
  * This file is part of the WebKit project.
  *
  * Copyright (C) 2006 Apple Computer, Inc.
+ *           (C) 2007 Nikolas Zimmermann <zimmermann@kde.org>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -23,20 +24,34 @@
 #include "config.h"
 
 #if ENABLE(SVG)
-
 #include "RenderSVGBlock.h"
+
 #include "SVGElement.h"
 
-namespace WebCore
-{
+namespace WebCore {
+
 RenderSVGBlock::RenderSVGBlock(SVGElement* node) 
     : RenderBlock(node)
 {
 }
 
-void RenderSVGBlock::setStyle(RenderStyle* style) 
+void RenderSVGBlock::setStyle(PassRefPtr<RenderStyle> style) 
 {
-    RenderBlock::setStyle(style);
+    RefPtr<RenderStyle> useStyle = style;
+
+    // SVG text layout code expects us to be a block-level style element.   
+    if (useStyle->display() == NONE)
+        setChildrenInline(false);
+    else if (useStyle->isDisplayInlineType()) {
+        RefPtr<RenderStyle> newStyle = RenderStyle::create();
+        newStyle->inheritFrom(useStyle.get());
+        newStyle->setDisplay(BLOCK);
+        useStyle = newStyle.release();
+    }
+
+    RenderBlock::setStyle(useStyle.release());
+    setReplaced(false);
+
     //FIXME: Once overflow rules are supported by SVG we should
     //probably map the CSS overflow rules rather than just ignoring
     //them

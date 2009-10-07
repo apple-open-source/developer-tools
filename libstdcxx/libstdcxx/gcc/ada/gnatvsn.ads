@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2003 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2006 Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -74,7 +74,7 @@ package Gnatvsn is
    --  value should never be decreased in the future, but it would be
    --  OK to increase it if absolutely necessary.
 
-   Library_Version : constant String := "4.0";
+   Library_Version : constant String := "4.2";
    --  Library version. This value must be updated whenever any change to the
    --  compiler affects the library formats in such a way as to obsolete
    --  previously compiled library modules.
@@ -85,11 +85,14 @@ package Gnatvsn is
    Verbose_Library_Version : constant String := "GNAT Lib v" & Library_Version;
    --  Version string stored in e.g. ALI files.
 
-   ASIS_Version_Number : constant := 4;
+   ASIS_Version_Number : constant := 5;
    --  ASIS Version. This is used to check for consistency between the compiler
    --  used to generate trees, and an ASIS application that is reading the
    --  trees. It must be updated (incremented) whenever a change is made to
    --  the tree format that would result in a compiler being incompatible with
    --  an older version of ASIS, or vice versa.
+
+   Current_Year : constant String := "2006";
+   --  Used in printing copyright messages
 
 end Gnatvsn;

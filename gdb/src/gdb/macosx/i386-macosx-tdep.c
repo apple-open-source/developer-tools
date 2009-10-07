@@ -266,7 +266,7 @@ x86_64_macosx_store_gp_registers_raw (gdb_x86_thread_state64_t *sp_regs)
 void
 i386_macosx_fetch_fp_registers (gdb_i386_float_state_t *fp_regs)
 {
-  i387_swap_fxsave (current_regcache, &fp_regs->fpu_fcw);
+  i387_swap_fxsave (current_regcache, (uint8_t *) &fp_regs->fpu_fcw);
   i387_supply_fxsave (current_regcache, -1, &fp_regs->fpu_fcw);
 }
 
@@ -279,7 +279,7 @@ i386_macosx_fetch_fp_registers_raw (gdb_i386_float_state_t *fp_regs)
 void
 x86_64_macosx_fetch_fp_registers (gdb_x86_float_state64_t *fp_regs)
 {
-  i387_swap_fxsave (current_regcache, &fp_regs->fpu_fcw);
+  i387_swap_fxsave (current_regcache, (uint8_t *) &fp_regs->fpu_fcw);
   i387_supply_fxsave (current_regcache, -1, &fp_regs->fpu_fcw);
 }
 
@@ -301,7 +301,7 @@ i386_macosx_store_fp_registers (gdb_i386_float_state_t *fp_regs)
 {
   memset (fp_regs, 0, sizeof (gdb_i386_float_state_t));
   i387_fill_fxsave ((unsigned char *) &fp_regs->fpu_fcw, -1);
-  i387_swap_fxsave (current_regcache, &fp_regs->fpu_fcw);
+  i387_swap_fxsave (current_regcache, (uint8_t *) &fp_regs->fpu_fcw);
 
   return 1;
 }
@@ -321,7 +321,7 @@ x86_64_macosx_store_fp_registers (gdb_x86_float_state64_t *fp_regs)
 {
   memset (fp_regs, 0, sizeof (gdb_x86_float_state64_t));
   i387_fill_fxsave ((unsigned char *) &fp_regs->fpu_fcw, -1);
-  i387_swap_fxsave (current_regcache, &fp_regs->fpu_fcw);
+  i387_swap_fxsave (current_regcache, (uint8_t *) &fp_regs->fpu_fcw);
 
   return 1;
 }
@@ -442,6 +442,39 @@ i386_macosx_thread_state_addr_1 (CORE_ADDR start_of_func, CORE_ADDR pc,
   return address_of_struct_mcontext + 12;
 }
 
+/* On entry to _sigtramp, r8 has the address of a ucontext_t structure.
+   48 bytes into the ucontext_t we have the address of an mcontext structure.
+   Starting 16 bytes into the mcontext structure, we have the saved registers,
+   the mapping of them is handled by amd64_macosx_thread_state_reg_offset. 
+   libSystem has eh_frame instructions for doing the same thing; they are of
+   the form,
+         DW_CFA_expression (1, expr(breg3 +48, deref , plus uconst 0x0018))
+   On function entry we can find the ucontext_t structure off of R8; when 
+   _sigtramp calls down into the handler we should look at RBX (reg3) to
+   find it.
+ */
+
+static CORE_ADDR
+amd64_macosx_thread_state_addr (struct frame_info *next_frame)
+{
+  gdb_byte buf[8];
+  CORE_ADDR mcontext_addr, ucontext_addr;
+
+  if (frame_relative_level (next_frame) == -1)
+    {
+      frame_unwind_register (next_frame, AMD64_R8_REGNUM, buf);
+      mcontext_addr = extract_unsigned_integer (buf, 8);
+    }
+  else
+    {
+      frame_unwind_register (next_frame, AMD64_RBX_REGNUM, buf);
+      mcontext_addr = extract_unsigned_integer (buf, 8);
+    }
+
+  ucontext_addr = read_memory_unsigned_integer (mcontext_addr + 48, 8);
+  return ucontext_addr + 0x10;
+}
+
 /* Offsets into the struct i386_thread_state where we'll find the saved regs. */
 /* From <mach/i386/thread_status.h and i386-tdep.h */
 static int i386_macosx_thread_state_reg_offset[] =
@@ -466,7 +499,7 @@ static int i386_macosx_thread_state_reg_offset[] =
 
 /* Offsets into the struct x86_thread_state64 where we'll find the saved regs. */
 /* From <mach/i386/thread_status.h and amd64-tdep.h */
-static int x86_64_macosx_thread_state_reg_offset[] =
+static int amd64_macosx_thread_state_reg_offset[] =
 {
   0 * 8,			/* %rax */
   1 * 8,			/* %rbx */
@@ -557,10 +590,9 @@ x86_macosx_init_abi_64 (struct gdbarch_info info, struct gdbarch *gdbarch)
 
   tdep->struct_return = reg_struct_return;
 
-  /* We don't do signals yet. */
-  tdep->sigcontext_addr = NULL;
-  tdep->sc_reg_offset = x86_64_macosx_thread_state_reg_offset;
-  tdep->sc_num_regs = ARRAY_SIZE (x86_64_macosx_thread_state_reg_offset);
+  tdep->sigcontext_addr = amd64_macosx_thread_state_addr;
+  tdep->sc_reg_offset = amd64_macosx_thread_state_reg_offset;
+  tdep->sc_num_regs = ARRAY_SIZE (amd64_macosx_thread_state_reg_offset);
 
   tdep->jb_pc_offset = 148;
   set_gdbarch_integer_to_address (gdbarch, i386_integer_to_address);
@@ -573,11 +605,11 @@ i386_mach_o_query_64bit ()
   int supports64bit;
   size_t sz;
   
-  sz = sizeof(supports64bit);
-  result = sysctlbyname("hw.optional.x86_64", &supports64bit, &sz, NULL, 0);
-  return (result == 0 &&
-          sz == sizeof(supports64bit) &&
-          supports64bit);
+  sz = sizeof (supports64bit);
+  result = sysctlbyname ("hw.optional.x86_64", &supports64bit, &sz, NULL, 0);
+  return (result == 0
+          && sz == sizeof (supports64bit)
+          && supports64bit);
 }
 
 static enum gdb_osabi

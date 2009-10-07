@@ -25,9 +25,7 @@
  */
 
 /*
- * Portions Copyright 2007 Apple Inc.
- *
- * $Id$
+ * Portions Copyright 2007-2009 Apple Inc.
  */
 
 #pragma ident	"@(#)auto_subr.c	1.95	05/12/19 SMI"
@@ -48,7 +46,6 @@
 #include <sys/stat.h>
 #include <sys/buf.h>
 #include <sys/proc.h>
-#include <sys/proc_internal.h>
 #include <sys/conf.h>
 #include <sys/mount.h>
 #include <sys/vnode.h>
@@ -63,35 +60,16 @@
 #include <sys/vm.h>
 #include <sys/errno.h>
 #include <vfs/vfs_support.h>
-#include <sys/syslog.h>
 
 #include <kern/assert.h>
 #include <kern/host.h>
 #include <kern/locks.h>
 #include <kern/clock.h>
 
+#include <IOKit/IOLib.h>
+
 #ifdef DEBUG
 #include <stdarg.h>
-#endif
-
-/*
- * XXX - until this gets added to <mach/host_special_ports.h>
- */
-#ifndef HOST_AUTOMOUNTD_PORT
-#ifdef HOST_MAX_SPECIAL_KERNEL_PORT
-#define HOST_AUTOMOUNTD_PORT	(4 + HOST_MAX_SPECIAL_KERNEL_PORT)
-#endif
-#endif
-
-#ifndef host_get_automountd_port(host, port)
-#define host_get_automountd_port(host, port)		\
-	(host_get_special_port((host),				\
-        HOST_LOCAL_NODE, HOST_AUTOMOUNTD_PORT, (port)))
-#endif
-
-#ifndef host_set_automountd_port(host, port)
-#define host_set_automountd_port(host, port)		\
-	(host_set_special_port((host), HOST_AUTOMOUNTD_PORT, (port)))
 #endif
 
 #include "autofs.h"
@@ -101,11 +79,11 @@
 #define	TYPICALPATH_MAX	64
 
 static int auto_perform_actions(fninfo_t *, fnnode_t *,
-    action_list *, ucred_t);
+    action_list *, kauth_cred_t);
 static int auto_lookup_request(fninfo_t *, char *, int,
     vfs_context_t, boolean_t, boolean_t *);
-static int auto_mount_request(fninfo_t *, fnnode_t *, char *, int,
-    action_list **, ucred_t, mach_port_t, boolean_t);
+static int auto_mount_request(fninfo_t *, char *, int,
+    action_list **, kauth_cred_t, mach_port_t, boolean_t);
 
 /*
  * Unless we're an automounter (in which case, the process that caused
@@ -117,9 +95,9 @@ static int auto_mount_request(fninfo_t *, fnnode_t *, char *, int,
  * so everybody's deadlocked), get a reader lock on the fninfo_t.
  */
 void
-auto_fninfo_lock_shared(fninfo_t *fnip, vfs_context_t ctx)
+auto_fninfo_lock_shared(fninfo_t *fnip, int pid)
 {
-	if (!auto_is_automounter(vfs_context_pid(ctx)))
+	if (!auto_is_automounter(pid))
 		lck_rw_lock_shared(fnip->fi_rwlock);
 }
 
@@ -128,9 +106,9 @@ auto_fninfo_lock_shared(fninfo_t *fnip, vfs_context_t ctx)
  * we don't have one.
  */
 void
-auto_fninfo_unlock_shared(fninfo_t *fnip, vfs_context_t ctx)
+auto_fninfo_unlock_shared(fninfo_t *fnip, int pid)
 {
-	if (!auto_is_automounter(vfs_context_pid(ctx)))
+	if (!auto_is_automounter(pid))
 		lck_rw_unlock_shared(fnip->fi_rwlock);
 }
 
@@ -174,7 +152,7 @@ int
 auto_wait4mount(fnnode_t *fnp, vfs_context_t context)
 {
 	int error;
-	pid_t pid;
+	int pid;
 
 	AUTOFS_DPRINT((4, "auto_wait4mount: fnp=%p\n", (void *)fnp));
 
@@ -277,16 +255,11 @@ auto_lookup_aux(fnnode_t *fnp, char *name, int namelen, vfs_context_t context)
 			AUTOFS_UNBLOCK_OTHERS(fnp, MF_LOOKUP);
 			lck_mtx_unlock(fnp->fn_lock);
 			/*
-			 * auto_new_mount_thread fires up a new thread which
-			 * calls automountd finishing up the work
+			 * auto_do_mount fires up a new thread which
+			 * calls automountd finishing up the work,
+			 * and then waits for that thread to complete.
 			 */
-			auto_new_mount_thread(fnp, name, namelen, context);
-
-			/*
-			 * At this point, we are simply another thread
-			 * waiting for the mount to complete
-			 */
-			error = auto_wait4mount(fnp, context);
+			error = auto_do_mount(fnp, name, namelen, context);
 		}
 	}
 
@@ -307,6 +280,19 @@ auto_lookup_aux(fnnode_t *fnp, char *name, int namelen, vfs_context_t context)
 }
 
 /*
+ * Parameters passed to a mount thread.
+ */
+struct autofs_callargs {
+	fnnode_t	*fnc_fnp;	/* fnnode */
+	char		*fnc_name;	/* path to lookup/mount */
+	int		fnc_namelen;	/* length of path */
+	thread_t	fnc_origin;	/* thread that fired up this thread */
+					/* used for debugging purposes */
+	kauth_cred_t	fnc_cred;
+	mach_port_t	fnc_gssd_port;	/* mach port for gssd */
+};
+
+/*
  * Starting point for thread to handle mount requests with automountd.
  */
 static void
@@ -318,7 +304,7 @@ auto_mount_thread(void *arg)
 	vnode_t vp;
 	char *name;
 	int namelen;
-	ucred_t cred;
+	kauth_cred_t cred;
 	action_list *alp = NULL;
 	int error;
 	struct vfsstatfs *vfsstat;
@@ -331,7 +317,15 @@ auto_mount_thread(void *arg)
 	namelen = argsp->fnc_namelen;
 	cred = argsp->fnc_cred;
 
-	error = auto_mount_request(fnip, fnp, name, namelen, &alp, cred,
+	/*
+	 * Set the UID of the mount point to the UID of the process on
+	 * whose behalf we're doing the mount; the mount might have to
+	 * be done as that user if it requires authentication as that
+	 * user.
+	 */
+	fnp->fn_uid = kauth_cred_getuid(cred);
+
+	error = auto_mount_request(fnip, name, namelen, &alp, cred,
 	    argsp->fnc_gssd_port, TRUE);
 	if (!error) {
 		error = auto_perform_actions(fnip, fnp, alp, cred);
@@ -358,9 +352,7 @@ auto_mount_thread(void *arg)
 	fnp->fn_error = error;
 	if (error) {
 		/*
-		 * Set the UID for this fnnode back to 0; automountd
-		 * might have changed it to the UID of the process
-		 * that triggered the mount.
+		 * Set the UID for this fnnode back to 0.
 		 */
 		fnp->fn_uid = 0;
 	}
@@ -372,7 +364,7 @@ auto_mount_thread(void *arg)
 	AUTOFS_UNBLOCK_OTHERS(fnp, MF_INPROG);
 	lck_mtx_unlock(fnp->fn_lock);
 
-	vnode_rele(vp);
+	vnode_rele(vp);	/* release reference from auto_do_mount() */
 	kauth_cred_unref(&argsp->fnc_cred);
 	FREE(argsp->fnc_name, M_AUTOFS);
 	FREE(argsp, M_AUTOFS);
@@ -384,19 +376,27 @@ auto_mount_thread(void *arg)
 static int autofs_thr_success = 0;
 
 /*
- * Creates new thread which calls auto_mount_thread which does
- * the bulk of the work calling automountd, via 'auto_perform_actions'.
+ * First, attempt to grab a use count on the vnode on which we're to do a
+ * mount.
+ *
+ * If that succeeds, attempt to create a new thread which calls
+ * auto_mount_thread which does the bulk of the work calling automountd,
+ * via 'auto_perform_actions'.
+ *
+ * If that succeeds, wait for that thread to finish.
  */
-void
-auto_new_mount_thread(fnnode_t *fnp, char *name, int namelen, vfs_context_t context)
+int
+auto_do_mount(fnnode_t *fnp, char *name, int namelen, vfs_context_t context)
 {
-	struct autofs_callargs *argsp;
 	int error;
+	struct autofs_callargs *argsp;
 	kern_return_t ret;
 
-	MALLOC(argsp, struct autofs_callargs *, sizeof (*argsp), M_AUTOFS, M_WAITOK);
-	/* XXX - what if this fails? */
 	error = vnode_ref(fntovn(fnp));	/* released at end of auto_mount_thread */
+	if (error != 0)
+		goto fail;
+
+	MALLOC(argsp, struct autofs_callargs *, sizeof (*argsp), M_AUTOFS, M_WAITOK);
 	argsp->fnc_fnp = fnp;
 	MALLOC(argsp->fnc_name, char *, namelen, M_AUTOFS, M_WAITOK);
 	bcopy(name, argsp->fnc_name, namelen);
@@ -408,14 +408,46 @@ auto_new_mount_thread(fnnode_t *fnp, char *name, int namelen, vfs_context_t cont
 	ret = vfs_context_get_special_port(context, TASK_GSSD_PORT,
 	    &argsp->fnc_gssd_port);
 	if (ret != KERN_SUCCESS) {
-		panic("autofs: can't get gssd port for process %d, status 0x%08x\n",
+		IOLog("auto_do_mount: can't get gssd port for process %d, status 0x%08x\n",
 		    vfs_context_pid(context), ret);
+		error = EIO;
+		goto fail_thread;
 	}
-	
+
 	ret = auto_new_thread(auto_mount_thread, argsp);
-	if (ret != KERN_SUCCESS)
-		panic("autofs: Can't start new mounter thread, status 0x%08x", ret);
+	if (ret != KERN_SUCCESS) {
+		/*
+		 * Release the GSSD port send right, if it's valid,
+		 * as we won't be using it.
+		 */
+		if (IPC_PORT_VALID(argsp->fnc_gssd_port))
+			auto_release_port(argsp->fnc_gssd_port);
+		IOLog("auto_do_mount: can't start new mounter thread, status 0x%08x",
+		    ret);
+		error = EIO;
+		goto fail_thread;
+	}
 	autofs_thr_success++;
+
+	/*
+	 * At this point, we are simply another thread waiting for the
+	 * mount to complete.
+	 */
+	return (auto_wait4mount(fnp, context));
+
+fail_thread:
+	vnode_rele(fntovn(fnp));	/* release reference from above */
+	kauth_cred_unref(&argsp->fnc_cred);
+	FREE(argsp->fnc_name, M_AUTOFS);
+	FREE(argsp, M_AUTOFS);
+
+fail:
+	lck_mtx_lock(fnp->fn_lock);
+	fnp->fn_error = error;
+	fnp->fn_uid = 0;
+	AUTOFS_UNBLOCK_OTHERS(fnp, MF_INPROG);
+	lck_mtx_unlock(fnp->fn_lock);
+	return (error);
 }
 
 /*
@@ -434,7 +466,7 @@ auto_check_trigger_request(fninfo_t *fnip, char *key, int keylen,
 
 	if (fnip->fi_flags & MF_DIRECT) {
 		name = fnip->fi_key;
-		namelen = strlen(fnip->fi_key);
+		namelen = (int)strlen(fnip->fi_key);
 	} else {
 		name = key;
 		namelen = keylen;
@@ -451,10 +483,13 @@ auto_check_trigger_request(fninfo_t *fnip, char *key, int keylen,
 	ret = autofs_check_trigger(automount_port, fnip->fi_map,
 	    fnip->fi_path, name, namelen, fnip->fi_subdir, fnip->fi_opts,
 	    isdirect, &error, istrigger);
-	auto_release_automountd_port(automount_port);
+	auto_release_port(automount_port);
 
-	if (ret != KERN_SUCCESS)
+	if (ret != KERN_SUCCESS) {
+		IOLog("autofs: autofs_check_trigger failed, status 0x%08x\n",
+		    ret);
 		error = EIO;		/* XXX - process Mach errors */
+	}
 done:
 	if (error)
 		*istrigger = FALSE;
@@ -469,23 +504,23 @@ auto_get_automountd_port(mach_port_t *automount_port)
 	*automount_port = MACH_PORT_NULL;
 	ret = host_get_automountd_port(host_priv_self(), automount_port);
 	if (ret != KERN_SUCCESS) {
-		log(LOG_ERR, "autofs: can't get automountd port, status 0x%08x\n",
+		IOLog("autofs: can't get automountd port, status 0x%08x\n",
 		    ret);
 		return (ECONNREFUSED);
 	}
 	if (!IPC_PORT_VALID(*automount_port)) {
-		log(LOG_ERR, "autofs: automountd port not valid\n");
+		IOLog("autofs: automountd port not valid\n");
 		return (ECONNRESET);
 	}
 	return (0);
 }
 
 void
-auto_release_automountd_port(mach_port_t automount_port)
+auto_release_port(mach_port_t port)
 {
 	extern void ipc_port_release_send(ipc_port_t);
 	
-	ipc_port_release_send(automount_port);
+	ipc_port_release_send(port);
 }
 
 static int
@@ -494,7 +529,7 @@ auto_lookup_request(
 	char *key,
 	int keylen,
 	vfs_context_t context,
-	boolean_t hard,
+	__unused boolean_t hard,
 	boolean_t *mountreq)
 {
 	mach_port_t automount_port;
@@ -506,7 +541,7 @@ auto_lookup_request(
 	boolean_t lu_verbose;
 	kern_return_t ret;
 	int error = 0;
-	ucred_t cred = vfs_context_ucred(context);
+	kauth_cred_t cred = vfs_context_ucred(context);
 
 	AUTOFS_DPRINT((4, "auto_lookup_request: path=%s name=%.*s\n",
 	    fnip->fi_path, keylen, key));
@@ -515,7 +550,7 @@ auto_lookup_request(
 
 	if (fnip->fi_flags & MF_DIRECT) {
 		name = fnip->fi_key;
-		namelen = strlen(fnip->fi_key);
+		namelen = (int)strlen(fnip->fi_key);
 	} else {
 		name = key;
 		namelen = keylen;
@@ -534,7 +569,7 @@ auto_lookup_request(
 	ret = autofs_lookup(automount_port, fnip->fi_map, fnip->fi_path,
 	    name, namelen, fnip->fi_subdir, fnip->fi_opts, isdirect,
 	    kauth_cred_getuid(cred), &error, &lu_action, &lu_verbose);
-	auto_release_automountd_port(automount_port);
+	auto_release_port(automount_port);
 	if (ret == KERN_SUCCESS) {
 		fngp->fng_verbose = lu_verbose;
 		if (error == 0) {
@@ -545,14 +580,16 @@ auto_lookup_request(
 			case AUTOFS_NONE:
 				break;
 			default:
-				log(LOG_WARNING,
+				IOLog(
 				    "auto_lookup_request: bad action type %d\n",
 				    lu_action);
 				error = ENOENT;
 			}
 		}
-	} else
+	} else {
+		IOLog("autofs: autofs_lookup failed, status 0x%08x\n", ret);
 		error = EIO;		/* XXX - process Mach errors */
+	}
 
 	/*
 	 * XXX - free stuff such as string buffers
@@ -570,23 +607,23 @@ getstring(char **strp, uint8_t **inbufp, mach_msg_type_number_t *bytes_leftp)
 	uint32_t stringlen;
 
 	if (*bytes_leftp < sizeof (uint32_t)) {
-		log(LOG_ERR, "Action list too short for string length");
+		IOLog("Action list too short for string length");
 		return (EIO);
 	}
 	memcpy(&stringlen, *inbufp, sizeof (uint32_t));
 	*inbufp += sizeof (uint32_t);
-	*bytes_leftp -= sizeof (uint32_t);
+	*bytes_leftp -= (mach_msg_type_number_t)sizeof (uint32_t);
 	if (stringlen == 0xFFFFFFFF) {
 		/* Null pointer */
 		*strp = NULL;
 	} else {
 		if (*bytes_leftp < stringlen) {
-			log(LOG_ERR, "Action list too short for string data");
+			IOLog("Action list too short for string data");
 			return (EIO);
 		}
 		MALLOC(*strp, char *, stringlen + 1, M_AUTOFS, M_WAITOK);
 		if (*strp == NULL) {
-			log(LOG_ERR, "No space for string data in action list");
+			IOLog("No space for string data in action list");
 			return (ENOMEM);
 		}
 		memcpy(*strp, *inbufp, stringlen);
@@ -623,13 +660,12 @@ free_action_list(action_list *alp)
 static int
 auto_mount_request(
 	fninfo_t *fnip,
-	fnnode_t *fnp,
 	char *key,
 	int keylen,
 	action_list **alpp,
-	ucred_t cred,
+	kauth_cred_t cred,
 	mach_port_t gssd_port,
-	boolean_t hard)
+	__unused boolean_t hard)
 {
 	mach_port_t automount_port;
 	int error;
@@ -655,7 +691,7 @@ auto_mount_request(
 
 	if (fnip->fi_flags & MF_DIRECT) {
 		name = fnip->fi_key;
-		namelen = strlen(fnip->fi_key);
+		namelen = (int)strlen(fnip->fi_key);
 	} else {
 		name = key;
 		namelen = keylen;
@@ -670,13 +706,20 @@ auto_mount_request(
 	 * XXX - what about the "hard" argument?
 	 */
 	error = auto_get_automountd_port(&automount_port);
-	if (error)
+	if (error) {
+		/*
+		 * Release the GSSD port send right, if it's valid,
+		 * as we won't be using it.
+		 */
+		if (IPC_PORT_VALID(gssd_port))
+			auto_release_port(gssd_port);
 		goto done;
+	}
 	ret = autofs_mount(automount_port, fnip->fi_map, fnip->fi_path, name,
 	    namelen, fnip->fi_subdir, fnip->fi_opts, isdirect,
 	    kauth_cred_getuid(cred), gssd_port,
 	    &mr_type, &actions_buffer, &actions_bufcount, &error, &mr_verbose);
-	auto_release_automountd_port(automount_port);
+	auto_release_port(automount_port);
 	if (ret == KERN_SUCCESS) {
 		fngp->fng_verbose = mr_verbose;
 		switch (mr_type) {
@@ -690,6 +733,8 @@ auto_mount_request(
 			    (vm_map_copy_t)actions_buffer);
 			if (ret != KERN_SUCCESS) {
 				/* XXX - deal with Mach errors */
+				IOLog("autofs: vm_map_copyout failed, status 0x%08x\n",
+				    ret);
 				error = EIO;
 				goto done;
 			}
@@ -730,14 +775,14 @@ auto_mount_request(
 				if (error)
 					break;
 				if (bytes_left < sizeof (uint32_t)) {
-					log(LOG_ERR, "Action list too short for isdirect");
+					IOLog("Action list too short for isdirect");
 					error = EIO;
 					break;
 				}
 				memcpy(&alp->mounta.isdirect, inbuf,
 				    sizeof (uint32_t));
 				inbuf += sizeof (uint32_t);
-				bytes_left -= sizeof (uint32_t);
+				bytes_left -= (mach_msg_type_number_t)sizeof (uint32_t);
 				error = getstring(&alp->mounta.key, &inbuf,
 				    &bytes_left);
 				if (error)
@@ -755,13 +800,14 @@ auto_mount_request(
 			break;
 		default:
 			error = ENOENT;
-			log(LOG_WARNING,
-			    "auto_mount_request: unknown status %d\n",
+			IOLog("auto_mount_request: unknown status %d\n",
 			    mr_type);
 			break;
 		}
-	} else
+	} else {
+		IOLog("autofs: autofs_mount failed, status 0x%08x\n", ret);
 		error = EIO;		/* XXX - process Mach errors */
+	}
 
 	/*
 	 * XXX - free stuff such as string buffers
@@ -793,7 +839,7 @@ auto_send_unmount_request(
 	char *mntpnt,
 	char *fstype,
 	char *mntopts,
-	boolean_t hard)
+	__unused boolean_t hard)
 {
 	int error;
 	mach_port_t automount_port;
@@ -810,11 +856,13 @@ auto_send_unmount_request(
 		goto done;
 	ret = autofs_unmount(automount_port, fsid.val[0], fsid.val[1],
 	    mntresource, mntpnt, fstype, mntopts, &status);
-	auto_release_automountd_port(automount_port);
+	auto_release_port(automount_port);
 	if (ret == KERN_SUCCESS)
 		error = status;
-	else
+	else {
+		IOLog("autofs: autofs_unmount failed, status 0x%08x\n", ret);
 		error = EIO;		/* XXX - process Mach errors */
+	}
 
 done:
 	AUTOFS_DPRINT((5, "\tauto_send_unmount_request: error=%d\n", error));
@@ -838,7 +886,7 @@ auto_send_mount_trigger_request(
 	int32_t direct,
 	fsid_t *fsid,
 	boolean_t *top_level,
-	boolean_t hard)
+	__unused boolean_t hard)
 {
 	int error;
 	mach_port_t automount_port;
@@ -854,12 +902,15 @@ auto_send_mount_trigger_request(
 	ret = autofs_mount_trigger(automount_port, mntpt, submntpt, path,
 	    opts, map, subdir, key, flags, mntflags, mount_to, mach_to,
 	    direct, &fsid_val0, &fsid_val1, top_level, &error);
-	auto_release_automountd_port(automount_port);
+	auto_release_port(automount_port);
 	if (ret == KERN_SUCCESS) {
 		fsid->val[0] = fsid_val0;
 		fsid->val[1] = fsid_val1;
-	} else
+	} else {
+		IOLog("autofs: autofs_mount_trigger failed, status 0x%08x\n",
+		    ret);
 		error = EIO;		/* XXX - process Mach errors */
+	}
 	return (error);
 }
 
@@ -868,7 +919,7 @@ auto_perform_actions(
 	fninfo_t *dfnip,
 	fnnode_t *dfnp,
 	action_list *alp,
-	ucred_t cred)	/* Credentials of the caller */
+	kauth_cred_t cred)	/* Credentials of the caller */
 {
 	action_list *p;
 	struct mounta *m;
@@ -975,40 +1026,50 @@ auto_perform_actions(
 			 * We have to create the mountpoint if it doesn't
 			 * exist already
 			 *
-			 * We use the caller's credentials in case a UID-match
-			 * is required (MF_THISUID_MATCH_RQD).
+			 * Create the fnnode first, as we can't hold
+			 * the writer lock while creating the fnnode,
+			 * because allocating a vnode for it might involve
+			 * reclaiming an autofs vnode and hence removing
+			 * it from the containing directory - which might
+			 * be this directory.
 			 */
+			error = auto_makefnnode(&mfnp, VDIR,
+			    vnode_mount(dvp), NULL, mntpnt, dvp,
+			    0, cred, dfnp->fn_globals);
+			if (error) {
+				IOLog("autofs: mount of %s "
+				    "failed - can't create mountpoint (auto_makefnnode failed).\n",
+				    buff);
+				continue;
+			}
 			lck_rw_lock_exclusive(dfnp->fn_rwlock);
-			error = auto_search(dfnp, mntpnt, strlen(mntpnt),
-			    &mfnp, cred);
-			if (error == 0) {
-				/*
-				 * AUTOFS mountpoint exists
-				 */
-				if (vnode_mountedhere(fntovn(mfnp)) != NULL) {
-					panic("auto_perform_actions: "
-					    "mfnp=%p covered", (void *)mfnp);
-				}
+			/*
+			 * Attempt to create the autofs mount point.
+			 * If it fails with EEXIST, it already existed.
+			 */
+			error = auto_enter(dfnp, NULL, mntpnt, &mfnp);
+			if (error) {
+				if (error == EEXIST) {
+					if (vnode_mountedhere(fntovn(mfnp)) != NULL) {
+						panic("auto_perform_actions: "
+						    "mfnp=%p covered", (void *)mfnp);
+					}
+					error = 0;
+				} 
 			} else {
-				/*
-				 * Create AUTOFS mountpoint
-				 */
 				assert((dfnp->fn_flags & MF_MOUNTPOINT) == 0);
-				error = auto_enter(dfnp, NULL, mntpnt, &mfnp,
-				    NULL, cred);
 				assert(mfnp->fn_linkcnt == 1);
 			}
 			if (!error)
 				update_times = 1;
 			lck_rw_unlock_exclusive(dfnp->fn_rwlock);
-			assert(error != EEXIST);
 			if (!error) {
 				/*
 				 * mfnp is already held.
 				 */
 				mvp = fntovn(mfnp);
 			} else {
-				log(LOG_WARNING, "autofs: mount of %s "
+				IOLog("autofs: mount of %s "
 				    "failed - can't create mountpoint.\n",
 				    buff);
 				continue;
@@ -1022,7 +1083,7 @@ mount:
 		    m->flags, m->mntflags, mount_to, mach_to, m->isdirect,
 		    &fsid, &top_level, FALSE);
 		if (error != 0) {
-			log(LOG_WARNING,
+			IOLog(
 			    "autofs: autofs mount of %s failed error=%d\n",
 			    buff, error);
 			if (mvp != NULL)
@@ -1054,7 +1115,7 @@ mount:
 				error = vfs_unmountbyfsid(&fsid, 0,
 				    vfs_context_current());
 				if (error && error != ENOENT) {
-					log(LOG_WARNING,
+					IOLog(
 					    "autofs: could not "
 					    "unmount vfs=%p\n",
 					(void *)mvfsp);
@@ -1115,8 +1176,13 @@ mount:
 			 * Do vnode_ref(newvp) here since dfnp now holds
 			 * reference to it as one of its trigger nodes.
 			 */
-			vnode_ref(newvp);	/* released in unmount_triggers() */
+			error = vnode_ref(newvp);	/* released in unmount_triggers() */
+			if (error != 0) {
+				panic("vnode_ref failed with %d: %s, line %u",
+				    error, __FILE__, __LINE__);
+			}
 			/* XXX - what if this fails? */
+#ifdef DEBUG
 			AUTOFS_DPRINT((10, "\tadding trigger %s to %s\n",
 			    newfnp->fn_name, dfnp->fn_name));
 			AUTOFS_DPRINT((10, "\tfirst trigger is %s\n",
@@ -1126,6 +1192,7 @@ mount:
 				    newfnp->fn_next->fn_name));
 			else
 				AUTOFS_DPRINT((10, "\tno next trigger\n"));
+#endif
 		}
 		vnode_put(newvp);
 
@@ -1145,7 +1212,11 @@ mount:
 		 * Make sure the parent can't be freed while it has triggers.
 		 */
 		/* XXX - what if this fails? */
-		vnode_ref(dvp);		/* released in unmount_triggers() */
+		error = vnode_ref(dvp);		/* released in unmount_triggers() */
+		if (error != 0) {
+			panic("vnode_ref failed with %d: %s, line %u",
+			    error, __FILE__, __LINE__);
+		}
 	}
 
 	/*
@@ -1188,7 +1259,7 @@ auto_makefnnode(
 	const char *name,
 	vnode_t parent,
 	int markroot,
-	ucred_t cred,
+	kauth_cred_t cred,
 	struct autofs_globals *fngp)
 {
 	int namelen;
@@ -1211,7 +1282,7 @@ auto_makefnnode(
 		name = cnp->cn_nameptr;
 		namelen = cnp->cn_namelen;
 	} else
-		namelen = strlen(name);
+		namelen = (int)strlen(name);
 
 	MALLOC(fnp, fnnode_t *, sizeof(fnnode_t), M_AUTOFS, M_WAITOK);
 	bzero(fnp, sizeof(*fnp));
@@ -1264,10 +1335,6 @@ auto_makefnnode(
 
 	error = vnode_create(VNCREATE_FLAVOR, VCREATESIZE, &vfsp, &vp); 
 	if (error != 0) {
-		if (vp) {
-			vnode_put(vp);
-			vnode_recycle(vp);
-		}
 		AUTOFS_DPRINT((5, "auto_makefnnode failed with vnode_create error code %d\n", error));
 		FREE(fnp->fn_name, M_TEMP);
 		FREE(fnp, M_TEMP);
@@ -1302,10 +1369,18 @@ auto_makefnnode(
 	 * usecount will go to 1 and then drop to zero.  That will
 	 * set the VL_NEEDINACTIVE flag (as it has a non-zero iocount),
 	 * causing the vnode to be inactivated when its iocount drops
-	 * to zero.
+	 * to zero.  Note that vnode_ref() can fail; if it does, we
+	 * just don't do vnode_rele(), as that'll drive the usecount
+	 * negative, and you get a "usecount -ve" crash.
+	 *
+	 * If we could just call vnode_setneedinactive(), we would, as
+	 * it does all that we really want done and doesn't do any of
+	 * the other stuff we don't care about, and it can't fail.
+	 * However, we can't call vnode_setneedinactive(), as it's not
+	 * exported from the kernel.
 	 */
-	vnode_ref(vp);
-	vnode_rele(vp);
+	if (vnode_ref(vp) == 0)
+		vnode_rele(vp);
 
 #ifdef DEBUG
 	/*
@@ -1339,16 +1414,8 @@ auto_freefnnode(fnnode_t *fnp)
 	assert(fnp->fn_parent == NULL);
 
 	FREE(fnp->fn_name, M_TEMP);
-#if 0
-	if (fnp->fn_symlink) {
-		assert(fnp->fn_flags & MF_THISUID_MATCH_RQD);
-		FREE(fnp->fn_symlink, M_TEMP);
-	}
-#endif
 	if (vnode_islnk(vp))
 		FREE(fnp->fn_symlink, M_AUTOFS);
-	if (fnp->fn_cred)
-		kauth_cred_unref(&fnp->fn_cred);
 	lck_mtx_free(fnp->fn_lock, autofs_lck_grp);
 	lck_rw_free(fnp->fn_rwlock, autofs_lck_grp);
 
@@ -1429,13 +1496,16 @@ auto_disconnect(
 	AUTOFS_DPRINT((5, "auto_disconnect: done\n"));
 }
 
+/*
+ * Add an entry to a directory.
+ * Called with a write lock held on the directory.
+ */
 int
 auto_enter(fnnode_t *dfnp, struct componentname *cnp, const char *name,
-    fnnode_t **fnpp, const char *linktarget, ucred_t cred)
+    fnnode_t **fnpp)
 {
 	int namelen;
 	struct fnnode *cfnp, **spp = NULL;
-	vnode_t dvp = fntovn(dfnp);
 	off_t offset = 0;
 	off_t diff;
 	errno_t error;
@@ -1445,7 +1515,7 @@ auto_enter(fnnode_t *dfnp, struct componentname *cnp, const char *name,
 		name = cnp->cn_nameptr;
 		namelen = cnp->cn_namelen;
 	} else
-		namelen = strlen(name);
+		namelen = (int)strlen(name);
 	AUTOFS_DPRINT((4, "auto_enter: dfnp=%p, name=%.*s ", (void *)dfnp,
 	    namelen, name));
 
@@ -1473,27 +1543,23 @@ auto_enter(fnnode_t *dfnp, struct componentname *cnp, const char *name,
 		    bcmp(cfnp->fn_name, name, namelen) == 0) {
 			/*
 			 * There is, and this is it.
+			 * Put and recycle the vnode for the fnnode we
+			 * were handed, get the vnode for the fnnode we
+			 * found and, if that succeeded, return EEXIST
+			 * to indicate that we found and got that fnnode,
+			 * otherwise return the error from vnode_get.
+			 * (This means we act like auto_search(), except
+			 * that we return EEXIST if we found the fnnode
+			 * and got its vnode.)
 			 */
-			lck_mtx_lock(cfnp->fn_lock);
-#if 0
-			if (cfnp->fn_flags & MF_THISUID_MATCH_RQD) {
-				/*
-				 * "thisuser" kind of node, need to
-				 * match CREDs as well
-				 */
-				lck_mtx_unlock(cfnp->fn_lock);
-				if (crcmp(cfnp->fn_cred, cred) == 0)
-					return (EEXIST);
-			} else {
-#else
-			{
-#endif
-				/*
-				 * Return EEXIST to indicate that.
-				 */
-				lck_mtx_unlock(cfnp->fn_lock);
-				return (EEXIST);
+			vnode_put(fntovn(*fnpp));
+			vnode_recycle(fntovn(*fnpp));
+			error = vnode_get(fntovn(cfnp));
+			if (error == 0) {
+				*fnpp = cfnp;
+				error = EEXIST;
 			}
+			return (error);
 		}
 
 		if (cfnp->fn_next != NULL) {
@@ -1510,11 +1576,6 @@ auto_enter(fnnode_t *dfnp, struct componentname *cnp, const char *name,
 		}
 	}
 
-	error = auto_makefnnode(fnpp, (linktarget != NULL) ? VLNK : VDIR,
-	    vnode_mount(dvp), cnp, name, dvp, 0, cred, dfnp->fn_globals);
-	if (error)
-		return (error);
-
 	/*
 	 * I don't hold the mutex on fnpp because I created it, and
 	 * I'm already holding the writers lock for it's parent
@@ -1526,25 +1587,11 @@ auto_enter(fnnode_t *dfnp, struct componentname *cnp, const char *name,
 	*spp = *fnpp;
 	(*fnpp)->fn_parent = dfnp;
 	(*fnpp)->fn_linkcnt++;	/* parent now holds reference to entry */
-	if (linktarget != NULL) {
-		size_t len;
-		char *tmp;
-
-		/*
-		 * The new fnnode is a symbolic link; set the target
-		 * information.
-		 */
-		len = strlen(linktarget);		/* don't include '\0' */
-		MALLOC(tmp, char *, len, M_AUTOFS, M_WAITOK);
-		bcopy(linktarget, tmp, len);
-		(*fnpp)->fn_symlink = tmp;
-		(*fnpp)->fn_symlinklen = len;
-	}
 
 	/*
 	 * dfnp->fn_linkcnt and dfnp->fn_direntcnt protected by dfnp->rw_lock
 	 */
-	if (linktarget == NULL) {
+	if (vnode_isdir(fntovn(*fnpp))) {
 		/*
 		 * The new fnnode is a directory, and has a ".." entry
 		 * for its parent.  Count that entry.
@@ -1560,13 +1607,11 @@ auto_enter(fnnode_t *dfnp, struct componentname *cnp, const char *name,
 	return (0);
 }
 
-int
-auto_search(fnnode_t *dfnp, char *name, int namelen, fnnode_t **fnpp,
-    ucred_t cred)
+fnnode_t *
+auto_search(fnnode_t *dfnp, char *name, int namelen)
 {
 	vnode_t dvp;
 	fnnode_t *p;
-	int error = ENOENT, match = 0;
 
 	AUTOFS_DPRINT((4, "auto_search: dfnp=%p, name=%.*s...\n",
 	    (void *)dfnp, namelen, name));
@@ -1580,38 +1625,13 @@ auto_search(fnnode_t *dfnp, char *name, int namelen, fnnode_t **fnpp,
 	for (p = dfnp->fn_dirents; p != NULL; p = p->fn_next) {
 		if (p->fn_namelen == namelen &&
 		    bcmp(p->fn_name, name, namelen) == 0) {
-			lck_mtx_lock(p->fn_lock);
-#if 0
-			if (p->fn_flags & MF_THISUID_MATCH_RQD) {
-				/*
-				 * "thisuser" kind of node
-				 * Need to match CREDs as well
-				 */
-				lck_mtx_unlock(p->fn_lock);
-				match = crcmp(p->fn_cred, cred) == 0;
-			} else {
-#else
-			{
-#endif
-				/*
-				 * No need to check CRED
-				 */
-				lck_mtx_unlock(p->fn_lock);
-				match = 1;
-			}
-		}
-		if (match) {
-			error = 0;
-			if (fnpp) {
-				*fnpp = p;
-				error = vnode_get(fntovn(*fnpp));
-			}
-			break;
+			AUTOFS_DPRINT((5, "auto_search: success\n"));
+			return (p);
 		}
 	}
 
-	AUTOFS_DPRINT((5, "auto_search: error=%d\n", error));
-	return (error);
+	AUTOFS_DPRINT((5, "auto_search: failure\n"));
+	return (NULL);
 }
 
 #define	DEEPER(x) (((x)->fn_dirents != NULL) || \
@@ -1694,8 +1714,8 @@ unmount_triggers(fnnode_t *fnp, action_list **alp)
 		 * Its parent was holding a reference to it, since this
 		 * is a trigger vnode.
 		 */
-		vnode_rele(tvp);
-		if (error = auto_inkernel_unmount(mp)) {
+		vnode_rele(tvp);	/* release reference from auto_perform_actions() */
+		if ((error = auto_inkernel_unmount(mp)) != 0) {
 			panic("unmount_triggers: "
 			    "unmount of vp=%p failed error=%d",
 			    (void *)tvp, error);
@@ -1709,7 +1729,7 @@ unmount_triggers(fnnode_t *fnp, action_list **alp)
 	/*
 	 * We were holding a reference to our parent.  Drop that.
 	 */
-	vnode_rele(fntovn(fnp));
+	vnode_rele(fntovn(fnp));	/* release reference from auto_perform_actions() */
 	fnp->fn_trigger = NULL;
 	fnp->fn_alp = NULL;
 
@@ -1979,17 +1999,17 @@ check_auto_node(vnode_t vp)
  * The daemon will "AUTOFS direct-mount" only one level below the root.
  */
 static int
-unmount_autofs(vnode_t rootvp)
+unmount_autofs(vnode_t auto_rootvp)
 {
 	fnnode_t *fnp, *rootfnp, *nfnp;
 	vnode_t vp;
 	int error;
 
-	AUTOFS_DPRINT((4, "\tunmount_autofs rootvp=%p ", (void *)rootvp));
+	AUTOFS_DPRINT((4, "\tunmount_autofs auto_rootvp=%p ", (void *)auto_rootvp));
 
-	rootfnp = vntofn(rootvp);
+	rootfnp = vntofn(auto_rootvp);
 	lck_rw_lock_exclusive(rootfnp->fn_rwlock);
-	error = check_auto_node(rootvp);
+	error = check_auto_node(auto_rootvp);
 	if (error == 0) {
 		/*
 		 * Remove all items immediately under it.
@@ -2063,7 +2083,7 @@ unmount_tree(struct autofs_globals *fngp, fsid_t *fsidp, int flags)
 		ref_time = fnp->fn_unmount_ref_time + 1;
 	lck_mtx_unlock(fnp->fn_lock);
 
-	AUTOFS_DPRINT((4, "unmount_tree (ID=%ld)\n", ref_time));
+	AUTOFS_DPRINT((4, "unmount_tree (ID=%ld)\n", (long)ref_time));
 top:
 	AUTOFS_DPRINT((10, "unmount_tree: %s\n", fnp->fn_name));
 	assert(fnp);
@@ -2302,16 +2322,16 @@ top:
 				 * clear the error condition.
 				 */
 				error = 0;
-				log(LOG_WARNING,
+				IOLog(
 				    "unmount_tree: automountd connection "
 				    "dropped\n");
 				if (fnip->fi_flags & MF_DIRECT) {
-					log(LOG_WARNING, "unmount_tree: "
+					IOLog("unmount_tree: "
 					    "%s successfully unmounted - "
 					    "do not remount triggers\n",
 					    fnip->fi_path);
 				} else {
-					log(LOG_WARNING, "unmount_tree: "
+					IOLog("unmount_tree: "
 					    "%s/%s successfully unmounted - "
 					    "do not remount triggers\n",
 					    fnip->fi_path, fnp->fn_name);
@@ -2364,10 +2384,9 @@ top:
 			/*
 			 * Unmount failed, got to remount triggers.
 			 */
-			assert((fnp->fn_flags & MF_THISUID_MATCH_RQD) == 0);
 			error = auto_perform_actions(fnip, fnp, alp, NULL);
 			if (error) {
-				log(LOG_WARNING, "autofs: can't remount "
+				IOLog("autofs: can't remount "
 				    "triggers fnp=%p error=%d\n", (void *)fnp,
 				    error);
 				error = 0;
@@ -2553,7 +2572,7 @@ int
 auto_dont_trigger(vnode_t vp, vfs_context_t context)
 {
 	fnnode_t *fnp;
-	pid_t pid;
+	int pid;
 
 	fnp = vntofn(vp);
 
@@ -2636,7 +2655,7 @@ auto_dprint(int level, const char *fmt, ...)
 	if (autofs_debug == level ||
 	    (autofs_debug > 10 && (autofs_debug - 10) >= level)) {
 		va_start(args, fmt);
-		vprintf(fmt, args); 
+		IOLogv(fmt, args); 
 		va_end(args);
 	}
 }

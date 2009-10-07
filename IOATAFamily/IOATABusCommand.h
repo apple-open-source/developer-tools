@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2001 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 1998-2008 Apple Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -19,21 +19,22 @@
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
+
 /*
  *
  *	IOATABusCommand.h
  *
  */
  
-
-
 #ifndef _IOATABUSCOMMAND_H
 #define _IOATABUSCOMMAND_H
 
 #include <IOKit/IOTypes.h>
 #include "IOATATypes.h"
 #include "IOATACommand.h"
-#include <IOKit/IOSyncer.h>
+
+
+class IOSyncer;
 
 
 /*!
@@ -63,7 +64,7 @@ internal use.
 
 class IOATABusCommand : public IOATACommand {
 
-	OSDeclareDefaultStructors( IOATABusCommand )
+	OSDeclareDefaultStructors( IOATABusCommand );
 	
 	public:
 	
@@ -82,7 +83,7 @@ class IOATABusCommand : public IOATACommand {
 
 	/*!@function allocateCmd
 	@abstract factory method to create an instance of this class used by subclasses of IOATADevice
-	*/	  
+	*/
 	static IOATABusCommand* allocateCmd(void);
 
 	/*!@function zeroCommand
@@ -92,12 +93,13 @@ class IOATABusCommand : public IOATACommand {
   	
  	/*!@function getOpcode
 	@abstract return the command opcode
-	*/ 
+	*/
 	virtual ataOpcode getOpcode( void );  
 	
 	/*!@function getFlags
 	@abstract return the flags for this command.
-	*/	virtual ataFlags getFlags ( void ); 
+	*/
+	virtual ataFlags getFlags ( void ); 
 		
 	/*!@function getRegMask
 	@abstract  get the register mask for desired regs
@@ -186,7 +188,7 @@ class IOATABusCommand : public IOATACommand {
 
 /*! @struct ExpansionData
     @discussion This structure will be used to expand the capablilties of the IOWorkLoop in the future.
-    */    
+    */
     struct ExpansionData { };
 
 /*! @var reserved
@@ -222,7 +224,7 @@ private:
 class IOATABusCommand64 : public IOATABusCommand
 {
 
-	OSDeclareDefaultStructors( IOATABusCommand64 )
+	OSDeclareDefaultStructors( IOATABusCommand64 );
 	
 	public:
 	

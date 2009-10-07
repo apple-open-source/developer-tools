@@ -1,4 +1,3 @@
-/* APPLE LOCAL file 3972875 mainline 2005-04-18 */
 /* { dg-require-effective-target vect_int } */
 /* { dg-require-effective-target vect_int_mult } */
 
@@ -50,3 +49,4 @@ int main (void)
 }
 
 /* { dg-final { scan-tree-dump-times "vectorized 1 loops" 2 "vect" } } */
+/* { dg-final { cleanup-tree-dump "vect" } } */

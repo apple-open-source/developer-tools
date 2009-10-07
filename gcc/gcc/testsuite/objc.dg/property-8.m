@@ -3,8 +3,8 @@
    exists in an unrelated class. Test should compile with no error.
 */
 /* APPLE LOCAL radar 4899595 */
-/* { dg-options "-fno-objc-new-property -mmacosx-version-min=10.5 -std=c99 -lobjc" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
-/* { dg-options "-fno-objc-new-property -std=c99 -lobjc" { target arm*-*-darwin* } } */
+/* { dg-options "-mmacosx-version-min=10.5 -std=c99" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
+/* { dg-options "-std=c99" { target arm*-*-darwin* } } */
 /* { dg-do run { target *-*-darwin* } } */
 
 #include <objc/objc.h>
@@ -23,10 +23,14 @@ typedef struct {int x, y, w, h;} st2;
 @end
 
 @interface foo : Object
-@property (ivar) st2 frame;
+{
+	st2 ivar;
+}
+@property (assign) st2 frame;
 @end
+
 @implementation foo
-@property st2 frame;
+@synthesize frame = ivar;
 @end
 
 extern void abort();
@@ -47,7 +51,7 @@ st2 test (void)
 int main ()
 {
   st2 res = test ();
-  if (res.x != 1 || res.x != 4)
-    abort;
+  if (res.x != 1 || res.h != 4)
+    abort();
   return 0;
 }

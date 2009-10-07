@@ -53,6 +53,7 @@ struct target_ops;
 #include "symtab.h"
 #include "dcache.h"
 #include "memattr.h"
+#include "value.h"  /* APPLE LOCAL - needed for enum check_which_threads.  */
 
 enum strata
   {
@@ -451,12 +452,21 @@ struct target_ops
 				gdb_byte *readbuf, const gdb_byte *writebuf,
 				ULONGEST offset, LONGEST len);
 
+    /* APPLE LOCAL: If this system supports setting names on threads, return
+       the name of this thread in a static buffer that will be reused on 
+       subsequent calls.  */
+   char *(*to_get_thread_name) (ptid_t ptid);
+
+    /* APPLE LOCAL: Return a string that uniquely identifies a given thread
+       in a way meaningful to the given target. */
+   char *(*to_get_thread_id_str) (ptid_t ptid);
+
     /* APPLE LOCAL: Check whether calling a function on the current
        thread is advisable (for instance, does the thread hold a
        malloc lock that is going to cause a deadlock.)  Returns 1 if
        safe to call 0 if unsafe, and -1 if there was an error
        checking.  */
-    int (*to_check_safe_call) ();
+    int (*to_check_safe_call) (int subsystem, enum check_which_threads thread_mode);
 
     /* APPLE LOCAL: Allocate SIZE bytes in the target. */
     CORE_ADDR (*to_allocate_memory) (int size);
@@ -465,6 +475,11 @@ struct target_ops
        the inferior's process (so it is safe to set breakpoints
        from that objfile.)  */
     int (*to_check_is_objfile_loaded) (struct objfile *objfile);
+
+    /* APPLE LOCAL: How do we load a shared library into the target?  
+       Returns a value containing the return value of the native
+       loader function.  */
+    struct value *(*to_load_solib) (char *path, char *flags);
 
     int to_magic;
     /* Need sub-structure for target machine related rather than comm related?
@@ -717,8 +732,7 @@ extern void print_section_info_objfile (struct objfile *o);
 
 /* Kill the inferior process.   Make it go away.  */
 
-#define target_kill() \
-     (*current_target.to_kill) ()
+extern void target_kill (void);
 
 /* Load an executable file into the target process.  This is expected
    to not only bring new code into the target process, but also to
@@ -931,7 +945,7 @@ extern int gdb_override_async;
 
 /* Use this to set the override of async behavior.
    Set ON to 1 to turn on the override, 0 to turn it off. */
-extern void gdb_set_async_override (int on);
+void gdb_set_async_override (void *on);
 
 /* Can the target support asynchronous execution? */
 #define target_can_async_p() (gdb_override_async ? 0 : current_target.to_can_async_p ())
@@ -1052,11 +1066,25 @@ extern void (*deprecated_target_new_objfile_hook) (struct objfile *);
      (current_target.to_bind_function) (NAME)
 
 /*
+ * APPLE LOCAL: Get the name of the thread for a given PTID
+ */
+
+#define target_get_thread_name(PTID)	\
+  (current_target.to_get_thread_name) (PTID)
+
+/*
+ * APPLE LOCAL: Get a string representatin of a thread identifier
+ */
+
+#define target_get_thread_id_str(PTID)	\
+  (current_target.to_get_thread_id_str) (PTID)
+
+/*
  * APPLE LOCAL: Check whether it is safe to call functions on this thread 
  */
 
-#define target_check_safe_call \
-    (current_target.to_check_safe_call)
+#define target_check_safe_call(WHICH, THREAD_MODE)	\
+  (current_target.to_check_safe_call) (WHICH, THREAD_MODE)
 
 /*
  * APPLE LOCAL: Allocate memory in the target.
@@ -1072,6 +1100,14 @@ extern void (*deprecated_target_new_objfile_hook) (struct objfile *);
 
 #define target_check_is_objfile_loaded(OBJFILE) \
     (current_target.to_check_is_objfile_loaded) (OBJFILE)
+
+/*
+ * APPLE LOCAL: Check whether OBJFILE has been loaded or
+ * not.
+ */
+
+#define target_load_solib(PATH,MODE)		\
+  (current_target.to_load_solib) (PATH,MODE)
 
 /* Thread-local values.  */
 #define target_get_thread_local_address \
@@ -1310,6 +1346,9 @@ extern struct target_ops deprecated_child_ops;
 
 /* APPLE LOCAL: Override trust-readonly-sections.  */
 extern int set_trust_readonly (int);
+void set_trust_readonly_cleanup (void *new);
 /* END APPLE LOCAL */
 
+/* APPLE LOCAL */
+int length_of_this_instruction (CORE_ADDR memaddr);
 #endif /* !defined (TARGET_H) */

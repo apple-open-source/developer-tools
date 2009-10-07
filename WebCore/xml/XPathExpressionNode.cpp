@@ -30,18 +30,21 @@
 #if ENABLE(XPATH)
 
 #include "Node.h"
-#include "XPathValue.h"
+#include <wtf/StdLibExtras.h>
 
 namespace WebCore {
 namespace XPath {
     
 EvaluationContext& Expression::evaluationContext()
 {
-    static EvaluationContext evaluationContext;
+    DEFINE_STATIC_LOCAL(EvaluationContext, evaluationContext, ());
     return evaluationContext;
 }
 
 Expression::Expression()
+    : m_isContextNodeSensitive(false)
+    , m_isContextPositionSensitive(false)
+    , m_isContextSizeSensitive(false)
 {
 }
 

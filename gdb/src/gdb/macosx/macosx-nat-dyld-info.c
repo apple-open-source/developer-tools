@@ -181,6 +181,10 @@ dyld_objfile_entry_clear (struct dyld_objfile_entry *e)
 
   e->reason = 0;
 
+  /* This isn't really correct -- we should use an invalid value like -1 here
+     to indicate "uninitialized" instead of making a stealthy default of 0.  */
+  e->in_shared_cache = 0;
+
   e->allocated = 0;
 }
 

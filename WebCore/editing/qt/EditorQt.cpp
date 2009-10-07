@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2006 Zack Rusin <zack@kde.org>
- * Copyright (C) 2006 Apple Computer, Inc.  All rights reserved.
+ * Copyright (C) 2006 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,20 +31,17 @@
 #include "ClipboardQt.h"
 #include "Document.h"
 #include "Element.h"
-#include "Selection.h"
+#include "VisibleSelection.h"
 #include "SelectionController.h"
 #include "TextIterator.h"
 #include "htmlediting.h"
 #include "visible_units.h"
 
-#include <QApplication>
-#include <QClipboard>
-
 namespace WebCore {
 
 PassRefPtr<Clipboard> Editor::newGeneralClipboard(ClipboardAccessPolicy policy)
 {
-    return new ClipboardQt(policy, QApplication::clipboard()->mimeData(), false); 
+    return ClipboardQt::create(policy);
 }
 
 } // namespace WebCore

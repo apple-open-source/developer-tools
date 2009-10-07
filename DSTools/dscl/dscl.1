@@ -86,7 +86,7 @@ option and either the
 .Fl P
 of
 .Fl p
-options to specify an administrative user and password on the remote host to authenticate with to the remote host. The exception to this is if "localhost" is specified.
+options to specify an administrative user and password on the remote host to authenticate with to the remote host. The exception to this is if "localhost" is specified.  Passing passwords on the command line is inherently insecure and can cause password exposure.  For better security do not provide the password as part of the command and you will be securely prompted.
 .Pp
 The datasource may also be specified as "localonly" in which case a separate DirectoryService daemon process is activated which contains only the Local plugin for use by dscl.  If no file path is provided then access goes only to the registered local nodes on the system. However, if the
 .Fl f
@@ -114,7 +114,7 @@ The action of each command is described below.  Some commands have aliases.  For
 Usage: read
 .Op Ar path Op Ar key Li "..."
 .Pp
-Prints a directory.  Each of the properties are printed one per line.  The property key is followed by a colon, then a space-separated list of the values for that property.  Note that a value which contains embedded spaces will appear identical to a pair of values.
+Prints a directory.  The property key is followed by colon, then a space-separated list of the values for that property. If any value contains embedded spaces, the list will instead be displayed one entry per line, starting on the line after the key.
 .Pp
 If The 
 .Fl raw
@@ -322,7 +322,7 @@ Changes a password for a user. The user must be specified by full path, not just
 .Fl u
 and
 .Fl P
-flags or by using the auth command when in interactive node) then you can simply specify a new password.  If you are not authenticated then the user's old password must be specified.  If passwords are not specified while in interactive mode, you will be prompted for them.
+flags or by using the auth command when in interactive node) then you can simply specify a new password.  If you are not authenticated then the user's old password must be specified.  If passwords are not specified while in interactive mode, you will be prompted for them.  Passing these passwords on the command line is inherently insecure and can cause password exposure.  For better security do not provide the password as part of the command and you will be securely prompted.
 .Sh INTERACTIVE COMMANDS
 .Ss cd
 Usage: cd dir

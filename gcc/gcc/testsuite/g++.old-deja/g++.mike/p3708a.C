@@ -38,7 +38,8 @@ public:
   virtual void xx(int doit) {
     --num;
     if (ptr != this)
-      printf("FAIL\n%x != %x\n", ptr, this);
+      /* APPLE LOCAL default to Wformat-security 5764921 */
+      printf("FAIL\n%p != %p\n", ptr, (void*)this);
     printf ("C is destructed.\n");
     B::xx (0);
     if (doit) A::xx (1);

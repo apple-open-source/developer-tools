@@ -1,5 +1,5 @@
 ; Options for the Fortran 95 front end.
-; Copyright (C) 2003, 2004 Free Software Foundation, Inc.
+; Copyright (C) 2003, 2004, 2005, 2006 Free Software Foundation, Inc.
 ;
 ; This file is part of GCC.
 ;
@@ -15,146 +15,238 @@
 ; 
 ; You should have received a copy of the GNU General Public License
 ; along with GCC; see the file COPYING.  If not, write to the Free
-; Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-; 02111-1307, USA.
+; Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+; 02110-1301, USA.
 
-; See c.opt for a description of this file's format.
+; See the GCC internals manual for a description of this file's format.
 
 ; Please try to keep this file in ASCII collating order.
 
 Language
-F95
+Fortran
 
 I
-F95 Joined
+Fortran Joined
 -I<directory>	Add a directory for INCLUDE and MODULE searching
 
 J
-F95 Joined
+Fortran Joined
 -J<directory>	Put MODULE files in 'directory'
 
 Wall
-F95 RejectNegative
+Fortran
 ; Documented in C
 
 Waliasing
-F95
+Fortran
 Warn about possible aliasing of dummy arguments
 
+Wampersand
+Fortran
+Warn about missing ampersand in continued character constants
+
+Wcharacter-truncation
+Fortran
+Warn about truncated character expressions
+
 Wconversion
-F95
+Fortran
 Warn about implicit conversion
 
 Wimplicit-interface
-F95
+Fortran
 Warn about calls with implicit interface
 
 Wline-truncation
-F95
+Fortran
 Warn about truncated source lines
 
 Wnonstd-intrinsics
-F95
+Fortran
 Warn about usage of non-standard intrinsics
 
 Wsurprising
-F95
+Fortran
 Warn about \"suspicious\" constructs
 
+Wtabs
+Fortran
+Permit nonconforming uses of the tab character
+
 Wunderflow
-F95
+Fortran
 Warn about underflow of numerical constant expressions
 
-Wunused-labels
-F95
-Warn when a label is unused
+fall-intrinsics
+Fortran RejectNegative
+All intrinsics procedures are available regardless of selected standard
+
+fautomatic
+Fortran
+Do not treat local variables and COMMON blocks as if they were named in SAVE statements
+
+fbackslash
+Fortran
+Specify that backslash in string introduces an escape character
 
 fdefault-double-8
-F95
+Fortran
 Set the default double precision kind to an 8 byte wide type
 
 fdefault-integer-8
-F95
+Fortran
 Set the default integer kind to an 8 byte wide type
 
 fdefault-real-8
-F95
+Fortran
 Set the default real kind to an 8 byte wide type
 
+fd-lines-as-code
+Fortran RejectNegative
+Ignore 'D' in column one in fixed form
+
+fd-lines-as-comments
+Fortran RejectNegative
+Treat lines with 'D' in column one as comments
+
 fdollar-ok
-F95
+Fortran
 Allow dollar signs in entity names
 
 fdump-parse-tree
-F95
-Display the code tree after parsing.
+Fortran
+Display the code tree after parsing
+
+ff2c
+Fortran
+Use f2c calling convention
 
 ffixed-form
-F95
+Fortran RejectNegative
 Assume that the source file is fixed form
 
 ffree-form
-F95
+Fortran RejectNegative
 Assume that the source file is free form
 
+fopenmp
+Fortran
+Enable OpenMP
+
 funderscoring
-F95
+Fortran
 Append underscores to externally visible names
 
+fcray-pointer
+Fortran
+Use the Cray Pointer extension
+
 fsecond-underscore
-F95
+Fortran
 Append a second underscore if the name already contains an underscore
 
 fimplicit-none
-F95
+Fortran
 Specify that no implicit typing is allowed, unless overridden by explicit IMPLICIT statements
 
 ffixed-line-length-none
-F95 RejectNegative
+Fortran RejectNegative
 Allow arbitrary character line width in fixed mode
 
 ffixed-line-length-
-F95 RejectNegative Joined UInteger
+Fortran RejectNegative Joined UInteger
 -ffixed-line-length-<n>		Use n as character line width in fixed mode
 
+ffree-line-length-none
+Fortran RejectNegative
+Allow arbitrary character line width in free mode
+
+ffree-line-length-
+Fortran RejectNegative Joined UInteger
+-ffree-line-length-<n>		Use n as character line width in free mode
+
+fmax-errors=
+Fortran RejectNegative Joined UInteger
+-fmax-errors=<n>	Maximum number of errors to report
+
 fmax-identifier-length=
-F95 RejectNegative Joined UInteger
--fmax-identifier-length=<n>	Maximum identifier length.
+Fortran RejectNegative Joined UInteger
+-fmax-identifier-length=<n>	Maximum identifier length
+
+fmax-subrecord-length=
+Fortran RejectNegative Joined UInteger
+-fmax-subrecord-length=<n>	Maximum length for subrecords
 
 fmax-stack-var-size=
-F95 RejectNegative Joined UInteger
+Fortran RejectNegative Joined UInteger
 -fmax-stack-var-size=<n>	Size in bytes of the largest array that will be put on the stack
 
-fmodule-private
-F95
-Set default accessibility of module entities to PRIVATE
-
 fno-backend
-F95 RejectNegative
+Fortran RejectNegative
 Don't generate code, just do syntax and semantics checking
 
+frange-check
+Fortran
+Enable range checking during compilation
+
 fpack-derived
-F95
+Fortran
 Try to layout derived types as compact as possible
 
 frepack-arrays
-F95
+Fortran
 Copy array sections into a contiguous block on procedure entry
 
-qkind=
-F95 RejectNegative Joined UInteger
--qkind=<n>	Set the kind for a real with the 'q' exponent to 'n'
+fpreprocessed
+Fortran
+Treat the input file as preprocessed
+
+ffpe-trap=
+Fortran RejectNegative JoinedOrMissing
+-ffpe-trap=[..]	Stop on following floating point exceptions
 
 std=f95
-F95
-Conform to the ISO Fortran 95 standard.
+Fortran
+Conform to the ISO Fortran 95 standard
 
 std=f2003
-F95
-Conform to the ISO Fortran 2003 standard.
+Fortran
+Conform to the ISO Fortran 2003 standard
 
 std=gnu
-F95
-Conform nothing in particular.
+Fortran
+Conform nothing in particular
+
+std=legacy
+Fortran
+Accept extensions to support legacy code
+
+fshort-enums
+Fortran
+Use the narrowest integer type possible for enumeration types
+
+fconvert=little-endian
+Fortran RejectNegative
+Use little-endian format for unformatted files
+
+fconvert=big-endian
+Fortran RejectNegative
+Use big-endian format for unformatted files
+
+fconvert=native
+Fortran RejectNegative
+Use native format for unformatted files
+
+fconvert=swap
+Fortran RejectNegative
+Swap endianness for unformatted files
+
+frecord-marker=4
+Fortran RejectNegative
+Use a 4-byte record marker for unformatted files
+
+frecord-marker=8
+Fortran RejectNegative
+Use an 8-byte record marker for unformatted files
 
 ; This comment is to ensure we retain the blank line above.

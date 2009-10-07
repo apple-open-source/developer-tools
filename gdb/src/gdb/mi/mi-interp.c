@@ -38,6 +38,7 @@
 #include "mi-common.h"
 #include "inlining.h"
 /* APPLE LOCAL end subroutine inlining  */
+#include "gdbthread.h"
 
 struct mi_interp
 {
@@ -181,7 +182,6 @@ mi_interpreter_suspend (void *data)
 static struct gdb_exception
 mi_interpreter_exec (void *data, const char *command)
 {
-  static struct gdb_exception ok;
   char *tmp = alloca (strlen (command) + 1);
   strcpy (tmp, command);
   mi_execute_command_wrapper (tmp);
@@ -321,6 +321,9 @@ mi_cmd_interpreter_exec (char *command, char **argv, int argc)
       ui_out_field_string (uiout, "reason",
 			   async_reason_lookup
 			   (EXEC_ASYNC_END_STEPPING_RANGE));
+
+      ui_out_print_annotation_int (uiout, 0, "thread-id",
+				   pid_to_thread_id (inferior_ptid));
     }
 
   /* APPLE LOCAL end subroutine inlining  */

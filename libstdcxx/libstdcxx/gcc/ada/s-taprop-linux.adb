@@ -6,7 +6,7 @@
 --                                                                          --
 --                                  B o d y                                 --
 --                                                                          --
---         Copyright (C) 1992-2004, Free Software Foundation, Inc.          --
+--         Copyright (C) 1992-2006, Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNARL; see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -40,53 +40,40 @@ pragma Polling (Off);
 --  Turn off polling, we do not want ATC polling to take place during
 --  tasking operations. It causes infinite loops and other problems.
 
-with System.Tasking.Debug;
---  used for Known_Tasks
-
 with Interfaces.C;
 --  used for int
 --           size_t
+
+with System.Tasking.Debug;
+--  used for Known_Tasks
 
 with System.Interrupt_Management;
 --  used for Keep_Unmasked
 --           Abort_Task_Interrupt
 --           Interrupt_ID
 
-with System.Interrupt_Management.Operations;
---  used for Set_Interrupt_Mask
---           All_Tasks_Mask
-pragma Elaborate_All (System.Interrupt_Management.Operations);
+with System.OS_Primitives;
+--  used for Delay_Modes
 
-with System.Parameters;
---  used for Size_Type
+with System.Soft_Links;
+--  used for Abort_Defer/Undefer
 
-with System.Tasking;
---  used for Ada_Task_Control_Block
---           Task_Id
+--  We use System.Soft_Links instead of System.Tasking.Initialization
+--  because the later is a higher level package that we shouldn't depend on.
+--  For example when using the restricted run time, it is replaced by
+--  System.Tasking.Restricted.Stages.
 
 with Ada.Exceptions;
 --  used for Raise_Exception
 --           Raise_From_Signal_Handler
 --           Exception_Id
 
-with System.Soft_Links;
---  used for Defer/Undefer_Abort
-
---  Note that we do not use System.Tasking.Initialization directly since
---  this is a higher level package that we shouldn't depend on. For example
---  when using the restricted run time, it is replaced by
---  System.Tasking.Restricted.Stages.
-
-with System.OS_Primitives;
---  used for Delay_Modes
-
-with System.Soft_Links;
---  used for Get_Machine_State_Addr
-
 with Unchecked_Conversion;
 with Unchecked_Deallocation;
 
 package body System.Task_Primitives.Operations is
+
+   package SSL renames System.Soft_Links;
 
    use System.Tasking.Debug;
    use System.Tasking;
@@ -94,8 +81,6 @@ package body System.Task_Primitives.Operations is
    use System.OS_Interface;
    use System.Parameters;
    use System.OS_Primitives;
-
-   package SSL renames System.Soft_Links;
 
    ----------------
    -- Local Data --
@@ -116,11 +101,9 @@ package body System.Task_Primitives.Operations is
    --  A variable to hold Task_Id for the environment task
 
    Unblocked_Signal_Mask : aliased sigset_t;
-   --  The set of signals that should unblocked in all tasks
+   --  The set of signals that should be unblocked in all tasks
 
    --  The followings are internal configuration constants needed
-
-   Priority_Ceiling_Emulation : constant Boolean := True;
 
    Next_Serial_Number : Task_Serial_Number := 100;
    --  We start at 100, to reserve some special values for
@@ -131,9 +114,6 @@ package body System.Task_Primitives.Operations is
 
    Dispatching_Policy : Character;
    pragma Import (C, Dispatching_Policy, "__gl_task_dispatching_policy");
-
-   FIFO_Within_Priorities : constant Boolean := Dispatching_Policy = 'F';
-   --  Indicates whether FIFO_Within_Priorities is set
 
    --  The following are effectively constants, but they need to
    --  be initialized by calling a pthread_ function.
@@ -285,14 +265,11 @@ package body System.Task_Primitives.Operations is
      (Prio : System.Any_Priority;
       L    : access Lock)
    is
+      pragma Unreferenced (Prio);
+
       Result : Interfaces.C.int;
-
    begin
-      if Priority_Ceiling_Emulation then
-         L.Ceiling := Prio;
-      end if;
-
-      Result := pthread_mutex_init (L.L'Access, Mutex_Attr'Access);
+      Result := pthread_mutex_init (L, Mutex_Attr'Access);
 
       pragma Assert (Result = 0 or else Result = ENOMEM);
 
@@ -324,7 +301,7 @@ package body System.Task_Primitives.Operations is
    procedure Finalize_Lock (L : access Lock) is
       Result : Interfaces.C.int;
    begin
-      Result := pthread_mutex_destroy (L.L'Access);
+      Result := pthread_mutex_destroy (L);
       pragma Assert (Result = 0);
    end Finalize_Lock;
 
@@ -341,37 +318,13 @@ package body System.Task_Primitives.Operations is
 
    procedure Write_Lock (L : access Lock; Ceiling_Violation : out Boolean) is
       Result : Interfaces.C.int;
-
    begin
-      if Priority_Ceiling_Emulation then
-         declare
-            Self_ID : constant Task_Id := Self;
+      Result := pthread_mutex_lock (L);
+      Ceiling_Violation := Result = EINVAL;
 
-         begin
-            if Self_ID.Common.LL.Active_Priority > L.Ceiling then
-               Ceiling_Violation := True;
-               return;
-            end if;
+      --  Assume the cause of EINVAL is a priority ceiling violation
 
-            L.Saved_Priority := Self_ID.Common.LL.Active_Priority;
-
-            if Self_ID.Common.LL.Active_Priority < L.Ceiling then
-               Self_ID.Common.LL.Active_Priority := L.Ceiling;
-            end if;
-
-            Result := pthread_mutex_lock (L.L'Access);
-            pragma Assert (Result = 0);
-            Ceiling_Violation := False;
-         end;
-
-      else
-         Result := pthread_mutex_lock (L.L'Access);
-         Ceiling_Violation := Result = EINVAL;
-
-         --  Assume the cause of EINVAL is a priority ceiling violation
-
-         pragma Assert (Result = 0 or else Result = EINVAL);
-      end if;
+      pragma Assert (Result = 0 or else Result = EINVAL);
    end Write_Lock;
 
    procedure Write_Lock
@@ -410,25 +363,9 @@ package body System.Task_Primitives.Operations is
 
    procedure Unlock (L : access Lock) is
       Result : Interfaces.C.int;
-
    begin
-      if Priority_Ceiling_Emulation then
-         declare
-            Self_ID : constant Task_Id := Self;
-
-         begin
-            Result := pthread_mutex_unlock (L.L'Access);
-            pragma Assert (Result = 0);
-
-            if Self_ID.Common.LL.Active_Priority > L.Saved_Priority then
-               Self_ID.Common.LL.Active_Priority := L.Saved_Priority;
-            end if;
-         end;
-
-      else
-         Result := pthread_mutex_unlock (L.L'Access);
-         pragma Assert (Result = 0);
-      end if;
+      Result := pthread_mutex_unlock (L);
+      pragma Assert (Result = 0);
    end Unlock;
 
    procedure Unlock (L : access RTS_Lock; Global_Lock : Boolean := False) is
@@ -558,14 +495,8 @@ package body System.Task_Primitives.Operations is
       Abs_Time   : Duration;
       Request    : aliased timespec;
       Result     : Interfaces.C.int;
+
    begin
-
-      --  Only the little window between deferring abort and
-      --  locking Self_ID is the reason we need to
-      --  check for pending abort and priority change below! :(
-
-      SSL.Abort_Defer.all;
-
       if Single_Lock then
          Lock_RTS;
       end if;
@@ -616,7 +547,6 @@ package body System.Task_Primitives.Operations is
       end if;
 
       Result := sched_yield;
-      SSL.Abort_Undefer.all;
    end Timed_Delay;
 
    ---------------------
@@ -683,12 +613,6 @@ package body System.Task_Primitives.Operations is
    begin
       T.Common.Current_Priority := Prio;
 
-      if Priority_Ceiling_Emulation then
-         if T.Common.LL.Active_Priority < Prio then
-            T.Common.LL.Active_Priority := Prio;
-         end if;
-      end if;
-
       --  Priorities are in range 1 .. 99 on GNU/Linux, so we map
       --  map 0 .. 31 to 1 .. 32
 
@@ -698,7 +622,7 @@ package body System.Task_Primitives.Operations is
          Result := pthread_setschedparam
            (T.Common.LL.Thread, SCHED_RR, Param'Access);
 
-      elsif FIFO_Within_Priorities or else Time_Slice_Val = 0 then
+      elsif Dispatching_Policy = 'F' or else Time_Slice_Val = 0 then
          Result := pthread_setschedparam
            (T.Common.LL.Thread, SCHED_FIFO, Param'Access);
 
@@ -825,22 +749,10 @@ package body System.Task_Primitives.Operations is
       Priority   : System.Any_Priority;
       Succeeded  : out Boolean)
    is
-      Adjusted_Stack_Size : Interfaces.C.size_t;
-
       Attributes : aliased pthread_attr_t;
       Result     : Interfaces.C.int;
 
    begin
-      if Stack_Size = Unspecified_Size then
-         Adjusted_Stack_Size := Interfaces.C.size_t (Default_Stack_Size);
-
-      elsif Stack_Size < Minimum_Stack_Size then
-         Adjusted_Stack_Size := Interfaces.C.size_t (Minimum_Stack_Size);
-
-      else
-         Adjusted_Stack_Size := Interfaces.C.size_t (Stack_Size);
-      end if;
-
       Result := pthread_attr_init (Attributes'Access);
       pragma Assert (Result = 0 or else Result = ENOMEM);
 
@@ -851,7 +763,7 @@ package body System.Task_Primitives.Operations is
 
       Result :=
         pthread_attr_setstacksize
-          (Attributes'Access, Adjusted_Stack_Size);
+          (Attributes'Access, Interfaces.C.size_t (Stack_Size));
       pragma Assert (Result = 0);
 
       Result :=
@@ -931,6 +843,170 @@ package body System.Task_Primitives.Operations is
         Signal (System.Interrupt_Management.Abort_Task_Interrupt));
       pragma Assert (Result = 0);
    end Abort_Task;
+
+   ----------------
+   -- Initialize --
+   ----------------
+
+   procedure Initialize (S : in out Suspension_Object) is
+      Result : Interfaces.C.int;
+   begin
+      --  Initialize internal state. It is always initialized to False (ARM
+      --  D.10 par. 6).
+
+      S.State := False;
+      S.Waiting := False;
+
+      --  Initialize internal mutex
+
+      Result := pthread_mutex_init (S.L'Access, Mutex_Attr'Access);
+
+      pragma Assert (Result = 0 or else Result = ENOMEM);
+
+      if Result = ENOMEM then
+         raise Storage_Error;
+      end if;
+
+      --  Initialize internal condition variable
+
+      Result := pthread_cond_init (S.CV'Access, Cond_Attr'Access);
+
+      pragma Assert (Result = 0 or else Result = ENOMEM);
+
+      if Result /= 0 then
+         Result := pthread_mutex_destroy (S.L'Access);
+         pragma Assert (Result = 0);
+
+         if Result = ENOMEM then
+            raise Storage_Error;
+         end if;
+      end if;
+   end Initialize;
+
+   --------------
+   -- Finalize --
+   --------------
+
+   procedure Finalize (S : in out Suspension_Object) is
+      Result  : Interfaces.C.int;
+   begin
+      --  Destroy internal mutex
+
+      Result := pthread_mutex_destroy (S.L'Access);
+      pragma Assert (Result = 0);
+
+      --  Destroy internal condition variable
+
+      Result := pthread_cond_destroy (S.CV'Access);
+      pragma Assert (Result = 0);
+   end Finalize;
+
+   -------------------
+   -- Current_State --
+   -------------------
+
+   function Current_State (S : Suspension_Object) return Boolean is
+   begin
+      --  We do not want to use lock on this read operation. State is marked
+      --  as Atomic so that we ensure that the value retrieved is correct.
+
+      return S.State;
+   end Current_State;
+
+   ---------------
+   -- Set_False --
+   ---------------
+
+   procedure Set_False (S : in out Suspension_Object) is
+      Result  : Interfaces.C.int;
+   begin
+      SSL.Abort_Defer.all;
+
+      Result := pthread_mutex_lock (S.L'Access);
+      pragma Assert (Result = 0);
+
+      S.State := False;
+
+      Result := pthread_mutex_unlock (S.L'Access);
+      pragma Assert (Result = 0);
+
+      SSL.Abort_Undefer.all;
+   end Set_False;
+
+   --------------
+   -- Set_True --
+   --------------
+
+   procedure Set_True (S : in out Suspension_Object) is
+      Result : Interfaces.C.int;
+   begin
+      SSL.Abort_Defer.all;
+
+      Result := pthread_mutex_lock (S.L'Access);
+      pragma Assert (Result = 0);
+
+      --  If there is already a task waiting on this suspension object then
+      --  we resume it, leaving the state of the suspension object to False,
+      --  as it is specified in ARM D.10 par. 9. Otherwise, it just leaves
+      --  the state to True.
+
+      if S.Waiting then
+         S.Waiting := False;
+         S.State := False;
+
+         Result := pthread_cond_signal (S.CV'Access);
+         pragma Assert (Result = 0);
+      else
+         S.State := True;
+      end if;
+
+      Result := pthread_mutex_unlock (S.L'Access);
+      pragma Assert (Result = 0);
+
+      SSL.Abort_Undefer.all;
+   end Set_True;
+
+   ------------------------
+   -- Suspend_Until_True --
+   ------------------------
+
+   procedure Suspend_Until_True (S : in out Suspension_Object) is
+      Result : Interfaces.C.int;
+   begin
+      SSL.Abort_Defer.all;
+
+      Result := pthread_mutex_lock (S.L'Access);
+      pragma Assert (Result = 0);
+
+      if S.Waiting then
+         --  Program_Error must be raised upon calling Suspend_Until_True
+         --  if another task is already waiting on that suspension object
+         --  (ARM D.10 par. 10).
+
+         Result := pthread_mutex_unlock (S.L'Access);
+         pragma Assert (Result = 0);
+
+         SSL.Abort_Undefer.all;
+
+         raise Program_Error;
+      else
+         --  Suspend the task if the state is False. Otherwise, the task
+         --  continues its execution, and the state of the suspension object
+         --  is set to False (ARM D.10 par. 9).
+
+         if S.State then
+            S.State := False;
+         else
+            S.Waiting := True;
+            Result := pthread_cond_wait (S.CV'Access, S.L'Access);
+         end if;
+
+         Result := pthread_mutex_unlock (S.L'Access);
+         pragma Assert (Result = 0);
+
+         SSL.Abort_Undefer.all;
+      end if;
+   end Suspend_Until_True;
 
    ----------------
    -- Check_Exit --
@@ -1022,6 +1098,26 @@ package body System.Task_Primitives.Operations is
    begin
       Environment_Task_Id := Environment_Task;
 
+      Interrupt_Management.Initialize;
+
+      --  Prepare the set of signals that should be unblocked in all tasks
+
+      Result := sigemptyset (Unblocked_Signal_Mask'Access);
+      pragma Assert (Result = 0);
+
+      for J in Interrupt_Management.Interrupt_ID loop
+         if System.Interrupt_Management.Keep_Unmasked (J) then
+            Result := sigaddset (Unblocked_Signal_Mask'Access, Signal (J));
+            pragma Assert (Result = 0);
+         end if;
+      end loop;
+
+      Result := pthread_mutexattr_init (Mutex_Attr'Access);
+      pragma Assert (Result = 0);
+
+      Result := pthread_condattr_init (Cond_Attr'Access);
+      pragma Assert (Result = 0);
+
       Initialize_Lock (Single_RTS_Lock'Access, RTS_Lock_Level);
 
       --  Initialize the global RTS lock
@@ -1051,34 +1147,4 @@ package body System.Task_Primitives.Operations is
       end if;
    end Initialize;
 
-begin
-   declare
-      Result : Interfaces.C.int;
-
-   begin
-      --  Mask Environment task for all signals. The original mask of the
-      --  Environment task will be recovered by Interrupt_Server task
-      --  during the elaboration of s-interr.adb.
-
-      System.Interrupt_Management.Operations.Set_Interrupt_Mask
-        (System.Interrupt_Management.Operations.All_Tasks_Mask'Access);
-
-      --  Prepare the set of signals that should unblocked in all tasks
-
-      Result := sigemptyset (Unblocked_Signal_Mask'Access);
-      pragma Assert (Result = 0);
-
-      for J in Interrupt_Management.Interrupt_ID loop
-         if System.Interrupt_Management.Keep_Unmasked (J) then
-            Result := sigaddset (Unblocked_Signal_Mask'Access, Signal (J));
-            pragma Assert (Result = 0);
-         end if;
-      end loop;
-
-      Result := pthread_mutexattr_init (Mutex_Attr'Access);
-      pragma Assert (Result = 0);
-
-      Result := pthread_condattr_init (Cond_Attr'Access);
-      pragma Assert (Result = 0);
-   end;
 end System.Task_Primitives.Operations;

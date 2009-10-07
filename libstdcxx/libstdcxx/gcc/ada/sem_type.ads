@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2004 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -91,7 +91,7 @@ package Sem_Type is
    -----------------
 
    procedure Init_Interp_Tables;
-   --  Invoked by gnatf when processing multiple files.
+   --  Invoked by gnatf when processing multiple files
 
    procedure Collect_Interps (N : Node_Id);
    --  Invoked when the name N has more than one visible interpretation.
@@ -131,7 +131,7 @@ package Sem_Type is
    --  of the operands of N, to check visibility.
 
    procedure End_Interp_List;
-   --  End the list of interpretations of current node.
+   --  End the list of interpretations of current node
 
    procedure Get_First_Interp
      (N  : Node_Id;
@@ -202,6 +202,13 @@ package Sem_Type is
    --  A user-defined function hides a predefined operator if it is
    --  matches the signature of the operator, and is declared in an
    --  open scope, or in the scope of the result type.
+
+   function Interface_Present_In_Ancestor
+     (Typ   : Entity_Id;
+      Iface : Entity_Id) return Boolean;
+   --  Ada 2005 (AI-251): Typ must be a tagged record type/subtype and Iface
+   --  must be an abstract interface type. This function is used to check if
+   --  some ancestor of Typ implements Iface.
 
    function Intersect_Types (L, R : Node_Id) return Entity_Id;
    --  Find the common interpretation to two analyzed nodes. If one of the

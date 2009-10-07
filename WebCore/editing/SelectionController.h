@@ -27,8 +27,8 @@
 #define SelectionController_h
 
 #include "IntRect.h"
-#include "Selection.h"
 #include "Range.h"
+#include "VisibleSelection.h"
 #include <wtf/Noncopyable.h>
 
 namespace WebCore {
@@ -48,16 +48,17 @@ public:
     Element* rootEditableElement() const { return m_sel.rootEditableElement(); }
     bool isContentEditable() const { return m_sel.isContentEditable(); }
     bool isContentRichlyEditable() const { return m_sel.isContentRichlyEditable(); }
-
+    Node* shadowTreeRootNode() const { return m_sel.shadowTreeRootNode(); }
+     
     void moveTo(const Range*, EAffinity, bool userTriggered = false);
     void moveTo(const VisiblePosition&, bool userTriggered = false);
     void moveTo(const VisiblePosition&, const VisiblePosition&, bool userTriggered = false);
     void moveTo(const Position&, EAffinity, bool userTriggered = false);
     void moveTo(const Position&, const Position&, EAffinity, bool userTriggered = false);
 
-    const Selection& selection() const { return m_sel; }
-    void setSelection(const Selection&, bool closeTyping = true, bool clearTypingStyle = true, bool userTriggered = false);
-    void setSelectedRange(Range*, EAffinity, bool closeTyping, ExceptionCode&);
+    const VisibleSelection& selection() const { return m_sel; }
+    void setSelection(const VisibleSelection&, bool closeTyping = true, bool clearTypingStyle = true, bool userTriggered = false);
+    bool setSelectedRange(Range*, EAffinity, bool closeTyping);
     void selectAll();
     void clear();
     
@@ -66,7 +67,7 @@ public:
 
     bool contains(const IntPoint&);
 
-    Selection::EState state() const { return m_sel.state(); }
+    VisibleSelection::SelectionType selectionType() const { return m_sel.selectionType(); }
 
     EAffinity affinity() const { return m_sel.affinity(); }
 
@@ -84,7 +85,13 @@ public:
     Position start() const { return m_sel.start(); }
     Position end() const { return m_sel.end(); }
 
-    IntRect caretRect() const;
+    // Return the renderer that is responsible for painting the caret (in the selection start node)
+    RenderObject* caretRenderer() const;
+
+    // Caret rect local to the caret's renderer
+    IntRect localCaretRect() const;
+    // Bounds of (possibly transformed) caret in absolute coords
+    IntRect absoluteCaretBounds();
     void setNeedsLayout(bool flag = true);
 
     void setLastChangeWasHorizontalExtension(bool b) { m_lastChangeWasHorizontalExtension = b; }
@@ -95,62 +102,27 @@ public:
     bool isRange() const { return m_sel.isRange(); }
     bool isCaretOrRange() const { return m_sel.isCaretOrRange(); }
     bool isInPasswordField() const;
-    bool isInsideNode() const;
+    bool isAll(StayInEditableContent stayInEditableContent = MustStayInEditableContent) const { return m_sel.isAll(stayInEditableContent); }
     
-    PassRefPtr<Range> toRange() const { return m_sel.toRange(); }
+    PassRefPtr<Range> toNormalizedRange() const { return m_sel.toNormalizedRange(); }
 
     void debugRenderer(RenderObject*, bool selected) const;
     
     void nodeWillBeRemoved(Node*);
 
-    // Safari Selection Object API
-    // These methods return the valid equivalents of internal editing positions.
-    Node* baseNode() const;
-    Node* extentNode() const;
-    int baseOffset() const;
-    int extentOffset() const;
-    String type() const;
-    void setBaseAndExtent(Node* baseNode, int baseOffset, Node* extentNode, int extentOffset, ExceptionCode&);
-    void setPosition(Node*, int offset, ExceptionCode&);
-    bool modify(const String& alterString, const String& directionString, const String& granularityString, bool userTriggered = false);
-    
-    // Mozilla Selection Object API
-    // In FireFox, anchor/focus are the equal to the start/end of the selection,
-    // but reflect the direction in which the selection was made by the user.  That does
-    // not mean that they are base/extent, since the base/extent don't reflect
-    // expansion.
-    // These methods return the valid equivalents of internal editing positions.
-    Node* anchorNode() const;
-    int anchorOffset() const;
-    Node* focusNode() const;
-    int focusOffset() const;
-    bool isCollapsed() const { return !isRange(); }
-    String toString() const;
-    void collapse(Node*, int offset, ExceptionCode&);
-    void collapseToEnd();
-    void collapseToStart();
-    void extend(Node*, int offset, ExceptionCode&);
-    PassRefPtr<Range> getRangeAt(int index, ExceptionCode&) const;
-    int rangeCount() const { return !isNone() ? 1 : 0; }
-    void removeAllRanges();
-    void addRange(const Range*);
-    //void deleteFromDocument();
-    //bool containsNode(Node *node, bool entirelyContained);
-    //void selectAllChildren(const Node *);
-    //void removeRange(const Range *);
-    
-    // Microsoft Selection Object API
-    void empty();
-    //void clear();
-    //TextRange *createRange();
-    
     bool recomputeCaretRect(); // returns true if caret rect moved
     void invalidateCaretRect();
-    void paintCaret(GraphicsContext*, const IntRect&);
+    void paintCaret(GraphicsContext*, int tx, int ty, const IntRect& clipRect);
 
     // Used to suspend caret blinking while the mouse is down.
     void setCaretBlinkingSuspended(bool suspended) { m_isCaretBlinkingSuspended = suspended; }
     bool isCaretBlinkingSuspended() const { return m_isCaretBlinkingSuspended; }
+
+    // Focus
+    void setFocused(bool);
+    bool isFocused() const { return m_focused; }
+    bool isFocusedAndActive() const;
+    void pageActivationChanged();
 
 #ifndef NDEBUG
     void formatForDebugger(char* buffer, unsigned length) const;
@@ -160,39 +132,49 @@ public:
 private:
     enum EPositionType { START, END, BASE, EXTENT };
 
-    VisiblePosition modifyExtendingRightForward(TextGranularity);
-    VisiblePosition modifyMovingRightForward(TextGranularity);
-    VisiblePosition modifyExtendingLeftBackward(TextGranularity);
-    VisiblePosition modifyMovingLeftBackward(TextGranularity);
+    TextDirection directionOfEnclosingBlock();
+
+    VisiblePosition modifyExtendingRight(TextGranularity);
+    VisiblePosition modifyExtendingForward(TextGranularity);
+    VisiblePosition modifyMovingRight(TextGranularity);
+    VisiblePosition modifyMovingForward(TextGranularity);
+    VisiblePosition modifyExtendingLeft(TextGranularity);
+    VisiblePosition modifyExtendingBackward(TextGranularity);
+    VisiblePosition modifyMovingLeft(TextGranularity);
+    VisiblePosition modifyMovingBackward(TextGranularity);
 
     void layout();
     IntRect caretRepaintRect() const;
 
     int xPosForVerticalArrowNavigation(EPositionType);
     
-#if PLATFORM(MAC)
+#if PLATFORM(MAC) || PLATFORM(GTK)
     void notifyAccessibilityForSelectionChange();
 #else
     void notifyAccessibilityForSelectionChange() {};
 #endif
 
-    Selection m_sel;
-
-    IntRect m_caretRect;            // caret coordinates, size, and position
+    void focusedOrActiveStateChanged();
+    bool caretRendersInsideNode(Node*) const;
     
-    // m_caretPositionOnLayout stores the scroll offset on the previous call to SelectionController::layout().
-    // When asked for caretRect(), we correct m_caretRect for offset due to scrolling since the last layout().
-    // This is faster than doing another layout().
-    IntPoint m_caretPositionOnLayout;
+    IntRect absoluteBoundsForLocalRect(const IntRect&) const;
+
+    Frame* m_frame;
+    int m_xPosForVerticalArrowNavigation;
+
+    VisibleSelection m_sel;
+
+    IntRect m_caretRect;        // caret rect in coords local to the renderer responsible for painting the caret
+    IntRect m_absCaretBounds;   // absolute bounding rect for the caret
+    IntRect m_absoluteCaretRepaintBounds;
     
     bool m_needsLayout : 1;       // true if the caret and expectedVisible rectangles need to be calculated
+    bool m_absCaretBoundsDirty: 1;
     bool m_lastChangeWasHorizontalExtension : 1;
-    Frame* m_frame;
-    bool m_isDragCaretController;
+    bool m_isDragCaretController : 1;
+    bool m_isCaretBlinkingSuspended : 1;
+    bool m_focused : 1;
 
-    bool m_isCaretBlinkingSuspended;
-    
-    int m_xPosForVerticalArrowNavigation;
 };
 
 inline bool operator==(const SelectionController& a, const SelectionController& b)
@@ -214,3 +196,4 @@ void showTree(const WebCore::SelectionController*);
 #endif
 
 #endif // SelectionController_h
+

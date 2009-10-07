@@ -41,6 +41,9 @@
 
 #include "defs.h"
 
+#include "defs.h"
+#include "value.h"
+
 #if KDP_TARGET_POWERPC
 #include "ppc-macosx-thread-status.h"
 #include "ppc-macosx-regs.h"
@@ -73,6 +76,10 @@
 #define CPU_TYPE_I386 (7)
 #endif
 
+#ifndef CPU_TYPE_X86_64
+#define CPU_TYPE_X86_64 (16777223)
+#endif
+
 #ifndef CPU_TYPE_POWERPC
 #define CPU_TYPE_POWERPC (18)
 #endif
@@ -87,6 +94,15 @@
 
 #define KDP_MAX_BREAKPOINTS 100
 
+/* When major changes are made to the
+ * level of KDP support (such as new built-in
+ * commands, or new target support, please
+ * increment this so that kgmacros can adopt
+ * the new support and keep old support for
+ * older gdb's
+ */
+#define GDB_KDP_SUPPORT_LEVEL 1
+
 #include <stdarg.h>
 #include <string.h>
 #include <ctype.h>
@@ -99,10 +115,11 @@ static unsigned int kdp_debug_level = 3;
 static unsigned int kdp_default_port = 41139;
 
 static char *kdp_default_host_type_str = "powerpc";
-static int kdp_default_host_type = CPU_TYPE_POWERPC;
+static int kdp_default_cpu_type = CPU_TYPE_POWERPC;
 
 static kdp_connection c;
 static int kdp_host_type = -1;
+static int kdp_cpu_type = -1; // CPU_TYPE_FOO
 
 static int kdp_stopped = 0;
 static int kdp_timeout = 5000;
@@ -191,6 +208,7 @@ convert_host_type (unsigned int mach_type)
     case CPU_TYPE_POWERPC:
       return bfd_arch_powerpc;
     case CPU_TYPE_I386:
+    case CPU_TYPE_X86_64:
       return bfd_arch_i386;
 #if defined(CPU_TYPE_ARM)
     case CPU_TYPE_ARM:
@@ -213,17 +231,31 @@ kdp_insert_breakpoint (CORE_ADDR addr, gdb_byte *contents_cache)
       return -1;
     }
 
+  if (remote_kdp_version >= 11) {
+    c.request->breakpoint64_req.hdr.request = KDP_BREAKPOINT64_SET;
+    c.request->breakpoint64_req.address = addr;
+  } else {
   c.request->breakpoint_req.hdr.request = KDP_BREAKPOINT_SET;
   c.request->breakpoint_req.address = addr;
+  }
+
   kdpret =
     kdp_transaction (&c, c.request, c.response, "kdp_insert_breakpoint");
   logger (KDP_LOG_DEBUG,
           "kdp_insert_breakpoint: kdp_transaction returned %d\n", kdpret);
-  if (c.response->breakpoint_reply.error != RR_SUCCESS)
+  if (kdpret == RR_SUCCESS) {
+    if (remote_kdp_version >= 11) {
+      kdpret = c.response->breakpoint64_reply.error;
+    } else {
+      kdpret = c.response->breakpoint_reply.error;
+    }
+  }
+
+  if (kdpret != RR_SUCCESS)
     {
       /* We've reached the maximum number of breakpoints the kernel can support
          so revert to the old model of directly writing to memory */
-      if (c.response->breakpoint_reply.error == KDP_MAX_BREAKPOINTS)
+      if (kdpret == KDP_MAX_BREAKPOINTS)
         {
           kdp_ops.to_insert_breakpoint = memory_insert_breakpoint;
           kdp_ops.to_remove_breakpoint = memory_remove_breakpoint;
@@ -232,7 +264,7 @@ kdp_insert_breakpoint (CORE_ADDR addr, gdb_byte *contents_cache)
           memory_insert_breakpoint (addr, contents_cache);
           return 0;
         }
-      kdpret = c.response->breakpoint_reply.error;
+
       logger (KDP_LOG_DEBUG,
               "kdp_insert_breakpoint: response contained error code %d\n",
               kdpret);
@@ -253,21 +285,57 @@ kdp_remove_breakpoint (CORE_ADDR addr, gdb_byte *contents_cache)
       return -1;
     }
 
+    if (remote_kdp_version >= 11) {
+      c.request->breakpoint64_req.hdr.request = KDP_BREAKPOINT64_REMOVE;
+      c.request->breakpoint64_req.address = addr;
+    } else {
   c.request->breakpoint_req.hdr.request = KDP_BREAKPOINT_REMOVE;
   c.request->breakpoint_req.address = addr;
+    }
+
   kdpret =
     kdp_transaction (&c, c.request, c.response, "kdp_remove_breakpoint");
   logger (KDP_LOG_DEBUG,
           "kdp_remove_breakpoint: kdp_transaction returned %d\n", kdpret);
-  if (c.response->breakpoint_reply.error != RR_SUCCESS)
-    {
+
+  if (kdpret == RR_SUCCESS) {
+    if (remote_kdp_version >= 11) {
+      kdpret = c.response->breakpoint64_reply.error;
+    } else {
       kdpret = c.response->breakpoint_reply.error;
+    }
+  }
+
+  if (kdpret != RR_SUCCESS)
+    {
       logger (KDP_LOG_DEBUG,
               "kdp_remove_breakpoint: response contained error code %d\n",
               kdpret);
       return -1;
     }
   return 0;
+}
+
+static void
+kdp_kernelversion_command (char *args, int from_tty)
+{
+  kdp_return_t kdpret;
+
+  /* Ignore arguments */
+
+  if (!kdp_is_connected (&c))
+    {
+      error ("kdp: unable to get kernel version (not connected)");
+    }
+
+  c.request->kernelversion_req.hdr.request = KDP_KERNELVERSION;
+  kdpret =
+    kdp_transaction (&c, c.request, c.response, "kdp_kernelversion");
+  logger (KDP_LOG_DEBUG,
+          "kdp_kernelversion: kdp_transaction returned %d\n", kdpret);
+  if (kdpret == RR_SUCCESS) {
+    printf_unfiltered ("%s\n", c.response->kernelversion_reply.version);
+  }
 }
 
 static void
@@ -363,42 +431,6 @@ kdp_attach (char *args, int from_tty)
              kdp_return_string (kdpret));
     }
 
-  {
-    c.request->readregs_req.hdr.request = KDP_HOSTINFO;
-
-    kdpret = kdp_transaction (&c, c.request, c.response, "kdp_attach");
-    if (kdpret != RR_SUCCESS)
-      {
-        kdpret2 = kdp_disconnect (&c);
-        if (kdpret2 != RR_SUCCESS)
-          {
-            warning
-              ("unable to disconnect from host after error determining cpu type: %s",
-               kdp_return_string (kdpret2));
-          }
-        kdpret2 = kdp_destroy (&c);
-        if (kdpret2 != RR_SUCCESS)
-          {
-            warning
-              ("unable to destroy host connection after error determining cpu type: %s",
-               kdp_return_string (kdpret2));
-          }
-        error ("kdp_attach: unable to determine host type: %s",
-               kdp_return_string (kdpret));
-      }
-
-    kdp_host_type = convert_host_type (c.response->hostinfo_reply.cpu_type);
-
-
-    if (kdp_host_type == -1)
-      {
-        warning
-          ("kdp_attach: unknown host type 0x%lx; trying default (0x%lx)\n",
-           (unsigned long) c.response->hostinfo_reply.cpu_type,
-           (unsigned long) kdp_default_host_type);
-        kdp_host_type = convert_host_type (kdp_default_host_type);
-      }
-
     c.request->readregs_req.hdr.request = KDP_VERSION;
 
     kdpret = kdp_transaction (&c, c.request, c.response, "kdp_attach");
@@ -424,6 +456,49 @@ kdp_attach (char *args, int from_tty)
 
     remote_kdp_version = c.response->version_reply.version;
     remote_kdp_feature = c.response->version_reply.feature;
+
+    set_internalvar (lookup_internalvar ("kdp_protocol_version"),
+		     value_from_longest (builtin_type_int, (LONGEST)remote_kdp_version));
+
+    set_internalvar (lookup_internalvar ("gdb_kdp_support_level"),
+		     value_from_longest (builtin_type_int, (LONGEST)GDB_KDP_SUPPORT_LEVEL));
+
+  {
+    c.request->readregs_req.hdr.request = KDP_HOSTINFO;
+
+    kdpret = kdp_transaction (&c, c.request, c.response, "kdp_attach");
+    if (kdpret != RR_SUCCESS)
+      {
+        kdpret2 = kdp_disconnect (&c);
+        if (kdpret2 != RR_SUCCESS)
+          {
+            warning
+              ("unable to disconnect from host after error determining cpu type: %s",
+               kdp_return_string (kdpret2));
+          }
+        kdpret2 = kdp_destroy (&c);
+        if (kdpret2 != RR_SUCCESS)
+          {
+            warning
+              ("unable to destroy host connection after error determining cpu type: %s",
+               kdp_return_string (kdpret2));
+          }
+        error ("kdp_attach: unable to determine host type: %s",
+               kdp_return_string (kdpret));
+      }
+
+    kdp_cpu_type = c.response->hostinfo_reply.cpu_type;
+    kdp_host_type = convert_host_type (kdp_cpu_type);
+
+    if (kdp_host_type == -1)
+      {
+        warning
+          ("kdp_attach: unknown host type 0x%lx; trying default (0x%lx)\n",
+           (unsigned long) c.response->hostinfo_reply.cpu_type,
+           (unsigned long) kdp_default_cpu_type);
+	kdp_cpu_type = kdp_default_cpu_type;
+        kdp_host_type = convert_host_type (kdp_default_cpu_type);
+      }
 
     if (kdp_host_type == -1)
       {
@@ -682,10 +757,10 @@ kdp_detach_command (char *args, int from_tty)
 static void
 kdp_set_trace_bit (int step)
 {
-  switch (kdp_host_type)
+  switch (kdp_cpu_type)
     {
 
-    case bfd_arch_powerpc:
+    case CPU_TYPE_POWERPC:
       {
 #if KDP_TARGET_POWERPC
         LONGEST srr1 = read_register (PS_REGNUM);
@@ -704,7 +779,7 @@ kdp_set_trace_bit (int step)
       }
       break;
 
-    case bfd_arch_i386:
+    case CPU_TYPE_I386:
       {
 #if KDP_TARGET_I386
         LONGEST eflags = read_register (PS_REGNUM);
@@ -722,7 +797,25 @@ kdp_set_trace_bit (int step)
 #endif
       }
       break;
-    case bfd_arch_arm:
+    case CPU_TYPE_X86_64:
+      {
+#if KDP_TARGET_I386
+        LONGEST rflags = read_register (PS_REGNUM);
+        if (step)
+          {
+            rflags |= 0x100UL;
+          }
+        else
+          {
+            rflags &= ~0x100UL;
+          }
+        write_register (PS_REGNUM, rflags);
+#else
+        error ("kdp_set_trace_bit: not configured to support x86_64");
+#endif
+      }
+      break;
+    case CPU_TYPE_ARM:
       /* We just ignore requests to set the trace bit on ARM.
 	 For now, we are always using software single stepping.  */
       break;
@@ -1038,12 +1131,12 @@ kdp_fetch_registers_i386 (int regno)
 
   if ((regno == -1) || IS_FP_REGNUM (regno))
     {
-      kdp_return_t kdpret;
       gdb_i386_thread_fpstate_t fp_regs = { };
 
       /* FIXME: For now we hang the kdp stub asking for FP registers,
          so till the kernel can handle the request, don't send it.  */
 #if 0
+      kdp_return_t kdpret;
       c.request->readregs_req.hdr.request = KDP_READREGS;
       c.request->readregs_req.cpu = 0;
       c.request->readregs_req.flavor = GDB_i386_THREAD_FPSTATE;
@@ -1070,6 +1163,85 @@ kdp_fetch_registers_i386 (int regno)
               (GDB_i386_THREAD_FPSTATE_COUNT * 4));
 #endif
       i386_macosx_fetch_fp_registers (&fp_regs);
+    }
+}
+#endif /* KDP_TARGET_I386 */
+
+#if KDP_TARGET_I386
+static void
+kdp_fetch_registers_x86_64 (int regno)
+{
+  if (!kdp_is_connected (&c))
+    {
+      error ("kdp: unable to fetch registers (not connected)");
+    }
+
+  if ((regno == -1) || IS_GP_REGNUM_64 (regno))
+    {
+      kdp_return_t kdpret;
+      gdb_x86_thread_state64_t gp_regs;
+
+      c.request->readregs_req.hdr.request = KDP_READREGS;
+      c.request->readregs_req.cpu = 0;
+      c.request->readregs_req.flavor = GDB_x86_THREAD_STATE64;
+
+      kdpret =
+        kdp_transaction (&c, c.request, c.response,
+                         "kdp_fetch_registers_x86_64");
+      if (kdpret != RR_SUCCESS)
+        {
+          error
+            ("kdp_fetch_registers_x86_64: unable to fetch x86_THREAD_STATE64: %s",
+             kdp_return_string (kdpret));
+        }
+      if (c.response->readregs_reply.nbytes !=
+          (GDB_x86_THREAD_STATE64_COUNT * 4))
+        {
+          error
+            ("kdp_fetch_registers_x86_64: kdp returned %lu bytes of register data (expected %u)",
+             c.response->readregs_reply.nbytes,
+             (GDB_x86_THREAD_STATE64_COUNT * 4));
+        }
+
+      memcpy (&gp_regs, c.response->readregs_reply.data,
+              (GDB_x86_THREAD_STATE64_COUNT * 4));
+      x86_64_macosx_fetch_gp_registers (&gp_regs);
+    }
+
+  if ((regno == -1) || IS_FP_REGNUM (regno))
+    {
+      kdp_return_t kdpret;
+      gdb_x86_float_state64_t fp_regs = { };
+
+      /* FIXME: For now we hang the kdp stub asking for FP registers,
+         so till the kernel can handle the request, don't send it.  */
+#if 1
+      c.request->readregs_req.hdr.request = KDP_READREGS;
+      c.request->readregs_req.cpu = 0;
+      c.request->readregs_req.flavor = GDB_x86_FLOAT_STATE64;
+
+      kdpret =
+        kdp_transaction (&c, c.request, c.response,
+                         "kdp_fetch_registers_x86_64");
+      if (kdpret != RR_SUCCESS)
+        {
+          error
+            ("kdp_fetch_registers_x86_64: unable to fetch x86_FLOAT_STATE64: %s",
+             kdp_return_string (kdpret));
+        }
+      if (c.response->readregs_reply.nbytes !=
+          (GDB_x86_FLOAT_STATE64_COUNT * 4))
+        {
+          error
+            ("kdp_fetch_registers_x86_64: kdp returned %lu bytes of register data (expected %u)",
+             c.response->readregs_reply.nbytes,
+             (GDB_x86_FLOAT_STATE64_COUNT * 4));
+        }
+
+      memcpy (&fp_regs, c.response->readregs_reply.data,
+              (GDB_x86_FLOAT_STATE64_COUNT * 4));
+#endif
+      x86_64_macosx_fetch_fp_registers (&fp_regs);
     }
 }
 #endif /* KDP_TARGET_I386 */
@@ -1304,6 +1476,45 @@ kdp_store_registers_arm (int regno)
 }
 #endif /* KDP_TARGET_ARM */
 
+#if KDP_TARGET_I386
+static void
+kdp_store_registers_x86_64 (int regno)
+{
+  if (!kdp_is_connected (&c))
+    {
+      error ("kdp: unable to store registers (not connected)");
+    }
+
+  if ((regno == -1) || IS_GP_REGNUM_64(regno))
+    {
+
+      gdb_x86_thread_state64_t gp_regs;
+      kdp_return_t kdpret;
+
+      x86_64_macosx_store_gp_registers (&gp_regs);
+
+      memcpy (c.request->writeregs_req.data, &gp_regs,
+              (GDB_x86_THREAD_STATE64_COUNT * 4));
+
+      c.request->writeregs_req.hdr.request = KDP_WRITEREGS;
+      c.request->writeregs_req.cpu = 0;
+      c.request->writeregs_req.flavor = GDB_x86_THREAD_STATE64;
+      c.request->writeregs_req.nbytes = GDB_x86_THREAD_STATE64_COUNT * 4;
+
+      kdpret =
+        kdp_transaction (&c, c.request, c.response,
+                         "kdp_store_registers_x86_64");
+      if (kdpret != RR_SUCCESS)
+        {
+          error
+            ("kdp_store_registers_x86_64: unable to store x86_THREAD_STATE64: %s",
+             kdp_return_string (kdpret));
+        }
+    }
+
+}
+#endif /* KDP_TARGET_I386 */
+
 static void
 kdp_store_registers (int regno)
 {
@@ -1312,10 +1523,10 @@ kdp_store_registers (int regno)
       error ("kdp: unable to store registers (not connected)");
     }
 
-  switch (kdp_host_type)
+  switch (kdp_cpu_type)
     {
 
-    case bfd_arch_powerpc:
+    case CPU_TYPE_POWERPC:
 #if KDP_TARGET_POWERPC
       kdp_store_registers_ppc (regno);
 #else
@@ -1323,7 +1534,15 @@ kdp_store_registers (int regno)
 #endif
       break;
 
-    case bfd_arch_i386:
+    case CPU_TYPE_X86_64:
+#if KDP_TARGET_I386
+      kdp_store_registers_x86_64 (regno);
+#else
+      error ("kdp_store_registers: not configured to support x86_64");
+#endif
+      break;
+
+    case CPU_TYPE_I386:
 #if KDP_TARGET_I386
       kdp_store_registers_i386 (regno);
 #else
@@ -1331,13 +1550,14 @@ kdp_store_registers (int regno)
 #endif
       break;
 
-    case bfd_arch_arm:
+    case CPU_TYPE_ARM:
 #if KDP_TARGET_ARM
       kdp_store_registers_arm (regno);
 #else
       error ("kdp_store_registers: not configured to support arm");
 #endif
       break;
+
     default:
       error ("kdp_store_registers: unknown host type 0x%lx",
              (unsigned long) kdp_host_type);
@@ -1352,10 +1572,10 @@ kdp_fetch_registers (int regno)
       error ("kdp: unable to fetch registers (not connected)");
     }
 
-  switch (kdp_host_type)
+  switch (kdp_cpu_type)
     {
 
-    case bfd_arch_powerpc:
+    case CPU_TYPE_POWERPC:
 #if KDP_TARGET_POWERPC
       kdp_fetch_registers_ppc (regno);
 #else
@@ -1363,7 +1583,7 @@ kdp_fetch_registers (int regno)
 #endif
       break;
 
-    case bfd_arch_i386:
+    case CPU_TYPE_I386:
 #if KDP_TARGET_I386
       kdp_fetch_registers_i386 (regno);
 #else
@@ -1371,11 +1591,19 @@ kdp_fetch_registers (int regno)
 #endif
       break;
 
-    case bfd_arch_arm:
+    case CPU_TYPE_ARM:
 #if KDP_TARGET_ARM
       kdp_fetch_registers_arm (regno);
 #else
       error ("kdp_fetch_registers: not configured to support arm");
+#endif
+      break;
+
+    case CPU_TYPE_X86_64:
+#if KDP_TARGET_I386
+      kdp_fetch_registers_x86_64 (regno);
+#else
+      error ("kdp_fetch_registers: not configured to support i386");
 #endif
       break;
 
@@ -1411,16 +1639,26 @@ kdp_xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len, int write,
 
   if (write)
     {
+      if (remote_kdp_version >= 11) {
+	c.request->writemem64_req.hdr.request = KDP_WRITEMEM64;
+	c.request->writemem64_req.address = memaddr;
+	c.request->writemem64_req.nbytes = len;
+	memcpy (c.request->writemem64_req.data, myaddr, len);
+      } else {
       c.request->writemem_req.hdr.request = KDP_WRITEMEM;
       c.request->writemem_req.address = memaddr;
       c.request->writemem_req.nbytes = len;
       memcpy (c.request->writemem_req.data, myaddr, len);
+      }
 
       kdpret = kdp_transaction (&c, c.request, c.response, "kdp_xfer_memory");
-      if (c.response->writemem_reply.error != RR_SUCCESS)
-        {
+      if (kdpret == RR_SUCCESS) {
+	if (remote_kdp_version >= 11) {
+	  kdpret = c.response->writemem64_reply.error;
+	} else {
           kdpret = c.response->writemem_reply.error;
         }
+      }
       if (kdpret != RR_SUCCESS)
         {
           logger (KDP_LOG_DEBUG,
@@ -1431,15 +1669,24 @@ kdp_xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len, int write,
     }
   else
     {
+      if (remote_kdp_version >= 11) {
+	c.request->readmem64_req.hdr.request = KDP_READMEM64;
+	c.request->readmem64_req.address = memaddr;
+	c.request->readmem64_req.nbytes = len;
+      } else {
       c.request->readmem_req.hdr.request = KDP_READMEM;
       c.request->readmem_req.address = memaddr;
       c.request->readmem_req.nbytes = len;
+      }
 
       kdpret = kdp_transaction (&c, c.request, c.response, "kdp_xfer_memory");
-      if (c.response->readmem_reply.error != RR_SUCCESS)
-        {
+      if (kdpret == RR_SUCCESS) {
+	if (remote_kdp_version >= 11) {
+	  kdpret = c.response->readmem64_reply.error;
+	} else {
           kdpret = c.response->readmem_reply.error;
         }
+      }
       if (kdpret != RR_SUCCESS)
         {
           logger (KDP_LOG_DEBUG,
@@ -1447,14 +1694,27 @@ kdp_xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len, int write,
                   len, paddr_nz (memaddr), kdp_return_string (kdpret));
           return 0;
         }
-      if (c.response->readmem_reply.nbytes != len)
+	if (remote_kdp_version >= 11) {
+	  if (c.response->readmem64_reply.nbytes != len)
+	    {
+	      logger (KDP_LOG_DEBUG,
+		      "kdp_xfer_memory: kdp read only %d bytes of data (expected %d)\n",
+		      c.response->readmem64_reply.nbytes, len);
+	      return 0;
+	    }
+	  memcpy (myaddr, c.response->readmem64_reply.data, len);
+	} 
+      else 
         {
-          logger (KDP_LOG_DEBUG,
+          if (c.response->readmem_reply.nbytes != len)
+            {
+              logger (KDP_LOG_DEBUG,
                   "kdp_xfer_memory: kdp read only %d bytes of data (expected %d)\n",
                   c.response->readmem_reply.nbytes, len);
-          return 0;
-        }
-      memcpy (myaddr, c.response->readregs_reply.data, len);
+              return 0;
+            }
+	  memcpy (myaddr, c.response->readmem_reply.data, len);
+	}
     }
 
   return len;
@@ -1479,7 +1739,7 @@ kdp_load (char *args, int from_tty)
 }
 
 static void
-kdp_create_inferior (char *execfile, char *args, char **env, int from_tty)
+kdp_create_inferior (char *execfile, char *args, char **env, int fromtty)
 {
   error ("unsupported operation kdp_create_inferior");
 }
@@ -1822,7 +2082,7 @@ update_kdp_default_host_type (char *args,
         }
     }
 
-  kdp_default_host_type = htype;
+  kdp_default_cpu_type = htype;
 }
 
 void
@@ -1839,6 +2099,8 @@ _initialize_remote_kdp (void)
            "Reboot a (possibly connected) remote Mac OS X kernel.\nThe kernel must support the reboot packet.");
   add_com ("kdp-detach", class_run, kdp_detach_command,
            "Reset a (possibly disconnected) remote Mac OS X kernel.\n");
+  add_com ("kdp-kernelversion", class_run, kdp_kernelversion_command,
+           "Print the version of a remote Mac OS X kernel.\n");
 
   add_setshow_enum_cmd
     ("kdp-default-host-type", class_obscure, archlist,

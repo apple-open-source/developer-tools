@@ -1,4 +1,3 @@
-// APPLE LOCAL file mainline
 // { dg-do compile }
 
 // This file should compile cleanly by default and not warn on the conversions.

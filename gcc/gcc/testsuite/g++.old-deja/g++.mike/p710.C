@@ -30,7 +30,8 @@ class B
    virtual ~B() {}
    void operator delete(void*,size_t s)
   {
-      printf("B::delete() %d\n",s);
+    /* APPLE LOCAL default to Wformat-security 5764921 */
+      printf("B::delete() %d\n", (int)s);
    }
    void operator delete(void*){}
 };

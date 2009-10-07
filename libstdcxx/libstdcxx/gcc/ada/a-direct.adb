@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2004 Free Software Foundation, Inc.               --
+--          Copyright (C) 2004-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -31,19 +31,27 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
-with Ada.Directories.Validity; use Ada.Directories.Validity;
-with Ada.Strings.Unbounded;    use Ada.Strings.Unbounded;
+with Ada.Directories.Validity;   use Ada.Directories.Validity;
+with Ada.Strings.Unbounded;      use Ada.Strings.Unbounded;
 with Ada.Unchecked_Deallocation;
-with Ada.Characters.Handling;  use Ada.Characters.Handling;
+with Ada.Unchecked_Conversion;
+with Ada.Characters.Handling;    use Ada.Characters.Handling;
 
-with GNAT.Directory_Operations; use GNAT.Directory_Operations;
-with GNAT.OS_Lib;               use GNAT.OS_Lib;
-with GNAT.Regexp;               use GNAT.Regexp;
---  ??? Ada units cannot depend on GNAT units
+with GNAT.Directory_Operations;  use GNAT.Directory_Operations;
+with GNAT.OS_Lib;                use GNAT.OS_Lib;
+with GNAT.Regexp;                use GNAT.Regexp;
+--  ??? Ada units should not depend on GNAT units
 
 with System;
 
 package body Ada.Directories is
+
+   function Duration_To_Time is new
+     Ada.Unchecked_Conversion (Duration, Ada.Calendar.Time);
+   function OS_Time_To_Long_Integer is new
+     Ada.Unchecked_Conversion (OS_Time, Long_Integer);
+   --  These two unchecked conversions are used in function Modification_Time
+   --  to convert an OS_Time to a Calendar.Time.
 
    type Search_Data is record
       Is_Valid      : Boolean := False;
@@ -54,15 +62,15 @@ package body Ada.Directories is
       Entry_Fetched : Boolean := False;
       Dir_Entry     : Directory_Entry_Type;
    end record;
-   --  Comment required ???
+   --  The current state of a search
 
    Empty_String : constant String := (1 .. 0 => ASCII.NUL);
-   --  Comment required ???
+   --  Empty string, returned by function Extension when there is no extension
 
    procedure Free is new Ada.Unchecked_Deallocation (Search_Data, Search_Ptr);
 
    function File_Exists (Name : String) return Boolean;
-   --  Returns True if the named file exists.
+   --  Returns True if the named file exists
 
    procedure Fetch_Next_Entry (Search : Search_Type);
    --  Get the next entry in a directory, setting Entry_Fetched if successful
@@ -126,7 +134,7 @@ package body Ada.Directories is
       then
          raise Name_Error;
 
-         --  This is not an invalid case. Build the path name.
+         --  This is not an invalid case so build the path name
 
       else
          Last := Containing_Directory'Length;
@@ -725,6 +733,8 @@ package body Ada.Directories is
       Minute : Minute_Type;
       Second : Second_Type;
 
+      Result : Ada.Calendar.Time;
+
    begin
       --  First, the invalid cases
 
@@ -733,14 +743,27 @@ package body Ada.Directories is
 
       else
          Date := File_Time_Stamp (Name);
-         --  ???? We need to be able to convert OS_Time to Ada.Calendar.Time
-         --  For now, use the component of the OS_Time to create the
-         --  Calendar.Time value.
 
-         GM_Split (Date, Year, Month, Day, Hour, Minute, Second);
+         --  ??? This implementation should be revisited when AI 00351 has
+         --  implemented.
 
-         return Ada.Calendar.Time_Of
-           (Year, Month, Day, Duration (Second + 60 * (Minute + 60 * Hour)));
+         if OpenVMS then
+
+            --  On OpenVMS, OS_Time is in local time
+
+            GM_Split (Date, Year, Month, Day, Hour, Minute, Second);
+
+            return Ada.Calendar.Time_Of
+              (Year, Month, Day,
+               Duration (Second + 60 * (Minute + 60 * Hour)));
+
+         else
+            --  On Unix and Windows, OS_Time is in GMT
+
+            Result :=
+              Duration_To_Time (Duration (OS_Time_To_Long_Integer (Date)));
+            return Result;
+         end if;
       end if;
    end Modification_Time;
 
@@ -938,6 +961,7 @@ package body Ada.Directories is
 
       exception
          when Error_In_Regexp =>
+            Free (Search.Value);
             raise Name_Error;
       end;
 

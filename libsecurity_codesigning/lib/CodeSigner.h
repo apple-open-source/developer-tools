@@ -44,29 +44,32 @@ namespace CodeSigning {
 class SecCodeSigner : public SecCFObject {
 	NOCOPY(SecCodeSigner)
 public:
+	class Parser;
+	class Signer;
+
+public:
 	SECCFFUNCTIONS(SecCodeSigner, SecCodeSignerRef, errSecCSInvalidObjectRef, gCFObjects().CodeSigner)
 
-	SecCodeSigner();
+	SecCodeSigner(SecCSFlags flags);
     virtual ~SecCodeSigner() throw();
 	
 	void parameters(CFDictionaryRef args);	// parse and set parameters
-	bool valid() const { return mSigner; }
+	bool valid() const;
 	
 	void sign(SecStaticCode *code, SecCSFlags flags);
+	void remove(SecStaticCode *code, SecCSFlags flags);
 	
-	void returnDetachedSignature(BlobCore *blob);
-
-public:
-	class Parser;
-	class Signer;
+	void returnDetachedSignature(BlobCore *blob, Signer &signer);
 	
 private:
 	// parsed parameter set
+	SecCSFlags mOpFlags;			// operation flags
 	CFRef<SecIdentityRef> mSigner;	// signing identity
 	CFRef<CFTypeRef> mDetached;		// detached-signing information (NULL => attached)
 	CFRef<CFDictionaryRef> mResourceRules; // explicit resource collection rules (override)
 	CFRef<CFDateRef> mSigningTime;	// signing time desired (kCFNull for none)
 	CFRef<CFDataRef> mApplicationData; // contents of application slot
+	CFRef<CFDataRef> mEntitlementData; // entitlement configuration data
 	const Requirements *mRequirements; // internal code requirements
 	size_t mCMSSize;				// size estimate for CMS blob
 	uint32_t mCdFlags;				// CodeDirectory flags

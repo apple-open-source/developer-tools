@@ -7,7 +7,7 @@
 --                                 B o d y                                  --
 --                                                                          --
 --               Copyright (C) 1986 by University of Toronto.               --
---           Copyright (C) 1996-2004 Ada Core Technologies, Inc.            --
+--                      Copyright (C) 1999-2006, AdaCore                    --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -17,8 +17,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -129,7 +129,7 @@ package body GNAT.Regpat is
       --  Complex loops
 
       CURLYX,     -- 2num node Match this complex thing {n,m} times
-      --                       The nums are coded on two characters each.
+      --                       The nums are coded on two characters each
 
       WHILEM,     -- no        Do curly processing and see if rest matches
 
@@ -233,15 +233,15 @@ package body GNAT.Regpat is
    procedure Set_In_Class
      (Bitmap : in out Character_Class;
       C      : Character);
-   --  Set the entry to True for C in the class Bitmap.
+   --  Set the entry to True for C in the class Bitmap
 
    function Get_From_Class
      (Bitmap : Character_Class;
       C      : Character) return Boolean;
-   --  Return True if the entry is set for C in the class Bitmap.
+   --  Return True if the entry is set for C in the class Bitmap
 
    procedure Reset_Class (Bitmap : out Character_Class);
-   --  Clear all the entries in the class Bitmap.
+   --  Clear all the entries in the class Bitmap
 
    pragma Inline (Set_In_Class);
    pragma Inline (Get_From_Class);
@@ -282,7 +282,7 @@ package body GNAT.Regpat is
    function Get_Next_Offset
      (Program : Program_Data;
       IP      : Pointer) return Pointer;
-   --  Get the offset field of a node. Used by Get_Next.
+   --  Get the offset field of a node. Used by Get_Next
 
    function Get_Next
      (Program : Program_Data;
@@ -295,7 +295,7 @@ package body GNAT.Regpat is
    function Read_Natural
      (Program : Program_Data;
       IP      : Pointer) return Natural;
-   --  Return the 2-byte natural coded at position IP.
+   --  Return the 2-byte natural coded at position IP
 
    --  All of the subprograms above are tiny and should be inlined
 
@@ -389,10 +389,10 @@ package body GNAT.Regpat is
       --  Return value is the location of new opcode, ie old Emit_Ptr.
 
       procedure Emit_Natural (IP : Pointer; N : Natural);
-      --  Split N on two characters at position IP.
+      --  Split N on two characters at position IP
 
       procedure Emit_Class (Bitmap : Character_Class);
-      --  Emits a character class.
+      --  Emits a character class
 
       procedure Case_Emit (C : Character);
       --  Emit C, after converting is to lower-case if the regular
@@ -454,7 +454,7 @@ package body GNAT.Regpat is
       function  Next_Instruction (P : Pointer) return Pointer;
       --  Dig the "next" pointer out of a node
 
-      procedure Fail (M : in String);
+      procedure Fail (M : String);
       pragma No_Return (Fail);
       --  Fail with a diagnostic message, if possible
 
@@ -572,9 +572,9 @@ package body GNAT.Regpat is
       -- Fail --
       ----------
 
-      procedure Fail (M : in String) is
+      procedure Fail (M : String) is
       begin
-         raise Expression_Error;
+         raise Expression_Error with M;
       end Fail;
 
       -------------------------
@@ -845,7 +845,7 @@ package body GNAT.Regpat is
       --  makes it hard to avoid.
 
       procedure Parse
-        (Parenthesized  : in Boolean;
+        (Parenthesized  : Boolean;
          Flags          : out Expression_Flags;
          IP             : out Pointer)
       is
@@ -1206,7 +1206,7 @@ package body GNAT.Regpat is
             Parse_Pos := Parse_Pos + 1;
          end if;
 
-         --  First character can be ] or -, without closing the class.
+         --  First character can be ] or - without closing the class
 
          if Parse_Pos <= Parse_End
            and then (Expression (Parse_Pos) = ']'
@@ -2389,7 +2389,7 @@ package body GNAT.Regpat is
 
       type Natural_Array is array (Match_Count range <>) of Natural;
       Matches_Tmp : Natural_Array (Matches_Full'Range);
-      --  Save the opening position of parenthesis.
+      --  Save the opening position of parenthesis
 
       Last_Paren  : Natural := 0;
       --  Last parenthesis seen
@@ -2414,7 +2414,7 @@ package body GNAT.Regpat is
       --  operators for complex expressions.
 
       Current_Curly : Current_Curly_Access := null;
-      --  The curly currently being processed.
+      --  The curly currently being processed
 
       -----------------------
       -- Local Subprograms --
@@ -2430,7 +2430,7 @@ package body GNAT.Regpat is
       --  It only matches on things of length 1.
       --  Starting from Input_Pos, it matches at most Max CURLY.
 
-      function Try (Pos : in Positive) return Boolean;
+      function Try (Pos : Positive) return Boolean;
       --  Try to match at specific point
 
       function Match (IP : Pointer) return Boolean;
@@ -2465,7 +2465,7 @@ package body GNAT.Regpat is
       pragma Inline (Index);
       pragma Inline (Repeat);
 
-      --  These are two complex functions, but used only once.
+      --  These are two complex functions, but used only once
 
       pragma Inline (Match_Whilem);
       pragma Inline (Match_Simple_Operator);
@@ -2878,12 +2878,14 @@ package body GNAT.Regpat is
             if Next_Char_Known then
                --  Last position to check
 
-               Last_Pos := Input_Pos + Max;
-
-               if Last_Pos > Last_In_Data
-                 or else Max = Natural'Last
-               then
+               if Max = Natural'Last then
                   Last_Pos := Last_In_Data;
+               else
+                  Last_Pos := Input_Pos + Max;
+
+                  if Last_Pos > Last_In_Data then
+                     Last_Pos := Last_In_Data;
+                  end if;
                end if;
 
                --  Look for the first possible opportunity
@@ -3002,10 +3004,10 @@ package body GNAT.Regpat is
          Ln : Natural                       := 0;
 
          Lastloc : constant Natural := Cc.Lastloc;
-         --  Detection of 0-len.
+         --  Detection of 0-len
 
       begin
-         --  If degenerate scan matches "", assume scan done.
+         --  If degenerate scan matches "", assume scan done
 
          if Input_Pos = Cc.Lastloc
            and then N >= Cc.Min
@@ -3031,7 +3033,7 @@ package body GNAT.Regpat is
             return False;
          end if;
 
-         --  First, just match a string of min scans.
+         --  First, just match a string of min scans
 
          if N < Cc.Min then
             Cc.Cur := N;
@@ -3046,7 +3048,7 @@ package body GNAT.Regpat is
             return False;
          end if;
 
-         --  Prefer next over scan for minimal matching.
+         --  Prefer next over scan for minimal matching
 
          if not Cc.Greedy then
             Current_Curly := Cc.Old_Cc;
@@ -3240,7 +3242,7 @@ package body GNAT.Regpat is
       -- Try --
       ---------
 
-      function Try (Pos : in Positive) return Boolean is
+      function Try (Pos : Positive) return Boolean is
       begin
          Input_Pos  := Pos;
          Last_Paren := 0;

@@ -3,19 +3,20 @@
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * The contents of this file constitute Original Code as defined in and
- * are subject to the Apple Public Source License Version 1.1 (the
- * "License").  You may not use this file except in compliance with the
- * License.  Please obtain a copy of the License at
- * http://www.apple.com/publicsource and read it before using this file.
+ * This file contains Original Code and/or Modifications of Original Code
+ * as defined in and that are subject to the Apple Public Source License
+ * Version 2.0 (the 'License'). You may not use this file except in
+ * compliance with the License. Please obtain a copy of the License at
+ * http://www.opensource.apple.com/apsl/ and read it before using this
+ * file.
  * 
- * This Original Code and all software distributed under the License are
- * distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+ * The Original Code and all software distributed under the License are
+ * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
  * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE OR NON-INFRINGEMENT.  Please see the
- * License for the specific language governing rights and limitations
- * under the License.
+ * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+ * Please see the License for the specific language governing rights and
+ * limitations under the License.
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
@@ -29,16 +30,6 @@
  */
 
 #include <syslog.h>
-#include <CoreFoundation/CoreFoundation.h>
-#include <SystemConfiguration/SystemConfiguration.h>
-#include <SystemConfiguration/SCValidation.h>
-#include <IOKit/pwr_mgt/IOPMLib.h>
-#include <IOKit/pwr_mgt/IOPMLibPrivate.h>
-#include <IOKit/pwr_mgt/IOPM.h>
-#include <IOKit/ps/IOPSKeys.h>
-#include <IOKit/ps/IOPowerSources.h>
-#include <IOKit/ps/IOPowerSourcesPrivate.h>
-#include <IOKit/IOMessage.h>
 #include <sys/syslog.h>
 
 #include "PMSettings.h"
@@ -65,6 +56,9 @@ static CFStringRef                      currentPowerSource = NULL;
  */
 static unsigned long                    g_overrides = 0;
 static unsigned long                    gLastOverrideState = 0;
+#if TARGET_OS_EMBEDDED
+static long				gSleepSetting = -1;
+#endif
 
 static io_connect_t                     gPowerManager;
 
@@ -110,6 +104,27 @@ activateSettingOverrides(void)
 
     if (gLastOverrideState != g_overrides)
     {
+#if TARGET_OS_EMBEDDED
+	if ((kPMPreventIdleSleep == (gLastOverrideState ^ g_overrides))
+	 && (-1 != gSleepSetting)) do
+	{
+	    static io_connect_t gIOPMConnection = MACH_PORT_NULL;
+	    IOReturn kr;
+
+	    if (!gIOPMConnection) gIOPMConnection = IOPMFindPowerManagement(0);
+	    if (!gIOPMConnection) break;
+	    kr = IOPMSetAggressiveness(gIOPMConnection, kPMMinutesToSleep, 
+					(kPMPreventIdleSleep & g_overrides) ? 0 : gSleepSetting);
+	    if (kIOReturnSuccess != kr)
+	    {
+		gIOPMConnection = MACH_PORT_NULL;
+		break;
+	    }
+	    gLastOverrideState = g_overrides;
+	    return;
+	}
+	while (false);
+#endif
         gLastOverrideState = g_overrides;
         activate_profiles( energySettings, 
                             currentPowerSource, 
@@ -170,22 +185,6 @@ PMSettings_CopyActivePMSettings(void)
     return return_val;
 }
 
-__private_extern__ void 
-PMSettingsConsoleUserHasChanged(void)
-{
-    static int first_login = 1;
-    
-    if(first_login) {
-        // Broadcast settings to drivers a second time during boot-up, since
-        // some drivers may not have been loaded at the time configd launched,
-        // particularly IOBacklightDisplay (3956697).
-        activate_profiles( energySettings, 
-                            currentPowerSource, 
-                            kIOPMRemoveUnsupportedSettings);
-        first_login = 0;
-    }
-}
-
 /* _copyPMSettings
  * The returned dictionary represents the "currently selected" 
  * per-power source settings.
@@ -219,14 +218,26 @@ activate_profiles(CFDictionaryRef d, CFStringRef s, bool removeUnsupported)
     int                                 one = 1;
     int                                 zero = 0;
     
-    if(NULL == d) return;
+    if(NULL == d) return kIOReturnBadArgument;
     
     if(NULL == s) s = CFSTR(kIOPMACPowerKey);
-    
+
+#if TARGET_OS_EMBEDDED
+    CFNumberRef                         sleepSetting;
+
+    energy_settings = (CFDictionaryRef)isA_CFDictionary(CFDictionaryGetValue(d, s));
+    if(!energy_settings) return kIOReturnError;
+    sleepSetting = (CFNumberRef)isA_CFNumber(CFDictionaryGetValue(energy_settings, CFSTR(kIOPMSystemSleepKey)));
+    if (sleepSetting)
+	CFNumberGetValue(sleepSetting, kCFNumberLongType, &gSleepSetting);
+#endif
+
     if(g_overrides)
     {
+#if !TARGET_OS_EMBEDDED
         energy_settings = (CFDictionaryRef)isA_CFDictionary(CFDictionaryGetValue(d, s));
         if(!energy_settings) return kIOReturnError;
+#endif
 
         profiles_activated = CFDictionaryCreateMutableCopy(kCFAllocatorDefault, 
             CFDictionaryGetCount(energy_settings), energy_settings);
@@ -273,7 +284,7 @@ activate_profiles(CFDictionaryRef d, CFStringRef s, bool removeUnsupported)
     } else {
         ret = IOPMActivatePMPreference(d, s, removeUnsupported);
     }
-        
+    
     return ret;
 }
 
@@ -461,7 +472,7 @@ _activateForcedSettings(CFDictionaryRef forceSettings)
 {
     // Calls to "pmset force" end up here
     energySettings = CFDictionaryCreateCopy(0, forceSettings);
-    activate_profiles( energySettings, 
+    return activate_profiles( energySettings, 
                         currentPowerSource,
                         kIOPMRemoveUnsupportedSettings);
 }

@@ -1,6 +1,6 @@
 /* Separate lexical analyzer for GNU C++.
    Copyright (C) 1987, 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+   1999, 2000, 2001, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
    Hacked by Michael Tiemann (tiemann@cygnus.com)
 
 This file is part of GCC.
@@ -17,8 +17,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 
 /* This file is the lexical analyzer for GNU C++.  */
@@ -117,7 +117,7 @@ init_operators (void)
 	 : &operator_name_info[(int) CODE]);				    \
   oni->identifier = identifier;						    \
   oni->name = NAME;							    \
-  oni->mangled_name = MANGLING;                                             \
+  oni->mangled_name = MANGLING;						    \
   oni->arity = ARITY;
 
 #include "operators.def"
@@ -145,7 +145,7 @@ init_operators (void)
   operator_name_info [(int) TRUTH_AND_EXPR].name = "strict &&";
   operator_name_info [(int) TRUTH_OR_EXPR].name = "strict ||";
   operator_name_info [(int) RANGE_EXPR].name = "...";
-  operator_name_info [(int) CONVERT_EXPR].name = "+";
+  operator_name_info [(int) UNARY_PLUS_EXPR].name = "+";
 
   assignment_operator_name_info [(int) EXACT_DIV_EXPR].name
     = "(exact /=)";
@@ -175,8 +175,7 @@ struct resword
    _true_.  */
 #define D_EXT		0x01	/* GCC extension */
 #define D_ASM		0x02	/* in C99, but has a switch to turn it off */
-/* APPLE LOCAL mainline */
-#define D_OBJC		0x08	/* Objective C++ only */
+#define D_OBJC		0x04	/* Objective C++ only */
 
 CONSTRAINT(ridbits_fit, RID_LAST_MODIFIER < sizeof(unsigned long) * CHAR_BIT);
 
@@ -187,7 +186,7 @@ static const struct resword reswords[] =
   { "_asm",		RID_ASM,	0 },
   { "__FUNCTION__",	RID_FUNCTION_NAME, 0 },
   { "__PRETTY_FUNCTION__", RID_PRETTY_FUNCTION_NAME, 0 },
-  { "__alignof", 	RID_ALIGNOF,	0 },
+  { "__alignof",	RID_ALIGNOF,	0 },
   { "__alignof__",	RID_ALIGNOF,	0 },
   { "__asm",		RID_ASM,	0 },
   { "__asm__",		RID_ASM,	0 },
@@ -282,10 +281,9 @@ static const struct resword reswords[] =
   { "virtual",		RID_VIRTUAL,	0 },
   { "void",		RID_VOID,	0 },
   { "volatile",		RID_VOLATILE,	0 },
-  { "wchar_t",          RID_WCHAR,	0 },
+  { "wchar_t",		RID_WCHAR,	0 },
   { "while",		RID_WHILE,	0 },
 
-  /* APPLE LOCAL begin mainline */
   /* The remaining keywords are specific to Objective-C++.  NB:
      All of them will remain _disabled_, since they are context-
      sensitive.  */
@@ -317,20 +315,15 @@ static const struct resword reswords[] =
   { "inout",		RID_INOUT,		D_OBJC },
   { "oneway",		RID_ONEWAY,		D_OBJC },
   { "out",		RID_OUT,		D_OBJC },
-  /* APPLE LOCAL end mainline */
   /* APPLE LOCAL begin C* property (Radar 4436866) */
   /* These are recognized inside a property attribute list */
   { "readonly",         RID_READONLY,           D_OBJC },
-  /* APPLE LOCAL Radar 4591909 */
-  { "dynamic",          RID_DYNAMIC,            D_OBJC },
   { "getter",           RID_GETTER,             D_OBJC },
   { "setter",           RID_SETTER,             D_OBJC },
-  { "ivar",             RID_IVAR,               D_OBJC },
-  /* APPLE LOCAL radar 4621020 */
-  { "weak",             RID_WEAK,               D_OBJC },
   /* APPLE LOCAL end C* property (Radar 4436866) */
   /* APPLE LOCAL begin objc new property */
   { "synthesize",       RID_AT_SYNTHESIZE,   D_OBJC },
+  { "dynamic",          RID_AT_DYNAMIC,      D_OBJC },
   { "readwrite",        RID_READWRITE,    D_OBJC },
   { "assign",           RID_ASSIGN,       D_OBJC },
   { "retain",           RID_RETAIN,       D_OBJC },
@@ -339,7 +332,7 @@ static const struct resword reswords[] =
   /* APPLE LOCAL radar 4947014 - objc atomic property */
   { "nonatomic",       RID_NONATOMIC,          D_OBJC },
   /* APPLE LOCAL radar 4564694 */
-  { "package",             RID_AT_PACKAGE,         D_OBJC },
+  { "package",          RID_AT_PACKAGE,         D_OBJC },
 };
 
 void
@@ -348,18 +341,14 @@ init_reswords (void)
   unsigned int i;
   tree id;
   int mask = ((flag_no_asm ? D_ASM : 0)
-	      /* APPLE LOCAL mainline */
 	      | D_OBJC
 	      | (flag_no_gnu_keywords ? D_EXT : 0));
 
-  ridpointers = ggc_calloc ((int) RID_MAX, sizeof (tree));
+  ridpointers = GGC_CNEWVEC (tree, (int) RID_MAX);
   for (i = 0; i < ARRAY_SIZE (reswords); i++)
     {
       id = get_identifier (reswords[i].word);
-      /* APPLE LOCAL begin objc new property */
-      C_RID_CODE (id) = (!flag_objc_new_property || reswords[i].rid != RID_DYNAMIC)
-			? reswords[i].rid : RID_AT_DYNAMIC;
-      /* APPLE LOCAL end objc new property */
+      C_RID_CODE (id) = reswords[i].rid;
       ridpointers [(int) reswords[i].rid] = id;
       if (! (reswords[i].disable & mask))
 	C_IS_RESERVED_WORD (id) = 1;
@@ -397,6 +386,10 @@ init_cp_pragma (void)
   c_register_pragma ("GCC", "java_exceptions", handle_pragma_java_exceptions);
 }
 
+/* TRUE if a code represents a statement.  */
+
+bool statement_code_p[MAX_TREE_CODES];
+
 /* Initialize the C++ front end.  This function is very sensitive to
    the exact order that things are done here.  It would be nice if the
    initialization done by this routine were moved to its subroutines,
@@ -404,12 +397,18 @@ init_cp_pragma (void)
 bool
 cxx_init (void)
 {
+  unsigned int i;
   static const enum tree_code stmt_codes[] = {
-    c_common_stmt_codes,
-    cp_stmt_codes
+   CTOR_INITIALIZER,	TRY_BLOCK,	HANDLER,
+   EH_SPEC_BLOCK,	USING_STMT,	TAG_DEFN,
+   IF_STMT,		CLEANUP_STMT,	FOR_STMT,
+   WHILE_STMT,		DO_STMT,	BREAK_STMT,
+   CONTINUE_STMT,	SWITCH_STMT,	EXPR_STMT
   };
 
-  INIT_STATEMENT_CODES (stmt_codes);
+  memset (&statement_code_p, 0, sizeof (statement_code_p));
+  for (i = 0; i < ARRAY_SIZE (stmt_codes); i++)
+    statement_code_p[stmt_codes[i]] = true;
 
   /* We cannot just assign to input_filename because it has already
      been initialized and will be used later as an N_BINCL for stabs+
@@ -508,20 +507,19 @@ parse_strconst_pragma (const char* name, int opt)
   tree result, x;
   enum cpp_ttype t;
 
-  t = c_lex (&x);
+  t = pragma_lex (&result);
   if (t == CPP_STRING)
     {
-      result = x;
-      if (c_lex (&x) != CPP_EOF)
-	warning ("junk at end of #pragma %s", name);
+      if (pragma_lex (&x) != CPP_EOF)
+	warning (0, "junk at end of #pragma %s", name);
       return result;
     }
 
   if (t == CPP_EOF && opt)
-    return 0;
+    return NULL_TREE;
 
   error ("invalid #pragma %s", name);
-  return (tree)-1;
+  return error_mark_node;
 }
 
 static void
@@ -545,14 +543,14 @@ handle_pragma_interface (cpp_reader* dfile ATTRIBUTE_UNUSED )
   struct c_fileinfo *finfo;
   const char *filename;
 
-  if (fname == (tree)-1)
+  if (fname == error_mark_node)
     return;
   else if (fname == 0)
     filename = lbasename (input_filename);
   else
     filename = ggc_strdup (TREE_STRING_POINTER (fname));
 
-  finfo = get_fileinfo (filename);
+  finfo = get_fileinfo (input_filename);
 
   if (impl_file_chain == 0)
     {
@@ -585,7 +583,7 @@ handle_pragma_implementation (cpp_reader* dfile ATTRIBUTE_UNUSED )
   const char *filename;
   struct impl_files *ifiles = impl_file_chain;
 
-  if (fname == (tree)-1)
+  if (fname == error_mark_node)
     return;
 
   if (fname == 0)
@@ -601,13 +599,13 @@ handle_pragma_implementation (cpp_reader* dfile ATTRIBUTE_UNUSED )
       filename = ggc_strdup (TREE_STRING_POINTER (fname));
 #if 0
       /* We currently cannot give this diagnostic, as we reach this point
-         only after cpplib has scanned the entire translation unit, so
+	 only after cpplib has scanned the entire translation unit, so
 	 cpp_included always returns true.  A plausible fix is to compare
 	 the current source-location cookie with the first source-location
 	 cookie (if any) of the filename, but this requires completing the
 	 --enable-mapped-location project first.  See PR 17577.  */
       if (cpp_included (parse_in, filename))
-	warning ("#pragma implementation for %qs appears after "
+	warning (0, "#pragma implementation for %qs appears after "
 		 "file is included", filename);
 #endif
     }
@@ -619,7 +617,7 @@ handle_pragma_implementation (cpp_reader* dfile ATTRIBUTE_UNUSED )
     }
   if (ifiles == 0)
     {
-      ifiles = xmalloc (sizeof (struct impl_files));
+      ifiles = XNEW (struct impl_files);
       ifiles->filename = filename;
       ifiles->next = impl_file_chain;
       impl_file_chain = ifiles;
@@ -628,11 +626,11 @@ handle_pragma_implementation (cpp_reader* dfile ATTRIBUTE_UNUSED )
 
 /* Indicate that this file uses Java-personality exception handling.  */
 static void
-handle_pragma_java_exceptions (cpp_reader* dfile ATTRIBUTE_UNUSED )
+handle_pragma_java_exceptions (cpp_reader* dfile ATTRIBUTE_UNUSED)
 {
   tree x;
-  if (c_lex (&x) != CPP_EOF)
-    warning ("junk at end of #pragma GCC java_exceptions");
+  if (pragma_lex (&x) != CPP_EOF)
+    warning (0, "junk at end of #pragma GCC java_exceptions");
 
   choose_personality_routine (lang_java);
 }
@@ -684,16 +682,16 @@ unqualified_fn_lookup_error (tree name)
 	 declaration of "f" is available.  Historically, G++ and most
 	 other compilers accepted that usage since they deferred all name
 	 lookup until instantiation time rather than doing unqualified
-	 name lookup at template definition time; explain to the user what 
+	 name lookup at template definition time; explain to the user what
 	 is going wrong.
 
 	 Note that we have the exact wording of the following message in
 	 the manual (trouble.texi, node "Name lookup"), so they need to
 	 be kept in synch.  */
       pedwarn ("there are no arguments to %qD that depend on a template "
-	       "parameter, so a declaration of %qD must be available", 
+	       "parameter, so a declaration of %qD must be available",
 	       name, name);
-      
+
       if (!flag_permissive)
 	{
 	  static bool hint;
@@ -721,7 +719,7 @@ build_lang_decl (enum tree_code code, tree name, tree type)
 
   /* All nesting of C++ functions is lexical; there is never a "static
      chain" in the sense of GNU C nested functions.  */
-  if (code == FUNCTION_DECL) 
+  if (code == FUNCTION_DECL)
     DECL_NO_STATIC_CHAIN (t) = 1;
 
   return t;
@@ -861,7 +859,7 @@ cxx_make_type (enum tree_code code)
   /* Set up some flags that give proper default behavior.  */
   if (IS_AGGR_TYPE_CODE (code))
     {
-      struct c_fileinfo *finfo = get_fileinfo (lbasename (input_filename));
+      struct c_fileinfo *finfo = get_fileinfo (input_filename);
       SET_CLASSTYPE_INTERFACE_UNKNOWN_X (t, finfo->interface_unknown);
       CLASSTYPE_INTERFACE_ONLY (t) = finfo->interface_only;
     }
@@ -879,3 +877,20 @@ make_aggr_type (enum tree_code code)
 
   return t;
 }
+/* APPLE LOCAL begin mainline radar 6194879 */
+
+/* Returns true if we are currently in the main source file, or in a
+   template instantiation started from the main source file.  */
+
+bool
+in_main_input_context (void)
+{
+  tree tl = outermost_tinst_level();
+
+  if (tl)
+    return strcmp (main_input_filename,
+		   LOCATION_FILE (TINST_LOCATION (tl))) == 0;
+  else
+    return strcmp (main_input_filename, input_filename) == 0;
+}
+/* APPLE LOCAL end mainline radar 6194879 */

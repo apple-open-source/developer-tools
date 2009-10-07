@@ -1,6 +1,4 @@
 /**
- * This file is part of the DOM implementation for KDE.
- *
  * Copyright (C) 1997 Martin Jones (mjones@kde.org)
  *           (C) 1997 Torben Weis (weis@kde.org)
  *           (C) 1998 Waldo Bastian (bastian@kde.org)
@@ -66,13 +64,14 @@ ContainerNode* HTMLTableSectionElement::addChild(PassRefPtr<Node> child)
 }
 
 // used by table row groups to share style decls created by the enclosing table.
-CSSMutableStyleDeclaration* HTMLTableSectionElement::additionalAttributeStyleDecl()
+void HTMLTableSectionElement::additionalAttributeStyleDecls(Vector<CSSMutableStyleDeclaration*>& results)
 {
     Node* p = parentNode();
     while (p && !p->hasTagName(tableTag))
         p = p->parentNode();
-
-    return p ?  static_cast<HTMLTableElement*>(p)->getSharedGroupDecl(true) : 0;
+    if (!p)
+        return;
+    static_cast<HTMLTableElement*>(p)->addSharedGroupDecls(true, results);
 }
 
 // these functions are rather slow, since we need to get the row at
@@ -85,7 +84,7 @@ PassRefPtr<HTMLElement> HTMLTableSectionElement::insertRow(int index, ExceptionC
     if (index < -1 || index > numRows)
         ec = INDEX_SIZE_ERR; // per the DOM
     else {
-        r = new HTMLTableRowElement(document());
+        r = new HTMLTableRowElement(trTag, document());
         if (numRows == index || index == -1)
             appendChild(r, ec);
         else {
@@ -168,7 +167,7 @@ void HTMLTableSectionElement::setVAlign(const String &value)
 
 PassRefPtr<HTMLCollection> HTMLTableSectionElement::rows()
 {
-    return new HTMLCollection(this, HTMLCollection::TableRows);
+    return HTMLCollection::create(this, TSectionRows);
 }
 
 }

@@ -1,8 +1,7 @@
 /* APPLE LOCAL file 4548636 */
 /* Check for a variety of rules for objc's class attributes. */
 /* APPLE LOCAL radar 4899595 */
-/* { dg-options "-fno-objc-new-property -mmacosx-version-min=10.5" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
-/* { dg-options "-fno-objc-new-property" { target arm*-*-darwin* } } */
+/* { dg-options "-mmacosx-version-min=10.5" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
 /* { dg-do compile } */
 
 #include <objc/objc.h>
@@ -13,10 +12,11 @@ __attribute ((deprecated))
 @interface DEPRECATED : Object
   { @public int ivar; } 
   - (int) instancemethod;
-@property (dynamic) int prop; 
+@property int prop; 
 @end
 
 @implementation DEPRECATED
+@dynamic prop;
   -(int) instancemethod {  return ivar; } 
 @end
 

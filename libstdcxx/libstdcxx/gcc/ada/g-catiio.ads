@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---            Copyright (C) 1999-2003 Ada Core Technologies, Inc.           --
+--                     Copyright (C) 1999-2005, AdaCore                     --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -20,8 +20,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -116,16 +116,15 @@ package GNAT.Calendar.Time_IO is
 
    function Image
      (Date    : Ada.Calendar.Time;
-      Picture : Picture_String)
-      return    String;
-   --  Return Date as a string with format Picture.
-   --  raise Picture_Error if picture string is wrong
+      Picture : Picture_String) return String;
+   --  Return Date as a string with format Picture. Raise Picture_Error if
+   --  picture string is wrong.
 
    procedure Put_Time
      (Date    : Ada.Calendar.Time;
       Picture : Picture_String);
-   --  Put Date with format Picture.
-   --  raise Picture_Error if picture string is wrong
+   --  Put Date with format Picture. Raise Picture_Error if picture string is
+   --  wrong
 
 private
    ISO_Date      : constant Picture_String := "%Y-%m-%d";

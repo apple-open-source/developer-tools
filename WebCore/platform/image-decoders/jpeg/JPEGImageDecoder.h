@@ -23,50 +23,44 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  */
 
-#ifndef JPEG_DECODER_H_
-#define JPEG_DECODER_H_
+#ifndef JPEGImageDecoder_h
+#define JPEGImageDecoder_h
 
 #include "ImageDecoder.h"
 
 namespace WebCore {
 
-class JPEGImageReader;
+    class JPEGImageReader;
 
-// This class decodes the JPEG image format.
-class JPEGImageDecoder : public ImageDecoder
-{
-public:
-    JPEGImageDecoder();
-    ~JPEGImageDecoder();
+    // This class decodes the JPEG image format.
+    class JPEGImageDecoder : public ImageDecoder {
+    public:
+        JPEGImageDecoder();
+        ~JPEGImageDecoder();
 
-    // Take the data and store it.
-    virtual void setData(SharedBuffer* data, bool allDataReceived);
+        virtual String filenameExtension() const { return "jpg"; }
 
-    // Whether or not the size information has been decoded yet.
-    virtual bool isSizeAvailable() const;
+        // Take the data and store it.
+        virtual void setData(SharedBuffer* data, bool allDataReceived);
 
-    virtual RGBA32Buffer* frameBufferAtIndex(size_t index);
-    
-    virtual bool supportsAlpha() const { return false; }
+        // Whether or not the size information has been decoded yet.
+        virtual bool isSizeAvailable();
 
-    void decode(bool sizeOnly = false) const;
+        virtual RGBA32Buffer* frameBufferAtIndex(size_t index);
+        
+        virtual bool supportsAlpha() const { return false; }
 
-    JPEGImageReader* reader() { return m_reader; }
+        void decode(bool sizeOnly = false);
 
-    void setSize(int width, int height) {
-        if (!m_sizeAvailable) {
-            m_sizeAvailable = true;
-            m_size = IntSize(width, height);
-        }
-    }
+        JPEGImageReader* reader() { return m_reader; }
 
-    bool outputScanlines();
-    void jpegComplete();
+        bool outputScanlines();
+        void jpegComplete();
 
-private:
-    mutable JPEGImageReader* m_reader;
-};
+    private:
+        JPEGImageReader* m_reader;
+    };
 
-}
+} // namespace WebCore
 
 #endif

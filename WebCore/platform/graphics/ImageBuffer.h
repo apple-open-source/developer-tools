@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2006 Nikolas Zimmermann <zimmermann@kde.org>
- * Copyright (C) 2007 Apple Inc. All rights reserved.
+ * Copyright (C) 2007, 2008, 2009 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -27,68 +27,64 @@
 #ifndef ImageBuffer_h
 #define ImageBuffer_h
 
+#include "TransformationMatrix.h"
+#include "Image.h"
 #include "IntSize.h"
+#include "ImageBufferData.h"
 #include <wtf/OwnPtr.h>
-#include <memory>
-
-#if PLATFORM(CG)
-typedef struct CGImage* CGImageRef;
-#endif
-
-#if PLATFORM(QT)
-#include <QPixmap>
-class QPainter;
-#endif
-
-#if PLATFORM(CAIRO)
-struct _cairo_surface;
-#endif
+#include <wtf/PassOwnPtr.h>
+#include <wtf/PassRefPtr.h>
 
 namespace WebCore {
 
     class GraphicsContext;
-    class RenderObject;
+    class ImageData;
+    class IntPoint;
+    class IntRect;
+    class String;
 
     class ImageBuffer : Noncopyable {
     public:
-        static std::auto_ptr<ImageBuffer> create(const IntSize&, bool grayScale);
+        // Will return a null pointer on allocation failure.
+        static PassOwnPtr<ImageBuffer> create(const IntSize& size, bool grayScale)
+        {
+            bool success = false;
+            OwnPtr<ImageBuffer> buf(new ImageBuffer(size, grayScale, success));
+            if (success)
+                return buf.release();
+            return 0;
+        }
+
         ~ImageBuffer();
 
-        IntSize size() const;
+        const IntSize& size() const { return m_size; }
         GraphicsContext* context() const;
 
-        // This offers a way to render parts of a WebKit rendering tree into this ImageBuffer class.
-        // FIXME: This doesn't belong in the platform directory.
-        // Bad layering that this knows about the render tree.
-        // We need to move it into RenderObject or somewhere in the SVG world.
-        static void renderSubtreeToImage(ImageBuffer*, RenderObject*);
+        Image* image() const;
 
-#if PLATFORM(CG)
-        CGImageRef cgImage() const;
-#elif PLATFORM(QT)
-        QPixmap* pixmap() const;
-#elif PLATFORM(CAIRO)
-        _cairo_surface* surface() const;
+        void clearImage() { m_image.clear(); }
+
+        PassRefPtr<ImageData> getImageData(const IntRect& rect) const;
+        void putImageData(ImageData* source, const IntRect& sourceRect, const IntPoint& destPoint);
+
+        String toDataURL(const String& mimeType) const;
+#if !PLATFORM(CG)
+        TransformationMatrix baseTransform() const { return TransformationMatrix(); }
+#else
+        TransformationMatrix baseTransform() const { return TransformationMatrix(1, 0, 0, -1, 0, m_size.height()); }
 #endif
-
     private:
-        void* m_data;
+        ImageBufferData m_data;
+
         IntSize m_size;
-
         OwnPtr<GraphicsContext> m_context;
+        mutable RefPtr<Image> m_image;
 
-#if PLATFORM(CG)
-        ImageBuffer(void* imageData, const IntSize&, std::auto_ptr<GraphicsContext>);
-        mutable CGImageRef m_cgImage;
-#elif PLATFORM(QT)
-        ImageBuffer(const QPixmap &px);
-        mutable QPixmap m_pixmap;
-        mutable QPainter* m_painter;
-#elif PLATFORM(CAIRO)
-        ImageBuffer(_cairo_surface* surface);
-        mutable _cairo_surface *m_surface;
-#endif
+        // This constructor will place its success into the given out-variable
+        // so that create() knows when it should return failure.
+        ImageBuffer(const IntSize&, bool grayScale, bool& success);
     };
-}
 
-#endif
+} // namespace WebCore
+
+#endif // ImageBuffer_h

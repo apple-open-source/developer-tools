@@ -26,22 +26,22 @@
 #include "config.h"
 #include "ClipboardWin.h"
 
+#include "CString.h"
 #include "CachedImage.h"
 #include "ClipboardUtilitiesWin.h"
-#include "csshelper.h"
-#include "CString.h"
-#include "DeprecatedString.h"
 #include "Document.h"
 #include "DragData.h"
+#include "Editor.h"
 #include "Element.h"
 #include "EventHandler.h"
+#include "FileList.h"
 #include "Frame.h"
 #include "FrameLoader.h"
 #include "FrameView.h"
 #include "HTMLNames.h"
 #include "Image.h"
 #include "MIMETypeRegistry.h"
-#include "markup.h"
+#include "NotImplemented.h"
 #include "Page.h"
 #include "Pasteboard.h"
 #include "PlatformMouseEvent.h"
@@ -51,11 +51,15 @@
 #include "ResourceResponse.h"
 #include "StringHash.h"
 #include "WCDataObject.h"
+#include "csshelper.h"
+#include "markup.h"
 
 #include <shlwapi.h>
 #include <wininet.h>
 
 #include <wtf/RefPtr.h>
+
+using namespace std;
 
 namespace WebCore {
 
@@ -139,7 +143,7 @@ static String filesystemPathFromUrlOrTitle(const String& url, const String& titl
             // The filename for any content based drag should be the last element of 
             // the path.  If we can't find it, or we're coming up with the name for a link
             // we just use the entire url.
-            KURL kurl(url.deprecatedString());
+            KURL kurl(url);
             String lastComponent;
             if (!isLink && !(lastComponent = kurl.lastPathComponent()).isEmpty()) {
                 len = min<DWORD>(MAX_PATH, lastComponent.length());
@@ -204,7 +208,6 @@ static HGLOBAL createGlobalURLContent(const String& url, int estimatedFileSize)
 
 static HGLOBAL createGlobalImageFileContent(SharedBuffer* data)
 {
-    HRESULT hr = S_OK;
     HGLOBAL memObj = GlobalAlloc(GPTR, data->size());
     if (!memObj) 
         return 0;
@@ -213,6 +216,69 @@ static HGLOBAL createGlobalImageFileContent(SharedBuffer* data)
 
     CopyMemory(fileContents, data->data(), data->size());
     
+    GlobalUnlock(memObj);
+    
+    return memObj;
+}
+
+static HGLOBAL createGlobalHDropContent(const KURL& url, String& fileName, SharedBuffer* data)
+{
+    if (fileName.isEmpty() || !data )
+        return 0;
+
+    WCHAR filePath[MAX_PATH];
+
+    if (url.isLocalFile()) {
+        String localPath = url.path();
+        // windows does not enjoy a leading slash on paths
+        if (localPath[0] == '/')
+            localPath = localPath.substring(1);
+        LPCTSTR localPathStr = localPath.charactersWithNullTermination();
+        if (wcslen(localPathStr) + 1 < MAX_PATH)
+            wcscpy_s(filePath, MAX_PATH, localPathStr);
+        else
+            return 0;
+    } else {
+        WCHAR tempPath[MAX_PATH];
+        WCHAR extension[MAX_PATH];
+        if (!::GetTempPath(ARRAYSIZE(tempPath), tempPath))
+            return 0;
+        if (!::PathAppend(tempPath, fileName.charactersWithNullTermination()))
+            return 0;
+        LPCWSTR foundExtension = ::PathFindExtension(tempPath);
+        if (foundExtension) {
+            if (wcscpy_s(extension, MAX_PATH, foundExtension))
+                return 0;
+        } else
+            *extension = 0;
+        ::PathRemoveExtension(tempPath);
+        for (int i = 1; i < 10000; i++) {
+            if (swprintf_s(filePath, MAX_PATH, TEXT("%s-%d%s"), tempPath, i, extension) == -1)
+                return 0;
+            if (!::PathFileExists(filePath))
+                break;
+        }
+        HANDLE tempFileHandle = CreateFile(filePath, GENERIC_READ | GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
+        if (tempFileHandle == INVALID_HANDLE_VALUE)
+            return 0;
+
+        // Write the data to this temp file.
+        DWORD written;
+        BOOL tempWriteSucceeded = WriteFile(tempFileHandle, data->data(), data->size(), &written, 0);
+        CloseHandle(tempFileHandle);
+        if (!tempWriteSucceeded)
+            return 0;
+    }
+
+    SIZE_T dropFilesSize = sizeof(DROPFILES) + (sizeof(WCHAR) * (wcslen(filePath) + 2));
+    HGLOBAL memObj = GlobalAlloc(GHND | GMEM_SHARE, dropFilesSize);
+    if (!memObj) 
+        return 0;
+
+    DROPFILES* dropFiles = (DROPFILES*) GlobalLock(memObj);
+    dropFiles->pFiles = sizeof(DROPFILES);
+    dropFiles->fWide = TRUE;
+    wcscpy((LPWSTR)(dropFiles + 1), filePath);    
     GlobalUnlock(memObj);
     
     return memObj;
@@ -253,6 +319,9 @@ static HGLOBAL createGlobalUrlFileDescriptor(const String& url, const String& ti
 
 static HGLOBAL createGlobalImageFileDescriptor(const String& url, const String& title, CachedImage* image)
 {
+    ASSERT_ARG(image, image);
+    ASSERT(image->image()->data());
+
     HRESULT hr = S_OK;
     HGLOBAL memObj = 0;
     String fsPath;
@@ -266,10 +335,15 @@ static HGLOBAL createGlobalImageFileDescriptor(const String& url, const String& 
     fgd->fgd[0].dwFlags = FD_FILESIZE;
     fgd->fgd[0].nFileSizeLow = image->image()->data()->size();
     
-    String extension(".");
-    extension += WebCore::MIMETypeRegistry::getPreferredExtensionForMIMEType(image->response().mimeType());
     const String& preferredTitle = title.isEmpty() ? image->response().suggestedFilename() : title;
-    fsPath = filesystemPathFromUrlOrTitle(url, preferredTitle, extension.length() ? (TCHAR*)extension.charactersWithNullTermination() : 0, false);
+    String extension = image->image()->filenameExtension();
+    if (extension.isEmpty()) {
+        // Do not continue processing in the rare and unusual case where a decoded image is not able 
+        // to provide a filename extension. Something tricky (like a bait-n-switch) is going on
+        return 0;
+    }
+    extension.insert(".", 0);
+    fsPath = filesystemPathFromUrlOrTitle(url, preferredTitle, (TCHAR*)extension.charactersWithNullTermination(), false);
 
     if (fsPath.length() <= 0) {
         GlobalUnlock(memObj);
@@ -286,7 +360,7 @@ static HGLOBAL createGlobalImageFileDescriptor(const String& url, const String& 
 
 
 // writeFileToDataObject takes ownership of fileDescriptor and fileContent
-static HRESULT writeFileToDataObject(IDataObject* dataObject, HGLOBAL fileDescriptor, HGLOBAL fileContent)
+static HRESULT writeFileToDataObject(IDataObject* dataObject, HGLOBAL fileDescriptor, HGLOBAL fileContent, HGLOBAL hDropContent)
 {
     HRESULT hr = S_OK;
     FORMATETC* fe;
@@ -307,7 +381,14 @@ static HRESULT writeFileToDataObject(IDataObject* dataObject, HGLOBAL fileDescri
     // Contents
     fe = fileContentFormatZero();
     medium.hGlobal = fileContent;
-    hr = dataObject->SetData(fe, &medium, TRUE);
+    if (FAILED(hr = dataObject->SetData(fe, &medium, TRUE)))
+        goto exit;
+
+    // HDROP
+    if (hDropContent) {
+        medium.hGlobal = hDropContent;
+        hr = dataObject->SetData(cfHDropFormat(), &medium, TRUE);
+    }
 
 exit:
     if (FAILED(hr)) {
@@ -315,6 +396,8 @@ exit:
             GlobalFree(fileDescriptor);
         if (fileContent)
             GlobalFree(fileContent);
+        if (hDropContent)
+            GlobalFree(hDropContent);
     }
     return hr;
 }
@@ -361,7 +444,9 @@ static bool writeURL(WCDataObject *data, const KURL& url, String title, bool wit
         success = true;
 
     if (withHTML) {
-        medium.hGlobal = createGlobalData(markupToCF_HTML(urlToMarkup(url, title), ""));
+        Vector<char> cfhtmlData;
+        markupToCF_HTML(urlToMarkup(url, title), "", cfhtmlData);
+        medium.hGlobal = createGlobalData(cfhtmlData);
         if (medium.hGlobal && FAILED(data->SetData(htmlFormat(), &medium, TRUE)))
             ::GlobalFree(medium.hGlobal);
         else
@@ -369,7 +454,7 @@ static bool writeURL(WCDataObject *data, const KURL& url, String title, bool wit
     }
 
     if (withPlainText) {
-        medium.hGlobal = createGlobalData(url.url());
+        medium.hGlobal = createGlobalData(url.string());
         if (medium.hGlobal && FAILED(data->SetData(plainTextWFormat(), &medium, TRUE)))
             ::GlobalFree(medium.hGlobal);
         else
@@ -378,7 +463,6 @@ static bool writeURL(WCDataObject *data, const KURL& url, String title, bool wit
 
     return success;
 }
-
 
 void ClipboardWin::clearData(const String& type)
 {
@@ -428,7 +512,7 @@ String ClipboardWin::getData(const String& type, bool& success) const
     return "";
 }
 
-bool ClipboardWin::setData(const String &type, const String &data)
+bool ClipboardWin::setData(const String& type, const String& data)
 {
     // FIXME: Need to be able to write to the system clipboard <rdar://problem/5015941>
     ASSERT(isForDragging());
@@ -438,7 +522,7 @@ bool ClipboardWin::setData(const String &type, const String &data)
     ClipboardDataType winType = clipboardTypeFromMIMEType(type);
 
     if (winType == ClipboardDataTypeURL)
-        return WebCore::writeURL(m_writableDataObject.get(), data.deprecatedString(), String(), false, true);
+        return WebCore::writeURL(m_writableDataObject.get(), KURL(data), String(), false, true);
 
     if (winType == ClipboardDataTypeText) {
         STGMEDIUM medium = {0};
@@ -498,16 +582,22 @@ HashSet<String> ClipboardWin::types() const
     return results;
 }
 
+PassRefPtr<FileList> ClipboardWin::files() const
+{
+    notImplemented();
+    return 0;
+}
+
 void ClipboardWin::setDragImage(CachedImage* image, Node *node, const IntPoint &loc)
 {
     if (policy() != ClipboardImageWritable && policy() != ClipboardWritable) 
         return;
         
     if (m_dragImage)
-        m_dragImage->deref(this);
+        m_dragImage->removeClient(this);
     m_dragImage = image;
     if (m_dragImage)
-        m_dragImage->ref(this);
+        m_dragImage->addClient(this);
 
     m_dragLoc = loc;
     m_dragImageElement = node;
@@ -526,9 +616,12 @@ void ClipboardWin::setDragImageElement(Node *node, const IntPoint &loc)
 DragImageRef ClipboardWin::createDragImage(IntPoint& loc) const
 {
     HBITMAP result = 0;
-    //FIXME: Need to be able to draw element <rdar://problem/5015942>
     if (m_dragImage) {
         result = createDragImageFromImage(m_dragImage->image());        
+        loc = m_dragLoc;
+    } else if (m_dragImageElement) {
+        Node* node = m_dragImageElement.get();
+        result = node->document()->frame()->nodeImage(node);
         loc = m_dragLoc;
     }
     return result;
@@ -565,10 +658,10 @@ static void writeImageToDataObject(IDataObject* dataObject, Element* element, co
         return;
 
     SharedBuffer* imageBuffer = cachedImage->image()->data();
-    if (!imageBuffer->size())
+    if (!imageBuffer || !imageBuffer->size())
         return;
 
-    HGLOBAL imageFileDescriptor = createGlobalImageFileDescriptor(url.url(), element->getAttribute(altAttr), cachedImage);
+    HGLOBAL imageFileDescriptor = createGlobalImageFileDescriptor(url.string(), element->getAttribute(altAttr), cachedImage);
     if (!imageFileDescriptor)
         return;
 
@@ -578,7 +671,14 @@ static void writeImageToDataObject(IDataObject* dataObject, Element* element, co
         return;
     }
 
-    writeFileToDataObject(dataObject, imageFileDescriptor, imageFileContent);
+    String fileName = cachedImage->response().suggestedFilename();
+    HGLOBAL hDropContent = createGlobalHDropContent(url, fileName, imageBuffer);
+    if (!hDropContent) {
+        GlobalFree(hDropContent);
+        return;
+    }
+
+    writeFileToDataObject(dataObject, imageFileDescriptor, imageFileContent, hDropContent);
 }
 
 void ClipboardWin::declareAndWriteDragImage(Element* element, const KURL& url, const String& title, Frame* frame)
@@ -594,7 +694,7 @@ void ClipboardWin::declareAndWriteDragImage(Element* element, const KURL& url, c
     if (imageURL.isEmpty()) 
         return;
 
-    String fullURL = frame->document()->completeURL(parseURL(imageURL));
+    String fullURL = frame->document()->completeURL(parseURL(imageURL)).string();
     if (fullURL.isEmpty()) 
         return;
     STGMEDIUM medium = {0};
@@ -602,7 +702,9 @@ void ClipboardWin::declareAndWriteDragImage(Element* element, const KURL& url, c
     ExceptionCode ec = 0;
 
     // Put img tag on the clipboard referencing the image
-    medium.hGlobal = createGlobalData(markupToCF_HTML(imageToMarkup(fullURL), ""));
+    Vector<char> data;
+    markupToCF_HTML(imageToMarkup(fullURL), "", data);
+    medium.hGlobal = createGlobalData(data);
     if (medium.hGlobal && FAILED(m_writableDataObject->SetData(htmlFormat(), &medium, TRUE)))
         ::GlobalFree(medium.hGlobal);
 }
@@ -614,7 +716,7 @@ void ClipboardWin::writeURL(const KURL& kurl, const String& titleStr, Frame*)
     WebCore::writeURL(m_writableDataObject.get(), kurl, titleStr, true, true);
 
     int estimatedSize = 0;
-    String url = kurl.url();
+    String url = kurl.string();
 
     HGLOBAL urlFileDescriptor = createGlobalUrlFileDescriptor(url, titleStr, estimatedSize);
     if (!urlFileDescriptor)
@@ -624,7 +726,7 @@ void ClipboardWin::writeURL(const KURL& kurl, const String& titleStr, Frame*)
         GlobalFree(urlFileDescriptor);
         return;
     }
-    writeFileToDataObject(m_writableDataObject.get(), urlFileDescriptor, urlFileContent);
+    writeFileToDataObject(m_writableDataObject.get(), urlFileDescriptor, urlFileContent, 0);
 }
 
 void ClipboardWin::writeRange(Range* selectedRange, Frame* frame)
@@ -637,7 +739,10 @@ void ClipboardWin::writeRange(Range* selectedRange, Frame* frame)
     medium.tymed = TYMED_HGLOBAL;
     ExceptionCode ec = 0;
 
-    medium.hGlobal = createGlobalData(markupToCF_HTML(createMarkup(selectedRange, 0, AnnotateForInterchange), selectedRange->startContainer(ec)->document()->URL()));
+    Vector<char> data;
+    markupToCF_HTML(createMarkup(selectedRange, 0, AnnotateForInterchange),
+        selectedRange->startContainer(ec)->document()->url().string(), data);
+    medium.hGlobal = createGlobalData(data);
     if (medium.hGlobal && FAILED(m_writableDataObject->SetData(htmlFormat(), &medium, TRUE)))
         ::GlobalFree(medium.hGlobal);
 
@@ -647,6 +752,10 @@ void ClipboardWin::writeRange(Range* selectedRange, Frame* frame)
     medium.hGlobal = createGlobalData(str);
     if (medium.hGlobal && FAILED(m_writableDataObject->SetData(plainTextWFormat(), &medium, TRUE)))
         ::GlobalFree(medium.hGlobal);
+
+    medium.hGlobal = 0;
+    if (frame->editor()->canSmartCopyOrDelete())
+        m_writableDataObject->SetData(smartPasteFormat(), &medium, TRUE);
 }
 
 bool ClipboardWin::hasData()
@@ -669,6 +778,14 @@ bool ClipboardWin::hasData()
     }
 
     return false;
+}
+
+void ClipboardWin::setExternalDataObject(IDataObject *dataObject)
+{
+    ASSERT(isForDragging());
+
+    m_writableDataObject = 0;
+    m_dataObject = dataObject;
 }
 
 } // namespace WebCore

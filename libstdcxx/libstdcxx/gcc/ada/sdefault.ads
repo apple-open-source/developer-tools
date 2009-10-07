@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-1999 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,23 +16,23 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
 --                                                                          --
 ------------------------------------------------------------------------------
 
+--  This package contains functions that return the default values for the
+--  include and object file directories, target name, default library
+--  subdirectory (libsubdir) prefix, and the target OS.
+
 with Types; use Types;
+
 package Sdefault is
-
-   --  This package contains functions that return the default values for
-   --  the include and object file directories, target name, and the default
-   --  library subdirectory (libsubdir) prefix.
-
    function Include_Dir_Default_Name return String_Ptr;
-   function Object_Dir_Default_Name return String_Ptr;
-   function Target_Name return String_Ptr;
-   function Search_Dir_Prefix return String_Ptr;
+   function Object_Dir_Default_Name  return String_Ptr;
+   function Target_Name              return String_Ptr;
+   function Search_Dir_Prefix        return String_Ptr;
 end Sdefault;

@@ -1054,25 +1054,20 @@ macosx_allocate_space_in_inferior (int len)
 {
   int ret;
   struct macosx_alloc_data alloc;
-  struct ui_file *saved_gdb_stderr;
-  struct ui_out *null_uiout = NULL;
   struct cleanup *cleanups;
 
-  null_uiout = cli_out_new (gdb_null);
-  if (null_uiout == NULL)
-    error ("Unable to allocate memory: unable to allocate null uiout.");
-  cleanups = make_cleanup_ui_out_delete (null_uiout);
-  saved_gdb_stderr = gdb_stderr;
-  gdb_stderr = gdb_null;
+  cleanups = make_cleanup_ui_out_suppress_output (uiout);
+  /* Suppress the debugger mode here since we trust the system malloc
+     will never end up in the ObjC runtime.  */
+  make_cleanup_set_restore_debugger_mode (NULL, -1);
 
   alloc.len = len;
   alloc.addr = 0;
 
-  ret = catch_exceptions (null_uiout, macosx_allocate_space_in_inferior_helper,
+  ret = catch_exceptions (uiout, macosx_allocate_space_in_inferior_helper,
                           &alloc, RETURN_MASK_ALL);
 
   do_cleanups (cleanups);
-  gdb_stderr = saved_gdb_stderr;
 
   if (ret >= 0)
     return alloc.addr;
@@ -1089,6 +1084,11 @@ macosx_allocate_space_in_inferior (int len)
    copy the def'ns here.  */
 
 #define MAX_NUM_FRAMES 100
+
+#define stack_logging_type_free         0
+#define stack_logging_type_generic      1       /* anything that is not allocation/deallocation */
+#define stack_logging_type_alloc        2       /* malloc, realloc, etc... */
+#define stack_logging_type_dealloc      4       /* free, realloc, etc... */
 
 #if HAVE_64_BIT_STACK_LOGGING
 
@@ -1114,88 +1114,12 @@ extern kern_return_t __mach_stack_logging_frames_for_uniqued_stack(task_t task,
 								   uint32_t max_stack_frames, 
 								   uint32_t *num_frames);
 
+
 /* END STACK_LOGGING.H  */
 
-/* This is the iterator function that libc uses in
-   stack_logging_enumerate_records.  It calls this function for each
-   uniqued stack that allocated a given address.  We just
-   print out the symbolicated version of this stack.  */
-
-static void 
-do_over_unique_frames (mach_stack_logging_record_t record, void *data) 
-{
-  mach_vm_address_t frames[MAX_NUM_FRAMES];
-  uint32_t num_frames;
-  struct cleanup *cleanup;
-  struct symtab_and_line sal;
-  int i;
-  CORE_ADDR thread;
-
-  if (__mach_stack_logging_frames_for_uniqued_stack (macosx_status->task, 
-						     record.stack_identifier,
-						     frames, MAX_NUM_FRAMES, &num_frames))
-    {
-      warning ("Error running stack_logging_frames_for_uniqued_stack");
-      return;
-    }
-
-  if (num_frames == 0)
-    return;
-
-  /* The last element of the frame array always points to the result of pthread_self()
-     (plus 1 for no apparent reason).  The second to the last element seems to
-     always be "1".  If it is "1" I will drop that as well.  */
-  thread = (CORE_ADDR) (frames[--num_frames] - 1);
-  if (frames[num_frames - 1] == 1)
-    num_frames--;
-
-  cleanup = make_cleanup_ui_out_tuple_begin_end (uiout, NULL);
-  ui_out_text (uiout, "Stack - pthread: ");
-  ui_out_field_fmt (uiout, "pthread", "0x%s", paddr_nz (thread));
-  ui_out_text (uiout, " number of frames: ");
-  ui_out_field_int (uiout, "num_frames", num_frames);
-  
-  ui_out_text (uiout, "\n");
-  
-  for (i = 0; i < num_frames; i++)
-    {
-      struct cleanup *frame_cleanup
-	= make_cleanup_ui_out_tuple_begin_end (uiout, "frame");
-      char *name;
-      int err;
-      /* This is cheesy spacing, but we really won't get
-	 more than 1000 frames, so more work would be overkill.  */
-      if (i < 10)
-	ui_out_text (uiout, "    ");
-      else if (i < 100)
-	ui_out_text (uiout, "   ");
-      else 
-	ui_out_text (uiout, "  ");
-
-      ui_out_field_int (uiout, "level", i);
-      ui_out_text (uiout, ": ");
-
-      ui_out_field_fmt (uiout, "addr", "0x%s", paddr_nz (frames[i]));
-
-      err = find_pc_partial_function (frames[i], &name, NULL, NULL);
-      if (err != 0)
-	{
-	  ui_out_text(uiout, " in ");
-	  ui_out_field_string (uiout, "func", name);
-	}
-      sal = find_pc_line (frames[i], 0);
-      if (sal.symtab != 0)
-	{
-	  ui_out_text (uiout, " at ");
-	  ui_out_field_string (uiout, "file", sal.symtab->filename);
-	  ui_out_text (uiout, ":");
-	  ui_out_field_int (uiout, "line", sal.line);
-	}
-      ui_out_text (uiout, "\n");
-      do_cleanups (frame_cleanup);
-    }
-  do_cleanups (cleanup);
-}
+/* I added these ones: */
+#define STACK_LOGGING_ALLOC_P(record) ((record).type_flags & stack_logging_type_alloc)
+#define STACK_LOGGING_DEALLOC_P(record) ((record).type_flags & stack_logging_type_dealloc)
 
 #elif HAVE_32_BIT_STACK_LOGGING
 
@@ -1218,6 +1142,10 @@ extern kern_return_t stack_logging_frames_for_uniqued_stack(task_t task,
 							    vm_address_t *stack_frames_buffer, 
 							    unsigned max_stack_frames, 
 							    unsigned *num_frames);
+
+/* I added these ones: */
+#define STACK_LOGGING_ALLOC_P(record) ((record).type & stack_logging_type_alloc)
+#define STACK_LOGGING_DEALLOC_P(record) ((record).type & stack_logging_type_dealloc)
 
 /* gdb_malloc_reader: The libc malloc history reader requires a
    routine of this signature to read out inferior memory, and return a
@@ -1272,26 +1200,78 @@ free_malloc_history_buffers ()
       xfree (tmp);
     }
 }
+#endif
+
+struct current_record_state
+{
+  vm_address_t requested_address;
+  vm_address_t block_address;
+};
 
 /* This is the iterator function that libc uses in
    stack_logging_enumerate_records.  It calls this function for each
    uniqued stack that allocated a given address.  We just
-   print out the symbolicated version of this stack.  */
+   print out the symbolicated version of this stack.  
+   If DATA is NULL, then just print out everything that comes in.  
+   Otherwise, we use the state to keep track both of the requested
+   address, and when we find a malloc that contains the given address
+   we record the start block so we can match the free to this malloc
+   event.  */
 
+#if HAVE_64_BIT_STACK_LOGGING
+static void 
+do_over_unique_frames (mach_stack_logging_record_t record, void *data) 
+{
+  mach_vm_address_t frames[MAX_NUM_FRAMES];
+#elif HAVE_32_BIT_STACK_LOGGING
 static void 
 do_over_unique_frames (stack_logging_record_t record, void *data) 
 {
   vm_address_t frames[MAX_NUM_FRAMES];
+#endif
   unsigned num_frames;
   struct cleanup *cleanup;
   struct symtab_and_line sal;
   int i;
   CORE_ADDR thread;
+  int final_return = 0;
+  struct current_record_state *state = (struct current_record_state *) data;
 
+  if (state != NULL)
+    {
+      if (STACK_LOGGING_ALLOC_P (record))
+	{
+	  /* For alloc type events the "argument" field is the size of the allocation. */
+	      if (state->requested_address >= record.address 
+		  && state->requested_address < record.address + record.argument)
+		{
+		  /* We need to record the actual address of this allocation so we can 
+		     match it up with the deallocation event.  */
+		  state->block_address = record.address;
+		  
+		}
+	      else
+		return;
+	}
+      else if (STACK_LOGGING_DEALLOC_P (record))
+	{
+	  if (record.address != state->block_address)
+	    return;
+	}
+      else
+	return;
+    }
+
+#if HAVE_64_BIT_STACK_LOGGING
+  if (__mach_stack_logging_frames_for_uniqued_stack (macosx_status->task, 
+						     record.stack_identifier,
+						     frames, MAX_NUM_FRAMES, &num_frames))
+#elif HAVE_32_BIT_STACK_LOGGING
   if (stack_logging_frames_for_uniqued_stack (macosx_status->task, 
 					      gdb_malloc_reader, 
 					      record.uniqued_stack,
 					      frames, MAX_NUM_FRAMES, &num_frames))
+#endif
     {
       warning ("Error running stack_logging_frames_for_uniqued_stack");
       return;
@@ -1302,25 +1282,45 @@ do_over_unique_frames (stack_logging_record_t record, void *data)
 
   /* The last element of the frame array always points to the result of pthread_self()
      (plus 1 for no apparent reason).  The second to the last element seems to
-     always be "1".  If it is "1" I will drop that as well.  */
+     always be "1" or sometimes "2".  We always make the first page unreadable,
+     so I'll just say if the frame address is < 1024 it can't be right and elide it...  */
   thread = (CORE_ADDR) (frames[--num_frames] - 1);
-  if (frames[num_frames - 1] == 1)
+  if (frames[num_frames - 1] <= 1024)
     num_frames--;
 
   cleanup = make_cleanup_ui_out_tuple_begin_end (uiout, NULL);
+
+  if (STACK_LOGGING_ALLOC_P (record))
+    {
+      ui_out_field_string (uiout, "record-type", "Alloc");
+      ui_out_text (uiout, ": Block address: ");
+      ui_out_field_core_addr (uiout, "block_address", record.address);
+      ui_out_text (uiout, " length: ");
+      ui_out_field_int (uiout, "length", record.argument);
+      ui_out_text (uiout, "\n");
+    }
+  else
+    {
+      ui_out_field_string (uiout, "record-type", "Dealloc");
+      ui_out_text (uiout, ": Block address: ");
+      ui_out_field_core_addr (uiout, "block_address", record.address);
+      ui_out_text (uiout, "\n");
+      final_return = 1;
+    }
+
   ui_out_text (uiout, "Stack - pthread: ");
   ui_out_field_fmt (uiout, "pthread", "0x%s", paddr_nz (thread));
   ui_out_text (uiout, " number of frames: ");
   ui_out_field_int (uiout, "num_frames", num_frames);
-  
   ui_out_text (uiout, "\n");
-  
+
   for (i = 0; i < num_frames; i++)
     {
       struct cleanup *frame_cleanup
 	= make_cleanup_ui_out_tuple_begin_end (uiout, "frame");
       char *name;
       int err;
+      struct gdb_exception e;
       /* This is cheesy spacing, but we really won't get
 	 more than 1000 frames, so more work would be overkill.  */
       if (i < 10)
@@ -1335,14 +1335,35 @@ do_over_unique_frames (stack_logging_record_t record, void *data)
 
       ui_out_field_fmt (uiout, "addr", "0x%s", paddr_nz (frames[i]));
 
-      err = find_pc_partial_function (frames[i], &name, NULL, NULL);
-      if (err != 0)
+      /* Since we're going to do pc->symbol, we should raise the load level
+	 of the library involved before doing so.  */
+
+      TRY_CATCH (e, RETURN_MASK_ERROR)
+	{
+	  pc_set_load_state (frames[i], OBJF_SYM_ALL, 1);
+	}
+      if (e.reason != NO_ERROR)
+	{
+	  ui_out_text (uiout, "\n");
+	  warning ("Could not raise load level for objfile at pc: 0x%s.", paddr_nz (frames[i]));
+	  continue;
+	}
+
+      TRY_CATCH (e, RETURN_MASK_ERROR)
+	{
+	  err = find_pc_partial_function_no_inlined (frames[i], &name, NULL, NULL);
+	}
+      if (e.reason == NO_ERROR && err != 0)
 	{
 	  ui_out_text(uiout, " in ");
 	  ui_out_field_string (uiout, "func", name);
 	}
-      sal = find_pc_line (frames[i], 0);
-      if (sal.symtab != 0)
+
+      TRY_CATCH (e, RETURN_MASK_ERROR)
+	{
+	  sal = find_pc_line (frames[i], 0);
+	}
+      if (e.reason == NO_ERROR && sal.symtab != 0)
 	{
 	  ui_out_text (uiout, " at ");
 	  ui_out_field_string (uiout, "file", sal.symtab->filename);
@@ -1353,9 +1374,9 @@ do_over_unique_frames (stack_logging_record_t record, void *data)
       do_cleanups (frame_cleanup);
     }
   do_cleanups (cleanup);
+  if (final_return)
+    ui_out_text (uiout, "\n");
 }
-
-#endif
 
 /* This adds the "info malloc-history" command.  Requires one argument
    (an address) and returns the malloc history for that address, as
@@ -1375,12 +1396,35 @@ malloc_history_info_command (char *arg, int from_tty)
   kern_return_t kret;
   volatile struct gdb_exception except;
   struct cleanup *cleanup;
+  /* APPLE LOCAL - Make "-exact" the default, since there's no way to
+     interrupt large spews that may result from using "-range".  */
+  int exact = 1;
+  vm_address_t passed_addr;
+  struct current_record_state state, *passed_state;
 
   if (macosx_status == NULL)
     error ("No target");
 
+  if (arg == NULL)
+    error ("Argument required (expression to compute).");
+
+  if (strstr (arg, "-exact") == arg)
+    {
+      exact = 1;
+      arg += sizeof ("-exact") - 1;
+      while (*arg == ' ')
+	arg++;
+    }
+  else if (strstr (arg, "-range") == arg)
+    {
+      exact = 0;
+      arg += sizeof ("-range") - 1;
+      while (*arg == ' ')
+	arg++;
+    }
+
 #if HAVE_64_BIT_STACK_LOGGING
-  addr = (mach_vm_address_t)parse_and_eval_address (arg);
+  addr = (mach_vm_address_t) parse_and_eval_address (arg);
 #elif HAVE_32_BIT_STACK_LOGGING
   addr = parse_and_eval_address (arg);
 #endif
@@ -1396,19 +1440,32 @@ malloc_history_info_command (char *arg, int from_tty)
     }
   cleanup = make_cleanup_ui_out_list_begin_end (uiout, "stacks");
 
+  if (exact)
+    {
+      passed_addr = addr;
+      passed_state = NULL;
+    }
+  else
+    {
+      passed_addr = 0;
+      state.requested_address = addr;
+      state.block_address = 0;
+      passed_state = &state;
+    }
+
   TRY_CATCH (except, RETURN_MASK_ERROR)
     {
 #if HAVE_64_BIT_STACK_LOGGING
       kret = __mach_stack_logging_enumerate_records (macosx_status->task,
-						     addr,
+						     passed_addr,
 						     do_over_unique_frames,
-						     NULL);
+						     passed_state);
 #elif HAVE_32_BIT_STACK_LOGGING
       kret = stack_logging_enumerate_records (macosx_status->task,
 					      gdb_malloc_reader,
-					      addr,
+					      passed_addr,
 					      do_over_unique_frames,
-					      NULL);
+					      passed_state);
 #endif
     }
 
@@ -1420,7 +1477,7 @@ malloc_history_info_command (char *arg, int from_tty)
 
   if (except.reason < 0)
     {
-      error ("Caught an error while enumerating stack logging records.");
+      error ("Caught an error while enumerating stack logging records: %s", except.message);
     }
 
   if (kret != KERN_SUCCESS)
@@ -1594,13 +1651,14 @@ get_symbol_at_address_on_stack (CORE_ADDR stack_address, int *frame_level)
   return symbol_name;
 }
 /* This stuff all comes from auto_gdb_interface.h */
-#define AUTO_BLOCK_GLOBAL 0
-#define AUTO_BLOCK_STACK  1
-#define AUTO_BLOCK_OBJECT 2
-#define AUTO_BLOCK_BYTES  3
+#define AUTO_BLOCK_GLOBAL       0
+#define AUTO_BLOCK_STACK        1
+#define AUTO_BLOCK_OBJECT       2
+#define AUTO_BLOCK_BYTES        3
+#define AUTO_BLOCK_ASSOCIATION  4
 
-static char *auto_kind_strings[4] = {"global", "stack", "object", "bytes"};
-static char *auto_kind_spacer[4] = {"", " ", "", " "};
+static char *auto_kind_strings[5] = {"global", "stack", "object", "bytes", "assoc"};
+static char *auto_kind_spacer[5] = {"", " ", "", " ", " "};
 static CORE_ADDR
 gc_print_references (CORE_ADDR list_addr, int wordsize)
 {
@@ -1610,8 +1668,17 @@ gc_print_references (CORE_ADDR list_addr, int wordsize)
   if (safe_read_memory_integer (list_addr, 4, &num_refs) == 0)
     error ("Could not read number of references at %s",
 	   paddr_nz (list_addr));
-  
-  list_addr += 4;
+  /* The struct we're reading looks like:
+       struct auto_memory_reference_list {
+         uint32_t count;
+         struct auto_memory_reference references[0];
+       }
+       
+       gcc wants to make sure that the array is wordsize aligned within
+       the struct.  So we need to step by wordsize here, even though we're
+       reading a 4-byte integer out of the struct.  */
+
+  list_addr += wordsize;
   //ui_out_field_int (uiout, "depth", num_refs);
   //ui_out_text (uiout, "\n");
 
@@ -1651,7 +1718,7 @@ gc_print_references (CORE_ADDR list_addr, int wordsize)
 	  
       ui_out_text (uiout, " Kind: ");
 
-      if (kind >= AUTO_BLOCK_GLOBAL && kind <= AUTO_BLOCK_BYTES)
+      if (kind >= AUTO_BLOCK_GLOBAL && kind <= AUTO_BLOCK_ASSOCIATION)
 	{
 	  ui_out_field_string (uiout, "kind", auto_kind_strings[kind]);
 	  ui_out_text (uiout, auto_kind_spacer[kind]);
@@ -1701,7 +1768,8 @@ gc_print_references (CORE_ADDR list_addr, int wordsize)
 	      ui_out_field_string (uiout, "frame", "<unknown>");
 	    }
 	}
-      else if (kind == AUTO_BLOCK_OBJECT)
+      else if (kind == AUTO_BLOCK_OBJECT 
+	       || kind == AUTO_BLOCK_ASSOCIATION)
 	{
 	  /* This is an ObjC object. */
 	  struct gdb_exception e;
@@ -1709,25 +1777,48 @@ gc_print_references (CORE_ADDR list_addr, int wordsize)
 	  struct type *dynamic_type = NULL;
 	  char *dynamic_name = NULL;
 
+          struct ui_file *saved_gdb_stderr;
+          static struct ui_file *null_stderr = NULL;
+
 	  ui_out_text (uiout, "  Address: ");
 	  ui_out_field_core_addr (uiout, "address", address);
 
+          /* suppress error messages */
+          if (null_stderr == NULL)
+            null_stderr = ui_file_new ();
+
+          saved_gdb_stderr = gdb_stderr;
+          gdb_stderr = null_stderr;
+
 	  TRY_CATCH (e, RETURN_MASK_ERROR)
 	    {
-	      dynamic_type = objc_target_type_from_object (address, NULL, wordsize,
+	      dynamic_type = objc_target_type_from_object (address, NULL, 
+                                                           wordsize,
 							   &dynamic_name);
 	    }
 	  if (e.reason == RETURN_ERROR)
 	    dynamic_type = NULL;
 
+          gdb_stderr = saved_gdb_stderr;
+
 	  if (dynamic_type != NULL)
 	    {
 	      char *ivar_name = NULL;
-	      int remaining_offset;
 	      ui_out_text (uiout, "  Class: ");
 	      ui_out_field_string (uiout, "class", TYPE_NAME (dynamic_type));
-	      if (offset > 0)
+	      if (kind == AUTO_BLOCK_ASSOCIATION) 
 		{
+		  ui_out_text (uiout, "  Key: ");
+		  ui_out_field_core_addr (uiout, "key", offset);
+		  if (dynamic_name != NULL)
+		    {
+		      ui_out_text (uiout, "  Class: ");
+		      ui_out_field_string (uiout, "class", dynamic_name);
+		    }
+		}
+	      else if (offset > 0)
+		{
+		  int remaining_offset;
 		  remaining_offset = build_path_to_element (dynamic_type, offset, 
 							    &ivar_name);
 		  if (ivar_name != NULL)
@@ -1745,8 +1836,16 @@ gc_print_references (CORE_ADDR list_addr, int wordsize)
 	    }
 	  else
 	    {
-	      ui_out_text (uiout, "  Offset: ");
-	      ui_out_field_core_addr (uiout, "offset", offset);
+	      if (kind == AUTO_BLOCK_ASSOCIATION) 
+		{
+		  ui_out_text (uiout, "  Key: ");
+		  ui_out_field_core_addr (uiout, "key", offset);
+		} 
+	      else 
+		{
+		  ui_out_text (uiout, "  Offset: ");
+		  ui_out_field_core_addr (uiout, "offset", offset);
+		}
 	      if (dynamic_name != NULL)
 		{
 		  ui_out_text (uiout, "  Class: ");
@@ -1801,6 +1900,8 @@ static void
 gc_free_data (struct value *addr_val)
 {
   static struct cached_value *free_fn = NULL;
+  struct cleanup *old_cleanups;
+
   /* Finally, we need to free the root list.  */
 
   if (free_fn == NULL)
@@ -1808,7 +1909,11 @@ gc_free_data (struct value *addr_val)
 				      builtin_type_void_func_ptr);
   if (free_fn == NULL)
     error ("Couldn't find \"Auto::aux_free\" function in the inferior.\n");
+  make_cleanup_set_restore_debugger_mode (&old_cleanups, -1);
+  make_cleanup_set_restore_scheduler_locking_mode 
+                      (scheduler_locking_on);
   call_function_by_hand (lookup_cached_function (free_fn), 1, &addr_val);  
+  do_cleanups (old_cleanups);
 }
 
 static void
@@ -1819,7 +1924,6 @@ gc_root_tracing_command (char *arg, int from_tty)
   struct cleanup *cleanup_chain;
   CORE_ADDR addr, list_addr;
   LONGEST num_roots;
-  int unwind;
   int wordsize = gdbarch_tdep (current_gdbarch)->wordsize;
   int root_index;
 
@@ -1859,9 +1963,10 @@ gc_root_tracing_command (char *arg, int from_tty)
   if (enumerate_root_fn == NULL)
     error ("Couldn't find \"auto_gdb_enumerate_roots\" function in inferior.");
     
-  unwind = set_unwind_on_signal (1);
-  cleanup_chain = make_cleanup (set_unwind_on_signal, (void *) unwind);
-
+  cleanup_chain = make_cleanup_set_restore_unwind_on_signal (1);
+  make_cleanup_set_restore_scheduler_locking_mode 
+                      (scheduler_locking_on);
+  make_cleanup_set_restore_debugger_mode (NULL, -1);
   arg_list[0] 
     = call_function_by_hand (lookup_cached_function (auto_zone_fn), 
 			     0, NULL);
@@ -1898,7 +2003,16 @@ gc_root_tracing_command (char *arg, int from_tty)
 
   /* Now print out all the roots, and recursively their references.  */
 
-  list_addr += 4;
+  /* The struct we're reading looks like:
+       struct auto_root_list {
+         uint32_t count;
+         struct auto_memory_reference_list_t references[0];
+       }
+       
+       gcc wants to make sure that the array is wordsize aligned within
+       the struct.  So we need to step by wordsize here, even though we're
+       reading a 4-byte integer out of the struct.  */
+  list_addr += wordsize;
   
   for (root_index = 0; root_index < num_roots; root_index++)
     {
@@ -1928,7 +2042,6 @@ gc_reference_tracing_command (char *arg, int from_tty)
   struct cleanup *cleanup_chain;
   CORE_ADDR addr, list_addr;
   LONGEST num_refs;
-  int unwind;
   int wordsize = gdbarch_tdep (current_gdbarch)->wordsize;
 
   if (arg == NULL || *arg == '\0')
@@ -1967,9 +2080,10 @@ gc_reference_tracing_command (char *arg, int from_tty)
   if (enumerate_ref_fn == NULL)
     error ("Couldn't find \"auto_gdb_enumerate_references\" function in inferior.");
     
-  unwind = set_unwind_on_signal (1);
-  cleanup_chain = make_cleanup (set_unwind_on_signal, (void *) unwind);
-
+  cleanup_chain = make_cleanup_set_restore_unwind_on_signal (1);
+  make_cleanup_set_restore_scheduler_locking_mode 
+                      (scheduler_locking_on);
+  make_cleanup_set_restore_debugger_mode (NULL, -1);
   arg_list[0] 
     = call_function_by_hand (lookup_cached_function (auto_zone_fn), 
 			     0, NULL);
@@ -2015,7 +2129,12 @@ Show if printing inferior memory debugging statements."), NULL,
 			   &setdebuglist, &showdebuglist);
 
   add_info ("malloc-history", malloc_history_info_command, 
-	    "List the stack(s) where malloc or free occurred for a given address.\n"
+	    "List the stack(s) where malloc or free occurred for the address\n"
+	    "resulting from expression given in the argument to the command.\n"
+            "If the argument is preceeded by \"-exact\" then only malloc and free events\n"
+	    "for that address will be reported, if by \"-range\" then any malloc\n"
+	    "that contains that address within its range will be reported.\n"
+	    "The default is \"-range\".\n"
 	    "Note: you must set MallocStackLoggingNoCompact in the target\n"
 	    "environment for the malloc history to be logged."); 
 

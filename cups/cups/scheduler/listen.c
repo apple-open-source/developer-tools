@@ -1,10 +1,10 @@
 /*
- * "$Id: listen.c 6788 2007-08-13 17:20:14Z mike $"
+ * "$Id: listen.c 7918 2008-09-08 22:03:01Z mike $"
  *
  *   Server listening routines for the Common UNIX Printing System (CUPS)
  *   scheduler.
  *
- *   Copyright 2007 by Apple Inc.
+ *   Copyright 2007-2009 by Apple Inc.
  *   Copyright 1997-2006 by Easy Software Products, all rights reserved.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -143,18 +143,6 @@ cupsdStartListening(void)
                   cupsArrayCount(Listeners));
 
  /*
-  * Get the server's IP address...
-  */
-
-  if (ServerAddrs)
-    httpAddrFreeList(ServerAddrs);
-
-  if ((ServerAddrs = httpAddrGetList(ServerName, AF_UNSPEC, NULL)) == NULL)
-    cupsdLogMessage(CUPSD_LOG_ERROR,
-                    "Unable to find IP address for server name \"%s\"!\n",
-		    ServerName);
-
- /*
   * Setup socket listeners...
   */
 
@@ -194,6 +182,20 @@ cupsdStartListening(void)
 	cupsdLogMessage(CUPSD_LOG_ERROR,
 			"Unable to open listen socket for address %s:%d - %s.",
 			s, p, strerror(errno));
+
+#ifdef AF_INET6
+       /*
+        * IPv6 is often disabled while DNS returns IPv6 addresses...
+	*/
+
+	if (lis->address.addr.sa_family != AF_INET6 &&
+	    (FatalErrors & CUPSD_FATAL_LISTEN))
+	  cupsdEndProcess(getpid(), 0);
+#else
+	if (FatalErrors & CUPSD_FATAL_LISTEN)
+	  cupsdEndProcess(getpid(), 0);
+#endif /* AF_INET6 */
+
 	continue;
       }
 
@@ -278,6 +280,10 @@ cupsdStartListening(void)
 			s, p, strerror(errno));
 	close(lis->fd);
 	lis->fd = -1;
+
+	if (FatalErrors & CUPSD_FATAL_LISTEN)
+	  cupsdEndProcess(getpid(), 0);
+
 	continue;
       }
 
@@ -290,7 +296,14 @@ cupsdStartListening(void)
 	cupsdLogMessage(CUPSD_LOG_ERROR,
 			"Unable to listen for clients on address %s:%d - %s.",
 			s, p, strerror(errno));
-	exit(errno);
+
+	close(lis->fd);
+	lis->fd = -1;
+
+	if (FatalErrors & CUPSD_FATAL_LISTEN)
+	  cupsdEndProcess(getpid(), 0);
+
+        continue;
       }
     }
 
@@ -339,11 +352,8 @@ cupsdStartListening(void)
                     "No Listen or Port lines were found to allow access via "
 		    "localhost!");
 
-   /*
-    * Commit suicide...
-    */
-
-    cupsdEndProcess(getpid(), 0);
+    if (FatalErrors & (CUPSD_FATAL_CONFIG | CUPSD_FATAL_LISTEN))
+      cupsdEndProcess(getpid(), 0);
   }
 
  /*
@@ -428,5 +438,5 @@ cupsdStopListening(void)
 
 
 /*
- * End of "$Id: listen.c 6788 2007-08-13 17:20:14Z mike $".
+ * End of "$Id: listen.c 7918 2008-09-08 22:03:01Z mike $".
  */

@@ -1,6 +1,6 @@
 /* APPLE LOCAL file CW asm blocks */
 /* { dg-do run { target i?86*-*-darwin* } } */
-/* { dg-skip-if "" { i?86*-*-darwin* } { "-m64" } } */
+/* { dg-require-effective-target ilp32 } */
 /* { dg-options { -fasm-blocks -msse3 } } */
 /* Radar 4682427 */
 

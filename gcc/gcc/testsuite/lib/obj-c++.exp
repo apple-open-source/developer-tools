@@ -1,19 +1,18 @@
-# APPLE LOCAL file mainline
-# Copyright (C) 2004 Free Software Foundation, Inc.
+# Copyright (C) 2004, 2005 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 2 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
-# Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+# Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
 # This file was written by Rob Savoye (rob@cygnus.com)
 # Many modifications by Jeffrey Wheat (cassidy@cygnus.com)
@@ -24,6 +23,7 @@
 #
 load_lib prune.exp
 load_lib gcc-defs.exp
+load_lib target-libpath.exp
 
 #
 # OBJCXX_UNDER_TEST is the compiler under test.
@@ -100,11 +100,14 @@ proc obj-c++_link_flags { paths } {
     global srcdir
     global ld_library_path
     global OBJCXX_UNDER_TEST
+    global shlib_ext
 
     set gccpath ${paths}
     set libio_dir ""
     set flags ""
     set ld_library_path "."
+    set shlib_ext [get_shlib_extension]
+    verbose "shared lib extension: $shlib_ext"
 
     if { $gccpath != "" } {
       if [file exists "${gccpath}/lib/libstdc++.a"] {
@@ -122,27 +125,43 @@ proc obj-c++_link_flags { paths } {
           append flags " -L${gccpath}/libstdc++-v3/src/.libs "
           append ld_library_path ":${gccpath}/libstdc++-v3/src/.libs"
       }
+      # Look for libstdc++.${shlib_ext}.
+      if [file exists "${gccpath}/libstdc++-v3/src/.libs/libstdc++.${shlib_ext}"] {
+	  append flags " -L${gccpath}/libstdc++-v3/src/.libs "
+	  append ld_library_path ":${gccpath}/libstdc++-v3/src/.libs"
+      }
       if [file exists "${gccpath}/libiberty/libiberty.a"] {
           append flags "-L${gccpath}/libiberty "
       }
       if [file exists "${gccpath}/librx/librx.a"] {
           append flags "-L${gccpath}/librx "
       }
-      append ld_library_path ":${rootme}"
-      set compiler [lindex $OBJCXX_UNDER_TEST 0]
-      if { [is_remote host] == 0 && [which $compiler] != 0 } {
-	foreach i "[exec $compiler --print-multi-lib]" {
-	  set mldir ""
-	  regexp -- "\[a-z0-9=/\.-\]*;" $i mldir
-	  set mldir [string trimright $mldir "\;@"]
-	  if { "$mldir" == "." } {
-	    continue
-	  }
-	  if { [llength [glob -nocomplain ${rootme}/${mldir}/libgcc_s*.so.*]] == 1 } {
-	    append ld_library_path ":${rootme}/${mldir}"
-	  }
-	}
+
+      set objcpath "[get_multilibs]"
+      set libobjc_dir [lookfor_file ${objcpath} libobjc/.libs/libobjc.a]
+      if { $libobjc_dir == ""} {
+	  set libobjc_dir [lookfor_file ${objcpath} libobjc/.libs/libobjc-gnu.a]
       }
+      # Now check if we have a shared only build.
+      if { $libobjc_dir == ""} {
+	  set libobjc_dir \
+	      [lookfor_file ${objcpath} libobjc/.libs/libobjc.${shlib_ext}]
+      }
+      if { $libobjc_dir == ""} {
+	  set libobjc_dir \
+	      [lookfor_file ${objcpath} libobjc/.libs/libobjc-gnu.${shlib_ext}]
+      }
+
+      verbose "libobjc_dir: $libobjc_dir"
+
+      if { $libobjc_dir != "" } {
+	  set libobjc_dir [file dirname ${libobjc_dir}]
+	  append flags "-L${libobjc_dir}"
+	  append ld_library_path ":${libobjc_dir}"
+      }
+      append ld_library_path \
+	  [gcc-set-multilib-library-path $OBJCXX_UNDER_TEST]
+
     } else {
       global tool_root_dir;
 
@@ -166,36 +185,7 @@ proc obj-c++_link_flags { paths } {
       }
     }
 
-    # On IRIX 6, we have to set variables akin to LD_LIBRARY_PATH, but
-    # called LD_LIBRARYN32_PATH (for the N32 ABI) and LD_LIBRARY64_PATH
-    # (for the 64-bit ABI).  The right way to do this would be to modify
-    # unix.exp -- but that's not an option since it's part of DejaGNU
-    # proper, so we do it here.
-    # The same applies to Darwin (DYLD_LIBRARY_PATH), Solaris 32 bit
-    # (LD_LIBRARY_PATH_32), Solaris 64 bit (LD_LIBRARY_PATH_64), and HP-UX
-    # (SHLIB_PATH).
-    # Doing this does cause trouble when testing cross-compilers.
-    if {![is_remote target]} {
-	global env;
-	if [info exists env(LD_LIBRARY_PATH)] {
-	    # If we've already added these directories once, keep the
-	    # existing path.
-	    if {$ld_library_path == $env(LD_LIBRARY_PATH)
-		|| [string first $ld_library_path: \
-				 $env(LD_LIBRARY_PATH)] == 0} {
-		set ld_library_path $env(LD_LIBRARY_PATH)
-	    } elseif { $env(LD_LIBRARY_PATH) != "" } {
-		append ld_library_path ":$env(LD_LIBRARY_PATH)"
-	    }
-	}
-	setenv  LD_LIBRARY_PATH     $ld_library_path
-	setenv  SHLIB_PATH          $ld_library_path
-	setenv  LD_LIBRARYN32_PATH  $ld_library_path
-	setenv  LD_LIBRARY64_PATH   $ld_library_path
-	setenv  LD_LIBRARY_PATH_32  $ld_library_path
-	setenv  LD_LIBRARY_PATH_64  $ld_library_path
-	setenv  DYLD_LIBRARY_PATH   $ld_library_path
-    }
+    set_ld_library_path_env_vars
 
     return "$flags"
 }
@@ -225,7 +215,7 @@ proc obj-c++_init { args } {
 	    if { [is_remote host] || ! [info exists TESTING_IN_BUILD_TREE] } {
 		set OBJCXX_UNDER_TEST [transform c++]
 	    } else {
-		set OBJCXX_UNDER_TEST [findfile $base_dir/../g++ "$base_dir/../g++ -B$base_dir/../" [findfile $base_dir/g++ "$base_dir/g++ -B$base_dir/" [transform c++]]]
+		set OBJCXX_UNDER_TEST [findfile $base_dir/../../g++ "$base_dir/../../g++ -B$base_dir/../../" [findfile $base_dir/g++ "$base_dir/g++ -B$base_dir/" [transform c++]]]
 	    }
 	}
     }
@@ -249,7 +239,7 @@ proc obj-c++_init { args } {
 	unset gluefile
     }
 
-    obj-c++_maybe_build_wrapper "${tmpdir}/obj-c++-testglue.o"
+    obj-c++_maybe_build_wrapper "${tmpdir}/obj-c++-testglue.o" "-fexceptions"
 
     set ALWAYS_OBJCXXFLAGS ""
 
@@ -271,7 +261,7 @@ proc obj-c++_init { args } {
     # error-message parsing machinery.
     lappend ALWAYS_OBJCXXFLAGS "additional_flags=-fmessage-length=0"
 
-    if { [string match "powerpc-*-darwin*" $target_triplet] } {
+    if { [string match "*-*-darwin*" $target_triplet] } {
 	lappend ALWAYS_OBJCXXFLAGS "ldflags=-multiply_defined suppress"
        }
 
@@ -285,13 +275,17 @@ proc obj-c++_init { args } {
 #
 
 proc obj-c++_target_compile { source dest type options } {
-    global tmpdir;
+    global tmpdir
+    global srcdir
     global gpp_compile_options
     global gluefile wrap_flags
-    global ALWAYS_OBJCXXFLAGS;
-    global OBJCXX_UNDER_TEST;
+    global ALWAYS_OBJCXXFLAGS
+    global OBJCXX_UNDER_TEST
+    global shlib_ext
 
     lappend options "libs=-lobjc"
+    set shlib_ext [get_shlib_extension]
+    verbose "shared lib extension: $shlib_ext"
 
     if { [target_info needs_status_wrapper] != "" && [info exists gluefile] } {
 	lappend options "libs=${gluefile}"
@@ -306,18 +300,26 @@ proc obj-c++_target_compile { source dest type options } {
 
     set libobjc_dir [lookfor_file ${objcpath} libobjc/.libs/libobjc.a]
     if { $libobjc_dir == ""} {
-      verbose "see if we have -fgnu-runtime in [target_info name]"
-      if [regexp ".*-fgnu-runtime.*" [target_info name]] {
-        set libobjc_dir [lookfor_file ${objcpath} libobjc/.libs/libobjc-gnu.a]
+      verbose "see if we have -fgnu-runtime in options"
+      if [regexp ".*-fgnu-runtime.*" "${options}" ] {
+	  set libobjc_dir [lookfor_file ${objcpath} libobjc/.libs/libobjc-gnu.a]
       }
     }
+    if { $libobjc_dir == ""} {
+	set libobjc_dir \
+	    [lookfor_file ${objcpath} libobjc/.libs/libobjc.${shlib_ext}]
+    }
+    if { $libobjc_dir == ""} {
+	verbose "see if we have -fgnu-runtime in options"
+	if [regexp ".*-fgnu-runtime.*" "${options}"] {
+	 set libobjc_dir \
+	     [lookfor_file ${objcpath} libobjc/.libs/libobjc-gnu.${shlib_ext}]
+	}
+    }
+
     if { $libobjc_dir != "" } {
 	set objc_include_dir "${srcdir}/../../libobjc"
 	lappend options "additional_flags=-I${objc_include_dir}"
-	set libobjc_dir [file dirname ${libobjc_dir}]
-	set objc_link_flags "-L${libobjc_dir}"
-	lappend options "additional_flags=${objc_link_flags}"
-	append ld_library_path ":${libobjc_dir}"
     }
 
     lappend options "additional_flags=[libio_include_flags]"

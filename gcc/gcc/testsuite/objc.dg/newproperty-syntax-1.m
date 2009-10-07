@@ -12,9 +12,12 @@
 @property (readwrite, assign) int name1;
 @property (readonly, retain)  id name2;
 @property (readwrite, copy)   id name3;
+@property (readwrite, assign) int name4;
+@property (readonly, retain)  id name5;
+@property (readwrite, copy)   id name6;
 @end
 
 @implementation INTF
 @dynamic name1,name2,name3;
-@synthesize name1=synthesize_ivar, name2=IV, name3=IVXXX;
+@synthesize name4=synthesize_ivar, name5=IV, name6=IVXXX;
 @end

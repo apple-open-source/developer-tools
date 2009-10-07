@@ -1,7 +1,7 @@
 /* APPLE LOCAL begin radar 4187164 */
 /* { dg-do run { target powerpc*-*-darwin* } } */
 /* This testcase isn't 64-bit safe.  */
-/* { dg-skip-if "" { powerpc*-*-darwin* } { "-m64" } { "" } } */
+/* { dg-require-effective-target ilp32 } */
 /* { dg-options "-fasm-blocks" } */
 
 #include <stdio.h>

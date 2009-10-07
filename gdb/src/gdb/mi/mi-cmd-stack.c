@@ -459,7 +459,6 @@ mi_cmd_stack_list_args (char *command, char **argv, int argc)
   int i;
   enum print_values values;
   struct frame_info *fi;
-  struct frame_id stack_frame_id;
   struct cleanup *cleanup_stack_args;
 
   if (argc < 1 || argc > 3 || argc == 2)
@@ -506,7 +505,7 @@ mi_cmd_stack_list_args (char *command, char **argv, int argc)
 	 the dynamic type of a variable (which will cause flush_cached_frames() 
 	 to be called resulting in our frame info chain being destroyed, 
 	 leaving FI pointing to invalid memory.  */
-      stack_frame_id = get_frame_id (fi);
+      struct frame_id stack_frame_id = get_frame_id (fi);
 
       cleanup_frame = make_cleanup_ui_out_tuple_begin_end (uiout, "frame");
       ui_out_field_int (uiout, "level", i); 
@@ -539,8 +538,8 @@ mi_cmd_stack_list_args (char *command, char **argv, int argc)
    blocks in the function that is in frame FI.*/
 
 static void
-list_args_or_locals (int locals, enum print_values values, struct frame_info *fi, 
-		     int all_blocks)
+list_args_or_locals (int locals, enum print_values values, 
+                     struct frame_info *fi, int all_blocks)
 {
   struct block *block = NULL;
   /* APPLE LOCAL begin address ranges  */
@@ -548,6 +547,9 @@ list_args_or_locals (int locals, enum print_values values, struct frame_info *fi
   /* APPLE LOCAL end address ranges  */
   struct cleanup *cleanup_list;
   static struct ui_stream *stb = NULL;
+  struct frame_id stack_frame_id = get_frame_id (fi);
+  /* APPLE LOCAL radar 6404668 locals vs. inlined subroutines  */
+  struct bfd_section *section;
 
   stb = ui_out_stream_new (uiout);
   
@@ -589,12 +591,24 @@ list_args_or_locals (int locals, enum print_values values, struct frame_info *fi
       /* APPLE LOCAL begin address ranges  */
       containing_block = block;
 
+      /* APPLE LOCAL radar 6404668 locals vs. inlined subroutines  */
+      section = find_pc_mapped_section (fstart);
+
       while (contained_in (block, containing_block))
       /* APPLE LOCAL end address ranges  */
 	{
-	  print_syms_for_block (block, fi, stb, locals, 1, 
-				values, NULL);
+	  /* APPLE LOCAL begin radar 6404668 locals vs. inlined subroutines  */
+	  if (block == containing_block
+	      || (block_inlined_function (block, section) == NULL))
+	    print_syms_for_block (block, fi, stb, locals, 1, 
+				  values, NULL);
+	  /* APPLE LOCAL end radar 6404668 locals vs. inlined subroutines  */
 	  index++;
+          /* Re-fetch FI in case we ran the inferior and the frame cache
+             was flushed.  */
+          fi = frame_find_by_id (stack_frame_id);
+          if (fi == NULL)
+            error ("Could not rediscover frame while printing args or locals");
 	  if (index == nblocks)
 	    break;
 	  block = BLOCKVECTOR_BLOCK (bv, index);
@@ -607,7 +621,12 @@ list_args_or_locals (int locals, enum print_values values, struct frame_info *fi
       while (block != 0)
 	{
 	  print_syms_for_block (block, fi, stb, locals, 1, values, NULL);
-	  
+          /* Re-fetch FI in case we ran the inferior and the frame cache
+             was flushed.  */
+          fi = frame_find_by_id (stack_frame_id);
+          if (fi == NULL)
+            error ("Could not rediscover frame while printing args or locals");
+
 	  if (BLOCK_FUNCTION (block))
 	    break;
 	  else
@@ -1063,6 +1082,9 @@ print_syms_for_block (struct block *block,
   struct dict_iterator iter;
   struct ui_stream *error_stb;
   struct cleanup *old_chain;
+  struct frame_id stack_frame_id;
+  if (fi)
+    stack_frame_id = get_frame_id (fi);
   
   if (dict_empty (BLOCK_DICT (block)))
     return;
@@ -1230,6 +1252,15 @@ print_syms_for_block (struct block *block,
 					   error_stb);
 		    }
 		  gdb_stderr = save_stderr;
+
+                  /* Re-fetch FI in case we ran the inferior and the frame cache
+                     was flushed.  */
+                  if (fi)
+                    {
+                      fi = frame_find_by_id (stack_frame_id);
+                      if (fi == NULL)
+                        error ("Could not rediscover frame when getting value");
+                    }
 		}
 	      else
 		ui_out_field_skip (uiout, "value");
@@ -1271,6 +1302,14 @@ print_syms_for_block (struct block *block,
 		  internal_error (__FILE__, __LINE__,
 				  "Wrong print_values value for this branch.\n");
 		}
+              /* Re-fetch FI in case we ran the inferior and the frame cache
+                 was flushed.  */
+              if (fi) 
+                {
+                  fi = frame_find_by_id (stack_frame_id);
+                  if (fi == NULL)
+                    error ("Could not rediscover frame when printing value");
+                }
 	    }
 	}
     }

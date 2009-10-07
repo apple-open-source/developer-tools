@@ -7,7 +7,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---              Copyright (C) 2001-2004, Ada Core Technologies, Inc.        --
+--                     Copyright (C) 2001-2005, AdaCore                     --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -17,8 +17,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -120,6 +120,15 @@ package body MLib.Tgt is
       return "";
    end DLL_Ext;
 
+   ----------------
+   -- DLL_Prefix --
+   ----------------
+
+   function DLL_Prefix return String is
+   begin
+      return "lib";
+   end DLL_Prefix;
+
    --------------------
    -- Dynamic_Option --
    --------------------
@@ -172,8 +181,11 @@ package body MLib.Tgt is
    -- Library_Exists_For --
    ------------------------
 
-   function Library_Exists_For (Project : Project_Id) return Boolean is
+   function Library_Exists_For
+     (Project : Project_Id; In_Tree : Project_Tree_Ref) return Boolean
+   is
       pragma Unreferenced (Project);
+      pragma Unreferenced (In_Tree);
    begin
       return False;
    end Library_Exists_For;
@@ -182,8 +194,12 @@ package body MLib.Tgt is
    -- Library_File_Name_For --
    ---------------------------
 
-   function Library_File_Name_For (Project : Project_Id) return Name_Id is
+   function Library_File_Name_For
+     (Project : Project_Id;
+      In_Tree : Project_Tree_Ref) return Name_Id
+   is
       pragma Unreferenced (Project);
+      pragma Unreferenced (In_Tree);
    begin
       return No_Name;
    end Library_File_Name_For;

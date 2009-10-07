@@ -30,6 +30,8 @@
 #include <IOKit/avc/IOFireWireAVCUnit.h>
 #include <IOKit/avc/IOFireWireAVCUserClientCommon.h>
 
+#include <IOKit/firewire/IOFWUserObjectExporter.h>
+
 class IOFireWireAVCUserClient;
 
 // A little class to put into the connections set
@@ -78,8 +80,10 @@ protected:
 	IOFireWireAVCAsynchronousCommand *pCommandObject;
 #endif
     
+	IOFireWireLib::UserObjectHandle		fSessionRef;
+	
     static void remakeConnections(void *arg);
-    virtual IOReturn IOFireWireAVCUserClient::updateP2PCount(UInt32 addr, SInt32 inc, bool failOnBusReset, UInt32 chan, IOFWSpeed speed);
+    virtual IOReturn updateP2PCount(UInt32 addr, SInt32 inc, bool failOnBusReset, UInt32 chan, IOFWSpeed speed);
     virtual IOReturn makeConnection(UInt32 addr, UInt32 chan, IOFWSpeed speed);
     virtual void breakConnection(UInt32 addr);
 	virtual IOFireWireAVCUserClientAsyncCommand *FindUCAsyncCommandWithHandle(UInt32 commandHandle);
@@ -102,7 +106,7 @@ public:
     virtual IOReturn clientDied( void );
 
     virtual IOReturn open( void *, void *, void *, void *, void *, void * );
-	virtual IOReturn openWithSessionRef( IOFireWireSessionRef sessionRef, void *, void *, void *, void *, void * );
+	virtual IOReturn openWithSessionRef( IOFireWireLib::UserObjectHandle sessionRef, void *, void *, void *, void *, void * );
 	virtual IOReturn getSessionRef( uint64_t * sessionRef, void *, void *, void *, void *, void * );
     virtual IOReturn close( void * = 0, void * = 0, void * = 0, void * = 0, void * = 0, void * = 0);
 

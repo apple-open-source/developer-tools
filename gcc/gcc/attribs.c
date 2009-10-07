@@ -1,6 +1,6 @@
 /* Functions dealing with attribute handling, used by most front ends.
    Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
-   2002, 2003, 2004 Free Software Foundation, Inc.
+   2002, 2003, 2004, 2005 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -16,8 +16,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 #include "config.h"
 #include "system.h"
@@ -77,21 +77,21 @@ init_attributes (void)
 	  /* The name must not begin and end with __.  */
 	  const char *name = attribute_tables[i][j].name;
 	  int len = strlen (name);
-	  
+
 	  gcc_assert (!(name[0] == '_' && name[1] == '_'
 			&& name[len - 1] == '_' && name[len - 2] == '_'));
-	  
+
 	  /* The minimum and maximum lengths must be consistent.  */
 	  gcc_assert (attribute_tables[i][j].min_length >= 0);
-	  
+
 	  gcc_assert (attribute_tables[i][j].max_length == -1
 		      || (attribute_tables[i][j].max_length
 			  >= attribute_tables[i][j].min_length));
-	  
+
 	  /* An attribute cannot require both a DECL and a TYPE.  */
 	  gcc_assert (!attribute_tables[i][j].decl_required
 		      || !attribute_tables[i][j].type_required);
-	  
+
 	  /* If an attribute requires a function type, in particular
 	     it requires a type.  */
 	  gcc_assert (!attribute_tables[i][j].function_type_required
@@ -172,7 +172,7 @@ decl_attributes (tree *node, tree attributes, int flags)
 
       if (spec == NULL)
 	{
-	  warning ("%qs attribute directive ignored",
+	  warning (OPT_Wattributes, "%qs attribute directive ignored",
 		   IDENTIFIER_POINTER (name));
 	  continue;
 	}
@@ -197,7 +197,7 @@ decl_attributes (tree *node, tree attributes, int flags)
 	    }
 	  else
 	    {
-	      warning ("%qs attribute does not apply to types",
+	      warning (OPT_Wattributes, "%qs attribute does not apply to types",
 		       IDENTIFIER_POINTER (name));
 	      continue;
 	    }
@@ -216,7 +216,8 @@ decl_attributes (tree *node, tree attributes, int flags)
       if (spec->function_type_required && TREE_CODE (*anode) != FUNCTION_TYPE
 	  && TREE_CODE (*anode) != METHOD_TYPE)
 	{
-	  if (TREE_CODE (*anode) == POINTER_TYPE
+	  /* APPLE LOCAL radar 6246527 */
+	  if ((TREE_CODE (*anode) == POINTER_TYPE || TREE_CODE (*anode) == BLOCK_POINTER_TYPE)
 	      && (TREE_CODE (TREE_TYPE (*anode)) == FUNCTION_TYPE
 		  || TREE_CODE (TREE_TYPE (*anode)) == METHOD_TYPE))
 	    {
@@ -227,8 +228,8 @@ decl_attributes (tree *node, tree attributes, int flags)
 		 pull out the target type now, frob it as appropriate, and
 		 rebuild the pointer type later.
 
-	         This would all be simpler if attributes were part of the
-	         declarator, grumble grumble.  */
+		 This would all be simpler if attributes were part of the
+		 declarator, grumble grumble.  */
 	      fn_ptr_tmp = TREE_TYPE (*anode);
 	      anode = &fn_ptr_tmp;
 	      flags &= ~(int) ATTR_FLAG_TYPE_IN_PLACE;
@@ -243,10 +244,19 @@ decl_attributes (tree *node, tree attributes, int flags)
 	  if (TREE_CODE (*anode) != FUNCTION_TYPE
 	      && TREE_CODE (*anode) != METHOD_TYPE)
 	    {
-	      warning ("%qs attribute only applies to function types",
+	      warning (OPT_Wattributes,
+		       "%qs attribute only applies to function types",
 		       IDENTIFIER_POINTER (name));
 	      continue;
 	    }
+	}
+
+      if (TYPE_P (*anode)
+	  && (flags & (int) ATTR_FLAG_TYPE_IN_PLACE)
+	  && TYPE_SIZE (*anode) != NULL_TREE)
+	{
+	  warning (OPT_Wattributes, "type attributes ignored after type is already defined");
+	  continue;
 	}
 
       if (spec->handler != NULL)
@@ -314,6 +324,14 @@ decl_attributes (tree *node, tree attributes, int flags)
 
       if (fn_ptr_tmp)
 	{
+          /* APPLE LOCAL begin radar 6246527 */
+          if (DECL_P (*node) && TREE_TYPE (*node) && 
+              TREE_CODE (TREE_TYPE (*node)) == BLOCK_POINTER_TYPE)
+            /* Rebuild the block pointer type and put it in the
+               appropriate place.  */
+            fn_ptr_tmp = build_block_pointer_type (fn_ptr_tmp);
+          else
+          /* APPLE LOCAL end radar 6246527 */
 	  /* Rebuild the function pointer type and put it in the
 	     appropriate place.  */
 	  fn_ptr_tmp = build_pointer_type (fn_ptr_tmp);

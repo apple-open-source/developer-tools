@@ -45,8 +45,6 @@
 #ifndef TCMALLOC_PAGEMAP_H__
 #define TCMALLOC_PAGEMAP_H__
 
-#include "config.h"
-
 #if HAVE(STDINT_H)
 #include <stdint.h>
 #elif HAVE(INTTYPES_H)
@@ -56,7 +54,6 @@
 #endif
 
 #include <string.h>
-
 #include "Assertions.h"
 
 // Single-level array
@@ -79,6 +76,8 @@ class TCMalloc_PageMap1 {
     // Nothing to do since flat array was allocate at start
     return true;
   }
+
+  void PreallocateMoreMemory() {}
 
   // REQUIRES "k" is in range "[0,2^BITS-1]".
   // REQUIRES "k" has been ensured before.
@@ -157,9 +156,14 @@ class TCMalloc_PageMap2 {
     return true;
   }
 
+  void PreallocateMoreMemory() {
+    // Allocate enough to keep track of all possible pages
+    Ensure(0, 1 << BITS);
+  }
+
 #ifdef WTF_CHANGES
   template<class Visitor, class MemoryReader>
-  void visit(const Visitor& visitor, const MemoryReader& reader)
+  void visitValues(Visitor& visitor, const MemoryReader& reader)
   {
     for (int i = 0; i < ROOT_LENGTH; i++) {
       if (!root_[i])
@@ -168,6 +172,14 @@ class TCMalloc_PageMap2 {
       Leaf* l = reader(reinterpret_cast<Leaf*>(root_[i]));
       for (int j = 0; j < LEAF_LENGTH; j += visitor.visit(l->values[j]))
         ;
+    }
+  }
+
+  template<class Visitor, class MemoryReader>
+  void visitAllocations(Visitor& visitor, const MemoryReader&) {
+    for (int i = 0; i < ROOT_LENGTH; i++) {
+      if (root_[i])
+        visitor.visit(root_[i], sizeof(Leaf));
     }
   }
 #endif
@@ -256,9 +268,12 @@ class TCMalloc_PageMap3 {
     return true;
   }
 
+  void PreallocateMoreMemory() {
+  }
+
 #ifdef WTF_CHANGES
   template<class Visitor, class MemoryReader>
-  void visit(const Visitor& visitor, const MemoryReader& reader) {
+  void visitValues(Visitor& visitor, const MemoryReader& reader) {
     Node* root = reader(root_);
     for (int i = 0; i < INTERIOR_LENGTH; i++) {
       if (!root->ptrs[i])
@@ -272,6 +287,26 @@ class TCMalloc_PageMap3 {
         Leaf* l = reader(reinterpret_cast<Leaf*>(n->ptrs[j]));
         for (int k = 0; k < LEAF_LENGTH; k += visitor.visit(l->values[k]))
           ;
+      }
+    }
+  }
+
+  template<class Visitor, class MemoryReader>
+  void visitAllocations(Visitor& visitor, const MemoryReader& reader) {
+    visitor.visit(root_, sizeof(Node));
+
+    Node* root = reader(root_);
+    for (int i = 0; i < INTERIOR_LENGTH; i++) {
+      if (!root->ptrs[i])
+        continue;
+
+      visitor.visit(root->ptrs[i], sizeof(Node));
+      Node* n = reader(root->ptrs[i]);
+      for (int j = 0; j < INTERIOR_LENGTH; j++) {
+        if (!n->ptrs[j])
+          continue;
+
+        visitor.visit(n->ptrs[j], sizeof(Leaf));
       }
     }
   }

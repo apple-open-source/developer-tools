@@ -1,12 +1,12 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                GNU ADA RUN-TIME LIBRARY (GNARL) COMPONENTS               --
+--                 GNAT RUN-TIME LIBRARY (GNARL) COMPONENTS                 --
 --                                                                          --
 --                 S Y S T E M . T A S K I N G . Q U E U I N G              --
 --                                                                          --
 --                                  S p e c                                 --
 --                                                                          --
---         Copyright (C) 1992-2004, Free Software Foundation, Inc.          --
+--         Copyright (C) 1992-2006, Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNARL; see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -54,9 +54,9 @@ package System.Tasking.Queuing is
    procedure Dequeue (E : in out Entry_Queue; Call : Entry_Call_Link);
    --  Dequeue Call from entry_queue E
 
-   function Head (E : in Entry_Queue) return Entry_Call_Link;
-   --  Return the head of entry_queue E
+   function Head (E : Entry_Queue) return Entry_Call_Link;
    pragma Inline (Head);
+   --  Return the head of entry_queue E
 
    procedure Dequeue_Head
      (E    : in out Entry_Queue;
@@ -64,10 +64,10 @@ package System.Tasking.Queuing is
    --  Remove and return the head of entry_queue E
 
    function Onqueue (Call : Entry_Call_Link) return Boolean;
-   --  Return True if Call is on any entry_queue at all
    pragma Inline (Onqueue);
+   --  Return True if Call is on any entry_queue at all
 
-   function Count_Waiting (E : in Entry_Queue) return Natural;
+   function Count_Waiting (E : Entry_Queue) return Natural;
    --  Return number of calls on the waiting queue of E
 
    procedure Select_Task_Entry_Call
@@ -82,9 +82,9 @@ package System.Tasking.Queuing is
    --    Open_Alternative will be True if there were any open alternatives
 
    procedure Select_Protected_Entry_Call
-     (Self_ID   : Task_Id;
-      Object    : POE.Protection_Entries_Access;
-      Call      : out Entry_Call_Link);
+     (Self_ID : Task_Id;
+      Object  : POE.Protection_Entries_Access;
+      Call    : out Entry_Call_Link);
    --  Select an entry of a protected object
 
    procedure Enqueue_Call (Entry_Call : Entry_Call_Link);

@@ -20,8 +20,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -39,13 +39,12 @@ generic
    type Object (<>) is limited private;
 
 package System.Address_To_Access_Conversions is
-pragma Preelaborate (Address_To_Access_Conversions);
-
-pragma Elaborate_Body;
---  This pragma Elaborate_Body is there to ensure the requirement of what is
---  at the moment a dummy null body. The reason this null body is there is
---  that we used to have a real body, and it causes bootstrap problems with
---  old compilers if we try to remove the corresponding file.
+   pragma Preelaborate;
+   pragma Elaborate_Body;
+   --  This pragma Elaborate_Body is there to ensure the requirement of what is
+   --  at the moment a dummy null body. The reason this null body is there is
+   --  that we used to have a real body, and it causes bootstrap problems with
+   --  old compilers if we try to remove the corresponding file.
 
    pragma Compile_Time_Warning
      (Object'Unconstrained_Array,
@@ -61,6 +60,13 @@ pragma Elaborate_Body;
 
    type Object_Pointer is access all Object;
    for Object_Pointer'Size use Standard'Address_Size;
+
+   pragma No_Strict_Aliasing (Object_Pointer);
+   --  Strictly speaking, this routine should not be used to generate pointers
+   --  to other than proper values of the proper type, but in practice, this
+   --  is done all the time. This pragma stops the compiler from doing some
+   --  optimizations that may cause unexpected results based on the assumption
+   --  of no strict aliasing.
 
    function To_Pointer (Value : Address)        return Object_Pointer;
    function To_Address (Value : Object_Pointer) return Address;

@@ -14,7 +14,8 @@ void* new_test::operator new(size_t sz, int count, int type)
 {
   void *p;
 
-  printf("%d %d %d\n", sz, count, type);
+  /* APPLE LOCAL default to Wformat-security 5764921 */
+  printf("%d %d %d\n", (int)sz, count, type);
 
   p = new char[sz * count];
   ((new_test *)p)->type = type;

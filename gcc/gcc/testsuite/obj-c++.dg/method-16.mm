@@ -1,4 +1,4 @@
-/* APPLE LOCAL file mainline */
+
 /* Ensure that we indeed cannot obtain the value of a message send
    if the chosen method signature returns 'void'.  There used to
    exist a cheesy hack that allowed it.  While at it, check that

@@ -1,9 +1,10 @@
 /* Check if the '-fno-zero-link' flag correctly _omits_ an objc_getClass() call. */
 /* Contributed by Ziemowit Laski <zlaski@apple.com>.  */
 /* { dg-options "-fnext-runtime -fno-zero-link" } */
-/* { dg-do compile } */
+/* APPLE LOCAL ARM objc2 */
+/* { dg-do compile { target powerpc*-*-darwin* i?86*-*-darwin* } } */
 /* APPLE LOCAL radar 4894756 */
-/* { dg-skip-if "" { *-*-darwin* } { "-m64" } { "" } } */
+/* { dg-require-effective-target ilp32 } */
 
 #include <objc/objc.h>
 #include <objc/Object.h>

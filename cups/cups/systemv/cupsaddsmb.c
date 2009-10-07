@@ -1,5 +1,5 @@
 /*
- * "$Id: cupsaddsmb.c 6649 2007-07-11 21:46:42Z mike $"
+ * "$Id: cupsaddsmb.c 7033 2007-10-19 02:11:28Z mike $"
  *
  *   "cupsaddsmb" command for the Common UNIX Printing System (CUPS).
  *
@@ -152,7 +152,12 @@ main(int  argc,				/* I - Number of command-line arguments */
       }
 
       if (SAMBAServer == NULL)
+      {
 	SAMBAServer = cupsServer();
+
+	if (SAMBAServer[0] == '/')	/* Use localhost instead of domain socket */
+	  SAMBAServer = "localhost";
+      }
 
       if ((status = export_dest(http, argv[i])) != 0)
 	return (status);
@@ -182,7 +187,12 @@ main(int  argc,				/* I - Number of command-line arguments */
     */
 
     if (SAMBAServer == NULL)
+    {
       SAMBAServer = cupsServer();
+
+      if (SAMBAServer[0] == '/')	/* Use localhost instead of domain socket */
+	SAMBAServer = "localhost";
+    }
 
     num_dests = cupsGetDests2(http, &dests);
 
@@ -288,5 +298,5 @@ usage(void)
 
 
 /*
- * End of "$Id: cupsaddsmb.c 6649 2007-07-11 21:46:42Z mike $".
+ * End of "$Id: cupsaddsmb.c 7033 2007-10-19 02:11:28Z mike $".
  */

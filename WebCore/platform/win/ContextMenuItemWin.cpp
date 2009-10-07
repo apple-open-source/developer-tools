@@ -76,9 +76,7 @@ ContextMenuItem::ContextMenuItem(ContextMenuItemType type, ContextMenuAction act
         m_platformDescription->fMask |= MIIM_STRING | MIIM_ID;
 
     m_platformDescription->fType = MFT_STRING;
-    
-    if (type == ActionType)
-        m_platformDescription->wID = action;
+    m_platformDescription->wID = action;
     
     String t = title;
     m_platformDescription->cch = t.length();
@@ -104,8 +102,7 @@ LPMENUITEMINFO ContextMenuItem::releasePlatformDescription()
 ContextMenuItemType ContextMenuItem::type() const
 {
     ContextMenuItemType type = ActionType;
-
-    if ((m_platformDescription->fType & MFT_STRING) && m_platformDescription->hSubMenu)
+    if (((m_platformDescription->fType & ~MFT_OWNERDRAW) == MFT_STRING) && m_platformDescription->hSubMenu)
         type = SubmenuType;
     else if (m_platformDescription->fType & MFT_SEPARATOR)
         type = SeparatorType;
@@ -189,7 +186,7 @@ void ContextMenuItem::setEnabled(bool enabled)
 
 bool ContextMenuItem::enabled() const
 {
-    return m_platformDescription->fState & MFS_ENABLED;
+    return !(m_platformDescription->fState & MFS_DISABLED);
 }
 
 }

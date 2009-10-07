@@ -1,4 +1,3 @@
-/* APPLE LOCAL file mainline */
 /* Test if prior method lookup at method @implementation time is not
    overly aggressive, leading to methods being found in other classes.  */
 /* Author: Ziemowit Laski <zlaski@apple.com>.  */

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2001-2005 Free Software Foundation, Inc.          --
+--          Copyright (C) 2001-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -41,11 +41,60 @@ package body Switch.B is
       Ptr : Integer          := Switch_Chars'First;
       C   : Character        := ' ';
 
+      function Get_Stack_Size (S : Character) return Int;
+      --  Used for -d and -D to scan stack size including handling k/m.
+      --  S is set to 'd' or 'D' to indicate the switch being scanned.
+
+      --------------------
+      -- Get_Stack_Size --
+      --------------------
+
+      function Get_Stack_Size (S : Character) return Int is
+         Result : Int;
+
+      begin
+         Scan_Pos (Switch_Chars, Max, Ptr, Result, S);
+
+         --  In the following code, we enable overflow checking since the
+         --  multiplication by K or M may cause overflow, which is an error.
+
+         declare
+            pragma Unsuppress (Overflow_Check);
+
+         begin
+            --  Check for additional character 'k' (for kilobytes) or 'm'
+            --  (for Megabytes), but only if we have not reached the end
+            --  of the switch string. Note that if this appears before the
+            --  end of the string we will get an error when we test to make
+            --  sure that the string is exhausted (at the end of the case).
+
+            if Ptr <= Max then
+               if Switch_Chars (Ptr) = 'k' then
+                  Result := Result * 1024;
+                  Ptr := Ptr + 1;
+
+               elsif Switch_Chars (Ptr) = 'm' then
+                  Result := Result * (1024 * 1024);
+                  Ptr := Ptr + 1;
+               end if;
+            end if;
+
+         exception
+            when Constraint_Error =>
+               Osint.Fail
+                 ("numeric value out of range for switch: ", (1 => S));
+         end;
+
+         return Result;
+      end Get_Stack_Size;
+
+   --  Start of processing for Scan_Binder_Switches
+
    begin
       --  Skip past the initial character (must be the switch character)
 
       if Ptr = Max then
-         raise Bad_Switch;
+         Bad_Switch (Switch_Chars);
       else
          Ptr := Ptr + 1;
       end if;
@@ -62,16 +111,21 @@ package body Switch.B is
 
       --  Loop to scan through switches given in switch string
 
-      while Ptr <= Max loop
+      Check_Switch : begin
          C := Switch_Chars (Ptr);
 
          case C is
+
+         --  Processing for a switch
+
+         when 'a' =>
+            Ptr := Ptr + 1;
+            Use_Pragma_Linker_Constructor := True;
 
          --  Processing for A switch
 
          when 'A' =>
             Ptr := Ptr + 1;
-
             Ada_Bind_File := True;
 
          --  Processing for b switch
@@ -98,44 +152,55 @@ package body Switch.B is
 
          when 'd' =>
 
-            --  Note: for the debug switch, the remaining characters in this
-            --  switch field must all be debug flags, since all valid switch
-            --  characters are also valid debug characters. This switch is not
-            --  documented on purpose because it is only used by the
-            --  implementors.
-
-            --  Loop to scan out debug flags
-
-            while Ptr < Max loop
-               Ptr := Ptr + 1;
-               C := Switch_Chars (Ptr);
-               exit when C = ASCII.NUL or else C = '/' or else C = '-';
-
-               if C in '1' .. '9' or else
-                  C in 'a' .. 'z' or else
-                  C in 'A' .. 'Z'
-               then
-                  Set_Debug_Flag (C);
-               else
-                  raise Bad_Switch;
-               end if;
-            end loop;
-
-            --  Make sure Zero_Cost_Exceptions is set if gnatdX set. This
-            --  is for backwards compatibility with old versions and usage.
-
-            if Debug_Flag_XX then
-               Zero_Cost_Exceptions_Set := True;
-               Zero_Cost_Exceptions_Val := True;
+            if Ptr = Max then
+               Bad_Switch (Switch_Chars);
             end if;
 
-            return;
+            Ptr := Ptr + 1;
+            C := Switch_Chars (Ptr);
+
+            --  Case where character after -d is a digit (default stack size)
+
+            if C in '0' .. '9' then
+
+               --  In this case, we process the default primary stack size
+
+               Default_Stack_Size := Get_Stack_Size ('d');
+
+            --  Case where character after -d is not digit (debug flags)
+
+            else
+               --  Note: for the debug switch, the remaining characters in this
+               --  switch field must all be debug flags, since all valid switch
+               --  characters are also valid debug characters. This switch is
+               --  not documented on purpose because it is only used by the
+               --  implementors.
+
+               --  Loop to scan out debug flags
+
+               loop
+                  C := Switch_Chars (Ptr);
+
+                  if C in 'a' .. 'z' or else C in 'A' .. 'Z' then
+                     Set_Debug_Flag (C);
+                  else
+                     Bad_Switch (Switch_Chars);
+                  end if;
+
+                  Ptr := Ptr + 1;
+                  exit when Ptr > Max;
+               end loop;
+            end if;
 
          --  Processing for D switch
 
          when 'D' =>
+            if Ptr = Max then
+               Bad_Switch (Switch_Chars);
+            end if;
+
             Ptr := Ptr + 1;
-            Scan_Pos (Switch_Chars, Max, Ptr, Default_Sec_Stack_Size);
+            Default_Sec_Stack_Size := Get_Stack_Size ('D');
 
          --  Processing for e switch
 
@@ -148,12 +213,6 @@ package body Switch.B is
          when 'E' =>
             Ptr := Ptr + 1;
             Exception_Tracebacks := True;
-
-         --  Processing for f switch
-
-         when 'f' =>
-            Ptr := Ptr + 1;
-            Force_RM_Elaboration_Order := True;
 
          --  Processing for F switch
 
@@ -190,7 +249,7 @@ package body Switch.B is
 
          when 'i' =>
             if Ptr = Max then
-               raise Bad_Switch;
+               Bad_Switch (Switch_Chars);
             end if;
 
             Ptr := Ptr + 1;
@@ -206,7 +265,7 @@ package body Switch.B is
                Identifier_Character_Set := C;
                Ptr := Ptr + 1;
             else
-               raise Bad_Switch;
+               Bad_Switch (Switch_Chars);
             end if;
 
          --  Processing for K switch
@@ -224,8 +283,12 @@ package body Switch.B is
          --  Processing for m switch
 
          when 'm' =>
+            if Ptr = Max then
+               Bad_Switch (Switch_Chars);
+            end if;
+
             Ptr := Ptr + 1;
-            Scan_Pos (Switch_Chars, Max, Ptr, Maximum_Errors);
+            Scan_Pos (Switch_Chars, Max, Ptr, Maximum_Errors, C);
 
          --  Processing for n switch
 
@@ -243,7 +306,7 @@ package body Switch.B is
             Ptr := Ptr + 1;
 
             if Output_File_Name_Present then
-               raise Too_Many_Output_Files;
+               Osint.Fail ("duplicate -o switch");
 
             else
                Output_File_Name_Present := True;
@@ -289,10 +352,30 @@ package body Switch.B is
          --  Processing for T switch
 
          when 'T' =>
+            if Ptr = Max then
+               Bad_Switch (Switch_Chars);
+            end if;
+
             Ptr := Ptr + 1;
             Time_Slice_Set := True;
-            Scan_Nat (Switch_Chars, Max, Ptr, Time_Slice_Value);
+            Scan_Nat (Switch_Chars, Max, Ptr, Time_Slice_Value, C);
             Time_Slice_Value := Time_Slice_Value * 1_000;
+
+         --  Processing for u switch
+
+         when 'u' =>
+            if Ptr = Max then
+               Bad_Switch (Switch_Chars);
+            end if;
+
+            Ptr := Ptr + 1;
+            Dynamic_Stack_Measurement := True;
+            Scan_Nat
+              (Switch_Chars,
+               Max,
+               Ptr,
+               Dynamic_Stack_Measurement_Array_Size,
+               C);
 
          --  Processing for v switch
 
@@ -303,6 +386,9 @@ package body Switch.B is
          --  Processing for w switch
 
          when 'w' =>
+            if Ptr = Max then
+               Bad_Switch (Switch_Chars);
+            end if;
 
             --  For the binder we only allow suppress/error cases
 
@@ -317,7 +403,7 @@ package body Switch.B is
                   Warning_Mode  := Suppress;
 
                when others =>
-                  raise Bad_Switch;
+                  Bad_Switch (Switch_Chars);
             end case;
 
             Ptr := Ptr + 1;
@@ -325,6 +411,10 @@ package body Switch.B is
          --  Processing for W switch
 
          when 'W' =>
+            if Ptr = Max then
+               Bad_Switch (Switch_Chars);
+            end if;
+
             Ptr := Ptr + 1;
 
             for J in WC_Encoding_Method loop
@@ -333,7 +423,7 @@ package body Switch.B is
                   exit;
 
                elsif J = WC_Encoding_Method'Last then
-                  raise Bad_Switch;
+                  Bad_Switch (Switch_Chars);
                end if;
             end loop;
 
@@ -353,8 +443,12 @@ package body Switch.B is
          --  Processing for X switch
 
          when 'X' =>
+            if Ptr = Max then
+               Bad_Switch (Switch_Chars);
+            end if;
+
             Ptr := Ptr + 1;
-            Scan_Pos (Switch_Chars, Max, Ptr, Default_Exit_Status);
+            Scan_Pos (Switch_Chars, Max, Ptr, Default_Exit_Status, C);
 
          --  Processing for z switch
 
@@ -362,29 +456,21 @@ package body Switch.B is
             Ptr := Ptr + 1;
             No_Main_Subprogram := True;
 
-         --  Ignore extra switch character
-
-         when '/'  =>
-            Ptr := Ptr + 1;
-
-         --  Ignore '-' extra switch caracter, only if it isn't followed by
-         --  'RTS'. If it is, then we must process the 'RTS' switch
+         --  Processing for --RTS
 
          when '-' =>
 
-            if Ptr + 3 <= Max and then
+            if Ptr + 4 <= Max and then
               Switch_Chars (Ptr + 1 .. Ptr + 3) = "RTS"
             then
-               Ptr := Ptr + 1;
+               Ptr := Ptr + 4;
 
-               if Switch_Chars (Ptr + 3) /= '=' or else
-                 (Switch_Chars (Ptr + 3) = '='
-                  and then Ptr + 4 > Max)
-               then
+               if Switch_Chars (Ptr) /= '=' or else Ptr = Max then
                   Osint.Fail ("missing path for --RTS");
-               else
 
+               else
                   --  valid --RTS switch
+
                   Opt.No_Stdinc := True;
                   Opt.RTS_Switch := True;
 
@@ -392,12 +478,12 @@ package body Switch.B is
                      Src_Path_Name : constant String_Ptr :=
                                        Get_RTS_Search_Dir
                                          (Switch_Chars
-                                           (Ptr + 4 .. Switch_Chars'Last),
+                                           (Ptr + 1 .. Switch_Chars'Last),
                                           Include);
                      Lib_Path_Name : constant String_Ptr :=
                                        Get_RTS_Search_Dir
                                          (Switch_Chars
-                                           (Ptr + 4 .. Switch_Chars'Last),
+                                           (Ptr + 1 .. Switch_Chars'Last),
                                           Objects);
 
                   begin
@@ -411,10 +497,7 @@ package body Switch.B is
                         RTS_Src_Path_Name := Src_Path_Name;
                         RTS_Lib_Path_Name := Lib_Path_Name;
 
-                        --  We can exit as there can not be another switch
-                        --  after --RTS
-
-                        exit;
+                        Ptr := Max + 1;
 
                      elsif  Src_Path_Name = null
                        and then Lib_Path_Name = null
@@ -432,28 +515,19 @@ package body Switch.B is
                end if;
 
             else
-               Ptr := Ptr + 1;
+               Bad_Switch (Switch_Chars);
             end if;
 
          --  Anything else is an error (illegal switch character)
 
          when others =>
-            raise Bad_Switch;
+            Bad_Switch (Switch_Chars);
          end case;
-      end loop;
 
-   exception
-      when Bad_Switch =>
-         Osint.Fail ("invalid switch: ", (1 => C));
-
-      when Bad_Switch_Value =>
-         Osint.Fail ("numeric value out of range for switch: ", (1 => C));
-
-      when Missing_Switch_Value =>
-         Osint.Fail ("missing numeric value for switch: ", (1 => C));
-
-      when Too_Many_Output_Files =>
-         Osint.Fail ("duplicate -o switch");
+         if Ptr <= Max then
+            Bad_Switch (Switch_Chars);
+         end if;
+      end Check_Switch;
    end Scan_Binder_Switches;
 
 end Switch.B;

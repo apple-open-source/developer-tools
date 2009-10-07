@@ -217,6 +217,11 @@ static char *(features[]) =
 #else
 	"-find_in_path",
 #endif
+#ifdef FEAT_FLOAT
+	"+float",
+#else
+	"-float",
+#endif
 #ifdef FEAT_FOLDING
 	"+folding",
 #else
@@ -344,6 +349,11 @@ static char *(features[]) =
 	"+mouse_netterm",
 # else
 	"-mouse_netterm",
+# endif
+# ifdef FEAT_SYSMOUSE
+	"+mouse_sysmouse",
+# else
+	"-mouse_sysmouse",
 # endif
 # ifdef FEAT_MOUSE_XTERM
 	"+mouse_xterm",
@@ -667,9 +677,236 @@ static char *(features[]) =
 static int included_patches[] =
 {   /* Add new patch number below this line */
 /**/
-    234,
+    108,
+/**/
+    107,
+/**/
+    106,
+/**/
+    105,
+/**/
+    104,
+/**/
+    103,
+/**/
+    102,
+/**/
+    101,
+/**/
+    100,
+/**/
+    99,
+/**/
+    98,
+/**/
+    97,
+/**/
+    96,
+/**/
+    95,
+/**/
+    94,
+/**/
+    93,
+/**/
+    92,
+/**/
+    91,
+/**/
+    90,
+/**/
+    89,
+/**/
+    88,
+/**/
+    87,
+/**/
+    86,
+/**/
+    85,
+/**/
+    84,
+/**/
+    83,
+/**/
+    82,
+/**/
+    81,
+/**/
+    80,
+/**/
+    79,
+/**/
+    78,
+/**/
+    77,
+/**/
+    76,
+/**/
+    75,
+/**/
+    74,
+/**/
+    73,
+/**/
+    72,
+/**/
+    71,
+/**/
+    70,
+/**/
+    69,
+/**/
+    68,
+/**/
+    67,
+/**/
+    66,
+/**/
+    65,
+/**/
+    64,
+/**/
+    63,
+/**/
+    62,
+/**/
+    61,
+/**/
+    60,
+/**/
+    59,
+/**/
+    58,
+/**/
+    57,
+/**/
+    56,
+/**/
+    55,
+/**/
+    54,
+/**/
+    53,
+/**/
+    52,
+/**/
+    51,
+/**/
+    50,
+/**/
+    49,
+/**/
+    48,
+/**/
+    47,
+/**/
+    46,
+/**/
+    45,
+/**/
+    44,
+/**/
+    43,
+/**/
+    42,
+/**/
+    41,
+/**/
+    40,
+/**/
+    39,
+/**/
+    38,
+/**/
+    37,
+/**/
+    36,
+/**/
+    35,
+/**/
+    34,
+/**/
+    33,
+/**/
+    32,
+/**/
+    31,
+/**/
+    30,
+/**/
+    29,
+/**/
+    28,
+/**/
+    27,
+/**/
+    26,
+/**/
+    25,
+/**/
+    24,
+/**/
+    23,
+/**/
+    22,
+/**/
+    21,
+/**/
+    20,
+/**/
+    19,
+/**/
+    18,
+/**/
+    17,
+/**/
+    16,
+/**/
+    15,
+/**/
+    14,
+/**/
+    13,
+/**/
+    12,
+/**/
+    11,
+/**/
+    10,
+/**/
+    9,
+/**/
+    8,
+/**/
+    7,
+/**/
+    6,
+/**/
+    5,
+/**/
+    4,
+/**/
+    3,
+/**/
+    2,
+/**/
+    1,
 /**/
     0
+};
+
+/*
+ * Place to put a short description when adding a feature with a patch.
+ * Keep it short, e.g.,: "relative numbers", "persistent undo".
+ * Also add a comment marker to separate the lines.
+ * See the official Vim patches for the diff format: It must use a context of
+ * one line only.  Create it by hand or use "diff -C2" and edit the patch.
+ */
+static char *(extra_patches[]) =
+{   /* Add your patch description below this line */
+/**/
+    NULL
 };
 
     int
@@ -731,9 +968,13 @@ list_version()
 # ifdef FEAT_GUI_W32
 #  if defined(_MSC_VER) && (_MSC_VER <= 1010)
     /* Only MS VC 4.1 and earlier can do Win32s */
-    MSG_PUTS(_("\nMS-Windows 16/32 bit GUI version"));
+    MSG_PUTS(_("\nMS-Windows 16/32-bit GUI version"));
 #  else
-    MSG_PUTS(_("\nMS-Windows 32 bit GUI version"));
+#   ifdef _WIN64
+    MSG_PUTS(_("\nMS-Windows 64-bit GUI version"));
+#   else
+    MSG_PUTS(_("\nMS-Windows 32-bit GUI version"));
+#   endif
 #  endif
     if (gui_is_win32s())
 	MSG_PUTS(_(" in Win32s mode"));
@@ -741,17 +982,21 @@ list_version()
     MSG_PUTS(_(" with OLE support"));
 # endif
 # else
-    MSG_PUTS(_("\nMS-Windows 32 bit console version"));
+#  ifdef _WIN64
+    MSG_PUTS(_("\nMS-Windows 64-bit console version"));
+#  else
+    MSG_PUTS(_("\nMS-Windows 32-bit console version"));
+#  endif
 # endif
 #endif
 #ifdef WIN16
-    MSG_PUTS(_("\nMS-Windows 16 bit version"));
+    MSG_PUTS(_("\nMS-Windows 16-bit version"));
 #endif
 #ifdef MSDOS
 # ifdef DJGPP
-    MSG_PUTS(_("\n32 bit MS-DOS version"));
+    MSG_PUTS(_("\n32-bit MS-DOS version"));
 # else
-    MSG_PUTS(_("\n16 bit MS-DOS version"));
+    MSG_PUTS(_("\n16-bit MS-DOS version"));
 # endif
 #endif
 #ifdef MACOS
@@ -770,7 +1015,15 @@ list_version()
     MSG_PUTS(_("\nRISC OS version"));
 #endif
 #ifdef VMS
-    MSG_PUTS("\nOpenVMS version");
+    MSG_PUTS(_("\nOpenVMS version"));
+# ifdef HAVE_PATHDEF
+    if (*compiled_arch != NUL)
+    {
+	MSG_PUTS(" - ");
+	MSG_PUTS(compiled_arch);
+    }
+# endif
+
 #endif
 
     /* Print the list of patch numbers if there is at least one. */
@@ -798,6 +1051,19 @@ list_version()
 		}
 		first = -1;
 	    }
+	}
+    }
+
+    /* Print the list of extra patch descriptions if there is at least one. */
+    if (extra_patches[0] != NULL)
+    {
+	MSG_PUTS(_("\nExtra patches: "));
+	s = "";
+	for (i = 0; extra_patches[i] != NULL; ++i)
+	{
+	    MSG_PUTS(s);
+	    s = ", ";
+	    MSG_PUTS(extra_patches[i]);
 	}
     }
 
@@ -1167,9 +1433,9 @@ do_intro_line(row, mesg, add_version, attr)
 
     if (*mesg == ' ')
     {
-	vim_strncpy(modby, _("Modified by "), MODBY_LEN - 1);
+	vim_strncpy(modby, (char_u *)_("Modified by "), MODBY_LEN - 1);
 	l = STRLEN(modby);
-	vim_strncpy(modby + l, MODIFIED_BY, MODBY_LEN - l - 1);
+	vim_strncpy(modby + l, (char_u *)MODIFIED_BY, MODBY_LEN - l - 1);
 	mesg = modby;
     }
 #endif

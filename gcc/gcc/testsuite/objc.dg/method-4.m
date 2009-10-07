@@ -3,8 +3,10 @@
 /* Author: Ziemowit Laski <zlaski@apple.com>.  */
 /* { dg-options "-fnext-runtime" } */
 /* { dg-do compile } */
-/* APPLE LOCAL radar 4894756 */
-/* { dg-skip-if "" { *-*-darwin* } { "-m64" } { "" } } */
+/* APPLE LOCAL begin objc2 */
+/* { dg-require-effective-target ilp32 } */
+/* { dg-skip-if "" { arm*-*-darwin* } { "*" } { "" } } */
+/* APPLE LOCAL end objc2 */
 
 /* APPLE LOCAL radar 4894756 */
 #include "../objc/execute/Object2.h"

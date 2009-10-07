@@ -1,4 +1,3 @@
-// APPLE LOCAL file mainline 4.2 2006-03-01 4311680
 // { dg-do compile { target arm*-*-*eabi* } }
 // { dg-options "-fvisibility=hidden" }
 // Class data should be exported.

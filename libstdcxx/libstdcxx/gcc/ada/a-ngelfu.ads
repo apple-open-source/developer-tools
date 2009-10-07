@@ -1,6 +1,6 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                         GNAT RUNTIME COMPONENTS                          --
+--                         GNAT RUN-TIME COMPONENTS                         --
 --                                                                          --
 --                ADA.NUMERICS.GENERIC_ELEMENTARY_FUNCTIONS                 --
 --                                                                          --
@@ -17,7 +17,7 @@ generic
    type Float_Type is digits <>;
 
 package Ada.Numerics.Generic_Elementary_Functions is
-pragma Pure (Generic_Elementary_Functions);
+   pragma Pure;
 
    function Sqrt    (X           : Float_Type'Base) return Float_Type'Base;
    function Log     (X           : Float_Type'Base) return Float_Type'Base;

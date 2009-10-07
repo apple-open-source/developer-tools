@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2006 Zack Rusin <zack@kde.org>
  * Copyright (C) 2006 Apple Computer, Inc.  All rights reserved.
- * Copyright (C) 2007 Trolltech ASA
+ * Copyright (C) 2008 Nokia Corporation and/or its subsidiary(-ies)
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -37,9 +37,11 @@ struct ExtensionMap {
 
 static const ExtensionMap extensionMap [] = {
     { "bmp", "image/bmp" },
+    { "css", "text/css" },
     { "gif", "image/gif" },
+    { "htm", "text/html" },
     { "html", "text/html" },
-    { "ico", "image/x-icon" },   
+    { "ico", "image/x-icon" },
     { "jpeg", "image/jpeg" },
     { "jpg", "image/jpeg" },
     { "js", "application/x-javascript" },
@@ -53,9 +55,11 @@ static const ExtensionMap extensionMap [] = {
     { "xml", "text/xml" },
     { "xsl", "text/xsl" },
     { "xhtml", "application/xhtml+xml" },
+    { "wml", "text/vnd.wap.wml" },
+    { "wmlc", "application/vnd.wap.wmlc" },
     { 0, 0 }
 };
-    
+
 String MIMETypeRegistry::getMIMETypeForExtension(const String &ext)
 {
     String s = ext.lower();
@@ -65,8 +69,8 @@ String MIMETypeRegistry::getMIMETypeForExtension(const String &ext)
             return e->mimeType;
         ++e;
     }
-    // unknown, let's just assume plain text
-    return "text/plain";
+
+    return String();
 }
 
 }

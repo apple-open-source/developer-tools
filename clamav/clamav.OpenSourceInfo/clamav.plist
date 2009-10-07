@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>OpenSourceImportDate</key>
-	<string>2007-06-12</string>
+	<string>2009-07-08</string>
 	<key>OpenSourceLicense</key>
 	<string>GNU GPL</string>
 	<key>OpenSourceLicenseFile</key>
@@ -11,15 +11,16 @@
 	<key>OpenSourceModifications</key>
 	<array>
 		<string>set config to not use NetInfo</string>
+		<string>prevent buffer overruns (rdar://problem/5876278)</string>
 	</array>
 	<key>OpenSourceProject</key>
 	<string>clamav</string>
 	<key>OpenSourceSHA1</key>
 	<string></string>
 	<key>OpenSourceURL</key>
-	<string>http://freshmeat.net/redir/clamav/29355/url_tgz/clamav-0.90.3.tar.gz</string>
+	<string>http://superb-west.dl.sourceforge.net/sourceforge/clamav/clamav-0.95.2.tar.gz</string>
 	<key>OpenSourceVersion</key>
-	<string>clamav 0.90.3</string>
+	<string>clamav 0.95.2 </string>
 	<key>OpenSourceWebsiteURL</key>
 	<string>http://www.clamav.net/</string>
 </dict>

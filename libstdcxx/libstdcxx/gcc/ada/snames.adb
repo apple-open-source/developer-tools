@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -32,6 +32,7 @@
 ------------------------------------------------------------------------------
 
 with Namet; use Namet;
+with Opt;   use Opt;
 with Table;
 
 package body Snames is
@@ -89,6 +90,11 @@ package body Snames is
      "_task_info#" &
      "_task_name#" &
      "_trace_sp#" &
+     "_disp_asynchronous_select#" &
+     "_disp_conditional_select#" &
+     "_disp_get_prim_op_kind#" &
+     "_disp_timed_select#" &
+     "_disp_get_task_id#" &
      "initialize#" &
      "adjust#" &
      "finalize#" &
@@ -169,10 +175,13 @@ package body Snames is
      "ada_83#" &
      "ada_95#" &
      "ada_05#" &
+     "ada_2005#" &
+     "assertion_policy#" &
      "c_pass_by_copy#" &
      "compile_time_warning#" &
      "component_alignment#" &
      "convention_identifier#" &
+     "debug_policy#" &
      "detect_blocking#" &
      "discard_names#" &
      "elaboration_checks#" &
@@ -191,8 +200,7 @@ package body Snames is
      "no_strict_aliasing#" &
      "normalize_scalars#" &
      "polling#" &
-     "persistent_data#" &
-     "persistent_object#" &
+     "persistent_bss#" &
      "profile#" &
      "profile_warnings#" &
      "propagate_exceptions#" &
@@ -223,6 +231,7 @@ package body Snames is
      "attach_handler#" &
      "comment#" &
      "common_object#" &
+     "complete_representation#" &
      "complex_representation#" &
      "controlled#" &
      "convention#" &
@@ -262,6 +271,8 @@ package body Snames is
      "keep_names#" &
      "link_with#" &
      "linker_alias#" &
+     "linker_constructor#" &
+     "linker_destructor#" &
      "linker_options#" &
      "linker_section#" &
      "list#" &
@@ -277,9 +288,11 @@ package body Snames is
      "page#" &
      "passive#" &
      "preelaborate#" &
+     "preelaborate_05#" &
      "priority#" &
      "psect_object#" &
      "pure#" &
+     "pure_05#" &
      "pure_function#" &
      "remote_call_interface#" &
      "remote_types#" &
@@ -321,8 +334,10 @@ package body Snames is
      "dll#" &
      "win32#" &
      "as_is#" &
+     "attribute_name#" &
      "body_file_name#" &
      "boolean_entry_barriers#" &
+     "check#" &
      "casing#" &
      "code#" &
      "component#" &
@@ -333,6 +348,7 @@ package body Snames is
      "dot_replacement#" &
      "dynamic#" &
      "entity#" &
+     "entry_count#" &
      "external_name#" &
      "first_optional_parameter#" &
      "form#" &
@@ -341,6 +357,8 @@ package body Snames is
      "gnat#" &
      "gpl#" &
      "ieee_float#" &
+     "ignore#" &
+     "info#" &
      "internal#" &
      "link_name#" &
      "lowercase#" &
@@ -348,6 +366,7 @@ package body Snames is
      "max_entry_queue_length#" &
      "max_size#" &
      "mechanism#" &
+     "message#" &
      "mixedcase#" &
      "modified_gpl#" &
      "name#" &
@@ -373,6 +392,7 @@ package body Snames is
      "semaphore#" &
      "simple_barriers#" &
      "spec_file_name#" &
+     "state#" &
      "static#" &
      "stack_size#" &
      "subunit_file_name#" &
@@ -390,6 +410,7 @@ package body Snames is
      "user#" &
      "vax_float#" &
      "vms#" &
+     "vtable_ptr#" &
      "working_storage#" &
      "abort_signal#" &
      "access#" &
@@ -441,6 +462,7 @@ package body Snames is
      "machine_mantissa#" &
      "machine_overflows#" &
      "machine_radix#" &
+     "machine_rounding#" &
      "machine_rounds#" &
      "machine_size#" &
      "mantissa#" &
@@ -607,6 +629,7 @@ package body Snames is
      "exception_message#" &
      "exception_name#" &
      "file#" &
+     "generic_dispatching_constructor#" &
      "import_address#" &
      "import_largest_value#" &
      "import_value#" &
@@ -621,6 +644,7 @@ package body Snames is
      "unchecked_conversion#" &
      "unchecked_deallocation#" &
      "to_pointer#" &
+     "free#" &
      "abstract#" &
      "aliased#" &
      "protected#" &
@@ -629,6 +653,8 @@ package body Snames is
      "tagged#" &
      "raise_exception#" &
      "ada_roots#" &
+     "archive_builder#" &
+     "archive_indexer#" &
      "binder#" &
      "binder_driver#" &
      "body_suffix#" &
@@ -636,10 +662,21 @@ package body Snames is
      "compiler#" &
      "compiler_driver#" &
      "compiler_kind#" &
+     "compiler_pic_option#" &
      "compute_dependency#" &
+     "config_body_file_name#" &
+     "config_body_file_name_pattern#" &
+     "config_file_switches#" &
+     "config_file_unique#" &
+     "config_spec_file_name#" &
+     "config_spec_file_name_pattern#" &
      "cross_reference#" &
+     "default_builder_switches#" &
+     "default_global_compiler_switches#" &
+     "default_language#" &
      "default_linker#" &
      "default_switches#" &
+     "dependency_file_kind#" &
      "dependency_option#" &
      "exec_dir#" &
      "executable#" &
@@ -647,6 +684,7 @@ package body Snames is
      "extends#" &
      "externally_built#" &
      "finder#" &
+     "global_compiler_switches#" &
      "global_configuration_pragmas#" &
      "gnatls#" &
      "gnatstub#" &
@@ -654,8 +692,12 @@ package body Snames is
      "implementation_exceptions#" &
      "implementation_suffix#" &
      "include_option#" &
+     "include_path#" &
+     "include_path_file#" &
+     "language_kind#" &
      "language_processing#" &
      "languages#" &
+     "library_ali_dir#" &
      "library_dir#" &
      "library_auto_init#" &
      "library_gcc#" &
@@ -669,13 +711,19 @@ package body Snames is
      "library_symbol_policy#" &
      "library_version#" &
      "linker#" &
+     "linker_executable_option#" &
+     "linker_lib_dir_option#" &
+     "linker_lib_name_option#" &
      "local_configuration_pragmas#" &
      "locally_removed_files#" &
+     "mapping_file_switches#" &
      "metrics#" &
      "naming#" &
      "object_dir#" &
      "pretty_printer#" &
      "project#" &
+     "roots#" &
+     "runtime_project#" &
      "separate_suffix#" &
      "source_dirs#" &
      "source_files#" &
@@ -735,15 +783,18 @@ package body Snames is
    --    xxxDF   deep finalize routine for type xxx                 (Exp_TSS)
    --    xxxDI   deep initialize routine for type xxx               (Exp_TSS)
    --    xxxEQ   composite equality routine for record type xxx     (Exp_TSS)
+   --    xxxFA   PolyORB/DSA From_Any converter for type xxx        (Exp_TSS)
    --    xxxIP   initialization procedure for type xxx              (Exp_TSS)
-   --    xxxRA   RAs type access routine for type xxx               (Exp_TSS)
-   --    xxxRD   RAs type dereference routine for type xxx          (Exp_TSS)
+   --    xxxRA   RAS type access routine for type xxx               (Exp_TSS)
+   --    xxxRD   RAS type dereference routine for type xxx          (Exp_TSS)
    --    xxxRP   Rep to Pos conversion for enumeration type xxx     (Exp_TSS)
    --    xxxSA   array/slice assignment for controlled comp. arrays (Exp_TSS)
    --    xxxSI   stream input attribute subprogram for type xxx     (Exp_TSS)
    --    xxxSO   stream output attribute subprogram for type xxx    (Exp_TSS)
    --    xxxSR   stream read attribute subprogram for type xxx      (Exp_TSS)
    --    xxxSW   stream write attribute subprogram for type xxx     (Exp_TSS)
+   --    xxxTA   PolyORB/DSA To_Any converter for type xxx          (Exp_TSS)
+   --    xxxTC   PolyORB/DSA Typecode for type xxx                  (Exp_TSS)
 
    --  Implicit type names
 
@@ -965,6 +1016,19 @@ package body Snames is
         First_Renamable_Function_Attribute ..
           Last_Renamable_Function_Attribute;
    end Is_Function_Attribute_Name;
+
+   ---------------------
+   -- Is_Keyword_Name --
+   ---------------------
+
+   function Is_Keyword_Name (N : Name_Id) return Boolean is
+   begin
+      return Get_Name_Table_Byte (N) /= 0
+        and then (Ada_Version >= Ada_95
+                  or else N not in Ada_95_Reserved_Words)
+        and then (Ada_Version >= Ada_05
+                  or else N not in Ada_2005_Reserved_Words);
+   end Is_Keyword_Name;
 
    ----------------------------
    -- Is_Locking_Policy_Name --

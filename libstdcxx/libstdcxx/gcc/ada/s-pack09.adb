@@ -1,12 +1,12 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                         GNAT RUNTIME COMPONENTS                          --
+--                         GNAT RUN-TIME COMPONENTS                         --
 --                                                                          --
 --                       S Y S T E M . P A C K _ 0 9                        --
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-1999 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -79,7 +79,6 @@ package body System.Pack_09 is
 
    function Get_09 (Arr : System.Address; N : Natural) return Bits_09 is
       C : constant Cluster_Ref := To_Ref (Arr + Bits * Ofs (Uns (N) / 8));
-
    begin
       case N07 (Uns (N) mod 8) is
          when 0 => return C.E0;
@@ -99,7 +98,6 @@ package body System.Pack_09 is
 
    procedure Set_09 (Arr : System.Address; N : Natural; E : Bits_09) is
       C : constant Cluster_Ref := To_Ref (Arr + Bits * Ofs (Uns (N) / 8));
-
    begin
       case N07 (Uns (N) mod 8) is
          when 0 => C.E0 := E;

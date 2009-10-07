@@ -20,7 +20,9 @@
 module events {
 
     // Introduced in DOM Level 2:
-    interface MouseEvent : UIEvent {
+    interface [
+        GenerateConstructor
+    ] MouseEvent : UIEvent {
         readonly attribute long             screenX;
         readonly attribute long             screenY;
         readonly attribute long             clientX;
@@ -32,7 +34,7 @@ module events {
         readonly attribute unsigned short   button;
         readonly attribute EventTarget      relatedTarget;
         
-        [OldStyleObjC] void initMouseEvent(in AtomicString type, 
+        [OldStyleObjC] void initMouseEvent(in DOMString type, 
                                            in boolean canBubble, 
                                            in boolean cancelable, 
                                            in DOMWindow view, 
@@ -56,7 +58,7 @@ module events {
         readonly attribute Node             fromElement;
         readonly attribute Node             toElement;
 
-#if defined(LANGUAGE_JAVASCRIPT)
+#if defined(LANGUAGE_JAVASCRIPT) && LANGUAGE_JAVASCRIPT
         readonly attribute Clipboard        dataTransfer;
 #endif
     };

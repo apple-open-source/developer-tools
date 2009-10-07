@@ -1,7 +1,5 @@
-// -*- mode: c++; c-basic-offset: 4 -*-
 /*
- *  This file is part of the KDE libraries
- *  Copyright (C) 2005, 2006 Apple Computer, Inc.
+ *  Copyright (C) 2005, 2006, 2007 Apple Inc. All rights reserved.
  *
  *  This library is free software; you can redistribute it and/or
  *  modify it under the terms of the GNU Library General Public
@@ -23,15 +21,15 @@
 #ifndef WTF_PassRefPtr_h
 #define WTF_PassRefPtr_h
 
+#include "AlwaysInline.h"
+
 namespace WTF {
 
     template<typename T> class RefPtr;
     template<typename T> class PassRefPtr;
     template <typename T> PassRefPtr<T> adoptRef(T*);
 
-    template<typename T> 
-    class PassRefPtr
-    {
+    template<typename T> class PassRefPtr {
     public:
         PassRefPtr() : m_ptr(0) {}
         PassRefPtr(T* ptr) : m_ptr(ptr) { if (ptr) ptr->ref(); }
@@ -42,13 +40,14 @@ namespace WTF {
         PassRefPtr(const PassRefPtr& o) : m_ptr(o.releaseRef()) {}
         template <typename U> PassRefPtr(const PassRefPtr<U>& o) : m_ptr(o.releaseRef()) { }
 
-        ~PassRefPtr() { if (T* ptr = m_ptr) ptr->deref(); }
+        ALWAYS_INLINE ~PassRefPtr() { if (UNLIKELY(m_ptr != 0)) m_ptr->deref(); }
         
         template <class U> 
         PassRefPtr(const RefPtr<U>& o) : m_ptr(o.get()) { if (T* ptr = m_ptr) ptr->ref(); }
         
         T* get() const { return m_ptr; }
 
+        void clear() { if (T* ptr = m_ptr) ptr->deref(); m_ptr = 0; }
         T* releaseRef() const { T* tmp = m_ptr; m_ptr = 0; return tmp; }
 
         T& operator*() const { return *m_ptr; }
@@ -57,9 +56,12 @@ namespace WTF {
         bool operator!() const { return !m_ptr; }
 
         // This conversion operator allows implicit conversion to bool but not to other integer types.
-        typedef T* (PassRefPtr::*UnspecifiedBoolType)() const;
-        operator UnspecifiedBoolType() const { return m_ptr ? &PassRefPtr::get : 0; }
-        
+#if COMPILER(WINSCW)
+        operator bool() const { return m_ptr; }
+#else
+        typedef T* PassRefPtr::*UnspecifiedBoolType;
+        operator UnspecifiedBoolType() const { return m_ptr ? &PassRefPtr::m_ptr : 0; }
+#endif
         PassRefPtr& operator=(T*);
         PassRefPtr& operator=(const PassRefPtr&);
         template <typename U> PassRefPtr& operator=(const PassRefPtr<U>&);

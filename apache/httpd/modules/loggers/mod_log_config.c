@@ -87,10 +87,13 @@
  * %...A:  local IP-address
  * %...{Foobar}i:  The contents of Foobar: header line(s) in the request
  *                 sent to the client.
+ * %...k:  number of keepalive requests served over this connection
  * %...l:  remote logname (from identd, if supplied)
  * %...{Foobar}n:  The contents of note "Foobar" from another module.
  * %...{Foobar}o:  The contents of Foobar: header line(s) in the reply.
- * %...p:  the port the request was served to
+ * %...p:  the canonical port for the server
+ * %...{format}p: the canonical port for the server, or the actual local
+ *                or remote port
  * %...P:  the process ID of the child that serviced the request.
  * %...{format}P: the process ID or thread ID of the child/thread that
  *                serviced the request
@@ -633,8 +636,22 @@ static const char *log_virtual_host(request_rec *r, char *a)
 
 static const char *log_server_port(request_rec *r, char *a)
 {
-    return apr_psprintf(r->pool, "%u",
-                        r->server->port ? r->server->port : ap_default_port(r));
+    apr_port_t port;
+
+    if (*a == '\0' || !strcasecmp(a, "canonical")) {
+        port = r->server->port ? r->server->port : ap_default_port(r);
+    }
+    else if (!strcasecmp(a, "remote")) {
+        port = r->connection->remote_addr->port;
+    }
+    else if (!strcasecmp(a, "local")) {
+        port = r->connection->local_addr->port;
+    }
+    else {
+        /* bogus format */
+        return a;
+    }
+    return apr_itoa(r->pool, (int)port);
 }
 
 /* This respects the setting of UseCanonicalName so that
@@ -681,6 +698,12 @@ static const char *log_connection_status(request_rec *r, char *a)
         return "+";
     }
     return "-";
+}
+
+static const char *log_requests_on_connection(request_rec *r, char *a)
+{
+    int num = r->connection->keepalives ? r->connection->keepalives - 1 : 0;
+    return apr_itoa(r->pool, num);
 }
 
 /*****************************************************************
@@ -1487,6 +1510,7 @@ static int log_pre_config(apr_pool_t *p, apr_pool_t *plog, apr_pool_t *ptemp)
         log_pfn_register(p, "q", log_request_query, 0);
         log_pfn_register(p, "X", log_connection_status, 0);
         log_pfn_register(p, "C", log_cookie, 0);
+        log_pfn_register(p, "k", log_requests_on_connection, 0);
         log_pfn_register(p, "r", log_request_line, 1);
         log_pfn_register(p, "D", log_request_duration_microseconds, 1);
         log_pfn_register(p, "T", log_request_duration, 1);

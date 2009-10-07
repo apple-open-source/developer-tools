@@ -49,6 +49,13 @@ struct thread_info
   struct breakpoint *step_resume_breakpoint;
   CORE_ADDR step_range_start;
   CORE_ADDR step_range_end;
+  /* APPLE LOCAL begin remember stepping into inlined subroutine
+     across intervening function calls.  */
+  /* The following contains the start address of the inlined subroutine
+     the user is (eventually) stepping into.  */
+  CORE_ADDR inlined_step_range_end;
+  /* APPLE LOCAL end remember stepping into inlined subroutine across
+     intervening function calls.  */
   /* APPLE LOCAL begin step ranges.  */
   /* The following is used in a manner similar to step_range_start 
      and step_range_end, in those cases (currently inlined subroutines)
@@ -72,10 +79,6 @@ struct thread_info
      list of the catchpoints that should be reported as triggering
      when we finally do stop stepping.  */
   bpstat stepping_through_solib_catchpoints;
-
-  /* APPLE LOCAL How much have WE suspended (for gdb_suspend_count > 0)
-     or resumed (gdb_suspend_count < 0) the current thread.  */
-  int gdb_suspend_count;
 
   /* Private data used by the target vector implementation.  */
   struct private_thread_info *private;

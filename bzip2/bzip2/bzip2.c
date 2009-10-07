@@ -7,8 +7,8 @@
    This file is part of bzip2/libbzip2, a program and library for
    lossless, block-sorting data compression.
 
-   bzip2/libbzip2 version 1.0.4 of 20 December 2006
-   Copyright (C) 1996-2006 Julian Seward <jseward@bzip.org>
+   bzip2/libbzip2 version 1.0.5 of 10 December 2007
+   Copyright (C) 1996-2007 Julian Seward <jseward@bzip.org>
 
    Please read the WARNING, DISCLAIMER and PATENTS sections in the 
    README file.
@@ -153,6 +153,7 @@
 #endif /* BZ_LCCWIN32 */
 
 #ifdef __APPLE__
+#include <sys/attr.h>
 #include <copyfile.h>
 #endif
 
@@ -1064,6 +1065,27 @@ void applySavedTimeInfoToOutputFile ( Char *dstName )
 #  endif
 }
 
+#ifdef __APPLE__
+static void
+clear_type_and_creator(char *path)
+{
+	struct attrlist alist;
+	struct {
+		u_int32_t length;
+		char info[32];
+	} abuf;
+
+	memset(&alist, 0, sizeof(alist));
+	alist.bitmapcount = ATTR_BIT_MAP_COUNT;
+	alist.commonattr = ATTR_CMN_FNDRINFO;
+
+	if (!getattrlist(path, &alist, &abuf, sizeof(abuf), 0) && abuf.length == sizeof(abuf)) {
+		memset(abuf.info, 0, 8);
+		setattrlist(path, &alist, abuf.info, sizeof(abuf.info), 0);
+	}
+}
+#endif /* __APPLE__ */
+
 static 
 void applySavedFileAttrToOutputFile ( IntNative fd )
 {
@@ -1076,6 +1098,7 @@ void applySavedFileAttrToOutputFile ( IntNative fd )
    (void) fchown ( fd, fileMetaInfo.st_uid, fileMetaInfo.st_gid );
 #if __APPLE__
     copyfile(inName, outName, 0, COPYFILE_ACL | COPYFILE_XATTR);
+    clear_type_and_creator(outName);
 #endif
    /* chown() will in many cases return with EPERM, which can
       be safely ignored.
@@ -1611,11 +1634,11 @@ void license ( void )
     "bzip2, a block-sorting file compressor.  "
     "Version %s.\n"
     "   \n"
-    "   Copyright (C) 1996-2006 by Julian Seward.\n"
+    "   Copyright (C) 1996-2007 by Julian Seward.\n"
     "   \n"
     "   This program is free software; you can redistribute it and/or modify\n"
     "   it under the terms set out in the LICENSE file, which is included\n"
-    "   in the bzip2-1.0.4 source distribution.\n"
+    "   in the bzip2-1.0.5 source distribution.\n"
     "   \n"
     "   This program is distributed in the hope that it will be useful,\n"
     "   but WITHOUT ANY WARRANTY; without even the implied warranty of\n"

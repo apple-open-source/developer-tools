@@ -1,5 +1,5 @@
 /* 
- * Copyright (c) 2006-2007, The RubyCocoa Project.
+ * Copyright (c) 2006-2008, The RubyCocoa Project.
  * Copyright (c) 2001-2006, FUJIMOTO Hisakuni.
  * All Rights Reserved.
  *
@@ -61,7 +61,7 @@ static VALUE
 osx_mf_objc_proxy_class_new(VALUE mdl, VALUE kls, VALUE kls_name)
 {
   kls_name = rb_obj_as_string(kls_name);
-  RBObjcClassNew(kls, STR2CSTR(kls_name), [RBObject class]);
+  RBObjcClassNew(kls, StringValuePtr(kls_name), [RBObject class]);
   return Qnil;
 }
 
@@ -75,9 +75,9 @@ osx_mf_objc_derived_class_new(VALUE mdl, VALUE kls, VALUE kls_name, VALUE super_
 
   kls_name = rb_obj_as_string(kls_name);
   super_name = rb_obj_as_string(super_name);
-  super_class = objc_getClass(STR2CSTR(super_name));
+  super_class = objc_getClass(StringValuePtr(super_name));
   if (super_class)
-    new_cls = RBObjcDerivedClassNew(kls, STR2CSTR(kls_name), super_class);
+    new_cls = RBObjcDerivedClassNew(kls, StringValuePtr(kls_name), super_class);
 
   if (new_cls)
     return ocobj_s_new(new_cls);
@@ -95,7 +95,7 @@ osx_mf_objc_class_method_add(VALUE mdl, VALUE kls, VALUE method_name, VALUE clas
   BOOL direct_override;
 
   method_name = rb_obj_as_string(method_name);
-  a_sel = sel_registerName(STR2CSTR(method_name));
+  a_sel = sel_registerName(StringValuePtr(method_name));
   if (a_sel == NULL)
     return Qnil;
   kls_name = rb_class2name(kls);
@@ -117,7 +117,7 @@ osx_mf_objc_class_method_add(VALUE mdl, VALUE kls, VALUE method_name, VALUE clas
     if (NIL_P(types))
       ovmix_register_ruby_method(rcv, a_sel, direct_override);
     else
-      [rcv addRubyMethod:a_sel withType:STR2CSTR(types)];
+      [rcv addRubyMethod:a_sel withType:StringValuePtr(types)];
   }
   return Qnil;
 }
@@ -125,7 +125,7 @@ osx_mf_objc_class_method_add(VALUE mdl, VALUE kls, VALUE method_name, VALUE clas
 static VALUE
 osx_mf_ruby_thread_switcher_start(int argc, VALUE* argv, VALUE mdl)
 {
-  VALUE arg_interval, arg_wait;
+  volatile VALUE arg_interval, arg_wait;
   double interval, wait;
 
   rb_scan_args(argc, argv, "02", &arg_interval, &arg_wait);
@@ -291,10 +291,12 @@ rbobj_get_ocid (VALUE obj)
   if (rb_respond_to(obj, mtd))
     return rb_obj_ocid(obj);
 
+#if 0
   if (rb_respond_to(obj, rb_intern("to_nsobj"))) {
     VALUE nso = rb_funcall(obj, rb_intern("to_nsobj"), 0);
     return rb_obj_ocid(nso);
   }
+#endif
 
   return nil;
 }
@@ -305,14 +307,11 @@ ocid_get_rbobj (id ocid)
   VALUE result = Qnil;
 
   @try {  
-    if ([ocid isProxy] && [ocid isRBObject])
-      result = [ocid __rbobj__];
-    else if ([ocid respondsToSelector: @selector(__rbobj__)])
+    if (([ocid isProxy] && [ocid isRBObject])
+        || [ocid respondsToSelector:@selector(__rbobj__)])
       result = [ocid __rbobj__];
   } 
-  @catch (id exception) {
-    result = Qnil;
-  }
+  @catch (id exception) {}
 
   return result;
 }
@@ -334,6 +333,31 @@ osx_mf_rebind_umethod(VALUE rcv, VALUE klass, VALUE umethod)
   
   return Qnil;
 }
+
+static VALUE
+osx_rbobj_to_nsobj (VALUE rcv, VALUE obj)
+{
+  id ocid, pool;
+  VALUE val;
+
+  pool = [[NSAutoreleasePool alloc] init];
+  if (!rbobj_to_nsobj(obj, &ocid) || ocid == nil) {
+    [pool release];
+    return Qnil;
+  }
+
+  val = ocid_to_rbobj(Qnil, ocid);
+  [ocid retain];
+  OBJCID_DATA_PTR(val)->retained = YES;
+  OBJCID_DATA_PTR(val)->can_be_released = YES;
+
+  [pool release];
+
+  return val;
+}
+
+NSThread *rubycocoaThread;
+NSRunLoop *rubycocoaRunLoop;
 
 /******************/
 
@@ -384,8 +408,13 @@ void initialize_mdl_osxobjc()
   rb_define_module_function(mOSX, "objc_symbol_to_obj", osx_mf_objc_symbol_to_obj, 2);
 
   rb_define_module_function(mOSX, "__rebind_umethod__", osx_mf_rebind_umethod, 2);
+
+  rb_define_module_function(mOSX, "rbobj_to_nsobj", osx_rbobj_to_nsobj, 1);
   
   thread_switcher_start();
   
   initialize_bridge_support(mOSX);
+
+  rubycocoaThread = [NSThread currentThread];
+  rubycocoaRunLoop = [NSRunLoop currentRunLoop];
 }

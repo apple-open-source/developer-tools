@@ -1,16 +1,10 @@
 /* APPLE LOCAL file radar 4436866 */
-/* Property name cannot match the ivar name. */
-/* APPLE LOCAL radar 4899595 */
-/* { dg-options "-fno-objc-new-property -mmacosx-version-min=10.5" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
-/* { dg-options "-fno-objc-new-property" { target arm*-*-darwin* } } */
+/* Check for proper declaration of @property. */
+/* { dg-options "-mmacosx-version-min=10.5" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
 /* { dg-do compile { target *-*-darwin* } } */
 
-@interface Person 
+@interface Bar
 {
-  char *firstName;
+  int iVar;
 }
-@property (dynamic) char *firstName; /* { dg-error "property name \\'firstName\\' matches an ivar name in this class" } */
-@end	
-
-@implementation  Person
-@end
+@property int FooBar /* { dg-warning "expected \\`@end\\' at end of input" } */

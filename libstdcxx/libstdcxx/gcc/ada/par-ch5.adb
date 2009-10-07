@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2004, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -1215,7 +1215,7 @@ package body Ch5 is
                --  Here we have an else that really is an else
 
                if Present (Else_Statements (If_Node)) then
-                  Error_Msg_SP ("Only one ELSE part allowed");
+                  Error_Msg_SP ("only one ELSE part allowed");
                   Append_List
                     (P_Sequence_Of_Statements (SS_Eftm_Eltm_Sreq),
                      Else_Statements (If_Node));
@@ -1671,7 +1671,7 @@ package body Ch5 is
 
    --  This function parses a block statement with DECLARE present
 
-   --  The caller has checked that the initial token is DECLARE.
+   --  The caller has checked that the initial token is DECLARE
 
    --  Error recovery: cannot raise Error_Resync
 

@@ -1,35 +1,16 @@
-/* APPLE LOCAL begin radar 4043818 */
-/* { dg-do compile { target i?86*-*-* } } */
-/* APPLE LOCAL x86_64 */
-/* { dg-require-effective-target ilp32 } */
+/* { dg-do compile } */
 /* { dg-options "-O3 -msse" } */
-/* { dg-final { scan-assembler-times "movq" 4 } } */
-
-typedef int __m64 __attribute__ ((__vector_size__ (8)));
-
-static __inline __m64 __attribute__((__always_inline__))
-_mm_add_si64 (__m64 __m1, __m64 __m2)
+#include <xmmintrin.h>
+static const __m128 v_sign = {-.0f, -.0f, -.0f, -.0f};
+static const __m128 v_half = {0.5f, 0.5f, 0.5f, 0.5f};
+static const __m128 v_one  = {1.0f, 1.0f, 1.0f, 1.0f};
+static inline __m128 insn_ABS (__m128 a)
 {
-  return (__m64) __builtin_ia32_paddq (__m1, __m2);
+  return _mm_andnot_ps (v_sign, a);
 }
-
-
-__m64 unsigned_add3( const __m64 *a, const __m64 *b, __m64 *result, unsigned long count )
+__m128 voodoo (__m128 a)
 {
-  __m64 sum, _a, _b;
-  unsigned int i;
-
-  _a = a[0];
-  _b = b[0];
-
-  sum = _mm_add_si64( _a, _b );
-  for( i = 1; i < count; i++ )
-  {
-   result[i-1] = sum;
-   _a = a[i];
-   _b = b[i];
-   sum = _mm_add_si64( _a, _b );
-  }
-  return sum;
+  __m128 x = insn_ABS (a), y = _mm_rsqrt_ps (x);
+  y = _mm_add_ps (_mm_mul_ps (_mm_sub_ps (_mm_setzero_ps(), _mm_sub_ps (_mm_mul_ps (x, _mm_add_ps (_mm_mul_ps (y, y), _mm_setzero_ps())), v_one)), _mm_add_ps (_mm_mul_ps (y, v_half), _mm_setzero_ps())), y);
+  return y;
 }
-/* APPLE LOCAL end radar 4043818 */

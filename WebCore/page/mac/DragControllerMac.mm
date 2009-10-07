@@ -51,11 +51,11 @@ DragOperation DragController::dragOperation(DragData* dragData)
     ASSERT(dragData);
     if ([NSApp modalWindow] || !dragData->containsURL())
         return DragOperationNone;
-    
-    if (!m_document || ![[m_page->mainFrame()->view()->getOuterView() window] attachedSheet] 
+
+    if (!m_documentUnderMouse || ![[m_page->mainFrame()->view()->getOuterView() window] attachedSheet] 
         && [dragData->platformData() draggingSource] != m_page->mainFrame()->view()->getOuterView())
         return DragOperationCopy;
-        
+
     return DragOperationNone;
 } 
 
@@ -64,6 +64,15 @@ const IntSize& DragController::maxDragImageSize()
     static const IntSize maxDragImageSize(400, 400);
     
     return maxDragImageSize;
+}
+
+void DragController::cleanupAfterSystemDrag()
+{
+    // Drag has ended, dragEnded *should* have been called, however it is possible
+    // for the UIDelegate to take over the drag, and fail to send the appropriate
+    // drag termination event.  As dragEnded just resets drag variables, we just
+    // call it anyway to be on the safe side
+    dragEnded();
 }
 
 }

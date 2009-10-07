@@ -3,8 +3,10 @@
 /* Contributed by Ziemowit Laski <zlaski@apple.com>.  */
 /* { dg-options "-lobjc -Wpadded" } */
 /* { dg-do run } */
-/* APPLE LOCAL radar 4894756 */
-/* { dg-skip-if "" { *-*-darwin* } { "-m64" } { "" } } */
+/* APPLE LOCAL begin objc2 */
+/* { dg-require-effective-target ilp32 } */
+/* { dg-skip-if "" { arm*-*-darwin* } { "*" } { "" } } */
+/* APPLE LOCAL end objc2 */
 
 #include <objc/objc.h>
 #include <objc/Object.h>

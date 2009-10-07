@@ -1,4 +1,3 @@
-/* APPLE LOCAL file mainline 2006-06-29 4336222 */
 /* { dg-do compile  } */
 /* { dg-options "-std=c99 -pedantic-errors" } */
 /* Radar 4336222 */

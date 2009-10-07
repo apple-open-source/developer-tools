@@ -1,9 +1,9 @@
 /*
- * "$Id: quotas.c 6949 2007-09-12 21:33:23Z mike $"
+ * "$Id: quotas.c 6947 2007-09-12 21:09:49Z mike $"
  *
  *   Quota routines for the Common UNIX Printing System (CUPS).
  *
- *   Copyright 2007 by Apple Inc.
+ *   Copyright 2007-2009 by Apple Inc.
  *   Copyright 1997-2007 by Easy Software Products.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -155,8 +155,20 @@ cupsdUpdateQuota(
        job;
        job = (cupsd_job_t *)cupsArrayNext(Jobs))
   {
+   /*
+    * We only care about the current printer/class and user...
+    */
+
     if (strcasecmp(job->dest, p->name) != 0 ||
         strcasecmp(job->username, q->username) != 0)
+      continue;
+
+   /*
+    * Make sure attributes are loaded; we always call cupsdLoadJob() to ensure
+    * the access_time member is updated so the job isn't unloaded right away...
+    */
+
+    if (!cupsdLoadJob(job))
       continue;
 
     if ((attr = ippFindAttribute(job->attrs, "time-at-completion",
@@ -166,13 +178,14 @@ cupsdUpdateQuota(
         attr = ippFindAttribute(job->attrs, "time-at-creation",
                                 IPP_TAG_INTEGER);
 
-    if (attr == NULL)
-      break;
-
     if (attr->values[0].integer < curtime)
     {
-      if (JobAutoPurge)
-        cupsdCancelJob(job, 1, IPP_JOB_CANCELED);
+     /*
+      * This job is too old to count towards the quota, ignore it...
+      */
+
+      if (JobAutoPurge && !job->printer && job->state_value > IPP_JOB_STOPPED)
+        cupsdDeleteJob(job, CUPSD_JOB_PURGE);
 
       continue;
     }
@@ -240,5 +253,5 @@ compare_quotas(const cupsd_quota_t *q1,	/* I - First quota record */
 
 
 /*
- * End of "$Id: quotas.c 6949 2007-09-12 21:33:23Z mike $".
+ * End of "$Id: quotas.c 6947 2007-09-12 21:09:49Z mike $".
  */

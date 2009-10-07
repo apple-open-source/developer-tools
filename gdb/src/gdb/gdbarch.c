@@ -238,6 +238,7 @@ struct gdbarch
   gdbarch_register_reggroup_p_ftype *register_reggroup_p;
   gdbarch_fetch_pointer_argument_ftype *fetch_pointer_argument;
   gdbarch_regset_from_core_section_ftype *regset_from_core_section;
+  gdbarch_adjust_ehframe_regnum_ftype *adjust_ehframe_regnum;
 };
 
 
@@ -367,6 +368,7 @@ struct gdbarch startup_gdbarch =
   default_register_reggroup_p,  /* register_reggroup_p */
   0,  /* fetch_pointer_argument */
   0,  /* regset_from_core_section */
+  default_adjust_ehframe_regnum,  /* adjust_ehframe_regnum */
   /* startup_gdbarch() */
 };
 
@@ -457,6 +459,7 @@ gdbarch_alloc (const struct gdbarch_info *info,
   current_gdbarch->dbx_make_msymbol_special = default_dbx_make_msymbol_special;
   current_gdbarch->name_of_malloc = "malloc";
   current_gdbarch->register_reggroup_p = default_register_reggroup_p;
+  current_gdbarch->adjust_ehframe_regnum = default_adjust_ehframe_regnum;
   /* gdbarch_alloc() */
 
   return current_gdbarch;
@@ -625,6 +628,7 @@ verify_gdbarch (struct gdbarch *current_gdbarch)
   /* Skip verify of register_reggroup_p, invalid_p == 0 */
   /* Skip verify of fetch_pointer_argument, has predicate */
   /* Skip verify of regset_from_core_section, has predicate */
+  /* Skip verify of adjust_ehframe_regnum, invalid_p == 0 */
   buf = ui_file_xstrdup (log, &dummy);
   make_cleanup (xfree, buf);
   if (strlen (buf) > 0)
@@ -729,6 +733,9 @@ gdbarch_dump (struct gdbarch *current_gdbarch, struct ui_file *file)
   fprintf_unfiltered (file,
                       "gdbarch_dump: adjust_breakpoint_address = <0x%lx>\n",
                       (long) current_gdbarch->adjust_breakpoint_address);
+  fprintf_unfiltered (file,
+                      "gdbarch_dump: adjust_ehframe_regnum = <0x%lx>\n",
+                      (long) current_gdbarch->adjust_ehframe_regnum);
 #ifdef BELIEVE_PCC_PROMOTION
   fprintf_unfiltered (file,
                       "gdbarch_dump: BELIEVE_PCC_PROMOTION # %s\n",
@@ -3801,6 +3808,23 @@ set_gdbarch_regset_from_core_section (struct gdbarch *gdbarch,
                                       gdbarch_regset_from_core_section_ftype regset_from_core_section)
 {
   gdbarch->regset_from_core_section = regset_from_core_section;
+}
+
+int
+gdbarch_adjust_ehframe_regnum (struct gdbarch *gdbarch, int regnum, int eh_frame_p)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->adjust_ehframe_regnum != NULL);
+  if (gdbarch_debug >= 2)
+    fprintf_unfiltered (gdb_stdlog, "gdbarch_adjust_ehframe_regnum called\n");
+  return gdbarch->adjust_ehframe_regnum (gdbarch, regnum, eh_frame_p);
+}
+
+void
+set_gdbarch_adjust_ehframe_regnum (struct gdbarch *gdbarch,
+                                   gdbarch_adjust_ehframe_regnum_ftype adjust_ehframe_regnum)
+{
+  gdbarch->adjust_ehframe_regnum = adjust_ehframe_regnum;
 }
 
 

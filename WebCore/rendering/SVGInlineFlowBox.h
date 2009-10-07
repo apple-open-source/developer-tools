@@ -25,25 +25,27 @@
 #define SVGInlineFlowBox_h
 
 #if ENABLE(SVG)
-
 #include "InlineFlowBox.h"
 
 namespace WebCore {
-
-void paintSVGInlineFlow(InlineFlowBox*, RenderObject*, RenderObject::PaintInfo&, int tx, int ty);
-int placeSVGFlowHorizontally(InlineFlowBox*, int x, int& leftPosition, int& rightPosition, bool& needsWordSpacing);
-void placeSVGFlowVertically(InlineFlowBox*, int& heightOfBlock);
 
 class SVGInlineFlowBox : public InlineFlowBox {
 public:
     SVGInlineFlowBox(RenderObject* obj)
         : InlineFlowBox(obj)
+        , m_height(0)
     {
     }
 
+    virtual int virtualHeight() const { return m_height; }
+    void setHeight(int h) { m_height = h; }
+
     virtual void paint(RenderObject::PaintInfo&, int tx, int ty);
     virtual int placeBoxesHorizontally(int x, int& leftPosition, int& rightPosition, bool& needsWordSpacing);
-    virtual void verticallyAlignBoxes(int& heightOfBlock);
+    virtual int verticallyAlignBoxes(int heightOfBlock);
+    
+private:
+    int m_height;
 };
 
 } // namespace WebCore

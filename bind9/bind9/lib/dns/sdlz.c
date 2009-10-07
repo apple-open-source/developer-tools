@@ -1,8 +1,8 @@
 /*
- * Portions Copyright (C) 2005-2007  Internet Systems Consortium, Inc. ("ISC")
+ * Portions Copyright (C) 2005-2008  Internet Systems Consortium, Inc. ("ISC")
  * Portions Copyright (C) 1999-2001  Internet Software Consortium.
  *
- * Permission to use, copy, modify, and distribute this software for any
+ * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
  *
@@ -50,7 +50,7 @@
  * USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* $Id: sdlz.c,v 1.2.2.9 2007/02/14 23:45:43 marka Exp $ */
+/* $Id: sdlz.c,v 1.18 2008/09/24 02:46:22 marka Exp $ */
 
 /*! \file */
 
@@ -166,6 +166,10 @@ typedef struct sdlz_rdatasetiter {
 
 static int dummy;
 
+#ifdef __COVERITY__
+#define MAYBE_LOCK(imp) LOCK(&imp->driverlock)
+#define MAYBE_UNLOCK(imp) UNLOCK(&imp->driverlock)
+#else
 #define MAYBE_LOCK(imp) \
 	do { \
 		unsigned int flags = imp->flags; \
@@ -179,6 +183,7 @@ static int dummy;
 		if ((flags & DNS_SDLZFLAG_THREADSAFE) == 0) \
 			UNLOCK(&imp->driverlock); \
 	} while (0)
+#endif
 
 /*
  * Forward references.  Try to keep these to a minimum.
@@ -662,8 +667,7 @@ printnode(dns_db_t *db, dns_dbnode_t *node, FILE *out) {
 }
 
 static isc_result_t
-createiterator(dns_db_t *db, isc_boolean_t relative_names,
-	       dns_dbiterator_t **iteratorp)
+createiterator(dns_db_t *db, unsigned int options, dns_dbiterator_t **iteratorp)
 {
 	dns_sdlz_db_t *sdlz = (dns_sdlz_db_t *)db;
 	sdlz_dbiterator_t *sdlziter;
@@ -675,6 +679,10 @@ createiterator(dns_db_t *db, isc_boolean_t relative_names,
 
 	if (sdlz->dlzimp->methods->allnodes == NULL)
 		return (ISC_R_NOTIMPLEMENTED);
+
+	if ((options & DNS_DB_NSEC3ONLY) != 0 ||
+	    (options & DNS_DB_NONSEC3) != 0)
+		 return (ISC_R_NOTIMPLEMENTED);
 
 	isc_buffer_init(&b, zonestr, sizeof(zonestr));
 	result = dns_name_totext(&sdlz->common.origin, ISC_TRUE, &b);
@@ -689,7 +697,7 @@ createiterator(dns_db_t *db, isc_boolean_t relative_names,
 	sdlziter->common.methods = &dbiterator_methods;
 	sdlziter->common.db = NULL;
 	dns_db_attach(db, &sdlziter->common.db);
-	sdlziter->common.relative_names = relative_names;
+	sdlziter->common.relative_names = ISC_TF(options & DNS_DB_RELATIVENAMES);
 	sdlziter->common.magic = DNS_DBITERATOR_MAGIC;
 	ISC_LIST_INIT(sdlziter->nodelist);
 	sdlziter->current = NULL;
@@ -1046,6 +1054,14 @@ static dns_dbmethods_t sdlzdb_methods = {
 	overmem,
 	settask,
 	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL
 };
 
 /*
@@ -1188,6 +1204,8 @@ static dns_rdatasetmethods_t rdataset_methods = {
 	isc__rdatalist_getnoqname,
 	NULL,
 	NULL,
+	NULL,
+	NULL,
 	NULL
 };
 
@@ -1322,7 +1340,7 @@ dns_sdlzallowzonexfr(void *driverarg, void *dbdata, isc_mem_t *mctx,
 		return (result);
 	isc_buffer_putuint8(&b2, 0);
 
-        /* make sure strings are always lowercase */
+	/* make sure strings are always lowercase */
 	dns_sdlz_tolower(namestr);
 	dns_sdlz_tolower(clientstr);
 
@@ -1435,7 +1453,7 @@ dns_sdlzfindzone(void *driverarg, void *dbdata, isc_mem_t *mctx,
 		return (result);
 	isc_buffer_putuint8(&b, 0);
 
-        /* make sure strings are always lowercase */
+	/* make sure strings are always lowercase */
 	dns_sdlz_tolower(namestr);
 
 	/* Call SDLZ driver's find zone method */
@@ -1566,7 +1584,7 @@ dns_sdlz_putrr(dns_sdlzlookup_t *lookup, const char *type, dns_ttl_t ttl,
 	return (ISC_R_SUCCESS);
 
  failure:
- 	if (rdatabuf != NULL)
+	if (rdatabuf != NULL)
 		isc_buffer_free(&rdatabuf);
 	if (lex != NULL)
 		isc_lex_destroy(&lex);

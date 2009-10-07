@@ -1,4 +1,3 @@
-/* APPLE LOCAL begin mainline 2005-08-31 */
 #include        <stdio.h>
 #include        <stdlib.h>
 extern void abort();
@@ -32,4 +31,3 @@ main(int argc, char **argv)
 	  abort();
 	return 0;
 }
-/* APPLE LOCAL end mainline 2005-08-31 */

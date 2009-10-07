@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2003 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -143,11 +143,10 @@ package Sem_Ch6 is
    procedure New_Overloaded_Entity
      (S            : Entity_Id;
       Derived_Type : Entity_Id := Empty);
-   --  Process new overloaded entity. Overloaded entities are created
-   --  by enumeration type declarations, subprogram specifications,
-   --  entry declarations, and (implicitly) by type derivations.
-   --  If Derived_Type is not Empty, then it indicates that this
-   --  is subprogram derived for that type.
+   --  Process new overloaded entity. Overloaded entities are created by
+   --  enumeration type declarations, subprogram specifications, entry
+   --  declarations, and (implicitly) by type derivations. Derived_Type non-
+   --  Empty indicates that this is subprogram derived for that type.
 
    procedure Process_Formals (T : List_Id; Related_Nod : Node_Id);
    --  Enter the formals in the scope of the subprogram or entry, and
@@ -168,11 +167,14 @@ package Sem_Ch6 is
 
    function Subtype_Conformant (New_Id, Old_Id : Entity_Id) return Boolean;
    --  Determine whether two callable entities (subprograms, entries,
-   --  literals) are subtype conformant (RM6.3.1(16))
+   --  literals) are subtype conformant (RM6.3.1(16)).
 
-   function Type_Conformant (New_Id, Old_Id : Entity_Id) return Boolean;
+   function Type_Conformant
+     (New_Id                   : Entity_Id;
+      Old_Id                   : Entity_Id;
+      Skip_Controlling_Formals : Boolean := False) return Boolean;
    --  Determine whether two callable entities (subprograms, entries,
-   --  literals) are type conformant (RM6.3.1(14))
+   --  literals) are type conformant (RM6.3.1(14)).
 
    procedure Valid_Operator_Definition (Designator : Entity_Id);
    --  Verify that an operator definition has the proper number of formals

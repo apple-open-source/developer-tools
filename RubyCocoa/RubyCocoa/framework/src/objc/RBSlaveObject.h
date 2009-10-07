@@ -1,5 +1,5 @@
 /* 
- * Copyright (c) 2006-2007, The RubyCocoa Project.
+ * Copyright (c) 2006-2008, The RubyCocoa Project.
  * Copyright (c) 2001-2006, FUJIMOTO Hisakuni.
  * All Rights Reserved.
  *
@@ -14,4 +14,10 @@
 - initWithMasterObject: master;
 - initWithClass: (Class)occlass masterObject: master;
 - initWithRubyClass: (VALUE)rbclass masterObject: master;
+@end
+
+@interface RBObject(RBSlaveObjectPrivate)
+- (void)trackRetainReleaseOfRubyObject;
+- (void)releaseRubyObject;
+- (void)retainRubyObject;
 @end

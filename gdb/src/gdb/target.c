@@ -42,6 +42,10 @@
 #include "gdbcore.h"
 #include "objc-lang.h"  /* for objc_clear_selector_to_implementation_cache */
 #include "checkpoint.h" /* for checkpoint_clear_inferior */
+#include "ui-out.h"
+#include "dis-asm.h"
+#include "gdbarch.h"
+
 static void target_info (char *, int);
 
 static void maybe_kill_then_attach (char *, int);
@@ -213,6 +217,15 @@ int set_trust_readonly (int newval)
   int oldval = trust_readonly;
   trust_readonly = newval;
   return oldval;
+}
+
+/* set_trust_readonly() takes an int but the cleanup func must take a void*
+   so we use this trampoline func to avoid sizeof int == sizeof void* 
+   confusions.  */
+void
+set_trust_readonly_cleanup (void *new)
+{
+  set_trust_readonly ((int) new);
 }
 
 /* Non-zero if we want to see trace of target level stuff.  */
@@ -483,12 +496,18 @@ update_current_target (void)
       INHERIT (to_make_corefile_notes, t);
       /* APPLE LOCAL to_bind_function */
       INHERIT (to_bind_function, t);
+      /* APPLE LOCAL to_get_thread_name */
+      INHERIT (to_get_thread_name, t);
+      /* APPLE LOCAL to_get_thread_id_str */
+      INHERIT (to_get_thread_id_str, t);
       /* APPLE LOCAL safe call check */
       INHERIT (to_check_safe_call, t);
       /* APPLE LOCAL objfile loaded check */
       INHERIT (to_check_is_objfile_loaded, t);
+      /* APPLE LOCAL: Loading shared libraries */
+      INHERIT (to_load_solib, t);
       /* APPLE LOCAL allocate memory in inferior */
-      INHERIT (to_allocate_memory, t);
+	INHERIT (to_allocate_memory, t);
       INHERIT (to_get_thread_local_address, t);
       INHERIT (to_magic, t);
     }
@@ -676,11 +695,17 @@ update_current_target (void)
 	    return_zero);
   de_fault (to_async, 
 	    (void (*) (void (*) (enum inferior_event_type, void*), void*)) 
-	    tcomplain);
+	    target_ignore);
   /* APPLE LOCAL begin target */
   de_fault (to_pid_to_str,
            (char * (*) (ptid_t))
            normal_pid_to_str);
+  de_fault (to_get_thread_name,
+           (char * (*) (ptid_t))
+           return_zero);
+  de_fault (to_get_thread_id_str,
+           (char * (*) (ptid_t))
+           return_zero);
   de_fault (to_bind_function,
            (int (*) (char *)) return_one);
   de_fault (to_check_safe_call,
@@ -689,6 +714,8 @@ update_current_target (void)
   de_fault (to_allocate_memory, allocate_space_in_inferior_malloc);
   de_fault (to_check_is_objfile_loaded,
            (int (*) (struct objfile *)) return_one);
+  de_fault (to_load_solib,
+	    (void *(*) (char *,int)) return_zero);
   /* APPLE LOCAL end target */
 #undef de_fault
 
@@ -936,7 +963,6 @@ memory_xfer_partial (struct target_ops *ops, void *readbuf,
   if (readbuf != NULL && trust_readonly)
     {
       struct obj_section *osect;
-      struct section_table *secp;
       LONGEST retval;
 
       /* APPLE LOCAL: This used to search through the target's
@@ -1088,7 +1114,10 @@ target_xfer_partial (struct target_ops *ops,
 		      fprintf_unfiltered (gdb_stdlog, " ...");
 		      break;
 		    }
-		  fprintf_unfiltered (gdb_stdlog, "\n");
+                  /* Only introduce line breaks if we're printing a large
+                     buffer.  For 8 bytes or less, put it on the same line.  */
+                  if (retval > 8)
+		    fprintf_unfiltered (gdb_stdlog, "\n");
 		}
 
 	      fprintf_unfiltered (gdb_stdlog, " %02x", myaddr[i] & 0xff);
@@ -1380,11 +1409,26 @@ target_preopen (int from_tty)
     pop_target ();
 }
 
+/* Kill the target, but make sure to turn off debugger mode
+   first.  */
+
+void
+target_kill (void)
+{
+  /* Make sure to turn off debugger mode - 
+     we will let the target run a bit before killing it.  */
+  do_hand_call_cleanups (ALL_CLEANUPS);
+  (current_target.to_kill) ();
+}
+
 /* Detach a target after doing deferred register stores.  */
 
 void
 target_detach (char *args, int from_tty)
 {
+  /* Make sure to turn off debugger mode - 
+     we will let the target run a bit before killing it.  */
+  do_hand_call_cleanups (ALL_CLEANUPS);
   (current_target.to_detach) (args, from_tty);
 }
 
@@ -1404,9 +1448,9 @@ target_async_mask (int mask)
 
 /* APPLE LOCAL begin async */
 void
-gdb_set_async_override (int on)
+gdb_set_async_override (void *on)
 {
-  gdb_override_async = on;
+  gdb_override_async = (int) on;
 }
 
 /* do_restore_target_async_mask is a convenience function to use
@@ -1670,7 +1714,7 @@ generic_mourn_inferior (void)
   if (!show_breakpoint_hit_counts)
     breakpoint_clear_ignore_counts ();
 
-  objc_clear_caches ();
+  reinitialize_objc ();
 
   if (deprecated_detach_hook)
     deprecated_detach_hook ();
@@ -1720,6 +1764,69 @@ normal_pid_to_str (ptid_t ptid)
 
   xsnprintf (buf, sizeof buf, "process %d", ptid_get_pid (ptid));
   return buf;
+}
+
+
+static struct disassemble_info gdb_disassemble_info_noprint 
+                              (struct gdbarch *gdbarch, struct ui_file *file);
+int length_of_this_instruction (CORE_ADDR memaddr);
+
+/* Like target_read_memory, but slightly different parameters.  */
+static int
+dis_asm_read_memory_noprint (bfd_vma memaddr, gdb_byte *myaddr, 
+                             unsigned int len, struct disassemble_info *info)
+{
+  return target_read_memory (memaddr, myaddr, len);
+}
+
+/* Like memory_error with slightly different parameters.  */
+static void
+dis_asm_memory_error_noprint (int status, bfd_vma memaddr,
+                              struct disassemble_info *info)
+{
+  memory_error (status, memaddr);
+}
+
+/* Like print_address with slightly different parameters.  */
+static void
+dis_asm_print_address_noprint (bfd_vma addr, struct disassemble_info *info)
+{
+}
+
+static int ATTR_FORMAT (printf, 2, 3)
+fprintf_disasm_noprint (void *stream, const char *format, ...)
+{
+  va_list args;
+  va_start (args, format);
+  va_end (args);
+  return 0;
+}
+
+static struct disassemble_info
+gdb_disassemble_info_noprint (struct gdbarch *gdbarch, struct ui_file *file)
+{
+  struct disassemble_info di;
+  init_disassemble_info (&di, file, fprintf_disasm_noprint);
+  di.flavour = bfd_target_unknown_flavour;
+  di.memory_error_func = dis_asm_memory_error_noprint;
+  di.print_address_func = dis_asm_print_address_noprint;
+  di.read_memory_func = dis_asm_read_memory_noprint;
+  di.arch = gdbarch_bfd_arch_info (gdbarch)->arch;
+  di.mach = gdbarch_bfd_arch_info (gdbarch)->mach;
+  di.endian = gdbarch_byte_order (gdbarch);
+  disassemble_init_for_target (&di);
+  return di;
+}
+
+int 
+length_of_this_instruction (CORE_ADDR memaddr)
+{
+  static struct ui_stream *stb = NULL;
+  if (stb == NULL)
+    stb = ui_out_stream_new (uiout); 
+  struct disassemble_info di = gdb_disassemble_info_noprint (current_gdbarch, 
+                                                            stb->stream);
+  return TARGET_PRINT_INSN (memaddr, &di);
 }
 
 /* Error-catcher for target_find_memory_regions */
@@ -1956,7 +2063,10 @@ deprecated_debug_xfer_memory (CORE_ADDR memaddr, bfd_byte *myaddr, int len,
 		  fprintf_unfiltered (gdb_stdlog, " ...");
 		  break;
 		}
-	      fprintf_unfiltered (gdb_stdlog, "\n");
+              /* Only introduce line breaks if we're printing a large
+                 buffer.  For 8 bytes or less, put it on the same line.  */
+              if (retval > 8)
+	        fprintf_unfiltered (gdb_stdlog, "\n");
 	    }
 
 	  fprintf_unfiltered (gdb_stdlog, " %02x", myaddr[i] & 0xff);
@@ -2410,10 +2520,10 @@ debug_to_rcmd (char *command,
 }
 
 /* APPLE LOCAL begin exception catchpoints */
-static struct symtab_and_line *
+static struct symtabs_and_lines *
 debug_to_find_exception_catchpoints (enum exception_event_kind kind, struct objfile *objfile)
 {
-  struct symtab_and_line *result;
+  struct symtabs_and_lines *result;
   result = debug_target.to_find_exception_catchpoints (kind, objfile);
   fprintf_unfiltered (gdb_stdlog,
 		      "target find_exception_catchpoints (%d) (%s)\n",
@@ -2422,10 +2532,11 @@ debug_to_find_exception_catchpoints (enum exception_event_kind kind, struct objf
 }
 /* APPLE LOCAL end exception catchpoints */
 
-struct symtab_and_line *
+/* APPLE LOCAL accept/return int */
+int
 debug_to_enable_exception_callback (enum exception_event_kind kind, int enable)
 {
-  struct symtab_and_line *result;
+  int result;
   result = debug_target.to_enable_exception_callback (kind, enable);
   fprintf_unfiltered (gdb_stdlog,
 		      "target get_exception_callback_sal (%d, %d)\n",
@@ -2466,6 +2577,23 @@ debug_check_is_objfile_loaded (struct objfile *objfile)
     fprintf_unfiltered (gdb_stdlog, "dyld_is_objfile_loaded (NULL) == %d\n", retval);
   else if (objfile->name)
     fprintf_unfiltered (gdb_stdlog, "dyld_is_objfile_loaded (\"%s\") == %d\n", objfile->name, retval);
+
+  return retval;
+}
+/* APPLE LOCAL end objfile loaded check */
+
+/* APPLE LOCAL begin objfile loading */
+static struct value *
+debug_load_solib (char *path, char *flags)
+{
+  struct value *retval = debug_target.to_load_solib (path, flags);
+
+  if (path == NULL)
+    fprintf_unfiltered (gdb_stdlog, "load_solib (NULL) == 0x%s\n", 
+			paddr_nz (value_as_address (retval)));
+  else if (path)
+    fprintf_unfiltered (gdb_stdlog, "load_solib (\"%s\",\"%s\") == 0x%s\n", path, flags,
+			paddr_nz (value_as_address (retval)));
 
   return retval;
 }
@@ -2529,6 +2657,7 @@ setup_target_debug (void)
   current_target.to_stop = debug_to_stop;
   /* APPLE LOCAL */
   current_target.to_check_is_objfile_loaded = debug_check_is_objfile_loaded;
+  current_target.to_load_solib = debug_load_solib;
   current_target.to_rcmd = debug_to_rcmd;
   current_target.to_find_exception_catchpoints 
     = debug_to_find_exception_catchpoints;

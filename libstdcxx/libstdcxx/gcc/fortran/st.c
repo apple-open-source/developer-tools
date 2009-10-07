@@ -1,5 +1,6 @@
 /* Build executable statement trees.
-   Copyright (C) 2000, 2001, 2002, 2004, 2005 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2002, 2004, 2005, 2006
+   Free Software Foundation, Inc.
    Contributed by Andy Vaught
 
 This file is part of GCC.
@@ -16,8 +17,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 /* Executable statements are strung together into a singly linked list
    of code structures.  These structures are later translated into GCC
@@ -92,6 +93,7 @@ gfc_free_statement (gfc_code * p)
     {
     case EXEC_NOP:
     case EXEC_ASSIGN:
+    case EXEC_INIT_ASSIGN:
     case EXEC_GOTO:
     case EXEC_CYCLE:
     case EXEC_RETURN:
@@ -111,6 +113,7 @@ gfc_free_statement (gfc_code * p)
       break;
 
     case EXEC_CALL:
+    case EXEC_ASSIGN_CALL:
       gfc_free_actual_arglist (p->ext.actual);
       break;
 
@@ -139,6 +142,7 @@ gfc_free_statement (gfc_code * p)
     case EXEC_BACKSPACE:
     case EXEC_ENDFILE:
     case EXEC_REWIND:
+    case EXEC_FLUSH:
       gfc_free_filepos (p->ext.filepos);
       break;
 
@@ -158,6 +162,33 @@ gfc_free_statement (gfc_code * p)
 
     case EXEC_FORALL:
       gfc_free_forall_iterator (p->ext.forall_iterator);
+      break;
+
+    case EXEC_OMP_DO:
+    case EXEC_OMP_END_SINGLE:
+    case EXEC_OMP_PARALLEL:
+    case EXEC_OMP_PARALLEL_DO:
+    case EXEC_OMP_PARALLEL_SECTIONS:
+    case EXEC_OMP_SECTIONS:
+    case EXEC_OMP_SINGLE:
+    case EXEC_OMP_WORKSHARE:
+    case EXEC_OMP_PARALLEL_WORKSHARE:
+      gfc_free_omp_clauses (p->ext.omp_clauses);
+      break;
+
+    case EXEC_OMP_CRITICAL:
+      gfc_free ((char *) p->ext.omp_name);
+      break;
+
+    case EXEC_OMP_FLUSH:
+      gfc_free_namelist (p->ext.omp_namelist);
+      break;
+
+    case EXEC_OMP_ATOMIC:
+    case EXEC_OMP_BARRIER:
+    case EXEC_OMP_MASTER:
+    case EXEC_OMP_ORDERED:
+    case EXEC_OMP_END_NOWAIT:
       break;
 
     default:

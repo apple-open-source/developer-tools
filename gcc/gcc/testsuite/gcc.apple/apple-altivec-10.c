@@ -1,6 +1,6 @@
 /* APPLE LOCAL file AltiVec */
 /* { dg-do run { target powerpc*-*-* } } */
-/* { dg-options "-faltivec" } */
+/* { dg-options "-faltivec -Wno-format" } */
 extern void abort();
 
 #include <stdio.h>

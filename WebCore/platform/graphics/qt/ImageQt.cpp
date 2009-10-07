@@ -2,6 +2,7 @@
  * Copyright (C) 2006 Dirk Mueller <mueller@kde.org>
  * Copyright (C) 2006 Zack Rusin <zack@kde.org>
  * Copyright (C) 2006 Simon Hausmann <hausmann@kde.org>
+ * Copyright (C) 2009 Torch Mobile Inc. http://www.torchmobile.com/
  *
  * All rights reserved.
  *
@@ -30,12 +31,14 @@
 #include "config.h"
 #include "Image.h"
 
+#include "ImageObserver.h"
 #include "BitmapImage.h"
 #include "FloatRect.h"
 #include "PlatformString.h"
 #include "GraphicsContext.h"
-#include "AffineTransform.h"
-#include "NotImplemented.h"
+#include "TransformationMatrix.h"
+#include "StillImageQt.h"
+#include "qwebsettings.h"
 
 #include <QPixmap>
 #include <QPainter>
@@ -50,17 +53,33 @@
 #include <math.h>
 
 // This function loads resources into WebKit
-QPixmap loadResourcePixmap(const char*);
+static QPixmap loadResourcePixmap(const char *name)
+{
+    QPixmap pixmap;
+    if (qstrcmp(name, "missingImage") == 0)
+        pixmap = QWebSettings::webGraphic(QWebSettings::MissingImageGraphic);
+    else if (qstrcmp(name, "nullPlugin") == 0)
+        pixmap = QWebSettings::webGraphic(QWebSettings::MissingPluginGraphic);
+    else if (qstrcmp(name, "urlIcon") == 0)
+        pixmap = QWebSettings::webGraphic(QWebSettings::DefaultFrameIconGraphic);
+    else if (qstrcmp(name, "textAreaResizeCorner") == 0)
+        pixmap = QWebSettings::webGraphic(QWebSettings::TextAreaSizeGripCornerGraphic);
+
+    return pixmap;
+}
 
 namespace WebCore {
 
-void FrameData::clear()
+bool FrameData::clear(bool clearMetadata)
 {
+    if (clearMetadata)
+        m_haveMetadata = false;
+
     if (m_frame) {
         m_frame = 0;
-        m_duration = 0.0f;
-        m_hasAlpha = true;
+        return true;
     }
+    return false;
 }
 
 
@@ -69,52 +88,54 @@ void FrameData::clear()
 // Image Class
 // ================================================
 
-Image* Image::loadPlatformResource(const char* name)
+PassRefPtr<Image> Image::loadPlatformResource(const char* name)
 {
-    BitmapImage* img = new BitmapImage(loadResourcePixmap(name));
-    return img;
+    return StillImage::create(loadResourcePixmap(name));
 }
 
     
-void Image::drawPattern(GraphicsContext* ctxt, const FloatRect& tileRect, const AffineTransform& patternTransform,
+void Image::drawPattern(GraphicsContext* ctxt, const FloatRect& tileRect, const TransformationMatrix& patternTransform,
                         const FloatPoint& phase, CompositeOperator op, const FloatRect& destRect)
 {
-    notImplemented();
-}
+    QPixmap* framePixmap = nativeImageForCurrentFrame();
+    if (!framePixmap) // If it's too early we won't have an image yet.
+        return;
 
-BitmapImage::BitmapImage(const QPixmap &pixmap, ImageObserver *observer)
-    : Image(observer)
-    , m_currentFrame(0)
-    , m_frames(0)
-    , m_frameTimer(0)
-    , m_repetitionCount(0)
-    , m_repetitionsComplete(0)
-    , m_isSolidColor(false)
-    , m_animatingImageType(true)
-    , m_animationFinished(false)
-    , m_allDataReceived(false)
-    , m_haveSize(false)
-    , m_sizeAvailable(false)
-    , m_decodedSize(0)
-{
-    m_pixmap = new QPixmap(pixmap);
+    QPixmap pixmap = *framePixmap;
+    QRect tr = QRectF(tileRect).toRect();
+    if (tr.x() || tr.y() || tr.width() != pixmap.width() || tr.height() != pixmap.height()) {
+        pixmap = pixmap.copy(tr);
+    }
+
+    QBrush b(pixmap);
+    b.setTransform(patternTransform);
+    ctxt->save();
+    ctxt->setCompositeOperation(op);
+    QPainter* p = ctxt->platformContext();
+    if (!pixmap.hasAlpha() && p->compositionMode() == QPainter::CompositionMode_SourceOver)
+        p->setCompositionMode(QPainter::CompositionMode_Source);
+    p->setBrushOrigin(phase);
+    p->fillRect(destRect, b);
+    ctxt->restore();
+
+    if (imageObserver())
+        imageObserver()->didDraw(this);
 }
 
 void BitmapImage::initPlatformData()
 {
-    m_pixmap = 0;
 }
 
 void BitmapImage::invalidatePlatformData()
 {
-    delete m_pixmap;
-    m_pixmap = 0;
 }
     
 // Drawing Routines
 void BitmapImage::draw(GraphicsContext* ctxt, const FloatRect& dst,
                        const FloatRect& src, CompositeOperator op)
 {
+    startAnimation();
+
     QPixmap* image = nativeImageForCurrentFrame();
     if (!image)
         return;
@@ -133,59 +154,33 @@ void BitmapImage::draw(GraphicsContext* ctxt, const FloatRect& dst,
 
     QPainter* painter(ctxt->platformContext());
 
+    if (!image->hasAlpha() && painter->compositionMode() == QPainter::CompositionMode_SourceOver)
+        painter->setCompositionMode(QPainter::CompositionMode_Source);
+
     // Test using example site at
     // http://www.meyerweb.com/eric/css/edge/complexspiral/demo.html    
     painter->drawPixmap(dst, *image, src);
 
     ctxt->restore();
 
-    startAnimation();
-}
-
-void BitmapImage::drawPattern(GraphicsContext* ctxt, const FloatRect& tileRect, const AffineTransform& patternTransform,
-                              const FloatPoint& phase, CompositeOperator op, const FloatRect& destRect)
-{
-    QPixmap* framePixmap = nativeImageForCurrentFrame();
-    if (!framePixmap) // If it's too early we won't have an image yet.
-        return;
-
-    QPixmap pixmap = *framePixmap;
-    QRect tr = QRectF(tileRect).toRect();
-    if (tr.x() || tr.y() || tr.width() != pixmap.width() || tr.height() != pixmap.height()) {
-        pixmap = pixmap.copy(tr);
-    }
-
-    if (patternTransform.isIdentity()) {
-        ctxt->save();
-        ctxt->setCompositeOperation(op);
-        QPainter* p = ctxt->platformContext();
-        p->setBrushOrigin(phase);
-        p->drawTiledPixmap(destRect, pixmap);
-        ctxt->restore();
-    } else {
-        QBrush b(pixmap);
-        b.setMatrix(patternTransform);
-        ctxt->save();
-        ctxt->setCompositeOperation(op);
-        QPainter* p = ctxt->platformContext();
-        p->setBrushOrigin(phase);
-        p->fillRect(destRect, b);
-        ctxt->restore();
-    }
+    if (imageObserver())
+        imageObserver()->didDraw(this);
 }
 
 void BitmapImage::checkForSolidColor()
 {
-    // FIXME: It's easy to implement this optimization. Just need to check the RGBA32 buffer to see if it is 1x1.
     m_isSolidColor = false;
-}
+    m_checkedForSolidColor = true;
 
-QPixmap* BitmapImage::getPixmap() const
-{
-    if (!m_pixmap)
-      return const_cast<BitmapImage*>(this)->frameAtIndex(0);
-    else
-      return m_pixmap;
+    if (frameCount() > 1)
+        return;
+
+    QPixmap* framePixmap = frameAtIndex(0);
+    if (!framePixmap || framePixmap->width() != 1 || framePixmap->height() != 1)
+        return;
+
+    m_isSolidColor = true;
+    m_solidColor = QColor::fromRgba(framePixmap->toImage().pixel(0, 0));
 }
 
 }

@@ -25,27 +25,13 @@
 
 #if ENABLE(SVG)
 #include "RenderSVGTSpan.h"
-#include "GraphicsContext.h"
-#include "KCanvasRenderingStyle.h"
-#include "SVGRootInlineBox.h"
-#include "SVGInlineFlowBox.h"
-#include "AffineTransform.h"
-#include "SVGTextPositioningElement.h"
-#include "SVGLengthList.h"
 
 namespace WebCore {
 
-RenderSVGTSpan::RenderSVGTSpan(Node* n) : RenderSVGInline(n)
+RenderSVGTSpan::RenderSVGTSpan(Node* n)
+    : RenderSVGInline(n)
 {
 }
-
-void RenderSVGTSpan::absoluteRects(Vector<IntRect>& rects, int tx, int ty, bool)
-{
-    InlineFlowBox* initFlow = firstLineBox();
-    FloatRect bounds(tx + initFlow->xPos(), ty + initFlow->yPos(), width(), height());
-    rects.append(enclosingIntRect(absoluteTransform().mapRect(bounds)));
-}
-
 
 }
 

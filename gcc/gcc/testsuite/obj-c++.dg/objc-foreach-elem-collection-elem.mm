@@ -1,7 +1,7 @@
 /* APPLE LOCAL file radar 5128402 */
 /* Check that elem collection can be used as a collection in the foreach-statement. */
-/* { dg-options "-mmacosx-version-min=10.5 -framework Foundation -framework CoreFoundation" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
-/* { dg-options "-framework Foundation -framework CoreFoundation" { target arm*-*-darwin* } } */
+/* { dg-options "-mmacosx-version-min=10.5 -framework Foundation" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
+/* { dg-options "-framework Foundation" { target arm*-*-darwin* } } */
 /* { dg-do run } */
 
 #include <Foundation/Foundation.h>

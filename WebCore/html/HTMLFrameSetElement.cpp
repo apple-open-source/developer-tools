@@ -1,11 +1,9 @@
 /**
- * This file is part of the DOM implementation for KDE.
- *
  * Copyright (C) 1999 Lars Knoll (knoll@kde.org)
  *           (C) 1999 Antti Koivisto (koivisto@kde.org)
  *           (C) 2000 Simon Hausmann (hausmann@kde.org)
  *           (C) 2001 Dirk Mueller (mueller@kde.org)
- * Copyright (C) 2004, 2006 Apple Computer, Inc.
+ * Copyright (C) 2004, 2006, 2009 Apple Inc. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -31,18 +29,19 @@
 #include "Event.h"
 #include "EventNames.h"
 #include "HTMLNames.h"
+#include "ScriptEventListener.h"
 #include "Length.h"
+#include "MappedAttribute.h"
 #include "MouseEvent.h"
 #include "RenderFrameSet.h"
 #include "Text.h"
 
 namespace WebCore {
 
-using namespace EventNames;
 using namespace HTMLNames;
 
-HTMLFrameSetElement::HTMLFrameSetElement(Document *doc)
-    : HTMLElement(framesetTag, doc)
+HTMLFrameSetElement::HTMLFrameSetElement(const QualifiedName& tagName, Document *doc)
+    : HTMLElement(tagName, doc)
     , m_rows(0)
     , m_cols(0)
     , m_totalRows(1)
@@ -54,6 +53,7 @@ HTMLFrameSetElement::HTMLFrameSetElement(Document *doc)
     , frameBorderSet(false)
     , noresize(false)
 {
+    ASSERT(hasTagName(framesetTag));
 }
 
 HTMLFrameSetElement::~HTMLFrameSetElement()
@@ -88,14 +88,14 @@ void HTMLFrameSetElement::parseMappedAttribute(MappedAttribute *attr)
     if (attr->name() == rowsAttr) {
         if (!attr->isNull()) {
             if (m_rows) delete [] m_rows;
-            m_rows = attr->value().toLengthArray(m_totalRows);
-            setChanged();
+            m_rows = newLengthArray(attr->value().string(), m_totalRows);
+            setNeedsStyleRecalc();
         }
     } else if (attr->name() == colsAttr) {
         if (!attr->isNull()) {
             delete [] m_cols;
-            m_cols = attr->value().toLengthArray(m_totalCols);
-            setChanged();
+            m_cols = newLengthArray(attr->value().string(), m_totalCols);
+            setNeedsStyleRecalc();
         }
     } else if (attr->name() == frameborderAttr) {
         if (!attr->isNull()) {
@@ -122,16 +122,30 @@ void HTMLFrameSetElement::parseMappedAttribute(MappedAttribute *attr)
     } else if (attr->name() == bordercolorAttr) {
         m_borderColorSet = attr->decl();
         if (!attr->decl() && !attr->isEmpty()) {
-            addCSSColor(attr, CSS_PROP_BORDER_COLOR, attr->value());
+            addCSSColor(attr, CSSPropertyBorderColor, attr->value());
             m_borderColorSet = true;
         }
-    } else if (attr->name() == onloadAttr) {
-        document()->setHTMLWindowEventListener(loadEvent, attr);
-    } else if (attr->name() == onbeforeunloadAttr) {
-        document()->setHTMLWindowEventListener(beforeunloadEvent, attr);
-    } else if (attr->name() == onunloadAttr) {
-        document()->setHTMLWindowEventListener(unloadEvent, attr);
-    } else
+    } else if (attr->name() == onloadAttr)
+        document()->setWindowAttributeEventListener(eventNames().loadEvent, createAttributeEventListener(document()->frame(), attr));
+    else if (attr->name() == onbeforeunloadAttr)
+        document()->setWindowAttributeEventListener(eventNames().beforeunloadEvent, createAttributeEventListener(document()->frame(), attr));
+    else if (attr->name() == onunloadAttr)
+        document()->setWindowAttributeEventListener(eventNames().unloadEvent, createAttributeEventListener(document()->frame(), attr));
+    else if (attr->name() == onblurAttr)
+        document()->setWindowAttributeEventListener(eventNames().blurEvent, createAttributeEventListener(document()->frame(), attr));
+    else if (attr->name() == onfocusAttr)
+        document()->setWindowAttributeEventListener(eventNames().focusEvent, createAttributeEventListener(document()->frame(), attr));
+    else if (attr->name() == onresizeAttr)
+        document()->setWindowAttributeEventListener(eventNames().resizeEvent, createAttributeEventListener(document()->frame(), attr));
+    else if (attr->name() == onscrollAttr)
+        document()->setWindowAttributeEventListener(eventNames().scrollEvent, createAttributeEventListener(document()->frame(), attr));
+    else if (attr->name() == onstorageAttr)
+        document()->setWindowAttributeEventListener(eventNames().storageEvent, createAttributeEventListener(document()->frame(), attr));
+    else if (attr->name() == ononlineAttr)
+        document()->setWindowAttributeEventListener(eventNames().onlineEvent, createAttributeEventListener(document()->frame(), attr));
+    else if (attr->name() == onofflineAttr)
+        document()->setWindowAttributeEventListener(eventNames().offlineEvent, createAttributeEventListener(document()->frame(), attr));
+    else
         HTMLElement::parseMappedAttribute(attr);
 }
 
@@ -154,8 +168,7 @@ void HTMLFrameSetElement::attach()
 {
     // Inherit default settings from parent frameset
     // FIXME: This is not dynamic.
-    HTMLElement* node = static_cast<HTMLElement*>(parentNode());
-    while (node) {
+    for (Node* node = parentNode(); node; node = node->parentNode()) {
         if (node->hasTagName(framesetTag)) {
             HTMLFrameSetElement* frameset = static_cast<HTMLFrameSetElement*>(node);
             if (!frameBorderSet)
@@ -170,7 +183,6 @@ void HTMLFrameSetElement::attach()
                 noresize = frameset->noResize();
             break;
         }
-        node = static_cast<HTMLElement*>(node->parentNode());
     }
 
     HTMLElement::attach();
@@ -178,19 +190,20 @@ void HTMLFrameSetElement::attach()
 
 void HTMLFrameSetElement::defaultEventHandler(Event* evt)
 {
-    if (evt->isMouseEvent() && !noresize && renderer())
+    if (evt->isMouseEvent() && !noresize && renderer()) {
         if (static_cast<RenderFrameSet*>(renderer())->userResize(static_cast<MouseEvent*>(evt))) {
             evt->setDefaultHandled();
             return;
         }
+    }
     HTMLElement::defaultEventHandler(evt);
 }
 
 void HTMLFrameSetElement::recalcStyle(StyleChange ch)
 {
-    if (changed() && renderer()) {
+    if (needsStyleRecalc() && renderer()) {
         renderer()->setNeedsLayout(true);
-        setChanged(NoStyleChange);
+        setNeedsStyleRecalc(NoStyleChange);
     }
     HTMLElement::recalcStyle(ch);
 }
@@ -215,4 +228,114 @@ void HTMLFrameSetElement::setRows(const String &value)
     setAttribute(rowsAttr, value);
 }
 
+EventListener* HTMLFrameSetElement::onblur() const
+{
+    return document()->getWindowAttributeEventListener(eventNames().blurEvent);
 }
+
+void HTMLFrameSetElement::setOnblur(PassRefPtr<EventListener> eventListener)
+{
+    document()->setAttributeEventListener(eventNames().blurEvent, eventListener);
+}
+
+EventListener* HTMLFrameSetElement::onerror() const
+{
+    return document()->getWindowAttributeEventListener(eventNames().errorEvent);
+}
+
+void HTMLFrameSetElement::setOnerror(PassRefPtr<EventListener> eventListener)
+{
+    document()->setAttributeEventListener(eventNames().errorEvent, eventListener);
+}
+
+EventListener* HTMLFrameSetElement::onfocus() const
+{
+    return document()->getWindowAttributeEventListener(eventNames().focusEvent);
+}
+
+void HTMLFrameSetElement::setOnfocus(PassRefPtr<EventListener> eventListener)
+{
+    document()->setAttributeEventListener(eventNames().focusEvent, eventListener);
+}
+
+EventListener* HTMLFrameSetElement::onload() const
+{
+    return document()->getWindowAttributeEventListener(eventNames().loadEvent);
+}
+
+void HTMLFrameSetElement::setOnload(PassRefPtr<EventListener> eventListener)
+{
+    document()->setAttributeEventListener(eventNames().loadEvent, eventListener);
+}
+
+EventListener* HTMLFrameSetElement::onbeforeunload() const
+{
+    return document()->getWindowAttributeEventListener(eventNames().beforeunloadEvent);
+}
+
+void HTMLFrameSetElement::setOnbeforeunload(PassRefPtr<EventListener> eventListener)
+{
+    document()->setAttributeEventListener(eventNames().beforeunloadEvent, eventListener);
+}
+
+EventListener* HTMLFrameSetElement::onmessage() const
+{
+    return document()->getWindowAttributeEventListener(eventNames().messageEvent);
+}
+
+void HTMLFrameSetElement::setOnmessage(PassRefPtr<EventListener> eventListener)
+{
+    document()->setAttributeEventListener(eventNames().messageEvent, eventListener);
+}
+
+EventListener* HTMLFrameSetElement::onoffline() const
+{
+    return document()->getWindowAttributeEventListener(eventNames().offlineEvent);
+}
+
+void HTMLFrameSetElement::setOnoffline(PassRefPtr<EventListener> eventListener)
+{
+    document()->setAttributeEventListener(eventNames().offlineEvent, eventListener);
+}
+
+EventListener* HTMLFrameSetElement::ononline() const
+{
+    return document()->getWindowAttributeEventListener(eventNames().onlineEvent);
+}
+
+void HTMLFrameSetElement::setOnonline(PassRefPtr<EventListener> eventListener)
+{
+    document()->setAttributeEventListener(eventNames().onlineEvent, eventListener);
+}
+
+EventListener* HTMLFrameSetElement::onresize() const
+{
+    return document()->getWindowAttributeEventListener(eventNames().resizeEvent);
+}
+
+void HTMLFrameSetElement::setOnresize(PassRefPtr<EventListener> eventListener)
+{
+    document()->setAttributeEventListener(eventNames().resizeEvent, eventListener);
+}
+
+EventListener* HTMLFrameSetElement::onstorage() const
+{
+    return document()->getWindowAttributeEventListener(eventNames().storageEvent);
+}
+
+void HTMLFrameSetElement::setOnstorage(PassRefPtr<EventListener> eventListener)
+{
+    document()->setAttributeEventListener(eventNames().storageEvent, eventListener);
+}
+
+EventListener* HTMLFrameSetElement::onunload() const
+{
+    return document()->getWindowAttributeEventListener(eventNames().unloadEvent);
+}
+
+void HTMLFrameSetElement::setOnunload(PassRefPtr<EventListener> eventListener)
+{
+    document()->setAttributeEventListener(eventNames().unloadEvent, eventListener);
+}
+
+} // namespace WebCore

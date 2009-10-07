@@ -37,8 +37,8 @@
 # endif
 
 /*
- * This file provides procedures that implement the command server functionality
- * of Vim when in contact with an X11 server.
+ * This file provides procedures that implement the command server
+ * functionality of Vim when in contact with an X11 server.
  *
  * Adapted from TCL/TK's send command  in tkSend.c of the tk 3.6 distribution.
  * Adapted for use in Vim by Flemming Madsen. Protocol changed to that of tk 4
@@ -736,7 +736,7 @@ ServerReplyFind(w, op)
 		+ serverReply.ga_len;
 	    e.id = w;
 	    ga_init2(&e.strings, 1, 100);
-	    memcpy(p, &e, sizeof(e));
+	    mch_memmove(p, &e, sizeof(e));
 	    serverReply.ga_len++;
 	}
     }
@@ -1018,7 +1018,7 @@ LookupName(dpy, name, delete, loose)
 	p++;
 	count = numItems - (p - regProp);
 	if (count > 0)
-	    memcpy(entry, p, count);
+	    mch_memmove(entry, p, count);
 	XChangeProperty(dpy, RootWindow(dpy, 0), registryProperty, XA_STRING,
 			8, PropModeReplace, regProp,
 			(int)(numItems - (p - entry)));
@@ -1031,8 +1031,8 @@ LookupName(dpy, name, delete, loose)
 }
 
 /*
- * Delete any lingering occurences of window id.  We promise that any
- * occurences is not ours since it is not yet put into the registry (by us)
+ * Delete any lingering occurrence of window id.  We promise that any
+ * occurrence is not ours since it is not yet put into the registry (by us)
  *
  * This is necessary in the following scenario:
  * 1. There is an old windowid for an exit'ed vim in the registry
@@ -1072,7 +1072,7 @@ DeleteAnyLingerer(dpy, win)
 		p++;
 		lastHalf = numItems - (p - regProp);
 		if (lastHalf > 0)
-		    memcpy(entry, p, lastHalf);
+		    mch_memmove(entry, p, lastHalf);
 		numItems = (entry - regProp) + lastHalf;
 		p = entry;
 		continue;
@@ -1150,7 +1150,7 @@ GetRegProp(dpy, regPropp, numItemsp, domsg)
 }
 
 /*
- * This procedure is invoked by the varous X event loops throughout Vims when
+ * This procedure is invoked by the various X event loops throughout Vims when
  * a property changes on the communication window.  This procedure reads the
  * property and handles command requests and responses.
  */
@@ -1390,7 +1390,6 @@ serverEventProc(dpy, eventPtr)
 	    unsigned int u;
 	    int		gotWindow;
 	    char_u	*str;
-	    char_u	winstr[30];
 	    struct	ServerReply *r;
 	    char_u	*enc;
 
@@ -1436,8 +1435,12 @@ serverEventProc(dpy, eventPtr)
 		ga_append(&(r->strings), NUL);
 	    }
 #ifdef FEAT_AUTOCMD
-	    sprintf((char *)winstr, "0x%x", (unsigned int)win);
-	    apply_autocmds(EVENT_REMOTEREPLY, winstr, str, TRUE, curbuf);
+	    {
+		char_u	winstr[30];
+
+		sprintf((char *)winstr, "0x%x", (unsigned int)win);
+		apply_autocmds(EVENT_REMOTEREPLY, winstr, str, TRUE, curbuf);
+	    }
 #endif
 	    vim_free(tofree);
 	}

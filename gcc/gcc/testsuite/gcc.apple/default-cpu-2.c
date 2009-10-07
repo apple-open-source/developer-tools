@@ -1,7 +1,7 @@
 /* Test default cpu type */
 /* { dg-do compile { target powerpc*-*-darwin* } } */
 /* This test doesn't make sense on 64-bit darwin.  */
-/* { dg-skip-if "" { powerpc*-*-darwin* } { "-m64" } { "" } } */
+/* { dg-require-effective-target ilp32 } */
 /* { dg-options "-mmacosx-version-min=10.4" } */
 int main()
 {

@@ -1,5 +1,5 @@
 # Makefile.rtl for GNU Ada Compiler (GNAT).
-#   Copyright (C) 2003, 2004 Free Software Foundation, Inc.
+#   Copyright (C) 2003-2005, Free Software Foundation, Inc.
 
 #This file is part of GCC.
 
@@ -15,8 +15,8 @@
 
 #You should have received a copy of the GNU General Public License
 #along with GCC; see the file COPYING.  If not, write to
-#the Free Software Foundation, 59 Temple Place - Suite 330,
-#Boston, MA 02111-1307, USA.
+#the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+#Boston, MA 02110-1301, USA.
 
 # This makefile fragment is included in the ada Makefile (both Unix
 # and NT and VMS versions).
@@ -32,9 +32,11 @@ GNATRTL_TASKING_OBJS= \
   a-intnam$(objext) \
   a-reatim$(objext) \
   a-retide$(objext) \
+  a-rttiev$(objext) \
   a-sytaco$(objext) \
   a-tasatt$(objext) \
   a-taside$(objext) \
+  a-taster$(objext) \
   g-boubuf$(objext) \
   g-boumai$(objext) \
   g-semaph$(objext) \
@@ -79,6 +81,7 @@ GNATRTL_NONTASKING_OBJS= \
   a-cgaaso$(objext) \
   a-cgarso$(objext) \
   a-cgcaso$(objext) \
+  a-chacon$(objext) \
   a-chahan$(objext) \
   a-charac$(objext) \
   a-chlat1$(objext) \
@@ -106,6 +109,7 @@ GNATRTL_NONTASKING_OBJS= \
   a-coormu$(objext) \
   a-coorse$(objext) \
   a-coprnu$(objext) \
+  a-coteio$(objext) \
   a-crbltr$(objext) \
   a-crbtgk$(objext) \
   a-crbtgo$(objext) \
@@ -118,6 +122,7 @@ GNATRTL_NONTASKING_OBJS= \
   a-dirval$(objext) \
   a-einuoc$(objext) \
   a-elchha$(objext) \
+  a-envvar$(objext) \
   a-except$(objext) \
   a-exctra$(objext) \
   a-filico$(objext) \
@@ -127,7 +132,9 @@ GNATRTL_NONTASKING_OBJS= \
   a-inteio$(objext) \
   a-ioexce$(objext) \
   a-iwteio$(objext) \
+  a-lcteio$(objext) \
   a-lfteio$(objext) \
+  a-llctio$(objext) \
   a-lfwtio$(objext) \
   a-lfztio$(objext) \
   a-liteio$(objext) \
@@ -159,6 +166,7 @@ GNATRTL_NONTASKING_OBJS= \
   a-numaux$(objext) \
   a-numeri$(objext) \
   a-rbtgso$(objext) \
+  a-scteio$(objext) \
   a-secain$(objext) \
   a-sequio$(objext) \
   a-sfteio$(objext) \
@@ -174,6 +182,8 @@ GNATRTL_NONTASKING_OBJS= \
   a-ssitio$(objext) \
   a-ssiwti$(objext) \
   a-ssizti$(objext) \
+  a-stboha$(objext) \
+  a-stfiha$(objext) \
   a-stmaco$(objext) \
   a-storio$(objext) \
   a-strbou$(objext) \
@@ -203,17 +213,23 @@ GNATRTL_NONTASKING_OBJS= \
   a-stzsup$(objext) \
   a-stzunb$(objext) \
   a-suteio$(objext) \
+  a-swbwha$(objext) \
+  a-swfwha$(objext) \
   a-swmwco$(objext) \
   a-swunau$(objext) \
-  a-swunha$(objext) \
+  a-swuwha$(objext) \
   a-swuwti$(objext) \
+  a-szbzha$(objext) \
+  a-szfzha$(objext) \
   a-szmzco$(objext) \
   a-szunau$(objext) \
-  a-szunha$(objext) \
+  a-szuzha$(objext) \
   a-szuzti$(objext) \
   a-tags$(objext) \
+  a-tgdico$(objext) \
   a-teioed$(objext) \
   a-textio$(objext) \
+  a-tiboio$(objext) \
   a-ticoau$(objext) \
   a-ticoio$(objext) \
   a-tideau$(objext) \
@@ -233,6 +249,8 @@ GNATRTL_NONTASKING_OBJS= \
   a-tiunio$(objext) \
   a-unccon$(objext) \
   a-uncdea$(objext) \
+  a-wichun$(objext) \
+  a-widcha$(objext) \
   a-witeio$(objext) \
   a-wtcoau$(objext) \
   a-wtcoio$(objext) \
@@ -251,7 +269,10 @@ GNATRTL_NONTASKING_OBJS= \
   a-wtmoau$(objext) \
   a-wtmoio$(objext) \
   a-wttest$(objext) \
+  a-wwboio$(objext) \
   a-wwunio$(objext) \
+  a-zchara$(objext) \
+  a-zchuni$(objext) \
   a-ztcoau$(objext) \
   a-ztcoio$(objext) \
   a-ztcstr$(objext) \
@@ -270,9 +291,17 @@ GNATRTL_NONTASKING_OBJS= \
   a-ztmoau$(objext) \
   a-ztmoio$(objext) \
   a-zttest$(objext) \
+  a-zzboio$(objext) \
   a-zzunio$(objext) \
   ada$(objext) \
   calendar$(objext) \
+  g-allein$(objext) \
+  g-alleve$(objext) \
+  g-altcon$(objext) \
+  g-altive$(objext) \
+  g-alveop$(objext) \
+  g-alvety$(objext) \
+  g-alvevi$(objext) \
   g-arrspl$(objext) \
   g-awk$(objext) \
   g-bubsor$(objext) \
@@ -369,7 +398,6 @@ GNATRTL_NONTASKING_OBJS= \
   s-crc32$(objext)  \
   s-direio$(objext) \
   s-errrep$(objext) \
-  s-except$(objext) \
   s-exctab$(objext) \
   s-exnint$(objext) \
   s-exnllf$(objext) \
@@ -386,9 +414,14 @@ GNATRTL_NONTASKING_OBJS= \
   s-fatsfl$(objext) \
   s-ficobl$(objext) \
   s-fileio$(objext) \
+  s-filofl$(objext) \
+  s-fishfl$(objext) \
   s-finimp$(objext) \
   s-finroo$(objext) \
   s-fore$(objext)   \
+  s-fvadfl$(objext) \
+  s-fvaffl$(objext) \
+  s-fvagfl$(objext) \
   s-geveop$(objext) \
   s-htable$(objext) \
   s-imgbiu$(objext) \
@@ -487,6 +520,7 @@ GNATRTL_NONTASKING_OBJS= \
   s-sopco4$(objext) \
   s-sopco5$(objext) \
   s-stache$(objext) \
+  s-stausa$(objext) \
   s-stchop$(objext) \
   s-stalib$(objext) \
   s-stoele$(objext) \

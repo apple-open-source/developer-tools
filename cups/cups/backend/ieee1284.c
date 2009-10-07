@@ -1,9 +1,9 @@
 /*
- * "$Id: ieee1284.c 6649 2007-07-11 21:46:42Z mike $"
+ * "$Id: ieee1284.c 7687 2008-06-24 01:28:36Z mike $"
  *
  *   IEEE-1284 support functions for the Common UNIX Printing System (CUPS).
  *
- *   Copyright 2007 by Apple Inc.
+ *   Copyright 2007-2008 by Apple Inc.
  *   Copyright 1997-2007 by Easy Software Products, all rights reserved.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -32,6 +32,10 @@
 #  include <linux/lp.h>
 #  define IOCNR_GET_DEVICE_ID		1
 #  define LPIOC_GET_DEVICE_ID(len)	_IOC(_IOC_READ, 'P', IOCNR_GET_DEVICE_ID, len)
+#  include <linux/parport.h>
+#  include <linux/ppdev.h>
+#  include <unistd.h>
+#  include <fcntl.h>
 #endif /* __linux */
 
 #ifdef __sun
@@ -60,18 +64,17 @@ backendGetDeviceID(
     char       *uri,			/* O - Device URI */
     int        uri_size)		/* I - Size of buffer */
 {
-  char	*attr,				/* 1284 attribute */
-  	*delim,				/* 1284 delimiter */
-	*uriptr,			/* Pointer into URI */
-	manufacturer[256],		/* Manufacturer string */
-	serial_number[1024];		/* Serial number string */
-  int	manulen;			/* Length of manufacturer string */
-#ifdef __linux
+#ifdef __APPLE__ /* This function is a no-op */
+  return (-1);
+
+#else /* Get the device ID from the specified file descriptor... */
+#  ifdef __linux
   int	length;				/* Length of device ID info */
-#endif /* __linux */
-#if defined(__sun) && defined(ECPPIOC_GETDEVID)
+  int   got_id = 0;
+#  endif /* __linux */
+#  if defined(__sun) && defined(ECPPIOC_GETDEVID)
   struct ecpp_device_id did;		/* Device ID buffer */
-#endif /* __sun && ECPPIOC_GETDEVID */
+#  endif /* __sun && ECPPIOC_GETDEVID */
 
 
   DEBUG_printf(("backendGetDeviceID(fd=%d, device_id=%p, device_id_size=%d, "
@@ -93,9 +96,6 @@ backendGetDeviceID(
   if (make_model)
     *make_model = '\0';
 
-  if (uri)
-    *uri = '\0';
-
   if (fd >= 0)
   {
    /*
@@ -104,8 +104,83 @@ backendGetDeviceID(
 
     *device_id = '\0';
 
-#ifdef __linux
-    if (!ioctl(fd, LPIOC_GET_DEVICE_ID(device_id_size), device_id))
+#  ifdef __linux
+    if (ioctl(fd, LPIOC_GET_DEVICE_ID(device_id_size), device_id))
+    {
+     /*
+      * Linux has to implement things differently for every device it seems.
+      * Since the standard parallel port driver does not provide a simple
+      * ioctl() to get the 1284 device ID, we have to open the "raw" parallel
+      * device corresponding to this port and do some negotiation trickery
+      * to get the current device ID.
+      */
+
+      if (uri && !strncmp(uri, "parallel:/dev/", 14))
+      {
+	char	devparport[16];		/* /dev/parportN */
+	int	devparportfd,		/* File descriptor for raw device */
+		  mode;			/* Port mode */
+
+
+       /*
+	* Since the Linux parallel backend only supports 4 parallel port
+	* devices, just grab the trailing digit and use it to construct a
+	* /dev/parportN filename...
+	*/
+
+	snprintf(devparport, sizeof(devparport), "/dev/parport%s",
+		 uri + strlen(uri) - 1);
+
+	if ((devparportfd = open(devparport, O_RDWR | O_NOCTTY)) != -1)
+	{
+	 /*
+	  * Claim the device...
+	  */
+
+	  if (!ioctl(devparportfd, PPCLAIM))
+	  {
+	    fcntl(devparportfd, F_SETFL, fcntl(devparportfd, F_GETFL) | O_NONBLOCK);
+
+	    mode = IEEE1284_MODE_COMPAT;
+
+	    if (!ioctl(devparportfd, PPNEGOT, &mode))
+	    {
+	     /*
+	      * Put the device into Device ID mode...
+	      */
+
+	      mode = IEEE1284_MODE_NIBBLE | IEEE1284_DEVICEID;
+
+	      if (!ioctl(devparportfd, PPNEGOT, &mode))
+	      {
+	       /*
+		* Read the 1284 device ID...
+		*/
+
+		if ((length = read(devparportfd, device_id,
+				   device_id_size - 1)) >= 2)
+		{
+		  device_id[length] = '\0';
+		  got_id = 1;
+		}
+	      }
+	    }
+
+	   /*
+	    * Release the device...
+	    */
+
+	    ioctl(devparportfd, PPRELEASE);
+	  }
+
+	  close(devparportfd);
+	}
+      }
+    }
+    else
+      got_id = 1;
+
+    if (got_id)
     {
      /*
       * Extract the length of the device ID string from the first two
@@ -136,13 +211,14 @@ backendGetDeviceID(
       memmove(device_id, device_id + 2, length);
       device_id[length] = '\0';
     }
-#  ifdef DEBUG
+#    ifdef DEBUG
     else
-      printf("backendGetDeviceID: ioctl failed - %s\n", strerror(errno));
-#  endif /* DEBUG */
-#endif /* __linux */
+      DEBUG_printf(("backendGetDeviceID: ioctl failed - %s\n",
+                    strerror(errno)));
+#    endif /* DEBUG */
+#  endif /* __linux */
 
-#if defined(__sun) && defined(ECPPIOC_GETDEVID)
+#   if defined(__sun) && defined(ECPPIOC_GETDEVID)
     did.mode = ECPP_CENTRONICS;
     did.len  = device_id_size - 1;
     did.rlen = 0;
@@ -159,14 +235,18 @@ backendGetDeviceID(
       else
 	device_id[device_id_size - 1] = '\0';
     }
-#  ifdef DEBUG
+#    ifdef DEBUG
     else
-      printf("backendGetDeviceID: ioctl failed - %s\n", strerror(errno));
-#  endif /* DEBUG */
-#endif /* __sun && ECPPIOC_GETDEVID */
+      DEBUG_printf(("backendGetDeviceID: ioctl failed - %s\n",
+                    strerror(errno)));
+#    endif /* DEBUG */
+#  endif /* __sun && ECPPIOC_GETDEVID */
   }
 
   DEBUG_printf(("backendGetDeviceID: device_id=\"%s\"\n", device_id));
+
+  if (scheme && uri)
+    *uri = '\0';
 
   if (!*device_id)
     return (-1);
@@ -184,111 +264,61 @@ backendGetDeviceID(
 
   if (scheme && uri && uri_size > 32)
   {
+    int			num_values;	/* Number of keys and values */
+    cups_option_t	*values;	/* Keys and values in device ID */
+    const char		*mfg,		/* Manufacturer */
+			*mdl,		/* Model */
+			*sern;		/* Serial number */
+    char		temp[256],	/* Temporary manufacturer string */
+			*tempptr;	/* Pointer into temp string */
+
+
    /*
-    * Look for the serial number field...
+    * Get the make, model, and serial numbers...
     */
 
-    if ((attr = strstr(device_id, "SERN:")) != NULL)
-      attr += 5;
-    else if ((attr = strstr(device_id, "SERIALNUMBER:")) != NULL)
-      attr += 13;
-    else if ((attr = strstr(device_id, ";SN:")) != NULL)
-      attr += 4;
+    num_values = _ppdGet1284Values(device_id, &values);
 
-    if (attr)
+    if ((sern = cupsGetOption("SERIALNUMBER", num_values, values)) == NULL)
+      if ((sern = cupsGetOption("SERN", num_values, values)) == NULL)
+        sern = cupsGetOption("SN", num_values, values);
+
+    if ((mfg = cupsGetOption("MANUFACTURER", num_values, values)) == NULL)
+      mfg = cupsGetOption("MFG", num_values, values);
+
+    if ((mdl = cupsGetOption("MODEL", num_values, values)) == NULL)
+      mdl = cupsGetOption("MDL", num_values, values);
+
+    if (mfg)
     {
-      strlcpy(serial_number, attr, sizeof(serial_number));
-
-      if ((delim = strchr(serial_number, ';')) != NULL)
-	*delim = '\0';
+      if (!strcasecmp(mfg, "Hewlett-Packard"))
+        mfg = "HP";
+      else if (!strcasecmp(mfg, "Lexmark International"))
+        mfg = "Lexmark";
     }
     else
-      serial_number[0] = '\0';
+    {
+      strlcpy(temp, make_model, sizeof(temp));
+
+      if ((tempptr = strchr(temp, ' ')) != NULL)
+        *tempptr = '\0';
+
+      mfg = temp;
+    }
 
    /*
     * Generate the device URI from the manufacturer, make_model, and
     * serial number strings.
     */
 
-    snprintf(uri, uri_size, "%s://", scheme);
+    httpAssembleURIf(HTTP_URI_CODING_ALL, uri, uri_size, scheme, NULL, mfg, 0,
+                     "/%s%s%s", mdl, sern ? "?serial=" : "", sern ? sern : "");
 
-    if ((attr = strstr(device_id, "MANUFACTURER:")) != NULL)
-      attr += 13;
-    else if ((attr = strstr(device_id, "Manufacturer:")) != NULL)
-      attr += 13;
-    else if ((attr = strstr(device_id, "MFG:")) != NULL)
-      attr += 4;
-
-    if (attr)
-    {
-      strlcpy(manufacturer, attr, sizeof(manufacturer));
-
-      if ((delim = strchr(manufacturer, ';')) != NULL)
-        *delim = '\0';
-
-      if (!strcasecmp(manufacturer, "Hewlett-Packard"))
-        strcpy(manufacturer, "HP");
-      else if (!strcasecmp(manufacturer, "Lexmark International"))
-        strcpy(manufacturer, "Lexmark");
-    }
-    else
-    {
-      strlcpy(manufacturer, make_model, sizeof(manufacturer));
-
-      if ((delim = strchr(manufacturer, ' ')) != NULL)
-        *delim = '\0';
-    }
-
-    manulen = strlen(manufacturer);
-
-    for (uriptr = uri + strlen(uri), delim = manufacturer;
-	 *delim && uriptr < (uri + uri_size - 3);
-	 delim ++)
-      if (*delim == ' ')
-      {
-	*uriptr++ = '%';
-	*uriptr++ = '2';
-	*uriptr++ = '0';
-      }
-      else
-	*uriptr++ = *delim;
-
-    *uriptr++ = '/';
-
-    if (!strncasecmp(make_model, manufacturer, manulen))
-    {
-      delim = make_model + manulen;
-
-      while (isspace(*delim & 255))
-        delim ++;
-    }
-    else
-      delim = make_model;
-
-    for (; *delim && uriptr < (uri + uri_size - 3); delim ++)
-      if (*delim == ' ')
-      {
-	*uriptr++ = '%';
-	*uriptr++ = '2';
-	*uriptr++ = '0';
-      }
-      else
-	*uriptr++ = *delim;
-
-    if (serial_number[0])
-    {
-     /*
-      * Add the serial number to the URI...
-      */
-
-      strlcpy(uriptr, "?serial=", uri_size - (uriptr - uri));
-      strlcat(uriptr, serial_number, uri_size - (uriptr - uri));
-    }
-    else
-      *uriptr = '\0';
+    cupsFreeOptions(num_values, values);
   }
 
   return (0);
+#endif /* __APPLE__ */
 }
 
 
@@ -302,10 +332,11 @@ backendGetMakeModel(
     char       *make_model,		/* O - Make/model */
     int        make_model_size)		/* I - Size of buffer */
 {
-  char	*attr,				/* 1284 attribute */
-  	*delim,				/* 1284 delimiter */
-	*mfg,				/* Manufacturer string */
-	*mdl;				/* Model string */
+  int		num_values;		/* Number of keys and values */
+  cups_option_t	*values;		/* Keys and values */
+  const char	*mfg,			/* Manufacturer string */
+		*mdl,			/* Model string */
+		*des;			/* Description string */
 
 
   DEBUG_printf(("backendGetMakeModel(device_id=\"%s\", "
@@ -328,12 +359,42 @@ backendGetMakeModel(
   * Look for the description field...
   */
 
-  if ((attr = strstr(device_id, "DES:")) != NULL)
-    attr += 4;
-  else if ((attr = strstr(device_id, "DESCRIPTION:")) != NULL)
-    attr += 12;
+  num_values = _ppdGet1284Values(device_id, &values);
 
-  if (attr)
+  if ((mdl = cupsGetOption("MODEL", num_values, values)) == NULL)
+    mdl = cupsGetOption("MDL", num_values, values);
+
+  if (mdl)
+  {
+   /*
+    * Build a make-model string from the manufacturer and model attributes...
+    */
+
+    if ((mfg = cupsGetOption("MANUFACTURER", num_values, values)) == NULL)
+      mfg = cupsGetOption("MFG", num_values, values);
+
+    if (!mfg || !strncasecmp(mdl, mfg, strlen(mfg)))
+    {
+     /*
+      * Just copy the model string, since it has the manufacturer...
+      */
+
+      _ppdNormalizeMakeAndModel(mdl, make_model, make_model_size);
+    }
+    else
+    {
+     /*
+      * Concatenate the make and model...
+      */
+
+      char	temp[1024];		/* Temporary make and model */
+
+      snprintf(temp, sizeof(temp), "%s %s", mfg, mdl);
+      _ppdNormalizeMakeAndModel(temp, make_model, make_model_size);
+    }
+  }
+  else if ((des = cupsGetOption("DESCRIPTION", num_values, values)) != NULL ||
+           (des = cupsGetOption("DES", num_values, values)) != NULL)
   {
    /*
     * Make sure the description contains something useful, since some
@@ -344,119 +405,30 @@ backendGetMakeModel(
     * containing at least one space and one letter.
     */
 
-    if ((delim = strchr(attr, ';')) == NULL)
-      delim = attr + strlen(attr);
-
-    if ((delim - attr) < 8)
-      attr = NULL;
-    else
+    if (strlen(des) >= 8)
     {
-      char	*ptr;			/* Pointer into description */
-      int	letters,		/* Number of letters seen */
-		spaces;			/* Number of spaces seen */
+      const char	*ptr;		/* Pointer into description */
+      int		letters,	/* Number of letters seen */
+			spaces;		/* Number of spaces seen */
 
 
-      for (ptr = attr, letters = 0, spaces = 0; ptr < delim; ptr ++)
+      for (ptr = des, letters = 0, spaces = 0; *ptr; ptr ++)
       {
-        if (isspace(*ptr & 255))
+	if (isspace(*ptr & 255))
 	  spaces ++;
 	else if (isalpha(*ptr & 255))
 	  letters ++;
 
-        if (spaces && letters)
+	if (spaces && letters)
 	  break;
       }
 
-      if (!spaces || !letters)
-        attr = NULL;
+      if (spaces && letters)
+        _ppdNormalizeMakeAndModel(des, make_model, make_model_size);
     }
   }
 
-  if ((mfg = strstr(device_id, "MANUFACTURER:")) != NULL)
-    mfg += 13;
-  else if ((mfg = strstr(device_id, "Manufacturer:")) != NULL)
-    mfg += 13;
-  else if ((mfg = strstr(device_id, "MFG:")) != NULL)
-    mfg += 4;
-
-  if ((mdl = strstr(device_id, "MODEL:")) != NULL)
-    mdl += 6;
-  else if ((mdl = strstr(device_id, "Model:")) != NULL)
-    mdl += 6;
-  else if ((mdl = strstr(device_id, "MDL:")) != NULL)
-    mdl += 4;
-
-  if (mdl)
-  {
-   /*
-    * Build a make-model string from the manufacturer and model attributes...
-    */
-
-    if (mfg)
-    {
-      if (!strncasecmp(mfg, "Hewlett-Packard", 15))
-	strlcpy(make_model, "HP", make_model_size);
-      else if (!strncasecmp(mfg, "Lexmark International", 21))
-	strlcpy(make_model, "Lexmark", make_model_size);
-      else
-	strlcpy(make_model, mfg, make_model_size);
-
-      if ((delim = strchr(make_model, ';')) != NULL)
-	*delim = '\0';
-
-      if (!strncasecmp(make_model, mdl, strlen(make_model)))
-      {
-       /*
-	* Just copy model string, since it has the manufacturer...
-	*/
-
-	strlcpy(make_model, mdl, make_model_size);
-      }
-      else
-      {
-       /*
-	* Concatenate the make and model...
-	*/
-
-	strlcat(make_model, " ", make_model_size);
-	strlcat(make_model, mdl, make_model_size);
-      }
-    }
-    else
-    {
-     /*
-      * Just copy model string, since it has the manufacturer...
-      */
-
-      strlcpy(make_model, mdl, make_model_size);
-    }
-  }
-  else if (attr)
-  {
-   /*
-    * Use description...
-    */
-
-    if (!strncasecmp(attr, "Hewlett-Packard hp ", 19))
-    {
-     /*
-      * Check for a common HP bug...
-      */
-
-      strlcpy(make_model, "HP ", make_model_size);
-      strlcpy(make_model + 3, attr + 19, make_model_size - 3);
-    }
-    else if (!strncasecmp(attr, "Hewlett-Packard ", 16))
-    {
-      strlcpy(make_model, "HP ", make_model_size);
-      strlcpy(make_model + 3, attr + 16, make_model_size - 3);
-    }
-    else
-    {
-      strlcpy(make_model, attr, make_model_size);
-    }
-  }
-  else
+  if (!make_model[0])
   {
    /*
     * Use "Unknown" as the printer make and model...
@@ -465,34 +437,12 @@ backendGetMakeModel(
     strlcpy(make_model, "Unknown", make_model_size);
   }
 
- /*
-  * Strip trailing data...
-  */
+  cupsFreeOptions(num_values, values);
 
-  if ((delim = strchr(make_model, ';')) != NULL)
-    *delim = '\0';
-
- /*
-  * Strip trailing whitespace...
-  */
-
-  for (delim = make_model + strlen(make_model) - 1; delim >= make_model; delim --)
-    if (isspace(*delim & 255))
-      *delim = '\0';
-    else
-      break;
-
- /*
-  * Return...
-  */
-
-  if (make_model[0])
-    return (0);
-  else
-    return (-1);
+  return (0);
 }
 
 
 /*
- * End of "$Id: ieee1284.c 6649 2007-07-11 21:46:42Z mike $".
+ * End of "$Id: ieee1284.c 7687 2008-06-24 01:28:36Z mike $".
  */

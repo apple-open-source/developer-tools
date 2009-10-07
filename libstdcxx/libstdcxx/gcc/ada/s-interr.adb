@@ -1,12 +1,12 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                GNU ADA RUN-TIME LIBRARY (GNARL) COMPONENTS               --
+--                 GNAT RUN-TIME LIBRARY (GNARL) COMPONENTS                 --
 --                                                                          --
 --                     S Y S T E M . I N T E R R U P T S                    --
 --                                                                          --
 --                                  B o d y                                 --
 --                                                                          --
---         Copyright (C) 1992-2004, Free Software Foundation, Inc.          --
+--         Copyright (C) 1992-2006, Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNARL; see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -106,13 +106,6 @@ with System.Storage_Elements;
 --           To_Integer
 --           Integer_Address
 
-with System.Tasking;
---  used for Task_Id
---           Task_Entry_Index
---           Null_Task
---           Self
---           Interrupt_Manager_ID
-
 with System.Tasking.Utilities;
 --  used for Make_Independent
 
@@ -157,20 +150,20 @@ package body System.Interrupts is
       entry Initialize (Mask : IMNG.Interrupt_Mask);
 
       entry Attach_Handler
-        (New_Handler : in Parameterless_Handler;
-         Interrupt   : in Interrupt_ID;
-         Static      : in Boolean;
-         Restoration : in Boolean := False);
+        (New_Handler : Parameterless_Handler;
+         Interrupt   : Interrupt_ID;
+         Static      : Boolean;
+         Restoration : Boolean := False);
 
       entry Exchange_Handler
         (Old_Handler : out Parameterless_Handler;
-         New_Handler : in Parameterless_Handler;
-         Interrupt   : in Interrupt_ID;
-         Static      : in Boolean);
+         New_Handler : Parameterless_Handler;
+         Interrupt   : Interrupt_ID;
+         Static      : Boolean);
 
       entry Detach_Handler
-        (Interrupt   : in Interrupt_ID;
-         Static      : in Boolean);
+        (Interrupt   : Interrupt_ID;
+         Static      : Boolean);
 
       entry Bind_Interrupt_To_Entry
         (T         : Task_Id;
@@ -256,7 +249,7 @@ package body System.Interrupts is
    type R_Link is access all Registered_Handler;
 
    type Registered_Handler is record
-      H :    System.Address := System.Null_Address;
+      H    : System.Address := System.Null_Address;
       Next : R_Link := null;
    end record;
 
@@ -287,9 +280,9 @@ package body System.Interrupts is
    --  can detach handlers attached through pragma Attach_Handler.
 
    procedure Attach_Handler
-     (New_Handler : in Parameterless_Handler;
-      Interrupt   : in Interrupt_ID;
-      Static      : in Boolean := False)
+     (New_Handler : Parameterless_Handler;
+      Interrupt   : Interrupt_ID;
+      Static      : Boolean := False)
    is
    begin
       if Is_Reserved (Interrupt) then
@@ -352,9 +345,9 @@ package body System.Interrupts is
            Interrupt_ID'Image (Interrupt) & " is reserved");
       end if;
 
-      --  ??? Since Parameterless_Handler is not Atomic, the
-      --  current implementation is wrong. We need a new service in
-      --  Interrupt_Manager to ensure atomicity.
+      --  ??? Since Parameterless_Handler is not Atomic, the current
+      --  implementation is wrong. We need a new service in Interrupt_Manager
+      --  to ensure atomicity.
 
       return User_Handler (Interrupt).H;
    end Current_Handler;
@@ -632,15 +625,15 @@ package body System.Interrupts is
       New_Node_Ptr : R_Link;
 
    begin
-      --  This routine registers the Handler as usable for Dynamic
-      --  Interrupt Handler. Routines attaching and detaching Handler
-      --  dynamically should first consult if the Handler is rgistered.
-      --  A Program Error should be raised if it is not registered.
+      --  This routine registers the Handler as usable for Dynamic Interrupt
+      --  Handler. Routines attaching and detaching Handler dynamically should
+      --  first consult if the Handler is registered. A Program Error should
+      --  be raised if it is not registered.
 
-      --  The pragma Interrupt_Handler can only appear in the library
-      --  level PO definition and instantiation. Therefore, we do not need
-      --  to implement Unregistering operation. Neither we need to
-      --  protect the queue structure using a Lock.
+      --  The pragma Interrupt_Handler can only appear in the library level PO
+      --  definition and instantiation. Therefore, we do not need to implement
+      --  Unregistering operation. Neither we need to protect the queue
+      --  structure using a Lock.
 
       pragma Assert (Handler_Addr /= System.Null_Address);
 
@@ -1014,10 +1007,10 @@ package body System.Interrupts is
          begin
             select
                accept Attach_Handler
-                  (New_Handler : in Parameterless_Handler;
-                   Interrupt   : in Interrupt_ID;
-                   Static      : in Boolean;
-                   Restoration : in Boolean := False)
+                  (New_Handler : Parameterless_Handler;
+                   Interrupt   : Interrupt_ID;
+                   Static      : Boolean;
+                   Restoration : Boolean := False)
                do
                   Unprotected_Exchange_Handler
                     (Old_Handler, New_Handler, Interrupt, Static, Restoration);
@@ -1026,9 +1019,9 @@ package body System.Interrupts is
             or
                accept Exchange_Handler
                   (Old_Handler : out Parameterless_Handler;
-                   New_Handler : in Parameterless_Handler;
-                   Interrupt   : in Interrupt_ID;
-                   Static      : in Boolean)
+                   New_Handler : Parameterless_Handler;
+                   Interrupt   : Interrupt_ID;
+                   Static      : Boolean)
                do
                   Unprotected_Exchange_Handler
                     (Old_Handler, New_Handler, Interrupt, Static);
@@ -1036,8 +1029,8 @@ package body System.Interrupts is
 
             or
                accept Detach_Handler
-                 (Interrupt   : in Interrupt_ID;
-                  Static      : in Boolean)
+                 (Interrupt   : Interrupt_ID;
+                  Static      : Boolean)
                do
                   Unprotected_Detach_Handler (Interrupt, Static);
                end Detach_Handler;
@@ -1438,8 +1431,13 @@ package body System.Interrupts is
 
          System.Tasking.Initialization.Undefer_Abort (Self_ID);
 
-         --  Undefer abort here to allow a window for this task
-         --  to be aborted  at the time of system shutdown.
+         if Self_ID.Pending_Action then
+            Initialization.Do_Pending_Action (Self_ID);
+         end if;
+
+         --  Undefer abort here to allow a window for this task to be aborted
+         --  at the time of system shutdown. We also explicitely test for
+         --  Pending_Action in case System.Parameters.No_Abort is True.
 
       end loop;
    end Server_Task;
@@ -1454,16 +1452,15 @@ begin
    --  During the elaboration of this package body we want the RTS
    --  to inherit the interrupt mask from the Environment Task.
 
-   --  The environment task should have gotten its mask from
-   --  the enclosing process during the RTS start up. (See
-   --  processing in s-inmaop.adb). Pass the Interrupt_Mask
-   --  of the environment task to the Interrupt_Manager.
+   IMOP.Setup_Interrupt_Mask;
 
-   --  Note : At this point we know that all tasks (including
-   --  RTS internal servers) are masked for non-reserved signals
-   --  (see s-taprop.adb). Only the Interrupt_Manager will have
-   --  masks set up differently inheriting the original environment
-   --  task's mask.
+   --  The environment task should have gotten its mask from the enclosing
+   --  process during the RTS start up. (See processing in s-inmaop.adb). Pass
+   --  the Interrupt_Mask of the environment task to the Interrupt_Manager.
+
+   --  Note : At this point we know that all tasks are masked for non-reserved
+   --  signals. Only the Interrupt_Manager will have masks set up differently
+   --  inheriting the original environment task's mask.
 
    Interrupt_Manager.Initialize (IMOP.Environment_Mask);
 end System.Interrupts;

@@ -44,6 +44,21 @@ const char**  NXArgv = NULL;
 const char**  environ = NULL;
 const char*   __progname = NULL;
 
+#if ADD_PROGRAM_VARS
+extern void* __dso_handle;
+struct ProgramVars
+{
+    void*           mh;
+    int*            NXArgcPtr;
+    const char***   NXArgvPtr;
+    const char***   environPtr;
+    const char**    __prognamePtr;
+};
+__attribute__((used))  static struct ProgramVars pvars 
+__attribute__ ((section ("__DATA,__program_vars")))  = { &__dso_handle, &NXArgc, &NXArgv, &environ, &__progname };
+
+#endif
+ 
 
 /*
  * This file is not needed for executables targeting 10.5 or later

@@ -15,10 +15,15 @@ int main (void)
 {
   Protocol *protocol = @protocol (Evaluating);
 
+  /* APPLE LOCAL begin objc2 */
+#if __OBJC2__
+#else
   if (strcmp ([protocol name], "Evaluating"))
     {
       abort ();
     }
+#endif
+  /* APPLE LOCAL end objc2 */
 
   return 0;
 }

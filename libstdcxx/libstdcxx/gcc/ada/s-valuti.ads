@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---   Copyright (C) 1992,1993,1994,1995,1996 Free Software Foundation, Inc.  --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -34,7 +34,7 @@
 --  This package provides some common utilities used by the s-valxxx files
 
 package System.Val_Util is
-pragma Pure (Val_Util);
+   pragma Pure;
 
    procedure Normalize_String
      (S    : in out String;
@@ -70,12 +70,19 @@ pragma Pure (Val_Util);
    --  is greater than Max as required in this case. Constraint_Error is
    --  also raised in this case.
 
+   procedure Scan_Plus_Sign
+     (Str   : String;
+      Ptr   : access Integer;
+      Max   : Integer;
+      Start : out Positive);
+   --  Same as Scan_Sign, but allows only plus, not minus.
+   --  This is used for modular types.
+
    function Scan_Exponent
      (Str  : String;
       Ptr  : access Integer;
       Max  : Integer;
-      Real : Boolean := False)
-      return Integer;
+      Real : Boolean := False) return Integer;
    --  Called to scan a possible exponent. Str, Ptr, Max are as described above
    --  for Scan_Sign. If Ptr.all < Max and Str (Ptr.all) = 'E' or 'e', then an
    --  exponent is scanned out, with the exponent value returned in Exp, and

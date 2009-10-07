@@ -1,12 +1,12 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                         GNAT RUNTIME COMPONENTS                          --
+--                         GNAT RUN-TIME COMPONENTS                         --
 --                                                                          --
 --               A D A . C H A R A C T E R S . L A T I N _ 9                --
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---            Copyright (C) 2002 Free Software Foundation, Inc.             --
+--          Copyright (C) 2002-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -21,8 +21,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -36,11 +36,11 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
---  This package provides definitions for Latin-9 (ISO-8859-9) analogous to
+--  This package provides definitions for Latin-9 (ISO-8859-15) analogous to
 --  those defined in the standard package Ada.Characters.Latin_1 for Latin-1.
 
 package Ada.Characters.Latin_9 is
-pragma Pure (Latin_9);
+   pragma Pure;
 
    ------------------------
    -- Control Characters --

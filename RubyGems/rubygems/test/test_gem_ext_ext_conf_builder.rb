@@ -1,6 +1,5 @@
-require 'test/unit'
-require 'test/gemutilities'
-require 'rubygems/installer'
+require File.join(File.expand_path(File.dirname(__FILE__)), 'gemutilities')
+require 'rubygems/ext'
 
 class TestGemExtExtConfBuilder < RubyGemTestCase
 
@@ -22,7 +21,7 @@ class TestGemExtExtConfBuilder < RubyGemTestCase
     output = []
 
     Dir.chdir @ext do
-      Gem::ExtExtConfBuilder.build 'extconf.rb', nil, @dest_path, output
+      Gem::Ext::ExtConfBuilder.build 'extconf.rb', nil, @dest_path, output
     end
 
     expected = [
@@ -34,7 +33,7 @@ class TestGemExtExtConfBuilder < RubyGemTestCase
       "make: Nothing to be done for `install'.\n"
     ]
 
-    assert_match(/^ruby extconf.rb/, output[0])
+    assert_match(/^#{Gem.ruby} extconf.rb/, output[0])
     assert_equal "creating Makefile\n", output[1]
     case RUBY_PLATFORM
     when /mswin/ then
@@ -55,18 +54,18 @@ class TestGemExtExtConfBuilder < RubyGemTestCase
 
     output = []
 
-    error = assert_raise Gem::InstallError do
+    error = assert_raises Gem::InstallError do
       Dir.chdir @ext do
-        Gem::ExtExtConfBuilder.build 'extconf.rb', nil, @dest_path, output
+        Gem::Ext::ExtConfBuilder.build 'extconf.rb', nil, @dest_path, output
       end
     end
 
     assert_match(/\Aextconf failed:
 
-ruby extconf.rb.*
+#{Gem.ruby} extconf.rb.*
 checking for main\(\) in .*?nonexistent/m, error.message)
 
-    assert_match(/^ruby extconf.rb/, output[0])
+    assert_match(/^#{Gem.ruby} extconf.rb/, output[0])
   end
 
   def test_class_make
@@ -80,7 +79,7 @@ checking for main\(\) in .*?nonexistent/m, error.message)
     end
 
     Dir.chdir @ext do
-      Gem::ExtExtConfBuilder.make @ext, output
+      Gem::Ext::ExtConfBuilder.make @ext, output
     end
 
     case RUBY_PLATFORM
@@ -103,9 +102,9 @@ install:
   end
 
   def test_class_make_no_Makefile
-    error = assert_raise Gem::InstallError do
+    error = assert_raises Gem::InstallError do
       Dir.chdir @ext do
-        Gem::ExtExtConfBuilder.make @ext, ['output']
+        Gem::Ext::ExtConfBuilder.make @ext, ['output']
       end
     end
 

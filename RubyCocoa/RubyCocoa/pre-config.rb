@@ -30,17 +30,27 @@ config_ary = [
   [ :install_path, install_path ]
 ]
 
+if @config['build-universal'] == 'yes' && @config['sdkroot'].size == 0
+  # SDKROOT is required to build a universal-binary on 10.4 
+  @config['sdkroot'] = 
+    case @config['macosx-deployment-target'].to_f 
+    when 10.4
+      sdkroot = '/Developer/SDKs/MacOSX10.4u.sdk'
+    else
+      '' # not needed for 10.5
+    end
+end
+
 # build options
-cflags = '-fno-common -g -fobjc-exceptions'
+cflags = '-fno-common -g -fobjc-exceptions -Wall'
 ldflags = '-undefined suppress -flat_namespace'
-sdkroot = ''
+sdkroot = @config['sdkroot'] 
 
 if @config['build-universal'] == 'yes'
   cflags << ' -arch ppc -arch i386'
   ldflags << ' -arch ppc -arch i386'
 
-  if `sw_vers -productVersion`.to_f < 10.5
-    sdkroot = '/Developer/SDKs/MacOSX10.4u.sdk'
+  if @config['macosx-deployment-target'].to_f < 10.5
     cflags << ' -isysroot ' << sdkroot
     ldflags << ' -Wl,-syslibroot,' << sdkroot
 
@@ -48,13 +58,24 @@ if @config['build-universal'] == 'yes'
     raise "ERROR: SDK \"#{sdkroot}\" does not exist." unless File.exist?(sdkroot)
     libruby_sdk = @config['libruby-path']
     raise "ERROR: library \"#{libruby_sdk}\" does not exist." unless File.exist?(libruby_sdk)
+  elsif @config['macosx-deployment-target'].to_f > 10.5
+    cflags << ' -arch x86_64'
+    ldflags << ' -arch x86_64'
   else
     cflags << ' -arch ppc64 -arch x86_64'
     ldflags << ' -arch ppc64 -arch x86_64'
   end
 end
 
-if File.exist?('/usr/include/libxml2') and File.exist?('/usr/lib/libxml2.dylib')
+if @config['macosx-deployment-target'].to_f > 10.5
+  cflags << ' -DRB_ID=ID'
+end
+
+def lib_exist?(path, sdkoot=@config['sdkroot'])
+  File.exist?(File.join(sdkoot, path))
+end
+
+if lib_exist?('/usr/include/libxml2') and lib_exist?('/usr/lib/libxml2.dylib')
   cflags << ' -I/usr/include/libxml2 -DHAS_LIBXML2 '
   ldflags << ' -lxml2 '
 else
@@ -64,16 +85,21 @@ end
 raise 'ERROR: ruby must be built as a shared library' if Config::CONFIG["ENABLE_SHARED"] != 'yes'
 
 # Add the libffi library to the build process.
-if !File.exist?('/usr/lib/libffi.a') and !File.exist?('/usr/lib/libffi.dylib')
-  if File.exist?('/usr/local/lib/libffi.a') and File.exist?('/usr/local/include/ffi')
-    cflags << ' -I/usr/local/include/ffi '
-    ldflags << ' -L/usr/local/lib '
-  else
-    cflags << ' -I../../misc/libffi/include -I../misc/libffi/include ' 
-    ldflags << ' -L../../misc/libffi -L../misc/libffi '
-  end
+if @config['macosx-deployment-target'].to_f < 10.5
+  cflags << ' -I../../misc/libffi/include -I../misc/libffi/include ' 
+  ldflags << ' -L../../misc/libffi -L../misc/libffi '
 else
-  cflags << ' -I/usr/include/ffi '
+  if !lib_exist?('/usr/lib/libffi.a') and !lib_exist?('/usr/lib/libffi.dylib')
+    if lib_exist?('/usr/local/lib/libffi.a') and lib_exist?('/usr/local/include/ffi')
+      cflags << ' -I/usr/local/include/ffi '
+      ldflags << ' -L/usr/local/lib '
+    else
+      cflags << ' -I../../misc/libffi/include -I../misc/libffi/include ' 
+      ldflags << ' -L../../misc/libffi -L../misc/libffi '
+    end
+  else
+    cflags << ' -I/usr/include/ffi '
+  end
 end
 cflags << ' -DMACOSX '
 ldflags << ' -lffi '

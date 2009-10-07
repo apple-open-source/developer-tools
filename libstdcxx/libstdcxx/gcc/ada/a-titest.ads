@@ -1,6 +1,6 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                         GNAT RUNTIME COMPONENTS                          --
+--                         GNAT RUN-TIME COMPONENTS                         --
 --                                                                          --
 --             A D A . T E X T _ I O . T E X T _ S T R E A M S              --
 --                                                                          --
@@ -18,6 +18,6 @@ package Ada.Text_IO.Text_Streams is
 
    type Stream_Access is access all Streams.Root_Stream_Type'Class;
 
-   function Stream (File : in File_Type) return Stream_Access;
+   function Stream (File : File_Type) return Stream_Access;
 
 end Ada.Text_IO.Text_Streams;

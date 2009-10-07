@@ -1,9 +1,9 @@
 /*
- * "$Id: testadmin.c 6649 2007-07-11 21:46:42Z mike $"
+ * "$Id: testadmin.c 7720 2008-07-11 22:46:21Z mike $"
  *
  *   Admin function test program for the Common UNIX Printing System (CUPS).
  *
- *   Copyright 2007 by Apple Inc.
+ *   Copyright 2007-2008 by Apple Inc.
  *   Copyright 2006 by Easy Software Products.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -61,7 +61,7 @@ main(int  argc,				/* I - Number of command-line args */
 
   if (argc > 1)
   {
-    for (i = 1, num_settings = 0; i < argc; i ++)
+    for (i = 1, num_settings = 0, settings = NULL; i < argc; i ++)
       num_settings = cupsParseOptions(argv[i], num_settings, &settings);
 
     if (cupsAdminSetServerSettings(http, num_settings, settings))
@@ -116,5 +116,5 @@ show_settings(
 
 
 /*
- * End of "$Id: testadmin.c 6649 2007-07-11 21:46:42Z mike $".
+ * End of "$Id: testadmin.c 7720 2008-07-11 22:46:21Z mike $".
  */

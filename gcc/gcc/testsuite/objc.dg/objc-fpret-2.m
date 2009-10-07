@@ -4,7 +4,7 @@ in the same places that the old ABI uses objc_msgSend_fpret().
 */
 /* { dg-options "-mmacosx-version-min=10.5 -fobjc-abi-version=2" } */
 /* { dg-do compile { target i?86-*-darwin* } } */
-/* { dg-skip-if "" { i?86-*-darwin* } { "-m64" } { "" } } */
+/* { dg-require-effective-target ilp32 } */
 
 @interface Test @end
 @implementation Test

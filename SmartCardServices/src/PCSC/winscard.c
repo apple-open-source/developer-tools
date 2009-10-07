@@ -332,6 +332,10 @@ LONG SCardConnect(SCARDCONTEXT hContext, LPCSTR szReader,
 	{
 		if (dwShareMode != SCARD_SHARE_DIRECT)
 		{
+			/* lock here instead in IFDSetPTS() to lock up to
+			 * setting rContext->readerState->cardProtocol */
+			SYS_MutexLock(rContext->mMutex);
+
 			/* the protocol is not yet set (no PPS yet) */
 			if (SCARD_PROTOCOL_UNSET == SharedReaderState_Protocol(rContext->readerState))
 			{
@@ -355,16 +359,26 @@ LONG SCardConnect(SCARDCONTEXT hContext, LPCSTR szReader,
 
 				/* keep cardProtocol = SCARD_PROTOCOL_UNSET in case of error  */
 				if (SET_PROTOCOL_PPS_FAILED == ret)
+				{
+					SYS_MutexUnLock(rContext->mMutex);
 					return SCARD_W_UNRESPONSIVE_CARD;
+				}
 
 				if (SET_PROTOCOL_WRONG_ARGUMENT == ret)
+				{
+					SYS_MutexUnLock(rContext->mMutex);
 					return SCARD_E_PROTO_MISMATCH;
+				}
 
-				/* use negociated protocol */
+				/* use negotiated protocol */
 				SharedReaderState_SetProtocol(rContext->readerState, ret);
+
+				SYS_MutexUnLock(rContext->mMutex);
 			}
 			else
 			{
+				SYS_MutexUnLock(rContext->mMutex);
+
 				if (! (dwPreferredProtocols & SharedReaderState_Protocol(rContext->readerState)))
 					return SCARD_E_PROTO_MISMATCH;
 			}
@@ -544,6 +558,10 @@ LONG SCardReconnect(SCARDHANDLE hCard, DWORD dwShareMode,
 	{
 		if (dwShareMode != SCARD_SHARE_DIRECT)
 		{
+			/* lock here instead in IFDSetPTS() to lock up to
+			 * setting rContext->readerState->cardProtocol */
+			SYS_MutexLock(rContext->mMutex);
+
 			/* the protocol is not yet set (no PPS yet) */
 			if (SCARD_PROTOCOL_UNSET == SharedReaderState_Protocol(rContext->readerState))
 			{
@@ -565,16 +583,26 @@ LONG SCardReconnect(SCARDHANDLE hCard, DWORD dwShareMode,
 
 				/* keep cardProtocol = SCARD_PROTOCOL_UNSET in case of error  */
 				if (SET_PROTOCOL_PPS_FAILED == ret)
+				{
+					SYS_MutexUnLock(rContext->mMutex);
 					return SCARD_W_UNRESPONSIVE_CARD;
+				}
 
 				if (SET_PROTOCOL_WRONG_ARGUMENT == ret)
+				{
+					SYS_MutexUnLock(rContext->mMutex);
 					return SCARD_E_PROTO_MISMATCH;
+				}
 
-				/* use negociated protocol */
+				/* use negotiated protocol */
 				SharedReaderState_SetProtocol(rContext->readerState, ret);
+
+				SYS_MutexUnLock(rContext->mMutex);
 			}
 			else
 			{
+				SYS_MutexUnLock(rContext->mMutex);
+
 				if (! (dwPreferredProtocols & SharedReaderState_Protocol(rContext->readerState)))
 					return SCARD_E_PROTO_MISMATCH;
 			}
@@ -929,37 +957,21 @@ LONG SCardStatus(SCARDHANDLE hCard, LPSTR mszReaderNames,
 	if (rv != SCARD_S_SUCCESS)
 		return rv;
 
-	if (mszReaderNames)
-	{  /* want reader name */
-		if (pcchReaderLen)
-		{ /* & present reader name length */
-			if (*pcchReaderLen >= strlen(rContext->lpcReader))
-			{ /* & enough room */
-				*pcchReaderLen = strlen(rContext->lpcReader);
-				strncpy(mszReaderNames, rContext->lpcReader, MAX_READERNAME);
-			}
-			else
-			{        /* may report only reader name len */
-				*pcchReaderLen = strlen(rContext->lpcReader);
-				rv = SCARD_E_INSUFFICIENT_BUFFER;
-			}
-		}
-		else
-		{            /* present buf & no buflen */
-			return SCARD_E_INVALID_PARAMETER;
-		}
-	}
-	else
+	if (mszReaderNames)			/* want reader name */
 	{
-		if (pcchReaderLen)
-		{ /* want reader len only */
-			*pcchReaderLen = strlen(rContext->lpcReader);
-		}
-		else
-		{
-		/* nothing todo */
-		}
+		int cchReaderLen;
+		if (!pcchReaderLen)		/* present buf & no buflen */
+			return SCARD_E_INVALID_PARAMETER;
+
+		cchReaderLen = strlen(rContext->lpcReader);
+		if(*pcchReaderLen < cchReaderLen)
+			rv = SCARD_E_INSUFFICIENT_BUFFER;
+		else   /* There's enough room in the buffer */
+			strncpy(mszReaderNames, rContext->lpcReader, cchReaderLen);
+		*pcchReaderLen = cchReaderLen;
 	}
+	else if (pcchReaderLen) /* want the reader length but not the name */
+		*pcchReaderLen = strlen(rContext->lpcReader);
 
 	if (pdwState)
 		*pdwState = SharedReaderState_State(rContext->readerState);
@@ -967,38 +979,23 @@ LONG SCardStatus(SCARDHANDLE hCard, LPSTR mszReaderNames,
 	if (pdwProtocol)
 		*pdwProtocol = SharedReaderState_Protocol(rContext->readerState);
 
-	if (pbAtr)
-	{  /* want ATR */
-		if (pcbAtrLen)
-		{ /* & present ATR length */
-			if (*pcbAtrLen >= SharedReaderState_CardAtrLength(rContext->readerState))
-			{ /* & enough room */
-				*pcbAtrLen = SharedReaderState_CardAtrLength(rContext->readerState);
-				memcpy(pbAtr, SharedReaderState_CardAtr(rContext->readerState),
-					SharedReaderState_CardAtrLength(rContext->readerState));
-			}
-			else
-			{ /* may report only ATR len */
-				*pcbAtrLen = SharedReaderState_CardAtrLength(rContext->readerState);
-				rv = SCARD_E_INSUFFICIENT_BUFFER;
-			}
-		}
-		else
-		{ /* present buf & no buflen */
-			return SCARD_E_INVALID_PARAMETER;
-		}
-	}
-	else
+	if (pbAtr)     /* want ATR */
 	{
-		if (pcbAtrLen)
-		{ /* want ATR len only */
-			*pcbAtrLen = SharedReaderState_CardAtrLength(rContext->readerState);
-		}
+		int cbAtrLen;
+		if (!pcbAtrLen)
+			return SCARD_E_INVALID_PARAMETER;
+		cbAtrLen = SharedReaderState_CardAtrLength(rContext->readerState);
+
+		if(cbAtrLen >= *pcbAtrLen)
+			rv = SCARD_E_INSUFFICIENT_BUFFER;
 		else
 		{
-			/* nothing todo */
+			*pcbAtrLen = cbAtrLen;
+			memcpy(pbAtr, SharedReaderState_CardAtr(rContext->readerState), cbAtrLen);
 		}
 	}
+	else if (pcbAtrLen)
+		*pcbAtrLen = SharedReaderState_CardAtrLength(rContext->readerState);
 
 	return rv;
 }

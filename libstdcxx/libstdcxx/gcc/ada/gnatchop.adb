@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---            Copyright (C) 1998-2005 Ada Core Technologies, Inc.           --
+--                     Copyright (C) 1998-2005, AdaCore                     --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -521,17 +521,19 @@ procedure Gnatchop is
 
    function Locate_Executable
      (Program_Name    : String;
-      Look_For_Prefix : Boolean := True)
-     return             String_Access
+      Look_For_Prefix : Boolean := True) return String_Access
    is
-      Current_Command : constant String := Command_Name;
-      End_Of_Prefix   : Natural  := Current_Command'First - 1;
-      Start_Of_Prefix : Positive := Current_Command'First;
+      Current_Command : constant String := Normalize_Pathname (Command_Name);
+      End_Of_Prefix   : Natural;
+      Start_Of_Prefix : Positive;
       Result          : String_Access;
 
    begin
+      Start_Of_Prefix := Current_Command'First;
+      End_Of_Prefix   := Start_Of_Prefix - 1;
 
       if Look_For_Prefix then
+
          --  Find Start_Of_Prefix
 
          for J in reverse Current_Command'Range loop
@@ -545,8 +547,6 @@ procedure Gnatchop is
          end loop;
 
          --  Find End_Of_Prefix
-
-         End_Of_Prefix := Start_Of_Prefix - 1;
 
          for J in reverse Start_Of_Prefix .. Current_Command'Last loop
             if Current_Command (J) = '-' then
@@ -1163,8 +1163,7 @@ procedure Gnatchop is
                Put (Standard_Error, "GNATCHOP ");
                Put_Line (Standard_Error, Gnatvsn.Gnat_Version_String);
                Put_Line
-                 (Standard_Error,
-                  "Copyright 1998-2005, Ada Core Technologies Inc.");
+                 (Standard_Error, "Copyright 1998-2005, AdaCore");
 
             when 'w' =>
                Overwrite_Files := True;

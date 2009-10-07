@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1999-2004 Free Software Foundation, Inc.          --
+--          Copyright (C) 1999-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -35,7 +35,7 @@
 --  tree to fill in representation information, and also the routine used
 --  by -gnatR to print this information. This unit is used both in the
 --  compiler and in ASIS (it is used in ASIS as part of the implementation
---  of the data decomposition annex.
+--  of the data decomposition annex).
 
 with Types; use Types;
 with Uintp; use Uintp;
@@ -55,7 +55,7 @@ package Repinfo is
    --  For composite types, there are three cases:
 
    --    1. In some cases the front end knows the values statically,
-   --       for example in the ase where representation clauses or
+   --       for example in the case where representation clauses or
    --       pragmas specify the values.
 
    --    2. If Backend_Layout is True, then the backend is responsible
@@ -128,7 +128,7 @@ package Repinfo is
    --  Subtype used for values that can either be a Node_Ref (negative)
    --  or a value (non-negative)
 
-   type TCode is range 0 .. 27;
+   type TCode is range 0 .. 28;
    --  Type used on Ada side to represent DEFTREECODE values defined in
    --  tree.def. Only a subset of these tree codes can actually appear.
    --  The names are the names from tree.def in Ada casing.
@@ -162,6 +162,7 @@ package Repinfo is
    Ge_Expr          : constant TCode := 25; -- comparision >=           2
    Eq_Expr          : constant TCode := 26; -- comparision =            2
    Ne_Expr          : constant TCode := 27; -- comparision /=           2
+   Bit_And_Expr     : constant TCode := 28; -- Binary and               2
 
    --  The following entry is used to represent a discriminant value in
    --  the tree. It has a special tree code that does not correspond

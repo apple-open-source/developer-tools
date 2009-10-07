@@ -6,7 +6,8 @@ template <class X>
 struct S
 {
   template <class U>
-  void f(U u) { printf ("%d\n", sizeof (U)); }
+  /* APPLE LOCAL default to Wformat-security 5764921 */
+  void f(U u) { printf ("%d\n", (int)sizeof (U)); }
 
   int i[4];
 };

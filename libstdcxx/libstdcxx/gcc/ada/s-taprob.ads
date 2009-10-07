@@ -1,12 +1,12 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                GNU ADA RUN-TIME LIBRARY (GNARL) COMPONENTS               --
+--                 GNAT RUN-TIME LIBRARY (GNARL) COMPONENTS                 --
 --                                                                          --
 --      S Y S T E M . T A S K I N G . P R O T E C T E D _ O B J E C T S     --
 --                                                                          --
 --                                  S p e c                                 --
 --                                                                          --
---          Copyright (C) 1992-2003, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNARL; see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -206,13 +206,24 @@ package System.Tasking.Protected_Objects is
 
 private
    type Protection is record
-      L       : aliased Task_Primitives.Lock;
+      L : aliased Task_Primitives.Lock;
+      --  Lock used to ensure mutual exclusive access to the protected object
+
       Ceiling : System.Any_Priority;
+      --  Ceiling priority associated to the protected object
+
+      Owner : Task_Id;
+      --  This field contains the protected object's owner. Null_Task
+      --  indicates that the protected object is not currently being used.
+      --  This information is used for detecting the type of potentially
+      --  blocking operations described in the ARM 9.5.1, par. 15 (external
+      --  calls on a protected subprogram with the same target object as that
+      --  of the protected action).
    end record;
 
    procedure Finalize_Protection (Object : in out Protection);
-   --  Clean up a Protection object; in particular, finalize the associated
-   --  Lock object. The compiler generates automatically calls to this
+   --  Clean up a Protection object (in particular, finalize the associated
+   --  Lock object). The compiler generates calls automatically to this
    --  procedure
 
 end System.Tasking.Protected_Objects;

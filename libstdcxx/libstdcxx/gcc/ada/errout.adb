@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2005 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -49,7 +49,6 @@ with Sinfo;    use Sinfo;
 with Snames;   use Snames;
 with Stand;    use Stand;
 with Style;
-with Uintp;    use Uintp;
 with Uname;    use Uname;
 
 with Unchecked_Conversion;
@@ -322,14 +321,13 @@ package body Errout is
          return;
       end if;
 
-      --  The idea at this stage is that we have two kinds of messages.
+      --  The idea at this stage is that we have two kinds of messages
 
-      --  First, we have those that are to be placed as requested at
-      --  Flag_Location. This includes messages that have nothing to
-      --  do with generics, and also messages placed on generic templates
-      --  that reflect an error in the template itself. For such messages
-      --  we simply call Error_Msg_Internal to place the message in the
-      --  requested location.
+      --  First, we have those messages that are to be placed as requested at
+      --  Flag_Location. This includes messages that have nothing to do with
+      --  generics, and also messages placed on generic templates that reflect
+      --  an error in the template itself. For such messages we simply call
+      --  Error_Msg_Internal to place the message in the requested location.
 
       if Instantiation (Sindex) = No_Location then
          Error_Msg_Internal (Msg, Flag_Location, Flag_Location, False);
@@ -493,6 +491,9 @@ package body Errout is
       --  since there may be white space inside the literal and we don't want
       --  to stop on that white space.
 
+      --  Note: since this is an error recovery issue anyway, it is not worth
+      --  worrying about special UTF_32 line terminator characters here.
+
       if Prev_Token = Tok_String_Literal then
          loop
             S1 := S1 + 1;
@@ -512,7 +513,10 @@ package body Errout is
 
       --  Otherwise we search forward for the end of the current token, marked
       --  by a line terminator, white space, a comment symbol or if we bump
-      --  into the following token (i.e. the current token)
+      --  into the following token (i.e. the current token).
+
+      --  Again, it is not worth worrying about UTF_32 special line terminator
+      --  characters in this context, since this is only for error recovery.
 
       else
          while Source (S1) not in Line_Terminator
@@ -528,7 +532,6 @@ package body Errout is
       --  S1 is now set to the location for the flag
 
       Error_Msg (Msg, S1);
-
    end Error_Msg_AP;
 
    ------------------
@@ -577,7 +580,6 @@ package body Errout is
       S : String (1 .. Feature'Length + 1 + CCRT'Length);
       L : Natural;
 
-
    begin
       S (1) := '|';
       S (2 .. Feature'Length + 1) := Feature;
@@ -602,7 +604,7 @@ package body Errout is
 
    procedure Error_Msg_F (Msg : String; N : Node_Id) is
    begin
-      Error_Msg_NEL (Msg, N, N, First_Sloc (N));
+      Error_Msg_NEL (Msg, N, N, Sloc (First_Node (N)));
    end Error_Msg_F;
 
    ------------------
@@ -689,6 +691,7 @@ package body Errout is
       if Suppress_Message
         and not All_Errors_Mode
         and not (Msg (Msg'Last) = '!')
+        and not Is_Warning_Msg
       then
          if not Continuation then
             Last_Killed := True;
@@ -778,7 +781,8 @@ package body Errout is
       Errors.Table (Cur_Msg).Warn     := Is_Warning_Msg;
       Errors.Table (Cur_Msg).Style    := Is_Style_Msg;
       Errors.Table (Cur_Msg).Serious  := Is_Serious_Error;
-      Errors.Table (Cur_Msg).Uncond   := Is_Unconditional_Msg;
+      Errors.Table (Cur_Msg).Uncond
+        := Is_Unconditional_Msg or Is_Warning_Msg;
       Errors.Table (Cur_Msg).Msg_Cont := Continuation;
       Errors.Table (Cur_Msg).Deleted  := False;
 
@@ -1003,6 +1007,7 @@ package body Errout is
 
       if All_Errors_Mode
         or else Msg (Msg'Last) = '!'
+        or else Is_Warning_Msg
         or else OK_Node (N)
         or else (Msg (Msg'First) = '\' and not Last_Killed)
       then
@@ -1029,7 +1034,10 @@ package body Errout is
       N     : Node_Or_Entity_Id)
    is
    begin
-      if Eflag and then In_Extended_Main_Source_Unit (N) then
+      if Eflag
+        and then In_Extended_Main_Source_Unit (N)
+        and then Comes_From_Source (N)
+      then
          Error_Msg_NEL (Msg, N, N, Sloc (N));
       end if;
    end Error_Msg_NW;
@@ -1117,9 +1125,9 @@ package body Errout is
       --  Brief Error mode
 
       if Brief_Output or (not Full_List and not Verbose_Mode) then
-         E := First_Error_Msg;
          Set_Standard_Error;
 
+         E := First_Error_Msg;
          while E /= No_Error_Msg loop
             if not Errors.Table (E).Deleted and then not Debug_Flag_KK then
                if Full_Path_Name_For_Brief_Errors then
@@ -1426,12 +1434,6 @@ package body Errout is
          Warnings.Table (Warnings.Last).Start := Source_Ptr'First;
          Warnings.Table (Warnings.Last).Stop  := Source_Ptr'Last;
       end if;
-
-      --  Set the error nodes to Empty to avoid uninitialized variable
-      --  references for saves/restores/moves.
-
-      Error_Msg_Node_1 := Empty;
-      Error_Msg_Node_2 := Empty;
    end Initialize;
 
    -----------------
@@ -1606,7 +1608,7 @@ package body Errout is
    procedure Remove_Warning_Messages (N : Node_Id) is
 
       function Check_For_Warning (N : Node_Id) return Traverse_Result;
-      --  This function checks one node for a possible warning message.
+      --  This function checks one node for a possible warning message
 
       function Check_All_Warnings is new
         Traverse_Func (Check_For_Warning);
@@ -1746,7 +1748,6 @@ package body Errout is
       --  Casing required for result. Default value of Mixed_Case is used if
       --  for some reason we cannot find the right file name in the table.
 
-
    begin
       --  Get length of file name
 
@@ -1863,9 +1864,15 @@ package body Errout is
       end if;
 
       --  The following assignment ensures that a second ampersand insertion
-      --  character will correspond to the Error_Msg_Node_2 parameter.
+      --  character will correspond to the Error_Msg_Node_2 parameter. We
+      --  suppress possible validity checks in case operating in -gnatVa mode,
+      --  and Error_Msg_Node_2 is not needed and has not been set.
 
-      Error_Msg_Node_1 := Error_Msg_Node_2;
+      declare
+         pragma Suppress (Range_Check);
+      begin
+         Error_Msg_Node_1 := Error_Msg_Node_2;
+      end;
    end Set_Msg_Insertion_Node;
 
    --------------------------------------
@@ -2038,9 +2045,15 @@ package body Errout is
       end if;
 
       --  The following assignment ensures that a second percent insertion
-      --  character will correspond to the Error_Msg_Unit_2 parameter.
+      --  character will correspond to the Error_Msg_Unit_2 parameter. We
+      --  suppress possible validity checks in case operating in -gnatVa mode,
+      --  and Error_Msg_Unit_2 is not needed and has not been set.
 
-      Error_Msg_Unit_1 := Error_Msg_Unit_2;
+      declare
+         pragma Suppress (Range_Check);
+      begin
+         Error_Msg_Unit_1 := Error_Msg_Unit_2;
+      end;
    end Set_Msg_Insertion_Unit_Name;
 
    ------------------
@@ -2234,7 +2247,6 @@ package body Errout is
             when '>' =>
                Set_Msg_Insertion_Run_Time_Name;
 
-
             when '^' =>
                Set_Msg_Insertion_Uint;
 
@@ -2246,6 +2258,9 @@ package body Errout is
                Is_Unconditional_Msg := True;
 
             when '?' =>
+               null; -- already dealt with
+
+            when '<' =>
                null; -- already dealt with
 
             when '|' =>

@@ -1,8 +1,8 @@
 /* APPLE LOCAL file radar 4441551 */
 /* Issue warning wherevr @defs is used. */
 /* { dg-options "-lobjc -Wobjc2" } */
-/* { dg-do run } */
-/* { dg-skip-if "" { *-*-darwin* } { "-m64" } { "" } } */
+/* { dg-do run { target powerpc*-*-darwin* i?86*-*-darwin* } } */
+/* { dg-require-effective-target ilp32 } */
 
 #include <objc/objc.h>
 #include <objc/Object.h>

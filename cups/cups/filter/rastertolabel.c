@@ -1,9 +1,9 @@
 /*
- * "$Id: rastertolabel.c 6820 2007-08-20 21:15:28Z mike $"
+ * "$Id: rastertolabel.c 7720 2008-07-11 22:46:21Z mike $"
  *
  *   Label printer filter for the Common UNIX Printing System (CUPS).
  *
- *   Copyright 2007 by Apple Inc.
+ *   Copyright 2007-2008 by Apple Inc.
  *   Copyright 2001-2007 by Easy Software Products.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -33,11 +33,12 @@
 #include <cups/cups.h>
 #include <cups/string.h>
 #include <cups/i18n.h>
-#include "raster.h"
+#include <cups/raster.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <errno.h>
 
 
 /*
@@ -54,7 +55,7 @@
  * The Zebra portion of the driver has been tested with the LP-2844,
  * LP-2844Z, QL-320, and QL-420 label printers; it may also work with
  * other models.  The driver supports EPL line mode, EPL page mode,
- * ZPL, and CPCL as defined in Zebra's on-line developer documentation.
+ * ZPL, and CPCL as defined in Zebra's online developer documentation.
  */
 
 /*
@@ -90,10 +91,10 @@ int		ModelNumber,		/* cupsModelNumber attribute */
  */
 
 void	Setup(ppd_file_t *ppd);
-void	StartPage(ppd_file_t *ppd, cups_page_header_t *header);
-void	EndPage(ppd_file_t *ppd, cups_page_header_t *header);
+void	StartPage(ppd_file_t *ppd, cups_page_header2_t *header);
+void	EndPage(ppd_file_t *ppd, cups_page_header2_t *header);
 void	CancelJob(int sig);
-void	OutputLine(ppd_file_t *ppd, cups_page_header_t *header, int y);
+void	OutputLine(ppd_file_t *ppd, cups_page_header2_t *header, int y);
 void	PCLCompress(unsigned char *line, int length);
 void	ZPLCompress(char repeat_char, int repeat_count);
 
@@ -166,13 +167,10 @@ Setup(ppd_file_t *ppd)			/* I - PPD file */
 
 void
 StartPage(ppd_file_t         *ppd,	/* I - PPD file */
-          cups_page_header_t *header)	/* I - Page header */
+          cups_page_header2_t *header)	/* I - Page header */
 {
   ppd_choice_t	*choice;		/* Marked choice */
   int		length;			/* Actual label length */
-#if defined(HAVE_SIGACTION) && !defined(HAVE_SIGSET)
-  struct sigaction action;		/* Actions for POSIX signals */
-#endif /* HAVE_SIGACTION && !HAVE_SIGSET */
 
 
  /*
@@ -225,23 +223,6 @@ StartPage(ppd_file_t         *ppd,	/* I - PPD file */
   fprintf(stderr, "DEBUG: cupsRowCount = %d\n", header->cupsRowCount);
   fprintf(stderr, "DEBUG: cupsRowFeed = %d\n", header->cupsRowFeed);
   fprintf(stderr, "DEBUG: cupsRowStep = %d\n", header->cupsRowStep);
-
- /*
-  * Register a signal handler to eject the current page if the
-  * job is canceled.
-  */
-
-#ifdef HAVE_SIGSET /* Use System V signals over POSIX to avoid bugs */
-  sigset(SIGTERM, CancelJob);
-#elif defined(HAVE_SIGACTION)
-  memset(&action, 0, sizeof(action));
-
-  sigemptyset(&action.sa_mask);
-  action.sa_handler = CancelJob;
-  sigaction(SIGTERM, &action, NULL);
-#else
-  signal(SIGTERM, CancelJob);
-#endif /* HAVE_SIGSET */
 
   switch (ModelNumber)
   {
@@ -498,13 +479,10 @@ StartPage(ppd_file_t         *ppd,	/* I - PPD file */
 
 void
 EndPage(ppd_file_t *ppd,		/* I - PPD file */
-        cups_page_header_t *header)	/* I - Page header */
+        cups_page_header2_t *header)	/* I - Page header */
 {
   int		val;			/* Option value */
   ppd_choice_t	*choice;		/* Marked choice */
-#if defined(HAVE_SIGACTION) && !defined(HAVE_SIGSET)
-  struct sigaction action;		/* Actions for POSIX signals */
-#endif /* HAVE_SIGACTION && !HAVE_SIGSET */
 
 
   switch (ModelNumber)
@@ -733,22 +711,6 @@ EndPage(ppd_file_t *ppd,		/* I - PPD file */
   fflush(stdout);
 
  /*
-  * Unregister the signal handler...
-  */
-
-#ifdef HAVE_SIGSET /* Use System V signals over POSIX to avoid bugs */
-  sigset(SIGTERM, SIG_IGN);
-#elif defined(HAVE_SIGACTION)
-  memset(&action, 0, sizeof(action));
-
-  sigemptyset(&action.sa_mask);
-  action.sa_handler = SIG_IGN;
-  sigaction(SIGTERM, &action, NULL);
-#else
-  signal(SIGTERM, SIG_IGN);
-#endif /* HAVE_SIGSET */
-
- /*
   * Free memory...
   */
 
@@ -779,7 +741,7 @@ CancelJob(int sig)			/* I - Signal */
 
 void
 OutputLine(ppd_file_t         *ppd,	/* I - PPD file */
-           cups_page_header_t *header,	/* I - Page header */
+           cups_page_header2_t *header,	/* I - Page header */
            int                y)	/* I - Line number */
 {
   int		i;			/* Looping var */
@@ -1069,9 +1031,6 @@ PCLCompress(unsigned char *line,	/* I - Line to compress */
     comp_ptr += count;
   }
 
-  line_ptr = CompBuffer;
-  line_end = comp_ptr;
-
  /*
   * Set the length of the data and write it...
   */
@@ -1145,11 +1104,14 @@ main(int  argc,				/* I - Number of command-line arguments */
 {
   int			fd;		/* File descriptor */
   cups_raster_t		*ras;		/* Raster stream for printing */
-  cups_page_header_t	header;		/* Page header from file */
+  cups_page_header2_t	header;		/* Page header from file */
   int			y;		/* Current line */
   ppd_file_t		*ppd;		/* PPD file */
   int			num_options;	/* Number of options */
   cups_option_t		*options;	/* Options */
+#if defined(HAVE_SIGACTION) && !defined(HAVE_SIGSET)
+  struct sigaction action;		/* Actions for POSIX signals */
+#endif /* HAVE_SIGACTION && !HAVE_SIGSET */
 
 
  /*
@@ -1169,8 +1131,9 @@ main(int  argc,				/* I - Number of command-line arguments */
     * and return.
     */
 
-    fprintf(stderr, _("Usage: %s job-id user title copies options [file]\n"),
-            argv[0]);
+    _cupsLangPrintf(stderr,
+                    _("Usage: %s job-id user title copies options [file]\n"),
+                    "rastertolabel");
     return (1);
   }
 
@@ -1182,7 +1145,8 @@ main(int  argc,				/* I - Number of command-line arguments */
   {
     if ((fd = open(argv[6], O_RDONLY)) == -1)
     {
-      perror("ERROR: Unable to open raster file - ");
+      _cupsLangPrintf(stderr, _("ERROR: Unable to open raster file - %s\n"),
+                      strerror(errno));
       sleep(1);
       return (1);
     }
@@ -1191,6 +1155,25 @@ main(int  argc,				/* I - Number of command-line arguments */
     fd = 0;
 
   ras = cupsRasterOpen(fd, CUPS_RASTER_READ);
+
+ /*
+  * Register a signal handler to eject the current page if the
+  * job is cancelled.
+  */
+
+  Canceled = 0;
+
+#ifdef HAVE_SIGSET /* Use System V signals over POSIX to avoid bugs */
+  sigset(SIGTERM, CancelJob);
+#elif defined(HAVE_SIGACTION)
+  memset(&action, 0, sizeof(action));
+
+  sigemptyset(&action.sa_mask);
+  action.sa_handler = CancelJob;
+  sigaction(SIGTERM, &action, NULL);
+#else
+  signal(SIGTERM, CancelJob);
+#endif /* HAVE_SIGSET */
 
  /*
   * Open the PPD file and apply options...
@@ -1214,14 +1197,16 @@ main(int  argc,				/* I - Number of command-line arguments */
   * Process pages as needed...
   */
 
-  Page      = 0;
-  Canceled = 0;
+  Page = 0;
 
-  while (cupsRasterReadHeader(ras, &header))
+  while (cupsRasterReadHeader2(ras, &header))
   {
    /*
     * Write a status message with the page number and number of copies.
     */
+
+    if (Canceled)
+      break;
 
     Page ++;
 
@@ -1243,9 +1228,12 @@ main(int  argc,				/* I - Number of command-line arguments */
       * Let the user know how far we have progressed...
       */
 
+      if (Canceled)
+	break;
+
       if ((y & 15) == 0)
-        fprintf(stderr, _("INFO: Printing page %d, %d%% complete...\n"), Page,
-	        100 * y / header.cupsHeight);
+        _cupsLangPrintf(stderr, _("INFO: Printing page %d, %d%% complete...\n"),
+                        Page, 100 * y / header.cupsHeight);
 
      /*
       * Read a line of graphics...
@@ -1291,14 +1279,20 @@ main(int  argc,				/* I - Number of command-line arguments */
   */
 
   if (Page == 0)
-    fputs(_("ERROR: No pages found!\n"), stderr);
+  {
+    _cupsLangPuts(stderr, _("ERROR: No pages found!\n"));
+    return (1);
+  }
   else
-    fputs(_("INFO: Ready to print.\n"), stderr);
+  {
+    _cupsLangPuts(stderr, _("INFO: Ready to print.\n"));
+    return (0);
+  }
 
   return (Page == 0);
 }
 
 
 /*
- * End of "$Id: rastertolabel.c 6820 2007-08-20 21:15:28Z mike $".
+ * End of "$Id: rastertolabel.c 7720 2008-07-11 22:46:21Z mike $".
  */

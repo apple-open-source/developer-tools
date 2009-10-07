@@ -62,8 +62,8 @@ L1:	mflr    r12
 	lis		r12,ha16(Ldyld_content_lazy_binder)
 	lwz		r12,lo16(Ldyld_content_lazy_binder)(r12)
 	mtctr	r12
-	lis		r12,ha16(MACH_HEADER_SYMBOL_NAME)
-	la		r12,lo16(MACH_HEADER_SYMBOL_NAME)(r12)
+	lis		r12,ha16(___dso_handle)
+	la		r12,lo16(___dso_handle)(r12)
 	bctr
  #endif
 	
@@ -88,13 +88,20 @@ L1:	mflr    r12
  // for i386 the mach_header parameter is pushed on the stack 
  // and the lazy_pointer is already on the stack
  #if __PIC__
+	subl	$8,%esp
+	pushl	%eax
+	pushl	%ecx
 	call	L1
 L1:	popl	%eax
-	pushl	dyld__mach_header-L1(%eax)
-	movl    Ldyld_content_lazy_binder-L1(%eax),%eax
-	jmpl    *%eax
+	movl	dyld__mach_header-L1(%eax),%ecx
+	movl	%ecx,12(%esp)
+	movl    Ldyld_content_lazy_binder-L1(%eax),%ecx
+	movl	%ecx,8(%esp)
+	popl	%ecx
+	popl	%eax
+	ret		// jumps into dyld with lp and mh on the stack
  #else
-	pushl   $MACH_HEADER_SYMBOL_NAME
+	pushl   $___dso_handle
 	jmpl    *Ldyld_content_lazy_binder
  #endif
 
@@ -121,11 +128,12 @@ Ldyld_lazy_symbol_binding_entry_point_base:
 #else
 	ldr	pc, [ip]
 #endif
+
 Ldyld__mach_header_pointer:
 #if __PIC__
 	.long	dyld__mach_header - (Ldyld__mach_header_pointer_base + 8)
 #else
-	.long	MACH_HEADER_SYMBOL_NAME
+	.long	___dso_handle
 #endif
 Ldyld_lazy_symbol_binding_entry_point:
 #if __PIC__
@@ -246,7 +254,7 @@ L__dyld_func_lookup_pointer:
 	.data
 	.align_pointer
 dyld__mach_header:
-	.pointer		MACH_HEADER_SYMBOL_NAME
+	.pointer		___dso_handle
 #endif // __x86_64__
 
 
@@ -277,8 +285,8 @@ Ldyld_content_lazy_binder:
 	.pointer		Ldyld_base_addr + 0x1000
 Ldyld_content_func_lookup:
 	.pointer		Ldyld_base_addr + 0x1008
-#if CRT
-	.pointer		MACH_HEADER_SYMBOL_NAME
+#if CRT && !OLD_LIBSYSTEM_SUPPORT
+	.pointer		___dso_handle
 	.pointer		_NXArgc
 	.pointer		_NXArgv
 	.pointer		_environ

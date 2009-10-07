@@ -16,6 +16,7 @@ float f1 __attribute__ ((aligned));
 int
 main (void)
 {
-  printf ("%d %d\n", __alignof (a1), __alignof (f1));
+  /* APPLE LOCAL default to Wformat-security 5764921 */
+  printf ("%d %d\n", (int)__alignof (a1), (int)__alignof (f1));
   return (__alignof (a1) < __alignof (f1));
 }

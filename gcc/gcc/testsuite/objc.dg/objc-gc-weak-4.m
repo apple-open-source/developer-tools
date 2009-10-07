@@ -2,6 +2,7 @@
 /* Check that gcc issues warning when __weak attribute is used unwisely. */
 /* { dg-do compile { target powerpc*-*-darwin* i?86*-*-darwin* } } */
 /* { dg-options "-fobjc-gc" } */
+/* { dg-require-effective-target objc_gc } */
 
 struct S {
 	__weak id  p; /* { dg-warning "__weak attribute cannot be specified on a field declaration" } */

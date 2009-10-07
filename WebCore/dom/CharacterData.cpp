@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 1999 Lars Knoll (knoll@kde.org)
  *           (C) 1999 Antti Koivisto (koivisto@kde.org)
- * Copyright (C) 2003, 2004, 2005, 2006, 2007 Apple Inc. All rights reserved.
+ * Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008 Apple Inc. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -22,285 +22,214 @@
 #include "config.h"
 #include "CharacterData.h"
 
-#include "Document.h"
+#include "CString.h"
 #include "EventNames.h"
 #include "ExceptionCode.h"
-#include "TextStream.h"
 #include "MutationEvent.h"
 #include "RenderText.h"
 
 namespace WebCore {
 
-using namespace EventNames;
-
-CharacterData::CharacterData(Document *doc)
-    : EventTargetNode(doc)
+CharacterData::CharacterData(Document *doc, bool isText)
+    : Node(doc, false, false, isText)
+    , m_data(StringImpl::empty())
 {
-    str = 0;
 }
 
-CharacterData::CharacterData(Document *doc, const String &_text)
-    : EventTargetNode(doc)
+CharacterData::CharacterData(Document* document, const String& text, bool isText)
+    : Node(document, false, false, isText)
 {
-    str = _text.impl() ? _text.impl() : new StringImpl(static_cast<UChar*>(0), 0);
-    str->ref();
+    m_data = text.impl() ? text.impl() : StringImpl::empty();
 }
 
 CharacterData::~CharacterData()
 {
-    if(str) str->deref();
 }
 
-void CharacterData::setData(const String& data, ExceptionCode& ec)
+void CharacterData::setData(const String& data, ExceptionCode&)
 {
-    // NO_MODIFICATION_ALLOWED_ERR: Raised when the node is readonly
-    if (isReadOnlyNode()) {
-        ec = NO_MODIFICATION_ALLOWED_ERR;
-        return;
-    }
-
-    if (equal(str, data.impl()))
+    StringImpl* dataImpl = data.impl() ? data.impl() : StringImpl::empty();
+    if (equal(m_data.get(), dataImpl))
         return;
 
-    StringImpl* oldStr = str;
-    str = data.impl();
-    if (str)
-        str->ref();
+    int oldLength = length();
+    RefPtr<StringImpl> oldStr = m_data;
+    m_data = dataImpl;
     
     if ((!renderer() || !rendererIsNeeded(renderer()->style())) && attached()) {
         detach();
         attach();
     } else if (renderer())
-        static_cast<RenderText*>(renderer())->setText(str);
+        toRenderText(renderer())->setText(m_data);
     
-    dispatchModifiedEvent(oldStr);
-    if (oldStr)
-        oldStr->deref();
+    dispatchModifiedEvent(oldStr.get());
     
-    document()->removeMarkers(this);
+    document()->textRemoved(this, 0, oldLength);
 }
 
-String CharacterData::substringData( const unsigned offset, const unsigned count, ExceptionCode& ec)
+String CharacterData::substringData(unsigned offset, unsigned count, ExceptionCode& ec)
 {
-    ec = 0;
     checkCharDataOperation(offset, ec);
     if (ec)
         return String();
 
-    return str->substring(offset,count);
+    return m_data->substring(offset, count);
 }
 
-void CharacterData::appendData( const String &arg, ExceptionCode& ec)
+void CharacterData::appendData(const String& arg, ExceptionCode&)
 {
-    ec = 0;
+    String newStr = m_data;
+    newStr.append(arg);
 
-    // NO_MODIFICATION_ALLOWED_ERR: Raised if this node is readonly
-    if (isReadOnlyNode()) {
-        ec = NO_MODIFICATION_ALLOWED_ERR;
-        return;
-    }
-
-    StringImpl *oldStr = str;
-    str = str->copy();
-    str->ref();
-    str->append(arg.impl());
+    RefPtr<StringImpl> oldStr = m_data;
+    m_data = newStr.impl();
 
     if ((!renderer() || !rendererIsNeeded(renderer()->style())) && attached()) {
         detach();
         attach();
     } else if (renderer())
-        static_cast<RenderText*>(renderer())->setTextWithOffset(str, oldStr->length(), 0);
+        toRenderText(renderer())->setTextWithOffset(m_data, oldStr->length(), 0);
     
-    dispatchModifiedEvent(oldStr);
-    oldStr->deref();
+    dispatchModifiedEvent(oldStr.get());
 }
 
-void CharacterData::insertData( const unsigned offset, const String &arg, ExceptionCode& ec)
+void CharacterData::insertData(unsigned offset, const String& arg, ExceptionCode& ec)
 {
-    ec = 0;
     checkCharDataOperation(offset, ec);
     if (ec)
         return;
 
-    StringImpl *oldStr = str;
-    str = str->copy();
-    str->ref();
-    str->insert(arg.impl(), offset);
+    String newStr = m_data;
+    newStr.insert(arg, offset);
+
+    RefPtr<StringImpl> oldStr = m_data;
+    m_data = newStr.impl();
 
     if ((!renderer() || !rendererIsNeeded(renderer()->style())) && attached()) {
         detach();
         attach();
     } else if (renderer())
-        static_cast<RenderText*>(renderer())->setTextWithOffset(str, offset, 0);
+        toRenderText(renderer())->setTextWithOffset(m_data, offset, 0);
+
+    dispatchModifiedEvent(oldStr.get());
     
-    dispatchModifiedEvent(oldStr);
-    oldStr->deref();
-    
-    // update the markers for spell checking and grammar checking
-    unsigned length = arg.length();
-    document()->shiftMarkers(this, offset, length);
+    document()->textInserted(this, offset, arg.length());
 }
 
-void CharacterData::deleteData( const unsigned offset, const unsigned count, ExceptionCode& ec)
+void CharacterData::deleteData(unsigned offset, unsigned count, ExceptionCode& ec)
 {
-    ec = 0;
-    checkCharDataOperation(offset, ec);
-    if (ec)
-        return;
-
-    StringImpl *oldStr = str;
-    str = str->copy();
-    str->ref();
-    str->remove(offset,count);
-    
-    if ((!renderer() || !rendererIsNeeded(renderer()->style())) && attached()) {
-        detach();
-        attach();
-    } else if (renderer())
-        static_cast<RenderText*>(renderer())->setTextWithOffset(str, offset, count);
-
-    dispatchModifiedEvent(oldStr);
-    oldStr->deref();
-
-    // update the markers for spell checking and grammar checking
-    document()->removeMarkers(this, offset, count);
-    document()->shiftMarkers(this, offset + count, -static_cast<int>(count));
-}
-
-void CharacterData::replaceData( const unsigned offset, const unsigned count, const String &arg, ExceptionCode& ec)
-{
-    ec = 0;
     checkCharDataOperation(offset, ec);
     if (ec)
         return;
 
     unsigned realCount;
-    if (offset + count > str->length())
-        realCount = str->length()-offset;
+    if (offset + count > length())
+        realCount = length() - offset;
     else
         realCount = count;
 
-    StringImpl *oldStr = str;
-    str = str->copy();
-    str->ref();
-    str->remove(offset,realCount);
-    str->insert(arg.impl(), offset);
+    String newStr = m_data;
+    newStr.remove(offset, realCount);
+
+    RefPtr<StringImpl> oldStr = m_data;
+    m_data = newStr.impl();
+    
+    if ((!renderer() || !rendererIsNeeded(renderer()->style())) && attached()) {
+        detach();
+        attach();
+    } else if (renderer())
+        toRenderText(renderer())->setTextWithOffset(m_data, offset, count);
+
+    dispatchModifiedEvent(oldStr.get());
+
+    document()->textRemoved(this, offset, realCount);
+}
+
+void CharacterData::replaceData(unsigned offset, unsigned count, const String& arg, ExceptionCode& ec)
+{
+    checkCharDataOperation(offset, ec);
+    if (ec)
+        return;
+
+    unsigned realCount;
+    if (offset + count > length())
+        realCount = length() - offset;
+    else
+        realCount = count;
+
+    String newStr = m_data;
+    newStr.remove(offset, realCount);
+    newStr.insert(arg, offset);
+
+    RefPtr<StringImpl> oldStr = m_data;
+    m_data = newStr.impl();
 
     if ((!renderer() || !rendererIsNeeded(renderer()->style())) && attached()) {
         detach();
         attach();
     } else if (renderer())
-        static_cast<RenderText*>(renderer())->setTextWithOffset(str, offset, count);
+        toRenderText(renderer())->setTextWithOffset(m_data, offset, count);
     
-    dispatchModifiedEvent(oldStr);
-    oldStr->deref();
+    dispatchModifiedEvent(oldStr.get());
     
     // update the markers for spell checking and grammar checking
-    int diff = arg.length() - count;
-    document()->removeMarkers(this, offset, count);
-    document()->shiftMarkers(this, offset + count, diff);
+    document()->textRemoved(this, offset, realCount);
+    document()->textInserted(this, offset, arg.length());
 }
 
 String CharacterData::nodeValue() const
 {
-    return str;
-}
-
-bool CharacterData::containsOnlyWhitespace(unsigned int from, unsigned int len) const
-{
-    if (str)
-        return str->containsOnlyWhitespace(from, len);
-    return true;
+    return m_data;
 }
 
 bool CharacterData::containsOnlyWhitespace() const
 {
-    if (str)
-        return str->containsOnlyWhitespace();
-    return true;
+    return !m_data || m_data->containsOnlyWhitespace();
 }
 
-void CharacterData::setNodeValue( const String &_nodeValue, ExceptionCode& ec)
+void CharacterData::setNodeValue(const String& nodeValue, ExceptionCode& ec)
 {
-    // NO_MODIFICATION_ALLOWED_ERR: taken care of by setData()
-    setData(_nodeValue, ec);
+    setData(nodeValue, ec);
 }
 
-void CharacterData::dispatchModifiedEvent(StringImpl *prevValue)
+void CharacterData::dispatchModifiedEvent(StringImpl* prevValue)
 {
     if (parentNode())
         parentNode()->childrenChanged();
     if (document()->hasListenerType(Document::DOMCHARACTERDATAMODIFIED_LISTENER)) {
-        StringImpl *newValue = str->copy();
-        newValue->ref();
-        ExceptionCode ec = 0;
-        dispatchEvent(new MutationEvent(DOMCharacterDataModifiedEvent,
-                      true,false,0,prevValue,newValue,String(),0),ec);
-        newValue->deref();
+        ExceptionCode ec;
+        dispatchMutationEvent(eventNames().DOMCharacterDataModifiedEvent, true, 0, prevValue, m_data, ec); 
     }
     dispatchSubtreeModifiedEvent();
 }
 
-void CharacterData::checkCharDataOperation( const unsigned offset, ExceptionCode& ec)
+void CharacterData::checkCharDataOperation(unsigned offset, ExceptionCode& ec)
 {
     ec = 0;
 
     // INDEX_SIZE_ERR: Raised if the specified offset is negative or greater than the number of 16-bit
     // units in data.
-    if (offset > str->length()) {
+    if (offset > length()) {
         ec = INDEX_SIZE_ERR;
         return;
     }
-
-    // NO_MODIFICATION_ALLOWED_ERR: Raised if this node is readonly
-    if (isReadOnlyNode()) {
-        ec = NO_MODIFICATION_ALLOWED_ERR;
-        return;
-    }
 }
 
-int CharacterData::maxOffset() const 
+int CharacterData::maxCharacterOffset() const
 {
-    return (int)length();
-}
-
-int CharacterData::caretMinOffset() const 
-{
-    RenderText *r = static_cast<RenderText *>(renderer());
-    return r && r->isText() ? r->caretMinOffset() : 0;
-}
-
-int CharacterData::caretMaxOffset() const 
-{
-    RenderText *r = static_cast<RenderText *>(renderer());
-    return r && r->isText() ? r->caretMaxOffset() : (int)length();
-}
-
-unsigned CharacterData::caretMaxRenderedOffset() const 
-{
-    RenderText *r = static_cast<RenderText *>(renderer());
-    return r ? r->caretMaxRenderedOffset() : length();
+    return static_cast<int>(length());
 }
 
 bool CharacterData::rendererIsNeeded(RenderStyle *style)
 {
-    if (!str || str->length() == 0)
+    if (!m_data || !length())
         return false;
-    return EventTargetNode::rendererIsNeeded(style);
+    return Node::rendererIsNeeded(style);
 }
 
 bool CharacterData::offsetInCharacters() const
 {
     return true;
 }
-
-#ifndef NDEBUG
-void CharacterData::dump(TextStream *stream, DeprecatedString ind) const
-{
-    *stream << " str=\"" << String(str).deprecatedString().ascii() << "\"";
-
-    EventTargetNode::dump(stream,ind);
-}
-#endif
 
 } // namespace WebCore

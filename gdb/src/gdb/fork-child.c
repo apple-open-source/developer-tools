@@ -96,7 +96,7 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
   static char default_shell_file[] = SHELL_FILE;
   int len;
   /* Set debug_fork then attach to the child while it sleeps, to debug. */
-  static int debug_fork = 1;
+  static int debug_fork = 0;
   /* This is set to the result of setpgrp, which if vforked, will be visible
      to you in the parent process.  It's only used by humans for debugging.  */
   static int debug_setpgrp = 657473;
@@ -130,10 +130,10 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
   /* Multiplying the length of exec_file by 4 is to account for the
      fact that it may expand when quoted; it is a worst-case number
      based on every character being '.  */
-  /* APPLE LOCAL 5 = "exec ", but we have "exec arch -arch x86_64 " at most.
-     so 5->24.  */
+  /* APPLE LOCAL 5 = "exec ", but we have "exec /usr/bin/arch -arch x86_64 " 
+     at most.  so 5->33.  */
 #ifdef USE_ARCH_FOR_EXEC
-  len = 24;
+  len = 33;
 #else
   len = 5;
 #endif
@@ -202,7 +202,7 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
 	  arch_string = "armv6";
 #endif
 	if (arch_string != NULL)
-	  sprintf (shell_command, "%s exec arch -arch %s ", shell_command, arch_string);
+	  sprintf (shell_command, "%s exec /usr/bin/arch -arch %s ", shell_command, arch_string);
 	else
 	  strcat (shell_command, "exec ");
       }
@@ -310,10 +310,18 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
      state, this doesn't work.  Also note that the vfork(2) call might
      actually be a call to fork(2) due to the fact that autoconf will
      ``#define vfork fork'' on certain platforms.  */
+
+  /* APPLE LOCAL: I have to do some synchronization between the forked side
+     and the parent side, which doesn't work with vfork.  So I #if 0'ed out
+     all the vfork stuff.  */
+
+  pid = fork ();
+#if 0
   if (pre_trace_fun || debug_fork)
     pid = fork ();
   else
     pid = vfork ();
+#endif
 
   if (pid < 0)
     perror_with_name (("vfork"));

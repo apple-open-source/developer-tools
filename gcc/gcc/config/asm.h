@@ -23,10 +23,7 @@ extern enum iasm_states iasm_state;
 extern bool iasm_in_decl;
 extern bool inside_iasm_block;
 extern bool iasm_kill_regs;
-extern bool iasm_at_bol;
-extern int iasm_in_operands;
-extern const cpp_token *iasm_split_next;
-void iasm_insert_saved_token (void);
+extern bool iasm_in_operands;
 extern tree iasm_do_id (tree);
 /* Maximum number of arguments.  */
 #define IASM_MAX_ARG 11
@@ -69,13 +66,12 @@ typedef struct iasm_md_Extra_info iasm_md_extra_info;
 void iasm_print_operand (char *buf, tree arg, unsigned argnum, tree *uses,
 			 bool must_be_reg, bool must_not_be_reg, iasm_md_extra_info *e);
 
-extern tree iasm_stmt (tree, tree, int);
+extern void iasm_stmt (tree, tree, int);
 extern tree iasm_build_register_offset (tree, tree);
-extern tree iasm_label (tree, int);
+extern tree iasm_label (tree, bool);
 extern tree prepend_char_identifier (tree, char);
-extern void iasm_clear_labels (void);
 extern tree iasm_reg_name (tree);
-extern tree iasm_entry (tree, tree, tree);
+extern void iasm_entry (int, tree);
 extern int iasm_typename_or_reserved (tree);
 extern tree iasm_c_build_component_ref (tree, tree);
 extern tree iasm_get_identifier (tree, const char *);

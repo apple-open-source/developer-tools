@@ -7,7 +7,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---           Copyright (C) 2003-2004, Ada Core Technologies, Inc.           --
+--                     Copyright (C) 2003-2005, AdaCore                     --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -17,8 +17,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -28,15 +28,13 @@
 --  This package provides a set of target dependent routines to build
 --  static, dynamic or relocatable libraries.
 
---  This is the AIX version of the body.
+--  This is the AIX version of the body
 
 with Ada.Strings.Fixed; use Ada.Strings.Fixed;
-with GNAT.OS_Lib;       use GNAT.OS_Lib;
 
 with MLib.Fil;
 with MLib.Utl;
 with Namet;    use Namet;
-with Osint;    use Osint;
 with Opt;
 with Output;   use Output;
 with Prj.Com;
@@ -46,12 +44,6 @@ package body MLib.Tgt is
 
    No_Arguments        : aliased Argument_List         := (1 .. 0 => null);
    Empty_Argument_List : constant Argument_List_Access := No_Arguments'Access;
-
-   Wl_Initfini_String  : constant String := "-Wl,-binitfini:";
-
-   Init_Fini_List      :  constant Argument_List_Access :=
-                            new Argument_List'(1 => null);
-   --  Used to put switch for automatic elaboration/finalization
 
    Bexpall : aliased String := "-Wl,-bexpall";
    Bexpall_Option : constant String_Access := Bexpall'Access;
@@ -142,15 +134,12 @@ package body MLib.Tgt is
       pragma Unreferenced (Interfaces);
       pragma Unreferenced (Symbol_Data);
       pragma Unreferenced (Lib_Version);
+      pragma Unreferenced (Auto_Init);
 
       Lib_File : constant String :=
                    Lib_Dir & Directory_Separator & "lib" &
                    MLib.Fil.Ext_To (Lib_Filename, DLL_Ext);
       --  The file name of the library
-
-      Init_Fini : Argument_List_Access := Empty_Argument_List;
-      --  The switch for automatic initialization of Stand-Alone Libraries.
-      --  Changed to a real switch when Auto_Init is True.
 
       Thread_Opts : Argument_List_Access := Empty_Argument_List;
       --  Set to Thread_Options if -lgnarl is found in the Options
@@ -161,16 +150,7 @@ package body MLib.Tgt is
          Write_Line (Lib_File);
       end if;
 
-      --  If specified, add automatic elaboration/finalization
-
-      if Auto_Init then
-         Init_Fini := Init_Fini_List;
-         Init_Fini (1) :=
-           new String'(Wl_Initfini_String & Lib_Filename & "init:" &
-                       Lib_Filename & "final");
-      end if;
-
-      --  Look for -lgnarl in Options. If found, set the thread options.
+      --  Look for -lgnarl in Options. If found, set the thread options
 
       for J in Options'Range loop
          if Options (J).all = "-lgnarl" then
@@ -223,7 +203,7 @@ package body MLib.Tgt is
       MLib.Utl.Gcc
         (Output_File => Lib_File,
          Objects     => Ofiles,
-         Options     => Options & Bexpall_Option & Init_Fini.all,
+         Options     => Options & Bexpall_Option,
          Driver_Name => Driver_Name,
          Options_2   => Options_2 & Thread_Opts.all);
    end Build_Dynamic_Library;
@@ -236,6 +216,15 @@ package body MLib.Tgt is
    begin
       return "a";
    end DLL_Ext;
+
+   ----------------
+   -- DLL_Prefix --
+   ----------------
+
+   function DLL_Prefix return String is
+   begin
+      return "lib";
+   end DLL_Prefix;
 
    --------------------
    -- Dynamic_Option --
@@ -286,9 +275,11 @@ package body MLib.Tgt is
    -- Library_Exists_For --
    ------------------------
 
-   function Library_Exists_For (Project : Project_Id) return Boolean is
+   function Library_Exists_For
+     (Project : Project_Id; In_Tree : Project_Tree_Ref) return Boolean
+   is
    begin
-      if not Projects.Table (Project).Library then
+      if not In_Tree.Projects.Table (Project).Library then
          Prj.Com.Fail ("INTERNAL ERROR: Library_Exists_For called " &
                        "for non library project");
          return False;
@@ -296,14 +287,17 @@ package body MLib.Tgt is
       else
          declare
             Lib_Dir  : constant String :=
-                         Get_Name_String
-                           (Projects.Table (Project).Library_Dir);
+              Get_Name_String
+                (In_Tree.Projects.Table (Project).Library_Dir);
+
             Lib_Name : constant String :=
-                         Get_Name_String
-                           (Projects.Table (Project).Library_Name);
+              Get_Name_String
+                (In_Tree.Projects.Table (Project).Library_Name);
 
          begin
-            if Projects.Table (Project).Library_Kind = Static then
+            if In_Tree.Projects.Table (Project).Library_Kind =
+              Static
+            then
                return Is_Regular_File
                  (Lib_Dir & Directory_Separator & "lib" &
                   Fil.Ext_To (Lib_Name, Archive_Ext));
@@ -321,9 +315,12 @@ package body MLib.Tgt is
    -- Library_File_Name_For --
    ---------------------------
 
-   function Library_File_Name_For (Project : Project_Id) return Name_Id is
+   function Library_File_Name_For
+     (Project : Project_Id;
+      In_Tree : Project_Tree_Ref) return Name_Id
+   is
    begin
-      if not Projects.Table (Project).Library then
+      if not In_Tree.Projects.Table (Project).Library then
          Prj.Com.Fail ("INTERNAL ERROR: Library_File_Name_For called " &
                        "for non library project");
          return No_Name;
@@ -331,13 +328,16 @@ package body MLib.Tgt is
       else
          declare
             Lib_Name : constant String :=
-              Get_Name_String (Projects.Table (Project).Library_Name);
+              Get_Name_String
+                (In_Tree.Projects.Table (Project).Library_Name);
 
          begin
             Name_Len := 3;
             Name_Buffer (1 .. Name_Len) := "lib";
 
-            if Projects.Table (Project).Library_Kind = Static then
+            if In_Tree.Projects.Table (Project).Library_Kind =
+              Static
+            then
                Add_Str_To_Name_Buffer (Fil.Ext_To (Lib_Name, Archive_Ext));
 
             else
@@ -382,7 +382,7 @@ package body MLib.Tgt is
 
    function Support_For_Libraries return Library_Support is
    begin
-      return Full;
+      return Static_Only;
    end Support_For_Libraries;
 
 end MLib.Tgt;

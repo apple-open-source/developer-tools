@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2003 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -49,10 +49,10 @@ package body Ada.Text_IO.Integer_Aux is
    -----------------------
 
    procedure Load_Integer
-     (File : in File_Type;
+     (File : File_Type;
       Buf  : out String;
       Ptr  : in out Natural);
-   --  This is an auxiliary routine that is used to load an possibly signed
+   --  This is an auxiliary routine that is used to load a possibly signed
    --  integer literal value from the input file into Buf, starting at Ptr + 1.
    --  On return, Ptr is set to the last character stored.
 
@@ -61,9 +61,9 @@ package body Ada.Text_IO.Integer_Aux is
    -------------
 
    procedure Get_Int
-     (File  : in File_Type;
+     (File  : File_Type;
       Item  : out Integer;
-      Width : in Field)
+      Width : Field)
    is
       Buf  : String (1 .. Field'Last);
       Ptr  : aliased Integer := 1;
@@ -86,9 +86,9 @@ package body Ada.Text_IO.Integer_Aux is
    -------------
 
    procedure Get_LLI
-     (File  : in File_Type;
+     (File  : File_Type;
       Item  : out Long_Long_Integer;
-      Width : in Field)
+      Width : Field)
    is
       Buf  : String (1 .. Field'Last);
       Ptr  : aliased Integer := 1;
@@ -111,7 +111,7 @@ package body Ada.Text_IO.Integer_Aux is
    --------------
 
    procedure Gets_Int
-     (From : in String;
+     (From : String;
       Item : out Integer;
       Last : out Positive)
    is
@@ -132,7 +132,7 @@ package body Ada.Text_IO.Integer_Aux is
    --------------
 
    procedure Gets_LLI
-     (From : in String;
+     (From : String;
       Item : out Long_Long_Integer;
       Last : out Positive)
    is
@@ -153,7 +153,7 @@ package body Ada.Text_IO.Integer_Aux is
    ------------------
 
    procedure Load_Integer
-     (File : in File_Type;
+     (File : File_Type;
       Buf  : out String;
       Ptr  : in out Natural)
    is
@@ -198,10 +198,10 @@ package body Ada.Text_IO.Integer_Aux is
    -------------
 
    procedure Put_Int
-     (File  : in File_Type;
-      Item  : in Integer;
-      Width : in Field;
-      Base  : in Number_Base)
+     (File  : File_Type;
+      Item  : Integer;
+      Width : Field;
+      Base  : Number_Base)
    is
       Buf : String (1 .. Integer'Max (Field'Last, Width));
       Ptr : Natural := 0;
@@ -223,10 +223,10 @@ package body Ada.Text_IO.Integer_Aux is
    -------------
 
    procedure Put_LLI
-     (File  : in File_Type;
-      Item  : in Long_Long_Integer;
-      Width : in Field;
-      Base  : in Number_Base)
+     (File  : File_Type;
+      Item  : Long_Long_Integer;
+      Width : Field;
+      Base  : Number_Base)
    is
       Buf : String (1 .. Integer'Max (Field'Last, Width));
       Ptr : Natural := 0;
@@ -249,8 +249,8 @@ package body Ada.Text_IO.Integer_Aux is
 
    procedure Puts_Int
      (To   : out String;
-      Item : in Integer;
-      Base : in Number_Base)
+      Item : Integer;
+      Base : Number_Base)
    is
       Buf : String (1 .. Integer'Max (Field'Last, To'Length));
       Ptr : Natural := 0;
@@ -275,8 +275,8 @@ package body Ada.Text_IO.Integer_Aux is
 
    procedure Puts_LLI
      (To   : out String;
-      Item : in Long_Long_Integer;
-      Base : in Number_Base)
+      Item : Long_Long_Integer;
+      Base : Number_Base)
    is
       Buf : String (1 .. Integer'Max (Field'Last, To'Length));
       Ptr : Natural := 0;

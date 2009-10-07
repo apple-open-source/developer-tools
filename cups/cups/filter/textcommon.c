@@ -3,7 +3,7 @@
  *
  *   Common text filter routines for the Common UNIX Printing System (CUPS).
  *
- *   Copyright 2007 by Apple Inc.
+ *   Copyright 2007-2008 by Apple Inc.
  *   Copyright 1997-2007 by Easy Software Products.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -45,7 +45,6 @@ lchar_t	**Page = NULL;		/* Page characters */
 int	NumPages = 0;		/* Number of pages in document */
 float	CharsPerInch = 10;	/* Number of character columns per inch */
 float	LinesPerInch = 6;	/* Number of lines per inch */
-int	UTF8 = 0;		/* Use UTF-8 encoding? */
 int	NumKeywords = 0;	/* Number of known keywords */
 char	**Keywords = NULL;	/* List of known keywords */
 
@@ -515,8 +514,9 @@ TextMain(const char *name,	/* I - Name of filter */
 
   if (argc < 6 || argc > 7)
   {
-    fprintf(stderr, _("Usage: %s job-id user title copies options [file]\n"),
-            name);
+    _cupsLangPrintf(stderr,
+                    _("Usage: %s job-id user title copies options [file]\n"),
+                    name);
     return (1);
   }
 
@@ -605,13 +605,37 @@ TextMain(const char *name,	/* I - Name of filter */
                 !strcasecmp(val, "yes");
 
   if ((val = cupsGetOption("columns", num_options, options)) != NULL)
+  {
     PageColumns = atoi(val);
 
+    if (PageColumns < 1)
+    {
+      _cupsLangPrintf(stderr, _("ERROR: Bad columns value %d!\n"), PageColumns);
+      return (1);
+    }
+  }
+
   if ((val = cupsGetOption("cpi", num_options, options)) != NULL)
+  {
     CharsPerInch = atof(val);
 
+    if (CharsPerInch <= 0.0)
+    {
+      _cupsLangPrintf(stderr, _("ERROR: Bad cpi value %f!\n"), CharsPerInch);
+      return (1);
+    }
+  }
+
   if ((val = cupsGetOption("lpi", num_options, options)) != NULL)
+  {
     LinesPerInch = atof(val);
+
+    if (LinesPerInch <= 0.0)
+    {
+      _cupsLangPrintf(stderr, _("ERROR: Bad lpi value %f!\n"), LinesPerInch);
+      return (1);
+    }
+  }
 
   if (PrettyPrint)
     PageTop -= 216.0f / LinesPerInch;
@@ -1142,7 +1166,7 @@ getutf8(FILE *fp)	/* I - File to read from */
   if ((ch = getc(fp)) == EOF)
     return (EOF);
 
-  if (ch < 0xc0 || !UTF8)	/* One byte character? */
+  if (ch < 0xc0)			/* One byte character? */
     return (ch);
   else if ((ch & 0xe0) == 0xc0)
   {

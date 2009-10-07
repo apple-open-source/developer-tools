@@ -1,12 +1,12 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                GNU ADA RUN-TIME LIBRARY (GNARL) COMPONENTS               --
+--                 GNAT RUN-TIME LIBRARY (GNARL) COMPONENTS                 --
 --                                                                          --
 --           S Y S T E M . T A S K I N G . A S Y N C _ D E L A Y S          --
 --                                                                          --
 --                                  B o d y                                 --
 --                                                                          --
---         Copyright (C) 1998-2004, Free Software Foundation, Inc.          --
+--         Copyright (C) 1998-2006, Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNARL; see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -63,6 +63,9 @@ with System.OS_Primitives;
 
 with Ada.Task_Identification;
 --  used for Task_Id type
+
+with System.Interrupt_Management.Operations;
+--  used for Setup_Interrupt_Mask
 
 with System.Parameters;
 --  used for Single_Lock
@@ -171,9 +174,8 @@ package body System.Tasking.Async_Delays is
    ---------------------------
 
    function Enqueue_Duration
-     (T    : in Duration;
-      D    : Delay_Block_Access)
-      return Boolean
+     (T : Duration;
+      D : Delay_Block_Access) return Boolean
    is
    begin
       if T <= 0.0 then
@@ -324,6 +326,12 @@ package body System.Tasking.Async_Delays is
    begin
       Timer_Server_ID := STPO.Self;
 
+      --  Since this package may be elaborated before System.Interrupt,
+      --  we need to call Setup_Interrupt_Mask explicitly to ensure that
+      --  this task has the proper signal mask.
+
+      Interrupt_Management.Operations.Setup_Interrupt_Mask;
+
       --  Initialize the timer queue to empty, and make the wakeup time of the
       --  header node be larger than any real wakeup time we will ever use.
 
@@ -371,7 +379,7 @@ package body System.Tasking.Async_Delays is
 
          while Timer_Queue.Succ.Resume_Time <= Now loop
 
-            --  Dequeue the waiting task from the front of the queue.
+            --  Dequeue the waiting task from the front of the queue
 
             pragma Debug (System.Tasking.Debug.Trace
               (Timer_Server_ID, "Timer service: waking up waiting task", 'E'));

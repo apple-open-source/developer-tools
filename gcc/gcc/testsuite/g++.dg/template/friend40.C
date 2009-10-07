@@ -1,4 +1,3 @@
-// APPLE LOCAL file mainline 2005-12-02 Radar 4458276
 // PR c++/24173
 // { dg-options "--param ggc-min-expand=0 --param ggc-min-heapsize=0" }
 

@@ -1,4 +1,3 @@
-// -*- mode: c++; c-basic-offset: 4 -*-
 /*
  * Copyright (C) 2004, 2006 Apple Computer, Inc.  All rights reserved.
  *
@@ -27,32 +26,44 @@
 #ifndef ResourceHandleInternal_h
 #define ResourceHandleInternal_h
 
+#include "ResourceHandle.h"
 #include "ResourceRequest.h"
 #include "AuthenticationChallenge.h"
+#include "Timer.h"
 
 #if USE(CFNETWORK)
 #include <CFNetwork/CFURLConnectionPriv.h>
 #endif
 
-#if USE(WININET)
+#if USE(WININET) || (USE(CURL) && PLATFORM(WIN))
 #include <winsock2.h>
 #include <windows.h>
-#include "Timer.h"
 #endif
 
 #if USE(CURL)
 #include <curl/curl.h>
+#include "FormDataStreamCurl.h"
+#endif
+
+#if USE(SOUP)
+#include <libsoup/soup.h>
+class Frame;
 #endif
 
 #if PLATFORM(QT)
 class QWebFrame;
 class QWebNetworkJob;
+namespace WebCore {
+class QNetworkReplyHandler;
+}
 #endif
 
 #if PLATFORM(MAC)
 #ifdef __OBJC__
+@class NSURLAuthenticationChallenge;
 @class NSURLConnection;
 #else
+class NSURLAuthenticationChallenge;
 class NSURLConnection;
 #endif
 #endif
@@ -93,19 +104,39 @@ namespace WebCore {
 #if USE(CURL)
             , m_handle(0)
             , m_url(0)
-            , m_fileName(0)
             , m_customHeaders(0)
+            , m_cancelled(false)
+            , m_formDataStream(loader)
+#endif
+#if USE(SOUP)
+            , m_msg(0)
+            , m_cancelled(false)
+            , m_gfile(0)
+            , m_inputStream(0)
+            , m_cancellable(0)
+            , m_buffer(0)
+            , m_bufferSize(0)
+            , m_total(0)
+            , m_idleHandler(0)
+            , m_frame(0)
 #endif
 #if PLATFORM(QT)
             , m_job(0)
             , m_frame(0)
 #endif
 #if PLATFORM(MAC)
+            , m_startWhenScheduled(false)
+            , m_needsSiteSpecificQuirks(false)
             , m_currentMacChallenge(nil)
 #elif USE(CFNETWORK)
             , m_currentCFChallenge(0)
 #endif
+            , m_failureTimer(loader, &ResourceHandle::fireFailure)
         {
+            const KURL& url = m_request.url();
+            m_user = url.user();
+            m_pass = url.pass();
+            m_request.removeCredentials();
         }
         
         ~ResourceHandleInternal();
@@ -114,6 +145,10 @@ namespace WebCore {
         ResourceHandleClient* m_client;
         
         ResourceRequest m_request;
+
+        // Suggested credentials for the current redirection step.
+        String m_user;
+        String m_pass;
         
         int status;
 
@@ -126,6 +161,8 @@ namespace WebCore {
         RetainPtr<NSURLConnection> m_connection;
         RetainPtr<WebCoreResourceHandleAsDelegate> m_delegate;
         RetainPtr<id> m_proxy;
+        bool m_startWhenScheduled;
+        bool m_needsSiteSpecificQuirks;
 #endif
 #if USE(WININET)
         HANDLE m_fileHandle;
@@ -145,15 +182,35 @@ namespace WebCore {
 #if USE(CURL)
         CURL* m_handle;
         char* m_url;
-        char* m_fileName;
-        struct curl_slist* m_customHeaders;        
-        Vector<char> m_postBytes;
+        struct curl_slist* m_customHeaders;
         ResourceResponse m_response;
+        bool m_cancelled;
+
+        FormDataStream m_formDataStream;
+        Vector<char> m_postBytes;
+#endif
+#if USE(SOUP)
+        SoupMessage* m_msg;
+        ResourceResponse m_response;
+        bool m_cancelled;
+        GFile* m_gfile;
+        GInputStream* m_inputStream;
+        GCancellable* m_cancellable;
+        char* m_buffer;
+        gsize m_bufferSize, m_total;
+        guint m_idleHandler;
+        Frame* m_frame;
 #endif
 #if PLATFORM(QT)
-        QWebNetworkJob *m_job;
-        QWebFrame *m_frame;
+#if QT_VERSION < 0x040400
+        QWebNetworkJob* m_job;
+#else
+        QNetworkReplyHandler* m_job;
 #endif
+        QWebFrame* m_frame;
+#endif
+
+        // FIXME: The platform challenge is almost identical to the one stored in m_currentWebChallenge, but it has a different sender. We only need to store a sender reference here.
 #if PLATFORM(MAC)
         NSURLAuthenticationChallenge *m_currentMacChallenge;
 #endif
@@ -161,6 +218,9 @@ namespace WebCore {
         CFURLAuthChallengeRef m_currentCFChallenge;
 #endif
         AuthenticationChallenge m_currentWebChallenge;
+
+        ResourceHandle::FailureType m_failureType;
+        Timer<ResourceHandle> m_failureTimer;
     };
 
 } // namespace WebCore

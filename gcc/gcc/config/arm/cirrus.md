@@ -1,5 +1,5 @@
 ;; Cirrus EP9312 "Maverick" ARM floating point co-processor description.
-;; Copyright (C) 2003, 2004 Free Software Foundation, Inc.
+;; Copyright (C) 2003, 2004, 2005 Free Software Foundation, Inc.
 ;; Contributed by Red Hat.
 ;; Written by Aldy Hernandez (aldyh@redhat.com)
 
@@ -17,8 +17,8 @@
 
 ;; You should have received a copy of the GNU General Public License
 ;; along with GCC; see the file COPYING.  If not, write to
-;; the Free Software Foundation, 59 Temple Place - Suite 330,
-;; Boston, MA 02111-1307, USA.
+;; the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+;; Boston, MA 02110-1301, USA.
 
 
 ; Cirrus types for invalid insn combinations
@@ -120,7 +120,7 @@
    (set_attr "cirrus" "normal")]
 )
 
-;; APPLE LOCAL ARM 20060428 DImode multiply enhancement 
+;; APPLE LOCAL DImode multiply enhancement 
 (define_insn "cirrus_muldi3"
   [(set (match_operand:DI          0 "cirrus_fp_register" "=v")
 	(mult:DI (match_operand:DI 2 "cirrus_fp_register"  "v")
@@ -369,11 +369,6 @@
   [(set_attr "cirrus" "normal")]
 )
 
-;; APPLE LOCAL begin ARM 20060306 merge these from mainline 
-;; http://gcc.gnu.org/ml/gcc-patches/2005-04/msg00850.html
-;; http://gcc.gnu.org/ml/gcc-patches/2005-09/msg01342.html
-;; http://gcc.gnu.org/ml/gcc-patches/2005-04/msg00769.html
-
 (define_insn "*cirrus_arm_movdi"
   [(set (match_operand:DI 0 "nonimmediate_di_operand" "=r,r,o<>,v,r,v,m,v")
 	(match_operand:DI 1 "di_operand"              "rIK,mi,r,r,v,mi,v,v"))]
@@ -397,7 +392,7 @@
     /* Shifting by 0 will just copy %1 into %0.  */
     case 7: return \"cfsh64%?\\t%V0, %V1, #0\";
 
-    default: abort ();
+    default: gcc_unreachable ();
     }
   }"
   [(set_attr "length"         "  8,   8,     8,   8,     8,     4,     4,     4")
@@ -406,32 +401,9 @@
    (set_attr "neg_pool_range" "  *,1012,     *,   *,     *,  1008,     *,     *")
    (set_attr "cirrus"         "not, not,   not,move,normal,double,double,normal")]
 )
-;; APPLE LOCAL end ARM 20060306 merge these from mainline 
 
 ;; Cirrus SI values have been outlawed.  Look in arm.h for the comment
 ;; on HARD_REGNO_MODE_OK.
-
-(define_insn "*cirrus_arm_movsi_insn"
-  [(set (match_operand:SI 0 "general_operand" "=r,r,r,m,*v,r,*v,T,*v")
-        (match_operand:SI 1 "general_operand" "rI,K,mi,r,r,*v,T,*v,*v"))]
-  "TARGET_ARM && TARGET_HARD_FLOAT && TARGET_MAVERICK && 0
-   && (register_operand (operands[0], SImode)
-       || register_operand (operands[1], SImode))"
-  "@
-   mov%?\\t%0, %1
-   mvn%?\\t%0, #%B1
-   ldr%?\\t%0, %1
-   str%?\\t%1, %0
-   cfmv64lr%?\\t%Z0, %1
-   cfmvr64l%?\\t%0, %Z1
-   cfldr32%?\\t%V0, %1
-   cfstr32%?\\t%V1, %0
-   cfsh32%?\\t%V0, %V1, #0"
-  [(set_attr "type"           "*,  *,  load1,store1,   *,     *,  load1,store1,     *")
-   (set_attr "pool_range"     "*,  *,  4096,     *,   *,     *,  1024,     *,     *")
-   (set_attr "neg_pool_range" "*,  *,  4084,     *,   *,     *,  1012,     *,     *")
-   (set_attr "cirrus"         "not,not, not,   not,move,normal,normal,normal,normal")]
-)
 
 (define_insn "*cirrus_movsf_hard_insn"
   [(set (match_operand:SF 0 "nonimmediate_operand" "=v,v,v,r,m,r,r,m")
@@ -455,11 +427,6 @@
    (set_attr "cirrus"         "normal,normal,move,normal,normal,not, not,   not")]
 )
 
-;; APPLE LOCAL begin ARM 20060306 merge these from mainline 
-;; http://gcc.gnu.org/ml/gcc-patches/2005-04/msg00850.html
-;; http://gcc.gnu.org/ml/gcc-patches/2005-09/msg01342.html
-;; http://gcc.gnu.org/ml/gcc-patches/2005-04/msg00769.html
-
 (define_insn "*cirrus_movdf_hard_insn"
   [(set (match_operand:DF 0 "nonimmediate_operand" "=r,Q,r,m,r,v,v,v,r,m")
 	(match_operand:DF 1 "general_operand"       "Q,r,r,r,mF,v,mF,r,v,v"))]
@@ -480,7 +447,7 @@
     case 7: return \"cfmvdlr\\t%V0, %Q1\;cfmvdhr%?\\t%V0, %R1\";
     case 8: return \"cfmvrdl%?\\t%Q0, %V1\;cfmvrdh%?\\t%R0, %V1\";
     case 9: return \"cfstrd%?\\t%V1, %0\";
-    default: abort ();
+    default: gcc_unreachable ();
     }
   }"
   [(set_attr "type"           "load1,store2,  *,store2,load1,     *,  load1,   *,     *,store2")
@@ -489,5 +456,4 @@
    (set_attr "neg_pool_range" "   *,     *,  *,     *, 244,     *,  1008,   *,     *,     *")
    (set_attr "cirrus"         " not,   not,not,   not, not,normal,double,move,normal,double")]
 )
-;; APPLE LOCAL end ARM 20060306 merge these from mainline 
 

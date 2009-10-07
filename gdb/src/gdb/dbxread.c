@@ -2085,7 +2085,7 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
 	    static int prev_so_symnum = -10;
 	    static int first_so_symnum;
 	    char *p;
-	    static char *dirname_nso;
+	    static char *dirname_nso = NULL;
 	    int prev_textlow_not_set;
 
 	    valu = nlist.n_value + objfile_text_section_offset (objfile);
@@ -2157,7 +2157,7 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
 	      {
 		/* Save the directory name SOs locally, then save it into
 		   the psymtab when it's created below. */
-	        dirname_nso = namestring;
+	        dirname_nso = xstrdup (namestring);
 	        continue;		
 	      }
             /* APPLE LOCAL: Try getting the file's language from 'desc' field */
@@ -2226,12 +2226,19 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
 	       immediately follow the first.  */
 
 	    if (!pst)
-	      pst = start_psymtab (objfile,
+              {
+	        pst = start_psymtab (objfile,
 				   namestring, valu,
 				   first_so_symnum * symbol_size,
 				   objfile->global_psymbols.next,
 				   /* APPLE LOCAL symbol prefixes */
 				   objfile->static_psymbols.next, prefix);
+                if (pst && dirname_nso && pst->dirname == NULL)
+                  {
+                    pst->dirname = dirname_nso;
+                    dirname_nso = NULL;
+                  }
+              }
 
             /* APPLE LOCAL: If there is a symbol separation file, put it in the 
                dependency list for this N_SO psymtab...  */
@@ -2332,8 +2339,13 @@ read_dbx_symtab (struct objfile *objfile, int dbx_symcount)
 		   if we are asked not to.  */
 		if (read_type_psym_p && objfile->separate_debug_objfile == NULL
                     && objfile->not_loaded_kext_filename == NULL)
-		  dwarf2_scan_pubtype_for_psymbols (pst, objfile, 
-						    psymtab_language);
+		  {
+		    dwarf2_scan_pubtype_for_psymbols (pst, objfile, 
+						      psymtab_language);
+		    /* APPLE LOCAL debug inlined section  */
+		    dwarf2_scan_inlined_section_for_psymbols (pst, objfile,
+							      psymtab_language);
+		  }
               }
 
             continue;
@@ -3259,6 +3271,19 @@ close_containing_archive_and_contents (bfd *containing_archive)
   bfd_close (containing_archive);
 }
 
+/* This is a convenience routine for closing a BFD that might
+   be a fat file, where you want to make sure that the archive
+   gets closed if there is one (and all its contents.)  */
+
+void
+close_bfd_or_archive (bfd *abfd)
+{
+  if (abfd->my_archive)
+    close_containing_archive_and_contents (abfd->my_archive);
+  else
+    bfd_close (abfd);
+}
+
 /* For DWARF files with debug info in .o files, we scan all the .o's for type
    symbols in the "pubtypes" section.  If the debug info is from an archive file
    we'll end up opening & closing that .a file MANY times.  So this array stores
@@ -3328,7 +3353,10 @@ clear_containing_archive_cache ()
 
 /* Given OSO_NAME, returns the bfd for the .o file containing
    that .o.  If the .o is fat, it returns the fork for the current
-   architecture.  If the name is of the form:
+   architecture.  So you should probably check the my_archive field
+   of the bfd & close that if it is not NULL...
+
+   If the name is of the form:
 
    /Foo/Bar/libfoo.a(member.o)
 
@@ -3360,22 +3388,26 @@ open_bfd_from_oso (struct partial_symtab *pst, int *cached)
 
   if (parse_archive_name (oso_name, &archive_name, &member_name) == 0)
     {
+      errno = 0;
       oso_bfd = bfd_openr (oso_name, gnutarget);
       if (!oso_bfd)
         {
 	  /* Only error if we do not have a separate debug objfile (dSYM).  */
-	  if (pst->objfile && pst->objfile->separate_debug_objfile != NULL)
-            return NULL;
-	  else
-            error ("Could not find object file: \"%s\"", oso_name);
+	  if (!pst->objfile || pst->objfile->separate_debug_objfile == NULL)
+            warning ("Could not open object file: \"%s\": %s", oso_name, strerror (errno));
+	  return NULL;
         }
       if (bfd_check_format (oso_bfd, bfd_archive))
 	{
 	  oso_bfd = open_bfd_matching_arch (oso_bfd, bfd_object);
 	  if (oso_bfd == NULL)
-	    error ("Could not open OSO file matching current "
-		   "architecture for \"%s\".",
-		   oso_name);
+	    {
+	      warning ("Could not open OSO file matching current "
+		       "architecture for \"%s\".",
+		       oso_name);
+	      return NULL;
+	    }
+	  
 	}
       retval = oso_bfd;
       mtime = bfd_get_mtime (retval);
@@ -3426,8 +3458,8 @@ open_bfd_from_oso (struct partial_symtab *pst, int *cached)
 	      warning ("Could not open fork matching current "
 		       "architecture for OSO archive \"%s\"",
 		       archive_name);
-	      goto do_cleanups;
 	      retval = NULL;
+	      goto do_cleanups;
 	    }
 	  if (!bfd_check_format (archive_bfd, bfd_archive))
 	    {
@@ -3472,7 +3504,21 @@ open_bfd_from_oso (struct partial_symtab *pst, int *cached)
     }
 
   if (retval != NULL && mtime && oso_mtime && mtime != oso_mtime)
-    warning (".o file \"%s\" more recent than executable timestamp", oso_name);
+    {
+      char *name;
+      if (pst->objfile->name != NULL)
+	name = pst->objfile->name;
+      else
+	name = "<Unknown objfile>";
+
+      warning (".o file \"%s\" more recent than executable timestamp in \"%s\"", oso_name, name);
+      if (cached)
+	clear_containing_archive_cache ();
+      else 
+	close_bfd_or_archive (retval);
+
+      return NULL;
+    }
 
   return retval;
 }
@@ -3520,7 +3566,11 @@ oso_scan_partial_symtab (struct partial_symtab *pst)
 
   oso_bfd = open_bfd_from_oso (pst, &cached);
   if (oso_bfd == NULL)
-    error ("Couldn't open bfd for .o file: %s\n", PSYMTAB_OSO_NAME (pst));
+    {
+      warning ("Couldn't open bfd for .o file: %s.", PSYMTAB_OSO_NAME (pst));
+      return;
+    }
+
   if (!bfd_check_format (oso_bfd, bfd_object))
     warning ("Not in bfd_object form");
   
@@ -3677,8 +3727,8 @@ oso_scan_partial_symtab (struct partial_symtab *pst)
 
   if (cached)
     clear_containing_archive_cache ();
-  else
-    bfd_close(oso_bfd);
+  else 
+    close_bfd_or_archive (oso_bfd);
 }
 
 /* APPLE LOCAL: Called from dwarf2read.c, this function reads all the
@@ -3961,7 +4011,9 @@ dbx_psymtab_to_symtab_1 (struct partial_symtab *pst)
 		or just the one oso_bfd.  */
 	      if (cached)
 		clear_containing_archive_cache ();
-	      else
+	      else if (oso_bfd->my_archive)
+		bfd_close (oso_bfd->my_archive);
+	      else		  
 		bfd_close(oso_bfd);
 	    }
 	}
@@ -5839,7 +5891,12 @@ read_so_stab_language_hint (short unsigned n_desc)
 static int
 objfile_contains_objc (struct objfile *objfile)
 {
+  /* This case works for i386...  */
   if (bfd_get_section_by_name (objfile->obfd, "LC_SEGMENT.__OBJC"))
+    return 1;
+  /* ...and this case works for x86_64.  */
+  else if (bfd_get_section_by_name (objfile->obfd, 
+				    "LC_SEGMENT.__DATA.__objc_imageinfo"))
     return 1;
 
   return 0;

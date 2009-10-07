@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2000 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 1998-2008 Apple Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -20,8 +20,6 @@
  * @APPLE_LICENSE_HEADER_END@
  */
 /*
- * Copyright (c) 1999-2001 Apple Computer, Inc.  All rights reserved. 
- *
  * IOATADevice.h
  *
  * This object implements a relay to an ATA Bus where a drive is attached.
@@ -49,7 +47,7 @@ class IOATAController;
 
 class IOATADevice : public IOService
 {
-    OSDeclareDefaultStructors(IOATADevice)
+    OSDeclareDefaultStructors(IOATADevice);
 
 public:
 
@@ -99,7 +97,7 @@ public:
 	@param command pointer to a valid IOATACommand with the command to be executed.
 	@result kIOSuccess (0) if the command was successfully queued in the controller. 
 	*/
-   virtual IOReturn		executeCommand(IOATACommand* command);
+	virtual IOReturn		executeCommand(IOATACommand* command);
  
 	// create and destroy IOATACommands
 	/*!
@@ -116,16 +114,17 @@ public:
 	*/
 	virtual void			freeCommand( IOATACommand* inCommand); 
 
-
 	// matching stuff for IOBSDInit and so on.	
 	/*!@function matchPropertyTable
 	@abstract matching stuff for IOBSDInit and so on.
 	*/
 	virtual bool matchPropertyTable(OSDictionary * table);
+	
 	/*!@function matchLocation
 	@abstract matching stuff for IOBSDInit and so on.
 	*/
 	virtual IOService* matchLocation(IOService * client);
+	
 	/*!@function matchPropertyTable
 	@abstract matching stuff for IOBSDInit and so on.	
 	*/
@@ -146,7 +145,7 @@ protected:
 protected:
 /*! @struct ExpansionData
     @discussion This structure will be used to expand the capablilties of the IOWorkLoop in the future.
-    */    
+    */
     struct ExpansionData { };
 
 /*! @var reserved

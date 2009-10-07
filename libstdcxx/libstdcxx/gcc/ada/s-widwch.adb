@@ -1,12 +1,12 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                         GNAT RUNTIME COMPONENTS                          --
+--                         GNAT RUN-TIME COMPONENTS                         --
 --                                                                          --
 --                     S Y S T E M . W I D _ W C H A R                      --
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2005 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -31,8 +31,6 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
-with System.WCh_Con; use System.WCh_Con;
-
 package body System.Wid_WChar is
 
    --------------------------
@@ -40,8 +38,7 @@ package body System.Wid_WChar is
    --------------------------
 
    function Width_Wide_Character
-     (Lo, Hi : Wide_Character;
-      EM     : WC_Encoding_Method) return Natural
+     (Lo, Hi : Wide_Character) return Natural
    is
       W : Natural;
       P : Natural;
@@ -52,36 +49,12 @@ package body System.Wid_WChar is
          P := Wide_Character'Pos (C);
 
          --  Here if we find a character in wide character range
+         --  Width is max value (12) for Hex_hhhhhhhh
 
          if P > 16#FF# then
+            return 12;
 
-            case EM is
-
-               when WCEM_Hex =>
-                  return Natural'Max (W, 5);
-
-               when WCEM_Upper =>
-                  return Natural'Max (W, 2);
-
-               when WCEM_Shift_JIS =>
-                  return Natural'Max (W, 2);
-
-               when WCEM_EUC =>
-                  return Natural'Max (W, 2);
-
-               when WCEM_UTF8 =>
-                  if Hi > Wide_Character'Val (16#07FF#) then
-                     return Natural'Max (W, 3);
-                  else
-                     return Natural'Max (W, 2);
-                  end if;
-
-               when WCEM_Brackets =>
-                  return Natural'Max (W, 8);
-
-            end case;
-
-         --  If we are in character range then use length of character image
+            --  If we are in character range then use length of character image
 
          else
             declare
@@ -100,8 +73,7 @@ package body System.Wid_WChar is
    -------------------------------
 
    function Width_Wide_Wide_Character
-     (Lo, Hi : Wide_Wide_Character;
-      EM     : WC_Encoding_Method) return Natural
+     (Lo, Hi : Wide_Wide_Character) return Natural
    is
       W : Natural;
       P : Natural;
@@ -111,35 +83,11 @@ package body System.Wid_WChar is
       for C in Lo .. Hi loop
          P := Wide_Wide_Character'Pos (C);
 
-         --  Here if we find a character in wide wide character range
+         --  Here if we find a character in wide wide character range.
+         --  Width is max value (12) for Hex_hhhhhhhh
 
          if P > 16#FF# then
-            case EM is
-               when WCEM_Hex =>
-                  return Natural'Max (W, 5);
-
-               when WCEM_Upper =>
-                  return Natural'Max (W, 2);
-
-               when WCEM_Shift_JIS =>
-                  return Natural'Max (W, 2);
-
-               when WCEM_EUC =>
-                  return Natural'Max (W, 2);
-
-               when WCEM_UTF8 =>
-                  if Hi > Wide_Wide_Character'Val (16#FFFF#) then
-                     return Natural'Max (W, 4);
-                  elsif Hi > Wide_Wide_Character'Val (16#07FF#) then
-                     return Natural'Max (W, 3);
-                  else
-                     return Natural'Max (W, 2);
-                  end if;
-
-               when WCEM_Brackets =>
-                  return Natural'Max (W, 10);
-
-            end case;
+            W := 12;
 
          --  If we are in character range then use length of character image
 

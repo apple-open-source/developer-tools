@@ -27,11 +27,14 @@
 #include "IOFWAsyncStreamReceiver.h"
 #include "IOFWAsyncStreamReceivePort.h"
 #include "IOFWAsyncStreamListener.h"
+#include "FWDebugging.h"
 
 
 OSDefineMetaClassAndStructors(IOFWAsyncStreamReceiver, OSObject);
 OSMetaClassDefineReservedUnused(IOFWAsyncStreamReceiver, 0);
 OSMetaClassDefineReservedUnused(IOFWAsyncStreamReceiver, 1);
+
+//#define DCL_MODE 1  // comment this to turn on multi mode async stream receive
 
 /*!
     @function initAll
@@ -46,11 +49,12 @@ bool IOFWAsyncStreamReceiver::initAll( IOFireWireController *control, UInt32 cha
 	fFWIM		= fControl->getLink();
 
 	fControl->closeGate();
-	
+
+#ifdef DCL_MODE
 	// Create a DCL program
 	fdclProgram = CreateAsyncStreamRxDCLProgram(receiveAsyncStream, this);
 	if(fdclProgram == NULL){
-		IOLog("    Error: AddAsyncStreamClient %d %x\n", __LINE__, status);
+		DebugLog("IOFWAsyncStreamReceiver::initAll -> CreateAsyncStreamRxDCLProgram failed %x\n", status);
 		return false;
 	}
 
@@ -60,38 +64,120 @@ bool IOFWAsyncStreamReceiver::initAll( IOFireWireController *control, UInt32 cha
 	fActive = false;
     fInitialized = true;
 
-	fAsyncStreamClients = OSSet::withCapacity(5);
+	fAsyncStreamClients = OSSet::withCapacity(2);
 	if( fAsyncStreamClients )
 		fAsyncStreamClientIterator = OSCollectionIterator::withCollection( fAsyncStreamClients );
 
-	activate(control->getBroadcastSpeed());
+	status = activate(control->getBroadcastSpeed());
 
-	fIODclProgram->setForceStopProc( forceStopNotification, this, fAsyncStreamChan );
+	if ( status == kIOReturnSuccess )
+	{
+		fIODclProgram->setForceStopProc( forceStopNotification, this, fAsyncStreamChan );
+	}
+
+#else
+
+	UInt64 mask = fControl->getFireWirePhysicalBufferMask();							// get controller mask
+	mask		&= ~((UInt64)(PAGE_SIZE-1));											// page align	
+	fBufDesc	= IOBufferMemoryDescriptor::inTaskWithPhysicalMask(	
+															kernel_task,				// kernel task
+															0,							// options
+															kMaxAsyncStreamReceiveBufferSize*2,	// size = 4096 * 2
+															mask );						// mask for physically addressable memory
+
+    if( fBufDesc )
+    {
+		fListener		= control->createMultiIsochReceiveListener(channel,receiveAsyncStream,this);
+	
+		if ( fListener )
+		{
+			fChannel		= channel;
+			fSpeed			= kFWSpeedMaximum;
+			fActive			= false;
+			fInitialized	= true;
+	
+			fAsyncStreamClients = OSSet::withCapacity(1);
+			if( fAsyncStreamClients )
+			{
+				fAsyncStreamClientIterator = OSCollectionIterator::withCollection( fAsyncStreamClients );
+			}
+			else
+			{
+				status = kIOReturnError;
+			}
+	
+			status = fListener->Activate();
+		}
+		else
+		{
+			status = kIOReturnError;
+		}
+	}
+	else
+	{
+		status = kIOReturnError;
+	}
+
+#endif
 
 	fControl->openGate();
 	
-	return true;
+	return ( status == kIOReturnSuccess );
 }
 
 void IOFWAsyncStreamReceiver::free()
 {
 	fControl->closeGate();
 
-	deactivate();
-	
-	removeAllListeners();
-	
-	fAsyncStreamClientIterator->release();
-	
-	// free dcl program
-	FreeAsyncStreamRxDCLProgram(fdclProgram);
+#ifdef DCL_MODE
 
-    delete fReceiveSegmentInfoPtr;
-	
-    delete fDCLOverrunLabelPtr;
+	deactivate();
+
+	// free dcl program
+	if( fdclProgram )
+	{
+		FreeAsyncStreamRxDCLProgram(fdclProgram);
+		fdclProgram = NULL;
+	}
 
 	// free the buffer 
-	fBufDesc->release();
+	if( fBufDesc ) 
+	{
+		fBufDesc->release();
+		fBufDesc = NULL;
+	}
+
+#else
+
+	if( fListener )
+	{
+		fListener->Deactivate();
+		fListener->release();
+		fListener = NULL;
+	}
+	
+	// free the buffer 
+	if( fBufDesc ) 
+	{
+		fBufDesc->release();
+		fBufDesc = NULL;
+	}
+	
+#endif
+	
+	removeAllListeners();
+
+	if ( fAsyncStreamClients )
+	{
+		fAsyncStreamClients->release();
+		fAsyncStreamClients = NULL;
+	}
+	
+	if( fAsyncStreamClientIterator )
+	{
+		fAsyncStreamClientIterator->release();
+		fAsyncStreamClientIterator = NULL;
+	}
 
 	fControl->openGate();
 
@@ -108,62 +194,73 @@ void IOFWAsyncStreamReceiver::FreeAsyncStreamRxDCLProgram(DCLCommandStruct *dclP
 	DCLCallProc			*callProc;
 	FWAsyncStreamReceiveRefCon		*rxProcData;
     DCLJump				*jump;
-    
-    for (seg=0;	seg<kMaxAsyncStreamReceiveBuffers-1;	seg++)
-	{
-        // free label
-        startLabel = fReceiveSegmentInfoPtr[seg].pSegmentLabelDCL;
-        if(startLabel == NULL)
-            break;
-		
-        receivePacket = (DCLTransferPacket*)startLabel->pNextDCLCommand;
-        if(receivePacket == NULL)
-            break;
-        
-        update = (DCLUpdateDCLList*)receivePacket->pNextDCLCommand;
-        if(update == NULL)
-            break;
-        
-        dclCommand = (DCLCommand*)update->dclCommandList[0];
-        if(dclCommand == NULL)
-            break;
-        
-        callProc = (DCLCallProc*)update->pNextDCLCommand;
-        if(callProc == NULL)
-            break;
-        
-        rxProcData = (FWAsyncStreamReceiveRefCon*)callProc->procData;
-        if(rxProcData == NULL)
-            break;
 
-        jump = (DCLJump *)callProc->pNextDCLCommand;
-        if(jump == NULL)
-            break;
-
-        delete rxProcData;
-        delete dclCommand;
-		delete update->dclCommandList;
-        delete update;
-        delete startLabel;
-        delete jump;
-       	delete callProc;
-    }
-	
-    receivePacket = (DCLTransferPacket*)fDCLOverrunLabelPtr->pNextDCLCommand;
-    if(receivePacket != NULL)
+	if ( fReceiveSegmentInfoPtr )
 	{
-		update = (DCLUpdateDCLList*)receivePacket->pNextDCLCommand;
-		if(update != NULL)
+		for (seg=0;	seg<kMaxAsyncStreamReceiveBuffers-1;	seg++)
 		{
+			// free label
+			startLabel = fReceiveSegmentInfoPtr[seg].pSegmentLabelDCL;
+			if(startLabel == NULL)
+				break;
+			
+			receivePacket = (DCLTransferPacket*)startLabel->pNextDCLCommand;
+			if(receivePacket == NULL)
+				break;
+			
+			update = (DCLUpdateDCLList*)receivePacket->pNextDCLCommand;
+			if(update == NULL)
+				break;
+			
+			dclCommand = (DCLCommand*)update->dclCommandList[0];
+			if(dclCommand == NULL)
+				break;
+			
 			callProc = (DCLCallProc*)update->pNextDCLCommand;
-			if(callProc != NULL)
-				delete callProc;
+			if(callProc == NULL)
+				break;
+			
+			rxProcData = (FWAsyncStreamReceiveRefCon*)callProc->procData;
+			if(rxProcData == NULL)
+				break;
 
-			delete update;
+			jump = (DCLJump *)callProc->pNextDCLCommand;
+			if(jump == NULL)
+				break;
+
+			delete rxProcData;
+			delete dclCommand;
 			delete update->dclCommandList;
+			delete update;
+			delete startLabel;
+			delete jump;
+			delete callProc;
 		}
-		delete receivePacket;
-    }
+		
+		delete[] fReceiveSegmentInfoPtr;
+		fReceiveSegmentInfoPtr = NULL;
+	}
+	
+	if ( fDCLOverrunLabelPtr )
+	{
+		receivePacket = (DCLTransferPacket*)fDCLOverrunLabelPtr->pNextDCLCommand;
+		if(receivePacket != NULL)
+		{
+			update = (DCLUpdateDCLList*)receivePacket->pNextDCLCommand;
+			if(update != NULL)
+			{
+				callProc = (DCLCallProc*)update->pNextDCLCommand;
+				if(callProc != NULL)
+					delete callProc;
+
+				delete update->dclCommandList;
+				delete update;
+			}
+			delete receivePacket;
+		}
+		delete fDCLOverrunLabelPtr;
+		fDCLOverrunLabelPtr = NULL;
+	}
 }
 
 DCLCommandStruct *IOFWAsyncStreamReceiver::CreateAsyncStreamRxDCLProgram(DCLCallCommandProc* proc, void *callbackObject) 
@@ -224,7 +321,7 @@ DCLCommandStruct *IOFWAsyncStreamReceiver::CreateAsyncStreamRxDCLProgram(DCLCall
 		{
 			callProc->opcode = kDCLCallProcOp ;
 			callProc->proc = proc ;
-			callProc->procData = (UInt32)new FWAsyncStreamReceiveRefCon ;
+			callProc->procData = (DCLCallProcDataType)new FWAsyncStreamReceiveRefCon ;
 			
 			((FWAsyncStreamReceiveRefCon*)callProc->procData)->obj = callbackObject;
 			((FWAsyncStreamReceiveRefCon*)callProc->procData)->thisObj = this;
@@ -273,7 +370,7 @@ DCLCommandStruct *IOFWAsyncStreamReceiver::CreateAsyncStreamRxDCLProgram(DCLCall
     {
         callProc->opcode = kDCLCallProcOp ;
         callProc->proc = overrunNotification;
-        callProc->procData = (UInt32)this;
+        callProc->procData = (DCLCallProcDataType)this;
     }
 
     fDCLOverrunLabelPtr->pNextDCLCommand = (DCLCommand*)receivePacket ;
@@ -296,27 +393,29 @@ IOFWAsyncStreamReceivePort *IOFWAsyncStreamReceiver::CreateAsyncStreamPort(bool 
 
     if(fFWIM == NULL)
     {
-		IOLog("    %s:%d fFWIM not initialized\n", __FILE__, __LINE__);
+		DebugLog("IOFWAsyncStreamReceiver::CreateAsyncStreamPort failed -> FWIM is NULL\n");
 		return NULL;
     }
 
     fIODclProgram = fFWIM->createDCLProgram(talking, opcodes, NULL, startEvent, startState, startMask);
     if(!fIODclProgram) 
 	{
-		IOLog("    %s:%d IODclProgram returned NULL from FWIM\n", __FILE__, __LINE__);
+		DebugLog("IOFWAsyncStreamReceiver::CreateAsyncStreamPort failed -> fIODclProgram is NULL\n");
 		return NULL;
 	}
 
-    port = new IOFWAsyncStreamReceivePort;
+    port = OSTypeAlloc( IOFWAsyncStreamReceivePort );
     if(!port) 
 	{
+		DebugLog("IOFWAsyncStreamReceiver::CreateAsyncStreamPort failed -> IOFWAsyncStreamReceivePort is NULL\n");
 		fIODclProgram->release();
+		fIODclProgram = NULL;
 		return NULL;
     }
 
     if(!port->init(fIODclProgram, fControl, channel)) 
 	{
-		IOLog("    %s:%d IOFWAsyncStreamReceivePort init failed \n", __FILE__, __LINE__);
+		DebugLog("IOFWAsyncStreamReceiver::CreateAsyncStreamPort failed -> IOFWAsyncStreamReceivePort::init failed\n");
 		port->release();
 		port = NULL;
     }
@@ -341,18 +440,18 @@ IOReturn IOFWAsyncStreamReceiver::activate(IOFWSpeed fBroadCastSpeed)
 	if(fAsynStreamPort == NULL)
 	{
 		FreeAsyncStreamRxDCLProgram(fdclProgram);
-		IOLog("    Error: AddAsyncStreamClient %d %x\n", __LINE__, status);
+		DebugLog("IOFWAsyncStreamReceiver::activate -> CreateAsyncStreamPort failed %x\n", status);
 		return kIOReturnError;
 	}
 
 	// Create a IOFWIsocChannel with the created port
 	fAsyncStreamChan = fControl->createIsochChannel(false, 0, fSpeed, NULL, NULL);
-
 	if(fAsyncStreamChan == NULL) 
 	{
 		FreeAsyncStreamRxDCLProgram(fdclProgram);
 		fAsynStreamPort->release() ;
-		IOLog("    Error: AddAsyncStreamClient %d %x\n", __LINE__, status);
+		fAsynStreamPort = NULL;
+		DebugLog("IOFWAsyncStreamReceiver::activate -> createIsochChannel failed %x\n", status);
 		return kIOReturnError;
 	}
 	
@@ -360,9 +459,13 @@ IOReturn IOFWAsyncStreamReceiver::activate(IOFWSpeed fBroadCastSpeed)
 	if(status != kIOReturnSuccess)
 	{
 		FreeAsyncStreamRxDCLProgram(fdclProgram);
+		fAsyncStreamChan->stop();
 		fAsyncStreamChan->releaseChannel();
+		fAsyncStreamChan->release();
+		fAsyncStreamChan = NULL;
 		fAsynStreamPort->release() ;
-		IOLog("    Error: AddAsyncStreamClient %d %x\n", __LINE__, status);
+		fAsynStreamPort = NULL;
+		DebugLog("IOFWAsyncStreamReceiver::activate -> addListener failed %x\n", status);
 		return kIOReturnError;
 	}
 	
@@ -376,9 +479,13 @@ IOReturn IOFWAsyncStreamReceiver::activate(IOFWSpeed fBroadCastSpeed)
 	if(status != kIOReturnSuccess)
 	{
 		FreeAsyncStreamRxDCLProgram(fdclProgram);
+		fAsyncStreamChan->stop();
 		fAsyncStreamChan->releaseChannel();
+		fAsyncStreamChan->release();
+		fAsyncStreamChan = NULL;
 		fAsynStreamPort->release() ;
-		IOLog("    Error: AddAsyncStreamClient %d %x\n", __LINE__, status);
+		fAsynStreamPort = NULL;
+		DebugLog("IOFWAsyncStreamReceiver::activate -> channel start failed %x\n", status);
 		return kIOReturnError;
 	}
 	
@@ -401,7 +508,7 @@ IOReturn IOFWAsyncStreamReceiver::modifyDCLJumps(DCLCommandStruct *callProc)
     
     if(proc == NULL)
     {
-        IOLog("%s:%d NULL callproc data\n", __FILE__, __LINE__);
+        DebugLog("IOFWAsyncStreamReceiver::modifyDCLJumps callproc data is NULL\n");
         return status;
     }
 
@@ -413,14 +520,14 @@ IOReturn IOFWAsyncStreamReceiver::modifyDCLJumps(DCLCommandStruct *callProc)
 									(DCLCommand**) & fReceiveSegmentInfoPtr[proc->index].pSegmentJumpDCL,
 									1);
 	if(status != kIOReturnSuccess)
-		IOLog("%s:%d %d\n", __FILE__, __LINE__, status);
+		DebugLog("IOFWAsyncStreamReceiver::modifyDCLJumps failed %x\n", status);
 
 	fReceiveSegmentInfoPtr[jumpIndex].pSegmentJumpDCL->pJumpDCLLabel = fReceiveSegmentInfoPtr[proc->index].pSegmentLabelDCL;
 	status = fAsynStreamPort->notify(kFWDCLModifyNotification,
 									(DCLCommand**) & fReceiveSegmentInfoPtr[jumpIndex].pSegmentJumpDCL,
 									1);
 	if(status != kIOReturnSuccess)
-		IOLog("%s:%d %d\n", __FILE__, __LINE__, status);
+		DebugLog("IOFWAsyncStreamReceiver::modifyDCLJumps failed %x\n", status);
 		
 	return status;
 }
@@ -450,7 +557,7 @@ void IOFWAsyncStreamReceiver::fixDCLJumps(bool	restart)
 											(DCLCommand**) & fReceiveSegmentInfoPtr[i].pSegmentJumpDCL,
 											1);
 			if(error != kIOReturnSuccess)
-				IOLog("%s:%d %d\n", __FILE__, __LINE__, error);
+				DebugLog("IOFWAsyncStreamReceiver::fixDCLJumps failed %x\n", error);
 		}
 	}
 }
@@ -501,23 +608,66 @@ IOReturn IOFWAsyncStreamReceiver::deactivate()
 
 	if(!fActive) 
 		return status;
-	
+
 	// Stop the channel
-	fAsyncStreamChan->stop();
+	if( fAsyncStreamChan )
+		fAsyncStreamChan->stop();
 
 	// Lets release the channel
-	fAsyncStreamChan->releaseChannel();
-	
-	// free the channel	
-	fAsyncStreamChan->release();
+	if( fAsyncStreamChan )
+		fAsyncStreamChan->releaseChannel();
 
+	// free the channel	
+	if( fAsyncStreamChan )
+	{
+		fAsyncStreamChan->release();
+		fAsyncStreamChan = NULL;
+	}
+	
 	// free the port
-	fAsynStreamPort->release();
+	if( fAsynStreamPort )
+	{
+		fAsynStreamPort->release();
+		fAsynStreamPort = NULL;
+	}
 	
 	fActive = false;
 	
 	return status;
 }
+
+IOReturn IOFWAsyncStreamReceiver::receiveAsyncStream(void *refcon, IOFireWireMultiIsochReceivePacket *pPacket)
+{
+	IOFWAsyncStreamReceiver *receiver = (IOFWAsyncStreamReceiver*)refcon;
+	
+	if( not receiver) 
+		return kIOReturnError;
+	
+	UInt16		index	= 0;
+	IOByteCount offset	= 0;
+	
+	for(;;)
+	{
+		if(index ==  pPacket->numRanges)
+			break;
+	
+		IOByteCount bytesWritten	=	receiver->fBufDesc->writeBytes(offset, (void*)pPacket->ranges[index].address, pPacket->ranges[index].length);
+		offset						+=	bytesWritten;
+		
+		index++;
+	}
+	
+	// Need to make the isoch header native endian
+	UInt32 *pHeader = (UInt32*)receiver->fBufDesc->getBytesNoCopy();
+	*pHeader = OSSwapLittleToHostInt32(*pHeader);
+	
+	receiver->indicateListeners( (UInt8*)receiver->fBufDesc->getBytesNoCopy() );
+	
+	pPacket->clientDone();
+	
+	return kIOReturnSuccess;
+}
+
 
 void IOFWAsyncStreamReceiver::receiveAsyncStream(DCLCommandStruct *callProc)
 {
@@ -629,7 +779,7 @@ bool IOFWAsyncStreamListener::initAll(IOFireWireController *control, UInt32 chan
 	}
 
 	fControl->openGate();
-	
+		
 	return ret;
 }
 
@@ -647,10 +797,10 @@ void IOFWAsyncStreamListener::free()
 
 	if( fReceiver )
 	{
-		fReceiver->release();
-
 		if( fReceiver->getClientsCount() == 0 )
 			fControl->removeAsyncStreamReceiver(fReceiver);
+
+		fReceiver->release();
 
 		fReceiver  = NULL;
 	}

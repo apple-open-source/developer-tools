@@ -49,6 +49,11 @@
     @constant kIOHIDEventTypeDigitizer
     @constant kIOHIDEventTypeAmbientLightSensor
     @constant kIOHIDEventTypeAccelerometer
+    @constant kIOHIDEventTypeProximity
+    @constant kIOHIDEventTypeTemperature
+    @constant kIOHIDEventTypeMouse
+    @constant kIOHIDEventTypeProgress
+    @constant kIOHIDEventTypeSwipe
 */
 enum {
     kIOHIDEventTypeNULL,
@@ -67,6 +72,9 @@ enum {
     kIOHIDEventTypeAccelerometer,
     kIOHIDEventTypeProximity,
     kIOHIDEventTypeTemperature,
+    kIOHIDEventTypeSwipe,
+    kIOHIDEventTypeMouse,
+    kIOHIDEventTypeProgress,
     kIOHIDEventTypeCount
 };
 typedef uint32_t IOHIDEventType;
@@ -126,10 +134,34 @@ enum {
     kIOHIDEventFieldVelocityZ
 };
 
+/*!
+	@typedef IOHIDAccelerometerType
+	@abstract Type of accelerometer event triggered.
+    @discussion
+	@constant kIOHIDAccelerometerTypeNormal
+	@constant kIOHIDAccelerometerTypeShake
+*/
+enum {
+    kIOHIDAccelerometerTypeNormal   = 0,
+    kIOHIDAccelerometerTypeShake    = 1
+};
+typedef uint32_t IOHIDAccelerometerType;
+
 enum {
     kIOHIDEventFieldAccelerometerX = IOHIDEventFieldBase(kIOHIDEventTypeAccelerometer),
     kIOHIDEventFieldAccelerometerY,
-    kIOHIDEventFieldAccelerometerZ
+    kIOHIDEventFieldAccelerometerZ,
+    kIOHIDEventFieldAccelerometerType
+};
+
+enum {
+    kIOHIDEventFieldMouseX = IOHIDEventFieldBase(kIOHIDEventTypeMouse),
+    kIOHIDEventFieldMouseY,
+    kIOHIDEventFieldMouseZ,
+    kIOHIDEventFieldMouseButtonMask,
+    kIOHIDEventFieldMouseNumber,
+    kIOHIDEventFieldMouseClickCount,
+    kIOHIDEventFieldMousePressure
 };
 
 enum {
@@ -188,7 +220,40 @@ enum {
     kIOHIDEventFieldDigitizerCollectionChord,
     kIOHIDEventFieldDigitizerChildEventMask
 };
+
+enum {
+    kIOHIDEventFieldSwipeMask = IOHIDEventFieldBase(kIOHIDEventTypeSwipe)
+};
+
+enum {
+    kIOHIDEventFieldProgressEventType = IOHIDEventFieldBase(kIOHIDEventTypeProgress),
+    kIOHIDEventFieldProgressLevel
+};
+
 typedef uint32_t IOHIDEventField;
+
+/*!
+	@typedef IOHIDSwipeMask
+	@abstract Mask detailing the type of swipe detected.
+    @discussion
+	@constant kIOHIDProximityDetectionLargeBodyContact
+	@constant kIOHIDProximityDetectionLargeBodyFarField
+	@constant kIOHIDProximityDetectionIrregularObjects
+	@constant kIOHIDProximityDetectionEdgeStraddling
+	@constant kIOHIDProximityDetectionFlatFingerClasp
+	@constant kIOHIDProximityDetectionFingerTouch
+	@constant kIOHIDProximityDetectionReceiver
+	@constant kIOHIDProximityDetectionSmallObjectsHovering
+    @constant kIOHIDProximityDetectionReceiverCrude
+*/
+enum {
+    kIOHIDSwipeUp                             = 0x00000001,
+    kIOHIDSwipeDown                           = 0x00000002,
+    kIOHIDSwipeLeft                           = 0x00000004,
+    kIOHIDSwipeRight                          = 0x00000008,
+};
+typedef uint32_t IOHIDSwipeMask;
+
 
 /*!
 	@typedef IOHIDProximityDetectionMask
@@ -264,6 +329,8 @@ enum {
     kIOHIDDigitizerEventIdentity                            = 0x00000020,
     kIOHIDDigitizerEventAttribute                           = 0x00000040,
     kIOHIDDigitizerEventCancel                              = 0x00000080,
+    kIOHIDDigitizerEventStart                               = 0x00000100,
+    kIOHIDDigitizerEventResting                             = 0x00000200,
     kIOHIDDigitizerEventSwipeUp                             = 0x01000000,
     kIOHIDDigitizerEventSwipeDown                           = 0x02000000,
     kIOHIDDigitizerEventSwipeLeft                           = 0x04000000,

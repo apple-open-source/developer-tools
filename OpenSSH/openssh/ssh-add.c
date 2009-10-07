@@ -1,4 +1,4 @@
-/* $OpenBSD: ssh-add.c,v 1.89 2006/08/03 03:34:42 deraadt Exp $ */
+/* $OpenBSD: ssh-add.c,v 1.90 2007/09/09 11:38:01 sobrado Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -42,6 +42,7 @@
 #include <sys/param.h>
 
 #include <openssl/evp.h>
+#include "openbsd-compat/openssl-compat.h"
 
 #include <fcntl.h>
 #include <pwd.h>
@@ -330,7 +331,7 @@ do_file(AuthenticationConnection *ac, int deleting, int keychain, char *file)
 static void
 usage(void)
 {
-	fprintf(stderr, "Usage: %s [options] [file ...]\n", __progname);
+	fprintf(stderr, "usage: %s [options] [file ...]\n", __progname);
 	fprintf(stderr, "Options:\n");
 	fprintf(stderr, "  -l          List fingerprints of all identities.\n");
 	fprintf(stderr, "  -L          List public key parameters of all identities.\n");
@@ -436,6 +437,7 @@ main(int argc, char **argv)
 	if (argc == 0) {
 		char buf[MAXPATHLEN];
 		struct passwd *pw;
+		char *pw_dir;
 		struct stat st;
 		int count = 0;
 
@@ -446,8 +448,10 @@ main(int argc, char **argv)
 			goto done;
 		}
 
+		pw_dir = xstrdup(pw->pw_dir);
+
 		for (i = 0; default_files[i]; i++) {
-			snprintf(buf, sizeof(buf), "%s/%s", pw->pw_dir,
+			snprintf(buf, sizeof(buf), "%s/%s", pw_dir,
 			    default_files[i]);
 			if (stat(buf, &st) < 0)
 				continue;
@@ -458,6 +462,8 @@ main(int argc, char **argv)
 		}
 		if (count == 0)
 			ret = 1;
+
+		xfree(pw_dir);
 	} else {
 		for (i = 0; i < argc; i++) {
 			if (do_file(ac, deleting, keychain, argv[i]) == -1)

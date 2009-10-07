@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2004 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -85,10 +85,10 @@ package body Exception_Traces is
 
    procedure Unhandled_Exception;
    pragma Export (C, Unhandled_Exception, "__gnat_unhandled_exception");
-   --  Hook for GDB to support "break exception unhandled".
+   --  Hook for GDB to support "break exception unhandled"
 
    --  For "break exception", GDB uses __gnat_raise_nodefer_with_msg, which
-   --  is not in this section because it fullfills other purposes than a mere
+   --  is not in this section because it functions as more than simply a
    --  debugger interface.
 
    --------------------------------
@@ -161,8 +161,18 @@ package body Exception_Traces is
    --------------------------------
 
    procedure Notify_Unhandled_Exception is
+      Excep : constant EOA := Get_Current_Excep.all;
+
    begin
-      Notify_Exception (Get_Current_Excep.all, Is_Unhandled => True);
+      --  Check whether there is any termination handler to be executed for
+      --  the environment task, and execute it if needed. Here we handle both
+      --  the Abnormal and Unhandled_Exception task termination. Normal
+      --  task termination routine is executed elsewhere (either in the
+      --  Task_Wrapper or in the Adafinal routine for the environment task).
+
+      Task_Termination_Handler.all (Excep.all);
+
+      Notify_Exception (Excep, Is_Unhandled => True);
       Unhandled_Exception;
    end Notify_Unhandled_Exception;
 
@@ -189,7 +199,6 @@ package body Exception_Traces is
    begin
       Last_Chance_Handler (Excep.all);
    end Unhandled_Exception_Terminate;
-
 
    ------------------------------------
    -- Handling GNAT.Exception_Traces --

@@ -59,10 +59,6 @@
 #include "exceptions.h"
 #include "filenames.h"
 
-#if defined (TARGET_POWERPC)
-#include "ppc-macosx-frameinfo.h"
-#include "ppc-macosx-tdep.h"
-#endif
 #if defined (TARGET_I386)
 #include "i386-tdep.h"
 #endif
@@ -264,12 +260,6 @@ static struct objfile ** build_list_of_objfiles_to_update (struct fixinfo *);
 static void redirect_old_function (struct fixinfo *, struct symbol *, struct symbol *, int);
 
 CORE_ADDR decode_fix_and_continue_trampoline (CORE_ADDR);
-
-#if defined (TARGET_POWERPC)
-static uint16_t encode_lo16 (CORE_ADDR);
-static uint16_t encode_hi16 (CORE_ADDR);
-static CORE_ADDR decode_hi16_lo16 (uint16_t, uint16_t);
-#endif
 
 static int in_active_func (const char *, struct active_threads *);
 
@@ -1398,50 +1388,6 @@ do_final_fix_fixups_static_syms (struct block *newstatics,
     }
 }
 
-/* The instructions to put a 32 bit address into a register will
-   sign extend the value of the lower 16 bits.  You put the higher
-   16 bits into the register with an 'addis' instructions so you
-   need to add 1 to the higher 16 bits to arrive at the correct
-   value.  This corresponds to the "hi16()" and "lo16()" address
-   transforms you see in assembly output.   */
-
-#if defined (TARGET_POWERPC)
-static uint16_t 
-encode_lo16 (CORE_ADDR addr) 
-{
-  return addr & 0xffff;
-}
-
-static uint16_t 
-encode_hi16 (CORE_ADDR addr) 
-{
-  uint16_t i;
-  i = addr >> 16;
-
-  /* is bit 15 set? */
-  if (addr & 0x8000)
-    i++;
-
-  return i;
-}
-
-static CORE_ADDR 
-decode_hi16_lo16 (uint16_t hi16, uint16_t lo16)
-{
-  CORE_ADDR addr = 0;
-
-  addr = lo16;
-
-  /* If the high bit of lo16 was set, we need to decrement hi16 by one. */
-  if (lo16 & 0x8000)
-    hi16--;
-
-  addr = addr | ((CORE_ADDR) hi16 << 16);
-
-  return addr;
-}
-#endif /* TARGET_POWERPC */
-
 /* FIXME: This is a copy of objfiles.c:do_free_objfile_cleanup which is static.
    Maybe it shouldn't be. */
 
@@ -1983,7 +1929,8 @@ sym_is_argument (struct symbol *s)
           SYMBOL_CLASS (s) == LOC_REF_ARG ||
           SYMBOL_CLASS (s) == LOC_REGPARM ||
           SYMBOL_CLASS (s) == LOC_REGPARM_ADDR ||
-          SYMBOL_CLASS (s) == LOC_BASEREG_ARG);
+          SYMBOL_CLASS (s) == LOC_BASEREG_ARG ||
+          SYMBOL_CLASS (s) == LOC_COMPUTED_ARG);
 }
 
 static int
@@ -1991,7 +1938,8 @@ sym_is_local (struct symbol *s)
 {
   return (SYMBOL_CLASS (s) == LOC_LOCAL ||
           SYMBOL_CLASS (s) == LOC_REGISTER ||
-          SYMBOL_CLASS (s) == LOC_BASEREG);
+          SYMBOL_CLASS (s) == LOC_BASEREG ||
+          SYMBOL_CLASS (s) == LOC_COMPUTED);
 }
 
 /* Expand the partial symtabs for the named source file in the given
@@ -2157,35 +2105,6 @@ in_active_func (const char *name, struct active_threads *threads)
   return 0;
 }
 
-/* Record the value of a memory location, and update it with the new value. */
-#if defined (TARGET_POWERPC)
-static void
-updatedatum (struct fixinfo *fixinfo, CORE_ADDR addr, gdb_byte *newval, int size)
-{ 
-  struct fixeddatum * fixeddatum;
-  gdb_byte buf[8];
-  int oldval;
-  target_read_memory (addr, buf, size);
-  oldval = extract_unsigned_integer (buf, size);
-  if (target_write_memory (addr, newval, size))
-    error ("Can't redirect function");
-  fixeddatum = xmalloc (sizeof (struct fixeddatum));
-  fixeddatum->next = NULL;
-  fixeddatum->addr = addr;
-  fixeddatum->size = size;
-  fixeddatum->oldval = oldval;
-  fixeddatum->newval = *newval;
-  if (fixinfo->most_recent_fix->firstdatum == NULL)
-    fixinfo->most_recent_fix->firstdatum = 
-                          fixinfo->most_recent_fix->lastdatum = fixeddatum;
-  else
-    {
-       fixinfo->most_recent_fix->lastdatum->next = fixeddatum;
-       fixinfo->most_recent_fix->lastdatum = fixeddatum;
-    }
-}
-#endif /* TARGET_POWERPC */
-
 /* Redirect a function to its new definition, update the gdb
    symbols so the now-obsolete ones are marked as such.  
    This function assumes that checks have already been made to
@@ -2197,9 +2116,6 @@ static void
 redirect_old_function (struct fixinfo *fixinfo, struct symbol *new_sym, 
                        struct symbol *old_sym, int active)
 {
-#if defined (TARGET_POWERPC)
-  int inst;
-#endif
   CORE_ADDR oldfuncstart, oldfuncend, newfuncstart, fixup_addr;
   struct minimal_symbol *msym;
   struct obsoletedsym *obsoletedsym;
@@ -2222,27 +2138,6 @@ redirect_old_function (struct fixinfo *fixinfo, struct symbol *new_sym,
 
   fixup_addr = oldfuncstart; 
 
-#if defined (TARGET_POWERPC)
-  /* li r12,lo16(newfuncstart) */
-  inst = 0x39800000 | encode_lo16 (newfuncstart);
-  updatedatum (fixinfo, fixup_addr, (gdb_byte *)&inst, 4);
-
-  /* addis r12,r12,hi16(newfuncstart) */
-  inst = 0x3d8c0000 | encode_hi16 (newfuncstart);
-  updatedatum (fixinfo, fixup_addr + 4, (gdb_byte *)&inst, 4);
-
-  /* mtctr r12  - move contents of r12 (newfuncstart) to count register */
-  inst = 0x7d8903a6;
-  updatedatum (fixinfo, fixup_addr + 8, (gdb_byte *)&inst, 4);
-
-  /* bctr - branch unconditionally to count reg, don't update link reg */
-  inst = 0x4e800420;
-  updatedatum (fixinfo, fixup_addr + 12, (gdb_byte *)&inst, 4);
-  
-  /* .long 0 - Illegal instruction for trampoline detection */
-  inst = 0x0;
-  updatedatum (fixinfo, fixup_addr + 16, (gdb_byte *)&inst, 4);
-#endif
 #if defined (TARGET_I386)
   unsigned char buf[6];
   uint32_t relative_offset;
@@ -2250,7 +2145,9 @@ redirect_old_function (struct fixinfo *fixinfo, struct symbol *new_sym,
   buf[0] = 0xe9;  /* jmp <imm32-relative-addr> */
   buf[5] = 0xcc;  /* int 3 */
   relative_offset = (uint32_t) newfuncstart - (oldfuncstart + 5);
-  store_unsigned_integer (buf + 1, TARGET_ADDRESS_BYTES, relative_offset);
+  /* Use '4' instead of TARGET_ADDRESS_BYTES because 0xe9 is a 32-bit 
+     eip/rip relative displacement, not an address.  */
+  store_unsigned_integer (buf + 1, 4, relative_offset);
   target_write_memory (oldfuncstart, buf, 6);
 #endif
 
@@ -2279,46 +2176,13 @@ redirect_old_function (struct fixinfo *fixinfo, struct symbol *new_sym,
 CORE_ADDR
 decode_fix_and_continue_trampoline (CORE_ADDR pc)
 {
-#if defined (TARGET_POWERPC)
-  uint16_t newpc_lo16, newpc_hi16;
-  int buf;
-
-  /* li r12,lo16(destination-address) */
-  buf = read_memory_unsigned_integer (pc, 4);
-  if ((buf & 0x39800000) != 0x39800000)
-    return 0;
-  newpc_lo16 = buf & 0xffff;
-
-  /* addis r12,r12,hi16(destination-address) */
-  buf = read_memory_unsigned_integer (pc + 4, 4);
-  if ((buf & 0x3d8c0000) != 0x3d8c0000)
-    return 0;
-  newpc_hi16 = buf & 0xffff;
-
-  /* mtctr r12 */
-  buf = read_memory_unsigned_integer (pc + 8, 4);
-  if (buf != 0x7d8903a6)
-    return 0;
-
-  /* bctr */
-  buf = read_memory_unsigned_integer (pc + 12, 4);
-  if (buf != 0x4e800420)
-    return 0;
-
-  /* .long 0 */
-  buf = read_memory_unsigned_integer (pc + 16, 4);
-  if (buf != 0x0)
-    return 0;
-
-  return decode_hi16_lo16 (newpc_hi16, newpc_lo16);
-#endif
 #if defined (TARGET_I386)
 
   /* Detect the x86 F&C trampoline sequence.  */
 
-  unsigned char buf[5];
-  uint32_t current_pc, relative_offset;
-  target_read_memory (pc, buf, 5);
+  unsigned char buf[6];
+  uint32_t relative_offset;
+  target_read_memory (pc, buf, 6);
 
   /* jmp <32-bit-relative-addr> */
   if (buf[0] != 0xe9)
@@ -2329,10 +2193,8 @@ decode_fix_and_continue_trampoline (CORE_ADDR pc)
     return 0;
   
   relative_offset = extract_unsigned_integer (buf + 1, 4);
-  current_pc = pc;  /* 64bit x86 unsafe, we're truncating the top 32 bits */
-  current_pc += 5;  /* Offset is from next instruction */
-  return (uint32_t) current_pc + relative_offset;
-
+  pc += 5;  /* the relative offset is computed from next instruction */
+  return pc + relative_offset;
 #endif
 }
 
@@ -2401,38 +2263,12 @@ print_active_functions (struct fixinfo *cur)
 void
 update_picbase_register (struct symbol *new_fun)
 {
-#if defined (TARGET_POWERPC)
-  ppc_function_properties props;
-  CORE_ADDR ret;
-  int pic_base_reg;
-  CORE_ADDR pic_base_value;
-
-  /* APPLE LOCAL begin address ranges  */
-  if (BLOCK_RANGES (SYMBOL_BLOCK_VALUE (new_fun)))
-    internal_error (__FILE__, __LINE__,
-		    _("Cannot redirect function with non-contiguous address ranges."));
-
-  /* APPLE LOCAL end address ranges  */
-
-  ppc_clear_function_properties (&props);
-  ret = ppc_parse_instructions (BLOCK_START (SYMBOL_BLOCK_VALUE (new_fun)),
-                                BLOCK_END (SYMBOL_BLOCK_VALUE (new_fun)),
-                                &props);
-
-  pic_base_reg = props.pic_base_reg;
-  pic_base_value = props.pic_base_address;
-
-  /* FIXME: It is possible to have a function without any PIC base used
-     (an empty stub function, like slurry() is in the current fix-small-c
-     test case), so for now I'll silently do nothing.  This may not be
-     a good choice -- I'm not distinguishing between a function that doesn't
-     have a PIC base and a failure to find the PIC base.  */
-  if (pic_base_reg == 0 || pic_base_value == INVALID_ADDRESS)
-    return;
-
-  write_register (pic_base_reg, pic_base_value);
-#endif
 #if defined (TARGET_I386)
+
+  /* x86_64 doesn't use an instruction sequence to set up a pic base register;
+     it has rip-relative addressing.  */
+  if (gdbarch_lookup_osabi (exec_bfd) == GDB_OSABI_DARWIN64)
+    return;
 
   /* Find & update the x86 PIC base register if one is used. */
 
@@ -2666,16 +2502,20 @@ fix_and_continue_supported (void)
   if (exec_bfd == NULL)
     return -1;
 
-  /* Not supported on ARM, neither remote nor native.  */
+  /* gdb looks mostly correct for x86_64 at this point but we need some
+     fixes from other components before we can enable this.  */
+  if (gdbarch_lookup_osabi (exec_bfd) == GDB_OSABI_DARWIN64)
+    return 0;
 
+  /* Not supported on ARM, neither remote nor native.  */
 #if defined (TARGET_ARM)
   return 0;
 #endif
 
-  /* F&C is not supported on ppc64 yet. */
-
-  if (gdbarch_lookup_osabi (exec_bfd) == GDB_OSABI_DARWIN64)
-    return 0;
+  /* No longer supported on ppc */
+#if defined (TARGET_POWERPC)
+  return 0;
+#endif
 
   return 1;
 }

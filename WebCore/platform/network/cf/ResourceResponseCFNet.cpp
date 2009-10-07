@@ -24,15 +24,14 @@
  */
 
 #include "config.h"
-#include "ResourceResponseCFNet.h"
+#include "ResourceResponse.h"
 
 #include "HTTPParsers.h"
 #include "MIMETypeRegistry.h"
-#include "ResourceResponse.h"
 #include <CFNetwork/CFURLResponsePriv.h>
 #include <wtf/RetainPtr.h>
 
-using std::min;
+using namespace std;
 
 // We would like a better value for a maximum time_t,
 // but there is no way to do that in C with any certainty.
@@ -55,10 +54,23 @@ static inline bool filenameHasSaneExtension(const String& filename)
     return dot > 0 && dot < length - 1;
 }
 
-void ResourceResponse::doUpdateResourceResponse()
+static time_t toTimeT(CFAbsoluteTime time)
 {
-    if (!m_cfResponse.get())
+    static const double maxTimeAsDouble = std::numeric_limits<time_t>::max();
+    static const double minTimeAsDouble = std::numeric_limits<time_t>::min();
+    return min(max(minTimeAsDouble, time + kCFAbsoluteTimeIntervalSince1970), maxTimeAsDouble);
+}
+
+void ResourceResponse::platformLazyInit()
+{
+    if (m_isUpToDate)
         return;
+    m_isUpToDate = true;
+
+    if (m_isNull) {
+        ASSERT(!m_cfResponse.get());
+        return;
+    }
 
     // FIXME: We may need to do MIME type sniffing here (unless that is done in CFURLResponseGetMIMEType).
 
@@ -67,11 +79,7 @@ void ResourceResponse::doUpdateResourceResponse()
     m_expectedContentLength = CFURLResponseGetExpectedContentLength(m_cfResponse.get());
     m_textEncodingName = CFURLResponseGetTextEncodingName(m_cfResponse.get());
 
-    CFAbsoluteTime expiration = CFURLResponseGetExpirationTime(m_cfResponse.get());
-    m_expirationDate = min((time_t)(expiration + kCFAbsoluteTimeIntervalSince1970), MAX_TIME_T);
-
-    CFAbsoluteTime lastModified = CFURLResponseGetLastModifiedDate(m_cfResponse.get());
-    m_lastModifiedDate = min((time_t)(lastModified + kCFAbsoluteTimeIntervalSince1970), MAX_TIME_T);
+    m_lastModifiedDate = toTimeT(CFURLResponseGetLastModifiedDate(m_cfResponse.get()));
 
     RetainPtr<CFStringRef> suggestedFilename(AdoptCF, CFURLResponseCopySuggestedFilename(m_cfResponse.get()));
     m_suggestedFilename = suggestedFilename.get();
@@ -82,9 +90,11 @@ void ResourceResponse::doUpdateResourceResponse()
 
         RetainPtr<CFStringRef> statusLine(AdoptCF, CFHTTPMessageCopyResponseStatusLine(httpResponse));
         String statusText(statusLine.get());
-        int spacePos = statusText.find(" ");
-        if (spacePos != -1)
-            statusText = statusText.substring(spacePos + 1);
+        int spacePos = statusText.find(' ');
+        // Remove the status code from the status text.
+        spacePos = statusText.find(' ', spacePos + 1);
+        statusText = statusText.substring(spacePos + 1);      
+
         m_httpStatusText = statusText;
 
         RetainPtr<CFDictionaryRef> headers(AdoptCF, CFHTTPMessageCopyAllHeaderFields(httpResponse));
@@ -97,5 +107,11 @@ void ResourceResponse::doUpdateResourceResponse()
     } else
         m_httpStatusCode = 0;
 }
+
+bool ResourceResponse::platformCompare(const ResourceResponse& a, const ResourceResponse& b)
+{
+    return CFEqual(a.cfURLResponse(), b.cfURLResponse());
+}
+
 
 }

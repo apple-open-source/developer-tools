@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---             Copyright (C) 2001-2004 Free Software Foundation, Inc.       --
+--          Copyright (C) 2001-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -27,8 +27,6 @@
 with Namet;   use Namet;
 with Osint;
 with Prj.Com; use Prj.Com;
-with Table;
-
 with System.Case_Util; use System.Case_Util;
 
 package body Prj.Attr is
@@ -55,7 +53,7 @@ package body Prj.Attr is
    --        insensitive
    --    'c' same as 'b', with optional index
 
-   --  End is indicated by two consecutive '#'.
+   --  End is indicated by two consecutive '#'
 
    Initialization_Data : constant String :=
 
@@ -75,6 +73,7 @@ package body Prj.Attr is
      "SVlibrary_auto_init#" &
      "LVlibrary_options#" &
      "SVlibrary_src_dir#" &
+     "SVlibrary_ali_dir#" &
      "SVlibrary_gcc#" &
      "SVlibrary_symbol_file#" &
      "SVlibrary_symbol_policy#" &
@@ -157,6 +156,12 @@ package body Prj.Attr is
    --  package gnatstub
 
      "Pgnatstub#" &
+     "Ladefault_switches#" &
+     "Lbswitches#" &
+
+   --  package Check
+
+     "Pcheck#" &
      "Ladefault_switches#" &
      "Lbswitches#" &
 

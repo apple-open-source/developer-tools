@@ -43,10 +43,10 @@ typedef struct _NSSize NSSize;
 #if PLATFORM(WIN)
 typedef struct tagSIZE SIZE;
 #elif PLATFORM(QT)
+#include <qglobal.h>
+QT_BEGIN_NAMESPACE
 class QSize;
-#endif
-#if PLATFORM(SYMBIAN)
-class TSize;
+QT_END_NAMESPACE
 #endif
 
 namespace WebCore {
@@ -64,6 +64,18 @@ public:
 
     bool isEmpty() const { return m_width <= 0 || m_height <= 0; }
 
+    void expand(int width, int height)
+    {
+        m_width += width;
+        m_height += height;
+    }
+    
+    void scale(float scale)
+    {
+        m_width = static_cast<int>(static_cast<float>(m_width) * scale);
+        m_height = static_cast<int>(static_cast<float>(m_height) * scale);
+    }
+    
     IntSize expandedTo(const IntSize& other) const
     {
         return IntSize(m_width > other.m_width ? m_width : other.m_width,
@@ -99,10 +111,6 @@ public:
 #if PLATFORM(QT)
     IntSize(const QSize&);
     operator QSize() const;
-#endif
-#if PLATFORM(SYMBIAN)
-    IntSize(const TSize&);
-    operator TSize() const;
 #endif
 
 

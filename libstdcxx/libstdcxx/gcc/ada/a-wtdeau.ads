@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2001 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -45,26 +45,22 @@ private package Ada.Wide_Text_IO.Decimal_Aux is
    function Get_Dec
      (File  : File_Type;
       Width : Field;
-      Scale : Integer)
-      return  Integer;
+      Scale : Integer) return Integer;
 
    function Get_LLD
      (File  : File_Type;
       Width : Field;
-      Scale : Integer)
-      return  Long_Long_Integer;
+      Scale : Integer) return Long_Long_Integer;
 
    function Gets_Dec
      (From  : String;
       Last  : access Positive;
-      Scale : Integer)
-      return  Integer;
+      Scale : Integer) return Integer;
 
    function Gets_LLD
      (From  : String;
       Last  : access Positive;
-      Scale : Integer)
-      return  Long_Long_Integer;
+      Scale : Integer) return Long_Long_Integer;
 
    procedure Put_Dec
      (File  : File_Type;

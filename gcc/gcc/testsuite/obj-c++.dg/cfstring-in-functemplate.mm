@@ -1,6 +1,6 @@
 /* APPLE LOCAL file 4557092 */
 /* Test correct generation of cfstring tree in a function template. */
-/* { dg-options "-framework Foundation -framework CoreFoundation" } */
+/* { dg-options "-framework Foundation" } */
 /* { dg-do run { target *-*-darwin* } } */
 
 #include <Foundation/Foundation.h>

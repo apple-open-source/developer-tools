@@ -1,12 +1,12 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                         GNAT RUNTIME COMPONENTS                          --
+--                         GNAT RUN-TIME COMPONENTS                         --
 --                                                                          --
 --             A D A . C O M M A N D _ L I N E . R E M O V E                --
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---        Copyright (C) 1999 Free Software Foundation, Inc.                 --
+--          Copyright (C) 1999-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -41,9 +41,9 @@
 --  argument, Argument_Count will be 2, and Argument (2) will return C.
 
 package Ada.Command_Line.Remove is
-pragma Preelaborate (Remove);
+   pragma Preelaborate;
 
-   procedure Remove_Argument (Number : in Positive);
+   procedure Remove_Argument (Number : Positive);
    --  Removes the argument identified by Number, which must be in the
    --  range 1 .. Argument_Count (i.e. an in range argument number which
    --  reflects removals). If Number is out of range Constraint_Error

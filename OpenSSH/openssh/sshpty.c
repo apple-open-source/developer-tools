@@ -1,4 +1,4 @@
-/* $OpenBSD: sshpty.c,v 1.26 2006/08/03 03:34:42 deraadt Exp $ */
+/* $OpenBSD: sshpty.c,v 1.28 2007/09/11 23:49:09 stevesk Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -46,6 +46,13 @@
 #define O_NOCTTY 0
 #endif
 
+#ifdef __APPLE__
+# include <AvailabilityMacros.h>
+# if (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_5)
+#  define __APPLE_PRIVPTY__
+# endif
+#endif
+
 /*
  * Allocates and opens a pty.  Returns 0 if no pty could be allocated, or
  * nonzero if a pty was successfully allocated.  On success, open file
@@ -57,18 +64,17 @@ int
 pty_allocate(int *ptyfd, int *ttyfd, char *namebuf, size_t namebuflen)
 {
 	/* openpty(3) exists in OSF/1 and some other os'es */
-	/*
-	 * ttyname() may fail due to different sshd code paths.  However,
-	 * we can just get the tty name from openpty() and avoid ttyname().
-	 */
-	char name[64];
+	char *name;
 	int i;
 
-	i = openpty(ptyfd, ttyfd, name, NULL, NULL);
+	i = openpty(ptyfd, ttyfd, NULL, NULL, NULL);
 	if (i < 0) {
 		error("openpty: %.100s", strerror(errno));
 		return 0;
 	}
+	name = ttyname(*ttyfd);
+	if (!name)
+		fatal("openpty returns device for which ttyname fails.");
 
 	strlcpy(namebuf, name, namebuflen);	/* possible truncation */
 	return 1;
@@ -79,10 +85,12 @@ pty_allocate(int *ptyfd, int *ttyfd, char *namebuf, size_t namebuflen)
 void
 pty_release(const char *tty)
 {
+#ifndef __APPLE_PRIVPTY__
 	if (chown(tty, (uid_t) 0, (gid_t) 0) < 0)
 		error("chown %.100s 0 0 failed: %.100s", tty, strerror(errno));
 	if (chmod(tty, (mode_t) 0666) < 0)
 		error("chmod %.100s 0666 failed: %.100s", tty, strerror(errno));
+#endif /* __APPLE_PRIVPTY__ */
 }
 
 /* Makes the tty the process's controlling tty and sets it to sane modes. */

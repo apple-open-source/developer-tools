@@ -2,16 +2,15 @@
 # APPLE LOCAL file ARM libgcc
 # This is a pared-down version of build_gcc that builds all non-native
 # TARGETS ($2) and then creates a destination directory containing only
-# the libgcc files for those TARGETS.
+# the libgcc files for those TARGETS.  Currently only designed to
+# support ARM.
 
 set -x
 
 # -arch arguments are different than configure arguments. We need to
 # translate them.
 
-TRANSLATE_ARCH="sed -e s/ppc/powerpc/ -e s/i386/i686/ -e s/ppc64/powerpc64/"
-TRANSLATE_TARGETS="sed -e s/ppc/powerpc/ -e s/i386/i686/ -e s/armv4t/arm/ \
-  -e s/armv6/arm/ -e s/x86_64// -e s/powerpc64// -e s/ppc64//"
+TRANSLATE_ARCH="sed -e s/ppc/powerpc/ -e s/i386/i686/ -e s/armv6/arm/"
 
 # Build GCC the "Apple way".
 # Parameters:
@@ -25,8 +24,13 @@ HOSTS=`echo $1 | $TRANSLATE_ARCH `
 # compilers will generate code for.  If the current machine isn't in
 # the list, a compiler for it will get built anyway, but won't be
 # installed.
-ORIG_TARGETS="$2"
-TARGETS=`echo $2 | $TRANSLATE_TARGETS`
+TARGETS=`echo $2 | $TRANSLATE_ARCH`
+
+# The GNU makefile target ('bootstrap' by default).
+BOOTSTRAP=${BOOTSTRAP-bootstrap}
+if [ "$BOOTSTRAP" != bootstrap ]; then
+    bootstrap=--disable-bootstrap
+fi
 
 # The B&I build srcript (~rc/bin/buildit) accepts an '-othercflags'
 # command-line flag, and captures the argument to that flag in
@@ -60,29 +64,23 @@ DIR=`pwd`
 # This isn't a parameter; it's the version of the compiler that we're
 # about to build.  It's included in the names of various files and
 # directories in the installed image.
-VERS=`sed -n -e '/version_string/s/.*\"\([^ \"]*\)[ \"].*/\1/p' \
-  < $ORIG_SRC_DIR/gcc/version.c || exit 1`
+VERS=`cat $ORIG_SRC_DIR/gcc/BASE-VER`
+if [ -z "$VERS" ]; then
+    exit 1
+fi
 
 # This isn't a parameter either, it's the major version of the compiler
 # to be built.  It's VERS but only up to the second '.' (if there is one).
 MAJ_VERS=`echo $VERS | sed 's/\([0-9]*\.[0-9]*\)[.-].*/\1/'`
 
-# This is the default architecture for i386 configurations.
-I386_CPU="--with-arch=apple --with-tune=generic"
-
 # For ARM, grab all system files from an SDK.
 ARM_SYSROOT="/Developer/SDKs/Extra"
-ARM_CONFIGFLAGS="--with-sysroot=\"$ARM_SYSROOT\""
+ARM_CONFIGFLAGS="--with-build-sysroot=\"$ARM_SYSROOT\""
 
 # This is the libstdc++ version to use.
 LIBSTDCXX_VERSION=4.0.0
 
-# Sniff to see if we can do ppc64 building.
-DARWIN_VERS=9
-if [ x"`file /usr/lib/crt1.o | grep 'architecture ppc64'`" == x ]; then
-    DARWIN_VERS=7
-fi
-
+DARWIN_VERS=`uname -r | sed 's/\..*//'`
 echo DARWIN_VERS = $DARWIN_VERS
 
 # If the user has CC set in their environment unset it now
@@ -132,17 +130,39 @@ fi
 # The $LOCAL_MAKEFLAGS variable can be used to override $MAKEFLAGS.
 MAKEFLAGS=${LOCAL_MAKEFLAGS-"-j $SYSCTL"}
 
+# Build the native GCC.  Do this even if the user didn't ask for it
+# because it'll be needed for the bootstrap.
+mkdir -p $DIR/obj-$BUILD-$BUILD $DIR/dst-$BUILD-$BUILD || exit 1
+cd $DIR/obj-$BUILD-$BUILD || exit 1
+if [ \! -f Makefile ]; then
+ $SRC_DIR/configure $bootstrap $CONFIGFLAGS \
+   --host=$BUILD-apple-darwin$DARWIN_VERS --target=$BUILD-apple-darwin$DARWIN_VERS || exit 1
+fi
+# Unset RC_DEBUG_OPTIONS because it causes the bootstrap to fail.
+# Also keep unset for cross compilers so that the cross built libraries are
+# comparable to the native built libraries.
+unset RC_DEBUG_OPTIONS
+make $MAKEFLAGS CFLAGS="$CFLAGS" CXXFLAGS="$CFLAGS" || exit 1
+make $MAKEFLAGS html CFLAGS="$CFLAGS" CXXFLAGS="$CFLAGS" || exit 1
+make $MAKEFLAGS DESTDIR=$DIR/dst-$BUILD-$BUILD install-gcc install-target \
+  CFLAGS="$CFLAGS" CXXFLAGS="$CFLAGS" || exit 1
+
+# Add the compiler we just built to the path, giving it appropriate names.
+D=$DIR/dst-$BUILD-$BUILD/usr/bin
+ln -f $D/gcc-$MAJ_VERS $D/gcc || exit 1
+ln -f $D/gcc $D/$BUILD-apple-darwin$DARWIN_VERS-gcc || exit 1
+PATH=$DIR/dst-$BUILD-$BUILD/usr/bin:$PATH
 # The cross-tools' build process expects to find certain programs
 # under names like 'i386-apple-darwin$DARWIN_VERS-ar'; so make them.
 # Annoyingly, ranlib changes behaviour depending on what you call it,
 # so we have to use a shell script for indirection, grrr.
 rm -rf $DIR/bin || exit 1
 mkdir $DIR/bin || exit 1
-for prog in ar nm ranlib strip lipo ; do
+for prog in ar nm ranlib strip lipo ld ; do
   for t in `echo $TARGETS $HOSTS | sort -u`; do
     P=$DIR/bin/${t}-apple-darwin$DARWIN_VERS-${prog}
     echo '#!/bin/sh' > $P || exit 1
-    echo 'exec /usr/bin/'${prog}' $*' >> $P || exit 1
+    echo 'exec /usr/bin/'${prog}' "$@"' >> $P || exit 1
     chmod a+x $P || exit 1
   done
 done
@@ -150,21 +170,30 @@ for t in `echo $1 $2 | sort -u`; do
   gt=`echo $t | $TRANSLATE_ARCH`
   P=$DIR/bin/${gt}-apple-darwin$DARWIN_VERS-as
   echo '#!/bin/sh' > $P || exit 1
-  echo 'exec /usr/bin/as -arch '${t}' $*' >> $P || exit 1
+
+  echo 'for a; do case $a in -arch) exec /usr/bin/as "$@";;  esac; done' >> $P || exit 1
+  echo 'exec /usr/bin/as -arch '${t}' "$@"' >> $P || exit 1
   chmod a+x $P || exit 1
 done
 PATH=$DIR/bin:$PATH
 
+# Determine which cross-compilers we should build.  If our build architecture is
+# one of our hosts, add all of the targets to the list.
+if echo $HOSTS | grep $BUILD
+then
+  CROSS_TARGETS=`echo $TARGETS $HOSTS | tr ' ' '\n' | sort -u`
+else
+  CROSS_TARGETS="$HOSTS"
+fi
+
 # Build the cross-compilers, using the compiler we just built.
-for t in `echo $TARGETS $HOSTS | sort -u`; do
+for t in $CROSS_TARGETS ; do
  if [ $t != $BUILD ] ; then
   mkdir -p $DIR/obj-$BUILD-$t $DIR/dst-$BUILD-$t || exit 1
    cd $DIR/obj-$BUILD-$t || exit 1
    if [ \! -f Makefile ]; then
     $SRC_DIR/configure $CONFIGFLAGS --enable-werror-always \
-     `if [ $t = i686 ] ; then echo $I386_CPU ; fi` \
      `if [ $t = 'arm' ] ; then echo $ARM_CONFIGFLAGS ; fi` \
-      --with-slibdir=$DEST_ROOT/lib \
       --program-prefix=$t-apple-darwin$DARWIN_VERS- \
       --host=$BUILD-apple-darwin$DARWIN_VERS --target=$t-apple-darwin$DARWIN_VERS || exit 1
    fi
@@ -211,26 +240,6 @@ for l in $SHARED_LIBS ; do
     fi
     if ! file .$DEST_ROOT/lib/$l | grep stub > /dev/null ; then
       strip -x .$DEST_ROOT/lib/$l || exit 1
-    fi
-  fi
-done
-
-# If targets is 'armv6' or 'armv4t', then strip out unrequested
-# targets, as these can do more harm than good (see rdar://5572168).
-for t in $ORIG_TARGETS ; do
-  if [ $t = 'armv6' ] ; then
-    INCLUDE_ARMV6='yes'
-  elif [ $t = 'armv4t' ] ; then
-    INCLUDE_ARMV4='yes'
-  fi
-done
-
-for l in $SHARED_LIBS ; do
-  if [ -f .$DEST_ROOT/lib/$l ] ; then
-    if [ "$INCLUDE_ARMV4" = 'yes' ] && [ "$INCLUDE_ARMV6" != 'yes' ] ; then
-      lipo -thin arm .$DEST_ROOT/lib/$l -output .$DEST_ROOT/lib/$l
-    elif [ "$INCLUDE_ARMV6" = 'yes' ] && [ "$INCLUDE_ARMV4" != 'yes' ] ; then
-      lipo -thin armv6 .$DEST_ROOT/lib/$l -output .$DEST_ROOT/lib/$l
     fi
   fi
 done

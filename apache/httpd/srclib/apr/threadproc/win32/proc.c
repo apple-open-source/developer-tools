@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#include "win32/apr_arch_threadproc.h"
-#include "win32/apr_arch_file_io.h"
+#include "apr_arch_threadproc.h"
+#include "apr_arch_file_io.h"
 
 #include "apr_thread_proc.h"
 #include "apr_file_io.h"
@@ -32,6 +32,15 @@
 #include <process.h>
 #endif
 
+/* Heavy on no'ops, here's what we want to pass if there is APR_NO_FILE
+ * requested for a specific child handle;
+ */
+static apr_file_t no_file = { NULL, INVALID_HANDLE_VALUE, };
+
+/* We have very carefully excluded volumes of definitions from the
+ * Microsoft Platform SDK, which kill the build time performance.
+ * These the sole constants we borrow from WinBase.h and WinUser.h
+ */
 #ifndef LOGON32_LOGON_NETWORK
 #define LOGON32_LOGON_NETWORK 3
 #endif
@@ -50,12 +59,12 @@
 #define SW_HIDE 0
 #endif
 #endif
+
 /* 
  * some of the ideas expressed herein are based off of Microsoft
  * Knowledge Base article: Q190351
  *
  */
-
 APR_DECLARE(apr_status_t) apr_procattr_create(apr_procattr_t **new,
                                                   apr_pool_t *pool)
 {
@@ -74,29 +83,41 @@ APR_DECLARE(apr_status_t) apr_procattr_io_set(apr_procattr_t *attr,
 
     if (in) {
         /* APR_CHILD_BLOCK maps to APR_WRITE_BLOCK, while
-         * APR_PARENT_BLOCK maps to APR_READ_BLOCK, so we
-         * must transpose the CHILD/PARENT blocking flags
-         * only for the stdin pipe.  stdout/stderr naturally
-         * map to the correct mode.
+         * APR_PARENT_BLOCK maps to APR_READ_BLOCK, so transpose 
+         * the CHILD/PARENT blocking flags for the stdin pipe.
+         * stdout/stderr map to the correct mode by default.
          */
         if (in == APR_CHILD_BLOCK)
             in = APR_READ_BLOCK;
         else if (in == APR_PARENT_BLOCK)
             in = APR_WRITE_BLOCK;
-        stat = apr_create_nt_pipe(&attr->child_in, &attr->parent_in, in,
-                                  attr->pool);
+
+        if (in == APR_NO_FILE)
+            attr->child_in = &no_file;
+        else { 
+            stat = apr_file_pipe_create_ex(&attr->child_in, &attr->parent_in,
+                                           in, attr->pool);
+        }
         if (stat == APR_SUCCESS)
             stat = apr_file_inherit_unset(attr->parent_in);
     }
     if (out && stat == APR_SUCCESS) {
-        stat = apr_create_nt_pipe(&attr->parent_out, &attr->child_out, out,
-                                  attr->pool);
+        if (out == APR_NO_FILE)
+            attr->child_out = &no_file;
+        else { 
+            stat = apr_file_pipe_create_ex(&attr->parent_out, &attr->child_out,
+                                           out, attr->pool);
+        }
         if (stat == APR_SUCCESS)
             stat = apr_file_inherit_unset(attr->parent_out);
     }
     if (err && stat == APR_SUCCESS) {
-        stat = apr_create_nt_pipe(&attr->parent_err, &attr->child_err, err,
-                                  attr->pool);
+        if (err == APR_NO_FILE)
+            attr->child_err = &no_file;
+        else { 
+            stat = apr_file_pipe_create_ex(&attr->parent_err, &attr->child_err,
+                                           err, attr->pool);
+        }
         if (stat == APR_SUCCESS)
             stat = apr_file_inherit_unset(attr->parent_err);
     }
@@ -110,7 +131,7 @@ APR_DECLARE(apr_status_t) apr_procattr_child_in_set(apr_procattr_t *attr,
     apr_status_t rv = APR_SUCCESS;
 
     if (child_in) {
-        if (attr->child_in == NULL)
+        if ((attr->child_in == NULL) || (attr->child_in == &no_file))
             rv = apr_file_dup(&attr->child_in, child_in, attr->pool);
         else
             rv = apr_file_dup2(attr->child_in, child_in, attr->pool);
@@ -136,7 +157,7 @@ APR_DECLARE(apr_status_t) apr_procattr_child_out_set(apr_procattr_t *attr,
     apr_status_t rv = APR_SUCCESS;
 
     if (child_out) {
-        if (attr->child_out == NULL)
+        if ((attr->child_out == NULL) || (attr->child_out == &no_file))
             rv = apr_file_dup(&attr->child_out, child_out, attr->pool);
         else
             rv = apr_file_dup2(attr->child_out, child_out, attr->pool);
@@ -162,7 +183,7 @@ APR_DECLARE(apr_status_t) apr_procattr_child_err_set(apr_procattr_t *attr,
     apr_status_t rv = APR_SUCCESS;
 
     if (child_err) {
-        if (attr->child_err == NULL)
+        if ((attr->child_err == NULL) || (attr->child_err == &no_file))
             rv = apr_file_dup(&attr->child_err, child_err, attr->pool);
         else
             rv = apr_file_dup2(attr->child_err, child_err, attr->pool);
@@ -784,9 +805,10 @@ APR_DECLARE(apr_status_t) apr_proc_create(apr_proc_t *new,
                     SetHandleInformation(si.hStdInput,
                                          HANDLE_FLAG_INHERIT, 0);
 
-                si.hStdInput = attr->child_in->filehand;
-                SetHandleInformation(si.hStdInput, HANDLE_FLAG_INHERIT,
-                                                   HANDLE_FLAG_INHERIT);
+                if ( (si.hStdInput = attr->child_in->filehand) 
+                                   != INVALID_HANDLE_VALUE )
+                    SetHandleInformation(si.hStdInput, HANDLE_FLAG_INHERIT,
+                                                       HANDLE_FLAG_INHERIT);
             }
             
             si.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -798,9 +820,10 @@ APR_DECLARE(apr_status_t) apr_proc_create(apr_proc_t *new,
                     SetHandleInformation(si.hStdOutput,
                                          HANDLE_FLAG_INHERIT, 0);
 
-                si.hStdOutput = attr->child_out->filehand;
-                SetHandleInformation(si.hStdOutput, HANDLE_FLAG_INHERIT,
-                                                    HANDLE_FLAG_INHERIT);
+                if ( (si.hStdOutput = attr->child_out->filehand) 
+                                   != INVALID_HANDLE_VALUE )
+                    SetHandleInformation(si.hStdOutput, HANDLE_FLAG_INHERIT,
+                                                        HANDLE_FLAG_INHERIT);
             }
 
             si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
@@ -812,9 +835,10 @@ APR_DECLARE(apr_status_t) apr_proc_create(apr_proc_t *new,
                     SetHandleInformation(si.hStdError,
                                          HANDLE_FLAG_INHERIT, 0);
 
-                si.hStdError = attr->child_err->filehand;
-                SetHandleInformation(si.hStdError, HANDLE_FLAG_INHERIT,
-                                                   HANDLE_FLAG_INHERIT);
+                if ( (si.hStdError = attr->child_err->filehand) 
+                                   != INVALID_HANDLE_VALUE )
+                    SetHandleInformation(si.hStdError, HANDLE_FLAG_INHERIT,
+                                                       HANDLE_FLAG_INHERIT);
             }
         }
         if (attr->user_token) {
@@ -937,33 +961,18 @@ APR_DECLARE(apr_status_t) apr_proc_create(apr_proc_t *new,
     new->hproc = pi.hProcess;
     new->pid = pi.dwProcessId;
 
-    if (attr->child_in) {
+    if ((attr->child_in) && (attr->child_in != &no_file)) {
         apr_file_close(attr->child_in);
     }
-    if (attr->child_out) {
+    if ((attr->child_out) && (attr->child_out != &no_file)) {
         apr_file_close(attr->child_out);
     }
-    if (attr->child_err) {
+    if ((attr->child_err) && (attr->child_err != &no_file)) {
         apr_file_close(attr->child_err);
     }
     CloseHandle(pi.hThread);
 
     return APR_SUCCESS;
-}
-
-APR_DECLARE(apr_status_t) apr_proc_wait_all_procs(apr_proc_t *proc,
-                                                  int *exitcode,
-                                                  apr_exit_why_e *exitwhy,
-                                                  apr_wait_how_e waithow,
-                                                  apr_pool_t *p)
-{
-    /* Unix does apr_proc_wait(proc(-1), exitcode, exitwhy, waithow)
-     * but Win32's apr_proc_wait won't work that way.  We can either
-     * register all APR created processes in some sort of AsyncWait
-     * thread, or simply walk from the global process pool for all 
-     * apr_pool_note_subprocess()es registered with APR.
-     */
-    return APR_ENOTIMPL;
 }
 
 static apr_exit_why_e why_from_exit_code(DWORD exit) {
@@ -977,6 +986,132 @@ static apr_exit_why_e why_from_exit_code(DWORD exit) {
         return APR_PROC_EXIT;
 
     /* ### No way to tell if Dr Watson grabbed a core, AFAICT. */
+}
+
+APR_DECLARE(apr_status_t) apr_proc_wait_all_procs(apr_proc_t *proc,
+                                                  int *exitcode,
+                                                  apr_exit_why_e *exitwhy,
+                                                  apr_wait_how_e waithow,
+                                                  apr_pool_t *p)
+{
+#if APR_HAS_UNICODE_FS
+#ifndef _WIN32_WCE
+    IF_WIN_OS_IS_UNICODE
+    {
+        DWORD  dwId    = GetCurrentProcessId();
+        DWORD  i;
+        DWORD  nChilds = 0;
+        DWORD  nActive = 0;
+        HANDLE ps32;
+        PROCESSENTRY32W pe32;
+        BOOL   bHasMore = FALSE;
+        DWORD  dwFlags  = PROCESS_QUERY_INFORMATION;
+        apr_status_t rv = APR_EGENERAL;
+
+        if (waithow == APR_WAIT)
+            dwFlags |= SYNCHRONIZE;
+        if (!(ps32 = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0))) {
+            return apr_get_os_error();
+        }
+        pe32.dwSize = sizeof(PROCESSENTRY32W);
+        if (!Process32FirstW(ps32, &pe32)) {
+            if (GetLastError() == ERROR_NO_MORE_FILES)
+                return APR_EOF;
+            else
+                return apr_get_os_error();
+        }
+        do {
+            DWORD  dwRetval = 0;
+            DWORD  nHandles = 0;
+            HANDLE hProcess = NULL;
+            HANDLE pHandles[MAXIMUM_WAIT_OBJECTS];
+            do {
+                if (pe32.th32ParentProcessID == dwId) {
+                    nChilds++;
+                    if ((hProcess = OpenProcess(dwFlags, FALSE,
+                                                pe32.th32ProcessID)) != NULL) {
+                        if (GetExitCodeProcess(hProcess, &dwRetval)) {
+                            if (dwRetval == STILL_ACTIVE) {
+                                nActive++;
+                                if (waithow == APR_WAIT)
+                                    pHandles[nHandles++] = hProcess;
+                                else
+                                    CloseHandle(hProcess);
+                            }
+                            else {                                
+                                /* Process has exited.
+                                 * No need to wait for its termination.
+                                 */
+                                CloseHandle(hProcess);
+                                if (exitcode)
+                                    *exitcode = dwRetval;
+                                if (exitwhy)
+                                    *exitwhy  = why_from_exit_code(dwRetval);
+                                proc->pid = pe32.th32ProcessID;
+                            }
+                        }
+                        else {
+                            /* Unexpected error code.
+                             * Cleanup and return;
+                             */
+                            rv = apr_get_os_error();
+                            CloseHandle(hProcess);
+                            for (i = 0; i < nHandles; i++)
+                                CloseHandle(pHandles[i]);
+                            return rv;
+                        }
+                    }
+                    else {
+                        /* This is our child, so it shouldn't happen
+                         * that we cannot open our child's process handle.
+                         * However if the child process increased the
+                         * security token it might fail.
+                         */
+                    }
+                }
+            } while ((bHasMore = Process32NextW(ps32, &pe32)) &&
+                     nHandles < MAXIMUM_WAIT_OBJECTS);
+            if (nHandles) {
+                /* Wait for all collected processes to finish */
+                DWORD waitStatus = WaitForMultipleObjects(nHandles, pHandles,
+                                                          TRUE, INFINITE);
+                for (i = 0; i < nHandles; i++)
+                    CloseHandle(pHandles[i]);
+                if (waitStatus == WAIT_OBJECT_0) {
+                    /* Decrease active count by the number of awaited
+                     * processes.
+                     */
+                    nActive -= nHandles;
+                }
+                else {
+                    /* Broken from the infinite loop */
+                    break;
+                }
+            }
+        } while (bHasMore);
+        CloseHandle(ps32);
+        if (waithow != APR_WAIT) {
+            if (nChilds && nChilds == nActive) {
+                /* All child processes are running */
+                rv = APR_CHILD_NOTDONE;
+                proc->pid = -1;
+            }
+            else {
+                /* proc->pid contains the pid of the
+                 * exited processes
+                 */
+                rv = APR_CHILD_DONE;
+            }
+        }
+        if (nActive == 0) {
+            rv = APR_CHILD_DONE;
+            proc->pid = -1;
+        }
+        return rv;
+    }
+#endif /* _WIN32_WCE */
+#endif /* APR_HAS_UNICODE_FS */
+    return APR_ENOTIMPL;
 }
 
 APR_DECLARE(apr_status_t) apr_proc_wait(apr_proc_t *proc,

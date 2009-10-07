@@ -49,6 +49,7 @@
 #include "gdb_assert.h"
 #include "block.h"
 #include "observer.h"
+#include "libbfd.h"
 /* APPLE LOCAL for objfile_changed */
 #include "objc-lang.h"
 /* APPLE LOCAL exceptions */
@@ -56,6 +57,7 @@
 #include "exec.h"
 #include "macosx/macosx-nat-inferior.h"
 #include "macosx/macosx-nat-utils.h" /* For macosx_filename_in_bundle.  */
+#include "mach-o.h"
 #include "osabi.h" /* For gdbarch_lookup_osabi.  */
 
 #include <sys/types.h>
@@ -182,6 +184,9 @@ static int simple_overlay_update_1 (struct obj_section *);
 static void add_filename_language (char *ext, enum language lang);
 
 static void info_ext_lang_command (char *args, int from_tty);
+
+/* APPLE LOCAL */
+static void add_dsym_command (char *args, int from_tty);
 
 static char *find_separate_debug_file (struct objfile *objfile);
 /* This is kind of a hack.  There are too many layers going through
@@ -749,6 +754,48 @@ syms_from_objfile (struct objfile *objfile,
   gdb_assert (! (addrs && offsets));
 
   init_entry_point_info (objfile);
+
+  /* The objfile might slide and so the entry point info from the bfd
+     might be wrong.  */
+  if (objfile->ei.entry_point != ~(CORE_ADDR) 0
+      && objfile->ei.entry_point != 0)
+    {
+      if (offsets != NULL)
+	{
+	  struct obj_section *s;
+	  int found = 0;
+
+	  /* Look the section up directly in this objfile, since you
+	     wouldn't want to find it in another one that overlapped
+	     this one.  */
+	  ALL_OBJFILE_OSECTIONS (objfile, s)
+	    {
+	      if (s->addr <= objfile->ei.entry_point 
+		  && objfile->ei.entry_point < s->endaddr)
+		{
+		  found = 1;
+		  break;
+		}
+	    }
+
+	  /* If we didn't find the section I'm just going to leave the
+	     start address alone.  I don't know what it would mean for
+	     the start address not to be in its objfile's sections.  */
+	  if (found)
+	    objfile->ei.entry_point += ANOFFSET (offsets, s->the_bfd_section->index);
+	}
+      else if (addrs != NULL)
+	{
+	  /* FIXME: When this gets run from dyld_load_symfile_internal
+	     we get an addrs array with no names.  That code should really
+	     use offsets not addrs since it's not taking advantage of the
+	     only point of the addrs - than names...  But I don't want to
+	     muck with that right now, so I'll assume a rigid offset.  */
+	  if (addrs->addrs_are_offsets == 1 && addrs->num_sections > 0)
+	      objfile->ei.entry_point += addrs->other[0].addr;
+	}
+    }
+
   find_sym_fns (objfile);
 
   if (objfile->sf == NULL)
@@ -1087,23 +1134,15 @@ add_objfile_prefix (struct objfile *objfile, const char* name)
 {
   char* prefixed_name;
   size_t prefixed_name_length;
-  char leading_char;
   /* Check to see if we need to add a prefix?  */
   if (name && name[0] && objfile && objfile->prefix && objfile->prefix[0])
     {
-      leading_char = bfd_get_symbol_leading_char (objfile->obfd);
-      if (leading_char == name[0])
-	name++;
-
       /* Get length for leading char, prefix, name and NULL terminator.  */
-      prefixed_name_length = 1 + strlen (objfile->prefix) + strlen (name) + 1;
+      prefixed_name_length = strlen (objfile->prefix) + strlen (name) + 1;
       prefixed_name = (char*) obstack_alloc (&objfile->objfile_obstack,
 					     prefixed_name_length);
 
-      sprintf (prefixed_name, "%c%s%s", 
-	       bfd_get_symbol_leading_char (objfile->obfd), 
-	       objfile->prefix, 
-	       name);
+      sprintf (prefixed_name, "%s%s", objfile->prefix, name);
 
       return prefixed_name;		
     }
@@ -1153,6 +1192,7 @@ append_psymbols_as_msymbols (struct objfile *objfile)
   struct cleanup *back_to;
   int add_prefix = objfile->prefix && objfile->prefix[0];
   /* Initialize a new block of msymbols and create a cleanup.  */
+  
   init_minimal_symbol_collection ();
   back_to = make_cleanup_discard_minimal_symbols ();
 
@@ -1299,7 +1339,7 @@ struct dbxread_symloc
       1. The kext bundle executable, output by ld -r but whose addresses
          are all 0-based, i.e. not final.
       2. The dSYM for the kext bundle which also has 0-based addresses.
-      3. The kextload-generated symbol file when the kext is linked and
+      3. The kextutil-generated symbol file when the kext is linked and
          loaded into the kernel.  The debug map in this executable has
          the correct final addresses.
 
@@ -1366,7 +1406,7 @@ replace_psymbols_with_correct_psymbols (struct objfile *exe_obj)
                                SYMBOL_DOMAIN (*psym),
                                SYMBOL_CLASS (*psym),
                                &dsym_pst->objfile->global_psymbols,
-                               SYMBOL_VALUE (*psym),
+                               0,
                                SYMBOL_VALUE_ADDRESS (*psym),
                                SYMBOL_LANGUAGE (*psym),
                                dsym_pst->objfile);
@@ -1383,7 +1423,7 @@ replace_psymbols_with_correct_psymbols (struct objfile *exe_obj)
                                SYMBOL_DOMAIN (*psym),
                                SYMBOL_CLASS (*psym),
                                &dsym_pst->objfile->static_psymbols,
-                               SYMBOL_VALUE (*psym),
+                               0,
                                SYMBOL_VALUE_ADDRESS (*psym),
                                SYMBOL_LANGUAGE (*psym),
                                dsym_pst->objfile);
@@ -1452,7 +1492,8 @@ symbol_file_add_with_addrs_or_offsets_using_objfile (struct objfile *in_objfile,
     objfile = allocate_objfile (abfd, flags, symflags, mapaddr, prefix);
   else 
     {
-      allocate_objfile_using_objfile (in_objfile, abfd, flags, symflags, mapaddr, prefix);
+      allocate_objfile_using_objfile (in_objfile, abfd, flags, symflags, 
+                                      mapaddr, prefix);
       objfile = in_objfile;
     }
   discard_cleanups (my_cleanups);
@@ -1517,15 +1558,16 @@ symbol_file_add_with_addrs_or_offsets_using_objfile (struct objfile *in_objfile,
 	  /* Don't bother to make the debug_objfile if the UUID's don't
 	     match.  */
 	  if (objfile->not_loaded_kext_filename)
-	    /* FIXME will kextload -s copy the uuid over to the output
+	    /* FIXME will kextutil -s copy the uuid over to the output
 	       binary?  Drop it?  Modify it?  That will determine what
-	       should be done here.  Right now kextload drops it.  
+	       should be done here.  Right now kextutil drops it.  
 	       NB we have the original unloaded kext over in
 	       objfile->not_loaded_kext_filename and we could try to
 	       match that file's UUID with the dSYM's.  */
 	    uuid_matches = 1;
 	  else
-	    uuid_matches = check_bfd_for_matching_uuid (objfile->obfd, debug_bfd);
+	    uuid_matches = check_bfd_for_matching_uuid (objfile->obfd, 
+                                                        debug_bfd);
 
 	  if (uuid_matches)
 	    {
@@ -1535,13 +1577,19 @@ symbol_file_add_with_addrs_or_offsets_using_objfile (struct objfile *in_objfile,
                  all the changes through for that right now.  Note, if we've 
                  called into here, we're using offsets, not the addrs_to_use, 
                  so NULL that out.  */
-	      macho_calculate_offsets_for_dsym (objfile, debug_bfd, addrs_to_use, offsets, num_offsets,
-						&sym_offsets, &num_sym_offsets);
+              /* Don't calculate the offset between the executable and the dSYM
+                 if we're dealing with a kext - we'll fix each symbol's address
+                 individually.  */
+              if (not_loaded_kext_bundle == 0)
+	        macho_calculate_offsets_for_dsym (objfile, debug_bfd, 
+                                             addrs_to_use, offsets, num_offsets,
+					     &sym_offsets, &num_sym_offsets);
 	      addrs_to_use = NULL;
 #endif /* TM_NEXTSTEP */
 	      
 	      objfile->separate_debug_objfile
-		= symbol_file_add_with_addrs_or_offsets_using_objfile (objfile->separate_debug_objfile,
+		= symbol_file_add_with_addrs_or_offsets_using_objfile 
+                                               (objfile->separate_debug_objfile,
 					       debug_bfd, from_tty, 
 					       addrs_to_use, 
 					       sym_offsets, num_sym_offsets, 0, 
@@ -1619,11 +1667,11 @@ symbol_file_add_with_addrs_or_offsets_using_objfile (struct objfile *in_objfile,
      in case it has been stripped. Stepping is very unhappy without 
      msymbols.  */
   if (objfile->separate_debug_objfile)
-    append_psymbols_as_msymbols (objfile);
+    append_psymbols_as_msymbols (objfile);  
 
   /* If OBJFILE is a kext binary that has final linked addresses (i.e. is the
-     output of kextload) and we have a dSYM file (which has ld -r'ed addresses
-     but not kextload'ed addresses so they are not final/correct), copy the
+     output of kextutil) and we have a dSYM file (which has ld -r'ed addresses
+     but not kextutil'ed addresses so they are not final/correct), copy the
      psymtabs from OBJFILE which are based on the debug map entries into
      the OBJFILE->separate_debug_objfile and unlink the dSYM's original psymtab
      entries.  */
@@ -2712,16 +2760,16 @@ add_symbol_file_command (char *args, int from_tty)
 
   if (strstr (filename, ".dSYM"))
     {
-      if (address != NULL || flags != OBJF_USERLOADED || section_index != 0
-          || mapaddr != 0 || prefix != NULL)
+      /* If there's one argument (e.g. a filename), argcnt == 2 */
+      if (argcnt == 2)
         {
-          warning ("add-symbol-file doesn't work on dSYM files, use "
-                   "\"add-dsym\" instead.");
+          add_dsym_command (args, from_tty);
+          return;
         }
       else
         {
-          add_dsym_command (filename, from_tty);
-          return;
+          warning ("add-symbol-file doesn't work on dSYM files, use "
+                   "\"add-dsym\" instead.");
         }
     }
 
@@ -2784,7 +2832,7 @@ add_symbol_file_command (char *args, int from_tty)
   update_section_tables ();
 #endif
   update_current_target ();
-  breakpoint_update ();
+  re_enable_breakpoints_in_shlibs (0);
 
   /* Getting new symbols may change our opinion about what is
      frameless.  */
@@ -2796,7 +2844,7 @@ add_symbol_file_command (char *args, int from_tty)
    specifically for the oddness that is kexts.  In the kext case we have
    three components that we need to juggle:
 
-     1. The output symbol file from kextload -a/-s which has the final
+     1. The output symbol file from kextutil -a/-s which has the final
         addresses that the kext loaded at 
         (e.g. "com.osxbook.kext.DummySysctl.sym"), 
      2. The kext bundle with an Info.plist and executable inside 
@@ -2805,7 +2853,7 @@ add_symbol_file_command (char *args, int from_tty)
      3. The companion dSYM to the kext bundle (e.g. "DummySysctl.kext.dSYM")
 
    kexts are unusual in that the kext bundle and dSYM do not have the actual
-   final addresses -- kextload has a linker ("libkld") inside which may do
+   final addresses -- kextutil has a linker ("libkld") inside which may do
    more linkery things than simply applying a static offset to all the 
    symbols.  We need file #1 because it has the final addresses of all the
    symbols; we need file #3 because it has the DWARF debug information.  Less
@@ -2825,7 +2873,7 @@ add_kext_command (char *args, int from_tty)
   char *kext_bundle_filename;
   const char *bundle_executable_name_from_plist;
   const char *bundle_identifier_name_from_plist;
-  char *kextload_symbol_filename;
+  char *kextload_symbol_filename, *kextload_symbol_basename;
   char *kext_bundle_executable_filename;
   char *t;
 
@@ -2834,7 +2882,7 @@ add_kext_command (char *args, int from_tty)
     "Usage: add-kext <PATHNAME-OF-KEXT>\n"
     "PATHNAME-OF-KEXT is the path to the .kext bundle directory which has an\n"
     "Info.plist file in its Contents subdirectory.  The .sym file (output from\n"
-    "kextload) should be a sibling of the .kext bundle and the kext bundle's\n"
+    "kextutil) should be a sibling of the .kext bundle and the kext bundle's\n"
     "dSYM bundle should also be in this drectory.";
 
   struct cleanup *my_cleanups = make_cleanup (null_cleanup, NULL);
@@ -2869,25 +2917,29 @@ add_kext_command (char *args, int from_tty)
   if (t == NULL)
     error (usage_string, "dirname on the kext bundle filename failed");
 
+  kextload_symbol_basename = xmalloc 
+             (strlen (bundle_identifier_name_from_plist) + strlen (".sym") + 1);
+  strcpy (kextload_symbol_basename, bundle_identifier_name_from_plist);
+  strcat (kextload_symbol_basename, ".sym");
+
   /* A string of "." means that KEXT_BUNDLE_FILENAME has no dirname 
      component. */
   if (t[0] == '.' && t[1] == '\0')
     {
-      kextload_symbol_filename = xmalloc 
-                     (strlen (bundle_identifier_name_from_plist) + 
-                      strlen (".sym") + 1);
-      strcpy (kextload_symbol_filename, bundle_identifier_name_from_plist);
-      strcat (kextload_symbol_filename, ".sym");
+      kextload_symbol_filename = kextload_symbol_basename;
+    }
+  else if (file_exists_p (kextload_symbol_basename))
+    {
+      kextload_symbol_filename = kextload_symbol_basename;
     }
   else
     {
       kextload_symbol_filename = xmalloc (strlen (t) + 1 + 
-                                strlen (bundle_identifier_name_from_plist) + 
-                                strlen (".sym") + 1);
+                                strlen (kextload_symbol_basename) + 1);
       strcpy (kextload_symbol_filename, t);
       strcat (kextload_symbol_filename, "/");
-      strcat (kextload_symbol_filename, bundle_identifier_name_from_plist);
-      strcat (kextload_symbol_filename, ".sym");
+      strcat (kextload_symbol_filename, kextload_symbol_basename);
+      xfree (kextload_symbol_basename);
     }
 
   /* By default we assume the .sym file is next to the .kext bundle - but
@@ -2975,7 +3027,7 @@ add_kext_command (char *args, int from_tty)
 /* APPLE LOCAL: This command adds the space-separated list of dSYMs
    pointed to by ARGS to the objfiles with matching UUIDs.  */
 
-void
+static void
 add_dsym_command (char *args, int from_tty)
 {
   struct objfile *objfile;
@@ -3204,6 +3256,13 @@ reread_symbols (void)
 	         to close the descriptor but BFD lacks a way of closing the
 	         BFD without closing the descriptor.  */
 	      obfd_filename = bfd_get_filename (objfile->obfd);
+
+	      /* APPLE LOCAL: Remember to remove its sections from the 
+		 target "to_sections".  Normally this is done in 
+		 free_objfile, but here we're remaking the objfile
+	         "in place" so we have to do it by hand.  */
+	      remove_target_sections (objfile->obfd);
+
 	      if (!bfd_close (objfile->obfd))
 		error (_("Can't close BFD for %s: %s"), objfile->name,
 		       bfd_errmsg (bfd_get_error ()));
@@ -3322,6 +3381,8 @@ reread_symbols (void)
  	      memset (objfile->section_offsets, 0, SIZEOF_N_SECTION_OFFSETS (num_offsets));
 
 	      objfile->num_sections = num_offsets;
+	      init_entry_point_info (objfile);
+
  	      objfile_relocate (objfile, offsets);
 
 	      /* What the hell is sym_new_init for, anyway?  The concept of
@@ -3331,6 +3392,13 @@ reread_symbols (void)
 		{
 		  (*objfile->sf->sym_new_init) (objfile);
 		}
+
+	      /* If the mtime has changed between the time we set new_modtime
+	         and now, we *want* this to be out of date, so don't call stat
+	         again now.  */
+	      objfile->mtime = new_modtime;
+	      reread_one = 1;
+              reread_separate_symbols (objfile);
 
 	      (*objfile->sf->sym_init) (objfile);
 	      clear_complaints (&symfile_complaints, 1, 1);
@@ -3353,17 +3421,14 @@ reread_symbols (void)
 	      /* Discard cleanups as symbol reading was successful.  */
 	      discard_cleanups (old_cleanups);
 
-	      /* If the mtime has changed between the time we set new_modtime
-	         and now, we *want* this to be out of date, so don't call stat
-	         again now.  */
-	      objfile->mtime = new_modtime;
-	      reread_one = 1;
-              reread_separate_symbols (objfile);
-
 	      /* APPLE LOCAL begin breakpoints */
 	      /* Finally, remember to call breakpoint_re_set with this
 		 objfile, so it will get on the change list.  */
 	      breakpoint_re_set (objfile);
+	      /* Also re-initialize the objc trampoline data in case it's the
+		 objc library that's either just been read in or has changed.  */
+	      if (objfile == find_libobjc_objfile ())
+		objc_init_trampoline_observer ();
 	      /* APPLE LOCAL end breakpoints */
 	    }
 	}
@@ -3508,9 +3573,9 @@ reread_separate_symbols (struct objfile *objfile)
       /* Don't bother to make the debug_objfile if the UUID's don't
 	 match.  */
       if (objfile->not_loaded_kext_filename)
-	/* FIXME will kextload -s copy the uuid over to the output
+	/* FIXME will kextutil -s copy the uuid over to the output
 	   binary?  Drop it?  Modify it?  That will determine what
-	   should be done here.  Right now kextload drops it.  
+	   should be done here.  Right now kextutil drops it.  
 	   NB we have the original unloaded kext over in
 	   objfile->not_loaded_kext_filename and we could try to
 	   match that file's UUID with the dSYM's.  */
@@ -4620,6 +4685,7 @@ find_pc_mapped_section (CORE_ADDR pc)
 	  return osect->the_bfd_section;
 	}
 
+  last_mapped_section_lookup_pc = INVALID_ADDRESS;
   cached_mapped_section = NULL;
   /* APPLE LOCAL end cache lookup values for improved performance  */
   return NULL;
@@ -4982,7 +5048,6 @@ static int
 simple_overlay_update_1 (struct obj_section *osect)
 {
   int i, size;
-  bfd *obfd = osect->objfile->obfd;
   asection *bsect = osect->the_bfd_section;
 
   size = bfd_get_section_size (osect->the_bfd_section);
@@ -5043,7 +5108,6 @@ simple_overlay_update (struct obj_section *osect)
     if (section_is_overlay (osect->the_bfd_section))
     {
       int i, size;
-      bfd *obfd = osect->objfile->obfd;
       asection *bsect = osect->the_bfd_section;
 
       size = bfd_get_section_size (bsect);
@@ -5114,7 +5178,8 @@ struct symbol_file_info {
   char *kext_bundle;
 };  
  
-int symbol_file_add_bfd_helper (char *v)
+int 
+symbol_file_add_bfd_helper (void *v)
 {
   struct symbol_file_info *s = (struct symbol_file_info *) v;
   s->result = symbol_file_add_with_addrs_or_offsets
@@ -5193,16 +5258,16 @@ struct bfd_file_info {
   bfd *result;
 };  
  
-int symfile_bfd_open_helper
-(char *v)
+int 
+symfile_bfd_open_helper (void *v)
 {
   struct bfd_file_info *s = (struct bfd_file_info *) v;
   s->result = symfile_bfd_open (s->filename, s->mainline);
   return 1;
 }
  
-bfd *symfile_bfd_open_safe
-(const char *filename, int mainline)
+bfd *
+symfile_bfd_open_safe (const char *filename, int mainline)
 {
   struct bfd_file_info s;
   int ret;
@@ -5345,7 +5410,7 @@ with the text.  SECT is a section name to be loaded at SECT_ADDR."),
 Usage: add-kext KEXTBUNDLE\n\
 Load the symbols from KEXTBUNDLE, where KEXTBUNDLE is the bundle directory\n\
 including a Contents/Info.plist file.  In the same directory you need the\n\
-output from kextload(8) -s/-a/etc which has the addresses where the kext\n\
+output from kextutil(8) -s/-a/etc which has the addresses where the kext\n\
 was loaded in the kernel and you need the .dSYM file in that directory as well.\n"),
 	       &cmdlist);
   set_cmd_completer (c, filename_completer);
@@ -5433,12 +5498,12 @@ cache."),
   /* APPLE LOCAL: For the add-kext command.  */
   add_setshow_optional_filename_cmd ("kext-symbol-file-path", class_support,
 				     &kext_symbol_file_path, _("\
-Set the directory where kextload-generated sym files are searched for."), _("\
-Show the directory where kextload-generated sym files are searched for."), _("\
-The kextload-generated sym file is first searched for in the same\n\
+Set the directory where kextutil-generated sym files are searched for."), _("\
+Show the directory where kextutil-generated sym files are searched for."), _("\
+The kextutil-generated sym file is first searched for in the same\n\
 directory as the kext bundle, then in the directory specified by \n\
 kext-symbol-file-path.  A common use would be to have kext-symbol-file-path\n\
-set to /tmp and the kextload-generated .sym files put in /tmp with the kext\n\
+set to /tmp and the kextutil-generated .sym files put in /tmp with the kext\n\
 bundle and dSYM in another location."),
 				     NULL,
 				     NULL,

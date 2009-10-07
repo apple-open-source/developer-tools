@@ -1,9 +1,9 @@
 /*
- * "$Id: pstops.c 6759 2007-08-02 04:10:23Z mike $"
+ * "$Id: pstops.c 7977 2008-09-23 23:44:33Z mike $"
  *
  *   PostScript filter for the Common UNIX Printing System (CUPS).
  *
- *   Copyright 2007 by Apple Inc.
+ *   Copyright 2007-2009 by Apple Inc.
  *   Copyright 1993-2007 by Easy Software Products.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -16,32 +16,36 @@
  *
  * Contents:
  *
- *   main()               - Main entry...
- *   add_page()           - Add a page to the pages array...
+ *   main()               - Main entry.
+ *   add_page()           - Add a page to the pages array.
  *   cancel_job()         - Flag the job as canceled.
  *   check_range()        - Check to see if the current page is selected for
- *   copy_bytes()         - Copy bytes from the input file to stdout...
- *   copy_comments()      - Copy all of the comments section...
- *   copy_dsc()           - Copy a DSC-conforming document...
- *   copy_non_dsc()       - Copy a document that does not conform to the DSC...
- *   copy_page()          - Copy a page description...
- *   copy_prolog()        - Copy the document prolog section...
- *   copy_setup()         - Copy the document setup section...
- *   copy_trailer()       - Copy the document trailer...
- *   do_prolog()          - Send the necessary document prolog commands...
- *   do_setup()           - Send the necessary document setup commands...
+ *                          printing.
+ *   copy_bytes()         - Copy bytes from the input file to stdout.
+ *   copy_comments()      - Copy all of the comments section.
+ *   copy_dsc()           - Copy a DSC-conforming document.
+ *   copy_non_dsc()       - Copy a document that does not conform to the DSC.
+ *   copy_page()          - Copy a page description.
+ *   copy_prolog()        - Copy the document prolog section.
+ *   copy_setup()         - Copy the document setup section.
+ *   copy_trailer()       - Copy the document trailer.
+ *   do_prolog()          - Send the necessary document prolog commands.
+ *   do_setup()           - Send the necessary document setup commands.
  *   doc_printf()         - Send a formatted string to stdout and/or the temp
  *                          file.
  *   doc_puts()           - Send a nul-terminated string to stdout and/or the
  *                          temp file.
  *   doc_write()          - Send data to stdout and/or the temp file.
- *   end_nup()            - End processing for N-up printing...
+ *   end_nup()            - End processing for N-up printing.
  *   include_feature()    - Include a printer option/feature command.
- *   parse_text()         - Parse a text value in a comment...
- *   set_pstops_options() - Set pstops options...
- *   skip_page()          - Skip past a page that won't be printed...
- *   start_nup()          - Start processing for N-up printing...
+ *   parse_text()         - Parse a text value in a comment.
+ *   set_pstops_options() - Set pstops options.
+ *   skip_page()          - Skip past a page that won't be printed.
+ *   start_nup()          - Start processing for N-up printing.
+ *   write_label_prolog() - Write the prolog with the classification and page
+ *                          label.
  *   write_labels()       - Write the actual page labels.
+ *   write_options()      - Write options provided via %%IncludeFeature.
  */
 
 /*
@@ -164,27 +168,27 @@ static void		cancel_job(int sig);
 static int		check_range(pstops_doc_t *doc, int page);
 static void		copy_bytes(cups_file_t *fp, off_t offset,
 			           size_t length);
-static size_t		copy_comments(cups_file_t *fp, pstops_doc_t *doc,
+static ssize_t		copy_comments(cups_file_t *fp, pstops_doc_t *doc,
 			              ppd_file_t *ppd, char *line,
-				      size_t linelen, size_t linesize);
+				      ssize_t linelen, size_t linesize);
 static void		copy_dsc(cups_file_t *fp, pstops_doc_t *doc,
-			         ppd_file_t *ppd, char *line, size_t linelen,
+			         ppd_file_t *ppd, char *line, ssize_t linelen,
 				 size_t linesize);
 static void		copy_non_dsc(cups_file_t *fp, pstops_doc_t *doc,
 			             ppd_file_t *ppd, char *line,
-				     size_t linelen, size_t linesize);
-static size_t		copy_page(cups_file_t *fp, pstops_doc_t *doc,
+				     ssize_t linelen, size_t linesize);
+static ssize_t		copy_page(cups_file_t *fp, pstops_doc_t *doc,
 			          ppd_file_t *ppd, int number, char *line,
-				  size_t linelen, size_t linesize);
-static size_t		copy_prolog(cups_file_t *fp, pstops_doc_t *doc,
+				  ssize_t linelen, size_t linesize);
+static ssize_t		copy_prolog(cups_file_t *fp, pstops_doc_t *doc,
 			            ppd_file_t *ppd, char *line,
-				    size_t linelen, size_t linesize);
-static size_t		copy_setup(cups_file_t *fp, pstops_doc_t *doc,
+				    ssize_t linelen, size_t linesize);
+static ssize_t		copy_setup(cups_file_t *fp, pstops_doc_t *doc,
 			           ppd_file_t *ppd, char *line,
-				   size_t linelen, size_t linesize);
-static size_t		copy_trailer(cups_file_t *fp, pstops_doc_t *doc,
+				   ssize_t linelen, size_t linesize);
+static ssize_t		copy_trailer(cups_file_t *fp, pstops_doc_t *doc,
 			             ppd_file_t *ppd, int number, char *line,
-				     size_t linelen, size_t linesize);
+				     ssize_t linelen, size_t linesize);
 static void		do_prolog(pstops_doc_t *doc, ppd_file_t *ppd);
 static void 		do_setup(pstops_doc_t *doc, ppd_file_t *ppd);
 static void		doc_printf(pstops_doc_t *doc, const char *format, ...)
@@ -203,7 +207,7 @@ static char		*parse_text(const char *start, char **end, char *buffer,
 static void		set_pstops_options(pstops_doc_t *doc, ppd_file_t *ppd,
 			                   char *argv[], int num_options,
 			                   cups_option_t *options);
-static size_t		skip_page(cups_file_t *fp, char *line, size_t linelen,
+static ssize_t		skip_page(cups_file_t *fp, char *line, ssize_t linelen,
 				  size_t linesize);
 static void		start_nup(pstops_doc_t *doc, int number,
 				  int show_border, const int *bounding_box);
@@ -211,10 +215,12 @@ static void		write_label_prolog(pstops_doc_t *doc, const char *label,
 			                   float bottom, float top,
 					   float width);
 static void		write_labels(pstops_doc_t *doc, int orient);
+static void		write_options(pstops_doc_t  *doc, ppd_file_t *ppd,
+			              int num_options, cups_option_t *options);
 
 
 /*
- * 'main()' - Main entry...
+ * 'main()' - Main entry.
  */
 
 int					/* O - Exit status */
@@ -245,8 +251,9 @@ main(int  argc,				/* I - Number of command-line args */
 
   if (argc < 6 || argc > 7)
   {
-    fprintf(stderr, _("Usage: %s job-id user title copies options [file]\n"),
-            argv[0]);
+    _cupsLangPrintf(stderr,
+                    _("Usage: %s job-id user title copies options [file]\n"),
+                    argv[0]);
     return (1);
   }
 
@@ -281,8 +288,8 @@ main(int  argc,				/* I - Number of command-line args */
 
     if ((fp = cupsFileOpen(argv[6], "r")) == NULL)
     {
-      fprintf(stderr, _("ERROR: Unable to open file \"%s\" - %s\n"),
-              argv[6], strerror(errno));
+      _cupsLangPrintf(stderr, _("ERROR: Unable to open file \"%s\" - %s\n"),
+                      argv[6], strerror(errno));
       return (1);
     }
   }
@@ -293,7 +300,7 @@ main(int  argc,				/* I - Number of command-line args */
 
   if ((len = cupsFileGetLine(fp, line, sizeof(line))) == 0)
   {
-    fputs(_("ERROR: Empty print file!\n"), stderr);
+    _cupsLangPuts(stderr, _("ERROR: Empty print file!\n"));
     return (1);
   }
 
@@ -412,7 +419,7 @@ main(int  argc,				/* I - Number of command-line args */
 
 
 /*
- * 'add_page()' - Add a page to the pages array...
+ * 'add_page()' - Add a page to the pages array.
  */
 
 static pstops_page_t *			/* O - New page info object */
@@ -427,15 +434,17 @@ add_page(pstops_doc_t *doc,		/* I - Document information */
 
   if (!doc->pages)
   {
-    fprintf(stderr, _("EMERG: Unable to allocate memory for pages array: %s\n"),
-            strerror(errno));
+    _cupsLangPrintf(stderr,
+                    _("EMERG: Unable to allocate memory for pages array: %s\n"),
+                    strerror(errno));
     exit(1);
   }
 
   if ((pageinfo = calloc(1, sizeof(pstops_page_t))) == NULL)
   {
-    fprintf(stderr, _("EMERG: Unable to allocate memory for page info: %s\n"),
-            strerror(errno));
+    _cupsLangPrintf(stderr,
+                    _("EMERG: Unable to allocate memory for page info: %s\n"),
+                    strerror(errno));
     exit(1);
   }
 
@@ -530,7 +539,7 @@ check_range(pstops_doc_t *doc,		/* I - Document information */
 
 
 /*
- * 'copy_bytes()' - Copy bytes from the input file to stdout...
+ * 'copy_bytes()' - Copy bytes from the input file to stdout.
  */
 
 static void
@@ -547,13 +556,13 @@ copy_bytes(cups_file_t *fp,		/* I - File to read from */
 
   if (cupsFileSeek(fp, offset) < 0)
   {
-    fprintf(stderr,
+    _cupsLangPrintf(stderr,
 #ifdef HAVE_LONG_LONG
-            _("ERROR: Unable to seek to offset %lld in file - %s\n"),
+		    _("ERROR: Unable to seek to offset %lld in file - %s\n"),
 #else
-            _("ERROR: Unable to seek to offset %ld in file - %s\n"),
+		    _("ERROR: Unable to seek to offset %ld in file - %s\n"),
 #endif /* HAVE_LONG_LONG */
-            CUPS_LLCAST offset, strerror(errno));
+		    CUPS_LLCAST offset, strerror(errno));
     return;
   }
 
@@ -575,18 +584,18 @@ copy_bytes(cups_file_t *fp,		/* I - File to read from */
 
 
 /*
- * 'copy_comments()' - Copy all of the comments section...
+ * 'copy_comments()' - Copy all of the comments section.
  *
  * This function expects "line" to be filled with a comment line.
  * On return, "line" will contain the next line in the file, if any.
  */
 
-static size_t				/* O - Length of next line */
+static ssize_t				/* O - Length of next line */
 copy_comments(cups_file_t  *fp,		/* I - File to read from */
               pstops_doc_t *doc,	/* I - Document info */
 	      ppd_file_t   *ppd,	/* I - PPD file */
               char         *line,	/* I - Line buffer */
-	      size_t       linelen,	/* I - Length of initial line */
+	      ssize_t      linelen,	/* I - Length of initial line */
 	      size_t       linesize)	/* I - Size of line buffer */
 {
   int	saw_bounding_box,		/* Saw %%BoundingBox: comment? */
@@ -636,7 +645,7 @@ copy_comments(cups_file_t  *fp,		/* I - File to read from */
 
 
       if (saw_pages)
-        fputs(_("ERROR: Duplicate %%Pages: comment seen!\n"), stderr);
+        _cupsLangPuts(stderr, _("ERROR: Duplicate %%Pages: comment seen!\n"));
 
       saw_pages = 1;
 
@@ -683,7 +692,8 @@ copy_comments(cups_file_t  *fp,		/* I - File to read from */
     else if (!strncmp(line, "%%BoundingBox:", 14))
     {
       if (saw_bounding_box)
-        fputs(_("ERROR: Duplicate %%BoundingBox: comment seen!\n"), stderr);
+        _cupsLangPuts(stderr,
+	              _("ERROR: Duplicate %%BoundingBox: comment seen!\n"));
       else if (strstr(line + 14, "(atend)"))
       {
        /*
@@ -694,7 +704,7 @@ copy_comments(cups_file_t  *fp,		/* I - File to read from */
 	              doc->bounding_box + 1, doc->bounding_box + 2,
 		      doc->bounding_box + 3) != 4)
       {
-	fputs(_("ERROR: Bad %%BoundingBox: comment seen!\n"), stderr);
+	_cupsLangPuts(stderr, _("ERROR: Bad %%BoundingBox: comment seen!\n"));
 
 	doc->bounding_box[0] = (int)PageLeft;
 	doc->bounding_box[1] = (int)PageBottom;
@@ -746,10 +756,10 @@ copy_comments(cups_file_t  *fp,		/* I - File to read from */
   }
 
   if (!saw_bounding_box)
-    fputs(_("ERROR: No %%BoundingBox: comment in header!\n"), stderr);
+    _cupsLangPuts(stderr, _("ERROR: No %%BoundingBox: comment in header!\n"));
 
   if (!saw_pages)
-    fputs(_("ERROR: No %%Pages: comment in header!\n"), stderr);
+    _cupsLangPuts(stderr, _("ERROR: No %%Pages: comment in header!\n"));
 
   if (!saw_for)
     WriteTextComment("For", doc->user);
@@ -799,7 +809,7 @@ copy_comments(cups_file_t  *fp,		/* I - File to read from */
 
 
 /*
- * 'copy_dsc()' - Copy a DSC-conforming document...
+ * 'copy_dsc()' - Copy a DSC-conforming document.
  *
  * This function expects "line" to be filled with the %!PS-Adobe comment line.
  */
@@ -809,7 +819,7 @@ copy_dsc(cups_file_t  *fp,		/* I - File to read from */
          pstops_doc_t *doc,		/* I - Document info */
          ppd_file_t   *ppd,		/* I - PPD file */
 	 char         *line,		/* I - Line buffer */
-	 size_t       linelen,		/* I - Length of initial line */
+	 ssize_t      linelen,		/* I - Length of initial line */
 	 size_t       linesize)		/* I - Size of line buffer */
 {
   int		number;			/* Page number */
@@ -889,7 +899,8 @@ copy_dsc(cups_file_t  *fp,		/* I - File to read from */
   * Finish up the last page(s)...
   */
 
-  if (number && is_not_last_page(number) && cupsArrayLast(doc->pages))
+  if (number && is_not_last_page(number) && cupsArrayLast(doc->pages) &&
+      check_range(doc, (number - 1) / doc->number_up + 1))
   {
     pageinfo = (pstops_page_t *)cupsArrayLast(doc->pages);
 
@@ -930,7 +941,7 @@ copy_dsc(cups_file_t  *fp,		/* I - File to read from */
 
   number = doc->slow_order ? 0 : doc->page;
 
-  if (doc->temp && !JobCanceled)
+  if (doc->temp && !JobCanceled && cupsArrayCount(doc->pages) > 0)
   {
     int	copy;				/* Current copy */
 
@@ -947,7 +958,12 @@ copy_dsc(cups_file_t  *fp,		/* I - File to read from */
     * Make the copies...
     */
 
-    for (copy = !doc->slow_order; copy < doc->copies; copy ++)
+    if (doc->slow_collate)
+      copy = !doc->slow_order;
+    else
+      copy = doc->copies - 1;
+
+    for (; copy < doc->copies; copy ++)
     {
       if (JobCanceled)
 	break;
@@ -1011,7 +1027,8 @@ copy_dsc(cups_file_t  *fp,		/* I - File to read from */
         number ++;
 
 	if (!ppd || !ppd->num_filters)
-	  fprintf(stderr, "PAGE: %d 1\n", number);
+	  fprintf(stderr, "PAGE: %d %d\n", number,
+	          doc->slow_collate ? 1 : doc->copies);
 
 	if (doc->number_up > 1)
 	{
@@ -1047,12 +1064,12 @@ copy_dsc(cups_file_t  *fp,		/* I - File to read from */
   */
 
   if (!JobCanceled)
-    linelen = copy_trailer(fp, doc, ppd, number, line, linelen, linesize);
+    copy_trailer(fp, doc, ppd, number, line, linelen, linesize);
 }
 
 
 /*
- * 'copy_non_dsc()' - Copy a document that does not conform to the DSC...
+ * 'copy_non_dsc()' - Copy a document that does not conform to the DSC.
  *
  * This function expects "line" to be filled with the %! comment line.
  */
@@ -1062,7 +1079,7 @@ copy_non_dsc(cups_file_t  *fp,		/* I - File to read from */
              pstops_doc_t *doc,		/* I - Document info */
              ppd_file_t   *ppd,		/* I - PPD file */
 	     char         *line,	/* I - Line buffer */
-	     size_t       linelen,	/* I - Length of initial line */
+	     ssize_t      linelen,	/* I - Length of initial line */
 	     size_t       linesize)	/* I - Size of line buffer */
 {
   int	copy;				/* Current copy */
@@ -1075,8 +1092,10 @@ copy_non_dsc(cups_file_t  *fp,		/* I - File to read from */
   * that may not print correctly...
   */
 
-  fputs(_("WARNING: This document does not conform to the Adobe Document "
-          "Structuring Conventions and may not print correctly!\n"), stderr);
+  _cupsLangPuts(stderr,
+                _("WARNING: This document does not conform to the Adobe "
+		  "Document Structuring Conventions and may not print "
+		  "correctly!\n"));
 
  /*
   * Then write a standard DSC comment section...
@@ -1232,19 +1251,19 @@ copy_non_dsc(cups_file_t  *fp,		/* I - File to read from */
 
 
 /*
- * 'copy_page()' - Copy a page description...
+ * 'copy_page()' - Copy a page description.
  *
  * This function expects "line" to be filled with a %%Page comment line.
  * On return, "line" will contain the next line in the file, if any.
  */
 
-static size_t				/* O - Length of next line */
+static ssize_t				/* O - Length of next line */
 copy_page(cups_file_t  *fp,		/* I - File to read from */
           pstops_doc_t *doc,		/* I - Document info */
           ppd_file_t   *ppd,		/* I - PPD file */
 	  int          number,		/* I - Current page number */
 	  char         *line,		/* I - Line buffer */
-	  size_t       linelen,		/* I - Length of initial line */
+	  ssize_t      linelen,		/* I - Length of initial line */
 	  size_t       linesize)	/* I - Size of line buffer */
 {
   char		label[256],		/* Page label string */
@@ -1252,6 +1271,7 @@ copy_page(cups_file_t  *fp,		/* I - File to read from */
   int		level;			/* Embedded document level */
   pstops_page_t	*pageinfo;		/* Page information */
   int		first_page;		/* First page on N-up output? */
+  int		has_page_setup;		/* Does the page have %%Begin/EndPageSetup? */
   int		bounding_box[4];	/* PageBoundingBox */
 
 
@@ -1263,13 +1283,13 @@ copy_page(cups_file_t  *fp,		/* I - File to read from */
 
   if (!parse_text(line + 7, &ptr, label, sizeof(label)))
   {
-    fputs(_("ERROR: Bad %%Page: comment in file!\n"), stderr);
+    _cupsLangPuts(stderr, _("ERROR: Bad %%Page: comment in file!\n"));
     label[0] = '\0';
     number   = doc->page;
   }
   else if (strtol(ptr, &ptr, 10) == LONG_MAX || !isspace(*ptr & 255))
   {
-    fputs(_("ERROR: Bad %%Page: comment in file!\n"), stderr);
+    _cupsLangPuts(stderr, _("ERROR: Bad %%Page: comment in file!\n"));
     number = doc->page;
   }
 
@@ -1339,7 +1359,8 @@ copy_page(cups_file_t  *fp,		/* I - File to read from */
                  bounding_box + 1, bounding_box + 2,
 		 bounding_box + 3) != 4)
       {
-        fputs(_("ERROR: Bad %%PageBoundingBox: comment in file!\n"), stderr);
+        _cupsLangPuts(stderr,
+	              _("ERROR: Bad %%PageBoundingBox: comment in file!\n"));
         memcpy(bounding_box, doc->bounding_box,
 	       sizeof(bounding_box));
       }
@@ -1499,60 +1520,65 @@ copy_page(cups_file_t  *fp,		/* I - File to read from */
   */
 
   if (first_page)
+    doc_puts(doc, "%%BeginPageSetup\n");
+
+  if ((has_page_setup = !strncmp(line, "%%BeginPageSetup", 16)) != 0)
+  {
+    int	feature = 0;			/* In a Begin/EndFeature block? */
+
+    while ((linelen = cupsFileGetLine(fp, line, linesize)) > 0)
+    {
+      if (!strncmp(line, "%%EndPageSetup", 14))
+	break;
+      else if (!strncmp(line, "%%BeginFeature:", 15))
+      {
+	feature = 1;
+
+	if (doc->number_up > 1 || doc->fitplot)
+	  continue;
+      }
+      else if (!strncmp(line, "%%EndFeature", 12))
+      {
+	feature = 0;
+
+	if (doc->number_up > 1 || doc->fitplot)
+	  continue;
+      }
+      else if (!strncmp(line, "%%IncludeFeature:", 17))
+      {
+	pageinfo->num_options = include_feature(ppd, line,
+						pageinfo->num_options,
+						&(pageinfo->options));
+	continue;
+      }
+      else if (!strncmp(line, "%%Include", 9))
+	continue;
+
+      if (line[0] != '%' && !feature)
+        break;
+
+      if (!feature || (doc->number_up == 1 && !doc->fitplot))
+	doc_write(doc, line, linelen);
+    }
+
+   /*
+    * Skip %%EndPageSetup...
+    */
+
+    if (linelen > 0 && !strncmp(line, "%%EndPageSetup", 14))
+    {
+      linelen        = cupsFileGetLine(fp, line, linesize);
+      has_page_setup = 0;
+    }
+  }
+
+  if (first_page)
   {
     char	*page_setup;		/* PageSetup commands to send */
 
 
-    doc_puts(doc, "%%BeginPageSetup\n");
-
     if (pageinfo->num_options > 0)
-    {
-      int		i;		/* Looping var */
-      ppd_option_t	*option;	/* PPD option */
-      int		min_order;	/* Minimum OrderDependency value */
-      char		*doc_setup,	/* DocumentSetup commands to send */
-			*any_setup;	/* AnySetup commands to send */
-
-
-     /*
-      * Yes, figure out the minimum OrderDependency value...
-      */
-
-      if ((option = ppdFindOption(ppd, "PageRegion")) != NULL)
-	min_order = option->order;
-      else
-	min_order = 999.0f;
-
-      for (i = 0; i < pageinfo->num_options; i ++)
-	if ((option = ppdFindOption(ppd, pageinfo->options[i].name)) != NULL &&
-            option->order < min_order)
-          min_order = option->order;
-
-     /*
-      * Mark and extract them...
-      */
-
-      cupsMarkOptions(ppd, pageinfo->num_options, pageinfo->options);
-
-      doc_setup = ppdEmitString(ppd, PPD_ORDER_DOCUMENT, min_order);
-      any_setup = ppdEmitString(ppd, PPD_ORDER_ANY, min_order);
-
-     /*
-      * Then send them out...
-      */
-
-      if (doc_setup)
-      {
-	doc_puts(doc, doc_setup);
-	free(doc_setup);
-      }
-
-      if (any_setup)
-      {
-	doc_puts(doc, any_setup);
-	free(any_setup);
-      }
-    }
+      write_options(doc, ppd, pageinfo->num_options, pageinfo->options);
 
    /*
     * Output commands for the current page...
@@ -1574,34 +1600,35 @@ copy_page(cups_file_t  *fp,		/* I - File to read from */
   start_nup(doc, number, 1, bounding_box);
 
  /*
-  * Copy page setup commands as needed...
+  * Finish the PageSetup section as needed...
   */
 
-  if (!strncmp(line, "%%BeginPageSetup", 16))
+  if (has_page_setup)
   {
     int	feature = 0;			/* In a Begin/EndFeature block? */
 
+    doc_write(doc, line, linelen);
 
     while ((linelen = cupsFileGetLine(fp, line, linesize)) > 0)
     {
       if (!strncmp(line, "%%EndPageSetup", 14))
-        break;
+	break;
       else if (!strncmp(line, "%%BeginFeature:", 15))
       {
-        feature = 1;
+	feature = 1;
 
 	if (doc->number_up > 1 || doc->fitplot)
 	  continue;
       }
       else if (!strncmp(line, "%%EndFeature", 12))
       {
-        feature = 0;
+	feature = 0;
 
 	if (doc->number_up > 1 || doc->fitplot)
 	  continue;
       }
       else if (!strncmp(line, "%%Include", 9))
-        continue;
+	continue;
 
       if (!feature || (doc->number_up == 1 && !doc->fitplot))
 	doc_write(doc, line, linelen);
@@ -1611,13 +1638,9 @@ copy_page(cups_file_t  *fp,		/* I - File to read from */
     * Skip %%EndPageSetup...
     */
 
-    if (linelen > 0)
+    if (linelen > 0 && !strncmp(line, "%%EndPageSetup", 14))
       linelen = cupsFileGetLine(fp, line, linesize);
   }
-
- /*
-  * Finish the PageSetup section as needed...
-  */
 
   if (first_page)
     doc_puts(doc, "%%EndPageSetup\n");
@@ -1701,18 +1724,18 @@ copy_page(cups_file_t  *fp,		/* I - File to read from */
 
 
 /*
- * 'copy_prolog()' - Copy the document prolog section...
+ * 'copy_prolog()' - Copy the document prolog section.
  *
  * This function expects "line" to be filled with a %%BeginProlog comment line.
  * On return, "line" will contain the next line in the file, if any.
  */
 
-static size_t				/* O - Length of next line */
+static ssize_t				/* O - Length of next line */
 copy_prolog(cups_file_t  *fp,		/* I - File to read from */
             pstops_doc_t *doc,		/* I - Document info */
             ppd_file_t   *ppd,		/* I - PPD file */
 	    char         *line,		/* I - Line buffer */
-	    size_t       linelen,	/* I - Length of initial line */
+	    ssize_t      linelen,	/* I - Length of initial line */
 	    size_t       linesize)	/* I - Size of line buffer */
 {
   while (strncmp(line, "%%BeginProlog", 13))
@@ -1745,7 +1768,7 @@ copy_prolog(cups_file_t  *fp,		/* I - File to read from */
     if (!strncmp(line, "%%EndProlog", 11))
       linelen = cupsFileGetLine(fp, line, linesize);
     else
-      fputs(_("ERROR: Missing %%EndProlog!\n"), stderr);
+      _cupsLangPuts(stderr, _("ERROR: Missing %%EndProlog!\n"));
   }
 
   doc_puts(doc, "%%EndProlog\n");
@@ -1755,20 +1778,24 @@ copy_prolog(cups_file_t  *fp,		/* I - File to read from */
 
 
 /*
- * 'copy_setup()' - Copy the document setup section...
+ * 'copy_setup()' - Copy the document setup section.
  *
  * This function expects "line" to be filled with a %%BeginSetup comment line.
  * On return, "line" will contain the next line in the file, if any.
  */
 
-static size_t				/* O - Length of next line */
+static ssize_t				/* O - Length of next line */
 copy_setup(cups_file_t  *fp,		/* I - File to read from */
            pstops_doc_t *doc,		/* I - Document info */
            ppd_file_t   *ppd,		/* I - PPD file */
 	   char         *line,		/* I - Line buffer */
-	   size_t       linelen,	/* I - Length of initial line */
+	   ssize_t      linelen,	/* I - Length of initial line */
 	   size_t       linesize)	/* I - Size of line buffer */
 {
+  int		num_options;		/* Number of options */
+  cups_option_t	*options;		/* Options */
+
+
   while (strncmp(line, "%%BeginSetup", 12))
   {
     if (!strncmp(line, "%%Page:", 7))
@@ -1784,6 +1811,9 @@ copy_setup(cups_file_t  *fp,		/* I - File to read from */
   
   do_setup(doc, ppd);
 
+  num_options = 0;
+  options     = NULL;
+
   if (!strncmp(line, "%%BeginSetup", 12))
   {
     while (strncmp(line, "%%EndSetup", 10))
@@ -1797,8 +1827,7 @@ copy_setup(cups_file_t  *fp,		/* I - File to read from */
 	*/
 
         if (doc->number_up == 1 && !doc->fitplot)
-	  doc->num_options = include_feature(ppd, line, doc->num_options,
-                                             &(doc->options));
+	  num_options = include_feature(ppd, line, num_options, &options);
       }
       else if (strncmp(line, "%%BeginSetup", 12))
         doc_write(doc, line, linelen);
@@ -1810,7 +1839,13 @@ copy_setup(cups_file_t  *fp,		/* I - File to read from */
     if (!strncmp(line, "%%EndSetup", 10))
       linelen = cupsFileGetLine(fp, line, linesize);
     else
-      fputs(_("ERROR: Missing %%EndSetup!\n"), stderr);
+      _cupsLangPuts(stderr, _("ERROR: Missing %%EndSetup!\n"));
+  }
+
+  if (num_options > 0)
+  {
+    write_options(doc, ppd, num_options, options);
+    cupsFreeOptions(num_options, options);
   }
 
   doc_puts(doc, "%%EndSetup\n");
@@ -1820,19 +1855,19 @@ copy_setup(cups_file_t  *fp,		/* I - File to read from */
 
 
 /*
- * 'copy_trailer()' - Copy the document trailer...
+ * 'copy_trailer()' - Copy the document trailer.
  *
  * This function expects "line" to be filled with a %%Trailer comment line.
  * On return, "line" will contain the next line in the file, if any.
  */
 
-static size_t				/* O - Length of next line */
+static ssize_t				/* O - Length of next line */
 copy_trailer(cups_file_t  *fp,		/* I - File to read from */
              pstops_doc_t *doc,		/* I - Document info */
              ppd_file_t   *ppd,		/* I - PPD file */
 	     int          number,	/* I - Number of pages */
 	     char         *line,	/* I - Line buffer */
-	     size_t       linelen,	/* I - Length of initial line */
+	     ssize_t      linelen,	/* I - Length of initial line */
 	     size_t       linesize)	/* I - Size of line buffer */
 {
  /*
@@ -1869,7 +1904,7 @@ copy_trailer(cups_file_t  *fp,		/* I - File to read from */
 
 
 /*
- * 'do_prolog()' - Send the necessary document prolog commands...
+ * 'do_prolog()' - Send the necessary document prolog commands.
  */
 
 static void
@@ -1908,7 +1943,7 @@ do_prolog(pstops_doc_t *doc,		/* I - Document information */
 
 
 /*
- * 'do_setup()' - Send the necessary document setup commands...
+ * 'do_setup()' - Send the necessary document setup commands.
  */
 
 static void
@@ -1927,7 +1962,7 @@ do_setup(pstops_doc_t *doc,		/* I - Document information */
   doc_puts(doc, "userdict dup(\\004)cvn{}put (\\004\\004)cvn{}put\n");
 
  /*
-  * Mark any options from %%IncludeFeature: comments...
+  * Mark job options...
   */
 
   cupsMarkOptions(ppd, doc->num_options, doc->options);
@@ -1968,7 +2003,10 @@ do_setup(pstops_doc_t *doc,		/* I - Document information */
   */
 
   if (doc->number_up > 1)
+  {
+    doc_puts(doc, "userdict/CUPSsetpagedevice/setpagedevice load put\n");
     doc_puts(doc, "userdict/setpagedevice{pop}bind put\n");
+  }
 
  /*
   * Changes to the transfer function must be made AFTER any
@@ -2048,9 +2086,9 @@ doc_printf(pstops_doc_t *doc,		/* I - Document information */
 
   if (bytes > sizeof(buffer))
   {
-    fprintf(stderr,
-            _("ERROR: doc_printf overflow (%d bytes) detected, aborting!\n"),
-            (int)bytes);
+    _cupsLangPrintf(stderr,
+		    _("ERROR: doc_printf overflow (%d bytes) detected, "
+		      "aborting!\n"), (int)bytes);
     exit(1);
   }
 
@@ -2091,7 +2129,7 @@ doc_write(pstops_doc_t *doc,		/* I - Document information */
 
 
 /*
- * 'end_nup()' - End processing for N-up printing...
+ * 'end_nup()' - End processing for N-up printing.
  */
 
 static void
@@ -2171,7 +2209,6 @@ include_feature(
   char		name[255],		/* Option name */
 		value[255];		/* Option value */
   ppd_option_t	*option;		/* Option in file */
-  ppd_choice_t	*choice;		/* Choice */
 
 
  /*
@@ -2180,7 +2217,7 @@ include_feature(
 
   if (sscanf(line + 17, "%254s%254s", name, value) != 2)
   {
-    fputs(_("ERROR: Bad %%IncludeFeature: comment!\n"), stderr);
+    _cupsLangPuts(stderr, _("ERROR: Bad %%IncludeFeature: comment!\n"));
     return (num_options);
   }
 
@@ -2190,22 +2227,23 @@ include_feature(
 
   if ((option = ppdFindOption(ppd, name + 1)) == NULL)
   {
-    fprintf(stderr, _("WARNING: Unknown option \"%s\"!\n"), name + 1);
+    _cupsLangPrintf(stderr, _("WARNING: Unknown option \"%s\"!\n"), name + 1);
     return (num_options);
   }
 
   if (option->section == PPD_ORDER_EXIT ||
       option->section == PPD_ORDER_JCL)
   {
-    fprintf(stderr, _("WARNING: Option \"%s\" cannot be included via "
-                      "IncludeFeature!\n"), name + 1);
+    _cupsLangPrintf(stderr, _("WARNING: Option \"%s\" cannot be included via "
+                              "IncludeFeature!\n"), name + 1);
     return (num_options);
   }
 
-  if ((choice = ppdFindChoice(option, value)) == NULL)
+  if (!ppdFindChoice(option, value))
   {
-    fprintf(stderr, _("WARNING: Unknown choice \"%s\" for option \"%s\"!\n"),
-            value, name + 1);
+    _cupsLangPrintf(stderr,
+                    _("WARNING: Unknown choice \"%s\" for option \"%s\"!\n"),
+                    value, name + 1);
     return (num_options);
   }
 
@@ -2218,7 +2256,7 @@ include_feature(
 
 
 /*
- * 'parse_text()' - Parse a text value in a comment...
+ * 'parse_text()' - Parse a text value in a comment.
  *
  * This function parses a DSC text value as defined on page 36 of the
  * DSC specification.  Text values are either surrounded by parenthesis
@@ -2307,7 +2345,7 @@ parse_text(const char *start,		/* I - Start of text value */
 
 
 /*
- * 'set_pstops_options()' - Set pstops options...
+ * 'set_pstops_options()' - Set pstops options.
  */
 
 static void
@@ -2377,8 +2415,8 @@ set_pstops_options(
 
     if (intval < 10 || intval > 1000)
     {
-      fprintf(stderr, _("ERROR: Unsupported brightness value %s, using "
-                        "brightness=100!\n"), val);
+      _cupsLangPrintf(stderr, _("ERROR: Unsupported brightness value %s, using "
+                                "brightness=100!\n"), val);
       doc->brightness = 1.0f;
     }
     else
@@ -2422,12 +2460,14 @@ set_pstops_options(
     doc->emit_jcl = 1;
 
  /*
-  * fitplot
+  * fitplot/fit-to-page
   */
 
   if ((val = cupsGetOption("fitplot", num_options, options)) != NULL &&
-      (!strcasecmp(val, "true") || !strcasecmp(val, "on") ||
-       !strcasecmp(val, "yes")))
+      !strcasecmp(val, "true"))
+    doc->fitplot = 1;
+  else if ((val = cupsGetOption("fit-to-page", num_options, options)) != NULL &&
+           !strcasecmp(val, "true"))
     doc->fitplot = 1;
 
  /*
@@ -2444,8 +2484,8 @@ set_pstops_options(
 
     if (intval < 1 || intval > 10000)
     {
-      fprintf(stderr, _("ERROR: Unsupported gamma value %s, using "
-                        "gamma=1000!\n"), val);
+      _cupsLangPrintf(stderr, _("ERROR: Unsupported gamma value %s, using "
+                                "gamma=1000!\n"), val);
       doc->gamma = 1.0f;
     }
     else
@@ -2497,9 +2537,9 @@ set_pstops_options(
           doc->number_up = intval;
 	  break;
       default :
-          fprintf(stderr,
-	          _("ERROR: Unsupported number-up value %d, using "
-		    "number-up=1!\n"), intval);
+          _cupsLangPrintf(stderr,
+			  _("ERROR: Unsupported number-up value %d, using "
+			    "number-up=1!\n"), intval);
           doc->number_up = 1;
 	  break;
     }
@@ -2531,8 +2571,8 @@ set_pstops_options(
       doc->number_up_layout = PSTOPS_LAYOUT_BTRL;
     else
     {
-      fprintf(stderr, _("ERROR: Unsupported number-up-layout value %s, using "
-                        "number-up-layout=lrtb!\n"), val);
+      _cupsLangPrintf(stderr, _("ERROR: Unsupported number-up-layout value %s, "
+                                "using number-up-layout=lrtb!\n"), val);
       doc->number_up_layout = PSTOPS_LAYOUT_LRTB;
     }
   }
@@ -2581,8 +2621,8 @@ set_pstops_options(
       doc->page_border = PSTOPS_BORDERDOUBLE2;
     else
     {
-      fprintf(stderr, _("ERROR: Unsupported page-border value %s, using "
-                        "page-border=none!\n"), val);
+      _cupsLangPrintf(stderr, _("ERROR: Unsupported page-border value %s, "
+                                "using page-border=none!\n"), val);
       doc->page_border = PSTOPS_BORDERNONE;
     }
   }
@@ -2676,8 +2716,7 @@ set_pstops_options(
     if ((doc->temp = cupsTempFile2(doc->tempfile,
                                    sizeof(doc->tempfile))) == NULL)
     {
-      fprintf(stderr, _("ERROR: Unable to create temporary file: %s\n"),
-              strerror(errno));
+      _cupsLangPrintError(_("ERROR: Unable to create temporary file"));
       exit(1);
     }
   }
@@ -2702,13 +2741,13 @@ set_pstops_options(
 
 
 /*
- * 'skip_page()' - Skip past a page that won't be printed...
+ * 'skip_page()' - Skip past a page that won't be printed.
  */
 
-static size_t				/* O - Length of next line */
+static ssize_t				/* O - Length of next line */
 skip_page(cups_file_t *fp,		/* I - File to read from */
           char        *line,		/* I - Line buffer */
-	  size_t      linelen,		/* I - Length of initial line */
+	  ssize_t     linelen,		/* I - Length of initial line */
           size_t      linesize)		/* I - Size of line buffer */
 {
   int	level;				/* Embedded document level */
@@ -2764,7 +2803,7 @@ skip_page(cups_file_t *fp,		/* I - File to read from */
 
 
 /*
- * 'start_nup()' - Start processing for N-up printing...
+ * 'start_nup()' - Start processing for N-up printing.
  */
 
 static void
@@ -2779,15 +2818,15 @@ start_nup(pstops_doc_t *doc,		/* I - Document information */
 		tx, ty;			/* Translation values for subpage */
   float		pagew,			/* Printable width of page */
 		pagel;			/* Printable height of page */
-  int		bboxw,			/* BoundingBox width */
+  int		bboxx,			/* BoundingBox X origin */
+		bboxy,			/* BoundingBox Y origin */
+		bboxw,			/* BoundingBox width */
 		bboxl;			/* BoundingBox height */
+  float		margin = 0;		/* Current margin for border */
 
 
   if (doc->number_up > 1)
     doc_puts(doc, "userdict/ESPsave save put\n");
-
-  if (doc->mirror)
-    doc_printf(doc, "%.1f 0.0 translate -1 1 scale\n", PageWidth);
 
   pos   = (number - 1) % doc->number_up;
   pagew = PageRight - PageLeft;
@@ -2795,17 +2834,22 @@ start_nup(pstops_doc_t *doc,		/* I - Document information */
 
   if (doc->fitplot)
   {
+    bboxx = bounding_box[0];
+    bboxy = bounding_box[1];
     bboxw = bounding_box[2] - bounding_box[0];
     bboxl = bounding_box[3] - bounding_box[1];
   }
   else
   {
+    bboxx = 0;
+    bboxy = 0;
     bboxw = PageWidth;
     bboxl = PageLength;
   }
 
   fprintf(stderr, "DEBUG: pagew = %.1f, pagel = %.1f\n", pagew, pagel);
-  fprintf(stderr, "DEBUG: bboxw = %d, bboxl = %d\n", bboxw, bboxl);
+  fprintf(stderr, "DEBUG: bboxx = %d, bboxy = %d, bboxw = %d, bboxl = %d\n",
+          bboxx, bboxy, bboxw, bboxl);
   fprintf(stderr, "DEBUG: PageLeft = %.1f, PageRight = %.1f\n",
           PageLeft, PageRight);
   fprintf(stderr, "DEBUG: PageTop = %.1f, PageBottom = %.1f\n",
@@ -2832,6 +2876,9 @@ start_nup(pstops_doc_t *doc,		/* I - Document information */
   else if (doc->number_up > 1 || doc->fitplot)
     doc_printf(doc, "%.1f %.1f translate\n", PageLeft, PageBottom);
 
+  if (doc->mirror)
+    doc_printf(doc, "%.1f 0.0 translate -1 1 scale\n", PageWidth);
+
   switch (doc->number_up)
   {
     default :
@@ -2853,10 +2900,7 @@ start_nup(pstops_doc_t *doc,		/* I - Document information */
 	             w / bboxw, l / bboxl);
 	}
 	else
-	{
           w = PageWidth;
-	  l = PageLength;
-	}
 	break;
 
     case 2 :
@@ -3123,8 +3167,7 @@ start_nup(pstops_doc_t *doc,		/* I - Document information */
   if (doc->page_border && show_border)
   {
     int		rects;			/* Number of border rectangles */
-    float	fscale,			/* Scaling value for points */
-		margin;			/* Current margin for borders */
+    float	fscale;			/* Scaling value for points */
 
 
     rects  = (doc->page_border & PSTOPS_BORDERDOUBLE) ? 2 : 1;
@@ -3147,10 +3190,10 @@ start_nup(pstops_doc_t *doc,		/* I - Document information */
     for (; rects > 0; rects --, margin += 2 * fscale)
       if (doc->number_up > 1)
 	doc_printf(doc, "%.1f %.1f %.1f %.1f ESPrs\n",
-		   margin - 2.25 * fscale,
-		   margin - 2.25 * fscale,
-		   bboxw + 4.5 * fscale - 2 * margin,
-		   bboxl + 4.5 * fscale - 2 * margin);
+		   margin,
+		   margin,
+		   bboxw - 2 * margin,
+		   bboxl - 2 * margin);
       else
 	doc_printf(doc, "%.1f %.1f %.1f %.1f ESPrs\n",
         	   PageLeft + margin,
@@ -3168,21 +3211,22 @@ start_nup(pstops_doc_t *doc,		/* I - Document information */
   if (doc->fitplot)
   {
    /*
-    * Clip the page that follows to the bounding box of the page...
+    * Offset the page by its bounding box...
     */
 
     doc_printf(doc, "%d %d translate\n", -bounding_box[0],
                -bounding_box[1]);
-    doc_printf(doc, "%d %d %d %d ESPrc\n", bounding_box[0], bounding_box[1],
-               bboxw, bboxl);
   }
-  else if (doc->number_up > 1)
+
+  if (doc->fitplot || doc->number_up > 1)
   {
    /*
-    * Clip the page that follows to the default page size...
+    * Clip the page to the page's bounding box...
     */
 
-    doc_printf(doc, "0 0 %d %d ESPrc\n", bboxw, bboxl);
+    doc_printf(doc, "%.1f %.1f %.1f %.1f ESPrc\n",
+               bboxx + margin, bboxy + margin,
+               bboxw - 2 * margin, bboxl - 2 * margin);
   }
 }
 
@@ -3351,5 +3395,82 @@ write_labels(pstops_doc_t *doc,		/* I - Document information */
 
 
 /*
- * End of "$Id: pstops.c 6759 2007-08-02 04:10:23Z mike $".
+ * 'write_options()' - Write options provided via %%IncludeFeature.
+ */
+
+static void
+write_options(
+    pstops_doc_t  *doc,		/* I - Document */
+    ppd_file_t    *ppd,		/* I - PPD file */
+    int           num_options,	/* I - Number of options */
+    cups_option_t *options)	/* I - Options */
+{
+  int		i;		/* Looping var */
+  ppd_option_t	*option;	/* PPD option */
+  int		min_order;	/* Minimum OrderDependency value */
+  char		*doc_setup,	/* DocumentSetup commands to send */
+		*any_setup;	/* AnySetup commands to send */
+
+
+ /*
+  * Figure out the minimum OrderDependency value...
+  */
+
+  if ((option = ppdFindOption(ppd, "PageRegion")) != NULL)
+    min_order = option->order;
+  else
+    min_order = 999.0f;
+
+  for (i = 0; i < num_options; i ++)
+    if ((option = ppdFindOption(ppd, options[i].name)) != NULL &&
+	option->order < min_order)
+      min_order = option->order;
+
+ /*
+  * Mark and extract them...
+  */
+
+  cupsMarkOptions(ppd, num_options, options);
+
+  doc_setup = ppdEmitString(ppd, PPD_ORDER_DOCUMENT, min_order);
+  any_setup = ppdEmitString(ppd, PPD_ORDER_ANY, min_order);
+
+ /*
+  * Then send them out...
+  */
+
+  if (doc->number_up > 1)
+  {
+   /*
+    * Temporarily restore setpagedevice so we can set the options...
+    */
+
+    doc_puts(doc, "userdict/setpagedevice/CUPSsetpagedevice load put\n");
+  }
+
+  if (doc_setup)
+  {
+    doc_puts(doc, doc_setup);
+    free(doc_setup);
+  }
+
+  if (any_setup)
+  {
+    doc_puts(doc, any_setup);
+    free(any_setup);
+  }
+
+  if (doc->number_up > 1)
+  {
+   /*
+    * Disable setpagedevice again...
+    */
+
+    doc_puts(doc, "userdict/setpagedevice{pop}bind put\n");
+  }
+}
+
+
+/*
+ * End of "$Id: pstops.c 7977 2008-09-23 23:44:33Z mike $".
  */

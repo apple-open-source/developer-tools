@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2003, Free Software Foundation, Inc.              --
+--          Copyright (C) 2003-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -135,6 +135,7 @@ package body Prepcomp is
 
    procedure Add_Command_Line_Symbols is
       Symbol_Id : Prep.Symbol_Id;
+
    begin
       for J in 1 .. Symbol_Table.Last (Command_Line_Symbols) loop
          Symbol_Id := Prep.Index_Of (Command_Line_Symbols.Table (J).Symbol);
@@ -225,11 +226,11 @@ package body Prepcomp is
    ------------------------------
 
    procedure Parse_Preprocessing_Data_File (N : File_Name_Type) is
-      OK : Boolean := False;
+      OK            : Boolean := False;
       Dash_Location : Source_Ptr;
-      Symbol_Data : Prep.Symbol_Data;
-      Symbol_Id   : Prep.Symbol_Id;
-      T : constant Nat := Total_Errors_Detected;
+      Symbol_Data   : Prep.Symbol_Data;
+      Symbol_Id     : Prep.Symbol_Id;
+      T             : constant Nat := Total_Errors_Detected;
 
    begin
       --  Load the preprocessing data file
@@ -246,13 +247,12 @@ package body Prepcomp is
       end if;
 
       --  Initialize the sanner and set its behavior for a processing data file
-      Scn.Scanner.Initialize_Scanner
-        (No_Unit, Source_Index_Of_Preproc_Data_File);
+
+      Scn.Scanner.Initialize_Scanner (Source_Index_Of_Preproc_Data_File);
       Scn.Scanner.Set_End_Of_Line_As_Token (True);
       Scn.Scanner.Reset_Special_Characters;
 
-      For_Each_Line :
-      loop
+      For_Each_Line : loop
          <<Scan_Line>>
          Scan;
 
@@ -340,7 +340,6 @@ package body Prepcomp is
          --  Check the switches that may follow
 
          while Token /= Tok_End_Of_Line and then Token /= Tok_EOF loop
-
             if Token /= Tok_Minus then
                Error_Msg ("`'-` expected", Token_Ptr);
                Skip_To_End_Of_Line;
@@ -508,7 +507,7 @@ package body Prepcomp is
 
                         Symbol_Id := Prep.Index_Of (Symbol_Data.Symbol);
 
-                        --  Otherwise, add a new entry in the table.
+                        --  Otherwise, add a new entry in the table
 
                         if Symbol_Id = No_Symbol then
                            Symbol_Table.Increment_Last (Prep.Mapping);
@@ -635,6 +634,7 @@ package body Prepcomp is
       --  If not already done it, process the definition file
 
       if Current_Data.Processed then
+
          --  Set Prep.Mapping
 
          Prep.Mapping := Current_Data.Mapping;
@@ -675,7 +675,7 @@ package body Prepcomp is
 
             --  Initialize the scanner and process the definition file
 
-            Scn.Scanner.Initialize_Scanner (No_Unit, Deffile);
+            Scn.Scanner.Initialize_Scanner (Deffile);
             Prep.Parse_Def_File;
 
             --  Reset the behaviour of the scanner to the default

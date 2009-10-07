@@ -8,10 +8,8 @@
 #include <objc/objc-class.h>
 #include <objc/Object.h>
 #include <ctype.h>
-/* APPLE LOCAL begin mainline */
 #include <stdlib.h>
 #include <string.h>
-/* APPLE LOCAL end mainline */
 
 /* APPLE LOCAL begin radar 4894756 */
 #if __OBJC2__
@@ -68,7 +66,6 @@
 
 /* The following is necessary to "cover" the bf*.m test cases on NeXT.  */
 
-/* APPLE LOCAL begin mainline */
 #undef  MAX
 #undef  MIN
 #undef  ROUND
@@ -88,19 +85,10 @@
   ({ typeof (V) __v = (V); typeof (A) __a = (A); \
      __a * ((__v+__a - 1)/__a); })
 #endif
-/* APPLE LOCAL end mainline */
 
 #define BITS_PER_UNIT __CHAR_BIT__
-/* APPLE LOCAL begin mainline */
 typedef struct{ char a; } __small_struct;
 #define STRUCTURE_SIZE_BOUNDARY (BITS_PER_UNIT * sizeof (__small_struct))
-/* APPLE LOCAL end mainline */
-
-/* APPLE LOCAL begin ARM support !PCC_BITFIELD_TYPE_MATTERS targets */
-typedef struct { char x; char :0; char y; } test_struct_1;
-typedef struct { char x; int :0; char y; } test_struct_2;
-#define PCC_BITFIELD_TYPE_MATTERS (sizeof (test_struct_1) != sizeof (test_struct_2))
-/* APPLE LOCAL end ARM support !PCC_BITFIELD_TYPE_MATTERS targets */
 
 /* Not sure why the following are missing from NeXT objc headers... */
 
@@ -144,7 +132,6 @@ struct objc_struct_layout
   unsigned int record_align;
 };
 
-/* APPLE LOCAL mainline */
 typedef union arglist {
   char *arg_ptr;
   char arg_regs[sizeof (char*)];
@@ -158,7 +145,6 @@ void objc_layout_structure (const char *type,
 BOOL objc_layout_structure_next_member (struct objc_struct_layout *layout);
 void objc_layout_finish_structure (struct objc_struct_layout *layout,
     unsigned int *size, unsigned int *align);
-/* APPLE LOCAL mainline */
 int objc_aligned_size (const char *type);
 
 /*
@@ -236,8 +222,9 @@ objc_sizeof_type (const char *type)
     return sizeof (double);
     break;
 
-  /* APPLE LOCAL mainline */
+  /* APPLE LOCAL begin radar 4894756 */
   /* Do not compute 'sizeof (void)'.  */
+  /* APPLE LOCAL end radar 4894756 */
 
   case _C_PTR:
   case _C_ATOM:
@@ -852,20 +839,14 @@ objc_layout_structure_next_member (struct objc_struct_layout *layout)
 
   type = objc_skip_type_qualifiers (layout->type);
 
-/* APPLE LOCAL begin ARM support !PCC_BITFIELD_TYPE_MATTERS targets */
-  if (!PCC_BITFIELD_TYPE_MATTERS && *type == _C_BFLD)
-    desired_align = 0;
-  else
-    desired_align = objc_alignof_type (type) * BITS_PER_UNIT;
-/* APPLE LOCAL end ARM support !PCC_BITFIELD_TYPE_MATTERS targets */
+  desired_align = objc_alignof_type (type) * BITS_PER_UNIT;
 
   /* Record must have at least as much alignment as any field.
      Otherwise, the alignment of the field within the record
      is meaningless.  */
   layout->record_align = MAX (layout->record_align, desired_align);
 
-  /* APPLE LOCAL ARM support !PCC_BITFIELD_TYPE_MATTERS targets */
-  if (*type == _C_BFLD && PCC_BITFIELD_TYPE_MATTERS)
+  if (*type == _C_BFLD)
     {
       int bfld_size = atoi (++type);
       int int_align = __alignof__ (int) * BITS_PER_UNIT;

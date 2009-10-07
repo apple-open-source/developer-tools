@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2002, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -87,7 +87,7 @@ package body Endh is
    --  child unit or a node with a Chars field identifying the actual label.
 
    End_Labl_Present : Boolean;
-   --  Indicates that the value in End_Labl was for an explicit label.
+   --  Indicates that the value in End_Labl was for an explicit label
 
    Syntax_OK : Boolean;
    --  Set True if the entry is syntactically correct
@@ -759,12 +759,22 @@ package body Endh is
    --------------------------
 
    function Explicit_Start_Label (SS_Index : Nat) return Boolean is
-      L : constant Node_Id := Scope.Table (SS_Index).Labl;
+      L    : constant Node_Id := Scope.Table (SS_Index).Labl;
+      Etyp : constant SS_End_Type := Scope.Table (SS_Index).Etyp;
 
    begin
       if No (L) then
          return False;
-      elsif Comes_From_Source (L) then
+
+      --  In the following test we protect the call to Comes_From_Source
+      --  against lines containing previously reported syntax errors.
+
+      elsif (Etyp = E_Loop
+         or else Etyp = E_Name
+         or else Etyp = E_Suspicious_Is
+         or else Etyp = E_Bad_Is)
+         and then Comes_From_Source (L)
+      then
          return True;
       else
          return False;

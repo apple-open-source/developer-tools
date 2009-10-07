@@ -1,8 +1,6 @@
 // PR 11767
 // { dg-do run }
 // { dg-options "-fnon-call-exceptions -fprofile-arcs" }
-/* APPLE LOCAL ARM no profiling support */
-/* { dg-skip-if "" { arm*-apple-darwin* } { "*" } { "" } } */
 
 #include <string>
 
@@ -51,3 +49,5 @@ int main (int argc, char * argv[])
   ACE_UINT32 const mc_isoValue = 10000;
   ResourceBalanceType2 rbResourceBalanceType2(3, mc_isoValue, "ATM", "M");
 }
+
+// { dg-final { cleanup-coverage-files } }

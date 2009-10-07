@@ -1,4 +1,4 @@
-/* APPLE LOCAL file 4375453 */
+/* APPLE LOCAL file mainline 4.2 5569774 */
 /* { dg-require-effective-target vect_int } */
 /* { dg-do run } */
 
@@ -40,3 +40,8 @@ int main (void)
   return 0;
 }
 
+
+/* { dg-final { scan-tree-dump-times "Alignment of access forced using peeling" 0 "vect" } } */
+/* { dg-final { scan-tree-dump-times "Alignment of access forced using versioning" 1 "vect" } } */
+/* { dg-final { scan-tree-dump-times "vectorized 1 loops" 1 "vect" } } */
+/* { dg-final { cleanup-tree-dump "vect" } } */

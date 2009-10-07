@@ -1,4 +1,3 @@
-/* APPLE LOCAL file mainline 2006-05-18 4336222 */
 /* { dg-do run } */
 /* { dg-options "-std=c99 -pedantic-errors" } */
 /* PR c/18740 */

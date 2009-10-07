@@ -83,7 +83,12 @@ enum {
     kMCalibrateRequestBit                   = 0x0008,
     kMChargeInhibitBit                      = 0x0010,
     kMChargerPowerOnResetBit                = 0x0020,
-    kMCalibrateBit                          = 0x0040
+    kMCalibrateBit                          = 0x0040,
+/* Bits 14 & 15 convey information about charges that were
+   terminated for temperature reasons
+ */
+    kMReservedNoChargeBit14                  = 0x4000,
+    kMReservedNoChargeBit15                  = 0x8000
 };
 
 /*  SBSM BatterySystemStateInfo bitfields               */
@@ -132,11 +137,25 @@ enum {
     kBDeviceNameCmd                   = 0x21,     // READ BLOCK
     kBDeviceChemistryCmd              = 0x22,     // READ BLOCK
     kBManufactureDataCmd              = 0x23,     // READ BLOCK
-/* Cell Voltage */
     kBReadCellVoltage4Cmd             = 0x3c,     // READ WORD
     kBReadCellVoltage3Cmd             = 0x3d,     // READ WORD
     kBReadCellVoltage2Cmd             = 0x3e,     // READ WORD
-    kBReadCellVoltage1Cmd             = 0x3f      // READ WORD
+    kBReadCellVoltage1Cmd             = 0x3f,     // READ WORD
+    kBManufacturerInfoCmd             = 0x70,     // READ BLOCK
+	kBReserveCapacityCmd			  = 0x8B,     // READ WORD
+    kBDesignCycleCount9CCmd           = 0x9C      // READ WORD
+};
+
+/*  Smart Battery Extended Registers                    */
+/*  bq20z90-V110 + bq29330 Chipset Technical Reference Manual    */
+/*  TI Literature SLUU264                               */
+enum {
+    kBExtendedPFStatusCmd             = 0x53
+};
+
+/* Apple Hardware Serial Number */
+enum {
+    kBAppleHardwareSerialCmd          = 0x76      // READ BLOCK
 };
 
 /*  Battery Mode Bits                                   */

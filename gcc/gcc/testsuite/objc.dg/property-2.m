@@ -1,79 +1,24 @@
-/* APPLE LOCAL file radar 4436866, modified due to radar 4625635 */
-/* This program tests use of properties . */
-/* { dg-options "-fno-objc-new-property -mmacosx-version-min=10.5 -framework Foundation -framework CoreFoundation -fobjc-exceptions" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
-/* { dg-options "-fno-objc-new-property -framework Foundation -framework CoreFoundation -fobjc-exceptions" { target arm*-*-darwin* } } */
-/* { dg-do run { target *-*-darwin* } } */
+/* APPLE LOCAL file radar 4738176 */
+/* Test that no bogus warning is issued in the synthesize compound-expression. */
+/* APPLE LOCAL radar 4899595 */
+/* { dg-options "-mmacosx-version-min=10.5 -Wall" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
+/* { dg-options "-Wall" { target arm*-*-darwin* } } */
+/* { dg-do compile } */
 
-#include <Foundation/Foundation.h>
-
-static id
-object_getProperty_byref (id self, SEL _cmd, unsigned int offset)
-{
-  id *slot = (id*) ((char*)self + offset);
-  return *slot;
-}
-
-static void 
-object_setProperty_byref (id self, SEL _cmd, id value, unsigned int offset)
-{
-  id *slot = (id*) ((char*)self + offset);
-  id oldValue = *slot;
-  if (oldValue != value)
-    *slot = value;
-}
-
-@interface Person : NSObject
-@property (ivar)NSString *firstName, *lastName;
-@property(ivar, readonly) NSString *fullName;
+@interface test
+@property int foo;
+@property int foo1;
+@property int foo2;
 @end
+extern int one ();
+extern int two ();
 
-@interface Group : NSObject
-@property (ivar) Person *techLead, *runtimeGuru, *propertiesMaven;
-@end
-
-@implementation Group
-@property Person *techLead, *runtimeGuru, *propertiesMaven;
-- init {
-  self.techLead = [[Person alloc] init];
-  self.runtimeGuru = [[Person alloc] init];
-  self.propertiesMaven = [[Person alloc] init];
-  return self;
+@implementation test
+@dynamic foo, foo1, foo2;
+- (void) pickWithWarning:(int)which { 
+	   self.foo = (which ? 1 : 2); 
+	   self.foo1 = self.foo2 = (which ? 1 : 2); 
+	   self.foo = (which ? one() : two() ); 
+	   self.foo1 = self.foo2 = (which ? one() : two ()); 
 }
 @end
-
-@implementation Person
-@property (ivar) NSString *firstName, *lastName;
-@property(readonly, ivar) NSString *fullName;
-- (NSString*)fullName { // computed getter
-    return [NSString stringWithFormat:@"%@ %@", self.firstName, self.lastName];
-}
-@end
-
-NSString *playWithProperties()
-{
-  Group *g = [[Group alloc] init] ;
-
-  g.techLead.firstName = @"Blaine";
-  g.techLead.lastName = @"Garst";
-  g.runtimeGuru.firstName = @"Greg";
-  g.runtimeGuru.lastName = @"Parker";
-  g.propertiesMaven.firstName = @"Patrick";
-  g.propertiesMaven.lastName = @"Beard";
-
-  return [NSString stringWithFormat:@"techlead %@ runtimeGuru %@ propertiesMaven %@",
-                        g.techLead.fullName, g.runtimeGuru.fullName, g.propertiesMaven.fullName];
-}
-
-main()
-{
-    char buf [256];
-    NSAutoreleasePool* pool  = [[NSAutoreleasePool alloc] init];
-#   if (MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_X_VERSION_10_5 || __OBJC2__)
-    sprintf(buf, "%s", [playWithProperties() UTF8String]);
-#else
-    sprintf(buf, "%s", [playWithProperties() cString]);
-#endif
-    [pool release];
-    return strcmp (buf, "techlead Blaine Garst runtimeGuru Greg Parker propertiesMaven Patrick Beard");
-}
-

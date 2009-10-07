@@ -1,4 +1,4 @@
-/* APPLE LOCAL file radar 3803157 */
+/* APPLE LOCAL file radar 3803157, 5556192 */
 /* Test implementaion of attributes on methods. */
 /* { dg-do compile } */
 
@@ -29,7 +29,7 @@ int main()
 	INTF *p;
 	[p foo1:2];	/* { dg-warning "\\'foo1:\\' is deprecated" } */
 	[p foo2:2];	/* { dg-warning "\\'foo2:\\' is deprecated" } */
-			/* { dg-warning "\\'foo2:\\' is unavailable" "" { target *-*-* } 31 } */
+			/* { dg-error "\\'foo2:\\' is unavailable" "" { target *-*-* } 31 } */
 	return [p foo:1];
 }
 

@@ -1,12 +1,12 @@
-Copyright (C) 2004, 2005  Internet Systems Consortium, Inc. ("ISC")
+Copyright (C) 2004, 2005, 2007, 2008  Internet Systems Consortium, Inc. ("ISC")
 Copyright (C) 2001, 2003  Internet Software Consortium.
 See COPYRIGHT in the source root or http://isc.org/copyright.html for terms.
 
-$Id: readme1st.txt,v 1.12.18.3 2005/09/06 03:47:20 marka Exp $
+$Id: readme1st.txt,v 1.18.372.2 2008/12/14 21:33:07 tbox Exp $
 
-	   Release of BIND 9.4 for Window NT/2000/XP/2003
+	   Release of BIND 9.5 for Window 2000/XP/2003
 
-This is a release of BIND 9.4 for Window NT/2000/XP/2003.
+This is a release of BIND 9.5 for Window 2000/XP/2003.
 Only IPv4 stacks are supported on the box running this version of BIND.
 IPv6 stacks will be supported in a future release.
   
@@ -33,7 +33,12 @@ it needs to read.
 
 It is important that on Windows the directory directive is used in
 the options section to tell BIND where to find the files used in
-named.conf.
+named.conf (default %WINDOWS%\system32\dns\etc\named.conf).
+
+e.g.
+	options {
+		directory "C:\WINDOWS\system32\dns\etc";
+	};
 
 If you have previously installed BIND 8 or BIND 4 on the system that
 you wish to install this kit, you MUST use the BIND 8 or BIND 4 installer
@@ -119,9 +124,10 @@ BIND 9 applications.
 
 The following tools have been built for Windows NT: dig, nslookup,
 host, nsupdate, rndc, rndc-confgen, named-checkconf, named-checkzone,
-dnssec-keygen, dnssec-signzone. The tools will NOT run on Win9x,
-only WinNT and Win2000. The latter tools are for use with DNSSEC.
-All tools are installed in the dns/bin directory.
+dnssec-keygen, dnssec-signzone, dnssec-dsfromkey and dnssec-keyfromlabel.
+The tools will NOT run on Win9x, only WinNT and Win2000. The latter
+tools are for use with DNSSEC.  All tools are installed in the
+dns/bin directory.
 
 IMPORTANT NOTE ON USING THE TOOLS:
 

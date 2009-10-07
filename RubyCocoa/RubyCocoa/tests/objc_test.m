@@ -1,4 +1,4 @@
-// $Id: objc_test.m 1993 2007-08-10 15:24:22Z psychs $
+// $Id: objc_test.m 2183 2008-02-07 16:24:08Z kimuraw $
 //
 //   some tests require objc codes
 #import <Foundation/Foundation.h>
@@ -121,6 +121,21 @@
   return [[NSClassFromString(@"RBSubclass") alloc] init];
 }
 
++(int) rbNewCount
+{
+  int retainCount;
+  id obj;
+  obj = [NSClassFromString(@"RBSubclass") new];
+  retainCount = [obj retainCount];
+  [obj release];
+  return retainCount;
+}
+
++(id) rbNewObject
+{
+  return [NSClassFromString(@"RBSubclass") new];
+}
+
 @end
 
 // tc_uniqobj.rb
@@ -161,6 +176,15 @@
     return NO;
 }
 
+- (BOOL)passByRefObjectWithTypeQualifiers:(inout id *)obj
+{
+    if (obj != NULL) {
+        *obj = self;
+        return YES;
+    }
+    return NO;
+}
+
 - (BOOL)passByRefInteger:(int *)integer
 {
     if (integer != NULL) {
@@ -189,6 +213,15 @@
         *floating = 666.0;
 }
 
+- (void)passByRefVariousTypeQualifiers:(in id *)object integer:(oneway int *)integer floating:(out float *)floating
+{
+    if (object != NULL)
+        *object = self;
+    if (integer != NULL)
+        *integer = 333;
+    if (floating != NULL)
+        *floating = 333.0;
+}
 @end
 
 // tc_subclass.rb 
@@ -209,7 +242,7 @@
 
 @interface NSObject (TcSubclassFoo)
 
-- (int)calledFoo:(id)arg;
+- (long)calledFoo:(id)arg;
 
 @end
 
@@ -378,6 +411,37 @@
 
 @end
 
+
+// This needs to be separate from DirectOverride since the test might damage
+// this class.
+@interface DirectOverrideParent : NSObject
+@end
+
+@implementation DirectOverrideParent
+
+- (id)overrideMe
+{
+  return @"foo";
+}
+
+- (void)checkOverride:(NSString *)want
+{
+  id obj = [self overrideMe];
+
+  if (![obj isEqualToString:want])
+    [NSException raise:@"DirectOverrideInheritance"
+      format:@"assertion overrideMe failed, got %@", obj];
+}
+
+@end
+
+@interface DirectOverrideChild : DirectOverrideParent
+@end
+
+@implementation DirectOverrideChild
+@end
+
+
 #import <AddressBook/ABPeoplePickerC.h>
 
 @interface TestFourCharCode : NSObject
@@ -427,7 +491,7 @@
 
 @implementation TestMagicCookie
 + (BOOL)isKCFAllocatorUseContext:(id)ocid { 
-  return ((unsigned)ocid == (unsigned)kCFAllocatorUseContext);
+  return ((unsigned long)ocid == (unsigned long)kCFAllocatorUseContext);
 }
 @end
 
@@ -578,6 +642,84 @@ static BOOL TestThreadedCallbackDone = NO;
   return [probe findInOcidToRbobjCache:obj];
 }
 
+@end
+
+@interface OvmixArgRetained : NSObject
+@end
+
+@implementation OvmixArgRetained
+
++ (void)test:(id)obj
+{
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  NSObject *o = [[[NSObject alloc] init] autorelease]; 
+  [obj performSelector:@selector(setObject:) withObject:o];
+  if ([obj performSelector:@selector(getObject)] != o)
+    [NSException raise:@"OvmixArgRetained" format:@"assertion1 failed"];
+  [pool release];
+  if ([obj performSelector:@selector(getObject)] != o)
+    [NSException raise:@"OvmixArgRetained" format:@"assertion2 failed"];
+}
+
+@end
+
+@interface ObjcPtrTest : NSObject
+@end
+
+@implementation ObjcPtrTest
+
+- (void*)returnVoidPtrForArrayOfString
+{
+  NSString* str = [NSString stringWithUTF8String:"foobar"];
+  NSArray* ary = [NSArray arrayWithObject:str];
+  [ary retain];
+  return (void*)ary;
+}
+
+- (void*)returnVoidPtrForKCFBooleanTrue
+{
+  return (void*)kCFBooleanTrue;
+}
+
+- (void*)returnVoidPtrForKCFBooleanFalse
+{
+  return (void*)kCFBooleanFalse;
+}
+
+- (void*)returnVoidPtrForInt
+{
+  static int i = -2147483648U;
+  return (void*)&i;
+}
+
+- (void*)returnVoidPtrForUInt
+{
+  static unsigned int i = 4294967295U;
+  return (void*)&i;
+}
+
+- (void*)returnVoidPtrForCStr
+{
+  static const char* str = "foobar";
+  return (void*)str;
+}
+
+@end
+
+struct ttype1 {float a; float b;};
+struct ttype2 {float a[2];};
+
+@implementation NSObject (FooTests)
+- (struct ttype1)test1 {
+	struct ttype1 r = {1., 2.};
+	return r;
+}
+- (struct ttype2)test2 {
+	struct ttype2 r;
+	r.a[0] = 1.;
+	r.a[1] = 2.;
+	return r;
+}
 @end
 
 void Init_objc_test(){

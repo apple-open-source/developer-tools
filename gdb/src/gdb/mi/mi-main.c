@@ -61,6 +61,9 @@
 #include "mi-common.h"
 #include "inlining.h"
 /* APPLE LOCAL end subroutine inlining  */
+#include "objc-lang.h"
+/* APPLE LOCAL Disable breakpoints while updating data formatters.  */
+#include "breakpoint.h"
 
 enum
   {
@@ -346,60 +349,92 @@ mi_cmd_exec_status (char *command, char **argv, int argc)
 
 }
 
-/* exec-safe-call takes one optional argument which is a thread id.  
-   It then checks to the best of its ability whether it would be safe
-   to call functions on that thread.  */
+/* exec-safe-call <THREAD> <SUBSYSTEM>
+   
+   Checks whether it would be safe to call into SUBSYSTEM.  The first
+   argument is the thread id to check - or optionally "all" for all
+   threads, or "current" for the current thead.  Relies on the
+   target's check_safe_call method.  Also uses the scheduler value to
+   determine whether to check all threads even if a given thread is
+   passed in.  Subsequent arguments are the subsystems to check,
+   and the currently valid values are "malloc", "objc", "loader"
+   and "all".  */
 
 enum mi_cmd_result
 mi_cmd_exec_safe_call (char *command, char **argv, int argc)
 {
-  enum mi_cmd_result rc = MI_CMD_DONE;
   struct cleanup *old_cleanups;
   ptid_t current_ptid = inferior_ptid;
   int safe;
+  int i;
+  int subsystems = 0;
+  enum check_which_threads thread_mode;
 
-  if (argc > 1)
+  if (argc == 0 || argc < 2)
     {
       xasprintf (&mi_error_message,
-		 "mi_cmd_exec_safe_call: USAGE: <threadnum>");
+		 "mi_cmd_exec_safe_call: USAGE: threadnum system [system... ]");
       return MI_CMD_ERROR;
     }
 
   if (!target_has_execution)
     {
       ui_out_field_int (uiout, "safe", 0);
-      ui_out_field_string (uiout, "reason", "program not running");
+      ui_out_field_string (uiout, "problem", "program not running");
     }
 
   if (target_executing)
     {
       ui_out_field_int (uiout, "safe", 0);
-      ui_out_field_string (uiout, "reason", "program executing");
+      ui_out_field_string (uiout, "problem", "program executing");
     }
 
-  if (argc == 0)
+  if (strcmp (argv[0], "all") == 0)
     {
       old_cleanups = make_cleanup (null_cleanup, NULL);
+      thread_mode = CHECK_ALL_THREADS;
+    }
+  else if (strcmp (argv[0], "current") == 0)
+    {
+      old_cleanups = make_cleanup (null_cleanup, NULL);
+      thread_mode = CHECK_SCHEDULER_VALUE;
     }
   else
     {
+      enum gdb_rc rc;
       old_cleanups = make_cleanup_restore_current_thread (current_ptid, 0);
       rc = gdb_thread_select (uiout, argv[0], 0, 0);
+      thread_mode = CHECK_SCHEDULER_VALUE;
       
       /* RC is enum gdb_rc if it is successful (>=0)
 	 enum return_reason if not (<0). */
-      if ((int) rc < 0 && (enum return_reason) rc == RETURN_ERROR)
-	return MI_CMD_ERROR;
-      else if ((int) rc >= 0 && rc == GDB_RC_FAIL)
-	return MI_CMD_ERROR;
+      if (((int) rc < 0 && (enum return_reason) rc == RETURN_ERROR) ||
+          ((int) rc >= 0 && rc == GDB_RC_FAIL))
+	{
+	  error ("Could not set thread to \"%s\".\n", argv[0]);
+	}
     }
 
-  safe = target_check_safe_call (current_ptid);
+  for (i = 1; i < argc; i++)
+    {
+      if (strcmp (argv[i], "malloc") == 0)
+	subsystems |= MALLOC_SUBSYSTEM;
+      else if (strcmp (argv[i], "loader") == 0)
+	subsystems |= LOADER_SUBSYSTEM;
+      else if (strcmp (argv[i], "objc") == 0)
+	subsystems |= OBJC_SUBSYSTEM;
+      else if (strcmp (argv[i], "all") == 0)
+	subsystems |= ALL_SUBSYSTEMS;
+      else
+	error ("Unrecognized subsystem: %s", argv[i]);
+    }
+
+  safe = target_check_safe_call (subsystems, thread_mode);
 
   ui_out_field_int (uiout, "safe", safe);
   do_cleanups (old_cleanups);
 
-  return rc;
+  return MI_CMD_DONE;
 }
 
 /* APPLE LOCAL: Have a show version that returns something useful...  
@@ -1207,12 +1242,17 @@ mi_cmd_data_evaluate_expression (char *command, char **argv, int argc)
 {
   struct expression *expr;
   struct cleanup *old_chain = NULL;
+  /* APPLE LOCAL Disable breakpoints while updating data formatters.  */
+  struct cleanup *bp_cleanup;
   struct value *val;
   struct ui_stream *stb = NULL;
   int unwinding_was_requested = 0;
   char *expr_string;
 
   stb = ui_out_stream_new (uiout);
+
+  /* APPLE LOCAL Disable breakpoints while updating data formatters.  */
+  bp_cleanup = make_cleanup_enable_disable_bpts_during_varobj_operation ();
 
   if (argc == 1)
     {
@@ -1222,6 +1262,9 @@ mi_cmd_data_evaluate_expression (char *command, char **argv, int argc)
     {
       if (strcmp (argv[0], "-u") != 0)
 	{
+	  /* APPLE LOCAL Disable breakpoints while updating data
+	     formatters.  */
+	  do_cleanups (bp_cleanup);
 	  xasprintf (&mi_error_message,
 		     "mi_cmd_data_evaluate_expression: Usage: "
 		     "-data-evaluate-expression [-u] expression");
@@ -1235,13 +1278,15 @@ mi_cmd_data_evaluate_expression (char *command, char **argv, int argc)
     }
   else
     {
+      /* APPLE LOCAL Disable breakpoints while updating data formatters.  */
+      do_cleanups (bp_cleanup);
       mi_error_message = xstrprintf ("mi_cmd_data_evaluate_expression: Usage: -data-evaluate-expression [-u] expression");
       return MI_CMD_ERROR;
     }
   
   old_chain = make_cleanup_set_restore_scheduler_locking_mode (scheduler_locking_on);
   if (unwinding_was_requested)
-    make_cleanup (set_unwind_on_signal, set_unwind_on_signal (1));
+    make_cleanup_set_restore_unwind_on_signal (1);
 
   expr = parse_expression (expr_string);
 
@@ -1258,6 +1303,8 @@ mi_cmd_data_evaluate_expression (char *command, char **argv, int argc)
   ui_out_stream_delete (stb);
 
   do_cleanups (old_chain);
+  /* APPLE LOCAL Disable breakpoints while updating data formatters.  */
+  do_cleanups (bp_cleanup);
 
   return MI_CMD_DONE;
 }
@@ -1265,19 +1312,39 @@ mi_cmd_data_evaluate_expression (char *command, char **argv, int argc)
 /* APPLE LOCAL: -target-attach
    This implements "-target-attach <PID>".  It is
    identical to the CLI command except that we raise
-   an error if we are already attached.  */
+   an error if we are already attached.  
+   We also support "-waitfor PROCESS_NAME" by passing
+   the two arguments put together to target_attach and
+   letting the implementation deal with it.  */
 
 enum mi_cmd_result
 mi_cmd_target_attach (char *command, char **argv, int argc)
 {
-  if (argc != 1) 
-    error ("mi_cmd_target_attach: Usage PID");
+  char *attach_arg;
+  struct cleanup *cleanups;
 
   if (target_has_execution)
     error ("mi_cmd_target_attach: Already debugging - detach first");
 
-  attach_command (argv[0], 0);
+  if (argc == 1)
+    {
+      attach_arg = argv[0];
+      cleanups = make_cleanup (null_cleanup, NULL);
+    }
+  else if (argc == 2 && strcmp (argv[0], "-waitfor") == 0)
+    {
+      int arg_len;
+      arg_len = strlen ("-waitfor \"") + strlen (argv[1]) + 2;
+      attach_arg = xmalloc (arg_len);
+      cleanups = make_cleanup (xfree, attach_arg);
+      snprintf (attach_arg, arg_len, "-waitfor \"%s\"", argv[1]);
+    }
+  else 
+    error ("mi_cmd_target_attach: Usage PID|-waitfor \"PROCESS\"");
 
+  attach_command (attach_arg, 0);
+
+  do_cleanups (cleanups);
   return MI_CMD_DONE;
 }
 
@@ -1320,6 +1387,99 @@ mi_cmd_target_select (char *args, int from_tty)
   fputs_unfiltered ("^connected", raw_stdout);
   do_exec_cleanups (ALL_CLEANUPS);
   return MI_CMD_QUIET;
+}
+
+/* TARGET-LOAD-SOLIB:
+
+   PATH: path to the shared library to be loaded
+   FLAGS: a string containing the flags.  This will be passed
+   as is to the target's to_load_solib function.  If the flags
+   are not provided, the target's to_load_solib function will
+   pick whatever is considered the default for the platform.
+
+   Loads the shared library pointed to by PATH, using FLAGS as
+   interpreted by the target specific function.
+
+   Returns:
+   A token that can be passed to TARGET-UNLOAD-SOLIB to unload
+   this shared library.
+
+   If the library can't be loaded, the command will return an
+   error, and the platform specific error message if it can 
+   be retrieved.
+*/
+
+struct solib_token_elem
+{
+  char *token;
+  struct value *val;
+  struct solib_token_elem *next;
+} *solib_token_list;
+
+enum mi_cmd_result
+mi_cmd_target_load_solib (char *command, char **argv, int argc)
+{
+  static int token_ctr = 0;
+  struct value *ret_val;
+  struct gdb_exception e;
+  struct solib_token_elem *new_token;
+
+  if (argc > 2)
+    {
+      mi_error_message = xstrdup ("Too many arguments: target-load-solib <PATH> [<FLAGS>]");
+      return MI_CMD_ERROR;
+    }
+  else if (argc == 0)
+    {
+      mi_error_message = xstrdup ("Too few arguments: target-load-solib <PATH> [<FLAGS>]");
+      return MI_CMD_ERROR;
+    }
+
+  TRY_CATCH (e, RETURN_MASK_ALL)
+    {
+      ret_val = target_load_solib (argv[0], argv[1]);
+    }
+
+  if (ret_val == NULL)
+    {
+      mi_error_message = xstrprintf ("Unknown error loading shared library \"%s\"", argv[0]);
+      return MI_CMD_ERROR;
+    }
+  else if (e.reason != NO_ERROR)
+    {
+      mi_error_message = xstrdup (e.message);
+      return MI_CMD_ERROR;
+    }
+
+  new_token = xmalloc (sizeof (struct solib_token_elem));
+  new_token->token = xstrprintf ("%d-solib", token_ctr++);
+  new_token->val = ret_val;
+  release_value (ret_val);
+
+  new_token->next = solib_token_list;
+  solib_token_list = new_token;
+  
+  ui_out_field_string (uiout, "token", new_token->token);
+  return MI_CMD_DONE;
+
+}
+
+/* TARGET-UNLOAD-SOLIB
+
+   Takes a token (the return value of a previous call to target-load-solib)
+   and unloads that shared library.
+
+   If there's some error unloading the library, we will return an
+   error and if possible fetch the error message.
+
+   FIXME: Implement this if somebody ever needs it.
+*/
+
+enum mi_cmd_result
+mi_cmd_target_unload_solib (char *command, char **argv, int argc)
+{
+  mi_error_message = xstrprintf ("Not yet implemented.");
+  return MI_CMD_ERROR;
 }
 
 /* DATA-MEMORY-READ:
@@ -1832,7 +1992,6 @@ captured_mi_execute_command (struct ui_out *uiout, void *data)
 
     case CLI_COMMAND:
       {
-	char *argv[2];
 	/* A CLI command was read from the input stream.  */
 	/* This "feature" will be removed as soon as we have a
 	   complete set of mi commands.  */
@@ -1845,6 +2004,7 @@ captured_mi_execute_command (struct ui_out *uiout, void *data)
 	   mi_execute_cli_command, which isn't perfect either.  */
 
 #if 0
+	char *argv[2];
 	/* Call the "console" interpreter.  */
 	argv[0] = "console";
 	argv[1] = context->command;
@@ -2238,7 +2398,9 @@ mi_execute_async_cli_command (char *mi, char *args, int from_tty)
 	  ui_out_field_string (uiout, "reason",
 			       async_reason_lookup 
 			       (EXEC_ASYNC_END_STEPPING_RANGE));
-	  mi_exec_async_cli_cmd_continuation (arg);
+	  ui_out_print_annotation_int (uiout, 0, "thread-id",
+				       pid_to_thread_id (inferior_ptid));
+	  mi_exec_async_cli_cmd_continuation ((struct continuation_arg *) arg);
 	}
       /* APPLE LOCAL end inlined subroutine  */
       else
@@ -2246,7 +2408,7 @@ mi_execute_async_cli_command (char *mi, char *args, int from_tty)
 	  /* If we didn't manage to set the inferior going, that's
 	     most likely an error... */
 	  discard_all_continuations ();
-	  if (arg->exec_error_cleanups != (struct cleanups *) -1)
+	  if (arg->exec_error_cleanups != (struct cleanup *) -1)
 	    discard_exec_error_cleanups (arg->exec_error_cleanups);
 	  free_continuation_arg (arg);
 	  if (except.message != NULL)
@@ -2312,10 +2474,10 @@ mi_exec_async_cli_cmd_continuation (struct continuation_arg *in_arg)
 	  arg->cleanups = NULL;
 	}
       
-      if (arg->exec_error_cleanups != (struct cleanups *) -1)
+      if (arg->exec_error_cleanups != (struct cleanup *) -1)
 	{
 	  discard_exec_error_cleanups (arg->exec_error_cleanups);
-	  arg->exec_error_cleanups = -1;
+	  arg->exec_error_cleanups = (struct cleanup *) -1;
 	}
 
       fputs_unfiltered ("*stopped", raw_stdout);
@@ -2382,7 +2544,8 @@ mi_exec_async_cli_cmd_continuation (struct continuation_arg *in_arg)
     }
   else if (target_can_async_p ())
     {
-      add_continuation (mi_exec_async_cli_cmd_continuation, in_arg);
+      add_continuation (mi_exec_async_cli_cmd_continuation, 
+                        (struct continuation_arg *) in_arg);
     }
 }
 

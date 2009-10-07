@@ -82,6 +82,9 @@ static int CopyExpanded(connection_struct *conn,
 			      current_user_info.domain,
 			      buf, sizeof(buf));
 	l = push_ascii(*dst,buf,*n, STR_TERMINATE);
+	if (l == -1) {
+		return 0;
+	}
 	(*dst) += l;
 	(*n) -= l;
 	return l;
@@ -94,6 +97,9 @@ static int CopyAndAdvance(char **dst, char *src, int *n)
 		return 0;
 	}
 	l = push_ascii(*dst,src,*n, STR_TERMINATE);
+	if (l == -1) {
+		return 0;
+	}
 	(*dst) += l;
 	(*n) -= l;
 	return l;
@@ -404,7 +410,7 @@ static void PackDriverData(struct pack_desc* desc)
 	SIVAL(drivdata,0,sizeof drivdata); /* cb */
 	SIVAL(drivdata,4,1000);	/* lVersion */
 	memset(drivdata+8,0,32);	/* szDeviceName */
-	push_ascii(drivdata+8,"NULL",-1, STR_TERMINATE);
+	push_ascii(drivdata+8,"NULL",32, STR_TERMINATE);
 	PACKl(desc,"l",drivdata,sizeof drivdata); /* pDriverData */
 }
 

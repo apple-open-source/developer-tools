@@ -163,7 +163,7 @@ namespace IOFireWireLib {
 		if ( error || mSegmentCount == 0)
 			throw error ;
 			
-		mSegments = new PhysicalSegment[mSegmentCount] ;
+		mSegments = new FWPhysicalSegment32[mSegmentCount] ;
 		if (!mSegments)
 		{
 			throw kIOReturnNoMemory ;
@@ -187,7 +187,7 @@ namespace IOFireWireLib {
 		ROSETTA_ONLY(	
 			{
 				UInt32 i;
-				for( i = 0; i < mSegmentCount; i++ );
+				for( i = 0; i < mSegmentCount; i++ )
 				{
 					mSegments[i].location = OSSwapInt32( mSegments[i].location );
 					mSegments[i].length = OSSwapInt32( mSegments[i].length );
@@ -195,7 +195,7 @@ namespace IOFireWireLib {
 			}
 		);
 #endif
-		
+
 		mFWAddress = FWAddress(0, mSegments[0].location, 0) ;
 	}
 	

@@ -17,8 +17,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 
 #include "config.h"
@@ -105,36 +105,6 @@ gfc_open_file (const char *name)
 }
 
 
-/* Given a word, return the correct article.  */
-
-const char *
-gfc_article (const char *word)
-{
-  const char *p;
-
-  switch (*word)
-    {
-    case 'a':
-    case 'A':
-    case 'e':
-    case 'E':
-    case 'i':
-    case 'I':
-    case 'o':
-    case 'O':
-    case 'u':
-    case 'U':
-      p = "an";
-      break;
-
-    default:
-      p = "a";
-    }
-
-  return p;
-}
-
-
 /* Return a string for each type.  */
 
 const char *
@@ -158,6 +128,9 @@ gfc_basic_typename (bt type)
       break;
     case BT_CHARACTER:
       p = "CHARACTER";
+      break;
+    case BT_HOLLERITH:
+      p = "HOLLERITH";
       break;
     case BT_DERIVED:
       p = "DERIVED";
@@ -206,6 +179,9 @@ gfc_typename (gfc_typespec * ts)
       break;
     case BT_CHARACTER:
       sprintf (buffer, "CHARACTER(%d)", ts->kind);
+      break;
+    case BT_HOLLERITH:
+      sprintf (buffer, "HOLLERITH");
       break;
     case BT_DERIVED:
       sprintf (buffer, "TYPE(%s)", ts->derived->name);
@@ -280,7 +256,6 @@ gfc_init_1 (void)
   gfc_scanner_init_1 ();
   gfc_arith_init_1 ();
   gfc_intrinsic_init_1 ();
-  gfc_simplify_init_1 ();
 }
 
 

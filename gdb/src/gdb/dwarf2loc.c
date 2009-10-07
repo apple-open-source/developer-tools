@@ -298,7 +298,6 @@ dwarf2_evaluate_loc_desc (struct symbol *var, struct frame_info *frame,
 			  gdb_byte *data, unsigned short size,
 			  struct objfile *objfile)
 {
-  struct gdbarch *arch = get_frame_arch (frame);
   struct value *retval;
   struct dwarf_expr_baton baton;
   struct dwarf_expr_context *ctx;
@@ -321,7 +320,7 @@ dwarf2_evaluate_loc_desc (struct symbol *var, struct frame_info *frame,
   ctx->get_frame_base = dwarf_expr_frame_base;
   ctx->get_tls_address = dwarf_expr_tls_address;
 
-  dwarf_expr_eval (ctx, data, size);
+  dwarf_expr_eval (ctx, data, size, 0);
   /* APPLE LOCAL begin DW_op_pieces for PPC registers */
   if (ctx->num_pieces == 2
       && ctx->pieces[0].in_reg
@@ -455,7 +454,7 @@ dwarf2_loc_desc_needs_frame (gdb_byte *data, unsigned short size)
   ctx->get_frame_base = needs_frame_frame_base;
   ctx->get_tls_address = needs_frame_tls_address;
 
-  dwarf_expr_eval (ctx, data, size);
+  dwarf_expr_eval (ctx, data, size, 0);
 
   in_reg = ctx->in_reg;
 
@@ -706,8 +705,6 @@ print_single_dwarf_location (struct ui_file *stream, gdb_byte **loc_ptr,
   int bytes_read;
   ULONGEST uoffset, reg;
   LONGEST offset;
-  char *output_str;
-  int len;
   gdb_byte *op_ptr = *loc_ptr;
 
   while (op_ptr < op_end)
@@ -909,8 +906,6 @@ print_single_dwarf_location (struct ui_file *stream, gdb_byte **loc_ptr,
 	  break;
 	case DW_OP_fbreg:
 	  {
-	    gdb_byte *datastart;
-	    size_t datalen;
 	    unsigned int before_stack_len;
 	    
 	    op_ptr = read_sleb128 (op_ptr, op_end, &offset);
@@ -927,7 +922,7 @@ print_single_dwarf_location (struct ui_file *stream, gdb_byte **loc_ptr,
 	       specific this_base method.  */
 	    /*
 	      (ctx->get_frame_base) (ctx->baton, &datastart, &datalen);
-	      dwarf_expr_eval (ctx, datastart, datalen);
+	      dwarf_expr_eval (ctx, datastart, datalen, 0);
 	      result = dwarf_expr_fetch (ctx, 0);
 	      if (ctx->in_reg)
 	      result = (ctx->read_reg) (ctx->baton, result);
@@ -997,7 +992,6 @@ print_single_dwarf_location (struct ui_file *stream, gdb_byte **loc_ptr,
 	    case DW_OP_deref_size:
 	      {
 		gdb_byte *buf = alloca (TARGET_ADDR_BIT / TARGET_CHAR_BIT);
-		int bytes_read;
 		
 		(ctx->read_mem) (ctx->baton, buf, result, *op_ptr++); 
 		fprintf_filtered (stream, "at address 0x%s", paddr_nz (result));

@@ -1,12 +1,13 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---               GNU ADA RUN-TIME LIBRARY (GNARL) COMPONENTS                --
+--                GNAT RUN-TIME LIBRARY (GNARL) COMPONENTS                  --
 --                                                                          --
---                 SYSTEM.TASKING.PROTECTED_OBJECTS.ENTRIES                 --
+--      S Y S T E M . T A S K I N G . P R O T E C T E D _ O B J E C T S .   --
+--                               E N T R I E S                              --
 --                                                                          --
 --                                  B o d y                                 --
 --                                                                          --
---         Copyright (C) 1998-2004, Free Software Foundation, Inc.          --
+--         Copyright (C) 1998-2005, Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +17,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNARL; see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -31,39 +32,40 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
---  This package contains all the simple primitives related to
---  Protected_Objects with entries (i.e init, lock, unlock).
+--  This package contains all the simple primitives related to protected
+--  objects with entries (i.e init, lock, unlock).
 
 --  The handling of protected objects with no entries is done in
 --  System.Tasking.Protected_Objects, the complex routines for protected
 --  objects with entries in System.Tasking.Protected_Objects.Operations.
+
 --  The split between Entries and Operations is needed to break circular
 --  dependencies inside the run time.
 
---  Note: the compiler generates direct calls to this interface, via Rtsfind.
+--  Note: the compiler generates direct calls to this interface, via Rtsfind
 
 with Ada.Exceptions;
---  used for Exception_Occurrence_Access
+--  Used for Exception_Occurrence_Access
 --           Raise_Exception
 
 with System.Task_Primitives.Operations;
---  used for Initialize_Lock
+--  Used for Initialize_Lock
 --           Write_Lock
 --           Unlock
 --           Get_Priority
 --           Wakeup
 
 with System.Tasking.Initialization;
---  used for Defer_Abort,
+--  Used for Defer_Abort,
 --           Undefer_Abort,
 --           Change_Base_Priority
 
 pragma Elaborate_All (System.Tasking.Initialization);
---  this insures that tasking is initialized if any protected objects are
+--  This insures that tasking is initialized if any protected objects are
 --  created.
 
 with System.Parameters;
---  used for Single_Lock
+--  Used for Single_Lock
 
 package body System.Tasking.Protected_Objects.Entries is
 
@@ -103,8 +105,9 @@ package body System.Tasking.Protected_Objects.Entries is
       end if;
 
       if Ceiling_Violation then
-         --  Dip our own priority down to ceiling of lock.
-         --  See similar code in Tasking.Entry_Calls.Lock_Server.
+
+         --  Dip our own priority down to ceiling of lock. See similar code in
+         --  Tasking.Entry_Calls.Lock_Server.
 
          STPO.Write_Lock (Self_ID);
          Old_Base_Priority := Self_ID.Common.Base_Priority;
@@ -130,7 +133,7 @@ package body System.Tasking.Protected_Objects.Entries is
          Object.Pending_Action := True;
       end if;
 
-      --  Send program_error to all tasks still queued on this object.
+      --  Send program_error to all tasks still queued on this object
 
       for E in Object.Entry_Queues'Range loop
          Entry_Call := Object.Entry_Queues (E).Head;
@@ -204,6 +207,7 @@ package body System.Tasking.Protected_Objects.Entries is
       Initialize_Lock (Init_Priority, Object.L'Access);
       Initialization.Undefer_Abort (Self_ID);
       Object.Ceiling := System.Any_Priority (Init_Priority);
+      Object.Owner := Null_Task;
       Object.Compiler_Info := Compiler_Info;
       Object.Pending_Action := False;
       Object.Call_In_Progress := null;
@@ -229,40 +233,50 @@ package body System.Tasking.Protected_Objects.Entries is
            (Program_Error'Identity, "Protected Object is finalized");
       end if;
 
-      --  If pragma Detect_Blocking is active then Program_Error must
-      --  be raised if this potentially blocking operation is called from
-      --  a protected action, and the protected object nesting level
-      --  must be increased.
+      --  If pragma Detect_Blocking is active then, as described in the ARM
+      --  9.5.1, par. 15, we must check whether this is an external call on a
+      --  protected subprogram with the same target object as that of the
+      --  protected action that is currently in progress (i.e., if the caller
+      --  is already the protected object's owner). If this is the case hence
+      --  Program_Error must be raised.
 
-      if Detect_Blocking then
-         declare
-            Self_Id : constant Task_Id := STPO.Self;
-         begin
-            if Self_Id.Common.Protected_Action_Nesting > 0  then
-               Ada.Exceptions.Raise_Exception
-                 (Program_Error'Identity, "potentially blocking operation");
-            else
-               --  We are entering in a protected action, so that we
-               --  increase the protected object nesting level.
-
-               Self_Id.Common.Protected_Action_Nesting :=
-                 Self_Id.Common.Protected_Action_Nesting + 1;
-            end if;
-         end;
+      if Detect_Blocking and then Object.Owner = Self then
+         raise Program_Error;
       end if;
 
-      --  The lock is made without defering abortion.
+      --  The lock is made without defering abort
 
-      --  Therefore the abortion has to be deferred before calling this
-      --  routine. This means that the compiler has to generate a Defer_Abort
-      --  call before the call to Lock.
+      --  Therefore the abort has to be deferred before calling this routine.
+      --  This means that the compiler has to generate a Defer_Abort call
+      --  before the call to Lock.
 
-      --  The caller is responsible for undeferring abortion, and compiler
+      --  The caller is responsible for undeferring abort, and compiler
       --  generated calls must be protected with cleanup handlers to ensure
-      --  that abortion is undeferred in all cases.
+      --  that abort is undeferred in all cases.
 
       pragma Assert (STPO.Self.Deferral_Level > 0);
       Write_Lock (Object.L'Access, Ceiling_Violation);
+
+      --  We are entering in a protected action, so that we increase the
+      --  protected object nesting level (if pragma Detect_Blocking is
+      --  active), and update the protected object's owner.
+
+      if Detect_Blocking then
+         declare
+            Self_Id : constant Task_Id := Self;
+
+         begin
+            --  Update the protected object's owner
+
+            Object.Owner := Self_Id;
+
+            --  Increase protected object nesting level
+
+            Self_Id.Common.Protected_Action_Nesting :=
+              Self_Id.Common.Protected_Action_Nesting + 1;
+         end;
+      end if;
+
    end Lock_Entries;
 
    procedure Lock_Entries (Object : Protection_Entries_Access) is
@@ -289,32 +303,49 @@ package body System.Tasking.Protected_Objects.Entries is
            (Program_Error'Identity, "Protected Object is finalized");
       end if;
 
-      --  If pragma Detect_Blocking is active then Program_Error must be
-      --  raised if this potentially blocking operation is called from a
-      --  protected action, and the protected object nesting level must
-      --  be increased.
+      --  If pragma Detect_Blocking is active then, as described in the ARM
+      --  9.5.1, par. 15, we must check whether this is an external call on a
+      --  protected subprogram with the same target object as that of the
+      --  protected action that is currently in progress (i.e., if the caller
+      --  is already the protected object's owner). If this is the case hence
+      --  Program_Error must be raised.
 
-      if Detect_Blocking then
-         declare
-            Self_Id : constant Task_Id := STPO.Self;
-         begin
-            if Self_Id.Common.Protected_Action_Nesting > 0  then
-               Ada.Exceptions.Raise_Exception
-                 (Program_Error'Identity, "potentially blocking operation");
-            else
-               --  We are entering in a protected action, so that we
-               --  increase the protected object nesting level.
+      --  Note that in this case (getting read access), several tasks may
+      --  have read ownership of the protected object, so that this method of
+      --  storing the (single) protected object's owner does not work
+      --  reliably for read locks. However, this is the approach taken for two
+      --  major reasosn: first, this function is not currently being used (it
+      --  is provided for possible future use), and second, it largely
+      --  simplifies the implementation.
 
-               Self_Id.Common.Protected_Action_Nesting :=
-                 Self_Id.Common.Protected_Action_Nesting + 1;
-            end if;
-         end;
+      if Detect_Blocking and then Object.Owner = Self then
+         raise Program_Error;
       end if;
 
       Read_Lock (Object.L'Access, Ceiling_Violation);
 
       if Ceiling_Violation then
          Raise_Exception (Program_Error'Identity, "Ceiling Violation");
+      end if;
+
+      --  We are entering in a protected action, so that we increase the
+      --  protected object nesting level (if pragma Detect_Blocking is
+      --  active), and update the protected object's owner.
+
+      if Detect_Blocking then
+         declare
+            Self_Id : constant Task_Id := Self;
+
+         begin
+            --  Update the protected object's owner
+
+            Object.Owner := Self_Id;
+
+            --  Increase protected object nesting level
+
+            Self_Id.Common.Protected_Action_Nesting :=
+              Self_Id.Common.Protected_Action_Nesting + 1;
+         end;
       end if;
    end Lock_Read_Only_Entries;
 
@@ -326,16 +357,23 @@ package body System.Tasking.Protected_Objects.Entries is
    begin
       --  We are exiting from a protected action, so that we decrease the
       --  protected object nesting level (if pragma Detect_Blocking is
-      --  active).
+      --  active), and remove ownership of the protected object.
 
       if Detect_Blocking then
          declare
             Self_Id : constant Task_Id := Self;
-         begin
-            --  Cannot call this procedure without being within a protected
-            --  action.
 
-            pragma Assert (Self_Id.Common.Protected_Action_Nesting > 0);
+         begin
+            --  Calls to this procedure can only take place when being within
+            --  a protected action and when the caller is the protected
+            --  object's owner.
+
+            pragma Assert (Self_Id.Common.Protected_Action_Nesting > 0
+                             and then Object.Owner = Self_Id);
+
+            --  Remove ownership of the protected object
+
+            Object.Owner := Null_Task;
 
             Self_Id.Common.Protected_Action_Nesting :=
               Self_Id.Common.Protected_Action_Nesting - 1;

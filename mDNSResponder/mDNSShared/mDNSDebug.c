@@ -23,6 +23,18 @@
     Change History (most recent first):
 
 $Log: mDNSDebug.c,v $
+Revision 1.16  2009/04/11 01:43:28  jessic2
+<rdar://problem/4426780> Daemon: Should be able to turn on LogOperation dynamically
+
+Revision 1.15  2009/04/11 00:20:26  jessic2
+<rdar://problem/4426780> Daemon: Should be able to turn on LogOperation dynamically
+
+Revision 1.14  2008/11/26 00:01:08  cheshire
+Get rid of "Unknown" tag in SIGINFO output on Leopard
+
+Revision 1.13  2007/12/01 00:40:30  cheshire
+Fixes from Bob Bradley for building on EFI
+
 Revision 1.12  2007/10/01 19:06:19  cheshire
 Defined symbolic constant MDNS_LOG_INITIAL_LEVEL to set the logging level we start out at
 
@@ -68,21 +80,19 @@ Changes necessary to support mDNSResponder on Linux.
 
 #include <stdio.h>
 
-#if defined(WIN32)
-// Need to add Windows syslog support here
+#if defined(WIN32) || defined(EFI32) || defined(EFI64) || defined(EFIX64)
+// Need to add Windows/EFI syslog support here
 #define LOG_PID 0x01
 #define LOG_CONS 0x02
 #define LOG_PERROR 0x20
-#define openlog(A,B,C) (void)(A); (void)(B)
-#define syslog(A,B,C)
-#define closelog()
 #else
 #include <syslog.h>
 #endif
 
 #include "mDNSEmbeddedAPI.h"
 
-mDNSexport LogLevel_t mDNS_LogLevel = MDNS_LOG_INITIAL_LEVEL;
+mDNSexport int mDNS_LoggingEnabled = 0;
+mDNSexport int mDNS_PacketLoggingEnabled = 0;
 
 #if MDNS_DEBUGMSGS
 mDNSexport int mDNS_DebugMode = mDNStrue;
@@ -92,97 +102,47 @@ mDNSexport int mDNS_DebugMode = mDNSfalse;
 
 // Note, this uses mDNS_vsnprintf instead of standard "vsnprintf", because mDNS_vsnprintf knows
 // how to print special data types like IP addresses and length-prefixed domain names
-#if MDNS_DEBUGMSGS
-mDNSexport void debugf_(const char *format, ...)
-	{
-	unsigned char buffer[512];
-	va_list ptr;
-	va_start(ptr,format);
-	buffer[mDNS_vsnprintf((char *)buffer, sizeof(buffer), format, ptr)] = 0;
-	va_end(ptr);
-	fprintf(stderr,"%s\n", buffer);
-	fflush(stderr);
-	}
-#endif
-
 #if MDNS_DEBUGMSGS > 1
 mDNSexport void verbosedebugf_(const char *format, ...)
 	{
-	unsigned char buffer[512];
+	char buffer[512];
 	va_list ptr;
 	va_start(ptr,format);
-	buffer[mDNS_vsnprintf((char *)buffer, sizeof(buffer), format, ptr)] = 0;
+	buffer[mDNS_vsnprintf(buffer, sizeof(buffer), format, ptr)] = 0;
 	va_end(ptr);
-	fprintf(stderr,"%s\n", buffer);
-	fflush(stderr);
+	mDNSPlatformWriteDebugMsg(buffer);
 	}
 #endif
 
-mDNSlocal void WriteLogMsg(const char *ident, const char *buffer, int logoptflags)
+// Log message with default "mDNSResponder" ident string at the start
+mDNSlocal void LogMsgWithLevelv(mDNSLogLevel_t logLevel, const char *format, va_list ptr)
 	{
-	if (mDNS_DebugMode)	// In debug mode we write to stderr
-		{
-		fprintf(stderr,"%s\n", buffer);
-		fflush(stderr);
-		}
-	else				// else, in production mode, we write to syslog
-		{
-		openlog(ident, LOG_CONS | logoptflags, LOG_DAEMON);
-		syslog(LOG_ERR, "%s", buffer);
-		closelog();
-		}
+	char buffer[512];
+	buffer[mDNS_vsnprintf((char *)buffer, sizeof(buffer), format, ptr)] = 0;
+	mDNSPlatformWriteLogMsg(ProgramName, buffer, logLevel);
 	}
+
+#define LOG_HELPER_BODY(L) \
+	{ \
+	va_list ptr; \
+	va_start(ptr,format); \
+	LogMsgWithLevelv(L, format, ptr); \
+	va_end(ptr); \
+	}
+
+// see mDNSDebug.h
+#if !MDNS_HAS_VA_ARG_MACROS
+void debug_noop(const char *format, ...)  { (void) format; }
+void LogMsg_(const char *format, ...)       LOG_HELPER_BODY(MDNS_LOG_MSG)
+void LogOperation_(const char *format, ...) LOG_HELPER_BODY(MDNS_LOG_OPERATION)
+void LogSPS_(const char *format, ...)       LOG_HELPER_BODY(MDNS_LOG_SPS)
+void LogInfo_(const char *format, ...)      LOG_HELPER_BODY(MDNS_LOG_INFO)
+#endif
+
+#if MDNS_DEBUGMSGS
+void debugf_(const char *format, ...)      LOG_HELPER_BODY(MDNS_LOG_DEBUG)
+#endif
 
 // Log message with default "mDNSResponder" ident string at the start
-mDNSexport void LogMsg(const char *format, ...)
-	{
-	char buffer[512];
-	va_list ptr;
-	va_start(ptr,format);
-	buffer[mDNS_vsnprintf((char *)buffer, sizeof(buffer), format, ptr)] = 0;
-	va_end(ptr);
-	WriteLogMsg(ProgramName, buffer, 0);
-	}
-
-// Log message with specified ident string at the start
-mDNSexport void LogMsgIdent(const char *ident, const char *format, ...)
-	{
-	char buffer[512];
-	va_list ptr;
-	va_start(ptr,format);
-	buffer[mDNS_vsnprintf((char *)buffer, sizeof(buffer), format, ptr)] = 0;
-	va_end(ptr);
-	WriteLogMsg(ident, buffer, ident && *ident ? LOG_PID : 0);
-	}
-
-// Log message with no ident string at the start
-mDNSexport void LogMsgNoIdent(const char *format, ...)
-	{
-	char buffer[512];
-	va_list ptr;
-	va_start(ptr,format);
-	buffer[mDNS_vsnprintf((char *)buffer, sizeof(buffer), format, ptr)] = 0;
-	va_end(ptr);
-	WriteLogMsg("", buffer, 0);
-	}
-
-mDNSlocal const char *CStringForLogLevel(LogLevel_t level)
-	{
-	switch (level) 
-		{
-		case MDNS_LOG_NONE:          return "MDNS_LOG_NONE";
-//		case MDNS_LOG_ERROR:         return "MDNS_LOG_ERROR";
-//		case MDNS_LOG_WARN:          return "MDNS_LOG_WARN";
-//		case MDNS_LOG_INFO:          return "MDNS_LOG_INFO";
-//		case MDNS_LOG_DEBUG:         return "MDNS_LOG_DEBUG";
-		case MDNS_LOG_VERBOSE_DEBUG: return "MDNS_LOG_VERBOSE_DEBUG";
-		default:                     return "MDNS_LOG_UNKNOWN"; 
-		}
-	}
-
-mDNSexport void SigLogLevel(void)
-	{
-	if (mDNS_LogLevel < MDNS_LOG_VERBOSE_DEBUG) mDNS_LogLevel++;
-	else mDNS_LogLevel = MDNS_LOG_NONE;
-	LogMsg("Log Level Changed to %s", CStringForLogLevel(mDNS_LogLevel));
-	}
+mDNSexport void LogMsgWithLevel(mDNSLogLevel_t logLevel, const char *format, ...)
+	LOG_HELPER_BODY(logLevel)

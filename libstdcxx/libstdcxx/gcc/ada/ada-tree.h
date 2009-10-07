@@ -6,7 +6,7 @@
  *                                                                          *
  *                              C Header File                               *
  *                                                                          *
- *          Copyright (C) 1992-2005 Free Software Foundation, Inc.          *
+ *          Copyright (C) 1992-2006 Free Software Foundation, Inc.          *
  *                                                                          *
  * GNAT is free software;  you can  redistribute it  and/or modify it under *
  * terms of the  GNU General Public License as published  by the Free Soft- *
@@ -16,8 +16,8 @@
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License *
  * for  more details.  You should have  received  a copy of the GNU General *
  * Public License  distributed with GNAT;  see file COPYING.  If not, write *
- * to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, *
- * MA 02111-1307, USA.                                                      *
+ * to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, *
+ * Boston, MA 02110-1301, USA.                                              *
  *                                                                          *
  * GNAT was originally developed  by the GNAT team at  New York University. *
  * Extensive contributions were provided by Ada Core Technologies Inc.      *
@@ -160,9 +160,6 @@ struct lang_type GTY(()) {tree t; };
    padding or alignment.  */
 #define TYPE_IS_PADDING_P(NODE) TYPE_LANG_FLAG_5 (RECORD_TYPE_CHECK (NODE))
 
-/* For a UNION_TYPE, nonzero if this is an unchecked union.  */
-#define TYPE_UNCHECKED_UNION_P(NODE) TYPE_LANG_FLAG_6 (UNION_TYPE_CHECK (NODE))
-
 /* This field is only defined for FUNCTION_TYPE nodes. If the Ada
    subprogram contains no parameters passed by copy in/copy out then this
    field is 0. Otherwise it points to a list of nodes used to specify the
@@ -235,6 +232,10 @@ struct lang_type GTY(()) {tree t; };
    discriminant.  */
 #define DECL_STUBBED_P(NODE) DECL_LANG_FLAG_0 (FUNCTION_DECL_CHECK (NODE))
 
+/* Nonzero in a VAR_DECL if it is guaranteed to be constant after having
+   been elaborated and TREE_READONLY is not set on it.  */
+#define DECL_READONLY_ONCE_ELAB(NODE) DECL_LANG_FLAG_0 (VAR_DECL_CHECK (NODE))
+
 /* Nonzero if this decl is always used by reference; i.e., an INDIRECT_REF
    is needed to access the object.  */
 #define DECL_BY_REF_P(NODE) DECL_LANG_FLAG_1 (NODE)
@@ -260,6 +261,9 @@ struct lang_type GTY(()) {tree t; };
 /* Nonzero in a PARM_DECL if we are to pass by descriptor.  */
 #define DECL_BY_DESCRIPTOR_P(NODE) DECL_LANG_FLAG_5 (PARM_DECL_CHECK (NODE))
 
+/* Nonzero in a VAR_DECL if it is a pointer renaming a global object.  */
+#define DECL_RENAMING_GLOBAL_P(NODE) DECL_LANG_FLAG_5 (VAR_DECL_CHECK (NODE))
+
 /* In a CONST_DECL, points to a VAR_DECL that is allocatable to
    memory.  Used when a scalar constant is aliased or has its
    address taken.  */
@@ -274,6 +278,14 @@ struct lang_type GTY(()) {tree t; };
   GET_DECL_LANG_SPECIFIC (FIELD_DECL_CHECK (NODE))
 #define SET_DECL_ORIGINAL_FIELD(NODE, X) \
   SET_DECL_LANG_SPECIFIC (FIELD_DECL_CHECK (NODE), X)
+
+/* In a VAR_DECL, points to the object being renamed if the VAR_DECL is a
+   renaming pointer, otherwise 0.  Note that this object is guaranteed to
+   be protected against multiple evaluations.  */
+#define DECL_RENAMED_OBJECT(NODE) \
+  GET_DECL_LANG_SPECIFIC (VAR_DECL_CHECK (NODE))
+#define SET_DECL_RENAMED_OBJECT(NODE, X) \
+  SET_DECL_LANG_SPECIFIC (VAR_DECL_CHECK (NODE), X)
 
 /* In a FIELD_DECL corresponding to a discriminant, contains the
    discriminant number.  */

@@ -1,4 +1,3 @@
-// APPLE LOCAL file mainline 2005-10-10
 // PR c++/24302
 // { dg-options "-Wunused" }
 

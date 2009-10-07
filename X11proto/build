@@ -1,0 +1,257 @@
+#!/usr/bin/perl
+
+$target=shift @ARGV;
+sys_print("mkdir $ENV{SRCROOT}") unless -e $ENV{SRCROOT};
+
+sub sys_print {
+    $command=shift;
+    print "$command\n";
+    system $command;
+    $retval=$? >> 8;
+    die "returned code $retval" if $retval;
+}
+
+sub sys_print_nodie {
+    $command=shift;
+    print "$command\n";
+    system $command;
+    $retval=$? >> 8;
+    print "returned code $retval\n" if $retval;
+}
+
+if($target eq 'installsrc') {
+    sys_print("ditto . $ENV{SRCROOT}");
+    chdir($ENV{SRCROOT});
+    foreach $module (glob('*')) {
+	next if $module =~ /build/;
+	next if $module =~ /Make/;
+	next if $module =~ /uvn/;
+	next if $module =~ /\./;
+	print "installing source for $module\n";
+	chdir($module);
+	sys_print("../uvn extract; ../uvn patch");
+	chdir('..');
+    }
+    exit();
+}
+
+if($target eq 'clean') {
+    print "Cleaning out directory $ENV{SRCROOT}\n";
+    chdir($ENV{SRCROOT});
+    sys_print("find . -name .svn | xargs rm -rf");
+    sys_print("find . -name .uvn | xargs rm -rf");
+    sys_print("find . -name \"*.gz\" | xargs rm");
+    sys_print("find . -name \"*.bz2\" | xargs rm");
+    sys_print("find . -name patches | xargs rm -rf");
+    exit();
+}
+
+if($target eq 'install') {
+sys_print("mkdir $ENV{DSTROOT}") unless -e $ENV{DSTROOT};
+sys_print("mkdir $ENV{OBJROOT}") unless -e $ENV{OBJROOT};
+$ENV{DESTDIR}=$ENV{DSTROOT};
+    print "Install phase: \n";
+    $prefix="/usr/X11";
+    
+    ($osx_version)=(`sw_vers -productVersion` =~ /(10\.\d)/);
+    print "Building on $osx_version\n";
+    
+# Must create local aclocal dir or aclocal fails
+    $ACLOCAL_LOCALDIR="$ENV{DSTROOT}$prefix/share/aclocal";
+    system "mkdir -p $ACLOCAL_LOCALDIR";
+    
+# The following is required to make aclocal find our .m4 macros
+# Don't include $prefix/share/aclocal since X11proto is the first X11 package to build
+    $ENV{ACLOCAL}="aclocal -I $ACLOCAL_LOCALDIR";
+    $ENV{LIBTOOLIZE}="/usr/bin/glibtoolize";
+    
+# The following is required to make pkg-config find our .pc metadata files
+    $ENV{PKG_CONFIG_PATH}="$ENV{DSTROOT}$prefix/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}";
+    
+# Set the library path so that locally built libs will be found by apps
+    $ENV{LD_LIBRARY_PATH}="$ENV{DSTROOT}$prefix/lib:$ENV{LD_LIBRARY_PATH}";
+    
+    $ENV{PATH}="$ENV{DSTROOT}$prefix/bin:$ENV{PATH}";
+    
+# Set the default font path for xserver/xorg unless it's already set
+    $ENV{FONTPATH}="$prefix/lib/X11/fonts/misc/,$prefix/lib/X11/fonts/Type1/,$prefix/lib/X11/fonts/75dpi/,$prefix/lib/X11/fonts/100dpi/,$prefix/lib/X11/fonts/cyrillic/,$prefix/lib/X11/fonts/TTF/";
+    
+    foreach $arch (split(/ /,$ENV{RC_ARCHS})) {
+        $arch_flags_lib .= "-arch $arch ";
+        if($ENV{MACOSFORGE_RELEASE} eq "YES") {
+            $arch_flags_exec .= " -arch $arch " unless $arch =~ /64/;
+        } else {
+            $arch_flags_exec .= " -arch $arch " unless $arch =~ /ppc/;
+        }
+    }
+
+    $ENV{MACOSX_DEPLOYMENT_TARGET}=$osx_version;
+    
+    set_arch_exec();
+
+    build('util-macros');
+    build('pkg-config');
+
+    set_arch_lib();
+
+    build('freetype');
+    fix_la();
+    build('fontconfig');
+    fix_la_reverse();
+
+    lipoexec("$ENV{DSTROOT}$prefix/bin/fc-cache");
+    lipoexec("$ENV{DSTROOT}$prefix/bin/fc-cat");
+    lipoexec("$ENV{DSTROOT}$prefix/bin/fc-list");
+    lipoexec("$ENV{DSTROOT}$prefix/bin/fc-match");
+
+    set_arch_exec();
+
+    build_proto();
+
+    if($ENV{MACOSFORGE_RELEASE} eq "YES") {
+        sys_print("sed -i.bak 's_$ENV{DSTROOT}__g' $ENV{DSTROOT}$prefix/lib/*.la");
+        sys_print("rm $ENV{DSTROOT}$prefix/lib/*.bak");
+    } else {
+        nuke_la();
+        sys_print("echo X11 > $ENV{DSTROOT}".`python -c "import sys, os;print os.path.join(sys.prefix, 'Extras/X11.pth')"`);
+    }
+
+    make_dsyms();
+}
+
+sub get_workdir {
+    foreach (glob('*')) {
+	if(-e "$_/configure") {
+	    return $_;
+	}
+    }
+    die "Unable to determine workdir";
+}
+
+sub build {
+    ($module)=@_;
+    $m1=$module;
+
+    print("build($module): ");
+    
+    die "$module not found" unless -e "$ENV{SRCROOT}/$module";
+    chdir ("$ENV{SRCROOT}/$module");
+    $full_path="/$module/".get_workdir();
+    sys_print("mkdir -p $ENV{OBJROOT}/$full_path");
+    sys_print("ditto $ENV{SRCROOT}/$full_path $ENV{OBJROOT}/$full_path");
+    sys_print("find . -depth 1 -type f -print | xargs -I foo cp -pv foo $ENV{OBJROOT}/$module");
+
+    chdir("$ENV{OBJROOT}/$full_path");
+    sys_print("autoreconf -fvi") unless ($module eq 'freetype');
+
+    print "Configuring...\n";
+    $conf_flags=" --prefix=$prefix --disable-static --disable-dependency-tracking --disable-nls ";
+
+    $conf_flags_path=$ENV{OBJROOT}."/$module/conf_flags";
+
+    if(-e $conf_flags_path) {
+	$conf_flags .= `cat $conf_flags_path`;
+	chomp $conf_flags;
+    }
+
+    if($ENV{MACOSFORGE_RELEASE} eq "YES") {
+        sys_print("sed -i.bak 's/sysconfig.get_python_lib(\\([^,]\\),0/sysconfig.get_python_lib(\\1,1/g' configure");
+    } else {
+        sys_print(q{sed -i.bak 's|from distutils import sysconfig; print sysconfig.get_python_lib(.*,.*,prefix=.*)|import sys, os;print os.path.join(sys.prefix, \\\\"Extras/X11\\\\")|' configure});
+    }
+
+    sys_print("./configure $conf_flags");
+    sys_print("make -j".`sysctl -n hw.activecpu`);
+    sys_print("make install");
+    chdir('../..');
+}
+
+# protocol headers have no build order dependencies
+sub build_proto {
+    build("applewmproto");
+    build("bigreqsproto");
+    build("compositeproto");
+    build("damageproto");
+    build("dmxproto");
+    build("dri2proto");
+    build("evieext");
+    build("fixesproto");
+    build("fontcacheproto");
+    build("fontsproto");
+    build("glproto");
+    build("inputproto");
+    build("kbproto");
+    build("printproto");
+    build("randrproto");
+    build("recordproto");
+    build("renderproto");
+    build("resourceproto");
+    build("scrnsaverproto");
+    build("videoproto");
+    build("xcmiscproto");
+    build("xextproto");
+    build("xcbproto");
+    build("xf86bigfontproto");
+    build("xf86dgaproto");
+    build("xf86driproto");
+    build("xf86miscproto");
+    build("xf86rushproto");
+    build("xf86vidmodeproto");
+    build("xineramaproto");
+    build("xproto");
+    build("xproxymanagementprotocol");
+    build("trapproto");
+}
+
+
+sub make_dsyms {
+    open(FIND,"find $ENV{DSTROOT} -type f -exec file {} +|");
+    while(<FIND>) {
+	if(/(.*): .*Mach-O/) {
+	    $basename=$1;
+	    $fullpath=$1;
+	    $basename =~ s/\/.*\///;
+	    sys_print_nodie("dsymutil --out=$ENV{SYMROOT}/$basename.dSYM $fullpath");
+	    sys_print_nodie("strip -S $fullpath");
+	}
+    }
+    close FIND;
+}
+
+sub set_arch_exec {
+    $ENV{CFLAGS}="-D__DEBUG__ -ggdb3 -Os -pipe $arch_flags_exec -D_FORTIFY_SOURCE=2 -Wall -Wformat-security";
+    $ENV{LDFLAGS}="-pipe $arch_flags_exec";
+}
+
+sub set_arch_lib {
+    $ENV{CFLAGS}="-D__DEBUG__ -ggdb3 -Os -pipe $arch_flags_lib -D_FORTIFY_SOURCE=2 -Wall -Wformat-security";
+    $ENV{LDFLAGS}="-pipe $arch_flags_lib";
+}
+
+sub fix_la {
+    sys_print_nodie("sed -i.bak 's_libdir=.*_libdir=$ENV{DSTROOT}$prefix/lib_' $ENV{DSTROOT}$prefix/lib/*.la");
+    sys_print_nodie("sed -i.bak 's_ ".$prefix."_ ".$ENV{DSTROOT}.$prefix."_' $ENV{DSTROOT}$prefix/lib/*.la");
+    sys_print_nodie("sed -i.bak \"s/\\(library_names='[^ ]* [^ ]*\\) [^ ]*'/\\1'/\" $ENV{DSTROOT}$prefix/lib/*.la");
+    sys_print_nodie("rm $ENV{DSTROOT}$prefix/lib/*.bak");
+}
+
+sub fix_la_reverse {
+    sys_print_nodie("sed -i.bak 's_libdir=.*_libdir=$prefix/lib_' $ENV{DSTROOT}$prefix/lib/*.la");
+    sys_print_nodie("sed -i.bak 's_$ENV{DSTROOT}__g' $ENV{DSTROOT}$prefix/lib/*.la");
+    sys_print_nodie("rm $ENV{DSTROOT}$prefix/lib/*.bak");
+}
+
+sub nuke_la {
+    sys_print("rm $ENV{DSTROOT}$prefix/lib/*.la");
+}
+
+sub lipoexec {
+    $fname=shift;
+    if($ENV{MACOSFORGE_RELEASE} eq "YES") {
+        sys_print_nodie("lipo $fname -verify_arch x86_64 && lipo -remove x86_64 -output $fname $fname");
+        sys_print_nodie("lipo $fname -verify_arch ppc64 && lipo -remove ppc64 -output $fname $fname");
+    } else {
+        sys_print_nodie("lipo $fname -verify_arch ppc && lipo -remove ppc -output $fname $fname");
+    }
+}
+

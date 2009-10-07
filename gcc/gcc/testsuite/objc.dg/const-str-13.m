@@ -4,8 +4,8 @@
 
 /* { dg-options "-fno-constant-cfstrings -fwritable-strings -fconstant-string-class=Foo -mmacosx-version-min=10.4" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
 /* { dg-options "-fno-constant-cfstrings -fwritable-strings -fconstant-string-class=Foo" { target arm*-*-darwin* } } */
-/* { dg-do run { target *-*-darwin* } } */
-/* { dg-skip-if "" { *-*-darwin* } { "-m64" } { "" } } */
+/* { dg-do run { target powerpc*-*-darwin* i?86*-*-darwin* } } */
+/* { dg-require-effective-target ilp32 } */
 
 #include <objc/Object.h>
 #include <stdlib.h>

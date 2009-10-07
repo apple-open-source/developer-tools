@@ -1,5 +1,5 @@
 /*
- * "$Id: scsi-irix.c 6835 2007-08-22 18:34:34Z mike $"
+ * "$Id: scsi-irix.c 6834 2007-08-22 18:29:25Z mike $"
  *
  *   IRIX SCSI printer support for the Common UNIX Printing System (CUPS).
  *
@@ -66,7 +66,8 @@
 void
 list_devices(void)
 {
-  puts("direct scsi \"Unknown\" \"SCSI Printer\"");
+  printf("direct scsi \"Unknown\" \"%s\"\n",
+         _cupsLangString(cupsLangDefault(), _("SCSI Printer")));
 }
 
 
@@ -236,5 +237,5 @@ print_device(const char *resource,	/* I - SCSI device */
 
 
 /*
- * End of "$Id: scsi-irix.c 6835 2007-08-22 18:34:34Z mike $".
+ * End of "$Id: scsi-irix.c 6834 2007-08-22 18:29:25Z mike $".
  */

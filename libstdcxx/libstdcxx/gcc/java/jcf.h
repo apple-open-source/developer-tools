@@ -1,5 +1,5 @@
 /* Utility macros to read Java(TM) .class files and byte codes.
-   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004
+   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2006
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -16,8 +16,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  
 
 Java and all Java-based marks are trademarks or registered trademarks
 of Sun Microsystems, Inc. in the United States and other countries.
@@ -62,8 +62,8 @@ The Free Software Foundation is independent of Sun Microsystems, Inc.  */
    open() call.
 
    If you want to add another host, add your define to the list below
-   (i.e. defined(WIN32) || defined(YOUR_HOST)) and add an host-specific
-   .c file to Make-lang.in similar to win32-host.c  */
+   (i.e. defined(WIN32) || defined(YOUR_HOST)) and add a host-specific
+   .c file to Make-lang.in similar to win32-host.c.  */
 #if defined(WIN32)
 extern int
 jcf_open_exact_case (const char* filename, int oflag);
@@ -165,9 +165,9 @@ typedef struct JCF GTY(()) {
 
 #define JCF_FINISH(JCF) { \
   CPOOL_FINISH(&(JCF)->cpool); \
-  if ((JCF)->buffer) FREE ((JCF)->buffer); \
-  if ((JCF)->filename) FREE ((char *) (JCF)->filename); \
-  if ((JCF)->classname) FREE ((char *) (JCF)->classname); \
+  if ((JCF)->buffer) free ((JCF)->buffer); \
+  if ((JCF)->filename) free ((char *) (JCF)->filename); \
+  if ((JCF)->classname) free ((char *) (JCF)->classname); \
   (JCF)->finished = 1; }
   
 #define CPOOL_INIT(CPOOL) \
@@ -224,15 +224,20 @@ typedef struct JCF GTY(()) {
 #define ACC_FINAL 0x0010
 #define ACC_SYNCHRONIZED 0x0020
 #define ACC_SUPER 0x0020
+#define ACC_BRIDGE 0x0040
 #define ACC_VOLATILE 0x0040
 #define ACC_TRANSIENT 0x0080
+#define ACC_VARARGS 0x0080
 #define ACC_NATIVE 0x0100
 #define ACC_INTERFACE 0x0200
 #define ACC_ABSTRACT 0x0400
 #define ACC_STRICT 0x0800
+#define ACC_SYNTHETIC 0x01000
+#define ACC_ANNOTATION 0x02000
+#define ACC_ENUM 0x04000
 /* "Invisible" refers to Miranda methods inserted into an abstract
-   #class.  It is also used in the runtime.  */
-#define ACC_INVISIBLE 0x1000
+   class.  It is also used in the runtime.  */
+#define ACC_INVISIBLE 0x8000
 
 #define ACC_VISIBILITY (ACC_PUBLIC | ACC_PRIVATE | ACC_PROTECTED)
 

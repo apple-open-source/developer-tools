@@ -49,6 +49,7 @@
 #include <securityd_client/ssclient.h>
 #include <Security/AuthorizationTags.h>
 #include <Security/AuthorizationTagsPriv.h>
+#include <security_keychain/SecCFTypes.h>
 
 //%%% add this to AuthorizationTagsPriv.h later
 #ifndef AGENT_HINT_LOGIN_KC_SUPPRESS_RESET_PANEL
@@ -62,20 +63,17 @@
 using namespace CssmClient;
 using namespace KeychainCore;
 
-// normal debug calls, which get stubbed out for deployment builds
-#define x_debug(str) secdebug("KClogin",(str))
-#define x_debug1(fmt,arg1) secdebug("KClogin",(fmt),(arg1))
-#define x_debug2(fmt,arg1,arg2) secdebug("KClogin",(fmt),(arg1),(arg2))
 #define kLoginKeychainPathPrefix "~/Library/Keychains/"
 #define kUserLoginKeychainPath "~/Library/Keychains/login.keychain"
-
+#define kEmptyKeychainSizeInBytes   20460
 
 //-----------------------------------------------------------------------------------
 
 StorageManager::StorageManager() :
 	mSavedList(kSecPreferencesDomainUser),
 	mCommonList(kSecPreferencesDomainCommon),
-	mDomain(kSecPreferencesDomainUser)
+	mDomain(kSecPreferencesDomainUser),
+	mMutex(Mutex::recursive)
 {
 	// get session attributes
 	SessionAttributeBits sessionAttrs;
@@ -102,8 +100,8 @@ StorageManager::StorageManager() :
 Keychain
 StorageManager::keychain(const DLDbIdentifier &dLDbIdentifier)
 {
-	StLock<Mutex> stAPILock(globals().apiLock);
-
+	StLock<Mutex>__(mKeychainMapMutex);
+	
 	if (!dLDbIdentifier)
 		return Keychain();
 	
@@ -114,8 +112,11 @@ StorageManager::keychain(const DLDbIdentifier &dLDbIdentifier)
 
     KeychainMap::iterator it = mKeychains.find(dLDbIdentifier);
     if (it != mKeychains.end())
+	{
+		it->second->handle(true); // causes a retain
 		return it->second;
-
+	}
+	
 	// The keychain is not in our cache.  Create it.
 	Module module(dLDbIdentifier.ssuid().guid());
 	DL dl;
@@ -133,7 +134,47 @@ StorageManager::keychain(const DLDbIdentifier &dLDbIdentifier)
 	mKeychains.insert(KeychainMap::value_type(dLDbIdentifier, &*keychain));
 	keychain->inCache(true);
 
+	// get the CF handle for the keychain and retain it
+	CFRetain(keychain->handle(false));
+	
 	return keychain;
+}
+
+void StorageManager::cleanup()
+{
+	StLock<Mutex>__(mKeychainMapMutex);
+	
+	bool didErase = true;
+	
+	while (didErase)
+	{
+		didErase = false;
+		
+		KeychainMap::iterator it = mKeychains.begin();
+		
+		while (it != mKeychains.end())
+		{
+			KeychainMap::iterator current = it++;
+			DLDbIdentifier dbid = current->first;
+			
+			KeychainImpl* k = current->second;
+			
+			// cleanup any items held by this keychain
+			k->cleanup();
+			
+			// cleanup the keychain itself
+			CFTypeRef ref = k->handle(false);
+			if (CFGetRetainCount(ref) == 1)
+			{
+				// deleting removes items from the list we are iterating.  As this would
+				// invalidate our iterator, we start over
+				CFRelease(ref);
+				didErase = true;
+				
+				break;
+			}
+		}
+	}
 }
 
 void 
@@ -141,17 +182,18 @@ StorageManager::removeKeychain(const DLDbIdentifier &dLDbIdentifier,
 	KeychainImpl *keychainImpl)
 {
 	// Lock the recursive mutex
-	StLock<Mutex> stAPILock(globals().apiLock);
-
+	StLock<Mutex>__(mKeychainMapMutex);
+	
 	// If this keychain isn't in the map anymore we're done
 	if (!keychainImpl->inCache())
 		return;
 
 	KeychainMap::iterator it = mKeychains.find(dLDbIdentifier);
-	assert(it != mKeychains.end() && it->second == keychainImpl);
 	if (it != mKeychains.end() && it->second == keychainImpl)
+	{
 		mKeychains.erase(it);
-
+	}
+	
 	keychainImpl->inCache(false);
 }
 
@@ -159,7 +201,8 @@ void
 StorageManager::didRemoveKeychain(const DLDbIdentifier &dLDbIdentifier)
 {
 	// Lock the recursive mutex
-	StLock<Mutex> stAPILock(globals().apiLock);
+	StLock<Mutex>__(mKeychainMapMutex);
+
 	KeychainMap::iterator it = mKeychains.find(dLDbIdentifier);
 	if (it != mKeychains.end())
 	{
@@ -175,6 +218,8 @@ StorageManager::didRemoveKeychain(const DLDbIdentifier &dLDbIdentifier)
 Keychain
 StorageManager::makeKeychain(const DLDbIdentifier &dLDbIdentifier, bool add)
 {
+	StLock<Mutex>__(mKeychainMapMutex);
+	
 	bool post = false;
 
 	Keychain theKeychain = keychain(dLDbIdentifier);
@@ -247,6 +292,8 @@ KCCursor
 StorageManager::createCursor(SecItemClass itemClass,
 	const SecKeychainAttributeList *attrList)
 {
+	StLock<Mutex>_(mMutex);
+	
 	KeychainList searchList;
 	getSearchList(searchList);
 	return KCCursor(searchList, itemClass, attrList);
@@ -255,6 +302,8 @@ StorageManager::createCursor(SecItemClass itemClass,
 KCCursor
 StorageManager::createCursor(const SecKeychainAttributeList *attrList)
 {
+	StLock<Mutex>_(mMutex);
+	
 	KeychainList searchList;
 	getSearchList(searchList);
 	return KCCursor(searchList, attrList);
@@ -263,6 +312,8 @@ StorageManager::createCursor(const SecKeychainAttributeList *attrList)
 void
 StorageManager::lockAll()
 {
+	StLock<Mutex>_(mMutex);
+	
     SecurityServer::ClientSession ss(Allocator::standard(), Allocator::standard());
     ss.lockAll (false);
 }
@@ -270,6 +321,8 @@ StorageManager::lockAll()
 Keychain
 StorageManager::defaultKeychain()
 {
+	StLock<Mutex>_(mMutex);
+	
 	Keychain theKeychain;
 	{
 		mSavedList.revert(false);
@@ -289,6 +342,10 @@ StorageManager::defaultKeychain()
 void
 StorageManager::defaultKeychain(const Keychain &keychain)
 {
+	StLock<Mutex>_(mMutex);
+	StLock<Mutex>__(mKeychainMapMutex);
+	
+	
 	DLDbIdentifier oldDefaultId;
 	DLDbIdentifier newDefaultId(keychain->dlDbIdentifier());
 	{
@@ -308,6 +365,10 @@ StorageManager::defaultKeychain(const Keychain &keychain)
 Keychain
 StorageManager::defaultKeychain(SecPreferencesDomain domain)
 {
+	StLock<Mutex>_(mMutex);
+	StLock<Mutex>__(mKeychainMapMutex);
+	
+	
 	if (domain == kSecPreferencesDomainDynamic)
 		MacOSError::throwMe(errSecInvalidPrefsDomain);
 
@@ -326,6 +387,10 @@ StorageManager::defaultKeychain(SecPreferencesDomain domain)
 void
 StorageManager::defaultKeychain(SecPreferencesDomain domain, const Keychain &keychain)
 {
+	StLock<Mutex>_(mMutex);
+	StLock<Mutex>__(mKeychainMapMutex);
+	
+	
 	if (domain == kSecPreferencesDomainDynamic)
 		MacOSError::throwMe(errSecInvalidPrefsDomain);
 
@@ -338,6 +403,10 @@ StorageManager::defaultKeychain(SecPreferencesDomain domain, const Keychain &key
 Keychain
 StorageManager::loginKeychain()
 {
+	StLock<Mutex>_(mMutex);
+	StLock<Mutex>__(mKeychainMapMutex);
+	
+	
 	Keychain theKeychain;
 	{
 		mSavedList.revert(false);
@@ -357,6 +426,8 @@ StorageManager::loginKeychain()
 void
 StorageManager::loginKeychain(Keychain keychain)
 {
+	StLock<Mutex>_(mMutex);
+	
 	mSavedList.revert(true);
 	mSavedList.loginDLDbIdentifier(keychain->dlDbIdentifier());
 	mSavedList.save();
@@ -365,6 +436,8 @@ StorageManager::loginKeychain(Keychain keychain)
 size_t
 StorageManager::size()
 {
+	StLock<Mutex>_(mMutex);
+	
     mSavedList.revert(false);
 	mCommonList.revert(false);
 	return mSavedList.searchList().size() + mCommonList.searchList().size();
@@ -373,6 +446,10 @@ StorageManager::size()
 Keychain
 StorageManager::at(unsigned int ix)
 {
+	StLock<Mutex>_(mMutex);
+	StLock<Mutex>__(mKeychainMapMutex);
+	
+	
 	mSavedList.revert(false);
 	DLDbList dLDbList = mSavedList.searchList();
 	if (ix < dLDbList.size())
@@ -394,11 +471,17 @@ StorageManager::at(unsigned int ix)
 Keychain
 StorageManager::operator[](unsigned int ix)
 {
+	StLock<Mutex>_(mMutex);
+	StLock<Mutex>__(mKeychainMapMutex);
+	
+	
     return at(ix);
 }	
 
 void StorageManager::rename(Keychain keychain, const char* newName)
 {
+	StLock<Mutex>__(mKeychainMapMutex);
+	
     bool changedDefault = false;
 	DLDbIdentifier newDLDbIdentifier;
 	{
@@ -425,14 +508,13 @@ void StorageManager::rename(Keychain keychain, const char* newName)
 		mSavedList.save();
 
 		// Now update the Keychain cache
-		StLock<Mutex> stAPILock(globals().apiLock);
 		if (keychain->inCache())
 		{
 			KeychainMap::iterator it = mKeychains.find(dLDbIdentifier);
 			assert(it != mKeychains.end() && it->second == keychain.get());
 			if (it != mKeychains.end() && it->second == keychain.get())
 			{
-				// Remove the keychain from the cache under it's old
+				// Remove the keychain from the cache under its old
 				// dLDbIdentifier
 				mKeychains.erase(it);
 			}
@@ -469,6 +551,8 @@ void StorageManager::rename(Keychain keychain, const char* newName)
 
 void StorageManager::renameUnique(Keychain keychain, CFStringRef newName)
 {
+	StLock<Mutex>_(mMutex);
+	
     bool doneCreating = false;
     int index = 1;
     do
@@ -491,6 +575,9 @@ void StorageManager::renameUnique(Keychain keychain, CFStringRef newName)
                     if ( lstat(toUseBuff2, &filebuf) )
                     {
                         rename(keychain, toUseBuff2);
+						KeychainList kcList;
+						kcList.push_back(keychain);
+						remove(kcList, false);
                         doneCreating = true;
                     }
                     else
@@ -521,6 +608,8 @@ static CFStringRef MakeExpandedPath (const char* path)
 
 void StorageManager::removeKeychainFromSyncList (const DLDbIdentifier &id)
 {
+	StLock<Mutex>_(mMutex);
+	
 	// make a CFString of our identifier
 	const char* idname = id.dbName ();
 	if (idname == NULL)
@@ -528,7 +617,7 @@ void StorageManager::removeKeychainFromSyncList (const DLDbIdentifier &id)
 		return;
 	}
 	
-	CFStringRef idString = MakeExpandedPath (idname);
+	CFRef<CFStringRef> idString = MakeExpandedPath (idname);
 	
 	// check and see if this keychain is in the keychain syncing list
 	CFArrayRef value =	 
@@ -542,17 +631,17 @@ void StorageManager::removeKeychainFromSyncList (const DLDbIdentifier &id)
 	}
 	
 	// make a mutable copy of the dictionary
-	CFMutableArrayRef mtValue = CFArrayCreateMutableCopy (NULL, 0, value);
+	CFRef<CFMutableArrayRef> mtValue = CFArrayCreateMutableCopy (NULL, 0, value);
 	CFRelease (value);
 	
 	// walk the array, looking for the value
 	CFIndex i;
-	CFIndex limit = CFArrayGetCount (mtValue);
+	CFIndex limit = CFArrayGetCount (mtValue.get());
 	bool found = false;
 	
 	for (i = 0; i < limit; ++i)
 	{
-		CFDictionaryRef idx = (CFDictionaryRef) CFArrayGetValueAtIndex (mtValue, i);
+		CFDictionaryRef idx = (CFDictionaryRef) CFArrayGetValueAtIndex (mtValue.get(), i);
 		CFStringRef v = (CFStringRef) CFDictionaryGetValue (idx, CFSTR("DbName"));
 		if (v == NULL)
 		{
@@ -560,12 +649,12 @@ void StorageManager::removeKeychainFromSyncList (const DLDbIdentifier &id)
 		}
 		
 		CFStringRef vExpanded = MakeExpandedPath (CFStringGetCStringPtr (v, 0));
-		CFComparisonResult result = CFStringCompare (vExpanded, idString, 0);
+		CFComparisonResult result = CFStringCompare (vExpanded, idString.get(), 0);
 		CFRelease (vExpanded);
 		
 		if (result == 0)
 		{
-			CFArrayRemoveValueAtIndex (mtValue, i);
+			CFArrayRemoveValueAtIndex (mtValue.get(), i);
 			found = true;
 			break;
 		}
@@ -573,7 +662,7 @@ void StorageManager::removeKeychainFromSyncList (const DLDbIdentifier &id)
 	
 	if (found)
 	{
-		CFShow (mtValue);
+		CFShow (mtValue.get());
 		
 		CFPreferencesSetValue (KEYCHAIN_SYNC_KEY,
 							   mtValue,
@@ -582,13 +671,14 @@ void StorageManager::removeKeychainFromSyncList (const DLDbIdentifier &id)
 							   kCFPreferencesAnyHost);
 		CFPreferencesSynchronize (KEYCHAIN_SYNC_DOMAIN, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
 	}
-	
-	CFRelease (idString);
-	CFRelease (mtValue);
 }
 
 void StorageManager::remove(const KeychainList &kcsToRemove, bool deleteDb)
 {
+	StLock<Mutex>_(mMutex);
+	StLock<Mutex>__(mKeychainMapMutex);
+	
+	
 	bool unsetDefault = false;
 	{
 		mSavedList.revert(true);
@@ -609,8 +699,8 @@ void StorageManager::remove(const KeychainList &kcsToRemove, bool deleteDb)
 			{
 				removeKeychainFromSyncList (dLDbIdentifier);
 				
-				// Now remove it from the cache
-				removeKeychain(dLDbIdentifier, theKeychain.get());
+				// Now remove our reference.
+				CFRelease(theKeychain->handle(false));
 			}
 		}
 
@@ -640,6 +730,11 @@ void StorageManager::remove(const KeychainList &kcsToRemove, bool deleteDb)
 void
 StorageManager::getSearchList(KeychainList &keychainList)
 {
+	StLock<Mutex>_(mMutex);
+	
+	// Lock the recursive mutex
+	StLock<Mutex>__(mKeychainMapMutex);
+	
 	if (gServerMode) {
 		keychainList.clear();
 		return;
@@ -656,9 +751,6 @@ StorageManager::getSearchList(KeychainList &keychainList)
 	result.reserve(dLDbList.size() + dynamicList.size() + commonList.size());
 
 	{
-		// Only hold globals().apiLock during the cache lookups
-		StLock<Mutex> stAPILock(globals().apiLock);
-
 		for (DLDbList::const_iterator it = dynamicList.begin();
 			it != dynamicList.end(); ++it)
 		{
@@ -684,6 +776,11 @@ StorageManager::getSearchList(KeychainList &keychainList)
 void
 StorageManager::setSearchList(const KeychainList &keychainList)
 {
+	StLock<Mutex>_(mMutex);
+	
+	// Lock the recursive mutex
+	StLock<Mutex>__(mKeychainMapMutex);
+	
 	DLDbList commonList = mCommonList.searchList();
 
 	// Strip out the common list part from the end of the search list.
@@ -728,6 +825,11 @@ StorageManager::setSearchList(const KeychainList &keychainList)
 void
 StorageManager::getSearchList(SecPreferencesDomain domain, KeychainList &keychainList)
 {
+	StLock<Mutex>_(mMutex);
+
+	// Lock the recursive mutex
+	StLock<Mutex>__(mKeychainMapMutex);
+		
 	if (gServerMode) {
 		keychainList.clear();
 		return;
@@ -756,6 +858,11 @@ void StorageManager::forceUserSearchListReread()
 void
 StorageManager::setSearchList(SecPreferencesDomain domain, const KeychainList &keychainList)
 {
+	StLock<Mutex>_(mMutex);
+	
+	// Lock the recursive mutex
+	StLock<Mutex>__(mKeychainMapMutex);
+	
 	if (domain == kSecPreferencesDomainDynamic)
 		MacOSError::throwMe(errSecInvalidPrefsDomain);
 
@@ -787,6 +894,8 @@ StorageManager::setSearchList(SecPreferencesDomain domain, const KeychainList &k
 void
 StorageManager::domain(SecPreferencesDomain domain)
 {
+	StLock<Mutex>_(mMutex);
+	
 	if (domain == kSecPreferencesDomainDynamic)
 		MacOSError::throwMe(errSecInvalidPrefsDomain);
 
@@ -812,6 +921,8 @@ StorageManager::domain(SecPreferencesDomain domain)
 void
 StorageManager::optionalSearchList(CFTypeRef keychainOrArray, KeychainList &keychainList)
 {
+	StLock<Mutex>_(mMutex);
+	
 	if (!keychainOrArray)
 		getSearchList(keychainList);
 	else
@@ -871,10 +982,11 @@ void StorageManager::convertList(DLDbList &ids, const KeychainList &kcs)
 
 void StorageManager::convertList(KeychainList &kcs, const DLDbList &ids)
 {
+	StLock<Mutex>_(mMutex);
+	
 	KeychainList result;
     result.reserve(ids.size());
 	{
-		StLock<Mutex> stAPILock(globals().apiLock);
 		for (DLDbList::const_iterator ix = ids.begin(); ix != ids.end(); ++ix)
 			result.push_back(keychain(*ix));
 	}
@@ -885,6 +997,8 @@ void StorageManager::convertList(KeychainList &kcs, const DLDbList &ids)
 
 void StorageManager::login(AuthorizationRef authRef, UInt32 nameLength, const char* name)
 {
+	StLock<Mutex>_(mMutex);
+	
     AuthorizationItemSet* info = NULL;
     OSStatus result = AuthorizationCopyInfo(authRef, NULL, &info);	// get the results of the copy rights call.
     Boolean created = false;
@@ -920,6 +1034,8 @@ void StorageManager::login(AuthorizationRef authRef, UInt32 nameLength, const ch
 
 void StorageManager::login(ConstStringPtr name, ConstStringPtr password)
 {
+	StLock<Mutex>_(mMutex);
+	
     if ( name == NULL || password == NULL )
         MacOSError::throwMe(paramErr);
 
@@ -929,10 +1045,9 @@ void StorageManager::login(ConstStringPtr name, ConstStringPtr password)
 void StorageManager::login(UInt32 nameLength, const void *name,
 	UInt32 passwordLength, const void *password)
 {
-	x_debug("StorageManager::login: entered");
 	if (passwordLength != 0 && password == NULL)
 	{
-		x_debug("StorageManager::login: invalid argument (NULL password)");
+		secdebug("KCLogin", "StorageManager::login: invalid argument (NULL password)");
 		MacOSError::throwMe(paramErr);
 	}
 
@@ -942,137 +1057,258 @@ void StorageManager::login(UInt32 nameLength, const void *name,
 		loginDLDbIdentifier = mSavedList.loginDLDbIdentifier();
 	}
 
-	x_debug1("StorageManager::login: loginDLDbIdentifier is %s", (loginDLDbIdentifier) ? loginDLDbIdentifier.dbName() : "<NULL>");
+	secdebug("KCLogin", "StorageManager::login: loginDLDbIdentifier is %s", (loginDLDbIdentifier) ? loginDLDbIdentifier.dbName() : "<NULL>");
 	if (!loginDLDbIdentifier)
 		MacOSError::throwMe(errSecNoSuchKeychain);
 
-	
-	
-	/***** Variables used thoughout the whole Function****************/
-		//Extract User ID
-		int uid = geteuid();
-		//check for root
-		
-		struct passwd * pw;
-		//Search password database for the given user uid
-		pw = getpwuid(uid);
-		if (pw == NULL){
-			x_debug("StorageManager::login: invalid argument (NULL uid)");
-			MacOSError::throwMe(paramErr);
-		}
-			
-		//Get user name from the returned passwd struct
-		char * userName		= pw->pw_name;
-		
-		//Creating shortname Full path
-		std::string shortnameKeychain = DLDbListCFPref::ExpandTildesInPath(kLoginKeychainPathPrefix);
-		shortnameKeychain += userName; // to access, use shortnameKeychain.c_str()
-		
-		//lKeychain contains the full path of login.keychain
-		std::string lKeychain = DLDbListCFPref::ExpandTildesInPath(kLoginKeychainPathPrefix);
-		lKeychain += "login.keychain";
-		
-		//Used to check if the shortnamekeychain exist
-		struct stat st;
-		int stat_result = stat(shortnameKeychain.c_str(), &st);
-	/****************************************************************/
-	
-	Keychain theKeychain(keychain(loginDLDbIdentifier));
-	
-	//Flag to determine if the login.keychain unlocked
-	//	This variable is used for the "Allowing another keychain other than login.keychain to be unlocked"
-	bool loginUnlocked = false;	
-	try
-	{
-		x_debug2("Attempting to unlock login keychain %s with %d-character password", (theKeychain) ? theKeychain->name() : "<NULL>", (unsigned int)passwordLength);
-		theKeychain->unlock(CssmData(const_cast<void *>(password), passwordLength));
-		// x_debug("Login keychain unlocked successfully");
-		loginUnlocked = true;
-	}
-	catch(const CssmError &e)
-	{
-		if (e.osStatus() != CSSMERR_DL_DATASTORE_DOESNOT_EXIST)
-			throw;
-		
-		int rename_stat = 0;
-		
-		//if "~/Libary/Keychains/shortname" file Exist
-		//Note: At this point we know that login.keychain is not made yet, therfore
-		//if "~/Libary/Keychains/shortname" we rename it to login.keychain
-		if(stat_result == 0){
-			
-			//Rename "~/Libary/Keychains/shortname" to "~/Libary/Keychains/login.keychain"
-			rename_stat = ::rename(shortnameKeychain.c_str(), lKeychain.c_str());
-			
-			if(rename_stat != 0){
-				MacOSError::throwMe(errno);
-			}
-			
-			// make the shortname identifier
-			CSSM_VERSION version = {0, 0};
-			DLDbIdentifier shortnameDLDbIdentifier = DLDbListCFPref::makeDLDbIdentifier(gGuidAppleCSPDL, version, 0, CSSM_SERVICE_CSP | CSSM_SERVICE_DL,shortnameKeychain.c_str(),NULL);
-			
-			//if the short keychain exists and it is the only item in
-			//the plist, rename it and blow the plist away.
-			if (mSavedList.searchList().size() == 1 && mSavedList.member(shortnameDLDbIdentifier)){
-				mSavedList.remove(shortnameDLDbIdentifier);
-			}
-			//If the shortname is in the plist, rename it in the plist as well
-			else if(mSavedList.member(shortnameDLDbIdentifier)){
-				mSavedList.revert(true);
-				
-				// theKeychain is in the searchList so lets rename it
-				mSavedList.rename(shortnameDLDbIdentifier,loginDLDbIdentifier);
-				mSavedList.save();
-			}
-			
-		}else{
-			//Default login.keychain is created	
-			x_debug1("Creating login keychain %s", (loginDLDbIdentifier) ? loginDLDbIdentifier.dbName() : "<NULL>");
-			theKeychain->create(passwordLength, password);
-			x_debug("Login keychain created successfully");
-			// Set the prefs for this new login keychain.
-			loginKeychain(theKeychain);
-			// Login Keychain does not lock on sleep nor lock after timeout by default.
-			theKeychain->setSettings(INT_MAX, false);
-		}
-	}
-	
-	/********** This part of the Code is a Temp solution for when a User wants 
-	*			 another Keychain (other than login.keychain) to auto unlock    *************************************
-	*
-	*Description: 
-	*	If the shortname keychain exist and is not in the searchlist then we added it. Also this code
-	*	now will automatically unlock any shortname keychain that has the same password as login.keychain.
-	****************************************************************************************************************/
 
-	
-	try{
-		
-		//If the shrtnamekeychain is not in the searchlist then we should add it to the SearchList
-		CSSM_VERSION version = {0, 0};
-		DLDbIdentifier shrtnameDLDbIdentifier = DLDbListCFPref::makeDLDbIdentifier(gGuidAppleCSPDL, version, 0, CSSM_SERVICE_CSP | CSSM_SERVICE_DL,shortnameKeychain.c_str(),NULL);
-		if( !(mSavedList.member(shrtnameDLDbIdentifier))  && (stat_result == 0) ){
-			// the Keychain exists and is not in our search list, so add it to the 
-			// search list.
-			mSavedList.revert(true);
-			mSavedList.add(shrtnameDLDbIdentifier);
-			mSavedList.save();
-		}
-		
-		Keychain shrtnameKC(keychain(shrtnameDLDbIdentifier));
-					
-		
-		x_debug2("Attempting to unlock shrtnamekeychain %s with %d-character password", 
-			(shrtnameKC) ? shrtnameKC->name() : "<NULL>", (unsigned int)passwordLength);
-		shrtnameKC->unlock(CssmData(const_cast<void *>(password), passwordLength));
+    //***************************************************************
+    // gather keychain information
+    //***************************************************************
+
+    // user name
+    int uid = geteuid();
+    struct passwd *pw = getpwuid(uid);
+    if (pw == NULL) {
+        secdebug("KCLogin", "StorageManager::login: invalid argument (NULL uid)");
+        MacOSError::throwMe(paramErr);
+    }
+    char *userName = pw->pw_name;
+
+    // make keychain path strings
+    std::string keychainPath = DLDbListCFPref::ExpandTildesInPath(kLoginKeychainPathPrefix);
+    std::string shortnameKeychain = keychainPath + userName;
+    std::string shortnameDotKeychain = shortnameKeychain + ".keychain";
+    std::string loginDotKeychain = keychainPath + "login.keychain";
+    std::string loginRenamed1Keychain = keychainPath + "login_renamed1.keychain";
+    
+    // check for existence of keychain files
+    bool shortnameKeychainExists = false;
+    bool shortnameDotKeychainExists = false;
+    bool loginKeychainExists = false;
+    bool loginRenamed1KeychainExists = false;
+    {
+        struct stat st;
+        int stat_result;
+        stat_result = ::stat(shortnameKeychain.c_str(), &st);
+        shortnameKeychainExists = (stat_result == 0);
+        stat_result = ::stat(shortnameDotKeychain.c_str(), &st);
+        shortnameDotKeychainExists = (stat_result == 0);
+        stat_result = ::stat(loginDotKeychain.c_str(), &st);
+        loginKeychainExists = (stat_result == 0);
+        stat_result = ::stat(loginRenamed1Keychain.c_str(), &st);
+        loginRenamed1KeychainExists = (stat_result == 0);
+    }
+
+    bool loginUnlocked = false;	
+
+    // make the keychain identifiers
+    CSSM_VERSION version = {0, 0};
+    DLDbIdentifier shortnameDLDbIdentifier = DLDbListCFPref::makeDLDbIdentifier(gGuidAppleCSPDL, version, 0, CSSM_SERVICE_CSP | CSSM_SERVICE_DL, shortnameKeychain.c_str(), NULL);
+    DLDbIdentifier shortnameDotDLDbIdentifier = DLDbListCFPref::makeDLDbIdentifier(gGuidAppleCSPDL, version, 0, CSSM_SERVICE_CSP | CSSM_SERVICE_DL, shortnameDotKeychain.c_str(), NULL);
+    DLDbIdentifier loginRenamed1DLDbIdentifier = DLDbListCFPref::makeDLDbIdentifier(gGuidAppleCSPDL, version, 0, CSSM_SERVICE_CSP | CSSM_SERVICE_DL, loginRenamed1Keychain.c_str(), NULL);
+
+    //***************************************************************
+    // make file renaming changes first
+    //***************************************************************
+
+    // if "~/Library/Keychains/shortname" exists, we need to migrate it forward;
+    // either to login.keychain if there isn't already one, otherwise to shortname.keychain
+    if (shortnameKeychainExists) {
+        int rename_stat = 0;
+        if (loginKeychainExists) {
+            struct stat st;
+            int tmp_result = ::stat(loginDotKeychain.c_str(), &st);
+            if (tmp_result == 0) {
+                if (st.st_size <= kEmptyKeychainSizeInBytes) {
+                    tmp_result = ::unlink(loginDotKeychain.c_str());
+                    rename_stat = ::rename(shortnameKeychain.c_str(), loginDotKeychain.c_str());
+                    shortnameKeychainExists = (rename_stat != 0);
+                }
+            }
+        }
+        if (shortnameKeychainExists) {
+            if (loginKeychainExists && !shortnameDotKeychainExists) {
+                rename_stat = ::rename(shortnameKeychain.c_str(), shortnameDotKeychain.c_str());
+                shortnameDotKeychainExists = (rename_stat == 0);
+            } else if (!loginKeychainExists) {
+                rename_stat = ::rename(shortnameKeychain.c_str(), loginDotKeychain.c_str());
+                loginKeychainExists = (rename_stat == 0);
+            } else {
+                // we have all 3 keychains: login.keychain, shortname, and shortname.keychain.
+                // on Leopard we never want a shortname keychain, so we must move it aside.
+                char pathbuf[MAXPATHLEN];
+                std::string shortnameRenamedXXXKeychain = keychainPath;
+                shortnameRenamedXXXKeychain += userName;
+                shortnameRenamedXXXKeychain += "_renamed_XXX.keychain";
+                ::strlcpy(pathbuf, shortnameRenamedXXXKeychain.c_str(), sizeof(pathbuf));
+                ::mkstemps(pathbuf, 9); // 9 == strlen(".keychain")
+                rename_stat = ::rename(shortnameKeychain.c_str(), pathbuf);
+                shortnameKeychainExists = (rename_stat != 0);
+            }
+        }
+        if (rename_stat != 0) {
+            MacOSError::throwMe(errno);
+        }
+    }
+    
+    //***************************************************************
+    // handle special case where user previously reset the keychain
+    //***************************************************************
+    // Since 9A581, we have changed the definition of kKeychainRenamedSuffix from "_renamed" to "_renamed_".
+    // Therefore, if "login_renamed1.keychain" exists and there is no plist, the user may have run into a
+    // prior upgrade issue and clicked Reset. If we can successfully unlock login_renamed1.keychain with the
+    // supplied password, then we will attempt to rename it to login.keychain if that file is empty, or with
+    // "shortname.keychain" if it is not.
+
+    if (loginRenamed1KeychainExists && (!loginKeychainExists ||
+        (mSavedList.searchList().size() == 1 && mSavedList.member(loginDLDbIdentifier)) )) {
+        try
+        {
+            Keychain loginRenamed1KC(keychain(loginRenamed1DLDbIdentifier));
+            secdebug("KCLogin", "Attempting to unlock %s with %d-character password", 
+                (loginRenamed1KC) ? loginRenamed1KC->name() : "<NULL>", (unsigned int)passwordLength);
+            loginRenamed1KC->unlock(CssmData(const_cast<void *>(password), passwordLength));
+            // if we get here, we unlocked it
+            if (loginKeychainExists) {
+                struct stat st;
+                int tmp_result = ::stat(loginDotKeychain.c_str(), &st);
+                if (tmp_result == 0) {
+                    if (st.st_size <= kEmptyKeychainSizeInBytes) {
+                        tmp_result = ::unlink(loginDotKeychain.c_str());
+                        tmp_result = ::rename(loginRenamed1Keychain.c_str(), loginDotKeychain.c_str());
+                    } else if (!shortnameDotKeychainExists) {
+                        tmp_result = ::rename(loginRenamed1Keychain.c_str(), shortnameDotKeychain.c_str());
+                        shortnameDotKeychainExists = (tmp_result == 0);
+                    } else {
+                        throw 1;   // can't do anything with it except move it out of the way
+                    }
+                }
+            } else {
+                int tmp_result = ::rename(loginRenamed1Keychain.c_str(), loginDotKeychain.c_str());
+                loginKeychainExists = (tmp_result == 0);
+            }
+        }
+        catch(...)
+        {
+            // we failed to unlock the login_renamed1.keychain file with the login password.
+            // move it aside so we don't try to deal with it again.
+            char pathbuf[MAXPATHLEN];
+            std::string loginRenamedXXXKeychain = keychainPath;
+            loginRenamedXXXKeychain += "login_renamed_XXX.keychain";
+            ::strlcpy(pathbuf, loginRenamedXXXKeychain.c_str(), sizeof(pathbuf));
+            ::mkstemps(pathbuf, 9); // 9 == strlen(".keychain")
+            ::rename(loginRenamed1Keychain.c_str(), pathbuf);
+        }
+    }
+
+    // if login.keychain does not exist at this point, create it
+    if (!loginKeychainExists) {
+        Keychain theKeychain(keychain(loginDLDbIdentifier));
+        secdebug("KCLogin", "Creating login keychain %s", (loginDLDbIdentifier) ? loginDLDbIdentifier.dbName() : "<NULL>");
+        theKeychain->create(passwordLength, password);
+        secdebug("KCLogin", "Login keychain created successfully");
+        loginKeychainExists = true;
+        // Set the prefs for this new login keychain.
+        loginKeychain(theKeychain);
+        // Login Keychain does not lock on sleep nor lock after timeout by default.
+        theKeychain->setSettings(INT_MAX, false);
+        loginUnlocked = true;
+        mSavedList.revert(true);
+    }
+
+    //***************************************************************
+    // make plist changes after files have been renamed or created
+    //***************************************************************
+
+    // if the shortname keychain exists in the search list, either rename or remove the entry
+    if (mSavedList.member(shortnameDLDbIdentifier)) {
+        if (shortnameDotKeychainExists && !mSavedList.member(shortnameDotDLDbIdentifier)) {
+            // change shortname to shortname.keychain (login.keychain will be added later if not present)
+            secdebug("KCLogin", "Renaming %s to %s in keychain search list",
+                    (shortnameDLDbIdentifier) ? shortnameDLDbIdentifier.dbName() : "<NULL>",
+                    (shortnameDotDLDbIdentifier) ? shortnameDotDLDbIdentifier.dbName() : "<NULL>");
+            mSavedList.rename(shortnameDLDbIdentifier, shortnameDotDLDbIdentifier);
+        } else if (!mSavedList.member(loginDLDbIdentifier)) {
+            // change shortname to login.keychain
+            secdebug("KCLogin", "Renaming %s to %s in keychain search list",
+                    (shortnameDLDbIdentifier) ? shortnameDLDbIdentifier.dbName() : "<NULL>",
+                    (loginDLDbIdentifier) ? loginDLDbIdentifier.dbName() : "<NULL>");
+            mSavedList.rename(shortnameDLDbIdentifier, loginDLDbIdentifier);
+        } else {
+            // already have login.keychain in list, and renaming to shortname.keychain isn't an option,
+            // so just remove the entry
+            secdebug("KCLogin", "Removing %s from keychain search list", (shortnameDLDbIdentifier) ? shortnameDLDbIdentifier.dbName() : "<NULL>");
+            mSavedList.remove(shortnameDLDbIdentifier);
+        }
+
+        // note: save() will cause the plist to be unlinked if the only remaining entry is for login.keychain
+        mSavedList.save();
+        mSavedList.revert(true);
+    }
+
+    // make sure that login.keychain is in the search list
+    if (!mSavedList.member(loginDLDbIdentifier)) {
+    	secdebug("KCLogin", "Adding %s to keychain search list", (loginDLDbIdentifier) ? loginDLDbIdentifier.dbName() : "<NULL>");
+        mSavedList.add(loginDLDbIdentifier);
+        mSavedList.save();
+        mSavedList.revert(true);
+    }
+
+    // if we have a shortname.keychain, always include it in the plist (after login.keychain)
+    if (shortnameDotKeychainExists && !mSavedList.member(shortnameDotDLDbIdentifier)) {
+        mSavedList.add(shortnameDotDLDbIdentifier);
+        mSavedList.save();
+        mSavedList.revert(true);
+    }
+
+    // make sure that the default keychain is in the search list; if not, reset the default to login.keychain
+	if (!mSavedList.member(mSavedList.defaultDLDbIdentifier())) {
+    	secdebug("KCLogin", "Changing default keychain to %s", (loginDLDbIdentifier) ? loginDLDbIdentifier.dbName() : "<NULL>");
+        mSavedList.defaultDLDbIdentifier(loginDLDbIdentifier);
+        mSavedList.save();
+        mSavedList.revert(true);
 	}
-	catch(const CssmError &e){
-		if (e.osStatus() != CSSMERR_DL_DATASTORE_DOESNOT_EXIST)
-			throw;
-	}
-	//***************************************************************************************************************
-	
+
+    //***************************************************************
+    // auto-unlock the login keychain(s)
+    //***************************************************************
+    // all our preflight fixups are finally done, so we can now attempt to unlock the login keychain
+
+    OSStatus loginResult = noErr;
+	if (!loginUnlocked) {
+        try
+        {
+            Keychain theKeychain(keychain(loginDLDbIdentifier));
+            secdebug("KCLogin", "Attempting to unlock login keychain \"%s\" with %d-character password",
+                (theKeychain) ? theKeychain->name() : "<NULL>", (unsigned int)passwordLength);
+            theKeychain->unlock(CssmData(const_cast<void *>(password), passwordLength));
+            loginUnlocked = true;
+        }
+        catch(const CssmError &e)
+        {
+            loginResult = e.osStatus(); // save this result
+        }
+    }
+
+    // if "shortname.keychain" exists and is in the search list, attempt to auto-unlock it with the same password
+    if (shortnameDotKeychainExists && mSavedList.member(shortnameDotDLDbIdentifier)) {
+        try
+        {
+            Keychain shortnameDotKC(keychain(shortnameDotDLDbIdentifier));
+            secdebug("KCLogin", "Attempting to unlock %s", 
+                (shortnameDotKC) ? shortnameDotKC->name() : "<NULL>");
+            shortnameDotKC->unlock(CssmData(const_cast<void *>(password), passwordLength));
+        }
+        catch(const CssmError &e)
+        {
+            // ignore; failure to unlock this keychain is not considered an error
+        }
+    }
+    
+    if (loginResult != noErr) {
+        MacOSError::throwMe(loginResult);
+    }
 }
 
 void StorageManager::logout()
@@ -1082,6 +1318,8 @@ void StorageManager::logout()
 
 void StorageManager::changeLoginPassword(ConstStringPtr oldPassword, ConstStringPtr newPassword)
 {
+	StLock<Mutex>_(mMutex);
+	
 	loginKeychain()->changePassphrase(oldPassword, newPassword);
 	secdebug("KClogin", "Changed login keychain password successfully");
 }
@@ -1089,6 +1327,8 @@ void StorageManager::changeLoginPassword(ConstStringPtr oldPassword, ConstString
 
 void StorageManager::changeLoginPassword(UInt32 oldPasswordLength, const void *oldPassword,  UInt32 newPasswordLength, const void *newPassword)
 {
+	StLock<Mutex>_(mMutex);
+	
 	loginKeychain()->changePassphrase(oldPasswordLength, oldPassword,  newPasswordLength, newPassword);
 	secdebug("KClogin", "Changed login keychain password successfully");
 }
@@ -1097,6 +1337,10 @@ void StorageManager::changeLoginPassword(UInt32 oldPasswordLength, const void *o
 //
 void StorageManager::resetKeychain(Boolean resetSearchList)
 {
+	StLock<Mutex>_(mMutex);
+	StLock<Mutex>__(mKeychainMapMutex);
+	
+	
     // Clear the keychain search list.
     try
     {
@@ -1125,7 +1369,7 @@ void StorageManager::resetKeychain(Boolean resetSearchList)
                 CFRange suffixRange = CFStringFind(newName, kcSuffix, 0);
                 CFStringFindAndReplace(newName, kcSuffix, CFSTR(""), suffixRange, 0);
             }
-            CFStringAppend(newName, CFSTR(kKeychainRenamedSuffix));	// add "_renamed"
+            CFStringAppend(newName, CFSTR(kKeychainRenamedSuffix));	// add "_renamed_"
             try
             {
                 renameUnique(keychain, newName);
@@ -1156,6 +1400,10 @@ Keychain StorageManager::make(const char *pathName)
 
 Keychain StorageManager::make(const char *pathName, bool add)
 {
+	StLock<Mutex>_(mMutex);
+	StLock<Mutex>__(mKeychainMapMutex);
+	
+	
 	string fullPathName;
     if ( pathName[0] == '/' )
 		fullPathName = pathName;
@@ -1204,6 +1452,8 @@ Keychain StorageManager::make(const char *pathName, bool add)
 
 Keychain StorageManager::makeLoginAuthUI(const Item *item)
 {
+	StLock<Mutex>_(mMutex);
+	
     // Create a login/default keychain for the user using UI.
     // The user can cancel out of the operation, or create a new login keychain.
     // If auto-login is turned off, the user will be asked for their login password.
@@ -1389,6 +1639,9 @@ Keychain StorageManager::makeLoginAuthUI(const Item *item)
 
 Keychain StorageManager::defaultKeychainUI(Item &item)
 {
+	StLock<Mutex>_(mMutex);
+	StLock<Mutex>__(mKeychainMapMutex);
+		
     Keychain returnedKeychain;
     try
     {
@@ -1415,6 +1668,8 @@ void
 StorageManager::addToDomainList(SecPreferencesDomain domain,
 	const char* dbName, const CSSM_GUID &guid, uint32 subServiceType)
 {
+	StLock<Mutex>_(mMutex);
+	
 	if (domain == kSecPreferencesDomainDynamic)
 		MacOSError::throwMe(errSecInvalidPrefsDomain);
 
@@ -1445,6 +1700,8 @@ void
 StorageManager::isInDomainList(SecPreferencesDomain domain,
 	const char* dbName, const CSSM_GUID &guid, uint32 subServiceType)
 {
+	StLock<Mutex>_(mMutex);
+	
 	if (domain == kSecPreferencesDomainDynamic)
 		MacOSError::throwMe(errSecInvalidPrefsDomain);
 
@@ -1474,6 +1731,8 @@ void
 StorageManager::removeFromDomainList(SecPreferencesDomain domain,
 	const char* dbName, const CSSM_GUID &guid, uint32 subServiceType)
 {
+	StLock<Mutex>_(mMutex);
+	
 	if (domain == kSecPreferencesDomainDynamic)
 		MacOSError::throwMe(errSecInvalidPrefsDomain);
 

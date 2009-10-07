@@ -38,9 +38,13 @@
 #include "gdb_string.h"
 #include "event-loop.h"
 #include "ui-out.h"
+#include "osabi.h"
+#include "arch-utils.h"
 
 #include "interps.h"
 #include "main.h"
+
+#include <pthread.h>
 
 /* If nonzero, display time usage both at startup and for each command.  */
 
@@ -113,6 +117,8 @@ captured_command_loop (void *data)
 static int
 captured_main (void *data)
 {
+  /* If you add initializations here, you also need to add then to the
+     proc do_steps_and_nexts in selftest.exp.  */
   struct captured_main_args *context = data;
   int argc = context->argc;
   char **argv = context->argv;
@@ -212,6 +218,11 @@ captured_main (void *data)
   gdb_stdin = stdio_fileopen (stdin);
   gdb_stdtargerr = gdb_stderr;	/* for moment */
   gdb_stdtargin = gdb_stdin;	/* for moment */
+
+  /* APPLE LOCAL: set our main thread's name */
+#ifdef HAVE_PTHREAD_SETNAME_NP
+  pthread_setname_np ("gdb main thread");
+#endif
 
   /* Set the sysroot path.  */
 #ifdef TARGET_SYSTEM_ROOT_RELOCATABLE
@@ -385,8 +396,8 @@ captured_main (void *data)
 	    break;
 	  /* APPLE LOCAL: */
 	  case OPT_WAITFOR:
-	    attach_waitfor = (char *) xmalloc (10 + strlen (optarg));
-	    sprintf (attach_waitfor, "-waitfor %s", optarg);
+	    attach_waitfor = (char *) xmalloc (12 + strlen (optarg));
+	    sprintf (attach_waitfor, "-waitfor \"%s\"", optarg);
 	    break;
 	  /* APPLE LOCAL: */
 	  case OPT_ARCH:
@@ -676,6 +687,13 @@ extern int gdbtk_test (char *);
   do_cleanups (ALL_CLEANUPS);
   /* APPLE LOCAL end global gdbinit */
  
+  /* APPLE LOCAL: Set the $_Xcode convenience variable at '0' before sourcing
+     any .gdbinit files.  Xcode will override this to 1 when it is launching
+     gdb but we need to start with a value of 0 so .gdbinit files can use it 
+     in conditional expressions.  */
+  set_internalvar (lookup_internalvar ("_Xcode"),
+                   value_from_longest (builtin_type_int, (LONGEST) 0));
+
   /* Read and execute $HOME/.gdbinit file, if it exists.  This is done
      *before* all the command line arguments are processed; it sets
      global parameters, which are independent of what file you are
@@ -852,7 +870,9 @@ extern int gdbtk_test (char *);
     if (((globalbuf.st_dev != cwdbuf.st_dev) || (globalbuf.st_ino != cwdbuf.st_ino))
 	&& ((homebuf.st_dev != cwdbuf.st_dev) || (homebuf.st_ino != cwdbuf.st_ino)))
       {
-	catch_command_errors (source_file, gdbinit, 0, RETURN_MASK_ALL);
+        /* APPLE LOCAL: fix for CVE-2005-1705 */
+        if (cwdbuf.st_uid == getuid ())
+	  catch_command_errors (source_file, gdbinit, 0, RETURN_MASK_ALL);
       }
   
   /* These need to be set this late in the initialization to ensure that

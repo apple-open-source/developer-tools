@@ -1,12 +1,12 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                GNU ADA RUN-TIME LIBRARY (GNARL) COMPONENTS               --
+--                 GNAT RUN-TIME LIBRARY (GNARL) COMPONENTS                 --
 --                                                                          --
 --           S Y S T E M . I N T E R R U P T _ M A N A G E M E N T          --
 --                                                                          --
 --                                  B o d y                                 --
 --                                                                          --
---          Copyright (C) 1992-2004 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2006 Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNARL; see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -33,25 +33,11 @@
 
 --  This is the VxWorks version of this package.
 
---  It is likely to need tailoring to fit each operating system
---  and machine architecture.
-
---  PLEASE DO NOT add any dependences on other packages.
---  This package is designed to work with or without tasking support.
-
---  See the other warnings in the package specification before making
---  any modifications to this file.
-
 --  Make a careful study of all signals available under the OS,
 --  to see which need to be reserved, kept always unmasked,
 --  or kept always unmasked.
 --  Be on the lookout for special signals that
 --  may be used by the thread library.
-
-with Interfaces.C;
-
-with System.OS_Interface;
---  used for various Constants, Signal and types
 
 package body System.Interrupt_Management is
 
@@ -62,10 +48,8 @@ package body System.Interrupt_Management is
    Exception_Signals : constant Signal_List (1 .. 4) :=
                          (SIGFPE, SIGILL, SIGSEGV, SIGBUS);
 
-   --  Keep these variables global so that they are initialized only once
-   --  What are "these variables" ???, I see only one
-
    Exception_Action : aliased struct_sigaction;
+   --  Keep this variable global so that it is initialized only once
 
    procedure Map_And_Raise_Exception (signo : Signal);
    pragma Import (C, Map_And_Raise_Exception, "__gnat_map_signal");
@@ -75,6 +59,20 @@ package body System.Interrupt_Management is
    -----------------------
    -- Local Subprograms --
    -----------------------
+
+   function State (Int : Interrupt_ID) return Character;
+   pragma Import (C, State, "__gnat_get_interrupt_state");
+   --  Get interrupt state.  Defined in init.c
+   --  The input argument is the interrupt number,
+   --  and the result is one of the following:
+
+   Runtime : constant Character := 'r';
+   Default : constant Character := 's';
+   --    'n'   this interrupt not set by any Interrupt_State pragma
+   --    'u'   Interrupt_State pragma set state to User
+   --    'r'   Interrupt_State pragma set state to Runtime
+   --    's'   Interrupt_State pragma set state to System (use "default"
+   --           system handler)
 
    procedure Notify_Exception (signo : Signal);
    --  Identify the Ada exception to be raised using
@@ -108,7 +106,6 @@ package body System.Interrupt_Management is
    procedure Initialize_Interrupts is
       Result  : int;
       old_act : aliased struct_sigaction;
-
    begin
       for J in Exception_Signals'Range loop
          Result :=
@@ -119,27 +116,21 @@ package body System.Interrupt_Management is
       end loop;
    end Initialize_Interrupts;
 
-begin
-   declare
+   ----------------
+   -- Initialize --
+   ----------------
+
+   Initialized : Boolean := False;
+
+   procedure Initialize is
       mask   : aliased sigset_t;
       Result : int;
-
-      function State (Int : Interrupt_ID) return Character;
-      pragma Import (C, State, "__gnat_get_interrupt_state");
-      --  Get interrupt state.  Defined in a-init.c
-      --  The input argument is the interrupt number,
-      --  and the result is one of the following:
-
-      Runtime : constant Character := 'r';
-      Default : constant Character := 's';
-      --    'n'   this interrupt not set by any Interrupt_State pragma
-      --    'u'   Interrupt_State pragma set state to User
-      --    'r'   Interrupt_State pragma set state to Runtime
-      --    's'   Interrupt_State pragma set state to System (use "default"
-      --           system handler)
-
    begin
-      --  Initialize signal handling
+      if Initialized then
+         return;
+      end if;
+
+      Initialized := True;
 
       --  Change this if you want to use another signal for task abort.
       --  SIGTERM might be a good one.
@@ -179,5 +170,6 @@ begin
       --  The abort signal must also be unmasked
 
       Keep_Unmasked (Abort_Task_Signal) := True;
-   end;
+   end Initialize;
+
 end System.Interrupt_Management;

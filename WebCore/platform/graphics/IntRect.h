@@ -44,10 +44,20 @@ typedef struct _NSRect NSRect;
 #if PLATFORM(WIN)
 typedef struct tagRECT RECT;
 #elif PLATFORM(QT)
+QT_BEGIN_NAMESPACE
 class QRect;
+QT_END_NAMESPACE
+#elif PLATFORM(GTK)
+typedef struct _GdkRectangle GdkRectangle;
 #endif
-#if PLATFORM(SYMBIAN)
-class TRect;
+
+#if PLATFORM(WX)
+class wxRect;
+#endif
+
+#if PLATFORM(SKIA)
+struct SkRect;
+struct SkIRect;
 #endif
 
 namespace WebCore {
@@ -120,21 +130,30 @@ public:
     void inflate(int d) { inflateX(d); inflateY(d); }
     void scale(float s);
 
+#if PLATFORM(WX)
+    IntRect(const wxRect&);
+    operator wxRect() const;
+#endif
+
 #if PLATFORM(WIN)
     IntRect(const RECT&);
     operator RECT() const;
 #elif PLATFORM(QT)
     IntRect(const QRect&);
     operator QRect() const;
-#endif
-#if PLATFORM(SYMBIAN)
-    IntRect(const TRect&);
-    operator TRect() const;
-    TRect Rect() const;
+#elif PLATFORM(GTK)
+    IntRect(const GdkRectangle&);
+    operator GdkRectangle() const;
 #endif
 
 #if PLATFORM(CG)
     operator CGRect() const;
+#endif
+
+#if PLATFORM(SKIA)
+    IntRect(const SkIRect&);
+    operator SkRect() const;
+    operator SkIRect() const;
 #endif
 
 #if PLATFORM(MAC) && !defined(NSGEOMETRY_TYPES_SAME_AS_CGGEOMETRY_TYPES)

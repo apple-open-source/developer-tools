@@ -4,7 +4,7 @@
 /* Contributed by Ziemowit Laski <zlaski@apple.com>.  */
 /* { dg-do compile { target *-*-darwin* } } */
 /* APPLE LOCAL radar 4492976 */
-/* { dg-skip-if "" { *-*-darwin* } { "-m64" } { "" } } */
+/* { dg-require-effective-target ilp32 } */
 
 /* APPLE LOCAL radar 4894756 */
 #include "../objc/execute/Object2.h"
@@ -44,9 +44,12 @@ struct astruct afunc(foo *foo_obj) {
   return [foo_obj stret];
 }
 
+/* APPLE LOCAL begin ARM hybrid ABI */
 /* { dg-final { scan-assembler "objc_msgSend_stret" } } */
-/* { dg-final { scan-assembler "objc_msgSendSuper_stret" } } */
+/* { dg-final { scan-assembler "objc_msgSendSuper2_stret" { target arm*-*-darwin* } } } */
+/* { dg-final { scan-assembler "objc_msgSendSuper_stret" { target { ! arm*-*-darwin* } } } } */
 
-/* { dg-final { scan-assembler-not "objc_msgSend\[^_S\]" } } */
-/* { dg-final { scan-assembler-not "objc_msgSendSuper\[^_\]" } } */
+/* { dg-final { scan-assembler-not "objc_msgSend\[^_S\]" { target { ! arm*-*-darwin* } } } } */
+/* { dg-final { scan-assembler-not "objc_msgSendSuper\[^_\]" { target { ! arm*-*-darwin* } } } } */
+/* APPLE LOCAL end ARM hybrid ABI */
 

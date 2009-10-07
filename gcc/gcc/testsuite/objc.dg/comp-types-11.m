@@ -1,4 +1,4 @@
-/* APPLE LOCAL file mainline */
+/* APPLE LOCAL file radar 5839123 */
 /* { dg-do compile } */
 #include <objc/Object.h>
 
@@ -8,7 +8,7 @@
 extern Object* foo(void);
 static Derived *test(void)
 {
-   Derived *m = foo();   /* { dg-warning "initialization from distinct Objective\\-C type" } */
+   Derived *m = foo();   /* { dg-warning "incompatible Objective-C types initializing \\'struct Object \\*\\', expected \\'struct Derived \\*\\'" } */
 
    return m;
 }

@@ -1,7 +1,7 @@
-/* APPLE LOCAL file mainline */
 /* Test whether casting 'id' to a specific class removes method lookup
    ambiguity.  */
 /* Author: Ziemowit Laski <zlaski@apple.com>.  */
+
 /* { dg-do compile } */
 
 #include <objc/objc.h>

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2005 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -89,16 +89,16 @@ package body Debug is
    --  dU   Enable garbage collection of unreachable entities
    --  dV   Enable viewing of all symbols in debugger
    --  dW   Disable warnings on calls for IN OUT parameters
-   --  dX   Enable Frontend ZCX even when it is not supported
+   --  dX
    --  dY   Enable configurable run-time mode
-   --  dZ
+   --  dZ   Generate listing showing the contents of the dispatch tables
 
    --  d.a
    --  d.b
    --  d.c
    --  d.d
    --  d.e
-   --  d.f
+   --  d.f  Inhibit folding of static expressions
    --  d.g
    --  d.h
    --  d.i
@@ -132,7 +132,7 @@ package body Debug is
 
    --  Debug flags for binder (GNATBIND)
 
-   --  da
+   --  da  All links (including internal units) listed if there is a cycle
    --  db
    --  dc  List units as they are chosen
    --  dd
@@ -158,16 +158,6 @@ package body Debug is
    --  dx  Force binder to read xref information from ali files
    --  dy
    --  dz
-
-   --  d1
-   --  d2
-   --  d3
-   --  d4
-   --  d5
-   --  d6
-   --  d7
-   --  d8
-   --  d9
 
    --  Debug flags used in package Make and its clients (e.g. GNATMAKE)
 
@@ -197,16 +187,6 @@ package body Debug is
    --  dx
    --  dy
    --  dz
-
-   --  d1
-   --  d2
-   --  d3
-   --  d4
-   --  d5
-   --  d6
-   --  d7
-   --  d8
-   --  d9
 
    --------------------------------------------
    -- Documentation for Compiler Debug Flags --
@@ -410,7 +390,7 @@ package body Debug is
    --       indications. This debug flag disconnects the tracking of constant
    --       values (see Exp_Ch2.Expand_Current_Value).
 
-   --  dN   Do not generate file name information in exception messages.
+   --  dN   Do not generate file name information in exception messages
 
    --  dO   Output immediate error messages. This causes error messages to
    --       be output as soon as they are generated (disconnecting several
@@ -457,16 +437,13 @@ package body Debug is
    --       task of transitioning incorrect legacy code, we provide this
    --       undocumented feature for suppressing these warnings.
 
-   --  dX   Enable frontend ZCX even when it is not supported. Equivalent to
-   --       -gnatZ but without verifying that System.Front_End_ZCX_Support
-   --       is set. This causes the front end to generate suitable tables
-   --       for ZCX handling even when the runtime cannot handle ZCX. This
-   --       is used for testing the front end for correct ZCX operation, and
-   --       in particular is useful for multi-target testing.
-
    --  dY   Enable configurable run-time mode, just as though the System file
    --       had Configurable_Run_Time_Mode set to True. This is useful in
    --       testing high integrity mode.
+
+   --  d.f  Suppress folding of static expressions. This of course results
+   --       in seriously non-conforming behavior, but is useful sometimes
+   --       when tracking down handling of complex expressions.
 
    --  d.x  No exception handlers in generated code. This causes exception
    --       handlers to be eliminated from the generated code. They are still
@@ -517,6 +494,12 @@ package body Debug is
    ------------------------------------------
    -- Documentation for Binder Debug Flags --
    ------------------------------------------
+
+   --  da  Normally if there is an elaboration circularity, then in describing
+   --      the cycle, links involving internal units are omitted, since they
+   --      are irrelevant and confusing. This debug flag causes all links to
+   --      be listed, and is useful when diagnosing circularities introduced
+   --      by incorrect changes to the run-time library itself.
 
    --  dc  List units as they are chosen. As units are selected for addition to
    --      the elaboration order, a line of output is generated showing which

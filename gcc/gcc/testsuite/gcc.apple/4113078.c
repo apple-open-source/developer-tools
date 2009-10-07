@@ -2,7 +2,7 @@
 /* Check that stack alignment is correct when callee inlined function uses
    a vector and caller does not.  */
 /* { dg-do compile { target i?86-*-darwin* } } */
-/* { dg-skip-if "" { i?86-*-darwin* } { "-m64" } { "" } } */
+/* { dg-require-effective-target ilp32 } */
 /* { dg-options "-O2 -msse3 -march=pentium4 -march=prescott" } */
 #include <xmmintrin.h>
 extern void bar(__m128i*);

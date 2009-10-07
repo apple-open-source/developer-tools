@@ -28,12 +28,11 @@
 
 #if ENABLE(SVG)
 
-#include "DeprecatedString.h"
 #include "TextStream.h"
 
 namespace WebCore {
 
-    class AffineTransform;
+    class TransformationMatrix;
     class Color;
     class FloatPoint;
     class FloatRect;
@@ -43,14 +42,23 @@ namespace WebCore {
     class Node;
     class RenderPath;
     class RenderSVGContainer;
+    class RenderSVGInlineText;
+    class RenderSVGRoot;
+    class RenderSVGText; 
+    class RenderSVGImage;
 
 // functions used by the main RenderTreeAsText code
-void write(TextStream&, const RenderSVGContainer&, int indent = 0);
 void write(TextStream&, const RenderPath&, int indent = 0);
+void write(TextStream&, const RenderSVGContainer&, int indent = 0);
+void write(TextStream&, const RenderSVGInlineText&, int indent = 0);
+void write(TextStream&, const RenderSVGRoot&, int indent = 0);
+void write(TextStream&, const RenderSVGText&, int indent = 0);
+void write(TextStream&, const RenderSVGImage&, int indent = 0);
+
 void writeRenderResources(TextStream&, Node* parent);
 
 // helper operators defined used in various classes to dump the render tree.
-TextStream& operator<<(TextStream&, const AffineTransform&);
+TextStream& operator<<(TextStream&, const TransformationMatrix&);
 TextStream& operator<<(TextStream&, const IntRect&);
 TextStream& operator<<(TextStream&, const Color&);
 TextStream& operator<<(TextStream&, const IntPoint&);
@@ -88,6 +96,13 @@ TextStream& operator<<(TextStream& ts, const Vector<Item>& v)
     }
 
     ts << "]";
+    return ts;
+}
+
+template<typename Pointer>
+TextStream& operator<<(TextStream& ts, Pointer* t)
+{
+    ts << reinterpret_cast<intptr_t>(t);
     return ts;
 }
 

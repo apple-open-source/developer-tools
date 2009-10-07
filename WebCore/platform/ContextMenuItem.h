@@ -44,6 +44,8 @@ typedef struct tagMENUITEMINFOW* LPMENUITEMINFO;
 typedef struct _GtkMenuItem GtkMenuItem;
 #elif PLATFORM(QT)
 #include <QAction>
+#elif PLATFORM(WX)
+class wxMenuItem;
 #endif
 
 namespace WebCore {
@@ -68,6 +70,12 @@ namespace WebCore {
         ContextMenuItemTagReload,
         ContextMenuItemTagCut,
         ContextMenuItemTagPaste,
+#if PLATFORM(GTK)
+        ContextMenuItemTagDelete,
+        ContextMenuItemTagSelectAll,
+        ContextMenuItemTagInputMethods,
+        ContextMenuItemTagUnicode,
+#endif
         ContextMenuItemTagSpellingGuess,
         ContextMenuItemTagNoGuessesFound,
         ContextMenuItemTagIgnoreSpelling,
@@ -112,11 +120,31 @@ namespace WebCore {
         ContextMenuItemTagPDFSinglePageScrolling,
         ContextMenuItemTagPDFFacingPagesScrolling,
         ContextMenuItemTagInspectElement,
+        ContextMenuItemTagTextDirectionMenu, // Text Direction sub-menu
+        ContextMenuItemTagTextDirectionDefault,
+        ContextMenuItemTagTextDirectionLeftToRight,
+        ContextMenuItemTagTextDirectionRightToLeft,
+#if PLATFORM(MAC)
+        ContextMenuItemTagCorrectSpellingAutomatically,
+        ContextMenuItemTagSubstitutionsMenu,
+        ContextMenuItemTagShowSubstitutions,
+        ContextMenuItemTagSmartCopyPaste,
+        ContextMenuItemTagSmartQuotes,
+        ContextMenuItemTagSmartDashes,
+        ContextMenuItemTagSmartLinks,
+        ContextMenuItemTagTextReplacement,
+        ContextMenuItemTagTransformationsMenu,
+        ContextMenuItemTagMakeUpperCase,
+        ContextMenuItemTagMakeLowerCase,
+        ContextMenuItemTagCapitalize,
+        ContextMenuItemTagChangeBack,
+#endif
         ContextMenuItemBaseApplicationTag = 10000
     };
 
     enum ContextMenuItemType {
         ActionType,
+        CheckableActionType,
         SeparatorType,
         SubmenuType
     };
@@ -126,18 +154,56 @@ namespace WebCore {
 #elif PLATFORM(WIN)
     typedef LPMENUITEMINFO PlatformMenuItemDescription;
 #elif PLATFORM(QT)
-    struct PlatformMenuItemDescriptionType {
-        PlatformMenuItemDescriptionType() : qaction(0), menu(0), action(ContextMenuItemTagNoAction), type(ActionType), subMenu(0) {}
-        QAction *qaction;
-        QMenu *menu;
-        ContextMenuAction action;
-        QString title;
+    struct PlatformMenuItemDescription {
+        PlatformMenuItemDescription()
+            : type(ActionType),
+              action(ContextMenuItemTagNoAction),
+              checked(false),
+              enabled(true)
+        {}
+
         ContextMenuItemType type;
-        PlatformMenuDescription subMenu;
+        ContextMenuAction action;
+        String title;
+        QList<ContextMenuItem> subMenuItems;
+        bool checked;
+        bool enabled;
     };
-    typedef PlatformMenuItemDescriptionType* PlatformMenuItemDescription;
 #elif PLATFORM(GTK)
-    typedef GtkMenuItem* PlatformMenuItemDescription;
+    struct PlatformMenuItemDescription {
+        PlatformMenuItemDescription()
+            : type(ActionType)
+            , action(ContextMenuItemTagNoAction)
+            , subMenu(0)
+            , checked(false)
+            , enabled(true)
+        {}
+
+        ContextMenuItemType type;
+        ContextMenuAction action;
+        String title;
+        GtkMenu* subMenu;
+        bool checked;
+        bool enabled;
+    };
+#elif PLATFORM(WX)
+    struct PlatformMenuItemDescription {
+        PlatformMenuItemDescription()
+            : type(ActionType),
+              action(ContextMenuItemTagNoAction),
+              checked(false),
+              enabled(true)
+        {}
+
+        ContextMenuItemType type;
+        ContextMenuAction action;
+        String title;
+        wxMenu * subMenu;
+        bool checked;
+        bool enabled;
+    };
+#else
+    typedef void* PlatformMenuItemDescription;
 #endif
 
     class ContextMenuItem {
@@ -145,6 +211,9 @@ namespace WebCore {
         ContextMenuItem(PlatformMenuItemDescription);
         ContextMenuItem(ContextMenu* subMenu = 0);
         ContextMenuItem(ContextMenuItemType type, ContextMenuAction action, const String& title, ContextMenu* subMenu = 0);
+#if PLATFORM(GTK)
+        ContextMenuItem(GtkMenuItem*);
+#endif
         ~ContextMenuItem();
 
         PlatformMenuItemDescription releasePlatformDescription();
@@ -167,6 +236,9 @@ namespace WebCore {
         bool enabled() const;
 
         // FIXME: Do we need a keyboard accelerator here?
+#if PLATFORM(GTK)
+        static GtkMenuItem* createNativeMenuItem(const PlatformMenuItemDescription&);
+#endif
 
     private:
 #if PLATFORM(MAC)

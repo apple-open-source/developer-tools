@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---           Copyright (C) 2000-2002 Ada Core Technologies, Inc.            --
+--                     Copyright (C) 2000-2005, AdaCore                     --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -43,10 +43,10 @@
 --  package allows for raising the standard predefined exceptions at least.
 
 package GNAT.Exceptions is
-pragma Pure (Exceptions);
+   pragma Pure;
 
    type Exception_Type is limited null record;
-   --  Type used to specify which exception to raise.
+   --  Type used to specify which exception to raise
 
    --  Really Exception_Type is Exception_Id, but Exception_Id can't be
    --  used directly since it is declared in the non-pure unit Ada.Exceptions,

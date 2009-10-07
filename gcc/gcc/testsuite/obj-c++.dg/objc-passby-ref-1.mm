@@ -1,8 +1,8 @@
 /* APPLE LOCAL file radar 4476365 */
 /* This that pass-by-referencong workd in obj-c++ */
-/* { dg-do run { target powerpc*-*-darwin* i?86*-*-darwin* } } */
-/* { dg-options "-framework Cocoa" } */
-#include <Cocoa/Cocoa.h>
+/* { dg-do run { target *-*-darwin* } } */
+/* { dg-options "-framework Foundation" } */
+#include <Foundation/Foundation.h>
 
 @interface Test : NSObject 
 - (void) process: (int)r3 :(int)r4 :(int)r5 :(int)r6 :(int)r7 :(int)r8 :(int)r9 :(int)r10 :(int &)i;

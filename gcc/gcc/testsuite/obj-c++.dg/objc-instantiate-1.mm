@@ -1,7 +1,7 @@
 /* APPLE LOCAL file radar 4439126 */
 /* Test to see if instantiation occurs before meta-data is generated. */
-/* { dg-do run { target powerpc*-*-darwin* i?86*-*-darwin* } } */
-/* { dg-options "-framework Cocoa" } */
+/* { dg-do run { target *-*-darwin* } } */
+/* { dg-options "-framework Foundation" } */
 #import <Foundation/Foundation.h>
 
 class Base

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2007 Apple Inc.  All Rights Reserved.
+ * Copyright (c) 1998-2009 Apple Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -222,6 +222,25 @@ public:
      */
 
     virtual IOReturn synchronizeCache(IOService * client);
+
+    /*!
+     * @function discard
+     * @discussion
+     * Delete unused data from the storage object at the specified byte offset,
+     * synchronously.
+     * @param client
+     * Client requesting the operation.
+     * @param byteStart
+     * Starting byte offset for the operation.
+     * @param byteCount
+     * Size of the operation.
+     * @result
+     * Returns the status of the operation.
+     */
+
+    virtual IOReturn discard(IOService * client,
+                             UInt64      byteStart,
+                             UInt64      byteCount);
 
     /*
      * Obtain this object's provider.  We override the superclass's method

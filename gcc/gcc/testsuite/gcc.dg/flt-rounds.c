@@ -1,8 +1,8 @@
-/* APPLE LOCAL file ARM 5526308 */
+/* APPLE LOCAL file 3399553 */
 /* Verify that FLT_ROUNDS changes with a successful call to
    fesetround().  */
 
-/* { dg-do run { target arm*-*-* } } */
+/* { dg-do run } */
 
 #include <fenv.h>
 #include <float.h>

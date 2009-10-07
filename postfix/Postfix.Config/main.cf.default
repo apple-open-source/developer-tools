@@ -643,3 +643,13 @@ sample_directory =
 # readme_directory: The location of the Postfix README files.
 #
 readme_directory =
+
+# dovecot 1.1.1
+dovecot_destination_recipient_limit = 1
+
+# default mailbox size limit set to no limit
+mailbox_size_limit = 0
+
+# List of ciphers or cipher types to exclude from the SMTP server cipher
+# list at all TLS security levels.
+smtpd_tls_exclude_ciphers = SSLv2, aNULL, ADH, eNULL

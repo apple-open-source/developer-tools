@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2006 Nikolas Zimmermann <zimmermann@kde.org>
+ * Copyright (C) 2006, 2007, 2008 Nikolas Zimmermann <zimmermann@kde.org>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -31,138 +31,106 @@
 
 #include <wtf/Assertions.h>
 
-using namespace KJS;
+using namespace JSC;
 
 namespace WebCore {
 
-static void updatePathSegContextMap(ExecState* exec, SVGPathSegList* list, SVGPathSeg* obj)
-{
-    ASSERT(exec && exec->dynamicInterpreter());
-    Frame* activeFrame = static_cast<ScriptInterpreter*>(exec->dynamicInterpreter())->frame();
-    if (!activeFrame)
-        return;
-
-    const SVGElement* context = list->context();
-    ASSERT(context);
-
-    // Update the SVGPathSeg* hashmap, so that the JSSVGPathSeg* wrappers, can access the context element
-    SVGDocumentExtensions* extensions = (activeFrame->document() ? activeFrame->document()->accessSVGExtensions() : 0);
-    if (extensions) {
-        if (extensions->hasGenericContext<SVGPathSeg>(obj))
-            ASSERT(extensions->genericContext<SVGPathSeg>(obj) == context);
-        else
-            extensions->setGenericContext<SVGPathSeg>(obj, context);
-    }
-
-    context->notifyAttributeChange();
-}
-
-static void removeFromPathSegContextMap(SVGPathSegList* list, SVGPathSeg* obj)
-{
-    const SVGElement* context = list->context();
-    ASSERT(context);
-
-    SVGDocumentExtensions::forgetGenericContext(obj);
-    context->notifyAttributeChange();
-}
-
-JSValue* JSSVGPathSegList::clear(ExecState* exec, const List& args)
+JSValue JSSVGPathSegList::clear(ExecState* exec, const ArgList&)
 {
     ExceptionCode ec = 0;
 
     SVGPathSegList* imp = static_cast<SVGPathSegList*>(impl());
-
-    unsigned int nr = imp->numberOfItems();
-    for (unsigned int i = 0; i < nr; i++)
-        removeFromPathSegContextMap(imp, imp->getItem(i, ec).get());
-
     imp->clear(ec);
+
     setDOMException(exec, ec);
+
+    m_context->svgAttributeChanged(imp->associatedAttributeName());
     return jsUndefined();
 }
 
-JSValue* JSSVGPathSegList::initialize(ExecState* exec, const List& args)
+JSValue JSSVGPathSegList::initialize(ExecState* exec, const ArgList& args)
 {
     ExceptionCode ec = 0;
-    SVGPathSeg* newItem = toSVGPathSeg(args[0]);
+    SVGPathSeg* newItem = toSVGPathSeg(args.at(0));
 
     SVGPathSegList* imp = static_cast<SVGPathSegList*>(impl());
 
     SVGPathSeg* obj = WTF::getPtr(imp->initialize(newItem, ec));
-    updatePathSegContextMap(exec, imp, obj);
 
-    KJS::JSValue* result = toJS(exec, obj);
+    JSC::JSValue result = toJS(exec, obj, m_context.get());
     setDOMException(exec, ec);
+
+    m_context->svgAttributeChanged(imp->associatedAttributeName());    
     return result;
 }
 
-JSValue* JSSVGPathSegList::getItem(ExecState* exec, const List& args)
+JSValue JSSVGPathSegList::getItem(ExecState* exec, const ArgList& args)
 {
     ExceptionCode ec = 0;
 
     bool indexOk;
-    unsigned index = args[0]->toInt32(exec, indexOk);
+    unsigned index = args.at(0).toInt32(exec, indexOk);
     if (!indexOk) {
         setDOMException(exec, TYPE_MISMATCH_ERR);
         return jsUndefined();
     }
 
     SVGPathSegList* imp = static_cast<SVGPathSegList*>(impl());
-
     SVGPathSeg* obj = WTF::getPtr(imp->getItem(index, ec));
-    updatePathSegContextMap(exec, imp, obj);
 
-    KJS::JSValue* result = toJS(exec, obj);
+    JSC::JSValue result = toJS(exec, obj, m_context.get());
     setDOMException(exec, ec);
     return result;
 }
 
-JSValue* JSSVGPathSegList::insertItemBefore(ExecState* exec, const List& args)
+JSValue JSSVGPathSegList::insertItemBefore(ExecState* exec, const ArgList& args)
 {
     ExceptionCode ec = 0;
-    SVGPathSeg* newItem = toSVGPathSeg(args[0]);
+    SVGPathSeg* newItem = toSVGPathSeg(args.at(0));
 
     bool indexOk;
-    unsigned index = args[1]->toInt32(exec, indexOk);
+    unsigned index = args.at(1).toInt32(exec, indexOk);
     if (!indexOk) {
         setDOMException(exec, TYPE_MISMATCH_ERR);
         return jsUndefined();
     }
 
     SVGPathSegList* imp = static_cast<SVGPathSegList*>(impl());
-    updatePathSegContextMap(exec, imp, newItem);
 
-    KJS::JSValue* result = toJS(exec, WTF::getPtr(imp->insertItemBefore(newItem, index, ec)));
+    JSC::JSValue result = toJS(exec, WTF::getPtr(imp->insertItemBefore(newItem, index, ec)), m_context.get());
     setDOMException(exec, ec);
+
+    m_context->svgAttributeChanged(imp->associatedAttributeName());    
     return result;
 }
 
-JSValue* JSSVGPathSegList::replaceItem(ExecState* exec, const List& args)
+JSValue JSSVGPathSegList::replaceItem(ExecState* exec, const ArgList& args)
 {
     ExceptionCode ec = 0;
-    SVGPathSeg* newItem = toSVGPathSeg(args[0]);
+    SVGPathSeg* newItem = toSVGPathSeg(args.at(0));
     
     bool indexOk;
-    unsigned index = args[1]->toInt32(exec, indexOk);
+    unsigned index = args.at(1).toInt32(exec, indexOk);
     if (!indexOk) {
         setDOMException(exec, TYPE_MISMATCH_ERR);
         return jsUndefined();
     }
 
     SVGPathSegList* imp = static_cast<SVGPathSegList*>(impl());
-    updatePathSegContextMap(exec, imp, newItem);
 
-    KJS::JSValue* result = toJS(exec, WTF::getPtr(imp->replaceItem(newItem, index, ec)));
+    JSC::JSValue result = toJS(exec, WTF::getPtr(imp->replaceItem(newItem, index, ec)), m_context.get());
     setDOMException(exec, ec);
+
+    m_context->svgAttributeChanged(imp->associatedAttributeName());    
     return result;
 }
 
-JSValue* JSSVGPathSegList::removeItem(ExecState* exec, const List& args)
+JSValue JSSVGPathSegList::removeItem(ExecState* exec, const ArgList& args)
 {
     ExceptionCode ec = 0;
     
     bool indexOk;
-    unsigned index = args[0]->toInt32(exec, indexOk);
+    unsigned index = args.at(0).toInt32(exec, indexOk);
     if (!indexOk) {
         setDOMException(exec, TYPE_MISMATCH_ERR);
         return jsUndefined();
@@ -171,28 +139,28 @@ JSValue* JSSVGPathSegList::removeItem(ExecState* exec, const List& args)
     SVGPathSegList* imp = static_cast<SVGPathSegList*>(impl());
 
     RefPtr<SVGPathSeg> obj(imp->removeItem(index, ec));
-    removeFromPathSegContextMap(imp, obj.get());
 
-    KJS::JSValue* result = toJS(exec, obj.get());
+    JSC::JSValue result = toJS(exec, obj.get(), m_context.get());
     setDOMException(exec, ec);
+
+    m_context->svgAttributeChanged(imp->associatedAttributeName());    
     return result;
 }
 
-JSValue* JSSVGPathSegList::appendItem(ExecState* exec, const List& args)
+JSValue JSSVGPathSegList::appendItem(ExecState* exec, const ArgList& args)
 {
     ExceptionCode ec = 0;
-    SVGPathSeg* newItem = toSVGPathSeg(args[0]);
+    SVGPathSeg* newItem = toSVGPathSeg(args.at(0));
 
     SVGPathSegList* imp = static_cast<SVGPathSegList*>(impl());
-    updatePathSegContextMap(exec, imp, newItem);
 
-    KJS::JSValue* result = toJS(exec, WTF::getPtr(imp->appendItem(newItem, ec)));
+    JSC::JSValue result = toJS(exec, WTF::getPtr(imp->appendItem(newItem, ec)), m_context.get());
     setDOMException(exec, ec);
+
+    m_context->svgAttributeChanged(imp->associatedAttributeName());    
     return result;
 }
 
 }
 
 #endif // ENABLE(SVG)
-
-// vim:ts=4:noet

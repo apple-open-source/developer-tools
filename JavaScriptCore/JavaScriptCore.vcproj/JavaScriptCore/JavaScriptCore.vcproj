@@ -17,22 +17,15 @@
 	<Configurations>
 		<Configuration
 			Name="Debug|Win32"
-			OutputDirectory="$(WebKitOutputDir)\lib"
-			IntermediateDirectory="$(WebKitOutputDir)\obj\$(ProjectName)\$(ConfigurationName)"
-			ConfigurationType="4"
-			InheritedPropertySheets="..\debug.vsprops"
+			ConfigurationType="2"
+			InheritedPropertySheets="$(WebKitLibrariesDir)\tools\vsprops\debug.vsprops;$(WebKitLibrariesDir)\tools\vsprops\common.vsprops;.\JavaScriptCoreCommon.vsprops;.\JavaScriptCoreCF.vsprops"
 			CharacterSet="1"
-			DeleteExtensionsOnClean="*.obj;*.ilk;*.tlb;*.tli;*.tlh;*.tmp;*.rsp;*.pgc;*.pgd;$(TargetPath)"
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
-				Description="Constructing generated files..."
-				CommandLine="set PATH=%SystemDrive%\cygwin\bin;%PATH%&#x0D;&#x0A;&#x0D;&#x0A;bash build-generated-files.sh &quot;$(ConfigurationName)&quot; &quot;$(WebKitOutputDir)&quot;&#x0D;&#x0A;&#x0D;&#x0A;&quot;$(WebKitOutputDir)\bin\dftables$(WebKitConfigSuffix).exe&quot; &quot;$(WebKitOutputDir)\obj\JavaScriptCore\$(ConfigurationName)\DerivedSources\chartables.c&quot;&#x0D;&#x0A;&#x0D;&#x0A;mkdir 2&gt;NUL &quot;$(WebKitOutputDir)\include\JavaScriptCore\JavaScriptCore&quot;&#x0D;&#x0A;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\API\APICast.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\API\JSBase.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\API\JSContextRef.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\API\JSObjectRef.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\API\JSStringRef.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\API\JSStringRefCF.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\API\JSStringRefCF.cpp&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\API\JSValueRef.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\API\JavaScriptCore.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\API\JSRetainPtr.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore\JavaScriptCore&quot;"
 			/>
 			<Tool
 				Name="VCCustomBuildTool"
-				Description=""
-				CommandLine=""
 			/>
 			<Tool
 				Name="VCXMLDataGeneratorTool"
@@ -45,21 +38,6 @@
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
-				Optimization="0"
-				AdditionalIncludeDirectories="&quot;$(WebKitOutputDir)\obj\JavaScriptCore\$(ConfigurationName)\DerivedSources\&quot;;../../;&quot;../../os-win32/&quot;;../../pcre/;../../kjs/;../../wtf/;&quot;$(WebKitLibrariesDir)\include&quot;;&quot;$(WebKitLibrariesDir)\include\icu&quot;;../../../icu/include;../../bindings;../../bindings/c;../../bindings/jni;&quot;$(WebKitOutputDir)\include\JavaScriptCore&quot;;&quot;$(WebKitLibrariesDir)\include\pthreads&quot;"
-				PreprocessorDefinitions="HAVE_CONFIG_H;WIN32;__STD_C;_SCL_SECURE_NO_DEPRECATE;_CRT_SECURE_NO_DEPRECATE"
-				MinimalRebuild="true"
-				ExceptionHandling="0"
-				BasicRuntimeChecks="3"
-				RuntimeLibrary="3"
-				RuntimeTypeInfo="false"
-				UsePrecompiledHeader="0"
-				WarningLevel="4"
-				WarnAsError="true"
-				Detect64BitPortabilityProblems="false"
-				DebugInformationFormat="3"
-				DisableSpecificWarnings="4127;4355;4510;4512;4610;4706;4996"
-				ForcedIncludeFiles=""
 			/>
 			<Tool
 				Name="VCManagedResourceCompilerTool"
@@ -71,12 +49,13 @@
 				Name="VCPreLinkEventTool"
 			/>
 			<Tool
-				Name="VCLibrarianTool"
-				AdditionalDependencies="winmm.lib"
-				OutputFile="$(OutDir)\$(ProjectName)$(WebKitConfigSuffix).lib"
+				Name="VCLinkerTool"
 			/>
 			<Tool
 				Name="VCALinkTool"
+			/>
+			<Tool
+				Name="VCManifestTool"
 			/>
 			<Tool
 				Name="VCXDCMakeTool"
@@ -88,29 +67,27 @@
 				Name="VCFxCopTool"
 			/>
 			<Tool
+				Name="VCAppVerifierTool"
+			/>
+			<Tool
+				Name="VCWebDeploymentTool"
+			/>
+			<Tool
 				Name="VCPostBuildEventTool"
-				CommandLine="mkdir 2&gt;NUL &quot;$(WebKitOutputDir)\include\JavaScriptCore&quot;&#x0D;&#x0A;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\wtf\*.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\wtf\unicode\*.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\wtf\unicode\icu\*.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\os-win32\*.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\kjs\*.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\kjs\create_hash_table&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\pcre\pcre.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore&quot;&#x0D;&#x0A;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\bindings\npruntime.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\bindings\npapi.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\bindings\npruntime_impl.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\bindings\NP_jsobject.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\bindings\runtime_object.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\bindings\runtime_root.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\bindings\runtime.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore&quot;&#x0D;&#x0A;"
 			/>
 		</Configuration>
 		<Configuration
 			Name="Release|Win32"
-			OutputDirectory="$(WebKitOutputDir)\lib"
-			IntermediateDirectory="$(WebKitOutputDir)\obj\$(ProjectName)\$(ConfigurationName)"
-			ConfigurationType="4"
-			InheritedPropertySheets="..\release.vsprops"
+			ConfigurationType="2"
+			InheritedPropertySheets="$(WebKitLibrariesDir)\tools\vsprops\common.vsprops;$(WebKitLibrariesDir)\tools\vsprops\release.vsprops;.\JavaScriptCoreCommon.vsprops;.\JavaScriptCoreCF.vsprops"
 			CharacterSet="1"
-			DeleteExtensionsOnClean="*.obj;*.ilk;*.tlb;*.tli;*.tlh;*.tmp;*.rsp;*.pgc;*.pgd;$(TargetPath)"
 			WholeProgramOptimization="1"
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
-				Description="Constructing generated files..."
-				CommandLine="set PATH=%SystemDrive%\cygwin\bin;%PATH%&#x0D;&#x0A;&#x0D;&#x0A;bash build-generated-files.sh &quot;$(ConfigurationName)&quot; &quot;$(WebKitOutputDir)&quot;&#x0D;&#x0A;&#x0D;&#x0A;&quot;$(WebKitOutputDir)\bin\dftables$(WebKitConfigSuffix).exe&quot; &quot;$(WebKitOutputDir)\obj\JavaScriptCore\$(ConfigurationName)\DerivedSources\chartables.c&quot;&#x0D;&#x0A;&#x0D;&#x0A;mkdir 2&gt;NUL &quot;$(WebKitOutputDir)\include\JavaScriptCore\JavaScriptCore&quot;&#x0D;&#x0A;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\API\APICast.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\API\JSBase.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\API\JSContextRef.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\API\JSObjectRef.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\API\JSStringRef.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\API\JSStringRefCF.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\API\JSStringRefCF.cpp&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\API\JSValueRef.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\API\JavaScriptCore.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\API\JSRetainPtr.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore\JavaScriptCore&quot;"
 			/>
 			<Tool
 				Name="VCCustomBuildTool"
-				Description=""
-				CommandLine=""
 			/>
 			<Tool
 				Name="VCXMLDataGeneratorTool"
@@ -123,18 +100,6 @@
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
-				AdditionalIncludeDirectories="&quot;$(WebKitOutputDir)\obj\JavaScriptCore\$(ConfigurationName)\DerivedSources\&quot;;../../;&quot;../../os-win32/&quot;;../../pcre/;../../kjs/;../../wtf/;&quot;$(WebKitLibrariesDir)\include&quot;;&quot;$(WebKitLibrariesDir)\include\icu&quot;;../../../icu/include;../../bindings;../../bindings/c;../../bindings/jni;&quot;$(WebKitOutputDir)\include\JavaScriptCore&quot;;&quot;$(WebKitLibrariesDir)\include\pthreads&quot;"
-				PreprocessorDefinitions="HAVE_CONFIG_H;WIN32;__STD_C;NDEBUG;_SCL_SECURE_NO_DEPRECATE;_CRT_SECURE_NO_DEPRECATE"
-				ExceptionHandling="0"
-				RuntimeLibrary="2"
-				RuntimeTypeInfo="false"
-				UsePrecompiledHeader="0"
-				WarningLevel="4"
-				WarnAsError="true"
-				Detect64BitPortabilityProblems="false"
-				DebugInformationFormat="3"
-				DisableSpecificWarnings="4127;4355;4510;4512;4610;4706;4996"
-				ForcedIncludeFiles=""
 			/>
 			<Tool
 				Name="VCManagedResourceCompilerTool"
@@ -146,12 +111,13 @@
 				Name="VCPreLinkEventTool"
 			/>
 			<Tool
-				Name="VCLibrarianTool"
-				AdditionalDependencies="winmm.lib"
-				OutputFile="$(OutDir)\$(ProjectName)$(WebKitConfigSuffix).lib"
+				Name="VCLinkerTool"
 			/>
 			<Tool
 				Name="VCALinkTool"
+			/>
+			<Tool
+				Name="VCManifestTool"
 			/>
 			<Tool
 				Name="VCXDCMakeTool"
@@ -163,8 +129,323 @@
 				Name="VCFxCopTool"
 			/>
 			<Tool
+				Name="VCAppVerifierTool"
+			/>
+			<Tool
+				Name="VCWebDeploymentTool"
+			/>
+			<Tool
 				Name="VCPostBuildEventTool"
-				CommandLine="mkdir 2&gt;NUL &quot;$(WebKitOutputDir)\include\JavaScriptCore&quot;&#x0D;&#x0A;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\wtf\*.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\wtf\unicode\*.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\wtf\unicode\icu\*.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\os-win32\*.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\kjs\*.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\kjs\create_hash_table&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\pcre\pcre.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore&quot;&#x0D;&#x0A;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\bindings\npruntime.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\bindings\npapi.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\bindings\npruntime_impl.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\bindings\NP_jsobject.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\bindings\runtime_object.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\bindings\runtime_root.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore&quot;&#x0D;&#x0A;xcopy /y /d &quot;$(ProjectDir)\..\..\bindings\runtime.h&quot; &quot;$(WebKitOutputDir)\include\JavaScriptCore&quot;&#x0D;&#x0A;"
+			/>
+		</Configuration>
+		<Configuration
+			Name="Debug_Internal|Win32"
+			ConfigurationType="2"
+			InheritedPropertySheets="$(WebKitLibrariesDir)\tools\vsprops\common.vsprops;$(WebKitLibrariesDir)\tools\vsprops\debug.vsprops;$(WebKitLibrariesDir)\tools\vsprops\debug_internal.vsprops;.\JavaScriptCoreCommon.vsprops;.\JavaScriptCoreCF.vsprops"
+			CharacterSet="1"
+			>
+			<Tool
+				Name="VCPreBuildEventTool"
+			/>
+			<Tool
+				Name="VCCustomBuildTool"
+			/>
+			<Tool
+				Name="VCXMLDataGeneratorTool"
+			/>
+			<Tool
+				Name="VCWebServiceProxyGeneratorTool"
+			/>
+			<Tool
+				Name="VCMIDLTool"
+			/>
+			<Tool
+				Name="VCCLCompilerTool"
+			/>
+			<Tool
+				Name="VCManagedResourceCompilerTool"
+			/>
+			<Tool
+				Name="VCResourceCompilerTool"
+			/>
+			<Tool
+				Name="VCPreLinkEventTool"
+			/>
+			<Tool
+				Name="VCLinkerTool"
+			/>
+			<Tool
+				Name="VCALinkTool"
+			/>
+			<Tool
+				Name="VCManifestTool"
+			/>
+			<Tool
+				Name="VCXDCMakeTool"
+			/>
+			<Tool
+				Name="VCBscMakeTool"
+			/>
+			<Tool
+				Name="VCFxCopTool"
+			/>
+			<Tool
+				Name="VCAppVerifierTool"
+			/>
+			<Tool
+				Name="VCWebDeploymentTool"
+			/>
+			<Tool
+				Name="VCPostBuildEventTool"
+			/>
+		</Configuration>
+		<Configuration
+			Name="Release_PGOInstrument|Win32"
+			IntermediateDirectory="$(WebKitOutputDir)\obj\$(ProjectName)\Release"
+			ConfigurationType="2"
+			InheritedPropertySheets="$(WebKitLibrariesDir)\tools\vsprops\common.vsprops;$(WebKitLibrariesDir)\tools\vsprops\release.vsprops;.\JavaScriptCoreCommon.vsprops;.\JavaScriptCoreCF.vsprops"
+			CharacterSet="1"
+			WholeProgramOptimization="2"
+			>
+			<Tool
+				Name="VCPreBuildEventTool"
+			/>
+			<Tool
+				Name="VCCustomBuildTool"
+			/>
+			<Tool
+				Name="VCXMLDataGeneratorTool"
+			/>
+			<Tool
+				Name="VCWebServiceProxyGeneratorTool"
+			/>
+			<Tool
+				Name="VCMIDLTool"
+			/>
+			<Tool
+				Name="VCCLCompilerTool"
+			/>
+			<Tool
+				Name="VCManagedResourceCompilerTool"
+			/>
+			<Tool
+				Name="VCResourceCompilerTool"
+			/>
+			<Tool
+				Name="VCPreLinkEventTool"
+			/>
+			<Tool
+				Name="VCLinkerTool"
+			/>
+			<Tool
+				Name="VCALinkTool"
+			/>
+			<Tool
+				Name="VCManifestTool"
+			/>
+			<Tool
+				Name="VCXDCMakeTool"
+			/>
+			<Tool
+				Name="VCBscMakeTool"
+			/>
+			<Tool
+				Name="VCFxCopTool"
+			/>
+			<Tool
+				Name="VCAppVerifierTool"
+			/>
+			<Tool
+				Name="VCWebDeploymentTool"
+			/>
+			<Tool
+				Name="VCPostBuildEventTool"
+			/>
+		</Configuration>
+		<Configuration
+			Name="Release_PGOOptimize|Win32"
+			IntermediateDirectory="$(WebKitOutputDir)\obj\$(ProjectName)\Release"
+			ConfigurationType="2"
+			InheritedPropertySheets="$(WebKitLibrariesDir)\tools\vsprops\common.vsprops;$(WebKitLibrariesDir)\tools\vsprops\release.vsprops;.\JavaScriptCoreCommon.vsprops;.\JavaScriptCoreCF.vsprops"
+			CharacterSet="1"
+			WholeProgramOptimization="4"
+			>
+			<Tool
+				Name="VCPreBuildEventTool"
+			/>
+			<Tool
+				Name="VCCustomBuildTool"
+			/>
+			<Tool
+				Name="VCXMLDataGeneratorTool"
+			/>
+			<Tool
+				Name="VCWebServiceProxyGeneratorTool"
+			/>
+			<Tool
+				Name="VCMIDLTool"
+			/>
+			<Tool
+				Name="VCCLCompilerTool"
+			/>
+			<Tool
+				Name="VCManagedResourceCompilerTool"
+			/>
+			<Tool
+				Name="VCResourceCompilerTool"
+			/>
+			<Tool
+				Name="VCPreLinkEventTool"
+			/>
+			<Tool
+				Name="VCLinkerTool"
+			/>
+			<Tool
+				Name="VCALinkTool"
+			/>
+			<Tool
+				Name="VCManifestTool"
+			/>
+			<Tool
+				Name="VCXDCMakeTool"
+			/>
+			<Tool
+				Name="VCBscMakeTool"
+			/>
+			<Tool
+				Name="VCFxCopTool"
+			/>
+			<Tool
+				Name="VCAppVerifierTool"
+			/>
+			<Tool
+				Name="VCWebDeploymentTool"
+			/>
+			<Tool
+				Name="VCPostBuildEventTool"
+			/>
+		</Configuration>
+		<Configuration
+			Name="Debug_CFLite|Win32"
+			ConfigurationType="2"
+			InheritedPropertySheets="$(WebKitLibrariesDir)\tools\vsprops\debug.vsprops;$(WebKitLibrariesDir)\tools\vsprops\common.vsprops;.\JavaScriptCoreCommon.vsprops;.\JavaScriptCoreCFLite.vsprops"
+			CharacterSet="1"
+			>
+			<Tool
+				Name="VCPreBuildEventTool"
+			/>
+			<Tool
+				Name="VCCustomBuildTool"
+			/>
+			<Tool
+				Name="VCXMLDataGeneratorTool"
+			/>
+			<Tool
+				Name="VCWebServiceProxyGeneratorTool"
+			/>
+			<Tool
+				Name="VCMIDLTool"
+			/>
+			<Tool
+				Name="VCCLCompilerTool"
+			/>
+			<Tool
+				Name="VCManagedResourceCompilerTool"
+			/>
+			<Tool
+				Name="VCResourceCompilerTool"
+			/>
+			<Tool
+				Name="VCPreLinkEventTool"
+			/>
+			<Tool
+				Name="VCLinkerTool"
+			/>
+			<Tool
+				Name="VCALinkTool"
+			/>
+			<Tool
+				Name="VCManifestTool"
+			/>
+			<Tool
+				Name="VCXDCMakeTool"
+			/>
+			<Tool
+				Name="VCBscMakeTool"
+			/>
+			<Tool
+				Name="VCFxCopTool"
+			/>
+			<Tool
+				Name="VCAppVerifierTool"
+			/>
+			<Tool
+				Name="VCWebDeploymentTool"
+			/>
+			<Tool
+				Name="VCPostBuildEventTool"
+			/>
+		</Configuration>
+		<Configuration
+			Name="Release_CFLite|Win32"
+			ConfigurationType="2"
+			InheritedPropertySheets="$(WebKitLibrariesDir)\tools\vsprops\common.vsprops;$(WebKitLibrariesDir)\tools\vsprops\release.vsprops;.\JavaScriptCoreCommon.vsprops;.\JavaScriptCoreCFLite.vsprops"
+			CharacterSet="1"
+			WholeProgramOptimization="1"
+			>
+			<Tool
+				Name="VCPreBuildEventTool"
+			/>
+			<Tool
+				Name="VCCustomBuildTool"
+			/>
+			<Tool
+				Name="VCXMLDataGeneratorTool"
+			/>
+			<Tool
+				Name="VCWebServiceProxyGeneratorTool"
+			/>
+			<Tool
+				Name="VCMIDLTool"
+			/>
+			<Tool
+				Name="VCCLCompilerTool"
+			/>
+			<Tool
+				Name="VCManagedResourceCompilerTool"
+			/>
+			<Tool
+				Name="VCResourceCompilerTool"
+			/>
+			<Tool
+				Name="VCPreLinkEventTool"
+			/>
+			<Tool
+				Name="VCLinkerTool"
+			/>
+			<Tool
+				Name="VCALinkTool"
+			/>
+			<Tool
+				Name="VCManifestTool"
+			/>
+			<Tool
+				Name="VCXDCMakeTool"
+			/>
+			<Tool
+				Name="VCBscMakeTool"
+			/>
+			<Tool
+				Name="VCFxCopTool"
+			/>
+			<Tool
+				Name="VCAppVerifierTool"
+			/>
+			<Tool
+				Name="VCWebDeploymentTool"
+			/>
+			<Tool
+				Name="VCPostBuildEventTool"
 			/>
 		</Configuration>
 	</Configurations>
@@ -172,394 +453,770 @@
 	</References>
 	<Files>
 		<Filter
-			Name="KJS"
+			Name="JavaScriptCore"
 			>
 			<File
-				RelativePath="..\..\kjs\array_instance.h"
+				RelativePath="..\..\runtime\ArgList.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\array_object.cpp"
+				RelativePath="..\..\runtime\ArgList.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\array_object.h"
+				RelativePath="..\..\runtime\Arguments.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\bool_object.cpp"
+				RelativePath="..\..\runtime\Arguments.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\bool_object.h"
+				RelativePath="..\..\runtime\ArrayConstructor.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\collector.cpp"
+				RelativePath="..\..\runtime\ArrayConstructor.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\collector.h"
+				RelativePath="..\..\runtime\ArrayPrototype.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\CommonIdentifiers.cpp"
+				RelativePath="..\..\runtime\ArrayPrototype.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\CommonIdentifiers.h"
+				RelativePath="..\..\runtime\BooleanConstructor.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\completion.h"
+				RelativePath="..\..\runtime\BooleanConstructor.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\config.h"
+				RelativePath="..\..\runtime\BooleanObject.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\Context.cpp"
+				RelativePath="..\..\runtime\BooleanObject.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\context.h"
+				RelativePath="..\..\runtime\BooleanPrototype.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\date_object.cpp"
+				RelativePath="..\..\runtime\BooleanPrototype.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\date_object.h"
+				RelativePath="..\..\interpreter\CachedCall.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\DateMath.cpp"
+				RelativePath="..\..\runtime\CallData.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\DateMath.h"
+				RelativePath="..\..\runtime\CallData.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\debugger.cpp"
+				RelativePath="..\..\interpreter\CallFrame.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\debugger.h"
+				RelativePath="..\..\interpreter\CallFrame.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\dtoa.cpp"
+				RelativePath="..\..\interpreter\CallFrameClosure.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\dtoa.h"
+				RelativePath="..\..\runtime\ClassInfo.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\error_object.cpp"
+				RelativePath="..\..\runtime\Collector.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\error_object.h"
+				RelativePath="..\..\runtime\Collector.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\ExecState.cpp"
+				RelativePath="..\..\runtime\CollectorHeapIntrospector.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\ExecState.h"
+				RelativePath="..\..\runtime\CommonIdentifiers.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\fpconst.cpp"
+				RelativePath="..\..\runtime\CommonIdentifiers.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\function.cpp"
+				RelativePath="..\..\runtime\Completion.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\function.h"
+				RelativePath="..\..\runtime\Completion.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\function_object.cpp"
+				RelativePath="..\..\config.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\function_object.h"
+				RelativePath="..\..\runtime\ConstructData.cpp"
 				>
 			</File>
 			<File
-				RelativePath=".\grammarWrapper.cpp"
+				RelativePath="..\..\runtime\ConstructData.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\identifier.cpp"
+				RelativePath="..\..\runtime\DateConstructor.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\identifier.h"
+				RelativePath="..\..\runtime\DateConstructor.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\internal.cpp"
+				RelativePath="..\..\runtime\DateConversion.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\internal.h"
+				RelativePath="..\..\runtime\DateConversion.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\interpreter.cpp"
+				RelativePath="..\..\runtime\DateInstance.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\interpreter.h"
+				RelativePath="..\..\runtime\DateInstance.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\JSImmediate.cpp"
+				RelativePath="..\..\runtime\DatePrototype.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\JSImmediate.h"
+				RelativePath="..\..\runtime\DatePrototype.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\JSLock.cpp"
+				RelativePath="..\..\runtime\Error.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\JSLock.h"
+				RelativePath="..\..\runtime\Error.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\JSWrapperObject.cpp"
+				RelativePath="..\..\runtime\ErrorConstructor.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\JSWrapperObject.h"
+				RelativePath="..\..\runtime\ErrorConstructor.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\lexer.cpp"
+				RelativePath="..\..\runtime\ErrorInstance.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\lexer.h"
+				RelativePath="..\..\runtime\ErrorInstance.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\list.cpp"
+				RelativePath="..\..\runtime\ErrorPrototype.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\list.h"
+				RelativePath="..\..\runtime\ErrorPrototype.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\lookup.cpp"
+				RelativePath="..\..\runtime\FunctionConstructor.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\lookup.h"
+				RelativePath="..\..\runtime\FunctionConstructor.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\math_object.cpp"
+				RelativePath="..\..\runtime\FunctionPrototype.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\math_object.h"
+				RelativePath="..\..\runtime\FunctionPrototype.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\nodes.cpp"
+				RelativePath="..\..\runtime\GetterSetter.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\nodes.h"
+				RelativePath="..\..\runtime\GetterSetter.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\nodes2string.cpp"
+				RelativePath="..\..\runtime\GlobalEvalFunction.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\number_object.cpp"
+				RelativePath="..\..\runtime\GlobalEvalFunction.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\number_object.h"
+				RelativePath="..\..\runtime\Identifier.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\object.cpp"
+				RelativePath="..\..\runtime\Identifier.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\object.h"
+				RelativePath="..\..\runtime\InitializeThreading.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\object_object.cpp"
+				RelativePath="..\..\runtime\InitializeThreading.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\object_object.h"
+				RelativePath="..\..\runtime\InternalFunction.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\operations.cpp"
+				RelativePath="..\..\runtime\InternalFunction.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\operations.h"
+				RelativePath="..\..\runtime\JSActivation.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\Parser.cpp"
+				RelativePath="..\..\runtime\JSActivation.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\Parser.h"
+				RelativePath="..\..\runtime\JSArray.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\property_map.cpp"
+				RelativePath="..\..\runtime\JSArray.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\property_map.h"
+				RelativePath="..\..\runtime\JSByteArray.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\property_slot.cpp"
+				RelativePath="..\..\runtime\JSByteArray.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\property_slot.h"
+				RelativePath="..\..\runtime\JSCell.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\PropertyNameArray.cpp"
+				RelativePath="..\..\runtime\JSCell.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\PropertyNameArray.h"
+				RelativePath="..\..\runtime\JSFunction.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\protect.h"
+				RelativePath="..\..\runtime\JSFunction.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\regexp.cpp"
+				RelativePath="..\..\runtime\JSGlobalData.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\regexp.h"
+				RelativePath="..\..\runtime\JSGlobalData.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\regexp_object.cpp"
+				RelativePath="..\..\runtime\JSGlobalObject.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\regexp_object.h"
+				RelativePath="..\..\runtime\JSGlobalObject.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\SavedBuiltins.h"
+				RelativePath="..\..\runtime\JSGlobalObjectFunctions.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\scope_chain.cpp"
+				RelativePath="..\..\runtime\JSGlobalObjectFunctions.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\scope_chain.h"
+				RelativePath="..\..\runtime\JSImmediate.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\simple_number.h"
+				RelativePath="..\..\runtime\JSImmediate.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\os-win32\stdint.h"
+				RelativePath="..\..\runtime\JSLock.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\string_object.cpp"
+				RelativePath="..\..\runtime\JSLock.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\string_object.h"
+				RelativePath="..\..\runtime\JSNotAnObject.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\types.h"
+				RelativePath="..\..\runtime\JSNotAnObject.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\ustring.cpp"
+				RelativePath="..\..\runtime\JSNumberCell.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\ustring.h"
+				RelativePath="..\..\runtime\JSNumberCell.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\value.cpp"
+				RelativePath="..\..\runtime\JSObject.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\kjs\value.h"
+				RelativePath="..\..\runtime\JSObject.h"
 				>
 			</File>
+			<File
+				RelativePath="..\..\runtime\JSONObject.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\JSONObject.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\JSStaticScopeObject.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\JSStaticScopeObject.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\JSString.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\JSString.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\JSType.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\JSValue.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\JSValue.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\JSVariableObject.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\JSVariableObject.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\JSWrapperObject.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\JSWrapperObject.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\bytecompiler\LabelScope.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\LiteralParser.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\LiteralParser.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\Lookup.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\Lookup.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\MathObject.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\MathObject.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\NativeErrorConstructor.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\NativeErrorConstructor.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\NativeErrorPrototype.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\NativeErrorPrototype.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\NativeFunctionWrapper.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\NumberConstructor.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\NumberConstructor.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\NumberObject.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\NumberObject.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\NumberPrototype.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\NumberPrototype.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\ObjectConstructor.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\ObjectConstructor.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\ObjectPrototype.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\ObjectPrototype.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\Operations.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\Operations.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\PropertyMapHashTable.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\PropertyNameArray.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\PropertyNameArray.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\PropertySlot.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\PropertySlot.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\Protect.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\PrototypeFunction.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\PrototypeFunction.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\RegExp.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\RegExp.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\RegExpConstructor.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\RegExpConstructor.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\RegExpObject.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\RegExpObject.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\RegExpPrototype.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\RegExpPrototype.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\ScopeChain.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\ScopeChain.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\ScopeChainMark.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\SmallStrings.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\SmallStrings.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\parser\SourceCode.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\parser\SourceProvider.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\StringConstructor.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\StringConstructor.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\StringObject.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\StringObject.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\StringObjectThatMasqueradesAsUndefined.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\StringPrototype.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\StringPrototype.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\Structure.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\Structure.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\StructureChain.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\StructureChain.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\StructureTransitionTable.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\SymbolTable.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\UString.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\UString.h"
+				>
+			</File>
+			<Filter
+				Name="DerivedSources"
+				>
+				<File
+					RelativePath="$(WebKitOutputDir)\obj\$(ProjectName)\DerivedSources\ArrayPrototype.lut.h"
+					>
+				</File>
+				<File
+					RelativePath="$(WebKitOutputDir)\obj\$(ProjectName)\DerivedSources\DatePrototype.lut.h"
+					>
+				</File>
+				<File
+					RelativePath="$(WebKitOutputDir)\obj\$(ProjectName)\DerivedSources\Grammar.cpp"
+					>
+					<FileConfiguration
+						Name="Debug|Win32"
+						>
+						<Tool
+							Name="VCCLCompilerTool"
+							DisableSpecificWarnings="4701"
+						/>
+					</FileConfiguration>
+					<FileConfiguration
+						Name="Release|Win32"
+						>
+						<Tool
+							Name="VCCLCompilerTool"
+							DisableSpecificWarnings="4701"
+						/>
+					</FileConfiguration>
+					<FileConfiguration
+						Name="Debug_Internal|Win32"
+						>
+						<Tool
+							Name="VCCLCompilerTool"
+							DisableSpecificWarnings="4701"
+						/>
+					</FileConfiguration>
+					<FileConfiguration
+						Name="Release_PGOInstrument|Win32"
+						>
+						<Tool
+							Name="VCCLCompilerTool"
+							DisableSpecificWarnings="4701"
+						/>
+					</FileConfiguration>
+					<FileConfiguration
+						Name="Release_PGOOptimize|Win32"
+						>
+						<Tool
+							Name="VCCLCompilerTool"
+							DisableSpecificWarnings="4701"
+						/>
+					</FileConfiguration>
+					<FileConfiguration
+						Name="Debug_CFLite|Win32"
+						>
+						<Tool
+							Name="VCCLCompilerTool"
+							DisableSpecificWarnings="4701"
+						/>
+					</FileConfiguration>
+					<FileConfiguration
+						Name="Release_CFLite|Win32"
+						>
+						<Tool
+							Name="VCCLCompilerTool"
+							DisableSpecificWarnings="4701"
+						/>
+					</FileConfiguration>
+				</File>
+				<File
+					RelativePath="$(WebKitOutputDir)\obj\$(ProjectName)\DerivedSources\Grammar.h"
+					>
+				</File>
+				<File
+					RelativePath="$(WebKitOutputDir)\obj\$(ProjectName)\DerivedSources\lexer.lut.h"
+					>
+				</File>
+				<File
+					RelativePath="$(WebKitOutputDir)\obj\$(ProjectName)\DerivedSources\MathObject.lut.h"
+					>
+				</File>
+				<File
+					RelativePath="$(WebKitOutputDir)\obj\$(ProjectName)\DerivedSources\NumberConstructor.lut.h"
+					>
+				</File>
+				<File
+					RelativePath="$(WebKitOutputDir)\obj\$(ProjectName)\DerivedSources\RegExpConstructor.lut.h"
+					>
+				</File>
+				<File
+					RelativePath="$(WebKitOutputDir)\obj\$(ProjectName)\DerivedSources\RegExpObject.lut.h"
+					>
+				</File>
+				<File
+					RelativePath="$(WebKitOutputDir)\obj\$(ProjectName)\DerivedSources\StringPrototype.lut.h"
+					>
+				</File>
+			</Filter>
 		</Filter>
 		<Filter
 			Name="PCRE"
 			>
 			<File
-				RelativePath="..\..\pcre\pcre-config.h"
-				>
-			</File>
-			<File
 				RelativePath="..\..\pcre\pcre.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\pcre\pcre_compile.c"
+				RelativePath="..\..\pcre\pcre_compile.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\pcre\pcre_config.c"
-				>
-			</File>
-			<File
-				RelativePath="..\..\pcre\pcre_exec.c"
-				>
-			</File>
-			<File
-				RelativePath="..\..\pcre\pcre_fullinfo.c"
-				>
-			</File>
-			<File
-				RelativePath="..\..\pcre\pcre_get.c"
-				>
-			</File>
-			<File
-				RelativePath="..\..\pcre\pcre_globals.c"
-				>
-			</File>
-			<File
-				RelativePath="..\..\pcre\pcre_info.c"
+				RelativePath="..\..\pcre\pcre_exec.cpp"
 				>
 			</File>
 			<File
@@ -567,47 +1224,15 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\pcre\pcre_maketables.c"
+				RelativePath="..\..\pcre\pcre_tables.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\pcre\pcre_ord2utf8.c"
+				RelativePath="..\..\pcre\pcre_ucp_searchfuncs.cpp"
 				>
 			</File>
 			<File
-				RelativePath="..\..\pcre\pcre_printint.src"
-				>
-			</File>
-			<File
-				RelativePath="..\..\pcre\pcre_refcount.c"
-				>
-			</File>
-			<File
-				RelativePath="..\..\pcre\pcre_study.c"
-				>
-			</File>
-			<File
-				RelativePath="..\..\pcre\pcre_tables.c"
-				>
-			</File>
-			<File
-				RelativePath="..\..\pcre\pcre_try_flipped.c"
-				>
-			</File>
-			<File
-				RelativePath="..\..\pcre\pcre_ucp_findchar.c"
-				>
-			</File>
-			<File
-				RelativePath="..\..\pcre\pcre_version.c"
-				>
-			</File>
-			<File
-				RelativePath="..\..\pcre\pcre_xclass.c"
-				>
-			</File>
-			<File
-				RelativePath="..\..\pcre\ucp.h"
+				RelativePath="..\..\pcre\pcre_xclass.cpp"
 				>
 			</File>
 			<File
@@ -616,114 +1241,14 @@
 			</File>
 		</Filter>
 		<Filter
-			Name="Bindings"
-			>
-			<File
-				RelativePath="..\..\bindings\c\c_class.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\bindings\c\c_class.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\bindings\c\c_instance.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\bindings\c\c_instance.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\bindings\c\c_runtime.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\bindings\c\c_runtime.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\bindings\c\c_utility.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\bindings\c\c_utility.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\bindings\NP_jsobject.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\bindings\NP_jsobject.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\bindings\npapi.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\bindings\npruntime.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\bindings\npruntime.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\bindings\npruntime_impl.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\bindings\npruntime_priv.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\bindings\runtime.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\bindings\runtime.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\bindings\runtime_array.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\bindings\runtime_array.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\bindings\runtime_method.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\bindings\runtime_method.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\bindings\runtime_object.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\bindings\runtime_object.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\bindings\runtime_root.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\bindings\runtime_root.h"
-				>
-			</File>
-		</Filter>
-		<Filter
 			Name="API"
 			>
 			<File
 				RelativePath="..\..\API\APICast.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\API\JavaScript.h"
 				>
 			</File>
 			<File
@@ -799,6 +1324,22 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\API\JSStringRefBSTR.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\API\JSStringRefBSTR.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\API\JSStringRefCF.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\API\JSStringRefCF.h"
+				>
+			</File>
+			<File
 				RelativePath="..\..\API\JSValueRef.cpp"
 				>
 			</File>
@@ -806,7 +1347,447 @@
 				RelativePath="..\..\API\JSValueRef.h"
 				>
 			</File>
+			<File
+				RelativePath="..\..\API\OpaqueJSString.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\API\OpaqueJSString.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\API\WebKitAvailability.h"
+				>
+			</File>
 		</Filter>
+		<Filter
+			Name="Profiler"
+			>
+			<File
+				RelativePath="..\..\profiler\HeavyProfile.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\profiler\HeavyProfile.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\profiler\Profile.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\profiler\Profile.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\profiler\ProfileGenerator.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\profiler\ProfileGenerator.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\profiler\ProfileNode.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\profiler\ProfileNode.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\profiler\Profiler.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\profiler\Profiler.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\profiler\TreeProfile.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\profiler\TreeProfile.h"
+				>
+			</File>
+		</Filter>
+		<Filter
+			Name="Compiler"
+			>
+			<File
+				RelativePath="..\..\bytecompiler\BytecodeGenerator.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\bytecompiler\BytecodeGenerator.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\bytecompiler\Label.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\parser\Lexer.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\parser\Lexer.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\parser\NodeConstructors.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\parser\NodeInfo.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\parser\Nodes.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\parser\Nodes.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\parser\Parser.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\parser\Parser.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\parser\ParserArena.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\parser\ParserArena.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\bytecompiler\RegisterID.h"
+				>
+			</File>
+		</Filter>
+		<Filter
+			Name="bytecode"
+			>
+			<File
+				RelativePath="..\..\bytecode\CodeBlock.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\bytecode\CodeBlock.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\bytecode\EvalCodeCache.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\ExceptionHelpers.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\interpreter\ExceptionHelpers.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\bytecode\Instruction.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\interpreter\Interpreter.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\interpreter\Interpreter.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\jit\JITStubs.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\jit\JITStubs.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\JSPropertyNameIterator.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\JSPropertyNameIterator.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\bytecode\JumpTable.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\bytecode\JumpTable.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\bytecode\Opcode.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\bytecode\Opcode.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\interpreter\Register.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\interpreter\RegisterFile.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\interpreter\RegisterFile.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\bytecode\SamplingTool.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\bytecode\SamplingTool.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\bytecode\StructureStubInfo.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\bytecode\StructureStubInfo.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\TimeoutChecker.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\runtime\TimeoutChecker.h"
+				>
+			</File>
+		</Filter>
+		<Filter
+			Name="Debugger"
+			>
+			<File
+				RelativePath="..\..\debugger\Debugger.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\debugger\Debugger.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\debugger\DebuggerActivation.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\debugger\DebuggerActivation.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\debugger\DebuggerCallFrame.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\debugger\DebuggerCallFrame.h"
+				>
+			</File>
+		</Filter>
+		<Filter
+			Name="assembler"
+			>
+			<File
+				RelativePath="..\..\assembler\AbstractMacroAssembler.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\assembler\AssemblerBuffer.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\assembler\MacroAssembler.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\assembler\MacroAssemblerX86.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\assembler\MacroAssemblerX86Common.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\assembler\X86Assembler.h"
+				>
+			</File>
+		</Filter>
+		<Filter
+			Name="wrec"
+			>
+			<File
+				RelativePath="..\..\wrec\CharacterClass.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\wrec\CharacterClass.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\wrec\CharacterClassConstructor.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\wrec\CharacterClassConstructor.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\wrec\Quantifier.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\wrec\WREC.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\wrec\WREC.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\wrec\WRECFunctors.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\wrec\WRECFunctors.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\wrec\WRECGenerator.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\wrec\WRECGenerator.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\wrec\WRECParser.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\wrec\WRECParser.h"
+				>
+			</File>
+		</Filter>
+		<Filter
+			Name="yarr"
+			>
+			<File
+				RelativePath="..\..\yarr\RegexCompiler.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\yarr\RegexCompiler.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\yarr\RegexInterpreter.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\yarr\RegexInterpreter.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\yarr\RegexJIT.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\yarr\RegexJIT.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\yarr\RegexParser.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\yarr\RegexPattern.h"
+				>
+			</File>
+		</Filter>
+		<Filter
+			Name="jit"
+			>
+			<File
+				RelativePath="..\..\jit\ExecutableAllocator.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\jit\ExecutableAllocator.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\jit\ExecutableAllocatorWin.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\jit\JIT.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\jit\JIT.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\jit\JITArithmetic.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\jit\JITCall.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\jit\JITInlineMethods.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\jit\JITOpcodes.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\jit\JITPropertyAccess.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\jit\JITStubCall.h"
+				>
+			</File>
+		</Filter>
+		<Filter
+			Name="Resources"
+			>
+			<File
+				RelativePath=".\JavaScriptCore.rc"
+				>
+			</File>
+		</Filter>
+		<File
+			RelativePath=".\JavaScriptCore.def"
+			>
+		</File>
+		<File
+			RelativePath=".\JavaScriptCore_debug.def"
+			>
+		</File>
 	</Files>
 	<Globals>
 	</Globals>

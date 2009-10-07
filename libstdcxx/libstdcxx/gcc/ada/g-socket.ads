@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---              Copyright (C) 2001-2005 Ada Core Technologies, Inc.         --
+--                     Copyright (C) 2001-2005, AdaCore                     --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -433,8 +433,9 @@ package GNAT.Sockets is
    --  treated like a wildcard enabling all addresses. No_Inet_Addr provides a
    --  special value to denote uninitialized inet addresses.
 
-   Any_Inet_Addr : constant Inet_Addr_Type;
-   No_Inet_Addr  : constant Inet_Addr_Type;
+   Any_Inet_Addr       : constant Inet_Addr_Type;
+   No_Inet_Addr        : constant Inet_Addr_Type;
+   Broadcast_Inet_Addr : constant Inet_Addr_Type;
 
    type Sock_Addr_Type (Family : Family_Type := Family_Inet) is record
       Addr : Inet_Addr_Type (Family);
@@ -488,7 +489,7 @@ package GNAT.Sockets is
    Host_Error : exception;
    --  Exception raised by the two following procedures. Once raised, its
    --  message contains a string describing the error code. This exception is
-   --  raised when an host entry can not be retrieved.
+   --  raised when an host entry cannot be retrieved.
 
    function Get_Host_By_Address
      (Address : Inet_Addr_Type;
@@ -594,6 +595,16 @@ package GNAT.Sockets is
       Unknown_Server_Error,
       Cannot_Resolve_Error);
 
+   --  Timeval_Duration is a subtype of Standard.Duration because the full
+   --  range of Standard.Duration cannot be represented in the equivalent C
+   --  structure. Moreover, negative values are not allowed to avoid system
+   --  incompatibilities.
+
+   Immediate : constant := 0.0;
+   Forever   : constant := Duration (Integer'Last) * 1.0;
+
+   subtype Timeval_Duration is Duration range Immediate .. Forever;
+
    --  Get_Socket_Options and Set_Socket_Options manipulate options associated
    --  with a socket. Options may exist at multiple protocol levels in the
    --  communication stack. Socket_Level is the uppermost socket level.
@@ -609,18 +620,21 @@ package GNAT.Sockets is
    --  a boolean to enable or disable this option.
 
    type Option_Name is (
-     Keep_Alive,      -- Enable sending of keep-alive messages
-     Reuse_Address,   -- Allow bind to reuse local address
-     Broadcast,       -- Enable datagram sockets to recv/send broadcast packets
-     Send_Buffer,     -- Set/get the maximum socket send buffer in bytes
-     Receive_Buffer,  -- Set/get the maximum socket recv buffer in bytes
-     Linger,          -- Shutdown wait for msg to be sent or timeout occur
-     Error,           -- Get and clear the pending socket error
-     No_Delay,        -- Do not delay send to coalesce packets (TCP_NODELAY)
-     Add_Membership,  -- Join a multicast group
-     Drop_Membership, -- Leave a multicast group
-     Multicast_TTL,   -- Indicate the time-to-live of sent multicast packets
-     Multicast_Loop); -- Sent multicast packets are looped to the local socket
+     Keep_Alive,       -- Enable sending of keep-alive messages
+     Reuse_Address,    -- Allow bind to reuse local address
+     Broadcast,        -- Enable datagram sockets to recv/send broadcasts
+     Send_Buffer,      -- Set/get the maximum socket send buffer in bytes
+     Receive_Buffer,   -- Set/get the maximum socket recv buffer in bytes
+     Linger,           -- Shutdown wait for msg to be sent or timeout occur
+     Error,            -- Get and clear the pending socket error
+     No_Delay,         -- Do not delay send to coalesce packets (TCP_NODELAY)
+     Add_Membership,   -- Join a multicast group
+     Drop_Membership,  -- Leave a multicast group
+     Multicast_If,     -- Set default outgoing interface for multicast packets
+     Multicast_TTL,    -- Indicate the time-to-live of sent multicast packets
+     Multicast_Loop,   -- Sent multicast packets are looped to local socket
+     Send_Timeout,     -- Set timeout value for output
+     Receive_Timeout); -- Set timeout value for input
 
    type Option_Type (Name : Option_Name := Keep_Alive) is record
       case Name is
@@ -651,8 +665,15 @@ package GNAT.Sockets is
             Multicast_Address : Inet_Addr_Type;
             Local_Interface   : Inet_Addr_Type;
 
+         when Multicast_If    =>
+            Outgoing_If : Inet_Addr_Type;
+
          when Multicast_TTL   =>
             Time_To_Live : Natural;
+
+         when Send_Timeout |
+              Receive_Timeout =>
+            Timeout : Timeval_Duration;
 
       end case;
    end record;
@@ -912,15 +933,16 @@ package GNAT.Sockets is
    procedure Set (Item : in out Socket_Set_Type; Socket : Socket_Type);
    --  Insert Socket into Item
 
-   --  C select() waits for a number of file descriptors to change status.
-   --  Usually, three independent sets of descriptors are watched (read, write
-   --  and exception). A timeout gives an upper bound on the amount of time
-   --  elapsed before select returns. This function blocks until an event
-   --  occurs. On some platforms, C select can block the full process.
+   --  The select(2) system call waits for events to occur on any of a set of
+   --  file descriptors. Usually, three independent sets of descriptors are
+   --  watched (read, write  and exception). A timeout gives an upper bound
+   --  on the amount of time elapsed before select returns. This function
+   --  blocks until an event occurs. On some platforms, the select(2) system
+   --  can block the full process (not just the calling thread).
    --
    --  Check_Selector provides the very same behaviour. The only difference is
    --  that it does not watch for exception events. Note that on some
-   --  platforms it is kept process blocking in purpose. The timeout parameter
+   --  platforms it is kept process blocking on purpose. The timeout parameter
    --  allows the user to have the behaviour he wants. Abort_Selector allows
    --  to abort safely a Check_Selector that is blocked forever. A special
    --  file descriptor is opened by Create_Selector and included in each call
@@ -933,15 +955,7 @@ package GNAT.Sockets is
    type Selector_Type is limited private;
    type Selector_Access is access all Selector_Type;
 
-   --  Selector_Duration is a subtype of Standard.Duration because the full
-   --  range of Standard.Duration cannot be represented in the equivalent C
-   --  structure. Moreover, negative values are not allowed to avoid system
-   --  incompatibilities.
-
-   Immediate : constant := 0.0;
-   Forever   : constant := Duration (Integer'Last) * 1.0;
-
-   subtype Selector_Duration is Duration range Immediate .. Forever;
+   subtype Selector_Duration is Timeval_Duration;
 
    procedure Create_Selector (Selector : out Selector_Type);
    --  Create a new selector
@@ -958,16 +972,19 @@ package GNAT.Sockets is
       Status       : out Selector_Status;
       Timeout      : Selector_Duration := Forever);
    --  Return when one Socket in R_Socket_Set has some data to be read or if
-   --  one Socket in W_Socket_Set is ready to receive some data. In these
+   --  one Socket in W_Socket_Set is ready to transmit some data. In these
    --  cases Status is set to Completed and sockets that are ready are set in
    --  R_Socket_Set or W_Socket_Set. Status is set to Expired if no socket was
    --  ready after a Timeout expiration. Status is set to Aborted if an abort
    --  signal has been received while checking socket status. As this
    --  procedure returns when Timeout occurs, it is a design choice to keep
    --  this procedure process blocking. Note that a Timeout of 0.0 returns
-   --  immediately. Also note that two different objects must be passed as
-   --  R_Socket_Set and W_Socket_Set (even if they contain the same set of
-   --  Sockets), or some event will be lost.
+   --  immediately. Also note that two different Socket_Set_Type objects must
+   --  be passed as R_Socket_Set and W_Socket_Set (even if they denote the
+   --  same set of Sockets), or some event may be lost.
+   --  Socket_Error is raised when the select(2) system call returns an
+   --  error condition, or when a read error occurs on the signalling socket
+   --  used for the implementation of Abort_Selector.
 
    procedure Check_Selector
      (Selector     : in out Selector_Type;
@@ -1027,10 +1044,14 @@ private
    Any_Port : constant Port_Type := 0;
    No_Port  : constant Port_Type := 0;
 
-   Any_Inet_Addr : constant Inet_Addr_Type := (Family_Inet, (others => 0));
-   No_Inet_Addr  : constant Inet_Addr_Type := (Family_Inet, (others => 0));
+   Any_Inet_Addr       : constant Inet_Addr_Type :=
+                           (Family_Inet, (others => 0));
+   No_Inet_Addr        : constant Inet_Addr_Type :=
+                           (Family_Inet, (others => 0));
+   Broadcast_Inet_Addr : constant Inet_Addr_Type :=
+                           (Family_Inet, (others => 255));
 
-   No_Sock_Addr  : constant Sock_Addr_Type := (Family_Inet, No_Inet_Addr, 0);
+   No_Sock_Addr : constant Sock_Addr_Type := (Family_Inet, No_Inet_Addr, 0);
 
    Max_Name_Length : constant := 64;
    --  The constant MAXHOSTNAMELEN is usually set to 64

@@ -364,7 +364,7 @@ static int show_server_settings(request_rec * r)
                "<tt>connection: %d &nbsp;&nbsp; "
                "keep-alive: %d</tt></dt>",
                (int) (apr_time_sec(serv->timeout)),
-               (int) (apr_time_sec(serv->timeout)));
+               (int) (apr_time_sec(serv->keep_alive_timeout)));
     ap_mpm_query(AP_MPMQ_MAX_DAEMON_USED, &max_daemons);
     ap_mpm_query(AP_MPMQ_IS_THREADED, &threaded);
     ap_mpm_query(AP_MPMQ_IS_FORKED, &forked);
@@ -607,7 +607,7 @@ static int display_info(request_rec * r)
     if (r->method_number != M_GET)
         return DECLINED;
 
-    ap_set_content_type(r, "text/html");
+    ap_set_content_type(r, "text/html; charset=ISO-8859-1");
 
     ap_rputs(DOCTYPE_XHTML_1_0T
              "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n"

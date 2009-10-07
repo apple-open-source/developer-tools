@@ -151,9 +151,7 @@ mi_gdb_test "146-var-evaluate-expression \"var6\"" "146\\^done,value=\"<value te
 
 mi_gdb_test "90-stack-select-frame 0" "90\\^done"  "Select stack frame 0"
 
-# mi_gdb_test "148-data-read-memory -- 0x00000000 x 1 1 100" "148\\^done,addr=\"$hex\",nr-bytes=\"0\",total-bytes=\"100\",next-row=\"$hex\",prev-row=\"$hex\",next-page=\"$hex\",prev-page=\"$hex\",memory=\\\[\{addr=\"$hex\",data=\\\[\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\",\"N/A\"\\\]\}\\\]"  "data-read-memory"
-
-mi_gdb_test "208-exec-step" "208\\^running.*208\\\*stopped,line=\"27\",file=\".*$srcfile\",reason=\"end-stepping-range\".*208\\^done"  "Exec step"
+mi_gdb_test "208-exec-step" "208\\^running.*208\\\*stopped,frame=\{func\"foo \\\inlined\\\]\".*line=\"27\",file=\".*$srcfile\",reason=\"end-stepping-range\".*208\\^done"  "Exec step"
 
 mi_gdb_test "209-thread-list-ids" ".*209\\^done,thread-ids=\{thread-id=\"1\"\},number-of-threads=\"1\""  "threat-list-ids"
 

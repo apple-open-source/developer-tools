@@ -29,6 +29,7 @@
 #include <DirectoryService/DirectoryService.h>
 #include <DirectoryServiceCore/CLog.h>
 #include <Kerberos/krb5.h>
+#include <dispatch/dispatch.h>
 #include <stack>
 
 using namespace std;
@@ -41,6 +42,58 @@ extern uint32_t	gSystemGoingToSleep;
 int32_t				CLDAPConnectionManager::fCheckThreadActive	= false;
 double				CLDAPConnectionManager::fCheckFailedLastRun	= 0.0;
 DSEventSemaphore	CLDAPConnectionManager::fCheckFailedEvent;
+
+#pragma mark -
+#pragma mark Struct sLDAPContinueData Functions
+
+sLDAPContinueData::sLDAPContinueData( void )
+{
+	fLDAPMsgId = 0;
+	fNodeRef = 0;
+	fLDAPConnection = NULL;
+	fResult = NULL;
+	fRefLD = NULL;
+	fRecNameIndex = 0;
+	fRecTypeIndex = 0;
+	fTotalRecCount = 0;
+	fLimitRecSearch = 0;
+	fAuthHndl = NULL;
+	fAuthHandlerProc = NULL;
+	fAuthAuthorityData = NULL;
+	fPassPlugContinueData = 0;
+}
+
+sLDAPContinueData::~sLDAPContinueData( void )
+{
+	if ( fResult != nil )
+	{
+		ldap_msgfree( fResult );
+		fResult = nil;
+	}
+	
+	if ( fLDAPMsgId > 0 )
+	{
+		if ( fLDAPConnection != nil ) 
+		{
+			LDAP *aHost = fLDAPConnection->LockLDAPSession();
+			if ( aHost != NULL )
+			{
+				if ( aHost == fRefLD )
+				{
+					ldap_abandon_ext( aHost, fLDAPMsgId, NULL, NULL );
+				}
+				
+				fLDAPConnection->UnlockLDAPSession( aHost, false );
+			}
+		}
+		
+		fLDAPMsgId = 0;
+		fRefLD = NULL;			
+	}
+	
+	DSRelease( fLDAPConnection );
+	DSFreeString( fAuthAuthorityData );
+}
 
 #pragma mark -
 #pragma mark Struct sLDAPContextData Functions
@@ -63,6 +116,9 @@ sLDAPContextData::sLDAPContextData( const sLDAPContextData& inContextData )
 	fPWSUserIDLength = 0;
 	fPWSUserID = NULL;
 	
+	fAccruedTimeout.tv_sec = 0;
+	fAccruedTimeout.tv_usec = 0;
+	
 	fLDAPConnection = inContextData.fLDAPConnection->Retain();
 }
 
@@ -79,6 +135,8 @@ sLDAPContextData::sLDAPContextData( CLDAPConnection *inConnection )
 	fPWSUserIDLength = 0;
 	fPWSUserID = NULL;
 	fUID = fEffectiveUID = 0xffffffff;  // this is -1 (nobody)
+	fAccruedTimeout.tv_sec = 0;
+	fAccruedTimeout.tv_usec = 0;
 	
 	if ( inConnection != NULL )
 		fLDAPConnection = inConnection->Retain();
@@ -129,17 +187,19 @@ CLDAPConnectionManager::~CLDAPConnectionManager( void )
 	
 	fLDAPConnectionMap.clear();
 	
-	// we check connections that have a retain count more than one since they will get removed next go around
-	LDAPAuthConnectionListI	aLDAPAuthConnectionListI;
-	for ( aLDAPAuthConnectionListI = fLDAPAuthConnectionList.begin(); aLDAPAuthConnectionListI != fLDAPAuthConnectionList.end(); 
-		  ++aLDAPAuthConnectionListI )
-	{
-		(*aLDAPAuthConnectionListI)->Release();
-	}
-	
+	// here let's just copy into another list before we clear so we can close the connections safely
+	LDAPAuthConnectionList	cleanupList( fLDAPAuthConnectionList );
+
+	// now safe to clear the list
 	fLDAPAuthConnectionList.clear();
-    
+
+	// release the lock so we can close our authed connections
 	fLDAPConnectionMapMutex.SignalLock();	
+
+	for ( LDAPAuthConnectionListI cleanupListI = cleanupList.begin(); cleanupListI != cleanupList.end(); ++cleanupListI )
+	{
+		(*cleanupListI)->Release();
+	}
 	
 	DSCFRelease( fSupportedSASLMethods );
 }
@@ -159,8 +219,10 @@ CLDAPConnection	*CLDAPConnectionManager::GetConnection( const char *inNodeName )
 	LDAPConnectionMapI aLDAPConnectionMapI = fLDAPConnectionMap.find( inNodeName );
 	if ( aLDAPConnectionMapI != fLDAPConnectionMap.end() )
 	{
+		int32_t connectionStatus = aLDAPConnectionMapI->second->ConnectionStatus();
+
 		// if it's safe return it
-		if ( aLDAPConnectionMapI->second->ConnectionStatus() == kConnectionSafe )
+		if ( connectionStatus == kConnectionSafe )
 		{
 			pConnection = aLDAPConnectionMapI->second->Retain();
 			if ( pConnection->fNodeConfig != NULL )
@@ -176,6 +238,17 @@ CLDAPConnection	*CLDAPConnectionManager::GetConnection( const char *inNodeName )
 					aLDAPConnectionMapI = fLDAPConnectionMap.end();
 				}
 			}
+		}
+		// if it's unknown, try it
+		else if ( connectionStatus == kConnectionUnknown )
+		{
+			// try to establish a connection, if it fails release it
+			pConnection = aLDAPConnectionMapI->second->Retain();
+			LDAP *pTemp = pConnection->LockLDAPSession();
+			if ( pTemp != NULL )
+				pConnection->UnlockLDAPSession( pTemp, false );
+			else
+				DSRelease( pConnection );			
 		}
 	}
 	
@@ -325,16 +398,21 @@ void CLDAPConnectionManager::NodeDeleted( const char *inNodeName )
 {
 	// if a node is deleted, just remove any existing known connections from our map, they will get
 	// deleted when existing sessions fail
+	CLDAPConnection *pConnection = NULL;
+	
 	fLDAPConnectionMapMutex.WaitLock();
 	
 	LDAPConnectionMapI aLDAPConnectionMapI = fLDAPConnectionMap.find( inNodeName );
 	if ( aLDAPConnectionMapI != fLDAPConnectionMap.end() )
 	{
-		aLDAPConnectionMapI->second->Release();
+		pConnection = aLDAPConnectionMapI->second;
 		fLDAPConnectionMap.erase( aLDAPConnectionMapI );
 	}
 
 	fLDAPConnectionMapMutex.SignalLock();
+	
+	// do while not holding mutex due to potential deadlock with Kerberos
+	DSRelease( pConnection );
 }
 
 void CLDAPConnectionManager::PeriodicTask( void )
@@ -344,6 +422,7 @@ void CLDAPConnectionManager::PeriodicTask( void )
 	
 	bool				bShouldCheckThread		= false;
 	LDAPConnectionMapI	aLDAPConnectionMapI;
+	LDAPAuthConnectionList	cleanupList;
 	
 	CLDAPv3Plugin::WaitForNetworkTransitionToFinish();
 	
@@ -360,7 +439,7 @@ void CLDAPConnectionManager::PeriodicTask( void )
 			DbgLog( kLogPlugin, "CLDAPConnectionManager::PeriodicTask - Status Node: %s -- References: 0 -- removing from table", 
 				    aLDAPConnectionMapI->first.c_str() );
 			
-			pConnection->Release();
+			cleanupList.push_back( pConnection );
 			fLDAPConnectionMap.erase( aLDAPConnectionMapI++ );
 			continue;
 		}
@@ -385,7 +464,7 @@ void CLDAPConnectionManager::PeriodicTask( void )
 			DbgLog( kLogPlugin, "CLDAPConnectionManager::PeriodicTask - Status Node: %s:%s -- References: 0 -- removing from table", 
 				    pConnection->fNodeConfig->fNodeName, pConnection->fLDAPUsername );
 			
-			pConnection->Release();
+			cleanupList.push_back( pConnection );
 			aLDAPAuthConnectionListI++;
 			fLDAPAuthConnectionList.remove( pConnection );
 			continue;
@@ -400,6 +479,12 @@ void CLDAPConnectionManager::PeriodicTask( void )
 	}
 	
 	fLDAPConnectionMapMutex.SignalLock();
+	
+	// now Release any we were planning on deleting while not holding the map mutex, due to a Kerberos deadlock potential
+	for ( LDAPAuthConnectionListI cleanupListI = cleanupList.begin(); cleanupListI != cleanupList.end(); cleanupListI++ )
+	{
+		(*cleanupListI)->Release();
+	}
 	
 	// check that there is actually at least one entry in the table that needs to be checked
 	if ( bShouldCheckThread )
@@ -444,7 +529,10 @@ void CLDAPConnectionManager::SystemGoingToSleep( void )
 	// flag all connections unsafe
 	LDAPConnectionMapI	aLDAPConnectionMapI;
 	for ( aLDAPConnectionMapI = fLDAPConnectionMap.begin(); aLDAPConnectionMapI != fLDAPConnectionMap.end(); ++aLDAPConnectionMapI )
+	{
 		aLDAPConnectionMapI->second->SetConnectionStatus( kConnectionUnsafe );
+		aLDAPConnectionMapI->second->CloseConnectionIfPossible();
+	}
 	
 	// need to flag authenticated ones too
 	LDAPAuthConnectionListI aLDAPAuthConnectionListI;
@@ -452,6 +540,7 @@ void CLDAPConnectionManager::SystemGoingToSleep( void )
 		 ++aLDAPAuthConnectionListI )
 	{
 		(*aLDAPAuthConnectionListI)->SetConnectionStatus( kConnectionUnsafe );
+		(*aLDAPAuthConnectionListI)->CloseConnectionIfPossible();
 	}
 	
 	fLDAPConnectionMapMutex.SignalLock();
@@ -470,7 +559,8 @@ void CLDAPConnectionManager::CheckFailed( void )
 		return;
 	
 	LDAPConnectionMap	aCheckConnections;
-    
+	LDAPAuthConnectionList	cleanupList;
+
 	// we don't want to process failed connections right after a network transition, let the active connections go first
 	CLDAPv3Plugin::WaitForNetworkTransitionToFinish();
 	
@@ -488,7 +578,7 @@ void CLDAPConnectionManager::CheckFailed( void )
 			DbgLog( kLogPlugin, "CLDAPConnectionManager::CheckFailed - Status Node: %s -- References: 0 -- removing from table", 
 				    aLDAPConnectionMapI->first.c_str() );
 			
-			pConnection->Release();
+			cleanupList.push_back( pConnection );
 			fLDAPConnectionMap.erase( aLDAPConnectionMapI++ );
 			continue;
 		}
@@ -512,7 +602,7 @@ void CLDAPConnectionManager::CheckFailed( void )
 			DbgLog( kLogPlugin, "CLDAPConnectionManager::CheckFailed - Status Node: %s:%s -- References: 0 -- removing from table", 
 				    pConnection->fNodeConfig->fNodeName, pConnection->fLDAPUsername );
 			
-			pConnection->Release();
+			cleanupList.push_back( pConnection );
 			aLDAPAuthConnectionListI++;
 			fLDAPAuthConnectionList.remove( pConnection );
 		}
@@ -525,6 +615,12 @@ void CLDAPConnectionManager::CheckFailed( void )
 	}
     
 	fLDAPConnectionMapMutex.SignalLock();	
+	
+	// now Release any we were planning on deleting while not holding the map mutex, due to a Kerberos deadlock potential
+	for ( LDAPAuthConnectionListI cleanupListI = cleanupList.begin(); cleanupListI != cleanupList.end(); cleanupListI++ )
+	{
+		(*cleanupListI)->Release();
+	}
     
 	CLDAPv3Plugin::WaitForNetworkTransitionToFinish();
 	
@@ -547,29 +643,14 @@ void CLDAPConnectionManager::CheckFailed( void )
 void CLDAPConnectionManager::LaunchCheckFailedThread( bool bForceCheck )
 {
 	if ( (bForceCheck == true || (CFAbsoluteTimeGetCurrent() - fCheckFailedLastRun) > 30.0) && 
-		 OSAtomicCompareAndSwap32Barrier(false, true, &fCheckThreadActive) == true )
+		 __sync_bool_compare_and_swap(&fCheckThreadActive, false, true) == true )
 	{
-		pthread_t       checkThread;
-		pthread_attr_t	defaultAttrs;
-		
         fCheckFailedEvent.ResetEvent();
-		fCheckThreadActive = true;
-		
-		pthread_attr_init( &defaultAttrs );
-		pthread_attr_setdetachstate( &defaultAttrs, PTHREAD_CREATE_DETACHED );
-		
-		pthread_create( &checkThread, &defaultAttrs, CheckFailedServers, (void *) this );
+		dispatch_async( dispatch_get_concurrent_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT), 
+					   ^(void) {
+						   CheckFailed();
+						   fCheckFailedLastRun = CFAbsoluteTimeGetCurrent(); // we set the timestamp after we finished our last check
+						   fCheckThreadActive = false;
+					   } );
 	}
-}
-
-void *CLDAPConnectionManager::CheckFailedServers( void *data )
-{
-	CLDAPConnectionManager   *nodeMgr = (CLDAPConnectionManager *) data;
-	
-	nodeMgr->CheckFailed();
-	
-	fCheckFailedLastRun = CFAbsoluteTimeGetCurrent(); // we set the timestamp after we finished our last check
-	OSAtomicCompareAndSwap32Barrier( true, false, &fCheckThreadActive );
-
-	return NULL;
 }

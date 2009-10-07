@@ -196,8 +196,11 @@ typedef struct B2 {
 } B2;
 
 
-static void check(char * rec_name, int actual, int expected32, int expected64, 
-		  int expected_ia32, int expected_arm, char * comment)
+/* APPLE LOCAL begin ARM alignments */
+/* APPLE LOCAL begin radar 4869885 */
+static void check(const char * rec_name, int actual, int expected32, int expected64, 
+		  int expected_ia32, int expected_arm, const char * comment)
+/* APPLE LOCAL end radar 4869885 */
 {
     int expected;
 #ifdef __i386__
@@ -217,6 +220,7 @@ static void check(char * rec_name, int actual, int expected32, int expected64,
         printf(": %s\n", comment);
     }
 }
+/* APPLE LOCAL end ARM alignments */
 
 static void check_option(char *option)
 {
@@ -233,6 +237,7 @@ static void check_option(char *option)
     }
 }
 
+/* APPLE LOCAL begin ARM alignments */
 int main(int argc, char *argv[])
 {
     int i;
@@ -295,3 +300,4 @@ int main(int argc, char *argv[])
     else
     	return 0;
 }
+/* APPLE LOCAL end ARM alignments */

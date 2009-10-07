@@ -1,4 +1,3 @@
-/* APPLE LOCAL file mainline */
 /* Copyright (C) 2004, 2005  Free Software Foundation.
 
    Ensure builtin __strcpy_chk performs correctly.  */
@@ -35,7 +34,7 @@ test1 (void)
   if (strcpy (p + 16, "vwxyz" + 1) != p + 16 || memcmp (p + 16, "wxyz", 5))
     abort ();
   if (strcpy (p + 1, "") != p + 1 || memcmp (p, "a\0cde", 6))
-    abort ();
+    abort ();  
   if (strcpy (p + 3, "fghij") != p + 3 || memcmp (p, "a\0cfghij", 9))
     abort ();
 

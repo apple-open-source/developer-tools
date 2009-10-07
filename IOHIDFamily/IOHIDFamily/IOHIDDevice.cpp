@@ -2,7 +2,7 @@
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
- * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
+ * Copyright (c) 1999-2009 Apple Computer, Inc.  All Rights Reserved.
  * 
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
@@ -22,6 +22,8 @@
  * @APPLE_LICENSE_HEADER_END@
  */
 
+#include <TargetConditionals.h>
+
 #include <IOKit/IOLib.h>    // IOMalloc/IOFree
 #include <IOKit/IOBufferMemoryDescriptor.h>
 #include <IOKit/hidsystem/IOHIDSystem.h>
@@ -29,10 +31,16 @@
 #include "IOHIDElementPrivate.h"
 #include "IOHIDParserPriv.h"
 #include "IOHIDInterface.h"
-#include "IOHIKeyboard.h"
-#include "IOHIPointing.h"
 #include "IOHIDPrivateKeys.h"
 #include "IOHIDFamilyPrivate.h"
+#include "IOHIDLibUserClient.h"
+#include "IOHIDFamilyTrace.h"
+
+#if !TARGET_OS_EMBEDDED
+#include "IOHIKeyboard.h"
+#include "IOHIPointing.h"
+#endif
+
 
 //===========================================================================
 // IOHIDDevice class
@@ -101,7 +109,7 @@ struct IOHIDReportHandler
 static SInt32 g3DGameControllerCount = 0;
 // *** END GAME DEVICE HACK ***
 
-static IOService * gDisplayManager = 0;
+static IOService *  gDisplayManager = 0;
 
 //---------------------------------------------------------------------------
 // Notification handler to grab an instance of the IOHIDSystem
@@ -270,7 +278,6 @@ bool IOHIDDevice::start( IOService * provider )
 {
     IOMemoryDescriptor * reportDescriptor;
     IOReturn             ret;
-    // IOHIDPointing *	 tempNub;
 
     if ( super::start(provider) != true )
         return false;
@@ -437,38 +444,44 @@ bool IOHIDDevice::publishProperties(IOService * provider)
 {
     OSObject * prop;
     
-#define SET_PROP_INT(key, prop) \
-            setProperty(key, prop);  \
-			_interfaceNub->setProperty(key, prop);
+#define SET_PROP_FROM_VALUE(key, value) \
+    do {								\
+        prop = value;					\
+        if (prop) {                 	\
+            setProperty(key, prop); 	\
+			_interfaceNub->setProperty(key, prop); \
+		}								\
+    } while (0)
 
-#define SET_PROP(func, key)          \
-    do {                             \
-        prop = func ();           \
-        if (prop) {                  \
-            SET_PROP_INT(key, prop);  \
-            prop->release();         \
-        }                            \
+#define SET_PROP_FROM_FUNCTION(key, func)          \
+    do {								\
+        prop = func ();					\
+        if (prop) {						\
+            setProperty(key, prop);		\
+			_interfaceNub->setProperty(key, prop); \
+            prop->release();			\
+        }								\
     } while (0)
     
-    SET_PROP( newTransportString,        kIOHIDTransportKey );
-    SET_PROP( newVendorIDNumber,         kIOHIDVendorIDKey );
-    SET_PROP( newVendorIDSourceNumber,   kIOHIDVendorIDSourceKey );
-    SET_PROP( newProductIDNumber,        kIOHIDProductIDKey );
-    SET_PROP( newVersionNumber,          kIOHIDVersionNumberKey );
-    SET_PROP( newManufacturerString,     kIOHIDManufacturerKey );
-    SET_PROP( newProductString,          kIOHIDProductKey );
-    SET_PROP( newLocationIDNumber,       kIOHIDLocationIDKey );
-    SET_PROP( newCountryCodeNumber,      kIOHIDCountryCodeKey );    
-    SET_PROP( newSerialNumberString,     kIOHIDSerialNumberKey );
-    SET_PROP( newPrimaryUsageNumber,     kIOHIDPrimaryUsageKey );
-    SET_PROP( newPrimaryUsagePageNumber, kIOHIDPrimaryUsagePageKey );
-    SET_PROP( newReportIntervalNumber,   kIOHIDReportIntervalKey );
-	SET_PROP( newDeviceUsagePairs,       kIOHIDDeviceUsagePairsKey );
+    SET_PROP_FROM_FUNCTION(	kIOHIDTransportKey,			newTransportString			);
+    SET_PROP_FROM_FUNCTION(	kIOHIDVendorIDKey,			newVendorIDNumber			);
+    SET_PROP_FROM_FUNCTION(	kIOHIDVendorIDSourceKey,	newVendorIDSourceNumber		);
+    SET_PROP_FROM_FUNCTION(	kIOHIDProductIDKey,			newProductIDNumber			);
+    SET_PROP_FROM_FUNCTION(	kIOHIDVersionNumberKey,		newVersionNumber			);
+    SET_PROP_FROM_FUNCTION(	kIOHIDManufacturerKey,		newManufacturerString		);
+    SET_PROP_FROM_FUNCTION(	kIOHIDProductKey,			newProductString			);
+    SET_PROP_FROM_FUNCTION(	kIOHIDLocationIDKey,		newLocationIDNumber			);
+    SET_PROP_FROM_FUNCTION(	kIOHIDCountryCodeKey,		newCountryCodeNumber		);    
+    SET_PROP_FROM_FUNCTION(	kIOHIDSerialNumberKey,		newSerialNumberString		);
+    SET_PROP_FROM_FUNCTION(	kIOHIDPrimaryUsageKey,		newPrimaryUsageNumber		);
+    SET_PROP_FROM_FUNCTION(	kIOHIDPrimaryUsagePageKey,	newPrimaryUsagePageNumber	);
+    SET_PROP_FROM_FUNCTION(	kIOHIDReportIntervalKey,	newReportIntervalNumber		);
+	SET_PROP_FROM_FUNCTION(	kIOHIDDeviceUsagePairsKey,	newDeviceUsagePairs			);
     
     if ( getProvider() ) 
     {
-        SET_PROP_INT("BootProtocol", getProvider()->getProperty("bInterfaceProtocol"));
-        SET_PROP_INT("HIDDefaultBehavior", getProperty("HIDDefaultBehavior"));
+        SET_PROP_FROM_VALUE("BootProtocol", getProvider()->getProperty("bInterfaceProtocol"));
+        SET_PROP_FROM_VALUE("HIDDefaultBehavior", getProperty("HIDDefaultBehavior"));
     }
 
     return true;
@@ -554,12 +567,14 @@ bool IOHIDDevice::handleOpen(IOService *  client,
                     
             _seizedClient = client;
             
+#if !TARGET_OS_EMBEDDED
             IOHIKeyboard * keyboard = 0;
             IOHIPointing * pointing = 0;
             if ( keyboard = OSDynamicCast(IOHIKeyboard, getProvider()) )
                 keyboard->IOHIKeyboard::message(kIOHIDSystemDeviceSeizeRequestMessage, this, (void *)true);
             else if ( pointing = OSDynamicCast(IOHIPointing, getProvider()) )
                 pointing->IOHIPointing::message(kIOHIDSystemDeviceSeizeRequestMessage, this, (void *)true);
+#endif
         }
 
         accept = true;
@@ -598,12 +613,14 @@ void IOHIDDevice::handleClose(IOService * client, IOOptionBits options)
         {
             _seizedClient = 0;
             
+#if !TARGET_OS_EMBEDDED
             IOHIKeyboard * keyboard = 0;
             IOHIPointing * pointing = 0;
             if ( keyboard = OSDynamicCast(IOHIKeyboard, getProvider()) )
                 keyboard->IOHIKeyboard::message(kIOHIDSystemDeviceSeizeRequestMessage, this, (void *)false);
             else if ( pointing = OSDynamicCast(IOHIPointing, getProvider()) )
                 pointing->IOHIPointing::message(kIOHIDSystemDeviceSeizeRequestMessage, this, (void *)false);
+#endif
         }
         
         _performTickle = ShouldPostDisplayActivityTickles(this, _clientSet, _seizedClient);
@@ -631,10 +648,65 @@ IOReturn IOHIDDevice::newUserClient( task_t          owningTask,
                                      OSDictionary *  properties,
                                      IOUserClient ** handler )
 {
-    if ( properties )
-        properties->setObject(kIOUserClientCrossEndianCompatibleKey, kOSBooleanTrue);
-        
-    return super::newUserClient(owningTask, security_id, type, properties, handler);
+    // RY: This is really skanky.  Apparently there are some subclasses out there
+    // that want all the benefits of IOHIDDevice w/o supporting the default HID
+    // User Client.  I know!  Shocking!  Anyway, passing a type known only to the
+    // default hid clients to ensure that at least connect to our correct client.
+    if ( type == kIOHIDLibUserClientConnectManager ) {
+        if ( isInactive() ) {
+            IOLog( "IOHIDDevice::newUserClient called on an inactive device\n" );
+            *handler = NULL;
+            return kIOReturnNotReady;
+        }
+
+        if ( properties ) {
+            properties->setObject( kIOUserClientCrossEndianCompatibleKey, kOSBooleanTrue );
+        }
+
+        IOWorkLoop *loop = getWorkLoop();
+
+        IOReturn result = kIOReturnNotReady;
+
+        if ( loop ) {
+            result = loop->runAction( OSMemberFunctionCast( IOWorkLoop::Action, this, &IOHIDDevice::newUserClientGated ),
+                                      this, owningTask, security_id, properties, handler );
+        }
+        else {
+            IOLog( "IOHIDDevice::newUserClient failed to get a workloop\n" );
+        }
+
+        return result;
+    }
+
+    return super::newUserClient( owningTask, security_id, type, properties, handler );
+}
+
+IOReturn IOHIDDevice::newUserClientGated( task_t          owningTask,
+										  void *          security_id,
+										  OSDictionary *  properties,
+										  IOUserClient ** handler )
+{
+    IOUserClient * client = new IOHIDLibUserClient;
+
+    if ( !client->initWithTask( owningTask, security_id, kIOHIDLibUserClientConnectManager, properties ) ) {
+        client->release();
+        return kIOReturnBadArgument;
+    }
+
+    if ( !client->attach( this ) ) {
+        client->release();
+        return kIOReturnUnsupported;
+    }
+
+    if ( !client->start( this ) ) {
+        client->detach( this );
+        client->release();
+        return kIOReturnUnsupported;
+    }
+
+    *handler = client;
+
+    return kIOReturnSuccess;
 }
 
 //---------------------------------------------------------------------------
@@ -949,16 +1021,41 @@ IOHIDDevice::createElementHierarchy( HIDPreparsedDataRef parseData )
 //---------------------------------------------------------------------------
 // Fetch the all the possible functions of the device
 
-OSArray * IOHIDDevice::newDeviceUsagePairs()
+static OSDictionary * CreateDeviceUsagePairFromElement(IOHIDElementPrivate * element)
 {
-    IOHIDElementPrivate *	element 	= 0;
-    OSArray *		functions 	= 0;
-    OSDictionary *	pair 		= 0;
+    OSDictionary *	pair		= 0;
     OSNumber *		usage 		= 0;
     OSNumber *		usagePage 	= 0;
     OSNumber *		type 		= 0;
-    UInt32 		elementCount 	= _elementArray->getCount();    
+	
+	pair		= OSDictionary::withCapacity(2);
+	usage		= OSNumber::withNumber(element->getUsage(), 32);
+	usagePage	= OSNumber::withNumber(element->getUsagePage(), 32);
+	type		= OSNumber::withNumber(element->getCollectionType(), 32);
+	
+	pair->setObject(kIOHIDDeviceUsageKey, usage);
+	pair->setObject(kIOHIDDeviceUsagePageKey, usagePage);
+	//pair->setObject(kIOHIDElementCollectionTypeKey, type);
+
+	usage->release();
+	usagePage->release();
+	type->release();
+	
+	return pair;
+ }
+
+OSArray * IOHIDDevice::newDeviceUsagePairs()
+{
+    IOHIDElementPrivate *	element			= 0;
+    OSArray *				functions		= 0;
+    OSDictionary *			pair			= 0;
+    UInt32					elementCount 	= _elementArray->getCount();    
     
+	if ( elementCount <= 1 ) // this include vitual collection
+		return NULL;
+		
+	functions = OSArray::withCapacity(2);
+	
     // starts at one to avoid the virtual collection
     for (unsigned i=1; i<elementCount; i++)
     {
@@ -967,23 +1064,14 @@ OSArray * IOHIDDevice::newDeviceUsagePairs()
         if ((element->getType() == kIOHIDElementTypeCollection) &&
             ((element->getCollectionType() == kIOHIDElementCollectionTypeApplication) ||
             (element->getCollectionType() == kIOHIDElementCollectionTypePhysical)))
-        {
-            if(!functions) functions = OSArray::withCapacity(2);
-            
-            pair 	= OSDictionary::withCapacity(2);
-            usage	= OSNumber::withNumber(element->getUsage(), 32);
-            usagePage	= OSNumber::withNumber(element->getUsagePage(), 32);
-            type	= OSNumber::withNumber(element->getCollectionType(), 32);
-            
-            pair->setObject(kIOHIDDeviceUsageKey, usage);
-            pair->setObject(kIOHIDDeviceUsagePageKey, usagePage);
-            //pair->setObject(kIOHIDElementCollectionTypeKey, type);
+        {            
+            pair = CreateDeviceUsagePairFromElement(element);
             
             UInt32 	pairCount = functions->getCount();
             bool 	found = false;
-            for(unsigned i=0; i<pairCount; i++)
+            for(unsigned j=0; j<pairCount; j++)
             {
-                OSDictionary *tempPair = (OSDictionary *)functions->getObject(i);
+                OSDictionary *tempPair = (OSDictionary *)functions->getObject(j);
                 
                 if (found = tempPair->isEqualTo(pair))
                     break;
@@ -995,11 +1083,14 @@ OSArray * IOHIDDevice::newDeviceUsagePairs()
             }
             
             pair->release();
-            usage->release();
-            usagePage->release();
-            type->release();
         }
     }
+	
+	if ( ! functions->getCount() ) {
+		pair = CreateDeviceUsagePairFromElement((IOHIDElementPrivate *)_elementArray->getObject(1));
+		functions->setObject(pair);
+		pair->release();
+	}
 
     return functions;
 }
@@ -1367,7 +1458,6 @@ bool IOHIDDevice::registerElement( IOHIDElementPrivate * element,
 //---------------------------------------------------------------------------
 // Create a buffer memory descriptor, and divide the memory buffer
 // for each data element.
-
 IOBufferMemoryDescriptor * IOHIDDevice::createMemoryForElementValues()
 {
     IOBufferMemoryDescriptor *  descriptor;
@@ -1375,17 +1465,14 @@ IOBufferMemoryDescriptor * IOHIDDevice::createMemoryForElementValues()
     UInt32                      capacity = 0;
     UInt8 *                     start;
     UInt8 *                     buffer;
-    
+
     // Discover the amount of memory required to publish the
     // element values for all "data" elements.
 
-    for ( UInt32 slot = 0; slot < kReportHandlerSlots; slot++ )
-    {
-        for ( UInt32 type = 0; type < kIOHIDReportTypeCount; type++ )
-        {
+    for ( UInt32 slot = 0; slot < kReportHandlerSlots; slot++ ) {
+        for ( UInt32 type = 0; type < kIOHIDReportTypeCount; type++ ) {
             element = GetHeadElement(slot, type);
-            while ( element )
-            {
+            while ( element ) {
                 capacity += element->getElementValueSize();
                 element   = element->getNextReportHandler();
             }
@@ -1394,14 +1481,13 @@ IOBufferMemoryDescriptor * IOHIDDevice::createMemoryForElementValues()
 
     // Allocate an IOBufferMemoryDescriptor object.
 
-	DLOG("Element value capacity %ld\n", capacity);
+    DLOG("Element value capacity %ld\n", capacity);
 
     descriptor = IOBufferMemoryDescriptor::withOptions(
-                   kIOMemorySharingTypeMask,
-                   capacity );
+                     kIOMemoryKernelUserShared,
+                     capacity );
 
-    if ( ( descriptor == 0 ) || ( descriptor->getBytesNoCopy() == 0 ) )
-    {
+    if ( ( descriptor == 0 ) || ( descriptor->getBytesNoCopy() == 0 ) ) {
         if ( descriptor ) descriptor->release();
         return 0;
     }
@@ -1409,18 +1495,15 @@ IOBufferMemoryDescriptor * IOHIDDevice::createMemoryForElementValues()
     // Now assign the update memory area for each report element.
     start = buffer = (UInt8 *) descriptor->getBytesNoCopy();
 
-    for ( UInt32 slot = 0; slot < kReportHandlerSlots; slot++ )
-    {
-        for ( UInt32 type = 0; type < kIOHIDReportTypeCount; type++ )
-        {
+    for ( UInt32 slot = 0; slot < kReportHandlerSlots; slot++ ) {
+        for ( UInt32 type = 0; type < kIOHIDReportTypeCount; type++ ) {
             element = GetHeadElement(slot, type);
-            while ( element )
-            {
+            while ( element ) {
                 assert ( buffer < (start + capacity) );
-            
+
                 element->setMemoryForElementValue( (IOVirtualAddress) buffer,
-                                                (void *) (buffer - start));
-    
+                                                   (void *) (buffer - start));
+
                 buffer += element->getElementValueSize();
                 element = element->getNextReportHandler();
             }
@@ -1619,8 +1702,8 @@ IOReturn IOHIDDevice::postElementValues(IOHIDElementCookie * cookies, UInt32 coo
     IOHIDElementPrivate 		*element = NULL;
     IOHIDElementPrivate 		*cookieElement = NULL;
     UInt8			*reportData = NULL;
-    IOByteCount			maxReportLength = 0;
-    IOByteCount			reportLength = 0;
+    UInt32			maxReportLength = 0;
+    UInt32			reportLength = 0;
     IOHIDReportType		reportType;
     UInt8			reportID = 0;
     UInt32 			index;
@@ -1722,7 +1805,7 @@ OSString * IOHIDDevice::newSerialNumberString() const
 	if ( number = newSerialNumber() )
 	{
 		char	str[11];
-		sprintf(str, "%d", number->unsigned32BitValue());
+		snprintf(str, sizeof (str), "%d", number->unsigned32BitValue());
 		string = OSString::withCString(str);
 		number->release();
 	}
@@ -1784,24 +1867,26 @@ OSNumber * IOHIDDevice::newCountryCodeNumber() const
 // Handle input reports (USB Interrupt In pipe) from the device.
 
 OSMetaClassDefineReservedUsed(IOHIDDevice,  8);
-IOReturn IOHIDDevice::handleReportWithTime( 
-									AbsoluteTime         timeStamp,
-									IOMemoryDescriptor * report,
-                                    IOHIDReportType      reportType,
-                                    IOOptionBits         options)
+IOReturn IOHIDDevice::handleReportWithTime(
+    AbsoluteTime         timeStamp,
+    IOMemoryDescriptor * report,
+    IOHIDReportType      reportType,
+    IOOptionBits         options)
 {
     void *         reportData;
     IOByteCount    reportLength;
     IOReturn       ret = kIOReturnNotReady;
     bool           changed = false;
     bool           shouldTickle = false;
-	UInt8          reportID = 0;
-
+    UInt8          reportID = 0;
+    
+    IOHID_DEBUG(kIOHIDDebugCode_HandleReport, reportType, options, __OSAbsoluteTime(timeStamp), 0);
+    
     // Only input reports are currently handled.
     
     //if ( reportType != kIOHIDReportTypeInput )
     //    return kIOReturnUnsupported;
-
+    
     // Get a pointer to the data in the descriptor.
     if ( !report )
         return kIOReturnBadArgument;
@@ -1817,74 +1902,70 @@ IOReturn IOHIDDevice::handleReportWithTime(
         return kIOReturnNoMemory;
         
     report->readBytes( 0, reportData, reportLength );
-
+    
     ELEMENT_LOCK;
-
-    if ( _readyForInputReports )
-    {
+    
+    if ( _readyForInputReports ) {
         IOHIDElementPrivate * element;
-
+        
         // The first byte in the report, may be the report ID.
         // XXX - Do we need to advance the start of the report data?
         
         reportID = ( _reportCount > 1 ) ? *((UInt8 *) reportData) : 0;
-
+        
         // Get the first element in the report handler chain.
-            
+        
         element = GetHeadElement( GetReportHandlerSlot(reportID),
-                                    reportType);
-
-        while ( element )
-        {
+                                  reportType);
+                                  
+        while ( element ) {
             shouldTickle |= element->shouldTickleActivity();
             changed |= element->processReport( reportID,
-                                    reportData,
-                                    reportLength << 3,
-                                    &timeStamp,
-                                    &element,
-                                    options );
+                                               reportData,
+                                               reportLength << 3,
+                                               &timeStamp,
+                                               &element,
+                                               options );
         }
-
+        
         ret = kIOReturnSuccess;
     }
-
-	if ( ( reportType == kIOHIDReportTypeInput ) &&
-             (( options & kIOHIDReportOptionNotInterrupt ) == 0 ) && _interfaceNub && !_seizedClient)
-	{
-		_interfaceNub->handleReport(timeStamp, report, reportType, reportID, options);
-	}
-
-    ELEMENT_UNLOCK;
-
-	// Release the buffer
-    IOFree(reportData, reportLength);
-
-#if 0 // XXX - debugging
-{
-    UInt32 * buf = (UInt32 *) _elementValuesDescriptor->getBytesNoCopy();
     
-    for (UInt32 words = 0; words < (_elementValuesDescriptor->getLength() / 4);
-         words+=6, buf+=6)
-    {
-        IOLog("%3ld: %08lx %08lx %08lx %08lx %08lx %08lx\n",
-              words,
-              buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]);
+    if ( ( reportType == kIOHIDReportTypeInput ) &&
+            (( options & kIOHIDReportOptionNotInterrupt ) == 0 ) && _interfaceNub && !_seizedClient) {
+        _interfaceNub->handleReport(timeStamp, report, reportType, reportID, options);
     }
-}
+    
+    ELEMENT_UNLOCK;
+    
+    // Release the buffer
+    IOFree(reportData, reportLength);
+    
+#if 0 // XXX - debugging
+    {
+        UInt32 * buf = (UInt32 *) _elementValuesDescriptor->getBytesNoCopy();
+        
+        for (UInt32 words = 0; words < (_elementValuesDescriptor->getLength() / 4);
+                words+=6, buf+=6) {
+            IOLog("%3ld: %08lx %08lx %08lx %08lx %08lx %08lx\n",
+                  words,
+                  buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]);
+        }
+    }
 #endif
-
+    
     // RY: If this is a non-system HID device, post a null hid
     // event to prevent the system from sleeping.
-    if (gDisplayManager 
-        && changed 
-        && shouldTickle
-        && _performTickle 
-        && (CMP_ABSOLUTETIME(&timeStamp, &_eventDeadline) > 0))
-    {		
+    if (gDisplayManager
+            && changed
+            && shouldTickle
+            && _performTickle
+            && (CMP_ABSOLUTETIME(&timeStamp, &_eventDeadline) > 0)) 
+    {
         AbsoluteTime ts;
         
         nanoseconds_to_absolutetime(kIOHIDEventThreshold, &ts);
-
+        
         _eventDeadline = ts;
         
         ADD_ABSOLUTETIME(&_eventDeadline, &timeStamp);

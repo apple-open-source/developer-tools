@@ -133,6 +133,10 @@ SOURCE=.\ipv6.c
 # End Source File
 # Begin Source File
 
+SOURCE=..\iterated_hash.c
+# End Source File
+# Begin Source File
+
 SOURCE=.\keyboard.c
 # End Source File
 # Begin Source File
@@ -198,6 +202,10 @@ SOURCE=.\include\isc\app.h
 # Begin Source File
 
 SOURCE=..\include\isc\assertions.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\include\isc\base32.h
 # End Source File
 # Begin Source File
 
@@ -297,6 +305,10 @@ SOURCE=..\include\isc\hmacsha.h
 # End Source File
 # Begin Source File
 
+SOURCE=..\include\isc\httpd.h
+# End Source File
+# Begin Source File
+
 SOURCE=.\include\isc\int.h
 # End Source File
 # Begin Source File
@@ -306,6 +318,10 @@ SOURCE=..\include\isc\interfaceiter.h
 # Begin Source File
 
 SOURCE=..\include\isc\ipv6.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\include\isc\iterated_hash.h
 # End Source File
 # Begin Source File
 
@@ -401,6 +417,10 @@ SOURCE=..\include\isc\parseint.h
 # End Source File
 # Begin Source File
 
+SOURCE=..\include\isc\portset.h
+# End Source File
+# Begin Source File
+
 SOURCE=..\include\isc\os.h
 # End Source File
 # Begin Source File
@@ -414,6 +434,10 @@ SOURCE=..\include\isc\print.h
 # Begin Source File
 
 SOURCE=..\include\isc\quota.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\include\isc\radix.h
 # End Source File
 # Begin Source File
 
@@ -553,6 +577,10 @@ SOURCE=..\assertions.c
 # End Source File
 # Begin Source File
 
+SOURCE=..\base32.c
+# End Source File
+# Begin Source File
+
 SOURCE=..\base64.c
 # End Source File
 # Begin Source File
@@ -598,6 +626,10 @@ SOURCE=..\hmacmd5.c
 # Begin Source File
 
 SOURCE=..\hmacsha.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\httpd.c
 # End Source File
 # Begin Source File
 
@@ -661,7 +693,15 @@ SOURCE=..\parseint.c
 # End Source File
 # Begin Source File
 
+SOURCE=..\portset.c
+# End Source File
+# Begin Source File
+
 SOURCE=..\quota.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\radix.c
 # End Source File
 # Begin Source File
 

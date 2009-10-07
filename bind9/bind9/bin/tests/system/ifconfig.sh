@@ -1,9 +1,9 @@
 #!/bin/sh
 #
-# Copyright (C) 2004  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2004, 2007, 2008  Internet Systems Consortium, Inc. ("ISC")
 # Copyright (C) 2000-2003  Internet Software Consortium.
 #
-# Permission to use, copy, modify, and distribute this software for any
+# Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
 # copyright notice and this permission notice appear in all copies.
 #
@@ -15,7 +15,7 @@
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
-# $Id: ifconfig.sh,v 1.46.18.3 2004/10/05 03:18:21 marka Exp $
+# $Id: ifconfig.sh,v 1.55 2008/09/24 02:46:21 marka Exp $
 
 #
 # Set up interface aliases for bind9 system tests.
@@ -57,7 +57,7 @@ esac
 case "$1" in
 
     start|up)
-	for ns in 1 2 3 4 5 6
+	for ns in 1 2 3 4 5 6 7
 	do
 		if test -n "$base"
 		then
@@ -72,7 +72,7 @@ case "$1" in
 		    *-sun-solaris2.[6-7])
 			ifconfig lo0:$int 10.53.0.$ns netmask 0xffffffff up
 			;;
-		    *-*-solaris2.[8-9]|*-*-solaris2.10)
+		    *-*-solaris2.[8-9]|*-*-solaris2.1[0-9])
     			/sbin/ifconfig lo0:$int plumb
 			/sbin/ifconfig lo0:$int 10.53.0.$ns up
 			;;
@@ -83,6 +83,9 @@ case "$1" in
 			ifconfig lo0 10.53.0.$ns alias netmask 0xffffffff
 			;;
 		    *-unknown-netbsd*)
+			ifconfig lo0 10.53.0.$ns alias netmask 255.255.255.0
+			;;
+		    *-unknown-openbsd*)
 			ifconfig lo0 10.53.0.$ns alias netmask 255.255.255.0
 			;;
 		    *-*-bsdi[3-5].*)
@@ -117,7 +120,7 @@ case "$1" in
 	;;
 
     stop|down)
-	for ns in 6 5 4 3 2 1
+	for ns in 7 6 5 4 3 2 1
 	do
 		if test -n "$base"
 		then
@@ -132,7 +135,7 @@ case "$1" in
 		    *-sun-solaris2.[6-7])
 			ifconfig lo0:$int 10.53.0.$ns down
 			;;
-		    *-*-solaris2.[8-9]|*-*-solaris2.10)
+		    *-*-solaris2.[8-9]|*-*-solaris2.1[0-9])
 			ifconfig lo0:$int 10.53.0.$ns down
 			ifconfig lo0:$int 10.53.0.$ns unplumb
 			;;
@@ -143,6 +146,9 @@ case "$1" in
 			ifconfig lo0 10.53.0.$ns delete
 			;;
 		    *-unknown-netbsd*)
+			ifconfig lo0 10.53.0.$ns delete
+			;;
+		    *-unknown-openbsd*)
 			ifconfig lo0 10.53.0.$ns delete
 			;;
 		    *-*-bsdi[3-5].*)

@@ -1,4 +1,4 @@
-/* APPLE LOCAL begin radar 4290840 */
+/* APPLE LOCAL file radar 4290840 - Modified for radar 6271728 */
 /* { dg-do compile } */
 
 @interface Foo
@@ -8,7 +8,7 @@
 @implementation Foo
 -(void)
 -(void) someMethod /* { dg-error "expected before .-." } */
+		   /* { dg-error "expected" "" { target *-*-* } 10 } */ 
 {
 }
 @end
-/* APPLE LOCAL end radar 4290840 */

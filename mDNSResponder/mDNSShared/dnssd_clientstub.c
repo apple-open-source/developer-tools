@@ -28,6 +28,141 @@
 	Change History (most recent first):
 
 $Log: dnssd_clientstub.c,v $
+Revision 1.134  2009/06/19 23:13:24  cheshire
+<rdar://problem/6990066> Library: crash at handle_resolve_response + 183
+Added check for NULL after calling get_string
+
+Revision 1.133  2009/05/27 22:19:12  cheshire
+Remove questionable uses of errno
+
+Revision 1.132  2009/05/26 21:31:07  herscher
+Fix compile errors on Windows
+
+Revision 1.131  2009/05/26 04:48:19  herscher
+<rdar://problem/6844819> ExplorerPlugin does not work in B4W 2.0
+
+Revision 1.130  2009/05/02 01:29:48  mcguire
+<rdar://problem/6847601> spin calling DNSServiceProcessResult if errno was set to EWOULDBLOCK by an unrelated call
+
+Revision 1.129  2009/05/01 19:18:50  cheshire
+<rdar://problem/6843645> Using duplicate DNSServiceRefs when sharing a connection should return an error
+
+Revision 1.128  2009/04/01 21:09:35  herscher
+<rdar://problem/5925472> Current Bonjour code does not compile on Windows.
+
+Revision 1.127  2009/03/03 21:38:19  cheshire
+Improved "deliver_request ERROR" message
+
+Revision 1.126  2009/02/12 21:02:22  cheshire
+Commented out BPF "Sending fd" debugging message
+
+Revision 1.125  2009/02/12 20:28:32  cheshire
+Added some missing "const" declarations
+
+Revision 1.124  2009/02/10 01:44:39  cheshire
+<rdar://problem/6553729> DNSServiceUpdateRecord fails with kDNSServiceErr_BadReference for otherwise valid reference
+
+Revision 1.123  2009/01/19 00:49:21  mkrochma
+Type cast size_t values to unsigned long
+
+Revision 1.122  2009/01/18 03:51:37  mkrochma
+Fix warning in deliver_request on Linux
+
+Revision 1.121  2009/01/16 23:34:37  cheshire
+<rdar://problem/6504143> Uninitialized error code variable in error handling path in deliver_request
+
+Revision 1.120  2009/01/13 05:31:35  mkrochma
+<rdar://problem/6491367> Replace bzero, bcopy with mDNSPlatformMemZero, mDNSPlatformMemCopy, memset, memcpy
+
+Revision 1.119  2009/01/11 03:45:08  mkrochma
+Stop type casting num_written and num_read to int
+
+Revision 1.118  2009/01/11 03:20:06  mkrochma
+<rdar://problem/5797526> Fixes from Igor Seleznev to get mdnsd working on Solaris
+
+Revision 1.117  2009/01/10 22:03:43  mkrochma
+<rdar://problem/5797507> dnsextd fails to build on Linux
+
+Revision 1.116  2009/01/05 16:55:24  cheshire
+<rdar://problem/6452199> Stuck in "Examining available disks"
+ConnectionResponse handler was accidentally matching the parent DNSServiceRef before
+finding the appropriate subordinate DNSServiceRef for the operation in question.
+
+Revision 1.115  2008/12/18 00:19:11  mcguire
+<rdar://problem/6452199> Stuck in "Examining available disks"
+
+Revision 1.114  2008/12/10 02:11:43  cheshire
+ARMv5 compiler doesn't like uncommented stuff after #endif
+
+Revision 1.113  2008/12/04 03:23:05  cheshire
+Preincrement UID counter before we use it -- it helps with debugging if we know the all-zeroes ID should never appear
+
+Revision 1.112  2008/11/25 22:56:54  cheshire
+<rdar://problem/6377257> Make library code more defensive when client calls DNSServiceProcessResult with bad DNSServiceRef repeatedly
+
+Revision 1.111  2008/10/28 17:58:44  cheshire
+If client code keeps calling DNSServiceProcessResult repeatedly after an error, rate-limit the
+"DNSServiceProcessResult called with DNSServiceRef with no ProcessReply function" log messages
+
+Revision 1.110  2008/10/23 23:38:58  cheshire
+For Windows compatibility, instead of "strerror(errno)" use "dnssd_strerror(dnssd_errno)"
+
+Revision 1.109  2008/10/23 23:06:17  cheshire
+Removed () from dnssd_errno macro definition -- it's not a function and doesn't need any arguments
+
+Revision 1.108  2008/10/23 22:33:24  cheshire
+Changed "NOTE:" to "Note:" so that BBEdit 9 stops putting those comment lines into the funtion popup menu
+
+Revision 1.107  2008/10/20 21:50:11  cheshire
+Improved /dev/bpf error message
+
+Revision 1.106  2008/10/20 15:37:18  cheshire
+Log error message if opening /dev/bpf fails
+
+Revision 1.105  2008/09/27 01:26:34  cheshire
+Added handler to pass back BPF fd when requested
+
+Revision 1.104  2008/09/23 01:36:00  cheshire
+Updated code to use internalPort/externalPort terminology, instead of the old privatePort/publicPort
+terms (which could be misleading, because the word "private" suggests security).
+
+Revision 1.103  2008/07/24 18:51:13  cheshire
+Removed spurious spaces
+
+Revision 1.102  2008/02/25 19:16:19  cheshire
+<rdar://problem/5708953> Problems with DNSServiceGetAddrInfo API
+Was returning a bogus result (NULL pointer) when following a CNAME referral
+
+Revision 1.101  2008/02/20 21:18:21  cheshire
+<rdar://problem/5708953> DNSServiceGetAddrInfo doesn't set the scope ID of returned IPv6 link local addresses
+
+Revision 1.100  2007/11/02 17:56:37  cheshire
+<rdar://problem/5565787> Bonjour API broken for 64-bit apps (SCM_RIGHTS sendmsg fails)
+Wrap hack code in "#if APPLE_OSX_mDNSResponder" since (as far as we know right now)
+we don't want to do this on 64-bit Linux, Solaris, etc.
+
+Revision 1.99  2007/11/02 17:29:40  cheshire
+<rdar://problem/5565787> Bonjour API broken for 64-bit apps (SCM_RIGHTS sendmsg fails)
+To get 64-bit code that works, we need to NOT use the standard CMSG_* macros
+
+Revision 1.98  2007/11/01 19:52:43  cheshire
+Wrap debugging messages in "#if DEBUG_64BIT_SCM_RIGHTS"
+
+Revision 1.97  2007/11/01 19:45:55  cheshire
+Added "DEBUG_64BIT_SCM_RIGHTS" debugging code
+See <rdar://problem/5565787> Bonjour API broken for 64-bit apps (SCM_RIGHTS sendmsg fails)
+
+Revision 1.96  2007/11/01 15:59:33  cheshire
+umask not being set and restored properly in USE_NAMED_ERROR_RETURN_SOCKET code
+(no longer used on OS X, but relevant for other platforms)
+
+Revision 1.95  2007/10/31 20:07:16  cheshire
+<rdar://problem/5541498> Set SO_NOSIGPIPE on client socket
+Refinement: the cleanup code still needs to close listenfd when necesssary
+
+Revision 1.94  2007/10/15 22:34:27  cheshire
+<rdar://problem/5541498> Set SO_NOSIGPIPE on client socket
+
 Revision 1.93  2007/10/10 00:48:54  cheshire
 <rdar://problem/5526379> Daemon spins in an infinite loop when it doesn't get the control message it's expecting
 
@@ -181,9 +316,13 @@ Minor textual tidying
 
 #if defined(_WIN32)
 
+	#define _SSIZE_T
+	#include <CommonServices.h>
+	#include <DebugServices.h>
 	#include <winsock2.h>
 	#include <ws2tcpip.h>
 	#include <windows.h>
+	#include <stdarg.h>
 	
 	#define sockaddr_mdns sockaddr_in
 	#define AF_MDNS AF_INET
@@ -199,9 +338,22 @@ Minor textual tidying
 	#define sleep(X) Sleep((X) * 1000)
 	
 	static int g_initWinsock = 0;
-
+	#define LOG_WARNING kDebugLevelWarning
+	static void syslog( int priority, const char * message, ...)
+		{
+		va_list args;
+		int len;
+		char * buffer;
+		DWORD err = WSAGetLastError();
+		va_start( args, message );
+		len = _vscprintf( message, args ) + 1;
+		buffer = malloc( len * sizeof(char) );
+		if ( buffer ) { vsprintf( buffer, message, args ); OutputDebugString( buffer ); free( buffer ); }
+		WSASetLastError( err );
+		}
 #else
 
+	#include <sys/fcntl.h>		// For O_RDWR etc.
 	#include <sys/time.h>
 	#include <sys/socket.h>
 	#include <syslog.h>
@@ -234,7 +386,7 @@ typedef struct _DNSServiceRef_t DNSServiceOp;
 typedef struct _DNSRecordRef_t DNSRecord;
 
 // client stub callback to process message from server and deliver results to client application
-typedef void (*ProcessReplyFn)(DNSServiceOp *sdr, CallbackHeader *cbh, char *msg, char *end);
+typedef void (*ProcessReplyFn)(DNSServiceOp *const sdr, const CallbackHeader *const cbh, const char *msg, const char *const end);
 
 #define ValidatorBits 0x12345678
 #define DNSServiceRefValid(X) (dnssd_SocketValid((X)->sockfd) && (((X)->sockfd ^ (X)->validator) == ValidatorBits))
@@ -272,7 +424,7 @@ struct _DNSRecordRef_t
 static int write_all(dnssd_sock_t sd, char *buf, int len)
 	{
 	// Don't use "MSG_WAITALL"; it returns "Invalid argument" on some Linux versions; use an explicit while() loop instead.
-	//if (send(sd, buf, len, MSG_WAITALL) != len)   return -1;
+	//if (send(sd, buf, len, MSG_WAITALL) != len) return -1;
 	while (len)
 		{
 		ssize_t num_written = send(sd, buf, len, 0);
@@ -280,9 +432,9 @@ static int write_all(dnssd_sock_t sd, char *buf, int len)
 			{
 			// Should never happen. If it does, it indicates some OS bug,
 			// or that the mDNSResponder daemon crashed (which should never happen).
-			syslog(LOG_WARNING, "dnssd_clientstub write_all(%d) failed %d/%d %d %s", sd, num_written, len,
-				(num_written < 0) ? errno           : 0,
-				(num_written < 0) ? strerror(errno) : "");
+			syslog(LOG_WARNING, "dnssd_clientstub write_all(%d) failed %ld/%d %d %s", sd, num_written, len,
+				(num_written < 0) ? dnssd_errno                 : 0,
+				(num_written < 0) ? dnssd_strerror(dnssd_errno) : "");
 			return -1;
 			}
 		buf += num_written;
@@ -291,7 +443,9 @@ static int write_all(dnssd_sock_t sd, char *buf, int len)
 	return 0;
 	}
 
-// Read len bytes. Return 0 on success, -1 on error
+enum { read_all_success = 0, read_all_fail = -1, read_all_wouldblock = -2 };
+
+// Read len bytes. Return 0 on success, read_all_fail on error, or read_all_wouldblock for 
 static int read_all(dnssd_sock_t sd, char *buf, int len)
 	{
 	// Don't use "MSG_WAITALL"; it returns "Invalid argument" on some Linux versions; use an explicit while() loop instead.
@@ -304,15 +458,15 @@ static int read_all(dnssd_sock_t sd, char *buf, int len)
 			{
 			// Should never happen. If it does, it indicates some OS bug,
 			// or that the mDNSResponder daemon crashed (which should never happen).
-			syslog(LOG_WARNING, "dnssd_clientstub read_all(%d) failed %d/%d %d %s", sd, num_read, len,
-				(num_read < 0) ? errno           : 0,
-				(num_read < 0) ? strerror(errno) : "");
-			return -1;
+			syslog(LOG_WARNING, "dnssd_clientstub read_all(%d) failed %ld/%d %d %s", sd, num_read, len,
+				(num_read < 0) ? dnssd_errno                 : 0,
+				(num_read < 0) ? dnssd_strerror(dnssd_errno) : "");
+			return (num_read < 0 && dnssd_errno == dnssd_EWOULDBLOCK) ? read_all_wouldblock : read_all_fail;
 			}
 		buf += num_read;
 		len -= num_read;
 		}
-	return 0;
+	return read_all_success;
 	}
 
 // Returns 1 if more bytes remain to be read on socket descriptor sd, 0 otherwise
@@ -351,7 +505,7 @@ static ipc_msg_hdr *create_hdr(uint32_t op, size_t *len, char **data_start, int 
 #elif defined(USE_NAMED_ERROR_RETURN_SOCKET)
 		struct timeval time;
 		if (gettimeofday(&time, NULL) < 0)
-			{ syslog(LOG_WARNING, "dnssd_clientstub create_hdr: gettimeofday failed %d %s", errno, strerror(errno)); return NULL; }
+			{ syslog(LOG_WARNING, "dnssd_clientstub create_hdr: gettimeofday failed %d %s", dnssd_errno, dnssd_strerror(dnssd_errno)); return NULL; }
 		sprintf(ctrl_path, "%s%d-%.3lx-%.6lu", CTL_PATH_PREFIX, (int)getpid(),
 			(unsigned long)(time.tv_sec & 0xFFF), (unsigned long)(time.tv_usec));
 		*len += strlen(ctrl_path) + 1;
@@ -367,7 +521,7 @@ static ipc_msg_hdr *create_hdr(uint32_t op, size_t *len, char **data_start, int 
 	msg = malloc(*len);
 	if (!msg) { syslog(LOG_WARNING, "dnssd_clientstub create_hdr: malloc failed"); return NULL; }
 
-	bzero(msg, *len);
+	memset(msg, 0, *len);
 	hdr = (ipc_msg_hdr *)msg;
 	hdr->version                = VERSION;
 	hdr->datalen                = datalen;
@@ -430,7 +584,7 @@ static DNSServiceErrorType ConnectToServer(DNSServiceRef *ref, DNSServiceFlags f
 			syslog(LOG_WARNING, "dnssd_clientstub kDNSServiceFlagsShareConnection used with NULL DNSServiceRef");
 			return kDNSServiceErr_BadParam;
 			}
-		if (!DNSServiceRefValid(*ref))
+		if (!DNSServiceRefValid(*ref) || (*ref)->op != connection_request || (*ref)->primary)
 			{
 			syslog(LOG_WARNING, "dnssd_clientstub kDNSServiceFlagsShareConnection used with invalid DNSServiceRef %p %08X %08X",
 				(*ref), (*ref)->sockfd, (*ref)->validator);
@@ -471,24 +625,33 @@ static DNSServiceErrorType ConnectToServer(DNSServiceRef *ref, DNSServiceFlags f
 		DNSServiceOp **p = &(*ref)->next;		// Append ourselves to end of primary's list
 		while (*p) p = &(*p)->next;
 		*p = sdr;
+		// Preincrement counter before we use it -- it helps with debugging if we know the all-zeroes ID should never appear
+		if (++(*ref)->uid.u32[0] == 0) ++(*ref)->uid.u32[1];	// In parent DNSServiceOp increment UID counter
 		sdr->primary    = *ref;					// Set our primary pointer
 		sdr->sockfd     = (*ref)->sockfd;		// Inherit primary's socket
 		sdr->validator  = (*ref)->validator;
 		sdr->uid        = (*ref)->uid;
-		if (++(*ref)->uid.u32[0] == 0) ++(*ref)->uid.u32[1];	// In parent DNSServiceOp increment UID counter
 		//printf("ConnectToServer sharing socket %d\n", sdr->sockfd);
 		}
 	else
 		{
+		#ifdef SO_NOSIGPIPE
+		const unsigned long optval = 1;
+		#endif
 		*ref = NULL;
 		sdr->sockfd    = socket(AF_DNSSD, SOCK_STREAM, 0);
 		sdr->validator = sdr->sockfd ^ ValidatorBits;
 		if (!dnssd_SocketValid(sdr->sockfd))
 			{
-			syslog(LOG_WARNING, "dnssd_clientstub ConnectToServer: socket failed %d %s", errno, strerror(errno));
+			syslog(LOG_WARNING, "dnssd_clientstub ConnectToServer: socket failed %d %s", dnssd_errno, dnssd_strerror(dnssd_errno));
 			FreeDNSServiceOp(sdr);
 			return kDNSServiceErr_NoMemory;
 			}
+		#ifdef SO_NOSIGPIPE
+		// Some environments (e.g. OS X) support turning off SIGPIPE for a socket
+		if (setsockopt(sdr->sockfd, SOL_SOCKET, SO_NOSIGPIPE, &optval, sizeof(optval)) < 0)
+			syslog(LOG_WARNING, "dnssd_clientstub ConnectToServer: SO_NOSIGPIPE failed %d %s", dnssd_errno, dnssd_strerror(dnssd_errno));
+		#endif
 		#if defined(USE_TCP_LOOPBACK)
 		saddr.sin_family      = AF_INET;
 		saddr.sin_addr.s_addr = inet_addr(MDNS_TCP_SERVERADDR);
@@ -517,6 +680,9 @@ static DNSServiceErrorType ConnectToServer(DNSServiceRef *ref, DNSServiceFlags f
 	return kDNSServiceErr_NoError;
 	}
 
+#define deliver_request_bailout(MSG) \
+	do { syslog(LOG_WARNING, "dnssd_clientstub deliver_request: %s failed %d (%s)", (MSG), dnssd_errno, dnssd_strerror(dnssd_errno)); goto cleanup; } while(0)
+
 static DNSServiceErrorType deliver_request(ipc_msg_hdr *hdr, DNSServiceOp *sdr)
 	{
 	uint32_t datalen = hdr->datalen;	// We take a copy here because we're going to convert hdr->datalen to network byte order
@@ -524,7 +690,7 @@ static DNSServiceErrorType deliver_request(ipc_msg_hdr *hdr, DNSServiceOp *sdr)
 	char *const data = (char *)hdr + sizeof(ipc_msg_hdr);
 	#endif
 	dnssd_sock_t listenfd = dnssd_InvalidSocket, errsd = dnssd_InvalidSocket;
-	DNSServiceErrorType err;
+	DNSServiceErrorType err = kDNSServiceErr_Unknown;	// Default for the "goto cleanup" cases
 	int MakeSeparateReturnSocket = 0;
 
 	// Note: need to check hdr->op, not sdr->op.
@@ -551,24 +717,25 @@ static DNSServiceErrorType deliver_request(ipc_msg_hdr *hdr, DNSServiceOp *sdr)
 			dnssd_sockaddr_t caddr;
 			dnssd_socklen_t len = (dnssd_socklen_t) sizeof(caddr);
 			listenfd = socket(AF_DNSSD, SOCK_STREAM, 0);
-			if (!dnssd_SocketValid(listenfd)) goto cleanup;
+			if (!dnssd_SocketValid(listenfd)) deliver_request_bailout("TCP socket");
 
 			caddr.sin_family      = AF_INET;
 			caddr.sin_port        = 0;
 			caddr.sin_addr.s_addr = inet_addr(MDNS_TCP_SERVERADDR);
-			if (bind(listenfd, (struct sockaddr*) &caddr, sizeof(caddr)) < 0) goto cleanup;
-			if (getsockname(listenfd, (struct sockaddr*) &caddr, &len) < 0) goto cleanup;
-			listen(listenfd, 1);
+			if (bind(listenfd, (struct sockaddr*) &caddr, sizeof(caddr)) < 0) deliver_request_bailout("TCP bind");
+			if (getsockname(listenfd, (struct sockaddr*) &caddr, &len)   < 0) deliver_request_bailout("TCP getsockname");
+			if (listen(listenfd, 1)                                      < 0) deliver_request_bailout("TCP listen");
 			port.s = caddr.sin_port;
 			data[0] = port.b[0];  // don't switch the byte order, as the
 			data[1] = port.b[1];  // daemon expects it in network byte order
 			}
 		#elif defined(USE_NAMED_ERROR_RETURN_SOCKET)
 			{
+			mode_t mask;
+			int bindresult;
 			dnssd_sockaddr_t caddr;
-			mode_t mask = umask(0);
 			listenfd = socket(AF_DNSSD, SOCK_STREAM, 0);
-			if (!dnssd_SocketValid(listenfd)) goto cleanup;
+			if (!dnssd_SocketValid(listenfd)) deliver_request_bailout("USE_NAMED_ERROR_RETURN_SOCKET socket");
 
 			caddr.sun_family = AF_LOCAL;
 			// According to Stevens (section 3.2), there is no portable way to
@@ -577,17 +744,16 @@ static DNSServiceErrorType deliver_request(ipc_msg_hdr *hdr, DNSServiceOp *sdr)
 			caddr.sun_len = sizeof(struct sockaddr_un);
 			#endif
 			strcpy(caddr.sun_path, data);
+			mask = umask(0);
+			bindresult = bind(listenfd, (struct sockaddr *)&caddr, sizeof(caddr));
 			umask(mask);
-			if (bind(listenfd, (struct sockaddr *)&caddr, sizeof(caddr)) < 0) goto cleanup;
-			listen(listenfd, 1);
+			if (bindresult          < 0) deliver_request_bailout("USE_NAMED_ERROR_RETURN_SOCKET bind");
+			if (listen(listenfd, 1) < 0) deliver_request_bailout("USE_NAMED_ERROR_RETURN_SOCKET listen");
 			}
 		#else
 			{
 			dnssd_sock_t sp[2];
-			//if (pipe(sp) < 0)
-			//	syslog(LOG_WARNING, "dnssd_clientstub ERROR: pipe() failed errno %d (%s)", errno, strerror(errno));
-			if (socketpair(AF_DNSSD, SOCK_STREAM, 0, sp) < 0)
-				syslog(LOG_WARNING, "dnssd_clientstub ERROR: socketpair() failed errno %d (%s)", errno, strerror(errno));
+			if (socketpair(AF_DNSSD, SOCK_STREAM, 0, sp) < 0) deliver_request_bailout("socketpair");
 			else
 				{
 				errsd    = sp[0];	// We'll read our four-byte error code from sp[0]
@@ -604,27 +770,33 @@ static DNSServiceErrorType deliver_request(ipc_msg_hdr *hdr, DNSServiceOp *sdr)
 	// any associated data does not work reliably -- e.g. one particular issue we ran
 	// into is that if the receiving program is in a kqueue loop waiting to be notified
 	// of the received message, it doesn't get woken up when the control message arrives.
-	if (MakeSeparateReturnSocket) datalen--;
+	if (MakeSeparateReturnSocket || sdr->op == send_bpf) datalen--;		// Okay to use sdr->op when checking for op == send_bpf
 #endif
 
 	// At this point, our listening socket is set up and waiting, if necessary, for the daemon to connect back to
 	ConvertHeaderBytes(hdr);
-	//syslog(LOG_WARNING, "dnssd_clientstub deliver_request writing %ld bytes", datalen + sizeof(ipc_msg_hdr));
+	//syslog(LOG_WARNING, "dnssd_clientstub deliver_request writing %lu bytes", (unsigned long)(datalen + sizeof(ipc_msg_hdr)));
 	//if (MakeSeparateReturnSocket) syslog(LOG_WARNING, "dnssd_clientstub deliver_request name is %s", data);
 #if TEST_SENDING_ONE_BYTE_AT_A_TIME
 	unsigned int i;
 	for (i=0; i<datalen + sizeof(ipc_msg_hdr); i++)
 		{
-		syslog(LOG_WARNING, "dnssd_clientstub writing %d", i);
-		if (write_all(sdr->sockfd, ((char *)hdr)+i, 1) < 0) goto cleanup;
+		syslog(LOG_WARNING, "dnssd_clientstub deliver_request writing %d", i);
+		if (write_all(sdr->sockfd, ((char *)hdr)+i, 1) < 0)
+			{ syslog(LOG_WARNING, "write_all (byte %u) failed", i); goto cleanup; }
 		usleep(10000);
 		}
 #else
-	if (write_all(sdr->sockfd, (char *)hdr, datalen + sizeof(ipc_msg_hdr)) < 0) goto cleanup;
+	if (write_all(sdr->sockfd, (char *)hdr, datalen + sizeof(ipc_msg_hdr)) < 0)
+		{
+		syslog(LOG_WARNING, "dnssd_clientstub deliver_request ERROR: write_all(%d, %lu bytes) failed",
+			sdr->sockfd, (unsigned long)(datalen + sizeof(ipc_msg_hdr)));
+		goto cleanup;
+		}
 #endif
 
 	if (!MakeSeparateReturnSocket) errsd = sdr->sockfd;
-	else
+	if (MakeSeparateReturnSocket || sdr->op == send_bpf)	// Okay to use sdr->op when checking for op == send_bpf
 		{
 #if defined(USE_TCP_LOOPBACK) || defined(USE_NAMED_ERROR_RETURN_SOCKET)
 		// At this point we may block in accept for a few milliseconds waiting for the daemon to connect back to us,
@@ -632,36 +804,91 @@ static DNSServiceErrorType deliver_request(ipc_msg_hdr *hdr, DNSServiceOp *sdr)
 		dnssd_sockaddr_t daddr;
 		dnssd_socklen_t len = sizeof(daddr);
 		errsd = accept(listenfd, (struct sockaddr *)&daddr, &len);
-		if (!dnssd_SocketValid(errsd)) goto cleanup;
+		if (!dnssd_SocketValid(errsd)) deliver_request_bailout("accept");
 #else
+
+#if APPLE_OSX_mDNSResponder
+// On Leopard, the stock definitions of the CMSG_* macros in /usr/include/sys/socket.h,
+// while arguably correct in theory, nonetheless in practice produce code that doesn't work on 64-bit machines
+// For details see <rdar://problem/5565787> Bonjour API broken for 64-bit apps (SCM_RIGHTS sendmsg fails)
+#undef  CMSG_DATA
+#define CMSG_DATA(cmsg) ((unsigned char *)(cmsg) + (sizeof(struct cmsghdr)))
+#undef  CMSG_SPACE
+#define CMSG_SPACE(l)   ((sizeof(struct cmsghdr)) + (l))
+#undef  CMSG_LEN
+#define CMSG_LEN(l)     ((sizeof(struct cmsghdr)) + (l))
+#endif
+
 		struct iovec vec = { ((char *)hdr) + sizeof(ipc_msg_hdr) + datalen, 1 }; // Send the last byte along with the SCM_RIGHTS
 		struct msghdr msg;
 		struct cmsghdr *cmsg;
-		char cbuf[sizeof(struct cmsghdr) + sizeof(dnssd_sock_t)];
+		char cbuf[CMSG_SPACE(sizeof(dnssd_sock_t))];
+
+		if (sdr->op == send_bpf)	// Okay to use sdr->op when checking for op == send_bpf
+			{
+			int i;
+			char p[12];		// Room for "/dev/bpf999" with terminating null
+			for (i=0; i<100; i++)
+				{
+				snprintf(p, sizeof(p), "/dev/bpf%d", i);
+				listenfd = open(p, O_RDWR, 0);
+				//if (dnssd_SocketValid(listenfd)) syslog(LOG_WARNING, "Sending fd %d for %s", listenfd, p);
+				if (!dnssd_SocketValid(listenfd) && dnssd_errno != EBUSY)
+					syslog(LOG_WARNING, "Error opening %s %d (%s)", p, dnssd_errno, dnssd_strerror(dnssd_errno));
+				if (dnssd_SocketValid(listenfd) || dnssd_errno != EBUSY) break;
+				}
+			}
+
 		msg.msg_name       = 0;
 		msg.msg_namelen    = 0;
 		msg.msg_iov        = &vec;
 		msg.msg_iovlen     = 1;
 		msg.msg_control    = cbuf;
-		msg.msg_controllen = sizeof(cbuf);
+		msg.msg_controllen = CMSG_LEN(sizeof(dnssd_sock_t));
 		msg.msg_flags      = 0;
 		cmsg = CMSG_FIRSTHDR(&msg);
-		cmsg->cmsg_len     = sizeof(cbuf);
+		cmsg->cmsg_len     = CMSG_LEN(sizeof(dnssd_sock_t));
 		cmsg->cmsg_level   = SOL_SOCKET;
 		cmsg->cmsg_type    = SCM_RIGHTS;
 		*((dnssd_sock_t *)CMSG_DATA(cmsg)) = listenfd;
+
 #if TEST_KQUEUE_CONTROL_MESSAGE_BUG
 		sleep(1);
 #endif
+
+#if DEBUG_64BIT_SCM_RIGHTS
+		syslog(LOG_WARNING, "dnssd_clientstub sendmsg read sd=%d write sd=%d %ld %ld %ld/%ld/%ld/%ld",
+			errsd, listenfd, sizeof(dnssd_sock_t), sizeof(void*),
+			sizeof(struct cmsghdr) + sizeof(dnssd_sock_t),
+			CMSG_LEN(sizeof(dnssd_sock_t)), (long)CMSG_SPACE(sizeof(dnssd_sock_t)),
+			(long)((char*)CMSG_DATA(cmsg) + 4 - cbuf));
+#endif // DEBUG_64BIT_SCM_RIGHTS
+
 		if (sendmsg(sdr->sockfd, &msg, 0) < 0)
-			syslog(LOG_WARNING, "dnssd_clientstub ERROR: sendmsg failed read sd=%d write sd=%d errno %d (%s)",
-				errsd, listenfd, errno, strerror(errno));
+			{
+			syslog(LOG_WARNING, "dnssd_clientstub deliver_request ERROR: sendmsg failed read sd=%d write sd=%d errno %d (%s)",
+				errsd, listenfd, dnssd_errno, dnssd_strerror(dnssd_errno));
+			err = kDNSServiceErr_Incompatible;
+			goto cleanup;
+			}
+
+#if DEBUG_64BIT_SCM_RIGHTS
+		syslog(LOG_WARNING, "dnssd_clientstub sendmsg read sd=%d write sd=%d okay", errsd, listenfd);
+#endif // DEBUG_64BIT_SCM_RIGHTS
+
 #endif
+		// Close our end of the socketpair *before* blocking in read_all to get the four-byte error code.
+		// Otherwise, if the daemon closes our socket (or crashes), we block in read_all() forever
+		// because the socket is not closed (we still have an open reference to it ourselves).
+		dnssd_close(listenfd);
+		listenfd = dnssd_InvalidSocket;		// Make sure we don't close it a second time in the cleanup handling below
 		}
 
 	// At this point we may block in read_all for a few milliseconds waiting for the daemon to send us the error code,
 	// but that's okay -- the daemon is a trusted service and we know if won't take more than a few milliseconds to respond.
-	if (read_all(errsd, (char*)&err, (int)sizeof(err)) < 0)
+	if (sdr->op == send_bpf)	// Okay to use sdr->op when checking for op == send_bpf
+		err = kDNSServiceErr_NoError;
+	else if (read_all(errsd, (char*)&err, (int)sizeof(err)) < 0)
 		err = kDNSServiceErr_ServiceNotRunning;	// On failure read_all will have written a message to syslog for us
 	else
 		err = ntohl(err);
@@ -676,10 +903,11 @@ cleanup:
 #if defined(USE_NAMED_ERROR_RETURN_SOCKET)
 		// syslog(LOG_WARNING, "dnssd_clientstub deliver_request: removing UDS: %s", data);
 		if (unlink(data) != 0)
-			syslog(LOG_WARNING, "dnssd_clientstub WARNING: unlink(\"%s\") failed errno %d (%s)", data, errno, strerror(errno));
+			syslog(LOG_WARNING, "dnssd_clientstub WARNING: unlink(\"%s\") failed errno %d (%s)", data, dnssd_errno, dnssd_strerror(dnssd_errno));
 		// else syslog(LOG_WARNING, "dnssd_clientstub deliver_request: removed UDS: %s", data);
 #endif
 		}
+
 	free(hdr);
 	return err;
 	}
@@ -726,7 +954,9 @@ DNSServiceErrorType DNSSD_API DNSServiceProcessResult(DNSServiceRef sdRef)
 
 	if (!sdRef->ProcessReply)
 		{
-		syslog(LOG_WARNING, "dnssd_clientstub DNSServiceProcessResult called with DNSServiceRef with no ProcessReply function");
+		static int num_logs = 0;
+		if (num_logs < 10) syslog(LOG_WARNING, "dnssd_clientstub DNSServiceProcessResult called with DNSServiceRef with no ProcessReply function");
+		if (num_logs < 1000) num_logs++; else sleep(1);
 		return kDNSServiceErr_BadReference;
 		}
 
@@ -738,22 +968,21 @@ DNSServiceErrorType DNSSD_API DNSServiceProcessResult(DNSServiceRef sdRef)
 		// return NoError on EWOULDBLOCK. This will handle the case
 		// where a non-blocking socket is told there is data, but it was a false positive.
 		// On error, read_all will write a message to syslog for us, so don't need to duplicate that here
-		if (read_all(sdRef->sockfd, (void *)&cbh.ipc_hdr, sizeof(cbh.ipc_hdr)) < 0)
+		// Note: If we want to properly support using non-blocking sockets in the future 
+		int result = read_all(sdRef->sockfd, (void *)&cbh.ipc_hdr, sizeof(cbh.ipc_hdr));
+		if (result == read_all_fail)
 			{
-			if (dnssd_errno() != dnssd_EWOULDBLOCK)
+			sdRef->ProcessReply = NULL;
+			return kDNSServiceErr_ServiceNotRunning;
+			}
+		else if (result == read_all_wouldblock)
+			{
+			if (morebytes && sdRef->logcounter < 100)
 				{
-				sdRef->ProcessReply = NULL;
-				return kDNSServiceErr_ServiceNotRunning;
+				sdRef->logcounter++;
+				syslog(LOG_WARNING, "dnssd_clientstub DNSServiceProcessResult error: select indicated data was waiting but read_all returned EWOULDBLOCK");
 				}
-			else
-				{
-				if (morebytes && sdRef->logcounter < 100)
-					{
-					sdRef->logcounter++;
-					syslog(LOG_WARNING, "dnssd_clientstub DNSServiceProcessResult error: select indicated data was waiting but read_all returned EWOULDBLOCK");
-					}
-				return kDNSServiceErr_NoError;
-				}
+			return kDNSServiceErr_NoError;
 			}
 	
 		ConvertHeaderBytes(&cbh.ipc_hdr);
@@ -774,7 +1003,7 @@ DNSServiceErrorType DNSSD_API DNSServiceProcessResult(DNSServiceRef sdRef)
 			}
 		else
 			{
-			char *ptr = data;
+			const char *ptr = data;
 			cbh.cb_flags     = get_flags     (&ptr, data + cbh.ipc_hdr.datalen);
 			cbh.cb_interface = get_uint32    (&ptr, data + cbh.ipc_hdr.datalen);
 			cbh.cb_err       = get_error_code(&ptr, data + cbh.ipc_hdr.datalen);
@@ -878,7 +1107,7 @@ DNSServiceErrorType DNSSD_API DNSServiceGetProperty(const char *property, void *
 	return kDNSServiceErr_NoError;
 	}
 
-static void handle_resolve_response(DNSServiceOp *sdr, CallbackHeader *cbh, char *data, char *end)
+static void handle_resolve_response(DNSServiceOp *const sdr, const CallbackHeader *const cbh, const char *data, const char *end)
 	{
 	char fullname[kDNSServiceMaxDomainName];
 	char target[kDNSServiceMaxDomainName];
@@ -888,7 +1117,7 @@ static void handle_resolve_response(DNSServiceOp *sdr, CallbackHeader *cbh, char
 
 	get_string(&data, end, fullname, kDNSServiceMaxDomainName);
 	get_string(&data, end, target,   kDNSServiceMaxDomainName);
-	if (data + 2 > end) data = NULL;
+	if (!data || data + 2 > end) data = NULL;
 	else
 		{
 		port.b[0] = *data++;
@@ -945,12 +1174,12 @@ DNSServiceErrorType DNSSD_API DNSServiceResolve
 	return err;
 	}
 
-static void handle_query_response(DNSServiceOp *sdr, CallbackHeader *cbh, char *data, char *end)
+static void handle_query_response(DNSServiceOp *const sdr, const CallbackHeader *const cbh, const char *data, const char *const end)
 	{
 	uint32_t ttl;
 	char name[kDNSServiceMaxDomainName];
 	uint16_t rrtype, rrclass, rdlen;
-	char *rdata;
+	const char *rdata;
 
 	get_string(&data, end, name, kDNSServiceMaxDomainName);
 	rrtype  = get_uint16(&data, end);
@@ -1004,45 +1233,55 @@ DNSServiceErrorType DNSSD_API DNSServiceQueryRecord
 	return err;
 	}
 
-static void handle_addrinfo_response(DNSServiceOp *sdr, CallbackHeader *cbh, char *data, char *end)
+static void handle_addrinfo_response(DNSServiceOp *const sdr, const CallbackHeader *const cbh, const char *data, const char *const end)
 	{
-	uint32_t ttl;
 	char hostname[kDNSServiceMaxDomainName];
 	uint16_t rrtype, rrclass, rdlen;
-	char *rdata;
-	struct sockaddr_in  sa4;
-	struct sockaddr_in6 sa6;
-	struct sockaddr   * sa = NULL;
+	const char *rdata;
+	uint32_t ttl;
 
 	get_string(&data, end, hostname, kDNSServiceMaxDomainName);
 	rrtype  = get_uint16(&data, end);
 	rrclass = get_uint16(&data, end);
 	rdlen   = get_uint16(&data, end);
-	rdata   = get_rdata(&data, end, rdlen);
+	rdata   = get_rdata (&data, end, rdlen);
 	ttl     = get_uint32(&data, end);
-	
+
+	// We only generate client callbacks for A and AAAA results (including NXDOMAIN results for
+	// those types, if the client has requested those with the kDNSServiceFlagsReturnIntermediates).
+	// Other result types, specifically CNAME referrals, are not communicated to the client, because
+	// the DNSServiceGetAddrInfoReply interface doesn't have any meaningful way to communiate CNAME referrals.
 	if (!data) syslog(LOG_WARNING, "dnssd_clientstub handle_addrinfo_response: error reading result from daemon");
-	else
+	else if (rrtype == kDNSServiceType_A || rrtype == kDNSServiceType_AAAA)
 		{
+		struct sockaddr_in  sa4;
+		struct sockaddr_in6 sa6;
+		const struct sockaddr *const sa = (rrtype == kDNSServiceType_A) ? (struct sockaddr*)&sa4 : (struct sockaddr*)&sa6;
 		if (rrtype == kDNSServiceType_A)
 			{
-			sa = (struct sockaddr *)&sa4;
-			bzero(&sa4, sizeof(sa4));
+			memset(&sa4, 0, sizeof(sa4));
 			#ifndef NOT_HAVE_SA_LEN
-			sa->sa_len = sizeof(struct sockaddr_in);
+			sa4.sin_len = sizeof(struct sockaddr_in);
 			#endif
-			sa->sa_family = AF_INET;
+			sa4.sin_family = AF_INET;
+			//  sin_port   = 0;
 			if (!cbh->cb_err) memcpy(&sa4.sin_addr, rdata, rdlen);
 			}
-		else if (rrtype == kDNSServiceType_AAAA)
+		else
 			{
-			sa = (struct sockaddr *)&sa6;
-			bzero(&sa6, sizeof(sa6));
+			memset(&sa6, 0, sizeof(sa6));
 			#ifndef NOT_HAVE_SA_LEN
-			sa->sa_len = sizeof(struct sockaddr_in6);
+			sa6.sin6_len = sizeof(struct sockaddr_in6);
 			#endif
-			sa->sa_family = AF_INET6;
-			if (!cbh->cb_err) memcpy(&sa6.sin6_addr, rdata, rdlen);
+			sa6.sin6_family     = AF_INET6;
+			//  sin6_port     = 0;
+			//  sin6_flowinfo = 0;
+			//  sin6_scope_id = 0;
+			if (!cbh->cb_err)
+				{
+				memcpy(&sa6.sin6_addr, rdata, rdlen);
+				if (IN6_IS_ADDR_LINKLOCAL(&sa6.sin6_addr)) sa6.sin6_scope_id = cbh->cb_interface;
+				}
 			}
 		((DNSServiceGetAddrInfoReply)sdr->AppCallback)(sdr, cbh->cb_flags, cbh->cb_interface, cbh->cb_err, hostname, sa, ttl, sdr->AppContext);
 		// MUST NOT touch sdr after invoking AppCallback -- client is allowed to dispose it from within callback function
@@ -1089,7 +1328,7 @@ DNSServiceErrorType DNSSD_API DNSServiceGetAddrInfo
 	return err;
 	}
 	
-static void handle_browse_response(DNSServiceOp *sdr, CallbackHeader *cbh, char *data, char *end)
+static void handle_browse_response(DNSServiceOp *const sdr, const CallbackHeader *const cbh, const char *data, const char *const end)
 	{
 	char replyName[256], replyType[kDNSServiceMaxDomainName], replyDomain[kDNSServiceMaxDomainName];
 	get_string(&data, end, replyName, 256);
@@ -1155,7 +1394,7 @@ DNSServiceErrorType DNSSD_API DNSServiceSetDefaultDomainForUser(DNSServiceFlags 
 	return err;
 	}
 
-static void handle_regservice_response(DNSServiceOp *sdr, CallbackHeader *cbh, char *data, char *end)
+static void handle_regservice_response(DNSServiceOp *const sdr, const CallbackHeader *const cbh, const char *data, const char *const end)
 	{
 	char name[256], regtype[kDNSServiceMaxDomainName], domain[kDNSServiceMaxDomainName];
 	get_string(&data, end, name, 256);
@@ -1226,7 +1465,7 @@ DNSServiceErrorType DNSSD_API DNSServiceRegister
 	return err;
 	}
 
-static void handle_enumeration_response(DNSServiceOp *sdr, CallbackHeader *cbh, char *data, char *end)
+static void handle_enumeration_response(DNSServiceOp *const sdr, const CallbackHeader *const cbh, const char *data, const char *const end)
 	{
 	char domain[kDNSServiceMaxDomainName];
 	get_string(&data, end, domain, kDNSServiceMaxDomainName);
@@ -1270,7 +1509,7 @@ DNSServiceErrorType DNSSD_API DNSServiceEnumerateDomains
 	return err;
 	}
 
-static void ConnectionResponse(DNSServiceOp *sdr, CallbackHeader *cbh, char *data, char *end)
+static void ConnectionResponse(DNSServiceOp *const sdr, const CallbackHeader *const cbh, const char *const data, const char *const end)
 	{
 	DNSRecordRef rref = cbh->ipc_hdr.client_context.context;
 	(void)data; // Unused
@@ -1279,13 +1518,15 @@ static void ConnectionResponse(DNSServiceOp *sdr, CallbackHeader *cbh, char *dat
 	if (cbh->ipc_hdr.op != reg_record_reply_op)
 		{
 		// When using kDNSServiceFlagsShareConnection, need to search the list of associated DNSServiceOps
-		// to find the one this response is intended for, and then call through to its ProcessReply handler
-		while (sdr && (sdr->uid.u32[0] != cbh->ipc_hdr.client_context.u32[0] || sdr->uid.u32[1] != cbh->ipc_hdr.client_context.u32[1]))
-			sdr = sdr->next;
-		// NOTE: We may sometimes not find a matching DNSServiceOp, in the case where the client has
+		// to find the one this response is intended for, and then call through to its ProcessReply handler.
+		// We start with our first subordinate DNSServiceRef -- don't want to accidentally match the parent DNSServiceRef.
+		DNSServiceOp *op = sdr->next;
+		while (op && (op->uid.u32[0] != cbh->ipc_hdr.client_context.u32[0] || op->uid.u32[1] != cbh->ipc_hdr.client_context.u32[1]))
+			op = op->next;
+		// Note: We may sometimes not find a matching DNSServiceOp, in the case where the client has
 		// cancelled the subordinate DNSServiceOp, but there are still messages in the pipeline from the daemon
-		if (sdr && sdr->ProcessReply) sdr->ProcessReply(sdr, cbh, data, end);
-		// WARNING: Don't touch sdr after this -- client may have called DNSServiceRefDeallocate
+		if (op && op->ProcessReply) op->ProcessReply(op, cbh, data, end);
+		// WARNING: Don't touch op or sdr after this -- client may have called DNSServiceRefDeallocate
 		return;
 		}
 
@@ -1293,7 +1534,7 @@ static void ConnectionResponse(DNSServiceOp *sdr, CallbackHeader *cbh, char *dat
 		rref->AppCallback(rref->sdr, rref, cbh->cb_flags, cbh->cb_err, rref->AppContext);
 	else
 		{
-		syslog(LOG_WARNING, "dnssd_clientstub handle_regrecord_response: sdr->op != connection_request");
+		syslog(LOG_WARNING, "dnssd_clientstub ConnectionResponse: sdr->op != connection_request");
 		rref->AppCallback(rref->sdr, rref, 0, kDNSServiceErr_Unknown, rref->AppContext);
 		}
 	// MUST NOT touch sdr after invoking AppCallback -- client is allowed to dispose it from within callback function
@@ -1439,7 +1680,6 @@ DNSServiceErrorType DNSSD_API DNSServiceAddRecord
 	rref->record_index = sdRef->max_index++;
 	rref->sdr = sdRef;
 	*RecordRef = rref;
-	hdr->client_context.context = rref;
 	hdr->reg_index = rref->record_index;
 
 	return deliver_request(hdr, sdRef);		// Will free hdr for us
@@ -1557,31 +1797,31 @@ DNSServiceErrorType DNSSD_API DNSServiceReconfirmRecord
 	return err;
 	}
 
-static void handle_port_mapping_response(DNSServiceOp *sdr, CallbackHeader *cbh, char *data, char *end)
+static void handle_port_mapping_response(DNSServiceOp *const sdr, const CallbackHeader *const cbh, const char *data, const char *const end)
 	{
 	union { uint32_t l; u_char b[4]; } addr;
 	uint8_t protocol = 0;
-	union { uint16_t s; u_char b[2]; } privatePort;
-	union { uint16_t s; u_char b[2]; } publicPort;
+	union { uint16_t s; u_char b[2]; } internalPort;
+	union { uint16_t s; u_char b[2]; } externalPort;
 	uint32_t ttl = 0;
 
-	if (data + 13 > end) data = NULL;
+	if (!data || data + 13 > end) data = NULL;
 	else
 		{
-		addr       .b[0] = *data++;
-		addr       .b[1] = *data++;
-		addr       .b[2] = *data++;
-		addr       .b[3] = *data++;
-		protocol         = *data++;
-		privatePort.b[0] = *data++;
-		privatePort.b[1] = *data++;
-		publicPort .b[0] = *data++;
-		publicPort .b[1] = *data++;
-		ttl              = get_uint32(&data, end);
+		addr        .b[0] = *data++;
+		addr        .b[1] = *data++;
+		addr        .b[2] = *data++;
+		addr        .b[3] = *data++;
+		protocol          = *data++;
+		internalPort.b[0] = *data++;
+		internalPort.b[1] = *data++;
+		externalPort.b[0] = *data++;
+		externalPort.b[1] = *data++;
+		ttl               = get_uint32(&data, end);
 		}
 
 	if (!data) syslog(LOG_WARNING, "dnssd_clientstub handle_port_mapping_response: error reading result from daemon");
-	else ((DNSServiceNATPortMappingReply)sdr->AppCallback)(sdr, cbh->cb_flags, cbh->cb_interface, cbh->cb_err, addr.l, protocol, privatePort.s, publicPort.s, ttl, sdr->AppContext);
+	else ((DNSServiceNATPortMappingReply)sdr->AppCallback)(sdr, cbh->cb_flags, cbh->cb_interface, cbh->cb_err, addr.l, protocol, internalPort.s, externalPort.s, ttl, sdr->AppContext);
 	// MUST NOT touch sdr after invoking AppCallback -- client is allowed to dispose it from within callback function
 	}
 
@@ -1591,8 +1831,8 @@ DNSServiceErrorType DNSSD_API DNSServiceNATPortMappingCreate
 	DNSServiceFlags                     flags,
 	uint32_t                            interfaceIndex,
 	uint32_t                            protocol,     /* TCP and/or UDP */
-	uint16_t                            privatePortInNetworkByteOrder,
-	uint16_t                            publicPortInNetworkByteOrder,
+	uint16_t                            internalPortInNetworkByteOrder,
+	uint16_t                            externalPortInNetworkByteOrder,
 	uint32_t                            ttl,          /* time to live in seconds */
 	DNSServiceNATPortMappingReply       callBack,
 	void                                *context      /* may be NULL */
@@ -1601,8 +1841,8 @@ DNSServiceErrorType DNSSD_API DNSServiceNATPortMappingCreate
 	char *ptr;
 	size_t len;
 	ipc_msg_hdr *hdr;
-	union { uint16_t s; u_char b[2]; } privatePort = { privatePortInNetworkByteOrder };
-	union { uint16_t s; u_char b[2]; } publicPort  = { publicPortInNetworkByteOrder };
+	union { uint16_t s; u_char b[2]; } internalPort = { internalPortInNetworkByteOrder };
+	union { uint16_t s; u_char b[2]; } externalPort = { externalPortInNetworkByteOrder };
 
 	DNSServiceErrorType err = ConnectToServer(sdRef, flags, port_mapping_request, handle_port_mapping_response, callBack, context);
 	if (err) return err;	// On error ConnectToServer leaves *sdRef set to NULL
@@ -1610,8 +1850,8 @@ DNSServiceErrorType DNSSD_API DNSServiceNATPortMappingCreate
 	len = sizeof(flags);
 	len += sizeof(interfaceIndex);
 	len += sizeof(protocol);
-	len += sizeof(privatePort);
-	len += sizeof(publicPort);
+	len += sizeof(internalPort);
+	len += sizeof(externalPort);
 	len += sizeof(ttl);
 
 	hdr = create_hdr(port_mapping_request, &len, &ptr, (*sdRef)->primary ? 1 : 0, *sdRef);
@@ -1620,10 +1860,10 @@ DNSServiceErrorType DNSSD_API DNSServiceNATPortMappingCreate
 	put_flags(flags, &ptr);
 	put_uint32(interfaceIndex, &ptr);
 	put_uint32(protocol, &ptr);
-	*ptr++ = privatePort.b[0];
-	*ptr++ = privatePort.b[1];
-	*ptr++ = publicPort .b[0];
-	*ptr++ = publicPort .b[1];
+	*ptr++ = internalPort.b[0];
+	*ptr++ = internalPort.b[1];
+	*ptr++ = externalPort.b[0];
+	*ptr++ = externalPort.b[1];
 	put_uint32(ttl, &ptr);
 
 	err = deliver_request(hdr, *sdRef);		// Will free hdr for us

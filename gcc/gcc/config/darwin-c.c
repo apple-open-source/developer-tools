@@ -1,5 +1,5 @@
 /* Darwin support needed only by C/C++ frontends.
-   Copyright (C) 2001, 2003, 2004  Free Software Foundation, Inc.
+   Copyright (C) 2001, 2003, 2004, 2005  Free Software Foundation, Inc.
    Contributed by Apple Computer Inc.
 
 This file is part of GCC.
@@ -16,8 +16,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 #include "config.h"
 #include "system.h"
@@ -28,7 +28,9 @@ Boston, MA 02111-1307, USA.  */
 #include "c-pragma.h"
 #include "c-tree.h"
 #include "c-incpath.h"
+#include "c-common.h"
 #include "toplev.h"
+#include "flags.h"
 #include "tm_p.h"
 #include "cppdefault.h"
 #include "prefix.h"
@@ -42,20 +44,10 @@ Boston, MA 02111-1307, USA.  */
 
 /* Pragmas.  */
 
-#define BAD(gmsgid) do { warning (gmsgid); return; } while (0)
-/* APPLE LOCAL Macintosh alignment 2002-1-22 --ff */
-#define BAD2(msgid, arg) do { warning (msgid, arg); return; } while (0)
+#define BAD(gmsgid) do { warning (OPT_Wpragmas, gmsgid); return; } while (0)
+#define BAD2(msgid, arg) do { warning (OPT_Wpragmas, msgid, arg); return; } while (0)
 
 static bool using_frameworks = false;
-
-/* APPLE LOCAL begin mainline */
-/* True if we're setting __attribute__ ((ms_struct)).  */
-static bool darwin_ms_struct = false;
-
-/* APPLE LOCAL end mainline */
-/* APPLE LOCAL begin CALL_ON_LOAD/CALL_ON_UNLOAD pragmas  20020202 --turly  */
-static void directive_with_named_function (const char *, void (*sec_f)(void));
-/* APPLE LOCAL end CALL_ON_LOAD/CALL_ON_UNLOAD pragmas  20020202 --turly  */
 
 /* Maintain a small stack of alignments.  This is similar to pragma
    pack's stack, but simpler.  */
@@ -77,15 +69,15 @@ static const char *find_subframework_header (cpp_reader *pfile, const char *head
    identified as follows:
      if maximum_field_alignment != 0
        mode = packed
-     else if TARGET_ALIGN_NATURAL
+     else if OPTION_ALIGN_NATURAL
        mode = natural
-     else if TARGET_ALIGN_MAC68K
+     else if OPTION_ALIGN_MAC68K
        mode
      else
        mode = power
    These modes are saved on the alignment stack by saving the values
-   of maximum_field_alignment, TARGET_ALIGN_MAC68K, and 
-   TARGET_ALIGN_NATURAL.  */
+   of maximum_field_alignment, OPTION_ALIGN_MAC68K, and
+   OPTION_ALIGN_NATURAL.  */
 typedef struct align_stack
 {
   int alignment;
@@ -105,28 +97,28 @@ static struct align_stack * field_align_stack = NULL;
 /* APPLE LOCAL end radar 4679943 */
 
 static void
-push_field_alignment (int bit_alignment, 
+push_field_alignment (int bit_alignment,
 		      int mac68k_alignment, int natural_alignment)
 {
-  align_stack *entry = (align_stack *) xmalloc (sizeof (align_stack));
+  align_stack *entry = XNEW (align_stack);
 
   entry->alignment = maximum_field_alignment;
-  entry->mac68k = TARGET_ALIGN_MAC68K;
-  entry->natural = TARGET_ALIGN_NATURAL;
+  entry->mac68k = OPTION_ALIGN_MAC68K;
+  entry->natural = OPTION_ALIGN_NATURAL;
   entry->prev = field_align_stack;
   field_align_stack = entry;
 
   maximum_field_alignment = bit_alignment;
   if (mac68k_alignment)
-    rs6000_alignment_flags |= MASK_ALIGN_MAC68K;
+    darwin_alignment_flags |= OPTION_MASK_ALIGN_MAC68K;
   else
-    rs6000_alignment_flags &= ~MASK_ALIGN_MAC68K;
+    darwin_alignment_flags &= ~OPTION_MASK_ALIGN_MAC68K;
 
   /* APPLE LOCAL begin radar 4679943 */
   if (natural_alignment == 1)
-    rs6000_alignment_flags |= MASK_ALIGN_NATURAL;
+    darwin_alignment_flags |= OPTION_MASK_ALIGN_NATURAL;
   else if (natural_alignment == 0)
-    rs6000_alignment_flags &= ~MASK_ALIGN_NATURAL;
+    darwin_alignment_flags &= ~OPTION_MASK_ALIGN_NATURAL;
   /* APPLE LOCAL end radar 4679943 */
 }
 /* APPLE LOCAL end Macintosh alignment 2001-12-17 --ff */
@@ -141,13 +133,13 @@ pop_field_alignment (void)
       maximum_field_alignment = entry->alignment;
 /* APPLE LOCAL begin Macintosh alignment 2001-12-17 --ff */
       if (entry->mac68k)
-	rs6000_alignment_flags |= MASK_ALIGN_MAC68K;
+	darwin_alignment_flags |= OPTION_MASK_ALIGN_MAC68K;
       else
-	rs6000_alignment_flags &= ~MASK_ALIGN_MAC68K;
+	darwin_alignment_flags &= ~OPTION_MASK_ALIGN_MAC68K;
       if (entry->natural)
-	rs6000_alignment_flags |= MASK_ALIGN_NATURAL;
+	darwin_alignment_flags |= OPTION_MASK_ALIGN_NATURAL;
       else
-	rs6000_alignment_flags &= ~MASK_ALIGN_NATURAL;
+	darwin_alignment_flags &= ~OPTION_MASK_ALIGN_NATURAL;
 /* APPLE LOCAL end Macintosh alignment 2001-12-17 --ff */
       field_align_stack = entry->prev;
       free (entry);
@@ -186,25 +178,25 @@ darwin_pragma_options (cpp_reader *pfile ATTRIBUTE_UNUSED)
   const char *arg;
   tree t, x;
 
-  if (c_lex (&t) != CPP_NAME)
+  if (pragma_lex (&t) != CPP_NAME)
     BAD ("malformed '#pragma options', ignoring");
   arg = IDENTIFIER_POINTER (t);
   if (strcmp (arg, "align"))
     BAD ("malformed '#pragma options', ignoring");
-  if (c_lex (&t) != CPP_EQ)
+  if (pragma_lex (&t) != CPP_EQ)
     BAD ("malformed '#pragma options', ignoring");
-  if (c_lex (&t) != CPP_NAME)
+  if (pragma_lex (&t) != CPP_NAME)
     BAD ("malformed '#pragma options', ignoring");
 
-  if (c_lex (&x) != CPP_EOF)
-    warning ("junk at end of '#pragma options'");
+  if (pragma_lex (&x) != CPP_EOF)
+    warning (OPT_Wpragmas, "junk at end of '#pragma options'");
 
   arg = IDENTIFIER_POINTER (t);
 /* APPLE LOCAL begin Macintosh alignment 2002-1-22 --ff */
   if (!strcmp (arg, "mac68k"))
     {
       if (POINTER_SIZE == 64)
-	warning ("mac68k alignment pragma is deprecated for 64-bit Darwin");
+	warning (OPT_Wpragmas, "mac68k alignment pragma is deprecated for 64-bit Darwin");
       push_field_alignment (0, 1, 0);
     }
   else if (!strcmp (arg, "native"))	/* equivalent to power on PowerPC */
@@ -218,16 +210,16 @@ darwin_pragma_options (cpp_reader *pfile ATTRIBUTE_UNUSED)
   else if (!strcmp (arg, "reset"))
     pop_field_alignment ();
   else
-    warning ("malformed '#pragma options align={mac68k|power|natural|reset}', ignoring");
+    BAD ("malformed '#pragma options align={mac68k|power|natural|reset}', ignoring");
 }
 /* APPLE LOCAL end Macintosh alignment 2002-1-22 --ff */
 
 /* APPLE LOCAL begin Macintosh alignment 2002-1-22 --ff */
 /* #pragma pack ()
-   #pragma pack (N)  
+   #pragma pack (N)
    #pragma pack (pop[,id])
    #pragma pack (push[,id],N)
-   
+
    We have a problem handling the semantics of these directives since,
    to play well with the Macintosh alignment directives, we want the
    usual pack(N) form to do a push of the previous alignment state.
@@ -241,10 +233,10 @@ darwin_pragma_pack (cpp_reader *pfile ATTRIBUTE_UNUSED)
   enum cpp_ttype token;
   enum { set, push, pop } action;
 
-  if (c_lex (&x) != CPP_OPEN_PAREN)
+  if (pragma_lex (&x) != CPP_OPEN_PAREN)
     BAD ("missing '(' after '#pragma pack' - ignored");
 
-  token = c_lex (&x);
+  token = pragma_lex (&x);
   if (token == CPP_CLOSE_PAREN)
     {
       action = pop;
@@ -252,9 +244,11 @@ darwin_pragma_pack (cpp_reader *pfile ATTRIBUTE_UNUSED)
     }
   else if (token == CPP_NUMBER)
     {
+      if (TREE_CODE (x) != INTEGER_CST)
+	BAD ("invalid constant in %<#pragma pack%> - ignored");
       align = TREE_INT_CST_LOW (x);
       action = push;
-      if (c_lex (&x) != CPP_CLOSE_PAREN)
+      if (pragma_lex (&x) != CPP_CLOSE_PAREN)
 	BAD ("malformed '#pragma pack' - ignored");
     }
   else if (token == CPP_NAME)
@@ -273,32 +267,24 @@ darwin_pragma_pack (cpp_reader *pfile ATTRIBUTE_UNUSED)
       else
 	BAD2 ("unknown action '%s' for '#pragma pack' - ignored", op);
 
-      token = c_lex (&x);
-      if (token != CPP_COMMA && action == push)
-	GCC_BAD_ACTION;
-
-      if (token == CPP_COMMA)
-	{
-	  token = c_lex (&x);
-	  if (token == CPP_NAME)
-	    {
-	      id = x;
-	      if (action == push && c_lex (&x) != CPP_COMMA)
-		GCC_BAD_ACTION;
-	      token = c_lex (&x);
-	    }
-
-	  if (action == push)
-	    {
-	      if (token == CPP_NUMBER)
-		{
-		  align = TREE_INT_CST_LOW (x);
-		  token = c_lex (&x);
-		}
-	      else
-		GCC_BAD_ACTION;
-	    }
-	}
+      while ((token = pragma_lex (&x)) == CPP_COMMA)
+        {
+          token = pragma_lex (&x);
+          if (token == CPP_NAME && id == 0)
+            {
+              id = x;
+            }
+          else if (token == CPP_NUMBER && action == push && align == -1)
+            {
+              if (TREE_CODE (x) != INTEGER_CST)
+                BAD ("invalid constant in %<#pragma pack%> - ignored");
+              align = TREE_INT_CST_LOW (x);
+              if (align == -1)
+                action = set;
+            }
+          else
+            GCC_BAD_ACTION;
+        }
 
       if (token != CPP_CLOSE_PAREN)
 	GCC_BAD_ACTION;
@@ -307,9 +293,9 @@ darwin_pragma_pack (cpp_reader *pfile ATTRIBUTE_UNUSED)
 else
   BAD ("malformed '#pragma pack' - ignored");
 
-  if (c_lex (&x) != CPP_EOF)
-    warning ("junk at end of '#pragma pack'");
-    
+  if (pragma_lex (&x) != CPP_EOF)
+    warning (OPT_Wpragmas, "junk at end of '#pragma pack'");
+
   if (action != pop)
     {
       switch (align)
@@ -322,11 +308,17 @@ else
 	  case 16:
 	    align *= BITS_PER_UNIT;
 	    break;
+	  case -1:
+	    if (action == push)
+              {
+		align = maximum_field_alignment;
+		break;
+	      }
 	  default:
 	    BAD2 ("alignment must be a small power of two, not %d", align);
 	}
     }
-  
+
   switch (action)
     {
     case pop:   pop_field_alignment ();		      break;
@@ -346,20 +338,21 @@ darwin_pragma_unused (cpp_reader *pfile ATTRIBUTE_UNUSED)
   tree decl, x;
   int tok;
 
-  if (c_lex (&x) != CPP_OPEN_PAREN)
+  /* APPLE LOCAL 5979888 */
+  if ((tok=pragma_lex (&x)) != CPP_OPEN_PAREN)
     BAD ("missing '(' after '#pragma unused', ignoring");
 
-  while (1)
+  /* APPLE LOCAL 5979888 */
+  while (tok != CPP_EOF && tok != CPP_CLOSE_PAREN)
     {
-      tok = c_lex (&decl);
+      tok = pragma_lex (&decl);
       if (tok == CPP_NAME && decl)
 	{
-	  /* APPLE LOCAL mainline lookup_name 4125055 */
-	  tree local = lookup_name_two (decl, 0);
+	  tree local = lookup_name (decl);
 	  if (local && (TREE_CODE (local) == PARM_DECL
 			|| TREE_CODE (local) == VAR_DECL))
 	    TREE_USED (local) = 1;
-	  tok = c_lex (&x);
+	  tok = pragma_lex (&x);
 	  if (tok != CPP_COMMA)
 	    break;
 	}
@@ -368,11 +361,10 @@ darwin_pragma_unused (cpp_reader *pfile ATTRIBUTE_UNUSED)
   if (tok != CPP_CLOSE_PAREN)
     BAD ("missing ')' after '#pragma unused', ignoring");
 
-  if (c_lex (&x) != CPP_EOF)
-    warning ("junk at end of '#pragma unused'");
+  if (pragma_lex (&x) != CPP_EOF)
+    BAD ("junk at end of '#pragma unused'");
 }
 
-/* APPLE LOCAL begin mainline */
 /* Parse the ms_struct pragma.  */
 void
 darwin_pragma_ms_struct (cpp_reader *pfile ATTRIBUTE_UNUSED)
@@ -380,7 +372,7 @@ darwin_pragma_ms_struct (cpp_reader *pfile ATTRIBUTE_UNUSED)
   const char *arg;
   tree t;
 
-  if (c_lex (&t) != CPP_NAME)
+  if (pragma_lex (&t) != CPP_NAME)
     BAD ("malformed '#pragma ms_struct', ignoring");
   arg = IDENTIFIER_POINTER (t);
 
@@ -389,24 +381,12 @@ darwin_pragma_ms_struct (cpp_reader *pfile ATTRIBUTE_UNUSED)
   else if (!strcmp (arg, "off") || !strcmp (arg, "reset"))
     darwin_ms_struct = false;
   else
-    warning ("malformed '#pragma ms_struct {on|off|reset}', ignoring");
+    BAD ("malformed '#pragma ms_struct {on|off|reset}', ignoring");
 
-  if (c_lex (&t) != CPP_EOF)
-    warning ("junk at end of '#pragma ms_struct'");
+  if (pragma_lex (&t) != CPP_EOF)
+    BAD ("junk at end of '#pragma ms_struct'");
 }
 
-/* Set darwin specific type attributes on TYPE.  */
-void
-darwin_set_default_type_attributes (tree type)
-{
-  /* Handle the ms_struct pragma.  */
-  if (darwin_ms_struct
-      && TREE_CODE (type) == RECORD_TYPE)
-    TYPE_ATTRIBUTES (type) = tree_cons (get_identifier ("ms_struct"),
-                                        NULL_TREE,
-                                        TYPE_ATTRIBUTES (type));
-}
-/* APPLE LOCAL end mainline */
 /* APPLE LOCAL begin pragma reverse_bitfields */
 /* Handle the reverse_bitfields pragma.  */
 
@@ -416,7 +396,7 @@ darwin_pragma_reverse_bitfields (cpp_reader *pfile ATTRIBUTE_UNUSED)
   const char* arg;
   tree t;
 
-  if (c_lex (&t) != CPP_NAME)
+  if (pragma_lex (&t) != CPP_NAME)
     BAD ("malformed '#pragma reverse_bitfields', ignoring");
   arg = IDENTIFIER_POINTER (t);
 
@@ -425,9 +405,9 @@ darwin_pragma_reverse_bitfields (cpp_reader *pfile ATTRIBUTE_UNUSED)
   else if (!strcmp (arg, "off") || !strcmp (arg, "reset"))
     darwin_reverse_bitfields = false;
   else
-    warning ("malformed '#pragma reverse_bitfields {on|off|reset}', ignoring");
-  if (c_lex (&t) != CPP_EOF)
-    warning ("junk at end of '#pragma reverse_bitfields'");
+    BAD ("malformed '#pragma reverse_bitfields {on|off|reset}', ignoring");
+  if (pragma_lex (&t) != CPP_EOF)
+    BAD ("junk at end of '#pragma reverse_bitfields'");
 }
 /* APPLE LOCAL end pragma reverse_bitfields */
 
@@ -449,10 +429,7 @@ pop_opt_level (void)
   if (!va_opt)
     VARRAY_INT_INIT (va_opt, 5, "va_opt");
   if (!VARRAY_ACTIVE_SIZE (va_opt))
-    {
-      warning ("optimization pragma stack underflow");
-      return;
-    }
+    BAD ("optimization pragma stack underflow");
   level = VARRAY_TOP_INT (va_opt);
   VARRAY_POP (va_opt);
 
@@ -468,6 +445,8 @@ static void darwin_set_flags_from_pragma (void)
 {
   set_flags_from_O (false);
 
+  /* MERGE FIXME 5416402 flag_loop_optimize2 is gone now */
+#if 0
   /* Enable new loop optimizer pass if any of its optimizations is called.  */
   if (flag_move_loop_invariants
       || flag_unswitch_loops
@@ -475,6 +454,7 @@ static void darwin_set_flags_from_pragma (void)
       || flag_unroll_loops
       || flag_branch_on_count_reg)
     flag_loop_optimize2 = 1;
+#endif
 
   /* This is expected to be defined in each target.   Should contain
      any snippets from OPTIMIZATION_OPTIONS and OVERRIDE_OPTIONS that
@@ -495,7 +475,7 @@ void
 darwin_pragma_opt_level  (cpp_reader *pfile ATTRIBUTE_UNUSED)
 {
   tree t;
-  enum cpp_ttype argtype = c_lex (&t);
+  enum cpp_ttype argtype = pragma_lex (&t);
 
   if (argtype == CPP_NAME)
     {
@@ -524,8 +504,8 @@ darwin_pragma_opt_level  (cpp_reader *pfile ATTRIBUTE_UNUSED)
   darwin_set_flags_from_pragma ();
   /* APPLE LOCAL end 4760857 optimization pragmas */
 
-  if (c_lex (&t) != CPP_EOF)
-    warning ("junk at end of '#pragma optimization_level'");
+  if (pragma_lex (&t) != CPP_EOF)
+    BAD ("junk at end of '#pragma optimization_level'");
 }
 
 void
@@ -534,7 +514,7 @@ darwin_pragma_opt_size  (cpp_reader *pfile ATTRIBUTE_UNUSED)
   const char* arg;
   tree t;
 
-  if (c_lex (&t) != CPP_NAME)
+  if (pragma_lex (&t) != CPP_NAME)
     BAD ("malformed '#pragma optimize_for_size { on | off | reset}', ignoring");
   arg = IDENTIFIER_POINTER (t);
 
@@ -557,8 +537,8 @@ darwin_pragma_opt_size  (cpp_reader *pfile ATTRIBUTE_UNUSED)
   darwin_set_flags_from_pragma ();
   /* APPLE LOCAL end 4760857 optimization pragmas */
 
-  if (c_lex (&t) != CPP_EOF)
-    warning ("junk at end of '#pragma optimize_for_size'");
+  if (pragma_lex (&t) != CPP_EOF)
+    BAD ("junk at end of '#pragma optimize_for_size'");
 }
 /* APPLE LOCAL end optimization pragmas 3124235/3420242 */
 
@@ -597,7 +577,7 @@ add_framework (const char *name, size_t len, cpp_dir *dir)
       frameworks_in_use = xrealloc (frameworks_in_use,
 				    max_frameworks*sizeof(*frameworks_in_use));
     }
-  dir_name = xmalloc (len + 1);
+  dir_name = XNEWVEC (char, len + 1);
   memcpy (dir_name, name, len);
   dir_name[len] = '\0';
   frameworks_in_use[num_frameworks].name = dir_name;
@@ -664,7 +644,7 @@ framework_construct_pathname (const char *fname, cpp_dir *dir)
   if (fast_dir && dir != fast_dir)
     return 0;
 
-  frname = xmalloc (strlen (fname) + dir->len + 2
+  frname = XNEWVEC (char, strlen (fname) + dir->len + 2
 		    + strlen(".framework/") + strlen("PrivateHeaders"));
   strncpy (&frname[0], dir->name, dir->len);
   frname_len = dir->len;
@@ -675,7 +655,6 @@ framework_construct_pathname (const char *fname, cpp_dir *dir)
   strncpy (&frname[frname_len], ".framework/", strlen (".framework/"));
   frname_len += strlen (".framework/");
 
-  /* APPLE LOCAL begin mainline */
   if (fast_dir == 0)
     {
       frname[frname_len-1] = 0;
@@ -695,19 +674,17 @@ framework_construct_pathname (const char *fname, cpp_dir *dir)
 	}
       frname[frname_len-1] = '/';
     }
-  /* APPLE LOCAL end mainline */
 
   /* Append framework_header_dirs and header file name */
   for (i = 0; framework_header_dirs[i].dirName; i++)
     {
-      strncpy (&frname[frname_len], 
+      strncpy (&frname[frname_len],
 	       framework_header_dirs[i].dirName,
 	       framework_header_dirs[i].dirNameLen);
       strcpy (&frname[frname_len + framework_header_dirs[i].dirNameLen],
 	      &fname[fname_len]);
 
       if (stat (frname, &st) == 0)
-	/* APPLE LOCAL mainline */
 	return frname;
     }
 
@@ -724,8 +701,8 @@ find_subframework_file (const char *fname, const char *pname)
 {
   char *sfrname;
   const char *dot_framework = ".framework/";
-  char *bufptr; 
-  int sfrname_len, i, fname_len; 
+  char *bufptr;
+  int sfrname_len, i, fname_len;
   struct cpp_dir *fast_dir;
   static struct cpp_dir subframe_dir;
   struct stat st;
@@ -735,7 +712,7 @@ find_subframework_file (const char *fname, const char *pname)
   /* Subframework files must have / in the name.  */
   if (bufptr == 0)
     return 0;
-    
+
   fname_len = bufptr - fname;
   fast_dir = find_framework (fname, fname_len);
 
@@ -750,18 +727,18 @@ find_subframework_file (const char *fname, const char *pname)
     return 0;
 
   /* Now translate. For example,                  +- bufptr
-     fname = CarbonCore/OSUtils.h                 | 
+     fname = CarbonCore/OSUtils.h                 |
      pname = /System/Library/Frameworks/Foundation.framework/Headers/Foundation.h
      into
      sfrname = /System/Library/Frameworks/Foundation.framework/Frameworks/CarbonCore.framework/Headers/OSUtils.h */
 
-  sfrname = (char *) xmalloc (strlen (pname) + strlen (fname) + 2 +
+  sfrname = XNEWVEC (char, strlen (pname) + strlen (fname) + 2 +
 			      strlen ("Frameworks/") + strlen (".framework/")
 			      + strlen ("PrivateHeaders"));
- 
+
   bufptr += strlen (dot_framework);
 
-  sfrname_len = bufptr - pname; 
+  sfrname_len = bufptr - pname;
 
   strncpy (&sfrname[0], pname, sfrname_len);
 
@@ -777,18 +754,18 @@ find_subframework_file (const char *fname, const char *pname)
   /* Append framework_header_dirs and header file name */
   for (i = 0; framework_header_dirs[i].dirName; i++)
     {
-      strncpy (&sfrname[sfrname_len], 
+      strncpy (&sfrname[sfrname_len],
 	       framework_header_dirs[i].dirName,
 	       framework_header_dirs[i].dirNameLen);
       strcpy (&sfrname[sfrname_len + framework_header_dirs[i].dirNameLen],
 	      &fname[fname_len]);
-    
+
       if (stat (sfrname, &st) == 0)
 	{
 	  if (fast_dir != &subframe_dir)
 	    {
 	      if (fast_dir)
-		warning ("subframework include %s conflicts with framework include",
+		warning (0, "subframework include %s conflicts with framework include",
 			 fname);
 	      else
 		add_framework (fname, fname_len, &subframe_dir);
@@ -811,7 +788,7 @@ add_system_framework_path (char *path)
   int cxx_aware = 1;
   cpp_dir *p;
 
-  p = xmalloc (sizeof (cpp_dir));
+  p = XNEW (cpp_dir);
   p->next = NULL;
   p->name = path;
   p->sysp = 1 + !cxx_aware;
@@ -829,7 +806,7 @@ add_framework_path (char *path)
 {
   cpp_dir *p;
 
-  p = xmalloc (sizeof (cpp_dir));
+  p = XNEW (cpp_dir);
   p->next = NULL;
   p->name = path;
   p->sysp = 0;
@@ -839,7 +816,7 @@ add_framework_path (char *path)
   add_cpp_dir_path (p, BRACKET);
 }
 
-static const char *framework_defaults [] = 
+static const char *framework_defaults [] =
   {
     "/System/Library/Frameworks",
     "/Library/Frameworks",
@@ -856,9 +833,9 @@ darwin_register_objc_includes (const char *sysroot, const char *iprefix,
   /* We do not do anything if we do not want the standard includes. */
   if (!stdinc)
     return;
-  
+
   fname = GCC_INCLUDE_DIR "-gnu-runtime";
-  
+
   /* Register the GNU OBJC runtime include path if we are compiling  OBJC
     with GNU-runtime.  */
 
@@ -875,13 +852,13 @@ darwin_register_objc_includes (const char *sysroot, const char *iprefix,
           /* FIXME: wrap the headers for C++awareness.  */
 	  add_path (str, SYSTEM, /*c++aware=*/false, false);
 	}
-      
+
       /* Should this directory start with the sysroot?  */
       if (sysroot)
 	str = concat (sysroot, fname, NULL);
       else
 	str = update_path (fname, "");
-      
+
       add_path (str, SYSTEM, /*c++aware=*/false, false);
     }
 }
@@ -950,69 +927,16 @@ find_subframework_header (cpp_reader *pfile, const char *header, cpp_dir **dirp)
   return 0;
 }
 
-/* APPLE LOCAL begin CALL_ON_LOAD/CALL_ON_UNLOAD pragmas  20020202 --turly  */
-extern void mod_init_section (void), mod_term_section (void);
-/* Grab the function name from the pragma line and output it to the
-   assembly output file with the parameter DIRECTIVE.  Called by the
-   pragma CALL_ON_LOAD and CALL_ON_UNLOAD handlers below.
-   So: "#pragma CALL_ON_LOAD foo"  will output ".mod_init_func _foo".  */
-
-static void directive_with_named_function (const char *pragma_name,
-			         void (*section_function) (void))
-{
-  tree decl;
-  int tok;
-
-  tok = c_lex (&decl);
-  if (tok == CPP_NAME && decl)
-    {
-      extern FILE *asm_out_file;
-
-      section_function ();
-      fprintf (asm_out_file, "\t.long _%s\n", IDENTIFIER_POINTER (decl));
-
-      if (c_lex (&decl) != CPP_EOF)
-	warning ("junk at end of #pragma %s <function_name>\n", pragma_name);
-    }
-  else
-    warning ("function name expected after #pragma %s\n", pragma_name);
-}
-void
-darwin_pragma_call_on_load (cpp_reader *pfile ATTRIBUTE_UNUSED)
-{
-  if (TARGET_64BIT)
-    error ("Pragma CALL_ON_LOAD unsupported for 64-bit target; use constructor attribute instead");
-  else
-    {
-      warning ("Pragma CALL_ON_LOAD is deprecated; use constructor attribute instead");
-      directive_with_named_function ("CALL_ON_LOAD", mod_init_section);
-    }
-}
-void
-darwin_pragma_call_on_unload (cpp_reader *pfile ATTRIBUTE_UNUSED)
-{
-  if (TARGET_64BIT)
-    error ("Pragma CALL_ON_UNLOAD unsupported for 64-bit target; use destructor attribute instead");
-  else
-    {
-      warning("Pragma CALL_ON_UNLOAD is deprecated; use destructor attribute instead");
-      directive_with_named_function ("CALL_ON_UNLOAD", mod_term_section);
-    }
-}
-/* APPLE LOCAL end CALL_ON_LOAD/CALL_ON_UNLOAD pragmas  20020202 --turly  */
-/* APPLE LOCAL begin mainline 2005-09-01 3449986 */
-
-
 /* Return the value of darwin_macosx_version_min suitable for the
    __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ macro,
-   so '10.4.2' becomes 1042.  
+   so '10.4.2' becomes 1042.
    Print a warning if the version number is not known.  */
 static const char *
 /* APPLE LOCAL ARM 5683689 */
 macosx_version_as_macro (void)
 {
   static char result[] = "1000";
-  
+
   if (strncmp (darwin_macosx_version_min, "10.", 3) != 0)
     goto fail;
   if (! ISDIGIT (darwin_macosx_version_min[3]))
@@ -1030,9 +954,9 @@ macosx_version_as_macro (void)
     }
   else
     result[3] = '0';
-  
+
   return result;
-  
+
  fail:
   error ("Unknown value %qs of -mmacosx-version-min",
 	 darwin_macosx_version_min);
@@ -1127,15 +1051,15 @@ darwin_cpp_builtins (cpp_reader *pfile)
   /* APPLE LOCAL Apple version */
   /* Don't define __APPLE_CC__ here.  */
 
-/* APPLE LOCAL begin ARM 5683689 */
+  /* APPLE LOCAL begin ARM 5683689 */
   if (darwin_macosx_version_min)
     builtin_define_with_value ("__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__",
 			       macosx_version_as_macro(), false);
   else
     builtin_define_with_value ("__ENVIRONMENT_IPHONE_OS_VERSION_MIN_REQUIRED__",
 			       iphoneos_version_as_macro(), false);
+  /* APPLE LOCAL end ARM 5683689 */
 
-/* APPLE LOCAL end ARM 5683689 */
   /* APPLE LOCAL begin constant cfstrings */
   if (darwin_constant_cfstrings)
     builtin_define ("__CONSTANT_CFSTRINGS__");
@@ -1147,7 +1071,8 @@ darwin_cpp_builtins (cpp_reader *pfile)
     }
   /* APPLE LOCAL end pascal strings */
   /* APPLE LOCAL begin ObjC GC */
-  if (flag_objc_gc)
+  /* APPLE LOCAL radar 5914395 */
+  if (flag_objc_gc || flag_objc_gc_only)
     {
       builtin_define ("__strong=__attribute__((objc_gc(strong)))");
       builtin_define ("__weak=__attribute__((objc_gc(weak)))");
@@ -1156,9 +1081,18 @@ darwin_cpp_builtins (cpp_reader *pfile)
   else
     {
       builtin_define ("__strong=");
-      builtin_define ("__weak=");
+      /* APPLE LOCAL radar 5847976 */
+      builtin_define ("__weak=__attribute__((objc_gc(weak)))");
     }
   /* APPLE LOCAL end ObjC GC */
+  /* APPLE LOCAL begin radar 5932809 - copyable byref blocks */
+  if (flag_blocks) {
+    builtin_define ("__block=__attribute__((__blocks__(byref)))");
+  }
+  /* APPLE LOCAL radar 6230656 */
+  /* code removed */
+  /* APPLE LOCAL end radar 5932809 - copyable byref blocks */
+
   /* APPLE LOCAL begin C* warnings to easy porting to new abi */
   if (flag_objc_abi == 2)
     builtin_define ("__OBJC2__");
@@ -1166,18 +1100,12 @@ darwin_cpp_builtins (cpp_reader *pfile)
   /* APPLE LOCAL begin radar 5072864 */
   if (flag_objc_zerocost_exceptions)
     builtin_define ("OBJC_ZEROCOST_EXCEPTIONS");
-  /* APPLE LOCAL begin radar 4899595 */
-  if (flag_objc_new_property)
-    builtin_define ("OBJC_NEW_PROPERTIES");
-  /* APPLE LOCAL end radar 4899595 */
+  /* APPLE LOCAL radar 4899595 */
+  builtin_define ("OBJC_NEW_PROPERTIES");
   /* APPLE LOCAL end radar 5072864 */
-  /* APPLE LOCAL begin radar 4224728 */
-  if (flag_pic)
-    builtin_define ("__PIC__");
-  /* APPLE LOCAL end radar 4224728 */
+/* APPLE LOCAL begin confused diff */
 }
-/* APPLE LOCAL end mainline 2005-09-01 3449986 */
-
+/* APPLE LOCAL end confused diff */
 /* APPLE LOCAL begin iframework for 4.3 4094959 */
 bool
 darwin_handle_c_option (size_t code, const char *arg, int value ATTRIBUTE_UNUSED)
@@ -1201,7 +1129,17 @@ darwin_handle_c_option (size_t code, const char *arg, int value ATTRIBUTE_UNUSED
 }
 /* APPLE LOCAL end iframework for 4.3 4094959 */
 
-/* APPLE LOCAL begin radar 4985544 - radar 5096648 */
+/* APPLE LOCAL begin radar 4985544 - radar 5096648 - radar 5195402 */
+/* Check that TYPE is CFStringRef type. */
+bool
+objc_check_cfstringref_type (tree type)
+{
+   tree CFStringRef_decl = lookup_name (get_identifier ("CFStringRef"));
+   if (!CFStringRef_decl || TREE_CODE (CFStringRef_decl) != TYPE_DECL)
+     return false;
+   return type == TREE_TYPE (CFStringRef_decl);
+}
+
 /* This routine checks that FORMAT_NUM'th argument ARGUMENT has the 'CFStringRef' type. */
 bool
 objc_check_format_cfstring (tree argument,
@@ -1209,9 +1147,13 @@ objc_check_format_cfstring (tree argument,
                             bool *no_add_attrs)
 {
   unsigned HOST_WIDE_INT i;
-  bool ok = true;
-  tree CFStringRef_decl;
-
+  /* APPLE LOCAL begin 6212507 */
+  if (format_num < 1)
+    {
+      error ("argument number of CFString format cannot be less than one");
+      return false;
+    }
+  /* APPLE LOCAL end 6212507 */
   for (i = 1; i != format_num; i++)
     {
       if (argument == 0)
@@ -1219,31 +1161,74 @@ objc_check_format_cfstring (tree argument,
        argument = TREE_CHAIN (argument);
     }
 
-  CFStringRef_decl = lookup_name_two (get_identifier ("CFStringRef"), 0);
-  if (!CFStringRef_decl || TREE_CODE (CFStringRef_decl) != TYPE_DECL)
-    ok = false;
-  else
-    {
-      tree t1 = TREE_VALUE (argument);
-      tree t2 = TREE_TYPE (CFStringRef_decl);
-      if (t1 != t2)
-        ok = false;
-    }
-
-  if (!ok)
+  if (!objc_check_cfstringref_type (TREE_VALUE (argument)))
     {
       error ("format CFString argument not an 'CFStringRef' type");
       *no_add_attrs = true;
+      return false;
     }
-  return ok;
+  return true;
 }
-/* APPLE LOCAL end radar 4985544 - radar 5096648 */
-/* APPLE LOCAL begin radar 2996215 */
-/* Objc wrapper to call libcpp's conversion routine. */
+/* APPLE LOCAL end radar 4985544 - radar 5096648 - radar 5195402 */
+
+/* APPLE LOCAL begin radar 2996215 - 6068877 */
+/* wrapper to call libcpp's conversion routine. */
 bool
-objc_cvt_utf8_utf16 (const unsigned char *inbuf, size_t length, 
+cvt_utf8_utf16 (const unsigned char *inbuf, size_t length, 
 		     unsigned char **uniCharBuf, size_t *numUniChars)
 {
   return cpp_utf8_utf16 (parse_in, inbuf, length, uniCharBuf, numUniChars);
 }
-/* APPLE LOCAL end radar 2996215 */
+/* This routine declares static char __utf16_string [numUniChars] in __TEXT,__ustring
+   section and initializes it with uniCharBuf[numUniChars] characters.
+*/ 
+tree
+create_init_utf16_var (const unsigned char *inbuf, size_t length, size_t *numUniChars)
+{
+  size_t l;
+  tree decl, type, init;
+  tree initlist = NULL_TREE;
+  tree attribute; 
+  const char *section_name = "__TEXT,__ustring";
+  int len = strlen (section_name);
+  unsigned char *uniCharBuf;
+  static int num;
+  const char *name_prefix = "__utf16_string_";
+  char *name;
+
+  if (!cvt_utf8_utf16 (inbuf, length, &uniCharBuf, numUniChars))
+    return NULL_TREE;
+
+  for (l = 0; l < *numUniChars; l++)
+    initlist = tree_cons (NULL_TREE, build_int_cst (char_type_node, uniCharBuf[l]), initlist);
+  type = build_array_type (char_type_node,
+                           build_index_type (build_int_cst (NULL_TREE, *numUniChars)));
+  name = (char *)alloca (strlen (name_prefix) + 10);
+  sprintf (name, "%s%d", name_prefix, ++num);
+  decl = build_decl (VAR_DECL, get_identifier (name), type);
+  TREE_STATIC (decl) = 1;
+  DECL_INITIAL (decl) = error_mark_node;  /* A real initializer is coming... */
+  DECL_IGNORED_P (decl) = 1;
+  DECL_ARTIFICIAL (decl) = 1;
+  DECL_CONTEXT (decl) = NULL_TREE;
+
+  attribute = tree_cons (NULL_TREE, build_string (len, section_name), NULL_TREE);
+  attribute = tree_cons (get_identifier ("section"), attribute, NULL_TREE);
+  decl_attributes (&decl, attribute, 0);
+  attribute = tree_cons (NULL_TREE, build_int_cst (NULL_TREE, 2), NULL_TREE);
+  attribute = tree_cons (get_identifier ("aligned"), attribute, NULL_TREE);
+  decl_attributes (&decl, attribute, 0);
+  init = build_constructor_from_list (type, nreverse (initlist));
+  TREE_CONSTANT (init) = 1;
+  TREE_STATIC (init) = 1;
+  TREE_READONLY (init) = 1;
+  if (c_dialect_cxx ())
+    TREE_TYPE (init) = NULL_TREE;
+  finish_decl (decl, init, NULL_TREE);
+  /* Ensure that the variable actually gets output.  */
+  mark_decl_referenced (decl);
+  /* Mark the decl to avoid "defined but not used" warning.  */
+  TREE_USED (decl) = 1;
+  return decl;
+}
+/* APPLE LOCAL end radar 2996215 - 6068877 */

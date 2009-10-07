@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002-2004 Apple Computer, Inc. All Rights Reserved.
+ * Copyright (c) 2002-2008 Apple Inc. All Rights Reserved.
  * 
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -47,10 +47,20 @@ IdentityCursorPolicyAndID::IdentityCursorPolicyAndID(const StorageManager::Keych
 	mPreferredIdentityChecked(false),
 	mPreferredIdentity(nil)
 {
+    if (mPolicy)
+        CFRetain(mPolicy);
+
+    if (mIDString)
+        CFRetain(mIDString);
 }
 
 IdentityCursorPolicyAndID::~IdentityCursorPolicyAndID() throw()
 {
+    if (mPolicy)
+        CFRelease(mPolicy);
+
+    if (mIDString)
+        CFRelease(mIDString);
 }
 
 void
@@ -108,7 +118,11 @@ IdentityCursorPolicyAndID::next(SecPointer<Identity> &identity)
 
 	if (!mPreferredIdentityChecked)
 	{
-		findPreferredIdentity();
+        try
+        {
+            findPreferredIdentity();
+        }
+        catch(...) {}
 		mPreferredIdentityChecked = true;
 		if (mPreferredIdentity)
 		{
@@ -222,8 +236,11 @@ IdentityCursorPolicyAndID::next(SecPointer<Identity> &identity)
 
 IdentityCursor::IdentityCursor(const StorageManager::KeychainList &searchList, CSSM_KEYUSE keyUsage) :
 	mSearchList(searchList),
-	mKeyCursor(mSearchList, CSSM_DL_DB_RECORD_PRIVATE_KEY, NULL)
+	mKeyCursor(mSearchList, CSSM_DL_DB_RECORD_PRIVATE_KEY, NULL),
+	mMutex(Mutex::recursive)
 {
+	StLock<Mutex>_(mMutex);
+
 	// If keyUsage is CSSM_KEYUSE_ANY then we need a key that can do everything
 	if (keyUsage & CSSM_KEYUSE_ANY)
 		keyUsage = CSSM_KEYUSE_ENCRYPT | CSSM_KEYUSE_DECRYPT
@@ -259,10 +276,14 @@ IdentityCursor::~IdentityCursor() throw()
 CFDataRef
 IdentityCursor::pubKeyHashForSystemIdentity(CFStringRef domain)
 {
+	StLock<Mutex>_(mMutex);
+
     CFDataRef entryValue = nil;
-    auto_ptr<Dictionary> identDict;
-    try {
-        identDict.reset(new Dictionary("com.apple.security.systemidentities", Dictionary::US_System));
+	auto_ptr<Dictionary> identDict;
+	Dictionary* d = Dictionary::CreateDictionary("com.apple.security.systemidentities", Dictionary::US_System);
+	if (d)
+	{
+		identDict.reset(d);
         entryValue = identDict->getDataValue(domain);
         if (entryValue == nil) {
             /* try for default entry if we're not already looking for default */
@@ -271,8 +292,7 @@ IdentityCursor::pubKeyHashForSystemIdentity(CFStringRef domain)
             }
         }
     }
-    catch(...) {
-    }
+
     if (entryValue) {
         CFRetain(entryValue);
     }
@@ -282,6 +302,8 @@ IdentityCursor::pubKeyHashForSystemIdentity(CFStringRef domain)
 bool
 IdentityCursor::next(SecPointer<Identity> &identity)
 {
+	StLock<Mutex>_(mMutex);
+
 	for (;;)
 	{
 		if (!mCertificateCursor)

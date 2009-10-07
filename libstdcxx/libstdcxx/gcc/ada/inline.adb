@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2004 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -29,7 +29,6 @@ with Einfo;    use Einfo;
 with Elists;   use Elists;
 with Errout;   use Errout;
 with Exp_Ch7;  use Exp_Ch7;
-with Exp_Ch11; use Exp_Ch11;
 with Exp_Tss;  use Exp_Tss;
 with Fname;    use Fname;
 with Fname.UF; use Fname.UF;
@@ -89,7 +88,7 @@ package body Inline is
    type Subp_Index is new Nat;
    No_Subp : constant Subp_Index := 0;
 
-   --  The subprogram entities are hashed into the Inlined table.
+   --  The subprogram entities are hashed into the Inlined table
 
    Num_Hash_Headers : constant := 512;
 
@@ -183,10 +182,10 @@ package body Inline is
    To_Clean : Elist_Id;
 
    procedure Add_Scope_To_Clean (Inst : Entity_Id);
-   --  Build set of scopes on which cleanup actions must be performed.
+   --  Build set of scopes on which cleanup actions must be performed
 
    procedure Cleanup_Scopes;
-   --  Complete cleanup actions on scopes that need it.
+   --  Complete cleanup actions on scopes that need it
 
    --------------
    -- Add_Call --
@@ -216,7 +215,7 @@ package body Inline is
             J := Successors.Table (J).Next;
          end loop;
 
-         --  On exit, make a successor entry for P2.
+         --  On exit, make a successor entry for P2
 
          Successors.Increment_Last;
          Successors.Table (Successors.Last).Subp := P2;
@@ -506,7 +505,7 @@ package body Inline is
       J     : Subp_Index;
 
       procedure New_Entry;
-      --  Initialize entry in Inlined table.
+      --  Initialize entry in Inlined table
 
       procedure New_Entry is
       begin
@@ -693,7 +692,8 @@ package body Inline is
             then
                Error_Msg_N
                  ("& cannot be inlined?", Inlined.Table (Index).Name);
-               --  A warning on the first one might be sufficient.
+
+               --  A warning on the first one might be sufficient ???
             end if;
          end loop;
 
@@ -986,29 +986,6 @@ package body Inline is
            and then not Is_Generic_Unit (Main_Unit_Entity)
          then
             Cleanup_Scopes;
-
-            --  Also generate subprogram descriptors that were delayed
-
-            for J in Pending_Descriptor.First .. Pending_Descriptor.Last loop
-               declare
-                  Ent : constant Entity_Id := Pending_Descriptor.Table (J);
-
-               begin
-                  if Is_Subprogram (Ent) then
-                     Generate_Subprogram_Descriptor_For_Subprogram
-                       (Get_Subprogram_Body (Ent), Ent);
-
-                  elsif Ekind (Ent) = E_Package then
-                     Generate_Subprogram_Descriptor_For_Package
-                       (Parent (Declaration_Node (Ent)), Ent);
-
-                  elsif Ekind (Ent) = E_Package_Body then
-                     Generate_Subprogram_Descriptor_For_Package
-                       (Declaration_Node (Ent), Ent);
-                  end if;
-               end;
-            end loop;
-
          elsif Is_Generic_Unit (Cunit_Entity (Main_Unit)) then
             End_Generic;
          end if;

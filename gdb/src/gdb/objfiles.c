@@ -43,7 +43,7 @@
 #include "gdb_string.h"
 #include "buildsym.h"
 #include "hashtab.h"
-
+#include "varobj.h" /* APPLE LOCAL: for varobj_delete_objfiles_vars  */
 #include "breakpoint.h"
 #include "block.h"
 #include "dictionary.h"
@@ -53,6 +53,7 @@
 #ifdef MACOSX_DYLD
 #include "inferior.h"
 #include "macosx-nat-dyld.h"
+#include "mach-o.h"
 #endif
 
 /* Prototypes for local functions */
@@ -978,6 +979,9 @@ free_objfile_internal (struct objfile *objfile)
     }
 
 
+  /* Now remove the varobj's that depend on this objfile.  */
+  varobj_delete_objfiles_vars (objfile);
+
   /* APPLE LOCAL: Remove all the obj_sections in this objfile from the
      ordered_sections list.  Do this before deleting the bfd, since
      we need to use the bfd_sections to do it.  */
@@ -989,6 +993,11 @@ free_objfile_internal (struct objfile *objfile)
   if (objfile->obfd != NULL)
     {
       char *name = bfd_get_filename (objfile->obfd);
+      /* APPLE LOCAL: we have to remove the bfd from the
+	 target's to_sections before we close it.  */
+
+      remove_target_sections (objfile->obfd);
+
       if (!bfd_close (objfile->obfd))
 	warning (_("cannot close \"%s\": %s"),
 		 name, bfd_errmsg (bfd_get_error ()));
@@ -1113,6 +1122,11 @@ clear_objfile (struct objfile *objfile)
 void
 free_objfile (struct objfile *objfile)
 {
+  /* APPLE LOCAL: Give a chance for any breakpoints to mark themselves as
+     pending with the name of the objfile kept around for accurate 
+     re-setting. */
+  tell_breakpoints_objfile_removed (objfile);
+
   if (objfile->separate_debug_objfile)
     {
       free_objfile (objfile->separate_debug_objfile);
@@ -1185,7 +1199,8 @@ objfile_relocate (struct objfile *objfile, struct section_offsets *new_offsets)
     if (!something_changed)
       return;
   }
-
+  
+  breakpoints_relocate (objfile, delta);
   /* APPLE LOCAL begin subroutine inlining  */
   /* Update all the inlined subroutine data for this objfile.  */
   inlined_subroutine_objfile_relocate (objfile,
@@ -1493,6 +1508,7 @@ find_pc_sect_section (CORE_ADDR pc, struct bfd_section *section)
     return cached_sect_section;
 
   last_sect_section_lookup_pc = pc;
+
   /* APPLE LOCAL end cache lookup values for improved performance  */
 
   /* APPLE LOCAL begin search in ordered sections */
@@ -1516,6 +1532,7 @@ find_pc_sect_section (CORE_ADDR pc, struct bfd_section *section)
 	return (s);
       }
 
+  last_sect_section_lookup_pc = INVALID_ADDRESS;
   cached_sect_section = NULL;
   /* APPLE LOCAL end cache lookup values for improved performance  */
   return (NULL);
@@ -1714,23 +1731,16 @@ find_objfile_by_name (const char *name, int exact)
   struct objfile *o, *temp;
   if (name == NULL || *name == '\0')
     return NULL;
-  int namelen = strlen (name);
 
   ALL_OBJFILES_SAFE (o, temp)
-    if (exact)
-      {
-        if (!strcmp (name, o->name))
-          return o;
-      }
-    else
-      {
-        int fnlen = strlen (o->name);
-        if (fnlen < namelen)
-          continue;
-        const char *c = o->name + fnlen - namelen;
-        if (!strcmp (name, c))
-          return o;
-      }
+    {
+       enum objfile_matches_name_return r;
+       r = objfile_matches_name (o, name);
+       if (exact && r == objfile_match_exact)
+         return o;
+       if (!exact && r == objfile_match_base)
+         return o;
+    }
 
   return NULL;
 }
@@ -1781,6 +1791,7 @@ enum objfile_matches_name_return
 objfile_matches_name (struct objfile *objfile, char *name)
 {
   const char *filename;
+  const char *bundlename;
   const char *real_name;
   
   if (objfile->name == NULL)
@@ -1791,6 +1802,10 @@ objfile_matches_name (struct objfile *objfile, char *name)
   if (strcmp (real_name, name) == 0)
     return objfile_match_exact;
   
+  bundlename = bundle_basename (real_name);
+  if (bundlename && strcmp (bundlename, name) == 0)
+    return objfile_match_base;
+
   filename = lbasename (real_name);
   if (filename == NULL)
     return objfile_no_match;
@@ -2257,7 +2272,7 @@ objfile_section_offset (struct objfile *objfile, int sect_idx)
 
   if (err_str != NULL)
     {
-      internal_error (__FILE__, __LINE__, err_str);
+      internal_error (__FILE__, __LINE__, "%s", err_str);
       return (CORE_ADDR) -1;
     }
 
@@ -2310,6 +2325,118 @@ objfile_bss_section_offset (struct objfile *objfile)
 }
 
 /* APPLE LOCAL END: objfile section offsets.  */
+
+/* APPLE LOCAL: objfile hitlists.  */
+/* We want to record all the objfiles that contribute to the 
+   parsing of an expression when making variable objects - so
+   we know which ones to toss when an objfile gets deleted.
+   So we set up an "objfile_hitlist" with objfile_init_hitlist,
+   and then the symbol lookup code calls objfile_add_to_hitlist
+   to add objfiles it uses.  Then you call objfile_detach_hitlist
+   to get ownership of the hitlist.
+   There can only be one hitlist going at a time.  */
+struct objfile_hitlist
+{
+  int num_elem;
+  struct objfile *ofiles[];
+};
+
+static struct objfile_hitlist *cur_objfile_hitlist;
+/* This is the alloc'ed size of the current objfile_hitlist. 
+  I had it part of the objfile_hitlist, but it is only needed
+  when building up the hitlist, so that's a waste of space.  */
+static int hitlist_max_elem;
+#define HITLIST_INITIAL_MAX_ELEM 1
+
+static void
+objfile_init_hitlist ()
+{
+  if (cur_objfile_hitlist != NULL)
+    internal_error (__FILE__, __LINE__, 
+		    "Tried to initialize hit list without "
+		    "closing previous hitlist.");
+  cur_objfile_hitlist = xmalloc (sizeof (struct objfile_hitlist) 
+				 + HITLIST_INITIAL_MAX_ELEM * sizeof (struct objfile *));
+  hitlist_max_elem = HITLIST_INITIAL_MAX_ELEM;
+  cur_objfile_hitlist->num_elem = 0;
+}
+
+void
+objfile_add_to_hitlist (struct objfile *ofile)
+{
+  int ctr;
+  if (cur_objfile_hitlist == NULL)
+    return;
+  if (ofile == NULL)
+    return;
+
+  if (cur_objfile_hitlist->num_elem == hitlist_max_elem)
+    {
+      hitlist_max_elem
+	+= hitlist_max_elem;
+      cur_objfile_hitlist = xrealloc (cur_objfile_hitlist, sizeof (struct objfile_hitlist)
+		     + hitlist_max_elem * sizeof (struct objfile *));
+    }
+  for (ctr = 0; ctr < cur_objfile_hitlist->num_elem; ctr++)
+    {
+      if (cur_objfile_hitlist->ofiles[ctr] == ofile)
+	return;
+    }
+  cur_objfile_hitlist->ofiles[ctr] = ofile;
+  cur_objfile_hitlist->num_elem += 1;
+}
+
+/* Use this to get control of the objfile_hitlist
+   you've been accumulating since the call to
+   make_cleanup_objfile_init_clear_hitlist.  You 
+   get a pointer to a malloc'ed hitlist structure.
+   When you are done with it you can just free it.  */
+
+struct objfile_hitlist *
+objfile_detach_hitlist ()
+{
+  struct objfile_hitlist *thislist;
+
+  thislist = cur_objfile_hitlist;
+  cur_objfile_hitlist = NULL;
+  hitlist_max_elem = HITLIST_INITIAL_MAX_ELEM;
+  return thislist;
+}
+
+static void
+objfile_clear_hitlist (void *notused)
+{
+  struct objfile_hitlist *hitlist;
+  hitlist = objfile_detach_hitlist ();
+  if (hitlist != NULL)
+    xfree (hitlist);
+}
+
+/* This will initialize the hitlist, and return a cleanup
+   that will clear the hitlist when called.  If you detach
+   the hitlist before you call the clearing cleanup, that
+   cleanup will do nothing.  */
+
+struct cleanup *
+make_cleanup_objfile_init_clear_hitlist ()
+{
+  objfile_init_hitlist ();
+  return make_cleanup (objfile_clear_hitlist, NULL);
+}
+
+int
+objfile_on_hitlist_p (struct objfile_hitlist *hitlist,
+		       struct objfile *ofile)
+{
+  int ctr;
+
+  for (ctr = 0; ctr < hitlist->num_elem; ctr++)
+    {
+      if (hitlist->ofiles[ctr] == ofile)
+	return 1;
+    }
+  return 0;
+}
 
 void
 _initialize_objfiles (void)

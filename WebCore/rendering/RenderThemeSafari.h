@@ -1,5 +1,6 @@
 /*
- * Copyright (C) 2007 Apple Inc.
+ * Copyright (C) 2007, 2008 Apple Inc.
+ * Copyright (C) 2009 Kenneth Rohde Christiansen
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -21,11 +22,16 @@
 #ifndef RenderThemeSafari_h
 #define RenderThemeSafari_h
 
-#ifdef USE_SAFARI_THEME
+#if USE(SAFARI_THEME)
 
 #include "RenderTheme.h"
 
+// If you have an empty placeholder SafariThemeConstants.h, then include SafariTheme.h
+// This is a workaround until a version of WebKitSupportLibrary is released with an updated SafariThemeConstants.h 
+#include <SafariTheme/SafariThemeConstants.h>
+#ifndef SafariThemeConstants_h
 #include <SafariTheme/SafariTheme.h>
+#endif
 
 #if PLATFORM(WIN)
 typedef void* HANDLE;
@@ -41,13 +47,12 @@ class RenderStyle;
 
 class RenderThemeSafari : public RenderTheme {
 public:
-    RenderThemeSafari();
-    virtual ~RenderThemeSafari();
+    static PassRefPtr<RenderTheme> create();
 
     // A method to obtain the baseline position for a "leaf" control.  This will only be used if a baseline
     // position cannot be determined by examining child content. Checkboxes and radio buttons are examples of
     // controls that need to do this.
-    virtual short baselinePosition(const RenderObject*) const;
+    virtual int baselinePosition(const RenderObject*) const;
 
     // A method asking if the control changes its tint when the window has focus or not.
     virtual bool controlSupportsTints(const RenderObject*) const;
@@ -58,11 +63,13 @@ public:
     virtual void adjustRepaintRect(const RenderObject*, IntRect&);
 
     virtual bool isControlStyled(const RenderStyle*, const BorderData&,
-                                 const BackgroundLayer&, const Color& backgroundColor) const;
+                                 const FillLayer&, const Color& backgroundColor) const;
 
     virtual Color platformActiveSelectionBackgroundColor() const;
     virtual Color platformInactiveSelectionBackgroundColor() const;
     virtual Color activeListBoxSelectionBackgroundColor() const;
+
+    virtual Color platformFocusRingColor() const;
 
     // System fonts.
     virtual void systemFont(int propId, FontDescription&) const;
@@ -118,8 +125,23 @@ protected:
 
     virtual void adjustSearchFieldResultsButtonStyle(CSSStyleSelector*, RenderStyle*, Element*) const;
     virtual bool paintSearchFieldResultsButton(RenderObject*, const RenderObject::PaintInfo&, const IntRect&);
+ 
+    virtual bool paintCapsLockIndicator(RenderObject*, const RenderObject::PaintInfo&, const IntRect&);
+
+#if ENABLE(VIDEO)
+    virtual bool paintMediaFullscreenButton(RenderObject*, const RenderObject::PaintInfo&, const IntRect&);
+    virtual bool paintMediaPlayButton(RenderObject*, const RenderObject::PaintInfo&, const IntRect&);
+    virtual bool paintMediaMuteButton(RenderObject*, const RenderObject::PaintInfo&, const IntRect&);
+    virtual bool paintMediaSeekBackButton(RenderObject*, const RenderObject::PaintInfo&, const IntRect&);
+    virtual bool paintMediaSeekForwardButton(RenderObject*, const RenderObject::PaintInfo&, const IntRect&);
+    virtual bool paintMediaSliderTrack(RenderObject*, const RenderObject::PaintInfo&, const IntRect&);
+    virtual bool paintMediaSliderThumb(RenderObject*, const RenderObject::PaintInfo&, const IntRect&);
+#endif
 
 private:
+    RenderThemeSafari();
+    virtual ~RenderThemeSafari();
+
     IntRect inflateRect(const IntRect&, const IntSize&, const int* margins) const;
 
     // Get the control size based off the font.  Used by some of the controls (like buttons).
@@ -155,13 +177,10 @@ private:
     void setSearchFieldSize(RenderStyle*) const;
 
     ThemeControlState determineState(RenderObject*) const;
-    
-private:
-    HMODULE m_themeDLL;
 };
 
 } // namespace WebCore
 
-#endif // defined(USE_SAFARI_THEME)
+#endif // #if USE(SAFARI_THEME)
 
 #endif // RenderThemeSafari_h

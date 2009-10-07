@@ -1,8 +1,30 @@
-2007-05-15  Fariborz Jahanian <fjahanian@apple.com>
+2008-08-04  Bill Wendling  <wendling@apple.com>
+
+        Radar 6121572
+        * charset.c (_cpp_convert_input): Don't read to.text[-1].
+
+2008-05-01  Mike Stump  <mrs@apple.com>
+
+	Radar 5774975
+	* charset.c (_cpp_convert_input): Eat UTF-8 BOM.
+
+2007-05-17  Fariborz Jahanian <fjahanian@apple.com>
 
         Radar 2996215
-	* charset.c (cpp_utf8_utf16): New
-	* include/cpplib.h (cpp_utf8_utf16): New decl.
+        * charset.c (cpp_utf8_utf16): New
+        * include/cpplib.h (cpp_utf8_utf16): New decl.
+
+2007-05-02  Eric Christopher  <echristo@apple.com>
+
+	Radar 4238322
+	* expr.c (num_div_op): Don't overflow if the result is
+	zero.
+
+2007-02-22  Geoffrey Keating  <geoffk@apple.com>
+
+	Radar 4927549
+	* init.c (lang_defaults): Enable extended identifiers by default
+	for languages which require them.
 
 2007-01-05  Bill Wendling  <wendling@apple.com>
 
@@ -47,7 +69,7 @@
 	Rename cw_asm_label_follows to iasm_label_follows.
 	Rename flag_cw_asm_blocks to flag_iasm_blocks.
 	* macro.c: Likewise.
-	* makedepend.c: Likewise.	
+	* makedepend.c: Likewise.
 
 2006-04-17  Devang Patel  <dpatel@apple.com>
 
@@ -90,11 +112,11 @@
 
 	Radar 4211954
 	* expr.c (interpret_int_suffix): Add support for the h suffix to
-	identify hex integers.	
+	identify hex integers.
 	(cpp_classify_number): Likewise.
 	(cpp_interpret_integer): Likewise.
 	* include/cpplib.h (struct cpp_options): Likewise.
-	
+
 2005-06-15  Geoffrey Keating  <geoffk@apple.com>
 
 	* lex.c (warn_about_normalization): Add cast to 'sz'.
@@ -130,7 +152,7 @@
 	* pch.c (count_defs): Remove Symbol Separation support.
 	(write_defs): Same.
 	(cpp_valid_state): Remove warn_invalid_sr use.
-	* directives.c (find_include_cinfo, cpp_symbol_separation_init, 
+	* directives.c (find_include_cinfo, cpp_symbol_separation_init,
 	cpp_write_symbol_deps, cpp_get_stabs_checksum): Remove.
 
 2005-02-27  Devang Patel  <dpatel@apple.com>
@@ -152,7 +174,7 @@
 2005-01-04  Anders Bertelrud  <anders@apple.com>
 
 	Radar 3871393
-	* include/cpplib.h (struct cpp_dir):  Added 'header_map' field. 
+	* include/cpplib.h (struct cpp_dir):  Added 'header_map' field.
 
 2005-01-06  Mike Stump  <mrs@apple.com>
 
@@ -177,7 +199,7 @@
 
 	Radar 3368707
 	Support for CodeWarrior-style assembly language blocks and
-	functions.  
+	functions.
 	* include/cpplib.h (CPP_BOL, CPP_EOL): Define.
 	* internal.h (struct cpp_context): New field bol_p.
 	* lex.c (lex_identifier): Handle special chars in opcodes.

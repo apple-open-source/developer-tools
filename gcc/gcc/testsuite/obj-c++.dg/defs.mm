@@ -1,11 +1,12 @@
-/* APPLE LOCAL file mainline */
 /* Check @defs() in Objective-C++ */
 /* Contributed by Devang Patel  <dpatel@apple.com>  */
+
 /* { dg-options "-lobjc" } */
 /* { dg-do run } */
 /* APPLE LOCAL radar 4894756 */
-/* { dg-skip-if "" { *-*-darwin* } { "-m64" } { "" } } */
-
+/* { dg-require-effective-target ilp32 } */
+/* APPLE LOCAL ARM objc2 */
+/* { dg-skip-if "" { arm*-*-darwin* } { "*" } { "" } } */
 
 #include <stdlib.h>
 #include <objc/objc.h>

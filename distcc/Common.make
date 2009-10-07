@@ -47,7 +47,7 @@ include $(CoreOSMakefiles)/Standard/Standard.make
 
 #RC_ARCHS   = $(shell for i in `file /usr/lib/libSystem.B.dylib | grep 'shared library ' | sed 's|.*shared library ||'`; do $(CC) -arch $$i -E -x c /dev/null > /dev/null 2>&1 && echo $$i; done)
 ifndef RC_ARCHS
-RC_ARCHS = ppc i386
+RC_ARCHS = ppc i386 x86_64
 endif
 ifndef RC_RELEASE
 RC_RELEASE = unknown

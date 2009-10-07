@@ -1,8 +1,8 @@
 /* APPLE LOCAL file 4631818 */
 /* Execution check for foreach. Make sure that whole tree is generated for function with
    this particular brand of foreach. */
-/* { dg-options "-mmacosx-version-min=10.5 -framework Foundation -framework CoreFoundation" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
-/* { dg-options "-framework Foundation -framework CoreFoundation" { target arm*-*-darwin* } } */
+/* { dg-options "-mmacosx-version-min=10.5 -framework Foundation" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
+/* { dg-options "-framework Foundation" { target arm*-*-darwin* } } */
 /* { dg-do run } */
 
 #include <Foundation/Foundation.h>
@@ -12,7 +12,7 @@
 int Verbosity = 0;
 int Errors = 0;
 
-bool testHandwritten(char *style, char *test, char *message, id collection, NSSet *reference) {
+bool testHandwritten(const char *style, const char *test, const char *message, id collection, NSSet *reference) {
     int counter = 0;
     bool result = true;
     if (Verbosity) {
@@ -53,7 +53,7 @@ bool testHandwritten(char *style, char *test, char *message, id collection, NSSe
     }
 }
 
-bool testCompiler(char *style, char *test, char *message, id collection, NSSet *reference) {
+bool testCompiler(const char *style, const char *test, const char *message, id collection, NSSet *reference) {
     int counter = 0;
     bool result = true;
     if (Verbosity) {
@@ -74,7 +74,7 @@ bool testCompiler(char *style, char *test, char *message, id collection, NSSet *
     }
 }
 
-bool testCompleteness(char *test, char *message, id collection, NSSet *reference) {
+bool testCompleteness(const char *test, const char *message, id collection, NSSet *reference) {
     testHandwritten("handwritten", test, message, collection, reference);
     testCompiler("compiler", test, message, collection, reference);
 }
@@ -96,7 +96,7 @@ void makeReferences(int n) {
     }
 }
     
-void testCollections(char *test, NSArray *array, NSSet *set) {
+void testCollections(const char *test, NSArray *array, NSSet *set) {
     NSAutoreleasePool *pool = [NSAutoreleasePool new];
     id collection;
     collection = [NSMutableArray arrayWithArray:array];
@@ -114,7 +114,7 @@ void testCollections(char *test, NSArray *array, NSSet *set) {
     [pool drain];
 }
 
-void testInnerDecl(char *test, char *message, id collection) {
+void testInnerDecl(const char *test, const char *message, id collection) {
     int counter = 0;
     for (id x in collection)
         ++counter;
@@ -127,7 +127,7 @@ void testInnerDecl(char *test, char *message, id collection) {
 // use 0 to show that the functions are emitted when no foreach loop is present
 // use 1 to show that the functions disappear
 
-void testOuterDecl(char *test, char *message, id collection) {
+void testOuterDecl(const char *test, const char *message, id collection) {
     int counter = 0;
     id x;
     for (x in collection)
@@ -137,7 +137,7 @@ void testOuterDecl(char *test, char *message, id collection) {
         ++Errors;
     }
 }
-void testInnerExpression(char *test, char *message, id collection) {
+void testInnerExpression(const char *test, const char *message, id collection) {
     int counter = 0;
     for (id x in [collection self])
         ++counter;
@@ -146,7 +146,7 @@ void testInnerExpression(char *test, char *message, id collection) {
         ++Errors;
     }
 }
-void testOuterExpression(char *test, char *message, id collection) {
+void testOuterExpression(const char *test, const char *message, id collection) {
     int counter = 0;
     id x;
     for (x in [collection self])
@@ -157,7 +157,7 @@ void testOuterExpression(char *test, char *message, id collection) {
     }
 }
 
-void testExpressions(char *message, id collection) {
+void testExpressions(const char *message, id collection) {
     testInnerDecl("inner", message, collection);
     testOuterDecl("outer", message, collection);
     testInnerExpression("outer expression", message, collection);

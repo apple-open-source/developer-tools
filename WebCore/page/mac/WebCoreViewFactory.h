@@ -23,20 +23,13 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  */
 
-@class NSArray;
-@class NSDictionary;
-@class NSMenu;
-@class NSString;
-@class NSView;
-@class WebCoreFrameBridge;
 @class WebCoreTextMarker;
 @class WebCoreTextMarkerRange;
 
 @protocol WebCoreViewFactory
 
 - (NSArray *)pluginsInfo; // array of id <WebCorePluginInfo>
-- (void)refreshPlugins:(BOOL)reloadPages;
-- (BOOL)pluginSupportsMIMEType:(NSString *)MIMEType;
+- (void)refreshPlugins;
 
 - (NSString *)inputElementAltText;
 - (NSString *)resetButtonDefaultLabel;
@@ -86,9 +79,23 @@
 - (NSString *)contextMenuItemTagStartSpeaking;
 - (NSString *)contextMenuItemTagStopSpeaking;
 - (NSString *)contextMenuItemTagWritingDirectionMenu;
+- (NSString *)contextMenuItemTagTextDirectionMenu;
 - (NSString *)contextMenuItemTagDefaultDirection;
 - (NSString *)contextMenuItemTagLeftToRight;
 - (NSString *)contextMenuItemTagRightToLeft;
+- (NSString *)contextMenuItemTagCorrectSpellingAutomatically;
+- (NSString *)contextMenuItemTagSubstitutionsMenu;
+- (NSString *)contextMenuItemTagShowSubstitutions:(bool)show;
+- (NSString *)contextMenuItemTagSmartCopyPaste;
+- (NSString *)contextMenuItemTagSmartQuotes;
+- (NSString *)contextMenuItemTagSmartDashes;
+- (NSString *)contextMenuItemTagSmartLinks;
+- (NSString *)contextMenuItemTagTextReplacement;
+- (NSString *)contextMenuItemTagTransformationsMenu;
+- (NSString *)contextMenuItemTagMakeUpperCase;
+- (NSString *)contextMenuItemTagMakeLowerCase;
+- (NSString *)contextMenuItemTagCapitalize;
+- (NSString *)contextMenuItemTagChangeBack:(NSString *)replacedString;
 - (NSString *)contextMenuItemTagInspectElement;
 
 - (NSString *)searchMenuNoRecentSearchesText;
@@ -96,6 +103,8 @@
 - (NSString *)searchMenuClearRecentSearchesText;
 
 - (NSString *)defaultLanguageCode;
+
+- (NSString *)imageTitleForFilename:(NSString *)filename width:(int)width height:(int)height;
 
 - (BOOL)objectIsTextMarker:(id)object;
 - (BOOL)objectIsTextMarkerRange:(id)object;
@@ -108,29 +117,37 @@
 - (WebCoreTextMarker *)endOfTextMarkerRange:(WebCoreTextMarkerRange *)range;
 
 - (void)accessibilityHandleFocusChanged;
+- (CGRect)accessibilityConvertScreenRect:(CGRect)bounds;
 
 - (AXUIElementRef)AXUIElementForElement:(id)element;
 - (void)unregisterUniqueIdForUIElement:(id)element;
-
-- (WebCoreFrameBridge *)bridgeForView:(NSView *)aView;
 
 - (NSString *)AXWebAreaText;
 - (NSString *)AXLinkText;
 - (NSString *)AXListMarkerText;
 - (NSString *)AXImageMapText;
 - (NSString *)AXHeadingText;
+- (NSString *)AXDefinitionListTermText;
+- (NSString *)AXDefinitionListDefinitionText;
 
+- (NSString *)AXButtonActionVerb;
+- (NSString *)AXRadioButtonActionVerb;
+- (NSString *)AXTextFieldActionVerb;
+- (NSString *)AXCheckedCheckBoxActionVerb;
+- (NSString *)AXUncheckedCheckBoxActionVerb;
+- (NSString *)AXLinkActionVerb;
+
+- (NSString *)multipleFileUploadTextForNumberOfFiles:(unsigned)numberOfFiles;
 // FTP Directory Related
 - (NSString *)unknownFileSizeText;
+
+- (NSString *)mediaElementLoadingStateText;
+- (NSString *)mediaElementLiveBroadcastStateText;
 
 @end
 
 @interface WebCoreViewFactory : NSObject
-{
-}
-
 + (WebCoreViewFactory *)sharedFactory;
-
 @end
 
 @interface WebCoreViewFactory (SubclassResponsibility) <WebCoreViewFactory>

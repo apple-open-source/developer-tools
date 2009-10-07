@@ -494,7 +494,6 @@ core_cache_section_registers (asection *sec, int flavour,
 	   memory leak since we will copy out just what we need into a new
 	   buffer.  */
 	ULONGEST sub_flavour = extract_unsigned_integer ((const gdb_byte *)regs, 4);
-	ULONGEST count = extract_unsigned_integer ((const gdb_byte *)regs, 4);
 	if (sub_flavour == BFD_MACH_O_i386_THREAD_STATE)
 	  {
 	    gdb_assert (cached_regs_raw->i386_gp_regs == NULL);
@@ -522,7 +521,6 @@ core_cache_section_registers (asection *sec, int flavour,
 	   memory leak since we will copy out just what we need into a new
 	   buffer.  */
 	ULONGEST sub_flavour = extract_unsigned_integer ((const gdb_byte *)regs, 4);
-	ULONGEST count = extract_unsigned_integer ((const gdb_byte *)regs, 4);
 	if (sub_flavour == BFD_MACH_O_i386_FLOAT_STATE)
 	  {
 	    gdb_assert (cached_regs_raw->i386_fp_regs == NULL);

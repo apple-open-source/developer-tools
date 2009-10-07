@@ -121,10 +121,9 @@ HEADERS				=	$(HFILES:%=$(SRCROOT)/%) 	\
 
 INCLUDES 			= 	-I$(PLUGIN_SUPPORT) -I.
 
-OPT				=	-O2
+OPT				=	-Os
 
 CFLAGS 				= 	-gdwarf-2			\
-					-D__DARWIN_UNIX03=0             \
 					$(OPT)				\
 					-c				\
 					-DVERSION=\""$(VERSION)"\"	\
@@ -164,15 +163,15 @@ INSTALL_FILES_PARTIAL_LIST	=	README.txt			\
 
 PRIVATE_BUILD			=	
 ifneq ($(PRIVATE_BUILD),,)
-FIXUP 				=	sudo chgrp procmod $(SYMROOT)/$(PLUGIN) && sudo chmod g+s $(SYMROOT)/$(PLUGIN)
+FIXUP 				=	
 else
 FIXUP				=	
 endif
 
 # Note: Alternative FIXUP:
 #FIXUP 				=	dsymutil -o $(SYMROOT)/$(PLUGIN).dSYM $(SYMROOT)/$(PLUGIN); \
-#					strip -x $(SYMROOT)/$(PLUGIN); \
-#					sudo chgrp procmod $(SYMROOT)/$(PLUGIN) && sudo chmod g+s $(SYMROOT)/$(PLUGIN)
+#					strip -x $(SYMROOT)/$(PLUGIN)
+#					
 
 # While this mimics the full gdb build, for my private builds, I do not see any need
 # to do this since gdb is fully capable of using the embedded dwarf debug info (even
@@ -214,8 +213,6 @@ install				:	all $(DSTDIR)
 	strip -x $(SYMROOT)/$(PLUGIN) -o $(DSTDIR)/$(PLUGIN)
 	install -m 755 $(DSTDIR)/$(PLUGIN) $(SYMROOT)/$(PLUGIN)
 	#chmod 755 $(DSTDIR)/$(PLUGIN)
-	chgrp procmod $(SYMROOT)/$(PLUGIN) && chmod g+s $(SYMROOT)/$(PLUGIN)
-	chgrp procmod $(DSTDIR)/$(PLUGIN) && chmod g+s $(DSTDIR)/$(PLUGIN)
 
 #--------------------------------------------------------------------------------------#
 #                        *-------------*

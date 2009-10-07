@@ -7,7 +7,7 @@
 --                                 B o d y                                  --
 --                             (Dummy version)                              --
 --                                                                          --
---          Copyright (C) 1999-2001 Free Software Foundation, Inc.          --
+--          Copyright (C) 1999-2005 Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -17,8 +17,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -41,8 +41,6 @@ package body System.Machine_State_Operations is
 
    pragma Warnings (Off);
 
-   use System.Exceptions;
-
    ----------------------------
    -- Allocate_Machine_State --
    ----------------------------
@@ -51,15 +49,6 @@ package body System.Machine_State_Operations is
    begin
       return Machine_State (Null_Address);
    end Allocate_Machine_State;
-
-   -------------------
-   -- Enter_Handler --
-   -------------------
-
-   procedure Enter_Handler (M : Machine_State; Handler : Handler_Loc) is
-   begin
-      null;
-   end Enter_Handler;
 
    ----------------
    -- Fetch_Code --
@@ -102,9 +91,7 @@ package body System.Machine_State_Operations is
    -- Pop_Frame --
    ---------------
 
-   procedure Pop_Frame
-     (M    : Machine_State;
-      Info : Subprogram_Info_Type) is
+   procedure Pop_Frame (M : Machine_State) is
    begin
       null;
    end Pop_Frame;
@@ -117,17 +104,5 @@ package body System.Machine_State_Operations is
    begin
       null;
    end Set_Machine_State;
-
-   ------------------------------
-   -- Set_Signal_Machine_State --
-   ------------------------------
-
-   procedure Set_Signal_Machine_State
-     (M       : Machine_State;
-      Context : System.Address)
-   is
-   begin
-      null;
-   end Set_Signal_Machine_State;
 
 end System.Machine_State_Operations;

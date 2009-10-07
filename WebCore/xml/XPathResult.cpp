@@ -1,6 +1,6 @@
 /*
- * Copyright 2005 Frerich Raabe <raabe@kde.org>
- * Copyright (C) 2006 Apple Computer, Inc.
+ * Copyright (C) 2005 Frerich Raabe <raabe@kde.org>
+ * Copyright (C) 2006, 2009 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,30 +29,19 @@
 
 #if ENABLE(XPATH)
 
-#include "EventListener.h"
-#include "EventNames.h"
-#include "EventTargetNode.h"
+#include "Document.h"
+#include "Node.h"
 #include "ExceptionCode.h"
 #include "XPathEvaluator.h"
+#include "XPathException.h"
 
 namespace WebCore {
 
 using namespace XPath;
 
-class InvalidatingEventListener : public EventListener {
-public:
-    InvalidatingEventListener(XPathResult* result) : m_result(result) { }
-    virtual void handleEvent(Event*, bool) { m_result->invalidateIteratorState(); }
-private:
-    XPathResult* m_result;
-};
-
-XPathResult::XPathResult(EventTargetNode* eventTarget, const Value& value)
+XPathResult::XPathResult(Document* document, const Value& value)
     : m_value(value)
-    , m_eventTarget(eventTarget)
 {
-    m_eventListener = new InvalidatingEventListener(this);
-    m_eventTarget->addEventListener(EventNames::DOMSubtreeModifiedEvent, m_eventListener, false);
     switch (m_value.type()) {
         case Value::BooleanValue:
             m_resultType = BOOLEAN_TYPE;
@@ -67,7 +56,8 @@ XPathResult::XPathResult(EventTargetNode* eventTarget, const Value& value)
             m_resultType = UNORDERED_NODE_ITERATOR_TYPE;
             m_nodeSetPosition = 0;
             m_nodeSet = m_value.toNodeSet();
-            m_invalidIteratorState = false;
+            m_document = document;
+            m_domTreeVersion = document->domTreeVersion();
             return;
     }
     ASSERT_NOT_REACHED();
@@ -75,8 +65,6 @@ XPathResult::XPathResult(EventTargetNode* eventTarget, const Value& value)
 
 XPathResult::~XPathResult()
 {
-    if (m_eventTarget)
-        m_eventTarget->removeEventListener(EventNames::DOMSubtreeModifiedEvent, m_eventListener.get(), false);
 }
 
 void XPathResult::convertTo(unsigned short type, ExceptionCode& ec)
@@ -101,14 +89,14 @@ void XPathResult::convertTo(unsigned short type, ExceptionCode& ec)
         case ANY_UNORDERED_NODE_TYPE:
         case FIRST_ORDERED_NODE_TYPE: // This is correct - singleNodeValue() will take care of ordering.
             if (!m_value.isNodeSet()) {
-                ec = TYPE_ERR;
+                ec = XPathException::TYPE_ERR;
                 return;
             }
             m_resultType = type;
             break;
         case ORDERED_NODE_ITERATOR_TYPE:
             if (!m_value.isNodeSet()) {
-                ec = TYPE_ERR;
+                ec = XPathException::TYPE_ERR;
                 return;
             }
             m_nodeSet.sort();
@@ -116,7 +104,7 @@ void XPathResult::convertTo(unsigned short type, ExceptionCode& ec)
             break;
         case ORDERED_NODE_SNAPSHOT_TYPE:
             if (!m_value.isNodeSet()) {
-                ec = TYPE_ERR;
+                ec = XPathException::TYPE_ERR;
                 return;
             }
             m_value.toNodeSet().sort();
@@ -133,7 +121,7 @@ unsigned short XPathResult::resultType() const
 double XPathResult::numberValue(ExceptionCode& ec) const
 {
     if (resultType() != NUMBER_TYPE) {
-        ec = TYPE_ERR;
+        ec = XPathException::TYPE_ERR;
         return 0.0;
     }
     return m_value.toNumber();
@@ -142,7 +130,7 @@ double XPathResult::numberValue(ExceptionCode& ec) const
 String XPathResult::stringValue(ExceptionCode& ec) const
 {
     if (resultType() != STRING_TYPE) {
-        ec = TYPE_ERR;
+        ec = XPathException::TYPE_ERR;
         return String();
     }
     return m_value.toString();
@@ -151,7 +139,7 @@ String XPathResult::stringValue(ExceptionCode& ec) const
 bool XPathResult::booleanValue(ExceptionCode& ec) const
 {
     if (resultType() != BOOLEAN_TYPE) {
-        ec = TYPE_ERR;
+        ec = XPathException::TYPE_ERR;
         return false;
     }
     return m_value.toBoolean();
@@ -160,7 +148,7 @@ bool XPathResult::booleanValue(ExceptionCode& ec) const
 Node* XPathResult::singleNodeValue(ExceptionCode& ec) const
 {
     if (resultType() != ANY_UNORDERED_NODE_TYPE && resultType() != FIRST_ORDERED_NODE_TYPE) {
-        ec = TYPE_ERR;
+        ec = XPathException::TYPE_ERR;
         return 0;
     }
   
@@ -171,30 +159,19 @@ Node* XPathResult::singleNodeValue(ExceptionCode& ec) const
         return nodes.anyNode();
 }
 
-void XPathResult::invalidateIteratorState()
-{ 
-    m_invalidIteratorState = true;
-    
-    ASSERT(m_eventTarget);
-    ASSERT(m_eventListener);
-    
-    m_eventTarget->removeEventListener(EventNames::DOMSubtreeModifiedEvent, m_eventListener.get(), false);
-    
-    m_eventTarget = 0;
-}
-
 bool XPathResult::invalidIteratorState() const
 {
     if (resultType() != UNORDERED_NODE_ITERATOR_TYPE && resultType() != ORDERED_NODE_ITERATOR_TYPE)
         return false;
-    
-    return m_invalidIteratorState;
+
+    ASSERT(m_document);
+    return m_document->domTreeVersion() != m_domTreeVersion;
 }
 
 unsigned long XPathResult::snapshotLength(ExceptionCode& ec) const
 {
     if (resultType() != UNORDERED_NODE_SNAPSHOT_TYPE && resultType() != ORDERED_NODE_SNAPSHOT_TYPE) {
-        ec = TYPE_ERR;
+        ec = XPathException::TYPE_ERR;
         return 0;
     }
 
@@ -204,11 +181,11 @@ unsigned long XPathResult::snapshotLength(ExceptionCode& ec) const
 Node* XPathResult::iterateNext(ExceptionCode& ec)
 {
     if (resultType() != UNORDERED_NODE_ITERATOR_TYPE && resultType() != ORDERED_NODE_ITERATOR_TYPE) {
-        ec = TYPE_ERR;
+        ec = XPathException::TYPE_ERR;
         return 0;
     }
     
-    if (m_invalidIteratorState) {
+    if (invalidIteratorState()) {
         ec = INVALID_STATE_ERR;
         return 0;
     }
@@ -226,7 +203,7 @@ Node* XPathResult::iterateNext(ExceptionCode& ec)
 Node* XPathResult::snapshotItem(unsigned long index, ExceptionCode& ec)
 {
     if (resultType() != UNORDERED_NODE_SNAPSHOT_TYPE && resultType() != ORDERED_NODE_SNAPSHOT_TYPE) {
-        ec = TYPE_ERR;
+        ec = XPathException::TYPE_ERR;
         return 0;
     }
     

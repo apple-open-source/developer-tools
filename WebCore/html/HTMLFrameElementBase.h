@@ -1,10 +1,8 @@
 /*
- * This file is part of the DOM implementation for KDE.
- *
  * Copyright (C) 1999 Lars Knoll (knoll@kde.org)
  *           (C) 1999 Antti Koivisto (koivisto@kde.org)
  *           (C) 2000 Simon Hausmann <hausmann@kde.org>
- * Copyright (C) 2004, 2006 Apple Computer, Inc.
+ * Copyright (C) 2004, 2006, 2008 Apple Inc. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -37,11 +35,11 @@ public:
 
     virtual void insertedIntoDocument();
     virtual void removedFromDocument();
-    virtual void willRemove();
 
     virtual void attach();
+    virtual bool canLazyAttach() { return false; }
 
-    String location() const;
+    KURL location() const;
     void setLocation(const String&);
 
     virtual bool isFocusable() const;
@@ -49,7 +47,7 @@ public:
     
     virtual bool isURLAttribute(Attribute*) const;
 
-    ScrollbarMode scrollingMode() const { return m_scrolling; }
+    virtual ScrollbarMode scrollingMode() const { return m_scrolling; }
     
     int getMarginWidth() const { return m_marginWidth; }
     int getMarginHeight() const { return m_marginHeight; }
@@ -75,7 +73,7 @@ public:
     String scrolling() const;
     void setScrolling(const String&);
 
-    String src() const;
+    KURL src() const;
     void setSrc(const String&);
 
     int width() const;
@@ -93,7 +91,7 @@ protected:
     static void setNameAndOpenURLCallback(Node*);
 
     AtomicString m_URL;
-    AtomicString m_name;
+    AtomicString m_frameName;
 
     ScrollbarMode m_scrolling;
 

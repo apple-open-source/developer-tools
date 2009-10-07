@@ -17,7 +17,7 @@ with Ada.Numerics.Generic_Complex_Types;
 pragma Elaborate_All (Ada.Numerics.Generic_Complex_Types);
 
 package Interfaces.Fortran is
-pragma Pure (Fortran);
+   pragma Pure;
 
    type Fortran_Integer  is new Integer;
    type Real             is new Float;
@@ -45,19 +45,19 @@ pragma Pure (Fortran);
 
    type Fortran_Character is array (Positive range <>) of Character_Set;
 
-   function To_Fortran (Item : in Character)     return Character_Set;
-   function To_Ada     (Item : in Character_Set) return Character;
+   function To_Fortran (Item : Character)     return Character_Set;
+   function To_Ada     (Item : Character_Set) return Character;
 
-   function To_Fortran (Item : in String)            return Fortran_Character;
-   function To_Ada     (Item : in Fortran_Character) return String;
+   function To_Fortran (Item : String)            return Fortran_Character;
+   function To_Ada     (Item : Fortran_Character) return String;
 
    procedure To_Fortran
-     (Item   : in String;
+     (Item   : String;
       Target : out Fortran_Character;
       Last   : out Natural);
 
    procedure To_Ada
-     (Item   : in Fortran_Character;
+     (Item   : Fortran_Character;
       Target : out String;
       Last   : out Natural);
 

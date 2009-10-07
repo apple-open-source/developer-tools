@@ -15,12 +15,26 @@
  */
 
 #include "apr_pools.h"
+#include "apr_general.h"
 #include "abts.h"
 
 #ifndef APR_TEST_UTIL
 #define APR_TEST_UTIL
 
-/* XXX FIXME */
+/* XXX: FIXME - these all should become much more utilitarian 
+ * and part of apr, itself
+ */
+
+#ifdef WIN32
+#ifdef BINPATH
+#define TESTBINPATH APR_STRINGIFY(BINPATH) "/"
+#else
+#define TESTBINPATH ""
+#endif
+#else
+#define TESTBINPATH "./"
+#endif
+
 #ifdef WIN32
 #define EXTENSION ".exe"
 #elif NETWARE
@@ -62,6 +76,7 @@ abts_suite *testglobalmutex(abts_suite *suite);
 abts_suite *testhash(abts_suite *suite);
 abts_suite *testipsub(abts_suite *suite);
 abts_suite *testlock(abts_suite *suite);
+abts_suite *testcond(abts_suite *suite);
 abts_suite *testlfs(abts_suite *suite);
 abts_suite *testmmap(abts_suite *suite);
 abts_suite *testnames(abts_suite *suite);
@@ -73,7 +88,6 @@ abts_suite *testpool(abts_suite *suite);
 abts_suite *testproc(abts_suite *suite);
 abts_suite *testprocmutex(abts_suite *suite);
 abts_suite *testrand(abts_suite *suite);
-abts_suite *testrand2(abts_suite *suite);
 abts_suite *testsleep(abts_suite *suite);
 abts_suite *testshm(abts_suite *suite);
 abts_suite *testsock(abts_suite *suite);

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2004 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -28,7 +28,7 @@
 --  reporting packages, including Errout and Prj.Err.
 
 with Table;
-with Types;  use Types;
+with Types; use Types;
 
 package Erroutc is
 
@@ -122,7 +122,7 @@ package Erroutc is
    --  Error_Msg routines.
 
    function Get_Location (E : Error_Msg_Id) return Source_Ptr;
-   --  Returns the flag location of the error message with the given id E.
+   --  Returns the flag location of the error message with the given id E
 
    -----------------------------------
    -- Error Message Data Structures --
@@ -307,8 +307,8 @@ package Erroutc is
 
    procedure Set_Msg_Blank;
    --  Sets a single blank in the message if the preceding character is a
-   --  non-blank character other than a left parenthesis. Has no effect if
-   --  manual quote mode is turned on.
+   --  non-blank character other than a left parenthesis or minus. Has no
+   --  effect if manual quote mode is turned on.
 
    procedure Set_Msg_Blank_Conditional;
    --  Sets a single blank in the message if the preceding character is a
@@ -332,7 +332,7 @@ package Erroutc is
    --  Handle name insertion (% insertion character)
 
    procedure Set_Msg_Insertion_Reserved_Name;
-   --  Handle insertion of reserved word name (* insertion character).
+   --  Handle insertion of reserved word name (* insertion character)
 
    procedure Set_Msg_Insertion_Reserved_Word
      (Text : String;

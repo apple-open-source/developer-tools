@@ -29,8 +29,8 @@
 
 #if ENABLE(XPATH)
 
-#include "Shared.h"
-#include <wtf/Forward.h>
+#include <wtf/RefCounted.h>
+#include <wtf/PassRefPtr.h>
 
 namespace WebCore {
 
@@ -42,17 +42,17 @@ namespace WebCore {
     class XPathNSResolver;
     class XPathResult;
 
-    // FIXME: Should these exception codes move to another header?
-    const int XPathExceptionOffset = 400;
-    const int XPathExceptionMax = 499;
-    enum XPathExceptionCode { INVALID_EXPRESSION_ERR = XPathExceptionOffset + 51, TYPE_ERR };
-
-    class XPathEvaluator : public Shared<XPathEvaluator> {
+    class XPathEvaluator : public RefCounted<XPathEvaluator> {
     public:
+        static PassRefPtr<XPathEvaluator> create() { return adoptRef(new XPathEvaluator); }
+        
         PassRefPtr<XPathExpression> createExpression(const String& expression, XPathNSResolver*, ExceptionCode&);
         PassRefPtr<XPathNSResolver> createNSResolver(Node* nodeResolver);
         PassRefPtr<XPathResult> evaluate(const String& expression, Node* contextNode,
             XPathNSResolver*, unsigned short type, XPathResult*, ExceptionCode&);
+
+    private:
+        XPathEvaluator() { }
     };
 
 }

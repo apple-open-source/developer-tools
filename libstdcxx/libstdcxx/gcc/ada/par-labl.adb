@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2004, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -42,10 +42,10 @@ procedure Labl is
    --  Next label node to process
 
    function Find_Enclosing_Body_Or_Block (N : Node_Id) return Node_Id;
-   --  Find the innermost body or block that encloses N.
+   --  Find the innermost body or block that encloses N
 
    function Find_Enclosing_Body (N : Node_Id) return Node_Id;
-   --  Find the innermost body that encloses N.
+   --  Find the innermost body that encloses N
 
    procedure Check_Distinct_Labels;
    --  Checks the rule in RM-5.1(11), which requires distinct identifiers
@@ -134,7 +134,7 @@ procedure Labl is
       Result : Node_Id := Parent (N);
 
    begin
-      --  Climb up the parent chain until we find a body or block.
+      --  Climb up the parent chain until we find a body or block
 
       while Present (Result)
         and then Nkind (Result) /= N_Accept_Statement
@@ -160,7 +160,7 @@ procedure Labl is
       Succ      : Elmt_Id;
 
       function Goto_Id (Goto_Node : Node_Id) return Name_Id;
-      --  Find Name_Id of goto statement, which may be an expanded name.
+      --  Find Name_Id of goto statement, which may be an expanded name
 
       function Matches
         (Label_Node : Node_Id;
@@ -521,7 +521,7 @@ begin
          --  Now attach the implicit label declaration to the appropriate
          --  declarative region, creating a declaration list if none exists
 
-         if not Present (Declarations (Enclosing_Body_Or_Block)) then
+         if No (Declarations (Enclosing_Body_Or_Block)) then
             Set_Declarations (Enclosing_Body_Or_Block, New_List);
          end if;
 

@@ -2,7 +2,7 @@
 /* Test for assigning compile-time constant-string objects to static variables.  */
 /* Contributed by Ziemowit Laski <zlaski@apple.com>  */
 
-/* { dg-options "-fconstant-cfstrings -framework Foundation -framework CoreFoundation" } */
+/* { dg-options "-fconstant-cfstrings -framework Foundation" } */
 /* { dg-do run { target *-*-darwin* } } */
 
 #include <stdlib.h>

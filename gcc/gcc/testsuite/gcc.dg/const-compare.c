@@ -1,5 +1,4 @@
-/* APPLE LOCAL begin radar 3869444 */
-/* { dg-do compile { target "powerpc*-*-darwin*" } } */
+/* { dg-do compile { target powerpc*-*-darwin* } } */
 /* { dg-options "-m64 -O1 -static" } */
 typedef unsigned long long uint64_t;
 
@@ -27,4 +26,4 @@ match(name, pat)
   }
  return(*name == '\0');
 }
-/* APPLE LOCAL end radar 3869444 */
+

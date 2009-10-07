@@ -1,8 +1,8 @@
 /*
- * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2008  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000-2003  Internet Software Consortium.
  *
- * Permission to use, copy, modify, and distribute this software for any
+ * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
  *
@@ -15,7 +15,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* $Id: validator.h,v 1.27.18.8 2007/01/08 02:42:00 marka Exp $ */
+/* $Id: validator.h,v 1.41 2008/09/25 04:02:39 tbox Exp $ */
 
 #ifndef DNS_VALIDATOR_H
 #define DNS_VALIDATOR_H 1
@@ -24,7 +24,7 @@
  ***** Module Info
  *****/
 
-/*! \file
+/*! \file dns/validator.h
  *
  * \brief
  * DNS Validator
@@ -81,17 +81,35 @@ typedef struct dns_validatorevent {
 	ISC_EVENT_COMMON(struct dns_validatorevent);
 	dns_validator_t *		validator;
 	isc_result_t			result;
+	/*
+	 * Name and type of the response to be validated.
+	 */
 	dns_name_t *			name;
 	dns_rdatatype_t			type;
+	/*
+	 * Rdata and RRSIG (if any) for positive responses.
+	 */
 	dns_rdataset_t *		rdataset;
 	dns_rdataset_t *		sigrdataset;
+	/*
+	 * The full response.  Required for negative responses.
+	 * Also required for positive wildcard responses.
+	 */
 	dns_message_t *			message;
-	dns_name_t *			proofs[3];
+	/*
+	 * Proofs to be cached.
+	 */
+	dns_name_t *			proofs[4];
+	/*
+	 * Optout proof seen.
+	 */
+	isc_boolean_t			optout;
 } dns_validatorevent_t;
 
 #define DNS_VALIDATOR_NOQNAMEPROOF 0
 #define DNS_VALIDATOR_NODATAPROOF 1
 #define DNS_VALIDATOR_NOWILDCARDPROOF 2
+#define DNS_VALIDATOR_CLOSESTENCLOSER 3
 
 /*%
  * A validator object represents a validation in progress.
@@ -126,11 +144,14 @@ struct dns_validator {
 	dns_rdataset_t *		dsset;
 	dns_rdataset_t *		soaset;
 	dns_rdataset_t *		nsecset;
+	dns_rdataset_t *		nsec3set;
 	dns_name_t *			soaname;
 	dns_rdataset_t			frdataset;
 	dns_rdataset_t			fsigrdataset;
 	dns_fixedname_t			fname;
 	dns_fixedname_t			wild;
+	dns_fixedname_t			nearest;
+	dns_fixedname_t			closest;
 	ISC_LINK(dns_validator_t)	link;
 	dns_rdataset_t 			dlv;
 	dns_fixedname_t			dlvsep;

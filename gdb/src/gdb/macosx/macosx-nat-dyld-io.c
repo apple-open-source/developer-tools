@@ -98,7 +98,6 @@ size_t
 inferior_read_memory_partial (CORE_ADDR addr, int nbytes, gdb_byte *mbuf)
 {
   size_t nbytes_read = 0;
-  int error = 0;
 
   volatile struct gdb_exception except;
 
@@ -341,7 +340,7 @@ inferior_bfd_generic (const char *name, CORE_ADDR addr, CORE_ADDR offset,
     {
       warning ("Unable to read symbols from %s: %s.", bfd_get_filename (abfd),
                bfd_errmsg (bfd_get_error ()));
-      bfd_close (abfd);
+      close_bfd_or_archive (abfd);
       return NULL;
     }
 

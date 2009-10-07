@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2005 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -60,8 +60,8 @@ package body System.Finalization_Implementation is
      new Unchecked_Conversion (Address, RC_Ptr);
 
    procedure Raise_Exception_No_Defer
-     (E       : in Exception_Id;
-      Message : in String := "");
+     (E       : Exception_Id;
+      Message : String := "");
    pragma Import (Ada, Raise_Exception_No_Defer,
      "ada__exceptions__raise_exception_no_defer");
    pragma No_Return (Raise_Exception_No_Defer);
@@ -84,9 +84,6 @@ package body System.Finalization_Implementation is
    function Parent_Size (Obj : Address; T : Ada.Tags.Tag)
      return SSE.Storage_Count;
    pragma Import (Ada, Parent_Size, "ada__tags__parent_size");
-
-   function Parent_Tag (T : Ada.Tags.Tag) return Ada.Tags.Tag;
-   pragma Import (Ada, Parent_Tag, "ada__tags__parent_tag");
 
    function Get_Deep_Controller (Obj : System.Address) return RC_Ptr;
    --  Given the address (obj) of a tagged object, return a
@@ -217,6 +214,13 @@ package body System.Finalization_Implementation is
             P.Next := L;
             L := Obj'Unchecked_Access;
          end;
+
+      --  Make the object completely unattached (case of a library-level,
+      --  Finalize_Storage_Only object).
+
+      elsif Nb_Link = 4 then
+         Obj.Prev := null;
+         Obj.Next := null;
       end if;
    end Attach_To_Final_List;
 
@@ -383,19 +387,22 @@ package body System.Finalization_Implementation is
    procedure Finalize_Global_List is
    begin
       --  There are three case here:
+
       --  a. the application uses tasks, in which case Finalize_Global_Tasks
-      --     will defer abortion
+      --     will defer abort.
+
       --  b. the application doesn't use tasks but uses other tasking
       --     constructs, such as ATCs and protected objects. In this case,
       --     the binder will call Finalize_Global_List instead of
       --     Finalize_Global_Tasks, letting abort undeferred, and leading
       --     to assertion failures in the GNULL
+
       --  c. the application doesn't use any tasking construct in which case
       --     deferring abort isn't necessary.
-      --
+
       --  Until another solution is found to deal with case b, we need to
       --  call abort_defer here to pass the checks, but we do not need to
-      --  undefer abortion, since Finalize_Global_List is the last procedure
+      --  undefer abort, since Finalize_Global_List is the last procedure
       --  called before exiting the partition.
 
       SSL.Abort_Defer.all;
@@ -470,7 +477,7 @@ package body System.Finalization_Implementation is
       --  when there are no controller at this level
 
       while Offset = -2 loop
-         The_Tag := Parent_Tag (The_Tag);
+         The_Tag := Ada.Tags.Parent_Tag (The_Tag);
          Offset  := RC_Offset (The_Tag);
       end loop;
 
@@ -594,6 +601,6 @@ package body System.Finalization_Implementation is
 --  Initialization of package, set Adafinal soft link
 
 begin
-   SSL.Adafinal := Finalize_Global_List'Access;
+   SSL.Finalize_Global_List := Finalize_Global_List'Access;
 
 end System.Finalization_Implementation;

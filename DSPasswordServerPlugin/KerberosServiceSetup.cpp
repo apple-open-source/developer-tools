@@ -33,6 +33,7 @@
 #include <CoreFoundation/CoreFoundation.h>
 #include "KerberosServiceSetup.h"
 #include "FTPAccessFile.h"
+#import "PSUtilitiesDefs.h"
 #include <smb_server_prefs.h>
 
 #include <SystemConfiguration/SystemConfiguration.h>
@@ -53,12 +54,16 @@
 #define	kPOPConfigKey		"cyrus"
 #define	kPOPPrincipalKey	"pop_principal"
 
+#define	kPcastConfigPath	"/var/pcast/server/kerberos_principals.plist"
+#define	kPcastPrincipalKey	"PodcastProducerServicePrincipals"
+
 #define kSMBConfigTool		"/usr/share/servermgrd/cgi-bin/servermgr_smb"
 
 #define	kVPNConfigPath		"/Library/Preferences/SystemConfiguration/com.apple.RemoteAccessServers.plist"
 #define	kVPNPrincipalKey	"KerberosServicePrincipalName"
 #define	kVPNServerKey		"Servers"
 #define	kVPNServiceKey		"com.apple.ppp.l2tp"
+#define kVPNPPTPServiceKey	"com.apple.ppp.pptp"
 #define	kVPNEAPKey			"EAP"
 
 #define	kXGridConfigPath	"/etc/xgrid/controller/service-principal"
@@ -92,20 +97,27 @@ CFErrorRef SetAFPPrincipal(CFStringRef inPrincipal)
     mode_t					mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH; // 644 -rw-r--r--
     
     thePathURL = CFURLCreateFromFileSystemRepresentation(NULL, (UInt8 *)kAFPConfigPath, strlen(kAFPConfigPath), false);
-    
-    // if the config file exists open it & parse it
-    theConfig = (CFMutableDictionaryRef) CreateMyPropertyListFromFile(thePathURL, true);
+    if ( thePathURL != NULL )
+	{
+		// if the config file exists open it & parse it
+		theConfig = (CFMutableDictionaryRef) CreateMyPropertyListFromFile(thePathURL, true);
+		CFRelease( thePathURL );
+		thePathURL = NULL;
+	}
+	
     if (theConfig != NULL)
     {
         // and add the principal name or overwrite
         CFDictionarySetValue(theConfig, CFSTR(kAFPPrincipalKey), inPrincipal);
-    } else {
+	}
+	else
+	{
         // else create minimal config dictionary
         keys[0] = CFSTR(kAFPPrincipalKey);
         values[0] = inPrincipal;
         theConfig = (CFMutableDictionaryRef)CFDictionaryCreate(NULL, keys, values, 1, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
     }
-
+	
     theData = CFPropertyListCreateXMLData(NULL, theConfig);
     if (theData != NULL)
     {
@@ -232,7 +244,7 @@ CFErrorRef SetSMBPrincipal(CFStringRef inPrincipal, CFStringRef inAdminName, con
 
     CFErrorRef				theError = NULL;
 	CFArrayRef				tmpArray = NULL;
-	SInt32					tmpInt;
+	CFIndex					tmpInt;
 	SCPreferencesRef prefs = NULL;
 	
 	prefs = SCPreferencesCreate(NULL, CFSTR("Password Server Plugin"), CFSTR(kSMBPreferencesAppID));	
@@ -553,6 +565,118 @@ CFErrorRef SetJABBERPrincipal(CFStringRef inPrincipal)
     return NULL;
 }
 
+CFErrorRef SetVNCPrincipal(CFStringRef inPrincipal)
+{
+    return NULL;
+}
+
+CFErrorRef SetPCastPrincipal(CFStringRef inPrincipal)
+{
+	CFErrorRef				theError = NULL;
+    CFMutableDictionaryRef	theConfig = NULL;
+    CFURLRef				thePathURL = NULL;
+    CFDataRef				theData = NULL;
+	CFStringRef				logString = NULL;
+    const void				*keys[1];
+    const void				*values[1];
+    CFIndex					dataLength;
+    int						fd;
+    pid_t					serverPid = 0;
+    size_t					len;
+    UInt8					theBuffer[16];
+    mode_t					mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH; // 644 -rw-r--r--
+    
+    thePathURL = CFURLCreateFromFileSystemRepresentation(NULL, (UInt8 *)kPcastConfigPath, strlen(kPcastConfigPath), false);
+    if ( thePathURL != NULL )
+	{
+		// if the config file exists open it & parse it
+		theConfig = (CFMutableDictionaryRef) CreateMyPropertyListFromFile(thePathURL, true);
+		CFRelease( thePathURL );
+		thePathURL = NULL;
+	}
+	
+    if (theConfig != NULL)
+    {
+        // and add the principal name or overwrite
+        CFDictionarySetValue(theConfig, CFSTR(kPcastPrincipalKey), inPrincipal);
+	}
+	else
+	{
+        // else create minimal config dictionary
+        keys[0] = CFSTR(kPcastPrincipalKey);
+        values[0] = inPrincipal;
+        theConfig = (CFMutableDictionaryRef)CFDictionaryCreate(NULL, keys, values, 1, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    }
+	
+    theData = CFPropertyListCreateXMLData(NULL, theConfig);
+    if (theData != NULL)
+    {
+		dataLength = CFDataGetLength(theData);
+        // open - truncate 
+		int err = 0;
+		struct stat sb;
+        if ( lstat("/var/pcast", &sb) != 0 )
+			err = pwsf_mkdir_p( "/var/pcast", 0755 );
+		if(err == 0) 
+		{
+			if ( lstat("/var/pcast/server", &sb) != 0 )
+				err = pwsf_mkdir_p( "/var/pcast/server", 0755 );
+			if(err == 0) 
+			{
+				if ((fd = open(kPcastConfigPath, O_RDWR | O_CREAT | O_TRUNC, mode)) == -1) 
+				{
+					logString = CFStringCreateWithFormat(NULL, NULL, CFSTR("Error opening Pcast config file at %s error = %d\n"),
+														 kPcastConfigPath, errno);
+					
+					theError = MyCFErrorCreate(kCFErrorDomainPOSIX, (CFIndex)errno, logString);
+					
+					if ( logString != NULL )
+						CFRelease( logString );
+				}
+				else
+				{
+					len = write(fd, CFDataGetBytePtr(theData), dataLength);
+					if(len != dataLength) {
+						logString = CFStringCreateWithFormat(NULL, NULL, CFSTR("Error writing Pcast config file at %s error = %d\n"),
+															 kPcastConfigPath, errno);
+						theError = MyCFErrorCreate(kCFErrorDomainPOSIX, (CFIndex)errno, logString);
+						
+						if ( logString != NULL )
+							CFRelease( logString );
+					}
+						
+					close(fd);
+				}
+			}
+			else {
+				logString = CFStringCreateWithFormat(NULL, NULL, CFSTR("Error creating Pcast config directory at /var/pcast/server error = %d\n")
+													 ,errno);
+				theError = MyCFErrorCreate(kCFErrorDomainPOSIX, (CFIndex)errno, logString);
+				
+				if ( logString != NULL )
+					CFRelease( logString );
+			}
+		}
+		else {
+			logString = CFStringCreateWithFormat(NULL, NULL, CFSTR("Error creating Pcast config directory at /var/pcast error = %d\n")
+												 ,errno);
+			theError = MyCFErrorCreate(kCFErrorDomainPOSIX, (CFIndex)errno, logString);
+			
+			if ( logString != NULL )
+				CFRelease( logString );
+		}
+			
+		CFRelease(theData);
+    }
+    CFRelease(theConfig);
+        
+    return theError;
+}
+
+CFErrorRef SetFCSvrPrincipal(CFStringRef inPrincipal)
+{
+    return NULL;
+}
 
 /*
 	SetVPNPrincipal()
@@ -577,6 +701,8 @@ CFErrorRef SetVPNPrincipal(CFStringRef inPrincipal)
 	CFMutableDictionaryRef	tmpDict1 = NULL;
 	CFMutableDictionaryRef	tmpDict2 = NULL;
 	CFMutableDictionaryRef	tmpDict3 = NULL;
+	CFMutableDictionaryRef	tmpDict4 = NULL;
+	CFMutableDictionaryRef	tmpDict5 = NULL;
 	CFDataRef				theData = NULL;
     CFErrorRef				theError = NULL;
 	CFStringRef				logString = NULL;
@@ -584,7 +710,7 @@ CFErrorRef SetVPNPrincipal(CFStringRef inPrincipal)
 	CFIndex					dataLength = 0;
 	mode_t					mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH; // 644 -rw-r--r--
 	struct stat				fileInfo;
-	bool					releaseTmpDict3 = false;
+	bool					releaseTmpDict = false;
 	
 	theConfigFile = open(kVPNConfigPath, O_CREAT | O_EXLOCK | O_RDWR, mode);
 	if (theConfigFile == -1)
@@ -653,7 +779,8 @@ CFErrorRef SetVPNPrincipal(CFStringRef inPrincipal)
 		CFRelease(workingDict);
 		return theError;
 	}
-
+	
+	//l2tp
 	tmpDict2 = (CFMutableDictionaryRef)CFDictionaryGetValue(tmpDict1, CFSTR(kVPNServiceKey));
 	if (tmpDict2 == NULL)
 	{
@@ -675,16 +802,50 @@ CFErrorRef SetVPNPrincipal(CFStringRef inPrincipal)
 	{
 		tmpDict3 = CFDictionaryCreateMutable(NULL, 1, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
 		CFDictionaryAddValue(tmpDict2, CFSTR(kVPNEAPKey), tmpDict3);
-		releaseTmpDict3 = true;
+		releaseTmpDict = true;
 	}
 	CFDictionarySetValue(tmpDict3, CFSTR(kVPNPrincipalKey), inPrincipal);
 
 	// only release tmpDict3 if it was created here.
-	if (releaseTmpDict3)
+	if (releaseTmpDict)
 	{
 		CFRelease(tmpDict3); // retained in tmpDict2
 	}
+	
+			//pptp
+	tmpDict4 = (CFMutableDictionaryRef)CFDictionaryGetValue(tmpDict1, CFSTR(kVPNPPTPServiceKey));
+	if (tmpDict4 == NULL)
+	{
+		logString = CFStringCreateWithFormat(NULL, NULL, CFSTR("SetVPNPrincipal: File is not a recognizable config file %s\n"),
+							kVPNConfigPath, EINVAL);
 		
+		theError = MyCFErrorCreate(kCFErrorDomainPOSIX, (CFIndex)EINVAL, logString);
+		
+		if ( logString != NULL )
+			CFRelease( logString );
+			
+		close(theConfigFile);
+		CFRelease(workingDict);
+		return theError;
+	}
+	
+	releaseTmpDict = false;
+	tmpDict5 = (CFMutableDictionaryRef)CFDictionaryGetValue(tmpDict4, CFSTR(kVPNEAPKey)); 
+	if (tmpDict5 == NULL)	// the EAP directory does not exist, create it
+	{
+		tmpDict5 = CFDictionaryCreateMutable(NULL, 1, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+		CFDictionaryAddValue(tmpDict4, CFSTR(kVPNEAPKey), tmpDict5);
+		releaseTmpDict = true;
+	}
+	CFDictionarySetValue(tmpDict5, CFSTR(kVPNPrincipalKey), inPrincipal);
+
+	// only release tmpDict5 if it was created here.
+	if (releaseTmpDict)
+	{
+		CFRelease(tmpDict5); // retained in tmpDict4
+	}
+					
+	
 	// write out the new plist
 	theData = CFPropertyListCreateXMLData(NULL, workingDict);
     if (theData != NULL)
@@ -837,6 +998,7 @@ CFMutableDictionaryRef	CreateVPNDefaults(void)
 	CFMutableDictionaryRef	tmpDict2 = CFDictionaryCreateMutable(NULL, 1, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
 
 	CFDictionaryAddValue(tmpDict1, CFSTR(kVPNServiceKey), tmpDict2);
+	CFDictionaryAddValue(tmpDict1, CFSTR(kVPNPPTPServiceKey), tmpDict2);
 	CFRelease(tmpDict2);
 	tmpDict2 = CFDictionaryCreateMutable(NULL, 2, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
 	CFDictionaryAddValue(tmpDict2, CFSTR(kVPNServerKey), tmpDict1);
@@ -888,7 +1050,7 @@ static CFMutableDictionaryRef CreateDictionaryFromFD(int inFd, Boolean inMakeMut
 	if (fstat(inFd, &fileInfo) == -1) 
 		return NULL;
 
-	size = fileInfo.st_size;
+	size = (CFIndex)fileInfo.st_size;
 	
 	// malloc the buffer
 	buffer = (UInt8 *)calloc(1,size);

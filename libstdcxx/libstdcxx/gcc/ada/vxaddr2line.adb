@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---            Copyright (C) 2002-2004 Ada Core Technologies, Inc.           --
+--                     Copyright (C) 2002-2005, AdaCore                     --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -83,13 +83,14 @@ procedure VxAddr2Line is
    type Architecture is
      (SOLARIS_I586,
       WINDOWS_POWERPC,
+      WINDOWS_I586,
       WINDOWS_M68K,
       SOLARIS_POWERPC,
       DEC_ALPHA);
 
    type Arch_Record is record
       Addr2line_Binary : String_Access;
-      --  Name of the addr2line utility to use.
+      --  Name of the addr2line utility to use
 
       Nm_Binary : String_Access;
       --  Name of the host nm utility, which will be used to find out the
@@ -121,6 +122,11 @@ procedure VxAddr2Line is
          Nm_Binary           => null,
          Addr_Digits_To_Skip => 0,
          Bt_Offset_From_Call => -4),
+      WINDOWS_I586 =>
+        (Addr2line_Binary    => null,
+         Nm_Binary           => null,
+         Addr_Digits_To_Skip => 0,
+         Bt_Offset_From_Call => -2),
       SOLARIS_POWERPC =>
         (Addr2line_Binary    => null,
          Nm_Binary           => null,
@@ -288,7 +294,7 @@ procedure VxAddr2Line is
             return Value;
       end;
 
-      --  We can not get here
+      --  We cannot get here
 
       raise Program_Error;
 
@@ -402,7 +408,7 @@ begin
       Error ("Couldn't find " & Arch_List (Cur_Arch).Addr2line_Binary.all);
    end if;
 
-   --  The first argument specifies the image file. Check if it exists.
+   --  The first argument specifies the image file. Check if it exists
 
    if not Is_Regular_File (Argument (1)) then
       Error ("Couldn't find the executable " & Argument (1));

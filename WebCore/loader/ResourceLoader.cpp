@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2006 Apple Computer, Inc.  All rights reserved.
+ * Copyright (C) 2006, 2007 Apple Inc. All rights reserved.
  *           (C) 2007 Graham Dennis (graham.dennis@gmail.com)
  *
  * Redistribution and use in source and binary forms, with or without
@@ -37,6 +37,7 @@
 #include "ProgressTracker.h"
 #include "ResourceHandle.h"
 #include "ResourceError.h"
+#include "Settings.h"
 #include "SharedBuffer.h"
 
 namespace WebCore {
@@ -53,15 +54,15 @@ PassRefPtr<SharedBuffer> ResourceLoader::resourceData()
 }
 
 ResourceLoader::ResourceLoader(Frame* frame, bool sendResourceLoadCallbacks, bool shouldContentSniff)
-    : m_reachedTerminalState(false)
+    : m_frame(frame)
+    , m_documentLoader(frame->loader()->activeDocumentLoader())
+    , m_identifier(0)
+    , m_reachedTerminalState(false)
     , m_cancelled(false)
     , m_calledDidFinishLoad(false)
     , m_sendResourceLoadCallbacks(sendResourceLoadCallbacks)
     , m_shouldContentSniff(shouldContentSniff)
     , m_shouldBufferData(true)
-    , m_frame(frame)
-    , m_documentLoader(frame->loader()->activeDocumentLoader())
-    , m_identifier(0)
     , m_defersLoading(frame->page()->defersLoading())
 {
 }
@@ -105,9 +106,7 @@ bool ResourceLoader::load(const ResourceRequest& r)
 {
     ASSERT(!m_handle);
     ASSERT(m_deferredRequest.isNull());
-    ASSERT(!frameLoader()->isArchiveLoadPending(this));
-    
-    m_originalURL = r.url();
+    ASSERT(!m_documentLoader->isSubstituteLoadPending(this));
     
     ResourceRequest clientRequest(r);
     willSendRequest(clientRequest, ResourceResponse());
@@ -116,9 +115,14 @@ bool ResourceLoader::load(const ResourceRequest& r)
         return false;
     }
     
-    if (frameLoader()->willUseArchive(this, clientRequest, m_originalURL))
+    if (m_documentLoader->scheduleArchiveLoad(this, clientRequest, r.url()))
         return true;
     
+#if ENABLE(OFFLINE_WEB_APPLICATIONS)
+    if (m_documentLoader->scheduleApplicationCacheLoad(this, clientRequest, r.url()))
+        return true;
+#endif
+
     if (m_defersLoading) {
         m_deferredRequest = clientRequest;
         return true;
@@ -148,13 +152,23 @@ FrameLoader* ResourceLoader::frameLoader() const
     return m_frame->loader();
 }
 
+void ResourceLoader::setShouldBufferData(bool shouldBufferData)
+{ 
+    m_shouldBufferData = shouldBufferData; 
+
+    // Reset any already buffered data
+    if (!m_shouldBufferData)
+        m_resourceData = 0;
+}
+    
+
 void ResourceLoader::addData(const char* data, int length, bool allAtOnce)
 {
     if (!m_shouldBufferData)
         return;
 
     if (allAtOnce) {
-        m_resourceData = new SharedBuffer(data, length);
+        m_resourceData = SharedBuffer::create(data, length);
         return;
     }
         
@@ -164,7 +178,7 @@ void ResourceLoader::addData(const char* data, int length, bool allAtOnce)
             m_resourceData->append(data, length);
     } else {
         if (!m_resourceData)
-            m_resourceData = new SharedBuffer(data, length);
+            m_resourceData = SharedBuffer::create(data, length);
         else
             m_resourceData->append(data, length);
     }
@@ -175,6 +189,17 @@ void ResourceLoader::clearResourceData()
     if (m_resourceData)
         m_resourceData->clear();
 }
+
+#if ENABLE(OFFLINE_WEB_APPLICATIONS)
+bool ResourceLoader::scheduleLoadFallbackResourceFromApplicationCache(ApplicationCache* cache)
+{
+    if (documentLoader()->scheduleLoadFallbackResourceFromApplicationCache(this, m_request, cache)) {
+        handle()->cancel();
+        return true;
+    }
+    return false;
+}
+#endif
 
 void ResourceLoader::willSendRequest(ResourceRequest& request, const ResourceResponse& redirectResponse)
 {
@@ -196,6 +221,10 @@ void ResourceLoader::willSendRequest(ResourceRequest& request, const ResourceRes
     m_request = request;
 }
 
+void ResourceLoader::didSendData(unsigned long long, unsigned long long)
+{
+}
+
 void ResourceLoader::didReceiveResponse(const ResourceResponse& r)
 {
     ASSERT(!m_reachedTerminalState);
@@ -206,6 +235,9 @@ void ResourceLoader::didReceiveResponse(const ResourceResponse& r)
 
     m_response = r;
 
+    if (FormData* data = m_request.httpBody())
+        data->removeGeneratedFilesIfNeeded();
+        
     if (m_sendResourceLoadCallbacks)
         frameLoader()->didReceiveResponse(this, m_response);
 }
@@ -236,7 +268,7 @@ void ResourceLoader::willStopBufferingData(const char* data, int length)
         return;
 
     ASSERT(!m_resourceData);
-    m_resourceData = new SharedBuffer(data, length);
+    m_resourceData = SharedBuffer::create(data, length);
 }
 
 void ResourceLoader::didFinishLoading()
@@ -274,21 +306,22 @@ void ResourceLoader::didFail(const ResourceError& error)
     // anything including possibly derefing this; one example of this is Radar 3266216.
     RefPtr<ResourceLoader> protector(this);
 
+    if (FormData* data = m_request.httpBody())
+        data->removeGeneratedFilesIfNeeded();
+
     if (m_sendResourceLoadCallbacks && !m_calledDidFinishLoad)
         frameLoader()->didFailToLoad(this, error);
 
     releaseResources();
 }
 
-void ResourceLoader::wasBlocked()
-{
-    didFail(blockedError());
-}
-
 void ResourceLoader::didCancel(const ResourceError& error)
 {
     ASSERT(!m_cancelled);
     ASSERT(!m_reachedTerminalState);
+
+    if (FormData* data = m_request.httpBody())
+        data->removeGeneratedFilesIfNeeded();
 
     // This flag prevents bad behavior when loads that finish cause the
     // load itself to be cancelled (which could happen with a javascript that 
@@ -300,7 +333,7 @@ void ResourceLoader::didCancel(const ResourceError& error)
     if (m_handle)
         m_handle->clearAuthentication();
 
-    frameLoader()->cancelPendingArchiveLoad(this);
+    m_documentLoader->cancelPendingSubstituteLoad(this);
     if (m_handle) {
         m_handle->cancel();
         m_handle = 0;
@@ -341,13 +374,35 @@ ResourceError ResourceLoader::blockedError()
     return frameLoader()->blockedError(m_request);
 }
 
+ResourceError ResourceLoader::cannotShowURLError()
+{
+    return frameLoader()->cannotShowURLError(m_request);
+}
+
 void ResourceLoader::willSendRequest(ResourceHandle*, ResourceRequest& request, const ResourceResponse& redirectResponse)
 {
+#if ENABLE(OFFLINE_WEB_APPLICATIONS)
+    if (!redirectResponse.isNull() && !protocolHostAndPortAreEqual(request.url(), redirectResponse.url())) {
+        if (scheduleLoadFallbackResourceFromApplicationCache())
+            return;
+    }
+#endif
     willSendRequest(request, redirectResponse);
+}
+
+void ResourceLoader::didSendData(ResourceHandle*, unsigned long long bytesSent, unsigned long long totalBytesToBeSent)
+{
+    didSendData(bytesSent, totalBytesToBeSent);
 }
 
 void ResourceLoader::didReceiveResponse(ResourceHandle*, const ResourceResponse& response)
 {
+#if ENABLE(OFFLINE_WEB_APPLICATIONS)
+    if (response.httpStatusCode() / 100 == 4 || response.httpStatusCode() / 100 == 5) {
+        if (scheduleLoadFallbackResourceFromApplicationCache())
+            return;
+    }
+#endif
     didReceiveResponse(response);
 }
 
@@ -363,12 +418,29 @@ void ResourceLoader::didFinishLoading(ResourceHandle*)
 
 void ResourceLoader::didFail(ResourceHandle*, const ResourceError& error)
 {
+#if ENABLE(OFFLINE_WEB_APPLICATIONS)
+    if (!error.isCancellation()) {
+        if (documentLoader()->scheduleLoadFallbackResourceFromApplicationCache(this, m_request))
+            return;
+    }
+#endif
     didFail(error);
 }
 
 void ResourceLoader::wasBlocked(ResourceHandle*)
 {
-    wasBlocked();
+    didFail(blockedError());
+}
+
+void ResourceLoader::cannotShowURL(ResourceHandle*)
+{
+    didFail(cannotShowURLError());
+}
+
+bool ResourceLoader::shouldUseCredentialStorage()
+{
+    RefPtr<ResourceLoader> protector(this);
+    return frameLoader()->shouldUseCredentialStorage(this);
 }
 
 void ResourceLoader::didReceiveAuthenticationChallenge(const AuthenticationChallenge& challenge)
@@ -395,7 +467,7 @@ void ResourceLoader::receivedCancellation(const AuthenticationChallenge&)
 void ResourceLoader::willCacheResponse(ResourceHandle*, CacheStoragePolicy& policy)
 {
     // When in private browsing mode, prevent caching to disk
-    if (policy == StorageAllowed && frameLoader()->privateBrowsingEnabled())
+    if (policy == StorageAllowed && m_frame->settings()->privateBrowsingEnabled())
         policy = StorageAllowedInMemoryOnly;    
 }
 

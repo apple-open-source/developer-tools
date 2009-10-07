@@ -1,13 +1,13 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                GNU ADA RUN-TIME LIBRARY (GNARL) COMPONENTS               --
+--                 GNAT RUN-TIME LIBRARY (GNARL) COMPONENTS                 --
 --                                                                          --
 --                   S Y S T E M . O S _ I N T E R F A C E                  --
 --                                                                          --
 --                                  S p e c                                 --
 --                                                                          --
 --             Copyright (C) 1991-1994, Florida State University            --
---             Copyright (C) 1995-2004, Free Software Foundation, Inc.      --
+--             Copyright (C) 1995-2005, Free Software Foundation, Inc.      --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -17,8 +17,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNARL; see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -45,7 +45,7 @@ with Interfaces.C.Strings;
 with Unchecked_Conversion;
 
 package System.OS_Interface is
-pragma Preelaborate;
+   pragma Preelaborate;
 
    pragma Linker_Options ("-mthreads");
 
@@ -198,19 +198,22 @@ pragma Preelaborate;
    -----------------------
 
    type CRITICAL_SECTION is private;
-   type PCRITICAL_SECTION is access all CRITICAL_SECTION;
 
-   procedure InitializeCriticalSection (pCriticalSection : PCRITICAL_SECTION);
+   procedure InitializeCriticalSection
+     (pCriticalSection : access CRITICAL_SECTION);
    pragma Import
      (Stdcall, InitializeCriticalSection, "InitializeCriticalSection");
 
-   procedure EnterCriticalSection (pCriticalSection : PCRITICAL_SECTION);
+   procedure EnterCriticalSection
+     (pCriticalSection : access CRITICAL_SECTION);
    pragma Import (Stdcall, EnterCriticalSection, "EnterCriticalSection");
 
-   procedure LeaveCriticalSection (pCriticalSection : PCRITICAL_SECTION);
+   procedure LeaveCriticalSection
+     (pCriticalSection : access CRITICAL_SECTION);
    pragma Import (Stdcall, LeaveCriticalSection, "LeaveCriticalSection");
 
-   procedure DeleteCriticalSection (pCriticalSection : PCRITICAL_SECTION);
+   procedure DeleteCriticalSection
+     (pCriticalSection : access CRITICAL_SECTION);
    pragma Import (Stdcall, DeleteCriticalSection, "DeleteCriticalSection");
 
    -------------------------------------------------------------
@@ -250,19 +253,21 @@ pragma Preelaborate;
       pThreadId            : PDWORD) return HANDLE;
    pragma Import (C, BeginThreadEx, "_beginthreadex");
 
-   Debug_Process              : constant := 16#00000001#;
-   Debug_Only_This_Process    : constant := 16#00000002#;
-   Create_Suspended           : constant := 16#00000004#;
-   Detached_Process           : constant := 16#00000008#;
-   Create_New_Console         : constant := 16#00000010#;
+   Debug_Process                     : constant := 16#00000001#;
+   Debug_Only_This_Process           : constant := 16#00000002#;
+   Create_Suspended                  : constant := 16#00000004#;
+   Detached_Process                  : constant := 16#00000008#;
+   Create_New_Console                : constant := 16#00000010#;
 
-   Create_New_Process_Group   : constant := 16#00000200#;
+   Create_New_Process_Group          : constant := 16#00000200#;
 
-   Create_No_window           : constant := 16#08000000#;
+   Create_No_window                  : constant := 16#08000000#;
 
-   Profile_User               : constant := 16#10000000#;
-   Profile_Kernel             : constant := 16#20000000#;
-   Profile_Server             : constant := 16#40000000#;
+   Profile_User                      : constant := 16#10000000#;
+   Profile_Kernel                    : constant := 16#20000000#;
+   Profile_Server                    : constant := 16#40000000#;
+
+   Stack_Size_Param_Is_A_Reservation : constant := 16#00010000#;
 
    function GetExitCodeThread
      (hThread   : HANDLE;

@@ -1,4 +1,3 @@
-/* APPLE LOCAL file mainline */
 /* { dg-do compile { target *-*-darwin* } } */
 /* { dg-options "-F$srcdir/gcc.dg" } */
 

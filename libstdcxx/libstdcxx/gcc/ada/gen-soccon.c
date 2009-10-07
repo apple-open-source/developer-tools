@@ -1,37 +1,49 @@
-/*****************************************************************************
-**                                                                          **
-**                          GNAT SYSTEM UTILITIES                           **
-**                                                                          **
-**                           G E N - S O C C O N                            **
-**                                                                          **
-**              Copyright (C) 2004 Free Software Foundation, Inc.           **
-**                                                                          **
-** GNAT is free software;  you can  redistribute it  and/or modify it under **
-** terms of the  GNU General Public License as published  by the Free Soft- **
-** ware  Foundation;  either version 2,  or (at your option) any later ver- **
-** sion.  GNAT is distributed in the hope that it will be useful, but WITH- **
-** OUT ANY WARRANTY;  without even the  implied warranty of MERCHANTABILITY **
-** or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License **
-** for  more details.  You should have  received  a copy of the GNU General **
-** Public License  distributed with GNAT;  see file COPYING.  If not, write **
-** to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, **
-** MA 02111-1307, USA.                                                      **
-**                                                                          **
-** GNAT was originally developed  by the GNAT team at  New York University. **
-** Extensive contributions were provided by Ada Core Technologies Inc.      **
-**                                                                          **
-******************************************************************************/
+/****************************************************************************
+ *                                                                          *
+ *                          GNAT SYSTEM UTILITIES                           *
+ *                                                                          *
+ *                           G E N - S O C C O N                            *
+ *                                                                          *
+ *          Copyright (C) 2004-2005, Free Software Foundation, Inc.         *
+ *                                                                          *
+ * GNAT is free software;  you can  redistribute it  and/or modify it under *
+ * terms of the  GNU General Public License as published  by the Free Soft- *
+ * ware  Foundation;  either version 2,  or (at your option) any later ver- *
+ * sion.  GNAT is distributed in the hope that it will be useful, but WITH- *
+ * OUT ANY WARRANTY;  without even the  implied warranty of MERCHANTABILITY *
+ * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License *
+ * for  more details.  You should have  received  a copy of the GNU General *
+ * Public License  distributed with GNAT;  see file COPYING.  If not, write *
+ * to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, *
+ * Boston, MA 02110-1301, USA.                                              *
+ *                                                                          *
+ * GNAT was originally developed  by the GNAT team at  New York University. *
+ * Extensive contributions were provided by Ada Core Technologies Inc.      *
+ *                                                                          *
+ ****************************************************************************/
 
 /* This program generates g-soccon.ads */
 
+/* To build using DEC C:
+  CC/DEFINE="TARGET=""OpenVMS""" gen-soccon
+  LINK gen-soccon
+  RUN gen-soccon
+*/
+
+#ifndef TARGET
+# error Please define TARGET
+#endif
+
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <limits.h>
 
-#include "socket.h"
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <sys/filio.h>
-#include <netdb.h>
+#ifdef __MINGW32__
+#include <fcntl.h>
+#endif
+
+#include "gsocket.h"
 
 struct line {
   char *text;
@@ -48,8 +60,8 @@ struct line *first = NULL, *last = NULL;
 #define _NL TXT("")
 /* Empty line */
 
-#define itoad(n) itoa ("%d", n)
-#define itoax(n) itoa ("16#%08x#", n)
+#define itoad(n) f_itoa ("%d", (n))
+#define itoax(n) f_itoa ("16#%08x#", (n))
 
 #define CND(name,comment) add_line(#name, itoad (name), comment);
 /* Constant (decimal) */
@@ -60,15 +72,23 @@ struct line *first = NULL, *last = NULL;
 #define CN_(name,comment) add_line(#name, name, comment);
 /* Constant (generic) */
 
+#define STR(p) STR1(p)
+#define STR1(p) #p
+
 void output (void);
 /* Generate output spec */
 
-char *itoa (char *, int);
+char *f_itoa (char *, int);
 /* int to string */
 
 void add_line (char *, char*, char*);
 
-void main (void) {
+#ifdef __MINGW32__
+unsigned int _CRT_fmode = _O_BINARY;
+#endif
+
+int
+main (void) {
 
 TXT("------------------------------------------------------------------------------")
 TXT("--                                                                          --")
@@ -78,7 +98,7 @@ TXT("--               G N A T . S O C K E T S . C O N S T A N T S               
 TXT("--                                                                          --")
 TXT("--                                 S p e c                                  --")
 TXT("--                                                                          --")
-TXT("--          Copyright (C) 2000-2004 Free Software Foundation, Inc.          --")
+TXT("--          Copyright (C) 2000-2005, Free Software Foundation, Inc.         --")
 TXT("--                                                                          --")
 TXT("-- GNAT is free software;  you can  redistribute it  and/or modify it under --")
 TXT("-- terms of the  GNU General Public License as published  by the Free Soft- --")
@@ -88,8 +108,8 @@ TXT("-- OUT ANY WARRANTY;  without even the  implied warranty of MERCHANTABILITY
 TXT("-- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --")
 TXT("-- for  more details.  You should have  received  a copy of the GNU General --")
 TXT("-- Public License  distributed with GNAT;  see file COPYING.  If not, write --")
-TXT("-- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --")
-TXT("-- MA 02111-1307, USA.                                                      --")
+TXT("-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --")
+TXT("-- Boston, MA 02110-1301, USA.                                              --")
 TXT("--                                                                          --")
 TXT("-- As a special exception,  if other files  instantiate  generics from this --")
 TXT("-- unit, or you link  this unit with other files  to produce an executable, --")
@@ -371,12 +391,12 @@ _NL
 #ifndef FIONBIO
 #define FIONBIO -1
 #endif
-CNX(FIONBIO, "Set/clear non-blocking io")
+CND(FIONBIO, "Set/clear non-blocking io")
 
 #ifndef FIONREAD
 #define FIONREAD -1
 #endif
-CNX(FIONREAD, "How many bytes to read")
+CND(FIONREAD, "How many bytes to read")
 _NL
 TXT("   --------------------")
 TXT("   -- Shutdown modes --")
@@ -472,16 +492,6 @@ _NL
 #endif
 CND(TCP_NODELAY, "Do not coalesce packets")
 
-#ifndef SO_SNDBUF
-#define SO_SNDBUF -1
-#endif
-CND(SO_SNDBUF, "Set/get send buffer size")
-
-#ifndef SO_RCVBUF
-#define SO_RCVBUF -1
-#endif
-CND(SO_RCVBUF, "Set/get recv buffer size")
-
 #ifndef SO_REUSEADDR
 #define SO_REUSEADDR -1
 #endif
@@ -497,15 +507,50 @@ CND(SO_KEEPALIVE, "Enable keep-alive msgs")
 #endif
 CND(SO_LINGER, "Defer close to flush data")
 
+#ifndef SO_BROADCAST
+#define SO_BROADCAST -1
+#endif
+CND(SO_BROADCAST, "Can send broadcast msgs")
+
+#ifndef SO_SNDBUF
+#define SO_SNDBUF -1
+#endif
+CND(SO_SNDBUF, "Set/get send buffer size")
+
+#ifndef SO_RCVBUF
+#define SO_RCVBUF -1
+#endif
+CND(SO_RCVBUF, "Set/get recv buffer size")
+
+#ifndef SO_SNDTIMEO
+#define SO_SNDTIMEO -1
+#endif
+CND(SO_SNDTIMEO, "Emission timeout")
+
+#ifndef SO_RCVTIMEO
+#define SO_RCVTIMEO -1
+#endif
+CND(SO_RCVTIMEO, "Reception timeout")
+
 #ifndef SO_ERROR
 #define SO_ERROR -1
 #endif
 CND(SO_ERROR, "Get/clear error status")
 
-#ifndef SO_BROADCAST
-#define SO_BROADCAST -1
+#ifndef IP_MULTICAST_IF
+#define IP_MULTICAST_IF -1
 #endif
-CND(SO_BROADCAST, "Can send broadcast msgs")
+CND(IP_MULTICAST_IF, "Set/get mcast interface")
+
+#ifndef IP_MULTICAST_TTL
+#define IP_MULTICAST_TTL -1
+#endif
+CND(IP_MULTICAST_TTL, "Set/get multicast TTL")
+
+#ifndef IP_MULTICAST_LOOP
+#define IP_MULTICAST_LOOP -1
+#endif
+CND(IP_MULTICAST_LOOP, "Set/get mcast loopback")
 
 #ifndef IP_ADD_MEMBERSHIP
 #define IP_ADD_MEMBERSHIP -1
@@ -517,19 +562,52 @@ CND(IP_ADD_MEMBERSHIP, "Join a multicast group")
 #endif
 CND(IP_DROP_MEMBERSHIP, "Leave a multicast group")
 
-#ifndef IP_MULTICAST_TTL
-#define IP_MULTICAST_TTL -1
-#endif
-CND(IP_MULTICAST_TTL, "Set/get multicast TTL")
+_NL
+TXT("   -------------------")
+TXT("   -- System limits --")
+TXT("   -------------------")
+_NL
 
-#ifndef IP_MULTICAST_LOOP
-#define IP_MULTICAST_LOOP -1
+#ifndef IOV_MAX
+#define IOV_MAX INT_MAX
 #endif
-CND(IP_MULTICAST_LOOP, "Set/get mcast loopback")
+CND(IOV_MAX, "Maximum writev iovcnt")
+
+_NL
+TXT("   ----------------------")
+TXT("   -- Type definitions --")
+TXT("   ----------------------")
+_NL
+
+{
+  struct timeval tv;
+TXT("   --  Sizes (in bytes) of the components of struct timeval")
+_NL
+#define SIZEOF_tv_sec (sizeof tv.tv_sec)
+CND(SIZEOF_tv_sec, "tv_sec")
+#define SIZEOF_tv_usec (sizeof tv.tv_usec)
+CND(SIZEOF_tv_usec, "tv_usec")
+}
+
+#ifdef __vxworks
+_NL
+TXT("   --------------------------------")
+TXT("   -- VxWorks-specific constants --")
+TXT("   --------------------------------")
+_NL
+TXT("   --  These constants may be used only within the VxWorks version of")
+TXT("   --  GNAT.Sockets.Thin.")
+_NL
+
+CND(OK,    "VxWorks generic success")
+CND(ERROR, "VxWorks generic error")
+#endif
+
 _NL
 TXT("end GNAT.Sockets.Constants;")
 
-output ();
+  output ();
+  return 0;
 }
 
 void
@@ -563,14 +641,19 @@ output (void) {
 }
 
 char *
-itoa (char *fmt, int n) {
-  char buf[32];
+f_itoa (char *fmt, int n) {
+  char buf[32], *ret;
   sprintf (buf, fmt, n);
-  return strdup (buf);
+  ret = malloc (strlen (buf) + 1);
+  if (ret != NULL)
+    strcpy (ret, buf);
+  return ret;
 }
 
-void add_line (char *_text, char *_value, char *_comment) {
+void
+add_line (char *_text, char *_value, char *_comment) {
   struct line *l = (struct line *) malloc (sizeof (struct line));
+
   l->text = _text;
   l->value = _value;
   l->comment = _comment;

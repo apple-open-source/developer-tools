@@ -1,4 +1,3 @@
-/* APPLE LOCAL file mainline */
 /* This file was miscompiled by an earlier version of the object size
    checking patch.  Object size in one of the memcpy calls was
    incorrectly determined to be 0 while it should be (size_t) -1
@@ -7,7 +6,7 @@
 /* { dg-options "-O2" } */
 
 #include "../gcc.c-torture/execute/builtins/chk.h"
-
+   
 void *bar (int);
 extern void *malloc (__SIZE_TYPE__);
 

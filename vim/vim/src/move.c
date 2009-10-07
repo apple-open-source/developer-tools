@@ -166,7 +166,7 @@ update_topline()
 
 #ifdef FEAT_MOUSE
     /* When dragging with the mouse, don't scroll that quickly */
-    if (mouse_dragging)
+    if (mouse_dragging > 0)
 	p_so = mouse_dragging - 1;
 #endif
 
@@ -280,18 +280,20 @@ update_topline()
 
 	if (curwin->w_botline <= curbuf->b_ml.ml_line_count)
 	{
-	    if (curwin->w_cursor.lnum < curwin->w_botline
-		    && ((long)curwin->w_cursor.lnum
+	    if (curwin->w_cursor.lnum < curwin->w_botline)
+	    {
+	      if (((long)curwin->w_cursor.lnum
 					     >= (long)curwin->w_botline - p_so
 #ifdef FEAT_FOLDING
 			|| hasAnyFolding(curwin)
 #endif
 			))
-	    {
+	      {
 		lineoff_T	loff;
 
-		/* Cursor is above botline, check if there are 'scrolloff'
-		 * window lines below the cursor.  If not, need to scroll. */
+		/* Cursor is (a few lines) above botline, check if there are
+		 * 'scrolloff' window lines below the cursor.  If not, need to
+		 * scroll. */
 		n = curwin->w_empty_rows;
 		loff.lnum = curwin->w_cursor.lnum;
 #ifdef FEAT_FOLDING
@@ -317,6 +319,10 @@ update_topline()
 		if (n >= p_so)
 		    /* sufficient context, no need to scroll */
 		    check_botline = FALSE;
+	      }
+	      else
+		  /* sufficient context, no need to scroll */
+		  check_botline = FALSE;
 	    }
 	    if (check_botline)
 	    {
@@ -509,6 +515,9 @@ set_topline(wp, lnum)
     /* Approximate the value of w_botline */
     wp->w_botline += lnum - wp->w_topline;
     wp->w_topline = lnum;
+#ifdef FEAT_AUTOCMD
+    wp->w_topline_was_set = TRUE;
+#endif
 #ifdef FEAT_DIFF
     wp->w_topfill = 0;
 #endif
@@ -876,7 +885,7 @@ validate_cheight()
 }
 
 /*
- * validate w_wcol and w_virtcol only.	Only correct when 'wrap' on!
+ * Validate w_wcol and w_virtcol only.
  */
     void
 validate_cursor_col()
@@ -892,13 +901,19 @@ validate_cursor_col()
 	col += off;
 
 	/* long line wrapping, adjust curwin->w_wrow */
-	if (curwin->w_p_wrap && col >= (colnr_T)W_WIDTH(curwin)
+	if (curwin->w_p_wrap
+		&& col >= (colnr_T)W_WIDTH(curwin)
 		&& W_WIDTH(curwin) - off + curwin_col_off2() > 0)
 	{
 	    col -= W_WIDTH(curwin);
 	    col = col % (W_WIDTH(curwin) - off + curwin_col_off2());
 	}
+	if (col > (int)curwin->w_leftcol)
+	    col -= curwin->w_leftcol;
+	else
+	    col = 0;
 	curwin->w_wcol = col;
+
 	curwin->w_valid |= VALID_WCOL;
     }
 }
@@ -1995,7 +2010,7 @@ scroll_cursor_bot(min_scroll, set_topbot)
 	if ((((scrolled <= 0 || scrolled >= min_scroll)
 			&& extra >= (
 #ifdef FEAT_MOUSE
-			    mouse_dragging ? mouse_dragging - 1 :
+			    mouse_dragging > 0 ? mouse_dragging - 1 :
 #endif
 			    p_so))
 		    || boff.lnum + 1 > curbuf->b_ml.ml_line_count)
@@ -2209,7 +2224,7 @@ cursor_correct()
     above_wanted = p_so;
     below_wanted = p_so;
 #ifdef FEAT_MOUSE
-    if (mouse_dragging)
+    if (mouse_dragging > 0)
     {
 	above_wanted = mouse_dragging - 1;
 	below_wanted = mouse_dragging - 1;
@@ -2225,7 +2240,7 @@ cursor_correct()
     validate_botline();
     if (curwin->w_botline == curbuf->b_ml.ml_line_count + 1
 #ifdef FEAT_MOUSE
-	    && !mouse_dragging
+	    && mouse_dragging == 0
 #endif
 	    )
     {

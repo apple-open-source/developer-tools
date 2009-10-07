@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 2000-2004 Free Software Foundation, Inc.          --
+--          Copyright (C) 2000-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -148,16 +148,34 @@ package GNAT.Sockets.Constants is
    --------------------
 
    TCP_NODELAY        : constant :=           1; --  Do not coalesce packets
-   SO_SNDBUF          : constant :=        4097; --  Set/get send buffer size
-   SO_RCVBUF          : constant :=        4098; --  Set/get recv buffer size
    SO_REUSEADDR       : constant :=           4; --  Bind reuse local address
    SO_KEEPALIVE       : constant :=           8; --  Enable keep-alive msgs
    SO_LINGER          : constant :=         128; --  Defer close to flush data
-   SO_ERROR           : constant :=        4103; --  Get/clear error status
    SO_BROADCAST       : constant :=          32; --  Can send broadcast msgs
-   IP_ADD_MEMBERSHIP  : constant :=          12; --  Join a multicast group
-   IP_DROP_MEMBERSHIP : constant :=          13; --  Leave a multicast group
+   SO_SNDBUF          : constant :=        4097; --  Set/get send buffer size
+   SO_RCVBUF          : constant :=        4098; --  Set/get recv buffer size
+   SO_SNDTIMEO        : constant :=        4101; --  Emission timeout
+   SO_RCVTIMEO        : constant :=        4102; --  Reception timeout
+   SO_ERROR           : constant :=        4103; --  Get/clear error status
+   IP_MULTICAST_IF    : constant :=           9; --  Set/get mcast interface
    IP_MULTICAST_TTL   : constant :=          10; --  Set/get multicast TTL
    IP_MULTICAST_LOOP  : constant :=          11; --  Set/get mcast loopback
+   IP_ADD_MEMBERSHIP  : constant :=          12; --  Join a multicast group
+   IP_DROP_MEMBERSHIP : constant :=          13; --  Leave a multicast group
+
+   -------------------
+   -- System limits --
+   -------------------
+
+   IOV_MAX            : constant :=  2147483647; --  Maximum writev iovcnt
+
+   ----------------------
+   -- Type definitions --
+   ----------------------
+
+   --  Sizes (in bytes) of the components of struct timeval
+
+   SIZEOF_tv_sec      : constant :=           4; --  tv_sec
+   SIZEOF_tv_usec     : constant :=           4; --  tv_usec
 
 end GNAT.Sockets.Constants;

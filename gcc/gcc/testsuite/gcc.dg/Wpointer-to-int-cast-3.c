@@ -1,4 +1,3 @@
-/* APPLE LOCAL file mainline 2883585 2005-04-20 */
 /* Test -Wno-pointer-to-int-cast.  */
 /* Origin: Joseph Myers <joseph@codesourcery.com> */
 /* { dg-do compile } */

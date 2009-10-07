@@ -1,5 +1,5 @@
 <!--
- - Copyright (C) 2004-2007 Internet Systems Consortium, Inc. ("ISC")
+ - Copyright (C) 2004-2008 Internet Systems Consortium, Inc. ("ISC")
  - Copyright (C) 2000-2003 Internet Software Consortium.
  - 
  - Permission to use, copy, modify, and distribute this software for any
@@ -14,7 +14,7 @@
  - OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
  - PERFORMANCE OF THIS SOFTWARE.
 -->
-<!-- $Id: man.dig.html,v 1.2.2.37.10.1 2007/07/09 02:25:53 marka Exp $ -->
+<!-- $Id: man.dig.html,v 1.93 2008/11/07 04:08:43 tbox Exp $ -->
 <html>
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
@@ -47,12 +47,12 @@
 </div>
 <div class="refsynopsisdiv">
 <h2>Synopsis</h2>
-<div class="cmdsynopsis"><p><code class="command">dig</code>  [@server] [<code class="option">-b <em class="replaceable"><code>address</code></em></code>] [<code class="option">-c <em class="replaceable"><code>class</code></em></code>] [<code class="option">-f <em class="replaceable"><code>filename</code></em></code>] [<code class="option">-k <em class="replaceable"><code>filename</code></em></code>] [<code class="option">-p <em class="replaceable"><code>port#</code></em></code>] [<code class="option">-q <em class="replaceable"><code>name</code></em></code>] [<code class="option">-t <em class="replaceable"><code>type</code></em></code>] [<code class="option">-x <em class="replaceable"><code>addr</code></em></code>] [<code class="option">-y <em class="replaceable"><code>[<span class="optional">hmac:</span>]name:key</code></em></code>] [<code class="option">-4</code>] [<code class="option">-6</code>] [name] [type] [class] [queryopt...]</p></div>
+<div class="cmdsynopsis"><p><code class="command">dig</code>  [@server] [<code class="option">-b <em class="replaceable"><code>address</code></em></code>] [<code class="option">-c <em class="replaceable"><code>class</code></em></code>] [<code class="option">-f <em class="replaceable"><code>filename</code></em></code>] [<code class="option">-k <em class="replaceable"><code>filename</code></em></code>] [<code class="option">-m</code>] [<code class="option">-p <em class="replaceable"><code>port#</code></em></code>] [<code class="option">-q <em class="replaceable"><code>name</code></em></code>] [<code class="option">-t <em class="replaceable"><code>type</code></em></code>] [<code class="option">-x <em class="replaceable"><code>addr</code></em></code>] [<code class="option">-y <em class="replaceable"><code>[<span class="optional">hmac:</span>]name:key</code></em></code>] [<code class="option">-4</code>] [<code class="option">-6</code>] [name] [type] [class] [queryopt...]</p></div>
 <div class="cmdsynopsis"><p><code class="command">dig</code>  [<code class="option">-h</code>]</p></div>
 <div class="cmdsynopsis"><p><code class="command">dig</code>  [global-queryopt...] [query...]</p></div>
 </div>
 <div class="refsect1" lang="en">
-<a name="id2564026"></a><h2>DESCRIPTION</h2>
+<a name="id2563841"></a><h2>DESCRIPTION</h2>
 <p><span><strong class="command">dig</strong></span>
       (domain information groper) is a flexible tool
       for interrogating DNS name servers.  It performs DNS lookups and
@@ -68,7 +68,7 @@
       arguments, it also has a batch mode of operation for reading lookup
       requests from a file.  A brief summary of its command-line arguments
       and options is printed when the <code class="option">-h</code> option is given.
-      Unlike earlier versions, the BIND9 implementation of
+      Unlike earlier versions, the BIND 9 implementation of
       <span><strong class="command">dig</strong></span> allows multiple lookups to be issued
       from the
       command line.
@@ -80,8 +80,8 @@
       <code class="filename">/etc/resolv.conf</code>.
     </p>
 <p>
-      When no command line arguments or options are given, will perform an
-      NS query for "." (the root).
+      When no command line arguments or options are given,
+      <span><strong class="command">dig</strong></span> will perform an NS query for "." (the root).
     </p>
 <p>
       It is possible to set per-user defaults for <span><strong class="command">dig</strong></span> via
@@ -92,13 +92,13 @@
 <p>
       The IN and CH class names overlap with the IN and CH top level
       domains names.  Either use the <code class="option">-t</code> and
-      <code class="option">-c</code> options to specify the type and class or
-      use the <code class="option">-q</code> the specify the domain name or
+      <code class="option">-c</code> options to specify the type and class, 
+      use the <code class="option">-q</code> the specify the domain name, or
       use "IN." and "CH." when looking up these top level domains.
     </p>
 </div>
 <div class="refsect1" lang="en">
-<a name="id2575037"></a><h2>SIMPLE USAGE</h2>
+<a name="id2563936"></a><h2>SIMPLE USAGE</h2>
 <p>
       A typical invocation of <span><strong class="command">dig</strong></span> looks like:
       </p>
@@ -144,7 +144,7 @@
     </p>
 </div>
 <div class="refsect1" lang="en">
-<a name="id2575148"></a><h2>OPTIONS</h2>
+<a name="id2570805"></a><h2>OPTIONS</h2>
 <p>
       The <code class="option">-b</code> option sets the source IP address of the query
       to <em class="parameter"><code>address</code></em>.  This must be a valid
@@ -157,7 +157,7 @@
       The default query class (IN for internet) is overridden by the
       <code class="option">-c</code> option.  <em class="parameter"><code>class</code></em> is
       any valid
-      class, such as HS for Hesiod records or CH for CHAOSNET records.
+      class, such as HS for Hesiod records or CH for Chaosnet records.
     </p>
 <p>
       The <code class="option">-f</code> option makes <span><strong class="command">dig </strong></span>
@@ -165,9 +165,13 @@
       in batch mode by reading a list of lookup requests to process from the
       file <em class="parameter"><code>filename</code></em>.  The file contains a
       number of
-      queries, one per line.  Each entry in the file should be organised in
+      queries, one per line.  Each entry in the file should be organized in
       the same way they would be presented as queries to
       <span><strong class="command">dig</strong></span> using the command-line interface.
+    </p>
+<p>
+      The <code class="option">-m</code> option enables memory usage debugging.
+      
     </p>
 <p>
       If a non-standard port number is to be queried, the
@@ -188,7 +192,7 @@
       The <code class="option">-t</code> option sets the query type to
       <em class="parameter"><code>type</code></em>.  It can be any valid query type
       which is
-      supported in BIND9.  The default query type "A", unless the
+      supported in BIND 9.  The default query type is "A", unless the
       <code class="option">-x</code> option is supplied to indicate a reverse lookup.
       A zone transfer can be requested by specifying a type of AXFR.  When
       an incremental zone transfer (IXFR) is required,
@@ -199,11 +203,11 @@
     </p>
 <p>
       The <code class="option">-q</code> option sets the query name to 
-      <em class="parameter"><code>name</code></em>.  This useful do distingish the
+      <em class="parameter"><code>name</code></em>.  This useful do distinguish the
       <em class="parameter"><code>name</code></em> from other arguments.
     </p>
 <p>
-      Reverse lookups - mapping addresses to names - are simplified by the
+      Reverse lookups &#8212; mapping addresses to names &#8212; are simplified by the
       <code class="option">-x</code> option.  <em class="parameter"><code>addr</code></em> is
       an IPv4
       address in dotted-decimal notation, or a colon-delimited IPv6 address.
@@ -244,7 +248,7 @@
     </p>
 </div>
 <div class="refsect1" lang="en">
-<a name="id2649141"></a><h2>QUERY OPTIONS</h2>
+<a name="id2628628"></a><h2>QUERY OPTIONS</h2>
 <p><span><strong class="command">dig</strong></span>
       provides a number of query options which affect
       the way in which lookups are made and the results displayed.  Some of
@@ -267,7 +271,7 @@
 <dt><span class="term"><code class="option">+[no]tcp</code></span></dt>
 <dd><p>
               Use [do not use] TCP when querying name servers.  The default
-              behaviour is to use UDP unless an AXFR or IXFR query is
+              behavior is to use UDP unless an AXFR or IXFR query is
               requested, in
               which case a TCP connection is used.
             </p></dd>
@@ -380,7 +384,7 @@
             </p></dd>
 <dt><span class="term"><code class="option">+[no]cmd</code></span></dt>
 <dd><p>
-              toggles the printing of the initial comment in the output
+              Toggles the printing of the initial comment in the output
               identifying
               the version of <span><strong class="command">dig</strong></span> and the query
               options that have
@@ -412,7 +416,7 @@
               This query option toggles the printing of statistics: when the
               query
               was made, the size of the reply and so on.  The default
-              behaviour is
+              behavior is
               to print the query statistics.
             </p></dd>
 <dt><span class="term"><code class="option">+[no]qr</code></span></dt>
@@ -451,8 +455,8 @@
 <dd><p>
 
               Sets the timeout for a query to
-              <em class="parameter"><code>T</code></em> seconds.  The default time
-              out is 5 seconds.
+              <em class="parameter"><code>T</code></em> seconds.  The default
+	      timeout is 5 seconds.
               An attempt to set <em class="parameter"><code>T</code></em> to less
               than 1 will result
               in a query timeout of 1 second being applied.
@@ -517,7 +521,7 @@
               default is
               to not try the next server which is the reverse of normal stub
               resolver
-              behaviour.
+              behavior.
             </p></dd>
 <dt><span class="term"><code class="option">+[no]besteffort</code></span></dt>
 <dd><p>
@@ -553,9 +557,13 @@
 </dd>
 <dt><span class="term"><code class="option">+[no]topdown</code></span></dt>
 <dd><p>
-              When chasing DNSSEC signature chains perform a top down
+              When chasing DNSSEC signature chains perform a top-down
               validation.
               Requires dig be compiled with -DDIG_SIGCHASE.
+            </p></dd>
+<dt><span class="term"><code class="option">+[no]nsid</code></span></dt>
+<dd><p>
+              Include an EDNS name server ID request when sending a query.
             </p></dd>
 </dl></div>
 <p>
@@ -563,7 +571,7 @@
     </p>
 </div>
 <div class="refsect1" lang="en">
-<a name="id2650059"></a><h2>MULTIPLE QUERIES</h2>
+<a name="id2629560"></a><h2>MULTIPLE QUERIES</h2>
 <p>
       The BIND 9 implementation of <span><strong class="command">dig </strong></span>
       supports
@@ -609,7 +617,7 @@ dig +qr www.isc.org any -x 127.0.0.1 isc.org ns +noqr
     </p>
 </div>
 <div class="refsect1" lang="en">
-<a name="id2650213"></a><h2>IDN SUPPORT</h2>
+<a name="id2629782"></a><h2>IDN SUPPORT</h2>
 <p>
       If <span><strong class="command">dig</strong></span> has been built with IDN (internationalized
       domain name) support, it can accept and display non-ASCII domain names.
@@ -623,14 +631,14 @@ dig +qr www.isc.org any -x 127.0.0.1 isc.org ns +noqr
     </p>
 </div>
 <div class="refsect1" lang="en">
-<a name="id2650242"></a><h2>FILES</h2>
+<a name="id2629811"></a><h2>FILES</h2>
 <p><code class="filename">/etc/resolv.conf</code>
     </p>
 <p><code class="filename">${HOME}/.digrc</code>
     </p>
 </div>
 <div class="refsect1" lang="en">
-<a name="id2650263"></a><h2>SEE ALSO</h2>
+<a name="id2629832"></a><h2>SEE ALSO</h2>
 <p><span class="citerefentry"><span class="refentrytitle">host</span>(1)</span>,
       <span class="citerefentry"><span class="refentrytitle">named</span>(8)</span>,
       <span class="citerefentry"><span class="refentrytitle">dnssec-keygen</span>(8)</span>,
@@ -638,7 +646,7 @@ dig +qr www.isc.org any -x 127.0.0.1 isc.org ns +noqr
     </p>
 </div>
 <div class="refsect1" lang="en">
-<a name="id2650300"></a><h2>BUGS</h2>
+<a name="id2629938"></a><h2>BUGS</h2>
 <p>
       There are probably too many query options.
     </p>

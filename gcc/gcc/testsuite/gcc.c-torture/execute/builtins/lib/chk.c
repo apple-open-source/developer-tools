@@ -1,4 +1,3 @@
-/* APPLE LOCAL file mainline */
 #include <stdarg.h>
 
 extern void abort (void);
@@ -229,7 +228,7 @@ char *
 strcat (char *dst, const char *src)
 {
   char *p = dst;
-
+  
 #ifdef __OPTIMIZE__
   if (strcat_disallowed && inside_main)
     abort ();

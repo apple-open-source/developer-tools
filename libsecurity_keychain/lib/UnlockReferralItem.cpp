@@ -49,7 +49,7 @@ UnlockReferralItem::UnlockReferralItem() :
 //
 // Destroy it
 //
-UnlockReferralItem::~UnlockReferralItem() throw()
+UnlockReferralItem::~UnlockReferralItem() 
 {
 	secdebug("referral", "destroy %p", this);
 }
@@ -60,6 +60,7 @@ UnlockReferralItem::~UnlockReferralItem() throw()
 //
 PrimaryKey UnlockReferralItem::add(Keychain &keychain)
 {
+	StLock<Mutex>_(mMutex);
 	// If we already have a Keychain we can't be added.
 	if (mKeychain)
 		MacOSError::throwMe(errSecDuplicateItem);

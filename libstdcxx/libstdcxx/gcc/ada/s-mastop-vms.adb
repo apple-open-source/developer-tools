@@ -7,7 +7,7 @@
 --                                 B o d y                                  --
 --                         (Version for Alpha/VMS)                          --
 --                                                                          --
---          Copyright (C) 2001-2002 Ada Core Technologies, Inc.             --
+--                     Copyright (C) 2001-2005, AdaCore                     --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -17,8 +17,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -41,10 +41,9 @@ with Unchecked_Conversion;
 
 package body System.Machine_State_Operations is
 
-   use System.Exceptions;
    subtype Cond_Value_Type is Unsigned_Longword;
 
-   --  Record layouts copied from Starlet.
+   --  Record layouts copied from Starlet
 
    type ICB_Fflags_Bits_Type is record
       Exception_Frame : Boolean;
@@ -95,7 +94,7 @@ package body System.Machine_State_Operations is
 
       Ireg : Unsigned_Quadword_Array (0 .. 30);
       Freg : Unsigned_Quadword_Array (0 .. 30);
-      --  The register contents areas. 31 for scalars, 31 for float.
+      --  The register contents areas. 31 for scalars, 31 for float
 
       System_Defined : Unsigned_Quadword_Array (0 .. 1);
       --  The following is an "internal" area that's reserved for use by
@@ -148,55 +147,13 @@ package body System.Machine_State_Operations is
         (Memory.Alloc (Invo_Handle_Type'Max_Size_In_Storage_Elements));
    end Allocate_Machine_State;
 
-   -------------------
-   -- Enter_Handler --
-   -------------------
-
-   procedure Enter_Handler (M : Machine_State; Handler : Handler_Loc) is
-      procedure Get_Invo_Context (
-         Result       : out Unsigned_Longword; -- return value
-         Invo_Handle  : Invo_Handle_Type;
-         Invo_Context : out Invo_Context_Blk_Type);
-
-      pragma Interface (External, Get_Invo_Context);
-
-      pragma Import_Valued_Procedure (Get_Invo_Context, "LIB$GET_INVO_CONTEXT",
-         (Unsigned_Longword, Invo_Handle_Type, Invo_Context_Blk_Type),
-         (Value, Value, Reference));
-
-      ICB : Invo_Context_Blk_Type;
-
-      procedure Goto_Unwind (
-         Status      : out Cond_Value_Type; -- return value
-         Target_Invo : Address := Address_Zero;
-         Target_PC   : Address := Address_Zero;
-         New_R0      : Unsigned_Quadword := Unsigned_Quadword'Null_Parameter;
-         New_R1      : Unsigned_Quadword := Unsigned_Quadword'Null_Parameter);
-
-      pragma Interface (External, Goto_Unwind);
-
-      pragma Import_Valued_Procedure
-        (Goto_Unwind, "SYS$GOTO_UNWIND",
-         (Cond_Value_Type, Address, Address,
-          Unsigned_Quadword, Unsigned_Quadword),
-         (Value, Reference, Reference,
-          Reference, Reference));
-
-      Status : Cond_Value_Type;
-
-   begin
-      Get_Invo_Context (Status, To_Invo_Handle_Access (M).all, ICB);
-      Goto_Unwind
-        (Status, System.Address (To_Invo_Handle_Access (M).all), Handler);
-   end Enter_Handler;
-
    ----------------
    -- Fetch_Code --
    ----------------
 
    function Fetch_Code (Loc : Code_Loc) return Code_Loc is
    begin
-      --  The starting address is in the second longword pointed to by Loc.
+      --  The starting address is in the second longword pointed to by Loc
 
       return Fetch (System.Aux_DEC."+" (Loc, 8));
    end Fetch_Code;
@@ -261,12 +218,7 @@ package body System.Machine_State_Operations is
    -- Pop_Frame --
    ---------------
 
-   procedure Pop_Frame
-     (M    : Machine_State;
-      Info : Subprogram_Info_Type)
-   is
-      pragma Warnings (Off, Info);
-
+   procedure Pop_Frame (M : Machine_State) is
       procedure Get_Prev_Invo_Handle (
          Result : out Invo_Handle_Type; -- return value
          ICB    : in  Invo_Handle_Type);
@@ -311,7 +263,7 @@ package body System.Machine_State_Operations is
          (Invo_Handle_Type, Invo_Context_Blk_Type),
          (Value, Reference));
 
-      ICB : Invo_Context_Blk_Type;
+      ICB         : Invo_Context_Blk_Type;
       Invo_Handle : aliased Invo_Handle_Type;
 
    begin
@@ -320,20 +272,5 @@ package body System.Machine_State_Operations is
       To_Invo_Handle_Access (M).all := Invo_Handle;
       Pop_Frame (M, System.Null_Address);
    end Set_Machine_State;
-
-   ------------------------------
-   -- Set_Signal_Machine_State --
-   ------------------------------
-
-   procedure Set_Signal_Machine_State
-     (M       : Machine_State;
-      Context : System.Address)
-   is
-      pragma Warnings (Off, M);
-      pragma Warnings (Off, Context);
-
-   begin
-      null;
-   end Set_Signal_Machine_State;
 
 end System.Machine_State_Operations;

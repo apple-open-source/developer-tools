@@ -7,11 +7,13 @@ class T {
 public:
   T() {
     i = 1;
-    printf("T() at %x\n", this);
+    /* APPLE LOCAL default to Wformat-security 5764921 */
+    printf("T() at %p\n", (void*)this);
   }
   T(const T& o) {
     i = o.i;
-    printf("T(const T&) at %x <-- %x\n", this, &o);
+    /* APPLE LOCAL default to Wformat-security 5764921 */
+    printf("T(const T&) at %p <-- %p\n", (void*)this, (void*)&o);
   }
   T operator +(const T& o) {
     T r;
@@ -21,7 +23,8 @@ public:
   operator int () {
     return i;
   }
-  ~T() { printf("~T() at %x\n", this); }
+  /* APPLE LOCAL default to Wformat-security 5764921 */
+  ~T() { printf("~T() at %p\n", (void*)this); }
 } s, b;
 
 int foo() { return getenv("TEST") == 0; }

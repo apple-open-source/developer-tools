@@ -67,6 +67,8 @@
 #include "dwarf2read.h"
 /* APPLE LOCAL psym equivalences  */
 #include <ctype.h>
+/* APPLE LOCAL objc_invalidate_objc_class */
+#include "objc-lang.h"
 
 /* A note on memory usage for this file.
    
@@ -195,6 +197,8 @@ struct dwarf2_per_objfile
   unsigned int ranges_size;
   unsigned int frame_size;
   unsigned int eh_frame_size;
+  /* APPLE LOCAL debug inlined section */
+  unsigned int inlined_size;
 
   /* Loaded data from the sections.  */
   char *info_buffer;
@@ -204,6 +208,8 @@ struct dwarf2_per_objfile
   char *macinfo_buffer;
   char *ranges_buffer;
   char *loc_buffer;
+  /* APPLE LOCAL debug inlined section  */
+  char *inlined_buffer;
   
   /* APPLE LOCAL: use mmap for dwarf sections.  */
 #if 0
@@ -290,6 +296,9 @@ static void rb_print_tree (struct rb_tree_node *, int);
 int dwarf2_allow_inlined_stepping = 1;
 int dwarf2_debug_inlined_stepping = 0;
 
+/* APPLE LOCAL inlined function symbols & blocks  */
+struct pending *inlined_subroutine_symbols = NULL;
+
 /* APPLE LOCAL end subroutine inlining  */
 
 static struct dwarf2_per_objfile *dwarf2_per_objfile;
@@ -301,6 +310,8 @@ static asection *dwarf_pubnames_section;
 /* APPLE LOCAL: pubtypes */
 static asection *dwarf_pubtypes_section;
 /* END APPLE LOCAL */
+/* APPLE LOCAL debug inlined section  */
+static asection *dwarf_inlined_section;
 static asection *dwarf_aranges_section;
 static asection *dwarf_loc_section;
 static asection *dwarf_macinfo_section;
@@ -320,6 +331,8 @@ asection *dwarf_eh_frame_section;
 /* APPLE LOCAL: pubtypes */
 #define PUBTYPES_SECTION "LC_SEGMENT.__DWARF.__debug_pubtypes"
 /* END APPLE LOCAL */
+/* APPLE LOCAL debug inlined section */
+#define INLINED_SECTION  "LC_SEGMENT.__DWARF.__debug_inlined"
 #define ARANGES_SECTION  "LC_SEGMENT.__DWARF.__debug_aranges"
 #define LOC_SECTION      "LC_SEGMENT.__DWARF.__debug_loc"
 #define MACINFO_SECTION  "LC_SEGMENT.__DWARF.__debug_macinfo"
@@ -746,6 +759,13 @@ struct dwarf_block
 #define DW_FIELD_ALLOC_CHUNK 4
 #endif
 
+/* APPLE LOCAL begin radar 6568709  */
+/* Determine how many bytes a pointer/address is supposed to have.  */
+#ifndef TARGET_ADDRESS_BYTES
+#define TARGET_ADDRESS_BYTES (TARGET_LONG_BIT / TARGET_CHAR_BIT)
+#endif
+/* APPLE LOCAL end radar 6568709  */
+
 /* A zeroed version of a partial die for initialization purposes.  */
 /* APPLE LOCAL avoid unused var warning.  */
 /* static struct partial_die_info zeroed_partial_die; */
@@ -902,6 +922,12 @@ dwarf2_invalid_attrib_class_complaint (const char *arg1, const char *arg2)
 /* local function prototypes */
 
 static void dwarf2_locate_sections (bfd *, asection *, void *);
+/* APPLE LOCAL begin debug inlined section  */
+static bfd_boolean find_debug_inlined_section (bfd *, asection *, void *);
+static bfd_boolean find_debug_str_section (bfd *, asection *, void *);
+static void scan_partial_inlined_function_symbols (struct dwarf2_cu *);
+static void fix_inlined_subroutine_symbols (void);
+/* APPLE LOCAL end debug inlined section  */
 
 #if 0
 static void dwarf2_build_psymtabs_easy (struct objfile *, int);
@@ -943,9 +969,6 @@ static char *locate_pdi_sibling (struct partial_die_info *orig_pdi,
 static void dwarf2_psymtab_to_symtab (struct partial_symtab *);
 
 static void psymtab_to_symtab_1 (struct partial_symtab *);
-
-/* APPLE LOCAL debug map take a bfd parameter */
-char *dwarf2_read_section (struct objfile *, bfd *, asection *);
 
 static void dwarf2_read_abbrevs (bfd *abfd, struct dwarf2_cu *cu);
 
@@ -1137,6 +1160,8 @@ static void read_tag_const_type (struct die_info *, struct dwarf2_cu *);
 
 static void read_tag_volatile_type (struct die_info *, struct dwarf2_cu *);
 
+static void read_tag_restrict_type (struct die_info *, struct dwarf2_cu *);
+
 static void read_tag_string_type (struct die_info *, struct dwarf2_cu *);
 
 static void read_subroutine_type (struct die_info *, struct dwarf2_cu *);
@@ -1307,6 +1332,8 @@ dwarf2_has_info_1 (struct objfile *objfile, bfd *abfd)
   dwarf_eh_frame_section = 0;
   dwarf_ranges_section = 0;
   dwarf_loc_section = 0;
+  /* APPLE LOCAL debug inlined section  */
+  dwarf_inlined_section = 0;
  
   bfd_map_over_sections (abfd, dwarf2_locate_sections, NULL);
   return (dwarf_info_section != NULL && dwarf_abbrev_section != NULL);
@@ -1352,6 +1379,13 @@ dwarf2_locate_sections (bfd *ignore_abfd, asection *sectp, void *ignore_ptr)
       dwarf_pubtypes_section = sectp;
     }
   /* END APPLE LOCAL */
+  /* APPLE LOCAL begin debug inlined section  */
+  else if (strcmp (sectp->name, INLINED_SECTION) == 0)
+    {
+      dwarf2_per_objfile->inlined_size = bfd_get_section_size (sectp);
+      dwarf_inlined_section = sectp;
+    }
+  /* APPLE LOCAL end debug inlined section */
   else if (strcmp (sectp->name, ARANGES_SECTION) == 0)
     {
       dwarf2_per_objfile->aranges_size = bfd_get_section_size (sectp);
@@ -1436,6 +1470,14 @@ dwarf2_copy_dwarf_from_file (struct objfile *objfile, bfd *abfd)
                                                           dwarf_loc_section);
   else
     dwarf2_per_objfile->loc_buffer = NULL;
+
+  /* APPLE LOCAL begin debug inlined section  */
+  if (dwarf_inlined_section)
+    dwarf2_per_objfile->inlined_buffer = dwarf2_read_section (objfile, abfd,
+							      dwarf_inlined_section);
+  else
+    dwarf2_per_objfile->inlined_buffer = NULL;
+  /* APPLE LOCAL end debug inlined section  */
 }
 
 /* Build a partial symbol table.  */
@@ -1470,6 +1512,267 @@ dwarf2_build_psymtabs (struct objfile *objfile, int mainline)
       dwarf2_build_psymtabs_hard (objfile, mainline);
     }
 }
+
+/* APPLE LOCAL begin debug inlined section  */
+
+/* Run from bfd_map_over_sections, finds the debug_inlined section.  */
+
+static bfd_boolean
+find_debug_inlined_section (bfd *ignore_abfd, asection *sectp, void *ignore)
+{
+  if (sectp->name
+      && strcmp (sectp->name, INLINED_SECTION) == 0)
+    {
+      return 1;
+    }
+  else
+    return 0;
+}
+
+/* Run from bfd_map_over_sections, finds the debug_inlined section.  */
+
+static bfd_boolean
+find_debug_str_section (bfd *ignore_abfd, asection *sectp, void *ignore)
+{
+  if (sectp->name
+      && strcmp (sectp->name, STR_SECTION) == 0)
+    {
+      return 1;
+    }
+  else
+    return 0;
+}
+
+
+
+/* Scan the debug inlined section stored in the OSO file for PST,
+   and add any inlined subroutines you find there to the global
+   pattial symbols for OBJFILE for this PST.  If we had to open an
+   archive to fetch out the symbols for PST, we return the BFD for
+   that archive  */
+
+void
+dwarf2_scan_inlined_section_for_psymbols (struct partial_symtab *pst,
+					  struct objfile *objfile,
+					  enum language psymtab_language)
+{
+  struct bfd *abfd;
+  int cached;
+  asection *inlined_section = NULL;
+  bfd_window inlined_window;
+  char *inlined_data, *inlined_ptr;
+  bfd_size_type inlined_size;
+
+  asection *str_section = NULL;
+  bfd_window str_window;
+  char *str_data;
+  bfd_size_type str_size;
+
+  int noerr;
+  int bytes_read;
+  struct cleanup *timing_cleanup;
+  static int timer = -1;
+  struct dwarf2_cu fake_cu;
+
+  /* FIXME temporary workaround for debug_inlined sections that cause gdb
+     to provide incorrect backtraces, v. <rdar://problem/6771834> 
+     jmolenda/2009-04-08  */
+  return;
+
+  if (maint_use_timers)
+    timing_cleanup = start_timer (&timer, "debug_inlined", 
+				  PSYMTAB_OSO_NAME (pst));
+
+  if (PSYMTAB_OSO_NAME (pst) == NULL || pst->readin)
+    return;
+
+  abfd = open_bfd_from_oso (pst, &cached);
+  if (abfd == NULL)
+    {
+      warning ("Couldnot open OSO file %s "
+	       "to scan for inlined section for objfile %s\n",
+	       PSYMTAB_OSO_NAME (pst),
+	       objfile->name ? objfile->name : "<unknown>");
+      if (maint_use_timers)
+	do_cleanups (timing_cleanup);
+      return;
+    }
+
+  if (!bfd_check_format (abfd, bfd_object))
+    {
+      warning ("Not in bfd_object form");
+      goto close_bfd;
+    }
+
+  inlined_section = bfd_sections_find_if (abfd, find_debug_inlined_section, 
+					  NULL);
+
+  if (inlined_section == NULL)
+    goto close_bfd;
+
+  str_section = bfd_sections_find_if (abfd, find_debug_str_section, NULL);
+
+  if (str_section == NULL)
+    goto close_bfd;
+
+  inlined_size = bfd_get_section_size (inlined_section);
+  str_size = bfd_get_section_size (str_section);
+
+  bfd_init_window (&(inlined_window));
+  noerr = bfd_get_section_contents_in_window_with_mode
+    (abfd, inlined_section, &inlined_window, 0, inlined_size, 0);
+  if (!noerr)
+    {
+      bfd_free_window (&inlined_window);
+      bfd_close (abfd);
+      perror_with_name (PSYMTAB_OSO_NAME (pst));
+    }
+  inlined_data = inlined_window.data;
+
+  bfd_init_window (&(str_window));
+  noerr = bfd_get_section_contents_in_window_with_mode
+    (abfd, str_section, &str_window, 0, str_size, 0);
+  if (!noerr)
+    {
+      bfd_free_window (&str_window);
+      bfd_close (abfd);
+      perror_with_name (PSYMTAB_OSO_NAME (pst));
+    }
+  str_data = str_window.data;
+
+  /* Now read through the data.  First pick off the header.  */
+
+  fake_cu.header.initial_length_size = 0;
+  fake_cu.header.signed_addr_p = 0;
+  inlined_ptr = inlined_data;
+
+  while ((inlined_ptr - inlined_data) < inlined_size)
+    {
+      LONGEST length, total_bytes_read;
+      unsigned char version;
+      unsigned int addr_size;
+
+      total_bytes_read = 0;
+
+      length = read_initial_length (abfd, inlined_ptr,
+				    &(fake_cu.header), &bytes_read);
+      inlined_ptr += bytes_read;
+      total_bytes_read += bytes_read;
+
+      version = read_2_bytes (abfd, inlined_ptr);
+      inlined_ptr += 2;
+      total_bytes_read += 2;
+
+      addr_size = read_1_byte (abfd, inlined_ptr);
+      inlined_ptr += 1;
+      total_bytes_read += 1;
+
+      fake_cu.header.addr_size = addr_size;
+
+      /* Keep reading entries until we have read the length of
+	 the debug_inlined section.  */
+
+      /* APPLE LOCAL begin radar 6568709  */
+      if (addr_size != TARGET_ADDRESS_BYTES)
+	{
+	  /* There's something wrong with the address sizes; don't
+	     attempt to read the rest of this section, just move the
+	     pointer to the end.  */
+	  total_bytes_read = length;
+	  inlined_ptr += inlined_size;
+  	  warning ("Unable to read debug info section for inlined subroutines.\n");
+	}
+      /* APPLE LOCAL end radar 6568709  */
+
+      while (total_bytes_read < length)
+	{
+	  char *mips_name;
+	  char *fn_name;
+	  unsigned int num_entries;
+	  unsigned int i;
+          LONGEST str_offset;
+
+	  /* Read one entry in the debug_inlined section.  An
+	     entry consists of the die offset for the origin die,
+	     the MIPS linkage name for the function, the regular name
+	     for the function, the number of times the function was
+	     inlined, followed by pairs of {low_pc address, die offset}
+	     for each time the subroutine was inlined.  */
+
+          str_offset = read_offset (abfd, inlined_ptr, &(fake_cu.header), 
+                                    &bytes_read);
+          if (str_offset >= str_size)
+            error ("W_FORM_strp pointing outside of .debug_str section [in module %s]", bfd_get_filename (abfd));
+          mips_name = str_data + str_offset;
+	  inlined_ptr += bytes_read;
+	  total_bytes_read += bytes_read;
+
+          str_offset = read_offset (abfd, inlined_ptr, &(fake_cu.header), 
+                                    &bytes_read);
+          if (str_offset >= str_size)
+            error ("W_FORM_strp pointing outside of .debug_str section [in module %s]", bfd_get_filename (abfd));
+          fn_name = str_data + str_offset;
+	  inlined_ptr += bytes_read;
+	  total_bytes_read += bytes_read;
+
+	  num_entries = read_unsigned_leb128 (abfd, inlined_ptr, 
+					      (unsigned int *) &bytes_read);
+	  inlined_ptr += bytes_read;
+	  total_bytes_read += bytes_read;
+	  
+	  for (i = 0; i < num_entries; i++)
+	    {
+	      CORE_ADDR low_pc;
+	      CORE_ADDR die_offset;
+
+	      die_offset = read_offset (abfd, inlined_ptr, &(fake_cu.header),
+					&bytes_read);
+	      inlined_ptr += bytes_read;
+	      total_bytes_read += bytes_read;
+
+	      low_pc = read_address (abfd, inlined_ptr, &fake_cu,
+				     &bytes_read);
+	      inlined_ptr += bytes_read;
+	      total_bytes_read += bytes_read;
+
+	      /* Note:  The low_pc address here is *exactly* the one
+		 the compiler generated; it has NOT been fixed up,
+		 relinked, shifted, run through the debug_map or
+		 anything else.  Therefore you should NOT use it
+		 as a real address, at this point (unless you also
+		 add the code to fix it up properly).  */
+
+	      /* APPLE LOCAL begin radar 6600806  */
+	      if (mips_name)
+		{
+		  /* It is possible to have inlined records without
+		     function names, in which case we do not want to
+		     try to create symbols for them.  */
+		  add_psymbol_to_list (mips_name, strlen (mips_name),
+				       VAR_DOMAIN, LOC_BLOCK,
+				       &objfile->global_psymbols,
+				       0, low_pc, 
+				       psymtab_language, objfile);
+		}
+	      /* APPLE LOCAL end radar 6600806  */
+
+	    }
+	}
+    }
+
+  bfd_free_window (&inlined_window);
+  bfd_free_window (&str_window);
+
+ close_bfd:
+      /* If we cached the bfd, we'll let our caller clean
+	 it up, otherwise close the bfd here.  */
+  if (!cached)
+    close_bfd_or_archive (abfd);
+
+  if (maint_use_timers)
+    do_cleanups (timing_cleanup);
+}
+/* APPLE LOCAL end debug inlined section  */
 
 /* Run from bfd_map_over_sections, finds the pubtypes section.  */
 
@@ -1519,7 +1822,7 @@ dwarf2_scan_pubtype_for_psymbols (struct partial_symtab *pst,
   if (abfd == NULL)
     {
       warning ("Could not open OSO file %s "
-	       "to scan for pubtypes for objfile %s\n", 
+	       "to scan for pubtypes for objfile %s", 
 	       PSYMTAB_OSO_NAME (pst), 
 	       objfile->name ? objfile->name : "<unknown>");
       if (maint_use_timers)
@@ -1556,11 +1859,11 @@ dwarf2_scan_pubtype_for_psymbols (struct partial_symtab *pst,
     }
   pubtypes_data = pubtypes_window.data;
 #else
-  pubtypes_data = malloc (pubtypes_size + 1);
+  pubtypes_data = xmalloc (pubtypes_size + 1);
   noerr = bfd_get_section_contents (abfd, pubtypes_section, pubtypes_data, 0, pubtypes_size);
   if (!noerr)
     {
-      free (pubtypes_data);
+      xfree (pubtypes_data);
       bfd_close (abfd);
       perror_with_name (PSYMTAB_OSO_NAME (pst));
     }
@@ -1618,14 +1921,23 @@ dwarf2_scan_pubtype_for_psymbols (struct partial_symtab *pst,
 		 typedef or a tag name.  So add it to both.  Yuck...
 		 But we want this scan to be really fast, so we don't
 		 want to have to peek into the .debug_info.  */
+	      /* Also, when we build psymtabs by scanning the actual
+		 DWARF, we put the types in the global psymtabs for C++,
+		 and the local one for C.  Since we can't tell the language
+		 from the pubtypes table, we have to just choose one.
+		 Putting it in the global table makes "ptype struct foo"
+		 work correctly, so let's do that.  */
+
 	      add_psymbol_to_list (type_name, type_name_length - 1,
 				   STRUCT_DOMAIN, LOC_TYPEDEF,
-				   &objfile->static_psymbols,
+				   &objfile->global_psymbols,
 				   0, 0,
 				   psymtab_language, objfile);
+              /* APPLE LOCAL: Put the VAR_DOMAIN sym in the global psymbol
+                 list as well. */
 	      add_psymbol_to_list (type_name, type_name_length - 1,
 				   VAR_DOMAIN, LOC_TYPEDEF,
-				   &objfile->static_psymbols,
+				   &objfile->global_psymbols,
 				   0, 0,
 				   psymtab_language, objfile);
 	    }	      
@@ -1635,14 +1947,14 @@ dwarf2_scan_pubtype_for_psymbols (struct partial_symtab *pst,
 #ifdef HAVE_MMAP
   bfd_free_window (&pubtypes_window);
 #else
-      free (pubtypes_data);
+      xfree (pubtypes_data);
 #endif
 
  close_bfd:
       /* If we cached the bfd, we'll let our caller clean
 	 it up, otherwise close the bfd here.  */
   if (!cached)
-    bfd_close (abfd);
+    close_bfd_or_archive (abfd);
 
   if (maint_use_timers)
     do_cleanups (timing_cleanup);
@@ -1850,6 +2162,135 @@ static void decrement_use_count (struct database_info *, struct objfile *);
 static int byte_swap_p;
 /* APPLE LOCAL end dwarf repository */
 
+/* APPLE LOCAL begin debug inlined section */
+static void
+scan_partial_inlined_function_symbols (struct dwarf2_cu *cu)
+{
+  const struct partial_symbol *psym = NULL;
+  static struct objfile *current_psym_objfile = NULL;
+
+  /* FIXME temporary workaround for debug_inlined sections that cause gdb
+     to provide incorrect backtraces, v. <rdar://problem/6771834>
+     jmolenda/2009-04-08  */
+  return;
+
+  /* Check current cu's objfile; if we've already read the debug_inlined
+     section for it, just return.  */
+
+  if (current_psym_objfile != cu->objfile)
+    current_psym_objfile = cu->objfile;
+  else
+    return;
+
+  if (dwarf2_per_objfile->inlined_buffer && dwarf2_per_objfile->inlined_size)
+    {
+      char *inlined_ptr;
+      struct objfile *objfile = cu->objfile;
+      bfd *abfd = objfile->obfd;
+      CORE_ADDR low_pc;
+      CORE_ADDR baseaddr;
+      CORE_ADDR inlined_die_ref;
+      unsigned num_instances = 0;
+      unsigned bytes_read = 0;
+      unsigned i;
+      unsigned total_length;
+      unsigned version;
+      unsigned addr_size;
+ 
+      char *fn_name;
+      char *mips_name;
+      struct comp_unit_head *cu_header = &cu->header;
+
+      /* NOTE: Final format for each entry (after the section header),
+         is: mips name, regular name, # of inlining instances,
+         followed by a {die_ref, lowpc} pair for each inlined
+         subroutine call. 
+
+         The section header consists of:  The length of the section,
+	 the DWARF version, and the size of an address.  */
+
+      baseaddr = objfile_text_section_offset (objfile);
+
+      inlined_ptr = dwarf2_per_objfile->inlined_buffer;
+
+      total_length = read_initial_length (abfd, inlined_ptr, &cu->header, 
+					  (int *) &bytes_read);
+      inlined_ptr += bytes_read;
+
+      version = read_2_bytes (abfd, inlined_ptr);
+      inlined_ptr += 2;
+
+      addr_size = read_1_byte (abfd, inlined_ptr);
+      inlined_ptr += 1;
+
+      /* APPLE LOCAL begin radar 6568709  */
+      if (addr_size != cu_header->addr_size)
+	{
+	  /* There's something wrong with the address sizes; don't
+	     attempt to read the rest of this section, just move the
+	     pointer to the end.  */
+	  inlined_ptr = dwarf2_per_objfile->inlined_buffer
+	                + dwarf2_per_objfile->inlined_size;
+	  warning ("Unable to read debug info section for inlined subroutines.\n");
+	}
+      /* APPLE LOCAL end radar 6568709  */
+
+      while (inlined_ptr < (dwarf2_per_objfile->inlined_buffer
+			    + dwarf2_per_objfile->inlined_size))
+	{
+	  mips_name = read_indirect_string (abfd, inlined_ptr, cu_header,
+					  &bytes_read);
+	  inlined_ptr += bytes_read;
+
+	  fn_name = read_indirect_string (abfd, inlined_ptr, cu_header,
+					  &bytes_read);
+	  inlined_ptr += bytes_read;
+
+	  num_instances = read_unsigned_leb128 (abfd, inlined_ptr, 
+						&bytes_read);
+	  inlined_ptr += bytes_read;
+
+	  for (i = 0; i < num_instances; i++)
+	    {
+	      CORE_ADDR addr;
+
+	      inlined_die_ref = read_offset (abfd, inlined_ptr, &cu->header,
+					     (int *) &bytes_read);
+	      inlined_ptr += bytes_read;
+
+	      low_pc = read_address (abfd, inlined_ptr, cu, 
+				     (int *) &bytes_read);
+	      inlined_ptr += bytes_read;
+	      
+	      if (translate_debug_map_address (cu->addr_map , low_pc, &addr, 
+					       0))
+		low_pc = addr;
+
+	      /* APPLE LOCAL begin radar 6600806  */
+	      if (mips_name)
+		{
+		  /* It is possible for some records to not have names,
+		     in which case we can't make symbols for them.  */
+		  psym = add_psymbol_to_list (mips_name, strlen (mips_name),
+					      VAR_DOMAIN, LOC_BLOCK,
+					      &objfile->global_psymbols,
+					      0, low_pc + baseaddr,
+					      cu->language, objfile);
+		  
+		  if (cu->language == language_cplus
+		      && cu->has_namespace_info == 0
+		      && psym != NULL
+		      && SYMBOL_CPLUS_DEMANGLED_NAME (psym) != NULL)
+		    cp_check_possible_namespace_symbols (SYMBOL_CPLUS_DEMANGLED_NAME (psym),
+							 objfile);
+		}
+	      /* APPLE LOCAL end radar 6600806  */
+	    }
+	}
+    }
+}
+/* APPLE LOCAL end debug inlined section  */
+
 /* Build the partial symbol table by doing a quick pass through the
    .debug_info and .debug_abbrev sections.  */
 
@@ -1995,6 +2436,9 @@ dwarf2_build_psymtabs_hard (struct objfile *objfile, int mainline)
 	  /* APPLE LOCAL begin psym equivalences  */
 	  scan_partial_symbols (first_die, &lowpc, &highpc, &cu,
 				&equiv_psyms);
+
+	  /* APPLE LOCAL debug inlined section  */
+	  scan_partial_inlined_function_symbols (&cu);
 
 	  pst->equiv_psyms = equiv_psyms;
 	  /* APPLE LOCAL end psym equivalences  */
@@ -2490,9 +2934,11 @@ add_partial_symbol (struct partial_die_info *pdi, struct dwarf2_cu *cu)
     case DW_TAG_typedef:
     case DW_TAG_base_type:
     case DW_TAG_subrange_type:
+      /* APPLE LOCAL: Put it in the global_psymbols list, not 
+         static_psymbols.  */
       add_psymbol_to_list (actual_name, strlen (actual_name),
 			   VAR_DOMAIN, LOC_TYPEDEF,
-			   &objfile->static_psymbols,
+			   &objfile->global_psymbols,
 			   0, (CORE_ADDR) 0, cu->language, objfile);
       break;
     case DW_TAG_namespace:
@@ -2511,12 +2957,11 @@ add_partial_symbol (struct partial_die_info *pdi, struct dwarf2_cu *cu)
 	 static vs. global.  */
       if (pdi->has_children == 0)
 	return;
+      /* APPLE LOCAL: Put it in the global_psymbols list, not 
+         static_psymbols regardless of which language it came from.  */
       add_psymbol_to_list (actual_name, strlen (actual_name),
 			   STRUCT_DOMAIN, LOC_TYPEDEF,
-			   (cu->language == language_cplus
-			    || cu->language == language_java)
-			   ? &objfile->global_psymbols
-			   : &objfile->static_psymbols,
+			   &objfile->global_psymbols,
 			   0, (CORE_ADDR) 0, cu->language, objfile);
 
       if (cu->language == language_cplus
@@ -2530,12 +2975,11 @@ add_partial_symbol (struct partial_die_info *pdi, struct dwarf2_cu *cu)
 	}
       break;
     case DW_TAG_enumerator:
+          /* APPLE LOCAL: Put it in the global_psymbols list regardless of
+             language.  */
       add_psymbol_to_list (actual_name, strlen (actual_name),
 			   VAR_DOMAIN, LOC_CONST,
-			   (cu->language == language_cplus
-			    || cu->language == language_java)
-			   ? &objfile->global_psymbols
-			   : &objfile->static_psymbols,
+			   &objfile->global_psymbols,
 			   0, (CORE_ADDR) 0, cu->language, objfile);
       break;
     default:
@@ -2916,7 +3360,13 @@ compare_map_entries_oso_addr (const void *a, const void *b)
   struct oso_final_addr_tuple *map_b = (struct oso_final_addr_tuple *) b;
 
   if (map_a->oso_low_addr == map_b->oso_low_addr)
-    return 0;
+    {
+      if (map_a->present_in_final == map_b->present_in_final)
+	return 0;
+      if (map_a->present_in_final < map_b->present_in_final)
+	return -1;
+      return 1;
+    }
   if (map_a->oso_low_addr < map_b->oso_low_addr)
     return -1;
   return 1;
@@ -3090,21 +3540,56 @@ convert_oso_map_to_final_map (struct nlist_rec *nlists,
 
   /* Initialize the oso_high_addr entries */
 
-  for (i = 0; i < map->entries - 1; i++)
-    map->tuples[i].oso_high_addr = map->tuples[i + 1].oso_low_addr;
-  map->tuples[map->entries - 1].oso_high_addr = (CORE_ADDR) -1;
+  if (map->entries > 1)
+    {
+      j = 0;  /* This holds valid the tuple insert index.  */
 
-  /* Allocate the final_addr_index array.  */
-  map->final_addr_index = (int *) xmalloc (sizeof (int) * map->entries);
+      for (i = 0; i < map->entries - 1; i++)
+	{
+	  if (map->tuples[i].oso_low_addr == map->tuples[i+1].oso_low_addr &&
+	      map->tuples[i].present_in_final == 0)
+	    {
+	      if (debug_debugmap)
+	      	{
+		  fprintf_unfiltered (gdb_stdlog, 
+				      "debugmap: removing tuple[%i] ('%s')\n", 
+				      i, map->tuples[i].name);
+		}
+	      continue; /* Skip useless tuple, and don't increment J.  */
+	    }
+	  
+	  /* If we have skipped some tuples, we need to copy subsequent ones 
+	     back to fill the gaps.  */
+	  if (j < i)
+	    map->tuples[j] = map->tuples[i];
+	    
+	  map->tuples[j].oso_high_addr = map->tuples[i+1].oso_low_addr;
+	  j++;
+	}
+		
+      gdb_assert(j <= map->entries);
+      map->tuples[j].oso_high_addr = (CORE_ADDR) -1;
+      /* Adjust the number of tuple if they changed.  */
+      map->entries = j + 1;
+      
+      /* Allocate the final_addr_index array.  */
+      map->final_addr_index = (int *) xmalloc (sizeof (int) * map->entries);
 
-  /* Initialize final_addr_index so it can be sorted using qsort_r.  */
-  for (i = 0; i < map->entries; i++)
-    map->final_addr_index[i] = i; 
+      /* Initialize final_addr_index so it can be sorted using qsort_r.  */
+      for (i = 0; i < map->entries; i++)
+        map->final_addr_index[i] = i; 
   
-  /* Sort the final_addr_index array.  */
-  qsort_r (map->final_addr_index, map->entries, sizeof (int), 
-	   map->tuples, compare_map_entries_final_addr_index);
-
+      /* Sort the final_addr_index array.  */
+      qsort_r (map->final_addr_index, map->entries, sizeof (int), 
+	       map->tuples, compare_map_entries_final_addr_index);
+    }
+  else if (map->entries == 1)
+    {
+      map->tuples[0].oso_high_addr = (CORE_ADDR) -1;
+      map->final_addr_index = (int *) xmalloc (sizeof (int));
+      map->final_addr_index[0] = 0; 
+    }
+ 
   /* Print out the final addr indexes array.  */
   if (debug_debugmap >= 6)
     {
@@ -3370,20 +3855,55 @@ create_kext_addr_map (struct nlist_rec *nlists,
 
   /* Initialize the oso_high_addr entries */
 
-  for (i = 0; i < map->entries - 1; i++)
-    map->tuples[i].oso_high_addr = map->tuples[i + 1].oso_low_addr;
-  map->tuples[map->entries - 1].oso_high_addr = (CORE_ADDR) -1;
+  if (map->entries > 1)
+    {
+      j = 0;  /* This holds valid the tuple insert index.  */
 
-  /* Allocate the final_addr_index array.  */
-  map->final_addr_index = (int *) xmalloc (sizeof (int) * map->entries);
-                             
-  /* Initialize final_addr_index so it can be sorted using qsort_r.  */
-  for (i = 0; i < map->entries; i++)
-    map->final_addr_index[i] = i;
-     
-  /* Sort the final_addr_index array.  */
-  qsort_r (map->final_addr_index, map->entries, sizeof (int),
-           map->tuples, compare_map_entries_final_addr_index);
+      for (i = 0; i < map->entries - 1; i++)
+	{
+	  if (map->tuples[i].oso_low_addr == map->tuples[i+1].oso_low_addr &&
+	      map->tuples[i].present_in_final == 0)
+	    {
+	      if (debug_debugmap)
+	      	{
+		  fprintf_unfiltered (gdb_stdlog, 
+				      "debugmap: removing tuple[%i] ('%s')\n", 
+				      i, map->tuples[i].name);
+		}
+	      continue; /* Skip useless tuple, and don't increment J.  */
+	    }
+	  
+	  /* If we have skipped some tuples, we need to copy subsequent ones 
+	     back to fill the gaps.  */
+	  if (j < i)
+	    map->tuples[j] = map->tuples[i];
+	    
+	  map->tuples[j].oso_high_addr = map->tuples[i+1].oso_low_addr;
+	  j++;
+	}
+		
+      gdb_assert(j <= map->entries);
+      map->tuples[j].oso_high_addr = (CORE_ADDR) -1;
+      /* Adjust the number of tuple if they changed.  */
+      map->entries = j + 1;
+      
+      /* Allocate the final_addr_index array.  */
+      map->final_addr_index = (int *) xmalloc (sizeof (int) * map->entries);
+
+      /* Initialize final_addr_index so it can be sorted using qsort_r.  */
+      for (i = 0; i < map->entries; i++)
+        map->final_addr_index[i] = i; 
+  
+      /* Sort the final_addr_index array.  */
+      qsort_r (map->final_addr_index, map->entries, sizeof (int), 
+	       map->tuples, compare_map_entries_final_addr_index);
+    }
+  else if (map->entries == 1)
+    {
+      map->tuples[0].oso_high_addr = (CORE_ADDR) -1;
+      map->final_addr_index = (int *) xmalloc (sizeof (int));
+      map->final_addr_index[0] = 0; 
+    }
   
   /* Print out the final addr indexes array.  */
   if (debug_debugmap >= 6)
@@ -3412,17 +3932,12 @@ static int
 compare_translation_tuples_highpc (const void *key, const void *arrmem)
 {
   CORE_ADDR oso_addr = *((CORE_ADDR *) key);
-  CORE_ADDR tuple_oso_low_addr = 
-                 ((struct oso_final_addr_tuple *) arrmem)->oso_low_addr;
-  CORE_ADDR tuple_oso_high_addr = 
-                 ((struct oso_final_addr_tuple *) arrmem)->oso_high_addr;
+  struct oso_final_addr_tuple *tuple = (struct oso_final_addr_tuple *) arrmem;
 
-  if (oso_addr == tuple_oso_high_addr)
-    return 0;
-  if (oso_addr < tuple_oso_high_addr && oso_addr > tuple_oso_low_addr)
-    return 0;
-  if (oso_addr < tuple_oso_high_addr)
+  if (oso_addr <= tuple->oso_low_addr)
     return -1;
+  if (oso_addr <= tuple->oso_high_addr)
+    return 0;
   return 1;
 }
 
@@ -3432,18 +3947,12 @@ static int
 compare_translation_tuples_nothighpc (const void *key, const void *arrmem)
 {
   CORE_ADDR oso_addr = *((CORE_ADDR *) key);
-  CORE_ADDR tuple_oso_low_addr = 
-                 ((struct oso_final_addr_tuple *) arrmem)->oso_low_addr;
-  CORE_ADDR tuple_oso_high_addr = 
-                 ((struct oso_final_addr_tuple *) arrmem)->oso_high_addr;
+  struct oso_final_addr_tuple *tuple = (struct oso_final_addr_tuple *) arrmem;
 
-  if (oso_addr == tuple_oso_low_addr)
-    return 0;
-  if (oso_addr > tuple_oso_low_addr && oso_addr < tuple_oso_high_addr)
-    return 0;
-  if (oso_addr < tuple_oso_low_addr)
+  if (oso_addr < tuple->oso_low_addr)
     return -1;
-
+  if (oso_addr < tuple->oso_high_addr)
+    return 0;
   return 1;
 }
 
@@ -3457,14 +3966,11 @@ static int
 compare_translation_tuples_inclusive (const void *key, const void *arrmem)
 {
   CORE_ADDR oso_addr = *((CORE_ADDR *) key);
-  CORE_ADDR tuple_oso_low_addr = 
-                 ((struct oso_final_addr_tuple *) arrmem)->oso_low_addr;
-  CORE_ADDR tuple_oso_high_addr = 
-                 ((struct oso_final_addr_tuple *) arrmem)->oso_high_addr;
+  struct oso_final_addr_tuple *tuple = (struct oso_final_addr_tuple *) arrmem;
 
-  if (oso_addr < tuple_oso_low_addr)
+  if (oso_addr < tuple->oso_low_addr)
     return -1;
-  if (oso_addr >= tuple_oso_low_addr && oso_addr <= tuple_oso_high_addr)
+  if (oso_addr <= tuple->oso_high_addr)
     return 0;
   return 1;
 }
@@ -3793,7 +4299,12 @@ dwarf2_debug_map_psymtab_to_symtab (struct partial_symtab *pst)
           return;
         }
       else
-        error ("Couldn't open object file '%s'", PSYMTAB_OSO_NAME (pst));
+	{
+	  /* Otherwise, warn, say we've read it in, and return.  */
+	  warning ("Couldn't open object file '%s'", PSYMTAB_OSO_NAME (pst));
+	  pst->readin = 1;
+	  return;
+	}
     }
   if (!bfd_check_format (oso_bfd, bfd_object))
     warning ("Not in bfd_object form");
@@ -3831,7 +4342,7 @@ dwarf2_debug_map_psymtab_to_symtab (struct partial_symtab *pst)
   if (cached)
     clear_containing_archive_cache ();
   else
-    bfd_close (oso_bfd);
+    close_bfd_or_archive (oso_bfd);
 
   pst->readin = 1;
   /* Finish up the debug error message.  */
@@ -4118,6 +4629,26 @@ load_full_comp_unit (struct dwarf2_per_cu_data *per_cu,
   return cu;
 }
 
+/* APPLE LOCAL begin inlined function symbols & blocks  */
+static void
+fix_inlined_subroutine_symbols (void)
+{
+  int j;
+  struct symbol *sym;
+  struct pending *current;
+
+  if (!inlined_subroutine_symbols)
+    return;
+
+  for (current = inlined_subroutine_symbols; current; current = current->next)
+    for (j = current->nsyms - 1; j >= 0; --j)
+      {
+	sym = current->symbol[j];
+	BLOCK_FUNCTION (SYMBOL_BLOCK_VALUE (sym)) = NULL;
+      }
+}
+/* APPLE LOCAL end inlined function symbols & blocks  */
+
 /* Generate full symbol information for PST and CU, whose DIEs have
    already been loaded into memory.  */
 
@@ -4184,7 +4715,11 @@ process_full_comp_unit (struct dwarf2_per_cu_data *per_cu)
     }
 
   /* Do line number decoding in read_file_scope () */
+  /* APPLE LOCAL begin inlined function symbols & blocks  */
+  inlined_subroutine_symbols = NULL;
   process_die (cu->dies, cu);
+  fix_inlined_subroutine_symbols ();
+  /* APPLE LOCAL end inlined function symbols & blocks  */
 
   /* Some compilers don't define a DW_AT_high_pc attribute for the
      compilation unit.  If the DW_AT_high_pc is missing, synthesize
@@ -4200,7 +4735,7 @@ process_full_comp_unit (struct dwarf2_per_cu_data *per_cu)
       highpc = cu->per_cu->psymtab->texthigh;
     }
 
-  symtab = end_symtab (highpc + baseaddr, objfile, SECT_OFF_TEXT (objfile));
+  symtab = end_symtab (highpc, objfile, SECT_OFF_TEXT (objfile));
 
   /* Set symtab language to language from DW_AT_language.
      If the compilation is from a C file generated by language preprocessors,
@@ -4235,7 +4770,10 @@ process_die (struct die_info *die, struct dwarf2_cu *cu)
     case DW_TAG_inlined_subroutine:
       /* APPLE LOCAL begin subroutine inlining  */
       if (dwarf2_allow_inlined_stepping)
-	read_inlined_subroutine_scope (die, cu);
+	{
+	  read_subroutine_type (die, cu);
+	  read_inlined_subroutine_scope (die, cu);
+	}
       /* APPLE LOCAL end subroutine inlining  */
       break;
     case DW_TAG_lexical_block:
@@ -4431,6 +4969,7 @@ read_file_scope (struct die_info *die, struct dwarf2_cu *cu)
 
   start_symtab (name, comp_dir, lowpc);
   record_debugformat ("DWARF 2");
+  record_producer (cu->producer);
 
   initialize_cu_func_list (cu);
 
@@ -4506,7 +5045,10 @@ dwarf2_add_to_list_of_inlined_calls (struct objfile *objfile,
 				     struct address_range_list *ranges,
 				     char *name, char *parent_name,
 				     struct attribute *decl_file,
-				     struct attribute *decl_line)
+				     /* APPLE LOCAL begin radar 6545149 */
+				     struct attribute *decl_line,
+				     struct symbol *func_sym)
+				     /* APPLE LOCAL end radar 6545149 */
 {
   struct dwarf_inlined_call_record *new;
   struct rb_tree_node *new_call_site;
@@ -4521,11 +5063,11 @@ dwarf2_add_to_list_of_inlined_calls (struct objfile *objfile,
     new->column = 0;
   new->lowpc = lowpc;
   new->highpc = highpc;
-  new->name = name;
+  new->name = xstrdup (name);
   /* APPLE LOCAL begin address ranges  */
   new->ranges = ranges;
   /* APPLE LOCAL end address ranges  */
-  new->parent_name = parent_name;
+  new->parent_name = xstrdup (parent_name);
 
   if (decl_file)
     new->decl_file_index = DW_UNSND (decl_file);
@@ -4536,6 +5078,9 @@ dwarf2_add_to_list_of_inlined_calls (struct objfile *objfile,
     new->decl_line = DW_UNSND (decl_line);
   else
     new->decl_line = 0;
+
+  /* APPLE LOCAL radar 6545149 */
+  new->func_sym = func_sym;
   
   /* Now wrap call_site information into red-black tree node, for quick
      insertion/lookup in list of call sites.  */
@@ -4643,22 +5188,36 @@ read_inlined_subroutine_scope (struct die_info *die, struct dwarf2_cu *cu)
     }
   /* APPLE LOCAL end address ranges  */
 
+  /* APPLE LOCAL begin inlined function symbols & blocks  */
+  /* APPLE LOCAL begin radar 6545149  - moved code to here (see below).  */
+  new = push_context (0, lowpc);
+  new->name = new_symbol (die, die->type, cu);
+  add_symbol_to_inlined_subroutine_list (new->name, 
+					 &inlined_subroutine_symbols);
+  /* APPLE LOCAL end radar 6545149  - moved code to here.  */
+
   /* Check to make sure the compiler found the call site information before
      we try to make use of it.  Also make sure we have names for the caller
      and callee functions.  */
 
   if (file_attr 
       && line_attr
+      && decl_file
+      && decl_line
       && name
       && parent_name)
     /* APPLE LOCAL begin address ranges  */
     dwarf2_add_to_list_of_inlined_calls (objfile, file_attr, line_attr, 
 					 column_attr, lowpc, highpc, ranges, 
 					 name, parent_name, decl_file, 
-					 decl_line);
+					 /* APPLE LOCAL radar 6545149  */
+					 decl_line, new->name);
     /* APPLE LOCAL end address ranges  */
 
-  push_context (0, lowpc);
+  /* APPLE LOCAL radar 6545149  - moved code from here (see above).  */
+
+  cu->list_in_scope = &local_symbols;
+  /* APPLE LOCAL end inlined function symbols & blocks  */
   if (die->child != NULL)
     {
       child_die = die->child;
@@ -4670,12 +5229,13 @@ read_inlined_subroutine_scope (struct die_info *die, struct dwarf2_cu *cu)
     }
   new = pop_context ();
 
-  if (local_symbols != NULL)
-    {
-      finish_block (0, &local_symbols, new->old_blocks, new->start_addr,
-		    highpc, ranges, objfile);
-    }
+  /* APPLE LOCAL begin inlined function symbols & blocks  */
+  finish_block (new->name, &local_symbols, new->old_blocks, lowpc,
+		highpc, ranges, objfile);
+
   local_symbols = new->locals;
+  param_symbols = new->params;
+  /* APPLE LOCAL end inlined function symbols & blocks  */
 }
 /* APPLE LOCAL end subroutine inlining  */
 
@@ -5678,11 +6238,11 @@ read_structure_type (struct die_info *die, struct dwarf2_cu *cu)
   attr = dwarf2_attr (die, DW_AT_byte_size, cu);
   if (attr)
     {
-      TYPE_LENGTH (type) = DW_UNSND (attr);
+      TYPE_LENGTH_ASSIGN (type) = DW_UNSND (attr);
     }
   else
     {
-      TYPE_LENGTH (type) = 0;
+      TYPE_LENGTH_ASSIGN (type) = 0;
     }
 
   if (die_is_declaration (die, cu))
@@ -5789,33 +6349,92 @@ read_structure_type (struct die_info *die, struct dwarf2_cu *cu)
       || cu->language == language_objcplus
       || cu->language == language_unknown)
     {
-      if (TYPE_N_BASECLASSES (type) == 0)
+      int found = 0;
+      attr = dwarf2_attr (die, DW_AT_APPLE_runtime_class, cu);
+      if (attr)
 	{
-	  /* If there are no baseclasses, see if this is the 
-	     base of the ObjC Hierarchy.  */
-	  if (TYPE_TAG_NAME (type) 
-	      && (strcmp(TYPE_TAG_NAME (type), "NSObject") == 0
-		  || strcmp (TYPE_TAG_NAME (type), "objc_object") == 0))
-	    TYPE_RUNTIME (type) = OBJC_RUNTIME;
+	  unsigned int language = DW_UNSND (attr);
+	  switch (language)
+	    {
+	    case DW_LANG_ObjC:
+	      /* For some reason gcc marks ObjC classes in .mm files
+		 as ObjC_plus_plus which isn't right, but they mean
+		 ObjC so we'll accept it...  */
+	    case DW_LANG_ObjC_plus_plus:
+	      /* Make sure we have cplus_stuff now or the
+		 TYPE_RUNTIME will go nowhere...  */
+	      ALLOCATE_CPLUS_STRUCT_TYPE (type);
+	      TYPE_RUNTIME (type) = OBJC_RUNTIME;
+	      found = 1;
+	      break;
+	    case DW_LANG_C_plus_plus:
+	      /* Make sure we have cplus_stuff now or the
+		 TYPE_RUNTIME will go nowhere...  */
+	      ALLOCATE_CPLUS_STRUCT_TYPE (type);
+	      TYPE_RUNTIME (type) = CPLUS_RUNTIME;
+	      found = 1;
+	      break;
+	    default:
+	      /* Anything else, just leave it the way it was.  */
+	      found = 1;
+	      break;
+	    }
+	}
+	  
+      if (!found)
+	{
+	  if (TYPE_N_BASECLASSES (type) == 0)
+	    {
+	      /* If there are no baseclasses, see if this is the 
+		 base of the ObjC Hierarchy.  */
+	      if (TYPE_TAG_NAME (type) 
+		  && (strcmp(TYPE_TAG_NAME (type), "NSObject") == 0))
+		{
+		  /* Have to allocate the cplus_stuff up here, since if there is no
+		     inheritance tag then we won't have set it up yet.  In the other
+		     branches of this test we're implicitly using the fact that if
+		     the cplus_stuff is not allocated, then we shouldn't set the
+		     runtime (TYPE_RUNTIME doesn't set anything if the cplus_stuff 
+		     is NULL.)  */
+		  ALLOCATE_CPLUS_STRUCT_TYPE (type);
+		  TYPE_RUNTIME (type) = OBJC_RUNTIME;
+		}
+	      else
+		TYPE_RUNTIME (type) = CPLUS_RUNTIME;
+	    }
+	  else if (TYPE_N_BASECLASSES (type) > 1)
+	    {
+	      /* ObjC is single inheritance only, so is there's more than one
+		 baseclass it can't be ObjC.  */
+	      TYPE_RUNTIME (type) = CPLUS_RUNTIME;
+	    }
 	  else
-	    TYPE_RUNTIME (type) = CPLUS_RUNTIME;
-	}
-      else if (TYPE_N_BASECLASSES (type) > 1)
-	{
-	  /* ObjC is single inheritance only, so is there's more than one
-	     baseclass it can't be ObjC.  */
-	  TYPE_RUNTIME (type) = CPLUS_RUNTIME;
-	}
-      else
-	{
-	  /* The type inherits its runtime from its parent.  */
-	  TYPE_RUNTIME (type)
-	    = TYPE_RUNTIME(TYPE_FIELD_TYPE (type, 0));
+	    {
+	      /* The type inherits its runtime from its parent.  */
+	      TYPE_RUNTIME (type)
+		= TYPE_RUNTIME(TYPE_FIELD_TYPE (type, 0));
+	    }
 	}
     }
   else
     TYPE_RUNTIME (type) = CPLUS_RUNTIME;
 
+  /* APPLE LOCAL: The ivar offsets of Obj classes can't
+     be determined from the information in the declaring 
+     header file.  So we need to fix them up from the
+     runtime.  I don't want to have to do this for every
+     class right now, however.  So I just mark all the 
+     lengths invalid, and get around to fixing them up
+     when they are read through TYPE_FIELD_BITPOS or
+     TYPE_LENGTH.  */
+  if (TYPE_RUNTIME (type) == OBJC_RUNTIME)
+    objc_invalidate_objc_class (type);
+
+  /* APPLE LOCAL: See if this is a Closure struct.  */
+  attr = dwarf2_attr (die, DW_AT_APPLE_closure, cu);
+  if (attr)
+    TYPE_FLAGS (type) |= TYPE_FLAG_APPLE_CLOSURE;
+  
   processing_current_prefix = previous_prefix;
   if (back_to != NULL)
     do_cleanups (back_to);
@@ -5899,11 +6518,11 @@ read_enumeration_type (struct die_info *die, struct dwarf2_cu *cu)
   attr = dwarf2_attr (die, DW_AT_byte_size, cu);
   if (attr)
     {
-      TYPE_LENGTH (type) = DW_UNSND (attr);
+      TYPE_LENGTH_ASSIGN (type) = DW_UNSND (attr);
     }
   else
     {
-      TYPE_LENGTH (type) = 0;
+      TYPE_LENGTH_ASSIGN (type) = 0;
     }
 
   set_die_type (die, type, cu);
@@ -6442,7 +7061,7 @@ read_tag_pointer_type (struct die_info *die, struct dwarf2_cu *cu)
       }
     }
 
-  TYPE_LENGTH (type) = byte_size;
+  TYPE_LENGTH_ASSIGN (type) = byte_size;
   set_die_type (die, type, cu);
 }
 
@@ -6489,11 +7108,11 @@ read_tag_reference_type (struct die_info *die, struct dwarf2_cu *cu)
   attr = dwarf2_attr (die, DW_AT_byte_size, cu);
   if (attr)
     {
-      TYPE_LENGTH (type) = DW_UNSND (attr);
+      TYPE_LENGTH_ASSIGN (type) = DW_UNSND (attr);
     }
   else
     {
-      TYPE_LENGTH (type) = cu_header->addr_size;
+      TYPE_LENGTH_ASSIGN (type) = cu_header->addr_size;
     }
   set_die_type (die, type, cu);
 }
@@ -6509,7 +7128,8 @@ read_tag_const_type (struct die_info *die, struct dwarf2_cu *cu)
     }
 
   base_type = die_type (die, cu);
-  set_die_type (die, make_cv_type (1, TYPE_VOLATILE (base_type), base_type, 0),
+  set_die_type (die, make_cvr_type (1, TYPE_VOLATILE (base_type), 
+                                    TYPE_RESTRICT (base_type), base_type, 0),
 		cu);
 }
 
@@ -6524,9 +7144,27 @@ read_tag_volatile_type (struct die_info *die, struct dwarf2_cu *cu)
     }
 
   base_type = die_type (die, cu);
-  set_die_type (die, make_cv_type (TYPE_CONST (base_type), 1, base_type, 0),
+  set_die_type (die, make_cvr_type (TYPE_CONST (base_type), 1, 
+                                    TYPE_RESTRICT (base_type), base_type, 0),
 		cu);
 }
+
+static void
+read_tag_restrict_type (struct die_info *die, struct dwarf2_cu *cu)
+{
+  struct type *base_type;
+
+  if (die->type)
+    {
+      return;
+    }
+
+  base_type = die_type (die, cu);
+  set_die_type (die, make_cvr_type (TYPE_CONST (base_type), 
+                                   TYPE_VOLATILE (base_type), 1, base_type, 0),
+		cu);
+}
+
 
 /* Extract all information from a DW_TAG_string_type DIE and add to
    the user defined type vector.  It isn't really a user defined type,
@@ -6839,7 +7477,7 @@ read_subrange_type (struct die_info *die, struct dwarf2_cu *cu)
   
   attr = dwarf2_attr (die, DW_AT_byte_size, cu);
   if (attr)
-    TYPE_LENGTH (range_type) = DW_UNSND (attr);
+    TYPE_LENGTH_ASSIGN (range_type) = DW_UNSND (attr);
 
   set_die_type (die, range_type, cu);
 }
@@ -7240,9 +7878,11 @@ load_partial_dies (bfd *abfd, char *info_ptr, int building_psymtab,
 	      || part_die->tag == DW_TAG_subrange_type))
 	{
 	  if (building_psymtab && part_die->name != NULL)
+            /* APPLE LOCAL: Put it in the global_psymbols list, not 
+               static_psymbols.  */
 	    add_psymbol_to_list (part_die->name, strlen (part_die->name),
 				 VAR_DOMAIN, LOC_TYPEDEF,
-				 &cu->objfile->static_psymbols,
+				 &cu->objfile->global_psymbols,
 				 0, (CORE_ADDR) 0, cu->language, cu->objfile);
 	  info_ptr = locate_pdi_sibling (part_die, info_ptr, abfd, cu);
 	  continue;
@@ -7261,12 +7901,11 @@ load_partial_dies (bfd *abfd, char *info_ptr, int building_psymtab,
 	  if (part_die->name == NULL)
 	    complaint (&symfile_complaints, _("malformed enumerator DIE ignored"));
 	  else if (building_psymtab)
+            /* APPLE LOCAL: Put it in the global_psymbols list regardless
+               of language.  */
 	    add_psymbol_to_list (part_die->name, strlen (part_die->name),
 				 VAR_DOMAIN, LOC_CONST,
-				 (cu->language == language_cplus
-				  || cu->language == language_java)
-				 ? &cu->objfile->global_psymbols
-				 : &cu->objfile->static_psymbols,
+				 &cu->objfile->global_psymbols,
 				 0, (CORE_ADDR) 0, cu->language, cu->objfile);
 
 	  info_ptr = locate_pdi_sibling (part_die, info_ptr, abfd, cu);
@@ -7589,6 +8228,7 @@ find_partial_die_in_comp_unit (unsigned long offset, struct dwarf2_cu *cu)
   part_die.offset = offset;
   lookup_die = htab_find_with_hash (cu->partial_dies, &part_die, offset);
 
+  /* FIXME: Remove this once <rdar://problem/6193416> is fixed */
   if (lookup_die == NULL)
     internal_error (__FILE__, __LINE__,
 		    _("could not find partial DIE in cache\n"));
@@ -8616,8 +9256,11 @@ check_inlined_function_calls (struct subfile *subfile, int file_index, int line,
   struct dwarf_inlined_call_record *current = NULL;
   struct objfile *objfile = cu->objfile;
   struct subfile *tmp_subfile = NULL;
+  struct subfile *call_site_subfile;
+  struct subfile *decl_site_subfile;
   struct rb_tree_node *rb_node;
   int done = 0;
+  const char *tmp_basename, *call_basename, *decl_basename;
 
   if (!objfile->inlined_call_sites)
     return;
@@ -8629,6 +9272,11 @@ check_inlined_function_calls (struct subfile *subfile, int file_index, int line,
   while (!done)
     {
       current = NULL;
+      call_site_subfile = NULL;
+      decl_site_subfile = NULL;
+      tmp_basename = NULL;
+      call_basename = NULL;
+      decl_basename = NULL;
 
       /* Look for an inlining instance with the address and file_index passed
 	 in.  */
@@ -8637,112 +9285,165 @@ check_inlined_function_calls (struct subfile *subfile, int file_index, int line,
 					      objfile->inlined_call_sites, 
 					      address, file_index);
 
+      /* The secondary key in the rb_tree corresponds to the file index of
+	 the call_site file.  It is possible that the subfile parameter
+	 will not match either the call_site or the decl_site for the
+	 inlined subroutine, in which case we will need to find (or
+	 create) the correct subfile records for either or both of those
+	 files.  */
+
       if (rb_node 
 	  && rb_node->secondary_key == file_index)
 	{
 	  tmp_subfile = subfile;
+	  call_site_subfile = subfile;
 	  current = (struct dwarf_inlined_call_record *) rb_node->data;
 	}
       else
 	{
-
 	  /* Look for an inlining instance with the same address but a
 	     differnt file_index than was passed in.  */
 
 	  if (!rb_node)
-	    rb_node = rb_tree_find_and_remove_node (&(objfile->inlined_call_sites), 
-						    objfile->inlined_call_sites, 
-						    address, -1);
+	    rb_node = rb_tree_find_and_remove_node 
+	                                      (&(objfile->inlined_call_sites), 
+					       objfile->inlined_call_sites, 
+					       address, -1);
 
-	  /* We found an inlining instance, but it has a different 
-	     file_index than was passed in.  Figure out what the file is,
-	     and make sure we have the appropriate subfile for it.  */
+	  /* We found an inlining instance, but it has a different
+	     file_index than was passed in.  We will have to igure out
+	     what the file is, and make sure we have the appropriate
+	     subfile for it.  */
 
 	  if (rb_node)
-	    {
-	      current = (struct dwarf_inlined_call_record *) rb_node->data;
-	      
-	      for (tmp_subfile = subfiles; tmp_subfile; 
-		   tmp_subfile = tmp_subfile->next)
-		{
-		  char *fname1;
-		  char *fname2;
-		  
-		  fname1 = strrchr (tmp_subfile->name, '/');
-		  fname2 = strrchr (lh->file_names[current->file_index-1].name,
-				    '/');
-		  
-		  if (fname1)
-		    fname1++;
-		  else
-		    fname1 = tmp_subfile->name;
-		  
-		  if (fname2)
-		    fname2++;
-		  else
-		    fname2 = lh->file_names[current->file_index - 1].name;
-		  
-		  if (strcmp (fname1, fname2) == 0)
-		    break;
-		}
-	    }
-	
-	  if (current && tmp_subfile == NULL)
-	    {
-	      struct file_entry *fe = &lh->file_names[current->file_index - 1];
-	      char *dir;
+	    current = (struct dwarf_inlined_call_record *) rb_node->data;
+	}
 
+      if (current
+	  && ((current->file_index > lh->num_file_names)
+	      || (current->decl_file_index > lh->num_file_names)))
+	{
+	  /* Something is seriously wrong: The dwarf record for the
+	     inlining says the inlined function is declared in or
+	     called from a file whose index did not make it into the
+	     dwarf line table.  The best thing to do at this point is
+	     to throw away the inlining record and hope for the
+	     best.  */
+	  current = NULL;
+	}
+
+      if (current)
+	{
+	  if (current->file_index == file_index)
+	    call_site_subfile = subfile;
+	  
+	  if (current->decl_file_index == file_index)
+	    decl_site_subfile = subfile;
+	  
+	  if (call_site_subfile == NULL)
+            call_basename = lbasename 
+                               (lh->file_names[current->file_index - 1].name);
+	  
+	  if (decl_site_subfile == NULL)
+	    decl_basename = lbasename 
+                          (lh->file_names[current->decl_file_index - 1].name);
+
+	  /* Look for subfiles for call site and decl site files,
+	     if necessary.  */
+
+	  for (tmp_subfile = subfiles; 
+	       tmp_subfile 
+                 && (call_site_subfile == NULL || decl_site_subfile == NULL);
+	       tmp_subfile = tmp_subfile->next)
+	    {
+	      tmp_basename = lbasename (tmp_subfile->name);
+
+	      if (call_site_subfile == NULL 
+                  && (strcmp (tmp_basename, call_basename) == 0))
+		call_site_subfile = tmp_subfile;
+	      
+	      if (decl_site_subfile == NULL 
+                  && (strcmp (tmp_basename, decl_basename) == 0))
+		decl_site_subfile = tmp_subfile;
+	    }
+	}
+      
+      /* If the subfile record for either the call site file or the decl 
+	 site file (or both) does not exist yet, we need to create the 
+	 record(s).  */
+      
+      if (current && (call_site_subfile == NULL || decl_site_subfile == NULL))
+	{
+	  struct file_entry *fe;
+	  char *dir;
+	  
+	  if (call_site_subfile == NULL)
+	    {
+	      fe = &lh->file_names[current->file_index - 1];
+	      
 	      if (fe->dir_index)
 		dir = lh->include_dirs[fe->dir_index - 1];
 	      else
 		dir = comp_dir;
+	      
+	      /* Create the new subfile record.  */
+	      
 	      dwarf2_start_subfile (fe->name, dir, cu->comp_dir);
-	      for (tmp_subfile = subfiles; tmp_subfile; 
-		   tmp_subfile = tmp_subfile->next)
-		{
-		  char *fname1;
-		  char *fname2;
-
-		  fname1 = strrchr (tmp_subfile->name, '/');
-		  fname2 = strrchr (lh->file_names[current->file_index-1].name,
-				    '/');
-
-		  if (fname1)
-		    fname1++;
-		  else
-		    fname1 = tmp_subfile->name;
-
-		  if (fname2)
-		    fname2++;
-		  else
-		    fname2 = lh->file_names[current->file_index - 1].name;
-
-		  if (strcmp (fname1, fname2) == 0)
-		    break;
-		}
-	      gdb_assert (tmp_subfile != NULL);
 	    }
+	  
+	  if (decl_site_subfile == NULL)
+	    {
+	      fe = &lh->file_names[current->decl_file_index - 1];
+	      if (fe->dir_index)
+		dir = lh->include_dirs[fe->dir_index - 1];
+	      else
+		dir = comp_dir;
+	      
+	      /* Create the new subfile record.  */
+	      
+	      dwarf2_start_subfile (fe->name, dir, cu->comp_dir);
+	    }
+	  
+	  /* Now we have to find the newly created record(s).  */
+	  
+	  for (tmp_subfile = subfiles; tmp_subfile; 
+	       tmp_subfile = tmp_subfile->next)
+	    {
+	      tmp_basename = lbasename (tmp_subfile->name);
+	      
+	      if (call_site_subfile == NULL 
+                  && (strcmp (tmp_basename, call_basename) == 0))
+		call_site_subfile = tmp_subfile;
+	      
+	      if (decl_site_subfile == NULL 
+                  && (strcmp (tmp_basename, decl_basename) == 0))
+		decl_site_subfile = tmp_subfile;
+	      
+	      if (call_site_subfile && decl_site_subfile)
+		break;
+	    }
+	  gdb_assert (call_site_subfile != NULL);
+	  gdb_assert (decl_site_subfile != NULL);
 	}
-
 
       /* Now we have the inlining instance and the files straight, write the
 	 appropriate entries in the line tables.  */
 
       if (current)
 	{
-	  if (tmp_subfile != subfile)
-	    record_line (tmp_subfile, current->line, address, 0, 
+	  if (call_site_subfile != decl_site_subfile)
+	    record_line (call_site_subfile, current->line, address, 0, 
 			 NORMAL_LT_ENTRY);
 
 	  if (dwarf2_debug_inlined_stepping)
 	    fprintf_unfiltered (gdb_stdout, "%s inlined into %s:\n", 
 				current->name, current->parent_name);
 	  
-	  record_line (tmp_subfile, current->line, current->lowpc, 
+	  record_line (call_site_subfile, current->line, current->lowpc, 
 		       current->highpc,
 		       INLINED_CALL_SITE_LT_ENTRY);
-	  record_line (subfile, current->decl_line + 1, current->lowpc, 
-		       current->highpc,
+	  record_line (decl_site_subfile, current->decl_line + 1, 
+		       current->lowpc, current->highpc,
 		       INLINED_SUBROUTINE_LT_ENTRY);
 	  /* APPLE LOCAL begin address ranges  */
 	  inlined_function_add_function_names (objfile,
@@ -8751,7 +9452,9 @@ check_inlined_function_calls (struct subfile *subfile, int file_index, int line,
 					       current->line, current->column,
 					       current->name,
 					       current->parent_name,
-					       current->ranges);
+					       current->ranges,
+					       /* APPLE LOCAL radar 6545149  */
+					       current->func_sym);
 	  /* APPLE LOCAL end address ranges  */
 	}
       else
@@ -8942,6 +9645,7 @@ dwarf2_record_line (struct line_header *lh, char *comp_dir, struct dwarf2_cu *cu
   else
     {
       /* We have a debug map and we need to translate the address.  */
+      const struct oso_final_addr_tuple *last_tuple = map->tuples + map->entries;
       struct oso_final_addr_tuple *match = NULL;
       if (map->entries == 1)
 	{
@@ -9008,8 +9712,7 @@ dwarf2_record_line (struct line_header *lh, char *comp_dir, struct dwarf2_cu *cu
 		{
 		  /* Set NEXT correctly if it already isn't is there is a next
 		     tuple.  */
-		  int match_index = match - map->tuples;
-		  if (match_index + 1 < map->entries)
+		  if (match + 1 < last_tuple)
 		    next = match + 1;
 		}
 	      
@@ -9163,12 +9866,6 @@ dwarf_decode_lines (struct line_header *lh, char *comp_dir, bfd *abfd,
   CORE_ADDR baseaddr;
   struct objfile *objfile = cu->objfile;
   const int decode_for_pst_p = (pst != NULL);
-
-  /* APPLE LOCAL */
-  if (debug_debugmap)
-    fprintf_unfiltered (gdb_stdlog,
-                        "debugmap: reading line program for %s\n",
-                        cu->per_cu->psymtab->filename);
 
   baseaddr = objfile_text_section_offset (objfile);
 
@@ -9405,12 +10102,6 @@ dwarf_decode_lines (struct line_header *lh, char *comp_dir, bfd *abfd,
               dwarf2_create_include_psymtab (include_name, pst, objfile);
           }
     }
-
-  /* APPLE LOCAL */
-  if (debug_debugmap)
-    fprintf_unfiltered (gdb_stdlog,
-                        "debugmap: finished reading line program for %s\n",
-                        cu->per_cu->psymtab->filename);
 }
 
 /* Start a subfile for DWARF.  FILENAME is the name of the file and
@@ -9627,7 +10318,10 @@ new_symbol (struct die_info *die, struct type *type, struct dwarf2_cu *cu)
 	     finish_block.  */
 	  SYMBOL_CLASS (sym) = LOC_BLOCK;
 	  attr2 = dwarf2_attr (die, DW_AT_external, cu);
-	  if (attr2 && (DW_UNSND (attr2) != 0))
+	  /* APPLE LOCAL begin inlined function symbols & blocks  */
+	  if ((attr2 && (DW_UNSND (attr2) != 0))
+	      || (die->tag == DW_TAG_inlined_subroutine))
+	  /* APPLE LOCAL end inlined function symbols & blocks  */
 	    {
 	      add_symbol_to_list (sym, &global_symbols);
 	    }
@@ -9777,9 +10471,15 @@ new_symbol (struct die_info *die, struct type *type, struct dwarf2_cu *cu)
 
 	    struct pending **list_to_add;
 
+            /* APPLE LOCAL: Put type symbols in the global namespace for all
+               languages.  For languages like C, types have a file-static
+               scope but within gdb it doesn't buy us anything to scope their
+               visibility the same way.  If we need a definition of a type in
+               a compile unit where it isn't defined, we're going to have to
+               find that definition in another compile unit - so we might as 
+               well mark these as global and save ourselves a round of failing
+               lookups.  */
 	    list_to_add = (cu->list_in_scope == &file_symbols
-			   && (cu->language == language_cplus
-			       || cu->language == language_java)
 			   ? &global_symbols : cu->list_in_scope);
 	  
 	    add_symbol_to_list (sym, list_to_add);
@@ -9822,13 +10522,17 @@ new_symbol (struct die_info *die, struct type *type, struct dwarf2_cu *cu)
 	    }
 	  SYMBOL_CLASS (sym) = LOC_TYPEDEF;
 	  SYMBOL_DOMAIN (sym) = VAR_DOMAIN;
-	  add_symbol_to_list (sym, cu->list_in_scope);
+          /* APPLE LOCAL: Put typedefs at the global scope for easier 
+             searching.  */
+	  add_symbol_to_list (sym, &global_symbols);
 	  break;
 	case DW_TAG_base_type:
         case DW_TAG_subrange_type:
 	  SYMBOL_CLASS (sym) = LOC_TYPEDEF;
 	  SYMBOL_DOMAIN (sym) = VAR_DOMAIN;
-	  add_symbol_to_list (sym, cu->list_in_scope);
+          /* APPLE LOCAL: Put base types at the global scope for easier 
+             searching.  */
+	  add_symbol_to_list (sym, &global_symbols);
 	  break;
 	case DW_TAG_enumerator:
 	  if (processing_has_namespace_info
@@ -9979,7 +10683,7 @@ dwarf2_const_value_data (struct attribute *attr,
 
   if (bits < sizeof (l) * 8)
     {
-      if (TYPE_UNSIGNED (SYMBOL_TYPE (sym)))
+      if (TYPE_UNSIGNED (check_typedef (SYMBOL_TYPE (sym))))
 	l &= ((LONGEST) 1 << bits) - 1;
       else
 	l = (l << (sizeof (l) * 8 - bits)) >> (sizeof (l) * 8 - bits);
@@ -10117,6 +10821,9 @@ read_type_die (struct die_info *die, struct dwarf2_cu *cu)
       break;
     case DW_TAG_volatile_type:
       read_tag_volatile_type (die, cu);
+      break;
+    case DW_TAG_restrict_type:
+      read_tag_restrict_type (die, cu);
       break;
     case DW_TAG_string_type:
       read_tag_string_type (die, cu);
@@ -12043,13 +12750,12 @@ dwarf_decode_macros (struct line_header *lh, unsigned int offset,
       macinfo_type = read_1_byte (abfd, mac_ptr);
       mac_ptr++;
 
+      /* A zero macinfo type indicates the end of the macro information.  */
+      if (macinfo_type == 0)
+        return;
+
       switch (macinfo_type)
         {
-          /* A zero macinfo type indicates the end of the macro
-             information.  */
-        case 0:
-          return;
-
         case DW_MACINFO_define:
         case DW_MACINFO_undef:
           {
@@ -14039,7 +14745,7 @@ db_error (char *function_name, char *db_action_description, sqlite3 *db)
   strcpy (message, sqlite3_errmsg (db));
   finalize_stmts (db);
   sqlite3_close (db);
-  internal_error (__FILE__, __LINE__, _(message));
+  internal_error (__FILE__, __LINE__, "%s", message);
 }
 
 static struct dwarf2_cu *
@@ -14556,8 +15262,8 @@ rb_print_node (struct rb_tree_node *tree)
 	fprintf (stdout, "(Black");
       else
 	fprintf (stdout, "(Unknown");
-      fprintf (stdout, ", %Ld, %d, %Ld)\n", tree->key, tree->secondary_key,
-	       tree->third_key);
+      fprintf (stdout, ", 0x%s, %d, 0x%s)\n", paddr_nz (tree->key),
+               tree->secondary_key, paddr_nz (tree->third_key));
     }
 }
 
@@ -14577,7 +15283,7 @@ rb_print_tree (struct rb_tree_node *tree, int indent_level)
       rb_print_tree (tree->right, indent_level + 3);
     }
 
-  free (spaces);
+  xfree (spaces);
 }
 
 /* End functions for debugging red-black trees.  */

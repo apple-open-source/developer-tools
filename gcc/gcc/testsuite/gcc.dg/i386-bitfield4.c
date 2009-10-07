@@ -1,5 +1,6 @@
 /* APPLE LOCAL file radar 4287182 */
-/* { dg-do compile { target "i?86-*-*" } } */
+/* APPLE LOCAL 6131435 */
+/* { dg-do compile { target { { i?86-*-* x86_64-*-* } && ilp32 } } } */
 /* { dg-options "-O2" } */
 /* { dg-final { scan-assembler-not "movb" } } */
 /* { dg-final { scan-assembler-not "movw" } } */

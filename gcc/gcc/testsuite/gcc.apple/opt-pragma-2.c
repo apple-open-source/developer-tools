@@ -22,5 +22,5 @@ void f6(int x) {
   printf("%d\n", x);
 }
 /* Make sure sibling call optimization is not applied. */
-/* { dg-final { scan-assembler-times "b L_printf" 0 } } */
-/* { dg-final { scan-assembler-times "bl L_printf" 4 } } */
+/* { dg-final { scan-assembler-times "b L?_printf" 0 } } */
+/* { dg-final { scan-assembler-times "bl L?_printf" 4 } } */

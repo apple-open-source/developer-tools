@@ -15,8 +15,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GCC; see the file COPYING.  If not, write to the Free
-   Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 /* This file contains the variable tracking pass.  It computes where
    variables are located (which registers or where in memory) at each position
@@ -102,6 +102,12 @@
 #include "alloc-pool.h"
 #include "fibheap.h"
 #include "hashtab.h"
+#include "regs.h"
+#include "expr.h"
+#include "timevar.h"
+#include "tree-pass.h"
+/* APPLE LOCAL 6414738 */
+#include "langhooks.h"
 
 /* Type of micro operation.  */
 enum micro_operation_type
@@ -110,6 +116,8 @@ enum micro_operation_type
   MO_USE_NO_VAR,/* Use location which is not associated with a variable
 		   or the variable is not trackable.  */
   MO_SET,	/* Set location.  */
+  MO_COPY,	/* Copy the same portion of a variable from one
+		   location to another.  */
   MO_CLOBBER,	/* Clobber location.  */
   MO_CALL,	/* Call insn.  */
   MO_ADJUST	/* Adjust stack pointer.  */
@@ -136,7 +144,11 @@ typedef struct micro_operation_def
     HOST_WIDE_INT adjust;
   } u;
 
-  /* The instruction which the micro operation is in.  */
+  /* The instruction which the micro operation is in, for MO_USE,
+     MO_USE_NO_VAR, MO_CALL and MO_ADJUST, or the subsequent
+     instruction or note in the original flow (before any var-tracking
+     notes are inserted, to simplify emission of notes), for MO_SET
+     and MO_CLOBBER.  */
   rtx insn;
 } micro_operation;
 
@@ -209,6 +221,14 @@ typedef struct location_chain_def
 
   /* The location (REG or MEM).  */
   rtx loc;
+
+  /* APPLE LOCAL begin track initialization status 4964532  */
+  /* The "value" stored in this location.  */
+  rtx set_src;
+
+  /* Initialized? */
+  enum var_init_status init;
+  /* APPLE LOCAL end track initialization status 4964532  */
 } *location_chain;
 
 /* Structure describing one part of variable.  */
@@ -264,19 +284,12 @@ static htab_t changed_variables;
 /* Shall notes be emitted?  */
 static bool emit_notes;
 
-/* Fake variable for stack pointer.  */
-tree frame_base_decl;
-
-/* Stack adjust caused by function prologue.  */
-static HOST_WIDE_INT frame_stack_adjust;
-
 /* Local function prototypes.  */
 static void stack_adjust_offset_pre_post (rtx, HOST_WIDE_INT *,
 					  HOST_WIDE_INT *);
 static void insn_stack_adjust_offset_pre_post (rtx, HOST_WIDE_INT *,
 					       HOST_WIDE_INT *);
 static void bb_stack_adjust_offset (basic_block);
-static HOST_WIDE_INT prologue_stack_adjust (void);
 static bool vt_stack_adjustments (void);
 static rtx adjust_stack_reference (rtx, HOST_WIDE_INT);
 static hashval_t variable_htab_hash (const void *);
@@ -291,14 +304,22 @@ static void attrs_list_copy (attrs *, attrs);
 static void attrs_list_union (attrs *, attrs);
 
 static void vars_clear (htab_t);
-static variable unshare_variable (dataflow_set *set, variable var);
+/* APPLE LOCAL begin track initialization status 4964532  */
+static variable unshare_variable (dataflow_set *set, variable var, 
+				  enum var_init_status);
 static int vars_copy_1 (void **, void *);
 static void vars_copy (htab_t, htab_t);
-static void var_reg_delete_and_set (dataflow_set *, rtx);
-static void var_reg_delete (dataflow_set *, rtx);
+static tree var_debug_decl (tree);
+static void var_reg_set (dataflow_set *, rtx, enum var_init_status, rtx);
+static void var_reg_delete_and_set (dataflow_set *, rtx, bool, 
+				    enum var_init_status, rtx);
+static void var_reg_delete (dataflow_set *, rtx, bool);
 static void var_regno_delete (dataflow_set *, int);
-static void var_mem_delete_and_set (dataflow_set *, rtx);
-static void var_mem_delete (dataflow_set *, rtx);
+static void var_mem_set (dataflow_set *, rtx, enum var_init_status, rtx);
+static void var_mem_delete_and_set (dataflow_set *, rtx, bool, 
+				    enum var_init_status, rtx);
+/* APPLE LOCAL end track initialization status 4964532  */
+static void var_mem_delete (dataflow_set *, rtx, bool);
 
 static void dataflow_set_init (dataflow_set *, int);
 static void dataflow_set_clear (dataflow_set *);
@@ -315,6 +336,7 @@ static void dataflow_set_destroy (dataflow_set *);
 
 static bool contains_symbol_ref (rtx);
 static bool track_expr_p (tree);
+static bool same_variable_part_p (rtx, tree, HOST_WIDE_INT);
 static int count_uses (rtx *, void *);
 static void count_uses_1 (rtx *, void *);
 static void count_stores (rtx, rtx, void *);
@@ -331,8 +353,12 @@ static void dump_dataflow_set (dataflow_set *);
 static void dump_dataflow_sets (void);
 
 static void variable_was_changed (variable, htab_t);
-static void set_frame_base_location (dataflow_set *, rtx);
-static void set_variable_part (dataflow_set *, rtx, tree, HOST_WIDE_INT);
+/* APPLE LOCAL begin track initialization status 4964532  */
+static void set_variable_part (dataflow_set *, rtx, tree, HOST_WIDE_INT, 
+			       enum var_init_status, rtx);
+static void clobber_variable_part (dataflow_set *, rtx, tree, HOST_WIDE_INT, 
+				   rtx);
+/* APPLE LOCAL end track initialization status 4964532  */
 static void delete_variable_part (dataflow_set *, rtx, tree, HOST_WIDE_INT);
 static int emit_note_insn_var_location (void **, void *);
 static void emit_notes_for_changes (rtx, enum emit_note_where);
@@ -387,9 +413,9 @@ stack_adjust_offset_pre_post (rtx pattern, HOST_WIDE_INT *pre,
 	    {
 	      rtx val = XEXP (XEXP (src, 1), 1);
 	      /* We handle only adjustments by constant amount.  */
-	      if (GET_CODE (XEXP (src, 1)) != PLUS ||
-		  GET_CODE (val) != CONST_INT)
-		abort ();
+	      gcc_assert (GET_CODE (XEXP (src, 1)) == PLUS &&
+			  GET_CODE (val) == CONST_INT);
+	      
 	      if (code == PRE_MODIFY)
 		*pre -= INTVAL (val);
 	      else
@@ -487,41 +513,9 @@ bb_stack_adjust_offset (basic_block bb)
   VTI (bb)->out.stack_adjust = offset;
 }
 
-/* Compute stack adjustment caused by function prologue.  */
-
-static HOST_WIDE_INT
-prologue_stack_adjust (void)
-{
-  HOST_WIDE_INT offset = 0;
-  basic_block bb = ENTRY_BLOCK_PTR->next_bb;
-  rtx insn;
-  rtx end;
-
-  if (!BB_END (bb))
-    return 0;
-
-  end = NEXT_INSN (BB_END (bb));
-  for (insn = BB_HEAD (bb); insn != end; insn = NEXT_INSN (insn))
-    {
-      if (NOTE_P (insn)
-	  && NOTE_LINE_NUMBER (insn) == NOTE_INSN_PROLOGUE_END)
-	break;
-
-      if (INSN_P (insn))
-	{
-	  HOST_WIDE_INT tmp;
-
-	  insn_stack_adjust_offset_pre_post (insn, &tmp, &tmp);
-	  offset += tmp;
-	}
-    }
-
-  return offset;
-}
-
 /* Compute stack adjustments for all blocks by traversing DFS tree.
    Return true when the adjustments on all incoming edges are consistent.
-   Heavily borrowed from flow_depth_first_order_compute.  */
+   Heavily borrowed from pre_and_rev_post_order_compute.  */
 
 static bool
 vt_stack_adjustments (void)
@@ -531,10 +525,10 @@ vt_stack_adjustments (void)
 
   /* Initialize entry block.  */
   VTI (ENTRY_BLOCK_PTR)->visited = true;
-  VTI (ENTRY_BLOCK_PTR)->out.stack_adjust = frame_stack_adjust;
+  VTI (ENTRY_BLOCK_PTR)->out.stack_adjust = INCOMING_FRAME_SP_OFFSET;
 
   /* Allocate stack for back-tracking up CFG.  */
-  stack = xmalloc ((n_basic_blocks + 1) * sizeof (edge_iterator));
+  stack = XNEWVEC (edge_iterator, n_basic_blocks + 1);
   sp = 0;
 
   /* Push the first edge on to the stack.  */
@@ -585,27 +579,28 @@ vt_stack_adjustments (void)
   return true;
 }
 
-/* Adjust stack reference MEM by ADJUSTMENT bytes and return the new rtx.  */
+/* Adjust stack reference MEM by ADJUSTMENT bytes and make it relative
+   to the argument pointer.  Return the new rtx.  */
 
 static rtx
 adjust_stack_reference (rtx mem, HOST_WIDE_INT adjustment)
 {
-  rtx adjusted_mem;
-  rtx tmp;
+  rtx addr, cfa, tmp;
 
-  if (adjustment == 0)
-    return mem;
+#ifdef FRAME_POINTER_CFA_OFFSET
+  adjustment -= FRAME_POINTER_CFA_OFFSET (current_function_decl);
+  cfa = plus_constant (frame_pointer_rtx, adjustment);
+#else
+  adjustment -= ARG_POINTER_CFA_OFFSET (current_function_decl);
+  cfa = plus_constant (arg_pointer_rtx, adjustment);
+#endif
 
-  adjusted_mem = copy_rtx (mem);
-  XEXP (adjusted_mem, 0) = replace_rtx (XEXP (adjusted_mem, 0),
-					stack_pointer_rtx,
-					gen_rtx_PLUS (Pmode, stack_pointer_rtx,
-						      GEN_INT (adjustment)));
-  tmp = simplify_rtx (XEXP (adjusted_mem, 0));
+  addr = replace_rtx (copy_rtx (XEXP (mem, 0)), stack_pointer_rtx, cfa);
+  tmp = simplify_rtx (addr);
   if (tmp)
-    XEXP (adjusted_mem, 0) = tmp;
+    addr = tmp;
 
-  return adjusted_mem;
+  return replace_equiv_address_nv (mem, addr);
 }
 
 /* The hash function for variable_htab, computes the hash value
@@ -639,10 +634,7 @@ variable_htab_free (void *elem)
   variable var = (variable) elem;
   location_chain node, next;
 
-#ifdef ENABLE_CHECKING
-  if (var->refcount <= 0)
-    abort ();
-#endif
+  gcc_assert (var->refcount > 0);
 
   var->refcount--;
   if (var->refcount > 0)
@@ -753,8 +745,11 @@ vars_clear (htab_t vars)
 
 /* Return a copy of a variable VAR and insert it to dataflow set SET.  */
 
+/* APPLE LOCAL begin track initialization status 4964532  */
 static variable
-unshare_variable (dataflow_set *set, variable var)
+unshare_variable (dataflow_set *set, variable var, 
+		  enum var_init_status initialized)
+/* APPLE LOCAL end track initialization status 4964532  */
 {
   void **slot;
   variable new_var;
@@ -779,6 +774,16 @@ unshare_variable (dataflow_set *set, variable var)
 
 	  new_lc = pool_alloc (loc_chain_pool);
 	  new_lc->next = NULL;
+	  /* APPLE LOCAL begin track initialization status 4964532  */
+	  if (node->init > initialized)
+	    new_lc->init = node->init;
+	  else
+	    new_lc->init = initialized;
+	  if (node->set_src && !(MEM_P (node->set_src)))
+	    new_lc->set_src = node->set_src;
+	  else
+	    new_lc->set_src = NULL;
+	  /* APPLE LOCAL end track initialization status 4964532  */
 	  new_lc->loc = node->loc;
 
 	  *nextp = new_lc;
@@ -830,16 +835,98 @@ vars_copy (htab_t dst, htab_t src)
   htab_traverse (src, vars_copy_1, dst);
 }
 
-/* Delete current content of register LOC in dataflow set SET
-   and set the register to contain REG_EXPR (LOC), REG_OFFSET (LOC).  */
+/* Map a decl to its main debug decl.  */
 
+static inline tree
+var_debug_decl (tree decl)
+{
+  if (decl && DECL_P (decl)
+      && DECL_DEBUG_EXPR_IS_FROM (decl) && DECL_DEBUG_EXPR (decl)
+      && DECL_P (DECL_DEBUG_EXPR (decl)))
+    decl = DECL_DEBUG_EXPR (decl);
+
+  return decl;
+}
+
+/* Set the register to contain REG_EXPR (LOC), REG_OFFSET (LOC).  */
+
+/* APPLE LOCAL begin track initialization status 4964532  */
 static void
-var_reg_delete_and_set (dataflow_set *set, rtx loc)
+var_reg_set (dataflow_set *set, rtx loc, enum var_init_status initialized, 
+	     rtx set_src)
+/* APPLE LOCAL end track initialization status 4964532  */
+{
+  tree decl = REG_EXPR (loc);
+  HOST_WIDE_INT offset = REG_OFFSET (loc);
+  attrs node;
+
+  decl = var_debug_decl (decl);
+
+  for (node = set->regs[REGNO (loc)]; node; node = node->next)
+    if (node->decl == decl && node->offset == offset)
+      break;
+  if (!node)
+    attrs_list_insert (&set->regs[REGNO (loc)], decl, offset, loc);
+  /* APPLE LOCAL begin track initialization status 4964532  */
+  set_variable_part (set, loc, decl, offset, initialized, set_src);
+}
+
+static int
+get_init_value (dataflow_set *set, rtx loc, tree decl)
+{
+  void **slot;
+  variable var;
+  int i;
+  int ret_val = STATUS_UNKNOWN;
+
+  if (! TARGET_DWARF_UNINIT_VARS)
+    return STATUS_INITIALIZED;
+
+  slot = htab_find_slot_with_hash (set->vars, decl, VARIABLE_HASH_VAL (decl),
+				   NO_INSERT);
+  if (slot)
+    {
+      var = * (variable *) slot;
+      for (i = 0; i < var->n_var_parts && ret_val == STATUS_UNKNOWN; i++)
+	{
+	  location_chain nextp;
+	  for (nextp = var->var_part[i].loc_chain; nextp; nextp = nextp->next)
+	    if (rtx_equal_p (nextp->loc, loc))
+	      {
+		ret_val = nextp->init;
+		break;
+	      }
+	}
+    }
+
+  return ret_val;
+}
+/* APPLE LOCAL end track initialization status 4964532  */
+
+/* Delete current content of register LOC in dataflow set SET and set
+   the register to contain REG_EXPR (LOC), REG_OFFSET (LOC).  If
+   MODIFY is true, any other live copies of the same variable part are
+   also deleted from the dataflow set, otherwise the variable part is
+   assumed to be copied from another location holding the same
+   part.  */
+
+/* APPLE LOCAL begin track initialization status 4964532  */
+static void
+var_reg_delete_and_set (dataflow_set *set, rtx loc, bool modify, 
+			enum var_init_status initialized, rtx set_src)
+/* APPLE LOCAL end track initialization status 4964532  */
 {
   tree decl = REG_EXPR (loc);
   HOST_WIDE_INT offset = REG_OFFSET (loc);
   attrs node, next;
   attrs *nextp;
+
+  decl = var_debug_decl (decl);
+
+  /* APPLE LOCAL begin track initialization status 4964532  */
+  if (initialized == STATUS_UNKNOWN)
+    initialized = get_init_value (set, loc, decl);
+  /* APPLE LOCAL end track initialization status 4964532  */
 
   nextp = &set->regs[REGNO (loc)];
   for (node = *nextp; node; node = next)
@@ -857,18 +944,33 @@ var_reg_delete_and_set (dataflow_set *set, rtx loc)
 	  nextp = &node->next;
 	}
     }
-  if (set->regs[REGNO (loc)] == NULL)
-    attrs_list_insert (&set->regs[REGNO (loc)], decl, offset, loc);
-  set_variable_part (set, loc, decl, offset);
+  /* APPLE LOCAL begin track initialization status 4964532  */
+  if (modify)
+    clobber_variable_part (set, loc, decl, offset, set_src);
+  var_reg_set (set, loc, initialized, set_src);
+  /* APPLE LOCAL end track initialization status 4964532  */
 }
 
-/* Delete current content of register LOC in dataflow set SET.  */
+/* Delete current content of register LOC in dataflow set SET.  If
+   CLOBBER is true, also delete any other live copies of the same
+   variable part.  */
 
 static void
-var_reg_delete (dataflow_set *set, rtx loc)
+var_reg_delete (dataflow_set *set, rtx loc, bool clobber)
 {
   attrs *reg = &set->regs[REGNO (loc)];
   attrs node, next;
+
+  if (clobber)
+    {
+      tree decl = REG_EXPR (loc);
+      HOST_WIDE_INT offset = REG_OFFSET (loc);
+
+      decl = var_debug_decl (decl);
+
+      /* APPLE LOCAL track initialization status 4964532  */
+      clobber_variable_part (set, NULL, decl, offset, NULL);
+    }
 
   for (node = *reg; node; node = next)
     {
@@ -896,28 +998,67 @@ var_regno_delete (dataflow_set *set, int regno)
   *reg = NULL;
 }
 
-/* Delete and set the location part of variable MEM_EXPR (LOC)
-   in dataflow set SET to LOC.
+/* Set the location part of variable MEM_EXPR (LOC) in dataflow set
+   SET to LOC.
    Adjust the address first if it is stack pointer based.  */
 
+/* APPLE LOCAL begin track initialization status 4964532  */
 static void
-var_mem_delete_and_set (dataflow_set *set, rtx loc)
+var_mem_set (dataflow_set *set, rtx loc, enum var_init_status initialized, 
+	     rtx set_src)
+/* APPLE LOCAL end track initialization status 4964532  */
 {
   tree decl = MEM_EXPR (loc);
   HOST_WIDE_INT offset = MEM_OFFSET (loc) ? INTVAL (MEM_OFFSET (loc)) : 0;
 
-  set_variable_part (set, loc, decl, offset);
+  decl = var_debug_decl (decl);
+
+  /* APPLE LOCAL track initialization status 4964532  */
+  set_variable_part (set, loc, decl, offset, initialized, set_src);
 }
 
-/* Delete the location part LOC from dataflow set SET.
+/* Delete and set the location part of variable MEM_EXPR (LOC) in
+   dataflow set SET to LOC.  If MODIFY is true, any other live copies
+   of the same variable part are also deleted from the dataflow set,
+   otherwise the variable part is assumed to be copied from another
+   location holding the same part.
    Adjust the address first if it is stack pointer based.  */
 
+/* APPLE LOCAL begin track initialization status 4964532  */
 static void
-var_mem_delete (dataflow_set *set, rtx loc)
+var_mem_delete_and_set (dataflow_set *set, rtx loc, bool modify, 
+			enum var_init_status initialized, rtx set_src)
+/* APPLE LOCAL end track initialization status 4964532  */
 {
   tree decl = MEM_EXPR (loc);
   HOST_WIDE_INT offset = MEM_OFFSET (loc) ? INTVAL (MEM_OFFSET (loc)) : 0;
 
+  decl = var_debug_decl (decl);
+
+  /* APPLE LOCAL begin track initialization status 4964532  */
+  if (initialized == STATUS_UNKNOWN)
+    initialized = get_init_value (set, loc, decl);
+
+  if (modify)
+    clobber_variable_part (set, NULL, decl, offset, set_src);
+  var_mem_set (set, loc, initialized, set_src);
+  /* APPLE LOCAL end track initialization status 4964532  */
+}
+
+/* Delete the location part LOC from dataflow set SET.  If CLOBBER is
+   true, also delete any other live copies of the same variable part.
+   Adjust the address first if it is stack pointer based.  */
+
+static void
+var_mem_delete (dataflow_set *set, rtx loc, bool clobber)
+{
+  tree decl = MEM_EXPR (loc);
+  HOST_WIDE_INT offset = MEM_OFFSET (loc) ? INTVAL (MEM_OFFSET (loc)) : 0;
+
+  decl = var_debug_decl (decl);
+  if (clobber)
+    /* APPLE LOCAL track initialization status 4964532  */
+    clobber_variable_part (set, NULL, decl, offset, NULL);
   delete_variable_part (set, loc, decl, offset);
 }
 
@@ -1019,25 +1160,26 @@ variable_union (void **slot, void *data)
 	 a copy of the variable.  */
       for (k = 0; k < src->n_var_parts; k++)
 	{
+	  gcc_assert (!src->var_part[k].loc_chain
+		      == !src->var_part[k].cur_loc);
 	  if (src->var_part[k].loc_chain)
 	    {
-#ifdef ENABLE_CHECKING
-	      if (src->var_part[k].cur_loc == NULL)
-		abort ();
-#endif
+	      gcc_assert (src->var_part[k].cur_loc);
 	      if (src->var_part[k].cur_loc != src->var_part[k].loc_chain->loc)
 		break;
 	    }
-#ifdef ENABLE_CHECKING
-	  else
-	    {
-	      if (src->var_part[k].cur_loc != NULL)
-		abort ();
-	    }
-#endif
 	}
       if (k < src->n_var_parts)
-	unshare_variable (set, src);
+	/* APPLE LOCAL begin track initialization status 4964532  */
+	{
+	  enum var_init_status status = STATUS_UNKNOWN;
+	  
+	  if (! TARGET_DWARF_UNINIT_VARS)
+	    status = STATUS_INITIALIZED;
+
+	  unshare_variable (set, src, status);
+	}
+      /* APPLE LOCAL end track initialization status 4964532  */
       else
 	*dstp = src;
 
@@ -1047,10 +1189,7 @@ variable_union (void **slot, void *data)
   else
     dst = *dstp;
 
-#ifdef ENABLE_CHECKING
-  if (src->n_var_parts == 0)
-    abort ();
-#endif
+  gcc_assert (src->n_var_parts);
 
   /* Count the number of location parts, result is K.  */
   for (i = 0, j = 0, k = 0;
@@ -1068,15 +1207,21 @@ variable_union (void **slot, void *data)
     }
   k += src->n_var_parts - i;
   k += dst->n_var_parts - j;
-#ifdef ENABLE_CHECKING
+
   /* We track only variables whose size is <= MAX_VAR_PARTS bytes
      thus there are at most MAX_VAR_PARTS different offsets.  */
-  if (k > MAX_VAR_PARTS)
-    abort ();
-#endif
+  gcc_assert (k <= MAX_VAR_PARTS);
 
   if (dst->refcount > 1 && dst->n_var_parts != k)
-    dst = unshare_variable (set, dst);
+    /* APPLE LOCAL begin track initialization status 4964532  */
+    {
+      enum var_init_status status = STATUS_UNKNOWN;
+      
+      if (! TARGET_DWARF_UNINIT_VARS)
+	status = STATUS_INITIALIZED;
+      dst = unshare_variable (set, dst, status);
+    }
+    /* APPLE LOCAL end track initialization status 4964532  */
 
   i = src->n_var_parts - 1;
   j = dst->n_var_parts - 1;
@@ -1109,10 +1254,15 @@ variable_union (void **slot, void *data)
 			 && REG_P (node->loc)
 			 && REGNO (node2->loc) == REGNO (node->loc))
 			|| rtx_equal_p (node2->loc, node->loc)))
+		    /* APPLE LOCAL begin track initialization status 4964532  */
+		    if (node2->init < node->init)
+		      node2->init = node->init;
+		    /* APPLE LOCAL end track initialization status 4964532  */
 		    break;
 		}
 	      if (node || node2)
-		dst = unshare_variable (set, dst);
+		/* APPLE LOCAL track initialization status 4964532  */
+		dst = unshare_variable (set, dst, STATUS_UNKNOWN);
 	    }
 
 	  src_l = 0;
@@ -1121,7 +1271,7 @@ variable_union (void **slot, void *data)
 	  dst_l = 0;
 	  for (node = dst->var_part[j].loc_chain; node; node = node->next)
 	    dst_l++;
-	  vui = xcalloc (src_l + dst_l, sizeof (struct variable_union_info));
+	  vui = XCNEWVEC (struct variable_union_info, src_l + dst_l);
 
 	  /* Fill in the locations from DST.  */
 	  for (node = dst->var_part[j].loc_chain, jj = 0; node;
@@ -1158,6 +1308,13 @@ variable_union (void **slot, void *data)
 		  /* Copy the location from SRC.  */
 		  new_node = pool_alloc (loc_chain_pool);
 		  new_node->loc = node->loc;
+		  /* APPLE LOCAL begin track initialization status 4964532  */
+		  new_node->init = node->init;
+		  if (!node->set_src || MEM_P (node->set_src))
+		    new_node->set_src = NULL;
+		  else
+		    new_node->set_src = node->set_src;
+		  /* APPLE LOCAL end track initialization status 4964532  */
 		  vui[n].lc = new_node;
 		  vui[n].pos_src = ii;
 		  vui[n].pos_dst = src_l + dst_l;
@@ -1204,6 +1361,13 @@ variable_union (void **slot, void *data)
 
 	      new_lc = pool_alloc (loc_chain_pool);
 	      new_lc->next = NULL;
+	      /* APPLE LOCAL begin track initialization status 4964532  */
+	      new_lc->init = node->init;
+	      if (!node->set_src || MEM_P (node->set_src))
+		new_lc->set_src = NULL;
+	      else
+		new_lc->set_src = node->set_src;
+	      /* APPLE LOCAL end track initialization status 4964532  */
 	      new_lc->loc = node->loc;
 
 	      *nextp = new_lc;
@@ -1221,6 +1385,20 @@ variable_union (void **slot, void *data)
       else
 	dst->var_part[k].cur_loc = NULL;
     }
+
+  /* APPLE LOCAL begin track initialization status 4964532  */
+  for (i = 0; i < src->n_var_parts && i < dst->n_var_parts; i++)
+    {
+      location_chain node, node2;
+      for (node = src->var_part[i].loc_chain; node; node = node->next)
+	for (node2 = dst->var_part[i].loc_chain; node2; node2 = node2->next)
+	  if (rtx_equal_p (node->loc, node2->loc))
+	    {
+	      if (node->init > node2->init)
+		node2->init = node->init;
+	    }
+    }
+  /* APPLE LOCAL end track initialization status 4964532  */
 
   /* Continue traversing the hash table.  */
   return 1;
@@ -1356,12 +1534,9 @@ dataflow_set_different_2 (void **slot, void *data)
       return 0;
     }
 
-#ifdef ENABLE_CHECKING
   /* If both variables are defined they have been already checked for
      equivalence.  */
-  if (variable_different_p (var1, var2, false))
-    abort ();
-#endif
+  gcc_assert (!variable_different_p (var1, var2, false));
 
   /* Continue traversing the hash table.  */
   return 1;
@@ -1460,8 +1635,7 @@ track_expr_p (tree expr)
      don't need to track this expression if the ultimate declaration is
      ignored.  */
   realdecl = expr;
-  if (DECL_DEBUG_EXPR (realdecl)
-      && DECL_DEBUG_EXPR_IS_FROM (realdecl))
+  if (DECL_DEBUG_EXPR_IS_FROM (realdecl) && DECL_DEBUG_EXPR (realdecl))
     {
       realdecl = DECL_DEBUG_EXPR (realdecl);
       /* ??? We don't yet know how to emit DW_OP_piece for variable
@@ -1497,7 +1671,8 @@ track_expr_p (tree expr)
   if (MEM_P (decl_rtl))
     {
       /* Do not track structures and arrays.  */
-      if (GET_MODE (decl_rtl) == BLKmode)
+      if (GET_MODE (decl_rtl) == BLKmode
+	  || AGGREGATE_TYPE_P (TREE_TYPE (realdecl)))
 	return 0;
       if (MEM_SIZE (decl_rtl)
 	  && INTVAL (MEM_SIZE (decl_rtl)) > MAX_VAR_PARTS)
@@ -1506,6 +1681,41 @@ track_expr_p (tree expr)
 
   return 1;
 }
+
+/* Determine whether a given LOC refers to the same variable part as
+   EXPR+OFFSET.  */
+
+static bool
+same_variable_part_p (rtx loc, tree expr, HOST_WIDE_INT offset)
+{
+  tree expr2;
+  HOST_WIDE_INT offset2;
+
+  if (! DECL_P (expr))
+    return false;
+
+  if (REG_P (loc))
+    {
+      expr2 = REG_EXPR (loc);
+      offset2 = REG_OFFSET (loc);
+    }
+  else if (MEM_P (loc))
+    {
+      expr2 = MEM_EXPR (loc);
+      offset2 = MEM_OFFSET (loc) ? INTVAL (MEM_OFFSET (loc)) : 0;
+    }
+  else
+    return false;
+
+  if (! expr2 || ! DECL_P (expr2))
+    return false;
+
+  expr = var_debug_decl (expr);
+  expr2 = var_debug_decl (expr2);
+
+  return (expr == expr2 && offset == offset2);
+}
+
 
 /* Count uses (register and memory references) LOC which will be tracked.
    INSN is instruction which the LOC is part of.  */
@@ -1517,17 +1727,14 @@ count_uses (rtx *loc, void *insn)
 
   if (REG_P (*loc))
     {
-#ifdef ENABLE_CHECKING
-	if (REGNO (*loc) >= FIRST_PSEUDO_REGISTER)
-	  abort ();
-#endif
-	VTI (bb)->n_mos++;
+      gcc_assert (REGNO (*loc) < FIRST_PSEUDO_REGISTER);
+      VTI (bb)->n_mos++;
     }
   else if (MEM_P (*loc)
 	   && MEM_EXPR (*loc)
 	   && track_expr_p (MEM_EXPR (*loc)))
     {
-	  VTI (bb)->n_mos++;
+      VTI (bb)->n_mos++;
     }
 
   return 0;
@@ -1601,10 +1808,20 @@ add_stores (rtx loc, rtx expr, void *insn)
       basic_block bb = BLOCK_FOR_INSN ((rtx) insn);
       micro_operation *mo = VTI (bb)->mos + VTI (bb)->n_mos++;
 
-      mo->type = ((GET_CODE (expr) != CLOBBER && REG_EXPR (loc)
-		   && track_expr_p (REG_EXPR (loc)))
-		  ? MO_SET : MO_CLOBBER);
+      if (GET_CODE (expr) == CLOBBER
+	  || ! REG_EXPR (loc)
+	  || ! track_expr_p (REG_EXPR (loc)))
+	mo->type = MO_CLOBBER;
+      else if (GET_CODE (expr) == SET
+	       && SET_DEST (expr) == loc
+	       && same_variable_part_p (SET_SRC (expr),
+					REG_EXPR (loc),
+					REG_OFFSET (loc)))
+	mo->type = MO_COPY;
+      else
+	mo->type = MO_SET;
       mo->u.loc = loc;
+      /* APPLE LOCAL track initialization status 4964532  */
       mo->insn = (rtx) insn;
     }
   else if (MEM_P (loc)
@@ -1614,11 +1831,126 @@ add_stores (rtx loc, rtx expr, void *insn)
       basic_block bb = BLOCK_FOR_INSN ((rtx) insn);
       micro_operation *mo = VTI (bb)->mos + VTI (bb)->n_mos++;
 
-      mo->type = GET_CODE (expr) == CLOBBER ? MO_CLOBBER : MO_SET;
+      if (GET_CODE (expr) == CLOBBER)
+	mo->type = MO_CLOBBER;
+      else if (GET_CODE (expr) == SET
+	       && SET_DEST (expr) == loc
+	       && same_variable_part_p (SET_SRC (expr),
+					MEM_EXPR (loc),
+					MEM_OFFSET (loc)
+					? INTVAL (MEM_OFFSET (loc)) : 0))
+	mo->type = MO_COPY;
+      else
+	mo->type = MO_SET;
       mo->u.loc = loc;
+      /* APPLE LOCAL begin track initialization status 4964532  */
       mo->insn = (rtx) insn;
     }
 }
+
+static enum var_init_status
+find_src_status (dataflow_set *in, rtx loc, rtx insn)
+{
+  rtx src = NULL_RTX;
+  tree decl = NULL_TREE;
+  enum var_init_status status = STATUS_UNINITIALIZED;
+
+  if (! TARGET_DWARF_UNINIT_VARS)
+    status = STATUS_INITIALIZED;
+
+  if (GET_CODE (PATTERN (insn)) == SET)
+    src = SET_SRC (PATTERN (insn));
+  else if (GET_CODE (PATTERN (insn)) == PARALLEL
+	   || GET_CODE (PATTERN (insn)) == SEQUENCE)
+    {
+      int i;
+      for (i = XVECLEN (PATTERN (insn), 0) - 1; i >= 0; i--)
+	if (GET_CODE (XVECEXP (PATTERN (insn), 0, i)) == SET
+	    && SET_DEST (XVECEXP (PATTERN (insn), 0, i)) == loc)
+	  src = SET_SRC (XVECEXP (PATTERN (insn), 0, i));
+    }
+  /* APPLE LOCAL begin ARM 5595749 */
+  else if (GET_CODE (PATTERN (insn)) == COND_EXEC
+	   && GET_CODE (COND_EXEC_CODE (PATTERN (insn))) == SET)
+    src = SET_SRC (COND_EXEC_CODE (PATTERN (insn)));
+  else
+    gcc_unreachable ();
+  /* APPLE LOCAL end ARM 5595749 */
+
+  if (REG_P (src))
+    decl = var_debug_decl (REG_EXPR (src));
+  else if (MEM_P (src))
+    decl = var_debug_decl (MEM_EXPR (src));
+
+  if (src && decl)
+    status = get_init_value (in, src, decl);
+
+  return status;
+}
+
+/* LOC is the destination the variable is being copied to.  INSN 
+   contains the copy instruction.  SET is the dataflow set containing
+   the variable in LOC.  */
+
+static rtx
+find_src_set_src (dataflow_set *set, rtx loc, rtx insn)
+{
+  tree decl = NULL_TREE;   /* The variable being copied around.          */
+  rtx src = NULL_RTX;      /* The location "decl" is being copied from.  */
+  rtx set_src = NULL_RTX;  /* The value for "decl" stored in "src".      */
+  void **slot;
+  variable var;
+  location_chain nextp;
+  int i;
+  bool found;
+
+  if (GET_CODE (PATTERN (insn)) == SET)
+    src = SET_SRC (PATTERN (insn));
+  else if (GET_CODE (PATTERN (insn)) == PARALLEL
+	   || GET_CODE (PATTERN (insn)) == SEQUENCE)
+    {
+      for (i = XVECLEN (PATTERN (insn), 0) - 1; i >= 0; i--)
+	if (GET_CODE (XVECEXP (PATTERN (insn), 0, i)) == SET
+	    && SET_DEST (XVECEXP (PATTERN (insn), 0, i)) == loc)
+	  src = SET_SRC (XVECEXP (PATTERN (insn), 0, i));
+    }
+  /* APPLE LOCAL begin ARM 5595749 */
+  else if (GET_CODE (PATTERN (insn)) == COND_EXEC
+	   && GET_CODE (COND_EXEC_CODE (PATTERN (insn))) == SET)
+    src = SET_SRC (COND_EXEC_CODE (PATTERN (insn)));
+  else
+    gcc_unreachable ();
+  /* APPLE LOCAL end ARM 5595749 */
+
+  if (REG_P (src))
+    decl = var_debug_decl (REG_EXPR (src));
+  else if (MEM_P (src))
+    decl = var_debug_decl (MEM_EXPR (src));
+
+  if (src && decl)
+    {
+      slot = htab_find_slot_with_hash (set->vars, decl, 
+				       VARIABLE_HASH_VAL (decl), NO_INSERT);
+
+      if (slot)
+	{
+	  var = *(variable *) slot;
+	  found = false;
+	  for (i = 0; i < var->n_var_parts && !found; i++)
+	    for (nextp = var->var_part[i].loc_chain; nextp && !found; 
+		 nextp = nextp->next)
+	      if (rtx_equal_p (nextp->loc, src))
+		{
+		  set_src = nextp->set_src;
+		  found = true;
+		}
+	      
+	}
+    }
+
+  return set_src;
+}
+/* APPLE LOCAL end track initialization status 4964532  */
 
 /* Compute the changes of variable locations in the basic block BB.  */
 
@@ -1647,38 +1979,101 @@ compute_bb_dataflow (basic_block bb)
 	    break;
 
 	  case MO_USE:
-	  case MO_SET:
 	    {
 	      rtx loc = VTI (bb)->mos[i].u.loc;
 
+	      /* APPLE LOCAL begin track initialization status 4964532  */
+	      enum var_init_status status = STATUS_UNINITIALIZED;
+
+	      if (! TARGET_DWARF_UNINIT_VARS)
+		status = STATUS_INITIALIZED;
+
+	      if (GET_CODE (loc) == REG)
+		var_reg_set (out, loc, status, NULL);
+	      else if (GET_CODE (loc) == MEM)
+		var_mem_set (out, loc, status, NULL);
+	      /* APPLE LOCAL end track initialization status 4964532  */
+	    }
+	    break;
+
+	  case MO_SET:
+	    {
+	      rtx loc = VTI (bb)->mos[i].u.loc;
+	      /* APPLE LOCAL begin track initialization status 4964532  */
+	      rtx set_src =  NULL;
+	      rtx insn = VTI (bb)->mos[i].insn;
+
+	      if (GET_CODE (PATTERN (insn)) == SET)
+		set_src = SET_SRC (PATTERN (insn));
+	      else if (GET_CODE (PATTERN (insn)) == PARALLEL
+		       || GET_CODE (PATTERN (insn)) == SEQUENCE)
+		{
+		  int j;
+		  for (j = XVECLEN (PATTERN (insn), 0) - 1; j >= 0; j--)
+		    if (GET_CODE (XVECEXP (PATTERN (insn), 0, j)) == SET
+			&& SET_DEST (XVECEXP (PATTERN (insn), 0, j)) == loc)
+		      set_src = SET_SRC (XVECEXP (PATTERN (insn), 0, j));
+		}
+
 	      if (REG_P (loc))
-		var_reg_delete_and_set (out, loc);
+		var_reg_delete_and_set (out, loc, true, STATUS_INITIALIZED,
+					set_src);
 	      else if (MEM_P (loc))
-		var_mem_delete_and_set (out, loc);
+		var_mem_delete_and_set (out, loc, true, STATUS_INITIALIZED,
+					set_src);
+	      /* APPLE LOCAL end track initialization status 4964532  */
+	    }
+	    break;
+
+	  case MO_COPY:
+	    {
+	      rtx loc = VTI (bb)->mos[i].u.loc;
+	      /* APPLE LOCAL begin track initialization status 4964532  */
+	      enum var_init_status src_status;
+	      rtx set_src;
+
+	      if (! TARGET_DWARF_UNINIT_VARS)
+		src_status = STATUS_INITIALIZED;
+	      else
+		src_status = find_src_status (in, loc, VTI (bb)->mos[i].insn);
+
+	      if (src_status == STATUS_UNKNOWN)
+		src_status = find_src_status (out, loc, VTI (bb)->mos[i].insn);
+
+	      set_src = find_src_set_src (in, loc, VTI (bb)->mos[i].insn);
+
+	      if (REG_P (loc))
+		var_reg_delete_and_set (out, loc, false, src_status, set_src);
+	      else if (MEM_P (loc))
+		var_mem_delete_and_set (out, loc, false, src_status, set_src);
+	      /* APPLE LOCAL end track initialization status 4964532  */
 	    }
 	    break;
 
 	  case MO_USE_NO_VAR:
+	    {
+	      rtx loc = VTI (bb)->mos[i].u.loc;
+
+	      if (REG_P (loc))
+		var_reg_delete (out, loc, false);
+	      else if (MEM_P (loc))
+		var_mem_delete (out, loc, false);
+	    }
+	    break;
+
 	  case MO_CLOBBER:
 	    {
 	      rtx loc = VTI (bb)->mos[i].u.loc;
 
 	      if (REG_P (loc))
-		var_reg_delete (out, loc);
+		var_reg_delete (out, loc, true);
 	      else if (MEM_P (loc))
-		var_mem_delete (out, loc);
+		var_mem_delete (out, loc, true);
 	    }
 	    break;
 
 	  case MO_ADJUST:
-	    {
-	      rtx base;
-
-	      out->stack_adjust += VTI (bb)->mos[i].u.adjust;
-	      base = gen_rtx_MEM (Pmode, plus_constant (stack_pointer_rtx,
-							out->stack_adjust));
-	      set_frame_base_location (out, base);
-	    }
+	    out->stack_adjust += VTI (bb)->mos[i].u.adjust;
 	    break;
 	}
     }
@@ -1703,10 +2098,10 @@ vt_find_locations (void)
 
   /* Compute reverse completion order of depth first search of the CFG
      so that the data-flow runs faster.  */
-  rc_order = xmalloc (n_basic_blocks * sizeof (int));
-  bb_order = xmalloc (last_basic_block * sizeof (int));
-  flow_depth_first_order_compute (NULL, rc_order);
-  for (i = 0; i < n_basic_blocks; i++)
+  rc_order = XNEWVEC (int, n_basic_blocks - NUM_FIXED_BLOCKS);
+  bb_order = XNEWVEC (int, last_basic_block);
+  pre_and_rev_post_order_compute (NULL, rc_order, false);
+  for (i = 0; i < n_basic_blocks - NUM_FIXED_BLOCKS; i++)
     bb_order[rc_order[i]] = i;
   free (rc_order);
 
@@ -1801,8 +2196,7 @@ dump_attrs_list (attrs list)
   for (; list; list = list->next)
     {
       print_mem_expr (dump_file, list->decl);
-      fprintf (dump_file, "+");
-      fprintf (dump_file, HOST_WIDE_INT_PRINT_DEC, list->offset);
+      fprintf (dump_file, "+" HOST_WIDE_INT_PRINT_DEC, list->offset);
     }
   fprintf (dump_file, "\n");
 }
@@ -1825,6 +2219,10 @@ dump_variable (void **slot, void *data ATTRIBUTE_UNUSED)
       for (node = var->var_part[i].loc_chain; node; node = node->next)
 	{
 	  fprintf (dump_file, "      ");
+	  /* APPLE LOCAL begin track initialization status 4964532  */
+	  if (node->init == STATUS_UNINITIALIZED)
+	    fprintf (dump_file, "[uninit]");
+	  /* APPLE LOCAL end track initialization status 4964532  */
 	  print_rtl_single (dump_file, node->loc);
 	}
     }
@@ -1852,10 +2250,9 @@ dump_dataflow_set (dataflow_set *set)
 {
   int i;
 
-  fprintf (dump_file, "Stack adjustment: ");
-  fprintf (dump_file, HOST_WIDE_INT_PRINT_DEC, set->stack_adjust);
-  fprintf (dump_file, "\n");
-  for (i = 1; i < FIRST_PSEUDO_REGISTER; i++)
+  fprintf (dump_file, "Stack adjustment: " HOST_WIDE_INT_PRINT_DEC "\n",
+	   set->stack_adjust);
+  for (i = 0; i < FIRST_PSEUDO_REGISTER; i++)
     {
       if (set->regs[i])
 	{
@@ -1883,6 +2280,63 @@ dump_dataflow_sets (void)
       dump_dataflow_set (&VTI (bb)->out);
     }
 }
+
+/* APPLE LOCAL begin 6414738 */
+/* Compare variable *SLOT with the same variable in hash table DATA;
+   if not identical, print difference on file _F.  */
+static const char *_set_name;
+static FILE *_f;
+static int
+dump_dataflow_set_difference_1 (void **slot, void *data)
+{
+  htab_t htab = (htab_t) data;
+  variable var1, var2;
+
+  var1 = *(variable *) slot;
+  var2 = htab_find_with_hash (htab, var1->decl,
+			      VARIABLE_HASH_VAL (var1->decl));
+  if (!var2)
+    fprintf (_f, "%s only in %s set\n", lang_hooks.decl_printable_name (var1->decl, 0), _set_name);
+  else if (variable_different_p (var1, var2, false))
+    fprintf (_f, "%s present but not identical in sets\n", lang_hooks.decl_printable_name (var1->decl, 0));
+  /* Continue traversing the hash table.  */
+  return 1;
+}
+
+/* Print dataflow set difference to stderr.  Plagiarized from
+   dataflow_set_different.  Never called; intended for use from
+   GDB.  */
+void debug_dataflow_set_difference (dataflow_set *, dataflow_set *);
+void
+debug_dataflow_set_difference (dataflow_set *left_set, dataflow_set *right_set)
+{
+  _f = stderr;
+  _set_name = "left";
+  htab_traverse (left_set->vars, dump_dataflow_set_difference_1, right_set->vars);
+  _set_name = "right";
+  htab_traverse (right_set->vars, dump_dataflow_set_difference_1, left_set->vars);
+}
+
+void debug_dataflow_set (dataflow_set *);
+void
+debug_dataflow_set (dataflow_set *set)
+{
+  FILE *saved_dump_file = dump_file;
+  dump_file = stderr;
+  dump_dataflow_set (set);
+  dump_file = saved_dump_file;
+}
+void debug_var_tracking (void);
+void
+debug_var_tracking (void)
+{
+  FILE *saved_dump_file = dump_file;
+  dump_file = stderr;
+  dump_dataflow_sets ();
+  dump_flow_info (stderr, dump_flags);
+  dump_file = saved_dump_file;
+}
+/* APPLE LOCAL end 6414738 */
 
 /* Add variable VAR to the hash table of changed variables and
    if it has no locations delete it from hash table HTAB.  */
@@ -1922,10 +2376,7 @@ variable_was_changed (variable var, htab_t htab)
     }
   else
     {
-#ifdef ENABLE_CHECKING
-      if (!htab)
-	abort ();
-#endif
+      gcc_assert (htab);
       if (var->n_var_parts == 0)
 	{
 	  void **slot = htab_find_slot_with_hash (htab, var->decl, hash,
@@ -1936,45 +2387,50 @@ variable_was_changed (variable var, htab_t htab)
     }
 }
 
-/* Set the location of frame_base_decl to LOC in dataflow set SET.  This
-   function expects that frame_base_decl has already one location for offset 0
-   in the variable table.  */
+/* Look for the index in VAR->var_part corresponding to OFFSET.
+   Return -1 if not found.  If INSERTION_POINT is non-NULL, the
+   referenced int will be set to the index that the part has or should
+   have, if it should be inserted.  */
 
-static void
-set_frame_base_location (dataflow_set *set, rtx loc)
+static inline int
+find_variable_location_part (variable var, HOST_WIDE_INT offset,
+			     int *insertion_point)
 {
-  variable var;
-  
-  var = htab_find_with_hash (set->vars, frame_base_decl,
-			     VARIABLE_HASH_VAL (frame_base_decl));
-#ifdef ENABLE_CHECKING
-  if (!var)
-    abort ();
-  if (var->n_var_parts != 1)
-    abort ();
-  if (var->var_part[0].offset != 0)
-    abort ();
-  if (!var->var_part[0].loc_chain)
-    abort ();
-#endif
+  int pos, low, high;
 
-  /* If frame_base_decl is shared unshare it first.  */
-  if (var->refcount > 1)
-    var = unshare_variable (set, var);
+  /* Find the location part.  */
+  low = 0;
+  high = var->n_var_parts;
+  while (low != high)
+    {
+      pos = (low + high) / 2;
+      if (var->var_part[pos].offset < offset)
+	low = pos + 1;
+      else
+	high = pos;
+    }
+  pos = low;
 
-  var->var_part[0].loc_chain->loc = loc;
-  var->var_part[0].cur_loc = loc;
-  variable_was_changed (var, set->vars);
+  if (insertion_point)
+    *insertion_point = pos;
+
+  if (pos < var->n_var_parts && var->var_part[pos].offset == offset)
+    return pos;
+
+  return -1;
 }
 
 /* Set the part of variable's location in the dataflow set SET.  The variable
    part is specified by variable's declaration DECL and offset OFFSET and the
    part's location by LOC.  */
 
+/* APPLE LOCAL begin track initialization status 4964532  */
 static void
-set_variable_part (dataflow_set *set, rtx loc, tree decl, HOST_WIDE_INT offset)
+set_variable_part (dataflow_set *set, rtx loc, tree decl, HOST_WIDE_INT offset,
+		   enum var_init_status initialized, rtx set_src)
+/* APPLE LOCAL end track initialization status 4964532  */
 {
-  int pos, low, high;
+  int pos;
   location_chain node, next;
   location_chain *nextp;
   variable var;
@@ -1997,22 +2453,13 @@ set_variable_part (dataflow_set *set, rtx loc, tree decl, HOST_WIDE_INT offset)
     }
   else
     {
+      int inspos = 0;
+
       var = (variable) *slot;
 
-      /* Find the location part.  */
-      low = 0;
-      high = var->n_var_parts;
-      while (low != high)
-	{
-	  pos = (low + high) / 2;
-	  if (var->var_part[pos].offset < offset)
-	    low = pos + 1;
-	  else
-	    high = pos;
-	}
-      pos = low;
+      pos = find_variable_location_part (var, offset, &inspos);
 
-      if (pos < var->n_var_parts && var->var_part[pos].offset == offset)
+      if (pos >= 0)
 	{
 	  node = var->var_part[pos].loc_chain;
 
@@ -2023,13 +2470,22 @@ set_variable_part (dataflow_set *set, rtx loc, tree decl, HOST_WIDE_INT offset)
 	    {
 	      /* LOC is in the beginning of the chain so we have nothing
 		 to do.  */
+	      /* APPLE LOCAL begin track initialization status 4964532  */
+	      if (node->init < initialized)
+		node->init = initialized;
+	      if (set_src != NULL)
+		node->set_src = set_src;
+
+	      *slot = var;
+	      /* APPLE LOCAL end track initialization status 4964532  */
 	      return;
 	    }
 	  else
 	    {
 	      /* We have to make a copy of a shared variable.  */
 	      if (var->refcount > 1)
-		var = unshare_variable (set, var);
+		/* APPLE LOCAL track initialization status 4964532  */
+		var = unshare_variable (set, var, initialized);
 	    }
 	}
       else
@@ -2038,19 +2494,17 @@ set_variable_part (dataflow_set *set, rtx loc, tree decl, HOST_WIDE_INT offset)
 
 	  /* We have to make a copy of the shared variable.  */
 	  if (var->refcount > 1)
-	    var = unshare_variable (set, var);
+	    /* APPLE LOCAL track initialization status 4964532  */
+	    var = unshare_variable (set, var, initialized);
 
-#ifdef ENABLE_CHECKING
 	  /* We track only variables whose size is <= MAX_VAR_PARTS bytes
 	     thus there are at most MAX_VAR_PARTS different offsets.  */
-	  if (var->n_var_parts >= MAX_VAR_PARTS)
-	    abort ();
-#endif
+	  gcc_assert (var->n_var_parts < MAX_VAR_PARTS);
 
-	  /* We have to move the elements of array starting at index low to the
-	     next position.  */
-	  for (high = var->n_var_parts; high > low; high--)
-	    var->var_part[high] = var->var_part[high - 1];
+	  /* We have to move the elements of array starting at index
+	     inspos to the next position.  */
+	  for (pos = var->n_var_parts; pos > inspos; pos--)
+	    var->var_part[pos] = var->var_part[pos - 1];
 
 	  var->n_var_parts++;
 	  var->var_part[pos].offset = offset;
@@ -2068,6 +2522,14 @@ set_variable_part (dataflow_set *set, rtx loc, tree decl, HOST_WIDE_INT offset)
 	   && REGNO (node->loc) == REGNO (loc))
 	  || rtx_equal_p (node->loc, loc))
 	{
+	  /* APPLE LOCAL begin track initialization status 4964532  */
+	  /* Save these values, to assign to the new node, before
+	     deleting this one.  */
+	  if (node->init > initialized)
+	    initialized = node->init;
+	  if (node->set_src != NULL && set_src == NULL)
+	    set_src = node->set_src;
+	  /* APPLE LOCAL end track initialization status 4964532  */
 	  pool_free (loc_chain_pool, node);
 	  *nextp = next;
 	  break;
@@ -2079,6 +2541,10 @@ set_variable_part (dataflow_set *set, rtx loc, tree decl, HOST_WIDE_INT offset)
   /* Add the location to the beginning.  */
   node = pool_alloc (loc_chain_pool);
   node->loc = loc;
+  /* APPLE LOCAL begin track initialization status 4964532  */
+  node->init = initialized;
+  node->set_src = set_src;
+  /* APPLE LOCAL end track initialization status 4964532  */
   node->next = var->var_part[pos].loc_chain;
   var->var_part[pos].loc_chain = node;
 
@@ -2090,6 +2556,79 @@ set_variable_part (dataflow_set *set, rtx loc, tree decl, HOST_WIDE_INT offset)
     }
 }
 
+/* Remove all recorded register locations for the given variable part
+   from dataflow set SET, except for those that are identical to loc.
+   The variable part is specified by variable's declaration DECL and
+   offset OFFSET.  */
+
+static void
+/* APPLE LOCAL begin track initialization status 4964532  */
+clobber_variable_part (dataflow_set *set, rtx loc, tree decl,
+		       HOST_WIDE_INT offset, rtx set_src)
+/* APPLE LOCAL end track initialization status 4964532  */
+{
+  void **slot;
+
+  if (! decl || ! DECL_P (decl))
+    return;
+
+  slot = htab_find_slot_with_hash (set->vars, decl, VARIABLE_HASH_VAL (decl),
+				   NO_INSERT);
+  if (slot)
+    {
+      variable var = (variable) *slot;
+      int pos = find_variable_location_part (var, offset, NULL);
+
+      if (pos >= 0)
+	{
+	  location_chain node, next;
+
+	  /* Remove the register locations from the dataflow set.  */
+	  next = var->var_part[pos].loc_chain;
+	  for (node = next; node; node = next)
+	    {
+	      next = node->next;
+	      /* APPLE LOCAL begin track initialization status 4964532  */
+	      if (node->loc != loc 
+		  && (!(TARGET_DWARF_UNINIT_VARS)
+		      || !set_src 
+		      || MEM_P (set_src)
+		      || !rtx_equal_p (set_src, node->set_src)))
+	      /* APPLE LOCAL end track initialization status 4964532  */
+		{
+		  if (REG_P (node->loc))
+		    {
+		      attrs anode, anext;
+		      attrs *anextp;
+
+		      /* Remove the variable part from the register's
+			 list, but preserve any other variable parts
+			 that might be regarded as live in that same
+			 register.  */
+		      anextp = &set->regs[REGNO (node->loc)];
+		      for (anode = *anextp; anode; anode = anext)
+			{
+			  anext = anode->next;
+			  if (anode->decl == decl
+			      && anode->offset == offset)
+			    {
+			      pool_free (attrs_pool, anode);
+			      *anextp = anext;
+			    }
+			  /* APPLE LOCAL begin 6414738 */
+			  else
+			    anextp = &anode->next;
+			  /* APPLE LOCAL end 6414738 */
+			}
+		    }
+
+		  delete_variable_part (set, node->loc, decl, offset);
+		}
+	    }
+	}
+    }
+}
+
 /* Delete the part of variable's location from dataflow set SET.  The variable
    part is specified by variable's declaration DECL and offset OFFSET and the
    part's location by LOC.  */
@@ -2098,7 +2637,6 @@ static void
 delete_variable_part (dataflow_set *set, rtx loc, tree decl,
 		      HOST_WIDE_INT offset)
 {
-  int pos, low, high;
   void **slot;
     
   slot = htab_find_slot_with_hash (set->vars, decl, VARIABLE_HASH_VAL (decl),
@@ -2106,21 +2644,9 @@ delete_variable_part (dataflow_set *set, rtx loc, tree decl,
   if (slot)
     {
       variable var = (variable) *slot;
+      int pos = find_variable_location_part (var, offset, NULL);
 
-      /* Find the location part.  */
-      low = 0;
-      high = var->n_var_parts;
-      while (low != high)
-	{
-	  pos = (low + high) / 2;
-	  if (var->var_part[pos].offset < offset)
-	    low = pos + 1;
-	  else
-	    high = pos;
-	}
-      pos = low;
-
-      if (pos < var->n_var_parts && var->var_part[pos].offset == offset)
+      if (pos >= 0)
 	{
 	  location_chain node, next;
 	  location_chain *nextp;
@@ -2137,8 +2663,13 @@ delete_variable_part (dataflow_set *set, rtx loc, tree decl,
 		       && REGNO (node->loc) == REGNO (loc))
 		      || rtx_equal_p (node->loc, loc))
 		    {
-		      var = unshare_variable (set, var);
+		      /* APPLE LOCAL begin track initialization status 4964532  */
+		      enum var_init_status status = STATUS_UNKNOWN;
+		      if (! TARGET_DWARF_UNINIT_VARS)
+			status = STATUS_INITIALIZED;
+		      var = unshare_variable (set, var, status);
 		      break;
+		      /* APPLE LOCAL end track initialization status 4964532  */
 		    }
 		}
 	    }
@@ -2186,7 +2717,7 @@ delete_variable_part (dataflow_set *set, rtx loc, tree decl,
 		}
 	    }
 	  if (changed)
-	      variable_was_changed (var, set->vars);
+	    variable_was_changed (var, set->vars);
 	}
     }
 }
@@ -2202,28 +2733,110 @@ emit_note_insn_var_location (void **varp, void *data)
   rtx insn = ((emit_note_data *)data)->insn;
   enum emit_note_where where = ((emit_note_data *)data)->where;
   rtx note;
-  int i;
+  int i, j, n_var_parts;
   bool complete;
+  /* APPLE LOCAL track initialization status 4964532  */
+  enum var_init_status initialized = STATUS_UNINITIALIZED;
   HOST_WIDE_INT last_limit;
   tree type_size_unit;
+  HOST_WIDE_INT offsets[MAX_VAR_PARTS];
+  rtx loc[MAX_VAR_PARTS];
 
-#ifdef ENABLE_CHECKING
-  if (!var->decl)
-    abort ();
-#endif
+  gcc_assert (var->decl);
+
+  /* APPLE LOCAL begin track initialization status 4964532  */
+  if (! TARGET_DWARF_UNINIT_VARS)
+    initialized = STATUS_INITIALIZED;
+  /* APPLE LOCAL end track initialization stauts.  */
 
   complete = true;
   last_limit = 0;
+  n_var_parts = 0;
   for (i = 0; i < var->n_var_parts; i++)
     {
+      enum machine_mode mode, wider_mode;
+
       if (last_limit < var->var_part[i].offset)
 	{
 	  complete = false;
 	  break;
 	}
-      last_limit
-	= (var->var_part[i].offset
-	   + GET_MODE_SIZE (GET_MODE (var->var_part[i].loc_chain->loc)));
+      else if (last_limit > var->var_part[i].offset)
+	continue;
+      offsets[n_var_parts] = var->var_part[i].offset;
+      loc[n_var_parts] = var->var_part[i].loc_chain->loc;
+      mode = GET_MODE (loc[n_var_parts]);
+      /* APPLE LOCAL track initialization status 4964532  */
+      initialized = var->var_part[i].loc_chain->init;
+      last_limit = offsets[n_var_parts] + GET_MODE_SIZE (mode);
+
+      /* Attempt to merge adjacent registers or memory.  */
+      wider_mode = GET_MODE_WIDER_MODE (mode);
+      for (j = i + 1; j < var->n_var_parts; j++)
+	if (last_limit <= var->var_part[j].offset)
+	  break;
+      if (j < var->n_var_parts
+	  && wider_mode != VOIDmode
+	  && GET_CODE (loc[n_var_parts])
+	     == GET_CODE (var->var_part[j].loc_chain->loc)
+	  && mode == GET_MODE (var->var_part[j].loc_chain->loc)
+	  && last_limit == var->var_part[j].offset)
+	{
+	  rtx new_loc = NULL;
+	  rtx loc2 = var->var_part[j].loc_chain->loc;
+
+	  if (REG_P (loc[n_var_parts])
+	      && hard_regno_nregs[REGNO (loc[n_var_parts])][mode] * 2
+		 == hard_regno_nregs[REGNO (loc[n_var_parts])][wider_mode]
+	      && REGNO (loc[n_var_parts])
+		 + hard_regno_nregs[REGNO (loc[n_var_parts])][mode]
+		 == REGNO (loc2))
+	    {
+	      if (! WORDS_BIG_ENDIAN && ! BYTES_BIG_ENDIAN)
+		new_loc = simplify_subreg (wider_mode, loc[n_var_parts],
+					   mode, 0);
+	      else if (WORDS_BIG_ENDIAN && BYTES_BIG_ENDIAN)
+		new_loc = simplify_subreg (wider_mode, loc2, mode, 0);
+	      if (new_loc)
+		{
+		  if (!REG_P (new_loc)
+		      || REGNO (new_loc) != REGNO (loc[n_var_parts]))
+		    new_loc = NULL;
+		  else
+		    REG_ATTRS (new_loc) = REG_ATTRS (loc[n_var_parts]);
+		}
+	    }
+	  else if (MEM_P (loc[n_var_parts])
+		   && GET_CODE (XEXP (loc2, 0)) == PLUS
+		   && GET_CODE (XEXP (XEXP (loc2, 0), 0)) == REG
+		   && GET_CODE (XEXP (XEXP (loc2, 0), 1)) == CONST_INT)
+	    {
+	      if ((GET_CODE (XEXP (loc[n_var_parts], 0)) == REG
+		   && rtx_equal_p (XEXP (loc[n_var_parts], 0),
+				   XEXP (XEXP (loc2, 0), 0))
+		   && INTVAL (XEXP (XEXP (loc2, 0), 1))
+		      == GET_MODE_SIZE (mode))
+		  || (GET_CODE (XEXP (loc[n_var_parts], 0)) == PLUS
+		      && GET_CODE (XEXP (XEXP (loc[n_var_parts], 0), 1))
+			 == CONST_INT
+		      && rtx_equal_p (XEXP (XEXP (loc[n_var_parts], 0), 0),
+				      XEXP (XEXP (loc2, 0), 0))
+		      && INTVAL (XEXP (XEXP (loc[n_var_parts], 0), 1))
+			 + GET_MODE_SIZE (mode)
+			 == INTVAL (XEXP (XEXP (loc2, 0), 1))))
+		new_loc = adjust_address_nv (loc[n_var_parts],
+					     wider_mode, 0);
+	    }
+
+	  if (new_loc)
+	    {
+	      loc[n_var_parts] = new_loc;
+	      mode = wider_mode;
+	      last_limit = offsets[n_var_parts] + GET_MODE_SIZE (mode);
+	      i = j;
+	    }
+	}
+      ++n_var_parts;
     }
   type_size_unit = TYPE_SIZE_UNIT (TREE_TYPE (var->decl));
   if ((unsigned HOST_WIDE_INT) last_limit < TREE_INT_CST_LOW (type_size_unit))
@@ -2234,34 +2847,49 @@ emit_note_insn_var_location (void **varp, void *data)
   else
     note = emit_note_before (NOTE_INSN_VAR_LOCATION, insn);
 
+  /* APPLE LOCAL begin track initialization status 4964532  */
+  if (!(TARGET_DWARF_UNINIT_VARS))
+    initialized = STATUS_INITIALIZED;
+  /* APPLE LOCAL end track initialization status 4964532  */
+
   if (!complete)
     {
+      /* APPLE LOCAL begin track initialization status 4964532  */
       NOTE_VAR_LOCATION (note) = gen_rtx_VAR_LOCATION (VOIDmode, var->decl,
-						       NULL_RTX);
+						       NULL_RTX, 0);
+      /* APPLE LOCAL end track initialization status 4964532  */
     }
-  else if (var->n_var_parts == 1)
+  else if (n_var_parts == 1)
     {
       rtx expr_list
-	= gen_rtx_EXPR_LIST (VOIDmode,
-			     var->var_part[0].loc_chain->loc,
-			     GEN_INT (var->var_part[0].offset));
+	= gen_rtx_EXPR_LIST (VOIDmode, loc[0], GEN_INT (offsets[0]));
 
+      /* APPLE LOCAL begin track initialization status 4964532  */
       NOTE_VAR_LOCATION (note) = gen_rtx_VAR_LOCATION (VOIDmode, var->decl,
-						       expr_list);
+						       expr_list, 
+						       (int) initialized);
+      /* APPLE LOCAL end track initialization status 4964532  */
     }
-  else if (var->n_var_parts)
+  else if (n_var_parts)
     {
-      rtx argp[MAX_VAR_PARTS];
       rtx parallel;
 
-      for (i = 0; i < var->n_var_parts; i++)
-	argp[i] = gen_rtx_EXPR_LIST (VOIDmode, var->var_part[i].loc_chain->loc,
-				     GEN_INT (var->var_part[i].offset));
+      for (i = 0; i < n_var_parts; i++)
+	loc[i]
+	  = gen_rtx_EXPR_LIST (VOIDmode, loc[i], GEN_INT (offsets[i]));
+
       parallel = gen_rtx_PARALLEL (VOIDmode,
-				   gen_rtvec_v (var->n_var_parts, argp));
+				   gen_rtvec_v (n_var_parts, loc));
+      /* APPLE LOCAL begin track initialization status 4964532  */
       NOTE_VAR_LOCATION (note) = gen_rtx_VAR_LOCATION (VOIDmode, var->decl,
-						       parallel);
+						       parallel, 
+						       (int) initialized);
+      /* APPLE LOCAL end track initialization status 4964532  */
     }
+
+  /* APPLE LOCAL begin track initialization status 4964532  */
+  NOTE_VAR_LOCATION_STATUS (note) = (int) initialized;
+  /* APPLE LOCAL end track initialization status 4964532  */
 
   htab_clear_slot (changed_variables, varp);
 
@@ -2389,49 +3017,102 @@ emit_notes_in_bb (basic_block bb)
 	    break;
 
 	  case MO_USE:
+	    {
+	      rtx loc = VTI (bb)->mos[i].u.loc;
+      
+	      /* APPLE LOCAL begin track initialization status 4964532  */
+	      enum var_init_status status = STATUS_UNINITIALIZED;
+	      if (! TARGET_DWARF_UNINIT_VARS)
+		status = STATUS_INITIALIZED;
+	      if (GET_CODE (loc) == REG)
+		var_reg_set (&set, loc, status, NULL);
+	      else
+		var_mem_set (&set, loc, status, NULL);
+	      /* APPLE LOCAL end track initialization status 4964532  */
+
+	      emit_notes_for_changes (insn, EMIT_NOTE_AFTER_INSN);
+	    }
+	    break;
+
 	  case MO_SET:
 	    {
 	      rtx loc = VTI (bb)->mos[i].u.loc;
+	      /* APPLE LOCAL begin track initialization status 4964532  */
+	      rtx set_src =  NULL;
+
+	      if (GET_CODE (PATTERN (insn)) == SET)
+		set_src = SET_SRC (PATTERN (insn));
+	      else if (GET_CODE (PATTERN (insn)) == PARALLEL
+		       || GET_CODE (PATTERN (insn)) == SEQUENCE)
+		{
+		  int j;
+		  for (j = XVECLEN (PATTERN (insn), 0) - 1; j >= 0; j--)
+		    if (GET_CODE (XVECEXP (PATTERN (insn), 0, j)) == SET
+			&& SET_DEST (XVECEXP (PATTERN (insn), 0, j)) == loc)
+		      set_src = SET_SRC (XVECEXP (PATTERN (insn), 0, j));
+		}
 
 	      if (REG_P (loc))
-		var_reg_delete_and_set (&set, loc);
+		var_reg_delete_and_set (&set, loc, true, STATUS_INITIALIZED, 
+					set_src);
 	      else
-		var_mem_delete_and_set (&set, loc);
+		var_mem_delete_and_set (&set, loc, true, STATUS_INITIALIZED, 
+					set_src);
 
-	      if (VTI (bb)->mos[i].type == MO_USE)
-		emit_notes_for_changes (insn, EMIT_NOTE_BEFORE_INSN);
+	      emit_notes_for_changes (NEXT_INSN (insn), EMIT_NOTE_BEFORE_INSN);
+	      /* APPLE LOCAL end track initialization status 4964532  */
+	    }
+	    break;
+
+	  case MO_COPY:
+	    {
+	      rtx loc = VTI (bb)->mos[i].u.loc;
+	      /* APPLE LOCAL begin track initialization status 4964532  */
+	      enum var_init_status src_status;
+	      rtx set_src;
+
+	      src_status = find_src_status (&set, loc, VTI (bb)->mos[i].insn);
+	      set_src = find_src_set_src (&set, loc, VTI (bb)->mos[i].insn);
+
+	      if (REG_P (loc))
+		var_reg_delete_and_set (&set, loc, false, src_status, set_src);
 	      else
-		emit_notes_for_changes (insn, EMIT_NOTE_AFTER_INSN);
+		var_mem_delete_and_set (&set, loc, false, src_status, set_src);
+
+	      emit_notes_for_changes (NEXT_INSN (insn), EMIT_NOTE_BEFORE_INSN);
+	      /* APPLE LOCAL end track initialization status 4964532  */
 	    }
 	    break;
 
 	  case MO_USE_NO_VAR:
+	    {
+	      rtx loc = VTI (bb)->mos[i].u.loc;
+
+	      if (REG_P (loc))
+		var_reg_delete (&set, loc, false);
+	      else
+		var_mem_delete (&set, loc, false);
+
+	      emit_notes_for_changes (insn, EMIT_NOTE_AFTER_INSN);
+	    }
+	    break;
+
 	  case MO_CLOBBER:
 	    {
 	      rtx loc = VTI (bb)->mos[i].u.loc;
 
 	      if (REG_P (loc))
-		var_reg_delete (&set, loc);
+		var_reg_delete (&set, loc, true);
 	      else
-		var_mem_delete (&set, loc);
+		var_mem_delete (&set, loc, true);
 
-	      if (VTI (bb)->mos[i].type == MO_USE_NO_VAR)
-		emit_notes_for_changes (insn, EMIT_NOTE_BEFORE_INSN);
-	      else
-		emit_notes_for_changes (insn, EMIT_NOTE_AFTER_INSN);
+	      /* APPLE LOCAL track initialization status 4964532  */
+	      emit_notes_for_changes (NEXT_INSN (insn), EMIT_NOTE_BEFORE_INSN);
 	    }
 	    break;
 
 	  case MO_ADJUST:
-	    {
-	      rtx base;
-
-	      set.stack_adjust += VTI (bb)->mos[i].u.adjust;
-	      base = gen_rtx_MEM (Pmode, plus_constant (stack_pointer_rtx,
-							set.stack_adjust));
-	      set_frame_base_location (&set, base);
-	      emit_notes_for_changes (insn, EMIT_NOTE_AFTER_INSN);
-	    }
+	    set.stack_adjust += VTI (bb)->mos[i].u.adjust;
 	    break;
 	}
     }
@@ -2447,10 +3128,7 @@ vt_emit_notes (void)
   dataflow_set *last_out;
   dataflow_set empty;
 
-#ifdef ENABLE_CHECKING
-  if (htab_elements (changed_variables))
-    abort ();
-#endif
+  gcc_assert (!htab_elements (changed_variables));
 
   /* Enable emitting notes by functions (mainly by set_variable_part and
      delete_variable_part).  */
@@ -2536,28 +3214,23 @@ vt_add_function_parameters (void)
       if (!decl)
 	continue;
 
-#ifdef ENABLE_CHECKING
-      if (parm != decl)
-	abort ();
-#endif
+      gcc_assert (parm == decl);
 
-      incoming = eliminate_regs (incoming, 0, NULL_RTX);
       out = &VTI (ENTRY_BLOCK_PTR)->out;
 
       if (REG_P (incoming))
 	{
-#ifdef ENABLE_CHECKING
-	  if (REGNO (incoming) >= FIRST_PSEUDO_REGISTER)
-	    abort ();
-#endif
+	  gcc_assert (REGNO (incoming) < FIRST_PSEUDO_REGISTER);
 	  attrs_list_insert (&out->regs[REGNO (incoming)],
 			     parm, offset, incoming);
-	  set_variable_part (out, incoming, parm, offset);
+	  /* APPLE LOCAL begin track initialization status 4964532  */
+	  set_variable_part (out, incoming, parm, offset, STATUS_INITIALIZED, 
+			     NULL);
 	}
       else if (MEM_P (incoming))
-	{
-	  set_variable_part (out, incoming, parm, offset);
-	}
+	set_variable_part (out, incoming, parm, offset, STATUS_INITIALIZED, 
+			   NULL);
+      /* APPLE LOCAL end track initialization status 4964532  */
     }
 }
 
@@ -2574,7 +3247,7 @@ vt_initialize (void)
   FOR_EACH_BB (bb)
     {
       rtx insn;
-      HOST_WIDE_INT pre, post;
+      HOST_WIDE_INT pre, post = 0;
 
       /* Count the number of micro operations.  */
       VTI (bb)->n_mos = 0;
@@ -2599,8 +3272,7 @@ vt_initialize (void)
 	}
 
       /* Add the micro-operations to the array.  */
-      VTI (bb)->mos = xmalloc (VTI (bb)->n_mos
-			       * sizeof (struct micro_operation_def));
+      VTI (bb)->mos = XNEWVEC (micro_operation, VTI (bb)->n_mos);
       VTI (bb)->n_mos = 0;
       for (insn = BB_HEAD (bb); insn != NEXT_INSN (BB_END (bb));
 	   insn = NEXT_INSN (insn))
@@ -2652,15 +3324,19 @@ vt_initialize (void)
 		}
 
 	      n1 = VTI (bb)->n_mos;
+	      /* This will record NEXT_INSN (insn), such that we can
+		 insert notes before it without worrying about any
+		 notes that MO_USEs might emit after the insn.  */
 	      note_stores (PATTERN (insn), add_stores, insn);
 	      n2 = VTI (bb)->n_mos - 1;
 
-	      /* Order the MO_SETs to be before MO_CLOBBERs.  */
+	      /* Order the MO_CLOBBERs to be before MO_SETs.  */
 	      while (n1 < n2)
 		{
-		  while (n1 < n2 && VTI (bb)->mos[n1].type == MO_SET)
+		  while (n1 < n2 && VTI (bb)->mos[n1].type == MO_CLOBBER)
 		    n1++;
-		  while (n1 < n2 && VTI (bb)->mos[n2].type == MO_CLOBBER)
+		  while (n1 < n2 && (VTI (bb)->mos[n2].type == MO_SET
+				     || VTI (bb)->mos[n2].type == MO_COPY))
 		    n2--;
 		  if (n1 < n2)
 		    {
@@ -2702,28 +3378,6 @@ vt_initialize (void)
   changed_variables = htab_create (10, variable_htab_hash, variable_htab_eq,
 				   NULL);
   vt_add_function_parameters ();
-
-  if (!frame_pointer_needed)
-    {
-      rtx base;
-
-      /* Create fake variable for tracking stack pointer changes.  */
-      frame_base_decl = make_node (VAR_DECL);
-      DECL_NAME (frame_base_decl) = get_identifier ("___frame_base_decl");
-      TREE_TYPE (frame_base_decl) = char_type_node;
-      DECL_ARTIFICIAL (frame_base_decl) = 1;
-      DECL_IGNORED_P (frame_base_decl) = 1;
-
-      /* Set its initial "location".  */
-      frame_stack_adjust = -prologue_stack_adjust ();
-      base = gen_rtx_MEM (Pmode, plus_constant (stack_pointer_rtx,
-						frame_stack_adjust));
-      set_variable_part (&VTI (ENTRY_BLOCK_PTR)->out, base, frame_base_decl, 0);
-    }
-  else
-    {
-      frame_base_decl = NULL;
-    }
 }
 
 /* Free the data structures needed for variable tracking.  */
@@ -2752,11 +3406,11 @@ vt_finalize (void)
 
 /* The entry point to variable tracking pass.  */
 
-void
+unsigned int
 variable_tracking_main (void)
 {
   if (n_basic_blocks > 500 && n_edges / n_basic_blocks >= 20)
-    return;
+    return 0;
 
   mark_dfs_back_edges ();
   vt_initialize ();
@@ -2765,18 +3419,45 @@ variable_tracking_main (void)
       if (!vt_stack_adjustments ())
 	{
 	  vt_finalize ();
-	  return;
+	  return 0;
 	}
     }
 
   vt_find_locations ();
   vt_emit_notes ();
 
-  if (dump_file)
+  if (dump_file && (dump_flags & TDF_DETAILS))
     {
       dump_dataflow_sets ();
-      dump_flow_info (dump_file);
+      dump_flow_info (dump_file, dump_flags);
     }
 
   vt_finalize ();
+  return 0;
 }
+
+static bool
+gate_handle_var_tracking (void)
+{
+  return (flag_var_tracking);
+}
+
+
+
+struct tree_opt_pass pass_variable_tracking =
+{
+  "vartrack",                           /* name */
+  gate_handle_var_tracking,             /* gate */
+  variable_tracking_main,               /* execute */
+  NULL,                                 /* sub */
+  NULL,                                 /* next */
+  0,                                    /* static_pass_number */
+  TV_VAR_TRACKING,                      /* tv_id */
+  0,                                    /* properties_required */
+  0,                                    /* properties_provided */
+  0,                                    /* properties_destroyed */
+  0,                                    /* todo_flags_start */
+  TODO_dump_func,                       /* todo_flags_finish */
+  'V'                                   /* letter */
+};
+

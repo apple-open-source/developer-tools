@@ -1,7 +1,7 @@
 /*
-* "$Id: usb-darwin.c 6996 2007-09-28 18:30:31Z mike $"
+* "$Id: usb-darwin.c 8619 2009-05-12 17:41:32Z mike $"
 *
-* Copyright � 2005-2007 Apple Inc. All rights reserved.
+* Copyright 2005-2009 Apple Inc. All rights reserved.
 *
 * IMPORTANT:  This Apple software is supplied to you by Apple Computer,
 * Inc. ("Apple") in consideration of your agreement to the following
@@ -65,7 +65,7 @@
 *  cfstr_create_trim()	- Create CFString and trim whitespace characters.
 *  parse_options()	- Parse uri options.
 *  setup_cfLanguage()	- Create AppleLanguages array from LANG environment var.
-*  run_ppc_backend()	- Re-exec i386 backend as ppc.
+*  run_legacy_backend()	- Re-exec backend as ppc or i386.
 *  sigterm_handler()	- SIGTERM handler.
 *  next_line()		- Find the next line in a buffer.
 *  parse_pserror()	- Scan the backchannel data for postscript errors.
@@ -83,6 +83,7 @@
 #include <fcntl.h>
 #include <termios.h>
 #include <unistd.h>
+#include <sys/stat.h>
 #include <sys/sysctl.h>
 #include <libgen.h>
 #include <mach/mach.h>
@@ -91,13 +92,25 @@
 #include <cups/debug.h>
 #include <cups/sidechannel.h>
 #include <cups/i18n.h>
+#include "backend-private.h"
 
 #include <CoreFoundation/CoreFoundation.h>
 #include <IOKit/usb/IOUSBLib.h>
 #include <IOKit/IOCFPlugIn.h>
 
+#include <spawn.h>
 #include <pthread.h>
 
+extern char **environ;
+
+
+/*
+ * DEBUG_WRITES, if defined, causes the backend to write data to the printer in
+ * 512 byte increments, up to 8192 bytes, to make debugging with a USB bus
+ * analyzer easier.
+ */
+
+#define DEBUG_WRITES 0
 
 /*
  * WAIT_EOF_DELAY is number of seconds we'll wait for responses from
@@ -227,6 +240,9 @@ typedef struct globals_s
 
   int			print_fd;	/* File descriptor to print */
   ssize_t		print_bytes;	/* Print bytes read */
+#if DEBUG_WRITES
+  ssize_t		debug_bytes;	/* Current bytes to read */
+#endif /* DEBUG_WRITES */
 
   Boolean		wait_eof;
   int			drain_output;	/* Drain all pending output */
@@ -273,11 +289,12 @@ static void setup_cfLanguage(void);
 static void soft_reset();
 static void status_timer_cb(CFRunLoopTimerRef timer, void *info);
 
-#if defined(__i386__)
-static pid_t	child_pid;					/* Child PID */
-static void run_ppc_backend(int argc, char *argv[], int fd);	/* Starts child backend process running as a ppc executable */
-static void sigterm_handler(int sig);				/* SIGTERM handler */
-#endif /* __i386__ */
+#if defined(__i386__) || defined(__x86_64__)
+static pid_t	child_pid;		/* Child PID */
+static void run_legacy_backend(int argc, char *argv[], int fd);	/* Starts child backend process running as a ppc executable */
+#endif /* __i386__ || __x86_64__ */
+static int	job_canceled = 0;	/* Was the job canceled? */
+static void sigterm_handler(int sig);	/* SIGTERM handler */
 
 #ifdef PARSE_PS_ERRORS
 static const char *next_line (const char *buffer);
@@ -312,9 +329,11 @@ print_device(const char *uri,		/* I - Device URI */
 {
   char		  serial[1024];		/* Serial number buffer */
   OSStatus	  status;		/* Function results */
+  IOReturn	  iostatus;		/* Current IO status */
   pthread_t	  read_thread_id,	/* Read thread */
 		  sidechannel_thread_id;/* Side-channel thread */
-  int		  sidechannel_started = 0;/* Was the side-channel thread started? */
+  int		  have_sidechannel = 0;	/* Was the side-channel thread started? */
+  struct stat     sidechannel_info;	/* Side-channel file descriptor info */
   char		  print_buffer[8192],	/* Print data buffer */
 		  *print_ptr;		/* Pointer into print data buffer */
   UInt32	  location;		/* Unique location in bus topology */
@@ -328,6 +347,17 @@ print_device(const char *uri,		/* I - Device URI */
 		  stimeout;		/* Timeout for select() */
   struct timespec cond_timeout;		/* pthread condition timeout */
 
+
+ /*
+  * See if the side-channel descriptor is valid...
+  */
+
+  have_sidechannel = !fstat(CUPS_SC_FD, &sidechannel_info) &&
+                     S_ISSOCK(sidechannel_info.st_mode);
+
+ /*
+  * Localize using CoreFoundation...
+  */
 
   setup_cfLanguage();
 
@@ -344,9 +374,14 @@ print_device(const char *uri,		/* I - Device URI */
 
   if (!g.make || !g.model)
   {
-    _cupsLangPrintf(stderr, 
-		    _("ERROR: Unable to create make and model strings\n"));
-    return CUPS_BACKEND_STOP;
+    _cupsLangPuts(stderr, _("ERROR: Fatal USB error!\n"));
+
+    if (!g.make)
+      fputs("DEBUG: USB make string is NULL!\n", stderr);
+    if (!g.model)
+      fputs("DEBUG: USB model string is NULL!\n", stderr);
+
+    return (CUPS_BACKEND_STOP);
   }
 
   fputs("STATE: +connecting-to-device\n", stderr);
@@ -373,17 +408,18 @@ print_device(const char *uri,		/* I - Device URI */
 
     status = registry_open(&driverBundlePath);
 
-#if defined(__i386__)
+#if defined(__i386__) || defined(__x86_64__)
     /*
-     * If we were unable to load the class drivers for this printer it's probably because they're ppc-only.
-     * In this case try to fork & exec this backend as a ppc executable so we can use them...
+     * If we were unable to load the class drivers for this printer it's
+     * probably because they're ppc or i386. In this case try to run this
+     * backend as i386 or ppc executables so we can use them...
      */
     if (status == -2)
     {
-      run_ppc_backend(argc, argv, print_fd);
+      run_legacy_backend(argc, argv, print_fd);
       /* Never returns here */
     }
-#endif /* __i386__ */
+#endif /* __i386__ || __x86_64__ */
 
     if (status ==  -2)
     {
@@ -396,12 +432,13 @@ print_device(const char *uri,		/* I - Device URI */
         strlcpy(print_buffer, "USB class driver", sizeof(print_buffer));
 
       fputs("STATE: +apple-missing-usbclassdriver-error\n", stderr);
-      _cupsLangPrintf(stderr, _("FATAL: Could not load %s\n"), print_buffer);
+      _cupsLangPuts(stderr, _("ERROR: Fatal USB error!\n"));
+      fprintf(stderr, "DEBUG: Could not load %s\n", print_buffer);
 
       if (driverBundlePath)
 	CFRelease(driverBundlePath);
 
-      return CUPS_BACKEND_STOP;
+      return (CUPS_BACKEND_STOP);
     }
 
     if (driverBundlePath)
@@ -413,8 +450,9 @@ print_device(const char *uri,		/* I - Device URI */
       countdown -= PRINTER_POLLING_INTERVAL;
       if (countdown <= 0)
       {
-	_cupsLangPrintf(stderr, _("INFO: Printer busy (status:0x%08x)\n"),
-	                (int)status);
+	_cupsLangPuts(stderr,
+		      _("INFO: Waiting for printer to become available...\n"));
+	fprintf(stderr, "DEBUG: USB printer status: 0x%08x\n", (int)status);
 	countdown = SUBSEQUENT_LOG_INTERVAL;	/* subsequent log entries, every 15 seconds */
       }
     }
@@ -423,9 +461,9 @@ print_device(const char *uri,		/* I - Device URI */
   fputs("STATE: -connecting-to-device\n", stderr);
 
   /*
-   * Now that we are "connected" to the port, ignore SIGTERM so that we
+   * Now that we are "connected" to the port, catch SIGTERM so that we
    * can finish out any page data the driver sends (e.g. to eject the
-   * current page...  Only ignore SIGTERM if we are printing data from
+   * current page...  Only catch SIGTERM if we are printing data from
    * stdin (otherwise you can't cancel raw jobs...)
    */
 
@@ -437,26 +475,19 @@ print_device(const char *uri,		/* I - Device URI */
     memset(&action, 0, sizeof(action));
 
     sigemptyset(&action.sa_mask);
-    action.sa_handler = SIG_IGN;
+    action.sa_handler = sigterm_handler;
     sigaction(SIGTERM, &action, NULL);
   }
 
  /*
-  * Start the side channel thread only if the descriptor is valid
-  * (i.e. it's not when the backend is used for auto-setup)...
+  * Start the side channel thread if the descriptor is valid...
   */
 
   pthread_mutex_init(&g.readwrite_lock_mutex, NULL);
   pthread_cond_init(&g.readwrite_lock_cond, NULL);
   g.readwrite_lock = 1;
 
-  FD_ZERO(&input_set);
-  FD_SET(CUPS_SC_FD, &input_set);
-
-  stimeout.tv_sec  = 0;
-  stimeout.tv_usec = 0;
-
-  if ((select(CUPS_SC_FD+1, &input_set, NULL, NULL, &stimeout)) >= 0)
+  if (have_sidechannel)
   {
     g.sidechannel_thread_stop = 0;
     g.sidechannel_thread_done = 0;
@@ -466,11 +497,10 @@ print_device(const char *uri,		/* I - Device URI */
 
     if (pthread_create(&sidechannel_thread_id, NULL, sidechannel_thread, NULL))
     {
-      _cupsLangPuts(stderr, _("WARNING: Couldn't create side channel\n"));
-      return CUPS_BACKEND_STOP;
+      _cupsLangPuts(stderr, _("ERROR: Fatal USB error!\n"));
+      fputs("DEBUG: Couldn't create side-channel thread!\n", stderr);
+      return (CUPS_BACKEND_STOP);
     }
-
-    sidechannel_started = 1;
   }
 
  /*
@@ -485,8 +515,9 @@ print_device(const char *uri,		/* I - Device URI */
 
   if (pthread_create(&read_thread_id, NULL, read_thread, NULL))
   {
-    _cupsLangPuts(stderr, _("WARNING: Couldn't create read channel\n"));
-    return CUPS_BACKEND_STOP;
+    _cupsLangPuts(stderr, _("ERROR: Fatal USB error!\n"));
+    fputs("DEBUG: Couldn't create read thread!\n", stderr);
+    return (CUPS_BACKEND_STOP);
   }
 
  /*
@@ -500,11 +531,11 @@ print_device(const char *uri,		/* I - Device URI */
 
   while (status == noErr && copies-- > 0)
   {
-    _cupsLangPuts(stderr, _("INFO: Sending data\n"));
+    _cupsLangPuts(stderr, _("INFO: Sending print data...\n"));
 
     if (print_fd != STDIN_FILENO)
     {
-      fputs("PAGE: 1 1", stderr);
+      fputs("PAGE: 1 1\n", stderr);
       lseek(print_fd, 0, SEEK_SET);
     }
 
@@ -564,12 +595,13 @@ print_device(const char *uri,		/* I - Device URI */
 	{
 	  fputs("DEBUG: Received an interrupt before any bytes were "
 	        "written, aborting!\n", stderr);
-          return (0);
+          return (CUPS_BACKEND_OK);
 	}
-	else if (errno != EAGAIN)
+	else if (errno != EAGAIN && errno != EINTR)
 	{
-	 _cupsLangPrintf(stderr, _("ERROR: select() returned %d\n"), (int)errno);
-	 return CUPS_BACKEND_STOP;
+	  _cupsLangPuts(stderr, _("ERROR: Unable to read print data!\n"));
+	  perror("DEBUG: select");
+	  return (CUPS_BACKEND_FAILED);
 	}
       }
 
@@ -590,7 +622,16 @@ print_device(const char *uri,		/* I - Device URI */
 
       if (FD_ISSET(print_fd, &input_set))
       {
+#if DEBUG_WRITES
+	g.debug_bytes += 512;
+        if (g.debug_bytes > sizeof(print_buffer))
+	  g.debug_bytes = 512;
+
+	g.print_bytes = read(print_fd, print_buffer, g.debug_bytes);
+
+#else
 	g.print_bytes = read(print_fd, print_buffer, sizeof(print_buffer));
+#endif /* DEBUG_WRITES */
 
 	if (g.print_bytes < 0)
 	{
@@ -598,10 +639,11 @@ print_device(const char *uri,		/* I - Device URI */
 	  * Read error - bail if we don't see EAGAIN or EINTR...
 	  */
 
-	  if (errno != EAGAIN || errno != EINTR)
+	  if (errno != EAGAIN && errno != EINTR)
 	  {
-	    perror("ERROR: Unable to read print data");
-	    return CUPS_BACKEND_STOP;
+	    _cupsLangPuts(stderr, _("ERROR: Unable to read print data!\n"));
+	    perror("DEBUG: read");
+	    return (CUPS_BACKEND_FAILED);
 	  }
 
 	  g.print_bytes = 0;
@@ -623,38 +665,77 @@ print_device(const char *uri,		/* I - Device URI */
 
       if (g.print_bytes)
       {
-	bytes = g.print_bytes;
-
-	status = (*g.classdriver)->WritePipe(g.classdriver, (UInt8*)print_ptr, &bytes, 0);
+	bytes    = g.print_bytes;
+	iostatus = (*g.classdriver)->WritePipe(g.classdriver, (UInt8*)print_ptr, &bytes, 0);
 
        /*
-	* Ignore timeout errors...
+	* Ignore timeout errors, but retain the number of bytes written to
+	* avoid sending duplicate data (<rdar://problem/6254911>)...
 	*/
 
-	if (status == kIOUSBTransactionTimeout)
+	if (iostatus == kIOUSBTransactionTimeout)
 	{
-	  status = 0;
-	  bytes = 0;
+	  fputs("DEBUG: Got USB transaction timeout during write!\n", stderr);
+	  iostatus = 0;
 	}
 
-	if (status || bytes < 0)
+       /*
+        * If we've stalled, retry the write...
+	*/
+
+	else if (iostatus == kIOUSBPipeStalled)
+	{
+	  fputs("DEBUG: Got USB pipe stalled during write!\n", stderr);
+
+	  bytes    = g.print_bytes;
+	  iostatus = (*g.classdriver)->WritePipe(g.classdriver, (UInt8*)print_ptr, &bytes, 0);
+	}
+
+       /*
+	* Retry a write after an aborted write since we probably just got
+	* SIGTERM (<rdar://problem/6860126>)...
+	*/
+
+	else if (iostatus == kIOReturnAborted)
+	{
+	  fputs("DEBUG: Got return aborted during write!\n", stderr);
+
+	  IOReturn err = (*g.classdriver)->Abort(g.classdriver);
+	  fprintf(stderr, "DEBUG: USB class driver Abort returned %x\n", err);
+
+#if DEBUG_WRITES
+          sleep(5);
+#endif /* DEBUG_WRITES */
+
+	  bytes    = g.print_bytes;
+	  iostatus = (*g.classdriver)->WritePipe(g.classdriver, (UInt8*)print_ptr, &bytes, 0);
+        }
+
+	if (iostatus || bytes < 0)
 	{
 	 /*
 	  * Write error - bail if we don't see an error we can retry...
 	  */
 
-	  OSStatus err = (*g.classdriver)->Abort(g.classdriver);
-	  _cupsLangPrintf(stderr, _("ERROR: %ld: (canceled:%ld)\n"),
-	                  (long)status, (long)err);
-	  status = CUPS_BACKEND_STOP;
+	  _cupsLangPuts(stderr, _("ERROR: Unable to send print data!\n"));
+	  fprintf(stderr, "DEBUG: USB class driver WritePipe returned %x\n",
+	          iostatus);
+
+	  IOReturn err = (*g.classdriver)->Abort(g.classdriver);
+	  fprintf(stderr, "DEBUG: USB class driver Abort returned %x\n",
+	          err);
+
+	  status = job_canceled ? CUPS_BACKEND_FAILED : CUPS_BACKEND_STOP;
 	  break;
 	}
+	else if (bytes > 0)
+	{
+	  fprintf(stderr, "DEBUG: Wrote %d bytes of print data...\n", (int)bytes);
 
-        fprintf(stderr, "DEBUG: Wrote %d bytes of print data...\n", (int)bytes);
-
-        g.print_bytes -= bytes;
-	print_ptr   += bytes;
-	total_bytes += bytes;
+	  g.print_bytes -= bytes;
+	  print_ptr   += bytes;
+	  total_bytes += bytes;
+	}
       }
 
       if (print_fd != 0 && status == noErr)
@@ -669,7 +750,7 @@ print_device(const char *uri,		/* I - Device URI */
   * Wait for the side channel thread to exit...
   */
 
-  if (sidechannel_started)
+  if (have_sidechannel)
   {
     close(CUPS_SC_FD);
     pthread_mutex_lock(&g.readwrite_lock_mutex);
@@ -734,6 +815,7 @@ print_device(const char *uri,		/* I - Device URI */
       * Force the read thread to exit...
       */
 
+      g.wait_eof = 0;
       pthread_kill(read_thread_id, SIGTERM);
     }
   }
@@ -799,6 +881,8 @@ static void *read_thread(void *reference)
     readstatus = (*g.classdriver)->ReadPipe(g.classdriver, readbuffer, &rbytes);
     if (readstatus == kIOReturnSuccess && rbytes > 0)
     {
+      fprintf(stderr, "DEBUG: Read %d bytes of back-channel data...\n",
+              (int)rbytes);
       cupsBackChannelWrite((char*)readbuffer, rbytes, 1.0);
 
       /* cntrl-d is echoed by the printer.
@@ -813,6 +897,12 @@ static void *read_thread(void *reference)
       parse_pserror(readbuffer, rbytes);
 #endif
     }
+    else if (readstatus == kIOUSBTransactionTimeout)
+      fputs("DEBUG: Got USB transaction timeout during write!\n", stderr);
+    else if (readstatus == kIOUSBPipeStalled)
+      fputs("DEBUG: Got USB pipe stalled during read!\n", stderr);
+    else if (readstatus == kIOReturnAborted)
+      fputs("DEBUG: Got return aborted during read!\n", stderr);
 
    /*
     * Make sure this loop executes no more than once every 250 miliseconds...
@@ -859,41 +949,83 @@ sidechannel_thread(void *reference)
     switch (command)
     {
       case CUPS_SC_CMD_SOFT_RESET:	/* Do a soft reset */
+	  fputs("DEBUG: CUPS_SC_CMD_SOFT_RESET received from driver...\n",
+		stderr);
+
           if ((*g.classdriver)->SoftReset != NULL)
 	  {
 	    soft_reset();
 	    cupsSideChannelWrite(command, CUPS_SC_STATUS_OK, NULL, 0, 1.0);
+	    fputs("DEBUG: Returning status CUPS_STATUS_OK with no bytes...\n",
+	          stderr);
 	  }
 	  else
 	  {
 	    cupsSideChannelWrite(command, CUPS_SC_STATUS_NOT_IMPLEMENTED,
 	                         NULL, 0, 1.0);
+	    fputs("DEBUG: Returning status CUPS_STATUS_NOT_IMPLEMENTED with "
+	          "no bytes...\n", stderr);
 	  }
 	  break;
 
       case CUPS_SC_CMD_DRAIN_OUTPUT:	/* Drain all pending output */
+	  fputs("DEBUG: CUPS_SC_CMD_DRAIN_OUTPUT received from driver...\n",
+		stderr);
+
 	  g.drain_output = 1;
 	  break;
 
       case CUPS_SC_CMD_GET_BIDI:		/* Is the connection bidirectional? */
+	  fputs("DEBUG: CUPS_SC_CMD_GET_BIDI received from driver...\n",
+		stderr);
+
 	  data[0] = g.bidi_flag;
 	  cupsSideChannelWrite(command, CUPS_SC_STATUS_OK, data, 1, 1.0);
+
+	  fprintf(stderr,
+	          "DEBUG: Returned CUPS_SC_STATUS_OK with 1 byte (%02X)...\n",
+		  data[0]);
 	  break;
 
       case CUPS_SC_CMD_GET_DEVICE_ID:	/* Return IEEE-1284 device ID */
+	  fputs("DEBUG: CUPS_SC_CMD_GET_DEVICE_ID received from driver...\n",
+		stderr);
+
 	  datalen = sizeof(data);
 	  get_device_id(&status, data, &datalen);
 	  cupsSideChannelWrite(command, CUPS_SC_STATUS_OK, data, datalen, 1.0);
+
+          if (datalen < sizeof(data))
+	    data[datalen] = '\0';
+	  else
+	    data[sizeof(data) - 1] = '\0';
+
+	  fprintf(stderr,
+	          "DEBUG: Returning CUPS_SC_STATUS_OK with %d bytes (%s)...\n",
+		  datalen, data);
 	  break;
 
       case CUPS_SC_CMD_GET_STATE:		/* Return device state */
+	  fputs("DEBUG: CUPS_SC_CMD_GET_STATE received from driver...\n",
+		stderr);
+
 	  data[0] = CUPS_SC_STATE_ONLINE;
 	  cupsSideChannelWrite(command, CUPS_SC_STATUS_OK, data, 1, 1.0);
+
+	  fprintf(stderr,
+	          "DEBUG: Returned CUPS_SC_STATUS_OK with 1 byte (%02X)...\n",
+		  data[0]);
 	  break;
 
       default:
+	  fprintf(stderr, "DEBUG: Unknown side-channel command (%d) received "
+			  "from driver...\n", command);
+
 	  cupsSideChannelWrite(command, CUPS_SC_STATUS_NOT_IMPLEMENTED,
 			       NULL, 0, 1.0);
+
+	  fputs("DEBUG: Returned CUPS_SC_STATUS_NOT_IMPLEMENTED with no bytes...\n",
+		stderr);
 	  break;
     }
   }
@@ -1004,25 +1136,23 @@ static Boolean list_device_cb(void *refcon,
     {
       CFStringRef make = NULL,  model = NULL, serial = NULL;
       char uristr[1024], makestr[1024], modelstr[1024], serialstr[1024];
-      char optionsstr[1024], idstr[1024];
+      char optionsstr[1024], idstr[1024], make_modelstr[1024];
 
       copy_deviceinfo(deviceIDString, &make, &model, &serial);
+      CFStringGetCString(deviceIDString, idstr, sizeof(idstr),
+                         kCFStringEncodingUTF8);
+      backendGetMakeModel(idstr, make_modelstr, sizeof(make_modelstr));
 
       modelstr[0] = '/';
 
-      CFStringGetCString(deviceIDString, idstr, sizeof(idstr),
-                         kCFStringEncodingUTF8);
-
-      if (make)
-        CFStringGetCString(make, makestr, sizeof(makestr),
-	                   kCFStringEncodingUTF8);
-      else
+      if (!make ||
+          !CFStringGetCString(make, makestr, sizeof(makestr),
+			      kCFStringEncodingUTF8))
         strcpy(makestr, "Unknown");
 
-      if (model)
-	CFStringGetCString(model, &modelstr[1], sizeof(modelstr)-1,
-      			   kCFStringEncodingUTF8);
-      else
+      if (!model ||
+          !CFStringGetCString(model, &modelstr[1], sizeof(modelstr)-1,
+			      kCFStringEncodingUTF8))
         strcpy(modelstr + 1, "Printer");
 
       optionsstr[0] = '\0';
@@ -1035,20 +1165,10 @@ static Boolean list_device_cb(void *refcon,
 	snprintf(optionsstr, sizeof(optionsstr), "?location=%x", (unsigned)deviceLocation);
 
       httpAssembleURI(HTTP_URI_CODING_ALL, uristr, sizeof(uristr), "usb", NULL, makestr, 0, modelstr);
-      strncat(uristr, optionsstr, sizeof(uristr));
+      strlcat(uristr, optionsstr, sizeof(uristr));
 
-     /*
-      * Fix common HP 1284 bug...
-      */
-
-      if (!strcasecmp(makestr, "Hewlett-Packard"))
-        strcpy(makestr, "HP");
-
-      if (!strncasecmp(modelstr + 1, "hp ", 3))
-        _cups_strcpy(modelstr + 1, modelstr + 4);
-
-      printf("direct %s \"%s %s\" \"%s %s USB\" \"%s\"\n", uristr, makestr,
-             &modelstr[1], makestr, &modelstr[1], idstr);
+      cupsBackendReport("direct", uristr, make_modelstr, make_modelstr, idstr,
+                        NULL);
 
       release_deviceinfo(&make, &model, &serial);
       CFRelease(deviceIDString);
@@ -1130,8 +1250,8 @@ static Boolean find_device_cb(void *refcon,
 
   if (!keepLooking && g.status_timer != NULL)
   {
-    fputs("STATE: -offline-error\n", stderr);
-    _cupsLangPuts(stderr, _("INFO: Printer is now on-line.\n"));
+    fputs("STATE: -offline-report\n", stderr);
+    _cupsLangPuts(stderr, _("INFO: Printer is now online.\n"));
     CFRunLoopRemoveTimer(CFRunLoopGetCurrent(), g.status_timer, kCFRunLoopDefaultMode);
     CFRelease(g.status_timer);
     g.status_timer = NULL;
@@ -1148,8 +1268,24 @@ static Boolean find_device_cb(void *refcon,
 static void status_timer_cb(CFRunLoopTimerRef timer,
 			    void *info)
 {
-  fputs("STATE: +offline-error\n", stderr);
-  _cupsLangPuts(stderr, _("INFO: Printer is currently off-line.\n"));
+  fputs("STATE: +offline-report\n", stderr);
+  _cupsLangPuts(stderr, _("INFO: Printer is offline.\n"));
+
+  if (getenv("CLASS") != NULL)
+  {
+   /*
+    * If the CLASS environment variable is set, the job was submitted
+    * to a class and not to a specific queue.  In this case, we want
+    * to abort immediately so that the job can be requeued on the next
+    * available printer in the class.
+    *
+    * Sleep 5 seconds to keep the job from requeuing too rapidly...
+    */
+
+    sleep(5);
+
+    exit(CUPS_BACKEND_FAILED);
+  }
 }
 
 
@@ -1169,8 +1305,10 @@ static void copy_deviceinfo(CFStringRef deviceIDString,
 
   if (make != NULL)
     *make = copy_value_for_key(deviceIDString, makeKeys);
+
   if (model != NULL)
     *model = copy_value_for_key(deviceIDString, modelKeys);
+
   if (serial != NULL)
     *serial = copy_value_for_key(deviceIDString, serialKeys);
 }
@@ -1213,58 +1351,83 @@ static kern_return_t load_classdriver(CFStringRef	    driverPath,
 				      printer_interface_t   intf,
 				      classdriver_t	    ***printerDriver)
 {
-  kern_return_t kr = kUSBPrinterClassDeviceNotOpen;
-  classdriver_t **driver = NULL;
-  CFStringRef bundle = (driverPath == NULL ? kUSBGenericTOPrinterClassDriver : driverPath);
+  kern_return_t	kr = kUSBPrinterClassDeviceNotOpen;
+  classdriver_t	**driver = NULL;
+  CFStringRef	bundle = driverPath ? driverPath : kUSBGenericTOPrinterClassDriver;
+  char 		bundlestr[1024];	/* Bundle path */
+  struct stat	bundleinfo;		/* File information for bundle */
+  CFURLRef	url;			/* URL for driver */
+  CFPlugInRef	plugin = NULL;		/* Plug-in address */
 
-  if (bundle != NULL)
+
+  CFStringGetCString(bundle, bundlestr, sizeof(bundlestr), kCFStringEncodingUTF8);
+
+ /*
+  * Validate permissions for the class driver...
+  */
+
+  if (stat(bundlestr, &bundleinfo))
   {
-    CFURLRef url = CFURLCreateWithFileSystemPath(NULL, bundle, kCFURLPOSIXPathStyle, true);
-    CFPlugInRef plugin = (url != NULL ? CFPlugInCreate(NULL, url) : NULL);
+    fprintf(stderr, "DEBUG: Unable to load class driver \"%s\": %s\n",
+	    bundlestr, strerror(errno));
+    return (kr);
+  }
+  else if (bundleinfo.st_mode & S_IWOTH)
+  {
+    fprintf(stderr, "DEBUG: Unable to load class driver \"%s\": insecure file "
+		    "permissions (0%o)\n", bundlestr, bundleinfo.st_mode);
+    return (kr);
+  }
 
-    if (url != NULL)
-      CFRelease(url);
+ /*
+  * Try loading the class driver...
+  */
 
-    if (plugin != NULL)
+  url = CFURLCreateWithFileSystemPath(NULL, bundle, kCFURLPOSIXPathStyle, true);
+
+  if (url)
+  {
+    plugin = CFPlugInCreate(NULL, url);
+    CFRelease(url);
+  }
+  else
+    plugin = NULL;
+
+  if (plugin)
+  {
+    CFArrayRef factories = CFPlugInFindFactoriesForPlugInTypeInPlugIn(kUSBPrinterClassTypeID, plugin);
+    if (factories != NULL && CFArrayGetCount(factories) > 0)
     {
-      CFArrayRef factories = CFPlugInFindFactoriesForPlugInTypeInPlugIn(kUSBPrinterClassTypeID, plugin);
-      if (factories != NULL && CFArrayGetCount(factories) > 0)
+      CFUUIDRef factoryID = CFArrayGetValueAtIndex(factories, 0);
+      IUnknownVTbl **iunknown = CFPlugInInstanceCreate(NULL, factoryID, kUSBPrinterClassTypeID);
+      if (iunknown != NULL)
       {
-	CFUUIDRef factoryID = CFArrayGetValueAtIndex(factories, 0);
-	IUnknownVTbl **iunknown = CFPlugInInstanceCreate(NULL, factoryID, kUSBPrinterClassTypeID);
-	if (iunknown != NULL)
+	kr = (*iunknown)->QueryInterface(iunknown, CFUUIDGetUUIDBytes(kUSBPrinterClassInterfaceID), (LPVOID *)&driver);
+	if (kr == kIOReturnSuccess && driver != NULL)
 	{
-	  kr = (*iunknown)->QueryInterface(iunknown, CFUUIDGetUUIDBytes(kUSBPrinterClassInterfaceID), (LPVOID *)&driver);
-	  if (kr == kIOReturnSuccess && driver != NULL)
+	  classdriver_t **genericDriver = NULL;
+	  if (driverPath != NULL && CFStringCompare(driverPath, kUSBGenericTOPrinterClassDriver, 0) != kCFCompareEqualTo)
+	    kr = load_classdriver(NULL, intf, &genericDriver);
+
+	  if (kr == kIOReturnSuccess)
 	  {
-	    classdriver_t **genericDriver = NULL;
-	    if (driverPath != NULL && CFStringCompare(driverPath, kUSBGenericTOPrinterClassDriver, 0) != kCFCompareEqualTo)
-	      kr = load_classdriver(NULL, intf, &genericDriver);
+	    (*driver)->interface = intf;
+	    (*driver)->Initialize(driver, genericDriver);
 
-	    if (kr == kIOReturnSuccess)
-	    {
-	      (*driver)->interface = intf;
-	      (*driver)->Initialize(driver, genericDriver);
-
-	      (*driver)->plugin = plugin;
-	      (*driver)->interface = intf;
-	      *printerDriver = driver;
-	    }
+	    (*driver)->plugin = plugin;
+	    (*driver)->interface = intf;
+	    *printerDriver = driver;
 	  }
-	  (*iunknown)->Release(iunknown);
 	}
-	CFRelease(factories);
+	(*iunknown)->Release(iunknown);
       }
+      CFRelease(factories);
     }
   }
 
-#ifdef DEBUG
-  char bundlestr[1024];
-  CFStringGetCString(bundle, bundlestr, sizeof(bundlestr), kCFStringEncodingUTF8);
   fprintf(stderr, "DEBUG: load_classdriver(%s) (kr:0x%08x)\n", bundlestr, (int)kr);
-#endif /* DEBUG */
 
-  return kr;
+  return (kr);
 }
 
 
@@ -1663,7 +1826,7 @@ static void parse_options(char *options,
 
 /*!
  * @function	setup_cfLanguage
- * @abstract	Convert the contents of the CUPS 'LANG' environment
+ * @abstract	Convert the contents of the CUPS 'APPLE_LANGUAGE' environment
  *		variable into a one element CF array of languages.
  *
  * @discussion	Each submitted job comes with a natural language. CUPS passes
@@ -1679,53 +1842,61 @@ static void setup_cfLanguage(void)
   CFArrayRef	langArray = NULL;
   const char	*requestedLang = NULL;
 
-  requestedLang = getenv("LANG");
+  if ((requestedLang = getenv("APPLE_LANGUAGE")) == NULL)
+    requestedLang = getenv("LANG");
+
   if (requestedLang != NULL)
   {
     lang[0] = CFStringCreateWithCString(kCFAllocatorDefault, requestedLang, kCFStringEncodingUTF8);
     langArray = CFArrayCreate(kCFAllocatorDefault, (const void **)lang, sizeof(lang) / sizeof(lang[0]), &kCFTypeArrayCallBacks);
 
-    CFPreferencesSetAppValue(CFSTR("AppleLanguages"), langArray, kCFPreferencesCurrentApplication);
-    DEBUG_printf((stderr, "DEBUG: usb: AppleLanguages = \"%s\"\n", requestedLang));
+    CFPreferencesSetValue(CFSTR("AppleLanguages"), langArray, kCFPreferencesCurrentApplication, kCFPreferencesAnyUser, kCFPreferencesAnyHost);
+    fprintf(stderr, "DEBUG: usb: AppleLanguages=\"%s\"\n", requestedLang);
 
     CFRelease(lang[0]);
     CFRelease(langArray);
   }
   else
-    fputs("DEBUG: usb: LANG environment variable missing.\n", stderr);
+    fputs("DEBUG: usb: LANG and APPLE_LANGUAGE environment variables missing.\n", stderr);
 }
 
 #pragma mark -
-#if defined(__i386__)
+#if defined(__i386__) || defined(__x86_64__)
 /*!
- * @function	run_ppc_backend
+ * @function	run_legacy_backend
  *
- * @abstract	Starts child backend process running as a ppc executable.
+ * @abstract	Starts child backend process running as a ppc or i386 executable.
  *
  * @result	Never returns; always calls exit().
  *
  * @discussion
  */
-static void run_ppc_backend(int argc,
-			    char *argv[],
-			    int fd)
+static void run_legacy_backend(int argc,
+			       char *argv[],
+			       int fd)
 {
   int	i;
   int	exitstatus = 0;
   int	childstatus;
   pid_t	waitpid_status;
   char	*my_argv[32];
-  char	*usb_ppc_status;
+  char	*usb_legacy_status;
 
-  /*
-   * If we're running as i386 and couldn't load the class driver (because they'it's
-   * ppc-only) then try to re-exec ourselves in ppc mode to try again. If we don't have
-   * a ppc architecture we may be running i386 again so guard against this by setting
-   * and testing an environment variable...
-   */
-  usb_ppc_status = getenv("USB_PPC_STATUS");
+ /*
+  * If we're running as x86_64 or i386 and couldn't load the class driver
+  * (because it's ppc or i386), then try to re-exec ourselves in ppc or i386
+  * mode to try again. If we don't have a ppc or i386 architecture we may be
+  * running with the same architecture again so guard against this by setting
+  * and testing an environment variable...
+  */
 
-  if (usb_ppc_status == NULL)
+#  ifdef __x86_64__
+  usb_legacy_status = getenv("USB_I386_STATUS");
+#  else
+  usb_legacy_status = getenv("USB_PPC_STATUS");
+#  endif /* __x86_64__ */
+
+  if (!usb_legacy_status)
   {
    /*
     * Setup a SIGTERM handler then block it before forking...
@@ -1734,6 +1905,9 @@ static void run_ppc_backend(int argc,
     struct sigaction	action;		/* POSIX signal action */
     sigset_t		newmask,	/* New signal mask */
 			oldmask;	/* Old signal mask */
+    char		usbpath[1024];	/* Path to USB backend */
+    const char		*cups_serverbin;/* Path to CUPS binaries */
+
 
     memset(&action, 0, sizeof(action));
     sigaddset(&action.sa_mask, SIGTERM);
@@ -1744,55 +1918,62 @@ static void run_ppc_backend(int argc,
     sigaddset(&newmask, SIGTERM);
     sigprocmask(SIG_BLOCK, &newmask, &oldmask);
 
-    if ((child_pid = fork()) == 0)
+   /*
+    * Set the environment variable...
+    */
+
+#  ifdef __x86_64__
+    setenv("USB_I386_STATUS", "1", false);
+#  else
+    setenv("USB_PPC_STATUS", "1", false);
+#  endif /* __x86_64__ */
+
+   /*
+    * Tell the kernel to use the specified CPU architecture...
+    */
+
+#  ifdef __x86_64__
+    cpu_type_t cpu = CPU_TYPE_I386;
+#  else
+    cpu_type_t cpu = CPU_TYPE_POWERPC;
+#  endif /* __x86_64__ */
+    size_t ocount = 1;
+    posix_spawnattr_t attrs;
+
+    if (!posix_spawnattr_init(&attrs))
     {
-     /*
-      * Child comes here...
-      */
-
-      setenv("USB_PPC_STATUS", "1", false);
-
-     /*
-      * Unblock signals before doing the exec...
-      */
-
-      memset(&action, 0, sizeof(action));
-      sigemptyset(&action.sa_mask);
-      action.sa_handler = SIG_DFL;
-      sigaction(SIGTERM, &action, NULL);
-
-      sigprocmask(SIG_SETMASK, &oldmask, NULL);
-
-     /*
-      * Tell the kernel the next exec call should favor the ppc architecture...
-      */
-
-      int mib[] = { CTL_KERN, KERN_AFFINITY, 1, 1 };
-      int namelen = 4;
-      sysctl(mib, namelen, NULL, NULL, NULL, 0);
-
-     /*
-      * Set up the arguments and call exec...
-      */
-
-      for (i = 0; i < argc && i < (sizeof(my_argv)/sizeof(my_argv[0])) - 1; i++)
-	my_argv[i] = argv[i];
-
-      my_argv[i] = NULL;
-
-      execv("/usr/libexec/cups/backend/usb", my_argv);
-
-      perror("/usr/libexec/cups/backend/usb");
-      exit(errno);
+      posix_spawnattr_setsigdefault(&attrs, &oldmask);
+      if (posix_spawnattr_setbinpref_np(&attrs, 1, &cpu, &ocount) || ocount != 1)
+      {
+#  ifdef __x86_64__
+	perror("DEBUG: Unable to set binary preference to i386");
+#  else
+	perror("DEBUG: Unable to set binary preference to ppc");
+#  endif /* __x86_64__ */
+	_cupsLangPrintf(stderr, _("Unable to use legacy USB class driver!\n"));
+	exit(CUPS_BACKEND_STOP);
+      }
     }
-    else if (child_pid < 0)
-    {
-     /*
-      * Error - couldn't fork a new process!
-      */
 
-      perror("fork");
-      exit(errno);
+   /*
+    * Set up the arguments and call posix_spawn...
+    */
+
+    if ((cups_serverbin = getenv("CUPS_SERVERBIN")) == NULL)
+      cups_serverbin = CUPS_SERVERBIN;
+    snprintf(usbpath, sizeof(usbpath), "%s/backend/usb", cups_serverbin);
+
+    for (i = 0; i < argc && i < (sizeof(my_argv) / sizeof(my_argv[0])) - 1; i ++)
+      my_argv[i] = argv[i];
+
+    my_argv[i] = NULL;
+
+    if (posix_spawn(&child_pid, usbpath, NULL, &attrs, my_argv, environ))
+    {
+      fprintf(stderr, "DEBUG: Unable to exec %s: %s\n", usbpath,
+              strerror(errno));
+      _cupsLangPrintf(stderr, _("Unable to use legacy USB class driver!\n"));
+      exit(CUPS_BACKEND_STOP);
     }
 
    /*
@@ -1808,48 +1989,77 @@ static void run_ppc_backend(int argc,
     close(fd);
     close(1);
 
-    fprintf(stderr, "DEBUG: Started usb(ppc) backend (PID %d)\n", (int)child_pid);
+    fprintf(stderr, "DEBUG: Started usb(legacy) backend (PID %d)\n",
+            (int)child_pid);
 
     while ((waitpid_status = waitpid(child_pid, &childstatus, 0)) == (pid_t)-1 && errno == EINTR)
       usleep(1000);
 
     if (WIFSIGNALED(childstatus))
     {
-      exitstatus = WTERMSIG(childstatus);
-      fprintf(stderr, "DEBUG: usb(ppc) backend %d crashed on signal %d!\n", child_pid, exitstatus);
+      exitstatus = CUPS_BACKEND_STOP;
+      fprintf(stderr, "DEBUG: usb(legacy) backend %d crashed on signal %d!\n",
+              child_pid, WTERMSIG(childstatus));
     }
     else
     {
       if ((exitstatus = WEXITSTATUS(childstatus)) != 0)
-	fprintf(stderr, "DEBUG: usb(ppc) backend %d stopped with status %d!\n", child_pid, exitstatus);
+	fprintf(stderr,
+	        "DEBUG: usb(legacy) backend %d stopped with status %d!\n",
+		child_pid, exitstatus);
       else
-	fprintf(stderr, "DEBUG: PID %d exited with no errors\n", child_pid);
+	fprintf(stderr, "DEBUG: usb(legacy) backend %d exited with no errors\n",
+	        child_pid);
     }
   }
   else
   {
-    fputs("DEBUG: usb child running i386 again\n", stderr);
-    exitstatus = ENOENT;
+    fputs("DEBUG: usb(legacy) backend running native again\n", stderr);
+    exitstatus = CUPS_BACKEND_STOP;
   }
 
   exit(exitstatus);
 }
+#endif /* __i386__ || __x86_64__ */
+
 
 /*
  * 'sigterm_handler()' - SIGTERM handler.
  */
 
-static void sigterm_handler(int sig)
+static void
+sigterm_handler(int sig)		/* I - Signal */
 {
-  /* If we started a child process pass the signal on to it...
-   */
+#if defined(__i386__) || defined(__x86_64__)
   if (child_pid)
+  {
+   /*
+    * If we started a child process pass the signal on to it...
+    */
+
+    int	status;
+
     kill(child_pid, sig);
+    while (waitpid(child_pid, &status, 0) < 0 && errno == EINTR);
 
-  exit(1);
+    if (WIFEXITED(status))
+      exit(WEXITSTATUS(status));
+    else if (status == SIGTERM || status == SIGKILL)
+      exit(0);
+    else
+    {
+      fprintf(stderr, "DEBUG: Child crashed on signal %d!\n", status);
+      exit(CUPS_BACKEND_STOP);
+    }
+  }
+#endif /* __i386__ || __x86_64__ */
+
+ /*
+  * Otherwise just flag that the job has been canceled...
+  */
+
+  job_canceled = 1;
 }
-
-#endif /* __i386__ */
 
 
 #ifdef PARSE_PS_ERRORS
@@ -2000,12 +2210,11 @@ static void get_device_id(cups_sc_status_t *status,
 			  char *data,
 			  int *datalen)
 {
-  UInt32 deviceLocation = 0;
-  UInt8	interfaceNum = 0;
   CFStringRef deviceIDString = NULL;
 
   /* GetDeviceID */
-  copy_devicestring(g.printer_obj, &deviceIDString, &deviceLocation, &interfaceNum);
+  copy_deviceid(g.classdriver, &deviceIDString);
+
   if (deviceIDString)
   {
     CFStringGetCString(deviceIDString, data, *datalen, kCFStringEncodingUTF8);
@@ -2017,5 +2226,5 @@ static void get_device_id(cups_sc_status_t *status,
 
 
 /*
- * End of "$Id: usb-darwin.c 6996 2007-09-28 18:30:31Z mike $".
+ * End of "$Id: usb-darwin.c 8619 2009-05-12 17:41:32Z mike $".
  */

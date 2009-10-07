@@ -1,4 +1,4 @@
-# Copyright (c) 2006-2007, The RubyCocoa Project.
+# Copyright (c) 2006-2008, The RubyCocoa Project.
 # Copyright (c) 2001-2006, FUJIMOTO Hisakuni.
 # All Rights Reserved.
 #
@@ -20,7 +20,7 @@ module OSX
         rescue
         end
       end
-      raise NameError, "undefined method `#{mname}' for OSX:Module"
+      super
     end
   end
 
@@ -41,7 +41,7 @@ module OSX
         end
       end
       mname.chomp!(':') if args.size == 1
-      return self.ocm_send(mname, nil, false, *margs)
+      return self.ocm_send(mname.to_sel, nil, false, *margs)
     end
 
     def method_missing(mname, *args)
@@ -84,7 +84,7 @@ module OSX
       end
 
       # convert foo= to setFoo
-      if m_name[-1] == ?=
+      if m_name[-1] == ?= and m_name.index(?_, 1).nil?
         m_name.chop!
         m_name = 'set' + m_name[0].chr.upcase + m_name[1..-1]
       end

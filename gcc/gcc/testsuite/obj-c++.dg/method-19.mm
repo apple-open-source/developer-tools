@@ -1,4 +1,3 @@
-/* APPLE LOCAL file mainline */
 /* Test if instance methods of root classes are used as class methods, if no
    "real" methods are found.  For receivers of type 'id' and 'Class', all
    root classes must be considered.  */
@@ -15,10 +14,9 @@
 #define OBJC_GETCLASS objc_get_class
 #endif
 
-extern "C" {
-  extern void abort(void);
-  extern int strcmp(const char *, const char *);
-}
+#include <stdlib.h>
+#include <string.h>
+
 #define CHECK_IF(expr) if(!(expr)) abort()
 
 @protocol Proto

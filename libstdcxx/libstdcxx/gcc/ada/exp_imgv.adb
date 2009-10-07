@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2001-2005 Free Software Foundation, Inc.          --
+--          Copyright (C) 2001-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -149,7 +149,6 @@ package body Exp_Imgv is
               Make_Aggregate (Loc,
                 Expressions => Ind))),
         Suppress => All_Checks);
-
    end Build_Enumeration_Image_Tables;
 
    ----------------------------
@@ -192,12 +191,11 @@ package body Exp_Imgv is
    --    For types whose root type is Wide_Character
    --      xx = Wide_Character
    --      tv = Wide_Character (Expr)
-   --      pm = Wide_Character_Encoding_Method
+   --      pm = Boolean, true if Ada 2005 mode, False otherwise
 
    --    For types whose root type is Wide_Wide_Character
    --      xx = Wide_Wide_haracter
    --      tv = Wide_Wide_Character (Expr)
-   --      pm = Wide_Character_Encoding_Method
 
    --    For floating-point types
    --      xx = Floating_Point
@@ -391,15 +389,6 @@ package body Exp_Imgv is
              Prefix         => New_Reference_To (Ptyp, Loc),
              Attribute_Name => Name_Aft));
 
-      --  For wide [wide] character, append encoding method
-
-      elsif Rtyp = Standard_Wide_Character
-        or else Rtyp = Standard_Wide_Wide_Character
-      then
-         Append_To (Arglist,
-           Make_Integer_Literal (Loc,
-             Intval => Int (Wide_Character_Encoding_Method)));
-
       --  For decimal, append Scale and also set to do literal conversion
 
       elsif Is_Decimal_Fixed_Point_Type (Rtyp) then
@@ -410,6 +399,12 @@ package body Exp_Imgv is
 
          Set_Conversion_OK (First (Arglist));
          Set_Etype (First (Arglist), Tent);
+
+         --  For Wide_Character, append Ada 2005 indication
+
+      elsif Rtyp = Standard_Wide_Character then
+         Append_To (Arglist,
+           New_Reference_To (Boolean_Literals (Ada_Version >= Ada_05), Loc));
       end if;
 
       Rewrite (N,
@@ -434,6 +429,12 @@ package body Exp_Imgv is
    --    For types whose root type is Character
    --      xx = Character
 
+   --    For types whose root type is Wide_Character
+   --      xx = Wide_Character
+
+   --    For types whose root type is Wide_Wide_Character
+   --      xx = Wide_Wide_Character
+
    --    For types whose root type is Boolean
    --      xx = Boolean
 
@@ -451,14 +452,6 @@ package body Exp_Imgv is
 
    --    For floating-point types and ordinary fixed-point types
    --      xx = Real
-
-   --  For types derived from Wide_Character, typ'Value (X) expands into
-
-   --    Value_Wide_Character (X, Wide_Character_Encoding_Method)
-
-   --  For types derived from Wide_Wide_Character, typ'Value (X) expands into
-
-   --    Value_Wide_Wide_Character (X, Wide_Character_Encoding_Method)
 
    --  For decimal types with size <= Integer'Size, typ'Value (X)
    --  expands into
@@ -504,15 +497,9 @@ package body Exp_Imgv is
 
       elsif Rtyp = Standard_Wide_Character then
          Vid := RE_Value_Wide_Character;
-         Append_To (Args,
-           Make_Integer_Literal (Loc,
-             Intval => Int (Wide_Character_Encoding_Method)));
 
       elsif Rtyp = Standard_Wide_Wide_Character then
          Vid := RE_Value_Wide_Wide_Character;
-         Append_To (Args,
-           Make_Integer_Literal (Loc,
-             Intval => Int (Wide_Character_Encoding_Method)));
 
       elsif     Rtyp = Base_Type (Standard_Short_Short_Integer)
         or else Rtyp = Base_Type (Standard_Short_Integer)
@@ -686,42 +673,36 @@ package body Exp_Imgv is
    --    Result_Type (Width_Wide_Character (
    --      Wide_Character (typ'First),
    --      Wide_Character (typ'Last),
-   --      Wide_Character_Encoding_Method);
 
    --  and typ'Wide_Width expands into:
 
    --    Result_Type (Wide_Width_Wide_Character (
    --      Wide_Character (typ'First),
    --      Wide_Character (typ'Last));
-   --      Wide_Character_Encoding_Method);
 
    --  and typ'Wide_Wide_Width expands into
 
    --    Result_Type (Wide_Wide_Width_Wide_Character (
    --      Wide_Character (typ'First),
    --      Wide_Character (typ'Last));
-   --      Wide_Character_Encoding_Method);
 
    --  For types derived from Wide_Wide_Character, typ'Width expands into
 
    --    Result_Type (Width_Wide_Wide_Character (
    --      Wide_Wide_Character (typ'First),
    --      Wide_Wide_Character (typ'Last),
-   --      Wide_Character_Encoding_Method);
 
    --  and typ'Wide_Width expands into:
 
    --    Result_Type (Wide_Width_Wide_Wide_Character (
    --      Wide_Wide_Character (typ'First),
    --      Wide_Wide_Character (typ'Last));
-   --      Wide_Character_Encoding_Method);
 
    --  and typ'Wide_Wide_Width expands into
 
    --    Result_Type (Wide_Wide_Width_Wide_Wide_Char (
    --      Wide_Wide_Character (typ'First),
    --      Wide_Wide_Character (typ'Last));
-   --      Wide_Character_Encoding_Method);
 
    --  For real types, typ'Width and typ'Wide_[Wide_]Width expand into
 
@@ -857,6 +838,22 @@ package body Exp_Imgv is
       else
          pragma Assert (Is_Enumeration_Type (Rtyp));
 
+         if Discard_Names (Rtyp) then
+
+            --  This is a configurable run-time, or else a restriction is in
+            --  effect. In either case the attribute cannot be supported. Force
+            --  a load error from Rtsfind to generate an appropriate message,
+            --  as is done with other ZFP violations.
+
+            declare
+               pragma Warnings (Off); -- since Discard is unreferenced
+               Discard : constant Entity_Id := RTE (RE_Null);
+               pragma Warnings (On);
+            begin
+               return;
+            end;
+         end if;
+
          Ttyp := Component_Type (Etype (Lit_Indexes (Rtyp)));
 
          case Attr is
@@ -914,14 +911,6 @@ package body Exp_Imgv is
                    Prefix => New_Reference_To (Ptyp, Loc),
                    Attribute_Name => Name_Last))));
 
-         --  For enumeration'Wide_[Wide_]Width, add encoding method parameter
-
-         if Attr /= Normal then
-            Append_To (Arglist,
-              Make_Integer_Literal (Loc,
-                Intval => Int (Wide_Character_Encoding_Method)));
-         end if;
-
          Rewrite (N,
            Convert_To (Typ,
              Make_Function_Call (Loc,
@@ -944,17 +933,6 @@ package body Exp_Imgv is
           Make_Attribute_Reference (Loc,
             Prefix => New_Reference_To (Ptyp, Loc),
             Attribute_Name => Name_Last)));
-
-      --  For Wide_[Wide_]Character'Width, add encoding method parameter
-
-      if (Rtyp = Standard_Wide_Character
-           or else
-          Rtyp = Standard_Wide_Wide_Character)
-        and then Attr /= Normal then
-         Append_To (Arglist,
-           Make_Integer_Literal (Loc,
-             Intval => Int (Wide_Character_Encoding_Method)));
-      end if;
 
       Rewrite (N,
         Convert_To (Typ,

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2006 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 2000-2009 Apple Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -97,18 +97,10 @@ _configopen(mach_port_t			server,
 	    int				*sc_status,
 	    audit_token_t		audit_token)
 {
-	CFMachPortContext		context		= { 0
-							  , (void *)1
-							  , NULL
-							  , NULL
-							  , openMPCopyDescription
-							  };
 	CFDictionaryRef			info;
-	CFMachPortRef			mp;
 	serverSessionRef		mySession;
 	CFStringRef			name		= NULL;	/* name (un-serialized) */
 	CFMutableDictionaryRef		newInfo;
-	serverSessionRef		newSession;
 	mach_port_t			oldNotify;
 	CFDictionaryRef			options		= NULL;	/* options (un-serialized) */
 	CFStringRef			sessionKey;
@@ -158,7 +150,7 @@ _configopen(mach_port_t			server,
 	}
 
 	mySession = getSession(server);
-	if (mySession->store != NULL) {
+	if ((mySession != NULL) && (mySession->store != NULL)) {
 #ifdef	DEBUG
 		SCLog(TRUE, LOG_DEBUG, CFSTR("_configopen(): session is already open."));
 #endif	/* DEBUG */
@@ -166,34 +158,20 @@ _configopen(mach_port_t			server,
 		goto done;
 	}
 
-	/* Create the server port for this session */
-	mp = CFMachPortCreate(NULL, configdCallback, &context, NULL);
-
-	/* return the newly allocated port to be used for this session */
-	*newServer = CFMachPortGetPort(mp);
-
 	/*
 	 * establish the new session
 	 */
-	newSession = addSession(mp);
+	mySession = addSession(MACH_PORT_NULL, openMPCopyDescription);
+	*newServer = mySession->key;
+	__MACH_PORT_DEBUG(TRUE, "*** _configopen (after addSession)", *newServer);
 
-	/*
-	 * get the credentials associated with the caller.
-	 */
-	audit_token_to_au32(audit_token,
-			    NULL,			// auidp
-			    &newSession->callerEUID,	// euid
-			    NULL,			// egid
-			    NULL,			// ruid
-			    NULL,			// rgid
-			    NULL,			// pid
-			    NULL,			// asid
-			    NULL);			// tid
+	/* save the audit_token in case we need to check the callers credentials */
+	mySession->auditToken = audit_token;
 
 	/* Create and add a run loop source for the port */
-	newSession->serverRunLoopSource = CFMachPortCreateRunLoopSource(NULL, mp, 0);
+	mySession->serverRunLoopSource = CFMachPortCreateRunLoopSource(NULL, mySession->serverPort, 0);
 	CFRunLoopAddSource(CFRunLoopGetCurrent(),
-			   newSession->serverRunLoopSource,
+			   mySession->serverRunLoopSource,
 			   kCFRunLoopDefaultMode);
 
 	if (_configd_trace) {
@@ -203,11 +181,12 @@ _configopen(mach_port_t			server,
 			name);
 	}
 
-	*sc_status = __SCDynamicStoreOpen(&newSession->store, name);
-	storePrivate = (SCDynamicStorePrivateRef)newSession->store;
+	*sc_status = __SCDynamicStoreOpen(&mySession->store, name);
+	storePrivate = (SCDynamicStorePrivateRef)mySession->store;
 
 	/*
 	 * Make the server port accessible to the framework routines.
+	 * ... and be sure to clear before calling CFRelease(store)
 	 */
 	storePrivate->server = *newServer;
 
@@ -227,18 +206,17 @@ _configopen(mach_port_t			server,
 						MACH_MSG_TYPE_MAKE_SEND_ONCE,
 						&oldNotify);
 	if (status != KERN_SUCCESS) {
-		SCLog(TRUE, LOG_DEBUG, CFSTR("_configopen() mach_port_request_notification() failed: %s"), mach_error_string(status));
+		SCLog(TRUE, LOG_ERR, CFSTR("_configopen() mach_port_request_notification() failed: %s"), mach_error_string(status));
 		cleanupSession(*newServer);
 		*newServer = MACH_PORT_NULL;
 		*sc_status = kSCStatusFailed;
 		goto done;
 	}
+	__MACH_PORT_DEBUG(TRUE, "*** _configopen (after mach_port_request_notification)", *newServer);
 
-#ifdef	DEBUG
 	if (oldNotify != MACH_PORT_NULL) {
-		SCLog(TRUE, LOG_ERR, CFSTR("_configopen(): why is oldNotify != MACH_PORT_NULL?"));
+		SCLog(TRUE, LOG_ERR, CFSTR("_configopen(): oldNotify != MACH_PORT_NULL"));
 	}
-#endif	/* DEBUG */
 
 	/*
 	 * Save the name of the calling application / plug-in with the session data.
@@ -257,6 +235,12 @@ _configopen(mach_port_t			server,
 	CFDictionarySetValue(sessionData, sessionKey, newInfo);
 	CFRelease(newInfo);
 	CFRelease(sessionKey);
+
+	/*
+	 * Note: at this time we should be holding ONE send right and
+	 *       ONE receive right to the server.  The send right is
+	 *       moved to the caller.
+	 */
 
     done :
 

@@ -1,4 +1,4 @@
-*spell.txt*	For Vim version 7.0.  Last change: 2006 Apr 30
+*spell.txt*	For Vim version 7.2.  Last change: 2008 Nov 30
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -16,8 +16,12 @@ Spell checking						*spell*
 Spell checking is not available when the |+syntax| feature has been disabled
 at compile time.
 
+Note: There also is a vimspell plugin.  If you have it you can do ":help
+vimspell" to find about it.  But you will probably want to get rid of the
+plugin and use the 'spell' option instead, it works better.
+
 ==============================================================================
-1. Quick start						*spell-quickstart*
+1. Quick start					*spell-quickstart* *E756*
 
 This command switches on spell checking: >
 
@@ -42,7 +46,7 @@ won't work.
 
 To search for the next misspelled word:
 
-							*]s* *E756*
+							*]s*
 ]s			Move to next misspelled word after the cursor.
 			A count before the command can be used to repeat.
 			'wrapscan' applies.
@@ -409,6 +413,7 @@ done:
 For the second method adding the @NoSpell cluster will disable spell checking
 again.  This can be used, for example, to add @Spell to the comments of a
 program, and add @NoSpell for items that shouldn't be checked.
+Also see |:syn-spell| for text that is not in a syntax item.
 
 
 VIM SCRIPTS
@@ -465,7 +470,7 @@ the word list and keeps it small.
 You can create a Vim spell file from the .aff and .dic files that Myspell
 uses.  Myspell is used by OpenOffice.org and Mozilla.  You should be able to
 find them here:
-	http://lingucomponent.openoffice.org/spell_dic.html
+	http://wiki.services.openoffice.org/wiki/Dictionaries
 You can also use a plain word list.  The results are the same, the choice
 depends on what word lists you can find.
 
@@ -546,7 +551,7 @@ following procedure is recommended:
 2. Make a copy of these files to xx_YY.orig.aff and xx_YY.orig.dic.
 3. Change the xx_YY.aff and xx_YY.dic files to remove bad words, add missing
    words, define word characters with FOL/LOW/UPP, etc.  The distributed
-   "src/spell/*.diff" files can be used.
+   "*.diff" files can be used.
 4. Start Vim with the right locale and use |:mkspell| to generate the Vim
    spell file.
 5. Try out the spell file with ":set spell spelllang=xx" if you wrote it in
@@ -614,12 +619,13 @@ SPELL FILE MISSING		*spell-SpellFileMissing* *spellfile.vim*
 If the spell file for the language you are using is not available, you will
 get an error message.  But if the "spellfile.vim" plugin is active it will
 offer you to download the spell file.  Just follow the instructions, it will
-ask you where to write the file.
+ask you where to write the file (there must be a writable directory in
+'runtimepath' for this).
 
 The plugin has a default place where to look for spell files, on the Vim ftp
 server.  If you want to use another location or another protocol, set the
 g:spellfile_URL variable to the directory that holds the spell files.  The
-|netrw| plugin is used for getting the file, look there for the speficic
+|netrw| plugin is used for getting the file, look there for the specific
 syntax of the URL.  Example: >
 	let g:spellfile_URL = 'http://ftp.vim.org/vim/runtime/spell'
 You may need to escape special characters.
@@ -646,9 +652,12 @@ exceptions:
   only ASCII letters for most of the words.
 
 The default "spellfile.vim" plugin uses this autocommand, if you define your
-autocommand afterwars you may want to use ":au! SpellFileMissing" to overrule
+autocommand afterwards you may want to use ":au! SpellFileMissing" to overrule
 it.  If you define your autocommand before the plugin is loaded it will notice
 this and not do anything.
+							*E797*
+Note that the SpellFileMissing autocommand must not change or destroy the
+buffer the user was editing.
 
 ==============================================================================
 4. Spell file format					*spell-file-format*
@@ -822,8 +831,11 @@ Comment lines in the .aff file start with a '#':
 
 	# comment line ~
 
-With some items it's also possible to put a comment after it, but this isn't
-supported in general.
+Items with a fixed number of arguments can be followed by a comment.  But only
+if none of the arguments can contain white space.  The comment must start with
+a "#" character.  Example:
+
+	KEEPCASE =  # fix case for words with this flag ~
 
 
 ENCODING							*spell-SET*
@@ -955,6 +967,9 @@ When using "caplong" the two-character flags all start with a capital: "Aa",
 common items and two-character flags for uncommon items.
 
 Note: When using utf-8 only characters up to 65000 may be used for flags.
+
+Note: even when using "num" or "long" the number of flags available to
+compounding and prefixes is limited to about 250.
 
 
 AFFIXES
@@ -1169,6 +1184,9 @@ word as good.
 The flag also applies to the word with affixes, thus this can be used to mark
 a whole bunch of related words as bad.
 
+							*spell-FORBIDDENWORD*
+FORBIDDENWORD can be used just like BAD.  For compatibility with Hunspell.
+
 							*spell-NEEDAFFIX*
 The NEEDAFFIX flag is used to require that a word is used with an affix.  The
 word itself is not a good word (unless there is an empty affix).  Example:
@@ -1259,6 +1277,10 @@ compound word.  The word itself is not a good word.  Example:
 
 	NEEDCOMPOUND & ~
 
+							*spell-ONLYINCOMPOUND*
+The ONLYINCOMPOUND does exactly the same as NEEDCOMPOUND.  Supported for
+compatiblity with Hunspell.
+
 							*spell-COMPOUNDMIN*
 The minimal character length of a word used for compounding is specified with
 COMPOUNDMIN.  Example:
@@ -1319,6 +1341,20 @@ compound.  This means it counts for two words when checking the compounding
 rules.  Can also be used for an affix to count the affix as a compounding
 word.
 
+						*spell-CHECKCOMPOUNDPATTERN*
+CHECKCOMPOUNDPATTERN is used to define patterns that, when matching at the
+position where two words are compounded together forbids the compound.
+For example:
+	CHECKCOMPOUNDPATTERN o e ~
+
+This forbids compounding if the first word ends in "o" and the second word
+starts with "e".
+
+The arguments must be plain text, no patterns are actually supported, despite
+the item name.  Case is always ignored.
+
+The Hunspell feature to use three arguments and flags is not supported.
+
 							*spell-SYLLABLE*
 The SYLLABLE item defines characters or character sequences that are used to
 count the number of syllables in a word.  Example:
@@ -1332,7 +1368,7 @@ With the example "ideeen" has three syllables, counted by "i", "ee" and "e".
 
 Only case-folded letters need to be included.
 
-Above another way to restrict compounding was mentioned above: Adding the
+Another way to restrict compounding was mentioned above: Adding the
 |spell-COMPOUNDFORBIDFLAG| flag to an affix causes all words that are made
 with that affix not be be used for compounding.
 
@@ -1487,6 +1523,10 @@ ignored, not supported or defined in another way.
 ACCENT		(Hunspell)				*spell-ACCENT*
 		Use MAP instead. |spell-MAP|
 
+BREAK		(Hunspell)				*spell-BREAK*
+		Define break points.  Unclear how it works exactly.
+		Not supported.
+
 CHECKCOMPOUNDCASE  (Hunspell)			*spell-CHECKCOMPOUNDCASE*
 		Disallow uppercase letters at compound word boundaries.
 		Not supported.
@@ -1503,14 +1543,11 @@ CHECKCOMPOUNDTRIPLE  (Hunspell)			*spell-CHECKCOMPOUNDTRIPLE*
 		Forbid three identical characters when compounding.  Not
 		supported.
 
-CHECKCOMPOUNDPATTERN  (Hunspell)		*spell-CHECKCOMPOUNDPATTERN*
-		Forbid compounding when patterns match.  Not supported.
-
 COMPLEXPREFIXES  (Hunspell)				*spell-COMPLEXPREFIXES*
 		Enables using two prefixes.  Not supported.
 
 COMPOUND	(Hunspell)				*spell-COMPOUND*
-		This is one line with the count of COMPOUND items, followd by
+		This is one line with the count of COMPOUND items, followed by
 		that many COMPOUND lines with a pattern.
 		Remove the first line with the count and rename the other
 		items to COMPOUNDRULE |spell-COMPOUNDRULE|
@@ -1527,13 +1564,18 @@ COMPOUNDEND	(Hunspell)				*spell-COMPOUNDEND*
 COMPOUNDMIDDLE	(Hunspell)				*spell-COMPOUNDMIDDLE*
 		Use COMPOUNDRULE instead. |spell-COMPOUNDRULE|
 
+COMPOUNDRULES	(Hunspell)				*spell-COMPOUNDRULES*
+		Number of COMPOUNDRULE lines following.  Ignored, but the
+		argument must be a number.
+
 COMPOUNDSYLLABLE  (Hunspell)			*spell-COMPOUNDSYLLABLE*
 		Use SYLLABLE and COMPOUNDSYLMAX instead. |spell-SYLLABLE|
 		|spell-COMPOUNDSYLMAX|
 
-FORBIDDENWORD	(Hunspell)				*spell-FORBIDDENWORD*
-		Use BAD instead. |spell-BAD|
-
+KEY		(Hunspell)				*spell-KEY*
+		Define characters that are close together on the keyboard.
+		Used to give better suggestions.  Not supported.
+		
 LANG		(Hunspell)				*spell-LANG*
 		This specifies language-specific behavior.  This actually
 		moves part of the language knowledge into the program,
@@ -1544,10 +1586,7 @@ LEMMA_PRESENT	(Hunspell)				*spell-LEMMA_PRESENT*
 		Only needed for morphological analysis.
 
 MAXNGRAMSUGS	(Hunspell)				*spell-MAXNGRAMSUGS*
-		Not supported.
-
-ONLYINCOMPOUND	(Hunspell)				*spell-ONLYINCOMPOUND*
-		Use NEEDCOMPOUND instead. |spell-NEEDCOMPOUND|
+		Set number of n-gram suggestions.  Not supported.
 
 PSEUDOROOT	(Hunspell)				*spell-PSEUDOROOT*
 		Use NEEDAFFIX instead. |spell-NEEDAFFIX|

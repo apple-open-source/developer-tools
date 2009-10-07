@@ -1,4 +1,3 @@
-// -*- mode: c++; c-basic-offset: 4 -*-
 /*
  * Copyright (C) 2003, 2006, 2007 Apple Inc.  All rights reserved.
  *
@@ -21,7 +20,7 @@
  * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
  * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include "config.h"
@@ -35,7 +34,7 @@
 #include <CoreFoundation/CFString.h>
 #endif
 
-#if PLATFORM(WIN)
+#if COMPILER(MSVC) && !PLATFORM(WINCE)
 #ifndef WINVER
 #define WINVER 0x0500
 #endif
@@ -48,17 +47,14 @@
 
 extern "C" {
 
-// This is to work around the "you should use a printf format attribute" warning on GCC
-// We can't use _attribute__ ((format (printf, 2, 3))) since we allow %@
-static int (* vfprintf_no_warning)(FILE *, const char*, va_list) = vfprintf;
-
+WTF_ATTRIBUTE_PRINTF(1, 0)
 static void vprintf_stderr_common(const char* format, va_list args)
 {
 #if PLATFORM(MAC)
     if (strstr(format, "%@")) {
         CFStringRef cfFormat = CFStringCreateWithCString(NULL, format, kCFStringEncodingUTF8);
         CFStringRef str = CFStringCreateWithFormatAndArguments(NULL, NULL, cfFormat, args);
-        
+
         int length = CFStringGetMaximumSizeForEncoding(CFStringGetLength(str), kCFStringEncodingUTF8);
         char* buffer = (char*)malloc(length + 1);
 
@@ -70,7 +66,7 @@ static void vprintf_stderr_common(const char* format, va_list args)
         CFRelease(str);
         CFRelease(cfFormat);
     } else
-#elif PLATFORM(WIN)
+#elif COMPILER(MSVC) && !PLATFORM(WINCE)
     if (IsDebuggerPresent()) {
         size_t size = 1024;
 
@@ -91,9 +87,10 @@ static void vprintf_stderr_common(const char* format, va_list args)
         } while (size > 1024);
     }
 #endif
-        vfprintf_no_warning(stderr, format, args);
+    vfprintf(stderr, format, args);
 }
 
+WTF_ATTRIBUTE_PRINTF(1, 2)
 static void printf_stderr_common(const char* format, ...)
 {
     va_list args;

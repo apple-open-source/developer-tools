@@ -39,7 +39,6 @@
 #endif
 
 namespace WebCore {
-class MenuEventProxy;
 
     class ContextMenuController;
 
@@ -69,16 +68,16 @@ class MenuEventProxy;
         void setPlatformDescription(PlatformMenuDescription);
 
         PlatformMenuDescription releasePlatformDescription();
-
+#if PLATFORM(WX)
+        static ContextMenuItem* itemWithId(int);
+#endif
     private:
         HitTestResult m_hitTestResult;
-
 #if PLATFORM(MAC)
         // Keep this in sync with the PlatformMenuDescription typedef
         RetainPtr<NSMutableArray> m_platformDescription;
 #elif PLATFORM(QT)
-        QMenu *m_menu;
-        MenuEventProxy *m_proxy;
+        QList<ContextMenuItem> m_items;
 #else
         PlatformMenuDescription m_platformDescription;
 #endif

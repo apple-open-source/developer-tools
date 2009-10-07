@@ -8,7 +8,7 @@
  */
 
 /*
- * diff.c: code for diff'ing two or three buffers.
+ * diff.c: code for diff'ing two, three or four buffers.
  */
 
 #include "vim.h"
@@ -73,6 +73,8 @@ diff_buf_delete(buf)
 	{
 	    tp->tp_diffbuf[i] = NULL;
 	    tp->tp_diff_invalid = TRUE;
+	    if (tp == curtab)
+		diff_redraw(TRUE);
 	}
     }
 }
@@ -102,6 +104,7 @@ diff_buf_adjust(win)
 	    {
 		curtab->tp_diffbuf[i] = NULL;
 		curtab->tp_diff_invalid = TRUE;
+		diff_redraw(TRUE);
 	    }
 	}
     }
@@ -113,7 +116,7 @@ diff_buf_adjust(win)
  * Add a buffer to make diffs for.
  * Call this when a new buffer is being edited in the current window where
  * 'diff' is set.
- * Marks the current buffer as being part of the diff and requireing updating.
+ * Marks the current buffer as being part of the diff and requiring updating.
  * This must be done before any autocmd, because a command may use info
  * about the screen contents.
  */
@@ -131,6 +134,7 @@ diff_buf_add(buf)
 	{
 	    curtab->tp_diffbuf[i] = buf;
 	    curtab->tp_diff_invalid = TRUE;
+	    diff_redraw(TRUE);
 	    return;
 	}
 
@@ -661,6 +665,7 @@ ex_diffupdate(eap)
     char_u	*tmp_diff;
     FILE	*fd;
     int		ok;
+    int		io_error = FALSE;
 
     /* Delete all diffblocks. */
     diff_clear(curtab);
@@ -697,18 +702,26 @@ ex_diffupdate(eap)
     {
 	ok = FALSE;
 	fd = mch_fopen((char *)tmp_orig, "w");
-	if (fd != NULL)
+	if (fd == NULL)
+	    io_error = TRUE;
+	else
 	{
-	    fwrite("line1\n", (size_t)6, (size_t)1, fd);
+	    if (fwrite("line1\n", (size_t)6, (size_t)1, fd) != 1)
+		io_error = TRUE;
 	    fclose(fd);
 	    fd = mch_fopen((char *)tmp_new, "w");
-	    if (fd != NULL)
+	    if (fd == NULL)
+		io_error = TRUE;
+	    else
 	    {
-		fwrite("line2\n", (size_t)6, (size_t)1, fd);
+		if (fwrite("line2\n", (size_t)6, (size_t)1, fd) != 1)
+		    io_error = TRUE;
 		fclose(fd);
 		diff_file(tmp_orig, tmp_new, tmp_diff);
 		fd = mch_fopen((char *)tmp_diff, "r");
-		if (fd != NULL)
+		if (fd == NULL)
+		    io_error = TRUE;
+		else
 		{
 		    char_u	linebuf[LBUFLEN];
 
@@ -761,6 +774,8 @@ ex_diffupdate(eap)
     }
     if (!ok)
     {
+	if (io_error)
+	    EMSG(_("E810: Cannot read or write temp files"));
 	EMSG(_("E97: Cannot create diffs"));
 	diff_a_works = MAYBE;
 #if defined(MSWIN) || defined(MSDOS)
@@ -790,6 +805,9 @@ ex_diffupdate(eap)
 	mch_remove(tmp_new);
     }
     mch_remove(tmp_orig);
+
+    /* force updating cursor position on screen */
+    curwin->w_valid_cursor.lnum = 0;
 
     diff_redraw(TRUE);
 
@@ -840,11 +858,11 @@ diff_file(tmp_orig, tmp_new, tmp_diff)
 		    tmp_orig, tmp_new);
 	    append_redir(cmd, p_srr, tmp_diff);
 #ifdef FEAT_AUTOCMD
-	    ++autocmd_block;	/* Avoid ShellCmdPost stuff */
+	    block_autocmds();	/* Avoid ShellCmdPost stuff */
 #endif
 	    (void)call_shell(cmd, SHELL_FILTER|SHELL_SILENT|SHELL_DOOUT);
 #ifdef FEAT_AUTOCMD
-	    --autocmd_block;
+	    unblock_autocmds();
 #endif
 	    vim_free(cmd);
 	}
@@ -911,7 +929,7 @@ ex_diffpatch(eap)
 	goto theend;
 
 #ifdef UNIX
-    /* Temporaraly chdir to /tmp, to avoid patching files in the current
+    /* Temporarily chdir to /tmp, to avoid patching files in the current
      * directory when the patch file contains more than one patch.  When we
      * have our own temp dir use that instead, it will be cleaned up when we
      * exit (any .rej files created).  Don't change directory if we can't
@@ -922,10 +940,10 @@ ex_diffpatch(eap)
     {
 # ifdef TEMPDIRNAMES
 	if (vim_tempdir != NULL)
-	    mch_chdir((char *)vim_tempdir);
+	    ignored = mch_chdir((char *)vim_tempdir);
 	else
 # endif
-	    mch_chdir("/tmp");
+	    ignored = mch_chdir("/tmp");
 	shorten_fnames(TRUE);
     }
 #endif
@@ -949,11 +967,11 @@ ex_diffpatch(eap)
 # endif
 		eap->arg);
 #ifdef FEAT_AUTOCMD
-	++autocmd_block;	/* Avoid ShellCmdPost stuff */
+	block_autocmds();	/* Avoid ShellCmdPost stuff */
 #endif
 	(void)call_shell(buf, SHELL_FILTER | SHELL_COOKED);
 #ifdef FEAT_AUTOCMD
-	--autocmd_block;
+	unblock_autocmds();
 #endif
     }
 
@@ -1296,7 +1314,9 @@ diff_read(idx_orig, idx_new, fname)
 	    }
 	    else
 		/* second overlap of new block with existing block */
-		dp->df_count[idx_new] += count_new - count_orig;
+		dp->df_count[idx_new] += count_new - count_orig
+		    + dpl->df_lnum[idx_orig] + dpl->df_count[idx_orig]
+		    - (dp->df_lnum[idx_orig] + dp->df_count[idx_orig]);
 
 	    /* Adjust the size of the block to include all the lines to the
 	     * end of the existing block or the new diff, whatever ends last. */
@@ -1310,7 +1330,7 @@ diff_read(idx_orig, idx_new, fname)
 		    dp->df_count[idx_new] += -off;
 		off = 0;
 	    }
-	    for (i = idx_orig; i < idx_new + !notset; ++i)
+	    for (i = idx_orig; i < idx_new; ++i)
 		if (curtab->tp_diffbuf[i] != NULL)
 		    dp->df_count[i] = dpl->df_lnum[i] + dpl->df_count[i]
 						       - dp->df_lnum[i] + off;
@@ -1625,14 +1645,16 @@ diff_set_topline(fromwin, towin)
     win_T	*fromwin;
     win_T	*towin;
 {
-    buf_T	*buf = fromwin->w_buffer;
+    buf_T	*frombuf = fromwin->w_buffer;
     linenr_T	lnum = fromwin->w_topline;
-    int		idx;
+    int		fromidx;
+    int		toidx;
     diff_T	*dp;
+    int		max_count;
     int		i;
 
-    idx = diff_buf_idx(buf);
-    if (idx == DB_COUNT)
+    fromidx = diff_buf_idx(frombuf);
+    if (fromidx == DB_COUNT)
 	return;		/* safety check */
 
     if (curtab->tp_diff_invalid)
@@ -1642,42 +1664,72 @@ diff_set_topline(fromwin, towin)
 
     /* search for a change that includes "lnum" in the list of diffblocks. */
     for (dp = curtab->tp_first_diff; dp != NULL; dp = dp->df_next)
-	if (lnum <= dp->df_lnum[idx] + dp->df_count[idx])
+	if (lnum <= dp->df_lnum[fromidx] + dp->df_count[fromidx])
 	    break;
     if (dp == NULL)
     {
 	/* After last change, compute topline relative to end of file; no
 	 * filler lines. */
 	towin->w_topline = towin->w_buffer->b_ml.ml_line_count
-					   - (buf->b_ml.ml_line_count - lnum);
+				       - (frombuf->b_ml.ml_line_count - lnum);
     }
     else
     {
 	/* Find index for "towin". */
-	i = diff_buf_idx(towin->w_buffer);
-	if (i == DB_COUNT)
+	toidx = diff_buf_idx(towin->w_buffer);
+	if (toidx == DB_COUNT)
 	    return;		/* safety check */
 
-	towin->w_topline = lnum + (dp->df_lnum[i] - dp->df_lnum[idx]);
-	if (lnum >= dp->df_lnum[idx])
+	towin->w_topline = lnum + (dp->df_lnum[toidx] - dp->df_lnum[fromidx]);
+	if (lnum >= dp->df_lnum[fromidx])
 	{
-	    /* Inside a change: compute filler lines. */
-	    if (dp->df_count[i] == dp->df_count[idx])
+	    /* Inside a change: compute filler lines. With three or more
+	     * buffers we need to know the largest count. */
+	    max_count = 0;
+	    for (i = 0; i < DB_COUNT; ++i)
+		if (curtab->tp_diffbuf[i] != NULL
+					       && max_count < dp->df_count[i])
+		    max_count = dp->df_count[i];
+
+	    if (dp->df_count[toidx] == dp->df_count[fromidx])
+	    {
+		/* same number of lines: use same filler count */
 		towin->w_topfill = fromwin->w_topfill;
-	    else if (dp->df_count[i] > dp->df_count[idx])
-	    {
-		if (lnum == dp->df_lnum[idx] + dp->df_count[idx])
-		    towin->w_topline = dp->df_lnum[i] + dp->df_count[i]
-							 - fromwin->w_topfill;
 	    }
-	    else
+	    else if (dp->df_count[toidx] > dp->df_count[fromidx])
 	    {
-		if (towin->w_topline >= dp->df_lnum[i] + dp->df_count[i])
+		if (lnum == dp->df_lnum[fromidx] + dp->df_count[fromidx])
 		{
-		    if (diff_flags & DIFF_FILLER)
-			towin->w_topfill = dp->df_lnum[idx]
-						   + dp->df_count[idx] - lnum;
-		    towin->w_topline = dp->df_lnum[i] + dp->df_count[i];
+		    /* more lines in towin and fromwin doesn't show diff
+		     * lines, only filler lines */
+		    if (max_count - fromwin->w_topfill >= dp->df_count[toidx])
+		    {
+			/* towin also only shows filler lines */
+			towin->w_topline = dp->df_lnum[toidx]
+						       + dp->df_count[toidx];
+			towin->w_topfill = fromwin->w_topfill;
+		    }
+		    else
+			/* towin still has some diff lines to show */
+			towin->w_topline = dp->df_lnum[toidx]
+					     + max_count - fromwin->w_topfill;
+		}
+	    }
+	    else if (towin->w_topline >= dp->df_lnum[toidx]
+							+ dp->df_count[toidx])
+	    {
+		/* less lines in towin and no diff lines to show: compute
+		 * filler lines */
+		towin->w_topline = dp->df_lnum[toidx] + dp->df_count[toidx];
+		if (diff_flags & DIFF_FILLER)
+		{
+		    if (lnum == dp->df_lnum[fromidx] + dp->df_count[fromidx])
+			/* fromwin is also out of diff lines */
+			towin->w_topfill = fromwin->w_topfill;
+		    else
+			/* fromwin has some diff lines */
+			towin->w_topfill = dp->df_lnum[fromidx]
+							   + max_count - lnum;
 		}
 	    }
 	}
@@ -1822,14 +1874,20 @@ diff_find_change(wp, lnum, startp, endp)
 
     idx = diff_buf_idx(wp->w_buffer);
     if (idx == DB_COUNT)	/* cannot happen */
+    {
+	vim_free(line_org);
 	return FALSE;
+    }
 
     /* search for a change that includes "lnum" in the list of diffblocks. */
     for (dp = curtab->tp_first_diff; dp != NULL; dp = dp->df_next)
 	if (lnum <= dp->df_lnum[idx] + dp->df_count[idx])
 	    break;
     if (dp == NULL || diff_check_sanity(curtab, dp) == FAIL)
+    {
+	vim_free(line_org);
 	return FALSE;
+    }
 
     off = lnum - dp->df_lnum[idx];
 
@@ -2008,6 +2066,7 @@ ex_diffgetput(eap)
     int		start_skip, end_skip;
     int		new_count;
     int		buf_empty;
+    int		found_not_ma = FALSE;
 
     /* Find the current buffer in the list of diff buffers. */
     idx_cur = diff_buf_idx(curbuf);
@@ -2022,13 +2081,19 @@ ex_diffgetput(eap)
 	/* No argument: Find the other buffer in the list of diff buffers. */
 	for (idx_other = 0; idx_other < DB_COUNT; ++idx_other)
 	    if (curtab->tp_diffbuf[idx_other] != curbuf
-		    && curtab->tp_diffbuf[idx_other] != NULL
-		    && (eap->cmdidx != CMD_diffput
-					       || curtab->tp_diffbuf[idx_other]->b_p_ma))
-		break;
+		    && curtab->tp_diffbuf[idx_other] != NULL)
+	    {
+		if (eap->cmdidx != CMD_diffput
+				     || curtab->tp_diffbuf[idx_other]->b_p_ma)
+		    break;
+		found_not_ma = TRUE;
+	    }
 	if (idx_other == DB_COUNT)
 	{
-	    EMSG(_("E100: No other buffer in diff mode"));
+	    if (found_not_ma)
+		EMSG(_("E793: No other buffer in diff mode is modifiable"));
+	    else
+		EMSG(_("E100: No other buffer in diff mode"));
 	    return;
 	}
 
@@ -2064,6 +2129,8 @@ ex_diffgetput(eap)
 	    EMSG2(_("E102: Can't find buffer \"%s\""), eap->arg);
 	    return;
 	}
+	if (buf == curbuf)
+	    return;		/* nothing to do */
 	idx_other = diff_buf_idx(buf);
 	if (idx_other == DB_COUNT)
 	{

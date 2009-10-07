@@ -377,7 +377,7 @@ case "${target}" in
     enable_shared=no
     enable_64_bit_bfd=yes
     enable_softfloat=no
-    host_configargs=" $host_configargs --disable-shared --enable-64-bit-bfd --disable-softfloat "
+    host_configargs=" $host_configargs --disable-shared --enable-64-bit-bfd --disable-softfloat --disable-werror "
 
     AC_ARG_ENABLE(carbon-framework,
     [AC_HELP_STRING([--disable-carbon-framework],[disable Carbon framework use even when available])],

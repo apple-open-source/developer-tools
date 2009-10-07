@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-1997 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -20,8 +20,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -39,7 +39,7 @@ with Ada.Task_Identification;
 
 generic
    type Attribute is private;
-   Initial_Value : in Attribute;
+   Initial_Value : Attribute;
 
 package Ada.Task_Attributes is
 
@@ -47,13 +47,11 @@ package Ada.Task_Attributes is
 
    function Value
      (T    : Ada.Task_Identification.Task_Id :=
-               Ada.Task_Identification.Current_Task)
-      return Attribute;
+               Ada.Task_Identification.Current_Task) return Attribute;
 
    function Reference
      (T    : Ada.Task_Identification.Task_Id :=
-               Ada.Task_Identification.Current_Task)
-      return Attribute_Handle;
+               Ada.Task_Identification.Current_Task) return Attribute_Handle;
 
    procedure Set_Value
      (Val : Attribute;

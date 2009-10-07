@@ -1,12 +1,12 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                GNU ADA RUN-TIME LIBRARY (GNARL) COMPONENTS               --
+--                 GNAT RUN-TIME LIBRARY (GNARL) COMPONENTS                 --
 --                                                                          --
 --                        S Y S T E M . T A S K I N G                       --
 --                                                                          --
 --                                  B o d y                                 --
 --                                                                          --
---          Copyright (C) 1992-2004, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNARL; see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -41,12 +41,24 @@ with System.Task_Primitives.Operations;
 with System.Storage_Elements;
 --  Needed for initializing Stack_Info.Size
 
-with System.Parameters;
---  Used for Adjust_Storage_Size
-
 package body System.Tasking is
 
    package STPO renames System.Task_Primitives.Operations;
+
+   ---------------------
+   -- Detect_Blocking --
+   ---------------------
+
+   function Detect_Blocking return Boolean is
+      GL_Detect_Blocking : Integer;
+      pragma Import (C, GL_Detect_Blocking, "__gl_detect_blocking");
+      --  Global variable exported by the binder generated file.
+      --  A value equal to 1 indicates that pragma Detect_Blocking is active,
+      --  while 0 is used for the pragma not being present.
+
+   begin
+      return GL_Detect_Blocking = 1;
+   end Detect_Blocking;
 
    ----------
    -- Self --
@@ -92,6 +104,9 @@ package body System.Tasking is
       T.Common.Elaborated := Elaborated;
       T.Common.Activation_Failed := False;
       T.Common.Task_Info := Task_Info;
+      T.Common.Global_Task_Lock_Nesting := 0;
+      T.Common.Fall_Back_Handler := null;
+      T.Common.Specific_Handler  := null;
 
       if T.Common.Parent = null then
          --  For the environment task, the adjusted stack size is
@@ -110,14 +125,18 @@ package body System.Tasking is
              (Parameters.Adjust_Storage_Size (Stack_Size));
       end if;
 
-      --  Link the task into the list of all tasks.
+      --  Link the task into the list of all tasks
 
       T.Common.All_Tasks_Link := All_Tasks_List;
       All_Tasks_List := T;
    end Initialize_ATCB;
 
+   ----------------
+   -- Initialize --
+   ----------------
+
    Main_Task_Image : constant String := "main_task";
-   --  Image of environment task.
+   --  Image of environment task
 
    Main_Priority : Integer;
    pragma Import (C, Main_Priority, "__gl_main_priority");
@@ -125,26 +144,21 @@ package body System.Tasking is
    --  Priority, because we use the value -1 to indicate the default
    --  main priority, and that is of course not in Priority'range.
 
-   ----------------------------
-   -- Tasking Initialization --
-   ----------------------------
+   Initialized : Boolean := False;
+   --  Used to prevent multiple calls to Initialize
 
-   --  This block constitutes the first part of the initialization of the
-   --  GNARL. This includes creating data structures to make the initial thread
-   --  into the environment task. The last part of the initialization is done
-   --  in System.Tasking.Initialization or System.Tasking.Restricted.Stages.
-   --  All the initializations used to be in Tasking.Initialization, but this
-   --  is no longer possible with the run time simplification (including
-   --  optimized PO and the restricted run time) since one cannot rely on
-   --  System.Tasking.Initialization being present, as was done before.
-
-begin
-   declare
+   procedure Initialize is
       T             : Task_Id;
       Success       : Boolean;
       Base_Priority : Any_Priority;
 
    begin
+      if Initialized then
+         return;
+      end if;
+
+      Initialized := True;
+
       --  Initialize Environment Task
 
       if Main_Priority = Unspecified_Priority then
@@ -170,5 +184,6 @@ begin
       --  in ravenscar mode. Rest of the initialization is done in Init_RTS.
 
       T.Entry_Calls (1).Self := T;
-   end;
+   end Initialize;
+
 end System.Tasking;

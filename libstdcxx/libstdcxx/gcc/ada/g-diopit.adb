@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---           Copyright (C) 2001-2003 Ada Core Technologies, Inc.            --
+--                     Copyright (C) 2001-2005, AdaCore                     --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -51,13 +51,14 @@ package body GNAT.Directory_Operations.Iteration is
    is
       File_Regexp : constant Regexp.Regexp := Regexp.Compile (File_Pattern);
       Index       : Natural := 0;
+      Quit        : Boolean;
 
       procedure Read_Directory (Directory : Dir_Name_Str);
       --  Open Directory and read all entries. This routine is called
       --  recursively for each sub-directories.
 
       function Make_Pathname (Dir, File : String) return String;
-      --  Returns the pathname for File by adding Dir as prefix.
+      --  Returns the pathname for File by adding Dir as prefix
 
       -------------------
       -- Make_Pathname --
@@ -80,7 +81,6 @@ package body GNAT.Directory_Operations.Iteration is
          Dir    : Dir_Type;
          Buffer : String (1 .. 2_048);
          Last   : Natural;
-         Quit   : Boolean;
 
       begin
          Open (Dir, Directory);
@@ -91,11 +91,11 @@ package body GNAT.Directory_Operations.Iteration is
 
             declare
                Dir_Entry : constant String := Buffer (1 .. Last);
-               Pathname  : constant String
-                 := Make_Pathname (Directory, Dir_Entry);
+               Pathname  : constant String :=
+                             Make_Pathname (Directory, Dir_Entry);
+
             begin
                if Regexp.Match (Dir_Entry, File_Regexp) then
-                  Quit  := False;
                   Index := Index + 1;
 
                   begin
@@ -115,6 +115,7 @@ package body GNAT.Directory_Operations.Iteration is
                  and then OS_Lib.Is_Directory (Pathname)
                then
                   Read_Directory (Pathname);
+                  exit when Quit;
                end if;
             end;
          end loop;
@@ -123,6 +124,7 @@ package body GNAT.Directory_Operations.Iteration is
       end Read_Directory;
 
    begin
+      Quit := False;
       Read_Directory (Root_Directory);
    end Find;
 
@@ -203,7 +205,7 @@ package body GNAT.Directory_Operations.Iteration is
                --  We have "../dir"
 
                Read (Current_Path & "..",
-                     SP (SP'First + 4 .. DS - 1),
+                     SP (SP'First + 3 .. DS - 1),
                      SP (DS .. SP'Last));
             end if;
 
@@ -308,7 +310,7 @@ package body GNAT.Directory_Operations.Iteration is
       ----------
 
       Quit : Boolean := False;
-      --  Global state to be able to exit all recursive calls.
+      --  Global state to be able to exit all recursive calls
 
       procedure Read
         (Directory      : String;
@@ -322,8 +324,8 @@ package body GNAT.Directory_Operations.Iteration is
          Last   : Natural;
 
       begin
-         if OS_Lib.Is_Directory (Directory) then
-            Open (Dir, Directory);
+         if OS_Lib.Is_Directory (Directory & Dir_Separator) then
+            Open (Dir, Directory & Dir_Separator);
 
             Dir_Iterator : loop
                Read (Dir, Buffer, Last);
@@ -343,7 +345,6 @@ package body GNAT.Directory_Operations.Iteration is
                      (Dir_Entry = ".." and then File_Pattern /= ".."))
                   then
                      if Regexp.Match (Dir_Entry, File_Regexp) then
-
                         if Suffix_Pattern = "" then
 
                            --  No more matching needed, call user's callback
@@ -352,14 +353,11 @@ package body GNAT.Directory_Operations.Iteration is
 
                            begin
                               Action (Pathname, Index, Quit);
-
                            exception
                               when others =>
                                  Close (Dir);
                                  raise;
                            end;
-
-                           exit Dir_Iterator when Quit;
 
                         else
                            --  Down one level
@@ -372,15 +370,23 @@ package body GNAT.Directory_Operations.Iteration is
                   end if;
                end;
 
-               exit Dir_Iterator when Quit;
+               --  Exit if Quit set by call to Action, either at this level
+               --  or at at some lower recursive call to Next_Level.
 
+               exit Dir_Iterator when Quit;
             end loop Dir_Iterator;
 
             Close (Dir);
          end if;
       end Read;
 
+   --  Start of processing for Wildcard_Iterator
+
    begin
+      if Path = "" then
+         return;
+      end if;
+
       Next_Level ("", Path);
    end Wildcard_Iterator;
 

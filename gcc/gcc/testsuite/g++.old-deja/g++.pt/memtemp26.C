@@ -16,7 +16,8 @@ template <class X>
 template <class U>
 void S<X>::f(U u)
 {
-  printf ("%d\n", sizeof (U));
+  /* APPLE LOCAL default to Wformat-security 5764921 */
+  printf ("%d\n", (int)sizeof (U));
 }
 
 

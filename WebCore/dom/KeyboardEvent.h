@@ -2,7 +2,7 @@
  * Copyright (C) 2001 Peter Kelly (pmk@post.com)
  * Copyright (C) 2001 Tobias Anton (anton@stud.fbi.fh-darmstadt.de)
  * Copyright (C) 2006 Samuel Weinig (sam.weinig@gmail.com)
- * Copyright (C) 2003, 2004, 2005, 2006, 2007 Apple Inc. All rights reserved.
+ * Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008 Apple Inc. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -33,10 +33,11 @@ namespace WebCore {
 
 #if PLATFORM(MAC)
     struct KeypressCommand {
-        Vector<String> commandNames;
+        KeypressCommand(const String& commandName) : commandName(commandName) {}
+        KeypressCommand(const String& commandName, const String& text) : commandName(commandName), text(text) { ASSERT(commandName == "insertText:"); }
+
+        String commandName;
         String text;
-        
-        bool isEmpty() const { return text.isEmpty() && commandNames.isEmpty(); }
     };
 #endif
     
@@ -50,11 +51,21 @@ namespace WebCore {
             DOM_KEY_LOCATION_NUMPAD        = 0x03
         };
         
-        KeyboardEvent();
-        KeyboardEvent(const PlatformKeyboardEvent&, AbstractView*);
-        KeyboardEvent(const AtomicString& type, bool canBubble, bool cancelable, AbstractView*,
-                      const String& keyIdentifier, unsigned keyLocation,
-                      bool ctrlKey, bool altKey, bool shiftKey, bool metaKey, bool altGraphKey);
+        static PassRefPtr<KeyboardEvent> create()
+        {
+            return adoptRef(new KeyboardEvent);
+        }
+        static PassRefPtr<KeyboardEvent> create(const PlatformKeyboardEvent& platformEvent, AbstractView* view)
+        {
+            return adoptRef(new KeyboardEvent(platformEvent, view));
+        }
+        static PassRefPtr<KeyboardEvent> create(const AtomicString& type, bool canBubble, bool cancelable, AbstractView* view,
+            const String& keyIdentifier, unsigned keyLocation,
+            bool ctrlKey, bool altKey, bool shiftKey, bool metaKey, bool altGraphKey)
+        {
+            return adoptRef(new KeyboardEvent(type, canBubble, cancelable, view, keyIdentifier, keyLocation,
+                ctrlKey, altKey, shiftKey, metaKey, altGraphKey));
+        }
         virtual ~KeyboardEvent();
     
         void initKeyboardEvent(const AtomicString& type, bool canBubble, bool cancelable, AbstractView*,
@@ -70,26 +81,31 @@ namespace WebCore {
     
         const PlatformKeyboardEvent* keyEvent() const { return m_keyEvent; }
 
-        int keyCode() const; // key code for keydown and keyup, character for other events
-        int charCode() const;
+        int keyCode() const; // key code for keydown and keyup, character for keypress
+        int charCode() const; // character code for keypress, 0 for keydown and keyup
     
         virtual bool isKeyboardEvent() const;
         virtual int which() const;
 
 #if PLATFORM(MAC)
         // We only have this need to store keypress command info on the Mac.
-        KeypressCommand keypressCommand() { return m_keypressCommand; }
-        void setKeypressCommand(const KeypressCommand& command) { m_keypressCommand = command; }        
+        Vector<KeypressCommand>& keypressCommands() { return m_keypressCommands; }
 #endif
 
     private:
+        KeyboardEvent();
+        KeyboardEvent(const PlatformKeyboardEvent&, AbstractView*);
+        KeyboardEvent(const AtomicString& type, bool canBubble, bool cancelable, AbstractView*,
+                      const String& keyIdentifier, unsigned keyLocation,
+                      bool ctrlKey, bool altKey, bool shiftKey, bool metaKey, bool altGraphKey);
+
         PlatformKeyboardEvent* m_keyEvent;
         String m_keyIdentifier;
         unsigned m_keyLocation;
         bool m_altGraphKey : 1;
 
 #if PLATFORM(MAC)        
-        KeypressCommand m_keypressCommand;
+        Vector<KeypressCommand> m_keypressCommands;
 #endif
     };
 

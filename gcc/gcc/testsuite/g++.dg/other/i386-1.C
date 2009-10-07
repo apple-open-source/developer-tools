@@ -1,17 +1,26 @@
-/* APPLE LOCAL begin mainline 2005-09-16 */
-/* { dg-do run { target i?86-*-* } } */
-/* { dg-require-effective-target ilp32 } */
+/* { dg-do run { target i?86-*-* x86_64-*-* } } */
 /* { dg-options "-march=pentium4" } */
+/* { dg-require-effective-target ilp32 } */
 
 #include <xmmintrin.h>
 #include <stdio.h>
+#include "../../gcc.dg/i386-cpuid.h"
 
 int main(int argc, char** argv) {
   float a = 1.0f;
   float b = 2.0f;
   float c = 3.0f;
   float r;
-  
+
+  unsigned long cpu_facilities;
+
+  cpu_facilities = i386_cpuid ();
+
+  if ((cpu_facilities & (bit_MMX | bit_SSE | bit_SSE2 | bit_CMOV))
+      != (bit_MMX | bit_SSE | bit_SSE2 | bit_CMOV))
+    /* If host has no vector support, pass.  */
+    return 0;
+
   __m128 v = _mm_set_ps(a, b, c, 0);
   
   v = (__m128)_mm_srli_si128((__m128i)v, 4);
@@ -20,4 +29,3 @@ int main(int argc, char** argv) {
     abort ();
   exit (0);
 }
-/* APPLE LOCAL end mainline 2005-09-16 */

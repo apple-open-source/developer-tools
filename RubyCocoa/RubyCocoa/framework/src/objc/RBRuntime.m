@@ -1,5 +1,5 @@
 /* 
- * Copyright (c) 2006-2007, The RubyCocoa Project.
+ * Copyright (c) 2006-2008, The RubyCocoa Project.
  * Copyright (c) 2001-2006, FUJIMOTO Hisakuni.
  * All Rights Reserved.
  *
@@ -32,7 +32,7 @@
 
 /* we cannot use the original DLOG here because it uses autoreleased objects */
 #undef DLOG
-#define DLOG(f,args...) do { if (rubycocoa_debug == Qtrue) printf(f, args); } while (0) 
+#define DLOG(f,args...) do { if (rubycocoa_debug == Qtrue) printf(f, args); } while (0)
 
 /* this function should be called from inside a NSAutoreleasePool */
 static NSBundle* bundle_for(Class klass)
@@ -215,23 +215,26 @@ int rubycocoa_frequently_init_stack()
 
 int RBNotifyException(const char* title, VALUE err)
 {
-  VALUE ary,str;
-  VALUE printf_args[2];
+  volatile VALUE ary;
+  VALUE str;
   int i;
 
   if (! RTEST(rb_obj_is_kind_of(err, rb_eException))) return 0;
   if (! RUBYCOCOA_SUPPRESS_EXCEPTION_LOGGING_P) {
+    VALUE err_class_str = rb_obj_as_string(rb_obj_class(err));
+    VALUE err_str = rb_obj_as_string(err);
     NSLog(@"%s: %s: %s",
           title,
-          STR2CSTR(rb_obj_as_string(rb_obj_class(err))),
-          STR2CSTR(rb_obj_as_string(err)));
+          StringValuePtr(err_class_str),
+          StringValuePtr(err_str));
     ary = rb_funcall(err, rb_intern("backtrace"), 0);
     if (!NIL_P(ary)) {
       for (i = 0; i < RARRAY(ary)->len; i++) {
+        VALUE printf_args[2]; /* GC safe */
         printf_args[0] = rb_str_new2("\t%s\n");
         printf_args[1] = rb_ary_entry(ary, i);
         str = rb_f_sprintf(2, printf_args);
-        rb_write_error(STR2CSTR(str));
+        rb_write_error(StringValuePtr(str));
       }
     }
   }
@@ -252,6 +255,7 @@ static int notify_if_error(const char* api_name, VALUE err)
 - (void) __clearCacheAndDealloc
 {
   remove_from_oc2rb_cache(self);
+  release_slave(self);
   [self __dealloc];
 }
 
@@ -793,19 +797,20 @@ static void rb_cocoa_thread_restore_context(NSThread *thread,
 
   oldExcHandlers = NSTHREAD_excHandlers_get(thread);
   if (oldExcHandlers != ctx->excHandlers) {
-    DLOG("Restored excHandlers as %p\n", ctx->excHandlers);
+    DLOG("Restored excHandlers as %p (from %p)\n", ctx->excHandlers, oldExcHandlers);
     NSTHREAD_excHandlers_set(thread, ctx->excHandlers);
     if (ctx->excHandlers != NULL)
       assert(NSTHREAD_excHandlers_get(thread) == ctx->excHandlers);
   }
 
-  oldAutoreleasePool = NSTHREAD_autoreleasePool_get(thread);
-  if (oldAutoreleasePool != ctx->autoreleasePool) {
+  if (ctx->autoreleasePool != NULL) {
+    oldAutoreleasePool = NSTHREAD_autoreleasePool_get(thread);
+	
     NSTHREAD_autoreleasePool_set(thread, ctx->autoreleasePool);
-    DLOG("Restored autoreleasePool as %p (%d)\n", ctx->autoreleasePool, NSAutoreleasePoolCount());
-    //ctx->saveAutoreleasePool = YES;
-    if (ctx->autoreleasePool != NULL)
-      assert(NSTHREAD_autoreleasePool_get(thread) == ctx->autoreleasePool);
+	  DLOG("Restored autoreleasePool as %p (%d) from (%p)\n",
+			ctx->autoreleasePool, NSAutoreleasePoolCount(), oldAutoreleasePool);
+
+    ctx->autoreleasePool = NULL;
   }
 
   rb_cocoa_between_threads = NO;
@@ -822,8 +827,12 @@ static void rb_cocoa_thread_save_context(NSThread *thread,
   if (ctx->ignoreHooks)
     return;
 
-  if (rb_cocoa_between_threads)
+  if (rb_cocoa_between_threads) {
+    DLOG("Many concurrent save contexts (exc: %p -> %p), (pool: %p -> %p)\n",
+      ctx->excHandlers, NSTHREAD_excHandlers_get(thread),
+      ctx->autoreleasePool, NSTHREAD_autoreleasePool_get(thread));
     return;
+  }
 
   if (ctx->excHandlers == NULL) {
     ctx->excHandlers = NSTHREAD_excHandlers_get(thread);
@@ -900,12 +909,17 @@ static void rb_cocoa_thread_schedule_hook(rb_threadswitch_event_t event,
 
 static void RBCocoaInstallRubyThreadSchedulerHooks()
 {
+#if MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6
+  /* The threading support is not implemented yet in 10.6. */
+  return;
+#else
   if (getenv("RUBYCOCOA_THREAD_HOOK_DISABLE") != NULL) {
     if (rb_cocoa_thread_debug) {
       NSLog(@"RBCocoaInstallRubyThreadSchedulerHooks: warning: disabled hooks due to RUBYCOCOA_THREAD_HOOK_DISABLE environment variable");
     }
     return;
   }
+#endif
   
   rb_cocoa_thread_debug = getenv("RUBYCOCOA_THREAD_DEBUG") != NULL;
   

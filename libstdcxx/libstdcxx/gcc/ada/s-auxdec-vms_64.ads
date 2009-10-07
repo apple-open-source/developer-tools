@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1996-2004 Free Software Foundation, Inc.          --
+--          Copyright (C) 1996-2005 Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS For A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -37,15 +37,21 @@
 --  These definitions can be used directly by withing this package, or merged
 --  with System using pragma Extend_System (Aux_DEC)
 
---  This is the IPF VMS 64 bit version.
+--  This is the VMS 64 bit version.
 
 with Unchecked_Conversion;
 
 package System.Aux_DEC is
-pragma Elaborate_Body (Aux_DEC);
+   pragma Preelaborate;
+
+   type Short_Integer_Address is
+     range -2 ** (32 - 1) .. +2 ** (32 - 1) - 1;
+   --  Integer literals cannot appear naked in an address context, as a
+   --  result the bounds of Short_Address cannot be given simply as 2^32 etc.
 
    subtype Short_Address is Address
-     range -2 ** (32 - 1) .. +2 ** (32 - 1) - 1;
+     range Address (Short_Integer_Address'First) ..
+           Address (Short_Integer_Address'Last);
    for Short_Address'Object_Size use 32;
    --  This subtype allows addresses to be converted from 64 bits to 32 bits
    --  with an appropriate range check. Note that since this is a subtype of

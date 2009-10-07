@@ -23,7 +23,6 @@
 #include "vimio.h"
 #include "vim.h"
 
-#include <fcntl.h>
 #include <dos.h>
 #include <string.h>
 #include <sys/types.h>
@@ -122,7 +121,8 @@ WinMain(
     pmain(argc, argv);
 
     free(argv);
-    free(tofree);
+    if (tofree != NULL)
+	free(tofree);
 
     return 0;
 }

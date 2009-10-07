@@ -1,16 +1,16 @@
-/* APPLE LOCAL file radar 4436866 */
-/* Property name cannot match the ivar name. */
+/* APPLE LOCAL file 4649718, 4651088 */
+/* Test for bogus property declarations. */
 /* APPLE LOCAL radar 4899595 */
-/* { dg-options "-fno-objc-new-property -mmacosx-version-min=10.5" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
-/* { dg-options "-fno-objc-new-property" { target arm*-*-darwin* } } */
-/* { dg-do compile { target *-*-darwin* } } */
+/* { dg-options "-mmacosx-version-min=10.5" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
+/* { dg-do compile } */
 
-@interface Person 
-{
-  char *firstName;
-}
-@property (dynamic) char *firstName; /* { dg-error "property name \\'firstName\\' matches an ivar name in this class" } */
-@end	
+@interface MyClass {
 
-@implementation  Person
+};
+@property unsigned char bufferedUTF8Bytes[4]; /* { dg-error "bad property declaration" } */
+@property unsigned char bufferedUTFBytes:1;   /* { dg-error "bad property declaration" } */
 @end
+
+@implementation MyClass
+@end
+

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2002 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -46,6 +46,15 @@ package Sem_Ch5 is
    --  to insert an N_Implicit_Label_Declaration in the tree. It also takes
    --  care of setting Reachable, since labels defined by the expander can
    --  be assumed to be reachable.
+
+   procedure Check_Possible_Current_Value_Condition (Cnode : Node_Id);
+   --  Cnode is N_If_Statement, N_Elsif_Part, or N_Iteration_Scheme
+   --  (the latter when a WHILE condition is present). This call checks
+   --  if Condition (Cnode) is of the form ([NOT] var op val), where var
+   --  is a simple object, val is known at compile time, and op is one
+   --  of the six relational operators. If this is the case, and the
+   --  Current_Value field of "var" is not set, then it is set to Cnode.
+   --  See Exp_Util.Set_Current_Value_Condition for further details.
 
    procedure Check_Unreachable_Code (N : Node_Id);
    --  This procedure is called with N being the node for a statement that

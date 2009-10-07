@@ -1,4 +1,3 @@
-/* APPLE LOCAL file mainline */
 /* PR middle-end/23484 */
 
 extern void abort (void);

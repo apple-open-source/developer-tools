@@ -643,6 +643,7 @@ print_frame (struct frame_info *fi,
   struct cleanup *list_chain;
   /* APPLE LOCAL begin subroutine inlining  */
   CORE_ADDR inline_end_pc;
+  int next_frame_is_inlined_p =  0;
   /* APPLE LOCAL end subroutine inlining  */
 
   stb = ui_out_stream_new (uiout);
@@ -670,7 +671,27 @@ print_frame (struct frame_info *fi,
     }
   /* APPLE LOCAL end subroutine inlining  */
 
-  func = find_pc_function (get_frame_address_in_block (fi));
+  /* APPLE LOCAL begin inlined function symbols & blocks  */
+  /* Inlined subroutines may share the exact same PC's and address ranges,
+     so if we want to clear the cached values and do a full lookup if
+     the last frame we may have dealt with was an inlined frame.  */
+
+  if (frame_relative_level (fi) > 0
+      && get_frame_type (get_next_frame (fi)) == INLINED_FRAME)
+    /* APPLE LOCAL begin radar 6529076  */
+    {
+      symtab_clear_cached_lookup_values ();
+      next_frame_is_inlined_p = 1;
+    }
+    /* APPLE LOCAL end radar 6529076  */
+
+  /* If we wanted to print an inlined function, it would have been caught
+     earlier, and we would have called print_inlined_frame.  Therefore
+     let's make sure we don't accidentally get an inlined function here.  */
+
+  func = find_pc_function_no_inlined (get_frame_address_in_block (fi));
+  /* APPLE LOCAL end inlined function symbols & blocks  */
+
   if (func)
     {
       /* In certain pathological cases, the symtabs give the wrong
@@ -754,7 +775,10 @@ print_frame (struct frame_info *fi,
   if (addressprint)
     if (get_frame_pc (fi) != sal.pc
 	|| !sal.symtab
-	|| print_what == LOC_AND_ADDRESS)
+	/* APPLE LOCAL begin radar 6529076  */
+	|| print_what == LOC_AND_ADDRESS
+	|| next_frame_is_inlined_p)
+        /* APPLE LOCAL end radar 6529076  */
       {
 	annotate_frame_address ();
 	ui_out_field_core_addr (uiout, "addr", get_frame_pc (fi));
@@ -797,10 +821,24 @@ print_frame (struct frame_info *fi,
       struct symtab *tmp_symtab;
 
       tmp_symtab = find_pc_symtab (stop_pc);
-      if (tmp_symtab != sal.symtab
-	  && inside_inlined
-	  && tmp_symtab->filename)
-	sal.symtab = tmp_symtab;
+      if (tmp_symtab && (tmp_symtab != sal.symtab))
+	{
+	  char *temp_filename= last_inlined_call_site_filename (fi);
+
+	  if (tmp_symtab != sal.symtab
+	      && inside_inlined
+	      && filename
+	      && tmp_symtab->filename
+	      && strcmp (filename, tmp_symtab->filename) == 0)
+	    sal.symtab = tmp_symtab;
+	  else if (frame_relative_level (fi) > 0
+		   && get_frame_type (get_next_frame (fi)) == INLINED_FRAME
+		   && get_frame_type (fi) == NORMAL_FRAME
+		   && temp_filename != NULL
+		   && tmp_symtab->filename
+		   && strcmp (tmp_symtab->filename, temp_filename) == 0)
+	    sal.symtab = tmp_symtab;
+	}
       /* APPLE LOCAL end subroutine inlining  */
 
       annotate_frame_source_begin ();
@@ -884,8 +922,6 @@ parse_frame_specification_1 (const char *frame_exp, const char *message,
     numargs = 0;
   else
     {
-      char *addr_string;
-      struct cleanup *tmp_cleanup;
 
       numargs = 0;
       while (1)
@@ -1005,7 +1041,7 @@ frame_info (char *addr_exp, int from_tty)
   struct symbol *func;
   struct symtab *s;
   struct frame_info *calling_frame_info;
-  int i, count, numregs;
+  int numregs;
   char *funname = 0;
   enum language funlang = language_unknown;
   const char *pc_regname;

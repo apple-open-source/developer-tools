@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2005 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -153,7 +153,11 @@ package body Ch12 is
 
       Decl_Loop : loop
          P_Pragmas_Opt (Decls);
-         Ignore (Tok_Private);
+
+         if Token = Tok_Private then
+            Error_Msg_S ("generic private child packages not permitted");
+            Scan; -- past PRIVATE
+         end if;
 
          if Token = Tok_Use then
             Append (P_Use_Clause, Decls);
@@ -487,13 +491,17 @@ package body Ch12 is
    --  | FORMAL_DECIMAL_FIXED_POINT_DEFINITION
    --  | FORMAL_ARRAY_TYPE_DEFINITION
    --  | FORMAL_ACCESS_TYPE_DEFINITION
+   --  | FORMAL_INTERFACE_TYPE_DEFINITION
 
    --  FORMAL_ARRAY_TYPE_DEFINITION ::= ARRAY_TYPE_DEFINITION
 
    --  FORMAL_ACCESS_TYPE_DEFINITION ::= ACCESS_TYPE_DEFINITION
 
+   --  FORMAL_INTERFACE_TYPE_DEFINITION ::= INTERFACE_TYPE_DEFINITION
+
    function P_Formal_Type_Definition return Node_Id is
-      Scan_State : Saved_Scan_State;
+      Scan_State   : Saved_Scan_State;
+      Typedef_Node : Node_Id;
 
    begin
       if Token_Name = Name_Abstract then
@@ -511,6 +519,9 @@ package body Ch12 is
          --  exception is ABSTRACT, where we have to scan ahead to see if we
          --  have a formal derived type or a formal private type definition.
 
+         --  In addition, in Ada 2005 LIMITED may appear after abstract, so
+         --  that the lookahead must be extended by one more token.
+
          when Tok_Abstract =>
             Save_Scan_State (Scan_State);
             Scan; -- past ABSTRACT
@@ -519,42 +530,123 @@ package body Ch12 is
                Restore_Scan_State (Scan_State); -- to ABSTRACT
                return P_Formal_Derived_Type_Definition;
 
+            elsif Token = Tok_Limited then
+               Scan;  --  past LIMITED
+
+               if Token = Tok_New then
+                  Restore_Scan_State (Scan_State); -- to ABSTRACT
+                  return P_Formal_Derived_Type_Definition;
+
+               else
+                  Restore_Scan_State (Scan_State); -- to ABSTRACT
+                  return P_Formal_Private_Type_Definition;
+               end if;
+
             else
                Restore_Scan_State (Scan_State); -- to ABSTRACT
                return P_Formal_Private_Type_Definition;
             end if;
 
-         when Tok_Private | Tok_Limited | Tok_Tagged =>
-            return P_Formal_Private_Type_Definition;
-
-         when Tok_New =>
-            return P_Formal_Derived_Type_Definition;
-
-         when Tok_Left_Paren =>
-            return P_Formal_Discrete_Type_Definition;
-
-         when Tok_Range =>
-            return P_Formal_Signed_Integer_Type_Definition;
-
-         when Tok_Mod =>
-            return P_Formal_Modular_Type_Definition;
-
-         when Tok_Digits =>
-            return P_Formal_Floating_Point_Definition;
-
-         when Tok_Delta =>
-            return P_Formal_Fixed_Point_Definition;
+         when Tok_Access =>
+            return P_Access_Type_Definition;
 
          when Tok_Array =>
             return P_Array_Type_Definition;
 
-         when Tok_Access =>
-            return P_Access_Type_Definition;
+         when Tok_Delta =>
+            return P_Formal_Fixed_Point_Definition;
+
+         when Tok_Digits =>
+            return P_Formal_Floating_Point_Definition;
+
+         when Tok_Interface => --  Ada 2005 (AI-251)
+            return P_Interface_Type_Definition (Is_Synchronized => False);
+
+         when Tok_Left_Paren =>
+            return P_Formal_Discrete_Type_Definition;
+
+         when Tok_Limited =>
+            Save_Scan_State (Scan_State);
+            Scan; --  past LIMITED
+
+            if Token = Tok_Interface then
+               Typedef_Node := P_Interface_Type_Definition
+                                (Is_Synchronized => False);
+               Set_Limited_Present (Typedef_Node);
+               return Typedef_Node;
+
+            elsif Token = Tok_New then
+               Restore_Scan_State (Scan_State); -- to LIMITED
+               return P_Formal_Derived_Type_Definition;
+
+            else
+               if Token = Tok_Abstract then
+                  Error_Msg_SC ("ABSTRACT must come before LIMITED");
+                  Scan;  --  past improper ABSTRACT
+
+                  if Token = Tok_New then
+                     Restore_Scan_State (Scan_State); -- to LIMITED
+                     return P_Formal_Derived_Type_Definition;
+
+                  else
+                     Restore_Scan_State (Scan_State);
+                     return P_Formal_Private_Type_Definition;
+                  end if;
+               end if;
+
+               Restore_Scan_State (Scan_State);
+               return P_Formal_Private_Type_Definition;
+            end if;
+
+         when Tok_Mod =>
+            return P_Formal_Modular_Type_Definition;
+
+         when Tok_New =>
+            return P_Formal_Derived_Type_Definition;
+
+         when Tok_Private |
+              Tok_Tagged  =>
+            return P_Formal_Private_Type_Definition;
+
+         when Tok_Range =>
+            return P_Formal_Signed_Integer_Type_Definition;
 
          when Tok_Record =>
             Error_Msg_SC ("record not allowed in generic type definition!");
             Discard_Junk_Node (P_Record_Definition);
             return Error;
+
+         --  Ada 2005 (AI-345)
+
+         when Tok_Protected    |
+              Tok_Synchronized |
+              Tok_Task         =>
+
+            Scan; -- past TASK, PROTECTED or SYNCHRONIZED
+
+            declare
+               Saved_Token  : constant Token_Type := Token;
+
+            begin
+               Typedef_Node := P_Interface_Type_Definition
+                                (Is_Synchronized => True);
+
+               case Saved_Token is
+                  when Tok_Task =>
+                     Set_Task_Present         (Typedef_Node);
+
+                  when Tok_Protected =>
+                     Set_Protected_Present    (Typedef_Node);
+
+                  when Tok_Synchronized =>
+                     Set_Synchronized_Present (Typedef_Node);
+
+                  when others =>
+                     null;
+               end case;
+
+               return Typedef_Node;
+            end;
 
          when others =>
             Error_Msg_BC ("expecting generic type definition here");
@@ -607,6 +699,20 @@ package body Ch12 is
          Scan; -- past LIMITED
       end if;
 
+      if Token = Tok_Abstract then
+         if Prev_Token = Tok_Tagged then
+            Error_Msg_SC ("ABSTRACT must come before TAGGED");
+         elsif Prev_Token = Tok_Limited then
+            Error_Msg_SC ("ABSTRACT must come before LIMITED");
+         end if;
+
+         Resync_Past_Semicolon;
+
+      elsif Token = Tok_Tagged then
+         Error_Msg_SC ("TAGGED must come before LIMITED");
+         Resync_Past_Semicolon;
+      end if;
+
       Set_Sloc (Def_Node, Token_Ptr);
       T_Private;
       return Def_Node;
@@ -617,9 +723,11 @@ package body Ch12 is
    --------------------------------------------
 
    --  FORMAL_DERIVED_TYPE_DEFINITION ::=
-   --    [abstract] new SUBTYPE_MARK [with private]
+   --    [abstract] [limited]
+   --         new SUBTYPE_MARK [[AND interface_list] with private]
 
-   --  The caller has checked the initial token(s) is/are NEW or ASTRACT NEW
+   --  The caller has checked the initial token(s) is/are NEW, ASTRACT NEW
+   --  LIMITED NEW, or ABSTRACT LIMITED NEW
 
    --  Error recovery: cannot raise Error_Resync
 
@@ -634,9 +742,45 @@ package body Ch12 is
          Scan; -- past ABSTRACT
       end if;
 
+      if Token = Tok_Limited then
+         Set_Limited_Present (Def_Node);
+         Scan;  --  past Limited
+
+         if Ada_Version < Ada_05 then
+            Error_Msg_SP
+              ("LIMITED in derived type is an Ada 2005 extension");
+            Error_Msg_SP
+              ("\unit must be compiled with -gnat05 switch");
+         end if;
+
+         if Token = Tok_Abstract then
+            Scan;  --  past ABSTRACT. diagnosed already in caller.
+         end if;
+      end if;
+
       Scan; -- past NEW;
       Set_Subtype_Mark (Def_Node, P_Subtype_Mark);
       No_Constraint;
+
+      --  Ada 2005 (AI-251): Deal with interfaces
+
+      if Token = Tok_And then
+         Scan; -- past AND
+
+         if Ada_Version < Ada_05 then
+            Error_Msg_SP
+              ("abstract interface is an Ada 2005 extension");
+            Error_Msg_SP ("\unit must be compiled with -gnat05 switch");
+         end if;
+
+         Set_Interface_List (Def_Node, New_List);
+
+         loop
+            Append (P_Qualified_Simple_Name, Interface_List (Def_Node));
+            exit when Token /= Tok_And;
+            Scan; -- past AND
+         end loop;
+      end if;
 
       if Token = Tok_With then
          Scan; -- past WITH
@@ -819,10 +963,12 @@ package body Ch12 is
 
    --  SUBPROGRAM_DEFAULT ::= DEFAULT_NAME | <>
 
-   --  DEFAULT_NAME ::= NAME
+   --  DEFAULT_NAME ::= NAME | null
 
    --  The caller has checked that the initial tokens are WITH FUNCTION or
    --  WITH PROCEDURE, and the initial WITH has been scanned out.
+
+   --  A null default is an Ada 2005 feature
 
    --  Error recovery: cannot raise Error_Resync
 
@@ -859,6 +1005,22 @@ package body Ch12 is
          elsif Token = Tok_Box then
             Set_Box_Present (Def_Node, True);
             Scan; -- past <>
+            T_Semicolon;
+
+         elsif Token = Tok_Null then
+            if Ada_Version < Ada_05 then
+               Error_Msg_SP
+                 ("null default subprograms are an Ada 2005 extension");
+               Error_Msg_SP ("\unit must be compiled with -gnat05 switch");
+            end if;
+
+            if Nkind (Spec_Node) = N_Procedure_Specification then
+               Set_Null_Present (Spec_Node);
+            else
+               Error_Msg_SP ("only procedures can be null");
+            end if;
+
+            Scan;  --  past NULL
             T_Semicolon;
 
          else

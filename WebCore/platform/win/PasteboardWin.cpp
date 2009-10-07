@@ -26,17 +26,16 @@
 #include "config.h"
 #include "Pasteboard.h"
 
-#include "ClipboardUtilitiesWin.h"
+#include "BitmapInfo.h"
 #include "CString.h"
-#include "DeprecatedString.h"
-#include "DocumentFragment.h"
+#include "ClipboardUtilitiesWin.h"
 #include "Document.h"
+#include "DocumentFragment.h"
 #include "Element.h"
 #include "Frame.h"
 #include "HitTestResult.h"
 #include "Image.h"
 #include "KURL.h"
-#include "NotImplemented.h"
 #include "Page.h"
 #include "Range.h"
 #include "RenderImage.h"
@@ -116,7 +115,10 @@ void Pasteboard::writeSelection(Range* selectedRange, bool canSmartCopyOrDelete,
     // Put CF_HTML format on the pasteboard 
     if (::OpenClipboard(m_owner)) {
         ExceptionCode ec = 0;
-        HGLOBAL cbData = createGlobalData(markupToCF_HTML(createMarkup(selectedRange, 0, AnnotateForInterchange), selectedRange->startContainer(ec)->document()->URL()));
+        Vector<char> data;
+        markupToCF_HTML(createMarkup(selectedRange, 0, AnnotateForInterchange),
+            selectedRange->startContainer(ec)->document()->url().string(), data);
+        HGLOBAL cbData = createGlobalData(data);
         if (!::SetClipboardData(HTMLClipboardFormat, cbData))
             ::GlobalFree(cbData);
         ::CloseClipboard();
@@ -166,7 +168,9 @@ void Pasteboard::writeURL(const KURL& url, const String& titleStr, Frame* frame)
 
     // write to clipboard in format CF_HTML to be able to paste into contenteditable areas as a link
     if (::OpenClipboard(m_owner)) {
-        HGLOBAL cbData = createGlobalData(markupToCF_HTML(urlToMarkup(url, title), ""));
+        Vector<char> data;
+        markupToCF_HTML(urlToMarkup(url, title), "", data);
+        HGLOBAL cbData = createGlobalData(data);
         if (!::SetClipboardData(HTMLClipboardFormat, cbData))
             ::GlobalFree(cbData);
         ::CloseClipboard();
@@ -174,7 +178,7 @@ void Pasteboard::writeURL(const KURL& url, const String& titleStr, Frame* frame)
 
     // bare-bones CF_UNICODETEXT support
     if (::OpenClipboard(m_owner)) {
-        HGLOBAL cbData = createGlobalData(url.url());
+        HGLOBAL cbData = createGlobalData(url.string());
         if (!::SetClipboardData(CF_UNICODETEXT, cbData))
             ::GlobalFree(cbData);
         ::CloseClipboard();
@@ -198,13 +202,8 @@ void Pasteboard::writeImage(Node* node, const KURL&, const String&)
     HBITMAP resultBitmap = CreateCompatibleBitmap(dc, image->width(), image->height());
     HBITMAP oldBitmap = (HBITMAP)SelectObject(compatibleDC, resultBitmap);
 
-    BITMAPINFO bmInfo = {0};
-    bmInfo.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmInfo.bmiHeader.biWidth = image->width();
-    bmInfo.bmiHeader.biHeight = image->height();
-    bmInfo.bmiHeader.biPlanes = 1;
-    bmInfo.bmiHeader.biBitCount = 32;
-    bmInfo.bmiHeader.biCompression = BI_RGB;
+    BitmapInfo bmInfo = BitmapInfo::create(image->size());
+
     HBITMAP coreBitmap = CreateDIBSection(dc, &bmInfo, DIB_RGB_COLORS, 0, 0, 0);
     HBITMAP oldSource = (HBITMAP)SelectObject(sourceDC, coreBitmap);
     image->getHBITMAP(coreBitmap);

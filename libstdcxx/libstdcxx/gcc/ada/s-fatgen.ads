@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2003 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005 Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -41,7 +41,7 @@ generic
     type T is digits <>;
 
 package System.Fat_Gen is
-pragma Pure (Fat_Gen);
+   pragma Pure;
 
    subtype UI is Integer;
    --  The runtime representation of universal integer for the purposes of
@@ -71,6 +71,8 @@ pragma Pure (Fat_Gen);
 
    function Machine           (X : T)                       return T;
 
+   function Machine_Rounding  (X : T)                       return T;
+
    function Model             (X : T)                       return T;
 
    function Pred              (X : T)                       return T;
@@ -95,6 +97,8 @@ pragma Pure (Fat_Gen);
    --  register, and the whole point of 'Valid is to prevent exceptions.
    --  Note that the object of type T must have the natural alignment
    --  for type T. See Unaligned_Valid for further discussion.
+   --
+   --  Note: this routine does not work for Vax_Float ???
 
    function Unaligned_Valid (A : System.Address) return Boolean;
    --  This version of Valid is used if the floating-point value to
@@ -112,11 +116,16 @@ pragma Pure (Fat_Gen);
    --  not require strict alignment (e.g. the ia32/x86), since on a
    --  target not requiring strict alignment, it is fine to pass a
    --  non-aligned value to the standard Valid routine.
+   --
+   --  Note: this routine does not work for Vax_Float ???
 
 private
    pragma Inline (Machine);
    pragma Inline (Model);
-   pragma Inline_Always (Valid);
-   pragma Inline_Always (Unaligned_Valid);
+
+   --  Note: previously the validity checking subprograms (Unaligned_Valid and
+   --  Valid) were also inlined, but this was changed since there were some
+   --  problems with this inlining in optimized mode, and in any case it seems
+   --  better to avoid this inlining (space and robustness considerations).
 
 end System.Fat_Gen;

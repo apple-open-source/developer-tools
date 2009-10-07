@@ -4,8 +4,7 @@
 /* Call to inlinex1 should be inlined.  */
 /* { dg-final { scan-assembler-not "(\tcall|\tbl)\[ 	a-zA-Z0-9_\]*inlinex1" } } */
 /* Call to calleex1 should be called, not inlined.  */
-/* APPLE LOCAL ARM different inline heuristics */
-/* { dg-final { scan-assembler "(\tcall|\tbl)\[ 	a-zA-Z0-9_\]*calleex1"  { xfail arm*-apple-darwin* } } } */
+/* { dg-final { scan-assembler "(\tcall|\tbl)\[ 	a-zA-Z0-9_\]*calleex1" } } */
 
 /* Insure that trivial callees (up to 30 "estimated insns") are
    inlined only if marked 'inline' in C++/Obj-C++.  It's unfortunate,

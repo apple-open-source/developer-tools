@@ -1,6 +1,6 @@
-/* APPLE LOCAL file mainline */
 /* Do not warn about "slightly" mismatched method signatures if 
    -Wstrict-selector-match is off.  */
+
 /* { dg-do compile } */
 /* { dg-options "-Wno-strict-selector-match" } */
 

@@ -1,7 +1,6 @@
-/* APPLE LOCAL file 64-bit mainline */
+/* APPLE LOCAL file 64-bit */
 /* 64-bit Darwin officially doesn't like the mac68k alignment pragma.  */
 
-/* APPLE LOCAL darwin10 */
 /* { dg-do compile { target powerpc*-*-darwin[8912]* } } */
 /* { dg-options "-m64" } */
 

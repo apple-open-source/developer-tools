@@ -56,6 +56,12 @@ enum {
     kQuickPollInterval = 1
 };
 
+// This bit lets us distinguish between reads & writes in the transactionCompletion switch statement
+#define kWriteIndicatorBit                  0x8000
+
+// Argument to transactionCompletion indicating we should start/re-start polling
+#define kTransactionRestart                 0xFFFFFFFF
+
 #define kErrorRetryAttemptsExceeded         "Read Retry Attempts Exceeded"
 #define kErrorOverallTimeoutExpired         "Overall Read Timeout Expired"
 #define kErrorZeroCapacity                  "Capacity Read Zero"
@@ -77,7 +83,9 @@ static const uint32_t kBatteryReadAllTimeout = 10000;       // 10 seconds
 // In microseconds.
 static const uint32_t microSecDelayTable[kRetryAttempts] = 
     { 10, 100, 1000, 10000, 250000 };
-                
+
+static const unsigned int   kExpectedDesignCycleBytes = 3;
+
 
 /* The union of the errors listed in STATUS_ERROR_NEEDS_RETRY
  * and STATUS_ERROR_NON_RECOVERABLE should equal the entirety of 
@@ -117,15 +125,54 @@ static const OSSymbol *_ManfDateSym =
                         OSSymbol::withCString(kIOPMPSManufactureDateKey);
 static const OSSymbol *_DesignCapacitySym = 
                         OSSymbol::withCString(kIOPMPSDesignCapacityKey);
-static const OSSymbol *_TemperatureSym = 
-                        OSSymbol::withCString("Temperature");
+//static const OSSymbol *_TemperatureSym = 
+//                        OSSymbol::withCString("Temperature");
 static const OSSymbol *_CellVoltageSym = 
                         OSSymbol::withCString("CellVoltage");
 static const OSSymbol *_ManufacturerDataSym = 
                         OSSymbol::withCString("ManufacturerData");
+static const OSSymbol *_PFStatusSym =
+                        OSSymbol::withCString("PermanentFailureStatus");
+static const OSSymbol *_DesignCycleCount70Sym =
+                        OSSymbol::withCString("DesignCycleCount70");
+static const OSSymbol *_DesignCycleCount9CSym =
+                        OSSymbol::withCString("DesignCycleCount9C");
+
+/* _SerialNumberSym represents the manufacturer's 16-bit serial number in
+    numeric format. 
+ */
+static const OSSymbol *_SerialNumberSym =
+                        OSSymbol::withCString("FirmwareSerialNumber");
+
+/* _HardwareSerialSym == AppleSoftwareSerial
+   represents the Apple-defined 12+ character string in firmware.
+ */
+static const OSSymbol *_HardwareSerialSym =
+                        OSSymbol::withCString("BatterySerialNumber");
+
+/* _ChargeStatusSym tracks any irregular charging patterns in the battery
+    that might cause it to stop charging mid-charge.
+ */
+// TODO: Delete these local definitions sync'd with OS (rdar://5608255)
+#ifndef kIOPMPSBatteryChargeStatusKey
+    #define kIOPMPSBatteryChargeStatusKey               "ChargeStatus"
+    #define kIOPMBatteryChargeStatusTooHot              "HighTemperature"
+    #define kIOPMBatteryChargeStatusTooCold             "LowTemperature"
+    #define kIOPMBatteryChargeStatusGradient            "BatteryTemperatureGradient"
+#endif
+
+static const OSSymbol *_ChargeStatusSym =
+                        OSSymbol::withCString(kIOPMPSBatteryChargeStatusKey);
+static const OSSymbol *_ChargeStatusTooHot =                        
+                        OSSymbol::withCString(kIOPMBatteryChargeStatusTooHot);
+static const OSSymbol *_ChargeStatusTooCold =                        
+                        OSSymbol::withCString(kIOPMBatteryChargeStatusTooCold);
+static const OSSymbol *_ChargeStatusGradient =                        
+                        OSSymbol::withCString(kIOPMBatteryChargeStatusGradient);
 
 
 #define super IOPMPowerSource
+
 OSDefineMetaClassAndStructors(AppleSmartBattery,IOPMPowerSource)
 
 /******************************************************************************
@@ -174,7 +221,7 @@ bool AppleSmartBattery::init(void)
 
 bool AppleSmartBattery::start(IOService *provider)
 {
-    IOReturn        err;
+    IORegistryEntry *p = NULL;
     OSNumber        *debugPollingSetting;
    
     BattLog("AppleSmartBattery loading...\n");
@@ -199,18 +246,18 @@ bool AppleSmartBattery::start(IOService *provider)
         fPollingOverridden = false;
     }
     
-    fPollingNow = false;
-    fCancelPolling = false;
-    fRetryAttempts = 0;
-    fPermanentFailure = false;
-    fFullyDischarged = false;
-    fFullyCharged = false;
-    fBatteryPresent = false;
-    fACConnected = false;
-    fAvgCurrent = 0;
-    fInflowDisabled = false;
-    fRebootPolling = false;
-    fCellVoltages = NULL;
+    fPollingNow             = false;
+    fCancelPolling          = false;
+    fRetryAttempts          = 0;
+    fPermanentFailure       = false;
+    fFullyDischarged        = false;
+    fFullyCharged           = false;
+    fBatteryPresent         = -1;
+    fACConnected            = -1;
+    fAvgCurrent             = 0;
+    fInflowDisabled         = false;
+    fRebootPolling          = false;
+    fCellVoltages           = NULL;
 
     fIncompleteReadRetries = kIncompleteReadRetryMax;
     
@@ -232,6 +279,18 @@ bool AppleSmartBattery::start(IOService *provider)
       || (kIOReturnSuccess != fWorkLoop->addEventSource(fPollTimer)) )
     {
         return false;
+    }
+    
+    // Find an object of class IOACPIPlatformDevice in my parent's
+    // IORegistry service plane ancsetry.
+    fACPIProvider = NULL;
+    p = this;
+    while (p) {
+        p = p->getParentEntry(gIOServicePlane);
+        if (OSDynamicCast(IOACPIPlatformDevice, p)) {
+            fACPIProvider = (IOACPIPlatformDevice *)p;
+            break;
+        }
     }
     
     // Publish the intended period in seconds that our "time remaining"
@@ -318,13 +377,14 @@ bool AppleSmartBattery::pollBatteryState(int path)
 
     if( !fPollingNow )
     {
-        /* Start the battery polling state machine in the 0 start state */    
-        return transactionCompletion((void *)0, NULL);
+        /* Start the battery polling state machine (resetting it if it's already in progress) */    
+        return transactionCompletion((void *)kTransactionRestart, NULL);
     } else {
         /* Outstanding transaction in process; flag it to restart polling from
            scratch when this flag is noticed. 
          */
         fRebootPolling = true;
+        return true;
     }
 }
 
@@ -367,26 +427,103 @@ void AppleSmartBattery::handleChargeInhibited(bool charge_state)
     pollBatteryState(kExistingBatteryPath);
 }
 
-void AppleSmartBattery::handleUCStalled(bool stall)
-{
-    if (stall) 
-    {
-        setProperty("BatteryUpdatesUserClientStalled", true);
-    
-        /* Stalled by user client. Halt all activity. */
-        fStalledByUserClient = true;
-        fPollTimer->cancelTimeout();    
+// One "wait interval" is 100ms
+#define kWaitExclusiveIntervals 30
 
-        if (fPollingNow)
-        {
-            fCancelPolling = true;
-            fBatteryReadAllTimer->cancelTimeout();
+void AppleSmartBattery::handleExclusiveAccess(bool exclusive)
+{
+    /* Write exclusive access bit to SMC via ACPI registers
+     *
+     * #define ACPIIO_SMB_MODE       ACPIIO_SMB_BASE + 0x29
+     * Mode bit masks: 0x01 - OS requests exclusive access to battery
+     *                 0x10 - SMC acknowledges OS exclusive access to battery
+     *                            (resets to non-exclusive (0) on warm restart
+     *                              or leaving S0 or timeout)
+     */
+
+    IOACPIAddress       ecBehaviorsAddress;
+    IOReturn            ret = kIOReturnSuccess;
+    UInt64              value64 = 0;
+    int                 waitCount = 0;
+
+    // Shut off SMC hardware communications with the batteries
+    do {
+
+        if (!fACPIProvider) 
+            break;
+            
+        /* Read BYTE */
+        // Register address is 0x29 + SMB base 0x20
+        ecBehaviorsAddress.addr64 = 0x20 + 0x29;
+        ret = fACPIProvider->readAddressSpace( &value64, 
+                        kIOACPIAddressSpaceIDEmbeddedController,
+                        ecBehaviorsAddress, 8, 0, 0);
+        if (kIOReturnSuccess != ret) {
+            break;
         }
+                    
+        /* Modify - set 0x01 to indicate the SMC should not communicate with battery*/
+        if (exclusive) {
+            value64 |= 1;
+        } else {
+            // Zero'ing out bit 0x01
+            value64 &= ~1;
+        }
+
+        /* Write BYTE */
+        ret = fACPIProvider->writeAddressSpace( value64, 
+                        kIOACPIAddressSpaceIDEmbeddedController,
+                        ecBehaviorsAddress, 8, 0, 0);
+        if (kIOReturnSuccess != ret) {
+            break;
+        }
+
+        // Wait up to 3 seconds for the SMC to set/clear bit 0x10
+        // As-implemented, this waits at least 100 msec before proceeding.
+        // That is OK - this is a very infrequent code path.
+
+        waitCount = 0;
+        value64 = 0;
+        ret = kIOReturnSuccess;
+        while ((waitCount < kWaitExclusiveIntervals) 
+            && (kIOReturnSuccess == ret))
+        {
+            waitCount++;
+            IOSleep(100);
+
+            ret = fACPIProvider->readAddressSpace( &value64, 
+                            kIOACPIAddressSpaceIDEmbeddedController,
+                            ecBehaviorsAddress, 8, 0, 0);
+
+            if (exclusive) {
+                // wait for 0x10 bit to set
+                if ((value64 & 0x10) == 0x10)
+                    break;
+            } else {
+                // wait for 0x10 bit to clear
+                if ((value64 & 0x10) == 0)
+                    break;
+            }
+        }
+
+    } while (0);
+
+
+    if (exclusive) 
+    {
+        // Communications with battery have been shutdown for
+        // exclusive access by the user client.
+        setProperty("BatteryUpdatesBlockedExclusiveAccess", true);    
+        fStalledByUserClient = true;
+        
     } else {
-        removeProperty("BatteryUpdatesUserClientStalled");
-        /* Unstalled! restart polling */
+        // Exclusive access disabled! restart polling
+        removeProperty("BatteryUpdatesBlockedExclusiveAccess");
         fStalledByUserClient = false;
-        pollBatteryState(kNewBatteryPath);
+
+        // Restore battery state
+        // Do a complete battery poll
+        pollBatteryState( kNewBatteryPath );
     }
 }
 
@@ -455,14 +592,28 @@ bool AppleSmartBattery::transactionCompletion(
     void *ref, 
     IOSMBusTransaction *transaction)
 {
-    int         next_state = (int)ref;
-    int16_t     my_signed_16;
-    uint16_t    my_unsigned_16;
+    int         next_state = (uintptr_t)ref;
     uint32_t    delay_for = 0;
-    IOSMBusStatus transaction_status;
+    IOSMBusStatus transaction_status = kIOSMBusStatusPECError;
     bool        transaction_needs_retry = false;
     char        recv_str[kIOSMBusMaxDataCount+1];
-    OSNumber    *cell_volt_num;
+
+    // scratch variables
+    int16_t     my_signed_16;
+    uint16_t    my_unsigned_16;
+    OSNumber    *writeNum;
+    unsigned long long writeByte;
+    OSNumber    *cell_volt_num = NULL;
+    OSNumber    *pfstatus_num = NULL;
+    
+    /* If a user client has exclusive access to the SMBus, 
+     * we'll exit immediately.
+     */
+    if (fStalledByUserClient)
+    {
+        fPollingNow = false;
+        return true; 
+    }
 
     /* Do we need to abort an ongoing polling session? 
        Example: If a battery has just been removed in the midst of our polling, we
@@ -480,7 +631,6 @@ bool AppleSmartBattery::transactionCompletion(
         }
     }
 
-
     /* 
      * Retry a failed transaction
      */
@@ -488,7 +638,7 @@ bool AppleSmartBattery::transactionCompletion(
     {
         // NULL argument for transaction means we should start
         // the state machine from scratch. Zero is the start state.
-        next_state = 0;
+        next_state = kTransactionRestart;
         fRebootPolling = false;
     } else {
         transaction_status = transaction->status;
@@ -624,7 +774,7 @@ bool AppleSmartBattery::transactionCompletion(
      
     switch(next_state)
     {
-        case 0:
+        case kTransactionRestart:
             
             /* Cancel polling timer in case this round of reads was initiated
                by an alarm. We re-set the 30 second poll later. */
@@ -647,11 +797,14 @@ bool AppleSmartBattery::transactionCompletion(
             // Determines if AC is "charge capable"
             if( kIOSMBusStatusOK == transaction_status ) 
             {
-                int new_ac_connected;
+                int new_ac_connected = 0;
+                uint16_t charge_disrupted = 0;
 
                 my_unsigned_16 = (transaction->receiveData[1] << 8)
                                 | transaction->receiveData[0];
-
+#if 0
+                IOLog("AppleSmartBattery::MStateCont = 0x%04x\n", my_unsigned_16);
+#endif
                 // If fInflowDisabled is currently set, then we acknowledge 
                 // our lack of AC power.
                 //
@@ -682,6 +835,51 @@ bool AppleSmartBattery::transactionCompletion(
                 setExternalConnected(fACConnected);
                 setExternalChargeCapable(
                         (my_unsigned_16 & kMPowerNotGoodBit) ? false:true);
+                        
+                        
+         /* Check whether our charge has been terminated due to temperature
+            If yes, then the user's battery level is likely stuck somewhere
+            less than 100% and the CPU is not charging.
+
+            We use the reserved bits in BatterySystemStateCont(0x02) register 
+            in the Smart Battery System Manager Specification to specify these 
+            thermal reasons.
+        
+            Bit 12 to Bit 15 are reserved.  We will use Bit 14 and Bit 15 to specify 
+            three types of thermal conditions:
+
+            Bit 15,   Bit 14
+            ---------------
+            1             0                battery charging limited/stopped due to high temperature
+            0             1                battery charging limited/stopped due to low temperature
+            1             1                battery charging limited/stopped due to battery temperature 
+                                             gradient (difference between 2 battery thermistors)
+          */
+
+                
+                charge_disrupted = my_unsigned_16 & (kMReservedNoChargeBit14
+                                                    | kMReservedNoChargeBit15);
+            
+#if 0
+                IOLog("AppleSmartBattery: Charge Disrupted = 0x%04x\n", charge_disrupted);
+#endif
+                if (kMReservedNoChargeBit14 == charge_disrupted)
+                {
+                setChargeStatus(_ChargeStatusTooCold);
+                } else if (charge_disrupted == kMReservedNoChargeBit15)
+                {
+                setChargeStatus(_ChargeStatusTooHot);
+                } else if (charge_disrupted == (kMReservedNoChargeBit14 
+                                                | kMReservedNoChargeBit15))
+                {
+                    setChargeStatus(_ChargeStatusGradient);
+                } else {
+                    // clear any existing charge status, since there are no
+                    // charge-preventing conditions any longer.
+                    if (chargeStatus()) {
+                        setChargeStatus(NULL);
+                    }
+                }
             } else {
                 fACConnected = false;
                 setExternalConnected(true);
@@ -806,6 +1004,39 @@ bool AppleSmartBattery::transactionCompletion(
                 return true;
             }
 
+            writeWordAsync(kSMBusBatteryAddr, kBManufacturerAccessCmd, kBExtendedPFStatusCmd);
+
+            break;
+
+/************ write battery permanent failure status register ****************/
+
+        case (kWriteIndicatorBit | kBManufacturerAccessCmd):
+            if (kIOSMBusStatusOK == transaction_status) 
+            {
+            // We successfully wrote 0x53 to register 0x0; meaning we can now
+            // read from register 0x0 to get out the permanent failure status.
+                readWordAsync(kSMBusBatteryAddr, kBManufacturerAccessCmd);            
+            }
+
+            break;
+
+/************ Finish read battery permanent failure status register ****************/
+
+        case kBManufacturerAccessCmd:
+
+            my_unsigned_16 = ((uint16_t)transaction->receiveData[1] << 8)
+                                | (uint16_t)transaction->receiveData[0];
+
+            if (kIOSMBusStatusOK == transaction_status) {
+                pfstatus_num = OSNumber::withNumber((unsigned long long)my_unsigned_16, (int)32);
+            } else {
+                pfstatus_num = OSNumber::withNumber((unsigned long long)0, (int)32);
+            }
+            if (pfstatus_num)
+            {
+                setPSProperty(_PFStatusSym, pfstatus_num);
+                pfstatus_num->release();
+            }
 
             // The battery read state machine may fork at this stage.
             if(kNewBatteryPath == fMachinePath) {
@@ -864,7 +1095,8 @@ bool AppleSmartBattery::transactionCompletion(
             } else {
                 properties->removeObject( _ManufacturerDataSym );
             }
-            
+
+
             readWordAsync(kSMBusBatteryAddr, kBManufactureDateCmd);
         break;
 
@@ -918,23 +1150,33 @@ bool AppleSmartBattery::transactionCompletion(
 /************ Only executed in ReadForNewBatteryPath ****************/
         case kBSerialNumberCmd:
             if( kIOSMBusStatusOK == transaction_status ) 
+            {        
+                /* Gets the firmware's 16-bit serial number out */
+                setSerialNumber((uint16_t) 
+                                (transaction->receiveData[0] 
+                              | (transaction->receiveData[1] << 8) ));        
+            } else {
+                properties->removeObject(_SerialNumberSym);
+            }
+            
+            readBlockAsync(kSMBusBatteryAddr, kBAppleHardwareSerialCmd);
+            break;
+
+/************ Only executed in ReadForNewBatteryPath ****************/
+        case kBAppleHardwareSerialCmd:
+
+            if( kIOSMBusStatusOK == transaction_status ) 
             {
-                const OSSymbol *serialSym;
-        
-                // IOPMPowerSource expects an OSSymbol for serial number, so we
-                // sprint this 16-bit number into an OSSymbol
-                
-                bzero(recv_str, sizeof(recv_str));
-                snprintf(recv_str, sizeof(recv_str), "%d", 
-                    ( transaction->receiveData[0] 
-                    | (transaction->receiveData[1] << 8) ));
-                serialSym = OSSymbol::withCString(recv_str);
-                if(serialSym) {
-                    setSerial( (OSSymbol *) serialSym);
-                    serialSym->release();        
+                // Expect transaction->receiveData to contain a NULL-terminated
+                // 12+ character ASCII string.
+                const OSSymbol *serialSymbol = OSSymbol::withCString(
+                                            (char *)transaction->receiveData);
+                if (serialSymbol) {                
+                    setPSProperty(_HardwareSerialSym, (OSObject *)serialSymbol);
+                    serialSymbol->release();
                 }
             } else {
-                properties->removeObject(serialKey);
+                properties->removeObject(_HardwareSerialSym);
             }
             
             readWordAsync(kSMBusBatteryAddr, kBDesignCapacityCmd);
@@ -1027,7 +1269,7 @@ bool AppleSmartBattery::transactionCompletion(
                     }
                 }
             } else {
-                fFullChargeCapacity == 0;
+                fFullChargeCapacity = 0;
                 setMaxCapacity(0);
             }
 
@@ -1274,7 +1516,6 @@ bool AppleSmartBattery::transactionCompletion(
                 setInstantAmperage( 0 );
             }
         
-
             /* Cancel read-completion timeout; Successfully read battery state */
             fBatteryReadAllTimer->cancelTimeout();
 
@@ -1345,12 +1586,12 @@ void AppleSmartBattery::clearBatteryState(bool do_update)
     // Only clear out battery state; don't clear manager state like AC Power.
     // We just zero out the int and bool values, but remove the OSType values.
 
-    fRetryAttempts = 0;
-    fFullyDischarged = false;
-    fFullyCharged = false;
-    fBatteryPresent = false;
-    fACConnected = false;
-    fAvgCurrent = 0;
+    fRetryAttempts          = 0;
+    fFullyDischarged        = false;
+    fFullyCharged           = false;
+    fBatteryPresent         = false;
+    fACConnected            = -1;
+    fAvgCurrent             = 0;
     
     setBatteryInstalled(false);
     setIsCharging(false);
@@ -1371,7 +1612,9 @@ void AppleSmartBattery::clearBatteryState(bool do_update)
     removeProperty(batteryInfoKey);
     properties->removeObject(errorConditionKey);
     removeProperty(errorConditionKey);
-        
+    properties->removeObject(_ChargeStatusSym);
+    removeProperty(_ChargeStatusSym);
+    
     rebuildLegacyIOBatteryInfo();
 
     if(do_update) {
@@ -1410,11 +1653,31 @@ void AppleSmartBattery::clearBatteryState(bool do_update)
     legacyDict->release();
 }
 
+
 /******************************************************************************
  *  Power Source value accessors
  *  These supplement the built-in accessors in IOPMPowerSource.h, and should 
  *  arguably be added back into the superclass IOPMPowerSource
  ******************************************************************************/
+
+void AppleSmartBattery::setSerialNumber(uint16_t sernum)
+{
+    OSNumber    *n = OSNumber::withNumber(sernum, 16);
+    if (n) {
+        setPSProperty(_SerialNumberSym, n);
+        n->release();
+    }
+}
+
+uint16_t AppleSmartBattery::serialNumber(void)
+{
+    OSNumber    *n = OSDynamicCast(OSNumber, properties->getObject(_SerialNumberSym));
+    if (n) {
+        return n->unsigned16BitValue();
+    } else {
+        return 0;
+    }
+}
 
 void AppleSmartBattery::setMaxErr(int error)
 {
@@ -1545,6 +1808,20 @@ void    AppleSmartBattery::setManufacturerData(uint8_t *buffer, uint32_t bufferS
     }
 }
 
+void    AppleSmartBattery::setChargeStatus(const OSSymbol *sym)
+{
+    if (NULL == sym) {
+        properties->removeObject(_ChargeStatusSym);
+        removeProperty(_ChargeStatusSym);
+    } else {
+        setPSProperty(_ChargeStatusSym, (OSObject *)sym);
+    }
+}
+
+const OSSymbol *AppleSmartBattery::chargeStatus(void)
+{
+    return (const OSSymbol *)properties->getObject(_ChargeStatusSym);
+}
 
 /******************************************************************************
  ******************************************************************************
@@ -1574,6 +1851,33 @@ IOReturn AppleSmartBattery::readWordAsync(
                     (void *)cmd);
 
     return ret;
+}
+
+IOReturn AppleSmartBattery::writeWordAsync(
+    uint8_t address, 
+    uint8_t cmd, 
+    uint16_t writeWord)
+{
+    IOReturn                ret = kIOReturnError;
+    bzero(&fTransaction, sizeof(IOSMBusTransaction));
+
+    // All transactions are performed async
+    fTransaction.protocol      = kIOSMBusProtocolWriteWord;
+    fTransaction.address       = address;
+    fTransaction.command       = cmd;
+    fTransaction.sendData[0]   = writeWord & 0xFF;
+    fTransaction.sendData[1]   = (writeWord >> 8) & 0xFF;
+    fTransaction.sendDataCount = 2;
+
+    ret = fProvider->performTransaction(
+                    &fTransaction,
+                    OSMemberFunctionCast( IOSMBusTransactionCompletion,
+                      this, &AppleSmartBattery::transactionCompletion),
+                    (OSObject *)this,
+                    (void *)((uint32_t)cmd | kWriteIndicatorBit));
+
+    return ret;
+
 }
 
 IOReturn AppleSmartBattery::readBlockAsync(

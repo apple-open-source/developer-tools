@@ -20,12 +20,14 @@ struct B {
 B::operator const A&() const {
         static A a;
         a.i = i;
-        printf("convert B to A at %x\n", &a);
+	/* APPLE LOCAL default to Wformat-security 5764921 */
+        printf("convert B to A at %p\n", (void*)&a);
         return a;
 }
 
 void f(A &a) { // { dg-error "" } in passing argument
-        printf("A at %x is %d\n", &a, a.i);
+  /* APPLE LOCAL default to Wformat-security 5764921 */
+  printf("A at %p is %d\n", (void*)&a, a.i);
 }
 
 int main() {

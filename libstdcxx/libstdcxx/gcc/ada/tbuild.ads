@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2004, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -69,20 +69,6 @@ package Tbuild is
    --  Must_Be_Byte_Aligned is set in the attribute reference node. The
    --  Attribute_Name must be Name_Address or Name_Unrestricted_Access.
 
-   function Make_DT_Component
-     (Loc  : Source_Ptr;
-      Typ  : Entity_Id;
-      I    : Positive) return Node_Id;
-   --  Gives a reference to the Ith component of the Dispatch Table of
-   --  a given Tagged Type.
-   --
-   --  I = 1    --> Inheritance_Depth
-   --  I = 2    --> Tags (array of ancestors)
-   --  I = 3, 4 --> predefined primitive
-   --            function _Size (X : Typ) return Long_Long_Integer;
-   --            function _Equality (X : Typ; Y : Typ'Class) return Boolean;
-   --  I >= 5   --> User-Defined Primitive Operations
-
    function Make_DT_Access
      (Loc : Source_Ptr; Rec : Node_Id; Typ : Entity_Id) return Node_Id;
    --  Create an access to the Dispatch Table by using the Tag field
@@ -131,6 +117,13 @@ package Tbuild is
       Intval : Int) return Node_Id;
    pragma Inline (Make_Integer_Literal);
    --  A convenient form of Make_Integer_Literal taking Int instead of Uint
+
+   function Make_Linker_Section_Pragma
+     (Ent : Entity_Id;
+      Loc : Source_Ptr;
+      Sec : String) return Node_Id;
+   --  Construct a Linker_Section pragma for entity Ent, using string Sec as
+   --  the section name. Loc is the Sloc value to use in building the pragma.
 
    function Make_Raise_Constraint_Error
      (Sloc      : Source_Ptr;

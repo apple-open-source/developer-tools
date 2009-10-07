@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 2004-2009 Apple Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -49,12 +49,10 @@
 #define SERVER_STATUS_ON_DEMAND 2
 
 #define DEFAULT_MARK_SEC 0
-#define DEFAULT_SWEEP_SEC 3600
-#define DEFAULT_FIRST_SWEEP_SEC 300
 #define DEFAULT_UTMP_TTL_SEC 31622400
 #define DEFAULT_FS_TTL_SEC 31622400
-#define DEFAULT_TTL_SEC 86400
 #define DEFAULT_BSD_MAX_DUP_SEC 30
+#define DEFAULT_MPS_LIMIT 500
 #define BILLION 1000000000
 
 #define NOTIFY_DELAY 1
@@ -64,47 +62,18 @@
 #define streq(A,B) (strcmp(A,B)==0)
 #define forever for(;;)
 
-static int reset = 0;
-static double mach_time_factor = 1.0;
-
-static TAILQ_HEAD(ml, module_list) Moduleq;
-
-/* global */
-int asl_log_filter = ASL_FILTER_MASK_UPTO(ASL_LEVEL_NOTICE);
-int archive_enable = 0;
-int restart = 0;
-int debug = 0;
-mach_port_t server_port = MACH_PORT_NULL;
-launch_data_t launch_dict;
-const char *debug_file = NULL;
+static uint64_t time_start = 0;
+static uint64_t mark_last = 0;
+static uint64_t ping_last = 0;
+static uint64_t time_last = 0;
 
 extern int __notify_78945668_info__;
 extern int _malloc_no_asl_log;
 
-/* monitor the database */
-uint64_t db_max_size = 25600000;
-uint64_t db_curr_size = 0;
-uint64_t db_shrink_size;
-uint64_t db_curr_empty = 0;
-uint64_t db_max_empty;
+static TAILQ_HEAD(ml, module_list) Moduleq;
 
-/* kernel log fd */
-extern int kfd;
-
-/* timers */
-uint64_t time_last = 0;
-uint64_t time_start = 0;
-uint64_t mark_last = 0;
-uint64_t mark_time = 0;
-uint64_t sweep_last = 0;
-uint64_t sweep_time = DEFAULT_SWEEP_SEC;
-uint64_t first_sweep_delay = DEFAULT_FIRST_SWEEP_SEC;
-uint64_t bsd_flush_time = 0;
-uint64_t bsd_max_dup_time = DEFAULT_BSD_MAX_DUP_SEC;
-
-time_t utmp_ttl = DEFAULT_UTMP_TTL_SEC;
-time_t fs_ttl = DEFAULT_FS_TTL_SEC;
-time_t ttl = DEFAULT_TTL_SEC;
+/* global */
+struct global_s global;
 
 /* Static Modules */
 int asl_in_init();
@@ -132,15 +101,21 @@ int bsd_out_reset();
 int bsd_out_close();
 static int activate_bsd_out = 1;
 
+int remote_init();
+int remote_reset();
+int remote_close();
+static int activate_remote = 0;
+
 int udp_in_init();
 int udp_in_reset();
 int udp_in_close();
 static int activate_udp_in = 1;
 
 extern void database_server();
-extern void db_worker();
+extern void output_worker();
 extern void launchd_drain();
-extern void bsd_flush_duplicates();
+extern void bsd_flush_duplicates(time_t now);
+extern void bsd_close_idle_files(time_t now);
 
 /*
  * Module approach: only one type of module.  This module may implement
@@ -253,6 +228,25 @@ static_modules()
 		tmp->init = bsd_out_init;
 		tmp->reset = bsd_out_reset;
 		tmp->close = bsd_out_close;
+		TAILQ_INSERT_TAIL(&Moduleq, tmp, entries);
+	}
+
+	if (activate_remote != 0)
+	{
+		tmp = calloc(1, sizeof(struct module_list));
+		if (tmp == NULL) return 1;
+
+		tmp->name = strdup("remote");
+		if (tmp->name == NULL)
+		{
+			free(tmp);
+			return 1;
+		}
+
+		tmp->module = NULL;
+		tmp->init = remote_init;
+		tmp->reset = remote_reset;
+		tmp->close = remote_close;
 		TAILQ_INSERT_TAIL(&Moduleq, tmp, entries);
 	}
 
@@ -379,7 +373,13 @@ detach(void)
 static void
 catch_sighup(int x)
 {
-	reset = 1;
+	global.reset = RESET_CONFIG;
+}
+
+static void
+catch_siginfo(int x)
+{
+	global.reset = RESET_NETWORK;
 }
 
 static void
@@ -399,15 +399,10 @@ send_reset(void)
 static void
 timed_events(struct timeval **run)
 {
-	uint64_t nanonow, now, delta, t;
+	time_t now, delta, t;
 	static struct timeval next;
-	double d;
 
-	nanonow = mach_absolute_time();
-	d = nanonow;
-	d = d * mach_time_factor;
-	nanonow = d;
-	now = nanonow / 1000000000;
+	now = time(NULL);
 
 	*run = NULL;
 	next.tv_sec = 0;
@@ -419,9 +414,7 @@ timed_events(struct timeval **run)
 		time_start = now;
 		time_last = now;
 		mark_last = now;
-
-		/* fake sweep_last so that we plan to run first_sweep_delay seconds after startup */
-		sweep_last = (now - sweep_time) + first_sweep_delay;
+		ping_last = now;
 	}
 
 	/*
@@ -443,25 +436,40 @@ timed_events(struct timeval **run)
 		 * Reset "last" times to current time.
 		 */
 		time_last = now;
-		sweep_last = now;
 		mark_last = now;
+		ping_last = now;
 	}
 
 	/*
-	 * Run database archiver.
+	 * Tickle bsd_out module to flush duplicates.
 	 */
-	if (sweep_time > 0)
+	if (global.bsd_flush_time > 0)
 	{
-		delta = now - sweep_last;
-		if (delta >= sweep_time)
+		bsd_flush_duplicates(now);
+		bsd_close_idle_files(now);
+		if (global.bsd_flush_time > 0)
 		{
-			db_archive(time(NULL) - ttl, db_shrink_size);
-			sweep_last = now;
-			t = sweep_time;
+			if (next.tv_sec == 0) next.tv_sec = global.bsd_flush_time;
+			else if (global.bsd_flush_time < next.tv_sec) next.tv_sec = global.bsd_flush_time;
+		}
+	}
+
+	/*
+	 * Tickle asl_store to sweep file cache
+	 */
+	if (global.asl_store_ping_time > 0)
+	{
+		delta = now - ping_last; 
+		if (delta >= global.asl_store_ping_time)
+		{
+			db_ping_store();
+			bsd_close_idle_files(now);
+			ping_last = now;
+			t = global.asl_store_ping_time;
 		}
 		else
 		{
-			t = sweep_time - delta;
+			t = global.asl_store_ping_time - delta;
 		}
 
 		if (next.tv_sec == 0) next.tv_sec = t;
@@ -469,49 +477,20 @@ timed_events(struct timeval **run)
 	}
 
 	/*
-	 * Shrink the database if it's too large.
-	 */
-	if (db_curr_size > db_max_size)
-	{
-		db_archive(time(NULL) - ttl, db_shrink_size);
-	}
-
-	/*
-	 * Compact the database if there are too many empty slots.
-	 */
-	if (db_curr_empty > db_max_empty)
-	{
-		db_compact();
-	}
-
-	/*
-	 * Tickle bsd_out module to flush duplicates.
-	 */
-	if (bsd_flush_time > 0)
-	{
-		bsd_flush_duplicates();
-		if (bsd_flush_time > 0)
-		{
-			if (next.tv_sec == 0) next.tv_sec = bsd_flush_time;
-			else if (bsd_flush_time < next.tv_sec) next.tv_sec = bsd_flush_time;
-		}
-	}
-
-	/*
 	 * Send MARK
 	 */
-	if (mark_time > 0)
+	if (global.mark_time > 0)
 	{
 		delta = now - mark_last; 
-		if (delta >= mark_time)
+		if (delta >= global.mark_time)
 		{
 			asl_mark();
 			mark_last = now;
-			t = mark_time;
+			t = global.mark_time;
 		}
 		else
 		{
-			t = mark_time - delta;
+			t = global.mark_time - delta;
 		}
 
 		if (next.tv_sec == 0) next.tv_sec = t;
@@ -533,16 +512,16 @@ init_config()
 	kern_return_t status;
 
 	tmp = launch_data_new_string(LAUNCH_KEY_CHECKIN);
-	launch_dict = launch_msg(tmp);
+	global.launch_dict = launch_msg(tmp);
 	launch_data_free(tmp);
 
-	if (launch_dict == NULL)
+	if (global.launch_dict == NULL)
 	{
 		fprintf(stderr, "%d launchd checkin failed\n", getpid());
 		exit(1);
 	}
 
-	tmp = launch_data_dict_lookup(launch_dict, LAUNCH_JOBKEY_MACHSERVICES);
+	tmp = launch_data_dict_lookup(global.launch_dict, LAUNCH_JOBKEY_MACHSERVICES);
 	if (tmp == NULL)
 	{
 		fprintf(stderr, "%d launchd lookup of LAUNCH_JOBKEY_MACHSERVICES failed\n", getpid());
@@ -556,10 +535,101 @@ init_config()
 		exit(1);
 	}
 
-	server_port = launch_data_get_machport(pdict);
+	global.server_port = launch_data_get_machport(pdict);
 
-	status = mach_port_insert_right(mach_task_self(), server_port, server_port, MACH_MSG_TYPE_MAKE_SEND);
-	if (status != KERN_SUCCESS) fprintf(stderr, "Warning! Can't make send right for server_port: %x\n", status);
+	/* port for receiving internal messages */
+	status = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &(global.self_port));
+	if (status != KERN_SUCCESS)
+	{
+		fprintf(stderr, "mach_port_allocate self_port failed: %d", status);
+		exit(1);
+	}
+
+	status = mach_port_insert_right(mach_task_self(), global.self_port, global.self_port, MACH_MSG_TYPE_MAKE_SEND);
+	if (status != KERN_SUCCESS)
+	{
+		fprintf(stderr, "Can't make send right for self_port: %d\n", status);
+		exit(1);
+	}
+
+	/* port for receiving MACH_NOTIFY_DEAD_NAME notifications */
+	status = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &(global.dead_session_port));
+	if (status != KERN_SUCCESS)
+	{
+		fprintf(stderr, "mach_port_allocate dead_session_port failed: %d", status);
+		exit(1);
+	}
+
+	status = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_PORT_SET, &(global.listen_set));
+	if (status != KERN_SUCCESS)
+	{
+		fprintf(stderr, "mach_port_allocate listen_set failed: %d", status);
+		exit(1);
+	}
+
+	status = mach_port_move_member(mach_task_self(), global.server_port, global.listen_set);
+	if (status != KERN_SUCCESS)
+	{
+		fprintf(stderr, "mach_port_move_member server_port failed: %d", status);
+		exit(1);
+	}
+
+	status = mach_port_move_member(mach_task_self(), global.self_port, global.listen_set);
+	if (status != KERN_SUCCESS)
+	{
+		fprintf(stderr, "mach_port_move_member self_port failed: %d", status);
+		exit(1);
+	}
+
+	status = mach_port_move_member(mach_task_self(), global.dead_session_port, global.listen_set);
+	if (status != KERN_SUCCESS)
+	{
+		fprintf(stderr, "mach_port_move_member dead_session_port failed (%u)", status);
+		exit(1);
+	}
+}
+
+void
+config_debug(int enable, const char *path)
+{
+	OSSpinLockLock(&global.lock);
+
+	global.debug = enable;
+	if (global.debug_file != NULL) free(global.debug_file);
+	global.debug_file = strdup(path);
+
+	OSSpinLockUnlock(&global.lock);
+}
+
+void
+config_data_store(int type, uint32_t file_max, uint32_t memory_max, uint32_t mini_max)
+{
+	pthread_mutex_lock(global.db_lock);
+
+	if (global.dbtype & DB_TYPE_FILE)
+	{
+		asl_store_close(global.file_db);
+		global.file_db = NULL;
+	}
+
+	if (global.dbtype & DB_TYPE_MEMORY)
+	{
+		asl_memory_close(global.memory_db);
+		global.memory_db = NULL;
+	}
+
+	if (global.dbtype & DB_TYPE_MINI)
+	{
+		asl_mini_memory_close(global.mini_db);
+		global.mini_db = NULL;
+	}
+
+	global.dbtype = type;
+	global.db_file_max = file_max;
+	global.db_memory_max = memory_max;
+	global.db_mini_max = mini_max;
+
+	pthread_mutex_unlock(global.db_lock);
 }
 
 int
@@ -572,40 +642,119 @@ main(int argc, const char *argv[])
 	struct timeval *runloop_timer, zto;
 	pthread_attr_t attr;
 	pthread_t t;
-	int nctoken;
-	mach_timebase_info_data_t info;
-	double mtn, mtd;
+	int network_change_token;
 	char tstr[32];
 	time_t now;
 
+	memset(&global, 0, sizeof(struct global_s));
+
+	global.db_lock = (pthread_mutex_t *)calloc(1, sizeof(pthread_mutex_t));
+	pthread_mutex_init(global.db_lock, NULL);
+
+	global.work_queue_lock = (pthread_mutex_t *)calloc(1, sizeof(pthread_mutex_t));
+	pthread_mutex_init(global.work_queue_lock, NULL);
+
+	pthread_cond_init(&global.work_queue_cond, NULL);
+
+	global.work_queue = (asl_search_result_t *)calloc(1, sizeof(asl_search_result_t));
+
+	global.asl_log_filter = ASL_FILTER_MASK_UPTO(ASL_LEVEL_DEBUG);
+	global.db_file_max = 16384000;
+	global.db_memory_max = 8192;
+	global.db_mini_max = 256;
+	global.bsd_max_dup_time = DEFAULT_BSD_MAX_DUP_SEC;
+	global.utmp_ttl = DEFAULT_UTMP_TTL_SEC;
+	global.fs_ttl = DEFAULT_FS_TTL_SEC;
+	global.mps_limit = DEFAULT_MPS_LIMIT;
+	global.kfd = -1;
+
+#ifdef CONFIG_MAC
+	global.dbtype = DB_TYPE_FILE;
+	global.db_file_max = 25600000;
+	global.asl_store_ping_time = 150;
+#endif
+
+#ifdef CONFIG_APPLETV
+	global.dbtype = DB_TYPE_FILE;
+	global.db_file_max = 10240000;
+	global.asl_store_ping_time = 150;
+#endif
+
+#ifdef CONFIG_IPHONE
+	global.dbtype = DB_TYPE_MINI;
+	activate_remote = 1;
+	activate_bsd_out = 0;
+#endif
+
 	mp = _PATH_MODULE_LIB;
 	daemonize = 0;
-	__notify_78945668_info__ = -1;
-	_malloc_no_asl_log = 1; /* prevent malloc from calling ASL on error */
-	kfd = -1;
+	__notify_78945668_info__ = 0xf0000000;
 	zto.tv_sec = 0;
 	zto.tv_usec = 0;
-	FD_ZERO(&kern);
-	debug_file = NULL;
 
-	memset(&info, 0, sizeof(mach_timebase_info_data_t));
-	mach_timebase_info(&info);
+	/* prevent malloc from calling ASL on error */
+	_malloc_no_asl_log = 1;
 
-	mtn = info.numer;
-	mtd = info.denom;
-	mach_time_factor = mtn / mtd;
+	/* first pass sets up default configurations */
+	for (i = 1; i < argc; i++)
+	{
+		if (streq(argv[i], "-config"))
+		{
+			if (((i + 1) < argc) && (argv[i+1][0] != '-'))
+			{
+				i++;
+				if (streq(argv[i], "mac"))
+				{
+					global.dbtype = DB_TYPE_FILE;
+					global.db_file_max = 25600000;
+				}
+				else if (streq(argv[i], "appletv"))
+				{
+					global.dbtype = DB_TYPE_FILE;
+					global.db_file_max = 10240000;
+				}
+				else if (streq(argv[i], "iphone"))
+				{
+					global.dbtype = DB_TYPE_MINI;
+					activate_remote = 1;
+				}
+			}
+		}
+	}
 
 	for (i = 1; i < argc; i++)
 	{
 		if (streq(argv[i], "-d"))
 		{
-			debug = 1;
-			if (((i+1) < argc) && (argv[i+1][0] != '-')) debug_file = argv[++i];
+			global.debug = 1;
+			if (((i+1) < argc) && (argv[i+1][0] != '-')) global.debug_file = strdup(argv[++i]);
 			memset(tstr, 0, sizeof(tstr));
 			now = time(NULL);
 			ctime_r(&now, tstr);
 			tstr[19] = '\0';
 			asldebug("%s syslogd[%d]: Start\n", tstr, getpid());
+		}
+		else if (streq(argv[i], "-db"))
+		{
+			if (((i + 1) < argc) && (argv[i+1][0] != '-'))
+			{
+				i++;
+				if (streq(argv[i], "file"))
+				{
+					global.dbtype |= DB_TYPE_FILE;
+					if (((i + 1) < argc) && (argv[i+1][0] != '-')) global.db_file_max = atol(argv[++i]);
+				}
+				else if (streq(argv[i], "memory"))
+				{
+					global.dbtype |= DB_TYPE_MEMORY;
+					if (((i + 1) < argc) && (argv[i+1][0] != '-')) global.db_memory_max = atol(argv[++i]);
+				}
+				else if (streq(argv[i], "mini"))
+				{
+					global.dbtype |= DB_TYPE_MINI;
+					if (((i + 1) < argc) && (argv[i+1][0] != '-')) global.db_mini_max = atol(argv[++i]);
+				}
+			}
 		}
 		else if (streq(argv[i], "-D"))
 		{
@@ -613,15 +762,19 @@ main(int argc, const char *argv[])
 		}
 		else if (streq(argv[i], "-m"))
 		{
-			if ((i + 1) < argc) mark_time = 60 * atoll(argv[++i]);
+			if ((i + 1) < argc) global.mark_time = 60 * atoll(argv[++i]);
 		}
 		else if (streq(argv[i], "-utmp_ttl"))
 		{
-			if ((i + 1) < argc) utmp_ttl = atol(argv[++i]);
+			if ((i + 1) < argc) global.utmp_ttl = atol(argv[++i]);
 		}
 		else if (streq(argv[i], "-fs_ttl"))
 		{
-			if ((i + 1) < argc) fs_ttl = atol(argv[++i]);
+			if ((i + 1) < argc) global.fs_ttl = atol(argv[++i]);
+		}
+		else if (streq(argv[i], "-mps_limit"))
+		{
+			if ((i + 1) < argc) global.mps_limit = atol(argv[++i]);
 		}
 		else if (streq(argv[i], "-l"))
 		{
@@ -632,28 +785,12 @@ main(int argc, const char *argv[])
 			if ((i + 1) < argc)
 			{
 				i++;
-				if ((argv[i][0] >= '0') && (argv[i][0] <= '7') && (argv[i][1] == '\0')) asl_log_filter = ASL_FILTER_MASK_UPTO(atoi(argv[i]));
+				if ((argv[i][0] >= '0') && (argv[i][0] <= '7') && (argv[i][1] == '\0')) global.asl_log_filter = ASL_FILTER_MASK_UPTO(atoi(argv[i]));
 			}
-		}
-		else if (streq(argv[i], "-a"))
-		{
-			archive_enable = 1;
-		}
-		else if (streq(argv[i], "-sweep"))
-		{
-			if ((i + 1) < argc) sweep_time = atoll(argv[++i]);
 		}
 		else if (streq(argv[i], "-dup_delay"))
 		{
-			if ((i + 1) < argc) bsd_max_dup_time = atoll(argv[++i]);
-		}
-		else if (streq(argv[i], "-ttl"))
-		{
-			if ((i + 1) < argc) ttl = atol(argv[++i]);
-		}
-		else if (streq(argv[i], "-db_max"))
-		{
-			if ((i + 1) < argc) db_max_size = atoll(argv[++i]);
+			if ((i + 1) < argc) global.bsd_max_dup_time = atoll(argv[++i]);
 		}
 		else if (streq(argv[i], "-asl_in"))
 		{
@@ -675,21 +812,29 @@ main(int argc, const char *argv[])
 		{
 			if ((i + 1) < argc) activate_bsd_out = atoi(argv[++i]);
 		}
+		else if (streq(argv[i], "-remote"))
+		{
+			if ((i + 1) < argc) activate_remote = atoi(argv[++i]);
+		}
 		else if (streq(argv[i], "-udp_in"))
 		{
 			if ((i + 1) < argc) activate_udp_in = atoi(argv[++i]);
 		}
 	}
 
-	db_max_empty = db_max_size / 8;
-	db_shrink_size = db_max_size - (db_max_size / 8);
+	if (global.dbtype == 0)
+	{
+		global.dbtype = DB_TYPE_FILE;
+		global.db_file_max = 25600000;
+		global.asl_store_ping_time = 150;
+	}
 
 	TAILQ_INIT(&Moduleq);
 	static_modules();
 	load_modules(mp);
 	aslevent_init();
 
-	if (debug == 0)
+	if (global.debug == 0)
 	{
 		if (daemonize != 0)
 		{
@@ -705,9 +850,11 @@ main(int argc, const char *argv[])
 	init_config();
 
 	signal(SIGHUP, catch_sighup);
+	signal(SIGINFO, catch_siginfo);
 
-	nctoken = -1;
-	notify_register_signal(NETWORK_CHANGE_NOTIFICATION, SIGHUP, &nctoken);
+	/* register for network change notifications if the udp_in module is active */
+	network_change_token = -1;
+	if (activate_udp_in != 0) notify_register_signal(NETWORK_CHANGE_NOTIFICATION, SIGINFO, &network_change_token);
 
 	for (mod = Moduleq.tqh_first; mod != NULL; mod = mod->entries.tqe_next)
 	{
@@ -724,11 +871,11 @@ main(int argc, const char *argv[])
 	pthread_attr_destroy(&attr);
 
 	/*
-	 * Start database worker thread
+	 * Start output worker thread
 	 */
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-	pthread_create(&t, &attr, (void *(*)(void *))db_worker, NULL);
+	pthread_create(&t, &attr, (void *(*)(void *))output_worker, NULL);
 	pthread_attr_destroy(&attr);
 
 	FD_ZERO(&rd);
@@ -738,9 +885,11 @@ main(int argc, const char *argv[])
 	/*
 	 * drain /dev/klog first
 	 */
-	if (kfd >= 0)
+	if (global.kfd >= 0)
 	{
-		max = kfd + 1;
+		FD_ZERO(&kern);
+		FD_SET(global.kfd, &kern);
+		max = global.kfd + 1;
 		while (select(max, &kern, NULL, NULL, &zto) > 0)
 		{
 			aslevent_handleevent(&kern, &wr, &ex);
@@ -763,10 +912,12 @@ main(int argc, const char *argv[])
 		max = aslevent_fdsets(&rd, &wr, &ex) + 1;
 
 		status = select(max, &rd, &wr, &ex, runloop_timer);
-		if ((kfd >= 0) && FD_ISSET(kfd, &rd))
+		if ((global.kfd >= 0) && FD_ISSET(global.kfd, &rd))
 		{
 			/*  drain /dev/klog */
-			max = kfd + 1;
+			FD_ZERO(&kern);
+			FD_SET(global.kfd, &kern);
+			max = global.kfd + 1;
 
 			while (select(max, &kern, NULL, NULL, &zto) > 0)
 			{
@@ -774,10 +925,10 @@ main(int argc, const char *argv[])
 			}
 		}
 
-		if (reset != 0)
+		if (global.reset != RESET_NONE)
 		{
 			send_reset();
-			reset = 0;
+			global.reset = RESET_NONE;
 		}
 
 		if (status != 0) aslevent_handleevent(&rd, &wr, &ex);

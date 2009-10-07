@@ -1,7 +1,7 @@
 /* APPLE LOCAL file radar 4947014 */
 /* Check that 'retain' property call objc_setProperty/objc_getProperty as it should. */
-/* { dg-options "-fobjc-gc -fobjc-new-property -mmacosx-version-min=10.5 -framework Foundation -framework CoreFoundation" } */
-/* { dg-do run { target powerpc*-*-darwin* i?86*-*-darwin* } } */
+/* { dg-options "-fobjc-gc -fobjc-new-property -mmacosx-version-min=10.5 -framework Foundation" } */
+/* { dg-do run { target *-*-darwin* } } */
 /* { dg-require-effective-target objc_gc } */
 
 #import <Foundation/Foundation.h>

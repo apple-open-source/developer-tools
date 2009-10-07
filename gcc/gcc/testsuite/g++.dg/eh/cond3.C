@@ -1,4 +1,3 @@
-// APPLE LOCAL file mainline 4950109
 // PR c++/24996
 // Bug: the cleanup for the A temporary was confusing the gimplifier
 // because of the TRY_CATCH_EXPR for the exception object.

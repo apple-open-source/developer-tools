@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1998-2005, Free Software Foundation, Inc.         --
+--          Copyright (C) 1998-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -34,6 +34,7 @@ with Nlists;   use Nlists;
 with Opt;      use Opt;
 with Restrict; use Restrict;
 with Rident;   use Rident;
+with Sem;      use Sem;
 with Sem_Prag; use Sem_Prag;
 with Sem_Util; use Sem_Util;
 with Sinfo;    use Sinfo;
@@ -110,8 +111,13 @@ package body Lib.Xref is
       if Opt.Xref_Active
 
          --  Definition must come from source
+         --  We make an exception for subprogram child units that have no
+         --  spec. For these we generate a subprogram declaration for library
+         --  use, and the corresponding entity does not come from source.
+         --  Nevertheless, all references will be attached to it and we have
+         --  to treat is as coming from user code.
 
-         and then Comes_From_Source (E)
+         and then (Comes_From_Source (E) or else Is_Child_Unit (E))
 
          --  And must have a reasonable source location that is not
          --  within an instance (all entities in instances are ignored)
@@ -133,6 +139,10 @@ package body Lib.Xref is
          Xrefs.Table (Indx).Eun := Get_Source_Unit (Loc);
          Xrefs.Table (Indx).Lun := No_Unit;
          Set_Has_Xref_Entry (E);
+
+         if In_Inlined_Body then
+            Set_Referenced (E);
+         end if;
       end if;
    end Generate_Definition;
 
@@ -250,8 +260,7 @@ package body Lib.Xref is
             end if;
          end loop;
 
-         --  Parent (N) is an assignment statement, check whether
-         --  N is its name.
+         --  Parent (N) is assignment statement, check whether N is its name
 
          return Name (Parent (N)) = N;
       end Is_On_LHS;
@@ -267,18 +276,23 @@ package body Lib.Xref is
          Check_Restriction (No_Obsolescent_Features, N);
       end if;
 
-      --  Warn if reference to Ada 2005 entity not in Ada 2005 mode
+      --  Warn if reference to Ada 2005 entity not in Ada 2005 mode. We only
+      --  detect real explicit references (modifications and references).
 
-      if Is_Ada_2005 (E) and then Ada_Version < Ada_05 then
+      if Is_Ada_2005 (E)
+        and then Ada_Version < Ada_05
+        and then Warn_On_Ada_2005_Compatibility
+        and then (Typ = 'm' or else Typ = 'r')
+      then
          Error_Msg_NE ("& is only defined in Ada 2005?", N, E);
       end if;
 
-      --  Never collect references if not in main source unit. However,
-      --  we omit this test if Typ is 'e' or 'k', since these entries are
-      --  really structural, and it is useful to have them in units
-      --  that reference packages as well as units that define packages.
-      --  We also omit the test for the case of 'p' since we want to
-      --  include inherited primitive operations from other packages.
+      --  Never collect references if not in main source unit. However, we omit
+      --  this test if Typ is 'e' or 'k', since these entries are structural,
+      --  and it is useful to have them in units that reference packages as
+      --  well as units that define packages. We also omit the test for the
+      --  case of 'p' since we want to include inherited primitive operations
+      --  from other packages.
 
       if not In_Extended_Main_Source_Unit (N)
         and then Typ /= 'e'
@@ -384,12 +398,9 @@ package body Lib.Xref is
                null;
 
             --  Neither does a reference to a variable on the left side
-            --  of an assignment
+            --  of an assignment.
 
-            elsif Ekind (E) = E_Variable
-              and then Nkind (Parent (N)) = N_Assignment_Statement
-              and then Name (Parent (N)) = N
-            then
+            elsif Is_On_LHS (N) then
                null;
 
             --  For entry formals, we want to place the warning on the
@@ -510,6 +521,14 @@ package body Lib.Xref is
                end if;
             end loop;
 
+         --  The internally created defining entity for a child subprogram
+         --  that has no previous spec has valid references.
+
+         elsif Is_Overloadable (E)
+           and then Is_Child_Unit (E)
+         then
+            Ent := E;
+
          --  Record components of discriminated subtypes or derived types
          --  must be treated as references to the original component.
 
@@ -534,7 +553,7 @@ package body Lib.Xref is
 
          Xrefs.Table (Indx).Loc := Ref;
 
-         --  Overriding operations are marked with 'P'.
+         --  Overriding operations are marked with 'P'
 
          if Typ = 'p'
            and then Is_Subprogram (N)
@@ -699,11 +718,21 @@ package body Lib.Xref is
 
                   elsif Is_Private_Type (Tref)
                     and then Present (Full_View (Tref))
-                    and then Is_Access_Type (Full_View (Tref))
                   then
-                     Tref := Directly_Designated_Type (Full_View (Tref));
-                     Left := '(';
-                     Right := ')';
+                     if Is_Access_Type (Full_View (Tref)) then
+                        Tref := Directly_Designated_Type (Full_View (Tref));
+                        Left := '(';
+                        Right := ')';
+
+                     --  If the full view is an array type, we also retrieve
+                     --  the corresponding component type, because the ali
+                     --  entry already indicates that this is an array.
+
+                     elsif Is_Array_Type (Full_View (Tref)) then
+                        Tref := Component_Type (Full_View (Tref));
+                        Left := '(';
+                        Right := ')';
+                     end if;
 
                   --  If non-derived array, get component type.
                   --  Skip component type for case of String
@@ -723,7 +752,7 @@ package body Lib.Xref is
                      exit;
                   end if;
 
-               --  For a subtype, go to ancestor subtype.
+               --  For a subtype, go to ancestor subtype
 
                else
                   Tref := Ancestor_Subtype (Tref);
@@ -778,7 +807,7 @@ package body Lib.Xref is
                   (Is_Wrapper_Package (Scope (Tref))
                      or else Is_Generic_Instance (Scope (Tref)))
                then
-                  Tref := Base_Type (Tref);
+                  Tref := First_Subtype (Base_Type (Tref));
                end if;
 
                return;
@@ -810,7 +839,7 @@ package body Lib.Xref is
             Language_Name := Name_Ada;
 
          else
-            --  These are the only languages that GPS knows about.
+            --  These are the only languages that GPS knows about
 
             return;
          end if;
@@ -1164,6 +1193,10 @@ package body Lib.Xref is
                --  the given source ptr in [file|line[...]] form. No output
                --  if the given location is not a generic template reference.
 
+               procedure Output_Overridden_Op (Old_E : Entity_Id);
+               --  For a subprogram that is overriding, display information
+               --  about the inherited operation that it overrides.
+
                -------------------------------
                -- Output_Instantiation_Refs --
                -------------------------------
@@ -1203,6 +1236,35 @@ package body Lib.Xref is
                   Curru := Cu;
                   return;
                end Output_Instantiation_Refs;
+
+               --------------------------
+               -- Output_Overridden_Op --
+               --------------------------
+
+               procedure Output_Overridden_Op (Old_E : Entity_Id) is
+               begin
+                  if Present (Old_E)
+                    and then Sloc (Old_E) /= Standard_Location
+                  then
+                     declare
+                        Loc      : constant Source_Ptr := Sloc (Old_E);
+                        Par_Unit : constant Unit_Number_Type :=
+                                     Get_Source_Unit (Loc);
+                     begin
+                        Write_Info_Char ('<');
+
+                        if Par_Unit /= Curxu then
+                           Write_Info_Nat (Dependency_Num (Par_Unit));
+                           Write_Info_Char ('|');
+                        end if;
+
+                        Write_Info_Nat (Int (Get_Logical_Line_Number (Loc)));
+                        Write_Info_Char ('p');
+                        Write_Info_Nat (Int (Get_Column_Number (Loc)));
+                        Write_Info_Char ('>');
+                     end;
+                  end if;
+               end Output_Overridden_Op;
 
             --  Start of processing for Output_One_Ref
 
@@ -1260,6 +1322,14 @@ package body Lib.Xref is
                      if Present (Ent) then
                         Ctyp := Fold_Lower (Xref_Entity_Letters (Ekind (Ent)));
                      end if;
+
+                  elsif Is_Generic_Type (Ent) then
+
+                     --  If the type of the entity is a  generic private type
+                     --  there is no usable full view, so retain the indication
+                     --  that this is an object.
+
+                     Ctyp := '*';
                   end if;
 
                   --  Special handling for access parameter
@@ -1285,7 +1355,7 @@ package body Lib.Xref is
                   end;
                end if;
 
-               --  Special handling for abstract types and operations.
+               --  Special handling for abstract types and operations
 
                if Is_Abstract (XE.Ent) then
 
@@ -1524,7 +1594,25 @@ package body Lib.Xref is
                            Rref := Selector_Name (Rref);
                         end if;
 
-                        if Nkind (Rref) /= N_Identifier then
+                        if Nkind (Rref) = N_Identifier
+                          or else Nkind (Rref) = N_Operator_Symbol
+                        then
+                           null;
+
+                        --  For renamed array components, use the array name
+                        --  for the renamed entity, which reflect the fact that
+                        --  in general the whole array is aliased.
+
+                        elsif Nkind (Rref) = N_Indexed_Component then
+                           if Nkind (Prefix (Rref)) = N_Identifier then
+                              Rref := Prefix (Rref);
+                           elsif Nkind (Prefix (Rref)) = N_Expanded_Name then
+                              Rref := Selector_Name (Prefix (Rref));
+                           else
+                              Rref := Empty;
+                           end if;
+
+                        else
                            Rref := Empty;
                         end if;
                      end if;
@@ -1544,6 +1632,31 @@ package body Lib.Xref is
                      --  of the current xref xection.
 
                      Curru := Curxu;
+
+                     --  Write out information about generic parent,
+                     --  if entity is an instance.
+
+                     if  Is_Generic_Instance (XE.Ent) then
+                        declare
+                           Gen_Par : constant Entity_Id :=
+                             Generic_Parent
+                               (Specification
+                                  (Unit_Declaration_Node (XE.Ent)));
+                           Loc : constant Source_Ptr := Sloc (Gen_Par);
+                           Gen_U : constant Unit_Number_Type :=
+                                     Get_Source_Unit (Loc);
+                        begin
+                           Write_Info_Char ('[');
+                           if Curru /= Gen_U then
+                              Write_Info_Nat (Dependency_Num (Gen_U));
+                              Write_Info_Char ('|');
+                           end if;
+
+                           Write_Info_Nat
+                             (Int (Get_Logical_Line_Number (Loc)));
+                           Write_Info_Char (']');
+                        end;
+                     end if;
 
                      --  See if we have a type reference and if so output
 
@@ -1600,6 +1713,15 @@ package body Lib.Xref is
                            Output_Instantiation_Refs (Sloc (Tref));
                            Write_Info_Char (Right);
                         end if;
+                     end if;
+
+                     --  If the entity is an overriding operation, write
+                     --  info on operation that was overridden.
+
+                     if Is_Subprogram (XE.Ent)
+                       and then Is_Overriding_Operation (XE.Ent)
+                     then
+                        Output_Overridden_Op (Overridden_Operation (XE.Ent));
                      end if;
 
                      --  End of processing for entity output

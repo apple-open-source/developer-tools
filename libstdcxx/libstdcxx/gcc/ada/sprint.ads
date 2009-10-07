@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2002, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -56,8 +56,10 @@ package Sprint is
    --    Operator with range check           {operator} (e.g. {+})
    --    Free statement                      free expr [storage_pool = xxx]
    --    Freeze entity with freeze actions   freeze entityname [ actions ]
+   --    Implicit call to run time routine   $routine-name
    --    Interpretation                      interpretation type [, entity]
    --    Intrinsic calls                     function-name!(arg, arg, arg)
+   --    Itype declaration                   [(sub)type declaration without ;]
    --    Itype reference                     reference itype
    --    Label declaration                   labelname : label
    --    Mod wi Treat_Fixed_As_Integer       x #mod y
@@ -115,7 +117,7 @@ package Sprint is
    --  does not generate any New_Line calls.
 
    procedure Sprint_Opt_Node_List (List : List_Id);
-   --  Like Sprint_Node_List, but prints nothing if List = No_List.
+   --  Like Sprint_Node_List, but prints nothing if List = No_List
 
    procedure Sprint_Indented_List (List : List_Id);
    --  Like Sprint_Line_List, except that the indentation level is

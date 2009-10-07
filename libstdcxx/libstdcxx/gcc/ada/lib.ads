@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2004 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -239,11 +239,6 @@ package Lib is
    --  Main_Unit is a body with a separate spec, in which case it is the
    --  entity for the spec.
 
-   Unit_Exception_Table_Present : Boolean;
-   --  Set true if a unit exception table is present for the unit (i.e.
-   --  zero cost exception handling is active and there is at least one
-   --  subprogram in the extended unit).
-
    -----------------
    -- Units Table --
    -----------------
@@ -429,10 +424,10 @@ package Lib is
    --  Return unit number of file identified by given source pointer value.
    --  This call must always succeed, since any valid source pointer value
    --  belongs to some previously loaded module. If the given source pointer
-   --  value is within an instantiation, this function returns the unit
-   --  number of the templace, i.e. the unit containing the source code
-   --  corresponding to the given Source_Ptr value. The version taking
-   --  a Node_Id argument, N, simply applies the function to Sloc (N).
+   --  value is within an instantiation, this function returns the unit number
+   --  of the template, i.e. the unit containing the source code corresponding
+   --  to the given Source_Ptr value. The version taking a Node_Id argument, N,
+   --  simply applies the function to Sloc (N).
 
    function Get_Code_Unit (N : Node_Or_Entity_Id) return Unit_Number_Type;
    pragma Inline (Get_Code_Unit);
@@ -623,7 +618,7 @@ package Lib is
 
    function Generic_Separately_Compiled
      (Sfile : File_Name_Type) return  Boolean;
-   --  Same as the previous function, but works directly on a unit file name.
+   --  Same as the previous function, but works directly on a unit file name
 
 private
    pragma Inline (Cunit);
@@ -722,16 +717,23 @@ private
    type Unit_Ref_Table is array (Pos range <>) of Unit_Number_Type;
    --  Type to hold list of indirect references to unit number table
 
-   --  The Load_Stack table contains a list of unit numbers (indexes into the
-   --  unit table) of units being loaded on a single dependency chain. The
-   --  First entry is the main unit. The second entry, if present is a unit
-   --  on which the first unit depends, etc. This stack is used to generate
-   --  error messages showing the dependency chain if a file is not found.
-   --  The Load function makes an entry in this table when it is called, and
-   --  removes the entry just before it returns.
+   type Load_Stack_Entry is record
+      Unit_Number       : Unit_Number_Type;
+      From_Limited_With : Boolean;
+   end record;
+
+   --  The Load_Stack table contains a list of unit numbers (indices into the
+   --  unit table) of units being loaded on a single dependency chain, and a
+   --  flag to indicate whether this unit is loaded through a limited_with
+   --  clause. The First entry is the main unit. The second entry, if present
+   --  is a unit on which the first unit depends, etc. This stack is used to
+   --  generate error messages showing the dependency chain if a file is not
+   --  found, or whether a true circular dependency exists.  The Load_Unit
+   --  function makes an entry in this table when it is called, and removes
+   --  the entry just before it returns.
 
    package Load_Stack is new Table.Table (
-     Table_Component_Type => Unit_Number_Type,
+     Table_Component_Type => Load_Stack_Entry,
      Table_Index_Type     => Nat,
      Table_Low_Bound      => 0,
      Table_Initial        => Alloc.Load_Stack_Initial,

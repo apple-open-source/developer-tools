@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 2000-2008 Apple Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -34,7 +34,7 @@
  *
  *
  */
-#ifdef __ppc__
+#if defined(__ppc__)
 
 #include <IOKit/IOTypes.h>
 #include "IOATATypes.h"
@@ -1289,4 +1289,4 @@ MacIOATA::handleBusReset(void)
 
 }
 
-#endif // __ppc__
+#endif // defined(__ppc__)

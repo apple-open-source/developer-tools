@@ -1,11 +1,12 @@
-/* APPLE LOCAL file mainline */
 /* Check if class references (generated for the NeXT runtime) are appropriately 
    folded.  This test is safe to run on all targets.  */
 /* Author: Ziemowit Laski <zlaski@apple.com>.  */
 /* { dg-options "-fnext-runtime" } */
 /* { dg-do compile } */
 /* APPLE LOCAL radar 4894756 */
-/* { dg-skip-if "" { *-*-darwin* } { "-m64" } { "" } } */
+/* { dg-require-effective-target ilp32 } */
+/* APPLE LOCAL ARM objc2 */
+/* { dg-skip-if "" { arm*-*-darwin* } { "*" } { "" } } */
 
 #include <objc/Object.h>
 

@@ -41,6 +41,7 @@ using namespace CodeSigning;
 const CFStringRef kSecCodeSignerApplicationData = CFSTR("application-specific");
 const CFStringRef kSecCodeSignerDetached =		CFSTR("detached");
 const CFStringRef kSecCodeSignerDryRun =		CFSTR("dryrun");
+const CFStringRef kSecCodeSignerEntitlements =	CFSTR("entitlements");
 const CFStringRef kSecCodeSignerFlags =			CFSTR("flags");
 const CFStringRef kSecCodeSignerIdentifier =	CFSTR("identifier");
 const CFStringRef kSecCodeSignerIdentifierPrefix = CFSTR("identifier-prefix");
@@ -69,9 +70,12 @@ OSStatus SecCodeSignerCreate(CFDictionaryRef parameters, SecCSFlags flags,
 	SecCodeSignerRef *signerRef)
 {
 	BEGIN_CSAPI
-	SecPointer<SecCodeSigner> signer = new SecCodeSigner;
+		
+	checkFlags(flags, kSecCSRemoveSignature);
+	SecPointer<SecCodeSigner> signer = new SecCodeSigner(flags);
 	signer->parameters(parameters);
 	Required(signerRef) = signer->handle();
+
     END_CSAPI
 }
 

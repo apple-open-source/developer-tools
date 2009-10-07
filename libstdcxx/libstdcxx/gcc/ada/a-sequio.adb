@@ -1,12 +1,12 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                         GNAT RUNTIME COMPONENTS                          --
+--                         GNAT RUN-TIME COMPONENTS                         --
 --                                                                          --
 --                    A D A . S E Q U E N T I A L _ I O                     --
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2003, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -76,9 +76,9 @@ package body Ada.Sequential_IO is
 
    procedure Create
      (File : in out File_Type;
-      Mode : in File_Mode := Out_File;
-      Name : in String := "";
-      Form : in String := "")
+      Mode : File_Mode := Out_File;
+      Name : String := "";
+      Form : String := "")
    is
    begin
       SIO.Create (FP (File), To_FCB (Mode), Name, Form);
@@ -97,7 +97,7 @@ package body Ada.Sequential_IO is
    -- End_Of_File --
    -----------------
 
-   function End_Of_File (File : in File_Type) return Boolean is
+   function End_Of_File (File : File_Type) return Boolean is
    begin
       return FIO.End_Of_File (AP (File));
    end End_Of_File;
@@ -106,7 +106,7 @@ package body Ada.Sequential_IO is
    -- Form --
    ----------
 
-   function Form (File : in File_Type) return String is
+   function Form (File : File_Type) return String is
    begin
       return FIO.Form (AP (File));
    end Form;
@@ -115,7 +115,7 @@ package body Ada.Sequential_IO is
    -- Is_Open --
    -------------
 
-   function Is_Open (File : in File_Type) return Boolean is
+   function Is_Open (File : File_Type) return Boolean is
    begin
       return FIO.Is_Open (AP (File));
    end Is_Open;
@@ -124,7 +124,7 @@ package body Ada.Sequential_IO is
    -- Mode --
    ----------
 
-   function Mode (File : in File_Type) return File_Mode is
+   function Mode (File : File_Type) return File_Mode is
    begin
       return To_SIO (FIO.Mode (AP (File)));
    end Mode;
@@ -133,7 +133,7 @@ package body Ada.Sequential_IO is
    -- Name --
    ----------
 
-   function Name (File : in File_Type) return String is
+   function Name (File : File_Type) return String is
    begin
       return FIO.Name (AP (File));
    end Name;
@@ -144,9 +144,9 @@ package body Ada.Sequential_IO is
 
    procedure Open
      (File : in out File_Type;
-      Mode : in File_Mode;
-      Name : in String;
-      Form : in String := "")
+      Mode : File_Mode;
+      Name : String;
+      Form : String := "")
    is
    begin
       SIO.Open (FP (File), To_FCB (Mode), Name, Form);
@@ -156,7 +156,7 @@ package body Ada.Sequential_IO is
    -- Read --
    ----------
 
-   procedure Read (File : in File_Type; Item : out Element_Type) is
+   procedure Read (File : File_Type; Item : out Element_Type) is
       Siz  : constant size_t := (Item'Size + SU - 1) / SU;
       Rsiz : size_t;
 
@@ -238,7 +238,7 @@ package body Ada.Sequential_IO is
    -- Reset --
    -----------
 
-   procedure Reset (File : in out File_Type; Mode : in File_Mode) is
+   procedure Reset (File : in out File_Type; Mode : File_Mode) is
    begin
       FIO.Reset (AP (File), To_FCB (Mode));
    end Reset;
@@ -252,7 +252,7 @@ package body Ada.Sequential_IO is
    -- Write --
    -----------
 
-   procedure Write (File : in File_Type; Item : in Element_Type) is
+   procedure Write (File : File_Type; Item : Element_Type) is
       Siz : constant size_t := (Item'Size + SU - 1) / SU;
 
    begin

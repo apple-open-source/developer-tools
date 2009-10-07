@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2001-2005 Free Software Foundation, Inc.          --
+--          Copyright (C) 2001-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -40,7 +40,6 @@ with Table;    use Table;
 
 with Ada.Characters.Handling;   use Ada.Characters.Handling;
 with GNAT.Directory_Operations; use GNAT.Directory_Operations;
-with GNAT.OS_Lib;               use GNAT.OS_Lib;
 with GNAT.Regexp;               use GNAT.Regexp;
 
 with System.Case_Util;          use System.Case_Util;
@@ -117,6 +116,8 @@ package body Prj.Makr is
       Preproc_Switches  : Argument_List;
       Very_Verbose      : Boolean)
    is
+      Tree : constant Project_Node_Tree_Ref := new Project_Node_Tree_Data;
+
       Path_Name : String (1 .. File_Path'Length +
                             Project_File_Extension'Length);
       Path_Last : Natural := File_Path'Length;
@@ -132,9 +133,14 @@ package body Prj.Makr is
       Source_Dirs_List    : Project_Node_Id := Empty_Node;
       Current_Source_Dir  : Project_Node_Id := Empty_Node;
 
-      Project_Naming_Node : Project_Node_Id := Empty_Node;
-      Project_Naming_Decl : Project_Node_Id := Empty_Node;
-      Naming_Package      : Project_Node_Id := Empty_Node;
+      Project_Naming_Node     : Project_Node_Id := Empty_Node;
+      Project_Naming_Decl     : Project_Node_Id := Empty_Node;
+      Naming_Package          : Project_Node_Id := Empty_Node;
+      Naming_Package_Comments : Project_Node_Id := Empty_Node;
+
+      Source_Files_Comments     : Project_Node_Id := Empty_Node;
+      Source_Dirs_Comments      : Project_Node_Id := Empty_Node;
+      Source_List_File_Comments : Project_Node_Id := Empty_Node;
 
       Project_Naming_File_Name : String (1 .. Output_Name'Length +
                                            Naming_File_Suffix'Length);
@@ -475,46 +481,57 @@ package body Prj.Makr is
                                        Decl_Item : constant Project_Node_Id :=
                                          Default_Project_Node
                                            (Of_Kind =>
-                                                N_Declarative_Item);
+                                                N_Declarative_Item,
+                                            In_Tree => Tree);
 
                                        Attribute : constant Project_Node_Id :=
                                          Default_Project_Node
                                            (Of_Kind =>
-                                                N_Attribute_Declaration);
+                                                N_Attribute_Declaration,
+                                            In_Tree => Tree);
 
                                        Expression : constant Project_Node_Id :=
                                          Default_Project_Node
                                            (Of_Kind => N_Expression,
-                                            And_Expr_Kind => Single);
+                                            And_Expr_Kind => Single,
+                                            In_Tree => Tree);
 
                                        Term : constant Project_Node_Id :=
                                          Default_Project_Node
                                            (Of_Kind => N_Term,
-                                            And_Expr_Kind => Single);
+                                            And_Expr_Kind => Single,
+                                            In_Tree => Tree);
 
                                        Value : constant Project_Node_Id :=
                                          Default_Project_Node
-                                           (Of_Kind => N_Literal_String,
-                                            And_Expr_Kind => Single);
+                                           (Of_Kind       => N_Literal_String,
+                                            And_Expr_Kind => Single,
+                                            In_Tree       => Tree);
 
                                     begin
                                        Set_Next_Declarative_Item
                                          (Decl_Item,
                                           To => First_Declarative_Item_Of
-                                            (Naming_Package));
+                                            (Naming_Package, Tree),
+                                          In_Tree => Tree);
                                        Set_First_Declarative_Item_Of
-                                         (Naming_Package, To => Decl_Item);
+                                         (Naming_Package,
+                                          To => Decl_Item,
+                                          In_Tree => Tree);
                                        Set_Current_Item_Node
-                                         (Decl_Item, To => Attribute);
+                                         (Decl_Item,
+                                          To => Attribute,
+                                          In_Tree => Tree);
 
                                        --  Is it a spec or a body?
 
                                        if SFN_Prag.Spec then
                                           Set_Name_Of
-                                            (Attribute, To => Name_Spec);
+                                            (Attribute, Tree,
+                                             To => Name_Spec);
                                        else
                                           Set_Name_Of
-                                            (Attribute,
+                                            (Attribute, Tree,
                                              To => Name_Body);
                                        end if;
 
@@ -523,20 +540,21 @@ package body Prj.Makr is
                                        Get_Name_String (SFN_Prag.Unit);
                                        To_Lower (Name_Buffer (1 .. Name_Len));
                                        Set_Associative_Array_Index_Of
-                                         (Attribute, To => Name_Find);
+                                         (Attribute, Tree, To => Name_Find);
 
                                        Set_Expression_Of
-                                         (Attribute, To => Expression);
+                                         (Attribute, Tree, To => Expression);
                                        Set_First_Term
-                                         (Expression, To => Term);
-                                       Set_Current_Term (Term, To => Value);
+                                         (Expression, Tree, To => Term);
+                                       Set_Current_Term
+                                         (Term, Tree, To => Value);
 
                                        --  And set the name of the file
 
                                        Set_String_Value_Of
-                                         (Value, To => File_Name_Id);
+                                         (Value, Tree, To => File_Name_Id);
                                        Set_Source_Index_Of
-                                         (Value, To => SFN_Prag.Index);
+                                         (Value, Tree, To => SFN_Prag.Index);
                                     end;
                                  end if;
                               end loop;
@@ -649,7 +667,8 @@ package body Prj.Makr is
       Csets.Initialize;
       Namet.Initialize;
       Snames.Initialize;
-      Prj.Initialize;
+      Prj.Initialize (No_Project_Tree);
+      Prj.Tree.Initialize (Tree);
 
       SFN_Pragmas.Set_Last (0);
 
@@ -707,9 +726,11 @@ package body Prj.Makr is
             end if;
 
             Part.Parse
-              (Project                => Project_Node,
+              (In_Tree                => Tree,
+               Project                => Project_Node,
                Project_File_Name      => Output_Name (1 .. Output_Name_Last),
-               Always_Errout_Finalize => False);
+               Always_Errout_Finalize => False,
+               Store_Comments         => True);
 
             --  Fail if parsing was not successful
 
@@ -725,73 +746,102 @@ package body Prj.Makr is
 
                declare
                   With_Clause : Project_Node_Id :=
-                                  First_With_Clause_Of (Project_Node);
+                                  First_With_Clause_Of (Project_Node, Tree);
                   Previous    : Project_Node_Id := Empty_Node;
 
                begin
                   while With_Clause /= Empty_Node loop
-                     if Tree.Name_Of (With_Clause) = Project_Naming_Id then
+                     if Prj.Tree.Name_Of (With_Clause, Tree) =
+                          Project_Naming_Id
+                     then
                         if Previous = Empty_Node then
                            Set_First_With_Clause_Of
-                             (Project_Node,
-                              To => Next_With_Clause_Of (With_Clause));
+                             (Project_Node, Tree,
+                              To => Next_With_Clause_Of (With_Clause, Tree));
                         else
                            Set_Next_With_Clause_Of
-                             (Previous,
-                              To => Next_With_Clause_Of (With_Clause));
+                             (Previous, Tree,
+                              To => Next_With_Clause_Of (With_Clause, Tree));
                         end if;
 
                         exit;
                      end if;
 
                      Previous := With_Clause;
-                     With_Clause := Next_With_Clause_Of (With_Clause);
+                     With_Clause := Next_With_Clause_Of (With_Clause, Tree);
                   end loop;
                end;
 
                --  Remove attribute declarations of Source_Files,
                --  Source_List_File, Source_Dirs, and the declaration of
-               --  package Naming, if they exist.
+               --  package Naming, if they exist, but preserve the comments
+               --  attached to these nodes.
 
                declare
                   Declaration  : Project_Node_Id :=
                                    First_Declarative_Item_Of
                                      (Project_Declaration_Of
-                                       (Project_Node));
+                                        (Project_Node, Tree),
+                                      Tree);
                   Previous     : Project_Node_Id := Empty_Node;
                   Current_Node : Project_Node_Id := Empty_Node;
 
+                  Name         : Name_Id;
+                  Kind_Of_Node : Project_Node_Kind;
+                  Comments     : Project_Node_Id;
+
                begin
                   while Declaration /= Empty_Node loop
-                     Current_Node := Current_Item_Node (Declaration);
+                     Current_Node := Current_Item_Node (Declaration, Tree);
 
-                     if (Kind_Of (Current_Node) = N_Attribute_Declaration
-                           and then
-                            (Tree.Name_Of (Current_Node) = Name_Source_Files
-                               or else Tree.Name_Of (Current_Node) =
-                                                 Name_Source_List_File
-                               or else Tree.Name_Of (Current_Node) =
-                                                 Name_Source_Dirs))
-                       or else
-                       (Kind_Of (Current_Node) = N_Package_Declaration
-                          and then Tree.Name_Of (Current_Node) = Name_Naming)
+                     Kind_Of_Node := Kind_Of (Current_Node, Tree);
+
+                     if Kind_Of_Node = N_Attribute_Declaration or else
+                       Kind_Of_Node = N_Package_Declaration
                      then
-                        if Previous = Empty_Node then
-                           Set_First_Declarative_Item_Of
-                             (Project_Declaration_Of (Project_Node),
-                              To => Next_Declarative_Item (Declaration));
+                        Name := Prj.Tree.Name_Of (Current_Node, Tree);
+
+                        if Name = Name_Source_Files     or else
+                           Name = Name_Source_List_File or else
+                           Name = Name_Source_Dirs      or else
+                           Name = Name_Naming
+                        then
+                           Comments :=
+                             Tree.Project_Nodes.Table (Current_Node).Comments;
+
+                           if Name = Name_Source_Files then
+                              Source_Files_Comments := Comments;
+
+                           elsif Name = Name_Source_List_File then
+                              Source_List_File_Comments := Comments;
+
+                           elsif Name = Name_Source_Dirs then
+                              Source_Dirs_Comments := Comments;
+
+                           elsif Name = Name_Naming then
+                              Naming_Package_Comments := Comments;
+                           end if;
+
+                           if Previous = Empty_Node then
+                              Set_First_Declarative_Item_Of
+                                (Project_Declaration_Of (Project_Node, Tree),
+                                 Tree,
+                                 To => Next_Declarative_Item
+                                         (Declaration, Tree));
+
+                           else
+                              Set_Next_Declarative_Item
+                                (Previous, Tree,
+                                 To => Next_Declarative_Item
+                                         (Declaration, Tree));
+                           end if;
 
                         else
-                           Set_Next_Declarative_Item
-                             (Previous,
-                              To => Next_Declarative_Item (Declaration));
+                           Previous := Declaration;
                         end if;
-
-                     else
-                        Previous := Declaration;
                      end if;
 
-                     Declaration := Next_Declarative_Item (Declaration);
+                     Declaration := Next_Declarative_Item (Declaration, Tree);
                   end loop;
                end;
             end if;
@@ -971,11 +1021,13 @@ package body Prj.Makr is
          --  name and its project declaration node.
 
          if Project_Node = Empty_Node then
-            Project_Node := Default_Project_Node (Of_Kind => N_Project);
-            Set_Name_Of (Project_Node, To => Output_Name_Id);
+            Project_Node :=
+              Default_Project_Node (Of_Kind => N_Project, In_Tree => Tree);
+            Set_Name_Of (Project_Node, Tree, To => Output_Name_Id);
             Set_Project_Declaration_Of
-              (Project_Node,
-               To => Default_Project_Node (Of_Kind => N_Project_Declaration));
+              (Project_Node, Tree,
+               To => Default_Project_Node
+                 (Of_Kind => N_Project_Declaration, In_Tree => Tree));
 
          end if;
 
@@ -983,93 +1035,126 @@ package body Prj.Makr is
          --  for Source_Files as an empty list, to indicate there are no
          --  sources in the naming project.
 
-         Project_Naming_Node := Default_Project_Node (Of_Kind => N_Project);
-         Set_Name_Of (Project_Naming_Node, To => Project_Naming_Id);
+         Project_Naming_Node :=
+           Default_Project_Node (Of_Kind => N_Project, In_Tree => Tree);
+         Set_Name_Of (Project_Naming_Node, Tree, To => Project_Naming_Id);
          Project_Naming_Decl :=
-           Default_Project_Node (Of_Kind => N_Project_Declaration);
-         Set_Project_Declaration_Of (Project_Naming_Node, Project_Naming_Decl);
+           Default_Project_Node
+             (Of_Kind => N_Project_Declaration, In_Tree => Tree);
+         Set_Project_Declaration_Of
+           (Project_Naming_Node, Tree, Project_Naming_Decl);
          Naming_Package :=
-           Default_Project_Node (Of_Kind => N_Package_Declaration);
-         Set_Name_Of (Naming_Package, To => Name_Naming);
+           Default_Project_Node
+             (Of_Kind => N_Package_Declaration, In_Tree => Tree);
+         Set_Name_Of (Naming_Package, Tree, To => Name_Naming);
 
          declare
             Decl_Item : constant Project_Node_Id :=
-              Default_Project_Node (Of_Kind => N_Declarative_Item);
+                          Default_Project_Node
+                            (Of_Kind => N_Declarative_Item, In_Tree => Tree);
 
             Attribute : constant Project_Node_Id :=
-              Default_Project_Node
-              (Of_Kind => N_Attribute_Declaration,
-               And_Expr_Kind => List);
+                          Default_Project_Node
+                            (Of_Kind       => N_Attribute_Declaration,
+                             In_Tree       => Tree,
+                             And_Expr_Kind => List);
 
             Expression : constant Project_Node_Id :=
-              Default_Project_Node
-              (Of_Kind => N_Expression,
-               And_Expr_Kind => List);
+                           Default_Project_Node
+                             (Of_Kind       => N_Expression,
+                              In_Tree       => Tree,
+                              And_Expr_Kind => List);
 
-            Term  : constant Project_Node_Id :=
-              Default_Project_Node
-              (Of_Kind => N_Term,
-               And_Expr_Kind => List);
+            Term      : constant Project_Node_Id :=
+                          Default_Project_Node
+                            (Of_Kind       => N_Term,
+                             In_Tree       => Tree,
+                             And_Expr_Kind => List);
 
             Empty_List : constant Project_Node_Id :=
-              Default_Project_Node
-              (Of_Kind => N_Literal_String_List);
+                           Default_Project_Node
+                             (Of_Kind => N_Literal_String_List,
+                              In_Tree => Tree);
 
          begin
             Set_First_Declarative_Item_Of
-              (Project_Naming_Decl, To => Decl_Item);
-            Set_Next_Declarative_Item (Decl_Item, Naming_Package);
-            Set_Current_Item_Node (Decl_Item, To => Attribute);
-            Set_Name_Of (Attribute, To => Name_Source_Files);
-            Set_Expression_Of (Attribute, To => Expression);
-            Set_First_Term (Expression, To => Term);
-            Set_Current_Term (Term, To => Empty_List);
+              (Project_Naming_Decl, Tree, To => Decl_Item);
+            Set_Next_Declarative_Item (Decl_Item, Tree, Naming_Package);
+            Set_Current_Item_Node (Decl_Item, Tree, To => Attribute);
+            Set_Name_Of (Attribute, Tree, To => Name_Source_Files);
+            Set_Expression_Of (Attribute, Tree, To => Expression);
+            Set_First_Term (Expression, Tree, To => Term);
+            Set_Current_Term (Term, Tree, To => Empty_List);
          end;
 
-         --  Add a with clause on the naming project in the main project
+         --  Add a with clause on the naming project in the main project, if
+         --  there is not already one.
 
          declare
-            With_Clause : constant Project_Node_Id :=
-              Default_Project_Node (Of_Kind => N_With_Clause);
+            With_Clause : Project_Node_Id :=
+                                  First_With_Clause_Of (Project_Node, Tree);
 
          begin
-            Set_Next_With_Clause_Of
-              (With_Clause, To => First_With_Clause_Of (Project_Node));
-            Set_First_With_Clause_Of (Project_Node, To => With_Clause);
-            Set_Name_Of (With_Clause, To => Project_Naming_Id);
+            while With_Clause /= Empty_Node loop
+               exit when
+                 Prj.Tree.Name_Of (With_Clause, Tree) = Project_Naming_Id;
+               With_Clause := Next_With_Clause_Of (With_Clause, Tree);
+            end loop;
 
-            --  We set the project node to something different than
-            --  Empty_Node, so that Prj.PP does not generate a limited
-            --  with clause.
+            if With_Clause = Empty_Node then
+               With_Clause := Default_Project_Node
+                 (Of_Kind => N_With_Clause, In_Tree => Tree);
+               Set_Next_With_Clause_Of
+                 (With_Clause, Tree,
+                  To => First_With_Clause_Of (Project_Node, Tree));
+               Set_First_With_Clause_Of
+                 (Project_Node, Tree, To => With_Clause);
+               Set_Name_Of (With_Clause, Tree, To => Project_Naming_Id);
 
-            Set_Project_Node_Of (With_Clause, Non_Empty_Node);
+               --  We set the project node to something different than
+               --  Empty_Node, so that Prj.PP does not generate a limited
+               --  with clause.
 
-            Name_Len := Project_Naming_Last;
-            Name_Buffer (1 .. Name_Len) :=
-              Project_Naming_File_Name (1 .. Project_Naming_Last);
-            Set_String_Value_Of (With_Clause, To => Name_Find);
+               Set_Project_Node_Of (With_Clause, Tree, Non_Empty_Node);
+
+               Name_Len := Project_Naming_Last;
+               Name_Buffer (1 .. Name_Len) :=
+                 Project_Naming_File_Name (1 .. Project_Naming_Last);
+               Set_String_Value_Of (With_Clause, Tree, To => Name_Find);
+            end if;
          end;
 
-         Project_Declaration := Project_Declaration_Of (Project_Node);
+         Project_Declaration := Project_Declaration_Of (Project_Node, Tree);
 
          --  Add a renaming declaration for package Naming in the main project
 
          declare
             Decl_Item  : constant Project_Node_Id :=
-              Default_Project_Node (Of_Kind => N_Declarative_Item);
+                           Default_Project_Node
+                             (Of_Kind => N_Declarative_Item,
+                              In_Tree => Tree);
 
             Naming : constant Project_Node_Id :=
-              Default_Project_Node (Of_Kind => N_Package_Declaration);
+                           Default_Project_Node
+                             (Of_Kind => N_Package_Declaration,
+                              In_Tree => Tree);
+
          begin
             Set_Next_Declarative_Item
-              (Decl_Item,
-               To => First_Declarative_Item_Of (Project_Declaration));
+              (Decl_Item, Tree,
+               To => First_Declarative_Item_Of (Project_Declaration, Tree));
             Set_First_Declarative_Item_Of
-              (Project_Declaration, To => Decl_Item);
-            Set_Current_Item_Node (Decl_Item, To => Naming);
-            Set_Name_Of (Naming, To => Name_Naming);
+              (Project_Declaration, Tree, To => Decl_Item);
+            Set_Current_Item_Node (Decl_Item, Tree, To => Naming);
+            Set_Name_Of (Naming, Tree, To => Name_Naming);
             Set_Project_Of_Renamed_Package_Of
-              (Naming, To => Project_Naming_Node);
+              (Naming, Tree, To => Project_Naming_Node);
+
+            --  Attach the comments, if any, that were saved for package
+            --  Naming.
+
+            Tree.Project_Nodes.Table (Naming).Comments :=
+              Naming_Package_Comments;
          end;
 
          --  Add an attribute declaration for Source_Dirs, initialized as an
@@ -1078,36 +1163,49 @@ package body Prj.Makr is
 
          declare
             Decl_Item  : constant Project_Node_Id :=
-              Default_Project_Node (Of_Kind => N_Declarative_Item);
+                           Default_Project_Node
+                             (Of_Kind => N_Declarative_Item,
+                              In_Tree => Tree);
 
             Attribute : constant Project_Node_Id :=
-              Default_Project_Node
-              (Of_Kind => N_Attribute_Declaration,
-               And_Expr_Kind => List);
+                           Default_Project_Node
+                             (Of_Kind       => N_Attribute_Declaration,
+                              In_Tree       => Tree,
+                              And_Expr_Kind => List);
 
             Expression : constant Project_Node_Id :=
-              Default_Project_Node
-              (Of_Kind => N_Expression,
-               And_Expr_Kind => List);
+                           Default_Project_Node
+                             (Of_Kind       => N_Expression,
+                              In_Tree       => Tree,
+                              And_Expr_Kind => List);
 
             Term  : constant Project_Node_Id :=
-              Default_Project_Node
-              (Of_Kind => N_Term, And_Expr_Kind => List);
+                           Default_Project_Node
+                             (Of_Kind       => N_Term, In_Tree => Tree,
+                              And_Expr_Kind => List);
 
          begin
             Set_Next_Declarative_Item
-              (Decl_Item,
-               To => First_Declarative_Item_Of (Project_Declaration));
+              (Decl_Item, Tree,
+               To => First_Declarative_Item_Of (Project_Declaration, Tree));
             Set_First_Declarative_Item_Of
-              (Project_Declaration, To => Decl_Item);
-            Set_Current_Item_Node (Decl_Item, To => Attribute);
-            Set_Name_Of (Attribute, To => Name_Source_Dirs);
-            Set_Expression_Of (Attribute, To => Expression);
-            Set_First_Term (Expression, To => Term);
+              (Project_Declaration, Tree, To => Decl_Item);
+            Set_Current_Item_Node (Decl_Item, Tree, To => Attribute);
+            Set_Name_Of (Attribute, Tree, To => Name_Source_Dirs);
+            Set_Expression_Of (Attribute, Tree, To => Expression);
+            Set_First_Term (Expression, Tree, To => Term);
             Source_Dirs_List :=
-              Default_Project_Node (Of_Kind => N_Literal_String_List,
-                                    And_Expr_Kind => List);
-            Set_Current_Term (Term, To => Source_Dirs_List);
+              Default_Project_Node
+                (Of_Kind       => N_Literal_String_List,
+                 In_Tree       => Tree,
+                 And_Expr_Kind => List);
+            Set_Current_Term (Term, Tree, To => Source_Dirs_List);
+
+            --  Attach the comments, if any, that were saved for attribute
+            --  Source_Dirs.
+
+            Tree.Project_Nodes.Table (Attribute).Comments :=
+              Source_Dirs_Comments;
          end;
 
          --  Add an attribute declaration for Source_List_File with the
@@ -1115,43 +1213,60 @@ package body Prj.Makr is
 
          declare
             Decl_Item  : constant Project_Node_Id :=
-              Default_Project_Node (Of_Kind => N_Declarative_Item);
+                           Default_Project_Node
+                             (Of_Kind => N_Declarative_Item,
+                              In_Tree => Tree);
 
-            Attribute : constant Project_Node_Id :=
-              Default_Project_Node
-              (Of_Kind => N_Attribute_Declaration,
-               And_Expr_Kind => Single);
+            Attribute  : constant Project_Node_Id :=
+                            Default_Project_Node
+                              (Of_Kind       => N_Attribute_Declaration,
+                               In_Tree       => Tree,
+                               And_Expr_Kind => Single);
 
             Expression : constant Project_Node_Id :=
-              Default_Project_Node
-              (Of_Kind => N_Expression,
-               And_Expr_Kind => Single);
+                           Default_Project_Node
+                             (Of_Kind       => N_Expression,
+                              In_Tree       => Tree,
+                              And_Expr_Kind => Single);
 
-            Term  : constant Project_Node_Id :=
-              Default_Project_Node
-              (Of_Kind => N_Term,
-               And_Expr_Kind => Single);
+            Term       : constant Project_Node_Id :=
+                           Default_Project_Node
+                             (Of_Kind       => N_Term,
+                              In_Tree       => Tree,
+                              And_Expr_Kind => Single);
 
-            Value : constant Project_Node_Id :=
-              Default_Project_Node
-              (Of_Kind => N_Literal_String,
-               And_Expr_Kind => Single);
+            Value      : constant Project_Node_Id :=
+                           Default_Project_Node
+                             (Of_Kind       => N_Literal_String,
+                              In_Tree       => Tree,
+                              And_Expr_Kind => Single);
 
          begin
             Set_Next_Declarative_Item
-              (Decl_Item,
-               To => First_Declarative_Item_Of (Project_Declaration));
+              (Decl_Item, Tree,
+               To => First_Declarative_Item_Of (Project_Declaration, Tree));
             Set_First_Declarative_Item_Of
-              (Project_Declaration, To => Decl_Item);
-            Set_Current_Item_Node (Decl_Item, To => Attribute);
-            Set_Name_Of (Attribute, To => Name_Source_List_File);
-            Set_Expression_Of (Attribute, To => Expression);
-            Set_First_Term (Expression, To => Term);
-            Set_Current_Term (Term, To => Value);
+              (Project_Declaration, Tree, To => Decl_Item);
+            Set_Current_Item_Node (Decl_Item, Tree, To => Attribute);
+            Set_Name_Of (Attribute, Tree, To => Name_Source_List_File);
+            Set_Expression_Of (Attribute, Tree, To => Expression);
+            Set_First_Term (Expression, Tree, To => Term);
+            Set_Current_Term (Term, Tree, To => Value);
             Name_Len := Source_List_Last;
             Name_Buffer (1 .. Name_Len) :=
               Source_List_Path (1 .. Source_List_Last);
-            Set_String_Value_Of (Value, To => Name_Find);
+            Set_String_Value_Of (Value, Tree, To => Name_Find);
+
+            --  If there was no comments for attribute Source_List_File, put
+            --  those for Source_Files, if they exist.
+
+            if Source_List_File_Comments /= Empty_Node then
+               Tree.Project_Nodes.Table (Attribute).Comments :=
+                 Source_List_File_Comments;
+            else
+               Tree.Project_Nodes.Table (Attribute).Comments :=
+                 Source_Files_Comments;
+            end if;
          end;
       end if;
 
@@ -1163,6 +1278,7 @@ package body Prj.Makr is
             Dir_Name    : constant String := Directories (Index).all;
             Last        : Natural := Dir_Name'Last;
             Recursively : Boolean := False;
+
          begin
             if Dir_Name'Length >= 4
               and then (Dir_Name (Last - 2 .. Last) = "/**")
@@ -1177,35 +1293,38 @@ package body Prj.Makr is
 
                declare
                   Expression : constant Project_Node_Id :=
-                    Default_Project_Node
-                    (Of_Kind => N_Expression,
-                     And_Expr_Kind => Single);
+                                 Default_Project_Node
+                                   (Of_Kind       => N_Expression,
+                                    In_Tree       => Tree,
+                                    And_Expr_Kind => Single);
 
-                  Term : constant Project_Node_Id :=
-                    Default_Project_Node
-                    (Of_Kind => N_Term,
-                     And_Expr_Kind => Single);
+                  Term       : constant Project_Node_Id :=
+                                 Default_Project_Node
+                                   (Of_Kind       => N_Term,
+                                    In_Tree       => Tree,
+                                    And_Expr_Kind => Single);
 
-                  Value : constant Project_Node_Id :=
-                    Default_Project_Node
-                    (Of_Kind => N_Literal_String,
-                     And_Expr_Kind => Single);
+                  Value      : constant Project_Node_Id :=
+                                 Default_Project_Node
+                                   (Of_Kind       => N_Literal_String,
+                                    In_Tree       => Tree,
+                                    And_Expr_Kind => Single);
 
                begin
                   if Current_Source_Dir = Empty_Node then
                      Set_First_Expression_In_List
-                       (Source_Dirs_List, To => Expression);
+                       (Source_Dirs_List, Tree, To => Expression);
                   else
                      Set_Next_Expression_In_List
-                       (Current_Source_Dir, To => Expression);
+                       (Current_Source_Dir, Tree, To => Expression);
                   end if;
 
                   Current_Source_Dir := Expression;
-                  Set_First_Term (Expression, To => Term);
-                  Set_Current_Term (Term, To => Value);
+                  Set_First_Term (Expression, Tree, To => Term);
+                  Set_Current_Term (Term, Tree, To => Value);
                   Name_Len := Dir_Name'Length;
                   Name_Buffer (1 .. Name_Len) := Dir_Name;
-                  Set_String_Value_Of (Value, To => Name_Find);
+                  Set_String_Value_Of (Value, Tree, To => Name_Find);
                end;
             end if;
 
@@ -1252,7 +1371,7 @@ package body Prj.Makr is
             --  Output the project file
 
             Prj.PP.Pretty_Print
-              (Project_Node,
+              (Project_Node, Tree,
                W_Char => Write_A_Char'Access,
                W_Eol  => Write_Eol'Access,
                W_Str  => Write_A_String'Access,
@@ -1290,7 +1409,7 @@ package body Prj.Makr is
             --  Output the naming project file
 
             Prj.PP.Pretty_Print
-              (Project_Naming_Node,
+              (Project_Naming_Node, Tree,
                W_Char => Write_A_Char'Access,
                W_Eol  => Write_Eol'Access,
                W_Str  => Write_A_String'Access,

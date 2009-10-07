@@ -54,6 +54,8 @@
 /* APPLE LOCAL - subroutine inlining  */
 #include "inlining.h"
 
+#include "macosx-nat-dyld.h"
+
 /* APPLE LOCAL: need objfile.h for pc_set_load_state.  */
 #include "objfiles.h"
 
@@ -140,6 +142,9 @@ static ptid_t previous_inferior_ptid;
 #endif
 
 static int may_follow_exec = MAY_FOLLOW_EXEC;
+
+/* APPLE LOCAL: Print the setup we do before hand calling functions.  */
+int debug_handcall_setup = 0;
 
 static int debug_infrun = 0;
 static void
@@ -323,6 +328,10 @@ enum stop_kind stop_soon;
    situation when stop_registers should be saved.  */
 
 int proceed_to_finish;
+
+/* Non-zero if we are proceeding from a hand function call.  */
+
+int proceed_from_hand_call;
 
 /* Save register contents here when about to pop a stack dummy frame,
    if-and-only-if proceed_to_finish is set.
@@ -605,7 +614,7 @@ set_scheduler_locking_mode (enum scheduler_locking_mode new_mode)
   else if (scheduler_mode == schedlock_step)
     old_mode = scheduler_locking_step;
   else
-    error ("Invalid old scheduler mode: %d", (int) scheduler_mode);
+    error ("Invalid old scheduler mode: %s", scheduler_mode);
 
   switch (new_mode)
     {
@@ -622,6 +631,39 @@ set_scheduler_locking_mode (enum scheduler_locking_mode new_mode)
       error ("Invalid new scheduler mode: %d", new_mode);
     }
      
+  if (debug_handcall_setup)
+    {
+      char *old_str = "UNKNOWN", *new_str = "UNKNOWN";
+
+      switch (old_mode)
+	{
+	case scheduler_locking_off:
+	  old_str = "OFF";
+	  break;
+	case scheduler_locking_on:
+	  old_str = "ON";
+	  break;
+	case scheduler_locking_step:
+	  old_str = "STEP";
+	  break;
+	}
+
+      switch (new_mode)
+	{
+	case scheduler_locking_off:
+	  new_str = "OFF";
+	  break;
+	case scheduler_locking_on:
+	  new_str = "ON";
+	  break;
+	case scheduler_locking_step:
+	  new_str = "STEP";
+	  break;
+	}
+
+      printf_unfiltered ("Setting scheduler lock from %s to %s.\n", old_str, new_str);
+    }
+
   set_schedlock_helper ();
 
   return old_mode;
@@ -821,6 +863,17 @@ prepare_to_proceed (void)
       return 0;
     }
 
+  /* If we're about to proceed to call a function by hand,
+     don't switch back to the wait_ptid.  Normally this won't
+     cause a problem, but if the scheduler is locked, we won't
+     be able to get back to the thread that we really meant to
+     lock the scheduler to.  It's alright in this context not to
+     handle the breakpoint hit right away, since we are only 
+     calling functions below the current point in the stack which
+     triggered the breakpoint.  */
+  if (proceed_from_hand_call)
+    return 0;
+
   if (!ptid_equal (wait_ptid, minus_one_ptid)
       && !ptid_equal (inferior_ptid, wait_ptid))
     {
@@ -900,6 +953,12 @@ proceed (CORE_ADDR addr, enum target_signal siggnal, int step)
   }
   /* APPLE LOCAL end checkpoints */
 #endif
+
+  if (!proceed_from_hand_call)
+    {
+      do_hand_call_cleanups (ALL_CLEANUPS);
+      proceed_from_hand_call = 0;
+    }
 
   if (step > 0)
     step_start_function = find_pc_function (read_pc ());
@@ -2241,10 +2300,20 @@ extern void macosx_print_extra_stop_info (int, CORE_ADDR);
 	     breakpoint.  */
 	  /* To simplify things, "continue" is forced to use the same
 	     code paths as single-step - set a breakpoint at the
-	     signal return address and then, once hit, step off that
-	     breakpoint.  */
+	     signal return address and then, once hit, step off that breakpoint.  */
 	  insert_step_resume_breakpoint_at_frame (get_current_frame ());
 	  ecs->step_after_step_resume_breakpoint = 1;
+
+	  /* APPLE LOCAL: If you look at keep_going, you will see that since
+	     we were expecting a trap (the single-step trap) and got some
+	     other signal instead - that's why we got into this branch -
+	     we're going to JUST resume (first branch of the if in keep_going.)
+	     We AREN'T going to insert breakpoints.  So setting this breakpoint
+	     really doesn't do much good.  OTOH, because of the way at least
+	     SnowLeopard handles the SOFT_SIGNAL & EXC_BREAKPOINT exceptions,
+	     if I actually insert the breakpoints here, I do hit this breakpoint,
+	     but the signal handler never gets tripped.  So I'm not going to do that.  */
+
 	  keep_going (ecs);
 	  return;
 	}
@@ -2642,6 +2711,26 @@ extern void macosx_print_extra_stop_info (int, CORE_ADDR);
       if (debug_infrun)
 	 fprintf_unfiltered (gdb_stdlog, "infrun: step-resume breakpoint\n");
 
+      /* APPLE LOCAL: On Mach, when we get the signal while trying to step,
+	 the step has actually already completed behind our back.  So immediately
+	 after we send the signal back, we hit the hardware step trap, and the
+	 pc is on the next instruction past where we set the breakpoint.
+  
+	 That's why we didn't notice it above where we check the
+	 bpstat_stop_status, and we come here instead.  If we JUST
+	 keep going, we're going to continue beyond our stepping range,
+	 since currently_stepping returns 0 if the step_resume_breakpoint is set. 
+         The only point of the step_resume_breakpoint was to make sure that
+         we did stop at the instruction we've already missed.  So we might as
+         well just delete it here and continue on.  */
+      if (ecs->step_after_step_resume_breakpoint
+	  && step_resume_breakpoint->loc->address 
+	  + length_of_this_instruction (step_resume_breakpoint->loc->address) == stop_pc)
+	{
+	  ecs->step_after_step_resume_breakpoint = 0;
+	  delete_step_resume_breakpoint (&step_resume_breakpoint);
+	  
+	}
       /* Having a step-resume breakpoint overrides anything
          else having to do with stepping commands until
          that breakpoint is reached.  */
@@ -3440,6 +3529,8 @@ prepare_to_wait (struct execution_control_state *ecs)
 static void
 print_stop_reason (enum inferior_stop_reason stop_reason, int stop_info)
 {
+  struct cleanup *notify_cleanup;
+
   switch (stop_reason)
     {
     case STOP_UNKNOWN:
@@ -3508,20 +3599,32 @@ print_stop_reason (enum inferior_stop_reason stop_reason, int stop_info)
     case SIGNAL_RECEIVED:
       /* Signal received. The signal table tells us to print about
          it. */
+      /* APPLE LOCAL: If we are going to print the signal but not stop
+	 then print it as an asynchronous message instead of accumulating
+	 these signal messages in the stop reason for the final *stopped
+	 result.  */
+      if (ui_out_is_mi_like_p (uiout) && !signal_stop [stop_info])
+	notify_cleanup 
+	  = make_cleanup_ui_out_notify_begin_end (uiout, "signal-received");
+
       annotate_signal ();
       ui_out_text (uiout, "\nProgram received signal ");
       annotate_signal_name ();
       ui_out_print_annotation_string (uiout, 0, "reason", 
-			       async_reason_lookup (EXEC_ASYNC_SIGNAL_RECEIVED));
+				      async_reason_lookup (EXEC_ASYNC_SIGNAL_RECEIVED));
       ui_out_print_annotation_string (uiout, 1, "signal-name",
-			   target_signal_to_name (stop_info));
+				      target_signal_to_name (stop_info));
       annotate_signal_name_end ();
       ui_out_text (uiout, ", ");
       annotate_signal_string ();
       ui_out_print_annotation_string (uiout, 1, "signal-meaning",
-			   target_signal_to_string (stop_info));
+				      target_signal_to_string (stop_info));
       annotate_signal_string_end ();
       ui_out_text (uiout, ".\n");
+
+      if (ui_out_is_mi_like_p (uiout) && !signal_stop [stop_info])
+	  do_cleanups (notify_cleanup); 
+
       break;
     default:
       internal_error (__FILE__, __LINE__,
@@ -3701,10 +3804,26 @@ Further execution is probably impossible.\n"));
 		 /* FIXME: cagney/2002-12-01: Given that a frame ID does
 		    (or should) carry around the function and does (or
 		    should) use that when doing a frame comparison.  */
-		 if (stop_step
+		 /* APPLE LOCAL begin radar 6130399  */
+		 if (get_frame_type (get_current_frame ()) == INLINED_FRAME
+		     && stop_step
 		     && frame_id_eq (step_frame_id,
-				     get_frame_id (get_current_frame ()))
+				     get_frame_id (get_prev_frame (get_current_frame ())))
 		     && step_start_function == find_pc_function (stop_pc))
+		   {
+		     if (finishing_inlined_subroutine
+			 || (current_inlined_subroutine_call_stack_start_pc () 
+			     == stop_pc))
+		       source_flag = SRC_AND_LOC;
+		     else
+		       source_flag = SRC_LINE;	/* finished step, just print source line */
+		   }
+		 else if (get_frame_type (get_current_frame ()) == NORMAL_FRAME
+			  && stop_step
+			  && frame_id_eq (step_frame_id,
+					  get_frame_id (get_current_frame ()))
+			  && step_start_function == find_pc_function_no_inlined (stop_pc))
+		   /* APPLE LOCAL end radar 6130399  */
 		   /* APPLE LOCAL begin subroutine inlining  */
 		   /* Finishing out of an inlined subroutine looks very
 		      similar to stepping, but needs to have the full
@@ -3844,20 +3963,20 @@ done:
    call hook_stop - especially when running
    functions in the objc parser.  */
 
-static int suppress_hook_stop_p;
+static void *suppress_hook_stop_p;
 
 static void
 do_cleanup_suppress_hook_stop (void *arg)
 {
-  suppress_hook_stop_p = (int) arg;
+  suppress_hook_stop_p = arg;
 }
 
 struct cleanup *
 make_cleanup_suppress_hook_stop ()
 {
-  int old_value = suppress_hook_stop_p;
-  suppress_hook_stop_p = 1;
-  return make_cleanup (do_cleanup_suppress_hook_stop, (void *) old_value);
+  void *old_value = suppress_hook_stop_p;
+  suppress_hook_stop_p = (void *) 1;
+  return make_cleanup (do_cleanup_suppress_hook_stop, old_value);
 }
 /* END APPLE LOCAL */
 static int
@@ -4226,6 +4345,57 @@ signals_info (char *signum_exp, int from_tty)
 
   printf_filtered (_("\nUse the \"handle\" command to change these tables.\n"));
 }
+
+/* APPLE LOCAL: This command sets gdb's signal handling into a minimal
+   "running" set where we don't stop for any signal unless it is likely fatal.
+   The previous state is stored away, and can be reset.  */
+
+static int minimal_signal_handling = 0;
+
+static unsigned char *minimal_signal_stop = NULL;
+static unsigned char *minimal_signal_print = NULL;
+static unsigned char *minimal_signal_program = NULL;
+
+static unsigned char *full_signal_stop = NULL;
+static unsigned char *full_signal_print = NULL;
+static unsigned char *full_signal_program = NULL;
+
+static int
+allocate_signal_set (unsigned char **stop, 
+		     unsigned char **print, 
+		     unsigned char **program)
+{
+  int numsigs;
+
+  numsigs = (int) TARGET_SIGNAL_LAST;
+  *stop = (unsigned char *) xmalloc (sizeof (signal_stop[0]) * numsigs);
+  *print = (unsigned char *)
+    xmalloc (sizeof (signal_print[0]) * numsigs);
+  *program = (unsigned char *)
+    xmalloc (sizeof (signal_program[0]) * numsigs);
+
+  return numsigs;
+}
+
+static void
+set_minimal_signal_handling (char *args, int from_tty,
+			       struct cmd_list_element *c)
+{
+
+  if (minimal_signal_handling)
+    {
+      signal_stop = minimal_signal_stop;
+      signal_print = minimal_signal_print;
+      signal_program = minimal_signal_program;
+    }
+  else
+    {
+      signal_stop = full_signal_stop;
+      signal_print = full_signal_print;
+      signal_program = full_signal_program;
+    }
+}
+
 
 struct inferior_status
 {
@@ -4311,9 +4481,15 @@ save_inferior_status (int restore_stack_info)
 
   inf_status->registers = regcache_dup (current_regcache);
 
-  inf_status->selected_frame_id = get_frame_id (deprecated_selected_frame);
+  /* APPLE LOCAL: use get_selected_frame not deprecated_selected_frame 
+     otherwise we'll store a NULL frame here if there's nothing selected,
+     and the restore_selected_frame will complain.  */
+  inf_status->selected_frame_id = get_frame_id (get_selected_frame (NULL));
   /* APPLE LOCAL: Store stop_ptid.  */
   inf_status->stop_ptid = inferior_ptid;
+
+  /* APPLE LOCAL subroutine inlining  */
+  inlined_subroutine_save_before_dummy_call ();
 
   return inf_status;
 }
@@ -4366,6 +4542,9 @@ restore_inferior_status (struct inferior_status *inf_status)
   /* FIXME: Is the restore of stop_registers always needed. */
   regcache_xfree (stop_registers);
   stop_registers = inf_status->stop_registers;
+
+  /* APPLE LOCAL subroutine inlining  */
+  inlined_subroutine_restore_after_dummy_call ();
 
   flush_inlined_subroutine_frames ();
 
@@ -4636,52 +4815,111 @@ When non-zero, inferior specific debugging is enabled."),
 			    show_debug_infrun,
 			    &setdebuglist, &showdebuglist);
 
-  numsigs = (int) TARGET_SIGNAL_LAST;
-  signal_stop = (unsigned char *) xmalloc (sizeof (signal_stop[0]) * numsigs);
-  signal_print = (unsigned char *)
-    xmalloc (sizeof (signal_print[0]) * numsigs);
-  signal_program = (unsigned char *)
-    xmalloc (sizeof (signal_program[0]) * numsigs);
+  add_setshow_zinteger_cmd ("hand-call-setup", class_obscure, &debug_handcall_setup,
+			    "Set whether we print debugging output for locking scheduler & setting debugger mode",
+			    "Set whether we print debugging output for locking scheduler & setting debugger mode",
+			    "When non-zero, print debugging information about ",
+			   NULL, NULL,
+			   &setdebuglist, &showdebuglist);
+
+  numsigs = allocate_signal_set (&full_signal_stop, 
+				 &full_signal_print, 
+				 &full_signal_program);
+
   for (i = 0; i < numsigs; i++)
     {
-      signal_stop[i] = 1;
-      signal_print[i] = 1;
-      signal_program[i] = 1;
+      full_signal_stop[i] = 1;
+      full_signal_print[i] = 1;
+      full_signal_program[i] = 1;
     }
 
   /* Signals caused by debugger's own actions
      should not be given to the program afterwards.  */
-  signal_program[TARGET_SIGNAL_TRAP] = 0;
-  signal_program[TARGET_SIGNAL_INT] = 0;
+  full_signal_program[TARGET_SIGNAL_TRAP] = 0;
+  full_signal_program[TARGET_SIGNAL_INT] = 0;
 
   /* Signals that are not errors should not normally enter the debugger.  */
-  signal_stop[TARGET_SIGNAL_ALRM] = 0;
-  signal_print[TARGET_SIGNAL_ALRM] = 0;
-  signal_stop[TARGET_SIGNAL_VTALRM] = 0;
-  signal_print[TARGET_SIGNAL_VTALRM] = 0;
-  signal_stop[TARGET_SIGNAL_PROF] = 0;
-  signal_print[TARGET_SIGNAL_PROF] = 0;
-  signal_stop[TARGET_SIGNAL_CHLD] = 0;
-  signal_print[TARGET_SIGNAL_CHLD] = 0;
-  signal_stop[TARGET_SIGNAL_IO] = 0;
-  signal_print[TARGET_SIGNAL_IO] = 0;
-  signal_stop[TARGET_SIGNAL_POLL] = 0;
-  signal_print[TARGET_SIGNAL_POLL] = 0;
-  signal_stop[TARGET_SIGNAL_URG] = 0;
-  signal_print[TARGET_SIGNAL_URG] = 0;
-  signal_stop[TARGET_SIGNAL_WINCH] = 0;
-  signal_print[TARGET_SIGNAL_WINCH] = 0;
+  full_signal_stop[TARGET_SIGNAL_ALRM] = 0;
+  full_signal_print[TARGET_SIGNAL_ALRM] = 0;
+  full_signal_stop[TARGET_SIGNAL_VTALRM] = 0;
+  full_signal_print[TARGET_SIGNAL_VTALRM] = 0;
+  full_signal_stop[TARGET_SIGNAL_PROF] = 0;
+  full_signal_print[TARGET_SIGNAL_PROF] = 0;
+  full_signal_stop[TARGET_SIGNAL_CHLD] = 0;
+  full_signal_print[TARGET_SIGNAL_CHLD] = 0;
+  full_signal_stop[TARGET_SIGNAL_IO] = 0;
+  full_signal_print[TARGET_SIGNAL_IO] = 0;
+  full_signal_stop[TARGET_SIGNAL_POLL] = 0;
+  full_signal_print[TARGET_SIGNAL_POLL] = 0;
+  full_signal_stop[TARGET_SIGNAL_URG] = 0;
+  full_signal_print[TARGET_SIGNAL_URG] = 0;
+  full_signal_stop[TARGET_SIGNAL_WINCH] = 0;
+  full_signal_print[TARGET_SIGNAL_WINCH] = 0;
 
   /* These signals are used internally by user-level thread
      implementations.  (See signal(5) on Solaris.)  Like the above
      signals, a healthy program receives and handles them as part of
      its normal operation.  */
-  signal_stop[TARGET_SIGNAL_LWP] = 0;
-  signal_print[TARGET_SIGNAL_LWP] = 0;
-  signal_stop[TARGET_SIGNAL_WAITING] = 0;
-  signal_print[TARGET_SIGNAL_WAITING] = 0;
-  signal_stop[TARGET_SIGNAL_CANCEL] = 0;
-  signal_print[TARGET_SIGNAL_CANCEL] = 0;
+  full_signal_stop[TARGET_SIGNAL_LWP] = 0;
+  full_signal_print[TARGET_SIGNAL_LWP] = 0;
+  full_signal_stop[TARGET_SIGNAL_WAITING] = 0;
+  full_signal_print[TARGET_SIGNAL_WAITING] = 0;
+  full_signal_stop[TARGET_SIGNAL_CANCEL] = 0;
+  full_signal_print[TARGET_SIGNAL_CANCEL] = 0;
+
+  minimal_signal_handling = 0;
+  set_minimal_signal_handling (NULL, 0, NULL);
+
+  /* APPLE LOCAL: Initialize the "minimal_signal" arrays.  */
+  numsigs = allocate_signal_set (&minimal_signal_stop, 
+				 &minimal_signal_print, 
+				 &minimal_signal_program);
+
+  for (i = 0; i < numsigs; i++)
+    {
+      minimal_signal_stop[i] = 0;
+      minimal_signal_print[i] = 1;
+      minimal_signal_program[i] = 1;
+    }
+
+  /* Signals caused by debugger's own actions
+     should not be given to the program afterwards.  */
+  minimal_signal_program[TARGET_SIGNAL_TRAP] = 0;
+  minimal_signal_program[TARGET_SIGNAL_INT] = 0;
+
+  /* Signals that are not errors are not even printed.  */
+  minimal_signal_print[TARGET_SIGNAL_ALRM] = 0;
+  minimal_signal_print[TARGET_SIGNAL_VTALRM] = 0;
+  minimal_signal_print[TARGET_SIGNAL_PROF] = 0;
+  minimal_signal_print[TARGET_SIGNAL_CHLD] = 0;
+  minimal_signal_print[TARGET_SIGNAL_IO] = 0;
+  minimal_signal_print[TARGET_SIGNAL_POLL] = 0;
+  minimal_signal_print[TARGET_SIGNAL_URG] = 0;
+  minimal_signal_print[TARGET_SIGNAL_WINCH] = 0;
+
+  /* See comment above for these.  */
+  minimal_signal_print[TARGET_SIGNAL_LWP] = 0;
+  minimal_signal_print[TARGET_SIGNAL_WAITING] = 0;
+  minimal_signal_print[TARGET_SIGNAL_CANCEL] = 0;
+
+  /* However, we should stop for signals that
+     are likely to be fatal.  */
+  minimal_signal_stop[TARGET_SIGNAL_TERM] = 1;
+  minimal_signal_stop[TARGET_SIGNAL_ILL] = 1;
+  minimal_signal_stop[TARGET_SIGNAL_ABRT] = 1;
+  minimal_signal_stop[TARGET_SIGNAL_KILL] = 1;
+  minimal_signal_stop[TARGET_SIGNAL_BUS] = 1;
+  minimal_signal_stop[TARGET_SIGNAL_TRAP] = 1;
+  minimal_signal_stop[TARGET_SIGNAL_INT] = 1;
+  minimal_signal_stop[TARGET_SIGNAL_SEGV] = 1;
+  minimal_signal_stop[TARGET_SIGNAL_QUIT] = 1;
+  minimal_signal_stop[TARGET_SIGNAL_FPE] = 1;
+
+
+  minimal_signal_stop[TARGET_EXC_BAD_ACCESS] = 1;
+  minimal_signal_stop[TARGET_EXC_BAD_INSTRUCTION] = 1;
+  minimal_signal_stop[TARGET_EXC_ARITHMETIC] = 1;
+  minimal_signal_stop[TARGET_EXC_BREAKPOINT] = 1;
 
   add_setshow_zinteger_cmd ("stop-on-solib-events", class_support,
 			    &stop_on_solib_events, _("\
@@ -4732,6 +4970,14 @@ will stop at the first instruction of that function. Otherwise, the\n\
 function is skipped and the step command stops at a different source line."),
 			   NULL,
 			   show_step_stop_if_no_debug,
+			   &setlist, &showlist);
+
+  /* APPLE LOCAL: minimal-signal-handling mode.  */
+  add_setshow_boolean_cmd ("minimal-signal-handling", class_run, &minimal_signal_handling,
+			   "Set whether we run with a minimal signal handling set.",
+			   "Show whether we run with a minimal signal handling set.",
+			   "When set, gdb will only stop on signals that are likely to be fatal.",
+			   set_minimal_signal_handling, NULL,
 			   &setlist, &showlist);
 
   /* ptid initializations */

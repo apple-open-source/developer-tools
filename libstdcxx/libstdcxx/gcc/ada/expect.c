@@ -6,7 +6,7 @@
  *                                                                          *
  *                          C Implementation File                           *
  *                                                                          *
- *           Copyright (C) 2001-2004 Ada Core Technologies, Inc.            *
+ *                     Copyright (C) 2001-2005, AdaCore                     *
  *                                                                          *
  * GNAT is free software;  you can  redistribute it  and/or modify it under *
  * terms of the  GNU General Public License as published  by the Free Soft- *
@@ -16,8 +16,8 @@
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License *
  * for  more details.  You should have  received  a copy of the GNU General *
  * Public License  distributed with GNAT;  see file COPYING.  If not, write *
- * to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, *
- * MA 02111-1307, USA.                                                      *
+ * to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, *
+ * Boston, MA 02110-1301, USA.                                              *
  *                                                                          *
  * As a  special  exception,  if you  link  this file  with other  files to *
  * produce an executable,  this file does not by itself cause the resulting *
@@ -43,6 +43,18 @@
 #include "system.h"
 #endif
 
+#include <sys/types.h>
+
+#ifdef __MINGW32__
+#if OLD_MINGW
+#include <sys/wait.h>
+#endif
+#elif defined (__vxworks) && defined (__RTP__)
+#include <wait.h>
+#else
+#include <sys/wait.h>
+#endif
+
 /* This file provides the low level functionalities needed to implement Expect
    capabilities in GNAT.Expect.
    Implementations for unix and windows systems is provided.
@@ -64,16 +76,33 @@
 #include <process.h>
 
 void
-__gnat_kill (int pid, int sig)
+__gnat_kill (int pid, int sig, int close)
 {
-  HANDLE process_handle;
-
   if (sig == 9)
     {
-      process_handle = OpenProcess (PROCESS_TERMINATE, FALSE, pid);
-      if (process_handle != NULL)
-	TerminateProcess (process_handle, 0);
+      if ((HANDLE)pid != NULL)
+	{
+	  TerminateProcess ((HANDLE)pid, 0);
+	  if (close)
+	    CloseHandle ((HANDLE)pid);
+	}
     }
+}
+
+int
+__gnat_waitpid (int pid)
+{
+  DWORD exitcode = 1;
+  DWORD res;
+
+  if ((HANDLE)pid != NULL)
+    {
+      res = WaitForSingleObject ((HANDLE)pid, INFINITE);
+      GetExitCodeProcess ((HANDLE)pid, &exitcode);
+      CloseHandle ((HANDLE)pid);
+    }
+
+  return (int) exitcode;
 }
 
 int
@@ -85,7 +114,61 @@ __gnat_expect_fork (void)
 void
 __gnat_expect_portable_execvp (int *pid, char *cmd, char *argv[])
 {
-  *pid = (int) spawnve (_P_NOWAIT, cmd, argv, NULL);
+  BOOL result;
+  STARTUPINFO SI;
+  PROCESS_INFORMATION PI;
+  SECURITY_ATTRIBUTES SA;
+  int csize = 1;
+  char *full_command;
+  int k;
+
+  /* compute the total command line length.  */
+  k = 0;
+  while (argv[k])
+    {
+      csize += strlen (argv[k]) + 1;
+      k++;
+    }
+
+  full_command = (char *) malloc (csize);
+  full_command[0] = '\0';
+
+  /* Startup info. */
+  SI.cb          = sizeof (STARTUPINFO);
+  SI.lpReserved  = NULL;
+  SI.lpReserved2 = NULL;
+  SI.lpDesktop   = NULL;
+  SI.cbReserved2 = 0;
+  SI.lpTitle     = NULL;
+  SI.dwFlags     = 0;
+  SI.wShowWindow = SW_HIDE;
+
+  /* Security attributes. */
+  SA.nLength = sizeof (SECURITY_ATTRIBUTES);
+  SA.bInheritHandle = TRUE;
+  SA.lpSecurityDescriptor = NULL;
+
+  k = 0;
+  while (argv[k])
+    {
+      strcat (full_command, argv[k]);
+      strcat (full_command, " ");
+      k++;
+    }
+
+  result = CreateProcess
+	     (NULL, (char *) full_command, &SA, NULL, TRUE,
+              GetPriorityClass (GetCurrentProcess()), NULL, NULL, &SI, &PI);
+
+  free (full_command);
+
+  if (result == TRUE)
+    {
+      CloseHandle (PI.hThread);
+      *pid = (int) PI.hProcess;
+    }
+  else
+    *pid = -1;
 }
 
 int
@@ -152,10 +235,21 @@ __gnat_expect_poll (int *fd, int num_fd, int timeout, int *is_set)
 #include <unixio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <descrip.h>
+#include <vms/descrip.h>
 #include <stdio.h>
-#include <stsdef.h>
-#include <iodef.h>
+#include <vms/stsdef.h>
+#include <vms/iodef.h>
+
+int
+__gnat_waitpid (int pid)
+{
+  int status = 0;
+
+  waitpid (pid, &status, 0);
+  status = WEXITSTATUS (status);
+
+  return status;
+}
 
 int
 __gnat_pipe (int *fd)
@@ -292,9 +386,20 @@ typedef long fd_mask;
 #endif /* !NO_FD_SET */
 
 void
-__gnat_kill (int pid, int sig)
+__gnat_kill (int pid, int sig, int close)
 {
   kill (pid, sig);
+}
+
+int
+__gnat_waitpid (int pid)
+{
+  int status = 0;
+
+  waitpid (pid, &status, 0);
+  status = WEXITSTATUS (status);
+
+  return status;
 }
 
 int
@@ -400,8 +505,14 @@ __gnat_expect_poll (int *fd, int num_fd, int timeout, int *is_set)
 #else
 
 void
-__gnat_kill (int pid, int sig)
+__gnat_kill (int pid, int sig, int close)
 {
+}
+
+int
+__gnat_waitpid (int pid, int sig)
+{
+  return 0;
 }
 
 int

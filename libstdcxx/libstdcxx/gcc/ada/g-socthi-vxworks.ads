@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---            Copyright (C) 2002-2004 Ada Core Technologies, Inc.           --
+--                     Copyright (C) 2002-2005, AdaCore                     --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -57,21 +57,34 @@ package GNAT.Sockets.Thin is
    Failure : constant C.int := -1;
 
    function Socket_Errno return Integer renames GNAT.OS_Lib.Errno;
-   --  Returns last socket error number.
+   --  Returns last socket error number
 
    function Socket_Error_Message (Errno : Integer) return C.Strings.chars_ptr;
-   --  Returns the error message string for the error number Errno. If
-   --  Errno is not known it returns "Unknown system error".
+   --  Returns the error message string for the error number Errno. If Errno is
+   --  not known it returns "Unknown system error".
+
+   function Host_Errno return Integer;
+   pragma Import (C, Host_Errno, "__gnat_get_h_errno");
+   --  Returns last host error number
 
    subtype Fd_Set_Access is System.Address;
    No_Fd_Set : constant Fd_Set_Access := System.Null_Address;
 
-   type Timeval_Unit is new C.int;
-   pragma Convention (C, Timeval_Unit);
+   type time_t is
+     range -2 ** (8 * Constants.SIZEOF_tv_sec - 1)
+         .. 2 ** (8 * Constants.SIZEOF_tv_sec - 1) - 1;
+   for time_t'Size use 8 * Constants.SIZEOF_tv_sec;
+   pragma Convention (C, time_t);
+
+   type suseconds_t is
+     range -2 ** (8 * Constants.SIZEOF_tv_usec - 1)
+         .. 2 ** (8 * Constants.SIZEOF_tv_usec - 1) - 1;
+   for suseconds_t'Size use 8 * Constants.SIZEOF_tv_usec;
+   pragma Convention (C, suseconds_t);
 
    type Timeval is record
-      Tv_Sec  : Timeval_Unit;
-      Tv_Usec : Timeval_Unit;
+      Tv_Sec  : time_t;
+      Tv_Usec : suseconds_t;
    end record;
    pragma Convention (C, Timeval);
 
@@ -145,25 +158,25 @@ package GNAT.Sockets.Thin is
      (Sin : Sockaddr_In_Access;
       Len : C.int);
    pragma Inline (Set_Length);
-   --  Set Sin.Sin_Length to Len.
+   --  Set Sin.Sin_Length to Len
 
    procedure Set_Family
      (Sin     : Sockaddr_In_Access;
       Family  : C.int);
    pragma Inline (Set_Family);
-   --  Set Sin.Sin_Family to Family.
+   --  Set Sin.Sin_Family to Family
 
    procedure Set_Port
      (Sin     : Sockaddr_In_Access;
       Port    : C.unsigned_short);
    pragma Inline (Set_Port);
-   --  Set Sin.Sin_Port to Port.
+   --  Set Sin.Sin_Port to Port
 
    procedure Set_Address
      (Sin        : Sockaddr_In_Access;
       Address    : In_Addr);
    pragma Inline (Set_Address);
-   --  Set Sin.Sin_Addr to Address.
+   --  Set Sin.Sin_Addr to Address
 
    type Hostent is record
       H_Name      : C.Strings.chars_ptr;
@@ -199,94 +212,78 @@ package GNAT.Sockets.Thin is
    function C_Accept
      (S       : C.int;
       Addr    : System.Address;
-      Addrlen : access C.int)
-      return    C.int;
+      Addrlen : access C.int) return C.int;
 
    function C_Bind
      (S       : C.int;
       Name    : System.Address;
-      Namelen : C.int)
-      return    C.int;
+      Namelen : C.int) return C.int;
 
    function C_Close
-     (Fd   : C.int)
-      return C.int;
+     (Fd : C.int) return C.int;
 
    function C_Connect
      (S       : C.int;
       Name    : System.Address;
-      Namelen : C.int)
-      return    C.int;
+      Namelen : C.int) return C.int;
 
    function C_Gethostbyaddr
      (Addr : System.Address;
       Len  : C.int;
-      Typ  : C.int)
-      return Hostent_Access;
+      Typ  : C.int) return Hostent_Access;
 
    function C_Gethostbyname
-     (Name : C.char_array)
-      return Hostent_Access;
+     (Name : C.char_array) return Hostent_Access;
 
    function C_Gethostname
      (Name    : System.Address;
-      Namelen : C.int)
-      return    C.int;
+      Namelen : C.int) return C.int;
 
    function C_Getpeername
      (S       : C.int;
       Name    : System.Address;
-      Namelen : access C.int)
-      return    C.int;
+      Namelen : access C.int) return C.int;
 
    function C_Getservbyname
      (Name  : C.char_array;
-      Proto : C.char_array)
-      return Servent_Access;
+      Proto : C.char_array) return Servent_Access;
 
    function C_Getservbyport
      (Port  : C.int;
-      Proto : C.char_array)
-      return Servent_Access;
+      Proto : C.char_array) return Servent_Access;
 
    function C_Getsockname
      (S       : C.int;
       Name    : System.Address;
-      Namelen : access C.int)
-      return    C.int;
+      Namelen : access C.int) return C.int;
 
    function C_Getsockopt
      (S       : C.int;
       Level   : C.int;
       Optname : C.int;
       Optval  : System.Address;
-      Optlen  : access C.int)
-      return    C.int;
+      Optlen  : access C.int) return C.int;
 
    function C_Inet_Addr
-     (Cp   : C.Strings.chars_ptr)
-      return C.int;
+     (Cp : C.Strings.chars_ptr) return C.int;
 
    function C_Ioctl
-     (S    : C.int;
-      Req  : C.int;
-      Arg  : Int_Access)
-      return C.int;
+     (S   : C.int;
+      Req : C.int;
+      Arg : Int_Access) return C.int;
 
    function C_Listen (S, Backlog : C.int) return C.int;
 
    function C_Readv
      (Fd     : C.int;
       Iov    : System.Address;
-      Iovcnt : C.int)
-      return   C.int;
+      Iovcnt : C.int) return C.int;
 
    function C_Recv
      (S     : C.int;
       Msg   : System.Address;
       Len   : C.int;
-      Flags : C.int)
-      return  C.int;
+      Flags : C.int) return C.int;
 
    function C_Recvfrom
      (S       : C.int;
@@ -294,23 +291,20 @@ package GNAT.Sockets.Thin is
       Len     : C.int;
       Flags   : C.int;
       From    : Sockaddr_In_Access;
-      Fromlen : access C.int)
-      return    C.int;
+      Fromlen : access C.int) return C.int;
 
    function C_Select
      (Nfds      : C.int;
       Readfds   : Fd_Set_Access;
       Writefds  : Fd_Set_Access;
       Exceptfds : Fd_Set_Access;
-      Timeout   : Timeval_Access)
-      return      C.int;
+      Timeout   : Timeval_Access) return C.int;
 
    function C_Send
      (S     : C.int;
       Msg   : System.Address;
       Len   : C.int;
-      Flags : C.int)
-      return  C.int;
+      Flags : C.int) return C.int;
 
    function C_Sendto
      (S     : C.int;
@@ -318,44 +312,37 @@ package GNAT.Sockets.Thin is
       Len   : C.int;
       Flags : C.int;
       To    : Sockaddr_In_Access;
-      Tolen : C.int)
-      return  C.int;
+      Tolen : C.int) return C.int;
 
    function C_Setsockopt
      (S       : C.int;
       Level   : C.int;
       Optname : C.int;
       Optval  : System.Address;
-      Optlen  : C.int)
-      return    C.int;
+      Optlen  : C.int) return C.int;
 
    function C_Shutdown
-     (S    : C.int;
-      How  : C.int)
-      return C.int;
+     (S   : C.int;
+      How : C.int) return C.int;
 
    function C_Socket
      (Domain   : C.int;
       Typ      : C.int;
-      Protocol : C.int)
-      return     C.int;
+      Protocol : C.int) return C.int;
 
    function C_Strerror
-     (Errnum : C.int)
-      return   C.Strings.chars_ptr;
+     (Errnum : C.int) return C.Strings.chars_ptr;
 
    function C_System
-     (Command : System.Address)
-      return    C.int;
+     (Command : System.Address) return C.int;
 
    function C_Writev
      (Fd     : C.int;
       Iov    : System.Address;
-      Iovcnt : C.int)
-      return   C.int;
+      Iovcnt : C.int) return C.int;
 
    procedure Free_Socket_Set
-     (Set    : Fd_Set_Access);
+     (Set : Fd_Set_Access);
    --  Free system-dependent socket set
 
    procedure Get_Socket_From_Set
@@ -389,8 +376,7 @@ package GNAT.Sockets.Thin is
    --  set back to the real largest socket in the socket set.
 
    function  New_Socket_Set
-     (Set    : Fd_Set_Access)
-     return   Fd_Set_Access;
+     (Set : Fd_Set_Access) return Fd_Set_Access;
    --  Allocate a new socket set which is a system-dependent structure
    --  and initialize by copying Set if it is non-null, by making it
    --  empty otherwise.

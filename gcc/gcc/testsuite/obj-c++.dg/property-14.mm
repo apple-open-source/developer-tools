@@ -1,13 +1,10 @@
-/* APPLE LOCAL file radar 4664707, 4712188 */
+/* APPLE LOCAL file radar 4664707 */
 /* Test sequence of assignment to setters. */
-/* Modified by adding -W. No warning must be issued. */
 /* APPLE LOCAL radar 4899595 */
-/* { dg-options "-fno-objc-new-property -mmacosx-version-min=10.5 -W -lobjc" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
-/* { dg-options "-fno-objc-new-property -W -lobjc" { target arm*-*-darwin* } } */
+/* { dg-options "-mmacosx-version-min=10.5" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
 /* { dg-do run { target *-*-darwin* } } */
 
 #include <objc/objc.h>
-/* APPLE LOCAL radar 4894756 */
 #include "../objc/execute/Object2.h"
 extern "C" void abort (void);
 
@@ -17,13 +14,15 @@ extern "C" void abort (void);
   int iBar;
   float f;
 }
-@property (ivar = iVar) int prop1;
-@property (ivar = iBar) int prop2;
-@property (ivar = f) int fprop;
+@property (setter = MySetter:) int prop1;
+@property int prop2;
+@property float fprop;
 @end
 
 @implementation Bar
-@property (ivar = iVar, setter = MySetter:) int prop1;
+@synthesize prop1 = iVar;
+@synthesize prop2 = iBar;
+@synthesize fprop = f;
 
 - (void) MySetter : (int) value { iVar = value; }
 

@@ -16,8 +16,8 @@
 ;;
 ;; You should have received a copy of the GNU General Public License
 ;; along with GCC; see the file COPYING.  If not, write to
-;; the Free Software Foundation, 59 Temple Place - Suite 330,
-;; Boston, MA 02111-1307, USA.
+;; the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+;; Boston, MA 02110-1301, USA.
 
 ;; The MMX and 3dNOW! patterns are in the same file because they use
 ;; the same register file, and 3dNOW! adds a number of extensions to
@@ -70,9 +70,13 @@
 ;; Take {ym->y} into account for register allocation
 (define_insn "*mov<mode>_internal_rex64"
   [(set (match_operand:MMXMODEI 0 "nonimmediate_operand"
-				"=rm,r,*y,y ,m ,*y,Y ,x,x ,m,r,x")
+;; APPLE LOCAL begin mainline 2007-06-05 5103201
+				"=rm,r,*y,*y ,m ,*y,Yt,x,x ,m,r,x")
+;; APPLE LOCAL end mainline 2007-06-05 5103201
 	(match_operand:MMXMODEI 1 "vector_move_operand"
-				"Cr ,m,C ,ym,*y,Y ,*y,C,xm,x,x,r"))]
+;; APPLE LOCAL begin mainline 2007-06-05 5103201
+				"Cr ,m,C ,*ym,*y,Yt,*y,C,xm,x,x,r"))]
+;; APPLE LOCAL end mainline 2007-06-05 5103201
   "TARGET_64BIT && TARGET_MMX
    && (GET_CODE (operands[0]) != MEM || GET_CODE (operands[1]) != MEM)"
   "@
@@ -88,16 +92,21 @@
     movq\t{%1, %0|%0, %1}
     movd\t{%1, %0|%0, %1}
     movd\t{%1, %0|%0, %1}"
-  [(set_attr "type" "imov,imov,mmxmov,mmxmov,mmxmov,ssecvt,ssecvt,ssemov,ssemov,ssemov,ssemov,ssemov")
+  [(set_attr "type" "imov,imov,mmx,mmxmov,mmxmov,ssecvt,ssecvt,sselog1,ssemov,ssemov,ssemov,ssemov")
+   (set_attr "unit" "*,*,*,*,*,mmx,mmx,*,*,*,*,*")
    (set_attr "mode" "DI")])
 ;; APPLE LOCAL end 4656532 use V1DImode for _m64
 
 (define_insn "*mov<mode>_internal"
 ;; APPLE LOCAL begin radar 4043818
   [(set (match_operand:MMXMODEI 0 "nonimmediate_operand"
-			"=*y,y ,m ,*y,*Y,*Y,*Y ,m ,*x,*x,*x,m ,?r ,?m")
+;; APPLE LOCAL begin mainline 2007-06-05 5103201
+			"=*y,y ,m ,*y ,*Yt,*Yt,*Yt ,m  ,*x,*x,*x,m ,?r ,?m")
+;; APPLE LOCAL end mainline 2007-06-05 5103201
 	(match_operand:MMXMODEI 1 "vector_move_operand"
-			"C  ,ym,*y,*Y,*y,C ,*Ym,*Y,C ,*x,m ,*x,irm,r"))]
+;; APPLE LOCAL begin mainline 2007-06-05 5103201
+			"C  ,*ym,*y,*Yt,*y ,C  ,*Ytm,*Yt,C ,*x,m ,*x,irm,r"))]
+;; APPLE LOCAL end mainline 2007-06-05 5103201
 ;; APPLE LOCAL end radar 4043818
   "TARGET_MMX
    && (GET_CODE (operands[0]) != MEM || GET_CODE (operands[1]) != MEM)"
@@ -116,7 +125,8 @@
     movlps\t{%1, %0|%0, %1}
     #
     #"
-  [(set_attr "type" "mmxmov,mmxmov,mmxmov,ssecvt,ssecvt,ssemov,ssemov,ssemov,ssemov,ssemov,ssemov,ssemov,*,*")
+  [(set_attr "type" "mmx,mmxmov,mmxmov,ssecvt,ssecvt,sselog1,ssemov,ssemov,sselog1,ssemov,ssemov,ssemov,*,*")
+   (set_attr "unit" "*,*,*,mmx,mmx,*,*,*,*,*,*,*,*,*")
    (set_attr "mode" "DI,DI,DI,DI,DI,TI,DI,DI,V4SF,V4SF,V2SF,V2SF,DI,DI")])
 
 (define_expand "movv2sf"
@@ -130,9 +140,13 @@
 
 (define_insn "*movv2sf_internal_rex64"
   [(set (match_operand:V2SF 0 "nonimmediate_operand"
-				"=rm,r,*y ,*y ,m ,*y,Y ,x,x,x,m,r,x")
+;; APPLE LOCAL begin mainline 2007-06-05 5103201
+	 			"=rm,r,*y ,*y ,m ,*y,Yt,x,x,x,m,r,x")
+;; APPLE LOCAL end mainline 2007-06-05 5103201
         (match_operand:V2SF 1 "vector_move_operand"
-				"Cr ,m ,C ,*ym,*y,Y ,*y,C,x,m,x,x,r"))]
+;; APPLE LOCAL begin mainline 2007-06-05 5103201
+				"Cr ,m ,C ,*ym,*y,Yt,*y,C,x,m,x,x,r"))]
+;; APPLE LOCAL end mainline 2007-06-05 5103201
   "TARGET_64BIT && TARGET_MMX
    && (GET_CODE (operands[0]) != MEM || GET_CODE (operands[1]) != MEM)"
   "@
@@ -149,14 +163,19 @@
     movlps\t{%1, %0|%0, %1}
     movd\t{%1, %0|%0, %1}
     movd\t{%1, %0|%0, %1}"
-  [(set_attr "type" "imov,imov,mmxmov,mmxmov,mmxmov,ssecvt,ssecvt,ssemov,ssemov,ssemov,ssemov,ssemov,ssemov")
+  [(set_attr "type" "imov,imov,mmx,mmxmov,mmxmov,ssecvt,ssecvt,ssemov,sselog1,ssemov,ssemov,ssemov,ssemov")
+   (set_attr "unit" "*,*,*,*,*,mmx,mmx,*,*,*,*,*,*")
    (set_attr "mode" "DI,DI,DI,DI,DI,DI,DI,V4SF,V4SF,V2SF,V2SF,DI,DI")])
 
 (define_insn "*movv2sf_internal"
   [(set (match_operand:V2SF 0 "nonimmediate_operand"
-					"=*y,*y ,m,*y,*Y,*x,*x,*x,m ,?r ,?m")
+;; APPLE LOCAL begin mainline 2007-06-05 5103201
+					"=*y,*y ,m,*y ,*Yt,*x,*x,*x,m ,?r ,?m")
+;; APPLE LOCAL end mainline 2007-06-05 5103201
         (match_operand:V2SF 1 "vector_move_operand"
-					"C ,*ym,*y,*Y,*y,C ,*x,m ,*x,irm,r"))]
+;; APPLE LOCAL begin mainline 2007-06-05 5103201
+					"C ,*ym,*y,*Yt,*y ,C ,*x,m ,*x,irm,r"))]
+;; APPLE LOCAL end mainline 2007-06-05 5103201
   "TARGET_MMX
    && (GET_CODE (operands[0]) != MEM || GET_CODE (operands[1]) != MEM)"
   "@
@@ -171,7 +190,8 @@
     movlps\t{%1, %0|%0, %1}
     #
     #"
-  [(set_attr "type" "mmxmov,mmxmov,mmxmov,ssecvt,ssecvt,ssemov,ssemov,ssemov,ssemov,*,*")
+  [(set_attr "type" "mmx,mmxmov,mmxmov,ssecvt,ssecvt,sselog1,ssemov,ssemov,ssemov,*,*")
+   (set_attr "unit" "*,*,*,mmx,mmx,*,*,*,*,*,*")
    (set_attr "mode" "DI,DI,DI,DI,DI,V4SF,V4SF,V2SF,V2SF,DI,DI")])
 
 ;; %%% This multiword shite has got to go.
@@ -1183,9 +1203,13 @@
 ;; APPLE LOCAL end 4684674
 
 (define_insn "*vec_extractv2si_1"
-  [(set (match_operand:SI 0 "nonimmediate_operand"     "=y,Y,Y,x,frxy")
+;; APPLE LOCAL begin mainline 2007-06-05 5103201
+  [(set (match_operand:SI 0 "nonimmediate_operand"     "=y,Yt,Yt,x,frxy")
+;; APPLE LOCAL end mainline 2007-06-05 5103201
 	(vec_select:SI
-	  (match_operand:V2SI 1 "nonimmediate_operand" " 0,0,Y,0,o")
+;; APPLE LOCAL begin mainline 2007-06-05 5103201
+	  (match_operand:V2SI 1 "nonimmediate_operand" " 0,0 ,Yt,0,o")
+;; APPLE LOCAL end mainline 2007-06-05 5103201
 	  (parallel [(const_int 1)])))]
   "TARGET_MMX && !(MEM_P (operands[0]) && MEM_P (operands[1]))"
   "@
@@ -1363,8 +1387,8 @@
 		   UNSPEC_MOVMSK))]
   "TARGET_SSE || TARGET_3DNOW_A"
   "pmovmskb\t{%1, %0|%0, %1}"
-  [(set_attr "type" "ssecvt")
-   (set_attr "mode" "V4SF")])
+  [(set_attr "type" "mmxcvt")
+   (set_attr "mode" "DI")])
 
 (define_expand "mmx_maskmovq"
   [(set (match_operand:V8QI 0 "memory_operand" "")

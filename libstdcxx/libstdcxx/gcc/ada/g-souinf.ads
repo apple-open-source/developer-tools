@@ -1,12 +1,12 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                         GNAT RUNTIME COMPONENTS                          --
+--                         GNAT RUN-TIME COMPONENTS                         --
 --                                                                          --
 --                     G N A T . S O U R C E _ I N F O                      --
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---              Copyright (C) 2000 Ada Core Technologies, Inc.              --
+--                     Copyright (C) 2000-2005 AdaCore                      --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -39,15 +39,15 @@
 --  the name of the source file in which the exception is handled.
 
 package GNAT.Source_Info is
-pragma Pure (Source_Info);
+   pragma Pure;
 
    function File return String;
    --  Return the name of the current file, not including the path information.
    --  The result is considered to be a static string constant.
 
    function Line return Positive;
-   --  Return the current input line number. The result is considered
-   --  to be a static expression.
+   --  Return the current input line number. The result is considered to be a
+   --  static expression.
 
    function Source_Location return String;
    --  Return a string literal of the form "name:line", where name is the
@@ -61,12 +61,14 @@ pragma Pure (Source_Info);
    --  Return the name of the current subprogram, package, task, entry or
    --  protected subprogram. The string is in exactly the form used for the
    --  declaration of the entity (casing and encoding conventions), and is
-   --  considered to be a static string constant.
+   --  considered to be a static string constant. The name is fully qualified
+   --  using periods where possible (this is not always possible, notably in
+   --  the case of entities appearing in unnamed block statements.)
    --
-   --  Note: if this function is used at the outer level of a generic
-   --  package, the string returned will be the name of the instance,
-   --  not the generic package itself. This is useful in identifying
-   --  and logging information from within generic templates.
+   --  Note: if this function is used at the outer level of a generic package,
+   --  the string returned will be the name of the instance, not the generic
+   --  package itself. This is useful in identifying and logging information
+   --  from within generic templates.
 
 private
    pragma Import (Intrinsic, File);

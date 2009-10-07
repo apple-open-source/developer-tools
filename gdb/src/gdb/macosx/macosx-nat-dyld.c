@@ -29,6 +29,7 @@
 #include <mach/vm_region.h>
 #include <mach/machine/vm_param.h>
 #include <mach-o/loader.h>
+#include <mach/task_info.h>
 #include <sys/time.h>
 
 #include "defs.h"
@@ -50,6 +51,7 @@
 #include "arch-utils.h"
 #include "ui-out.h"
 #include "osabi.h"
+#include "exceptions.h"
 
 #ifdef USE_MMALLOC
 #include <mmalloc.h>
@@ -224,12 +226,6 @@ static void macosx_set_auto_start_dyld (char *args, int from_tty,
 static int target_read_dylib_command (CORE_ADDR addr, 
 				      struct dylib_command *dcmd);
 				      
-static int target_read_segment_command (CORE_ADDR addr, 
-					struct segment_command *segcmd);
-					
-static int target_read_segment_command_64 (CORE_ADDR addr, 
-					   struct segment_command_64 *segcmd);
-
 void
 dyld_debug (const char *fmt, ...)
 {
@@ -278,7 +274,17 @@ dyld_print_status_info (struct macosx_dyld_thread_status *s,
 void
 macosx_clear_start_breakpoint (void)
 {
-  remove_solib_event_breakpoints ();
+  struct macosx_dyld_thread_status *status = &macosx_dyld_status;
+  if (status && status->dyld_breakpoint)
+    {
+      delete_breakpoint (status->dyld_breakpoint);
+      status->dyld_breakpoint = NULL;
+    }
+  if (status && status->malloc_inited_breakpoint)
+    {
+      delete_breakpoint (status->malloc_inited_breakpoint);
+      status->malloc_inited_breakpoint = NULL;
+    }
 }
 
 /* Check if we're debugging via gdb remote protocol (Rosetta debugging,
@@ -320,8 +326,20 @@ lookup_dyld_address (macosx_dyld_thread_status *status, const char *s)
     return INVALID_ADDRESS;
 
   sym_addr = SYMBOL_VALUE_ADDRESS (msym);
-  if (status->dyld_slide != INVALID_ADDRESS)
-    sym_addr += status->dyld_slide;
+
+  /* The minsyms normally have the correct, relocated address of the symbol.
+     dyld is special because we may have loaded the objfile without yet knowing
+     its actual slide value.  We'll unload & reload it in a bit but until then
+     we need to adjust any minsyms manually by dyld_slide.  
+     This comes up in debugging translated apps when the ppc dyld is always 
+     slid from its declared load addr.  */
+
+  if (status->dyld_slide != INVALID_ADDRESS 
+      && status->dyld_minsyms_have_been_relocated == 0)
+    {
+      sym_addr += status->dyld_slide;
+    }
+
   return sym_addr;
 }
 
@@ -419,6 +437,22 @@ macosx_init_dyld_cache_ranges (macosx_dyld_thread_status *s)
     (gdb_byte *)buf + offsetof(type, member), \
     sizeof( struct_ptr -> member))
 
+/* This is a little confusing.  We only use target_read_mach_header
+   when we are reading from memory, and need to figure out how big the
+   whole header is so we can mmap it in, or do some very minimal
+   parsing (like find the UUID).  We generally make a bfd out of it,
+   and use the bfd to actually parse the header.
+
+   As of SL, there is a mach_header struct which is the header for 32
+   bit programs, and a mach_header_64 which is used by 64 bit
+   programs.  The 32 bit & 64 bit headers are laid out the same way as
+   far as the 32 bit one extends, and we don't care about the extra
+   field in the 64 bit version.  So for now, we'll just read in a
+   mach_header in both cases.  
+
+   But then when you want to compute the header size, you need to use
+   target_get_mach_header_size.  */
+
 int 
 target_read_mach_header (CORE_ADDR addr, struct mach_header *s)
 {
@@ -437,6 +471,15 @@ target_read_mach_header (CORE_ADDR addr, struct mach_header *s)
       EXTRACT_INT_MEMBER (struct mach_header, s, flags);
     }
   return error;
+}
+
+int
+target_get_mach_header_size (struct mach_header *header)
+{
+  if (header->magic == 0xfeedfacf)
+    return sizeof (struct mach_header_64);
+  else
+    return sizeof (struct mach_header);
 }
 
 int 
@@ -488,87 +531,6 @@ target_read_dylib_command (CORE_ADDR addr, struct dylib_command *s)
   return error;
 }
 
-int 
-target_read_segment_command (CORE_ADDR addr, struct segment_command *s)
-{
-  int error;
-  gdb_assert (addr != INVALID_ADDRESS);
-  error = target_read_memory (addr, (gdb_byte *)s, sizeof (*s));
-
-  if (error == 0)
-    {
-      EXTRACT_INT_MEMBER (struct segment_command, s, cmd);
-      EXTRACT_INT_MEMBER (struct segment_command, s, cmdsize);
-      /* We don't need to swap segname.  */
-      EXTRACT_INT_MEMBER (struct segment_command, s, vmaddr);
-      EXTRACT_INT_MEMBER (struct segment_command, s, vmsize);
-      EXTRACT_INT_MEMBER (struct segment_command, s, fileoff);
-      EXTRACT_INT_MEMBER (struct segment_command, s, filesize);
-      EXTRACT_INT_MEMBER (struct segment_command, s, maxprot);
-      EXTRACT_INT_MEMBER (struct segment_command, s, initprot);
-      EXTRACT_INT_MEMBER (struct segment_command, s, nsects);
-      EXTRACT_INT_MEMBER (struct segment_command, s, flags);
-    }
-  return error;
-}
-
-
-static void 
-target_extract_segment_command (gdb_byte* buf, struct segment_command *s)
-{
-  EXTRACT_INT_MEMBER_FROM_BUF (buf, struct segment_command, s, cmd);
-  EXTRACT_INT_MEMBER_FROM_BUF (buf, struct segment_command, s, cmdsize);
-  memcpy (s->segname, buf + offsetof(struct segment_command, segname), 16);
-  EXTRACT_INT_MEMBER_FROM_BUF (buf, struct segment_command, s, vmaddr);
-  EXTRACT_INT_MEMBER_FROM_BUF (buf, struct segment_command, s, vmsize);
-  EXTRACT_INT_MEMBER_FROM_BUF (buf, struct segment_command, s, fileoff);
-  EXTRACT_INT_MEMBER_FROM_BUF (buf, struct segment_command, s, filesize);
-  EXTRACT_INT_MEMBER_FROM_BUF (buf, struct segment_command, s, maxprot);
-  EXTRACT_INT_MEMBER_FROM_BUF (buf, struct segment_command, s, initprot);
-  EXTRACT_INT_MEMBER_FROM_BUF (buf, struct segment_command, s, nsects);
-  EXTRACT_INT_MEMBER_FROM_BUF (buf, struct segment_command, s, flags);
-}
-
-static void
-target_extract_segment_command_64 (gdb_byte* buf, struct segment_command_64 *s)
-{
-  EXTRACT_INT_MEMBER_FROM_BUF (buf, struct segment_command_64, s, cmd);
-  EXTRACT_INT_MEMBER_FROM_BUF (buf, struct segment_command_64, s, cmdsize);
-  memcpy (s->segname, buf + offsetof(struct segment_command_64, segname), 16);
-  EXTRACT_INT_MEMBER_FROM_BUF (buf, struct segment_command_64, s, vmaddr);
-  EXTRACT_INT_MEMBER_FROM_BUF (buf, struct segment_command_64, s, vmsize);
-  EXTRACT_INT_MEMBER_FROM_BUF (buf, struct segment_command_64, s, fileoff);
-  EXTRACT_INT_MEMBER_FROM_BUF (buf, struct segment_command_64, s, filesize);
-  EXTRACT_INT_MEMBER_FROM_BUF (buf, struct segment_command_64, s, maxprot);
-  EXTRACT_INT_MEMBER_FROM_BUF (buf, struct segment_command_64, s, initprot);
-  EXTRACT_INT_MEMBER_FROM_BUF (buf, struct segment_command_64, s, nsects);
-  EXTRACT_INT_MEMBER_FROM_BUF (buf, struct segment_command_64, s, flags);
-}
-
-int
-target_read_segment_command_64 (CORE_ADDR addr, struct segment_command_64 *s)
-{
-  int error;
-  gdb_assert (addr != INVALID_ADDRESS);
-  error = target_read_memory (addr, (gdb_byte *)s, sizeof (*s));
-
-  if (error == 0)
-    {
-      EXTRACT_INT_MEMBER (struct segment_command_64, s, cmd);
-      EXTRACT_INT_MEMBER (struct segment_command_64, s, cmdsize);
-      /* We don't need to swap segname.  */
-      EXTRACT_INT_MEMBER (struct segment_command_64, s, vmaddr);
-      EXTRACT_INT_MEMBER (struct segment_command_64, s, vmsize);
-      EXTRACT_INT_MEMBER (struct segment_command_64, s, fileoff);
-      EXTRACT_INT_MEMBER (struct segment_command_64, s, filesize);
-      EXTRACT_INT_MEMBER (struct segment_command_64, s, maxprot);
-      EXTRACT_INT_MEMBER (struct segment_command_64, s, initprot);
-      EXTRACT_INT_MEMBER (struct segment_command_64, s, nsects);
-      EXTRACT_INT_MEMBER (struct segment_command_64, s, flags);
-    }
-  return error;
-}
-
 static int
 dyld_starts_here_in_memory (CORE_ADDR addr)
 {
@@ -597,8 +559,8 @@ dyld_starts_here_p (mach_vm_address_t addr)
   mach_msg_type_number_t info_cnt = sizeof (vm_region_basic_info_data_64_t);
   kern_return_t ret;
   mach_port_t object_name;
-  vm_address_t data;
-  vm_size_t data_count;
+  vm_offset_t data;
+  mach_msg_type_number_t data_count;
 
   struct mach_header *mh;
 
@@ -796,6 +758,40 @@ macosx_locate_dyld (CORE_ADDR *value, CORE_ADDR hint)
 #if defined (NM_NEXTSTEP)
   /* We have a native Mac OS X target so we can use vm tricks to locate
      dyld.  */
+
+  /* First use the task_info call with TASK_DYLD_INFO if it exists.  That is
+     bound to be correct, so why fool around...  */
+#ifdef TASK_DYLD_INFO
+  task_dyld_info_data_t info;
+  mach_msg_type_number_t count = TASK_DYLD_INFO_COUNT;
+  kern_return_t kret;
+
+  kret = task_info (macosx_status->task, TASK_DYLD_INFO, (task_info_t) &info, &count);
+
+  /* Sometimes task_info returns success, but the addr & size are still 0.  Presumably
+     when a task is just starting?  Anyway, protect against that case here.  */
+  if (kret == KERN_SUCCESS 
+      && info.all_image_info_addr != 0
+      && info.all_image_info_size != 0)
+    {
+      struct dyld_raw_infos raw_infos;
+      struct gdb_exception e;
+      TRY_CATCH (e, RETURN_MASK_ERROR)
+	{
+	  dyld_read_raw_infos (info.all_image_info_addr, &raw_infos);
+	}
+
+      if (e.reason == NO_ERROR 
+	  && raw_infos.version >= 2 
+	  && raw_infos.dyld_image_load_address != INVALID_ADDRESS
+	  && dyld_starts_here_p (raw_infos.dyld_image_load_address))
+	{
+	  *value = raw_infos.dyld_image_load_address;
+	  return 1;
+	}
+    }
+  
+#endif
   
   if (hint != INVALID_ADDRESS && dyld_starts_here_p (hint))
     {
@@ -911,7 +907,6 @@ macosx_cfm_init (macosx_cfm_thread_status *s)
 void
 macosx_dyld_create_inferior_hook ()
 {
-  macosx_clear_start_breakpoint ();
   dyld_init_paths (&macosx_dyld_status.path_info);
   macosx_dyld_thread_init (&macosx_dyld_status);
 
@@ -1506,6 +1501,10 @@ macosx_solib_add (const char *filename, int from_tty,
 	do_cleanups (timer_cleanup);
       notify = libraries_changed && dyld_stop_on_shlibs_updated;
     }
+  else if (objc_handle_update (read_pc ()) == 1)
+    {
+      /* Don't need to do anything special here, just need to call this.  */
+    }
   else if (dyld_status->dyld_breakpoint != NULL || core_bfd)
     {
       /* looks like an attach -- we're not at the dyld_breakpoint, but
@@ -1526,9 +1525,11 @@ macosx_solib_add (const char *filename, int from_tty,
 void
 macosx_dyld_thread_init (macosx_dyld_thread_status *s)
 {
+  macosx_clear_start_breakpoint ();
   s->dyld_name = NULL;
   s->dyld_addr = INVALID_ADDRESS;
   s->dyld_slide = INVALID_ADDRESS;
+  s->dyld_minsyms_have_been_relocated = 0;
   s->dyld_image_infos = INVALID_ADDRESS;
   s->dyld_shared_cache_ranges = INVALID_ADDRESS;
   s->dyld_num_shared_cache_ranges = -1;
@@ -1559,7 +1560,6 @@ macosx_dyld_thread_clear (macosx_dyld_thread_status *s)
     xfree (s->path_info.insert_libraries);
   if (s->dyld_shared_cache_array)
     xfree (s->dyld_shared_cache_array);
-  macosx_clear_start_breakpoint ();
   macosx_dyld_thread_init (s);
 }
 
@@ -1727,19 +1727,22 @@ get_sectoffs_for_shared_cache_dylib (struct dyld_objfile_entry *entry,
   struct section_offsets *sect_offsets;
   struct bfd_section *this_sect;
   bfd *mem_bfd = NULL;
+  unsigned int header_size;
 
   target_read_mach_header (header_addr, &header);
+  header_size = target_get_mach_header_size (&header);
+
   buf = (gdb_byte *) xmalloc 
-                      (header.sizeofcmds + sizeof (struct mach_header));
+                      (header.sizeofcmds + header_size);
   bfd_cleanups = make_cleanup (xfree, buf);
   if (target_read_memory (header_addr, buf, 
-      header.sizeofcmds + sizeof (struct mach_header)) != 0)
+      header.sizeofcmds + header_size) != 0)
     {
       error ("Couldn't read load commands in memory for %s\n", 
              entry->dyld_name);
     }
   mem_bfd = bfd_memopenr (entry->dyld_name, NULL, buf, 
-                          header.sizeofcmds + sizeof (struct mach_header));
+                          header.sizeofcmds + header_size);
   if (mem_bfd == NULL)
     {
        internal_error (__FILE__, __LINE__, 
@@ -1747,9 +1750,16 @@ get_sectoffs_for_shared_cache_dylib (struct dyld_objfile_entry *entry,
                        entry->dyld_name, paddr_nz (header_addr));
     }
   make_cleanup_bfd_close (mem_bfd);
-  if (!bfd_check_format (mem_bfd, bfd_object)) {
-       error ("Wrong format for in memory dylib %s\n", 
-              entry->dyld_name);
+  if (!bfd_check_format (mem_bfd, bfd_object)) 
+    {
+      /* If for some reason we misparse the memory version of the
+	 bfd, set mem_bfd to this_bfd, then we'll fall through and
+	 compute an 0 set of section offsets.  This library will not
+	 get properly slid, but before we would error out, and then
+	 that would stop reading in the loaded dylibs.  */
+      mem_bfd = this_bfd;
+      warning ("Wrong format for in memory dylib %s\n", 
+	       entry->dyld_name);
      }
 
   if (this_bfd->section_count != mem_bfd->section_count)
@@ -1856,7 +1866,8 @@ dyld_info_process_raw (struct macosx_dyld_thread_status *s,
      shared library that we've read in already, we still want to read the raw
      information from memory.  */
   old_trust_readonly = set_trust_readonly (0);
-  override_trust_readonly = make_cleanup (set_trust_readonly, old_trust_readonly);
+  override_trust_readonly = make_cleanup (set_trust_readonly_cleanup, 
+                                          (void *) old_trust_readonly);
 
   /* Determine whether the image is in the new "shared cache" region.  */
   if (s->dyld_num_shared_cache_ranges != -1)
@@ -1882,6 +1893,7 @@ dyld_info_process_raw (struct macosx_dyld_thread_status *s,
     case MH_DYLIB:
     case MH_DYLINKER:
     case MH_BUNDLE:
+    case BFD_MACH_O_MH_BUNDLE_KEXT: /* Use until MH_BUNDLE_KEXT in headers */
       break;
     case MH_FVMLIB:
     case MH_PRELOAD:
@@ -1909,7 +1921,7 @@ dyld_info_process_raw (struct macosx_dyld_thread_status *s,
     {
       namebuf = xmalloc (256);
       
-      curpos = header_addr + sizeof (struct mach_header);
+      curpos = header_addr + target_get_mach_header_size (&header);
       
       for (i = 0; i < header.ncmds; i++)
         {
@@ -1977,8 +1989,6 @@ dyld_info_process_raw (struct macosx_dyld_thread_status *s,
 
       if (entry->dyld_name != NULL)
 	{
-	  bfd *mem_bfd = NULL;
-	  gdb_byte *buf = NULL;
 	  struct bfd_section *this_sect = NULL;
 	  struct section_offsets *sect_offsets = NULL;
 
@@ -2170,6 +2180,7 @@ dyld_info_process_raw (struct macosx_dyld_thread_status *s,
       break;
     case MH_DYLINKER:
     case MH_BUNDLE:
+    case BFD_MACH_O_MH_BUNDLE_KEXT:  /* Use until MH_BUNDLE_KEXT in headers */
       entry->reason = dyld_reason_dyld;
       break;
     default:
@@ -2226,9 +2237,16 @@ dyld_read_raw_infos (CORE_ADDR addr, struct dyld_raw_infos *info)
     {
       target_read_memory (addr + 8 + wordsize * 2 + 1, buf, 1);
       info->libsystem_initialized = extract_unsigned_integer (buf, 1);
+      /* I'm skipping to the dyld image location field.  There are two bools
+         inbetween, but they always get padded to a word.  */
+      target_read_memory (addr + 8 + wordsize * 2 + wordsize, buf, wordsize);
+      info->dyld_image_load_address = extract_unsigned_integer (buf, wordsize);
     }
   else
-    info->libsystem_initialized = -1;
+    {
+      info->libsystem_initialized = -1;
+      info->dyld_image_load_address = INVALID_ADDRESS;
+    }
 }
 
 /* Read an array of NUM dyld_raw_info structures out of the inferior's
@@ -2461,6 +2479,15 @@ macosx_dyld_update (int dyldonly)
 #if WITH_CFM
   macosx_cfm_init (&macosx_status->cfm_status);
 #endif
+
+  /* OBJC_VTABLE: Init the objc trampoline stuff.  This is also done in the
+     dyld_symfile_loaded hook.  I'm not convinced by the comment above that
+     this needs to be done here, and if you don't do it in the symfile hook
+     a change in the library won't get noticed on run (for instance if you 
+     use DYLD_LIBRARY_PATH AFTER you've read in the executable.)  But it won't
+     hurt to do it here.  */
+
+  objc_init_trampoline_observer ();
 
   if (maint_use_timers)
     do_cleanups (timer_cleanup);
@@ -2743,6 +2770,11 @@ set_load_state_1 (struct dyld_objfile_entry *e,
   struct bfd *tmp_bfd;
   enum dyld_reload_result state_change;
 
+  int old_pre_run_slide_addr_valid;
+  CORE_ADDR old_pre_run_slide_addr;
+  int old_image_addr_valid;
+  CORE_ADDR old_image_addr;
+
   e->load_flag = load_state;
 
   /* If there is no existing objfile, load it (if appropriate) and return. */
@@ -2794,10 +2826,55 @@ set_load_state_1 (struct dyld_objfile_entry *e,
   /* FIXME: check state_change, and remove the varobj's that depend
      on the objfile now as well.  */
 
+  /* FIXME: This hiding & restoring the pre_run_slide & image_addr
+     state is a hack.  The pre_run_slide is only set in load
+     library, not load_symfile, so they will get lost if we allow
+     dyld_clear_objfile to zero them here.  You also have to set the
+     image_addr before doing load_symfile_internal, or the library
+     address will not get reported properly (more specifically, 
+     loaded_addrisoffset will get set to 1 here, which is wrong.)  
+
+     I suspect that the pre run sliding is not getting done in quite
+     the correct place 'cause we shouldn't need to do this.  But for
+     now...  */
+
+  if (e->reason == dyld_reason_init)
+    {
+      old_pre_run_slide_addr_valid = e->pre_run_slide_addr_valid;
+      old_pre_run_slide_addr = e->pre_run_slide_addr;
+      old_image_addr = e->image_addr;
+      old_image_addr_valid = e->image_addr_valid;
+    }
+
   dyld_clear_objfile (e);
 
   e->abfd = tmp_bfd;
+
+  if (e->reason == dyld_reason_init)
+    {
+      e->pre_run_slide_addr_valid = old_pre_run_slide_addr_valid;
+      e->pre_run_slide_addr = old_pre_run_slide_addr;
+      asection *text_sect =
+        bfd_get_section_by_name (e->abfd, TEXT_SEGMENT_NAME);
+      if (text_sect != NULL)
+        {
+          e->image_addr = bfd_section_vma (e->abfd, text_sect);
+          e->image_addr_valid = 1;
+        }
+
+    }
+
   dyld_load_symfile_preserving_objfile (e);
+
+  /* Now if we modified the image_addr & image_addr_valid to get
+     dyld_load_symfile to work right, reset them here.  */
+
+  if (e->reason == dyld_reason_init)
+    {
+      e->image_addr = old_image_addr;
+      e->image_addr_valid = old_image_addr_valid;
+    }
+
   if (ui_out_is_mi_like_p (uiout))
     {
       struct cleanup *notify_cleanup;
@@ -3021,6 +3098,7 @@ info_sharedlibrary_dyld_command (char *args, int from_tty)
                          dyld_reason_dyld, 1, args);
 }
 
+#if WITH_CFM
 static void
 info_sharedlibrary_cfm_command (char *args, int from_tty)
 {
@@ -3028,7 +3106,6 @@ info_sharedlibrary_cfm_command (char *args, int from_tty)
                          dyld_reason_cfm, 1, args);
 }
 
-#if WITH_CFM
 static void
 info_sharedlibrary_raw_cfm_command (char *args, int from_tty)
 {
@@ -3242,6 +3319,15 @@ macosx_set_malloc_inited (int new_val)
 int
 macosx_get_malloc_inited (void)
 {
+  /* If it's uninitialized, use this as an opportunity to double-check...
+     Otherwise we only re-examine this boolean from dyld when we have a
+     shlib load notification -- if we have a trivial program that only directly
+     links to dylibs, we may only get the initial libsystem et al load 
+     notification at which point libsystem has not yet been initialized.  
+     e.g. in the testsuite's "ivars.exp" test case.  */
+  if (malloc_inited_p == 0)
+    macosx_init_addresses (&macosx_dyld_status);
+
   return malloc_inited_p;
 }
 

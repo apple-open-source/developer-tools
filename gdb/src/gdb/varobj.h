@@ -32,7 +32,8 @@ enum varobj_display_formats
     FORMAT_HEXADECIMAL,		/* Hex display                       */
     FORMAT_OCTAL,		/* Octal display                     */
     FORMAT_UNSIGNED,		/* APPLE LOCAL: Unsigned decimal display */
-    FORMAT_OSTYPE               /* APPLE LOCAL: OSType display       */
+    FORMAT_OSTYPE,              /* APPLE LOCAL: OSType display       */
+    FORMAT_HEXFLOAT             /* APPLE LOCAL: Floating point in hex '%a' */
   };
 
 enum varobj_type
@@ -109,6 +110,9 @@ extern int varobj_is_fake_child (struct varobj *var);
 
 extern char *varobj_get_type (struct varobj *var);
 
+/* APPLE LOCAL: Get the type without typedef's.  */
+char *varobj_get_resolved_type (struct varobj *var);
+
 extern char *varobj_get_dynamic_type (struct varobj *var);
 
 extern char *varobj_get_path_expr (struct varobj *var);
@@ -139,4 +143,6 @@ extern struct varobj *varobj_changelist_pop (struct varobj_changelist *changelis
 
 extern void varobj_get_valid_block (struct varobj *var, CORE_ADDR *start,
 				    CORE_ADDR *end);
+
+extern void varobj_delete_objfiles_vars (struct objfile *ofile);
 #endif /* VAROBJ_H */

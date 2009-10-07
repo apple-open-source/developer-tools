@@ -1,6 +1,5 @@
-// -*- mode: c++; c-basic-offset: 4 -*-
 /*
- * Copyright (C) 2006 Apple Computer, Inc.  All rights reserved.
+ * Copyright (C) 2006, 2007 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -24,52 +23,132 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  */
 
-#include <wtf/Platform.h>
-#include "APICast.h"
+#include "config.h"
 #include "JSContextRef.h"
 
+#include "APICast.h"
+#include "InitializeThreading.h"
 #include "JSCallbackObject.h"
-#include "completion.h"
-#include "interpreter.h"
-#include "object.h"
+#include "JSClassRef.h"
+#include "JSGlobalObject.h"
+#include "JSObject.h"
+#include <wtf/Platform.h>
 
-using namespace KJS;
+#if PLATFORM(DARWIN)
+#include <mach-o/dyld.h>
+
+static const int32_t webkitFirstVersionWithConcurrentGlobalContexts = 0x2100500; // 528.5.0
+#endif
+
+using namespace JSC;
+
+JSContextGroupRef JSContextGroupCreate()
+{
+    initializeThreading();
+    return toRef(JSGlobalData::create().releaseRef());
+}
+
+JSContextGroupRef JSContextGroupRetain(JSContextGroupRef group)
+{
+    toJS(group)->ref();
+    return group;
+}
+
+void JSContextGroupRelease(JSContextGroupRef group)
+{
+    toJS(group)->deref();
+}
 
 JSGlobalContextRef JSGlobalContextCreate(JSClassRef globalObjectClass)
 {
-    JSLock lock;
+    initializeThreading();
+#if PLATFORM(DARWIN)
+    // When running on Tiger or Leopard, or if the application was linked before JSGlobalContextCreate was changed
+    // to use a unique JSGlobalData, we use a shared one for compatibility.
+#if !defined(BUILDING_ON_TIGER) && !defined(BUILDING_ON_LEOPARD)
+    if (NSVersionOfLinkTimeLibrary("JavaScriptCore") <= webkitFirstVersionWithConcurrentGlobalContexts) {
+#else
+    {
+#endif
+        JSLock lock(true);
+        return JSGlobalContextCreateInGroup(toRef(&JSGlobalData::sharedInstance()), globalObjectClass);
+    }
+#endif // PLATFORM(DARWIN)
 
-    JSObject* globalObject;
-    if (globalObjectClass)
-        // Specify jsNull() as the prototype.  Interpreter will fix it up to point at builtinObjectPrototype() in its constructor
-        globalObject = new JSCallbackObject(0, globalObjectClass, jsNull(), 0);
-    else
-        globalObject = new JSObject();
+    return JSGlobalContextCreateInGroup(0, globalObjectClass);
+}
 
-    Interpreter* interpreter = new Interpreter(globalObject); // adds the built-in object prototype to the global object
-    if (globalObjectClass)
-        static_cast<JSCallbackObject*>(globalObject)->initializeIfNeeded(interpreter->globalExec());
-    JSGlobalContextRef ctx = reinterpret_cast<JSGlobalContextRef>(interpreter->globalExec());
-    return JSGlobalContextRetain(ctx);
+JSGlobalContextRef JSGlobalContextCreateInGroup(JSContextGroupRef group, JSClassRef globalObjectClass)
+{
+    initializeThreading();
+
+    JSLock lock(true);
+
+    RefPtr<JSGlobalData> globalData = group ? PassRefPtr<JSGlobalData>(toJS(group)) : JSGlobalData::create();
+
+#if ENABLE(JSC_MULTIPLE_THREADS)
+    globalData->makeUsableFromMultipleThreads();
+#endif
+
+    if (!globalObjectClass) {
+        JSGlobalObject* globalObject = new (globalData.get()) JSGlobalObject;
+        return JSGlobalContextRetain(toGlobalRef(globalObject->globalExec()));
+    }
+
+    JSGlobalObject* globalObject = new (globalData.get()) JSCallbackObject<JSGlobalObject>(globalObjectClass);
+    ExecState* exec = globalObject->globalExec();
+    JSValue prototype = globalObjectClass->prototype(exec);
+    if (!prototype)
+        prototype = jsNull();
+    globalObject->resetPrototype(prototype);
+    return JSGlobalContextRetain(toGlobalRef(exec));
 }
 
 JSGlobalContextRef JSGlobalContextRetain(JSGlobalContextRef ctx)
 {
-    JSLock lock;
     ExecState* exec = toJS(ctx);
-    exec->dynamicInterpreter()->ref();
+    JSLock lock(exec);
+
+    JSGlobalData& globalData = exec->globalData();
+
+    globalData.heap.registerThread();
+
+    gcProtect(exec->dynamicGlobalObject());
+    globalData.ref();
     return ctx;
 }
 
 void JSGlobalContextRelease(JSGlobalContextRef ctx)
 {
-    JSLock lock;
     ExecState* exec = toJS(ctx);
-    exec->dynamicInterpreter()->deref();
+    JSLock lock(exec);
+
+    gcUnprotect(exec->dynamicGlobalObject());
+
+    JSGlobalData& globalData = exec->globalData();
+    if (globalData.refCount() == 2) { // One reference is held by JSGlobalObject, another added by JSGlobalContextRetain().
+        // The last reference was released, this is our last chance to collect.
+        ASSERT(!globalData.heap.protectedObjectCount());
+        ASSERT(!globalData.heap.isBusy());
+        globalData.heap.destroy();
+    } else
+        globalData.heap.collect();
+
+    globalData.deref();
 }
 
 JSObjectRef JSContextGetGlobalObject(JSContextRef ctx)
 {
     ExecState* exec = toJS(ctx);
-    return toRef(exec->dynamicInterpreter()->globalObject());
+    exec->globalData().heap.registerThread();
+    JSLock lock(exec);
+
+    // It is necessary to call toThisObject to get the wrapper object when used with WebCore.
+    return toRef(exec->lexicalGlobalObject()->toThisObject(exec));
+}
+
+JSContextGroupRef JSContextGetGroup(JSContextRef ctx)
+{
+    ExecState* exec = toJS(ctx);
+    return toRef(&exec->globalData());
 }

@@ -1,7 +1,7 @@
 /* APPLE LOCAL file KEXT double destructor */
-/* { dg-do compile } */
+/* { dg-do compile { target powerpc*-*-darwin* i?86*-*-darwin* } } */
 /* { dg-options "-fapple-kext" } */
-/* { dg-skip-if "Not valid on 64-bit" { *-*-darwin* } { "-m64" } { "" } } */
+/* { dg-require-effective-target ilp32 } */
 /* test for use of apple_kext_compatibility on stack */
 struct B1 {
   virtual ~B1();

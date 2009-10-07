@@ -1,4 +1,3 @@
-/* APPLE LOCAL file mainline 4.0 5322531 */
 /* PR rtl-optimization/23561 */
 
 struct A

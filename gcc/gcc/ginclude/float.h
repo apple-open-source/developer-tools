@@ -14,8 +14,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 /* As a special exception, if you include this header file into source
    files compiled by GCC, this header file does not by itself cause
@@ -126,11 +126,11 @@ Boston, MA 02111-1307, USA.  */
 #define LDBL_MIN	__LDBL_MIN__
 
 /* Addition rounds to 0: zero, 1: nearest, 2: +inf, 3: -inf, -1: unknown.  */
-/* APPLE LOCAL begin ARM 5526308 */
+/* APPLE LOCAL begin 3399553 */
 /* This changes with calls to fesetround in <fenv.h>.  */
 #undef FLT_ROUNDS
 #define FLT_ROUNDS (__builtin_flt_rounds ())
-/* APPLE LOCAL end ARM 5526308 */
+/* APPLE LOCAL end 3399553 */
 
 #if defined (__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
 /* The floating-point expression evaluation method.

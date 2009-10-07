@@ -2,8 +2,8 @@
 /* This tests the new spec. for foreach-statement. On exit from foreach loop
    with no match, value of 'elem' is set to nil! */
 #include <Foundation/Foundation.h>
-/* { dg-options "-mmacosx-version-min=10.5 -framework Foundation -fobjc-exceptions -framework CoreFoundation" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
-/* { dg-options "-framework Foundation -fobjc-exceptions -framework CoreFoundation" { target arm*-*-darwin* } } */
+/* { dg-options "-mmacosx-version-min=10.5 -framework Foundation -fobjc-exceptions" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
+/* { dg-options "-framework Foundation -fobjc-exceptions" { target arm*-*-darwin* } } */
 /* { dg-do run { target *-*-darwin* } } */
 
 /* foreach tester */
@@ -46,7 +46,7 @@ bool testHandwritten(char *style, char *test, char *message, id collection, NSSe
     }
     else {
         result = false;
-        printf("** failed: %s %s %s (%d vs %d)\n", style, test, message, counter, [reference count]);
+        printf("** failed: %s %s %s (%d vs %ld)\n", style, test, message, counter, (long)[reference count]);
         ++Errors;
     }
     return result;
@@ -67,7 +67,7 @@ bool testCompiler(char *style, char *test, char *message, id collection, NSSet *
     }
     else {
         result = false;
-        printf("** failed: %s %s %s (%d vs %d)\n", style, test, message, counter, [reference count]);
+        printf("** failed: %s %s %s (%d vs %ld)\n", style, test, message, counter, (long)[reference count]);
         ++Errors;
     }
     return result;

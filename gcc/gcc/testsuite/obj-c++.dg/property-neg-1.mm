@@ -1,18 +1,15 @@
-/* APPLE LOCAL file radar 4436866 */
-/* This program checks for proper use of 'readonly' attribute. */
+/* APPLE LOCAL file 4649718, 4651088 */
+/* Test for bogus property declarations. */
 /* APPLE LOCAL radar 4899595 */
-/* { dg-options "-fno-objc-new-property -mmacosx-version-min=10.5" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
-/* { dg-options "-fno-objc-new-property" { target arm*-*-darwin* } } */
-/* { dg-do compile { target *-*-darwin* } } */
+/* { dg-options "-mmacosx-version-min=10.5" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
+/* { dg-do compile } */
 
-@interface Bar
-{
-  int iVar;
-}
-@property (ivar) int FooBar;
+@interface MyClass {
+
+};
+@property unsigned char bufferedUTF8Bytes[4]; /* { dg-error "bad property declaration" } */
 @end
 
-@implementation Bar
-@property (readonly) int FooBar; /* { dg-error "property \\'FooBar\\' is \\'readonly\\' in implementation but not in interface" } */
-
+@implementation MyClass
 @end
+

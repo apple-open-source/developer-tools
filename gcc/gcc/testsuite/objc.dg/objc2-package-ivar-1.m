@@ -1,7 +1,7 @@
 /* APPLE LOCAL file radar 5040740 */
 /* Test use of new @package ivars. */
-/* { dg-options "-mmacosx-version-min=10.5 -m64" } */
-/* { dg-do compile { target powerpc*-*-darwin* i?86*-*-darwin* } } */
+/* { dg-options "-mmacosx-version-min=10.5 -m64" { target powerpc*-*-darwin* i?86*-*-darwin* } } */
+/* { dg-do compile { target *-*-darwin* } } */
 @interface INTF
 {
 @private

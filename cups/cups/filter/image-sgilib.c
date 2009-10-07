@@ -1,10 +1,10 @@
 /*
- * "$Id: image-sgilib.c 6649 2007-07-11 21:46:42Z mike $"
+ * "$Id: image-sgilib.c 7221 2008-01-16 22:20:08Z mike $"
  *
  *   SGI image file format library routines for the Common UNIX Printing
  *   System (CUPS).
  *
- *   Copyright 2007 by Apple Inc.
+ *   Copyright 2007-2008 by Apple Inc.
  *   Copyright 1993-2005 by Easy Software Products.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -250,8 +250,20 @@ sgiOpenFile(FILE *file,			/* I - File to open */
 
           fseek(sgip->file, 512, SEEK_SET);
 
-          sgip->table    = calloc(sgip->zsize, sizeof(long *));
-          sgip->table[0] = calloc(sgip->ysize * sgip->zsize, sizeof(long));
+          if ((sgip->table = calloc(sgip->zsize, sizeof(long *))) == NULL)
+	  {
+	    free(sgip);
+	    return (NULL);
+	  }
+
+          if ((sgip->table[0] = calloc(sgip->ysize * sgip->zsize,
+	                               sizeof(long))) == NULL)
+          {
+	    free(sgip->table);
+	    free(sgip);
+	    return (NULL);
+	  }
+
           for (i = 1; i < sgip->zsize; i ++)
             sgip->table[i] = sgip->table[0] + i * sgip->ysize;
 
@@ -333,12 +345,39 @@ sgiOpenFile(FILE *file,			/* I - File to open */
 
               sgip->firstrow = ftell(sgip->file);
               sgip->nextrow  = ftell(sgip->file);
-              sgip->table    = calloc(sgip->zsize, sizeof(long *));
-              sgip->table[0] = calloc(sgip->ysize * sgip->zsize, sizeof(long));
+              if ((sgip->table = calloc(sgip->zsize, sizeof(long *))) == NULL)
+	      {
+	        free(sgip);
+		return (NULL);
+	      }
+
+              if ((sgip->table[0] = calloc(sgip->ysize * sgip->zsize,
+	                                   sizeof(long))) == NULL)
+              {
+	        free(sgip->table);
+		free(sgip);
+		return (NULL);
+	      }
+
               for (i = 1; i < sgip->zsize; i ++)
         	sgip->table[i] = sgip->table[0] + i * sgip->ysize;
-              sgip->length    = calloc(sgip->zsize, sizeof(long *));
-              sgip->length[0] = calloc(sgip->ysize * sgip->zsize, sizeof(long));
+
+              if ((sgip->length = calloc(sgip->zsize, sizeof(long *))) == NULL)
+	      {
+	        free(sgip->table);
+		free(sgip);
+		return (NULL);
+	      }
+
+              if ((sgip->length[0] = calloc(sgip->ysize * sgip->zsize,
+	                                    sizeof(long))) == NULL)
+              {
+	        free(sgip->length);
+		free(sgip->table);
+		free(sgip);
+		return (NULL);
+	      }
+
               for (i = 1; i < sgip->zsize; i ++)
         	sgip->length[i] = sgip->length[0] + i * sgip->ysize;
               break;
@@ -601,13 +640,14 @@ read_rle8(FILE           *fp,		/* I - File to read from */
     if (ch & 128)
     {
       for (i = 0; i < count; i ++, row ++, xsize --, length ++)
-        *row = getc(fp);
+        if (xsize > 0)
+	  *row = getc(fp);
     }
     else
     {
       ch = getc(fp);
       length ++;
-      for (i = 0; i < count; i ++, row ++, xsize --)
+      for (i = 0; i < count && xsize > 0; i ++, row ++, xsize --)
         *row = ch;
     }
   }
@@ -646,14 +686,15 @@ read_rle16(FILE           *fp,		/* I - File to read from */
     if (ch & 128)
     {
       for (i = 0; i < count; i ++, row ++, xsize --, length ++)
-        *row = getshort(fp);
+        if (xsize > 0)
+	  *row = getshort(fp);
     }
     else
     {
       ch = getshort(fp);
       length ++;
-      for (i = 0; i < count; i ++, row ++, xsize --)
-        *row = ch;
+      for (i = 0; i < count && xsize > 0; i ++, row ++, xsize --)
+	*row = ch;
     }
   }
 
@@ -846,5 +887,5 @@ write_rle16(FILE           *fp,		/* I - File to write to */
 
 
 /*
- * End of "$Id: image-sgilib.c 6649 2007-07-11 21:46:42Z mike $".
+ * End of "$Id: image-sgilib.c 7221 2008-01-16 22:20:08Z mike $".
  */

@@ -1,8 +1,8 @@
 /*
- * Copyright (C) 2004-2006  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2008  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2002  Internet Software Consortium.
  *
- * Permission to use, copy, modify, and distribute this software for any
+ * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
  *
@@ -15,7 +15,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* $Id: socket.h,v 1.57.18.6 2006/06/07 00:29:45 marka Exp $ */
+/* $Id: socket.h,v 1.85 2008/09/04 07:46:02 marka Exp $ */
 
 #ifndef ISC_SOCKET_H
 #define ISC_SOCKET_H 1
@@ -24,7 +24,7 @@
  ***** Module Info
  *****/
 
-/*! \file
+/*! \file isc/socket.h
  * \brief Provides TCP and UDP sockets for network I/O.  The sockets are event
  * sources in the task system.
  *
@@ -64,6 +64,7 @@
 #include <isc/time.h>
 #include <isc/region.h>
 #include <isc/sockaddr.h>
+#include <isc/xml.h>
 
 ISC_LANG_BEGINDECLS
 
@@ -76,6 +77,12 @@ ISC_LANG_BEGINDECLS
  * system in use must support at least this number (plus one on some.)
  */
 #define ISC_SOCKET_MAXSCATTERGATHER	8
+
+/*%
+ * In isc_socket_bind() set socket option SO_REUSEADDR prior to calling
+ * bind() if a non zero port is specified (AF_INET and AF_INET6).
+ */
+#define ISC_SOCKET_REUSEADDRESS		0x01U
 
 /***
  *** Types
@@ -144,7 +151,8 @@ struct isc_socket_connev {
 typedef enum {
 	isc_sockettype_udp = 1,
 	isc_sockettype_tcp = 2,
-	isc_sockettype_unix = 3
+	isc_sockettype_unix = 3,
+	isc_sockettype_fdwatch = 4
 } isc_sockettype_t;
 
 /*@{*/
@@ -175,6 +183,14 @@ typedef enum {
 #define ISC_SOCKFLAG_NORETRY	0x00000002	/*%< drop failed UDP sends */
 /*@}*/
 
+/*@{*/
+/*!
+ * Flags for fdwatchcreate.
+ */
+#define ISC_SOCKFDWATCH_READ	0x00000001	/*%< watch for readable */
+#define ISC_SOCKFDWATCH_WRITE	0x00000002	/*%< watch for writable */
+/*@}*/
+
 /***
  *** Socket and Socket Manager Functions
  ***
@@ -183,12 +199,54 @@ typedef enum {
  ***/
 
 isc_result_t
+isc_socket_fdwatchcreate(isc_socketmgr_t *manager,
+			 int fd,
+			 int flags,
+			 isc_sockfdwatch_t callback,
+			 void *cbarg,
+			 isc_task_t *task,
+			 isc_socket_t **socketp);
+/*%<
+ * Create a new file descriptor watch socket managed by 'manager'.
+ *
+ * Note:
+ *
+ *\li   'fd' is the already-opened file descriptor.
+ *\li	This function is not available on Windows.
+ *\li	The callback function is called "in-line" - this means the function
+ *	needs to return as fast as possible, as all other I/O will be suspended
+ *	until the callback completes.
+ *
+ * Requires:
+ *
+ *\li	'manager' is a valid manager
+ *
+ *\li	'socketp' is a valid pointer, and *socketp == NULL
+ *
+ *\li	'fd' be opened.
+ *
+ * Ensures:
+ *
+ *	'*socketp' is attached to the newly created fdwatch socket
+ *
+ * Returns:
+ *
+ *\li	#ISC_R_SUCCESS
+ *\li	#ISC_R_NOMEMORY
+ *\li	#ISC_R_NORESOURCES
+ *\li	#ISC_R_UNEXPECTED
+ */
+
+isc_result_t
 isc_socket_create(isc_socketmgr_t *manager,
 		  int pf,
 		  isc_sockettype_t type,
 		  isc_socket_t **socketp);
 /*%<
  * Create a new 'type' socket managed by 'manager'.
+ *
+ * For isc_sockettype_fdwatch sockets you should use isc_socket_fdwatchcreate()
+ * rather than isc_socket_create().
  *
  * Note:
  *
@@ -199,6 +257,8 @@ isc_socket_create(isc_socketmgr_t *manager,
  *\li	'manager' is a valid manager
  *
  *\li	'socketp' is a valid pointer, and *socketp == NULL
+ *
+ *\li	'type' is not isc_sockettype_fdwatch
  *
  * Ensures:
  *
@@ -312,7 +372,63 @@ isc_socket_detach(isc_socket_t **socketp);
  */
 
 isc_result_t
-isc_socket_bind(isc_socket_t *sock, isc_sockaddr_t *addressp);
+isc_socket_open(isc_socket_t *sock);
+/*%<
+ * Open a new socket file descriptor of the given socket structure.  It simply
+ * opens a new descriptor; all of the other parameters including the socket
+ * type are inherited from the existing socket.  This function is provided to
+ * avoid overhead of destroying and creating sockets when many short-lived
+ * sockets are frequently opened and closed.  When the efficiency is not an
+ * issue, it should be safer to detach the unused socket and re-create a new
+ * one.  This optimization may not be available for some systems, in which
+ * case this function will return ISC_R_NOTIMPLEMENTED and must not be used.
+ *
+ * isc_socket_open() should not be called on sockets created by
+ * isc_socket_fdwatchcreate().
+ *
+ * Requires:
+ *
+ * \li	there must be no other reference to this socket.
+ *
+ * \li	'socket' is a valid and previously closed by isc_socket_close()
+ *
+ * \li  'sock->type' is not isc_sockettype_fdwatch
+ *
+ * Returns:
+ *	Same as isc_socket_create().
+ * \li	ISC_R_NOTIMPLEMENTED
+ */
+
+isc_result_t
+isc_socket_close(isc_socket_t *sock);
+/*%<
+ * Close a socket file descriptor of the given socket structure.  This function
+ * is provided as an alternative to destroying an unused socket when overhead
+ * destroying/re-creating sockets can be significant, and is expected to be
+ * used with isc_socket_open().  This optimization may not be available for some
+ * systems, in which case this function will return ISC_R_NOTIMPLEMENTED and
+ * must not be used.
+ *
+ * isc_socket_close() should not be called on sockets created by
+ * isc_socket_fdwatchcreate().
+ *
+ * Requires:
+ *
+ * \li	The socket must have a valid descriptor.
+ *
+ * \li	There must be no other reference to this socket.
+ *
+ * \li	There must be no pending I/O requests.
+ *
+ * \li  'sock->type' is not isc_sockettype_fdwatch
+ *
+ * Returns:
+ * \li	#ISC_R_NOTIMPLEMENTED
+ */
+
+isc_result_t
+isc_socket_bind(isc_socket_t *sock, isc_sockaddr_t *addressp,
+		unsigned int options);
 /*%<
  * Bind 'socket' to '*addressp'.
  *
@@ -637,8 +753,15 @@ isc_socket_sendto2(isc_socket_t *sock, isc_region_t *region,
 
 isc_result_t
 isc_socketmgr_create(isc_mem_t *mctx, isc_socketmgr_t **managerp);
+
+isc_result_t
+isc_socketmgr_create2(isc_mem_t *mctx, isc_socketmgr_t **managerp,
+		      unsigned int maxsocks);
 /*%<
- * Create a socket manager.
+ * Create a socket manager.  If "maxsocks" is non-zero, it specifies the
+ * maximum number of sockets that the created manager should handle.
+ * isc_socketmgr_create() is equivalent of isc_socketmgr_create2() with
+ * "maxsocks" being zero.
  *
  * Notes:
  *
@@ -659,6 +782,23 @@ isc_socketmgr_create(isc_mem_t *mctx, isc_socketmgr_t **managerp);
  *\li	#ISC_R_SUCCESS
  *\li	#ISC_R_NOMEMORY
  *\li	#ISC_R_UNEXPECTED
+ *\li	#ISC_R_NOTIMPLEMENTED
+ */
+
+isc_result_t
+isc_socketmgr_getmaxsockets(isc_socketmgr_t *manager, unsigned int *nsockp);
+/*%<
+ * Returns in "*nsockp" the maximum number of sockets this manager may open.
+ *
+ * Requires:
+ *
+ *\li	'*manager' is a valid isc_socketmgr_t.
+ *\li	'nsockp' is not NULL.
+ *
+ * Returns:
+ *
+ *\li	#ISC_R_SUCCESS
+ *\li	#ISC_R_NOTIMPLEMENTED
  */
 
 void
@@ -731,7 +871,7 @@ isc_socket_cleanunix(isc_sockaddr_t *addr, isc_boolean_t active);
 
 isc_result_t
 isc_socket_permunix(isc_sockaddr_t *sockaddr, isc_uint32_t perm,
-                    isc_uint32_t owner, isc_uint32_t group);
+		    isc_uint32_t owner, isc_uint32_t group);
 /*%<
  * Set ownership and file permissions on the UNIX domain socket.
  *
@@ -746,6 +886,39 @@ isc_socket_permunix(isc_sockaddr_t *sockaddr, isc_uint32_t perm,
  * \li	#ISC_R_SUCCESS
  * \li	#ISC_R_FAILURE
  */
+
+void isc_socket_setname(isc_socket_t *socket, const char *name, void *tag);
+/*%<
+ * Set the name and optional tag for a socket.  This allows tracking of the
+ * owner or purpose for this socket, and is useful for tracing and statistics
+ * reporting.
+ */
+
+const char *isc_socket_getname(isc_socket_t *socket);
+/*%<
+ * Get the name associated with a socket, if any.
+ */
+
+void *isc_socket_gettag(isc_socket_t *socket);
+/*%<
+ * Get the tag associated with a socket, if any.
+ */
+
+void
+isc__socketmgr_setreserved(isc_socketmgr_t *mgr, isc_uint32_t);
+/*%<
+ * Temporary.  For use by named only.
+ */
+
+#ifdef HAVE_LIBXML2
+
+void
+isc_socketmgr_renderxml(isc_socketmgr_t *mgr, xmlTextWriterPtr writer);
+/*%<
+ * Render internal statistics and other state into the XML document.
+ */
+
+#endif /* HAVE_LIBXML2 */
 
 ISC_LANG_ENDDECLS
 

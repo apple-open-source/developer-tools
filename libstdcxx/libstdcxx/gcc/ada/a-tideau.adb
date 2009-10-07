@@ -1,12 +1,12 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                         GNAT RUNTIME COMPONENTS                          --
+--                         GNAT RUN-TIME COMPONENTS                         --
 --                                                                          --
 --              A D A . T E X T _ I O . D E C I M A L _ A U X               --
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2001 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -46,10 +46,9 @@ package body Ada.Text_IO.Decimal_Aux is
    -------------
 
    function Get_Dec
-     (File   : in File_Type;
-      Width  : in Field;
-      Scale  : Integer)
-      return   Integer
+     (File  : File_Type;
+      Width : Field;
+      Scale : Integer) return Integer
    is
       Buf  : String (1 .. Field'Last);
       Ptr  : aliased Integer;
@@ -75,10 +74,9 @@ package body Ada.Text_IO.Decimal_Aux is
    -------------
 
    function Get_LLD
-     (File   : in File_Type;
-      Width  : in Field;
-      Scale  : Integer)
-      return   Long_Long_Integer
+     (File  : File_Type;
+      Width : Field;
+      Scale : Integer) return Long_Long_Integer
    is
       Buf  : String (1 .. Field'Last);
       Ptr  : aliased Integer;
@@ -104,10 +102,9 @@ package body Ada.Text_IO.Decimal_Aux is
    --------------
 
    function Gets_Dec
-     (From  : in String;
+     (From  : String;
       Last  : access Positive;
-      Scale : Integer)
-      return  Integer
+      Scale : Integer) return Integer
    is
       Pos  : aliased Integer;
       Item : Integer;
@@ -129,10 +126,9 @@ package body Ada.Text_IO.Decimal_Aux is
    --------------
 
    function Gets_LLD
-     (From  : in String;
+     (From  : String;
       Last  : access Positive;
-      Scale : Integer)
-      return  Long_Long_Integer
+      Scale : Integer) return Long_Long_Integer
    is
       Pos  : aliased Integer;
       Item : Long_Long_Integer;
@@ -154,11 +150,11 @@ package body Ada.Text_IO.Decimal_Aux is
    -------------
 
    procedure Put_Dec
-     (File  : in File_Type;
-      Item  : in Integer;
-      Fore  : in Field;
-      Aft   : in Field;
-      Exp   : in Field;
+     (File  : File_Type;
+      Item  : Integer;
+      Fore  : Field;
+      Aft   : Field;
+      Exp   : Field;
       Scale : Integer)
    is
       Buf : String (1 .. Field'Last);
@@ -174,11 +170,11 @@ package body Ada.Text_IO.Decimal_Aux is
    -------------
 
    procedure Put_LLD
-     (File  : in File_Type;
-      Item  : in Long_Long_Integer;
-      Fore  : in Field;
-      Aft   : in Field;
-      Exp   : in Field;
+     (File  : File_Type;
+      Item  : Long_Long_Integer;
+      Fore  : Field;
+      Aft   : Field;
+      Exp   : Field;
       Scale : Integer)
    is
       Buf : String (1 .. Field'Last);
@@ -195,9 +191,9 @@ package body Ada.Text_IO.Decimal_Aux is
 
    procedure Puts_Dec
      (To    : out String;
-      Item  : in Integer;
-      Aft   : in Field;
-      Exp   : in Field;
+      Item  : Integer;
+      Aft   : Field;
+      Exp   : Field;
       Scale : Integer)
    is
       Buf  : String (1 .. Field'Last);
@@ -230,9 +226,9 @@ package body Ada.Text_IO.Decimal_Aux is
 
    procedure Puts_LLD
      (To    : out String;
-      Item  : in Long_Long_Integer;
-      Aft   : in Field;
-      Exp   : in Field;
+      Item  : Long_Long_Integer;
+      Aft   : Field;
+      Exp   : Field;
       Scale : Integer)
    is
       Buf  : String (1 .. Field'Last);

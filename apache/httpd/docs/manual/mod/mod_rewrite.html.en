@@ -71,6 +71,9 @@ URLs on the fly</td></tr>
 <li><img alt="" src="../images/down.gif" /> <a href="#EnvVar">Environment Variables</a></li>
 <li><img alt="" src="../images/down.gif" /> <a href="#vhosts">Rewriting in Virtual Hosts</a></li>
 <li><img alt="" src="../images/down.gif" /> <a href="#Solutions">Practical Solutions</a></li>
+</ul><h3>See also</h3>
+<ul class="seealso">
+<li><a href="#rewriteflags">Rewrite Flags</a></li>
 </ul></div>
 <div class="top"><a href="#page-header"><img alt="top" src="../images/up.gif" /></a></div>
 <div class="section">
@@ -212,7 +215,9 @@ Result:
               correct Apache internal processing. Because the
               per-directory rewriting comes late in the
               process, the rewritten request
-              has to be re-injected into the Apache kernel. 
+              has to be re-injected into the Apache kernel, as if it
+              were a new request. (See <a href="../rewrite/rewrite_tech.html">mod_rewrite technical
+              details</a>.)
               This is not the serious overhead it may seem to be - 
               this re-injection is completely internal to the 
 	      Apache server (and the same procedure is used by 
@@ -436,7 +441,15 @@ Result:
 	value of a header sent in the HTTP request.
         Example: <code>%{HTTP:Proxy-Connection}</code> is
         the value of the HTTP header
-        ``<code>Proxy-Connection:</code>''.</li>
+        ``<code>Proxy-Connection:</code>''.
+        <p>If a HTTP header is used in a condition this header is added to
+        the Vary header of the response in case the condition evaluates to
+        to true for the request. It is <strong>not</strong> added if the
+        condition evaluates to false for the request. Adding the HTTP header
+        to the Vary header of the response is needed for proper caching.</p>
+        <p>It has to be kept in mind that conditions follow a short circuit
+        logic in the case of the '<strong><code>ornext|OR</code></strong>' flag
+        so that certain conditions might not be evaluated at all.</p></li>
 
         <li>
         <code>%{LA-U:variable}</code> can be used for look-aheads which perform
@@ -594,6 +607,16 @@ RewriteRule ...some special stuff for any of these hosts...
           Without this flag you would have to write the condition/rule
           pair three times.
         </li>
+
+        <li>'<strong><code>novary|NV</code></strong>'
+        (<strong>n</strong>o <strong>v</strong>ary)<br />
+        If a HTTP header is used in the condition, this flag prevents
+        this header from being added to the Vary header of the response. <br />
+        Using this flag might break proper caching of the response if
+        the representation of this response varies on the value of this header.
+        So this flag should be only used if the meaning of the Vary header
+        is well understood.
+        </li>
       </ul>
       </li>
      </ol>
@@ -652,6 +675,11 @@ RewriteRule  ^/$                 /homepage.std.html  [L]
       inherited by virtual hosts. This means that you need to have a
       <code>RewriteEngine on</code> directive for each virtual host
       in which you wish to use rewrite rules.</p>
+
+      <p><code class="directive">RewriteMap</code> directives of the type <code>prg</code>
+      are not started during server initialization if they're defined in a
+      context that does not have <code class="directive">RewriteEngine</code>  set to
+      <code>on</code></p>
 
 </div>
 <div class="top"><a href="#page-header"><img alt="top" src="../images/up.gif" /></a></div>
@@ -939,6 +967,10 @@ $ httxt2dbm -i mapfile.txt -o mapfile.map
           program which will implement a 1:1 map (<em>i.e.</em>,
           key == value) could be:</p>
 
+          <p>External rewriting programs are not started if they're defined in a
+          context that does not have <code class="directive">RewriteEngine</code> set to
+          <code>on</code></p>.
+
 <div class="example"><pre>
 #!/usr/bin/perl
 $| = 1;
@@ -1045,50 +1077,10 @@ later</td></tr>
       <code>%{QUERY_STRING}</code> variables respectively.</p>
 </div>
 
-
-
-      <p>Some hints on the syntax of <a class="glossarylink" href="../glossary.html#regex" title="see glossary">regular 
-      expressions</a>:</p>
-
-<div class="note"><pre>
-<strong>Text:</strong>
-  <strong><code>.</code></strong>           Any single character
-  <strong><code>[</code></strong>chars<strong><code>]</code></strong>     Character class: Any character of the class ``chars''
-  <strong><code>[^</code></strong>chars<strong><code>]</code></strong>    Character class: Not a character of the class ``chars''
-  text1<strong><code>|</code></strong>text2 Alternative: text1 or text2
-
-<strong>Quantifiers:</strong>
-  <strong><code>?</code></strong>           0 or 1 occurrences of the preceding text
-  <strong><code>*</code></strong>           0 or N occurrences of the preceding text (N &gt; 0)
-  <strong><code>+</code></strong>           1 or N occurrences of the preceding text (N &gt; 1)
-
-<strong>Grouping:</strong>
-  <strong><code>(</code></strong>text<strong><code>)</code></strong>      Grouping of text
-              (used either to set the borders of an alternative as above, or
-              to make backreferences, where the <strong>N</strong>th group can 
-              be referred to on the RHS of a RewriteRule as <code>$</code><strong>N</strong>)
-
-<strong>Anchors:</strong>
-  <strong><code>^</code></strong>           Start-of-line anchor
-  <strong><code>$</code></strong>           End-of-line anchor
-
-<strong>Escaping:</strong>
-  <strong><code>\</code></strong>char       escape the given char
-              (for instance, to specify the chars "<code>.[]()</code>" <em>etc.</em>)
-</pre></div>
-
-      <p>For more information about regular expressions, have a look at the
-      perl regular expression manpage ("<a href="http://www.perldoc.com/perlre.html">perldoc
-      perlre</a>"). If you are interested in more detailed
-      information about regular expressions and their variants
-      (POSIX regex etc.) the following book is dedicated to this topic:</p>
-
-      <p class="indent">
-        <em>Mastering Regular Expressions, 2nd Edition</em><br />
-         Jeffrey E.F. Friedl<br />
-         O'Reilly &amp; Associates, Inc. 2002<br />
-         ISBN 0-596-00289-0<br />
-      </p>
+      <p>For some hints on <a class="glossarylink" href="../glossary.html#regex" title="see glossary">regular
+      expressions</a>, see
+      the <a href="../rewrite/rewrite_intro.html#regex">mod_rewrite
+      Introduction</a>.</p>
 
       <p>In mod_rewrite, the NOT character	
        ('<code>!</code>') is also available as a possible pattern 
@@ -1123,7 +1115,7 @@ cannot use <code>$N</code> in the substitution string!
         <dd>A <code class="directive"><a href="../mod/core.html#documentroot">DocumentRoot</a></code>-relative path to the
         resource to be served. Note that <code class="module"><a href="../mod/mod_rewrite.html">mod_rewrite</a></code>
         tries to guess whether you have specified a file-system path
-        or a URL-path by checking to see if the first segement of the
+        or a URL-path by checking to see if the first segment of the
         path exists at the root of the file-system. For example, if
         you specify a <em>Substitution</em> string of
         <code>/www/file.html</code>, then this will be treated as a
@@ -1207,6 +1199,21 @@ cannot use <code>$N</code> in the substitution string!
       brackets, of any of the following flags: </p>
 
       <dl>
+        <dt>'<code>B</code>' (escape backreferences)</dt>
+        <dd><p>Apache has to unescape URLs before mapping them,
+        so backreferences will be unescaped at the time they are applied.
+        Using the B flag, non-alphanumeric characters in backreferences
+        will be escaped.  For example, consider the rule:</p>
+        <pre><code> RewriteRule ^(.*)$ index.php?show=$1 </code></pre>
+        <p>This will map <code>/C++</code> to <code>index.php?show=/C++</code>.
+        But it will also map <code>/C%2b%2b</code> to
+        <code>index.php?show=/C++</code>, because the <code>%2b</code>
+        has been unescaped.  With the B flag, it will instead map to
+        <code>index.php?show=/C%2b%2b</code>.</p>
+        <p>This escaping is particularly necessary in a proxy situation,
+        when the backend may break if presented with an unescaped URL.</p>
+        </dd>
+
         <dt>'<code>chain|C</code>'
         (chained with next rule)</dt><dd>
          This flag chains the current rule with the next rule
@@ -1220,15 +1227,18 @@ cannot use <code>$N</code> in the substitution string!
         when you let an external redirect happen (where the
         ``<code>.www</code>'' part should not occur!).</dd>
 
-        <dt>
-		'<code>cookie|CO=</code><em>NAME</em>:<em>VAL</em>:<em>domain</em>[:<em>lifetime</em>[:<em>path</em>]]'
+        <dt>'<code>cookie|CO=</code><em>NAME</em>:<em>VAL</em>:<em>domain</em>[:<em>lifetime</em>[:<em>path</em>[:<em>secure</em>[:<em>httponly</em>]]]]'
         (set cookie)</dt><dd>
         This sets a cookie in the client's browser.  The cookie's name
         is specified by <em>NAME</em> and the value is
         <em>VAL</em>. The <em>domain</em> field is the domain of the
         cookie, such as '.apache.org', the optional <em>lifetime</em>
-	is the lifetime of the cookie in minutes, and the optional 
-	<em>path</em> is the path of the cookie</dd>
+        is the lifetime of the cookie in minutes, and the optional 
+        <em>path</em> is the path of the cookie. If <em>secure</em>
+        is set to 'secure', 'true' or '1', the cookie is only transmitted via secured
+        connections. If <em>httponly</em> is set to 'HttpOnly', 'true' or '1', the
+        <code>HttpOnly</code> flag is used, making the cookie not accessible
+        to JavaScript code on browsers that support this feature.</dd>
 
         <dt>
         '<code>env|E=</code><em>VAR</em>:<em>VAL</em>'
@@ -1461,6 +1471,17 @@ cannot use <code>$N</code> in the substitution string!
         </dd>
       </dl>
 
+<div class="note"><h3>Home directory expansion</h3>
+<p> When the substitution string begins with a string
+resembling "/~user" (via explicit text or backreferences), mod_rewrite performs
+home directory expansion independent of the presence or configuration
+of <code class="module"><a href="../mod/mod_userdir.html">mod_userdir</a></code>.</p>
+
+<p> This expansion does not occur when the <em>PT</em>
+flag is used on the <code class="directive"><a href="#rewriterule">RewriteRule</a></code>
+directive.</p>
+</div>
+
 <div class="note"><h3>Per-directory Rewrites</h3>
  
 <p>The rewrite engine may be used in <a href="../howto/htaccess.html">.htaccess</a> files.  To enable the
@@ -1586,6 +1607,6 @@ should never be necessary and is unsupported.</p>
 <div class="bottomlang">
 <p><span>Available Languages: </span><a href="../en/mod/mod_rewrite.html" title="English">&nbsp;en&nbsp;</a></p>
 </div><div id="footer">
-<p class="apache">Copyright 2007 The Apache Software Foundation.<br />Licensed under the <a href="http://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a>.</p>
+<p class="apache">Copyright 2008 The Apache Software Foundation.<br />Licensed under the <a href="http://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a>.</p>
 <p class="menu"><a href="../mod/">Modules</a> | <a href="../mod/directives.html">Directives</a> | <a href="../faq/">FAQ</a> | <a href="../glossary.html">Glossary</a> | <a href="../sitemap.html">Sitemap</a></p></div>
 </body></html>

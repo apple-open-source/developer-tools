@@ -1,12 +1,12 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                         GNAT RUNTIME COMPONENTS                          --
+--                         GNAT RUN-TIME COMPONENTS                         --
 --                                                                          --
 --                       S Y S T E M . W C H _ J I S                        --
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---        Copyright (C) 1992,1993,1994 Free Software Foundation, Inc.       --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -35,7 +35,7 @@
 --  JIS codes and the two external forms we support (EUC and Shift-JIS)
 
 package System.WCh_JIS is
-pragma Pure (WCh_JIS);
+   pragma Pure;
 
    function EUC_To_JIS (EUC1, EUC2 : Character) return Wide_Character;
    --  Given the two bytes of a EUC representation, return the
@@ -43,7 +43,7 @@ pragma Pure (WCh_JIS);
    --  if the two characters are not a valid EUC encoding.
 
    procedure JIS_To_EUC
-     (J    : in Wide_Character;
+     (J    : Wide_Character;
       EUC1 : out Character;
       EUC2 : out Character);
 
@@ -56,7 +56,7 @@ pragma Pure (WCh_JIS);
    --  the input code is assumed to be in an appropriate range.
 
    procedure JIS_To_Shift_JIS
-     (J   : in Wide_Character;
+     (J   : Wide_Character;
       SJ1 : out Character;
       SJ2 : out Character);
    --  Given a wide character code in JIS form, produce the corresponding

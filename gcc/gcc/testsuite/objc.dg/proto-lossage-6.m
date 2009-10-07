@@ -1,4 +1,3 @@
-/* APPLE LOCAL file mainline */
 /* { dg-do compile } */
 @class Base;
 @protocol _Protocol;

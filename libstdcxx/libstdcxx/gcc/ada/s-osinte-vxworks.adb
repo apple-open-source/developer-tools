@@ -1,12 +1,12 @@
 ------------------------------------------------------------------------------
 --                                                                          --
---                 GNU ADA RUN-TIME LIBRARY (GNARL) COMPONENTS              --
+--                  GNAT RUN-TIME LIBRARY (GNARL) COMPONENTS                --
 --                                                                          --
 --                   S Y S T E M . O S _ I N T E R F A C E                  --
 --                                                                          --
 --                                   B o d y                                --
 --                                                                          --
---             Copyright (C) 1997-2002 Free Software Foundation             --
+--             Copyright (C) 1997-2005 Free Software Foundation             --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNARL; see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- As a special exception,  if other files  instantiate  generics from this --
 -- unit, or you link  this unit with other files  to produce an executable, --
@@ -46,6 +46,28 @@ package body System.OS_Interface is
 
    Low_Priority : constant := 255;
    --  VxWorks native (default) lowest scheduling priority.
+
+   ----------
+   -- kill --
+   ----------
+
+   function kill (pid : t_id; sig : Signal) return int is
+      function c_kill (pid : t_id; sig : Signal) return int;
+      pragma Import (C, c_kill, "kill");
+   begin
+      return c_kill (pid, sig);
+   end kill;
+
+   --------------------
+   -- Set_Time_Slice --
+   --------------------
+
+   function Set_Time_Slice (ticks : int) return int is
+      function kernelTimeSlice (ticks : int) return int;
+      pragma Import (C, kernelTimeSlice, "kernelTimeSlice");
+   begin
+      return kernelTimeSlice (ticks);
+   end Set_Time_Slice;
 
    -------------
    -- sigwait --
@@ -160,5 +182,14 @@ package body System.OS_Interface is
 
       return int (Ticks);
    end To_Clock_Ticks;
+
+   ----------------
+   -- VX_FP_TASK --
+   ----------------
+
+   function VX_FP_TASK return int is
+   begin
+      return 16#0008#;
+   end VX_FP_TASK;
 
 end System.OS_Interface;

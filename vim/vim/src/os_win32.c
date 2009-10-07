@@ -27,9 +27,6 @@
 # include "if_mzsch.h"
 #endif
 
-#ifdef HAVE_FCNTL_H
-# include <fcntl.h>
-#endif
 #include <sys/types.h>
 #include <errno.h>
 #include <signal.h>
@@ -1521,7 +1518,12 @@ mch_inchar(
 #endif
 		   )
 		{
+#ifdef FEAT_MBYTE
+		    n = (*mb_char2bytes)(typeahead[typeaheadlen] | 0x80,
+						    typeahead + typeaheadlen);
+#else
 		    typeahead[typeaheadlen] |= 0x80;
+#endif
 		    modifiers &= ~MOD_MASK_ALT;
 		}
 
@@ -1585,7 +1587,7 @@ executable_exists(char *name)
 #ifdef FEAT_MBYTE
     if (enc_codepage >= 0 && (int)GetACP() != enc_codepage)
     {
-	WCHAR	*p = enc_to_ucs2(name, NULL);
+	WCHAR	*p = enc_to_utf16(name, NULL);
 	WCHAR	fnamew[_MAX_PATH];
 	WCHAR	*dumw;
 	long	n;
@@ -1680,8 +1682,8 @@ mch_init(void)
     clip_init(TRUE);
 
     /*
-     * Vim's own clipboard format recognises whether the text is char, line, or
-     * rectangular block.  Only useful for copying between two Vims.
+     * Vim's own clipboard format recognises whether the text is char, line,
+     * or rectangular block.  Only useful for copying between two Vims.
      * "VimClipboard" was used for previous versions, using the first
      * character to specify MCHAR, MLINE or MBLOCK.
      */
@@ -2378,7 +2380,7 @@ mch_get_user_name(
     char_u  *s,
     int	    len)
 {
-    char szUserName[MAX_COMPUTERNAME_LENGTH + 1];
+    char szUserName[256 + 1];	/* UNLEN is 256 */
     DWORD cch = sizeof szUserName;
 
     if (GetUserName(szUserName, &cch))
@@ -2438,7 +2440,7 @@ mch_dirname(
 
 	if (GetCurrentDirectoryW(_MAX_PATH, wbuf) != 0)
 	{
-	    char_u  *p = ucs2_to_enc(wbuf, NULL);
+	    char_u  *p = utf16_to_enc(wbuf, NULL);
 
 	    if (p != NULL)
 	    {
@@ -2464,7 +2466,7 @@ mch_getperm(char_u *name)
 #ifdef FEAT_MBYTE
     if (enc_codepage >= 0 && (int)GetACP() != enc_codepage)
     {
-	WCHAR	*p = enc_to_ucs2(name, NULL);
+	WCHAR	*p = enc_to_utf16(name, NULL);
 	long	n;
 
 	if (p != NULL)
@@ -2493,7 +2495,7 @@ mch_setperm(
 #ifdef FEAT_MBYTE
     if (enc_codepage >= 0 && (int)GetACP() != enc_codepage)
     {
-	WCHAR	*p = enc_to_ucs2(name, NULL);
+	WCHAR	*p = enc_to_utf16(name, NULL);
 	long	n;
 
 	if (p != NULL)
@@ -2520,7 +2522,7 @@ mch_hide(char_u *name)
     WCHAR	*p = NULL;
 
     if (enc_codepage >= 0 && (int)GetACP() != enc_codepage)
-	p = enc_to_ucs2(name, NULL);
+	p = enc_to_utf16(name, NULL);
 #endif
 
 #ifdef FEAT_MBYTE
@@ -2588,7 +2590,7 @@ mch_is_linked(char_u *fname)
     WCHAR	*wn = NULL;
 
     if (enc_codepage >= 0 && (int)GetACP() != enc_codepage)
-	wn = enc_to_ucs2(fname, NULL);
+	wn = enc_to_utf16(fname, NULL);
     if (wn != NULL)
     {
 	hFile = CreateFileW(wn,		/* file name */
@@ -2701,6 +2703,12 @@ mch_nodetype(char_u *name)
 {
     HANDLE	hFile;
     int		type;
+
+    /* We can't open a file with a name "\\.\con" or "\\.\prn" and trying to
+     * read from it later will cause Vim to hang.  Thus return NODE_WRITABLE
+     * here. */
+    if (STRNCMP(name, "\\\\.\\", 4) == 0)
+	return NODE_WRITABLE;
 
     hFile = CreateFile(name,		/* file name */
 		GENERIC_WRITE,		/* access mode */
@@ -2845,7 +2853,7 @@ handler_routine(
 	windgoto((int)Rows - 1, 0);
 	g_fForceExit = TRUE;
 
-	sprintf((char *)IObuff, _("Vim: Caught %s event\n"),
+	vim_snprintf((char *)IObuff, IOSIZE, _("Vim: Caught %s event\n"),
 		(dwCtrlType == CTRL_CLOSE_EVENT
 		     ? _("close")
 		     : dwCtrlType == CTRL_LOGOFF_EVENT
@@ -3271,12 +3279,13 @@ mch_call_shell(
     {
 	/* we use "command" or "cmd" to start the shell; slow but easy */
 	char_u *newcmd;
-
-	newcmd = lalloc((long_u) (
+	long_u cmdlen =  (
 #ifdef FEAT_GUI_W32
 		STRLEN(vimrun_path) +
 #endif
-		STRLEN(p_sh) + STRLEN(p_shcf) + STRLEN(cmd) + 10), TRUE);
+		STRLEN(p_sh) + STRLEN(p_shcf) + STRLEN(cmd) + 10);
+
+	newcmd = lalloc(cmdlen, TRUE);
 	if (newcmd != NULL)
 	{
 	    char_u *cmdbase = (*cmd == '"' ? cmd + 1 : cmd);
@@ -3362,14 +3371,15 @@ mch_call_shell(
 		if (!s_dont_use_vimrun)
 		    /* Use vimrun to execute the command.  It opens a console
 		     * window, which can be closed without killing Vim. */
-		    sprintf((char *)newcmd, "%s%s%s %s %s",
+                    vim_snprintf((char *)newcmd, cmdlen, "%s%s%s %s %s",
 			    vimrun_path,
 			    (msg_silent != 0 || (options & SHELL_DOOUT))
 								 ? "-s " : "",
 			    p_sh, p_shcf, cmd);
 		else
 #endif
-		    sprintf((char *)newcmd, "%s %s %s", p_sh, p_shcf, cmd);
+                    vim_snprintf((char *)newcmd, cmdlen, "%s %s %s",
+							   p_sh, p_shcf, cmd);
 		x = mch_system((char *)newcmd, options);
 	    }
 	    vim_free(newcmd);
@@ -3794,7 +3804,7 @@ standend(void)
 
 
 /*
- * Set normal fg/bg color, based on T_ME.  Called whem t_me has been set.
+ * Set normal fg/bg color, based on T_ME.  Called when t_me has been set.
  */
     void
 mch_set_normal_colors(void)
@@ -4229,7 +4239,7 @@ mch_remove(char_u *name)
 
     if (enc_codepage >= 0 && (int)GetACP() != enc_codepage)
     {
-	wn = enc_to_ucs2(name, NULL);
+	wn = enc_to_utf16(name, NULL);
 	if (wn != NULL)
 	{
 	    SetFileAttributesW(wn, FILE_ATTRIBUTE_NORMAL);
@@ -4372,8 +4382,8 @@ mch_rename(
 
     if (enc_codepage >= 0 && (int)GetACP() != enc_codepage)
     {
-	wold = enc_to_ucs2((char_u *)pszOldFile, NULL);
-	wnew = enc_to_ucs2((char_u *)pszNewFile, NULL);
+	wold = enc_to_utf16((char_u *)pszOldFile, NULL);
+	wnew = enc_to_utf16((char_u *)pszNewFile, NULL);
 	if (wold != NULL && wnew != NULL)
 	    retval = mch_wrename(wold, wnew);
 	vim_free(wold);
@@ -4482,7 +4492,7 @@ mch_access(char *n, int p)
     WCHAR	*wn = NULL;
 
     if (enc_codepage >= 0 && (int)GetACP() != enc_codepage)
-	wn = enc_to_ucs2(n, NULL);
+	wn = enc_to_utf16(n, NULL);
 #endif
 
     if (mch_isdir(n))
@@ -4608,7 +4618,7 @@ getout:
 
 #if defined(FEAT_MBYTE) || defined(PROTO)
 /*
- * Version of open() that may use ucs2 file name.
+ * Version of open() that may use UTF-16 file name.
  */
     int
 mch_open(char *name, int flags, int mode)
@@ -4620,7 +4630,7 @@ mch_open(char *name, int flags, int mode)
 
     if (enc_codepage >= 0 && (int)GetACP() != enc_codepage)
     {
-	wn = enc_to_ucs2(name, NULL);
+	wn = enc_to_utf16(name, NULL);
 	if (wn != NULL)
 	{
 	    f = _wopen(wn, flags, mode);
@@ -4638,7 +4648,7 @@ mch_open(char *name, int flags, int mode)
 }
 
 /*
- * Version of fopen() that may use ucs2 file name.
+ * Version of fopen() that may use UTF-16 file name.
  */
     FILE *
 mch_fopen(char *name, char *mode)
@@ -4653,12 +4663,29 @@ mch_fopen(char *name, char *mode)
 # endif
        )
     {
-	wn = enc_to_ucs2(name, NULL);
-	wm = enc_to_ucs2(mode, NULL);
+# if defined(DEBUG) && _MSC_VER >= 1400
+	/* Work around an annoying assertion in the Microsoft debug CRT
+	 * when mode's text/binary setting doesn't match _get_fmode(). */
+	char newMode = mode[strlen(mode) - 1];
+	int oldMode = 0;
+
+	_get_fmode(&oldMode);
+	if (newMode == 't')
+	    _set_fmode(_O_TEXT);
+	else if (newMode == 'b')
+	    _set_fmode(_O_BINARY);
+# endif
+	wn = enc_to_utf16(name, NULL);
+	wm = enc_to_utf16(mode, NULL);
 	if (wn != NULL && wm != NULL)
 	    f = _wfopen(wn, wm);
 	vim_free(wn);
 	vim_free(wm);
+
+# if defined(DEBUG) && _MSC_VER >= 1400
+	_set_fmode(oldMode);
+# endif
+
 	if (f != NULL)
 	    return f;
 	/* Retry with non-wide function (for Windows 98). Can't use
@@ -4749,8 +4776,8 @@ copy_infostreams(char_u *from, char_u *to)
     int			len;
 
     /* Convert the file names to wide characters. */
-    fromw = enc_to_ucs2(from, NULL);
-    tow = enc_to_ucs2(to, NULL);
+    fromw = enc_to_utf16(from, NULL);
+    tow = enc_to_utf16(to, NULL);
     if (fromw != NULL && tow != NULL)
     {
 	/* Open the file for reading. */
@@ -5095,7 +5122,7 @@ fix_arg_enc(void)
     for (i = 0; i < used_file_count; ++i)
     {
 	idx = used_file_indexes[i];
-	str = ucs2_to_enc(ArglistW[idx], NULL);
+	str = utf16_to_enc(ArglistW[idx], NULL);
 	if (str != NULL)
 	{
 #ifdef FEAT_DIFF

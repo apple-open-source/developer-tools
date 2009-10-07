@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2004 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2006, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -39,6 +39,16 @@ with Stylesw;  use Stylesw;
 package body Styleg is
 
    use ASCII;
+
+   Blank_Lines : Nat := 0;
+   --  Counts number of empty lines seen. Reset to zero if a non-empty line
+   --  is encountered. Used to check for trailing blank lines in Check_EOF,
+   --  and for multiple blank lines.
+
+   Blank_Line_Location : Source_Ptr;
+   --  Remembers location of first blank line in a series. Used to issue an
+   --  appropriate diagnostic if subsequent blank lines or the end of file
+   --  is encountered.
 
    -----------------------
    -- Local Subprograms --
@@ -129,7 +139,6 @@ package body Styleg is
 
    procedure Check_Attribute_Name (Reserved : Boolean) is
       pragma Warnings (Off, Reserved);
-
    begin
       if Style_Check_Attribute_Casing then
          if Determine_Token_Casing /= Mixed_Case then
@@ -265,6 +274,8 @@ package body Styleg is
          S : Source_Ptr;
 
       begin
+         --  Do we need to worry about UTF_32 line terminators here ???
+
          S := Scan_Ptr + 3;
          while Source (S) not in Line_Terminator loop
             S := S + 1;
@@ -397,6 +408,31 @@ package body Styleg is
       end if;
    end Check_Dot_Dot;
 
+   ---------------
+   -- Check_EOF --
+   ---------------
+
+   --  In check blanks at end mode, check no blank lines precede the EOF
+
+   procedure Check_EOF is
+   begin
+      if Style_Check_Blank_Lines then
+
+         --  We expect one blank line, from the EOF, but no more than one
+
+         if Blank_Lines = 2 then
+            Error_Msg
+              ("(style) blank line not allowed at end of file",
+               Blank_Line_Location);
+
+         elsif Blank_Lines >= 3 then
+            Error_Msg
+              ("(style) blank lines not allowed at end of file",
+               Blank_Line_Location);
+         end if;
+      end if;
+   end Check_EOF;
+
    -----------------------------------
    -- Check_Exponentiation_Operator --
    -----------------------------------
@@ -462,62 +498,14 @@ package body Styleg is
    end Check_Left_Paren;
 
    ---------------------------
-   -- Check_Line_Terminator --
+   -- Check_Line_Max_Length --
    ---------------------------
-
-   --  In check blanks at end mode (-gnatyb), lines may not end with a
-   --  trailing space.
 
    --  In check max line length mode (-gnatym), the line length must
    --  not exceed the permitted maximum value.
 
-   --  In check form feeds mode (-gnatyf), the line terminator may not
-   --  be either of the characters FF or VT.
-
-   procedure Check_Line_Terminator (Len : Int) is
-      S : Source_Ptr;
-
+   procedure Check_Line_Max_Length (Len : Int) is
    begin
-      --  Check FF/VT terminators
-
-      if Style_Check_Form_Feeds then
-         if Source (Scan_Ptr) = ASCII.FF then
-            Error_Msg_S ("(style) form feed not allowed");
-
-         elsif Source (Scan_Ptr) = ASCII.VT then
-            Error_Msg_S ("(style) vertical tab not allowed");
-         end if;
-      end if;
-
-      --  We are now possibly going to check for trailing spaces and maximum
-      --  line length. There is no point in doing this if the current line is
-      --  empty. It is actually wrong in the case of trailing spaces, because
-      --  we scan backwards for this purpose, so we would end up looking at a
-      --  different line, or even at invalid buffer locations if we have the
-      --  first source line at hand.
-
-      if Len = 0 then
-         return;
-      end if;
-
-      --  Check trailing space
-
-      if Style_Check_Blanks_At_End then
-         if Scan_Ptr >= First_Non_Blank_Location then
-            if Is_White_Space (Source (Scan_Ptr - 1)) then
-               S := Scan_Ptr - 1;
-
-               while Is_White_Space (Source (S - 1)) loop
-                  S := S - 1;
-               end loop;
-
-               Error_Msg ("(style) trailing spaces not permitted", S);
-            end if;
-         end if;
-      end if;
-
-      --  Check max line length
-
       if Style_Check_Max_Line_Length then
          if Len > Style_Max_Line_Length then
             Error_Msg
@@ -525,7 +513,99 @@ package body Styleg is
                Current_Line_Start + Source_Ptr (Style_Max_Line_Length));
          end if;
       end if;
+   end Check_Line_Max_Length;
 
+   ---------------------------
+   -- Check_Line_Terminator --
+   ---------------------------
+
+   --  In check blanks at end mode (-gnatyb), lines may not end with a
+   --  trailing space.
+
+   --  In check form feeds mode (-gnatyf), the line terminator may not
+   --  be either of the characters FF or VT.
+
+   --  In check DOS line terminators node (-gnatyd), the line terminator
+   --  must be a single LF, without a following CR.
+
+   procedure Check_Line_Terminator (Len : Int) is
+      S : Source_Ptr;
+
+      L : Int := Len;
+      --  Length of line (adjusted down for blanks at end of line)
+
+   begin
+      --  Reset count of blank lines if first line
+
+      if Get_Logical_Line_Number (Scan_Ptr) = 1 then
+         Blank_Lines := 0;
+      end if;
+
+      --  Check FF/VT terminators
+
+      if Style_Check_Form_Feeds then
+         if Source (Scan_Ptr) = ASCII.FF then
+            Error_Msg_S ("(style) form feed not allowed");
+         elsif Source (Scan_Ptr) = ASCII.VT then
+            Error_Msg_S ("(style) vertical tab not allowed");
+         end if;
+      end if;
+
+      --  Check DOS line terminator (ignore EOF, since we only get called
+      --  with an EOF if it is the last character in the buffer, and was
+      --  therefore not present in the sources
+
+      if Style_Check_DOS_Line_Terminator then
+         if Source (Scan_Ptr) = EOF then
+            null;
+         elsif Source (Scan_Ptr) /= LF
+           or else Source (Scan_Ptr + 1) = CR
+         then
+            Error_Msg_S ("(style) incorrect line terminator");
+         end if;
+      end if;
+
+      --  Remove trailing spaces
+
+      S := Scan_Ptr;
+      while L > 0 and then Is_White_Space (Source (S - 1)) loop
+         S := S - 1;
+         L := L - 1;
+      end loop;
+
+      --  Issue message for blanks at end of line if option enabled
+
+      if Style_Check_Blanks_At_End and then L < Len then
+         Error_Msg
+           ("(style) trailing spaces not permitted", S);
+      end if;
+
+      --  Deal with empty (blank) line
+
+      if L = 0 then
+
+         --  Increment blank line count
+
+         Blank_Lines := Blank_Lines + 1;
+
+         --  If first blank line, record location for later error message
+
+         if Blank_Lines = 1 then
+            Blank_Line_Location := Scan_Ptr;
+         end if;
+
+      --  Non-blank line, check for previous multiple blank lines
+
+      else
+         if Style_Check_Blank_Lines and then Blank_Lines > 1 then
+            Error_Msg
+              ("(style) multiple blank lines", Blank_Line_Location);
+         end if;
+
+         --  And reset blank line count
+
+         Blank_Lines := 0;
+      end if;
    end Check_Line_Terminator;
 
    --------------------------
@@ -713,6 +793,15 @@ package body Styleg is
    begin
       return C = ' ' or else C = HT;
    end Is_White_Space;
+
+   -------------------
+   -- Mode_In_Check --
+   -------------------
+
+   function Mode_In_Check return Boolean is
+   begin
+      return Style_Check and Style_Check_Mode_In;
+   end Mode_In_Check;
 
    -----------------
    -- No_End_Name --

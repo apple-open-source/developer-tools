@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2004 Free Software Foundation, Inc.          --
+--          Copyright (C) 1992-2005, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -16,8 +16,8 @@
 -- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
 -- for  more details.  You should have  received  a copy of the GNU General --
 -- Public License  distributed with GNAT;  see file COPYING.  If not, write --
--- to  the Free Software Foundation,  59 Temple Place - Suite 330,  Boston, --
--- MA 02111-1307, USA.                                                      --
+-- to  the  Free Software Foundation,  51  Franklin  Street,  Fifth  Floor, --
+-- Boston, MA 02110-1301, USA.                                              --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -31,7 +31,6 @@ with Checks;
 with CStand;
 with Debug;    use Debug;
 with Elists;
-with Exp_Ch11;
 with Exp_Dbug;
 with Fmap;
 with Fname.UF;
@@ -80,7 +79,6 @@ begin
    Lib.Load.Initialize;
    Sem_Ch8.Initialize;
    Fname.UF.Initialize;
-   Exp_Ch11.Initialize;
    Checks.Initialize;
 
    --  Create package Standard
@@ -129,7 +127,6 @@ begin
 
       Opt.Style_Check := False;
       Style_Check := False;
-      Opt.Max_Line_Length := Int (Column_Number'Last);
 
       --  Capture current suppress options, which may get modified
 
@@ -193,7 +190,6 @@ begin
       --  Restore style check, but if config file turned on checks, leave on!
 
       Opt.Style_Check := Save_Style_Check or Style_Check;
-      Opt.Max_Line_Length := Hostparm.Max_Line_Length;
 
       --  Capture any modifications to suppress options from config pragmas
 
@@ -329,11 +325,6 @@ begin
             end if;
 
             Check_Elab_Calls;
-
-            --  Build unit exception table. We leave this up to the end to
-            --  make sure that all the necessary information is at hand.
-
-            Exp_Ch11.Generate_Unit_Exception_Table;
          end if;
 
          --  List library units if requested

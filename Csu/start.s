@@ -201,8 +201,40 @@ Lapple:
 	ldr	r4, [r3], #4		// look for NULL ending env[] array
 	cmp	r4, #0
 	bne	Lapple			
-	bl	_main			// "apple" param now in r3
+					// "apple" param now in r3
+#if __STATIC__
+	bl	_main
 	b	_exit
+#else
+// use -mlong-branch style call sites so that main executable can be >32MB 
+	ldr	ip, L4
+L2:	add	ip, pc, ip
+	ldr	ip, [ip, #0]
+#if __ARM_ARCH_4T__
+	mov lr, pc		// blx not supported, so simulate it in two steps
+	bx  ip
+#else
+	blx	ip			// call main()
+#endif
+	
+	ldr	ip, L5
+L3:	add	ip, pc, ip
+	ldr	ip, [ip, #0]
+	bx	ip			// jmp exit()
+	
+L4:	.long	L_main$non_lazy_ptr-(L2+8)
+L5:	.long	L_exit$non_lazy_ptr-(L3+8)
+
+	.non_lazy_symbol_pointer
+L_main$non_lazy_ptr:
+	.indirect_symbol _main
+	.long	0
+L_exit$non_lazy_ptr:
+	.indirect_symbol _exit
+	.long	0
+#endif
+
+
 #endif
 #endif /* __arm__ */
 

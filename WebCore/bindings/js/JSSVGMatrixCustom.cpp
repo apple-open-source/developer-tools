@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2006 Nikolas Zimmermann <zimmermann@kde.org>
+ * Copyright (C) 2006, 2007, 2008 Nikolas Zimmermann <zimmermann@kde.org>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -20,44 +20,41 @@
 #include "config.h"
 
 #if ENABLE(SVG)
-
 #include "JSSVGMatrix.h"
 
-#include "AffineTransform.h"
+#include "TransformationMatrix.h"
 #include "SVGException.h"
 
-using namespace KJS;
+using namespace JSC;
 
 namespace WebCore {
 
-JSValue* JSSVGMatrix::inverse(ExecState* exec, const List&)
+JSValue JSSVGMatrix::inverse(ExecState* exec, const ArgList&)
 {
-    const AffineTransform& imp(*impl());
-    KJS::JSValue* result = toJS(exec, new JSSVGPODTypeWrapper<AffineTransform>(imp.inverse()));
+    TransformationMatrix imp(*impl());
+    JSC::JSValue result = toJS(exec, JSSVGStaticPODTypeWrapper<TransformationMatrix>::create(imp.inverse()).get(), m_context.get());
 
     if (!imp.isInvertible())
-        setDOMException(exec, SVG_MATRIX_NOT_INVERTABLE);
+        setDOMException(exec, SVGException::SVG_MATRIX_NOT_INVERTABLE);
 
     return result;
 }
 
-JSValue* JSSVGMatrix::rotateFromVector(ExecState* exec, const List& args)
+JSValue JSSVGMatrix::rotateFromVector(ExecState* exec, const ArgList& args)
 {
-    AffineTransform& imp(*impl());
+    TransformationMatrix imp(*impl());
  
-    float x = args[0]->toFloat(exec);
-    float y = args[1]->toFloat(exec);
+    float x = args.at(0).toFloat(exec);
+    float y = args.at(1).toFloat(exec);
 
-    KJS::JSValue* result = toJS(exec, new JSSVGPODTypeWrapper<AffineTransform>(imp.rotateFromVector(x, y)));
+    JSC::JSValue result = toJS(exec, JSSVGStaticPODTypeWrapper<TransformationMatrix>::create(imp.rotateFromVector(x, y)).get(), m_context.get());
 
     if (x == 0.0 || y == 0.0)
-        setDOMException(exec, SVG_INVALID_VALUE_ERR);
+        setDOMException(exec, SVGException::SVG_INVALID_VALUE_ERR);
 
     return result;
 }
-    
+
 }
 
 #endif // ENABLE(SVG)
-
-// vim:ts=4:noet

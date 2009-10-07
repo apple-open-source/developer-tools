@@ -1,9 +1,9 @@
 dnl
-dnl "$Id: cups-common.m4 6981 2007-09-19 21:51:55Z mike $"
+dnl "$Id: cups-common.m4 7900 2008-09-03 13:47:57Z mike $"
 dnl
 dnl   Common configuration stuff for the Common UNIX Printing System (CUPS).
 dnl
-dnl   Copyright 2007 by Apple Inc.
+dnl   Copyright 2007-2009 by Apple Inc.
 dnl   Copyright 1997-2007 by Easy Software Products, all rights reserved.
 dnl
 dnl   These coded instructions, statements, and computer programs are the
@@ -19,15 +19,20 @@ AC_PREREQ(2.60)
 dnl Set the name of the config header file...
 AC_CONFIG_HEADER(config.h)
 
-dnl Versio number information...
-CUPS_VERSION="1.3.3"
+dnl Version number information...
+CUPS_VERSION="1.4.0"
 CUPS_REVISION=""
 #if test -z "$CUPS_REVISION" -a -d .svn; then
 #	CUPS_REVISION="-r`svnversion . | awk -F: '{print $NF}' | sed -e '1,$s/[[a-zA-Z]]*//g'`"
 #fi
+CUPS_BUILD="cups-$CUPS_VERSION"
+
+AC_ARG_WITH(cups_build, [  --with-cups-build       set "cups-config --build" string ],
+	CUPS_BUILD="$withval")
 
 AC_SUBST(CUPS_VERSION)
 AC_SUBST(CUPS_REVISION)
+AC_SUBST(CUPS_BUILD)
 AC_DEFINE_UNQUOTED(CUPS_SVERSION, "CUPS v$CUPS_VERSION$CUPS_REVISION")
 AC_DEFINE_UNQUOTED(CUPS_MINIMAL, "CUPS/$CUPS_VERSION$CUPS_REVISION")
 
@@ -40,15 +45,11 @@ LDFLAGS="${LDFLAGS:=}"
 dnl Checks for programs...
 AC_PROG_AWK
 AC_PROG_CC
-AC_PROG_CXX
 AC_PROG_CPP
-AC_PROG_INSTALL
-if test "$INSTALL" = "$ac_install_sh"; then
-	# Use full path to install-sh script...
-	INSTALL="`pwd`/install-sh -c"
-fi
+AC_PROG_CXX
 AC_PROG_RANLIB
 AC_PATH_PROG(AR,ar)
+AC_PATH_PROG(CHMOD,chmod)
 AC_PATH_PROG(HTMLDOC,htmldoc)
 AC_PATH_PROG(LD,ld)
 AC_PATH_PROG(LN,ln)
@@ -56,7 +57,18 @@ AC_PATH_PROG(MV,mv)
 AC_PATH_PROG(RM,rm)
 AC_PATH_PROG(RMDIR,rmdir)
 AC_PATH_PROG(SED,sed)
-AC_PATH_PROG(STRIP,strip)
+AC_PATH_PROG(XDGOPEN,xdg-open)
+if test "x$XDGOPEN" = x; then
+	CUPS_HTMLVIEW="htmlview"
+else
+	CUPS_HTMLVIEW="$XDGOPEN"
+fi
+AC_SUBST(CUPS_HTMLVIEW)
+
+AC_MSG_CHECKING(for install-sh script)
+INSTALL="`pwd`/install-sh"
+AC_SUBST(INSTALL)
+AC_MSG_RESULT(using $INSTALL)
 
 if test "x$AR" = x; then
 	AC_MSG_ERROR([Unable to find required library archive command.])
@@ -64,13 +76,10 @@ fi
 if test "x$CC" = x; then
 	AC_MSG_ERROR([Unable to find required C compiler command.])
 fi
-if test "x$CXX" = x; then
-	AC_MSG_ERROR([Unable to find required C++ compiler command.])
-fi
 
 dnl Static library option...
 INSTALLSTATIC=""
-AC_ARG_ENABLE(static, [  --enable-static         install static libraries, default=no])
+AC_ARG_ENABLE(static, [  --enable-static         install static libraries])
 
 if test x$enable_static = xyes; then
 	echo Installing static libraries...
@@ -84,23 +93,20 @@ AC_SEARCH_LIBS(crypt, crypt)
 AC_SEARCH_LIBS(getspent, sec gen)
 
 LIBMALLOC=""
-AC_ARG_ENABLE(mallinfo, [  --enable-mallinfo       turn on malloc debug information, default=no])
+AC_ARG_ENABLE(mallinfo, [  --enable-mallinfo       build with malloc debug logging])
 
 if test x$enable_mallinfo = xyes; then
-	AC_CHECK_LIB(c,mallinfo,LIBS="$LIBS"; AC_DEFINE(HAVE_MALLINFO),LIBS="$LIBS")
-	if test "$ac_cv_lib_c_mallinfo" = "no"; then
-		AC_CHECK_LIB(malloc,mallinfo,
-	        	     LIBS="$LIBS"
-			     LIBMALLOC="-lmalloc"
-			     AC_DEFINE(HAVE_MALLINFO),
-			     LIBS="$LIBS")
-	fi
+	SAVELIBS="$LIBS"
+	LIBS=""
+	AC_SEARCH_LIBS(mallinfo, malloc, AC_DEFINE(HAVE_MALLINFO))
+	LIBMALLOC="$LIBS"
+	LIBS="$SAVELIBS"
 fi
 
 AC_SUBST(LIBMALLOC)
 
 dnl Check for libpaper support...
-AC_ARG_ENABLE(libpaper, [  --enable-libpaper       turn on libpaper support, default=no])
+AC_ARG_ENABLE(libpaper, [  --enable-libpaper       build with libpaper support])
 
 if test x$enable_libpaper = xyes; then
 	AC_CHECK_LIB(paper,systempapername,
@@ -135,8 +141,8 @@ else
 	AC_CHECK_FUNCS(snprintf vsnprintf)
 fi
 
-dnl Checks for mkstemp and mkstemps functions.
-AC_CHECK_FUNCS(mkstemp mkstemps)
+dnl Check for random number functions...
+AC_CHECK_FUNCS(random mrand48 lrand48)
 
 dnl Check for geteuid function.
 AC_CHECK_FUNCS(geteuid)
@@ -171,6 +177,40 @@ AC_TRY_COMPILE([#include <time.h>],[struct tm t;
 dnl See if we have the removefile(3) function for securely removing files
 AC_CHECK_FUNCS(removefile)
 
+dnl See if we have libusb...
+AC_ARG_ENABLE(libusb, [  --enable-libusb         use libusb for USB printing])
+
+LIBUSB=""
+AC_SUBST(LIBUSB)
+
+if test x$enable_libusb = xyes; then
+	check_libusb=yes
+elif test x$enable_libusb != xno -a $uname != Darwin; then
+	check_libusb=yes
+else
+	check_libusb=no
+fi
+
+if test $check_libusb = yes; then
+	AC_CHECK_LIB(usb, usb_init,[
+		AC_CHECK_HEADER(usb.h,
+			AC_DEFINE(HAVE_USB_H)
+			LIBUSB="-lusb")])
+fi
+
+dnl See if we have libwrap for TCP wrappers support...
+AC_ARG_ENABLE(tcp_wrappers, [  --enable-tcp-wrappers   use libwrap for TCP wrappers support])
+
+LIBWRAP=""
+AC_SUBST(LIBWRAP)
+
+if test x$enable_tcp_wrappers = xyes; then
+	AC_CHECK_LIB(wrap, hosts_access,[
+		AC_CHECK_HEADER(tcpd.h,
+			AC_DEFINE(HAVE_TCPD_H)
+			LIBWRAP="-lwrap")])
+fi
+
 dnl Flags for "ar" command...
 case $uname in
         Darwin* | *BSD*)
@@ -183,36 +223,77 @@ esac
 
 AC_SUBST(ARFLAGS)
 
-dnl Extra platform-specific libraries...
+dnl Prep libraries specifically for cupsd and backends...
 BACKLIBS=""
 CUPSDLIBS=""
-DBUSDIR=""
-CUPS_DEFAULT_PRINTADMIN_AUTH="@SYSTEM"
-CUPS_SYSTEM_AUTHKEY=""
+AC_SUBST(BACKLIBS)
+AC_SUBST(CUPSDLIBS)
 
-AC_ARG_ENABLE(dbus, [  --enable-dbus           enable DBUS support, default=auto])
+dnl See if we have POSIX ACL support...
+SAVELIBS="$LIBS"
+LIBS=""
+AC_ARG_ENABLE(acl, [  --enable-acl            build with POSIX ACL support])
+if test "x$enable_acl" != xno; then
+	AC_SEARCH_LIBS(acl_init, acl, AC_DEFINE(HAVE_ACL_INIT))
+	CUPSDLIBS="$CUPSDLIBS $LIBS"
+fi
+LIBS="$SAVELIBS"
 
-FONTS="fonts"
-AC_SUBST(FONTS)
-LEGACY_BACKENDS="parallel scsi"
-AC_SUBST(LEGACY_BACKENDS)
+dnl Check for DBUS support
+if test -d /etc/dbus-1; then
+	DBUSDIR="/etc/dbus-1"
+else
+	DBUSDIR=""
+fi
 
-case $uname in
-        Darwin*)
-		FONTS=""
-		LEGACY_BACKENDS=""
-                BACKLIBS="-framework IOKit"
-                CUPSDLIBS="-sectorder __TEXT __text cupsd.order -e start -framework IOKit -framework SystemConfiguration"
-                LIBS="-framework CoreFoundation $LIBS"
+AC_ARG_ENABLE(dbus, [  --enable-dbus           build with DBUS support])
+AC_ARG_WITH(dbusdir, [  --with-dbusdir          set DBUS configuration directory ],
+	DBUSDIR="$withval")
 
-		dnl Check for CFLocaleCreateCanonicalLocaleIdentifierFromString...
-		AC_MSG_CHECKING(for CFLocaleCreateCanonicalLocaleIdentifierFromString)
-		if test "$uname" = "Darwin" -a $uversion -ge 70; then
-			AC_DEFINE(HAVE_CF_LOCALE_ID)
+DBUS_NOTIFIER=""
+DBUS_NOTIFIERLIBS=""
+
+if test "x$enable_dbus" != xno; then
+	AC_PATH_PROG(PKGCONFIG, pkg-config)
+	if test "x$PKGCONFIG" != x; then
+		AC_MSG_CHECKING(for DBUS)
+		if $PKGCONFIG --exists dbus-1; then
 			AC_MSG_RESULT(yes)
+			AC_DEFINE(HAVE_DBUS)
+			CFLAGS="$CFLAGS `$PKGCONFIG --cflags dbus-1` -DDBUS_API_SUBJECT_TO_CHANGE"
+			CUPSDLIBS="$CUPSDLIBS `$PKGCONFIG --libs dbus-1`"
+			AC_CHECK_LIB(dbus-1,
+				dbus_message_iter_init_append,
+				AC_DEFINE(HAVE_DBUS_MESSAGE_ITER_INIT_APPEND),,
+				`$PKGCONFIG --libs dbus-1`)
+			if $PKGCONFIG --exists glib-2.0 && $PKGCONFIG --exists dbus-glib-1; then
+				DBUS_NOTIFIER="dbus"
+				DBUS_NOTIFIERLIBS="`$PKGCONFIG --libs glib-2.0` `$PKGCONFIG --libs dbus-glib-1` `$PKGCONFIG --libs dbus-1`"
+				CFLAGS="$CFLAGS `$PKGCONFIG --cflags glib-2.0`"
+			fi
 		else
 			AC_MSG_RESULT(no)
 		fi
+	fi
+fi
+
+AC_SUBST(DBUSDIR)
+AC_SUBST(DBUS_NOTIFIER)
+AC_SUBST(DBUS_NOTIFIERLIBS)
+
+dnl Extra platform-specific libraries...
+CUPS_DEFAULT_PRINTOPERATOR_AUTH="@SYSTEM"
+CUPS_SYSTEM_AUTHKEY=""
+FONTS="fonts"
+LEGACY_BACKENDS="parallel scsi"
+
+case $uname in
+        Darwin*)
+#		FONTS=""
+		LEGACY_BACKENDS=""
+                BACKLIBS="$BACKLIBS -framework IOKit"
+                CUPSDLIBS="$CUPSDLIBS -sectorder __TEXT __text cupsd.order -e start -framework IOKit -framework SystemConfiguration -weak_framework ApplicationServices"
+                LIBS="-framework SystemConfiguration -framework CoreFoundation $LIBS"
 
 		dnl Check for framework headers...
 		AC_CHECK_HEADER(CoreFoundation/CoreFoundation.h,AC_DEFINE(HAVE_COREFOUNDATION_H))
@@ -224,6 +305,9 @@ case $uname in
 		AC_CHECK_HEADER(membershipPriv.h,AC_DEFINE(HAVE_MEMBERSHIPPRIV_H))
 		AC_CHECK_FUNCS(mbr_uid_to_uuid)
 
+                dnl Check for the vproc_transaction_begin/end stuff...
+		AC_CHECK_FUNCS(vproc_transaction_begin)
+
 		dnl Need <dlfcn.h> header...
 		AC_CHECK_HEADER(dlfcn.h,AC_DEFINE(HAVE_DLFCN_H))
 
@@ -232,60 +316,44 @@ case $uname in
 		AC_CHECK_FUNCS(notify_post)
 
 		dnl Check for Authorization Services support
+		AC_ARG_WITH(adminkey, [  --with-adminkey         set the default SystemAuthKey value],
+			default_adminkey="$withval",
+			default_adminkey="default")
+ 		AC_ARG_WITH(operkey, [  --with-operkey          set the default operator @AUTHKEY value],
+			default_operkey="$withval",
+			default_operkey="default")
+ 
 		AC_CHECK_HEADER(Security/Authorization.h, [
 			AC_DEFINE(HAVE_AUTHORIZATION_H)
-			CUPS_DEFAULT_PRINTADMIN_AUTH="@AUTHKEY(system.print.admin) @admin @lpadmin"
-			CUPS_SYSTEM_AUTHKEY="SystemGroupAuthKey system.preferences"])
-		AC_CHECK_HEADER(Security/SecBasePriv.h,AC_DEFINE(HAVE_SECBASEPRIV_H))
-                ;;
 
-	Linux*)
-		dnl Check for DBUS support
-		if test "x$enable_dbus" != xno; then
-			AC_PATH_PROG(PKGCONFIG, pkg-config)
-			if test "x$PKGCONFIG" != x; then
-				AC_MSG_CHECKING(for DBUS)
-				if $PKGCONFIG --exists dbus-1; then
-					AC_MSG_RESULT(yes)
-					AC_DEFINE(HAVE_DBUS)
-					CFLAGS="$CFLAGS `$PKGCONFIG --cflags dbus-1` -DDBUS_API_SUBJECT_TO_CHANGE"
-					CUPSDLIBS="`$PKGCONFIG --libs dbus-1`"
-					AC_ARG_WITH(dbusdir, [  --with-dbusdir          set DBUS configuration directory ], dbusdir="$withval", dbusdir="/etc/dbus-1")
-					DBUSDIR="$dbusdir"
-					AC_CHECK_LIB(dbus-1,
-					    dbus_message_iter_init_append,
-					    AC_DEFINE(HAVE_DBUS_MESSAGE_ITER_INIT_APPEND))
-				else
-					AC_MSG_RESULT(no)
-				fi
+			if test "x$default_adminkey" != xdefault; then
+				CUPS_SYSTEM_AUTHKEY="SystemGroupAuthKey $default_adminkey"
+			elif grep -q system.print.operator /etc/authorization; then
+				CUPS_SYSTEM_AUTHKEY="SystemGroupAuthKey system.print.admin"
+			else
+				CUPS_SYSTEM_AUTHKEY="SystemGroupAuthKey system.preferences"
 			fi
-		fi
-		;;
+
+			if test "x$default_operkey" != xdefault; then
+				CUPS_DEFAULT_PRINTOPERATOR_AUTH="@AUTHKEY($default_operkey) @admin @lpadmin"
+			elif grep -q system.print.operator /etc/authorization; then
+				CUPS_DEFAULT_PRINTOPERATOR_AUTH="@AUTHKEY(system.print.operator) @admin @lpadmin"
+			else
+				CUPS_DEFAULT_PRINTOPERATOR_AUTH="@AUTHKEY(system.print.admin) @admin @lpadmin"
+			fi])
+		AC_CHECK_HEADER(Security/SecBasePriv.h,AC_DEFINE(HAVE_SECBASEPRIV_H))
+
+		dnl Check for sandbox/Seatbelt support
+		AC_CHECK_HEADER(sandbox.h,AC_DEFINE(HAVE_SANDBOX_H))
+                ;;
 esac
 
-AC_SUBST(CUPS_DEFAULT_PRINTADMIN_AUTH)
-AC_DEFINE_UNQUOTED(CUPS_DEFAULT_PRINTADMIN_AUTH, "$CUPS_DEFAULT_PRINTADMIN_AUTH")
+AC_SUBST(CUPS_DEFAULT_PRINTOPERATOR_AUTH)
+AC_DEFINE_UNQUOTED(CUPS_DEFAULT_PRINTOPERATOR_AUTH, "$CUPS_DEFAULT_PRINTOPERATOR_AUTH")
 AC_SUBST(CUPS_SYSTEM_AUTHKEY)
-
-dnl See if we have POSIX ACL support...
-SAVELIBS="$LIBS"
-LIBS=""
-AC_SEARCH_LIBS(acl_init, acl, AC_DEFINE(HAVE_ACL_INIT))
-CUPSDLIBS="$CUPSDLIBS $LIBS"
-LIBS="$SAVELIBS"
-
-AC_SUBST(BACKLIBS)
-AC_SUBST(CUPSDLIBS)
-AC_SUBST(DBUSDIR)
-
-dnl New default port definition for IPP...
-AC_ARG_WITH(ipp-port, [  --with-ipp-port         set default port number for IPP ],
-	DEFAULT_IPP_PORT="$withval",
-	DEFAULT_IPP_PORT="631")
-
-AC_SUBST(DEFAULT_IPP_PORT)
-AC_DEFINE_UNQUOTED(CUPS_DEFAULT_IPP_PORT,$DEFAULT_IPP_PORT)
+AC_SUBST(FONTS)
+AC_SUBST(LEGACY_BACKENDS)
 
 dnl
-dnl End of "$Id: cups-common.m4 6981 2007-09-19 21:51:55Z mike $".
+dnl End of "$Id: cups-common.m4 7900 2008-09-03 13:47:57Z mike $".
 dnl

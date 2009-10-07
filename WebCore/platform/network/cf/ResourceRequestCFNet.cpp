@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2006, 2007 Apple Inc.  All rights reserved.
+ * Copyright (C) 2006, 2007, 2008 Apple Inc.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,8 +30,44 @@
 #include "ResourceRequest.h"
 
 #include <CFNetwork/CFURLRequestPriv.h>
+#include <WebKitSystemInterface/WebKitSystemInterface.h>
 
 namespace WebCore {
+
+typedef void (*CFURLRequestSetContentDispositionEncodingFallbackArrayFunction)(CFMutableURLRequestRef, CFArrayRef);
+typedef CFArrayRef (*CFURLRequestCopyContentDispositionEncodingFallbackArrayFunction)(CFURLRequestRef);
+
+static HMODULE findCFNetworkModule()
+{
+    if (HMODULE module = GetModuleHandleA("CFNetwork"))
+        return module;
+    return GetModuleHandleA("CFNetwork_debug");
+}
+
+static CFURLRequestSetContentDispositionEncodingFallbackArrayFunction findCFURLRequestSetContentDispositionEncodingFallbackArrayFunction()
+{
+    return reinterpret_cast<CFURLRequestSetContentDispositionEncodingFallbackArrayFunction>(GetProcAddress(findCFNetworkModule(), "_CFURLRequestSetContentDispositionEncodingFallbackArray"));
+}
+
+static CFURLRequestCopyContentDispositionEncodingFallbackArrayFunction findCFURLRequestCopyContentDispositionEncodingFallbackArrayFunction()
+{
+    return reinterpret_cast<CFURLRequestCopyContentDispositionEncodingFallbackArrayFunction>(GetProcAddress(findCFNetworkModule(), "_CFURLRequestCopyContentDispositionEncodingFallbackArray"));
+}
+
+static void setContentDispositionEncodingFallbackArray(CFMutableURLRequestRef request, CFArrayRef fallbackArray)
+{
+    static CFURLRequestSetContentDispositionEncodingFallbackArrayFunction function = findCFURLRequestSetContentDispositionEncodingFallbackArrayFunction();
+    if (function)
+        function(request, fallbackArray);
+}
+
+static CFArrayRef copyContentDispositionEncodingFallbackArray(CFURLRequestRef request)
+{
+    static CFURLRequestCopyContentDispositionEncodingFallbackArrayFunction function = findCFURLRequestCopyContentDispositionEncodingFallbackArrayFunction();
+    if (!function)
+        return 0;
+    return function(request);
+}
 
 CFURLRequestRef ResourceRequest::cfURLRequest() const
 {
@@ -57,10 +93,19 @@ static inline void addHeadersFromHashMap(CFMutableURLRequestRef request, const H
 
 void ResourceRequest::doUpdatePlatformRequest()
 {
-    RetainPtr<CFURLRef> url(AdoptCF, ResourceRequest::url().createCFURL());
-    RetainPtr<CFURLRef> mainDocumentURL(AdoptCF, ResourceRequest::mainDocumentURL().createCFURL());
+    CFMutableURLRequestRef cfRequest;
 
-    CFMutableURLRequestRef cfRequest = CFURLRequestCreateMutable(0, url.get(), (CFURLRequestCachePolicy)cachePolicy(), timeoutInterval(), mainDocumentURL.get());
+    RetainPtr<CFURLRef> url(AdoptCF, ResourceRequest::url().createCFURL());
+    RetainPtr<CFURLRef> firstPartyForCookies(AdoptCF, ResourceRequest::firstPartyForCookies().createCFURL());
+    if (m_cfRequest) {
+        cfRequest = CFURLRequestCreateMutableCopy(0, m_cfRequest.get());
+        CFURLRequestSetURL(cfRequest, url.get());
+        CFURLRequestSetMainDocumentURL(cfRequest, firstPartyForCookies.get());
+        CFURLRequestSetCachePolicy(cfRequest, (CFURLRequestCachePolicy)cachePolicy());
+        CFURLRequestSetTimeoutInterval(cfRequest, timeoutInterval());
+    } else {
+        cfRequest = CFURLRequestCreateMutable(0, url.get(), (CFURLRequestCachePolicy)cachePolicy(), timeoutInterval(), firstPartyForCookies.get());
+    }
 
     RetainPtr<CFStringRef> requestMethod(AdoptCF, httpMethod().createCFString());
     CFURLRequestSetHTTPRequestMethod(cfRequest, requestMethod.get());
@@ -69,12 +114,21 @@ void ResourceRequest::doUpdatePlatformRequest()
     WebCore::setHTTPBody(cfRequest, httpBody());
     CFURLRequestSetShouldHandleHTTPCookies(cfRequest, allowHTTPCookies());
 
+    unsigned fallbackCount = m_responseContentDispositionEncodingFallbackArray.size();
+    RetainPtr<CFMutableArrayRef> encodingFallbacks(AdoptCF, CFArrayCreateMutable(kCFAllocatorDefault, fallbackCount, 0));
+    for (unsigned i = 0; i != fallbackCount; ++i) {
+        RetainPtr<CFStringRef> encodingName(AdoptCF, m_responseContentDispositionEncodingFallbackArray[i].createCFString());
+        CFStringEncoding encoding = CFStringConvertIANACharSetNameToEncoding(encodingName.get());
+        if (encoding != kCFStringEncodingInvalidId)
+            CFArrayAppendValue(encodingFallbacks.get(), reinterpret_cast<const void*>(encoding));
+    }
+    setContentDispositionEncodingFallbackArray(cfRequest, encodingFallbacks.get());
+
     if (m_cfRequest) {
-#ifdef CFNETWORK_HAS_NEW_COOKIE_FUNCTIONS
         RetainPtr<CFHTTPCookieStorageRef> cookieStorage(AdoptCF, CFURLRequestCopyHTTPCookieStorage(m_cfRequest.get()));
-        CFURLRequestSetHTTPCookieStorage(cfRequest, cookieStorage.get());
+        if (cookieStorage)
+            CFURLRequestSetHTTPCookieStorage(cfRequest, cookieStorage.get());
         CFURLRequestSetHTTPCookieStorageAcceptPolicy(cfRequest, CFURLRequestGetHTTPCookieStorageAcceptPolicy(m_cfRequest.get()));
-#endif
         CFURLRequestSetSSLProperties(cfRequest, CFURLRequestGetSSLProperties(m_cfRequest.get()));
     }
 
@@ -87,7 +141,7 @@ void ResourceRequest::doUpdateResourceRequest()
 
     m_cachePolicy = (ResourceRequestCachePolicy)CFURLRequestGetCachePolicy(m_cfRequest.get());
     m_timeoutInterval = CFURLRequestGetTimeoutInterval(m_cfRequest.get());
-    m_mainDocumentURL = CFURLRequestGetMainDocumentURL(m_cfRequest.get());
+    m_firstPartyForCookies = CFURLRequestGetMainDocumentURL(m_cfRequest.get());
     if (CFStringRef method = CFURLRequestCopyHTTPRequestMethod(m_cfRequest.get())) {
         m_httpMethod = method;
         CFRelease(method);
@@ -104,15 +158,24 @@ void ResourceRequest::doUpdateResourceRequest()
         CFRelease(headers);
     }
 
-    if (CFDataRef bodyData = CFURLRequestCopyHTTPRequestBody(m_cfRequest.get())) {
-        m_httpBody = new FormData(CFDataGetBytePtr(bodyData), CFDataGetLength(bodyData));
-        CFRelease(bodyData);
-    } else if (CFReadStreamRef bodyStream = CFURLRequestCopyHTTPRequestBodyStream(m_cfRequest.get())) {
-        if (FormData* formData = httpBodyFromStream(bodyStream))
-            m_httpBody = formData;
-        CFRelease(bodyStream);
+    m_responseContentDispositionEncodingFallbackArray.clear();
+    RetainPtr<CFArrayRef> encodingFallbacks(AdoptCF, copyContentDispositionEncodingFallbackArray(m_cfRequest.get()));
+    if (encodingFallbacks) {
+        CFIndex count = CFArrayGetCount(encodingFallbacks.get());
+        for (CFIndex i = 0; i < count; ++i) {
+            CFStringEncoding encoding = reinterpret_cast<CFIndex>(CFArrayGetValueAtIndex(encodingFallbacks.get(), i));
+            if (encoding != kCFStringEncodingInvalidId)
+                m_responseContentDispositionEncodingFallbackArray.append(CFStringConvertEncodingToIANACharSetName(encoding));
+        }
     }
-    // FIXME: what to do about arbitrary body streams?
+
+    m_httpBody = httpBodyFromRequest(m_cfRequest.get());
+}
+
+unsigned initializeMaximumHTTPConnectionCountPerHost()
+{
+    static const unsigned preferredConnectionCount = 6;
+    return wkInitializeMaximumHTTPConnectionCountPerHost(preferredConnectionCount);
 }
 
 }

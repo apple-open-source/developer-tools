@@ -49,7 +49,7 @@ PassRefPtr<XPathExpression> XPathEvaluator::createExpression(const String& expre
 
 PassRefPtr<XPathNSResolver> XPathEvaluator::createNSResolver(Node* nodeResolver)
 {
-    return new NativeXPathNSResolver(nodeResolver);
+    return NativeXPathNSResolver::create(nodeResolver);
 }
 
 PassRefPtr<XPathResult> XPathEvaluator::evaluate(const String& expression,
@@ -64,6 +64,7 @@ PassRefPtr<XPathResult> XPathEvaluator::evaluate(const String& expression,
         return 0;
     }
 
+    ec = 0;
     RefPtr<XPathExpression> expr = createExpression(expression, resolver, ec);
     if (ec)
         return 0;

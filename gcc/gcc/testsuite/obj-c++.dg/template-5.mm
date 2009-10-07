@@ -1,6 +1,6 @@
-// APPLE LOCAL file mainline
 // Test that extern template does not get emitted.
 // Author: Matt Austern <austern@apple.com>
+
 // { dg-do compile }
 // { dg-options "" }
 // { dg-final { scan-assembler-not ".globl __ZN3FooIiE5identEi" } }

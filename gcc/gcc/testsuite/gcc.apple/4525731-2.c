@@ -1,6 +1,6 @@
 /* APPLE LOCAL file 4525731 */
 /* { dg-do compile { target i?86-*-* } } */
-/* { dg-skip-if "" { i?86-*-* } { "-m64" } { "" } } */
+/* { dg-require-effective-target ilp32 } */
 /* { dg-options "-O3" } */
 
 #include <stdlib.h>

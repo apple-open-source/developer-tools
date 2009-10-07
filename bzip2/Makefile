@@ -8,7 +8,7 @@ Extra_CC_Flags      = -no-cpp-precomp -D_FILE_OFFSET_BITS=64
 Extra_Install_Flags = PREFIX=$(RC_Install_Prefix)
 GnuAfterInstall     = strip-binaries fix-manpages install-plist
 
-BZIP2_VERSION = 1.0.4
+BZIP2_VERSION = 1.0.5
 Extra_Environment = BZIP2_VERSION=$(BZIP2_VERSION)
 
 install:: shadow_source
@@ -24,10 +24,6 @@ strip-binaries:
 		$(CP) $${file} $(SYMROOT); \
 		echo $(STRIP) -x $${file}; \
 		$(STRIP) -x $${file}; \
-		for arch in ppc64 x86_64; do \
-			echo lipo -remove $${arch} -output $${file} $${file}; \
-			lipo -remove $${arch} -output $${file} $${file} || true; \
-		done \
 	done
 	$(CP) $(DSTROOT)/usr/local/lib/libbz2.a $(SYMROOT)
 	$(STRIP) -x $(DSTROOT)/usr/local/lib/libbz2.a
@@ -57,7 +53,7 @@ AEP_Version    = $(BZIP2_VERSION)
 AEP_ProjVers   = $(AEP_Project)-$(AEP_Version)
 AEP_Filename   = $(AEP_ProjVers).tar.gz
 AEP_ExtractDir = $(AEP_ProjVers)
-AEP_Patches    = EA.diff dylib.diff nopic.diff bzgrep.diff
+AEP_Patches    = EA.diff dylib.diff nopic.diff bzgrep.diff bzdiff.diff
 
 ifeq ($(suffix $(AEP_Filename)),.bz2)
 AEP_ExtractOption = j

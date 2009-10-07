@@ -1,7 +1,7 @@
 /* APPLE LOCAL file 4380289 */
 /* { dg-do compile { target powerpc*-*-darwin* } } */
-/* { dg-skip-if "Not valid on 64-bit" { powerpc*-*-darwin* } { "-m64" } { "" } } */
-/* { dg-options "-mlongcall" } */
+/* { dg-require-effective-target ilp32 } */
+/* { dg-options "-mlongcall -mkernel" } */
 /* { dg-final { scan-assembler "\tjmp" } } */
 /* { dg-final { scan-assembler "\tjbsr" } } */
 /* Fail if any short calls ("bl foo") are present.  */
@@ -10,7 +10,6 @@
    present.  Short branches to labels ("b L42") are O.K.  */
 /* { dg-final { scan-assembler-not "\tb\[	 \]*_" } } */
 /* { dg-final { scan-assembler-not "__ZN7derivedD1Ev " } } */
-/* { dg-final { scan-assembler "__ZN7derivedD1Ev.stub" } } */
 /* Radar 4299630: insure C++ thunks get long jmps.  */
 
 struct base1
@@ -54,8 +53,7 @@ int main()
 {
   typedef void (base1::*F1)();
   typedef void (base2::*F2)();
-  derived d;
-  derived* dp = &d;
+  derived* dp;
   derived* dd;
   F1 f1 = &base1::foo1;
   F2 f2 = &base2::foo2;
